@@ -36,6 +36,7 @@
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/policy/proto/cloud_policy.pb.h"
 #include "content/public/test/browser_test.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace ash {
@@ -53,7 +54,7 @@ using ArcGoogleLocationServiceConsent =
     ::sync_pb::UserConsentTypes::ArcGoogleLocationServiceConsent;
 
 const char kManagedUser[] = "user@example.com";
-const char kManagedGaiaID[] = "33333";
+const GaiaId::Literal kManagedGaiaID("33333");
 
 constexpr char kConsolidatedConsentId[] = "consolidated-consent";
 

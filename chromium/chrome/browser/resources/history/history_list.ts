@@ -5,7 +5,6 @@
 import 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.js';
 import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 import 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
-import 'chrome://resources/polymer/v3_0/iron-scroll-threshold/iron-scroll-threshold.js';
 import './shared_style.css.js';
 import './history_item.js';
 
@@ -19,7 +18,6 @@ import {assert} from 'chrome://resources/js/assert.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {getDeepActiveElement} from 'chrome://resources/js/util.js';
 import type {IronListElement} from 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
-import type {IronScrollThresholdElement} from 'chrome://resources/polymer/v3_0/iron-scroll-threshold/iron-scroll-threshold.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {BrowserServiceImpl} from './browser_service.js';
@@ -44,7 +42,6 @@ type HistoryCheckboxSelectEvent = CustomEvent<{
 export interface HistoryListElement {
   $: {
     'infinite-list': IronListElement,
-    'scroll-threshold': IronScrollThresholdElement,
     'dialog': CrLazyRenderElement<CrDialogElement>,
     'no-results': HTMLElement,
     'sharedMenu': CrLazyRenderElement<CrActionMenuElement>,
@@ -111,6 +108,13 @@ export class HistoryListElement extends HistoryListElementBase {
       },
       scrollOffset: Number,
 
+      // Whether this element is active, i.e. visible to the user.
+      isActive: {
+        type: Boolean,
+        value: true,
+        observer: 'onIsActiveChanged_',
+      },
+
       isEmpty: {
         type: Boolean,
         reflectToAttribute: true,
@@ -123,7 +127,22 @@ export class HistoryListElement extends HistoryListElementBase {
   private canDeleteHistory_: boolean =
       loadTimeData.getBoolean('allowDeletingHistory');
   private actionMenuModel_: ActionMenuModel|null = null;
+  private lastOffsetHeight_: number = 0;
+  private resizeObserver_: ResizeObserver = new ResizeObserver(() => {
+    if (this.lastOffsetHeight_ === 0) {
+      this.lastOffsetHeight_ = this.scrollTarget.offsetHeight;
+      return;
+    }
+    if (this.scrollTarget.offsetHeight > this.lastOffsetHeight_) {
+      this.lastOffsetHeight_ = this.scrollTarget.offsetHeight;
+      this.onScrollOrResize_();
+    }
+  });
   private resultLoadingDisabled_: boolean = false;
+  private scrollDebounce_: number = 200;
+  private scrollListener_: EventListener = () => this.onScrollOrResize_();
+  private scrollTimeout_: number|null = null;
+  isActive: boolean;
   isEmpty: boolean;
   searchedTerm: string = '';
   selectedItems: Set<number> = new Set();
@@ -199,7 +218,9 @@ export class HistoryListElement extends HistoryListElementBase {
   addNewResults(
       historyResults: HistoryEntry[], incremental: boolean, finished: boolean) {
     const results = historyResults.slice();
-    this.$['scroll-threshold'].clearTriggers();
+    if (this.scrollTimeout_) {
+      clearTimeout(this.scrollTimeout_);
+    }
 
     if (!incremental) {
       this.resultLoadingDisabled_ = false;
@@ -640,11 +661,54 @@ export class HistoryListElement extends HistoryListElementBase {
         !!this.searchedTerm && this.historyData_?.length > 0;
   }
 
-  private onScrollTargetChanged_() {
+  private onIsActiveChanged_() {
+    if (this.isActive) {
+      // Active changed from false to true. Add the scroll observer.
+      this.scrollTarget.addEventListener('scroll', this.scrollListener_);
+    } else {
+      // Active changed from true to false. Remove scroll observer.
+      this.scrollTarget.removeEventListener('scroll', this.scrollListener_);
+    }
+  }
+
+  private onScrollTargetChanged_(
+      _newTarget: HTMLElement, oldTarget?: HTMLElement) {
     // It is possible (eg, when middle clicking the reload button) for all other
     // resize events to fire before the list is attached and can be measured.
     // Adding another resize here ensures it will get sized correctly.
     this.$['infinite-list'].notifyResize();
+
+    if (oldTarget) {
+      this.resizeObserver_.disconnect();
+      oldTarget.removeEventListener('scroll', this.scrollListener_);
+    }
+    if (this.scrollTarget) {
+      this.resizeObserver_.observe(this.scrollTarget);
+      this.scrollTarget.addEventListener('scroll', this.scrollListener_);
+    }
+  }
+
+  setScrollDebounceForTest(debounce: number) {
+    this.scrollDebounce_ = debounce;
+  }
+
+  private onScrollOrResize_() {
+    // Debounce by 200ms.
+    if (this.scrollTimeout_) {
+      clearTimeout(this.scrollTimeout_);
+    }
+    this.scrollTimeout_ =
+        setTimeout(() => this.onScrollTimeout_(), this.scrollDebounce_);
+  }
+
+  private onScrollTimeout_() {
+    this.scrollTimeout_ = null;
+    const lowerScroll = this.scrollTarget.scrollHeight -
+        this.scrollTarget.scrollTop - this.scrollTarget.offsetHeight;
+    if (lowerScroll < 500) {
+      this.onScrollToBottom_();
+    }
+    this.fire_('scroll-timeout-for-test');
   }
 
   private computeIsEmpty_() {

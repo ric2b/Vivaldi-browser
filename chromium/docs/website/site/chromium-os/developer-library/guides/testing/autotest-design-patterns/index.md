@@ -52,7 +52,7 @@ Writing a test that uses telemetry is a 2 step process:
                 autotest test.
         *   It will take a day or two for the chrome tip-of-tree to be
                     rev-ed into the next build
-    *   Please see <http://www.chromium.org/developers/telemetry> for
+    *   Please see <https://www.chromium.org/developers/telemetry> for
                 more information.
 *   Write an autotest test to kick off the new telemetry test.
     *   Once your new telemetry test/benchmark is checked into chrome
@@ -96,7 +96,7 @@ telemetry changes.
 
 1.  First set up a local AFE and database by following the instructions
             here:
-            <http://www.chromium.org/chromium-os/developer-library/guides/autotest-developer-faq/setup-autotest-server>
+            <https://www.chromium.org/chromium-os/developer-library/guides/autotest-developer-faq/setup-autotest-server>
 2.  Kick off a local devserver.
 
     ```none

@@ -223,12 +223,12 @@ export class ProfileView extends UI.View.SimpleView implements UI.SearchableView
     this.linkifierInternal = new Components.Linkifier.Linkifier(maxLinkLength);
   }
 
-  static buildPopoverTable(entryInfo: {
+  static buildPopoverTable(popoverInfo: {
     title: string,
     value: string,
   }[]): Element {
     const table = document.createElement('table');
-    for (const entry of entryInfo) {
+    for (const entry of popoverInfo) {
       const row = table.createChild('tr');
       row.createChild('td').textContent = entry.title;
       row.createChild('td').textContent = entry.value;
@@ -514,7 +514,7 @@ export class ProfileView extends UI.View.SimpleView implements UI.SearchableView
   }
 
   resetClicked(): void {
-    this.viewSelectComboBox.selectElement().focus();
+    this.viewSelectComboBox.element.focus();
     this.resetButton.setEnabled(false);
     if (this.profileDataGridTree) {
       this.profileDataGridTree.restore();

@@ -11,6 +11,7 @@
 #include "chrome/browser/task_manager/task_manager_metrics_recorder.h"
 #include "chrome/browser/ui/task_manager/task_manager_table_model.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/task_manager_search_bar_view.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/models/table_model.h"
 #include "ui/base/mojom/dialog_button.mojom.h"
@@ -36,8 +37,6 @@ class View;
 
 namespace task_manager {
 
-enum class FilterCategory : uint8_t { kTabs = 0, kExtensions = 1, kSystem = 2 };
-
 // The new task manager UI container.
 class TaskManagerView : public TableViewDelegate,
                         public views::DialogDelegateView,
@@ -45,24 +44,27 @@ class TaskManagerView : public TableViewDelegate,
                         public views::TableGrouper,
                         public views::TableViewObserver,
                         public views::ContextMenuController,
-                        public ui::SimpleMenuModel::Delegate {
+                        public ui::SimpleMenuModel::Delegate,
+                        public TaskManagerSearchBarView::Delegate {
   METADATA_HEADER(TaskManagerView, views::DialogDelegateView)
 
  public:
   struct FilterTab {
+    DisplayCategory associated_category;
     int title_id;
-    FilterCategory associated_category;
+    // This field is not a raw_ptr<> because it only ever points to statically-
+    // allocated data which is never freed, and hence cannot dangle.
+    RAW_PTR_EXCLUSION const gfx::VectorIcon* icon;
   };
 
   TaskManagerView(const TaskManagerView&) = delete;
   TaskManagerView& operator=(const TaskManagerView&) = delete;
   ~TaskManagerView() override;
 
-  static constexpr size_t kTaskManagerHeaderWidth = 250;
-  static constexpr size_t kTaskManagerHeaderHeight = 32;
-
   // Shows the Task Manager window, or re-activates an existing one.
-  static task_manager::TaskManagerTableModel* Show(Browser* browser);
+  static task_manager::TaskManagerTableModel* Show(
+      Browser* browser,
+      StartAction start_action = StartAction::kOther);
 
   // Hides the Task Manager if it is showing.
   static void Hide();
@@ -109,28 +111,57 @@ class TaskManagerView : public TableViewDelegate,
   void ExecuteCommand(int id, int event_flags) override;
   void MenuClosed(ui::SimpleMenuModel* source) override;
 
+  // TaskManagerSearchBarView::Delegate:
+  void SearchBarOnInputChanged(const std::u16string& text) override;
+  void SearchBarOnHoverChange(const bool is_hover_on) override;
+
   views::TableView* tab_table_for_testing() { return tab_table_; }
 
   static TaskManagerView* GetInstanceForTests();
 
  private:
+  // Used for the TaskManagerDesktopRefresh.
+  // Determines how the UI for the TaskManager is rendered. Each boolean
+  // controls a specific deviation from the original TaskManager UI.
+  // TODO(crbug.com/364926055): Remove after feature is enabled by default.
+  struct TableConfigs {
+    bool table_has_border;
+    bool header_style;
+    bool table_refresh;
+    bool scroll_view_rounded;
+    bool layout_refresh;
+    bool dialog_button_disabled;
+    bool sort_on_cpu_by_default;
+  };
+
   friend class TaskManagerViewTest;
 
-  TaskManagerView();
+  explicit TaskManagerView(StartAction start_action = StartAction::kOther);
+
+  // Returns flags that describe how the TaskManagerView should be rendered.
+  static TableConfigs GetTableConfigs();
 
   // Creates the header for the view.
   void CreateHeader(const ChromeLayoutProvider* provider);
+  std::unique_ptr<views::View> CreateHeaderContent(
+      const ChromeLayoutProvider* provider);
+  std::unique_ptr<views::View> CreateHeaderSeparatorUnderlay(int height);
 
-  // Requests that the sorted_task_ids_ returned by TaskManagerTableModel are
-  // filtered by a FilterCategory.
-  void PerformFilter(FilterCategory category);
+  // Creates a new TableModel which only operates on the subset of tasks
+  // associated with the DisplayCategory (e.g. kTabs means only Tab processes
+  // are displayed).
+  void PerformFilter(DisplayCategory category,
+                     const std::u16string& search_term = u"");
 
   // Creates all corresponding subcomponents for the header.
-  std::unique_ptr<views::View> CreateTabbedPane();
-  std::unique_ptr<views::Textfield> CreateSearchBar(const gfx::Insets& margins);
+  std::unique_ptr<views::TabbedPaneTabStrip> CreateTabbedPane(
+      const ChromeLayoutProvider* provider,
+      const gfx::Insets& title_insets,
+      const gfx::Outsets& tab_outsets);
+  std::unique_ptr<views::View> CreateSearchBar(
+      const ChromeLayoutProvider* provider);
   std::unique_ptr<views::MdTextButton> CreateEndProcessButton(
       const gfx::Insets& margins);
-  std::unique_ptr<views::Separator> CreateSeparator(const gfx::Insets& margins);
   std::unique_ptr<views::ScrollView> CreateProcessView(
       std::unique_ptr<views::TableView> tab_table,
       bool table_has_border,
@@ -168,8 +199,18 @@ class TaskManagerView : public TableViewDelegate,
   raw_ptr<views::TableView, DanglingUntriaged> tab_table_;
   raw_ptr<views::View, DanglingUntriaged> tab_table_parent_;
 
+  // Specifications on how to layout the table.
+  TableConfigs table_config_;
+
   // all possible columns, not necessarily visible.
   std::vector<ui::TableColumn> columns_;
+
+  // The tabs which holds different task categories which is not null if task
+  // manager refresh is enabled.
+  raw_ptr<views::TabbedPaneTabStrip> tabs_ = nullptr;
+
+  // The container which holds search bar icon, textfield and clear button.
+  raw_ptr<views::View> search_bar_ = nullptr;
 
   // This button is not the same as the dialog button. It is only non-null if
   // task manager refresh is enabled.
@@ -178,10 +219,15 @@ class TaskManagerView : public TableViewDelegate,
   // The first time this instance of the task manager was initialized.
   const base::TimeTicks start_time_ = base::TimeTicks::Now();
 
+  // The last time a process was ended by the user.
+  base::TimeTicks latest_end_process_time_ = base::TimeTicks::Now();
+
+  // The number of times a process has been ended in this session.
+  size_t end_process_count_ = 0;
+
   // True when the Task Manager window should be shown on top of other windows.
   bool is_always_on_top_;
 
-  // An array of FilterTabs, populated when CreateTabbedPane() is called.
   base::WeakPtrFactory<TaskManagerView> weak_factory_{this};
 };
 

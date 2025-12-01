@@ -55,9 +55,9 @@ TEST_F(CPDFCreatorEmbedderTest, Bug873) {
       "36/ID[<D889EB6B9ADF88E5EDA7DC08FE85978B><";
   ASSERT_THAT(saved_data, testing::HasSubstr(kTrailerBeforeSecondID));
   size_t trailer_start = saved_data.find(kTrailerBeforeSecondID);
-  constexpr size_t kIdLen = 32;
+  static constexpr size_t kIdLen = 32;
   size_t trailer_continuation =
-      trailer_start + strlen(kTrailerBeforeSecondID) + kIdLen;
+      trailer_start + UNSAFE_TODO(strlen(kTrailerBeforeSecondID)) + kIdLen;
   std::string data_after_second_id = saved_data.substr(trailer_continuation);
   EXPECT_THAT(data_after_second_id, testing::StartsWith(">]>>\r\n"));
 }

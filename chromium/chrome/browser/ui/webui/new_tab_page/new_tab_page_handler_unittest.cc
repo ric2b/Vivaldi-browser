@@ -16,11 +16,17 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/test/gmock_move_support.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/token.h"
 #include "chrome/browser/new_tab_page/feature_promo_helper/new_tab_page_feature_promo_helper.h"
+#include "chrome/browser/new_tab_page/microsoft_auth/microsoft_auth_service.h"
+#include "chrome/browser/new_tab_page/microsoft_auth/microsoft_auth_service_factory.h"
+#include "chrome/browser/new_tab_page/microsoft_auth/microsoft_auth_service_observer.h"
+#include "chrome/browser/new_tab_page/modules/modules_constants.h"
+#include "chrome/browser/new_tab_page/modules/new_tab_page_modules.h"
 #include "chrome/browser/new_tab_page/promos/promo_data.h"
 #include "chrome/browser/new_tab_page/promos/promo_service.h"
 #include "chrome/browser/new_tab_page/promos/promo_service_factory.h"
@@ -61,6 +67,7 @@
 #include "components/segmentation_platform/public/constants.h"
 #include "components/segmentation_platform/public/testing/mock_segmentation_platform_service.h"
 #include "components/sync/test/test_sync_service.h"
+#include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_web_contents_factory.h"
@@ -104,11 +111,16 @@ class MockPage : public new_tab_page::mojom::Page {
   MOCK_METHOD(void,
               SetDisabledModules,
               (bool, const std::vector<std::string>&));
+  MOCK_METHOD(void, SetModulesLoadable, ());
   MOCK_METHOD(void, SetModulesFreVisibility, (bool));
   MOCK_METHOD(void, SetCustomizeChromeSidePanelVisibility, (bool));
   MOCK_METHOD(void, SetPromo, (new_tab_page::mojom::PromoPtr));
   MOCK_METHOD(void, ShowWebstoreToast, ());
   MOCK_METHOD(void, SetWallpaperSearchButtonVisibility, (bool));
+  MOCK_METHOD(void,
+              ConnectToParentDocument,
+              (mojo::PendingRemote<
+                  new_tab_page::mojom::MicrosoftAuthUntrustedDocument>));
 
   mojo::Receiver<new_tab_page::mojom::Page> receiver_{this};
 };
@@ -244,6 +256,12 @@ class MockFeaturePromoHelper : public NewTabPageFeaturePromoHelper {
   ~MockFeaturePromoHelper() override = default;
 };
 
+class MockMicrosoftAuthService : public MicrosoftAuthService {
+ public:
+  MOCK_METHOD0(GetAuthState, new_tab_page::mojom::AuthState());
+  MOCK_METHOD(void, AddObserver, (MicrosoftAuthServiceObserver*), (override));
+};
+
 std::unique_ptr<TestingProfile> MakeTestingProfile(
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
   TestingProfile::Builder profile_builder;
@@ -252,6 +270,12 @@ std::unique_ptr<TestingProfile> MakeTestingProfile(
       base::BindRepeating([](content::BrowserContext* context)
                               -> std::unique_ptr<KeyedService> {
         return std::make_unique<testing::NiceMock<MockPromoService>>();
+      }));
+  profile_builder.AddTestingFactory(
+      MicrosoftAuthServiceFactory::GetInstance(),
+      base::BindRepeating([](content::BrowserContext* context)
+                              -> std::unique_ptr<KeyedService> {
+        return std::make_unique<testing::NiceMock<MockMicrosoftAuthService>>();
       }));
   profile_builder.SetSharedURLLoaderFactory(url_loader_factory);
   auto profile = profile_builder.Build();
@@ -329,7 +353,9 @@ class NewTabPageHandlerTest : public testing::Test {
         &mock_logo_service_, &test_sync_service_,
         &mock_segmentation_platform_service_, web_contents_,
         std::move(mock_feature_promo_helper_ptr_), base::Time::Now(),
-        &module_id_names, mock_customize_chrome_tab_helper_.get());
+        &module_id_details);
+    handler_->SetCustomizeChromeSidePanelControllerForTesting(
+        mock_customize_chrome_tab_helper_.get());
     mock_page_.FlushForTesting();
     EXPECT_EQ(handler_.get(), theme_service_observer_);
     EXPECT_EQ(handler_.get(), ntp_custom_background_service_observer_);
@@ -399,8 +425,8 @@ class NewTabPageHandlerTest : public testing::Test {
   raw_ptr<PromoServiceObserver> promo_service_observer_;
 
  private:
-  const std::vector<std::pair<const std::string, int>> module_id_names = {
-      {"drive", IDS_NTP_MODULES_DRIVE_NAME}};
+  const std::vector<ntp::ModuleIdDetail> module_id_details = {
+      {ntp_modules::kDriveModuleId, IDS_NTP_MODULES_DRIVE_NAME}};
   raw_ptr<MockHatsService> mock_hats_service_;
 };
 
@@ -893,6 +919,96 @@ TEST_F(NewTabPageHandlerTest, OnDoodleShared) {
       "gen_204?atype=i&ct=doodle&ntp=2&cad=sh,5,ct:food_id&ei=bar_id"));
 }
 
+class NewTabPageHandlerMicrosoftAuthStateTest
+    : public NewTabPageHandlerTest,
+      public ::testing::WithParamInterface<new_tab_page::mojom::AuthState> {
+ public:
+  NewTabPageHandlerMicrosoftAuthStateTest() {
+    profile_->GetTestingPrefService()->SetManagedPref(
+        prefs::kNtpSharepointModuleVisible, base::Value(true));
+    feature_list_.InitWithFeatures(
+        /*enabled_features=*/{ntp_features::kNtpMicrosoftAuthenticationModule,
+                              ntp_features::kNtpSharepointModule,
+                              ntp_features::kNtpOutlookCalendarModule},
+        /*disabled_features=*/{});
+
+    mock_microsoft_auth_service_ = static_cast<MockMicrosoftAuthService*>(
+        MicrosoftAuthServiceFactory::GetForProfile(profile_.get()));
+    EXPECT_CALL(*mock_microsoft_auth_service_, AddObserver)
+        .Times(1)
+        .WillOnce(testing::SaveArg<0>(&microsoft_auth_service_observer_));
+  }
+
+  MockMicrosoftAuthService& mock_microsoft_auth_service() {
+    return *mock_microsoft_auth_service_;
+  }
+
+  MicrosoftAuthServiceObserver& microsoft_auth_service_observer() {
+    return *microsoft_auth_service_observer_;
+  }
+
+  void SetAuthState(new_tab_page::mojom::AuthState state) {
+    ON_CALL(mock_microsoft_auth_service(), GetAuthState())
+        .WillByDefault(testing::Return(state));
+  }
+
+  new_tab_page::mojom::AuthState AuthState() const { return GetParam(); }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+  raw_ptr<MockMicrosoftAuthService> mock_microsoft_auth_service_;
+  raw_ptr<MicrosoftAuthServiceObserver> microsoft_auth_service_observer_;
+};
+
+TEST_P(NewTabPageHandlerMicrosoftAuthStateTest, OnAuthStateUpdated) {
+  SetAuthState(AuthState());
+
+  microsoft_auth_service_observer().OnAuthStateUpdated();
+  mock_page_.FlushForTesting();
+
+  base::Value::List auth_dependent_modules;
+  for (const char* id : ntp_modules::kMicrosoftAuthDependentModuleIds) {
+    auth_dependent_modules.Append(id);
+  }
+  const std::string auth_id = ntp_modules::kMicrosoftAuthenticationModuleId;
+  base::Value::List expected_disabled_modules;
+  switch (AuthState()) {
+    case new_tab_page::mojom::AuthState::kNone:
+      break;
+    case new_tab_page::mojom::AuthState::kError:
+      expected_disabled_modules = std::move(auth_dependent_modules);
+      break;
+    case new_tab_page::mojom::AuthState::kSuccess:
+      expected_disabled_modules.Append(auth_id);
+      break;
+  }
+
+  EXPECT_EQ(profile_->GetPrefs()->GetList(prefs::kNtpHiddenModules),
+            expected_disabled_modules);
+}
+
+TEST_P(NewTabPageHandlerMicrosoftAuthStateTest,
+       UpdateModulesLoadableTriggersPageCall) {
+  SetAuthState(AuthState());
+
+  handler_->UpdateModulesLoadable();
+
+  if (AuthState() == new_tab_page::mojom::AuthState::kNone) {
+    EXPECT_CALL(mock_page_, SetModulesLoadable()).Times(0);
+  } else {
+    EXPECT_CALL(mock_page_, SetModulesLoadable()).Times(1);
+  }
+
+  mock_page_.FlushForTesting();
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    NewTabPageHandlerMicrosoftAuthStateTest,
+    ::testing::Values(new_tab_page::mojom::AuthState::kNone,
+                      new_tab_page::mojom::AuthState::kError,
+                      new_tab_page::mojom::AuthState::kSuccess));
+
 TEST_F(NewTabPageHandlerTest, GetModulesIdNames) {
   std::vector<new_tab_page::mojom::ModuleIdNamePtr> modules_details;
   base::MockCallback<NewTabPageHandler::GetModulesIdNamesCallback> callback;
@@ -909,7 +1025,7 @@ TEST_F(NewTabPageHandlerTest, GetModulesIdNames) {
       /*disabled_features=*/{});
   handler_->GetModulesIdNames(callback.Get());
   EXPECT_EQ(modules_details.size(), 1u);
-  EXPECT_EQ(modules_details.front()->id, "drive");
+  EXPECT_EQ(modules_details.front()->id, ntp_modules::kDriveModuleId);
 }
 
 TEST_F(NewTabPageHandlerTest, GetModulesOrder) {
@@ -945,8 +1061,9 @@ TEST_F(NewTabPageHandlerTest, SurveyLaunchedEligibleModulesCriteria) {
   EXPECT_CALL(*mock_hats_service(),
               LaunchDelayedSurveyForWebContents(_, _, _, _, _, _, _, _, _, _))
       .Times(1);
-  const std::vector<std::string> module_ids = {"google_calendar",
-                                               "tab_resumption"};
+  const std::vector<std::string> module_ids = {
+      ntp_modules::kGoogleCalendarModuleId,
+      ntp_modules::kMostRelevantTabResumptionModuleId};
   handler_->OnModulesLoadedWithData(module_ids);
 
   for (const auto& module_id : module_ids) {
@@ -962,14 +1079,15 @@ TEST_F(NewTabPageHandlerTest, SurveyLaunchSkippedEligibleModulesCriteria) {
       {
           {features::kHappinessTrackingSurveysForDesktopNtpModules,
            {{ntp_features::kNtpModulesEligibleForHappinessTrackingSurveyParam,
-             "drive"}}},
+             ntp_modules::kDriveModuleId}}},
       },
       {});
 
   EXPECT_CALL(*mock_hats_service(),
               LaunchDelayedSurveyForWebContents(_, _, _, _, _, _, _, _, _, _))
       .Times(0);
-  const std::vector<std::string> module_ids = {"google_calendar"};
+  const std::vector<std::string> module_ids = {
+      ntp_modules::kGoogleCalendarModuleId};
   handler_->OnModulesLoadedWithData(module_ids);
 
   for (const auto& module_id : module_ids) {
@@ -979,10 +1097,45 @@ TEST_F(NewTabPageHandlerTest, SurveyLaunchSkippedEligibleModulesCriteria) {
   }
 }
 
-TEST_F(NewTabPageHandlerTest, SetModuleDisabledTriggersPageCall) {
-  handler_->SetModuleDisabled("drive", true);
+TEST_F(NewTabPageHandlerTest, SetModuleDisabled) {
+  base::Value::List disabled_modules_list;
+  EXPECT_EQ(disabled_modules_list,
+            profile_->GetPrefs()->GetList(prefs::kNtpDisabledModules));
+
+  handler_->SetModuleDisabled(ntp_modules::kDriveModuleId, true);
   EXPECT_CALL(mock_page_, SetDisabledModules).Times(1);
   mock_page_.FlushForTesting();
+
+  disabled_modules_list.Append(ntp_modules::kDriveModuleId);
+  EXPECT_EQ(disabled_modules_list,
+            profile_->GetPrefs()->GetList(prefs::kNtpDisabledModules));
+}
+
+TEST_F(NewTabPageHandlerTest, SetModuleHiddenAndDisabled) {
+  std::vector<std::string> disabled_module_ids;
+  EXPECT_CALL(mock_page_, SetDisabledModules)
+      .Times(2)
+      .WillRepeatedly(testing::Invoke(
+          [&disabled_module_ids](bool all_arg,
+                                 std::vector<std::string> module_ids_arg) {
+            disabled_module_ids = std::move(module_ids_arg);
+          }));
+  mock_page_.FlushForTesting();
+
+  base::Value::List hidden_modules_list;
+  hidden_modules_list.Append(ntp_modules::kDriveModuleId);
+  profile_->GetPrefs()->SetList(prefs::kNtpHiddenModules,
+                                std::move(hidden_modules_list));
+  mock_page_.FlushForTesting();
+  EXPECT_EQ(1u, disabled_module_ids.size());
+  EXPECT_EQ(disabled_module_ids[0], ntp_modules::kDriveModuleId);
+
+  handler_->SetModuleDisabled(ntp_modules::kDriveModuleId, true);
+  mock_page_.FlushForTesting();
+  // Ensure |disabled_module_ids| still only has one entry for
+  // `ntp_modules::kDriveModuleId`.
+  EXPECT_EQ(1u, disabled_module_ids.size());
+  EXPECT_EQ(disabled_module_ids[0], ntp_modules::kDriveModuleId);
 }
 
 TEST_F(NewTabPageHandlerTest, ModulesVisiblePrefChangeTriggersPageCall) {

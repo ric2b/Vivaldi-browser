@@ -271,13 +271,8 @@ class VideoConferenceIntegrationTest
     // Flags use to automatically select the right desktop source and get
     // around security restrictions.
     // TODO(crbug.com/40274188): Use a less error-prone flag.
-#if BUILDFLAG(IS_CHROMEOS_ASH)
     command_line->AppendSwitchASCII(::switches::kAutoSelectDesktopCaptureSource,
                                     "Display");
-#else
-    command_line->AppendSwitchASCII(::switches::kAutoSelectDesktopCaptureSource,
-                                    "Entire screen");
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
     // If in guest mode.
     if (is_guest_mode_) {
@@ -952,9 +947,7 @@ IN_PROC_BROWSER_TEST_P(VideoConferenceIntegrationTest,
   EXPECT_TRUE(found_noise_cancellation_buttion);
 }
 
-// TODO(crbug.com/40071631): re-enable once the bug is fixed.
-IN_PROC_BROWSER_TEST_P(VideoConferenceIntegrationTest,
-                       DISABLED_StopAllScreenShare) {
+IN_PROC_BROWSER_TEST_P(VideoConferenceIntegrationTest, StopAllScreenShare) {
   // Open a tab.
   content::WebContents* web_contents_1 =
       NavigateTo("/video_conference_demo.html");

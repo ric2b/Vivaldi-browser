@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "third_party/blink/renderer/platform/media/multi_buffer_data_source.h"
 
 #include <stddef.h>
@@ -1091,7 +1096,7 @@ TEST_F(MultiBufferDataSourceTest, Http_ShareData_AtLeastOneProgress) {
       .Times(testing::AtLeast(1));
 
   auto data = base::HeapArray<char>::Uninit(total_bytes);
-  base::ranges::fill(data, 0xA5);  // Arbitrary non-zero value.
+  std::ranges::fill(data, 0xA5);  // Arbitrary non-zero value.
   provider1->DidReceiveData(data);
   provider1->DidFinishLoading();
   task_environment_.RunUntilIdle();

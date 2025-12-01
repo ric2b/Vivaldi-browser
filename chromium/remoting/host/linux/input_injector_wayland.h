@@ -27,14 +27,14 @@
 #include "remoting/base/constants.h"
 #include "remoting/host/clipboard.h"
 #include "remoting/host/input_injector.h"
-#include "remoting/host/input_injector_constants_linux.h"
 #include "remoting/host/input_injector_metadata.h"
 #include "remoting/host/linux/clipboard_wayland.h"
+#include "remoting/host/linux/input_injector_constants_linux.h"
 #include "remoting/host/linux/remote_desktop_portal_injector.h"
 #include "remoting/host/linux/wayland_manager.h"
 #include "remoting/proto/internal.pb.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "remoting/host/chromeos/point_transformer.h"
 #endif
 
@@ -129,7 +129,7 @@ class InputInjectorWayland : public InputInjector {
     // The direction of the last scroll event that resulted in at least one
     // "tick" being injected.
     ScrollDirection latest_tick_y_direction_ = ScrollDirection::NONE;
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     PointTransformer point_transformer_;
 #endif
     std::unique_ptr<ClipboardWayland> clipboard_;

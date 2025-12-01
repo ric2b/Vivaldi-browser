@@ -2,7 +2,7 @@
 breadcrumbs:
 - - /chromium-os
   - ChromiumOS
-- - /chromium-os/developer-information-for-chrome-os-devices
+- - /chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices
   - Developer Information for ChromeOS Devices
 page_name: samsung-series-5-chromebook
 title: Samsung Series 5 Chromebook
@@ -73,9 +73,9 @@ secure again.
 Here's a photo showing the location of the developer switch:
 
 [<img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/samsung-series-5-chromebook/b.jpg"
+src="b.jpg"
 height=171
-width=400>](/chromium-os/developer-information-for-chrome-os-devices/samsung-series-5-chromebook/b.jpg)
+width=400>](./b.jpg)
 
 ### Developer-mode BIOS
 
@@ -151,7 +151,7 @@ a valid read-write normal-mode BIOS, Google-signed kernel, and an unmodified
 ChromeOS root filesystem, then that's what will boot and you'll be back running
 the official ChromeOS image. Or, if you've modified any part of the verified
 boot chain so that a full verified boot process isn't possible, you'll be
-dropped into [recovery mode](http://www.google.com/chromeos/recovery). That will
+dropped into [recovery mode](https://www.google.com/chromeos/recovery). That will
 require you to create a bootable USB key to restore your chromebook to its
 fresh-from-the-factory state. That's annoying, but not dangerous. As long as you
 haven't taken the device apart, you shouldn't be able to permanently break
@@ -195,9 +195,9 @@ using the recovery mode button. On the bottom of the Samsung Series 5, on the
 corner nearest the developer switch, there is a tiny pinhole:
 
 [<img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/samsung-series-5-chromebook/cc.jpg"
+src="cc.jpg"
 height=300
-width=400>](/chromium-os/developer-information-for-chrome-os-devices/samsung-series-5-chromebook/cc.jpg)
+width=400>](./cc.jpg)
 
 If you stick a paperclip into this hole, you'll feel it press a button. To force
 recovery mode, turn the device off, press this button, and while keeping it
@@ -222,9 +222,9 @@ a paperclip to gently press the battery reset button through the hole on the
 back of the chromebook. Hold it down for a few seconds, then release it.
 
 [<img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/samsung-series-5-chromebook/alex_reset.jpg"
+src="alex_reset.jpg"
 height=300
-width=400>](/chromium-os/developer-information-for-chrome-os-devices/samsung-series-5-chromebook/alex_reset.jpg)
+width=400>](./alex_reset.jpg)
 
 This process turns the battery off. It won't turn on again until you've
 connected the AC power cord and the EC has booted. After that, things should
@@ -234,7 +234,7 @@ the EC may take a moment or two to fully reboot.
 ## Firmware
 
 See the [H2C firmware
-page](/chromium-os/developer-information-for-chrome-os-devices/h2c-firmware) for
+page](/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/h2c-firmware) for
 more details.
 
 ## What's inside?
@@ -252,17 +252,17 @@ and all paperwork your received first. If you just want to see what the inside
 looks like, gaze upon this (click for a high res version):
 
 [<img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/samsung-series-5-chromebook/alex-bottom-guts.jpg"
+src="alex-bottom-guts.jpg"
 height=236
-width=320>](/chromium-os/developer-information-for-chrome-os-devices/samsung-series-5-chromebook/alex-bottom-guts.jpg)
+width=320>](./alex-bottom-guts.jpg)
 [<img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/samsung-series-5-chromebook/alex-bottom-guts-no-battery.jpg"
+src="alex-bottom-guts-no-battery.jpg"
 height=236
-width=320>](/chromium-os/developer-information-for-chrome-os-devices/samsung-series-5-chromebook/alex-bottom-guts-no-battery.jpg)
+width=320>](./alex-bottom-guts-no-battery.jpg)
 [<img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/samsung-series-5-chromebook/alex-top-guts.jpg"
+src="alex-top-guts.jpg"
 height=190
-width=320>](/chromium-os/developer-information-for-chrome-os-devices/samsung-series-5-chromebook/alex-top-guts.jpg)
+width=320>](./alex-top-guts.jpg)
 
 However, we acknowledge that some people like to tinker. So here's a quick guide
 to taking it apart:

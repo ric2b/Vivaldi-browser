@@ -184,10 +184,10 @@ HTMLImageElement* HTMLAreaElement::ImageElement() const {
   return nullptr;
 }
 
-bool HTMLAreaElement::IsKeyboardFocusable(
+bool HTMLAreaElement::IsKeyboardFocusableSlow(
     UpdateBehavior update_behavior) const {
   // Explicitly skip over the HTMLAnchorElementBase's keyboard focus behavior.
-  return Element::IsKeyboardFocusable(update_behavior);
+  return Element::IsKeyboardFocusableSlow(update_behavior);
 }
 
 FocusableState HTMLAreaElement::IsFocusableState(
@@ -226,28 +226,6 @@ void HTMLAreaElement::SetFocused(bool should_be_focused,
   LayoutObject* layout_object = image_element->GetLayoutObject();
   if (auto* layout_image = DynamicTo<LayoutImage>(layout_object))
     layout_image->AreaElementFocusChanged(this);
-}
-
-Element* HTMLAreaElement::interestTargetElement() {
-  CHECK(RuntimeEnabledFeatures::HTMLInterestTargetAttributeEnabled());
-
-  if (!IsInTreeScope()) {
-    return nullptr;
-  }
-
-  return GetElementAttributeResolvingReferenceTarget(
-      html_names::kInteresttargetAttr);
-}
-
-AtomicString HTMLAreaElement::interestAction() const {
-  CHECK(RuntimeEnabledFeatures::HTMLInterestTargetAttributeEnabled());
-  const AtomicString& attribute_value =
-      FastGetAttribute(html_names::kInterestactionAttr);
-  if (attribute_value && !attribute_value.IsNull() &&
-      !attribute_value.empty()) {
-    return attribute_value;
-  }
-  return g_empty_atom;
 }
 
 void HTMLAreaElement::UpdateSelectionOnFocus(

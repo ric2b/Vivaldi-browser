@@ -35,6 +35,7 @@
 #include "include/gpu/graphite/Image.h"
 #include "include/gpu/graphite/Recorder.h"
 #include "include/gpu/graphite/Surface.h"
+#include "include/gpu/graphite/PrecompileContext.h"
 #include "include/gpu/graphite/precompile/Precompile.h"
 #include "include/gpu/graphite/precompile/PrecompileBlender.h"
 #include "include/gpu/graphite/precompile/PrecompileColorFilter.h"
@@ -53,6 +54,7 @@
 #include "src/gpu/graphite/KeyHelpers.h"
 #include "src/gpu/graphite/PaintParams.h"
 #include "src/gpu/graphite/PipelineData.h"
+#include "src/gpu/graphite/PrecompileContextPriv.h"
 #include "src/gpu/graphite/RecorderPriv.h"
 #include "src/gpu/graphite/RenderPassDesc.h"
 #include "src/gpu/graphite/Renderer.h"
@@ -368,6 +370,7 @@ enum class ColorSpaceType {
     kNone,
     kSRGB,
     kSRGBLinear,
+    kSRGBSpin,
     kRGB,
 
     kLast = kRGB
@@ -389,6 +392,8 @@ sk_sp<SkColorSpace> random_colorspace(SkRandom* rand) {
             return SkColorSpace::MakeSRGB();
         case ColorSpaceType::kSRGBLinear:
             return SkColorSpace::MakeSRGBLinear();
+        case ColorSpaceType::kSRGBSpin:
+            return SkColorSpace::MakeSRGB()->makeColorSpin();
         case ColorSpaceType::kRGB:
             return SkColorSpace::MakeRGB(random_xfer_function(rand), random_gamut(rand));
     }
@@ -1814,13 +1819,11 @@ void non_simple_draws(SkCanvas* canvas, const SkPaint& paint, const DrawData& dr
 }
 
 #ifdef SK_DEBUG
-void dump_keys(Context* context,
+void dump_keys(PrecompileContext* precompileContext,
                const std::vector<skgpu::UniqueKey>& needleKeys,
                const std::vector<skgpu::UniqueKey>& hayStackKeys,
                const char* needleName,
                const char* haystackName) {
-    const RendererProvider* rendererProvider = context->priv().rendererProvider();
-    const ShaderCodeDictionary* dict = context->priv().shaderCodeDictionary();
 
     SkDebugf("-------------------------- %zu %s pipelines\n", needleKeys.size(), needleName);
 
@@ -1830,7 +1833,7 @@ void dump_keys(Context* context,
 
         GraphicsPipelineDesc originalPipelineDesc;
         RenderPassDesc originalRenderPassDesc;
-        UniqueKeyUtils::ExtractKeyDescs(context, k,
+        UniqueKeyUtils::ExtractKeyDescs(precompileContext, k,
                                         &originalPipelineDesc,
                                         &originalRenderPassDesc);
 
@@ -1838,7 +1841,7 @@ void dump_keys(Context* context,
         label.appendf("--- %s key %d (%s in %s):\n",
                       needleName, count++, found ? "found" : "not-found", haystackName);
         k.dump(label.c_str());
-        UniqueKeyUtils::DumpDescs(rendererProvider, dict,
+        UniqueKeyUtils::DumpDescs(precompileContext,
                                   originalPipelineDesc,
                                   originalRenderPassDesc);
     }
@@ -1847,6 +1850,7 @@ void dump_keys(Context* context,
 
 void check_draw(skiatest::Reporter* reporter,
                 Context* context,
+                PrecompileContext* precompileContext,
                 skiatest::graphite::GraphiteTestContext* testContext,
                 Recorder* recorder,
                 const SkPaint& paint,
@@ -1857,9 +1861,9 @@ void check_draw(skiatest::Reporter* reporter,
 
     std::vector<skgpu::UniqueKey> precompileKeys, drawKeys;
 
-    UniqueKeyUtils::FetchUniqueKeys(context->priv().globalCache(), &precompileKeys);
+    UniqueKeyUtils::FetchUniqueKeys(precompileContext, &precompileKeys);
 
-    context->priv().globalCache()->resetGraphicsPipelines();
+    precompileContext->priv().globalCache()->resetGraphicsPipelines();
 
     {
         // TODO: vary the colorType of the target surface too
@@ -1939,7 +1943,7 @@ void check_draw(skiatest::Reporter* reporter,
         testContext->syncedSubmit(context);
     }
 
-    UniqueKeyUtils::FetchUniqueKeys(context->priv().globalCache(), &drawKeys);
+    UniqueKeyUtils::FetchUniqueKeys(precompileContext, &drawKeys);
 
     // Actually using the SkPaint with the specified type of draw shouldn't have added
     // any additional pipelines
@@ -1957,8 +1961,8 @@ void check_draw(skiatest::Reporter* reporter,
                     precompileKeys.size(), drawKeys.size(), missingPipelines);
 #ifdef SK_DEBUG
     if (missingPipelines) {
-        dump_keys(context, drawKeys, precompileKeys, "draw", "precompile");
-        dump_keys(context, precompileKeys, drawKeys, "precompile", "draw");
+        dump_keys(precompileContext, drawKeys, precompileKeys, "draw", "precompile");
+        dump_keys(precompileContext, precompileKeys, drawKeys, "precompile", "draw");
     }
 #endif // SK_DEBUG
 
@@ -2022,13 +2026,11 @@ void extract_vs_build_subtest(skiatest::Reporter* reporter,
         };
         Coverage coverage = coverageOptions[rand->nextULessThan(3)];
 
-        DstReadRequirement dstReadReq = DstReadRequirement::kNone;
         const SkBlenderBase* blender = as_BB(paint.getBlender());
-        if (blender) {
-            dstReadReq = GetDstReadRequirement(recorder->priv().caps(),
-                                               blender->asBlendMode(),
-                                               coverage);
-        }
+        bool dstReadRequired = blender ? IsDstReadRequired(recorder->priv().caps(),
+                                                           blender->asBlendMode(),
+                                                           coverage)
+                                       : false;
 
         // In the normal API this modification happens in SkDevice::clipShader()
         // All clipShaders get wrapped in a CTMShader
@@ -2051,7 +2053,7 @@ void extract_vs_build_subtest(skiatest::Reporter* reporter,
                                              primitiveBlender,
                                              {}, // TODO (jvanverth): add analytic clip to test
                                              std::move(modifiedClipShader),
-                                             dstReadReq,
+                                             dstReadRequired,
                                              /* skipColorXform= */ false),
                                  {},
                                  precompileKeyContext.dstColorInfo());
@@ -2112,6 +2114,7 @@ void extract_vs_build_subtest(skiatest::Reporter* reporter,
 // Precompile system will, at least, generate all the pipelines a real draw would generate.
 void precompile_vs_real_draws_subtest(skiatest::Reporter* reporter,
                                       Context* context,
+                                      PrecompileContext* precompileContext,
                                       skiatest::graphite::GraphiteTestContext* testContext,
                                       Recorder* recorder,
                                       const SkPaint& paint,
@@ -2120,9 +2123,11 @@ void precompile_vs_real_draws_subtest(skiatest::Reporter* reporter,
                                       sk_sp<SkShader> clipShader,
                                       DrawTypeFlags dt,
                                       bool /* verbose */) {
-    context->priv().globalCache()->resetGraphicsPipelines();
+    GlobalCache* globalCache = precompileContext->priv().globalCache();
 
-    const Caps* caps = context->priv().caps();
+    globalCache->resetGraphicsPipelines();
+
+    const skgpu::graphite::Caps* caps = context->priv().caps();
 
     const SkColorType kColorType = kBGRA_8888_SkColorType;
 
@@ -2151,21 +2156,23 @@ void precompile_vs_real_draws_subtest(skiatest::Reporter* reporter,
                                                                  ? &kDepth_Stencil_4
                                                                  : &kDepth_1;
 
-    int before = context->priv().globalCache()->numGraphicsPipelines();
-    Precompile(context, paintOptions, dt,
+    int before = globalCache->numGraphicsPipelines();
+    Precompile(precompileContext, paintOptions, dt,
                dt == kNonSimpleShape ? SkSpan(pathProperties, 1) : SkSpan(&kDepth_1, 1));
     if (gNeedSKPPaintOption) {
         // The skp draws a rect w/ a default SkPaint
         PaintOptions skpPaintOptions;
-        Precompile(context, skpPaintOptions, DrawTypeFlags::kSimpleShape, { kDepth_1 });
+        Precompile(precompileContext, skpPaintOptions, DrawTypeFlags::kSimpleShape,
+                   { kDepth_1 });
     }
-    int after = context->priv().globalCache()->numGraphicsPipelines();
+    int after = globalCache->numGraphicsPipelines();
 
     REPORTER_ASSERT(reporter, before == 0);
     REPORTER_ASSERT(reporter, after > before);
 
     check_draw(reporter,
                context,
+               precompileContext,
                testContext,
                recorder,
                paint,
@@ -2176,6 +2183,7 @@ void precompile_vs_real_draws_subtest(skiatest::Reporter* reporter,
 
 void run_test(skiatest::Reporter* reporter,
               Context* context,
+              PrecompileContext* precompileContext,
               skiatest::graphite::GraphiteTestContext* testContext,
               const KeyContext& precompileKeyContext,
               ShaderType s,
@@ -2210,7 +2218,8 @@ void run_test(skiatest::Reporter* reporter,
     extract_vs_build_subtest(reporter, context, testContext, precompileKeyContext, recorder.get(),
                              paint, paintOptions, s, bm, cf, mf, imageFilter, clip, clipShader, dt,
                              seed, &rand, verbose);
-    precompile_vs_real_draws_subtest(reporter, context, testContext, recorder.get(),
+    precompile_vs_real_draws_subtest(reporter, context, precompileContext,
+                                     testContext, recorder.get(),
                                      paint, paintOptions, clip, clipShader, dt, verbose);
 }
 
@@ -2222,6 +2231,7 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_ALL_CONTEXTS(PaintParamsKeyTestReduced,
                                                testContext,
                                                true,
                                                CtsEnforcement::kNever) {
+    std::unique_ptr<PrecompileContext> precompileContext = context->makePrecompileContext();
     std::unique_ptr<RuntimeEffectDictionary> rtDict = std::make_unique<RuntimeEffectDictionary>();
 
 #if 1
@@ -2257,6 +2267,7 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_ALL_CONTEXTS(PaintParamsKeyTestReduced,
 
     run_test(reporter,
              context,
+             precompileContext.get(),
              testContext,
              create_key_context(context, rtDict.get()),
              shaderType,
@@ -2283,6 +2294,7 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_ALL_CONTEXTS(PaintParamsKeyTest,
                                                testContext,
                                                true,
                                                CtsEnforcement::kNever) {
+    std::unique_ptr<PrecompileContext> precompileContext = context->makePrecompileContext();
     std::unique_ptr<RuntimeEffectDictionary> rtDict = std::make_unique<RuntimeEffectDictionary>();
 
     KeyContext precompileKeyContext(create_key_context(context, rtDict.get()));
@@ -2400,7 +2412,8 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_ALL_CONTEXTS(PaintParamsKeyTest,
                                 ++current;
 #endif
 
-                                run_test(reporter, context, testContext, precompileKeyContext,
+                                run_test(reporter, context, precompileContext.get(),
+                                         testContext, precompileKeyContext,
                                          shader, blender, cf, mf, imageFilter, clip, dt,
                                          kDefaultSeed, /* verbose= */ false);
                             }

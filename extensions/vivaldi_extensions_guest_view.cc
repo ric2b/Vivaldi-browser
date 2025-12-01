@@ -15,7 +15,7 @@ void ExtensionsGuestView::ExtensionCanExecuteContentScript(
 
   bool allowScript = false;
 
-  auto* rfh = content::RenderFrameHost::FromID(render_process_id(),
+  auto* rfh = content::RenderFrameHost::FromID(render_process_id().value(),
                                                frame_id_.frame_routing_id);
   if (rfh) {
     auto* web_contents = content::WebContents::FromRenderFrameHost(rfh);

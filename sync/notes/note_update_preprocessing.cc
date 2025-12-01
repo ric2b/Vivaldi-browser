@@ -65,7 +65,7 @@ std::string InferGuidForLegacyNote(
 
   static_assert(base::kSHA1Length >= 16, "16 bytes needed to infer UUID");
 
-  const std::string guid = ComputeUuidFromBytes(base::make_span(hash));
+  const std::string guid = ComputeUuidFromBytes(base::span(hash));
   DCHECK(base::Uuid::ParseLowercase(guid).is_valid());
   return guid;
 }
@@ -86,7 +86,7 @@ UniquePosition::Suffix GenerateUniquePositionSuffixForNote(
   std::string suffix_str =
       base::Base64Encode(base::SHA1Hash(base::as_byte_span(hash_input)));
   CHECK_EQ(suffix.size(), suffix_str.size());
-  base::ranges::copy(suffix_str, suffix.begin());
+  std::ranges::copy(suffix_str, suffix.begin());
   return suffix;
 }
 

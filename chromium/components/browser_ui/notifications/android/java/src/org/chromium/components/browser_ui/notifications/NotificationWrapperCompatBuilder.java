@@ -4,13 +4,14 @@
 
 package org.chromium.components.browser_ui.notifications;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import android.app.Notification;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.drawable.Icon;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.widget.RemoteViews;
@@ -20,9 +21,12 @@ import androidx.core.graphics.drawable.IconCompat;
 
 import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.components.browser_ui.notifications.channels.ChannelsInitializer;
 
 /** Wraps a {@link NotificationCompat.Builder} object. */
+@NullMarked
 public class NotificationWrapperCompatBuilder implements NotificationWrapperBuilder {
     private static final String TAG = "NotifCompatBuilder";
     private final NotificationCompat.Builder mBuilder;
@@ -34,9 +38,7 @@ public class NotificationWrapperCompatBuilder implements NotificationWrapperBuil
             String channelId,
             ChannelsInitializer channelsInitializer,
             NotificationMetadata metadata) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            channelsInitializer.safeInitialize(channelId);
-        }
+        channelsInitializer.safeInitialize(channelId);
         mBuilder = new NotificationCompat.Builder(context, channelId);
         mMetadata = metadata;
         mContext = context;
@@ -49,14 +51,15 @@ public class NotificationWrapperCompatBuilder implements NotificationWrapperBuil
     }
 
     @Override
-    public NotificationWrapperBuilder setContentIntent(PendingIntent contentIntent) {
+    public NotificationWrapperBuilder setContentIntent(@Nullable PendingIntent contentIntent) {
         mBuilder.setContentIntent(contentIntent);
         return this;
     }
 
     @Override
-    public NotificationWrapperBuilder setContentIntent(PendingIntentProvider contentIntent) {
-        mBuilder.setContentIntent(contentIntent.getPendingIntent());
+    public NotificationWrapperBuilder setContentIntent(
+            @Nullable PendingIntentProvider contentIntent) {
+        mBuilder.setContentIntent(contentIntent != null ? contentIntent.getPendingIntent() : null);
         return this;
     }
 
@@ -80,7 +83,7 @@ public class NotificationWrapperCompatBuilder implements NotificationWrapperBuil
 
     @Override
     public NotificationWrapperBuilder setSmallIcon(Icon icon) {
-        mBuilder.setSmallIcon(IconCompat.createFromIcon(mContext, icon));
+        mBuilder.setSmallIcon(assumeNonNull(IconCompat.createFromIcon(mContext, icon)));
         return this;
     }
 
@@ -338,7 +341,7 @@ public class NotificationWrapperCompatBuilder implements NotificationWrapperBuil
     }
 
     @Override
-    public Notification build() {
+    public @Nullable Notification build() {
         boolean success = false;
         Notification notification = null;
         try {

@@ -73,6 +73,7 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/renderer/chrome_content_renderer_client.h"
 #include "chrome/test/base/chrome_test_suite.h"
+#include "chrome/test/base/chrome_test_utils.h"
 #include "chrome/test/base/test_launcher_utils.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -92,6 +93,7 @@
 #include "content/public/test/test_launcher.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "extensions/buildflags/buildflags.h"
+#include "extensions/common/extension_features.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "services/device/public/cpp/device_features.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -362,6 +364,10 @@ void InProcessBrowserTest::Initialize() {
   // tests to fail.
   disabled_features.push_back(
       features::kRestartNetworkServiceUnsandboxedForFailedLaunch);
+
+  // Allow unpacked extensions without developer mode for testing.
+  disabled_features.push_back(
+      extensions_features::kExtensionDisableUnsupportedDeveloper);
 
   // In-product help can conflict with tests' expected window activation and
   // focus. Individual tests can re-enable IPH.
@@ -821,7 +827,7 @@ base::CommandLine InProcessBrowserTest::GetCommandLineForRelaunch() {
 #endif  // !BUILDFLAG(IS_MAC)
 
 base::FilePath InProcessBrowserTest::GetChromeTestDataDir() const {
-  return base::FilePath(FILE_PATH_LITERAL("chrome/test/data"));
+  return chrome_test_utils::GetChromeTestDataDir();
 }
 
 void InProcessBrowserTest::PreRunTestOnMainThread() {

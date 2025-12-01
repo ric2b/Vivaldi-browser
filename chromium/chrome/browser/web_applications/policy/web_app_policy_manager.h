@@ -22,8 +22,8 @@
 #include "url/gurl.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/ash/system_web_apps/types/system_web_app_delegate_map.h"
 #include "chrome/browser/policy/system_features_disable_list_policy_handler.h"
+#include "chromeos/ash/experiences/system_web_apps/types/system_web_app_delegate_map.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 class PrefService;
@@ -140,7 +140,7 @@ class WebAppPolicyManager {
     std::optional<std::vector<blink::Manifest::ImageResource>> icons;
   };
 
-  void InitChangeRegistrarAndRefreshPolicy(bool enable_pwa_support);
+  void InitChangeRegistrarAndRefreshPolicy();
 
   void RefreshPolicyInstalledApps(bool allow_close_and_relaunch = false);
   void ParsePolicySettings();

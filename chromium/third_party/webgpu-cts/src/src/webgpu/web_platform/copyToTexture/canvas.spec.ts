@@ -495,6 +495,7 @@ g.test('copy_contents_from_2d_context_canvas')
   )
   .beforeAllSubcases(t => {
     t.skipIfTextureFormatNotSupported(t.params.dstColorFormat);
+    t.skipIfColorRenderableNotSupportedForFormat(t.params.dstColorFormat);
   })
   .fn(t => {
     const { width, height, canvasType, dstAlphaMode } = t.params;
@@ -559,6 +560,7 @@ g.test('copy_contents_from_gl_context_canvas')
   )
   .beforeAllSubcases(t => {
     t.skipIfTextureFormatNotSupported(t.params.dstColorFormat);
+    t.skipIfColorRenderableNotSupportedForFormat(t.params.dstColorFormat);
   })
   .fn(t => {
     const { width, height, canvasType, contextName, srcPremultiplied, dstAlphaMode } = t.params;
@@ -628,6 +630,7 @@ g.test('copy_contents_from_gpu_context_canvas')
   )
   .beforeAllSubcases(t => {
     t.skipIfTextureFormatNotSupported(t.params.dstColorFormat);
+    t.skipIfColorRenderableNotSupportedForFormat(t.params.dstColorFormat);
     t.selectMismatchedDeviceOrSkipTestCase(undefined);
   })
   .fn(t => {
@@ -694,6 +697,7 @@ g.test('copy_contents_from_bitmaprenderer_context_canvas')
   )
   .beforeAllSubcases(t => {
     t.skipIfTextureFormatNotSupported(t.params.dstColorFormat);
+    t.skipIfColorRenderableNotSupportedForFormat(t.params.dstColorFormat);
   })
   .fn(async t => {
     const { width, height, canvasType, dstAlphaMode } = t.params;
@@ -770,6 +774,7 @@ g.test('color_space_conversion')
   )
   .beforeAllSubcases(t => {
     t.skipIfTextureFormatNotSupported(t.params.dstColorFormat);
+    t.skipIfColorRenderableNotSupportedForFormat(t.params.dstColorFormat);
   })
   .fn(t => {
     const {

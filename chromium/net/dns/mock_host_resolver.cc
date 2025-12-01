@@ -453,6 +453,12 @@ class MockHostResolverBase::ServiceEndpointRequestImpl
     return resolve_error_info_;
   }
 
+  const HostCache::EntryStaleness* GetStaleInfo() const override {
+    return nullptr;
+  }
+
+  bool IsStaleWhileRefresing() const override { return false; }
+
   void ChangeRequestPriority(RequestPriority priority) override {
     priority_ = priority;
   }
@@ -779,7 +785,7 @@ void MockHostResolverBase::RuleResolver::AddIPLiteralRuleWithDnsAliases(
     std::string_view ip_literal,
     std::set<std::string> dns_aliases) {
   std::vector<std::string> aliases_vector;
-  base::ranges::move(dns_aliases, std::back_inserter(aliases_vector));
+  std::ranges::move(dns_aliases, std::back_inserter(aliases_vector));
 
   AddIPLiteralRuleWithDnsAliases(hostname_pattern, ip_literal,
                                  std::move(aliases_vector));

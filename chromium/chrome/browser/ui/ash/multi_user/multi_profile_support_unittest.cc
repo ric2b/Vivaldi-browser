@@ -92,7 +92,7 @@ const content::BrowserContext* GetActiveContext() {
 
 class TestShellDelegateChromeOS : public ash::TestShellDelegate {
  public:
-  TestShellDelegateChromeOS() {}
+  TestShellDelegateChromeOS() = default;
 
   TestShellDelegateChromeOS(const TestShellDelegateChromeOS&) = delete;
   TestShellDelegateChromeOS& operator=(const TestShellDelegateChromeOS&) =
@@ -107,8 +107,9 @@ class TestShellDelegateChromeOS : public ash::TestShellDelegate {
 std::unique_ptr<Browser> CreateTestBrowser(aura::Window* window,
                                            const gfx::Rect& bounds,
                                            Browser::CreateParams* params) {
-  if (!bounds.IsEmpty())
+  if (!bounds.IsEmpty()) {
     window->SetBounds(bounds);
+  }
   std::unique_ptr<Browser> browser =
       chrome::CreateBrowserWithAuraTestWindowForParams(base::WrapUnique(window),
                                                        params);
@@ -133,6 +134,7 @@ class MultiProfileSupportTest : public ChromeAshTestBase {
   // ChromeAshTestBase:
   void SetUp() override;
   void TearDown() override;
+  void OnHelperWillBeDestroyed() override;
 
  protected:
   void SwitchActiveUser(const AccountId& id) {
@@ -186,8 +188,9 @@ class MultiProfileSupportTest : public ChromeAshTestBase {
   // Ensures that a user with the given |account_id| exists.
   const user_manager::User* EnsureTestUser(const AccountId& account_id) {
     const user_manager::User* user = fake_user_manager_->FindUser(account_id);
-    if (user)
+    if (user) {
       return user;
+    }
 
     user = fake_user_manager_->AddUser(account_id);
     ash_test_helper()->test_session_controller_client()->AddUserSession(
@@ -325,8 +328,9 @@ void MultiProfileSupportTest::SetUpForThisManyWindows(int windows) {
 
 std::vector<std::unique_ptr<views::Widget>>
 MultiProfileSupportTest::SetUpOneWindowEachDeskForUser(AccountId account_id) {
-  if (!windows_.empty())
+  if (!windows_.empty()) {
     return std::vector<std::unique_ptr<views::Widget>>();
+  }
   std::vector<std::unique_ptr<views::Widget>> widgets;
   std::vector<int> container_ids = desks_util::GetDesksContainersIds();
   TestShellDelegate* test_shell_delegate =
@@ -366,16 +370,24 @@ void MultiProfileSupportTest::TearDown() {
 
   ::MultiUserWindowManagerHelper::DeleteInstance();
   ChromeAshTestBase::TearDown();
-  profile_manager_.reset();
+  // ProfileManager instance is destroyed in OnHelperWillBeDestroyed()
+  // invoked inside ChromeAshTestBase::TearDown().
+  EXPECT_FALSE(profile_manager_.get());
   cros_settings_holder_.reset();
   ash::DeviceSettingsService::Shutdown();
+}
+
+void MultiProfileSupportTest::OnHelperWillBeDestroyed() {
+  ChromeAshTestBase::OnHelperWillBeDestroyed();
+  profile_manager_.reset();
 }
 
 std::string MultiProfileSupportTest::GetStatusImpl(bool follow_transients) {
   std::string s;
   for (size_t i = 0; i < windows_.size(); i++) {
-    if (i)
+    if (i) {
       s += ", ";
+    }
     if (!window(i)) {
       s += "D";
       continue;
@@ -403,8 +415,9 @@ std::string MultiProfileSupportTest::GetOwnersOfVisibleWindowsAsString() {
       multi_user_window_manager()->GetOwnersOfVisibleWindows();
 
   std::vector<std::string_view> owner_list;
-  for (auto& owner : owners)
+  for (auto& owner : owners) {
     owner_list.push_back(owner.GetUserEmail());
+  }
   return base::JoinString(owner_list, " ");
 }
 
@@ -1391,7 +1404,7 @@ class TestWindowObserver : public aura::WindowObserver {
   TestWindowObserver(const TestWindowObserver&) = delete;
   TestWindowObserver& operator=(const TestWindowObserver&) = delete;
 
-  ~TestWindowObserver() override {}
+  ~TestWindowObserver() override = default;
 
   void OnWindowBoundsChanged(aura::Window* window,
                              const gfx::Rect& old_bounds,

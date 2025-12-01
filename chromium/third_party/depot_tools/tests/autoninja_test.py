@@ -82,6 +82,11 @@ class AutoninjaTest(trial_dir.TestCase):
                         return_value=0) as run_ninja:
             out_dir = os.path.join('out', 'dir')
             write(os.path.join(out_dir, 'args.gn'), 'use_remoteexec=true')
+            write(os.path.join('build', 'toolchain', 'use_reclient_value.py'),
+                  """
+def use_reclient_value(output_dir):
+  return True
+""")
             write(os.path.join('buildtools', 'reclient_cfgs', 'reproxy.cfg'),
                   'RBE_v=2')
             write(os.path.join('buildtools', 'reclient', 'version.txt'), '0.0')
@@ -133,6 +138,12 @@ class AutoninjaTest(trial_dir.TestCase):
                 out_dir = os.path.join('out', 'dir')
                 write(os.path.join(out_dir, 'args.gn'),
                       'use_siso=true\nuse_remoteexec=true')
+                write(
+                    os.path.join('build', 'toolchain', 'use_reclient_value.py'),
+                    """
+def use_reclient_value(output_dir):
+  return True
+""")
                 write(
                     os.path.join('buildtools', 'reclient_cfgs', 'reproxy.cfg'),
                     'instance=projects/rbe-chromium-untrusted-test/'

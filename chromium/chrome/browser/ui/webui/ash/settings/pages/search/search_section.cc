@@ -12,6 +12,7 @@
 #include "ash/lobster/lobster_controller.h"
 #include "ash/public/cpp/assistant/assistant_state.h"
 #include "ash/public/cpp/capture_mode/capture_mode_api.h"
+#include "ash/scanner/scanner_controller.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_util.h"
@@ -26,7 +27,6 @@
 #include "chrome/browser/ui/webui/ash/settings/search/search_concept.h"
 #include "chrome/browser/ui/webui/ash/settings/search/search_tag_registry.h"
 #include "chrome/browser/ui/webui/settings/search_engines_handler.h"
-#include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/ash/services/assistant/public/cpp/assistant_prefs.h"
@@ -42,6 +42,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/chromeos/devicetype_utils.h"
+#include "ui/webui/webui_util.h"
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 #include "chromeos/ash/resources/internal/strings/grit/ash_internal_strings.h"
@@ -51,7 +52,6 @@ namespace ash::settings {
 
 namespace mojom {
 using ::chromeos::settings::mojom::kAssistantSubpagePath;
-using ::chromeos::settings::mojom::kSearchAndAssistantSectionPath;
 using ::chromeos::settings::mojom::kSearchSubpagePath;
 using ::chromeos::settings::mojom::kSystemPreferencesSectionPath;
 using ::chromeos::settings::mojom::Section;
@@ -90,11 +90,14 @@ bool IsMagicBoostNoticeBannerVisible(Profile* profile) {
 }
 
 bool IsLobsterSettingsToggleVisible(Profile* profile) {
-  LobsterService* lobster_service =
-      ash::features::IsLobsterEnabled()
-          ? LobsterServiceProvider::GetForProfile(profile)
-          : nullptr;
-  return lobster_service != nullptr && lobster_service->UserHasAccess();
+  return ash::features::IsLobsterEnabled() &&
+         LobsterServiceProvider::GetForProfile(profile) != nullptr;
+}
+
+bool IsScannerSettingsToggleVisible() {
+  ash::Shell* shell = ash::Shell::HasInstance() ? Shell::Get() : nullptr;
+  return shell && shell->scanner_controller() &&
+         shell->scanner_controller()->CanShowFeatureSettingsToggle();
 }
 
 base::span<const SearchConcept> GetSearchPageSearchConcepts() {
@@ -361,11 +364,11 @@ SearchSection::SearchSection(Profile* profile,
     UpdateQuickAnswersSearchTags();
   }
 
+  // Magic boost related search tags are updated in `AddLoadTimeData`, i.e. when
+  // the settings app is opened. See `AddLoadTimeData`.
   auto* magic_boost_state = chromeos::MagicBoostState::Get();
-  if (magic_boost_state && magic_boost_state->IsMagicBoostAvailable()) {
-    updater.AddSearchTags(GetMagicBoostSearchConcepts());
+  if (magic_boost_state) {
     magic_boost_state->AddObserver(this);
-    UpdateSubMagicBoostSearchTags();
   }
 }
 
@@ -377,9 +380,6 @@ SearchSection::~SearchSection() {
 }
 
 void SearchSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
-  const bool kIsRevampEnabled =
-      ash::features::IsOsSettingsRevampWayfindingEnabled();
-
   webui::LocalizedString kLocalizedStrings[] = {
       {"enableMagicBoost", IDS_OS_SETTINGS_ENABLE_MAGIC_BOOST},
       {"enableMagicBoostDesc", IDS_OS_SETTINGS_ENABLE_MAGIC_BOOST_DESCRIPTION},
@@ -397,17 +397,13 @@ void SearchSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       {"enableLobster", IDS_OS_SETTINGS_ENABLE_LOBSTER},
       {"enableLobsterDesc", IDS_OS_SETTINGS_ENABLE_LOBSTER_DESCRIPTION},
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
-      {"osSearchEngineLabel", kIsRevampEnabled
-                                  ? IDS_OS_SETTINGS_REVAMP_SEARCH_ENGINE_LABEL
-                                  : IDS_OS_SETTINGS_SEARCH_ENGINE_LABEL},
+      {"osSearchEngineLabel", IDS_OS_SETTINGS_SEARCH_ENGINE_LABEL},
       {"searchSubpageTitle", IDS_SETTINGS_SEARCH_SUBPAGE_TITLE},
       {"searchGoogleAssistant", IDS_SETTINGS_SEARCH_GOOGLE_ASSISTANT},
       {"searchGoogleAssistantEnabled",
-       kIsRevampEnabled ? IDS_OS_SETTINGS_SEARCH_GOOGLE_ASSISTANT_ON
-                        : IDS_SETTINGS_SEARCH_GOOGLE_ASSISTANT_ENABLED},
+       IDS_OS_SETTINGS_SEARCH_GOOGLE_ASSISTANT_ON},
       {"searchGoogleAssistantDisabled",
-       kIsRevampEnabled ? IDS_OS_SETTINGS_SEARCH_GOOGLE_ASSISTANT_OFF
-                        : IDS_SETTINGS_SEARCH_GOOGLE_ASSISTANT_DISABLED},
+       IDS_OS_SETTINGS_SEARCH_GOOGLE_ASSISTANT_OFF},
       {"searchGoogleAssistantOn", IDS_OS_SETTINGS_SEARCH_GOOGLE_ASSISTANT_ON},
       {"searchGoogleAssistantOff", IDS_OS_SETTINGS_SEARCH_GOOGLE_ASSISTANT_OFF},
   };
@@ -418,10 +414,19 @@ void SearchSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
 
   html_source->AddBoolean("isQuickAnswersSupported", IsQuickAnswersSupported());
 
-  html_source->AddBoolean(
-      "isMagicBoostFeatureEnabled",
+  bool is_magic_boost_feature_enabled =
       chromeos::MagicBoostState::Get()->IsMagicBoostAvailable() ||
-          IsLobsterSettingsToggleVisible(profile()));
+      IsLobsterSettingsToggleVisible(profile());
+
+  // Updates magic boost search tags each time when the load time data is added,
+  // instead of a one-off update in the constructor, to avoid the unreliable
+  // value of chromeos::MagicBoostState::Get()->IsMagicBoostAvailable() during
+  // the user login.
+  // See crbug.com/379281461 for more details.
+  UpdateMagicBoostSearchTags(is_magic_boost_feature_enabled);
+
+  html_source->AddBoolean("isMagicBoostFeatureEnabled",
+                          is_magic_boost_feature_enabled);
 
   html_source->AddBoolean("isMagicBoostNoticeBannerVisible",
                           IsMagicBoostNoticeBannerVisible(profile()));
@@ -430,14 +435,21 @@ void SearchSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
                           IsLobsterSettingsToggleVisible(profile()));
 
   html_source->AddBoolean("isSunfishSettingsToggleVisible",
-                          ash::CanStartSunfishSession());
+                          ash::features::IsSunfishFeatureEnabled() ||
+                              IsScannerSettingsToggleVisible());
 
   const bool is_assistant_allowed = IsAssistantAllowed();
   html_source->AddBoolean("isAssistantAllowed", is_assistant_allowed);
-  html_source->AddLocalizedString("osSearchPageTitle",
-                                  is_assistant_allowed
-                                      ? IDS_SETTINGS_SEARCH_AND_ASSISTANT
-                                      : IDS_SETTINGS_SEARCH);
+
+  if (assistant::features::IsNewEntryPointEnabled()) {
+    html_source->AddLocalizedString(
+        "osSearchPageTitle", IDS_OS_SETTINGS_SEARCH_AND_SUGGESTIONS_TITLE);
+  } else {
+    html_source->AddLocalizedString(
+        "osSearchPageTitle", is_assistant_allowed
+                                 ? IDS_SETTINGS_SEARCH_AND_ASSISTANT
+                                 : IDS_SETTINGS_SEARCH);
+  }
   html_source->AddString("osSearchEngineDescription",
                          ui::SubstituteChromeOSDeviceType(
                              IDS_OS_SETTINGS_SEARCH_ENGINE_DESCRIPTION));
@@ -453,6 +465,10 @@ void SearchSection::AddHandlers(content::WebUI* web_ui) {
 }
 
 int SearchSection::GetSectionNameMessageId() const {
+  if (assistant::features::IsNewEntryPointEnabled()) {
+    return IDS_OS_SETTINGS_SEARCH_AND_SUGGESTIONS_TITLE;
+  }
+
   return IsAssistantAllowed() ? IDS_SETTINGS_SEARCH_AND_ASSISTANT
                               : IDS_SETTINGS_SEARCH;
 }
@@ -590,8 +606,14 @@ void SearchSection::OnEligibilityChanged(bool eligible) {
   UpdateQuickAnswersSearchTags();
 }
 
+void SearchSection::OnFeatureTypeChanged() {
+  UpdateQuickAnswersSearchTags();
+}
+
 void SearchSection::OnMagicBoostEnabledUpdated(bool enabled) {
-  UpdateSubMagicBoostSearchTags();
+  // This is triggered on magic boost prefs value changes, which means magic
+  // boost must be available.
+  UpdateMagicBoostSearchTags(/*is_magic_boost_available=*/true);
 }
 
 void SearchSection::OnIsDeleting() {
@@ -654,13 +676,20 @@ void SearchSection::UpdateQuickAnswersSearchTags() {
   }
 }
 
-void SearchSection::UpdateSubMagicBoostSearchTags() {
+void SearchSection::UpdateMagicBoostSearchTags(bool is_magic_boost_available) {
   auto* magic_boost_state = chromeos::MagicBoostState::Get();
   DCHECK(magic_boost_state);
 
   SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
 
+  updater.RemoveSearchTags(GetMagicBoostSearchConcepts());
   updater.RemoveSearchTags(GetMagicBoostSubSearchConcepts());
+
+  if (!is_magic_boost_available) {
+    return;
+  }
+
+  updater.AddSearchTags(GetMagicBoostSearchConcepts());
 
   if (magic_boost_state->magic_boost_enabled().value_or(false)) {
     updater.AddSearchTags(GetMagicBoostSubSearchConcepts());

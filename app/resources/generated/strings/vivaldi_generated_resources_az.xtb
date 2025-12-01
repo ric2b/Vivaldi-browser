@@ -13,6 +13,7 @@
 <translation id="1165039591588034296">Xəta</translation>
 <translation id="1175364870820465910">&amp;Çap edin...</translation>
 <translation id="1181037720776840403">Silmək</translation>
+<translation id="1184037892196730210">Ekranı yayımlamaq olmur</translation>
 <translation id="1187722533808055681">Aktiv rejimə keçid</translation>
 <translation id="122082903575839559">Sertifikat imza alqoritmi</translation>
 <translation id="1221825588892235038">Yalnız seçilənlər</translation>
@@ -37,6 +38,7 @@
 <translation id="1601560923496285236">Tətbiq etmək</translation>
 <translation id="1603914832182249871">(Məxfi)</translation>
 <translation id="1627276047960621195">Fayl təsvirediciləri</translation>
+<translation id="1654713139320245449">Yayım üçün cihazlar tapılmadı. Kömək lazımdır?</translation>
 <translation id="166278006618318542">Subyektin ictimai açar alqoritmi</translation>
 <translation id="1682548588986054654">Yeni məxfi pəncərə</translation>
 <translation id="1708338024780164500">(Qeyri-aktiv)</translation>
@@ -168,6 +170,7 @@
 <translation id="3838085852053358637">Qoşma yüklənə bilmədi</translation>
 <translation id="383891835335927981">Miqyası dəyişdirilən saytlar yoxdur</translation>
 <translation id="385051799172605136">Geriyə</translation>
+<translation id="3861977424605124250">Başlanğıcda göstərmək</translation>
 <translation id="3867944738977021751">Sertifikat sahələri</translation>
 <translation id="3905761538810670789">Tətbiqi bərpa etmək</translation>
 <translation id="3908501907586732282">Əlavə qoşmanı aktiv etmək</translation>
@@ -276,6 +279,7 @@
 <translation id="5582839680698949063">Əsas menyu</translation>
 <translation id="5614553682702429503">Şifrə saxlanılsın?</translation>
 <translation id="5623842676595125836">Jurnal</translation>
+<translation id="5624959475330585145">Etibarsız bağlantı istifadə etməzdən əvvəl soruşulsun</translation>
 <translation id="5638309510554459422">Əlavələri və görünüş mövzularını <ph name="BEGIN_LINK" />Chrome əlavələr mağazasında<ph name="END_LINK" /> tapın</translation>
 <translation id="5677928146339483299">Əngəlləndi</translation>
 <translation id="5707185214361380026">Əlavə qoşmanı buradan yükləmək mümkün olmadı:</translation>
@@ -365,6 +369,7 @@
 <translation id="7287143125007575591">İcazə verilmədi.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Yazan zaman orfoqrafiyanı yoxlamaq</translation>
+<translation id="7359680654975233185">Vərəqi yayımlamaq olmur</translation>
 <translation id="7385854874724088939">Çap zamanı xəta baş verdi. Printerinizi yoxlayın və yenidən cəhd edin.</translation>
 <translation id="7412226954991670867">GPU Yaddaşı</translation>
 <translation id="7421925624202799674">&amp;Səhifənin koduna baxmaq</translation>
@@ -378,6 +383,7 @@
 <translation id="7661259717474717992">Saytlara kuku məlumatlarını saxlamağa və oxumağa icazə verin</translation>
 <translation id="7663719505383602579">Qəbuledici: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">İnzibatçınız tərəfindən quraşdırılıb</translation>
+<translation id="7685038817958445325">Yayımlamaq olmur</translation>
 <translation id="7685049629764448582">JavaScript yaddaşı</translation>
 <translation id="7701869757853594372">USER emalçısı</translation>
 <translation id="7704305437604973648">Tapşırıq</translation>
@@ -463,6 +469,7 @@ Açar faylını təhlükəsiz yerdə saxlayın. Bu yeni versiya qoşma yaratmaq 
 <translation id="9218430445555521422">Standart veb-bələdçi kimi təyin etmək</translation>
 <translation id="93766956588638423">Qoşmanı bərpa etmək</translation>
 <translation id="961012016278832836">Microsoft Edge Təminatı</translation>
+<translation id="961856697154696964">Baxış verilənlərini silmək</translation>
 <translation id="994289308992179865">&amp;Təkrar</translation>
 <translation id="998747458861718449">Təftiş etmək</translation>
 </translationbundle>

@@ -5,10 +5,13 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_CSS_RESOLVER_STYLE_CASCADE_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_CSS_RESOLVER_STYLE_CASCADE_H_
 
+#include <utility>
+
 #include "third_party/blink/renderer/core/animation/interpolation.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/css_property_name.h"
 #include "third_party/blink/renderer/core/css/css_property_value.h"
+#include "third_party/blink/renderer/core/css/kleene_value.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_token.h"
 #include "third_party/blink/renderer/core/css/parser/css_tokenizer.h"
 #include "third_party/blink/renderer/core/css/properties/css_bitset.h"
@@ -39,6 +42,7 @@ class CSSValue;
 class CSSVariableData;
 class CustomProperty;
 class MatchResult;
+class MediaQueryFeatureExpNode;
 class StyleResolverState;
 
 namespace cssvalue {
@@ -66,6 +70,7 @@ class CORE_EXPORT StyleCascade {
 
   using CSSPendingSubstitutionValue = cssvalue::CSSPendingSubstitutionValue;
   using CSSFlipRevertValue = cssvalue::CSSFlipRevertValue;
+  struct FunctionContext;
 
  public:
   StyleCascade(StyleResolverState& state) : state_(state) {}
@@ -269,15 +274,25 @@ class CORE_EXPORT StyleCascade {
     String OriginalText() { return original_text_.ToString(); }
 
     bool Append(StringView str,
+                bool is_attr_tainted,
                 wtf_size_t byte_limit = std::numeric_limits<wtf_size_t>::max());
     bool Append(CSSVariableData* data,
+                bool is_attr_tainted,
                 wtf_size_t byte_limit = std::numeric_limits<wtf_size_t>::max());
     bool Append(const CSSValue* data,
+                bool is_attr_tainted,
                 wtf_size_t byte_limit = std::numeric_limits<wtf_size_t>::max());
-    void Append(const CSSParserToken&, StringView string);
+    void Append(const CSSParserToken&, bool is_attr_tainted, StringView string);
 
     // NOTE: Strips trailing whitespace.
-    bool AppendFallback(const TokenSequence&, wtf_size_t byte_limit);
+    bool AppendFallback(const TokenSequence&,
+                        bool is_attr_tainted,
+                        wtf_size_t byte_limit);
+
+    const Vector<std::pair<wtf_size_t, wtf_size_t>>* GetAttrTaintedRanges()
+        const {
+      return &attr_taint_ranges_;
+    }
 
     CSSVariableData* BuildVariableData();
 
@@ -310,6 +325,8 @@ class CORE_EXPORT StyleCascade {
     bool has_font_units_ = false;
     bool has_root_font_units_ = false;
     bool has_line_height_units_ = false;
+    // Attr tainted intervals [start, end).
+    Vector<std::pair<wtf_size_t, wtf_size_t>> attr_taint_ranges_;
   };
 
   // Resolving Values
@@ -365,19 +382,53 @@ class CORE_EXPORT StyleCascade {
 
   CSSVariableData* ResolveVariableData(CSSVariableData*,
                                        const CSSParserContext&,
+                                       FunctionContext*,
                                        CascadeResolver&);
 
   // Certain parts of CSS function evaluation may need some local context
   // supplied by the caller. Given the current scoping strategy, the only
-  // relevant context is the arguments given to the function in current
-  // scope. (If we are not currently evaluating a function, this will be
-  // empty.) If we get to the point of supporting more dynamic scope,
-  // there may be a call stack or similar here, and possibly also locals.
+  // relevant context is the arguments given to the function in current scope,
+  // as well as locals within that function. (If we are not currently
+  // evaluating a function, this will be nullptr.) If we get to the point of
+  // supporting more dynamic scope, there may be a call stack or similar here.
+  //
+  // Arguments and Locals
+  // ====================
+  //
+  // Generally, when a var() is encountered, it must be substituted by some
+  // value that does not itself contain any substitution functions (e.g. another
+  // var()). For a var() that is evaluated in the context of a function, we try
+  // the following things, in order:
+  //
+  //  1. If there is a matching local variable, substitute its value.
+  //  2. Otherwise, if there is a matching argument, substitute its value.
+  //  3. Otherwise, if there is a matching custom property, substitute its
+  //     computed value.
+  //  4. Otherwise, if there is a fallback, resolve any substitution functions
+  //     in the fallback value, and substitute that result.
+  //  5. Otherwise, it's invalid at computed-value time.
   struct FunctionContext {
     STACK_ALLOCATED();
 
    public:
+    // The values within `arguments` and `locals` are the values used
+    // to substitute var() functions that refer to arguments and local
+    // variables (respectively).
+    //
+    // These maps never contain any unresolved substitution functions.
+    // Arguments are resolved eagerly at the call site, and locals are resolved
+    // through the process described in "Application of Local Variables"
+    // near `ApplyLocalVariables` in this file.
     HeapHashMap<String, Member<const CSSValue>> arguments;
+    HeapHashMap<String, Member<const CSSValue>> locals;
+
+    // Contains the *specified* locals, with any var() (etc) intact.
+    // This is needed by the process that populates the `locals` map,
+    // see "Application of Local Variables".
+    const HeapHashMap<String, Member<const CSSValue>>& unresolved_locals;
+
+    // Parent stack frame (for dynamic scoping).
+    FunctionContext* parent = nullptr;
   };
 
   // The Resolve*Into functions either resolve dependencies, append to the
@@ -391,32 +442,37 @@ class CORE_EXPORT StyleCascade {
   bool ResolveTokensInto(CSSParserTokenStream&,
                          CascadeResolver&,
                          const CSSParserContext&,
-                         const FunctionContext&,
+                         FunctionContext*,
                          CSSParserTokenType stop_type,
                          TokenSequence&);
   bool ResolveVarInto(CSSParserTokenStream&,
                       CascadeResolver&,
                       const CSSParserContext&,
+                      FunctionContext*,
                       TokenSequence&);
   bool ResolveEnvInto(CSSParserTokenStream&,
                       CascadeResolver&,
                       const CSSParserContext&,
                       TokenSequence&);
-  bool ResolveArgInto(CSSParserTokenStream&,
-                      CascadeResolver&,
-                      const CSSParserContext&,
-                      const FunctionContext&,
-                      TokenSequence&);
   bool ResolveAttrInto(CSSParserTokenStream&,
                        CascadeResolver&,
                        const CSSParserContext&,
                        TokenSequence&);
-  bool ResolveAppearanceAutoBaseSelectInto(CSSParserTokenStream&,
-                                           CascadeResolver&,
-                                           const CSSParserContext&,
-                                           TokenSequence&);
+  bool ResolveAutoBaseInto(CSSParserTokenStream&,
+                           CascadeResolver&,
+                           const CSSParserContext&,
+                           TokenSequence&);
+  bool ResolveIfInto(CSSParserTokenStream&,
+                     CascadeResolver&,
+                     const CSSParserContext&,
+                     TokenSequence&);
 
-  void AppendTaintToken(TokenSequence& out);
+  bool EvalIfCondition(CSSParserTokenStream& stream,
+                       CascadeResolver& resolver,
+                       const CSSParserContext& context);
+  KleeneValue EvalIfStyleFeature(const MediaQueryFeatureExpNode&,
+                                 CascadeResolver&,
+                                 const CSSParserContext& context);
 
   // NOTE: The FunctionContext object must be the _caller's_ function context,
   // not the one the function itself sets up. This is because it is used to
@@ -426,15 +482,57 @@ class CORE_EXPORT StyleCascade {
                            CSSParserTokenStream& stream,
                            CascadeResolver& resolver,
                            const CSSParserContext& context,
-                           const FunctionContext& function_context,
+                           FunctionContext* function_context,
                            TokenSequence& out);
+  bool ResolveArgumentOrLocalInto(const CSSValue* value,
+                                  CSSParserTokenStream& stream,
+                                  CascadeResolver& resolver,
+                                  const CSSParserContext& context,
+                                  const TokenSequence* fallback,
+                                  TokenSequence& out);
 
-  const CSSValue* ResolveFunctionExpression(
-      StringView expr,
-      const StyleRuleFunction::Type& type,
-      CascadeResolver& resolver,
-      const CSSParserContext& context,
-      const FunctionContext& function_context);
+  const CSSValue* ResolveFunctionExpression(StringView expr,
+                                            const CSSSyntaxDefinition& type,
+                                            CascadeResolver& resolver,
+                                            const CSSParserContext& context,
+                                            FunctionContext* function_context);
+
+  // Application of Local Variables
+  // ==============================
+  //
+  // Just as custom properties are applied to a ComputedStyle,
+  // local variables are applied to a FunctionContext. In both cases,
+  // a crucial part of the "apply" process is eliminating any substitution
+  // functions in the specified value. This gives rise to a dependency graph
+  // of local variables---one that can even contain cycles.
+  //
+  // ApplyLocalVariables goes though each specified local variable (in an order
+  // determined by the HashMap backing), resolves any substitution functions
+  // (ResolveLocalVariable), and stores the resolved value into
+  // FunctionContext::locals.
+  //
+  //   @function --f() {
+  //     --x: 42px;
+  //     --y: var(--x);
+  //     --z: var(--y);
+  //     /* ... */
+  //   }
+  //
+  // In the example above, --z refers to --y which refers to --x. If we happen
+  // to resolve --z first, then --y is also resolved as part of resolving
+  // the var(--y) within --z's value. This on-demand resolution of referenced
+  // local variables is done by LookupAndApplyLocalVariable.
+  void ApplyLocalVariables(CascadeResolver&,
+                           const CSSParserContext&,
+                           FunctionContext&);
+  void LookupAndApplyLocalVariable(const String& name,
+                                   CascadeResolver&,
+                                   const CSSParserContext&,
+                                   FunctionContext&);
+  const CSSValue* ResolveLocalVariable(const CSSValue&,
+                                       CascadeResolver&,
+                                       const CSSParserContext&,
+                                       FunctionContext&);
 
   CSSVariableData* GetVariableData(const CustomProperty&) const;
   CSSVariableData* GetEnvironmentVariable(const AtomicString&,
@@ -461,6 +559,14 @@ class CORE_EXPORT StyleCascade {
   // Marks a CSSProperty as having a reference to a custom property. Needed to
   // disable the matched property cache in some cases.
   void MarkHasVariableReference(const CSSProperty&);
+  // Set ComputedStyle bits that require parsing unresolved env() variables.
+  void ApplyUnresolvedEnv();
+  // See comments on IsBottomRelativeToSafeAreaInset in
+  // computed_style_extra_fields.json5.
+  void ApplyIsBottomRelativeToSafeAreaInset();
+  // See comments on ReferencesSafeAreaInsetBottom in
+  // computed_style_extra_fields.json5.
+  void ApplyReferencesSafeAreaInsetBottom();
 
   // Declarations originating from @position-try rules are treated as
   // revert-layer if we're not out-of-flow positioned. Since such declarations

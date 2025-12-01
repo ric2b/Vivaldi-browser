@@ -576,8 +576,6 @@ object in the update check request.
  *   `app`: A list of `app` objects. There is one object for each `app` in the
      request body.
  *   `daystart`: A `daystart` object.
- *   `systemrequirements`: A `systemrequirements` object. The server will not
-     send this element, but it may be present in offline installer manifests.
  *   `protocol`: The version of the Omaha protocol. Servers responding with this
      protocol must send a value of "4.0".
  *   `server`: A string identifying the server or server family for diagnostic
@@ -591,47 +589,6 @@ server's locale. It has the following members:
      request was received. The client should generally save this value for use
      in future update checks (for examples, see `request.app.ping.rd` and
      `request.app.installdate`).
-
-#### `systemrequirements` Objects (Update Check Response)
-A `systemrequirements` object contains information about the operating system
-that the application requires to install. It has the following members:
- *   `platform`: The operating system family that the application requires
-     (e.g. "win", "mac", "linux", "ios", "android"), or "" if not applicable.
- *   `arch`: Expected host processor architecture that the app is compatible
-     with, or "" if not applicable.
-
-     `arch` can be a single entry, or multiple entries separated with `,`.
-     Entries prefixed with a `-` (negative entries) indicate non-compatible
-     hosts. Non-prefixed entries indicate compatible guests.
-
-     An application is compatible with the current architecture if:
-     * `arch` is empty, or
-     * none of the negative entries within `arch` match the current host
-       architecture exactly, and there are no non-negative entries, or
-     * one of the non-negative entries within `arch` matches the current
-       architecture, or is compatible with the current architecture (i.e., it is
-       a compatible guest for the current host). The latter is determined by
-       `::IsWow64GuestMachineSupported()` on Windows.
-       * If `::IsWow64GuestMachineSupported()` is not available, returns `true`
-         if `arch` is x86.
-
-     Examples:
-     * `arch` == "x86".
-     * `arch` == "x64".
-     * `arch` == "x86,x64,-arm64": installation will fail if the underlying host
-       is arm64.
- *   `min_os_version`: The minimum required version of the operating system, or
-     "" if not applicable.
-
-     The `min_os_version` is in the format `major.minor.build.patch` for
-     Windows. The `major`, `minor` and `build` are the values returned by the
-     `::GetVersionEx` API. The `patch` is the `UBR` value under the registry
-     path `HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion`.
-
-     The `build` and the `patch` components may be omitted if all that is needed
-     is a minimum `major.minor` version. For example, `6.0` will match all OS
-     versions that are at or above that version, regardless of `build` and
-     `patch` numbers.
 
 #### `app` Objects (Update Check Response)
 An app object represents a per-application acknowledgement of the request. If an
@@ -708,17 +665,19 @@ the following members:
      *   "error-inexpressible": The server finds that it is unable to produce a
          list of pipelines for the given product using the set of operations
          provided in `acceptformat`.
- *   `pipelines`: A list of `pipeline` objects.
+
+The following members are only present if the `status` is "ok":
+ *   `nextversion`: The expected version of the product, if any pipeline is
+     able to complete all operations successfully.
+ *   `nextfp`: A `fingerprint` object representing the package fingerprint
+     associated with the all `pipeline` objects.
+ *   `pipeline`: A list of `pipeline` objects.
 
 #### `pipeline` Objects (Update Check Response)
 A pipeline object describes a pipeline process that may be applied in order to
 update the current binary. A pipeline is represented as a series of operations.
 A pipeline object has the following members:
- *  `operations`: A list of `operation` objects.
- *  `nextversion`: The expected version of the product, if this pipeline is
-    able to complete all operations successfully.
- *  `nextfp`: A `fingerprint` object representing the package fingerprint
-    associated with the package file that this pipeline installs.
+ *  `operation`: A list of `operation` objects.
 
 #### `operation` Objects (Update Check Response)
 A operation object describes one of many operations to be performed in order to
@@ -734,7 +693,7 @@ For `type == "download"`: Download a payload.
  *  `size`: The size in bytes of the payload requested for download.
  *  `outhash_sha256`: The SHA256 hash of the payload downloaded, encoded as a
     lowercase hexadecimal string.
- *  `urls`: The ordered list of url objects from which this payload may be
+ *  `url`: The ordered list of url objects from which this payload may be
     obtained. Clients must attempt to download from each URL of the appropriate
     type in the specified order, falling back to the next URL if a TCP or HTTP
     error is encountered. A 4xx or 5xx HTTP response qualifies as an error that
@@ -784,8 +743,8 @@ A url object describes a fully-qualified URL. It has the following members:
 
 ## Downloads
 Download requests occur when an application update is needed, as a result of a
-`response.app.updatecheck.pipelines.operations.urls` member.  Download requests
-are HTTP GET requests and can use any HTTP implementation.
+`response.app.updatecheck.pipeline.operation.url` list element. Download
+requests are HTTP GET requests and can use any HTTP implementation.
 
 ### Request Headers
 In addition to the regular HTTP headers, this protocol defines the following

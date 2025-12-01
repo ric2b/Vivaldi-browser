@@ -15,6 +15,7 @@ export class AnimationScreenshotPopover extends UI.Widget.VBox {
   #endDelay?: number;
   constructor(images: HTMLImageElement[]) {
     super(true);
+    this.registerRequiredCSS(animationScreenshotPopoverStyles);
     console.assert(images.length > 0);
 
     this.contentElement.classList.add('animation-screenshot-popover');
@@ -30,8 +31,8 @@ export class AnimationScreenshotPopover extends UI.Widget.VBox {
   }
 
   override wasShown(): void {
+    super.wasShown();
     this.#rafId = this.contentElement.window().requestAnimationFrame(this.changeFrame.bind(this));
-    this.registerCSSFiles([animationScreenshotPopoverStyles]);
   }
 
   override willHide(): void {

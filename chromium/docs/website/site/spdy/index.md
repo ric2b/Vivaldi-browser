@@ -46,7 +46,7 @@ latency of web pages. Its successor is
                     <http://wiki.eclipse.org/Jetty/Feature/SPDY>
         *   Apache module for SPDY: <http://code.google.com/p/mod-spdy/>
         *   Python implementation of a SPDY server:
-                    <http://github.com/mnot/nbhttp/tree/spdy>
+                    <https://github.com/mnot/nbhttp/tree/spdy>
         *   Ruby SPDY: <https://github.com/igrigorik/spdy>
         *   node.js SPDY: <https://github.com/indutny/node-spdy>
     *   Libraries

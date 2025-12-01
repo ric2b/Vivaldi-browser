@@ -129,6 +129,7 @@ class TestNavigationLoaderInterceptor : public NavigationLoaderInterceptor {
         /*trust_token_observer=*/mojo::NullRemote(),
         /*url_loader_network_observer=*/mojo::NullRemote(),
         /*devtools_observer=*/mojo::NullRemote(),
+        /*device_bound_session_observer=*/mojo::NullRemote(),
         /*accept_ch_frame_observer=*/mojo::NullRemote(),
         /*attribution_request_helper=*/nullptr,
         /*shared_storage_writable=*/false);
@@ -300,7 +301,9 @@ class NavigationURLLoaderImplTest : public testing::Test {
         mojo::NullRemote() /* trust_token_observer */,
         mojo::NullRemote() /* shared_dictionary_observer */,
         mojo::NullRemote() /* url_loader_network_observer */,
-        /*devtools_observer=*/mojo::NullRemote(), std::move(interceptors));
+        /*devtools_observer=*/mojo::NullRemote(),
+        /*device_bound_session_observer=*/mojo::NullRemote(),
+        std::move(interceptors));
   }
 
   // Requests |redirect_url|, which must return a HTTP 3xx redirect. It's also

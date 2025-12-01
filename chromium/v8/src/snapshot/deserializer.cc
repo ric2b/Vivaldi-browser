@@ -245,7 +245,8 @@ int Deserializer<IsolateT>::WriteHeapPointer(
 template <typename IsolateT>
 int Deserializer<IsolateT>::WriteExternalPointer(Tagged<HeapObject> host,
                                                  ExternalPointerSlot dest,
-                                                 Address value) {
+                                                 Address value,
+                                                 ExternalPointerTag tag) {
   DCHECK(!next_reference_is_weak_ && !next_reference_is_indirect_pointer_ &&
          !next_reference_is_protected_pointer);
 
@@ -253,7 +254,7 @@ int Deserializer<IsolateT>::WriteExternalPointer(Tagged<HeapObject> host,
   ExternalPointerTable::ManagedResource* managed_resource = nullptr;
   ExternalPointerTable* owning_table = nullptr;
   ExternalPointerHandle original_handle = kNullExternalPointerHandle;
-  if (IsManagedExternalPointerType(dest.tag())) {
+  if (IsManagedExternalPointerType(tag)) {
     // This can currently only happen during snapshot stress mode as we cannot
     // normally serialized managed resources. In snapshot stress mode, the new
     // isolate will be destroyed and the old isolate (really, the old isolate's
@@ -272,7 +273,7 @@ int Deserializer<IsolateT>::WriteExternalPointer(Tagged<HeapObject> host,
   }
 #endif  // V8_ENABLE_SANDBOX
 
-  dest.init(main_thread_isolate(), host, value);
+  dest.init(main_thread_isolate(), host, value, tag);
 
 #ifdef V8_ENABLE_SANDBOX
   if (managed_resource) {
@@ -336,6 +337,9 @@ Deserializer<IsolateT>::Deserializer(IsolateT* isolate,
   // kEmptyBackingStoreRefSentinel) in a deserialized object requiring fix-up.
   static_assert(kEmptyBackingStoreRefSentinel == 0);
   backing_stores_.push_back({});
+
+  back_refs_.reserve(2048);
+  js_dispatch_entries_.reserve(512);
 
 #ifdef DEBUG
   num_api_references_ = GetNumApiReferences(isolate);
@@ -598,7 +602,7 @@ void Deserializer<IsolateT>::PostProcessNewObject(DirectHandle<Map> map,
         // TODO(leszeks): This handle patching is ugly, consider adding an
         // explicit internalized string bytecode. Also, the new thin string
         // should be dead, try immediately freeing it.
-        Handle<String> string = Cast<String>(obj);
+        DirectHandle<String> string = Cast<String>(obj);
 
         StringTableInsertionKey key(
             isolate(), string,
@@ -1031,6 +1035,8 @@ int Deserializer<IsolateT>::ReadSingleBytecodeData(uint8_t data,
       return ReadInitializeSelfIndirectPointer(data, slot_accessor);
     case kAllocateJSDispatchEntry:
       return ReadAllocateJSDispatchEntry(data, slot_accessor);
+    case kJSDispatchEntry:
+      return ReadJSDispatchEntry(data, slot_accessor);
     case kProtectedPointerPrefix:
       return ReadProtectedPointerPrefix(data, slot_accessor);
     case CASE_RANGE(kRootArrayConstants, 32):
@@ -1087,7 +1093,7 @@ int Deserializer<IsolateT>::ReadNewObject(uint8_t data,
   DCHECK_IMPLIES(V8_STATIC_ROOTS_BOOL, space != SnapshotSpace::kReadOnlyHeap);
   // Save the descriptor before recursing down into reading the object.
   ReferenceDescriptor descr = GetAndResetNextReferenceDescriptor();
-  Handle<HeapObject> heap_object = ReadObject(space);
+  DirectHandle<HeapObject> heap_object = ReadObject(space);
   if (v8_flags.trace_deserialization) {
     --depth_;
   }
@@ -1146,7 +1152,7 @@ int Deserializer<IsolateT>::ReadRootArray(uint8_t data,
                                           SlotAccessor slot_accessor) {
   int id = source_.GetUint30();
   RootIndex root_index = static_cast<RootIndex>(id);
-  Handle<HeapObject> heap_object =
+  DirectHandle<HeapObject> heap_object =
       Cast<HeapObject>(isolate()->root_handle(root_index));
 
   if (v8_flags.trace_deserialization) {
@@ -1205,7 +1211,7 @@ int Deserializer<IsolateT>::ReadNewMetaMap(uint8_t data,
   SnapshotSpace space = data == kNewContextlessMetaMap
                             ? SnapshotSpace::kReadOnlyHeap
                             : SnapshotSpace::kOld;
-  Handle<HeapObject> heap_object = ReadMetaMap(space);
+  DirectHandle<HeapObject> heap_object = ReadMetaMap(space);
   if (v8_flags.trace_deserialization) {
     PrintF("%*sNewMetaMap [%s]\n", depth_, "", SnapshotSpaceName(space));
   }
@@ -1226,12 +1232,12 @@ int Deserializer<IsolateT>::ReadExternalReference(uint8_t data,
     tag = ReadExternalPointerTag();
   }
   if (v8_flags.trace_deserialization) {
-    PrintF("%*sExternalReference [%" PRIxPTR ", %" PRIx64 "]\n", depth_, "",
-           address, tag);
+    PrintF("%*sExternalReference [%" PRIxPTR ", %i]\n", depth_, "", address,
+           tag);
   }
   return WriteExternalPointer(*slot_accessor.object(),
-                              slot_accessor.external_pointer_slot(tag),
-                              address);
+                              slot_accessor.external_pointer_slot(tag), address,
+                              tag);
 }
 
 template <typename IsolateT>
@@ -1246,12 +1252,12 @@ int Deserializer<IsolateT>::ReadRawExternalReference(
     tag = ReadExternalPointerTag();
   }
   if (v8_flags.trace_deserialization) {
-    PrintF("%*sRawExternalReference [%" PRIxPTR ", %" PRIx64 "]\n", depth_, "",
-           address, tag);
+    PrintF("%*sRawExternalReference [%" PRIxPTR ", %i]\n", depth_, "", address,
+           tag);
   }
   return WriteExternalPointer(*slot_accessor.object(),
-                              slot_accessor.external_pointer_slot(tag),
-                              address);
+                              slot_accessor.external_pointer_slot(tag), address,
+                              tag);
 }
 
 // Find an object in the attached references and write a pointer to it to
@@ -1291,7 +1297,7 @@ int Deserializer<IsolateT>::ReadResolvePendingForwardRef(
   // the map field or after the 'self' indirect pointer for trusted objects.
   DCHECK(slot_accessor.offset() == HeapObject::kHeaderSize ||
          slot_accessor.offset() == ExposedTrustedObject::kHeaderSize);
-  Handle<HeapObject> obj = slot_accessor.object();
+  DirectHandle<HeapObject> obj = slot_accessor.object();
   int index = source_.GetUint30();
   auto& forward_ref = unresolved_forward_refs_[index];
   auto slot = SlotAccessorForHeapObject::ForSlotOffset(forward_ref.object,
@@ -1401,12 +1407,11 @@ int Deserializer<IsolateT>::ReadApiReference(uint8_t data,
     tag = ReadExternalPointerTag();
   }
   if (v8_flags.trace_deserialization) {
-    PrintF("%*sApiReference [%" PRIxPTR ", %" PRIx64 "]\n", depth_, "", address,
-           tag);
+    PrintF("%*sApiReference [%" PRIxPTR ", %i]\n", depth_, "", address, tag);
   }
   return WriteExternalPointer(*slot_accessor.object(),
-                              slot_accessor.external_pointer_slot(tag),
-                              address);
+                              slot_accessor.external_pointer_slot(tag), address,
+                              tag);
 }
 
 template <typename IsolateT>
@@ -1475,36 +1480,53 @@ int Deserializer<IsolateT>::ReadAllocateJSDispatchEntry(
     uint8_t data, SlotAccessor slot_accessor) {
 #ifdef V8_ENABLE_LEAPTIERING
   DCHECK_NE(slot_accessor.object()->address(), kNullAddress);
-  JSDispatchTable* jdt = GetProcessWideJSDispatchTable();
-  Handle<HeapObject> host = slot_accessor.object();
+  JSDispatchTable* jdt = IsolateGroup::current()->js_dispatch_table();
+  DirectHandle<HeapObject> host = slot_accessor.object();
 
-  uint32_t entry_id = source_.GetUint30();
   uint32_t parameter_count = source_.GetUint30();
   DCHECK_LE(parameter_count, kMaxUInt16);
 
   if (v8_flags.trace_deserialization) {
-    PrintF("%*sAllocateJSDispatchEntry [%u, %u]\n", depth_, "", entry_id,
-           parameter_count);
+    PrintF("%*sAllocateJSDispatchEntry [%u]\n", depth_, "", parameter_count);
   }
 
   DirectHandle<Code> code = Cast<Code>(ReadObject());
 
-  JSDispatchHandle handle;
-  auto it = js_dispatch_entries_map_.find(entry_id);
-  if (it != js_dispatch_entries_map_.end()) {
-    handle = it->second;
-    DCHECK_EQ(parameter_count, jdt->GetParameterCount(handle));
-    DCHECK_EQ(*code, jdt->GetCode(handle));
-  } else {
-    JSDispatchTable::Space* space =
-        IsolateForSandbox(isolate()).GetJSDispatchTableSpaceFor(
-            host->address());
-    handle = jdt->AllocateAndInitializeEntry(space, parameter_count);
-    js_dispatch_entries_map_[entry_id] = handle;
-    jdt->SetCodeNoWriteBarrier(handle, *code);
+  JSDispatchTable::Space* space =
+      isolate()->GetJSDispatchTableSpaceFor(host->address());
+  JSDispatchHandle handle =
+      jdt->AllocateAndInitializeEntry(space, parameter_count);
+  js_dispatch_entries_.push_back(handle);
+  jdt->SetCodeNoWriteBarrier(handle, *code);
+  host->Relaxed_WriteField<JSDispatchHandle::underlying_type>(
+      slot_accessor.offset(), handle.value());
+  JS_DISPATCH_HANDLE_WRITE_BARRIER(*host, handle);
+
+  return 1;
+#else
+  UNREACHABLE();
+#endif  // V8_ENABLE_SANDBOX
+}
+
+template <typename IsolateT>
+template <typename SlotAccessor>
+int Deserializer<IsolateT>::ReadJSDispatchEntry(uint8_t data,
+                                                SlotAccessor slot_accessor) {
+#ifdef V8_ENABLE_LEAPTIERING
+  DCHECK_NE(slot_accessor.object()->address(), kNullAddress);
+  DirectHandle<HeapObject> host = slot_accessor.object();
+  uint32_t entry_id = source_.GetUint30();
+  DCHECK_LT(entry_id, js_dispatch_entries_.size());
+
+  if (v8_flags.trace_deserialization) {
+    PrintF("%*sJSDispatchEntry [%u]\n", depth_, "", entry_id);
   }
 
-  host->Relaxed_WriteField<JSDispatchHandle>(slot_accessor.offset(), handle);
+  JSDispatchHandle handle = js_dispatch_entries_[entry_id];
+  DCHECK_NE(handle, kNullJSDispatchHandle);
+
+  host->Relaxed_WriteField<JSDispatchHandle::underlying_type>(
+      slot_accessor.offset(), handle.value());
   JS_DISPATCH_HANDLE_WRITE_BARRIER(*host, handle);
 
   return 1;
@@ -1536,7 +1558,7 @@ int Deserializer<IsolateT>::ReadRootArrayConstants(uint8_t data,
                 static_cast<int>(RootIndex::kLastImmortalImmovableRoot));
 
   RootIndex root_index = RootArrayConstant::Decode(data);
-  Handle<HeapObject> heap_object =
+  DirectHandle<HeapObject> heap_object =
       Cast<HeapObject>(isolate()->root_handle(root_index));
   if (v8_flags.trace_deserialization) {
     PrintF("%*sRootArrayConstants [%u] : %s\n", depth_, "",
@@ -1624,9 +1646,7 @@ Address Deserializer<IsolateT>::ReadExternalReferenceCase() {
 
 template <typename IsolateT>
 ExternalPointerTag Deserializer<IsolateT>::ReadExternalPointerTag() {
-  uint64_t shifted_tag = static_cast<uint64_t>(source_.GetUint30());
-  return static_cast<ExternalPointerTag>(shifted_tag
-                                         << kExternalPointerTagShift);
+  return static_cast<ExternalPointerTag>(source_.GetUint30());
 }
 
 template <typename IsolateT>
@@ -1646,7 +1666,7 @@ Tagged<HeapObject> Deserializer<IsolateT>::Allocate(
           size, allocation, AllocationOrigin::kRuntime, alignment));
 
 #ifdef DEBUG
-  previous_allocation_obj_ = handle(obj, isolate());
+  previous_allocation_obj_ = direct_handle(obj, isolate());
   previous_allocation_size_ = size;
 #endif
 

@@ -38,6 +38,11 @@ const char kVivaldiAccountServerUrlIdentity[] =
 const char kVivaldiSyncServerUrl[] = "vivaldi.sync.server_url";
 const char kVivaldiSyncNotificationsServerUrl[] =
     "vivaldi.sync.notifications.server_url";
+//sync error
+const char kVivaldiLastSyncErrorDialogShownDate[] =
+    "vivaldi.sync.error_dialog.prompt_date";
+const char kVivaldiShouldAskSyncErrorAgain[] =
+    "vivaldi.sync.error_dialog.ask_again";
 
 const char kVivaldiClientHintsBrand[] = "vivaldi.ClientHintsBrand";
 const char kVivaldiClientHintsBrandAppendVivaldi[] =
@@ -84,6 +89,8 @@ const char kVivaldiEnableSearchEngineNickname[] =
 // Address bar
 const char kVivaldiShowFullAddressEnabled[] =
     "vivaldi.addressbar.show_full_address";
+const char kVivaldiShowXForSuggestionEnabled[] =
+    "vivaldi.addressbar.show_x_suggestion";
 
 // Tabs
 // Desktop style tabs enabled status
@@ -146,10 +153,8 @@ const char kVivaldiStartPageLastVisitedGroup[] =
 const char kVivaldiPreferTranslatePanel[] = "vivaldi.translate.prefer_panel";
 
 // Content Settings
-extern const char kVivaldiPageZoomLevel[] =
+const char kVivaldiPageZoomLevel[] =
     "vivaldi.content_setting.pagezoom.level";
-extern const char kGlobalPageZoomEnabled[] =
-    "vivaldi.content_setting.pagezoom.global_enabled";
 #endif
 
 #if BUILDFLAG(IS_ANDROID)
@@ -157,5 +162,7 @@ const char kBackgroundMediaPlaybackAllowed[] =
     "vivaldi.background.media_playback.allowed";
 const char kPWADisabled[] =
     "vivaldi.site.PWADisabled.disabled";
+const char kAddressBarDeleteDirectMatch[] =
+    "vivaldi.address.field.direct.match.deletion.enabled";
 #endif
 }  // namespace vivaldiprefs

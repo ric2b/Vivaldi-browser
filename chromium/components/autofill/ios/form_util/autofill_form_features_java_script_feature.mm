@@ -43,12 +43,30 @@ void AutofillFormFeaturesJavaScriptFeature::SetAutofillAcrossIframes(
       base::Value::List().Append(enabled));
 }
 
+void AutofillFormFeaturesJavaScriptFeature::SetAutofillAcrossIframesThrottling(
+    web::WebFrame* frame,
+    bool enabled) {
+  CHECK(frame);
+  frame->CallJavaScriptFunction(
+      "autofill_form_features.setAutofillAcrossIframesThrottling",
+      base::Value::List().Append(enabled));
+}
+
 void AutofillFormFeaturesJavaScriptFeature::SetAutofillIsolatedContentWorld(
     web::WebFrame* frame,
     bool enabled) {
   CHECK(frame);
   frame->CallJavaScriptFunction(
       "autofill_form_features.setAutofillIsolatedContentWorld",
+      base::Value::List().Append(enabled));
+}
+
+void AutofillFormFeaturesJavaScriptFeature::SetAutofillFixPaymentSheetSpam(
+    web::WebFrame* frame,
+    bool enabled) {
+  CHECK(frame);
+  frame->CallJavaScriptFunction(
+      "autofill_form_features.setAutofillFixPaymentSheetSpam",
       base::Value::List().Append(enabled));
 }
 

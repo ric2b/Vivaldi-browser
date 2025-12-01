@@ -90,6 +90,7 @@ source_set("webrtc") {
 
   public_deps = [
     "//base",
+    "//build:android_buildflags",
     "//build:buildflag_header_h",
     "//build:chromeos_buildflags",
     "//chrome/browser:browser_public_dependencies",
@@ -117,7 +118,6 @@ source_set("webrtc") {
 
   deps = [
     "//base:i18n",
-    "//build:android_buildflags",
     "//chrome/app:branded_strings",
     "//chrome/app:branded_strings_grit",
     "//chrome/app:command_ids",
@@ -224,7 +224,7 @@ source_set("webrtc") {
     deps += [ "//components/remote_cocoa/browser" ]
   }
 
-  if ((is_linux || is_chromeos_lacros) && use_ozone) {
+  if (is_linux && use_ozone) {
     sources += [ "window_icon_util_ozone.cc" ]
     deps += [ "//ui/ozone" ]
   }
@@ -263,10 +263,6 @@ source_set("webrtc") {
       "//chrome/browser/ash/system_web_apps/apps/camera_app",
       "//chrome/browser/ash/system_web_apps/apps/recorder_app",
     ]
-  }
-
-  if (is_chromeos_lacros) {
-    deps += [ "//chromeos/lacros" ]
   }
 
   if (is_chromeos) {

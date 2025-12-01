@@ -18,7 +18,7 @@ describe('Metrics: Lantern FCP', () => {
     const data = await getComputationDataFromFixture({trace});
     const result = FirstContentfulPaint.compute(data);
 
-    assert.deepStrictEqual(
+    assert.deepEqual(
         {
           timing: Math.round(result.timing),
           optimistic: Math.round(result.optimisticEstimate.timeInMs),
@@ -33,8 +33,8 @@ describe('Metrics: Lantern FCP', () => {
           optimisticNodeTimings: 4,
           pessimisticNodeTimings: 4,
         });
-    assert.ok(result.optimisticGraph, 'should have created optimistic graph');
-    assert.ok(result.pessimisticGraph, 'should have created pessimistic graph');
+    assert.isOk(result.optimisticGraph, 'should have created optimistic graph');
+    assert.isOk(result.pessimisticGraph, 'should have created pessimistic graph');
   });
 
   it('should handle negative request networkEndTime', async () => {

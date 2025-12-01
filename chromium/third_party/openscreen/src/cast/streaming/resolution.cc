@@ -17,14 +17,14 @@ namespace {
 
 /// Dimension properties.
 // Width in pixels.
-static constexpr char kWidth[] = "width";
+constexpr char kWidth[] = "width";
 
 // Height in pixels.
-static constexpr char kHeight[] = "height";
+constexpr char kHeight[] = "height";
 
 // Frame rate as a rational decimal number or fraction.
 // E.g. 30 and "3000/1001" are both valid representations.
-static constexpr char kFrameRate[] = "frameRate";
+constexpr char kFrameRate[] = "frameRate";
 
 // Choice of epsilon for double comparison allows for proper comparison
 // for both aspect ratios and frame rates. For frame rates, it is based on the

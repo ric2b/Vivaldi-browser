@@ -9,8 +9,6 @@ import android.app.Activity;
 import android.view.View;
 import android.view.ViewGroup;
 
-import androidx.annotation.ColorInt;
-
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplier;
@@ -18,6 +16,7 @@ import org.chromium.base.supplier.Supplier;
 import org.chromium.base.supplier.TransitiveObservableSupplier;
 import org.chromium.chrome.browser.browser_controls.BottomControlsStacker;
 import org.chromium.chrome.browser.browser_controls.BrowserStateBrowserControlsVisibilityDelegate;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.layouts.LayoutManager;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider;
@@ -27,11 +26,15 @@ import org.chromium.chrome.browser.toolbar.bottom.BottomControlsViewBinder.ViewH
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeController;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 import org.chromium.ui.resources.ResourceManager;
 import org.chromium.ui.resources.dynamics.ViewResourceAdapter;
 import org.chromium.ui.widget.Toast;
+
+import java.util.HashSet;
+import java.util.Set;
 
 // Vivaldi
 import org.chromium.chrome.browser.browser_controls.BrowserControlsSizer;
@@ -47,8 +50,6 @@ public class BottomControlsCoordinator implements BackPressHandler {
     /** Interface for the BottomControls component to hide and show itself. */
     public interface BottomControlsVisibilityController {
         void setBottomControlsVisible(boolean isVisible);
-
-        void setBottomControlsColor(@ColorInt int color);
     }
 
     /** The mediator that handles events from outside the bottom controls. */
@@ -109,8 +110,15 @@ public class BottomControlsCoordinator implements BackPressHandler {
         mSceneLayer = new ScrollingBottomViewSceneLayer(root, root.getTopShadowHeight());
         PropertyModelChangeProcessor.create(
                 model, new ViewHolder(root, mSceneLayer), BottomControlsViewBinder::bind);
-        layoutManager.createCompositorMCP(
-                model, mSceneLayer, BottomControlsViewBinder::bindCompositorMCP);
+        if (ChromeFeatureList.sBcivBottomControls.isEnabled()) {
+            Set<PropertyKey> exclusions = new HashSet();
+            exclusions.add(BottomControlsProperties.ANDROID_VIEW_VISIBLE);
+            layoutManager.createCompositorMCPWithExclusions(
+                    model, mSceneLayer, BottomControlsViewBinder::bindCompositorMCP, exclusions);
+        } else {
+            layoutManager.createCompositorMCP(
+                    model, mSceneLayer, BottomControlsViewBinder::bindCompositorMCP);
+        }
         int bottomControlsHeightId = R.dimen.bottom_controls_height;
 
         View container = root.findViewById(R.id.bottom_container_slot);
@@ -129,6 +137,7 @@ public class BottomControlsCoordinator implements BackPressHandler {
                         fullscreenManager,
                         tabObscuringHandler,
                         bottomControlsHeightRes,
+                        root.getTopShadowHeight(),
                         overlayPanelVisibilitySupplier,
                         edgeToEdgeControllerSupplier,
                         readAloudRestoringSupplier);
@@ -156,11 +165,6 @@ public class BottomControlsCoordinator implements BackPressHandler {
                                 @Override
                                 public void setBottomControlsVisible(boolean isVisible) {
                                     mMediator.setBottomControlsVisible(isVisible);
-                                }
-
-                                @Override
-                                public void setBottomControlsColor(int color) {
-                                    mMediator.setBottomControlsColor(color);
                                 }
                             },
                             root::onModelTokenChange);

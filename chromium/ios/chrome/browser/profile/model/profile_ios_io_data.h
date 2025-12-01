@@ -33,10 +33,6 @@ class IOSChromeHttpUserAgentSettings;
 class IOSChromeURLRequestContextGetter;
 class ProfileIOS;
 
-namespace content_settings {
-class CookieSettings;
-}
-
 namespace net {
 class HttpTransactionFactory;
 class ProxyConfigService;
@@ -70,7 +66,6 @@ class ProfileIOSIOData {
   // These are useful when the Chrome layer is called from the content layer
   // with a content::ResourceContext, and they want access to Chrome data for
   // that profile.
-  content_settings::CookieSettings* GetCookieSettings() const;
   HostContentSettingsMap* GetHostContentSettingsMap() const;
 
   ProfileIOSType profile_type() const { return profile_type_; }
@@ -95,7 +90,6 @@ class ProfileIOSIOData {
 
     base::FilePath path;
     raw_ptr<IOSChromeIOThread> io_thread;
-    scoped_refptr<content_settings::CookieSettings> cookie_settings;
     scoped_refptr<HostContentSettingsMap> host_content_settings_map;
 
     // We need to initialize the ProxyConfigService from the UI thread
@@ -163,7 +157,6 @@ class ProfileIOSIOData {
 
   // Member variables which are pointed to by the various context objects.
   mutable BooleanPrefMember enable_referrers_;
-  mutable BooleanPrefMember enable_do_not_track_;
 
   BooleanPrefMember enable_metrics_;
   std::unique_ptr<AcceptLanguagePrefWatcher> accept_language_pref_watcher_;
@@ -171,8 +164,6 @@ class ProfileIOSIOData {
   // These are only valid in between LazyInitialize() and their accessor being
   // called.
   mutable std::unique_ptr<net::URLRequestContext> main_request_context_;
-
-  mutable scoped_refptr<content_settings::CookieSettings> cookie_settings_;
 
   mutable scoped_refptr<HostContentSettingsMap> host_content_settings_map_;
 

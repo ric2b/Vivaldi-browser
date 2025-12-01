@@ -48,7 +48,6 @@
 #include "third_party/blink/renderer/core/loader/modulescript/module_script_creation_params.h"
 #include "third_party/blink/renderer/core/loader/modulescript/module_script_fetch_request.h"
 #include "third_party/blink/renderer/core/loader/render_blocking_resource_manager.h"
-#include "third_party/blink/renderer/core/loader/subresource_integrity_helper.h"
 #include "third_party/blink/renderer/core/loader/url_matcher.h"
 #include "third_party/blink/renderer/core/loader/web_bundle/script_web_bundle.h"
 #include "third_party/blink/renderer/core/script/classic_pending_script.h"
@@ -73,6 +72,7 @@
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_client_settings_object_snapshot.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_parameters.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
+#include "third_party/blink/renderer/platform/loader/integrity_report.h"
 #include "third_party/blink/renderer/platform/loader/subresource_integrity.h"
 #include "third_party/blink/renderer/platform/network/mime/mime_type_registry.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
@@ -334,7 +334,9 @@ bool IsEligibleForForceInOrder(const Document& element_document) {
 // [Intervention, DelayAsyncScriptExecution, crbug.com/1340837]
 bool IsEligibleForDelay(const Resource& resource,
                         const Document& element_document,
-                        const ScriptElementBase& element) {
+                        const ScriptElementBase& element,
+                        bool parser_inserted,
+                        bool is_in_document_write) {
   if (!base::FeatureList::IsEnabled(features::kDelayAsyncScriptExecution)) {
     return false;
   }
@@ -388,6 +390,18 @@ bool IsEligibleForDelay(const Resource& resource,
       break;
   }
 
+  static const bool exclude_non_parser_inserted =
+      features::kDelayAsyncExecExcludeNonParserInsertedParam.Get();
+  if (exclude_non_parser_inserted && !parser_inserted) {
+    return false;
+  }
+
+  static const bool exclude_scripts_via_document_write =
+      features::kDelayAsyncExecExcludeDocumentWriteParam.Get();
+  if (exclude_scripts_via_document_write && is_in_document_write) {
+    return false;
+  }
+
   const bool opt_out_low =
       features::kDelayAsyncScriptExecutionOptOutLowFetchPriorityHintParam.Get();
   const bool opt_out_auto =
@@ -433,55 +447,6 @@ bool IsEligibleForDelay(const Resource& resource,
               features::kDelayAsyncScriptExecution, "delay_async_exec_allow_list", ""))));
       return url_matcher.Match(resource.Url());
   }
-}
-
-// [Intervention, LowPriorityScriptLoading, crbug.com/1365763]
-bool IsEligibleForLowPriorityScriptLoading(const Document& element_document,
-                                           const ScriptElementBase& element,
-                                           const KURL& url) {
-  static const bool enabled =
-      base::FeatureList::IsEnabled(features::kLowPriorityScriptLoading);
-  if (!enabled) {
-    return false;
-  }
-
-  if (!IsEligibleCommon(element_document)) {
-    return false;
-  }
-
-  if (element.IsPotentiallyRenderBlocking()) {
-    return false;
-  }
-
-  // Most LCP elements are provided by the main frame, and delaying subframe's
-  // resources seems not to improve LCP.
-  const bool main_frame_only =
-      features::kLowPriorityScriptLoadingMainFrameOnlyParam.Get();
-  if (main_frame_only && !element_document.IsInOutermostMainFrame()) {
-    return false;
-  }
-
-  const base::TimeDelta feature_limit =
-      features::kLowPriorityScriptLoadingFeatureLimitParam.Get();
-  if (!feature_limit.is_zero() &&
-      element_document.GetStartTime().Elapsed() > feature_limit) {
-    return false;
-  }
-
-  const bool cross_site_only =
-      features::kLowPriorityScriptLoadingCrossSiteOnlyParam.Get();
-  if (cross_site_only && IsSameSite(url, element_document)) {
-    return false;
-  }
-
-  DEFINE_STATIC_LOCAL(
-      UrlMatcher, deny_list,
-      (UrlMatcher(features::kLowPriorityScriptLoadingDenyListParam.Get())));
-  if (deny_list.Match(url)) {
-    return false;
-  }
-
-  return true;
 }
 
 // [Intervention, SelectiveInOrderScript, crbug.com/1356396]
@@ -699,8 +664,11 @@ PendingScript* ScriptLoader::PrepareScript(
   // returns "Blocked" when given el, "script", and source text, then return.
   // [CSP]</spec>
   if (!element_->HasSourceAttribute() &&
-      !element_->AllowInlineScriptForCSP(element_->GetNonceForElement(),
-                                         position.line_, source_text)) {
+      (!element_->AllowInlineScriptForCSP(element_->GetNonceForElement(),
+                                          position.line_, source_text) ||
+       !SubresourceIntegrity::VerifyInlineIntegrity(
+           element_->IntegrityAttributeValue(),
+           element_->SignatureAttributeValue(), source_text))) {
     return nullptr;
   }
 
@@ -731,14 +699,10 @@ PendingScript* ScriptLoader::PrepareScript(
   String integrity_attr = element_->IntegrityAttributeValue();
   IntegrityMetadataSet integrity_metadata;
   if (!integrity_attr.empty()) {
-    SubresourceIntegrity::IntegrityFeatures integrity_features =
-        SubresourceIntegrityHelper::GetFeatures(
-            element_->GetExecutionContext());
-    SubresourceIntegrity::ReportInfo report_info;
+    IntegrityReport integrity_report;
     SubresourceIntegrity::ParseIntegrityAttribute(
-        integrity_attr, integrity_features, integrity_metadata, &report_info);
-    SubresourceIntegrityHelper::DoReport(*element_->GetExecutionContext(),
-                                         report_info);
+        integrity_attr, integrity_metadata, &integrity_report);
+    integrity_report.SendReports(element_->GetExecutionContext());
   }
 
   // <spec step="25">Let referrer policy be the current state of el's
@@ -847,9 +811,7 @@ PendingScript* ScriptLoader::PrepareScript(
     // TODO(apaseltiner): Propagate the element instead of passing nullptr.
     if (element_->HasAttributionsrcAttribute() &&
         context_window->GetFrame()->GetAttributionSrcLoader()->CanRegister(
-            url,
-            /*element=*/nullptr,
-            /*request_id=*/std::nullopt)) {
+            url, /*element=*/nullptr)) {
       options.SetAttributionReportingEligibility(
           ScriptFetchOptions::AttributionReportingEligibility::kEligible);
     }
@@ -921,12 +883,7 @@ PendingScript* ScriptLoader::PrepareScript(
         FetchParameters::DeferOption defer = FetchParameters::kNoDefer;
         if (!parser_inserted_ || element_->AsyncAttributeValue() ||
             element_->DeferAttributeValue()) {
-          if (!IsEligibleForLowPriorityScriptLoading(element_document,
-                                                     *element_, url)) {
-            defer = FetchParameters::kLazyLoad;
-          } else {
-            defer = FetchParameters::kIdleLoad;
-          }
+          defer = FetchParameters::kLazyLoad;
         }
         ClassicPendingScript* pending_script = ClassicPendingScript::Fetch(
             url, element_document, options, cross_origin, encoding, element_,
@@ -935,7 +892,8 @@ PendingScript* ScriptLoader::PrepareScript(
         Resource* resource = pending_script->GetResource();
         resource_keep_alive_ = resource;
         is_eligible_for_delay =
-            IsEligibleForDelay(*resource, element_document, *element_);
+            IsEligibleForDelay(*resource, element_document, *element_,
+                               parser_inserted_, is_in_document_write);
         is_eligible_for_selective_in_order =
             IsEligibleForSelectiveInOrder(*resource, element_document);
         break;

@@ -266,7 +266,7 @@ public class TopToolbarCoordinator implements Toolbar {
             ObservableSupplier<Tab> tabSupplier,
             BrowserControlsVisibilityManager browserControlsVisibilityManager,
             TopUiThemeColorProvider topUiThemeColorProvider,
-            Supplier<Integer> bottomToolbarControlsOffsetSupplier) {
+            ObservableSupplier<Integer> bottomToolbarControlsOffsetSupplier) {
         assert mTabModelSelectorSupplier.get() != null;
         mTrackerSupplier.set(TrackerFactory.getTrackerForProfile(profile));
         mToolbarLayout.setTabCountSupplier(
@@ -600,11 +600,6 @@ public class TopToolbarCoordinator implements Toolbar {
     @Override
     public CaptureReadinessResult isReadyForTextureCapture() {
         return mToolbarLayout.isReadyForTextureCapture();
-    }
-
-    @Override
-    public boolean setForceTextureCapture(boolean forceTextureCapture) {
-        return mToolbarLayout.setForceTextureCapture(forceTextureCapture);
     }
 
     /**

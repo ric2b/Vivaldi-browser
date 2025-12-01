@@ -2,12 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include <stddef.h>
+
+#include <array>
 
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
@@ -71,7 +68,7 @@
 #include "base/mac/mac_util.h"
 #endif
 
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_WIN)
 #include "base/test/scoped_feature_list.h"
 #endif
 
@@ -152,7 +149,7 @@ class BrowserFocusBasicTest : public InProcessBrowserTest {
     // the setup function, which interferes with what the test wants to test so
     // unset it.
     set_global_browser_set_up_function(nullptr);
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_WIN)
     // For CHROME_HEADLESS, which is currently used for browser tests, native
     // window occlusion is turned off. Turn it on to match the production
     // environment.
@@ -181,7 +178,7 @@ class BrowserFocusBasicTest : public InProcessBrowserTest {
   }
 
  private:
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_WIN)
   base::test::ScopedFeatureList scoped_feature_list_;
 #endif
 };
@@ -334,9 +331,11 @@ IN_PROC_BROWSER_TEST_F(BrowserFocusTest, TabsRememberFocus) {
   }
 
   // Alternate focus for the tab.
-  const bool kFocusPage[3][5] = {{true, true, true, true, false},
-                                 {false, false, false, false, false},
-                                 {false, true, false, true, false}};
+  const std::array<std::array<const bool, 5>, 3> kFocusPage = {{
+      {true, true, true, true, false},
+      {false, false, false, false, false},
+      {false, true, false, true, false},
+  }};
 
   for (int i = 0; i < 3; i++) {
     for (int j = 0; j < 5; j++) {
@@ -703,7 +702,7 @@ IN_PROC_BROWSER_TEST_F(BrowserFocusTest, NavigateFromOmniboxIntoNewTab) {
       url2, nullptr, WindowOpenDisposition::NEW_FOREGROUND_TAB,
       ui::PAGE_TRANSITION_TYPED, AutocompleteMatchType::URL_WHAT_YOU_TYPED,
       base::TimeTicks(), false, false, std::u16string(), AutocompleteMatch(),
-      AutocompleteMatch(), IDNA2008DeviationCharacter::kNone);
+      AutocompleteMatch());
 
   // Make sure the second tab is selected.
   EXPECT_EQ(1, browser()->tab_strip_model()->active_index());

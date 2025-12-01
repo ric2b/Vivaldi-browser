@@ -39,12 +39,16 @@ to Chrome that we preserve our culture of being open by default.
   internal view of the bug entries, which may cause you to run into the previous
   problems. Be careful!
 
-- **When referencing issues please use the external/Chromium tracker link**:
+- **When referencing issues in the Chromium tracker please use the external/Chromium tracker link**:
   use [crbug.com](https://crbug.com) or [issues.chromium.org](https://issues.chromium.org)
   rather than b/ or g-issues.chromium.org. Internal / g-issues.chromium.org
   links may redirect to a Google SSO login page and create an inefficient
   and sub-optimal workflow for non-Googlers. Similarly, other
   corp.google.com links are not OK, e.g. crbug/.
+
+  When referencing issues in corp Buganizer (that are only accessible to
+  Googlers) in commit messages or code, it is preferred to use the b/XXX format.
+  However, make every effort to use public issues to track work in Chromium.
 
 - **Usage of severity and Priority should align with Chromium severity and
   priority guidelines, not Google guidelines**. For example, severity and
@@ -70,4 +74,4 @@ to Chrome that we preserve our culture of being open by default.
   because then it will become an orphan bug which needs to be rescued.
 
 - Any additional issues, please reach out to
-[chromium-issue-tracker-admins@google.com](chromium-issue-tracker-admins@google.com)
+[chromium-issue-tracker-admins@google.com](mailto:chromium-issue-tracker-admins@google.com)

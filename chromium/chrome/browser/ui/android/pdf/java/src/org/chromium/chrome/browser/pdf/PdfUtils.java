@@ -30,9 +30,8 @@ import org.chromium.url.GURL;
 import java.io.File;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
-import java.net.URLDecoder;
 import java.net.URLEncoder;
-import java.util.Objects;
+import java.util.Set;
 
 /** Utilities for inline pdf support. */
 public class PdfUtils {
@@ -71,6 +70,14 @@ public class PdfUtils {
     private static final String PARAM_ANDROID_INLINE_PDF_IN_INCOGNITO = "inline_pdf_in_incognito";
     private static final String PARAM_ANDROID_INLINE_PDF_BACKPORT_IN_INCOGNITO =
             "inline_pdf_backport_in_incognito";
+    private static final Set<String> TRANSIENT_PDF_SCHEMES =
+            Set.of(
+                    UrlConstants.HTTP_SCHEME,
+                    UrlConstants.HTTPS_SCHEME,
+                    UrlConstants.BLOB_SCHEME,
+                    UrlConstants.DATA_SCHEME);
+    private static final Set<String> PERMANENT_PDF_SCHEMES =
+            Set.of(UrlConstants.CONTENT_SCHEME, UrlConstants.FILE_SCHEME);
     private static boolean sShouldOpenPdfInlineForTesting;
 
     /**
@@ -86,10 +93,10 @@ public class PdfUtils {
             return false;
         }
 
-        if (scheme.equals(UrlConstants.FILE_SCHEME) || scheme.equals(UrlConstants.CONTENT_SCHEME)) {
+        if (PERMANENT_PDF_SCHEMES.contains(scheme)) {
             return true;
         }
-        if (scheme.equals(UrlConstants.HTTP_SCHEME) || scheme.equals(UrlConstants.HTTPS_SCHEME)) {
+        if (TRANSIENT_PDF_SCHEMES.contains(scheme)) {
             return params != null && params.getIsPdf();
         }
         return false;
@@ -107,8 +114,7 @@ public class PdfUtils {
             return false;
         }
 
-        return scheme.equals(UrlConstants.FILE_SCHEME)
-                || scheme.equals(UrlConstants.CONTENT_SCHEME);
+        return PERMANENT_PDF_SCHEMES.contains(scheme);
     }
 
     private static String getDecodedScheme(String url) {
@@ -183,10 +189,7 @@ public class PdfUtils {
         Uri uri = Uri.parse(url);
         String scheme = uri.getScheme();
         assert scheme != null;
-        assert scheme.equals(UrlConstants.HTTP_SCHEME)
-                || scheme.equals(UrlConstants.HTTPS_SCHEME)
-                || scheme.equals(UrlConstants.CONTENT_SCHEME)
-                || scheme.equals(UrlConstants.FILE_SCHEME);
+        assert TRANSIENT_PDF_SCHEMES.contains(scheme) || PERMANENT_PDF_SCHEMES.contains(scheme);
         String fileName = defaultTitle;
         if (scheme.equals(UrlConstants.CONTENT_SCHEME)) {
             String displayName = ContentUriUtils.maybeGetDisplayName(url);
@@ -236,10 +239,10 @@ public class PdfUtils {
         if (scheme == null) {
             return PdfPageType.NONE;
         }
-        if (scheme.equals(UrlConstants.HTTP_SCHEME) || scheme.equals(UrlConstants.HTTPS_SCHEME)) {
+        if (TRANSIENT_PDF_SCHEMES.contains(scheme)) {
             return isDownloadSafe ? PdfPageType.TRANSIENT_SECURE : PdfPageType.TRANSIENT_INSECURE;
         }
-        if (scheme.equals(UrlConstants.CONTENT_SCHEME) || scheme.equals(UrlConstants.FILE_SCHEME)) {
+        if (PERMANENT_PDF_SCHEMES.contains(scheme)) {
             return PdfPageType.LOCAL;
         }
         return PdfPageType.NONE;
@@ -253,12 +256,12 @@ public class PdfUtils {
         Uri uri = Uri.parse(pdfFilePath);
         String scheme = uri.getScheme();
         try {
-            if (UrlConstants.CONTENT_SCHEME.equals(scheme)) {
+            if (UrlConstants.CONTENT_SCHEME.equals(scheme)
+                    || UrlConstants.FILE_SCHEME.equals(scheme)) {
+                // PDF androidx library accepts file or content URI.
                 return uri;
-            } else if (UrlConstants.FILE_SCHEME.equals(scheme)) {
-                File file = new File(Objects.requireNonNull(uri.getPath()));
-                return ChromeFileProvider.generateUri(file);
             } else {
+                // Convert filepath to Uri for transient downloads.
                 File file = new File(pdfFilePath);
                 return ChromeFileProvider.generateUri(file);
             }
@@ -317,9 +320,9 @@ public class PdfUtils {
             return null;
         }
         Uri uri = Uri.parse(originalUrl);
-        String encodedUrl = uri.getQueryParameter(UrlConstants.PDF_URL_QUERY_PARAM);
         try {
-            String decodedUrl = URLDecoder.decode(encodedUrl, "UTF-8");
+            // #getQueryParameter has already decoded the url.
+            String decodedUrl = uri.getQueryParameter(UrlConstants.PDF_URL_QUERY_PARAM);
             recordIsPdfDownloadUrlDecoded(true);
             return decodedUrl;
         } catch (Exception e) {
@@ -362,6 +365,11 @@ public class PdfUtils {
     static void recordFindInPage(int findInPageCounts) {
         RecordHistogram.recordExactLinearHistogram(
                 "Android.Pdf.FindInPageCounts", findInPageCounts, /* max= */ 9);
+    }
+
+    static void recordIsWorkProfile(boolean isWorkProfile) {
+        RecordHistogram.recordBooleanHistogram(
+                "Android.Pdf.AssistContent.IsWorkProfile", isWorkProfile);
     }
 
     static void recordHasFilepathWithoutFragmentOnDestroy(boolean hasFilepath) {

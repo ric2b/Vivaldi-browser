@@ -9,6 +9,9 @@
 
 class Browser;
 
+// The minimum height for the WebUI version of the signout prompt.
+inline constexpr int kSignoutConfirmationPromptMinHeight = 189;
+
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
 // LINT.IfChange(ChromeSignoutConfirmationChoice)
@@ -33,6 +36,9 @@ enum class ChromeSignoutConfirmationPromptVariant {
   // proceeding anyway. Dismissing the dialog closes it without any action.
   // Available choices: `kReauth`, `kSignout` and `kDismissed`.
   kUnsyncedDataWithReauthButton,
+  // The user is supervised and parental controls apply to their profile.
+  // Available choices: `kSignout` and `kDismissed`.
+  kProfileWithParentalControls,
 };
 
 // Factory function to create and show the Chrome signout confirmation prompt.

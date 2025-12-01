@@ -1109,7 +1109,8 @@ LoginDatabase::LoginDatabase(const base::FilePath& db_path,
     : db_path_(db_path),
       is_account_store_(is_account_store),
       // Set options for a small, private database (based on WebDatabase).
-      db_({.page_size = 2048, .cache_size = 32}),
+      db_(sql::DatabaseOptions().set_page_size(2048).set_cache_size(32),
+          /*tag=*/"Passwords"),
       is_deleting_undecryptable_logins_enabled_by_policy_(can_delete) {}
 
 LoginDatabase::~LoginDatabase() = default;
@@ -1121,8 +1122,6 @@ bool LoginDatabase::Init(
   on_undecryptable_passwords_removed_ =
       std::move(on_undecryptable_passwords_removed);
   encryptor_ = std::move(encryptor);
-
-  db_.set_histogram_tag("Passwords");
 
   if (!db_.Open(db_path_)) {
     LogDatabaseInitError(OPEN_FILE_ERROR);

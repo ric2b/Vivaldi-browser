@@ -36,6 +36,9 @@ import java.util.concurrent.TimeUnit;
 
 @RunWith(BaseRobolectricTestRunner.class)
 public class AutomotiveBackButtonToolbarCoordinatorUnitTest {
+    private static final int ANIMATION_DURATION_MS = 400;
+    private static final int ON_SWIPE_TOOLBAR_DURATION_MS = 10000;
+
     private AutomotiveBackButtonToolbarCoordinator mAutomotiveBackButtonToolbarCoordinator;
     private View mAutomotiveToolbar;
     private View mOnSwipeAutomotiveToolbar;
@@ -82,7 +85,7 @@ public class AutomotiveBackButtonToolbarCoordinatorUnitTest {
 
     @Test
     public void testFullscreen_onEnterFullscreen() {
-        Assert.assertEquals(mAutomotiveToolbar.getVisibility(), View.VISIBLE);
+        Assert.assertEquals(View.VISIBLE, mAutomotiveToolbar.getVisibility());
         mFullscreenObserver =
                 mAutomotiveBackButtonToolbarCoordinator.getFullscreenObserverForTesting();
 
@@ -90,8 +93,8 @@ public class AutomotiveBackButtonToolbarCoordinatorUnitTest {
         mFullscreenObserver.onEnterFullscreen(null, null);
         Assert.assertEquals(
                 "Toolbar should be gone when entering fullscreen",
-                mAutomotiveToolbar.getVisibility(),
-                View.GONE);
+                View.GONE,
+                mAutomotiveToolbar.getVisibility());
     }
 
     @Test
@@ -99,20 +102,20 @@ public class AutomotiveBackButtonToolbarCoordinatorUnitTest {
         mFullscreenObserver =
                 mAutomotiveBackButtonToolbarCoordinator.getFullscreenObserverForTesting();
         mFullscreenObserver.onEnterFullscreen(null, null);
-        Assert.assertEquals(mAutomotiveToolbar.getVisibility(), View.GONE);
+        Assert.assertEquals(View.GONE, mAutomotiveToolbar.getVisibility());
         mOnSwipeAutomotiveToolbar.setVisibility(View.VISIBLE);
-        Assert.assertEquals(mOnSwipeAutomotiveToolbar.getVisibility(), View.VISIBLE);
+        Assert.assertEquals(View.VISIBLE, mOnSwipeAutomotiveToolbar.getVisibility());
         mFullscreenObserver.onExitFullscreen(null);
 
         verify(mTouchEventProvider).removeTouchEventObserver(mEdgeSwipeGestureDetector);
         Assert.assertEquals(
                 "On swipe toolbar should not be gone when not in fullscreen",
-                mOnSwipeAutomotiveToolbar.getVisibility(),
-                View.GONE);
+                View.GONE,
+                mOnSwipeAutomotiveToolbar.getVisibility());
         Assert.assertEquals(
                 "Toolbar should appear when not in fullscreen",
-                mAutomotiveToolbar.getVisibility(),
-                View.VISIBLE);
+                View.VISIBLE,
+                mAutomotiveToolbar.getVisibility());
     }
 
     @Test
@@ -122,16 +125,98 @@ public class AutomotiveBackButtonToolbarCoordinatorUnitTest {
         mAutomotiveBackButtonToolbarCoordinator
                 .getFullscreenObserverForTesting()
                 .onEnterFullscreen(tab, fullscreenOptions);
-        mAutomotiveBackButtonToolbarCoordinator.handleSwipe();
+        mOnSwipeAutomotiveToolbar.setVisibility(View.GONE);
+        mAutomotiveBackButtonToolbarCoordinator.getOnSwipeCallbackForTesting().handleSwipe();
 
+        ShadowLooper.idleMainLooper(ANIMATION_DURATION_MS, TimeUnit.MILLISECONDS);
         Assert.assertEquals(
                 "On swipe toolbar should be visible on valid swipe",
-                mOnSwipeAutomotiveToolbar.getVisibility(),
-                View.VISIBLE);
-        ShadowLooper.idleMainLooper(10000, TimeUnit.MILLISECONDS);
+                View.VISIBLE,
+                mOnSwipeAutomotiveToolbar.getVisibility());
+        ShadowLooper.idleMainLooper(ON_SWIPE_TOOLBAR_DURATION_MS, TimeUnit.MILLISECONDS);
         Assert.assertEquals(
                 "On swipe toolbar should disappear after 10s",
-                mOnSwipeAutomotiveToolbar.getVisibility(),
-                View.GONE);
+                View.GONE,
+                mOnSwipeAutomotiveToolbar.getVisibility());
+    }
+
+    @Test
+    public void testOnBackSwipe_handleBackSwipe() {
+        Tab tab = Mockito.mock(Tab.class);
+        FullscreenOptions fullscreenOptions = Mockito.mock(FullscreenOptions.class);
+        mAutomotiveBackButtonToolbarCoordinator
+                .getFullscreenObserverForTesting()
+                .onEnterFullscreen(tab, fullscreenOptions);
+        mOnSwipeAutomotiveToolbar.setVisibility(View.VISIBLE);
+        mAutomotiveBackButtonToolbarCoordinator.getOnSwipeCallbackForTesting().handleBackSwipe();
+        ShadowLooper.idleMainLooper(ANIMATION_DURATION_MS, TimeUnit.MILLISECONDS);
+        Assert.assertEquals(
+                "On swipe toolbar should be gone after a back swipe",
+                View.GONE,
+                mOnSwipeAutomotiveToolbar.getVisibility());
+    }
+
+    @Test
+    public void testMultipleSwipes_handleForwardSwipe() {
+        Tab tab = Mockito.mock(Tab.class);
+        FullscreenOptions fullscreenOptions = Mockito.mock(FullscreenOptions.class);
+        mAutomotiveBackButtonToolbarCoordinator
+                .getFullscreenObserverForTesting()
+                .onEnterFullscreen(tab, fullscreenOptions);
+        mOnSwipeAutomotiveToolbar.setVisibility(View.GONE);
+        mAutomotiveBackButtonToolbarCoordinator.getOnSwipeCallbackForTesting().handleSwipe();
+        mAutomotiveBackButtonToolbarCoordinator.getOnSwipeCallbackForTesting().handleBackSwipe();
+        ShadowLooper.idleMainLooper(ANIMATION_DURATION_MS, TimeUnit.MILLISECONDS);
+        Assert.assertEquals(
+                "First swipe gesture will be consumed to show the toolbar, and the backswipe will"
+                        + " be ignored",
+                View.VISIBLE,
+                mOnSwipeAutomotiveToolbar.getVisibility());
+
+        mAutomotiveBackButtonToolbarCoordinator
+                .getFullscreenObserverForTesting()
+                .onEnterFullscreen(tab, fullscreenOptions);
+        mOnSwipeAutomotiveToolbar.setVisibility(View.GONE);
+        mAutomotiveBackButtonToolbarCoordinator.getOnSwipeCallbackForTesting().handleSwipe();
+        mAutomotiveBackButtonToolbarCoordinator.getOnSwipeCallbackForTesting().handleBackSwipe();
+        mAutomotiveBackButtonToolbarCoordinator.getOnSwipeCallbackForTesting().handleSwipe();
+        ShadowLooper.idleMainLooper(ANIMATION_DURATION_MS, TimeUnit.MILLISECONDS);
+        Assert.assertEquals(
+                "First swipe gesture will be consumed to show the toolbar, and the backswipe and"
+                        + " following forward swipe will be ignored",
+                View.VISIBLE,
+                mOnSwipeAutomotiveToolbar.getVisibility());
+    }
+
+    @Test
+    public void testMultipleSwipes_handleBackSwipe() {
+        Tab tab = Mockito.mock(Tab.class);
+        FullscreenOptions fullscreenOptions = Mockito.mock(FullscreenOptions.class);
+        mAutomotiveBackButtonToolbarCoordinator
+                .getFullscreenObserverForTesting()
+                .onEnterFullscreen(tab, fullscreenOptions);
+        mOnSwipeAutomotiveToolbar.setVisibility(View.VISIBLE);
+        mAutomotiveBackButtonToolbarCoordinator.getOnSwipeCallbackForTesting().handleBackSwipe();
+        mAutomotiveBackButtonToolbarCoordinator.getOnSwipeCallbackForTesting().handleSwipe();
+        ShadowLooper.idleMainLooper(ANIMATION_DURATION_MS, TimeUnit.MILLISECONDS);
+        Assert.assertEquals(
+                "First swipe gesture will be consumed to hide the toolbar, and the forward swipe"
+                        + " will be ignored",
+                View.GONE,
+                mOnSwipeAutomotiveToolbar.getVisibility());
+
+        mAutomotiveBackButtonToolbarCoordinator
+                .getFullscreenObserverForTesting()
+                .onEnterFullscreen(tab, fullscreenOptions);
+        mOnSwipeAutomotiveToolbar.setVisibility(View.VISIBLE);
+        mAutomotiveBackButtonToolbarCoordinator.getOnSwipeCallbackForTesting().handleBackSwipe();
+        mAutomotiveBackButtonToolbarCoordinator.getOnSwipeCallbackForTesting().handleSwipe();
+        mAutomotiveBackButtonToolbarCoordinator.getOnSwipeCallbackForTesting().handleBackSwipe();
+        ShadowLooper.idleMainLooper(ANIMATION_DURATION_MS, TimeUnit.MILLISECONDS);
+        Assert.assertEquals(
+                "First swipe gesture will be consumed to hide the toolbar, and the foward swipe and"
+                        + " following back swipe will be ignored",
+                View.GONE,
+                mOnSwipeAutomotiveToolbar.getVisibility());
     }
 }

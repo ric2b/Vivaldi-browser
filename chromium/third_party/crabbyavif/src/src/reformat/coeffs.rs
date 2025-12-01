@@ -19,7 +19,7 @@ fn expand_coeffs(y: f32, v: f32) -> [f32; 3] {
 }
 
 impl ColorPrimaries {
-    pub fn y_coeffs(&self) -> [f32; 3] {
+    pub(crate) fn y_coeffs(&self) -> [f32; 3] {
         // These values come from computations in Section 8 of
         // https://www.itu.int/rec/T-REC-H.273-201612-S
         match self {
@@ -56,7 +56,7 @@ fn calculate_yuv_coefficients_from_cicp(
     }
 }
 
-pub fn calculate_yuv_coefficients(
+pub(crate) fn calculate_yuv_coefficients(
     color_primaries: ColorPrimaries,
     matrix_coefficients: MatrixCoefficients,
 ) -> [f32; 3] {

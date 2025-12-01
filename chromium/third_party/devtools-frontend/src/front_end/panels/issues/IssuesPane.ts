@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import '../../ui/legacy/legacy.js';
+
 import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as IssuesManager from '../../models/issues_manager/issues_manager.js';
@@ -182,6 +184,7 @@ export class IssuesPane extends UI.Widget.VBox {
 
   constructor() {
     super(true);
+    this.registerRequiredCSS(issuesPaneStyles);
 
     this.element.setAttribute('jslog', `${VisualLogging.panel('issues')}`);
 
@@ -198,6 +201,7 @@ export class IssuesPane extends UI.Widget.VBox {
 
     this.#issuesTree.setShowSelectionOnKeyboardFocus(true);
     this.#issuesTree.contentElement.classList.add('issues');
+    this.#issuesTree.registerRequiredCSS(issuesTreeStyles);
     this.contentElement.appendChild(this.#issuesTree.element);
 
     this.#hiddenIssuesRow = new HiddenIssuesRow();
@@ -224,8 +228,11 @@ export class IssuesPane extends UI.Widget.VBox {
   #createToolbars(): {toolbarContainer: Element} {
     const toolbarContainer = this.contentElement.createChild('div', 'issues-toolbar-container');
     toolbarContainer.setAttribute('jslog', `${VisualLogging.toolbar()}`);
-    new UI.Toolbar.Toolbar('issues-toolbar-left', toolbarContainer);
-    const rightToolbar = new UI.Toolbar.Toolbar('issues-toolbar-right', toolbarContainer);
+    toolbarContainer.role = 'toolbar';
+    const leftToolbar = toolbarContainer.createChild('devtools-toolbar', 'issues-toolbar-left');
+    leftToolbar.role = 'presentation';
+    const rightToolbar = toolbarContainer.createChild('devtools-toolbar', 'issues-toolbar-right');
+    rightToolbar.role = 'presentation';
 
     const groupByCategorySetting = getGroupIssuesByCategorySetting();
     const groupByCategoryCheckbox = new UI.Toolbar.ToolbarSettingCheckbox(
@@ -466,11 +473,5 @@ export class IssuesPane extends UI.Widget.VBox {
       issueView.reveal();
       issueView.select(false, true);
     }
-  }
-
-  override wasShown(): void {
-    super.wasShown();
-    this.#issuesTree.registerCSSFiles([issuesTreeStyles]);
-    this.registerCSSFiles([issuesPaneStyles]);
   }
 }

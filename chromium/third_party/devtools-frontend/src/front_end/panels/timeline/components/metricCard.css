@@ -56,6 +56,25 @@
   font-weight: var(--ref-typeface-weight-medium);
 }
 
+.warning {
+  margin-top: 4px;
+  color: var(--sys-color-error);
+  font-size: var(--sys-typescale-body4-size);
+  line-height: var(--sys-typescale-body4-line-height);
+  display: flex;
+
+  &::before {
+    content: " ";
+    width: var(--sys-typescale-body4-line-height);
+    height: var(--sys-typescale-body4-line-height);
+    mask-size: var(--sys-typescale-body4-line-height);
+    mask-image: var(--image-file-warning);
+    background-color: var(--sys-color-error);
+    margin-right: 4px;
+    flex-shrink: 0;
+  }
+}
+
 .good-bg {
   background-color: var(--app-color-performance-good);
 }
@@ -85,17 +104,34 @@
 }
 
 .environment-recs {
-  margin: 12px 0;
+  margin: 9px 0;
 }
 
 .environment-recs > summary {
   font-weight: var(--ref-typeface-weight-medium);
   margin-bottom: 4px;
+  font-size: var(--sys-typescale-body4-size);
+  line-height: var(--sys-typescale-body4-line-height);
+  display: flex;
+
+  &::before {
+    content: " ";
+    width: var(--sys-typescale-body4-line-height);
+    height: var(--sys-typescale-body4-line-height);
+    mask-size: var(--sys-typescale-body4-line-height);
+    mask-image: var(--image-file-triangle-right);
+    background-color: var(--icon-default);
+    margin-right: 4px;
+    flex-shrink: 0;
+  }
+}
+
+details.environment-recs[open] > summary::before {
+  mask-image: var(--image-file-triangle-down);
 }
 
 .environment-recs-list {
   margin: 0;
-  padding-left: 20px;
 }
 
 .detailed-compare-text {
@@ -112,8 +148,7 @@
   grid-template-columns: minmax(min-content, auto) minmax(20px, 50px) max-content;
   grid-auto-rows: 1fr;
   column-gap: 8px;
-  justify-items: flex-end;
-  align-items: center;
+  place-items: center flex-end;
 }
 
 .bucket-label {

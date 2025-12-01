@@ -188,8 +188,6 @@ inline void PrintHex(const int x, const char* name) {
 #define PX(x) PrintHex(x, #x)
 
 #if LIBGAV1_MSAN
-#include <sanitizer/msan_interface.h>
-
 inline void PrintShadow(const void* r, const char* const name,
                         const size_t size) {
   if (kEnablePrintRegs) {

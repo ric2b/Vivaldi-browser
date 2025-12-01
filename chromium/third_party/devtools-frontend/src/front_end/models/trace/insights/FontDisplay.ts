@@ -7,7 +7,7 @@ import * as Platform from '../../../core/platform/platform.js';
 import * as Helpers from '../helpers/helpers.js';
 import * as Types from '../types/types.js';
 
-import type {InsightModel, InsightSetContext, RequiredData} from './types.js';
+import {InsightCategory, type InsightModel, type InsightSetContext, type RequiredData} from './types.js';
 
 const UIStrings = {
   /** Title of an insight that provides details about the fonts used on the page, and the value of their `font-display` properties. */
@@ -30,12 +30,19 @@ export type FontDisplayInsightModel = InsightModel<{
   fonts: Array<{
     request: Types.Events.SyntheticNetworkRequest,
     display: string,
-    wastedTime: Types.Timing.MilliSeconds,
+    wastedTime: Types.Timing.Milli,
   }>,
 }>;
 
-function finalize(partialModel: Omit<FontDisplayInsightModel, 'title'|'description'>): FontDisplayInsightModel {
-  return {title: i18nString(UIStrings.title), description: i18nString(UIStrings.description), ...partialModel};
+function finalize(partialModel: Omit<FontDisplayInsightModel, 'title'|'description'|'category'|'shouldShow'>):
+    FontDisplayInsightModel {
+  return {
+    title: i18nString(UIStrings.title),
+    description: i18nString(UIStrings.description),
+    category: InsightCategory.INP,
+    shouldShow: Boolean(partialModel.fonts.find(font => font.wastedTime > 0)),
+    ...partialModel,
+  };
 }
 
 export function generateInsight(
@@ -53,16 +60,16 @@ export function generateInsight(
     }
 
     const display = event.args.display;
-    let wastedTime = Types.Timing.MilliSeconds(0);
+    let wastedTime = Types.Timing.Milli(0);
 
     if (/^(block|fallback|auto)$/.test(display)) {
-      const wastedTimeMicro = Types.Timing.MicroSeconds(
+      const wastedTimeMicro = Types.Timing.Micro(
           request.args.data.syntheticData.finishTime - request.args.data.syntheticData.sendStartTime);
       // TODO(crbug.com/352244504): should really end at the time of the next Commit trace event.
-      wastedTime = Platform.NumberUtilities.floor(Helpers.Timing.microSecondsToMilliseconds(wastedTimeMicro), 1 / 5) as
-          Types.Timing.MilliSeconds;
+      wastedTime =
+          Platform.NumberUtilities.floor(Helpers.Timing.microToMilli(wastedTimeMicro), 1 / 5) as Types.Timing.Milli;
       // All browsers wait for no more than 3s.
-      wastedTime = Math.min(wastedTime, 3000) as Types.Timing.MilliSeconds;
+      wastedTime = Math.min(wastedTime, 3000) as Types.Timing.Milli;
     }
 
     fonts.push({
@@ -74,7 +81,7 @@ export function generateInsight(
 
   fonts.sort((a, b) => b.wastedTime - a.wastedTime);
 
-  const savings = Math.max(...fonts.map(f => f.wastedTime)) as Types.Timing.MilliSeconds;
+  const savings = Math.max(...fonts.map(f => f.wastedTime)) as Types.Timing.Milli;
 
   return finalize({
     relatedEvents: fonts.map(f => f.request),

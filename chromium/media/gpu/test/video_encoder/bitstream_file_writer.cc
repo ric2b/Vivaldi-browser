@@ -9,11 +9,12 @@
 
 #include "media/gpu/test/video_encoder/bitstream_file_writer.h"
 
+#include <algorithm>
+
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/ranges/algorithm.h"
 #include "media/gpu/test/video_test_helpers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -144,6 +145,9 @@ void BitstreamFileWriter::ProcessBitstream(
       temporal_idx = bitstream->metadata.vp8->temporal_idx;
     else if (bitstream->metadata.vp9)
       temporal_idx = bitstream->metadata.vp9->temporal_idx;
+    else if (bitstream->metadata.svc_generic) {
+      temporal_idx = bitstream->metadata.svc_generic->temporal_idx;
+    }
 
     CHECK_NE(temporal_idx, 255) << "No metadata about temporal idx";
 

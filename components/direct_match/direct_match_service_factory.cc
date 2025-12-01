@@ -41,10 +41,12 @@ content::BrowserContext* DirectMatchServiceFactory::GetBrowserContextToUse(
   return GetBrowserContextRedirectedInIncognito(context);
 }
 
-KeyedService* DirectMatchServiceFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+DirectMatchServiceFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
   Profile* profile = Profile::FromBrowserContext(context);
-  auto dm_service = new DirectMatchService();
+  std::unique_ptr<DirectMatchService> dm_service =
+      std::make_unique<DirectMatchService>();
   dm_service->Load(profile);
   return dm_service;
 }

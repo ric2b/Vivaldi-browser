@@ -131,7 +131,6 @@
 <translation id="1722567105086139392">Ссылка</translation>
 <translation id="1727806147743597030">ftr</translation>
 <translation id="1730447754326314349">Добро пожаловать в руководство по ChromeVox! Вы можете в любой момент выйти из него, нажав клавишу Esc в левом верхнем углу клавиатуры. Чтобы отключить ChromeVox, нажмите Z, удерживая клавиши Ctrl и Alt. Чтобы перейти к следующему уроку, используйте пробел.</translation>
-<translation id="1735957571918073979">Моргнуть двумя глазами</translation>
 <translation id="174268867904053074">Перейти к следующей диаграмме</translation>
 <translation id="1756785467854861272">Темная маджента</translation>
 <translation id="1758693804775271377">Чтобы просматривать уроки по этой теме, проводите по экрану пальцем влево или вправо</translation>
@@ -139,7 +138,7 @@
 <translation id="1771761307086386028">Вправо</translation>
 <translation id="1781173782405573156">Пропустить нажатие</translation>
 <translation id="1787176709638001873">Поле для ввода пароля</translation>
-<translation id="1795438342141780114">Переместить курсор в центр экрана</translation>
+<translation id="1795438342141780114">Переместить указатель в центр экрана</translation>
 <translation id="180203835522132923">Поиск + O, затем W</translation>
 <translation id="1810107444790159527">Список</translation>
 <translation id="1812527064848182527">горизонтальная ориентация</translation>
@@ -242,6 +241,7 @@
 <translation id="2556326187583116255">Чтобы остановить озвучивание текста, коснитесь экрана двумя пальцами.</translation>
 <translation id="2573256689920773241">Основы навигации</translation>
 <translation id="257674075312929031">Группа</translation>
+<translation id="2577127557293415225">Ненадолго закройте оба глаза одновременно</translation>
 <translation id="2582407057977008361">Боковой блок.</translation>
 <translation id="2592212930811759050">Нажмите дважды, чтобы начать редактировать</translation>
 <translation id="2598495320872286378">Грамматическая ошибка</translation>
@@ -845,6 +845,7 @@
 <translation id="6385591741672306837">стлбц</translation>
 <translation id="6387719785439924554">aside</translation>
 <translation id="6393014464788431702">Отключить все фильтры событий</translation>
+<translation id="6406989068857078334">Скорость указателя для мыши снижена. Чтобы выполнить клик, сделайте жест "<ph name="GESTURE" />".</translation>
 <translation id="6411569524720229058">Осень</translation>
 <translation id="6417265370957905582">Google Ассистент</translation>
 <translation id="641759969622533235">{COUNT,plural, =1{двоеточие}one{# двоеточие}few{# двоеточия}many{# двоеточий}other{# colons}}</translation>
@@ -1098,6 +1099,7 @@
 <translation id="8205922869661890178">Открыть страницу с журналом разработчика.</translation>
 <translation id="8212109599554677485">Изменить стиль дисплея на параллельный</translation>
 <translation id="8215202828671303819">Множественный выбор</translation>
+<translation id="822316432305106615">Выполнить точный клик</translation>
 <translation id="8249864170673238087">Цвет <ph name="COLOR" />, прозрачность <ph name="OPACITY_PERCENTAGE" /> %.</translation>
 <translation id="8261506727792406068">Удалить</translation>
 <translation id="826825447994856889">Введение</translation>

@@ -18,6 +18,7 @@
 #include "components/user_manager/fake_user_manager.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "components/user_manager/user_manager_impl.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -40,12 +41,8 @@ std::optional<std::string> GetStringPrefValue(KnownUser* known_user,
 class KnownUserTest : public testing::Test {
  public:
   KnownUserTest() {
-    auto fake_user_manager = std::make_unique<FakeUserManager>();
-    fake_user_manager_ = fake_user_manager.get();
-    scoped_user_manager_ =
-        std::make_unique<ScopedUserManager>(std::move(fake_user_manager));
-
-    UserManagerImpl::RegisterPrefs(local_state_.registry());
+    UserManager::RegisterPrefs(local_state_.registry());
+    fake_user_manager_.Reset(std::make_unique<FakeUserManager>(&local_state_));
   }
   ~KnownUserTest() override = default;
 
@@ -55,8 +52,8 @@ class KnownUserTest : public testing::Test {
  protected:
   const AccountId kDefaultAccountId =
       AccountId::FromUserEmailGaiaId("default_account@gmail.com",
-                                     "fake-gaia-id");
-  FakeUserManager* fake_user_manager() { return fake_user_manager_; }
+                                     GaiaId("fake-gaia-id"));
+  FakeUserManager* fake_user_manager() { return fake_user_manager_.Get(); }
 
   PrefService* local_state() { return &local_state_; }
 
@@ -69,9 +66,8 @@ class KnownUserTest : public testing::Test {
       base::test::TaskEnvironment::MainThreadType::UI};
 
   // Owned by |scoped_user_manager_|.
-  raw_ptr<FakeUserManager, DanglingUntriaged> fake_user_manager_ = nullptr;
-  std::unique_ptr<ScopedUserManager> scoped_user_manager_;
   TestingPrefServiceSimple local_state_;
+  TypedScopedUserManager<FakeUserManager> fake_user_manager_;
 };
 
 TEST_F(KnownUserTest, FindPrefsNonExisting) {
@@ -93,15 +89,22 @@ TEST_F(KnownUserTest, FindPrefsExisting) {
 
 TEST_F(KnownUserTest, FindPrefsIgnoresEphemeralGaiaUsers) {
   KnownUser known_user(local_state());
+  const AccountId kAccountIdNonEphemeralGaia =
+      AccountId::FromUserEmailGaiaId("account1@gmail.com", GaiaId("gaia_id_1"));
   const AccountId kAccountIdEphemeralGaia =
-      AccountId::FromUserEmailGaiaId("account2@gmail.com", "gaia_id_2");
+      AccountId::FromUserEmailGaiaId("account2@gmail.com", GaiaId("gaia_id_2"));
   const AccountId kAccountIdEphemeralAd =
       AccountId::AdFromUserEmailObjGuid("account4@gmail.com", "guid_4");
-  fake_user_manager()->SetUserNonCryptohomeDataEphemeral(
-      kAccountIdEphemeralGaia,
-      /*is_ephemeral=*/true);
-  fake_user_manager()->SetUserNonCryptohomeDataEphemeral(kAccountIdEphemeralAd,
-                                                         /*is_ephemeral=*/true);
+  fake_user_manager()->SetEphemeralModeConfig(UserManager::EphemeralModeConfig(
+      /*included_by_default=*/false,
+      {kAccountIdEphemeralGaia, kAccountIdEphemeralAd},
+      /*exclude_list=*/{}));
+  fake_user_manager()->SetOwnerId(kAccountIdNonEphemeralGaia);
+  ASSERT_TRUE(fake_user_manager()->IsUserNonCryptohomeDataEphemeral(
+      kAccountIdEphemeralGaia));
+  ASSERT_TRUE(fake_user_manager()->IsUserNonCryptohomeDataEphemeral(
+      kAccountIdEphemeralAd));
+
   const std::string kCustomPrefName = "custom_pref";
   known_user.SetStringPref(kAccountIdEphemeralGaia, kCustomPrefName, "value");
   known_user.SetStringPref(kAccountIdEphemeralAd, kCustomPrefName, "value");
@@ -117,7 +120,7 @@ TEST_F(KnownUserTest, FindPrefsMatchForUnknownAccountType) {
   const AccountId kAccountIdUnknown =
       AccountId::FromUserEmail("account1@gmail.com");
   const AccountId kAccountIdGaia =
-      AccountId::FromUserEmailGaiaId("account1@gmail.com", "gaia_id_2");
+      AccountId::FromUserEmailGaiaId("account1@gmail.com", GaiaId("gaia_id_2"));
   const AccountId kAccountIdAd =
       AccountId::AdFromUserEmailObjGuid("account1@gmail.com", "guid");
 
@@ -132,8 +135,8 @@ TEST_F(KnownUserTest, FindPrefsMatchForGaiaAccountWithEmail) {
   KnownUser known_user(local_state());
   const char* kEmailA = "a@gmail.com";
   const char* kEmailB = "b@gmail.com";
-  const char* kGaiaIdA = "a";
-  const char* kGaiaIdB = "b";
+  const GaiaId kGaiaIdA("a");
+  const GaiaId kGaiaIdB("b");
 
   known_user.SaveKnownUser(AccountId::FromUserEmailGaiaId(kEmailA, kGaiaIdA));
 
@@ -181,7 +184,8 @@ TEST_F(KnownUserTest, FindPrefsMatchForAdAccountWithEmail) {
   EXPECT_TRUE(FindPrefs(AccountId::FromUserEmail(kEmailA)));
 
   // Looking up an AccountId stored as AD by an AccountId with type gaia fails.
-  EXPECT_FALSE(FindPrefs(AccountId::FromUserEmailGaiaId(kEmailA, "gaia_id")));
+  EXPECT_FALSE(
+      FindPrefs(AccountId::FromUserEmailGaiaId(kEmailA, GaiaId("gaia_id"))));
 }
 
 TEST_F(KnownUserTest, UpdatePrefsWithoutClear) {
@@ -231,7 +235,7 @@ TEST_F(KnownUserTest, GetKnownAccountIdsNoAccounts) {
 TEST_F(KnownUserTest, GetKnownAccountIdsWithAccounts) {
   KnownUser known_user(local_state());
   const AccountId kAccountIdGaia =
-      AccountId::FromUserEmailGaiaId("account2@gmail.com", "gaia_id");
+      AccountId::FromUserEmailGaiaId("account2@gmail.com", GaiaId("gaia_id"));
   const AccountId kAccountIdAd =
       AccountId::AdFromUserEmailObjGuid("account3@gmail.com", "obj_guid");
 
@@ -255,19 +259,23 @@ TEST_F(KnownUserTest, SaveKnownUserIgnoresUnknownType) {
 TEST_F(KnownUserTest, SaveKnownUserIgnoresEphemeralGaiaUsers) {
   KnownUser known_user(local_state());
   const AccountId kAccountIdNonEphemeralGaia =
-      AccountId::FromUserEmailGaiaId("account1@gmail.com", "gaia_id_1");
+      AccountId::FromUserEmailGaiaId("account1@gmail.com", GaiaId("gaia_id_1"));
   const AccountId kAccountIdEphemeralGaia =
-      AccountId::FromUserEmailGaiaId("account2@gmail.com", "gaia_id_2");
+      AccountId::FromUserEmailGaiaId("account2@gmail.com", GaiaId("gaia_id_2"));
   const AccountId kAccountIdNonEphemeralAd =
       AccountId::AdFromUserEmailObjGuid("account3@gmail.com", "guid_3");
   const AccountId kAccountIdEphemeralAd =
       AccountId::AdFromUserEmailObjGuid("account4@gmail.com", "guid_4");
 
-  fake_user_manager()->SetUserNonCryptohomeDataEphemeral(
-      kAccountIdEphemeralGaia,
-      /*is_ephemeral=*/true);
-  fake_user_manager()->SetUserNonCryptohomeDataEphemeral(kAccountIdEphemeralAd,
-                                                         /*is_ephemeral=*/true);
+  fake_user_manager()->SetEphemeralModeConfig(UserManager::EphemeralModeConfig(
+      /*included_by_default=*/false,
+      {kAccountIdEphemeralGaia, kAccountIdEphemeralAd},
+      /*exclude_list=*/{}));
+  fake_user_manager()->SetOwnerId(kAccountIdNonEphemeralGaia);
+  ASSERT_TRUE(fake_user_manager()->IsUserNonCryptohomeDataEphemeral(
+      kAccountIdEphemeralGaia));
+  ASSERT_TRUE(fake_user_manager()->IsUserNonCryptohomeDataEphemeral(
+      kAccountIdEphemeralAd));
 
   known_user.SaveKnownUser(kAccountIdNonEphemeralGaia);
   known_user.SaveKnownUser(kAccountIdEphemeralGaia);
@@ -289,7 +297,7 @@ TEST_F(KnownUserTest, UpdateIdForGaiaAccount) {
               testing::UnorderedElementsAre(kAccountIdUnknown));
 
   const AccountId kAccountIdGaia =
-      AccountId::FromUserEmailGaiaId("account1@gmail.com", "gaia_id");
+      AccountId::FromUserEmailGaiaId("account1@gmail.com", GaiaId("gaia_id"));
   known_user.UpdateId(kAccountIdGaia);
   EXPECT_THAT(known_user.GetKnownAccountIds(),
               testing::UnorderedElementsAre(kAccountIdGaia));
@@ -313,7 +321,7 @@ TEST_F(KnownUserTest, UpdateIdForAdAccount) {
 TEST_F(KnownUserTest, FindGaiaIdForGaiaAccount) {
   KnownUser known_user(local_state());
   const AccountId kAccountIdGaia =
-      AccountId::FromUserEmailGaiaId("account1@gmail.com", "gaia_id");
+      AccountId::FromUserEmailGaiaId("account1@gmail.com", GaiaId("gaia_id"));
   known_user.SaveKnownUser(kAccountIdGaia);
 
   const std::string* gaia_id = known_user.FindGaiaID(kAccountIdGaia);
@@ -513,9 +521,9 @@ TEST_F(KnownUserTest, PasswordSyncToken) {
 TEST_F(KnownUserTest, CleanEphemeralUsersRemovesEphemeralAdOnly) {
   KnownUser known_user(local_state());
   const AccountId kAccountIdNonEphemeralGaia =
-      AccountId::FromUserEmailGaiaId("account1@gmail.com", "gaia_id_1");
+      AccountId::FromUserEmailGaiaId("account1@gmail.com", GaiaId("gaia_id_1"));
   const AccountId kAccountIdEphemeralGaia =
-      AccountId::FromUserEmailGaiaId("account2@gmail.com", "gaia_id_2");
+      AccountId::FromUserEmailGaiaId("account2@gmail.com", GaiaId("gaia_id_2"));
   const AccountId kAccountIdNonEphemeralAd =
       AccountId::AdFromUserEmailObjGuid("account3@gmail.com", "guid_3");
   const AccountId kAccountIdEphemeralAd =

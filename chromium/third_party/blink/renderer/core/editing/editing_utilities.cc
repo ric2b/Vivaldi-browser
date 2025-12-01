@@ -35,7 +35,6 @@
 #include "third_party/blink/renderer/core/clipboard/system_clipboard.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
-#include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/range.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/dom/text.h"
@@ -77,8 +76,12 @@
 #include "third_party/blink/renderer/core/html/html_olist_element.h"
 #include "third_party/blink/renderer/core/html/html_paragraph_element.h"
 #include "third_party/blink/renderer/core/html/html_span_element.h"
+#include "third_party/blink/renderer/core/html/html_table_caption_element.h"
 #include "third_party/blink/renderer/core/html/html_table_cell_element.h"
+#include "third_party/blink/renderer/core/html/html_table_col_element.h"
 #include "third_party/blink/renderer/core/html/html_table_element.h"
+#include "third_party/blink/renderer/core/html/html_table_row_element.h"
+#include "third_party/blink/renderer/core/html/html_table_section_element.h"
 #include "third_party/blink/renderer/core/html/html_ulist_element.h"
 #include "third_party/blink/renderer/core/html/image_document.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
@@ -210,22 +213,8 @@ static bool HasEditableLevel(const Node& node, EditableLevel editable_level) {
   for (const Node& ancestor : NodeTraversal::InclusiveAncestorsOf(node)) {
     if (!(ancestor.IsHTMLElement() || ancestor.IsDocumentNode()))
       continue;
-    // An inert subtree should not contain any content or controls which are
-    // critical to understanding or using aspects of the page which are not in
-    // the inert state. Content in an inert subtree will not be perceivable by
-    // all users, or interactive. See
-    // https://html.spec.whatwg.org/multipage/interaction.html#the-inert-attribute.
-    // To prevent the invisible inert element being overlooked, the
-    // inert attribute of the element is initially assessed. See
-    // https://issues.chromium.org/issues/41490809.
-    if (RuntimeEnabledFeatures::InertElementNonEditableEnabled()) {
-      const Element* element = DynamicTo<Element>(ancestor);
-      if (element && element->IsInertRoot()) {
-        return false;
-      }
-    }
     if (const ComputedStyle* style =
-            ancestor.GetComputedStyleForElementOrLayoutObject()) {
+            GetComputedStyleForElementOrLayoutObject(ancestor)) {
       switch (style->UsedUserModify()) {
         case EUserModify::kReadOnly:
           return false;
@@ -233,6 +222,20 @@ static bool HasEditableLevel(const Node& node, EditableLevel editable_level) {
           return true;
         case EUserModify::kReadWritePlaintextOnly:
           return editable_level != kRichlyEditable;
+      }
+    }
+    // An inert subtree should not contain any content or controls which are
+    // critical to understanding or using aspects of the page which are not in
+    // the inert state. Content in an inert subtree will not be perceivable by
+    // all users, or interactive. See
+    // https://html.spec.whatwg.org/multipage/interaction.html#the-inert-attribute.
+    // To prevent the invisible inert element being overlooked, the
+    // inert attribute of the element is considered when style is not present.
+    // See https://issues.chromium.org/issues/41490809.
+    if (RuntimeEnabledFeatures::InertElementNonEditableEnabled()) {
+      const Element* element = DynamicTo<Element>(ancestor);
+      if (element && element->IsInertRoot()) {
+        return false;
       }
     }
   }
@@ -894,6 +897,18 @@ TextDirection PrimaryDirectionOf(const Node& node) {
   return primary_direction;
 }
 
+const ComputedStyle* GetComputedStyleForElementOrLayoutObject(
+    const Node& node) {
+  if (const auto* element = DynamicTo<Element>(node)) {
+    return element->GetComputedStyle();
+  }
+  // Text nodes and Document.
+  if (LayoutObject* layout_object = node.GetLayoutObject()) {
+    return layout_object->Style();
+  }
+  return nullptr;
+}
+
 String StringWithRebalancedWhitespace(const String& string,
                                       bool start_is_start_of_paragraph,
                                       bool should_emit_nbs_pbefore_end) {
@@ -1133,6 +1148,13 @@ bool IsTableCell(const Node* node) {
   DCHECK(node);
   LayoutObject* r = node->GetLayoutObject();
   return r ? r->IsTableCell() : IsA<HTMLTableCellElement>(*node);
+}
+
+bool IsTablePartElement(const Node* n) {
+  return n &&
+         (IsA<HTMLTableCellElement>(*n) || IsA<HTMLTableCaptionElement>(*n) ||
+          IsA<HTMLTableColElement>(*n) || IsA<HTMLTableSectionElement>(*n) ||
+          IsA<HTMLTableRowElement>(*n));
 }
 
 HTMLElement* CreateDefaultParagraphElement(Document& document) {

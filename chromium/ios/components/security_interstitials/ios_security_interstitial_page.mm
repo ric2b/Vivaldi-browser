@@ -42,10 +42,7 @@ IOSSecurityInterstitialPage::IOSSecurityInterstitialPage(
     web::WebState* web_state,
     const GURL& request_url,
     IOSBlockingPageControllerClient* client)
-    : web_state_(web_state),
-      request_url_(request_url),
-      client_(client) {
-}
+    : web_state_(web_state), request_url_(request_url), client_(client) {}
 
 IOSSecurityInterstitialPage::~IOSSecurityInterstitialPage() {}
 
@@ -75,6 +72,8 @@ std::string_view IOSSecurityInterstitialPage::GetInterstitialType() const {
 }
 
 void IOSSecurityInterstitialPage::ShowInfobar() {}
+
+void IOSSecurityInterstitialPage::WasDismissed() {}
 
 std::u16string IOSSecurityInterstitialPage::GetFormattedHostName() const {
   return security_interstitials::common_string_util::GetFormattedHostName(

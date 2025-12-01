@@ -10,7 +10,6 @@
 #include "base/test/bind.h"
 #include "build/build_config.h"
 #include "build/chromecast_buildflags.h"
-#include "build/chromeos_buildflags.h"
 #include "content/browser/accessibility/accessibility_tree_formatter_blink.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/ax_inspect_factory.h"
@@ -25,6 +24,8 @@
 #include "content/shell/browser/shell.h"
 #include "content/test/content_browser_test_utils_internal.h"
 #include "net/dns/mock_host_resolver.h"
+#include "ui/accessibility/ax_action_data.h"
+#include "ui/accessibility/ax_action_handler_base.h"
 #include "ui/accessibility/ax_clipping_behavior.h"
 #include "ui/accessibility/ax_coordinate_system.h"
 #include "ui/accessibility/ax_node_id_forward.h"
@@ -433,8 +434,8 @@ IN_PROC_BROWSER_TEST_P(AccessibilityHitTestingBrowserTest, MAYBE_HitTest) {
 // this platform.
 #if !BUILDFLAG(IS_ANDROID)
 
-// crbug.com/1317505: Flaky on Lacros and Linux Wayland
-#if BUILDFLAG(IS_CHROMEOS_LACROS) || BUILDFLAG(IS_LINUX)
+// crbug.com/1317505: Flaky on Linux Wayland
+#if BUILDFLAG(IS_LINUX)
 #define MAYBE_HitTestInPopup DISABLED_HitTestInPopup
 #else
 #define MAYBE_HitTestInPopup HitTestInPopup
@@ -584,6 +585,116 @@ IN_PROC_BROWSER_TEST_P(AccessibilityHitTestingCrossProcessBrowserTest,
     hit_node = AsyncHitTestAndWaitForCallback(rect_g_point);
     EXPECT_ACCESSIBILITY_HIT_TEST_RESULT(rect_g_point, expected_node, hit_node);
   }
+}
+
+class AXActionHandlerForStitchedChildTree : public ui::AXActionHandlerBase {
+ public:
+  explicit AXActionHandlerForStitchedChildTree(
+      const ui::AXTreeManager& child_manager) {
+    SetAXTreeID(child_manager.GetTreeID());
+  }
+
+  AXActionHandlerForStitchedChildTree(
+      const AXActionHandlerForStitchedChildTree&) = delete;
+  AXActionHandlerForStitchedChildTree& operator=(
+      const AXActionHandlerForStitchedChildTree&) = delete;
+  ~AXActionHandlerForStitchedChildTree() override = default;
+
+  const ui::AXActionData& action_data() const { return data_; }
+
+  void PerformAction(const ui::AXActionData& data) override { data_ = data; }
+
+ private:
+  ui::AXActionData data_;
+};
+
+IN_PROC_BROWSER_TEST_P(AccessibilityHitTestingBrowserTest,
+                       HitTestingInStitchedChildTree) {
+  LoadInitialAccessibilityTreeFromHtml(R"HTML(
+      <!DOCTYPE html>
+      <html>
+      <body>
+        <div role="link" aria-label="Link"
+            style="height: 100vh; width: 100vw">
+          <p>Text that is replaced by child tree.</p>
+        </div>
+      </body>
+      </html>"
+      )HTML");
+
+  ui::BrowserAccessibility* link = FindNode(ax::mojom::Role::kLink,
+                                            /*name_or_value=*/"Link");
+  ASSERT_NE(nullptr, link);
+  ASSERT_EQ(1u, link->PlatformChildCount());
+  ui::BrowserAccessibility* paragraph = link->PlatformGetChild(0u);
+  ASSERT_NE(nullptr, paragraph);
+  ASSERT_EQ(ax::mojom::Role::kParagraph, paragraph->node()->GetRole());
+
+  //
+  // Set up a child tree that will be stitched into the link making the
+  // enclosed content invisible.
+  //
+
+  ui::AXNodeData root;
+  root.id = -2;
+  root.role = ax::mojom::Role::kRootWebArea;
+  root.AddBoolAttribute(ax::mojom::BoolAttribute::kIsLineBreakingObject, true);
+  root.relative_bounds.bounds = gfx::RectF(220, 50);
+
+  ui::AXTreeUpdate update;
+  update.root_id = root.id;
+  update.nodes = {root};
+  update.has_tree_data = true;
+  update.tree_data.tree_id = ui::AXTreeID::CreateNewAXTreeID();
+  ASSERT_NE(nullptr, link->manager());
+  update.tree_data.parent_tree_id = link->manager()->GetTreeID();
+  update.tree_data.title = "Generated content";
+
+  auto child_tree = std::make_unique<ui::AXTree>(update);
+  ui::AXTreeManager child_manager(std::move(child_tree));
+  AXActionHandlerForStitchedChildTree child_handler(child_manager);
+
+  ui::AXActionData action_data;
+  action_data.action = ax::mojom::Action::kStitchChildTree;
+  ASSERT_NE(nullptr, GetRootBrowserAccessibilityManager());
+  action_data.target_tree_id =
+      GetRootBrowserAccessibilityManager()->GetTreeID();
+  action_data.target_node_id = link->node()->id();
+  action_data.child_tree_id = update.tree_data.tree_id;
+
+  AccessibilityNotificationWaiter stitch_waiter(
+      shell()->web_contents(), ui::kAXModeComplete,
+      ui::AXEventGenerator::Event::CHILDREN_CHANGED);
+  link->AccessibilityPerformAction(action_data);
+  ASSERT_TRUE(stitch_waiter.WaitForNotification());
+
+  gfx::Rect link_bounds = link->GetBoundsRect(
+      ui::AXCoordinateSystem::kRootFrame, ui::AXClippingBehavior::kUnclipped);
+  gfx::Point target_point = FrameToCSSPoint(link_bounds.CenterPoint());
+  base::RunLoop run_loop;
+  ui::AXTreeManager* hit_manager = nullptr;
+  ui::AXNodeID hit_node_id = ui::kInvalidAXNodeID;
+
+  auto hit_callback = [&](ui::AXPlatformTreeManager* manager,
+                          ui::AXNodeID node_id) {
+    hit_manager = manager;
+    hit_node_id = node_id;
+    run_loop.QuitClosure().Run();
+  };
+
+  GetRootBrowserAccessibilityManager()->delegate()->AccessibilityHitTest(
+      target_point, ax::mojom::Event::kClicked, /*opt_request_id=*/2,
+      base::BindLambdaForTesting(hit_callback));
+  run_loop.Run();
+
+  EXPECT_EQ(hit_manager, GetRootBrowserAccessibilityManager());
+  EXPECT_EQ(link->GetId(), hit_node_id);
+  EXPECT_EQ(ax::mojom::Action::kHitTest, child_handler.action_data().action);
+  EXPECT_EQ(2, child_handler.action_data().request_id);
+  EXPECT_EQ(ax::mojom::Event::kClicked,
+            child_handler.action_data().hit_test_event_to_fire);
+  EXPECT_EQ(target_point - link_bounds.OffsetFromOrigin(),
+            child_handler.action_data().target_point);
 }
 
 IN_PROC_BROWSER_TEST_P(AccessibilityHitTestingBrowserTest,

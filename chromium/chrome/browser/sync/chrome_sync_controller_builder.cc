@@ -45,7 +45,6 @@
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 #if BUILDFLAG(IS_CHROMEOS)
-#include "ash/components/arc/arc_util.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "chrome/browser/ash/app_list/app_list_syncable_service.h"
@@ -59,6 +58,7 @@
 #include "chrome/browser/ash/printing/printers_sync_bridge.h"
 #include "chrome/browser/ash/printing/synced_printers_manager.h"
 #include "chromeos/ash/components/sync_wifi/wifi_configuration_sync_service.h"
+#include "chromeos/ash/experiences/arc/arc_util.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
@@ -197,8 +197,6 @@ ChromeSyncControllerBuilder::Build(syncer::SyncService* sync_service) {
                   kTransportModeWithSingleModel,
               extension_system_profile_.value()));
 
-      // TODO(crbug.com/377339175): Enable this for
-      // `kTransportModeWithSingleModel`.
       controllers.push_back(
           std::make_unique<browser_sync::ExtensionSettingDataTypeController>(
               syncer::EXTENSION_SETTINGS, data_type_store_factory,
@@ -207,7 +205,7 @@ ChromeSyncControllerBuilder::Build(syncer::SyncService* sync_service) {
                   syncer::EXTENSION_SETTINGS),
               dump_stack,
               browser_sync::ExtensionSettingDataTypeController::DelegateMode::
-                  kLegacyFullSyncModeOnly,
+                  kTransportModeWithSingleModel,
               extension_system_profile_.value()));
 
       controllers.push_back(

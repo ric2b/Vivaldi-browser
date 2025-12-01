@@ -10,8 +10,11 @@
 
 namespace features {
 
-BASE_DECLARE_FEATURE(kAIAssistantOverrideConfiguration);
-extern const base::FeatureParam<int> kAIAssistantOverrideConfigurationMaxTopK;
+BASE_DECLARE_FEATURE(kAILanguageModelOverrideConfiguration);
+extern const base::FeatureParam<int>
+    kAILanguageModelOverrideConfigurationMaxTopK;
+extern const base::FeatureParam<double>
+    kAILanguageModelOverrideConfigurationMaxTemperature;
 
 }  // namespace features
 

@@ -7,6 +7,7 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
+#include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/permissions/features.h"
 #include "components/permissions/permission_manager.h"
@@ -23,6 +24,7 @@
 class ChromePermissionManagerTest : public ChromeRenderViewHostTestHarness {
  public:
   void SetUp() override {
+    TestingBrowserProcess::GetGlobal()->CreateGlobalFeaturesForTesting();
     ChromeRenderViewHostTestHarness::SetUp();
     profile()->SetPermissionControllerDelegate(
         permissions::GetPermissionControllerDelegate(GetBrowserContext()));
@@ -43,10 +45,10 @@ class ChromePermissionManagerTest : public ChromeRenderViewHostTestHarness {
   content::RenderFrameHost* AddChildRFH(
       content::RenderFrameHost* parent,
       const GURL& origin,
-      blink::mojom::PermissionsPolicyFeature feature =
-          blink::mojom::PermissionsPolicyFeature::kNotFound) {
+      network::mojom::PermissionsPolicyFeature feature =
+          network::mojom::PermissionsPolicyFeature::kNotFound) {
     blink::ParsedPermissionsPolicy frame_policy = {};
-    if (feature != blink::mojom::PermissionsPolicyFeature::kNotFound) {
+    if (feature != network::mojom::PermissionsPolicyFeature::kNotFound) {
       frame_policy.emplace_back(
           feature,
           std::vector{*blink::OriginWithPossibleWildcards::FromOrigin(
@@ -199,7 +201,7 @@ TEST_F(ChromePermissionManagerTest, SubscribeWithPermissionDelegation) {
 
   // Enabling geolocation by FP should allow the child to request access also.
   child = AddChildRFH(parent, url2,
-                      blink::mojom::PermissionsPolicyFeature::kGeolocation);
+                      network::mojom::PermissionsPolicyFeature::kGeolocation);
 
   EXPECT_EQ(PermissionStatus::GRANTED,
             permission_controller->GetPermissionStatusForCurrentDocument(

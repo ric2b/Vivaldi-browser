@@ -42,8 +42,7 @@ NavigationPresence GetNavigationPresence(
     case UserEventSpecifics::EVENT_NOT_SET:
       break;
   }
-  NOTREACHED_IN_MIGRATION();
-  return kEitherOkay;
+  NOTREACHED();
 }
 
 bool NavigationPresenceValid(UserEventSpecifics::EventCase event_case,
@@ -87,8 +86,7 @@ EventTypeForUMA GetEventTypeForUMA(UserEventSpecifics::EventCase event_case) {
     case UserEventSpecifics::EVENT_NOT_SET:
       break;
   }
-  NOTREACHED_IN_MIGRATION();
-  return EventTypeForUMA::kUnknown;
+  NOTREACHED();
 }
 
 }  // namespace

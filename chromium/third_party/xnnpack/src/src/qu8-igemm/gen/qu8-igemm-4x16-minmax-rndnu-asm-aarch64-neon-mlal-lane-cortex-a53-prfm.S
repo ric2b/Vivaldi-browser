@@ -26,7 +26,8 @@
 
 # params structure is 20 bytes
 #  struct {
-#    uint8_t kernel_zero_point[4];
+#    uint8_t kernel_zero_point;
+#    uint8_t padding[3];
 #    int32_t right_pre_shift;
 #    int32_t multiplier;
 #    int32_t right_post_shift;
@@ -69,7 +70,7 @@ BEGIN_FUNCTION xnn_qu8_igemm_minmax_rndnu_ukernel_4x16__asm_aarch64_neon_mlal_la
         ADD         x7,  x17, x7            // c3 = c2 + cm_stride
         CSEL        x7,  x17, x7, LO        //   c3 = c2
 
-        LD1R        {v7.4s}, [x11]          // kernel_zero_point
+        LD1R        {v7.16b}, [x11]          // kernel_zero_point
 
         .p2align    3
 0:
@@ -557,7 +558,6 @@ BEGIN_FUNCTION xnn_qu8_igemm_minmax_rndnu_ukernel_4x16__asm_aarch64_neon_mlal_la
         SRSHL       v29.4s, v29.4s, v6.4s
         SRSHL       v30.4s, v30.4s, v6.4s
         SRSHL       v31.4s, v31.4s, v6.4s
-
         SQXTN       v16.4h, v16.4s
         SQXTN       v17.4h, v17.4s
         SQXTN       v18.4h, v18.4s

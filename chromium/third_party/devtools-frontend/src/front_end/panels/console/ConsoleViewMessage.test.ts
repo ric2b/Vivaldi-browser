@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 import * as Common from '../../core/common/common.js';
-import type * as Platform from '../../core/platform/platform.js';
+import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
 import {
@@ -16,9 +16,36 @@ import {describeWithMockConnection} from '../../testing/MockConnection.js';
 import * as Components from '../../ui/legacy/components/utils/utils.js';
 import * as UI from '../../ui/legacy/legacy.js';
 
+import * as Console from './console.js';
 // The css files aren't exported by the bundle, so we need to import it directly.
-// eslint-disable-next-line rulesdir/es_modules_import
+// eslint-disable-next-line rulesdir/es-modules-import
 import consoleViewStyles from './consoleView.css.js';
+
+const {urlString} = Platform.DevToolsPath;
+
+describe('ConsoleViewMessage', () => {
+  describe('concatErrorDescriptionAndIssueSummary', () => {
+    const {concatErrorDescriptionAndIssueSummary} = Console.ConsoleViewMessage;
+
+    it('correctly appends the issue summary in case of single line error descriptions', () => {
+      assert.strictEqual(
+          concatErrorDescriptionAndIssueSummary(
+              'TypeError: Failed to fetch',
+              'Access blocked by CORS policy: Cross origin requests are not allowed by request mode.'),
+          'TypeError: Failed to fetch. Access blocked by CORS policy: Cross origin requests are not allowed by request mode.',
+      );
+    });
+
+    it('correctly inserts the issue summary in case of multi-line error descriptions', () => {
+      assert.strictEqual(
+          concatErrorDescriptionAndIssueSummary(
+              'TypeError: Failed to fetch\n  at (index):25:5',
+              'Access blocked by CORS policy: Cross origin requests are not allowed by request mode.'),
+          'TypeError: Failed to fetch. Access blocked by CORS policy: Cross origin requests are not allowed by request mode.\n  at (index):25:5',
+      );
+    });
+  });
+});
 
 describeWithMockConnection('ConsoleViewMessage', () => {
   describe('anchor rendering', () => {
@@ -179,17 +206,23 @@ describeWithMockConnection('ConsoleViewMessage', () => {
       assert.isTrue(showLess.checkVisibility());
     }
 
-    function errorMessageForStack(stack: Protocol.Runtime.StackTrace) {
-      return [
+    function errorMessageForStack(stack: Protocol.Runtime.StackTrace, withBuiltinFrames?: boolean) {
+      const lines = [
         'Error:',
-        ...(stack.callFrames.map(
-            frame => `    at ${frame.functionName} (${frame.url}:${frame.lineNumber}:${frame.columnNumber})`)),
-      ].join('\n');
+        ...(stack.callFrames.flatMap(frame => {
+          const line = `    at ${frame.functionName} (${frame.url}:${frame.lineNumber}:${frame.columnNumber})`;
+          if (withBuiltinFrames) {
+            return [line, '    at JSON.parse (<anonymous>)'];
+          }
+          return [line];
+        })),
+      ];
+      return lines.join('\n');
     }
 
     function getCallFrames(element: HTMLElement): string[] {
       const results = [];
-      for (const line of element.querySelectorAll('.formatted-stack-frame')) {
+      for (const line of element.querySelectorAll('.formatted-stack-frame,.formatted-builtin-stack-frame')) {
         if (line.checkVisibility()) {
           results.push(line.textContent ?? 'Error: line was null or undefined');
         }
@@ -221,7 +254,8 @@ describeWithMockConnection('ConsoleViewMessage', () => {
       (showLess.querySelector('.link') as HTMLElement).click();
     }
 
-    async function createConsoleMessageWithIgnoreListing(ignoreListFn: (url: string) => Boolean): Promise<HTMLElement> {
+    async function createConsoleMessageWithIgnoreListing(
+        ignoreListFn: (url: string) => Boolean, withBuiltinFrames?: boolean): Promise<HTMLElement> {
       const target = createTarget();
       const runtimeModel = target.model(SDK.RuntimeModel.RuntimeModel);
       const stackTrace = createStackTrace([
@@ -229,7 +263,7 @@ describeWithMockConnection('ConsoleViewMessage', () => {
         'USER_ID::userFunction::http://example.com/script.js::10::2',
         'APP_ID::entry::http://example.com/app.js::25::10',
       ]);
-      const stackTraceMessage = errorMessageForStack(stackTrace);
+      const stackTraceMessage = errorMessageForStack(stackTrace, withBuiltinFrames);
       const messageDetails = {
         type: Protocol.Runtime.ConsoleAPICalledEventType.Error,
         stackTrace,
@@ -254,7 +288,7 @@ describeWithMockConnection('ConsoleViewMessage', () => {
       });
       linkifier.maybeLinkifyConsoleCallFrame.callsFake((target, callFrame, options) => {
         const link = Components.Linkifier.Linkifier.linkifyURL(
-            callFrame.url as Platform.DevToolsPath.UrlString, {lineNumber: callFrame.lineNumber, ...options});
+            urlString`${callFrame.url}`, {lineNumber: callFrame.lineNumber, ...options});
         if (ignoreListFn(callFrame.url)) {
           link.classList.add(IGNORE_LIST_LINK);
         }
@@ -264,7 +298,7 @@ describeWithMockConnection('ConsoleViewMessage', () => {
       await message.formatErrorStackPromiseForTest();
 
       const wrapperElement = document.createElement('div');
-      const shadowElement = UI.UIUtils.createShadowRootWithCoreStyles(wrapperElement, {cssFile: [consoleViewStyles]});
+      const shadowElement = UI.UIUtils.createShadowRootWithCoreStyles(wrapperElement, {cssFile: consoleViewStyles});
       shadowElement.appendChild(element);
       renderElementIntoDOM(wrapperElement);
       assert.isTrue(element.checkVisibility());
@@ -279,6 +313,20 @@ describeWithMockConnection('ConsoleViewMessage', () => {
     const COLLAPSED_UNSTRUCTURED = [
       '    at userNestedFunction (/script.js:40:15)\n',
       '    at userFunction (/script.js:10:2)\n',
+    ];
+    const EXPANDED_UNSTRUCTURED_WITH_BUILTIN = [
+      '    at userNestedFunction (/script.js:40:15)\n',
+      '    at JSON.parse (<anonymous>)\n',
+      '    at userFunction (/script.js:10:2)\n',
+      '    at JSON.parse (<anonymous>)\n',
+      '    at entry (/app.js:25:10)\n',
+      '    at JSON.parse (<anonymous>)',
+    ];
+    const COLLAPSED_UNSTRUCTURED_WITH_BUILTIN = [
+      '    at userNestedFunction (/script.js:40:15)\n',
+      '    at JSON.parse (<anonymous>)\n',
+      '    at userFunction (/script.js:10:2)\n',
+      '    at JSON.parse (<anonymous>)\n',
     ];
     const EXPANDED_STRUCTURED = [
       '\nuserNestedFunction @ example.com/script.js:41',
@@ -334,6 +382,52 @@ describeWithMockConnection('ConsoleViewMessage', () => {
       assertShowAllLink(element);
       assert.deepEqual(getStructuredCallFrames(element), COLLAPSED_STRUCTURED);
       assert.deepEqual(getCallFrames(element), COLLAPSED_UNSTRUCTURED);
+    });
+
+    it('shows everything with no links when nothing is ignore listed, including builtin frames', async () => {
+      const element = await createConsoleMessageWithIgnoreListing(_ => false, true);
+      assertNoLinks(element);
+      assert.deepEqual(getCallFrames(element), EXPANDED_UNSTRUCTURED_WITH_BUILTIN);
+      assert.deepEqual(getStructuredCallFrames(element), []);
+      expandStructuredTrace(element);
+      assertNoLinks(element);
+      assert.deepEqual(getStructuredCallFrames(element), EXPANDED_STRUCTURED);
+    });
+
+    it('shows everything with no links when everything is ignore listed, including builtin frames', async () => {
+      const element = await createConsoleMessageWithIgnoreListing(_ => true, true);
+      assertNoLinks(element);
+      assert.deepEqual(getCallFrames(element), EXPANDED_UNSTRUCTURED_WITH_BUILTIN);
+      assert.deepEqual(getStructuredCallFrames(element), []);
+      expandStructuredTrace(element);
+      assertNoLinks(element);
+      assert.deepEqual(getStructuredCallFrames(element), EXPANDED_STRUCTURED);
+    });
+
+    it('shows expandable list when something is ignore listed, collapsing builtin frames', async () => {
+      const element = await createConsoleMessageWithIgnoreListing(url => url.includes('/app.js'), true);
+      assertShowAllLink(element);
+      assert.deepEqual(getStructuredCallFrames(element), []);
+      assert.deepEqual(getCallFrames(element), COLLAPSED_UNSTRUCTURED_WITH_BUILTIN);
+      expandIgnored(element);
+      assertShowLessLink(element);
+      assert.deepEqual(getCallFrames(element), EXPANDED_UNSTRUCTURED_WITH_BUILTIN);
+      collapseIgnored(element);
+      assertShowAllLink(element);
+
+      expandStructuredTrace(element);
+
+      assertShowAllLink(element);
+      assert.deepEqual(getStructuredCallFrames(element), COLLAPSED_STRUCTURED);
+      assert.deepEqual(getCallFrames(element), COLLAPSED_UNSTRUCTURED_WITH_BUILTIN);
+      expandIgnored(element);
+      assertShowLessLink(element);
+      assert.deepEqual(getCallFrames(element), EXPANDED_UNSTRUCTURED_WITH_BUILTIN);
+      assert.deepEqual(getStructuredCallFrames(element), EXPANDED_STRUCTURED);
+      collapseIgnored(element);
+      assertShowAllLink(element);
+      assert.deepEqual(getStructuredCallFrames(element), COLLAPSED_STRUCTURED);
+      assert.deepEqual(getCallFrames(element), COLLAPSED_UNSTRUCTURED_WITH_BUILTIN);
     });
   });
 });

@@ -193,7 +193,7 @@ public class AwFileChooserTest extends AwParameterizedTest {
         Intent i = params.createIntent();
         Assert.assertEquals(
                 i.getStringArrayExtra(Intent.EXTRA_MIME_TYPES), expectedIntentExtraTypes);
-        Assert.assertEquals(i.getType(), expectedIntentType);
+        Assert.assertEquals(expectedIntentType, i.getType());
     }
 
     @Test
@@ -351,8 +351,7 @@ public class AwFileChooserTest extends AwParameterizedTest {
     @SmallTest
     @EnableFeatures({BlinkFeatures.FILE_SYSTEM_ACCESS_LOCAL, AwFeatures.WEBVIEW_FILE_SYSTEM_ACCESS})
     public void testFileSystemAccessDirectory() throws Throwable {
-        fileSystemAccessOk(
-                "showDirectoryPicker()", WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE);
+        fileSystemAccessOk("showDirectoryPicker()", FileChooserParamsImpl.Mode.OPEN_FOLDER);
     }
 
     /** Simulates user clicking Choose File button. */

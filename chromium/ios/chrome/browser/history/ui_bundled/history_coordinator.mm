@@ -8,9 +8,9 @@
 #import "ios/chrome/browser/history/ui_bundled/history_clear_browsing_data_coordinator.h"
 #import "ios/chrome/browser/history/ui_bundled/history_clear_browsing_data_coordinator_delegate.h"
 #import "ios/chrome/browser/history/ui_bundled/history_table_view_controller.h"
+#import "ios/chrome/browser/menu/ui_bundled/menu_histograms.h"
+#import "ios/chrome/browser/settings/ui_bundled/clear_browsing_data/features.h"
 #import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
-#import "ios/chrome/browser/ui/menu/menu_histograms.h"
-#import "ios/chrome/browser/ui/settings/clear_browsing_data/features.h"
 
 // Vivaldi
 #include "app/vivaldi_apptools.h"
@@ -27,10 +27,21 @@
 
 @implementation HistoryCoordinator
 
+- (instancetype)initWithBaseViewController:(UIViewController*)viewController
+                                   browser:(Browser*)browser {
+  if ((self = [super initWithBaseViewController:viewController
+                                        browser:browser])) {
+    self.canPerformTabsClosureAnimation = YES;
+  }
+  return self;
+}
+
 - (void)start {
   // Initialize and configure HistoryTableViewController.
   _viewController = [[HistoryTableViewController alloc] init];
   _viewController.searchTerms = self.searchTerms;
+  _viewController.canPerformTabsClosureAnimation =
+      self.canPerformTabsClosureAnimation;
   _viewController.delegate = self;
 
   // Configure and present HistoryNavigationController.

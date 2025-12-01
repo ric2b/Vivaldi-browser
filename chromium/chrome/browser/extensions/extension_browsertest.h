@@ -16,12 +16,12 @@
 #include "base/test/scoped_path_override.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "chrome/browser/extensions/extension_browser_test_util.h"
+#include "chrome/browser/extensions/extension_platform_browsertest.h"
 #include "chrome/browser/extensions/install_verifier.h"
 #include "chrome/browser/extensions/scoped_test_mv2_enabler.h"
 #include "chrome/browser/extensions/updater/extension_updater.h"
-#include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/browser/web_contents.h"
-#include "extensions/browser/browsertest_util.h"
 #include "extensions/browser/extension_creator.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_protocols.h"
@@ -54,30 +54,11 @@ class WindowController;
 
 // Base class for extension browser tests. Provides utilities for loading,
 // unloading, and installing extensions.
-class ExtensionBrowserTest : public InProcessBrowserTest,
+class ExtensionBrowserTest : public ExtensionPlatformBrowserTest,
                              public ExtensionRegistryObserver {
  public:
-  // Different types of extension's lazy background contexts used in some tests.
-  enum class ContextType {
-    // TODO(crbug.com:/1241220): Get rid of this value when we can use
-    // std::optional in the LoadOptions struct.
-    // No specific context type.
-    kNone,
-    // A non-persistent background page/JS based extension.
-    kEventPage,
-    // A Service Worker based extension.
-    kServiceWorker,
-    // A Service Worker based extension that uses MV2.
-    kServiceWorkerMV2,
-    // An extension with a persistent background page.
-    kPersistentBackground,
-    // Use the value from the manifest. This is used when the test
-    // has been parameterized but the particular extension should
-    // be loaded without using the parameterized type. Typically,
-    // this is used when a test loads another extension that is
-    // not parameterized.
-    kFromManifest,
-  };
+  using ContextType = extensions::browser_test_util::ContextType;
+  using LoadOptions = extensions::browser_test_util::LoadOptions;
 
   ExtensionBrowserTest(const ExtensionBrowserTest&) = delete;
   ExtensionBrowserTest& operator=(const ExtensionBrowserTest&) = delete;
@@ -87,51 +68,11 @@ class ExtensionBrowserTest : public InProcessBrowserTest,
                          const Extension* extension) override;
   void OnShutdown(ExtensionRegistry* registry) override;
 
-  static bool IsServiceWorkerContext(ContextType context_type) {
-    return context_type == ContextType::kServiceWorker ||
-           context_type == ContextType::kServiceWorkerMV2;
-  }
-
   bool IsContextTypeForServiceWorker() const {
     return IsServiceWorkerContext(context_type_);
   }
 
  protected:
-  struct LoadOptions {
-    // Allows the extension to run in incognito mode.
-    bool allow_in_incognito = false;
-
-    // Allows file access for the extension.
-    bool allow_file_access = false;
-
-    // Doesn't fail when the loaded manifest has warnings (should only be used
-    // when testing deprecated features).
-    bool ignore_manifest_warnings = false;
-
-    // Waits for extension renderers to fully load.
-    bool wait_for_renderers = true;
-
-    // An optional install param.
-    const char* install_param = nullptr;
-
-    // If this is a Service Worker-based extension, wait for the
-    // Service Worker's registration to be stored before returning.
-    bool wait_for_registration_stored = false;
-
-    // Loads the extension with location COMPONENT.
-    bool load_as_component = false;
-
-    // Changes the "manifest_version" manifest key to 3. Note as of now, this
-    // doesn't make any other changes to convert the extension to MV3 other than
-    // changing the integer value in the manifest.
-    bool load_as_manifest_version_3 = false;
-
-    // Used to force loading the extension with a particular background type.
-    // Currently this only support loading an extension as using a service
-    // worker.
-    ContextType context_type = ContextType::kNone;
-  };
-
   explicit ExtensionBrowserTest(ContextType context_type = ContextType::kNone);
   ~ExtensionBrowserTest() override;
 
@@ -163,11 +104,6 @@ class ExtensionBrowserTest : public InProcessBrowserTest,
   // (since many tests are parameterized to exercise both MV2 + MV3 logic).
   virtual bool ShouldAllowMV2Extensions();
 
-  // Returns the path of the directory from which to serve resources when they
-  // are prefixed with "_test_resources/".
-  // The default is chrome/test/data/extensions/.
-  virtual base::FilePath GetTestResourcesParentDir();
-
   static const Extension* GetExtensionByPath(const ExtensionSet& extensions,
                                              const base::FilePath& path);
 
@@ -177,10 +113,15 @@ class ExtensionBrowserTest : public InProcessBrowserTest,
   void SetUpOnMainThread() override;
   void TearDownOnMainThread() override;
 
+  // These functions intentionally shadow the versions in the base class
+  // ExtensionPlatformBrowserTest. They cannot be made virtual because there
+  // are too many individual tests that define a LoadExtension() function and
+  // shadowing virtual functions is not allowed.
   const Extension* LoadExtension(const base::FilePath& path);
-
   const Extension* LoadExtension(const base::FilePath& path,
                                  const LoadOptions& options);
+
+  void DisableExtension(const std::string& extension_id, int disable_reasons);
 
   // Loads unpacked extension from |path| with manifest |manifest_relative_path|
   // and imitates that it is a component extension.
@@ -339,36 +280,6 @@ class ExtensionBrowserTest : public InProcessBrowserTest,
                                   const std::string& path,
                                   int expected_hosts);
 
-  // Waits until `script` calls "chrome.test.sendScriptResult(result)",
-  // where `result` is a serializable value, and returns `result`. Fails
-  // the test and returns an empty base::Value if `extension_id` isn't
-  // installed in the test's profile or doesn't have a background page, or
-  // if executing the script fails. The argument `script_user_activation`
-  // determines if the script should be executed after a user activation.
-  base::Value ExecuteScriptInBackgroundPage(
-      const extensions::ExtensionId& extension_id,
-      const std::string& script,
-      browsertest_util::ScriptUserActivation script_user_activation =
-          browsertest_util::ScriptUserActivation::kDontActivate);
-
-  // Waits until |script| calls "window.domAutomationController.send(result)",
-  // where |result| is a string, and returns |result|. Fails the test and
-  // returns an empty base::Value if |extension_id| isn't installed in test's
-  // profile or doesn't have a background page, or if executing the script
-  // fails. The argument |script_user_activation| determines if the script
-  // should be executed after a user activation.
-  std::string ExecuteScriptInBackgroundPageDeprecated(
-      const extensions::ExtensionId& extension_id,
-      const std::string& script,
-      browsertest_util::ScriptUserActivation script_user_activation =
-          browsertest_util::ScriptUserActivation::kDontActivate);
-
-  bool ExecuteScriptInBackgroundPageNoWait(
-      const extensions::ExtensionId& extension_id,
-      const std::string& script,
-      browsertest_util::ScriptUserActivation script_user_activation =
-          browsertest_util::ScriptUserActivation::kDontActivate);
-
   // Get the ServiceWorkerContext for the default browser's profile.
   content::ServiceWorkerContext* GetServiceWorkerContext();
 
@@ -382,21 +293,9 @@ class ExtensionBrowserTest : public InProcessBrowserTest,
   bool set_chromeos_user_;
 #endif
 
-  // Set to "chrome/test/data/extensions". Derived classes may override.
-  // TODO(michaelpg): Don't override protected data members.
-  base::FilePath test_data_dir_;
-
   std::unique_ptr<ChromeExtensionTestNotificationObserver> observer_;
 
-  const ContextType context_type_;
-
  private:
-  // Modifies extension at `input_path` as dictated by `options`. On success,
-  // returns true and populates `out_path`. On failure, false is returned.
-  bool ModifyExtensionIfNeeded(const LoadOptions& options,
-                               const base::FilePath& input_path,
-                               base::FilePath* out_path);
-
   // Temporary directory for testing.
   base::ScopedTempDir temp_dir_;
 
@@ -466,10 +365,6 @@ class ExtensionBrowserTest : public InProcessBrowserTest,
 
   // Cache cache implementation.
   std::unique_ptr<ExtensionCacheFake> test_extension_cache_;
-
-  // An override so that chrome-extensions://<extension_id>/_test_resources/foo
-  // maps to chrome/test/data/extensions/foo.
-  ExtensionProtocolTestHandler test_protocol_handler_;
 
   // Conditionally disable content verification.
   std::unique_ptr<ScopedIgnoreContentVerifierForTest>

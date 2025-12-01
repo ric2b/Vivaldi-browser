@@ -18,6 +18,7 @@
 
 #include <bitset>
 
+#include "perfetto/base/thread_annotations.h"
 #include "perfetto/tracing/buffer_exhausted_policy.h"
 #include "perfetto/tracing/data_source.h"
 #include "perfetto/tracing/internal/basic_types.h"
@@ -68,12 +69,31 @@ struct PerfettoDsImpl {
   DataSourceType cpp_type;
   std::atomic<bool> enabled{false};
   std::mutex mu;
-  // Guarded by mu
-  std::bitset<perfetto::internal::kMaxDataSourceInstances> enabled_instances;
+  std::bitset<perfetto::internal::kMaxDataSourceInstances> enabled_instances
+      PERFETTO_GUARDED_BY(mu);
 
   bool IsRegistered() {
     return cpp_type.static_state()->index !=
            perfetto::internal::kMaxDataSources;
+  }
+};
+
+struct PerfettoDsOnStopArgs {
+  struct PerfettoDsAsyncStopper* stopper = nullptr;
+};
+
+struct PerfettoDsAsyncStopper {
+  PerfettoDsImpl* ds_impl;
+  uint32_t instance_idx;
+  std::function<void()> async_stop_closure;
+
+  void FinishStop() {
+    std::lock_guard<std::mutex> lock(ds_impl->mu);
+    ds_impl->enabled_instances.reset(instance_idx);
+    if (ds_impl->enabled_instances.none()) {
+      ds_impl->enabled.store(false, std::memory_order_release);
+    }
+    async_stop_closure();
   }
 };
 
@@ -124,17 +144,24 @@ class ShlibDataSource : public perfetto::DataSourceBase {
   }
 
   void OnStop(const StopArgs& args) override {
+    PerfettoDsOnStopArgs c_args;
+    c_args.stopper = new PerfettoDsAsyncStopper();
+    // Capturing ds_impl is ok, because data sources cannot be unregistered.
+    c_args.stopper->ds_impl = &type_;
+    c_args.stopper->async_stop_closure = args.HandleStopAsynchronously();
+    c_args.stopper->instance_idx = args.internal_instance_index;
+
     if (type_.on_stop_cb) {
-      type_.on_stop_cb(
-          &type_, args.internal_instance_index, type_.cb_user_arg, inst_ctx_,
-          const_cast<PerfettoDsOnStopArgs*>(
-              reinterpret_cast<const PerfettoDsOnStopArgs*>(&args)));
+      type_.on_stop_cb(&type_, args.internal_instance_index, type_.cb_user_arg,
+                       inst_ctx_, &c_args);
     }
 
-    std::lock_guard<std::mutex> lock(type_.mu);
-    type_.enabled_instances.reset(args.internal_instance_index);
-    if (type_.enabled_instances.none()) {
-      type_.enabled.store(false, std::memory_order_release);
+    // If c_args.stopper is nullptr, the user must have called
+    // PerfettoDsOnStopArgsPostpone() in the callback above: the user will
+    // invoke PerfettoDsStopDone later. If c_args.stopper is not nullptr, we
+    // need to invoke it.
+    if (c_args.stopper) {
+      PerfettoDsStopDone(c_args.stopper);
     }
   }
 
@@ -352,16 +379,14 @@ void PerfettoDsImplUpdateDescriptor(struct PerfettoDsImpl* ds_impl,
 
 PerfettoDsAsyncStopper* PerfettoDsOnStopArgsPostpone(
     PerfettoDsOnStopArgs* args) {
-  auto* cb = new std::function<void()>();
-  *cb = reinterpret_cast<const ShlibDataSource::StopArgs*>(args)
-            ->HandleStopAsynchronously();
-  return reinterpret_cast<PerfettoDsAsyncStopper*>(cb);
+  PerfettoDsAsyncStopper* stopper = args->stopper;
+  args->stopper = nullptr;
+  return stopper;
 }
 
 void PerfettoDsStopDone(PerfettoDsAsyncStopper* stopper) {
-  auto* cb = reinterpret_cast<std::function<void()>*>(stopper);
-  (*cb)();
-  delete cb;
+  stopper->FinishStop();
+  delete stopper;
 }
 
 PerfettoDsAsyncFlusher* PerfettoDsOnFlushArgsPostpone(

@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 import * as Common from '../../core/common/common.js';
-import type * as Platform from '../../core/platform/platform.js';
+import * as Platform from '../../core/platform/platform.js';
 import * as Root from '../../core/root/root.js';
 import type * as SDK from '../../core/sdk/sdk.js';
 import * as Bindings from '../../models/bindings/bindings.js';
@@ -21,6 +21,8 @@ import {addChildFrame, createResource, getMainFrame, setMockResourceTree} from '
 import * as UI from '../../ui/legacy/legacy.js';
 
 import * as Sources from './sources.js';
+
+const {urlString} = Platform.DevToolsPath;
 
 describeWithMockConnection('NavigatorView', () => {
   let target: SDK.Target.Target;
@@ -75,20 +77,20 @@ describeWithMockConnection('NavigatorView', () => {
   }
 
   it('can discard multiple childless frames', async () => {
-    const url = 'http://example.com/index.html' as Platform.DevToolsPath.UrlString;
+    const url = urlString`http://example.com/index.html`;
 
     const childFrame = await addChildFrame(target);
     const {project} = addResourceAndUISourceCode(url, childFrame, '', 'text/html');
 
     const navigatorView = Sources.SourcesNavigator.NetworkNavigatorView.instance({forceNew: true});
     const children = navigatorView.scriptsTree.rootElement().children();
-    assert.strictEqual(children.length, 1, 'The NavigatorView root node should have 1 child before node removal');
+    assert.lengthOf(children, 1, 'The NavigatorView root node should have 1 child before node removal');
     assert.strictEqual(children[0].title, 'top');
 
     // Remove leaf node and assert that node removal propagates up to the root node.
     project.removeUISourceCode(url);
-    assert.strictEqual(
-        navigatorView.scriptsTree.rootElement().children().length, 0,
+    assert.lengthOf(
+        navigatorView.scriptsTree.rootElement().children(), 0,
         'The NavigarorView root node should not have any children after node removal');
   });
 
@@ -96,7 +98,7 @@ describeWithMockConnection('NavigatorView', () => {
     it('should use the project origin if the url matches the default context', async () => {
       const mainFrame = await getMainFrame(target);
 
-      const url = 'http://example.com/index.html' as Platform.DevToolsPath.UrlString;
+      const url = urlString`http://example.com/index.html`;
       addResourceAndUISourceCode(url, mainFrame, '', 'text/html');
 
       dispatchEvent(target, 'Runtime.executionContextCreated', {
@@ -139,7 +141,7 @@ describeWithMockConnection('NavigatorView', () => {
     it('should use a matching context name if the url does not match the default context', async () => {
       const mainFrame = await getMainFrame(target);
 
-      const url = 'chrome-extension://ahfhijdlegdabablpippeagghigmibma/script.js' as Platform.DevToolsPath.UrlString;
+      const url = urlString`chrome-extension://ahfhijdlegdabablpippeagghigmibma/script.js`;
       addResourceAndUISourceCode(url, mainFrame, '', 'text/html');
 
       dispatchEvent(target, 'Runtime.executionContextCreated', {
@@ -182,7 +184,7 @@ describeWithMockConnection('NavigatorView', () => {
     it('should prioritize the default context', async () => {
       const mainFrame = await getMainFrame(target);
 
-      const url = 'http://example.com/index.html' as Platform.DevToolsPath.UrlString;
+      const url = urlString`http://example.com/index.html`;
       addResourceAndUISourceCode(url, mainFrame, '', 'text/html');
 
       dispatchEvent(target, 'Runtime.executionContextCreated', {
@@ -228,7 +230,7 @@ describeWithMockConnection('NavigatorView', () => {
     it('should ignore contexts with no name', async () => {
       const mainFrame = await getMainFrame(target);
 
-      const url = 'http://example.com/index.html' as Platform.DevToolsPath.UrlString;
+      const url = urlString`http://example.com/index.html`;
       addResourceAndUISourceCode(url, mainFrame, '', 'text/html');
 
       dispatchEvent(target, 'Runtime.executionContextCreated', {
@@ -258,7 +260,7 @@ describeWithMockConnection('NavigatorView', () => {
     it('should indicate if a display name cannot be found', async () => {
       const mainFrame = await getMainFrame(target);
 
-      const url = '*bad url*' as Platform.DevToolsPath.UrlString;
+      const url = urlString`*bad url*`;
       addResourceAndUISourceCode(url, mainFrame, '', 'text/html');
 
       const navigatorView = Sources.SourcesNavigator.NetworkNavigatorView.instance({forceNew: true});

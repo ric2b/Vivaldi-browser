@@ -50,6 +50,7 @@
 #include "third_party/blink/renderer/core/events/message_event.h"
 #include "third_party/blink/renderer/core/execution_context/agent.h"
 #include "third_party/blink/renderer/core/frame/font_matching_metrics.h"
+#include "third_party/blink/renderer/core/frame/reporting_context.h"
 #include "third_party/blink/renderer/core/frame/user_activation.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/inspector/console_message_storage.h"
@@ -698,6 +699,16 @@ WorkerGlobalScope::WorkerGlobalScope(
         GetTaskRunner(TaskType::kInternalDefault));
   }
 
+  if (creation_params->coep_reporting_observer) {
+    ReportingContext::From(this)->Bind(
+        std::move(creation_params->coep_reporting_observer));
+  }
+
+  if (creation_params->dip_reporting_observer) {
+    ReportingContext::From(this)->Bind(
+        std::move(creation_params->dip_reporting_observer));
+  }
+
   // A PermissionsPolicy is created by
   // PermissionsPolicy::CreateFromParentPolicy, even if the parent policy is
   // null.
@@ -755,12 +766,6 @@ void WorkerGlobalScope::SetWorkerMainScriptLoadingParametersForModules(
       std::move(worker_main_script_load_params_for_modules);
 }
 
-void WorkerGlobalScope::queueMicrotask(V8VoidFunction* callback) {
-  GetAgent()->event_loop()->EnqueueMicrotask(
-      WTF::BindOnce(&V8VoidFunction::InvokeAndReportException,
-                    WrapPersistent(callback), nullptr));
-}
-
 void WorkerGlobalScope::SetWorkerSettings(
     std::unique_ptr<WorkerSettings> worker_settings) {
   worker_settings_ = std::move(worker_settings);
@@ -801,6 +806,7 @@ void WorkerGlobalScope::Trace(Visitor* visitor) const {
   visitor->Trace(trusted_types_);
   visitor->Trace(worker_script_);
   visitor->Trace(browser_interface_broker_proxy_);
+  UniversalGlobalScope::Trace(visitor);
   WorkerOrWorkletGlobalScope::Trace(visitor);
   Supplementable<WorkerGlobalScope>::Trace(visitor);
 }

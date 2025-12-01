@@ -98,6 +98,12 @@ chromium-metrics-reviews@google.com.
   <int value="11" label="ErrorDisabled">Response was disabled.</int>
   <int value="12" label="ErrorCancelled">The request was cancelled.</int>
   <int value="13" label="ErrorSessionDestroyed">The session was destroyed.</int>
+  <int value="14" label="ErrorPromptRequestTooLarge">
+    The prompt is too large to be stored in the context.
+  </int>
+  <int value="15" label="ErrorResponseLowQuality">
+    The response was retracted due to low quality.
+  </int>
 </enum>
 
 <!-- LINT.ThenChange(//third_party/blink/public/mojom/ai/model_streaming_responder.mojom:ModelStreamingResponseStatus) -->
@@ -105,7 +111,7 @@ chromium-metrics-reviews@google.com.
 <!-- LINT.IfChange(LoadTranslateKitResult) -->
 
 <enum name="LoadTranslateKitResult">
-  <int value="0" label="Unknown"/>
+  <int value="0" label="[deprecated] Unknown"/>
   <int value="1" label="Success">Success to load TranslateKit binary.</int>
   <int value="2" label="InvalidBinary">
     Fails due to invalid TranslateKit binary.
@@ -113,6 +119,9 @@ chromium-metrics-reviews@google.com.
   <int value="3" label="InvalidFunctionPointer">
     Success to load TranslateKit binary but one or more function pointers are
     null.
+  </int>
+  <int value="4" label="InvalidVersion">
+    Success to load TranslateKit binary but the binary version is invalid.
   </int>
 </enum>
 

@@ -8,7 +8,7 @@ title: Suite scheduler design doc
 
 **Autotest Test Scheduler V2**
 
-**We’ve recently added [dynamically-defined test suites](/chromium-os/testing/dynamic-test-suites) for Chrome OS, but can currently only run them synchronously from our build workers. That works great for a BVT suite, but is less than ideal for longer-running suites, suites whose results are not needed immediately, and suites that need to be run on a particular build on-demand.**
+**We’ve recently added [dynamically-defined test suites](/chromium-os/developer-library/reference/design-docs/dynamic-test-suites) for Chrome OS, but can currently only run them synchronously from our build workers. That works great for a BVT suite, but is less than ideal for longer-running suites, suites whose results are not needed immediately, and suites that need to be run on a particular build on-demand.**
 
 **# Requirements**
 

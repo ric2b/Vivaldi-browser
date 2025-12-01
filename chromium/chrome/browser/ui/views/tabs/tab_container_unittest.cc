@@ -2,28 +2,30 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <algorithm>
 #include <memory>
 
 #include "base/memory/raw_ref.h"
-#include "base/ranges/algorithm.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/tabs/features.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/frame/browser_root_view.h"
+#include "chrome/browser/ui/views/tabs/dragging/tab_drag_context.h"
 #include "chrome/browser/ui/views/tabs/fake_base_tab_strip_controller.h"
 #include "chrome/browser/ui/views/tabs/fake_tab_slot_controller.h"
 #include "chrome/browser/ui/views/tabs/tab_close_button.h"
 #include "chrome/browser/ui/views/tabs/tab_container_impl.h"
-#include "chrome/browser/ui/views/tabs/tab_drag_context.h"
 #include "chrome/browser/ui/views/tabs/tab_group_header.h"
 #include "chrome/browser/ui/views/tabs/tab_group_views.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_layout_helper.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_types.h"
 #include "chrome/browser/ui/views/tabs/tab_style_views.h"
+#include "chrome/grit/generated_resources.h"
 #include "chrome/test/views/chrome_views_test_base.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/drop_target_event.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/animation/animation_test_api.h"
@@ -91,8 +93,9 @@ class FakeTabContainerController final : public TabContainerController {
   int NumPinnedTabsInModel() const override {
     for (size_t i = 0;
          i < static_cast<size_t>(tab_strip_controller_->GetCount()); ++i) {
-      if (!tab_strip_controller_->IsTabPinned(static_cast<int>(i)))
+      if (!tab_strip_controller_->IsTabPinned(static_cast<int>(i))) {
         return static_cast<int>(i);
+      }
     }
 
     // All tabs are pinned.
@@ -203,11 +206,13 @@ class TabContainerTest : public ChromeViewsTestBase {
         std::make_unique<Tab>(tab_slot_controller_.get()), model_index, pinned);
     tab_strip_controller_->AddTab(model_index, active, pinned);
 
-    if (active == TabActive::kActive)
+    if (active == TabActive::kActive) {
       tab_slot_controller_->set_active_tab(tab);
+    }
 
-    if (group)
+    if (group) {
       AddTabToGroup(model_index, group.value());
+    }
 
     return tab;
   }
@@ -227,12 +232,13 @@ class TabContainerTest : public ChromeViewsTestBase {
   }
 
   void AddTabToGroup(int model_index, tab_groups::TabGroupId group) {
-    tab_container_->GetTabAtModelIndex(model_index)->set_group(group);
+    tab_container_->GetTabAtModelIndex(model_index)->SetGroup(group);
     tab_strip_controller_->AddTabToGroup(model_index, group);
 
     const auto& group_views = tab_container_->get_group_views_for_testing();
-    if (group_views.find(group) == group_views.end())
+    if (group_views.find(group) == group_views.end()) {
       tab_container_->OnGroupCreated(group);
+    }
 
     tab_container_->OnGroupMoved(group);
   }
@@ -242,13 +248,14 @@ class TabContainerTest : public ChromeViewsTestBase {
     std::optional<tab_groups::TabGroupId> old_group = tab->group();
     DCHECK(old_group);
 
-    tab->set_group(std::nullopt);
+    tab->SetGroup(std::nullopt);
     tab_strip_controller_->RemoveTabFromGroup(model_index);
 
     bool group_is_empty = true;
     for (int i = 0; i < tab_container_->GetTabCount(); i++) {
-      if (tab_container_->GetTabAtModelIndex(i)->group() == old_group)
+      if (tab_container_->GetTabAtModelIndex(i)->group() == old_group) {
         group_is_empty = false;
+      }
     }
 
     if (group_is_empty) {
@@ -263,17 +270,20 @@ class TabContainerTest : public ChromeViewsTestBase {
     std::optional<tab_groups::TabGroupId> old_group =
         tab_container_->GetTabAtModelIndex(index)->group();
 
-    if (old_group.has_value())
+    if (old_group.has_value()) {
       RemoveTabFromGroup(index);
-    if (new_group.has_value())
+    }
+    if (new_group.has_value()) {
       AddTabToGroup(index, new_group.value());
+    }
   }
 
   std::vector<TabGroupViews*> ListGroupViews() const {
     std::vector<TabGroupViews*> result;
     for (auto const& group_view_pair :
-         tab_container_->get_group_views_for_testing())
+         tab_container_->get_group_views_for_testing()) {
       result.push_back(group_view_pair.second.get());
+    }
     return result;
   }
 
@@ -820,8 +830,9 @@ TEST_F(TabContainerTest, GroupHeaderBetweenTabs) {
 }
 
 TEST_F(TabContainerTest, GroupHeaderMovesRightWithTab) {
-  for (int i = 0; i < 4; i++)
+  for (int i = 0; i < 4; i++) {
     AddTab(i);
+  }
   tab_groups::TabGroupId group = tab_groups::TabGroupId::GenerateNew();
   AddTabToGroup(1, group);
   tab_container_->CompleteAnimationAndLayout();
@@ -836,8 +847,9 @@ TEST_F(TabContainerTest, GroupHeaderMovesRightWithTab) {
 }
 
 TEST_F(TabContainerTest, GroupHeaderMovesLeftWithTab) {
-  for (int i = 0; i < 4; i++)
+  for (int i = 0; i < 4; i++) {
     AddTab(i);
+  }
   tab_groups::TabGroupId group = tab_groups::TabGroupId::GenerateNew();
   AddTabToGroup(2, group);
   tab_container_->CompleteAnimationAndLayout();
@@ -852,8 +864,9 @@ TEST_F(TabContainerTest, GroupHeaderMovesLeftWithTab) {
 }
 
 TEST_F(TabContainerTest, GroupHeaderDoesntMoveReorderingTabsInGroup) {
-  for (int i = 0; i < 4; i++)
+  for (int i = 0; i < 4; i++) {
     AddTab(i);
+  }
   tab_groups::TabGroupId group = tab_groups::TabGroupId::GenerateNew();
   AddTabToGroup(1, group);
   AddTabToGroup(2, group);
@@ -876,8 +889,9 @@ TEST_F(TabContainerTest, GroupHeaderDoesntMoveReorderingTabsInGroup) {
 }
 
 TEST_F(TabContainerTest, GroupHeaderMovesOnRegrouping) {
-  for (int i = 0; i < 3; i++)
+  for (int i = 0; i < 3; i++) {
     AddTab(i);
+  }
   tab_groups::TabGroupId group0 = tab_groups::TabGroupId::GenerateNew();
   AddTabToGroup(0, group0);
   tab_groups::TabGroupId group1 = tab_groups::TabGroupId::GenerateNew();
@@ -886,7 +900,7 @@ TEST_F(TabContainerTest, GroupHeaderMovesOnRegrouping) {
   tab_container_->CompleteAnimationAndLayout();
 
   std::vector<TabGroupViews*> views = ListGroupViews();
-  auto views_it = base::ranges::find(views, group1, [](TabGroupViews* view) {
+  auto views_it = std::ranges::find(views, group1, [](TabGroupViews* view) {
     return view->header()->group();
   });
   ASSERT_TRUE(views_it != views.end());
@@ -905,8 +919,9 @@ TEST_F(TabContainerTest, GroupHeaderMovesOnRegrouping) {
 }
 
 TEST_F(TabContainerTest, UngroupedTabMovesLeftOfHeader) {
-  for (int i = 0; i < 2; i++)
+  for (int i = 0; i < 2; i++) {
     AddTab(i);
+  }
   tab_groups::TabGroupId group = tab_groups::TabGroupId::GenerateNew();
   AddTabToGroup(0, group);
   tab_container_->CompleteAnimationAndLayout();

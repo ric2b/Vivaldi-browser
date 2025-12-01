@@ -29,6 +29,7 @@
 #include "cc/layers/layer_impl.h"
 #include "cc/metrics/begin_main_frame_metrics.h"
 #include "cc/metrics/compositor_timing_history.h"
+#include "cc/raster/raster_buffer_provider.h"
 #include "cc/test/animation_test_common.h"
 #include "cc/test/fake_compositor_frame_reporting_controller.h"
 #include "cc/test/fake_layer_tree_host_client.h"
@@ -82,6 +83,7 @@ class SynchronousLayerTreeFrameSink : public TestLayerTreeFrameSink {
       bool use_software_renderer)
       : TestLayerTreeFrameSink(std::move(compositor_context_provider),
                                std::move(worker_context_provider),
+                               /*shared_image_interface=*/nullptr,
                                gpu_memory_buffer_manager,
                                renderer_settings,
                                debug_settings,
@@ -431,7 +433,7 @@ class LayerTreeHostClientForTesting : public LayerTreeHostClient,
       bool,
       PaintHoldingReason,
       std::optional<PaintHoldingCommitTrigger>) override {}
-  void OnCommitRequested() override {}
+  void OnCommitRequested() override { test_hooks_->OnCommitRequested(); }
 
   void RecordStartOfFrameMetrics() override {}
   void RecordEndOfFrameMetrics(base::TimeTicks,
@@ -439,8 +441,9 @@ class LayerTreeHostClientForTesting : public LayerTreeHostClient,
   std::unique_ptr<BeginMainFrameMetrics> GetBeginMainFrameMetrics() override {
     return test_hooks_->GetBeginMainFrameMetrics();
   }
-  void NotifyThroughputTrackerResults(CustomTrackerResults results) override {
-    test_hooks_->NotifyThroughputTrackerResults(std::move(results));
+  void NotifyCompositorMetricsTrackerResults(
+      CustomTrackerResults results) override {
+    test_hooks_->NotifyCompositorMetricsTrackerResults(std::move(results));
   }
 
   void UpdateLayerTreeHost() override { test_hooks_->UpdateLayerTreeHost(); }
@@ -520,7 +523,8 @@ class LayerTreeHostForTesting : public LayerTreeHost {
       scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
       scoped_refptr<base::SingleThreadTaskRunner> impl_task_runner,
       scoped_refptr<base::SequencedTaskRunner> image_worker_task_runner,
-      MutatorHost* mutator_host) {
+      MutatorHost* mutator_host,
+      PropertyTreeDelegate* property_tree_delegate) {
     LayerTreeHost::InitParams params;
     params.client = client;
     params.scheduling_client = scheduling_client;
@@ -529,6 +533,7 @@ class LayerTreeHostForTesting : public LayerTreeHost {
     params.mutator_host = mutator_host;
     params.image_worker_task_runner = std::move(image_worker_task_runner);
     params.ukm_recorder_factory = std::make_unique<TestUkmRecorderFactory>();
+    params.property_tree_delegate = property_tree_delegate;
 
     auto layer_tree_host = base::WrapUnique(
         new LayerTreeHostForTesting(test_hooks, std::move(params), mode));
@@ -953,7 +958,8 @@ void LayerTreeTest::DoBeginTest() {
   layer_tree_host_ = LayerTreeHostForTesting::Create(
       this, mode_, client_.get(), scheduling_client, client_.get(),
       task_graph_runner_.get(), settings_, main_task_runner, impl_task_runner,
-      image_worker_->task_runner(), animation_host_.get());
+      image_worker_->task_runner(), animation_host_.get(),
+      property_tree_delegate_.get());
   ASSERT_TRUE(layer_tree_host_);
 
   main_task_runner_ =
@@ -1256,11 +1262,17 @@ std::unique_ptr<TestLayerTreeFrameSink> LayerTreeTest::CreateLayerTreeFrameSink(
         use_software_renderer());
   }
 
+  gpu::SharedImageInterface* shared_image_interface = nullptr;
+  if (!compositor_context_provider) {
+    context_provider_sw_ = viz::TestContextProvider::CreateRaster();
+    shared_image_interface = context_provider_sw_->SharedImageInterface();
+  }
+
   return std::make_unique<TestLayerTreeFrameSink>(
       compositor_context_provider, std::move(worker_context_provider),
-      gpu_memory_buffer_manager(), renderer_settings, &debug_settings_,
-      task_runner_provider(), synchronous_composite, disable_display_vsync,
-      refresh_rate, begin_frame_source_);
+      shared_image_interface, gpu_memory_buffer_manager(), renderer_settings,
+      &debug_settings_, task_runner_provider(), synchronous_composite,
+      disable_display_vsync, refresh_rate, begin_frame_source_);
 }
 
 std::unique_ptr<viz::DisplayCompositorMemoryAndTaskController>

@@ -33,7 +33,7 @@ ExtensionErrorController::ExtensionErrorController(
 
 }
 
-ExtensionErrorController::~ExtensionErrorController() {}
+ExtensionErrorController::~ExtensionErrorController() = default;
 
 void ExtensionErrorController::ShowErrorIfNeeded() {
   if (error_ui_.get()) {

@@ -22,30 +22,31 @@ Embedding ComputeEmbeddingForPassage(const std::string& passage) {
   return embedding;
 }
 
-std::vector<Embedding> ComputeEmbeddingsForPassages(
-    const std::vector<std::string>& passages) {
-  return std::vector<Embedding>(passages.size(),
-                                ComputeEmbeddingForPassage(""));
-}
-
 }  // namespace
 
 MockEmbedder::MockEmbedder() = default;
 MockEmbedder::~MockEmbedder() = default;
 
 void MockEmbedder::ComputePassagesEmbeddings(
-    PassageKind kind,
+    passage_embeddings::PassagePriority priority,
     std::vector<std::string> passages,
     ComputePassagesEmbeddingsCallback callback) {
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(callback), std::move(passages),
-                                ComputeEmbeddingsForPassages(passages),
-                                ComputeEmbeddingsStatus::SUCCESS));
+      FROM_HERE,
+      base::BindOnce(std::move(callback), std::move(passages),
+                     ComputeEmbeddingsForPassages(passages),
+                     passage_embeddings::ComputeEmbeddingsStatus::kSuccess));
 }
 
 void MockEmbedder::SetOnEmbedderReady(OnEmbedderReadyCallback callback) {
   // The mock embedder is always ready, so we invoke the callback directly.
   std::move(callback).Run({kModelVersion, kOutputSize});
+}
+
+std::vector<Embedding> MockEmbedder::ComputeEmbeddingsForPassages(
+    const std::vector<std::string>& passages) {
+  return std::vector<Embedding>(passages.size(),
+                                ComputeEmbeddingForPassage(""));
 }
 
 }  // namespace history_embeddings

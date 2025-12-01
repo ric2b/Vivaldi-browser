@@ -398,8 +398,7 @@ ErrorOr<UdpPacket> ReceiveMessageInternal(int fd) {
   // getsocktopt(...NREAD...) to get the datagram size if possible.
   // Ref: https://www.unix.com/man-page/mojave/2/getsockopt/
   socklen_t optlen = sizeof(upper_bound_bytes);
-  if (getsockopt(fd, SOL_SOCKET, SO_NREAD, &upper_bound_bytes, &optlen) ==
-      -1) {
+  if (getsockopt(fd, SOL_SOCKET, SO_NREAD, &upper_bound_bytes, &optlen) == -1) {
     upper_bound_bytes = -1;
   }
 #endif  // BUILDFLAG(IS_LINUX)

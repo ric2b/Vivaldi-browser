@@ -4,6 +4,7 @@
 
 #include "net/dns/host_resolver.h"
 
+#include <algorithm>
 #include <optional>
 #include <set>
 #include <string>
@@ -15,7 +16,6 @@
 #include "base/functional/bind.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time_delta_from_string.h"
 #include "base/values.h"
@@ -133,6 +133,12 @@ class FailingServiceEndpointRequestImpl
   ResolveErrorInfo GetResolveErrorInfo() override {
     return ResolveErrorInfo(error_);
   }
+
+  const HostCache::EntryStaleness* GetStaleInfo() const override {
+    return nullptr;
+  }
+
+  bool IsStaleWhileRefresing() const override { return false; }
 
   void ChangeRequestPriority(RequestPriority priority) override {}
 
@@ -321,6 +327,13 @@ std::unique_ptr<HostResolver> HostResolver::Factory::CreateStandaloneResolver(
 }
 
 HostResolver::ResolveHostParameters::ResolveHostParameters() = default;
+
+HostResolver::ResolveHostParameters::ResolveHostParameters(
+    const ResolveHostParameters&) = default;
+
+HostResolver::ResolveHostParameters&
+HostResolver::ResolveHostParameters::operator=(const ResolveHostParameters&) =
+    default;
 
 HostResolver::~HostResolver() = default;
 
@@ -534,7 +547,7 @@ AddressList HostResolver::EndpointResultToAddressList(
   AddressList list;
 
   auto non_protocol_endpoint =
-      base::ranges::find_if(endpoints, &EndpointResultIsNonProtocol);
+      std::ranges::find_if(endpoints, &EndpointResultIsNonProtocol);
   if (non_protocol_endpoint == endpoints.end())
     return list;
 

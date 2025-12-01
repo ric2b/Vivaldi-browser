@@ -279,6 +279,7 @@
 <translation id="5582839680698949063">Գլխավոր մենյու</translation>
 <translation id="5614553682702429503">Պահպանե՞լ գաղտնաբառը</translation>
 <translation id="5623842676595125836">Մատյան</translation>
+<translation id="5624959475330585145">Հարցնել նախքան ոչ ապահով միացումներ օգտագործելը</translation>
 <translation id="5638309510554459422">Գտեք ընդլայնումներ և ոճեր <ph name="BEGIN_LINK" />Chrome Վեբ-խանութում<ph name="END_LINK" /></translation>
 <translation id="5677928146339483299">Արգելափակված</translation>
 <translation id="5707185214361380026">Չհաջողվեց բեռնել ընդլայնում այստեղից՝</translation>
@@ -369,7 +370,7 @@
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7339785458027436441">Ստուգել քերականությունը մուտքագրման ընթացքում</translation>
 <translation id="7359680654975233185">Չհաջողվեց հեռարձակել ներդիրը</translation>
-<translation id="7385854874724088939">Տպել փորձելիս ինչ-որ սխալ տեղի ունեցավ։ Խնդրում ենք ստուգեք Ձեր տպիչն ու փորձեք նորից։</translation>
+<translation id="7385854874724088939">Տպել փորձելիս ինչ-որ խնդիր առաջացավ։ Ստուգեք Ձեր տպիչն ու փորձեք նորից։</translation>
 <translation id="7412226954991670867">GPU-ի հիշողություն</translation>
 <translation id="7421925624202799674">&amp;Դիտել էջի կոդը</translation>
 <translation id="7427348830195639090">Հետին էջ. <ph name="BACKGROUND_PAGE_URL" /></translation>
@@ -387,7 +388,7 @@
 <translation id="7701869757853594372">USER մշակիչներ</translation>
 <translation id="7704305437604973648">Խնդիր</translation>
 <translation id="7710568461918838723">Հե&amp;ռարձակել…</translation>
-<translation id="7714464543167945231">Վկայագիր</translation>
+<translation id="7714464543167945231">Հավաստագիր</translation>
 <translation id="7750228210027921155">Նկարը նկարում</translation>
 <translation id="7771452384635174008">Դասավորում</translation>
 <translation id="7782102568078991263">Առաջարկներ Google-ից այլևս չկան</translation>
@@ -468,6 +469,7 @@
 <translation id="9218430445555521422">Դարձնել ստանդարտ</translation>
 <translation id="93766956588638423">Վերանորոգել ընդլայնումը</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
+<translation id="961856697154696964">Ջնջել դիտման տվյալները</translation>
 <translation id="994289308992179865">Կրկնե&amp;լ</translation>
 <translation id="998747458861718449">Հետա&amp;զոտել</translation>
 </translationbundle>

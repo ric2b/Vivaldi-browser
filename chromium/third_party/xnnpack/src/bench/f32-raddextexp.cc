@@ -48,7 +48,7 @@ static void f32_raddextexp(
       buffer_index = 0;
     }
 
-    float y_sum[2] = { nanf(""), nanf("") };
+    float y_sum[2];
     raddextexp(elements * sizeof(float), x.data(), y_sum);
   }
 
@@ -158,5 +158,5 @@ static void CharacteristicArguments(benchmark::internal::Benchmark* b) {
 #endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
 
 #ifndef XNNPACK_BENCHMARK_NO_MAIN
-BENCHMARK_MAIN();
+XNN_BENCHMARK_MAIN();
 #endif

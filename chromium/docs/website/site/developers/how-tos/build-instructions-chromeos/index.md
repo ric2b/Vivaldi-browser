@@ -14,4 +14,4 @@ This page has been replaced by
 ## Running Chromium on a Chromium OS device
 
 See [Building Chromium for Chromium OS (simple
-chrome)](http://www.chromium.org/chromium-os/how-tos-and-troubleshooting/building-chromium-browser)
+chrome)](/chromium-os/developer-library/guides/development/simple-chrome-workflow).

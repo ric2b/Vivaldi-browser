@@ -15,7 +15,6 @@
 
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
-#include "base/memory/shared_memory_mapping.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -38,11 +37,11 @@
 #include "cc/trees/layer_tree_frame_sink.h"
 #include "cc/trees/layer_tree_host_impl.h"
 #include "cc/trees/layer_tree_impl.h"
+#include "components/viz/client/client_resource_provider.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/gpu/raster_context_provider.h"
 #include "components/viz/common/quads/solid_color_draw_quad.h"
 #include "components/viz/common/quads/texture_draw_quad.h"
-#include "components/viz/common/resources/bitmap_allocation.h"
 #include "components/viz/common/resources/platform_color.h"
 #include "components/viz/common/resources/shared_image_format.h"
 #include "gpu/GLES2/gl2extchromium.h"
@@ -139,63 +138,6 @@ std::unique_ptr<LayerImpl> HeadsUpDisplayLayerImpl::CreateLayerImpl(
   return HeadsUpDisplayLayerImpl::Create(tree_impl, id(),
                                          paused_localized_message_);
 }
-
-class HudGpuBacking : public ResourcePool::GpuBacking {
- public:
-  ~HudGpuBacking() override {
-    if (!shared_image) {
-      return;
-    }
-    if (returned_sync_token.HasData())
-      shared_image_interface->DestroySharedImage(returned_sync_token,
-                                                 std::move(shared_image));
-    else if (mailbox_sync_token.HasData())
-      shared_image_interface->DestroySharedImage(mailbox_sync_token,
-                                                 std::move(shared_image));
-  }
-
-  void OnMemoryDump(
-      base::trace_event::ProcessMemoryDump* pmd,
-      const base::trace_event::MemoryAllocatorDumpGuid& buffer_dump_guid,
-      uint64_t tracing_process_id,
-      int importance) const override {
-    if (!shared_image) {
-      return;
-    }
-
-    auto tracing_guid = shared_image->GetGUIDForTracing();
-    pmd->CreateSharedGlobalAllocatorDump(tracing_guid);
-    pmd->AddOwnershipEdge(buffer_dump_guid, tracing_guid, importance);
-  }
-
-  raw_ptr<gpu::SharedImageInterface> shared_image_interface = nullptr;
-};
-
-class HudSoftwareBacking : public ResourcePool::SoftwareBacking {
- public:
-  ~HudSoftwareBacking() override {
-    if (shared_image) {
-      auto sii = layer_tree_frame_sink->shared_image_interface();
-      if (sii) {
-        sii->DestroySharedImage(mailbox_sync_token, std::move(shared_image));
-      }
-    } else {
-      layer_tree_frame_sink->DidDeleteSharedBitmap(shared_bitmap_id);
-    }
-  }
-
-  void OnMemoryDump(
-      base::trace_event::ProcessMemoryDump* pmd,
-      const base::trace_event::MemoryAllocatorDumpGuid& buffer_dump_guid,
-      uint64_t tracing_process_id,
-      int importance) const override {
-      pmd->CreateSharedMemoryOwnershipEdge(buffer_dump_guid,
-                                           shared_mapping.guid(), importance);
-  }
-
-  raw_ptr<LayerTreeFrameSink> layer_tree_frame_sink;
-  base::WritableSharedMemoryMapping shared_mapping;
-};
 
 bool HeadsUpDisplayLayerImpl::WillDraw(
     DrawMode draw_mode,
@@ -301,9 +243,8 @@ void HeadsUpDisplayLayerImpl::UpdateHudTexture(
         internal_content_bounds_, raster_caps.tile_format, gfx::ColorSpace());
 
     if (!pool_resource.gpu_backing()) {
-      auto backing = std::make_unique<HudGpuBacking>();
+      auto backing = std::make_unique<ResourcePool::GpuBacking>();
       auto* sii = raster_context_provider->SharedImageInterface();
-      backing->shared_image_interface = sii;
       backing->overlay_candidate = raster_caps.tile_overlay_candidate;
 
       gpu::SharedImageUsageSet flags = gpu::SHARED_IMAGE_USAGE_DISPLAY_READ |
@@ -333,48 +274,26 @@ void HeadsUpDisplayLayerImpl::UpdateHudTexture(
     DCHECK_EQ(draw_mode, DRAW_MODE_SOFTWARE);
 
     auto sii = layer_tree_frame_sink->shared_image_interface();
-    if (sii) {
-      pool_resource = pool_->AcquireResource(internal_content_bounds_,
-                                             viz::SinglePlaneFormat::kBGRA_8888,
-                                             gfx::ColorSpace());
+    DCHECK(sii);
+    pool_resource = pool_->AcquireResource(internal_content_bounds_,
+                                           viz::SinglePlaneFormat::kBGRA_8888,
+                                           gfx::ColorSpace());
 
-      if (!pool_resource.software_backing()) {
-        auto backing = std::make_unique<HudSoftwareBacking>();
-        backing->layer_tree_frame_sink = layer_tree_frame_sink;
-        auto shared_image_mapping = sii->CreateSharedImage(
-            {pool_resource.format(), pool_resource.size(),
-             pool_resource.color_space(), gpu::SHARED_IMAGE_USAGE_CPU_WRITE,
-             "HeadsUpDisplayLayer"});
-
-        backing->shared_image = std::move(shared_image_mapping.shared_image);
-        backing->shared_mapping = std::move(shared_image_mapping.mapping);
-        CHECK(backing->shared_image);
-        pool_resource.set_software_backing(std::move(backing));
-      }
-
-    } else {
-      pool_resource = pool_->AcquireResource(internal_content_bounds_,
-                                             viz::SinglePlaneFormat::kRGBA_8888,
-                                             gfx::ColorSpace());
-      if (!pool_resource.software_backing()) {
-        auto backing = std::make_unique<HudSoftwareBacking>();
-        backing->layer_tree_frame_sink = layer_tree_frame_sink;
-        backing->shared_bitmap_id = viz::SharedBitmap::GenerateId();
-        base::MappedReadOnlyRegion shm =
-            viz::bitmap_allocation::AllocateSharedBitmap(
-                pool_resource.size(), pool_resource.format());
-        backing->shared_mapping = std::move(shm.mapping);
-
-        layer_tree_frame_sink->DidAllocateSharedBitmap(
-            std::move(shm.region), backing->shared_bitmap_id);
-        pool_resource.set_software_backing(std::move(backing));
-      }
+    if (!pool_resource.software_backing()) {
+      auto backing = std::make_unique<ResourcePool::SoftwareBacking>();
+      backing->shared_image_interface = sii;
+      backing->shared_image = sii->CreateSharedImageForSoftwareCompositor(
+          {pool_resource.format(), pool_resource.size(),
+           pool_resource.color_space(), gpu::SHARED_IMAGE_USAGE_CPU_WRITE_ONLY,
+           "HeadsUpDisplayLayer"});
+      CHECK(backing->shared_image);
+      pool_resource.set_software_backing(std::move(backing));
     }
   }
 
   if (draw_mode == DRAW_MODE_HARDWARE) {
     DCHECK(pool_resource.gpu_backing());
-    auto* backing = static_cast<HudGpuBacking*>(pool_resource.gpu_backing());
+    auto* backing = pool_resource.gpu_backing();
     auto* ri = raster_context_provider->RasterInterface();
 
     if (raster_caps.use_gpu_rasterization) {
@@ -446,9 +365,9 @@ void HeadsUpDisplayLayerImpl::UpdateHudTexture(
         pool_resource.size().width(), pool_resource.size().height());
     SkSurfaceProps props = skia::LegacyDisplayGlobals::GetSkSurfaceProps();
     const size_t row_bytes = info.minRowBytes();
-    auto* backing =
-        static_cast<HudSoftwareBacking*>(pool_resource.software_backing());
-    base::span<uint8_t> mem(backing->shared_mapping);
+    auto* backing = pool_resource.software_backing();
+    auto mapping = backing->shared_image->Map();
+    base::span<uint8_t> mem = mapping->GetMemoryForPlane(0);
     CHECK_GE(mem.size(), info.computeByteSize(row_bytes));
     sk_sp<SkSurface> surface =
         SkSurfaces::WrapPixels(info, mem.data(), row_bytes, &props);
@@ -457,9 +376,7 @@ void HeadsUpDisplayLayerImpl::UpdateHudTexture(
     DrawHudContents(&canvas);
 
     auto sii = layer_tree_frame_sink->shared_image_interface();
-    if (backing->shared_image && sii) {
-      backing->mailbox_sync_token = sii->GenVerifiedSyncToken();
-    }
+    backing->mailbox_sync_token = sii->GenVerifiedSyncToken();
   }
 
   // Exports the backing to the ResourceProvider, giving it a ResourceId that
@@ -506,7 +423,6 @@ void HeadsUpDisplayLayerImpl::UpdateHudTexture(
                    /*uv_top_left=*/gfx::PointF(),
                    /*uv_bottom_right=*/uv_bottom_right,
                    /*background_color=*/SkColors::kTransparent,
-                   /*flipped=*/false,
                    /*nearest_neighbor=*/false, /*secure_output_only=*/false,
                    gfx::ProtectedVideoType::kClear);
       ValidateQuadResources(quad);

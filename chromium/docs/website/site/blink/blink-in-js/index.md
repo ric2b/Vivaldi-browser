@@ -256,18 +256,18 @@ file:
 1.  Change
             [`blink_resources.grd`](https://chromium.googlesource.com/chromium/blink/+/HEAD/public/blink_resources.grd)
             in Blink repository to include your private script, e.g.
-            [crrev/570863002](http://crrev.com/570863002)
+            [crrev/570863002](https://crrev.com/570863002)
     *   Since we also need to change file in Chromium repository, I
                 recommend to create dummy file and check-in this before
                 reviewing your private script.
 2.  Change
             [`content/child/blink_platform_impl.cc`](https://chromium.googlesource.com/chromium/src/+/HEAD/content/child/blink_platform_impl.cc)
             in Chromium repository, e.g.
-            [crrev/556793006](http://crrev.com/556793006)
+            [crrev/556793006](https://crrev.com/556793006)
     *   **You should wait step #1 blink change is rolled into Chromium
                 rather than landed into blink repository.**
 
-Note: Due to [crbug/415908](http://crbug.com/415908), blink_resources.pak isn't
+Note: Due to [crbug/415908](https://crbug.com/415908), blink_resources.pak isn't
 rebuild when your private script file changed. You may want to remove it,
 `out/Debug/gen/blink/public/resources/blink_resources.pak`.
 

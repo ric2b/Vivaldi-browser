@@ -467,6 +467,12 @@ class Validator {
                                        const core::type::Type* type,
                                        const Source& source) const;
 
+    /// Validates a subgroup matrix type
+    /// @param t the subgroup matrix type to validate
+    /// @param source the source of the subgroup matrix type
+    /// @returns true on success, false otherwise
+    bool SubgroupMatrix(const core::type::SubgroupMatrix* t, const Source& source) const;
+
     /// Validates a structure
     /// @param str the structure to validate
     /// @param stage the current pipeline stage
@@ -527,6 +533,12 @@ class Validator {
     /// @param arr_type the type of the array
     /// @returns true on success, false otherwise
     bool ArrayConstructor(const ast::CallExpression* ctor, const sem::Array* arr_type) const;
+
+    /// Validates a subgroupShuffle builtin functions including Up,Down, and Xor.
+    /// @param fn the builtin call type
+    /// @param call the builtin call to validate
+    /// @returns true on success, false otherwise
+    bool SubgroupShuffleFunction(wgsl::BuiltinFn fn, const sem::Call* call) const;
 
     /// Validates a texture builtin function
     /// @param call the builtin call to validate

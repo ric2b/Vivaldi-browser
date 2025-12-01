@@ -4,6 +4,7 @@
 
 #include "base/feature_list.h"
 #include "base/memory/ref_counted.h"
+#include "base/strings/to_string.h"
 #include "base/test/run_until.h"
 #include "chrome/browser/extensions/api/side_panel/side_panel_api.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
@@ -183,7 +184,7 @@ class ExtensionSidePanelBrowserTest : public ExtensionBrowserTest {
                          : "";
     std::string args =
         base::StringPrintf(R"([{%s%s"enabled":%s}])", tab_id_arg.c_str(),
-                           path_arg.c_str(), enabled ? "true" : "false");
+                           path_arg.c_str(), base::ToString(enabled));
     EXPECT_TRUE(api_test_utils::RunFunction(function.get(), args, profile()))
         << function->GetError();
   }
@@ -197,7 +198,7 @@ class ExtensionSidePanelBrowserTest : public ExtensionBrowserTest {
 
     std::string args =
         base::StringPrintf(R"([{"openPanelOnActionClick":%s}])",
-                           openPanelOnActionClick ? "true" : "false");
+                           base::ToString(openPanelOnActionClick));
     EXPECT_TRUE(api_test_utils::RunFunction(function.get(), args, profile()))
         << function->GetError();
   }
@@ -939,7 +940,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionSidePanelBrowserTest,
                   /*enabled=*/true);
     waiter.WaitForRegistration();
     side_panel_coordinator()->Show(
-        {browser()->GetActiveTabInterface()->GetTabHandle(), extension_key},
+        {browser()->GetActiveTabInterface()->GetHandle(), extension_key},
         /*open_trigger=*/std::nullopt, /*suppress_animations=*/true);
 
     ASSERT_TRUE(default_path_listener.WaitUntilSatisfied());
@@ -992,8 +993,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionSidePanelBrowserTest,
                        UnloadExtensionAfterMovingTab) {
   OpenNewForegroundTab();
   ASSERT_TRUE(browser()->tab_strip_model()->IsTabSelected(1));
-  const tabs::TabModel* second_tab =
-      browser()->tab_strip_model()->GetTabHandleAt(1).Get();
+  const tabs::TabInterface* second_tab =
+      browser()->tab_strip_model()->GetTabAtIndex(1);
   ASSERT_TRUE(second_tab);
   int second_tab_id = GetCurrentTabId();
 
@@ -1007,7 +1008,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionSidePanelBrowserTest,
   {
     // Register a SidePanelEntry for the extension for the second tab.
     SidePanelRegistry* second_tab_registry =
-        SidePanelRegistry::GetDeprecated(second_tab->contents());
+        SidePanelRegistry::GetDeprecated(second_tab->GetContents());
     ExtensionSidePanelRegistryWaiter waiter(second_tab_registry,
                                             extension->id());
     RunSetOptions(*extension, second_tab_id, "panel_1.html",

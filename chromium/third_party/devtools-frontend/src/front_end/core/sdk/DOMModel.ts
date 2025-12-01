@@ -353,12 +353,20 @@ export class DOMNode {
     return this.#pseudoElements;
   }
 
+  checkmarkPseudoElement(): DOMNode|undefined {
+    return this.#pseudoElements.get(Protocol.DOM.PseudoType.Checkmark)?.at(-1);
+  }
+
   beforePseudoElement(): DOMNode|undefined {
     return this.#pseudoElements.get(Protocol.DOM.PseudoType.Before)?.at(-1);
   }
 
   afterPseudoElement(): DOMNode|undefined {
     return this.#pseudoElements.get(Protocol.DOM.PseudoType.After)?.at(-1);
+  }
+
+  pickerIconPseudoElement(): DOMNode|undefined {
+    return this.#pseudoElements.get(Protocol.DOM.PseudoType.PickerIcon)?.at(-1);
   }
 
   markerPseudoElement(): DOMNode|undefined {
@@ -376,6 +384,15 @@ export class DOMNode {
       ...this.#pseudoElements.get(Protocol.DOM.PseudoType.ViewTransitionImagePair) || [],
       ...this.#pseudoElements.get(Protocol.DOM.PseudoType.ViewTransitionOld) || [],
       ...this.#pseudoElements.get(Protocol.DOM.PseudoType.ViewTransitionNew) || [],
+    ];
+  }
+
+  carouselPseudoElements(): DOMNode[] {
+    return [
+      ...this.#pseudoElements.get(Protocol.DOM.PseudoType.ScrollButton) || [],
+      ...this.#pseudoElements.get(Protocol.DOM.PseudoType.Column) || [],
+      ...this.#pseudoElements.get(Protocol.DOM.PseudoType.ScrollMarker) || [],
+      ...this.#pseudoElements.get(Protocol.DOM.PseudoType.ScrollMarkerGroup) || [],
     ];
   }
 
@@ -1044,6 +1061,11 @@ export class DOMNode {
 
     return this.domModel().nodeForId(response.nodeId);
   }
+
+  classNames(): string[] {
+    const classes = this.getAttribute('class');
+    return classes ? classes.split(/\s+/) : [];
+  }
 }
 
 export namespace DOMNode {
@@ -1469,10 +1491,11 @@ export class DOMModel extends SDKModel<EventTypes> {
       throw new Error('DOMModel._pseudoElementAdded expects pseudoType to be defined.');
     }
     const currentPseudoElements = parent.pseudoElements().get(pseudoType);
-    if (currentPseudoElements) {
-      if (!pseudoType.startsWith('view-transition')) {
+    if (currentPseudoElements && currentPseudoElements.length > 0) {
+      if (!(pseudoType.startsWith('view-transition') || pseudoType.startsWith('scroll-') || pseudoType === 'column')) {
         throw new Error(
-            'DOMModel.pseudoElementAdded expects parent to not already have this pseudo type added; only view-transition* pseudo elements can coexist under the same parent.');
+            'DOMModel.pseudoElementAdded expects parent to not already have this pseudo type added; only view-transition* and scrolling pseudo elements can coexist under the same parent.' +
+            ` ${currentPseudoElements.length} elements of type ${pseudoType} already exist on parent.`);
       }
       currentPseudoElements.push(node);
     } else {
@@ -1679,20 +1702,20 @@ export enum Events {
   /* eslint-enable @typescript-eslint/naming-convention */
 }
 
-export type EventTypes = {
-  [Events.AttrModified]: {node: DOMNode, name: string},
-  [Events.AttrRemoved]: {node: DOMNode, name: string},
-  [Events.CharacterDataModified]: DOMNode,
-  [Events.DOMMutated]: DOMNode,
-  [Events.NodeInserted]: DOMNode,
-  [Events.NodeRemoved]: {node: DOMNode, parent: DOMNode},
-  [Events.DocumentUpdated]: DOMModel,
-  [Events.ChildNodeCountUpdated]: DOMNode,
-  [Events.DistributedNodesChanged]: DOMNode,
-  [Events.MarkersChanged]: DOMNode,
-  [Events.TopLayerElementsChanged]: void,
-  [Events.ScrollableFlagUpdated]: {node: DOMNode},
-};
+export interface EventTypes {
+  [Events.AttrModified]: {node: DOMNode, name: string};
+  [Events.AttrRemoved]: {node: DOMNode, name: string};
+  [Events.CharacterDataModified]: DOMNode;
+  [Events.DOMMutated]: DOMNode;
+  [Events.NodeInserted]: DOMNode;
+  [Events.NodeRemoved]: {node: DOMNode, parent: DOMNode};
+  [Events.DocumentUpdated]: DOMModel;
+  [Events.ChildNodeCountUpdated]: DOMNode;
+  [Events.DistributedNodesChanged]: DOMNode;
+  [Events.MarkersChanged]: DOMNode;
+  [Events.TopLayerElementsChanged]: void;
+  [Events.ScrollableFlagUpdated]: {node: DOMNode};
+}
 
 class DOMDispatcher implements ProtocolProxyApi.DOMDispatcher {
   readonly #domModel: DOMModel;

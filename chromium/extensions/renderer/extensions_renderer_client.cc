@@ -8,10 +8,7 @@
 #include <ostream>
 
 #include "base/check.h"
-#include "base/command_line.h"
 #include "base/functional/bind.h"
-#include "base/lazy_instance.h"
-#include "base/metrics/histogram_functions.h"
 #include "components/guest_view/buildflags/buildflags.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_switches.h"
@@ -20,14 +17,12 @@
 #include "extensions/buildflags/buildflags.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
-#include "extensions/common/extension_set.h"
 #include "extensions/common/mojom/context_type.mojom.h"
 #include "extensions/common/switches.h"
 #include "extensions/renderer/dispatcher.h"
 #include "extensions/renderer/extension_frame_helper.h"
 #include "extensions/renderer/extension_web_view_helper.h"
 #include "extensions/renderer/extensions_render_frame_observer.h"
-#include "extensions/renderer/renderer_extension_registry.h"
 #include "extensions/renderer/resource_request_policy.h"
 #include "extensions/renderer/script_context.h"
 #include "third_party/blink/public/common/security/protocol_handler_security_level.h"
@@ -149,7 +144,6 @@ bool ExtensionsRendererClient::AllowPopup() {
     case mojom::ContextType::kUntrustedWebUi:
     case mojom::ContextType::kOffscreenExtension:
     case mojom::ContextType::kUserScript:
-    case mojom::ContextType::kLockscreenExtension:
       return false;
     case mojom::ContextType::kPrivilegedExtension:
       return !current_context->IsForServiceWorker();
@@ -173,7 +167,6 @@ ExtensionsRendererClient::GetProtocolHandlerSecurityLevel() {
   switch (current_context->context_type()) {
     case mojom::ContextType::kPrivilegedWebPage:
     case mojom::ContextType::kContentScript:
-    case mojom::ContextType::kLockscreenExtension:
     case mojom::ContextType::kOffscreenExtension:
     case mojom::ContextType::kUnprivilegedExtension:
     case mojom::ContextType::kUnspecified:
@@ -244,25 +237,6 @@ void ExtensionsRendererClient::WillSendRequest(
   } else {
     if (site_for_cookies.scheme() == extensions::kExtensionScheme) {
       extension_id = site_for_cookies.registrable_domain();
-    }
-  }
-
-  // TODO(devlin): Is this check necessary?
-  // Any (cross-origin) navigations or requests should also be checked in the
-  // browser process, since the renderer is less trusted. That will rewrite
-  // these requests as necessary to chrome-extension://invalid. Additionally,
-  // having this check here could (potentially) be used in timing attacks to
-  // determine if a given extension is installed.
-  if (!extension_id.empty()) {
-    const extensions::RendererExtensionRegistry* extension_registry =
-        extensions::RendererExtensionRegistry::Get();
-    if (!extension_registry->Contains(extension_id) &&
-        !extension_registry->ContainsGUID(extension_id)) {
-      // If there is no extension installed for the origin, it may be from a
-      // recently uninstalled extension.  The tabs of such extensions are
-      // automatically closed, but subframes and content scripts may stick
-      // around. Fail such requests without killing the process.
-      *new_url = GURL(kExtensionInvalidRequestURL);
     }
   }
 

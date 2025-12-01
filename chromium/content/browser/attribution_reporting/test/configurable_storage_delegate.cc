@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 
+#include <algorithm>
 #include <limits>
 #include <optional>
 #include <utility>
@@ -14,7 +15,6 @@
 #include "base/check.h"
 #include "base/containers/flat_set.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/sequence_checker.h"
 #include "base/time/time.h"
 #include "base/types/expected.h"
@@ -106,15 +106,8 @@ void ConfigurableStorageDelegate::ShuffleReports(
     std::vector<AttributionReport>& reports) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (reverse_reports_on_shuffle_) {
-    base::ranges::reverse(reports);
+    std::ranges::reverse(reports);
   }
-}
-
-std::optional<double> ConfigurableStorageDelegate::GetRandomizedResponseRate(
-    const attribution_reporting::TriggerSpecs&,
-    attribution_reporting::EventLevelEpsilon) const {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return randomized_response_rate_;
 }
 
 AttributionResolverDelegate::GetRandomizedResponseResult

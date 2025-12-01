@@ -8,7 +8,7 @@ page_name: usb-low-power-boot
 title: USB-C / PD Low Power Boot
 ---
 
-(Additional discussion on [crbug.com/537269](http://crbug.com/537269))
+(Additional discussion on [crbug.com/537269](https://crbug.com/537269))
 
 **==Problem==**:
 

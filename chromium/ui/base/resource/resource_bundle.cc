@@ -11,6 +11,7 @@
 
 #include <stdint.h>
 
+#include <algorithm>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -28,7 +29,6 @@
 #include "base/numerics/byte_conversions.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/path_service.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -202,7 +202,7 @@ void DecompressIfNeeded(std::string_view data, OutputBufferType output) {
     TRACE_EVENT0("ui", "DecompressIfNeeded::GzipUncompress");
     const uint32_t uncompressed_size = compression::GetUncompressedSize(data);
     bool success = compression::GzipUncompress(
-        base::as_bytes(base::make_span(data)),
+        base::as_byte_span(data),
         GetBufferForWriting(output, uncompressed_size));
     DCHECK(success);
   } else if (!data.empty() && HasBrotliHeader(data)) {
@@ -211,7 +211,7 @@ void DecompressIfNeeded(std::string_view data, OutputBufferType output) {
     DCHECK(success);
   } else {
     base::span<uint8_t> dest = GetBufferForWriting(output, data.size());
-    base::ranges::copy(data, dest.data());
+    std::ranges::copy(data, dest.data());
   }
 }
 
@@ -516,7 +516,7 @@ std::string ResourceBundle::LoadLocaleResources(const std::string& pref_locale,
                   std::size(path_copy));
     base::debug::Alias(path_copy);
 #endif  // BUILDFLAG(IS_WIN)
-    CHECK(false);
+    NOTREACHED();
   }
 
   if (!g_vivaldi_load_secondary) {

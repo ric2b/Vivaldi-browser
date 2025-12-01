@@ -12,6 +12,7 @@
 
 #include <optional>
 
+#include "base/android/build_info.h"
 #include "base/android/jni_android.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
@@ -27,9 +28,9 @@ namespace internal {
 
 // - kRealtimeAudio corresponds to Android's PRIORITY_AUDIO = -16 value.
 // - kDisplay corresponds to Android's PRIORITY_DISPLAY = -4 value.
-// - kBackground corresponds to Android's PRIORITY_BACKGROUND = 10 value and can
-// result in heavy throttling and force the thread onto a little core on
-// big.LITTLE devices.
+// - kBackground corresponds to Android's PRIORITY_BACKGROUND = 10
+//   value. Contrary to the matching Java APi in Android <13, this does not
+//   restrict the thread to (subset of) little cores.
 const ThreadPriorityToNiceValuePairForTest
     kThreadPriorityToNiceValueMapForTest[7] = {
         {ThreadPriorityForTest::kRealtimeAudio, -16},
@@ -58,9 +59,14 @@ bool CanSetThreadTypeToRealtimeAudio() {
 
 bool SetCurrentThreadTypeForPlatform(ThreadType thread_type,
                                      MessagePumpType pump_type_hint) {
-  // On Android, we set the Audio priority through JNI as Audio priority
-  // will also allow the process to run while it is backgrounded.
-  if (thread_type == ThreadType::kRealtimeAudio) {
+  // We set the Audio priority through JNI as the Java setThreadPriority will
+  // put it into a preferable cgroup, whereas the "normal" C++ call wouldn't.
+  // However, with
+  // https://android-review.googlesource.com/c/platform/system/core/+/1975808
+  // this becomes obsolete and we can avoid this starting in API level 33.
+  if (thread_type == ThreadType::kRealtimeAudio &&
+      base::android::BuildInfo::GetInstance()->sdk_int() <
+          base::android::SDK_VERSION_T) {
     JNIEnv* env = base::android::AttachCurrentThread();
     Java_ThreadUtils_setThreadPriorityAudio(env, PlatformThread::CurrentId());
     return true;
@@ -79,8 +85,8 @@ bool SetCurrentThreadTypeForPlatform(ThreadType thread_type,
 std::optional<ThreadPriorityForTest>
 GetCurrentThreadPriorityForPlatformForTest() {
   JNIEnv* env = base::android::AttachCurrentThread();
-  if (Java_ThreadUtils_isThreadPriorityAudio(
-      env, PlatformThread::CurrentId())) {
+  if (Java_ThreadUtils_isThreadPriorityAudio(env,
+                                             PlatformThread::CurrentId())) {
     return std::make_optional(ThreadPriorityForTest::kRealtimeAudio);
   }
   return std::nullopt;
@@ -95,18 +101,18 @@ void PlatformThread::SetName(const std::string& name) {
   // debugger by setting the process name for the LWP.
   // We don't want to do this for the main thread because that would rename
   // the process, causing tools like killall to stop working.
-  if (PlatformThread::CurrentId() == getpid())
+  if (PlatformThread::CurrentId() == getpid()) {
     return;
+  }
 
   // Set the name for the LWP (which gets truncated to 15 characters).
   int err = prctl(PR_SET_NAME, name.c_str());
-  if (err < 0 && errno != EPERM)
+  if (err < 0 && errno != EPERM) {
     DPLOG(ERROR) << "prctl(PR_SET_NAME)";
+  }
 }
 
-
-void InitThreading() {
-}
+void InitThreading() {}
 
 void TerminateOnThread() {
   base::android::DetachFromVM();

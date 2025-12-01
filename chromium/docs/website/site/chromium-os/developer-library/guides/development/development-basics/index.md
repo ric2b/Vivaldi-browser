@@ -229,10 +229,10 @@ and mailing lists rather than the internal versions.
 [contact]: /chromium-os/developer-library/guides/who-do-i-notify/contact/
 [documentation guidelines]: https://chromium.googlesource.com/chromium/src/+/HEAD/docs/documentation_guidelines.md
 [documentation best practices]: https://chromium.googlesource.com/chromium/src/+/HEAD/docs/documentation_best_practices.md
-[ChromiumOS design docs]: https://www.chromium.org/chromium-os/chromiumos-design-docs
-[Chromium design docs]: https://www.chromium.org/developers/design-documents
+[ChromiumOS design docs]: /chromium-os/chromiumos-design-docs
+[Chromium design docs]: /developers/design-documents
 [set from crosvm]: https://chromium.googlesource.com/chromiumos/platform/crosvm/+/HEAD/bin/clippy
-[Rust on ChromeOS]: https://www.chromium.org/chromium-os/developer-library/guides/rust/rust-on-cros
+[Rust on ChromeOS]: /chromium-os/developer-library/guides/rust/rust-on-cros
 [Google C++ style guide]: https://google.github.io/styleguide/cppguide.html
 [Chromium C++ style guide]: https://chromium.googlesource.com/chromium/src/+/HEAD/styleguide/c++/c++.md
 [Modern C++ use in Chromium]: https://chromium.googlesource.com/chromium/src/+/HEAD/styleguide/c++/c++-features.md
@@ -250,16 +250,16 @@ and mailing lists rather than the internal versions.
 [Google Python style guide]: https://google.github.io/styleguide/pyguide.html
 [ChromiumOS Python style guidelines]: /chromium-os/developer-library/reference/style-guides/python/
 [autotest coding style]: https://chromium.googlesource.com/chromiumos/third_party/autotest/+/HEAD/docs/coding-style.md
-[ChromiumOS testing site]: https://www.chromium.org/chromium-os/testing
+[ChromiumOS testing site]: /chromium-os/testing
 [Google Test]: https://github.com/google/googletest
 [Why Google C++ Testing Framework?]: https://github.com/google/googletest/blob/HEAD/googletest/docs/primer.md
 [Google Test FAQ]: https://github.com/google/googletest/blob/HEAD/googletest/docs/faq.md
-[unit testing document]: https://www.chromium.org/chromium-os/testing/adding-unit-tests-to-the-build
+[unit testing document]: /chromium-os/testing/adding-unit-tests-to-the-build
 [Best practices for writing ChromeOS unit tests]: /chromium-os/developer-library/guides/testing/unit-tests/
 [Autotest]: https://chromium.googlesource.com/chromiumos/third_party/autotest/+/HEAD/docs/user-doc.md
 [Chromium code review policy]: https://chromium.googlesource.com/chromium/src/+/HEAD/docs/code_reviews.md
 [Developer Guide's code review instructions]: /chromium-os/developer-library/guides/development/developer-guide/#Upload-your-changes-and-get-a-code-review
 [Gerrit notification settings]: https://chromium-review.googlesource.com/settings/#Notifications
 [chromium issue tracker]: https://crbug.com/
-[Chromium bug reporting guidelines]: https://www.chromium.org/for-testers/bug-reporting-guidelines
+[Chromium bug reporting guidelines]: /for-testers/bug-reporting-guidelines
 [chromium-os-dev]: https://groups.google.com/a/chromium.org/forum/#!forum/chromium-os-dev

@@ -10,7 +10,36 @@
 
 #include "pc/test/integration_test_helpers.h"
 
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "absl/functional/any_invocable.h"
 #include "api/audio/builtin_audio_processing_builder.h"
+#include "api/enable_media_with_defaults.h"
+#include "api/jsep.h"
+#include "api/peer_connection_interface.h"
+#include "api/rtc_event_log/rtc_event_log_factory.h"
+#include "api/sequence_checker.h"
+#include "api/stats/rtcstats_objects.h"
+#include "api/task_queue/default_task_queue_factory.h"
+#include "api/task_queue/pending_task_safety_flag.h"
+#include "api/task_queue/task_queue_base.h"
+#include "api/units/time_delta.h"
+#include "logging/rtc_event_log/fake_rtc_event_log_factory.h"
+#include "p2p/base/basic_packet_socket_factory.h"
+#include "p2p/base/port_allocator.h"
+#include "p2p/client/basic_port_allocator.h"
+#include "pc/peer_connection_factory.h"
+#include "pc/test/fake_audio_capture_module.h"
+#include "rtc_base/checks.h"
+#include "rtc_base/fake_network.h"
+#include "rtc_base/socket_server.h"
+#include "rtc_base/thread.h"
+#include "test/gtest.h"
 
 namespace webrtc {
 
@@ -193,6 +222,7 @@ bool PeerConnectionIntegrationWrapper::Init(
     rtc::SocketServer* socket_server,
     rtc::Thread* network_thread,
     rtc::Thread* worker_thread,
+    std::unique_ptr<FieldTrialsView> field_trials,
     std::unique_ptr<FakeRtcEventLogFactory> event_log_factory,
     bool reset_encoder_factory,
     bool reset_decoder_factory,
@@ -205,6 +235,7 @@ bool PeerConnectionIntegrationWrapper::Init(
   fake_network_manager_->AddInterface(kDefaultLocalAddress);
 
   socket_factory_.reset(new rtc::BasicPacketSocketFactory(socket_server));
+  network_thread_ = network_thread;
 
   std::unique_ptr<cricket::PortAllocator> port_allocator(
       new cricket::BasicPortAllocator(fake_network_manager_.get(),
@@ -221,7 +252,7 @@ bool PeerConnectionIntegrationWrapper::Init(
   pc_factory_dependencies.worker_thread = worker_thread;
   pc_factory_dependencies.signaling_thread = signaling_thread;
   pc_factory_dependencies.task_queue_factory = CreateDefaultTaskQueueFactory();
-  pc_factory_dependencies.trials = std::make_unique<FieldTrialBasedConfig>();
+  pc_factory_dependencies.trials = std::move(field_trials);
   pc_factory_dependencies.decode_metronome =
       std::make_unique<TaskQueueMetronome>(TimeDelta::Millis(8));
 

@@ -4,6 +4,7 @@
 
 #include "content/browser/service_worker/service_worker_fetch_dispatcher.h"
 
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -56,12 +57,6 @@
 namespace content {
 
 namespace {
-
-// TODO(crbug.com/40268507): When this is enabled, the browser will schedule
-// ServiceWorkerFetchDispatcher::ResponseCallback in a high priority task queue.
-BASE_FEATURE(kServiceWorkerFetchResponseCallbackUseHighPriority,
-             "ServiceWorkerFetchResponseCallbackUseHighPriority",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool g_force_disable_high_priority_fetch_response_callback = false;
 
@@ -336,7 +331,7 @@ CreateNetworkFactoryForNavigationPreload(FrameTreeNode& frame_tree_node,
   // for navigations.
   GetContentClient()->browser()->WillCreateURLLoaderFactory(
       partition.browser_context(), frame_tree_node.current_frame_host(),
-      frame_tree_node.current_frame_host()->GetProcess()->GetID(),
+      frame_tree_node.current_frame_host()->GetProcess()->GetDeprecatedID(),
       ContentBrowserClient::URLLoaderFactoryType::kNavigation, url::Origin(),
       net::IsolationInfo(),
       frame_tree_node.navigation_request()->GetNavigationId(),
@@ -349,7 +344,11 @@ CreateNetworkFactoryForNavigationPreload(FrameTreeNode& frame_tree_node,
   // Make the network factory.
   return base::MakeRefCounted<network::WrapperSharedURLLoaderFactory>(
       NavigationURLLoaderImpl::CreateURLLoaderFactoryWithHeaderClient(
-          std::move(header_client), std::move(factory_builder), &partition));
+          std::move(header_client), std::move(factory_builder), &partition,
+          // TODO(crbug.com/390003764): Consider whether/how to apply devtools
+          // cookies setting overrides for a service worker.
+          /*devtools_cookie_overrides=*/std::nullopt,
+          /*cookie_overrides=*/std::nullopt));
 }
 
 }  // namespace
@@ -368,9 +367,7 @@ class ServiceWorkerFetchDispatcher::ResponseCallback
       : receiver_(
             this,
             std::move(receiver),
-            (!g_force_disable_high_priority_fetch_response_callback &&
-                     base::FeatureList::IsEnabled(
-                         kServiceWorkerFetchResponseCallbackUseHighPriority)
+            (!g_force_disable_high_priority_fetch_response_callback
                  ? GetUIThreadTaskRunner(
                        {BrowserTaskType::kServiceWorkerStorageControlResponse})
                  : base::SequencedTaskRunner::GetCurrentDefault())),

@@ -14,9 +14,12 @@ import org.chromium.components.data_sharing.GroupMember;
  * //components/collaboration/public/messaging/message.h for specific details.
  */
 public class MessageAttribution {
+    @Nullable public String id;
     public String collaborationId;
     @Nullable public TabGroupMessageMetadata tabGroupMetadata;
     @Nullable public TabMessageMetadata tabMetadata;
     @Nullable public GroupMember affectedUser;
+    public boolean affectedUserIsSelf;
     @Nullable public GroupMember triggeringUser;
+    public boolean triggeringUserIsSelf;
 }

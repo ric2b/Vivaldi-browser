@@ -6,17 +6,18 @@
 // CLDeviceVk.cpp: Implements the class methods for CLDeviceVk.
 
 #include "libANGLE/renderer/vulkan/CLDeviceVk.h"
-#include "libANGLE/renderer/vulkan/CLPlatformVk.h"
+#include "libANGLE/renderer/vulkan/clspv_utils.h"
 #include "libANGLE/renderer/vulkan/vk_renderer.h"
 
-#include "libANGLE/Display.h"
+#include "libANGLE/renderer/cl_types.h"
+
 #include "libANGLE/cl_utils.h"
 
 namespace rx
 {
 
 CLDeviceVk::CLDeviceVk(const cl::Device &device, vk::Renderer *renderer)
-    : CLDeviceImpl(device), mRenderer(renderer)
+    : CLDeviceImpl(device), mRenderer(renderer), mSpirvVersion(ClspvGetSpirvVersion(renderer))
 {
     const VkPhysicalDeviceProperties &props = mRenderer->getPhysicalDeviceProperties();
 
@@ -61,15 +62,18 @@ CLDeviceVk::CLDeviceVk(const cl::Device &device, vk::Renderer *renderer)
         {cl::DeviceInfo::SingleFpConfig, CL_FP_ROUND_TO_NEAREST | CL_FP_INF_NAN | CL_FP_FMA},
         {cl::DeviceInfo::AtomicMemoryCapabilities,
          CL_DEVICE_ATOMIC_ORDER_RELAXED | CL_DEVICE_ATOMIC_SCOPE_WORK_GROUP},
+        // TODO (http://anglebug.com/379669750) Add these based on the Vulkan features query
         {cl::DeviceInfo::AtomicFenceCapabilities, CL_DEVICE_ATOMIC_ORDER_RELAXED |
-                                                      CL_DEVICE_ATOMIC_SCOPE_WORK_ITEM |
-                                                      CL_DEVICE_ATOMIC_SCOPE_WORK_GROUP},
+                                                      CL_DEVICE_ATOMIC_ORDER_ACQ_REL |
+                                                      CL_DEVICE_ATOMIC_SCOPE_WORK_GROUP |
+                                                      // non-mandatory
+                                                      CL_DEVICE_ATOMIC_SCOPE_WORK_ITEM},
     };
     mInfoUInt = {
         {cl::DeviceInfo::VendorID, props.vendorID},
-        {cl::DeviceInfo::MaxReadImageArgs, props.limits.maxPerStageDescriptorSampledImages},
-        {cl::DeviceInfo::MaxWriteImageArgs, props.limits.maxPerStageDescriptorStorageImages},
-        {cl::DeviceInfo::MaxReadWriteImageArgs, props.limits.maxPerStageDescriptorStorageImages},
+        {cl::DeviceInfo::MaxReadImageArgs, cl::IMPLEMENATION_MAX_READ_IMAGES},
+        {cl::DeviceInfo::MaxWriteImageArgs, cl::IMPLEMENATION_MAX_WRITE_IMAGES},
+        {cl::DeviceInfo::MaxReadWriteImageArgs, cl::IMPLEMENATION_MAX_WRITE_IMAGES},
         {cl::DeviceInfo::GlobalMemCachelineSize,
          static_cast<cl_uint>(props.limits.nonCoherentAtomSize)},
         {cl::DeviceInfo::Available, CL_TRUE},
@@ -92,7 +96,9 @@ CLDeviceVk::CLDeviceVk(const cl::Device &device, vk::Renderer *renderer)
         {cl::DeviceInfo::AddressBits, 32},
         {cl::DeviceInfo::EndianLittle, CL_TRUE},
         {cl::DeviceInfo::LocalMemType, CL_LOCAL},
-        {cl::DeviceInfo::MaxSamplers, props.limits.maxSamplerAllocationCount},
+        // TODO (http://anglebug.com/379669750) Vulkan reports a big sampler count number, we dont
+        // need that many and set it to minimum req for now.
+        {cl::DeviceInfo::MaxSamplers, 16u},
         {cl::DeviceInfo::MaxConstantArgs, 8},
         {cl::DeviceInfo::MaxNumSubGroups, 0},
         {cl::DeviceInfo::MaxComputeUnits, 4},
@@ -119,7 +125,7 @@ CLDeviceVk::CLDeviceVk(const cl::Device &device, vk::Renderer *renderer)
         {cl::DeviceInfo::PreferredLocalAtomicAlignment, 0},
         {cl::DeviceInfo::PreferredGlobalAtomicAlignment, 0},
         {cl::DeviceInfo::PreferredPlatformAtomicAlignment, 0},
-        {cl::DeviceInfo::NonUniformWorkGroupSupport, CL_FALSE},
+        {cl::DeviceInfo::NonUniformWorkGroupSupport, CL_TRUE},
         {cl::DeviceInfo::GenericAddressSpaceSupport, CL_FALSE},
         {cl::DeviceInfo::SubGroupIndependentForwardProgress, CL_FALSE},
         {cl::DeviceInfo::WorkGroupCollectiveFunctionsSupport, CL_FALSE},
@@ -145,12 +151,13 @@ CLDeviceImpl::Info CLDeviceVk::createInfo(cl::DeviceType type) const
 
     info.imageSupport = CL_TRUE;
 
-    info.image2D_MaxWidth          = properties.limits.maxImageDimension2D;
-    info.image2D_MaxHeight         = properties.limits.maxImageDimension2D;
-    info.image3D_MaxWidth          = properties.limits.maxImageDimension3D;
-    info.image3D_MaxHeight         = properties.limits.maxImageDimension3D;
-    info.image3D_MaxDepth          = properties.limits.maxImageDimension3D;
-    info.imageMaxBufferSize        = properties.limits.maxImageDimension1D;
+    info.image2D_MaxWidth  = properties.limits.maxImageDimension2D;
+    info.image2D_MaxHeight = properties.limits.maxImageDimension2D;
+    info.image3D_MaxWidth  = properties.limits.maxImageDimension3D;
+    info.image3D_MaxHeight = properties.limits.maxImageDimension3D;
+    info.image3D_MaxDepth  = properties.limits.maxImageDimension3D;
+    // TODO (http://anglebug.com/379669750) For now set it minimum requirement.
+    info.imageMaxBufferSize        = 65536;
     info.imageMaxArraySize         = properties.limits.maxImageArrayLayers;
     info.imagePitchAlignment       = 0u;
     info.imageBaseAddressAlignment = 0u;
@@ -186,7 +193,34 @@ CLDeviceImpl::Info CLDeviceVk::createInfo(cl::DeviceType type) const
         cl_name_version{.version = CL_MAKE_VERSION(1, 0, 0),
                         .name    = "cl_khr_local_int32_extended_atomics"},
     };
+    if (info.imageSupport && info.image3D_MaxDepth > 1)
+    {
+        versionedExtensionList.push_back(
+            cl_name_version{.version = CL_MAKE_VERSION(1, 0, 0), .name = "cl_khr_3d_image_writes"});
+    }
     info.initializeVersionedExtensions(std::move(versionedExtensionList));
+
+    if (!mRenderer->getFeatures().supportsUniformBufferStandardLayout.enabled)
+    {
+        ERR() << "VK_KHR_uniform_buffer_standard_layout extension support is needed to properly "
+                 "support uniform buffers. Otherwise, you must disable OpenCL.";
+    }
+
+    // Populate supported features
+    if (info.imageSupport)
+    {
+        info.OpenCL_C_Features.push_back(
+            cl_name_version{.version = CL_MAKE_VERSION(3, 0, 0), .name = "__opencl_c_images"});
+        info.OpenCL_C_Features.push_back(cl_name_version{.version = CL_MAKE_VERSION(3, 0, 0),
+                                                         .name    = "__opencl_c_3d_image_writes"});
+        info.OpenCL_C_Features.push_back(cl_name_version{.version = CL_MAKE_VERSION(3, 0, 0),
+                                                         .name = "__opencl_c_read_write_images"});
+    }
+    if (mRenderer->getEnabledFeatures().features.shaderInt64)
+    {
+        info.OpenCL_C_Features.push_back(
+            cl_name_version{.version = CL_MAKE_VERSION(3, 0, 0), .name = "__opencl_c_int64"});
+    }
 
     return info;
 }

@@ -25,7 +25,7 @@
 #include "api/video_codecs/h264_profile_level_id.h"
 #include "api/video_codecs/sdp_video_format.h"
 #ifdef RTC_ENABLE_H265
-#include "api/video_codecs/h265_profile_tier_level.h"
+#include "api/video_codecs/h265_profile_tier_level.h"  // IWYU pragma: keep
 #endif
 #include "media/base/codec_comparators.h"
 #include "media/base/media_constants.h"
@@ -35,10 +35,6 @@
 #include "rtc_base/strings/string_builder.h"
 
 namespace cricket {
-namespace {
-
-
-}  // namespace
 
 FeedbackParams::FeedbackParams() = default;
 FeedbackParams::~FeedbackParams() = default;
@@ -66,6 +62,15 @@ void FeedbackParams::Add(const FeedbackParam& param) {
   }
   params_.push_back(param);
   RTC_CHECK(!HasDuplicateEntries());
+}
+
+bool FeedbackParams::Remove(const FeedbackParam& param) {
+  if (!Has(param)) {
+    return false;
+  }
+  params_.erase(std::remove(params_.begin(), params_.end(), param),
+                params_.end());
+  return true;
 }
 
 void FeedbackParams::Intersect(const FeedbackParams& from) {
@@ -318,11 +323,6 @@ bool HasRrtr(const Codec& codec) {
       FeedbackParam(kRtcpFbParamRrtr, kParamValueEmpty));
 }
 
-bool HasTransportCc(const Codec& codec) {
-  return codec.HasFeedbackParam(
-      FeedbackParam(kRtcpFbParamTransportCc, kParamValueEmpty));
-}
-
 const Codec* FindMatchingVideoCodec(const std::vector<Codec>& supported_codecs,
                                     const Codec& codec) {
   webrtc::SdpVideoFormat sdp_video_format{codec.name, codec.params};
@@ -417,6 +417,12 @@ Codec CreateVideoCodec(int id, const std::string& name) {
 
 Codec CreateVideoCodec(const webrtc::SdpVideoFormat& c) {
   return Codec(c);
+}
+
+Codec CreateVideoCodec(int id, const webrtc::SdpVideoFormat& sdp) {
+  Codec c = CreateVideoCodec(sdp);
+  c.id = id;
+  return c;
 }
 
 }  // namespace cricket

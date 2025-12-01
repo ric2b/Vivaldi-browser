@@ -29,7 +29,8 @@
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/autofill/content/browser/content_autofill_client.h"
-#include "components/autofill/core/browser/autofill_test_utils.h"
+#include "components/autofill/core/browser/test_utils/autofill_test_utils.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/password_store/password_store_results_observer.h"
 #include "components/password_manager/core/browser/password_store/test_password_store.h"
@@ -106,6 +107,7 @@ class CustomManagePasswordsUIController : public ManagePasswordsUIController {
   void NotifyUnsyncedCredentialsWillBeDeleted(
       std::vector<password_manager::PasswordForm> unsynced_credentials)
       override;
+  void ShowChangePasswordBubble() override;
 
   // Should not be used for manual fallback events.
   bool IsTargetStateObserved(
@@ -260,6 +262,11 @@ void CustomManagePasswordsUIController::NotifyUnsyncedCredentialsWillBeDeleted(
       password_manager::ui::WILL_DELETE_UNSYNCED_ACCOUNT_PASSWORDS_STATE);
 }
 
+void CustomManagePasswordsUIController::ShowChangePasswordBubble() {
+  ManagePasswordsUIController::ShowChangePasswordBubble();
+  was_prompt_automatically_shown_ = true;
+}
+
 bool CustomManagePasswordsUIController::IsTargetStateObserved(
     const password_manager::ui::State target_state,
     const password_manager::ui::State current_state) const {
@@ -304,6 +311,12 @@ BubbleObserver::BubbleObserver(content::WebContents* web_contents)
     : passwords_ui_controller_(
           ManagePasswordsUIController::FromWebContents(web_contents)) {}
 
+bool BubbleObserver::IsBubbleDisplayedAutomatically() const {
+  return static_cast<CustomManagePasswordsUIController*>(
+             passwords_ui_controller_)
+      ->was_prompt_automatically_shown();
+}
+
 bool BubbleObserver::IsSavePromptAvailable() const {
   return passwords_ui_controller_->GetState() ==
          password_manager::ui::PENDING_PASSWORD_STATE;
@@ -312,11 +325,6 @@ bool BubbleObserver::IsSavePromptAvailable() const {
 bool BubbleObserver::IsUpdatePromptAvailable() const {
   return passwords_ui_controller_->GetState() ==
          password_manager::ui::PENDING_PASSWORD_UPDATE_STATE;
-}
-
-bool BubbleObserver::IsDefaultStoreChangedPromptAvailable() const {
-  return passwords_ui_controller_->GetState() ==
-         password_manager::ui::PASSWORD_STORE_CHANGED_BUBBLE_STATE;
 }
 
 bool BubbleObserver::IsSavePromptShownAutomatically() const {
@@ -330,15 +338,6 @@ bool BubbleObserver::IsSavePromptShownAutomatically() const {
 
 bool BubbleObserver::IsUpdatePromptShownAutomatically() const {
   if (!IsUpdatePromptAvailable()) {
-    return false;
-  }
-  return static_cast<CustomManagePasswordsUIController*>(
-             passwords_ui_controller_)
-      ->was_prompt_automatically_shown();
-}
-
-bool BubbleObserver::IsDefaultStoreChangedPromptShownAutomatically() const {
-  if (!IsDefaultStoreChangedPromptAvailable()) {
     return false;
   }
   return static_cast<CustomManagePasswordsUIController*>(
@@ -364,12 +363,6 @@ void BubbleObserver::AcceptUpdatePrompt() const {
       passwords_ui_controller_->GetPendingPassword().username_value,
       passwords_ui_controller_->GetPendingPassword().password_value);
   EXPECT_FALSE(IsUpdatePromptAvailable());
-}
-
-void BubbleObserver::AcknowledgeDefaultStoreChange() const {
-  ASSERT_TRUE(IsDefaultStoreChangedPromptAvailable());
-  passwords_ui_controller_->PromptSaveBubbleAfterDefaultStoreChanged();
-  EXPECT_FALSE(IsDefaultStoreChangedPromptAvailable());
 }
 
 void BubbleObserver::WaitForAccountChooser() const {
@@ -467,7 +460,8 @@ void PasswordManagerBrowserTestBase::SetUpCommandLine(
 
 // static
 content::WebContents* PasswordManagerBrowserTestBase::GetNewTab(
-    Browser* browser) {
+    Browser* browser,
+    bool open_new_tab) {
   // Add a tab with a customized ManagePasswordsUIController. Thus, we can
   // intercept useful UI events.
   content::WebContents* preexisting_tab =
@@ -486,13 +480,12 @@ content::WebContents* PasswordManagerBrowserTestBase::GetNewTab(
       new CustomManagePasswordsUIController(web_contents);
   browser->tab_strip_model()->AppendWebContents(std::move(owned_web_contents),
                                                 true);
-  if (preexisting_tab) {
+  if (!open_new_tab && preexisting_tab) {
     browser->tab_strip_model()->CloseWebContentsAt(0,
                                                    TabCloseTypes::CLOSE_NONE);
   }
   EXPECT_EQ(controller,
             ManagePasswordsUIController::FromWebContents(web_contents));
-  EXPECT_EQ(web_contents, browser->tab_strip_model()->GetActiveWebContents());
   EXPECT_FALSE(web_contents->IsLoading());
   return web_contents;
 }
@@ -520,6 +513,11 @@ void PasswordManagerBrowserTestBase::WaitForPasswordStore(Browser* browser) {
 
 content::WebContents* PasswordManagerBrowserTestBase::WebContents() const {
   return web_contents_;
+}
+
+void PasswordManagerBrowserTestBase::SetWebContents(
+    content::WebContents* web_contents) {
+  web_contents_ = web_contents;
 }
 
 content::RenderFrameHost* PasswordManagerBrowserTestBase::RenderFrameHost()
@@ -676,6 +674,13 @@ void PasswordManagerBrowserTestBase::CheckElementValue(
     const std::string& iframe_id,
     const std::string& element_id,
     const std::string& expected_value) {
+  EXPECT_EQ(expected_value, GetElementValue(iframe_id, element_id))
+      << "element_id = " << element_id;
+}
+
+std::string PasswordManagerBrowserTestBase::GetElementValue(
+    const std::string& iframe_id,
+    const std::string& element_id) {
   const std::string value_get_script = base::StringPrintf(
       "if (%s)"
       "  var element = document.getElementById("
@@ -686,11 +691,9 @@ void PasswordManagerBrowserTestBase::CheckElementValue(
       "value;",
       iframe_id.c_str(), iframe_id.c_str(), element_id.c_str(),
       element_id.c_str());
-  std::string return_value =
-      content::EvalJs(RenderFrameHost(), value_get_script,
-                      content::EXECUTE_SCRIPT_NO_USER_GESTURE)
-          .ExtractString();
-  EXPECT_EQ(expected_value, return_value) << "element_id = " << element_id;
+  return content::EvalJs(RenderFrameHost(), value_get_script,
+                         content::EXECUTE_SCRIPT_NO_USER_GESTURE)
+      .ExtractString();
 }
 
 void PasswordManagerBrowserTestBase::SetUpInProcessBrowserTestFixture() {
@@ -736,7 +739,8 @@ void PasswordManagerBrowserTestBase::AddHSTSHost(const std::string& host) {
 
 void PasswordManagerBrowserTestBase::CheckThatCredentialsStored(
     const std::string& username,
-    const std::string& password) {
+    const std::string& password,
+    std::optional<password_manager::PasswordForm::Type> type) {
   SCOPED_TRACE(::testing::Message() << username << ", " << password);
   scoped_refptr<password_manager::TestPasswordStore> password_store =
       static_cast<password_manager::TestPasswordStore*>(
@@ -750,4 +754,7 @@ void PasswordManagerBrowserTestBase::CheckThatCredentialsStored(
   const password_manager::PasswordForm& form = passwords_vector[0];
   EXPECT_EQ(base::ASCIIToUTF16(username), form.username_value);
   EXPECT_EQ(base::ASCIIToUTF16(password), form.password_value);
+  if (type.has_value()) {
+    EXPECT_EQ(type.value(), form.type);
+  }
 }

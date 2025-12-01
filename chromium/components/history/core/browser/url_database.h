@@ -259,6 +259,15 @@ class URLDatabase {
   // Deletes any search corresponding to `url_id`.
   bool DeleteKeywordSearchTermForURL(URLID url_id);
 
+  // Vivaldi
+  void GetRecentTypedHistoryItems(
+      base::OnceCallback<void(sql::Statement&&)> callback,
+      int max_results);
+  void GetRecentTypedSearchItems(
+      base::OnceCallback<void(sql::Statement&&)> callback,
+      int max_results,
+      KeywordID keyword_id);
+
 #include "components/history/vivaldi_url_database.h.inc"
 
  protected:

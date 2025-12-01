@@ -12,10 +12,10 @@
 #include "base/strings/utf_string_conversions.h"
 #include "components/omnibox/browser/actions/omnibox_action.h"
 #include "components/omnibox/browser/autocomplete_match.h"
-#include "components/omnibox/browser/omnibox_feature_configs.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_popup_selection.h"
 #include "components/omnibox/browser/suggestion_answer.h"
+#include "components/omnibox/common/omnibox_feature_configs.h"
 #include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -65,7 +65,8 @@ std::string AutocompleteMatchType::ToString(AutocompleteMatchType::Type type) {
 
     // Vivaldi
     "bookmark-nickname",
-    "direct-match"
+    "direct-match",
+    "recent-typed-history",
   });
   // clang-format on
   static_assert(strings.size() == AutocompleteMatchType::NUM_TYPES,
@@ -167,6 +168,7 @@ std::u16string GetAccessibilityBaseLabel(const AutocompleteMatch& match,
       // Vivaldi
       0,                                     // bookmark-nickname
       0,                                     // direct-match
+      0,                                     // recent-typed-history
   });
   static_assert(std::size(message_ids) == AutocompleteMatchType::NUM_TYPES,
                 "message_ids must have NUM_TYPES elements");

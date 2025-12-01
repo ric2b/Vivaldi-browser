@@ -54,7 +54,7 @@ ProductState::ProductState()
       has_oem_install_(false),
       has_usagestats_(false) {}
 
-ProductState::~ProductState() {}
+ProductState::~ProductState() = default;
 
 bool ProductState::Initialize(bool system_install) {
   // For Vivaldi, as we support multiple installations, we read the version from
@@ -354,7 +354,7 @@ std::wstring ProductState::FindProductGuid(std::wstring_view display_name,
   return {};
 }
 
-InstallationState::InstallationState() {}
+InstallationState::InstallationState() = default;
 
 void InstallationState::Initialize() {
   user_chrome_.Initialize(false);

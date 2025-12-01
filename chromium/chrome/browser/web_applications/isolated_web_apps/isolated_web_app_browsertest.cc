@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include <optional>
 #include <string_view>
 
@@ -19,6 +14,7 @@
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/test/gmock_expected_support.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_future.h"
 #include "base/threading/thread_restrictions.h"
@@ -77,6 +73,7 @@
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/features_generated.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_database.mojom-forward.h"
+#include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom.h"
 
 namespace web_app {
 
@@ -101,9 +98,8 @@ const uint8_t kApplicationServerKey[kApplicationServerKeyLength] = {
     0xB6, 0x01, 0x20, 0xD8, 0x35, 0xA5, 0xD9, 0x3C, 0x43, 0xFD};
 
 std::string GetTestApplicationServerKey() {
-  std::string application_server_key(
-      kApplicationServerKey,
-      kApplicationServerKey + std::size(kApplicationServerKey));
+  std::string application_server_key(std::begin(kApplicationServerKey),
+                                     std::end(kApplicationServerKey));
 
   return application_server_key;
 }
@@ -259,12 +255,12 @@ IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest, AppsPartitioned) {
   std::unique_ptr<ScopedBundledIsolatedWebApp> app1 =
       IsolatedWebAppBuilder(ManifestBuilder()).BuildBundle();
   ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info1,
-                       app1->TrustBundleAndInstall(profile()));
+                       app1->Install(profile()));
 
   std::unique_ptr<ScopedBundledIsolatedWebApp> app2 =
       IsolatedWebAppBuilder(ManifestBuilder()).BuildBundle();
   ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info2,
-                       app2->TrustBundleAndInstall(profile()));
+                       app2->Install(profile()));
 
   auto* non_app_frame = ui_test_utils::NavigateToURL(
       browser(), https_server()->GetURL("/simple.html"));
@@ -288,8 +284,7 @@ IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest,
           .AddFileFromDisk("/index.html",
                            "web_apps/simple_isolated_app/index.html")
           .BuildBundle();
-  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info,
-                       app->TrustBundleAndInstall(profile()));
+  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info, app->Install(profile()));
 
   GURL app_url = url_info.origin().GetURL().Resolve("/index.html");
   auto* app_frame =
@@ -334,8 +329,7 @@ IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest, SameOriginWindowOpen) {
 IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest, CrossOriginWindowOpen) {
   std::unique_ptr<ScopedBundledIsolatedWebApp> app =
       IsolatedWebAppBuilder(ManifestBuilder()).BuildBundle();
-  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info,
-                       app->TrustBundleAndInstall(profile()));
+  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info, app->Install(profile()));
 
   content::RenderFrameHost* app_frame = OpenApp(url_info.app_id());
 
@@ -379,30 +373,28 @@ IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest, CrossOriginWindowOpen) {
   }
 }
 
-// TODO(b/366524200): Find out why the navigation isn't opening in an IWA window
 IN_PROC_BROWSER_TEST_F(
     IsolatedWebAppBrowserTest,
-    DISABLED_OmniboxNavigationOpensNewPwaWindowEvenIfUserDisplayModeIsBrowser) {
+    OmniboxNavigationOpensStandaloneWindowEvenIfDisplayModeIsBrowser) {
   std::unique_ptr<ScopedBundledIsolatedWebApp> app =
-      IsolatedWebAppBuilder(ManifestBuilder())
-          .AddFileFromDisk("/", "web_apps/simple_isolated_app/index.html")
+      IsolatedWebAppBuilder(
+          ManifestBuilder().SetDisplayMode(blink::mojom::DisplayMode::kBrowser))
           .BuildBundle();
-  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info,
-                       app->TrustBundleAndInstall(profile()));
+  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info, app->Install(profile()));
 
   WebAppProvider::GetForTest(browser()->profile())
       ->sync_bridge_unsafe()
       .SetAppUserDisplayModeForTesting(url_info.app_id(),
                                        mojom::UserDisplayMode::kBrowser);
 
-  GURL app_url = url_info.origin().GetURL().Resolve("/index.html");
+  GURL app_url = url_info.origin().GetURL();
   auto* app_frame =
       NavigateToURLInNewTab(browser(), app_url, WindowOpenDisposition::UNKNOWN);
 
   // The browser shouldn't have opened the app's page.
   EXPECT_EQ(GetPrimaryMainFrame(browser())->GetLastCommittedURL(), GURL());
 
-  // The app's frame should belong to an isolated PWA browser window.
+  // The app's frame should belong to an IWA window.
   Browser* app_browser = GetBrowserFromFrame(app_frame);
   EXPECT_NE(app_browser, browser());
   EXPECT_TRUE(
@@ -412,12 +404,66 @@ IN_PROC_BROWSER_TEST_F(
             app_frame->GetWebExposedIsolationLevel());
 }
 
+IN_PROC_BROWSER_TEST_F(
+    IsolatedWebAppBrowserTest,
+    OmniboxNavigationOpensStandaloneWindowEvenIfDisplayModeIsMinimalUi) {
+  std::unique_ptr<ScopedBundledIsolatedWebApp> app =
+      IsolatedWebAppBuilder(ManifestBuilder().SetDisplayMode(
+                                blink::mojom::DisplayMode::kMinimalUi))
+          .BuildBundle();
+  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info, app->Install(profile()));
+
+  GURL app_url = url_info.origin().GetURL();
+  auto* app_frame =
+      NavigateToURLInNewTab(browser(), app_url, WindowOpenDisposition::UNKNOWN);
+
+  // The browser shouldn't have opened the app's page.
+  EXPECT_EQ(GetPrimaryMainFrame(browser())->GetLastCommittedURL(), GURL());
+
+  // The app's frame should belong to an IWA window.
+  Browser* app_browser = GetBrowserFromFrame(app_frame);
+  EXPECT_NE(app_browser, browser());
+  EXPECT_TRUE(
+      AppBrowserController::IsForWebApp(app_browser, url_info.app_id()));
+  EXPECT_FALSE(app_browser->app_controller()->HasMinimalUiButtons());
+  EXPECT_EQ(content::WebExposedIsolationLevel::kIsolatedApplication,
+            app_frame->GetWebExposedIsolationLevel());
+}
+
+IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest,
+                       OpeningNonexistentPathShowsError) {
+  std::unique_ptr<ScopedBundledIsolatedWebApp> app =
+      IsolatedWebAppBuilder(ManifestBuilder()).BuildBundle();
+  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info, app->Install(profile()));
+
+  const GURL app_url =
+      url_info.origin().GetURL().Resolve("/does_not_exist.html");
+  auto* app_frame =
+      NavigateToURLInNewTab(browser(), app_url, WindowOpenDisposition::UNKNOWN);
+
+  // The browser shouldn't have opened the app's page.
+  EXPECT_EQ(GetPrimaryMainFrame(browser())->GetLastCommittedURL(), GURL());
+
+  Browser* app_browser = GetBrowserFromFrame(app_frame);
+  EXPECT_NE(app_browser, browser());
+  EXPECT_TRUE(
+      AppBrowserController::IsForWebApp(app_browser, url_info.app_id()));
+
+  // Because we accessed a nonexistent path, we should get a
+  // window with error message instead of the actual IWA
+  EXPECT_NE(content::WebExposedIsolationLevel::kIsolatedApplication,
+            app_frame->GetWebExposedIsolationLevel());
+  EXPECT_TRUE(EvalJs(app_frame,
+                     "document.body.textContent.includes("
+                     "'No webpage was found for the web address')")
+                  .ExtractBool());
+}
+
 // Tests that the app menu doesn't have an 'Open in Chrome' option.
 IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest, NoOpenInChrome) {
   std::unique_ptr<ScopedBundledIsolatedWebApp> app =
       IsolatedWebAppBuilder(ManifestBuilder()).BuildBundle();
-  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info,
-                       app->TrustBundleAndInstall(profile()));
+  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info, app->Install(profile()));
   content::RenderFrameHost* app_frame = OpenApp(url_info.app_id());
   Browser* app_browser = GetBrowserFromFrame(app_frame);
 
@@ -441,8 +487,7 @@ IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest, WasmLoadableFromFile) {
           .AddFileFromDisk("/empty.wasm",
                            "web_apps/simple_isolated_app/empty.wasm")
           .BuildBundle();
-  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info,
-                       app->TrustBundleAndInstall(profile()));
+  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info, app->Install(profile()));
   content::RenderFrameHost* app_frame = OpenApp(url_info.app_id());
 
   content::EvalJsResult result = EvalJs(app_frame, R"(
@@ -459,8 +504,7 @@ IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest, WasmLoadableFromFile) {
 IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest, WasmLoadableFromBytes) {
   std::unique_ptr<ScopedBundledIsolatedWebApp> app =
       IsolatedWebAppBuilder(ManifestBuilder()).BuildBundle();
-  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info,
-                       app->TrustBundleAndInstall(profile()));
+  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info, app->Install(profile()));
   content::RenderFrameHost* app_frame = OpenApp(url_info.app_id());
 
   content::EvalJsResult result = EvalJs(app_frame, R"(
@@ -479,8 +523,7 @@ IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest, WasmLoadableFromBytes) {
 IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest, CanNavigateToBlobUrl) {
   std::unique_ptr<ScopedBundledIsolatedWebApp> app =
       IsolatedWebAppBuilder(ManifestBuilder()).BuildBundle();
-  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info,
-                       app->TrustBundleAndInstall(profile()));
+  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info, app->Install(profile()));
   content::RenderFrameHost* app_frame = OpenApp(url_info.app_id());
 
   content::TestNavigationObserver navigation_observer(
@@ -499,8 +542,7 @@ IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest, CanNavigateToBlobUrl) {
 IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest, WebCannotLoadIwaResources) {
   std::unique_ptr<ScopedBundledIsolatedWebApp> app =
       IsolatedWebAppBuilder(ManifestBuilder()).BuildBundle();
-  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info,
-                       app->TrustBundleAndInstall(profile()));
+  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info, app->Install(profile()));
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   ASSERT_TRUE(content::NavigateToURL(web_contents,
@@ -523,12 +565,12 @@ IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest,
   std::unique_ptr<ScopedBundledIsolatedWebApp> app1 =
       IsolatedWebAppBuilder(ManifestBuilder()).BuildBundle();
   ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info1,
-                       app1->TrustBundleAndInstall(profile()));
+                       app1->Install(profile()));
 
   std::unique_ptr<ScopedBundledIsolatedWebApp> app2 =
       IsolatedWebAppBuilder(ManifestBuilder()).BuildBundle();
   ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info2,
-                       app2->TrustBundleAndInstall(profile()));
+                       app2->Install(profile()));
 
   content::RenderFrameHost* app1_frame = OpenApp(url_info1.app_id());
   content::TestNavigationObserver navigation_observer(
@@ -596,13 +638,52 @@ IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest,
   EXPECT_EQ("message body", EvalJs(app_frame, js));
 }
 
+IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest, UseCounters) {
+  base::HistogramTester histogram_tester;
+  std::unique_ptr<ScopedBundledIsolatedWebApp> app =
+      IsolatedWebAppBuilder(ManifestBuilder()).BuildBundle();
+  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info, app->Install(profile()));
+
+  histogram_tester.ExpectBucketCount("Blink.UseCounter.Features",
+                                     blink::mojom::WebFeature::kPageVisits, 0);
+
+  content::RenderFrameHost* app_frame = OpenApp(url_info.app_id());
+  EXPECT_TRUE(app_frame);
+
+  histogram_tester.ExpectBucketCount("Blink.UseCounter.Features",
+                                     blink::mojom::WebFeature::kPageVisits, 1);
+}
+
+IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest,
+                       PermissionsPolicyCannotBeExpanded) {
+  std::unique_ptr<ScopedBundledIsolatedWebApp> app =
+      IsolatedWebAppBuilder(ManifestBuilder())
+          .AddResource("/", "Test IWA",
+                       {{"Content-Type", "text/html"},
+                        {"Permissions-Policy", "direct-sockets=(self)"}})
+          .BuildBundle();
+
+  app->TrustSigningKey();
+  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info, app->Install(profile()));
+  content::RenderFrameHost* app_frame = OpenApp(url_info.app_id());
+
+  std::string openSocketJs = R"(
+    (async function() {
+      const socket = new TCPSocket("localhost", 0);
+      await socket.opened;
+    })();
+  )";
+  EXPECT_THAT(EvalJs(app_frame, openSocketJs).error,
+              HasSubstr("Permissions-Policy: direct-sockets are disabled."));
+}
+
 class IsolatedWebAppApiAccessBrowserTest : public IsolatedWebAppBrowserTest {
  protected:
   IsolatedWebAppUrlInfo InstallAppWithSocketPermission() {
     std::unique_ptr<ScopedBundledIsolatedWebApp> app =
         IsolatedWebAppBuilder(
             ManifestBuilder().AddPermissionsPolicy(
-                blink::mojom::PermissionsPolicyFeature::kDirectSockets,
+                network::mojom::PermissionsPolicyFeature::kDirectSockets,
                 /*self=*/true, {}))
             .AddJs("/csp_violation_handler.js", R"(
               console.log('In bundled script');
@@ -1184,8 +1265,7 @@ IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest, SharedWorker) {
           .AddFileFromDisk("/shared_worker.js",
                            "web_apps/simple_isolated_app/shared_worker.js")
           .BuildBundle();
-  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info,
-                       app->TrustBundleAndInstall(profile()));
+  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info, app->Install(profile()));
 
   content::RenderFrameHost* app_frame1 = OpenApp(url_info.app_id());
   ASSERT_TRUE(ExecJs(app_frame1, register_worker_js));
@@ -1229,8 +1309,7 @@ IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowserTest, DedicatedWorker) {
           .AddFileFromDisk("/dedicated_worker.js",
                            "web_apps/simple_isolated_app/dedicated_worker.js")
           .BuildBundle();
-  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info,
-                       app->TrustBundleAndInstall(profile()));
+  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info, app->Install(profile()));
 
   content::RenderFrameHost* app_frame = OpenApp(url_info.app_id());
   ASSERT_TRUE(ExecJs(app_frame, register_worker_js));
@@ -1291,8 +1370,7 @@ IN_PROC_BROWSER_TEST_P(IsolatedWebAppExtensionBrowserTest,
           .AddFileFromDisk("/index.html",
                            "web_apps/simple_isolated_app/index.html")
           .BuildBundle();
-  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info,
-                       app->TrustBundleAndInstall(profile()));
+  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info, app->Install(profile()));
   {
     base::ScopedAllowBlockingForTesting allow_blocking;
     base::WriteFile(temp_dir_.GetPath().AppendASCII("manifest.json"),
@@ -1338,8 +1416,7 @@ IN_PROC_BROWSER_TEST_P(IsolatedWebAppExtensionBrowserTest, ConnectToExtension) {
           .AddFileFromDisk("/index.html",
                            "web_apps/simple_isolated_app/index.html")
           .BuildBundle();
-  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info,
-                       app->TrustBundleAndInstall(profile()));
+  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info, app->Install(profile()));
   {
     base::ScopedAllowBlockingForTesting allow_blocking;
     base::WriteFile(temp_dir_.GetPath().AppendASCII("manifest.json"),

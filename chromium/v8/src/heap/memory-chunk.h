@@ -6,8 +6,10 @@
 #define V8_HEAP_MEMORY_CHUNK_H_
 
 #include "src/base/build_config.h"
-#include "src/base/functional.h"
+#include "src/base/hashing.h"
 #include "src/flags/flags.h"
+#include "src/heap/memory-chunk-constants.h"
+#include "src/init/isolate-group.h"
 
 #if V8_ENABLE_STICKY_MARK_BITS_BOOL
 #define UNREACHABLE_WITH_STICKY_MARK_BITS() UNREACHABLE()
@@ -17,6 +19,10 @@
 
 namespace v8 {
 namespace internal {
+
+namespace debug_helper_internal {
+class ReadStringVisitor;
+}  // namespace  debug_helper_internal
 
 class Heap;
 class MemoryChunkMetadata;
@@ -121,6 +127,12 @@ class V8_EXPORT_PRIVATE MemoryChunk final {
     // enabled, the trusted space is located outside of the sandbox and so its
     // content cannot be corrupted by an attacker.
     IS_TRUSTED = 1u << 22,
+
+    // A quarantined page that contains objects reachable from stack during a
+    // scavenge. The page will be move to "to space", swept, and not used for
+    // further allocations (to make it easier to keep track of the intermediate
+    // generation). This flag should only ever be set during a scavenge cycle.
+    IS_QUARANTINED = 1u << 23,
   };
 
   using MainThreadFlags = base::Flags<Flag, uintptr_t>;
@@ -141,7 +153,6 @@ class V8_EXPORT_PRIVATE MemoryChunk final {
   static constexpr MainThreadFlags kSkipEvacuationSlotsRecordingMask =
       MainThreadFlags(kEvacuationCandidateMask) |
       MainThreadFlags(kIsInYoungGenerationMask);
-
   static constexpr MainThreadFlags kIsOnlyOldOrMajorGCInProgressMask =
       MainThreadFlags(CONTAINS_ONLY_OLD) |
       MainThreadFlags(IS_MAJOR_GC_IN_PROGRESS);
@@ -296,6 +307,8 @@ class V8_EXPORT_PRIVATE MemoryChunk final {
     return GetFlags() & kIsOnlyOldOrMajorGCInProgressMask;
   }
 
+  bool IsQuarantined() const { return IsFlagSet(IS_QUARANTINED); }
+
   V8_INLINE static constexpr bool IsAligned(Address address) {
     return (address & kAlignmentMask) == 0;
   }
@@ -342,15 +355,11 @@ class V8_EXPORT_PRIVATE MemoryChunk final {
 #endif
 
  private:
-  // Flags that are only mutable from the main thread when no concurrent
-  // component (e.g. marker, sweeper, compilation, allocation) is running.
-  MainThreadFlags main_thread_flags_;
-
-#ifdef V8_ENABLE_SANDBOX
-  uint32_t metadata_index_;
-#else
-  MemoryChunkMetadata* metadata_;
-#endif
+  // Keep offsets and masks private to only expose them with matching friend
+  // declarations.
+  static constexpr intptr_t FlagsOffset() {
+    return offsetof(MemoryChunk, main_thread_flags_);
+  }
 
   static constexpr intptr_t kAlignment =
       (static_cast<uintptr_t>(1) << kPageSizeBits);
@@ -361,46 +370,45 @@ class V8_EXPORT_PRIVATE MemoryChunk final {
 #error The global metadata pointer table requires a single external code space.
 #endif
 
-  static constexpr size_t kPagesInMainCage =
-      kPtrComprCageReservationSize / kRegularPageSize;
-  static constexpr size_t kPagesInCodeCage =
-      kMaximalCodeRangeSize / kRegularPageSize;
-  static constexpr size_t kPagesInTrustedCage =
-      kMaximalTrustedRangeSize / kRegularPageSize;
-
-  static constexpr size_t kMainCageMetadataOffset = 0;
-  static constexpr size_t kTrustedSpaceMetadataOffset =
-      kMainCageMetadataOffset + kPagesInMainCage;
-  static constexpr size_t kCodeRangeMetadataOffset =
-      kTrustedSpaceMetadataOffset + kPagesInTrustedCage;
-
-  static constexpr size_t kMetadataPointerTableSizeLog2 = base::bits::BitWidth(
-      kPagesInMainCage + kPagesInCodeCage + kPagesInTrustedCage);
-  static constexpr size_t kMetadataPointerTableSize =
-      1 << kMetadataPointerTableSizeLog2;
-  static constexpr size_t kMetadataPointerTableSizeMask =
-      kMetadataPointerTableSize - 1;
-
-  static MemoryChunkMetadata*
-      metadata_pointer_table_[kMetadataPointerTableSize];
+  static constexpr intptr_t MetadataIndexOffset() {
+    return offsetof(MemoryChunk, metadata_index_);
+  }
 
   V8_INLINE static MemoryChunkMetadata* FromIndex(uint32_t index);
   static uint32_t MetadataTableIndex(Address chunk_address);
 
-  V8_INLINE static Address MetadataTableAddress() {
-    return reinterpret_cast<Address>(metadata_pointer_table_);
+  V8_INLINE static MemoryChunkMetadata** MetadataTableAddress() {
+    return IsolateGroup::current()->metadata_pointer_table();
   }
 
-  // For access to the kMetadataPointerTableSizeMask;
-  friend class CodeStubAssembler;
-  friend class MacroAssembler;
-  // For access to the MetadataTableAddress;
+  // For MetadataIndexOffset().
+  friend class debug_helper_internal::ReadStringVisitor;
+  // For MetadataTableAddress().
   friend class ExternalReference;
   friend class TestDebugHelper;
 
-#endif  // V8_ENABLE_SANDBOX
+#else  // !V8_ENABLE_SANDBOX
 
-  friend class MemoryChunkValidator;
+  static constexpr intptr_t MetadataOffset() {
+    return offsetof(MemoryChunk, metadata_);
+  }
+
+#endif  // !V8_ENABLE_SANDBOX
+
+  // Flags that are only mutable from the main thread when no concurrent
+  // component (e.g. marker, sweeper, compilation, allocation) is running.
+  MainThreadFlags main_thread_flags_;
+
+#ifdef V8_ENABLE_SANDBOX
+  uint32_t metadata_index_;
+#else
+  MemoryChunkMetadata* metadata_;
+#endif
+
+  // For kMetadataPointerTableSizeMask, FlagsOffset(), MetadataIndexOffset(),
+  // MetadataOffset().
+  friend class CodeStubAssembler;
+  friend class MacroAssembler;
 };
 
 DEFINE_OPERATORS_FOR_FLAGS(MemoryChunk::MainThreadFlags)

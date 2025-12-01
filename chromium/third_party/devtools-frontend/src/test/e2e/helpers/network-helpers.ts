@@ -136,8 +136,7 @@ export async function setTextFilter(text: string): Promise<void> {
 export async function getTextFilterContent(): Promise<string> {
   const toolbarHandle = await waitFor('.text-filter');
   const textFilterContent = toolbarHandle.evaluate(toolbar => {
-    const input = toolbar.shadowRoot?.querySelector('[aria-label="Filter"]');
-    return input?.textContent ?? '';
+    return toolbar.querySelector('[aria-label="Filter"]')?.textContent ?? '';
   });
   return textFilterContent;
 }
@@ -146,7 +145,7 @@ export async function clearTextFilter(): Promise<void> {
   const textFilterContent = await getTextFilterContent();
   if (textFilterContent) {
     const toolbarHandle = await waitFor('.text-filter');
-    await click('devtools-button', {root: toolbarHandle});
+    await click('[aria-label="Clear"]', {root: toolbarHandle});
   }
 }
 
@@ -187,17 +186,17 @@ export function veImpressionForNetworkPanel(options?: {newFilterBar?: boolean}) 
             'Section', 'filter-bitset',
             [
               veImpression('Item', 'all'),
-              veImpression('Item', 'FetchandXHR'),
-              veImpression('Item', 'Document'),
-              veImpression('Item', 'CSS'),
-              veImpression('Item', 'JavaScript'),
-              veImpression('Item', 'Font'),
-              veImpression('Item', 'Image'),
-              veImpression('Item', 'Media'),
-              veImpression('Item', 'Manifest'),
-              veImpression('Item', 'WebSocket'),
-              veImpression('Item', 'WebAssembly'),
-              veImpression('Item', 'Other'),
+              veImpression('Item', 'xhr'),
+              veImpression('Item', 'document'),
+              veImpression('Item', 'stylesheet'),
+              veImpression('Item', 'script'),
+              veImpression('Item', 'font'),
+              veImpression('Item', 'image'),
+              veImpression('Item', 'media'),
+              veImpression('Item', 'manifest'),
+              veImpression('Item', 'web-socket'),
+              veImpression('Item', 'wasm'),
+              veImpression('Item', 'other'),
             ]),
         veImpression('TextField', 'filter'),
         veImpression('Toggle', 'invert-filter'),

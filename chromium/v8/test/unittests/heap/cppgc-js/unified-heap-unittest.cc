@@ -145,22 +145,41 @@ TEST_F(UnifiedHeapTest, TracedReferenceRetainsFromStack) {
   EXPECT_TRUE(local->IsObject());
 }
 
-TEST_F(UnifiedHeapDetachedTest, AllocationBeforeConfigureHeap) {
-  auto heap =
-      v8::CppHeap::Create(V8::GetCurrentPlatform(), CppHeapCreateParams{{}});
-  auto* object =
-      cppgc::MakeGarbageCollected<Wrappable>(heap->GetAllocationHandle());
-  cppgc::WeakPersistent<Wrappable> weak_holder{object};
+template <typename TMixin>
+class WithCppHeapWithAllocationBeforeConfigureHeap : public TMixin {
+ public:
+  WithCppHeapWithAllocationBeforeConfigureHeap() {
+    auto heap =
+        v8::CppHeap::Create(V8::GetCurrentPlatform(), CppHeapCreateParams{{}});
+    auto* object =
+        cppgc::MakeGarbageCollected<Wrappable>(heap->GetAllocationHandle());
+    weak_holder_ = cppgc::WeakPersistent<Wrappable>{object};
 
+    IsolateWrapper::set_cpp_heap_for_next_isolate(std::move(heap));
+  }
+  cppgc::WeakPersistent<Wrappable> weak_holder_;
+};
+
+using UnifiedHeapTestWithAllocationBeforeConfigureHeap = WithUnifiedHeap<  //
+    WithContextMixin<                                                      //
+        WithHeapInternals<                                                 //
+            WithInternalIsolateMixin<                                      //
+                WithIsolateScopeMixin<                                     //
+                    WithIsolateMixin<                                      //
+                        WithCppHeapWithAllocationBeforeConfigureHeap<      //
+                            WithDefaultPlatformMixin<                      //
+                                ::testing::Test>>>>>>>>;
+
+TEST_F(UnifiedHeapTestWithAllocationBeforeConfigureHeap,
+       AllocationBeforeConfigureHeap) {
   auto& js_heap = *isolate()->heap();
-  js_heap.AttachCppHeap(heap.get());
   auto& cpp_heap = *CppHeap::From(isolate()->heap()->cpp_heap());
+  auto weak_holder = std::move(weak_holder_);
   {
     InvokeMajorGC();
     cpp_heap.AsBase().sweeper().FinishIfRunning();
     EXPECT_TRUE(weak_holder);
   }
-  USE(object);
   {
     EmbedderStackStateScope stack_scope(
         &js_heap, EmbedderStackStateOrigin::kExplicitInvocation,
@@ -273,7 +292,8 @@ namespace v8::internal {
 
 namespace {
 
-class UnifiedHeapWithCustomSpaceTest : public UnifiedHeapTest {
+template <typename TMixin>
+class WithCppHeapWithCustomSpace : public TMixin {
  public:
   static std::vector<std::unique_ptr<cppgc::CustomSpaceBase>>
   GetCustomSpaces() {
@@ -281,9 +301,22 @@ class UnifiedHeapWithCustomSpaceTest : public UnifiedHeapTest {
     custom_spaces.emplace_back(std::make_unique<cppgc::CustomSpaceForTest>());
     return custom_spaces;
   }
-  UnifiedHeapWithCustomSpaceTest() : UnifiedHeapTest(GetCustomSpaces()) {}
+
+  WithCppHeapWithCustomSpace() {
+    IsolateWrapper::set_cpp_heap_for_next_isolate(v8::CppHeap::Create(
+        V8::GetCurrentPlatform(), CppHeapCreateParams{GetCustomSpaces()}));
+  }
 };
 
+using UnifiedHeapWithCustomSpaceTest = WithUnifiedHeap<  //
+    WithContextMixin<                                    //
+        WithHeapInternals<                               //
+            WithInternalIsolateMixin<                    //
+                WithIsolateScopeMixin<                   //
+                    WithIsolateMixin<                    //
+                        WithCppHeapWithCustomSpace<      //
+                            WithDefaultPlatformMixin<    //
+                                ::testing::Test>>>>>>>>;
 }  // namespace
 
 TEST_F(UnifiedHeapWithCustomSpaceTest, CollectCustomSpaceStatisticsAtLastGC) {
@@ -685,8 +718,8 @@ TEST_F(UnifiedHeapTest, TracingInEphemerons) {
     v8::Local<v8::Object> value = WrapperHelper::CreateWrapper(
         v8_isolate()->GetCurrentContext(), wrappable_object);
     EXPECT_FALSE(value.IsEmpty());
-    Handle<JSObject> js_key =
-        handle(Cast<JSObject>(*v8::Utils::OpenDirectHandle(*key)), i_isolate());
+    DirectHandle<JSObject> js_key = direct_handle(
+        Cast<JSObject>(*v8::Utils::OpenDirectHandle(*key)), i_isolate());
     DirectHandle<JSReceiver> js_value = v8::Utils::OpenDirectHandle(*value);
     int32_t hash = Object::GetOrCreateHash(*js_key, i_isolate()).value();
     JSWeakCollection::Set(weak_map, js_key, js_value, hash);
@@ -832,8 +865,9 @@ TEST_F(UnifiedHeapTestWithRandomGCInterval, AllocationTimeout) {
 
 namespace {
 using UnifiedHeapMinimalTest = WithIsolateMixin<  //
-    WithDefaultPlatformMixin<                     //
-        ::testing::Test>>;
+    WithCppHeap<                                  //
+        WithDefaultPlatformMixin<                 //
+            ::testing::Test>>>;
 
 class ThreadUsingV8Locker final : public v8::base::Thread {
  public:
@@ -865,12 +899,8 @@ class ThreadUsingV8Locker final : public v8::base::Thread {
 }  // anonymous namespace
 
 TEST_F(UnifiedHeapMinimalTest, UsingV8Locker) {
-  auto heap =
-      CppHeap::Create(V8::GetCurrentPlatform(), CppHeapCreateParams{{}});
   Isolate* isolate = reinterpret_cast<Isolate*>(v8_isolate());
-  isolate->heap()->AttachCppHeap(heap.get());
-  auto* cpp_heap = CppHeap::From(isolate->heap()->cpp_heap());
-
+  i::CppHeap* cpp_heap = i::CppHeap::From(isolate->heap()->cpp_heap());
   // The use of v8::Locker in this test should suppress DCHECKs and CHECKS
   // that enforce that the current thread is the creation thread of the heap
   // or of a persistent.
@@ -892,6 +922,49 @@ TEST_F(UnifiedHeapMinimalTest, UsingV8Locker) {
     v8::Isolate::Scope isolate_scope(v8_isolate());
     obj.Clear();
   }
+}
+
+namespace {
+class WrappedWithConservativeGCInCtor final
+    : public cppgc::GarbageCollected<WrappedWithConservativeGCInCtor> {
+ public:
+  template <typename GCCallback>
+  WrappedWithConservativeGCInCtor(v8::Isolate* isolate,
+                                  v8::Local<v8::Private> data, GCCallback gc)
+      : data_(isolate, data) {
+    // A GC here means that the object is in construction and data_ will be
+    // traced conservatively. If we miss out on handling the TracedReference it
+    // will be zapped.
+    gc();
+  }
+
+  void Trace(cppgc::Visitor* visitor) const {
+    // For completeness only as GC in ctor won't use the `Trace()` method.
+    visitor->Trace(data_);
+  }
+
+  v8::Local<v8::Private> data(v8::Isolate* isolate) {
+    return data_.Get(isolate);
+  }
+
+ private:
+  TracedReference<v8::Private> data_;
+};
+}  // namespace
+
+TEST_F(UnifiedHeapTest, WrappedWithConservativeGCInCtor) {
+  v8::Isolate* isolate = v8_isolate();
+  WrappedWithConservativeGCInCtor* object =
+      cppgc::MakeGarbageCollected<WrappedWithConservativeGCInCtor>(
+          allocation_handle(), isolate,
+          v8::Private::New(isolate,
+                           v8::String::NewFromUtf8Literal(isolate, "test")),
+          [this]() {
+            this->CollectGarbageWithEmbedderStack(
+                cppgc::Heap::SweepingType::kAtomic);
+          });
+  v8::Local<v8::Value> name = object->data(isolate)->Name();
+  CHECK(name->IsString());
 }
 
 }  // namespace v8::internal

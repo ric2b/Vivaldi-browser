@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "base/location.h"
@@ -15,12 +16,14 @@
 #include "base/sequence_checker.h"
 #include "base/task/bind_post_task.h"
 #include "base/time/time.h"
+#include "base/uuid.h"
 #include "chrome/browser/ash/policy/reporting/user_event_reporter_helper.h"
 #include "chrome/browser/ash/policy/reporting/user_session_activity/user_session_activity_reporter_delegate.h"
 #include "chrome/browser/policy/messaging_layer/proto/synced/user_session_activity.pb.h"
 #include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "components/account_id/account_id.h"
 #include "components/policy/core/common/device_local_account_type.h"
+#include "components/reporting/proto/synced/record_constants.pb.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_names.h"
@@ -114,18 +117,38 @@ void UserSessionActivityReporter::OnLocked() {
   OnSessionEnd(SessionEndEvent_Reason_LOCK, active_user);
 }
 
+void UserSessionActivityReporter::OnUnlocked() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  const user_manager::User* active_user =
+      user_manager::UserManager::Get()->GetActiveUser();
+
+  OnSessionStart(SessionStartEvent_Reason_UNLOCK, active_user);
+}
+
 void UserSessionActivityReporter::ActiveUserChanged(
     user_manager::User* active_user) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  // This user change could be a login, or an unlock.
+  // Handle logins. Otherwise, if the session is inactive and the device is
+  // locked, it means we are unlocking the device in a multi-user session and we
+  // should just return and let OnUnlocked() start the session.
   if (!IsSessionActive()) {
-    if (is_device_locked_) {
-      OnSessionStart(SessionStartEvent_Reason_UNLOCK, active_user);
-    } else {
+    if (!is_device_locked_) {
       OnSessionStart(SessionStartEvent_Reason_LOGIN, active_user);
     }
+    return;
+  }
+
+  // If user A locks device in a multi-user session and user B unlocks the
+  // device, both OnUnlocked() and ActiveUserChanged() are called but we only
+  // want OnUnlocked() to handle it. If ActiveUserChanged() is called first, the
+  // above if-statement will return since the session is not active. If
+  // OnUnlocked() is called first, the session will start and `session_user_`
+  // will be set to the current active user. Then when ActiveUserChanged() is
+  // called, the below if-statement will return.
+  if (active_user == session_user_) {
     return;
   }
 
@@ -156,12 +179,14 @@ void UserSessionActivityReporter::OnSessionStart(
     return;
   }
 
+  // Set member fields to indicate session is active.
   is_device_locked_ = false;
   session_user_ = user;
+  session_id_ = base::Uuid::GenerateRandomV4().AsLowercaseString();
 
   StartTimers();
 
-  delegate_->SetSessionStartEvent(reason, session_user_);
+  delegate_->SetSessionStartEvent(reason, session_user_, session_id_.value());
 }
 
 void UserSessionActivityReporter::OnSessionEnd(SessionEndEvent::Reason reason,
@@ -200,12 +225,14 @@ void UserSessionActivityReporter::OnSessionEnd(SessionEndEvent::Reason reason,
 
   StopTimers();
 
-  delegate_->SetSessionEndEvent(reason, user);
+  delegate_->SetSessionEndEvent(reason, user, session_id_.value());
 
   // Session activity should be reported at the end of each session.
   delegate_->ReportSessionActivity();
 
+  // Reset fields to indicate session is no longer active.
   session_user_ = nullptr;
+  session_id_ = std::nullopt;
 }
 
 void UserSessionActivityReporter::OnReportingTimerExpired() {
@@ -234,8 +261,10 @@ void UserSessionActivityReporter::UpdateActiveIdleState() {
       delegate_->QueryIdleStatus();
 
   bool is_user_active = delegate_->IsUserActive(activity_data);
+
   CHECK(session_user_);
-  delegate_->AddActiveIdleState(is_user_active, session_user_);
+  delegate_->AddActiveIdleState(is_user_active, session_user_,
+                                session_id_.value());
 }
 
 void UserSessionActivityReporter::StartTimers() {
@@ -265,7 +294,11 @@ void UserSessionActivityReporter::StopTimers() {
 bool UserSessionActivityReporter::IsSessionActive() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  return session_user_ != nullptr;
+
+  const bool is_session_active = session_user_ != nullptr;
+  CHECK(is_session_active == session_id_.has_value());
+
+  return is_session_active;
 }
 
 }  // namespace reporting

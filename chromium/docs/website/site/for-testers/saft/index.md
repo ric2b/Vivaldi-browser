@@ -13,9 +13,8 @@ title: SAFT
 SAFT stands for Semi Automated Firmware Test. It is a Python and BASH based
 Linux application enabled in the [ChromeOS](/chromium-os) test distribution. On
 the target system SAFT code is placed in `/usr/sbin/firmware/saft. The source
-code is controlled by a separate [git](goog_880557684)`
-`[repository](http://gerrit.chromium.org/gerrit/gitweb?p=chromiumos%2Fplatform%2Fsaft.git;a=shortlog;h=HEAD).
-`
+code is controlled by a separate [git
+repository](http://gerrit.chromium.org/gerrit/gitweb?p=chromiumos%2Fplatform%2Fsaft.git;a=shortlog;h=HEAD).
 
 SAFT is designed to verify BIOS functionality, including different aspects of
 [Verified Boot](/chromium-os/chromiumos-design-docs/verified-boot) and [Google

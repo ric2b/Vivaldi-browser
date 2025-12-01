@@ -6,16 +6,17 @@
 
 import 'chrome://personalization/strings.m.js';
 
-import {ColorScheme, DynamicColorElement, emptyState, SetColorSchemeAction, SetSampleColorSchemesAction, SetStaticColorAction, ThemeActionName, ThemeObserver} from 'chrome://personalization/js/personalization_app.js';
-import {CrButtonElement} from 'chrome://resources/ash/common/cr_elements/cr_button/cr_button.js';
-import {CrToggleElement} from 'chrome://resources/ash/common/cr_elements/cr_toggle/cr_toggle.js';
+import type {SetColorSchemeAction, SetSampleColorSchemesAction, SetStaticColorAction} from 'chrome://personalization/js/personalization_app.js';
+import {ColorScheme, DynamicColorElement, emptyState, ThemeActionName, ThemeObserver} from 'chrome://personalization/js/personalization_app.js';
+import type {CrButtonElement} from 'chrome://resources/ash/common/cr_elements/cr_button/cr_button.js';
+import type {CrToggleElement} from 'chrome://resources/ash/common/cr_elements/cr_toggle/cr_toggle.js';
 import {hexColorToSkColor} from 'chrome://resources/js/color_utils.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 
 import {baseSetup, dispatchKeydown, getActiveElement, initElement, teardownElement, waitForActiveElement} from './personalization_app_test_utils.js';
-import {TestPersonalizationStore} from './test_personalization_store.js';
-import {TestThemeProvider} from './test_theme_interface_provider.js';
+import type {TestPersonalizationStore} from './test_personalization_store.js';
+import type {TestThemeProvider} from './test_theme_interface_provider.js';
 
 suite('DynamicColorElementTest', function() {
   let dynamicColorElement: DynamicColorElement|null;
@@ -37,11 +38,11 @@ suite('DynamicColorElementTest', function() {
   }
 
   function getColorSchemeButtons(): NodeListOf<CrButtonElement> {
-    return getColorSchemeSelector().querySelectorAll('cr-button')!;
+    return getColorSchemeSelector().querySelectorAll('cr-button');
   }
 
   function getStaticColorButtons(): NodeListOf<CrButtonElement> {
-    return getStaticColorSelector().querySelectorAll('cr-button')!;
+    return getStaticColorSelector().querySelectorAll('cr-button');
   }
 
   async function showStaticColorButtons() {
@@ -200,8 +201,9 @@ suite('DynamicColorElementTest', function() {
     assertTrue(
         getStaticColorSelector().hidden,
         'when the toggle is on, the static color buttons should be hidden.');
-    const pressedButton = getColorSchemeSelector().querySelector(
-                              'cr-button[aria-checked="true"]') as HTMLElement;
+    const pressedButton = getColorSchemeSelector().querySelector<HTMLElement>(
+        'cr-button[aria-checked="true"]');
+    assertTrue(!!pressedButton);
     assertEquals(String(colorScheme), pressedButton.dataset['colorSchemeId']);
   });
 
@@ -218,8 +220,9 @@ suite('DynamicColorElementTest', function() {
     assertFalse(
         getStaticColorSelector().hidden,
         'when the toggle is off, the static color buttons should be visible.');
-    const pressedButton = getStaticColorSelector().querySelector(
-                              'cr-button[aria-checked="true"]') as HTMLElement;
+    const pressedButton = getStaticColorSelector().querySelector<HTMLElement>(
+        'cr-button[aria-checked="true"]');
+    assertTrue(!!pressedButton);
     assertTrue(pressedButton.getElementsByTagName('circle')[0]!
                    .getAttribute('style')!.includes(staticColorHex));
   });

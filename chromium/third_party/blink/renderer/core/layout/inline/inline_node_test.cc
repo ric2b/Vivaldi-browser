@@ -1711,6 +1711,22 @@ TEST_F(InlineNodeTest, FindSvgTextChunksCrash3) {
   // Pass if no CHECK() failures in FindSvgTextChunks().
 }
 
+TEST_F(InlineNodeTest, FontFeaturesInitial) {
+  SetBodyInnerHTML(R"HTML(
+    <div id="initial"></div>
+    <div id="no-kern" style="font-kerning: none"></div>
+  )HTML");
+  const auto is_initial = [this](const char* id) {
+    const auto* layout_object = GetLayoutObjectByElementId(id);
+    FontFeatures features;
+    features.Initialize(
+        layout_object->StyleRef().GetFont().GetFontDescription());
+    return features.IsInitial();
+  };
+  EXPECT_TRUE(is_initial("initial"));
+  EXPECT_FALSE(is_initial("no-kern"));
+}
+
 TEST_F(InlineNodeTest, ShapeCacheDisabled) {
   ScopedLayoutNGShapeCacheForTest scoped_feature(false);
 
@@ -1732,16 +1748,28 @@ TEST_F(InlineNodeTest, ShapeCacheDisabled) {
 TEST_F(InlineNodeTest, ShapeCacheLongString) {
   ScopedLayoutNGShapeCacheForTest scoped_feature(true);
 
-  SetupHtml("t", "<div id=t>abcdefghijklmnopqrstuvwxyz</div>");
-  InlineNodeForTest node = CreateInlineNode();
-  node.CollectInlines();
+  for (const unsigned text_length :
+       {NGShapeCache::kMaxTextLengthOfEntries - 1,
+        NGShapeCache::kMaxTextLengthOfEntries,
+        NGShapeCache::kMaxTextLengthOfEntries + 1}) {
+    StringBuilder builder;
+    builder.Append("<div id=t>");
+    for (unsigned i = 0; i < text_length; ++i) {
+      builder.Append(static_cast<LChar>((i % 10) + '0'));
+    }
+    builder.Append("</div>");
 
-  const String& text_content(node.Text().c_str());
-  HeapVector<InlineItem>& items = node.Items();
-  ShapeResultSpacing<String> spacing(text_content, node.IsSvgText());
+    SetupHtml("t", builder.ToString());
+    InlineNodeForTest node = CreateInlineNode();
+    node.CollectInlines();
 
-  EXPECT_FALSE(
-      node.IsNGShapeCacheAllowed(text_content, nullptr, items, spacing));
+    const String& text_content(node.Text().c_str());
+    HeapVector<InlineItem>& items = node.Items();
+    ShapeResultSpacing<String> spacing(text_content, node.IsSvgText());
+
+    EXPECT_EQ(node.IsNGShapeCacheAllowed(text_content, nullptr, items, spacing),
+              text_length <= NGShapeCache::kMaxTextLengthOfEntries);
+  }
 }
 
 TEST_F(InlineNodeTest, ShapeCacheMultiItems) {

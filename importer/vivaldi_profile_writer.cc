@@ -85,7 +85,7 @@ void RestoreTabsToBrowser(
 
   int initial_tab_count = tab_strip_model->count();
   int active_tab_index = tab_strip_model->active_index();
-  auto active_tab_handle = tab_strip_model->GetTabHandleAt(active_tab_index);
+  auto active_tab_handle = tab_strip_model->GetTabAtIndex(active_tab_index);
   auto prev_active_tab = tab_strip_model->GetActiveTab();
 
   const base::Time epoch_time = base::Time::UnixEpoch();
@@ -209,13 +209,11 @@ void ProfileWriter::AddNotes(const std::vector<ImportedNotesEntry>& notes,
   model->EndExtensiveChanges();
 }
 
-void ProfileWriter::AddExtensions(
-    const std::vector<std::string>& extensions,
-    base::WeakPtr<ExternalProcessImporterHost> host) {
+void ProfileWriter::AddExtensions(const std::vector<std::string>& extensions) {
   vivaldi_extensions_importer_ =
       std::unique_ptr<extension_importer::ChromiumExtensionsImporter,
                       ChromiumExtensionsImporterDeleter>(
-          new extension_importer::ChromiumExtensionsImporter(profile_, host));
+          new extension_importer::ChromiumExtensionsImporter(profile_));
   vivaldi_extensions_importer_->AddExtensions(extensions);
 }
 
@@ -223,7 +221,7 @@ void ProfileWriter::AddOpenTabs(const std::vector<ImportedTabEntry>& tabs) {
   SessionService* session_service =
       SessionServiceFactory::GetForProfile(profile_);
 
-  std::vector<sessions::SessionWindow*> session_windows;
+  std::vector<const sessions::SessionWindow*> session_windows;
 
   std::unique_ptr<sessions::SessionWindow> session_window =
       std::make_unique<sessions::SessionWindow>();

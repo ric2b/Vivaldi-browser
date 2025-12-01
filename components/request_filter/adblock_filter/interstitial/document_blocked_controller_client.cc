@@ -39,7 +39,7 @@ DocumentBlockedControllerClient::~DocumentBlockedControllerClient() {}
 
 void DocumentBlockedControllerClient::GoBack() {
   if (CanGoBack())
-    web_contents_->GetController().GoBack();
+    web_contents()->GetController().GoBack();
 }
 
 void DocumentBlockedControllerClient::Proceed() {

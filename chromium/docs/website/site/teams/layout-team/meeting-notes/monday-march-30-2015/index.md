@@ -40,7 +40,7 @@ per element type basis.
 
 be collected on an attached phone.
 
-Scrolling (skobes) \[[crbug.com/417782](http://crbug.com/417782)\]
+Scrolling (skobes) \[[crbug.com/417782](https://crbug.com/417782)\]
 
 - Fixed the scroll animation test that was failing on the leak bots.
 
@@ -51,18 +51,18 @@ Scrolling (skobes) \[[crbug.com/417782](http://crbug.com/417782)\]
 virtual test suites as right now it is only running fast/scrolling.
 
 Rename Rendering -&gt; Layout (dsinclair)
-\[[crbug.com/450612](http://crbug.com/450612)\]
+\[[crbug.com/450612](https://crbug.com/450612)\]
 
 - Done. All files have been moved and renamed. The rendering/ directory
 
 is gone!
 
 First letter refactoring (dsinclair)
-\[[crbug.com/391288](http://crbug.com/391288)\]
+\[[crbug.com/391288](https://crbug.com/391288)\]
 
 - Fixed first-letter hit testing, discovered a couple of new bugs.
 
-List marker refactoring \[[crbug.com/370461](http://crbug.com/370461)\]
+List marker refactoring \[[crbug.com/370461](https://crbug.com/370461)\]
 
 - Getting back to list-marker work, will turn the marker into a ::marker
 
@@ -78,7 +78,7 @@ panned out. Will continue to experiment and evaluate ideas to guide
 
 future work.
 
-Flexbox (cbiesinger) \[[crbug.com/426898](http://crbug.com/426898)\]
+Flexbox (cbiesinger) \[[crbug.com/426898](https://crbug.com/426898)\]
 
 - Finished implementing spec changes for min-width auto.
 
@@ -86,7 +86,7 @@ Flexbox (cbiesinger) \[[crbug.com/426898](http://crbug.com/426898)\]
 
 - Working on importing w3c test suite for flexbox.
 
-Line Boxes (szager) \[[crbug.com/321237](http://crbug.com/321237)\]
+Line Boxes (szager) \[[crbug.com/321237](https://crbug.com/321237)\]
 
 - Finished going through the layout test failures for Glenn's patch, and
 
@@ -108,15 +108,15 @@ theory that they explain at least part of the regression.
 
 decide exactly where to draw the line between LayoutUnit and float.
 
-Isolate core/fetch (japhet) \[[crbug.com/458222](http://crbug.com/458222)\]
+Isolate core/fetch (japhet) \[[crbug.com/458222](https://crbug.com/458222)\]
 
 - Continuing work to isolate core/fetch from the rest of core.
 
-Page scale handling (bokan) \[[crbug.com/459591](http://crbug.com/459591)\]
+Page scale handling (bokan) \[[crbug.com/459591](https://crbug.com/459591)\]
 
 - Remove old pinch-zoom paths from Blink.
 
-Blink componentization (pilgrim) \[[crbug.com/428284](http://crbug.com/428284)\]
+Blink componentization (pilgrim) \[[crbug.com/428284](https://crbug.com/428284)\]
 
 - Moving things from core to modules; core/storage and core/timing.
 
@@ -142,7 +142,7 @@ handles text from the part that handles traversing. (wjmaclean)
 
 finding/reporting a problem causing unnecessary layouts.
 
-\[[crbug.com/471079](http://crbug.com/471079)\] (rune)
+\[[crbug.com/471079](https://crbug.com/471079)\] (rune)
 
 - Fix vertical flow regression when a major web font site provides
 
@@ -163,7 +163,7 @@ Content sizing (davve)
 - Working on content sizing/intrinsic size for HTML and SVG.
 
 Region-based multi-column support (mstensho)
-\[[crbug.com/334335](http://crbug.com/334335)\]
+\[[crbug.com/334335](https://crbug.com/334335)\]
 
 - New multi-column implementation enabled as experimental web platform
 

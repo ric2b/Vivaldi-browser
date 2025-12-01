@@ -74,7 +74,7 @@ intent-to-experiment or with an intent-to-ship. You must still complete steps 2
         *   <td>Follow the instructions on <a
                     href="/blink/origin-trials/running-an-origin-trial">how to
                     run an origin trial</a>. Google employees should see <a
-                    href="http://goto.google.com/running-an-origin-trial">go/running-an-origin-trial</a>.</td>
+                    href="http://go/running-an-origin-trial">go/running-an-origin-trial</a>.</td>
         *   <td>Email blink-dev using the <a
                     href="https://docs.google.com/document/d/1vlTlsQKThwaX0-lj_iZbVTzyqY7LioqERU8DK3u3XjI/edit#bookmark=id.pygli2e122ic">“Intent
                     to Experiment” template</a>. Wait for LGTM from at least 1

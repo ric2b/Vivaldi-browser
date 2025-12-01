@@ -18,10 +18,11 @@ import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.sync.SyncServiceFactory;
-import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.components.browser_ui.widget.ActionConfirmationDialog;
-import org.chromium.components.browser_ui.widget.ActionConfirmationDialog.ConfirmationDialogResult;
+import org.chromium.components.browser_ui.widget.ActionConfirmationDialog.ConfirmationDialogHandler;
+import org.chromium.components.browser_ui.widget.ActionConfirmationDialog.DialogDismissType;
+import org.chromium.components.browser_ui.widget.ActionConfirmationDialog.DismissHandler;
 import org.chromium.components.browser_ui.widget.ActionConfirmationResult;
 import org.chromium.components.browser_ui.widget.StrictButtonPressController.ButtonClickResult;
 import org.chromium.components.prefs.PrefService;
@@ -32,8 +33,6 @@ import org.chromium.components.sync.DataType;
 import org.chromium.components.sync.SyncService;
 import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.ui.modaldialog.ModalDialogManager;
-
-import java.util.List;
 
 /**
  * Many tab actions can now cause deletion of tab groups. This class helps orchestrates flows where
@@ -46,10 +45,8 @@ public class ActionConfirmationManager {
     private static final String DELETE_SHARED_GROUP_USER_ACTION =
             TAB_GROUP_CONFIRMATION + "DeleteSharedGroup.";
     private static final String UNGROUP_USER_ACTION = TAB_GROUP_CONFIRMATION + "Ungroup.";
-    private static final String REMOVE_TAB_USER_ACTION = TAB_GROUP_CONFIRMATION + "RemoveTab.";
     private static final String REMOVE_TAB_FULL_GROUP_USER_ACTION =
             TAB_GROUP_CONFIRMATION + "RemoveTabFullGroup.";
-    private static final String CLOSE_TAB_USER_ACTION = TAB_GROUP_CONFIRMATION + "CloseTab.";
     private static final String CLOSE_TAB_FULL_GROUP_USER_ACTION =
             TAB_GROUP_CONFIRMATION + "CloseTabFullGroup.";
     private static final String LEAVE_GROUP_USER_ACTION = TAB_GROUP_CONFIRMATION + "LeaveGroup.";
@@ -60,26 +57,41 @@ public class ActionConfirmationManager {
 
     private final Profile mProfile;
     private final Context mContext;
-    private final TabGroupModelFilter mTabGroupModelFilter;
     private final ModalDialogManager mModalDialogManager;
+
+    /** Holder for the return result from operations that show a blocking modal dialog. */
+    public static class MaybeBlockingResult {
+        /** The result of the modal dialog. */
+        public final @ActionConfirmationResult int result;
+
+        /**
+         * A runnable that must be invoked if provided to stop showing the blocking UI when the
+         * requisite operation is finished.
+         */
+        public final @Nullable Runnable finishBlocking;
+
+        /**
+         * Constructor is public in the event another API is expecting this type when the action
+         * confirmation dialog is not shown. It should not be used widely.
+         */
+        public MaybeBlockingResult(
+                @ActionConfirmationResult int result, @Nullable Runnable finishBlocking) {
+            this.result = result;
+            this.finishBlocking = finishBlocking;
+        }
+    }
+    ;
 
     /**
      * @param profile The profile to access shared services with.
      * @param context Used to load android resources.
-     * @param regularTabGroupModelFilter Used to read tab data.
      * @param modalDialogManager Used to show dialogs.
      */
     public ActionConfirmationManager(
-            Profile profile,
-            Context context,
-            TabGroupModelFilter regularTabGroupModelFilter,
-            @NonNull ModalDialogManager modalDialogManager) {
+            Profile profile, Context context, @NonNull ModalDialogManager modalDialogManager) {
         assert modalDialogManager != null;
         mProfile = profile;
         mContext = context;
-        assert regularTabGroupModelFilter == null
-                || !regularTabGroupModelFilter.isIncognitoBranded();
-        mTabGroupModelFilter = regularTabGroupModelFilter;
         mModalDialogManager = modalDialogManager;
     }
 
@@ -99,24 +111,26 @@ public class ActionConfirmationManager {
     }
 
     /** Processes deleting a shared group, the user should be the owner. */
-    public void processDeleteSharedGroupAttempt(String groupTitle, Callback<Integer> onResult) {
-        processGroupNameAction(
+    public void processDeleteSharedGroupAttempt(
+            String groupTitle, Callback<MaybeBlockingResult> onResult) {
+        processExitSharedGroupAction(
                 DELETE_SHARED_GROUP_USER_ACTION,
-                R.string.delete_tab_group_dialog_title,
+                R.string.delete_shared_tab_group_dialog_title,
                 R.string.delete_shared_tab_group_description,
                 groupTitle,
-                R.string.delete_tab_group_menu_item,
+                R.string.delete_tab_group_action,
                 onResult);
     }
 
     /** Processing leaving a shared group. */
-    public void processLeaveGroupAttempt(String groupTitle, Callback<Integer> onResult) {
-        processGroupNameAction(
+    public void processLeaveGroupAttempt(
+            String groupTitle, Callback<MaybeBlockingResult> onResult) {
+        processExitSharedGroupAction(
                 LEAVE_GROUP_USER_ACTION,
                 R.string.leave_tab_group_dialog_title,
                 R.string.leave_tab_group_description,
                 groupTitle,
-                R.string.leave_tab_group_menu_item,
+                R.string.keep_tab_group_dialog_leave_action,
                 onResult);
     }
 
@@ -139,7 +153,7 @@ public class ActionConfirmationManager {
      */
     public void processUngroupTabAttempt(Callback<Integer> onResult) {
         processMaybeSyncAndPrefAction(
-                REMOVE_TAB_USER_ACTION,
+                REMOVE_TAB_FULL_GROUP_USER_ACTION,
                 Pref.STOP_SHOWING_TAB_GROUP_CONFIRMATION_ON_TAB_REMOVE,
                 R.string.remove_from_group_dialog_message,
                 R.string.remove_from_group_description,
@@ -148,34 +162,13 @@ public class ActionConfirmationManager {
                 onResult);
     }
 
-    // TODO(crbug.com/345854441): Remove this function and create a new helper class that wraps all
-    // removal behaviors.
-    /**
-     * Removing tabs is ungrouping through the dialog bottom bar, selecting tabs and ungrouping, or
-     * by dragging out of the strip. The list of tabs should all be in the same group.
-     */
-    public void processUngroupTabAttempt(List<Integer> tabIdList, Callback<Integer> onResult) {
-        if (isFullGroup(tabIdList)) {
-            processMaybeSyncAndPrefAction(
-                    REMOVE_TAB_FULL_GROUP_USER_ACTION,
-                    Pref.STOP_SHOWING_TAB_GROUP_CONFIRMATION_ON_TAB_REMOVE,
-                    R.string.remove_from_group_dialog_message,
-                    R.string.remove_from_group_description,
-                    R.string.delete_tab_group_no_sync_description,
-                    R.string.delete_tab_group_action,
-                    onResult);
-        } else {
-            onResult.onResult(ActionConfirmationResult.IMMEDIATE_CONTINUE);
-        }
-    }
-
     /**
      * This processes closing tabs within groups. The caller needs to ensure this action will delete
      * the group.
      */
     public void processCloseTabAttempt(Callback<Integer> onResult) {
         processMaybeSyncAndPrefAction(
-                CLOSE_TAB_USER_ACTION,
+                CLOSE_TAB_FULL_GROUP_USER_ACTION,
                 Pref.STOP_SHOWING_TAB_GROUP_CONFIRMATION_ON_TAB_CLOSE,
                 R.string.close_from_group_dialog_title,
                 R.string.close_from_group_description,
@@ -184,33 +177,12 @@ public class ActionConfirmationManager {
                 onResult);
     }
 
-    // TODO(crbug.com/345854441): Remove this function and create a new helper class that wraps all
-    // removal behaviors.
-    /**
-     * This processes closing tabs within groups. Warns when the last tab(s) are being closed. The
-     * list of tabs should all be in the same group.
-     */
-    public void processCloseTabAttempt(List<Integer> tabIdList, Callback<Integer> onResult) {
-        if (isFullGroup(tabIdList)) {
-            processMaybeSyncAndPrefAction(
-                    CLOSE_TAB_FULL_GROUP_USER_ACTION,
-                    Pref.STOP_SHOWING_TAB_GROUP_CONFIRMATION_ON_TAB_CLOSE,
-                    R.string.close_from_group_dialog_title,
-                    R.string.close_from_group_description,
-                    R.string.delete_tab_group_no_sync_description,
-                    R.string.delete_tab_group_action,
-                    onResult);
-        } else {
-            onResult.onResult(ActionConfirmationResult.IMMEDIATE_CONTINUE);
-        }
-    }
-
     /**
      * Process a remove last tab action (ungroup, close, etc.) for collaboration owner. The caller
      * is responsible for deciding this.
      */
     public void processCollaborationOwnerRemoveLastTab(
-            String groupTitle, Callback<Integer> onResult) {
+            String groupTitle, Callback<MaybeBlockingResult> onResult) {
         processCollaborationTabRemoval(
                 COLLABORATION_OWNER_REMOVE_LAST_TAB,
                 R.string.keep_tab_group_dialog_title,
@@ -226,7 +198,7 @@ public class ActionConfirmationManager {
      * is responsible for deciding this.
      */
     public void processCollaborationMemberRemoveLastTab(
-            String groupTitle, Callback<Integer> onResult) {
+            String groupTitle, Callback<MaybeBlockingResult> onResult) {
         processCollaborationTabRemoval(
                 COLLABORATION_MEMBER_REMOVE_LAST_TAB,
                 R.string.keep_tab_group_dialog_title,
@@ -235,11 +207,6 @@ public class ActionConfirmationManager {
                 R.string.keep_tab_group_dialog_keep_action,
                 R.string.keep_tab_group_dialog_leave_action,
                 onResult);
-    }
-
-    private boolean isFullGroup(List<Integer> tabIdList) {
-        assert mTabGroupModelFilter != null : "TabGroupModelFilter has not been set";
-        return tabIdList.size() >= mTabGroupModelFilter.getRelatedTabList(tabIdList.get(0)).size();
     }
 
     private void processMaybeSyncAndPrefAction(
@@ -268,19 +235,20 @@ public class ActionConfirmationManager {
             descriptionResolver = resources -> resources.getString(noSyncDescriptionRes);
         }
 
-        PrefService prefService = UserPrefs.get(mProfile);
-        if (prefService.getBoolean(stopShowingPref)) {
+        if (shouldSkipDialog(stopShowingPref)) {
             onResult.onResult(ActionConfirmationResult.IMMEDIATE_CONTINUE);
             return;
         }
 
-        ConfirmationDialogResult onDialogResult =
-                (buttonClickResult, resultStopShowing) -> {
+        ConfirmationDialogHandler onDialogInteracted =
+                (dismissHandler, buttonClickResult, resultStopShowing) -> {
                     if (resultStopShowing) {
                         RecordUserAction.record(userActionBaseString + "StopShowing");
+                        PrefService prefService = UserPrefs.get(mProfile);
                         prefService.setBoolean(stopShowingPref, true);
                     }
                     handleDialogResult(buttonClickResult, userActionBaseString, onResult);
+                    return DialogDismissType.DISMISS_IMMEDIATELY;
                 };
         ActionConfirmationDialog dialog =
                 new ActionConfirmationDialog(mContext, mModalDialogManager);
@@ -290,7 +258,7 @@ public class ActionConfirmationManager {
                 actionRes,
                 R.string.cancel,
                 /* supportStopShowing= */ true,
-                onDialogResult);
+                onDialogInteracted);
     }
 
     private @Nullable CoreAccountInfo getCoreAccountInfo() {
@@ -304,19 +272,27 @@ public class ActionConfirmationManager {
         }
     }
 
-    private void processGroupNameAction(
+    private void processExitSharedGroupAction(
             String userActionBaseString,
             @StringRes int titleRes,
             @StringRes int descriptionRes,
             String formatArg,
             @StringRes int actionRes,
-            Callback<Integer> onResult) {
+            Callback<MaybeBlockingResult> onResult) {
         final Function<Resources, String> titleResolver = (res) -> res.getString(titleRes);
         final Function<Resources, String> descriptionResolver =
                 resources -> resources.getString(descriptionRes, formatArg);
-        ConfirmationDialogResult onDialogResult =
-                (buttonClickResult, resultStopShowing) ->
-                        handleDialogResult(buttonClickResult, userActionBaseString, onResult);
+        ConfirmationDialogHandler onDialogInteracted =
+                (dismissHandler, buttonClickResult, resultStopShowing) -> {
+                    boolean takePositiveAction = buttonClickResult == ButtonClickResult.POSITIVE;
+                    recordProceedOrAbort(userActionBaseString, takePositiveAction);
+                    return handleExitCollaborationResult(
+                            getActionConfirmationResult(takePositiveAction),
+                            takePositiveAction,
+                            dismissHandler,
+                            buttonClickResult,
+                            onResult);
+                };
         ActionConfirmationDialog dialog =
                 new ActionConfirmationDialog(mContext, mModalDialogManager);
         dialog.show(
@@ -325,19 +301,47 @@ public class ActionConfirmationManager {
                 actionRes,
                 R.string.cancel,
                 /* supportStopShowing= */ false,
-                onDialogResult);
+                onDialogInteracted);
     }
 
-    private void handleDialogResult(
+    private static void handleDialogResult(
             @ButtonClickResult int buttonClickResult,
             String userActionBaseString,
             Callback<Integer> onResult) {
         boolean takePositiveAction = buttonClickResult == ButtonClickResult.POSITIVE;
-        RecordUserAction.record(userActionBaseString + (takePositiveAction ? "Proceed" : "Abort"));
+        recordProceedOrAbort(userActionBaseString, takePositiveAction);
         onResult.onResult(
                 takePositiveAction
                         ? ActionConfirmationResult.CONFIRMATION_POSITIVE
                         : ActionConfirmationResult.CONFIRMATION_NEGATIVE);
+    }
+
+    private static @DialogDismissType int handleExitCollaborationResult(
+            @ActionConfirmationResult int result,
+            boolean blocking,
+            DismissHandler dismissHandler,
+            @ButtonClickResult int buttonClickResult,
+            Callback<MaybeBlockingResult> onResult) {
+        if (!blocking) {
+            onResult.onResult(new MaybeBlockingResult(result, /* finishBlocking= */ null));
+            return DialogDismissType.DISMISS_IMMEDIATELY;
+        }
+
+        Runnable finishBlocking = dismissHandler.dismissBlocking(buttonClickResult);
+        onResult.onResult(new MaybeBlockingResult(result, finishBlocking));
+        return DialogDismissType.DISMISS_LATER;
+    }
+
+    private static void recordProceedOrAbort(
+            String userActionBaseString, boolean takePositiveAction) {
+        RecordUserAction.record(userActionBaseString + (takePositiveAction ? "Proceed" : "Abort"));
+    }
+
+    private static @ActionConfirmationResult int getActionConfirmationResult(
+            boolean takePositiveAction) {
+        return takePositiveAction
+                ? ActionConfirmationResult.CONFIRMATION_POSITIVE
+                : ActionConfirmationResult.CONFIRMATION_NEGATIVE;
     }
 
     private void processCollaborationTabRemoval(
@@ -347,14 +351,25 @@ public class ActionConfirmationManager {
             String formatArg,
             @StringRes int positiveButtonRes,
             @StringRes int negativeButtonRes,
-            Callback<Integer> onResult) {
+            Callback<MaybeBlockingResult> onResult) {
         final Function<Resources, String> titleResolver = (res) -> res.getString(titleRes);
         final Function<Resources, String> descriptionResolver =
                 resources -> resources.getString(descriptionRes, formatArg);
-        ConfirmationDialogResult onDialogResult =
-                (buttonClickResult, resultStopShowing) ->
-                        handleCollaborationDialogResult(
-                                buttonClickResult, userActionBaseString, onResult);
+        ConfirmationDialogHandler onDialogInteracted =
+                (dismissHandler, buttonClickResult, resultStopShowing) -> {
+                    boolean takePositiveAction =
+                            shouldTakePositiveActionForKeepOrRemoveGroupButtonClick(
+                                    buttonClickResult, userActionBaseString);
+
+                    // Invert take positive action for blocking as we want to block on the negative
+                    // action (leave/delete). Rather than the positive action (keep).
+                    return handleExitCollaborationResult(
+                            getActionConfirmationResult(takePositiveAction),
+                            !takePositiveAction,
+                            dismissHandler,
+                            buttonClickResult,
+                            onResult);
+                };
         ActionConfirmationDialog dialog =
                 new ActionConfirmationDialog(mContext, mModalDialogManager);
         dialog.show(
@@ -363,27 +378,14 @@ public class ActionConfirmationManager {
                 positiveButtonRes,
                 negativeButtonRes,
                 /* supportStopShowing= */ false,
-                onDialogResult);
-    }
-
-    private void handleCollaborationDialogResult(
-            @ButtonClickResult int buttonClickResult,
-            String userActionBaseString,
-            Callback<Integer> onResult) {
-        boolean takePositiveAction =
-                shouldTakePositiveActionForCollaborationButtonClick(
-                        buttonClickResult, userActionBaseString);
-        onResult.onResult(
-                takePositiveAction
-                        ? ActionConfirmationResult.CONFIRMATION_POSITIVE
-                        : ActionConfirmationResult.CONFIRMATION_NEGATIVE);
+                onDialogInteracted);
     }
 
     /**
      * Returns whether to take the positive action for the button click result. Also emits a user
      * action.
      */
-    private boolean shouldTakePositiveActionForCollaborationButtonClick(
+    private boolean shouldTakePositiveActionForKeepOrRemoveGroupButtonClick(
             @ButtonClickResult int buttonClickResult, String userActionBaseString) {
         switch (buttonClickResult) {
             case ButtonClickResult.POSITIVE:
@@ -399,6 +401,31 @@ public class ActionConfirmationManager {
                 assert false : "Not reached";
                 return true;
         }
+    }
+
+    /** Returns whether the dialog will be skipped for the close tab attempt. */
+    public boolean willSkipCloseTabAttempt() {
+        return shouldSkipDialog(Pref.STOP_SHOWING_TAB_GROUP_CONFIRMATION_ON_TAB_CLOSE);
+    }
+
+    /** Returns whether the dialog will be skipped for the delete group attempt. */
+    public boolean willSkipDeleteGroupAttempt() {
+        return shouldSkipDialog(Pref.STOP_SHOWING_TAB_GROUP_CONFIRMATION_ON_CLOSE);
+    }
+
+    /** Returns whether the dialog will be skipped for the ungroup tab attempt. */
+    public boolean willSkipUngroupAttempt() {
+        return shouldSkipDialog(Pref.STOP_SHOWING_TAB_GROUP_CONFIRMATION_ON_UNGROUP);
+    }
+
+    /** Returns whether the dialog will be skipped for the ungroup attempt. */
+    public boolean willSkipUngroupTabAttempt() {
+        return shouldSkipDialog(Pref.STOP_SHOWING_TAB_GROUP_CONFIRMATION_ON_TAB_REMOVE);
+    }
+
+    private boolean shouldSkipDialog(@NonNull String stopShowingPref) {
+        PrefService prefService = UserPrefs.get(mProfile);
+        return prefService.getBoolean(stopShowingPref);
     }
 
     public static void clearStopShowingPrefsForTesting(PrefService prefService) {

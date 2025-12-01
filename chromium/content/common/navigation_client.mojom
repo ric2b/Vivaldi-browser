@@ -26,7 +26,6 @@ import "third_party/blink/public/mojom/loader/url_loader_factory_bundle.mojom";
 import "third_party/blink/public/mojom/navigation/navigation_params.mojom";
 import "third_party/blink/public/mojom/permissions_policy/document_policy_feature.mojom";
 import "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom";
-import "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom";
 import "third_party/blink/public/mojom/permissions_policy/policy_value.mojom";
 import "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom";
 import "third_party/blink/public/mojom/service_worker/controller_service_worker.mojom";
@@ -169,8 +168,21 @@ struct DidCommitProvisionalLoadParams {
 
   // Timestamp of when this frame started and ended the commit for the
   // navigation.
+  //
+  // TODO(alexmos): `commit_navigation_end` is a bit misleading, since it is
+  // actually taken in the middle of processing a commit in the renderer, just
+  // before calling DocumentLoader::CommitNavigation(), which does various other
+  // work before actually sending the DidCommit IPC to unblock the browser
+  // process. To get the latter timestamp, use `commit_reply_sent` below.
+  // For now, `commit_navigation_end` is left alone as it's exposed to metrics,
+  // but it should eventually be replaced with `commit_reply_sent`.
   mojo_base.mojom.TimeTicks commit_navigation_start;
   mojo_base.mojom.TimeTicks? commit_navigation_end;
+
+  // The timestamp at which the renderer responded to the browser's
+  // CommitNavigation IPC.
+  // TODO(alexmos): replace `commit_navigation_end` with this timestamp.
+  mojo_base.mojom.TimeTicks commit_reply_sent;
 };
 
 // Similar to DidCommitProvisionalLoadParams, but only used for

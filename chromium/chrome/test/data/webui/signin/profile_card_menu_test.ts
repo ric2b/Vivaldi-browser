@@ -38,6 +38,8 @@ suite('ProfileCardMenuTest', function() {
       userName: `User@gmail.com`,
       avatarIcon: `AvatarUrl`,
       avatarBadge: ``,
+      profileCardButtonLabel: ``,
+      hasEnterpriseLabel: false,
     };
     profileCardMenuElement.profileState = testProfileState;
     document.body.appendChild(profileCardMenuElement);

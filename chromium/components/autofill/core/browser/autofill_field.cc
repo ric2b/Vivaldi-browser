@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include <iterator>
+#include <ranges>
 
 #include "base/containers/contains.h"
 #include "base/containers/fixed_flat_set.h"
@@ -30,13 +31,10 @@ using FieldPrediction =
     AutofillQueryResponse::FormSuggestion::FieldSuggestion::FieldPrediction;
 
 template <>
-struct DenseSetTraits<FieldPrediction::Source> {
-  static constexpr FieldPrediction::Source kMinValue =
-      FieldPrediction::Source(0);
-  static constexpr FieldPrediction::Source kMaxValue =
-      FieldPrediction::Source_MAX;
-  static constexpr bool kPacked = false;
-};
+struct DenseSetTraits<FieldPrediction::Source>
+    : EnumDenseSetTraits<FieldPrediction::Source,
+                         FieldPrediction::Source_MIN,
+                         FieldPrediction::Source_MAX> {};
 
 namespace {
 
@@ -68,13 +66,18 @@ static constexpr auto kAutofillHeuristicsVsHtmlOverrides =
          {ADDRESS_HOME_OVERFLOW, HtmlFieldType::kAddressLine2},
          {ADDRESS_HOME_OVERFLOW, HtmlFieldType::kAddressLine3},
          {ADDRESS_HOME_HOUSE_NUMBER, HtmlFieldType::kStreetAddress},
-         {ADDRESS_HOME_STREET_NAME, HtmlFieldType::kStreetAddress}});
+         {ADDRESS_HOME_STREET_NAME, HtmlFieldType::kStreetAddress},
+         {NAME_LAST_PREFIX, HtmlFieldType::kAdditionalName},
+         {NAME_LAST_PREFIX, HtmlFieldType::kAdditionalNameInitial},
+         {NAME_LAST_CORE, HtmlFieldType::kFamilyName}});
 
 // This list includes pairs (heuristic_type, server_type) that express which
 // heuristics predictions should be prioritized over server predictions. The
 // list is used for new field types that the server may have learned
 // incorrectly. In these cases, the local heuristics predictions will be used to
 // determine the field type.
+// TODO(crbug.com/359768803): Remove overrides for alternative names once the
+// feature is rolled out.
 static constexpr auto kAutofillHeuristicsVsServerOverrides =
     base::MakeFixedFlatSet<std::pair<FieldType, FieldType>>(
         {{ADDRESS_HOME_ADMIN_LEVEL2, ADDRESS_HOME_CITY},
@@ -95,7 +98,14 @@ static constexpr auto kAutofillHeuristicsVsServerOverrides =
          {ADDRESS_HOME_BETWEEN_STREETS_OR_LANDMARK, ADDRESS_HOME_LINE2},
          {ADDRESS_HOME_OVERFLOW_AND_LANDMARK, ADDRESS_HOME_LINE2},
          {ADDRESS_HOME_OVERFLOW, ADDRESS_HOME_LINE2},
-         {ADDRESS_HOME_OVERFLOW, ADDRESS_HOME_LINE3}});
+         {ADDRESS_HOME_OVERFLOW, ADDRESS_HOME_LINE3},
+         {ALTERNATIVE_FULL_NAME, NAME_FULL},
+         {ALTERNATIVE_GIVEN_NAME, NAME_FIRST},
+         {ALTERNATIVE_FAMILY_NAME, NAME_LAST},
+         {ALTERNATIVE_FAMILY_NAME, NAME_LAST_SECOND},
+         {ALTERNATIVE_FAMILY_NAME, NAME_LAST_CORE},
+         {NAME_LAST_PREFIX, NAME_MIDDLE},
+         {NAME_LAST_CORE, NAME_LAST}});
 
 // Returns true, if the prediction is non-experimental and should be used by
 // autofill or password manager.
@@ -109,6 +119,10 @@ bool IsDefaultPrediction(const FieldPrediction& prediction) {
       FieldPrediction::SOURCE_OVERRIDE,
       FieldPrediction::SOURCE_MANUAL_OVERRIDE};
   return default_sources.contains(prediction.source());
+}
+
+bool IsAutofillAiPrediction(const FieldPrediction& prediction) {
+  return prediction.source() == FieldPrediction::SOURCE_AUTOFILL_AI;
 }
 
 // Returns true if for two consecutive events, the second event may be ignored.
@@ -232,6 +246,15 @@ bool AutofillField::server_type_prediction_is_override() const {
                                      : server_predictions_[0].override();
 }
 
+bool AutofillField::HasServerPredictionsWithAutofillAiType() const {
+  return std::ranges::any_of(
+      server_predictions_, [](const FieldPrediction& prediction) {
+        return GroupTypeOfFieldType(
+                   ToSafeFieldType(prediction.type(), NO_SERVER_DATA)) ==
+               FieldTypeGroup::kAutofillAi;
+      });
+}
+
 void AutofillField::set_heuristic_type(HeuristicSource s, FieldType type) {
   if (type < 0 || type > MAX_VALID_FIELD_TYPE ||
       type == FIELD_WITH_DEFAULT_VALUE) {
@@ -241,6 +264,17 @@ void AutofillField::set_heuristic_type(HeuristicSource s, FieldType type) {
   if (s == GetActiveHeuristicSource()) {
     overall_type_ = AutofillType(NO_SERVER_DATA);
   }
+}
+
+FieldType AutofillField::GetAutofillAiServerTypePredictions() const {
+  for (const FieldPrediction& prediction : server_predictions_) {
+    FieldType predicted_type =
+        ToSafeFieldType(prediction.type(), NO_SERVER_DATA);
+    if (GroupTypeOfFieldType(predicted_type) == FieldTypeGroup::kAutofillAi) {
+      return predicted_type;
+    }
+  }
+  return FieldType::NO_SERVER_DATA;
 }
 
 void AutofillField::set_server_predictions(
@@ -255,26 +289,33 @@ void AutofillField::set_server_predictions(
   experimental_server_predictions_.clear();
 
   for (auto& prediction : predictions) {
-    if (prediction.has_source()) {
-      if (prediction.source() == FieldPrediction::SOURCE_UNSPECIFIED)
-        // A prediction with `SOURCE_UNSPECIFIED` is one of two things:
-        //   1. No prediction for default, a.k.a. `NO_SERVER_DATA`. The absence
-        //      of a prediction may not be creditable to a particular prediction
-        //      source.
-        //   2. An experiment that is missing from the `PredictionSource` enum.
-        //      Protobuf corrects unknown values to 0 when parsing.
-        // Neither case is actionable.
-        continue;
-      if (IsDefaultPrediction(prediction)) {
-        server_predictions_.push_back(std::move(prediction));
-      } else {
-        experimental_server_predictions_.push_back(std::move(prediction));
-      }
-    } else {
+    if (!prediction.has_source()) {
       // TODO(crbug.com/40243028): captured tests store old autofill api
       // response recordings without `source` field. We need to maintain the old
       // behavior until these recordings will be migrated.
       server_predictions_.push_back(std::move(prediction));
+      continue;
+    }
+
+    if (prediction.source() == FieldPrediction::SOURCE_UNSPECIFIED) {
+      // A prediction with `SOURCE_UNSPECIFIED` is one of two things:
+      //   1. No prediction for default, a.k.a. `NO_SERVER_DATA`. The absence
+      //      of a prediction may not be creditable to a particular prediction
+      //      source.
+      //   2. An experiment that is missing from the `PredictionSource` enum.
+      //      Protobuf corrects unknown values to 0 when parsing.
+      // Neither case is actionable.
+      continue;
+    }
+
+    if (IsDefaultPrediction(prediction)) {
+      server_predictions_.push_back(std::move(prediction));
+    } else if (IsAutofillAiPrediction(prediction)) {
+      if (base::FeatureList::IsEnabled(features::kAutofillAiWithDataSchema)) {
+        server_predictions_.push_back(std::move(prediction));
+      }
+    } else {
+      experimental_server_predictions_.push_back(std::move(prediction));
     }
   }
 

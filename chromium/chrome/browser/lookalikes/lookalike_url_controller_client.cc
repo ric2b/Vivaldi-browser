@@ -43,7 +43,7 @@ LookalikeUrlControllerClient::LookalikeUrlControllerClient(
       request_url_(request_url),
       safe_url_(safe_url) {}
 
-LookalikeUrlControllerClient::~LookalikeUrlControllerClient() {}
+LookalikeUrlControllerClient::~LookalikeUrlControllerClient() = default;
 
 void LookalikeUrlControllerClient::GoBack() {
   // We don't offer 'go back', but rather redirect to the legitimate site.
@@ -53,12 +53,12 @@ void LookalikeUrlControllerClient::GoBack() {
 
   // Prevent the back button from returning to the bad site.
   params.should_replace_current_entry = true;
-  web_contents_->OpenURL(params, /*navigation_handle_callback=*/{});
+  web_contents()->OpenURL(params, /*navigation_handle_callback=*/{});
 }
 
 void LookalikeUrlControllerClient::Proceed() {
   LookalikeUrlServiceFactory::GetForProfile(
-      Profile::FromBrowserContext(web_contents_->GetBrowserContext()))
+      Profile::FromBrowserContext(web_contents()->GetBrowserContext()))
       ->SetUserIgnore(request_url_);
   Reload();
 }

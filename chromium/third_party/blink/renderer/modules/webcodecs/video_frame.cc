@@ -57,7 +57,6 @@
 #include "third_party/blink/renderer/modules/webcodecs/video_frame_init_util.h"
 #include "third_party/blink/renderer/modules/webcodecs/video_frame_rect_util.h"
 #include "third_party/blink/renderer/platform/geometry/geometry_hash_traits.h"
-#include "third_party/blink/renderer/platform/graphics/canvas_color_params.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_resource_provider.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/shared_gpu_context.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_types.h"
@@ -89,10 +88,11 @@ namespace blink {
 
 namespace {
 
-// Controls if VideoFrame.copyTo() reads GPU frames asynchronously
+// Controls if VideoFrame.copyTo() reads GPU frames asynchronously when it's given a
+// SharedArrayBuffer.
 BASE_FEATURE(kVideoFrameAsyncCopyTo,
              "VideoFrameAsyncCopyTo",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 media::VideoPixelFormat ToMediaPixelFormat(V8VideoPixelFormat::Enum fmt) {
   switch (fmt) {
@@ -507,11 +507,7 @@ bool CopyTexturablePlanes(media::VideoFrame& src_frame,
   if (!wrapper)
     return false;
 
-  auto* provider = wrapper->ContextProvider();
-  if (!provider)
-    return false;
-
-  auto* ri = provider->RasterInterface();
+  auto* ri = wrapper->ContextProvider().RasterInterface();
   if (!ri)
     return false;
 
@@ -520,9 +516,9 @@ bool CopyTexturablePlanes(media::VideoFrame& src_frame,
         media::VideoFrame::SampleSize(dest_layout.Format(), i);
     gfx::Rect plane_src_rect = PlaneRect(src_rect, sample_size);
     uint8_t* dest_pixels = dest_buffer.data() + dest_layout.Offset(i);
-    if (!media::ReadbackTexturePlaneToMemorySync(
-            src_frame, i, plane_src_rect, dest_pixels, dest_layout.Stride(i),
-            ri, provider->GetCapabilities())) {
+    if (!media::ReadbackTexturePlaneToMemorySync(src_frame, i, plane_src_rect,
+                                                 dest_pixels,
+                                                 dest_layout.Stride(i), ri)) {
       // It's possible to fail after copying some but not all planes, leaving
       // the output buffer in a corrupt state D:
       return false;
@@ -823,8 +819,6 @@ VideoFrame* VideoFrame::Create(ScriptState* script_state,
       return nullptr;
 
     auto* sbi = static_cast<StaticBitmapImage*>(image.get());
-    gpu::MailboxHolder mailbox_holder = sbi->GetMailboxHolder();
-    const bool is_origin_top_left = sbi->IsOriginTopLeft();
 
     // The sync token needs to be updated when |frame| is released, but
     // AcceleratedStaticBitmapImage::UpdateSyncToken() is not thread-safe.
@@ -839,12 +833,9 @@ VideoFrame* VideoFrame::Create(ScriptState* script_state,
     auto client_shared_image = sbi->GetSharedImage();
     CHECK(client_shared_image);
     frame = media::VideoFrame::WrapSharedImage(
-        format, std::move(client_shared_image), mailbox_holder.sync_token,
+        format, std::move(client_shared_image), sbi->GetSyncToken(),
         std::move(release_cb), coded_size, parsed_init.visible_rect,
         parsed_init.display_size, timestamp);
-
-    if (frame)
-      frame->metadata().texture_origin_is_top_left = is_origin_top_left;
 
     // Note: We could add the StaticBitmapImage to the VideoFrameHandle so we
     // can round trip through VideoFrame back to canvas w/o any copies, but
@@ -1306,12 +1297,16 @@ bool VideoFrame::CopyToAsync(
     const VideoFrameLayout& dest_layout) {
   auto* background_readback = BackgroundReadback::From(
       *ExecutionContext::From(resolver->GetScriptState()));
-  if (!background_readback)
+  if (!background_readback) {
     return false;
+  }
 
-  ArrayBufferContents contents = PinArrayBufferContent(destination);
-  if (!contents.DataLength())
+  ArrayBufferContents contents = PinSharedArrayBufferContent(destination);
+  if (!contents.IsValid() || !contents.DataLength()) {
+    // `contents` is empty, most likely destination isn't a shared buffer.
+    // Async copyTo() can't be used.
     return false;
+  }
 
   auto readback_done_handler =
       [](ArrayBufferContents contents,
@@ -1397,12 +1392,14 @@ ScriptPromise<IDLSequence<PlaneLayout>> VideoFrame::copyTo(
     DCHECK(local_frame->HasSharedImage());
 
     if (base::FeatureList::IsEnabled(kVideoFrameAsyncCopyTo)) {
+      // Check if we can run copyTo() asynchronously.
       if (CopyToAsync(resolver, local_frame, src_rect, destination,
                       dest_layout)) {
         return promise;
       }
     }
 
+    // Async version didn't work, let's copy planes synchronously.
     if (!CopyTexturablePlanes(*local_frame, src_rect, dest_layout, buffer)) {
       exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                         "Failed to read VideoFrame data.");
@@ -1491,21 +1488,20 @@ bool VideoFrame::WouldTaintOrigin() const {
 gfx::SizeF VideoFrame::ElementSize(
     const gfx::SizeF& default_object_size,
     const RespectImageOrientationEnum respect_orientation) const {
-  // BitmapSourceSize() will always ignore orientation.
+  auto local_frame = handle_->frame();
+  if (!local_frame) {
+    return gfx::SizeF();
+  }
+  gfx::SizeF size(local_frame->natural_size());
   if (respect_orientation == kRespectImageOrientation) {
-    auto local_frame = handle_->frame();
-    if (!local_frame)
-      return gfx::SizeF();
-
     const auto orientation_enum = VideoTransformationToImageOrientation(
         local_frame->metadata().transformation.value_or(
             media::kNoTransformation));
-    auto orientation_adjusted_size = gfx::SizeF(local_frame->natural_size());
-    if (ImageOrientation(orientation_enum).UsesWidthAsHeight())
-      orientation_adjusted_size.Transpose();
-    return orientation_adjusted_size;
+    if (ImageOrientation(orientation_enum).UsesWidthAsHeight()) {
+      size.Transpose();
+    }
   }
-  return gfx::SizeF(BitmapSourceSize());
+  return size;
 }
 
 bool VideoFrame::IsVideoFrame() const {
@@ -1531,13 +1527,12 @@ void VideoFrame::ResetExternalMemory() {
   external_memory_accounter_.Clear(v8::Isolate::GetCurrent());
 }
 
-gfx::Size VideoFrame::BitmapSourceSize() const {
+ImageBitmapSourceStatus VideoFrame::CheckUsability() const {
   auto local_frame = handle_->frame();
-  if (!local_frame)
-    return gfx::Size();
-
-  // ImageBitmaps should always return the size w/o respecting orientation.
-  return local_frame->natural_size();
+  if (!local_frame) {
+    return base::unexpected(ImageBitmapSourceError::kInvalid);
+  }
+  return base::ok();
 }
 
 ScriptPromise<ImageBitmap> VideoFrame::CreateImageBitmap(

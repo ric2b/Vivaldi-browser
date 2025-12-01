@@ -291,6 +291,7 @@ typedef struct SANMVideoContext {
 
     int8_t p4x4glyphs[NGLYPHS][16];
     int8_t p8x8glyphs[NGLYPHS][64];
+    uint8_t c47itbl[0x10000];
 } SANMVideoContext;
 
 typedef struct SANMFrameHeader {
@@ -856,6 +857,55 @@ static int process_block(SANMVideoContext *ctx, uint8_t *dst, uint8_t *prev1,
     return 0;
 }
 
+static void codec47_read_interptable(SANMVideoContext *ctx)
+{
+    uint8_t *p1, *p2, *itbl = ctx->c47itbl;
+    int i, j;
+
+    for (i = 0; i < 256; i++) {
+        p1 = p2 = itbl + i;
+        for (j = 256 - i; j; j--) {
+            *p1 = *p2 = bytestream2_get_byte(&ctx->gb);
+            p1 += 1;
+            p2 += 256;
+        }
+        itbl += 256;
+    }
+}
+
+static void codec47_comp1(SANMVideoContext *ctx, uint8_t *dst_in, int width,
+                          int height, ptrdiff_t stride)
+{
+    uint8_t p1, *dst, *itbl = ctx->c47itbl;
+    uint16_t px;
+    int i, j;
+
+    dst = dst_in + stride;
+    for (i = 0; i < height; i += 2) {
+        p1 = bytestream2_get_byte(&ctx->gb);
+        *dst++ = p1;
+        *dst++ = p1;
+        px = p1;
+        for (j = 2; j < width; j += 2) {
+            p1 = bytestream2_get_byte(&ctx->gb);
+            px = (px << 8) | p1;
+            *dst++ = itbl[px];
+            *dst++ = p1;
+        }
+        dst += stride;
+    }
+
+    memcpy(dst_in, dst_in + stride, width);
+    dst = dst_in + stride + stride;
+    for (i = 2; i < height - 1; i += 2) {
+        for (j = 0; j < width; j++) {
+            px = (*(dst - stride) << 8) | *(dst + stride);
+            *dst++ = itbl[px];
+        }
+        dst += stride;
+    }
+}
+
 static int old_codec47(SANMVideoContext *ctx, int top,
                        int left, int width, int height)
 {
@@ -863,15 +913,18 @@ static int old_codec47(SANMVideoContext *ctx, int top,
     int i, j;
     ptrdiff_t stride = ctx->pitch;
     uint8_t *dst   = (uint8_t *)ctx->frm0 + left + top * stride;
-    uint8_t *prev1 = (uint8_t *)ctx->frm1;
-    uint8_t *prev2 = (uint8_t *)ctx->frm2;
+    uint8_t *prev1 = (uint8_t *)ctx->frm1 + left + top * stride;
+    uint8_t *prev2 = (uint8_t *)ctx->frm2 + left + top * stride;
+    uint8_t auxcol[2];
     int tbl_pos = bytestream2_tell(&ctx->gb);
     int seq     = bytestream2_get_le16(&ctx->gb);
     int compr   = bytestream2_get_byte(&ctx->gb);
     int new_rot = bytestream2_get_byte(&ctx->gb);
     int skip    = bytestream2_get_byte(&ctx->gb);
 
-    bytestream2_skip(&ctx->gb, 9);
+    bytestream2_skip(&ctx->gb, 7);
+    auxcol[0] = bytestream2_get_byteu(&ctx->gb);
+    auxcol[1] = bytestream2_get_byteu(&ctx->gb);
     decoded_size = bytestream2_get_le32(&ctx->gb);
     bytestream2_skip(&ctx->gb, 8);
 
@@ -880,12 +933,15 @@ static int old_codec47(SANMVideoContext *ctx, int top,
         av_log(ctx->avctx, AV_LOG_WARNING, "Decoded size is too large.\n");
     }
 
-    if (skip & 1)
-        bytestream2_skip(&ctx->gb, 0x8080);
+    if (skip & 1) {
+        if (bytestream2_get_bytes_left(&ctx->gb) < 0x8080)
+            return AVERROR_INVALIDDATA;
+        codec47_read_interptable(ctx);
+    }
     if (!seq) {
         ctx->prev_seq = -1;
-        memset(prev1, 0, ctx->height * stride);
-        memset(prev2, 0, ctx->height * stride);
+        memset(prev1, auxcol[0], (ctx->height - top) * stride);
+        memset(prev2, auxcol[1], (ctx->height - top) * stride);
     }
 
     switch (compr) {
@@ -900,15 +956,7 @@ static int old_codec47(SANMVideoContext *ctx, int top,
     case 1:
         if (bytestream2_get_bytes_left(&ctx->gb) < ((width + 1) >> 1) * ((height + 1) >> 1))
             return AVERROR_INVALIDDATA;
-        for (j = 0; j < height; j += 2) {
-            for (i = 0; i < width; i += 2) {
-                dst[i] =
-                dst[i + 1] =
-                dst[stride + i] =
-                dst[stride + i + 1] = bytestream2_get_byteu(&ctx->gb);
-            }
-            dst += stride * 2;
-        }
+        codec47_comp1(ctx, dst, width, height, stride);
         break;
     case 2:
         if (seq == ctx->prev_seq + 1) {
@@ -986,6 +1034,45 @@ static int process_frame_obj(SANMVideoContext *ctx)
         avpriv_request_sample(ctx->avctx, "Subcodec %d", codec);
         return AVERROR_PATCHWELCOME;
     }
+}
+
+static int process_xpal(SANMVideoContext *ctx, int size)
+{
+    int16_t *dp = ctx->delta_pal;
+    uint32_t *pal = ctx->pal;
+    uint16_t cmd;
+    uint8_t c[3];
+    int i, j;
+
+    bytestream2_skip(&ctx->gb, 2);
+    cmd = bytestream2_get_be16(&ctx->gb);
+
+    if (cmd == 1) {
+        for (i = 0; i < PALETTE_DELTA; i += 3) {
+            c[0] = (*pal >> 16) & 0xFF;
+            c[1] = (*pal >>  8) & 0xFF;
+            c[2] = (*pal >>  0) & 0xFF;
+            for (j = 0; j < 3; j++) {
+                int cl = (c[j] * 129) + *dp++;
+                c[j] = av_clip_uint8(cl / 128) & 0xFF;
+            }
+            *pal++ = 0xFFU << 24 | c[0] << 16 | c[1] << 8 | c[2];
+        }
+    } else if (cmd == 2) {
+        if (size < PALETTE_DELTA * 2 + 4) {
+            av_log(ctx->avctx, AV_LOG_ERROR,
+                   "Incorrect palette change block size %"PRIu32".\n", size);
+            return AVERROR_INVALIDDATA;
+        }
+        for (i = 0; i < PALETTE_DELTA; i++)
+            dp[i] = bytestream2_get_le16u(&ctx->gb);
+
+        if (size >= PALETTE_DELTA * 2 + 4 + PALETTE_SIZE * 3) {
+            for (i = 0; i < PALETTE_SIZE; i++)
+                ctx->pal[i] = 0xFFU << 24 | bytestream2_get_be24u(&ctx->gb);
+        }
+    }
+    return 0;
 }
 
 static int decode_0(SANMVideoContext *ctx)
@@ -1427,34 +1514,8 @@ static int decode_frame(AVCodecContext *avctx, AVFrame *frame,
                     return ret;
                 break;
             case MKBETAG('X', 'P', 'A', 'L'):
-                if (size == 6 || size == 4) {
-                    uint8_t tmp[3];
-                    int j;
-
-                    for (i = 0; i < PALETTE_SIZE; i++) {
-                        for (j = 0; j < 3; j++) {
-                            int t = (ctx->pal[i] >> (16 - j * 8)) & 0xFF;
-                            tmp[j] = av_clip_uint8((t * 129 + ctx->delta_pal[i * 3 + j]) >> 7);
-                        }
-                        ctx->pal[i] = 0xFFU << 24 | AV_RB24(tmp);
-                    }
-                } else {
-                    if (size < PALETTE_DELTA * 2 + 4) {
-                        av_log(avctx, AV_LOG_ERROR,
-                               "Incorrect palette change block size %"PRIu32".\n",
-                               size);
-                        return AVERROR_INVALIDDATA;
-                    }
-                    bytestream2_skipu(&ctx->gb, 4);
-                    for (i = 0; i < PALETTE_DELTA; i++)
-                        ctx->delta_pal[i] = bytestream2_get_le16u(&ctx->gb);
-                    if (size >= PALETTE_DELTA * 5 + 4) {
-                        for (i = 0; i < PALETTE_SIZE; i++)
-                            ctx->pal[i] = 0xFFU << 24 | bytestream2_get_be24u(&ctx->gb);
-                    } else {
-                        memset(ctx->pal, 0, sizeof(ctx->pal));
-                    }
-                }
+                if (ret = process_xpal(ctx, size))
+                    return ret;
                 break;
             case MKBETAG('S', 'T', 'O', 'R'):
                 to_store = 1;

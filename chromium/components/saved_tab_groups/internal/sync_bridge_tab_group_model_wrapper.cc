@@ -7,6 +7,7 @@
 #include "components/saved_tab_groups/internal/saved_tab_group_model.h"
 #include "components/saved_tab_groups/public/saved_tab_group.h"
 #include "components/sync/base/data_type.h"
+#include "google_apis/gaia/gaia_id.h"
 
 namespace tab_groups {
 
@@ -59,13 +60,14 @@ const SavedTabGroup* SyncBridgeTabGroupModelWrapper::GetGroupContainingTab(
 
 void SyncBridgeTabGroupModelWrapper::RemoveTabFromGroup(
     const base::Uuid& group_id,
-    const base::Uuid& tab_id) {
+    const base::Uuid& tab_id,
+    GaiaId removed_by) {
   // Verify that the group corresponds to the data type.
   const SavedTabGroup* group = model_->Get(group_id);
   CHECK(group);
   CHECK_EQ(group->is_shared_tab_group(), IsSharedTabGroupData());
 
-  model_->RemoveTabFromGroupFromSync(group_id, tab_id);
+  model_->RemoveTabFromGroupFromSync(group_id, tab_id, std::move(removed_by));
 }
 
 void SyncBridgeTabGroupModelWrapper::RemoveGroup(const base::Uuid& group_id) {
@@ -84,7 +86,8 @@ const SavedTabGroup* SyncBridgeTabGroupModelWrapper::MergeRemoteGroupMetadata(
     std::optional<size_t> position,
     std::optional<std::string> creator_cache_guid,
     std::optional<std::string> last_updater_cache_guid,
-    base::Time update_time) {
+    base::Time update_time,
+    GaiaId updated_by) {
   // Verify that the group corresponds to the data type.
   const SavedTabGroup* group = model_->Get(group_id);
   CHECK(group);
@@ -92,7 +95,7 @@ const SavedTabGroup* SyncBridgeTabGroupModelWrapper::MergeRemoteGroupMetadata(
 
   return model_->MergeRemoteGroupMetadata(
       group_id, title, color, position, std::move(creator_cache_guid),
-      std::move(last_updater_cache_guid), update_time);
+      std::move(last_updater_cache_guid), update_time, updated_by);
 }
 
 const SavedTabGroupTab* SyncBridgeTabGroupModelWrapper::MergeRemoteTab(
@@ -124,10 +127,23 @@ SyncBridgeTabGroupModelWrapper::UpdateLocalCacheGuid(
                                       std::move(new_cache_guid));
 }
 
+void SyncBridgeTabGroupModelWrapper::MarkTransitionedToShared(
+    const base::Uuid& group_id) {
+  CHECK(IsSharedTabGroupData());
+
+  model_->MarkTransitionedToShared(group_id);
+}
+
 void SyncBridgeTabGroupModelWrapper::Initialize(
     std::vector<SavedTabGroup> groups,
     std::vector<SavedTabGroupTab> tabs) {
   std::move(on_load_callback_).Run(std::move(groups), std::move(tabs));
+}
+
+void SyncBridgeTabGroupModelWrapper::OnSyncBridgeUpdateTypeChanged(
+    SyncBridgeUpdateType sync_bridge_update_type) {
+  CHECK(IsSharedTabGroupData());
+  model_->OnSyncBridgeUpdateTypeChanged(sync_bridge_update_type);
 }
 
 bool SyncBridgeTabGroupModelWrapper::IsSharedTabGroupData() const {

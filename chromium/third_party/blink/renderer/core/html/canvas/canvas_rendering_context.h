@@ -31,6 +31,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/notreached.h"
 #include "cc/paint/paint_flags.h"
+#include "components/viz/common/resources/shared_image_format_utils.h"
 #include "third_party/blink/public/common/privacy_budget/identifiable_token.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -38,8 +39,8 @@
 #include "third_party/blink/renderer/core/html/canvas/canvas_performance_monitor.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context_host.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
-#include "third_party/blink/renderer/platform/graphics/canvas_color_params.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_resource_provider.h"
+#include "third_party/blink/renderer/platform/graphics/graphics_types.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_types_3d.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
 #include "third_party/blink/renderer/platform/heap/prefinalizer.h"
@@ -128,6 +129,19 @@ class CORE_EXPORT CanvasRenderingContext
     return canvas_rendering_type_ == CanvasRenderingAPI::kWebgpu;
   }
 
+  // ---------------------------------------------------------------------- //
+  // ctx.placeElement() API. Used exclusively with CanvasRenderingContext2D.
+
+  // Elements placed with ctx.placeElement() hold CanvasDeferredPaintRecords,
+  // which are painted into with this function during
+  // HTMLCanvasElement::PaintInternal.
+  virtual void PaintPlacedElements() {}
+  // Returns true if any element has been drawn to the canvas.
+  virtual bool HasPlacedElements() const { return false; }
+  // Element needs to be redrawn
+  virtual void MarkPlacedElementDirty(Element* element) {}
+  // ---------------------------------------------------------------------- //
+
   // ActiveScriptWrappable
   // As this class inherits from ActiveScriptWrappable, as long as
   // HasPendingActivity returns true, we can ensure that the Garbage Collector
@@ -165,16 +179,14 @@ class CORE_EXPORT CanvasRenderingContext
     return nullptr;
   }
 
-  virtual SkColorInfo CanvasRenderingContextSkColorInfo() const;
+  virtual SkAlphaType GetAlphaType() const = 0;
+  virtual SkColorType GetSkColorType() const = 0;
+  virtual viz::SharedImageFormat GetSharedImageFormat() const = 0;
+  virtual gfx::ColorSpace GetColorSpace() const = 0;
 
   virtual scoped_refptr<StaticBitmapImage> GetImage(FlushReason) = 0;
   virtual bool IsComposited() const = 0;
-  virtual bool IsOriginTopLeft() const {
-    // Canvas contexts have the origin of coordinates on the top left corner.
-    // Accelerated resources (e.g. GPU textures) have their origin of
-    // coordinates in the bottom left corner.
-    return Host()->GetRasterMode() == RasterMode::kCPU;
-  }
+
   // Called when the entire tab is backgrounded or unbackgrounded.
   // The page's visibility status can be queried at any time via
   // Host()->IsPageVisible().
@@ -272,7 +284,6 @@ class CORE_EXPORT CanvasRenderingContext
 
   // WebGL & WebGPU-specific interface
   virtual void SetHdrMetadata(const gfx::HDRMetadata& hdr_metadata) {}
-  virtual void SetFilterQuality(cc::PaintFlags::FilterQuality) { NOTREACHED(); }
   virtual void Reshape(int width, int height) {}
   virtual int ExternallyAllocatedBufferCountPerPixel() { NOTREACHED(); }
 
@@ -323,7 +334,6 @@ class CORE_EXPORT CanvasRenderingContext
 
  private:
   Member<CanvasRenderingContextHost> host_;
-  CanvasColorParams color_params_;
   CanvasContextCreationAttributesCore creation_attributes_;
 
   void RenderTaskEnded();

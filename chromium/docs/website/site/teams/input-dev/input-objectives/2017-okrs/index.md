@@ -353,7 +353,7 @@ states (no new APIs) \[0.2\] Implement a prototype based on the design
 ## Experiment with a simple user activation indicator that is good for
 cross-browser implementation P1 0.50\[0.3\] Prototype a simple bit-per-frame
 user activation and perform lab-test.
-[crbug.com/696617](http://crbug.com/696617) \[0.2\] Propose a detailed design
+[crbug.com/696617](https://crbug.com/696617) \[0.2\] Propose a detailed design
 for implementation. \[0.3\] Implement the design behind a flag, covering all
 user activation clients. \[0.2\] Experimentally switch away from current
 UserGestureIndicator in M59/60 beta. \[stretch\] \[PUNTED\] Publish a report on
@@ -367,7 +367,7 @@ worker thread.
 
 ## Enable Input Automation APIs in WPT P1 0.20\[0.3\] \[PUNTED\] Add key
 injection APIs in GPU Benchmarking (blocked on
-[crbug.com/722921](http://crbug.com/722921)) \[0.3\] Add input injecting input
+[crbug.com/722921](https://crbug.com/722921)) \[0.3\] Add input injecting input
 API with consensus from other vendors \[0.2\] Plumb the input injecting API to
 enable the manual tests to run on Chrome bots \[0.2\] Update at least 3 manual
 tests to use the new input injection API
@@ -844,7 +844,7 @@ Be responsive in working with PMs and UI review team 1.00
 ### Accelerate more CSS animations 0.15
 
 Accelerate transform animations containing percentages P2
-0.10<http://crbug.com/389359> MQU: Discussed with Paint team, no potential
+0.10<https://crbug.com/389359> MQU: Discussed with Paint team, no potential
 problems found. Otherwise, no progress EOQ: No further progress
 
 Accelerate independent transform properties P2 0.20MQU: Investigation done,
@@ -879,7 +879,7 @@ UMA metrics along with implementation
 Fix known bugs in existing AnimationWorklet / Compositor Worker implementation
 P1 0.25Fix any remaining bugs and polish the interface and performance: -
 document.scrollingElement is not working (<https://crbug.com/645493>) -
-occassional renderer freeze (<http://crbug.com/647035>)
+occassional renderer freeze (<https://crbug.com/647035>)
 
 Batch property updates to compositor proxies enabling running on a different
 thread. P1 0.40

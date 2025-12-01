@@ -52,9 +52,11 @@ public class MiniPlayerMediator implements BottomControlsLayer {
                 public void onControlsOffsetChanged(
                         int topOffset,
                         int topControlsMinHeightOffset,
+                        boolean topControlsMinHeightChanged,
                         int bottomOffset,
                         int bottomControlsMinHeightOffset,
-                        boolean needsAnimate,
+                        boolean bottomControlsMinHeightChanged,
+                        boolean requestNewFrame,
                         boolean isVisibilityForced) {
                     // Direct the call to BottomControlsLayer#onBrowserControlsOffsetUpdate.
                     if (BottomControlsStacker.isDispatchingYOffset()) return;
@@ -203,7 +205,12 @@ public class MiniPlayerMediator implements BottomControlsLayer {
     }
 
     private void growBottomControls() {
-        mBottomControlsStacker.notifyBackgroundColor(mModel.get(Properties.BACKGROUND_COLOR_ARGB));
+        if (!mBottomControlsStacker.isLayerVisible(LayerType.BOTTOM_TOOLBAR)) {
+            // TODO(crbug.com/345488108): Handle background coloring for bottom controls layers in a
+            // more coordinated way.
+            mBottomControlsStacker.notifyBackgroundColor(
+                    mModel.get(Properties.BACKGROUND_COLOR_ARGB));
+        }
         int minHeight = getBrowserControls().getBottomControlsMinHeight();
         setBottomControlsHeight(
                 getBrowserControls().getBottomControlsHeight() + mLayoutHeightPx,
@@ -269,12 +276,6 @@ public class MiniPlayerMediator implements BottomControlsLayer {
         }
     }
 
-    private boolean isVisible() {
-        // Consider layer visible even during its transition.
-        return mModel.get(Properties.VISIBILITY) == VisibilityState.VISIBLE
-                || mModel.get(Properties.VISIBILITY) == VisibilityState.SHOWING;
-    }
-
     // Implements BottomControlsStacker.BottomControlsLayer
 
     @Override
@@ -308,7 +309,7 @@ public class MiniPlayerMediator implements BottomControlsLayer {
     }
 
     @Override
-    public void onBrowserControlsOffsetUpdate(int layerYOffset) {
+    public void onBrowserControlsOffsetUpdate(int layerYOffset, boolean didMinHeightChange) {
         assert BottomControlsStacker.isDispatchingYOffset();
 
         // yOffset for the mini player is a negative number if it has to move up. This value *can*

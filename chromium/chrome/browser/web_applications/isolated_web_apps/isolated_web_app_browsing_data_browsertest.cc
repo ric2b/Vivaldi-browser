@@ -11,6 +11,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
+#include "base/strings/to_string.h"
 #include "base/test/bind.h"
 #include "base/test/test_future.h"
 #include "base/time/time.h"
@@ -86,7 +87,7 @@ class IsolatedWebAppBrowsingDataTest : public IsolatedWebAppBrowserTestHarness {
     std::unique_ptr<web_app::ScopedBundledIsolatedWebApp> app =
         web_app::IsolatedWebAppBuilder(
             web_app::ManifestBuilder().AddPermissionsPolicyWildcard(
-                blink::mojom::PermissionsPolicyFeature::kControlledFrame))
+                network::mojom::PermissionsPolicyFeature::kControlledFrame))
             .BuildBundle();
     app->TrustSigningKey();
     return app->InstallChecked(profile());
@@ -97,10 +98,10 @@ class IsolatedWebAppBrowsingDataTest : public IsolatedWebAppBrowserTestHarness {
   }
 
   int64_t GetIwaUsage(const IsolatedWebAppUrlInfo& url_info) {
-    base::test::TestFuture<base::flat_map<url::Origin, int64_t>> future;
+    base::test::TestFuture<base::flat_map<url::Origin, uint64_t>> future;
     web_app_provider().scheduler().GetIsolatedWebAppBrowsingData(
         future.GetCallback());
-    base::flat_map<url::Origin, int64_t> result = future.Get();
+    base::flat_map<url::Origin, uint64_t> result = future.Get();
     return result.contains(url_info.origin()) ? result.at(url_info.origin())
                                               : 0;
   }
@@ -819,7 +820,7 @@ IN_PROC_BROWSER_TEST_F(IsolatedWebAppBrowsingDataClearingTest,
   const std::string partition_name("test_partition");
   for (const bool in_memory : {true, false}) {
     SCOPED_TRACE(base::StrCat({"Controlled Frame partition is in-memory: ",
-                               (in_memory ? "true" : "false")}));
+                               base::ToString(in_memory)}));
     IsolatedWebAppUrlInfo url_info = InstallIsolatedWebApp();
 
     Browser* browser = LaunchWebAppBrowserAndWait(url_info.app_id());

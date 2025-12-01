@@ -35,7 +35,9 @@
 #include "connections/advertising_options.h"
 #include "connections/connection_options.h"
 #include "connections/discovery_options.h"
+#include "connections/implementation/analytics/advertising_metadata_params.h"
 #include "connections/implementation/analytics/analytics_recorder.h"
+#include "connections/implementation/analytics/discovery_metadata_params.h"
 #include "connections/implementation/flags/nearby_connections_feature_flags.h"
 #include "connections/listeners.h"
 #include "connections/medium_selector.h"
@@ -66,7 +68,9 @@
 
 namespace nearby {
 namespace connections {
+
 namespace {
+using ::location::nearby::analytics::proto::ConnectionsLog;
 using ::location::nearby::connections::OsInfo;
 
 constexpr char kEndpointIdChars[] = {
@@ -79,12 +83,7 @@ bool IsFeatureUseStableEndpointIdEnabled() {
       connections::config_package_nearby::nearby_connections_feature::
           kUseStableEndpointId);
 }
-
 }  // namespace
-
-// The definition is necessary before C++17.
-constexpr absl::Duration
-    ClientProxy::kHighPowerAdvertisementEndpointIdCacheTimeout;
 
 ClientProxy::ClientProxy(::nearby::analytics::EventLogger* event_logger)
     : client_id_(Prng().NextInt64()) {
@@ -216,6 +215,8 @@ void ClientProxy::StartedAdvertising(
     const std::string& service_id, Strategy strategy,
     const ConnectionListener& listener,
     absl::Span<location::nearby::proto::connections::Medium> mediums,
+    const std::vector<ConnectionsLog::OperationResultWithMedium>&
+        operation_result_with_mediums,
     const AdvertisingOptions& advertising_options) {
   MutexLock lock(&mutex_);
   NEARBY_LOGS(INFO) << "ClientProxy [StartedAdvertising]: client="
@@ -244,7 +245,13 @@ void ClientProxy::StartedAdvertising(
 
   const std::vector<location::nearby::proto::connections::Medium> medium_vector(
       mediums.begin(), mediums.end());
-  analytics_recorder_->OnStartAdvertising(strategy, medium_vector, false, 0);
+  std::unique_ptr<AdvertisingMetadataParams> advertising_metadata_params;
+  advertising_metadata_params =
+      GetAnalyticsRecorder().BuildAdvertisingMetadataParams();
+  advertising_metadata_params->operation_result_with_mediums =
+      std::move(operation_result_with_mediums);
+  analytics_recorder_->OnStartAdvertising(strategy, medium_vector,
+                                          advertising_metadata_params.get());
 }
 
 void ClientProxy::StoppedAdvertising() {
@@ -363,6 +370,8 @@ void ClientProxy::StartedDiscovery(
     const std::string& service_id, Strategy strategy,
     DiscoveryListener listener,
     absl::Span<location::nearby::proto::connections::Medium> mediums,
+    const std::vector<ConnectionsLog::OperationResultWithMedium>&
+        operation_result_with_mediums,
     const DiscoveryOptions& discovery_options) {
   MutexLock lock(&mutex_);
   discovery_info_ = DiscoveryInfo{service_id, std::move(listener)};
@@ -370,7 +379,13 @@ void ClientProxy::StartedDiscovery(
 
   const std::vector<location::nearby::proto::connections::Medium> medium_vector(
       mediums.begin(), mediums.end());
-  analytics_recorder_->OnStartDiscovery(strategy, medium_vector, false, 0);
+  std::unique_ptr<DiscoveryMetadataParams> discovery_metadata_params;
+  discovery_metadata_params =
+      GetAnalyticsRecorder().BuildDiscoveryMetadataParams();
+  discovery_metadata_params->operation_result_with_mediums =
+      std::move(operation_result_with_mediums);
+  analytics_recorder_->OnStartDiscovery(strategy, medium_vector,
+                                        discovery_metadata_params.get());
 }
 
 void ClientProxy::StoppedDiscovery() {
@@ -558,8 +573,9 @@ void ClientProxy::OnBandwidthChanged(const std::string& endpoint_id,
   NEARBY_LOGS(INFO) << "ClientProxy [BandwidthChanged]: id=" << endpoint_id;
   MutexLock lock(&mutex_);
 
-  const ConnectionPair* item = LookupConnection(endpoint_id);
+  ConnectionPair* item = LookupConnection(endpoint_id);
   if (item != nullptr) {
+    item->first.connected_medium = new_medium;
     item->first.connection_listener.bandwidth_changed_cb(endpoint_id,
                                                          new_medium);
     NEARBY_LOGS(INFO) << "ClientProxy [reporting onBandwidthChanged]: client="
@@ -598,6 +614,17 @@ bool ClientProxy::ConnectionStatusMatches(const std::string& endpoint_id,
     return item->first.status == status;
   }
   return false;
+}
+
+Medium ClientProxy::GetConnectedMedium(const std::string& endpoint_id) const {
+  MutexLock lock(&mutex_);
+
+  const ConnectionPair* item = LookupConnection(endpoint_id);
+  if (item != nullptr) {
+    return item->first.connected_medium;
+  }
+
+  return Medium::UNKNOWN_MEDIUM;
 }
 
 BooleanMediumSelector ClientProxy::GetUpgradeMediums(
@@ -1194,7 +1221,16 @@ std::int32_t ClientProxy::GetLocalMultiplexSocketBitmask() const {
           config_package_nearby::nearby_connections_feature::
               kEnableMultiplex)) {
     std::int32_t multiplex_bitmask =
-        kBtMultiplexEnabled | kWifiLanMultiplexEnabled;
+        (NearbyFlags::GetInstance().GetBoolFlag(
+             config_package_nearby::nearby_connections_feature::
+                 kEnableMultiplexBluetooth)
+             ? kBtMultiplexEnabled
+             : 0) |
+        (NearbyFlags::GetInstance().GetBoolFlag(
+             config_package_nearby::nearby_connections_feature::
+                 kEnableMultiplexWifiLan)
+             ? kWifiLanMultiplexEnabled
+             : 0);
     NEARBY_LOGS(INFO) << "ClientProxy [GetLocalMultiplexSocketBitmask]: "
                       << multiplex_bitmask;
     return multiplex_bitmask;

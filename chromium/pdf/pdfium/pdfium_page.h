@@ -143,6 +143,13 @@ class PDFiumPage {
   std::vector<AccessibilityTextFieldInfo> GetTextFieldInfo(
       uint32_t text_run_count);
 
+  // Traverses the entire struct tree of the page recursively and extracts the
+  // text run type or the alt text from struct tree elements corresponding to
+  // the marked content IDs associated with `text_runs` or present in
+  // `marked_content_id_image_map_` respectively.
+  void PopulateTextRunTypeAndImageAltText(
+      std::vector<AccessibilityTextRunInfo>& text_runs);
+
   enum Area {
     NONSELECTABLE_AREA,
     TEXT_AREA,       // Area contains regular, selectable text not
@@ -274,7 +281,7 @@ class PDFiumPage {
   FRIEND_TEST_ALL_PREFIXES(PDFiumPageImageForOcrTest, HighResolutionImage);
   FRIEND_TEST_ALL_PREFIXES(PDFiumPageImageForOcrTest, RotatedPage);
   FRIEND_TEST_ALL_PREFIXES(PDFiumPageImageForOcrTest, NonImage);
-  FRIEND_TEST_ALL_PREFIXES(PDFiumPageImageTest, CalculateImages);
+  FRIEND_TEST_ALL_PREFIXES(PDFiumPageImageTest, PopulateImageAltText);
   FRIEND_TEST_ALL_PREFIXES(PDFiumPageImageTest, ImageAltText);
   FRIEND_TEST_ALL_PREFIXES(PDFiumPageLinkTest, AnnotLinkGeneration);
   FRIEND_TEST_ALL_PREFIXES(PDFiumPageLinkTest, GetLinkTarget);
@@ -429,23 +436,27 @@ class PDFiumPage {
   // broken for page objects such as links and images.
   void CalculatePageObjectTextRunBreaks();
 
+  // Key    :  Marked content id for the text element as specified in the struct
+  //           tree.
+  // Value:    A list of pointers to the associated text runs.
+  using MarkedContentIdToTextRunInfoMap =
+      std::map<int, std::vector<raw_ptr<AccessibilityTextRunInfo>>>;
+
   // Key    :  Marked content id for the image element as specified in the
-  //           struct tree.
-  // Value  :  Index of image in the `images_` vector.
+  // struct tree.
+  // Value  :  Index of the image in the `images_` vector.
   using MarkedContentIdToImageMap = std::map<int, size_t>;
-  // Traverses the entire struct tree of the page recursively and extracts the
-  // alt text from struct tree elements corresponding to the marked content IDs
-  // present in `marked_content_id_image_map`.
-  void PopulateImageAltText(
-      const MarkedContentIdToImageMap& marked_content_id_image_map);
+
   // Traverses a struct element and its sub-tree recursively and extracts the
-  // alt text from struct elements corresponding to the marked content IDs
-  // present in `marked_content_id_image_map`. Uses `visited_elements` to guard
-  // against malformed struct trees.
-  void PopulateImageAltTextForStructElement(
-      const MarkedContentIdToImageMap& marked_content_id_image_map,
+  // text run type or the alt text from struct elements corresponding to the
+  // marked content IDs present in `marked_content_id_text_run_info_map` or
+  // `marked_content_id_image_map_` respectively. Uses `visited_elements` to
+  // guard against malformed struct trees.
+  void PopulateTextRunTypeAndImageAltTextForStructElement(
       FPDF_STRUCTELEMENT current_element,
-      std::set<FPDF_STRUCTELEMENT>* visited_elements);
+      std::set<FPDF_STRUCTELEMENT>& visited_elements,
+      MarkedContentIdToTextRunInfoMap& marked_content_id_text_run_info_map);
+
   bool PopulateFormFieldProperties(FPDF_ANNOTATION annot,
                                    FormField* form_field);
 
@@ -453,9 +464,10 @@ class PDFiumPage {
   void GenerateAndSendThumbnail(float device_pixel_ratio,
                                 SendThumbnailCallback send_callback);
 
-  // Helper that just create a `Thumbnail` for a given `device_pixel_ratio`
-  // using this page's size.
-  Thumbnail GetThumbnail(float device_pixel_ratio);
+  // Creates a `Thumbnail` for a given `device_pixel_ratio` using this page's
+  // size. The caller is responsible for rendering the page content into the
+  // thumbnail.
+  Thumbnail CreateThumbnail(float device_pixel_ratio);
 
 #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
   bool IsCharacterAddedBySearchify(int char_index);
@@ -470,6 +482,7 @@ class PDFiumPage {
   bool calculated_links_ = false;
   std::vector<Link> links_;
   bool calculated_images_ = false;
+  MarkedContentIdToImageMap marked_content_id_image_map_;
   std::vector<Image> images_;
   bool calculated_annotations_ = false;
   std::vector<Highlight> highlights_;

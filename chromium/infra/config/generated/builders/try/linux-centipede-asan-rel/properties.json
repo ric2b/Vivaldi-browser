@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Centipede Upload Linux ASan",
-              "project": "chromium-m132"
+              "project": "chromium-m134"
             },
             "builder_spec": {
               "builder_group": "chromium.fuzz",
@@ -36,15 +36,10 @@
         {
           "bucket": "ci",
           "builder": "Centipede Upload Linux ASan",
-          "project": "chromium-m132"
+          "project": "chromium-m134"
         }
       ]
     }
-  },
-  "$build/reclient": {
-    "instance": "rbe-chromium-untrusted",
-    "metrics_project": "chromium-reclient-metrics",
-    "scandeps_server": true
   },
   "$build/siso": {
     "configs": [

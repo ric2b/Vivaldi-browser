@@ -112,7 +112,7 @@ Iban& Iban::operator=(const Iban& iban) = default;
 
 PaymentsMetadata Iban::GetMetadata() const {
   CHECK_NE(record_type_, Iban::kUnknown);
-  PaymentsMetadata metadata(*this);
+  PaymentsMetadata metadata(usage_history_information_);
   metadata.id = record_type_ == Iban::kLocalIban
                     ? guid()
                     : base::NumberToString(instrument_id());
@@ -495,37 +495,9 @@ bool Iban::SetMetadata(const PaymentsMetadata& metadata) {
                           : base::NumberToString(instrument_id()))) {
     return false;
   }
-  set_use_count(metadata.use_count);
-  set_use_date(metadata.use_date);
+  usage_history_information_.set_use_count(metadata.use_count);
+  usage_history_information_.set_use_date(metadata.use_date);
   return true;
-}
-
-std::u16string Iban::GetRawInfo(FieldType type) const {
-  if (type == IBAN_VALUE) {
-    return value_;
-  }
-
-  NOTREACHED();
-}
-
-void Iban::SetRawInfoWithVerificationStatus(FieldType type,
-                                            const std::u16string& value,
-                                            VerificationStatus status) {
-  if (type == IBAN_VALUE) {
-    set_value(value);
-  } else {
-    NOTREACHED() << "Attempting to set unknown info-type" << type;
-  }
-}
-
-void Iban::GetSupportedTypes(FieldTypeSet* supported_types) const {
-  supported_types->insert(IBAN_VALUE);
-}
-
-bool Iban::IsEmpty(const std::string& app_locale) const {
-  FieldTypeSet types;
-  GetNonEmptyTypes(app_locale, &types);
-  return types.empty();
 }
 
 int Iban::Compare(const Iban& iban) const {
@@ -638,8 +610,9 @@ std::string Iban::GetCountryCode() const {
 
 void Iban::RecordAndLogUse() {
   autofill_metrics::LogDaysSinceLastIbanUse(*this);
-  RecordUseDate(AutofillClock::Now());
-  set_use_count(use_count() + 1);
+  usage_history_information_.RecordUseDate(AutofillClock::Now());
+  usage_history_information_.set_use_count(
+      usage_history_information_.use_count() + 1);
 }
 
 std::u16string Iban::GetIdentifierStringForAutofillDisplay(
@@ -698,6 +671,13 @@ bool Iban::MatchesPrefixAndSuffix(const Iban& iban) const {
   return true;
 }
 
+UsageHistoryInformation& Iban::usage_history() {
+  return usage_history_information_;
+}
+const UsageHistoryInformation& Iban::usage_history() const {
+  return usage_history_information_;
+}
+
 std::ostream& operator<<(std::ostream& os, const Iban& iban) {
   return os << "[id: "
             << (iban.record_type() == Iban::RecordType::kLocalIban
@@ -707,7 +687,7 @@ std::ostream& operator<<(std::ostream& os, const Iban& iban) {
             << (iban.record_type() == Iban::RecordType::kLocalIban
                     ? "Local IBAN"
                     : "Server IBAN")
-            << ", value: " << base::UTF16ToUTF8(iban.GetRawInfo(IBAN_VALUE))
+            << ", value: " << base::UTF16ToUTF8(iban.value())
             << ", prefix: " << base::UTF16ToUTF8(iban.prefix())
             << ", suffix: " << base::UTF16ToUTF8(iban.suffix())
             << ", nickname: " << base::UTF16ToUTF8(iban.nickname()) << "]";

@@ -4,11 +4,10 @@
 
 import * as Common from '../../../../core/common/common.js';
 import * as Platform from '../../../../core/platform/platform.js';
-import * as Coordinator from '../../../components/render_coordinator/render_coordinator.js';
+import type * as TextUtils from '../../../../models/text_utils/text_utils.js';
+import * as RenderCoordinator from '../../../components/render_coordinator/render_coordinator.js';
 
 import {type DataGridData, DataGridImpl, DataGridNode, type Parameters} from './DataGrid.js';
-
-const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
 
 export class ViewportDataGrid<T> extends Common.ObjectWrapper.eventMixin<EventTypes, typeof DataGridImpl>(
     DataGridImpl)<ViewportDataGridNode<T>> {
@@ -27,6 +26,7 @@ export class ViewportDataGrid<T> extends Common.ObjectWrapper.eventMixin<EventTy
   private lastScrollTop: number;
   private firstVisibleIsStriped: boolean;
   private isStriped: boolean;
+  private filters: readonly TextUtils.TextUtils.ParsedFilter[] = [];
 
   constructor(dataGridParameters: Parameters) {
     super(dataGridParameters);
@@ -53,6 +53,14 @@ export class ViewportDataGrid<T> extends Common.ObjectWrapper.eventMixin<EventTy
       startsWithOdd = Boolean(allChildren.indexOf(this.visibleNodes[0]));
     }
     this.updateStripesClass(startsWithOdd);
+  }
+
+  setFilters(filters: readonly TextUtils.TextUtils.ParsedFilter[]): void {
+    if (this.filters === filters) {
+      return;
+    }
+    this.filters = filters;
+    this.scheduleUpdate();
   }
 
   private updateStripesClass(startsWithOdd: boolean): void {
@@ -90,7 +98,7 @@ export class ViewportDataGrid<T> extends Common.ObjectWrapper.eventMixin<EventTy
 
   scheduleUpdate(isFromUser?: boolean): void {
     this.updateIsFromUser = this.updateIsFromUser || Boolean(isFromUser);
-    void coordinator.write('ViewportDataGrid.render', this.update.bind(this));
+    void RenderCoordinator.write('ViewportDataGrid.render', this.update.bind(this));
   }
 
   // TODO(allada) This should be fixed to never be needed. It is needed right now for network because removing
@@ -106,6 +114,50 @@ export class ViewportDataGrid<T> extends Common.ObjectWrapper.eventMixin<EventTy
     this.update();
   }
 
+  private getStringifiedCellValues(data: DataGridData, columns: Set<string>): string {
+    return JSON
+        .stringify(Object.entries(data).filter(([key]) => columns.has(key)).map(([, value]) => {
+          if (value instanceof Node) {
+            return value.textContent;
+          }
+          return String(value);
+        }))
+        .toLowerCase();
+  }
+
+  private testNodeWithFilter(node: ViewportDataGridNode<T>, filter: TextUtils.TextUtils.ParsedFilter): boolean {
+    let rowMatchesFilter = false;
+
+    const {key, text, negative, regex} = filter;
+
+    const dataToTest = this.getStringifiedCellValues(
+        node.data, key ? new Set(key.split(',')) : new Set(this.visibleColumnsArray.map(column => column.id)));
+
+    if (regex) {
+      rowMatchesFilter = regex.test(dataToTest);
+    } else if (text) {
+      rowMatchesFilter = dataToTest.includes(text.toLowerCase());
+    }
+
+    // If `negative` is set to `true`, that means we have to flip the final
+    // result, because the filter is matching anything that doesn't match. e.g.
+    // {text: 'foo', negative: false} matches rows that contain the text `foo`
+    // but {text: 'foo', negative: true} matches rows that do NOT contain the
+    // text `foo` so if a filter is marked as negative, we first match against
+    // that filter, and then we flip it here.
+    return negative ? !rowMatchesFilter : rowMatchesFilter;
+  }
+
+  testNodeWithFilters(node: ViewportDataGridNode<T>): boolean {
+    for (const filter of this.filters) {
+      const nodeMatchesFilter = this.testNodeWithFilter(node, filter);
+      if (!nodeMatchesFilter) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   private calculateVisibleNodes(clientHeight: number, scrollTop: number): {
     topPadding: number,
     bottomPadding: number,
@@ -113,7 +165,9 @@ export class ViewportDataGrid<T> extends Common.ObjectWrapper.eventMixin<EventTy
     visibleNodes: Array<ViewportDataGridNode<T>>,
     offset: number,
   } {
-    const nodes = (this.rootNode() as ViewportDataGridNode<T>).flatChildren();
+    const nodes =
+        (this.rootNode() as ViewportDataGridNode<T>).flatChildren().filter(this.testNodeWithFilters.bind(this));
+
     if (this.inline) {
       return {topPadding: 0, bottomPadding: 0, contentHeight: 0, visibleNodes: nodes, offset: 0};
     }
@@ -152,6 +206,13 @@ export class ViewportDataGrid<T> extends Common.ObjectWrapper.eventMixin<EventTy
     };
   }
 
+  override getNumberOfRows(): number {
+    return (this.rootNode() as ViewportDataGridNode<T>)
+        .flatChildren()
+        .filter(this.testNodeWithFilters.bind(this))
+        .length;
+  }
+
   private contentHeight(): number {
     const nodes = (this.rootNode() as ViewportDataGridNode<T>).flatChildren();
     let result = 0;
@@ -161,18 +222,23 @@ export class ViewportDataGrid<T> extends Common.ObjectWrapper.eventMixin<EventTy
     return result;
   }
 
+  // The datagrids assume a fixed height of rows, typically 20px. see nodeSelfHeight() and calculateVisibleNodes().
   private update(): void {
+    // Visual height of visible data rows
     const clientHeight = this.scrollContainer.clientHeight - this.headerHeightInScroller();
-    let scrollTop: number = this.scrollContainer.scrollTop;
-    const currentScrollTop = scrollTop;
-    const maxScrollTop = Math.max(0, this.contentHeight() - clientHeight);
+    // The hypothetical height of all data rows summed.
+    const contentHeight = this.contentHeight();
+    const currentScrollTop = this.scrollContainer.scrollTop;
+    // Scrolltop if scrolled to the very bottom
+    const maxScrollTop = Math.max(0, contentHeight - clientHeight);
+    let nextScrollTop = currentScrollTop;
     if (!this.updateIsFromUser && this.keepScrollingToBottom) {
-      scrollTop = maxScrollTop;
+      nextScrollTop = maxScrollTop;
     }
     this.updateIsFromUser = false;
-    scrollTop = Math.min(maxScrollTop, scrollTop);
+    nextScrollTop = Math.min(maxScrollTop, nextScrollTop);
 
-    const viewportState = this.calculateVisibleNodes(clientHeight, scrollTop);
+    const viewportState = this.calculateVisibleNodes(clientHeight, nextScrollTop);
     const visibleNodes = viewportState.visibleNodes;
     const visibleNodesSet = new Set<ViewportDataGridNode<T>>(visibleNodes);
 
@@ -213,9 +279,9 @@ export class ViewportDataGrid<T> extends Common.ObjectWrapper.eventMixin<EventTy
     }
 
     this.setVerticalPadding(viewportState.topPadding, viewportState.bottomPadding);
-    this.lastScrollTop = scrollTop;
-    if (scrollTop !== currentScrollTop) {
-      this.scrollContainer.scrollTop = scrollTop;
+    this.lastScrollTop = nextScrollTop;
+    if (nextScrollTop !== currentScrollTop) {
+      this.scrollContainer.scrollTop = nextScrollTop;
     }
     const contentFits =
         viewportState.contentHeight <= clientHeight && viewportState.topPadding + viewportState.bottomPadding === 0;
@@ -254,9 +320,9 @@ export const enum Events {
   VIEWPORT_CALCULATED = 'ViewportCalculated',
 }
 
-export type EventTypes = {
-  [Events.VIEWPORT_CALCULATED]: void,
-};
+export interface EventTypes {
+  [Events.VIEWPORT_CALCULATED]: void;
+}
 
 export class ViewportDataGridNode<T> extends DataGridNode<ViewportDataGridNode<T>> {
   private stale: boolean;
@@ -270,7 +336,7 @@ export class ViewportDataGridNode<T> extends DataGridNode<ViewportDataGridNode<T
     this.isStripedInternal = false;
   }
 
-  override element(): Element {
+  override element(): HTMLElement {
     const existingElement = this.existingElement();
     const element = existingElement || this.createElement();
     if (!existingElement || this.stale) {
@@ -278,6 +344,13 @@ export class ViewportDataGridNode<T> extends DataGridNode<ViewportDataGridNode<T
       this.stale = false;
     }
     return element;
+  }
+
+  override nodeSelfHeight(): number {
+    // Use the height of the first non-filler row.
+    const firstVisibleRow = this.dataGrid?.topFillerRow?.nextElementSibling;
+    const height = firstVisibleRow?.classList.contains('data-grid-data-grid-node') && firstVisibleRow.clientHeight;
+    return height || super.nodeSelfHeight();
   }
 
   setStriped(isStriped: boolean): void {
@@ -423,6 +496,26 @@ export class ViewportDataGridNode<T> extends DataGridNode<ViewportDataGridNode<T
     this.clearFlatNodes();
     super.expand();
     (this.dataGrid as ViewportDataGrid<T>).scheduleUpdateStructure();
+  }
+
+  override traverseNextNode(skipHidden: boolean, stayWithin?: DataGridNode<T>|null, dontPopulate?: boolean, info?: {
+    depthChange: number,
+  }): DataGridNode<T>|null {
+    const result = super.traverseNextNode(skipHidden, stayWithin, dontPopulate, info);
+    if (result && skipHidden &&
+        !(this.dataGrid as ViewportDataGrid<T>).testNodeWithFilters(result as ViewportDataGridNode<T>)) {
+      return result.traverseNextNode(skipHidden, stayWithin, dontPopulate, info);
+    }
+    return result;
+  }
+
+  override traversePreviousNode(skipHidden: boolean, dontPopulate?: boolean): DataGridNode<T>|null {
+    const result = super.traversePreviousNode(skipHidden, dontPopulate);
+    if (result && skipHidden &&
+        !(this.dataGrid as ViewportDataGrid<T>).testNodeWithFilters(result as ViewportDataGridNode<T>)) {
+      return result.traversePreviousNode(skipHidden, dontPopulate);
+    }
+    return result;
   }
 
   attached(): boolean {

@@ -26,7 +26,6 @@
 
 #if BUILDFLAG(IS_WIN)
 #include "base/task/sequence_manager/thread_controller_power_monitor.h"
-#include "base/threading/platform_thread_win.h"
 #endif
 
 namespace base::features {
@@ -53,12 +52,19 @@ BASE_FEATURE(kUseRustJsonParser,
 
 // If true, use the Rust JSON parser in-thread; otherwise, it runs in a thread
 // pool.
-const base::FeatureParam<bool> kUseRustJsonParserInCurrentSequence{
-    &kUseRustJsonParser, "UseRustJsonParserInCurrentSequence", false};
+BASE_FEATURE_PARAM(bool,
+                   kUseRustJsonParserInCurrentSequence,
+                   &kUseRustJsonParser,
+                   "UseRustJsonParserInCurrentSequence",
+                   false);
 
 // Use non default low memory device threshold.
 // Value should be given via |LowMemoryDeviceThresholdMB|.
-#if BUILDFLAG(IS_IOS)
+#if BUILDFLAG(IS_ANDROID)
+// LINT.IfChange
+#define LOW_MEMORY_DEVICE_THRESHOLD_MB 1024
+// LINT.ThenChange(//base/android/java/src/org/chromium/base/SysUtils.java)
+#elif BUILDFLAG(IS_IOS)
 // For M99, 45% of devices have 2GB of RAM, and 55% have more.
 #define LOW_MEMORY_DEVICE_THRESHOLD_MB 1024
 #else
@@ -68,9 +74,11 @@ const base::FeatureParam<bool> kUseRustJsonParserInCurrentSequence{
 BASE_FEATURE(kLowEndMemoryExperiment,
              "LowEndMemoryExperiment",
              FEATURE_DISABLED_BY_DEFAULT);
-const base::FeatureParam<int> kLowMemoryDeviceThresholdMB{
-    &kLowEndMemoryExperiment, "LowMemoryDeviceThresholdMB",
-    LOW_MEMORY_DEVICE_THRESHOLD_MB};
+BASE_FEATURE_PARAM(size_t,
+                   kLowMemoryDeviceThresholdMB,
+                   &kLowEndMemoryExperiment,
+                   "LowMemoryDeviceThresholdMB",
+                   LOW_MEMORY_DEVICE_THRESHOLD_MB);
 
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS)
 // Force to enable LowEndDeviceMode partially on Android 3Gb devices.
@@ -112,7 +120,7 @@ BASE_FEATURE(kPostPowerMonitorBroadcastReceiverInitToBackground,
 // If enabled, getMyMemoryState IPC will be posted to background.
 BASE_FEATURE(kPostGetMyMemoryStateToBackground,
              "PostGetMyMemoryStateToBackground",
-             FEATURE_DISABLED_BY_DEFAULT);
+             FEATURE_ENABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_ANDROID)
 
 void Init(EmitThreadControllerProfilerMetadata
@@ -131,7 +139,6 @@ void Init(EmitThreadControllerProfilerMetadata
 #endif
 
 #if BUILDFLAG(IS_APPLE)
-  ConditionVariable::InitializeFeatures();
   File::InitializeFeatures();
   MessagePumpCFRunLoopBase::InitializeFeatures();
   MessagePumpKqueue::InitializeFeatures();
@@ -144,7 +151,6 @@ void Init(EmitThreadControllerProfilerMetadata
 #if BUILDFLAG(IS_WIN)
   sequence_manager::internal::ThreadControllerPowerMonitor::
       InitializeFeatures();
-  InitializePlatformThreadFeatures();
 #endif
 }
 

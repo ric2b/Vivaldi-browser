@@ -4,7 +4,9 @@
 <translation id="1033008476608128425">Portret 3</translation>
 <translation id="1118377629180821201">Portret 12</translation>
 <translation id="1158503667684816647">Təsdiqləmə bir daha göstərilməsin</translation>
+<translation id="1159983379553246472">Medianın oynadılması problemlərini düzəltmək üçün vərəqi yenidən yükləyin.</translation>
 <translation id="1222195720020481779">Quraşdırıcı işə düşür...</translation>
+<translation id="1224683873953469764">Mobil telefonlar üçün Vibvaldini əldə edin</translation>
 <translation id="1270785070369717623">Təəssüf ki, bu veb-bələdçi işlədiyi zaman Opera GX ayarları əlçatan deyil. Bu ayarları Vivaldiyə daxil etmək üçün bütün Opera GX pəncərələrini bağlayın və sonra Davam edin düyməsinə vurun.</translation>
 <translation id="1276145862619442150">Sürətli Yığım</translation>
 <translation id="1281950884873973195">Heyvan 6</translation>
@@ -12,6 +14,7 @@
 <translation id="1454726940098520109">Təsdiqləməni göstərməmək</translation>
 <translation id="1462666970065907900">Bu pəncərəni doğrudan bağlamaq istəyirsiniz?</translation>
 <translation id="1480046233931937785">Minnətdarlıq</translation>
+<translation id="1521774566618522728">Bu gün aktiv olub</translation>
 <translation id="1526344461589023948">Endirilmiş yenilənmələrin saxlanılmasına cəhd edilərkən xəta baş verdi. Kompyuterinizin diskində kifayət qədər boş yer olduğunu yoxlayın və sonra yenidən cəhd edin.</translation>
 <translation id="1635542496948266458">Başqa profilə keçid</translation>
 <translation id="1657174850639146440">Canavar 9</translation>
@@ -97,6 +100,7 @@
 <translation id="4430019312045809116">Səs səviyyəsi</translation>
 <translation id="443008484043213881">Alətlər</translation>
 <translation id="4456211719108566931">Canavar 6</translation>
+<translation id="4459169140545916303"><ph name="DEVICE_LAST_ACTIVATED_TIME" /> gün öncə aktiv olub</translation>
 <translation id="4512900838580567989">Keçidi yeni arxa vərəqdə açın</translation>
 <translation id="4545097004879999966">Poçtu açın</translation>
 <translation id="4548358047305717967">Şəkili yeni arxa vərəqdə açın</translation>
@@ -119,6 +123,7 @@
 <translation id="5388358297987318779">Şəkili açın</translation>
 <translation id="5416008465899576639">Yeni Vivaldi versiyası əlçatandır.</translation>
 <translation id="5497042274492038489">Pəncərənin bağlanmasını təsdiqləmək</translation>
+<translation id="5556459405103347317">Yenidən yükləmək</translation>
 <translation id="5594602170491763400">Canavar 5</translation>
 <translation id="5648110075441906505">Şəkili yeni pəncərədə açın</translation>
 <translation id="5656371807944747581">Yenilənmə xətası!</translation>
@@ -148,6 +153,7 @@
 <translation id="7099506190679014195">Açar saxlama yaddaşının təhlükəsiz yenilənməsi</translation>
 <translation id="7111492742514999492">Portret 9</translation>
 <translation id="7208252576848052204">Təəssüf ki, bu veb-bələdçi işlədiyi zaman Arc ayarları əlçatan deyil. Bu ayarları Vivaldiyə daxil etmək üçün bütün Arc pəncərələrini bağlayın və sonra Davam edin düyməsinə vurun.</translation>
+<translation id="7321500017121629018">Dünən aktiv olub</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7581266044164103589">Yenilənmə quraşdırıcısı başladıla bilmədi. Disk yaddaşında kifayət qədər yerin olmasını yoxlayın və yenidən cəhd edin.</translation>
 <translation id="7658239707568436148">İmtina</translation>

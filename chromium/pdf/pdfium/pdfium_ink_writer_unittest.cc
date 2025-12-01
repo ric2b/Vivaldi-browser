@@ -11,7 +11,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/cfi_buildflags.h"
 #include "base/files/file_path.h"
 #include "base/time/time.h"
 #include "pdf/pdf_ink_brush.h"
@@ -24,7 +23,7 @@
 #include "pdf/test/test_helpers.h"
 #include "third_party/ink/src/ink/geometry/affine_transform.h"
 #include "third_party/ink/src/ink/geometry/intersects.h"
-#include "third_party/ink/src/ink/geometry/modeled_shape.h"
+#include "third_party/ink/src/ink/geometry/partitioned_mesh.h"
 #include "third_party/ink/src/ink/geometry/point.h"
 #include "third_party/ink/src/ink/strokes/input/stroke_input.h"
 #include "third_party/ink/src/ink/strokes/input/stroke_input_batch.h"
@@ -84,13 +83,7 @@ std::unique_ptr<PdfInkBrush> CreateTestBrush() {
 
 using PDFiumInkWriterTest = PDFiumTestBase;
 
-// TODO(crbug.com/377704081): Enable test for CFI.
-#if BUILDFLAG(CFI_ICALL_CHECK)
-#define MAYBE_BasicWriteAndRead DISABLED_BasicWriteAndRead
-#else
-#define MAYBE_BasicWriteAndRead BasicWriteAndRead
-#endif
-TEST_P(PDFiumInkWriterTest, MAYBE_BasicWriteAndRead) {
+TEST_P(PDFiumInkWriterTest, BasicWriteAndRead) {
   TestClient client;
   std::unique_ptr<PDFiumEngine> engine =
       InitializeEngine(&client, FILE_PATH_LITERAL("blank.pdf"));
@@ -131,8 +124,9 @@ TEST_P(PDFiumInkWriterTest, MAYBE_BasicWriteAndRead) {
   ASSERT_TRUE(saved_page);
 
   // Complete the round trip and read the written PDF data back into memory as
-  // an ink::ModeledShape. ReadV2InkPathsFromPageAsModeledShapes() is known to
-  // be good because its unit tests reads from a real, known to be good Ink PDF.
+  // an ink::PartitionedMesh. ReadV2InkPathsFromPageAsModeledShapes() is known
+  // to be good because its unit tests reads from a real, known to be good Ink
+  // PDF.
   std::vector<ReadV2InkPathResult> saved_results =
       ReadV2InkPathsFromPageAsModeledShapes(saved_page);
   ASSERT_EQ(saved_results.size(), 1u);

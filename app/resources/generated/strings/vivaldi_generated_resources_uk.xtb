@@ -279,6 +279,7 @@
 <translation id="5582839680698949063">Головне меню</translation>
 <translation id="5614553682702429503">Зберегти пароль?</translation>
 <translation id="5623842676595125836">Журнал</translation>
+<translation id="5624959475330585145">Запитувати перед використанням незахищених з’єднань</translation>
 <translation id="5638309510554459422">Шукайте розширення у <ph name="BEGIN_LINK" />Веб-магазині Chrome <ph name="END_LINK" /></translation>
 <translation id="5677928146339483299">Заблоковано</translation>
 <translation id="5707185214361380026">Помилка завантаження розширення з:</translation>
@@ -468,6 +469,7 @@
 <translation id="9218430445555521422">Установити за умовчанням</translation>
 <translation id="93766956588638423">Відновити розширення</translation>
 <translation id="961012016278832836">Старий Microsoft Edge</translation>
+<translation id="961856697154696964">Видалити дані перегляду</translation>
 <translation id="994289308992179865">&amp;Безперервно</translation>
 <translation id="998747458861718449">Перевірити</translation>
 </translationbundle>

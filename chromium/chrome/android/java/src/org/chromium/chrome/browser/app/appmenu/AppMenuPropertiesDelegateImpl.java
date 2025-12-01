@@ -55,7 +55,6 @@ import org.chromium.chrome.browser.night_mode.WebContentsDarkModeController;
 import org.chromium.chrome.browser.omaha.UpdateMenuItemHelper;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.quick_delete.QuickDeleteController;
 import org.chromium.chrome.browser.readaloud.ReadAloudController;
 import org.chromium.chrome.browser.share.ShareHelper;
 import org.chromium.chrome.browser.share.ShareUtils;
@@ -110,7 +109,7 @@ import android.text.style.SuperscriptSpan;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkType;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
-import org.chromium.chrome.browser.accessibility.settings.AccessibilitySettings;
+import org.chromium.components.browser_ui.accessibility.AccessibilitySettings;
 import org.chromium.chrome.browser.dom_distiller.TabDistillabilityProvider;
 import org.chromium.chrome.browser.night_mode.settings.ThemeSettingsFragment;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
@@ -568,6 +567,12 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                 menu.findItem(R.id.disable_price_tracking_menu_id),
                 currentTab);
 
+        boolean showOpenWith =
+                currentTab != null
+                        && currentTab.isNativePage()
+                        && currentTab.getNativePage().isPdf();
+        menu.findItem(R.id.open_with_id).setVisible(showOpenWith);
+
         if (ChromeApplicationImpl.isVivaldi()) {
             menu.findItem(R.id.downloads_menu_id).setVisible(!BuildConfig.IS_OEM_AUTOMOTIVE_BUILD);
             // NOTE(jarle@vivaldi.com) VAB-2769 blind fix.
@@ -703,9 +708,10 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
 
         updateManagedByMenuItem(menu, currentTab);
 
-        // Only display quick delete divider line on the page menu and if quick delete is enabled.
-        menu.findItem(R.id.quick_delete_divider_line_id)
-                .setVisible(isQuickDeleteEnabled(isIncognito));
+        // Only display quick delete divider line on the regular mode page menu.
+        menu.findItem(R.id.quick_delete_divider_line_id).setVisible(!isIncognito);
+
+        menu.findItem(R.id.download_page_id).setVisible(shouldShowDownloadPageMenuItem(currentTab));
 
         if (ChromeApplicationImpl.isVivaldi())
             menu.findItem(R.id.managed_by_standard_menu_id).setVisible(false);
@@ -730,13 +736,16 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                     menu.findItem(R.id.share_row_menu_id).setVisible(false);
                 if (menuId == R.id.request_desktop_site_id)
                     menu.findItem(R.id.request_desktop_site_row_menu_id).setVisible(false);
+                if (menuId == R.id.simplified_view_id)
+                    menu.findItem(R.id.simplified_view_id_row).setVisible(false);
             }
         }
+        // End Vivaldi
     }
 
     /**
-     * @return The number of Chrome instances either running alive or dormant but the state
-     *         is present for restoration.
+     * @return The number of Chrome instances either running alive or dormant but the state is
+     *     present for restoration.
      */
     @VisibleForTesting
     int getInstanceCount() {
@@ -827,8 +836,7 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                 item.setEnabled(hasIncognitoTabs);
             }
             if (item.getItemId() == R.id.quick_delete_menu_id) {
-                item.setVisible(isQuickDeleteEnabled(isIncognito));
-                item.setEnabled(isQuickDeleteEnabled(isIncognito));
+                item.setVisible(!isIncognito);
             }
             if (item.getItemId() == R.id.tinker_tank_menu_id) {
                 boolean enabled = TinkerTankDelegate.isEnabled();
@@ -851,14 +859,6 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
                 hasItemBetweenDividers = true;
             }
         }
-    }
-
-    /**
-     * @param isIncognito Whether the currentTab is incognito.
-     * @return Whether the quick delete menu item should be enabled.
-     */
-    private boolean isQuickDeleteEnabled(boolean isIncognito) {
-        return !isIncognito && QuickDeleteController.isQuickDeleteEnabled();
     }
 
     /**
@@ -1056,6 +1056,16 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
      */
     protected boolean shouldShowManagedByMenuItem(Tab currentTab) {
         return false;
+    }
+
+    /**
+     * @param currentTab Current tab being displayed.
+     * Returns whether the "Download page" menu item should be displayed.
+     */
+    protected boolean shouldShowDownloadPageMenuItem(Tab currentTab) {
+        return ChromeFeatureList.sHideTabletToolbarDownloadButton.isEnabled()
+                && isTabletSizeScreen()
+                && shouldEnableDownloadPage(currentTab);
     }
 
     /** Sets the visibility and labels of the "Add to Home screen" and "Open WebAPK" menu items. */

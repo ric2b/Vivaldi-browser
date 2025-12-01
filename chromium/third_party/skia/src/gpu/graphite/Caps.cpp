@@ -50,9 +50,7 @@ void Caps::finishInitialization(const ContextOptions& options) {
     fMaxPathAtlasTextureSize = options.fMaxPathAtlasTextureSize;
     fAllowMultipleAtlasTextures = options.fAllowMultipleAtlasTextures;
     fSupportBilerpFromGlyphAtlas = options.fSupportBilerpFromGlyphAtlas;
-    if (options.fDisableCachedGlyphUploads) {
-        fRequireOrderedRecordings = true;
-    }
+    fRequireOrderedRecordings = options.fRequireOrderedRecordings;
     fSetBackendLabels = options.fSetBackendLabels;
 }
 
@@ -68,18 +66,6 @@ bool Caps::isTexturable(const TextureInfo& info) const {
         return false;
     }
     return this->onIsTexturable(info);
-}
-
-GraphiteResourceKey Caps::makeSamplerKey(const SamplerDesc& samplerDesc) const {
-    GraphiteResourceKey samplerKey;
-    static const ResourceType kType = GraphiteResourceKey::GenerateResourceType();
-    GraphiteResourceKey::Builder builder(&samplerKey, kType, /*data32Count=*/1, Shareable::kYes);
-
-    // The default impl. of this method adds no additional backend information to the key.
-    builder[0] = samplerDesc.desc();
-
-    builder.finish();
-    return samplerKey;
 }
 
 bool Caps::areColorTypeAndTextureInfoCompatible(SkColorType ct, const TextureInfo& info) const {
@@ -151,12 +137,12 @@ skgpu::Swizzle Caps::getWriteSwizzle(SkColorType ct, const TextureInfo& info) co
     return colorTypeInfo->fWriteSwizzle;
 }
 
-DstReadRequirement Caps::getDstReadRequirement() const {
+DstReadStrategy Caps::getDstReadStrategy() const {
     // TODO(b/238757201): Currently this only supports dst reads by FB fetch and texture copy.
     if (this->shaderCaps()->fFBFetchSupport) {
-        return DstReadRequirement::kFramebufferFetch;
+        return DstReadStrategy::kFramebufferFetch;
     } else {
-        return DstReadRequirement::kTextureCopy;
+        return DstReadStrategy::kTextureCopy;
     }
 }
 

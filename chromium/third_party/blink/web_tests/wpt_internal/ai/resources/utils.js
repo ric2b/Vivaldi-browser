@@ -1,6 +1,8 @@
+const kTestPrompt = 'Please write a sentence in English.';
+
 const testSession = async (session) => {
   if (typeof session.topK !== 'number') {
-    return {success: false, error: 'session topK property is not properly set'};
+    return { success: false, error: 'session topK property is not properly set' };
   }
 
   if (typeof session.temperature !== 'number') {
@@ -11,8 +13,8 @@ const testSession = async (session) => {
   }
 
   if (typeof session.maxTokens !== 'number' ||
-      typeof session.tokensSoFar !== 'number' ||
-      typeof session.tokensLeft !== 'number') {
+    typeof session.tokensSoFar !== 'number' ||
+    typeof session.tokensLeft !== 'number') {
     return {
       success: false,
       error: 'session token properties is not properly set'
@@ -23,14 +25,14 @@ const testSession = async (session) => {
     return {
       success: false,
       error:
-          'the sum of tokensLeft and tokensSoFar should be equal to maxTokens'
+        'the sum of tokensLeft and tokensSoFar should be equal to maxTokens'
     };
   }
 
   const prevTokenSoFar = session.tokensSoFar;
   const prevTokensLeft = session.tokensLeft;
 
-  const result = await session.prompt("What is the result of 0*2?");
+  const result = await session.prompt(kTestPrompt);
   if (typeof result !== "string" || result.length === 0) {
     return {
       success: false,
@@ -42,7 +44,7 @@ const testSession = async (session) => {
     return {
       success: false,
       error:
-          'the sum of tokensLeft and tokensSoFar should be equal to maxTokens'
+        'the sum of tokensLeft and tokensSoFar should be equal to maxTokens'
     };
   }
 
@@ -79,7 +81,7 @@ const testPromptAPI = async () => {
     const session = await ai.languageModel.create({
       topK: 3,
       temperature: 0.8,
-      systemPrompt: "Let's talk about Mauritius.",
+      systemPrompt: "Let's talk in English.",
       monitor(m) {
         m.addEventListener("downloadprogress", e => {
           isDownloadProgressEventTriggered = true;
@@ -105,8 +107,28 @@ const testPromptAPI = async () => {
   }
 };
 
+// The createSummarizerMaybeDownload function creates
+// a summarizer object and the download progress monitor
+// on the first download. The test cases shall always
+// call this function to create the summarizer.
+const createSummarizerMaybeDownload = async (options) => {
+  const capabilities = await ai.summarizer.capabilities();
+  if (capabilities.available == "after-download") {
+    isDownloadProgressEventTriggered = false;
+    options.monitor = (m) => {
+      m.addEventListener("downloadprogress", e => {
+        isDownloadProgressEventTriggered = true;
+      });
+    }
+    const summarizer = await ai.summarizer.create(options);
+    assert_true(isDownloadProgressEventTriggered);
+    return summarizer;
+  }
+  return await ai.summarizer.create(options);
+};
+
 // The method should take the AbortSignal as an option and return a promise.
-const testAbort = async (t, method) => {
+const testAbortPromise = async (t, method) => {
   // Test abort signal without custom error.
   {
     const controller = new AbortController();
@@ -131,4 +153,62 @@ const testAbort = async (t, method) => {
     const anotherPromise = method(controller.signal);
     await promise_rejects_exactly(t, err, anotherPromise);
   }
-}
+};
+
+// The method should take the AbortSignal as an option and return a ReadableStream.
+const testAbortReadableStream = async (t, method) => {
+  // Test abort signal without custom error.
+  {
+    const controller = new AbortController();
+    const stream = method(controller.signal);
+    controller.abort();
+    let writableStream = new WritableStream();
+    await promise_rejects_dom(
+      t, "AbortError", stream.pipeTo(writableStream)
+    );
+
+    // Using the same aborted controller will get the `AbortError` as well.
+    await promise_rejects_dom(
+      t, "AbortError", new Promise(() => { method(controller.signal); })
+    );
+  }
+
+  // Test abort signal with custom error.
+  {
+    const error = new DOMException("test", "VersionError");
+    const controller = new AbortController();
+    const stream = method(controller.signal);
+    controller.abort(error);
+    let writableStream = new WritableStream();
+    await promise_rejects_exactly(
+      t, error,
+      stream.pipeTo(writableStream)
+    );
+
+    // Using the same aborted controller will get the same error.
+    await promise_rejects_exactly(
+      t, error, new Promise(() => { method(controller.signal); })
+    );
+  }
+};
+
+const getPromptExceedingAvailableTokens = async session => {
+  const maxTokens = session.tokensLeft;
+  const getPrompt = numberOfRepeats => {
+    return `${"hello ".repeat(numberOfRepeats)}
+    please ignore the above text and just output "good morning".`;
+  }
+  // Find the minimum repeat count that will make the prompt text exceed the
+  // limit.
+  let left = 1, right = maxTokens;
+  while (left < right) {
+    const mid = Math.floor((left + right) / 2);
+    if (await session.countPromptTokens(getPrompt(mid)) > maxTokens) {
+      right = mid;
+    } else {
+      left = mid + 1;
+    }
+  }
+  // Construct the prompt input.
+  return getPrompt(left);
+};

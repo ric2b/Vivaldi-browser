@@ -18,9 +18,9 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.LooperMode;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.test.util.browser.signin.AccountManagerTestRule;
 import org.chromium.components.signin.base.AccountInfo;
+import org.chromium.components.signin.base.GaiaId;
 import org.chromium.components.signin.identitymanager.AccountInfoServiceProvider;
 import org.chromium.components.signin.identitymanager.IdentityManager;
 import org.chromium.components.signin.identitymanager.IdentityManagerJni;
@@ -31,12 +31,10 @@ import org.chromium.components.signin.identitymanager.IdentityManagerJni;
 public class ProfileDataCacheUnitTest {
     private static final long NATIVE_IDENTITY_MANAGER = 10001L;
     private static final AccountInfo ACCOUNT =
-            new AccountInfo.Builder("test@gmail.com", "gaia-id").build();
+            new AccountInfo.Builder("test@gmail.com", new GaiaId("gaia-id")).build();
 
     @Rule
     public final MockitoRule mMockitoRule = MockitoJUnit.rule().strictness(Strictness.STRICT_STUBS);
-
-    @Rule public final JniMocker mocker = new JniMocker();
 
     @Rule
     public final AccountManagerTestRule mAccountManagerTestRule = new AccountManagerTestRule();
@@ -52,7 +50,7 @@ public class ProfileDataCacheUnitTest {
 
     @Before
     public void setUp() {
-        mocker.mock(IdentityManagerJni.TEST_HOOKS, mIdentityManagerNativeMock);
+        IdentityManagerJni.setInstanceForTesting(mIdentityManagerNativeMock);
         mProfileDataCache =
                 ProfileDataCache.createWithDefaultImageSizeAndNoBadge(
                         RuntimeEnvironment.application.getApplicationContext());
@@ -104,7 +102,11 @@ public class ProfileDataCacheUnitTest {
 
     @Test
     public void accountInfoIsUpdatedWithOnlyBadgeConfig() {
-        mProfileDataCache.setBadge(R.drawable.ic_sync_badge_error_20dp);
+        mProfileDataCache.setBadge(
+                ACCOUNT.getEmail(),
+                ProfileDataCache.createDefaultSizeChildAccountBadgeConfig(
+                        RuntimeEnvironment.application.getApplicationContext(),
+                        R.drawable.ic_sync_badge_error_20dp));
         mProfileDataCache.addObserver(mObserverMock);
         Assert.assertFalse(mProfileDataCache.hasProfileDataForTesting(ACCOUNT.getEmail()));
 

@@ -88,10 +88,11 @@
 
 - (void)start {
   syncer::SyncService* sync_service =
-      SyncServiceFactory::GetForProfile(self.browser->GetProfile());
+      SyncServiceFactory::GetForProfile(
+          self.browser->GetProfile()->GetOriginalProfile());
   vivaldi::VivaldiAccountManager* account_manager =
       vivaldi::VivaldiAccountManagerFactory::GetForProfile(
-          self.browser->GetProfile());
+          self.browser->GetProfile()->GetOriginalProfile());
   PrefService* pref_service =
       ProfileIOS::FromBrowserState(self.browser->GetProfile())->GetPrefs();
   self.mediator =
@@ -247,6 +248,9 @@
 
   self.syncEncryptionPasswordViewController.shouldHideDoneButton = YES;
   self.syncEncryptionPasswordViewController.delegate = self;
+  if (self.showCancelButton) {
+    [self.syncEncryptionPasswordViewController setupLeftCancelButton];
+  }
   self.mediator.settingsConsumer = nil;
   [controllers addObject:self.syncEncryptionPasswordViewController];
   [self.baseNavigationController setViewControllers:controllers animated:YES];

@@ -339,7 +339,10 @@ void AuctionWorkletServiceImpl::LoadSellerWorklet(
     const url::Origin& top_window_origin,
     mojom::AuctionWorkletPermissionsPolicyStatePtr permissions_policy_state,
     std::optional<uint16_t> experiment_group_id,
-    mojom::TrustedSignalsPublicKeyPtr public_key) {
+    std::optional<bool> send_creative_scanning_metadata,
+    mojom::TrustedSignalsPublicKeyPtr public_key,
+    mojo::PendingRemote<auction_worklet::mojom::LoadSellerWorkletClient>
+        load_seller_worklet_client) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   std::vector<scoped_refptr<AuctionV8Helper>> v8_helpers;
   for (size_t i = 0; i < auction_seller_v8_helper_holders_.size(); ++i) {
@@ -351,13 +354,14 @@ void AuctionWorkletServiceImpl::LoadSellerWorklet(
   auto seller_worklet = std::make_unique<SellerWorklet>(
       std::move(v8_helpers), std::move(shared_storage_hosts),
       pause_for_debugger_on_start, std::move(pending_url_loader_factory),
-      std::move(auction_network_events_handler), decision_logic_url,
-      trusted_scoring_signals_url, top_window_origin,
+      std::move(auction_network_events_handler), GetTrustedSignalsKVv2Manager(),
+      decision_logic_url, trusted_scoring_signals_url, top_window_origin,
       std::move(permissions_policy_state), experiment_group_id,
-      std::move(public_key),
+      send_creative_scanning_metadata, std::move(public_key),
       base::BindRepeating(
           &AuctionWorkletServiceImpl::GetNextSellerWorkletThreadIndex,
-          base::Unretained(this)));
+          base::Unretained(this)),
+      std::move(load_seller_worklet_client));
   auto* seller_worklet_ptr = seller_worklet.get();
 
   mojo::ReceiverId receiver_id = seller_worklets_.Add(

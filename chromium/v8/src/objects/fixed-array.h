@@ -231,17 +231,23 @@ V8_OBJECT class FixedArray
                            WriteBarrierMode mode);
 
   // Return a grown copy if the index is bigger than the array's length.
-  V8_EXPORT_PRIVATE static Handle<FixedArray> SetAndGrow(
-      Isolate* isolate, Handle<FixedArray> array, int index,
+  template <template <typename> typename HandleType>
+    requires(
+        std::is_convertible_v<HandleType<FixedArray>, DirectHandle<FixedArray>>)
+  V8_EXPORT_PRIVATE static HandleType<FixedArray> SetAndGrow(
+      Isolate* isolate, HandleType<FixedArray> array, int index,
       DirectHandle<Object> value);
 
   // Right-trim the array.
   // Invariant: 0 < new_length <= length()
   V8_EXPORT_PRIVATE void RightTrim(Isolate* isolate, int new_capacity);
   // Right-trims the array, and canonicalizes length 0 to empty_fixed_array.
-  static Handle<FixedArray> RightTrimOrEmpty(Isolate* isolate,
-                                             Handle<FixedArray> array,
-                                             int new_length);
+  template <template <typename> typename HandleType>
+    requires(
+        std::is_convertible_v<HandleType<FixedArray>, DirectHandle<FixedArray>>)
+  static HandleType<FixedArray> RightTrimOrEmpty(Isolate* isolate,
+                                                 HandleType<FixedArray> array,
+                                                 int new_length);
 
   // TODO(jgruber): Only needed for FixedArrays used as JSObject elements.
   inline void FillWithHoles(int from, int to);
@@ -272,6 +278,7 @@ static_assert(sizeof(FixedArray) == Internals::kFixedArrayHeaderSize);
 class TrustedArrayShape final : public AllStatic {
  public:
   using ElementT = Object;
+  // The elements in a TrustedFixedArray are pointers into the main cage!
   using CompressionScheme = V8HeapCompressionScheme;
   static constexpr RootIndex kMapRootIndex = RootIndex::kTrustedFixedArrayMap;
   static constexpr bool kLengthEqualsCapacity = true;
@@ -466,6 +473,10 @@ V8_OBJECT class FixedDoubleArray
   static inline Handle<Object> get(Tagged<FixedDoubleArray> array, int index,
                                    Isolate* isolate);
   inline void set(int index, double value);
+#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+  inline void set_undefined(int index);
+  inline bool is_undefined(int index);
+#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
 
   inline void set_the_hole(Isolate* isolate, int index);
   inline void set_the_hole(int index);
@@ -504,7 +515,7 @@ V8_OBJECT class WeakFixedArray
   static inline Handle<WeakFixedArray> New(
       IsolateT* isolate, int capacity,
       AllocationType allocation = AllocationType::kYoung,
-      MaybeHandle<Object> initial_value = {});
+      MaybeDirectHandle<Object> initial_value = {});
 
   DECL_PRINTER(WeakFixedArray)
   DECL_VERIFIER(WeakFixedArray)
@@ -521,7 +532,7 @@ class TrustedWeakFixedArrayShape final : public AllStatic {
   static constexpr bool kLengthEqualsCapacity = true;
 };
 
-// A WeakFixedArray in trusted space and with a unique instance type.
+// A WeakFixedArray in trusted space holding pointers into the main cage.
 V8_OBJECT class TrustedWeakFixedArray
     : public TaggedArrayBase<TrustedWeakFixedArray, TrustedWeakFixedArrayShape,
                              TrustedObjectLayout> {
@@ -535,6 +546,35 @@ V8_OBJECT class TrustedWeakFixedArray
 
   DECL_PRINTER(TrustedWeakFixedArray)
   DECL_VERIFIER(TrustedWeakFixedArray)
+
+  class BodyDescriptor;
+} V8_OBJECT_END;
+
+class ProtectedWeakFixedArrayShape final : public AllStatic {
+ public:
+  using ElementT = Union<MaybeWeak<TrustedObject>, Smi>;
+  using CompressionScheme = TrustedSpaceCompressionScheme;
+  static constexpr RootIndex kMapRootIndex =
+      RootIndex::kProtectedWeakFixedArrayMap;
+  static constexpr bool kLengthEqualsCapacity = true;
+};
+
+// A WeakFixedArray in trusted space, containing weak pointers to other
+// trusted objects (or smis).
+V8_OBJECT class ProtectedWeakFixedArray
+    : public TaggedArrayBase<ProtectedWeakFixedArray,
+                             ProtectedWeakFixedArrayShape,
+                             TrustedObjectLayout> {
+  using Super =
+      TaggedArrayBase<ProtectedWeakFixedArray, ProtectedWeakFixedArrayShape,
+                      TrustedObjectLayout>;
+
+ public:
+  template <class IsolateT>
+  static inline Handle<ProtectedWeakFixedArray> New(IsolateT* isolate,
+                                                    int capacity);
+  DECL_PRINTER(ProtectedWeakFixedArray)
+  DECL_VERIFIER(ProtectedWeakFixedArray)
 
   class BodyDescriptor;
 } V8_OBJECT_END;
@@ -554,7 +594,7 @@ class WeakArrayList
       Isolate* isolate, Handle<WeakArrayList> array,
       MaybeObjectDirectHandle value);
 
-  // A version that adds to elements. This ensures that the elements are
+  // A version that adds two elements. This ensures that the elements are
   // inserted atomically w.r.t GC.
   V8_EXPORT_PRIVATE static Handle<WeakArrayList> AddToEnd(
       Isolate* isolate, Handle<WeakArrayList> array,
@@ -687,7 +727,7 @@ V8_OBJECT class ArrayList : public TaggedArrayBase<ArrayList, ArrayListShape> {
       DirectHandle<Object> obj1,
       AllocationType allocation = AllocationType::kYoung);
 
-  V8_EXPORT_PRIVATE static Handle<FixedArray> ToFixedArray(
+  V8_EXPORT_PRIVATE static DirectHandle<FixedArray> ToFixedArray(
       Isolate* isolate, DirectHandle<ArrayList> array,
       AllocationType allocation = AllocationType::kYoung);
 
@@ -839,8 +879,8 @@ class FixedAddressArrayBase : public FixedIntegerArrayBase<Address, Base> {
 
   // {MoreArgs...} allows passing the `AllocationType` if `Base` is `ByteArray`.
   template <typename... MoreArgs>
-  static inline Handle<FixedAddressArrayBase> New(Isolate* isolate, int length,
-                                                  MoreArgs&&... more_args);
+  static inline DirectHandle<FixedAddressArrayBase> New(
+      Isolate* isolate, int length, MoreArgs&&... more_args);
 } V8_OBJECT_END;
 
 using FixedAddressArray = FixedAddressArrayBase<ByteArray>;
@@ -899,8 +939,9 @@ V8_OBJECT
 template <class T>
 class TrustedPodArray : public PodArrayBase<T, TrustedByteArray> {
  public:
-  static Handle<TrustedPodArray<T>> New(Isolate* isolate, int length);
-  static Handle<TrustedPodArray<T>> New(LocalIsolate* isolate, int length);
+  static DirectHandle<TrustedPodArray<T>> New(Isolate* isolate, int length);
+  static DirectHandle<TrustedPodArray<T>> New(LocalIsolate* isolate,
+                                              int length);
 } V8_OBJECT_END;
 
 }  // namespace v8::internal

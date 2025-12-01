@@ -16,17 +16,21 @@ import * as Buttons from '../../../ui/components/buttons/buttons.js';
 import type * as ExpandableList from '../../../ui/components/expandable_list/expandable_list.js';
 import type * as IconButton from '../../../ui/components/icon_button/icon_button.js';
 import * as LegacyWrapper from '../../../ui/components/legacy_wrapper/legacy_wrapper.js';
-import * as Coordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
+import * as RenderCoordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
 import type * as ReportView from '../../../ui/components/report_view/report_view.js';
 import type * as TreeOutline from '../../../ui/components/tree_outline/tree_outline.js';
 import * as Components from '../../../ui/legacy/components/utils/utils.js';
-import * as LitHtml from '../../../ui/lit-html/lit-html.js';
+import * as Lit from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
 import {NotRestoredReasonDescription} from './BackForwardCacheStrings.js';
-import backForwardCacheViewStyles from './backForwardCacheView.css.js';
+import backForwardCacheViewStylesRaw from './backForwardCacheView.css.js';
 
-const {html} = LitHtml;
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const backForwardCacheViewStyles = new CSSStyleSheet();
+backForwardCacheViewStyles.replaceSync(backForwardCacheViewStylesRaw.cssContent);
+
+const {html} = Lit;
 
 const UIStrings = {
   /**
@@ -154,8 +158,6 @@ const enum ScreenStatusType {
   RESULT = 'Result',
 }
 
-const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
-
 export class BackForwardCacheView extends LegacyWrapper.LegacyWrapper.WrappableComponent {
   readonly #shadow = this.attachShadow({mode: 'open'});
   #screenStatus = ScreenStatusType.RESULT;
@@ -184,10 +186,10 @@ export class BackForwardCacheView extends LegacyWrapper.LegacyWrapper.WrappableC
   }
 
   override async render(): Promise<void> {
-    await coordinator.write('BackForwardCacheView render', () => {
+    await RenderCoordinator.write('BackForwardCacheView render', () => {
       // Disabled until https://crbug.com/1079231 is fixed.
       // clang-format off
-      LitHtml.render(html`
+      Lit.render(html`
         <devtools-report .data=${
             {reportTitle: i18nString(UIStrings.backForwardCacheTitle)} as ReportView.ReportView.ReportData
         } jslog=${VisualLogging.pane('back-forward-cache')}>
@@ -260,7 +262,7 @@ export class BackForwardCacheView extends LegacyWrapper.LegacyWrapper.WrappableC
     void resourceTreeModel.navigate('chrome://terms' as Platform.DevToolsPath.UrlString);
   }
 
-  #renderMainFrameInformation(): LitHtml.TemplateResult {
+  #renderMainFrameInformation(): Lit.TemplateResult {
     const frame = this.#getMainFrame();
     if (!frame) {
       // clang-format off
@@ -318,12 +320,12 @@ export class BackForwardCacheView extends LegacyWrapper.LegacyWrapper.WrappableC
   }
 
   #maybeRenderFrameTree(explanationTree: Protocol.Page.BackForwardCacheNotRestoredExplanationTree|
-                        undefined): LitHtml.LitTemplate {
+                        undefined): Lit.LitTemplate {
     if (!explanationTree || (explanationTree.explanations.length === 0 && explanationTree.children.length === 0)) {
-      return LitHtml.nothing;
+      return Lit.nothing;
     }
 
-    function treeNodeRenderer(node: TreeOutline.TreeOutlineUtils.TreeNode<FrameTreeNodeData>): LitHtml.TemplateResult {
+    function treeNodeRenderer(node: TreeOutline.TreeOutlineUtils.TreeNode<FrameTreeNodeData>): Lit.TemplateResult {
       // clang-format off
       return html`
         <div class="text-ellipsis">
@@ -335,7 +337,7 @@ export class BackForwardCacheView extends LegacyWrapper.LegacyWrapper.WrappableC
               height: '20px',
             } as IconButton.Icon.IconData}>
             </devtools-icon>
-          ` : LitHtml.nothing}
+          ` : Lit.nothing}
           ${node.treeNodeData.text}
         </div>
       `;
@@ -433,7 +435,7 @@ export class BackForwardCacheView extends LegacyWrapper.LegacyWrapper.WrappableC
     return {node, frameCount, issueCount};
   }
 
-  #renderBackForwardCacheStatus(status: boolean|undefined): LitHtml.TemplateResult {
+  #renderBackForwardCacheStatus(status: boolean|undefined): Lit.TemplateResult {
     switch (status) {
       case true:
         // clang-format off
@@ -504,9 +506,9 @@ export class BackForwardCacheView extends LegacyWrapper.LegacyWrapper.WrappableC
 
   #maybeRenderExplanations(
       explanations: Protocol.Page.BackForwardCacheNotRestoredExplanation[],
-      explanationTree: Protocol.Page.BackForwardCacheNotRestoredExplanationTree|undefined): LitHtml.LitTemplate {
+      explanationTree: Protocol.Page.BackForwardCacheNotRestoredExplanationTree|undefined): Lit.LitTemplate {
     if (explanations.length === 0) {
-      return LitHtml.nothing;
+      return Lit.nothing;
     }
 
     const pageSupportNeeded = explanations.filter(
@@ -533,7 +535,7 @@ export class BackForwardCacheView extends LegacyWrapper.LegacyWrapper.WrappableC
   #renderExplanations(
       category: Platform.UIString.LocalizedString, explainerText: Platform.UIString.LocalizedString,
       explanations: Protocol.Page.BackForwardCacheNotRestoredExplanation[],
-      reasonToFramesMap: Map<Protocol.Page.BackForwardCacheNotRestoredReason, string[]>): LitHtml.TemplateResult {
+      reasonToFramesMap: Map<Protocol.Page.BackForwardCacheNotRestoredReason, string[]>): Lit.TemplateResult {
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
     return html`
@@ -551,12 +553,12 @@ export class BackForwardCacheView extends LegacyWrapper.LegacyWrapper.WrappableC
           </div>
         </devtools-report-section-header>
         ${explanations.map(explanation => this.#renderReason(explanation, reasonToFramesMap.get(explanation.reason)))}
-      ` : LitHtml.nothing}
+      ` : Lit.nothing}
     `;
     // clang-format on
   }
 
-  #maybeRenderReasonContext(explanation: Protocol.Page.BackForwardCacheNotRestoredExplanation): LitHtml.LitTemplate {
+  #maybeRenderReasonContext(explanation: Protocol.Page.BackForwardCacheNotRestoredExplanation): Lit.LitTemplate {
     if (explanation.reason ===
             Protocol.Page.BackForwardCacheNotRestoredReason.EmbedderExtensionSentMessageToCachedFrame &&
         explanation.context) {
@@ -566,12 +568,12 @@ export class BackForwardCacheView extends LegacyWrapper.LegacyWrapper.WrappableC
       <devtools-chrome-link .href=${link}>${explanation.context}</devtools-chrome-link>`;
       // clang-format on
     }
-    return LitHtml.nothing;
+    return Lit.nothing;
   }
 
-  #renderFramesPerReason(frames: string[]|undefined): LitHtml.LitTemplate {
+  #renderFramesPerReason(frames: string[]|undefined): Lit.LitTemplate {
     if (frames === undefined || frames.length === 0) {
-      return LitHtml.nothing;
+      return Lit.nothing;
     }
     const rows = [html`<div>${i18nString(UIStrings.framesPerIssue, {n: frames.length})}</div>`];
     rows.push(...frames.map(url => html`<div class="text-ellipsis" title=${url}
@@ -588,7 +590,7 @@ export class BackForwardCacheView extends LegacyWrapper.LegacyWrapper.WrappableC
     `;
   }
 
-  #maybeRenderDeepLinkToUnload(explanation: Protocol.Page.BackForwardCacheNotRestoredExplanation): LitHtml.LitTemplate {
+  #maybeRenderDeepLinkToUnload(explanation: Protocol.Page.BackForwardCacheNotRestoredExplanation): Lit.LitTemplate {
     if (explanation.reason === Protocol.Page.BackForwardCacheNotRestoredReason.UnloadHandlerExistsInMainFrame ||
         explanation.reason === Protocol.Page.BackForwardCacheNotRestoredReason.UnloadHandlerExistsInSubFrame) {
       return html`
@@ -599,13 +601,12 @@ export class BackForwardCacheView extends LegacyWrapper.LegacyWrapper.WrappableC
           ${i18nString(UIStrings.neverUseUnload)}
         </x-link>`;
     }
-    return LitHtml.nothing;
+    return Lit.nothing;
   }
 
-  #maybeRenderJavaScriptDetails(details: Protocol.Page.BackForwardCacheBlockingDetails[]|
-                                undefined): LitHtml.LitTemplate {
+  #maybeRenderJavaScriptDetails(details: Protocol.Page.BackForwardCacheBlockingDetails[]|undefined): Lit.LitTemplate {
     if (details === undefined || details.length === 0) {
-      return LitHtml.nothing;
+      return Lit.nothing;
     }
     const maxLengthForDisplayedURLs = 50;
     const linkifier = new Components.Linkifier.Linkifier(maxLengthForDisplayedURLs);
@@ -627,7 +628,7 @@ export class BackForwardCacheView extends LegacyWrapper.LegacyWrapper.WrappableC
   }
 
   #renderReason(explanation: Protocol.Page.BackForwardCacheNotRestoredExplanation, frames: string[]|undefined):
-      LitHtml.TemplateResult {
+      Lit.TemplateResult {
     // clang-format off
     return html`
       <devtools-report-section>
@@ -647,7 +648,7 @@ export class BackForwardCacheView extends LegacyWrapper.LegacyWrapper.WrappableC
               ${this.#maybeRenderDeepLinkToUnload(explanation)}
               ${this.#maybeRenderReasonContext(explanation)}
            </div>` :
-            LitHtml.nothing}
+            Lit.nothing}
       </devtools-report-section>
       <div class="gray-text">
         ${explanation.reason}

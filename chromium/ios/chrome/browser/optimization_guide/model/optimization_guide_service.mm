@@ -4,15 +4,19 @@
 
 #import "ios/chrome/browser/optimization_guide/model/optimization_guide_service.h"
 
+#import "base/apple/bundle_locations.h"
 #import "base/files/file_util.h"
 #import "base/functional/callback.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/path_service.h"
+#import "base/system/sys_info.h"
 #import "base/task/thread_pool.h"
 #import "base/time/default_clock.h"
 #import "components/component_updater/pref_names.h"
 #import "components/optimization_guide/core/command_line_top_host_provider.h"
 #import "components/optimization_guide/core/hints_processing_util.h"
+#import "components/optimization_guide/core/model_execution/model_execution_manager.h"
+#import "components/optimization_guide/core/model_execution/on_device_model_service_controller.h"
 #import "components/optimization_guide/core/optimization_guide_constants.h"
 #import "components/optimization_guide/core/optimization_guide_features.h"
 #import "components/optimization_guide/core/optimization_guide_logger.h"
@@ -32,15 +36,12 @@
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/paths/paths.h"
 #import "ios/web/public/navigation/navigation_context.h"
+#import "ios/web/public/thread/web_thread.h"
 #import "services/network/public/cpp/shared_url_loader_factory.h"
 
 #if BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
-#import "base/apple/bundle_locations.h"
-#import "base/system/sys_info.h"
-#import "components/optimization_guide/core/model_execution/model_execution_manager.h"
 #import "components/optimization_guide/core/model_execution/on_device_model_component.h"
 #import "ios/chrome/browser/optimization_guide/model/on_device_model_service_controller_ios.h"
-#import "ios/web/public/thread/web_thread.h"
 #endif  // BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
 
 namespace {
@@ -168,10 +169,10 @@ OptimizationGuideService::OptimizationGuideService(
             }));
   }
 
-#if BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
   if (!off_the_record_) {
     PrefService* local_state = GetApplicationContext()->GetLocalState();
 
+#if BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
     // Create and startup the on-device model's state manager.
     on_device_model_state_manager_ =
         optimization_guide::OnDeviceModelComponentStateManager::CreateOrGet(
@@ -179,7 +180,7 @@ OptimizationGuideService::OptimizationGuideService(
             std::make_unique<OnDeviceModelComponentStateManagerDelegate>());
     on_device_model_state_manager_->OnStartup();
 
-    // TODO(crbug.com/370768381): Always set a high perfomance class for
+    // TODO(crbug.com/387509291): Always set a high perfomance class for
     // prototyping.
     on_device_model_state_manager_->DevicePerformanceClassChanged(
         optimization_guide::OnDeviceModelPerformanceClass::kHigh);
@@ -195,8 +196,13 @@ OptimizationGuideService::OptimizationGuideService(
             std::move(on_device_model_service_controller), this,
             on_device_model_state_manager_->GetWeakPtr(),
             optimization_guide_logger_.get(), nullptr);
-  }
+#else   // BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
+    model_execution_manager_ =
+        std::make_unique<optimization_guide::ModelExecutionManager>(
+            url_loader_factory, local_state, identity_manager, nullptr, this,
+            nullptr, optimization_guide_logger_.get(), nullptr);
 #endif  // BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
+  }
 
   // Some previous paths were written in incorrect locations. Delete the
   // old paths.
@@ -360,23 +366,7 @@ void OptimizationGuideService::RemoveObserverForOptimizationTargetModel(
   }
 }
 
-#if BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
 #pragma mark - optimization_guide::OptimizationGuideModelExecutor implementation
-
-bool OptimizationGuideService::CanCreateOnDeviceSession(
-    optimization_guide::ModelBasedCapabilityKey feature,
-    optimization_guide::OnDeviceModelEligibilityReason*
-        on_device_model_eligibility_reason) {
-  if (!model_execution_manager_) {
-    if (on_device_model_eligibility_reason) {
-      *on_device_model_eligibility_reason = optimization_guide::
-          OnDeviceModelEligibilityReason::kFeatureNotEnabled;
-    }
-    return false;
-  }
-  return model_execution_manager_->CanCreateOnDeviceSession(
-      feature, on_device_model_eligibility_reason);
-}
 
 std::unique_ptr<optimization_guide::OptimizationGuideModelExecutor::Session>
 OptimizationGuideService::StartSession(
@@ -414,6 +404,8 @@ void OptimizationGuideService::ExecuteModel(
       /*log_ai_data_request=*/nullptr, std::move(callback));
 }
 
+#if BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
+
 void OptimizationGuideService::AddOnDeviceModelAvailabilityChangeObserver(
     optimization_guide::ModelBasedCapabilityKey feature,
     optimization_guide::OnDeviceModelAvailabilityObserver* observer) {
@@ -442,5 +434,38 @@ void OptimizationGuideService::RemoveOnDeviceModelAvailabilityChangeObserver(
     service_controller->RemoveOnDeviceModelAvailabilityChangeObserver(feature,
                                                                       observer);
   }
+}
+
+#pragma mark - optimization_guide::OptimizationGuideOnDeviceCapabilityProvider implementation
+
+optimization_guide::OnDeviceModelEligibilityReason
+OptimizationGuideService::GetOnDeviceModelEligibility(
+    optimization_guide::ModelBasedCapabilityKey feature) {
+  if (!model_execution_manager_) {
+    return optimization_guide::OnDeviceModelEligibilityReason::
+        kFeatureNotEnabled;
+  }
+
+  return model_execution_manager_->GetOnDeviceModelEligibility(feature);
+}
+
+std::optional<optimization_guide::SamplingParamsConfig>
+OptimizationGuideService::GetSamplingParamsConfig(
+    optimization_guide::ModelBasedCapabilityKey feature) {
+  if (!model_execution_manager_) {
+    return std::nullopt;
+  }
+
+  return model_execution_manager_->GetSamplingParamsConfig(feature);
+}
+
+std::optional<const optimization_guide::proto::Any>
+OptimizationGuideService::GetFeatureMetadata(
+    optimization_guide::ModelBasedCapabilityKey feature) {
+  if (!model_execution_manager_) {
+    return std::nullopt;
+  }
+
+  return model_execution_manager_->GetFeatureMetadata(feature);
 }
 #endif  // BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)

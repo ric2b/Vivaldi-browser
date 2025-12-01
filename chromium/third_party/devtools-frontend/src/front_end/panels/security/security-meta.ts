@@ -6,7 +6,7 @@ import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as UI from '../../ui/legacy/legacy.js';
 
-import type * as Security from './security.js';
+import * as Security from './security.js';
 
 const UIStrings = {
   /**
@@ -14,17 +14,17 @@ const UIStrings = {
    */
   security: 'Security',
   /**
-   *@description Title of security and privacy panel. This is used when the kDevToolsPrivacyUI feature flag is enabled.
+   *@description Title of privacy and security panel. This is used when the kDevToolsPrivacyUI feature flag is enabled.
    */
-  securityAndPrivacy: 'Security & Privacy',
+  PrivacyAndSecurity: 'Privacy and security',
   /**
    *@description Default command to open the security panel
    */
   showSecurity: 'Show Security',
   /**
-   *@description Command to open the security and privacy panel. This is used when the kDevToolPrivacyUI feature flag is enabled
+   *@description Command to open the privacy and security panel. This is used when the kDevToolPrivacyUI feature flag is enabled
    */
-  showSecurityAndPrivacy: 'Show Security and Privacy',
+  showPrivacyAndSecurity: 'Show Privacy and security',
 };
 
 const str_ = i18n.i18n.registerUIStrings('panels/security/security-meta.ts', UIStrings);
@@ -43,15 +43,28 @@ UI.ViewManager.registerViewExtension({
   location: UI.ViewManager.ViewLocationValues.PANEL,
   id: 'security',
   title: () => Common.Settings.Settings.instance().getHostConfig().devToolsPrivacyUI?.enabled ?
-      i18nLazyString(UIStrings.securityAndPrivacy)() :
+      i18nLazyString(UIStrings.PrivacyAndSecurity)() :
       i18nLazyString(UIStrings.security)(),
   commandPrompt: () => Common.Settings.Settings.instance().getHostConfig().devToolsPrivacyUI?.enabled ?
-      i18nLazyString(UIStrings.showSecurityAndPrivacy)() :
+      i18nLazyString(UIStrings.showPrivacyAndSecurity)() :
       i18nLazyString(UIStrings.showSecurity)(),
   order: 80,
   persistence: UI.ViewManager.ViewPersistence.CLOSEABLE,
   async loadView() {
     const Security = await loadSecurityModule();
     return Security.SecurityPanel.SecurityPanel.instance();
+  },
+});
+
+Common.Revealer.registerRevealer({
+  contextTypes() {
+    return [
+      Security.CookieReportView.CookieReportView,
+    ];
+  },
+  destination: Common.Revealer.RevealerDestination.SECURITY_PANEL,
+  async loadRevealer() {
+    const Security = await loadSecurityModule();
+    return new Security.SecurityPanel.SecurityRevealer();
   },
 });

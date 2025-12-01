@@ -169,9 +169,10 @@ bool ShouldOverrideUserAgent(
 }
 
 // Returns true if this navigation should be treated as a reload. For e.g.
-// navigating to the last committed url via the address bar or clicking on a
-// link which results in a navigation to the last committed URL (but wasn't
-// converted to do a replacement navigation in the renderer), etc.
+// clicking on a link which results in a navigation to the last committed URL
+// (but wasn't converted to do a replacement navigation in the renderer), etc.
+// This intentionally excludes navigating to the last committed URL via the
+// address bar, so that the current scroll position is not restored.
 // |node| is the FrameTreeNode which is navigating. |url|, |virtual_url|,
 // |base_url_for_data_url|, |transition_type| correspond to the new navigation
 // (i.e. the pending NavigationEntry). |last_committed_entry| is the last
@@ -196,21 +197,24 @@ bool ShouldTreatNavigationAsReload(FrameTreeNode* node,
   if (transition_type & ui::PAGE_TRANSITION_FROM_API)
     return false;
 
-  // We treat (PAGE_TRANSITION_RELOAD | PAGE_TRANSITION_FROM_ADDRESS_BAR),
-  // PAGE_TRANSITION_TYPED or PAGE_TRANSITION_LINK transitions as navigations
-  // which should be treated as reloads.
+  // Same URL navigations from the address bar should only be treated as reloads
+  // if PAGE_TRANSITION_RELOAD is set (not for PAGE_TRANSITION_TYPED or
+  // PAGE_TRANSITION_LINK). In non-address-bar cases, PAGE_TRANSITION_TYPED
+  // and PAGE_TRANSITION_LINK can be treated as reloads.
   bool transition_type_can_be_converted = false;
-  if (ui::PageTransitionCoreTypeIs(transition_type,
-                                   ui::PAGE_TRANSITION_RELOAD) &&
-      (transition_type & ui::PAGE_TRANSITION_FROM_ADDRESS_BAR)) {
-    transition_type_can_be_converted = true;
+  if (transition_type & ui::PAGE_TRANSITION_FROM_ADDRESS_BAR) {
+    if (ui::PageTransitionCoreTypeIs(transition_type,
+                                     ui::PAGE_TRANSITION_RELOAD)) {
+      transition_type_can_be_converted = true;
+    }
+  } else {
+    if (ui::PageTransitionCoreTypeIs(transition_type,
+                                     ui::PAGE_TRANSITION_TYPED) ||
+        ui::PageTransitionCoreTypeIs(transition_type,
+                                     ui::PAGE_TRANSITION_LINK)) {
+      transition_type_can_be_converted = true;
+    }
   }
-  if (ui::PageTransitionCoreTypeIs(transition_type,
-                                   ui::PAGE_TRANSITION_TYPED)) {
-    transition_type_can_be_converted = true;
-  }
-  if (ui::PageTransitionCoreTypeIs(transition_type, ui::PAGE_TRANSITION_LINK))
-    transition_type_can_be_converted = true;
   if (!transition_type_can_be_converted)
     return false;
 
@@ -1736,14 +1740,14 @@ bool NavigationControllerImpl::RendererDidNavigate(
     node->current_frame_host()->set_nav_entry_id(nav_entry_id);
 
   if (navigation_request->IsPrerenderedPageActivation()) {
-    BroadcastHistoryOffsetAndLength();
+    BroadcastHistoryIndexAndLength();
     // TODO(crbug.com/40187392): Broadcasting happens after the prerendered page
     // is activated. As a result, a "prerenderingchange" event listener sees the
     // history.length which is not updated yet. We should guarantee that
-    // history's length and offset should be updated before a
+    // history's length and index should be updated before a
     // "prerenderingchange" event listener runs. One possible approach is to use
     // the same IPC which "prerenderingchange" uses, and propagate history's
-    // length and offset together with that.
+    // length and index together with that.
   }
 
   return true;
@@ -1842,10 +1846,8 @@ NavigationType NavigationControllerImpl::ClassifyNavigation(
   if (navigation_request->DidEncounterError() &&
       failed_pending_entry_id_ != 0 &&
       nav_entry_id == failed_pending_entry_id_) {
-    // If the renderer was going to a new pending entry that got cleared because
-    // of an error, this is the case of the user trying to retry a failed load
-    // by pressing return. Classify as EXISTING_ENTRY because we probably don't
-    // have a pending entry.
+    // If the renderer was going to a pending entry that got cleared because of
+    // an error, then the error page will replace the existing entry.
     trace_return.set_return_reason(
         "unreachable, matching pending, existing entry");
     return NAVIGATION_TYPE_MAIN_FRAME_EXISTING_ENTRY;
@@ -2541,7 +2543,7 @@ void NavigationControllerImpl::PruneAllButLastCommitted() {
   DCHECK_EQ(0, last_committed_entry_index_);
   DCHECK_EQ(1, GetEntryCount());
 
-  BroadcastHistoryOffsetAndLength();
+  BroadcastHistoryIndexAndLength();
 }
 
 void NavigationControllerImpl::PruneAllButLastCommittedInternal() {
@@ -2579,7 +2581,7 @@ void NavigationControllerImpl::DeleteNavigationEntries(
     for (const auto& index : base::Reversed(delete_indices)) {
       RemoveEntryAtIndex(index);
     }
-    BroadcastHistoryOffsetAndLength();
+    BroadcastHistoryIndexAndLength();
   }
   delegate()->NotifyNavigationEntriesDeleted();
 }
@@ -3172,7 +3174,7 @@ NavigationControllerImpl::NavigateToExistingPendingEntry(
   int initiator_process_id = ChildProcessHost::kInvalidUniqueID;
   if (initiator_rfh) {
     initiator_frame_token = initiator_rfh->GetFrameToken();
-    initiator_process_id = initiator_rfh->GetProcess()->GetID();
+    initiator_process_id = initiator_rfh->GetProcess()->GetDeprecatedID();
     DCHECK(initiator_frame_token);
   }
 
@@ -3191,7 +3193,7 @@ NavigationControllerImpl::NavigateToExistingPendingEntry(
     // history entry to the pending one but keep the main document loaded.  We
     // also need to ensure that observers are informed about the updated
     // current history entry (e.g., for greying out back/forward buttons), and
-    // that renderer processes update their history offsets.  The easiest way
+    // that renderer processes update their history indices.  The easiest way
     // to do all that is to schedule a "redundant" same-document navigation in
     // the main frame.
     //
@@ -3537,6 +3539,19 @@ NavigationControllerImpl::DetermineActionForHistoryNavigation(
   if (new_item->site_instance() &&
       new_item->site_instance() != old_item->site_instance())
     return HistoryNavigationAction::kDifferentDocument;
+
+  // If the origins of the new and old items are both present but don't match,
+  // schedule a different document load even if the document sequence numbers
+  // somehow match.
+  // TODO(crbug.com/40051596): Also handle session restore cases that lack a
+  // committed origin on `new_item`, and update the Blink DSN computation to
+  // avoid a cross-origin DSN match when possible.
+  if (new_item->committed_origin().has_value() &&
+      old_item->committed_origin().has_value() &&
+      !new_item->committed_origin()->IsSameOriginWith(
+          old_item->committed_origin().value())) {
+    return HistoryNavigationAction::kDifferentDocument;
+  }
 
   // Schedule a different-document load if the current RenderFrameHost is not
   // live. This case can happen for Ctrl+Back or after a renderer crash. Note
@@ -4066,7 +4081,7 @@ NavigationControllerImpl::CreateNavigationRequestFromLoadParams(
           params.can_load_local_resources, page_state_data,
           entry->GetUniqueID(), entry->GetSubframeUniqueNames(node),
           /*intended_as_new_entry=*/true,
-          /*pending_history_list_offset=*/-1,
+          /*pending_history_list_index=*/-1,
           params.should_clear_history_list ? -1 : GetLastCommittedEntryIndex(),
           params.should_clear_history_list ? 0 : GetEntryCount(),
           /*was_discarded=*/false, is_view_source_mode,
@@ -4113,7 +4128,8 @@ NavigationControllerImpl::CreateNavigationRequestFromLoadParams(
           /*cookie_deprecation_label=*/std::nullopt,
           /*visited_link_salt=*/std::nullopt,
           /*local_surface_id=*/std::nullopt,
-          node->current_frame_host()->GetCachedPermissionStatuses());
+          node->current_frame_host()->GetCachedPermissionStatuses(),
+          /*should_skip_screentshot=*/false);
 #if BUILDFLAG(IS_ANDROID)
   if (ValidateDataURLAsString(params.data_url_as_string)) {
     commit_params->data_url_as_string = params.data_url_as_string->as_string();
@@ -4139,10 +4155,16 @@ NavigationControllerImpl::CreateNavigationRequestFromLoadParams(
       params.is_pdf, is_embedder_initiated_fenced_frame_navigation,
       is_container_initiated, params.has_rel_opener, storage_access_api_status,
       embedder_shared_storage_context);
+
+  if (!navigation_request) {
+    return nullptr;
+  }
+
   navigation_request->set_from_download_cross_origin_redirect(
       params.from_download_cross_origin_redirect);
   navigation_request->set_force_new_browsing_instance(
       params.force_new_browsing_instance);
+  navigation_request->set_force_new_compositor(params.force_new_compositor);
   if (params.force_no_https_upgrade) {
     navigation_request->set_force_no_https_upgrade();
   }
@@ -4618,17 +4640,17 @@ NavigationControllerImpl::ComputePolicyContainerPoliciesForFrameEntry(
   return rfh->policy_container_host()->policies().ClonePtr();
 }
 
-void NavigationControllerImpl::BroadcastHistoryOffsetAndLength() {
+void NavigationControllerImpl::BroadcastHistoryIndexAndLength() {
   OPTIONAL_TRACE_EVENT2(
-      "content", "NavigationControllerImpl::BroadcastHistoryOffsetAndLength",
-      "history_offset", GetLastCommittedEntryIndex(), "history_length",
+      "content", "NavigationControllerImpl::BroadcastHistoryIndexAndLength",
+      "history_index", GetLastCommittedEntryIndex(), "history_length",
       GetEntryCount());
 
-  int history_offset = GetLastCommittedEntryIndex();
+  int history_index = GetLastCommittedEntryIndex();
   int history_length = GetEntryCount();
-  auto callback = [history_offset, history_length](RenderViewHostImpl* rvh) {
+  auto callback = [history_index, history_length](RenderViewHostImpl* rvh) {
     if (auto& broadcast = rvh->GetAssociatedPageBroadcast()) {
-      broadcast->SetHistoryOffsetAndLength(history_offset, history_length);
+      broadcast->SetHistoryIndexAndLength(history_index, history_length);
     }
   };
   frame_tree_->root()->render_manager()->ExecutePageBroadcastMethod(callback);

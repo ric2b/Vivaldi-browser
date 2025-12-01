@@ -269,19 +269,28 @@ void CPDF_SimpleFont::LoadSubstFont() {
     int width = 0;
     size_t i;
     for (i = 0; i < kInternalTableSize; i++) {
-      if (m_CharWidth[i] == 0 || m_CharWidth[i] == 0xffff)
+      if (m_CharWidth[i] == 0 || m_CharWidth[i] == 0xffff) {
         continue;
+      }
 
-      if (width == 0)
+      if (width == 0) {
         width = m_CharWidth[i];
-      else if (width != m_CharWidth[i])
+      } else if (width != m_CharWidth[i]) {
         break;
+      }
     }
-    if (i == kInternalTableSize && width)
-      m_Flags |= FXFONT_FIXED_PITCH;
+    if (i == kInternalTableSize && width) {
+      m_Flags |= pdfium::kFontStyleFixedPitch;
+    }
   }
-  m_Font.LoadSubst(m_BaseFontName, IsTrueTypeFont(), m_Flags, GetFontWeight(),
-                   m_ItalicAngle, FX_CodePage::kDefANSI, false);
+
+  int weight = GetFontWeight().value_or(pdfium::kFontWeightNormal);
+  if (weight < pdfium::kFontWeightExtraLight ||
+      weight > pdfium::kFontWeightExtraBold) {
+    weight = pdfium::kFontWeightNormal;
+  }
+  m_Font.LoadSubst(m_BaseFontName, IsTrueTypeFont(), m_Flags, weight,
+                   m_ItalicAngle, FX_CodePage::kDefANSI, /*bVertical=*/false);
 }
 
 bool CPDF_SimpleFont::IsUnicodeCompatible() const {

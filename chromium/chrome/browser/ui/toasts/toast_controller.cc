@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/toasts/toast_controller.h"
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
@@ -17,6 +18,7 @@
 #include "base/location.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
@@ -25,10 +27,13 @@
 #include "chrome/browser/ui/toasts/api/toast_id.h"
 #include "chrome/browser/ui/toasts/api/toast_registry.h"
 #include "chrome/browser/ui/toasts/api/toast_specification.h"
+#include "chrome/browser/ui/toasts/toast_dismiss_menu_model.h"
 #include "chrome/browser/ui/toasts/toast_features.h"
 #include "chrome/browser/ui/toasts/toast_metrics.h"
 #include "chrome/browser/ui/toasts/toast_view.h"
+#include "chrome/common/pref_names.h"
 #include "components/omnibox/common/omnibox_focus_state.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
@@ -42,6 +47,14 @@
 
 #include "app/vivaldi_apptools.h"
 #include "ui/vivaldi_browser_window.h"
+
+namespace {
+bool ShouldAddDismissMenuOptions(const ToastSpecification* spec) {
+  return base::FeatureList::IsEnabled(toast_features::kToastRefinements) &&
+         !spec->has_close_button() && !spec->has_menu();
+}
+
+}  // namespace
 
 ToastParams::ToastParams(ToastId id) : toast_id(id) {}
 ToastParams::ToastParams(ToastParams&& other) noexcept = default;
@@ -68,8 +81,20 @@ bool ToastController::IsShowingToast() const {
   return GetCurrentToastId().has_value();
 }
 
-bool ToastController::CanShowToast(ToastId id) const {
-  return base::FeatureList::IsEnabled(toast_features::kToastFramework);
+bool ToastController::CanShowToast(ToastId toast_id) const {
+  if (!base::FeatureList::IsEnabled(toast_features::kToastFramework)) {
+    return false;
+  }
+  if (base::FeatureList::IsEnabled(toast_features::kToastRefinements) &&
+      static_cast<toasts::ToastAlertLevel>(
+          g_browser_process->local_state()->GetInteger(
+              prefs::kToastAlertLevel)) ==
+          toasts::ToastAlertLevel::kActionable) {
+    const ToastSpecification* toast_spec =
+        toast_registry_->GetToastSpecification(toast_id);
+    return toast_spec->has_close_button() || toast_spec->has_menu();
+  }
+  return true;
 }
 
 std::optional<ToastId> ToastController::GetCurrentToastId() const {
@@ -78,6 +103,7 @@ std::optional<ToastId> ToastController::GetCurrentToastId() const {
 
 bool ToastController::MaybeShowToast(ToastParams params) {
   if (!CanShowToast(params.toast_id)) {
+    RecordToastFailedToShow(params.toast_id);
     return false;
   }
 
@@ -213,10 +239,13 @@ void ToastController::ShowToast(ToastParams params) {
   CHECK_EQ(current_toast_spec->has_menu(), !!params.menu_model);
 
   currently_showing_toast_id_ = params.toast_id;
+  const bool is_actionable =
+      current_toast_spec->action_button_string_id().has_value() ||
+      current_toast_spec->has_menu() ||
+      ShouldAddDismissMenuOptions(current_toast_spec);
   base::TimeDelta timeout =
-      current_toast_spec->action_button_string_id().has_value()
-          ? toast_features::kToastTimeout.Get()
-          : toast_features::kToastWithoutActionTimeout.Get();
+      is_actionable ? toast_features::kToastTimeout.Get()
+                    : toast_features::kToastWithoutActionTimeout.Get();
 
   toast_close_timer_.Start(
       FROM_HERE, timeout,
@@ -233,16 +262,18 @@ void ToastController::CloseToast(toasts::ToastCloseReason reason) {
 
 void ToastController::CreateToast(ToastParams params,
                                   const ToastSpecification* spec) {
-
   if (browser_window_interface_ && vivaldi::IsVivaldiRunning()) {
     VivaldiBrowserWindow* vivaldi_browser_window =
         static_cast<VivaldiBrowserWindow*>(
             browser_window_interface_->GetFeatures().window());
-    vivaldi_browser_window->ShowToast(spec,
-                                      params.body_string_replacement_params);
-    // We are taking over this.
-    currently_showing_toast_id_ = std::nullopt;
-    return;
+    // Window is only set for Vivaldi browser windows, not PWA windows etc.
+    if (vivaldi_browser_window) {
+      vivaldi_browser_window->ShowToast(spec,
+                                        params.body_string_replacement_params);
+      // We are taking over this.
+      currently_showing_toast_id_ = std::nullopt;
+      return;
+    } // fallthrough
   }
 
   // TODO(crbug.com/364730656): Replace this logic when improving
@@ -279,8 +310,13 @@ void ToastController::CreateToast(ToastParams params,
             &RecordToastActionButtonClicked, params.toast_id)));
   }
 
-  if (params.menu_model) {
+  if (spec->has_menu()) {
     toast_view->AddMenu(std::move(params.menu_model));
+  }
+
+  if (ShouldAddDismissMenuOptions(spec)) {
+    toast_view->AddMenu(
+        std::make_unique<ToastDismissMenuModel>(params.toast_id));
   }
 
   toast_view_ = toast_view.get();

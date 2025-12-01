@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <map>
 #include <memory>
 #include <set>
@@ -16,7 +17,6 @@
 #include "base/i18n/rtl.h"
 #include "base/memory/raw_ptr.h"
 #include "base/rand_util.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/scoped_multi_source_observation.h"
 #include "base/strings/string_util.h"
@@ -88,24 +88,27 @@ namespace {
 
 // Returns true if |ancestor| is an ancestor of |layer|.
 bool LayerIsAncestor(const ui::Layer* ancestor, const ui::Layer* layer) {
-  while (layer && layer != ancestor)
+  while (layer && layer != ancestor) {
     layer = layer->parent();
+  }
   return layer == ancestor;
 }
 
 // Convenience functions for walking a View tree.
 const views::View* FirstView(const views::View* view) {
   const views::View* v = view;
-  while (!v->children().empty())
+  while (!v->children().empty()) {
     v = v->children().front();
+  }
   return v;
 }
 
 const views::View* NextView(const views::View* view) {
   const views::View* v = view;
   const views::View* parent = v->parent();
-  if (!parent)
+  if (!parent) {
     return nullptr;
+  }
   const auto next = std::next(parent->FindChild(v));
   return (next == parent->children().cend()) ? parent : FirstView(*next);
 }
@@ -113,18 +116,20 @@ const views::View* NextView(const views::View* view) {
 // Convenience functions for walking a Layer tree.
 const ui::Layer* FirstLayer(const ui::Layer* layer) {
   const ui::Layer* l = layer;
-  while (!l->children().empty())
+  while (!l->children().empty()) {
     l = l->children().front();
+  }
   return l;
 }
 
 const ui::Layer* NextLayer(const ui::Layer* layer) {
   const ui::Layer* parent = layer->parent();
-  if (!parent)
+  if (!parent) {
     return nullptr;
+  }
   const std::vector<raw_ptr<ui::Layer, VectorExperimental>> children =
       parent->children();
-  const auto i = base::ranges::find(children, layer) + 1;
+  const auto i = std::ranges::find(children, layer) + 1;
   return (i == children.cend()) ? parent : FirstLayer(*i);
 }
 
@@ -136,35 +141,42 @@ bool ViewAndLayerTreeAreConsistent(const views::View* view,
   const ui::Layer* l = FirstLayer(layer);
   while (v && l) {
     // Find the view with a layer.
-    while (v && !v->layer())
+    while (v && !v->layer()) {
       v = NextView(v);
+    }
     EXPECT_TRUE(v);
-    if (!v)
+    if (!v) {
       return false;
+    }
 
     // Check if the View tree and the Layer tree are in sync.
     EXPECT_EQ(l, v->layer());
-    if (v->layer() != l)
+    if (v->layer() != l) {
       return false;
+    }
 
     // Check if the visibility states of the View and the Layer are in sync.
     EXPECT_EQ(l->IsVisible(), v->IsDrawn());
     if (v->IsDrawn() != l->IsVisible()) {
-      for (const views::View* vv = v; vv; vv = vv->parent())
+      for (const views::View* vv = v; vv; vv = vv->parent()) {
         LOG(ERROR) << "V: " << vv << " " << vv->GetVisible() << " "
                    << vv->IsDrawn() << " " << vv->layer();
-      for (const ui::Layer* ll = l; ll; ll = ll->parent())
+      }
+      for (const ui::Layer* ll = l; ll; ll = ll->parent()) {
         LOG(ERROR) << "L: " << ll << " " << ll->IsVisible();
+      }
       return false;
     }
 
     // Check if the size of the View and the Layer are in sync.
     EXPECT_EQ(l->bounds(), v->bounds());
-    if (v->bounds() != l->bounds())
+    if (v->bounds() != l->bounds()) {
       return false;
+    }
 
-    if (v == view || l == layer)
+    if (v == view || l == layer) {
       return v == view && l == layer;
+    }
 
     v = NextView(v);
     l = NextLayer(l);
@@ -175,27 +187,32 @@ bool ViewAndLayerTreeAreConsistent(const views::View* view,
 
 // Constructs a View tree with the specified depth.
 void ConstructTree(views::View* view, int depth) {
-  if (depth == 0)
+  if (depth == 0) {
     return;
+  }
   int count = base::RandInt(1, 5);
   for (int i = 0; i < count; i++) {
     views::View* v = new views::View;
     view->AddChildView(v);
-    if (base::RandDouble() > 0.5)
+    if (base::RandDouble() > 0.5) {
       v->SetPaintToLayer();
-    if (base::RandDouble() < 0.2)
+    }
+    if (base::RandDouble() < 0.2) {
       v->SetVisible(false);
+    }
 
     ConstructTree(v, depth - 1);
   }
 }
 
 void ScrambleTree(views::View* view) {
-  if (view->children().empty())
+  if (view->children().empty()) {
     return;
+  }
 
-  for (views::View* child : view->children())
+  for (views::View* child : view->children()) {
     ScrambleTree(child);
+  }
 
   size_t count = view->children().size();
   if (count > 1) {
@@ -211,11 +228,13 @@ void ScrambleTree(views::View* view) {
     }
   }
 
-  if (!view->layer() && base::RandDouble() < 0.1)
+  if (!view->layer() && base::RandDouble() < 0.1) {
     view->SetPaintToLayer();
+  }
 
-  if (base::RandDouble() < 0.1)
+  if (base::RandDouble() < 0.1) {
     view->SetVisible(!view->GetVisible());
+  }
 }
 
 }  // namespace
@@ -588,6 +607,382 @@ TEST_F(ViewTest, ReadyToSendAccessibilityEvents) {
                                                ax::mojom::NameFrom::kAttribute);
   EXPECT_EQ(ax_counter.GetCount(ax::mojom::Event::kTextChanged, added_view_2),
             1);
+}
+
+TEST_F(ViewTest, InvisibleState) {
+  auto view1 = std::make_unique<TestView>();
+  view1->GetViewAccessibility().SetRole(ax::mojom::Role::kMenu);
+  view1->SetVisible(true);
+
+  auto view2 = std::make_unique<TestView>();
+  view2->GetViewAccessibility().SetRole(ax::mojom::Role::kButton);
+  view2->SetVisible(true);
+
+  auto view3 = std::make_unique<TestView>();
+  view3->GetViewAccessibility().SetRole(ax::mojom::Role::kLink);
+  view3->SetVisible(true);
+
+  auto view4 = std::make_unique<TestView>();
+  view4->GetViewAccessibility().SetRole(ax::mojom::Role::kRadioButton);
+  view4->SetVisible(true);
+
+  auto widget = std::make_unique<Widget>();
+  Widget::InitParams params = CreateParams(
+      Widget::InitParams::CLIENT_OWNS_WIDGET, Widget::InitParams::TYPE_POPUP);
+  params.bounds = gfx::Rect(50, 50, 650, 650);
+  widget->Init(std::move(params));
+  auto* root = AsViewClass<internal::RootView>(widget->GetRootView());
+  auto* button = view1->AddChildView(std::move(view2));
+  auto* link = button->AddChildView(std::move(view3));
+  auto* radio_button = view1->AddChildView(std::move(view4));
+  auto* menu = root->AddChildView(std::move(view1));
+
+  // This is the tree structure:
+  // Root
+  //   Menu
+  //     Button
+  //       Link
+  //     radio_button
+
+  // All views should be visible.
+  ui::AXNodeData data;
+  menu->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kInvisible));
+  data = ui::AXNodeData();
+  button->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kInvisible));
+  data = ui::AXNodeData();
+  link->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kInvisible));
+  data = ui::AXNodeData();
+  radio_button->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kInvisible));
+
+  // Setting the visibility of the radio_button to false should result in the
+  // radio_button being invisible.
+  radio_button->SetVisible(false);
+  data = ui::AXNodeData();
+  radio_button->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kInvisible));
+
+  // Setting the visibility of the radio_button to true should result in the
+  // radio_button being visible.
+  radio_button->SetVisible(true);
+  data = ui::AXNodeData();
+  radio_button->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kInvisible));
+
+  // Setting the visibility of the button to false should result in the button
+  // and link being invisible.
+  button->SetVisible(false);
+  data = ui::AXNodeData();
+  button->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kInvisible));
+  data = ui::AXNodeData();
+  link->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kInvisible));
+
+  // Setting the visibility of the button to true should result in the button
+  // and link being visible.
+  button->SetVisible(true);
+  data = ui::AXNodeData();
+  button->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kInvisible));
+  data = ui::AXNodeData();
+  link->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kInvisible));
+
+  // If we set the visibility of the radio_button to false, and then set the
+  // visibility of the menu to false, the radio_button should still be
+  // invisible, as should the menu, button, and link.
+  radio_button->SetVisible(false);
+  menu->SetVisible(false);
+  data = ui::AXNodeData();
+  radio_button->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kInvisible));
+  data = ui::AXNodeData();
+  menu->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kInvisible));
+  data = ui::AXNodeData();
+  button->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kInvisible));
+  data = ui::AXNodeData();
+  link->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kInvisible));
+
+  // If we set the visibility of the button to true, the button and the link
+  // should still be invisible since the menu is invisible.
+  button->SetVisible(true);
+  data = ui::AXNodeData();
+  button->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kInvisible));
+  data = ui::AXNodeData();
+  link->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kInvisible));
+
+  // If we add a child to the radio button, the child should be invisible since
+  // the radio button is invisible.
+  auto view_5 = std::make_unique<TestView>();
+  view_5->GetViewAccessibility().SetRole(ax::mojom::Role::kLink);
+  auto* added_view_5 = radio_button->AddChildView(std::move(view_5));
+  data = ui::AXNodeData();
+  added_view_5->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kInvisible));
+
+  // If we set the visibility of the menu to true, the menu, button, and link
+  // should be visible. The radio_button and its new child should still be
+  // invisible since we explicitly set it to invisible before.
+
+  auto view_6 = std::make_unique<TestView>();
+  view_6->GetViewAccessibility().SetRole(ax::mojom::Role::kLink);
+  view_6->SetVisible(true);
+  auto* added_view_6 = radio_button->AddChildView(std::move(view_6));
+  data = ui::AXNodeData();
+  added_view_6->GetViewAccessibility().GetAccessibleNodeData(&data);
+  // Should be invisible since the radio_button is invisible.
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kInvisible));
+
+  menu->SetVisible(true);
+  data = ui::AXNodeData();
+  menu->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kInvisible));
+  data = ui::AXNodeData();
+  button->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kInvisible));
+  data = ui::AXNodeData();
+  link->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kInvisible));
+  data = ui::AXNodeData();
+  radio_button->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kInvisible));
+  data = ui::AXNodeData();
+  added_view_6->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kInvisible));
+
+  // If we add a child that we set to invisible to the Menu, the child should
+  // keep the invisible state.
+  auto view_7 = std::make_unique<TestView>();
+  view_7->GetViewAccessibility().SetRole(ax::mojom::Role::kButton);
+  view_7->SetVisible(false);
+  auto* added_view_7 = menu->AddChildView(std::move(view_7));
+  data = ui::AXNodeData();
+  added_view_7->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kInvisible));
+}
+
+TEST_F(ViewTest, InvisibleStateOnReparenting) {
+  auto view1 = std::make_unique<TestView>();
+  view1->GetViewAccessibility().SetRole(ax::mojom::Role::kMenu);
+  view1->SetVisible(true);
+
+  auto view2 = std::make_unique<TestView>();
+  view2->GetViewAccessibility().SetRole(ax::mojom::Role::kButton);
+  view2->SetVisible(true);
+
+  auto view3 = std::make_unique<TestView>();
+  view3->GetViewAccessibility().SetRole(ax::mojom::Role::kLink);
+  view3->SetVisible(true);
+
+  auto view4 = std::make_unique<TestView>();
+  view4->GetViewAccessibility().SetRole(ax::mojom::Role::kRadioButton);
+  view4->SetVisible(true);
+
+  auto widget = std::make_unique<Widget>();
+  Widget::InitParams params = CreateParams(
+      Widget::InitParams::CLIENT_OWNS_WIDGET, Widget::InitParams::TYPE_POPUP);
+  params.bounds = gfx::Rect(50, 50, 650, 650);
+  widget->Init(std::move(params));
+  auto* root = AsViewClass<internal::RootView>(widget->GetRootView());
+  auto* button = view1->AddChildView(std::move(view2));
+  auto* link = button->AddChildView(std::move(view3));
+  auto* radio_button = view1->AddChildView(std::move(view4));
+  auto* menu = root->AddChildView(std::move(view1));
+
+  // This is the tree structure:
+  // Root
+  //   Menu
+  //     Button
+  //       Link
+  //     radio_button
+
+  // All views should be visible.
+  ui::AXNodeData data;
+  menu->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kInvisible));
+  data = ui::AXNodeData();
+  button->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kInvisible));
+  data = ui::AXNodeData();
+  link->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kInvisible));
+  data = ui::AXNodeData();
+  radio_button->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kInvisible));
+
+  // Setting the visibility of the Button to false should result in the
+  // link being invisible.
+  button->SetVisible(false);
+  data = ui::AXNodeData();
+  button->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kInvisible));
+  data = ui::AXNodeData();
+  link->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kInvisible));
+  EXPECT_TRUE(link->GetViewAccessibility().is_invisible_by_inheritance());
+
+  // Reparenting the link to being a child of the menu, should result in it
+  // becoming visible, and should be focusable too.
+  auto* reparented_link = menu->AddChildView(std::move(link));
+  data = ui::AXNodeData();
+  reparented_link->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kInvisible));
+  EXPECT_FALSE(
+      reparented_link->GetViewAccessibility().is_invisible_by_inheritance());
+}
+
+TEST_F(ViewTest, VisibleLeafInSubtreeAddedToInvisibleParent) {
+  auto view1 = std::make_unique<TestView>();
+  view1->GetViewAccessibility().SetRole(ax::mojom::Role::kMenu);
+  view1->SetVisible(false);
+  view1->SetFocusBehavior(A11yTestView::FocusBehavior::NEVER);
+
+  auto view2 = std::make_unique<TestView>();
+  view2->GetViewAccessibility().SetRole(ax::mojom::Role::kButton);
+  view2->SetVisible(true);
+  view2->SetFocusBehavior(A11yTestView::FocusBehavior::NEVER);
+
+  auto view3 = std::make_unique<TestView>();
+  view3->GetViewAccessibility().SetRole(ax::mojom::Role::kLink);
+  view3->SetVisible(true);
+  view3->SetFocusBehavior(A11yTestView::FocusBehavior::ALWAYS);
+
+  auto widget = std::make_unique<Widget>();
+  Widget::InitParams params = CreateParams(
+      Widget::InitParams::CLIENT_OWNS_WIDGET, Widget::InitParams::TYPE_POPUP);
+  params.bounds = gfx::Rect(50, 50, 650, 650);
+  widget->Init(std::move(params));
+  auto* root = AsViewClass<internal::RootView>(widget->GetRootView());
+  auto* menu = root->AddChildView(std::move(view1));
+
+  ui::AXNodeData data;
+  menu->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kInvisible));
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kFocusable));
+
+  // Since the button and the link have not been added to the invisible menu,
+  // they should not yet be marked as invisible/unfocusable.
+  data = ui::AXNodeData();
+  view2->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kInvisible));
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kFocusable));
+  data = ui::AXNodeData();
+  view3->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kInvisible));
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kFocusable));
+
+  auto* button = menu->AddChildView(std::move(view2));
+  auto* link = button->AddChildView(std::move(view3));
+
+  // This is the tree structure:
+  // Root
+  //   Menu
+  //     Button
+  //       Link
+
+  // Once the button and link are added to the menu, they should be marked as
+  // invisible/unfocusable, since the menu is too.
+  data = ui::AXNodeData();
+  button->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kInvisible));
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kFocusable));
+  data = ui::AXNodeData();
+  link->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kInvisible));
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kFocusable));
+}
+
+TEST_F(ViewTest, InisibleLeafInVisibleSubtreeTurnedVisible) {
+  auto view1 = std::make_unique<TestView>();
+  view1->GetViewAccessibility().SetRole(ax::mojom::Role::kMenu);
+  view1->SetVisible(false);
+  view1->SetFocusBehavior(A11yTestView::FocusBehavior::NEVER);
+
+  auto view2 = std::make_unique<TestView>();
+  view2->GetViewAccessibility().SetRole(ax::mojom::Role::kButton);
+  view2->SetVisible(true);
+  view2->SetFocusBehavior(A11yTestView::FocusBehavior::NEVER);
+
+  auto view3 = std::make_unique<TestView>();
+  view3->GetViewAccessibility().SetRole(ax::mojom::Role::kLink);
+  view3->SetVisible(true);
+  view3->SetFocusBehavior(A11yTestView::FocusBehavior::ALWAYS);
+
+  auto widget = std::make_unique<Widget>();
+  Widget::InitParams params = CreateParams(
+      Widget::InitParams::CLIENT_OWNS_WIDGET, Widget::InitParams::TYPE_POPUP);
+  params.bounds = gfx::Rect(50, 50, 650, 650);
+  widget->Init(std::move(params));
+  auto* root = AsViewClass<internal::RootView>(widget->GetRootView());
+  auto* menu = root->AddChildView(std::move(view1));
+
+  ui::AXNodeData data;
+  menu->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kInvisible));
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kFocusable));
+
+  // Since the button and the link have not been added to the invisible menu,
+  // they should not yet be marked as invisible/unfocusable.
+  data = ui::AXNodeData();
+  view2->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kInvisible));
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kFocusable));
+  data = ui::AXNodeData();
+  view3->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kInvisible));
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kFocusable));
+
+  auto* button = menu->AddChildView(std::move(view2));
+  auto* link = button->AddChildView(std::move(view3));
+
+  // This is the tree structure:
+  // Root
+  //   Menu
+  //     Button
+  //       Link
+
+  // Once the button and link are added to the menu, they should be marked as
+  // invisible/unfocusable, since the menu is too.
+  data = ui::AXNodeData();
+  button->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kInvisible));
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kFocusable));
+  data = ui::AXNodeData();
+  link->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kInvisible));
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kFocusable));
+
+  // The link is turned visible, but since the menu is invisible, the link
+  // should remain invisible by inheritance.
+  link->SetVisible(false);
+  data = ui::AXNodeData();
+  EXPECT_TRUE(link->GetViewAccessibility().is_invisible_by_inheritance());
+
+  // The menu is turned visible, but the link should still not be visible since
+  // it was explicitly set to invisible above.
+  menu->SetVisible(true);
+  data = ui::AXNodeData();
+  link->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kInvisible));
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kFocusable));
+  EXPECT_FALSE(link->GetViewAccessibility().is_invisible_by_inheritance());
+
+  // The link is turned visible, so now it should be totally visible.
+  link->SetVisible(true);
+  data = ui::AXNodeData();
+  link->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kInvisible));
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kFocusable));
+  EXPECT_FALSE(link->GetViewAccessibility().is_invisible_by_inheritance());
 }
 
 TEST_F(ViewTest, SetAccessibilityPropertiesRoleNameDescription) {
@@ -2921,79 +3316,6 @@ TEST_F(ViewTest, TextfieldCutCopyPaste) {
   widget->CloseNow();
 }
 
-class ViewPaintOptimizationTest : public ViewsTestBase {
- public:
-  ViewPaintOptimizationTest() = default;
-
-  ViewPaintOptimizationTest(const ViewPaintOptimizationTest&) = delete;
-  ViewPaintOptimizationTest& operator=(const ViewPaintOptimizationTest&) =
-      delete;
-
-  ~ViewPaintOptimizationTest() override = default;
-
-  void SetUp() override {
-    scoped_feature_list_.InitAndEnableFeature(
-        views::features::kEnableViewPaintOptimization);
-    ViewTest::SetUp();
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-// Tests that only Views where SchedulePaint was invoked get repainted.
-TEST_F(ViewPaintOptimizationTest, PaintDirtyViewsOnly) {
-  ScopedTestPaintWidget widget(CreateParams(
-      Widget::InitParams::CLIENT_OWNS_WIDGET, Widget::InitParams::TYPE_POPUP));
-  View* root_view = widget->GetRootView();
-
-  TestView* v1 = root_view->AddChildView(std::make_unique<TestView>());
-  v1->SetBounds(10, 11, 12, 13);
-
-  TestView* v2 = root_view->AddChildView(std::make_unique<TestView>());
-  v2->SetBounds(3, 4, 6, 5);
-
-  TestView* v21 = v2->AddChildView(std::make_unique<TestView>());
-  v21->SetBounds(2, 3, 4, 5);
-
-  // Paint everything once, since it has to build its cache. Then we can test
-  // invalidation.
-  gfx::Rect first_paint(1, 1);
-  auto list = base::MakeRefCounted<cc::DisplayItemList>();
-  root_view->Paint(PaintInfo::CreateRootPaintInfo(
-      ui::PaintContext(list.get(), 1.f, first_paint, false),
-      root_view->size()));
-  v1->Reset();
-  v2->Reset();
-  v21->Reset();
-
-  gfx::Rect paint_area(10, 11, 12, 13);
-  list = base::MakeRefCounted<cc::DisplayItemList>();
-
-  // Schedule a paint on v2 which marks it invalidated.
-  v2->SchedulePaint();
-  EXPECT_FALSE(v1->did_paint_);
-  EXPECT_FALSE(v2->did_paint_);
-  EXPECT_FALSE(v21->did_paint_);
-
-  // Paint with an unknown invalidation. The invalidation is irrelevant since
-  // repainting a view only depends on whether the view had a scheduled paint.
-  gfx::Rect empty_rect;
-  EXPECT_TRUE(empty_rect.IsEmpty());
-
-  root_view->Paint(PaintInfo::CreateRootPaintInfo(
-      ui::PaintContext(list.get(), 1.f, paint_area, false), empty_rect.size()));
-
-  // Only v2 should be repainted.
-  EXPECT_FALSE(v1->did_paint_);
-  EXPECT_TRUE(v2->did_paint_);
-  EXPECT_FALSE(v21->did_paint_);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Accelerators
-////////////////////////////////////////////////////////////////////////////////
-
 namespace {
 
 // A Widget with a TestView in the view hierarchy. Used for accelerator tests.
@@ -3018,8 +3340,9 @@ class TestViewWidget {
     widget_->Init(std::move(params));
     View* root = widget_->GetRootView();
     view_ = root->AddChildView(std::move(view));
-    if (show_after_init)
+    if (show_after_init) {
       widget_->Show();
+    }
 
     EXPECT_TRUE(widget_->GetFocusManager());
   }
@@ -4453,14 +4776,16 @@ TEST_F(ViewTest, RemoveAllChildViews) {
 
   View* child1 = root->AddChildView(std::make_unique<View>());
 
-  for (size_t i = 0; i < 2; ++i)
+  for (size_t i = 0; i < 2; ++i) {
     root->AddChildView(std::make_unique<View>());
+  }
 
   View* foo = child1->AddChildView(std::make_unique<View>());
 
   // Add some nodes to |foo|.
-  for (size_t i = 0; i < 3; ++i)
+  for (size_t i = 0; i < 3; ++i) {
     foo->AddChildView(std::make_unique<View>());
+  }
 
   EXPECT_EQ(3u, root->children().size());
   EXPECT_EQ(1u, child1->children().size());
@@ -6278,8 +6603,9 @@ class NoLayerWhenHiddenView : public View {
   }
 
   void RemovedFromWidget() override {
-    if (removed_from_widget_)
+    if (removed_from_widget_) {
       std::move(removed_from_widget_).Run();
+    }
   }
 
  private:
@@ -6353,8 +6679,9 @@ TEST_F(ViewTest, ChildViewZOrderChanged) {
   const size_t kNumChildren = 4;
   auto view = std::make_unique<OrderableView>();
   view->SetPaintToLayer();
-  for (size_t i = 0; i < kNumChildren; ++i)
+  for (size_t i = 0; i < kNumChildren; ++i) {
     AddViewWithChildLayer(view.get());
+  }
   View::Views children = view->GetChildrenInZOrder();
   const std::vector<raw_ptr<ui::Layer, VectorExperimental>>& layers =
       view->layer()->children();

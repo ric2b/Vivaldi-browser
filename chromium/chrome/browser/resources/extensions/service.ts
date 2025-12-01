@@ -207,7 +207,13 @@ export class Service implements ServiceInterface {
     chrome.metricsPrivate.recordUserAction(
         isEnabled ? 'Extensions.ExtensionEnabled' :
                     'Extensions.ExtensionDisabled');
-    chrome.management.setEnabled(id, isEnabled);
+    return chrome.management.setEnabled(id, isEnabled)
+        .catch(
+            _ => {
+                // The `setEnabled` call can reasonably fail for a number of
+                // reasons, including that the user chose to deny a re-enable
+                // dialog. Silently ignore these errors.
+            });
   }
 
   setItemAllowedIncognito(id: string, isAllowedIncognito: boolean) {
@@ -515,6 +521,10 @@ export class Service implements ServiceInterface {
 
   dismissMv2DeprecationNoticeForExtension(id: string): Promise<void> {
     return chrome.developerPrivate.dismissMv2DeprecationNoticeForExtension(id);
+  }
+
+  uploadItemToAccount(id: string): Promise<void> {
+    return chrome.developerPrivate.uploadExtensionToAccount(id);
   }
 
   static getInstance(): ServiceInterface {

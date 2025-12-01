@@ -42,17 +42,21 @@ module.exports = {
     meta: {
         type: "suggestion",
 
+        defaultOptions: [{
+            allowIndirect: false
+        }],
+
         docs: {
             description: "Disallow the use of `eval()`",
             recommended: false,
-            url: "https://eslint.org/docs/rules/no-eval"
+            url: "https://eslint.org/docs/latest/rules/no-eval"
         },
 
         schema: [
             {
                 type: "object",
                 properties: {
-                    allowIndirect: { type: "boolean", default: false }
+                    allowIndirect: { type: "boolean" }
                 },
                 additionalProperties: false
             }
@@ -64,15 +68,12 @@ module.exports = {
     },
 
     create(context) {
-        const allowIndirect = Boolean(
-            context.options[0] &&
-            context.options[0].allowIndirect
-        );
-        const sourceCode = context.getSourceCode();
+        const [{ allowIndirect }] = context.options;
+        const sourceCode = context.sourceCode;
         let funcInfo = null;
 
         /**
-         * Pushs a `this` scope (non-arrow function, class static block, or class field initializer) information to the stack.
+         * Pushes a `this` scope (non-arrow function, class static block, or class field initializer) information to the stack.
          * Top-level scopes are handled separately.
          *
          * This is used in order to check whether or not `this` binding is a
@@ -84,7 +85,7 @@ module.exports = {
          * @returns {void}
          */
         function enterThisScope(node) {
-            const strict = context.getScope().isStrict;
+            const strict = sourceCode.getScope(node).isStrict;
 
             funcInfo = {
                 upper: funcInfo,
@@ -221,7 +222,7 @@ module.exports = {
             },
 
             Program(node) {
-                const scope = context.getScope(),
+                const scope = sourceCode.getScope(node),
                     features = context.parserOptions.ecmaFeatures || {},
                     strict =
                         scope.isStrict ||
@@ -239,8 +240,8 @@ module.exports = {
                 };
             },
 
-            "Program:exit"() {
-                const globalScope = context.getScope();
+            "Program:exit"(node) {
+                const globalScope = sourceCode.getScope(node);
 
                 exitThisScope();
                 reportAccessingEval(globalScope);

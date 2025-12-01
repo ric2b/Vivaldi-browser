@@ -26,6 +26,16 @@ bool IsPostalAddressForm(const FormStructure& form);
 
 }  // namespace internal
 
+// Used to store `CalculateMinimalIncompatibleProfileWithTypeSets() ` result. It
+// contains the `profile` that was being compared and a set of FieldTypes that
+// had different values.
+struct DifferingProfileWithTypeSet {
+  const raw_ptr<const AutofillProfile> profile;
+  const FieldTypeSet field_type_set;
+
+  bool operator==(const DifferingProfileWithTypeSet& other) const = default;
+};
+
 // kAccount profiles are synced from an external source and have potentially
 // originated from outside of Autofill. In order to determine the added value
 // for Autofill, the `AutofillProfile::RecordType` is further resolved in some
@@ -86,6 +96,33 @@ DenseSet<FormTypeNameForLogging> GetAddressFormTypesForLogging(
 // `FormType::kCreditCardForm` or `FormType::kStandaloneCvcForm`.
 DenseSet<FormTypeNameForLogging> GetCreditCardFormTypesForLogging(
     const FormStructure& form);
+
+// Returns whether the caller should log autofill suggestions shown metrics.
+// Some suggestions can be "displayed" without a direct user action (i.e. typing
+// into a field or unfocusing a text area with a previous
+// `FillingProduct::kCompose` suggestion). We do not want to log suggestion
+// shown logs for them since they defeat the purpose of the metric.
+bool ShouldLogAutofillSuggestionShown(
+    AutofillSuggestionTriggerSource trigger_source);
+
+// This function encodes the integer value of a `FieldType` and the
+// boolean value of `suggestion_accepted` into a 14 bit integer.
+// The lower 2 bits are used to encode the filling acceptance and the higher 12
+// bits are used to encode the field type. This integer is used to determine
+// which bucket of metrics such as
+// "Autofill.KeyMetrics.FillingAcceptance.GroupedByFocusedFieldType"
+// should be emitted.
+// Even though `suggestion_accepted` could be encoded in only 1 bit, 2 bits are
+// used to leave room for possible other future values.
+int GetBucketForAcceptanceMetricsGroupedByFieldType(FieldType field_type,
+                                                    bool suggestion_accepted);
+
+// Given the result of `CalculateMinimalIncompatibleProfileWithTypeSets()`,
+// returns the minimum number of fields whose removal makes `import_candidate` a
+// duplicate of any entry in `existing_profiles`. Returns
+// `std::numeric_limits<int>::max()` in case `min_incompatible_sets` is empty.
+int GetDuplicationRank(
+    base::span<const DifferingProfileWithTypeSet> min_incompatible_sets);
 
 }  // namespace autofill::autofill_metrics
 

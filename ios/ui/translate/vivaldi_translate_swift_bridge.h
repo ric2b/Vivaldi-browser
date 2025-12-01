@@ -9,6 +9,7 @@
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
+#import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ios/ui/translate/vivaldi_translate_consumer.h"
 #import "ios/ui/translate/vivaldi_translate_entry_point.h"
 #import "ios/ui/translate/vivaldi_translate_language_item.h"

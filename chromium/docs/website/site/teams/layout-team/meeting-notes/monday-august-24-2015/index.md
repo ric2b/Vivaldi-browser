@@ -11,7 +11,7 @@ title: Monday, August 24, 2015
 ---
 
 Updates since last meeting (on Monday, August 17th):
-Scrolling (skobes, szager) \[[crbug.com/417782](http://crbug.com/417782)\]
+Scrolling (skobes, szager) \[[crbug.com/417782](https://crbug.com/417782)\]
 - Working on an issue where Element.clientWidth and clientHeight are not
 excluding the width/height of scrollbars as expected. (skobes)
 - There is logic for coordinates scrollbars in the compositor that has a
@@ -27,7 +27,7 @@ perf regression that prevented landing it. Fixed regression mostly,
 is close but is a great deal of variance in inspector tests between
 runs. Working on getting tracing information from running layout
 tests. Will reach out to tracing-team. (szager)
-CSS Flexbox (cbiesinger) \[[crbug.com/426898](http://crbug.com/426898)\]
+CSS Flexbox (cbiesinger) \[[crbug.com/426898](https://crbug.com/426898)\]
 - Added use counters for flexbox intrinsic size change and for the
 prefixed intrinsic size keywords.
 - Unprefixed the intrinsic size keywords, with the exception of fill.
@@ -36,10 +36,10 @@ Will be in M 46.
 only supported by us and webkit, fairly low usage.
 - fill-avalible will be kept as prefixed, pending spec changes to
 unprefix. Oddly seems to be the most used one.
-CSS Grid Layout (svillar) \[[crbug.com/79180](http://crbug.com/79180)\]
+CSS Grid Layout (svillar) \[[crbug.com/79180](https://crbug.com/79180)\]
 - No update since last week.
 Region-based multi-column support (mstensho)
-\[[crbug.com/334335](http://crbug.com/334335)\]
+\[[crbug.com/334335](https://crbug.com/334335)\]
 - Refactoring the multicol balancing implementation. It currently
 assumes that the layout engine feeds the balancer with accurate data
 (space shortage and explicit breaks) for each layout object once and
@@ -53,7 +53,7 @@ change it to performing everything related to column balancing after
 layout of a flow thread, instead of partially during layout and
 partially after layout.
 Add API for layout (leviw, pilgrim, ojan)
-\[[crbug.com/495288](http://crbug.com/495288)\]
+\[[crbug.com/495288](https://crbug.com/495288)\]
 - Landed several API patches. Estimate a couple of days worth of work
 remains. (pilgrim)
 Text (eae, drott, kojii)

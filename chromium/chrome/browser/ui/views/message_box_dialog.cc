@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/auto_reset.h"
 #include "base/compiler_specific.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
@@ -13,7 +14,6 @@
 #include "base/run_loop.h"
 #include "base/task/current_thread.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/simple_message_box.h"
 #include "chrome/browser/ui/simple_message_box_internal.h"
@@ -32,7 +32,7 @@
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/dialog_delegate.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "chromeos/ui/base/window_properties.h"
 #include "ui/aura/window.h"  // nogncheck
 #endif
@@ -71,8 +71,9 @@ chrome::MessageBoxResult ShowSync(gfx::NativeWindow parent,
   static bool g_message_box_is_showing_sync = false;
   // To avoid showing another MessageBoxDialog when one is already pending.
   // Otherwise, this might lead to a stack overflow due to infinite runloops.
-  if (g_message_box_is_showing_sync)
+  if (g_message_box_is_showing_sync) {
     return chrome::MESSAGE_BOX_RESULT_NO;
+  }
 
   base::AutoReset<bool> is_showing(&g_message_box_is_showing_sync, true);
   chrome::MessageBoxResult result = chrome::MESSAGE_BOX_RESULT_NO;
@@ -196,7 +197,7 @@ chrome::MessageBoxResult MessageBoxDialog::Show(
       title, message, type, yes_text, no_text, checkbox_text);
 
   // System modals have no parent and are only supported on ChromeOS Ash.
-  const bool is_modal = parent || BUILDFLAG(IS_CHROMEOS_ASH);
+  const bool is_modal = parent || BUILDFLAG(IS_CHROMEOS);
   views::Widget* widget = nullptr;
   if (is_modal) {
     dialog->SetModalType(parent ? ui::mojom::ModalType::kWindow
@@ -235,7 +236,7 @@ bool MessageBoxDialog::ShouldShowCloseButton() const {
 
 void MessageBoxDialog::OnWidgetActivationChanged(views::Widget* widget,
                                                  bool active) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   if (GetWidget()->GetNativeWindow()->GetProperty(
           chromeos::kIsShowingInOverviewKey)) {
     // Prevent this from closing while starting overview mode for better UX.
@@ -244,8 +245,9 @@ void MessageBoxDialog::OnWidgetActivationChanged(views::Widget* widget,
   }
 #endif
 
-  if (!active)
+  if (!active) {
     GetWidget()->Close();
+  }
 }
 
 void MessageBoxDialog::OnWidgetDestroying(views::Widget* widget) {
@@ -296,13 +298,15 @@ MessageBoxDialog::MessageBoxDialog(std::u16string_view title,
   // Only MESSAGE_BOX_TYPE_QUESTION has a Cancel button.
   if (type_ == chrome::MESSAGE_BOX_TYPE_QUESTION) {
     std::u16string cancel_text(no_text);
-    if (cancel_text.empty())
+    if (cancel_text.empty()) {
       cancel_text = l10n_util::GetStringUTF16(IDS_CANCEL);
+    }
     SetButtonLabel(ui::mojom::DialogButton::kCancel, cancel_text);
   }
 
-  if (!checkbox_text.empty())
+  if (!checkbox_text.empty()) {
     message_box_view_->SetCheckBoxLabel(std::u16string(checkbox_text));
+  }
 }
 
 MessageBoxDialog::~MessageBoxDialog() {

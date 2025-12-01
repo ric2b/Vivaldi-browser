@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "base/trace_event/trace_event.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_xr_eye.h"
 #include "third_party/blink/renderer/modules/xr/xr_camera.h"
 #include "third_party/blink/renderer/modules/xr/xr_depth_manager.h"
@@ -75,15 +76,15 @@ XRSession* XRView::session() const {
   return frame_->session();
 }
 
-DOMFloat32Array* XRView::projectionMatrix() const {
+NotShared<DOMFloat32Array> XRView::projectionMatrix() const {
   if (!projection_matrix_ || !projection_matrix_->Data()) {
     // A page may take the projection matrix value and detach it so
     // projection_matrix_ is a detached array buffer.  This breaks the
     // inspector, so return null instead.
-    return nullptr;
+    return NotShared<DOMFloat32Array>();
   }
 
-  return projection_matrix_.Get();
+  return projection_matrix_;
 }
 
 XRCPUDepthInformation* XRView::GetCpuDepthInformation(
@@ -333,6 +334,24 @@ void XRViewData::requestViewportScale(std::optional<double> scale) {
     return;
 
   requested_viewport_scale_ = std::clamp(*scale, kMinViewportScale, 1.0);
+}
+
+bool XRViewData::ApplyViewportScaleForFrame() {
+  bool changed = false;
+
+  // Dynamic viewport scaling, see steps 6 and 7 in
+  // https://immersive-web.github.io/webxr/#dom-xrwebgllayer-getviewport
+  if (ViewportModifiable() &&
+      CurrentViewportScale() != RequestedViewportScale()) {
+    DVLOG(2) << __func__
+             << ": apply ViewportScale=" << RequestedViewportScale();
+    SetCurrentViewportScale(RequestedViewportScale());
+    changed = true;
+  }
+  TRACE_COUNTER1("xr", "XR viewport scale (%)", CurrentViewportScale() * 100);
+  SetViewportModifiable(false);
+
+  return changed;
 }
 
 void XRViewData::Trace(Visitor* visitor) const {

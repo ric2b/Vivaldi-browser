@@ -75,6 +75,8 @@ if(NOT AOM_TARGET_CPU)
     set(AOM_TARGET_CPU "arm64")
   elseif(cpu_lowercase MATCHES "^ppc")
     set(AOM_TARGET_CPU "ppc")
+  elseif(cpu_lowercase MATCHES "^riscv")
+    set(AOM_TARGET_CPU "riscv")
   else()
     message(WARNING "The architecture ${CMAKE_SYSTEM_PROCESSOR} is not "
                     "supported, falling back to the generic target")
@@ -308,6 +310,9 @@ if(MSVC)
   if(ENABLE_WERROR)
     add_compiler_flag_if_supported("/WX")
   endif()
+
+  # Compile source files in parallel
+  add_compiler_flag_if_supported("/MP")
 else()
   require_c_flag("-std=c99" YES)
   if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang"

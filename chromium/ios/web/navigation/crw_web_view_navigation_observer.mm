@@ -18,8 +18,8 @@
 #import "ios/web/navigation/navigation_context_impl.h"
 #import "ios/web/navigation/wk_navigation_util.h"
 #import "ios/web/public/web_client.h"
+#import "ios/web/util/wk_web_view_util.h"
 #import "ios/web/web_state/web_state_impl.h"
-#import "ios/web/web_view/wk_web_view_util.h"
 #import "net/base/apple/http_response_headers_util.h"
 #import "net/base/apple/url_conversions.h"
 #import "url/gurl.h"
@@ -127,8 +127,9 @@ using web::NavigationManagerImpl;
 - (void)webViewLoadingStateDidChange {
   self.webStateImpl->SetIsLoading(self.webView.loading);
 
-  if (self.webView.loading)
+  if (self.webView.loading) {
     return;
+  }
 
   GURL webViewURL = net::GURLWithNSURL(self.webView.URL);
 
@@ -187,7 +188,7 @@ using web::NavigationManagerImpl;
 - (void)webViewBackForwardStateDidChange {
   // Don't trigger for LegacyNavigationManager because its back/foward state
   // doesn't always match that of WKWebView.
-    self.webStateImpl->OnBackForwardStateChanged();
+  self.webStateImpl->OnBackForwardStateChanged();
 }
 
 // Called when WKWebView URL has been changed.

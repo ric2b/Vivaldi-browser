@@ -247,8 +247,8 @@ ComPtr<IPin> VideoCaptureDeviceWin::GetPin(ComPtr<IBaseFilter> capture_filter,
 VideoPixelFormat VideoCaptureDeviceWin::TranslateMediaSubtypeToPixelFormat(
     const GUID& sub_type) {
   static struct {
-    // This field is not a raw_ref<> because it was filtered by the rewriter
-    // for: #global-scope
+    // This field is not a raw_ref<> because it only ever references statically-
+    // allocated data that will never be freed, so it cannot possibly dangle.
     RAW_PTR_EXCLUSION const GUID& sub_type;
     VideoPixelFormat format;
   } const kMediaSubtypeToPixelFormatCorrespondence[] = {
@@ -898,7 +898,8 @@ void VideoCaptureDeviceWin::FrameReceived(const uint8_t* buffer,
     // DXVA_NominalRangeto build a gfx::ColorSpace. See http://crbug.com/959992.
     client_->OnIncomingCapturedData(
         buffer, length, format, gfx::ColorSpace(), camera_rotation_.value(),
-        flip_y, base::TimeTicks::Now(), timestamp, std::nullopt);
+        flip_y, base::TimeTicks::Now(), timestamp,
+        /*capture_begin_timestamp=*/std::nullopt, /*metadata=*/std::nullopt);
   }
 
   while (!take_photo_callbacks_.empty()) {

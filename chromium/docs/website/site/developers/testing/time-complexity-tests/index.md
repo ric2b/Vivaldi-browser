@@ -12,8 +12,8 @@ title: Time Complexity Tests
 
 **HISTORICAL (documentation)**
 
-**Removed in [crrev.com/1149253002](http://crrev.com/1149253002)
-([crbug.com/488986](http://crbug.com/488986)).**
+**Removed in [crrev.com/1149253002](https://crrev.com/1149253002)
+([crbug.com/488986](https://crbug.com/488986)).**
 
 Time complexity tests verify the order of growth of time complexity *T*(*n*) for
 various operations, generally verifying that this is *O*(1) or *O*(*n*), rather
@@ -59,7 +59,7 @@ function testFoo(magnitude)
 {
     // ...
 }
-Magnitude.description('Verifies that fooing is linear in the number of bars. See http://crbug.com/42');
+Magnitude.description('Verifies that fooing is linear in the number of bars. See https://crbug.com/42');
 Magnitude.initialExponent = 0;
 Magnitude.numPoints = 10;
 Magnitude.trim = 1;
@@ -149,7 +149,7 @@ This means:
 *   run for 10 **points** (magnitudes), so up to *n* = 20 + (10 − 1) =
             29;
 *   **trim** off the 1 most extreme value (we use [trimmed
-            estimators](http://en.wikipedia.org/wiki/Trimmed_estimator), meaning
+            estimators](https://en.wikipedia.org/wiki/Trimmed_estimator), meaning
             "discard some outliers", to deal with noise);
 *   succeed if data is within 10% **tolerance** of perfect fit.
 
@@ -188,7 +188,7 @@ You generally want an odd number of trials, so you can use majority rule:
 and 3 trials is usually enough.
 
 50% (majority rule) optimizes the overall trade-off between [sensitivity and
-specificity](http://en.wikipedia.org/wiki/Sensitivity_and_specificity) (true
+specificity](https://en.wikipedia.org/wiki/Sensitivity_and_specificity) (true
 positive rate and true negative rate). If you have the same rate for both, the
 complimentary rates (false negative rate and false positive rate) are attenuated
 linearly (as powers, i.e., on the log scale) in number of trials needed for
@@ -227,7 +227,7 @@ you can instead decrease the maximum magnitude.
 *Statistical parameters*
 
 *   `Magnitude.trim` – number of extreme values to trim ([trimmed
-            estimator](http://en.wikipedia.org/wiki/Trimmed_estimator))
+            estimator](https://en.wikipedia.org/wiki/Trimmed_estimator))
 *   `Magnitude.tolerance` – succeed if data is within this percentage of
             model (perfect fit); formally, if maximum deviation is less than
             this threshold.
@@ -323,9 +323,9 @@ In more detail:
 #### Statistical tests
 
 Tests are all of the form: "use
-[trimmed](http://en.wikipedia.org/wiki/Trimmed_estimator) [maximum absolute
-deviation](http://en.wikipedia.org/wiki/Maximum_absolute_deviation) (from model)
-as [test statistic](http://en.wikipedia.org/wiki/Test_statistic)", meaning
+[trimmed](https://en.wikipedia.org/wiki/Trimmed_estimator) [maximum absolute
+deviation](https://en.wikipedia.org/wiki/Maximum_absolute_deviation) (from model)
+as [test statistic](https://en.wikipedia.org/wiki/Test_statistic)", meaning
 "compare this value against tolerance, and succeed if error doesn't exceed
 tolerance". In detail:
 
@@ -349,7 +349,7 @@ log of ratios of successive times (equivalently, difference of successive logs)
 should be 1 (linear) or more than 2 (quadratic or more).
 
 This is effectively looking at slope of successive steps on the [log-log
-scale](http://en.wikipedia.org/wiki/Log-log_plot), as the slope of a monomial on
+scale](https://en.wikipedia.org/wiki/Log-log_plot), as the slope of a monomial on
 the log-log scale is its exponent.
 
 These are simple tests, not sophisticated ones (we're not doing robust

@@ -8,6 +8,7 @@
 
 namespace adblock_filter {
 bool CompileFlatRules(const ParseResult& parse_result,
+                      const RuleSourceSettings& source_settings,
                       const base::FilePath& output_path,
                       std::string& checksum);
 }  // namespace adblock_filter

@@ -3,8 +3,8 @@
 #ifndef IOS_SYNC_NOTE_SYNC_SERVICE_FACTORY_H_
 #define IOS_SYNC_NOTE_SYNC_SERVICE_FACTORY_H_
 
-#include "base/no_destructor.h"
-#include "components/keyed_service/ios/browser_state_keyed_service_factory.h"
+#import "base/no_destructor.h"
+#import "ios/chrome/browser/shared/model/profile/profile_keyed_service_factory_ios.h"
 
 class ProfileIOS;
 
@@ -14,7 +14,7 @@ class NoteSyncService;
 
 namespace vivaldi {
 // Singleton that owns the note sync service.
-class NoteSyncServiceFactory : public BrowserStateKeyedServiceFactory {
+class NoteSyncServiceFactory : public ProfileKeyedServiceFactoryIOS {
  public:
   // Returns the instance of NoteSyncService associated with this profile
   // (creating one if none exists).
@@ -34,8 +34,6 @@ class NoteSyncServiceFactory : public BrowserStateKeyedServiceFactory {
 
   // BrowserStateKeyedServiceFactory implementation.
   std::unique_ptr<KeyedService> BuildServiceInstanceFor(
-      web::BrowserState* context) const override;
-  web::BrowserState* GetBrowserStateToUse(
       web::BrowserState* context) const override;
 };
 

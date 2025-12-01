@@ -5,7 +5,7 @@
 module blink.mojom;
 
 import "cc/mojom/browser_controls_state.mojom";
-import "cc/mojom/browser_controls_offset_tags_info.mojom";
+import "cc/mojom/browser_controls_offset_tag_modifications.mojom";
 import "mojo/public/mojom/base/byte_string.mojom";
 import "mojo/public/mojom/base/shared_memory.mojom";
 import "mojo/public/mojom/base/string16.mojom";
@@ -379,10 +379,9 @@ interface LocalFrameHost {
   // allow the commit to proceed.
   StartLoadingForAsyncNavigationApiCommit();
 
-  // Indicates an attempt by the associated frame to navigate from the
-  // |initiator_url| to the |blocked_url|, but the navigation was
-  // blocked because of |reason|.
-  DidBlockNavigation(url.mojom.Url blocked_url, url.mojom.Url initiator_url,
+  // Indicates an attempt by the associated frame to navigate to |blocked_url|,
+  // but the navigation was blocked because of |reason|.
+  DidBlockNavigation(url.mojom.Url blocked_url,
                        blink.mojom.NavigationBlockedReason reason);
 
   // Sent when the renderer changed the progress of a load.
@@ -434,10 +433,11 @@ interface LocalFrameHost {
   UpdateTitle(mojo_base.mojom.String16? title,
               mojo_base.mojom.TextDirection title_direction);
 
-  // Updates the app title for a document. If non-empty, a web app displayed in an app
-  // window may use this string instead of the regular title.
-  // See https://github.com/MicrosoftEdge/MSEdgeExplainers/blob/main/DocumentSubtitle/explainer.md
-  UpdateAppTitle(mojo_base.mojom.String16 app_title);
+  // Updates the application title for a document. If non-empty, a web app
+  // displayed in an app window may use this string instead of the regular
+  // title. See
+  // https://github.com/MicrosoftEdge/MSEdgeExplainers/blob/main/DocumentSubtitle/explainer.md
+  UpdateApplicationTitle(mojo_base.mojom.String16 application_title);
 
   // Indicates that the user activation state in the current frame has been
   // updated, so the replicated states need to be synced (in the browser process
@@ -534,7 +534,6 @@ interface LocalFrameHost {
   // The popup menu is hidden when the mojo channel is closed.
   ShowPopupMenu(pending_remote<PopupMenuClient> popup_client,
                 gfx.mojom.Rect bounds,
-                int32 item_height,
                 double font_size,
                 int32 selected_item,
                 array<MenuItem> menu_items,
@@ -1266,8 +1265,8 @@ interface LocalMainFrame {
   // enabled, what the current state should be, and whether or not to
   // animate to the proper state.
   //
-  // offset_tags_info consists of OffsetTags, and metadata for creating
-  // OffsetTagConstraints. It is passed to the renderer and used to tag the
+  // offset_tag_modifications consists of OffsetTags and additional metadata
+  // for moving browser controls. It is passed to the renderer and used to tag the
   // browser controls scroll offsets in the compositor frame's metadata, with
   // the goal of allowing viz to scroll the top controls by applying the
   // offset. The slim::Layers for the top controls in the browser must be
@@ -1285,7 +1284,7 @@ interface LocalMainFrame {
       cc.mojom.BrowserControlsState constraints,
       cc.mojom.BrowserControlsState current,
       bool animate,
-      cc.mojom.BrowserControlsOffsetTagsInfo? offset_tags_info);
+      cc.mojom.BrowserControlsOffsetTagModifications? offset_tag_modifications);
 
   // Transmits data to V8CrowdsourcedCompileHintsConsumer in the renderer. The
   // data is a Bloom filter describing which JavaScript functions on the page

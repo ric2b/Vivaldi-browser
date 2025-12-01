@@ -53,6 +53,10 @@
 #include "ui/gl/gl_angle_util_win.h"
 #endif
 
+#if BUILDFLAG(IS_ANDROID)
+#include "base/android/build_info.h"
+#endif
+
 namespace gpu {
 namespace {
 
@@ -96,20 +100,17 @@ std::vector<const char*> GetEnabledToggles(
   for (const auto& toggle : gpu_preferences.enabled_dawn_features_list) {
     enabled_toggles.push_back(toggle.c_str());
   }
+
   // The following toggles are all device-scoped toggles so it's not necessary
   // to pass them when creating the Instance above.
+  if (features::kSkiaGraphiteDawnBackendDebugLabels.Get()) {
+    enabled_toggles.push_back("use_user_defined_labels_in_backend");
+  }
 
-  // Only enable backend labels on Windows or DCHECK builds on other platforms
-  // since it can have non-trivial performance overhead e.g. with Metal.
-#if DCHECK_IS_ON() || BUILDFLAG(IS_WIN)
-  enabled_toggles.push_back("use_user_defined_labels_in_backend");
-#endif
-
-#if !DCHECK_IS_ON()
   if (features::kSkiaGraphiteDawnSkipValidation.Get()) {
     enabled_toggles.push_back("skip_validation");
   }
-#endif
+
   enabled_toggles.push_back("disable_robustness");
   enabled_toggles.push_back("disable_lazy_clear_for_mapped_at_creation_buffer");
 
@@ -120,6 +121,22 @@ std::vector<const char*> GetEnabledToggles(
     enabled_toggles.push_back("use_packed_depth24_unorm_stencil8_format");
   }
 #endif
+
+  if (backend_type == wgpu::BackendType::Vulkan) {
+#if BUILDFLAG(IS_ANDROID)
+    const auto* build_info = base::android::BuildInfo::GetInstance();
+    // Samsung devices are failing validation checks that texture allocation
+    // size is bigger than AHB size when they should. See
+    // https://crbug.com/377935752 for details.
+    if (std::string_view(build_info->brand()) == "samsung") {
+      enabled_toggles.push_back(
+          "ignore_imported_ahardwarebuffer_vulkan_image_size");
+    }
+#endif
+
+    // Use a single VkPipelineCache inside dawn.
+    enabled_toggles.push_back("vulkan_monolithic_pipeline_cache");
+  }
 
   // Skip expensive swiftshader vkCmdDraw* for tests.
   // TODO(penghuang): rename kDisableGLDrawingForTests to
@@ -179,7 +196,7 @@ std::vector<wgpu::FeatureName> GetRequiredFeatures(
       // The following features are always supported when running on the Vulkan
       // backend on Android.
       wgpu::FeatureName::SharedTextureMemoryAHardwareBuffer,
-      wgpu::FeatureName::SharedFenceVkSemaphoreSyncFD,
+      wgpu::FeatureName::SharedFenceSyncFD,
 
       // The following features are always supported by the the D3D backends.
       wgpu::FeatureName::SharedTextureMemoryD3D11Texture2D,
@@ -190,6 +207,8 @@ std::vector<wgpu::FeatureName> GetRequiredFeatures(
 
       wgpu::FeatureName::DawnLoadResolveTexture,
       wgpu::FeatureName::DawnPartialLoadResolveTexture,
+      wgpu::FeatureName::DawnTexelCopyBufferRowAlignment,
+      wgpu::FeatureName::FlexibleTextureViews,
   };
 
   for (auto feature : kOptionalFeatures) {
@@ -277,6 +296,25 @@ const char* HRESULTToString(HRESULT result) {
   }
 }
 #endif  // BUILDFLAG(IS_WIN)
+
+const char* BackendTypeToString(wgpu::BackendType backend_type) {
+  switch (backend_type) {
+    case wgpu::BackendType::D3D11:
+      return "D3D11";
+    case wgpu::BackendType::D3D12:
+      return "D3D12";
+    case wgpu::BackendType::Metal:
+      return "Metal";
+    case wgpu::BackendType::Vulkan:
+      return "Vulkan";
+    case wgpu::BackendType::OpenGL:
+      return "OpenGL";
+    case wgpu::BackendType::OpenGLES:
+      return "OpenGLES";
+    default:
+      CHECK(false);
+  }
+}
 
 }  // namespace
 
@@ -389,13 +427,22 @@ class DawnSharedContext : public base::RefCountedThreadSafe<DawnSharedContext>,
   }
 
   // Provided to wgpu::Device as logging callback.
-  static void LogInfo(WGPULoggingType type,
-                      WGPUStringView message,
-                      void*) {
+  static void LogInfo(wgpu::LoggingType type,
+                      wgpu::StringView message,
+                      DawnSharedContext* shared_context) {
     std::string_view view = {message.data, message.length};
     switch (static_cast<wgpu::LoggingType>(type)) {
       case wgpu::LoggingType::Warning:
         LOG(WARNING) << view;
+        if (shared_context && !shared_context->device_) {
+          // If device hasn't been created yet. This warning message must be
+          // from dawn::native::Instance when we try to enumerate adapters or
+          // when trying to create the device. In that case, saving the message
+          // so that if there is any init failure afterward, we can include the
+          // warnings in the LogInitFailure()'s report.
+          shared_context->init_warning_msgs_.append(view);
+          shared_context->init_warning_msgs_.append("\n");
+        }
         break;
       case wgpu::LoggingType::Error:
         LOG(ERROR) << view;
@@ -411,6 +458,28 @@ class DawnSharedContext : public base::RefCountedThreadSafe<DawnSharedContext>,
 
   void OnError(wgpu::ErrorType error_type, wgpu::StringView message);
 
+  void LogInitFailure(std::string_view reason,
+                      bool generate_crash_report,
+                      wgpu::BackendType backend_type,
+                      bool force_fallback_adapter) {
+    LOG(ERROR) << reason;
+
+    if (!generate_crash_report) {
+      return;
+    }
+
+    SCOPED_CRASH_KEY_STRING256("dawn-shared-context", "init-failure", reason);
+    SCOPED_CRASH_KEY_STRING32("dawn-shared-context", "backend-type",
+                              BackendTypeToString(backend_type));
+    SCOPED_CRASH_KEY_BOOL("dawn-shared-context", "fallback-adapter",
+                          force_fallback_adapter);
+    // Also include any warning messages collected during the initialization.
+    SCOPED_CRASH_KEY_STRING1024("dawn-shared-context", "init-warning-msgs",
+                                init_warning_msgs_);
+    init_warning_msgs_.clear();
+    base::debug::DumpWithoutCrashing();
+  }
+
   // base::trace_event::MemoryDumpProvider implementation:
   bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
                     base::trace_event::ProcessMemoryDump* pmd) override;
@@ -424,6 +493,7 @@ class DawnSharedContext : public base::RefCountedThreadSafe<DawnSharedContext>,
   wgpu::Adapter adapter_;
   wgpu::Device device_;
   wgpu::BackendType backend_type_;
+  std::string init_warning_msgs_;
   bool is_vulkan_swiftshader_adapter_ = false;
   bool registered_memory_dump_provider_ = false;
 
@@ -438,7 +508,8 @@ DawnSharedContext::~DawnSharedContext() {
       base::trace_event::MemoryDumpManager::GetInstance()
           ->UnregisterDumpProvider(this);
     }
-    device_.SetLoggingCallback(nullptr, nullptr);
+    device_.SetLoggingCallback([](wgpu::LoggingType, wgpu::StringView) {});
+
     // Destroy the device now so that the lost callback, which references this
     // class, is fired now before we clean up the rest of this class.
     device_.Destroy();
@@ -458,9 +529,11 @@ bool DawnSharedContext::Initialize(
   // instance doesn't exit the GPU process.
   // LogInfo will be used to receive instance level errors. For example failures
   // of loading libraries, initializing backend, etc
-  instance_ = webgpu::DawnInstance::Create(
-      &platform_, gpu_preferences, webgpu::SafetyLevel::kUnsafe,
-      &DawnSharedContext::LogInfo, nullptr);
+  dawn::native::DawnInstanceDescriptor dawn_instance_desc;
+  dawn_instance_desc.SetLoggingCallback(&DawnSharedContext::LogInfo, this);
+  instance_ = webgpu::DawnInstance::Create(&platform_, gpu_preferences,
+                                           webgpu::SafetyLevel::kUnsafe,
+                                           &dawn_instance_desc);
 
   std::vector<const char*> enabled_toggles =
       GetEnabledToggles(backend_type, force_fallback_adapter, gpu_preferences);
@@ -523,27 +596,30 @@ bool DawnSharedContext::Initialize(
   }
 #endif  // BUILDFLAG(IS_WIN)
 
-  adapter_options.compatibilityMode = false;
+  adapter_options.featureLevel = wgpu::FeatureLevel::Core;
   std::vector<dawn::native::Adapter> adapters =
       instance_->EnumerateAdapters(&adapter_options);
 
-#if !BUILDFLAG(IS_WIN)
-  // Not fallback to compatibility mode due to rendering issue with d3d11
-  // feature level 11.0
   if (adapters.empty()) {
     LOG(ERROR) << "No adapters found for non compatibility mode.";
-    adapter_options.compatibilityMode = true;
+    adapter_options.featureLevel = wgpu::FeatureLevel::Compatibility;
     adapters = instance_->EnumerateAdapters(&adapter_options);
   }
-#endif
 
   if (adapters.empty()) {
-    LOG(ERROR) << "No adapters found.";
+    // On Android, it's expected that some devices might not support Dawn atm.
+    // So don't generate report for it.
+    LogInitFailure("No adapters found.",
+                   /*generate_crash_report=*/!BUILDFLAG(IS_ANDROID),
+                   backend_type, force_fallback_adapter);
     return false;
   }
   adapter_ = wgpu::Adapter(adapters[0].Get());
 
   if (!validate_adapter_fn(backend_type, adapter_)) {
+    LogInitFailure("Validate adapter failed.",
+                   /*generate_crash_report=*/!BUILDFLAG(IS_ANDROID),
+                   backend_type, force_fallback_adapter);
     return false;
   }
 
@@ -569,7 +645,7 @@ bool DawnSharedContext::Initialize(
       [](const wgpu::Device&, wgpu::DeviceLostReason reason,
          wgpu::StringView message, DawnSharedContext* state) {
         if (reason != wgpu::DeviceLostReason::Destroyed) {
-          state->OnError(wgpu::ErrorType::DeviceLost, message);
+          state->OnError(wgpu::ErrorType::Unknown, message);
         }
       },
       this);
@@ -583,7 +659,9 @@ bool DawnSharedContext::Initialize(
   // Use best limits for the device.
   wgpu::SupportedLimits supportedLimits = {};
   if (adapter_.GetLimits(&supportedLimits) != wgpu::Status::Success) {
-    LOG(ERROR) << "Failed to call adapter.GetLimits().";
+    LogInitFailure("Failed to call adapter.GetLimits().",
+                   /*generate_crash_report=*/true, backend_type,
+                   force_fallback_adapter);
     return false;
   }
 
@@ -623,11 +701,12 @@ bool DawnSharedContext::Initialize(
   }
 
   if (!device_) {
-    LOG(ERROR) << "Failed to create device.";
+    LogInitFailure("Failed to create device.", /*generate_crash_report=*/true,
+                   backend_type, force_fallback_adapter);
     return false;
   }
 
-  device_.SetLoggingCallback(&DawnSharedContext::LogInfo, nullptr);
+  device_.SetLoggingCallback(&DawnSharedContext::LogInfo, this);
 
   backend_type_ = backend_type;
   is_vulkan_swiftshader_adapter_ =

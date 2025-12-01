@@ -4,7 +4,7 @@
 
 import 'chrome://os-settings/lazy_load.js';
 
-import {SettingsStorageElement} from 'chrome://os-settings/lazy_load.js';
+import type {SettingsStorageElement} from 'chrome://os-settings/lazy_load.js';
 import {DevicePageBrowserProxyImpl, Router, routes, setDisplayApiForTesting, StorageSpaceState} from 'chrome://os-settings/os_settings.js';
 import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
@@ -20,8 +20,6 @@ import {getFakePrefs} from './device_page_test_util.js';
 import {TestDevicePageBrowserProxy} from './test_device_page_browser_proxy.js';
 
 suite('<settings-storage> for device page', () => {
-  const isRevampWayfindingEnabled =
-      loadTimeData.getBoolean('isRevampWayfindingEnabled');
   let storageSubpage: SettingsStorageElement;
   let fakeSystemDisplay: FakeSystemDisplay;
   let browserProxy: TestDevicePageBrowserProxy;
@@ -250,8 +248,7 @@ suite('<settings-storage> for device page', () => {
   test('apps extensions size default', async () => {
     await createStorageSubpage();
 
-    const expectedLabel =
-        isRevampWayfindingEnabled ? 'Apps' : 'Apps and extensions';
+    const expectedLabel = 'Apps';
     assertEquals(expectedLabel, getStorageItemLabelFromId('appsSize'));
     assertEquals('Calculating…', getStorageItemSubLabelFromId('appsSize'));
 

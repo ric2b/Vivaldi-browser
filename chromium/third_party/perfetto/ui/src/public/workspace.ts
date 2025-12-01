@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import {assertTrue} from '../base/logging';
+import {errResult, okResult, Result} from '../base/result';
 
 export interface WorkspaceManager {
   // This is the same of ctx.workspace, exposed for consistency also here.
@@ -38,9 +39,7 @@ let sessionUniqueIdCounter = 0;
  * everywhere where session-unique ids are required.
  */
 function createSessionUniqueId(): string {
-  // Return the counter in base36 (0-z) to keep the string as short as possible
-  // but still human readable.
-  return (sessionUniqueIdCounter++).toString(36);
+  return (sessionUniqueIdCounter++).toString();
 }
 
 /**
@@ -63,167 +62,6 @@ function createSessionUniqueId(): string {
  * If you find yourself using this as a Javascript class in external code, e.g.
  * `instance of TrackNodeContainer`, you're probably doing something wrong.
  */
-export abstract class TrackNodeContainer {
-  protected _children: Array<TrackNode> = [];
-  protected readonly tracksById = new Map<string, TrackNode>();
-  protected abstract fireOnChangeListener(): void;
-
-  /**
-   * True if this node has children, false otherwise.
-   */
-  get hasChildren(): boolean {
-    return this._children.length > 0;
-  }
-
-  /**
-   * The ordered list of children belonging to this node.
-   */
-  get children(): ReadonlyArray<TrackNode> {
-    return this._children;
-  }
-
-  /**
-   * Inserts a new child node considering it's sortOrder.
-   *
-   * The child will be added before the first child whose |sortOrder| is greater
-   * than the child node's sort order, or at the end if one does not exist. If
-   * |sortOrder| is omitted on either node in the comparison it is assumed to be
-   * 0.
-   *
-   * @param child - The child node to add.
-   */
-  addChildInOrder(child: TrackNode): void {
-    const insertPoint = this._children.find(
-      (n) => (n.sortOrder ?? 0) > (child.sortOrder ?? 0),
-    );
-    if (insertPoint) {
-      this.addChildBefore(child, insertPoint);
-    } else {
-      this.addChildLast(child);
-    }
-  }
-
-  /**
-   * Add a new child node at the start of the list of children.
-   *
-   * @param child The new child node to add.
-   */
-  addChildLast(child: TrackNode): void {
-    this.adopt(child);
-    this._children.push(child);
-    this.fireOnChangeListener();
-  }
-
-  /**
-   * Add a new child node at the end of the list of children.
-   *
-   * @param child The child node to add.
-   */
-  addChildFirst(child: TrackNode): void {
-    this.adopt(child);
-    this._children.unshift(child);
-    this.fireOnChangeListener();
-  }
-
-  /**
-   * Add a new child node before an existing child node.
-   *
-   * @param child The child node to add.
-   * @param referenceNode An existing child node. The new node will be added
-   * before this node.
-   */
-  addChildBefore(child: TrackNode, referenceNode: TrackNode): void {
-    if (child === referenceNode) return;
-
-    assertTrue(this.children.includes(referenceNode));
-
-    this.adopt(child);
-
-    const indexOfReference = this.children.indexOf(referenceNode);
-    this._children.splice(indexOfReference, 0, child);
-    this.fireOnChangeListener();
-  }
-
-  /**
-   * Add a new child node after an existing child node.
-   *
-   * @param child The child node to add.
-   * @param referenceNode An existing child node. The new node will be added
-   * after this node.
-   */
-  addChildAfter(child: TrackNode, referenceNode: TrackNode): void {
-    if (child === referenceNode) return;
-
-    assertTrue(this.children.includes(referenceNode));
-
-    this.adopt(child);
-
-    const indexOfReference = this.children.indexOf(referenceNode);
-    this._children.splice(indexOfReference + 1, 0, child);
-    this.fireOnChangeListener();
-  }
-
-  /**
-   * Remove a child node from this node.
-   *
-   * @param child The child node to remove.
-   */
-  removeChild(child: TrackNode): void {
-    this._children = this.children.filter((x) => child !== x);
-    child.parent = undefined;
-    child.id && this.tracksById.delete(child.id);
-    this.fireOnChangeListener();
-  }
-
-  /**
-   * The flattened list of all descendent nodes.
-   */
-  get flatTracks(): ReadonlyArray<TrackNode> {
-    return this.children.flatMap((node) => {
-      return [node, ...node.flatTracks];
-    });
-  }
-
-  /**
-   * Remove all children from this node.
-   */
-  clear(): void {
-    this._children = [];
-    this.tracksById.clear();
-    this.fireOnChangeListener();
-  }
-
-  /**
-   * Find a track node by its id.
-   *
-   * Node: This is an O(N) operation where N is the depth of the target node.
-   * I.e. this is more efficient than findTrackByURI().
-   *
-   * @param id The id of the node we want to find.
-   * @returns The node or undefined if no such node exists.
-   */
-  getTrackById(id: string): TrackNode | undefined {
-    const foundNode = this.tracksById.get(id);
-    if (foundNode) {
-      return foundNode;
-    } else {
-      // Recurse our children
-      for (const child of this._children) {
-        const foundNode = child.getTrackById(id);
-        if (foundNode) return foundNode;
-      }
-    }
-    return undefined;
-  }
-
-  private adopt(child: TrackNode): void {
-    if (child.parent) {
-      child.parent.removeChild(child);
-    }
-    child.parent = this;
-    child.id && this.tracksById.set(child.id, child);
-  }
-}
 
 export interface TrackNodeArgs {
   title: string;
@@ -239,15 +77,12 @@ export interface TrackNodeArgs {
 /**
  * A base class for any node with children (i.e. a group or a workspace).
  */
-export class TrackNode extends TrackNodeContainer {
+export class TrackNode {
   // Immutable unique (within the workspace) ID of this track node. Used for
   // efficiently retrieving this node object from a workspace. Note: This is
   // different to |uri| which is used to reference a track to render on the
   // track. If this means nothing to you, don't bother using it.
   public readonly id: string;
-
-  // Parent node - could be the workspace or another node.
-  public parent?: TrackNodeContainer;
 
   // A human readable string for this track - displayed in the track shell.
   // TODO(stevegolton): Make this optional, so that if we implement a string for
@@ -280,10 +115,17 @@ export class TrackNode extends TrackNodeContainer {
   public removable: boolean;
 
   protected _collapsed = true;
+  protected _children: Array<TrackNode> = [];
+  protected readonly tracksById = new Map<string, TrackNode>();
+  protected readonly tracksByUri = new Map<string, TrackNode>();
+  private _parent?: TrackNode;
+  public _workspace?: Workspace;
+
+  get parent(): TrackNode | undefined {
+    return this._parent;
+  }
 
   constructor(args?: Partial<TrackNodeArgs>) {
-    super();
-
     const {
       title = '',
       id = createSessionUniqueId(),
@@ -354,7 +196,7 @@ export class TrackNode extends TrackNodeContainer {
     // Build a path from the root workspace to this node
     const path: TrackNode[] = [];
     let node = this.parent;
-    while (node && node instanceof TrackNode) {
+    while (node) {
       path.unshift(node);
       node = node.parent;
     }
@@ -370,7 +212,7 @@ export class TrackNode extends TrackNodeContainer {
    */
   reveal(): void {
     let parent = this.parent;
-    while (parent && parent instanceof TrackNode) {
+    while (parent) {
       parent.expand();
       parent = parent.parent;
     }
@@ -379,25 +221,19 @@ export class TrackNode extends TrackNodeContainer {
   /**
    * Find this node's root node - this may be a workspace or another node.
    */
-  get rootNode(): TrackNodeContainer | undefined {
-    // Travel upwards through the tree to find the root node.
-    let parent: TrackNodeContainer | undefined = this;
-    while (parent && parent instanceof TrackNode) {
-      parent = parent.parent;
+  get rootNode(): TrackNode {
+    let node: TrackNode = this;
+    while (node.parent) {
+      node = node.parent;
     }
-    return parent;
+    return node;
   }
 
   /**
-   * Find this node's parent workspace if it is attached to one.
+   * Find this node's workspace if it is attached to one.
    */
   get workspace(): Workspace | undefined {
-    // Find the root node and return it if it's a Workspace instance
-    const rootNode = this.rootNode;
-    if (rootNode instanceof Workspace) {
-      return rootNode;
-    }
-    return undefined;
+    return this.rootNode._workspace;
   }
 
   /**
@@ -405,7 +241,6 @@ export class TrackNode extends TrackNodeContainer {
    */
   expand(): void {
     this._collapsed = false;
-    this.fireOnChangeListener();
   }
 
   /**
@@ -414,7 +249,6 @@ export class TrackNode extends TrackNodeContainer {
    */
   collapse(): void {
     this._collapsed = true;
-    this.fireOnChangeListener();
   }
 
   /**
@@ -422,7 +256,6 @@ export class TrackNode extends TrackNodeContainer {
    */
   toggleCollapsed(): void {
     this._collapsed = !this._collapsed;
-    this.fireOnChangeListener();
   }
 
   /**
@@ -448,9 +281,9 @@ export class TrackNode extends TrackNodeContainer {
   get fullPath(): ReadonlyArray<string> {
     let fullPath = [this.title];
     let parent = this.parent;
-    while (parent && parent instanceof TrackNode) {
+    while (parent) {
       // Ignore headless containers as they don't appear in the tree...
-      if (!parent.headless) {
+      if (!parent.headless && parent.title !== '') {
         fullPath = [parent.title, ...fullPath];
       }
       parent = parent.parent;
@@ -458,38 +291,283 @@ export class TrackNode extends TrackNodeContainer {
     return fullPath;
   }
 
-  protected override fireOnChangeListener(): void {
-    this.workspace?.onchange(this.workspace);
+  /**
+   * True if this node has children, false otherwise.
+   */
+  get hasChildren(): boolean {
+    return this._children.length > 0;
+  }
+
+  /**
+   * The ordered list of children belonging to this node.
+   */
+  get children(): ReadonlyArray<TrackNode> {
+    return this._children;
+  }
+
+  /**
+   * Inserts a new child node considering it's sortOrder.
+   *
+   * The child will be added before the first child whose |sortOrder| is greater
+   * than the child node's sort order, or at the end if one does not exist. If
+   * |sortOrder| is omitted on either node in the comparison it is assumed to be
+   * 0.
+   *
+   * @param child - The child node to add.
+   */
+  addChildInOrder(child: TrackNode): Result {
+    const insertPoint = this._children.find(
+      (n) => (n.sortOrder ?? 0) > (child.sortOrder ?? 0),
+    );
+    if (insertPoint) {
+      return this.addChildBefore(child, insertPoint);
+    } else {
+      return this.addChildLast(child);
+    }
+  }
+
+  /**
+   * Add a new child node at the start of the list of children.
+   *
+   * @param child The new child node to add.
+   */
+  addChildLast(child: TrackNode): Result {
+    const result = this.adopt(child);
+    if (!result.ok) return result;
+    this._children.push(child);
+    return result;
+  }
+
+  /**
+   * Add a new child node at the end of the list of children.
+   *
+   * @param child The child node to add.
+   */
+  addChildFirst(child: TrackNode): Result {
+    const result = this.adopt(child);
+    if (!result.ok) return result;
+    this._children.unshift(child);
+    return result;
+  }
+
+  /**
+   * Add a new child node before an existing child node.
+   *
+   * @param child The child node to add.
+   * @param referenceNode An existing child node. The new node will be added
+   * before this node.
+   */
+  addChildBefore(child: TrackNode, referenceNode: TrackNode): Result {
+    // Nodes are the same, nothing to do.
+    if (child === referenceNode) return okResult();
+
+    assertTrue(this.children.includes(referenceNode));
+
+    const result = this.adopt(child);
+    if (!result.ok) return result;
+
+    const indexOfReference = this.children.indexOf(referenceNode);
+    this._children.splice(indexOfReference, 0, child);
+
+    return okResult();
+  }
+
+  /**
+   * Add a new child node after an existing child node.
+   *
+   * @param child The child node to add.
+   * @param referenceNode An existing child node. The new node will be added
+   * after this node.
+   */
+  addChildAfter(child: TrackNode, referenceNode: TrackNode): Result {
+    // Nodes are the same, nothing to do.
+    if (child === referenceNode) return okResult();
+
+    assertTrue(this.children.includes(referenceNode));
+
+    const result = this.adopt(child);
+    if (!result.ok) return result;
+
+    const indexOfReference = this.children.indexOf(referenceNode);
+    this._children.splice(indexOfReference + 1, 0, child);
+
+    return okResult();
+  }
+
+  /**
+   * Remove a child node from this node.
+   *
+   * @param child The child node to remove.
+   */
+  removeChild(child: TrackNode): void {
+    this._children = this.children.filter((x) => child !== x);
+    child._parent = undefined;
+    this.removeFromIndex(child);
+    this.propagateRemoval(child);
+  }
+
+  /**
+   * The flattened list of all descendent nodes in depth first order.
+   *
+   * Use flatTracksUnordered if you don't care about track order, as it's more
+   * efficient.
+   */
+  get flatTracksOrdered(): ReadonlyArray<TrackNode> {
+    const tracks: TrackNode[] = [];
+    this.collectFlatTracks(tracks);
+    return tracks;
+  }
+
+  private collectFlatTracks(tracks: TrackNode[]): void {
+    for (let i = 0; i < this.children.length; ++i) {
+      tracks.push(this.children[i]); // Push the current node before its children
+      this.children[i].collectFlatTracks(tracks); // Recurse to collect child tracks
+    }
+  }
+
+  /**
+   * The flattened list of all descendent nodes in no particular order.
+   */
+  get flatTracks(): ReadonlyArray<TrackNode> {
+    return Array.from(this.tracksById.values());
+  }
+
+  /**
+   * Remove all children from this node.
+   */
+  clear(): void {
+    this._children = [];
+    this.tracksById.clear();
+  }
+
+  /**
+   * Get a track node by its id.
+   *
+   * Node: This is an O(1) operation.
+   *
+   * @param id The id of the node we want to find.
+   * @returns The node or undefined if no such node exists.
+   */
+  getTrackById(id: string): TrackNode | undefined {
+    return this.tracksById.get(id);
+  }
+
+  /**
+   * Get a track node via its URI.
+   *
+   * Node: This is an O(1) operation.
+   *
+   * @param uri The uri of the track to find.
+   * @returns The node or undefined if no such node exists with this URI.
+   */
+  getTrackByUri(uri: string): TrackNode | undefined {
+    return this.tracksByUri.get(uri);
+  }
+
+  /**
+   * Creates a copy of this node with a new ID.
+   *
+   * @param deep - If true, children are copied too.
+   * @returns - A copy of this node.
+   */
+  clone(deep = false): TrackNode {
+    const cloned = new TrackNode({...this, id: undefined});
+    if (deep) {
+      this.children.forEach((c) => {
+        cloned.addChildLast(c.clone(deep));
+      });
+    }
+    return cloned;
+  }
+
+  private adopt(child: TrackNode): Result {
+    if (child === this || child.getTrackById(this.id)) {
+      return errResult(
+        'Cannot move track into itself or one of its descendants',
+      );
+    }
+
+    if (child.parent) {
+      child.parent.removeChild(child);
+    }
+    child._parent = this;
+    this.addToIndex(child);
+    this.propagateAddition(child);
+
+    return okResult();
+  }
+
+  private addToIndex(child: TrackNode) {
+    this.tracksById.set(child.id, child);
+    for (const [id, node] of child.tracksById) {
+      this.tracksById.set(id, node);
+    }
+
+    child.uri && this.tracksByUri.set(child.uri, child);
+    for (const [uri, node] of child.tracksByUri) {
+      this.tracksByUri.set(uri, node);
+    }
+  }
+
+  private removeFromIndex(child: TrackNode) {
+    this.tracksById.delete(child.id);
+    for (const [id] of child.tracksById) {
+      this.tracksById.delete(id);
+    }
+
+    child.uri && this.tracksByUri.delete(child.uri);
+    for (const [uri] of child.tracksByUri) {
+      this.tracksByUri.delete(uri);
+    }
+  }
+
+  private propagateAddition(node: TrackNode): void {
+    if (this.parent) {
+      this.parent.addToIndex(node);
+      this.parent.propagateAddition(node);
+    }
+  }
+
+  private propagateRemoval(node: TrackNode): void {
+    if (this.parent) {
+      this.parent.removeFromIndex(node);
+      this.parent.propagateRemoval(node);
+    }
   }
 }
 
 /**
  * Defines a workspace containing a track tree and a pinned area.
  */
-export class Workspace extends TrackNodeContainer {
+export class Workspace {
   public title = '<untitled-workspace>';
   public readonly id: string;
-  onchange: (w: Workspace) => void = () => {};
+  public userEditable: boolean = true;
 
   // Dummy node to contain the pinned tracks
-  private pinnedRoot = new TrackNode();
+  public readonly pinnedTracksNode = new TrackNode();
+  public readonly tracks = new TrackNode();
 
   get pinnedTracks(): ReadonlyArray<TrackNode> {
-    return this.pinnedRoot.children;
+    return this.pinnedTracksNode.children;
   }
 
   constructor() {
-    super();
     this.id = createSessionUniqueId();
-    this.pinnedRoot.parent = this;
+    this.pinnedTracksNode._workspace = this;
+    this.tracks._workspace = this;
+
+    // Expanding these nodes makes the logic work
+    this.pinnedTracksNode.expand();
+    this.tracks.expand();
   }
 
   /**
    * Reset the entire workspace including the pinned tracks.
    */
-  override clear(): void {
-    super.clear();
-    this.pinnedRoot.clear();
+  clear(): void {
+    this.pinnedTracksNode.clear();
+    this.tracks.clear();
   }
 
   /**
@@ -502,16 +580,18 @@ export class Workspace extends TrackNodeContainer {
       title: track.title,
       removable: track.removable,
     });
-    this.pinnedRoot.addChildLast(cloned);
+    this.pinnedTracksNode.addChildLast(cloned);
   }
 
   /**
    * Removes a track node from this workspace's pinned area.
    */
   unpinTrack(track: TrackNode): void {
-    const foundNode = this.pinnedRoot.children.find((t) => t.uri === track.uri);
+    const foundNode = this.pinnedTracksNode.children.find(
+      (t) => t.uri === track.uri,
+    );
     if (foundNode) {
-      this.pinnedRoot.removeChild(foundNode);
+      this.pinnedTracksNode.removeChild(foundNode);
     }
   }
 
@@ -519,32 +599,119 @@ export class Workspace extends TrackNodeContainer {
    * Check if this workspace has a pinned track with the same URI as |track|.
    */
   hasPinnedTrack(track: TrackNode): boolean {
-    return this.pinnedTracks.some((p) => p.uri === track.uri);
+    return this.pinnedTracksNode.flatTracks.some((p) => p.uri === track.uri);
   }
 
   /**
-   * Find a track node via its URI.
+   * Get a track node via its URI.
    *
-   * Note: This in an O(N) operation where N is the number of nodes in the
-   * workspace.
+   * Node: This is an O(1) operation.
    *
    * @param uri The uri of the track to find.
-   * @returns A reference to the track node if it exists in this workspace,
-   * otherwise undefined.
+   * @returns The node or undefined if no such node exists with this URI.
    */
-  findTrackByUri(uri: string): TrackNode | undefined {
-    return this.flatTracks.find((t) => t.uri === uri);
+  getTrackByUri(uri: string): TrackNode | undefined {
+    return this.tracks.flatTracks.find((t) => t.uri === uri);
   }
 
   /**
-   * Find a track by ID, also searching pinned tracks.
+   * Get a track node by its id.
+   *
+   * Node: This is an O(1) operation.
+   *
+   * @param id The id of the node we want to find.
+   * @returns The node or undefined if no such node exists.
    */
-  override getTrackById(id: string): TrackNode | undefined {
-    // Also search the pinned tracks
-    return this.pinnedRoot.getTrackById(id) || super.getTrackById(id);
+  getTrackById(id: string): TrackNode | undefined {
+    return (
+      this.tracks.getTrackById(id) || this.pinnedTracksNode.getTrackById(id)
+    );
   }
 
-  protected override fireOnChangeListener(): void {
-    this.onchange(this);
+  /**
+   * The ordered list of children belonging to this node.
+   */
+  get children(): ReadonlyArray<TrackNode> {
+    return this.tracks.children;
+  }
+
+  /**
+   * Inserts a new child node considering it's sortOrder.
+   *
+   * The child will be added before the first child whose |sortOrder| is greater
+   * than the child node's sort order, or at the end if one does not exist. If
+   * |sortOrder| is omitted on either node in the comparison it is assumed to be
+   * 0.
+   *
+   * @param child - The child node to add.
+   */
+  addChildInOrder(child: TrackNode): Result {
+    return this.tracks.addChildInOrder(child);
+  }
+
+  /**
+   * Add a new child node at the start of the list of children.
+   *
+   * @param child The new child node to add.
+   */
+  addChildLast(child: TrackNode): Result {
+    return this.tracks.addChildLast(child);
+  }
+
+  /**
+   * Add a new child node at the end of the list of children.
+   *
+   * @param child The child node to add.
+   */
+  addChildFirst(child: TrackNode): Result {
+    return this.tracks.addChildFirst(child);
+  }
+
+  /**
+   * Add a new child node before an existing child node.
+   *
+   * @param child The child node to add.
+   * @param referenceNode An existing child node. The new node will be added
+   * before this node.
+   */
+  addChildBefore(child: TrackNode, referenceNode: TrackNode): Result {
+    return this.tracks.addChildBefore(child, referenceNode);
+  }
+
+  /**
+   * Add a new child node after an existing child node.
+   *
+   * @param child The child node to add.
+   * @param referenceNode An existing child node. The new node will be added
+   * after this node.
+   */
+  addChildAfter(child: TrackNode, referenceNode: TrackNode): Result {
+    return this.tracks.addChildAfter(child, referenceNode);
+  }
+
+  /**
+   * Remove a child node from this node.
+   *
+   * @param child The child node to remove.
+   */
+  removeChild(child: TrackNode): void {
+    this.tracks.removeChild(child);
+  }
+
+  /**
+   * The flattened list of all descendent nodes in depth first order.
+   *
+   * Use flatTracksUnordered if you don't care about track order, as it's more
+   * efficient.
+   */
+  get flatTracksOrdered() {
+    return this.tracks.flatTracksOrdered;
+  }
+
+  /**
+   * The flattened list of all descendent nodes in no particular order.
+   */
+  get flatTracks() {
+    return this.tracks.flatTracks;
   }
 }

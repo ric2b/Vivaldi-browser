@@ -8,16 +8,16 @@
  * You may select, at your option, one of the above-listed licenses.
  */
 
-#if defined (__cplusplus)
-extern "C" {
-#endif
-
 #ifndef ZSTD_ZDICT_H
 #define ZSTD_ZDICT_H
+
 
 /*======  Dependencies  ======*/
 #include <stddef.h>  /* size_t */
 
+#if defined (__cplusplus)
+extern "C" {
+#endif
 
 /* =====   ZDICTLIB_API : control library symbols visibility   ===== */
 #ifndef ZDICTLIB_VISIBLE
@@ -271,10 +271,18 @@ ZDICTLIB_API size_t ZDICT_getDictHeaderSize(const void* dictBuffer, size_t dictS
 ZDICTLIB_API unsigned ZDICT_isError(size_t errorCode);
 ZDICTLIB_API const char* ZDICT_getErrorName(size_t errorCode);
 
+#if defined (__cplusplus)
+}
+#endif
+
 #endif   /* ZSTD_ZDICT_H */
 
 #if defined(ZDICT_STATIC_LINKING_ONLY) && !defined(ZSTD_ZDICT_H_STATIC)
 #define ZSTD_ZDICT_H_STATIC
+
+#if defined (__cplusplus)
+extern "C" {
+#endif
 
 /* This can be overridden externally to hide static symbols. */
 #ifndef ZDICTLIB_STATIC_API
@@ -466,9 +474,8 @@ ZDICTLIB_STATIC_API
 size_t ZDICT_addEntropyTablesFromBuffer(void* dictBuffer, size_t dictContentSize, size_t dictBufferCapacity,
                                   const void* samplesBuffer, const size_t* samplesSizes, unsigned nbSamples);
 
-
-#endif   /* ZSTD_ZDICT_H_STATIC */
-
 #if defined (__cplusplus)
 }
 #endif
+
+#endif   /* ZSTD_ZDICT_H_STATIC */

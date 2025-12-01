@@ -163,7 +163,7 @@ public class AwMediaIntegrityServiceImpl implements WebViewMediaIntegrityService
             callback.call(WebViewMediaIntegrityErrorCode.INTERNAL_ERROR);
             return;
         }
-        final AwBrowserContext awBrowserContext = awContents.getBrowserContext();
+        final AwBrowserContext awBrowserContext = awContents.getBrowserContextInternal();
 
         final MediaIntegrityProviderKey key =
                 new MediaIntegrityProviderKey(
@@ -186,7 +186,7 @@ public class AwMediaIntegrityServiceImpl implements WebViewMediaIntegrityService
         PlatformServiceBridge.getInstance()
                 .getMediaIntegrityProvider2(
                         cloudProjectNumber,
-                        /* requestMode= */ apiStatus,
+                        /* apiStatus= */ apiStatus,
                         new ValueOrErrorCallback<>() {
                             @Override
                             public void onResult(MediaIntegrityProvider provider) {

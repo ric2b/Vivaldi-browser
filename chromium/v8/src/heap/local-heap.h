@@ -8,6 +8,10 @@
 #include <atomic>
 #include <memory>
 
+#if V8_OS_DARWIN
+#include "pthread.h"
+#endif
+
 #include "src/base/logging.h"
 #include "src/base/macros.h"
 #include "src/base/platform/condition-variable.h"
@@ -74,10 +78,10 @@ class V8_EXPORT_PRIVATE LocalHeap {
     return persistent_handles_->NewHandle(object);
   }
 
-  template <typename T, template <typename> typename HandleType,
-            typename = std::enable_if_t<
-                std::is_convertible_v<HandleType<T>, DirectHandle<T>>>>
-  IndirectHandle<T> NewPersistentHandle(HandleType<T> object) {
+  template <typename T, template <typename> typename HandleType>
+  IndirectHandle<T> NewPersistentHandle(HandleType<T> object)
+    requires(std::is_convertible_v<HandleType<T>, DirectHandle<T>>)
+  {
     return NewPersistentHandle(*object);
   }
 
@@ -87,11 +91,11 @@ class V8_EXPORT_PRIVATE LocalHeap {
     return NewPersistentHandle(Tagged<T>(object));
   }
 
-  template <typename T, template <typename> typename MaybeHandleType,
-            typename = std::enable_if_t<std::is_convertible_v<
-                MaybeHandleType<T>, MaybeDirectHandle<T>>>>
+  template <typename T, template <typename> typename MaybeHandleType>
   MaybeIndirectHandle<T> NewPersistentMaybeHandle(
-      MaybeHandleType<T> maybe_handle) {
+      MaybeHandleType<T> maybe_handle)
+    requires(std::is_convertible_v<MaybeHandleType<T>, MaybeDirectHandle<T>>)
+  {
     DirectHandle<T> handle;
     if (maybe_handle.ToHandle(&handle)) {
       return NewPersistentHandle(handle);
@@ -227,6 +231,10 @@ class V8_EXPORT_PRIVATE LocalHeap {
   V8_INLINE void ExecuteMainThreadWhileParked(Callback callback);
   template <typename Callback>
   V8_INLINE void ExecuteBackgroundThreadWhileParked(Callback callback);
+
+#if V8_OS_DARWIN
+  pthread_t thread_handle() { return thread_handle_; }
+#endif
 
  private:
   using ParkedBit = base::BitField8<bool, 0, 1>;
@@ -369,6 +377,10 @@ class V8_EXPORT_PRIVATE LocalHeap {
   bool is_main_thread_;
 
   AtomicThreadState state_;
+
+#if V8_OS_DARWIN
+  pthread_t thread_handle_;
+#endif
 
   bool allocation_failed_;
   int nested_parked_scopes_;

@@ -16,6 +16,7 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/test/test_bookmark_client.h"
 #include "components/commerce/core/commerce_feature_list.h"
+#include "components/commerce/core/mock_account_checker.h"
 #include "components/commerce/core/pref_names.h"
 #include "components/commerce/core/proto/discounts.pb.h"
 #include "components/commerce/core/proto/merchant_trust.pb.h"
@@ -120,9 +121,7 @@ OptimizationGuideDecision MockOptGuideDecider::CanApplyOptimization(
     OptimizationType optimization_type,
     OptimizationMetadata* optimization_metadata) {
   // We don't use the synchronous API in the shopping service.
-  NOTREACHED_IN_MIGRATION();
-
-  return OptimizationGuideDecision::kUnknown;
+  NOTREACHED();
 }
 
 void MockOptGuideDecider::AddOnDemandShoppingResponse(
@@ -470,7 +469,7 @@ ShoppingServiceTestBase::ShoppingServiceTestBase()
           std::make_unique<testing::NiceMock<MockTabRestoreService>>()) {
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       optimization_guide::switches::kDisableCheckingUserPermissionsForTesting);
-  RegisterCommercePrefs(pref_service_->registry());
+  MockAccountChecker::RegisterCommercePrefs(pref_service_->registry());
   pref_service_->registry()->RegisterBooleanPref(
       unified_consent::prefs::kUrlKeyedAnonymizedDataCollectionEnabled, false);
 }
@@ -485,8 +484,8 @@ void ShoppingServiceTestBase::SetUp() {
       base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
           test_url_loader_factory_.get()),
       nullptr, nullptr, product_spec_service_.get(), nullptr, nullptr, nullptr,
-      std::make_unique<testing::NiceMock<MockWebExtractor>>(),
-      tab_restore_service_.get(), nullptr);
+      nullptr, std::make_unique<testing::NiceMock<MockWebExtractor>>(),
+      tab_restore_service_.get());
 }
 
 void ShoppingServiceTestBase::TestBody() {}

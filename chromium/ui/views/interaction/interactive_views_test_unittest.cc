@@ -65,9 +65,12 @@ class InteractiveViewsTestTest : public InteractiveViewsTest {
                 Builder<TabbedPane>()
                     .CopyAddressTo(&tabs_)
                     .SetProperty(kElementIdentifierKey, kTabbedPaneId)
-                    .AddTab(kTab1Title, std::make_unique<Label>(kTab1Contents))
-                    .AddTab(kTab2Title, std::make_unique<Label>(kTab2Contents))
-                    .AddTab(kTab3Title, std::make_unique<Label>(kTab3Contents)),
+                    .AddTab(kTab1Title, std::make_unique<Label>(kTab1Contents),
+                            nullptr)
+                    .AddTab(kTab2Title, std::make_unique<Label>(kTab2Contents),
+                            nullptr)
+                    .AddTab(kTab3Title, std::make_unique<Label>(kTab3Contents),
+                            nullptr),
                 Builder<FlexLayoutView>()
                     .SetProperty(kElementIdentifierKey, kButtonsId)
                     .SetOrientation(LayoutOrientation::kHorizontal)
@@ -333,7 +336,7 @@ TEST_F(InteractiveViewsTestTest, NameViewRelative) {
       SelectTab(kTabbedPaneId, 1U, InputType::kTouch),
       NameViewRelative(kTabbedPaneId, kViewName,
                        base::BindRepeating([&](TabbedPane* tabs) {
-                         return tabs->GetTabAt(1U)->contents();
+                         return tabs->GetTabContentsForTesting(1);
                        })),
       WithElement(kViewName,
                   base::BindLambdaForTesting([&](ui::TrackedElement* el) {

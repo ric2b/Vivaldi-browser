@@ -85,10 +85,6 @@ namespace blink {
 
 namespace {
 
-String SerializeBoolean(bool value) {
-  return value ? "true" : "false";
-}
-
 String SerializeServers(
     const std::vector<webrtc::PeerConnectionInterface::IceServer>& servers) {
   StringBuilder result;
@@ -124,9 +120,9 @@ String SerializeOfferOptions(blink::RTCOfferOptionsPlatform* options) {
   result.Append(", offerToReceiveAudio: ");
   result.AppendNumber(options->OfferToReceiveAudio());
   result.Append(", voiceActivityDetection: ");
-  result.Append(SerializeBoolean(options->VoiceActivityDetection()));
+  result.Append(String::Boolean(options->VoiceActivityDetection()));
   result.Append(", iceRestart: ");
-  result.Append(SerializeBoolean(options->IceRestart()));
+  result.Append(String::Boolean(options->IceRestart()));
   return result.ToString();
 }
 
@@ -136,7 +132,7 @@ String SerializeAnswerOptions(blink::RTCAnswerOptionsPlatform* options) {
 
   StringBuilder result;
   result.Append(", voiceActivityDetection: ");
-  result.Append(SerializeBoolean(options->VoiceActivityDetection()));
+  result.Append(String::Boolean(options->VoiceActivityDetection()));
   return result.ToString();
 }
 
@@ -211,7 +207,7 @@ String SerializeEncodingParameters(
     result.Append(indent);
     result.Append("    {");
     result.Append("active: ");
-    result.Append(encoding.active ? "true" : "false");
+    result.Append(String::Boolean(encoding.active));
     result.Append(", ");
     if (encoding.max_bitrate_bps) {
       result.Append("maxBitrate: ");
@@ -684,14 +680,6 @@ void PeerConnectionTracker::OnThermalStateChange(
   }
 }
 
-void PeerConnectionTracker::OnSpeedLimitChange(int32_t speed_limit) {
-  DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
-  current_speed_limit_ = speed_limit;
-  for (auto& entry : peer_connection_local_id_map_) {
-    entry.key->OnSpeedLimitChange(speed_limit);
-  }
-}
-
 void PeerConnectionTracker::StartEventLog(int peer_connection_local_id,
                                           int output_period_ms) {
   DCHECK_CALLED_ON_VALID_THREAD(main_thread_);
@@ -949,7 +937,7 @@ void PeerConnectionTracker::TrackCreateDataChannel(
   result.Append("label: ");
   result.Append(String::FromUTF8(data_channel->label()));
   result.Append(", ordered: ");
-  result.Append(SerializeBoolean(data_channel->ordered()));
+  result.Append(String::Boolean(data_channel->ordered()));
   std::optional<uint16_t> maxPacketLifeTime = data_channel->maxPacketLifeTime();
   if (maxPacketLifeTime.has_value()) {
     result.Append(", maxPacketLifeTime: ");
@@ -967,7 +955,7 @@ void PeerConnectionTracker::TrackCreateDataChannel(
   }
   bool negotiated = data_channel->negotiated();
   result.Append(", negotiated: ");
-  result.Append(SerializeBoolean(negotiated));
+  result.Append(String::Boolean(negotiated));
   if (negotiated) {
     result.Append(", id: ");
     result.Append(String::Number(data_channel->id()));
@@ -984,7 +972,7 @@ void PeerConnectionTracker::TrackClose(RTCPeerConnectionHandler* pc_handler) {
   int id = GetLocalIDForHandler(pc_handler);
   if (id == -1)
     return;
-  SendPeerConnectionUpdate(id, "close", String(""));
+  SendPeerConnectionUpdate(id, "close", g_empty_string);
 }
 
 void PeerConnectionTracker::TrackSignalingStateChange(
@@ -1091,7 +1079,7 @@ void PeerConnectionTracker::TrackOnRenegotiationNeeded(
   int id = GetLocalIDForHandler(pc_handler);
   if (id == -1)
     return;
-  SendPeerConnectionUpdate(id, "negotiationneeded", String(""));
+  SendPeerConnectionUpdate(id, "negotiationneeded", g_empty_string);
 }
 
 void PeerConnectionTracker::TrackGetUserMedia(
@@ -1116,12 +1104,12 @@ void PeerConnectionTracker::TrackGetUserMediaSuccess(
   // empty string when there is no such track.
   String audio_track_info =
       stream->getAudioTracks().empty()
-          ? String("")
+          ? g_empty_string
           : String("id:") + stream->getAudioTracks()[0]->id() +
                 String(" label:") + stream->getAudioTracks()[0]->label();
   String video_track_info =
       stream->getVideoTracks().empty()
-          ? String("")
+          ? g_empty_string
           : String("id:") + stream->getVideoTracks()[0]->id() +
                 String(" label:") + stream->getVideoTracks()[0]->label();
 
@@ -1162,12 +1150,12 @@ void PeerConnectionTracker::TrackGetDisplayMediaSuccess(
   // empty string when there is no such track.
   String audio_track_info =
       stream->getAudioTracks().empty()
-          ? String("")
+          ? g_empty_string
           : String("id:") + stream->getAudioTracks()[0]->id() +
                 String(" label:") + stream->getAudioTracks()[0]->label();
   String video_track_info =
       stream->getVideoTracks().empty()
-          ? String("")
+          ? g_empty_string
           : String("id:") + stream->getVideoTracks()[0]->id() +
                 String(" label:") + stream->getVideoTracks()[0]->label();
 
@@ -1224,10 +1212,6 @@ void PeerConnectionTracker::SendPeerConnectionUpdate(
 
 void PeerConnectionTracker::AddStandardStats(int lid, base::Value::List value) {
   peer_connection_tracker_host_->AddStandardStats(lid, std::move(value));
-}
-
-void PeerConnectionTracker::AddLegacyStats(int lid, base::Value::List value) {
-  peer_connection_tracker_host_->AddLegacyStats(lid, std::move(value));
 }
 
 }  // namespace blink

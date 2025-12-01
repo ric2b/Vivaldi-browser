@@ -13,23 +13,15 @@
 #include <vector>
 
 #include "base/containers/flat_map.h"
-#include "base/feature_list.h"
-#include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
-#include "third_party/skia/include/core/SkBitmap.h"
-#include "ui/base/ui_base_features.h"
-#include "ui/display/tablet_state.h"
-#include "ui/events/event.h"
 #include "ui/gl/gl_display.h"
 #include "ui/ozone/platform/wayland/common/wayland_object.h"
-#include "ui/ozone/platform/wayland/host/single_pixel_buffer.h"
-#include "ui/ozone/platform/wayland/host/wayland_buffer_manager_host.h"
-#include "ui/ozone/platform/wayland/host/wayland_clipboard.h"
-#include "ui/ozone/platform/wayland/host/wayland_data_drag_controller.h"
-#include "ui/ozone/platform/wayland/host/wayland_data_source.h"
 #include "ui/ozone/platform/wayland/host/wayland_serial_tracker.h"
 #include "ui/ozone/platform/wayland/host/wayland_window_manager.h"
+
+class SkBitmap;
 
 struct wl_cursor;
 struct wl_event_queue;
@@ -45,36 +37,35 @@ class WaylandProxy;
 namespace ui {
 
 struct InputDevice;
-class OrgKdeKwinIdle;
-class SurfaceAugmenter;
 struct KeyboardDevice;
 struct TouchscreenDevice;
+
+class GtkPrimarySelectionDeviceManager;
+class GtkShell1;
+class OrgKdeKwinIdle;
+class OverlayPrioritizer;
+class SinglePixelBuffer;
 class WaylandBufferFactory;
 class WaylandBufferManagerHost;
+class WaylandClipboard;
 class WaylandCursor;
 class WaylandCursorBufferListener;
+class WaylandCursorPosition;
+class WaylandCursorShape;
+class WaylandDataDeviceManager;
+class WaylandDataDragController;
 class WaylandEventSource;
 class WaylandOutputManager;
 class WaylandSeat;
-class WaylandZAuraShell;
-class WaylandZAuraOutputManagerV2;
+class WaylandWindowDragController;
 class WaylandZcrColorManager;
-class WaylandZcrCursorShapes;
-class WaylandZcrTouchpadHaptics;
 class WaylandZwpPointerConstraints;
 class WaylandZwpPointerGestures;
 class WaylandZwpRelativePointerManager;
-class WaylandDataDeviceManager;
-class WaylandCursorPosition;
-class WaylandCursorShape;
-class WaylandWindowDragController;
-class GtkPrimarySelectionDeviceManager;
-class GtkShell1;
-class ZwpIdleInhibitManager;
-class ZwpPrimarySelectionDeviceManager;
 class XdgActivation;
 class XdgForeignWrapper;
-class OverlayPrioritizer;
+class ZwpIdleInhibitManager;
+class ZwpPrimarySelectionDeviceManager;
 
 // These values are persisted to logs.  Entries should not be renumbered and
 // numeric values should never be reused.
@@ -84,7 +75,7 @@ class OverlayPrioritizer;
 //
 // See also tools/metrics/histograms/README.md#enum-histograms
 enum class UMALinuxWaylandShell {
-  kZauraShell = 0,
+  // kZauraShell = 0, // Removed.
   kGtkShell1 = 1,
   kOrgKdePlasmaShell = 2,
   kXdgWmBase = 3,
@@ -115,9 +106,12 @@ class WaylandConnection {
   // error. Called by WaylandEventWatcher.
   void SetShutdownCb(base::OnceCallback<void()> shutdown_cb);
 
-  // Returns the dotted number version of the Wayland server. For Lacros, this
-  // is the Ash Chrome version.
-  base::Version GetServerVersion() const;
+  void SetUserInputTaskRunner(
+      scoped_refptr<base::SingleThreadTaskRunner> user_input_task_runner);
+
+  scoped_refptr<base::SingleThreadTaskRunner> user_input_task_runner() const {
+    return user_input_task_runner_;
+  }
 
   wl_compositor* compositor() const { return compositor_.get(); }
   // The server version of the compositor interface (might be higher than the
@@ -140,7 +134,6 @@ class WaylandConnection {
   keyboard_shortcuts_inhibit_manager_v1() const {
     return keyboard_shortcuts_inhibit_manager_v1_.get();
   }
-  zcr_stylus_v2* stylus_v2() const { return zcr_stylus_v2_.get(); }
   zwp_text_input_manager_v1* text_input_manager_v1() const {
     return text_input_manager_v1_.get();
   }
@@ -210,26 +203,12 @@ class WaylandConnection {
     return buffer_manager_host_.get();
   }
 
-  WaylandZAuraOutputManagerV2* zaura_output_manager_v2() const {
-    return zaura_output_manager_v2_.get();
-  }
-
-  WaylandZAuraShell* zaura_shell() const { return zaura_shell_.get(); }
-
   WaylandZcrColorManager* zcr_color_manager() const {
     return zcr_color_manager_.get();
   }
 
   WaylandCursorShape* wayland_cursor_shape() const {
     return cursor_shape_.get();
-  }
-
-  WaylandZcrCursorShapes* zcr_cursor_shapes() const {
-    return zcr_cursor_shapes_.get();
-  }
-
-  WaylandZcrTouchpadHaptics* zcr_touchpad_haptics() const {
-    return zcr_touchpad_haptics_.get();
   }
 
   WaylandWindowManager* window_manager() { return &window_manager_; }
@@ -286,10 +265,6 @@ class WaylandConnection {
     return overlay_prioritizer_.get();
   }
 
-  SurfaceAugmenter* surface_augmenter() const {
-    return surface_augmenter_.get();
-  }
-
   SinglePixelBuffer* single_pixel_buffer() const {
     return single_pixel_buffer_.get();
   }
@@ -328,40 +303,15 @@ class WaylandConnection {
     supports_viewporter_surface_scaling_ = enabled;
   }
 
-  bool UsePerSurfaceScaling() const {
-    return base::FeatureList::IsEnabled(features::kWaylandPerSurfaceScale) &&
-           supports_viewporter_surface_scaling();
-  }
-
-  bool IsUiScaleEnabled() const {
-    return base::FeatureList::IsEnabled(features::kWaylandUiScale) &&
-           UsePerSurfaceScaling();
-  }
-
+  bool UsePerSurfaceScaling() const;
+  bool IsUiScaleEnabled() const;
   bool ShouldUseOverlayDelegation() const;
-
-  // True if the client has bound the either aura output manager globals. If
-  // present aura output manager handles the responsibilities of keeping
-  // output metrics up to date and triggering delegate notifications.
-  bool IsUsingZAuraOutputManager() const;
 
   wl::SerialTracker& serial_tracker() { return serial_tracker_; }
 
-  void set_tablet_layout_state(display::TabletState tablet_layout_state) {
-    tablet_layout_state_ = tablet_layout_state;
-  }
-  bool GetTabletMode() {
-    return tablet_layout_state_ == display::TabletState::kInTabletMode ||
-           tablet_layout_state_ == display::TabletState::kEnteringTabletMode;
-  }
-  display::TabletState GetTabletState() { return tablet_layout_state_; }
-
   void DumpState(std::ostream& out) const;
 
-  bool UseImplicitSyncInterop() const {
-    return !SupportsExplicitSync() &&
-           WaylandBufferManagerHost::SupportsImplicitSyncInterop();
-  }
+  bool UseImplicitSyncInterop() const;
 
   // Returns a sync callback, which is invoked when the server has processed all
   // pending events prior to this sync point.
@@ -386,20 +336,15 @@ class WaylandConnection {
   friend class OrgKdeKwinIdle;
   friend class OverlayPrioritizer;
   friend class SinglePixelBuffer;
-  friend class SurfaceAugmenter;
   friend class ToplevelIconManager;
   friend class WaylandDataDeviceManager;
   friend class WaylandOutput;
   friend class WaylandSeat;
-  friend class WaylandZAuraOutputManagerV2;
-  friend class WaylandZAuraShell;
-  friend class WaylandZcrTouchpadHaptics;
   friend class WaylandZwpPointerConstraints;
   friend class WaylandZwpPointerGestures;
   friend class WaylandZwpRelativePointerManager;
   friend class WaylandZcrColorManager;
   friend class WaylandCursorShape;
-  friend class WaylandZcrCursorShapes;
   friend class XdgActivation;
   friend class XdgForeignWrapper;
   friend class ZwpIdleInhibitManager;
@@ -421,10 +366,6 @@ class WaylandConnection {
 
   // Returns true if the required wl_globals are announced by the server.
   bool WlGlobalsReady() const;
-
-  // Based on the bound globals, returns true if required information are
-  // announced by the server. E.g. server version from zaura-shell.
-  bool WlObjectsReady() const;
 
   // Updates InputDevice structures in Chrome. Currently, Wayland doesn't
   // support such, so the devices are derived from the connected interfaces.
@@ -491,7 +432,6 @@ class WaylandConnection {
   wl::Object<zcr_keyboard_extension_v1> keyboard_extension_v1_;
   wl::Object<zwp_keyboard_shortcuts_inhibit_manager_v1>
       keyboard_shortcuts_inhibit_manager_v1_;
-  wl::Object<zcr_stylus_v2> zcr_stylus_v2_;
   wl::Object<zwp_text_input_manager_v1> text_input_manager_v1_;
   wl::Object<zwp_text_input_manager_v3> text_input_manager_v3_;
   wl::Object<zcr_text_input_extension_v1> text_input_extension_v1_;
@@ -521,12 +461,8 @@ class WaylandConnection {
   std::unique_ptr<WaylandDataDeviceManager> data_device_manager_;
   std::unique_ptr<WaylandOutputManager> output_manager_;
   std::unique_ptr<WaylandCursorPosition> cursor_position_;
-  std::unique_ptr<WaylandZAuraOutputManagerV2> zaura_output_manager_v2_;
-  std::unique_ptr<WaylandZAuraShell> zaura_shell_;
   std::unique_ptr<WaylandZcrColorManager> zcr_color_manager_;
   std::unique_ptr<WaylandCursorShape> cursor_shape_;
-  std::unique_ptr<WaylandZcrCursorShapes> zcr_cursor_shapes_;
-  std::unique_ptr<WaylandZcrTouchpadHaptics> zcr_touchpad_haptics_;
   std::unique_ptr<WaylandZwpPointerConstraints> zwp_pointer_constraints_;
   std::unique_ptr<WaylandZwpRelativePointerManager>
       zwp_relative_pointer_manager_;
@@ -537,7 +473,6 @@ class WaylandConnection {
   std::unique_ptr<XdgForeignWrapper> xdg_foreign_;
   std::unique_ptr<ZwpIdleInhibitManager> zwp_idle_inhibit_manager_;
   std::unique_ptr<OverlayPrioritizer> overlay_prioritizer_;
-  std::unique_ptr<SurfaceAugmenter> surface_augmenter_;
   std::unique_ptr<SinglePixelBuffer> single_pixel_buffer_;
 
   // Clipboard-related objects. |clipboard_| must be declared after all
@@ -567,13 +502,11 @@ class WaylandConnection {
 
   raw_ptr<WaylandCursorBufferListener> listener_ = nullptr;
 
-  // The current window table mode layout state.
-  display::TabletState tablet_layout_state_ =
-      display::TabletState::kInClamshellMode;
-
   // This is set if wp_viewporter may be used to instruct the compositor to
   // properly scale fractional scaled surfaces.
   bool supports_viewporter_surface_scaling_ = false;
+
+  scoped_refptr<base::SingleThreadTaskRunner> user_input_task_runner_;
 
   wl::SerialTracker serial_tracker_;
 

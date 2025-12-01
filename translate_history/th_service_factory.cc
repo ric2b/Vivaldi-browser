@@ -50,14 +50,15 @@ content::BrowserContext* TH_ServiceFactory::GetBrowserContextToUse(
   return GetBrowserContextRedirectedInIncognito(context);
 }
 
-KeyedService* TH_ServiceFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+TH_ServiceFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
   Profile* profile = Profile::FromBrowserContext(context);
   PrefService* pref_service = profile->GetOriginalProfile()->GetPrefs();
   bool session_only =
       pref_service->GetBoolean(prefs::kSavingBrowserHistoryDisabled);
   std::unique_ptr<TH_Model> service(new TH_Model(context, session_only));
-  return service.release();
+  return service;
 }
 
 bool TH_ServiceFactory::ServiceIsNULLWhileTesting() const {

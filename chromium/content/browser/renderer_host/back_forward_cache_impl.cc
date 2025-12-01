@@ -4,6 +4,7 @@
 
 #include "content/browser/renderer_host/back_forward_cache_impl.h"
 
+#include <algorithm>
 #include <list>
 #include <optional>
 #include <string>
@@ -18,7 +19,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/rand_util.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
@@ -200,6 +200,7 @@ WebSchedulerTrackedFeatures GetDisallowedWebSchedulerTrackedFeatures() {
           WebSchedulerTrackedFeature::kSharedWorker,
           WebSchedulerTrackedFeature::kSpeechRecognizer,
           WebSchedulerTrackedFeature::kUnloadHandler,
+          WebSchedulerTrackedFeature::kWebAuthentication,
           WebSchedulerTrackedFeature::kWebDatabase,
           WebSchedulerTrackedFeature::kWebHID,
           WebSchedulerTrackedFeature::kWebLocks,
@@ -253,7 +254,8 @@ WebSchedulerTrackedFeatures GetAllowedWebSchedulerTrackedFeatures() {
 // affects other scheduling policies (e.g. aggressive throttling).
 WebSchedulerTrackedFeatures
 GetNonBackForwardCacheAffectingWebSchedulerTrackedFeatures() {
-  return {WebSchedulerTrackedFeature::kWebSerial};
+  return {WebSchedulerTrackedFeature::kWebSerial,
+          WebSchedulerTrackedFeature::kWebBluetooth};
 }
 
 // The BackForwardCache feature is controlled via an experiment. This function
@@ -976,8 +978,12 @@ void BackForwardCacheImpl::NotRestoredReasonBuilder::
   // that are based on MPArch are allowed to be stored. To determine if this
   // is an inner WebContents we check the inner frame tree's type to see if
   // it is `kPrimary`.
-  if (rfh->frame_tree()->delegate()->GetOuterDelegateFrameTreeNodeId() &&
-      rfh->frame_tree()->is_primary()) {
+  // We also make MPArch based GuestViews ineligible. While supporting them
+  // is probably feasible, other than the case of https://crbug.com/330282443 ,
+  // there is little benefit to doing so.
+  if ((rfh->frame_tree()->delegate()->GetOuterDelegateFrameTreeNodeId() &&
+       rfh->frame_tree()->is_primary()) ||
+      rfh->frame_tree()->is_guest()) {
     result.No(BackForwardCacheMetrics::NotRestoredReason::kHaveInnerContents);
   }
 
@@ -1061,35 +1067,27 @@ void BackForwardCacheImpl::NotRestoredReasonBuilder::
   }
 
   // Handle ongoing navigations in subframes.
-  // - When kEnableBackForwardCacheForOngoingSubframeNavigation is enabled, we
-  // allow the following cases to be cached:
+  // - We allow the following cases to be cached:
   //   - 1) Subframe navigations that don't need URLLoaders and haven't reached
-  //   the pending commit stage.
+  //        the pending commit stage.
   //   - 2) Subframe navigations that need URLLoaders and haven't sent any
-  //   network requests.
+  //        network requests.
+  //
   // If there are other type of navigations in any of the subframes, we disallow
   // BFCache.
-  // - When kEnableBackForwardCacheForOngoingSubframeNavigation is disabled, do
-  // not cache if any navigation is ongoing in any of the subframes.
   if (rfh->GetParentOrOuterDocument()) {
-    if (base::FeatureList::IsEnabled(
-            features::kEnableBackForwardCacheForOngoingSubframeNavigation)) {
-      NavigationRequest* nav_request =
-          rfh->frame_tree_node()->navigation_request();
-      // Prevent BFCache if the navigation needs a URLLoader and already sent a
-      // network request. It is not enough to check that URLLoader exists,
-      // because it is reset when the request receives its response, so we must
-      // check if navigation state has already passed `WillStartRequest` to
-      // cover the navigations between sending request and starting commit.
-      if ((nav_request && nav_request->NeedsUrlLoader() &&
-           (nav_request->HasLoader() ||
-            nav_request->state() >
-                NavigationRequest::NavigationState::WILL_START_REQUEST)) ||
-          rfh->frame_tree_node()->HasPendingCommitNavigation()) {
-        result.No(
-            BackForwardCacheMetrics::NotRestoredReason::kSubframeIsNavigating);
-      }
-    } else if (rfh->frame_tree_node()->HasNavigation()) {
+    NavigationRequest* nav_request =
+        rfh->frame_tree_node()->navigation_request();
+    // Prevent BFCache if the navigation needs a URLLoader and already sent a
+    // network request. It is not enough to check that URLLoader exists,
+    // because it is reset when the request receives its response, so we must
+    // check if navigation state has already passed `WillStartRequest` to
+    // cover the navigations between sending request and starting commit.
+    if ((nav_request && nav_request->NeedsUrlLoader() &&
+         (nav_request->HasLoader() ||
+          nav_request->state() >
+              NavigationRequest::NavigationState::WILL_START_REQUEST)) ||
+        rfh->frame_tree_node()->HasPendingCommitNavigation()) {
       result.No(
           BackForwardCacheMetrics::NotRestoredReason::kSubframeIsNavigating);
     }
@@ -1153,7 +1151,7 @@ BackForwardCacheImpl::NotRestoredReasonBuilder::NotRestoredReasonBuilder(
   // Populate the reasons and build the tree.
   std::map<RenderFrameHostImpl*, BackForwardCacheCanStoreTreeResult*>
       parent_map;
-  root_rfh_->ForEachRenderFrameHost([&](RenderFrameHostImpl* rfh) {
+  root_rfh_->ForEachRenderFrameHostImpl([&](RenderFrameHostImpl* rfh) {
     auto rfh_result = PopulateReasons(rfh);
     parent_map[rfh] = rfh_result.get();
 
@@ -1276,7 +1274,7 @@ std::unique_ptr<BackForwardCacheImpl::Entry> BackForwardCacheImpl::RestoreEntry(
   TRACE_EVENT0("navigation", "BackForwardCache::RestoreEntry");
 
   // Select the RenderFrameHostImpl matching the navigation entry.
-  auto matching_entry = base::ranges::find(
+  auto matching_entry = std::ranges::find(
       entries_, navigation_entry_id, [](std::unique_ptr<Entry>& entry) {
         return entry->render_frame_host()->nav_entry_id();
       });
@@ -1442,7 +1440,7 @@ BackForwardCacheImpl::GetEntriesForRenderViewHostImpl(
 base::expected<BackForwardCacheImpl::Entry*,
                BackForwardCacheImpl::GetEntryFailureCase>
 BackForwardCacheImpl::GetOrEvictEntry(int navigation_entry_id) {
-  auto matching_entry = base::ranges::find(
+  auto matching_entry = std::ranges::find(
       entries_, navigation_entry_id, [](std::unique_ptr<Entry>& entry) {
         return entry->render_frame_host()->nav_entry_id();
       });
@@ -1631,7 +1629,7 @@ bool BackForwardCacheImpl::
     if (entry->render_frame_host()->is_evicted_from_back_forward_cache()) {
       continue;
     }
-    entry->render_frame_host()->ForEachRenderFrameHostWithAction(
+    entry->render_frame_host()->ForEachRenderFrameHostImplWithAction(
         [&found, site_instance_group_id](RenderFrameHostImpl* rfh) {
           if (rfh->GetSiteInstance()->group()->GetId() ==
               site_instance_group_id) {
@@ -1836,6 +1834,13 @@ BackForwardCacheCanStoreTreeResult::GetWebExposedNotRestoredReasonsInternal(
     not_restored_reasons->same_origin_details->url = url_;
     // Populate the reasons for same-origin frames.
     for (auto& name : GetDocumentResult().GetStringReasons()) {
+      if (base::FeatureList::IsEnabled(
+              blink::features::kBackForwardCacheUpdateNotRestoredReasonsName) &&
+          name == "session-restored") {
+        // Session restore should return nullptr just like non-history
+        // navigations.
+        return nullptr;
+      }
       blink::mojom::BFCacheBlockingDetailedReasonPtr reason =
           blink::mojom::BFCacheBlockingDetailedReason::New();
       reason->name = name;

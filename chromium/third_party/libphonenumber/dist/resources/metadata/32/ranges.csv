@@ -13,22 +13,23 @@ Prefix        ; Length ; Type       ; Tariff        ; Operator                  
 4500[02-9]    ; 9      ; MOBILE     ; STANDARD_RATE ;                                  ; "fmt1_3/2/2/2" ; "BE"
 45001         ; 9      ; MOBILE     ; STANDARD_RATE ; "gateway_communications"         ; "fmt1_3/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; GOVERNMENT
 450[1-9]      ; 9      ; MOBILE     ; STANDARD_RATE ;                                  ; "fmt1_3/2/2/2" ; "BE"
-45[1-47-9]    ; 9      ; MOBILE     ; STANDARD_RATE ;                                  ; "fmt1_3/2/2/2" ; "BE"
+4510          ; 9      ; MOBILE     ; STANDARD_RATE ; "digi"                           ; "fmt1_3/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; GOVERNMENT
+451[1-9]      ; 9      ; MOBILE     ; STANDARD_RATE ;                                  ; "fmt1_3/2/2/2" ; "BE"
+45[2-47-9]    ; 9      ; MOBILE     ; STANDARD_RATE ;                                  ; "fmt1_3/2/2/2" ; "BE"
 455           ; 9      ; MOBILE     ; STANDARD_RATE ; "voo"                            ; "fmt1_3/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; GOVERNMENT
 456           ; 9      ; MOBILE     ; STANDARD_RATE ; "mobile_vikings_or_jim"          ; "fmt1_3/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; GOVERNMENT
 460           ; 9      ; MOBILE     ; STANDARD_RATE ; "proximus"                       ; "fmt1_3/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; IR21
 461[0-79]     ; 9      ; MOBILE     ; STANDARD_RATE ;                                  ; "fmt1_3/2/2/2" ; "BE"
 4618          ; 9      ; MOBILE     ; STANDARD_RATE ; "nmbs"                           ; "fmt1_3/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; GOVERNMENT
 46[24]        ; 9      ; MOBILE     ; STANDARD_RATE ;                                  ; "fmt1_3/2/2/2" ; "BE"
-4630          ; 9      ; MOBILE     ; STANDARD_RATE ; "tismi_bv"                       ; "fmt1_3/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; GOVERNMENT
-463[1-9]      ; 9      ; MOBILE     ; STANDARD_RATE ;                                  ; "fmt1_3/2/2/2" ; "BE"
-4650          ; 9      ; MOBILE     ; STANDARD_RATE ;                                  ; "fmt1_3/2/2/2" ; "BE"
+463[01]       ; 9      ; MOBILE     ; STANDARD_RATE ; "lancelot"                       ; "fmt1_3/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; IR21
+463[2-9]      ; 9      ; MOBILE     ; STANDARD_RATE ;                                  ; "fmt1_3/2/2/2" ; "BE"
+46[57]0       ; 9      ; MOBILE     ; STANDARD_RATE ; "telenet"                        ; "fmt1_3/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; IR21
 465[1-9]      ; 9      ; MOBILE     ; STANDARD_RATE ; "lycamobile"                     ; "fmt1_3/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; GOVERNMENT
 466[0-4]      ; 9      ; MOBILE     ; STANDARD_RATE ; "lycamobile"                     ; "fmt1_3/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; GOVERNMENT
 466[5-7]      ; 9      ; MOBILE     ; STANDARD_RATE ; "vectone"                        ; "fmt1_3/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; IR21
 4668          ; 9      ; MOBILE     ; STANDARD_RATE ;                                  ; "fmt1_3/2/2/2" ; "BE"
 4669          ; 9      ; MOBILE     ; STANDARD_RATE ; "voxbone_sa"                     ; "fmt1_3/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; GOVERNMENT
-4670          ; 9      ; MOBILE     ; STANDARD_RATE ; "telenet"                        ; "fmt1_3/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; IR21
 467[12]       ; 9      ; MOBILE     ; STANDARD_RATE ; "join_experience_belgium"        ; "fmt1_3/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; IR21
 46730[0-57-9] ; 9      ; MOBILE     ; STANDARD_RATE ;                                  ; "fmt1_3/2/2/2" ; "BE"
 467306        ; 9      ; MOBILE     ; STANDARD_RATE ; "telenet"                        ; "fmt1_3/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; GOVERNMENT
@@ -39,13 +40,15 @@ Prefix        ; Length ; Type       ; Tariff        ; Operator                  
 4679          ; 9      ; MOBILE     ; STANDARD_RATE ; "interactive_digital_media_gmbh" ; "fmt1_3/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; GOVERNMENT
 468[0-5]      ; 9      ; MOBILE     ; STANDARD_RATE ; "telenet"                        ; "fmt1_3/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; IR21
 4686          ; 9      ; MOBILE     ; STANDARD_RATE ; "onoff_telecom_sasu"             ; "fmt1_3/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; GOVERNMENT
-468[78]       ; 9      ; MOBILE     ; STANDARD_RATE ; "premium_routing_gmbh"           ; "fmt1_3/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; GOVERNMENT
+468[78]       ; 9      ; MOBILE     ; STANDARD_RATE ; "lancelot"                       ; "fmt1_3/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; IR21
 4689          ; 9      ; MOBILE     ; STANDARD_RATE ; "febo_telecom"                   ; "fmt1_3/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; GOVERNMENT
 469           ; 9      ; MOBILE     ; STANDARD_RATE ; "telenet"                        ; "fmt1_3/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; IR21
 47            ; 9      ; MOBILE     ; STANDARD_RATE ; "proximus"                       ; "fmt1_3/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; IR21
-480[013468]   ; 9      ; MOBILE     ; STANDARD_RATE ;                                  ; "fmt1_3/2/2/2" ; "BE"
+480[0148]     ; 9      ; MOBILE     ; STANDARD_RATE ;                                  ; "fmt1_3/2/2/2" ; "BE"
 4802          ; 9      ; MOBILE     ; STANDARD_RATE ; "tismi_bv"                       ; "fmt1_3/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; IR21
+4803          ; 9      ; MOBILE     ; STANDARD_RATE ; "lancelot"                       ; "fmt1_3/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; IR21
 4805          ; 9      ; MOBILE     ; STANDARD_RATE ; "voyacom_sprl"                   ; "fmt1_3/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; GOVERNMENT
+4806          ; 9      ; MOBILE     ; STANDARD_RATE ; "telenet"                        ; "fmt1_3/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; IR21
 4807          ; 9      ; MOBILE     ; STANDARD_RATE ; "messagebird"                    ; "fmt1_3/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; GOVERNMENT
 4809          ; 9      ; MOBILE     ; STANDARD_RATE ; "ericsson"                       ; "fmt1_3/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; GOVERNMENT
 48[12]        ; 9      ; MOBILE     ; STANDARD_RATE ;                                  ; "fmt1_3/2/2/2" ; "BE"
@@ -73,11 +76,12 @@ Prefix        ; Length ; Type       ; Tariff        ; Operator                  
 703[0457]     ; 8      ; FIXED_LINE ; PREMIUM_RATE  ;                                  ; "fmt3_2/2/2/2" ; "BE"
 7036          ; 8      ; FIXED_LINE ; PREMIUM_RATE  ;                                  ; "fmt3_2/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; GOVERNMENT
 7044          ; 8      ; FIXED_LINE ; PREMIUM_RATE  ;                                  ; "fmt3_2/2/2/2" ; "BE"
+7064          ; 8      ; FIXED_LINE ; PREMIUM_RATE  ;                                  ; "fmt3_2/2/2/2" ; "BE"    ;                      ;                      ;                      ;                      ; GOVERNMENT
 706[569]      ; 8      ; FIXED_LINE ; PREMIUM_RATE  ;                                  ; "fmt3_2/2/2/2" ; "BE"
 707[0579]     ; 8      ; FIXED_LINE ; PREMIUM_RATE  ;                                  ; "fmt3_2/2/2/2" ; "BE"
 71            ; 8      ; FIXED_LINE ; STANDARD_RATE ;                                  ; "fmt3_2/2/2/2" ; "BE"    ; "Charleroi"          ; "Charleroi"          ; "Charleroi"          ; "Charleroi"
 780[57]       ; 8      ; UAN        ; STANDARD_RATE ;                                  ; "fmt3_2/2/2/2" ; "BE"
-781[0458]     ; 8      ; UAN        ; STANDARD_RATE ;                                  ; "fmt3_2/2/2/2" ; "BE"
+781[014-8]    ; 8      ; UAN        ; STANDARD_RATE ;                                  ; "fmt3_2/2/2/2" ; "BE"
 782[25]       ; 8      ; UAN        ; STANDARD_RATE ;                                  ; "fmt3_2/2/2/2" ; "BE"
 783[15-8]     ; 8      ; UAN        ; STANDARD_RATE ;                                  ; "fmt3_2/2/2/2" ; "BE"
 7848          ; 8      ; UAN        ; STANDARD_RATE ;                                  ; "fmt3_2/2/2/2" ; "BE"
@@ -96,15 +100,5 @@ Prefix        ; Length ; Type       ; Tariff        ; Operator                  
 86            ; 8      ; FIXED_LINE ; STANDARD_RATE ;                                  ; "fmt3_2/2/2/2" ; "BE"    ; "Durbuy"             ; "Durbuy"             ; "Durbuy"             ; "Durbuy"
 87            ; 8      ; FIXED_LINE ; STANDARD_RATE ;                                  ; "fmt3_2/2/2/2" ; "BE"    ; "Verviers"           ; "Verviers"           ; "Verviers"           ; "Verviers"
 89            ; 8      ; FIXED_LINE ; STANDARD_RATE ;                                  ; "fmt3_2/2/2/2" ; "BE"    ; "Genk"               ; "Genk"               ; "Genk"               ; "Genk"
-900[0-35-8]   ; 8      ; FIXED_LINE ; PREMIUM_RATE  ;                                  ; "fmt4_3/2/3"   ; "BE"    ; "Gent"               ; "Ghent"              ; "Gand"               ; "Gent"
-90[07]4       ; 8      ; FIXED_LINE ; PREMIUM_RATE  ;                                  ; "fmt4_3/2/3"   ; "BE"    ; "Gent"               ; "Ghent"              ; "Gand"               ; "Gent"               ; GOVERNMENT
-901[36]       ; 8      ; FIXED_LINE ; PREMIUM_RATE  ;                                  ; "fmt4_3/2/3"   ; "BE"    ; "Gent"               ; "Ghent"              ; "Gand"               ; "Gent"
-902[0-3568]   ; 8      ; FIXED_LINE ; PREMIUM_RATE  ;                                  ; "fmt4_3/2/3"   ; "BE"    ; "Gent"               ; "Ghent"              ; "Gand"               ; "Gent"
-903[0135689]  ; 8      ; FIXED_LINE ; PREMIUM_RATE  ;                                  ; "fmt4_3/2/3"   ; "BE"    ; "Gent"               ; "Ghent"              ; "Gand"               ; "Gent"
-903[24]       ; 8      ; FIXED_LINE ; PREMIUM_RATE  ;                                  ; "fmt4_3/2/3"   ; "BE"    ; "Gent"               ; "Ghent"              ; "Gand"               ; "Gent"               ; GOVERNMENT
-904[2-68]     ; 8      ; FIXED_LINE ; PREMIUM_RATE  ;                                  ; "fmt4_3/2/3"   ; "BE"    ; "Gent"               ; "Ghent"              ; "Gand"               ; "Gent"
-905[1-68]     ; 8      ; FIXED_LINE ; PREMIUM_RATE  ;                                  ; "fmt4_3/2/3"   ; "BE"    ; "Gent"               ; "Ghent"              ; "Gand"               ; "Gent"
-906[0-378]    ; 8      ; FIXED_LINE ; PREMIUM_RATE  ;                                  ; "fmt4_3/2/3"   ; "BE"    ; "Gent"               ; "Ghent"              ; "Gand"               ; "Gent"
-907[23568]    ; 8      ; FIXED_LINE ; PREMIUM_RATE  ;                                  ; "fmt4_3/2/3"   ; "BE"    ; "Gent"               ; "Ghent"              ; "Gand"               ; "Gent"
-909[34679]    ; 8      ; FIXED_LINE ; PREMIUM_RATE  ;                                  ; "fmt4_3/2/3"   ; "BE"    ; "Gent"               ; "Ghent"              ; "Gand"               ; "Gent"
+90            ; 8      ; FIXED_LINE ; PREMIUM_RATE  ;                                  ; "fmt4_3/2/3"   ; "BE"    ; "Gent"               ; "Ghent"              ; "Gand"               ; "Gent"
 9[2-4]        ; 8      ; FIXED_LINE ; STANDARD_RATE ;                                  ; "fmt2_1/3/2/2" ; "BE"    ; "Gent"               ; "Ghent"              ; "Gand"               ; "Gent"

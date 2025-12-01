@@ -45,6 +45,7 @@
 #include "net/cookies/cookie_setting_override.h"
 #include "services/network/public/cpp/network_service_buildflags.h"
 #include "services/network/public/mojom/cert_verifier_service_updater.mojom.h"
+#include "services/network/public/mojom/device_bound_sessions.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/network_context_client.mojom.h"
 #include "storage/browser/blob/blob_url_registry.h"
@@ -66,6 +67,7 @@ class IsolationInfo;
 namespace network {
 namespace mojom {
 class SharedDictionaryAccessObserver;
+class DeviceBoundSessionAccessObserver;
 }  // namespace mojom
 }  // namespace network
 
@@ -93,7 +95,6 @@ class CacheStorageControlWrapper;
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
 class CdmStorageDataModel;
 class CdmStorageManager;
-class MediaLicenseManager;
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 class CookieDeprecationLabelManagerImpl;
 class CookieStoreManager;
@@ -161,6 +162,9 @@ class CONTENT_EXPORT StoragePartitionImpl
   void OverridePrivateAggregationManagerForTesting(
       std::unique_ptr<PrivateAggregationManagerImpl>
           private_aggregation_manager);
+  void OverrideDeviceBoundSessionManagerForTesting(
+      std::unique_ptr<network::mojom::DeviceBoundSessionManager>
+          device_bound_session_manager);
 
   // StoragePartition interface.
   const StoragePartitionConfig& GetConfig() const override;
@@ -219,7 +223,10 @@ class CONTENT_EXPORT StoragePartitionImpl
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
   CdmStorageDataModel* GetCdmStorageDataModel() override;
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
-  void DeleteStaleSessionOnlyCookiesAfterDelay() override;
+  network::mojom::DeviceBoundSessionManager* GetDeviceBoundSessionManager()
+      override;
+
+  void DeleteStaleSessionData() override;
 
   void SetProtoDatabaseProvider(
       std::unique_ptr<leveldb_proto::ProtoDatabaseProvider> proto_db_provider)
@@ -292,9 +299,6 @@ class CONTENT_EXPORT StoragePartitionImpl
   const std::string& GetPartitionDomain() const;
   AggregationService* GetAggregationService();
   FontAccessManager* GetFontAccessManager();
-#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
-  MediaLicenseManager* GetMediaLicenseManager();
-#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
   storage::SharedStorageManager* GetSharedStorageManager() override;
   PrivateAggregationManager* GetPrivateAggregationManager();
@@ -334,9 +338,6 @@ class CONTENT_EXPORT StoragePartitionImpl
       const std::string& spn,
       OnGenerateHttpNegotiateAuthTokenCallback callback) override;
 #endif
-#if BUILDFLAG(IS_CHROMEOS)
-  void OnTrustAnchorUsed() override;
-#endif
 #if BUILDFLAG(IS_CT_SUPPORTED)
   void OnCanSendSCTAuditingReport(
       OnCanSendSCTAuditingReportCallback callback) override;
@@ -359,6 +360,11 @@ class CONTENT_EXPORT StoragePartitionImpl
           listener) override;
   void OnWebSocketConnectedToPrivateNetwork(
       network::mojom::IPAddressSpace ip_address_space) override;
+  void OnUrlLoaderConnectedToPrivateNetwork(
+      const GURL& request_url,
+      network::mojom::IPAddressSpace response_address_space,
+      network::mojom::IPAddressSpace client_address_space,
+      network::mojom::IPAddressSpace target_address_space) override;
   void OnAuthRequired(
       const std::optional<base::UnguessableToken>& window_id,
       int32_t request_id,
@@ -388,7 +394,9 @@ class CONTENT_EXPORT StoragePartitionImpl
                        int64_t sent_bytes) override;
   void OnSharedStorageHeaderReceived(
       const url::Origin& request_origin,
-      std::vector<network::mojom::SharedStorageOperationPtr> operations,
+      std::vector<network::mojom::SharedStorageModifierMethodWithOptionsPtr>
+          methods_with_options,
+      const std::optional<std::string>& with_lock,
       OnSharedStorageHeaderReceivedCallback callback) override;
 
   SharedStorageHeaderObserver* shared_storage_header_observer() {
@@ -452,6 +460,7 @@ class CONTENT_EXPORT StoragePartitionImpl
       int process_id,
       int routing_id,
       net::CookieSettingOverrides cookie_setting_overrides,
+      net::CookieSettingOverrides devtools_cookie_setting_overrides,
       mojo::PendingReceiver<network::mojom::RestrictedCookieManager> receiver,
       mojo::PendingRemote<network::mojom::CookieAccessObserver>
           cookie_observer);
@@ -467,6 +476,9 @@ class CONTENT_EXPORT StoragePartitionImpl
 
   mojo::PendingRemote<network::mojom::URLLoaderNetworkServiceObserver>
   CreateAuthCertObserverForServiceWorker(int process_id);
+
+  mojo::PendingRemote<network::mojom::DeviceBoundSessionAccessObserver>
+  CreateDeviceBoundSessionObserverForServiceWorker();
 
   std::vector<std::string> GetCorsExemptHeaderList();
 
@@ -541,6 +553,7 @@ class CONTENT_EXPORT StoragePartitionImpl
   class ServiceWorkerCookieAccessObserver;
   class ServiceWorkerTrustTokenAccessObserver;
   class ServiceWorkerSharedDictionaryAccessObserver;
+  class ServiceWorkerDeviceBoundSessionAccessObserver;
   struct NetworkContextOwner;
 
   friend class BackgroundSyncManagerTest;
@@ -715,7 +728,7 @@ class CONTENT_EXPORT StoragePartitionImpl
 
   GlobalRenderFrameHostId GetRenderFrameHostIdFromNetworkContext();
 
-  void DeleteStaleSessionOnlyCookiesAfterDelayCallback();
+  void DeleteStaleSessionOnlyCookiesAfterDelay();
 
   void ClearNoncesInNetworkContextAfterDelayCallback(
       const std::vector<base::UnguessableToken>& nonces);
@@ -783,11 +796,9 @@ class CONTENT_EXPORT StoragePartitionImpl
   std::unique_ptr<AggregationService> aggregation_service_;
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
   std::unique_ptr<CdmStorageManager> cdm_storage_manager_;
-
-  // TODO(crbug.com/40272342): Remove MediaLicenseManager once migration has
-  // been completed.
-  std::unique_ptr<MediaLicenseManager> media_license_manager_;
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
+  mojo::Remote<network::mojom::DeviceBoundSessionManager>
+      device_bound_session_manager_;
 
   // Owning pointer to the SharedStorageManager for this partition.
   std::unique_ptr<storage::SharedStorageManager> shared_storage_manager_;
@@ -871,6 +882,12 @@ class CONTENT_EXPORT StoragePartitionImpl
   // about shared dictionary accesses made by a service worker in this process.
   mojo::UniqueReceiverSet<network::mojom::SharedDictionaryAccessObserver>
       service_worker_shared_dictionary_observers_;
+
+  // A set of connections to the network service used to notify the
+  // browser process about device bound session accesses made by a
+  // service worker in this process.
+  mojo::UniqueReceiverSet<network::mojom::DeviceBoundSessionAccessObserver>
+      service_worker_device_bound_session_observers_;
 
   mojo::ReceiverSet<network::mojom::URLLoaderNetworkServiceObserver,
                     URLLoaderNetworkContext>

@@ -26,9 +26,9 @@
 #include "base/json/json_reader.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
@@ -38,15 +38,17 @@
 #include "components/omnibox/browser/autocomplete_provider.h"
 #include "components/omnibox/browser/autocomplete_provider_client.h"
 #include "components/omnibox/browser/autocomplete_provider_listener.h"
+#include "components/omnibox/browser/document_suggestions_service.h"
 #include "components/omnibox/browser/in_memory_url_index_types.h"
-#include "components/omnibox/browser/omnibox_feature_configs.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/remote_suggestions_service.h"
 #include "components/omnibox/browser/search_suggestion_parser.h"
+#include "components/omnibox/common/omnibox_feature_configs.h"
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/search/search.h"
 #include "components/search_engines/search_engine_type.h"
 #include "components/search_engines/template_url_service.h"
+#include "components/signin/public/identity_manager/tribool.h"
 #include "components/strings/grit/components_strings.h"
 #include "net/base/url_util.h"
 #include "services/network/public/cpp/simple_url_loader.h"
@@ -66,7 +68,7 @@ const size_t kMaxQueryLength = 200;
 // numeric values should never be reused.
 //
 // Keep up to date with DocumentProviderAllowedReason in
-// //tools/metrics/histograms/enums.xml.
+// //tools/metrics/histograms/metadata/omnibox/enums.xml.
 enum class DocumentProviderAllowedReason : int {
   kAllowed = 0,
   kUnknown = 1,
@@ -81,7 +83,8 @@ enum class DocumentProviderAllowedReason : int {
   kInputOnFocusOrEmpty = 10,
   kInputTooShort = 11,
   kInputLooksLikeUrl = 12,
-  kMaxValue = kInputLooksLikeUrl
+  kNotEnterpriseEligible = 13,
+  kMaxValue = kNotEnterpriseEligible
 };
 
 void LogOmniboxDocumentRequest(RemoteRequestEvent request_event) {
@@ -181,7 +184,7 @@ bool IsOwnedByUser(const std::string& user, const base::Value::Dict& result) {
   std::vector<const std::string*> owner_emails = ExtractResultList(
       result, "metadata.owner.emailAddresses", "emailAddress");
   const auto lower_user = base::i18n::ToLower(base::UTF8ToUTF16(user));
-  return base::ranges::any_of(
+  return std::ranges::any_of(
       owner_emails,
       [&](const std::u16string& email) { return lower_user == email; },
       [&](const std::string* email) {
@@ -218,7 +221,7 @@ bool IsCompletelyMatchedInTitleOrOwner(const std::u16string& input,
     // It's possible `input` contained 'owner' as a word, as opposed to
     // 'owner:...' as an operator. Ignore this rare edge case for simplicity.
     if (input_word != u"owner" &&
-        base::ranges::none_of(
+        std::ranges::none_of(
             title_and_owner_words, [&](const std::u16string& title_word) {
               return base::StartsWith(title_word, input_word,
                                       base::CompareCase::INSENSITIVE_ASCII);
@@ -358,10 +361,35 @@ bool DocumentProvider::IsDocumentProviderAllowed(
     return false;
   }
 
-  // Must be logged in.
-  if (!client_->IsAuthenticated()) {
+  // Must be authenticated.
+  const bool is_authenticated =
+      base::FeatureList::IsEnabled(
+          omnibox::kDocumentProviderPrimaryAccountRequirement)
+          ? client_->GetDocumentSuggestionsService()->HasPrimaryAccount()
+          : client_->IsAuthenticated();
+  if (!is_authenticated) {
     base::UmaHistogramEnumeration("Omnibox.DocumentSuggest.ProviderAllowed",
                                   DocumentProviderAllowedReason::kNotLoggedIn);
+    return false;
+  }
+
+  // Must be enterprise eligibile (if the feature is enabled).
+  bool is_enterprise_eligible = true;
+  if (base::FeatureList::IsEnabled(
+          omnibox::kDocumentProviderEnterpriseEligibility)) {
+    const auto& entrprise_account_state =
+        client_->GetDocumentSuggestionsService()
+            ->account_is_subject_to_enterprise_policies();
+    is_enterprise_eligible =
+        base::FeatureList::IsEnabled(
+            omnibox::kDocumentProviderEnterpriseEligibilityWhenUnknown)
+            ? entrprise_account_state != signin::Tribool::kFalse
+            : entrprise_account_state == signin::Tribool::kTrue;
+  }
+  if (!is_enterprise_eligible) {
+    base::UmaHistogramEnumeration(
+        "Omnibox.DocumentSuggest.ProviderAllowed",
+        DocumentProviderAllowedReason::kNotEnterpriseEligible);
     return false;
   }
 
@@ -375,7 +403,11 @@ bool DocumentProvider::IsDocumentProviderAllowed(
   }
 
   // We haven't received a server backoff signal.
-  if (backoff_for_session_) {
+  bool should_backoff =
+      omnibox_feature_configs::DocumentProvider::Get().scope_backoff_to_profile
+          ? client_->GetDocumentSuggestionsService()->should_backoff()
+          : backoff_for_this_instance_only_;
+  if (should_backoff) {
     base::UmaHistogramEnumeration("Omnibox.DocumentSuggest.ProviderAllowed",
                                   DocumentProviderAllowedReason::kBackoff);
     return false;
@@ -533,12 +565,11 @@ void DocumentProvider::AddProviderInfo(ProvidersInfo* provider_info) const {
 DocumentProvider::DocumentProvider(AutocompleteProviderClient* client,
                                    AutocompleteProviderListener* listener)
     : AutocompleteProvider(AutocompleteProvider::TYPE_DOCUMENT),
-      backoff_for_session_(false),
       client_(client),
-      matches_cache_(20) {
+      debouncer_(std::make_unique<AutocompleteProviderDebouncer>(true, 300)),
+      matches_cache_(20),
+      task_runner_(base::SequencedTaskRunner::GetCurrentDefault()) {
   AddListener(listener);
-
-  debouncer_ = std::make_unique<AutocompleteProviderDebouncer>(true, 300);
 }
 
 DocumentProvider::~DocumentProvider() = default;
@@ -555,14 +586,40 @@ void DocumentProvider::OnURLLoadComplete(
   base::UmaHistogramSparse("Omnibox.DocumentSuggest.HttpResponseCode",
                            response_code);
 
+  // Also log the response code sliced by the enterprise account capability.
+  const auto& account_is_subject_to_enterprise_policies =
+      signin::TriboolToString(
+          client_->GetDocumentSuggestionsService()
+              ->account_is_subject_to_enterprise_policies());
+  base::UmaHistogramSparse(
+      base::StringPrintf("Omnibox.DocumentSuggest.HttpResponseCode."
+                         "IsSubjectToEnterprisePolicies.%s",
+                         account_is_subject_to_enterprise_policies),
+      response_code);
+
   // The following are codes that we believe indicate non-transient failures,
   // based on experience working with the owners of the API. Since they are
   // expected to be semi-persistent, it does not make sense to continue to issue
   // requests during the current session after receiving one.
-  if (response_code == 400 || response_code == 403 || response_code == 499 ||
-      (omnibox_feature_configs::DocumentProvider::Get().backoff_on_401 &&
-       response_code == 401)) {
-    backoff_for_session_ = true;
+  if (response_code == 400 || response_code == 401 || response_code == 403 ||
+      response_code == 499) {
+    bool scope_backoff_to_profile =
+        omnibox_feature_configs::DocumentProvider::Get()
+            .scope_backoff_to_profile;
+    if (scope_backoff_to_profile) {
+      client_->GetDocumentSuggestionsService()->set_should_backoff(true);
+      base::TimeDelta backoff_duration =
+          omnibox_feature_configs::DocumentProvider::Get().backoff_duration;
+      if (backoff_duration > base::TimeDelta()) {
+        task_runner_->PostDelayedTask(
+            FROM_HERE,
+            base::BindOnce(&DocumentProvider::ResetBackoffState,
+                           weak_ptr_factory_.GetWeakPtr()),
+            backoff_duration);
+      }
+    } else {
+      backoff_for_this_instance_only_ = true;
+    }
   }
 
   const bool results_updated =
@@ -573,6 +630,10 @@ void DocumentProvider::OnURLLoadComplete(
   loader_.reset();
   done_ = true;
   NotifyListeners(results_updated);
+}
+
+void DocumentProvider::ResetBackoffState() {
+  client_->GetDocumentSuggestionsService()->set_should_backoff(false);
 }
 
 bool DocumentProvider::UpdateResults(const std::string& json_data) {
@@ -746,8 +807,7 @@ ACMatches DocumentProvider::ParseDocumentSearchResults(
     // `matches_cache_`.
     match.stripped_destination_url = AutocompleteMatch::GURLToStrippedGURL(
         GURL(short_url), input_, client_->GetTemplateURLService(),
-        std::u16string(), /*keep_search_intent_params=*/false,
-        /*normalize_search_terms=*/false);
+        std::u16string(), /*keep_search_intent_params=*/false);
 
     match.contents =
         AutocompleteMatch::SanitizeString(base::UTF8ToUTF16(title));
@@ -800,7 +860,7 @@ ACMatches DocumentProvider::ParseDocumentSearchResults(
 }
 
 void DocumentProvider::CopyCachedMatchesToMatches() {
-  base::ranges::transform(
+  std::ranges::transform(
       matches_cache_, std::back_inserter(matches_),
       [this](auto match) {
         match.allowed_to_be_default_match = false;
@@ -816,7 +876,7 @@ void DocumentProvider::CopyCachedMatchesToMatches() {
 }
 
 void DocumentProvider::SetCachedMatchesScoresTo0() {
-  base::ranges::for_each(matches_cache_, [&](auto& cache_key_match_pair) {
+  std::ranges::for_each(matches_cache_, [&](auto& cache_key_match_pair) {
     cache_key_match_pair.second.relevance = 0;
   });
 }

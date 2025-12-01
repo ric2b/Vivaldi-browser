@@ -43,10 +43,10 @@
 #include "services/network/public/mojom/cors.mojom-blink-forward.h"
 #include "services/network/public/mojom/fetch_api.mojom-blink.h"
 #include "services/network/public/mojom/ip_address_space.mojom-blink-forward.h"
+#include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink-forward.h"
 #include "services/network/public/mojom/trust_tokens.mojom-blink.h"
 #include "services/network/public/mojom/web_bundle_handle.mojom-blink.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink-forward.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/resource_request_blocked_reason.h"
 #include "third_party/blink/public/platform/web_url_request_extra_data.h"
 #include "third_party/blink/renderer/platform/loader/fetch/render_blocking_behavior.h"
@@ -280,7 +280,12 @@ class PLATFORM_EXPORT ResourceRequestHead {
 
   // True if the request can work after the fetch group is terminated.
   bool GetKeepalive() const { return keepalive_; }
-  void SetKeepalive(bool keepalive) { keepalive_ = keepalive; }
+  void SetKeepalive(bool keepalive) {
+    keepalive_ = keepalive;
+    keepalive_token_ =
+        keepalive_ ? std::make_optional(base::UnguessableToken::Create())
+                   : std::nullopt;
+  }
 
   // True if the request should be considered for computing and attaching the
   // topics headers.
@@ -395,8 +400,12 @@ class PLATFORM_EXPORT ResourceRequestHead {
   }
 
   const String& GetFetchIntegrity() const { return fetch_integrity_; }
-  void SetFetchIntegrity(const String& integrity) {
-    fetch_integrity_ = integrity;
+  void SetFetchIntegrity(const String& integrity);
+
+  // The list of expected signatures is set as a side-effect of
+  // `SetFetchIntegrity()`.
+  const WTF::Vector<String>& GetExpectedSignatures() const {
+    return expected_signatures_;
   }
 
   bool CacheControlContainsNoCache() const;
@@ -644,6 +653,10 @@ class PLATFORM_EXPORT ResourceRequestHead {
     return known_transparent_placeholder_image_index_;
   }
 
+  const std::optional<base::UnguessableToken>& GetKeepaliveToken() const {
+    return keepalive_token_;
+  }
+
   // Indicates that both FetchContext::PrepareResourceRequestForCacheAccess()
   // and FetchContext::UpgradeResourceRequestForLoader() must be called. See
   // FetchContext::UpgradeResourceRequestForLoader() for details.
@@ -726,6 +739,8 @@ class PLATFORM_EXPORT ResourceRequestHead {
   network::mojom::RedirectMode redirect_mode_;
   // Exposed as Request.integrity in Service Workers
   String fetch_integrity_;
+  // Signature expectations extracted from `fetch_integrity_`
+  WTF::Vector<String> expected_signatures_;
   String referrer_string_;
   network::mojom::ReferrerPolicy referrer_policy_;
   network::mojom::CorsPreflightPolicy cors_preflight_policy_;
@@ -801,6 +816,11 @@ class PLATFORM_EXPORT ResourceRequestHead {
 
   std::optional<base::UnguessableToken>
       service_worker_race_network_request_token_;
+
+  // The unique identifier set when this request's `keepalive_` is true.
+  // TODO(crbug.com/382527001): Consider merge this field with `keepalive_`.
+  std::optional<base::UnguessableToken> keepalive_token_;
+
 #if DCHECK_IS_ON()
   bool is_set_url_allowed_ = true;
 #endif
@@ -886,7 +906,7 @@ class PLATFORM_EXPORT ResourceRequest final : public ResourceRequestHead {
   // private for safety.
   bool IsFeatureEnabledForSubresourceRequestAssumingOptIn(
       const PermissionsPolicy* policy,
-      mojom::blink::PermissionsPolicyFeature feature,
+      network::mojom::PermissionsPolicyFeature feature,
       const url::Origin& origin);
 
  private:

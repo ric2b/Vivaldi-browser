@@ -25,6 +25,7 @@
 #include "chrome/browser/webauthn/gpm_enclave_transaction.h"
 #include "components/trusted_vault/trusted_vault_connection.h"
 #include "content/public/browser/global_routing_id.h"
+#include "google_apis/gaia/gaia_id.h"
 
 namespace base {
 class TickClock;
@@ -59,6 +60,7 @@ class GPMEnclaveController : public AuthenticatorRequestDialogModel::Observer,
  public:
   static constexpr base::TimeDelta kDownloadAccountStateTimeout =
       base::Seconds(1);
+  static constexpr base::TimeDelta kLoadingTimeout = base::Milliseconds(500);
 
   enum class AccountState {
     // There isn't a primary account, or enclave support is disabled.
@@ -143,7 +145,7 @@ class GPMEnclaveController : public AuthenticatorRequestDialogModel::Observer,
 
   // Called when the account state has finished downloading.
   void OnAccountStateDownloaded(
-      std::string gaia_id,
+      GaiaId gaia_id,
       std::unique_ptr<trusted_vault::TrustedVaultConnection> unused,
       trusted_vault::DownloadAuthenticationFactorsRegistrationStateResult
           result);
@@ -187,9 +189,9 @@ class GPMEnclaveController : public AuthenticatorRequestDialogModel::Observer,
   // Called when the enclave enrollment is complete.
   void OnEnclaveAccountSetUpComplete();
 
-  // Called when the EnclaveManager is ready. Sets `account_state_` to the
-  // correct value for the level of user verification required.
-  void SetAccountStateReady();
+  // Called when the EnclaveManager has finished loading. Sets `account_state_`
+  // and progresses the flow if waiting.
+  void SetAccountState(AccountState account_state);
 
   // Called when the user selects Google Password Manager from the list of
   // mechanisms. (Or when it's the priority mechanism.)
@@ -203,6 +205,14 @@ class GPMEnclaveController : public AuthenticatorRequestDialogModel::Observer,
 
   // Called when the user completes forgot pin flow.
   void OnGpmPinChanged(bool success);
+
+  // Called when the user selects a GPM option, but the enclave is still loading
+  // or the account data hasn't finished downloading yet.
+  void OnGpmSelectedWhileLoading();
+
+  // Called when the enclave is still loading and |loading_timeout_| is
+  // triggered.
+  void OnLoadingTimeout();
 
   // AuthenticatorRequestDialogModel::Observer:
   void OnTrustThisComputer() override;
@@ -320,6 +330,11 @@ class GPMEnclaveController : public AuthenticatorRequestDialogModel::Observer,
   // A timeout to prevent waiting for the security domain service forever.
   std::unique_ptr<base::OneShotTimer> account_state_timeout_;
 
+  // A timeout to prevent waiting for the enclave to load forever. If triggered
+  // while still loading, the user is sent to the mechanism selection screen.
+  // Loading the enclave and downloading account data are not interrupted.
+  base::OneShotTimer loading_timeout_;
+
   // Set to true when the user initiates reset GPM pin flow during UV.
   bool changing_gpm_pin_ = false;
 
@@ -331,7 +346,7 @@ class GPMEnclaveController : public AuthenticatorRequestDialogModel::Observer,
   bool gpm_pin_creation_confirmed_ = false;
 
   // The gaia id of the user at the time the account state was downloaded.
-  std::string user_gaia_id_;
+  GaiaId user_gaia_id_;
 
   raw_ptr<const base::TickClock> tick_clock_ = nullptr;
 

@@ -6,10 +6,8 @@
 #define DISCOVERY_MDNS_IMPL_MDNS_TRACKERS_H_
 
 #include <tuple>
-#include <unordered_map>
 #include <vector>
 
-#include "absl/hash/hash.h"
 #include "discovery/mdns/public/mdns_records.h"
 #include "platform/api/task_runner.h"
 #include "platform/base/error.h"

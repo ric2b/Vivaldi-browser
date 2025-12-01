@@ -49,7 +49,7 @@ In Blink, the contents of a web page are internally stored as a tree of Node obj
 
 Each node in the DOM tree that produces visual output has a corresponding RenderObject. RenderObjects are stored in a parallel tree structure, called the Render Tree. A RenderObject knows how to paint the contents of the Node on a display surface. It does so by issuing the necessary draw calls to a GraphicsContext. A GraphicsContext is responsible for writing the pixels into a bitmap that eventually get displayed to the screen. In Chrome, the GraphicsContext wraps Skia, our 2D drawing library.
 
-Traditionally most GraphicsContext calls became calls to an SkCanvas or SkPlatformCanvas, i.e. immediately painted into a software bitmap (see [this document](http://www.chromium.org/developers/design-documents/graphics-and-skia) for more detail on this older model of how Chrome uses Skia). But to move painting off the main thread (covered in greater detail later in this document), these commands are now instead recorded into an [SkPicture](https://code.google.com/p/skia/source/browse/trunk/include/core/SkPicture.h). The SkPicture is a serializable data structure that can capture and then later replay commands, similar to a [display list](http://en.wikipedia.org/wiki/Display_list).
+Traditionally most GraphicsContext calls became calls to an SkCanvas or SkPlatformCanvas, i.e. immediately painted into a software bitmap (see [this document](/developers/design-documents/graphics-and-skia) for more detail on this older model of how Chrome uses Skia). But to move painting off the main thread (covered in greater detail later in this document), these commands are now instead recorded into an [SkPicture](https://code.google.com/p/skia/source/browse/trunk/include/core/SkPicture.h). The SkPicture is a serializable data structure that can capture and then later replay commands, similar to a [display list](https://en.wikipedia.org/wiki/Display_list).
 
 #### From RenderObjects to RenderLayers
 
@@ -165,7 +165,7 @@ In the hardware accelerated architecture, compositing happens on the GPU via cal
 
 Before we go any further exploring the GPU commands the compositor generates, its important to understand how the renderer process issues any commands to the GPU at all. In Chrome’s multi-process model, we have a dedicated process for this task: the GPU process. The GPU process exists primarily for security reasons. Note that Android is an exception, where Chrome uses an in-process GPU implementation that runs as a thread in the Browser process. The GPU thread on Android otherwise behaves the same way as the GPU process on other platforms.
 
-Restricted by its sandbox, the Renderer process (which contains an instance of Blink and of cc) cannot directly issue calls to the 3D APIs provided by the OS (GL / D3D). For that reason we use a separate process to access the device. We call this process the GPU Process. The GPU process is specifically designed to provide access to the system's 3D APIs from within the Renderer sandbox or the even more restrictive [Native Client](http://www.chromium.org/nativeclient) "jail". It works via a client-server model as follows:
+Restricted by its sandbox, the Renderer process (which contains an instance of Blink and of cc) cannot directly issue calls to the 3D APIs provided by the OS (GL / D3D). For that reason we use a separate process to access the device. We call this process the GPU Process. The GPU process is specifically designed to provide access to the system's 3D APIs from within the Renderer sandbox or the even more restrictive [Native Client](/nativeclient) "jail". It works via a client-server model as follows:
 
     The client (code running in the Renderer or within a NaCl module),
     instead of issuing calls directly to the system APIs, serializes them and
@@ -189,7 +189,7 @@ From the client's perspective, an application has the option to either write com
 
 #### Resource Sharing & Synchronization
 
-In addition to providing storage for the command buffer, Chrome uses shared memory for passing larger resources such as bitmaps for textures, vertex arrays, etc between the client and the server. See the [command buffer documentation](http://www.chromium.org/developers/design-documents/gpu-command-buffer) for more about the command format and data transfer.
+In addition to providing storage for the command buffer, Chrome uses shared memory for passing larger resources such as bitmaps for textures, vertex arrays, etc between the client and the server. See the [command buffer documentation](/developers/design-documents/gpu-command-buffer) for more about the command format and data transfer.
 
 Another construct, referred to as a [mailbox](http://src.chromium.org/viewvc/chrome/trunk/src/gpu/GLES2/extensions/CHROMIUM/CHROMIUM_texture_mailbox.txt), provides a means to share textures between command buffers and manage their lifetimes. The mailbox is a simple string identifier, which can be attached (consumed) to a local texture id for any command buffer, and then accessed through that texture id alias. Each texture id attached in this way holds a reference on the underlying real texture, and once all references are released by deleting the local texture ids, the real texture is also destroyed.
 
@@ -234,7 +234,7 @@ With that explanation out of the way, we can go back to explaining how the GL co
 
 The compositor is implemented on top of the GL ES 2.0 client library which proxies the graphics calls to the GPU process (using the method explained above). When a page renders via the compositor, all of its pixels are drawn (remember, drawing != painting) directly into the window’s backbuffer via the GPU process.
 
-The compositor’s architecture has evolved over time: initially it lived in the Renderer’s main thread, was then moved to its own thread (the so-called compositor thread), then took on additional responsibility orchestrating when paints occur (so-called impl-side painting). This document will focus on the latest version; see the [GPU architecture roadmap](http://www.chromium.org/developers/design-documents/gpu-accelerated-compositing-in-chrome/gpu-architecture-roadmap) for where older versions may still be in use.
+The compositor’s architecture has evolved over time: initially it lived in the Renderer’s main thread, was then moved to its own thread (the so-called compositor thread), then took on additional responsibility orchestrating when paints occur (so-called impl-side painting). This document will focus on the latest version; see the [GPU architecture roadmap](/developers/design-documents/gpu-accelerated-compositing-in-chrome/gpu-architecture-roadmap) for where older versions may still be in use.
 
 In theory, the threaded compositor is fundamentally tasked with taking enough information from the main thread to produce frames independently in response to future user input, even if the main thread is busy and can’t be asked for additional data. In practice this currently means it makes a copy of the cc layer tree and SkPicture recordings for layer regions within in an area around the viewport’s current location.
 

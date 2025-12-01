@@ -34,6 +34,7 @@
 
 #include "src/dawn/node/binding/Converter.h"
 #include "src/dawn/node/binding/Errors.h"
+#include "src/dawn/node/binding/GPUAdapterInfo.h"
 #include "src/dawn/node/binding/GPUBindGroup.h"
 #include "src/dawn/node/binding/GPUBindGroupLayout.h"
 #include "src/dawn/node/binding/GPUBuffer.h"
@@ -57,15 +58,15 @@ namespace wgpu::binding {
 namespace {
 
 // Returns a string representation of the WGPULoggingType
-const char* str(WGPULoggingType ty) {
+const char* str(wgpu::LoggingType ty) {
     switch (ty) {
-        case WGPULoggingType_Verbose:
+        case wgpu::LoggingType::Verbose:
             return "verbose";
-        case WGPULoggingType_Info:
+        case wgpu::LoggingType::Info:
             return "info";
-        case WGPULoggingType_Warning:
+        case wgpu::LoggingType::Warning:
             return "warning";
-        case WGPULoggingType_Error:
+        case wgpu::LoggingType::Error:
             return "error";
         default:
             return "unknown";
@@ -147,12 +148,10 @@ GPUDevice::GPUDevice(Napi::Env env,
       async_(async),
       lost_promise_(lost_promise),
       label_(CopyLabel(desc.label)) {
-    device_.SetLoggingCallback(
-        [](WGPULoggingType type, WGPUStringView message, void* userdata) {
-            printf("%s:\n", str(type));
-            chunkedWrite(message);
-        },
-        nullptr);
+    device_.SetLoggingCallback([](wgpu::LoggingType type, wgpu::StringView message) {
+        printf("%s:\n", str(type));
+        chunkedWrite(message);
+    });
 }
 
 GPUDevice::~GPUDevice() {
@@ -192,9 +191,7 @@ interop::Interface<interop::GPUSupportedLimits> GPUDevice::getLimits(Napi::Env e
     };
 
     // Query the subgroup limits only if subgroups feature is enabled on the device.
-    // TODO(349125474): Remove deprecated ChromiumExperimentalSubgroups.
-    if (device_.HasFeature(wgpu::FeatureName::Subgroups) ||
-        device_.HasFeature(wgpu::FeatureName::ChromiumExperimentalSubgroups)) {
+    if (device_.HasFeature(wgpu::FeatureName::Subgroups)) {
         InsertInChain(&subgroupLimits);
     }
 
@@ -208,6 +205,15 @@ interop::Interface<interop::GPUSupportedLimits> GPUDevice::getLimits(Napi::Env e
         Napi::Error::New(env, "failed to get device limits").ThrowAsJavaScriptException();
     }
     return interop::GPUSupportedLimits::Create<GPUSupportedLimits>(env, limits);
+}
+
+interop::Interface<interop::GPUAdapterInfo> GPUDevice::getAdapterInfo(Napi::Env env) {
+    wgpu::AdapterInfo adapterInfo = {};
+    wgpu::AdapterPropertiesSubgroups subgroupsProperties = {};
+    adapterInfo.nextInChain = &subgroupsProperties;
+    device_.GetAdapterInfo(&adapterInfo);
+
+    return interop::GPUAdapterInfo::Create<GPUAdapterInfo>(env, adapterInfo);
 }
 
 interop::Interface<interop::GPUQueue> GPUDevice::getQueue(Napi::Env env) {
@@ -564,15 +570,7 @@ interop::Promise<std::optional<interop::Interface<interop::GPUError>>> GPUDevice
                     break;
                 }
                 case wgpu::ErrorType::Unknown:
-                case wgpu::ErrorType::DeviceLost:
                     ctx->promise.Reject(Errors::OperationError(env, std::string(message)));
-                    break;
-                default:
-                    ctx->promise.Reject(
-                        "unhandled error type (" +
-                        std::to_string(
-                            static_cast<std::underlying_type<wgpu::ErrorType>::type>(type)) +
-                        ")");
                     break;
             }
         });

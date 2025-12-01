@@ -171,7 +171,6 @@ constexpr SharedImageUsageSet kSupportedUsage =
     SHARED_IMAGE_USAGE_WEBGPU_SWAP_CHAIN_TEXTURE |
     SHARED_IMAGE_USAGE_HIGH_PERFORMANCE_GPU | SHARED_IMAGE_USAGE_CPU_UPLOAD |
     SHARED_IMAGE_USAGE_WEBGPU_STORAGE_TEXTURE |
-    SHARED_IMAGE_USAGE_RASTER_DELEGATED_COMPOSITING |
     SHARED_IMAGE_USAGE_WEBGPU_SHARED_BUFFER;
 
 }  // anonymous namespace
@@ -188,6 +187,16 @@ D3DImageBackingFactory::D3DImageBackingFactory(
       gl_format_caps_(gl_format_caps),
       use_update_subresource1_(UseUpdateSubresource1(workarounds)) {
   CHECK(angle_d3d11_device_);
+
+  UINT format_support;
+  HRESULT hr =
+      d3d11_device_->CheckFormatSupport(DXGI_FORMAT_NV12, &format_support);
+  constexpr auto kRequiredUsage = D3D11_FORMAT_SUPPORT_TEXTURE2D |
+                                  D3D11_FORMAT_SUPPORT_SHADER_SAMPLE |
+                                  D3D11_FORMAT_SUPPORT_RENDER_TARGET;
+  bool has_required_format_support =
+      (format_support & kRequiredUsage) == kRequiredUsage;
+  d3d11_supports_nv12_ = SUCCEEDED(hr) && has_required_format_support;
 }
 
 D3DImageBackingFactory::~D3DImageBackingFactory() = default;
@@ -616,19 +625,15 @@ std::unique_ptr<SharedImageBacking> D3DImageBackingFactory::CreateSharedImage(
     return nullptr;
   }
 
-  if (handle.type != gfx::DXGI_SHARED_HANDLE || !handle.dxgi_handle.IsValid()) {
+  if (handle.type != gfx::DXGI_SHARED_HANDLE ||
+      !handle.dxgi_handle().IsValid()) {
     LOG(ERROR) << "Invalid handle with type: " << handle.type;
-    return nullptr;
-  }
-
-  if (!handle.dxgi_token.has_value()) {
-    LOG(ERROR) << "Missing token for DXGI handle";
     return nullptr;
   }
 
   scoped_refptr<DXGISharedHandleState> dxgi_shared_handle_state =
       dxgi_shared_handle_manager_->GetOrCreateSharedHandleState(
-          std::move(handle.dxgi_token.value()), std::move(handle.dxgi_handle),
+          handle.dxgi_handle().token(), handle.dxgi_handle().TakeBufferHandle(),
           d3d11_device_);
   if (!dxgi_shared_handle_state) {
     LOG(ERROR) << "Failed to retrieve matching DXGI shared handle state";
@@ -904,6 +909,10 @@ bool D3DImageBackingFactory::IsSupported(SharedImageUsageSet usage,
   }
 
   if (format == viz::MultiPlaneFormat::kNV12) {
+    // Return early if d3d11 cannot support nv12 formats.
+    if (!d3d11_supports_nv12_) {
+      return false;
+    }
     // We know current size is within `max_nv12_size_supported_` and nv12
     // creation is supported for `max_nv12_size_supported_`.
     if (size.GetArea() <= max_nv12_size_supported_) {

@@ -8,6 +8,9 @@
 #ifndef COMPONENTS_AUTOFILL_CORE_BROWSER_DATA_MODEL_AUTOFILL_I18N_PARSING_EXPRESSIONS_H_
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_DATA_MODEL_AUTOFILL_I18N_PARSING_EXPRESSIONS_H_
 
+#include <string_view>
+#include <utility>
+
 #include "base/containers/fixed_flat_map.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/span.h"
@@ -17,7 +20,6 @@
 #include "third_party/re2/src/re2/re2.h"
 
 namespace autofill::i18n_model_definition {
-namespace {
 
 using CountryAndFieldType = std::pair<std::string_view, FieldType>;
 
@@ -45,8 +47,8 @@ inline constexpr char kRegularExpression_20[] = "(?m)(?i:(?:piso\\s*(?P<ADDRESS_
 inline constexpr char kRegularExpression_21[] = "(?m)(?i:(?:\\b(?:x|Entre( Calles)?)\\s+(?P<ADDRESS_HOME_BETWEEN_STREETS>(?P<ADDRESS_HOME_BETWEEN_STREETS_1>(?:[^\\s,]+(?:[^\\S\\r\\n]+[^\\s,]+)*?))(?:\\s+y\\s+)(?P<ADDRESS_HOME_BETWEEN_STREETS_2>(?:[^,\\r\\n]+)))))"; // nocheck
 inline constexpr char kRegularExpression_22[] = "(?m)(?i:(?:(?:Cerca del)(?P<ADDRESS_HOME_LANDMARK>[^,\\n]+)))"; // nocheck
 inline constexpr char kRegularExpression_23[] = "(?m)(?i:(?P<ADDRESS_HOME_APT>(?P<ADDRESS_HOME_APT_TYPE>(?:despacho|loc\\.?|local|int(?:erior|\\.?)|n[uú]m(?:ero|\\.)? int(?:erno|\\.)?|Apartamento|Apto\\.?|Departamento|apto\\.?))?(?:(?:^|\\s+)(?P<ADDRESS_HOME_APT_NUM>(?:\\d+\\w?\\b|\\w\\b)))))"; // nocheck
-inline constexpr char kRegularExpression_24[] = "(?m)(?i:(?P<ADDRESS_HOME_STREET_LOCATION>(?P<ADDRESS_HOME_STREET_NAME>(?:[^\\s,]+(?:[^\\S\\r\\n]+[^\\s,]+)*?))(?:(?:^|\\s+)(?P<ADDRESS_HOME_HOUSE_NUMBER_AND_APT>(?P<ADDRESS_HOME_HOUSE_NUMBER>(?:\\d+))(?:(?:[-\\s/,]*)(?P<ADDRESS_HOME_APT>(?:\\w[\\w\\s-]*)))?))))"; // nocheck
-inline constexpr char kRegularExpression_25[] = "(?m)(?i:(?P<ADDRESS_HOME_STREET_ADDRESS>(?P<ADDRESS_HOME_STREET_LOCATION>(?P<ADDRESS_HOME_STREET_NAME>(?:[^\\s,]+(?:[^\\S\\r\\n]+[^\\s,]+)*?))(?:(?:^|\\s+)(?P<ADDRESS_HOME_HOUSE_NUMBER_AND_APT>(?P<ADDRESS_HOME_HOUSE_NUMBER>(?:\\d+))(?:(?:[-\\s/,]*)(?P<ADDRESS_HOME_APT>(?:\\w[\\w\\s-]*)))?)))))"; // nocheck
+inline constexpr char kRegularExpression_24[] = "(?m)(?i:(?P<ADDRESS_HOME_STREET_LOCATION>(?P<ADDRESS_HOME_STREET_NAME>(?:[^\\s,]+(?:[^\\S\\r\\n]+[^\\s,]+)*?))(?:(?:^|\\s+)(?P<ADDRESS_HOME_HOUSE_NUMBER_AND_APT>(?P<ADDRESS_HOME_HOUSE_NUMBER>(?:\\d+))(?:(?:[-\\s/,]*)(?P<ADDRESS_HOME_APT>(?P<ADDRESS_HOME_APT_NUM>(?:\\w[\\w\\s-]*))))?))))"; // nocheck
+inline constexpr char kRegularExpression_25[] = "(?m)(?i:(?P<ADDRESS_HOME_STREET_ADDRESS>(?P<ADDRESS_HOME_STREET_LOCATION>(?P<ADDRESS_HOME_STREET_NAME>(?:[^\\s,]+(?:[^\\S\\r\\n]+[^\\s,]+)*?))(?:(?:^|\\s+)(?P<ADDRESS_HOME_HOUSE_NUMBER_AND_APT>(?P<ADDRESS_HOME_HOUSE_NUMBER>(?:\\d+))(?:(?:[-\\s/,]*)(?P<ADDRESS_HOME_APT>(?P<ADDRESS_HOME_APT_NUM>(?:\\w[\\w\\s-]*))))?)))))"; // nocheck
 inline constexpr char kRegularExpression_26[] = "(?m)(?i:(?P<ADDRESS_HOME_STREET_LOCATION>(?:(?:(?:ulica|ul\\.?)\\s*)?(?P<ADDRESS_HOME_STREET_NAME>(?:[^\\s,]+(?:[^\\S\\r\\n]+[^\\s,]+)*?)))(?:(?:^|\\s+)(?P<ADDRESS_HOME_HOUSE_NUMBER_AND_APT>(?P<ADDRESS_HOME_HOUSE_NUMBER>\\d+(?:\\s*[[:alpha:]]\\b)?)(?:(?:^|[/\\s]+)(?P<ADDRESS_HOME_APT>(?P<ADDRESS_HOME_APT_TYPE>(?:mieszkanie|m\\.?|lokal|lok\\.?|apartment|apt\\.?)?)?(?:\\s*(?P<ADDRESS_HOME_APT_NUM>(?:\\d+\\w?\\b|\\w\\b)))))?))))"; // nocheck
 inline constexpr char kRegularExpression_27[] = "(?m)(?i:(?P<ADDRESS_HOME_STREET_ADDRESS>(?P<ADDRESS_HOME_STREET_LOCATION>(?:(?:(?:ulica|ul\\.?)\\s*)?(?P<ADDRESS_HOME_STREET_NAME>(?:[^\\s,]+(?:[^\\S\\r\\n]+[^\\s,]+)*?)))(?:(?:^|\\s+)(?P<ADDRESS_HOME_HOUSE_NUMBER_AND_APT>(?P<ADDRESS_HOME_HOUSE_NUMBER>\\d+(?:\\s*[[:alpha:]]\\b)?)(?:(?:^|[/\\s]+)(?P<ADDRESS_HOME_APT>(?P<ADDRESS_HOME_APT_TYPE>(?:mieszkanie|m\\.?|lokal|lok\\.?|apartment|apt\\.?)?)?(?:\\s*(?P<ADDRESS_HOME_APT_NUM>(?:\\d+\\w?\\b|\\w\\b)))))?)))))"; // nocheck
 inline constexpr char kRegularExpression_28[] = "(?m)(?i:(?P<ADDRESS_HOME_HOUSE_NUMBER_AND_APT>(?P<ADDRESS_HOME_HOUSE_NUMBER>\\d+(?:\\s*[[:alpha:]]\\b)?)(?:(?:^|[/\\s]+)(?P<ADDRESS_HOME_APT>(?P<ADDRESS_HOME_APT_TYPE>(?:mieszkanie|m\\.?|lokal|lok\\.?|apartment|apt\\.?)?)?(?:\\s*(?P<ADDRESS_HOME_APT_NUM>(?:\\d+\\w?\\b|\\w\\b)))))?))"; // nocheck
@@ -116,7 +118,6 @@ inline constexpr ExtractPart const* kExtractParts_6_Pieces[]{&kExtractPartList[7
 inline constexpr ExtractParts kExtractParts_6 = ExtractParts("", kExtractParts_6_Pieces);
 inline constexpr ExtractPart const* kExtractParts_7_Pieces[]{&kExtractPartList[9],&kExtractPartList[5],&kExtractPartList[6],&kExtractPartList[7],&kExtractPartList[8]};
 inline constexpr ExtractParts kExtractParts_7 = ExtractParts("", kExtractParts_7_Pieces);
-}  // namespace
 
 // A lookup map for parsing expressions for countries and field types.
 inline constexpr auto kAutofillParsingRulesMap =

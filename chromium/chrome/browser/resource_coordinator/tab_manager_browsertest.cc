@@ -204,6 +204,12 @@ class TabManagerTest : public InProcessBrowserTest,
     GetTabLifecycleUnitSource()->SetFocusedTabStripModelForTesting(tsm());
   }
 
+  void TearDownOnMainThread() override {
+    // Clear the fakely-focused model before browsers are destroyed.
+    GetTabLifecycleUnitSource()->SetFocusedTabStripModelForTesting(nullptr);
+    InProcessBrowserTest::TearDownOnMainThread();
+  }
+
   void OpenTwoTabs(const GURL& first_url, const GURL& second_url) {
     // Open two tabs. Wait for both of them to load.
     content::TestNavigationObserver load1(tsm()->GetActiveWebContents(), 1);
@@ -778,7 +784,7 @@ IN_PROC_BROWSER_TEST_P(TabManagerTest, DiscardedTabHasNoProcess) {
   ASSERT_TRUE(process);
   EXPECT_TRUE(process->IsInitializedAndNotDead());
   EXPECT_NE(base::kNullProcessHandle, process->GetProcess().Handle());
-  const int initial_renderer_id = process->GetID();
+  const int initial_renderer_id = process->GetDeprecatedID();
 
   // Discard the tab. This simulates a tab discard.
   TabLifecycleUnitExternal::FromWebContents(web_contents)
@@ -793,7 +799,7 @@ IN_PROC_BROWSER_TEST_P(TabManagerTest, DiscardedTabHasNoProcess) {
     content::RenderProcessHost* new_process =
         web_contents->GetPrimaryMainFrame()->GetProcess();
     EXPECT_NE(new_process, process);
-    EXPECT_NE(new_process->GetID(), initial_renderer_id);
+    EXPECT_NE(new_process->GetDeprecatedID(), initial_renderer_id);
     process = new_process;
   }
 
@@ -834,8 +840,8 @@ IN_PROC_BROWSER_TEST_P(TabManagerTest,
             child_frame->GetLastCommittedURL().DeprecatedGetOriginAsURL());
   if (content::AreAllSitesIsolatedForTesting()) {
     EXPECT_NE(main_frame->GetSiteInstance(), child_frame->GetSiteInstance());
-    EXPECT_NE(main_frame->GetProcess()->GetID(),
-              child_frame->GetProcess()->GetID());
+    EXPECT_NE(main_frame->GetProcess()->GetDeprecatedID(),
+              child_frame->GetProcess()->GetDeprecatedID());
   }
 
   // document.wasDiscarded is false before discard, on main frame and child

@@ -12,7 +12,6 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/base/signin_buildflags.h"
 #include "components/signin/public/base/signin_metrics.h"
@@ -31,7 +30,7 @@ namespace {
 
 // Constants used by the different tests.
 const char kPrimaryAccountEmail[] = "primary.account@example.com";
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 const char kAnotherAccountEmail[] = "another.account@example.com";
 const char kUnknownAccountId[] = "{unknown account id}";
 #endif
@@ -100,7 +99,7 @@ class ClearPrimaryAccountTestObserver
       scoped_observation_{this};
 };
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 // Helper for testing of RevokeSyncConsent/ClearPrimaryAccount(). This function
 // requires lots of tests due to having different behaviors based on its
 // arguments. But the setup and execution of these test is all the boiler plate
@@ -128,8 +127,9 @@ void RunRevokeConsentTest(
 
   // Abort the test if the current platform does not support mutation of the
   // primary account (the returned PrimaryAccountMutator* will be null).
-  if (!primary_account_mutator)
+  if (!primary_account_mutator) {
     return;
+  }
 
   // With the exception of ClearPrimaryAccount_AuthInProgress, every other
   // ClearPrimaryAccount_* test requires a primary account to be signed in.
@@ -140,7 +140,7 @@ void RunRevokeConsentTest(
   signin::PrimaryAccountMutator::PrimaryAccountError setPrimaryAccountResult =
       primary_account_mutator->SetPrimaryAccount(
           account_info.account_id, signin::ConsentLevel::kSync,
-          signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+          signin_metrics::AccessPoint::kUnknown);
   EXPECT_EQ(signin::PrimaryAccountMutator::PrimaryAccountError::kNoError,
             setPrimaryAccountResult);
   EXPECT_TRUE(identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSync));
@@ -273,7 +273,7 @@ void RunClearPrimaryAccountTestForSigninOnly() {
       environment.MakeAccountAvailable(kAnotherAccountEmail);
   EXPECT_EQ(primary_account_mutator->SetPrimaryAccount(
                 primary_account_info.account_id, signin::ConsentLevel::kSignin,
-                signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN),
+                signin_metrics::AccessPoint::kUnknown),
             signin::PrimaryAccountMutator::PrimaryAccountError::kNoError);
 
   base::RunLoop run_loop;
@@ -308,7 +308,7 @@ void RunClearPrimaryAccountTestForSigninOnly() {
       secondary_account_info.account_id));
 }
 
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
 }  // namespace
 
@@ -337,7 +337,7 @@ TEST_F(PrimaryAccountMutatorTest, SetPrimaryAccount_Signin) {
   signin::PrimaryAccountMutator::PrimaryAccountError
       set_primary_account_result = primary_account_mutator->SetPrimaryAccount(
           account_info.account_id, signin::ConsentLevel::kSignin,
-          signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+          signin_metrics::AccessPoint::kUnknown);
   EXPECT_EQ(signin::PrimaryAccountMutator::PrimaryAccountError::kNoError,
             set_primary_account_result);
 
@@ -373,7 +373,7 @@ TEST_F(PrimaryAccountMutatorTest, SetPrimaryAccount_Sync) {
   signin::PrimaryAccountMutator::PrimaryAccountError setPrimaryAccountResult =
       primary_account_mutator->SetPrimaryAccount(
           account_info.account_id, signin::ConsentLevel::kSync,
-          signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+          signin_metrics::AccessPoint::kUnknown);
   EXPECT_EQ(signin::PrimaryAccountMutator::PrimaryAccountError::kNoError,
             setPrimaryAccountResult);
 
@@ -387,7 +387,7 @@ TEST_F(PrimaryAccountMutatorTest, SetPrimaryAccount_Sync) {
 // ChromeOS, where those preconditions do not exist.
 // TODO(crbug.com/41470280): Run these tests on ChromeOS if/once we
 // enable those preconditions on that platform
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 // Checks that setting the primary account fails if the account is not known by
 // the identity system.
 TEST_F(PrimaryAccountMutatorTest, SetPrimaryAccount_NoAccount) {
@@ -400,16 +400,16 @@ TEST_F(PrimaryAccountMutatorTest, SetPrimaryAccount_NoAccount) {
 
   // Abort the test if the current platform does not support mutation of the
   // primary account (the returned PrimaryAccountMutator* will be null).
-  if (!primary_account_mutator)
+  if (!primary_account_mutator) {
     return;
+  }
 
   EXPECT_FALSE(
       identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSignin));
   signin::PrimaryAccountMutator::PrimaryAccountError setPrimaryAccountResult =
       primary_account_mutator->SetPrimaryAccount(
           CoreAccountId::FromGaiaId(kUnknownAccountId),
-          signin::ConsentLevel::kSignin,
-          signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+          signin::ConsentLevel::kSignin, signin_metrics::AccessPoint::kUnknown);
   EXPECT_EQ(
       signin::PrimaryAccountMutator::PrimaryAccountError::kAccountInfoEmpty,
       setPrimaryAccountResult);
@@ -426,8 +426,9 @@ TEST_F(PrimaryAccountMutatorTest, SetPrimaryAccount_UnknownAccount) {
 
   // Abort the test if the current platform does not support mutation of the
   // primary account (the returned PrimaryAccountMutator* will be null).
-  if (!primary_account_mutator)
+  if (!primary_account_mutator) {
     return;
+  }
 
   AccountInfo account_info =
       environment.MakeAccountAvailable(kPrimaryAccountEmail);
@@ -437,8 +438,7 @@ TEST_F(PrimaryAccountMutatorTest, SetPrimaryAccount_UnknownAccount) {
   signin::PrimaryAccountMutator::PrimaryAccountError setPrimaryAccountResult =
       primary_account_mutator->SetPrimaryAccount(
           CoreAccountId::FromGaiaId(kUnknownAccountId),
-          signin::ConsentLevel::kSignin,
-          signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+          signin::ConsentLevel::kSignin, signin_metrics::AccessPoint::kUnknown);
   EXPECT_EQ(
       signin::PrimaryAccountMutator::PrimaryAccountError::kAccountInfoEmpty,
       setPrimaryAccountResult);
@@ -458,8 +458,9 @@ TEST_F(PrimaryAccountMutatorTest, SetPrimaryAccount_AlreadyHasPrimaryAccount) {
 
   // Abort the test if the current platform does not support mutation of the
   // primary account (the returned PrimaryAccountMutator* will be null).
-  if (!primary_account_mutator)
+  if (!primary_account_mutator) {
     return;
+  }
 
   AccountInfo primary_account_info =
       environment.MakeAccountAvailable(kPrimaryAccountEmail);
@@ -471,14 +472,14 @@ TEST_F(PrimaryAccountMutatorTest, SetPrimaryAccount_AlreadyHasPrimaryAccount) {
   signin::PrimaryAccountMutator::PrimaryAccountError setPrimaryAccountResult =
       primary_account_mutator->SetPrimaryAccount(
           primary_account_info.account_id, signin::ConsentLevel::kSync,
-          signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+          signin_metrics::AccessPoint::kUnknown);
   EXPECT_EQ(signin::PrimaryAccountMutator::PrimaryAccountError::kNoError,
             setPrimaryAccountResult);
 
   EXPECT_TRUE(identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSync));
   setPrimaryAccountResult = primary_account_mutator->SetPrimaryAccount(
       another_account_info.account_id, signin::ConsentLevel::kSync,
-      signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+      signin_metrics::AccessPoint::kUnknown);
   EXPECT_EQ(signin::PrimaryAccountMutator::PrimaryAccountError::
                 kSyncConsentAlreadySet,
             setPrimaryAccountResult);
@@ -514,7 +515,7 @@ TEST_F(PrimaryAccountMutatorTest,
   signin::PrimaryAccountMutator::PrimaryAccountError setPrimaryAccountResult =
       primary_account_mutator->SetPrimaryAccount(
           primary_account_info.account_id, signin::ConsentLevel::kSignin,
-          signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+          signin_metrics::AccessPoint::kUnknown);
   EXPECT_EQ(signin::PrimaryAccountMutator::PrimaryAccountError::kNoError,
             setPrimaryAccountResult);
 
@@ -522,7 +523,7 @@ TEST_F(PrimaryAccountMutatorTest,
       identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSignin));
   setPrimaryAccountResult = primary_account_mutator->SetPrimaryAccount(
       another_account_info.account_id, signin::ConsentLevel::kSignin,
-      signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+      signin_metrics::AccessPoint::kUnknown);
   EXPECT_EQ(signin::PrimaryAccountMutator::PrimaryAccountError::kNoError,
             setPrimaryAccountResult);
 
@@ -560,7 +561,7 @@ TEST_F(PrimaryAccountMutatorTest,
   signin::PrimaryAccountMutator::PrimaryAccountError setPrimaryAccountResult =
       primary_account_mutator->SetPrimaryAccount(
           primary_account_info.account_id, signin::ConsentLevel::kSignin,
-          signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+          signin_metrics::AccessPoint::kUnknown);
   EXPECT_EQ(signin::PrimaryAccountMutator::PrimaryAccountError::kNoError,
             setPrimaryAccountResult);
 
@@ -568,7 +569,7 @@ TEST_F(PrimaryAccountMutatorTest,
       identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSignin));
   setPrimaryAccountResult = primary_account_mutator->SetPrimaryAccount(
       another_account_info.account_id, signin::ConsentLevel::kSignin,
-      signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+      signin_metrics::AccessPoint::kUnknown);
   EXPECT_EQ(signin::PrimaryAccountMutator::PrimaryAccountError::
                 kPrimaryAccountChangeNotAllowed,
             setPrimaryAccountResult);
@@ -578,7 +579,6 @@ TEST_F(PrimaryAccountMutatorTest,
       primary_account_info.account_id);
 }
 
-#if !BUILDFLAG(IS_CHROMEOS_LACROS)
 // Checks that trying to set the primary account fails if setting the primary
 // account is not allowed.
 TEST_F(PrimaryAccountMutatorTest,
@@ -595,8 +595,9 @@ TEST_F(PrimaryAccountMutatorTest,
 
   // Abort the test if the current platform does not support mutation of the
   // primary account (the returned PrimaryAccountMutator* will be null).
-  if (!primary_account_mutator)
+  if (!primary_account_mutator) {
     return;
+  }
 
   AccountInfo primary_account_info =
       environment.MakeAccountAvailable(kPrimaryAccountEmail);
@@ -609,12 +610,11 @@ TEST_F(PrimaryAccountMutatorTest,
   signin::PrimaryAccountMutator::PrimaryAccountError setPrimaryAccountResult =
       primary_account_mutator->SetPrimaryAccount(
           primary_account_info.account_id, signin::ConsentLevel::kSignin,
-          signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+          signin_metrics::AccessPoint::kUnknown);
   EXPECT_EQ(
       signin::PrimaryAccountMutator::PrimaryAccountError::kSigninNotAllowed,
       setPrimaryAccountResult);
 }
-#endif  // !BUILDFLAG(IS_CHROMEOS_LACROS)
 
 // End of tests of preconditions not being satisfied causing the setting of
 // the primary account to fail.
@@ -631,8 +631,9 @@ TEST_F(PrimaryAccountMutatorTest, ClearPrimaryAccount_NotSignedIn) {
 
   // Abort the test if the current platform does not support mutation of the
   // primary account (the returned PrimaryAccountMutator* will be null).
-  if (!primary_account_mutator)
+  if (!primary_account_mutator) {
     return;
+  }
 
   // Trying to signout an account that hasn't signed in first should fail.
   EXPECT_FALSE(
@@ -659,4 +660,4 @@ TEST_F(PrimaryAccountMutatorTest, RevokeSyncConsent) {
 TEST_F(PrimaryAccountMutatorTest, ClearPrimaryAccount_SigninOnly) {
   RunClearPrimaryAccountTestForSigninOnly();
 }
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_CHROMEOS)

@@ -11,6 +11,7 @@
 
 #include "common/platform.h"
 #include "libANGLE/Display.h"
+#include "libANGLE/ErrorStrings.h"
 #include "libANGLE/Surface.h"
 #include "libANGLE/renderer/metal/ContextMtl.h"
 #include "libANGLE/renderer/metal/DisplayMtl.h"
@@ -471,7 +472,7 @@ egl::Error WindowSurfaceMtl::initialize(const egl::Display *display)
         }
         else
         {
-            mMetalLayer             = [[[CAMetalLayer alloc] init] ANGLE_MTL_AUTORELEASE];
+            mMetalLayer             = mtl::adoptObjCObj([[CAMetalLayer alloc] init]);
             mMetalLayer.get().frame = mLayer.frame;
         }
 
@@ -661,8 +662,7 @@ angle::Result WindowSurfaceMtl::obtainNextDrawable(const gl::Context *context)
     ANGLE_MTL_OBJC_SCOPE
     {
         ContextMtl *contextMtl = mtl::GetImpl(context);
-
-        ANGLE_MTL_TRY(contextMtl, mMetalLayer);
+        ANGLE_CHECK(contextMtl, mMetalLayer, gl::err::kInternalError, GL_INVALID_OPERATION);
 
         // Check if layer was resized
         if (checkIfLayerResized(context))

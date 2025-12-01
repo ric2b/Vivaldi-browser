@@ -172,7 +172,7 @@ help you configure the tree for both.
 If you're building Chrome for:
 
 *   Chrome OS, see [these build
-            instructions](http://www.chromium.org/developers/how-tos/build-instructions-chromeos)
+            instructions](/developers/how-tos/build-instructions-chromeos)
 *   Android, see [these build
             instructions](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/android_build_instructions.md)
 *   iOS, see [these build instructions](/system/errors/NodeNotFound)

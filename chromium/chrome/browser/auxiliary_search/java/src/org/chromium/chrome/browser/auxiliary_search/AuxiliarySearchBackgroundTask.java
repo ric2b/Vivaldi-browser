@@ -4,7 +4,7 @@
 
 package org.chromium.chrome.browser.auxiliary_search;
 
-import static org.chromium.chrome.browser.auxiliary_search.AuxiliarySearchUtils.USE_LARGE_FAVICON;
+import static org.chromium.chrome.browser.flags.ChromeFeatureList.sAndroidAppIntegrationWithFaviconUseLargeFavicon;
 
 import android.content.Context;
 import android.content.res.Resources;
@@ -19,6 +19,8 @@ import org.chromium.base.Callback;
 import org.chromium.base.StreamUtil;
 import org.chromium.base.TimeUtils;
 import org.chromium.base.task.AsyncTask;
+import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.browser.auxiliary_search.AuxiliarySearchGroupProto.AuxiliarySearchEntry;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileManager;
@@ -57,9 +59,10 @@ public class AuxiliarySearchBackgroundTask extends NativeBackgroundTask {
 
     private final Map<Integer, Bitmap> mTabIdToFaviconMap = new HashMap<>();
 
-    @NonNull private Context mContext;
+    private @NonNull Context mContext;
     private int mTaskFinishedCount;
-    @NonNull private AuxiliarySearchController mAuxiliarySearchController;
+    private AuxiliarySearchController mAuxiliarySearchController;
+    private FaviconHelper mFaviconHelper;
 
     @Override
     protected int onStartTaskBeforeNativeLoaded(
@@ -77,9 +80,14 @@ public class AuxiliarySearchBackgroundTask extends NativeBackgroundTask {
 
         mTaskFinishedCount = 0;
         Profile profile = ProfileManager.getLastUsedRegularProfile();
+        // The AuxiliarySearchControllerFactory#setIsTablet() must be called before creating the
+        // controller which checks AuxiliarySearchControllerFactory#isEnabled(). This task won't be
+        // scheduled if the device isn't a tablet.
+        AuxiliarySearchControllerFactory.getInstance().setIsTablet(true);
         mAuxiliarySearchController =
-                AuxiliarySearchControllerFactory.createAuxiliarySearchController(
-                        mContext, profile, /* tabModelSelector= */ null);
+                AuxiliarySearchControllerFactory.getInstance()
+                        .createAuxiliarySearchController(
+                                mContext, profile, /* tabModelSelector= */ null);
 
         long startTimeMs = TimeUtils.uptimeMillis();
         // Record the delay from soonest expected wakeup time.
@@ -92,11 +100,12 @@ public class AuxiliarySearchBackgroundTask extends NativeBackgroundTask {
 
         Resources resources = mContext.getResources();
         int faviconSize =
-                USE_LARGE_FAVICON.getValue()
+                sAndroidAppIntegrationWithFaviconUseLargeFavicon.getValue()
                         ? resources.getDimensionPixelSize(R.dimen.auxiliary_search_favicon_size)
                         : resources.getDimensionPixelSize(
                                 R.dimen.auxiliary_search_favicon_size_small);
 
+        mFaviconHelper = new FaviconHelper();
         readTabDonateMetadataAsync(
                 (tabs) ->
                         onTabDonateMetadataRead(
@@ -104,7 +113,7 @@ public class AuxiliarySearchBackgroundTask extends NativeBackgroundTask {
                                 faviconSize,
                                 startTimeMs,
                                 taskFinishedCallback,
-                                new FaviconHelper(),
+                                mFaviconHelper,
                                 mAuxiliarySearchController,
                                 tabs));
     }
@@ -231,10 +240,17 @@ public class AuxiliarySearchBackgroundTask extends NativeBackgroundTask {
 
     @VisibleForTesting
     public void onTaskFinished(TaskFinishedCallback taskFinishedCallback) {
+        PostTask.runOrPostTask(TaskTraits.UI_TRAITS_START, () -> destroy());
         taskFinishedCallback.taskFinished(/* needsReschedule= */ false);
+    }
+
+    private void destroy() {
         if (mAuxiliarySearchController != null) {
             mAuxiliarySearchController.destroy();
             mAuxiliarySearchController = null;
+        }
+        if (mFaviconHelper != null) {
+            mFaviconHelper.destroy();
         }
     }
 }

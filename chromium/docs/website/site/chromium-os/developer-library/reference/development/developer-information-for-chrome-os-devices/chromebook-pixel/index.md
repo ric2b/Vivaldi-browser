@@ -2,7 +2,7 @@
 breadcrumbs:
 - - /chromium-os
   - ChromiumOS
-- - /chromium-os/developer-information-for-chrome-os-devices
+- - /chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices
   - Developer Information for ChromeOS Devices
 page_name: chromebook-pixel
 title: Chromebook Pixel (2013)
@@ -13,7 +13,7 @@ title: Chromebook Pixel (2013)
 ## Introduction
 
 This page contains information about the [Chromebook Pixel
-(2013)](http://www.google.com/chromebook/pixel) that is interesting and/or
+(2013)](https://www.google.com/chromebook/pixel) that is interesting and/or
 useful to software developers. For general information about getting started
 with developing on ChromiumOS (the open-source version of the software on the
 Chrome Notebook), see the [ChromiumOS Developer
@@ -33,7 +33,7 @@ Guide](/chromium-os/developer-guide).
     *   LTE on some models
 *   Bluetooth 3.0
 *   No [Kensington Security
-            Slot](http://en.wikipedia.org/wiki/Kensington_Security_Slot)
+            Slot](https://en.wikipedia.org/wiki/Kensington_Security_Slot)
 
 ## Developer Mode
 
@@ -212,9 +212,9 @@ paperwork you received first. If you just want to see what the inside looks
 like, gaze upon this (click for a high res version):
 
 [<img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/chromebook-pixel/link-bottom-guts.jpg"
+src="link-bottom-guts.jpg"
 height=239
-width=320>](/chromium-os/developer-information-for-chrome-os-devices/chromebook-pixel/link-bottom-guts.jpg)
+width=320>](./link-bottom-guts.jpg)
 
 Fine. If you **must** risk breaking it for good, at least do it the right way.
 

@@ -61,6 +61,7 @@
 #include "connections/implementation/pcp.h"
 #include "connections/implementation/wifi_lan_service_info.h"
 #include "internal/platform/byte_array.h"
+#include "internal/platform/expected.h"
 
 namespace nearby {
 namespace connections {
@@ -196,16 +197,21 @@ class P2pClusterPcpHandler : public BasePcpHandler {
                                           NearbyDevice::Type device_type,
                                           const std::string& service_id,
                                           BluetoothSocket socket);
-  location::nearby::proto::connections::Medium StartBluetoothAdvertising(
-      ClientProxy* client, const std::string& service_id,
-      const ByteArray& service_id_hash, const std::string& local_endpoint_id,
-      const ByteArray& local_endpoint_info, WebRtcState web_rtc_state);
-  location::nearby::proto::connections::Medium StartBluetoothDiscovery(
+  ErrorOr<location::nearby::proto::connections::Medium>
+  StartBluetoothAdvertising(ClientProxy* client, const std::string& service_id,
+                            const ByteArray& service_id_hash,
+                            const std::string& local_endpoint_id,
+                            const ByteArray& local_endpoint_info,
+                            WebRtcState web_rtc_state);
+  ErrorOr<location::nearby::proto::connections::Medium> StartBluetoothDiscovery(
       ClientProxy* client, const std::string& service_id);
   void StartBluetoothDiscoveryWithPause(
       ClientProxy* client, const std::string& service_id,
       const DiscoveryOptions& discovery_options,
-      std::vector<Medium>& mediums_started_successfully);
+      std::vector<Medium>& mediums_started_successfully,
+      std::vector<location::nearby::analytics::proto::ConnectionsLog::
+                      OperationResultWithMedium>& operation_result_with_mediums,
+      int update_index);
   BasePcpHandler::ConnectImplResult BluetoothConnectImpl(
       ClientProxy* client, BluetoothEndpoint* endpoint);
 
@@ -224,12 +230,12 @@ class P2pClusterPcpHandler : public BasePcpHandler {
                                     NearbyDevice::Type device_type,
                                     BleSocket socket,
                                     const std::string& service_id);
-  location::nearby::proto::connections::Medium StartBleAdvertising(
+  ErrorOr<location::nearby::proto::connections::Medium> StartBleAdvertising(
       ClientProxy* client, const std::string& service_id,
       const std::string& local_endpoint_id,
       const ByteArray& local_endpoint_info,
       const AdvertisingOptions& advertising_options, WebRtcState web_rtc_state);
-  location::nearby::proto::connections::Medium StartBleScanning(
+  ErrorOr<location::nearby::proto::connections::Medium> StartBleScanning(
       ClientProxy* client, const std::string& service_id,
       const std::string& fast_advertisement_service_uuid);
   BasePcpHandler::ConnectImplResult BleConnectImpl(ClientProxy* client,
@@ -259,12 +265,12 @@ class P2pClusterPcpHandler : public BasePcpHandler {
                                       NearbyDevice::Type device_type,
                                       BleV2Socket socket,
                                       const std::string& service_id);
-  location::nearby::proto::connections::Medium StartBleV2Advertising(
+  ErrorOr<location::nearby::proto::connections::Medium> StartBleV2Advertising(
       ClientProxy* client, const std::string& service_id,
       const std::string& local_endpoint_id,
       const ByteArray& local_endpoint_info,
       const AdvertisingOptions& advertising_options, WebRtcState web_rtc_state);
-  location::nearby::proto::connections::Medium StartBleV2Scanning(
+  ErrorOr<location::nearby::proto::connections::Medium> StartBleV2Scanning(
       ClientProxy* client, const std::string& service_id,
       const DiscoveryOptions& discovery_options);
   BasePcpHandler::ConnectImplResult BleV2ConnectImpl(ClientProxy* client,
@@ -286,11 +292,11 @@ class P2pClusterPcpHandler : public BasePcpHandler {
                                         NearbyDevice::Type device_type,
                                         const std::string& service_id,
                                         WifiLanSocket socket);
-  location::nearby::proto::connections::Medium StartWifiLanAdvertising(
+  ErrorOr<location::nearby::proto::connections::Medium> StartWifiLanAdvertising(
       ClientProxy* client, const std::string& service_id,
       const std::string& local_endpoint_id,
       const ByteArray& local_endpoint_info, WebRtcState web_rtc_state);
-  location::nearby::proto::connections::Medium StartWifiLanDiscovery(
+  ErrorOr<location::nearby::proto::connections::Medium> StartWifiLanDiscovery(
       ClientProxy* client, const std::string& service_id);
   BasePcpHandler::ConnectImplResult WifiLanConnectImpl(
       ClientProxy* client, WifiLanEndpoint* endpoint);

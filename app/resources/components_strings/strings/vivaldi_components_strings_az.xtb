@@ -9,9 +9,11 @@
 <translation id="1175364870820465910">&amp;Çap edin...</translation>
 <translation id="1375198122581997741">Versiya haqqında</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> heç bir məlumat göndərmədi.</translation>
+<translation id="1555191101192706055">Daxil olmağa cəhd etdiyiniz saytda hücumçular əsas səhifəni dəyişməklə və ya əlavə reklamlar göstərməklə sizi axtarış təcrübənizə təsir edən zərərli proqram təminatı quraşdırmağa təşviq edə bilər.</translation>
 <translation id="1559528461873125649">Belə fayl və ya qovluq yoxdur</translation>
 <translation id="1640244768702815859"><ph name="BEGIN_LINK" /> yoxlayaraq <ph name="END_LINK" /> Ev səhifəsini açın.</translation>
 <translation id="1645368109819982629">Dəstəklənməyən protokol</translation>
+<translation id="1662550410081243962">Ödəniş üsullarını yadda saxlayın və doldurun</translation>
 <translation id="1710259589646384581">ƏS</translation>
 <translation id="1728677426644403582">Siz səhifənin koduna baxırsınız</translation>
 <translation id="1734878702283171397">Sistem inzibatçısına müraciət edin.</translation>
@@ -20,8 +22,10 @@
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Proksi və təhlükəsizlik divarının yoxlanılması<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Verildi: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Bu sayt təhlükəsiz bağlantı təmin edə bilmir</translation>
+<translation id="2178904466768126352">Daxil olmağa cəhd etdiyiniz saytda hücumçular şifrələr, fotolar, mesajlar və ya kredit kartı nömrələri kimi məlumatları oğurlayan və ya silən zərərli proqram təminatı quraşdıra bilər.</translation>
 <translation id="2187317261103489799">Müəyyən etmək (susmaya görə)</translation>
 <translation id="2224337661447660594">İnternet yoxdur</translation>
+<translation id="2283340219607151381">Ünvanları yadda saxlayın və doldurun</translation>
 <translation id="2292556288342944218">Sizin internetə girişiniz əngəllənib</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> istifadəçi adı və şifrəsini tələb edir.</translation>
 <translation id="2337852623177822836">Bu ayar inzibatçınız tərəfindən idarə olunur</translation>
@@ -43,9 +47,11 @@
 <translation id="2826760142808435982">Bağlantı <ph name="CIPHER" /> istifadə edərək şifrələnib və doğrulanıb və açar mübadiləsi mexanizmi kimi <ph name="KX" /> istifadə edir.</translation>
 <translation id="2909946352844186028">Şəbəkə dəyişikliyi aşkar edildi.</translation>
 <translation id="2948083400971632585">Ayarlar səhifəsindən hər hansı proksi serveri söndürə bilərsiniz.</translation>
+<translation id="2954624054936281172">Saxlanan ödəniş metodları cədvəli</translation>
 <translation id="2991571918955627853">İndi siz <ph name="SITE" /> saytına daxil ola bilməzsiniz, çünki sayt HSTS mexanizmindən istifadə edir. Şəbəkə xətası və sayta kənar hücumlar səbəbi ilə yaranan problem adətən müvəqqəti xarakter daşıyır. Yəqin ki, sayt bir müddət sonra işini bərpa edəcək.</translation>
 <translation id="3005723025932146533">Saxlanılan kopyasını göstərmək</translation>
 <translation id="301521992641321250">Avtomatik əngəlləndi</translation>
+<translation id="3037605927509011580">Paho! Bu nə işdir!</translation>
 <translation id="3041612393474885105">Sertifikat məlumatı</translation>
 <translation id="3109728660330352905">Bu səhifəyə baxmaq imtiyazınız yoxdur.</translation>
 <translation id="31207688938192855"><ph name="BEGIN_LINK" />Bağlantınızı diaqnostika edin<ph name="END_LINK" />.</translation>
@@ -67,6 +73,7 @@
 <translation id="3566021033012934673">Bağlantınız qorunmur</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Əlavə məlumatları gizlədin</translation>
+<translation id="3614001939154393113">Hücumçular <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> saytından məlumat (məsələn, parol, mesaj və ya kredit kartları) oğurlamağa çalışa bilərlər. <ph name="BEGIN_LEARN_MORE_LINK" />Bu xəbərdarlıq haqqında ətraflı məlumat əldə edin<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="3630155396527302611">Əgər tətbiq şəbəkəyə girişinə icazə verilənlər siyahısındadırsa,
       onları siyahıdan silin və yenidən əlavə edin.</translation>
 <translation id="3658742229777143148">Versiya</translation>
@@ -86,6 +93,7 @@
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Təhlükəsizlik divarı və antivirus tənzimləmələrinin yoxlanılması<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Şəbəkə diaqnostikasını başladın<ph name="END_LINK" />.</translation>
 <translation id="4235360514405112390">Etibarlı</translation>
+<translation id="4241830393007970744">Daxil olmağa cəhd etdiyiniz saytda hücumçular sizi proqram təminatı quraşdırmağa, yaxud şifrələr, telefon və ya kredit kartı nömrələri kimi məlumatları açıqlamağa təşviq edə bilər.</translation>
 <translation id="4250431568374086873">Bi sayt ilə bağlantınızın təhlükəsizliyi tam təmin olunmayıb</translation>
 <translation id="4265872034478892965">İnzibatçınız tərəfindən icazə verildi</translation>
 <translation id="4305666528087210886">Faylınıza giriş mümkün olmadı</translation>
@@ -96,6 +104,7 @@
 <translation id="4522570452068850558">Təfərrütlar</translation>
 <translation id="4558551763791394412">Qoşmanızı söndürməyə cəhd edin.</translation>
 <translation id="4592951414987517459"><ph name="DOMAIN" /> ilə bağlantınız müasir şifrə dəsti ilə şifrələnib.</translation>
+<translation id="4598641255230617220">Yerləşdir və keç</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Bağlantı kəsildi</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Windows şəbəkəsi diaqnostika edilir<ph name="END_LINK" /></translation>
@@ -105,6 +114,7 @@
 <translation id="4764776831041365478"><ph name="URL" /> ünvanındakı veb-sayt ya müvəqqəti söndürülüb, ya da başqa ünvana köçürülüb.</translation>
 <translation id="483241715238664915">Xəbərdarlıqları aktiv edin</translation>
 <translation id="4943872375798546930">Nəticə yoxdur</translation>
+<translation id="5017554619425969104">Kopyalanmış mətn</translation>
 <translation id="5023310440958281426">İnzibatçının qoyduğu qayfaları yoxlayın</translation>
 <translation id="5039804452771397117">İcazə vermək</translation>
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 kuki faylı istifadə olunur)} other {(# kuki faylları istifadə olunur)}}</translation>
@@ -158,6 +168,7 @@
 <translation id="7108819624672055576">Qoşma tərəfindən icazə verildi</translation>
 <translation id="7111012039238467737">(doğru)</translation>
 <translation id="7113310725918019676"><ph name="DOMAIN" /> serverindən <ph name="BLOCKED_TYPE" /> icazə verin</translation>
+<translation id="7126644664682723998">Yerləşdir və axtar</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> Təhlükəsizlik standartlarına əməl etmir.</translation>
 <translation id="7219179957768738017">Bu bağlantıda <ph name="SSL_VERSION" /> istifadə olunur.</translation>
 <translation id="7221855153210829124">Bildirişlər göstərilsin</translation>
@@ -193,6 +204,7 @@
 <translation id="8288807391153049143">Sertifikatı göstərmək</translation>
 <translation id="8289355894181816810">Bunun nə olduğunu şəbəkə inzibatçınızdan öyrənin.</translation>
 <translation id="8332188693563227489"><ph name="HOST_NAME" /> girişə icazə verilmədi</translation>
+<translation id="8473863474539038330">Ünvanlar və dah çoxu</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> cavab verməsi çox uzun çəkdi.</translation>
 <translation id="8503813439785031346">İstifadəçi adı</translation>
 <translation id="8703575177326907206"><ph name="DOMAIN" /> ilə bağlantınız şifrələnməyib.</translation>
@@ -200,6 +212,7 @@
 <translation id="8820817407110198400">Əlfəcinlər</translation>
 <translation id="8940028675168378100"><ph name="BLOCKER_NAME" /> tərəfindən əngəllənib</translation>
 <translation id="8963117664422609631">Sayt ayarlarına keçin</translation>
+<translation id="8975012916872825179">Telefon nömrələri, e-poçt ünvanları və çatdırılma ünvanı kimi məlumat daxildir</translation>
 <translation id="9001074447101275817"><ph name="DOMAIN" /> proksi serveri istifadəçi adı və şifrə tələb edir.</translation>
 <translation id="9008201768610948239">Gözardı edin</translation>
 <translation id="9025348182339809926">(yalnış)</translation>
@@ -207,10 +220,12 @@
 <translation id="9062620674789239642">Bu, ya köçürülüb, dəyişdirilib və ya silinib.</translation>
 <translation id="9069693763241529744">Qoşma tərəfindən əngəllənib</translation>
 <translation id="9073799351042754113">Bu sayt üçün təhlükəsizlik xəbərdarlıqlarını deaktiv etməyi seçdiniz.</translation>
+<translation id="9168814207360376865">Saytlara ödəniş üsullarını yadda saxlayıb-saxlamadığınızı yoxlamaq icazəsi vermək</translation>
 <translation id="9169664750068251925">Bu saytda həmişə əngəlləmək</translation>
 <translation id="9180553614777056266">Reklam əngəlləyici</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> dəstəklənməyən protokol istifadə edir.</translation>
 <translation id="936602727769022409">Sİz Google hesabınıza girişi itirə bilərsiniz. Google şifrənizi indi dəyişməyi tövsiyyə edir. Yenidən daxil olmanız tələb olunacaq.</translation>
 <translation id="969892804517981540">Rəsmi quruluş</translation>
+<translation id="984275831282074731">Ödəniş üsulları</translation>
 <translation id="988159990683914416">Tərtibatçı rejimi</translation>
 </translationbundle>

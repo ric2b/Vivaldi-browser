@@ -6,13 +6,12 @@
 #include "base/values.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/webstore_install_with_prompt.h"
-#include "chrome/browser/importer/external_process_importer_host.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/importer/importer_data_types.h"
 #include "extensions/browser/extension_file_task_runner.h"
-#include "extensions/browser/extension_system.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest.h"
+#include "extensions/vivaldi_silent_extension_installer.h"
 
 #include <optional>
 #include <string>
@@ -38,7 +37,7 @@ base::Value::Dict GetExtensionsFromPreferences(const base::FilePath& path) {
   DCHECK(preference->is_dict());
   if (auto* extensions = preference->GetDict().FindDictByDottedPath(
           kChromeExtensionsListPath)) {
-    return std::move(*extensions);
+    return extensions->Clone();
   }
   return base::Value::Dict();
 }
@@ -85,36 +84,6 @@ std::vector<std::string> FilterImportableExtensions(
   return extensions;
 }
 
-class SilentWebstoreInstaller : public extensions::WebstoreInstallWithPrompt {
- public:
-  using WebstoreInstallWithPrompt::WebstoreInstallWithPrompt;
-
- private:
-  ~SilentWebstoreInstaller() override = default;
-
-  std::unique_ptr<ExtensionInstallPrompt::Prompt> CreateInstallPrompt()
-      const override {
-    return nullptr;
-  }
-  bool ShouldShowPostInstallUI() const override { return false; }
-
-  void CompleteInstall(extensions::webstore_install::Result result,
-                       const std::string& error) override {
-    if (result == extensions::webstore_install::SUCCESS) {
-      extensions::ExtensionSystem* system =
-          extensions::ExtensionSystem::Get(profile());
-      if (!system || !system->extension_service()) {
-        extensions::WebstoreInstallWithPrompt::CompleteInstall(result, error);
-        return;
-      }
-
-      extensions::ExtensionService* service = system->extension_service();
-      service->DisableExtension(
-          id(), extensions::disable_reason::DISABLE_USER_ACTION);
-    }
-    extensions::WebstoreInstallWithPrompt::CompleteInstall(result, error);
-  }
-};
 }  // namespace
 
 namespace extension_importer {
@@ -129,52 +98,38 @@ bool ChromiumExtensionsImporter::CanImportExtensions(
   return !GetImportableExtensions(profile_dir).empty();
 }
 
-ChromiumExtensionsImporter::ChromiumExtensionsImporter(
-    Profile* profile,
-    base::WeakPtr<ExternalProcessImporterHost> host)
-    : profile_(profile), host_(host) {}
+ChromiumExtensionsImporter::ChromiumExtensionsImporter(Profile* profile)
+    : profile_(profile) {}
 
 ChromiumExtensionsImporter::~ChromiumExtensionsImporter() = default;
 
 void ChromiumExtensionsImporter::OnExtensionAdded(
     bool success,
     const std::string& error,
-    extensions::webstore_install::Result result) {
-  if (host_ && !success) {
-    host_->NotifyImportItemFailed(importer::EXTENSIONS, error);
-  }
-  FinishExtensionProcessing();
-}
+    extensions::webstore_install::Result result) {}
 
 void ChromiumExtensionsImporter::AddExtensions(
-    const std::vector<std::string>& extensions) {
+    const std::vector<std::string> extensions) {
   using namespace extensions;
   ExtensionRegistry* registry = ExtensionRegistry::Get(profile_);
-  DCHECK(registry);
-  extensions_size_ = extensions.size();
+  if (!registry) {
+    return;
+  }
   for (const auto& extension : extensions) {
     // Skip if extension is already installed or blocklisted.
     const Extension* installed_extension = registry->GetExtensionById(
         extension, ExtensionRegistry::ENABLED | ExtensionRegistry::DISABLED |
                        ExtensionRegistry::BLOCKLISTED);
     if (installed_extension) {
-      FinishExtensionProcessing();
       continue;
     }
 
-    scoped_refptr<SilentWebstoreInstaller> installer =
-        new SilentWebstoreInstaller(
+    scoped_refptr<vivaldi::SilentWebstoreInstaller> installer =
+        new vivaldi::SilentWebstoreInstaller(
             extension, profile_, nullptr,
             base::BindOnce(&ChromiumExtensionsImporter::OnExtensionAdded,
                            weak_ptr_factory_.GetWeakPtr()));
     installer->BeginInstall();
-  }
-}
-
-void ChromiumExtensionsImporter::FinishExtensionProcessing() {
-  if (++extensions_processed_ >= extensions_size_ && host_) {
-    host_->NotifyImportItemEnded(importer::EXTENSIONS);
-    host_->NotifyImportEnded();
   }
 }
 

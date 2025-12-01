@@ -9,9 +9,9 @@ import android.view.ViewGroup;
 
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
-import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
+import org.chromium.chrome.browser.compositor.layouts.phone.NewTabAnimationLayout;
 import org.chromium.chrome.browser.compositor.layouts.phone.SimpleAnimationLayout;
-import org.chromium.chrome.browser.data_sharing.DataSharingTabManager;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.hub.HubLayoutDependencyHolder;
 import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.tab.Tab;
@@ -19,10 +19,8 @@ import org.chromium.chrome.browser.tab_ui.TabContentManager;
 import org.chromium.chrome.browser.tab_ui.TabSwitcher;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.tasks.tab_management.ActionConfirmationManager;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
-import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 
 // Vivaldi
@@ -30,17 +28,23 @@ import android.content.SharedPreferences;
 import android.view.View;
 import android.view.ViewStub;
 
+import androidx.annotation.NonNull;
+
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.build.BuildConfig;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
+import org.chromium.chrome.browser.data_sharing.DataSharingTabManager;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.multiwindow.MultiInstanceManager;
-import org.chromium.ui.dragdrop.DragAndDropDelegate;
+import org.chromium.chrome.browser.tasks.tab_management.ActionConfirmationManager;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
-import org.chromium.ui.base.WindowAndroid;
 import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateManager;
+import org.chromium.ui.dragdrop.DragAndDropDelegate;
+import org.chromium.ui.modaldialog.ModalDialogManager;
+import org.chromium.ui.base.WindowAndroid;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -50,13 +54,15 @@ import java.util.List;
  * phone.
  */
 public class LayoutManagerChromePhone extends LayoutManagerChrome {
-    // Layouts
-    private SimpleAnimationLayout mSimpleAnimationLayout;
+    // TODO(crbug.com/40282469): Rename SimpleAnimationLayout to NewTabAnimationLayout once it is
+    // rolled out.
+    private Layout mSimpleAnimationLayout;
 
     // Vivaldi
     private final List<StripLayoutHelperManager> mTabStrips = new ArrayList<>();
     /** A {@link TitleCache} instance that stores all title/favicon bitmaps as CC resources. */
     protected LayerTitleCache mLayerTitleCache;
+    private final ObservableSupplier<Integer> mTabStripHeightSupplier;
 
     /**
      * Creates an instance of a {@link LayoutManagerChromePhone}.
@@ -79,6 +85,7 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
             ObservableSupplier<TabContentManager> tabContentManagerSupplier,
             Supplier<TopUiThemeColorProvider> topUiThemeColorProvider,
             HubLayoutDependencyHolder hubLayoutDependencyHolder,
+            @NonNull ViewStub tabStripTooltipViewStub, // Vivaldi
             ObservableSupplier<StripLayoutHelperManager.TabModelStartupInfo>  // Vivaldi
                     tabModelStartupInfoSupplier,  // Vivaldi
             ActivityLifecycleDispatcher lifecycleDispatcher, // Vivaldi
@@ -111,14 +118,25 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
                     tabModelStartupInfoSupplier, lifecycleDispatcher, multiInstanceManager,
                     dragAndDropDelegate, toolbarContainerView,
                     i == 0 ? tabHoverCardViewStub : tabHoverCardViewStubStack,
-                    tabContentManagerSupplier, browserControlsStateProvider, windowAndroid,
-                    toolbarManager, desktopWindowStateManager, actionConfirmationManager,
-                    modalDialogManager, dataSharingTabManager));
+                    tabStripTooltipViewStub, tabContentManagerSupplier,
+                    browserControlsStateProvider, windowAndroid, toolbarManager,
+                    desktopWindowStateManager, actionConfirmationManager, modalDialogManager,
+                    dataSharingTabManager));
             mTabStrips.get(i).setIsStackStrip(i != 0);
             addObserver(mTabStrips.get(i).getTabSwitcherObserver());
         }
+        mTabStripHeightSupplier = toolbarManager.getTabStripHeightSupplier();
         updateGlobalSceneOverlay();
         // End Vivaldi
+    }
+
+    @Override
+    public void destroy() {
+        super.destroy();
+        mSimpleAnimationLayout.destroy();
+        // Vivaldi
+        for (int i = 0; i < 2; i++) mTabStrips.get(i).destroy();
+        mTabStrips.clear();
     }
 
     @Override
@@ -128,13 +146,19 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
             ControlContainer controlContainer,
             DynamicResourceLoader dynamicResourceLoader,
             TopUiThemeColorProvider topUiColorProvider,
-            Supplier<Integer> bottomControlsOffsetSupplier) {
+            ObservableSupplier<Integer> bottomControlsOffsetSupplier) {
         Context context = mHost.getContext();
         LayoutRenderHost renderHost = mHost.getLayoutRenderHost();
 
-        // Build Layouts
-        mSimpleAnimationLayout =
-                new SimpleAnimationLayout(context, this, renderHost, getContentContainer());
+        if (ChromeFeatureList.sShowNewTabAnimations.isEnabled()) {
+            // TODO(crbug.com/40282469): Change from getContentContainer() as it is z-indexed behind
+            // the NTP.
+            mSimpleAnimationLayout =
+                    new NewTabAnimationLayout(context, this, renderHost, getContentContainer());
+        } else {
+            mSimpleAnimationLayout =
+                    new SimpleAnimationLayout(context, this, renderHost, getContentContainer());
+        }
 
         super.init(
                 selector,
@@ -155,7 +179,8 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
 
         // Vivaldi
         if (DeviceClassManager.enableLayerDecorationCache()) {
-            mLayerTitleCache = new LayerTitleCache(mHost.getContext(), getResourceManager());
+            mLayerTitleCache = new LayerTitleCache(
+                    mHost.getContext(), getResourceManager(), mTabStripHeightSupplier.get());
             mLayerTitleCache.setTabModelSelector(selector);
         }
     }
@@ -195,7 +220,7 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
                 && overlaysHandleTabCreating()
                 && getActiveLayout().handlesTabCreating()) {
             // If the current layout in the foreground, let it handle the tab creation animation.
-            // This check allows us to switch from the StackLayout to the SimpleAnimationLayout
+            // This check allows us to switch from the HubLayout to the SimpleAnimationLayout
             // smoothly.
             getActiveLayout().onTabCreating(sourceId);
         } else if (animationsEnabled()) {
@@ -239,15 +264,6 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
         for (int i = 0; i < 2; i++) addSceneOverlay(mTabStrips.get(i));
         if (getTabModelSelector() != null)
             tabModelSwitched(getTabModelSelector().isIncognitoSelected());
-    }
-
-    // Vivaldi
-    @Override
-    public void destroy() {
-        super.destroy();
-        // Vivaldi
-        for (int i = 0; i < 2; i++) mTabStrips.get(i).destroy();
-        mTabStrips.clear();
     }
 
     // Vivaldi

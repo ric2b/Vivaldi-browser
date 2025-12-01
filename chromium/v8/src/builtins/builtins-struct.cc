@@ -39,7 +39,7 @@ using UniqueNameHandleSet =
 
 BUILTIN(SharedSpaceJSObjectHasInstance) {
   HandleScope scope(isolate);
-  Handle<Object> constructor = args.receiver();
+  DirectHandle<Object> constructor = args.receiver();
   if (!IsJSFunction(*constructor)) {
     return *isolate->factory()->false_value();
   }
@@ -55,9 +55,9 @@ BUILTIN(SharedSpaceJSObjectHasInstance) {
 
 namespace {
 Maybe<bool> CollectFieldsAndElements(Isolate* isolate,
-                                     Handle<JSReceiver> property_names,
+                                     DirectHandle<JSReceiver> property_names,
                                      int num_properties,
-                                     std::vector<Handle<Name>>& field_names,
+                                     DirectHandleVector<Name>& field_names,
                                      std::set<uint32_t>& element_names) {
   Handle<Object> raw_property_name;
   Handle<Name> property_name;
@@ -109,12 +109,12 @@ BUILTIN(SharedStructTypeConstructor) {
   HandleScope scope(isolate);
   auto* factory = isolate->factory();
 
-  Handle<Map> instance_map;
+  DirectHandle<Map> instance_map;
 
   {
     // Step 1: Collect the struct's property names and create the instance map.
 
-    Handle<JSReceiver> property_names_arg;
+    DirectHandle<JSReceiver> property_names_arg;
     if (!IsJSReceiver(*args.atOrUndefined(isolate, 1))) {
       THROW_NEW_ERROR_RETURN_FAILURE(
           isolate,
@@ -124,7 +124,7 @@ BUILTIN(SharedStructTypeConstructor) {
     property_names_arg = args.at<JSReceiver>(1);
 
     // Treat property_names_arg as arraylike.
-    Handle<Object> raw_length_number;
+    DirectHandle<Object> raw_length_number;
     ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
         isolate, raw_length_number,
         Object::GetLengthFromArrayLike(isolate, property_names_arg));
@@ -136,7 +136,7 @@ BUILTIN(SharedStructTypeConstructor) {
     }
     int num_properties = static_cast<int>(num_properties_double);
 
-    std::vector<Handle<Name>> field_names;
+    DirectHandleVector<Name> field_names(isolate);
     std::set<uint32_t> element_names;
     if (num_properties != 0) {
       MAYBE_RETURN(
@@ -148,7 +148,7 @@ BUILTIN(SharedStructTypeConstructor) {
     if (IsUndefined(*args.atOrUndefined(isolate, 2), isolate)) {
       // Create a new instance map if this type isn't registered.
       instance_map = JSSharedStruct::CreateInstanceMap(
-          isolate, field_names, element_names, MaybeHandle<String>());
+          isolate, base::VectorOf(field_names), element_names, {});
     } else {
       // Otherwise, get the canonical map.
       if (!IsString(*args.atOrUndefined(isolate, 2))) {
@@ -160,18 +160,19 @@ BUILTIN(SharedStructTypeConstructor) {
       ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
           isolate, instance_map,
           isolate->shared_struct_type_registry()->Register(
-              isolate, args.at<String>(2), field_names, element_names));
+              isolate, args.at<String>(2), base::VectorOf(field_names),
+              element_names));
     }
   }
 
   // Step 2: Creat the JSFunction constructor. This is always created anew,
   // regardless of whether the type is registered.
-  Handle<SharedFunctionInfo> info =
+  DirectHandle<SharedFunctionInfo> info =
       isolate->factory()->NewSharedFunctionInfoForBuiltin(
           isolate->factory()->empty_string(), Builtin::kSharedStructConstructor,
           0, kAdapt);
 
-  Handle<JSFunction> constructor =
+  DirectHandle<JSFunction> constructor =
       Factory::JSFunctionBuilder{isolate, info, isolate->native_context()}
           .set_map(isolate->strict_function_with_readonly_prototype_map())
           .Build();
@@ -179,8 +180,9 @@ BUILTIN(SharedStructTypeConstructor) {
 
   JSObject::AddProperty(
       isolate, constructor, factory->has_instance_symbol(),
-      handle(isolate->native_context()->shared_space_js_object_has_instance(),
-             isolate),
+      direct_handle(
+          isolate->native_context()->shared_space_js_object_has_instance(),
+          isolate),
       ALL_ATTRIBUTES_MASK);
 
   return *constructor;

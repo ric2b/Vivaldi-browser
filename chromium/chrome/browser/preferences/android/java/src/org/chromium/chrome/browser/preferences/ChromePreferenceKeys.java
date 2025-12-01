@@ -10,6 +10,7 @@ import static org.chromium.components.browser_ui.site_settings.SingleCategorySet
 
 import org.chromium.base.shared_preferences.KeyPrefix;
 import org.chromium.build.annotations.CheckDiscard;
+import org.chromium.build.annotations.NullMarked;
 
 import java.util.Arrays;
 import java.util.List;
@@ -46,6 +47,7 @@ import java.util.List;
  * Tests in ChromePreferenceKeysTest and checks in {@link StrictPreferenceKeyChecker} ensure the
  * validity of this file.
  */
+@NullMarked
 public final class ChromePreferenceKeys {
     /** Whether the current adaptive toolbar customization is enabled. */
     public static final String ADAPTIVE_TOOLBAR_CUSTOMIZATION_ENABLED =
@@ -94,6 +96,22 @@ public final class ChromePreferenceKeys {
     /** Whether proactive help is enabled. */
     public static final String AUTOFILL_ASSISTANT_PROACTIVE_HELP_ENABLED =
             "Chrome.AutofillAssistant.ProactiveHelp";
+
+    /** Whether the Tabs sharing schema has been set. */
+    public static final String AUXILIARY_SEARCH_IS_SCHEMA_SET =
+            "Chrome.AuxiliarySearch.IsSchemaSet";
+
+    /** Whether the consumer schema for Tabs sharing exists. */
+    public static final String AUXILIARY_SEARCH_CONSUMER_SCHEMA_FOUND =
+            "Chrome.AuxiliarySearch.ConsumerSchemaFound";
+
+    /** The total times that the opt in card was shown to the user. */
+    public static final String AUXILIARY_SEARCH_MODULE_IMPRESSION =
+            "Chrome.AuxiliarySearchModule.Impression";
+
+    /** Whether users have responded to the opt in card. */
+    public static final String AUXILIARY_SEARCH_MODULE_USER_RESPONDED =
+            "Chrome.AuxiliarySearchModule.UserResponded";
 
     public static final String BACKUP_FIRST_BACKUP_DONE = "first_backup_done";
 
@@ -545,6 +563,13 @@ public final class ChromePreferenceKeys {
             new KeyPrefix("Chrome.HomeModules.FreshnessScoreTimeStamp.*");
 
     /**
+     * The number at the end should be consistent with {@link
+     * org.chromium.chrome.browser.magic_stack.ModuleDelegate.ModuleType}
+     */
+    public static final KeyPrefix HOME_MODULES_IMPRESSION_COUNT_BEFORE_INTERACTION =
+            new KeyPrefix("Chrome.HomeModules.ImpressionCountBeforeInteraction.*");
+
+    /**
      * Save the timestamp of the last time that we record metrics on whether user enables the price
      * tracking annotations.
      */
@@ -709,9 +734,8 @@ public final class ChromePreferenceKeys {
     public static final String SHARING_LAST_SHARED_COMPONENT_NAME =
             "Chrome.Sharing.LastSharedComponentName";
 
-    /** Stores whether the tab group creation dialog should be shown. */
-    public static final String SHOW_TAB_GROUP_CREATION_DIALOG =
-            "Chrome.Tab.ShowTabGroupCreationDialog";
+    /** Stores whether opened tabs can be shared with OS. */
+    public static final String SHARING_TABS_WITH_OS = "Chrome.Tab.ShareTabsWithOs";
 
     public static final String SIGNIN_ACCOUNTS_CHANGED = "prefs_sync_accounts_changed";
 
@@ -730,10 +754,6 @@ public final class ChromePreferenceKeys {
 
     /** SyncPromo total shown count preference across all access points. */
     public static final String SYNC_PROMO_TOTAL_SHOW_COUNT = "Chrome.SyncPromo.TotalShowCount";
-
-    /** Generic signin and sync promo preferences. */
-    public static final String SIGNIN_AND_SYNC_PROMO_SHOW_COUNT =
-            "enhanced_bookmark_signin_promo_show_count";
 
     public static final String SIGNIN_PROMO_LAST_SHOWN_ACCOUNT_NAMES =
             "signin_promo_last_shown_account_names";
@@ -756,13 +776,6 @@ public final class ChromePreferenceKeys {
 
     /** Personalized signin promo preference. */
     public static final String SIGNIN_PROMO_BOOKMARKS_DECLINED = "signin_promo_bookmarks_declined";
-
-    /**
-     * Whether the user dismissed the personalized sign in promo from the Settings. Default value is
-     * false.
-     */
-    public static final String SIGNIN_PROMO_SETTINGS_PERSONALIZED_DISMISSED =
-            "settings_personalized_signin_promo_dismissed";
 
     // TODO(crbug.com/40697988): Remove this after migrating the legacy code that uses
     //                                  the primary account before the native is loaded.
@@ -793,6 +806,8 @@ public final class ChromePreferenceKeys {
             "org.chromium.chrome.browser.tabmodel.TabPersistentStore."
                     + "HAS_RUN_MULTI_INSTANCE_FILE_MIGRATION";
 
+    public static final String TAB_DECLUTTER_ARCHIVE_DUPLICATE_TABS_ENABLED =
+            "Chrome.Tab.ArchiveDuplicateTabsEnabled";
     public static final String TAB_DECLUTTER_ARCHIVE_ENABLED = "Chrome.Tab.ArchiveEnabled";
     public static final String TAB_DECLUTTER_ARCHIVE_TIME_DELTA_HOURS =
             "Chrome.Tab.ArchiveTimeDeltaHours";
@@ -917,6 +932,10 @@ public final class ChromePreferenceKeys {
                 ADAPTIVE_TOOLBAR_CUSTOMIZATION_SETTINGS,
                 AUTOFILL_ASSISTANT_FIRST_TIME_LITE_SCRIPT_USER,
                 AUTOFILL_ASSISTANT_PROACTIVE_HELP_ENABLED,
+                AUXILIARY_SEARCH_CONSUMER_SCHEMA_FOUND,
+                AUXILIARY_SEARCH_MODULE_USER_RESPONDED,
+                AUXILIARY_SEARCH_MODULE_IMPRESSION,
+                AUXILIARY_SEARCH_IS_SCHEMA_SET,
                 APP_LAUNCH_LAST_KNOWN_ACTIVE_TAB_STATE,
                 APP_LAUNCH_SEARCH_ENGINE_HAD_LOGO,
                 APPLICATION_OVERRIDE_LANGUAGE,
@@ -951,6 +970,7 @@ public final class ChromePreferenceKeys {
                 DEVICE_LOCK_SHOW_ALERT_IF_REMOVED,
                 DOWNLOAD_INTERSTITIAL_DOWNLOAD_PENDING_REMOVAL,
                 DSE_NEW_TAB_URL,
+                HOME_MODULES_IMPRESSION_COUNT_BEFORE_INTERACTION.pattern(),
                 EXPLORE_OFFLINE_CONTENT_AVAILABILITY_STATUS,
                 FIRST_RUN_SKIPPED_BY_POLICY,
                 FLAGS_LAST_CACHED_MINIMAL_BROWSER_FLAGS_TIME_MILLIS,
@@ -1028,7 +1048,7 @@ public final class ChromePreferenceKeys {
                 SETTINGS_SAFETY_CHECK_LAST_RUN_TIMESTAMP,
                 SETTINGS_SAFETY_CHECK_RUN_COUNTER,
                 SHARING_LAST_SHARED_COMPONENT_NAME,
-                SHOW_TAB_GROUP_CREATION_DIALOG,
+                SHARING_TABS_WITH_OS,
                 SYNC_PROMO_SHOW_COUNT.pattern(),
                 SIGNIN_PROMO_NTP_FIRST_SHOWN_TIME,
                 SIGNIN_PROMO_NTP_LAST_SHOWN_TIME,
@@ -1037,6 +1057,7 @@ public final class ChromePreferenceKeys {
                 SWAA_TIMESTAMP,
                 SWAA_STATUS,
                 TABBED_ACTIVITY_LAST_VISIBLE_TIME_MS,
+                TAB_DECLUTTER_ARCHIVE_DUPLICATE_TABS_ENABLED,
                 TAB_DECLUTTER_ARCHIVE_ENABLED,
                 TAB_DECLUTTER_ARCHIVE_TIME_DELTA_HOURS,
                 TAB_DECLUTTER_AUTO_DELETE_ENABLED,

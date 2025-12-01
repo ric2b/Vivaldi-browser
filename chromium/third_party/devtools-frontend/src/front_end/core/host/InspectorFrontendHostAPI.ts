@@ -204,36 +204,36 @@ export interface KeyDownEvent {
 // `EventTypes` is not used at runtime.
 // Please note that the "dispatch" side can't be type-checked as the dispatch is
 // done dynamically.
-export type EventTypes = {
-  [Events.AppendedToURL]: Platform.DevToolsPath.RawPathString|Platform.DevToolsPath.UrlString,
-  [Events.CanceledSaveURL]: Platform.DevToolsPath.UrlString,
-  [Events.ColorThemeChanged]: void,
-  [Events.ContextMenuCleared]: void,
-  [Events.ContextMenuItemSelected]: number,
-  [Events.DeviceCountUpdated]: number,
-  [Events.DevicesDiscoveryConfigChanged]: Adb.Config,
-  [Events.DevicesPortForwardingStatusChanged]: void,
-  [Events.DevicesUpdated]: void,
-  [Events.DispatchMessage]: string,
-  [Events.DispatchMessageChunk]: DispatchMessageChunkEvent,
-  [Events.EnterInspectElementMode]: void,
-  [Events.EyeDropperPickedColor]: EyeDropperPickedColorEvent,
-  [Events.FileSystemsLoaded]: DevToolsFileSystem[],
-  [Events.FileSystemRemoved]: Platform.DevToolsPath.RawPathString,
-  [Events.FileSystemAdded]: FileSystemAddedEvent,
-  [Events.FileSystemFilesChangedAddedRemoved]: FilesChangedEvent,
-  [Events.IndexingTotalWorkCalculated]: IndexingTotalWorkCalculatedEvent,
-  [Events.IndexingWorked]: IndexingWorkedEvent,
-  [Events.IndexingDone]: IndexingEvent,
-  [Events.KeyEventUnhandled]: KeyEventUnhandledEvent,
-  [Events.ReloadInspectedPage]: boolean,
-  [Events.RevealSourceLine]: RevealSourceLineEvent,
-  [Events.SavedURL]: SavedURLEvent,
-  [Events.SearchCompleted]: SearchCompletedEvent,
-  [Events.SetInspectedTabId]: string,
-  [Events.SetUseSoftMenu]: boolean,
-  [Events.ShowPanel]: string,
-};
+export interface EventTypes {
+  [Events.AppendedToURL]: Platform.DevToolsPath.RawPathString|Platform.DevToolsPath.UrlString;
+  [Events.CanceledSaveURL]: Platform.DevToolsPath.UrlString;
+  [Events.ColorThemeChanged]: void;
+  [Events.ContextMenuCleared]: void;
+  [Events.ContextMenuItemSelected]: number;
+  [Events.DeviceCountUpdated]: number;
+  [Events.DevicesDiscoveryConfigChanged]: Adb.Config;
+  [Events.DevicesPortForwardingStatusChanged]: void;
+  [Events.DevicesUpdated]: void;
+  [Events.DispatchMessage]: string;
+  [Events.DispatchMessageChunk]: DispatchMessageChunkEvent;
+  [Events.EnterInspectElementMode]: void;
+  [Events.EyeDropperPickedColor]: EyeDropperPickedColorEvent;
+  [Events.FileSystemsLoaded]: DevToolsFileSystem[];
+  [Events.FileSystemRemoved]: Platform.DevToolsPath.RawPathString;
+  [Events.FileSystemAdded]: FileSystemAddedEvent;
+  [Events.FileSystemFilesChangedAddedRemoved]: FilesChangedEvent;
+  [Events.IndexingTotalWorkCalculated]: IndexingTotalWorkCalculatedEvent;
+  [Events.IndexingWorked]: IndexingWorkedEvent;
+  [Events.IndexingDone]: IndexingEvent;
+  [Events.KeyEventUnhandled]: KeyEventUnhandledEvent;
+  [Events.ReloadInspectedPage]: boolean;
+  [Events.RevealSourceLine]: RevealSourceLineEvent;
+  [Events.SavedURL]: SavedURLEvent;
+  [Events.SearchCompleted]: SearchCompletedEvent;
+  [Events.SetInspectedTabId]: string;
+  [Events.SetUseSoftMenu]: boolean;
+  [Events.ShowPanel]: string;
+}
 
 export interface InspectorFrontendHostAPI {
   addFileSystem(type?: string): void;
@@ -478,8 +478,8 @@ export const enum EnumeratedHistogram {
   SourcesPanelFileDebugged = 'DevTools.SourcesPanelFileDebugged',
   SourcesPanelFileOpened = 'DevTools.SourcesPanelFileOpened',
   NetworkPanelResponsePreviewOpened = 'DevTools.NetworkPanelResponsePreviewOpened',
+  TimelineNavigationSettingState = 'DevTools.TimelineNavigationSettingState',
   StyleTextCopied = 'DevTools.StyleTextCopied',
-  ManifestSectionSelected = 'DevTools.ManifestSectionSelected',
   CSSHintShown = 'DevTools.CSSHintShown',
   LighthouseModeRun = 'DevTools.LighthouseModeRun',
   LighthouseCategoryUsed = 'DevTools.LighthouseCategoryUsed',
@@ -487,9 +487,5 @@ export const enum EnumeratedHistogram {
   SwatchActivated = 'DevTools.SwatchActivated',
   AnimationPlaybackRateChanged = 'DevTools.AnimationPlaybackRateChanged',
   AnimationPointDragged = 'DevTools.AnimationPointDragged',
-  LegacyResourceTypeFilterNumberOfSelectedChanged = 'DevTools.LegacyResourceTypeFilterNumberOfSelectedChanged',
-  LegacyResourceTypeFilterItemSelected = 'DevTools.LegacyResourceTypeFilterItemSelected',
-  ResourceTypeFilterNumberOfSelectedChanged = 'DevTools.ResourceTypeFilterNumberOfSelectedChanged',
-  ResourceTypeFilterItemSelected = 'DevTools.ResourceTypeFilterItemSelected',
-  /* eslint-disable @typescript-eslint/naming-convention -- Shadows a legacy enum */
+
 }

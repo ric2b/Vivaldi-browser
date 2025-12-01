@@ -109,8 +109,7 @@ const CpuUarchTableEntry kCpuUarchTable[] = {
     // clang-format on
 };
 
-const CpuUarchTableEntry* kCpuUarchTableEnd =
-    kCpuUarchTable + std::size(kCpuUarchTable);
+const CpuUarchTableEntry* kCpuUarchTableEnd = std::end(kCpuUarchTable);
 
 bool CpuUarchTableCmp(const CpuUarchTableEntry& a,
                       const CpuUarchTableEntry& b) {
@@ -123,7 +122,7 @@ CPUIdentity::CPUIdentity() : family(0), model(0) {}
 
 CPUIdentity::CPUIdentity(const CPUIdentity& other) = default;
 
-CPUIdentity::~CPUIdentity() {}
+CPUIdentity::~CPUIdentity() = default;
 
 std::string GetCpuUarch(const CPUIdentity& cpuid) {
   if (cpuid.vendor != "GenuineIntel" && cpuid.vendor != "AuthenticAMD")

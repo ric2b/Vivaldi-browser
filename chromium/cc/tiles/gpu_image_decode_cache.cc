@@ -26,7 +26,6 @@
 #include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_math.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
 #include "base/task/single_thread_task_runner.h"
@@ -1109,6 +1108,9 @@ GpuImageDecodeCache::ImageData::ImageData(
     // This is the only plane config supported by non-OOP raster.
     DCHECK_EQ(info.yuva->yuvaInfo().planeConfig(),
               SkYUVAInfo::PlaneConfig::kY_U_V);
+  }
+  if (base::FeatureList::IsEnabled(features::kInitImageDecodeLastUseTime)) {
+    last_use = base::TimeTicks::Now();
   }
 }
 
@@ -2333,7 +2335,7 @@ void GpuImageDecodeCache::InsertTransferCacheEntry(
   if (data) {
     // TODO(crbug.com/40285824): Have MapTransferCacheEntry() return a span.
     bool succeeded = image_entry.Serialize(
-        UNSAFE_TODO(base::make_span(static_cast<uint8_t*>(data), size)));
+        UNSAFE_TODO(base::span(static_cast<uint8_t*>(data), size)));
     DCHECK(succeeded);
     context_->ContextSupport()->UnmapAndCreateTransferCacheEntry(
         image_entry.UnsafeType(), image_entry.Id());
@@ -2709,6 +2711,11 @@ void GpuImageDecodeCache::UploadImageIfNecessary_TransferCache_SoftwareDecode(
     auto aux_image_index = AuxImageIndex(aux_image);
     const auto& info = image_data->GetImageInfo(aux_image);
     if (aux_image == AuxImage::kGainmap) {
+      // The gainmap image is allowed to silently fail to decode. If that
+      // happens, there will be no data. Just pretend it didn't exist.
+      if (!image_data->decode.data(aux_image)) {
+        continue;
+      }
       has_gainmap = info.rgba.has_value() || info.yuva.has_value();
     }
     if (info.yuva.has_value()) {
@@ -3738,7 +3745,7 @@ void GpuImageDecodeCache::UpdateMipsIfNeeded(const DrawImage& draw_image,
 scoped_refptr<TileTask> GpuImageDecodeCache::GetTaskFromMapForClientId(
     const ClientId client_id,
     const ImageTaskMap& task_map) {
-  auto task_it = base::ranges::find_if(
+  auto task_it = std::ranges::find_if(
       task_map,
       [client_id](
           const std::pair<ClientId, scoped_refptr<TileTask>> task_item) {

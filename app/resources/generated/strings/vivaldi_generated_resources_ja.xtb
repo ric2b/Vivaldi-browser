@@ -279,6 +279,7 @@
 <translation id="5582839680698949063">メインメニュー</translation>
 <translation id="5614553682702429503">パスワードを保存しますか？</translation>
 <translation id="5623842676595125836">ログ</translation>
+<translation id="5624959475330585145">安全でない接続を使用する前に確認する</translation>
 <translation id="5638309510554459422"><ph name="BEGIN_LINK" />Chrome ウェブストア<ph name="END_LINK" />で拡張機能やテーマを探すことができます</translation>
 <translation id="5677928146339483299">ブロック中</translation>
 <translation id="5707185214361380026">拡張機能の読み込みに失敗しました:</translation>
@@ -467,6 +468,7 @@
 <translation id="9218430445555521422">既定として設定</translation>
 <translation id="93766956588638423">拡張機能を修復</translation>
 <translation id="961012016278832836">レガシー Microsoft Edge</translation>
+<translation id="961856697154696964">ブラウジングデータを消去する</translation>
 <translation id="994289308992179865">ループ</translation>
 <translation id="998747458861718449">検証 (&amp;N)</translation>
 </translationbundle>

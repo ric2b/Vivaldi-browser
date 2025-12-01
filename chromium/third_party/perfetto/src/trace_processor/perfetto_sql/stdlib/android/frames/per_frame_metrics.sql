@@ -16,6 +16,33 @@
 INCLUDE PERFETTO MODULE time.conversion;
 INCLUDE PERFETTO MODULE android.frames.timeline;
 
+-- `actual_frame_timeline_slice` returns the same slice name for different layer IDs or tracks.
+-- This happens because there can be multiple slices associated with a single frame_id.
+-- We are interested in unique names(frame_id) and the respective counts.
+-- This is a legacy table which is moved to this file because the android_frames_overrun table depends on it.
+CREATE PERFETTO TABLE _frame_id_count_in_actual_timeline AS
+SELECT
+    cast_int!(name) AS frame_id,
+    MIN(id) AS id,
+    MIN(ts) AS ts,
+    MAX(dur) AS dur,
+    MAX(ts + dur) AS ts_end,
+    count() AS count
+FROM actual_frame_timeline_slice
+GROUP BY 1;
+
+-- `expected_frame_timeline_slice` returns the same slice name for different tracks.
+-- This happens because there can be multiple slices associated with a single frame_id.
+-- We are interested in unique names(frame_id) and the respective counts.
+-- This is a legacy table which is moved to this file because the android_frames_overrun table depends on it.
+CREATE PERFETTO TABLE _frame_id_count_in_expected_timeline AS
+SELECT
+    cast_int!(name) AS frame_id,
+    id,
+    count() AS count
+FROM expected_frame_timeline_slice
+GROUP BY 1;
+
 -- The amount by which each frame missed of hit its deadline. Negative if the
 -- deadline was not missed. Frames are considered janky if `overrun` is
 -- positive.
@@ -26,25 +53,25 @@ INCLUDE PERFETTO MODULE android.frames.timeline;
 -- For Googlers: more details in go/android-performance-metrics-glossary.
 CREATE PERFETTO TABLE android_frames_overrun(
     -- Frame id.
-    frame_id INT,
+    frame_id LONG,
     -- Difference between `expected` and `actual` frame ends. Negative if frame
     -- didn't miss deadline.
-    overrun INT
+    overrun LONG
 ) AS
 SELECT
     frame_id,
     (act_slice.ts + act_slice.dur) - (exp_slice.ts + exp_slice.dur) AS overrun
-FROM _distinct_from_actual_timeline_slice act
-JOIN _distinct_from_expected_timeline_slice exp USING (frame_id)
+FROM _frame_id_count_in_actual_timeline act
+JOIN _frame_id_count_in_expected_timeline exp USING (frame_id)
 JOIN slice act_slice ON (act.id = act_slice.id)
 JOIN slice exp_slice ON (exp.id = exp_slice.id);
 
 -- How much time did the frame's Choreographer callbacks take.
 CREATE PERFETTO TABLE android_frames_ui_time(
     -- Frame id
-    frame_id INT,
+    frame_id LONG,
     -- UI time duration
-    ui_time INT
+    ui_time LONG
 ) AS
 SELECT
     frame_id,
@@ -60,9 +87,9 @@ JOIN slice USING (id);
 -- For Googlers: more details in go/android-performance-metrics-glossary.
 CREATE PERFETTO TABLE android_app_vsync_delay_per_frame(
     -- Frame id
-    frame_id INT,
+    frame_id LONG,
     -- App VSYNC delay.
-    app_vsync_delay INT
+    app_vsync_delay LONG
 ) AS
 -- As there can be multiple `DrawFrame` slices, the `frames_surface_slices`
 -- table contains multiple rows for the same `frame_id` which only differ on
@@ -92,17 +119,17 @@ JOIN slice act ON (f.actual_frame_timeline_id = act.id);
 -- For Googlers: more details in go/android-performance-metrics-glossary.
 CREATE PERFETTO TABLE android_cpu_time_per_frame(
     -- Frame id
-    frame_id INT,
+    frame_id LONG,
     -- Difference between actual timeline of the frame and
     -- `Choreographer#doFrame`. See `android_app_vsync_delay_per_frame` table for more details.
-    app_vsync_delay INT,
+    app_vsync_delay LONG,
     -- Duration of `Choreographer#doFrame` slice.
-    do_frame_dur INT,
+    do_frame_dur DURATION,
     -- Duration of `DrawFrame` slice. Summed duration of all `DrawFrame`
     -- slices, if more than one. See `android_frames_draw_frame` for more details.
-    draw_frame_dur INT,
+    draw_frame_dur DURATION,
     -- CPU time across the UI Thread + RenderThread.
-    cpu_time INT
+    cpu_time LONG
 ) AS
 WITH all_draw_frames AS (
 SELECT
@@ -136,9 +163,9 @@ JOIN slice do_frame ON (f.do_frame_id = do_frame.id);
 -- For Googlers: more details in go/android-performance-metrics-glossary.
 CREATE PERFETTO TABLE _cpu_time_per_frame_fallback(
     -- Frame id.
-    frame_id INT,
+    frame_id LONG,
     -- Estimated cpu time.
-    estimated_cpu_time INT
+    estimated_cpu_time LONG
 ) AS
 SELECT
     frame_id,
@@ -146,8 +173,8 @@ SELECT
 FROM android_frames_ui_time;
 
 CREATE PERFETTO TABLE _estimated_cpu_time_per_frame(
-    frame_id INT,
-    cpu_time INT
+    frame_id LONG,
+    cpu_time LONG
 ) AS
 SELECT
     frame_id,
@@ -160,14 +187,14 @@ LEFT JOIN android_cpu_time_per_frame r USING (frame_id);
 -- For Googlers: more details in go/android-performance-metrics-glossary.
 CREATE PERFETTO TABLE android_frame_stats(
     -- Frame id.
-    frame_id INT,
+    frame_id LONG,
     -- The amount by which each frame missed of hit its deadline. See
     -- `android_frames_overrun` for details.
-    overrun INT,
+    overrun LONG,
     -- How much time did the frame take across the UI Thread + RenderThread.
-    cpu_time INT,
+    cpu_time LONG,
     -- How much time did the frame's Choreographer callbacks take.
-    ui_time INT,
+    ui_time LONG,
     -- Was frame janky.
     was_jank BOOL,
     -- CPU time of the frame took over 20ms.

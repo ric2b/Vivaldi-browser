@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <array>
 #include <memory>
 #include <optional>
 #include <string>
@@ -327,8 +328,7 @@ class MockDriveServiceNoConnectionAtInitiate : public DummyDriveService {
                                   const base::FilePath& local_file_path,
                                   UploadRangeCallback callback,
                                   ProgressCallback progress_callback) override {
-    NOTREACHED_IN_MIGRATION();
-    return CancelCallbackOnce();
+    NOTREACHED();
   }
 
   CancelCallbackOnce MultipartUploadNewFile(
@@ -881,14 +881,15 @@ TEST_F(DriveUploaderTest, BatchProcessing) {
       &service, base::SingleThreadTaskRunner::GetCurrentDefault().get(),
       mojo::NullRemote());
 
-  struct {
+  struct Results {
     ApiErrorCode error;
     GURL resume_url;
     std::unique_ptr<FileResource> file;
     UploadCompletionCallback callback() {
       return test_util::CreateCopyResultCallback(&error, &resume_url, &file);
     }
-  } results[2];
+  };
+  std::array<Results, 2> results;
 
   uploader.StartBatchProcessing();
   uploader.UploadNewFile("parent_resource_id", local_path, "title",
@@ -938,14 +939,15 @@ TEST_F(DriveUploaderTest, BatchProcessingWithError) {
       &service, base::SingleThreadTaskRunner::GetCurrentDefault().get(),
       mojo::NullRemote());
 
-  struct {
+  struct Results {
     ApiErrorCode error;
     GURL resume_url;
     std::unique_ptr<FileResource> file;
     UploadCompletionCallback callback() {
       return test_util::CreateCopyResultCallback(&error, &resume_url, &file);
     }
-  } results[2];
+  };
+  std::array<Results, 2> results;
 
   uploader.StartBatchProcessing();
   uploader.UploadNewFile("parent_resource_id",

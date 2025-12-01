@@ -45,7 +45,9 @@ def fetch_content(host: str, repo: str, ref: str, file: str) -> bytes:
     return base64.b64decode(response.read())
 
 
-def git_diff(src: str | None, dest: str | None) -> str:
+def git_diff(src: str | None,
+             dest: str | None,
+             unified: int | None = None) -> str:
     """Returns the result of `git diff --no-index` between two paths.
 
     If a path is not specified, the diff is against /dev/null. At least one of
@@ -54,13 +56,23 @@ def git_diff(src: str | None, dest: str | None) -> str:
     Args:
       src: Source path.
       dest: Destination path.
+      unified: Number of lines of context. If None, git diff uses 3 as
+        the default value.
 
     Returns:
         A string containing the git diff.
     """
-    return subprocess2.capture(
-        ["git", "diff", "--no-index", "--", src or DEV_NULL, dest
-         or DEV_NULL]).decode("utf-8")
+    args = ["git", "diff", "--no-index"]
+    if unified is not None:
+        # git diff doesn't error out even if it's given a negative <n> value.
+        # e.g., --unified=-3323, -U-3
+        #
+        # It just ignores the value and treats it as 0.
+        # hence, this script doesn't bother validating the <n> value.
+        args.append(f"-U{unified}")
+
+    args.extend(["--", src or DEV_NULL, dest or DEV_NULL])
+    return subprocess2.capture(args).decode("utf-8")
 
 
 def _process_diff(diff: str, src_root: str, dst_root: str) -> str:
@@ -99,7 +111,8 @@ def _process_diff(diff: str, src_root: str, dst_root: str) -> str:
     return header
 
 
-def _create_diff(host: str, repo: str, ref: str, root: str, file: str) -> str:
+def _create_diff(host: str, repo: str, ref: str, root: str, file: str,
+                 unified: int | None) -> str:
     new_file = os.path.join(root, file)
     if not os.path.exists(new_file):
         new_file = None
@@ -117,12 +130,16 @@ def _create_diff(host: str, repo: str, ref: str, root: str, file: str) -> str:
             raise RuntimeError(f"Could not access file {file} from {root} "
                                f"or from {host}/{repo}:{ref}.")
 
-        diff = git_diff(old_file, new_file)
+        diff = git_diff(old_file, new_file, unified)
         return _process_diff(diff, tmp_root, root)
 
 
-def create_diffs(host: str, repo: str, ref: str, root: str,
-                 files: list[str]) -> dict[str, str]:
+def create_diffs(host: str,
+                 repo: str,
+                 ref: str,
+                 root: str,
+                 files: list[str],
+                 unified: int | None = None) -> dict[str, str]:
     """Calculates diffs of files in a directory against a commit.
 
     Args:
@@ -131,6 +148,8 @@ def create_diffs(host: str, repo: str, ref: str, root: str,
       ref: Gerrit commit.
       root: Path of local directory containing modified files.
       files: List of file paths relative to root.
+      unified: Number of lines of context. If None, git diff uses 3 as
+        the default value.
 
     Returns:
         A dict mapping file paths to diffs.
@@ -142,7 +161,8 @@ def create_diffs(host: str, repo: str, ref: str, root: str,
     with concurrent.futures.ThreadPoolExecutor(
             max_workers=MAX_CONCURRENT_CONNECTION) as executor:
         futures_to_file = {
-            executor.submit(_create_diff, host, repo, ref, root, file): file
+            executor.submit(_create_diff, host, repo, ref, root, file, unified):
+            file
             for file in files
         }
         for future in concurrent.futures.as_completed(futures_to_file):
@@ -165,6 +185,12 @@ def main(argv):
     parser.add_argument("--root",
                         required=True,
                         help="Folder containing modified files.")
+    parser.add_argument("-U",
+                        "--unified",
+                        required=False,
+                        type=int,
+                        help="generate diffs with <n> lines context",
+                        metavar='<n>')
     parser.add_argument(
         "files",
         nargs="+",
@@ -173,7 +199,7 @@ def main(argv):
     options = parser.parse_args(argv)
 
     diffs = create_diffs(options.host, options.repo, options.ref, options.root,
-                         options.files)
+                         options.files, options.unified)
 
     unified_diff = "\n".join([d for d in diffs.values() if d])
     if options.output:

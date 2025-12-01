@@ -17,6 +17,8 @@ import org.jni_zero.NativeMethods;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
@@ -34,12 +36,13 @@ import org.vivaldi.browser.oem_extensions.lynkco.OemLynkcoExtensions;
  * like a notification.
  */
 @JNINamespace("content")
+@NullMarked
 public class AudioFocusDelegate implements AudioManager.OnAudioFocusChangeListener {
     private static final String TAG = "MediaSession";
 
     private int mFocusType;
     private boolean mIsDucking;
-    private AudioFocusRequest mFocusRequest;
+    private @Nullable AudioFocusRequest mFocusRequest;
 
     // Native pointer to C++ content::AudioFocusDelegateAndroid.
     // It will be set to 0 when the native AudioFocusDelegateAndroid object is destroyed.
@@ -123,7 +126,15 @@ public class AudioFocusDelegate implements AudioManager.OnAudioFocusChangeListen
                         .setWillPauseWhenDucked(false)
                         .setOnAudioFocusChangeListener(this, mHandler)
                         .build();
-        result = am.requestAudioFocus(mFocusRequest);
+        try {
+            result = am.requestAudioFocus(mFocusRequest);
+        } catch (SecurityException e) {
+            // If we get a SecurityException, the platform has a bug and requestAudioFocus is broken
+            // (at least under our current running conditions). Pretend that everything worked,
+            // because the alternative is that media such as videos may refuse to ever play.
+            Log.w(TAG, "audio focus coordination is broken", e);
+            return true;
+        }
 
         return result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
     }
@@ -152,9 +163,6 @@ public class AudioFocusDelegate implements AudioManager.OnAudioFocusChangeListen
             case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK:
                 mIsDucking = true;
                 AudioFocusDelegateJni.get()
-                        .recordSessionDuck(
-                                mNativeAudioFocusDelegateAndroid, AudioFocusDelegate.this);
-                AudioFocusDelegateJni.get()
                         .onStartDucking(mNativeAudioFocusDelegateAndroid, AudioFocusDelegate.this);
                 break;
             case AudioManager.AUDIOFOCUS_LOSS:
@@ -177,7 +185,5 @@ public class AudioFocusDelegate implements AudioManager.OnAudioFocusChangeListen
         void onStartDucking(long nativeAudioFocusDelegateAndroid, AudioFocusDelegate caller);
 
         void onStopDucking(long nativeAudioFocusDelegateAndroid, AudioFocusDelegate caller);
-
-        void recordSessionDuck(long nativeAudioFocusDelegateAndroid, AudioFocusDelegate caller);
     }
 }

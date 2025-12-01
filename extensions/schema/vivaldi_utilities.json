@@ -620,48 +620,6 @@
             "description": "Mime type of the read image."
           }
         }
-      },
-      {
-        "id": "DirectMatchItem",
-        "type": "object",
-        "description": "A Direct match item",
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "image_url": {
-            "type": "string"
-          },
-          "image_path": {
-            "type": "string"
-          },
-          "category": {
-            "type": "number"
-          },
-          "display_location_address_bar": {
-            "type": "boolean"
-          },
-          "display_location_sd_dialog": {
-            "type": "boolean"
-          },
-          "redirect_url": {
-            "type": "string"
-          },
-          "allowed_to_be_default_match": {
-            "type": "boolean"
-          }
-        }
-      },
-      {
-        "id": "DirectMatchItems",
-        "type": "array",
-        "description": "A Direct match items array",
-        "items": {
-          "$ref": "DirectMatchItem"
-        }
       }
     ],
     "functions": [
@@ -2040,68 +1998,6 @@
         }
       },
       {
-        "name": "getDirectMatch",
-        "type": "function",
-        "description": "Get DirectMatch item that best matches the query",
-        "parameters": [
-          {
-            "name": "query",
-            "type": "string",
-            "description": "The query to search in items"
-          }
-        ],
-        "returns_async": {
-          "name": "callback",
-          "optional": true,
-          "parameters": [
-            {
-              "name": "item",
-              "$ref": "DirectMatchItem",
-              "optional": true
-            }
-          ]
-        }
-      },
-      {
-        "name": "GetDirectMatchPopularSites",
-        "type": "function",
-        "description": "Fetch popular sites from DM units sorted asc by `position` where sd_dialog=true",
-        "parameters": [],
-        "returns_async": {
-          "name": "callback",
-          "optional": true,
-          "parameters": [
-            {
-              "name": "items",
-              "$ref": "DirectMatchItems",
-              "optional": false
-            }
-          ]
-        }
-      },
-      {
-        "name": "GetDirectMatchesForCategory",
-        "type": "function",
-        "description": "Returns direct match items for provided `category_id` sorted asc by `position` and filtered by `display_locations`",
-        "parameters": [
-          {
-            "name": "categoryId",
-            "type": "number"
-          }
-        ],
-        "returns_async": {
-          "name": "callback",
-          "optional": true,
-          "parameters": [
-            {
-              "name": "items",
-              "$ref": "DirectMatchItems",
-              "optional": false
-            }
-          ]
-        }
-      },
-      {
         "name": "emulateUserInput",
         "type": "function",
         "description": "Notifies render there has been user driven input. To be used when normal input is not detected in render because of blocking event loop handling (eg when menus are open).",
@@ -2196,6 +2092,26 @@
           "name": "callback",
           "parameters": []
         }
+      },
+      {
+        "name": "silentlyInstallExtension",
+        "type": "function",
+        "description": "Handles silent installation of an extension, disabled after install, given it's id.",
+        "parameters": [
+          {
+            "name": "id",
+            "type": "string"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "success",
+              "type": "boolean"
+            }
+          ]
+        }
       }
     ],
     "events": [
@@ -2210,6 +2126,13 @@
             "minimum": 0,
             "description": "Device that triggers scrolling. 1: Mouse, 2: Trackpad 3: Inertial"
           }
+        ]
+      },
+      {
+        "name": "onDialogCanceled",
+        "type": "function",
+        "description": "Called when the javascript dialog was canceled.",
+        "parameters": [
         ]
       },
       {

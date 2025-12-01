@@ -23,6 +23,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ref.h"
 #include "base/not_fatal_until.h"
+#include "base/notreached.h"
 #include "base/numerics/checked_math.h"
 #include "base/power_monitor/power_monitor.h"
 #include "base/strings/string_split.h"
@@ -92,34 +93,6 @@ constexpr wgpu::TextureUsage kAllowedReadableMailboxTextureUsages =
 
 constexpr wgpu::TextureUsage kAllowedMailboxTextureUsages =
     kAllowedWritableMailboxTextureUsages | kAllowedReadableMailboxTextureUsages;
-
-template <typename T1, typename T2>
-struct AssignIfSameElseCrashFnImpl;
-
-template <typename T2, typename R, typename... Args>
-struct AssignIfSameElseCrashFnImpl<R (*)(Args...), T2> {
-  using T1 = R (*)(Args...);
-
-  void operator()(T1* out, T2 in) {
-    if constexpr (std::is_same_v<T1, T2>) {
-      *out = in;
-    } else if constexpr (std::is_same_v<R, void>) {
-      *out = [](Args... args) {
-        CHECK(false) << "Invalid call to deprecated function.";
-      };
-    } else {
-      *out = [](Args... args) -> R {
-        CHECK(false) << "Invalid call to deprecated function.";
-        return {};
-      };
-    }
-  }
-};
-
-template <typename T1, typename T2>
-void AssignIfSameElseCrashFn(T1* out, T2 in) {
-  AssignIfSameElseCrashFnImpl<T1, T2>{}(out, in);
-}
 
 template <typename T1, typename T2>
 void ChainStruct(T1& head, T2* struct_to_chain) {
@@ -362,7 +335,7 @@ class WebGPUDecoderImpl final : public WebGPUDecoder {
 
   wgpu::Adapter CreatePreferredAdapter(wgpu::PowerPreference power_preference,
                                        bool force_fallback,
-                                       bool compatibility_mode) const;
+                                       wgpu::FeatureLevel feature_level) const;
 
   // Decide if a device feature is exposed to render process.
   bool IsFeatureExposed(wgpu::FeatureName feature) const;
@@ -373,8 +346,8 @@ class WebGPUDecoderImpl final : public WebGPUDecoder {
                                 const WGPURequestAdapterOptions* options,
                                 CallbackInfo callback_info);
   WGPUBool AdapterHasFeatureImpl(WGPUAdapter adapter, WGPUFeatureName feature);
-  size_t AdapterEnumerateFeaturesImpl(WGPUAdapter adapter,
-                                      WGPUFeatureName* features);
+  void AdapterGetFeaturesImpl(WGPUAdapter adapter,
+                              WGPUSupportedFeatures* features_out);
   template <typename CallbackInfo>
   WGPUFuture RequestDeviceImpl(WGPUAdapter adapter,
                                const WGPUDeviceDescriptor* descriptor,
@@ -1144,9 +1117,8 @@ WebGPUDecoderImpl::WebGPUDecoderImpl(
   if (gpu_preferences.enable_unsafe_webgpu) {
     safety_level_ = webgpu::SafetyLevel::kUnsafe;
   }
-  dawn_instance_ = DawnInstance::Create(
-      dawn_platform_.get(), gpu_preferences, safety_level_,
-      /*logging_callback=*/nullptr, /*logging_callback_userdata=*/nullptr);
+  dawn_instance_ = DawnInstance::Create(dawn_platform_.get(), gpu_preferences,
+                                        safety_level_);
 
   use_webgpu_adapter_ = gpu_preferences.use_webgpu_adapter;
   use_webgpu_power_preference_ = gpu_preferences.use_webgpu_power_preference;
@@ -1166,38 +1138,33 @@ WebGPUDecoderImpl::WebGPUDecoderImpl(
 
   DawnProcTable wire_procs = dawn::native::GetProcs();
   wire_procs.createInstance =
-      [](const WGPUInstanceDescriptor*) -> WGPUInstance {
-    CHECK(false);
-    return nullptr;
-  };
-  wire_procs.instanceRequestAdapter2 = [](auto... args) {
+      [](const WGPUInstanceDescriptor*) -> WGPUInstance { NOTREACHED(); };
+  wire_procs.instanceRequestAdapter = [](auto... args) {
     DCHECK(parent_decoder);
     return parent_decoder->RequestAdapterImpl(
         std::forward<decltype(args)>(args)...);
   };
-  AssignIfSameElseCrashFn(&wire_procs.instanceRequestAdapter,
-                          wire_procs.instanceRequestAdapter2);
-  AssignIfSameElseCrashFn(&wire_procs.instanceRequestAdapterF,
-                          wire_procs.instanceRequestAdapter2);
   wire_procs.adapterHasFeature = [](auto... args) {
     DCHECK(parent_decoder);
     return parent_decoder->AdapterHasFeatureImpl(
         std::forward<decltype(args)>(args)...);
   };
-  wire_procs.adapterEnumerateFeatures = [](auto... args) {
+  wire_procs.adapterGetFeatures = [](auto... args) {
     DCHECK(parent_decoder);
-    return parent_decoder->AdapterEnumerateFeaturesImpl(
+    return parent_decoder->AdapterGetFeaturesImpl(
         std::forward<decltype(args)>(args)...);
   };
-  wire_procs.adapterRequestDevice2 = [](auto... args) {
+  wire_procs.supportedFeaturesFreeMembers =
+      [](WGPUSupportedFeatures supported_features) -> void {
+    // We don't need any state so we don't need the parent decoder and can free
+    // immediately.
+    delete[] supported_features.features;
+  };
+  wire_procs.adapterRequestDevice = [](auto... args) {
     DCHECK(parent_decoder);
     return parent_decoder->RequestDeviceImpl(
         std::forward<decltype(args)>(args)...);
   };
-  AssignIfSameElseCrashFn(&wire_procs.adapterRequestDevice,
-                          wire_procs.adapterRequestDevice2);
-  AssignIfSameElseCrashFn(&wire_procs.adapterRequestDeviceF,
-                          wire_procs.adapterRequestDevice2);
 
   wire_server_ = DawnWireServer::Create(
       this, wire_serializer_.get(), memory_transfer_service_.get(), wire_procs);
@@ -1276,8 +1243,6 @@ ContextResult WebGPUDecoderImpl::Initialize(
 bool WebGPUDecoderImpl::IsFeatureExposed(wgpu::FeatureName feature) const {
   switch (feature) {
     case wgpu::FeatureName::ChromiumExperimentalTimestampQueryInsidePasses:
-    case wgpu::FeatureName::ChromiumExperimentalSubgroups:
-    case wgpu::FeatureName::ChromiumExperimentalSubgroupUniformControlFlow:
     case wgpu::FeatureName::MultiDrawIndirect:
     case wgpu::FeatureName::Unorm16TextureFormats:
     case wgpu::FeatureName::Snorm16TextureFormats:
@@ -1303,8 +1268,7 @@ bool WebGPUDecoderImpl::IsFeatureExposed(wgpu::FeatureName feature) const {
     case wgpu::FeatureName::ClipDistances:
     case wgpu::FeatureName::DualSourceBlending:
     case wgpu::FeatureName::DawnMultiPlanarFormats:
-    case wgpu::FeatureName::Subgroups:
-    case wgpu::FeatureName::SubgroupsF16: {
+    case wgpu::FeatureName::Subgroups: {
       // Likely case when no features are blocked.
       if (runtime_unsafe_features_.empty() ||
           safety_level_ == webgpu::SafetyLevel::kUnsafe) {
@@ -1341,25 +1305,18 @@ WGPUFuture WebGPUDecoderImpl::RequestAdapterImpl(
     force_fallback_adapter = true;
   }
 
-#if BUILDFLAG(IS_LINUX)
-  if (!shared_context_state_->GrContextIsVulkan() &&
-      !shared_context_state_->IsGraphiteDawnVulkan() &&
-      use_webgpu_adapter_ != WebGPUAdapterName::kOpenGLES) {
-    callback_info.callback(
-        WGPURequestAdapterStatus_Unavailable, nullptr,
-        MakeStringView(
-            "WebGPU on Linux requires GLES compat, or command-line "
-            "flag --enable-features=Vulkan, or command-line flag "
-            "--enable-features=SkiaGraphite (and skia_use_dawn = true GN arg)"),
-        callback_info.userdata1, callback_info.userdata2);
-    return {};
+  wgpu::FeatureLevel feature_level = wgpu::FeatureLevel::Core;
+  if (force_webgpu_compat_ ||
+      (static_cast<wgpu::FeatureLevel>(options->featureLevel) ==
+           wgpu::FeatureLevel::Compatibility &&
+       (safety_level_ == webgpu::SafetyLevel::kUnsafe ||
+        safety_level_ == webgpu::SafetyLevel::kSafeExperimental))) {
+    feature_level = wgpu::FeatureLevel::Compatibility;
   }
-#endif  // BUILDFLAG(IS_LINUX)
 
   wgpu::Adapter adapter = CreatePreferredAdapter(
       static_cast<wgpu::PowerPreference>(options->powerPreference),
-      options->forceFallbackAdapter || force_fallback_adapter,
-      options->compatibilityMode || force_webgpu_compat_);
+      options->forceFallbackAdapter || force_fallback_adapter, feature_level);
 
   if (adapter == nullptr) {
     // There are no adapters to return since webgpu is not supported here
@@ -1383,24 +1340,28 @@ WGPUBool WebGPUDecoderImpl::AdapterHasFeatureImpl(WGPUAdapter adapter,
   return adapter_obj.HasFeature(static_cast<wgpu::FeatureName>(feature));
 }
 
-size_t WebGPUDecoderImpl::AdapterEnumerateFeaturesImpl(
+void WebGPUDecoderImpl::AdapterGetFeaturesImpl(
     WGPUAdapter adapter,
-    WGPUFeatureName* features_out) {
+    WGPUSupportedFeatures* features_out) {
   wgpu::Adapter adapter_obj(adapter);
-  size_t count = adapter_obj.EnumerateFeatures(nullptr);
+  wgpu::SupportedFeatures supported_features;
+  adapter_obj.GetFeatures(&supported_features);
 
-  std::vector<wgpu::FeatureName> features(count);
-  adapter_obj.EnumerateFeatures(features.data());
-
-  auto it =
-      std::partition(features.begin(), features.end(),
-                     [&](wgpu::FeatureName f) { return IsFeatureExposed(f); });
-  count = std::distance(features.begin(), it);
-
-  if (features_out != nullptr) {
-    memcpy(features_out, features.data(), sizeof(wgpu::FeatureName) * count);
+  std::vector<wgpu::FeatureName> exposed_features;
+  for (uint32_t i = 0; i < supported_features.featureCount; ++i) {
+    wgpu::FeatureName feature = supported_features.features[i];
+    if (IsFeatureExposed(feature)) {
+      exposed_features.push_back(feature);
+    };
   }
-  return count;
+  const size_t count = exposed_features.size();
+  WGPUFeatureName* features = new WGPUFeatureName[count];
+  uint32_t index = 0;
+  for (wgpu::FeatureName feature : exposed_features) {
+    features[index++] = static_cast<WGPUFeatureName>(feature);
+  }
+  features_out->featureCount = count;
+  features_out->features = features;
 }
 
 template <typename CallbackInfo>
@@ -1438,7 +1399,7 @@ WGPUFuture WebGPUDecoderImpl::RequestDeviceImpl(
     };
 
     // Check that no disallowed features were requested. They should be hidden
-    // by AdapterEnumerateFeaturesImpl.
+    // by AdapterGetFeaturesImpl.
     for (const wgpu::FeatureName& feature : required_features) {
       if (!IsFeatureExposed(feature)) {
         callback_info.callback(WGPURequestDeviceStatus_Error, nullptr,
@@ -1468,7 +1429,7 @@ WGPUFuture WebGPUDecoderImpl::RequestDeviceImpl(
 
 #if BUILDFLAG(IS_ANDROID)
       wgpu::FeatureName::SharedTextureMemoryAHardwareBuffer,
-      wgpu::FeatureName::SharedFenceVkSemaphoreSyncFD,
+      wgpu::FeatureName::SharedFenceSyncFD,
 #endif
 
       wgpu::FeatureName::SharedTextureMemoryD3D11Texture2D,
@@ -1650,7 +1611,7 @@ WebGPUDecoderImpl::CreateQueuedRequestDeviceCallback(
                                      callback_info);
         } else {
           callback_info.callback(
-              WGPURequestDeviceStatus_Unknown, nullptr,
+              WGPURequestDeviceStatus_InstanceDropped, nullptr,
               MakeStringView("Queued device request cancelled."),
               callback_info.userdata1, callback_info.userdata2);
         }
@@ -1668,7 +1629,7 @@ bool WebGPUDecoderImpl::use_blocklist() const {
 wgpu::Adapter WebGPUDecoderImpl::CreatePreferredAdapter(
     wgpu::PowerPreference power_preference,
     bool force_fallback,
-    bool compatibility_mode) const {
+    wgpu::FeatureLevel feature_level) const {
   // Update power_preference based on command-line flag
   // use_webgpu_power_preference_.
   switch (use_webgpu_power_preference_) {
@@ -1704,7 +1665,7 @@ wgpu::Adapter WebGPUDecoderImpl::CreatePreferredAdapter(
 
   // Prepare wgpu::RequestAdapterOptions.
   wgpu::RequestAdapterOptions adapter_options;
-  adapter_options.compatibilityMode = compatibility_mode;
+  adapter_options.featureLevel = feature_level;
   adapter_options.forceFallbackAdapter = force_fallback;
   adapter_options.powerPreference = power_preference;
 
@@ -1791,6 +1752,13 @@ wgpu::Adapter WebGPUDecoderImpl::CreatePreferredAdapter(
       backend_types = {wgpu::BackendType::D3D12};
 #elif BUILDFLAG(IS_MAC)
       backend_types = {wgpu::BackendType::Metal};
+#elif BUILDFLAG(IS_LINUX)
+      if (shared_context_state_->GrContextIsVulkan() ||
+          shared_context_state_->IsGraphiteDawnVulkan()) {
+        backend_types = {wgpu::BackendType::Vulkan};
+      } else {
+        backend_types = {wgpu::BackendType::OpenGLES};
+      }
 #else
       backend_types = {wgpu::BackendType::Vulkan, wgpu::BackendType::OpenGLES};
 #endif

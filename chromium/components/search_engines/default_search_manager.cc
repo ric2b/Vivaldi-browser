@@ -21,11 +21,6 @@
 #include "components/search_engines/template_url_data_util.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
 
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "chromeos/crosapi/mojom/prefs.mojom.h"
-#include "chromeos/lacros/lacros_service.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
-
 namespace {
 bool g_fallback_search_engines_disabled = false;
 
@@ -72,9 +67,6 @@ const char DefaultSearchManager::kSuggestionsURLPostParams[] =
     "suggestions_url_post_params";
 const char DefaultSearchManager::kImageURLPostParams[] =
     "image_url_post_params";
-const char DefaultSearchManager::kSideSearchParam[] = "side_search_param";
-const char DefaultSearchManager::kSideImageSearchParam[] =
-    "side_image_search_param";
 const char DefaultSearchManager::kImageSearchBrandingLabel[] =
     "image_search_branding_label";
 const char DefaultSearchManager::kSearchIntentParams[] = "search_intent_params";
@@ -92,7 +84,7 @@ const char DefaultSearchManager::kLastVisited[] = "last_visited";
 
 const char DefaultSearchManager::kUsageCount[] = "usage_count";
 const char DefaultSearchManager::kAlternateURLs[] = "alternate_urls";
-const char DefaultSearchManager::kCreatedByPolicy[] = "created_by_policy";
+const char DefaultSearchManager::kPolicyOrigin[] = "policy_origin";
 const char DefaultSearchManager::kDisabledByPolicy[] = "disabled_by_policy";
 const char DefaultSearchManager::kCreatedFromPlayAPI[] =
     "created_from_play_api";
@@ -114,40 +106,21 @@ const char DefaultSearchManager::kPosition[] = "position";
 DefaultSearchManager::DefaultSearchManager(
     PrefService* pref_service,
     search_engines::SearchEngineChoiceService* search_engine_choice_service,
-    const ObserverCallback& change_observer
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-    ,
-    bool for_lacros_main_profile
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
-    )
+    const ObserverCallback& change_observer)
     : DefaultSearchManager(pref_service,
                            search_engine_choice_service,
                            kDefaultSearchProviderDataPrefName,
-                           change_observer
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-                           ,
-                           bool for_lacros_main_profile
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
-      ) {
-}
+                           change_observer) {}
 
 DefaultSearchManager::DefaultSearchManager(
     PrefService* pref_service,
     search_engines::SearchEngineChoiceService* search_engine_choice_service,
     const char* vivaldi_default_pref,
-    const ObserverCallback& change_observer
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-    ,
-    bool for_lacros_main_profile
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
-    )
+    const ObserverCallback& change_observer)
     : pref_service_(pref_service),
       search_engine_choice_service_(search_engine_choice_service),
       change_observer_(change_observer),
       search_engine_choice_service_observation_(this),
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-      for_lacros_main_profile_(for_lacros_main_profile),
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
       prefs_default_search_(pref_service, search_engine_choice_service),
       vivaldi_default_pref_(vivaldi_default_pref) {
   if (pref_service_) {
@@ -335,26 +308,6 @@ void DefaultSearchManager::OnDefaultSearchPrefChanged() {
   // both before and after the above load.
   if (!source_was_fallback || (GetDefaultSearchEngineSource() != FROM_FALLBACK))
     NotifyObserver();
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  if (for_lacros_main_profile_) {
-    auto* lacros_service = chromeos::LacrosService::Get();
-    if (!lacros_service ||
-        !lacros_service->IsAvailable<crosapi::mojom::Prefs>()) {
-      LOG(WARNING) << "crosapi: Prefs API not available";
-      return;
-    }
-
-    const base::Value::Dict& dict =
-        pref_service_->GetDict(kDefaultSearchProviderDataPrefName);
-    if (dict.empty()) {
-      return;
-    }
-    lacros_service->GetRemote<crosapi::mojom::Prefs>()->SetPref(
-        crosapi::mojom::PrefPath::kDefaultSearchProviderDataPrefName,
-        base::Value(dict.Clone()), base::DoNothing());
-  }
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 }
 
 void DefaultSearchManager::OnOverridesPrefChanged() {

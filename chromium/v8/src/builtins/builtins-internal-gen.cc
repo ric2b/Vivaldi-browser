@@ -83,7 +83,7 @@ TF_BUILTIN(DebugBreakTrampoline, CodeStubAssembler) {
   auto new_target = Parameter<Object>(Descriptor::kJSNewTarget);
   auto arg_count =
       UncheckedParameter<Int32T>(Descriptor::kJSActualArgumentsCount);
-#ifdef V8_ENABLE_LEAPTIERING
+#ifdef V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE
   auto dispatch_handle =
       UncheckedParameter<JSDispatchHandleT>(Descriptor::kJSDispatchHandle);
 #else
@@ -166,9 +166,14 @@ class WriteBarrierCodeStubAssembler : public CodeStubAssembler {
     // Load address of SlotSet
     TNode<IntPtrT> slot_set = LoadSlotSet(page, &slow_path);
     TNode<IntPtrT> slot_offset = IntPtrSub(slot, chunk);
+    TNode<IntPtrT> num_buckets_address =
+        IntPtrSub(slot_set, IntPtrConstant(SlotSet::kNumBucketsSize));
+    TNode<IntPtrT> num_buckets = UncheckedCast<IntPtrT>(
+        Load(MachineType::Pointer(), num_buckets_address, IntPtrConstant(0)));
 
     // Load bucket
-    TNode<IntPtrT> bucket = LoadBucket(slot_set, slot_offset, &slow_path);
+    TNode<IntPtrT> bucket =
+        LoadBucket(slot_set, slot_offset, num_buckets, &slow_path);
 
     // Update cell
     SetBitInCell(bucket, slot_offset);
@@ -191,15 +196,17 @@ class WriteBarrierCodeStubAssembler : public CodeStubAssembler {
   TNode<IntPtrT> LoadSlotSet(TNode<IntPtrT> page, Label* slow_path) {
     TNode<IntPtrT> slot_set = UncheckedCast<IntPtrT>(
         Load(MachineType::Pointer(), page,
-             IntPtrConstant(MutablePageMetadata::kOldToNewSlotSetOffset)));
+             IntPtrConstant(MutablePageMetadata::SlotSetOffset(
+                 RememberedSetType::OLD_TO_NEW))));
     GotoIf(WordEqual(slot_set, IntPtrConstant(0)), slow_path);
     return slot_set;
   }
 
   TNode<IntPtrT> LoadBucket(TNode<IntPtrT> slot_set, TNode<WordT> slot_offset,
-                            Label* slow_path) {
+                            TNode<IntPtrT> num_buckets, Label* slow_path) {
     TNode<WordT> bucket_index =
         WordShr(slot_offset, SlotSet::kBitsPerBucketLog2 + kTaggedSizeLog2);
+    CSA_CHECK(this, IntPtrLessThan(bucket_index, num_buckets));
     TNode<IntPtrT> bucket = UncheckedCast<IntPtrT>(
         Load(MachineType::Pointer(), slot_set,
              WordShl(bucket_index, kSystemPointerSizeLog2)));
@@ -1442,18 +1449,7 @@ void Builtins::Generate_BaselineLeaveFrame(MacroAssembler* masm) {
 #endif  // V8_ENABLE_SPARKPLUG
 }
 
-// TODO(v8:11421): Remove #if once the Maglev compiler is ported to other
-// architectures.
-#ifndef V8_TARGET_ARCH_X64
-void Builtins::Generate_MaglevOnStackReplacement(MacroAssembler* masm) {
-  using D =
-      i::CallInterfaceDescriptorFor<Builtin::kMaglevOnStackReplacement>::type;
-  static_assert(D::kParameterCount == 1);
-  masm->Trap();
-}
-#endif  // V8_TARGET_ARCH_X64
-
-#ifdef V8_ENABLE_MAGLEV
+#if defined(V8_ENABLE_MAGLEV) && !defined(V8_ENABLE_LEAPTIERING)
 void Builtins::Generate_MaglevOptimizeCodeOrTailCallOptimizedCodeSlot(
     MacroAssembler* masm) {
   using D = MaglevOptimizeCodeOrTailCallOptimizedCodeSlotDescriptor;
@@ -1465,16 +1461,19 @@ void Builtins::Generate_MaglevOptimizeCodeOrTailCallOptimizedCodeSlot(
   masm->Trap();
 }
 #else
+void Builtins::Generate_MaglevOptimizeCodeOrTailCallOptimizedCodeSlot(
+    MacroAssembler* masm) {
+  masm->Trap();
+}
+#endif  // V8_ENABLE_MAGLEV && !V8_ENABLE_LEAPTIERING
+
+#ifndef V8_ENABLE_MAGLEV
 // static
 void Builtins::Generate_MaglevFunctionEntryStackCheck(MacroAssembler* masm,
                                                       bool save_new_target) {
   masm->Trap();
 }
-void Builtins::Generate_MaglevOptimizeCodeOrTailCallOptimizedCodeSlot(
-    MacroAssembler* masm) {
-  masm->Trap();
-}
-#endif  // V8_ENABLE_MAGLEV
+#endif  // !V8_ENABLE_MAGLEV
 
 void Builtins::Generate_MaglevFunctionEntryStackCheck_WithoutNewTarget(
     MacroAssembler* masm) {
@@ -1647,9 +1646,12 @@ TF_BUILTIN(InstantiateAsmJs, CodeStubAssembler) {
   auto new_target = Parameter<Object>(Descriptor::kNewTarget);
   auto arg_count =
       UncheckedParameter<Int32T>(Descriptor::kActualArgumentsCount);
-#ifdef V8_ENABLE_LEAPTIERING
+#ifdef V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE
   auto dispatch_handle =
       UncheckedParameter<JSDispatchHandleT>(Descriptor::kDispatchHandle);
+#elif defined(V8_ENABLE_LEAPTIERING)
+  TNode<JSDispatchHandleT> dispatch_handle = ReinterpretCast<JSDispatchHandleT>(
+      LoadJSFunctionDispatchHandle(function));
 #else
   auto dispatch_handle = InvalidDispatchHandleConstant();
 #endif

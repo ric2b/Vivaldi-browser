@@ -9,6 +9,8 @@ import android.view.View;
 import androidx.annotation.ColorInt;
 import androidx.annotation.IntDef;
 
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.url.GURL;
 
@@ -18,6 +20,7 @@ import java.lang.annotation.RetentionPolicy;
 import org.vivaldi.browser.common.VivaldiUrlConstants;
 
 /** An interface for pages that will be using Android views instead of html/rendered Web content. */
+@NullMarked
 public interface NativePage {
 
     /** An interface to trigger the native page's smooth transition. */
@@ -40,7 +43,7 @@ public interface NativePage {
     /**
      * @return The View to display the page. This is always non-null.
      */
-    View getView();
+    @Nullable View getView();
 
     /**
      * @return The title of the page.
@@ -117,7 +120,7 @@ public interface NativePage {
     /**
      * @return the filepath or null if not available. Only pdf native page supports filepath now.
      */
-    default String getCanonicalFilepath() {
+    default @Nullable String getCanonicalFilepath() {
         return null;
     }
 
@@ -137,7 +140,7 @@ public interface NativePage {
      * Return a {@link SmoothTransitionDelegate} which will signal the start and execute the given
      * post-task.
      */
-    default SmoothTransitionDelegate enableSmoothTransition() {
+    default @Nullable SmoothTransitionDelegate enableSmoothTransition() {
         return null;
     }
 
@@ -217,7 +220,10 @@ public interface NativePage {
      * @return Type of the native page defined in {@link NativePageType}.
      */
     private static @NativePageType int nativePageType(
-            GURL url, NativePage candidatePage, boolean isIncognito, boolean hasPdfDownload) {
+            GURL url,
+            @Nullable NativePage candidatePage,
+            boolean isIncognito,
+            boolean hasPdfDownload) {
         if (hasPdfDownload) {
             // For navigation with associated pdf download (e.g. open a pdf link), pdf page should
             // be created.
@@ -247,7 +253,7 @@ public interface NativePage {
      *     which do not have chrome or chrome-native scheme.
      */
     private static @NativePageType int chromePageType(
-            GURL url, NativePage candidatePage, boolean isIncognito) {
+            GURL url, @Nullable NativePage candidatePage, boolean isIncognito) {
         String host = url.getHost();
         String scheme = url.getScheme();
         if (!UrlConstants.CHROME_NATIVE_SCHEME.equals(scheme)

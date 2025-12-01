@@ -57,7 +57,7 @@ void compute_main_inner(uint local_invocation_index_2, threadgroup S_atomic* con
       break;
     }
     uint const x_35 = idx;
-    atomic_store_explicit(&((*(tint_symbol_1)).a[x_35]), 0u, memory_order_relaxed);
+    atomic_store_explicit(&((*(tint_symbol_1)).a[min(x_35, 9u)]), 0u, memory_order_relaxed);
     {
       idx = (idx + 1u);
     }

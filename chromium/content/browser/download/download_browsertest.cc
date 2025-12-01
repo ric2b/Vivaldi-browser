@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 // This file contains download browser tests that are known to be runnable
 // in a pure content context.  Over time tests should be migrated here.
 
@@ -4819,8 +4824,8 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, UploadBytes) {
           shell()->web_contents(), url, TRAFFIC_ANNOTATION_FOR_TESTS));
 
   download_parameters->set_post_body(
-      network::ResourceRequestBody::CreateFromBytes(kUploadString.data(),
-                                                    kUploadString.size()));
+      network::ResourceRequestBody::CreateFromCopyOfBytes(
+          base::as_byte_span(kUploadString)));
 
   DownloadManager* download_manager = DownloadManagerForShell(shell());
   std::unique_ptr<DownloadTestObserver> observer(CreateWaiter(shell(), 1));
@@ -5173,15 +5178,8 @@ class MHTMLImprovementsLoadingTest : public MhtmlLoadingTest {
   std::unique_ptr<DownloadTestContentBrowserClient> browser_client_;
 };
 
-#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_FUCHSIA)
-#define MAYBE_FormsDisabledWhenRenderedFromHttp \
-  DISABLED_FormsDisabledWhenRenderedFromHttp
-#else
-#define MAYBE_FormsDisabledWhenRenderedFromHttp \
-  FormsDisabledWhenRenderedFromHttp
-#endif
 IN_PROC_BROWSER_TEST_F(MHTMLImprovementsLoadingTest,
-                       MAYBE_FormsDisabledWhenRenderedFromHttp) {
+                       FormsDisabledWhenRenderedFromHttp) {
   // Note that normally Chrome will not load MHTML over HTTP(s), and instead
   // will download the file. On Android, Chrome supports loading 'trusted'
   // offline pages, which are loaded through `OfflinePageURLLoader`, and are
@@ -5213,6 +5211,7 @@ IN_PROC_BROWSER_TEST_F(MHTMLImprovementsLoadingTest,
   response.Done();
 
   observer->WaitForNavigationFinished();
+  ASSERT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
   // <input> is disabled. It won't have the disabled property set, but it will
   // have the effects. One effect is changing the cursor.
@@ -5233,6 +5232,7 @@ IN_PROC_BROWSER_TEST_F(MHTMLImprovementsLoadingTest,
   EXPECT_TRUE(NavigateToURL(shell(), url));
 
   observer->WaitForNavigationFinished();
+  ASSERT_TRUE(WaitForLoadStop(shell()->web_contents()));
 
   // <input> is not disabled.
   EXPECT_EQ(
@@ -5283,7 +5283,7 @@ IN_PROC_BROWSER_TEST_F(DownloadPrerenderTest, DiscardNonNavigationDownload) {
   // prerendered page and mark it as rendered-initiated, otherwise the download
   // won't be checked.
   auto download_parameters = std::make_unique<download::DownloadUrlParameters>(
-      kDownloadUrl, render_frame_host->GetProcess()->GetID(),
+      kDownloadUrl, render_frame_host->GetProcess()->GetDeprecatedID(),
       render_frame_host->GetRoutingID(), TRAFFIC_ANNOTATION_FOR_TESTS);
   download_parameters->set_content_initiated(true);
   download_manager->DownloadUrl(std::move(download_parameters));

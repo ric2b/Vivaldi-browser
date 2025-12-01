@@ -9,9 +9,11 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
+#include "osp/public/connect_request.h"
 #include "osp/public/presentation/presentation_common.h"
 #include "osp/public/presentation/presentation_connection.h"
 #include "osp/public/protocol_connection.h"
@@ -61,7 +63,8 @@ class ReceiverObserver {
 };
 
 class Controller final : public ServiceListener::Observer,
-                         public Connection::Controller {
+                         public Connection::Controller,
+                         public ConnectRequestCallback {
  public:
   class ReceiverWatch {
    public:
@@ -130,6 +133,10 @@ class Controller final : public ServiceListener::Observer,
                                  TerminationReason reason) override;
   void OnConnectionDestroyed(Connection* connection) override;
 
+  // Build an underlying connection to `instance_name`.`OnConnectSucceed` is
+  // called if succeed. Otherwise, `OnConnectFailed` is called.
+  void BuildConnection(std::string_view instance_name);
+
   // Requests receivers compatible with all urls in `urls` and registers
   // `observer` for availability changes.  The screens will be a subset of the
   // screen list maintained by the ServiceListener.  Returns an RAII object that
@@ -172,6 +179,10 @@ class Controller final : public ServiceListener::Observer,
   ProtocolConnection* GetConnectionRequestGroupStream(
       const std::string& instance_name);
 
+  UrlAvailabilityRequester* availability_requester() {
+    return availability_requester_.get();
+  }
+
  private:
   class TerminationListener;
   class MessageGroupStreams;
@@ -192,7 +203,13 @@ class Controller final : public ServiceListener::Observer,
   void OnReceiverRemoved(const ServiceInfo& info) override;
   void OnAllReceiversRemoved() override;
   void OnError(const Error& error) override;
-  void OnMetrics(ServiceListener::Metrics) override;
+
+  // ConnectRequestCallback overrides.
+  void OnConnectSucceed(uint64_t request_id,
+                        std::string_view instance_name,
+                        uint64_t instance_id) override;
+  void OnConnectFailed(uint64_t request_id,
+                       std::string_view instance_name) override;
 
   static std::string MakePresentationId(const std::string& url,
                                         const std::string& instance_name);
@@ -222,11 +239,14 @@ class Controller final : public ServiceListener::Observer,
   std::unique_ptr<UrlAvailabilityRequester> availability_requester_;
 
   std::map<std::string, ControlledPresentation> presentations_by_id_;
-  // TODO(crbug.com/347268871): Replace instance_name as an agent identifier
-  std::map<std::string, std::unique_ptr<MessageGroupStreams>>
-      group_streams_by_instance_name_;
   std::map<std::string, std::unique_ptr<TerminationListener>>
       termination_listener_by_id_;
+
+  // TODO(crbug.com/347268871): Replace instance_name as an agent identifier
+  std::map<std::string, openscreen::osp::ConnectRequest>
+      connect_requests_by_instance_name_;
+  std::map<std::string, std::unique_ptr<MessageGroupStreams>>
+      group_streams_by_instance_name_;
 };
 
 }  // namespace openscreen::osp

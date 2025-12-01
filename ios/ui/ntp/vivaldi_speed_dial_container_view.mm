@@ -10,8 +10,8 @@
 #import "ios/chrome/browser/favicon/model/favicon_loader.h"
 #import "ios/chrome/browser/net/model/crurl.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
-#import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
-#import "ios/chrome/browser/ui/toolbar/public/toolbar_utils.h"
+#import "ios/chrome/browser/toolbar/ui_bundled/public/toolbar_constants.h"
+#import "ios/chrome/browser/toolbar/ui_bundled/public/toolbar_utils.h"
 #import "ios/chrome/common/ui/favicon/favicon_attributes.h"
 #import "ios/chrome/common/ui/favicon/favicon_constants.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -74,7 +74,7 @@ const CGFloat commonPadding = 20;
 // Collection view layout for selected column and layout rendering
 @property(nonatomic,strong) VivaldiSpeedDialViewContainerViewFlowLayout *layout;
 // Parent speed dial folder
-@property(assign,nonatomic) VivaldiSpeedDialItem* parent;
+@property(strong,nonatomic) VivaldiSpeedDialItem* parent;
 // Array to store the children to populate on the collection view
 @property(strong,nonatomic) NSMutableArray *speedDialItems;
 // Currently selected layout

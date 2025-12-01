@@ -61,7 +61,7 @@ and
 [modules/idl.gypi](https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/Source/bindings/modules/idl.gypi)),
 due to having to categorize the IDL files for the build (see [Web IDL
 interfaces:
-Build](http://www.chromium.org/developers/web-idl-interfaces#TOC-Build)).
+Build](/developers/web-idl-interfaces#TOC-Build)).
 
 There are relatively long lists of .gypi includes in the .gyp files, which are
 due to factoring for componentization, and are longer than desired due to
@@ -72,10 +72,10 @@ make the (bad) dependencies explicit.
 ## Performance
 
 *For build performance in compiling a single IDL file, see [IDL compiler:
-Performance](http://www.chromium.org/developers/design-documents/idl-compiler#TOC-Performance)*
+Performance](/developers/design-documents/idl-compiler#TOC-Performance)*
 
 Build performance is one of the [IDL compiler
-goals](http://www.chromium.org/developers/design-documents/idl-compiler#TOC-Goals),
+goals](/developers/design-documents/idl-compiler#TOC-Goals),
 though secondary to correctness and performance of the generated code.
 
 The primary concern is minimizing *full build time* (notably full bindings
@@ -95,7 +95,7 @@ implemented interface) is touched, which is infrequent.
 
 The coarsest way to profile a full build – which is sufficient for verifying
 coarse improvements – is to do a build (using ninja), then `touch
-idl_compiler.py` and [`time(1)`](http://en.wikipedia.org/wiki/Time_(Unix))
+idl_compiler.py` and [`time(1)`](https://en.wikipedia.org/wiki/Time_(Unix))
 another build (most finely the targets should be `bindings_core_v8_generated
 bindings_modules_v8_generated` but (for ninja) it's fine for the target to be
 `chrome`); "user time" is most relevant. This should only rebuild the bindings,

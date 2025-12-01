@@ -11,21 +11,23 @@ import {NewTabPageProxy} from '../new_tab_page_proxy.js';
 
 import type {ModuleDescriptor} from './module_descriptor.js';
 import {ModuleRegistry} from './module_registry.js';
+import {microsoftAuthModuleDescriptor} from './v2/authentication/microsoft_auth_module.js';
 import {googleCalendarDescriptor} from './v2/calendar/google_calendar_module.js';
 import {outlookCalendarDescriptor} from './v2/calendar/outlook_calendar_module.js';
 // <if expr="not is_official_build">
 import {dummyV2Descriptor} from './v2/dummy/module.js';
 // </if>
 import {driveModuleV2Descriptor} from './v2/file_suggestion/drive_module.js';
-import {sharepointModuleDescriptor} from './v2/file_suggestion/sharepoint_module.js';
+import {microsoftFilesModuleDescriptor} from './v2/file_suggestion/microsoft_files_module.js';
 import {mostRelevantTabResumptionDescriptor} from './v2/most_relevant_tab_resumption/module.js';
 
 export const descriptors: ModuleDescriptor[] = [];
-descriptors.push(driveModuleV2Descriptor);
-descriptors.push(sharepointModuleDescriptor);
 descriptors.push(mostRelevantTabResumptionDescriptor);
+descriptors.push(driveModuleV2Descriptor);
 descriptors.push(googleCalendarDescriptor);
+descriptors.push(microsoftAuthModuleDescriptor);
 descriptors.push(outlookCalendarDescriptor);
+descriptors.push(microsoftFilesModuleDescriptor);
 
 // <if expr="not is_official_build">
 descriptors.push(dummyV2Descriptor);

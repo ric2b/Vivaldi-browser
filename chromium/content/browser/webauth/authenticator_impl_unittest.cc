@@ -37,7 +37,6 @@
 #include "base/memory/stack_allocated.h"
 #include "base/notreached.h"
 #include "base/rand_util.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -53,7 +52,6 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "components/cbor/reader.h"
 #include "components/cbor/values.h"
 #include "components/ukm/test_ukm_recorder.h"
@@ -68,6 +66,7 @@
 #include "content/public/browser/authenticator_request_client_delegate.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/web_authentication_delegate.h"
 #include "content/public/browser/web_authentication_request_proxy.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
@@ -462,7 +461,7 @@ GetTestPublicKeyCredentialRequestOptions() {
   auto options = PublicKeyCredentialRequestOptions::New();
   options->extensions = AuthenticationExtensionsClientInputs::New();
   options->relying_party_id = std::string(kTestRelyingPartyId);
-  options->challenge.assign(32, 0x0A);
+  options->challenge = std::vector<uint8_t>(32, 0x0A);
   options->timeout = base::Minutes(1);
   options->user_verification = device::UserVerificationRequirement::kPreferred;
   options->allow_credentials = GetTestCredentials();
@@ -1007,8 +1006,8 @@ TEST_F(AuthenticatorImplTest, ClientDataJSONSerialization) {
 // Verify behavior for various combinations of origins and RP IDs.
 TEST_F(AuthenticatorImplTest, MakeCredentialOriginAndRpIds) {
   std::vector<OriginClaimedAuthorityPair> tests;
-  base::ranges::copy(kValidRpTestCases, std::back_inserter(tests));
-  base::ranges::copy(kInvalidRpTestCases, std::back_inserter(tests));
+  std::ranges::copy(kValidRpTestCases, std::back_inserter(tests));
+  std::ranges::copy(kInvalidRpTestCases, std::back_inserter(tests));
 
   int test_case_count = 0;
   for (const auto& test_case : tests) {
@@ -1083,7 +1082,7 @@ TEST_F(AuthenticatorImplTest, GetClientCapabilities) {
   ClientCapabilitiesList capabilities = AuthenticatorGetClientCapabilities();
 
   std::vector<std::string> capability_names;
-  base::ranges::transform(
+  std::ranges::transform(
       capabilities, std::back_inserter(capability_names),
       [](const auto& capability) { return capability->name; });
 
@@ -1101,7 +1100,7 @@ TEST_F(AuthenticatorImplTest, GetClientCapabilities) {
   // Check that each required capability is present exactly once.
   for (const auto& capability : kRequiredCapabilities) {
     EXPECT_EQ(1u, static_cast<size_t>(
-                      base::ranges::count(capability_names, capability)));
+                      std::ranges::count(capability_names, capability)));
   }
 }
 
@@ -1124,7 +1123,7 @@ TEST_F(AuthenticatorImplTest,
        GetClientCapabilities_HybridTransport_BluetoothDisabled) {
   blink::ParsedPermissionsPolicy permissions_policy(1);
   permissions_policy[0].feature =
-      blink::mojom::PermissionsPolicyFeature::kBluetooth;
+      network::mojom::PermissionsPolicyFeature::kBluetooth;
   // Simulate navigating to a page with this Permissions Policy.
   auto navigation_simulator = NavigationSimulator::CreateRendererInitiated(
       GURL(kTestOrigin1), main_rfh());
@@ -3527,8 +3526,6 @@ class AuthenticatorImplRemoteDesktopClientOverrideTest
   }
 
   base::test::ScopedCommandLine scoped_command_line_;
-  base::test::ScopedFeatureList scoped_feature_list_{
-      device::kWebAuthnGoogleCorpRemoteDesktopClientPrivilege};
 };
 
 TEST_F(AuthenticatorImplRemoteDesktopClientOverrideTest, MakeCredential) {
@@ -4311,7 +4308,7 @@ TEST_F(AuthenticatorImplTest, AllowListWithOnlyOversizedCredentialIds) {
     const auto& allow_list_history =
         virtual_device_factory_->mutable_state()->allow_list_history;
     // No empty allow-list requests should have been made.
-    EXPECT_TRUE(base::ranges::none_of(
+    EXPECT_TRUE(std::ranges::none_of(
         allow_list_history,
         [](const std::vector<device::PublicKeyCredentialDescriptor>&
                allow_list) { return allow_list.empty(); }));
@@ -7176,7 +7173,7 @@ class ResidentKeyTestAuthenticatorRequestDelegate
               });
 
     std::vector<std::string> string_reps;
-    base::ranges::transform(
+    std::ranges::transform(
         responses, std::back_inserter(string_reps),
         [](const device::AuthenticatorGetAssertionResponse& response) {
           const device::PublicKeyCredentialUserEntity& user =
@@ -7187,7 +7184,7 @@ class ResidentKeyTestAuthenticatorRequestDelegate
 
     EXPECT_EQ(config_.expected_accounts, base::JoinString(string_reps, "/"));
 
-    const auto selected = base::ranges::find(
+    const auto selected = std::ranges::find(
         responses, config_.selected_user_id,
         [](const device::AuthenticatorGetAssertionResponse& response) {
           return response.user_entity->id;
@@ -7421,6 +7418,45 @@ TEST_F(ResidentKeyAuthenticatorImplTest, MakeCredentialRkPreferredStorageFull) {
     // tap. In 2.1 remaining storage capacity can be checked up front such that
     // the request is sent with rk=false right away.
     EXPECT_EQ(num_taps, is_ctap_2_1 ? 1u : 2u);
+  }
+}
+
+TEST_F(ResidentKeyAuthenticatorImplTest,
+       MakeCredentialRkPreferredStorageFull_LargeBlob) {
+  device::VirtualCtap2Device::Config config;
+  config.ctap2_versions = {std::begin(device::kCtap2Versions2_1),
+                           std::end(device::kCtap2Versions2_1)};
+  config.internal_uv_support = true;
+  config.resident_key_support = true;
+  config.resident_credential_storage = 0;
+  config.large_blob_support = true;
+  config.pin_uv_auth_token_support = true;
+  virtual_device_factory_->SetCtap2Config(config);
+  virtual_device_factory_->mutable_state()->fingerprints_enrolled = true;
+  {
+    PublicKeyCredentialCreationOptionsPtr options =
+        make_credential_options(device::ResidentKeyRequirement::kPreferred);
+    options->large_blob_enable = device::LargeBlobSupport::kRequired;
+    MakeCredentialResult result =
+        AuthenticatorMakeCredential(std::move(options));
+    EXPECT_EQ(AuthenticatorStatus::NOT_ALLOWED_ERROR, result.status);
+  }
+  {
+    PublicKeyCredentialCreationOptionsPtr options =
+        make_credential_options(device::ResidentKeyRequirement::kPreferred);
+    options->large_blob_enable = device::LargeBlobSupport::kPreferred;
+    MakeCredentialResult result =
+        AuthenticatorMakeCredential(std::move(options));
+    ASSERT_EQ(AuthenticatorStatus::SUCCESS, result.status);
+    EXPECT_TRUE(result.response->echo_large_blob);
+    EXPECT_FALSE(result.response->supports_large_blob);
+    EXPECT_EQ(1u,
+              virtual_device_factory_->mutable_state()->registrations.size());
+    const device::VirtualFidoDevice::RegistrationData& registration =
+        virtual_device_factory_->mutable_state()->registrations.begin()->second;
+    EXPECT_FALSE(registration.is_resident);
+    EXPECT_FALSE(registration.large_blob);
+    EXPECT_FALSE(registration.large_blob_key);
   }
 }
 
@@ -8899,10 +8935,6 @@ TEST_F(ResidentKeyAuthenticatorImplTest, ConditionalUI) {
 // specialized to the chosen credential ID and post-request account selection UI
 // to be skipped.
 TEST_F(ResidentKeyAuthenticatorImplTest, PreselectDiscoverableCredential) {
-  device::VirtualCtap2Device::Config config;
-  config.resident_key_support = true;
-  config.internal_uv_support = true;
-  virtual_device_factory_->SetCtap2Config(config);
   virtual_device_factory_->SetTransport(
       device::FidoTransportProtocol::kInternal);
   virtual_device_factory_->mutable_state()->fingerprints_enrolled = true;
@@ -8920,19 +8952,28 @@ TEST_F(ResidentKeyAuthenticatorImplTest, PreselectDiscoverableCredential) {
   ASSERT_TRUE(virtual_device_factory_->mutable_state()->InjectResidentKey(
       kSecondCredentialId, kTestRelyingPartyId, kSecondUserId, std::nullopt,
       std::nullopt));
+  for (bool has_pin_uv_auth_token : {false, true}) {
+    SCOPED_TRACE(has_pin_uv_auth_token);
+    device::VirtualCtap2Device::Config config;
+    config.pin_uv_auth_token_support = has_pin_uv_auth_token;
+    config.ctap2_versions = {device::Ctap2Version::kCtap2_1};
+    config.resident_key_support = true;
+    config.internal_uv_support = true;
+    virtual_device_factory_->SetCtap2Config(std::move(config));
 
-  // |SelectAccount| should not be called if an account was chosen from
-  // pre-select UI.
-  test_client_.delegate_config.expected_accounts = "<invalid>";
+    // |SelectAccount| should not be called if an account was chosen from
+    // pre-select UI.
+    test_client_.delegate_config.expected_accounts = "<invalid>";
 
-  for (const auto& id : {kFirstCredentialId, kSecondCredentialId}) {
-    test_client_.delegate_config.preselected_credential_id = id;
-    test_client_.delegate_config.preselected_authenticator_id =
-        kAuthenticatorId;
-    PublicKeyCredentialRequestOptionsPtr options(get_credential_options());
-    GetAssertionResult result = AuthenticatorGetAssertion(std::move(options));
-    EXPECT_EQ(result.status, AuthenticatorStatus::SUCCESS);
-    EXPECT_EQ(result.response->info->raw_id, id);
+    for (const auto& id : {kFirstCredentialId, kSecondCredentialId}) {
+      test_client_.delegate_config.preselected_credential_id = id;
+      test_client_.delegate_config.preselected_authenticator_id =
+          kAuthenticatorId;
+      PublicKeyCredentialRequestOptionsPtr options(get_credential_options());
+      GetAssertionResult result = AuthenticatorGetAssertion(std::move(options));
+      EXPECT_EQ(result.status, AuthenticatorStatus::SUCCESS);
+      EXPECT_EQ(result.response->info->raw_id, id);
+    }
   }
 }
 
@@ -9719,7 +9760,7 @@ class AuthenticatorCableV2Test : public AuthenticatorImplRequestDelegateTest {
 
   void OnInvalidatedPairing(
       std::unique_ptr<device::cablev2::Pairing> disabled_pairing) {
-    pairings_.erase(base::ranges::find_if(
+    pairings_.erase(std::ranges::find_if(
         pairings_, [&disabled_pairing](const auto& pairing) {
           return device::cablev2::Pairing::EqualPublicKeys(pairing,
                                                            disabled_pairing);
@@ -9837,7 +9878,7 @@ class AuthenticatorCableV2Test : public AuthenticatorImplRequestDelegateTest {
   const std::array<uint8_t, device::cablev2::kQRSeedSize> zero_seed_ = {0};
 
   std::unique_ptr<network::mojom::NetworkContext> network_context_;
-  uint8_t peer_identity_x962_[device::kP256X962Length] = {0};
+  uint8_t peer_identity_x962_[device::kP256X962Length] = {};
   device::VirtualCtap2Device virtual_device_{DeviceState(), DeviceConfig()};
   std::vector<std::unique_ptr<device::cablev2::Pairing>> pairings_;
   base::OnceCallback<void(
@@ -10371,8 +10412,6 @@ class AuthenticatorImplWithRequestProxyTest : public AuthenticatorImplTest {
 
   raw_ptr<ContentBrowserClient> old_client_ = nullptr;
   TestAuthenticatorContentBrowserClient test_client_;
-  base::test::ScopedFeatureList scoped_feature_list_{
-      device::kWebAuthnGoogleCorpRemoteDesktopClientPrivilege};
 };
 
 TEST_F(AuthenticatorImplWithRequestProxyTest, Inactive) {

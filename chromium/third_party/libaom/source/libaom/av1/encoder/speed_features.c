@@ -22,7 +22,7 @@
 #define MAX_MESH_SPEED 5  // Max speed setting for mesh motion method
 // Max speed setting for tx domain evaluation
 #define MAX_TX_DOMAIN_EVAL_SPEED 5
-static MESH_PATTERN
+static const MESH_PATTERN
     good_quality_mesh_patterns[MAX_MESH_SPEED + 1][MAX_MESH_STEP] = {
       { { 64, 8 }, { 28, 4 }, { 15, 1 }, { 7, 1 } },
       { { 64, 8 }, { 28, 4 }, { 15, 1 }, { 7, 1 } },
@@ -34,14 +34,15 @@ static MESH_PATTERN
 
 // TODO(huisu@google.com): These settings are pretty relaxed, tune them for
 // each speed setting
-static MESH_PATTERN intrabc_mesh_patterns[MAX_MESH_SPEED + 1][MAX_MESH_STEP] = {
-  { { 256, 1 }, { 256, 1 }, { 0, 0 }, { 0, 0 } },
-  { { 256, 1 }, { 256, 1 }, { 0, 0 }, { 0, 0 } },
-  { { 64, 1 }, { 64, 1 }, { 0, 0 }, { 0, 0 } },
-  { { 64, 1 }, { 64, 1 }, { 0, 0 }, { 0, 0 } },
-  { { 64, 4 }, { 16, 1 }, { 0, 0 }, { 0, 0 } },
-  { { 64, 4 }, { 16, 1 }, { 0, 0 }, { 0, 0 } },
-};
+static const MESH_PATTERN
+    intrabc_mesh_patterns[MAX_MESH_SPEED + 1][MAX_MESH_STEP] = {
+      { { 256, 1 }, { 256, 1 }, { 0, 0 }, { 0, 0 } },
+      { { 256, 1 }, { 256, 1 }, { 0, 0 }, { 0, 0 } },
+      { { 64, 1 }, { 64, 1 }, { 0, 0 }, { 0, 0 } },
+      { { 64, 1 }, { 64, 1 }, { 0, 0 }, { 0, 0 } },
+      { { 64, 4 }, { 16, 1 }, { 0, 0 }, { 0, 0 } },
+      { { 64, 4 }, { 16, 1 }, { 0, 0 }, { 0, 0 } },
+    };
 
 // Threshold values to be used for pruning the txfm_domain_distortion
 // based on block MSE
@@ -50,7 +51,7 @@ static MESH_PATTERN intrabc_mesh_patterns[MAX_MESH_SPEED + 1][MAX_MESH_STEP] = {
 // Index 2: Winner mode evaluation. Index 1 and 2 are applicable when
 // enable_winner_mode_for_use_tx_domain_dist speed feature is ON
 // TODO(any): Experiment the threshold logic based on variance metric
-static unsigned int tx_domain_dist_thresholds[4][MODE_EVAL_TYPES] = {
+static const unsigned int tx_domain_dist_thresholds[4][MODE_EVAL_TYPES] = {
   { UINT_MAX, UINT_MAX, UINT_MAX },
   { 22026, 22026, 22026 },
   { 1377, 1377, 1377 },
@@ -67,7 +68,7 @@ static unsigned int tx_domain_dist_thresholds[4][MODE_EVAL_TYPES] = {
 // applicable (Eg : IntraBc). Index 1: Mode evaluation. Index 2: Winner mode
 // evaluation. Index 1 and 2 are applicable when
 // enable_winner_mode_for_use_tx_domain_dist speed feature is ON
-static unsigned int
+static const unsigned int
     tx_domain_dist_types[TX_DOMAIN_DIST_LEVELS][MODE_EVAL_TYPES] = {
       { 0, 2, 0 }, { 1, 2, 0 }, { 2, 2, 0 }, { 2, 2, 2 }
     };
@@ -84,7 +85,7 @@ static unsigned int
 // Index 1 and 2 are applicable when enable_winner_mode_for_coeff_opt speed
 // feature is ON
 // There are 7 levels with increasing speed, mapping to vertical indices.
-static unsigned int coeff_opt_thresholds[9][MODE_EVAL_TYPES][2] = {
+static const unsigned int coeff_opt_thresholds[9][MODE_EVAL_TYPES][2] = {
   { { UINT_MAX, UINT_MAX }, { UINT_MAX, UINT_MAX }, { UINT_MAX, UINT_MAX } },
   { { 3200, UINT_MAX }, { 250, UINT_MAX }, { UINT_MAX, UINT_MAX } },
   { { 1728, UINT_MAX }, { 142, UINT_MAX }, { UINT_MAX, UINT_MAX } },
@@ -101,12 +102,13 @@ static unsigned int coeff_opt_thresholds[9][MODE_EVAL_TYPES][2] = {
 // (Eg : IntraBc) Index 1: Mode evaluation. Index 2: Winner mode evaluation.
 // Index 1 and 2 are applicable when enable_winner_mode_for_tx_size_srch speed
 // feature is ON
-static TX_SIZE_SEARCH_METHOD tx_size_search_methods[4][MODE_EVAL_TYPES] = {
-  { USE_FULL_RD, USE_LARGESTALL, USE_FULL_RD },
-  { USE_FAST_RD, USE_LARGESTALL, USE_FULL_RD },
-  { USE_LARGESTALL, USE_LARGESTALL, USE_FULL_RD },
-  { USE_LARGESTALL, USE_LARGESTALL, USE_LARGESTALL }
-};
+static const TX_SIZE_SEARCH_METHOD
+    tx_size_search_methods[4][MODE_EVAL_TYPES] = {
+      { USE_FULL_RD, USE_LARGESTALL, USE_FULL_RD },
+      { USE_FAST_RD, USE_LARGESTALL, USE_FULL_RD },
+      { USE_LARGESTALL, USE_LARGESTALL, USE_FULL_RD },
+      { USE_LARGESTALL, USE_LARGESTALL, USE_LARGESTALL }
+    };
 
 // Predict transform skip levels to be used for default, mode and winner mode
 // evaluation. Index 0: Default mode evaluation, Winner mode processing is not
@@ -115,9 +117,9 @@ static TX_SIZE_SEARCH_METHOD tx_size_search_methods[4][MODE_EVAL_TYPES] = {
 // 0 : no early skip prediction
 // 1 : conservative early skip prediction using DCT_DCT
 // 2 : early skip prediction based on SSE
-static unsigned int predict_skip_levels[3][MODE_EVAL_TYPES] = { { 0, 0, 0 },
-                                                                { 1, 1, 1 },
-                                                                { 1, 2, 1 } };
+static const unsigned int predict_skip_levels[3][MODE_EVAL_TYPES] = {
+  { 0, 0, 0 }, { 1, 1, 1 }, { 1, 2, 1 }
+};
 
 // Predict skip or DC block level used during transform type search. It is
 // indexed using the following:
@@ -131,7 +133,7 @@ static unsigned int predict_skip_levels[3][MODE_EVAL_TYPES] = { { 0, 0, 0 },
 // Type 1 : Prediction of skip block based on residual mean and variance
 // Type 2 : Prediction of skip block or DC only block based on residual mean and
 // variance
-static unsigned int predict_dc_levels[4][MODE_EVAL_TYPES] = {
+static const unsigned int predict_dc_levels[4][MODE_EVAL_TYPES] = {
   { 0, 0, 0 }, { 1, 1, 0 }, { 2, 2, 0 }, { 2, 2, 2 }
 };
 
@@ -142,7 +144,7 @@ static unsigned int predict_dc_levels[4][MODE_EVAL_TYPES] = {
 // 1 : All reference frames except L2 and L3 are allowed.
 // 2 : All reference frames except L2, L3 and ARF2 are allowed.
 // 3 : No reference frame is allowed.
-static int gm_available_reference_frames[GM_DISABLE_SEARCH + 1] = {
+static const int gm_available_reference_frames[GM_DISABLE_SEARCH + 1] = {
   INTER_REFS_PER_FRAME, INTER_REFS_PER_FRAME - 2, INTER_REFS_PER_FRAME - 3, 0
 };
 #endif
@@ -153,14 +155,15 @@ static int gm_available_reference_frames[GM_DISABLE_SEARCH + 1] = {
 // Aggressiveness increases from i = 0 to 2.
 // j = 0: lower than 720p resolution, j = 1: 720p or larger resolution.
 // Currently invoked only for speed 0, 1 and 2.
-static int ms_qindex_thresh[3][2][2] = { { { 200, 70 }, { MAXQ, 200 } },
-                                         { { 170, 50 }, { MAXQ, 200 } },
-                                         { { 170, 40 }, { 200, 40 } } };
+static const int ms_qindex_thresh[3][2][2] = { { { 200, 70 }, { MAXQ, 200 } },
+                                               { { 170, 50 }, { MAXQ, 200 } },
+                                               { { 170, 40 }, { 200, 40 } } };
 
 // Full-pel search methods for aggressive search based on qindex.
 // Index 0 is for resolutions lower than 720p, index 1 for 720p or larger
 // resolutions. Currently invoked only for speed 1 and 2.
-static SEARCH_METHODS motion_search_method[2] = { CLAMPED_DIAMOND, DIAMOND };
+static const SEARCH_METHODS motion_search_method[2] = { CLAMPED_DIAMOND,
+                                                        DIAMOND };
 
 // Intra only frames, golden frames (except alt ref overlays) and
 // alt ref frames tend to be coded at a higher than ambient quality

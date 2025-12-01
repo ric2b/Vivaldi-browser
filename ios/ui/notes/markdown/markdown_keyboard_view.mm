@@ -7,13 +7,13 @@
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ios/ui/notes/markdown/markdown_command_delegate.h"
+#import "ios/ui/notes/markdown/vivaldi_markdown_constants.h"
 
 namespace {
 
 typedef NS_ENUM(NSInteger, CommandId) {
-  Bold = 0,
+  Bold = 1,
   Italic,
-  Underline,
   Strikethrough,
   Indent,
   Outdent,
@@ -21,10 +21,6 @@ typedef NS_ENUM(NSInteger, CommandId) {
   UnorderedList,
   CheckList,
   Link,
-  AlignCenter,
-  AlignRight,
-  AlignLeft,
-  AlignJustify,
   Highlight,
   Code,
   Subscript,
@@ -33,6 +29,8 @@ typedef NS_ENUM(NSInteger, CommandId) {
   Heading2,
   Heading3,
   Heading4,
+  Heading5,
+  Heading6,
   Paragraph,
   CodeBlock,
   Quote,
@@ -45,6 +43,10 @@ typedef NS_ENUM(NSInteger, CommandId) {
 constexpr CGFloat kDefaultPadding = 60;
 constexpr CGFloat kPageControlBottomPadding = -15;
 constexpr NSInteger kNumberOfKeyboardPages = 2;
+
+// Size and shape of the background tint of active buttons
+constexpr CGFloat kTintSize = 50;
+constexpr CGFloat kTintCornerRadius = 6.0f;
 
 }  // namespace
 
@@ -83,18 +85,42 @@ constexpr NSInteger kNumberOfKeyboardPages = 2;
   self.pageControl = nil;
 }
 
+- (void)userContentController:(WKUserContentController*)userContentController
+      didReceiveScriptMessage:(WKScriptMessage*)message {
+  if ([message.name isEqualToString:vCurrentMarkdownFormat]) {
+    if ([message.body isKindOfClass:[NSDictionary class]]) {
+      for (id key in message.body) {
+        // VIB-1114 Change the tint of the buttons to indicate which
+        // format is active
+        NSInteger tag = [self getCommandIdFromName:key];
+        UIButton* button = (UIButton*)[self viewWithTag:tag];
+        if ([button isKindOfClass:[UIButton class]]) {
+          if ([[message.body objectForKey:key] boolValue] == YES) {
+            // Format is active, use different background tint
+            [button
+                setBackgroundColor:[UIColor
+                                       colorNamed:kTertiaryBackgroundColor]];
+          } else {
+            // Format is NOT active, remove background tint
+            [button setBackgroundColor:nil];
+          }
+        }
+      }
+    }
+  }
+}
+
 #pragma mark - SET UP UI COMPONENTS
 
 - (void)setUpTabletUI {
-  self.backgroundColor = [UIColor colorNamed:kGrey300Color];
   NSArray* buttonLayout = @[
     [self getButtonGroup:@[
       @(Bold),
       @(Italic),
-      @(Underline), // TODO(tomas@vivaldi): does not get saved
       @(Strikethrough),
       @(Subscript),
       @(Superscript),
+      @(Code),
     ]],
     [self getButtonGroup:@[
       @(Heading1),  // block type
@@ -105,14 +131,6 @@ constexpr NSInteger kNumberOfKeyboardPages = 2;
       @(CodeBlock), // block type
     ]],
     [self getButtonGroup:@[
-      @(Image),
-      @(Link),
-      @(AlignLeft),    // TODO(tomas@vivaldi): does not get saved
-      @(AlignCenter),  // TODO(tomas@vivaldi): does not get saved
-      @(AlignRight),   // TODO(tomas@vivaldi): does not get saved
-      @(Code),
-    ]],
-    [self getButtonGroup:@[
       @(OrderedList),
       @(UnorderedList),
       @(CheckList),
@@ -121,9 +139,9 @@ constexpr NSInteger kNumberOfKeyboardPages = 2;
       @(Highlight),
     ]],
     [self getButtonGroup:@[
+      @(Image),
+      @(Link),
       @(Quote),
-      @(BlankSpace),
-      @(BlankSpace),
       @(BlankSpace),
       @(BlankSpace),
       @(BlankSpace),
@@ -159,25 +177,24 @@ constexpr NSInteger kNumberOfKeyboardPages = 2;
 }
 
 - (void)setUpPhoneUI {
-  self.backgroundColor = [UIColor colorNamed:kGrey300Color];
   NSArray* buttonLayout1 = @[
     [self getButtonGroup:@[
       @(Bold),
       @(Italic),
-      @(Underline), // TODO(tomas@vivaldi): does not get saved
       @(Strikethrough),
+      @(Highlight),
     ]],
     [self getButtonGroup:@[
       @(Heading1),  // block type
       @(Heading2),  // block type
-      @(Paragraph), // block type
-      @(Code),
+      @(Heading3),   // block type
+      @(Heading4),   // block type
     ]],
     [self getButtonGroup:@[
-      @(AlignLeft),    // TODO(tomas@vivaldi): does not get saved
-      @(AlignCenter),  // TODO(tomas@vivaldi): does not get saved
-      @(AlignRight),   // TODO(tomas@vivaldi): does not get saved
-      @(Highlight),
+      @(Subscript),
+      @(Superscript),
+      @(Paragraph), // block type
+      @(Code),
     ]],
     [self getButtonGroup:@[
       @(OrderedList),
@@ -195,22 +212,16 @@ constexpr NSInteger kNumberOfKeyboardPages = 2;
       @(CodeBlock),    // block type
     ]],
     [self getButtonGroup:@[
-      @(Heading3),     // block type
-      @(Heading4),     // block type
-      @(Subscript),
-      @(Superscript),
-    ]],
-    [self getButtonGroup:@[
       @(Image),
       @(BlankSpace),
       @(BlankSpace),
       @(BlankSpace),
     ]],
     [self getButtonGroup:@[
-      @(BlankSpace),
-      @(BlankSpace),
-      @(BlankSpace),
-      @(BlankSpace),
+      @(BlankSpace), // Blank row
+    ]],
+    [self getButtonGroup:@[
+      @(BlankSpace), // Blank row
     ]],
   ];
 
@@ -337,6 +348,13 @@ constexpr NSInteger kNumberOfKeyboardPages = 2;
   button.tintColor = [UIColor colorNamed:kTextPrimaryColor];
   [button setTag:commandId];
   button.translatesAutoresizingMaskIntoConstraints = NO;
+
+  // VIB-1114 size & shape of the button tint.
+  [button.widthAnchor constraintEqualToConstant:kTintSize].active = YES;
+  [button.heightAnchor constraintEqualToConstant:kTintSize].active = YES;
+  [[button layer] setCornerRadius:kTintCornerRadius];
+  [[button layer] setMasksToBounds:YES];
+
   return button;
 }
 
@@ -364,8 +382,6 @@ constexpr NSInteger kNumberOfKeyboardPages = 2;
       return [UIImage systemImageNamed:@"bold"];
     case Italic:
       return [UIImage systemImageNamed:@"italic"];
-    case Underline:
-      return [UIImage systemImageNamed:@"underline"];
     case Strikethrough:
       return [UIImage systemImageNamed:@"strikethrough"];
     case Highlight:
@@ -378,14 +394,6 @@ constexpr NSInteger kNumberOfKeyboardPages = 2;
       return [UIImage systemImageNamed:@"textformat.subscript"];
     case Superscript:
       return [UIImage systemImageNamed:@"textformat.superscript"];
-    case AlignCenter:
-      return [UIImage systemImageNamed:@"text.aligncenter"];
-    case AlignRight:
-      return [UIImage systemImageNamed:@"text.alignright"];
-    case AlignLeft:
-      return [UIImage systemImageNamed:@"text.alignleft"];
-    case AlignJustify:
-      return [UIImage systemImageNamed:@"text.justify"];
     case Heading1:
       return [UIImage imageNamed:@"markdown_h1_button"];
     case Heading2:
@@ -428,8 +436,6 @@ constexpr NSInteger kNumberOfKeyboardPages = 2;
       return @"bold";
     case Italic:
       return @"italic";
-    case Underline:
-      return @"underline";
     case Strikethrough:
       return @"strikethrough";
     case Highlight:
@@ -441,14 +447,6 @@ constexpr NSInteger kNumberOfKeyboardPages = 2;
       return @"subscript";
     case Superscript:
       return @"superscript";
-    case AlignCenter:
-      return @"center";
-    case AlignRight:
-      return @"right";
-    case AlignLeft:
-      return @"left";
-    case AlignJustify:
-      return @"justify";
     case Heading1:
       return @"h1";
     case Heading2:
@@ -457,6 +455,10 @@ constexpr NSInteger kNumberOfKeyboardPages = 2;
       return @"h3";
     case Heading4:
       return @"h4";
+    case Heading5:
+      return @"h5";
+    case Heading6:
+      return @"h6";
     case Paragraph:
       return @"paragraph";
     case Quote:
@@ -476,13 +478,59 @@ constexpr NSInteger kNumberOfKeyboardPages = 2;
   }
 }
 
+// NOTE(tomas@vivaldi): These must match the type definition for
+// CurrentTextFormat in vivapp/src/mobile/markdown/Types.jsx
+- (NSInteger)getCommandIdFromName:(NSString*)name {
+  if ([name isEqualToString:@"bold"]) {
+    return Bold;
+  } else if ([name isEqualToString:@"italic"]) {
+    return Italic;
+  } else if ([name isEqualToString:@"strikethrough"]) {
+    return Strikethrough;
+  } else if ([name isEqualToString:@"highlight"]) {
+    return Highlight;
+  } else if ([name isEqualToString:@"subscript"]) {
+    return Subscript;
+  } else if ([name isEqualToString:@"superscript"]) {
+    return Superscript;
+  } else if ([name isEqualToString:@"code"]) {
+    return Code;
+  } else if ([name isEqualToString:@"link"]) {
+    return Link;
+  } else if ([name isEqualToString:@"h1"]) {
+    return Heading1;
+  } else if ([name isEqualToString:@"h2"]) {
+    return Heading2;
+  } else if ([name isEqualToString:@"h3"]) {
+    return Heading3;
+  } else if ([name isEqualToString:@"h4"]) {
+    return Heading4;
+  } else if ([name isEqualToString:@"h5"]) {
+    return Heading5;
+  } else if ([name isEqualToString:@"h6"]) {
+    return Heading6;
+  } else if ([name isEqualToString:@"codeBlock"]) {
+    return CodeBlock;
+  } else if ([name isEqualToString:@"quote"]) {
+    return Quote;
+  } else if ([name isEqualToString:@"paragraph"]) {
+    return Paragraph;
+  } else if ([name isEqualToString:@"checkList"]) {
+    return CheckList;
+  } else if ([name isEqualToString:@"unorderedList"]) {
+    return UnorderedList;
+  } else if ([name isEqualToString:@"orderedList"]) {
+    return OrderedList;
+  }
+  return 0;
+}
+
 // NOTE(tomas@vivaldi): These must match the lexical definitions
 // See usage in vivapp/src/mobile/markdown/ToolbarHandler.jsx
 - (NSString*)getCommandType:(NSInteger)tag {
   switch (tag) {
     case Bold:
     case Italic:
-    case Underline:
     case Strikethrough:
     case Highlight:
     case Code:
@@ -501,15 +549,12 @@ constexpr NSInteger kNumberOfKeyboardPages = 2;
       return @"INSERT_CHECK_LIST_COMMAND";
     case Link:
       return @"TOGGLE_LINK_COMMAND";
-    case AlignCenter:
-    case AlignRight:
-    case AlignLeft:
-    case AlignJustify:
-      return @"FORMAT_ELEMENT_COMMAND";
     case Heading1:
     case Heading2:
     case Heading3:
     case Heading4:
+    case Heading5:
+    case Heading6:
     case Paragraph:
     case CodeBlock:
     case Quote:

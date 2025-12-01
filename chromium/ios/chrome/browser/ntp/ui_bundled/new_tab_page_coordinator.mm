@@ -30,6 +30,8 @@
 #import "ios/chrome/app/profile/profile_init_stage.h"
 #import "ios/chrome/app/profile/profile_state.h"
 #import "ios/chrome/app/profile/profile_state_observer.h"
+#import "ios/chrome/browser/authentication/ui_bundled/account_menu/account_menu_coordinator.h"
+#import "ios/chrome/browser/authentication/ui_bundled/enterprise/enterprise_utils.h"
 #import "ios/chrome/browser/bubble/ui_bundled/bubble_view_controller_presenter.h"
 #import "ios/chrome/browser/context_menu/ui_bundled/link_preview/link_preview_coordinator.h"
 #import "ios/chrome/browser/discover_feed/model/discover_feed_observer_bridge.h"
@@ -100,6 +102,8 @@
 #import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
 #import "ios/chrome/browser/shared/ui/util/snackbar_util.h"
 #import "ios/chrome/browser/shared/ui/util/util_swift.h"
+#import "ios/chrome/browser/sharing/ui_bundled/sharing_coordinator.h"
+#import "ios/chrome/browser/sharing/ui_bundled/sharing_params.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/model/authentication_service_observer_bridge.h"
@@ -110,16 +114,12 @@
 #import "ios/chrome/browser/signin/model/system_identity_manager.h"
 #import "ios/chrome/browser/supervised_user/model/family_link_user_capabilities_observer_bridge.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
-#import "ios/chrome/browser/ui/authentication/account_menu/account_menu_coordinator.h"
-#import "ios/chrome/browser/ui/authentication/enterprise/enterprise_utils.h"
+#import "ios/chrome/browser/toolbar/ui_bundled/public/fakebox_focuser.h"
+#import "ios/chrome/browser/toolbar/ui_bundled/tab_groups/coordinator/tab_group_indicator_coordinator.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_coordinator.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_delegate.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_mediator.h"
-#import "ios/chrome/browser/ui/sharing/sharing_coordinator.h"
-#import "ios/chrome/browser/ui/sharing/sharing_params.h"
-#import "ios/chrome/browser/ui/toolbar/public/fakebox_focuser.h"
-#import "ios/chrome/browser/ui/toolbar/tab_groups/coordinator/tab_group_indicator_coordinator.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
 #import "ios/chrome/common/material_timing.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
@@ -401,7 +401,7 @@ using vivaldi::IsVivaldiRunning;
   [self configureContentSuggestionsCoordinator];
   [self configureFeedMetricsRecorder];
   [self configureNTPViewController];
-  if (IsTabGroupIndicatorEnabled()) {
+  if (IsTabGroupInGridEnabled()) {
     [self configureTabGroupIndicator];
   }
   } // End Vivaldi
@@ -430,10 +430,8 @@ using vivaldi::IsVivaldiRunning;
 
   [sceneState.profileState removeObserver:self];
 
-  if (IsTabGroupIndicatorEnabled()) {
-    [_tabGroupIndicatorCoordinator stop];
-    _tabGroupIndicatorCoordinator = nil;
-  }
+  [_tabGroupIndicatorCoordinator stop];
+  _tabGroupIndicatorCoordinator = nil;
 
   [self.feedManagementCoordinator stop];
   self.feedManagementCoordinator = nil;
@@ -866,6 +864,8 @@ using vivaldi::IsVivaldiRunning;
   _tabGroupIndicatorCoordinator = [[TabGroupIndicatorCoordinator alloc]
       initWithBaseViewController:self.NTPViewController
                          browser:self.browser];
+  _tabGroupIndicatorCoordinator.parentViewController =
+      self.headerViewController;
   _tabGroupIndicatorCoordinator.toolbarHeightDelegate = nil;
   _tabGroupIndicatorCoordinator.displayedOnNTP = YES;
   [_tabGroupIndicatorCoordinator start];
@@ -947,6 +947,7 @@ using vivaldi::IsVivaldiRunning;
       _showAccountMenuInProgress = YES;
       __weak __typeof(self) weakSelf = self;
       [handler showAccountMenuWithAnchorView:identityDisc
+                        skipIfUINotAvailable:NO
                                   completion:^{
                                     [weakSelf showAccountMenuDidFinish];
                                   }];
@@ -960,12 +961,11 @@ using vivaldi::IsVivaldiRunning;
     ShowSigninCommand* const showSigninCommand = [[ShowSigninCommand alloc]
         initWithOperation:AuthenticationOperation::kSheetSigninAndHistorySync
                  identity:nil
-              accessPoint:signin_metrics::AccessPoint::
-                              ACCESS_POINT_NTP_SIGNED_OUT_ICON
+              accessPoint:signin_metrics::AccessPoint::kNtpSignedOutIcon
               promoAction:signin_metrics::PromoAction::
                               PROMO_ACTION_NO_SIGNIN_PROMO
                completion:^(SigninCoordinatorResult result,
-                            SigninCompletionInfo* info) {
+                            id<SystemIdentity> completionIdentity) {
                  [weakSelf showSigninCommandDidFinish];
                }];
     [handler showSignin:showSigninCommand
@@ -1181,6 +1181,11 @@ using vivaldi::IsVivaldiRunning;
 #pragma mark - FeedSignInPromoDelegate
 
 - (void)showSignInPromoUI {
+  // If the user is already signed in, do nothing.
+  if (self.authService &&
+      self.authService->HasPrimaryIdentity(signin::ConsentLevel::kSignin)) {
+    return;
+  }
   if (![self isSignInAllowed]) {
     [self showSignInDisableMessage];
     [self.feedMetricsRecorder recordShowSignInRelatedUIWithType:
@@ -1191,9 +1196,7 @@ using vivaldi::IsVivaldiRunning;
     return;
   }
 
-  BOOL hasUserIdentities = ChromeAccountManagerServiceFactory::GetForProfile(
-                               self.browser->GetProfile())
-                               ->HasIdentities();
+  BOOL hasUserIdentities = [self hasIdentitiesOnDevice];
   id<ApplicationCommands> handler = HandlerForProtocol(
       self.browser->GetCommandDispatcher(), ApplicationCommands);
   __weak __typeof(self) weakSelf = self;
@@ -1201,12 +1204,11 @@ using vivaldi::IsVivaldiRunning;
   ShowSigninCommand* command = [[ShowSigninCommand alloc]
       initWithOperation:AuthenticationOperation::kSigninOnly
                identity:nil
-            accessPoint:signin_metrics::AccessPoint::
-                            ACCESS_POINT_NTP_FEED_CARD_MENU_PROMO
+            accessPoint:signin_metrics::AccessPoint::kNtpFeedCardMenuPromo
             promoAction:signin_metrics::PromoAction::
                             PROMO_ACTION_NO_SIGNIN_PROMO
              completion:^(SigninCoordinatorResult result,
-                          SigninCompletionInfo* info) {
+                          id<SystemIdentity> completionIdentity) {
                [weakSelf showSigninCommandDidFinish];
              }];
   [handler showSignin:command baseViewController:self.NTPViewController];
@@ -1214,10 +1216,15 @@ using vivaldi::IsVivaldiRunning;
                                 feed::FeedSignInUI::kShowSignInOnlyFlow];
   [self.feedMetricsRecorder recordShowSignInOnlyUIWithUserId:hasUserIdentities];
   signin_metrics::RecordSigninUserActionForAccessPoint(
-      signin_metrics::AccessPoint::ACCESS_POINT_NTP_FEED_CARD_MENU_PROMO);
+      signin_metrics::AccessPoint::kNtpFeedCardMenuPromo);
 }
 
 - (void)showSignInUI {
+  // If the user is already signed in, do nothing.
+  if (self.authService &&
+      self.authService->HasPrimaryIdentity(signin::ConsentLevel::kSignin)) {
+    return;
+  }
   // Both possible flows (sign-in only and sign-in + sync) involve sign-in. So
   // they shouldn't be offered if sign-in is disallowed.
   if (![self isSignInAllowed]) {
@@ -1230,12 +1237,10 @@ using vivaldi::IsVivaldiRunning;
     return;
   }
 
-  ProfileIOS* profile = self.browser->GetProfile();
   id<ApplicationCommands> handler = HandlerForProtocol(
       self.browser->GetCommandDispatcher(), ApplicationCommands);
   // If there are 0 identities, kInstantSignin requires less taps.
-  auto operation = ChromeAccountManagerServiceFactory::GetForProfile(profile)
-                           ->HasIdentities()
+  auto operation = [self hasIdentitiesOnDevice]
                        ? AuthenticationOperation::kSigninOnly
                        : AuthenticationOperation::kInstantSignin;
   __weak __typeof(self) weakSelf = self;
@@ -1243,12 +1248,11 @@ using vivaldi::IsVivaldiRunning;
   ShowSigninCommand* command = [[ShowSigninCommand alloc]
       initWithOperation:operation
                identity:nil
-            accessPoint:signin_metrics::AccessPoint::
-                            ACCESS_POINT_NTP_FEED_BOTTOM_PROMO
+            accessPoint:signin_metrics::AccessPoint::kNtpFeedBottomPromo
             promoAction:signin_metrics::PromoAction::
                             PROMO_ACTION_NO_SIGNIN_PROMO
              completion:^(SigninCoordinatorResult result,
-                          SigninCompletionInfo* info) {
+                          id<SystemIdentity> completionIdentity) {
                [weakSelf showSigninCommandDidFinish];
              }];
   [handler showSignin:command baseViewController:self.NTPViewController];
@@ -1258,7 +1262,7 @@ using vivaldi::IsVivaldiRunning;
   [self.feedMetricsRecorder
       recordShowSyncnRelatedUIWithType:feed::FeedSyncPromo::kShowSyncFlow];
   signin_metrics::RecordSigninUserActionForAccessPoint(
-      signin_metrics::AccessPoint::ACCESS_POINT_NTP_FEED_BOTTOM_PROMO);
+      signin_metrics::AccessPoint::kNtpFeedBottomPromo);
 }
 
 #pragma mark - FeedWrapperViewControllerDelegate
@@ -1289,7 +1293,8 @@ using vivaldi::IsVivaldiRunning;
   id<FakeboxFocuser> fakeboxFocuserHandler =
       HandlerForProtocol(self.browser->GetCommandDispatcher(), FakeboxFocuser);
   [fakeboxFocuserHandler focusOmniboxFromFakebox:_fakeboxTapped
-                                          pinned:[self isFakeboxPinned]];
+                                          pinned:[self isFakeboxPinned]
+                  fakeboxButtonsSnapshotProvider:self.headerViewController];
 }
 
 - (void)refreshNTPContent {
@@ -1397,8 +1402,9 @@ using vivaldi::IsVivaldiRunning;
 
   // Return an empty list if the BrowserAgent is null (which can happen
   // if e.g. the Browser is off-the-record).
-  if (!followBrowserAgent)
+  if (!followBrowserAgent) {
     return @[];
+  }
 
   return followBrowserAgent->GetFollowedWebSites();
 }
@@ -1645,6 +1651,18 @@ using vivaldi::IsVivaldiRunning;
 }
 
 #pragma mark - Private
+
+- (bool)hasIdentitiesOnDevice {
+  ProfileIOS* profile = self.browser->GetProfile();
+  if (IsUseAccountListFromIdentityManagerEnabled()) {
+    return !IdentityManagerFactory::GetForProfile(profile)
+                ->GetAccountsOnDevice()
+                .empty();
+  } else {
+    return ChromeAccountManagerServiceFactory::GetForProfile(profile)
+        ->HasIdentities();
+  }
+}
 
 // Update the state, to take into account that the menu coordinator is stopped.
 - (void)accountMenuCoordinatorIsStopped {

@@ -20,7 +20,7 @@ def build(project_folder, output_folder, signed):
         build_command += " GCC_PREPROCESSOR_DEFINITIONS='${inherited} VIVALDI_SIGNED_BUILD=1'"
     build_command += " > /dev/null"
 
-    subprocess.call(build_command,cwd=project_folder,shell=True)
+    subprocess.check_output(build_command,cwd=project_folder,shell=True)
 
 def main():
     parser = argparse.ArgumentParser(

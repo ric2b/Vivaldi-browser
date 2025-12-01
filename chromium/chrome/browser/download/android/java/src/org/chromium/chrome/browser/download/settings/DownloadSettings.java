@@ -25,15 +25,6 @@ import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.user_prefs.UserPrefs;
 
 // Vivaldi
-import android.view.Gravity;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.LinearLayout;
-
-import androidx.annotation.NonNull;
-import androidx.appcompat.widget.Toolbar;
-import org.chromium.build.BuildConfig;
-import org.chromium.ui.base.DeviceFormFactor;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /** Fragment containing Download settings. */
@@ -169,37 +160,5 @@ public class DownloadSettings extends ChromeBaseSettingsFragment
 
     public ManagedPreferenceDelegate getLocationPromptEnabledPrefDelegateForTesting() {
         return mLocationPromptEnabledPrefDelegate;
-    }
-
-    /** Vivaldi **/
-    @Override
-    public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
-        if (BuildConfig.IS_VIVALDI) {
-            boolean isTablet = DeviceFormFactor
-                    .isNonMultiDisplayContextOnTablet(view.getContext());
-            if (isTablet) {
-                getView().setBackgroundColor(getContext()
-                        .getColor(R.color.tablet_panel_bg_color));
-                Toolbar toolbar = new Toolbar(getContext());
-                if (getView() != null) {
-                    ((ViewGroup) getView()).addView(toolbar, 0);
-                    toolbar.getLayoutParams().height =
-                    Math.round(56 * getResources().getDisplayMetrics().density);
-                    toolbar.setBackgroundColor(
-                            getContext().getColor(R.color.tablet_panel_bg_color));
-                    toolbar.setSubtitle(getResources().getString(R.string.downloads));
-                    toolbar.setNavigationIcon(R.drawable.vivaldi_nav_button_back);
-                    ((LinearLayout.LayoutParams) toolbar.getLayoutParams()).gravity = Gravity.TOP;
-                    toolbar.setNavigationOnClickListener(new View.OnClickListener() {
-                        @Override
-                        public void onClick(View v) {
-                            getParentFragmentManager().popBackStack();
-                        }
-                    });
-                }
-
-            }
-        }
-        super.onViewCreated(view, savedInstanceState);
     }
 }

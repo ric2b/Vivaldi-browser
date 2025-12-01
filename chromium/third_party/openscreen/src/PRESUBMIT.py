@@ -36,7 +36,8 @@ def _CheckLicenses(input_api, output_api):
         os.path.join('buildtools', 'third_party'),
         os.path.join('third_party', 'libc++'),
         os.path.join('third_party', 'libc++abi'),
-        os.path.join('third_party', 'rust-toolchain')
+        os.path.join('third_party', 'rust-toolchain'),
+        os.path.join('third_party', 'depot_tools')
         ])
 
     if any(s.LocalPath().startswith('third_party')

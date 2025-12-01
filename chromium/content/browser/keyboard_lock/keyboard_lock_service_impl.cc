@@ -131,7 +131,7 @@ void KeyboardLockServiceImpl::CancelKeyboardLock() {
   auto& frame_host_impl =
       static_cast<RenderFrameHostImpl&>(render_frame_host());
   frame_host_impl.GetRenderWidgetHost()->CancelKeyboardLock();
-  feature_handle_.reset();
+  feature_handle_.Reset();
 }
 
 void KeyboardLockServiceImpl::GetKeyboardLayoutMap(
@@ -144,7 +144,7 @@ void KeyboardLockServiceImpl::GetKeyboardLayoutMap(
   // with the permission policy enabled.
   if (frame_host_impl.GetParentOrOuterDocument() &&
       !frame_host_impl.IsFeatureEnabled(
-          blink::mojom::PermissionsPolicyFeature::kKeyboardMap)) {
+          network::mojom::PermissionsPolicyFeature::kKeyboardMap)) {
     response->status = blink::mojom::GetKeyboardLayoutMapStatus::kDenied;
     std::move(callback).Run(std::move(response));
     return;

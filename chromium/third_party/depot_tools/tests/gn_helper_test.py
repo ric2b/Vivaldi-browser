@@ -36,6 +36,7 @@ class GnHelperTest(trial_dir.TestCase):
         super().tearDown()
 
     def test_lines(self):
+        write('.gn', '')
         out_dir = os.path.join('out', 'dir')
         # Make sure nested import directives work. This is based on the
         # reclient test.
@@ -52,6 +53,7 @@ class GnHelperTest(trial_dir.TestCase):
         ])
 
     def test_args(self):
+        write('.gn', '')
         out_dir = os.path.join('out', 'dir')
         # Make sure nested import directives work. This is based on the
         # reclient test.
@@ -68,6 +70,7 @@ class GnHelperTest(trial_dir.TestCase):
         ])
 
     def test_args_spaces(self):
+        write('.gn', '')
         out_dir = os.path.join('out', 'dir')
         # Make sure nested import directives work. This is based on the
         # reclient test.

@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.payments;
 
+import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
@@ -13,11 +14,14 @@ import android.content.pm.ServiceInfo;
 import android.content.pm.Signature;
 import android.os.Bundle;
 
+import androidx.appcompat.app.AlertDialog;
 import androidx.test.annotation.UiThreadTest;
 import androidx.test.filters.SmallTest;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -29,6 +33,7 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.test.BaseActivityTestRule;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.Features;
@@ -56,7 +61,7 @@ import org.chromium.ui.InsetObserver;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.IntentRequestTracker;
 import org.chromium.ui.base.WindowAndroid;
-import org.chromium.ui.test.util.BlankUiTestActivityTestCase;
+import org.chromium.ui.test.util.BlankUiTestActivity;
 import org.chromium.url.GURL;
 import org.chromium.url.Origin;
 
@@ -69,11 +74,18 @@ import java.util.Map;
 @RunWith(BaseJUnit4ClassRunner.class)
 @Batch(AndroidPaymentAppFinderUnitTest.PAYMENTS_BROWSER_UNIT_TESTS)
 @Features.EnableFeatures({PaymentFeatureList.UPDATE_PAYMENT_DETAILS_INTENT_FILTER_IN_PAYMENT_APP})
-public class AndroidPaymentAppFinderUnitTest extends BlankUiTestActivityTestCase {
+@Features.DisableFeatures({PaymentFeatureList.ANDROID_PAYMENT_INTENTS_OMIT_DEPRECATED_PARAMETERS})
+public class AndroidPaymentAppFinderUnitTest {
     // Collection of payments unit tests that require the browser process to be initialized.
     static final String PAYMENTS_BROWSER_UNIT_TESTS = "PaymentsBrowserUnitTests";
     private static final IntentArgumentMatcher sPayIntentArgumentMatcher =
             new IntentArgumentMatcher(new Intent("org.chromium.intent.action.PAY"));
+
+    @ClassRule
+    public static BaseActivityTestRule<BlankUiTestActivity> sActivityTestRule =
+            new BaseActivityTestRule<>(BlankUiTestActivity.class);
+
+    private static Activity sActivity;
 
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
     @Rule public ChromeBrowserTestRule mTestRule = new ChromeBrowserTestRule();
@@ -90,16 +102,22 @@ public class AndroidPaymentAppFinderUnitTest extends BlankUiTestActivityTestCase
 
     private WindowAndroid mWindowAndroid;
 
+    @BeforeClass
+    public static void setupSuite() {
+        sActivity = sActivityTestRule.launchActivity(null);
+    }
+
     @Before
     public void setUp() {
         mWindowAndroid =
                 ThreadUtils.runOnUiThreadBlocking(
                         () -> {
                             return new ActivityWindowAndroid(
-                                    getActivity(),
+                                    sActivity,
                                     /* listenToActivityState= */ true,
-                                    IntentRequestTracker.createFromActivity(getActivity()),
-                                    mInsetObserver);
+                                    IntentRequestTracker.createFromActivity(sActivity),
+                                    mInsetObserver,
+                                    /* trackOcclusion= */ true);
                         });
 
         NativeLibraryTestUtils.loadNativeLibraryAndInitBrowserProcess();
@@ -157,6 +175,13 @@ public class AndroidPaymentAppFinderUnitTest extends BlankUiTestActivityTestCase
                 .thenReturn(new HashMap<String, PaymentDetailsModifier>());
         Mockito.when(mParams.getMayCrawl()).thenReturn(false);
         Mockito.when(mDelegate.getParams()).thenReturn(mParams);
+        Mockito.when(mDelegate.getDialogController())
+                .thenReturn(
+                        new DialogControllerImpl(
+                                mWebContents,
+                                (context, style) -> {
+                                    return new AlertDialog.Builder(context, style);
+                                }));
         AndroidPaymentAppFinder finder =
                 new AndroidPaymentAppFinder(
                         mPaymentManifestWebDataService,

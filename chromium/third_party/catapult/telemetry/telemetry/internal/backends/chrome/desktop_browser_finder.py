@@ -14,6 +14,7 @@ import six
 from py_utils import file_util
 from telemetry.core import exceptions
 from telemetry.core import platform as platform_module
+from telemetry.core import util
 from telemetry.internal.backends.chrome import chrome_startup_args
 from telemetry.internal.backends.chrome import desktop_browser_backend
 from telemetry.internal.browser import browser
@@ -51,9 +52,10 @@ class PossibleDesktopBrowser(possible_browser.PossibleBrowser):
     target_os = sys.platform.lower()
     super().__init__(
         browser_type, target_os, not is_content_shell)
-    assert browser_type in FindAllBrowserTypes(), (
-        'Please add %s to desktop_browser_finder.FindAllBrowserTypes' %
-        browser_type)
+    if not util.IsBuilderOutName(browser_type):
+      assert browser_type in FindAllBrowserTypes(), (
+          'Please add %s to desktop_browser_finder.FindAllBrowserTypes' %
+          browser_type)
     self._local_executable = executable
     self._is_content_shell = is_content_shell
     self._browser_directory = browser_directory
@@ -69,8 +71,8 @@ class PossibleDesktopBrowser(possible_browser.PossibleBrowser):
     self._build_dir = self._browser_directory
 
   def __repr__(self):
-    return 'PossibleDesktopBrowser(type=%s, executable=%s)' % (
-        self.browser_type, self._local_executable)
+    return 'PossibleDesktopBrowser(type=%s, executable=%s, binary_path=%s)' % (
+        self.browser_type, self._local_executable, self._browser_directory)
 
   @property
   def browser_directory(self):
@@ -290,6 +292,7 @@ def CanFindAvailableBrowsers():
 
 def FindAllBrowserTypes():
   return [
+      'builder',
       'exact',
       'reference',
       'release',
@@ -377,19 +380,30 @@ def FindAllAvailableBrowsers(finder_options, device):
   if finder_options.chromium_output_dir:
     logging.info('Flag chromium_output_dir: %s' %
                  finder_options.chromium_output_dir)
+    if finder_options.browser_type and finder_options.browser_type != 'all':
+      browser_type = finder_options.browser_type
+      logging.info('Using browser_type %s from command line', browser_type)
+    else:
+      browser_type = os.path.basename(
+          os.path.abspath(finder_options.chromium_output_dir).rstrip(os.sep)
+      ).lower()
+      logging.info(
+          'Generated browser_type %s from chromium_output_dir', browser_type)
     for chromium_app_name in chromium_app_names:
-      AddIfFound(finder_options.browser_type,
+      AddIfFound(browser_type,
                  finder_options.chromium_output_dir, chromium_app_name, False)
   else:
     logging.info('Search for possible desktop browser options from flag chrome '
                  'root: %s' % finder_options.chrome_root)
-    # path_module.GetBuildDirectories() very much relies on the legacy format
-    # of out/Debug, out/Release, out/Release_x64, etc.
-    # The out folder has been updated to be dependent on the builder's name
-    # that generated the Chrome artifact. See b/355218109.
+    # b/377748127 - GetBuildDirectories will search legacy formats, for example,
+    # out/Release or out/Debug as well as out/{hash}-{builder_name} format.
+    # As long as a Chrome binary exists at {build_path} + {app_location},
+    # it'll be included as a PossibleBrowser option.
     for build_path in path_module.GetBuildDirectories(
         finder_options.chrome_root):
-      # TODO(agrieve): Extract browser_type from args.gn's is_debug.
+
+      # The browser type for out/{hash}-{builder_name} will be
+      # {hash}-{builder_name}
       browser_type = os.path.basename(build_path.rstrip(os.sep)).lower()
 
       for chromium_app_name in chromium_app_names:

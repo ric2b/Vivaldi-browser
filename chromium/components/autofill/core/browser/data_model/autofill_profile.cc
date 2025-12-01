@@ -12,6 +12,7 @@
 #include <ostream>
 #include <ranges>
 #include <set>
+#include <string>
 #include <vector>
 
 #include "base/feature_list.h"
@@ -23,14 +24,12 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversion_utils.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/uuid.h"
 #include "build/build_config.h"
-#include "components/autofill/core/browser/autofill_address_util.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/data_model/address.h"
@@ -38,6 +37,9 @@
 #include "components/autofill/core/browser/data_model/autofill_structured_address_utils.h"
 #include "components/autofill/core/browser/data_model/contact_info.h"
 #include "components/autofill/core/browser/data_model/phone_number.h"
+#include "components/autofill/core/browser/data_model/usage_history_information.h"
+#include "components/autofill/core/browser/data_quality/addresses/profile_token_quality.h"
+#include "components/autofill/core/browser/data_quality/validation.h"
 #include "components/autofill/core/browser/field_type_utils.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/geo/address_i18n.h"
@@ -45,17 +47,13 @@
 #include "components/autofill/core/browser/geo/phone_number_i18n.h"
 #include "components/autofill/core/browser/geo/state_names.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
-#include "components/autofill/core/browser/profile_token_quality.h"
-#include "components/autofill/core/browser/validation.h"
+#include "components/autofill/core/browser/ui/addresses/autofill_address_util.h"
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_l10n_util.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/strings/grit/components_strings.h"
-#include "third_party/icu/source/common/unicode/uchar.h"
-#include "third_party/icu/source/common/unicode/utypes.h"
-#include "third_party/icu/source/i18n/unicode/translit.h"
 #include "third_party/libaddressinput/chromium/addressinput_util.h"
 #include "third_party/libaddressinput/src/cpp/include/libaddressinput/address_data.h"
 #include "third_party/libaddressinput/src/cpp/include/libaddressinput/address_formatter.h"
@@ -74,6 +72,8 @@ using ::i18n::addressinput::AddressField;
 namespace autofill {
 
 namespace {
+
+constexpr char kAddressComponentsDefaultLocality[] = "en-US";
 
 // Stores the data types that are relevant for the structured address/name.
 constexpr DenseSet kStructuredDataTypes = {NAME_FIRST,
@@ -127,7 +127,7 @@ FieldType GetStorableTypeCollapsingGroups(FieldType type,
 // example, if the profile is going to fill ADDRESS_HOME_ZIP, it should
 // prioritize showing that over ADDRESS_HOME_STATE in the suggestion sublabel.
 int SpecificityForType(FieldType type, bool use_improved_labels_order) {
-  // TODO(crbug.com/40274514): Clean up after launch. To make `kDefaultOrder`
+  // TODO(crbug.com/380273791): Clean up after launch. To make `kDefaultOrder`
   // and `kImprovedOrder` have the same size/type, an `EMPTY_TYPE` dummy value
   // is added to the end of `kImprovedOrder`. It can be removed together with
   // the CHECK() after launch.
@@ -203,7 +203,7 @@ void GetFieldsForDistinguishingProfiles(
   // `NAME_FULL` or `PHONE_HOME_WHOLE_NUMBER` in the list of distinguishing
   // fields as a last-ditch fallback. This allows us to distinguish between
   // profiles that are identical except for the name or phone number.
-  // TODO(crbug.com/320475288): Clean up this special case. It might be possible
+  // TODO(crbug.com/380273791): Clean up this special case. It might be possible
   // to just append `PHONE_HOME_WHOLE_NUMBER` at the end.
   for (FieldType excluded_field : excluded_fields) {
     FieldType effective_excluded_type =
@@ -257,18 +257,14 @@ AutofillProfile CreateStarterProfile(
 AutofillProfile::AutofillProfile(const std::string& guid,
                                  RecordType record_type,
                                  AddressCountryCode country_code)
-    : AutofillDataModel(/*usage_history_size=*/
-                        base::FeatureList::IsEnabled(
-                            features::kAutofillTrackMultipleUseDates)
-                            ? 3
-                            : 1),
-      guid_(guid),
+    : guid_(guid),
       phone_number_(this),
       address_(country_code),
       record_type_(record_type),
       initial_creator_id_(kInitialCreatorOrModifierChrome),
       last_modifier_id_(kInitialCreatorOrModifierChrome),
-      token_quality_(this) {}
+      token_quality_(this),
+      usage_history_information_(/*usage_history_size=*/3) {}
 
 AutofillProfile::AutofillProfile(RecordType record_type,
                                  AddressCountryCode country_code)
@@ -280,10 +276,10 @@ AutofillProfile::AutofillProfile(AddressCountryCode country_code)
     : AutofillProfile(RecordType::kLocalOrSyncable, country_code) {}
 
 AutofillProfile::AutofillProfile(const AutofillProfile& profile)
-    : AutofillDataModel(profile),
-      phone_number_(this),
+    : phone_number_(this),
       address_(profile.GetAddress()),
-      token_quality_(this) {
+      token_quality_(this),
+      usage_history_information_(profile.usage_history_information_) {
   operator=(profile);
 }
 
@@ -293,11 +289,15 @@ AutofillProfile& AutofillProfile::operator=(const AutofillProfile& profile) {
   if (this == &profile)
     return *this;
 
-  set_use_count(profile.use_count());
-  for (size_t i = 1; i <= usage_history_size(); i++) {
-    set_use_date(profile.use_date(i), i);
+  usage_history_information_.set_use_count(
+      profile.usage_history_information_.use_count());
+  for (size_t i = 1; i <= usage_history_information_.usage_history_size();
+       i++) {
+    usage_history_information_.set_use_date(
+        profile.usage_history_information_.use_date(i), i);
   }
-  set_modification_date(profile.modification_date());
+  usage_history_information_.set_modification_date(
+      profile.usage_history_information_.modification_date());
 
   set_guid(profile.guid());
 
@@ -392,13 +392,13 @@ double AutofillProfile::GetRankingScore(base::Time current_time,
       !use_frecency) {
     // Exponentially decay the use count by the days since the data model was
     // last used.
-    return log10(use_count() + 1) *
-           exp(-GetDaysSinceLastUse(current_time) /
+    return log10(usage_history_information_.use_count() + 1) *
+           exp(-usage_history_information_.GetDaysSinceLastUse(current_time) /
                features::kAutofillRankingFormulaAddressProfilesUsageHalfLife
                    .Get());
   }
   // Default to legacy frecency scoring.
-  return AutofillDataModel::GetRankingScore(current_time);
+  return usage_history_information_.GetRankingScore(current_time);
 }
 
 bool AutofillProfile::HasGreaterRankingThan(const AutofillProfile* other,
@@ -407,20 +407,17 @@ bool AutofillProfile::HasGreaterRankingThan(const AutofillProfile* other,
   const double score = GetRankingScore(comparison_time, use_frecency);
   const double other_score =
       other->GetRankingScore(comparison_time, use_frecency);
-  return AutofillDataModel::CompareRankingScores(score, other_score,
-                                                 other->use_date());
+  return usage_history_information_.CompareRankingScores(
+      score, other_score, other->usage_history().use_date());
 }
 
-void AutofillProfile::GetMatchingTypesWithProfileSources(
-    const std::u16string& text,
-    const std::string& app_locale,
-    FieldTypeSet* matching_types,
-    PossibleProfileValueSources* profile_value_sources) const {
+void AutofillProfile::GetMatchingTypes(const std::u16string& text,
+                                       const std::string& app_locale,
+                                       FieldTypeSet* matching_types) const {
   FieldTypeSet matching_types_in_this_profile;
   for (const auto* form_group : FormGroups()) {
-    form_group->GetMatchingTypesWithProfileSources(
-        text, app_locale, &matching_types_in_this_profile,
-        profile_value_sources);
+    form_group->GetMatchingTypes(text, app_locale,
+                                 &matching_types_in_this_profile);
   }
 
   for (auto type : matching_types_in_this_profile) {
@@ -466,6 +463,21 @@ FieldType AutofillProfile::GetStorableTypeOf(FieldType type) const {
   }
 }
 
+FieldTypeSet AutofillProfile::GetUserVisibleTypes() const {
+  FieldTypeSet visible_types{PHONE_HOME_WHOLE_NUMBER, EMAIL_ADDRESS};
+  std::string components_language_code;
+  for (const AutofillAddressUIComponent& component :
+       GetAddressComponents(GetAddressCountryCode().value(),
+                            kAddressComponentsDefaultLocality,
+                            /*enable_field_labels_localization=*/false,
+                            /*include_literals=*/false,
+                            components_language_code)) {
+    visible_types.insert(component.field);
+  }
+
+  return visible_types;
+}
+
 bool AutofillProfile::IsEmpty(const std::string& app_locale) const {
   FieldTypeSet types;
   GetNonEmptyTypes(app_locale, &types);
@@ -503,6 +515,8 @@ int AutofillProfile::Compare(const AutofillProfile& profile) const {
                                 NAME_FIRST,
                                 NAME_MIDDLE,
                                 NAME_LAST,
+                                NAME_LAST_PREFIX,
+                                NAME_LAST_CORE,
                                 NAME_LAST_FIRST,
                                 NAME_LAST_SECOND,
                                 NAME_LAST_CONJUNCTION,
@@ -539,7 +553,7 @@ int AutofillProfile::Compare(const AutofillProfile& profile) const {
 
   // When adding field types, ensure that they don't need to be added here and
   // update the last checked value.
-  static_assert(FieldType::MAX_VALID_FIELD_TYPE == 166,
+  static_assert(FieldType::MAX_VALID_FIELD_TYPE == 175,
                 "New field type needs to be reviewed for inclusion in the "
                 "profile comparison logic.");
 
@@ -571,14 +585,19 @@ int AutofillProfile::Compare(const AutofillProfile& profile) const {
 
 bool AutofillProfile::EqualsForLegacySyncPurposes(
     const AutofillProfile& profile) const {
-  return use_count() == profile.use_count() &&
-         UseDateEqualsInSeconds(&profile) && EqualsSansGuid(profile);
+  return usage_history_information_.use_count() ==
+             profile.usage_history_information_.use_count() &&
+         usage_history_information_.UseDateEqualsInSeconds(
+             profile.usage_history()) &&
+         EqualsSansGuid(profile);
 }
 
 bool AutofillProfile::EqualsForUpdatePurposes(
     const AutofillProfile& new_profile) const {
-  return use_count() == new_profile.use_count() &&
-         UseDateEqualsInSeconds(&new_profile) &&
+  return usage_history_information_.use_count() ==
+             new_profile.usage_history_information_.use_count() &&
+         usage_history_information_.UseDateEqualsInSeconds(
+             new_profile.usage_history()) &&
          language_code() == new_profile.language_code() &&
          token_quality() == new_profile.token_quality() &&
          Compare(new_profile) == 0;
@@ -753,8 +772,10 @@ bool AutofillProfile::MergeDataFrom(const AutofillProfile& profile,
   // in the autofill drop-down; we don't need to account for that here. Further,
   // a similar, fully-typed submission that merges to an existing profile should
   // not be counted as a re-use of that profile.
-  set_use_count(std::max(profile.use_count(), use_count()));
-  MergeUseDates(profile);
+  usage_history_information_.set_use_count(
+      std::max(profile.usage_history_information_.use_count(),
+               usage_history_information_.use_count()));
+  usage_history_information_.MergeUseDates(profile.usage_history());
 
   // Update the fields which need to be modified, if any. Note: that we're
   // comparing the fields for representational equality below (i.e., are the
@@ -827,21 +848,19 @@ void AutofillProfile::MergeFormGroupTokenQuality(
 }
 
 // static
-void AutofillProfile::CreateDifferentiatingLabels(
+std::vector<std::u16string> AutofillProfile::CreateDifferentiatingLabels(
     const std::vector<raw_ptr<const AutofillProfile, VectorExperimental>>&
         profiles,
-    const std::string& app_locale,
-    std::vector<std::u16string>* labels) {
+    const std::string& app_locale) {
   const size_t kMinimalFieldsShown = 2;
-  CreateInferredLabels(profiles, /*suggested_fields=*/std::nullopt,
-                       /*triggering_field_type=*/std::nullopt,
-                       /*excluded_fields=*/{}, kMinimalFieldsShown, app_locale,
-                       labels);
-  DCHECK_EQ(profiles.size(), labels->size());
+  return CreateInferredLabels(profiles, /*suggested_fields=*/std::nullopt,
+                              /*triggering_field_type=*/std::nullopt,
+                              /*excluded_fields=*/{}, kMinimalFieldsShown,
+                              app_locale);
 }
 
 // static
-void AutofillProfile::CreateInferredLabels(
+std::vector<std::u16string> AutofillProfile::CreateInferredLabels(
     const std::vector<raw_ptr<const AutofillProfile, VectorExperimental>>&
         profiles,
     const std::optional<FieldTypeSet> suggested_fields,
@@ -849,15 +868,12 @@ void AutofillProfile::CreateInferredLabels(
     FieldTypeSet excluded_fields,
     size_t minimal_fields_shown,
     const std::string& app_locale,
-    std::vector<std::u16string>* labels,
     bool use_improved_labels_order) {
-  // TODO(crbug.com/40274514): Clean up after launch.
+  // TODO(crbug.com/380273791): Clean up after launch.
   CHECK(!triggering_field_type ||
-        base::FeatureList::IsEnabled(
-            features::kAutofillGranularFillingAvailable));
+        base::FeatureList::IsEnabled(features::kAutofillImprovedLabels));
   CHECK(!use_improved_labels_order ||
-        base::FeatureList::IsEnabled(
-            features::kAutofillGranularFillingAvailable));
+        base::FeatureList::IsEnabled(features::kAutofillImprovedLabels));
 
   std::vector<FieldType> fields_to_use;
   std::vector<FieldType> suggested_fields_types =
@@ -887,20 +903,27 @@ void AutofillProfile::CreateInferredLabels(
     labels_to_profiles[{main_text, label}].push_back(i);
   }
 
-  labels->resize(profiles.size());
+  std::vector<std::u16string> labels;
+  labels.resize(profiles.size());
   for (auto& it : labels_to_profiles) {
     if (it.second.size() == 1) {
       // This label is unique, so use it without any further ado.
       std::u16string label = it.first.second;
       size_t profile_index = it.second.front();
-      (*labels)[profile_index] = label;
+      labels[profile_index] = label;
     } else {
       // We have more than one profile with the same label, so add
       // differentiating fields.
-      CreateInferredLabelsHelper(profiles, it.second, fields_to_use,
-                                 minimal_fields_shown, app_locale, labels);
+      CreateInferredLabelsHelper(
+          profiles, it.second, fields_to_use, minimal_fields_shown, app_locale,
+          use_improved_labels_order &&
+              features::
+                  kAutofillImprovedLabelsParamWithDifferentiatingLabelsInFrontParam
+                      .Get(),
+          labels);
     }
   }
+  return labels;
 }
 
 std::u16string AutofillProfile::ConstructInferredLabel(
@@ -976,22 +999,24 @@ std::u16string AutofillProfile::ConstructInferredLabel(
 
 void AutofillProfile::RecordAndLogUse() {
   const base::Time now = AutofillClock::Now();
-  const base::TimeDelta time_since_last_used = now - use_date();
-  RecordUseDate(now);
+  const base::TimeDelta time_since_last_used =
+      now - usage_history_information_.use_date();
+  usage_history_information_.RecordUseDate(now);
   // Ensure that use counts are not skewed by multiple filling operations of the
   // form. This is especially important for forms fully annotated with
   // autocomplete=unrecognized. For such forms, keyboard accessory chips only
   // fill a single field at a time as per
   // `AutofillSuggestionsForAutocompleteUnrecognizedFieldsOnMobile`.
   if (time_since_last_used.InSeconds() >= 60) {
-    if (use_count() == 1) {
+    if (usage_history_information_.use_count() == 1) {
       // The max is the number of days a profile wasn't used before it gets
       // deleted (see `kDisusedDataModelDeletionTimeDelta`).
       base::UmaHistogramCustomCounts("Autofill.DaysUntilFirstUsage.Profile",
                                      time_since_last_used.InDays(), 1, 395,
                                      100);
     }
-    set_use_count(use_count() + 1);
+    usage_history_information_.set_use_count(
+        usage_history_information_.use_count() + 1);
     UMA_HISTOGRAM_COUNTS_1000("Autofill.DaysSinceLastUse.Profile",
                               time_since_last_used.InDays());
   }
@@ -1003,7 +1028,7 @@ void AutofillProfile::LogVerificationStatuses() {
   AutofillMetrics::LogVerificationStatusOfAddressTokensOnProfileUsage(*this);
 }
 
-VerificationStatus AutofillProfile::GetVerificationStatusImpl(
+VerificationStatus AutofillProfile::GetVerificationStatus(
     const FieldType type) const {
   const FormGroup* form_group = FormGroupForType(type);
   if (!form_group)
@@ -1012,17 +1037,21 @@ VerificationStatus AutofillProfile::GetVerificationStatusImpl(
   return form_group->GetVerificationStatus(type);
 }
 
-std::u16string AutofillProfile::GetInfoImpl(
-    const AutofillType& type,
-    const std::string& app_locale) const {
+std::u16string AutofillProfile::GetInfo(FieldType type,
+                                        const std::string& app_locale) const {
+  return GetInfo(AutofillType(type), app_locale);
+}
+
+std::u16string AutofillProfile::GetInfo(const AutofillType& type,
+                                        const std::string& app_locale) const {
   const FormGroup* form_group = FormGroupForType(type.GetStorableType());
   if (!form_group) {
     return std::u16string();
   }
-  return form_group->GetInfoImpl(type, app_locale);
+  return form_group->GetInfo(type, app_locale);
 }
 
-bool AutofillProfile::SetInfoWithVerificationStatusImpl(
+bool AutofillProfile::SetInfoWithVerificationStatus(
     const AutofillType& type,
     const std::u16string& value,
     const std::string& app_locale,
@@ -1034,8 +1063,17 @@ bool AutofillProfile::SetInfoWithVerificationStatusImpl(
   std::u16string trimmed_value;
   base::TrimWhitespace(value, base::TRIM_ALL, &trimmed_value);
 
-  return form_group->SetInfoWithVerificationStatusImpl(type, trimmed_value,
-                                                       app_locale, status);
+  return form_group->SetInfoWithVerificationStatus(type, trimmed_value,
+                                                   app_locale, status);
+}
+
+bool AutofillProfile::SetInfoWithVerificationStatus(
+    FieldType type,
+    const std::u16string& value,
+    const std::string& app_locale,
+    VerificationStatus status) {
+  return SetInfoWithVerificationStatus(AutofillType(type), value, app_locale,
+                                       status);
 }
 
 // static
@@ -1046,7 +1084,8 @@ void AutofillProfile::CreateInferredLabelsHelper(
     const std::vector<FieldType>& field_types,
     size_t num_fields_to_include,
     const std::string& app_locale,
-    std::vector<std::u16string>* labels) {
+    bool force_differentiating_label_in_front,
+    std::vector<std::u16string>& labels) {
   // For efficiency, we first construct a map of fields to their text values and
   // each value's frequency.
   std::map<FieldType, std::map<std::u16string, size_t>>
@@ -1060,8 +1099,9 @@ void AutofillProfile::CreateInferredLabelsHelper(
       std::u16string field_text = profile->GetInfo(field_type, app_locale);
 
       // If this label is not already in the map, add it with frequency 0.
-      if (!field_text_frequencies.count(field_text))
+      if (!field_text_frequencies.contains(field_text)) {
         field_text_frequencies[field_text] = 0;
+      }
 
       // Now, increment the frequency for this label.
       ++field_text_frequencies[field_text];
@@ -1080,6 +1120,7 @@ void AutofillProfile::CreateInferredLabelsHelper(
 
     std::vector<FieldType> label_fields;
     bool found_differentiating_field = false;
+    std::u16string first_differentiating_field_text;
     for (FieldType field_type : field_types) {
       // Skip over empty fields.
       std::u16string field_text = profile->GetInfo(field_type, app_locale);
@@ -1088,17 +1129,33 @@ void AutofillProfile::CreateInferredLabelsHelper(
 
       std::map<std::u16string, size_t>& field_text_frequencies =
           field_text_frequencies_by_field[field_type];
-      found_differentiating_field |=
-          !field_text_frequencies.count(std::u16string()) &&
-          (field_text_frequencies[field_text] == 1);
+
+      bool current_field_is_differentiating =
+          !field_text_frequencies.contains(u"") &&
+          field_text_frequencies[field_text] == 1;
+      found_differentiating_field |= current_field_is_differentiating;
 
       // Once we've found enough non-empty fields, skip over any remaining
       // fields that are identical across all the profiles.
-      if (label_fields.size() >= num_fields_to_include &&
-          (field_text_frequencies.size() == 1))
+      if (label_fields.size() + !first_differentiating_field_text.empty() >=
+              num_fields_to_include &&
+          field_text_frequencies.size() == 1) {
         continue;
+      }
 
-      label_fields.push_back(field_type);
+      // Only the first differentiating label is moved to the front. This is
+      // because `field_types` are ordered by relevance, so the first
+      // differentiating label found is the most relevant. There is no need to
+      // move more differentiating labels to the front, especially given that
+      // the order established later by `ConstructInferredLabel` shouldn't be
+      // broken more than necessary.
+      if (force_differentiating_label_in_front &&
+          current_field_is_differentiating &&
+          first_differentiating_field_text.empty()) {
+        first_differentiating_field_text = field_text;
+      } else {
+        label_fields.push_back(field_type);
+      }
 
       // If we've (1) found a differentiating field and (2) found at least
       // |num_fields_to_include| non-empty fields, we're done!
@@ -1107,8 +1164,20 @@ void AutofillProfile::CreateInferredLabelsHelper(
         break;
     }
 
-    (*labels)[it] = profile->ConstructInferredLabel(
+    // The final order of the `label_fields` is established by a third party
+    // library: libaddressinput. Libaddressinput has a different order for each
+    // country, depending on what makes sense in that country. Chrome code has
+    // no control over the final order of the labels.
+    labels[it] = profile->ConstructInferredLabel(
         label_fields, label_fields.size(), app_locale);
+    // Manually append the differentiating label in front.
+    if (!first_differentiating_field_text.empty()) {
+      std::u16string separator =
+          l10n_util::GetStringUTF16(IDS_AUTOFILL_ADDRESS_SUMMARY_SEPARATOR);
+      labels[it] = labels[it].empty() ? first_differentiating_field_text
+                                      : first_differentiating_field_text +
+                                            separator + labels[it];
+    }
   }
 }
 
@@ -1136,7 +1205,7 @@ FormGroup* AutofillProfile::MutableFormGroupForType(FieldType type) {
     case FieldTypeGroup::kTransaction:
     case FieldTypeGroup::kStandaloneCvcField:
     case FieldTypeGroup::kUnfillable:
-    case FieldTypeGroup::kPredictionImprovements:
+    case FieldTypeGroup::kAutofillAi:
       return nullptr;
   }
   NOTREACHED();
@@ -1150,8 +1219,9 @@ bool AutofillProfile::EqualsSansGuid(const AutofillProfile& profile) const {
 
 std::ostream& operator<<(std::ostream& os, const AutofillProfile& profile) {
   os << profile.guid() << " label: " << profile.profile_label() << " "
-     << profile.use_count() << " " << profile.use_date() << " "
-     << profile.language_code() << std::endl;
+     << profile.usage_history().use_count() << " "
+     << profile.usage_history().use_date() << " " << profile.language_code()
+     << std::endl;
 
   // Lambda to print the value and verification status for |type|.
   auto print_values_lambda = [&os, &profile](FieldType type) {
@@ -1163,7 +1233,7 @@ std::ostream& operator<<(std::ostream& os, const AutofillProfile& profile) {
   FieldTypeSet field_types_to_print;
   profile.GetSupportedTypes(&field_types_to_print);
 
-  base::ranges::for_each(field_types_to_print, print_values_lambda);
+  std::ranges::for_each(field_types_to_print, print_values_lambda);
 
   return os;
 }
@@ -1229,38 +1299,11 @@ void AutofillProfile::ClearFields(const FieldTypeSet& fields) {
   }
 }
 
-AutofillType AutofillProfile::GetFillingType(AutofillType field_type) const {
-  if (HasInfo(field_type)) {
-    return field_type;
-  }
-  switch (field_type.group()) {
-    case FieldTypeGroup::kName:
-      return AutofillType(
-          GetNameInfo().GetStructuredName().GetFallbackTypeForType(
-              field_type.GetStorableType()));
-    case FieldTypeGroup::kAddress:
-      return AutofillType(GetAddress().GetRoot().GetFallbackTypeForType(
-          field_type.GetStorableType()));
-    case FieldTypeGroup::kEmail:
-    case FieldTypeGroup::kCompany:
-    case FieldTypeGroup::kPhone:
-      return field_type;
-    // For field-by-field filling in manual fallback autofill, the field's type
-    // will not be used but the type that generated the suggested value will.
-    // This means that this function will return at the `HasInfo` since we do
-    // not suggest filling empty values.
-    case FieldTypeGroup::kNoGroup:
-    case FieldTypeGroup::kCreditCard:
-    case FieldTypeGroup::kPasswordField:
-    case FieldTypeGroup::kTransaction:
-    case FieldTypeGroup::kUsernameField:
-    case FieldTypeGroup::kUnfillable:
-    case FieldTypeGroup::kIban:
-    case FieldTypeGroup::kStandaloneCvcField:
-    case FieldTypeGroup::kPredictionImprovements:
-      NOTREACHED();
-  }
-  NOTREACHED();
+UsageHistoryInformation& AutofillProfile::usage_history() {
+  return usage_history_information_;
+}
+const UsageHistoryInformation& AutofillProfile::usage_history() const {
+  return usage_history_information_;
 }
 
 }  // namespace autofill

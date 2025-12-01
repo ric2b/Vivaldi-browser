@@ -28,13 +28,13 @@ title: Training
     <tr>
       <td>Callbacks in Chromium</td>
       <td>
-        <a href="http://goto.google.com/callbacks-in-chromium-video"
+        <a href="http://go/callbacks-in-chromium-video"
            target="_blank">
           Video
         </a>
       </td>
       <td>
-        <a href="http://goto.google.com/callbacks-in-chromium-slides"
+        <a href="http://go/callbacks-in-chromium-slides"
            target="_blank">
           Slides
         </a>
@@ -49,7 +49,7 @@ title: Training
     <tr>
       <td>ChromiumOS Fast Boot</td>
       <td>
-        <a href="http://www.youtube.com/watch?v=mTFfl7AjNfI" target="_blank">
+        <a href="https://youtube.com/watch?v=mTFfl7AjNfI" target="_blank">
           Video
         </a>
       </td>
@@ -59,7 +59,7 @@ title: Training
     <tr>
       <td>ChromiumOS Security</td>
       <td>
-        <a href="http://www.youtube.com/watch?v=A9WVmNfgjtQ" target="_blank">
+        <a href="https://youtube.com/watch?v=A9WVmNfgjtQ" target="_blank">
           Video
         </a>
       </td>
@@ -69,7 +69,7 @@ title: Training
     <tr>
       <td>ChromiumOS & Open Source</td>
       <td>
-        <a href="http://www.youtube.com/watch?v=KA5RQv9mBoY" target="_blank">
+        <a href="https://youtube.com/watch?v=KA5RQv9mBoY" target="_blank">
           Video
         </a>
       </td>
@@ -79,13 +79,13 @@ title: Training
     <tr>
       <td>ChromeOS Software Bluetooth 101</td>
       <td>
-        <a href="http://goto.google.com/chromeos-software-bt-101"
+        <a href="http://go/chromeos-software-bt-101"
            target="_blank">
           go/chromeos-software-bt-101
         </a>
       </td>
       <td>
-        <a href="http://goto.google.com/chromeos-software-bt-101-slides"
+        <a href="http://go/chromeos-software-bt-101-slides"
            target="_blank">
           go/chromeos-software-bt-101-slides
         </a>
@@ -118,7 +118,7 @@ title: Training
     <tr>
       <td>What is Google ChromeOS?</td>
       <td>
-        <a href="https://www.youtube.com/watch?v=LwVX42Amcak" target="_blank">
+        <a href="https://youtube.com/watch?v=LwVX42Amcak" target="_blank">
           Video
         </a>
       </td>

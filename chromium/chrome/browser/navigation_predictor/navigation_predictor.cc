@@ -13,7 +13,6 @@
 #include "base/hash/hash.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/rand_util.h"
-#include "base/ranges/algorithm.h"
 #include "base/system/sys_info.h"
 #include "base/time/default_tick_clock.h"
 #include "chrome/browser/navigation_predictor/navigation_predictor_keyed_service.h"
@@ -77,7 +76,7 @@ PathLengthDepthAndHash GetUrlPathLengthDepthAndHash(const GURL& target_url) {
   // Truncate at 100 characters.
   path_length = std::min(path_length, static_cast<int64_t>(100));
 
-  int num_slashes = base::ranges::count(path, '/');
+  int num_slashes = std::ranges::count(path, '/');
   // Truncate at 5.
   int path_depth = std::min(num_slashes, 5);
 
@@ -109,10 +108,6 @@ base::TimeDelta MLModelExecutionTimerStartDelay() {
 base::TimeDelta MLModelExecutionTimerInterval() {
   return base::Milliseconds(
       blink::features::kPreloadingModelTimerInterval.Get());
-}
-
-bool MLModelOneExecutionPerHover() {
-  return blink::features::kPreloadingModelOneExecutionPerHover.Get();
 }
 
 base::TimeDelta MLModelMaxHoverTime() {
@@ -487,14 +482,7 @@ void NavigationPredictor::OnMLModelExecutionTimerFired() {
       base::BindOnce(&NavigationPredictor::OnPreloadingHeuristicsModelDone,
                      weak_ptr_factory_.GetWeakPtr(), anchor.target_url));
 
-  // TODO(crbug.com/40278151): In its current form, the model does not seem to
-  // ever increase in confidence when dwelling on an anchor, which makes
-  // repeated executions wasteful. So we only do one execution per mouse over.
-  // As we iterate on the model, multiple executions may become useful, but we
-  // need to take care to not produce a large amount of redundant predictions
-  // (as seen in crbug.com/338200075 ).
-  if (!MLModelOneExecutionPerHover() &&
-      inputs.hover_dwell_time < MLModelMaxHoverTime() &&
+  if (inputs.hover_dwell_time < MLModelMaxHoverTime() &&
       !ml_model_execution_timer_.IsRunning()) {
     ml_model_execution_timer_.Start(
         FROM_HERE, MLModelExecutionTimerInterval(),
@@ -506,14 +494,6 @@ void NavigationPredictor::OnMLModelExecutionTimerFired() {
 void NavigationPredictor::SetModelScoreCallbackForTesting(
     ModelScoreCallbackForTesting callback) {
   model_score_callback_ = std::move(callback);
-}
-
-void NavigationPredictor::SetTaskRunnerForTesting(
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-    const base::TickClock* clock) {
-  ml_model_execution_timer_.SetTaskRunner(task_runner);
-  clock_ = clock;
-  navigation_start_ = NowTicks();
 }
 
 // static

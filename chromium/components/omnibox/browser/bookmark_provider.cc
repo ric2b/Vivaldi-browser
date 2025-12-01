@@ -33,6 +33,9 @@
 #include "url/url_constants.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
+// Vivaldi
+#include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+
 using bookmarks::BookmarkNode;
 using bookmarks::TitledUrlMatch;
 
@@ -45,6 +48,13 @@ void BookmarkProvider::Start(const AutocompleteInput& input,
                              bool minimal_changes) {
   TRACE_EVENT0("omnibox", "BookmarkProvider::Start");
   matches_.clear();
+
+#if defined(VIVALDI_BUILD)
+  PrefService* prefs = client_->GetPrefs();
+  if (!prefs->GetBoolean(vivaldiprefs::kAddressBarOmniboxBookmarks)) {
+    return;
+  }
+#endif
 
   if (input.IsZeroSuggest() || input.text().empty()) {
     return;
@@ -68,15 +78,17 @@ void BookmarkProvider::DoAutocomplete(const AutocompleteInput& input) {
   // Remove the keyword from input if we're in keyword mode for a starter pack
   // engine.
   const auto [adjusted_input, starter_pack_engine] =
-      KeywordProvider::AdjustInputForStarterPackEngines(
-          input, client_->GetTemplateURLService());
+      AdjustInputForStarterPackKeyword(input, client_->GetTemplateURLService());
 
   const query_parser::MatchingAlgorithm matching_algorithm =
-#if BUILDFLAG(IS_ANDROID) && defined(VIVALDI_BUILD)
+#if defined(VIVALDI_BUILD)
       query_parser::MatchingAlgorithm::ALWAYS_PREFIX_SEARCH;
 #else
       GetMatchingAlgorithm(adjusted_input);
 #endif
+
+  // Vivaldi: The Below behaviour has been altered, performs partial matches
+  // for any total search text length.
 
   // GetBookmarksMatching returns bookmarks matching the user's
   // search terms using the following rules:
@@ -116,12 +128,20 @@ void BookmarkProvider::DoAutocomplete(const AutocompleteInput& input) {
       // `transition` appropriately to avoid popping the user out of keyword
       // mode.
 #if defined(VIVALDI_BUILD)
-      PrefService* prefs = client_->GetPrefs();
-      bool allow_default_match =
-          prefs->GetBoolean(vivaldiprefs::kAddressBarOmniboxShowBookmarks) &&
-          (!input.prevent_inline_autocomplete() ||
-           match.inline_autocompletion.empty());
-      match.allowed_to_be_default_match = allow_default_match;
+      if (match.allowed_to_be_default_match) {
+        const std::string host(base::UTF16ToUTF8(input.text().substr(
+            input.parts().host.begin, input.parts().host.len)));
+
+        bool has_controlled_domain =
+            net::registry_controlled_domains::HostHasRegistryControlledDomain(
+                host,
+                net::registry_controlled_domains::EXCLUDE_UNKNOWN_REGISTRIES,
+                net::registry_controlled_domains::EXCLUDE_PRIVATE_REGISTRIES);
+        PrefService* prefs = client_->GetPrefs();
+        match.allowed_to_be_default_match =
+            !has_controlled_domain &&
+            prefs->GetBoolean(vivaldiprefs::kAddressBarOmniboxBookmarksBoosted);
+      }
 #endif
       if (starter_pack_engine) {
         match.keyword = starter_pack_engine->keyword();
@@ -254,8 +274,8 @@ std::pair<int, int> BookmarkProvider::CalculateBookmarkMatchRelevance(
   int vivaldi_bookmark_boost_score = 0;
   PrefService* prefs = client_->GetPrefs();
   bool bookmark_boost =
-      prefs->GetBoolean(vivaldiprefs::kAddressBarOmniboxShowBookmarks);
-  vivaldi_bookmark_boost_score = bookmark_boost ? 380 : 0;
+      prefs->GetBoolean(vivaldiprefs::kAddressBarOmniboxBookmarksBoosted);
+  vivaldi_bookmark_boost_score = bookmark_boost ? 500 : 0;
   const int kBaseBookmarkScore = bookmarklet_without_title_match
                                      ? 400
                                      : 900 + vivaldi_bookmark_boost_score;

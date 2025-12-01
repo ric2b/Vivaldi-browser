@@ -137,5 +137,5 @@ See [ChromiumOS Unit Testing].
 [ChromiumOS Unit Testing]: /chromium-os/developer-library/guides/testing/running-unit-tests/
 [GN in ChromeOS]: /chromium-os/developer-library/reference/build/chromeos-gn/
 [GN]: https://gn.googlesource.com/gn/
-[GN video]: https://goto.google.com/gn-intro-tech-talk
-[GN slides]: https://goto.google.com/gn-intro-slides
+[GN video]: http://go/gn-intro-tech-talk
+[GN slides]: http://go/gn-intro-slides

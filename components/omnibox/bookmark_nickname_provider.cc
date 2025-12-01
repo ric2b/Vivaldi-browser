@@ -66,6 +66,11 @@ void BookmarkNicknameProvider::DoAutocomplete(const AutocompleteInput& input) {
   if (!bookmark_model_) {
     return;
   }
+
+  if (input.prevent_inline_autocomplete()) {
+    return;
+  }
+
   // Retrieve enough bookmarks so that we have a reasonable probability of
   // suggesting the one that the user desires.
   const size_t kMaxBookmarkMatches = 50;
@@ -90,34 +95,36 @@ void BookmarkNicknameProvider::DoAutocomplete(const AutocompleteInput& input) {
   if (matches.empty())
     return;  // There were no matches.
 
-  std::u16string input_text(input.text());
-
   for (auto& bookmark_match : matches) {
     // Score the TitledUrlMatch. If its score is greater than 0 then the
     // AutocompleteMatch is created and added to matches_.
     auto [relevance, bookmark_count] =
         CalculateBookmarkMatchRelevance(bookmark_match);
+    if (relevance == 0) {
+      continue;
+    }
 
-    if (relevance > 0) {
+    // VB-113189 Keep the three highest scoring results. A possible
+    // alternative could be to implement VB-109302 Partial matches
+    // score too high.
+    const size_t max_results = 3;
+    auto it = std::lower_bound(
+        matches_.begin(), matches_.end(), relevance, [](auto& a, int rel) {
+      return a.relevance > rel;
+    });
+    if (matches_.size() < max_results || it != matches_.end()) {
       AutocompleteMatch match = NicknameMatchToAutocompleteMatch(
           bookmark_match, AutocompleteMatchType::BOOKMARK_NICKNAME, relevance,
-          bookmark_count, this, client_->GetSchemeClassifier(), input,
-          input_text);
+          bookmark_count, this, client_->GetSchemeClassifier(), input);
 
       if (match.inline_autocompletion.empty() &&
-          input_text.length() !=
-              bookmark_match.node->GetTitledUrlNodeNickName().length()) {
-        match.relevance = 0;
+          input.text().length() != match.nickname.length()) {
+        continue;
       }
 
-      match.allowed_to_be_default_match =
-          !input.prevent_inline_autocomplete() ||
-          match.inline_autocompletion.empty();
-
-      match.nickname = bookmark_match.node->GetTitledUrlNodeNickName();
-
-      if (!input.prevent_inline_autocomplete() && match.relevance > 0) {
-        matches_.push_back(match);
+      matches_.insert(it, match);
+      if (matches_.size() > max_results) {
+        matches_.pop_back();
       }
     }
   }
@@ -137,8 +144,13 @@ std::pair<int, int> BookmarkNicknameProvider::CalculateBookmarkMatchRelevance(
 
   const GURL& url(bookmark_match.node->GetTitledUrlNodeUrl());
 
-  const int kBaseBookmarkNicknameScore = 1460;
-  const int kMaxBookmarkScore = 1599;
+  PrefService* prefs = client_->GetPrefs();
+  bool bookmark_boost =
+    prefs->GetBoolean(vivaldiprefs::kAddressBarOmniboxBookmarksBoosted);
+  int vivaldi_bookmark_boost_score = bookmark_boost ? 500 : 0;
+
+  const int kBaseBookmarkNicknameScore = 1460 + vivaldi_bookmark_boost_score;
+  const int kMaxBookmarkScore = 1599 + vivaldi_bookmark_boost_score;
   const double kBookmarkScoreRange =
       static_cast<double>(kMaxBookmarkScore - kBaseBookmarkNicknameScore);
   int relevance = static_cast<int>(normalized_sum * kBookmarkScoreRange) +

@@ -11,11 +11,13 @@
 #include "chrome/browser/ui/views/page_info/page_info_history_controller.h"
 #include "chrome/browser/ui/views/page_info/page_info_navigation_handler.h"
 #include "components/content_settings/core/common/content_settings_types.h"
+#include "components/page_info/core/page_info_types.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 
 class ChromePageInfoUiDelegate;
 class PageSwitcherView;
 class PageInfoViewFactory;
+class PageInfoMerchantTrustCoordinator;
 
 class Browser;
 
@@ -42,8 +44,9 @@ class PageInfoBubbleView : public PageInfoBubbleViewBase,
       const GURL& url,
       base::OnceClosure initialized_callback,
       PageInfoClosingCallback closing_callback,
-      bool allow_about_this_site,
-      std::optional<ContentSettingsType> type = std::nullopt);
+      bool allow_extended_site_info,
+      std::optional<ContentSettingsType> type = std::nullopt,
+      bool open_merchant_trust_page = false);
 
   // PageInfoNavigationHandler:
   void OpenMainPage(base::OnceClosure initialized_callback) override;
@@ -51,6 +54,8 @@ class PageInfoBubbleView : public PageInfoBubbleViewBase,
   void OpenPermissionPage(ContentSettingsType type) override;
   void OpenAdPersonalizationPage() override;
   void OpenCookiesPage() override;
+  void OpenMerchantTrustPage(
+      page_info::MerchantBubbleOpenReferrer referrer) override;
   void CloseBubble() override;
 
   // WebContentsObserver:
@@ -75,7 +80,7 @@ class PageInfoBubbleView : public PageInfoBubbleViewBase,
                      const GURL& url,
                      base::OnceClosure initialized_callback,
                      PageInfoClosingCallback closing_callback,
-                     bool allow_about_this_site);
+                     bool allow_extended_site_info);
 
   // PageInfoBubbleViewBase:
   gfx::Size CalculatePreferredSize(
@@ -94,6 +99,8 @@ class PageInfoBubbleView : public PageInfoBubbleViewBase,
   std::unique_ptr<PageInfoViewFactory> view_factory_;
 
   std::unique_ptr<PageInfoHistoryController> history_controller_;
+
+  std::unique_ptr<PageInfoMerchantTrustCoordinator> merchant_trust_coordinator_;
 
   raw_ptr<PageSwitcherView> page_container_ = nullptr;
 

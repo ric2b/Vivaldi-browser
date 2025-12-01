@@ -10,12 +10,16 @@ import * as Workspace from '../../../models/workspace/workspace.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
 import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
 import * as UI from '../../../ui/legacy/legacy.js';
-import * as LitHtml from '../../../ui/lit-html/lit-html.js';
+import * as Lit from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
-import HeadersViewStyles from './HeadersView.css.js';
+import HeadersViewStylesRaw from './HeadersView.css.js';
 
-const {html} = LitHtml;
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const HeadersViewStyles = new CSSStyleSheet();
+HeadersViewStyles.replaceSync(HeadersViewStylesRaw.cssContent);
+
+const {html} = Lit;
 
 const UIStrings = {
   /**
@@ -53,9 +57,6 @@ const UIStrings = {
 const str_ = i18n.i18n.registerUIStrings('panels/sources/components/HeadersView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
-const plusIconUrl = new URL('../../../Images/plus.svg', import.meta.url).toString();
-const trashIconUrl = new URL('../../../Images/bin.svg', import.meta.url).toString();
-
 const DEFAULT_HEADER_VALUE = 'header value';
 const getDefaultHeaderName = (i: number): string => `header-name-${i}`;
 
@@ -89,7 +90,7 @@ export class HeadersView extends UI.View.SimpleView {
       if (!headerOverrides.every(Persistence.NetworkPersistenceManager.isHeaderOverride)) {
         throw 'Type mismatch after parsing';
       }
-    } catch (e) {
+    } catch {
       console.error('Failed to parse', this.#uiSourceCode.url(), 'for locally overriding headers.');
       parsingError = true;
     }
@@ -346,7 +347,7 @@ export class HeadersViewComponent extends HTMLElement {
     if (this.#parsingError) {
       const fileName = this.#uiSourceCode?.name() || '.headers';
       // clang-format off
-      LitHtml.render(html`
+      Lit.render(html`
         <div class="center-wrapper">
           <div class="centered">
             <div class="error-header">${i18nString(UIStrings.errorWhenParsing, {PH1: fileName})}</div>
@@ -359,7 +360,7 @@ export class HeadersViewComponent extends HTMLElement {
     }
 
     // clang-format off
-    LitHtml.render(html`
+    Lit.render(html`
       ${this.#headerOverrides.map((headerOverride, blockIndex) =>
         html`
           ${this.#renderApplyToRow(headerOverride.applyTo, blockIndex)}
@@ -400,7 +401,7 @@ export class HeadersViewComponent extends HTMLElement {
     }
   }
 
-  #renderApplyToRow(pattern: string, blockIndex: number): LitHtml.TemplateResult {
+  #renderApplyToRow(pattern: string, blockIndex: number): Lit.TemplateResult {
     // clang-format off
     return html`
       <div class="row" data-block-index=${blockIndex}
@@ -411,7 +412,7 @@ export class HeadersViewComponent extends HTMLElement {
         <devtools-button
         title=${i18nString(UIStrings.removeBlock)}
         .size=${Buttons.Button.Size.SMALL}
-        .iconUrl=${trashIconUrl}
+        .iconName=${'bin'}
         .iconWidth=${'14px'}
         .iconHeight=${'14px'}
         .variant=${Buttons.Button.Variant.ICON}
@@ -423,8 +424,7 @@ export class HeadersViewComponent extends HTMLElement {
     // clang-format on
   }
 
-  #renderHeaderRow(header: Protocol.Fetch.HeaderEntry, blockIndex: number, headerIndex: number):
-      LitHtml.TemplateResult {
+  #renderHeaderRow(header: Protocol.Fetch.HeaderEntry, blockIndex: number, headerIndex: number): Lit.TemplateResult {
     // clang-format off
     return html`
       <div class="row padded" data-block-index=${blockIndex} data-header-index=${headerIndex}
@@ -435,7 +435,7 @@ export class HeadersViewComponent extends HTMLElement {
         <devtools-button
           title=${i18nString(UIStrings.addHeader)}
           .size=${Buttons.Button.Size.SMALL}
-          .iconUrl=${plusIconUrl}
+          .iconName=${'plus'}
           .variant=${Buttons.Button.Variant.ICON}
           .jslogContext=${'headers-view.add-header'}
           class="add-header inline-button"
@@ -443,7 +443,7 @@ export class HeadersViewComponent extends HTMLElement {
         <devtools-button
           title=${i18nString(UIStrings.removeHeader)}
           .size=${Buttons.Button.Size.SMALL}
-          .iconUrl=${trashIconUrl}
+          .iconName=${'bin'}
           .variant=${Buttons.Button.Variant.ICON}
           ?hidden=${!this.#isDeletable(blockIndex, headerIndex)}
           .jslogContext=${'headers-view.remove-header'}
@@ -454,8 +454,8 @@ export class HeadersViewComponent extends HTMLElement {
     // clang-format on
   }
 
-  #renderEditable(value: string, className?: string, isKey?: boolean): LitHtml.TemplateResult {
-    // This uses LitHtml's `live`-directive, so that when checking whether to
+  #renderEditable(value: string, className?: string, isKey?: boolean): Lit.TemplateResult {
+    // This uses Lit's `live`-directive, so that when checking whether to
     // update during re-render, `value` is compared against the actual live DOM
     // value of the contenteditable element and not the potentially outdated
     // value from the previous render.
@@ -465,7 +465,7 @@ export class HeadersViewComponent extends HTMLElement {
                               contenteditable="true"
                               class="editable ${className}"
                               tabindex="0"
-                              .innerText=${LitHtml.Directives.live(value)}></span>`;
+                              .innerText=${Lit.Directives.live(value)}></span>`;
     // clang-format on
   }
 }

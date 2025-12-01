@@ -156,6 +156,25 @@ class InteractiveBrowserTestApi : public views::test::InteractiveViewsTestApi {
       AbsoluteViewSpecifier web_view,
       bool wait_for_ready = true);
 
+  // Instruments an inner webview of an already-instrumented WebContents of any
+  // type; the resulting element will be present only when the parent element is
+  // *and* the inner webview is loaded and ready.
+  //
+  // Do not use with iframe; just instrument the primary contents and use
+  // `DeepQuery` instead.
+  [[nodiscard]] MultiStep InstrumentInnerWebContents(
+      ui::ElementIdentifier inner_id,
+      ui::ElementIdentifier outer_id,
+      size_t inner_contents_index,
+      bool wait_for_ready = true);
+
+  // Removes instrumentation for the WebContents with identifier `id`.
+  // `fail_if_not_instrumented` defines what happens if `id` is not in use;
+  // if true, crashes the test. If false, ignores and continues.
+  [[nodiscard]] StepBuilder UninstrumentWebContents(
+      ui::ElementIdentifier id,
+      bool fail_if_not_instrumented = true);
+
   // These convenience methods wait for page navigation/ready. If you specify
   // `expected_url`, the test will fail if that is not the loaded page. If you
   // do not, there is no step start callback and you can add your own logic.
@@ -358,6 +377,12 @@ class InteractiveBrowserTestApi : public views::test::InteractiveViewsTestApi {
   [[nodiscard]] StepBuilder ScrollIntoView(ui::ElementIdentifier web_contents,
                                            const DeepQuery& where);
 
+  // Waits until the intersection of the element's bounds and the window bounds
+  // are nonempty.
+  [[nodiscard]] MultiStep WaitForElementVisible(
+      ui::ElementIdentifier web_contents,
+      const DeepQuery& where);
+
   // Simulates clicking on an HTML element by injecting the click event directly
   // into the DOM. You can specify the mouse button and additional modifier
   // keys (default is left-click, no modifiers).
@@ -383,8 +408,7 @@ class InteractiveBrowserTestApi : public views::test::InteractiveViewsTestApi {
       const DeepQuery& query);
 
   // Possibly waits for `element_id` to be painted if it is a WebContents.
-  [[nodiscard]] MultiStep MaybeWaitForPaint(ElementSpecifier element,
-                                            const std::string& desc);
+  [[nodiscard]] MultiStep MaybeWaitForPaint(ElementSpecifier element);
 
   Browser* GetBrowserFor(ui::ElementContext current_context,
                          BrowserSpecifier spec);

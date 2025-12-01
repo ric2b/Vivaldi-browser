@@ -6,6 +6,7 @@
 #define V8_TOOLS_WASM_MJSUNIT_MODULE_DISASSEMBLER_IMPL_H_
 
 #include <ctime>
+#include <string_view>
 
 #include "src/numbers/conversions.h"
 #include "src/wasm/function-body-decoder-impl.h"
@@ -177,7 +178,7 @@ class MjsunitNamesProvider {
     }
     WasmName name = wire_bytes_.GetNameOrNull(function_variable_names_[index]);
     if (name.size() > 0) {
-      out << name << index;
+      out << name;
     } else {
       out << "$func" << index;
     }
@@ -261,6 +262,14 @@ class MjsunitNamesProvider {
   void PrintElementSegmentReferenceLeb(StringBuilder& out, uint32_t index) {
     MaybeLebScope leb_scope(out, index);
     PrintElementSegmentName(out, index);
+  }
+
+  void PrintStringLiteralName(StringBuilder& out, uint32_t index) {
+    out << "$string" << index;
+  }
+  void PrintStringLiteralReference(StringBuilder& out, uint32_t index) {
+    MaybeLebScope leb_scope(out, index);
+    PrintStringLiteralName(out, index);
   }
 
   // Format: HeapType::* enum value, JS global constant.
@@ -418,10 +427,10 @@ class MjsunitNamesProvider {
       char uc = c | 0x20;
       if (uc >= 'a' && uc <= 'z') continue;
       if (c == '$' || c == '_') continue;
-      if (c >= '0' && c <= '9') continue;
+      if (i > 0 && c >= '0' && c <= '9') continue;
       return false;
     }
-    // Check for clashes with auto-generated names.
+    // Check for clashes with auto-generated names and reserved words.
     // This isn't perfect: any collision with a function (e.g. "makeSig")
     // or constant (e.g. "kFooRefCode") would also break the generated test,
     // but it doesn't seem feasible to accurately guard against all of those.
@@ -442,6 +451,7 @@ class MjsunitNamesProvider {
       if (memcmp(name.begin(), "kExpr", 5) == 0) return false;
       if (memcmp(name.begin(), "kSig_", 5) == 0) return false;
       if (memcmp(name.begin(), "kWasm", 5) == 0) return false;
+      if (memcmp(name.begin(), "throw", 5) == 0) return false;
     }
     if (name.length() >= 4) {
       if (memcmp(name.begin(), "$mem", 4) == 0) return false;
@@ -689,8 +699,8 @@ void PrintF32Const(StringBuilder& out, ImmF32Immediate& imm) {
     return;
   }
   char buffer[100];
-  const char* str =
-      DoubleToCString(imm.value, base::VectorOf(buffer, sizeof(buffer)));
+  std::string_view str =
+      DoubleToStringView(imm.value, base::ArrayVector(buffer));
   out << "wasmF32Const(" << str << ")";
 }
 
@@ -711,8 +721,8 @@ void PrintF64Const(StringBuilder& out, ImmF64Immediate& imm) {
     return;
   }
   char buffer[100];
-  const char* str =
-      DoubleToCString(imm.value, base::VectorOf(buffer, sizeof(buffer)));
+  std::string_view str =
+      DoubleToStringView(imm.value, base::ArrayVector(buffer));
   out << "wasmF64Const(" << str << ")";
 }
 
@@ -1026,9 +1036,9 @@ class MjsunitImmediatesPrinter {
   }
 
   void StringConst(StringConstImmediate& imm) {
-    // TODO(jkummerow): Support for string constants is incomplete, we never
-    // emit a strings section.
-    WriteUnsignedLEB(imm.index);
+    out_ << " ";
+    names()->PrintStringLiteralReference(out_, imm.index);
+    out_ << ",";
   }
 
   void MemoryInit(MemoryInitImmediate& imm) {
@@ -1115,7 +1125,8 @@ class MjsunitModuleDis {
     offsets_.CollectOffsets(module, wire_bytes.module_bytes());
   }
 
-  void PrintModule() {
+  void PrintModule(std::string_view extra_flags = {},
+                   bool emit_call_main = true) {
     tzset();
     time_t current_time = time(nullptr);
     struct tm current_localtime;
@@ -1126,14 +1137,18 @@ class MjsunitModuleDis {
 #endif
     int year = 1900 + current_localtime.tm_year;
 
+    // TODO(jkummerow): It would be neat to dynamically detect additional
+    // necessary --experimental-wasm-foo feature flags and add them.
+    // That requires decoding/validating functions before getting here though.
     out_ << "// Copyright " << year
          << " the V8 project authors. All rights reserved.\n"
             "// Use of this source code is governed by a BSD-style license "
             "that can be\n"
             "// found in the LICENSE file.\n"
             "\n"
-            "// Flags: --wasm-staging --wasm-inlining-call-indirect\n"
-            "\n"
+            "// Flags: --wasm-staging --wasm-inlining-call-indirect"
+         << extra_flags
+         << "\n\n"
             "d8.file.execute('test/mjsunit/wasm/wasm-module-builder.js');\n"
             "\n"
             "const builder = new WasmModuleBuilder();";
@@ -1314,6 +1329,7 @@ class MjsunitModuleDis {
             out_ << "undefined, ";
           }
           names()->PrintValueType(out_, table.type, kEmitObjects);
+          out_ << ", /*shared*/ " << (table.shared ? "true" : "false");
           if (table.is_table64()) out_ << ", true";
           break;
         }
@@ -1463,12 +1479,23 @@ class MjsunitModuleDis {
       out_ << "[";
       uint32_t num_bytes = static_cast<uint32_t>(data.size());
       if (num_bytes > 0) out_ << uint32_t{data[0]};
-      for (uint32_t i = 1; i < num_bytes; i++) {
-        out_ << ", " << uint32_t{data[i]};
+      for (uint32_t j = 1; j < num_bytes; j++) {
+        out_ << ", " << uint32_t{data[j]};
       }
       out_ << "]";
       if (segment.shared) out_ << ", true";
       out_ << ");";
+      out_.NextLine(0);
+    }
+
+    // Stringref literals.
+    for (uint32_t i = 0; i < module_->stringref_literals.size(); i++) {
+      out_ << "let ";
+      names()->PrintStringLiteralName(out_, i);
+      out_ << " = builder.addLiteralStringRef(\"";
+      const WasmStringRefLiteral lit = module_->stringref_literals[i];
+      PrintStringAsJSON(out_, wire_bytes_.start(), lit.source);
+      out_ << "\");";
       out_.NextLine(0);
     }
 
@@ -1675,19 +1702,21 @@ class MjsunitModuleDis {
 
     // Instantiate and invoke.
     if (added_any_export) out_.NextLine(0);
+    out_ << "let kBuiltins = { builtins: ['js-string', 'text-decoder', "
+            "'text-encoder'] };\n";
     bool compiles = !has_error_;
     if (compiles) {
-      out_ << "let kBuiltins = { builtins: ['js-string', 'text-decoder', "
-              "'text-encoder'] };\n"
-              "const instance = builder.instantiate({}, kBuiltins);\n"
-              "try {\n"
-              "  print(instance.exports.main(1, 2, 3));\n"
-              "} catch (e) {\n"
-              "  print('caught exception', e);\n"
-              "}";
+      out_ << "const instance = builder.instantiate({}, kBuiltins);\n";
+      if (emit_call_main) {
+        out_ << "try {\n"
+                "  print(instance.exports.main(1, 2, 3));\n"
+                "} catch (e) {\n"
+                "  print('caught exception', e);\n"
+                "}";
+      }
       out_.NextLine(0);
     } else {
-      out_ << "assertThrows(() => builder.instantiate(), "
+      out_ << "assertThrows(() => builder.instantiate({}, kBuiltins), "
               "WebAssembly.CompileError);";
       out_.NextLine(0);
     }
@@ -1711,22 +1740,22 @@ class MjsunitModuleDis {
 
   void DecodeAndAppendInitExpr(ConstantExpression init, ValueType expected) {
     switch (init.kind()) {
-      case ConstantExpression::kEmpty:
+      case ConstantExpression::Kind::kEmpty:
         UNREACHABLE();
-      case ConstantExpression::kI32Const:
+      case ConstantExpression::Kind::kI32Const:
         out_ << "wasmI32Const(" << init.i32_value() << ")";
         break;
-      case ConstantExpression::kRefNull:
+      case ConstantExpression::Kind::kRefNull:
         out_ << "[kExprRefNull, ";
         names()->PrintHeapType(out_, HeapType(init.repr()), kEmitWireBytes);
         out_ << "]";
         break;
-      case ConstantExpression::kRefFunc:
+      case ConstantExpression::Kind::kRefFunc:
         out_ << "[kExprRefFunc, ";
         names()->PrintFunctionReferenceLeb(out_, init.index());
         out_ << "]";
         break;
-      case ConstantExpression::kWireBytesRef: {
+      case ConstantExpression::Kind::kWireBytesRef: {
         WireBytesRef ref = init.wire_bytes_ref();
         const uint8_t* start = wire_bytes_.start() + ref.offset();
         const uint8_t* end = start + ref.length();

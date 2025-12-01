@@ -21,6 +21,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/mojom/ui_base_types.mojom-shared.h"
 #include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/test/view_metadata_test_utils.h"
 #include "ui/views/test/widget_test.h"
 #include "ui/views/window/dialog_delegate.h"
@@ -68,11 +69,11 @@ class WebDialogViewUnitTest : public views::test::WidgetTest {
   void SetUp() override {
     views::test::WidgetTest::SetUp();
 
-    browser_context_ = std::make_unique<content::TestBrowserContext>();
-
     // Set the test content browser client to avoid pulling in needless
     // dependencies from content.
     SetBrowserClientForTesting(&test_browser_client_);
+
+    browser_context_ = std::make_unique<content::TestBrowserContext>();
 
     web_dialog_delegate_ =
         std::make_unique<TestWebDialogViewWebDialogDelegate>();
@@ -131,8 +132,9 @@ class WebDialogViewUnitTest : public views::test::WidgetTest {
     ASSERT_TRUE(web_dialog_view_->GetFocusManager() != nullptr);
     ASSERT_TRUE(widget_ != nullptr);
     ui::KeyEvent event_copy = event;
-    if (web_dialog_view_->GetFocusManager()->OnKeyEvent(event_copy))
+    if (web_dialog_view_->GetFocusManager()->OnKeyEvent(event_copy)) {
       widget_->OnKeyEvent(&event_copy);
+    }
   }
 
  private:
@@ -182,6 +184,42 @@ TEST_F(WebDialogViewUnitTest, ObservableWebViewOnWebDialogViewClosed) {
   EXPECT_FALSE(web_view_delegate());
 
   ResetWebDialogDelegate();
+}
+
+TEST_F(WebDialogViewUnitTest, RootViewAccessibleName) {
+  ui::AXNodeData root_view_data;
+  web_dialog_view()
+      ->GetWidget()
+      ->GetRootView()
+      ->GetViewAccessibility()
+      .GetAccessibleNodeData(&root_view_data);
+  EXPECT_EQ(
+      root_view_data.GetString16Attribute(ax::mojom::StringAttribute::kName),
+      web_dialog_view()->GetAccessibleWindowTitle());
+
+  root_view_data = ui::AXNodeData();
+  web_dialog_view()
+      ->GetWidget()
+      ->GetRootView()
+      ->GetViewAccessibility()
+      .GetAccessibleNodeData(&root_view_data);
+  EXPECT_EQ(u"Test", web_dialog_view()->GetAccessibleWindowTitle());
+  EXPECT_EQ(
+      root_view_data.GetString16Attribute(ax::mojom::StringAttribute::kName),
+      web_dialog_view()->GetAccessibleWindowTitle());
+
+  web_dialog_delegate()->set_accessible_dialog_title(u"Acessible Dialog Title");
+  root_view_data = ui::AXNodeData();
+  web_dialog_view()
+      ->GetWidget()
+      ->GetRootView()
+      ->GetViewAccessibility()
+      .GetAccessibleNodeData(&root_view_data);
+  EXPECT_EQ(u"Acessible Dialog Title",
+            web_dialog_view()->GetAccessibleWindowTitle());
+  EXPECT_EQ(
+      root_view_data.GetString16Attribute(ax::mojom::StringAttribute::kName),
+      web_dialog_view()->GetAccessibleWindowTitle());
 }
 
 TEST_F(WebDialogViewUnitTest, MetadataTest) {

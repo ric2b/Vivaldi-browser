@@ -24,6 +24,7 @@
 #include "ui/compositor/layer.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/gfx/geometry/rrect_f.h"
+#include "ui/gfx/vector_icon_types.h"
 #include "ui/views/controls/focus_ring.h"
 #include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/controls/label.h"
@@ -121,15 +122,6 @@ LabeledSliderView::LabeledSliderView(TrayDetailedView* detailed_view,
     : is_wide_slider_(is_wide_slider) {
   SetUseDefaultFillLayout(true);
 
-  // TODO (b/319941708): Remove this work-around after this bug is fixed.
-  // Adding a layer avoids calling `OrphanLayers()` when removing child views.
-  // Note that we set the layer of `unified_slider_view_` beneath the layer of
-  // `device_name_view_`. Meanwhile, `device_name_view_` is removed before
-  // `unified_slider_view_` due to the view order. As a result, the layer of
-  // `unified_slider_view_` will be removed from the parent twice, causing a
-  // CHECK error.
-  SetPaintToLayer();
-
   // Creates and formats the slider view.
   unified_slider_view_ = views::AsViewClass<UnifiedSliderView>(
       AddChildView(std::move(slider_view)));
@@ -141,7 +133,8 @@ LabeledSliderView::LabeledSliderView(TrayDetailedView* detailed_view,
 
   // Creates and formats the device name view.
   device_name_view_ = detailed_view->AddScrollListCheckableItem(
-      this, gfx::kNoneIcon, GetAudioDeviceName(device), device.active);
+      this, gfx::VectorIcon::EmptyIcon(), GetAudioDeviceName(device),
+      device.active);
   ConfigureDeviceNameView(device);
 
   // Puts `unified_slider_view_` beneath `device_name_view_`.
@@ -158,8 +151,6 @@ LabeledSliderView::~LabeledSliderView() {
 }
 
 void LabeledSliderView::ConfigureDeviceNameView(const AudioDevice& device) {
-  device_name_view_->SetPaintToLayer();
-
   // Set this flag to false to make the assigned color id effective.
   // Otherwise it will use `color_utils::BlendForMinContrast()` to improve
   // label readability over the background.

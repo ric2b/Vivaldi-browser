@@ -190,19 +190,20 @@ public class SharedWebViewChromium {
             mRunQueue.addTask(() -> setProfile(profileName));
             return;
         }
-        mAwContents.setBrowserContext(AwBrowserContextStore.getNamedContext(profileName, true));
+        mAwContents.setBrowserContextForPublicApi(
+                AwBrowserContextStore.getNamedContext(profileName, true));
     }
 
     public Profile getProfile() {
         if (checkNeedsPost()) {
             return mRunQueue.runOnUiThreadBlocking(this::getProfile);
         }
-        String profileName = mAwContents.getBrowserContext().getName();
+        String profileName = mAwContents.getBrowserContextForPublicApi().getName();
         return ProfileStore.getInstance().getProfile(profileName);
     }
 
     protected boolean checkNeedsPost() {
-        boolean needsPost = !mRunQueue.chromiumHasStarted() || !ThreadUtils.runningOnUiThread();
+        boolean needsPost = !mAwInit.isChromiumInitialized() || !ThreadUtils.runningOnUiThread();
         if (!needsPost && mAwContents == null) {
             throw new IllegalStateException("AwContents must be created if we are not posting!");
         }

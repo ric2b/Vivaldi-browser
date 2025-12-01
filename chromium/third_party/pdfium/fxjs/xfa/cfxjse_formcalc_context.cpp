@@ -6,7 +6,6 @@
 
 #include "fxjs/xfa/cfxjse_formcalc_context.h"
 
-#include <ctype.h>
 #include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -28,6 +27,7 @@
 #include "core/fxcrt/fx_extension.h"
 #include "core/fxcrt/fx_random.h"
 #include "core/fxcrt/fx_safe_types.h"
+#include "core/fxcrt/fx_string.h"
 #include "core/fxcrt/numerics/safe_conversions.h"
 #include "core/fxcrt/span_util.h"
 #include "core/fxcrt/widetext_buffer.h"
@@ -508,7 +508,7 @@ bool IsWhitespace(char c) {
 }
 
 bool IsPartOfNumber(char ch) {
-  return isdigit(ch) || ch == '-' || ch == '.';
+  return FXSYS_IsDecimalDigit(ch) || ch == '-' || ch == '.';
 }
 
 bool IsPartOfNumberW(wchar_t ch) {
@@ -523,13 +523,13 @@ ByteString GUIDString(bool bSeparator) {
   ByteString bsGUID;
   {
     // Span's lifetime must end before ReleaseBuffer() below.
-    pdfium::span<char> pBuf = bsGUID.GetBuffer(40);
+    pdfium::span<char> guid_span = bsGUID.GetBuffer(40);
     size_t out_index = 0;
     for (size_t i = 0; i < 16; ++i, out_index += 2) {
       if (bSeparator && (i == 4 || i == 6 || i == 8 || i == 10)) {
-        pBuf[out_index++] = L'-';
+        guid_span[out_index++] = L'-';
       }
-      FXSYS_IntToTwoHexChars(data[i], &pBuf[out_index]);
+      FXSYS_IntToTwoHexChars(data[i], guid_span.subspan(out_index, 2u));
     }
   }
   bsGUID.ReleaseBuffer(bSeparator ? 36 : 32);
@@ -549,7 +549,8 @@ void GetLocalTimeZone(int32_t* pHour, int32_t* pMin, int32_t* pSec) {
 
 bool HTMLSTR2Code(const WideString& pData, uint32_t* iCode) {
   auto cmpFunc = [](const XFA_FMHtmlReserveCode& iter, ByteStringView val) {
-    return strcmp(val.unterminated_c_str(), iter.m_htmlReserve) > 0;
+    return UNSAFE_TODO(strcmp(val.unterminated_c_str(), iter.m_htmlReserve)) >
+           0;
   };
   if (!pData.IsASCII())
     return false;
@@ -558,7 +559,7 @@ bool HTMLSTR2Code(const WideString& pData, uint32_t* iCode) {
       std::begin(kReservesForDecode), std::end(kReservesForDecode),
       temp.AsStringView(), cmpFunc);
   if (result != std::end(kReservesForDecode) &&
-      !strcmp(temp.c_str(), result->m_htmlReserve)) {
+      !UNSAFE_TODO(strcmp(temp.c_str(), result->m_htmlReserve))) {
     *iCode = result->m_uCode;
     return true;
   }
@@ -1078,8 +1079,8 @@ int32_t ValueToInteger(v8::Isolate* pIsolate, v8::Local<v8::Value> arg) {
     return ValueToInteger(pIsolate, extracted);
 
   if (fxv8::IsString(extracted)) {
-    ByteString bsValue = fxv8::ReentrantToByteStringHelper(pIsolate, extracted);
-    return FXSYS_atoi(bsValue.c_str());
+    ByteString value = fxv8::ReentrantToByteStringHelper(pIsolate, extracted);
+    return StringToInt(value.AsStringView());
   }
 
   return fxv8::ReentrantToInt32Helper(pIsolate, extracted);
@@ -1098,7 +1099,8 @@ float ValueToFloat(v8::Isolate* pIsolate, v8::Local<v8::Value> arg) {
 
   if (fxv8::IsString(extracted)) {
     ByteString bsValue = fxv8::ReentrantToByteStringHelper(pIsolate, extracted);
-    return strtof(bsValue.c_str(), nullptr);
+    // SAFETY: ByteStrings are always NUL-terminated.
+    return UNSAFE_BUFFERS(strtof(bsValue.c_str(), nullptr));
   }
 
   return fxv8::ReentrantToFloatHelper(pIsolate, extracted);
@@ -1117,7 +1119,8 @@ double ValueToDouble(v8::Isolate* pIsolate, v8::Local<v8::Value> arg) {
 
   if (fxv8::IsString(extracted)) {
     ByteString bsValue = fxv8::ReentrantToByteStringHelper(pIsolate, extracted);
-    return strtod(bsValue.c_str(), nullptr);
+    // SAFETY: ByteStrings are always NUL_terminated.
+    return UNSAFE_BUFFERS(strtod(bsValue.c_str(), nullptr));
   }
 
   return fxv8::ReentrantToDoubleHelper(pIsolate, extracted);
@@ -2173,7 +2176,7 @@ void CFXJSE_FormCalcContext::Time2Num(
   const int32_t second = uniTime.GetSecond();
   const int32_t millisecond = uniTime.GetMillisecond();
 
-  constexpr int kMinutesInDay = 24 * 60;
+  static constexpr int kMinutesInDay = 24 * 60;
   int32_t minutes_with_tz =
       hour * 60 + minute - CXFA_TimeZoneProvider().GetTimeZoneInMinutes();
   minutes_with_tz %= kMinutesInDay;
@@ -3223,7 +3226,7 @@ void CFXJSE_FormCalcContext::UnitValue(
       }
 
       while (uVal < bsUnitTemp.GetLength()) {
-        if (!isdigit(pChar[uVal]) && pChar[uVal] != '.') {
+        if (!FXSYS_IsDecimalDigit(pChar[uVal]) && pChar[uVal] != '.') {
           break;
         }
         ++uVal;
@@ -3899,7 +3902,7 @@ void CFXJSE_FormCalcContext::Str(
   }
   float fNumber = ValueToFloat(info.GetIsolate(), numberValue);
 
-  constexpr int32_t kDefaultWidth = 10;
+  static constexpr int32_t kDefaultWidth = 10;
   int32_t iWidth = kDefaultWidth;
   if (argc > 1) {
     v8::Local<v8::Value> widthValue = GetSimpleValue(info, 1);
@@ -3910,10 +3913,10 @@ void CFXJSE_FormCalcContext::Str(
     }
   }
 
-  constexpr int32_t kDefaultPrecision = 0;
+  static constexpr int32_t kDefaultPrecision = 0;
   int32_t iPrecision = kDefaultPrecision;
   if (argc > 2) {
-    constexpr int32_t kMaxPrecision = 15;
+    static constexpr int32_t kMaxPrecision = 15;
     v8::Local<v8::Value> precision_value = GetSimpleValue(info, 2);
     iPrecision = std::max(0, static_cast<int32_t>(ValueToFloat(
                                  info.GetIsolate(), precision_value)));
@@ -5174,7 +5177,7 @@ bool CFXJSE_FormCalcContext::IsIsoDateFormat(ByteStringView bsData,
 
   std::array<char, 5> szYear = {};
   for (int32_t i = 0; i < 4; ++i) {
-    if (!isdigit(pData[i])) {
+    if (!FXSYS_IsDecimalDigit(pData[i])) {
       return false;
     }
     szYear[i] = pData[i];
@@ -5186,7 +5189,8 @@ bool CFXJSE_FormCalcContext::IsIsoDateFormat(ByteStringView bsData,
 
   int32_t iStyle = pData[4] == '-' ? 1 : 0;
   size_t iPosOff = iStyle == 0 ? 4 : 5;
-  if (!isdigit(pData[iPosOff]) || !isdigit(pData[iPosOff + 1])) {
+  if (!FXSYS_IsDecimalDigit(pData[iPosOff]) ||
+      !FXSYS_IsDecimalDigit(pData[iPosOff + 1])) {
     return false;
   }
 
@@ -5209,7 +5213,8 @@ bool CFXJSE_FormCalcContext::IsIsoDateFormat(ByteStringView bsData,
       return true;
     }
   }
-  if (!isdigit(pData[iPosOff]) || !isdigit(pData[iPosOff + 1])) {
+  if (!FXSYS_IsDecimalDigit(pData[iPosOff]) ||
+      !FXSYS_IsDecimalDigit(pData[iPosOff + 1])) {
     return false;
   }
 
@@ -5243,7 +5248,7 @@ bool CFXJSE_FormCalcContext::IsIsoTimeFormat(ByteStringView bsData) {
   size_t iZone = 0;
   size_t i = 0;
   while (i < pData.size()) {
-    if (!isdigit(pData[i]) && pData[i] != ':') {
+    if (!FXSYS_IsDecimalDigit(pData[i]) && pData[i] != ':') {
       iZone = i;
       break;
     }
@@ -5259,7 +5264,8 @@ bool CFXJSE_FormCalcContext::IsIsoTimeFormat(ByteStringView bsData) {
   while (iIndex + 1 < iZone) {
     szBuffer[0] = pData[iIndex];
     szBuffer[1] = pData[iIndex + 1];
-    if (!isdigit(szBuffer[0]) || !isdigit(szBuffer[1])) {
+    if (!FXSYS_IsDecimalDigit(szBuffer[0]) ||
+        !FXSYS_IsDecimalDigit(szBuffer[1])) {
       return false;
     }
     int32_t value = FXSYS_atoi(szBuffer);
@@ -5289,7 +5295,7 @@ bool CFXJSE_FormCalcContext::IsIsoTimeFormat(ByteStringView bsData) {
   }
 
   if (iIndex < pData.size() && pData[iIndex] == '.') {
-    constexpr int kSubSecondLength = 3;
+    static constexpr int kSubSecondLength = 3;
     if (iIndex + kSubSecondLength >= pData.size()) {
       return false;
     }
@@ -5298,7 +5304,7 @@ bool CFXJSE_FormCalcContext::IsIsoTimeFormat(ByteStringView bsData) {
     std::array<char, kSubSecondLength + 1> szMilliSeconds = {};
     for (int j = 0; j < kSubSecondLength; ++j) {
       char c = pData[iIndex + j];
-      if (!isdigit(c)) {
+      if (!FXSYS_IsDecimalDigit(c)) {
         return false;
       }
       szMilliSeconds[j] = c;
@@ -5324,7 +5330,8 @@ bool CFXJSE_FormCalcContext::IsIsoTimeFormat(ByteStringView bsData) {
   while (iIndex + 1 < pData.size()) {
     szBuffer[0] = pData[iIndex];
     szBuffer[1] = pData[iIndex + 1];
-    if (!isdigit(szBuffer[0]) || !isdigit(szBuffer[1])) {
+    if (!FXSYS_IsDecimalDigit(szBuffer[0]) ||
+        !FXSYS_IsDecimalDigit(szBuffer[1])) {
       return false;
     }
     int32_t value = FXSYS_atoi(szBuffer);

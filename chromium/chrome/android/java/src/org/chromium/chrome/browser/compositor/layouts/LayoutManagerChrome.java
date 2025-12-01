@@ -33,6 +33,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.theme.ThemeColorProvider;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
+import org.chromium.chrome.browser.toolbar.ToolbarPositionController;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateManager;
 import org.chromium.components.browser_ui.widget.gesture.SwipeGestureListener.ScrollDirection;
@@ -43,6 +44,8 @@ import java.util.List;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
+
 import org.vivaldi.browser.common.VivaldiUtils;
 
 /**
@@ -107,7 +110,8 @@ public class LayoutManagerChrome extends LayoutManagerImpl
             HubLayoutDependencyHolder hubLayoutDependencyHolder) {
         super(host, contentContainer, tabContentManagerSupplier, topUiThemeColorProvider);
         // Build Event Filter Handlers
-        mToolbarSwipeHandler = createToolbarSwipeHandler(/* supportSwipeDown= */ true);
+        mToolbarSwipeHandler =
+                createToolbarSwipeHandler(/* supportsSwipeToShowTabSwitcher= */ true);
 
         mTabContentManagerSupplier = tabContentManagerSupplier;
         mTabContentManagerSupplier.addObserver(mOnTabContentManager);
@@ -159,8 +163,8 @@ public class LayoutManagerChrome extends LayoutManagerImpl
     }
 
     @Override
-    public SwipeHandler createToolbarSwipeHandler(boolean supportSwipeDown) {
-        return new ToolbarSwipeHandler(supportSwipeDown);
+    public SwipeHandler createToolbarSwipeHandler(boolean supportsSwipeToShowTabSwitcher) {
+        return new ToolbarSwipeHandler(supportsSwipeToShowTabSwitcher);
     }
 
     @Override
@@ -170,7 +174,7 @@ public class LayoutManagerChrome extends LayoutManagerImpl
             ControlContainer controlContainer,
             DynamicResourceLoader dynamicResourceLoader,
             TopUiThemeColorProvider topUiColorProvider,
-            Supplier<Integer> bottomControlsOffsetSupplier) {
+            ObservableSupplier<Integer> bottomControlsOffsetSupplier) {
         Context context = mHost.getContext();
         LayoutRenderHost renderHost = mHost.getLayoutRenderHost();
         BrowserControlsStateProvider browserControlsStateProvider =
@@ -310,6 +314,9 @@ public class LayoutManagerChrome extends LayoutManagerImpl
     @Override
     public void onTabsAllClosing(boolean incognito) {
         if (getActiveLayout() == mStaticLayout && !incognito) {
+            // Note(david@vivaldi.com): We always create a new tab rather then showing the tab
+            // switcher.
+            if (!ChromeApplicationImpl.isVivaldi())
             showLayout(LayoutType.TAB_SWITCHER, /* animate= */ false);
         }
         super.onTabsAllClosing(incognito);
@@ -378,10 +385,10 @@ public class LayoutManagerChrome extends LayoutManagerImpl
          */
         private static final float SWIPE_RANGE_DEG = 25;
 
-        private final boolean mSupportSwipeDown;
+        private final boolean mSupportsSwipeToShowTabSwitcher;
 
-        public ToolbarSwipeHandler(boolean supportSwipeDown) {
-            mSupportSwipeDown = supportSwipeDown;
+        public ToolbarSwipeHandler(boolean supportsSwipeToShowTabSwitcher) {
+            mSupportsSwipeToShowTabSwitcher = supportsSwipeToShowTabSwitcher;
         }
 
         @Override
@@ -409,15 +416,13 @@ public class LayoutManagerChrome extends LayoutManagerImpl
             mScrollDirection = computeScrollDirection(dx, dy);
             if (mScrollDirection == ScrollDirection.UNKNOWN) return;
 
-            if (mSupportSwipeDown
-                && VivaldiUtils.isAddressBarSwipeGestureEnabled()
-                && ((VivaldiUtils.isTopToolbarOn() && mScrollDirection == ScrollDirection.DOWN)
-                || (!VivaldiUtils.isTopToolbarOn() && mScrollDirection == ScrollDirection.UP))) {
-                RecordUserAction.record("MobileToolbarSwipeOpenStackView");
-                showLayout(LayoutType.TAB_SWITCHER, true);
-            } else if (mScrollDirection == ScrollDirection.LEFT
+            if (mScrollDirection == ScrollDirection.LEFT
                     || mScrollDirection == ScrollDirection.RIGHT) {
                 startShowing(mToolbarSwipeLayout, true);
+            } else if (mSupportsSwipeToShowTabSwitcher) {
+                // No need to test scroll direction here, as we've ruled out other possibilities.
+                RecordUserAction.record("MobileToolbarSwipeOpenStackView");
+                showLayout(LayoutType.TAB_SWITCHER, true);
             }
 
             mToolbarSwipeLayout.swipeStarted(time(), mScrollDirection, x, y);
@@ -466,6 +471,8 @@ public class LayoutManagerChrome extends LayoutManagerImpl
                 direction = ScrollDirection.RIGHT;
             } else if (swipeAngle < 270 + SWIPE_RANGE_DEG && swipeAngle > 270 - SWIPE_RANGE_DEG) {
                 direction = ScrollDirection.DOWN;
+            } else if (swipeAngle < 90 + SWIPE_RANGE_DEG && swipeAngle > 90 - SWIPE_RANGE_DEG) {
+                direction = ScrollDirection.UP;
             }
             // Vivaldi: Note(nagamani@vivaldi.com): Swipe UP is sometimes not computed
             // properly with swipeAngle.
@@ -485,7 +492,13 @@ public class LayoutManagerChrome extends LayoutManagerImpl
                 return false;
             }
 
-            return direction == ScrollDirection.DOWN
+            Tab tab = getTabModelSelector() != null ? getTabModelSelector().getCurrentTab() : null;
+            boolean toolbarShownOnTop = ToolbarPositionController.shouldShowToolbarOnTop(tab);
+            @ScrollDirection
+            int showTabSwitcherScrollDirection =
+                    toolbarShownOnTop ? ScrollDirection.DOWN : ScrollDirection.UP;
+
+            return direction == showTabSwitcherScrollDirection
                     || (!VivaldiUtils.isTopToolbarOn() && direction == ScrollDirection.UP)
                     || direction == ScrollDirection.LEFT
                     || direction == ScrollDirection.RIGHT;

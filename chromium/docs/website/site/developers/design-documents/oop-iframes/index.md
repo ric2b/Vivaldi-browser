@@ -70,7 +70,7 @@ component
   - The set of Chromium features we know are affected by OOPIFs.
 
 - [Site Isolation Summit
-    talks](http://www.chromium.org/developers/design-documents/site-isolation#TOC-2015-Site-Isolation-Summit-Talks)
+    talks](/developers/design-documents/site-isolation#TOC-2015-Site-Isolation-Summit-Talks)
   - A set of slides and videos covering the changes to Chromium's architecture
     and how features can be updated.
 
@@ -82,7 +82,7 @@ component
 ### Frame Representation
 
 Much of the logic in the [content
-module](http://www.chromium.org/developers/content-module) has moved from being
+module](/developers/content-module) has moved from being
 tab-specific to frame-specific, since each frame may be rendered in different
 processes over its lifetime.
 
@@ -244,16 +244,16 @@ To render an iframe in a different process than its parent frame, the browser
 process passes information back and forth between the renderer processes and
 helps the GPU process composite the images together in the correct sizes and
 locations. We use the
-[Surfaces](http://www.chromium.org/developers/design-documents/chromium-graphics/surfaces)
+[Surfaces](/developers/design-documents/chromium-graphics/surfaces)
 implementation to maintain a set of textures from multiple renderer processes,
 compositing them into a single output image. More details are available in this
 [design
-document](http://www.chromium.org/developers/design-documents/oop-iframes/oop-iframes-rendering).
+document](/developers/design-documents/oop-iframes/oop-iframes-rendering).
 
 ### Input Events
 
 Similar to rendering, we use the
-[Surfaces](http://www.chromium.org/developers/design-documents/chromium-graphics/surfaces)
+[Surfaces](/developers/design-documents/chromium-graphics/surfaces)
 implementation to do hit testing in the browser process to deliver input events
 directly to the intended frame's renderer process. We also manage focus in the
 browser process to send keyboard events directly to the renderer process of the

@@ -6,6 +6,8 @@ package org.chromium.chrome.browser.ui.appmenu;
 
 import androidx.annotation.IntDef;
 
+import org.chromium.build.annotations.NullMarked;
+
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
@@ -17,6 +19,7 @@ import org.chromium.base.supplier.Supplier;
  * AppMenuObservers about these actions. This interface may be used by classes outside of app_menu
  * to interact with the app menu.
  */
+@NullMarked
 public interface AppMenuHandler {
     @IntDef({
         AppMenuItemType.STANDARD,

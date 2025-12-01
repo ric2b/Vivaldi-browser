@@ -209,9 +209,17 @@ inline constexpr char kLocalPasswordMigrationWarningPrefsVersion[] =
 inline constexpr char kPasswordGenerationBottomSheetDismissCount[] =
     "password_generation_bottom_sheet_dismiss_count";
 
-// Whether the post password migration sheet ahould be shown at startup.
+// Whether the post password migration sheet should be shown at startup.
 inline constexpr char kShouldShowPostPasswordMigrationSheetAtStartup[] =
     "should_show_post_password_migration_sheet_at_startup";
+
+// Whether the passwords who couldn't be migrated to UPM have been
+// saved as a CSV. The user can then choose to export the CSV out of Chrome
+// via a separate flow. The pref is also set to true if there were no
+// saved passwords. The value is used as a signal that the login db
+// can stop being used.
+inline constexpr char kUpmUnmigratedPasswordsExported[] =
+    "profile.upm_unmigrated_passwords_exported";
 #endif
 
 #if BUILDFLAG(IS_WIN)
@@ -246,10 +254,11 @@ inline constexpr char kWereOldGoogleLoginsRemoved[] =
     "profile.were_old_google_logins_removed";
 
 #if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
+// Deprecated 01/2025.
 // A dictionary of account-storage-related settings that exist per Gaia account
 // (e.g. whether that user has opted in). It maps from hash of Gaia ID to
 // dictionary of key-value pairs.
-inline constexpr char kAccountStoragePerAccountSettings[] =
+inline constexpr char kObsoleteAccountStoragePerAccountSettings[] =
     "profile.password_account_storage_settings";
 #endif  // !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
 
@@ -336,6 +345,13 @@ inline constexpr char kAutofillableCredentialsProfileStoreLoginDatabase[] =
 // A cache of whether the account LoginDatabase has autofillable credentials.
 inline constexpr char kAutofillableCredentialsAccountStoreLoginDatabase[] =
     "password_manager.autofillable_credentials_account_store_login_database";
+#endif
+
+#if !BUILDFLAG(IS_IOS)
+// Boolean pref indicating whether the user has accepted the privacy notice
+// agreement for starting the password change flow.
+inline constexpr char kPasswordChangeFlowNoticeAgreement[] =
+    "password_manager.password_change_flow_notice_agreement";
 #endif
 
 // Boolean pref indicating whether password sharing is enabled. Enables both

@@ -7,6 +7,7 @@
 #import <CoreML/CoreML.h>
 #import <Foundation/Foundation.h>
 
+#include <algorithm>
 #include <memory>
 
 #include "base/apple/foundation_util.h"
@@ -22,13 +23,11 @@
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/checked_math.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/thread_pool.h"
-#include "base/trace_event/trace_event.h"
 #include "base/types/expected_macros.h"
 #include "mojo/public/cpp/base/big_buffer.h"
 #include "mojo/public/cpp/bindings/self_owned_associated_receiver.h"
@@ -39,6 +38,7 @@
 #include "services/webnn/coreml/utils_coreml.h"
 #include "services/webnn/error.h"
 #include "services/webnn/public/cpp/operand_descriptor.h"
+#include "services/webnn/public/cpp/webnn_trace.h"
 #include "services/webnn/public/mojom/webnn_context_provider.mojom.h"
 #include "services/webnn/public/mojom/webnn_error.mojom.h"
 #include "services/webnn/queueable_resource_state_base.h"
@@ -185,144 +185,6 @@ class GraphImplCoreml::ComputeResources
     CHECK(ml_model_);
   }
 
-  void DoCompute(base::flat_map<std::string, mojo_base::BigBuffer> named_inputs,
-                 mojom::WebNNGraph::ComputeCallback compute_callback) const {
-    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    TRACE_EVENT0("gpu", "webnn::coreml::GraphImplCoreml::ComputeImpl");
-
-    base::ElapsedTimer model_predict_timer;
-
-    NSMutableSet* feature_names = [[NSMutableSet alloc] init];
-    NSMutableDictionary* feature_values = [[NSMutableDictionary alloc] init];
-
-    if (named_inputs.empty()) {
-      CHECK_EQ(ml_model_.modelDescription.inputDescriptionsByName.count, 1u);
-
-      NSString* placeholder_name =
-          base::SysUTF8ToNSString(kPlaceholderInputName);
-      [feature_names addObject:placeholder_name];
-      NSError* error;
-      MLMultiArray* placeholder_input =
-          [[MLMultiArray alloc] initWithShape:@[ @1 ]
-                                     dataType:MLMultiArrayDataTypeFloat16
-                                        error:&error];
-      placeholder_input[0] = @0;
-      CHECK(!error);
-      feature_values[placeholder_name] =
-          [MLFeatureValue featureValueWithMultiArray:placeholder_input];
-    } else {
-      CHECK_EQ(named_inputs.size(),
-               ml_model_.modelDescription.inputDescriptionsByName.count);
-
-      // Create an `MLFeatureValue` for each of the `named_inputs`.
-      NSString* feature_name;
-      for (feature_name in ml_model_.modelDescription.inputDescriptionsByName) {
-        [feature_names addObject:feature_name];
-
-        MLFeatureDescription* feature_description =
-            ml_model_.modelDescription.inputDescriptionsByName[feature_name];
-        CHECK_EQ(feature_description.type,
-                 MLFeatureType::MLFeatureTypeMultiArray);
-
-        auto operand_name_it = coreml_name_to_operand_name_.find(
-            base::SysNSStringToUTF8(feature_name));
-        CHECK(operand_name_it != coreml_name_to_operand_name_.end());
-
-        auto buffer_it = named_inputs.find(operand_name_it->second);
-        CHECK(buffer_it != named_inputs.end());
-
-        mojo_base::BigBuffer buffer = std::move(buffer_it->second);
-
-        MLFeatureValue* feature_value = CreateMultiArrayFeatureValueFromBytes(
-            feature_description.multiArrayConstraint, std::move(buffer));
-        if (!feature_value) {
-          std::move(compute_callback)
-              .Run(mojom::ComputeResult::NewError(
-                  mojom::Error::New(mojom::Error::Code::kUnknownError,
-                                    "Input initialization error")));
-          return;
-        }
-
-        // Assert that `feature_value` is compatible with `feature_description`.
-        CHECK([feature_description isAllowedValue:feature_value]);
-
-        feature_values[feature_name] = feature_value;
-      }
-    }
-
-    // Run the MLModel asynchronously.
-    WebNNMLFeatureProvider* feature_provider =
-        [[WebNNMLFeatureProvider alloc] initWithFeatures:feature_names
-                                           featureValues:feature_values];
-    auto done_callback = base::BindOnce(
-        &GraphImplCoreml::ComputeResources::DidPredictFromCompute, this,
-        std::move(model_predict_timer), std::move(compute_callback));
-    [ml_model_ predictionFromFeatures:feature_provider
-                    completionHandler:base::CallbackToBlock(
-                                          base::BindPostTaskToCurrentDefault(
-                                              std::move(done_callback)))];
-  }
-
-  void DidPredictFromCompute(
-      base::ElapsedTimer model_predict_timer,
-      mojom::WebNNGraph::ComputeCallback compute_callback,
-      id<MLFeatureProvider> output_features,
-      NSError* error) const {
-    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-    DEPRECATED_UMA_HISTOGRAM_MEDIUM_TIMES("WebNN.CoreML.TimingMs.ModelPredict",
-                                          model_predict_timer.Elapsed());
-
-    if (error) {
-      LOG(ERROR) << "[WebNN] PredictionError : " << error;
-      std::move(compute_callback)
-          .Run(mojom::ComputeResult::NewError(mojom::Error::New(
-              mojom::Error::Code::kUnknownError, "Error computing results")));
-      return;
-    }
-
-    // Read back the outputs.
-    base::ElapsedTimer model_output_read_timer;
-
-    auto barrier_callback =
-        base::BarrierCallback<std::pair<std::string, mojo_base::BigBuffer>>(
-            output_features.featureNames.count,
-            base::BindOnce(
-                [](mojom::WebNNGraph::ComputeCallback compute_callback,
-                   base::ElapsedTimer model_output_read_timer,
-                   std::vector<std::pair<std::string, mojo_base::BigBuffer>>
-                       named_outputs) {
-                  DEPRECATED_UMA_HISTOGRAM_MEDIUM_TIMES(
-                      "WebNN.CoreML.TimingMs.ModelOutputRead",
-                      model_output_read_timer.Elapsed());
-
-                  std::move(compute_callback)
-                      .Run(mojom::ComputeResult::NewNamedOutputs(
-                          std::move(named_outputs)));
-                },
-                std::move(compute_callback),
-                std::move(model_output_read_timer)));
-
-    for (NSString* feature_name in output_features.featureNames) {
-      MLFeatureValue* feature_value =
-          [output_features featureValueForName:feature_name];
-      std::string name = coreml_name_to_operand_name_.at(
-          base::SysNSStringToUTF8(feature_name));
-
-      MLMultiArray* multi_array_value = feature_value.multiArrayValue;
-      ReadFromMLMultiArray(
-          multi_array_value,
-          base::BindOnce(
-              [](base::OnceCallback<void(
-                     std::pair<std::string, mojo_base::BigBuffer>)> callback,
-                 std::string name, mojo_base::BigBuffer buffer) {
-                std::move(callback).Run(
-                    std::make_pair(std::move(name), std::move(buffer)));
-              },
-              barrier_callback, std::move(name)));
-    }
-  }
-
   void DoDispatch(
       base::flat_map<std::string,
                      scoped_refptr<QueueableResourceState<BufferContent>>>
@@ -330,9 +192,11 @@ class GraphImplCoreml::ComputeResources
       base::flat_map<std::string,
                      scoped_refptr<QueueableResourceState<BufferContent>>>
           named_output_buffer_states,
-      base::OnceClosure completion_closure) const {
+      base::OnceClosure completion_closure,
+      ScopedTrace scoped_trace) const {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
+    scoped_trace.AddStep("Set up prediction");
     base::ElapsedTimer model_predict_timer;
 
     NSString* feature_name;
@@ -436,6 +300,8 @@ class GraphImplCoreml::ComputeResources
     auto wrapped_completion_closure =
         base::BindPostTaskToCurrentDefault(std::move(completion_closure));
 
+    scoped_trace.AddStep("Trigger prediction");
+
     // Run the MLModel asynchronously.
     [ml_model_
         predictionFromFeatures:feature_provider
@@ -444,14 +310,17 @@ class GraphImplCoreml::ComputeResources
                  base::CallbackToBlock(base::BindOnce(
                      &GraphImplCoreml::ComputeResources::DidDispatch, this,
                      std::move(model_predict_timer), std::move(output_backings),
-                     std::move(wrapped_completion_closure)))];
+                     std::move(wrapped_completion_closure),
+                     std::move(scoped_trace)))];
   }
 
   void DidDispatch(base::ElapsedTimer model_predict_timer,
                    NSMutableDictionary* output_backing_buffers,
                    base::OnceClosure completion_closure,
+                   ScopedTrace scoped_trace,
                    id<MLFeatureProvider> output_features,
                    NSError* error) const {
+    scoped_trace.AddStep("Process prediction");
     DEPRECATED_UMA_HISTOGRAM_MEDIUM_TIMES("WebNN.CoreML.TimingMs."
                                           "ModelPredictWithDispatch",
                                           model_predict_timer.Elapsed());
@@ -543,8 +412,8 @@ void GraphImplCoreml::CreateAndBuildOnBackgroundThread(
   ASSIGN_OR_RETURN(
       std::unique_ptr<GraphBuilderCoreml::Result> build_graph_result,
       GraphBuilderCoreml::CreateAndBuild(
-          *graph_info.get(), std::move(context_properties), constant_operands,
-          model_file_dir.GetPath()),
+          *graph_info.get(), std::move(context_properties),
+          context_options->device, constant_operands, model_file_dir.GetPath()),
       [&](mojom::ErrorPtr error) {
         std::move(callback).Run(base::unexpected(std::move(error)));
         return;
@@ -701,20 +570,12 @@ GraphImplCoreml::GraphImplCoreml(ContextImplCoreml* context,
 
 GraphImplCoreml::~GraphImplCoreml() = default;
 
-void GraphImplCoreml::ComputeImpl(
-    base::flat_map<std::string, mojo_base::BigBuffer> named_inputs,
-    mojom::WebNNGraph::ComputeCallback callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  TRACE_EVENT0("gpu", "webnn::coreml::GraphImplCoreml::ComputeImpl");
-
-  compute_resources_->DoCompute(std::move(named_inputs), std::move(callback));
-}
-
 void GraphImplCoreml::DispatchImpl(
     const base::flat_map<std::string_view, WebNNTensorImpl*>& named_inputs,
     const base::flat_map<std::string_view, WebNNTensorImpl*>& named_outputs) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  TRACE_EVENT0("gpu", "webnn::coreml::GraphImpl::DispatchImpl");
+
+  ScopedTrace scoped_trace("GraphImplCoreml::DispatchImpl");
 
   base::flat_map<std::string,
                  scoped_refptr<QueueableResourceState<BufferContent>>>
@@ -727,17 +588,18 @@ void GraphImplCoreml::DispatchImpl(
   // them as shared/read-only.
   std::vector<scoped_refptr<QueueableResourceStateBase>> shared_resources;
   shared_resources.reserve(named_inputs.size());
-  base::ranges::transform(
+  std::ranges::transform(
       named_input_buffer_states, std::back_inserter(shared_resources),
       [](const auto& name_and_state) { return name_and_state.second; });
 
   // Exclusively reserve all output tensors, which will be written to.
   std::vector<scoped_refptr<QueueableResourceStateBase>> exclusive_resources;
   exclusive_resources.reserve(named_outputs.size());
-  base::ranges::transform(
+  std::ranges::transform(
       named_output_buffer_states, std::back_inserter(exclusive_resources),
       [](const auto& name_and_state) { return name_and_state.second; });
 
+  scoped_trace.AddStep("Acquire resources");
   auto task = base::MakeRefCounted<ResourceTask>(
       std::move(shared_resources), std::move(exclusive_resources),
       base::BindOnce(
@@ -750,13 +612,14 @@ void GraphImplCoreml::DispatchImpl(
                  std::string,
                  scoped_refptr<QueueableResourceState<BufferContent>>>
                  named_output_buffer_states,
-             base::OnceClosure completion_closure) {
+             ScopedTrace scoped_trace, base::OnceClosure completion_closure) {
             compute_resources->DoDispatch(std::move(named_input_buffer_states),
                                           std::move(named_output_buffer_states),
-                                          std::move(completion_closure));
+                                          std::move(completion_closure),
+                                          std::move(scoped_trace));
           },
           compute_resources_, std::move(named_input_buffer_states),
-          std::move(named_output_buffer_states)));
+          std::move(named_output_buffer_states), std::move(scoped_trace)));
   task->Enqueue();
 }
 

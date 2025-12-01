@@ -12,7 +12,6 @@ import {
   waitFor,
   waitForFunction,
 } from '../../shared/helper.js';
-
 import {assertMatchesJSONSnapshot} from '../../shared/snapshots.js';
 import {
   clearStorageItems,
@@ -31,17 +30,7 @@ describe('The Application Tab', () => {
     const {target} = getBrowserAndPages();
     const cookies = await target.cookies();
 
-    await target.deleteCookie(...cookies.map(cookie => {
-      if (cookie.partitionKey) {
-        // @ts-ignore parition key deletion not working in Puppeteer
-        // https://github.com/puppeteer/puppeteer/pull/12815.
-        cookie.partitionKey = {
-          topLevelSite: cookie.partitionKey,
-          hasCrossSiteAncestor: false,
-        };
-      }
-      return cookie;
-    }));
+    await target.deleteCookie(...cookies);
   });
 
   // Flaky test
@@ -165,7 +154,7 @@ describe('The Application Tab', () => {
 
     // Make sure that the preview resets
     await waitForFunction(async () => {
-      const previewValueNode2 = await waitFor('.empty-view');
+      const previewValueNode2 = await waitFor('.empty-state');
       const previewValue2 = await previewValueNode2.evaluate(e => e.textContent as string);
 
       return previewValue2.match(/Select a cookie to preview its value/);

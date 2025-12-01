@@ -34,6 +34,7 @@
 #import "ios/chrome/browser/metrics/model/new_tab_page_uma.h"
 #import "ios/chrome/browser/net/model/crurl.h"
 #import "ios/chrome/browser/policy/model/policy_util.h"
+#import "ios/chrome/browser/settings/ui_bundled/clear_browsing_data/features.h"
 #import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
@@ -52,7 +53,6 @@
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
 #import "ios/chrome/browser/shared/ui/util/pasteboard_util.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
-#import "ios/chrome/browser/ui/settings/clear_browsing_data/features.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_params.h"
 #import "ios/chrome/browser/window_activities/model/window_activity_helpers.h"
@@ -71,7 +71,7 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
-#import "ios/chrome/browser/ui/menu/browser_action_factory.h"
+#import "ios/chrome/browser/menu/ui_bundled/browser_action_factory.h"
 #import "ios/panel/panel_constants.h"
 #import "ios/ui/custom_views/vivaldi_search_bar_view.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
@@ -307,12 +307,6 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   return [super tableView:tableView URLInfoAtIndexPath:indexPath];
 }
 
-- (void)fetchHistoryForQuery:(NSString*)query continuation:(BOOL)continuation {
-  self.loading = YES;
-
-  [super fetchHistoryForQuery:query continuation:continuation];
-}
-
 #pragma mark - Navigation Toolbar Configuration
 
 // Animates the view configuration after flipping the current status of `[self
@@ -388,21 +382,6 @@ const CGFloat kButtonHorizontalPadding = 30.0;
     self.navigationItem.largeTitleDisplayMode =
         UINavigationItemLargeTitleDisplayModeAutomatic;
   }
-}
-
-#pragma mark - Context Menu
-
-- (void)displayContextMenuInvokedByGestureRecognizer:
-    (UILongPressGestureRecognizer*)gestureRecognizer {
-  if (self.editing) {
-    return;
-  }
-
-  if ([self scrimIsVisible]) {
-    self.searchController.active = NO;
-    return;
-  }
-  [super displayContextMenuInvokedByGestureRecognizer:gestureRecognizer];
 }
 
 #pragma mark - HistoryConsumer
@@ -589,10 +568,6 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   }
 }
 
-- (BOOL)scrimIsVisible {
-  return self.scrimView.superview ? YES : NO;
-}
-
 #pragma mark - Helper Methods
 
 // Returns YES if the history is actually empty, and the user is neither
@@ -617,7 +592,8 @@ const CGFloat kButtonHorizontalPadding = 30.0;
         self.browser->GetCommandDispatcher(), QuickDeleteCommands);
     [quickDeleteHandler
         showQuickDeleteAndCanPerformTabsClosureAnimation:
-            ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET];
+            ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET &&
+            self.canPerformTabsClosureAnimation];
     return;
   }
 

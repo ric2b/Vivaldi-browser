@@ -4,6 +4,8 @@
 
 #include "chrome/browser/invalidation/profile_invalidation_provider_factory.h"
 
+#include <stdint.h>
+
 #include "ash/constants/ash_switches.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
@@ -25,7 +27,7 @@
 namespace invalidation {
 
 namespace {
-constexpr char kFakeProjectId[] = "fake_project_id";
+constexpr int64_t kFakeProjectNumber = 1234567890;
 }  // namespace
 
 class ProfileInvalidationProviderFactoryTestBase : public InProcessBrowserTest {
@@ -43,10 +45,10 @@ class ProfileInvalidationProviderFactoryTestBase : public InProcessBrowserTest {
 };
 
 ProfileInvalidationProviderFactoryTestBase::
-    ProfileInvalidationProviderFactoryTestBase() {}
+    ProfileInvalidationProviderFactoryTestBase() = default;
 
 ProfileInvalidationProviderFactoryTestBase::
-    ~ProfileInvalidationProviderFactoryTestBase() {}
+    ~ProfileInvalidationProviderFactoryTestBase() = default;
 
 bool ProfileInvalidationProviderFactoryTestBase::
     CanConstructProfileInvalidationProvider(Profile* profile) {
@@ -70,10 +72,10 @@ class ProfileInvalidationProviderFactoryLoginScreenBrowserTest
 };
 
 ProfileInvalidationProviderFactoryLoginScreenBrowserTest::
-    ProfileInvalidationProviderFactoryLoginScreenBrowserTest() {}
+    ProfileInvalidationProviderFactoryLoginScreenBrowserTest() = default;
 
 ProfileInvalidationProviderFactoryLoginScreenBrowserTest::
-    ~ProfileInvalidationProviderFactoryLoginScreenBrowserTest() {}
+    ~ProfileInvalidationProviderFactoryLoginScreenBrowserTest() = default;
 
 void ProfileInvalidationProviderFactoryLoginScreenBrowserTest::SetUpCommandLine(
     base::CommandLine* command_line) {
@@ -106,10 +108,10 @@ class ProfileInvalidationProviderFactoryGuestBrowserTest
 };
 
 ProfileInvalidationProviderFactoryGuestBrowserTest::
-    ProfileInvalidationProviderFactoryGuestBrowserTest() {}
+    ProfileInvalidationProviderFactoryGuestBrowserTest() = default;
 
 ProfileInvalidationProviderFactoryGuestBrowserTest::
-    ~ProfileInvalidationProviderFactoryGuestBrowserTest() {}
+    ~ProfileInvalidationProviderFactoryGuestBrowserTest() = default;
 
 void ProfileInvalidationProviderFactoryGuestBrowserTest::SetUpCommandLine(
     base::CommandLine* command_line) {
@@ -149,7 +151,7 @@ IN_PROC_BROWSER_TEST_F(
   ASSERT_TRUE(provider);
 
   auto service_or_listener =
-      provider->GetInvalidationServiceOrListener(kFakeProjectId);
+      provider->GetInvalidationServiceOrListener(kFakeProjectNumber);
 
   EXPECT_TRUE(
       std::holds_alternative<InvalidationService*>(service_or_listener));
@@ -157,7 +159,7 @@ IN_PROC_BROWSER_TEST_F(
 
 class ProfileInvalidationProviderFactoryWithDirectInvalidationsBrowserTest
     : public ProfileInvalidationProviderFactoryBrowserTest,
-      public testing::WithParamInterface<std::string> {
+      public testing::WithParamInterface<int64_t> {
  protected:
   const auto& GetProjectNumber() const { return GetParam(); }
 };

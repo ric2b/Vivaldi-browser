@@ -8,7 +8,6 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/gmock_expected_support.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "cc/base/math_util.h"
 #include "content/browser/renderer_host/cross_process_frame_connector.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
@@ -39,7 +38,7 @@
 #include "ui/base/test/scoped_preferred_scroller_style_mac.h"
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "ui/aura/test/test_screen.h"
 #endif
 
@@ -406,7 +405,7 @@ INSTANTIATE_TEST_SUITE_P(SitePerProcess,
                          testing::Values(1.0, 1.5, 2.0));
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
                        SubframeUpdateToCorrectDeviceScaleFactor) {
   GURL main_url(embedded_test_server()->GetURL(
@@ -1314,7 +1313,8 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest, TextAutosizerPageInfo) {
       web_contents()->GetSiteInstance()->GetRelatedSiteInstance(c_url);
   // Force creation of a render process for c's SiteInstance, this will get
   // used when we dynamically create the new frame.
-  auto* c_rph = static_cast<RenderProcessHostImpl*>(c_site->GetProcess());
+  auto* c_rph =
+      static_cast<RenderProcessHostImpl*>(c_site->GetOrCreateProcess());
   ASSERT_TRUE(c_rph);
   ASSERT_NE(c_rph, root->current_frame_host()->GetProcess());
   ASSERT_NE(c_rph, b_child->current_frame_host()->GetProcess());
@@ -1698,8 +1698,8 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
 // This test verifies that changing the CSS visibility of a cross-origin
 // <iframe> is forwarded to its corresponding RenderWidgetHost and all other
 // RenderWidgetHosts corresponding to the nested cross-origin frame.
-// TODO(crbug.com/40865141): Flaky on mac, linux-lacros, android.
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_CHROMEOS_LACROS)
+// TODO(crbug.com/40865141): Flaky on mac and android.
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_MAC)
 #define MAYBE_CSSVisibilityChanged DISABLED_CSSVisibilityChanged
 #else
 #define MAYBE_CSSVisibilityChanged CSSVisibilityChanged

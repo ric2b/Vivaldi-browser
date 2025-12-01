@@ -24,6 +24,7 @@
 #include "base/task/single_thread_task_runner.h"
 #include "mail_client_backend_notifier.h"
 #include "mail_client_database.h"
+#include "message_type.h"
 #include "sql/init_status.h"
 
 namespace base {
@@ -98,18 +99,24 @@ class MailClientBackend : public base::RefCountedThreadSafe<MailClientBackend>,
   bool DeleteMessages(SearchListIDs ids);
   bool DeleteMailSearchDB();
 
-  MessageResult UpdateMessage(mail_client::MessageRow message);
+  StatusCB UpdateMessage(mail_client::MessageRow message);
 
-  SearchListIDs EmailSearch(std::u16string searchValue);
+  MailSearchCB EmailSearch(std::u16string searchValue);
 
   bool MatchMessage(SearchListID search_list_id, std::u16string searchValue);
 
   bool MigrateSearchDB();
+  StatusCB CheckDBHealth();
   Migration GetDBVersion();
+
+  std::string diagnostics_string_;
+  sql::DatabaseDiagnostics diagnostics_;
 
   void NotifyMigrationProgress(int progress,
                                int total,
                                std::string msg) override;
+
+  void DatabaseErrorCallback(int error, sql::Statement* stmt);
 
   void NotifyDeleteMessages(int delete_progress_count) override;
 

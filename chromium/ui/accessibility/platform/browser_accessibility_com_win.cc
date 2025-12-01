@@ -869,7 +869,7 @@ IFACEMETHODIMP BrowserAccessibilityComWin::get_name(LONG action_index,
         ax::mojom::StringAttribute::kHtmlId);
     action_verb = html_id.empty()
                       ? AXPlatformNodeBase::kAriaActionsPrefix
-                      : AXPlatformNodeBase::kAriaActionsPrefix + "#" + html_id;
+                      : AXPlatformNodeBase::kAriaActionsPrefix + "_" + html_id;
   }
 
   if (action_verb.empty() || action_verb.compare("none") == 0) {
@@ -1118,7 +1118,7 @@ IFACEMETHODIMP BrowserAccessibilityComWin::get_nodeInfo(
 
 // ISimpleDOMNode::get_attributes()
 // Returns HTML attributes -- not text attributes!
-// TODO(accessibility) Remove a few years after JAWS screen readers stops using.
+// TODO(https://crbug.com/378908266) Remove 3 years after JAWS stops using.
 IFACEMETHODIMP BrowserAccessibilityComWin::get_attributes(USHORT max_attribs,
                                                           BSTR* attrib_names,
                                                           SHORT* name_space_id,
@@ -1171,6 +1171,11 @@ IFACEMETHODIMP BrowserAccessibilityComWin::get_attributes(USHORT max_attribs,
       ax::mojom::StringAttribute::kHtmlInputName);
   if (!name_attr.empty()) {
     ADD_ATTRIBUTE("name", name_attr);
+  }
+  // JAWS url reading feature for links depends on "href", before JAWS 2025.
+  if (ui::IsLink(GetOwner()->GetRole())) {
+    ADD_ATTRIBUTE("href", GetOwner()->GetStringAttribute(
+                              ax::mojom::StringAttribute::kUrl));
   }
 
   // Vispero's Inspect tool needs this temporarily, until they start tracking

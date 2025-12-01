@@ -4,7 +4,7 @@
 #define IOS_DIRECT_MATCH_DIRECT_MATCH_SERVICE_FACTORY_H_
 
 #import "base/no_destructor.h"
-#import "components/keyed_service/ios/browser_state_keyed_service_factory.h"
+#import "ios/chrome/browser/shared/model/profile/profile_keyed_service_factory_ios.h"
 
 class ProfileIOS;
 
@@ -12,11 +12,10 @@ namespace direct_match {
 
 class DirectMatchService;
 
-class DirectMatchServiceFactory : public BrowserStateKeyedServiceFactory {
+class DirectMatchServiceFactory : public ProfileKeyedServiceFactoryIOS {
 public:
   static DirectMatchService* GetForProfile(ProfileIOS* profile);
-  static DirectMatchService* GetForProfileIfExists(
-      ProfileIOS* profile);
+  static DirectMatchService* GetForProfileIfExists(ProfileIOS* profile);
   static DirectMatchServiceFactory* GetInstance();
 
 private:
@@ -30,9 +29,6 @@ private:
   // BrowserStateKeyedServiceFactory implementation.
   std::unique_ptr<KeyedService> BuildServiceInstanceFor(
        web::BrowserState* context) const override;
-  web::BrowserState* GetBrowserStateToUse(
-       web::BrowserState* context) const override;
-  bool ServiceIsNULLWhileTesting() const override;
 };
 
 }  // namespace direct_match

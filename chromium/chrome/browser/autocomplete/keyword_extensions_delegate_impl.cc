@@ -138,7 +138,8 @@ void KeywordExtensionsDelegateImpl::OnOmniboxInputEntered() {
 }
 
 void KeywordExtensionsDelegateImpl::OnOmniboxSuggestionsReady(
-    omnibox_api::SendSuggestions::Params* suggestions) {
+    omnibox_api::SendSuggestions::Params* suggestions,
+    const std::string& extension_id) {
   DCHECK(suggestions);
 
   if (suggestions->request_id != current_input_id_)
@@ -149,15 +150,25 @@ void KeywordExtensionsDelegateImpl::OnOmniboxSuggestionsReady(
 
   const AutocompleteInput& input = extension_suggest_last_input_;
 
-  // ExtractKeywordFromInput() can fail if e.g. this code is triggered by
-  // direct calls from the development console, outside the normal flow of
-  // user input.
+  // AutocompleteInput::ExtractKeywordFromInput() can fail if e.g. this code is
+  // triggered by direct calls from the development console, outside the normal
+  // flow of user input.
   std::u16string keyword, remaining_input;
-  if (!KeywordProvider::ExtractKeywordFromInput(input, model, &keyword,
-                                                &remaining_input))
+  if (!AutocompleteInput::ExtractKeywordFromInput(input, model, &keyword,
+                                                  &remaining_input)) {
     return;
+  }
 
   const TemplateURL* template_url = model->GetTemplateURLForKeyword(keyword);
+  DCHECK_EQ(extension_id, template_url->GetExtensionId());
+
+  const auto supports_replacement =
+      template_url->url_ref().SupportsReplacement(model->search_terms_data());
+  DCHECK(supports_replacement)
+      << "Support for non-substituting keywords has been deprecated.";
+  if (!supports_replacement) {
+    return;
+  }
 
   for (size_t i = 0; i < suggestions->suggest_results.size(); ++i) {
     const omnibox_api::SuggestResult& suggestion =
@@ -169,7 +180,7 @@ void KeywordExtensionsDelegateImpl::OnOmniboxSuggestionsReady(
     // is true, because we wouldn't get results from the extension unless
     // the full keyword had been typed.
     int first_relevance = KeywordProvider::CalculateRelevance(
-        input.type(), true, true, input.prefer_keyword(),
+        input.type(), true, input.prefer_keyword(),
         input.allow_exact_keyword_match());
     // Because these matches are async, we should never let them become the
     // default match, lest we introduce race conditions in the omnibox user
@@ -201,9 +212,10 @@ void KeywordExtensionsDelegateImpl::OnOmniboxDefaultSuggestionChanged() {
   // session.
   std::u16string keyword, remaining_input;
   if (matches()->empty() || current_keyword_extension_id_.empty() ||
-      !KeywordProvider::ExtractKeywordFromInput(input, model, &keyword,
-                                                &remaining_input))
+      !AutocompleteInput::ExtractKeywordFromInput(input, model, &keyword,
+                                                  &remaining_input)) {
     return;
+  }
 
   const TemplateURL* template_url(model->GetTemplateURLForKeyword(keyword));
   extensions::ApplyDefaultSuggestionForExtensionKeyword(

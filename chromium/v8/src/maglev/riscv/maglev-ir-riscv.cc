@@ -208,6 +208,22 @@ void RestLength::GenerateCode(MaglevAssembler* masm,
 
 int CheckedObjectToIndex::MaxCallStackArgs() const { return 0; }
 
+void CheckedIntPtrToInt32::SetValueLocationConstraints() {
+  UseRegister(input());
+  DefineSameAsFirst(this);
+}
+
+void CheckedIntPtrToInt32::GenerateCode(MaglevAssembler* masm,
+                                        const ProcessingState& state) {
+  Register input_reg = ToRegister(input());
+  __ MacroAssembler::Branch(__ GetDeoptLabel(this, DeoptimizeReason::kNotInt32),
+                            gt, input_reg,
+                            Operand(std::numeric_limits<int32_t>::max()));
+  __ MacroAssembler::Branch(__ GetDeoptLabel(this, DeoptimizeReason::kNotInt32),
+                            lt, input_reg,
+                            Operand(std::numeric_limits<int32_t>::min()));
+}
+
 void Int32AddWithOverflow::SetValueLocationConstraints() {
   UseRegister(left_input());
   UseRegister(right_input());
@@ -655,27 +671,17 @@ void Float64Round::GenerateCode(MaglevAssembler* masm,
   MaglevAssembler::TemporaryRegisterScope temps(masm);
   DoubleRegister fscratch1 = temps.AcquireScratchDouble();
 
-  // TODO(Yuri Gaevsky): can we be better here?
   if (kind_ == Kind::kNearest) {
-    Register tmp = temps.AcquireScratch();
-    DoubleRegister half_one = temps.AcquireDouble();  // available in this mode
-    __ Round_d_d(out, in, fscratch1);
     // RISC-V Rounding Mode RNE means "Round to Nearest, ties to Even", while JS
     // expects it to round towards +Infinity (see ECMA-262, 20.2.2.28).
-    // Fix the difference by checking if we rounded down by exactly 0.5, and
-    // if so, round to the other side.
-    DoubleRegister fsubtract = fscratch1;
-    __ fmv_d(fsubtract, in);
-    __ fsub_d(fsubtract, fsubtract, out);
+    // The best seems to be to add 0.5 then round with RDN mode.
+
+    DoubleRegister half_one = temps.AcquireDouble();  // available in this mode
     __ LoadFPRImmediate(half_one, 0.5);
-    __ CompareF64(tmp, FPUCondition::NE, fsubtract, half_one);
-    Label done;
-    // (in - rounded(in)) != 0.5?
-    __ MacroAssembler::Branch(&done, ne, tmp, Operand(zero_reg), Label::kNear);
-    // Fix wrong tie-to-even by adding 0.5 twice.
-    __ fadd_d(out, out, half_one);
-    __ fadd_d(out, out, half_one);
-    __ bind(&done);
+    DoubleRegister tmp = half_one;
+    __ fadd_d(tmp, in, half_one);
+    __ Floor_d_d(out, tmp, fscratch1);
+    __ fsgnj_d(out, out, in);
   } else if (kind_ == Kind::kCeil) {
     __ Ceil_d_d(out, in, fscratch1);
   } else if (kind_ == Kind::kFloor) {
@@ -724,12 +730,11 @@ void LoadTypedArrayLength::GenerateCode(MaglevAssembler* masm,
   }
   __ LoadBoundedSizeFromObject(result_register, object,
                                JSTypedArray::kRawByteLengthOffset);
-  int element_size = ElementsKindSize(elements_kind_);
-  if (element_size > 1) {
+  int shift_size = ElementsKindToShiftSize(elements_kind_);
+  if (shift_size > 0) {
     // TODO(leszeks): Merge this shift with the one in LoadBoundedSize.
-    DCHECK(element_size == 2 || element_size == 4 || element_size == 8);
-    __ SrlWord(result_register, result_register,
-               Operand(base::bits::CountTrailingZeros(element_size)));
+    DCHECK(shift_size == 1 || shift_size == 2 || shift_size == 3);
+    __ SrlWord(result_register, result_register, Operand(shift_size));
   }
 }
 
@@ -911,7 +916,7 @@ void Return::GenerateCode(MaglevAssembler* masm, const ProcessingState& state) {
   Register params_size = a6;
 
   // Compute the size of the actual parameters + receiver (in bytes).
-  // TODO(leszeks): Consider making this an input into Return to re-use the
+  // TODO(leszeks): Consider making this an input into Return to reuse the
   // incoming argc's register (if it's still valid).
   __ LoadWord(actual_params_size,
               MemOperand(fp, StandardFrameConstants::kArgCOffset));

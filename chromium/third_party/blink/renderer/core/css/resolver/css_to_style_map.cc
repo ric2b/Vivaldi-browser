@@ -330,7 +330,8 @@ Timing::Delay CSSToStyleMap::MapAnimationDelayStart(StyleResolverState& state,
 Timing::Delay CSSToStyleMap::MapAnimationDelayEnd(const CSSValue& value) {
   // Note: using default length resolver here, as this function is only
   // called from the serialization code.
-  return MapAnimationTimingDelay(CSSToLengthConversionData(), value);
+  return MapAnimationTimingDelay(CSSToLengthConversionData(/*element=*/nullptr),
+                                 value);
 }
 
 Timing::Delay CSSToStyleMap::MapAnimationDelayEnd(StyleResolverState& state,
@@ -362,7 +363,8 @@ std::optional<double> CSSToStyleMap::MapAnimationDuration(
       identifier && identifier->GetValueID() == CSSValueID::kAuto) {
     return std::nullopt;
   }
-  return To<CSSPrimitiveValue>(value).ComputeSeconds();
+  return To<CSSPrimitiveValue>(value).ComputeSeconds(
+      state.CssToLengthConversionData());
 }
 
 Timing::FillMode CSSToStyleMap::MapAnimationFillMode(StyleResolverState& state,
@@ -388,7 +390,8 @@ double CSSToStyleMap::MapAnimationIterationCount(StyleResolverState& state,
       identifier_value->GetValueID() == CSSValueID::kInfinite) {
     return std::numeric_limits<double>::infinity();
   }
-  return To<CSSPrimitiveValue>(value).GetFloatValue();
+  return To<CSSPrimitiveValue>(value).ComputeNumber(
+      state.CssToLengthConversionData());
 }
 
 AtomicString CSSToStyleMap::MapAnimationName(StyleResolverState& state,
@@ -539,6 +542,7 @@ CSSTransitionData::TransitionProperty CSSToStyleMap::MapAnimationProperty(
 }
 
 scoped_refptr<TimingFunction> CSSToStyleMap::MapAnimationTimingFunction(
+    const CSSLengthResolver& length_resolver,
     const CSSValue& value) {
   // FIXME: We should probably only call into this function with a valid
   // single timing function value which isn't initial or inherit. We can
@@ -586,14 +590,15 @@ scoped_refptr<TimingFunction> CSSToStyleMap::MapAnimationTimingFunction(
 
   const auto& steps_timing_function =
       To<cssvalue::CSSStepsTimingFunctionValue>(value);
-  return StepsTimingFunction::Create(steps_timing_function.NumberOfSteps(),
-                                     steps_timing_function.GetStepPosition());
+  return StepsTimingFunction::Create(
+      steps_timing_function.NumberOfSteps()->ComputeInteger(length_resolver),
+      steps_timing_function.GetStepPosition());
 }
 
 scoped_refptr<TimingFunction> CSSToStyleMap::MapAnimationTimingFunction(
     StyleResolverState& state,
     const CSSValue& value) {
-  return MapAnimationTimingFunction(value);
+  return MapAnimationTimingFunction(state.CssToLengthConversionData(), value);
 }
 
 void CSSToStyleMap::MapNinePieceImage(StyleResolverState& state,
@@ -788,6 +793,42 @@ void CSSToStyleMap::MapNinePieceImageRepeat(StyleResolverState&,
       break;
   }
   image.SetVerticalRule(vertical_rule);
+}
+
+EAnimationTriggerType CSSToStyleMap::MapAnimationTriggerType(
+    StyleResolverState&,
+    const CSSValue& value) {
+  return To<CSSIdentifierValue>(value).ConvertTo<EAnimationTriggerType>();
+}
+
+StyleTimeline CSSToStyleMap::MapAnimationTriggerTimeline(
+    StyleResolverState& state,
+    const CSSValue& value) {
+  return MapAnimationTimeline(state, value);
+}
+
+std::optional<TimelineOffset> CSSToStyleMap::MapAnimationTriggerRangeStart(
+    StyleResolverState& state,
+    const CSSValue& value) {
+  return MapAnimationRange(state, value, 0);
+}
+
+std::optional<TimelineOffset> CSSToStyleMap::MapAnimationTriggerRangeEnd(
+    StyleResolverState& state,
+    const CSSValue& value) {
+  return MapAnimationRange(state, value, 100);
+}
+
+std::optional<TimelineOffset> CSSToStyleMap::MapAnimationTriggerExitRangeStart(
+    StyleResolverState& state,
+    const CSSValue& value) {
+  return MapAnimationRange(state, value, 0);
+}
+
+std::optional<TimelineOffset> CSSToStyleMap::MapAnimationTriggerExitRangeEnd(
+    StyleResolverState& state,
+    const CSSValue& value) {
+  return MapAnimationRange(state, value, 100);
 }
 
 }  // namespace blink

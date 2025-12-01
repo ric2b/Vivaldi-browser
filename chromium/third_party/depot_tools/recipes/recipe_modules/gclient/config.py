@@ -193,43 +193,6 @@ def build_internal(c):
   c.got_revision_mapping['build'] = 'got_build_revision'
 
 @config_ctx()
-def build_internal_scripts_slave(c):
-  s = c.solutions.add()
-  s.name = 'build_internal/scripts/slave'
-  s.url = ('https://chrome-internal.googlesource.com/'
-           'chrome/tools/build_limited/scripts/slave.git')
-  c.got_revision_mapping['build_internal/scripts/slave'] = 'got_revision'
-  # We do not use 'includes' here, because we want build_internal to be the
-  # first solution in the list as run_presubmit computes upstream revision
-  # from the first solution.
-  build(c)
-  c.got_revision_mapping['build'] = 'got_build_revision'
-
-@config_ctx()
-def master_deps(c):
-  s = c.solutions.add()
-  s.name = 'master.DEPS'
-  s.url = ('https://chrome-internal.googlesource.com/'
-           'chrome/tools/build/master.DEPS.git')
-  c.got_revision_mapping['master.DEPS'] = 'got_revision'
-
-@config_ctx()
-def slave_deps(c):
-  s = c.solutions.add()
-  s.name = 'slave.DEPS'
-  s.url = ('https://chrome-internal.googlesource.com/'
-           'chrome/tools/build/slave.DEPS.git')
-  c.got_revision_mapping['slave.DEPS'] = 'got_revision'
-
-@config_ctx()
-def internal_deps(c):
-  s = c.solutions.add()
-  s.name = 'internal.DEPS'
-  s.url = ('https://chrome-internal.googlesource.com/'
-           'chrome/tools/build/internal.DEPS.git')
-  c.got_revision_mapping['internal.DEPS'] = 'got_revision'
-
-@config_ctx()
 def pdfium(c):
   soln = c.solutions.add()
   soln.name = 'pdfium'
@@ -391,6 +354,15 @@ def infradata_master_manager(c):
   del c.got_revision_mapping['infra_internal']
   c.got_revision_mapping['infra-data-master-manager'] = 'got_revision'
 
+
+@config_ctx()
+def infradata_cloud_run(c):
+  soln = c.solutions.add()
+  soln.name = 'infra-data-cloud-run'
+  soln.url = 'https://chrome-internal.googlesource.com/infradata/cloud-run.git'
+  c.got_revision_mapping['infra-data-cloud-run'] = 'got_revision'
+
+
 @config_ctx()
 def infradata_config(c):
   soln = c.solutions.add()
@@ -544,6 +516,13 @@ def crossbench(c):
   soln.url = 'https://chromium.googlesource.com/crossbench'
   c.got_revision_mapping['crossbench'] = 'got_revision'
 
+@config_ctx()
+def website(c):  # pragma: no cover
+  s = c.solutions.add()
+  s.name = 'website'
+  s.url = ChromiumGitURL(c, 'website.git')
+  m = c.got_revision_mapping
+  m['website'] = 'got_revision'
 
 @config_ctx()
 def ytdevinfra(c):
@@ -551,3 +530,15 @@ def ytdevinfra(c):
   soln.name = 'ytdevinfra'
   soln.url = 'https://lbshell-internal.googlesource.com/cobalt_src.git'
   c.got_revision_mapping['ytdevinfra'] = 'got_revision'
+
+
+@config_ctx()
+def ytdevinfra_github(c):
+  soln = c.solutions.add()
+  soln.name = 'ytdevinfra_github'
+  soln.url = 'https://github.googlesource.com/youtube/cobalt.git'
+  soln.custom_vars = {
+      'download_remoteexec_cfg': True,
+      'rbe_instance': 'projects/cobalt-actions-prod/instances/default_instance'
+  }
+  c.got_revision_mapping['ytdevinfra_github'] = 'got_revision'

@@ -117,7 +117,7 @@ XrResult OpenXrPlatformHelper::CreateInstance(XrInstance* instance,
   // engine version should be the build number of chromium
   instance_create_info.applicationInfo.engineVersion = build;
 
-  instance_create_info.applicationInfo.apiVersion = XR_CURRENT_API_VERSION;
+  instance_create_info.applicationInfo.apiVersion = XR_API_VERSION_1_0;
 
   // xrCreateInstance validates the list of extensions and returns
   // XR_ERROR_EXTENSION_NOT_PRESENT if an extension is not supported,
@@ -163,6 +163,8 @@ XrResult OpenXrPlatformHelper::CreateInstance(XrInstance* instance,
           XR_MSFT_SECONDARY_VIEW_CONFIGURATION_EXTENSION_NAME)) {
     EnableExtensionIfSupported(XR_MSFT_FIRST_PERSON_OBSERVER_EXTENSION_NAME);
   }
+
+  EnableExtensionIfSupported(XR_EXT_LOCAL_FLOOR_EXTENSION_NAME);
 
   // Enable any other platform-specific extensions that we don't just enable or
   // try to enable across the board.

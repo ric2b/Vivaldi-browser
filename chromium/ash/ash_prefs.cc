@@ -40,6 +40,7 @@
 #include "ash/quick_insert/quick_insert_controller.h"
 #include "ash/quick_pair/feature_status_tracker/scanning_enabled_provider.h"
 #include "ash/quick_pair/keyed_service/quick_pair_mediator.h"
+#include "ash/scanner/scanner_controller.h"
 #include "ash/session/fullscreen_controller.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shelf/shelf_controller.h"
@@ -108,7 +109,7 @@
 #include "components/language/core/browser/pref_names.h"
 #include "components/live_caption/pref_names.h"
 #include "components/soda/constants.h"
-#include "components/user_manager/known_user.h"
+#include "components/user_manager/user_manager.h"
 
 namespace ash {
 
@@ -180,6 +181,7 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry,
   QuickInsertController::RegisterProfilePrefs(registry);
   quick_pair::Mediator::RegisterProfilePrefs(registry);
   RegisterSystemShortcutBehaviorProfilePrefs(registry);
+  ScannerController::RegisterProfilePrefs(registry);
   ScreensaverImagesPolicyHandler::RegisterPrefs(registry);
   ShelfController::RegisterProfilePrefs(registry);
   SnoopingProtectionController::RegisterProfilePrefs(registry);
@@ -235,6 +237,7 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry,
     registry->RegisterIntegerPref(prefs::kInformedRestoreNudgeShownCount, 0);
     registry->RegisterTimePref(prefs::kInformedRestoreNudgeLastShown,
                                base::Time());
+    registry->RegisterDictionaryPref(prefs::kEmojiPickerHistory);
   }
 }
 
@@ -263,7 +266,7 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry, bool for_test) {
 
   if (for_test) {
     registry->RegisterBooleanPref(prefs::kOwnerPrimaryMouseButtonRight, false);
-    user_manager::KnownUser::RegisterPrefs(registry);
+    user_manager::UserManager::RegisterPrefs(registry);
   }
 }
 

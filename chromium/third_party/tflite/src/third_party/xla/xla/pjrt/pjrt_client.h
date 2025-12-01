@@ -612,9 +612,6 @@ class PjRtClient {
   // Pending completion of b/237720161, `options` is a mandatory argument in
   // most implementations of this interface. They _are_ optional for
   // implementations related to the PJRT C API.
-  //
-  // If `options` are provided, then they override the compile options
-  // from the serialized executable (`serialized`).
   virtual absl::StatusOr<std::unique_ptr<PjRtLoadedExecutable>>
   DeserializeExecutable(absl::string_view serialized,
                         std::optional<CompileOptions> options) {
@@ -644,9 +641,17 @@ class PjRtClient {
   }
 
   // Creates a buffer on the device without initializing or copying any data.
+  ABSL_DEPRECATED("Use CreateUninitializedBuffer(Shape, PjRtMemorySpace*)")
   virtual absl::StatusOr<std::unique_ptr<PjRtBuffer>> CreateUninitializedBuffer(
       const Shape& shape, PjRtDevice* device) {
-    return Unimplemented("CreateUnitializedBuffer is not supported.");
+    return Unimplemented("CreateUninitializedBuffer is not supported.");
+  }
+
+  // Creates a buffer in the given memory space without initializing or copying
+  // any data.
+  virtual absl::StatusOr<std::unique_ptr<PjRtBuffer>> CreateUninitializedBuffer(
+      const Shape& shape, PjRtMemorySpace* memory_space) {
+    return Unimplemented("CreateUninitializedBuffer is not supported.");
   }
 
   // Creates buffer in the given memory space that carries an error future
@@ -819,43 +824,6 @@ class PjRtClient {
         "implemented.");
   }
 
-  // Creates a shapeless buffer on the device that can be partitioned into
-  // multiple PjRtBuffer. This class is an Arena version of
-  // `AsyncHostToDeviceTransferManager`.
-  // As a low-level interface, the user must make sure that invocations of
-  // `Slice` match properly with the writes from `TransferRawDataToSubBuffer`.
-  //
-  // For the intended application to Arena allocation / transfer, the user can
-  // use `GetOnDeviceSizeInBytes` to calculate the offsets for the host buffers
-  // that need to be transferred.
-  class PjRtRawDeviceBuffer {
-   public:
-    virtual ~PjRtRawDeviceBuffer() = default;
-
-    // Transfers data to the device buffer. Data should already be in the
-    // device layout.
-    virtual absl::Status TransferRawDataToSubBuffer(
-        const void* data, int64_t offset, int64_t transfer_size,
-        bool is_last_transfer, absl::AnyInvocable<void() &&> on_done) = 0;
-
-    // The resulting buffer becomes ready when all transfers complete.
-    virtual absl::StatusOr<std::unique_ptr<PjRtBuffer>> Slice(
-        int64_t offset, PrimitiveType type, absl::Span<int64_t const> dims,
-        const Layout& layout) = 0;
-  };
-  // Creates a raw device buffer of a given size in bytes.
-  virtual absl::StatusOr<std::unique_ptr<PjRtRawDeviceBuffer>>
-  CreateRawDeviceBuffer(int64_t size, PjRtDevice* device) {
-    return Unimplemented("CreateRawDeviceBuffer is not implemented.");
-  }
-
-  // On-device bytes required for a PjRt buffer with these `Shape` attributes.
-  virtual absl::StatusOr<int64_t> GetOnDeviceSizeInBytes(
-      PrimitiveType type, absl::Span<int64_t const> dims,
-      const Layout& layout) {
-    return Unimplemented("GetOnDeviceSizeInBytes is not implemented.");
-  };
-
   // Describes the semantics the caller to BufferFromHostBuffer expects from the
   // runtime, in a total order from most restrictive to least restrictive.
   enum class HostBufferSemantics {
@@ -944,6 +912,9 @@ class PjRtClient {
         platform_name());
   }
 
+  // TODO(b/277820585): remove BufferFromHostLiteral with PjRtDevice after the
+  // migration is done.
+
   // Note that literal must remain in scope until the transfer has completed, so
   // the caller should, for example, wait for GetReadyFuture().Await()
   // completes on the return value before letting literal go out of scope.
@@ -952,21 +923,6 @@ class PjRtClient {
     return Unimplemented("BufferFromHostLiteral is not implemented.");
   }
 
-  virtual absl::StatusOr<std::unique_ptr<PjRtBuffer>> BufferFromHostLiteral(
-      const LiteralSlice& literal, PjRtDevice* device,
-      const Layout* device_layout) {
-    if (device_layout) {
-      return absl::UnimplementedError(absl::StrCat(
-          "BufferFromHostLiteral with device_layout is not implemented on "
-          "platform: ",
-          platform_name()));
-    }
-
-    return this->BufferFromHostLiteral(literal, device);
-  }
-
-  // TODO(b/277820585): remove BufferFromHostLiteral with PjRtDevice after the
-  // migration is done.
   virtual absl::StatusOr<std::unique_ptr<PjRtBuffer>> BufferFromHostLiteral(
       const LiteralSlice& literal, PjRtMemorySpace* memory_space) {
     return tsl::errors::Unimplemented(
@@ -1000,7 +956,7 @@ class PjRtClient {
   // support dlpack on GPU and is not expected to be supported on all hardware
   // platforms.
   virtual absl::StatusOr<std::unique_ptr<PjRtBuffer>> CreateViewOfDeviceBuffer(
-      void* device_ptr, const Shape& shape, PjRtDevice* device,
+      void* device_ptr, const Shape& shape, PjRtMemorySpace* memory_space,
       std::function<void()> on_delete_callback,
       std::optional<std::intptr_t> stream = std::nullopt) {
     return Unimplemented("CreateViewOfDeviceBuffer is not implemented.");
@@ -1073,30 +1029,30 @@ class PjRtClient {
         "MakeCrossHostReceiveBuffersForGather is not implemented.");
   }
 
-  // Create ChannelHandles for XLA send/recv.
-  virtual absl::StatusOr<ChannelHandle> CreateChannelHandle() {
-    return Unimplemented("CreateChannelHandle is not implemented.");
-  }
-  virtual absl::StatusOr<ChannelHandle> CreateDeviceToHostChannelHandle() {
-    return Unimplemented("CreateDeviceToHostChannelHandle is not implemented.");
-  }
-
   // TODO(zhangqiaorjc): Experimental API to be removed.
   // Defragment device memory.
   virtual absl::Status Defragment() {
     return Unimplemented("Defragment is not implemented.");
   }
 
-  // If false, this client does not support send/recv host callbacks, and
-  // callers should not set the `send_callbacks` and `recv_callbacks` arguments
-  // in ExecuteOptions.
-  virtual bool SupportsSendRecvCallbacks() const { return false; }
-
   // Return the PjRtHostMemoryForDeviceManager for this client. It can be
   // nullptr if the implementation does not provide one.
   virtual PjRtHostMemoryForDeviceManager* GetPjRtHostMemoryForDeviceManager()
       const {
     return host_memory_for_device_manager_.get();
+  }
+
+  // Experimental: Maps memory for fast transfers. May have backend specific
+  // alignment requirements (most backends will require at least a page).
+  virtual absl::Status DmaMap(void* data, size_t size) {
+    return Unimplemented("DmaMap not supported on platform %s",
+                         platform_name());
+  }
+
+  // Experimental: Unmaps memory for fast transfers.
+  virtual absl::Status DmaUnmap(void* data) {
+    return Unimplemented("DmaUnmap not supported on platform %s",
+                         platform_name());
   }
 
  private:
@@ -1124,12 +1080,12 @@ class PjRtBuffer {
     return on_device_shape().dimensions();
   }
 
-  // The on-device memory layout of this buffer. Returned via unique_ptr to make
+  // The on-device memory layout of this buffer. Returned via shared_ptr to make
   // memory management easier -- PjRtLayout is an abstract base class, so cannot
   // be easily copied.
-  virtual std::unique_ptr<PjRtLayout> layout() const {
+  virtual std::shared_ptr<const PjRtLayout> layout() const {
     CHECK(on_device_shape().has_layout());
-    return std::make_unique<PjRtXlaLayout>(on_device_shape().layout());
+    return std::make_shared<PjRtLayout>(on_device_shape().layout());
   }
 
   // PjRtBuffers can either represent a single array buffer or a tuple of array
@@ -1247,9 +1203,13 @@ class PjRtBuffer {
       } else {
         literal_dims = dimensions();
       }
-      device_shape = ShapeUtil::MakeShape(element_type(), literal_dims);
-      // TODO(b/327524065): use PjRtLayout directly instead of xla::Layout
-      *device_shape.mutable_layout() = GetXlaLayoutUnsafe(layout());
+      if (element_type() == TOKEN) {
+        device_shape = ShapeUtil::MakeTokenShape();
+      } else {
+        device_shape = ShapeUtil::MakeShape(element_type(), literal_dims);
+        // TODO(b/327524065): use PjRtLayout directly instead of xla::Layout
+        *device_shape.mutable_layout() = layout()->xla_layout();
+      }
     } else {
       // TODO(skyewm): does anything need to create tuple literals? The PJRT C
       // API doesn't support tuples or {logical_}on_device_shape(), so we prefer
@@ -1426,51 +1386,6 @@ class PjRtBuffer {
   virtual absl::StatusOr<std::unique_ptr<PjRtBuffer>>
   DonateWithControlDependency(PjRtFuture<> dependency) {
     return Unimplemented("DonateWithControlDependency is not supported.");
-  }
-
-  // Helper to allow a caller to indicate that it is going to do some "sends"
-  // of the buffer a later date, where a send is a transfer out of a device
-  // buffer, either copying to host, or to a remote device.
-  //
-  // An AsyncSendPlaceholder is associated with a particular buffer, and acts as
-  // a way for the caller to inform the system of a partial ordering on actions.
-  // If the caller writes:
-  //   1) auto placeholder = buffer->CreateAsyncSendPlaceholder();
-  //   2) auto results = client->ExecuteSharded(...);
-  //   3) [..] other client work
-  //   4) auto s = placeholder->ToLiteral(...);
-  // then that means that the ToLiteral in (4) is earlier than the work in
-  // (2+3) in the partial order. For example, the work in (2+3) may depend
-  // on the D2H in (4), for example via a cross-host dependency that is
-  // otherwise not visible to the PjRtClient.
-  //
-  // The AsyncSendPlaceholder may not outlive the buffer it was created by,
-  // and it should be destroyed as soon as possible after its last use.
-  class AsyncSendPlaceholder {
-   public:
-    virtual ~AsyncSendPlaceholder() = default;
-
-    // Equivalent to PjRtBuffer::ToLiteral on the underlying buffer;
-    virtual PjRtFuture<> ToLiteral(MutableLiteralBase* literal) = 0;
-
-    // Equivalent to PjRtBuffer::CopyRawToHost on the underlying buffer;
-    virtual PjRtFuture<> CopyRawToHost(void* dst, int64_t offset,
-                                       int64_t transfer_size) = 0;
-
-    // Equivalent to PjRtBuffer::CopyToRemoteDevice on the underlying buffer;
-    virtual void CopyToRemoteDevice(absl::string_view serialized_descriptor,
-                                    RemoteSendCallback on_done) = 0;
-
-    // Equivalent to PjRtBuffer::CopyToRemoteDeviceScattered on the underlying
-    // buffer;
-    virtual void CopyToRemoteDeviceScattered(
-        std::vector<std::string> serialized_descriptors,
-        std::vector<PjRtBuffer::RemoteSendCallback> callbacks,
-        const ScatterDetails& scatter_details) = 0;
-  };
-  virtual absl::StatusOr<std::unique_ptr<AsyncSendPlaceholder>>
-  CreateAsyncSendPlaceholder() {
-    return Unimplemented("AsyncSendPlaceholder is not supported.");
   }
 
   // Returns a future that can be used to discover when the data in the

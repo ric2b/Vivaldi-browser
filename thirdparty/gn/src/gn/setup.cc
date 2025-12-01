@@ -98,7 +98,7 @@ Variables
       default. They can be checked explicitly by running
       "gn check --check-system" or "gn gen --check=system"
 
-  exec_script_whitelist [optional]
+  exec_script_allowlist [optional]
       A list of .gn/.gni files (not labels) that have permission to call the
       exec_script function. If this list is defined, calls to exec_script will
       be checked against this list and GN will fail if the current file isn't
@@ -112,10 +112,16 @@ Variables
       If unspecified, the ability to call exec_script is unrestricted.
 
       Example:
-        exec_script_whitelist = [
+        exec_script_allowlist = [
           "//base/BUILD.gn",
           "//build/my_config.gni",
         ]
+
+  exec_script_whitelist [optional]
+      A synonym for "exec_script_allowlist" that exists for backwards
+      compatibility. New code should use "exec_script_allowlist" instead.
+      If both values are set, only the value in "exec_script_allowlist" will
+      have any effect (so don't set both!).
 
   export_compile_commands [optional]
       A list of label patterns for which to generate a Clang compilation
@@ -1100,26 +1106,32 @@ bool Setup::FillOtherConfig(const base::CommandLine& cmdline, Err* err) {
     check_system_includes_ = check_system_includes_value->boolean_value();
   }
 
-  // Fill exec_script_whitelist.
-  const Value* exec_script_whitelist_value =
+  // Fill exec_script_allowlist.
+  const Value* exec_script_allowlist_value =
+      dotfile_scope_.GetValue("exec_script_allowlist", true);
+  if (!exec_script_allowlist_value) {
+    // Check for this value as well, for backwards-compatibility.
+    exec_script_allowlist_value =
       dotfile_scope_.GetValue("exec_script_whitelist", true);
-  if (exec_script_whitelist_value) {
+  }
+
+  if (exec_script_allowlist_value) {
     // Fill the list of targets to check.
-    if (!exec_script_whitelist_value->VerifyTypeIs(Value::LIST, err)) {
+    if (!exec_script_allowlist_value->VerifyTypeIs(Value::LIST, err)) {
       return false;
     }
-    std::unique_ptr<SourceFileSet> whitelist =
+    std::unique_ptr<SourceFileSet> allowlist =
         std::make_unique<SourceFileSet>();
-    for (const auto& item : exec_script_whitelist_value->list_value()) {
+    for (const auto& item : exec_script_allowlist_value->list_value()) {
       if (!item.VerifyTypeIs(Value::STRING, err)) {
         return false;
       }
-      whitelist->insert(current_dir.ResolveRelativeFile(item, err));
+      allowlist->insert(current_dir.ResolveRelativeFile(item, err));
       if (err->has_error()) {
         return false;
       }
     }
-    build_settings_.set_exec_script_whitelist(std::move(whitelist));
+    build_settings_.set_exec_script_allowlist(std::move(allowlist));
   }
 
   // Fill optional default_args.

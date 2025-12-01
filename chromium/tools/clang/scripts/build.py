@@ -155,10 +155,11 @@ def CheckoutGitRepo(name, git_url, commit, dir):
   # Try updating the current repo if it exists and has no local diff.
   if os.path.isdir(dir):
     os.chdir(dir)
-    # git diff-index --exit-code returns 0 when there is no diff.
+    # Undo local changes with `git restore .`.
+    # `git diff-index --exit-code` returns 0 when there is no diff.
     # Also check that the first commit is reachable.
-    if (RunCommand(['git', 'diff-index', '--exit-code', 'HEAD'],
-                   fail_hard=False)
+    if (RunCommand(['git', 'restore', '.'], fail_hard=False) and RunCommand(
+        ['git', 'diff-index', '--exit-code', 'HEAD'], fail_hard=False)
         and RunCommand(['git', 'fetch'], fail_hard=False)
         and RunCommand(['git', 'checkout', commit], fail_hard=False)
         and RunCommand(['git', 'clean', '-f'], fail_hard=False)):
@@ -180,11 +181,13 @@ def CheckoutGitRepo(name, git_url, commit, dir):
   sys.exit(1)
 
 
-def GitCherryPick(git_repository, git_remote, commit):
+def GitCherryPick(git_repository, git_remote, commit, git_remote_name='github'):
   print(f'Cherry-picking {commit} in {git_repository} from {git_remote}')
   git_cmd = ['git', '-C', git_repository]
-  RunCommand(git_cmd + ['remote', 'add', 'github', git_remote], fail_hard=False)
-  RunCommand(git_cmd + ['fetch', '--recurse-submodules=no', 'github', commit])
+  RunCommand(git_cmd + ['remote', 'add', git_remote_name, git_remote],
+             fail_hard=False)
+  RunCommand(git_cmd +
+             ['fetch', '--recurse-submodules=no', git_remote_name, commit])
   is_ancestor = RunCommand(git_cmd +
                            ['merge-base', '--is-ancestor', commit, 'HEAD'],
                            fail_hard=False)
@@ -341,6 +344,7 @@ def BuildLibXml2():
           '-GNinja',
           '-DCMAKE_BUILD_TYPE=Release',
           '-DCMAKE_INSTALL_PREFIX=install',
+          '-DCMAKE_INSTALL_LIBDIR=lib',
           '-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded',  # /MT to match LLVM.
           '-DBUILD_SHARED_LIBS=OFF',
           '-DLIBXML2_WITH_C14N=OFF',
@@ -448,6 +452,7 @@ def BuildZStd():
           '-GNinja',
           '-DCMAKE_BUILD_TYPE=Release',
           '-DCMAKE_INSTALL_PREFIX=install',
+          '-DCMAKE_INSTALL_LIBDIR=lib',
           '-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded',  # /MT to match LLVM.
           '-DZSTD_BUILD_SHARED=OFF',
           '../build/cmake',
@@ -692,6 +697,11 @@ def main():
 
   global CLANG_REVISION, PACKAGE_VERSION, LLVM_BUILD_DIR
 
+  # TODO(crbug.com/392929930): Remove in next Clang roll.
+  if args.llvm_force_head_revision:
+    global RELEASE_VERSION
+    RELEASE_VERSION = '21'
+
   if (args.pgo or args.thinlto) and not args.bootstrap:
     print('--pgo/--thinlto requires --bootstrap')
     return 1
@@ -746,40 +756,6 @@ def main():
   if not args.skip_checkout:
     CheckoutGitRepo('LLVM monorepo', LLVM_GIT_URL, checkout_revision, LLVM_DIR)
 
-    if sys.platform == 'win32' and not args.llvm_force_head_revision:
-      # Apply https://github.com/zmodem/llvm-project/commit/802b816836f1 which
-      # adds printfs to the win/asan runtime which get printed at high verbosity
-      # level or on errors such as CHECK failure.
-      # TODO(crbug.com/341936875): Remove once debugging is done.
-      GitCherryPick(LLVM_DIR, 'https://github.com/zmodem/llvm-project.git',
-                    '802b816836f1dcf9544f250ee5c6977b4cb2bb41')
-
-      # Apply https://github.com/zmodem/llvm-project/commit/89a723c438a5 which
-      # should fix the issue of win/asan failing to allocate memory for
-      # trampoline functions.
-      # TODO(crbug.com/341936875): Land this upstream and remove after debugging.
-      GitCherryPick(LLVM_DIR, 'https://github.com/zmodem/llvm-project.git',
-                    '89a723c438a50a34507a71159ba37f6e60afcea9')
-
-      # Apply https://github.com/zmodem/llvm-project/commit/72112845b8e3 which
-      # fixes an issue in the previous patch and adds more printfs.
-      # TODO(crbug.com/341936875): Remove after debugging.
-      GitCherryPick(LLVM_DIR, 'https://github.com/zmodem/llvm-project.git',
-                    '72112845b8e37ba5296858d0224f916f0afbf88b')
-
-      # Apply https://github.com/zmodem/llvm-project/commit/723a2efebddf which
-      # tries to speed up the runtime by removing calls to GetModuleFileName and
-      # VPrintfs for contigous_containers.
-      # TODO(crbug.com/341936875): Remove after debugging.
-      GitCherryPick(LLVM_DIR, 'https://github.com/zmodem/llvm-project.git',
-                    '723a2efebddf250b58c2dd3bd064c1cd0f57b85f')
-
-      # Apply https://github.com/zmodem/llvm-project/commit/a86b7e95a8a7 which
-      # adds proper clamping of {min,max}_addr in AllocateTrampolineRegion.
-      # TODO(crbug.com/341936875): Remove after debugging.
-      GitCherryPick(LLVM_DIR, 'https://github.com/zmodem/llvm-project.git',
-                    'a86b7e95a8a7a7de750d19e4d189e9a9497e31e8')
-
   if args.llvm_force_head_revision:
     CLANG_REVISION = GetCommitDescription(checkout_revision)
     PACKAGE_VERSION = '%s-0' % CLANG_REVISION
@@ -795,6 +771,12 @@ def main():
     # CMake on Windows doesn't like depot_tools's ninja.bat wrapper.
     ninja_dir = os.path.join(THIRD_PARTY_DIR, 'ninja')
     os.environ['PATH'] = ninja_dir + os.pathsep + os.environ.get('PATH', '')
+
+  if sys.platform.startswith('linux'):
+    sysroot_amd64 = DownloadDebianSysroot('amd64', args.skip_checkout)
+    sysroot_i386 = DownloadDebianSysroot('i386', args.skip_checkout)
+    sysroot_arm = DownloadDebianSysroot('arm', args.skip_checkout)
+    sysroot_arm64 = DownloadDebianSysroot('arm64', args.skip_checkout)
 
   if args.skip_build:
     return 0
@@ -877,8 +859,7 @@ def main():
     cc = args.host_cc
     cxx = args.host_cxx
   else:
-    if not args.skip_checkout:
-      DownloadPinnedClang()
+    DownloadPinnedClang()
     if sys.platform == 'win32':
       cc = os.path.join(PINNED_CLANG_DIR, 'bin', 'clang-cl.exe')
       cxx = os.path.join(PINNED_CLANG_DIR, 'bin', 'clang-cl.exe')
@@ -896,11 +877,6 @@ def main():
       base_cmake_args += [ '-DLLVM_STATIC_LINK_CXX_STDLIB=ON' ]
 
   if sys.platform.startswith('linux'):
-    sysroot_amd64 = DownloadDebianSysroot('amd64', args.skip_checkout)
-    sysroot_i386 = DownloadDebianSysroot('i386', args.skip_checkout)
-    sysroot_arm = DownloadDebianSysroot('arm', args.skip_checkout)
-    sysroot_arm64 = DownloadDebianSysroot('arm64', args.skip_checkout)
-
     # Add the sysroot to base_cmake_args.
     if platform.machine() == 'aarch64':
       base_cmake_args.append('-DCMAKE_SYSROOT=' + sysroot_arm64)
@@ -1216,7 +1192,8 @@ def main():
     runtimes_triples_args['i386-unknown-linux-gnu'] = {
         "args": [
             'CMAKE_SYSROOT=%s' % sysroot_i386,
-            # TODO(crbug.com/40242553): pass proper flags to i386 tests so they compile correctly
+            # TODO(crbug.com/40242553): pass proper flags to i386 tests so they
+            # compile correctly
             'LLVM_INCLUDE_TESTS=OFF',
         ],
         "profile":
@@ -1304,11 +1281,13 @@ def main():
             'COMPILER_RT_ENABLE_MACCATALYST=ON',
             'COMPILER_RT_ENABLE_IOS=ON',
             'COMPILER_RT_ENABLE_WATCHOS=ON',
-            'COMPILER_RT_ENABLE_TVOS=OFF',
+            'COMPILER_RT_ENABLE_TVOS=ON',
             'COMPILER_RT_ENABLE_XROS=ON',
             'DARWIN_ios_ARCHS=arm64',
             'DARWIN_iossim_ARCHS=arm64;x86_64',
             'DARWIN_osx_ARCHS=arm64;x86_64',
+            'DARWIN_tvos_BUILTIN_ARCHS=arm64',
+            'DARWIN_tvossim_BUILTIN_ARCHS=arm64;x86_64',
             'DARWIN_watchos_BUILTIN_ARCHS=arm64',
             'DARWIN_watchossim_BUILTIN_ARCHS=arm64;x86_64',
         ],

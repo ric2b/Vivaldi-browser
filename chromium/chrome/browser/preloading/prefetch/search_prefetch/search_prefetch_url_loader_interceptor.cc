@@ -10,7 +10,7 @@
 #include <utility>
 
 #include "base/functional/callback.h"
-#include "chrome/browser/preloading/prefetch/search_prefetch/field_trial_settings.h"
+#include "base/trace_event/trace_event.h"
 #include "chrome/browser/preloading/prefetch/search_prefetch/search_prefetch_service.h"
 #include "chrome/browser/preloading/prefetch/search_prefetch/search_prefetch_service_factory.h"
 #include "chrome/browser/preloading/prefetch/search_prefetch/search_prefetch_url_loader.h"
@@ -46,14 +46,7 @@ SearchPrefetchService* GetSearchPrefetchService(
   if (!profile) {
     return nullptr;
   }
-  // If the feature is enabled, ensure SearchPrefetchService so that the
-  // navigation can consult the search prefetch cache regardless of if
-  // SearchPrefetchService has been accessed before this line, for example,
-  // during browser startup.
-  if (base::FeatureList::IsEnabled(kEnsureSearchPrefetchServiceOnInterceptor)) {
-    return SearchPrefetchServiceFactory::GetForProfile(profile);
-  }
-  return SearchPrefetchServiceFactory::GetForProfileIfExists(profile);
+  return SearchPrefetchServiceFactory::GetForProfile(profile);
 }
 
 void SearchPrefetchRequestHandler(
@@ -163,7 +156,7 @@ SearchPrefetchURLLoaderInterceptor::MaybeProxyRequestHandler(
   if (web_request_api) {
     web_request_api->MaybeProxyURLLoaderFactory(
         browser_context, render_frame_host,
-        render_frame_host->GetProcess()->GetID(),
+        render_frame_host->GetProcess()->GetDeprecatedID(),
         content::ContentBrowserClient::URLLoaderFactoryType::kNavigation,
         navigation_id_, ukm::kInvalidSourceIdObj, factory_builder,
         /*header_client=*/nullptr, navigation_response_task_runner_,
@@ -183,6 +176,8 @@ void SearchPrefetchURLLoaderInterceptor::MaybeCreateLoader(
     content::BrowserContext* browser_context,
     content::URLLoaderRequestInterceptor::LoaderCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  TRACE_EVENT("loading",
+              "SearchPrefetchURLLoaderInterceptor::MaybeCreateLoader");
 
   SearchPrefetchURLLoader::RequestHandler prefetched_loader_handler =
       MaybeCreateLoaderForRequest(tentative_resource_request,

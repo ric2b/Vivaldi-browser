@@ -20,7 +20,7 @@ shouldn't be an issue since we're only testing web UI with axe-core.
 
 Simple Test
 
-// Copyright 2019 The Chromium Authors.
+// Copyright 2019 The Chromium Authors
 
 // Use of this source code is governed by a BSD-style license that can be
 

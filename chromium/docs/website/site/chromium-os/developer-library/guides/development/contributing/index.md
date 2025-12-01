@@ -74,7 +74,7 @@ services that facilitate the creation of that build, must abide by these rules.
 
 See the [FAQ] below for some concrete questions.
 
-Googlers should also see https://goto.google.com/change-management-policy for a
+Googlers should also see http://go/change-management-policy for a
 lot more in-depth detail & company wide policies that CrOS is subject to.
 
 ## Commit messages
@@ -562,7 +562,7 @@ It can sometimes take several tries to get it to pass.
 If you're still unsure, feel free to reach out to the reviewers.
 
 (Googlers only) You may also reach out to sheriffs using this link:
-[go/cros-oncall](https://goto.google.com/cros-oncall)
+[go/cros-oncall](http://go/cros-oncall)
 
 *** note
 **Also see**: [Breakage and Flake Policy]
@@ -654,9 +654,6 @@ Once uploaded, you can browse commits via [Gitiles].
 The URL will look like:
 `https://chromium.googlesource.com/${projectname}/+/sandbox/${USER}/${BRANCH_NAME}`.
 Note that the `refs/` part is omitted.
-
-If you want to preview markdown changes (e.g. `README.md`), check out
-[Previewing changes](./README.md#previewing-changes).
 
 Once you're finished with a sandbox, you can delete it:
 
@@ -959,7 +956,7 @@ wouldn't protect from [insider threats].
 [archive mirrors]: /chromium-os/developer-library/reference/third-party/archive-mirrors/
 [Breakage and Flake Policy]: /chromium-os/developer-library/guides/testing/breakages-and-flakes/
 [Change-Id]: https://gerrit-review.googlesource.com/Documentation/user-changeid.html
-[ChromeOS sheriff rotation]: https://www.chromium.org/developers/tree-sheriffs/sheriff-details-chromium-os#TOC-How-do-I-join-or-leave-the-rotation-
+[ChromeOS sheriff rotation]: /developers/tree-sheriffs/sheriff-details-chromium-os#TOC-How-do-I-join-or-leave-the-rotation-
 [CL]: /chromium-os/developer-library/glossary/
 [Contributor License Agreement]: https://cla.developers.google.com/
 [CQ]: https://chromium.googlesource.com/chromium/src/+/refs/heads/main/docs/infra/cq.md
@@ -967,7 +964,7 @@ wouldn't protect from [insider threats].
 [Developer Guide]: /chromium-os/developer-library/guides/development/developer-guide/
 [FAQ]: #faq
 [Gerrit]: https://gerrit-review.googlesource.com/Documentation/
-[Gerrit Guide]: https://dev.chromium.org/chromium-os/developer-guide/gerrit-guide
+[Gerrit Guide]: /chromium-os/developer-guide/gerrit-guide
 [Gerrit OWNERS documentation]: https://chromium-review.googlesource.com/plugins/code-owners/Documentation/how-to-use.html#add-code-owners-to-your-change
 [Git & Gerrit Intro]: /chromium-os/developer-library/guides/development/git-and-gerrit-intro/
 [Gitiles]: https://gerrit.googlesource.com/gitiles/

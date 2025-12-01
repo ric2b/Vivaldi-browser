@@ -14,11 +14,9 @@ group("interactions") {
 
 node_ts_library("tests") {
   deps = [
-    "data_grid",
-    "data_grid_controller",
     "helpers",
+    "panels/ai_assistance",
     "panels/explain",
-    "panels/freestyler",
     "panels/performance/timeline",
     "panels/recorder/injected",
     "text_editor",

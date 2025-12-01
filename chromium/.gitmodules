@@ -271,9 +271,6 @@
 [submodule "third_party/protobuf-javascript/src"]
 	path = third_party/protobuf-javascript/src
 	url = ../../external/github.com/protocolbuffers/protobuf-javascript.git
-[submodule "third_party/pthreadpool/src"]
-	path = third_party/pthreadpool/src
-	url = ../../external/github.com/Maratyszcza/pthreadpool.git
 [submodule "third_party/quic_trace/src"]
 	path = third_party/quic_trace/src
 	url = ../../external/github.com/google/quic-trace.git
@@ -340,6 +337,9 @@
 [submodule "third_party/vulkan_memory_allocator"]
 	path = third_party/vulkan_memory_allocator
 	url = ../../external/github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
+[submodule "third_party/wasm_tts_engine/src"]
+	path = third_party/wasm_tts_engine/src
+	url = ../wasm-tts-engine.git
 [submodule "third_party/wayland/src"]
 	path = third_party/wayland/src
 	url = ../../external/anongit.freedesktop.org/git/wayland/wayland.git
@@ -362,6 +362,9 @@
 [submodule "third_party/webgpu-cts/src"]
 	path = third_party/webgpu-cts/src
 	url = ../../external/github.com/gpuweb/cts.git
+[submodule "third_party/webpagereplay"]
+	path = third_party/webpagereplay
+	url = ../../webpagereplay.git
 [submodule "third_party/webrtc"]
 	path = third_party/webrtc
 	url = ../../webrtc/src.git
@@ -385,3 +388,6 @@
 [submodule "v8"]
 	path = v8
 	url = ../../v8/v8.git
+[submodule "third_party/pthreadpool/src"]
+	path = third_party/pthreadpool/src
+	url = ../../external/github.com/google/pthreadpool.git

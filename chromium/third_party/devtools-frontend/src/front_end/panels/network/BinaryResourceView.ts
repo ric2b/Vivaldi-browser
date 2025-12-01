@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import '../../ui/legacy/legacy.js';
+
 import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
@@ -74,11 +76,12 @@ export class BinaryResourceView extends UI.Widget.VBox {
       content: TextUtils.StreamingContentData.StreamingContentData, contentUrl: Platform.DevToolsPath.UrlString,
       resourceType: Common.ResourceType.ResourceType) {
     super();
+    this.registerRequiredCSS(binaryResourceViewStyles);
 
     this.binaryResourceViewFactory =
         new SourceFrame.BinaryResourceViewFactory.BinaryResourceViewFactory(content, contentUrl, resourceType);
 
-    this.toolbar = new UI.Toolbar.Toolbar('binary-view-toolbar', this.element);
+    this.toolbar = this.element.createChild('devtools-toolbar', 'binary-view-toolbar');
 
     this.binaryViewObjects = [
       new BinaryViewObject(
@@ -111,7 +114,7 @@ export class BinaryResourceView extends UI.Widget.VBox {
 
     this.copiedText = new UI.Toolbar.ToolbarText();
     this.copiedText.element.classList.add('binary-view-copied-text');
-    this.toolbar.element.appendChild(this.copiedText.element);
+    this.toolbar.appendChild(this.copiedText.element);
 
     this.addFadeoutSettimeoutId = null;
 
@@ -147,11 +150,6 @@ export class BinaryResourceView extends UI.Widget.VBox {
     this.addFadeoutSettimeoutId = window.setTimeout(addFadeoutClass.bind(this), 2000);
   }
 
-  override wasShown(): void {
-    this.updateView();
-    this.registerCSSFiles([binaryResourceViewStyles]);
-  }
-
   private updateView(): void {
     const newViewObject = this.getCurrentViewObject();
     if (!newViewObject) {
@@ -168,8 +166,8 @@ export class BinaryResourceView extends UI.Widget.VBox {
     }
     this.lastView = newView;
 
-    newView.show(this.element, this.toolbar.element);
-    this.binaryViewTypeCombobox.selectElement().value = this.binaryViewTypeSetting.get();
+    newView.show(this.element, this.toolbar);
+    this.binaryViewTypeCombobox.element.value = this.binaryViewTypeSetting.get();
   }
 
   private binaryViewTypeChanged(): void {

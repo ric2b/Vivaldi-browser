@@ -16,12 +16,15 @@ module.exports = {
         docs: {
             description: "Disallow lexical declarations in case clauses",
             recommended: true,
-            url: "https://eslint.org/docs/rules/no-case-declarations"
+            url: "https://eslint.org/docs/latest/rules/no-case-declarations"
         },
+
+        hasSuggestions: true,
 
         schema: [],
 
         messages: {
+            addBrackets: "Add {} brackets around the case block.",
             unexpected: "Unexpected lexical declaration in case block."
         }
     },
@@ -53,7 +56,16 @@ module.exports = {
                     if (isLexicalDeclaration(statement)) {
                         context.report({
                             node: statement,
-                            messageId: "unexpected"
+                            messageId: "unexpected",
+                            suggest: [
+                                {
+                                    messageId: "addBrackets",
+                                    fix: fixer => [
+                                        fixer.insertTextBefore(node.consequent[0], "{ "),
+                                        fixer.insertTextAfter(node.consequent.at(-1), " }")
+                                    ]
+                                }
+                            ]
                         });
                     }
                 }

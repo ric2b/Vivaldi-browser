@@ -7,10 +7,9 @@ import * as Trace from '../../models/trace/trace.js';
 import * as PerfUI from '../../ui/legacy/components/perf_ui/perf_ui.js';
 import * as ThemeSupport from '../../ui/legacy/theme_support/theme_support.js';
 
-import {addDecorationToEvent, buildGroupStyle, buildTrackHeader, getFormattedTime} from './AppenderUtils.js';
+import {addDecorationToEvent, buildGroupStyle, buildTrackHeader} from './AppenderUtils.js';
 import {
   type CompatibilityTracksAppender,
-  type HighlightedEntryInfo,
   type TrackAppender,
   type TrackAppenderName,
   VisualLoggingTrackName,
@@ -69,15 +68,5 @@ export class AnimationsTrackAppender implements TrackAppender {
 
   colorForEvent(): string {
     return ThemeSupport.ThemeSupport.instance().getComputedValue('--app-color-rendering');
-  }
-
-  titleForEvent(event: Trace.Types.Events.SyntheticAnimationPair): string {
-    const {displayName} = event.args.data.beginEvent.args.data;
-    return displayName || event.name;
-  }
-
-  highlightedEntryInfo(event: Trace.Types.Events.SyntheticAnimationPair): HighlightedEntryInfo {
-    const title = this.titleForEvent(event);
-    return {title, formattedTime: getFormattedTime(event.dur)};
   }
 }

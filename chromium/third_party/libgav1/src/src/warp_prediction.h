@@ -17,7 +17,6 @@
 #ifndef LIBGAV1_SRC_WARP_PREDICTION_H_
 #define LIBGAV1_SRC_WARP_PREDICTION_H_
 
-#include "src/obu_parser.h"
 #include "src/utils/constants.h"
 #include "src/utils/types.h"
 

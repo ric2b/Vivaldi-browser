@@ -333,7 +333,7 @@ Note that .bundle_lock/.bundle_unlock machinery is only available in NaCl SDK
 starting from PPAPI 33. Before that you were forced to use %nacl pseudo-prefix
 and and bunch of special instructions to produce validateable code [as explaines
 in the SFI
-document](http://www.chromium.org/nativeclient/design-documents/nacl-sfi-model-on-x86-64-systems).
+document](/nativeclient/design-documents/nacl-sfi-model-on-x86-64-systems).
 This approach was slower (because it was impossible to combine address
 calculation with register restriction) and more cryptic, but if you need to deal
 with PPAPI 32 or below then it's your only choice.

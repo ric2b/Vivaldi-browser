@@ -87,7 +87,7 @@ you can add the following code to detect regression/improvement:
 The idea of this tool is adopted from the automated regression detection tool
 for Chrome. Related information can be found at:
 
-http://www.chromium.org/developers/tree-sheriffs/perf-sheriffs
+https://www.chromium.org/developers/tree-sheriffs/perf-sheriffs
 
 http://src.chromium.org/viewvc/chrome/trunk/src/tools/perf_expectations
 

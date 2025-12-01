@@ -8,6 +8,7 @@
 #include <optional>
 
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/picture_in_picture/auto_pip_setting_overlay_view.h"
 #include "chromeos/ui/frame/highlight_border_overlay.h"
@@ -23,6 +24,10 @@
 #include "ui/views/video_pip_controller.h"
 
 namespace views {
+class ImageView;
+class Label;
+
+// Vivaldi
 class Button;
 }  // namespace views
 
@@ -90,6 +95,9 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
   void SetPreviousSlideButtonVisibility(bool is_visible) override;
   void SetNextSlideButtonVisibility(bool is_visible) override;
   void SetMediaPosition(const media_session::MediaPosition& position) override;
+  void SetSourceTitle(const std::u16string& source_title) override;
+  void SetFaviconImages(
+      const std::vector<media_session::MediaImage>& images) override;
   void SetSurfaceId(const viz::SurfaceId& surface_id) override;
 
   // views::Widget:
@@ -159,6 +167,8 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
   gfx::Rect GetCloseControlsBounds();
   gfx::Rect GetMinimizeControlsBounds();
   gfx::Rect GetPlayPauseControlsBounds();
+  gfx::Rect GetReplay10SecondsButtonBounds();
+  gfx::Rect GetForward10SecondsButtonBounds();
   gfx::Rect GetNextTrackControlsBounds();
   gfx::Rect GetPreviousTrackControlsBounds();
   gfx::Rect GetToggleMicrophoneButtonBounds();
@@ -169,6 +179,8 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
   gfx::Rect GetProgressViewBounds();
 
   PlaybackImageButton* play_pause_controls_view_for_testing() const;
+  SimpleOverlayWindowImageButton* replay_10_seconds_button_for_testing() const;
+  SimpleOverlayWindowImageButton* forward_10_seconds_button_for_testing() const;
   SimpleOverlayWindowImageButton* next_track_controls_view_for_testing() const;
   SimpleOverlayWindowImageButton* previous_track_controls_view_for_testing()
       const;
@@ -180,6 +192,9 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
   SimpleOverlayWindowImageButton* previous_slide_controls_view_for_testing()
       const;
   global_media_controls::MediaProgressView* progress_view_for_testing() const;
+  views::Label* timestamp_for_testing() const;
+  views::ImageView* favicon_view_for_testing() const;
+  views::Label* origin_for_testing() const;
   CloseImageButton* close_button_for_testing() const;
   OverlayWindowMinimizeButton* minimize_button_for_testing() const;
   OverlayWindowBackToTabButton* back_to_tab_button_for_testing() const;
@@ -192,6 +207,7 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
   }
 
   void ForceControlsVisibleForTesting(bool visible);
+  void StopForcingControlsVisibleForTesting();
 
   void set_overlay_view_cb_for_testing(GetOverlayViewCb get_overlay_view_cb) {
     get_overlay_view_cb_ = std::move(get_overlay_view_cb);
@@ -252,6 +268,10 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
   // state.
   void TogglePlayPause();
 
+  void Replay10Seconds();
+
+  void Forward10Seconds();
+
   // Closes this window and also pauses the underlying video if pausing is
   // available.
   void CloseAndPauseIfAvailable();
@@ -306,6 +326,12 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
   void SeekForProgressBarInteraction(double seek_progress);
   void OnProgressViewUpdateCurrentTime(base::TimeDelta current_time);
 
+  void UpdateTimestampLabel(base::TimeDelta current_time,
+                            base::TimeDelta duration);
+
+  void OnFaviconReceived(const SkBitmap& image);
+  void UpdateFavicon(const gfx::ImageSkia& favicon);
+
   // Not owned; |controller_| owns |this|.
   raw_ptr<content::VideoPictureInPictureWindowController> controller_;
 
@@ -357,7 +383,11 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
   raw_ptr<views::View> window_background_view_ = nullptr;
   raw_ptr<views::View> video_view_ = nullptr;
   raw_ptr<views::View> controls_scrim_view_ = nullptr;
+  raw_ptr<views::View> controls_top_scrim_view_ = nullptr;
+  raw_ptr<views::View> controls_bottom_scrim_view_ = nullptr;
   raw_ptr<views::View> controls_container_view_ = nullptr;
+  raw_ptr<views::ImageView> favicon_view_ = nullptr;
+  raw_ptr<views::Label> origin_ = nullptr;
   raw_ptr<CloseImageButton> close_controls_view_ = nullptr;
   raw_ptr<OverlayWindowMinimizeButton> minimize_button_ = nullptr;
   raw_ptr<OverlayWindowBackToTabButton> back_to_tab_button_ = nullptr;
@@ -365,6 +395,8 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
   raw_ptr<SimpleOverlayWindowImageButton> previous_track_controls_view_ =
       nullptr;
   raw_ptr<PlaybackImageButton> play_pause_controls_view_ = nullptr;
+  raw_ptr<SimpleOverlayWindowImageButton> replay_10_seconds_button_ = nullptr;
+  raw_ptr<SimpleOverlayWindowImageButton> forward_10_seconds_button_ = nullptr;
   raw_ptr<SimpleOverlayWindowImageButton> next_track_controls_view_ = nullptr;
   raw_ptr<SkipAdLabelButton> skip_ad_controls_view_ = nullptr;
   raw_ptr<ResizeHandleButton> resize_handle_view_ = nullptr;
@@ -375,6 +407,7 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
       nullptr;
   raw_ptr<SimpleOverlayWindowImageButton> next_slide_controls_view_ = nullptr;
   raw_ptr<global_media_controls::MediaProgressView> progress_view_ = nullptr;
+  raw_ptr<views::Label> timestamp_ = nullptr;
   raw_ptr<AutoPipSettingOverlayView> overlay_view_ = nullptr;
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -453,6 +486,8 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
   std::unique_ptr<vivaldi::VideoPIPController> video_pip_controller_;
   std::unique_ptr<vivaldi::VideoPIPController::Delegate> video_pip_delegate_;
 // Vivaldi end
+
+  base::WeakPtrFactory<VideoOverlayWindowViews> weak_factory_{this};
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_OVERLAY_VIDEO_OVERLAY_WINDOW_VIEWS_H_

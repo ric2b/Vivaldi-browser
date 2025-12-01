@@ -38,6 +38,7 @@
 #include "internal/platform/byte_array.h"
 #include "internal/platform/cancelable_alarm.h"
 #include "internal/platform/cancellation_flag.h"
+#include "internal/platform/expected.h"
 #include "internal/platform/implementation/ble_v2.h"
 #include "internal/platform/multi_thread_executor.h"
 #include "internal/platform/mutex.h"
@@ -74,9 +75,10 @@ class BleV2 final {
   // power_level           - The power level to use for the advertisement.
   // is_fast_advertisement - True to use fast advertisements, which are smaller
   //                         but much more efficient to discover.
-  bool StartAdvertising(const std::string& service_id,
-                        const ByteArray& advertisement_bytes,
-                        PowerLevel power_level, bool is_fast_advertisement)
+  ErrorOr<bool> StartAdvertising(const std::string& service_id,
+                                 const ByteArray& advertisement_bytes,
+                                 PowerLevel power_level,
+                                 bool is_fast_advertisement)
       ABSL_LOCKS_EXCLUDED(mutex_);
 
   // Disables BLE advertising.
@@ -91,7 +93,7 @@ class BleV2 final {
 
   // Use dummy bytes to do ble advertising, only for legacy devices.
   // Returns true, if data is successfully set, and false otherwise.
-  bool StartLegacyAdvertising(
+  ErrorOr<bool> StartLegacyAdvertising(
       const std::string& service_id, const std::string& local_endpoint_id,
       const std::string& fast_advertisement_service_uuid)
       ABSL_LOCKS_EXCLUDED(mutex_);
@@ -109,8 +111,9 @@ class BleV2 final {
   // power_level - The power level to use for the discovery.
   // discovered_peripheral_callback - The callback to invoke for discovery
   //                                  events.
-  bool StartScanning(const std::string& service_id, PowerLevel power_level,
-                     DiscoveredPeripheralCallback callback)
+  ErrorOr<bool> StartScanning(const std::string& service_id,
+                              PowerLevel power_level,
+                              DiscoveredPeripheralCallback callback)
       ABSL_LOCKS_EXCLUDED(mutex_);
 
   // Disables BLE scanning for a service ID.
@@ -123,8 +126,8 @@ class BleV2 final {
 
   // Starts a worker thread, creates a Ble socket, associates it with a
   // service id.
-  bool StartAcceptingConnections(const std::string& service_id,
-                                 AcceptedConnectionCallback callback)
+  ErrorOr<bool> StartAcceptingConnections(const std::string& service_id,
+                                          AcceptedConnectionCallback callback)
       ABSL_LOCKS_EXCLUDED(mutex_);
 
   // Closes socket corresponding to a service id.
@@ -136,9 +139,9 @@ class BleV2 final {
 
   // Establishes connection to Ble peripheral.
   // Returns socket instance. On success, BleSocket.IsValid() return true.
-  BleV2Socket Connect(const std::string& service_id,
-                      const BleV2Peripheral& peripheral,
-                      CancellationFlag* cancellation_flag)
+  ErrorOr<BleV2Socket> Connect(const std::string& service_id,
+                               const BleV2Peripheral& peripheral,
+                               CancellationFlag* cancellation_flag)
       ABSL_LOCKS_EXCLUDED(mutex_);
 
   // Returns true if this object owns a valid platform implementation.

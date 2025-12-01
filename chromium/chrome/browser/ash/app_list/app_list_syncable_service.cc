@@ -21,8 +21,8 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/one_shot_event.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/to_string.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -70,6 +70,7 @@
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
+#include "extensions/browser/install_prefs_helper.h"
 #include "extensions/browser/uninstall_reason.h"
 #include "extensions/common/constants.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
@@ -141,8 +142,9 @@ void CopyAttributesToSyncItem(const AppListSyncableService::SyncItem* source,
 bool AppIsDefault(Profile* profile, const std::string& id) {
   // Querying the extension system is legacy logic from the time that we only
   // had extension apps.
-  if (extensions::ExtensionPrefs::Get(profile)->WasInstalledByDefault(id))
+  if (WasInstalledByDefault(extensions::ExtensionPrefs::Get(profile), id)) {
     return true;
+  }
 
   bool result = false;
   apps::AppServiceProxyFactory::GetForProfile(profile)
@@ -1669,7 +1671,7 @@ void AppListSyncableService::ProcessExistingSyncItem(SyncItem* sync_item) {
       sync_item->item_id != ash::kOemFolderId,  // Don't sync oem folder's name.
       update_folder);
 
-  const auto linked_promise_item = base::ranges::find_if(
+  const auto linked_promise_item = std::ranges::find_if(
       items_linked_to_promise_item_, [&sync_item](const auto& linked_item) {
         return linked_item.second == sync_item->item_id;
       });
@@ -1820,10 +1822,10 @@ std::string AppListSyncableService::SyncItem::ToString() const {
     if (!parent_id.empty()) {
       res += " <" + parent_id.substr(0, 8) + ">";
     }
-    res += " [" + item_pin_ordinal.ToDebugString() + "(up=" +
-           (is_user_pinned.has_value() ? (*is_user_pinned ? "true" : "false")
-                                       : "?") +
-           ")]";
+    res +=
+        " [" + item_pin_ordinal.ToDebugString() + "(up=" +
+        (is_user_pinned.has_value() ? base::ToString(*is_user_pinned) : "?") +
+        ")]";
   }
 
   if (item_color.IsValid()) {
@@ -1849,8 +1851,8 @@ AppListSyncableService::GetSortedTopLevelSyncItems() const {
   }
 
   // Sort remaining items based on their positions.
-  base::ranges::sort(sync_items, syncer::StringOrdinal::LessThanFn(),
-                     &SyncItem::item_ordinal);
+  std::ranges::sort(sync_items, syncer::StringOrdinal::LessThanFn(),
+                    &SyncItem::item_ordinal);
   return sync_items;
 }
 
@@ -2240,7 +2242,7 @@ void AppListSyncableService::OnGetLauncherOrdering(
     // Sort ordering for items in the same folder.
     std::vector<std::pair<apps::LauncherItem, apps::LauncherItemData>>
         folder_order(item_map.begin(), item_map.end());
-    base::ranges::sort(
+    std::ranges::sort(
         folder_order, {},
         [](const std::pair<apps::LauncherItem, apps::LauncherItemData>& p) {
           return p.second.order;
@@ -2278,8 +2280,8 @@ void AppListSyncableService::OnGetLauncherOrdering(
         lhs = ordinal;
       } else {
         // Update `merge_index` and `lhs` if new match is after current.
-        auto defaults_it = base::ranges::find(defaults.begin() + merge_index,
-                                              defaults.end(), item);
+        auto defaults_it = std::ranges::find(defaults.begin() + merge_index,
+                                             defaults.end(), item);
         if (defaults_it != defaults.end()) {
           merge_index = defaults_it - defaults.begin();
           lhs = preload_service_ordinals_[item];

@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import type * as Common from '../../../core/common/common.js';
+import type * as Protocol from '../../../generated/protocol.js';
 import type * as Handlers from '../handlers/handlers.js';
 import type * as Lantern from '../lantern/lantern.js';
 import type * as Types from '../types/types.js';
@@ -14,13 +16,13 @@ import type * as Models from './Models.js';
 export type InsightSetContext = InsightSetContextWithoutNavigation|InsightSetContextWithNavigation;
 
 export interface InsightSetContextWithoutNavigation {
-  bounds: Types.Timing.TraceWindowMicroSeconds;
+  bounds: Types.Timing.TraceWindowMicro;
   frameId: string;
   navigation?: never;
 }
 
 export interface InsightSetContextWithNavigation {
-  bounds: Types.Timing.TraceWindowMicroSeconds;
+  bounds: Types.Timing.TraceWindowMicro;
   frameId: string;
   navigation: Types.Events.NavigationStart;
   navigationId: string;
@@ -31,6 +33,19 @@ export interface LanternContext {
   graph: Lantern.Graph.Node<Types.Events.SyntheticNetworkRequest>;
   simulator: Lantern.Simulation.Simulator<Types.Events.SyntheticNetworkRequest>;
   metrics: Record<string, Lantern.Metrics.MetricResult>;
+}
+
+export interface ForcedReflowAggregatedData {
+  topLevelFunctionCall: Types.Events.CallFrame|Protocol.Runtime.CallFrame;
+  totalReflowTime: number;
+  bottomUpData: Set<string>;
+  topLevelFunctionCallEvents: Types.Events.Event[];
+}
+
+export interface BottomUpCallStack {
+  bottomUpData: Types.Events.CallFrame|Protocol.Runtime.CallFrame;
+  totalTime: number;
+  relatedEvents: Types.Events.Event[];
 }
 
 export type InsightModelsType = typeof Models;
@@ -45,18 +60,30 @@ export enum InsightWarning {
 
 export interface MetricSavings {
   /* eslint-disable @typescript-eslint/naming-convention */
-  FCP?: Types.Timing.MilliSeconds;
-  LCP?: Types.Timing.MilliSeconds;
-  TBT?: Types.Timing.MilliSeconds;
+  FCP?: Types.Timing.Milli;
+  LCP?: Types.Timing.Milli;
+  TBT?: Types.Timing.Milli;
   CLS?: number;
-  INP?: Types.Timing.MilliSeconds;
+  INP?: Types.Timing.Milli;
   /* eslint-enable @typescript-eslint/naming-convention */
 }
 
+export enum InsightCategory {
+  ALL = 'All',
+  INP = 'INP',
+  LCP = 'LCP',
+  CLS = 'CLS',
+}
+
+export type RelatedEventsMap = Map<Types.Events.Event, string[]>;
+
 export type InsightModel<R extends Record<string, unknown>> = R&{
-  title: string,
-  description: string,
-  relatedEvents?: Types.Events.Event[],
+  title: Common.UIString.LocalizedString,
+  description: Common.UIString.LocalizedString,
+  category: InsightCategory,
+  /** True if there is anything of interest to display to the user. */
+  shouldShow: boolean,
+  relatedEvents?: RelatedEventsMap | Types.Events.Event[],
   warnings?: InsightWarning[],
   metricSavings?: MetricSavings,
 };
@@ -66,16 +93,16 @@ export type InsightModel<R extends Record<string, unknown>> = R&{
  * this could instead represent the duration from the beginning of the trace up to the first recorded
  * navigation (or the end of the trace).
  */
-export type InsightSet = {
+export interface InsightSet {
   /** If for a navigation, this is the navigationId. Else it is Trace.Types.Events.NO_NAVIGATION. */
-  id: Types.Events.NavigationId,
+  id: Types.Events.NavigationId;
   /** The URL to show in the accordion list. */
-  url: URL,
-  frameId: string,
-  bounds: Types.Timing.TraceWindowMicroSeconds,
-  model: InsightModels,
-  navigation?: Types.Events.NavigationStart,
-};
+  url: URL;
+  frameId: string;
+  bounds: Types.Timing.TraceWindowMicro;
+  model: InsightModels;
+  navigation?: Types.Events.NavigationStart;
+}
 
 /**
  * Contains insights for a specific insight set.

@@ -12,7 +12,7 @@ Everybody who might ever need to touch the repositories that were formerly
 
 at git.chromium.org should start by doing the account setup that Anush
 
-posted about: http://www.chromium.org/chromium-os/developer-guide/gerrit-guide
+posted about: https://www.chromium.org/chromium-os/developer-guide/gerrit-guide
 
 You can use your existing SSH key you were using with git.chromium.org
 

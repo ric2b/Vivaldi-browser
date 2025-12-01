@@ -50,6 +50,7 @@ import "src/tint/lang/core/texel_format.def"
 enum core_diagnostic_rule {
   // Rules defined in the spec.
   derivative_uniformity
+  subgroup_uniformity
 }
 
 // chromium-specific diagnostics
@@ -83,8 +84,6 @@ enum extension {
   chromium_disable_uniformity_analysis
   // A Chromium-specific extension for push constants
   chromium_experimental_push_constant
-  // A Chromium-specific extension that adds basic subgroup functionality.
-  chromium_experimental_subgroups
   // A Chromium-specific extension that enables features for graphite
   chromium_internal_graphite
   // A Chromium-specific extension that enables features for input

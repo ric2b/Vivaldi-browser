@@ -161,9 +161,4 @@ class TabListContainerViewBinder {
         assert false : "Unexpected MODE when setting INITIAL_SCROLL_INDEX.";
         return 0;
     }
-
-    /** Vivaldi */
-    private static void scrollView(TabListRecyclerView view, int index) {
-        ((LinearLayoutManager) view.getLayoutManager()).scrollToPositionWithOffset(index, 0);
-    }
 }

@@ -6,6 +6,7 @@
 #define OSP_PUBLIC_CONNECT_REQUEST_H_
 
 #include <cstdint>
+#include <string_view>
 
 namespace openscreen::osp {
 
@@ -22,8 +23,11 @@ class ConnectRequestCallback {
 
   // Called when a new connection (corresponds to a underlying QuicConnection)
   // was created between 5-tuples.
-  virtual void OnConnectSucceed(uint64_t request_id, uint64_t instance_id) = 0;
-  virtual void OnConnectFailed(uint64_t request_id) = 0;
+  virtual void OnConnectSucceed(uint64_t request_id,
+                                std::string_view instance_name,
+                                uint64_t instance_id) = 0;
+  virtual void OnConnectFailed(uint64_t request_id,
+                               std::string_view instance_name) = 0;
 };
 
 class ConnectRequest final {

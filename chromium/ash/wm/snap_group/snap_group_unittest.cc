@@ -179,8 +179,7 @@ void DragGroupItemToPoint(OverviewItemBase* item,
 
   gfx::Point location =
       gfx::ToRoundedPoint(item->target_bounds().CenterPoint());
-  // TODO(michelefan): Use the center point of the `overview_item` after
-  // implementing or defining the event handling for the middle seam area.
+
   location.Offset(/*delta_x=*/5, /*delta_y=*/5);
   event_generator->set_current_screen_location(location);
   if (by_touch_gestures) {
@@ -1340,7 +1339,6 @@ TEST_F(FasterSplitScreenTest, KeyboardAndWorkAreaBoundsChanges) {
       Shell::Get()->docked_magnifier_controller();
   docked_magnifier_controller->SetEnabled(/*enabled=*/true);
   EXPECT_FALSE(IsInOverviewSession());
-  // TODO(sophiewen): Consider testing no faster splitview widget.
 }
 
 // Test to verify that there will be no crash when dragging the snapped window
@@ -1677,7 +1675,7 @@ TEST_F(FasterSplitScreenTest, AccessibilityFocusAnnotator) {
   ASSERT_TRUE(focus_widget);
   OverviewGrid* grid = GetOverviewSession()->grid_list()[0].get();
   ASSERT_FALSE(grid->desks_widget());
-  ASSERT_FALSE(grid->GetSaveDeskForLaterButton());
+  ASSERT_FALSE(OverviewGridTestApi(grid).GetSaveDeskForLaterButton());
   auto* split_view_setup_widget = grid->split_view_setup_widget();
   ASSERT_TRUE(split_view_setup_widget);
 
@@ -2126,7 +2124,6 @@ class SnapGroupTest : public SnapGroupTestBase {
     }
   }
 
-  // TODO(michelefan): Consider put this test util in a base class or test file.
   std::unique_ptr<aura::Window> CreateTestWindowWithAppID(
       std::string app_id_key) {
     std::unique_ptr<aura::Window> window = CreateAppWindow();
@@ -6822,7 +6819,8 @@ TEST_F(SnapGroupDesksTest, SaveDeskForSnapGroupWithAnotherSavedDeskOld) {
   ASSERT_TRUE(overview_grid);
   ASSERT_EQ(1u, overview_grid->item_list().size());
 
-  auto* save_for_later_button = overview_grid->GetSaveDeskForLaterButton();
+  auto* save_for_later_button =
+      OverviewGridTestApi(overview_grid).GetSaveDeskForLaterButton();
   ASSERT_TRUE(save_for_later_button);
   base::RunLoop().RunUntilIdle();
   LeftClickOn(save_for_later_button);

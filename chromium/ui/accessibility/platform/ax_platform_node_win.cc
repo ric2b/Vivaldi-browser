@@ -12,6 +12,7 @@
 #include <wrl/client.h>
 #include <wrl/implements.h>
 
+#include <algorithm>
 #include <map>
 #include <set>
 #include <string>
@@ -23,7 +24,6 @@
 #include "base/lazy_instance.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_number_conversions_win.h"
 #include "base/strings/string_util.h"
@@ -498,7 +498,7 @@ SAFEARRAY* AXPlatformNodeWin::CreateUIAElementsArrayForReverseRelation(
       GetDelegate()->GetSourceNodesForReverseRelations(attribute);
 
   std::vector<int32_t> id_list;
-  base::ranges::transform(
+  std::ranges::transform(
       reverse_relations, std::back_inserter(id_list),
       [](AXPlatformNode* platform_node) {
         return static_cast<AXPlatformNodeWin*>(platform_node)->GetData().id;
@@ -4324,10 +4324,7 @@ IFACEMETHODIMP AXPlatformNodeWin::get_caretOffset(LONG* offset) {
   if (!HasVisibleCaretOrSelection())
     return S_FALSE;
 
-  int selection_start, selection_end;
-  GetSelectionOffsets(&selection_start, &selection_end);
-  // The caret is always at the end of the selection.
-  *offset = selection_end;
+  *offset = GetCaretOffset();
   if (*offset < 0)
     return S_FALSE;
 
@@ -4564,7 +4561,7 @@ IFACEMETHODIMP AXPlatformNodeWin::get_offsetAtPoint(
     return S_FALSE;
   }
 
-  for (int i = 0, text_length = hit_child->GetTextContentUTF16().length();
+  for (int i = 0, text_length = hit_child->GetTextContentLengthUTF16();
        i < text_length; ++i) {
     gfx::Rect char_bounds =
         hit_child->GetDelegate()->GetInnerTextRangeBoundsRect(
@@ -4647,10 +4644,15 @@ AXPlatformNodeWin::get_selections(IA2TextSelection** selections,
   AXSelection unignored_selection = GetDelegate()->GetUnignoredSelection();
 
   AXNodeID anchor_id = unignored_selection.anchor_object_id;
+  if (unignored_selection.anchor_offset == ax::mojom::kNoSelectionOffset) {
+    // This indicates there is no selection.
+    return S_FALSE;
+  }
   AXPlatformNodeWin* anchor_node =
       static_cast<AXPlatformNodeWin*>(GetDelegate()->GetFromNodeID(anchor_id));
-  if (!anchor_node)
+  if (!anchor_node) {
     return E_FAIL;
+  }
 
   // If the selection endpoint is inside this object and therefore, at least
   // from this side, we do not need to crop the selection. Simply convert
@@ -4662,7 +4664,7 @@ AXPlatformNodeWin::get_selections(IA2TextSelection** selections,
   // the method's declaration.
 
   int anchor_offset = unignored_selection.anchor_offset;
-  if (anchor_node->IsDescendant(this)) {
+  if (anchor_node->IsDescendantOf(this)) {
     anchor_offset =
         anchor_node->GetHypertextOffsetFromEndpoint(anchor_node, anchor_offset);
   } else {
@@ -4680,7 +4682,7 @@ AXPlatformNodeWin::get_selections(IA2TextSelection** selections,
     return E_FAIL;
 
   int focus_offset = unignored_selection.focus_offset;
-  if (focus_node->IsDescendant(this)) {
+  if (focus_node->IsDescendantOf(this)) {
     focus_offset =
         focus_node->GetHypertextOffsetFromEndpoint(focus_node, focus_offset);
   } else {
@@ -4690,9 +4692,6 @@ AXPlatformNodeWin::get_selections(IA2TextSelection** selections,
   DCHECK_GE(focus_offset, 0)
       << "This value is unexpected here, since we have already determined in "
          "this method that focus_object is in the accessibility tree.";
-
-  if (anchor_node == focus_node && anchor_offset == focus_offset)
-    return S_FALSE;  // No selection within this subtree.
 
   Microsoft::WRL::ComPtr<IAccessibleText> anchor_text_node;
   if (FAILED(anchor_node->QueryInterface(IID_PPV_ARGS(&anchor_text_node))))
@@ -4730,6 +4729,28 @@ IFACEMETHODIMP AXPlatformNodeWin::setSelections(LONG nSelections,
 
   COM_OBJECT_VALIDATE();
 
+  if (nSelections == 0) {
+    // Clear the selection by using an anchor offset of
+    // kNoSelectionOffset. If it's a plain textfield, this will
+    // collapse the selection to the caret, as plain textfields always need to
+    // have some selection.
+    AXActionData clear_action;
+    clear_action.action = ax::mojom::Action::kSetSelection;
+    clear_action.target_tree_id = GetDelegate()->GetTreeData().tree_id;
+    clear_action.anchor_node_id = GetData().id;
+    clear_action.focus_node_id = GetData().id;
+    if (GetData().IsAtomicTextField()) {
+      int caret_offset = GetCaretOffset();
+      clear_action.anchor_offset = caret_offset;
+      clear_action.focus_offset = caret_offset;
+    } else {
+      clear_action.anchor_offset = ax::mojom::kNoSelectionOffset;
+      clear_action.focus_offset = ax::mojom::kNoSelectionOffset;
+    }
+    return GetDelegate()->AccessibilityPerformAction(clear_action) ? S_OK
+                                                                   : S_FALSE;
+  }
+
   // Chromium does not currently support more than one selection.
   if (nSelections != 1 || !selections)
     return E_INVALIDARG;
@@ -4758,8 +4779,9 @@ IFACEMETHODIMP AXPlatformNodeWin::setSelections(LONG nSelections,
   AXPosition end_position =
       end_node->HypertextOffsetToEndpoint(selections->endOffset)
           ->AsDomSelectionPosition();
-  if (start_position->IsNullPosition() || end_position->IsNullPosition())
+  if (start_position->IsNullPosition() || end_position->IsNullPosition()) {
     return E_INVALIDARG;
+  }
 
   AXActionData action_data;
   action_data.action = ax::mojom::Action::kSetSelection;
@@ -5811,11 +5833,6 @@ IFACEMETHODIMP AXPlatformNodeWin::QueryService(REFGUID guidService,
   if (riid == IID_IAccessible2) {
     for (WinAccessibilityAPIUsageObserver& observer :
          GetWinAccessibilityAPIUsageObserverList()) {
-      if (!features::IsAccessibilityRestrictiveIA2AXModesEnabled()) {
-        observer.OnAdvancedIAccessible2Used();
-        continue;
-      }
-
       if (GetDelegate()->IsWebContent()) {
         observer.OnAdvancedIAccessible2Used();
       } else {
@@ -6320,7 +6337,8 @@ AXPlatformNodeWin::GetMarkerTypeFromRange(
             sort_ranges_by_start_offset);
 
   // Validate that the desired range has instance of MarkerType.
-  bool has_marker_in_desired_range = false;
+  int desired_start = start_offset.value_or(0);
+  int desired_end = end_offset.value_or(GetTextContentLengthUTF16());
   for (const std::pair<int, int>& range : relevant_ranges) {
     if (end_offset && range.first >= end_offset.value()) {
       break;
@@ -6329,15 +6347,16 @@ AXPlatformNodeWin::GetMarkerTypeFromRange(
       continue;
     }
 
-    has_marker_in_desired_range = true;
-    break;
+    if (range.first <= desired_start && range.second >= desired_end) {
+      // Marker covers the desired range perfectly.
+      return MarkerTypeRangeResult::kMatch;
+    } else {
+      // Marker only partially covers the desired range.
+      return MarkerTypeRangeResult::kMixed;
+    }
   }
 
-  if (!has_marker_in_desired_range) {
-    return MarkerTypeRangeResult::kNone;
-  }
-
-  return MarkerTypeRangeResult::kMatch;
+  return MarkerTypeRangeResult::kNone;
 }
 
 // IRawElementProviderSimple support methods.
@@ -8410,12 +8429,10 @@ void AXPlatformNodeWin::NotifyObserverForMSAAUsage() const {
 
 void AXPlatformNodeWin::NotifyAddAXModeFlagsForIA2(
     const uint32_t ax_modes) const {
-  if (features::IsAccessibilityRestrictiveIA2AXModesEnabled()) {
-    // Non-web content is always enabled, if a client isn't looking for web
-    // content, don't enable.
-    if (!GetDelegate() || !GetDelegate()->IsWebContent()) {
-      return;
-    }
+  // Non-web content is always enabled, if a client isn't looking for web
+  // content, don't enable.
+  if (!GetDelegate() || !GetDelegate()->IsWebContent()) {
+    return;
   }
 
   AXPlatformNode::NotifyAddAXModeFlags(ax_modes);

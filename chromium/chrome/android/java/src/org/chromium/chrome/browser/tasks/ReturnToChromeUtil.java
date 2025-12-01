@@ -33,7 +33,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.ui.native_page.NativePage;
 import org.chromium.chrome.browser.util.BrowserUiUtils;
 import org.chromium.chrome.browser.util.BrowserUiUtils.ModuleTypeOnStartAndNtp;
-import org.chromium.components.cached_flags.IntCachedFieldTrialParameter;
+import org.chromium.components.cached_flags.IntCachedFeatureParam;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.content_public.browser.LoadUrlParams;
@@ -81,16 +81,6 @@ public final class ReturnToChromeUtil {
     public static final String FAIL_TO_SHOW_HOME_SURFACE_UI_UMA =
             "NewTabPage.FailToShowHomeSurfaceUI";
 
-    // Start return time experiment:
-    // This parameter isn't just used on tablets anymore.
-    public static final String HOME_SURFACE_RETURN_TIME_SECONDS_PARAM =
-            "start_surface_return_time_on_tablet_seconds";
-    public static final IntCachedFieldTrialParameter HOME_SURFACE_RETURN_TIME_SECONDS =
-            ChromeFeatureList.newIntCachedFieldTrialParameter(
-                    ChromeFeatureList.START_SURFACE_RETURN_TIME,
-                    HOME_SURFACE_RETURN_TIME_SECONDS_PARAM,
-                    14400); // 4 hours
-
     private ReturnToChromeUtil() {}
 
     /**
@@ -104,7 +94,8 @@ public final class ReturnToChromeUtil {
      * @return true if past threshold, false if not past threshold or experiment cannot be loaded.
      */
     public static boolean shouldShowTabSwitcher(final long lastTimeMillis) {
-        long tabSwitcherAfterMillis = getReturnTime(HOME_SURFACE_RETURN_TIME_SECONDS);
+        long tabSwitcherAfterMillis =
+                getReturnTime(ChromeFeatureList.sStartSurfaceReturnTimeTabletSecs);
 
         // Note(david@vivaldi.com): We never show the tab switcher on startup. We reset the field
         // trial parameter here.
@@ -129,7 +120,7 @@ public final class ReturnToChromeUtil {
      *
      * @param returnTime The return time parameter based on form factor, either phones or tablets.
      */
-    private static long getReturnTime(IntCachedFieldTrialParameter returnTime) {
+    private static long getReturnTime(IntCachedFeatureParam returnTime) {
         return returnTime.getValue() * DateUtils.SECOND_IN_MILLIS;
     }
 

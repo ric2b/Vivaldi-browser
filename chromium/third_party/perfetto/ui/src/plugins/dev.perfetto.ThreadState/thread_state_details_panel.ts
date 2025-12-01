@@ -21,27 +21,28 @@ import {Section} from '../../widgets/section';
 import {SqlRef} from '../../widgets/sql_ref';
 import {Tree, TreeNode} from '../../widgets/tree';
 import {Intent} from '../../widgets/common';
-import {SchedSqlId} from '../../trace_processor/sql_utils/core_types';
+import {SchedSqlId} from '../../components/sql_utils/core_types';
 import {
   getThreadState,
   getThreadStateFromConstraints,
   ThreadState,
-} from '../../trace_processor/sql_utils/thread_state';
-import {DurationWidget, renderDuration} from '../../frontend/widgets/duration';
-import {Timestamp} from '../../frontend/widgets/timestamp';
-import {getProcessName} from '../../trace_processor/sql_utils/process';
+} from '../../components/sql_utils/thread_state';
+import {DurationWidget} from '../../components/widgets/duration';
+import {Timestamp} from '../../components/widgets/timestamp';
+import {getProcessName} from '../../components/sql_utils/process';
 import {
   getFullThreadName,
   getThreadName,
-} from '../../trace_processor/sql_utils/thread';
-import {ThreadStateRef} from '../../frontend/widgets/thread_state';
+} from '../../components/sql_utils/thread';
+import {ThreadStateRef} from '../../components/widgets/thread_state';
 import {
   CRITICAL_PATH_CMD,
   CRITICAL_PATH_LITE_CMD,
 } from '../../public/exposed_commands';
-import {goToSchedSlice} from '../../frontend/widgets/sched';
+import {goToSchedSlice} from '../../components/widgets/sched';
 import {TrackEventDetailsPanel} from '../../public/details_panel';
 import {Trace} from '../../public/trace';
+import {formatDuration} from '../../components/time_utils';
 
 interface RelatedThreadStates {
   prev?: ThreadState;
@@ -52,7 +53,7 @@ interface RelatedThreadStates {
 }
 
 export class ThreadStateDetailsPanel implements TrackEventDetailsPanel {
-  private state?: ThreadState;
+  private threadState?: ThreadState;
   private relatedStates?: RelatedThreadStates;
 
   constructor(
@@ -62,9 +63,9 @@ export class ThreadStateDetailsPanel implements TrackEventDetailsPanel {
 
   async load() {
     const id = this.id;
-    this.state = await getThreadState(this.trace.engine, id);
+    this.threadState = await getThreadState(this.trace.engine, id);
 
-    if (!this.state) {
+    if (!this.threadState) {
       return;
     }
 
@@ -72,8 +73,8 @@ export class ThreadStateDetailsPanel implements TrackEventDetailsPanel {
     relatedStates.prev = (
       await getThreadStateFromConstraints(this.trace.engine, {
         filters: [
-          `ts + dur = ${this.state.ts}`,
-          `utid = ${this.state.thread?.utid}`,
+          `ts + dur = ${this.threadState.ts}`,
+          `utid = ${this.threadState.thread?.utid}`,
         ],
         limit: 1,
       })
@@ -81,22 +82,34 @@ export class ThreadStateDetailsPanel implements TrackEventDetailsPanel {
     relatedStates.next = (
       await getThreadStateFromConstraints(this.trace.engine, {
         filters: [
-          `ts = ${this.state.ts + this.state.dur}`,
-          `utid = ${this.state.thread?.utid}`,
+          `ts = ${this.threadState.ts + this.threadState.dur}`,
+          `utid = ${this.threadState.thread?.utid}`,
         ],
         limit: 1,
       })
     )[0];
-    if (this.state.wakerId !== undefined) {
-      relatedStates.waker = await getThreadState(
-        this.trace.engine,
-        this.state.wakerId,
-      );
-    }
+
     // note: this might be valid even if there is no |waker| slice, in the case
     // of an interrupt wakeup while in the idle process (which is omitted from
     // the thread_state table).
-    relatedStates.wakerInterruptCtx = this.state.wakerInterruptCtx;
+    relatedStates.wakerInterruptCtx = this.threadState.wakerInterruptCtx;
+
+    if (this.threadState.wakerId !== undefined) {
+      relatedStates.waker = await getThreadState(
+        this.trace.engine,
+        this.threadState.wakerId,
+      );
+    } else if (
+      this.threadState.state == 'Running' &&
+      relatedStates.prev.wakerId != undefined
+    ) {
+      // For running slices, extract waker info from the preceding runnable.
+      relatedStates.waker = await getThreadState(
+        this.trace.engine,
+        relatedStates.prev.wakerId,
+      );
+      relatedStates.wakerInterruptCtx = relatedStates.prev.wakerInterruptCtx;
+    }
 
     relatedStates.wakee = await getThreadStateFromConstraints(
       this.trace.engine,
@@ -121,7 +134,7 @@ export class ThreadStateDetailsPanel implements TrackEventDetailsPanel {
         m(
           Section,
           {title: 'Details'},
-          this.state && this.renderTree(this.state),
+          this.threadState && this.renderTree(this.threadState),
         ),
         m(
           Section,
@@ -133,33 +146,37 @@ export class ThreadStateDetailsPanel implements TrackEventDetailsPanel {
   }
 
   private renderLoadingText() {
-    if (!this.state) {
+    if (!this.threadState) {
       return 'Loading';
     }
     return this.id;
   }
 
-  private renderTree(state: ThreadState) {
-    const thread = state.thread;
-    const process = state.thread?.process;
+  private renderTree(threadState: ThreadState) {
+    const thread = threadState.thread;
+    const process = threadState.thread?.process;
     return m(
       Tree,
       m(TreeNode, {
         left: 'Start time',
-        right: m(Timestamp, {ts: state.ts}),
+        right: m(Timestamp, {ts: threadState.ts}),
       }),
       m(TreeNode, {
         left: 'Duration',
-        right: m(DurationWidget, {dur: state.dur}),
+        right: m(DurationWidget, {dur: threadState.dur}),
       }),
       m(TreeNode, {
         left: 'State',
-        right: this.renderState(state.state, state.cpu, state.schedSqlId),
+        right: this.renderState(
+          threadState.state,
+          threadState.cpu,
+          threadState.schedSqlId,
+        ),
       }),
-      state.blockedFunction &&
+      threadState.blockedFunction &&
         m(TreeNode, {
           left: 'Blocked function',
-          right: state.blockedFunction,
+          right: threadState.blockedFunction,
         }),
       process &&
         m(TreeNode, {
@@ -167,9 +184,14 @@ export class ThreadStateDetailsPanel implements TrackEventDetailsPanel {
           right: getProcessName(process),
         }),
       thread && m(TreeNode, {left: 'Thread', right: getThreadName(thread)}),
+      threadState.priority !== undefined &&
+        m(TreeNode, {
+          left: 'Priority',
+          right: threadState.priority,
+        }),
       m(TreeNode, {
         left: 'SQL ID',
-        right: m(SqlRef, {table: 'thread_state', id: state.threadStateSqlId}),
+        right: m(SqlRef, {table: 'thread_state', id: threadState.id}),
       }),
     );
   }
@@ -197,18 +219,18 @@ export class ThreadStateDetailsPanel implements TrackEventDetailsPanel {
   }
 
   private renderRelatedThreadStates(): m.Children {
-    if (this.state === undefined || this.relatedStates === undefined) {
+    if (this.threadState === undefined || this.relatedStates === undefined) {
       return 'Loading';
     }
-    const startTs = this.state.ts;
+    const startTs = this.threadState.ts;
     const renderRef = (state: ThreadState, name?: string) =>
       m(ThreadStateRef, {
-        id: state.threadStateSqlId,
+        id: state.id,
         name,
       });
 
-    const nameForNextOrPrev = (state: ThreadState) =>
-      `${state.state} for ${renderDuration(state.dur)}`;
+    const nameForNextOrPrev = (threadState: ThreadState) =>
+      `${threadState.state} for ${formatDuration(this.trace, threadState.dur)}`;
 
     const renderWaker = (related: RelatedThreadStates) => {
       // Could be absent if:
@@ -257,7 +279,7 @@ export class ThreadStateDetailsPanel implements TrackEventDetailsPanel {
           m(TreeNode, {
             left: m(Timestamp, {
               ts: state.ts,
-              display: `+${renderDuration(state.ts - startTs)}`,
+              display: `+${formatDuration(this.trace, state.ts - startTs)}`,
             }),
             right: renderRef(state, getFullThreadName(state.thread)),
           }),
@@ -294,7 +316,7 @@ export class ThreadStateDetailsPanel implements TrackEventDetailsPanel {
           onclick: () => {
             this.trace.commands.runCommand(
               CRITICAL_PATH_LITE_CMD,
-              this.state?.thread?.utid,
+              this.threadState?.thread?.utid,
             );
           },
         }),
@@ -305,7 +327,7 @@ export class ThreadStateDetailsPanel implements TrackEventDetailsPanel {
           onclick: () => {
             this.trace.commands.runCommand(
               CRITICAL_PATH_CMD,
-              this.state?.thread?.utid,
+              this.threadState?.thread?.utid,
             );
           },
         }),
@@ -313,6 +335,6 @@ export class ThreadStateDetailsPanel implements TrackEventDetailsPanel {
   }
 
   isLoading() {
-    return this.state === undefined || this.relatedStates === undefined;
+    return this.threadState === undefined || this.relatedStates === undefined;
   }
 }

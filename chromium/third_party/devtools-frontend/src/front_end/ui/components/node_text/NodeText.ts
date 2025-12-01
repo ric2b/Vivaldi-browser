@@ -2,11 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as LitHtml from '../../../ui/lit-html/lit-html.js';
+import * as Lit from '../../../ui/lit/lit.js';
 
-import nodeTextStyles from './nodeText.css.js';
+import nodeTextStylesRaw from './nodeText.css.js';
 
-const {render, html} = LitHtml;
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const nodeTextStyles = new CSSStyleSheet();
+nodeTextStyles.replaceSync(nodeTextStylesRaw.cssContent);
+
+const {render, html} = Lit;
 
 export interface NodeTextData {
   nodeTitle: string;
@@ -41,7 +45,7 @@ export class NodeText extends HTMLElement {
     ];
 
     if (this.#nodeId) {
-      const classes = LitHtml.Directives.classMap({
+      const classes = Lit.Directives.classMap({
         'node-label-id': true,
         'node-multiple-descriptors': hasNodeClasses,
       });
@@ -50,7 +54,7 @@ export class NodeText extends HTMLElement {
 
     if (this.#nodeClasses && this.#nodeClasses.length > 0) {
       const text = this.#nodeClasses.map(c => `.${CSS.escape(c)}`).join('');
-      const classes = LitHtml.Directives.classMap({
+      const classes = Lit.Directives.classMap({
         'node-label-class': true,
         'node-multiple-descriptors': hasId,
       });

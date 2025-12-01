@@ -184,11 +184,11 @@ To unplug all MST ports just use regular `Unplug`.
 ChameleonD is the daemon that runs on Cv3 and is responsible for all the heavy lifting. It's the one that interacts with the hardware and exposes the API for the clients to interact with.
 The daemon is written in Python and can be found in the [chameleond directory](https://chromium.googlesource.com/chromiumos/platform/chameleon/+/refs/heads/main/v3/chameleond/).
 This is what you will interact with through the XMLRPC interface calls, or interactively as described above.
-All available calls are listed [here](./chameleond.md)
+All available calls are listed [here](./chameleond)
 
 ## 7. Run Your First Test
 The following guide assumes you're familiar with running IGT and can run a test such as `kms_atomic` on your DUT.
-If not, please refer to the [IGT guide](../igt/index.md) to get started. The guide will also help you building and deploying IGT on your DUT if they're not already there.
+If not, please refer to the [IGT guide](../igt) to get started. The guide will also help you building and deploying IGT on your DUT if they're not already there.
 
 ### Configure the device to run a chamelium test
 For a chamelium test, you run it like any other IGT test, but there is a one-time setup (per DUT image) that needs to be done to tell your DUT how to find its associated chamelium.

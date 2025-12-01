@@ -8,7 +8,7 @@ import * as ThemeSupport from '../../ui/legacy/theme_support/theme_support.js';
 import {buildGroupStyle, buildTrackHeader, getFormattedTime} from './AppenderUtils.js';
 import {
   type CompatibilityTracksAppender,
-  type HighlightedEntryInfo,
+  type PopoverInfo,
   type TrackAppender,
   type TrackAppenderName,
   VisualLoggingTrackName,
@@ -103,14 +103,10 @@ export class ExtensionTrackAppender implements TrackAppender {
     return event.name;
   }
 
-  /**
-   * Returns the info shown when an event added by this appender
-   * is hovered in the timeline.
-   */
-  highlightedEntryInfo(event: Trace.Types.Events.Event): HighlightedEntryInfo {
-    const title = Trace.Types.Extensions.isSyntheticExtensionEntry(event) && event.args.tooltipText ?
+  setPopoverInfo(event: Trace.Types.Events.Event, info: PopoverInfo): void {
+    info.title = Trace.Types.Extensions.isSyntheticExtensionEntry(event) && event.args.tooltipText ?
         event.args.tooltipText :
         this.titleForEvent(event);
-    return {title, formattedTime: getFormattedTime(event.dur)};
+    info.formattedTime = getFormattedTime(event.dur);
   }
 }

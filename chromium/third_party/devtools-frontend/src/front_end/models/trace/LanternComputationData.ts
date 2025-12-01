@@ -23,14 +23,14 @@ function createProcessedNavigation(parsedTrace: Handlers.Types.ParsedTrace, fram
   }
 
   const getTimestampOrUndefined =
-      (metric: Handlers.ModelHandlers.PageLoadMetrics.MetricName): Types.Timing.MicroSeconds|undefined => {
+      (metric: Handlers.ModelHandlers.PageLoadMetrics.MetricName): Types.Timing.Micro|undefined => {
         const metricScore = scores.get(metric);
         if (!metricScore?.event) {
           return;
         }
         return metricScore.event.ts;
       };
-  const getTimestamp = (metric: Handlers.ModelHandlers.PageLoadMetrics.MetricName): Types.Timing.MicroSeconds => {
+  const getTimestamp = (metric: Handlers.ModelHandlers.PageLoadMetrics.MetricName): Types.Timing.Micro => {
     const metricScore = scores.get(metric);
     if (!metricScore?.event) {
       throw new Lantern.Core.LanternError(`missing metric: ${metric}`);
@@ -94,7 +94,7 @@ function createLanternRequest(
   let url;
   try {
     url = new URL(request.args.data.url);
-  } catch (e) {
+  } catch {
     return;
   }
 
@@ -155,10 +155,11 @@ function createLanternRequest(
   // TODO: set decodedBodyLength for data urls in Trace Engine.
   let resourceSize = request.args.data.decodedBodyLength ?? 0;
   if (url.protocol === 'data:' && resourceSize === 0) {
-    const needle = 'base64,';
-    const index = url.pathname.indexOf(needle);
-    if (index !== -1) {
-      resourceSize = atob(url.pathname.substring(index + needle.length)).length;
+    const commaIndex = url.pathname.indexOf(',');
+    if (url.pathname.substring(0, commaIndex).includes(';base64')) {
+      resourceSize = atob(url.pathname.substring(commaIndex + 1)).length;
+    } else {
+      resourceSize = url.pathname.length - commaIndex - 1;
     }
   }
 
@@ -427,7 +428,7 @@ function createGraph(
 }
 
 export {
-  createProcessedNavigation,
-  createNetworkRequests,
   createGraph,
+  createNetworkRequests,
+  createProcessedNavigation,
 };

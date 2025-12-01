@@ -15,7 +15,8 @@ limitations under the License.
 
 #include "tensorflow/compiler/mlir/lite/quantization/device_target.h"
 
-#include <algorithm>
+#include <cassert>
+#include <cmath>
 #include <functional>
 #include <optional>
 
@@ -42,7 +43,7 @@ constexpr int k32Bits = 32;
 constexpr unsigned kSigned = QuantizationFlags::Signed;
 
 DeviceTarget::DeviceTarget(MLIRContext* ctx) : ctx_(ctx) {
-  f32_ = FloatType::getF32(ctx_);
+  f32_ = Float32Type::get(ctx_);
   i8_ = IntegerType::get(ctx_, k8Bits);
   i8_min_ = QuantizedType::getDefaultMinimumForInteger(kSigned, k8Bits);
   i8_max_ = QuantizedType::getDefaultMaximumForInteger(kSigned, k8Bits);

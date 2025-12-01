@@ -17,36 +17,6 @@ namespace lens::features {
 COMPONENT_EXPORT(LENS_FEATURES)
 BASE_DECLARE_FEATURE(kLensStandalone);
 
-// Enables a variety of changes aimed to improve user's engagement with current
-// Lens features.
-COMPONENT_EXPORT(LENS_FEATURES)
-BASE_DECLARE_FEATURE(kLensSearchOptimizations);
-
-// Enables Latency logging for the LensStandalone feature.
-COMPONENT_EXPORT(LENS_FEATURES)
-BASE_DECLARE_FEATURE(kEnableLatencyLogging);
-
-// Enable keyboard shortcut for the Lens Region Search feature.
-COMPONENT_EXPORT(LENS_FEATURES)
-BASE_DECLARE_FEATURE(kEnableRegionSearchKeyboardShortcut);
-
-// Enables context menu option for translating image feature.
-COMPONENT_EXPORT(LENS_FEATURES)
-BASE_DECLARE_FEATURE(kEnableImageTranslate);
-
-// Enables the image search side panel experience for third party default search
-// engines
-COMPONENT_EXPORT(LENS_FEATURES)
-BASE_DECLARE_FEATURE(kEnableImageSearchSidePanelFor3PDse);
-
-// Enables launching the region search experience in a new tab with WebUI.
-COMPONENT_EXPORT(LENS_FEATURES)
-BASE_DECLARE_FEATURE(kLensRegionSearchStaticPage);
-
-// Enables the context menu in the Lens side panel.
-COMPONENT_EXPORT(LENS_FEATURES)
-BASE_DECLARE_FEATURE(EnableContextMenuInLensSidePanel);
-
 // Enables the Lens overlay.
 COMPONENT_EXPORT(LENS_FEATURES)
 BASE_DECLARE_FEATURE(kLensOverlay);
@@ -78,6 +48,10 @@ BASE_DECLARE_FEATURE(kLensOverlayRoutingInfo);
 // Enables the Lens overlay HaTS survey.
 COMPONENT_EXPORT(LENS_FEATURES)
 BASE_DECLARE_FEATURE(kLensOverlaySurvey);
+
+// Enables the Lens overlay side panel open in new tab option.
+COMPONENT_EXPORT(LENS_FEATURES)
+BASE_DECLARE_FEATURE(kLensOverlaySidePanelOpenInNewTab);
 
 // The base URL for Lens.
 COMPONENT_EXPORT(LENS_FEATURES)
@@ -121,14 +95,9 @@ extern const base::FeatureParam<bool> kDismissLoadingStateOnPrimaryPageChanged;
 COMPONENT_EXPORT(LENS_FEATURES)
 extern const base::FeatureParam<bool> kEnableFullscreenSearch;
 
-// Enables Latency logging for the LensStandalone feature.
+// Enable "open in new tab" option in side panel.
 COMPONENT_EXPORT(LENS_FEATURES)
-extern bool GetEnableLatencyLogging();
-
-// Returns whether the image search side panel is supported for third party
-// default search engines
-COMPONENT_EXPORT(LENS_FEATURES)
-extern bool GetEnableImageSearchUnifiedSidePanelFor3PDse();
+extern const base::FeatureParam<bool> kLensOverlayEnableOpenInNewTab;
 
 // The URL for the Lens home page.
 COMPONENT_EXPORT(LENS_FEATURES)
@@ -138,56 +107,10 @@ extern std::string GetHomepageURLForLens();
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool GetEnableLensHtmlRedirectFix();
 
-// Returns whether to remove the Lens side panel loading state in the
-// OnDocumentOnLoadCompletedInPrimaryMainFrame web contents observer callback.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern bool GetDismissLoadingStateOnDocumentOnLoadCompletedInPrimaryMainFrame();
-
-// Returns whether to remove the Lens side panel loading state in the
-// DOMContentLoaded web contents observer callback.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern bool GetDismissLoadingStateOnDomContentLoaded();
-
-// Returns whether to remove the Lens side panel loading state in the
-// DidFinishNavigation web contents observer callback.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern bool GetDismissLoadingStateOnDidFinishNavigation();
-
-// Returns whether to remove the Lens side panel loading state in the
-// NavigationEntryCommitted web contents observer callback.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern bool GetDismissLoadingStateOnNavigationEntryCommitted();
-
-// Returns whether to remove the Lens side panel loading state in the
-// DidFinishLoad web contents observer callback.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern bool GetDismissLoadingStateOnDidFinishLoad();
-
-// Returns whether to remove the Lens side panel loading state in the
-// PrimaryPageChanged web contents observer callback.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern bool GetDismissLoadingStateOnPrimaryPageChanged();
-
-// Returns whether Lens fullscreen search is enabled.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern bool IsLensFullscreenSearchEnabled();
-
-// Returns whether the Lens side panel is enabled for image search.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern bool IsLensSidePanelEnabled();
-
 // Returns whether the Search Image button in the Chrome Screenshot Sharing
 // feature is enabled
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool IsLensInScreenshotSharingEnabled();
-
-// Returns whether we should use a WebUI static page for region search.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern bool IsLensRegionSearchStaticPageEnabled();
-
-// Returns whether to enable the context menu in the Lens side panel.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern bool GetEnableContextMenuInLensSidePanel();
 
 // The URL for the Lens ping.
 COMPONENT_EXPORT(LENS_FEATURES)
@@ -371,9 +294,10 @@ extern std::string GetLensOverlayClusterInfoEndpointUrl();
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool GetLensOverlaySendLensInputsForContextualSuggest();
 
-// Returns whether or not to send the search session and visual
-// search request ids in suggest requests from the Lens
-// search box.
+// Returns whether or not to send the search session, visual
+// search request id, and visual interaction type in suggest requests from the
+// Lens search box. These params replace the existing "iil" image signals
+// param.
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool GetLensOverlaySendLensInputsForLensSuggest();
 
@@ -381,6 +305,11 @@ extern bool GetLensOverlaySendLensInputsForLensSuggest();
 // in suggest requests from the Lens search box.
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool GetLensOverlaySendLensVisualInteractionDataForLensSuggest();
+
+// Returns whether or not to send the image signals in suggest requests from
+// the Lens search box.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool GetLensOverlaySendImageSignalsForLensSuggest();
 
 // Returns the max number of bytes to allow for content uploads.
 COMPONENT_EXPORT(LENS_FEATURES)
@@ -452,10 +381,6 @@ extern int GetLensOverlayVerticalTextMargin();
 COMPONENT_EXPORT(LENS_FEATURES)
 extern int GetLensOverlayHorizontalTextMargin();
 
-// Returns whether to show the lens overlay search bubble.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern bool IsLensOverlaySearchBubbleEnabled();
-
 // Returns whether to render the Lens overlay shimmer.
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool IsLensOverlayShimmerEnabled();
@@ -496,10 +421,6 @@ extern bool UseLensOverlayForImageSearch();
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool UseLensOverlayForVideoFrameSearch();
 
-// Returns whether to enable the find-in-page entry point.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern bool IsFindInPageEntryPointEnabled();
-
 // Returns whether to enable the omnibox entry point.
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool IsOmniboxEntryPointEnabled();
@@ -538,11 +459,6 @@ extern bool SendVisualSearchInteractionParamForLensTextQueries();
 COMPONENT_EXPORT(LENS_FEATURES)
 extern double GetLensOverlaySelectTextOverRegionTriggerThreshold();
 
-// Returns whether the shimmer should be rendered using Canvas2D or CSS Paint
-// Api.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern bool GetLensOverlayUseShimmerCanvas();
-
 // Minimum area (in device-independent pixels) for significant regions to send
 // with the screenshot.
 COMPONENT_EXPORT(LENS_FEATURES)
@@ -558,13 +474,9 @@ extern int GetLensOverlayMaxSignificantRegions();
 COMPONENT_EXPORT(LENS_FEATURES)
 extern double GetLensOverlayPostSelectionComparisonThreshold();
 
-// The radius of the live page / underlying tab contents blur in pixels.
+// Enables our blur layer.
 COMPONENT_EXPORT(LENS_FEATURES)
-extern int GetLensOverlayLivePageBlurRadiusPixels();
-
-// Enables our custom blur layer instead of that built into the ui::Layer.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern bool GetLensOverlayUseCustomBlur();
+extern bool GetLensOverlayUseBlur();
 
 // The radius of blur in pixels for the custom blur. This is separate from
 // LivePageBlurRadiusPixels because the custom blur applies a lower blur since
@@ -611,10 +523,6 @@ extern bool GetLensOverlayEnableInFullscreen();
 COMPONENT_EXPORT(LENS_FEATURES)
 extern int GetLensOverlaySegmentationMaskCornerRadius();
 
-// Number identifying variant sets of strings to use in the find bar.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern int GetLensOverlayFindBarStringsVariant();
-
 // Whether to show the translate button in the Lens Overlay to allow translation
 // of the screenshot of the page.
 COMPONENT_EXPORT(LENS_FEATURES)
@@ -636,6 +544,10 @@ int GetLensOverlayImageContextMenuActionsTextReceivedTimeout();
 // Whether to show the contextual searchbox in the Lens Overlay.
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool IsLensOverlayContextualSearchboxEnabled();
+
+// Whether to enable the "open in new tab" option in the side panel.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool IsLensOverlaySidePanelOpenInNewTabEnabled();
 
 // Returns whether to use the new optimized request flow which makes a request
 // to get the cluster info prior to uploading any image or page content bytes.
@@ -675,6 +587,10 @@ extern std::string GetLensOverlayTranslateEndpointURL();
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool ShowContextualSearchboxGhostLoaderLoadingState();
 
+// The timeout set for autocomplete for lens searchboxes.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern base::TimeDelta GetLensSearchboxAutocompleteTimeout();
+
 // The list of source languages supported by Lens.
 COMPONENT_EXPORT(LENS_FEATURES)
 extern std::string GetLensOverlayTranslateSourceLanguages();
@@ -701,6 +617,29 @@ extern int GetLensOverlayTranslateRecentLanguagesAmount();
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool IsLensOverlayRoutingInfoEnabled();
 
+// Whether to enable the feature where side panel navigations are checked for
+// text fragments and whether the highlights generated by these fragments can be
+// rendered in the current open tab.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool HandleSidePanelTextDirectivesEnabled();
+
+// Whether to compress the PDF bytes using zstd before sending them to the
+// server.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool ShouldZstdCompressPdfBytes();
+
+// The compression level to use when compressing the PDF bytes using zstd.
+// Higher values mean better compression but also take longer to compress.
+// See the introduction section in third_party/zstd/src/lib/zstd.h for more
+// details.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern int GetZstdCompressionLevel();
+
+// Whether to fix the request id for page content upload requests. When enabled,
+// this will not increment the image upload request ID when the page content
+// upload request is sent.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool PageContentUploadRequestIdFixEnabled();
 }  // namespace lens::features
 
 #endif  // COMPONENTS_LENS_LENS_FEATURES_H_

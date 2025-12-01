@@ -34,8 +34,7 @@
 #include "sharing/internal/api/public_certificate_database.h"
 #include "sharing/proto/rpc_resources.pb.h"
 
-namespace nearby {
-namespace sharing {
+namespace nearby::sharing {
 
 // Implements NearbyShareCertificateStorage using Prefs to store private
 // certificates and LevelDB Proto to store public certificates. Must be
@@ -74,6 +73,11 @@ class NearbyShareCertificateStorageImpl : public NearbyShareCertificateStorage,
   // NearbyShareCertificateStorage
   std::vector<std::string> GetPublicCertificateIds() const override;
   void GetPublicCertificates(PublicCertificateCallback callback) override;
+  void GetPublicCertificate(
+      absl::string_view id,
+      std::function<void(
+          bool, std::unique_ptr<nearby::sharing::proto::PublicCertificate>)>
+          callback) override;
   std::optional<std::vector<NearbySharePrivateCertificate>>
   GetPrivateCertificates() const override;
   std::optional<absl::Time> NextPublicCertificateExpirationTime()
@@ -81,10 +85,6 @@ class NearbyShareCertificateStorageImpl : public NearbyShareCertificateStorage,
   void ReplacePrivateCertificates(
       absl::Span<const NearbySharePrivateCertificate> private_certificates)
       override;
-  void ReplacePublicCertificates(
-      absl::Span<const nearby::sharing::proto::PublicCertificate>
-          public_certificates,
-      ResultCallback callback) override;
   void AddPublicCertificates(
       absl::Span<const nearby::sharing::proto::PublicCertificate>
           public_certificates,
@@ -112,14 +112,6 @@ class NearbyShareCertificateStorageImpl : public NearbyShareCertificateStorage,
 
   void DestroyAndReinitialize();
 
-  void ReplacePublicCertificatesDestroyCallback(
-      const std::vector<nearby::sharing::proto::PublicCertificate>&
-          new_certificates,
-      const ExpirationList& new_expirations, ResultCallback callback,
-      bool proceed);
-  void ReplacePublicCertificatesUpdateEntriesCallback(
-      std::unique_ptr<ExpirationList> expirations, ResultCallback callback,
-      bool proceed);
   void AddPublicCertificatesCallback(
       std::unique_ptr<ExpirationList> new_expirations, ResultCallback callback,
       bool proceed);
@@ -140,7 +132,6 @@ class NearbyShareCertificateStorageImpl : public NearbyShareCertificateStorage,
   std::queue<std::function<void()>> deferred_callbacks_;
 };
 
-}  // namespace sharing
-}  // namespace nearby
+}  // namespace nearby::sharing
 
 #endif  // THIRD_PARTY_NEARBY_SHARING_CERTIFICATES_NEARBY_SHARE_CERTIFICATE_STORAGE_IMPL_H_

@@ -112,13 +112,26 @@ public interface BrowserPaymentRequest {
 
     /**
      * Notifies the payment UI service of the payment apps pending to be handled
+     *
      * @param pendingApps The payment apps that are pending to be handled.
      */
     void notifyPaymentUiOfPendingApps(List<PaymentApp> pendingApps);
 
     /**
-     * Called when these conditions are satisfied: (1) show() has been called, (2) payment apps
-     * are all queried, and (3) PaymentDetails is finalized.
+     * Called when the merchant requested Secure Payment Confirmation (SPC), but no credentials have
+     * been found.
+     *
+     * @return Returns true if SPC is supported and enabled (e.g., in Chrome). Returns false if SPC
+     *     is not supported or disabled (e.g., in WebView).
+     */
+    default boolean showNoMatchingPaymentCredential() {
+        return false;
+    }
+
+    /**
+     * Called when these conditions are satisfied: (1) show() has been called, (2) payment apps are
+     * all queried, and (3) PaymentDetails is finalized.
+     *
      * @return The error if it fails; null otherwise.
      */
     @Nullable
@@ -214,4 +227,24 @@ public interface BrowserPaymentRequest {
     default boolean isContactSectionVisible() {
         return false;
     }
+
+    /**
+     * @return A dialog controller for displaying informational or warning messages.
+     */
+    DialogController getDialogController();
+
+    /**
+     * @return The site certificate chain of the web contents where PaymentRequest API was invoked.
+     *     Can return null when ANDROID_PAYMENT_INTENTS_OMIT_DEPRECATED_PARAMETERS is enabled or
+     *     when the page is localhost or is a file.
+     */
+    @Nullable
+    byte[][] getCertificateChain();
+
+    /**
+     * @return The string resource ID of the error string to be shown if activity is paused before
+     *     intent results from the Android payment app, or null if no message is required.
+     */
+    @Nullable
+    Integer getPayIntentErrorStringId();
 }

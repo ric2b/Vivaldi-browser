@@ -116,6 +116,7 @@ export class Model extends EventTarget {
       await this.#processor.parse(traceEvents, {
         isFreshRecording,
         isCPUProfile,
+        metadata,
       });
       this.#storeParsedFileData(file, this.#processor.parsedTrace, this.#processor.insights);
       // We only push the file onto this.#traces here once we know it's valid
@@ -221,18 +222,18 @@ export const enum ModelUpdateType {
 
 export type ModelUpdateEventData = ModelUpdateEventComplete|ModelUpdateEventProgress;
 
-export type ModelUpdateEventComplete = {
-  type: ModelUpdateType.COMPLETE,
-  data: 'done',
-};
-export type ModelUpdateEventProgress = {
-  type: ModelUpdateType.PROGRESS_UPDATE,
-  data: TraceParseEventProgressData,
-};
+export interface ModelUpdateEventComplete {
+  type: ModelUpdateType.COMPLETE;
+  data: 'done';
+}
+export interface ModelUpdateEventProgress {
+  type: ModelUpdateType.PROGRESS_UPDATE;
+  data: TraceParseEventProgressData;
+}
 
-export type TraceParseEventProgressData = {
-  percent: number,
-};
+export interface TraceParseEventProgressData {
+  percent: number;
+}
 
 export class ModelUpdateEvent extends Event {
   static readonly eventName = 'modelupdate';

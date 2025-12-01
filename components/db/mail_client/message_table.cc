@@ -71,6 +71,21 @@ bool MessageTable::CreateMessages(
   return transaction.Commit();
 }
 
+bool MessageTable::CheckDBHealth() {
+  sql::Statement statement(GetDB().GetUniqueStatement("PRAGMA quick_check;"));
+
+  if (statement.Step()) {
+    if (!statement.is_valid()) {
+      return false;
+    }
+
+    std::string result = statement.ColumnString(0);
+    return result == "ok";
+  } else {
+    return false;
+  }
+}
+
 bool MessageTable::SearchMessages(std::u16string search,
                                   SearchListIDs* out_ids) {
   sql::Statement statement(GetDB().GetUniqueStatement(
@@ -82,6 +97,11 @@ bool MessageTable::SearchMessages(std::u16string search,
   while (statement.Step()) {
     SearchListID searchListId = statement.ColumnInt64(0);
     out_ids->push_back(searchListId);
+  }
+
+  if (!statement.Succeeded()) {
+    LOG(ERROR) << "Statement Failed. Error: " << GetDB().GetErrorCode();
+    return false;
   }
   return true;
 }

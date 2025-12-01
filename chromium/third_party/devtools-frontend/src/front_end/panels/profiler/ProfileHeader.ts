@@ -2,10 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import type * as Bindings from '../../models/bindings/bindings.js';
 import * as Common from '../../core/common/common.js';
-import type * as UI from '../../ui/legacy/legacy.js';
 import type * as Protocol from '../../generated/protocol.js';
+import type * as Bindings from '../../models/bindings/bindings.js';
+import type * as UI from '../../ui/legacy/legacy.js';
 
 export class ProfileHeader extends Common.ObjectWrapper.ObjectWrapper<EventTypes> {
   readonly profileTypeInternal: ProfileType;
@@ -95,10 +95,10 @@ export const enum Events {
   PROFILE_TITLE_CHANGED = 'ProfileTitleChanged',
 }
 
-export type EventTypes = {
-  [Events.UPDATE_STATUS]: StatusUpdate,
-  [Events.PROFILE_TITLE_CHANGED]: ProfileHeader,
-};
+export interface EventTypes {
+  [Events.UPDATE_STATUS]: StatusUpdate;
+  [Events.PROFILE_TITLE_CHANGED]: ProfileHeader;
+}
 
 export class ProfileType extends Common.ObjectWrapper.ObjectWrapper<ProfileEventTypes> {
   readonly idInternal: string;
@@ -268,12 +268,12 @@ export const enum ProfileEvents {
   VIEW_UPDATED = 'view-updated',
 }
 
-export type ProfileEventTypes = {
-  [ProfileEvents.ADD_PROFILE_HEADER]: ProfileHeader,
-  [ProfileEvents.PROFILE_COMPLETE]: ProfileHeader,
-  [ProfileEvents.REMOVE_PROFILE_HEADER]: ProfileHeader,
-  [ProfileEvents.VIEW_UPDATED]: void,
-};
+export interface ProfileEventTypes {
+  [ProfileEvents.ADD_PROFILE_HEADER]: ProfileHeader;
+  [ProfileEvents.PROFILE_COMPLETE]: ProfileHeader;
+  [ProfileEvents.REMOVE_PROFILE_HEADER]: ProfileHeader;
+  [ProfileEvents.VIEW_UPDATED]: void;
+}
 
 export interface DataDisplayDelegate {
   showProfile(profile: ProfileHeader|null): UI.Widget.Widget|null;

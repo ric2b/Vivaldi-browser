@@ -206,7 +206,7 @@ variables can be used with a single mutex.
 Both `Signal()` and `Broadcast()` are efficient if there are no threads to wake.
 (TODO: verify this) Clients should call `Signal()` or `Broadcast()` [inside the
 critical
-section](http://www.chromium.org/developers/lock-and-condition-variable#TOC-Why-put-Signal-inside-the-critical-section-)
+section](/developers/lock-and-condition-variable#TOC-Why-put-Signal-inside-the-critical-section-)
 that makes the condition true.
 
 The call `TimedWait()` allows a thread to wait until either a condition is true,
@@ -811,7 +811,7 @@ Even when they don't make mistakes, the resulting code is hard for others to
 maintain. Both CPUs and compilers can rearrange reads and writes in ways
 that lead to subtle race conditions. The simple-sounding pattern of
 [double-checked
-locking](http://en.wikipedia.org/wiki/Double-checked_locking) is actually
+locking](https://en.wikipedia.org/wiki/Double-checked_locking) is actually
 extremely subtle and is usually implemented incorrectly.
 
 Programmers assume that locking is expensive, and that using atomic

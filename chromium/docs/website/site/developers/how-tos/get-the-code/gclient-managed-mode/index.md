@@ -51,4 +51,4 @@ in any special way by the tools.
 ## What's missing
 
 *   Safesync is not supported for new managed git checkouts yet
-            (<http://crbug.com/109191>).
+            (<https://crbug.com/109191>).

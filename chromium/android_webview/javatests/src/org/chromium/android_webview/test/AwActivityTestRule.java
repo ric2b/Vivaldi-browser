@@ -149,15 +149,15 @@ public class AwActivityTestRule extends BaseActivityTestRule<AwTestRunnerActivit
     }
 
     @Override
-    public void launchActivity(Intent intent) {
-        if (getActivity() != null) return;
+    public AwTestRunnerActivity launchActivity(Intent intent) {
+        if (getActivity() != null) return getActivity();
         super.launchActivity(intent);
         ApplicationTestUtils.waitForActivityState(getActivity(), Stage.RESUMED);
+        return getActivity();
     }
 
     public AwTestRunnerActivity launchActivity() {
-        launchActivity(getLaunchIntent());
-        return getActivity();
+        return launchActivity(getLaunchIntent());
     }
 
     public AwBrowserContext createAwBrowserContextOnUiThread() {
@@ -846,7 +846,7 @@ public class AwActivityTestRule extends BaseActivityTestRule<AwTestRunnerActivit
         public AwSettings createAwSettings(Context context, boolean supportsLegacyQuirks) {
             return new AwSettings(
                     context,
-                    /* isAccessFromFileURLsGrantedByDefault= */ false,
+                    /* isAccessFromFileUrlsGrantedByDefault= */ false,
                     supportsLegacyQuirks,
                     /* allowEmptyDocumentPersistence= */ false,
                     /* allowGeolocationOnInsecureOrigins= */ true,

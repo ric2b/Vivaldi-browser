@@ -22,12 +22,21 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <new>
+#include <utility>
 
 #include "src/buffer_pool.h"
-#include "src/decoder_impl.h"
-#include "src/motion_vector.h"
+#include "src/decoder_state.h"
+#include "src/gav1/decoder_buffer.h"
+#include "src/gav1/status_code.h"
+#include "src/quantizer.h"
 #include "src/utils/common.h"
+#include "src/utils/constants.h"
 #include "src/utils/logging.h"
+#include "src/utils/raw_bit_reader.h"
+#include "src/utils/reference_info.h"
+#include "src/utils/segmentation.h"
+#include "src/utils/types.h"
 
 namespace libgav1 {
 namespace {

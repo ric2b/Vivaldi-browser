@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.h"
 
 #include <memory>
@@ -141,7 +146,8 @@ bool ValidateSubSourceAndGetData(DOMArrayBufferView* view,
   if (!byte_length) {
     byte_length = view->byteLength() - byte_offset;
   }
-  const auto data = view->ByteSpanMaybeShared().subspan(byte_offset);
+  const auto data =
+      view->ByteSpanMaybeShared().subspan(static_cast<size_t>(byte_offset));
   *out_base_address = data.data();
   *out_byte_length = byte_length;
   return true;

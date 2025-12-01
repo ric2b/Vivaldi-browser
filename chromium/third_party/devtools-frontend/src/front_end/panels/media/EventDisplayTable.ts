@@ -76,6 +76,7 @@ export class PlayerEventsView extends UI.Widget.VBox {
 
   constructor() {
     super();
+    this.registerRequiredCSS(eventDisplayTableStyles);
 
     this.element.setAttribute('jslog', `${VisualLogging.pane('events')}`);
 
@@ -143,7 +144,7 @@ export class PlayerEventsView extends UI.Widget.VBox {
       if (isAtBottom) {
         scroll.scrollTop = scroll.scrollHeight;
       }
-    } catch (e) {
+    } catch {
       // If this is a legacy message event, ignore it for now until they
       // are handled.
     }
@@ -164,9 +165,5 @@ export class PlayerEventsView extends UI.Widget.VBox {
       weight: columnConfig.weight || 0,
       sort: DataGrid.DataGrid.Order.Ascending,
     } as DataGrid.DataGrid.ColumnDescriptor;
-  }
-  override wasShown(): void {
-    super.wasShown();
-    this.registerCSSFiles([eventDisplayTableStyles]);
   }
 }

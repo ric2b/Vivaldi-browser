@@ -259,7 +259,7 @@
       {
         "name": "onNeedRestartToReloadCodecs",
         "type": "function",
-        "description": "Fired when an update to FFMPEG codecs happened while the application was running, and restart is needed to reload them",
+        "description": "Fired when an update to audio/video support (including Widevine) happened while the application was running, and restart is needed to reload.",
         "parameters": []
       },
       {

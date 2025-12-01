@@ -4,19 +4,18 @@
 
 #import "ios/chrome/browser/enterprise/model/idle/action.h"
 
+#import <algorithm>
 #import <cstring>
 #import <utility>
 #import <vector>
 
 #import "base/callback_list.h"
 #import "base/check_is_test.h"
-#import "base/memory/raw_ptr.h"
 #import "base/containers/flat_map.h"
 #import "base/containers/flat_set.h"
 #import "base/functional/bind.h"
 #import "base/functional/callback.h"
 #import "base/memory/raw_ptr.h"
-#import "base/ranges/algorithm.h"
 #import "base/scoped_observation.h"
 #import "components/browsing_data/core/browsing_data_utils.h"
 #import "components/browsing_data/core/pref_names.h"
@@ -72,7 +71,6 @@ class SignOutAction : public Action {
       signout_start_time_ = base::TimeTicks::Now();
       authentication_service->SignOut(
           signin_metrics::ProfileSignout::kIdleTimeoutPolicyTriggeredSignOut,
-          /*force_clear_browsing_data=*/false,
           base::CallbackToBlock(
               base::BindOnce(&SignOutAction::OnSignOutCompleted,
                              base::Unretained(this), std::move(continuation))));

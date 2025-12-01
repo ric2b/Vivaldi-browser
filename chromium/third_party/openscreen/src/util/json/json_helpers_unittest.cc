@@ -13,6 +13,7 @@ namespace {
 
 using ::testing::ElementsAre;
 
+// NOTE: not constexpr as Json::Value ctor is not constexpr
 const Json::Value kNone;
 const Json::Value kEmptyString = "";
 const Json::Value kEmptyArray(Json::arrayValue);

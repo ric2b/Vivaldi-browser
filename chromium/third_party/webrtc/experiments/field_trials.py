@@ -47,6 +47,9 @@ ACTIVE_FIELD_TRIALS: FrozenSet[FieldTrial] = frozenset([
     FieldTrial('WebRTC-Audio-GainController2',
                42232605,
                date(2024, 4, 1)),
+    FieldTrial('WebRTC-Audio-OpusDecodeStereoByDefault',
+               379996136,
+               date(2025, 11, 15)),
     FieldTrial('WebRTC-Audio-OpusGeneratePlc',
                42223518,
                date(2025, 4, 1)),
@@ -80,6 +83,9 @@ ACTIVE_FIELD_TRIALS: FrozenSet[FieldTrial] = frozenset([
     FieldTrial('WebRTC-EncoderDataDumpDirectory',
                296242528,
                date(2024, 4, 1)),
+    FieldTrial('WebRTC-ForceDtls13',
+               383141571,
+               date(2024,9,1)),
     FieldTrial('WebRTC-FrameCadenceAdapter-UseVideoFrameTimestamp',
                42226256,
                date(2024, 10, 1)),
@@ -110,9 +116,6 @@ ACTIVE_FIELD_TRIALS: FrozenSet[FieldTrial] = frozenset([
     FieldTrial('WebRTC-Pacer-KeyframeFlushing',
                42221435,
                date(2024, 4, 1)),
-    FieldTrial('WebRTC-DisableTlsSessionTicketKillswitch',
-               367181089,
-               date(2025, 7, 1)),
     FieldTrial('WebRTC-QCM-Dynamic-AV1',
                349860657,
                date(2025, 7, 1)),
@@ -188,6 +191,9 @@ ACTIVE_FIELD_TRIALS: FrozenSet[FieldTrial] = frozenset([
     FieldTrial('WebRTC-Video-Vp9FlexibleMode',
                329396373,
                date(2025, 6, 26)),
+    FieldTrial('WebRTC-IceHandshakeDtls',
+               367395350,
+               date(2026, 1, 1)),
     # keep-sorted end
 ])  # yapf: disable
 
@@ -691,9 +697,6 @@ POLICY_EXEMPT_FIELD_TRIALS: FrozenSet[FieldTrial] = frozenset([
     FieldTrial('WebRTC-LegacySimulcastLayerLimit',
                42233936,
                INDEFINITE),
-    FieldTrial('WebRTC-LegacyTlsProtocols',
-               40644300,
-               date(2024, 4, 1)),
     FieldTrial('WebRTC-LowresSimulcastBitrateInterpolation',
                42222558,
                date(2024, 4, 1)),
@@ -893,7 +896,7 @@ POLICY_EXEMPT_FIELD_TRIALS: FrozenSet[FieldTrial] = frozenset([
 ])  # yapf: disable
 
 POLICY_EXEMPT_FIELD_TRIALS_DIGEST: str = \
-    'e750429cb042c02921a227fa18291f2cea23ea3b'
+    '32ec47da125c13ceb01a908627c7c10aada3d4dd'
 
 REGISTERED_FIELD_TRIALS: FrozenSet[FieldTrial] = ACTIVE_FIELD_TRIALS.union(
     POLICY_EXEMPT_FIELD_TRIALS)

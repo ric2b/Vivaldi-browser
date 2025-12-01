@@ -17,25 +17,56 @@
 #include <algorithm>
 #include <bitset>
 #include <charconv>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <system_error>  // NOLINT
 #include <vector>
 
+#include "absl/base/no_destructor.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
+#include "absl/time/time.h"
 #include "./centipede/feature.h"
 #include "./centipede/knobs.h"
 #include "./common/defs.h"
 #include "./common/logging.h"
 #include "./common/remote_file.h"
 #include "./common/status_macros.h"
+#include "./fuzztest/internal/configuration.h"
 
 namespace centipede {
+namespace {
+
+size_t ComputeTimeoutPerBatch(size_t timeout_per_input, size_t batch_size) {
+  CHECK_GT(batch_size, 0);
+  // NOTE: If `timeout_per_input` == 0, leave `timeout_per_batch` at 0 too:
+  // the implementation interprets both as "no limit".
+  if (timeout_per_input == 0) return 0;
+  // TODO(ussuri): The formula here is an unscientific heuristic conjured
+  //  up for CPU instruction fuzzing. `timeout_per_input` is interpreted as
+  //  the long tail of the input runtime distribution of yet-unknown nature.
+  //  It might be the exponential, log-normal distribution or similar, and
+  //  the distribution of the total time per batch could be modeled by the
+  //  gamma distribution. Work out the math later. Right now, this naive
+  //  formula gives ~18 min per batch with the input flags' defaults (this
+  //  has worked in test runs so far).
+  constexpr double kScale = 12;
+  const double estimated_mean_time_per_input =
+      std::max(timeout_per_input / kScale, 1.0);
+  return std::ceil(std::log(estimated_mean_time_per_input + 1.0) * batch_size);
+}
+
+}  // namespace
+
+const Environment &Environment::Default() {
+  static absl::NoDestructor<Environment> default_env;
+  return *default_env;
+}
 
 bool Environment::DumpCorpusTelemetryInThisShard() const {
   // Corpus stats are global across all shards on all machines.
@@ -203,6 +234,88 @@ void Environment::ReadKnobsFileIfSpecified() {
   knobs.ForEachKnob([](std::string_view name, Knobs::value_type value) {
     VLOG(1) << "knob " << name << ": " << static_cast<uint32_t>(value);
   });
+}
+
+void Environment::UpdateWithTargetConfig(
+    const fuzztest::internal::Configuration &config) {
+  if (config.jobs != 0) {
+    CHECK(j == Default().j || j == config.jobs)
+        << "Value for --j is inconsistent with the value for jobs in the "
+           "target binary:"
+        << VV(j) << VV(config.jobs);
+    j = config.jobs;
+    total_shards = config.jobs;
+    num_threads = config.jobs;
+    my_shard_index = 0;
+  }
+
+  const auto convert_to_seconds =
+      [&](absl::Duration duration, absl::string_view duration_name) -> size_t {
+    if (duration == absl::InfiniteDuration()) return 0;
+    // Centipede's time-related fields are in seconds, so we need at least 1s.
+    CHECK_GE(duration, absl::Seconds(1))
+        << duration_name << " must not be less than one second";
+    return static_cast<size_t>(absl::ToInt64Seconds(duration));
+  };
+
+  // Update `timeout_per_input` and consequently `timeout_per_batch`.
+  const size_t time_limit_per_input_sec =
+      convert_to_seconds(config.time_limit_per_input, "Time limit per input");
+  CHECK(timeout_per_input == 0 ||
+        timeout_per_input == Default().timeout_per_input ||
+        timeout_per_input == time_limit_per_input_sec)
+      << "Value for --timeout_per_input is inconsistent with the value for "
+         "time_limit_per_input in the target binary:"
+      << VV(timeout_per_input) << VV(config.time_limit_per_input);
+  const size_t autocomputed_timeout_per_batch =
+      ComputeTimeoutPerBatch(timeout_per_input, batch_size);
+  timeout_per_input = time_limit_per_input_sec;
+  UpdateTimeoutPerBatchIfEqualTo(autocomputed_timeout_per_batch);
+
+  // Adjust `timeout_per_batch` to never exceed the test time limit.
+  if (const auto test_time_limit = config.GetTimeLimitPerTest();
+      test_time_limit < absl::InfiniteDuration()) {
+    const size_t test_time_limit_seconds =
+        convert_to_seconds(test_time_limit, "Test time limit");
+    timeout_per_batch =
+        timeout_per_batch == 0
+            ? test_time_limit_seconds
+            : std::min(timeout_per_batch, test_time_limit_seconds);
+  }
+
+  // Convert bytes to MB by rounding up.
+  constexpr auto bytes_to_mb = [](size_t bytes) {
+    return bytes == 0 ? 0 : (bytes - 1) / 1024 / 1024 + 1;
+  };
+  CHECK(rss_limit_mb == Default().rss_limit_mb ||
+        rss_limit_mb == bytes_to_mb(config.rss_limit))
+      << "Value for --rss_limit_mb is inconsistent with the value for "
+         "rss_limit in the target binary:"
+      << VV(rss_limit_mb) << VV(config.rss_limit);
+  rss_limit_mb = bytes_to_mb(config.rss_limit);
+
+  // Convert bytes to KB by rounding up.
+  constexpr auto bytes_to_kb = [](size_t bytes) {
+    return bytes == 0 ? 0 : (bytes - 1) / 1024 + 1;
+  };
+  CHECK(stack_limit_kb == Default().stack_limit_kb ||
+        stack_limit_kb == bytes_to_kb(config.stack_limit))
+      << "Value for --stack_limit_kb is inconsistent with the value for "
+         "stack_limit in the target binary:"
+      << VV(stack_limit_kb) << VV(config.stack_limit);
+  stack_limit_kb = bytes_to_kb(config.stack_limit);
+
+  if (config.only_replay) {
+    load_shards_only = true;
+    populate_binary_info = false;
+  }
+}
+
+void Environment::UpdateTimeoutPerBatchIfEqualTo(size_t val) {
+  if (timeout_per_batch != val) return;
+  timeout_per_batch = ComputeTimeoutPerBatch(timeout_per_input, batch_size);
+  VLOG(1) << "--timeout_per_batch auto-computed: " << timeout_per_batch
+          << " sec (see --help for details)";
 }
 
 }  // namespace centipede

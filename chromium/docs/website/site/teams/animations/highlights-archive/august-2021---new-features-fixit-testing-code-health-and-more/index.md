@@ -292,7 +292,7 @@ title: August 2021 - New features, Fixit, Testing, Code health and more!
     results</a>.</td></td>
 
     <td><td>We committed to look again in Q3 this year, and coincidentally got
-    an <a href="http://crbug.com/1233544">escalation</a> from fbeaufort@ and the
+    an <a href="https://crbug.com/1233544">escalation</a> from fbeaufort@ and the
     Media team just in time!</td></td>
 
     <td><td>Brainstorming in early Q3 by mustaq@, flackr@ and rdcronin@ led us

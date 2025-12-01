@@ -10,6 +10,7 @@ import static org.chromium.content_public.browser.HostZoomMap.getSystemFontScale
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.MathUtils;
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.content_public.browser.BrowserContextHandle;
 import org.chromium.content_public.browser.ContentFeatureList;
 import org.chromium.content_public.browser.ContentFeatureMap;
@@ -45,6 +46,7 @@ import org.chromium.build.BuildConfig;
  *         300%     |   6.03    |   3.00    |    250      |
  *
  */
+@NullMarked
 public class PageZoomUtils {
     // The default value for zoom that user can change in the accessibility settings page.
     public static final int PAGE_ZOOM_DEFAULT_SEEK_VALUE = convertZoomFactorToSeekBarValue(0.0);

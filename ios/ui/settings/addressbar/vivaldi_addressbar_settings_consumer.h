@@ -11,17 +11,18 @@
 
 // Updates the state with the show full address preference value.
 - (void)setPreferenceForShowFullAddress:(BOOL)show;
-// Updates the state with the enable bookmarks matching preference value.
-- (void)setPreferenceForEnableBookmarksMatching:(BOOL)enableMatching;
-// Updates the state with the enable bookmarks nickname matching preference
-// value.
-- (void)setPreferenceForEnableBookmarksNicknameMatching:(BOOL)enableMatching;
+// Updates the state with the prioritize bookmarks preference value.
+- (void)setPreferenceForEnableBookmarksBoosted:(BOOL)enableMatching;
+// Updates the state with the enable bookmark nicknames preference value.
+- (void)setPreferenceForEnableBookmarkNicknames:(BOOL)enableMatching;
 // Updates the state with the enable address bar direct match preference
 // value.
 - (void)setPreferenceForEnableDirectMatch:(BOOL)enable;
 // Updates the state with the enable address bar direct match prioritization
 // preference value.
 - (void)setPreferenceForEnableDirectMatchPrioritization:(BOOL)enable;
+// Updates the state with the show X for suggestions preference value.
+- (void)setPreferenceForShowXForSugggestions:(BOOL)show;
 
 @end
 

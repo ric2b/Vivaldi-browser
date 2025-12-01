@@ -19,7 +19,7 @@ understand the high level overview of the Chromium projects and repositories.
 
 The Chromium projects include Chromium and ChromiumOS, the open-source projects
 behind the Google Chrome browser and Google ChromeOS. Read more about the
-Chromium projects at the <a href="https://chromium.org/chromium-projects"
+Chromium projects at the <a href="https://www.chromium.org/chromium-projects"
 target="_blank">chromium.org home page</a>. Chromium (the browser) and Chromium
 OS (the platform) share code due to historical development decisions.
 

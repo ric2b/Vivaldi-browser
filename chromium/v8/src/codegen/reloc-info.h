@@ -117,7 +117,7 @@ class RelocInfo {
 
     WASM_CALL,  // FIRST_SHAREABLE_RELOC_MODE
     WASM_STUB_CALL,
-    WASM_INDIRECT_CALL_TARGET,  // A Wasm fn address embedded as a full pointer.
+    WASM_CODE_POINTER_TABLE_ENTRY,
     WASM_CANONICAL_SIG_ID,
 
     EXTERNAL_REFERENCE,  // The address of an external C++ function.
@@ -126,6 +126,10 @@ class RelocInfo {
     // Encoded internal reference, used only on RISCV64, RISCV32, MIPS64
     // and PPC.
     INTERNAL_REFERENCE_ENCODED,
+
+    // An integer JSDispatchHandle, referring to an entry in the
+    // JSDispatchTable.
+    JS_DISPATCH_HANDLE,
 
     // An off-heap instruction stream target. See http://goo.gl/Z2HUiM.
     // TODO(ishell): rename to BUILTIN_ENTRY.
@@ -213,8 +217,8 @@ class RelocInfo {
   static constexpr bool IsWasmCanonicalSigId(Mode mode) {
     return mode == WASM_CANONICAL_SIG_ID;
   }
-  static constexpr bool IsWasmIndirectCallTarget(Mode mode) {
-    return mode == WASM_INDIRECT_CALL_TARGET;
+  static constexpr bool IsWasmCodePointerTableEntry(Mode mode) {
+    return mode == WASM_CODE_POINTER_TABLE_ENTRY;
   }
   static constexpr bool IsConstPool(Mode mode) { return mode == CONST_POOL; }
   static constexpr bool IsVeneerPool(Mode mode) { return mode == VENEER_POOL; }
@@ -246,6 +250,9 @@ class RelocInfo {
   static constexpr bool IsBuiltinEntryMode(Mode mode) {
     return base::IsInRange(mode, FIRST_BUILTIN_ENTRY_MODE,
                            LAST_BUILTIN_ENTRY_MODE);
+  }
+  static constexpr bool IsJSDispatchHandle(Mode mode) {
+    return mode == JS_DISPATCH_HANDLE;
   }
   static constexpr bool IsNoInfo(Mode mode) { return mode == NO_INFO; }
 
@@ -286,7 +293,7 @@ class RelocInfo {
   Address wasm_call_address() const;
   Address wasm_stub_call_address() const;
   V8_EXPORT_PRIVATE uint32_t wasm_canonical_sig_id() const;
-  V8_INLINE WasmCodePointer wasm_indirect_call_target() const;
+  V8_INLINE WasmCodePointer wasm_code_pointer_table_entry() const;
 
   uint32_t wasm_call_tag() const;
 
@@ -300,7 +307,7 @@ class RelocInfo {
   // Cage base value is used for decompressing compressed embedded references.
   V8_INLINE Tagged<HeapObject> target_object(PtrComprCageBase cage_base);
 
-  V8_INLINE Handle<HeapObject> target_object_handle(Assembler* origin);
+  V8_INLINE DirectHandle<HeapObject> target_object_handle(Assembler* origin);
 
   // Decodes builtin ID encoded as a PC-relative offset. This encoding is used
   // during code generation of call/jump with NEAR_BUILTIN_ENTRY.
@@ -343,21 +350,12 @@ class RelocInfo {
   // can only be called if rmode_ is INTERNAL_REFERENCE.
   V8_INLINE Address target_internal_reference_address();
 
+  // Return the JSDispatchHandle this relocation applies to;
+  // can only be called if rmode_ is JS_DISPATCH_HANDLE.
+  V8_INLINE JSDispatchHandle js_dispatch_handle();
+
   template <typename ObjectVisitor>
-  void Visit(Tagged<InstructionStream> host, ObjectVisitor* visitor) {
-    Mode mode = rmode();
-    if (IsEmbeddedObjectMode(mode)) {
-      visitor->VisitEmbeddedPointer(host, this);
-    } else if (IsCodeTargetMode(mode)) {
-      visitor->VisitCodeTarget(host, this);
-    } else if (IsExternalReference(mode)) {
-      visitor->VisitExternalReference(host, this);
-    } else if (IsInternalReference(mode) || IsInternalReferenceEncoded(mode)) {
-      visitor->VisitInternalReference(host, this);
-    } else if (IsBuiltinEntryMode(mode)) {
-      visitor->VisitOffHeapTarget(host, this);
-    }
-  }
+  void Visit(Tagged<InstructionStream> host, ObjectVisitor* visitor);
 
 #ifdef ENABLE_DISASSEMBLER
   // Printing
@@ -425,7 +423,7 @@ class WritableRelocInfo : public RelocInfo {
   void set_wasm_call_address(Address);
   void set_wasm_stub_call_address(Address);
   void set_wasm_canonical_sig_id(uint32_t);
-  V8_INLINE void set_wasm_indirect_call_target(
+  V8_INLINE void set_wasm_code_pointer_table_entry(
       WasmCodePointer,
       ICacheFlushMode icache_flush_mode = FLUSH_ICACHE_IF_NEEDED);
 
@@ -484,7 +482,7 @@ class RelocInfoWriter {
   inline uint32_t WriteLongPCJump(uint32_t pc_delta);
 
   inline void WriteShortTaggedPC(uint32_t pc_delta, int tag);
-  inline void WriteShortData(intptr_t data_delta);
+  inline void WriteShortData(uint8_t data_delta);
 
   inline void WriteMode(RelocInfo::Mode rmode);
   inline void WriteModeAndPC(uint32_t pc_delta, RelocInfo::Mode rmode);

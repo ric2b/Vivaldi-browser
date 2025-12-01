@@ -64,6 +64,10 @@ BASE_FEATURE(kIosDetectUsernameInUff,
              "IosSaveUsernameInUff",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+BASE_FEATURE(kIOSImprovePasswordFieldDetectionForFilling,
+             "IOSImprovePasswordFieldDetectionForFilling",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kIOSPasswordBottomSheetV2,
              "IOSPasswordBottomSheetV2",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -75,7 +79,7 @@ BASE_FEATURE(kIOSProactivePasswordGenerationBottomSheet,
 
 BASE_FEATURE(kLocalStateEnterprisePasswordHashes,
              "LocalStateEnterprisePasswordHashes",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kPasswordFormGroupedAffiliations,
              "PasswordFormGroupedAffiliations",
@@ -86,16 +90,10 @@ BASE_FEATURE(kPasswordFormClientsideClassifier,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)  // Desktop
-
 BASE_FEATURE(kPasswordGenerationChunking,
              "PasswordGenerationChunkPassword",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kPasswordGenerationSoftNudge,
-             "PasswordGenerationSoftNudge",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-#endif
+#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 
 BASE_FEATURE(kPasswordManagerLogToTerminal,
              "PasswordManagerLogToTerminal",
@@ -119,17 +117,11 @@ BASE_FEATURE(kRestartToGainAccessToKeychain,
 #endif
 #endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH)
-BASE_FEATURE(kScreenlockReauthPromoCard,
-             "ScreenlockReauthPromoCard",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-#endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH)
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 BASE_FEATURE(kBiometricsAuthForPwdFill,
              "BiometricsAuthForPwdFill",
              base::FEATURE_DISABLED_BY_DEFAULT);
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 BASE_FEATURE(kSkipUndecryptablePasswords,
              "SkipUndecryptablePasswords",
@@ -147,27 +139,24 @@ BASE_FEATURE(kTriggerPasswordResyncAfterDeletingUndecryptablePasswords,
 #if BUILDFLAG(IS_ANDROID)
 BASE_FEATURE(kUnifiedPasswordManagerLocalPasswordsAndroidAccessLossWarning,
              "UnifiedPasswordManagerLocalPasswordsAndroidAccessLossWarning",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kBiometricAuthIdentityCheck,
              "BiometricAuthIdentityCheck",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kClearLoginDatabaseForAllMigratedUPMUsers,
-             "ClearLoginDatabaseForAllMigratedUPMUsers",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kDropLoginDbRenameForUpmSyncingUsers,
              "DropLoginDbRenameForUpmSyncingUsers",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-#endif
+             base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi
 
-BASE_FEATURE(kUsernameFirstFlowFallbackCrowdsourcing,
-             "UsernameFirstFlowFallbackCrowdsourcing",
+BASE_FEATURE(kLoginDbDeprecationAndroid,
+             "LoginDbDeprecationAndroid",
              base::FEATURE_DISABLED_BY_DEFAULT);
+#endif  // BUILDFLAG(IS_ANDROID)
 
 BASE_FEATURE(kUsernameFirstFlowWithIntermediateValuesPredictions,
              "UsernameFirstFlowWithIntermediateValuesPredictions",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kUsernameFirstFlowWithIntermediateValuesVoting,
              "UsernameFirstFlowWithIntermediateValuesVoting",
@@ -175,7 +164,7 @@ BASE_FEATURE(kUsernameFirstFlowWithIntermediateValuesVoting,
 
 BASE_FEATURE(kUseAsyncOsCryptInLoginDatabase,
              "UseAsyncOsCryptInLoginDatabase",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kUseNewEncryptionMethod,
              "UseNewEncryptionMethod",

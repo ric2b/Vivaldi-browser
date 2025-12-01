@@ -1120,7 +1120,7 @@ For the purpose of counting total allocated probability points, it counts as one
 
 Symbols probabilities are read one by one, in order.
 After each probability is decoded, the total nb of probability points is updated.
-This is used to dermine how many bits must be read to decode the probability of next symbol.
+This is used to determine how many bits must be read to decode the probability of next symbol.
 
 When a symbol has a __probability__ of `zero` (decoded from reading a Value `1`),
 it is followed by a 2-bits repeat flag.

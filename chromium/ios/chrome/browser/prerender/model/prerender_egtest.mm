@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #import <XCTest/XCTest.h>
-#import "ios/testing/earl_grey/earl_grey_test.h"
 
 #import "base/functional/bind.h"
 #import "base/ios/ios_util.h"
@@ -19,6 +18,7 @@
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
+#import "ios/testing/earl_grey/earl_grey_test.h"
 #import "ios/web/common/user_agent.h"
 #import "net/test/embedded_test_server/embedded_test_server.h"
 #import "net/test/embedded_test_server/http_request.h"
@@ -150,6 +150,8 @@ void LegacyLongPressAndDragTabInTabStrip(NSString* moving_tab_identifier,
 
 - (AppLaunchConfiguration)appConfigurationForTestCase {
   AppLaunchConfiguration config;
+  // Put MVT as the top magic stack module for easier tapping.
+  config.additional_args.push_back("--test-ios-module-ranker=mvt");
   if ([self isRunningTest:@selector
             (MAYBE_testLegacyOpenTabInTabStripBeforePrerenderedTab)] ||
       [self isRunningTest:@selector(MAYBE_testMovePrerenderedTabInTabStrip)]) {

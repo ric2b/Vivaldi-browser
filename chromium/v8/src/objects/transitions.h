@@ -172,7 +172,7 @@ class V8_EXPORT_PRIVATE TransitionsAccessor {
   void TraverseTransitionTree(const TraverseCallback& callback) {
     // Make sure that we do not allocate in the callback.
     DisallowGarbageCollection no_gc;
-    base::SharedMutexGuardIf<base::kShared> scope(
+    base::SpinningMutexGuardIf mutex_guard(
         isolate_->full_transition_array_access(), concurrent_access_);
     TraverseTransitionTreeInternal(callback, &no_gc);
   }
@@ -440,7 +440,7 @@ class TransitionArray : public WeakFixedArray {
   static bool CompactPrototypeTransitionArray(Isolate* isolate,
                                               Tagged<WeakFixedArray> array);
 
-  static Handle<WeakFixedArray> GrowPrototypeTransitionArray(
+  static DirectHandle<WeakFixedArray> GrowPrototypeTransitionArray(
       DirectHandle<WeakFixedArray> array, int new_capacity, Isolate* isolate);
 
   // Compares two tuples <key, kind, attributes>, returns -1 if

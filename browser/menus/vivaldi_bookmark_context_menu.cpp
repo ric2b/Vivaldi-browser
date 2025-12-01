@@ -5,6 +5,7 @@
 #include "app/vivaldi_resources.h"
 #include "browser/menus/vivaldi_menu_enums.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/bookmarks/bookmark_merged_surface_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
@@ -137,7 +138,42 @@ void HandleHoverUrl(Browser* browser, const std::string& url) {
   Container->delegate->OnHover(url);
 }
 
-void HandleOpenMenu(Browser* browser, int64_t id) {
+const bookmarks::BookmarkNode* GetNodeByFolder(bookmarks::BookmarkModel* model,
+    const BookmarkParentFolder& folder) {
+  const bookmarks::BookmarkNode* node = folder.as_non_permanent_folder();
+  if (!node) {
+    std::optional<BookmarkParentFolder::PermanentFolderType> type =
+        folder.as_permanent_folder();
+    if (type.has_value()) {
+      switch (type.value()) {
+        case BookmarkParentFolder::PermanentFolderType::kBookmarkBarNode:
+          node = model->bookmark_bar_node();
+          break;
+        case BookmarkParentFolder::PermanentFolderType::kOtherNode:
+          node = model->other_node();
+          break;
+        case BookmarkParentFolder::PermanentFolderType::kMobileNode:
+          node = model->mobile_node();
+          break;
+        case BookmarkParentFolder::PermanentFolderType::kTrash:
+          node = model->trash_node();
+          break;
+        case BookmarkParentFolder::PermanentFolderType::kManagedNode:
+          // Not used
+          break;
+      }
+    }
+  }
+  return node;
+}
+
+void HandleOpenMenu(bookmarks::BookmarkModel* model,
+                    const BookmarkParentFolder& folder) {
+  const bookmarks::BookmarkNode* node = GetNodeByFolder(model, folder);
+  if (!node) {
+    return;
+  }
+  int64_t id = node->id();
   for (const ::vivaldi::BookmarkMenuContainerEntry& e : Container->siblings) {
     if (e.id == id) {
       Container->delegate->OnOpenMenu(id);
@@ -215,29 +251,31 @@ void SortBookmarkNodes(const bookmarks::BookmarkNode* parent,
 
 void AddExtraBookmarkMenuItems(Profile* profile,
                                views::MenuItemView* menu,
-                               unsigned int* menu_index,
+                               size_t menu_index,
                                const bookmarks::BookmarkNode* parent,
                                bool on_top) {
+
   BookmarkMenuContainer::Edge edge =
       on_top ? BookmarkMenuContainer::Above : BookmarkMenuContainer::Below;
   if (edge == Container->edge) {
     if (edge == BookmarkMenuContainer::Below) {
       AddSeparator(menu, menu_index);
+      menu_index += 1;
     }
     menu->AddMenuItemAt(
-        *menu_index, NextMenuId,
+        menu_index, NextMenuId,
         l10n_util::GetStringUTF16(IDS_VIV_BOOKMARK_ADD_ACTIVE_TAB),
         std::u16string(), std::u16string(), ui::ImageModel(), ui::ImageModel(),
         views::MenuItemView::Type::kNormal, ui::NORMAL_SEPARATOR);
     MenuIdToBookmarkMap[NextMenuId] = parent;
     NextMenuId++;
-    *menu_index += 1;
+    menu_index += 1;
 
     if (edge == BookmarkMenuContainer::Above) {
       AddSeparator(menu, menu_index);
+      menu_index += 1;
     }
   }
-
   // Add an extra separator if requsted by the api setup code.
   if (edge == BookmarkMenuContainer::Below) {
     for (const ::vivaldi::BookmarkMenuContainerEntry& e : Container->siblings) {
@@ -257,7 +295,7 @@ bool IsVivaldiMenuItem(int id) {
 
 bool AddIfSeparator(const bookmarks::BookmarkNode* node,
                     views::MenuItemView* menu,
-                    unsigned int* menu_index) {
+                    size_t menu_index) {
   if (vivaldi_bookmark_kit::IsSeparator(node)) {
     if (Container->sort_field == BookmarkSorter::FIELD_NONE) {
       AddSeparator(menu, menu_index);
@@ -267,16 +305,15 @@ bool AddIfSeparator(const bookmarks::BookmarkNode* node,
   return false;
 }
 
-void AddSeparator(views::MenuItemView* menu, unsigned int* menu_index) {
-  menu->AddMenuItemAt(*menu_index, 0, std::u16string(), std::u16string(),
+void AddSeparator(views::MenuItemView* menu, size_t menu_index) {
+  menu->AddMenuItemAt(menu_index, 0, std::u16string(), std::u16string(),
                       std::u16string(), ui::ImageModel(), ui::ImageModel(),
                       views::MenuItemView::Type::kSeparator,
                       ui::NORMAL_SEPARATOR);
-  *menu_index += 1;
 }
 
 views::MenuItemView* AddMenuItem(views::MenuItemView* menu,
-                                 unsigned int* menu_index,
+                                 size_t/*unsigned int*/* menu_index,
                                  int id,
                                  const std::u16string& label,
                                  const ui::ImageModel& icon,

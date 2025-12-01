@@ -2,10 +2,13 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="af">
 <translation id="1016495303386450659">Item bygewerk</translation>
+<translation id="1033201038396796706">Donkermodus-, verfristempo- of temaprobleme</translation>
 <translation id="1041637248958093184">Soekopdragte, besoekte werwe, koekies en tydelike lêers word nie deur Vivaldi bewaar wanneer privaat oortjies gebruik word nie.</translation>
+<translation id="1062373127858055283">Voer asb. die beeldbronadres in</translation>
 <translation id="1066692930984703744">Aktiveer naspoorder- en advertensieversperring vir vinniger en veiliger blaaiery</translation>
 <translation id="1116694919640316211">Oor</translation>
 <translation id="1123707809902612118">Versper naspoorders en advertensies</translation>
+<translation id="1134179431044204911">Ek vind gebare en navigasie moeilik om te gebruik</translation>
 <translation id="1149336474099429879">Bied kitstoegang tot spesifieke webwerwe direk vanuit die adresbalk en bespaar klikke in vergelyking met ’n soekenjin. Meer inligting oor [Direct Match]</translation>
 <translation id="1151972924205500581">Wagwoord vereis</translation>
 <translation id="1166425484559430538">U sinchroniseerdata is geënkripteer. Verskaf u enkripsiewagwoord om die data te dekripteer.</translation>
@@ -20,6 +23,7 @@
 <translation id="1267954839079880017">Italiaans (<ph name="ORIGIN" />)</translation>
 <translation id="1272729688996227528">Sinchronisering is aktief</translation>
 <translation id="1275213816424141989">Dalk later</translation>
+<translation id="1288585320003964783">Die vertaalpaneel i.p.v. ’n dialoog sal gebruik word wanneer gekose teks vertaal word</translation>
 <translation id="1315107593850379616">Herstel-e-pos</translation>
 <translation id="1325473901257014816">Bewaar met Vivaldi al u oortjies in een blaaier en sinchroniseer dit op alle toestelle.</translation>
 <translation id="132683371494960526">Dubbeltik om die boliggende vouer te verander.</translation>
@@ -30,35 +34,50 @@
 <translation id="1381484244248892686">U kan bewaarde wagwoorde op elke toestel gebruik. Dit word bewaar in Vivaldi Wagwoordbestuurder vir <ph name="EMAIL" /></translation>
 <translation id="1383876407941801731">Soek</translation>
 <translation id="1397515084080510783">Geen gesinchroniseerde oortjies</translation>
+<translation id="1401336397986481078">Toegevoeg tot</translation>
 <translation id="1410197035576869800">Toepikoon</translation>
 <translation id="1430308140197327248">Toon volledige adres</translation>
 <translation id="1430638949087011281">Geen versperring</translation>
 <translation id="1446108955355168157">Skep ’n enkripsiewagwoord om u sinchroniseerdata (wagwoorde, boekmerke, notas en meer) te enkripteer en beskerm. Die wagwoord word nooit na ons verstuur nie.</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> items</translation>
 <translation id="1468415711258933398">Standaard oortjie</translation>
+<translation id="1470330357709335121">Vivaldi is stadig of hakerig</translation>
+<translation id="1502492982318476895">Sinchronisering het misluk: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="1521731267649138856">u herstel-e-posadres.</translation>
+<translation id="1535446875484049224">Donkermodus is hakerig of lyk nie reg nie</translation>
+<translation id="1567659716528258242">Vivaldi laat my toestel warm word</translation>
+<translation id="156793582229023040">Ek is bekommerd oor nasporing of dataversameling</translation>
 <translation id="1573784689611551537">Bestuur advertensieversperringsdienste</translation>
 <translation id="1577761519530347814">Sinchroniseer bewaarde webwerfwagwoorde</translation>
+<translation id="1620921465699122417">Voer teks vir vertaling in</translation>
+<translation id="1631998297781042533">Gewilde webwerwe</translation>
 <translation id="1644574205037202324">Geskiedenis</translation>
+<translation id="1655816024544228768">Sport</translation>
 <translation id="1659112017960130179">Koreaans (<ph name="ORIGIN" />)</translation>
 <translation id="1689333818294560261">Bynaam</translation>
 <translation id="1711184756728070210"><ph name="BEGIN_LINK" />Gebruiksvoorwaardes ➔<ph name="END_LINK" />     <ph name="BEGIN_LINK2" />Privaatheidsbeleid ➔<ph name="END_LINK2" /></translation>
 <translation id="1717473843091433383">Dwing ’n donker tema op alle webwerwe</translation>
+<translation id="1721265415699013829">Wees asb. so spesifiek as moontlik</translation>
 <translation id="173924678149983125">Voer bronadres in om versperderreëls in te voer</translation>
 <translation id="1751280147639351837">Advertensie- en naspoorderversperder</translation>
 <translation id="1752547299766512813">Bewaar wagwoorde</translation>
 <translation id="1754797958074421486">Gebruiksvoorwaardes</translation>
 <translation id="1763111582687651119">Aktiveer soekenjinbyname</translation>
 <translation id="1771413903824396513">Volgens bynaam</translation>
+<translation id="1771605894228673800">Ek soek ’n ingeboude VPN-funksie</translation>
+<translation id="1800685789463945995">Vivaldi hou aan uitbom of vries</translation>
 <translation id="1804522390855853698">Sjinees (<ph name="ORIGIN" />)</translation>
 <translation id="1807246157184219062">Lig</translation>
 <translation id="1809939268435598390">Skrap vouer</translation>
 <translation id="1813686536470127172">Ander vouer</translation>
 <translation id="1828800626900562968">Tik op die plusikoon hieronder om ’n nuwe oortjie te skep.</translation>
 <translation id="1861262398884155592">Hierdie vouer is leeg</translation>
+<translation id="1921508034244765766">Vivaldi is stadig, bom uit of maak toestel warm</translation>
 <translation id="1929299157575856072">VERSTEKVERSPERVLAK</translation>
 <translation id="1968240832686794952">Open beeld in agtergrondoortjie</translation>
+<translation id="1986733655397734221">Geen hiervan</translation>
 <translation id="1994506778397655062">Open in nuwe agtergrondoortjie</translation>
+<translation id="1996915956617647318">Versteek Wysig</translation>
 <translation id="2030706494969937066">Kon nie u aantekengegewens ophaal nie. Teken weer aan.</translation>
 <translation id="2034405583989639424">Wysig snelkieser</translation>
 <translation id="2048247880942380698">Arabies (<ph name="ORIGIN" />)</translation>
@@ -66,9 +85,11 @@
 <translation id="2129408066358825297">Ouderdom</translation>
 <translation id="2148384276939959392">Sinchroniseer seleksie</translation>
 <translation id="2195713384412091023">Dit sal alle sinchroniseerdata op ons bediener verwyder, u enkripsiewagwoord terugstel en u afteken.</translation>
+<translation id="2228584369802328636">Spele</translation>
 <translation id="2243210264130642074">Nota is bewaar</translation>
 <translation id="2272338747456392228">Rekening is vergrendel</translation>
 <translation id="2273327106802955778">Nog-kieslys</translation>
+<translation id="2283599456633275070">Reis</translation>
 <translation id="2324160330092901720">’n Bevestigingskode is na <ph name="EMAIL_ID" /> gestuur</translation>
 <translation id="2330644510603114741">Oortjiegedrag</translation>
 <translation id="2336309953058658733">Ledig asblik</translation>
@@ -82,15 +103,19 @@
 <translation id="2434910957904013691">Sinchroniseer alles</translation>
 <translation id="2448144008809286557"><ph name="BEGIN_LINK" />Gebruikersnaam<ph name="END_LINK" /> of <ph name="BEGIN_LINK" />wagwoord<ph name="END_LINK" /> vergeet?</translation>
 <translation id="2478478121390627077">Huidige kleur</translation>
+<translation id="2496616243169085015">Fotografie</translation>
 <translation id="2536780277491102902">UITSONDERINGS</translation>
+<translation id="2538889169193998601">Prioritiseer direkte treffer in outovulvoorstelle.</translation>
 <translation id="2558801801411970131">Naspoorders word versper</translation>
 <translation id="2562040727226360285">Verwyder ergernisse, webwerwe kan sleg werk (<ph name="ORIGIN" />)</translation>
 <translation id="2563886993995570961">Maksimum aantal kolomme</translation>
 <translation id="257674075312929031">Groep</translation>
 <translation id="2577446409661931381">Nuwe nota</translation>
+<translation id="2590350610957954839">Laaste besoekte groep</translation>
 <translation id="261264557609353020">Beginblad</translation>
 <translation id="2619628557366098325">Portugees (<ph name="ORIGIN" />)</translation>
 <translation id="2620436844016719705">Stelsel</translation>
+<translation id="2653659639078652383">Dien in</translation>
 <translation id="2666092431469916601">Bo-aan</translation>
 <translation id="2677862276555105603">Advertensie
 versper</translation>
@@ -98,15 +123,18 @@ versper</translation>
 <translation id="2702801445560668637">Leeslys</translation>
 <translation id="2709516037105925701">Outovul</translation>
 <translation id="271033894570825754">Nuut</translation>
+<translation id="2712076950889800659">Deur voort te gaan stem u in tot Vivaldi se <ph name="BEGIN_LINK" />lisensieooreenkoms vir eindgebruikers<ph name="END_LINK" /> en <ph name="BEGIN_LINK" />privaatheidsbeleid<ph name="END_LINK" /></translation>
 <translation id="2725892265692641195">Nuww <ph name="ITEM_TYPE" /></translation>
 <translation id="2745324713975967671">Enkripsiewagwoord</translation>
 <translation id="276436995507680929">Sinchroniseer die leeslys</translation>
 <translation id="2765217105034171413">Klein</translation>
 <translation id="2767124759205735526">Sinchroniseer geskiedenis en getikte bronadresse</translation>
+<translation id="2770868136620962117">Sjoe, ons is so bly om dit te hoor!</translation>
 <translation id="2825232297853754349">U moet instem tot die Terme en Voorwaardes.</translation>
 <translation id="2842985007712546952">Moedervouer</translation>
 <translation id="2843343418360315034">Hongaars (<ph name="ORIGIN" />)</translation>
 <translation id="2850144663494818309">Inisialiseer sinchronisering…</translation>
+<translation id="2862504765180635001">Ons is jammer om dit te hoor!</translation>
 <translation id="2874111661876416905">Soek met Vivaldi</translation>
 <translation id="2884735088411646852">Sortering</translation>
 <translation id="2898963176829412617">Nuwe vouer…</translation>
@@ -118,17 +146,18 @@ versper</translation>
 <translation id="3018244467214569202">Grieks (<ph name="ORIGIN" />)</translation>
 <translation id="3029426144711327484">Toon snelkiesers</translation>
 <translation id="3039671569659952257">Skrap vouer</translation>
-<translation id="3065031457538473619">Gee prioriteit aan boekmerke in outovoltooivoorstelle</translation>
 <translation id="3073196329485613487">Teken aan op u rekening</translation>
-<translation id="307859903981308731">Deur voort te gaan stem u in tot Vivaldi se</translation>
 <translation id="3086746722712840547">nota</translation>
 <translation id="3087734570205094154">Onderaan</translation>
+<translation id="309084557304084991">Ek soek nie voorafgelaaide boekmerke en snelkiesers nie</translation>
 <translation id="3091563570137981919">Naspoorder- en advertensieversperring</translation>
 <translation id="3134385238404760368">Geen onlangse oortjies</translation>
 <translation id="3142562627629111859">Nuwe groep</translation>
 <translation id="3157931365184549694">Herstel</translation>
 <translation id="3159285901314605198">Agtergrondbeeld</translation>
 <translation id="3177673846235066154">Bediener het u aanmeldgegewens geweier.</translation>
+<translation id="3180057018690062250">Stroming</translation>
+<translation id="3180358318770512945">Ouerskap</translation>
 <translation id="3229182533910980085">Voeg u eerste boekmerk toe deur op die onderstaande plusikoon te tik</translation>
 <translation id="3236835587712044564">Tevrede met Vivaldi? Maak dit u verstekblaaier.</translation>
 <translation id="3270894089048358271">Stel Vivaldi in as u verstek</translation>
@@ -136,48 +165,67 @@ versper</translation>
 <translation id="3335772982573114336">Nuwe nota</translation>
 <translation id="33451081266695216">Verbinding deur bediener gewurg.</translation>
 <translation id="3346386541263128307">E-posadresse moet ooreenstem.</translation>
+<translation id="3363375699928395745">Voer titel in</translation>
 <translation id="3365991203476235715">Engels (<ph name="ORIGIN" />)</translation>
 <translation id="3368960138304620657">Litaus(<ph name="ORIGIN" />)</translation>
 <translation id="3377025655491224618">Privaat oortjie</translation>
+<translation id="3394474617110693560">Kategorieë</translation>
 <translation id="3435896845095436175">Aktiveer</translation>
 <translation id="3438160227308459316">Roemeens (<ph name="ORIGIN" />)</translation>
+<translation id="3451109402849920193">Aangedryf deur Lingvanex met Vivaldi as gasheer.</translation>
 <translation id="3451162533623145500">Skep ’n rekening</translation>
+<translation id="3500626002244909877">Dankie dat u die tyd geneem het om terugvoer te gee!</translation>
 <translation id="3509379002674019679">Skep, bewaar en bestuur u wagwoorde sodat u maklik by webwerwe en toeps kan aanteken.</translation>
 <translation id="3513566764071045027">Teken af</translation>
 <translation id="3527085408025491307">Vouer</translation>
 <translation id="3530991200302302959">Bulgaars (<ph name="ORIGIN" />)</translation>
+<translation id="3588477659268085586">Open vertaler</translation>
 <translation id="3601414719864711130">Volgens datum</translation>
 <translation id="3602290021589620013">Voorskou</translation>
 <translation id="3607176258839749451">Registrasie het misluk weens ’n fout. Probeer later weer.</translation>
+<translation id="3628734956995390149">{count, plural,
+          =1 {Boekmerke geskuif na “{title}”}
+          other {{count} boekmerke geskuif na “{title}”}}</translation>
 <translation id="3638687955382971136">Zoemteks</translation>
 <translation id="3646647753063635401">Sinchroniseer alle data en aktiveer sinchronisering van nuwe datatipes outomaties</translation>
 <translation id="3682791711395736890">Toon rekenaarweergawe van werf</translation>
+<translation id="3689125468279190285">Vertoon tuisknop</translation>
 <translation id="3699026013955941879">Die kode het verstryk. Versoek asb. ’n nuwe aktiveringskode.</translation>
 <translation id="3700829948786686853">Welkom by Vivaldi</translation>
+<translation id="3719826155360621982">Tuisblad</translation>
 <translation id="373855430416507951">Soek op blad</translation>
 <translation id="3745190878148784130">Versteek zoemteks</translation>
 <translation id="3766350025418769949">U kan die bewaarde wagwoorde in Vivaldi Wagwoordbestuurder in ander toeps op u iPad gebruik.</translation>
+<translation id="3815158430926662417">Ek kan nie op my Vivaldi-sinchroniseerrekening inteken nie</translation>
 <translation id="3817539520771282781">Volgens tipe</translation>
+<translation id="383723620494271391">Wil u nog iets toevoeg?</translation>
 <translation id="3842727926262967527">Kies waar u die oortjiebalk en die adresveld wil hê.</translation>
 <translation id="3845564230651302310">Nuwe versperderinstellings word toegepas…</translation>
 <translation id="3858860766373142691">Naam</translation>
 <translation id="3861379244432690245">Aktiveer direkte passing</translation>
 <translation id="3866249974567520381">Beskrywing</translation>
 <translation id="3872195896030547485">Voer asb. ’n geldige e-posadres in.</translation>
+<translation id="3891045256838140223">Kan u met ons deel wat nie na wense is nie?</translation>
 <translation id="3897092660631435901">Kieslys</translation>
 <translation id="3920366244737784074">Voeg <ph name="ITEM_TYPE" /> toe</translation>
 <translation id="3921585859122905677">Adresbalkposisie</translation>
 <translation id="3953599441418463312">Japannees (<ph name="ORIGIN" />)</translation>
 <translation id="395506590020066151">Naspoorder versper</translation>
 <translation id="3958433364221339259">Soek met <ph name="SEARCH_ENGINE" /></translation>
+<translation id="3960532956440723967">Teksgrootte is te klein of te groot</translation>
+<translation id="3972953605944268742">Die koppelvlak is verwarrend of rommelig</translation>
+<translation id="3989040793235713489">Ek soek meer of beter tema-opsies</translation>
 <translation id="3997823869212225788">Voer die 6-syfer kode in</translation>
 <translation id="4002066346123236978">Titel</translation>
 <translation id="4032606071208172574">(Verstek)</translation>
 <translation id="4048057312173843244">Gesinchroniseerde oortjies van ander toestelle sal hier verskyn. Teken by sinchronisering in om hierdie diens te gebruik.</translation>
 <translation id="4071269289580887166">Werkskermwerf</translation>
+<translation id="4072876042695422377">Sluit die vertaalaansig</translation>
 <translation id="4073968054795398875">Die sinchroniseerbediener ervaar probleme. Sinchroniseerinisialisering word weer probeer…</translation>
 <translation id="4084682180776658562">Boekmerk</translation>
 <translation id="4096707694175478403">Paneel</translation>
+<translation id="4118801221225128605">Vertaalde teks</translation>
+<translation id="4134597009271720826">Gradeer toep</translation>
 <translation id="414098425907666915">Privaat soekopdrag</translation>
 <translation id="4141861385728508836">Noors (<ph name="ORIGIN" />)</translation>
 <translation id="4145489350420416595">Onverwagte fout.</translation>
@@ -185,6 +233,7 @@ versper</translation>
 <translation id="4152011295694446843">U sal u boekmerke hier vind</translation>
 <translation id="4152623049003960417">Naspoorderdetail</translation>
 <translation id="4176463684765177261">Gedeaktiveer</translation>
+<translation id="4193549853510262477">Outobespeur</translation>
 <translation id="4209092469652827314">Groot</translation>
 <translation id="4219175188138757774">Tsjeggies en Slowaaks (<ph name="ORIGIN" />)</translation>
 <translation id="4222285809803895512">Datum geskep</translation>
@@ -194,24 +243,29 @@ versper</translation>
 versper</translation>
 <translation id="4299298331965375737">Wil u Vivaldi u verstekblaaier maak?</translation>
 <translation id="4304224509867189079">Teken aan</translation>
+<translation id="4304752732957821175">Die uitleg of knoppe is verwarrend</translation>
 <translation id="4314476537497682637">Versteek werkskermwerf</translation>
 <translation id="4316955624679873896">Boekmerk gemaak in</translation>
 <translation id="432696242656678770">Russies (<ph name="ORIGIN" />)</translation>
 <translation id="4350751486125178847">Spaans (<ph name="ORIGIN" />)</translation>
 <translation id="4376661454588260127">Viëtnamees (<ph name="ORIGIN" />)</translation>
+<translation id="4380745054983890306">Ek wens ek kon blaaier as PDF bewaar</translation>
 <translation id="4394049700291259645">Deaktiveer</translation>
+<translation id="440304190776086038">Prioritiseer direkte treffer</translation>
 <translation id="4413780690230851155">Skrap blaaigeskiedenis</translation>
+<translation id="443008484043213881">Nutsmiddels</translation>
 <translation id="4452878871193896747">Indonesies (<ph name="ORIGIN" />)</translation>
 <translation id="445620040230332178">Oortjiestyl</translation>
 <translation id="4461652107878667683">Navigasie vorentoe</translation>
 <translation id="4474581062946673155">U het tans geen gesinchroniseerde oortjies van ander toestelle nie.</translation>
 <translation id="4488900295693536220">Van toepassing wanneer adresbalk onder is, maak dit makliker om die boonste voorstelle te bereik.</translation>
-<translation id="4493850495402472953">en</translation>
 <translation id="4497115807425788318">Ligging</translation>
 <translation id="4507213865286211606">Voorbeeldgrootte</translation>
 <translation id="4515084385531683114">Wagwoorde word op hierdie toestel in Wagwoordbeheerder bewaar.</translation>
+<translation id="4518934934246049498">Ons is so bly dat u Vivaldi gebruik!</translation>
 <translation id="4525945044609022380">Hierdie e-posadres is reeds aan ’n ander rekening gekoppel.</translation>
 <translation id="4526803704855831732">Privaat oortjies</translation>
+<translation id="4542001945479572846">Iets anders</translation>
 <translation id="4553717494760925411">Navigasie terug</translation>
 <translation id="4563480492836333884">E-posadres is nie aanvaar nie. Gebruik ’n ander domein.</translation>
 <translation id="457386861538956877">Nog…</translation>
@@ -229,6 +283,7 @@ versper</translation>
 <translation id="4727698999970341158">Yslands (<ph name="ORIGIN" />)</translation>
 <translation id="473775607612524610">Werk by</translation>
 <translation id="4739712911308055817">Nie opgehaal</translation>
+<translation id="4749460556537826127">Ek wil wagwoord en boekmerke kan invoer of uitstuur</translation>
 <translation id="4750394297954878236">Voorstelle</translation>
 <translation id="4759238208242260848">Aflaaie</translation>
 <translation id="4759399863961855552">Sortering</translation>
@@ -237,11 +292,16 @@ versper</translation>
 <translation id="4807415245238822255">Wagwoorde moet ooreenstem.</translation>
 <translation id="4818836520802586445">Aksentkleur</translation>
 <translation id="4821701638681626529">Vivaldi teken nie u blaaigeskiedenis aan terwyl y privaat oortjies gebruik nie</translation>
+<translation id="4825714975043873206">Webwerwe laai stadig of open nie</translation>
 <translation id="4833044618885331665">U moet Vivaldi opgradeer om te kan sinchroniseer.</translation>
+<translation id="484344804915260122">Ek benodig ’n ingeboude vertaler</translation>
 <translation id="484462545196658690">Outomaties</translation>
 <translation id="4852383705713307704">Advertensie is versper</translation>
+<translation id="4899260893220375866">Ek soek meer beheer oor koekies en werftoestemmings</translation>
 <translation id="4903325570808402486">Sinchroniseer Vivaldi-instellings (nie alle instellings is al sinchroniseerbaar nie)</translation>
+<translation id="4925542198780948858">Mediabeheer werk nie soos verwag nie</translation>
 <translation id="4929196061847506605">Kragtig. Persoonlik. Privaat.</translation>
+<translation id="4936675324097895694">Finansies</translation>
 <translation id="4936710149174207991">Nie gesinchroniseer</translation>
 <translation id="4943266325467647391">Vivaldi se ingeboude naspoorder- en advertensieversperder beskerm u teen roofware en advertensies.</translation>
 <translation id="4950266778127803750">Toon X-knop vir agtergrondoortjies</translation>
@@ -250,6 +310,7 @@ versper</translation>
 <translation id="4993477362660748586">Sinchronisering</translation>
 <translation id="5037761343305489956">Gekopieer na nota</translation>
 <translation id="504986598654589766">Deur in ’n Privaat Oortjie te blaai beteken dit dat u soektogte, besoekte webwerwe, koekies en tydelike lêers nie deur Vivalde bewaar word nie. Dit enkripteer of pas nie u verbinding andersins aan nie.</translation>
+<translation id="5052190740258132773">Prioritiseer boekmerke</translation>
 <translation id="505774819758747674">Voorskou vir die nutsbalk met gekose aksentkleur</translation>
 <translation id="5094183365876568934">Sommige webwerwe pas hul kleurskema aan volgens hul gebruikervoorkeure. Kies welke kleurskema hierdie werwe moet gebruik.</translation>
 <translation id="5094376253685335202">Aktiveer sinchronisering</translation>
@@ -271,11 +332,16 @@ versper</translation>
 <translation id="5378841821586202982">Asblik</translation>
 <translation id="5398772614898833570">Advertensies versper</translation>
 <translation id="5421638721143596928">Kon nie u aantekengegewens dekripteer nie. Teken weer aan.</translation>
+<translation id="5439599923922718668">Gereeld besoek</translation>
 <translation id="5439835075346716808">Registrasie is tydelik vanaf hierdie IP-adres versper. Probeer later weer.</translation>
 <translation id="5475116651001049780">Versteek mobiele werf</translation>
 <translation id="5486261815000869482">Bevestig wagwoord</translation>
 <translation id="5494016731375030300">Onlangs gesluite oortjies</translation>
+<translation id="5517833250460609673">Video’s of musiek speel nie reg af nie</translation>
+<translation id="5519187824830275200">Versteek Voeg toe tot…</translation>
+<translation id="5521914729572529753">Ek is bekommerd oor privaatheid en sekuriteit</translation>
 <translation id="5564687523685713029">Toon slegs groepe</translation>
+<translation id="5577770221789895760">Kies welke blad u wil open wanneer die Tuis-knop getik word.</translation>
 <translation id="5600792731098584229">Snelkiesergrootte</translation>
 <translation id="5607445917275004427">Toon volledige adres in die adresbalk in plaas van slegs die domein.</translation>
 <translation id="5639137028584114536">U organisasie vereis dat u privaat blaai. Oortjies word nie in privaatmodus bewaar nie.
@@ -283,6 +349,8 @@ versper</translation>
 <translation id="5684277895745049190">Lys</translation>
 <translation id="5710478562694930157">Stygend</translation>
 <translation id="574392208103952083">Gemiddeld</translation>
+<translation id="5756451123057329358">Heropen beginblad met</translation>
+<translation id="5775233583238650955">Laat soekvoorstelle in adresveld toe</translation>
 <translation id="5787420647064736989">Toestelnaam</translation>
 <translation id="5801825598531634872">Onaktief na dae</translation>
 <translation id="5822336771053074270">Voeg nota toe</translation>
@@ -294,24 +362,40 @@ versper</translation>
 <translation id="5871497086027727873">1 item geskuif</translation>
 <translation id="5898502570200301364">U kan die bewaarde wagwoorde in Vivaldi Wagwoordbestuurder in ander toeps op u iPhone gebruik.</translation>
 <translation id="5900160494089383343">Hierdie gebruikersnaam is nie beskikbaar nie.</translation>
+<translation id="5907851754429991366">Ons wil graag u terugvoer op die App Store sien.</translation>
+<translation id="5914847543920496660">Vir deursigtigheid verkies ek oopbronprogrammatuur</translation>
+<translation id="591684450784861763">Voeg blad toe tot…</translation>
 <translation id="6005497458542935062">Skuif uit vouer</translation>
+<translation id="603230602684548091">Kies brontaal</translation>
+<translation id="6040304352785030331">Ek wil blaaieruitbreidings/toevoegings gebruik</translation>
 <translation id="6042308850641462728">Nog</translation>
+<translation id="604930981600990598">Vertaling gekopieer!</translation>
 <translation id="6077943432358741146">Snelkieser</translation>
 <translation id="6079696972035130497">Onbeperk</translation>
 <translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> items geskuif</translation>
 <translation id="6147094071357011481">Onlangs gesluite oortjies is onbeskikbaar</translation>
+<translation id="6177301865411451337">Die Vivaldi sinchroniseerdiens ondervind dalk probleme. Ontvang diensopdaterings by: <ph name="BEGIN_LINK" />VivaldiStatus.com<ph name="END_LINK" /></translation>
+<translation id="6180515952840978051">Ek vind dit moeilik om ’n webwerf as ’n snelkieser te bewaar</translation>
 <translation id="6193995664633100765">Indies (<ph name="ORIGIN" />)</translation>
 <translation id="6224086034182508647">Webwerfvoorkomsopsies</translation>
+<translation id="6253990869902066991">Vivaldi herlaai webblaaie onverwags</translation>
 <translation id="6257488392933423163">Bekyk as HTML</translation>
+<translation id="6275978505813092431">Voer beeld in</translation>
 <translation id="6365929278691047681">Duits (<ph name="ORIGIN" />)</translation>
+<translation id="638249699236255123">Webwerfuitleg is gebreek of lyk vreemd</translation>
+<translation id="6383855939619098095">Dit is moeilik om die beginblad van Vivaldi aan te pas</translation>
 <translation id="6406506848690869874">Sinchroniseer</translation>
+<translation id="641394169129472837">Kies welke blad om te open wanneer die knop vir nuwe oortjie getik word.</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> gekies</translation>
 <translation id="6442584491342758233">Direkte treffer</translation>
+<translation id="6443682944493983866">Aanvaar tale</translation>
 <translation id="6468130661190228905">Jammer, dit lyk of u nog ’n ruk moet wag voor u by ons gemeenskap aansluit. Ons vereis dat lede ten minste 16 jaar oud moet wees om te kan aansluit.</translation>
 <translation id="6487150267908786236"><ph name="BEGIN_LINK" />Voer in<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">Rugsteunenkripsiesleutel</translation>
 <translation id="6527303717912515753">Deel</translation>
 <translation id="6535988230515403205">Pools (<ph name="ORIGIN" />)</translation>
+<translation id="6536226749629478563">Ek soek beter wagwoordbestuurveiligheid</translation>
+<translation id="6544880104552732240">Kies doeltaal</translation>
 <translation id="659351303388691480">Wis blaaidata…</translation>
 <translation id="6602272356389933803">Voorkoms &amp; tema</translation>
 <translation id="6614744450826097546">Advertensiedetails</translation>
@@ -321,30 +405,50 @@ versper</translation>
 <translation id="6645228090427373820">Naspoorders word versper, maar nie advertensies nie. Sommige webwerwe kan verkeerd vertoon.</translation>
 <translation id="6656103420185847513">Wysig vouer</translation>
 <translation id="6657585470893396449">Wagwoord</translation>
+<translation id="6659376785721135061">Dit wis die invoerveld</translation>
 <translation id="6690955457036363013">Bestuur versperringsvlak per werf</translation>
 <translation id="6703516503311038964">Ek wil Vivaldi se nuusbrief ontvang</translation>
+<translation id="6709133671862442373">Nuus</translation>
 <translation id="6724024423419410528">Kleure</translation>
 <translation id="6745857330065678428">Neem aksentkleur van blad oor</translation>
+<translation id="6756507620369789050">Deel terugvoer</translation>
 <translation id="6798469570047202628">Verkeerde wagwoord ingevoer</translation>
+<translation id="6807791860691150411">Onderwys</translation>
 <translation id="681368974849482173">Item geskep</translation>
 <translation id="6830986331692390764">Wis tans sinchroniseerdata. Wag asb.</translation>
+<translation id="6831043979455480757">Vertaal</translation>
+<translation id="6838968771741416244">Bied bykomende details oor u terugvoer</translation>
+<translation id="6850275739048136176">Wissel die bron- en doeltale</translation>
 <translation id="6875510405870945573">Kies u gewenste versperringsvlak.</translation>
+<translation id="6878199227380123461">Verkies vertaalpaneel</translation>
 <translation id="6887143077297974801">Sinchronsering kon nie begin nie.</translation>
+<translation id="6887865947291302490">Tydens tik in die adresbalk word u toevoer na u soekenjin gestuur vir voorstelle. Dit is gedeaktiveer in ’n privaat venster.</translation>
+<translation id="6896758677409633944">Kopieer</translation>
 <translation id="691132463664340655">Blaaiertema</translation>
+<translation id="6918338082370824763">Spesifieke blad</translation>
 <translation id="6937750621455385628">U moet ’n Vivaldi-rekening gebruik om aan te teken.</translation>
+<translation id="6941852195052765076">Gesondheid</translation>
 <translation id="6945221475159498467">Kies</translation>
 <translation id="6946395294519639514">Met panele hou u belangrike nutsmiddels in die systaaf van die blaaier binne bereik.</translation>
 <translation id="6951435330868954105">Bestuur verstekinstellings</translation>
 <translation id="6951948201878750661">Tik om hierdie kleur te kies</translation>
 <translation id="6967884871145366229">Bestuur privaatheidinstellings</translation>
 <translation id="6973630695168034713">Vouers</translation>
-<translation id="6976865195058364361">Gee prioriteit aan boekmerkbyname in outovoltooivoorstelle</translation>
 <translation id="7006864796794806241">Kry wagwoord terug</translation>
 <translation id="7029809446516969842">Wagwoorde</translation>
 <translation id="7041964446309059643">Handleiding</translation>
+<translation id="7072317570101031415">Boeke</translation>
 <translation id="7083011465470143310"><ph name="BEGIN_LINK" />Wagwoord<ph name="END_LINK" /> vergeet?</translation>
+<translation id="7083783675072250424">Oortjies is moeilik om te beheer of te organiseer</translation>
+<translation id="7096550097771629450">Dit kopieer die vertaalde teks na die knipbord</translation>
 <translation id="7110758301321962823">Kry gebruikersnaam terug</translation>
+<translation id="711946737922560234">Voer skakel in</translation>
+<translation id="7120229714826964836">Deel blad</translation>
+<translation id="713792263829536729">Stroomdienste werk nie goed nie</translation>
 <translation id="7158507293261405349">Voeg nuwe groep toe</translation>
+<translation id="718052827125696482">Skerm draai nie reg nie</translation>
+<translation id="7180919683305939836">Ek soek KI-aangedrewe funksies (samevattings, klets, ens.)</translation>
+<translation id="7182884564543065232">Sekere webwerwe kan nie geopen word nie</translation>
 <translation id="7192066917392691622">Dalend</translation>
 <translation id="7194677467200983873">Laaste sinchronisering:</translation>
 <translation id="7203411967620588391">Wysig <ph name="ITEM_TYPE" /></translation>
@@ -355,18 +459,27 @@ versper</translation>
 <translation id="7325310788570036874">Blaai slimmer, soepeler en vinniger op die internet met Vivaldi.</translation>
 <translation id="734110743815267231">Hebreeus (<ph name="ORIGIN" />)</translation>
 <translation id="7347289093190902150">Open in privaat?</translation>
+<translation id="735361677607128142">Die soekvoorstelle werk nie vir my nie</translation>
 <translation id="7362952245780030555">Kies tussen volle rekenaaroortjies, of die vereenvoudigde oortjiewisselaar.</translation>
+<translation id="736592699917579616">Voedsel</translation>
 <translation id="7379938540614588640">Nederlands (<ph name="ORIGIN" />)</translation>
 <translation id="7386354767119759965">Mobiele werwe</translation>
 <translation id="7388525939184421699">Voeg nuwe bron toe</translation>
+<translation id="7393145587390257456">Die advertensieversperder werk nie goed nie</translation>
 <translation id="7400418766976504921">Bronadres</translation>
 <translation id="7417521636956146248">Soekenjins sal na verstekinstellings teruggestel word, wat ook u pasgemaakte soekenjins terug sal stel.</translation>
+<translation id="7451784507428459503">YouTube-video’s speel nie af nie of gee probleme</translation>
 <translation id="7454640759045234067">Naspoorders versper</translation>
 <translation id="7461899062138731833">BRONNE</translation>
+<translation id="7473891865547856676">Nee dankie</translation>
 <translation id="749277285729135008">Fokus adresbalk op nuwe oortjie</translation>
+<translation id="7504733216949066481">Vertaling het misluk!</translation>
 <translation id="750493650310597496">0 gekies</translation>
 <translation id="7525067979554623046">Skep</translation>
 <translation id="753732157349120914">Oortjiewisselaar</translation>
+<translation id="7541018845757104937">Vivaldi maak my battery vinnig leeg</translation>
+<translation id="755410338177348055">Oudio of video bly buffer of vries</translation>
+<translation id="7562758693157424472">Het u gou tyd om u gedagtes met ons te deel?</translation>
 <translation id="7573518470897278603">Toon mobiele weergawe van werf</translation>
 <translation id="7574321014880720413">Voeg nuwe domein toe</translation>
 <translation id="7587132259180664054">E-pos suksesvol verstuur</translation>
@@ -374,6 +487,7 @@ versper</translation>
 <translation id="7593546601395782810">Versteek notas</translation>
 <translation id="7602336701644200880">Stuur van e-pos het misluk. Probeer weer.</translation>
 <translation id="7606108789437688910">Open nota-adresse in privaat modus</translation>
+<translation id="7616284412875773842">Teleurgesteld</translation>
 <translation id="7622661618259256505">Kies ’n wagwoord wat ten minste 12 karakters het.</translation>
 <translation id="7658239707568436148">Kanselleer</translation>
 <translation id="767363698559661695">Stel u oortjiestyl in</translation>
@@ -383,12 +497,20 @@ versper</translation>
 <translation id="7732622593814325274">Bestuur naspoorderversperringsbronne</translation>
 <translation id="7765158879357617694">Skuif</translation>
 <translation id="7771452384635174008">Uitleg</translation>
+<translation id="7781069478569868053">Nuwe oortjie-blad</translation>
+<translation id="7801111502975417831">Ek wil video’s in die agtergrond kan afspeel</translation>
 <translation id="7801204999757211519">HeT U al ’n rekening? <ph name="BEGIN_LINK" />Teken aan ➔<ph name="END_LINK" /></translation>
 <translation id="7850070199083838600">Skep ’n nuwe groep?</translation>
+<translation id="7870765213383950011">Eerste groep</translation>
 <translation id="7914995060146784406">Wysig nota</translation>
 <translation id="7925340978147141704">Toon wagwoord</translation>
+<translation id="7930665886069596866">’n Funksie werk nie reg nie</translation>
 <translation id="7931102520806266819">Open in privaat</translation>
+<translation id="7961270736686975887">Wissel tale</translation>
+<translation id="7967161908152532036">Webwerfadres</translation>
 <translation id="8008214489230610096">Bevestig herstel-e-pos</translation>
+<translation id="8038592796033755028"><ph name="USERNAME" /> se toestelle</translation>
+<translation id="8041093619605951337">Gelukkig</translation>
 <translation id="8046542428651654244">Werk duimnael by</translation>
 <translation id="804786196054284061">Eindgebruikerlisensieooreenkoms</translation>
 <translation id="8053851743673939284">Frans (<ph name="ORIGIN" />)</translation>
@@ -398,6 +520,7 @@ versper</translation>
 <translation id="8077675488769462025">Onaktiewe oortjies</translation>
 <translation id="8112996065264879835">Hierdie kode stem nie ooreen met wat aan u gestuur is nie.
         U het die limiet vir verkeerde pogings bereik. Vra hieronder ’n nuwe kode aan met die opsie Stuur weer.</translation>
+<translation id="8131740175452115882">Bevestig</translation>
 <translation id="8134672010161840864">Knyp om die beeld te snoei en te posisioneer</translation>
 <translation id="8142291334394582384">Draai soekvoorstelvolgorde om</translation>
 <translation id="8147118677117542370">Verskaf asb. u ouderdom.</translation>
@@ -410,28 +533,35 @@ versper</translation>
 <translation id="8284356787013856231">Toestemming om lêer te open is geweier</translation>
 <translation id="8289933454364510719">Bo of onder</translation>
 <translation id="8304044605002588416">Maak beginbladknop pas</translation>
+<translation id="8323167517179506834">Tik bronadres</translation>
 <translation id="8326104954595890674">Nuwe privaat oortjie</translation>
 <translation id="8329813750766387010">Bygewerk: <ph name="DATE" /></translation>
+<translation id="8339701072035560935">Blanko blad</translation>
 <translation id="8347535536909603600">Verwyder koekiewaarskuwings (<ph name="TYPE" />)</translation>
 <translation id="8359194106448244241">Om oortjies van ander toestelle te sien moet u sinchronisering aktiveer.</translation>
 <translation id="8366175803122817174">Open alle nota-adresse</translation>
+<translation id="8372721116225477180">Sosiaal</translation>
 <translation id="8395378633507873708">Adresbalk</translation>
 <translation id="839736845446313156">Registreer</translation>
+<translation id="8404556771547317369">Voer asb. die bronadres in</translation>
 <translation id="8414685983518053656">Notas</translation>
 <translation id="8423076545503792640">Versoek het misluk weens ’n fout. Probeer later weer.</translation>
 <translation id="8428213095426709021">Instellings</translation>
 <translation id="8458397775385147834">1 item geskrap</translation>
+<translation id="8466547766474747336">’n Funksie wat ek soek, ontbreek</translation>
 <translation id="8500459200727969761">Herstel ingeboude lyste</translation>
 <translation id="8503813439785031346">Gebruikersnaam</translation>
 <translation id="8515808232153642813">Dekripteer</translation>
 <translation id="8517852590337319813">Aktiveer u rekening</translation>
 <translation id="8546963963006468833">Met Vivaldi kan u naatloos skakels open, soek vanuit dingesies en outomaties wagwoord in ander toeps invul.</translation>
+<translation id="8546995005405883065">Voorkeurtale, aanvaar deur versoenbare webwerwe in bepaalde volgorde.</translation>
 <translation id="8562452229998620586">Bewaarde wagwoorde verskyn hier.</translation>
 <translation id="8591818185775466306">Skrap <ph name="ITEM_TYPE" /></translation>
 <translation id="8605953154325672921">Gebruikersnaam vereis</translation>
 <translation id="8675578805254882416">Haal tans op</translation>
 <translation id="8677007239430848917">Voeg u eerste nota toe deur op die onderstaande plusikoon te tik</translation>
 <translation id="8684294196284714094">Gereed om Vivaldi as u verstekblaaier in te stel?</translation>
+<translation id="8696653005998192569">Beelde of video’s laai nie op webwerwe nie</translation>
 <translation id="8733945742171960420">Sodra u begin blaai, word u belangrikste webwerwe hier vertoon.</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> items geskrap</translation>
 <translation id="8763006697839582351">Open in Vivaldi privaat</translation>
@@ -442,25 +572,35 @@ versper</translation>
 <translation id="8819841443522803117">Tyd om van verstekblaaier te wissel? Kies Vivaldi.</translation>
 <translation id="8820817407110198400">Boekmerke</translation>
 <translation id="8855707633300847215">Toon oortjiebalk</translation>
+<translation id="8866638710644054825">Prioritiseer boekmerkbyname</translation>
 <translation id="8892354889971902600">Onlangs geslote oortjies verskyn hier.</translation>
 <translation id="89390081013973080">Heeltemal klaar! Tyd om te besluit welke data om tussen toestelle te sinchroniseer.</translation>
 <translation id="8964449607824577665">Sonder u huidige enkripsiewagwoord kan ons nie u data dekodeer nie. Om die wagwoord terug te stel, moet alle bestaande sinchroniseerdata van Vivaldi-bedieners geskrap word.</translation>
 <translation id="8965371804397726192">Begin alle data sinchroniseer</translation>
+<translation id="8993821994276892302">{count, plural,
+          =1 {Boekmerk geskuif na “{title}”}
+          other {Boekmerke geskuif na “{title}”}}</translation>
 <translation id="9028089729841356743">Netwerkfout.</translation>
 <translation id="9043882097999887291">Advertensies
 versper</translation>
 <translation id="9065203028668620118">Wysig</translation>
+<translation id="9077265667054763280">Webwerwe laai te stadig</translation>
 <translation id="9079251484401922158">Fins (<ph name="ORIGIN" />)</translation>
 <translation id="9083392325882095631">1 item</translation>
 <translation id="9091665118798175641">Sinchroniseer boekmerke en snelkiesers</translation>
 <translation id="9097127519290088802">Enkripsiewagwoord word vereis</translation>
+<translation id="9139318394846604261">Inkopies</translation>
 <translation id="9152984048904392513">Open alles in agtergrond</translation>
 <translation id="9195659219948942754">Bly die gesinchroniseerde data in u Vivaldi-rekening gebruik</translation>
 <translation id="9212737146310746733">Farsi (<ph name="ORIGIN" />)</translation>
 <translation id="9218693288527810093">Versper naspoorders</translation>
 <translation id="924053859552461110">Maak beginblad pas</translation>
+<translation id="925891113183098411">Ek het sukkel om my data oor toestelle te sinchroniseer</translation>
+<translation id="932327136139879170">Tuis</translation>
 <translation id="937440209447114831">Ons versper geen advertensies of naspoorders nie.</translation>
 <translation id="958688202859970851">Onlangs besoekte oortjies verskyn hier</translation>
 <translation id="984650419570014454">Aktiveringskode moet 6 syfers hê.</translation>
+<translation id="987264212798334818">Algemeen</translation>
 <translation id="992440609313570947">Nuut by Vivaldi? <ph name="BEGIN_LINK" />Skep ’n rekening ➔<ph name="END_LINK" /></translation>
+<translation id="998988732385109770">Boekmerke is moeilik om te gebruik of te beheer</translation>
 </translationbundle>

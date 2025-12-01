@@ -11,15 +11,15 @@ title: Monday, October 5, 2015
 ---
 
 Updates since last meeting (on Monday, October 5th):
-Scrolling (skobes, szager) \[[crbug.com/417782](http://crbug.com/417782)\]
+Scrolling (skobes, szager) \[[crbug.com/417782](https://crbug.com/417782)\]
 - Landed change that enables coordinated scrollbars everywhere. (skobes)
 - Landed unit test fixes for root layer scrolling. (szager)
-CSS Flexbox (cbiesinger) \[[crbug.com/426898](http://crbug.com/426898)\]
+CSS Flexbox (cbiesinger) \[[crbug.com/426898](https://crbug.com/426898)\]
 - Worked on the flexbox layout tests, in the W3C repository. The W3C
 repository is the source of truth that we pull in periodically.
 - Misc flexbox bug fixes.
 CSS Grid Layout (svillar, jfernandez, rego)
-\[[crbug.com/79180](http://crbug.com/79180)\]
+\[[crbug.com/79180](https://crbug.com/79180)\]
 - Reviewed several grid layout patches. (svillar)
 - Working on grid container height sizing when there are min|max
 content constraints and min|max height restrictions. The CL is
@@ -32,11 +32,11 @@ lines. (rego)
 - Implemented auto margin alignment for grid items. (jfernandez)
 - Added 0fr support for track sizes. (jfernandez)
 Region-based multi-column support (mstensho)
-\[[crbug.com/334335](http://crbug.com/334335)\]
+\[[crbug.com/334335](https://crbug.com/334335)\]
 - Fixed pagination strut propagation for blocks.
 - Removed unused clearPaginationInformation from LayoutState.
 Add API for layout (leviw, pilgrim, ojan)
-\[[crbug.com/495288](http://crbug.com/495288)\]
+\[[crbug.com/495288](https://crbug.com/495288)\]
 - Landed two layout API changes that added a couple of methods missing
 form the API around scaling. (pilgrim)
 - Converted inline text box painters to not use the line layout api but

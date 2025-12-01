@@ -15,8 +15,10 @@
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "base/uuid.h"
+#include "components/saved_tab_groups/public/types.h"
 #include "components/sync/base/data_type.h"
 #include "components/tab_groups/tab_group_color.h"
+#include "google_apis/gaia/gaia_id.h"
 
 namespace tab_groups {
 
@@ -56,8 +58,11 @@ class SyncBridgeTabGroupModelWrapper {
   // corresponds to the data type, otherwise returns null.
   const SavedTabGroup* GetGroupContainingTab(const base::Uuid& tab_id) const;
 
-  // Removes the tab from the `group_id`.
-  void RemoveTabFromGroup(const base::Uuid& group_id, const base::Uuid& tab_id);
+  // Removes the tab from the `group_id`. `removed_by` is the user who removed
+  // the tab (used for shared tab groups only, may be empty).
+  void RemoveTabFromGroup(const base::Uuid& group_id,
+                          const base::Uuid& tab_id,
+                          GaiaId removed_by = GaiaId());
 
   // Removes the whole group and all its tabs.
   void RemoveGroup(const base::Uuid& group_id);
@@ -70,7 +75,8 @@ class SyncBridgeTabGroupModelWrapper {
       std::optional<size_t> position,
       std::optional<std::string> creator_cache_guid,
       std::optional<std::string> last_updater_cache_guid,
-      base::Time update_time);
+      base::Time update_time,
+      GaiaId updated_by);
 
   // Updates the tab with the given remote data.
   const SavedTabGroupTab* MergeRemoteTab(const SavedTabGroupTab& remote_tab);
@@ -88,9 +94,19 @@ class SyncBridgeTabGroupModelWrapper {
       std::optional<std::string> old_cache_guid,
       std::optional<std::string> new_cache_guid);
 
+  // Marks the tab group as transitioned to shared, used for shared tab groups
+  // only.
+  void MarkTransitionedToShared(const base::Uuid& group_id);
+
   // Initializes with the data loaded from the disk.
   void Initialize(std::vector<SavedTabGroup> groups,
                   std::vector<SavedTabGroupTab> tabs);
+
+  // Called to notify of the sync bridge state changes, e.g. whether initial
+  // merge or disable sync are in progress. Invoked only for shared tab group
+  // bridge.
+  void OnSyncBridgeUpdateTypeChanged(
+      SyncBridgeUpdateType sync_bridge_update_type);
 
  private:
   // Returns whether the current wrapper is used for the shared tab group data.

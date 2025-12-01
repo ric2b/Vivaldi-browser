@@ -279,6 +279,7 @@
 <translation id="5582839680698949063">Menu utama</translation>
 <translation id="5614553682702429503">Simpan sandi?</translation>
 <translation id="5623842676595125836">Catatan</translation>
+<translation id="5624959475330585145">Tanyakan sebelum menggunakan koneksi yang tidak aman</translation>
 <translation id="5638309510554459422">Temukan ekstensi dan tema di <ph name="BEGIN_LINK" />Chrome Web Store<ph name="END_LINK" /></translation>
 <translation id="5677928146339483299">Diblokir</translation>
 <translation id="5707185214361380026">Gagal memuat ekstensi dari:</translation>
@@ -468,6 +469,7 @@ Simpan berkas kunci anda di tempat yang aman. Anda akan membutuhkannya untuk mem
 <translation id="9218430445555521422">Atur sebagai standar</translation>
 <translation id="93766956588638423">Perbaiki ekstensi</translation>
 <translation id="961012016278832836">Legasi Microsoft Edge</translation>
+<translation id="961856697154696964">Hapus data penjelajahan</translation>
 <translation id="994289308992179865">&amp;Ulang</translation>
 <translation id="998747458861718449">I&amp;nspeksi</translation>
 </translationbundle>

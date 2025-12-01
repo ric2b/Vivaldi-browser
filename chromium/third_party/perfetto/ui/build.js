@@ -86,7 +86,7 @@ const cfg = {
   startHttpServer: false,
   httpServerListenHost: '127.0.0.1',
   httpServerListenPort: 10000,
-  wasmModules: ['trace_processor', 'traceconv'],
+  wasmModules: ['trace_processor', 'traceconv', 'trace_config_utils'],
   crossOriginIsolation: false,
   testFilter: '',
   noOverrideGnArgs: false,
@@ -120,7 +120,7 @@ const RULES = [
   {r: /ui\/src\/assets\/((.*)[.]png)/, f: copyAssets},
   {r: /buildtools\/typefaces\/(.+[.]woff2)/, f: copyAssets},
   {r: /buildtools\/catapult_trace_viewer\/(.+(js|html))/, f: copyAssets},
-  {r: /ui\/src\/assets\/.+[.]scss/, f: compileScss},
+  {r: /ui\/src\/assets\/.+[.]scss|ui\/src\/(?:plugins|core_plugins)\/.+\/styles[.]scss/, f: compileScss},
   {r: /ui\/src\/chrome_extension\/.*/, f: copyExtensionAssets},
   {r: /.*\/dist\/.+\/(?!manifest\.json).*/, f: genServiceWorkerManifestJson},
   {r: /.*\/dist\/.*[.](js|html|css|wasm)$/, f: notifyLiveServer},
@@ -209,8 +209,9 @@ async function main() {
   process.on('SIGINT', () => {
     console.log('\nSIGINT received. Killing all child processes and exiting');
     for (const proc of subprocesses) {
-      if (proc) proc.kill('SIGINT');
+      if (proc) proc.kill('SIGKILL');
     }
+    process.kill(0, 'SIGKILL');  // Kill the whole process group.
     process.exit(130);  // 130 -> Same behavior of bash when killed by SIGINT.
   });
 
@@ -248,12 +249,14 @@ async function main() {
     updateSymlinks();  // Links //ui/out -> //out/xxx/ui/
 
     buildWasm(args.no_wasm);
+    generateImports('ui/src/core_plugins', 'all_core_plugins');
+    generateImports('ui/src/plugins', 'all_plugins');
     scanDir('ui/src/assets');
+    scanDir('ui/src/plugins', /styles[.]scss$/);
+    scanDir('ui/src/core_plugins', /styles[.]scss$/);
     scanDir('ui/src/chrome_extension');
     scanDir('buildtools/typefaces');
     scanDir('buildtools/catapult_trace_viewer');
-    generateImports('ui/src/core_plugins', 'all_core_plugins.ts');
-    generateImports('ui/src/plugins', 'all_plugins.ts');
     compileProtos();
     genVersion();
     generateStdlibDocs();
@@ -405,6 +408,7 @@ function compileProtos() {
     'protos/perfetto/ipc/consumer_port.proto',
     'protos/perfetto/ipc/wire_protocol.proto',
     'protos/perfetto/trace/perfetto/perfetto_metatrace.proto',
+    'protos/perfetto/perfetto_sql/structured_query.proto',
     'protos/perfetto/trace_processor/trace_processor.proto',
   ];
   // Can't put --no-comments here - The comments are load bearing for

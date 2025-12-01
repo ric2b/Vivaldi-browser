@@ -23,7 +23,6 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/notimplemented.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
@@ -66,7 +65,6 @@
 #include "chrome/browser/ash/guest_os/public/guest_os_service.h"
 #include "chrome/browser/ash/guest_os/public/guest_os_service_factory.h"
 #include "chrome/browser/ash/guest_os/public/types.h"
-#include "chrome/browser/ash/scheduler_config/scheduler_configuration_manager.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/profiles/profile.h"
@@ -82,6 +80,7 @@
 #include "chromeos/ash/components/network/device_state.h"
 #include "chromeos/ash/components/network/network_state.h"
 #include "chromeos/ash/components/network/network_state_handler.h"
+#include "chromeos/ash/components/scheduler_config/scheduler_configuration_manager.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -1450,9 +1449,8 @@ void CrostiniManager::InstallTermina(CrostiniResultCallback callback) {
           LOG(ERROR) << "Installing Termina failed: cancelled";
           res = CrostiniResult::INSTALL_TERMINA_CANCELLED;
         } else {
-          CHECK(false)
+          NOTREACHED()
               << "Got unexpected value of TerminaInstaller::InstallResult";
-          res = CrostiniResult::LOAD_COMPONENT_FAILED;
         }
         std::move(callback).Run(res);
       },
@@ -2839,7 +2837,7 @@ void CrostiniManager::OnStartLxdProgress(
 void CrostiniManager::OnStopVm(
     std::string vm_name,
     CrostiniResultCallback callback,
-    std::optional<vm_tools::concierge::StopVmResponse> response) {
+    std::optional<vm_tools::concierge::SuccessFailureResponse> response) {
   if (!response) {
     LOG(ERROR) << "Failed to stop termina vm. Empty response.";
     std::move(callback).Run(CrostiniResult::STOP_VM_NO_RESPONSE);
@@ -3880,7 +3878,7 @@ void CrostiniManager::OnImportLxdContainerProgress(
 
 void CrostiniManager::OnCancelDiskImageOp(
     const guest_os::GuestId& key,
-    std::optional<vm_tools::concierge::CancelDiskImageResponse> response) {
+    std::optional<vm_tools::concierge::SuccessFailureResponse> response) {
   auto it = disk_image_callbacks_.find(key);
   if (it == disk_image_callbacks_.end()) {
     LOG(ERROR) << "No export callback for " << key;

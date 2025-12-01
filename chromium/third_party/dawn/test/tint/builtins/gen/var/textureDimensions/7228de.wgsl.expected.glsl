@@ -1,9 +1,12 @@
+//
+// fragment_main
+//
 #version 310 es
 precision highp float;
 precision highp int;
 
 layout(binding = 0, std430)
-buffer prevent_dce_block_1_ssbo {
+buffer f_prevent_dce_block_ssbo {
   uint inner;
 } v;
 layout(binding = 0, r32ui) uniform highp writeonly uimage2D arg_0;
@@ -14,6 +17,9 @@ uint textureDimensions_7228de() {
 void main() {
   v.inner = textureDimensions_7228de();
 }
+//
+// compute_main
+//
 #version 310 es
 
 layout(binding = 0, std430)

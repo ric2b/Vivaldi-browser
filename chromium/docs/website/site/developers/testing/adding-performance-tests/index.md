@@ -10,7 +10,7 @@ title: Adding Performance Tests
 
 Chrome runs a battery of [performance tests](https://chromeperf.appspot.com/)
 against every build. These tests are monitored by the [perf
-sheriffs](http://www.chromium.org/developers/tree-sheriffs/perf-sheriffs) for
+sheriffs](/developers/tree-sheriffs/perf-sheriffs) for
 regressions. The best ways to ensure your feature stays fast and gets faster is
 to add a performance test.
 

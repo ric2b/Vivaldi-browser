@@ -24,7 +24,7 @@ const ToolbarElementBase = WebUiListenerMixinLit(I18nMixinLit(CrLitElement));
 export interface ToolbarElement {
   $: {
     heading: SpHeadingElement,
-    pinningSelectionCard: HTMLDivElement,
+    pinningSelectionCard: HTMLElement,
   };
 }
 
@@ -73,6 +73,7 @@ export class ToolbarElement extends ToolbarElementBase {
         this.populateUi_.bind(this)));
 
     this.addWebUiListener('theme-changed', this.populateUi_.bind(this));
+    chrome.send('observeThemeChanges');
   }
 
   override disconnectedCallback() {

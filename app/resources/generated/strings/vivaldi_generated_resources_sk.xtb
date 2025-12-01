@@ -279,6 +279,7 @@
 <translation id="5582839680698949063">Hlavná ponuka</translation>
 <translation id="5614553682702429503">Uložiť heslo?</translation>
 <translation id="5623842676595125836">Nízka</translation>
+<translation id="5624959475330585145">Pýtať sa pred použitím nezabezpečených pripojení</translation>
 <translation id="5638309510554459422">Nájdite rozšírenia a motívy vzhľadu v <ph name="BEGIN_LINK" />Internetovom obchode Chrome<ph name="END_LINK" /></translation>
 <translation id="5677928146339483299">Zablokovaný</translation>
 <translation id="5707185214361380026">Nepodarilo sa načítať rozšírenie z:</translation>
@@ -468,6 +469,7 @@ Súbor kľúča uložte na bezpečné miesto. Budete ho potrebovať na vytvoreni
 <translation id="9218430445555521422">Nastaviť ako predvolený</translation>
 <translation id="93766956588638423">Opraviť rozšírenie</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
+<translation id="961856697154696964">Odstrániť dáta prehliadania</translation>
 <translation id="994289308992179865">Opa&amp;kovať</translation>
 <translation id="998747458861718449">P&amp;reskúmať</translation>
 </translationbundle>

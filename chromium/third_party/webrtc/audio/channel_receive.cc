@@ -11,49 +11,74 @@
 #include "audio/channel_receive.h"
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "api/array_view.h"
 #include "api/audio/audio_device.h"
+#include "api/audio/audio_mixer.h"
+#include "api/audio_codecs/audio_codec_pair_id.h"
+#include "api/audio_codecs/audio_decoder_factory.h"
+#include "api/audio_codecs/audio_format.h"
+#include "api/call/audio_sink.h"
+#include "api/call/transport.h"
+#include "api/crypto/crypto_options.h"
 #include "api/crypto/frame_decryptor_interface.h"
+#include "api/environment/environment.h"
 #include "api/frame_transformer_interface.h"
+#include "api/make_ref_counted.h"
+#include "api/media_types.h"
 #include "api/neteq/default_neteq_factory.h"
 #include "api/neteq/neteq.h"
+#include "api/neteq/neteq_factory.h"
 #include "api/rtc_event_log/rtc_event_log.h"
+#include "api/rtp_headers.h"
+#include "api/rtp_packet_info.h"
+#include "api/rtp_packet_infos.h"
+#include "api/scoped_refptr.h"
 #include "api/sequence_checker.h"
 #include "api/task_queue/pending_task_safety_flag.h"
 #include "api/task_queue/task_queue_base.h"
+#include "api/transport/rtp/rtp_source.h"
 #include "api/units/time_delta.h"
 #include "api/units/timestamp.h"
 #include "audio/audio_level.h"
 #include "audio/channel_receive_frame_transformer_delegate.h"
-#include "audio/channel_send.h"
 #include "audio/utility/audio_frame_operations.h"
+#include "call/syncable.h"
 #include "logging/rtc_event_log/events/rtc_event_audio_playout.h"
 #include "logging/rtc_event_log/events/rtc_event_neteq_set_minimum_delay.h"
 #include "modules/audio_coding/acm2/acm_resampler.h"
 #include "modules/audio_coding/acm2/call_statistics.h"
-#include "modules/audio_coding/audio_network_adaptor/include/audio_network_adaptor_config.h"
+#include "modules/audio_coding/include/audio_coding_module_typedefs.h"
 #include "modules/pacing/packet_router.h"
 #include "modules/rtp_rtcp/include/receive_statistics.h"
 #include "modules/rtp_rtcp/include/remote_ntp_time_estimator.h"
+#include "modules/rtp_rtcp/include/rtcp_statistics.h"
+#include "modules/rtp_rtcp/include/rtp_rtcp_defines.h"
 #include "modules/rtp_rtcp/source/absolute_capture_time_interpolator.h"
 #include "modules/rtp_rtcp/source/capture_clock_offset_updater.h"
-#include "modules/rtp_rtcp/source/rtp_header_extensions.h"
 #include "modules/rtp_rtcp/source/rtp_packet_received.h"
 #include "modules/rtp_rtcp/source/rtp_rtcp_config.h"
 #include "modules/rtp_rtcp/source/rtp_rtcp_impl2.h"
+#include "modules/rtp_rtcp/source/source_tracker.h"
+#include "rtc_base/buffer.h"
 #include "rtc_base/checks.h"
 #include "rtc_base/logging.h"
+#include "rtc_base/numerics/safe_conversions.h"
 #include "rtc_base/numerics/safe_minmax.h"
 #include "rtc_base/numerics/sequence_number_unwrapper.h"
 #include "rtc_base/race_checker.h"
 #include "rtc_base/strings/string_builder.h"
 #include "rtc_base/synchronization/mutex.h"
 #include "rtc_base/system/no_unique_address.h"
+#include "rtc_base/thread_annotations.h"
 #include "rtc_base/time_utils.h"
 #include "rtc_base/trace_event.h"
 #include "system_wrappers/include/metrics.h"
@@ -145,7 +170,7 @@ class ChannelReceive : public ChannelReceiveInterface,
 
   // Audio+Video Sync.
   uint32_t GetDelayEstimate() const override;
-  bool SetMinimumPlayoutDelay(int delayMs) override;
+  bool SetMinimumPlayoutDelay(int delay_ms) override;
   bool GetPlayoutRtpTimestamp(uint32_t* rtp_timestamp,
                               int64_t* time_ms) const override;
   void SetEstimatedPlayoutNtpTimestampMs(int64_t ntp_timestamp_ms,
@@ -165,7 +190,7 @@ class ChannelReceive : public ChannelReceiveInterface,
   void ResetReceiverCongestionControlObjects() override;
 
   CallReceiveStatistics GetRTCPStatistics() const override;
-  void SetNACKStatus(bool enable, int maxNumberOfPackets) override;
+  void SetNACKStatus(bool enable, int max_packets) override;
   void SetRtcpMode(webrtc::RtcpMode mode) override;
   void SetNonSenderRttMeasurement(bool enabled) override;
 
@@ -176,10 +201,6 @@ class ChannelReceive : public ChannelReceiveInterface,
   int PreferredSampleRate() const override;
 
   std::vector<RtpSource> GetSources() const override;
-
-  // Associate to a send channel.
-  // Used for obtaining RTT for a receive-only channel.
-  void SetAssociatedSendChannel(const ChannelSendInterface* channel) override;
 
   // Sets a frame transformer between the depacketizer and the decoder, to
   // transform the received frames before decoding them.
@@ -222,7 +243,6 @@ class ChannelReceive : public ChannelReceiveInterface,
   // parts with single-threaded semantics, and thereby reduce the need for
   // locks.
   RTC_NO_UNIQUE_ADDRESS SequenceChecker worker_thread_checker_;
-  RTC_NO_UNIQUE_ADDRESS SequenceChecker network_thread_checker_;
 
   const Environment env_;
   TaskQueueBase* const worker_thread_;
@@ -247,8 +267,6 @@ class ChannelReceive : public ChannelReceiveInterface,
   const uint32_t remote_ssrc_;
   SourceTracker source_tracker_ RTC_GUARDED_BY(&worker_thread_checker_);
 
-  // Info for GetSyncInfo is updated on network or worker thread, and queried on
-  // the worker thread.
   std::optional<uint32_t> last_received_rtp_timestamp_
       RTC_GUARDED_BY(&worker_thread_checker_);
   std::optional<int64_t> last_received_rtp_system_time_ms_
@@ -286,9 +304,6 @@ class ChannelReceive : public ChannelReceiveInterface,
 
   AudioDeviceModule* _audioDeviceModulePtr;
   float _outputGain RTC_GUARDED_BY(volume_settings_mutex_);
-
-  const ChannelSendInterface* associated_send_channel_
-      RTC_GUARDED_BY(network_thread_checker_);
 
   PacketRouter* packet_router_ = nullptr;
 
@@ -350,7 +365,8 @@ void ChannelReceive::OnReceivedPayloadData(
   // Push the incoming payload (parsed and ready for decoding) into NetEq.
   if (payload.empty()) {
     neteq_->InsertEmptyPacket(rtpHeader);
-  } else if (neteq_->InsertPacket(rtpHeader, payload, receive_time) < 0) {
+  } else if (neteq_->InsertPacket(rtpHeader, payload,
+                                  RtpPacketInfo(rtpHeader, receive_time)) < 0) {
     RTC_DLOG(LS_ERROR) << "ChannelReceive::OnReceivedPayloadData() unable to "
                           "insert packet into NetEq; PT = "
                        << static_cast<int>(rtpHeader.payloadType);
@@ -574,13 +590,10 @@ ChannelReceive::ChannelReceive(
       capture_start_ntp_time_ms_(-1),
       _audioDeviceModulePtr(audio_device_module),
       _outputGain(1.0f),
-      associated_send_channel_(nullptr),
       frame_decryptor_(frame_decryptor),
       crypto_options_(crypto_options),
       absolute_capture_time_interpolator_(&env_.clock()) {
   RTC_DCHECK(audio_device_module);
-
-  network_thread_checker_.Detach();
 
   rtp_receive_statistics_->EnableRetransmitDetection(remote_ssrc_, true);
   RtpRtcpInterface::Configuration configuration;
@@ -654,9 +667,6 @@ void ChannelReceive::SetReceiveCodecs(
 
 void ChannelReceive::OnRtpPacket(const RtpPacketReceived& packet) {
   RTC_DCHECK_RUN_ON(&worker_thread_checker_);
-  // TODO(bugs.webrtc.org/11993): Expect to be called exclusively on the
-  // network thread. Once that's done, the same applies to
-  // UpdatePlayoutTimestamp and
   int64_t now_ms = rtc::TimeMillis();
 
   last_received_rtp_timestamp_ = packet.Timestamp();
@@ -753,8 +763,6 @@ void ChannelReceive::ReceivePacket(const uint8_t* packet,
 
 void ChannelReceive::ReceivedRTCPPacket(const uint8_t* data, size_t length) {
   RTC_DCHECK_RUN_ON(&worker_thread_checker_);
-  // TODO(bugs.webrtc.org/11993): Expect to be called exclusively on the
-  // network thread.
 
   // Store playout timestamp for the received RTCP packet
   UpdatePlayoutTimestamp(true, rtc::TimeMillis());
@@ -839,23 +847,17 @@ CallReceiveStatistics ChannelReceive::GetRTCPStatistics() const {
     rtp_stats = statistician->GetStats();
   }
 
-  stats.cumulativeLost = rtp_stats.packets_lost;
-  stats.jitterSamples = rtp_stats.jitter;
+  stats.packets_lost = rtp_stats.packets_lost;
+  stats.jitter_ms = rtp_stats.interarrival_jitter.ms();
 
   // Data counters.
   if (statistician) {
     stats.payload_bytes_received = rtp_stats.packet_counter.payload_bytes;
-
     stats.header_and_padding_bytes_received =
         rtp_stats.packet_counter.header_bytes +
         rtp_stats.packet_counter.padding_bytes;
-    stats.packetsReceived = rtp_stats.packet_counter.packets;
+    stats.packets_received = rtp_stats.packet_counter.packets;
     stats.last_packet_received = rtp_stats.last_packet_received;
-  } else {
-    stats.payload_bytes_received = 0;
-    stats.header_and_padding_bytes_received = 0;
-    stats.packetsReceived = 0;
-    stats.last_packet_received = std::nullopt;
   }
 
   {
@@ -866,7 +868,7 @@ CallReceiveStatistics ChannelReceive::GetRTCPStatistics() const {
   // Timestamps.
   {
     MutexLock lock(&ts_stats_lock_);
-    stats.capture_start_ntp_time_ms_ = capture_start_ntp_time_ms_;
+    stats.capture_start_ntp_time_ms = capture_start_ntp_time_ms_;
   }
 
   std::optional<RtpRtcpInterface::SenderReportStats> rtcp_sr_stats =
@@ -934,12 +936,6 @@ void ChannelReceive::RtcpPacketTypesCounterUpdated(
   rtcp_packet_type_counter_ = packet_counter;
 }
 
-void ChannelReceive::SetAssociatedSendChannel(
-    const ChannelSendInterface* channel) {
-  RTC_DCHECK_RUN_ON(&network_thread_checker_);
-  associated_send_channel_ = channel;
-}
-
 void ChannelReceive::SetDepacketizerToDecoderFrameTransformer(
     rtc::scoped_refptr<webrtc::FrameTransformerInterface> frame_transformer) {
   RTC_DCHECK_RUN_ON(&worker_thread_checker_);
@@ -962,19 +958,16 @@ void ChannelReceive::SetDepacketizerToDecoderFrameTransformer(
 
 void ChannelReceive::SetFrameDecryptor(
     rtc::scoped_refptr<webrtc::FrameDecryptorInterface> frame_decryptor) {
-  // TODO(bugs.webrtc.org/11993): Expect to be called on the network thread.
   RTC_DCHECK_RUN_ON(&worker_thread_checker_);
   frame_decryptor_ = std::move(frame_decryptor);
 }
 
 void ChannelReceive::OnLocalSsrcChange(uint32_t local_ssrc) {
-  // TODO(bugs.webrtc.org/11993): Expect to be called on the network thread.
   RTC_DCHECK_RUN_ON(&worker_thread_checker_);
   rtp_rtcp_->SetLocalSsrc(local_ssrc);
 }
 
 uint32_t ChannelReceive::GetLocalSsrc() const {
-  // TODO(bugs.webrtc.org/11993): Expect to be called on the network thread.
   RTC_DCHECK_RUN_ON(&worker_thread_checker_);
   return rtp_rtcp_->local_media_ssrc();
 }
@@ -1062,9 +1055,6 @@ uint32_t ChannelReceive::GetDelayEstimate() const {
 }
 
 bool ChannelReceive::SetMinimumPlayoutDelay(int delay_ms) {
-  // TODO(bugs.webrtc.org/11993): This should run on the network thread.
-  // We get here via RtpStreamsSynchronizer. Once that's done, many (all?) of
-  // these locks aren't needed.
   RTC_DCHECK_RUN_ON(&worker_thread_checker_);
   // Limit to range accepted by both VoE and ACM, so we're at least getting as
   // close as possible, instead of failing.
@@ -1117,9 +1107,6 @@ int ChannelReceive::GetBaseMinimumPlayoutDelayMs() const {
 }
 
 std::optional<Syncable::Info> ChannelReceive::GetSyncInfo() const {
-  // TODO(bugs.webrtc.org/11993): This should run on the network thread.
-  // We get here via RtpStreamsSynchronizer. Once that's done, many of
-  // these locks aren't needed.
   RTC_DCHECK_RUN_ON(&worker_thread_checker_);
   Syncable::Info info;
   std::optional<RtpRtcpInterface::SenderReportStats> last_sr =
@@ -1145,8 +1132,6 @@ std::optional<Syncable::Info> ChannelReceive::GetSyncInfo() const {
 
 void ChannelReceive::UpdatePlayoutTimestamp(bool rtcp, int64_t now_ms) {
   RTC_DCHECK_RUN_ON(&worker_thread_checker_);
-  // TODO(bugs.webrtc.org/11993): Expect to be called exclusively on the
-  // network thread. Once that's done, we won't need video_sync_lock_.
 
   jitter_buffer_playout_timestamp_ = neteq_->GetPlayoutTimestamp();
 
@@ -1181,11 +1166,11 @@ int ChannelReceive::GetRtpTimestampRateHz() const {
   const auto decoder_format = neteq_->GetCurrentDecoderFormat();
 
   // Default to the playout frequency if we've not gotten any packets yet.
-  // TODO(ossu): Zero clockrate can only happen if we've added an external
+  // TODO(ossu): Zero clock rate can only happen if we've added an external
   // decoder for a format we don't support internally. Remove once that way of
   // adding decoders is gone!
   // TODO(kwiberg): `decoder_format->sdp_format.clockrate_hz` is an RTP
-  // clockrate as it should, but `neteq_->last_output_sample_rate_hz()` is a
+  // clock rate as it should, but `neteq_->last_output_sample_rate_hz()` is a
   // codec sample rate, which is not always the same thing.
   return (decoder_format && decoder_format->sdp_format.clockrate_hz != 0)
              ? decoder_format->sdp_format.clockrate_hz

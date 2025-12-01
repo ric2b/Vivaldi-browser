@@ -74,7 +74,6 @@ class CustomLogPrinter : public testing::TestEventListener {
  public:
   // Takes ownership of impl.
   explicit CustomLogPrinter(testing::TestEventListener* impl) : impl_(impl) {}
-  ~CustomLogPrinter() override = default;
   CustomLogPrinter(const CustomLogPrinter&) = delete;
   CustomLogPrinter& operator=(const CustomLogPrinter&) = delete;
 
@@ -219,10 +218,10 @@ bool KillProcesses(const base::FilePath::StringType& executable_name,
 }
 
 scoped_refptr<PolicyService> CreateTestPolicyService() {
-  std::vector<scoped_refptr<PolicyManagerInterface>> managers{
-      GetDefaultValuesPolicyManager()};
-  return base::MakeRefCounted<PolicyService>(std::move(managers),
-                                             /*usage_stats_enabled=*/true);
+  return base::MakeRefCounted<PolicyService>(
+      /*external_constants=*/nullptr,
+      /*persisted_data=*/nullptr,
+      /*is_ceca_experiment_enabled=*/false);
 }
 
 std::string GetTestName() {
@@ -291,47 +290,6 @@ void InitLoggingForUnitTest(const base::FilePath& log_base_path) {
 namespace {
 const wchar_t kProcmonPath[] = L"C:\\tools\\Procmon.exe";
 }  // namespace
-
-void MaybeExcludePathsFromWindowsDefender() {
-  constexpr char kTestLauncherExcludePathsFromWindowDefender[] =
-      "exclude-paths-from-win-defender";
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (!command_line->HasSwitch(kTestLauncherExcludePathsFromWindowDefender)) {
-    return;
-  }
-
-  if (!IsServiceRunning(L"WinDefend")) {
-    VLOG(1) << "WinDefend is not running, no need to add exclusion paths.";
-    return;
-  }
-
-  base::FilePath program_files;
-  base::FilePath program_files_x86;
-  base::FilePath local_app_data;
-  if (!base::PathService::Get(base::DIR_PROGRAM_FILES, &program_files) ||
-      !base::PathService::Get(base::DIR_PROGRAM_FILESX86, &program_files_x86) ||
-      !base::PathService::Get(base::DIR_LOCAL_APP_DATA, &local_app_data)) {
-    return;
-  }
-
-  const auto quote_path_value = [](const base::FilePath& path) {
-    return base::StrCat({L"'", path.value(), L"'"});
-  };
-  const std::wstring cmdline =
-      base::StrCat({L"PowerShell.exe Add-MpPreference -ExclusionPath ",
-                    base::JoinString({quote_path_value(program_files),
-                                      quote_path_value(program_files_x86),
-                                      quote_path_value(local_app_data)},
-                                     L", ")});
-
-  base::LaunchOptions options;
-  options.start_hidden = true;
-  options.wait = true;
-  VLOG(1) << "Running: " << cmdline;
-  base::Process process = base::LaunchProcess(cmdline, options);
-  LOG_IF(ERROR, !process.IsValid())
-      << "Failed to disable Windows Defender: " << cmdline;
-}
 
 base::FilePath StartProcmonLogging() {
   if (!::IsUserAnAdmin()) {

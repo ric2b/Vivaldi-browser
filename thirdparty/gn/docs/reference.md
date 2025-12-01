@@ -6793,7 +6793,7 @@
   If no public files are declared, other targets (assuming they have visibility
   to depend on this target) can include any file in the sources list. If this
   variable is defined on a target, dependent targets may only include files on
-  this whitelist unless that target is marked as a friend (see "gn help
+  this allowlist unless that target is marked as a friend (see "gn help
   friend").
 
   Header file permissions are also subject to visibility. A target must be
@@ -7430,7 +7430,7 @@
       default. They can be checked explicitly by running
       "gn check --check-system" or "gn gen --check=system"
 
-  exec_script_whitelist [optional]
+  exec_script_allowlist [optional]
       A list of .gn/.gni files (not labels) that have permission to call the
       exec_script function. If this list is defined, calls to exec_script will
       be checked against this list and GN will fail if the current file isn't
@@ -7444,10 +7444,16 @@
       If unspecified, the ability to call exec_script is unrestricted.
 
       Example:
-        exec_script_whitelist = [
+        exec_script_allowlist = [
           "//base/BUILD.gn",
           "//build/my_config.gni",
         ]
+
+  exec_script_whitelist [optional]
+      A synonym for "exec_script_allowlist" that exists for backwards
+      compatibility. New code should use "exec_script_allowlist" instead.
+      If both values are set, only the value in "exec_script_allowlist" will
+      have any effect (so don't set both!).
 
   export_compile_commands [optional]
       A list of label patterns for which to generate a Clang compilation
@@ -8322,7 +8328,7 @@
   GN's header checker helps validate that the includes match the build
   dependency graph. Sometimes an include might be conditional or otherwise
   problematic, but you want to specifically allow it. In this case, it can be
-  whitelisted.
+  allowlisted.
 
   Include lines containing the substring "nogncheck" will be excluded from
   header checking. The most common case is a conditional include:

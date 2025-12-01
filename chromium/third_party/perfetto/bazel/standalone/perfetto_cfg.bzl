@@ -55,6 +55,7 @@ PERFETTO_CONFIG = struct(
         protobuf_lite = ["@com_google_protobuf//:protobuf_lite"],
         protobuf_full = ["@com_google_protobuf//:protobuf"],
         protobuf_descriptor_proto = ["@com_google_protobuf//:descriptor_proto"],
+        open_csd = ["@perfetto_dep_open_csd//:open_csd"],
 
         # The Python targets are empty on the standalone build because we assume
         # any relevant deps are installed on the system or are not applicable.
@@ -89,6 +90,7 @@ PERFETTO_CONFIG = struct(
         linenoise = [],
         sqlite = [],
         llvm_demangle = [],
+        open_csd = [],
     ),
 
     # Allow Bazel embedders to change the visibility of "public" targets.
@@ -133,6 +135,10 @@ PERFETTO_CONFIG = struct(
         go_proto_library = None,
 
         jspb_proto_library = None,
+
+        android_binary = None,
+        android_library = None,
+        android_jni_library = None,
     ),
 
     # The default copts which we use to compile C++ code.

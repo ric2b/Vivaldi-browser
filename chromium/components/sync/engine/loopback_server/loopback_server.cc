@@ -157,7 +157,7 @@ class UpdateSieve {
     return !datatypes_to_migrate->empty();
   }
 
-  // Sets the progress markers in |get_updates_response| based on the highest
+  // Sets the progress markers in `get_updates_response` based on the highest
   // version between request progress markers and response entities.
   void SetProgressMarkers(
       sync_pb::GetUpdatesResponse* get_updates_response) const {
@@ -169,7 +169,7 @@ class UpdateSieve {
     }
   }
 
-  // Determines whether the server should send an |entity| to the client as
+  // Determines whether the server should send an `entity` to the client as
   // part of a GetUpdatesResponse.
   bool ClientWantsItem(const LoopbackServerEntity& entity) const {
     DataType type = entity.GetDataType();
@@ -671,7 +671,7 @@ bool LoopbackServer::IsChild(const string& id,
 
 void LoopbackServer::DeleteChildren(const string& parent_id) {
   std::vector<sync_pb::SyncEntity> tombstones;
-  // Find all the children of |parent_id|.
+  // Find all the children of `parent_id`.
   for (auto& [id, entity] : entities_) {
     if (IsChild(id, parent_id)) {
       sync_pb::SyncEntity proto;
@@ -921,7 +921,7 @@ std::optional<std::string> LoopbackServer::SerializeData() {
   }
   UMA_HISTOGRAM_MEMORY_KB(
       "Sync.Local.FileSizeKB",
-      base::saturated_cast<base::Histogram::Sample>(
+      base::saturated_cast<base::Histogram::Sample32>(
           base::ClampDiv(base::ClampAdd(data.size(), 512), 1024)));
   return data;
 }

@@ -41,6 +41,7 @@ class ErrorThrower;
 class WasmInterpreterRuntime;
 #endif  // V8_ENABLE_DRUMBRAKE
 class WellKnownImportsList;
+class TypeCanonicalizer;
 
 enum class AddressType : uint8_t { kI32, kI64 };
 
@@ -133,18 +134,27 @@ enum BoundsCheckStrategy : int8_t {
 
 // Static representation of a wasm memory.
 struct WasmMemory {
-  uint32_t index = 0;              // index into the memory table
-  uint32_t initial_pages = 0;      // initial size of the memory in 64k pages
-  uint32_t maximum_pages = 0;      // maximum size of the memory in 64k pages
-  bool is_shared = false;          // true if memory is a SharedArrayBuffer
-  bool has_maximum_pages = false;  // true if there is a maximum memory size
-  AddressType address_type = AddressType::kI32;  // 32 or 64 bit memory?
-  bool imported = false;                   // true if the memory is imported
-  bool exported = false;                   // true if the memory is exported
+  // Index into the memory table.
+  uint32_t index = 0;
+  // Initial size of the memory in 64k pages.
+  uint32_t initial_pages = 0;
+  // Maximum declared size of the memory in 64k pages. The actual memory size at
+  // runtime is capped at {kV8MaxWasmMemory32Pages} / {kV8MaxWasmMemory64Pages}.
+  uint64_t maximum_pages = 0;
+  bool is_shared = false;
+  bool has_maximum_pages = false;
+  AddressType address_type = AddressType::kI32;
+  bool imported = false;
+  bool exported = false;
+
   // Computed information, cached here for faster compilation.
   // Updated via {UpdateComputedInformation}.
-  uintptr_t min_memory_size = 0;  // smallest size of any memory in bytes
-  uintptr_t max_memory_size = 0;  // largest size of any memory in bytes
+  // Smallest size this memory can have at runtime, in bytes.
+  uintptr_t min_memory_size = 0;
+  // Largest size this memory can have at runtime (via declared maximum and
+  // engine limits), in bytes.
+  uintptr_t max_memory_size = 0;
+
   BoundsCheckStrategy bounds_checks = kExplicitBoundsChecks;
 
   bool is_memory64() const { return address_type == AddressType::kI64; }
@@ -152,13 +162,13 @@ struct WasmMemory {
 
 inline void UpdateComputedInformation(WasmMemory* memory, ModuleOrigin origin) {
   const uintptr_t platform_max_pages =
-      memory->is_memory64() ? kV8MaxWasmMemory64Pages : kV8MaxWasmMemory32Pages;
-  memory->min_memory_size =
-      std::min(platform_max_pages, uintptr_t{memory->initial_pages}) *
-      kWasmPageSize;
-  memory->max_memory_size =
-      std::min(platform_max_pages, uintptr_t{memory->maximum_pages}) *
-      kWasmPageSize;
+      memory->is_memory64() ? wasm::max_mem64_pages() : wasm::max_mem32_pages();
+  memory->min_memory_size = static_cast<uintptr_t>(std::min<uint64_t>(
+                                platform_max_pages, memory->initial_pages)) *
+                            kWasmPageSize;
+  memory->max_memory_size = static_cast<uintptr_t>(std::min<uint64_t>(
+                                platform_max_pages, memory->maximum_pages)) *
+                            kWasmPageSize;
 
   if (!v8_flags.wasm_bounds_checks) {
     memory->bounds_checks = kNoBoundsChecks;
@@ -169,7 +179,6 @@ inline void UpdateComputedInformation(WasmMemory* memory, ModuleOrigin origin) {
     // Asm.js modules can't use trap handling.
     memory->bounds_checks = kExplicitBoundsChecks;
   } else if (memory->is_memory64() && !v8_flags.wasm_memory64_trap_handling) {
-    // Memory64 currently always requires explicit bounds checks.
     memory->bounds_checks = kExplicitBoundsChecks;
   } else if (trap_handler::IsTrapHandlerEnabled()) {
     if constexpr (kSystemPointerSize == 4) UNREACHABLE();
@@ -402,7 +411,7 @@ class V8_EXPORT_PRIVATE LazilyGeneratedNames {
  private:
   // Lazy loading must guard against concurrent modifications from multiple
   // {WasmModuleObject}s.
-  mutable base::Mutex mutex_;
+  mutable base::SpinningMutex mutex_;
   bool has_functions_{false};
   NameMap function_names_;
 };
@@ -426,7 +435,7 @@ class V8_EXPORT_PRIVATE AsmJsOffsetInformation {
   // The offset information table is decoded lazily, hence needs to be
   // protected against concurrent accesses.
   // Exactly one of the two fields below will be set at a time.
-  mutable base::Mutex mutex_;
+  mutable base::SpinningMutex mutex_;
 
   // Holds the encoded offset table bytes.
   base::OwnedVector<const uint8_t> encoded_offsets_;
@@ -507,7 +516,18 @@ class CallSiteFeedback {
     int absolute_call_frequency;
   };
 
-  // Regular constructor: uninitialized/unknown, monomorphic, or polymorphic.
+  static CallSiteFeedback CreateMegamorphic() {
+    CallSiteFeedback feedback;
+    feedback.is_megamorphic_ = true;
+    DCHECK(!feedback.is_invalid());
+    DCHECK(!feedback.is_monomorphic());
+    DCHECK(!feedback.is_polymorphic());
+    DCHECK(feedback.is_megamorphic());
+    return feedback;
+  }
+
+  // Regular constructor: uninitialized/unknown, monomorphic, or
+  // polymorphic.
   CallSiteFeedback() : index_or_count_(-1), frequency_or_ool_(0) {}
   CallSiteFeedback(int function_index, int call_count)
       : index_or_count_(function_index), frequency_or_ool_(call_count) {}
@@ -533,6 +553,8 @@ class CallSiteFeedback {
     } else {
       frequency_or_ool_ = other.frequency_or_ool_;
     }
+    has_non_inlineable_targets_ = other.has_non_inlineable_targets_;
+    is_megamorphic_ = other.is_megamorphic_;
     return *this;
   }
   CallSiteFeedback& operator=(CallSiteFeedback&& other) V8_NOEXCEPT {
@@ -541,6 +563,8 @@ class CallSiteFeedback {
       frequency_or_ool_ = other.frequency_or_ool_;
       other.frequency_or_ool_ = 0;
     }
+    has_non_inlineable_targets_ = other.has_non_inlineable_targets_;
+    is_megamorphic_ = other.is_megamorphic_;
     return *this;
   }
 
@@ -550,16 +574,17 @@ class CallSiteFeedback {
 
   int num_cases() const {
     if (is_monomorphic()) return 1;
-    if (is_invalid()) return 0;
+    if (is_invalid() || is_megamorphic()) return 0;
     return -index_or_count_;
   }
   int function_index(int i) const {
-    DCHECK(!is_invalid());
+    DCHECK(!is_invalid() && !is_megamorphic());
     if (is_monomorphic()) return index_or_count_;
     return polymorphic_storage()[i].function_index;
   }
   int call_count(int i) const {
-    if (index_or_count_ >= 0) return static_cast<int>(frequency_or_ool_);
+    DCHECK(!is_invalid() && !is_megamorphic());
+    if (is_monomorphic()) return static_cast<int>(frequency_or_ool_);
     return polymorphic_storage()[i].absolute_call_frequency;
   }
   bool has_non_inlineable_targets() const {
@@ -569,10 +594,12 @@ class CallSiteFeedback {
     has_non_inlineable_targets_ = has_non_inlineable_targets;
   }
 
+  bool is_megamorphic() const { return is_megamorphic_; }
+
  private:
   bool is_monomorphic() const { return index_or_count_ >= 0; }
   bool is_polymorphic() const { return index_or_count_ <= -2; }
-  bool is_invalid() const { return index_or_count_ == -1; }
+  bool is_invalid() const { return index_or_count_ == -1 && !is_megamorphic_; }
   const PolymorphicCase* polymorphic_storage() const {
     DCHECK(is_polymorphic());
     return reinterpret_cast<PolymorphicCase*>(frequency_or_ool_);
@@ -580,13 +607,14 @@ class CallSiteFeedback {
 
   int index_or_count_;
   bool has_non_inlineable_targets_ = false;
+  bool is_megamorphic_ = false;
   intptr_t frequency_or_ool_;
 };
 
 struct FunctionTypeFeedback {
   // {feedback_vector} is computed from {call_targets} and the instance-specific
   // feedback vector by {TransitiveTypeFeedbackProcessor}.
-  std::vector<CallSiteFeedback> feedback_vector;
+  base::OwnedVector<CallSiteFeedback> feedback_vector;
 
   // {call_targets} has one entry per "call", "call_indirect", and "call_ref" in
   // the function.
@@ -631,7 +659,7 @@ struct TypeFeedbackStorage {
   // - PGO deserializer: writes everything, currently not locked, relies on
   //   being called before multi-threading enters the picture.
   // - Deoptimizer: sets needs_reprocessing_after_deopt.
-  mutable base::SharedMutex mutex;
+  mutable base::SpinningMutex mutex;
 
   WellKnownImportsList well_known_imports;
 
@@ -641,8 +669,9 @@ struct TypeFeedbackStorage {
 struct WasmTable {
   ValueType type = kWasmVoid;
   uint32_t initial_size = 0;
-  // TODO(369904698): Allow true 64-bit declared maximum sizes (for memory64).
-  uint32_t maximum_size = 0;
+  // The declared maximum size; at runtime the actual size is limited to a
+  // 32-bit value (kV8MaxWasmTableSize).
+  uint64_t maximum_size = 0;
   bool has_maximum_size = false;
   AddressType address_type = AddressType::kI32;
   bool shared = false;
@@ -689,6 +718,8 @@ struct V8_EXPORT_PRIVATE WasmModule {
   // Position and size of the name section (payload only, i.e. without section
   // ID and length).
   WireBytesRef name_section = {0, 0};
+  // Set by the singleton TypeNamesProvider to avoid duplicate work.
+  mutable std::atomic<bool> canonical_typenames_decoded = false;
   // Set to true if this module has wasm-gc types in its type section.
   bool is_wasm_gc = false;
   // Set to true if this module has any shared elements other than memories.
@@ -721,6 +752,7 @@ struct V8_EXPORT_PRIVATE WasmModule {
   const ModuleOrigin origin;
   mutable LazilyGeneratedNames lazily_generated_names;
   std::array<WasmDebugSymbols, WasmDebugSymbols::kNumTypes> debug_symbols{};
+  WireBytesRef build_id;
 
   // Asm.js source position information. Only available for modules compiled
   // from asm.js.
@@ -786,8 +818,17 @@ struct V8_EXPORT_PRIVATE WasmModule {
 
   CanonicalTypeIndex canonical_type_id(ModuleTypeIndex index) const {
     size_t num_types = isorecursive_canonical_type_ids.size();
+    DCHECK_EQ(num_types, types.size());
     V8_ASSUME(index.index < num_types);
     return isorecursive_canonical_type_ids[index.index];
+  }
+
+  CanonicalValueType canonical_type(ValueType type) const {
+    if (!type.has_index()) {
+      return CanonicalValueType{type};
+    }
+    return CanonicalValueType::FromIndex(type.kind(),
+                                         canonical_type_id(type.ref_index()));
   }
 
   bool has_signature(ModuleTypeIndex index) const {
@@ -807,6 +848,9 @@ struct V8_EXPORT_PRIVATE WasmModule {
     V8_ASSUME(index.index < num_types);
     return isorecursive_canonical_type_ids[index.index];
   }
+
+  uint64_t signature_hash(const TypeCanonicalizer*,
+                          uint32_t function_index) const;
 
   bool has_struct(ModuleTypeIndex index) const {
     return index.index < types.size() &&
@@ -898,11 +942,11 @@ struct V8_EXPORT_PRIVATE WasmModule {
 #if V8_ENABLE_DRUMBRAKE
   void SetWasmInterpreter(
       std::shared_ptr<WasmInterpreterRuntime> interpreter) const {
-    base::MutexGuard lock(&interpreter_mutex_);
+    base::SpinningMutexGuard lock(&interpreter_mutex_);
     interpreter_ = interpreter;
   }
   mutable std::weak_ptr<WasmInterpreterRuntime> interpreter_;
-  mutable base::Mutex interpreter_mutex_;
+  mutable base::SpinningMutex interpreter_mutex_;
 #endif  // V8_ENABLE_DRUMBRAKE
 
   size_t EstimateStoredSize() const;                // No tracing.
@@ -993,13 +1037,12 @@ struct WasmFunctionName {
 V8_EXPORT_PRIVATE std::ostream& operator<<(std::ostream& os,
                                            const WasmFunctionName& name);
 
-V8_EXPORT_PRIVATE bool IsWasmCodegenAllowed(Isolate* isolate,
-                                            Handle<NativeContext> context);
+V8_EXPORT_PRIVATE bool IsWasmCodegenAllowed(
+    Isolate* isolate, DirectHandle<NativeContext> context);
 V8_EXPORT_PRIVATE DirectHandle<String> ErrorStringForCodegen(
     Isolate* isolate, DirectHandle<Context> context);
 
-template <typename T>
-Handle<JSObject> GetTypeForFunction(Isolate* isolate, const Signature<T>* sig,
+Handle<JSObject> GetTypeForFunction(Isolate* isolate, const FunctionSig* sig,
                                     bool for_exception = false);
 Handle<JSObject> GetTypeForGlobal(Isolate* isolate, bool is_mutable,
                                   ValueType type);

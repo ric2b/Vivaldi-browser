@@ -42,9 +42,7 @@ unions, complex constructors, etc.).
   needed; for example, implementing operator< for use in an STL container does
   not require implementing all comparison operators.
 
-## 
-
-Code Syntax
+## Code Syntax
 
 - Braces are optional for single-line if statements; follow the style of
   surrounding code.
@@ -60,6 +58,34 @@ Code Syntax
       `using FooId = std::string` in foo.h.
     - Case by case exceptions may be made for readability/convenience,
       e.g. as in `platform/base/span.h`.
+
+
+## Initialization
+
+Generally, follow the guidance in [Abseil ToTw \#88](https://abseil.io/tips/88).
+This means to prefer prefer copy-initialization over direct-initialization when
+available, and use parentheses over curly braces when resorting to
+direct-initialization.
+
+Preferred:
+
+```
+int x = 2;
+std::string foo = "Hello World";
+std::vector<int> v = {1, 2, 3};
+auto matrix = std::make_unique<NewMatrix>(rows, cols);
+MyStruct x = {true, 5.0};
+```
+
+Discouraged:
+
+```
+int x{2};
+std::string foo{"Hello World"};
+std::vector<int> v{1, 2, 3};
+std::unique_ptr<Matrix> matrix{NewMatrix(rows, cols)};
+MyStruct x{true, 5.0};
+```
 
 ## Copy and Move Operators
 

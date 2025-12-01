@@ -31,10 +31,10 @@ describe('UserInteractionsHandler', function() {
     const event = {
       name: 'EventTiming',
       type,
-      ts: Trace.Types.Timing.MicroSeconds(options.startTime),
-      dur: Trace.Types.Timing.MicroSeconds(options.endTime - options.startTime),
-      processingStart: Trace.Types.Timing.MicroSeconds(options.processingStart || 0),
-      processingEnd: Trace.Types.Timing.MicroSeconds(options.processingEnd || 0),
+      ts: Trace.Types.Timing.Micro(options.startTime),
+      dur: Trace.Types.Timing.Micro(options.endTime - options.startTime),
+      processingStart: Trace.Types.Timing.Micro(options.processingStart || 0),
+      processingEnd: Trace.Types.Timing.Micro(options.processingEnd || 0),
       interactionId: options.interactionId,
     };
 
@@ -52,8 +52,8 @@ describe('UserInteractionsHandler', function() {
       return event.args.data.type === 'click';
     });
 
-    assert.strictEqual(data.allEvents.length, 58);
-    assert.strictEqual(clicks.length, 1);
+    assert.lengthOf(data.allEvents, 58);
+    assert.lengthOf(clicks, 1);
   });
 
   it('returns all interaction events', async () => {
@@ -62,7 +62,7 @@ describe('UserInteractionsHandler', function() {
     // There are three inct interactions:
     // pointerdown on the button (start of the click)
     // pointerup & click on the button (end of the click)
-    assert.strictEqual(data.interactionEvents.length, 3);
+    assert.lengthOf(data.interactionEvents, 3);
   });
 
   it('adds microsecond processingStart and processingEnd times to the synthetic event', async function() {

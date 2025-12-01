@@ -46,12 +46,13 @@ NotesModelFactory* NotesModelFactory::GetInstance() {
   return base::Singleton<NotesModelFactory>::get();
 }
 
-KeyedService* NotesModelFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+NotesModelFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
   Profile* profile = Profile::FromBrowserContext(context);
-  NotesModel* notes_model =
-      new NotesModel(NoteSyncServiceFactory::GetForProfile(profile),
-                     SyncedFileStoreFactory::GetForBrowserContext(profile));
+  std::unique_ptr<NotesModel> notes_model = std::make_unique<NotesModel>(
+      NoteSyncServiceFactory::GetForProfile(profile),
+      SyncedFileStoreFactory::GetForBrowserContext(profile));
   notes_model->Load(profile->GetPath());
   return notes_model;
 }

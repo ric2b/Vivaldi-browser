@@ -10,6 +10,7 @@ import type * as Lantern from '../lantern/lantern.js';
 import type * as Types from '../types/types.js';
 
 import {
+  InsightCategory,
   type InsightModel,
   type InsightSetContext,
   type InsightSetContextWithNavigation,
@@ -68,8 +69,7 @@ function getNodesAndTimingByRequestId(nodeTimings: Lantern.Simulation.Result['no
   return requestIdToNode;
 }
 
-function estimateSavingsWithGraphs(
-    deferredIds: Set<string>, lanternContext: LanternContext): Types.Timing.MilliSeconds {
+function estimateSavingsWithGraphs(deferredIds: Set<string>, lanternContext: LanternContext): Types.Timing.Milli {
   const simulator = lanternContext.simulator;
   const fcpGraph = lanternContext.metrics.firstContentfulPaint.optimisticGraph;
   const {nodeTimings} = lanternContext.simulator.simulate(fcpGraph);
@@ -97,7 +97,7 @@ function estimateSavingsWithGraphs(
   minimalFCPGraph.request.transferSize = safeTransferSize + totalChildNetworkBytes;
   const estimateAfterInline = simulator.simulate(minimalFCPGraph).timeInMs;
   minimalFCPGraph.request.transferSize = originalTransferSize;
-  return Math.round(Math.max(estimateBeforeInline - estimateAfterInline, 0)) as Types.Timing.MilliSeconds;
+  return Math.round(Math.max(estimateBeforeInline - estimateAfterInline, 0)) as Types.Timing.Milli;
 }
 
 function hasImageLCP(parsedTrace: RequiredData<typeof deps>, context: InsightSetContextWithNavigation): boolean {
@@ -115,7 +115,7 @@ function computeSavings(
   const nodesAndTimingsByRequestId =
       getNodesAndTimingByRequestId(context.lantern.metrics.firstContentfulPaint.optimisticEstimate.nodeTimings);
 
-  const metricSavings = {FCP: 0 as Types.Timing.MilliSeconds, LCP: 0 as Types.Timing.MilliSeconds};
+  const metricSavings = {FCP: 0 as Types.Timing.Milli, LCP: 0 as Types.Timing.Milli};
   const requestIdToWastedMs = new Map<string, number>();
   const deferredNodeIds = new Set<string>();
   for (const request of renderBlockingRequests) {
@@ -150,8 +150,15 @@ function computeSavings(
   return {metricSavings, requestIdToWastedMs};
 }
 
-function finalize(partialModel: Omit<RenderBlockingInsightModel, 'title'|'description'>): RenderBlockingInsightModel {
-  return {title: i18nString(UIStrings.title), description: i18nString(UIStrings.description), ...partialModel};
+function finalize(partialModel: Omit<RenderBlockingInsightModel, 'title'|'description'|'category'|'shouldShow'>):
+    RenderBlockingInsightModel {
+  return {
+    title: i18nString(UIStrings.title),
+    description: i18nString(UIStrings.description),
+    category: InsightCategory.LCP,
+    shouldShow: partialModel.renderBlockingRequests.length > 0,
+    ...partialModel,
+  };
 }
 
 export function generateInsight(

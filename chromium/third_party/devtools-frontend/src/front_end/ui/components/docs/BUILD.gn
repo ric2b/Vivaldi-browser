@@ -12,23 +12,21 @@ group("docs") {
     ":component_doc_styles",
     "../../../Images",
     "../../../panels/timeline/fixtures/traces",
+    "./ai_assistance",
     "./breadcrumbs_perf",
     "./button",
     "./color_swatch",
+    "./combo_box",
     "./computed_style_property",
     "./computed_style_trace",
     "./console_insight",
     "./css_overview",
-    "./data_grid",
-    "./data_grid_controller",
     "./dialog",
     "./elements_breadcrumbs",
     "./expandable_list",
     "./floating_button",
-    "./freestyler",
     "./icon_button",
     "./icon_component",
-    "./icon_dialog",
     "./input",
     "./issue_counter",
     "./issue_link_icon",
@@ -42,6 +40,7 @@ group("docs") {
     "./panel_introduction_steps",
     "./perf_piechart",
     "./performance_panel",
+    "./radio_button",
     "./recorder_control_button",
     "./recorder_create_recording_view",
     "./recorder_injected",
@@ -49,11 +48,10 @@ group("docs") {
     "./recorder_recording_view",
     "./recorder_select_button",
     "./recorder_split_view",
-    "./recorder_start_view",
     "./report",
     "./request_link_icon",
     "./select_menu",
-    "./shortcut_dialog",
+    "./slider",
     "./style_property_editor",
     "./survey_link",
     "./switch",
@@ -61,7 +59,6 @@ group("docs") {
     "./text_prompt",
     "./theme_colors",
     "./tree_outline",
-    "./two_states_counter",
     "./user_agent_client_hints",
   ]
 }
@@ -80,5 +77,5 @@ ts_library("bundle") {
     "toggle_fonts.ts",
   ]
 
-  deps = [ "../../../ui/lit-html:bundle" ]
+  deps = [ "../../../ui/lit:bundle" ]
 }

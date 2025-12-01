@@ -9,6 +9,7 @@
 
 #include "net/http/http_cache.h"
 
+#include <algorithm>
 #include <optional>
 #include <string_view>
 #include <utility>
@@ -32,7 +33,6 @@
 #include "base/not_fatal_until.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/pickle.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -409,6 +409,12 @@ HttpCache::HttpCache(std::unique_ptr<HttpTransactionFactory> network_layer,
       keys_marked_no_store_(
           features::kAvoidEntryCreationForNoStoreCacheSize.Get()) {
   g_init_cache = true;
+  if (base::FeatureList::IsEnabled(features::kHttpCacheNoVarySearch)) {
+    size_t max_entries = features::kHttpCacheNoVarySearchCacheMaxEntries.Get();
+    if (max_entries) {
+      no_vary_search_cache_.emplace(static_cast<size_t>(max_entries));
+    }
+  }
   HttpNetworkSession* session = network_layer_->GetSession();
   // Session may be NULL in unittests.
   // TODO(mmenke): Seems like tests could be changed to provide a session,
@@ -613,6 +619,9 @@ std::string HttpCache::GetResourceURLFromHttpCacheKey(const std::string& key) {
 
 // static
 bool HttpCache::CanGenerateCacheKeyForRequest(const HttpRequestInfo* request) {
+  // WARNING: If this function is changed to look at `request->url` in future,
+  // it will break GenerateCacheKeyForRequestWithAlternateURL(). Add an extra
+  // `url` parameter instead.
   if (IsSplitCacheEnabled()) {
     if (request->network_isolation_key.IsTransient()) {
       return false;
@@ -767,6 +776,14 @@ HttpCache::ExperimentMode HttpCache::GetExperimentMode() {
 // static
 std::optional<std::string> HttpCache::GenerateCacheKeyForRequest(
     const HttpRequestInfo* request) {
+  return GenerateCacheKeyForRequestWithAlternateURL(request, request->url);
+}
+
+// static
+std::optional<std::string>
+HttpCache::GenerateCacheKeyForRequestWithAlternateURL(
+    const HttpRequestInfo* request,
+    const GURL& url) {
   CHECK(request);
 
   if (!CanGenerateCacheKeyForRequest(request)) {
@@ -777,7 +794,7 @@ std::optional<std::string> HttpCache::GenerateCacheKeyForRequest(
       request->upload_data_stream ? request->upload_data_stream->identifier()
                                   : int64_t(0);
   return GenerateCacheKey(
-      request->url, request->load_flags, request->network_isolation_key,
+      url, request->load_flags, request->network_isolation_key,
       upload_data_identifier, request->is_subframe_document_resource,
       request->is_main_frame_navigation, request->initiator);
 }
@@ -1173,7 +1190,7 @@ void HttpCache::DoneWithEntry(scoped_refptr<ActiveEntry>& entry,
   }
 
   // Transaction is waiting in the done_headers_queue.
-  auto it = base::ranges::find(entry->done_headers_queue(), transaction);
+  auto it = std::ranges::find(entry->done_headers_queue(), transaction);
   if (it != entry->done_headers_queue().end()) {
     entry->done_headers_queue().erase(it);
 

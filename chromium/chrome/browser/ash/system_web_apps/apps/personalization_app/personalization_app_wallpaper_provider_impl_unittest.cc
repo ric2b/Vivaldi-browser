@@ -62,6 +62,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_web_ui.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/test_support/test_utils.h"
@@ -79,7 +80,7 @@ namespace ash::personalization_app {
 namespace {
 
 constexpr char kFakeTestEmail[] = "fakeemail@personalization";
-constexpr char kTestGaiaId[] = "1234567890";
+constexpr GaiaId::Literal kTestGaiaId("1234567890");
 
 // Create fake Jpg image bytes.
 std::string CreateJpgBytes() {
@@ -448,7 +449,7 @@ TEST_F(PersonalizationAppWallpaperProviderImplTest,
 TEST_F(PersonalizationAppWallpaperProviderImplTest,
        IgnoresWallpaperResizeForOtherUser) {
   const AccountId other_account_id = AccountId::FromUserEmailGaiaId(
-      "otherfakeemail@personalization", "0987654321");
+      "otherfakeemail@personalization", GaiaId("0987654321"));
   test_wallpaper_controller()->SetCurrentUser(other_account_id);
 
   test_wallpaper_controller()->ShowWallpaperImage(

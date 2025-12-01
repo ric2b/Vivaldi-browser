@@ -150,6 +150,12 @@ AutofillCountry::address_format_extensions() const {
         .label_id = IDS_LIBADDRESSINPUT_STATE,
         .placed_after = FieldType::ADDRESS_HOME_CITY,
         .separator_before_label = " "}}};
+  static constexpr std::array<AddressFormatExtension, 1> jp_extensions{
+      {{.type = FieldType::ALTERNATIVE_FULL_NAME,
+        .label_id = IDS_AUTOFILL_ADDRESS_EDIT_DIALOG_JAPANESE_ALTERNATIVE_NAME,
+        .placed_after = FieldType::NAME_FULL,
+        .separator_before_label = "\n",
+        .large_sized = true}}};
 
   std::vector<std::pair<std::string, base::span<const AddressFormatExtension>>>
       overrides = {{"GB", gb_extensions}, {"MX", mx_extensions}};
@@ -159,13 +165,17 @@ AutofillCountry::address_format_extensions() const {
   base::span<const AddressFormatExtension> fr_extensions_span =
       base::FeatureList::IsEnabled(features::kAutofillUseFRAddressModel)
           ? fr_extensions
-          : base::span(fr_extensions).subspan(/*offset=*/0, /*count=*/1);
+          : base::span(fr_extensions).first(1u);  // first<1>() => type mismatch
   overrides.emplace_back("FR", fr_extensions_span);
   if (base::FeatureList::IsEnabled(features::kAutofillUseDEAddressModel)) {
     overrides.emplace_back("DE", de_extensions);
   }
   if (base::FeatureList::IsEnabled(features::kAutofillUsePLAddressModel)) {
     overrides.emplace_back("PL", pl_extensions);
+  }
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillSupportPhoneticNameForJP)) {
+    overrides.emplace_back("JP", jp_extensions);
   }
 
   auto extensions =

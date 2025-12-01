@@ -8,11 +8,9 @@ import {dispatchFocusOutEvent} from '../../testing/DOMHelpers.js';
 import {createTarget} from '../../testing/EnvironmentHelpers.js';
 import {describeWithMockConnection} from '../../testing/MockConnection.js';
 import {SECURITY_ORIGIN} from '../../testing/ResourceTreeHelpers.js';
-import * as Coordinator from '../../ui/components/render_coordinator/render_coordinator.js';
+import * as RenderCoordinator from '../../ui/components/render_coordinator/render_coordinator.js';
 
 import * as Resources from './application.js';
-
-const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
 
 describeWithMockConnection('StorageView', () => {
   const testKey = 'test-storage-key';
@@ -73,7 +71,7 @@ describeWithMockConnection('StorageView', () => {
     const container = view.element.shadowRoot?.querySelector('.clear-storage-header') || null;
     assert.instanceOf(container, HTMLDivElement);
     const customQuotaCheckbox =
-        container.shadowRoot!.querySelector('.quota-override-row span')!.shadowRoot!.querySelector(
+        container.shadowRoot!.querySelector('.quota-override-row dt-checkbox')!.shadowRoot!.querySelector(
             '[title="Simulate custom storage quota"]');
     assert.instanceOf(customQuotaCheckbox, HTMLInputElement);
     customQuotaCheckbox.checked = true;
@@ -85,7 +83,7 @@ describeWithMockConnection('StorageView', () => {
     assert.instanceOf(editor, HTMLInputElement);
     editor.value = '9999999999999';
     dispatchFocusOutEvent(editor);
-    await coordinator.done();
+    await RenderCoordinator.done();
     assert.strictEqual(errorDiv.textContent, 'Number must be smaller than 9,000,000,000,000');
   });
 

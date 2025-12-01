@@ -72,7 +72,7 @@ Scheduler::ScopedSetSequencePriority::ScopedSetSequencePriority(
     Scheduler* scheduler,
     SequenceId sequence_id,
     SchedulingPriority priority)
-    : scheduler_(scheduler), sequence_id_(sequence_id), priority_(priority) {
+    : scheduler_(scheduler), sequence_id_(sequence_id) {
   scheduler_->SetSequencePriority(sequence_id, priority);
 }
 Scheduler::ScopedSetSequencePriority::~ScopedSetSequencePriority() {
@@ -181,11 +181,10 @@ void Scheduler::Sequence::ContinueTask(base::OnceClosure task_closure) {
   TaskGraph::Sequence::ContinueTask(std::move(task_closure));
 }
 
-uint32_t Scheduler::Sequence::AddTask(
-    base::OnceClosure task_closure,
-    std::vector<SyncToken> wait_fences,
-    const SyncToken& release,
-    TaskGraph::ReportingCallback report_callback) {
+uint32_t Scheduler::Sequence::AddTask(base::OnceClosure task_closure,
+                                      std::vector<SyncToken> wait_fences,
+                                      const SyncToken& release,
+                                      ReportingCallback report_callback) {
   uint32_t order_num = TaskGraph::Sequence::AddTask(
       std::move(task_closure), std::move(wait_fences), release,
       std::move(report_callback));

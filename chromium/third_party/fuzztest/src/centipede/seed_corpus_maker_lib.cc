@@ -36,6 +36,7 @@
 #include <variant>
 #include <vector>
 
+#include "absl/container/flat_hash_set.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/random/random.h"
@@ -104,7 +105,10 @@ absl::Status SampleSeedCorpusElementsFromSource(  //
   // `source.num_recent_dirs()` most recent ones.
 
   std::vector<std::string> src_dirs;
-  RETURN_IF_NOT_OK(RemoteGlobMatch(source.dir_glob, src_dirs));
+  if (const auto match_status = RemoteGlobMatch(source.dir_glob, src_dirs);
+      !match_status.ok() && !absl::IsNotFound(match_status)) {
+    return match_status;
+  }
   LOG(INFO) << "Found " << src_dirs.size() << " corpus dir(s) matching "
             << source.dir_glob;
   // Sort in the ascending lexicographical order. We expect that dir names
@@ -115,21 +119,54 @@ absl::Status SampleSeedCorpusElementsFromSource(  //
     LOG(INFO) << "Selected " << src_dirs.size() << " corpus dir(s)";
   }
 
-  // Find all the corpus shard files in the found dirs.
+  // Find all the corpus shard and individual input files in the found dirs.
 
   std::vector<std::string> corpus_shard_fnames;
+  std::vector<std::string> individual_input_fnames;
   for (const auto& dir : src_dirs) {
-    const std::string shards_glob = fs::path{dir} / source.shard_rel_glob;
-    // NOTE: `RemoteGlobMatch` appends to the output list.
-    const auto prev_num_shards = corpus_shard_fnames.size();
-    RETURN_IF_NOT_OK(RemoteGlobMatch(shards_glob, corpus_shard_fnames));
-    LOG(INFO) << "Found " << (corpus_shard_fnames.size() - prev_num_shards)
-              << " shard(s) matching " << shards_glob;
+    absl::flat_hash_set<std::string> current_corpus_shard_fnames;
+    if (!source.shard_rel_glob.empty()) {
+      std::vector<std::string> matched_fnames;
+      const std::string glob = fs::path{dir} / source.shard_rel_glob;
+      const auto match_status = RemoteGlobMatch(glob, matched_fnames);
+      if (!match_status.ok() && !absl::IsNotFound(match_status)) {
+        LOG(ERROR) << "Got error when glob-matching in " << dir << ": "
+                   << match_status;
+      } else {
+        current_corpus_shard_fnames.insert(matched_fnames.begin(),
+                                           matched_fnames.end());
+        corpus_shard_fnames.insert(corpus_shard_fnames.end(),
+                                   matched_fnames.begin(),
+                                   matched_fnames.end());
+        LOG(INFO) << "Found " << matched_fnames.size() << " shard(s) matching "
+                  << glob;
+      }
+    }
+    if (!source.individual_input_rel_glob.empty()) {
+      std::vector<std::string> matched_fnames;
+      const std::string glob = fs::path{dir} / source.individual_input_rel_glob;
+      const auto match_status = RemoteGlobMatch(glob, matched_fnames);
+      if (!match_status.ok() && !absl::IsNotFound(match_status)) {
+        LOG(ERROR) << "Got error when glob-matching in " << dir << ": "
+                   << match_status;
+      } else {
+        size_t num_added_individual_inputs = 0;
+        for (auto& fname : matched_fnames) {
+          if (current_corpus_shard_fnames.contains(fname)) continue;
+          if (RemotePathIsDirectory(fname)) continue;
+          ++num_added_individual_inputs;
+          individual_input_fnames.push_back(std::move(fname));
+        }
+        LOG(INFO) << "Found " << num_added_individual_inputs
+                  << " individual input(s) with glob " << glob;
+      }
+    }
   }
-  LOG(INFO) << "Found " << corpus_shard_fnames.size()
-            << " shard(s) total in source " << source.dir_glob;
+  LOG(INFO) << "Found " << corpus_shard_fnames.size() << " shard(s) and "
+            << individual_input_fnames.size()
+            << " individual input(s) total in source " << source.dir_glob;
 
-  if (corpus_shard_fnames.empty()) {
+  if (corpus_shard_fnames.empty() && individual_input_fnames.empty()) {
     LOG(WARNING) << "Skipping empty source " << source.dir_glob;
     return absl::OkStatus();
   }
@@ -140,10 +177,12 @@ absl::Status SampleSeedCorpusElementsFromSource(  //
   const auto num_shards = corpus_shard_fnames.size();
   std::vector<InputAndFeaturesVec> src_elts_per_shard(num_shards);
   std::vector<size_t> src_elts_with_features_per_shard(num_shards, 0);
+  InputAndFeaturesVec src_elts;
 
   {
     constexpr int kMaxReadThreads = 32;
-    ThreadPool threads{std::min<int>(kMaxReadThreads, num_shards)};
+    ThreadPool threads{std::min<int>(
+        kMaxReadThreads, std::max(num_shards, individual_input_fnames.size()))};
 
     for (int shard = 0; shard < num_shards; ++shard) {
       const auto& corpus_fname = corpus_shard_fnames[shard];
@@ -160,10 +199,10 @@ absl::Status SampleSeedCorpusElementsFromSource(  //
         const auto work_dir = WorkDir::FromCorpusShardPath(  //
             corpus_fname, coverage_binary_name, coverage_binary_hash);
         const std::string features_fname =
-            work_dir.CorpusFiles().IsShardPath(corpus_fname)
-                ? work_dir.FeaturesFiles().MyShardPath()
-            : work_dir.DistilledCorpusFiles().IsShardPath(corpus_fname)
-                ? work_dir.DistilledFeaturesFiles().MyShardPath()
+            work_dir.CorpusFilePaths().IsShard(corpus_fname)
+                ? work_dir.FeaturesFilePaths().MyShard()
+            : work_dir.DistilledCorpusFilePaths().IsShard(corpus_fname)
+                ? work_dir.DistilledFeaturesFilePaths().MyShard()
                 : "";
 
         VLOG(2) << "Reading elements from source shard " << shard
@@ -193,11 +232,27 @@ absl::Status SampleSeedCorpusElementsFromSource(  //
 
       threads.Schedule(read_shard);
     }
+
+    RPROF_SNAPSHOT_AND_LOG("Done reading shards");
+
+    src_elts.resize(individual_input_fnames.size());
+    for (size_t index = 0; index < individual_input_fnames.size(); ++index) {
+      threads.Schedule([index, &individual_input_fnames, &src_elts] {
+        ByteArray input;
+        const auto& path = individual_input_fnames[index];
+        const auto read_status = RemoteFileGetContents(path, input);
+        if (!read_status.ok()) {
+          LOG(WARNING) << "Skipping individual input path " << path
+                       << " due to read error: " << read_status;
+          return;
+        }
+        src_elts[index] = {std::move(input), {}};
+      });
+    }
   }
 
   RPROF_SNAPSHOT_AND_LOG("Done reading");
 
-  InputAndFeaturesVec src_elts;
   size_t src_num_features = 0;
 
   for (int s = 0; s < num_shards; ++s) {
@@ -216,6 +271,16 @@ absl::Status SampleSeedCorpusElementsFromSource(  //
   src_elts_with_features_per_shard.shrink_to_fit();
 
   RPROF_SNAPSHOT_AND_LOG("Done merging");
+
+  // Remove empty inputs possibly due to read errors.
+  auto remove_it =
+      std::remove_if(src_elts.begin(), src_elts.end(),
+                     [](const auto& elt) { return std::get<0>(elt).empty(); });
+  if (remove_it != src_elts.end()) {
+    LOG(WARNING) << "Removed " << std::distance(remove_it, src_elts.end())
+                 << " empty inputs";
+    src_elts.erase(remove_it, src_elts.end());
+  }
 
   LOG(INFO) << "Read total of " << src_elts.size() << " elements ("
             << src_num_features << " with features) from source "
@@ -356,21 +421,21 @@ absl::Status WriteSeedCorpusElementsToDestination(  //
         const auto work_dir = WorkDir::FromCorpusShardPath(  //
             corpus_fname, coverage_binary_name, coverage_binary_hash);
 
-        if (corpus_fname != work_dir.CorpusFiles().MyShardPath() &&
-            corpus_fname != work_dir.DistilledCorpusFiles().MyShardPath()) {
+        if (corpus_fname != work_dir.CorpusFilePaths().MyShard() &&
+            corpus_fname != work_dir.DistilledCorpusFilePaths().MyShard()) {
           return absl::InvalidArgumentError(absl::StrCat(
               "Bad config: generated destination corpus filename '",
               corpus_fname, "' doesn't match one of two expected forms '",
-              work_dir.CorpusFiles().MyShardPath(), "' or '",
-              work_dir.DistilledCorpusFiles().MyShardPath(),
+              work_dir.CorpusFilePaths().MyShard(), "' or '",
+              work_dir.DistilledCorpusFilePaths().MyShard(),
               "'; make sure binary name in config matches explicitly passed '",
               coverage_binary_name, "'"));
         }
 
         const std::string features_fname =
-            work_dir.CorpusFiles().IsShardPath(corpus_fname)
-                ? work_dir.FeaturesFiles().MyShardPath()
-                : work_dir.DistilledFeaturesFiles().MyShardPath();
+            work_dir.CorpusFilePaths().IsShard(corpus_fname)
+                ? work_dir.FeaturesFilePaths().MyShard()
+                : work_dir.DistilledFeaturesFilePaths().MyShard();
         CHECK(!features_fname.empty());
 
         VLOG(2) << "Writing " << std::distance(elt_range_begin, elt_range_end)

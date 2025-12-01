@@ -19,6 +19,7 @@
 #include "components/autofill/core/browser/form_processing/optimization_guide_proto_util.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/geo/phone_number_i18n.h"
+#include "components/optimization_guide/core/model_quality/model_quality_logs_uploader_service.h"
 #include "components/optimization_guide/core/optimization_guide_decider.h"
 #include "components/optimization_guide/core/optimization_guide_model_executor.h"
 #include "components/optimization_guide/core/optimization_guide_proto_util.h"
@@ -58,10 +59,14 @@ void RecordUserAnnotationsFormImportResult(
   base::UmaHistogramEnumeration("UserAnnotations.FormImportResult", result);
 }
 
+void RecordMemoryCountEntriesResult(int result) {
+  base::UmaHistogramCounts1000("UserAnnotations.EntryCount", result);
+}
+
 void ProcessEntryRetrieval(
     base::OnceCallback<void(UserAnnotationsEntries)> callback,
     UserAnnotationsEntryRetrievalResult user_annotations) {
-  // TODO: b/36169665 - Record the entry retrieval result metrics.
+  RecordMemoryCountEntriesResult(user_annotations->size());
   if (!user_annotations.has_value()) {
     std::move(callback).Run({});
     return;
@@ -123,10 +128,12 @@ void NotifyAutofillProfileSaved(
 
 UserAnnotationsService::UserAnnotationsService(
     optimization_guide::OptimizationGuideModelExecutor* model_executor,
+    optimization_guide::ModelQualityLogsUploaderService* logs_uploader,
     const base::FilePath& storage_dir,
     os_crypt_async::OSCryptAsync* os_crypt_async,
     optimization_guide::OptimizationGuideDecider* optimization_guide_decider)
     : model_executor_(model_executor),
+      logs_uploader_(logs_uploader->GetWeakPtr()),
       optimization_guide_decider_(optimization_guide_decider),
       allowed_hosts_for_forms_annotations_(
           GetAllowedHostsForFormsAnnotations()) {

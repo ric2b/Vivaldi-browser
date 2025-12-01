@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 import 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 
-// <if expr="chromeos_ash">
+// <if expr="is_chromeos">
 import type {LanguageToastElement} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 // </if>
 import {BrowserProxy, ToolbarEvent} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
@@ -108,7 +108,6 @@ suite('UpdateVoicePack', () => {
 
       test('request install if we need to', () => {
         const lang = 'it-it';
-        chrome.readingMode.isLanguagePackDownloadingEnabled = true;
         chrome.readingMode.baseLanguageForSpeech = lang;
         app.$.toolbar.updateFonts = () => {};
         app.languageChanged();
@@ -139,11 +138,14 @@ suite('UpdateVoicePack', () => {
         await microtasksFinished();
 
         assertFalse(app.enabledLangs.includes(lang));
+        assertFalse(
+            chrome.readingMode.getLanguagesEnabledInPref().includes(lang));
       });
 
       test(
-          'and only eSpeak voices for language, disables language',
+          'and only eSpeak voices for language, disables language on ChromeOS',
           async () => {
+            chrome.readingMode.isChromeOsAsh = true;
             createAndSetVoices(app, speechSynthesis, [
               {lang: lang, name: 'eSpeak Portuguese'},
             ]);
@@ -152,6 +154,24 @@ suite('UpdateVoicePack', () => {
             await microtasksFinished();
 
             assertFalse(app.enabledLangs.includes(lang));
+            assertFalse(
+                chrome.readingMode.getLanguagesEnabledInPref().includes(lang));
+          });
+
+      test(
+          'and only system voices for language, keeps language for desktop',
+          async () => {
+            chrome.readingMode.isChromeOsAsh = false;
+            createAndSetVoices(app, speechSynthesis, [
+              {lang: lang, name: 'System Portuguese'},
+            ]);
+
+            app.updateVoicePackStatus(lang, 'kOther');
+            await microtasksFinished();
+
+            assertTrue(app.enabledLangs.includes(lang));
+            assertTrue(
+                chrome.readingMode.getLanguagesEnabledInPref().includes(lang));
           });
 
       test(
@@ -165,6 +185,8 @@ suite('UpdateVoicePack', () => {
             await microtasksFinished();
 
             assertFalse(app.enabledLangs.includes('it-it'));
+            assertFalse(chrome.readingMode.getLanguagesEnabledInPref().includes(
+                'it-it'));
           });
 
       test(
@@ -180,25 +202,29 @@ suite('UpdateVoicePack', () => {
             await microtasksFinished();
 
             assertFalse(app.enabledLangs.includes('it-it'));
+            assertFalse(chrome.readingMode.getLanguagesEnabledInPref().includes(
+                'it-it'));
           });
 
       test(
           'and has other Google voices for language, keeps language enabled',
           async () => {
             createAndSetVoices(app, speechSynthesis, [
-              {lang: lang, name: 'ChromeOS Portuguese 1'},
-              {lang: lang, name: 'ChromeOS Portuguese 2'},
+              {lang: lang, name: 'Google Portuguese 1'},
+              {lang: lang, name: 'Google Portuguese 2'},
             ]);
             app.onVoicesChanged();
             app.updateVoicePackStatus(lang, 'kOther');
             await microtasksFinished();
 
             assertTrue(app.enabledLangs.includes(lang));
+            assertTrue(
+                chrome.readingMode.getLanguagesEnabledInPref().includes(lang));
           });
     });
   });
 
-  // <if expr="chromeos_ash">
+  // <if expr="is_chromeos">
   suite('download notification', () => {
     const lang = 'en-us';
     let toast: LanguageToastElement;
@@ -384,8 +410,6 @@ suite('UpdateVoicePack', () => {
       'with flag switches to newly available voices if it\'s for the current language',
       async () => {
         const lang = 'en-us';
-        chrome.readingMode.isLanguagePackDownloadingEnabled = true;
-        chrome.readingMode.isAutoVoiceSwitchingEnabled = true;
         chrome.readingMode.baseLanguageForSpeech = lang;
         app.enabledLangs = [lang];
         chrome.readingMode.getStoredVoice = () => '';
@@ -403,8 +427,6 @@ suite('UpdateVoicePack', () => {
       'with flag does not switch to newly available voices if it\'s not for the current language',
       () => {
         const installedLang = 'en-us';
-        chrome.readingMode.isLanguagePackDownloadingEnabled = true;
-        chrome.readingMode.isAutoVoiceSwitchingEnabled = true;
         chrome.readingMode.baseLanguageForSpeech = 'pt-br';
         app.enabledLangs = [chrome.readingMode.baseLanguageForSpeech];
         const currentVoice = createSpeechSynthesisVoice({

@@ -205,14 +205,14 @@ ci.builder(
             "minimal_symbols",
             "x64",
             "strip_debug_info",
-            "android_fastbuild",
             "webview_trichrome",
             "webview_shell",
         ],
     ),
-    # This is empty because we automatically compile any tests required for
-    # the builders that triggered this.
-    targets = targets.bundle(targets = []),
+    # crbug.com/390061059: Explicitly compile android_lint to have lint coverage
+    targets = targets.bundle(
+        additional_compile_targets = "android_lint",
+    ),
     gardener_rotations = gardener_rotations.ANDROID,
     tree_closing = True,
     console_view_entry = consoles.console_view_entry(
@@ -256,6 +256,18 @@ ci.thin_tester(
                     "14-desktop-x64-emulator",
                     "emulator-8-cores",
                 ],
+                per_test_modifications = {
+                    "android_browsertests": targets.mixin(
+                        args = [
+                            "--test-launcher-filter-file=../../testing/buildbot/filters/android.desktop.emulator_14.android_browsertests.filter",
+                        ],
+                    ),
+                    "unit_tests": targets.mixin(
+                        args = [
+                            "--test-launcher-filter-file=../../testing/buildbot/filters/android.desktop.emulator_14.unit_tests.filter",
+                        ],
+                    ),
+                },
             ),
         ],
     ),
@@ -266,7 +278,76 @@ ci.thin_tester(
     cores = 8,
     console_view_entry = consoles.console_view_entry(
         category = "tester|x64",
-        short_name = "rel",
+        short_name = "14-rel",
+    ),
+    cq_mirrors_console_view = "mirrors",
+)
+
+ci.thin_tester(
+    name = "android-desktop-x64-rel-15-tests",
+    description_html = "Android desktop x64 release tests on Android 15.",
+    triggered_by = ["ci/android-desktop-x64-compile-rel"],
+    builder_spec = builder_config.builder_spec(
+        execution_mode = builder_config.execution_mode.TEST,
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+            apply_configs = [
+                "android",
+            ],
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "android",
+            build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.INTEL,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.ANDROID,
+        ),
+        android_config = builder_config.android_config(
+            config = "x64_builder_mb",
+        ),
+        build_gs_bucket = "chromium-android-desktop-archive",
+    ),
+    targets = targets.bundle(
+        targets = [
+            "android_desktop_junit_tests",
+            targets.bundle(
+                targets = "android_desktop_tests",
+                mixins = [
+                    "15-desktop-x64-emulator",
+                    "emulator-8-cores",
+                ],
+            ),
+        ],
+        per_test_modifications = {
+            "android_browsertests": targets.mixin(
+                args = [
+                    "--test-launcher-filter-file=../../testing/buildbot/filters/android.desktop.emulator_15.android_browsertests.filter",
+                ],
+                swarming = targets.swarming(
+                    shards = 10,
+                ),
+            ),
+            "chrome_public_unit_test_apk": targets.mixin(
+                args = [
+                    # https://crbug.com/392649074
+                    "--gtest_filter=-org.chromium.chrome.browser.ui.appmenu.AppMenuTest.testShowAppMenu_AnchorTop",
+                ],
+            ),
+            "unit_tests": targets.mixin(
+                args = [
+                    "--test-launcher-filter-file=../../testing/buildbot/filters/android.desktop.emulator_15.unit_tests.filter",
+                ],
+            ),
+        },
+    ),
+    targets_settings = targets.settings(
+        os_type = targets.os_type.ANDROID,
+    ),
+    builderless = True,
+    cores = 8,
+    console_view_entry = consoles.console_view_entry(
+        category = "tester|x64",
+        short_name = "15-rel",
     ),
     cq_mirrors_console_view = "mirrors",
 )

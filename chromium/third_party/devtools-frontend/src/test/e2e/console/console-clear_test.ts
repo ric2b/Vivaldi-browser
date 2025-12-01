@@ -5,7 +5,6 @@
 import {assert} from 'chai';
 
 import {$$, click, getBrowserAndPages, step, waitFor} from '../../shared/helper.js';
-
 import {
   CONSOLE_TAB_SELECTOR,
   focusConsolePrompt,
@@ -62,7 +61,7 @@ describe('The Console Tab', function() {
     const sideBar = await waitFor('div[slot="sidebar"]');
     const entries = await $$('li', sideBar);
     const entriesText = await Promise.all(entries.map(e => e.evaluate(e => e.textContent)));
-    assert.deepStrictEqual(entriesText, [
+    assert.deepEqual(entriesText, [
       '1 message',
       '<other>1',
       '1 user message',

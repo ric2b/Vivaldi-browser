@@ -296,6 +296,102 @@ IN_PROC_BROWSER_TEST_F(
   CheckCounter(WebFeature::kPrivateNetworkAccessPreflightWarning, 1);
 }
 
+// This test verifies that the PNA 2.0 breakage UseCounter
+// (kPrivateNetworkAccessInsecureResourceNotKnownPrivate) is correctly logged.
+IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
+                       PrivateNetworkAccessV2BreakageUseCounter) {
+  // A top-level navigation request to a site with a private address should not
+  // trigger the UseCounter.
+  ASSERT_TRUE(content::NavigateToURL(
+      web_contents(), http_server().GetURL(
+                          "a.com", "/private_network_access/no-favicon.html")));
+  CheckCounter(WebFeature::kPrivateNetworkAccessInsecureResourceNotKnownPrivate,
+               0);
+
+  // Navigate to an HTTPS site with a public address. Requests to HTTPS
+  // resources should work but not log the UseCounter. Requests to HTTP
+  // resources should be blocked as mixed content.
+  ASSERT_TRUE(content::NavigateToURL(
+      web_contents(),
+      https_server().GetURL("a.com",
+                            "/private_network_access/"
+                            "no-favicon-treat-as-public-address.html")));
+  EXPECT_EQ(true, content::EvalJs(web_contents(),
+                                  content::JsReplace(
+                                      "fetch($1).then(response => response.ok)",
+                                      https_server().GetURL(kPnaPath))));
+  CheckCounter(WebFeature::kPrivateNetworkAccessInsecureResourceNotKnownPrivate,
+               0);
+  EXPECT_THAT(content::EvalJs(
+                  web_contents(),
+                  content::JsReplace("fetch($1).then(response => response.ok)",
+                                     http_server().GetURL("b.com", kPnaPath))),
+              content::EvalJsResult::IsError());
+  CheckCounter(WebFeature::kPrivateNetworkAccessInsecureResourceNotKnownPrivate,
+               0);
+
+  // Navigate to an HTTP site with a public address, and then trigger various
+  // fetch requests and check whether the UseCounter has been logged.
+  ASSERT_TRUE(content::NavigateToURL(
+      web_contents(),
+      http_server().GetURL("a.com",
+                           "/private_network_access/"
+                           "no-favicon-treat-as-public-address.html")));
+
+  // Trigger a request to a localhost HTTP site via 127.0.0.1.
+  EXPECT_EQ(true, content::EvalJs(web_contents(),
+                                  content::JsReplace(
+                                      "fetch($1).then(response => response.ok)",
+                                      http_server().GetURL(kPnaPath))));
+  CheckCounter(WebFeature::kPrivateNetworkAccessInsecureResourceNotKnownPrivate,
+               0);
+
+  // Trigger a request to a private HTTPS site with a public domain. This should
+  // not trigger the UseCounter.
+  EXPECT_EQ(true,
+            content::EvalJs(
+                web_contents(),
+                content::JsReplace("fetch($1).then(response => response.ok)",
+                                   https_server().GetURL("b.com", kPnaPath))));
+
+  // TODO(cthomp): Add a case for triggering a request to an  HTTP site via a
+  // private IP literal hostname. This should succeed and not cause the
+  // UseCounter to be triggered. This may not be feasible to test if the test
+  // server only listens on 127.0.0.1. (We also can't use URLLoaderInterceptor
+  // for this, because we need to trigger the real URLLoader in order to reach
+  // the UseCounter collection code path.)
+
+  // Trigger a request to a private HTTP site via a .local hostname.
+  EXPECT_EQ(true,
+            content::EvalJs(
+                web_contents(),
+                content::JsReplace("fetch($1).then(response => response.ok)",
+                                   http_server().GetURL("b.local", kPnaPath))));
+  CheckCounter(WebFeature::kPrivateNetworkAccessInsecureResourceNotKnownPrivate,
+               0);
+
+  // Trigger a request to a private HTTP site with a public domain, but the
+  // fetch() call is tagged with `targetAddressSpace: 'local'` making it a
+  // priori known local.
+  EXPECT_EQ(true,
+            content::EvalJs(
+                web_contents(),
+                content::JsReplace("fetch($1, { targetAddressSpace: "
+                                   "'local'}).then(response => response.ok)",
+                                   http_server().GetURL("b.com", kPnaPath))));
+
+  // Trigger a request to a private HTTP site, that is not a priori known to be
+  // private. Post-PNA 2.0 this would be blocked as mixed content and would not
+  // trigger the PNA prompt. This should cause the UseCounter to be triggered.
+  EXPECT_EQ(true,
+            content::EvalJs(
+                web_contents(),
+                content::JsReplace("fetch($1).then(response => response.ok)",
+                                   http_server().GetURL("b.com", kPnaPath))));
+  CheckCounter(WebFeature::kPrivateNetworkAccessInsecureResourceNotKnownPrivate,
+               1);
+}
+
 IN_PROC_BROWSER_TEST_F(
     ChromeWebPlatformSecurityMetricsBrowserTest,
     PrivateNetworkAccessPolicyEnabledFetchWithPreflightRepliedWithoutPNAHeaders) {
@@ -612,28 +708,16 @@ IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
     const char* csp_frame_src;
     const char* sub_document_url;
     int expected_kCspWouldBlockIfWildcardDoesNotMatchWs;
-    int expected_kCspWouldBlockIfWildcardDoesNotMatchFtp;
   } test_cases[] = {
-      {"*", "http://example.com", 0, 0},
+      {"*", "http://example.com", 0},
       // Feature shouldn't be logged if matches explicitly.
-      {"ftp:*", "ftp://example.com", 0, 0},
-      {"ws:*", "ws://example.com", 0, 0},
-      {"wss:*", "wss://example.com", 0, 0},
-      // Feature should be logged if matched with wildcard.
-      {
-          "*",
-          "ftp://example.com",
-          0,
-          base::FeatureList::IsEnabled(
-              network::features::kCspStopMatchingWildcardDirectivesToFtp)
-              ? 0
-              : 1,
-      },
-      {"*", "ws://example.com", 1, 0},
-      {"*", "wss://example.com", 1, 0},
+      {"ftp:*", "ftp://example.com", 0},
+      {"ws:*", "ws://example.com", 0},
+      {"wss:*", "wss://example.com", 0},
+      {"*", "ws://example.com", 1},
+      {"*", "wss://example.com", 1},
   };
   int total_kCspWouldBlockIfWildcardDoesNotMatchWs = 0;
-  int total_kCspWouldBlockIfWildcardDoesNotMatchFtp = 0;
   for (const auto& test_case : test_cases) {
     GURL main_document_url = https_server().GetURL(
         "a.com",
@@ -656,9 +740,6 @@ IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
     CheckCounter(WebFeature::kCspWouldBlockIfWildcardDoesNotMatchWs,
                  total_kCspWouldBlockIfWildcardDoesNotMatchWs +=
                  test_case.expected_kCspWouldBlockIfWildcardDoesNotMatchWs);
-    CheckCounter(WebFeature::kCspWouldBlockIfWildcardDoesNotMatchFtp,
-                 total_kCspWouldBlockIfWildcardDoesNotMatchFtp +=
-                 test_case.expected_kCspWouldBlockIfWildcardDoesNotMatchFtp);
   }
 }
 
@@ -2958,6 +3039,30 @@ IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
   )",
                                                                  url)));
   CheckCounter(WebFeature::kCSPEESameOriginBlanketEnforcement, 0);
+}
+
+IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
+                       NoCharsetAutoDetection) {
+  EXPECT_TRUE(content::NavigateToURL(
+      web_contents(), https_server().GetURL("/security/utf8.html")));
+  CheckCounter(WebFeature::kCharsetAutoDetection, 0);
+  CheckCounter(WebFeature::kCharsetAutoDetectionISO2022JP, 0);
+}
+
+IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
+                       CharsetAutoDetection) {
+  EXPECT_TRUE(content::NavigateToURL(
+      web_contents(), https_server().GetURL("/security/no_charset.html")));
+  CheckCounter(WebFeature::kCharsetAutoDetection, 1);
+  CheckCounter(WebFeature::kCharsetAutoDetectionISO2022JP, 0);
+}
+
+IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
+                       ISO2022JPDetection) {
+  EXPECT_TRUE(content::NavigateToURL(
+      web_contents(), https_server().GetURL("/security/iso_2022_jp.html")));
+  CheckCounter(WebFeature::kCharsetAutoDetection, 1);
+  CheckCounter(WebFeature::kCharsetAutoDetectionISO2022JP, 1);
 }
 
 // TODO(arthursonzogni): Add basic test(s) for the WebFeatures:

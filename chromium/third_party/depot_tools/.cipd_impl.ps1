@@ -102,6 +102,31 @@ function Retry-Command {
   }
 }
 
+# Check is url in the NO_PROXY of Environment?
+function Is-UrlInNoProxy {
+  [CmdletBinding()]
+  param (
+    [Parameter(Mandatory)]
+    [string]$Url
+  )
+  $NoProxy = $Env:NO_PROXY
+  if ([string]::IsNullOrEmpty($NoProxy)) {
+    return $false
+  }
+  $NoProxyList = $NoProxy -split ',' | ForEach-Object { $_.Trim().ToLower() }
+  $UriHost = ([uri]$Url).Host.ToLower()
+  foreach ($entry in $NoProxyList) {
+    if ($entry.StartsWith('.')) {
+      if ($UriHost.EndsWith($entry.Substring(1))) {
+        return $true
+      }
+    } elseif ($entry -eq $UriHost) {
+      return $true
+    }
+  }
+  return $false
+}
+
 $ExpectedSHA256 = Get-Expected-SHA256 $Platform
 $Version = (Get-Content $VersionFile).Trim()
 $URL = "$BackendURL/client?platform=$Platform&version=$Version"
@@ -110,9 +135,31 @@ $URL = "$BackendURL/client?platform=$Platform&version=$Version"
 $TmpPath = $CipdBinary + ".tmp." + $PID
 try {
   Write-Output "Downloading CIPD client for $Platform from $URL..."
+
+  $Parameters = @{
+    UserAgent = $UserAgent
+    Uri = $URL
+    OutFile = $TmpPath
+  }
+
+  if ($Env:HTTPS_PROXY) {
+    $Proxy = $Env:HTTPS_PROXY
+  } elseif ($Env:HTTP_PROXY) {
+    $Proxy = $Env:HTTP_PROXY
+  } elseif ($Env:ALL_PROXY) {
+    $Proxy = $Env:ALL_PROXY
+  } else {
+    $Proxy = $null
+  }
+  $UrlNotInNoProxy = -not (Is-UrlInNoProxy -Url $URL)
+  if ($UrlNotInNoProxy -and $Proxy) {
+    Write-Output "Using Proxy $Proxy..."
+    $Parameters.Proxy = $Proxy
+  }
+
   Retry-Command {
     $ProgressPreference = "SilentlyContinue"
-    Invoke-WebRequest -UserAgent $UserAgent -Uri $URL -OutFile $TmpPath
+    Invoke-WebRequest @Parameters
   }
 
   $ActualSHA256 = (Get-FileHash -Path $TmpPath -Algorithm "SHA256").Hash.toLower()

@@ -200,6 +200,8 @@ class VideoDecoderPipelineTest
     auto pool = std::make_unique<MockVideoFramePool>();
     pool_ = pool.get();
     decoder_ = base::WrapUnique(new VideoDecoderPipeline(
+        VideoDecoderPipeline::DecoderReservation::Take(
+            std::numeric_limits<int>::max()),
         gpu::GpuDriverBugWorkarounds(),
         base::SingleThreadTaskRunner::GetCurrentDefault(), std::move(pool),
         /*frame_converter=*/nullptr,
@@ -546,7 +548,7 @@ TEST_F(VideoDecoderPipelineTest, TranscryptThenEos) {
 TEST_F(VideoDecoderPipelineTest, TranscryptReset) {
   InitializeForTranscrypt();
   scoped_refptr<DecoderBuffer> encrypted_buffer2 =
-      DecoderBuffer::CopyFrom(base::span(kEncryptedData).subspan(1));
+      DecoderBuffer::CopyFrom(base::span(kEncryptedData).subspan<1>());
   // Send in a buffer, but don't invoke the Decrypt callback so it stays as
   // pending. Then send in 2 more buffers so they are in the queue.
   {

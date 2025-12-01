@@ -115,8 +115,9 @@ class MoqtIngestionHandler {
         absl::bind_front(&MoqtIngestionHandler::OnAnnounceReceived, this);
   }
 
+  // TODO(martinduke): Handle when |announce| is false (UNANNOUNCE).
   std::optional<MoqtAnnounceErrorReason> OnAnnounceReceived(
-      FullTrackName track_namespace) {
+      FullTrackName track_namespace, AnnounceEvent /*announce*/) {
     if (!IsValidTrackNamespace(track_namespace) &&
         !quiche::GetQuicheCommandLineFlag(
             FLAGS_allow_invalid_track_namespaces)) {
@@ -160,13 +161,14 @@ class MoqtIngestionHandler {
   }
 
  private:
-  class NamespaceHandler : public RemoteTrack::Visitor {
+  class NamespaceHandler : public SubscribeRemoteTrack::Visitor {
    public:
     explicit NamespaceHandler(absl::string_view directory)
         : directory_(directory) {}
 
     void OnReply(
         const FullTrackName& full_track_name,
+        std::optional<FullSequence> /*largest_id*/,
         std::optional<absl::string_view> error_reason_phrase) override {
       if (error_reason_phrase.has_value()) {
         QUICHE_LOG(ERROR) << "Failed to subscribe to the peer track "
@@ -180,7 +182,6 @@ class MoqtIngestionHandler {
                           FullSequence sequence,
                           MoqtPriority /*publisher_priority*/,
                           MoqtObjectStatus /*status*/,
-                          MoqtForwardingPreference /*forwarding_preference*/,
                           absl::string_view object,
                           bool /*end_of_message*/) override {
       std::string file_name = absl::StrCat(sequence.group, "-", sequence.object,

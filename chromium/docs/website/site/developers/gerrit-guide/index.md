@@ -12,25 +12,17 @@ title: Gerrit Guide
 
 ### (EVERYONE) To get access to the Chromium Gerrit instance
 
-1.  Install [depot_tools](https://www.chromium.org/developers/how-tos/install-depot-tools/).
-2.  Log in by running `luci-auth login -scopes "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/gerritcodereview"`.
-    *   Log in with the email you use for your git commits
-3.  Go to <https://www.googlesource.com/new-password>
-4.  Log in with the email you use for your git commits.
-    *   **If you are a Googler, make sure you're using the account you
-                want to use (either @google.com or @chromium.org, depending on
-                how you want to use things).**
-    *   **You can verify this by ensuring that the Username field looks
-                like git-&lt;user&gt;.chromium.org**
-5.  Follow the directions on the new-password page to set up/append to
-            your .gitcookies file.
-    *   You should click the radio button labeled "only
-                chromium.googlesource.com" if it exists.
-6.  **Verification:** Run `git ls-remote
-            https://chromium.googlesource.com/chromiumos/manifest.git`
-    *   This should **not** prompt for any credentials, and should just
-                print out a list of git references.
-7.  Make sure to set your real name.
+1.  Install [depot_tools](/developers/how-tos/install-depot-tools/).
+2.  Set up your account on Gerrit by visiting <https://chromium-review.googlesource.com/>
+        and signing in once. This makes sure that you have an account on these review
+        systems, which is required for uploading new CLs.
+3.  To ensure that `git cl` workflows authenticate correctly:
+    ```
+    git config --global depot-tools.useNewAuthStack 1
+    ```
+4.  If you are using a @google.com account:
+    1.  Run `gcert` once a day to authenticate your account.
+5.  Make sure to set your real name.
     1.  Visit <https://chromium-review.googlesource.com/#/settings/> and
                 check the "Full Name" field.
 
@@ -64,7 +56,7 @@ one Gerrit account you can link them yourself:
             click the Send Verification button, and follow the instructions.
     1.  If you see an error on clicking the link, use this link to file
                 a ticket
-                [go/fix-chrome-git](http://goto.google.com/fix-chrome-git)
+                [go/fix-chrome-git](http://go/fix-chrome-git)
 4.  To verify that it worked, open [Settings -&gt;
             Identities](https://chromium-review.googlesource.com/#/settings/web-identities)
             and verify your @chromium.org, @google.com and ldapuser/\*
@@ -109,6 +101,13 @@ ticket](https://bugs.chromium.org/p/chromium/issues/entry?template=Infra-Git)
 with the subject "Unlink my &lt;id&gt;@chromium.org and &lt;id&gt;@google.com
 accounts". If it is urgent, email ajp@chromium.org. Otherwise, the request
 should be handled within 2-3 days.
+
+### (EVERYONE) Verification
+
+Run `git ls-remote https://chromium.googlesource.com/chromiumos/manifest.git`
+
+This should **not** prompt for any credentials, and should just print out a list of git
+references.
 
 ## Watching Projects / Notifications
 

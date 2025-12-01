@@ -31,7 +31,6 @@
 
 #include "base/memory/values_equivalent.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "third_party/blink/renderer/core/css/css_color.h"
 #include "third_party/blink/renderer/core/css/css_identifier_value.h"
 #include "third_party/blink/renderer/core/css/css_math_expression_node.h"
@@ -43,7 +42,6 @@
 #include "third_party/blink/renderer/core/css/properties/longhands.h"
 #include "third_party/blink/renderer/core/css/resolver/style_builder_converter.h"
 #include "third_party/blink/renderer/core/css_value_keywords.h"
-#include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/text_link_colors.h"
 #include "third_party/blink/renderer/platform/graphics/color.h"
 #include "third_party/blink/renderer/platform/graphics/gradient.h"
@@ -157,7 +155,7 @@ scoped_refptr<Image> CSSGradientValue::GetImage(
       style, &style, root_style,
       CSSToLengthConversionData::ViewportSize(document.GetLayoutView()),
       container_sizes, CSSToLengthConversionData::AnchorData(),
-      style.EffectiveZoom(), ignored_flags);
+      style.EffectiveZoom(), ignored_flags, /*element=*/nullptr);
 
   scoped_refptr<Gradient> gradient;
   switch (GetClassType()) {
@@ -420,7 +418,7 @@ static const CSSValue* GetComputedStopColor(const CSSValue& color,
   const mojom::blink::ColorScheme color_scheme = style.UsedColorScheme();
   // TODO(40946458): Don't use default length resolver here!
   const ResolveColorValueContext context{
-      .length_resolver = CSSToLengthConversionData(),
+      .length_resolver = CSSToLengthConversionData(/*element=*/nullptr),
       .text_link_colors = TextLinkColors(),
       .used_color_scheme = color_scheme};
   const StyleColor style_stop_color = ResolveColorValue(color, context);
@@ -651,7 +649,7 @@ void CSSGradientValue::AddStops(
         stops[i].offset =
             stop.offset_->ComputePercentage(conversion_data) / 100;
       } else if (stop.offset_->IsLength() ||
-                 stop.offset_->IsCalculatedPercentageWithLength()) {
+                 !stop.offset_->IsResolvableBeforeLayout()) {
         float length;
         if (stop.offset_->IsLength()) {
           length = stop.offset_->ComputeLength<float>(conversion_data);
@@ -842,7 +840,7 @@ static float PositionFromValue(const CSSValue* value,
                         100.f * edge_distance;
   }
 
-  if (primitive_value->IsCalculatedPercentageWithLength()) {
+  if (!primitive_value->IsResolvableBeforeLayout()) {
     return origin + sign * To<CSSMathFunctionValue>(primitive_value)
                                ->ToCalcValue(conversion_data)
                                ->Evaluate(edge_distance);
@@ -874,9 +872,10 @@ bool CSSGradientValue::KnownToBeOpaque(const Document& document,
                                        const ComputedStyle& style) const {
   for (auto& stop : stops_) {
     // TODO(40946458): Don't use default length resolver here!
-    if (!stop.IsHint() && !ResolveStopColor(CSSToLengthConversionData(),
-                                            *stop.color_, document, style)
-                               .IsOpaque()) {
+    if (!stop.IsHint() &&
+        !ResolveStopColor(CSSToLengthConversionData(/*element=*/nullptr),
+                          *stop.color_, document, style)
+             .IsOpaque()) {
       return false;
     }
   }
@@ -912,8 +911,9 @@ Vector<Color> CSSGradientValue::GetStopColors(
   for (const auto& stop : stops_) {
     if (!stop.IsHint()) {
       // TODO(40946458): Don't use default length resolver here!
-      stop_colors.push_back(ResolveStopColor(CSSToLengthConversionData(),
-                                             *stop.color_, document, style));
+      stop_colors.push_back(
+          ResolveStopColor(CSSToLengthConversionData(/*element=*/nullptr),
+                           *stop.color_, document, style));
     }
   }
   return stop_colors;
@@ -930,7 +930,7 @@ bool CSSGradientValue::ShouldSerializeColorSpace() const {
   }
 
   bool has_only_legacy_colors =
-      base::ranges::all_of(stops_, [](const CSSGradientColorStop& stop) {
+      std::ranges::all_of(stops_, [](const CSSGradientColorStop& stop) {
         const auto* color_value =
             DynamicTo<cssvalue::CSSColor>(stop.color_.Get());
         return !color_value ||
@@ -1339,11 +1339,11 @@ void CSSGradientValue::AppendCSSTextForDeprecatedColorStops(
   for (unsigned i = 0; i < stops_.size(); i++) {
     const CSSGradientColorStop& stop = stops_[i];
     result.Append(", ");
-    if (stop.offset_->IsZero() == CSSPrimitiveValue::BoolStatus::kTrue) {
+    if (stop.offset_->GetValueIfKnown() == 0.0) {
       result.Append("from(");
       result.Append(stop.color_->CssText());
       result.Append(')');
-    } else if (stop.offset_->IsOne() == CSSPrimitiveValue::BoolStatus::kTrue) {
+    } else if (stop.offset_->GetValueIfKnown() == 1.0) {
       result.Append("to(");
       result.Append(stop.color_->CssText());
       result.Append(')');
@@ -1896,7 +1896,8 @@ bool CSSConstantGradientValue::KnownToBeOpaque(
     const Document& document,
     const ComputedStyle& style) const {
   // TODO(40946458): Don't use default length resolver here!
-  return ResolveStopColor(CSSToLengthConversionData(), *color_, document, style)
+  return ResolveStopColor(CSSToLengthConversionData(/*element=*/nullptr),
+                          *color_, document, style)
       .IsOpaque();
 }
 

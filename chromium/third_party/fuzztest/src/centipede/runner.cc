@@ -104,21 +104,25 @@ __thread ThreadLocalRunnerState tls;
 static void WriteFailureDescription(const char *description) {
   // TODO(b/264715830): Remove I/O error logging once the bug is fixed?
   if (state.failure_description_path == nullptr) return;
-  FILE *f = fopen(state.failure_description_path, "w");
-  if (f == nullptr) {
-    perror("FAILURE: fopen()");
-    return;
-  }
-  const auto len = strlen(description);
-  if (fwrite(description, 1, len, f) != len) {
-    perror("FAILURE: fwrite()");
-  }
-  if (fflush(f) != 0) {
-    perror("FAILURE: fflush()");
-  }
-  if (fclose(f) != 0) {
-    perror("FAILURE: fclose()");
-  }
+  // Make sure that the write is atomic and only happens once.
+  [[maybe_unused]] static int write_once = [=] {
+    FILE *f = fopen(state.failure_description_path, "w");
+    if (f == nullptr) {
+      perror("FAILURE: fopen()");
+      return 0;
+    }
+    const auto len = strlen(description);
+    if (fwrite(description, 1, len, f) != len) {
+      perror("FAILURE: fwrite()");
+    }
+    if (fflush(f) != 0) {
+      perror("FAILURE: fflush()");
+    }
+    if (fclose(f) != 0) {
+      perror("FAILURE: fclose()");
+    }
+    return 0;
+  }();
 }
 
 void ThreadLocalRunnerState::TraceMemCmp(uintptr_t caller_pc, const uint8_t *s1,
@@ -279,6 +283,8 @@ __attribute__((noinline)) void CheckStackLimit(uintptr_t sp) {
   // Check for the stack limit only if sp is inside the stack region.
   if (stack_limit > 0 && tls.stack_region_low &&
       tls.top_frame_sp - sp > stack_limit) {
+    const bool test_not_running = state.input_start_time == 0;
+    if (test_not_running) return;
     if (stack_limit_exceeded.test_and_set()) return;
     fprintf(stderr,
             "========= Stack limit exceeded: %" PRIuPTR
@@ -305,10 +311,11 @@ void GlobalRunnerState::StartWatchdogThread() {
   fprintf(stderr,
           "Starting watchdog thread: timeout_per_input: %" PRIu64
           " sec; timeout_per_batch: %" PRIu64 " sec; rss_limit_mb: %" PRIu64
-          " MB\n",
+          " MB; stack_limit_kb: %" PRIu64 " KB\n",
           state.run_time_flags.timeout_per_input.load(),
           state.run_time_flags.timeout_per_batch,
-          state.run_time_flags.rss_limit_mb.load());
+          state.run_time_flags.rss_limit_mb.load(),
+          state.run_time_flags.stack_limit_kb.load());
   pthread_t watchdog_thread;
   pthread_create(&watchdog_thread, nullptr, WatchdogThread, nullptr);
   pthread_detach(watchdog_thread);
@@ -330,8 +337,8 @@ void GlobalRunnerState::ResetTimers() {
 
 // Byte array mutation fallback for a custom mutator, as defined here:
 // https://github.com/google/fuzzing/blob/master/docs/structure-aware-fuzzing.md
-extern "C" size_t LLVMFuzzerMutate(uint8_t *data, size_t size,
-                                   size_t max_size) {
+extern "C" __attribute__((weak)) size_t
+CentipedeLLVMFuzzerMutateCallback(uint8_t *data, size_t size, size_t max_size) {
   // TODO(kcc): [as-needed] fix the interface mismatch.
   // LLVMFuzzerMutate is an array-based interface (for compatibility reasons)
   // while ByteArray has a vector-based interface.
@@ -351,6 +358,11 @@ extern "C" size_t LLVMFuzzerMutate(uint8_t *data, size_t size,
   }
   memcpy(data, array.data(), array.size());
   return array.size();
+}
+
+extern "C" size_t LLVMFuzzerMutate(uint8_t *data, size_t size,
+                                   size_t max_size) {
+  return CentipedeLLVMFuzzerMutateCallback(data, size, max_size);
 }
 
 // An arbitrary large size for input data.
@@ -399,7 +411,9 @@ PrepareCoverage(bool full_clear) {
       tls.cmp_traceN.Clear();
     }
   });
-  state.pc_counter_set.ForEachNonZeroByte([](size_t idx, uint8_t value) {});
+  state.pc_counter_set.ForEachNonZeroByte(
+      [](size_t idx, uint8_t value) {}, 0,
+      state.actual_pc_counter_set_size_aligned);
   if (state.run_time_flags.use_dataflow_features)
     state.data_flow_feature_set.ForEachNonZeroBit([](size_t idx) {});
   if (state.run_time_flags.use_cmp_features) {
@@ -602,7 +616,9 @@ static void RunOneInput(const uint8_t *data, size_t size,
   int target_return_value = callbacks.Execute({data, size}) ? 0 : -1;
   state.stats.exec_time_usec = UsecSinceLast();
   CheckWatchdogLimits();
-  PostProcessCoverage(target_return_value);
+  if (centipede::state.input_start_time.exchange(0) != 0) {
+    PostProcessCoverage(target_return_value);
+  }
   state.stats.post_time_usec = UsecSinceLast();
   state.stats.peak_rss_mb = GetPeakRSSMb();
 }
@@ -1223,7 +1239,9 @@ extern "C" void CentipedePrepareProcessing() {
 
 extern "C" void CentipedeFinalizeProcessing() {
   centipede::CheckWatchdogLimits();
-  centipede::PostProcessCoverage(/*target_return_value=*/0);
+  if (centipede::state.input_start_time.exchange(0) != 0) {
+    centipede::PostProcessCoverage(/*target_return_value=*/0);
+  }
 }
 
 extern "C" size_t CentipedeGetExecutionResult(uint8_t *data, size_t capacity) {

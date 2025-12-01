@@ -14,6 +14,8 @@
                       destLang:(NSString*)destLang
               autoDetectSource:(BOOL)autoDetectSource;
 
+- (void)didDeleteHistoryItems:(NSArray<NSString*>*)historyItems;
+
 @end
 
 #endif  // IOS_UI_TRANSLATE_VIVALDI_TRANSLATE_VIEW_DELEGATE_H_

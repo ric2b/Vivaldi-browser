@@ -60,8 +60,8 @@ stuck, or to ask questions.
 [fuzz target effectiveness]: /chromium-os/developer-library/guides/testing/fuzzing/#Improving-fuzzer-effectiveness
 [Fuzzing]: https://en.wikipedia.org/wiki/Fuzzing
 [Fuzzing for Chrome Browser]: https://chromium.googlesource.com/chromium/src/+/HEAD/testing/libfuzzer/README.md
-[go/fuzzing-success]: https://goto.google.com/fuzzing-success
-[go/why-fuzz]:https://goto.google.com/why-fuzz
+[go/fuzzing-success]: http://go/fuzzing-success
+[go/why-fuzz]:http://go/why-fuzz
 [Guided in-process fuzzing of Chrome components]: https://security.googleblog.com/2016/08/guided-in-process-fuzzing-of-chrome.html
 [Issues found]: https://bugs.chromium.org/p/chromium/issues/list?sort=-modified&colspec=ID%20Pri%20M%20Stars%20ReleaseBlock%20Component%20Status%20Owner%20Summary%20OS%20Modified&q=label%3AStability-LibFuzzer%2CStability-AFL%20label%3AClusterFuzz%20-status%3AWontFix%2CDuplicate&can=1
 [libFuzzer]: https://llvm.org/docs/LibFuzzer.html

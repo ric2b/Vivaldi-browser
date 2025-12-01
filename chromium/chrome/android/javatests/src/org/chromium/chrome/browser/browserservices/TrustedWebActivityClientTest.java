@@ -20,6 +20,7 @@ import androidx.test.core.app.ApplicationProvider;
 import androidx.test.filters.SmallTest;
 import androidx.test.rule.ServiceTestRule;
 
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -36,6 +37,7 @@ import org.chromium.chrome.browser.browserservices.permissiondelegation.Installe
 import org.chromium.chrome.browser.notifications.NotificationUmaTracker;
 import org.chromium.chrome.browser.notifications.StandardNotificationBuilder;
 import org.chromium.chrome.test.R;
+import org.chromium.components.browser_ui.notifications.NotificationProxyUtils;
 import org.chromium.components.content_settings.ContentSettingValues;
 import org.chromium.components.embedder_support.util.Origin;
 
@@ -130,6 +132,7 @@ public class TrustedWebActivityClientTest {
     public void setUp() throws TimeoutException, RemoteException {
         mTargetContext = ApplicationProvider.getApplicationContext();
         mBuilder = new StandardNotificationBuilder(mTargetContext);
+        NotificationProxyUtils.setNotificationEnabledForTest(true);
 
         // TestTrustedWebActivityService is in the test support apk.
         InstalledWebappPermissionManager.addDelegateApp(ORIGIN, TEST_SUPPORT_PACKAGE);
@@ -154,6 +157,11 @@ public class TrustedWebActivityClientTest {
         mResponseHandler.mResponderRegistered.waitForCallback(0);
     }
 
+    @After
+    public void tearDown() {
+        NotificationProxyUtils.setNotificationEnabledForTest(null);
+    }
+
     /**
      * Tests that #notifyNotification: - Gets the small icon id from the service (although it
      * doesn't check that it's used). - Gets the service to show the notification. - Uses the
@@ -167,8 +175,8 @@ public class TrustedWebActivityClientTest {
         Assert.assertTrue(mResponseHandler.mGetSmallIconId.getCallCount() >= 1);
         // getIconId() can be called directly and also indirectly via getIconBitmap().
 
-        Assert.assertEquals(mResponseHandler.mNotificationTag, NOTIFICATION_TAG);
-        Assert.assertEquals(mResponseHandler.mNotificationId, NOTIFICATION_ID);
+        Assert.assertEquals(NOTIFICATION_TAG, mResponseHandler.mNotificationTag);
+        Assert.assertEquals(NOTIFICATION_ID, mResponseHandler.mNotificationId);
         Assert.assertEquals(
                 mResponseHandler.mNotificationChannel,
                 mTargetContext.getString(R.string.notification_category_group_general));
@@ -205,8 +213,8 @@ public class TrustedWebActivityClientTest {
 
         mResponseHandler.mCancelNotification.waitForOnly();
 
-        Assert.assertEquals(mResponseHandler.mNotificationTag, NOTIFICATION_TAG);
-        Assert.assertEquals(mResponseHandler.mNotificationId, NOTIFICATION_ID);
+        Assert.assertEquals(NOTIFICATION_TAG, mResponseHandler.mNotificationTag);
+        Assert.assertEquals(NOTIFICATION_ID, mResponseHandler.mNotificationId);
     }
 
     /**

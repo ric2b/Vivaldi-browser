@@ -156,7 +156,7 @@ class RendererAgentTest : public ::testing::Test {
   }
 
   void ExpectNoSignalAboutSubresourceDisallowed() {
-    EXPECT_CALL(*agent(), OnSubresourceDisallowed(_)).Times(0);
+    EXPECT_CALL(*agent(), OnSubresourceDisallowed()).Times(0);
   }
 
   void ExpectLoadPolicy(std::string_view url_spec,
@@ -172,7 +172,7 @@ class RendererAgentTest : public ::testing::Test {
     // If the load policy indicated the load was filtered, simulate a filtered
     // load callback.
     if (actual_policy == subresource_filter::LoadPolicy::DISALLOW) {
-      agent()->OnSubresourceDisallowed(url_spec);
+      agent()->OnSubresourceDisallowed();
     }
   }
 
@@ -325,7 +325,7 @@ TEST_F(RendererAgentTest, Enabled_FilteringIsInEffectForOneLoad) {
       subresource_filter::mojom::ActivationLevel::kEnabled);
   ASSERT_TRUE(::testing::Mock::VerifyAndClearExpectations(agent()));
 
-  EXPECT_CALL(*agent(), OnSubresourceDisallowed(kTestFirstURL));
+  EXPECT_CALL(*agent(), OnSubresourceDisallowed());
 
   ExpectLoadPolicy(kTestFirstURL, subresource_filter::LoadPolicy::DISALLOW);
   ExpectLoadPolicy(kTestSecondURL, subresource_filter::LoadPolicy::ALLOW);
@@ -335,11 +335,12 @@ TEST_F(RendererAgentTest, Enabled_FilteringIsInEffectForOneLoad) {
   ExpectNoFilterGetsInjected();
   ExpectNoSignalAboutSubresourceDisallowed();
   PerformSameDocumentNavigationWithoutSettingActivationLevel();
-  EXPECT_CALL(*agent(), OnSubresourceDisallowed(kTestFirstURL));
+  EXPECT_CALL(*agent(), OnSubresourceDisallowed());
   ExpectLoadPolicy(kTestFirstURL, subresource_filter::LoadPolicy::DISALLOW);
   ExpectLoadPolicy(kTestSecondURL, subresource_filter::LoadPolicy::ALLOW);
 
   ExpectNoFilterGetsInjected();
+  EXPECT_CALL(*agent(), RequestActivationState());
   StartLoadWithoutSettingActivationState();
   FinishLoad();
 
@@ -365,7 +366,7 @@ TEST_F(RendererAgentTest, Enabled_ActivationIsInheritedWhenAvailable) {
   StartLoadWithoutSettingActivationState();
   ASSERT_TRUE(::testing::Mock::VerifyAndClearExpectations(agent()));
 
-  EXPECT_CALL(*agent(), OnSubresourceDisallowed(kTestFirstURL));
+  EXPECT_CALL(*agent(), OnSubresourceDisallowed());
 
   ExpectLoadPolicy(kTestFirstURL, subresource_filter::LoadPolicy::DISALLOW);
   ExpectLoadPolicy(kTestSecondURL, subresource_filter::LoadPolicy::ALLOW);
@@ -393,7 +394,7 @@ TEST_F(RendererAgentTest, Enabled_NewRulesetIsPickedUpAtNextLoad) {
   ASSERT_NO_FATAL_FAILURE(
       SetTestRulesetToDisallowURLsWithPathSuffix(kTestSecondURLPathSuffix));
 
-  EXPECT_CALL(*agent(), OnSubresourceDisallowed(kTestFirstURL));
+  EXPECT_CALL(*agent(), OnSubresourceDisallowed());
 
   ExpectLoadPolicy(kTestFirstURL, subresource_filter::LoadPolicy::DISALLOW);
   ExpectLoadPolicy(kTestSecondURL, subresource_filter::LoadPolicy::ALLOW);
@@ -409,7 +410,7 @@ TEST_F(RendererAgentTest, Enabled_NewRulesetIsPickedUpAtNextLoad) {
       subresource_filter::mojom::ActivationLevel::kEnabled);
   ASSERT_TRUE(::testing::Mock::VerifyAndClearExpectations(agent()));
 
-  EXPECT_CALL(*agent(), OnSubresourceDisallowed(kTestSecondURL));
+  EXPECT_CALL(*agent(), OnSubresourceDisallowed());
 
   ExpectLoadPolicy(kTestFirstURL, subresource_filter::LoadPolicy::ALLOW);
   ExpectLoadPolicy(kTestSecondURL, subresource_filter::LoadPolicy::DISALLOW);
@@ -421,13 +422,58 @@ TEST_F(RendererAgentTest, Enabled_NewRulesetIsPickedUpAtNextLoad) {
       DocumentLoadRulesetIsAvailableHistogramName, 1, 2);
 }
 
-// Make sure that the activation decision does not outlive a failed provisional
-// load (and affect the second load).
-TEST_F(RendererAgentTest,
-       Enabled_FilteringNoLongerActiveAfterProvisionalLoadIsCancelled) {
+// Make sure that the activation decision does not outlive a failed main frame
+// provisional load (Document/Page change) and affect the second load.
+TEST_F(
+    RendererAgentTest,
+    Enabled_FilteringNoLongerActiveAfterMainFrameProvisionalLoadIsCancelled) {
   base::HistogramTester histogram_tester;
   ASSERT_NO_FATAL_FAILURE(
       SetTestRulesetToDisallowURLsWithPathSuffix(kTestBothURLsPathSuffix));
+  EXPECT_CALL(*agent(), OnSetFilterCalled());
+  // The mocked function `GetMainDocumentUrl` will be called several times in
+  // the stack of `DidCreateNewDocument`.
+  EXPECT_CALL(*agent(), GetMainDocumentUrl()).Times(testing::AtLeast(2));
+  // The agent should request activation state since the newly-started load is
+  // cross-origin (about:blank vs. example.com).
+  EXPECT_CALL(*agent(), RequestActivationState());
+  StartLoadWithoutSettingActivationState();
+  subresource_filter::mojom::ActivationStatePtr state =
+      subresource_filter::mojom::ActivationState::New();
+  state->activation_level =
+      subresource_filter::mojom::ActivationLevel::kEnabled;
+  state->measure_performance = true;
+  agent()->OnActivationComputed(std::move(state));
+  agent_as_rfo()->DidFailProvisionalLoad();
+  ASSERT_TRUE(::testing::Mock::VerifyAndClearExpectations(agent()));
+
+  // The activation state should have been reset.
+  EXPECT_EQ(agent()->activation_state().activation_level,
+            subresource_filter::mojom::ActivationLevel::kDisabled);
+
+  // The agent should request activation again even though the next load is
+  // same origin (example.com) because the activation state has been reset.
+  EXPECT_CALL(*agent(), RequestActivationState());
+  EXPECT_CALL(*agent(), GetMainDocumentUrl()).Times(testing::AtLeast(2));
+  StartLoadWithoutSettingActivationState();
+
+  histogram_tester.ExpectUniqueSample(
+      MainFrameLoadRulesetIsAvailableAnyActivationLevelHistogramName, 1, 1);
+  histogram_tester.ExpectUniqueSample(
+      DocumentLoadRulesetIsAvailableHistogramName, 1, 1);
+}
+
+// A failed provisional load in a subframe should not reset activation state
+// because subframes should always have the same state as the main frame.
+TEST_F(RendererAgentTest,
+       Enabled_FilteringStillActiveAfterSubframeProvisionalLoadIsCancelled) {
+  base::HistogramTester histogram_tester;
+  ASSERT_NO_FATAL_FAILURE(
+      SetTestRulesetToDisallowURLsWithPathSuffix(kTestBothURLsPathSuffix));
+
+  // Simulate an agent for a subframe.
+  ResetAgent(/*is_top_level_main_frame=*/false, /*has_valid_opener=*/true);
+
   EXPECT_CALL(*agent(), OnSetFilterCalled());
   agent_as_rfo()->DidStartNavigation(GURL(), std::nullopt);
   agent_as_rfo()->ReadyToCommitNavigation(nullptr);
@@ -440,14 +486,14 @@ TEST_F(RendererAgentTest,
   agent_as_rfo()->DidFailProvisionalLoad();
   ASSERT_TRUE(::testing::Mock::VerifyAndClearExpectations(agent()));
 
-  EXPECT_CALL(*agent(), OnSetFilterCalled()).Times(0);
-  agent_as_rfo()->DidStartNavigation(GURL(), std::nullopt);
-  agent_as_rfo()->ReadyToCommitNavigation(nullptr);
-  agent_as_rfo()->DidCommitProvisionalLoad(ui::PAGE_TRANSITION_LINK);
-  FinishLoad();
+  // The activation state should still be Enabled.
+  EXPECT_EQ(agent()->activation_state().activation_level,
+            subresource_filter::mojom::ActivationLevel::kEnabled);
 
+  // Expect no samples for main frame histogram because we didn't load a main
+  // frame.
   histogram_tester.ExpectUniqueSample(
-      MainFrameLoadRulesetIsAvailableAnyActivationLevelHistogramName, 1, 1);
+      MainFrameLoadRulesetIsAvailableAnyActivationLevelHistogramName, 0, 0);
   histogram_tester.ExpectUniqueSample(
       DocumentLoadRulesetIsAvailableHistogramName, 1, 1);
 }
@@ -534,7 +580,7 @@ TEST_F(RendererAgentTest,
   StartLoadAndSetActivationState(activation_state);
   ASSERT_TRUE(::testing::Mock::VerifyAndClearExpectations(agent()));
 
-  EXPECT_CALL(*agent(), OnSubresourceDisallowed(kTestFirstURL));
+  EXPECT_CALL(*agent(), OnSubresourceDisallowed());
 
   ExpectLoadPolicy(kTestFirstURL, subresource_filter::LoadPolicy::DISALLOW);
   ExpectLoadPolicy(kTestSecondURL, subresource_filter::LoadPolicy::ALLOW);

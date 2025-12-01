@@ -689,7 +689,9 @@ public class AndroidPaymentAppFinder implements ManifestVerifyCallback {
             app =
                     new AndroidPaymentApp(
                             new AndroidPaymentApp.LauncherImpl(
-                                    mFactoryDelegate.getParams().getWebContents()),
+                                    mFactoryDelegate.getParams().getWebContents(),
+                                    mFactoryDelegate.getPayIntentErrorStringId()),
+                            mFactoryDelegate.getDialogController(),
                             packageName,
                             resolveInfo.activityInfo.name,
                             mIsReadyToPayServices.get(packageName),
@@ -700,7 +702,11 @@ public class AndroidPaymentAppFinder implements ManifestVerifyCallback {
                             webAppIdCanDeduped,
                             appSupportedDelegations,
                             PaymentFeatureList.isEnabled(
-                                    PaymentFeatureList.SHOW_READY_TO_PAY_DEBUG_INFO));
+                                    PaymentFeatureList.SHOW_READY_TO_PAY_DEBUG_INFO),
+                            /* removeDeprecatedFields= */ PaymentFeatureList
+                                    .isEnabledOrExperimentalFeaturesEnabled(
+                                            PaymentFeatureList
+                                                    .ANDROID_PAYMENT_INTENTS_OMIT_DEPRECATED_PARAMETERS));
             mValidApps.put(packageName, app);
         }
 

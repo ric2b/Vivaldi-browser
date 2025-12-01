@@ -126,14 +126,15 @@ static const struct {
   media::VideoCodecProfile min_profile;
   media::VideoCodecProfile max_profile;
 } kPreferredCodecIdAndVEAProfiles[] = {
-    {CodecId::kVp8, media::VP8PROFILE_MIN, media::VP8PROFILE_MAX},
-    {CodecId::kVp9, media::VP9PROFILE_MIN, media::VP9PROFILE_MAX},
+    {CodecId::kVp8, media::VP8PROFILE_ANY, media::VP8PROFILE_ANY},
+    {CodecId::kVp9, media::VP9PROFILE_PROFILE0, media::VP9PROFILE_PROFILE0},
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
-    {CodecId::kH264, media::H264PROFILE_MIN, media::H264PROFILE_MAX},
+    {CodecId::kH264, media::H264PROFILE_BASELINE, media::H264PROFILE_HIGH},
 #endif
-    {CodecId::kAv1, media::AV1PROFILE_MIN, media::AV1PROFILE_MAX},
+    {CodecId::kAv1, media::AV1PROFILE_PROFILE_MAIN,
+     media::AV1PROFILE_PROFILE_MAIN},
 #if BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
-    {CodecId::kHevc, media::HEVCPROFILE_MIN, media::HEVCPROFILE_MAX},
+    {CodecId::kHevc, media::HEVCPROFILE_MAIN, media::HEVCPROFILE_MAIN},
 #endif
 };
 
@@ -362,6 +363,14 @@ GetCreateSoftwareVideoEncoderCallback(CodecId codec_id) {
     default:
       NOTREACHED() << "Unsupported codec=" << static_cast<int>(codec_id);
   }
+}
+
+std::optional<media::VideoTransformation> GetFrameTransformation(
+    scoped_refptr<media::VideoFrame> video_frame) {
+  if (const auto& transformation = video_frame->metadata().transformation) {
+    return *transformation;
+  }
+  return std::nullopt;
 }
 }  // anonymous namespace
 
@@ -870,6 +879,9 @@ VideoTrackRecorderImpl::VideoTrackRecorderImpl(
 VideoTrackRecorderImpl::~VideoTrackRecorderImpl() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(main_sequence_checker_);
   DisconnectFromTrack();
+
+  UMA_HISTOGRAM_COUNTS_100("Media.MediaRecorder.TrackTransformationChangeCount",
+                           num_video_transformation_changes_);
 }
 
 void VideoTrackRecorderImpl::OnEncoderSupportKnown() {
@@ -896,6 +908,15 @@ void VideoTrackRecorderImpl::OnVideoFrame(
     base::TimeTicks capture_time) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(main_sequence_checker_);
   TRACE_EVENT("media", "VideoTrackRecorderImpl::OnVideoFrame");
+
+  // Measure how common video transformation changes are, crbug.com/391786486.
+  auto frame_transformation = GetFrameTransformation(video_frame);
+  if (num_video_transformation_changes_ == 0) {
+    num_video_transformation_changes_ = 1;
+  } else if (last_transformation_ != frame_transformation) {
+    ++num_video_transformation_changes_;
+  }
+  last_transformation_ = frame_transformation;
 
   if (encoder_support_known_) {
     ProcessOneVideoFrame(allow_vea_encoder, std::move(video_frame),
@@ -1089,7 +1110,8 @@ void VideoTrackRecorderImpl::InitializeEncoder(
       GetMediaVideoCodecProfile(codec_profile, input_size, allow_vea_encoder);
   if (!profile) {
     if (auto* callback = callback_interface()->Get()) {
-      callback->OnVideoEncodingError();
+      callback->OnVideoEncodingError(
+          media::EncoderStatus::Codes::kEncoderUnsupportedConfig);
     }
     return;
   }
@@ -1142,8 +1164,10 @@ void VideoTrackRecorderImpl::InitializeEncoder(
   }
 }
 
-void VideoTrackRecorderImpl::OnHardwareEncoderError() {
-  DVLOG(3) << __func__;
+void VideoTrackRecorderImpl::OnHardwareEncoderError(
+    const media::EncoderStatus& error_status) {
+  DVLOG(3) << __func__ << ", error_status: "
+           << media::EncoderStatusCodeToString(error_status);
   DCHECK_CALLED_ON_VALID_SEQUENCE(main_sequence_checker_);
   // Try without VEA.
   DisconnectFromTrack();

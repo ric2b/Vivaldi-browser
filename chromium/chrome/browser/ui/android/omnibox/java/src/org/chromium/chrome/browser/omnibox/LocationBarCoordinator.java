@@ -12,7 +12,6 @@ import android.view.ActionMode;
 import android.view.View;
 import android.view.View.OnLongClickListener;
 
-import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.view.ViewCompat;
@@ -23,6 +22,8 @@ import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.back_press.BackPressManager;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider.ControlsPosition;
 import org.chromium.chrome.browser.browser_controls.BrowserStateBrowserControlsVisibilityDelegate;
 import org.chromium.chrome.browser.lens.LensController;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
@@ -35,7 +36,6 @@ import org.chromium.chrome.browser.omnibox.geo.GeolocationHeader;
 import org.chromium.chrome.browser.omnibox.status.StatusCoordinator;
 import org.chromium.chrome.browser.omnibox.status.StatusCoordinator.PageInfoAction;
 import org.chromium.chrome.browser.omnibox.status.StatusView;
-import org.chromium.chrome.browser.omnibox.styles.OmniboxResourceProvider;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteCoordinator;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteDelegate;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxLoadUrlParams;
@@ -50,7 +50,6 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabWindowManager;
-import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
 import org.chromium.components.omnibox.AutocompleteMatch;
 import org.chromium.components.omnibox.action.OmniboxActionDelegate;
@@ -89,6 +88,8 @@ public class LocationBarCoordinator
     private LocationBarLayout mLocationBarLayout;
     @Nullable private SubCoordinator mSubCoordinator;
     private ActivityLifecycleDispatcher mActivityLifecycleDispatcher;
+    @Nullable private final BrowserControlsStateProvider mBrowserControlsStateProvider;
+    private final boolean mIsToolbarPositionCustomizationEnabled;
     private UrlBarCoordinator mUrlCoordinator;
     private AutocompleteCoordinator mAutocompleteCoordinator;
     private StatusCoordinator mStatusCoordinator;
@@ -102,10 +103,6 @@ public class LocationBarCoordinator
     private boolean mDestroyed;
 
     private boolean mNativeInitialized;
-    private final @ColorInt int mDropdownStandardBackgroundColor;
-    private final @ColorInt int mDropdownIncognitoBackgroundColor;
-    private final @ColorInt int mSuggestionStandardBackgroundColor;
-    private final @ColorInt int mSuggestionIncognitoBackgroundColor;
 
     /** Vivaldi */
     private View mQrCodeButton;
@@ -191,10 +188,14 @@ public class LocationBarCoordinator
             LocationBarEmbedderUiOverrides uiOverrides,
             @Nullable View baseChromeLayout,
             Supplier<Integer> bottomWindowPaddingSupplier,
-            @Nullable OnLongClickListener onLongClickListener) {
+            @Nullable OnLongClickListener onLongClickListener,
+            @Nullable BrowserControlsStateProvider browserControlsStateProvider,
+            boolean isToolbarPositionCustomizationEnabled) {
         mLocationBarLayout = (LocationBarLayout) locationBarLayout;
         mWindowAndroid = windowAndroid;
         mActivityLifecycleDispatcher = activityLifecycleDispatcher;
+        mBrowserControlsStateProvider = browserControlsStateProvider;
+        mIsToolbarPositionCustomizationEnabled = isToolbarPositionCustomizationEnabled;
         mActivityLifecycleDispatcher.register(this);
         Context context = mLocationBarLayout.getContext();
         OneshotSupplierImpl<TemplateUrlService> templateUrlServiceSupplier =
@@ -233,7 +234,8 @@ public class LocationBarCoordinator
                         omniboxUma,
                         isToolbarMicEnabledSupplier,
                         mOmniboxDropdownEmbedderImpl,
-                        tabModelSelectorSupplier);
+                        tabModelSelectorSupplier,
+                        browserControlsStateProvider);
         if (backPressManager != null) {
             backPressManager.addHandler(mLocationBarMediator, BackPressHandler.Type.LOCATION_BAR);
         }
@@ -318,15 +320,6 @@ public class LocationBarCoordinator
                 mUrlCoordinator,
                 mStatusCoordinator,
                 locationBarDataProvider);
-
-        mDropdownStandardBackgroundColor =
-                ChromeColors.getSurfaceColor(
-                        context, R.dimen.omnibox_suggestion_dropdown_bg_elevation);
-        mDropdownIncognitoBackgroundColor = context.getColor(R.color.omnibox_dropdown_bg_incognito);
-        mSuggestionStandardBackgroundColor =
-                OmniboxResourceProvider.getStandardSuggestionBackgroundColor(context);
-        mSuggestionIncognitoBackgroundColor =
-                context.getColor(R.color.omnibox_suggestion_bg_incognito);
 
         Callback<Profile> profileObserver =
                 new Callback<>() {
@@ -558,6 +551,17 @@ public class LocationBarCoordinator
     }
 
     @Override
+    public boolean isToolbarPositionCustomizationEnabled() {
+        return mIsToolbarPositionCustomizationEnabled;
+    }
+
+    @Override
+    public boolean isToolbarBottomAnchored() {
+        return mBrowserControlsStateProvider != null
+                && mBrowserControlsStateProvider.getControlsPosition() == ControlsPosition.BOTTOM;
+    }
+
+    @Override
     public void clearOmniboxFocus() {
         mLocationBarMediator.clearOmniboxFocus();
     }
@@ -698,6 +702,15 @@ public class LocationBarCoordinator
     }
 
     /**
+     * Whether the omnibox focus animation should be completed immediately. This is used to put it
+     * in a fully expanded state when focusing a bottom-anchored toolbar, avoiding a combination of
+     * horizontal and vertical movement in the animation.
+     */
+    public boolean shouldShortCircuitFocusAnimation(boolean gainingFocus) {
+        return gainingFocus && isToolbarBottomAnchored();
+    }
+
+    /**
      * Toggles the mic button being shown when the location bar is not focused. By default the mic
      * button is not shown.
      */
@@ -819,24 +832,6 @@ public class LocationBarCoordinator
 
     /* package */ LocationBarMediator getMediatorForTesting() {
         return mLocationBarMediator;
-    }
-
-    /**
-     * @param isIncognito Whether we are currently in incognito mode.
-     * @return The background color for the Omnibox suggestion dropdown list.
-     */
-    public @ColorInt int getDropdownBackgroundColor(boolean isIncognito) {
-        return isIncognito ? mDropdownIncognitoBackgroundColor : mDropdownStandardBackgroundColor;
-    }
-
-    /**
-     * @param isIncognito Whether we are currently in incognito mode.
-     * @return The the background color for each individual suggestion.
-     */
-    public @ColorInt int getSuggestionBackgroundColor(boolean isIncognito) {
-        return isIncognito
-                ? mSuggestionIncognitoBackgroundColor
-                : mSuggestionStandardBackgroundColor;
     }
 
     /**

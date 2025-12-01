@@ -22,7 +22,7 @@
 # Read more about `vpython` and how to modify this file here:
 #   https://chromium.googlesource.com/infra/infra/+/main/doc/users/vpython.md
 
-python_version: "3.8"
+python_version: "3.11"
 
 # The default set of platforms vpython checks does not yet include mac-arm64.
 # Setting `verify_pep425_tag` to the list of platforms we explicitly must support
@@ -40,7 +40,7 @@ verify_pep425_tag: [
 
 wheel <
   name: "infra/python/wheels/pyyaml/${vpython_platform}"
-  version: "version:5.4.1"
+  version: "version:5.4.1.chromium.2"
 >
 
 # Used by //scripts/fetch_lobs to fetch stuff over HTTPS using connection pools.

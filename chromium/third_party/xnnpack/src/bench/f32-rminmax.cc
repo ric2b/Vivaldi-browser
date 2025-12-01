@@ -42,7 +42,7 @@ static void f32_rminmax(
     init_params(&params);
   }
 
-  float output[2] = {std::nanf(""), std::nanf("")};
+  float output[2];
   for (auto _ : state) {
     rminmax(elements * sizeof(float), input.data(), output, &params);
   }
@@ -298,5 +298,5 @@ BENCHMARK_CAPTURE(f32_rminmax, scalar_u4_acc4,
   ->UseRealTime();
 
 #ifndef XNNPACK_BENCHMARK_NO_MAIN
-BENCHMARK_MAIN();
+XNN_BENCHMARK_MAIN();
 #endif

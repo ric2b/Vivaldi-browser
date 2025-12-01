@@ -15,6 +15,7 @@
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "services/tracing/perfetto/system_test_utils.h"
+#include "services/tracing/perfetto/test_utils.h"
 #include "services/tracing/public/cpp/perfetto/perfetto_traced_process.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -30,10 +31,6 @@ class SystemTracingServiceTest : public testing::Test {
       : task_environment_(base::test::TaskEnvironment::MainThreadType::IO) {}
 
   void SetUp() override {
-    // Disable system producer since the tests will exercise producer socket
-    // connection.
-    PerfettoTracedProcess::SetSystemProducerEnabledForTesting(false);
-
     // The test connects to the mock system service.
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
     system_service_ = std::make_unique<MockSystemService>(temp_dir_);
@@ -46,10 +43,6 @@ class SystemTracingServiceTest : public testing::Test {
     // Override the default system producer socket.
     ASSERT_EQ(0, setenv(kProducerSockEnvName,
                         system_service_->producer().c_str(), 1));
-
-    // Use the current thread as the Perfetto task runner.
-    test_handle_ = tracing::PerfettoTracedProcess::SetupForTesting(
-        base::SingleThreadTaskRunner::GetCurrentDefault());
   }
 
   void TearDown() override {
@@ -67,9 +60,10 @@ class SystemTracingServiceTest : public testing::Test {
 
  protected:
   base::test::TaskEnvironment task_environment_;
+  tracing::TracedProcessForTesting traced_process_{
+      base::SingleThreadTaskRunner::GetCurrentDefault()};
   base::ScopedTempDir temp_dir_;
   std::unique_ptr<MockSystemService> system_service_;
-  std::unique_ptr<PerfettoTracedProcess::TestHandle> test_handle_;
   std::optional<std::string> saved_producer_sock_env_;
 };
 

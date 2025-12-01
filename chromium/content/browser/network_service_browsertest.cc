@@ -2,7 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "services/network/network_service.h"
+
 #include <array>
+#include <optional>
 
 #include "base/base_paths.h"
 #include "base/command_line.h"
@@ -28,7 +31,6 @@
 #include "components/os_crypt/async/browser/os_crypt_async.h"
 #include "components/os_crypt/async/browser/test_utils.h"
 #include "components/os_crypt/async/common/encryptor.h"
-#include "components/os_crypt/async/common/encryptor_features.h"
 #include "content/browser/storage_partition_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -838,12 +840,35 @@ CreateNetworkContextForPaths(network::mojom::NetworkContextFilePathsPtr paths,
   context_params->enable_encrypted_cookies = false;
   context_params->http_cache_enabled = true;
   context_params->file_paths->http_cache_directory = cache_path;
+
 #if BUILDFLAG(IS_WIN)
-  // The cookie file is still open on the background sequence within the network
-  // service when performing parts of the test here, so file locking must be
-  // disabled. See https://crbug.com/377940976.
-  context_params->enable_locking_cookie_database = false;
+  // TODO(crbug.com/377940976): Remove this once the background sequence runner
+  // can be fully drained of tasks during network context shutdown.
+  {
+    base::RunLoop run_loop;
+    // The remote for the test network service needs to stay alive until the
+    // RunLoop has finished.
+    std::optional<mojo::Remote<network::mojom::NetworkServiceTest>>
+        maybe_network_service_test;
+    if (content::IsOutOfProcessNetworkService()) {
+      maybe_network_service_test.emplace();
+      GetNetworkService()->BindTestInterfaceForTesting(
+          maybe_network_service_test->BindNewPipeAndPassReceiver());
+      (*maybe_network_service_test)
+          ->DisableExclusiveCookieDatabaseLockingForTesting(
+              run_loop.QuitClosure());
+    } else {
+      content::GetNetworkTaskRunner()->PostTaskAndReply(
+          FROM_HERE, base::BindOnce([]() {
+            network::NetworkService::GetNetworkServiceForTesting()
+                ->disable_exclusive_cookie_database_locking_for_testing();
+          }),
+          run_loop.QuitClosure());
+    }
+    run_loop.Run();
+  }
 #endif  // BUILDFLAG(IS_WIN)
+
   mojo::PendingRemote<network::mojom::NetworkContext> network_context;
   content::CreateNetworkContextInNetworkService(
       network_context.InitWithNewPipeAndPassReceiver(),
@@ -1765,9 +1790,9 @@ class NetworkServiceBoundedNetLogBrowserTest
     log_file_read.GetInfo(&file_info);
 
     // The max size is only a rough bound, so let's make sure the final file is
-    // within a reasonable range from our max. Let's say 10%.
-    const int64_t kMaxSizeUpper = kMaxSizeBytes * 1.1;
-    const int64_t kMaxSizeLower = kMaxSizeBytes * 0.9;
+    // within a reasonable range from our max. Let's say 15%.
+    const int64_t kMaxSizeUpper = kMaxSizeBytes * 1.15;
+    const int64_t kMaxSizeLower = kMaxSizeBytes * 0.85;
 
     // Some devices don't always finish flushing the file to disk before
     // control is returned to the test, meaning that if we were to immediately
@@ -1844,17 +1869,7 @@ class TestCookieEncryptionProvider
   mojo::Receiver<network::mojom::CookieEncryptionProvider> receiver_{this};
 };
 
-class NetworkServiceCookieEncryptionBrowserTest
-    : public ContentBrowserTest,
-      public testing::WithParamInterface</*kProtectEncryptionKey*/ bool> {
- public:
-#if BUILDFLAG(IS_WIN)
-  NetworkServiceCookieEncryptionBrowserTest() {
-    scoped_feature_list_.InitWithFeatureState(
-        os_crypt_async::features::kProtectEncryptionKey, GetParam());
-  }
-#endif  // BUILDFLAG(IS_WIN)
-
+class NetworkServiceCookieEncryptionBrowserTest : public ContentBrowserTest {
  protected:
   void SetUpOnMainThread() override {
     host_resolver()->AddRule("*", "127.0.0.1");
@@ -1879,17 +1894,12 @@ class NetworkServiceCookieEncryptionBrowserTest
 
     const std::vector<uint8_t> key_;
   };
-
-#if BUILDFLAG(IS_WIN)
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-#endif  // BUILDFLAG(IS_WIN)
 };
 
 // This test verifies that when a cookie encryption provider is set when
 // creating a network context, then it results in a call to the GetEncryptor
 // method on the CookieEncryptionProvider.
-IN_PROC_BROWSER_TEST_P(NetworkServiceCookieEncryptionBrowserTest,
+IN_PROC_BROWSER_TEST_F(NetworkServiceCookieEncryptionBrowserTest,
                        CookieEncryptionProvider) {
   const auto data_path =
       shell()->web_contents()->GetBrowserContext()->GetPath();
@@ -1979,24 +1989,12 @@ IN_PROC_BROWSER_TEST_P(NetworkServiceCookieEncryptionBrowserTest,
       it += key_data.size();
     }
 
-    // If kProtectEncryptionKey is enabled, no instances of the key should be
-    // present in the full memory dump of the network service process.
-    EXPECT_EQ(GetParam() ? 0u : 1u, occurrences);
+    // No instances of the key should be present in the full memory dump of the
+    // network service process as it's encrypted.
+    EXPECT_EQ(0u, occurrences);
   }
 #endif  // BUILDFLAG(IS_WIN) && !defined(ADDRESS_SANITIZER) && defined(NDEBUG)
 }
-
-INSTANTIATE_TEST_SUITE_P(,
-                         NetworkServiceCookieEncryptionBrowserTest,
-                         ::testing::Values(false
-#if BUILDFLAG(IS_WIN)
-                                           ,
-                                           true
-#endif
-                                           ),
-                         [](const auto& info) {
-                           return info.param ? "ProtectOn" : "ProtectOff";
-                         });
 
 #if BUILDFLAG(IS_WIN)
 class NetworkServiceCodeIntegrityTest : public NetworkServiceBrowserTest {

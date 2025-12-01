@@ -49,12 +49,6 @@ describeWithEnvironment('CompatibilityTracksAppender', function() {
           ...parsedTrace.UserTimings.timestampEvents,
           ...parsedTrace.UserTimings.performanceMarks,
           ...parsedTrace.UserTimings.performanceMeasures,
-          ...parsedTrace.PageLoadMetrics.allMarkerEvents.toSorted((m1, m2) => {
-            // These get sorted based on the metric so we have to replicate
-            // that for this assertion.
-            return Timeline.TimingsTrackAppender.SORT_ORDER_PAGE_LOAD_MARKERS[m1.name] -
-                Timeline.TimingsTrackAppender.SORT_ORDER_PAGE_LOAD_MARKERS[m2.name];
-          }),
         ].sort((a, b) => a.ts - b.ts);
         assert.deepEqual(timingsTrackEvents, allTimingEvents);
       });
@@ -90,16 +84,16 @@ describeWithEnvironment('CompatibilityTracksAppender', function() {
         await initTrackAppender(this, 'lcp-images-rasterizer.json.gz');
         const rasterTracks = tracksAppender.threadAppenders().filter(
             threadAppender => threadAppender.threadType === Trace.Handlers.Threads.ThreadType.RASTERIZER);
-        assert.strictEqual(rasterTracks.length, 2);
+        assert.lengthOf(rasterTracks, 2);
 
         const raster1Events = tracksAppender.eventsInTrack(rasterTracks[0]);
-        assert.strictEqual(raster1Events.length, 6);
+        assert.lengthOf(raster1Events, 6);
         assert.isTrue(Trace.Helpers.TreeHelpers.canBuildTreesFromEvents(raster1Events));
         const raster1TreeEvents = tracksAppender.eventsForTreeView(rasterTracks[0]);
         assert.deepEqual(raster1TreeEvents, raster1Events);
 
         const raster2Events = tracksAppender.eventsInTrack(rasterTracks[1]);
-        assert.strictEqual(raster2Events.length, 1);
+        assert.lengthOf(raster2Events, 1);
         assert.isTrue(Trace.Helpers.TreeHelpers.canBuildTreesFromEvents(raster2Events));
         const raster2TreeEvents = tracksAppender.eventsForTreeView(rasterTracks[1]);
         assert.deepEqual(raster2TreeEvents, raster2Events);
@@ -118,12 +112,6 @@ describeWithEnvironment('CompatibilityTracksAppender', function() {
           ...parsedTrace.UserTimings.timestampEvents,
           ...parsedTrace.UserTimings.performanceMarks,
           ...parsedTrace.UserTimings.performanceMeasures,
-          ...parsedTrace.PageLoadMetrics.allMarkerEvents.toSorted((m1, m2) => {
-            // These get sorted based on the metric so we have to replicate
-            // that for this assertion.
-            return Timeline.TimingsTrackAppender.SORT_ORDER_PAGE_LOAD_MARKERS[m1.name] -
-                Timeline.TimingsTrackAppender.SORT_ORDER_PAGE_LOAD_MARKERS[m2.name];
-          }),
         ].sort((a, b) => a.ts - b.ts);
         assert.deepEqual(timingsGroupEvents, allTimingEvents);
       });
@@ -138,7 +126,7 @@ describeWithEnvironment('CompatibilityTracksAppender', function() {
     });
   });
 
-  describe('highlightedEntryInfo', () => {
+  describe('popoverInfo', () => {
     it('shows the correct warning for a long task when hovered', async function() {
       await initTrackAppender(this, 'simple-js-program.json.gz');
       const events = parsedTrace.Renderer?.allTraceEntries;
@@ -149,7 +137,7 @@ describeWithEnvironment('CompatibilityTracksAppender', function() {
       if (!longTask) {
         throw new Error('Could not find long task');
       }
-      const info = tracksAppender.highlightedEntryInfo(longTask, 2);
+      const info = tracksAppender.popoverInfo(longTask, 2);
       assert.strictEqual(info.warningElements?.length, 1);
       const warning = info.warningElements?.[0];
       if (!(warning instanceof HTMLSpanElement)) {
@@ -169,7 +157,7 @@ describeWithEnvironment('CompatibilityTracksAppender', function() {
       if (!recalcStyles) {
         throw new Error('Could not find recalc styles');
       }
-      const info = tracksAppender.highlightedEntryInfo(recalcStyles, 2);
+      const info = tracksAppender.popoverInfo(recalcStyles, 2);
       assert.strictEqual(info.warningElements?.length, 1);
       const warning = info.warningElements?.[0];
       if (!(warning instanceof HTMLSpanElement)) {
@@ -189,7 +177,7 @@ describeWithEnvironment('CompatibilityTracksAppender', function() {
       if (!layout) {
         throw new Error('Could not find layout');
       }
-      const info = tracksAppender.highlightedEntryInfo(layout, 2);
+      const info = tracksAppender.popoverInfo(layout, 2);
       assert.strictEqual(info.warningElements?.length, 1);
       const warning = info.warningElements?.[0];
       if (!(warning instanceof HTMLSpanElement)) {
@@ -217,7 +205,7 @@ describeWithEnvironment('CompatibilityTracksAppender', function() {
       if (!idleCallback) {
         throw new Error('Could not find idle callback');
       }
-      const info = tracksAppender.highlightedEntryInfo(idleCallback, 2);
+      const info = tracksAppender.popoverInfo(idleCallback, 2);
       assert.strictEqual(info.warningElements?.length, 1);
       const warning = info.warningElements?.[0];
       if (!(warning instanceof HTMLSpanElement)) {
@@ -230,12 +218,10 @@ describeWithEnvironment('CompatibilityTracksAppender', function() {
   it('can return the group for a given level', async () => {
     await initTrackAppender(this, 'web-dev-with-commit.json.gz');
     // The order of these groups might seem odd, but it's based on the setup in
-    // the initTrackAppender function which does Timings, GPU and then threads.
+    // the initTrackAppender function which does GPU and then threads.
     const groupForLevel0 = tracksAppender.groupForLevel(0);
-    assert.strictEqual(groupForLevel0?.name, 'Timings');
+    assert.strictEqual(groupForLevel0?.name, 'GPU');
     const groupForLevel1 = tracksAppender.groupForLevel(1);
-    assert.strictEqual(groupForLevel1?.name, 'GPU');
-    const groupForLevel2 = tracksAppender.groupForLevel(2);
-    assert.strictEqual(groupForLevel2?.name, 'Main — https://web.dev/');
+    assert.strictEqual(groupForLevel1?.name, 'Main — https://web.dev/');
   });
 });

@@ -485,7 +485,7 @@ TEST_F(GetBindGroupLayoutTests, BindingType) {
                     BindGroupLayoutCacheEq(pipeline.GetBindGroupLayout(0)));
     }
 
-    binding.buffer.type = wgpu::BufferBindingType::Undefined;
+    binding.buffer.type = wgpu::BufferBindingType::BindingNotUsed;
     binding.buffer.minBindingSize = 0;
     {
         binding.texture.sampleType = wgpu::TextureSampleType::UnfilterableFloat;
@@ -511,7 +511,7 @@ TEST_F(GetBindGroupLayoutTests, BindingType) {
                     BindGroupLayoutCacheEq(pipeline.GetBindGroupLayout(0)));
     }
 
-    binding.texture.sampleType = wgpu::TextureSampleType::Undefined;
+    binding.texture.sampleType = wgpu::TextureSampleType::BindingNotUsed;
     {
         binding.sampler.type = wgpu::SamplerBindingType::Filtering;
         wgpu::RenderPipeline pipeline = RenderPipelineFromFragmentShader(R"(
@@ -1274,6 +1274,28 @@ TEST_F(GetBindGroupLayoutTests, FullOfEmptyBGLs) {
     )");
     wgpu::ComputePipeline pipeline = device.CreateComputePipeline(&pipelineDesc);
 
+    EXPECT_THAT(pipeline.GetBindGroupLayout(0), BindGroupLayoutEq(emptyBGL));
+    EXPECT_THAT(pipeline.GetBindGroupLayout(1), BindGroupLayoutEq(emptyBGL));
+    EXPECT_THAT(pipeline.GetBindGroupLayout(2), BindGroupLayoutEq(emptyBGL));
+    EXPECT_THAT(pipeline.GetBindGroupLayout(3), BindGroupLayoutEq(emptyBGL));
+}
+
+// Test that a pipeline full of explicitly null BGLs correctly reflects empty BGLs.
+TEST_F(GetBindGroupLayoutTests, NullBGLs) {
+    DAWN_SKIP_TEST_IF(UsesWire());
+
+    wgpu::PipelineLayout pl =
+        utils::MakePipelineLayout(device, {nullptr, nullptr, nullptr, nullptr});
+
+    wgpu::ComputePipelineDescriptor pipelineDesc;
+    pipelineDesc.layout = pl;
+    pipelineDesc.compute.module = utils::CreateShaderModule(device, R"(
+        @compute @workgroup_size(1) fn main() {
+        }
+    )");
+    wgpu::ComputePipeline pipeline = device.CreateComputePipeline(&pipelineDesc);
+
+    wgpu::BindGroupLayout emptyBGL = utils::MakeBindGroupLayout(device, {});
     EXPECT_THAT(pipeline.GetBindGroupLayout(0), BindGroupLayoutEq(emptyBGL));
     EXPECT_THAT(pipeline.GetBindGroupLayout(1), BindGroupLayoutEq(emptyBGL));
     EXPECT_THAT(pipeline.GetBindGroupLayout(2), BindGroupLayoutEq(emptyBGL));

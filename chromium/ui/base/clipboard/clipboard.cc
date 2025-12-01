@@ -4,6 +4,7 @@
 
 #include "ui/base/clipboard/clipboard.h"
 
+#include <algorithm>
 #include <iterator>
 #include <limits>
 #include <memory>
@@ -16,7 +17,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/types/optional_util.h"
@@ -79,7 +79,7 @@ void Clipboard::SetAllowedThreads(
   base::AutoLock lock(ClipboardMapLock());
 
   AllowedThreads().clear();
-  base::ranges::copy(allowed_threads, std::back_inserter(AllowedThreads()));
+  std::ranges::copy(allowed_threads, std::back_inserter(AllowedThreads()));
 }
 
 // static
@@ -267,13 +267,6 @@ void Clipboard::DispatchPortableRepresentation(const ObjectMapParams& params) {
             WriteText(data.data);
           },
           [&](const WebkitData& data) { WriteWebSmartPaste(); },
-          [&](const RawData& data) {
-            if (data.data.empty()) {
-              return;
-            }
-
-            WriteData(data.format, base::as_bytes(base::make_span(data.data)));
-          },
           [&](const SvgData& data) {
             if (data.markup.empty()) {
               return;
@@ -294,10 +287,18 @@ void Clipboard::DispatchPortableRepresentation(const ObjectMapParams& params) {
             }
 
             WriteData(ClipboardFormatType::WebCustomFormatMap(),
-                      base::as_bytes(base::make_span(data.data)));
+                      base::as_byte_span(data.data));
           },
       },
       params.data);
+}
+
+void Clipboard::DispatchPortableRepresentation(const RawData& data) {
+  if (data.data.empty()) {
+    return;
+  }
+
+  WriteData(data.format, base::as_byte_span(data.data));
 }
 
 Clipboard::ObjectMapParams::ObjectMapParams() = default;
@@ -320,7 +321,7 @@ void Clipboard::DispatchPlatformRepresentations(
     std::vector<Clipboard::PlatformRepresentation> platform_representations) {
   for (const auto& representation : platform_representations) {
     WriteData(ClipboardFormatType::CustomPlatformType(representation.format),
-              base::as_bytes(base::make_span(representation.data)));
+              base::as_byte_span(representation.data));
   }
 }
 

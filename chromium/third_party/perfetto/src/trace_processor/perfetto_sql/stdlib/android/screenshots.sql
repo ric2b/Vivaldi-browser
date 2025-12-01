@@ -14,13 +14,13 @@
 
 -- Screenshot slices, used in perfetto UI.
 CREATE PERFETTO TABLE android_screenshots(
-  -- Slice id.
-  id INT,
+  -- Id of the screenshot slice.
+  id ID(slice.id),
   -- Slice timestamp.
-  ts INT,
+  ts TIMESTAMP,
   -- Slice duration, should be typically 0 since screeenshot slices are of instant
   -- type.
-  dur INT,
+  dur DURATION,
   -- Slice name.
   name STRING
 ) AS

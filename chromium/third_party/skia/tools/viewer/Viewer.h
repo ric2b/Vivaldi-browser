@@ -152,6 +152,7 @@ private:
     void initSlides();
     void updateTitle();
     void setBackend(sk_app::Window::BackendType);
+    void initGpuTimer();
     void setColorMode(ColorMode);
     int startupSlide() const;
     void setCurrentSlide(int);
@@ -253,7 +254,7 @@ private:
 
     // fDisplay contains default values (fWindow.fRequestedDisplayParams contains the overrides),
     // fDisplayOverrides controls if overrides are applied.
-    skwindow::DisplayParams fDisplay;
+    std::unique_ptr<skwindow::DisplayParams> fDisplay;
     DisplayFields fDisplayOverrides;
 
     struct CachedShader {

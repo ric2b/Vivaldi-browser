@@ -114,48 +114,48 @@ $ TESTS=<test> emerge-$board <package>
 
 5. Try running:
 
-**```none
+```none
 $ run_remote_tests.sh --remote=<IP> --use_emerged <test>
-```**
+```
 
-**6. Iterate on 4,5 and modify source until happy with the initial version.**
-**7. Commit test source first, when it is safely in, commit the 9999 ebuild version change.**
-**8. Cleanup**
+6. Iterate on 4,5 and modify source until happy with the initial version.
+7. Commit test source first, when it is safely in, commit the 9999 ebuild version change.
+8. Cleanup
 
-**```none
+```none
 $ cros_workon --board=${board} stop <package>
-```**
+```
 
-**### W3. Splitting autotest ebuild into two**
+### W3. Splitting autotest ebuild into two
 
-**Removing a test from one ebuild and adding to another in the same revision causes portage file collisions unless counter-measures are taken. Generally, some things routinely go wrong in this process, so this checklist should serve to help that.**
-**0. We have ebuild foo-0.0.1-r100 with test and would like to split that test off into ebuild bar-0.0.1-r1.**
-**Assume that:**
-**- both ebuilds are using cros-workon (because it’s likely the case).**
-**- foo is used globally (eg. autotest-all depends on it), rather than just some personal ebuild**
-**1. Remove test from foo-{0.0.1-r100,9999}; uprev foo-0.0.1-r100 (to -r101)**
-**2. Create bar-9999 (making a copy of foo and replacing IUSE_TESTS may be a good start), with IUSE_TESTS containing just the entry for test**
-**3. Verify package dependencies of test. Make bar-9999 only depend on what is needed for test, remove the dependencies from foo-9999, unless they are needed by tests that remained.**
-**4. Add a blocker. Since bar installs files owned by foo-0.0.1-r100 and earlier, the blocker’s format will be:**
+Removing a test from one ebuild and adding to another in the same revision causes portage file collisions unless counter-measures are taken. Generally, some things routinely go wrong in this process, so this checklist should serve to help that.
+0. We have ebuild foo-0.0.1-r100 with test and would like to split that test off into ebuild bar-0.0.1-r1.
+Assume that:
+- both ebuilds are using cros-workon (because it’s likely the case).
+- foo is used globally (eg. autotest-all depends on it), rather than just some personal ebuild
+1. Remove test from foo-{0.0.1-r100,9999}; uprev foo-0.0.1-r100 (to -r101)
+2. Create bar-9999 (making a copy of foo and replacing IUSE_TESTS may be a good start), with IUSE_TESTS containing just the entry for test
+3. Verify package dependencies of test. Make bar-9999 only depend on what is needed for test, remove the dependencies from foo-9999, unless they are needed by tests that remained.
+4. Add a blocker. Since bar installs files owned by foo-0.0.1-r100 and earlier, the blocker’s format will be:
 
-**```none
+```none
 RDEPEND=”!<=foo-0.0.1-r100”
-```**
+```
 
-**5. Add a dependency to the new version of bar into chromeos-base/autotest-all-0.0.1**
+5. Add a dependency to the new version of bar into chromeos-base/autotest-all-0.0.1
 
-**```none
+```none
 RDEPEND=”bar”
-```**
+```
 
-**6. Change the dependency of foo in chromeos-base/autotest-all-0.0.1 to be version locked to the new rev:**
+6. Change the dependency of foo in chromeos-base/autotest-all-0.0.1 to be version locked to the new rev:
 
-**```none
+```none
 RDEPEND=”>foo-0.0.1-r100”
-```**
+```
 
-**7. Uprev (move) autotest-all-0.0.1-rX symlink by one.**
-**8. Publish all as the same change list, have it reviewed, push.**
+7. Uprev (move) autotest-all-0.0.1-rX symlink by one.
+8. Publish all as the same change list, have it reviewed, push.
 
 ### W4. Create and run a test-enabled image on your device
 

@@ -32,7 +32,6 @@
 #include "components/cbor/reader.h"
 #include "components/cbor/values.h"
 #include "content/browser/aggregation_service/aggregatable_report.h"
-#include "content/browser/aggregation_service/aggregation_service_features.h"
 #include "content/browser/aggregation_service/aggregation_service_test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -174,32 +173,25 @@ void VerifyReport(
               base::as_byte_span(value_byte_string).first<4u>());
           EXPECT_EQ(int64_t{value}, expected_contributions[j].value);
 
-          ASSERT_EQ(
-              CborMapContainsKeyAndType(data_map, "id",
-                                        cbor::Value::Type::BYTE_STRING),
-              expected_payload_contents.filtering_id_max_bytes.has_value());
-          if (expected_payload_contents.filtering_id_max_bytes.has_value()) {
-            size_t filtering_id_max_bytes =
-                expected_payload_contents.filtering_id_max_bytes.value();
+          ASSERT_TRUE(CborMapContainsKeyAndType(
+              data_map, "id", cbor::Value::Type::BYTE_STRING));
+          const cbor::Value::BinaryValue& filtering_id_byte_string =
+              data_map.at(cbor::Value("id")).GetBytestring();
+          ASSERT_EQ(filtering_id_byte_string.size(),
+                    expected_payload_contents.filtering_id_max_bytes);
 
-            const cbor::Value::BinaryValue& filtering_id_byte_string =
-                data_map.at(cbor::Value("id")).GetBytestring();
-            ASSERT_EQ(filtering_id_byte_string.size(), filtering_id_max_bytes);
+          std::array<uint8_t, 8u> padded_filtering_id_bytestring;
+          padded_filtering_id_bytestring.fill(0);
+          base::as_writable_byte_span(padded_filtering_id_bytestring)
+              .last(expected_payload_contents.filtering_id_max_bytes)
+              .copy_from(filtering_id_byte_string);
 
-            std::array<uint8_t, 8u> padded_filtering_id_bytestring;
-            padded_filtering_id_bytestring.fill(0);
-            base::as_writable_byte_span(padded_filtering_id_bytestring)
-                .last(filtering_id_max_bytes)
-                .copy_from(filtering_id_byte_string);
+          CHECK_LE(expected_payload_contents.filtering_id_max_bytes, 8u);
+          uint64_t filtering_id = base::U64FromBigEndian(
+              base::span(padded_filtering_id_bytestring));
 
-            CHECK_LE(expected_payload_contents.filtering_id_max_bytes.value(),
-                     8u);
-            uint64_t filtering_id = base::U64FromBigEndian(
-                base::make_span(padded_filtering_id_bytestring));
-
-            EXPECT_EQ(filtering_id,
-                      expected_contributions[j].filtering_id.value_or(0));
-          }
+          EXPECT_EQ(filtering_id,
+                    expected_contributions[j].filtering_id.value_or(0));
         }
 
         EXPECT_FALSE(payload_map.contains(cbor::Value("dpf_key")));
@@ -455,19 +447,7 @@ TEST_F(AggregatableReportTest, AdditionalFieldsPresent_ValidReportReturned) {
       expected_additional_fields, std::move(hpke_keys)));
 }
 
-class AggregatableReportFilteringIdTest : public AggregatableReportTest {
- public:
-  void SetUp() override {
-    AggregatableReportTest::SetUp();
-    scoped_feature_list_.InitAndEnableFeature(
-        kPrivacySandboxAggregationServiceFilteringIds);
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-TEST_F(AggregatableReportFilteringIdTest,
+TEST_F(AggregatableReportTest,
        FilteringIdMaxBytesSpecified_ValidReportReturned) {
   AggregatableReportRequest example_request =
       aggregation_service::CreateExampleRequest();
@@ -496,8 +476,7 @@ TEST_F(AggregatableReportFilteringIdTest,
       /*expected_additional_fields=*/{}, std::move(hpke_keys)));
 }
 
-TEST_F(AggregatableReportFilteringIdTest,
-       FilteringIdsSpecified_ValidReportReturned) {
+TEST_F(AggregatableReportTest, FilteringIdsSpecified_ValidReportReturned) {
   AggregatableReportRequest example_request =
       aggregation_service::CreateExampleRequest();
 
@@ -1145,36 +1124,7 @@ TEST_F(AggregatableReportTest, EmptyPayloads) {
   EXPECT_EQ(report_json_string, kExpectedJsonString);
 }
 
-TEST_F(AggregatableReportFilteringIdTest, FilteringIdMaxBytesNullopt) {
-  AggregatableReportRequest example_request =
-      aggregation_service::CreateExampleRequest();
-
-  AggregationServicePayloadContents payload_contents =
-      example_request.payload_contents();
-  payload_contents.filtering_id_max_bytes.reset();
-
-  AggregatableReportRequest request =
-      AggregatableReportRequest::Create(
-          payload_contents, example_request.shared_info().Clone(),
-          AggregatableReportRequest::DelayType::ScheduledWithFullDelay)
-          .value();
-
-  // The filtering_id_max_bytes is correctly serialized and deserialized
-  std::vector<uint8_t> proto = request.Serialize();
-  std::optional<AggregatableReportRequest> parsed_request =
-      AggregatableReportRequest::Deserialize(proto);
-  EXPECT_FALSE(parsed_request.value()
-                   .payload_contents()
-                   .filtering_id_max_bytes.has_value());
-
-  // Trying to set any explicit filtering ID will cause an error
-  payload_contents.contributions[0].filtering_id = 0;
-  EXPECT_FALSE(AggregatableReportRequest::Create(
-                   payload_contents, example_request.shared_info().Clone())
-                   .has_value());
-}
-
-TEST_F(AggregatableReportFilteringIdTest, FilteringIdMaxBytesMax) {
+TEST_F(AggregatableReportTest, FilteringIdMaxBytesMax) {
   AggregatableReportRequest example_request =
       aggregation_service::CreateExampleRequest();
 
@@ -1208,7 +1158,7 @@ TEST_F(AggregatableReportFilteringIdTest, FilteringIdMaxBytesMax) {
   }
 }
 
-TEST_F(AggregatableReportFilteringIdTest, FilteringIdMaxBytesNotMax) {
+TEST_F(AggregatableReportTest, FilteringIdMaxBytesNotMax) {
   AggregatableReportRequest example_request =
       aggregation_service::CreateExampleRequest();
 
@@ -1245,55 +1195,14 @@ TEST_F(AggregatableReportFilteringIdTest, FilteringIdMaxBytesNotMax) {
     std::optional<AggregatableReportRequest> parsed_request =
         AggregatableReportRequest::Deserialize(proto);
     EXPECT_EQ(parsed_request.value().payload_contents().filtering_id_max_bytes,
-              1);
+              1u);
     EXPECT_EQ(
         parsed_request.value().payload_contents().contributions[0].filtering_id,
         test_case.filtering_id);
   }
 }
 
-TEST_F(AggregatableReportTest, FilteringIdsIgnoredIfFeatureDisabled) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(
-      kPrivacySandboxAggregationServiceFilteringIds);
-
-  AggregatableReportRequest example_request =
-      aggregation_service::CreateExampleRequest();
-  AggregationServicePayloadContents payload_contents =
-      example_request.payload_contents();
-
-  // No matter what combination is used (even if typically invalid), the
-  // filtering IDs and max bytes should be ignored.
-  const struct {
-    std::optional<uint64_t> filtering_id;
-    std::optional<int> filtering_id_max_bytes;
-  } kTestCases[] = {
-      {std::nullopt, std::nullopt},
-      {0, std::nullopt},
-      {std::nullopt, 1},
-      {0, 1},
-      {std::numeric_limits<uint64_t>::max(), std::nullopt},
-      {std::numeric_limits<uint64_t>::max(), 1},
-      {std::nullopt, -1},
-      {std::nullopt,
-       AggregationServicePayloadContents::kMaximumFilteringIdMaxBytes + 1}};
-
-  for (const auto& test_case : kTestCases) {
-    payload_contents.contributions[0].filtering_id = test_case.filtering_id;
-    payload_contents.filtering_id_max_bytes = test_case.filtering_id_max_bytes;
-
-    AggregatableReportRequest request =
-        AggregatableReportRequest::Create(payload_contents,
-                                          example_request.shared_info().Clone())
-            .value();
-
-    EXPECT_FALSE(request.payload_contents().filtering_id_max_bytes.has_value());
-    EXPECT_FALSE(
-        request.payload_contents().contributions[0].filtering_id.has_value());
-  }
-}
-
-TEST_F(AggregatableReportFilteringIdTest, FilteringIdMaxBytesTooSmall) {
+TEST_F(AggregatableReportTest, FilteringIdMaxBytesTooSmall) {
   AggregatableReportRequest example_request =
       aggregation_service::CreateExampleRequest();
 
@@ -1310,7 +1219,7 @@ TEST_F(AggregatableReportFilteringIdTest, FilteringIdMaxBytesTooSmall) {
                    .has_value());
 }
 
-TEST_F(AggregatableReportFilteringIdTest, FilteringIdMaxBytesTooLarge) {
+TEST_F(AggregatableReportTest, FilteringIdMaxBytesTooLarge) {
   AggregatableReportRequest example_request =
       aggregation_service::CreateExampleRequest();
 
@@ -1350,7 +1259,7 @@ TEST(AggregatableReportProtoMigrationTest,
               blink::mojom::AggregationServiceMode::kDefault,
               /*aggregation_coordinator_origin=*/std::nullopt,
               /*max_contributions_allowed=*/1u,
-              /*filtering_id_max_bytes=*/std::nullopt),
+              /*filtering_id_max_bytes=*/1u),  // Default max bytes used.
           AggregatableReportSharedInfo(
               base::Time::FromMillisecondsSinceUnixEpoch(1652984901234),
               base::Uuid::ParseLowercase(
@@ -1398,7 +1307,7 @@ TEST(AggregatableReportProtoMigrationTest, NegativeDebugKey_ParsesCorrectly) {
               blink::mojom::AggregationServiceMode::kDefault,
               /*aggregation_coordinator_origin=*/std::nullopt,
               /*max_contributions_allowed=*/1u,
-              /*filtering_id_max_bytes=*/std::nullopt),
+              /*filtering_id_max_bytes=*/1u),  // Default max bytes used.
           AggregatableReportSharedInfo(
               base::Time::FromMillisecondsSinceUnixEpoch(1652984901234),
               base::Uuid::ParseLowercase(
@@ -1447,7 +1356,7 @@ TEST(
               blink::mojom::AggregationServiceMode::kDefault,
               /*aggregation_coordinator_origin=*/std::nullopt,
               /*max_contributions_allowed=*/1u,
-              /*filtering_id_max_bytes=*/std::nullopt),
+              /*filtering_id_max_bytes=*/1u),  // Default max bytes used.
           AggregatableReportSharedInfo(
               base::Time::FromMillisecondsSinceUnixEpoch(1652984901234),
               base::Uuid::ParseLowercase(
@@ -1515,7 +1424,7 @@ TEST_F(AggregatableReportTest, AggregationCoordinator_ProcessingUrlSet) {
                 blink::mojom::AggregationServiceMode::kDefault,
                 test_case.aggregation_coordinator_origin,
                 /*max_contributions_allowed=*/20u,
-                /*filtering_id_max_bytes=*/std::nullopt),
+                /*filtering_id_max_bytes=*/1u),  // Default max bytes used.
             AggregatableReportSharedInfo(
                 /*scheduled_report_time=*/base::Time::Now(),
                 /*report_id=*/
@@ -1567,19 +1476,11 @@ TEST(AggregatableReportPayloadLengthTest, With20Contributions) {
   // NOTE: These expectations are inscrutable when they fail due to
   // `StrictNumeric`, unless we include base/numerics/ostream_operators.h.
   EXPECT_EQ(AggregatableReport::ComputeTeeBasedPayloadLengthInBytesForTesting(
-                /*num_contributions=*/20u,
-                /*filtering_id_max_bytes=*/std::nullopt),
-            747);
-  EXPECT_EQ(AggregatableReport::ComputeTeeBasedPayloadLengthInBytesForTesting(
                 /*num_contributions=*/20u, /*filtering_id_max_bytes=*/1u),
             847);
 }
 
 TEST(AggregatableReportPayloadLengthTest, With100Contributions) {
-  EXPECT_EQ(AggregatableReport::ComputeTeeBasedPayloadLengthInBytesForTesting(
-                /*num_contributions=*/100u,
-                /*filtering_id_max_bytes=*/std::nullopt),
-            3628);
   EXPECT_EQ(AggregatableReport::ComputeTeeBasedPayloadLengthInBytesForTesting(
                 /*num_contributions=*/100u, /*filtering_id_max_bytes=*/1u),
             4128);
@@ -1612,18 +1513,13 @@ TEST(AggregatableReportPayloadLengthTest, PredictionMatchesReality) {
       // Edge cases for one-byte and two-byte length prefixes.
       255, 256, 257, 65535, 65536, 65537};
 
-  constexpr std::optional<size_t> kFilteringIdMaxBytesValues[] = {
-      std::nullopt, {1u}, {2u}, {3u}, {4u}, {8u}};
+  constexpr size_t kFilteringIdMaxBytesValues[] = {1u, 2u, 3u, 4u, 8u};
 
   for (const size_t num_contributions : kNumContributionsValues) {
-    for (const std::optional<size_t> filtering_id_max_bytes :
-         kFilteringIdMaxBytesValues) {
+    for (const size_t filtering_id_max_bytes : kFilteringIdMaxBytesValues) {
       SCOPED_TRACE(testing::Message()
                    << "num_contributions: " << num_contributions
-                   << ", filtering_id_max_bytes: "
-                   << (filtering_id_max_bytes.has_value()
-                           ? base::ToString(*filtering_id_max_bytes)
-                           : "nullopt"));
+                   << ", filtering_id_max_bytes: " << filtering_id_max_bytes);
 
       const std::optional<size_t> predicted_length =
           AggregatableReport::ComputeTeeBasedPayloadLengthInBytesForTesting(

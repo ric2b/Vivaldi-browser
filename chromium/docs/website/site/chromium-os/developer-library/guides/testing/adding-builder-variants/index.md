@@ -33,7 +33,7 @@ be made. This can be achieved by adding builders to generate new image variants
 to be tested. That process is what this document will focus on.
 
 The debug-kernel builders, used for
-[automated debug kernel testing](https://go/cros-automated-debug-kernel-testing),
+[automated debug kernel testing](http://go/cros-automated-debug-kernel-testing),
 will be used as an example throughout this document.
 
 The images built by these builders have several additional kernel debugging

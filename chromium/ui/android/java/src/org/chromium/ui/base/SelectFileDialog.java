@@ -4,6 +4,8 @@
 
 package org.chromium.ui.base;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
@@ -18,17 +20,18 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
+import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import android.text.TextUtils;
 import android.webkit.MimeTypeMap;
 
 import androidx.annotation.IntDef;
-import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.core.content.ContextCompat;
 
 import org.jni_zero.CalledByNative;
 import org.jni_zero.JNINamespace;
+import org.jni_zero.JniType;
 import org.jni_zero.NativeMethods;
 
 import org.chromium.base.ContentUriUtils;
@@ -44,6 +47,9 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
+import org.chromium.build.annotations.Initializer;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.ui.R;
 import org.chromium.ui.UiUtils;
 
@@ -63,6 +69,7 @@ import java.util.concurrent.TimeUnit;
  * a set of accepted file types. The path of the selected file is passed to the native dialog.
  */
 @JNINamespace("ui")
+@NullMarked
 public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPickerListener {
     private static final String TAG = "SelectFileDialog";
     private static final String IMAGE_TYPE = "image";
@@ -247,17 +254,21 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
 
     /** If set, overrides the WindowAndroid passed in {@link selectFile()}. */
     @SuppressLint("StaticFieldLeak")
-    private static WindowAndroid sWindowAndroidForTesting;
+    private static @Nullable WindowAndroid sWindowAndroidForTesting;
 
     private long mNativeSelectFileDialog;
     private String mIntentAction;
+
     // File types may contain both file extensions and MIME types.
     private List<String> mFileTypes;
+
     // Converted from `mFileTypes`, only contains deduped MIME types.
     private List<String> mMimeTypes;
+
     private boolean mCapture;
     private boolean mAllowMultiple;
-    private Uri mCameraOutputUri;
+    private @Nullable Uri mCameraOutputUri;
+
     private WindowAndroid mWindowAndroid;
 
     /** Whether an Activity is available on the system to support capturing images (i.e. Camera). */
@@ -280,10 +291,10 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
     private boolean mMediaPickerWasUsed;
 
     /** A delegate for the photo picker. */
-    private static PhotoPickerDelegate sPhotoPickerDelegate;
+    private static @Nullable PhotoPickerDelegate sPhotoPickerDelegate;
 
     /** The active photo picker, or null if none is active. */
-    private static PhotoPicker sPhotoPicker;
+    private static @Nullable PhotoPicker sPhotoPicker;
 
     /**
      * Allows setting a delegate to override the default Android stock photo picker.
@@ -319,14 +330,21 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
      * @param fileTypes MIME types requested (i.e. "image/*")
      * @param capture The capture value as described in http://www.w3.org/TR/html-media-capture/
      * @param multiple Whether it should be possible to select multiple files.
+     * @param defaultDirectory directory to open chooser at when intentAction is
+     *     ACTION_{OPEN,CREATE}_DOCUMENT{_TREE}.
+     * @param suggestedName suggested filename for save-as when intentAction is
+     *     ACTION_CREATE_DOCUMENT.
      * @param window The WindowAndroid that can show intents
      */
     @CalledByNative
+    @Initializer
     protected void selectFile(
             String intentAction,
             String[] fileTypes,
             boolean capture,
             boolean multiple,
+            @JniType("std::string") String defaultDirectory,
+            @JniType("std::string") String suggestedName,
             WindowAndroid window) {
         mIntentAction =
                 UiAndroidFeatureMap.isEnabled(UiAndroidFeatures.SELECT_FILE_OPEN_DOCUMENT)
@@ -346,16 +364,31 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
                 || Intent.ACTION_OPEN_DOCUMENT_TREE.equals(mIntentAction)
                 || Intent.ACTION_CREATE_DOCUMENT.equals(mIntentAction)) {
             Intent intent = new Intent(mIntentAction);
-            // No mime types for open-directory.
-            if (!Intent.ACTION_OPEN_DOCUMENT_TREE.equals(mIntentAction)) {
+            if (Intent.ACTION_OPEN_DOCUMENT.equals(mIntentAction)) {
                 intent.setType(ALL_TYPES);
-                if (!mMimeTypes.isEmpty()) {
+                boolean mimeTypesKnown = true;
+                for (String mimeType : mMimeTypes) {
+                    if (!MimeTypeMap.getSingleton().hasMimeType(mimeType)) {
+                        mimeTypesKnown = false;
+                        break;
+                    }
+                }
+                if (!mMimeTypes.isEmpty() && mimeTypesKnown) {
                     intent.putExtra(Intent.EXTRA_MIME_TYPES, mMimeTypes.toArray(new String[0]));
                 }
                 if (mAllowMultiple) {
                     intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
                 }
                 intent.addCategory(Intent.CATEGORY_OPENABLE);
+            } else if (Intent.ACTION_CREATE_DOCUMENT.equals(intentAction)) {
+                intent.setType(!mMimeTypes.isEmpty() ? mMimeTypes.get(0) : ALL_TYPES);
+                if (!TextUtils.isEmpty(suggestedName)) {
+                    intent.putExtra(Intent.EXTRA_TITLE, suggestedName);
+                }
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+            }
+            if (!TextUtils.isEmpty(defaultDirectory)) {
+                intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI, Uri.parse(defaultDirectory));
             }
             if (!mWindowAndroid.showIntent(intent, this, R.string.low_memory_error)) {
                 onFileNotSelected();
@@ -495,8 +528,7 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
      * Returns a Video capture Intent. Can return null if video capture is not supported or the
      * camera permission has not been granted.
      */
-    @Nullable
-    private Intent getVideoCaptureIntent() {
+    private @Nullable Intent getVideoCaptureIntent() {
         boolean hasCameraPermission = mWindowAndroid.hasPermission(Manifest.permission.CAMERA);
         if (mSupportsVideoCapture && hasCameraPermission) {
             return new Intent(MediaStore.ACTION_VIDEO_CAPTURE);
@@ -508,8 +540,7 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
      * Returns a SoundRecorder Intent. Can return null if sound capture is not supported or the
      * sound permission has not been granted.
      */
-    @Nullable
-    private Intent getSoundRecorderIntent() {
+    private @Nullable Intent getSoundRecorderIntent() {
         boolean hasAudioPermission = mWindowAndroid.hasPermission(Manifest.permission.RECORD_AUDIO);
         if (mSupportsAudioCapture && hasAudioPermission) {
             return new Intent(MediaStore.Audio.Media.RECORD_SOUND_ACTION);
@@ -523,7 +554,7 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
      * is allowed to choose files from the camera.
      * @param camera Intent for selecting files from camera.
      */
-    private void launchSelectFileWithCameraIntent(Intent camera) {
+    private void launchSelectFileWithCameraIntent(@Nullable Intent camera) {
         RecordHistogram.recordEnumeratedHistogram(
                 "Android.SelectFileDialogScope",
                 determineSelectFileDialogScope(),
@@ -570,7 +601,8 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
      * @param camcorder A camcorder intent to supply as extra Intent data.
      * @param soundRecorder A soundRecorder intent to supply as extra Intent data.
      */
-    private void showExternalPicker(Intent camera, Intent camcorder, Intent soundRecorder) {
+    private void showExternalPicker(
+            @Nullable Intent camera, @Nullable Intent camcorder, @Nullable Intent soundRecorder) {
         if (UiAndroidFeatureMap.isEnabled(UiAndroidFeatures.DEPRECATED_EXTERNAL_PICKER_FUNCTION)) {
             showExternalPickerDeprecated(camera, camcorder, soundRecorder);
             return;
@@ -630,7 +662,7 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
      * @param soundRecorder A soundRecorder intent to supply as extra Intent data.
      */
     private void showExternalPickerDeprecated(
-            Intent camera, Intent camcorder, Intent soundRecorder) {
+            @Nullable Intent camera, @Nullable Intent camcorder, @Nullable Intent soundRecorder) {
         Intent getContentIntent = new Intent(mIntentAction);
 
         if (mAllowMultiple) {
@@ -832,7 +864,7 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
         sPhotoPicker = null;
     }
 
-    private class GetCameraIntentTask extends AsyncTask<Uri> {
+    private class GetCameraIntentTask extends AsyncTask<@Nullable Uri> {
         private Boolean mDirectToCamera;
         private WindowAndroid mWindow;
         private WindowAndroid.IntentCallback mCallback;
@@ -847,7 +879,7 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
         }
 
         @Override
-        public Uri doInBackground() {
+        public @Nullable Uri doInBackground() {
             try {
                 Context context = ContextUtils.getApplicationContext();
                 return FileProviderUtils.getContentUriFromFile(getFileForImageCapture(context));
@@ -858,7 +890,7 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
         }
 
         @Override
-        protected void onPostExecute(Uri result) {
+        protected void onPostExecute(@Nullable Uri result) {
             mCameraOutputUri = result;
             if (mCameraOutputUri == null) {
                 if (captureImage() || mDirectToCamera) {
@@ -908,6 +940,7 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
     private static boolean isPathUnderAppDir(String path, Context context) {
         File file = new File(path);
         File dataDir = ContextCompat.getDataDir(context);
+        assumeNonNull(dataDir);
         try {
             String pathCanonical = file.getCanonicalPath();
             String dataDirCanonical = dataDir.getCanonicalPath();
@@ -921,6 +954,7 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
         assert !ThreadUtils.runningOnUiThread();
         try {
             ParcelFileDescriptor pfd = context.getContentResolver().openFileDescriptor(uri, "r");
+            assumeNonNull(pfd);
             int fd = pfd.getFd();
             // Use the file descriptor to find out the read file path thru symbolic link.
             Path fdPath = Paths.get("/proc/self/fd/" + fd);
@@ -954,6 +988,7 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
         if (results == null || (results.getData() == null && (results.getClipData() == null))) {
             // If we have a successful return but no data, then assume this is the camera returning
             // the photo that we requested.
+            assumeNonNull(mCameraOutputUri);
             // If the uri is a file, we need to convert it to the absolute path or otherwise
             // android cannot handle it correctly on some earlier versions.
             // http://crbug.com/423338.
@@ -980,9 +1015,9 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
 
         // Path for when EXTRA_ALLOW_MULTIPLE Intent extra has been defined. Each of the selected
         // files will be shared as an entry on the Intent's ClipData.
-        if (results.getData() == null && results.getClipData() != null) {
-            ClipData clipData = results.getClipData();
-
+        Uri uri = results.getData();
+        if (uri == null) {
+            ClipData clipData = assumeNonNull(results.getClipData());
             int itemCount = clipData.getItemCount();
             if (itemCount == 0) {
                 onFileNotSelected();
@@ -1006,8 +1041,8 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
             return;
         }
 
-        if (ContentResolver.SCHEME_FILE.equals(results.getData().getScheme())) {
-            String filePath = results.getData().getPath();
+        if (ContentResolver.SCHEME_FILE.equals(uri.getScheme())) {
+            String filePath = uri.getPath();
             if (!TextUtils.isEmpty(filePath)) {
                 FilePathSelectedTask task =
                         new FilePathSelectedTask(
@@ -1018,7 +1053,6 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
         }
 
         if (ContentResolver.SCHEME_CONTENT.equals(results.getScheme())) {
-            Uri uri = results.getData();
             // Check if the caller has permission to access the uri.
             if (!doesCallerHavePermissionForUri(uri)) {
                 onFileNotSelected();
@@ -1237,8 +1271,9 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
         }
     }
 
-    class GetDisplayNameTask extends AsyncTask<String[]> {
+    class GetDisplayNameTask extends AsyncTask<String @Nullable []> {
         String[] mFilePaths;
+
         final Context mContext;
         final boolean mIsMultiple;
         final Uri[] mUris;
@@ -1247,12 +1282,12 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
             mContext = context;
             mIsMultiple = isMultiple;
             mUris = uris;
+            mFilePaths = new String[mUris.length];
         }
 
         @Override
         @SuppressLint("NewApi")
-        public String[] doInBackground() {
-            mFilePaths = new String[mUris.length];
+        public String @Nullable [] doInBackground() {
             String[] displayNames = new String[mUris.length];
             try {
                 for (int i = 0; i < mUris.length; i++) {
@@ -1291,7 +1326,7 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
         }
 
         @Override
-        protected void onPostExecute(String[] result) {
+        protected void onPostExecute(String @Nullable [] result) {
             if (result == null) {
                 onFileNotSelected();
                 return;
@@ -1335,7 +1370,7 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
         }
 
         @Override
-        protected void onPostExecute(Boolean result) {}
+        protected void onPostExecute(@Nullable Boolean result) {}
     }
 
     protected RecordUploadMetricsTask getUploadMetricTaskForTesting(
@@ -1369,7 +1404,9 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
     }
 
     protected void onFileSelected(
-            long nativeSelectFileDialogImpl, String filePath, String displayName) {
+            long nativeSelectFileDialogImpl,
+            @Nullable String filePath,
+            @Nullable String displayName) {
         recordImageCountHistograms(new String[] {filePath});
         if (nativeSelectFileDialogImpl != 0) {
             SelectFileDialogJni.get()
@@ -1508,27 +1545,30 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
 
         // Unable to look up the MIME type, most likely because this URI is for media captured by
         // the camera. Use the extension if provided.
-        int index = mediaUri.getPath().lastIndexOf(".");
-        if (index > -1) {
-            String extension = mediaUri.getPath().substring(index);
-            for (String right : POPULAR_IMAGE_EXTENSIONS) {
-                if (extension.equalsIgnoreCase(right)) {
-                    return mediaPickerWasUsed
-                            ? FileSelectedAction.MEDIA_PICKER_IMAGE_BY_EXTENSION
-                            : FileSelectedAction.EXTERNAL_PICKER_IMAGE_BY_EXTENSION;
+        String path = mediaUri.getPath();
+        if (path != null) {
+            int index = path.lastIndexOf(".");
+            if (index > -1) {
+                String extension = path.substring(index);
+                for (String right : POPULAR_IMAGE_EXTENSIONS) {
+                    if (extension.equalsIgnoreCase(right)) {
+                        return mediaPickerWasUsed
+                                ? FileSelectedAction.MEDIA_PICKER_IMAGE_BY_EXTENSION
+                                : FileSelectedAction.EXTERNAL_PICKER_IMAGE_BY_EXTENSION;
+                    }
                 }
-            }
-            for (String right : POPULAR_VIDEO_EXTENSIONS) {
+                for (String right : POPULAR_VIDEO_EXTENSIONS) {
                 if (extension.equalsIgnoreCase(right)) {
                     return mediaPickerWasUsed
                             ? FileSelectedAction.MEDIA_PICKER_VIDEO_BY_EXTENSION
                             : FileSelectedAction.EXTERNAL_PICKER_VIDEO_BY_EXTENSION;
                 }
-            }
+                }
 
-            return mediaPickerWasUsed
-                    ? FileSelectedAction.MEDIA_PICKER_OTHER_BY_EXTENSION
-                    : FileSelectedAction.EXTERNAL_PICKER_OTHER_BY_EXTENSION;
+                return mediaPickerWasUsed
+                        ? FileSelectedAction.MEDIA_PICKER_OTHER_BY_EXTENSION
+                        : FileSelectedAction.EXTERNAL_PICKER_OTHER_BY_EXTENSION;
+            }
         }
 
         return mediaPickerWasUsed
@@ -1710,7 +1750,8 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
         // sure that the Android Media Picker is the one handling the request and not something
         // random.
         String packageNameForGetContent = resolvePackageNameFromIntent(intent);
-        if (!"com.google.android.providers.media.module".equals(packageNameForGetContent)) {
+        if (!"com.google.android.providers.media.module".equals(packageNameForGetContent)
+                && !"com.google.android.photopicker".equals(packageNameForGetContent)) {
             return showAndroidMediaPickerDirect(
                     windowAndroid, intentCallback, allowMultiple, mimeTypes);
         }
@@ -1794,8 +1835,8 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
         void onFileSelected(
                 long nativeSelectFileDialogImpl,
                 SelectFileDialog caller,
-                String filePath,
-                String displayName);
+                @Nullable String filePath,
+                @Nullable String displayName);
 
         void onMultipleFilesSelected(
                 long nativeSelectFileDialogImpl,

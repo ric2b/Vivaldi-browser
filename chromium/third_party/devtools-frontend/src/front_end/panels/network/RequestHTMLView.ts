@@ -37,6 +37,7 @@ export class RequestHTMLView extends UI.Widget.VBox {
   private readonly dataURL: string;
   private constructor(dataURL: string) {
     super(true);
+    this.registerRequiredCSS(requestHTMLViewStyles);
 
     this.dataURL = dataURL;
     this.contentElement.classList.add('html', 'request-view');
@@ -48,8 +49,8 @@ export class RequestHTMLView extends UI.Widget.VBox {
   }
 
   override wasShown(): void {
+    super.wasShown();
     this.createIFrame();
-    this.registerCSSFiles([requestHTMLViewStyles]);
   }
 
   override willHide(): void {

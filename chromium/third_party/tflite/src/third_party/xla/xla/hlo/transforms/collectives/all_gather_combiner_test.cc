@@ -21,6 +21,7 @@ limitations under the License.
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include "absl/strings/string_view.h"
 #include "xla/hlo/ir/hlo_casting_utils.h"
 #include "xla/hlo/ir/hlo_computation.h"
 #include "xla/hlo/ir/hlo_instruction.h"
@@ -116,6 +117,45 @@ ENTRY entry {
   EXPECT_THAT(module->entry_computation()->root_instruction(),
               op::Tuple(op::AllGather(op::Parameter(0)),
                         op::AllGather(op::Parameter(1))));
+}
+
+// Tests that AllGather instructions inside while loop bodies are not combined
+// when combine_while_loops is false.
+TEST_F(AllGatherCombinerTest, DoNotCombineInWhileLoop) {
+  const char* const hlo_string = R"(
+HloModule Module
+
+while_body {
+  param0 = (f32[32], s32[32]) parameter(0)
+  param0.0 = f32[32] get-tuple-element(param0), index=0
+  param0.1 = s32[32] get-tuple-element(param0), index=1
+  allgather0 = f32[128] all-gather(param0.0), replica_groups={}, dimensions={0}
+  allgather1 = s32[128] all-gather(param0.1), replica_groups={}, dimensions={0}
+  ROOT tuple = (f32[32], s32[32]) tuple(param0.0, param0.1)
+}
+
+while_cond {
+  param0 = (f32[32], s32[32]) parameter(0)
+  ROOT cond = pred[] constant(true)
+}
+
+ENTRY entry {
+  param0 = f32[32] parameter(0)
+  param1 = s32[32] parameter(1)
+  while_init = (f32[32], s32[32]) tuple(param0, param1)
+  while_loop = (f32[32], s32[32]) while(while_init), condition=while_cond, body=while_body
+  ROOT gte = f32[32] get-tuple-element(while_loop), index=0
+}
+)";
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+
+  AllGatherCombiner combine(1024 * 1024, kMaxCombineCount,
+                            /*combine_by_dim=*/true,
+                            /*combine_different_dtypes=*/true,
+                            /*combine_while_loops=*/false);
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, combine.Run(module.get()));
+  EXPECT_FALSE(changed);
 }
 
 // Tests combination of several cross replica gather instructions with
@@ -575,6 +615,36 @@ ENTRY entry {
   ASSERT_EQ(2, all_gathers.size());
   ASSERT_EQ(0, all_gathers[0]->all_gather_dimension());
   ASSERT_EQ(1, all_gathers[1]->all_gather_dimension());
+}
+
+TEST_F(AllGatherCombinerTest, PreservesMetadata) {
+  absl::string_view hlo_string = R"(
+    HloModule Module
+
+    ENTRY entry {
+      param0 = f32[32] parameter(0)
+      param1 = f32[32] parameter(1)
+      allgather0 = f32[128] all-gather(param0), replica_groups={}, dimensions={0}, metadata={op_type="test_type0" op_name="test_name0"}
+      allgather1 = f32[128] all-gather(param1), replica_groups={}, dimensions={0}, metadata={op_type="test_type1" op_name="test_name1"}
+      ROOT tuple = (f32[128], f32[128]) tuple(allgather0, allgather1)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+
+  AllGatherCombiner combine(1024 * 1024, kMaxCombineCount,
+                            /*combine_by_dim=*/true);
+  ASSERT_EQ(AllGatherCount(*module), 2);
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, combine.Run(module.get()));
+  EXPECT_TRUE(changed);
+
+  OpMetadata metadata;
+  metadata.set_op_type("test_type0");
+  metadata.set_op_name("test_name0");
+  Matcher<const HloInstruction*> combined_all_gather = op::Metadata(metadata);
+  EXPECT_THAT(module->entry_computation()->root_instruction(),
+              op::Tuple(op::GetTupleElement(combined_all_gather, 0),
+                        op::GetTupleElement(combined_all_gather, 1)));
 }
 
 }  // namespace

@@ -12,48 +12,50 @@ import static androidx.test.espresso.matcher.ViewMatchers.withParent;
 
 import static org.hamcrest.CoreMatchers.allOf;
 import static org.hamcrest.CoreMatchers.instanceOf;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import static org.chromium.base.test.transit.ViewSpec.viewSpec;
 
 import android.view.View;
+import android.view.ViewGroup;
 
 import org.hamcrest.Matcher;
 
 import org.chromium.base.test.transit.Condition;
 import org.chromium.base.test.transit.Elements;
 import org.chromium.base.test.transit.Transition;
+import org.chromium.base.test.transit.ViewElement;
 import org.chromium.base.test.transit.ViewSpec;
 import org.chromium.base.test.util.ViewActionOnDescendant;
-import org.chromium.chrome.browser.hub.HubFieldTrial;
 import org.chromium.chrome.browser.hub.HubToolbarView;
 import org.chromium.chrome.browser.hub.PaneId;
+import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.tab_management.TabGridView;
 import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.transit.page.PageStation;
 import org.chromium.chrome.test.transit.tabmodel.TabCountChangedCondition;
+import org.chromium.chrome.test.util.TabBinningUtil;
+import org.chromium.components.omnibox.OmniboxFeatures;
+
+import java.util.List;
 
 /** The base station for Hub tab switcher stations. */
 public abstract class TabSwitcherStation extends HubBaseStation {
     public static final ViewSpec TAB_LIST_RECYCLER_VIEW =
-            viewSpec(
-                    allOf(
-                            isDescendantOfA(HubBaseStation.HUB_PANE_HOST.getViewMatcher()),
-                            withId(R.id.tab_list_recycler_view)));
+            HUB_PANE_HOST.descendant(withId(R.id.tab_list_recycler_view));
 
+    public static final ViewSpec TOOLBAR = viewSpec(instanceOf(HubToolbarView.class));
     public static final ViewSpec TOOLBAR_NEW_TAB_BUTTON =
+            TOOLBAR.descendant(withId(R.id.toolbar_action_button));
+    public static final ViewSpec SEARCH_BOX = viewSpec(withId(R.id.search_box));
+    public static final ViewSpec SEARCH_LOUPE = TOOLBAR.descendant(withId(R.id.search_loupe));
+    public static final ViewSpec TAB_GROUP_COLOR_ICON_VIEW =
             viewSpec(
                     allOf(
-                            withId(R.id.toolbar_action_button),
-                            isDescendantOfA(instanceOf(HubToolbarView.class))));
-
-    public static final ViewSpec FLOATING_NEW_TAB_BUTTON =
-            viewSpec(
-                    allOf(
-                            withId(R.id.host_action_button),
-                            isDescendantOfA(HubBaseStation.HUB_PANE_HOST.getViewMatcher())));
-
+                            withId(R.id.tab_group_color_view_container),
+                            withParent(withId(R.id.card_view))));
     public static final Matcher<View> TAB_CLOSE_BUTTON =
             allOf(
                     withId(R.id.action_button),
@@ -73,6 +75,8 @@ public abstract class TabSwitcherStation extends HubBaseStation {
 
     private final boolean mIsIncognito;
 
+    private ViewElement mRecyclerViewElement;
+
     public TabSwitcherStation(
             boolean isIncognito, boolean regularTabsExist, boolean incognitoTabsExist) {
         super(regularTabsExist, incognitoTabsExist);
@@ -84,7 +88,20 @@ public abstract class TabSwitcherStation extends HubBaseStation {
         super.declareElements(elements);
 
         elements.declareView(getNewTabButtonViewSpec());
-        elements.declareView(TAB_LIST_RECYCLER_VIEW);
+        if (OmniboxFeatures.sAndroidHubSearch.isEnabled()) {
+            elements.declareElementFactory(
+                    mActivityElement,
+                    delayedElements -> {
+                        if (!mActivityElement.get().isTablet()) {
+                            delayedElements.declareView(SEARCH_BOX);
+                            delayedElements.declareNoView(SEARCH_LOUPE);
+                        } else {
+                            delayedElements.declareView(SEARCH_LOUPE);
+                            delayedElements.declareNoView(SEARCH_BOX);
+                        }
+                    });
+        }
+        mRecyclerViewElement = elements.declareView(TAB_LIST_RECYCLER_VIEW);
     }
 
     public boolean isIncognito() {
@@ -178,11 +195,7 @@ public abstract class TabSwitcherStation extends HubBaseStation {
     }
 
     protected ViewSpec getNewTabButtonViewSpec() {
-        if (HubFieldTrial.usesFloatActionButton()) {
-            return FLOATING_NEW_TAB_BUTTON;
-        } else {
-            return TOOLBAR_NEW_TAB_BUTTON;
-        }
+        return TOOLBAR_NEW_TAB_BUTTON;
     }
 
     /**
@@ -200,5 +213,32 @@ public abstract class TabSwitcherStation extends HubBaseStation {
                         .withIncognito(mIsIncognito)
                         .build();
         return leaveHubToPreviousTabViaBack(destination);
+    }
+
+    /** Expect a tab group card to exist. */
+    public TabSwitcherGroupCardFacility expectGroupCard(List<Integer> tabIdsInGroup, String title) {
+        TabModel currentModel = getTabModelSelectorSupplier().get().getCurrentModel();
+        int expectedCardIndex = TabBinningUtil.getBinIndex(currentModel, tabIdsInGroup);
+        return enterFacilitySync(
+                new TabSwitcherGroupCardFacility(expectedCardIndex, tabIdsInGroup, title),
+                /* trigger= */ null);
+    }
+
+    /** Expect a tab card to exist. */
+    public TabSwitcherTabCardFacility expectTabCard(int tabId, String title) {
+        TabModel currentModel = getTabModelSelectorSupplier().get().getCurrentModel();
+        int expectedCardIndex = TabBinningUtil.getBinIndex(currentModel, tabId);
+        return enterFacilitySync(
+                new TabSwitcherTabCardFacility(expectedCardIndex, tabId, title),
+                /* trigger= */ null);
+    }
+
+    /** Verify the tab switcher card count. */
+    public void verifyTabSwitcherCardCount(int count) {
+        assertEquals(((ViewGroup) mRecyclerViewElement.get()).getChildCount(), count);
+    }
+
+    public ViewElement getRecyclerViewElement() {
+        return mRecyclerViewElement;
     }
 }

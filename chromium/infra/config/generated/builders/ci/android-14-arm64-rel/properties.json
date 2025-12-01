@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "android-14-arm64-rel",
-              "project": "chromium-m132"
+              "project": "chromium-m134"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-android-archive",
@@ -25,7 +25,7 @@
                   "mb"
                 ],
                 "build_config": "Release",
-                "config": "android",
+                "config": "main_builder",
                 "target_bits": 64,
                 "target_platform": "android"
               },
@@ -43,7 +43,7 @@
         {
           "bucket": "ci",
           "builder": "android-14-arm64-rel",
-          "project": "chromium-m132"
+          "project": "chromium-m134"
         }
       ],
       "mirroring_builder_group_and_names": [

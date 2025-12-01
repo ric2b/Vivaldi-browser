@@ -15,10 +15,8 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_model_listener.h"
-#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_service_factory.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/tab_group_action_context_desktop.h"
-#include "chrome/browser/ui/tabs/saved_tab_groups/tab_group_sync_service_proxy.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "components/saved_tab_groups/public/tab_group_sync_service.h"
@@ -259,7 +257,7 @@ TabGroupSyncDelegateDesktop::GetLocalTabGroupIds() {
         browser->tab_strip_model()->SupportsTabGroups()) {
       std::vector<LocalTabGroupID> local_groups =
           browser->tab_strip_model()->group_model()->ListTabGroups();
-      base::ranges::copy(local_groups, std::back_inserter(local_group_ids));
+      std::ranges::copy(local_groups, std::back_inserter(local_group_ids));
     }
   }
 
@@ -271,10 +269,11 @@ std::vector<LocalTabID> TabGroupSyncDelegateDesktop::GetLocalTabIdsForTabGroup(
   // TODO(b/346871861): Implement.
   return std::vector<LocalTabID>();
 }
-
-void TabGroupSyncDelegateDesktop::CreateRemoteTabGroup(
+std::unique_ptr<SavedTabGroup>
+TabGroupSyncDelegateDesktop::CreateSavedTabGroupFromLocalGroup(
     const LocalTabGroupID& local_tab_group_id) {
   // TODO(b/346871861): Implement.
+  return nullptr;
 }
 
 std::unique_ptr<ScopedLocalObservationPauser>

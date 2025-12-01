@@ -13,7 +13,7 @@ title: SKU and FW Configuration Fields
 There are many different concepts that all have the same name: SKU. For this
 document SKU will refer to the Firmware SKU referenced in model.yaml or
 config.star and firmware code. This SKU is stored in the
-[CBI](./cros_board_info.md) EEPROM connected to the EC; this SKU used to be
+[CBI](../cros-board-info) EEPROM connected to the EC; this SKU used to be
 stored in resistor straps on the EC or AP. For some devices, like ARM, the
 SKU is still resistor-strap based.
 

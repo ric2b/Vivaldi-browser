@@ -517,7 +517,7 @@ void ValidateAndConvertPaymentDetailsModifiers(
         payments::mojom::blink::PaymentMethodData::New();
     output.back()->method_data->supported_method = modifier->supportedMethod();
 
-    if (modifier->hasData() && !modifier->data().IsEmpty()) {
+    if (modifier->hasData()) {
       StringifyAndParseMethodSpecificData(
           execution_context, modifier->supportedMethod(), modifier->data(),
           output.back()->method_data, exception_state);
@@ -760,8 +760,7 @@ void ValidateAndConvertPaymentMethodData(
     output.push_back(payments::mojom::blink::PaymentMethodData::New());
     output.back()->supported_method = payment_method_data->supportedMethod();
 
-    if (payment_method_data->hasData() &&
-        !payment_method_data->data().IsEmpty()) {
+    if (payment_method_data->hasData()) {
       StringifyAndParseMethodSpecificData(
           execution_context, payment_method_data->supportedMethod(),
           payment_method_data->data(), output.back(), exception_state);
@@ -787,7 +786,7 @@ bool AllowedToUsePaymentRequest(ExecutionContext* execution_context) {
   // 2. If Permissions Policy is enabled, return the policy for "payment"
   // feature.
   return execution_context->IsFeatureEnabled(
-      mojom::blink::PermissionsPolicyFeature::kPayment,
+      network::mojom::PermissionsPolicyFeature::kPayment,
       ReportOptions::kReportOnFailure);
 }
 
@@ -819,6 +818,19 @@ void RecordActivationlessShow(ExecutionContext* execution_context,
 }
 
 }  // namespace
+
+// static
+ScriptPromise<IDLBoolean> PaymentRequest::isSecurePaymentConfirmationAvailable(
+    ScriptState* script_state) {
+  auto* resolver =
+      MakeGarbageCollected<ScriptPromiseResolver<IDLBoolean>>(script_state);
+  auto promise = resolver->Promise();
+
+  // TODO(crbug.com/40258712): Implement isSecurePaymentConfirmationAvailable
+  resolver->Resolve(false);
+
+  return promise;
+}
 
 PaymentRequest* PaymentRequest::Create(
     ExecutionContext* execution_context,
@@ -913,7 +925,7 @@ ScriptPromise<PaymentResponse> PaymentRequest::show(
     // If the website does not calculate the final shopping cart contents within
     // 10 seconds, abort payment.
     update_payment_details_timer_.StartOneShot(base::Seconds(10), FROM_HERE);
-    details_promise.React(
+    details_promise.Then(
         script_state, MakeGarbageCollected<UpdatePaymentDetailsResolve>(this),
         MakeGarbageCollected<UpdatePaymentDetailsReject>(this));
   }
@@ -1403,8 +1415,9 @@ void PaymentRequest::OnPaymentMethodChange(const String& method_name,
       ClearResolversAndCloseMojoConnection();
       return;
     }
+    CHECK(parsed_value->IsObject());
     init->setMethodDetails(
-        ScriptValue(script_state->GetIsolate(), parsed_value));
+        ScriptObject(script_state->GetIsolate(), parsed_value));
   }
 
   PaymentRequestUpdateEvent* event = PaymentMethodChangeEvent::Create(

@@ -13,12 +13,15 @@
 <translation id="1859234291848436338">ලිවීමේ දිශාව</translation>
 <translation id="2297836609126180313"><ph name="QUANTITY" /> ටෙ.බ./ත.</translation>
 <translation id="3049748772180311791">මෙ.බ. <ph name="QUANTITY" /></translation>
+<translation id="3240426699337459095">සබැඳිය පිටපත් කරන ලදී</translation>
 <translation id="3291688615589870984">{DAYS, plural, =1 {දවස් 1} other {දවස් #}}</translation>
+<translation id="335581015389089642">කතාව</translation>
 <translation id="3600566671520689681">{DAYS, plural, =1 {දවස් 1 ක් ඉතිරියි} other {දවස් # ක් ඉතිරියි}}</translation>
 <translation id="3618849550573277856">“<ph name="LOOKUP_STRING" />” බලන්න</translation>
 <translation id="3740362395218339114"><ph name="QUANTITY" /> ගි.බ./ත.</translation>
 <translation id="3757388668994797779">ගි.බ. <ph name="QUANTITY" /></translation>
 <translation id="3889424535448813030">දකුණු ඊතලය</translation>
+<translation id="4289300219472526559">කතා කිරීම ආරම්භ කරන්න</translation>
 <translation id="4968171027979920686">{SECONDS, plural, =1 {තත්. 1} other {තත්. #}}</translation>
 <translation id="5076340679995252485">අලවන්න (&amp;P)</translation>
 <translation id="520299402983819650">පෙ.බ. <ph name="QUANTITY" /></translation>
@@ -28,6 +31,7 @@
 <translation id="5906667377645263094">{SECONDS, plural, =1 {තත්. 1 ක් ඉතිරියි} other {තත්. # ක් ඉතිරියි}}</translation>
 <translation id="5943826764092288734">{HOURS, plural, =1 {පැය 1} other {පැය #}}</translation>
 <translation id="6142413573757616983"><ph name="QUANTITY" /> බ./තත්.</translation>
+<translation id="6397363302884558537">කතා කිරීම නවත්වන්න</translation>
 <translation id="6404817160109697034">{SECONDS, plural, =1 {තත්. 1 කට පෙර} other {තත්. # කට පෙර}}</translation>
 <translation id="6483402905448010557">{SECONDS, plural, =1 {තත්. 1 කට පෙර} other {තත්. # කට පෙර}}</translation>
 <translation id="6863590663815976734">{HOURS, plural, =1 {පැය 1 ක් ඉතිරියි} other {පැය # ක් ඉතිරියි}}</translation>

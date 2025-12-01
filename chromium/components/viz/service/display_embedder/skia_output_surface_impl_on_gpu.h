@@ -66,7 +66,6 @@ namespace gpu {
 class DisplayCompositorMemoryAndTaskControllerOnGpu;
 class SharedImageRepresentationFactory;
 class SharedImageFactory;
-class SyncPointClientState;
 }  // namespace gpu
 
 namespace skgpu::graphite {
@@ -116,7 +115,6 @@ class SkiaOutputSurfaceImplOnGpu
   static std::unique_ptr<SkiaOutputSurfaceImplOnGpu> Create(
       SkiaOutputSurfaceDependency* deps,
       const RendererSettings& renderer_settings,
-      const gpu::SequenceId sequence_id,
       gpu::DisplayCompositorMemoryAndTaskControllerOnGpu* shared_gpu_deps,
       DidSwapBufferCompleteCallback did_swap_buffer_complete_callback,
       BufferPresentedCallback buffer_presented_callback,
@@ -130,7 +128,6 @@ class SkiaOutputSurfaceImplOnGpu
       SkiaOutputSurfaceDependency* deps,
       scoped_refptr<gpu::gles2::FeatureInfo> feature_info,
       const RendererSettings& renderer_settings,
-      const gpu::SequenceId sequence_id,
       gpu::DisplayCompositorMemoryAndTaskControllerOnGpu* shared_gpu_deps,
       DidSwapBufferCompleteCallback did_swap_buffer_complete_callback,
       BufferPresentedCallback buffer_presented_callback,
@@ -246,8 +243,6 @@ class SkiaOutputSurfaceImplOnGpu
   // It will do nothing when Vulkan is used.
   bool MakeCurrent(bool need_framebuffer);
 
-  void ReleaseFenceSync(uint64_t sync_fence_release);
-
   void PreserveChildSurfaceControls();
 
   void InitDelegatedInkPointRendererReceiver(
@@ -338,7 +333,11 @@ class SkiaOutputSurfaceImplOnGpu
   void DestroyCopyOutputResourcesOnGpuThread(const gpu::Mailbox& mailbox);
 
   void SwapBuffersInternal(std::optional<OutputSurfaceFrame> frame);
-  void PostSubmit(std::optional<OutputSurfaceFrame> frame);
+  void PostSubmit(std::optional<OutputSurfaceFrame> frame, bool skip_present);
+
+  // Attempts presentation for `frame`. Returns false if presentation was
+  // skipped.
+  bool PresentFrame(OutputSurfaceFrame frame);
 
   GrDirectContext* gr_context() const { return context_state_->gr_context(); }
 
@@ -487,7 +486,6 @@ class SkiaOutputSurfaceImplOnGpu
   const raw_ptr<SkiaOutputSurfaceDependency> dependency_;
   raw_ptr<gpu::DisplayCompositorMemoryAndTaskControllerOnGpu> shared_gpu_deps_;
   scoped_refptr<gpu::gles2::FeatureInfo> feature_info_;
-  scoped_refptr<gpu::SyncPointClientState> sync_point_client_state_;
   std::unique_ptr<gpu::SharedImageFactory> shared_image_factory_;
   std::unique_ptr<gpu::SharedImageRepresentationFactory>
       shared_image_representation_factory_;
@@ -580,6 +578,8 @@ class SkiaOutputSurfaceImplOnGpu
   // Micro-optimization to get to issuing GPU SwapBuffers as soon as possible.
   std::vector<sk_sp<GrDeferredDisplayList>> destroy_after_swap_;
 
+  bool draw_render_pass_failed_ = false;
+
   bool waiting_for_full_damage_ = false;
 
   int num_readbacks_pending_ = 0;
@@ -596,7 +596,7 @@ class SkiaOutputSurfaceImplOnGpu
   // external semaphore type has copy transference, which means importing
   // semaphores has to be delayed until submission.
   base::circular_deque<std::pair<GrBackendSemaphore,
-                       base::OnceCallback<void(gfx::GpuFenceHandle)>>>
+                                 base::OnceCallback<void(gfx::GpuFenceHandle)>>>
       pending_release_fence_cbs_;
 
   // A cache of solid color image mailboxes so we can destroy them in the

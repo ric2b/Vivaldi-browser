@@ -16,7 +16,7 @@ namespace openscreen::osp {
 
 TEST(PresentationMessagesTest, EncodeRequestOneUrl) {
   uint8_t buffer[256];
-  std::vector<std::string> urls{"https://example.com/receiver.html"};
+  std::vector<std::string> urls = {"https://example.com/receiver.html"};
   int64_t bytes_out = EncodePresentationUrlAvailabilityRequest(
       PresentationUrlAvailabilityRequest{7, urls}, buffer, sizeof(buffer));
   ASSERT_LE(bytes_out, static_cast<int64_t>(sizeof(buffer)));
@@ -50,7 +50,7 @@ TEST(PresentationMessagesTest, EncodeRequestMultipleUrls) {
 
 TEST(PresentationMessagesTest, EncodeWouldOverflow) {
   uint8_t buffer[40];
-  std::vector<std::string> urls{"https://example.com/receiver.html"};
+  std::vector<std::string> urls = {"https://example.com/receiver.html"};
   int64_t bytes_out = EncodePresentationUrlAvailabilityRequest(
       PresentationUrlAvailabilityRequest{7, urls}, buffer, sizeof(buffer));
   ASSERT_GT(bytes_out, static_cast<int64_t>(sizeof(buffer)));
@@ -59,7 +59,7 @@ TEST(PresentationMessagesTest, EncodeWouldOverflow) {
 // TODO(btolsch): Expand invalid utf8 testing to good/bad files and fuzzing.
 TEST(PresentationMessagesTest, EncodeInvalidUtf8) {
   uint8_t buffer[256];
-  std::vector<std::string> urls{"\xc0"};
+  std::vector<std::string> urls = {"\xc0"};
   int64_t bytes_out = EncodePresentationUrlAvailabilityRequest(
       PresentationUrlAvailabilityRequest{7, urls}, buffer, sizeof(buffer));
   ASSERT_GT(0, bytes_out);
@@ -67,7 +67,7 @@ TEST(PresentationMessagesTest, EncodeInvalidUtf8) {
 
 TEST(PresentationMessagesTest, DecodeInvalidUtf8) {
   uint8_t buffer[256];
-  std::vector<std::string> urls{"https://example.com/receiver.html"};
+  std::vector<std::string> urls = {"https://example.com/receiver.html"};
   int64_t bytes_out = EncodePresentationUrlAvailabilityRequest(
       PresentationUrlAvailabilityRequest{7, urls}, buffer, sizeof(buffer));
   ASSERT_LE(bytes_out, static_cast<int64_t>(sizeof(buffer)));
@@ -168,7 +168,7 @@ TEST(PresentationMessagesTest, EncodeConnectionMessageBytes) {
 }
 
 TEST(PresentationMessagesTest, CborEncodeBufferSmall) {
-  std::vector<std::string> urls{"https://example.com/receiver.html"};
+  std::vector<std::string> urls = {"https://example.com/receiver.html"};
   PresentationUrlAvailabilityRequest request{7, urls};
   CborEncodeBuffer buffer;
   ASSERT_TRUE(EncodePresentationUrlAvailabilityRequest(request, &buffer));
@@ -203,7 +203,7 @@ TEST(PresentationMessagesTest, CborEncodeBufferMedium) {
 }
 
 TEST(PresentationMessagesTest, CborEncodeBufferTooLarge) {
-  std::vector<std::string> urls{"https://example.com/receiver.html"};
+  std::vector<std::string> urls = {"https://example.com/receiver.html"};
   PresentationUrlAvailabilityRequest request{7, urls};
   CborEncodeBuffer buffer{10, 30};
   ASSERT_FALSE(EncodePresentationUrlAvailabilityRequest(request, &buffer));

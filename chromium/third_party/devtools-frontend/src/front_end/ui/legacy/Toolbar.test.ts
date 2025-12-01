@@ -2,27 +2,113 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as Coordinator from '../components/render_coordinator/render_coordinator.js';
-
-const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
-
-import {
-  dispatchClickEvent,
-  doubleRaf,
-  renderElementIntoDOM,
-} from '../../testing/DOMHelpers.js';
+import {dispatchClickEvent, doubleRaf, renderElementIntoDOM} from '../../testing/DOMHelpers.js';
 import {describeWithLocale} from '../../testing/EnvironmentHelpers.js';
+import * as RenderCoordinator from '../components/render_coordinator/render_coordinator.js';
 
 import * as UI from './legacy.js';
 
 describeWithLocale('Toolbar', () => {
+  const {Toolbar} = UI.Toolbar;
+
+  describe('Toolbar', () => {
+    it('can be instantiated via `createElement`', () => {
+      const toolbar = document.createElement('devtools-toolbar');
+
+      assert.instanceOf(toolbar, Toolbar);
+    });
+
+    it('attaches a shadow root', () => {
+      const toolbar = document.createElement('devtools-toolbar');
+
+      assert.isNotNull(toolbar.shadowRoot, 'Expected Toolbar to use Light DOM');
+    });
+
+    describe('connectedCallback', () => {
+      it('adjusts the ARIA role to `toolbar` if unspecified', () => {
+        const toolbar = document.createElement('devtools-toolbar');
+
+        toolbar.connectedCallback();
+
+        assert.strictEqual(toolbar.role, 'toolbar');
+      });
+
+      it('leaves the ARIA role as is if the developer specified one', () => {
+        const toolbar = document.createElement('devtools-toolbar');
+        toolbar.role = 'presentation';
+
+        toolbar.connectedCallback();
+
+        assert.strictEqual(toolbar.role, 'presentation');
+      });
+    });
+
+    describe('floating', () => {
+      it('defaults to off', () => {
+        const toolbar = document.createElement('devtools-toolbar');
+
+        assert.isFalse(toolbar.floating);
+      });
+
+      it('can be toggled on', () => {
+        const toolbar = document.createElement('devtools-toolbar');
+
+        toolbar.floating = true;
+
+        assert.isTrue(toolbar.floating);
+      });
+
+      it('reflects changes onto the `floating` attribute', () => {
+        const toolbar = document.createElement('devtools-toolbar');
+
+        toolbar.floating = true;
+
+        assert.isTrue(toolbar.hasAttribute('floating'));
+      });
+    });
+
+    describe('hidden', () => {
+      it('hides the toolbar when present', () => {
+        const toolbar = renderElementIntoDOM(document.createElement('devtools-toolbar'));
+
+        toolbar.hidden = true;
+
+        assert.strictEqual(window.getComputedStyle(toolbar).display, 'none');
+      });
+    });
+
+    describe('wrappable', () => {
+      it('defaults to off', () => {
+        const toolbar = document.createElement('devtools-toolbar');
+
+        assert.isFalse(toolbar.wrappable);
+      });
+
+      it('can be toggled on', () => {
+        const toolbar = document.createElement('devtools-toolbar');
+
+        toolbar.wrappable = true;
+
+        assert.isTrue(toolbar.wrappable);
+      });
+
+      it('reflects changes onto the `wrappable` attribute', () => {
+        const toolbar = document.createElement('devtools-toolbar');
+
+        toolbar.wrappable = true;
+
+        assert.isTrue(toolbar.hasAttribute('wrappable'));
+      });
+    });
+  });
+
   describe('ToolbarInput', () => {
     it('sets a title on the clear button', async () => {
       const input = new UI.Toolbar.ToolbarInput('placeholder');
       renderElementIntoDOM(input.element);
       input.setValue('test value');
       const clearButton = input.element.querySelector('.toolbar-input-clear-button');
-      await coordinator.done();
+      await RenderCoordinator.done();
       const innerButton = clearButton?.shadowRoot?.querySelector('button');
       assert.instanceOf(innerButton, HTMLElement);
       assert.strictEqual(innerButton.title, 'Clear');
@@ -40,16 +126,14 @@ describeWithLocale('Toolbar', () => {
   });
 
   it('can append items into the toolbar', async () => {
-    const div = document.createElement('div');
-    const toolbar = new UI.Toolbar.Toolbar('test-toolbar', div);
-    renderElementIntoDOM(div);
+    const toolbar = renderElementIntoDOM(document.createElement('devtools-toolbar'));
 
     const itemOne = new UI.Toolbar.ToolbarInput('placeholder-item-1');
     toolbar.appendToolbarItem(itemOne);
     const itemTwo = new UI.Toolbar.ToolbarInput('placeholder-item-2');
     toolbar.appendToolbarItem(itemTwo);
 
-    const toolbarInputs = div.querySelector('.toolbar')?.shadowRoot?.querySelectorAll('[data-placeholder]');
+    const toolbarInputs = toolbar.querySelectorAll('[data-placeholder]');
     assert.isOk(toolbarInputs);
     assert.lengthOf(toolbarInputs, 2);
 
@@ -61,16 +145,14 @@ describeWithLocale('Toolbar', () => {
   });
 
   it('can prepend items into the toolbar', async () => {
-    const div = document.createElement('div');
-    const toolbar = new UI.Toolbar.Toolbar('test-toolbar', div);
-    renderElementIntoDOM(div);
+    const toolbar = renderElementIntoDOM(document.createElement('devtools-toolbar'));
 
     const itemOne = new UI.Toolbar.ToolbarInput('placeholder-item-1');
     toolbar.appendToolbarItem(itemOne);
     const itemTwo = new UI.Toolbar.ToolbarInput('placeholder-item-2');
     toolbar.prependToolbarItem(itemTwo);
 
-    const toolbarInputs = div.querySelector('.toolbar')?.shadowRoot?.querySelectorAll('[data-placeholder]');
+    const toolbarInputs = toolbar.querySelectorAll('[data-placeholder]');
     assert.isOk(toolbarInputs);
     assert.lengthOf(toolbarInputs, 2);
 
@@ -83,7 +165,7 @@ describeWithLocale('Toolbar', () => {
   });
 
   it('knows if it has an item in the toolbar', async () => {
-    const toolbar = new UI.Toolbar.Toolbar('test-toolbar');
+    const toolbar = document.createElement('devtools-toolbar');
     const item = new UI.Toolbar.ToolbarInput('placeholder');
     toolbar.appendToolbarItem(item);
     assert.isTrue(toolbar.hasItem(item));
@@ -95,9 +177,7 @@ describeWithLocale('Toolbar', () => {
     function createToolbarWithButton(
         contextMenuHandler: sinon.SinonStubStatic,
         ): UI.Toolbar.ToolbarMenuButton {
-      const div = document.createElement('div');
-      const toolbar = new UI.Toolbar.Toolbar('test-toolbar', div);
-      renderElementIntoDOM(div);
+      const toolbar = renderElementIntoDOM(document.createElement('devtools-toolbar'));
       const menuButton = new UI.Toolbar.ToolbarMenuButton(contextMenuHandler);
       menuButton.setTriggerDelay(0);  // default is 200ms but don't want to slow tests down
       toolbar.appendToolbarItem(menuButton);

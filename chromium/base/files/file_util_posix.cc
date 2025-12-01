@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "base/files/file_util.h"
 
 #include <dirent.h>
@@ -451,7 +456,7 @@ std::optional<FilePath> MakeAbsoluteFilePathNoResolveSymbolicLinks(
   // a relative |input|.
   if (input.IsAbsolute()) {
     collapsed_path = FilePath(components_span[0]);
-    components_span = components_span.subspan(1);
+    components_span = components_span.subspan<1>();
   } else {
     if (!GetCurrentDirectory(&collapsed_path)) {
       return std::nullopt;
@@ -1103,7 +1108,7 @@ bool WriteFileDescriptor(int fd, span<const uint8_t> data) {
 }
 
 bool WriteFileDescriptor(int fd, std::string_view data) {
-  return WriteFileDescriptor(fd, as_bytes(make_span(data)));
+  return WriteFileDescriptor(fd, as_byte_span(data));
 }
 
 bool AllocateFileRegion(File* file, int64_t offset, size_t size) {
@@ -1212,7 +1217,7 @@ bool AppendToFile(const FilePath& filename, span<const uint8_t> data) {
 }
 
 bool AppendToFile(const FilePath& filename, std::string_view data) {
-  return AppendToFile(filename, as_bytes(make_span(data)));
+  return AppendToFile(filename, as_byte_span(data));
 }
 
 bool GetCurrentDirectory(FilePath* dir) {

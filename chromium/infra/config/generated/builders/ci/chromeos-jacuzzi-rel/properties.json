@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "chromeos-jacuzzi-rel",
-              "project": "chromium-m132"
+              "project": "chromium-m134"
             },
             "builder_spec": {
               "builder_group": "chromium.chromiumos",
@@ -46,7 +46,7 @@
         {
           "bucket": "ci",
           "builder": "chromeos-jacuzzi-rel",
-          "project": "chromium-m132"
+          "project": "chromium-m134"
         }
       ],
       "mirroring_builder_group_and_names": [
@@ -55,7 +55,8 @@
           "group": "tryserver.chromium.chromiumos"
         }
       ],
-      "retry_failed_shards": false
+      "retry_failed_shards": false,
+      "targets_spec_directory": "src/infra/config/generated/builders/ci/chromeos-jacuzzi-rel/targets"
     }
   },
   "$build/reclient": {
@@ -69,7 +70,9 @@
     ],
     "enable_cloud_profiler": true,
     "enable_cloud_trace": true,
-    "experiments": [],
+    "experiments": [
+      "no-fast-deps"
+    ],
     "project": "rbe-chromium-trusted",
     "remote_jobs": 500
   },

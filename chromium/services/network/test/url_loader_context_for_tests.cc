@@ -38,7 +38,17 @@ URLLoaderContextForTests::GetCoepReporter() const {
   return nullptr;
 }
 
+mojom::DocumentIsolationPolicyReporter*
+URLLoaderContextForTests::GetDipReporter() const {
+  return nullptr;
+}
+
 mojom::DevToolsObserver* URLLoaderContextForTests::GetDevToolsObserver() const {
+  return nullptr;
+}
+
+mojom::DeviceBoundSessionAccessObserver*
+URLLoaderContextForTests::GetDeviceBoundSessionAccessObserver() const {
   return nullptr;
 }
 

@@ -3,7 +3,6 @@
 # found in the LICENSE file.
 
 import("//build/buildflag_header.gni")
-import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/features.gni")
 import("//components/password_manager/core/browser/buildflags.gni")
 import("//third_party/libprotobuf-mutator/fuzzable_proto_library.gni")
@@ -79,6 +78,7 @@ static_library("browser") {
     "password_autofill_manager.h",
     "password_bubble_experiment.cc",
     "password_bubble_experiment.h",
+    "password_change_service_interface.h",
     "password_check_referrer_android.h",
     "password_counter.cc",
     "password_counter.h",
@@ -193,7 +193,7 @@ static_library("browser") {
     "//components/device_reauth",
     "//components/favicon/core",
     "//components/favicon_base",
-    "//components/os_crypt/sync:os_crypt",
+    "//components/os_crypt/sync",
     "//components/password_manager/core/browser:password_switches",
     "//components/password_manager/core/browser/affiliation:affiliation_match_helper",
     "//components/password_manager/core/browser/features:password_features",
@@ -249,7 +249,7 @@ static_library("browser") {
     ]
   }
 
-  if (!is_chromeos_ash && !is_android) {
+  if (!is_chromeos && !is_android) {
     sources += [
       "password_reuse_manager_signin_notifier_impl.cc",
       "password_reuse_manager_signin_notifier_impl.h",
@@ -519,7 +519,7 @@ source_set("unit_tests") {
     sources += [ "hash_password_manager_unittest.cc" ]
   }
 
-  if (!is_chromeos_ash && !is_android) {
+  if (!is_chromeos && !is_android) {
     sources += [ "password_reuse_manager_signin_notifier_impl_unittest.cc" ]
   }
 
@@ -535,7 +535,7 @@ source_set("unit_tests") {
     "//components/device_reauth",
     "//components/device_reauth:test_support",
     "//components/favicon/core/test:test_support",
-    "//components/os_crypt/sync:os_crypt",
+    "//components/os_crypt/sync",
     "//components/os_crypt/sync:test_support",
     "//components/password_manager/core/browser/affiliation:affiliation_match_helper",
     "//components/password_manager/core/browser/features:password_features",

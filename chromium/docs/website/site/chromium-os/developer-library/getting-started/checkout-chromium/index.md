@@ -8,8 +8,8 @@ title: Checkout Chromium
 
 Some development tasks may require working in the `chromium` repository, the
 `chromiumos` repository, or both. If you only need to work in the `chromiumos`
-repository, you can jump ahead to the [Checkout
-ChromiumOS](/chromium-os/developer-library/getting-started/checkout-chromiumos)
+repository, you can jump ahead to the [ChromiumOS Developer
+Guide](/chromium-os/developer-library/guides/development/developer-guide#get-the-source)
 page.
 
 This page details the steps to create the initial checkout of the `chromium`

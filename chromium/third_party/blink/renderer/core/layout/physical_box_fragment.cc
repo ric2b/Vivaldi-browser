@@ -27,10 +27,12 @@
 #include "third_party/blink/renderer/core/layout/layout_text_combine.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/layout/outline_utils.h"
+#include "third_party/blink/renderer/core/layout/pagination_utils.h"
 #include "third_party/blink/renderer/core/layout/relative_utils.h"
 #include "third_party/blink/renderer/core/layout/table/layout_table_cell.h"
 #include "third_party/blink/renderer/core/paint/inline_paint_context.h"
 #include "third_party/blink/renderer/core/paint/outline_painter.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/size_assertions.h"
 
 namespace blink {
@@ -57,15 +59,34 @@ bool HasControlClip(const PhysicalBoxFragment& self) {
   return box && box->HasControlClip();
 }
 
+bool IsFlexibleBoxWithSingleChildElement(const LayoutObject& layout_object) {
+  if (!RuntimeEnabledFeatures::
+          UsePositionForPointInFlexibleBoxWithSingleChildElementEnabled()) {
+    return false;
+  }
+  auto* node = layout_object.GetNode();
+  if (!node || !layout_object.IsFlexibleBox()) {
+    return false;
+  }
+  return ElementTraversal::FirstChild(*node) ==
+         ElementTraversal::LastChild(*node);
+}
+
 bool ShouldUsePositionForPointInBlockFlowDirection(
     const LayoutObject& layout_object) {
   const LayoutBlockFlow* const layout_block_flow =
       DynamicTo<LayoutBlockFlow>(layout_object);
-  if (!layout_block_flow) {
-    // For <tr>, see editing/selection/click-before-and-after-table.html
+  // If it is not a layout block flow,  it should return false to prevent table
+  // elements like `<tr>` from being included. See
+  // editing/selection/click-before-and-after-table.html for more details.
+  // Additionally, if it is a flex block and it has only one child element, it
+  // should also return false. See https://issues.chromium.org/issues/40889098
+  // for more details.
+  if (!layout_block_flow &&
+      !IsFlexibleBoxWithSingleChildElement(layout_object)) {
     return false;
   }
-  if (layout_block_flow->StyleRef().SpecifiesColumns()) {
+  if (layout_object.StyleRef().SpecifiesColumns()) {
     // Columns are laid out in inline direction.
     return false;
   }
@@ -215,16 +236,26 @@ const PhysicalBoxFragment* PhysicalBoxFragment::CloneWithPostLayoutFragments(
     child.fragment = child->PostLayout();
     DCHECK(child.fragment);
 
-    if (!child->IsFragmentainerBox())
+    const auto* child_fragment = DynamicTo<PhysicalBoxFragment>(child.get());
+    if (!child_fragment) {
       continue;
+    }
+    // See if there's a fragmentainer here. A column fragmentainer is a direct
+    // child of a multicol container fragment. A page fragmentainer is wrapped
+    // inside a page border box, which is wrapped inside a page container box.
+    if (child_fragment->GetBoxType() == kPageContainer) {
+      child_fragment = &GetPageArea(GetPageBorderBox(*child_fragment));
+    }
+    if (!child_fragment->IsFragmentainerBox()) {
+      continue;
+    }
 
     // Fragmentainers don't have the concept of post-layout fragments, so if
     // this is a fragmentation context root (such as a multicol container), we
     // need to not only update its children, but also the children of the
     // children that are fragmentainers.
-    auto& fragmentainer = *To<PhysicalBoxFragment>(child.fragment.Get());
     for (PhysicalFragmentLink& fragmentainer_child :
-         fragmentainer.GetMutableForCloning().Children()) {
+         child_fragment->GetMutableForCloning().Children()) {
       auto& old_child =
           *To<PhysicalBoxFragment>(fragmentainer_child.fragment.Get());
       fragmentainer_child.fragment = old_child.PostLayout();
@@ -293,17 +324,14 @@ PhysicalBoxFragment::PhysicalBoxFragment(
   DCHECK(layout_object_->IsBoxModelObject());
   DCHECK(!builder->break_token_ || builder->break_token_->IsBlockType());
 
-  children_.resize(builder->children_.size());
+  children_.ReserveInitialCapacity(builder->children_.size());
   PhysicalSize size = Size();
   const WritingModeConverter converter(
       {block_or_line_writing_mode, builder->Direction()}, size);
-  wtf_size_t i = 0;
   for (auto& child : builder->children_) {
-    children_[i].offset =
-        converter.ToPhysical(child.offset, child.fragment->Size());
-    // Fragments in |builder| are not used after |this| was constructed.
-    children_[i].fragment = child.fragment.Release();
-    ++i;
+    children_.emplace_back(
+        std::move(child.fragment),
+        converter.ToPhysical(child.offset, child.fragment->Size()));
   }
 
   if (HasItems()) {
@@ -330,7 +358,7 @@ PhysicalBoxFragment::PhysicalBoxFragment(
       inflow_bounds.has_value() + !!builder->Style().MayHaveMargin();
 
   if (rare_fields_size > 0 || !builder->table_column_geometries_.empty() ||
-      !builder->reading_flow_elements_.empty()) {
+      !builder->reading_flow_nodes_.empty() || builder->gap_geometry_) {
     rare_data_ = MakeGarbageCollected<PhysicalFragmentRareData>(
         has_scrollable_overflow ? &scrollable_overflow : nullptr, borders,
         scrollbar, padding, inflow_bounds, *builder, rare_fields_size);
@@ -839,8 +867,10 @@ void PhysicalBoxFragment::MutableForOofFragmentation::Merge(
     if (!fragment_.oof_data_) {
       fragment_.oof_data_ = MakeGarbageCollected<OofData>();
     }
+    PhysicalAnchorQuery& anchor_query =
+        fragment_.oof_data_->EnsureAnchorQuery();
     for (auto entry : *query) {
-      fragment_.oof_data_->AnchorQuery().insert(entry.key, entry.value);
+      anchor_query.insert(entry.key, entry.value);
     }
   }
 

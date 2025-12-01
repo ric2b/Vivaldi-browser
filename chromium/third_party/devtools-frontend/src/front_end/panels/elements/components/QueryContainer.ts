@@ -6,13 +6,17 @@ import '../../../ui/components/icon_button/icon_button.js';
 import '../../../ui/components/node_text/node_text.js';
 
 import * as SDK from '../../../core/sdk/sdk.js';
-import * as LitHtml from '../../../ui/lit-html/lit-html.js';
+import * as Lit from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
 import type {DOMNode} from './Helper.js';
-import queryContainerStyles from './queryContainer.css.js';
+import queryContainerStylesRaw from './queryContainer.css.js';
 
-const {render, html} = LitHtml;
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const queryContainerStyles = new CSSStyleSheet();
+queryContainerStyles.replaceSync(queryContainerStylesRaw.cssContent);
+
+const {render, html} = Lit;
 const {PhysicalAxis, QueryAxis} = SDK.CSSContainerQuery;
 
 export class QueriedSizeRequestedEvent extends Event {
@@ -79,7 +83,7 @@ export class QueryContainer extends HTMLElement {
 
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
-    // eslint-disable-next-line rulesdir/ban_a_tags_in_lit_html
+    // eslint-disable-next-line rulesdir/no-a-tags-in-lit
     render(html`
       →
       <a href="#"
@@ -96,21 +100,21 @@ export class QueryContainer extends HTMLElement {
         nodeId: idToDisplay,
         nodeClasses: classesToDisplay,
       }}></devtools-node-text></a>
-      ${this.#isContainerLinkHovered ? this.#renderQueriedSizeDetails() : LitHtml.nothing}
+      ${this.#isContainerLinkHovered ? this.#renderQueriedSizeDetails() : Lit.nothing}
     `, this.#shadow, {
       host: this,
     });
     // clang-format on
   }
 
-  #renderQueriedSizeDetails(): LitHtml.LitTemplate {
+  #renderQueriedSizeDetails(): Lit.LitTemplate {
     if (!this.#queriedSizeDetails || this.#queriedSizeDetails.queryAxis === QueryAxis.NONE) {
-      return LitHtml.nothing;
+      return Lit.nothing;
     }
 
     const areBothAxesQueried = this.#queriedSizeDetails.queryAxis === QueryAxis.BOTH;
 
-    const axisIconClasses = LitHtml.Directives.classMap({
+    const axisIconClasses = Lit.Directives.classMap({
       'axis-icon': true,
       hidden: areBothAxesQueried,
       vertical: this.#queriedSizeDetails.physicalAxis === PhysicalAxis.VERTICAL,
@@ -125,13 +129,13 @@ export class QueryContainer extends HTMLElement {
             iconName: 'width',
             color: 'var(--icon-default)',
           }}></devtools-icon>)
-        ${areBothAxesQueried && this.#queriedSizeDetails.width ? 'width:' : LitHtml.nothing}
-        ${this.#queriedSizeDetails.width || LitHtml.nothing}
-        ${areBothAxesQueried && this.#queriedSizeDetails.height ? 'height:' : LitHtml.nothing}
-        ${this.#queriedSizeDetails.height || LitHtml.nothing}
+        ${areBothAxesQueried && this.#queriedSizeDetails.width ? 'width:' : Lit.nothing}
+        ${this.#queriedSizeDetails.width || Lit.nothing}
+        ${areBothAxesQueried && this.#queriedSizeDetails.height ? 'height:' : Lit.nothing}
+        ${this.#queriedSizeDetails.height || Lit.nothing}
       </span>
     `;
-            // clang-format on
+          // clang-format on
   }
 }
 

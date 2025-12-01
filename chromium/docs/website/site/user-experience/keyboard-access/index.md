@@ -90,7 +90,7 @@ Explorer), so this should be a very easy shortcut to remember.
 
 [Chrome extensions](https://chrome.google.com/extensions) can install [Page
 Actions and Browser
-Actions](http://www.google.com/support/chrome/bin/answer.py?answer=154007) in
+Actions](https://www.google.com/support/chrome/bin/answer.py?answer=154007) in
 the main toolbar. These are all fully accessible using these keystrokes. Don't
 forget to try the **Context Menu** key for Page Actions and Browser Actions.
 

@@ -6,8 +6,15 @@
 
 #include "src/codegen/signature.h"
 #include "src/utils/utils.h"
+#include "src/wasm/canonical-types.h"
+#include "src/wasm/signature-hashing.h"
 
 namespace v8::internal::wasm {
+
+bool CanonicalValueType::IsFunctionType_Slow() const {
+  DCHECK(has_index());
+  return wasm::GetTypeCanonicalizer()->IsFunctionSignature(ref_index());
+}
 
 std::optional<wasm::ValueKind> WasmReturnTypeFromSignature(
     const CanonicalSig* wasm_signature) {
@@ -83,6 +90,15 @@ const wasm::FunctionSig* ReplaceTypeInSig(Zone* zone,
 
 const wasm::FunctionSig* GetI32Sig(Zone* zone, const wasm::FunctionSig* sig) {
   return ReplaceTypeInSig(zone, sig, wasm::kWasmI64, wasm::kWasmI32, 2);
+}
+
+CanonicalSig* CanonicalSig::Builder::Get() const {
+  CanonicalSig* sig =
+      reinterpret_cast<
+          const SignatureBuilder<CanonicalSig, CanonicalValueType>*>(this)
+          ->Get();
+  sig->signature_hash_ = wasm::SignatureHasher::Hash(sig);
+  return sig;
 }
 
 }  // namespace v8::internal::wasm

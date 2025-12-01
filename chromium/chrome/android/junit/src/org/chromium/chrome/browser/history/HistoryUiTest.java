@@ -62,7 +62,6 @@ import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.HistogramWatcher;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.back_press.BackPressHelper;
@@ -72,8 +71,6 @@ import org.chromium.chrome.browser.history.AppFilterCoordinator.AppInfo;
 import org.chromium.chrome.browser.history.HistoryManagerToolbar.InfoHeaderPref;
 import org.chromium.chrome.browser.incognito.IncognitoUtils;
 import org.chromium.chrome.browser.preferences.Pref;
-import org.chromium.chrome.browser.preferences.PrefChangeRegistrar;
-import org.chromium.chrome.browser.preferences.PrefChangeRegistrarJni;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
@@ -88,6 +85,8 @@ import org.chromium.components.browser_ui.widget.selectable_list.SelectableItemV
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListToolbar.NavigationButton;
 import org.chromium.components.favicon.LargeIconBridge;
 import org.chromium.components.favicon.LargeIconBridgeJni;
+import org.chromium.components.prefs.PrefChangeRegistrar;
+import org.chromium.components.prefs.PrefChangeRegistrarJni;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.components.signin.test.util.TestAccounts;
@@ -110,7 +109,6 @@ public class HistoryUiTest {
 
     @Rule public AccountManagerTestRule mAccountManagerTestRule = new AccountManagerTestRule();
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
-    @Rule public JniMocker mJniMocker = new JniMocker();
 
     @Rule
     public ActivityScenarioRule<TestActivity> mActivityScenarioRule =
@@ -158,15 +156,15 @@ public class HistoryUiTest {
 
         ProfileManager.setLastUsedProfileForTesting(mProfile);
 
-        mJniMocker.mock(LargeIconBridgeJni.TEST_HOOKS, mMockLargeIconBridgeJni);
+        LargeIconBridgeJni.setInstanceForTesting(mMockLargeIconBridgeJni);
         doReturn(1L).when(mMockLargeIconBridgeJni).init();
-        mJniMocker.mock(UserPrefsJni.TEST_HOOKS, mUserPrefsJni);
+        UserPrefsJni.setInstanceForTesting(mUserPrefsJni);
         doReturn(mPrefService).when(mUserPrefsJni).get(mProfile);
         doReturn(true).when(mPrefService).getBoolean(Pref.ALLOW_DELETING_BROWSER_HISTORY);
         doReturn(true).when(mPrefService).getBoolean(HistoryManager.HISTORY_CLUSTERS_VISIBLE_PREF);
         IdentityServicesProvider.setInstanceForTests(mIdentityService);
         doReturn(mSigninManager).when(mIdentityService).getSigninManager(mProfile);
-        mJniMocker.mock(PrefChangeRegistrarJni.TEST_HOOKS, mPrefChangeRegistrarJni);
+        PrefChangeRegistrarJni.setInstanceForTesting(mPrefChangeRegistrarJni);
         IncognitoUtils.setEnabledForTesting(true);
         TemplateUrlServiceFactory.setInstanceForTesting(mTemplateUrlService);
         mActivityScenarioRule
@@ -192,7 +190,8 @@ public class HistoryUiTest {
                         /* clientPackageName= */ null,
                         /* shouldShowClearData= */ true,
                         /* launchedForApp= */ false,
-                        /* showAppFilter= */ isAppSpecificHistoryEnabled);
+                        /* showAppFilter= */ isAppSpecificHistoryEnabled,
+                        /* openHistoryItemCallback= */ null);
         mContentManager = mHistoryManager.getContentManagerForTests();
         mAdapter = mContentManager.getAdapter();
         mRecyclerView = mContentManager.getRecyclerView();
@@ -757,14 +756,16 @@ public class HistoryUiTest {
                         /* Supplier<Tab>= */ null,
                         mHistoryProvider,
                         new HistoryUmaRecorder(),
-                        appId,
-                        true,
-                        true,
-                        false);
+                        /* clientPackageName= */ appId,
+                        /* shouldShowClearData= */ true,
+                        /* launchedForApp= */ true,
+                        /* showAppFilter= */ false,
+                        /* openHistoryItemCallback= */ null);
+
         final HistoryManagerToolbar toolbar = mHistoryManager.getToolbarForTests();
         Assert.assertNull(toolbar.getItemById(R.id.close_menu_id));
         Assert.assertEquals(
-                toolbar.getNavigationButtonForTests(), NavigationButton.NORMAL_VIEW_BACK);
+                NavigationButton.NORMAL_VIEW_BACK, toolbar.getNavigationButtonForTests());
 
         Resources res = mActivity.getResources();
         Assert.assertEquals(
@@ -792,10 +793,11 @@ public class HistoryUiTest {
                         /* Supplier<Tab>= */ null,
                         mHistoryProvider,
                         new HistoryUmaRecorder(),
-                        appId,
-                        true,
-                        true,
-                        false);
+                        /* clientPackageName= */ appId,
+                        /* shouldShowClearData= */ true,
+                        /* launchedForApp= */ true,
+                        /* showAppFilter= */ false,
+                        /* openHistoryItemCallback= */ null);
         InfoHeaderPref headerPref = mHistoryManager.getInfoHeaderPrefForTests();
         Assert.assertFalse(headerPref.isVisible());
         HistoryManagerToolbar toolbar = mHistoryManager.getToolbarForTests();
@@ -912,8 +914,8 @@ public class HistoryUiTest {
                 button);
         Assert.assertEquals(
                 "State for the MPB should be button",
-                button.getStateForTest(),
-                MoreProgressButton.State.BUTTON);
+                MoreProgressButton.State.BUTTON,
+                button.getStateForTest());
 
         // Test click, should load more items
         button.findViewById(R.id.action_button).performClick();

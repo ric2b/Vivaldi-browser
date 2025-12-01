@@ -137,6 +137,7 @@ func run() error {
 
 	var formatList, ignore, dxcPath, fxcPath, tintPath, xcrunPath string
 	var maxTableWidth int
+	var useIrReader bool
 	numCPU := runtime.NumCPU()
 	verbose, generateExpected, generateSkip := false, false, false
 	flag.StringVar(&formatList, "format", "all", "comma separated list of formats to emit. Possible values are: all, wgsl, spvasm, msl, msl-ir, hlsl, hlsl-ir, hlsl-dxc, hlsl-dxc-ir, hlsl-fxc, hlsl-fxc-ir, glsl")
@@ -148,6 +149,7 @@ func run() error {
 	flag.BoolVar(&verbose, "verbose", false, "print all run tests, including rows that all pass")
 	flag.BoolVar(&generateExpected, "generate-expected", false, "create or update all expected outputs")
 	flag.BoolVar(&generateSkip, "generate-skip", false, "create or update all expected outputs that fail with SKIP")
+	flag.BoolVar(&useIrReader, "use-ir-reader", false, "force use of IR SPIR-V Reader")
 	flag.IntVar(&numCPU, "j", numCPU, "maximum number of concurrent threads to run tests")
 	flag.IntVar(&maxTableWidth, "table-width", terminalWidth, "maximum width of the results table")
 	flag.Usage = showUsage
@@ -283,7 +285,7 @@ func run() error {
 		color.Unset()
 		fmt.Printf(" validation ")
 		if *tool.path != "" {
-			fmt.Printf("ENABLED (" + *tool.path + ")")
+			fmt.Printf("ENABLED (%s)", *tool.path)
 		} else {
 			color.Set(color.FgRed)
 			fmt.Printf("DISABLED")
@@ -324,6 +326,7 @@ func run() error {
 		generateExpected: generateExpected,
 		generateSkip:     generateSkip,
 		validationCache:  validationCache,
+		useIrReader:      useIrReader,
 	}
 	for cpu := 0; cpu < numCPU; cpu++ {
 		go func() {
@@ -408,20 +411,20 @@ func run() error {
 	cyan := color.New(color.FgCyan)
 
 	printFormatsHeader := func() {
-		fmt.Printf(strings.Repeat(" ", filenameColumnWidth))
-		fmt.Printf(" ┃ ")
+		fmt.Print(strings.Repeat(" ", filenameColumnWidth))
+		fmt.Print(" ┃ ")
 		for _, format := range formats {
-			cyan.Printf(alignCenter(format, formatWidth(format)))
-			fmt.Printf(" │ ")
+			cyan.Print(alignCenter(format, formatWidth(format)))
+			fmt.Print(" │ ")
 		}
 		fmt.Println()
 	}
 	printHorizontalLine := func() {
-		fmt.Printf(strings.Repeat("━", filenameColumnWidth))
-		fmt.Printf("━╋━")
+		fmt.Print(strings.Repeat("━", filenameColumnWidth))
+		fmt.Print("━╋━")
 		for _, format := range formats {
-			fmt.Printf(strings.Repeat("━", formatWidth(format)))
-			fmt.Printf("━┿━")
+			fmt.Print(strings.Repeat("━", formatWidth(format)))
+			fmt.Print("━┿━")
 		}
 		fmt.Println()
 	}
@@ -446,8 +449,8 @@ func run() error {
 			shortFile = "..." + file[filenameLength-filenameColumnWidth+3:]
 		}
 
-		fmt.Fprintf(row, alignRight(shortFile, filenameColumnWidth))
-		fmt.Fprintf(row, " ┃ ")
+		fmt.Fprint(row, alignRight(shortFile, filenameColumnWidth))
+		fmt.Fprint(row, " ┃ ")
 		for _, format := range formats {
 			columnWidth := formatWidth(format)
 			result := <-results[format]
@@ -467,25 +470,25 @@ func run() error {
 
 			switch result.code {
 			case pass:
-				green.Fprintf(row, alignCenter("PASS", columnWidth))
+				green.Fprint(row, alignCenter("PASS", columnWidth))
 				stats.numPass++
 			case fail:
-				red.Fprintf(row, alignCenter("FAIL", columnWidth))
+				red.Fprint(row, alignCenter("FAIL", columnWidth))
 				rowAllPassed = false
 				stats.numFail++
 			case skip:
-				yellow.Fprintf(row, alignCenter("SKIP", columnWidth))
+				yellow.Fprint(row, alignCenter("SKIP", columnWidth))
 				rowAllPassed = false
 				stats.numSkip++
 			case invalid:
-				yellow.Fprintf(row, alignCenter("INVALID", columnWidth))
+				yellow.Fprint(row, alignCenter("INVALID", columnWidth))
 				rowAllPassed = false
 				stats.numInvalid++
 			default:
-				fmt.Fprintf(row, alignCenter(result.code, columnWidth))
+				fmt.Fprint(row, alignCenter(result.code, columnWidth))
 				rowAllPassed = false
 			}
-			fmt.Fprintf(row, " │ ")
+			fmt.Fprint(row, " │ ")
 		}
 
 		if verbose || !rowAllPassed {
@@ -514,23 +517,23 @@ func run() error {
 			columnWidth := formatWidth(format)
 			count := num(statsByFmt[format])
 			if count > 0 {
-				col.Fprintf(row, alignLeft(count, columnWidth))
+				col.Fprint(row, alignLeft(count, columnWidth))
 				anyNonZero = true
 			} else {
-				fmt.Fprintf(row, alignLeft(count, columnWidth))
+				fmt.Fprint(row, alignLeft(count, columnWidth))
 			}
-			fmt.Fprintf(row, " │ ")
+			fmt.Fprint(row, " │ ")
 		}
 
 		if !anyNonZero {
 			return
 		}
-		col.Printf(alignRight(name, filenameColumnWidth))
-		fmt.Printf(" ┃ ")
+		col.Print(alignRight(name, filenameColumnWidth))
+		fmt.Print(" ┃ ")
 		fmt.Fprintln(color.Output, row)
 
-		col.Printf(strings.Repeat(" ", filenameColumnWidth))
-		fmt.Printf(" ┃ ")
+		col.Print(strings.Repeat(" ", filenameColumnWidth))
+		fmt.Print(" ┃ ")
 		for _, format := range formats {
 			columnWidth := formatWidth(format)
 			stats := statsByFmt[format]
@@ -541,7 +544,7 @@ func run() error {
 			} else {
 				fmt.Print(alignRight(percent, columnWidth))
 			}
-			fmt.Printf(" │ ")
+			fmt.Print(" │ ")
 		}
 		fmt.Println()
 	}
@@ -550,12 +553,12 @@ func run() error {
 	printStat(yellow, "INVALID", func(s *stats) int { return s.numInvalid })
 	printStat(red, "FAIL", func(s *stats) int { return s.numFail })
 
-	cyan.Printf(alignRight("TIME", filenameColumnWidth))
-	fmt.Printf(" ┃ ")
+	cyan.Print(alignRight("TIME", filenameColumnWidth))
+	fmt.Print(" ┃ ")
 	for _, format := range formats {
 		timeTaken := printDuration(statsByFmt[format].timeTaken)
-		cyan.Printf(alignLeft(timeTaken, formatWidth(format)))
-		fmt.Printf(" │ ")
+		cyan.Print(alignLeft(timeTaken, formatWidth(format)))
+		fmt.Print(" │ ")
 	}
 	fmt.Println()
 
@@ -662,6 +665,7 @@ type runConfig struct {
 	generateExpected bool
 	generateSkip     bool
 	validationCache  validationCache
+	useIrReader      bool
 }
 
 // Skips the path portion of FXC warning/error strings, matching the rest.
@@ -727,6 +731,10 @@ func (j job) run(cfg runConfig) {
 
 		if useIr {
 			args = append(args, "--use-ir")
+		}
+
+		if cfg.useIrReader {
+			args = append(args, "--use-ir-reader")
 		}
 
 		// Append any skip-hashes, if they're found.

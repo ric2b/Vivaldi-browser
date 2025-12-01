@@ -4,11 +4,13 @@
 
 #include "ash/wm/workspace/workspace_window_resizer.h"
 
+#include <algorithm>
 #include <cmath>
 #include <utility>
 
 #include "ash/constants/ash_features.h"
 #include "ash/metrics/pip_uma.h"
+#include "ash/public/cpp/presentation_time_recorder.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/root_window_controller.h"
@@ -36,7 +38,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
-#include "base/ranges/algorithm.h"
 #include "chromeos/ui/base/app_types.h"
 #include "chromeos/ui/base/window_properties.h"
 #include "chromeos/ui/frame/caption_buttons/snap_controller.h"
@@ -1144,17 +1145,11 @@ WorkspaceWindowResizer::WorkspaceWindowResizer(
     window_splitter_ = std::make_unique<WindowSplitter>(window_state->window());
   }
 
-  std::unique_ptr<ash::PresentationTimeRecorder> recorder =
-      window_state->OnDragStarted(details().window_component);
-  if (recorder) {
-    SetPresentationTimeRecorder(std::move(recorder));
-  } else {
-    // Default to use compositor based recorder.
-    SetPresentationTimeRecorder(
-        PresentationTimeRecorder::CreateCompositorRecorder(
-            GetTarget(), "Ash.InteractiveWindowResize.TimeToPresent",
-            "Ash.InteractiveWindowResize.TimeToPresent.MaxLatency"));
-  }
+  window_state->OnDragStarted(details().window_component);
+  SetPresentationTimeRecorder(
+      PresentationTimeRecorder::CreateCompositorRecorder(
+          GetTarget(), "Ash.InteractiveWindowResize.TimeToPresent",
+          "Ash.InteractiveWindowResize.TimeToPresent.MaxLatency"));
 
   StartDragForAttachedWindows();
 
@@ -1306,7 +1301,9 @@ void WorkspaceWindowResizer::CreateBucketsForAttached(
     int min = PrimaryAxisSize(
         window_delegate ? window_delegate->GetMinimumSize() : gfx::Size());
     int max = PrimaryAxisSize(
-        window_delegate ? window_delegate->GetMaximumSize() : gfx::Size());
+        window_delegate
+            ? window_delegate->GetMaximumSize().value_or(gfx::Size())
+            : gfx::Size());
 
     sizes->push_back(WindowSize(initial_size, min, max));
   }
@@ -1647,13 +1644,13 @@ void WorkspaceWindowResizer::RestackWindows() {
   aura::Window* parent = GetTarget()->parent();
   const std::vector<raw_ptr<aura::Window, VectorExperimental>>& windows(
       parent->children());
-  map[base::ranges::find(windows, GetTarget()) - windows.begin()] = GetTarget();
+  map[std::ranges::find(windows, GetTarget()) - windows.begin()] = GetTarget();
   for (aura::Window* attached_window : attached_windows_) {
     if (attached_window->parent() != parent) {
       return;
     }
     size_t index =
-        base::ranges::find(windows, attached_window) - windows.begin();
+        std::ranges::find(windows, attached_window) - windows.begin();
     map[index] = attached_window;
   }
 

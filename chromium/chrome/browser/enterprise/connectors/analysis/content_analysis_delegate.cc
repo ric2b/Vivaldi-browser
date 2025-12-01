@@ -30,6 +30,7 @@
 #include "chrome/browser/enterprise/connectors/analysis/page_print_analysis_request.h"
 #include "chrome/browser/enterprise/connectors/common.h"
 #include "chrome/browser/enterprise/connectors/connectors_service.h"
+#include "chrome/browser/enterprise/data_controls/reporting_service.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router.h"
 #include "chrome/browser/file_util_service.h"
 #include "chrome/browser/policy/dm_token_utils.h"
@@ -43,6 +44,7 @@
 #include "components/enterprise/common/files_scan_data.h"
 #include "components/enterprise/common/proto/connectors.pb.h"
 #include "components/enterprise/connectors/core/analysis_settings.h"
+#include "components/enterprise/connectors/core/common.h"
 #include "components/policy/core/common/chrome_schema.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/content/browser/web_ui/safe_browsing_ui.h"
@@ -195,20 +197,24 @@ ContentAnalysisDelegate::~ContentAnalysisDelegate() = default;
 
 void ContentAnalysisDelegate::BypassWarnings(
     std::optional<std::u16string> user_justification) {
-  if (callback_.is_null())
+  if (callback_.is_null()) {
     return;
+  }
 
   // Mark the full text as complying and report a warning bypass.
   if (text_warning_) {
     std::fill(result_.text_results.begin(), result_.text_results.end(), true);
 
     int64_t content_size = 0;
-    for (const std::string& entry : data_.text)
+    for (const std::string& entry : data_.text) {
       content_size += entry.size();
+    }
 
     ReportAnalysisConnectorWarningBypass(
         profile_, /*url*/ url_, /*tab_url*/ url_,
-        /*source*/ data_.clipboard_source,
+        /*source*/
+        data_controls::ReportingService::GetClipboardSourceString(
+            data_.clipboard_source),
         /*destination*/ url_.spec(), "Text data", /*download_digest_sha256*/ "",
         "text/plain",
         extensions::SafeBrowsingPrivateEventRouter::kTriggerWebContentUpload,
@@ -222,8 +228,11 @@ void ContentAnalysisDelegate::BypassWarnings(
 
     ReportAnalysisConnectorWarningBypass(
         profile_, /*url*/ url_, /*tab_url*/ url_,
-        /*source*/ data_.clipboard_source, /*destination*/ url_.spec(),
-        "Image data", /*download_digest_sha256*/ "",
+        /*source*/
+        data_controls::ReportingService::GetClipboardSourceString(
+            data_.clipboard_source),
+        /*destination*/ url_.spec(), "Image data",
+        /*download_digest_sha256*/ "",
         /*mime_type*/ "",
         extensions::SafeBrowsingPrivateEventRouter::kTriggerWebContentUpload,
         GetContentTransferMethod(), access_point_, data_.image.size(),
@@ -255,8 +264,9 @@ void ContentAnalysisDelegate::BypassWarnings(
 }
 
 void ContentAnalysisDelegate::Cancel(bool warning) {
-  if (callback_.is_null())
+  if (callback_.is_null()) {
     return;
+  }
 
   // Don't report this upload as cancelled if the user didn't bypass the
   // warning.
@@ -273,8 +283,9 @@ void ContentAnalysisDelegate::Cancel(bool warning) {
   cancel->set_user_action_id(user_action_id_);
 
   BinaryUploadService* upload_service = GetBinaryUploadService();
-  if (upload_service)
+  if (upload_service) {
     upload_service->MaybeCancelRequests(std::move(cancel));
+  }
 
   // Make sure to reject everything.
   FillAllResultsWith(false);
@@ -367,8 +378,9 @@ bool ContentAnalysisDelegate::IsEnabled(Profile* profile,
                                         AnalysisConnector connector) {
   auto* service = ConnectorsServiceFactory::GetForBrowserContext(profile);
   // If the corresponding Connector policy isn't set, don't perform scans.
-  if (!service || !service->IsConnectorEnabled(connector))
+  if (!service || !service->IsConnectorEnabled(connector)) {
     return false;
+  }
 
   // Check that |url| matches the appropriate URL patterns by getting settings.
   // No settings means no matches were found.
@@ -378,8 +390,9 @@ bool ContentAnalysisDelegate::IsEnabled(Profile* profile,
   }
 
   data->settings = std::move(settings.value());
-  if (url.is_valid())
+  if (url.is_valid()) {
     data->url = url;
+  }
 
   return true;
 }
@@ -500,8 +513,9 @@ void ContentAnalysisDelegate::SetFactoryForTesting(Factory factory) {
 
 // static
 void ContentAnalysisDelegate::ResetFactoryForTesting() {
-  if (GetFactoryStorage())
+  if (GetFactoryStorage()) {
     GetFactoryStorage()->Reset();
+  }
 }
 
 // static
@@ -556,12 +570,14 @@ void ContentAnalysisDelegate::StringRequestCallback(
     BinaryUploadService::Result result,
     ContentAnalysisResponse response) {
   // Remember to send an ack for this response.
-  if (result == safe_browsing::BinaryUploadService::Result::SUCCESS)
+  if (result == safe_browsing::BinaryUploadService::Result::SUCCESS) {
     final_actions_[response.request_token()] = GetAckFinalAction(response);
+  }
 
   int64_t content_size = 0;
-  for (const std::string& entry : data_.text)
+  for (const std::string& entry : data_.text) {
     content_size += entry.size();
+  }
   RecordDeepScanMetrics(
       data_.settings.cloud_or_local_settings.is_cloud_analysis(), access_point_,
       base::TimeTicks::Now() - upload_start_time_, content_size, result,
@@ -583,7 +599,9 @@ void ContentAnalysisDelegate::StringRequestCallback(
 
   MaybeReportDeepScanningVerdict(
       profile_, /*url*/ url_, /*tab_url*/ url_,
-      /*source*/ data_.clipboard_source,
+      /*source*/
+      data_controls::ReportingService::GetClipboardSourceString(
+          data_.clipboard_source),
       /*destination*/ url_.spec(), "Text data", /*download_digest_sha256*/ "",
       "text/plain",
       extensions::SafeBrowsingPrivateEventRouter::kTriggerWebContentUpload,
@@ -630,7 +648,9 @@ void ContentAnalysisDelegate::ImageRequestCallback(
 
   MaybeReportDeepScanningVerdict(
       profile_, /*url*/ url_, /*tab_url*/ url_,
-      /*source*/ data_.clipboard_source,
+      /*source*/
+      data_controls::ReportingService::GetClipboardSourceString(
+          data_.clipboard_source),
       /*destination*/ url_.spec(), "Image data", /*download_digest_sha256*/ "",
       /*mime_type*/ "",
       extensions::SafeBrowsingPrivateEventRouter::kTriggerWebContentUpload,
@@ -680,16 +700,18 @@ ContentAnalysisDelegate::GetFilesRequestHandlerForTesting() {
 }
 
 bool ContentAnalysisDelegate::ShowFinalResultInDialog() {
-  if (!dialog_)
+  if (!dialog_) {
     return false;
+  }
 
   dialog_->ShowResult(final_result_);
   return true;
 }
 
 bool ContentAnalysisDelegate::CancelDialog() {
-  if (!dialog_)
+  if (!dialog_) {
     return false;
+  }
 
   dialog_->CancelDialogAndDelete();
   return true;
@@ -699,8 +721,9 @@ void ContentAnalysisDelegate::PageRequestCallback(
     BinaryUploadService::Result result,
     ContentAnalysisResponse response) {
   // Remember to send an ack for this response.
-  if (result == safe_browsing::BinaryUploadService::Result::SUCCESS)
+  if (result == safe_browsing::BinaryUploadService::Result::SUCCESS) {
     final_actions_[response.request_token()] = GetAckFinalAction(response);
+  }
 
   RecordDeepScanMetrics(
       data_.settings.cloud_or_local_settings.is_cloud_analysis(), access_point_,
@@ -815,8 +838,9 @@ bool ContentAnalysisDelegate::ShouldFailOpenWithoutLocalClient(
 
 void ContentAnalysisDelegate::PrepareTextRequest() {
   std::string full_text;
-  for (const std::string& text : data_.text)
+  for (const std::string& text : data_.text) {
     full_text.append(text);
+  }
 
   // The request is considered complete if there is no text or if the text is
   // too small compared to the minimum size. This means a minimum_data_size of
@@ -841,8 +865,17 @@ void ContentAnalysisDelegate::PrepareTextRequest() {
 
     PrepareRequest(BULK_DATA_ENTRY, request.get());
     request->set_destination(url_.spec());
-    if (!data_.clipboard_source.empty()) {
-      request->set_source(data_.clipboard_source);
+    std::string source_string =
+        data_controls::ReportingService::GetClipboardSourceString(
+            data_.clipboard_source);
+    if (!source_string.empty()) {
+      request->set_source(source_string);
+    }
+    if (data_.clipboard_source.has_context()) {
+      request->set_clipboard_source_type(data_.clipboard_source.context());
+    }
+    if (data_.clipboard_source.has_url()) {
+      request->set_clipboard_source_url(data_.clipboard_source.url());
     }
     UploadTextForDeepScanning(std::move(request));
   }
@@ -983,16 +1016,18 @@ void ContentAnalysisDelegate::UploadImageForDeepScanning(
     std::unique_ptr<BinaryUploadService::Request> request) {
   BinaryUploadService* upload_service = GetBinaryUploadService();
   request->set_user_action_requests_count(total_requests_count_);
-  if (upload_service)
+  if (upload_service) {
     upload_service->MaybeUploadForDeepScanning(std::move(request));
+  }
 }
 
 void ContentAnalysisDelegate::UploadPageForDeepScanning(
     std::unique_ptr<BinaryUploadService::Request> request) {
   BinaryUploadService* upload_service = GetBinaryUploadService();
   request->set_user_action_requests_count(total_requests_count_);
-  if (upload_service)
+  if (upload_service) {
     upload_service->MaybeUploadForDeepScanning(std::move(request));
+  }
 }
 
 bool ContentAnalysisDelegate::UpdateDialog() {
@@ -1090,12 +1125,14 @@ void ContentAnalysisDelegate::UpdateFinalResult(
 }
 
 void ContentAnalysisDelegate::AckAllRequests() {
-  if (!OnAckAllRequestsStorage()->is_null())
+  if (!OnAckAllRequestsStorage()->is_null()) {
     std::move(*OnAckAllRequestsStorage()).Run(final_actions_);
+  }
 
   BinaryUploadService* upload_service = GetBinaryUploadService();
-  if (!upload_service)
+  if (!upload_service) {
     return;
+  }
 
   for (const auto& token_and_action : final_actions_) {
     // Only have files that have a request token. Not having one implies that

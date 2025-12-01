@@ -1,6 +1,7 @@
 Prefix       ; Length ; Type       ; Tariff        ; Operator   ; Format    ; Regions ; Geocode:en                                                            ; Provenance ; Comment
 [27]         ; 7      ; MOBILE     ; STANDARD_RATE ; "africell" ; "fmt_3/4" ; "GM"    ;                                                                       ; IR21
 3            ; 7      ; MOBILE     ; STANDARD_RATE ; "qcell"    ; "fmt_3/4" ; "GM"    ;                                                                       ; IR21
+4[015]       ; 7      ; MOBILE     ; STANDARD_RATE ; "africell" ; "fmt_3/4" ; "GM"    ;                                                                       ; IR21
 42           ; 7      ; FIXED_LINE ; STANDARD_RATE ;            ; "fmt_3/4" ; "GM"    ; "Banjul"                                                              ; ITU
 43           ; 7      ; FIXED_LINE ; STANDARD_RATE ;            ; "fmt_3/4" ; "GM"    ; "Bundung/Serekunda"                                                   ; ITU
 4410         ; 7      ; FIXED_LINE ; STANDARD_RATE ;            ; "fmt_3/4" ; "GM"    ; "Brufut"                                                              ; ITU
@@ -19,7 +20,7 @@ Prefix       ; Length ; Type       ; Tariff        ; Operator   ; Format    ; Re
 4488         ; 7      ; FIXED_LINE ; STANDARD_RATE ;            ; "fmt_3/4" ; "GM"    ; "Sibanor"                                                             ; ITU
 4489         ; 7      ; FIXED_LINE ; STANDARD_RATE ;            ; "fmt_3/4" ; "GM"    ; "Bwiam"                                                               ; ITU
 449          ; 7      ; FIXED_LINE ; STANDARD_RATE ;            ; "fmt_3/4" ; "GM"    ; "Bakau"                                                               ; ITU
-5[0-3]       ; 7      ; MOBILE     ; STANDARD_RATE ; "qcell"    ; "fmt_3/4" ; "GM"    ;                                                                       ; IR21
+5[0-4]       ; 7      ; MOBILE     ; STANDARD_RATE ; "qcell"    ; "fmt_3/4" ; "GM"    ;                                                                       ; IR21
 553          ; 7      ; FIXED_LINE ; STANDARD_RATE ;            ; "fmt_3/4" ; "GM"    ; "Soma"                                                                ; ITU        ; "Added per client's request."
 5540         ; 7      ; FIXED_LINE ; STANDARD_RATE ;            ; "fmt_3/4" ; "GM"    ; "Kaiaf"                                                               ; ITU
 5541         ; 7      ; FIXED_LINE ; STANDARD_RATE ;            ; "fmt_3/4" ; "GM"    ; "Kwenella"                                                            ; ITU

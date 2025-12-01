@@ -4,6 +4,7 @@
 
 #include "chrome/enterprise_companion/test/test_server.h"
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
@@ -12,9 +13,9 @@
 #include "base/containers/flat_map.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
-#include "base/ranges/algorithm.h"
 #include "base/time/time.h"
 #include "chrome/enterprise_companion/enterprise_companion_status.h"
+#include "chrome/enterprise_companion/enterprise_companion_version.h"
 #include "chrome/enterprise_companion/proto/enterprise_companion_event.pb.h"
 #include "chrome/enterprise_companion/telemetry_logger/proto/log_request.pb.h"
 #include "net/test/embedded_test_server/http_request.h"
@@ -38,8 +39,8 @@ TestServer::~TestServer() {
     // Forces `request_matcher` to log to help debugging, unless the
     // matcher matches the empty request.
     ADD_FAILURE() << "Unmet expectation: ";
-    base::ranges::for_each(request_matcher_group,
-                           [](Matcher matcher) { matcher.Run(HttpRequest()); });
+    std::ranges::for_each(request_matcher_group,
+                          [](Matcher matcher) { matcher.Run(HttpRequest()); });
   }
 }
 
@@ -59,7 +60,7 @@ std::unique_ptr<HttpResponse> TestServer::HandleRequest(
     response->set_code(net::HTTP_EXPECTATION_FAILED);
     return response;
   }
-  if (!base::ranges::all_of(
+  if (!std::ranges::all_of(
           request_matcher_groups_.front(),
           [&request](Matcher matcher) { return matcher.Run(request); })) {
     VLOG(0) << "Request did not match.";
@@ -115,12 +116,17 @@ Matcher CreateEventLogMatcher(
           return false;
         }
 
-        return base::ranges::equal(
+        EXPECT_EQ(extension.metadata().app_version(),
+                  kEnterpriseCompanionVersion);
+
+        return std::ranges::equal(
             extension.event(), expected_events, /*pred=*/{},
             [](const proto::EnterpriseCompanionEvent& event) {
               return std::make_pair(
                   event.event_case(),
-                  EnterpriseCompanionStatus::FromProtoStatus(event.status()));
+                  EnterpriseCompanionStatus::FromPersistedError(PersistedError(
+                      event.status().space(), event.status().code(),
+                      "<missing description>")));
             });
       },
       test_server.event_logging_url(), std::move(expected_events));

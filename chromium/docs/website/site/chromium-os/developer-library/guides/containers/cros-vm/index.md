@@ -268,7 +268,7 @@ webgl_conformance --show-stdout --browser=cros-chrome --passthrough -v \
 
 ```bash
 (vm) localhost ~ # /usr/local/autotest/bin/autologin.py \
---url "http://www.google.com/chromebook"
+--url "https://www.google.com/chromebook"
 ```
 
 ## Launch a VM built by a waterfall bot
@@ -376,7 +376,7 @@ To lookup release versions for a particular board (e.g. betty):
 (shell) .../chrome/src $ gsutil ls gs://chromeos-image-archive/betty-release/
 ```
 
-[depot_tools installed]: https://www.chromium.org/developers/how-tos/install-depot-tools
+[depot_tools installed]: /developers/how-tos/install-depot-tools
 [go/cros-qemu]: https://storage.cloud.google.com/achuith-cloud.google.com.a.appspot.com/qemu.tar.gz
 [Linux Chromium checkout]: https://chromium.googlesource.com/chromium/src/+/HEAD/docs/linux/build_instructions.md
 [Virtualization enabled]: https://g3doc.corp.google.com/tools/android/g3doc/development/crow/enable_kvm.md

@@ -10,6 +10,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/feedback/show_feedback_page.h"
 #include "chrome/browser/history_embeddings/history_embeddings_service_factory.h"
+#include "chrome/browser/history_embeddings/history_embeddings_utils.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_navigator.h"
@@ -98,7 +99,8 @@ void HistoryEmbeddingsHandler::Search(
   CHECK(service);
   last_result_ = service->Search(
       &last_result_, query->query, query->time_range_start,
-      history_embeddings::kSearchResultItemCount.Get(),
+      history_embeddings::GetFeatureParameters().search_result_item_count,
+      /*skip_answering=*/false,
       base::BindRepeating(&HistoryEmbeddingsHandler::OnReceivedSearchResult,
                           weak_ptr_factory_.GetWeakPtr()));
   VLOG(3) << "HistoryEmbeddingsHandler::Search started for '"
@@ -117,16 +119,9 @@ void HistoryEmbeddingsHandler::PublishResultToPage(
 
   auto mojom_search_result = history_embeddings::mojom::SearchResult::New();
   mojom_search_result->query = native_search_result.query;
-
-  bool has_answer = false;
-  if (history_embeddings::IsHistoryEmbeddingsAnswersEnabled()) {
-    mojom_search_result->answer_status = AnswererAnswerStatusToMojoAnswerStatus(
-        native_search_result.answerer_result.status);
-    if (!native_search_result.AnswerText().empty()) {
-      has_answer = true;
-      mojom_search_result->answer = native_search_result.AnswerText();
-    }
-  }
+  mojom_search_result->answer_status = AnswererAnswerStatusToMojoAnswerStatus(
+      native_search_result.answerer_result.status);
+  mojom_search_result->answer = native_search_result.AnswerText();
 
   for (size_t i = 0; i < native_search_result.scored_url_rows.size(); i++) {
     const history_embeddings::ScoredUrlRow& scored_url_row =
@@ -143,19 +138,21 @@ void HistoryEmbeddingsHandler::PublishResultToPage(
         scored_url_row.row.last_visit().InMillisecondsFSinceUnixEpoch();
     item->url_for_display =
         base::UTF16ToUTF8(history_clusters::ComputeURLForDisplay(
-            scored_url_row.row.url(),
-            history_embeddings::kTrimAfterHostInResults.Get()));
-    if (has_answer && i == native_search_result.AnswerIndex()) {
+            scored_url_row.row.url(), history_embeddings::GetFeatureParameters()
+                                          .trim_after_host_in_results));
+    if (!native_search_result.AnswerText().empty() &&
+        i == native_search_result.AnswerIndex()) {
       item->answer_data = history_embeddings::mojom::AnswerData::New();
       item->answer_data->answer_text_directives.assign(
           native_search_result.answerer_result.text_directives.begin(),
           native_search_result.answerer_result.text_directives.end());
     }
 
-    if (history_embeddings::kShowSourcePassages.Get()) {
+    if (history_embeddings::GetFeatureParameters().show_source_passages) {
       item->source_passage = scored_url_row.GetBestPassage();
     }
 
+    item->is_url_known_to_sync = scored_url_row.is_url_known_to_sync;
     mojom_search_result->items.push_back(std::move(item));
   }
   page_->SearchResultChanged(std::move(mojom_search_result));

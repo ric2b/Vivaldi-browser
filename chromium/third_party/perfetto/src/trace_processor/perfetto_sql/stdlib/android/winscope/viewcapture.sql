@@ -16,20 +16,14 @@
 -- Android viewcapture (from android.viewcapture data source).
 CREATE PERFETTO VIEW android_viewcapture(
   -- Snapshot id
-  id INT,
+  id LONG,
   -- Timestamp when the snapshot was triggered
-  ts INT,
+  ts TIMESTAMP,
   -- Extra args parsed from the proto message
-  arg_set_id INT,
-  -- Raw proto message encoded in base64
-  base64_proto STRING,
-  -- String id for raw proto message
-  base64_proto_id INT
+  arg_set_id ARGSETID
 ) AS
 SELECT
   id,
   ts,
-  arg_set_id,
-  base64_proto,
-  base64_proto_id
+  arg_set_id
 FROM __intrinsic_viewcapture;

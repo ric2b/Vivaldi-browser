@@ -55,29 +55,29 @@ export interface TranslateState {
 
 export interface TranslateButtonElement {
   $: {
-    allSourceLanguagesMenu: HTMLDivElement,
-    allTargetLanguagesMenu: HTMLDivElement,
-    menuDetectedLanguage: HTMLDivElement,
-    languagePicker: HTMLDivElement,
+    allSourceLanguagesMenu: HTMLElement,
+    allTargetLanguagesMenu: HTMLElement,
+    menuDetectedLanguage: HTMLElement,
+    languagePicker: HTMLElement,
     recentSourceLanguagesContainer: DomRepeat,
-    recentSourceLanguagesSection: HTMLDivElement,
+    recentSourceLanguagesSection: HTMLElement,
     recentTargetLanguagesContainer: DomRepeat,
-    recentTargetLanguagesSection: HTMLDivElement,
+    recentTargetLanguagesSection: HTMLElement,
     searchSourceLanguagesContainer: DomRepeat,
-    searchSourceLanguagePicker: HTMLDivElement,
+    searchSourceLanguagePicker: HTMLElement,
     searchTargetLanguagesContainer: DomRepeat,
-    searchTargetLanguagePicker: HTMLDivElement,
+    searchTargetLanguagePicker: HTMLElement,
     sourceAutoDetectButton: CrButtonElement,
     sourceLanguageButton: CrButtonElement,
     sourceLanguagePickerBackButton: CrIconButtonElement,
     sourceLanguagePickerContainer: DomRepeat,
-    sourceLanguagePickerMenu: HTMLDivElement,
+    sourceLanguagePickerMenu: HTMLElement,
     sourceLanguageSearchButton: CrIconButtonElement,
     sourceLanguageSearchbox: HTMLInputElement,
     targetLanguageButton: CrButtonElement,
     targetLanguagePickerBackButton: CrIconButtonElement,
     targetLanguagePickerContainer: DomRepeat,
-    targetLanguagePickerMenu: HTMLDivElement,
+    targetLanguagePickerMenu: HTMLElement,
     targetLanguageSearchButton: CrIconButtonElement,
     targetLanguageSearchbox: HTMLInputElement,
     translateDisableButton: CrButtonElement,
@@ -857,8 +857,18 @@ export class TranslateButtonElement extends PolymerElement {
   }
 
   private getSourceLanguageButtonAriaLabel(): string {
+    let sourceLanguageAriaLabel = this.getSourceLanguageDisplayName();
+    // If the source language is set to auto detect language, the label should
+    // have both the source language display name (if found) and detect language
+    // string.
+    if (this.sourceLanguage === null &&
+        sourceLanguageAriaLabel !== loadTimeData.getString('detectLanguage')) {
+      sourceLanguageAriaLabel = `${this.getSourceLanguageDisplayName()}, ${
+          loadTimeData.getString('detectLanguage')}`;
+    }
+
     return loadTimeData.getStringF(
-        'sourceLanguageAriaLabel', this.getSourceLanguageDisplayName());
+        'sourceLanguageAriaLabel', sourceLanguageAriaLabel);
   }
 
   private getTargetLanguageButtonAriaLabel(): string {

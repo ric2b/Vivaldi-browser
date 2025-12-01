@@ -177,17 +177,6 @@ void MojoVideoEncodeAccelerator::Encode(
   UMA_HISTOGRAM_ENUMERATION("Media.MojoVideoEncodeAccelerator.InputStorageType",
                             frame->storage_type(),
                             static_cast<int>(VideoFrame::STORAGE_MAX) + 1);
-  if (frame->format() != PIXEL_FORMAT_I420 &&
-      frame->format() != PIXEL_FORMAT_NV12) {
-    if (vea_client_) {
-      vea_client_->NotifyErrorStatus(
-          {EncoderStatus::Codes::kUnsupportedFrameFormat,
-           "Unexpected pixel format: " +
-               VideoPixelFormatToString(frame->format())});
-    }
-    return;
-  }
-
   vea_->Encode(frame, options, base::DoNothingWithBoundArgs(frame));
 }
 

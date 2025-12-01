@@ -14,8 +14,11 @@
 
 #include "src/buffer_pool.h"
 
+#include <array>
 #include <cassert>
 #include <cstring>
+#include <mutex>  // NOLINT (unapproved c++11 header)
+#include <new>
 
 #include "src/utils/common.h"
 #include "src/utils/constants.h"

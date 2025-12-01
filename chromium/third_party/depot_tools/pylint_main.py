@@ -17,6 +17,16 @@ RC_FILE = os.path.join(HERE, 'pylintrc')
 ARGS_ON_STDIN = '--args-on-stdin'
 
 
+def find_rcfile() -> str:
+    """Locate the config file for this wrapper."""
+    arg0 = os.path.basename(sys.argv[0])
+    if arg0.startswith('pylint-'):
+        rc_file = RC_FILE + '-' + arg0.split('-', 1)[1]
+        if os.path.exists(rc_file):
+            return rc_file
+    return RC_FILE
+
+
 def main(argv):
     """Our main wrapper."""
     # Add support for a custom mode where arguments are fed line by line on
@@ -24,6 +34,8 @@ def main(argv):
     if ARGS_ON_STDIN in argv:
         argv = [x for x in argv if x != ARGS_ON_STDIN]
         argv.extend(x.strip() for x in sys.stdin)
+
+    rc_file = find_rcfile()
 
     # Set default config options with the PYLINTRC environment variable. This
     # will allow overriding with "more local" config file options, such as a
@@ -41,8 +53,7 @@ def main(argv):
     # their own PYLINTRC, or set an empty PYLINTRC to use pylint's normal config
     # file resolution, which would include the "more global" options that are
     # normally overridden by the depot_tools config.
-    if os.path.isfile(RC_FILE) and 'PYLINTRC' not in os.environ:
-        os.environ['PYLINTRC'] = RC_FILE
+    os.environ.setdefault('PYLINTRC', rc_file)
 
     # This import has to happen after PYLINTRC is set because the module tries
     # to resolve the config file location on load.

@@ -45,26 +45,24 @@ void RecordBubbleHistogramValue(StoragePressureBubbleHistogramValue value) {
 
 }  // namespace
 
-namespace chrome {
-
 // static
 void ShowStoragePressureBubble(const url::Origin& origin) {
   StoragePressureBubbleView::ShowBubble(origin);
 }
 
-}  // namespace chrome
-
 void StoragePressureBubbleView::ShowBubble(const url::Origin& origin) {
   Browser* browser = BrowserList::GetInstance()->GetLastActive();
-  if (!browser)
+  if (!browser) {
     return;
+  }
+
   views::View* vivaldi_anchor_view = nullptr;
   if (vivaldi::IsVivaldiRunning()) {
     VivaldiBrowserWindow* window = vivaldi::ui_tools::GetLastActiveMainWindow();
     if (!window)
       return;
     vivaldi_anchor_view = window->GetBubbleDialogAnchor();
-  }
+  } // End Vivaldi
 
   StoragePressureBubbleView* bubble = new StoragePressureBubbleView(
       vivaldi_anchor_view ? vivaldi_anchor_view :

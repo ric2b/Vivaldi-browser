@@ -18,7 +18,7 @@
 namespace bookmarks {
 
 std::vector<TitledUrlMatch> TitledUrlIndex::MatchNicknameNodesWithQuery(
-    const TitledUrlNodes& nodes,
+    const TitledUrlIndex::NodeVector& nodes,
     const query_parser::QueryNodeVector& query_nodes,
     const std::vector<std::u16string>& query_terms,
     size_t max_count) {
@@ -28,7 +28,7 @@ std::vector<TitledUrlMatch> TitledUrlIndex::MatchNicknameNodesWithQuery(
   // `HistoryContentsProvider::ConvertResults()` will run backwards to assure
   // higher relevance will be attributed to the best matches.
   std::vector<TitledUrlMatch> matches;
-  for (TitledUrlNodes::const_iterator i = nodes.begin();
+  for (TitledUrlIndex::FlatNodeSet::const_iterator i = nodes.begin();
        i != nodes.end() && matches.size() < max_count; ++i) {
     std::optional<TitledUrlMatch> match =
         MatchNicknameNodeWithQuery(*i, query_nodes, query_terms);
@@ -48,16 +48,17 @@ std::vector<TitledUrlMatch> TitledUrlIndex::GetResultsNicknameMatching(
     return {};
 
   // `matches` shouldn't exclude nodes that don't match every query term, as the
-  // query terms may match in the ancestors. `MatchTitledUrlNodeWithQuery()`
+  // query terms may match in the ancestors. `MatchNicknameNodesWithQuery()`
   // below will filter out nodes that neither match nor ancestor-match every
   // query term.
 
-  TitledUrlNodeSet matches = RetrieveNicknameNodesMatchingAnyTerms(terms);
+  TitledUrlIndex::FlatNodeSet matches =
+      RetrieveNicknameNodesMatchingAnyTerms(terms);
 
   if (matches.empty())
     return {};
 
-  TitledUrlNodes sorted_nodes;
+  TitledUrlIndex::NodeVector sorted_nodes;
   SortMatches(matches, &sorted_nodes);
 
   // We use a QueryParser to fill in match positions for us. It's not the most
@@ -98,7 +99,7 @@ std::optional<TitledUrlMatch> TitledUrlIndex::MatchNicknameNodeWithQuery(
       base::i18n::ToLower(Normalize(node->GetTitledUrlNodeNickName()));
 
   std::vector<std::u16string> lower_ancestor_titles;
-  base::ranges::transform(
+  std::ranges::transform(
       node->GetTitledUrlNodeAncestorTitles(),
       std::back_inserter(lower_ancestor_titles),
       [](const auto& ancestor_title) {
@@ -110,7 +111,7 @@ std::optional<TitledUrlMatch> TitledUrlIndex::MatchNicknameNodeWithQuery(
   // faster, so if it returns false, early exit and avoid the expensive
   // `ExtractQueryWords()` calls.
   bool approximate_match =
-      base::ranges::all_of(query_terms, [&](const auto& word) {
+      std::ranges::all_of(query_terms, [&](const auto& word) {
         if (nickname.find(word) != std::u16string::npos)
           return true;
 

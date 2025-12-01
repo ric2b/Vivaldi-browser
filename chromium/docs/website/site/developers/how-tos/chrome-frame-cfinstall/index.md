@@ -65,7 +65,7 @@ implementation location or recompile the stub with your intended hosting path
 ### Specifying a Custom Implementation URL
 
 The implementation is located at
-<http://google.com/tools/dlpage/res/chromeframe/script/cf-xd-install-impl.js> .
+<https://google.com/tools/dlpage/res/chromeframe/script/cf-xd-install-impl.js> .
 If you wish to access it from elsewhere, you must make the following call before
 CFInstall.require:
 

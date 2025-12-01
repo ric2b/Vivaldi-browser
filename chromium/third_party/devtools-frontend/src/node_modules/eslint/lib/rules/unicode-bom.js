@@ -13,10 +13,12 @@ module.exports = {
     meta: {
         type: "layout",
 
+        defaultOptions: ["never"],
+
         docs: {
             description: "Require or disallow Unicode byte order mark (BOM)",
             recommended: false,
-            url: "https://eslint.org/docs/rules/unicode-bom"
+            url: "https://eslint.org/docs/latest/rules/unicode-bom"
         },
 
         fixable: "whitespace",
@@ -42,9 +44,9 @@ module.exports = {
 
             Program: function checkUnicodeBOM(node) {
 
-                const sourceCode = context.getSourceCode(),
-                    location = { column: 0, line: 1 },
-                    requireBOM = context.options[0] || "never";
+                const sourceCode = context.sourceCode,
+                    location = { column: 0, line: 1 };
+                const [requireBOM] = context.options;
 
                 if (!sourceCode.hasBOM && (requireBOM === "always")) {
                     context.report({

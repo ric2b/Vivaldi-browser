@@ -136,14 +136,14 @@ const gfx::VectorIcon& AppContextMenu::GetMenuItemVectorIcon(int command_id,
       return views::kNewIncognitoWindowIcon;
     case ash::INSTALL:
       // Deprecated.
-      return gfx::kNoneIcon;
+      return gfx::VectorIcon::EmptyIcon();
     case ash::SETTINGS:
       return vector_icons::kSettingsIcon;
     case ash::USE_LAUNCH_TYPE_REGULAR:
     case ash::USE_LAUNCH_TYPE_WINDOW:
     case ash::USE_LAUNCH_TYPE_TABBED_WINDOW:
       // Check items use the default icon.
-      return gfx::kNoneIcon;
+      return gfx::VectorIcon::EmptyIcon();
     case ash::DEPRECATED_USE_LAUNCH_TYPE_PINNED:
     case ash::DEPRECATED_USE_LAUNCH_TYPE_FULLSCREEN:
       NOTREACHED();
@@ -157,6 +157,7 @@ const gfx::VectorIcon& AppContextMenu::GetMenuItemVectorIcon(int command_id,
       NOTREACHED() << "NOTIFICATION_CONTAINER does not have an icon, and it is "
                       "added to the model by NotificationMenuController.";
     case ash::SHUTDOWN_GUEST_OS:
+    case ash::SHUTDOWN_BRUSCHETTA_OS:
       return kShutdownGuestOsIcon;
     default:
       NOTREACHED() << "No icon for command_id: " << command_id;

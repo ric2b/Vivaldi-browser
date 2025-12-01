@@ -5,18 +5,19 @@
 #include "components/enterprise/connectors/core/realtime_reporting_client_base.h"
 
 #include "base/i18n/time_formatting.h"
-#include "base/metrics/histogram_functions_internal_overloads.h"
 #include "components/enterprise/connectors/core/common.h"
 #include "components/enterprise/connectors/core/reporting_constants.h"
 #include "components/policy/core/common/cloud/device_management_service.h"
 #include "components/policy/core/common/cloud/realtime_reporting_job_configuration.h"
 #include "components/policy/core/common/cloud/reporting_job_configuration_base.h"
+#include "components/safe_browsing/core/common/features.h"
+#include "net/base/network_interfaces.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace enterprise_connectors {
 
 namespace {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 const char kPolicyClientDescription[] = "any";
 #else
 const char kChromeBrowserCloudManagementClientDescription[] =
@@ -74,7 +75,7 @@ void RealtimeReportingClientBase::InitRealtimeReportingClient(
 
   policy::CloudPolicyClient* client = nullptr;
   std::string policy_client_desc;
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   std::pair<std::string, policy::CloudPolicyClient*> desc_and_client =
       InitBrowserReportingClient(settings.dm_token);
 #else
@@ -95,7 +96,7 @@ std::pair<std::string, policy::CloudPolicyClient*>
 RealtimeReportingClientBase::InitBrowserReportingClient(
     const std::string& dm_token) {
   std::string policy_client_desc;
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   policy_client_desc = kPolicyClientDescription;
 #else
   policy_client_desc = kChromeBrowserCloudManagementClientDescription;
@@ -220,6 +221,10 @@ void RealtimeReportingClientBase::UploadSecurityEventReport(
           .Set("time", base::TimeFormatAsIso8601(time))
           .Set(name, std::move(event));
 
+  if (base::FeatureList::IsEnabled(safe_browsing::kLocalIpAddressInEvents)) {
+    event_wrapper.Set("localIps", GetLocalIpAddresses());
+  }
+
   DVLOG(1) << "enterprise.connectors: security event: "
            << event_wrapper.DebugString();
 
@@ -235,6 +240,19 @@ void RealtimeReportingClientBase::UploadSecurityEventReport(
   client->UploadSecurityEventReport(
       ShouldIncludeDeviceInfo(settings.per_profile), std::move(report),
       std::move(upload_callback));
+}
+
+base::Value::List RealtimeReportingClientBase::GetLocalIpAddresses() {
+  net::NetworkInterfaceList list;
+  base::Value::List ip_addresses;
+  if (!net::GetNetworkList(&list, net::INCLUDE_HOST_SCOPE_VIRTUAL_INTERFACES)) {
+    LOG(ERROR) << "GetNetworkList failed";
+    return ip_addresses;
+  }
+  for (const auto& network_interface : list) {
+    ip_addresses.Append(network_interface.address.ToString());
+  }
+  return ip_addresses;
 }
 
 const std::string

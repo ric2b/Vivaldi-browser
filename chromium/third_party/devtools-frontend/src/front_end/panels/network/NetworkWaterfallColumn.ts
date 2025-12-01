@@ -4,7 +4,7 @@
 
 import * as Common from '../../core/common/common.js';
 import type * as SDK from '../../core/sdk/sdk.js';
-import * as Coordinator from '../../ui/components/render_coordinator/render_coordinator.js';
+import * as RenderCoordinator from '../../ui/components/render_coordinator/render_coordinator.js';
 import * as PerfUI from '../../ui/legacy/components/perf_ui/perf_ui.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as ThemeSupport from '../../ui/legacy/theme_support/theme_support.js';
@@ -17,8 +17,6 @@ import networkWaterfallColumnStyles from './networkWaterfallColumn.css.js';
 import {type RequestTimeRange, RequestTimeRangeNames, RequestTimingView} from './RequestTimingView.js';
 
 const BAR_SPACING = 1;
-
-const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
 
 export class NetworkWaterfallColumn extends UI.Widget.VBox {
   private canvas: HTMLCanvasElement;
@@ -50,8 +48,9 @@ export class NetworkWaterfallColumn extends UI.Widget.VBox {
   constructor(calculator: NetworkTimeCalculator) {
     // TODO(allada) Make this a shadowDOM when the NetworkWaterfallColumn gets moved into NetworkLogViewColumns.
     super(false);
+    this.registerRequiredCSS(networkWaterfallColumnStyles);
 
-    this.canvas = (this.contentElement.createChild('canvas') as HTMLCanvasElement);
+    this.canvas = this.contentElement.createChild('canvas');
     this.canvas.tabIndex = -1;
     this.setDefaultFocusedElement(this.canvas);
     this.canvasPosition = this.canvas.getBoundingClientRect();
@@ -209,11 +208,12 @@ export class NetworkWaterfallColumn extends UI.Widget.VBox {
 
   override willHide(): void {
     this.popoverHelper.hidePopover();
+    super.willHide();
   }
 
   override wasShown(): void {
+    super.wasShown();
     this.update();
-    this.registerCSSFiles([networkWaterfallColumnStyles]);
   }
 
   private onMouseMove(event: MouseEvent): void {
@@ -281,7 +281,7 @@ export class NetworkWaterfallColumn extends UI.Widget.VBox {
       show: (popover: UI.GlassPane.GlassPane) => {
         const content =
             RequestTimingView.createTimingTable((request as SDK.NetworkRequest.NetworkRequest), this.calculator);
-        popover.registerCSSFiles([networkingTimingTableStyles]);
+        popover.registerRequiredCSS(networkingTimingTableStyles);
         popover.contentElement.appendChild(content);
         return Promise.resolve(true);
       },
@@ -338,7 +338,7 @@ export class NetworkWaterfallColumn extends UI.Widget.VBox {
   }
 
   scheduleDraw(): void {
-    void coordinator.write('NetworkWaterfallColumn.render', () => this.update());
+    void RenderCoordinator.write('NetworkWaterfallColumn.render', () => this.update());
   }
 
   update(scrollTop?: number, eventDividers?: Map<string, number[]>, nodes?: NetworkNode[]): void {

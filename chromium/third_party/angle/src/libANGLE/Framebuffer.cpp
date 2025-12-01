@@ -347,11 +347,6 @@ bool HasSupportedStencilBitCount(const Framebuffer *framebuffer)
 
 }  // anonymous namespace
 
-bool FramebufferStatus::isComplete() const
-{
-    return status == GL_FRAMEBUFFER_COMPLETE;
-}
-
 FramebufferStatus FramebufferStatus::Complete()
 {
     FramebufferStatus result;
@@ -804,11 +799,6 @@ Extents FramebufferState::getExtents() const
     return Extents(getDefaultWidth(), getDefaultHeight(), 0);
 }
 
-bool FramebufferState::isDefault() const
-{
-    return mId == Framebuffer::kDefaultDrawFramebufferHandle;
-}
-
 bool FramebufferState::isBoundAsDrawFramebuffer(const Context *context) const
 {
     return context->getState().getDrawFramebuffer()->id() == mId;
@@ -1090,7 +1080,7 @@ bool Framebuffer::detachMatchingAttachment(Context *context,
             // currently bound draw framebuffer object, and pixel local storage is active, then it
             // is as if EndPixelLocalStorageANGLE() had been called with
             // <n>=PIXEL_LOCAL_STORAGE_ACTIVE_PLANES_ANGLE and <storeops> of STORE_OP_STORE_ANGLE.
-            context->endPixelLocalStorageWithStoreOpsStore();
+            context->endPixelLocalStorageImplicit();
         }
         // We go through resetAttachment to make sure that all the required bookkeeping will be done
         // such as updating enabled draw buffer state.
@@ -1216,11 +1206,6 @@ ComponentType Framebuffer::getDrawbufferWriteType(size_t drawBuffer) const
 ComponentTypeMask Framebuffer::getDrawBufferTypeMask() const
 {
     return mState.mDrawBufferTypeMask;
-}
-
-DrawBufferMask Framebuffer::getDrawBufferMask() const
-{
-    return mState.mEnabledDrawBuffers;
 }
 
 bool Framebuffer::hasEnabledDrawBuffer() const
@@ -2695,11 +2680,6 @@ Box Framebuffer::getDimensions() const
 Extents Framebuffer::getExtents() const
 {
     return mState.getExtents();
-}
-
-bool Framebuffer::isFoveationEnabled() const
-{
-    return (mState.mFoveationState.getFoveatedFeatureBits() & GL_FOVEATION_ENABLE_BIT_QCOM);
 }
 
 GLuint Framebuffer::getFoveatedFeatureBits() const

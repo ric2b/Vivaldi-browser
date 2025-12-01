@@ -35,7 +35,7 @@
 namespace blink {
 
 class LayoutObject;
-struct IntrinsicSizingInfo;
+struct NaturalSizingInfo;
 
 class CORE_EXPORT LayoutImageResource
     : public GarbageCollected<LayoutImageResource> {
@@ -69,11 +69,7 @@ class CORE_EXPORT LayoutImageResource
 
   virtual bool HasIntrinsicSize() const;
 
-  virtual gfx::SizeF ImageSize(float multiplier) const;
-  virtual gfx::SizeF ConcreteObjectSize(
-      float multiplier,
-      const gfx::SizeF& default_object_size) const;
-  virtual IntrinsicSizingInfo GetNaturalDimensions(float multiplier) const;
+  virtual NaturalSizingInfo GetNaturalDimensions(float multiplier) const;
   virtual RespectImageOrientationEnum ImageOrientation() const;
   virtual WrappedImagePtr ImagePtr() const { return cached_image_.Get(); }
 

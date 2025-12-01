@@ -65,7 +65,8 @@ content::BrowserContext* CalendarServiceFactory::GetBrowserContextToUse(
   return GetBrowserContextRedirectedInIncognito(context);
 }
 
-KeyedService* CalendarServiceFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+CalendarServiceFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
   std::unique_ptr<calendar::CalendarService> cal_service(
       new calendar::CalendarService());
@@ -78,7 +79,7 @@ KeyedService* CalendarServiceFactory::BuildServiceInstanceFor(
   if (!cal_service->Init(false, param)) {
     return nullptr;
   }
-  return cal_service.release();
+  return cal_service;
 }
 
 bool CalendarServiceFactory::ServiceIsNULLWhileTesting() const {

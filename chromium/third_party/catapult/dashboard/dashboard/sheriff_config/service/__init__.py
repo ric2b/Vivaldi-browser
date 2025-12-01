@@ -19,6 +19,7 @@ from google.protobuf import json_format
 import google.auth
 
 from dashboard.protobuf import sheriff_config_pb2
+import luci_auth_service
 import luci_config
 import match_policy
 import service_client
@@ -88,9 +89,8 @@ def CreateApp(test_config=None):
   config_client = service_client.CreateServiceClient(
       'https://luci-config.appspot.com/_ah/api', 'config', 'v1',
       **client_config)
-  auth_client = service_client.CreateServiceClient(
-      'https://chrome-infra-auth.appspot.com/_ah/api', 'auth', 'v1',
-      **client_config)
+  auth_client = luci_auth_service.LUCIAuthServiceClient(
+      'https://chrome-infra-auth.appspot.com', **client_config)
 
   # First we check whether the test_config already has a predefined
   # datastore_client.
@@ -210,7 +210,7 @@ def CreateApp(test_config=None):
     (from the main dashboard service).
 
     """
-
+    logging.debug('[SkiaTriage] List() in sheriff service.')
     try:
       list_request = json_format.Parse(request.get_data(),
                                        sheriff_config_pb2.ListRequest())
@@ -222,8 +222,12 @@ def CreateApp(test_config=None):
           }]}), 400
     list_response = sheriff_config_pb2.ListResponse()
     configs = list(luci_config.ListAllConfigs(datastore_client))
+    logging.debug('[SkiaTriage] from ListAllConfigs: %d',
+                  0 if not configs else len(configs))
     configs = match_policy.FilterSubscriptionsByIdentity(
         auth_client, list_request, configs)
+    logging.debug('[SkiaTriage] after FilterSubscriptionsByIdentity: %d',
+                  0 if not configs else len(configs))
     for config_set, revision, subscription in configs:
       subscription_metadata = list_response.subscriptions.add()
       subscription_metadata.config_set = config_set

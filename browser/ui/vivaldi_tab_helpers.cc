@@ -6,11 +6,15 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/subresource_filter/chrome_content_subresource_filter_web_contents_helper_factory.h"
 
+#include "components/ad_blocker/adblock_rule_service.h"
 #include "components/adverse_adblocking/adverse_ad_filter_list.h"
 #include "components/adverse_adblocking/adverse_ad_filter_list_factory.h"
 #include "components/adverse_adblocking/vivaldi_subresource_filter_throttle_manager.h"
 #include "components/bookmarks/bookmark_thumbnail_theme_tab_helper.h"
 #include "components/prefs/pref_service.h"
+#include "components/request_filter/adblock_filter/adblock_rule_service_content.h"
+#include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
+#include "components/request_filter/adblock_filter/adblock_state_and_logs.h"
 
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/web_contents.h"
@@ -23,6 +27,10 @@
 #include "services/device/public/mojom/geolocation_context.mojom.h"
 #include "services/device/public/mojom/geoposition.mojom.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
+
+#if !BUILDFLAG(IS_ANDROID)
+#include "components/drm_helper/vivaldi_drm_tab_helper.h"
+#endif
 
 using content::WebContents;
 
@@ -43,6 +51,19 @@ void VivaldiAttachTabHelpers(WebContents* web_contents) {
 
     vivaldi_bookmark_kit::BookmarkThumbnailThemeTabHelper::CreateForWebContents(
         web_contents);
+
+#if !BUILDFLAG(IS_ANDROID)
+    drm_helper::DRMContentTabHelper::CreateForWebContents(web_contents);
+#endif
+  }
+
+  adblock_filter::RuleService* rules_service =
+      adblock_filter::RuleServiceFactory::GetForBrowserContext(
+          web_contents->GetBrowserContext());
+
+  // The adblock rules might not be loaded yet, so we fallback to the lazy-creation.
+  if (rules_service && rules_service->IsLoaded()) {
+    rules_service->GetStateAndLogs()->CreateTabHelper(web_contents);
   }
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)

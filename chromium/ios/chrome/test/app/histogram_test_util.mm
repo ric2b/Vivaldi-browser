@@ -42,8 +42,8 @@ HistogramTester::~HistogramTester() {
 
 BOOL HistogramTester::ExpectUniqueSample(
     const std::string& name,
-    base::HistogramBase::Sample sample,
-    base::HistogramBase::Count expected_count,
+    base::HistogramBase::Sample32 sample,
+    base::HistogramBase::Count32 expected_count,
     FailureBlock failure_block) const {
   base::HistogramBase* histogram = FindHistogram(name, failure_block);
   if (!histogram) {
@@ -63,8 +63,8 @@ BOOL HistogramTester::ExpectUniqueSample(
 
 BOOL HistogramTester::ExpectBucketCount(
     const std::string& name,
-    base::HistogramBase::Sample sample,
-    base::HistogramBase::Count expected_count,
+    base::HistogramBase::Sample32 sample,
+    base::HistogramBase::Count32 expected_count,
     FailureBlock failure_block) const {
   BOOL not_found_fails = expected_count > 0;
   FailureBlock not_found_block =
@@ -80,7 +80,7 @@ BOOL HistogramTester::ExpectBucketCount(
 }
 
 BOOL HistogramTester::ExpectTotalCount(const std::string& name,
-                                       base::HistogramBase::Count count,
+                                       base::HistogramBase::Count32 count,
                                        FailureBlock failure_block) const {
   BOOL not_found_fails = count > 0;
   FailureBlock not_found_block =
@@ -100,8 +100,8 @@ std::vector<Bucket> HistogramTester::GetAllSamples(
       GetHistogramSamplesSinceCreation(name);
   if (snapshot) {
     for (auto it = snapshot->Iterator(); !it->Done(); it->Next()) {
-      base::HistogramBase::Sample sample;
-      base::HistogramBase::Count count;
+      base::HistogramBase::Sample32 sample;
+      base::HistogramBase::Count32 count;
       it->Get(&sample, nullptr, &count);
       samples.push_back(Bucket(sample, count));
     }
@@ -127,21 +127,23 @@ HistogramTester::GetHistogramSamplesSinceCreation(
   std::unique_ptr<base::HistogramSamples> named_samples(
       histogram->SnapshotSamples());
   auto original_samples_it = histograms_snapshot_.find(histogram_name);
-  if (original_samples_it != histograms_snapshot_.end())
+  if (original_samples_it != histograms_snapshot_.end()) {
     named_samples->Subtract(*original_samples_it->second);
+  }
   return named_samples;
 }
 
 BOOL HistogramTester::CheckBucketCount(
     const std::string& name,
-    base::HistogramBase::Sample sample,
-    base::HistogramBase::Count expected_count,
+    base::HistogramBase::Sample32 sample,
+    base::HistogramBase::Count32 expected_count,
     const base::HistogramSamples& samples,
     FailureBlock failure_block) const {
   int actual_count = samples.GetCount(sample);
   auto histogram_data = histograms_snapshot_.find(name);
-  if (histogram_data != histograms_snapshot_.end())
+  if (histogram_data != histograms_snapshot_.end()) {
     actual_count -= histogram_data->second->GetCount(sample);
+  }
   if (expected_count == actual_count) {
     return YES;
   }
@@ -157,13 +159,14 @@ BOOL HistogramTester::CheckBucketCount(
 }
 
 BOOL HistogramTester::CheckTotalCount(const std::string& name,
-                                      base::HistogramBase::Count expected_count,
+                                      base::HistogramBase::Count32 expected_count,
                                       const base::HistogramSamples& samples,
                                       FailureBlock failure_block) const {
   int actual_count = samples.TotalCount();
   auto histogram_data = histograms_snapshot_.find(name);
-  if (histogram_data != histograms_snapshot_.end())
+  if (histogram_data != histograms_snapshot_.end()) {
     actual_count -= histogram_data->second->TotalCount();
+  }
   if (expected_count == actual_count) {
     return YES;
   }

@@ -11,11 +11,13 @@
 #include "build/build_config.h"
 #include "chrome/browser/ui/tabs/tab_types.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_types.h"
+#include "components/tab_groups/tab_group_id.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/mojom/menu_source_type.mojom-forward.h"
 
 class Browser;
 class Tab;
+class TabGroup;
 class TabSlotView;
 
 enum class BrowserFrameActiveState;
@@ -94,13 +96,16 @@ class TabSlotController {
   // Switches the collapsed state of a tab group. Returns false if the state was
   // not successfully switched.
   virtual void ToggleTabGroupCollapsedState(
-      const tab_groups::TabGroupId group,
-      ToggleTabGroupCollapsedStateOrigin origin =
-          ToggleTabGroupCollapsedStateOrigin::kMenuAction) = 0;
+      tab_groups::TabGroupId group,
+      ToggleTabGroupCollapsedStateOrigin origin) = 0;
+  void ToggleTabGroupCollapsedState(tab_groups::TabGroupId group) {
+    ToggleTabGroupCollapsedState(
+        group, ToggleTabGroupCollapsedStateOrigin::kMenuAction);
+  }
 
-  // Notify this controller of a tab group editor bubble opening/closing.
-  virtual void NotifyTabGroupEditorBubbleOpened() = 0;
-  virtual void NotifyTabGroupEditorBubbleClosed() = 0;
+  // Notify this controller of a bubble opening/closing in the tabstrip.
+  virtual void NotifyTabstripBubbleOpened() = 0;
+  virtual void NotifyTabstripBubbleClosed() = 0;
 
   // Shows a context menu for the tab at the specified point in screen coords.
   virtual void ShowContextMenuForTab(Tab* tab,
@@ -202,6 +207,9 @@ class TabSlotController {
 
   // Returns opacity for use on tab hover radial highlight.
   virtual float GetHoverOpacityForRadialHighlight() const = 0;
+
+  // Returns TabGroup of the given |group|.
+  virtual TabGroup* GetTabGroup(const tab_groups::TabGroupId& id) const = 0;
 
   // Returns the displayed title of the given |group|.
   virtual std::u16string GetGroupTitle(

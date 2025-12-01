@@ -126,9 +126,9 @@ ci.builder(
         ],
     ),
     builderless = False,
-    # TODO: crrev.com/i/7808548 - Drop cores=32 after bot migration.
-    cores = "16|32",
+    cores = 16,
     os = os.WINDOWS_ANY,
+    ssd = True,
     console_view_entry = consoles.console_view_entry(
         category = "release|builder",
         short_name = "32",
@@ -166,10 +166,9 @@ ci.builder(
             "all",
         ],
     ),
-    cores = "16|32",
+    cores = 16,
     os = os.WINDOWS_ANY,
-    # TODO: crrev.com/i/7808548 - Drop cores=32 and add ssd=True after bot migration.
-    ssd = None,
+    ssd = True,
     console_view_entry = consoles.console_view_entry(
         category = "debug|builder",
         short_name = "64",
@@ -227,13 +226,6 @@ ci.builder(
                 swarming = targets.swarming(
                     shards = 2,
                 ),
-            ),
-            "content_browsertests": targets.mixin(
-                # crbug.com/868082
-                args = [
-                    "--disable-features=WebRTC-H264WithOpenH264FFmpeg",
-                ],
-                experiment_percentage = 100,
             ),
             "content_shell_crash_test": targets.mixin(
                 # https://crbug.com/861730
@@ -314,9 +306,9 @@ ci.builder(
         ],
     ),
     builderless = False,
-    # TODO: crrev.com/i/7808548 - Drop cores=32 after bot migration.
-    cores = "16|32",
+    cores = 16,
     os = os.WINDOWS_ANY,
+    ssd = True,
     console_view_entry = consoles.console_view_entry(
         category = "debug|builder",
         short_name = "32",
@@ -375,9 +367,9 @@ ci.builder(
         ],
     ),
     builderless = False,
-    # TODO: crrev.com/i/7808548 - Drop cores=32 after bot migration.
-    cores = "16|32",
+    cores = 16,
     os = os.WINDOWS_ANY,
+    ssd = True,
     console_view_entry = consoles.console_view_entry(
         category = "release|builder",
         short_name = "64",
@@ -421,24 +413,19 @@ ci.builder(
         per_test_modifications = {
             "blink_web_tests": targets.mixin(
                 swarming = targets.swarming(
-                    # blink_web_tests has issues on non-broadwell machines.
+                    # blink_web_tests has issues when mixing different CPUs.
                     # see https://crbug.com/1458859
+                    # As of 2024 Q4, all e2 machines in chromium.tests use
+                    # x86-64-Broadwell_GCE. But, the situation may change when
+                    # GCE replaces the hardwares. If that happens, it needs to
+                    # be updated to run on the most popular CPU platform.
                     dimensions = {
                         "cpu": "x86-64-Broadwell_GCE",
                     },
                     shards = 12,
                 ),
             ),
-            "blink_wpt_tests": targets.mixin(
-                swarming = targets.swarming(
-                    shards = 18,
-                ),
-            ),
             "browser_tests": targets.mixin(
-                # crbug.com/868082
-                args = [
-                    "--disable-features=WebRTC-H264WithOpenH264FFmpeg",
-                ],
                 # Only retry the individual failed tests instead of rerunning
                 # entire shards.
                 # crbug.com/1473501
@@ -454,10 +441,6 @@ ci.builder(
                 isolate_profile_data = False,
             ),
             "content_browsertests": targets.mixin(
-                # crbug.com/868082
-                args = [
-                    "--disable-features=WebRTC-H264WithOpenH264FFmpeg",
-                ],
                 # Only retry the individual failed tests instead of rerunning
                 # entire shards.
                 # crbug.com/1475852
@@ -532,16 +515,7 @@ ci.thin_tester(
                     shards = 12,
                 ),
             ),
-            "blink_wpt_tests": targets.mixin(
-                swarming = targets.swarming(
-                    shards = 18,
-                ),
-            ),
             "browser_tests": targets.mixin(
-                # crbug.com/868082
-                args = [
-                    "--disable-features=WebRTC-H264WithOpenH264FFmpeg",
-                ],
                 swarming = targets.swarming(
                     # This is for slow test execution that often becomes a
                     # critical path of swarming jobs. crbug.com/868114
@@ -553,12 +527,6 @@ ci.thin_tester(
             ),
             "components_browsertests_no_field_trial": targets.remove(
                 reason = "crbug/40630866",
-            ),
-            "content_browsertests": targets.mixin(
-                # crbug.com/868082
-                args = [
-                    "--disable-features=WebRTC-H264WithOpenH264FFmpeg",
-                ],
             ),
             "interactive_ui_tests_no_field_trial": targets.remove(
                 reason = "crbug/40630866",
@@ -696,11 +664,6 @@ ci.thin_tester(
             "win-arm64",
         ],
         per_test_modifications = {
-            "blink_wpt_tests": targets.mixin(
-                swarming = targets.swarming(
-                    shards = 18,
-                ),
-            ),
             "browser_tests": targets.mixin(
                 swarming = targets.swarming(
                     # This is for slow test execution that often becomes a
@@ -790,10 +753,9 @@ ci.builder(
             "all",
         ],
     ),
-    cores = "16|32",
+    cores = 16,
     os = os.WINDOWS_DEFAULT,
-    # TODO: crrev.com/i/7808548 - Drop cores=32 and add ssd=True after bot migration.
-    ssd = None,
+    ssd = True,
     tree_closing = True,
     console_view_entry = consoles.console_view_entry(
         category = "debug|builder",
@@ -894,8 +856,8 @@ ci.builder(
         ],
     ),
     builderless = False,
-    # TODO: crrev.com/i/7808548 - Drop cores=32 after bot migration.
-    cores = "16|32",
+    cores = 32,
+    ssd = True,
     console_view_entry = consoles.console_view_entry(
         category = "misc",
         short_name = "det",
@@ -924,6 +886,7 @@ ci.builder(
             build_config = builder_config.build_config.RELEASE,
             target_bits = 64,
             target_platform = builder_config.target_platform.WIN,
+            host_platform = builder_config.host_platform.LINUX,
         ),
         build_gs_bucket = "chromium-win-archive",
     ),

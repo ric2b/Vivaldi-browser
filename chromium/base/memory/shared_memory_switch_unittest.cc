@@ -24,8 +24,7 @@
 #include "base/posix/global_descriptors.h"
 #endif
 
-namespace base {
-namespace shared_memory {
+namespace base::shared_memory {
 namespace {
 
 constexpr char kSharedMemoryData[] = "shared_memory_data";
@@ -120,8 +119,7 @@ TEST_P(SharedMemorySwitchTest, PassViaSwitch) {
 
   // Update the launch parameters.
   if (read_only) {
-    AddToLaunchParameters(kSharedMemoryData,
-                          read_only_region.region.Duplicate(),
+    AddToLaunchParameters(kSharedMemoryData, read_only_region.region,
 #if BUILDFLAG(IS_APPLE)
                           kArbitraryRendezvousKey,
 #elif BUILDFLAG(IS_POSIX)
@@ -129,7 +127,7 @@ TEST_P(SharedMemorySwitchTest, PassViaSwitch) {
 #endif
                           &command_line, &launch_options);
   } else {
-    AddToLaunchParameters(kSharedMemoryData, unsafe_region.Duplicate(),
+    AddToLaunchParameters(kSharedMemoryData, unsafe_region,
 #if BUILDFLAG(IS_APPLE)
                           kArbitraryRendezvousKey,
 #elif BUILDFLAG(IS_POSIX)
@@ -170,5 +168,4 @@ TEST_P(SharedMemorySwitchTest, PassViaSwitch) {
   EXPECT_EQ(0, exit_code);
 }
 
-}  // namespace shared_memory
-}  // namespace base
+}  // namespace base::shared_memory

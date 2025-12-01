@@ -6,7 +6,7 @@
 var __addDisposableResource = (this && this.__addDisposableResource) || function (env, value, async) {
     if (value !== null && value !== void 0) {
         if (typeof value !== "object" && typeof value !== "function") throw new TypeError("Object expected.");
-        var dispose;
+        var dispose, inner;
         if (async) {
             if (!Symbol.asyncDispose) throw new TypeError("Symbol.asyncDispose is not defined.");
             dispose = value[Symbol.asyncDispose];
@@ -14,8 +14,10 @@ var __addDisposableResource = (this && this.__addDisposableResource) || function
         if (dispose === void 0) {
             if (!Symbol.dispose) throw new TypeError("Symbol.dispose is not defined.");
             dispose = value[Symbol.dispose];
+            if (async) inner = dispose;
         }
         if (typeof dispose !== "function") throw new TypeError("Object not disposable.");
+        if (inner) dispose = function() { try { inner.call(this); } catch (e) { return Promise.reject(e); } };
         env.stack.push({ value: value, dispose: dispose, async: async });
     }
     else if (async) {
@@ -29,17 +31,22 @@ var __disposeResources = (this && this.__disposeResources) || (function (Suppres
             env.error = env.hasError ? new SuppressedError(e, env.error, "An error was suppressed during disposal.") : e;
             env.hasError = true;
         }
+        var r, s = 0;
         function next() {
-            while (env.stack.length) {
-                var rec = env.stack.pop();
+            while (r = env.stack.pop()) {
                 try {
-                    var result = rec.dispose && rec.dispose.call(rec.value);
-                    if (rec.async) return Promise.resolve(result).then(next, function(e) { fail(e); return next(); });
+                    if (!r.async && s === 1) return s = 0, env.stack.push(r), Promise.resolve().then(next);
+                    if (r.dispose) {
+                        var result = r.dispose.call(r.value);
+                        if (r.async) return s |= 2, Promise.resolve(result).then(next, function(e) { fail(e); return next(); });
+                    }
+                    else s |= 1;
                 }
                 catch (e) {
                     fail(e);
                 }
             }
+            if (s === 1) return env.hasError ? Promise.reject(env.error) : Promise.resolve();
             if (env.hasError) throw env.error;
         }
         return next();
@@ -67,7 +74,6 @@ import { isTargetClosedError } from './Connection.js';
 import { Coverage } from './Coverage.js';
 import { CdpDialog } from './Dialog.js';
 import { EmulationManager } from './EmulationManager.js';
-import { FirefoxTargetManager } from './FirefoxTargetManager.js';
 import { FrameManager } from './FrameManager.js';
 import { FrameManagerEvent } from './FrameManagerEvents.js';
 import { CdpKeyboard, CdpMouse, CdpTouchscreen } from './Input.js';
@@ -334,6 +340,11 @@ export class CdpPage extends Page {
             message: `Waiting for \`FileChooser\` failed: ${timeout}ms exceeded`,
             timeout,
         });
+        if (options.signal) {
+            options.signal.addEventListener('abort', () => {
+                deferred.reject(options.signal?.reason);
+            }, { once: true });
+        }
         this.#fileChooserDeferreds.add(deferred);
         let enablePromise;
         if (needsEnable) {
@@ -428,6 +439,9 @@ export class CdpPage extends Page {
     getDefaultTimeout() {
         return this._timeoutSettings.timeout();
     }
+    getDefaultNavigationTimeout() {
+        return this._timeoutSettings.navigationTimeout();
+    }
     async queryObjects(prototypeHandle) {
         assert(!prototypeHandle.disposed, 'Prototype JSHandle is disposed!');
         assert(prototypeHandle.id, 'Prototype JSHandle must not be referencing primitive value');
@@ -463,11 +477,25 @@ export class CdpPage extends Page {
     async deleteCookie(...cookies) {
         const pageURL = this.url();
         for (const cookie of cookies) {
-            const item = Object.assign({}, cookie);
+            const item = {
+                ...cookie,
+                partitionKey: convertCookiesPartitionKeyFromPuppeteerToCdp(cookie.partitionKey),
+            };
             if (!cookie.url && pageURL.startsWith('http')) {
                 item.url = pageURL;
             }
             await this.#primaryTargetClient.send('Network.deleteCookies', item);
+            if (pageURL.startsWith('http') && !item.partitionKey) {
+                const url = new URL(pageURL);
+                // Delete also cookies from the page's partition.
+                await this.#primaryTargetClient.send('Network.deleteCookies', {
+                    ...item,
+                    partitionKey: {
+                        topLevelSite: url.origin.replace(`:${url.port}`, ''),
+                        hasCrossSiteAncestor: false,
+                    },
+                });
+            }
         }
     }
     async setCookie(...cookies) {
@@ -488,20 +516,15 @@ export class CdpPage extends Page {
                 cookies: items.map(cookieParam => {
                     return {
                         ...cookieParam,
-                        partitionKey: cookieParam.partitionKey
-                            ? {
-                                // TODO: a breaking change neeeded to change the partition key
-                                // type in Puppeteer.
-                                topLevelSite: cookieParam.partitionKey,
-                                hasCrossSiteAncestor: false,
-                            }
-                            : undefined,
+                        partitionKey: convertCookiesPartitionKeyFromPuppeteerToCdp(cookieParam.partitionKey),
                     };
                 }),
             });
         }
     }
-    async exposeFunction(name, pptrFunction) {
+    async exposeFunction(name, 
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+    pptrFunction) {
         if (this.#bindings.has(name)) {
             throw new Error(`Failed to add page binding with name ${name}: window['${name}'] already exists!`);
         }
@@ -715,10 +738,8 @@ export class CdpPage extends Page {
         const env_2 = { stack: [], error: void 0, hasError: false };
         try {
             const { fromSurface, omitBackground, optimizeForSpeed, quality, clip: userClip, type, captureBeyondViewport, } = options;
-            const isFirefox = this.target()._targetManager() instanceof FirefoxTargetManager;
             const stack = __addDisposableResource(env_2, new AsyncDisposableStack(), true);
-            // Firefox omits background by default; it's not configurable.
-            if (!isFirefox && omitBackground && (type === 'png' || type === 'webp')) {
+            if (omitBackground && (type === 'png' || type === 'webp')) {
                 await this.#emulationManager.setTransparentBackgroundColor();
                 stack.defer(async () => {
                     await this.#emulationManager
@@ -736,13 +757,12 @@ export class CdpPage extends Page {
                 });
                 clip = getIntersectionRect(clip, viewport);
             }
-            // We need to do these spreads because Firefox doesn't allow unknown options.
             const { data } = await this.#primaryTargetClient.send('Page.captureScreenshot', {
                 format: type,
-                ...(optimizeForSpeed ? { optimizeForSpeed } : {}),
+                optimizeForSpeed,
+                fromSurface,
                 ...(quality !== undefined ? { quality: Math.round(quality) } : {}),
                 ...(clip ? { clip: { ...clip, scale: clip.scale ?? 1 } } : {}),
-                ...(!fromSurface ? { fromSurface } : {}),
                 captureBeyondViewport,
             });
             return data;
@@ -853,7 +873,7 @@ export class CdpPage extends Page {
      *   page.click('#connect-bluetooth'),
      * ]);
      * await devicePrompt.select(
-     *   await devicePrompt.waitForDevice(({name}) => name.includes('My Device'))
+     *   await devicePrompt.waitForDevice(({name}) => name.includes('My Device')),
      * );
      * ```
      */
@@ -886,6 +906,21 @@ function getIntersectionRect(clip, viewport) {
         y,
         width: Math.max(Math.min(clip.x + clip.width, viewport.x + viewport.width) - x, 0),
         height: Math.max(Math.min(clip.y + clip.height, viewport.y + viewport.height) - y, 0),
+    };
+}
+export function convertCookiesPartitionKeyFromPuppeteerToCdp(partitionKey) {
+    if (partitionKey === undefined) {
+        return undefined;
+    }
+    if (typeof partitionKey === 'string') {
+        return {
+            topLevelSite: partitionKey,
+            hasCrossSiteAncestor: false,
+        };
+    }
+    return {
+        topLevelSite: partitionKey.sourceOrigin,
+        hasCrossSiteAncestor: partitionKey.hasCrossSiteAncestor ?? false,
     };
 }
 //# sourceMappingURL=Page.js.map

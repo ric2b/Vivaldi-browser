@@ -11,7 +11,6 @@
 #include "base/containers/contains.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
@@ -238,8 +237,7 @@ BookmarksUuidDuplicates MatchBookmarksUuidDuplicates(
 
   switch (update.entity.specifics.bookmark().type()) {
     case sync_pb::BookmarkSpecifics::UNSPECIFIED:
-      NOTREACHED_IN_MIGRATION();
-      break;
+      NOTREACHED();
     case sync_pb::BookmarkSpecifics::URL: {
       const bool matching_urls =
           update.entity.specifics.bookmark().url() ==
@@ -259,8 +257,7 @@ BookmarksUuidDuplicates MatchBookmarksUuidDuplicates(
     }
   }
 
-  NOTREACHED_IN_MIGRATION();
-  return BookmarksUuidDuplicates();
+  NOTREACHED();
 }
 
 // Returns true the |next_update| is selected to keep and the |previous_update|
@@ -536,7 +533,7 @@ BookmarkModelMerger::RemoteTreeNode::BuildTree(
   }
 
   // Sort the children according to their unique position.
-  base::ranges::sort(node.children_, UniquePositionLessThan);
+  std::ranges::sort(node.children_, UniquePositionLessThan);
 
   return node;
 }

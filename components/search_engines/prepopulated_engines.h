@@ -13,7 +13,7 @@
 
 #include "components/search_engines/search_engine_type.h"
 #include "components/search_engines/regulatory_extension_type.h"
-#include "components/search_engines/original/prepopulated_engines.h"
+#include "third_party/search_engines_data/original/search_engines.h"
 
 namespace TemplateURLPrepopulateData {
 

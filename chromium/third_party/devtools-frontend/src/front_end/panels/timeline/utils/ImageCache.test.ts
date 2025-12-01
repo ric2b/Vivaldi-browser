@@ -14,7 +14,7 @@ describe('ImageCache', () => {
   const validJpegData =
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAEElEQVR4nGISWfUPEAAA//8CmgG/YtkszwAAAABJRU5ErkJggg==';
 
-  const rawSourceEvent: Trace.Types.Events.Screenshot = {
+  const rawSourceEvent: Trace.Types.Events.LegacyScreenshot = {
     ...defaultTraceEvent,
     id: '0x1',
     args: {snapshot: validJpegData},
@@ -27,7 +27,8 @@ describe('ImageCache', () => {
   Trace.Handlers.ModelHandlers.Screenshots.handleEvent(rawSourceEvent);
   void Trace.Handlers.ModelHandlers.Screenshots.finalize();
 
-  const syntheticScreenshot1 = Trace.Handlers.ModelHandlers.Screenshots.data().all[0];
+  const syntheticScreenshot1 = Trace.Handlers.ModelHandlers.Screenshots.data().legacySyntheticScreenshots?.at(0);
+  assert.isOk(syntheticScreenshot1);
   const syntheticScreenshot2 = structuredClone(syntheticScreenshot1);
   syntheticScreenshot2.rawSourceEvent.id = '0x2';
   const badDataUriScreenshot = structuredClone(syntheticScreenshot1);
@@ -48,11 +49,11 @@ describe('ImageCache', () => {
   it('loadImage resolves invalid images to null', async () => {
     const datauri = 'data:image/jpg;base64,INVALIDDATA';
     const res = await loadImage(datauri);
-    assert.strictEqual(res, null);
+    assert.isNull(res);
   });
 
   it('getOrQueue should return null for a new screenshot', () => {
-    assert.strictEqual(getOrQueue(syntheticScreenshot1), null);
+    assert.isNull(getOrQueue(syntheticScreenshot1));
   });
 
   it('getOrQueue should return the same image for the same screenshot', async () => {

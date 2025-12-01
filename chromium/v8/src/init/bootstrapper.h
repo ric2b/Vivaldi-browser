@@ -57,7 +57,7 @@ class Bootstrapper final {
   // Creates a JavaScript Global Context with initial object graph.
   // The returned value is a global handle casted to V8Environment*.
   DirectHandle<NativeContext> CreateEnvironment(
-      MaybeHandle<JSGlobalProxy> maybe_global_proxy,
+      MaybeDirectHandle<JSGlobalProxy> maybe_global_proxy,
       v8::Local<v8::ObjectTemplate> global_object_template,
       v8::ExtensionConfiguration* extensions, size_t context_snapshot_index,
       DeserializeEmbedderFieldsCallback embedder_fields_deserializer,
@@ -66,7 +66,7 @@ class Bootstrapper final {
   // Used for testing context deserialization. No code runs in the generated
   // context. It only needs to pass heap verification.
   DirectHandle<NativeContext> CreateEnvironmentForTesting() {
-    MaybeHandle<JSGlobalProxy> no_global_proxy;
+    MaybeDirectHandle<JSGlobalProxy> no_global_proxy;
     v8::Local<v8::ObjectTemplate> no_global_object_template;
     ExtensionConfiguration no_extensions;
     static constexpr int kDefaultContextIndex = 0;
@@ -78,7 +78,7 @@ class Bootstrapper final {
   }
 
   DirectHandle<JSGlobalProxy> NewRemoteContext(
-      MaybeHandle<JSGlobalProxy> maybe_global_proxy,
+      MaybeDirectHandle<JSGlobalProxy> maybe_global_proxy,
       v8::Local<v8::ObjectTemplate> global_object_template);
 
   // Traverses the pointers for memory management.
@@ -130,9 +130,17 @@ class BootstrapperActive final {
   Bootstrapper* bootstrapper_;
 };
 
+// Exposed for Wasm bootstrapping.
 V8_NOINLINE Handle<JSFunction> SimpleInstallFunction(
-    Isolate* isolate, Handle<JSObject> base, const char* name, Builtin call,
-    int len, AdaptArguments adapt, PropertyAttributes attrs = DONT_ENUM);
+    Isolate* isolate, DirectHandle<JSObject> base, const char* name,
+    Builtin call, int len, AdaptArguments adapt,
+    PropertyAttributes attrs = DONT_ENUM);
+
+// Exposed for Wasm bootstrapping.
+V8_NOINLINE void InstallError(
+    Isolate* isolate, DirectHandle<JSObject> global, DirectHandle<String> name,
+    int context_index, Builtin error_constructor = Builtin::kErrorConstructor,
+    int error_function_length = 1);
 
 }  // namespace internal
 }  // namespace v8

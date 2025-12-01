@@ -9,7 +9,9 @@
 
 #include "base/check.h"
 #include "base/feature_list.h"
+#include "base/metrics/histogram_functions.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+#include "net/cookies/cookie_util.h"
 #include "net/http/http_request_headers.h"
 #include "net/url_request/url_request.h"
 #include "services/network/public/cpp/cors/origin_access_list.h"
@@ -30,6 +32,9 @@ constexpr std::string_view kSecFetchSite = "Sec-Fetch-Site";
 constexpr std::string_view kSecFetchUser = "Sec-Fetch-User";
 constexpr std::string_view kSecFetchDest = "Sec-Fetch-Dest";
 constexpr std::string_view kSecFetchStorageAccess = "Sec-Fetch-Storage-Access";
+
+constexpr char kSecFetchStorageAccessOutcomeHistogram[] =
+    "API.StorageAccessHeader.SecFetchStorageAccessOutcome";
 
 // Sec-Fetch-Site infrastructure:
 //
@@ -131,6 +136,28 @@ char const* GetSecFetchStorageAccessHeaderValue(
   NOTREACHED();
 }
 
+net::cookie_util::SecFetchStorageAccessOutcome
+ComputeSecFetchStorageAccessOutcome(const net::URLRequest& request,
+                                    mojom::CredentialsMode credentials_mode) {
+  if (!request.storage_access_status()) {
+    return net::cookie_util::SecFetchStorageAccessOutcome::
+        kOmittedStatusMissing;
+  }
+  if (credentials_mode != mojom::CredentialsMode::kInclude) {
+    return net::cookie_util::SecFetchStorageAccessOutcome::
+        kOmittedRequestOmitsCredentials;
+  }
+  switch (request.storage_access_status().value()) {
+    case net::cookie_util::StorageAccessStatus::kInactive:
+      return net::cookie_util::SecFetchStorageAccessOutcome::kValueInactive;
+    case net::cookie_util::StorageAccessStatus::kActive:
+      return net::cookie_util::SecFetchStorageAccessOutcome::kValueActive;
+    case net::cookie_util::StorageAccessStatus::kNone:
+      return net::cookie_util::SecFetchStorageAccessOutcome::kValueNone;
+  }
+  NOTREACHED();
+}
+
 // Sec-Fetch-Site
 void SetSecFetchSiteHeader(net::URLRequest* request,
                            const GURL* pending_redirect_url,
@@ -172,8 +199,21 @@ void SetSecFetchDestHeader(net::URLRequest* request,
 }
 
 // Sec-Fetch-Storage-Access
-void SetSecFetchStorageAccessHeader(net::URLRequest& request) {
-  if (!request.storage_access_status()) {
+void SetSecFetchStorageAccessHeader(net::URLRequest& request,
+                                    mojom::CredentialsMode credentials_mode) {
+  base::UmaHistogramEnumeration(
+      kSecFetchStorageAccessOutcomeHistogram,
+      ComputeSecFetchStorageAccessOutcome(request, credentials_mode));
+
+  if (credentials_mode != mojom::CredentialsMode::kInclude ||
+      !request.storage_access_status()) {
+    // A credentials mode of "same-origin" or "omit" prevents including cookies
+    // on the request in the first place, so we don't bother to include the
+    // `Sec-Fetch-Storage-Access` header in that case.
+    //
+    // To ensure that an erroneous value isn't sent by mistake (and that
+    // consumers aren't allowed to override the correct "omitted" value), we
+    // clear any existing value.
     request.RemoveRequestHeaderByName(kSecFetchStorageAccess);
     return;
   }
@@ -193,7 +233,8 @@ void SetFetchMetadataHeaders(
     network::mojom::RequestDestination dest,
     const GURL* pending_redirect_url,
     const mojom::URLLoaderFactoryParams& factory_params,
-    const cors::OriginAccessList& origin_access_list) {
+    const cors::OriginAccessList& origin_access_list,
+    const mojom::CredentialsMode credentials_mode) {
   DCHECK(request);
   DCHECK_NE(0u, request->url_chain().size());
 
@@ -208,17 +249,17 @@ void SetFetchMetadataHeaders(
   SetSecFetchModeHeader(request, mode);
   SetSecFetchUserHeader(request, has_user_activation);
   SetSecFetchDestHeader(request, dest);
-  SetSecFetchStorageAccessHeader(*request);
+  SetSecFetchStorageAccessHeader(*request, credentials_mode);
 }
 
 void MaybeRemoveSecHeaders(net::URLRequest* request,
                            const GURL& pending_redirect_url) {
   DCHECK(request);
 
-  // If our redirect destination is not trusted it would not have had sec-ch- or
-  // sec-fetch- prefixed headers added to it. Our previous hops may have added
-  // these headers if the current url is trustworthy though so we should try to
-  // remove these now.
+  // If our redirect destination is not trusted it would not have had sec-ch-
+  // or sec-fetch- prefixed headers added to it. Our previous hops may have
+  // added these headers if the current url is trustworthy though so we should
+  // try to remove these now.
   if (IsUrlPotentiallyTrustworthy(request->url()) &&
       !IsUrlPotentiallyTrustworthy(pending_redirect_url)) {
     // Check each of our request headers and if it is a "sec-ch-" or

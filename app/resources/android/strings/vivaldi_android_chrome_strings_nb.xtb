@@ -14,13 +14,17 @@
 <translation id="2433507940547922241">Utseende</translation>
 <translation id="2501278716633472235">Gå tilbake</translation>
 <translation id="2633278372998075009">Privatfaner</translation>
+<translation id="265156376773362237">Standard forhåndslasting</translation>
 <translation id="272026394418727548">Startsiden for Vivaldi</translation>
+<translation id="2871733351037274014">Forhåndslasting av sider</translation>
 <translation id="2951071800649516099">Legg til sider på leselisten til senere</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> bokmerke}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> bokmerker}}</translation>
 <translation id="3076631378407175873">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Alle rettigheter forbeholdt.</translation>
+<translation id="3232293466644486101">Slett nettlesingsdata …</translation>
 <translation id="3234355010754616171">Ny privat fane</translation>
+<translation id="3237087289225714896">Standard forhåndslasting:</translation>
 <translation id="3377025655491224618">Privatfane</translation>
 <translation id="3504699618187058974">Stable faner</translation>
 <translation id="3518985090088779359">Godta og fortsett</translation>
@@ -28,6 +32,7 @@
 <translation id="3602290021589620013">Forhåndsvisning</translation>
 <translation id="3700829948786686853">Velkommen til Vivaldi</translation>
 <translation id="3719826155360621982">Hjemmeside</translation>
+<translation id="3738139272394829648">Trykk for å søke</translation>
 <translation id="385051799172605136">Tilbake</translation>
 <translation id="399014816462153200">Leste artikler:</translation>
 <translation id="4121750346708795461">Ved å bruke denne appen, godtar du Vivaldi's <ph name="BEGIN_LINK1" />Lisensavtale for sluttbrukere<ph name="END_LINK1" /> og <ph name="BEGIN_LINK2" />Personvernregler<ph name="END_LINK2" />.</translation>
@@ -36,6 +41,7 @@
 <translation id="4195643157523330669">Åpne i ny fane</translation>
 <translation id="4225895483398857530">Verktøylinje-snarvei</translation>
 <translation id="4243710787042215766">Åpne i privat fane</translation>
+<translation id="4291407919474070700"><ph name="BEGIN_LINK" />Slå på skjermlås i Android-innstillingene<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Passordbehandler</translation>
 <translation id="451872707440238414">Søk i bokmerkene dine</translation>
 <translation id="4526803704855831732">Privatfaner</translation>
@@ -57,24 +63,34 @@ For å justere søkeordet, trykk lenge for å velge. For å finjustere søket, d
 <translation id="572328651809341494">Nylige faner</translation>
 <translation id="6150320133806434356">Bokmerke lagret</translation>
 <translation id="6336451774241870485">Ny privat fane</translation>
+<translation id="6337323516034698937">For å sende denne fanen til en annen enhet, logg inn på Vivaldi Sync på begge enhetene. Sørg for å angi krypteringspassordet om nødvendig.</translation>
 <translation id="6404511346730675251">Rediger bokmerke</translation>
 <translation id="6585139692466700358">Tilby oversettelse av sider på andre språk, ved hjelp av Vivaldis oversettelsestjeneste</translation>
+<translation id="6588043302623806746">Bruk sikker DNS</translation>
 <translation id="6593061639179217415">Skrivebordsversjon</translation>
 <translation id="6610147964972079463">Lukk private faner</translation>
 <translation id="7029995644714925509">Når et nettsted ber om å privat forhåndslaste lenker på siden, krypterer og forhåndsinnlaster Vivaldi sider via Googles servere uten infokapsler. Dette skjuler din identitet fra det forhåndsinnlastede nettstedet.</translation>
 <translation id="706339621163631076">Personvern for nettleser</translation>
 <translation id="732145680195464316">Bokmerke lagret i <ph name="PRODUCT_NAME" /></translation>
+<translation id="7324354302972299151">Send en «Do Not Track»-forespørsel</translation>
+<translation id="7359002509206457351">Gå til betalingsmåter</translation>
+<translation id="7419565702166471774">Bruk alltid sikre tilkoblinger</translation>
 <translation id="7427132068601343474">Om Vivaldi</translation>
+<translation id="7456774706094330779">Utvidet forhåndslasting</translation>
 <translation id="7465104139234185284">Lukk alle private faner</translation>
 <translation id="7481312909269577407">Frem</translation>
 <translation id="7968014550143838305">Lagt til på leselisten</translation>
 <translation id="804786196054284061">Lisensavtale for sluttbruker (EULA)</translation>
+<translation id="8062594758852531064">Utvidet forhåndslasting:</translation>
 <translation id="8127542551745560481">Rediger startsiden</translation>
+<translation id="8348430946834215779">Bruk HTTPS når det er mulig, og bli advart før innlasting av nettsteder som ikke støtter dette</translation>
 <translation id="8560602726703398413">Finn leselisten din i Bokmerker</translation>
 <translation id="85991616550051997">Gå til hjemmesiden</translation>
 <translation id="8820817407110198400">Bokmerker</translation>
 <translation id="9042893549633094279">Personvern og sikkerhet</translation>
 <translation id="9063523880881406963">Slå av Bruk skrivebordsversjon</translation>
 <translation id="9080642952018487277">Gå inn i privat modus</translation>
+<translation id="930124987204876019">Slett logg, informasjonskapsler, nettstedsdata, buffer …</translation>
+<translation id="961856697154696964">Slett nettlesingsdata</translation>
 <translation id="96681097142096641">Vis forenklet side?</translation>
 </translationbundle>

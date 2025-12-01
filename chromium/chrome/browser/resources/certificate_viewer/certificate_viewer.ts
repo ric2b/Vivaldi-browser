@@ -6,7 +6,8 @@ import '/strings.m.js';
 import 'chrome://resources/cr_elements/cr_tab_box/cr_tab_box.js';
 import 'chrome://resources/cr_elements/cr_tree/cr_tree.js';
 import 'chrome://resources/cr_elements/cr_tree/cr_tree_item.js';
-import './constraint_list.js';
+import './browser_proxy.js';
+import './modifications_panel.js';
 
 import type {CrTreeElement} from 'chrome://resources/cr_elements/cr_tree/cr_tree.js';
 import type {CrTreeItemElement} from 'chrome://resources/cr_elements/cr_tree/cr_tree_item.js';
@@ -19,21 +20,7 @@ interface TreeInfo {
   label: string;
 }
 
-interface CertificateInfo {
-  general: {[key: string]: string};
-  hierarchy: TreeInfo[];
-  isError: boolean;
-}
-
-export interface TreeItemDetail {
-  payload: {
-    val?: string,
-    index?: number,
-  };
-  children: {[key: string|number]: CrTreeItemElement};
-}
-
-enum CertificateTrust {
+export enum CertificateTrust {
   // LINT.IfChange(CertificateTrustType)
   CERTIFICATE_TRUST_DISTRUSTED = 0,
   CERTIFICATE_TRUST_UNSPECIFIED = 1,
@@ -43,7 +30,24 @@ enum CertificateTrust {
 
 interface CertificateMetadata {
   trust: CertificateTrust;
-  constraints: string[];
+  constraints?: string[];
+  isEditable: boolean;
+}
+
+interface CertificateInfo {
+  general: {[key: string]: string};
+  hierarchy: TreeInfo[];
+  isError: boolean;
+
+  certMetadata?: CertificateMetadata;
+}
+
+export interface TreeItemDetail {
+  payload: {
+    val?: string,
+    index?: number,
+  };
+  children: {[key: string|number]: CrTreeItemElement};
 }
 
 /**
@@ -58,6 +62,7 @@ function initialize() {
   const args =
       JSON.parse(chrome.getVariableValue('dialogArguments')) as CertificateInfo;
   getCertificateInfo(args);
+  getCertificateMetadata(args);
 
   /**
    * Initialize the second tab's contents.
@@ -94,17 +99,10 @@ function initialize() {
   const exportButton = document.querySelector<HTMLElement>('#export');
   assert(exportButton);
   exportButton.onclick = exportCertificate;
-
-  // TODO(crbug.com/40928765): see if we can do this instead with dialog args
-  // versus callbacks.
-  // TODO(crbug.com/40928765): add test for cert metadata after trying dialog
-  // args refactor.
-  sendWithPromise('hasCertificateMetadata').then(onHasCertificateMetadata);
 }
 
-
-function onHasCertificateMetadata(hasCertificateMetadata: boolean) {
-  if (!hasCertificateMetadata) {
+function getCertificateMetadata(certInfo: CertificateInfo) {
+  if (certInfo.certMetadata === undefined) {
     return;
   }
 
@@ -112,19 +110,18 @@ function onHasCertificateMetadata(hasCertificateMetadata: boolean) {
       document.querySelector<HTMLElement>('#modifications-tab');
   assert(modificationsTab);
   modificationsTab.hidden = false;
-  sendWithPromise('requestCertificateMetadata').then(onGetCertificateMetadata);
-}
 
-function onGetCertificateMetadata(certMetadata: CertificateMetadata) {
-  const trustStateSelect =
-      document.querySelector<HTMLSelectElement>('#trust-state-select');
-  assert(trustStateSelect);
-  trustStateSelect.value = certMetadata.trust.toString();
+  const modificationsPanel = document.querySelector('modifications-panel');
+  assert(modificationsPanel);
+  modificationsPanel.trustStateValue = certInfo.certMetadata.trust.toString();
 
-  const constraintsElement = document.querySelector('constraint-list');
-  assert(constraintsElement);
+  if (certInfo.certMetadata.isEditable) {
+    modificationsPanel.isEditable = true;
+  }
 
-  constraintsElement.constraints = certMetadata.constraints;
+  if (certInfo.certMetadata.constraints !== undefined) {
+    modificationsPanel.constraints = certInfo.certMetadata.constraints;
+  }
 }
 
 /**

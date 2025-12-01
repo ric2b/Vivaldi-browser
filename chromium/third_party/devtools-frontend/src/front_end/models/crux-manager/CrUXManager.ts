@@ -3,7 +3,19 @@
 // found in the LICENSE file.
 
 import * as Common from '../../core/common/common.js';
+import * as i18n from '../../core/i18n/i18n.js';
 import * as SDK from '../../core/sdk/sdk.js';
+import * as EmulationModel from '../../models/emulation/emulation.js';
+
+const UIStrings = {
+  /**
+   * @description Warning message indicating that the user will see real user data for a URL which is different from the URL they are currently looking at.
+   */
+  fieldOverrideWarning: 'Field data is configured for a different URL than the current page.',
+};
+
+const str_ = i18n.i18n.registerUIStrings('models/crux-manager/CrUXManager.ts', UIStrings);
+const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
 // This key is expected to be visible in the frontend.
 // b/349721878
@@ -15,7 +27,12 @@ export type StandardMetricNames = 'cumulative_layout_shift'|'first_contentful_pa
 export type MetricNames = StandardMetricNames|'form_factors';
 export type FormFactor = 'DESKTOP'|'PHONE'|'TABLET';
 export type DeviceScope = FormFactor|'ALL';
+export type DeviceOption = DeviceScope|'AUTO';
 export type PageScope = 'url'|'origin';
+export interface Scope {
+  pageScope: PageScope;
+  deviceScope: DeviceScope;
+}
 export type ConnectionType = 'offline'|'slow-2G'|'2G'|'3G'|'4G';
 
 export interface CrUXRequest {
@@ -67,6 +84,8 @@ export interface CrUXResponse {
 
 export type PageResult = {
   [K in`${PageScope}-${DeviceScope}`]: CrUXResponse|null;
+}&{
+  warnings: string[],
 };
 
 export interface OriginMapping {
@@ -88,6 +107,7 @@ export const DEVICE_SCOPE_LIST: DeviceScope[] = ['ALL', 'DESKTOP', 'PHONE'];
 
 const pageScopeList: PageScope[] = ['origin', 'url'];
 const metrics: MetricNames[] = [
+  'first_contentful_paint',
   'largest_contentful_paint',
   'cumulative_layout_shift',
   'interaction_to_next_paint',
@@ -101,6 +121,9 @@ export class CrUXManager extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
   #mainDocumentUrl?: string;
   #configSetting: Common.Settings.Setting<ConfigSetting>;
   #endpoint = DEFAULT_ENDPOINT;
+  #pageResult?: PageResult;
+  fieldDeviceOption: DeviceOption = 'AUTO';
+  fieldPageScope: PageScope = 'url';
 
   private constructor() {
     super();
@@ -126,7 +149,7 @@ export class CrUXManager extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
         storageTypeForConsent);
 
     this.#configSetting.addChangeListener(() => {
-      void this.#automaticRefresh();
+      void this.refresh();
     });
 
     SDK.TargetManager.TargetManager.instance().addModelListener(
@@ -141,6 +164,11 @@ export class CrUXManager extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
     }
 
     return cruxManagerInstance;
+  }
+
+  /** The most recent page result from the CrUX service. */
+  get pageResult(): PageResult|undefined {
+    return this.#pageResult;
   }
 
   getConfigSetting(): Common.Settings.Setting<ConfigSetting> {
@@ -161,6 +189,7 @@ export class CrUXManager extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
       'url-DESKTOP': null,
       'url-PHONE': null,
       'url-TABLET': null,
+      warnings: [],
     };
 
     try {
@@ -202,6 +231,10 @@ export class CrUXManager extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
     }
   }
 
+  async getFieldDataForCurrentPageForTesting(): Promise<PageResult> {
+    return this.#getFieldDataForCurrentPage();
+  }
+
   /**
    * In general, this function should use the main document URL
    * (i.e. the URL after all redirects but before SPA navigations)
@@ -211,11 +244,16 @@ export class CrUXManager extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
    * back to the currently inspected URL (i.e. what is displayed in the omnibox) if
    * the main document URL cannot be found.
    */
-  async getFieldDataForCurrentPage(): Promise<PageResult> {
-    const pageUrl = this.#configSetting.get().overrideEnabled ?
-        this.#configSetting.get().override || '' :
-        this.#getMappedUrl(this.#mainDocumentUrl || await this.#getInspectedURL());
-    return this.getFieldDataForPage(pageUrl);
+  async #getFieldDataForCurrentPage(): Promise<PageResult> {
+    const currentUrl = this.#mainDocumentUrl || await this.#getInspectedURL();
+    const urlForCrux = this.#configSetting.get().overrideEnabled ? this.#configSetting.get().override || '' :
+                                                                   this.#getMappedUrl(currentUrl);
+
+    const result = await this.getFieldDataForPage(urlForCrux);
+    if (currentUrl !== urlForCrux) {
+      result.warnings.push(i18nString(UIStrings.fieldOverrideWarning));
+    }
+    return result;
   }
 
   async #getInspectedURL(): Promise<string> {
@@ -243,22 +281,22 @@ export class CrUXManager extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
 
     this.#mainDocumentUrl = event.data.url;
 
-    await this.#automaticRefresh();
+    await this.refresh();
   }
 
-  async #automaticRefresh(): Promise<void> {
+  async refresh(): Promise<void> {
     // This does 2 things:
     // - Tells listeners to clear old data so it isn't shown during a URL transition
     // - Tells listeners to clear old data when field data is disabled.
+    this.#pageResult = undefined;
     this.dispatchEventToListeners(Events.FIELD_DATA_CHANGED, undefined);
 
     if (!this.#configSetting.get().enabled) {
       return;
     }
 
-    const pageResult = await this.getFieldDataForCurrentPage();
-
-    this.dispatchEventToListeners(Events.FIELD_DATA_CHANGED, pageResult);
+    this.#pageResult = await this.#getFieldDataForCurrentPage();
+    this.dispatchEventToListeners(Events.FIELD_DATA_CHANGED, this.#pageResult);
   }
 
   #normalizeUrl(inputUrl: string): URL {
@@ -325,6 +363,49 @@ export class CrUXManager extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
     return responseData;
   }
 
+  #getAutoDeviceScope(): DeviceScope {
+    const emulationModel = EmulationModel.DeviceModeModel.DeviceModeModel.tryInstance();
+    if (emulationModel === null) {
+      return 'ALL';
+    }
+
+    if (emulationModel.isMobile()) {
+      if (this.#pageResult?.[`${this.fieldPageScope}-PHONE`]) {
+        return 'PHONE';
+      }
+
+      return 'ALL';
+    }
+
+    if (this.#pageResult?.[`${this.fieldPageScope}-DESKTOP`]) {
+      return 'DESKTOP';
+    }
+
+    return 'ALL';
+  }
+
+  getSelectedDeviceScope(): DeviceScope {
+    return this.fieldDeviceOption === 'AUTO' ? this.#getAutoDeviceScope() : this.fieldDeviceOption;
+  }
+
+  getSelectedScope(): Scope {
+    return {pageScope: this.fieldPageScope, deviceScope: this.getSelectedDeviceScope()};
+  }
+
+  getSelectedFieldResponse(): CrUXResponse|null|undefined {
+    const pageScope = this.fieldPageScope;
+    const deviceScope = this.getSelectedDeviceScope();
+    return this.getFieldResponse(pageScope, deviceScope);
+  }
+
+  getSelectedFieldMetricData(fieldMetric: StandardMetricNames): MetricResponse|undefined {
+    return this.getSelectedFieldResponse()?.record.metrics[fieldMetric];
+  }
+
+  getFieldResponse(pageScope: PageScope, deviceScope: DeviceScope): CrUXResponse|null|undefined {
+    return this.#pageResult?.[`${pageScope}-${deviceScope}`];
+  }
+
   setEndpointForTesting(endpoint: string): void {
     this.#endpoint = endpoint;
   }
@@ -334,6 +415,6 @@ export const enum Events {
   FIELD_DATA_CHANGED = 'field-data-changed',
 }
 
-type EventTypes = {
-  [Events.FIELD_DATA_CHANGED]: PageResult|undefined,
-};
+interface EventTypes {
+  [Events.FIELD_DATA_CHANGED]: PageResult|undefined;
+}

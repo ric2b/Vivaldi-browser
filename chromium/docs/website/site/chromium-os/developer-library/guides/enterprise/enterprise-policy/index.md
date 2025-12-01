@@ -14,7 +14,8 @@ Here, we extract a few key points from the more general
 ## Overview
 
 Features can optionally be controlled by enterprise administrators. This
-requires a few additions to the code base. For example, consider Nearby Share:
+requires a few additions to the code base. For example, consider Quick Share
+(formerly known and referenced here as Nearby Share):
 
 1.  Add an entry to policy_template.json, for example,
     [`NearbyShareAllowed`](https://source.chromium.org/chromium/chromium/src/+/main:components/policy/resources/policy_templates.json;l=17460-17480;drc=02e368ac68c1761743de421113af2eea2b0fdce5).
@@ -38,7 +39,7 @@ To test an enterprise policy on ChromeOS quickly--without needing to set up a
 policy test server (see
 [add_new_policy.md](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/enterprise/add_new_policy.md))--
 we can simply add a file to the DUT (see also
-[linux-quick-start](https://www.chromium.org/administrators/linux-quick-start)).
+[linux-quick-start](/administrators/linux-quick-start)).
 For example, to set the `NearbyShareAllowed` policy value,
 
 1.  ssh into your DUT,
@@ -52,7 +53,7 @@ No special account is required on the DUT to perform this testing.
 
 [^1]: For unofficial Chromium builds, this might need to be
     `/etc/chromium/policies/managed/test_policy.json`. See
-    [linux-quick-start](https://www.chromium.org/administrators/linux-quick-start).
+    [linux-quick-start](/administrators/linux-quick-start).
 
 ## Using the Enterprise Policies Admin Panel
 

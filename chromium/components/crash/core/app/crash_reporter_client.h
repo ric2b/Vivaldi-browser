@@ -19,6 +19,15 @@ class FilePath;
 
 namespace crash_reporter {
 
+struct ProductInfo {
+  ProductInfo();
+  ~ProductInfo();
+
+  std::string product_name;
+  std::string version;
+  std::string channel;
+};
+
 class CrashReporterClient;
 
 // Setter and getter for the client.  The client should be set early, before any
@@ -28,12 +37,21 @@ void SetCrashReporterClient(CrashReporterClient* client);
 
 #if defined(CRASH_IMPLEMENTATION)
 // The components's embedder API should only be used by the component.
+// WARNING: do not use this outside of the component.
+// On Windows, the CrashReporterClient lives in chrome_elf.dll. Unless you are
+// in chrome_elf.dll, this function will returns nullptr. If you want to access
+// the client data from outside of the component, use functions in
+// crash_export_thunks.h (Windows-only) or client_upload_info.h (all platforms).
 CrashReporterClient* GetCrashReporterClient();
 #endif
 
 // Interface that the embedder implements.
 class CrashReporterClient {
  public:
+  // Type alias for subclasses outside of crash_reporter to reference
+  // ProductInfo without needing to include the crash_reporter:: prefix.
+  using ProductInfo = crash_reporter::ProductInfo;
+
   CrashReporterClient();
   virtual ~CrashReporterClient();
 
@@ -73,16 +91,6 @@ class CrashReporterClient {
 #endif
 
 #if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_MAC)
-  // Returns a textual description of the product type and version to include
-  // in the crash report. Neither out parameter should be set to NULL.
-  // TODO(jperaza): Remove the 2-parameter overload of this method once all
-  // Linux-ish breakpad clients have transitioned to crashpad.
-  virtual void GetProductNameAndVersion(const char** product_name,
-                                        const char** version);
-  virtual void GetProductNameAndVersion(std::string* product_name,
-                                        std::string* version,
-                                        std::string* channel);
-
   virtual base::FilePath GetReporterLogFilename();
 
   // Custom crash minidump handler after the minidump is generated.
@@ -113,6 +121,10 @@ class CrashReporterClient {
 #else
   virtual bool GetCrashMetricsLocation(base::FilePath* metrics_dir);
 #endif
+
+  // Returns a textual description of the product info (product name, version,
+  // etc.) to include in the crash report.
+  virtual void GetProductInfo(ProductInfo* product_info);
 
   // Returns true if running in unattended mode (for automated testing).
   virtual bool IsRunningUnattended();

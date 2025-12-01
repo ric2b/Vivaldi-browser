@@ -20,7 +20,7 @@ several reasons:
 *   It contributes to variation in web page loading, as the first web
             page takes substantially longer than later ones.
 
-This problem is tracked in [Issue 52909](http://crbug.com/52909). This document
+This problem is tracked in [Issue 52909](https://crbug.com/52909). This document
 sketches out a proposed solution to this problem.
 
 **Requirements**
@@ -43,7 +43,7 @@ I believe that these requirements imply:
 
 **Notes on synchronous vs. asynchronous interfaces to the CookieMonster**
 
-(See [Issue 68657](http://crbug.com/68657))
+(See [Issue 68657](https://crbug.com/68657))
 
 Generally, services on the IO thread provide asynchronous interfaces with
 callbacks, to avoid the IO thread becoming a bottleneck in providing services

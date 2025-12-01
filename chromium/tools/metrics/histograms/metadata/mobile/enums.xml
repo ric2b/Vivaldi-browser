@@ -231,6 +231,8 @@ chromium-metrics-reviews@google.com.
   <int value="63" label="AI Prototyping"/>
   <int value="64" label="Manage shared tab group"/>
   <int value="65" label="Share local tab group"/>
+  <int value="66" label="Leave shared tab group"/>
+  <int value="67" label="Delete shared tab group"/>
 </enum>
 
 <enum name="IOSMenuScenario">
@@ -319,11 +321,16 @@ chromium-metrics-reviews@google.com.
   <int value="18" label="NFC"/>
 </enum>
 
+<!-- LINT.IfChange(LoadPoint) -->
+
 <enum name="LoadPoint">
   <int value="0" label="Native initializition"/>
   <int value="1" label="Policy load"/>
   <int value="2" label="Child account status load"/>
+  <int value="3" label="Load accounts from the device"/>
 </enum>
+
+<!-- LINT.ThenChange(/chrome/browser/ui/android/signin/java/src/org/chromium/chrome/browser/ui/signin/fullscreen_signin/FullscreenSigninMediator.java:LoadPoint) -->
 
 <enum name="MobileDefaultBrowserState">
   <int value="0" label="No default"/>
@@ -540,6 +547,8 @@ chromium-metrics-reviews@google.com.
   <int value="31" label="Undo provisional unsubscribe button."/>
   <int value="32" label="Commit provisional unsubscribe explicitly."/>
   <int value="33" label="Commit provisional unsubscribe implicitly."/>
+  <int value="34" label="Show original notification button."/>
+  <int value="35" label="Always allow notification button."/>
 </enum>
 
 <enum name="SystemNotificationType">

@@ -20,7 +20,6 @@
 
 #include "base/containers/span.h"
 #include "base/memory/aligned_memory.h"
-#include "base/ranges/algorithm.h"
 #include "net/base/net_errors.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -305,8 +304,8 @@ TEST(WebSocketFrameTest, MaskPayloadAlignment) {
               std::min(chunk_size, aligned_len - chunk_start);
           MaskWebSocketFramePayload(
               masking_key, frame_offset + chunk_start,
-              base::as_writable_bytes(base::make_span(
-                  aligned_scratch + chunk_start, this_chunk_size)));
+              base::as_writable_bytes(
+                  base::span(aligned_scratch + chunk_start, this_chunk_size)));
         }
         // Stop the test if it fails, since we don't want to spew thousands of
         // failures.

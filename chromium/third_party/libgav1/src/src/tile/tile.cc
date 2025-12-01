@@ -18,9 +18,11 @@
 #include <array>
 #include <cassert>
 #include <climits>
+#include <condition_variable>  // NOLINT (unapproved c++11 header)
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <mutex>  // NOLINT (unapproved c++11 header)
 #include <new>
 #include <numeric>
 #include <type_traits>
@@ -1068,18 +1070,29 @@ void Tile::ReadTransformType(const Block& block, int x4, int y4,
           break;
       }
     } else {
-      const PredictionMode intra_direction =
+      // Backup the current set of warnings and disable -Warray-bounds for this
+      // block as the compiler cannot, in all cases, determine whether
+      // |intra_mode| is within [0, kIntraPredictionModesY).
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds"
+#endif
+      const PredictionMode intra_mode =
           block.bp->prediction_parameters->use_filter_intra
               ? kFilterIntraModeToIntraPredictor[block.bp->prediction_parameters
                                                      ->filter_intra_mode]
               : bp.y_mode;
-      cdf =
-          symbol_decoder_context_
-              .intra_tx_type_cdf[cdf_index][cdf_tx_size_index][intra_direction];
+      assert(intra_mode < kIntraPredictionModesY);
+      cdf = symbol_decoder_context_
+                .intra_tx_type_cdf[cdf_index][cdf_tx_size_index][intra_mode];
       assert(tx_set == kTransformSetIntra1 || tx_set == kTransformSetIntra2);
       tx_type = static_cast<TransformType>((tx_set == kTransformSetIntra1)
                                                ? reader_.ReadSymbol<7>(cdf)
                                                : reader_.ReadSymbol<5>(cdf));
+      // Restore the previous set of compiler warnings.
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
     }
 
     // This array does not contain an entry for kTransformSetDctOnly, so the

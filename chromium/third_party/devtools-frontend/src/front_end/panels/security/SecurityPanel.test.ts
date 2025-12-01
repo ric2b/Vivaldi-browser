@@ -2,19 +2,59 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import type * as Platform from '../../core/platform/platform.js';
+import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
-import {createTarget} from '../../testing/EnvironmentHelpers.js';
+import {createTarget, getGetHostConfigStub} from '../../testing/EnvironmentHelpers.js';
 import {describeWithMockConnection} from '../../testing/MockConnection.js';
 import {getMainFrame, navigate} from '../../testing/ResourceTreeHelpers.js';
 
 import * as Security from './security.js';
 
+const {urlString} = Platform.DevToolsPath;
+
 describeWithMockConnection('SecurityAndPrivacyPanel', () => {
+  describe('viewMemory', () => {
+    it('initially shows control view if privacy UI is enabled', () => {
+      const stub = getGetHostConfigStub({devToolsPrivacyUI: {enabled: true}});
+      const securityPanel = Security.SecurityPanel.SecurityPanel.instance({forceNew: true});
+
+      assert.instanceOf(securityPanel.visibleView, Security.CookieControlsView.CookieControlsView);
+
+      stub.restore();
+    });
+
+    it('initially shows security main view if privacy UI is not enabled', () => {
+      const stub = getGetHostConfigStub({devToolsPrivacyUI: {enabled: false}});
+      const securityPanel = Security.SecurityPanel.SecurityPanel.instance({forceNew: true});
+
+      assert.instanceOf(securityPanel.visibleView, Security.SecurityPanel.SecurityMainView);
+
+      stub.restore();
+    });
+
+    it('remembers last selected view when new panel is made', () => {
+      const stub = getGetHostConfigStub({devToolsPrivacyUI: {enabled: true}});
+      let securityPanel = Security.SecurityPanel.SecurityPanel.instance({forceNew: true});
+
+      // Should initially be the controls view
+      assert.instanceOf(securityPanel.visibleView, Security.CookieControlsView.CookieControlsView);
+
+      // Select and switch to the security main view
+      securityPanel.sidebar.securityOverviewElement.select(/* omitFocus=*/ false, /* selectedByUser=*/ true);
+      assert.instanceOf(securityPanel.visibleView, Security.SecurityPanel.SecurityMainView);
+
+      // Create a new security panel. The last selected view memory should make the main view visible
+      securityPanel = Security.SecurityPanel.SecurityPanel.instance({forceNew: true});
+      assert.instanceOf(securityPanel.visibleView, Security.SecurityPanel.SecurityMainView);
+
+      stub.restore();
+    });
+  });
+
   describe('updateOrigin', () => {
     it('correctly updates the URL scheme highlighting', () => {
-      const origin = 'https://foo.bar' as Platform.DevToolsPath.UrlString;
+      const origin = urlString`https://foo.bar`;
       const securityPanel = Security.SecurityPanel.SecurityPanel.instance({forceNew: true});
 
       securityPanel.sidebar.addOrigin(origin, Protocol.Security.SecurityState.Unknown);

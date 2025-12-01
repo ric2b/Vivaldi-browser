@@ -23,6 +23,7 @@ static_library("extensions") {
     "vivaldi_associated_tabs.h",
     "vivaldi_standard_management_policy_provider.cc",
     "vivaldi_standard_management_policy_provider.h",
+    "vivaldi_silent_extension_installer.h",
   ]
 }
 

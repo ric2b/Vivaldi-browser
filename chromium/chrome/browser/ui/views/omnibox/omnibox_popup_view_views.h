@@ -66,9 +66,8 @@ class OmniboxPopupViewViews : public views::View,
   void ProvideButtonFocusHint(size_t line) override;
   void OnMatchIconUpdated(size_t match_index) override;
   void OnDragCanceled() override;
-  void GetPopupAccessibleNodeData(ui::AXNodeData* node_data) override;
-  void AddPopupAccessibleNodeData(ui::AXNodeData* node_data) override;
-  std::u16string GetAccessibleButtonTextForResult(size_t line) override;
+  void GetPopupAccessibleNodeData(ui::AXNodeData* node_data) const override;
+  std::u16string GetAccessibleButtonTextForResult(size_t line) const override;
   void SetSuggestionGroupVisibility(size_t match_index,
                                     bool suggestion_group_hidden) override;
 
@@ -101,6 +100,7 @@ class OmniboxPopupViewViews : public views::View,
 
   // Gets the OmniboxResultView for match |i|.
   OmniboxResultView* result_view_at(size_t i);
+  const OmniboxResultView* result_view_at(size_t i) const;
 
   // Returns true if the model has a match at the specified index.
   bool HasMatchAt(size_t index) const;
@@ -115,6 +115,8 @@ class OmniboxPopupViewViews : public views::View,
 
  private:
   void UpdateAccessibleStates() const;
+
+  void UpdateAccessibleControlIds();
 
   void UpdateAccessibleActiveDescendantForInvokingView();
 

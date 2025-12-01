@@ -97,13 +97,22 @@ ProcessNodeImpl::~ProcessNodeImpl() {
   CHECK(worker_nodes_.empty());
 }
 
-void ProcessNodeImpl::Bind(
+void ProcessNodeImpl::BindRenderProcessCoordinationUnit(
     mojo::PendingReceiver<mojom::ProcessCoordinationUnit> receiver) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // A RenderProcessHost can be reused if the backing process suddenly dies, in
   // which case we will receive a new receiver from the newly spawned process.
-  receiver_.reset();
-  receiver_.Bind(std::move(receiver));
+  render_process_receiver_.reset();
+  render_process_receiver_.Bind(std::move(receiver));
+}
+
+void ProcessNodeImpl::BindChildProcessCoordinationUnit(
+    mojo::PendingReceiver<mojom::ChildProcessCoordinationUnit> receiver) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // A RenderProcessHost can be reused if the backing process suddenly dies, in
+  // which case we will receive a new receiver from the newly spawned process.
+  child_process_receiver_.reset();
+  child_process_receiver_.Bind(std::move(receiver));
 }
 
 void ProcessNodeImpl::SetMainThreadTaskLoadIsLow(
@@ -130,16 +139,18 @@ void ProcessNodeImpl::OnV8ContextDetached(
     const blink::V8ContextToken& v8_context_token) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_EQ(process_type_, content::PROCESS_TYPE_RENDERER);
-  if (auto* tracker = v8_memory::V8ContextTracker::GetFromGraph(graph()))
+  if (auto* tracker = v8_memory::V8ContextTracker::GetFromGraph(graph())) {
     tracker->OnV8ContextDetached(PassKey(), this, v8_context_token);
+  }
 }
 
 void ProcessNodeImpl::OnV8ContextDestroyed(
     const blink::V8ContextToken& v8_context_token) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_EQ(process_type_, content::PROCESS_TYPE_RENDERER);
-  if (auto* tracker = v8_memory::V8ContextTracker::GetFromGraph(graph()))
+  if (auto* tracker = v8_memory::V8ContextTracker::GetFromGraph(graph())) {
     tracker->OnV8ContextDestroyed(PassKey(), this, v8_context_token);
+  }
 }
 
 void ProcessNodeImpl::OnRemoteIframeAttached(
@@ -181,16 +192,14 @@ void ProcessNodeImpl::OnRemoteIframeDetached(
   }
 }
 
-void ProcessNodeImpl::RequestSharedPerformanceScenarioRegions(
+void ProcessNodeImpl::InitializeChildProcessCoordination(
     uint64_t process_track_id,
-    RequestSharedPerformanceScenarioRegionsCallback callback) {
+    InitializeChildProcessCoordinationCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // Should not be called for the Browser process, which already has a track.
   // Otherwise, it's ok to overwrite `tracing_track_`, since processes can be
   // re-initialized for the same ProcessNode (eg. after a crash).
-  // TODO(crbug.com/374302723): Rename the Mojo message that sets this, since
-  // the track ID is used for more than PerformanceScenarios now.
   CHECK_NE(process_type_, content::PROCESS_TYPE_BROWSER);
   tracing_track_.emplace(perfetto::Track::Global(process_track_id));
 
@@ -322,7 +331,8 @@ void ProcessNodeImpl::SetProcessExitStatus(int32_t exit_status) {
   process_.SetAndNotify(this, base::Process());
 
   // No more message should be received from this process.
-  receiver_.reset();
+  render_process_receiver_.reset();
+  child_process_receiver_.reset();
 }
 
 void ProcessNodeImpl::SetProcessMetricsName(const std::string& metrics_name) {
@@ -419,12 +429,14 @@ void ProcessNodeImpl::SetProcessImpl(base::Process process,
 ProcessNode::NodeSetView<const FrameNode*> ProcessNodeImpl::GetFrameNodes()
     const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  CHECK(graph()->NodeEdgesArePublic(this) || frame_nodes_.empty());
   return NodeSetView<const FrameNode*>(frame_nodes_);
 }
 
 ProcessNode::NodeSetView<const WorkerNode*> ProcessNodeImpl::GetWorkerNodes()
     const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  CHECK(graph()->NodeEdgesArePublic(this) || worker_nodes_.empty());
   return NodeSetView<const WorkerNode*>(worker_nodes_);
 }
 
@@ -436,7 +448,7 @@ void ProcessNodeImpl::OnAllFramesInProcessFrozen() {
   }
 }
 
-void ProcessNodeImpl::OnJoiningGraph() {
+void ProcessNodeImpl::OnInitializingProperties() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // Make sure all weak pointers, even `weak_this_` that was created on the UI
@@ -447,20 +459,20 @@ void ProcessNodeImpl::OnJoiningGraph() {
   NodeAttachedDataStorage::Create(this);
 }
 
-void ProcessNodeImpl::OnBeforeLeavingGraph() {
+void ProcessNodeImpl::OnUninitializingEdges() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  // Make as if we're transitioning to the null PID before we die to clear this
-  // instance from the PID map.
-  if (process_id_ != base::kNullProcessId)
-    graph()->BeforeProcessPidChange(this, base::kNullProcessId);
-
   // All child frames should have been removed before the process is removed.
   DCHECK(frame_nodes_.empty());
 }
 
-void ProcessNodeImpl::RemoveNodeAttachedData() {
+void ProcessNodeImpl::CleanUpNodeState() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // Make as if we're transitioning to the null PID before we die to clear this
+  // instance from the PID map.
+  if (process_id_ != base::kNullProcessId) {
+    graph()->BeforeProcessPidChange(this, base::kNullProcessId);
+  }
+
   DestroyNodeInlineDataStorage();
 }
 

@@ -10,13 +10,13 @@
 #include <utility>
 #include <vector>
 
-#include "base/strings/utf_ostream_operators.h"
-#include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/uuid.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node.h"
+#include "components/bookmarks/browser/bookmark_test_util.h"
 #include "components/bookmarks/test/test_bookmark_client.h"
+#include "components/bookmarks/test/test_matchers.h"
 #include "components/sync/base/features.h"
 #include "components/sync_bookmarks/bookmark_model_view.h"
 #include "components/sync_bookmarks/test_bookmark_model_view.h"
@@ -28,62 +28,18 @@
 namespace sync_bookmarks {
 namespace {
 
+using bookmarks::test::IsFolder;
+using bookmarks::test::IsFolderWithUuid;
+using bookmarks::test::IsUrlBookmark;
+using bookmarks::test::IsUrlBookmarkWithUuid;
 using testing::ElementsAre;
 using testing::IsEmpty;
 using testing::Ne;
 
-MATCHER_P2(MatchesUrl, title, url, "") {
-  if (!arg->is_url()) {
-    *result_listener << "Expected URL bookmark but got folder.";
-    return false;
-  }
-  if (arg->GetTitle() != base::ASCIIToUTF16(title)) {
-    *result_listener << "Expected URL title \"" << title << "\" but got \""
-                     << arg->GetTitle() << "\"";
-    return false;
-  }
-  if (arg->url() != url) {
-    *result_listener << "Expected URL \"" << url << "\" but got \""
-                     << arg->url() << "\"";
-    return false;
-  }
-  return true;
-}
-
-MATCHER_P2(MatchesFolder, title, children_matcher, "") {
-  if (!arg->is_folder()) {
-    *result_listener << "Expected folder but got URL.";
-    return false;
-  }
-  if (arg->GetTitle() != base::ASCIIToUTF16(title)) {
-    *result_listener << "Expected folder title \"" << title << "\" but got \""
-                     << arg->GetTitle() << "\"";
-    return false;
-  }
-  return testing::ExplainMatchResult(children_matcher, arg->children(),
-                                     result_listener);
-}
-
-MATCHER_P(HasUuid, uuid, "") {
-  return testing::ExplainMatchResult(uuid, arg->uuid(), result_listener);
-}
-
-MATCHER_P3(MatchesUrlWithUuid, title, url, uuid, "") {
-  return testing::ExplainMatchResult(MatchesUrl(title, url), arg,
-                                     result_listener) &&
-         testing::ExplainMatchResult(HasUuid(uuid), arg, result_listener);
-}
-
-MATCHER_P3(MatchesFolderWithUuid, title, uuid, children_matcher, "") {
-  return testing::ExplainMatchResult(MatchesFolder(title, children_matcher),
-                                     arg, result_listener) &&
-         testing::ExplainMatchResult(HasUuid(uuid), arg, result_listener);
-}
-
 // Test class to build bookmark URLs conveniently and compactly in tests.
 class UrlBuilder {
  public:
-  UrlBuilder(const std::string& title, const GURL& url)
+  UrlBuilder(const std::u16string& title, const GURL& url)
       : title_(title), url_(url) {}
   UrlBuilder(const UrlBuilder&) = default;
   ~UrlBuilder() = default;
@@ -95,13 +51,12 @@ class UrlBuilder {
 
   void Build(BookmarkModelView* model,
              const bookmarks::BookmarkNode* parent) const {
-    model->AddURL(parent, parent->children().size(), base::UTF8ToUTF16(title_),
-                  url_, /*meta_info=*/nullptr, /*creation_time=*/std::nullopt,
-                  uuid_);
+    model->AddURL(parent, parent->children().size(), title_, url_,
+                  /*meta_info=*/nullptr, /*creation_time=*/std::nullopt, uuid_);
   }
 
  private:
-  const std::string title_;
+  const std::u16string title_;
   const GURL url_;
   std::optional<base::Uuid> uuid_;
 };
@@ -130,7 +85,7 @@ class FolderBuilder {
     }
   }
 
-  explicit FolderBuilder(const std::string& title) : title_(title) {}
+  explicit FolderBuilder(const std::u16string& title) : title_(title) {}
   FolderBuilder(const FolderBuilder&) = default;
   ~FolderBuilder() = default;
 
@@ -147,13 +102,13 @@ class FolderBuilder {
   void Build(BookmarkModelView* model,
              const bookmarks::BookmarkNode* parent) const {
     const bookmarks::BookmarkNode* folder = model->AddFolder(
-        parent, parent->children().size(), base::UTF8ToUTF16(title_),
+        parent, parent->children().size(), title_,
         /*meta_info=*/nullptr, /*creation_time=*/std::nullopt, uuid_);
     AddChildrenTo(model, folder, children_);
   }
 
  private:
-  const std::string title_;
+  const std::u16string title_;
   std::vector<FolderOrUrl> children_;
   std::optional<base::Uuid> uuid_;
 };
@@ -188,13 +143,13 @@ class LocalBookmarkModelMergerTest : public testing::Test {
 
 TEST_F(LocalBookmarkModelMergerTest,
        ShouldUploadEntireLocalModelIfAccountModelEmpty) {
-  const std::string kFolder1Title = "folder1";
-  const std::string kFolder2Title = "folder2";
+  const std::u16string kFolder1Title = u"folder1";
+  const std::u16string kFolder2Title = u"folder2";
 
-  const std::string kUrl1Title = "url1";
-  const std::string kUrl2Title = "url2";
-  const std::string kUrl3Title = "url3";
-  const std::string kUrl4Title = "url4";
+  const std::u16string kUrl1Title = u"url1";
+  const std::u16string kUrl2Title = u"url2";
+  const std::u16string kUrl3Title = u"url3";
+  const std::u16string kUrl4Title = u"url4";
 
   const GURL kUrl1("http://www.url1.com/");
   const GURL kUrl2("http://www.url2.com/");
@@ -228,17 +183,17 @@ TEST_F(LocalBookmarkModelMergerTest,
   // Same as the local model described above.
   EXPECT_THAT(
       account_model->bookmark_bar_node()->children(),
-      ElementsAre(MatchesFolder(kFolder1Title,
-                                ElementsAre(MatchesUrl(kUrl1Title, kUrl1),
-                                            MatchesUrl(kUrl2Title, kUrl2))),
-                  MatchesFolder(kFolder2Title,
-                                ElementsAre(MatchesUrl(kUrl3Title, kUrl3),
-                                            MatchesUrl(kUrl4Title, kUrl4)))));
+      ElementsAre(IsFolder(kFolder1Title,
+                           ElementsAre(IsUrlBookmark(kUrl1Title, kUrl1),
+                                       IsUrlBookmark(kUrl2Title, kUrl2))),
+                  IsFolder(kFolder2Title,
+                           ElementsAre(IsUrlBookmark(kUrl3Title, kUrl3),
+                                       IsUrlBookmark(kUrl4Title, kUrl4)))));
 }
 
 TEST_F(LocalBookmarkModelMergerTest, ShouldIgnoreManagedNodes) {
-  const std::string kUrl1Title = "url1";
-  const std::string kUrl2Title = "url2";
+  const std::u16string kUrl1Title = u"url1";
+  const std::u16string kUrl2Title = u"url2";
 
   const GURL kUrl1("http://www.url1.com/");
   const GURL kUrl2("http://www.url2.com/");
@@ -273,7 +228,7 @@ TEST_F(LocalBookmarkModelMergerTest, ShouldIgnoreManagedNodes) {
   //  |- url1(http://www.url1.com)
   //
   ASSERT_THAT(account_model->bookmark_bar_node()->children(),
-              ElementsAre(MatchesUrl(kUrl1Title, kUrl1)));
+              ElementsAre(IsUrlBookmark(kUrl1Title, kUrl1)));
 
   // Managed nodes should be excluded from the merge.
   EXPECT_THAT(account_model->underlying_model()->GetNodesByURL(kUrl2),
@@ -281,7 +236,7 @@ TEST_F(LocalBookmarkModelMergerTest, ShouldIgnoreManagedNodes) {
 }
 
 TEST_F(LocalBookmarkModelMergerTest, ShouldUploadLocalUuid) {
-  const std::string kUrl1Title = "url1";
+  const std::u16string kUrl1Title = u"url1";
   const GURL kUrl1("http://www.url1.com/");
   const base::Uuid kUrl1Uuid = base::Uuid::GenerateRandomV4();
 
@@ -301,15 +256,15 @@ TEST_F(LocalBookmarkModelMergerTest, ShouldUploadLocalUuid) {
   // -------- The expected merge outcome --------
   // Same as the local model described above, including the UUID.
   EXPECT_THAT(account_model->bookmark_bar_node()->children(),
-              ElementsAre(MatchesUrlWithUuid(kUrl1Title, kUrl1, kUrl1Uuid)));
+              ElementsAre(IsUrlBookmarkWithUuid(kUrl1Title, kUrl1, kUrl1Uuid)));
 }
 
 TEST_F(LocalBookmarkModelMergerTest, ShouldNotUploadDuplicateBySemantics) {
-  const std::string kFolder1Title = "folder1";
+  const std::u16string kFolder1Title = u"folder1";
 
-  const std::string kUrl1Title = "url1";
-  const std::string kUrl2Title = "url2";
-  const std::string kUrl3Title = "url3";
+  const std::u16string kUrl1Title = u"url1";
+  const std::u16string kUrl2Title = u"url2";
+  const std::u16string kUrl3Title = u"url3";
 
   const GURL kUrl1("http://www.url1.com/");
   const GURL kUrl2("http://www.url2.com/");
@@ -344,22 +299,23 @@ TEST_F(LocalBookmarkModelMergerTest, ShouldNotUploadDuplicateBySemantics) {
   //    |- url2(http://www.url2.com)
   //    |- url3(http://www.url3.com)
   //    |- url1(http://www.url1.com)
-  EXPECT_THAT(account_model->bookmark_bar_node()->children(),
-              ElementsAre(MatchesFolder(
-                  kFolder1Title, ElementsAre(MatchesUrl(kUrl2Title, kUrl2),
-                                             MatchesUrl(kUrl3Title, kUrl3),
-                                             MatchesUrl(kUrl1Title, kUrl1)))));
+  EXPECT_THAT(
+      account_model->bookmark_bar_node()->children(),
+      ElementsAre(IsFolder(kFolder1Title,
+                           ElementsAre(IsUrlBookmark(kUrl2Title, kUrl2),
+                                       IsUrlBookmark(kUrl3Title, kUrl3),
+                                       IsUrlBookmark(kUrl1Title, kUrl1)))));
 }
 
 TEST_F(LocalBookmarkModelMergerTest, ShouldMergeLocalAndAccountModels) {
-  const std::string kFolder1Title = "folder1";
-  const std::string kFolder2Title = "folder2";
-  const std::string kFolder3Title = "folder3";
+  const std::u16string kFolder1Title = u"folder1";
+  const std::u16string kFolder2Title = u"folder2";
+  const std::u16string kFolder3Title = u"folder3";
 
-  const std::string kUrl1Title = "url1";
-  const std::string kUrl2Title = "url2";
-  const std::string kUrl3Title = "url3";
-  const std::string kUrl4Title = "url4";
+  const std::u16string kUrl1Title = u"url1";
+  const std::u16string kUrl2Title = u"url2";
+  const std::u16string kUrl3Title = u"url3";
+  const std::u16string kUrl4Title = u"url4";
 
   const GURL kUrl1("http://www.url1.com/");
   const GURL kUrl2("http://www.url2.com/");
@@ -416,25 +372,24 @@ TEST_F(LocalBookmarkModelMergerTest, ShouldMergeLocalAndAccountModels) {
   //    |- url4(http://www.url4.com)
   EXPECT_THAT(
       account_model->bookmark_bar_node()->children(),
-      ElementsAre(
-          MatchesFolder(kFolder1Title,
-                        ElementsAre(MatchesUrl(kUrl1Title, kUrl1),
-                                    MatchesUrl(kUrl2Title, kAnotherUrl2),
-                                    MatchesUrl(kUrl2Title, kUrl2))),
-          MatchesFolder(kFolder3Title,
-                        ElementsAre(MatchesUrl(kUrl3Title, kUrl3),
-                                    MatchesUrl(kUrl4Title, kUrl4))),
-          MatchesFolder(kFolder2Title,
-                        ElementsAre(MatchesUrl(kUrl3Title, kUrl3),
-                                    MatchesUrl(kUrl4Title, kUrl4)))));
+      ElementsAre(IsFolder(kFolder1Title,
+                           ElementsAre(IsUrlBookmark(kUrl1Title, kUrl1),
+                                       IsUrlBookmark(kUrl2Title, kAnotherUrl2),
+                                       IsUrlBookmark(kUrl2Title, kUrl2))),
+                  IsFolder(kFolder3Title,
+                           ElementsAre(IsUrlBookmark(kUrl3Title, kUrl3),
+                                       IsUrlBookmark(kUrl4Title, kUrl4))),
+                  IsFolder(kFolder2Title,
+                           ElementsAre(IsUrlBookmark(kUrl3Title, kUrl3),
+                                       IsUrlBookmark(kUrl4Title, kUrl4)))));
 }
 
 // This tests that truncated titles produced by legacy clients are properly
 // matched.
 TEST_F(LocalBookmarkModelMergerTest,
        ShouldMergeLocalAndAccountNodesWhenAccountHasLegacyTruncatedTitle) {
-  const std::string kLocalLongTitle(300, 'A');
-  const std::string kAccountTruncatedTitle(255, 'A');
+  const std::u16string kLocalLongTitle(300, 'A');
+  const std::u16string kAccountTruncatedTitle(255, 'A');
 
   // -------- The local model --------
   std::unique_ptr<BookmarkModelView> local_model =
@@ -449,15 +404,15 @@ TEST_F(LocalBookmarkModelMergerTest,
 
   // Both titles should have matched against each other.
   EXPECT_THAT(account_model->bookmark_bar_node()->children(),
-              ElementsAre(MatchesFolder(kLocalLongTitle, IsEmpty())));
+              ElementsAre(IsFolder(kLocalLongTitle, IsEmpty())));
 }
 
 // This test checks that local node with truncated title will merge with account
 // node which has full title.
 TEST_F(LocalBookmarkModelMergerTest,
        ShouldMergeLocalAndAccountNodesWhenLocalHasLegacyTruncatedTitle) {
-  const std::string kAccountFullTitle(300, 'A');
-  const std::string kLocalTruncatedTitle(255, 'A');
+  const std::u16string kAccountFullTitle(300, 'A');
+  const std::u16string kLocalTruncatedTitle(255, 'A');
 
   // -------- The local model --------
   std::unique_ptr<BookmarkModelView> local_model =
@@ -474,12 +429,12 @@ TEST_F(LocalBookmarkModelMergerTest,
   // title is truncated, for simplicity of the algorithm and considering how
   // rare this scenario is, the local one wins.
   EXPECT_THAT(account_model->bookmark_bar_node()->children(),
-              ElementsAre(MatchesFolder(kLocalTruncatedTitle, IsEmpty())));
+              ElementsAre(IsFolder(kLocalTruncatedTitle, IsEmpty())));
 }
 
 TEST_F(LocalBookmarkModelMergerTest, ShouldMergeBookmarkByUuid) {
-  const std::string kLocalTitle = "Title 1";
-  const std::string kAccountTitle = "Title 2";
+  const std::u16string kLocalTitle = u"Title 1";
+  const std::u16string kAccountTitle = u"Title 2";
   const GURL kUrl("http://www.foo.com/");
   const base::Uuid kUuid = base::Uuid::GenerateRandomV4();
 
@@ -502,14 +457,291 @@ TEST_F(LocalBookmarkModelMergerTest, ShouldMergeBookmarkByUuid) {
   // bookmark_bar
   //  |- bookmark(kUuid/kLocalTitle)
   EXPECT_THAT(account_model->bookmark_bar_node()->children(),
-              ElementsAre(MatchesUrlWithUuid(kLocalTitle, kUrl, kUuid)));
+              ElementsAre(IsUrlBookmarkWithUuid(kLocalTitle, kUrl, kUuid)));
+}
+
+TEST_F(LocalBookmarkModelMergerTest,
+       ShouldDeduplicateBySemanticsAfterParentMatchedByUuid) {
+  const std::u16string kFolder1Title = u"folder1";
+  const std::u16string kFolder2Title = u"folder2";
+  const std::u16string kFolder3Title = u"folder3";
+
+  const std::u16string kUrl1Title = u"url1";
+  const std::u16string kUrl2Title = u"url2";
+  const std::u16string kUrl3Title = u"url3";
+
+  const GURL kUrl1("http://www.url1.com/");
+  const GURL kUrl2("http://www.url2.com/");
+  const GURL kUrl3("http://www.url3.com/");
+
+  const base::Uuid kFolder2Uuid = base::Uuid::GenerateRandomV4();
+
+  // -------- Local bookmarks --------
+  // bookmark_bar
+  //  | - folder 1 (kFolder1Title)
+  //  | - folder 2 (kFolder2Uuid/kFolder2Title)
+  //    |- url1(http://www.url1.com)
+  //    |- url2(http://www.url2.com)
+  std::unique_ptr<BookmarkModelView> local_model =
+      BuildLocalModel({FolderBuilder(kFolder1Title),
+                       FolderBuilder(kFolder2Title)
+                           .SetUuid(kFolder2Uuid)
+                           .SetChildren({UrlBuilder(kUrl1Title, kUrl1),
+                                         UrlBuilder(kUrl2Title, kUrl2)})});
+
+  // -------- Account bookmarks --------
+  // bookmark_bar
+  //  | - folder 3 (kFolder3Title)
+  //    | - folder 2 (kFolder2Uuid/kFolder2Title)
+  //      |- url2(http://www.url1.com)
+  //      |- url3(http://www.url3.com)
+  std::unique_ptr<BookmarkModelView> account_model = BuildAccountModel(
+      {FolderBuilder(kFolder3Title)
+           .SetChildren({FolderBuilder(kFolder2Title)
+                             .SetUuid(kFolder2Uuid)
+                             .SetChildren({UrlBuilder(kUrl2Title, kUrl2),
+                                           UrlBuilder(kUrl3Title, kUrl3)})})});
+
+  // -------- The expected merge outcome --------
+  // bookmark_bar
+  //  | - folder 3 (kFolder3Title)
+  //    | - folder 2 (kFolder2Uuid/kTitle2)
+  //      |- url2(http://www.url2.com)
+  //      |- url3(http://www.url3.com)
+  //      |- url1(http://www.url1.com)
+  //  | - folder 1 (kTitle1)
+  LocalBookmarkModelMerger(local_model.get(), account_model.get()).Merge();
+
+  EXPECT_THAT(
+      account_model->bookmark_bar_node()->children(),
+      ElementsAre(IsFolder(kFolder3Title,
+                           ElementsAre(IsFolder(
+                               kFolder2Title,
+                               ElementsAre(IsUrlBookmark(kUrl2Title, kUrl2),
+                                           IsUrlBookmark(kUrl3Title, kUrl3),
+                                           IsUrlBookmark(kUrl1Title, kUrl1))))),
+                  IsFolder(kFolder1Title, IsEmpty())));
+}
+
+TEST_F(LocalBookmarkModelMergerTest,
+       ShouldDeduplicateBySemanticsAfterNestedParentMatchedByUuid) {
+  const std::u16string kFolder1Title = u"folder1";
+  const std::u16string kFolder2Title = u"folder2";
+
+  const std::u16string kUrl1Title = u"url1";
+  const std::u16string kUrl2Title = u"url2";
+  const std::u16string kUrl3Title = u"url3";
+
+  const GURL kUrl1("http://www.url1.com/");
+  const GURL kUrl2("http://www.url2.com/");
+  const GURL kUrl3("http://www.url3.com/");
+
+  const base::Uuid kFolder2Uuid = base::Uuid::GenerateRandomV4();
+
+  // -------- Local bookmarks --------
+  // bookmark_bar
+  //  | - folder 1 (kFolder1Title)
+  //    | - folder 2 (kFolder2Uuid/kFolder2Title)
+  //      |- url1(http://www.url1.com)
+  //      |- url2(http://www.url2.com)
+  std::unique_ptr<BookmarkModelView> local_model = BuildLocalModel(
+      {FolderBuilder(kFolder1Title)
+           .SetChildren({FolderBuilder(kFolder2Title)
+                             .SetUuid(kFolder2Uuid)
+                             .SetChildren({UrlBuilder(kUrl1Title, kUrl1),
+                                           UrlBuilder(kUrl2Title, kUrl2)})})});
+
+  // -------- Account bookmarks --------
+  // bookmark_bar
+  //  | - folder 2 (kFolder2Uuid/kFolder2Title)
+  //    |- url2(http://www.url2.com)
+  //    |- url3(http://www.url3.com)
+  std::unique_ptr<BookmarkModelView> account_model =
+      BuildAccountModel({FolderBuilder(kFolder2Title)
+                             .SetUuid(kFolder2Uuid)
+                             .SetChildren({UrlBuilder(kUrl2Title, kUrl2),
+                                           UrlBuilder(kUrl3Title, kUrl3)})});
+
+  // -------- The expected merge outcome --------
+  // bookmark_bar
+  //  | - folder 2 (kFolder2Uuid/kTitle2)
+  //    |- url2(http://www.url2.com)
+  //    |- url3(http://www.url3.com)
+  //    |- url1(http://www.url1.com)
+  //  | - folder 1 (kTitle1)
+  LocalBookmarkModelMerger(local_model.get(), account_model.get()).Merge();
+
+  EXPECT_THAT(
+      account_model->bookmark_bar_node()->children(),
+      ElementsAre(IsFolder(kFolder2Title,
+                           ElementsAre(IsUrlBookmark(kUrl2Title, kUrl2),
+                                       IsUrlBookmark(kUrl3Title, kUrl3),
+                                       IsUrlBookmark(kUrl1Title, kUrl1))),
+                  IsFolder(kFolder1Title, IsEmpty())));
+}
+
+TEST_F(LocalBookmarkModelMergerTest,
+       ShouldDeduplicateBySemanticsAfterTwoConsecutiveAncestorsMatchedByUuid) {
+  const std::u16string kFolder1Title = u"folder1";
+  const std::u16string kFolder2Title = u"folder2";
+  const std::u16string kFolder3Title = u"folder3";
+
+  const std::u16string kUrl1Title = u"url1";
+  const std::u16string kUrl2Title = u"url2";
+  const std::u16string kUrl3Title = u"url3";
+
+  const GURL kUrl1("http://www.url1.com/");
+  const GURL kUrl2("http://www.url2.com/");
+  const GURL kUrl3("http://www.url3.com/");
+
+  const base::Uuid kFolder2Uuid = base::Uuid::GenerateRandomV4();
+  const base::Uuid kFolder3Uuid = base::Uuid::GenerateRandomV4();
+
+  // -------- Local bookmarks --------
+  // bookmark_bar
+  //  | - folder 1 (kFolder1Title)
+  //    | - folder 2 (kFolder2Uuid/kFolder2Title)
+  //      | - folder 3 (kFolder3Uuid/kFolder3Title)
+  //        |- url1(http://www.url1.com)
+  //        |- url2(http://www.url2.com)
+  std::unique_ptr<BookmarkModelView> local_model = BuildLocalModel(
+      {FolderBuilder(kFolder1Title)
+           .SetChildren(
+               {FolderBuilder(kFolder2Title)
+                    .SetUuid(kFolder2Uuid)
+                    .SetChildren(
+                        {FolderBuilder(kFolder3Title)
+                             .SetUuid(kFolder3Uuid)
+                             .SetChildren(
+                                 {UrlBuilder(kUrl1Title, kUrl1),
+                                  UrlBuilder(kUrl2Title, kUrl2)})})})});
+
+  // -------- Account bookmarks --------
+  // bookmark_bar
+  //  | - folder 2 (kFolder2Uuid/kFolder2Title)
+  //    | - folder 3 (kFolder3Uuid/kFolder3Title)
+  //      |- url2(http://www.url2.com)
+  //      |- url3(http://www.url3.com)
+  std::unique_ptr<BookmarkModelView> account_model = BuildAccountModel(
+      {FolderBuilder(kFolder2Title)
+           .SetUuid(kFolder2Uuid)
+           .SetChildren({FolderBuilder(kFolder3Title)
+                             .SetUuid(kFolder3Uuid)
+                             .SetChildren({UrlBuilder(kUrl2Title, kUrl2),
+                                           UrlBuilder(kUrl3Title, kUrl3)})})});
+
+  // -------- The expected merge outcome --------
+  // bookmark_bar
+  //  | - folder 2 (kFolder2Uuid/kTitle2)
+  //    | - folder 3 (kFolder3Uuid/kTitle3)
+  //      |- url2(http://www.url2.com)
+  //      |- url3(http://www.url3.com)
+  //      |- url1(http://www.url1.com)
+  //  | - folder 1 (kTitle1)
+  LocalBookmarkModelMerger(local_model.get(), account_model.get()).Merge();
+
+  EXPECT_THAT(
+      account_model->bookmark_bar_node()->children(),
+      ElementsAre(IsFolder(kFolder2Title,
+                           ElementsAre(IsFolder(
+                               kFolder3Title,
+                               ElementsAre(IsUrlBookmark(kUrl2Title, kUrl2),
+                                           IsUrlBookmark(kUrl3Title, kUrl3),
+                                           IsUrlBookmark(kUrl1Title, kUrl1))))),
+                  IsFolder(kFolder1Title, IsEmpty())));
+}
+
+TEST_F(
+    LocalBookmarkModelMergerTest,
+    ShouldDeduplicateBySemanticsAfterTwoNonConsecutiveAncestorsMatchedByUuid) {
+  const std::u16string kFolder1Title = u"folder1";
+  const std::u16string kFolder2Title = u"folder2";
+  const std::u16string kFolder3Title = u"folder3";
+  const std::u16string kFolder4Title = u"folder4";
+  const std::u16string kFolder5Title = u"folder5";
+
+  const std::u16string kUrl1Title = u"url1";
+  const std::u16string kUrl2Title = u"url2";
+  const std::u16string kUrl3Title = u"url3";
+
+  const GURL kUrl1("http://www.url1.com/");
+  const GURL kUrl2("http://www.url2.com/");
+  const GURL kUrl3("http://www.url3.com/");
+
+  const base::Uuid kFolder2Uuid = base::Uuid::GenerateRandomV4();
+  const base::Uuid kFolder5Uuid = base::Uuid::GenerateRandomV4();
+
+  // -------- Local bookmarks --------
+  // bookmark_bar
+  //  | - folder 1 (kFolder1Title)
+  //    | - folder 2 (kFolder2Uuid/kFolder2Title)
+  //      | - folder 3 (kFolder3Title)
+  //        | - folder 4 (kFolder4Title)
+  //          | - folder 5 (kFolder5Uuid/kFolder5Title)
+  //            |- url1(http://www.url1.com)
+  //            |- url2(http://www.url2.com)
+  std::unique_ptr<BookmarkModelView> local_model = BuildLocalModel(
+      {FolderBuilder(kFolder1Title)
+           .SetChildren(
+               {FolderBuilder(kFolder2Title)
+                    .SetUuid(kFolder2Uuid)
+                    .SetChildren(
+                        {FolderBuilder(kFolder3Title)
+                             .SetChildren(
+                                 {FolderBuilder(kFolder4Title)
+                                      .SetChildren(
+                                          {FolderBuilder(kFolder5Title)
+                                               .SetUuid(kFolder5Uuid)
+                                               .SetChildren(
+                                                   {UrlBuilder(kUrl1Title,
+                                                               kUrl1),
+                                                    UrlBuilder(
+                                                        kUrl2Title,
+                                                        kUrl2)})})})})})});
+
+  // -------- Account bookmarks --------
+  // bookmark_bar
+  //  | - folder 2 (kFolder2Uuid/kFolder2Title)
+  //  | - folder 5 (kFolder5Uuid/kFolder5Title)
+  //    |- url2(http://www.url2.com)
+  //    |- url3(http://www.url3.com)
+  std::unique_ptr<BookmarkModelView> account_model =
+      BuildAccountModel({FolderBuilder(kFolder2Title).SetUuid(kFolder2Uuid),
+                         FolderBuilder(kFolder5Title)
+                             .SetUuid(kFolder5Uuid)
+                             .SetChildren({UrlBuilder(kUrl2Title, kUrl2),
+                                           UrlBuilder(kUrl3Title, kUrl3)})});
+
+  // -------- The expected merge outcome --------
+  // bookmark_bar
+  //  | - folder 2 (kFolder2Uuid/kTitle2)
+  //    | - folder 3 (kTitle3)
+  //      | - folder 4 (kTitle4)
+  //  | - folder 5 (kFolder5Uuid/kFolder5Title)
+  //      |- url2(http://www.url2.com)
+  //      |- url3(http://www.url3.com)
+  //      |- url1(http://www.url1.com)
+  //  | - folder 1 (kTitle1)
+  LocalBookmarkModelMerger(local_model.get(), account_model.get()).Merge();
+
+  EXPECT_THAT(
+      account_model->bookmark_bar_node()->children(),
+      ElementsAre(IsFolder(kFolder2Title,
+                           ElementsAre(IsFolder(
+                               kFolder3Title, ElementsAre(IsFolder(
+                                                  kFolder4Title, IsEmpty()))))),
+                  IsFolder(kFolder5Title,
+                           ElementsAre(IsUrlBookmark(kUrl2Title, kUrl2),
+                                       IsUrlBookmark(kUrl3Title, kUrl3),
+                                       IsUrlBookmark(kUrl1Title, kUrl1))),
+                  IsFolder(kFolder1Title, IsEmpty())));
 }
 
 TEST_F(LocalBookmarkModelMergerTest,
        ShouldMergeBookmarkByUuidDespiteDifferentParent) {
-  const std::string kFolderTitle = "Folder Title";
-  const std::string kLocalTitle = "Title 1";
-  const std::string kAccountTitle = "Title 2";
+  const std::u16string kFolderTitle = u"Folder Title";
+  const std::u16string kLocalTitle = u"Title 1";
+  const std::u16string kAccountTitle = u"Title 2";
   const GURL kUrl("http://www.foo.com/");
   const base::Uuid kUuid = base::Uuid::GenerateRandomV4();
 
@@ -536,17 +768,17 @@ TEST_F(LocalBookmarkModelMergerTest,
   //    | - bookmark(kUuid/kLocalTitle)
   EXPECT_THAT(
       account_model->bookmark_bar_node()->children(),
-      ElementsAre(MatchesFolder(kFolderTitle, ElementsAre(MatchesUrlWithUuid(
-                                                  kLocalTitle, kUrl, kUuid)))));
+      ElementsAre(IsFolder(kFolderTitle, ElementsAre(IsUrlBookmarkWithUuid(
+                                             kLocalTitle, kUrl, kUuid)))));
 }
 
 TEST_F(LocalBookmarkModelMergerTest,
        ShouldNotMergeBySemanticsIfDifferentParent) {
-  const std::string kFolder1Title = "folder1";
-  const std::string kFolder2Title = "folder2";
+  const std::u16string kFolder1Title = u"folder1";
+  const std::u16string kFolder2Title = u"folder2";
 
-  const std::string kUrl1Title = "url1";
-  const std::string kUrl2Title = "url2";
+  const std::u16string kUrl1Title = u"url1";
+  const std::u16string kUrl2Title = u"url2";
 
   const GURL kUrl1("http://www.url1.com/");
   const GURL kUrl2("http://www.url2.com/");
@@ -581,17 +813,17 @@ TEST_F(LocalBookmarkModelMergerTest,
   //      |- url1(http://www.url1.com)
   EXPECT_THAT(
       account_model->bookmark_bar_node()->children(),
-      ElementsAre(MatchesFolder(kFolder2Title,
-                                ElementsAre(MatchesUrl(kUrl2Title, kUrl2))),
-                  MatchesFolder(kFolder1Title,
-                                ElementsAre(MatchesFolder(
-                                    kFolder2Title, ElementsAre(MatchesUrl(
-                                                       kUrl1Title, kUrl1)))))));
+      ElementsAre(IsFolder(kFolder2Title,
+                           ElementsAre(IsUrlBookmark(kUrl2Title, kUrl2))),
+                  IsFolder(kFolder1Title,
+                           ElementsAre(IsFolder(kFolder2Title,
+                                                ElementsAre(IsUrlBookmark(
+                                                    kUrl1Title, kUrl1)))))));
 }
 
 TEST_F(LocalBookmarkModelMergerTest, ShouldMergeFolderByUuidAndNotSemantics) {
-  const std::string kTitle1 = "Title 1";
-  const std::string kTitle2 = "Title 2";
+  const std::u16string kTitle1 = u"Title 1";
+  const std::u16string kTitle2 = u"Title 2";
   const GURL kUrl("http://www.foo.com/");
   const base::Uuid kUuid1 = base::Uuid::GenerateRandomV4();
   const base::Uuid kUuid2 = base::Uuid::GenerateRandomV4();
@@ -621,19 +853,19 @@ TEST_F(LocalBookmarkModelMergerTest, ShouldMergeFolderByUuidAndNotSemantics) {
   // The node should have been merged with its UUID match, even if the other
   // candidate matches by semantics.
   EXPECT_THAT(account_model->bookmark_bar_node()->children(),
-              ElementsAre(MatchesFolderWithUuid(kTitle2, kUuid2, IsEmpty()),
-                          MatchesFolderWithUuid(kTitle1, kUuid1, IsEmpty())));
+              ElementsAre(IsFolderWithUuid(kTitle2, kUuid2, IsEmpty()),
+                          IsFolderWithUuid(kTitle1, kUuid1, IsEmpty())));
 }
 
 TEST_F(
     LocalBookmarkModelMergerTest,
     ShouldIgnoreFolderSemanticsMatchAndLaterMatchByUuidWithSemanticsNodeFirst) {
-  const std::string kLocalOnlyTitle = "LocalOnlyTitle";
-  const std::string kMatchingTitle = "MatchingTitle";
+  const std::u16string kLocalOnlyTitle = u"LocalOnlyTitle";
+  const std::u16string kMatchingTitle = u"MatchingTitle";
   const base::Uuid kUuid1 = base::Uuid::GenerateRandomV4();
   const base::Uuid kUuid2 = base::Uuid::GenerateRandomV4();
   const GURL kUrl("http://foo.com/");
-  const std::string kUrlTitle = "Bookmark Title";
+  const std::u16string kUrlTitle = u"Bookmark Title";
 
   // -------- The local model --------
   // bookmark_bar
@@ -665,20 +897,19 @@ TEST_F(
   // candidate matches by semantics.
   EXPECT_THAT(
       account_model->bookmark_bar_node()->children(),
-      ElementsAre(
-          MatchesFolderWithUuid(kLocalOnlyTitle, kUuid2,
-                                ElementsAre(MatchesUrl(kUrlTitle, kUrl))),
-          MatchesFolderWithUuid(kMatchingTitle, kUuid1, IsEmpty())));
+      ElementsAre(IsFolderWithUuid(kLocalOnlyTitle, kUuid2,
+                                   ElementsAre(IsUrlBookmark(kUrlTitle, kUrl))),
+                  IsFolderWithUuid(kMatchingTitle, kUuid1, IsEmpty())));
 }
 
 TEST_F(LocalBookmarkModelMergerTest,
        ShouldIgnoreFolderSemanticsMatchAndLaterMatchByUuidWithUuidNodeFirst) {
-  const std::string kLocalOnlyTitle = "LocalOnlyTitle";
-  const std::string kMatchingTitle = "MatchingTitle";
+  const std::u16string kLocalOnlyTitle = u"LocalOnlyTitle";
+  const std::u16string kMatchingTitle = u"MatchingTitle";
   const base::Uuid kUuid1 = base::Uuid::GenerateRandomV4();
   const base::Uuid kUuid2 = base::Uuid::GenerateRandomV4();
   const GURL kUrl("http://foo.com/");
-  const std::string kUrlTitle = "Bookmark Title";
+  const std::u16string kUrlTitle = u"Bookmark Title";
 
   // -------- The local model --------
   // bookmark_bar
@@ -710,15 +941,14 @@ TEST_F(LocalBookmarkModelMergerTest,
   // candidate matches by semantics.
   EXPECT_THAT(
       account_model->bookmark_bar_node()->children(),
-      ElementsAre(
-          MatchesFolderWithUuid(kLocalOnlyTitle, kUuid2,
-                                ElementsAre(MatchesUrl(kUrlTitle, kUrl))),
-          MatchesFolderWithUuid(kMatchingTitle, kUuid1, IsEmpty())));
+      ElementsAre(IsFolderWithUuid(kLocalOnlyTitle, kUuid2,
+                                   ElementsAre(IsUrlBookmark(kUrlTitle, kUrl))),
+                  IsFolderWithUuid(kMatchingTitle, kUuid1, IsEmpty())));
 }
 
 TEST_F(LocalBookmarkModelMergerTest,
        ShouldReplaceBookmarkUuidWithConflictingURLs) {
-  const std::string kTitle = "Title";
+  const std::u16string kTitle = u"Title";
   const GURL kUrl1("http://www.foo.com/");
   const GURL kUrl2("http://www.bar.com/");
   const base::Uuid kUuid = base::Uuid::GenerateRandomV4();
@@ -745,14 +975,14 @@ TEST_F(LocalBookmarkModelMergerTest,
   //
   // The conflicting node UUID should have been replaced.
   EXPECT_THAT(account_model->bookmark_bar_node()->children(),
-              ElementsAre(MatchesUrlWithUuid(kTitle, kUrl2, kUuid),
-                          MatchesUrlWithUuid(kTitle, kUrl1, Ne(kUuid))));
+              ElementsAre(IsUrlBookmarkWithUuid(kTitle, kUrl2, kUuid),
+                          IsUrlBookmarkWithUuid(kTitle, kUrl1, Ne(kUuid))));
 }
 
 TEST_F(LocalBookmarkModelMergerTest,
        ShouldReplaceBookmarkUuidWithConflictingTypes) {
   const GURL kUrl1("http://www.foo.com/");
-  const std::string kTitle = "Title";
+  const std::u16string kTitle = u"Title";
   const base::Uuid kUuid = base::Uuid::GenerateRandomV4();
 
   // -------- The local model --------
@@ -777,15 +1007,15 @@ TEST_F(LocalBookmarkModelMergerTest,
   //
   // The conflicting node UUID should have been replaced.
   EXPECT_THAT(account_model->bookmark_bar_node()->children(),
-              ElementsAre(MatchesFolderWithUuid(kTitle, kUuid, IsEmpty()),
-                          MatchesUrlWithUuid(kTitle, kUrl1, Ne(kUuid))));
+              ElementsAre(IsFolderWithUuid(kTitle, kUuid, IsEmpty()),
+                          IsUrlBookmarkWithUuid(kTitle, kUrl1, Ne(kUuid))));
 }
 
 TEST_F(LocalBookmarkModelMergerTest,
        ShouldReplaceBookmarkUuidWithConflictingTypesAndLocalChildren) {
-  const std::string kFolderTitle = "Folder Title";
-  const std::string kUrl1Title = "url1";
-  const std::string kUrl2Title = "url2";
+  const std::u16string kFolderTitle = u"Folder Title";
+  const std::u16string kUrl1Title = u"url1";
+  const std::u16string kUrl2Title = u"url2";
   const GURL kUrl1("http://www.url1.com/");
   const GURL kUrl2("http://www.url2.com/");
   const base::Uuid kUuid = base::Uuid::GenerateRandomV4();
@@ -816,10 +1046,10 @@ TEST_F(LocalBookmarkModelMergerTest,
   //
   // The conflicting node UUID should have been replaced.
   EXPECT_THAT(account_model->bookmark_bar_node()->children(),
-              ElementsAre(MatchesUrlWithUuid(kUrl2Title, kUrl2, kUuid),
-                          MatchesFolderWithUuid(
+              ElementsAre(IsUrlBookmarkWithUuid(kUrl2Title, kUrl2, kUuid),
+                          IsFolderWithUuid(
                               kFolderTitle, Ne(kUuid),
-                              ElementsAre(MatchesUrl(kUrl1Title, kUrl1)))));
+                              ElementsAre(IsUrlBookmark(kUrl1Title, kUrl1)))));
 }
 
 }  // namespace

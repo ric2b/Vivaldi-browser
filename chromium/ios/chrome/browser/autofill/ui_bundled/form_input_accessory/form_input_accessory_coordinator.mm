@@ -7,6 +7,7 @@
 #import <vector>
 
 #import "base/apple/foundation_util.h"
+#import "base/debug/dump_without_crashing.h"
 #import "base/feature_list.h"
 #import "base/functional/bind.h"
 #import "base/ios/ios_util.h"
@@ -18,8 +19,8 @@
 #import "base/strings/utf_string_conversions.h"
 #import "base/task/sequenced_task_runner.h"
 #import "base/time/time.h"
+#import "components/autofill/core/browser/data_manager/personal_data_manager.h"
 #import "components/autofill/core/browser/payments/payments_service_url.h"
-#import "components/autofill/core/browser/personal_data_manager.h"
 #import "components/autofill/core/common/autofill_features.h"
 #import "components/autofill/ios/browser/form_suggestion.h"
 #import "components/autofill/ios/form_util/form_activity_params.h"
@@ -33,7 +34,9 @@
 #import "components/plus_addresses/features.h"
 #import "components/plus_addresses/grit/plus_addresses_strings.h"
 #import "components/strings/grit/components_strings.h"
+#import "ios/chrome/browser/autofill/model/autofill_tab_helper.h"
 #import "ios/chrome/browser/autofill/model/bottom_sheet/autofill_bottom_sheet_tab_helper.h"
+#import "ios/chrome/browser/autofill/model/features.h"
 #import "ios/chrome/browser/autofill/model/personal_data_manager_factory.h"
 #import "ios/chrome/browser/autofill/ui_bundled/autofill_credit_card_util.h"
 #import "ios/chrome/browser/autofill/ui_bundled/branding/branding_coordinator.h"
@@ -60,6 +63,7 @@
 #import "ios/chrome/browser/passwords/model/password_tab_helper.h"
 #import "ios/chrome/browser/shared/coordinator/alert/alert_coordinator.h"
 #import "ios/chrome/browser/shared/coordinator/layout_guide/layout_guide_util.h"
+#import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
@@ -105,6 +109,16 @@ const base::Feature* FetchIPHFeatureFromEnum(
     case SuggestionFeatureForIPH::kUnknown:
       NOTREACHED();
   }
+}
+
+// Returns yes if input views can be reloaded.
+bool CanReloadInputViews() {
+  // Do not allow reloading input views in the background when skipping that in
+  // the background is enabled.
+  return !base::FeatureList::IsEnabled(
+             kFormInputAccessorySkipInputViewReloadInBackground) ||
+         UIApplication.sharedApplication.applicationState ==
+             UIApplicationStateActive;
 }
 
 }  // namespace
@@ -228,34 +242,53 @@ const base::Feature* FetchIPHFeatureFromEnum(
       [layoutGuideCenter makeLayoutGuideNamed:kAutofillFirstSuggestionGuide];
   [self.baseViewController.view addLayoutGuide:self.layoutGuide];
 
+  auto autofillProviderGetter = base::BindRepeating(
+      [](web::WebState* webState) -> id<FormSuggestionProvider> {
+        if (auto* tabHelper = AutofillTabHelper::FromWebState(webState);
+            tabHelper) {
+          return AutofillTabHelper::FromWebState(webState)
+              ->GetSuggestionProvider();
+        }
+        return nil;
+      });
+
   _injectionHandler = [[ManualFillInjectionHandler alloc]
         initWithWebStateList:self.browser->GetWebStateList()
         securityAlertHandler:securityAlertHandler
       reauthenticationModule:self.reauthenticationModule
-        formSuggestionClient:_formInputAccessoryMediator];
+        formSuggestionClient:_formInputAccessoryMediator
+      autofillProviderGetter:autofillProviderGetter];
 }
 
 - (void)stop {
   [self clearPresentedState];
-  [self.formInputAccessoryTapRecognizer.view
-      removeGestureRecognizer:self.formInputAccessoryTapRecognizer];
+
+  // Avoid cleaning up the views after the scene has been disconnected. This
+  // seems to cause watchdog kills. See crbug.com/40918951.
+  if (SceneState* sceneState = self.browser->GetSceneState();
+      sceneState.activationLevel > SceneActivationLevelDisconnected) {
+    [self.layoutGuide.owningView removeLayoutGuide:self.layoutGuide];
+    [self.formInputAccessoryTapRecognizer.view
+        removeGestureRecognizer:self.formInputAccessoryTapRecognizer];
+    [self maybeReloadInputViews];
+  }
+
   _formInputAccessoryViewController = nil;
   _formInputViewController = nil;
-  [GetFirstResponder() reloadInputViews];
 
   [_formInputAccessoryMediator disconnect];
   _formInputAccessoryMediator = nil;
 
   [_brandingCoordinator stop];
   _brandingCoordinator = nil;
-  [self.layoutGuide.owningView removeLayoutGuide:self.layoutGuide];
+
   self.layoutGuide = nil;
 }
 
 - (void)reset {
   [self stopChildren];
   [self resetInputViews];
-  [GetFirstResponder() reloadInputViews];
+  [self maybeReloadInputViews];
 }
 
 #pragma mark - Presenting Children
@@ -301,7 +334,7 @@ const base::Feature* FetchIPHFeatureFromEnum(
     [passwordCoordinator presentFromButton:button];
   } else {
     self.formInputViewController = passwordCoordinator.viewController;
-    [GetFirstResponder() reloadInputViews];
+    [self maybeReloadInputViews];
   }
 
   [self.childCoordinators addObject:passwordCoordinator];
@@ -320,7 +353,7 @@ const base::Feature* FetchIPHFeatureFromEnum(
     [cardCoordinator presentFromButton:button];
   } else {
     self.formInputViewController = cardCoordinator.viewController;
-    [GetFirstResponder() reloadInputViews];
+    [self maybeReloadInputViews];
   }
 
   [self.childCoordinators addObject:cardCoordinator];
@@ -339,7 +372,7 @@ const base::Feature* FetchIPHFeatureFromEnum(
     [addressCoordinator presentFromButton:button];
   } else {
     self.formInputViewController = addressCoordinator.viewController;
-    [GetFirstResponder() reloadInputViews];
+    [self maybeReloadInputViews];
   }
 
   [self.childCoordinators addObject:addressCoordinator];
@@ -368,7 +401,7 @@ const base::Feature* FetchIPHFeatureFromEnum(
   [expandedManualFillCoordinator start];
 
   self.formInputViewController = expandedManualFillCoordinator.viewController;
-  [GetFirstResponder() reloadInputViews];
+  [self maybeReloadInputViews];
 
   [self.childCoordinators addObject:expandedManualFillCoordinator];
 }
@@ -652,7 +685,7 @@ const base::Feature* FetchIPHFeatureFromEnum(
   tabHelper->ShowPlusAddressesBottomSheet(std::move(callback));
 }
 
-- (void)openAllPlusAddressesPicker {
+- (void)openAllPlusAddressesPicker:(BOOL)isAddressManualFallback {
   [self reset];
 
   [self stopManualFillAllPlusAddressCoordinator];
@@ -662,6 +695,7 @@ const base::Feature* FetchIPHFeatureFromEnum(
                          browser:self.browser
                 injectionHandler:self.injectionHandler];
   _allPlusAddressCoordinator.manualFillAllPlusAddressCoordinatorDelegate = self;
+  _allPlusAddressCoordinator.isAddressManualFallback = isAddressManualFallback;
   [_allPlusAddressCoordinator start];
 }
 
@@ -968,6 +1002,12 @@ const base::Feature* FetchIPHFeatureFromEnum(
   id<SettingsCommands> settingsHandler = HandlerForProtocol(
       self.browser->GetCommandDispatcher(), SettingsCommands);
   [settingsHandler showPasswordDetailsForCredential:credential inEditMode:YES];
+}
+
+- (void)maybeReloadInputViews {
+  if (CanReloadInputViews()) {
+    [GetFirstResponder() reloadInputViews];
+  }
 }
 
 @end

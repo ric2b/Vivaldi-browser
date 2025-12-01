@@ -37,6 +37,7 @@
 #include <utility>
 
 #include "base/functional/function_ref.h"
+#include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/process/process_handle.h"
 #include "base/task/single_thread_task_runner.h"
@@ -64,7 +65,6 @@
 #include "third_party/blink/renderer/core/dom/dom_string_list.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/flat_tree_traversal.h"
-#include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/pseudo_element.h"
 #include "third_party/blink/renderer/core/dom/range.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
@@ -172,6 +172,7 @@
 #include "third_party/blink/renderer/core/testing/internal_settings.h"
 #include "third_party/blink/renderer/core/testing/internals_ukm_recorder.h"
 #include "third_party/blink/renderer/core/testing/mock_hyphenation.h"
+#include "third_party/blink/renderer/core/testing/nadc_attribute_test.h"
 #include "third_party/blink/renderer/core/testing/origin_trials_test.h"
 #include "third_party/blink/renderer/core/testing/record_test.h"
 #include "third_party/blink/renderer/core/testing/scoped_mock_overlay_scrollbars.h"
@@ -319,8 +320,7 @@ class TestReadableStreamSource : public UnderlyingSourceBase {
   TestReadableStreamSource(ScriptState* script_state, Type type)
       : UnderlyingSourceBase(script_state), type_(type) {}
 
-  ScriptPromise<IDLUndefined> Start(ScriptState* script_state,
-                                    ExceptionState&) override {
+  ScriptPromise<IDLUndefined> Start(ScriptState* script_state) override {
     if (generator_) {
       return ToResolvedUndefinedPromise(script_state);
     }
@@ -1763,7 +1763,7 @@ String Internals::viewportAsText(Document* document,
   builder.Append(String::Number(constraints.maximum_scale));
 
   builder.Append("] and userScalable ");
-  builder.Append(description.user_zoom ? "true" : "false");
+  builder.Append(String::Boolean(description.user_zoom));
 
   return builder.ToString();
 }
@@ -2390,11 +2390,11 @@ AtomicString Internals::htmlNamespace() {
 }
 
 Vector<AtomicString> Internals::htmlTags() {
-  Vector<AtomicString> tags(html_names::kTagsCount);
-  std::unique_ptr<const HTMLQualifiedName*[]> qualified_names =
-      html_names::GetTags();
-  for (wtf_size_t i = 0; i < html_names::kTagsCount; ++i)
+  base::HeapArray<const QualifiedName*> qualified_names = html_names::GetTags();
+  Vector<AtomicString> tags(qualified_names.size());
+  for (size_t i = 0; i < qualified_names.size(); ++i) {
     tags[i] = qualified_names[i]->LocalName();
+  }
   return tags;
 }
 
@@ -2403,11 +2403,11 @@ AtomicString Internals::svgNamespace() {
 }
 
 Vector<AtomicString> Internals::svgTags() {
-  Vector<AtomicString> tags(svg_names::kTagsCount);
-  std::unique_ptr<const SVGQualifiedName*[]> qualified_names =
-      svg_names::GetTags();
-  for (wtf_size_t i = 0; i < svg_names::kTagsCount; ++i)
+  base::HeapArray<const QualifiedName*> qualified_names = svg_names::GetTags();
+  Vector<AtomicString> tags(qualified_names.size());
+  for (size_t i = 0; i < qualified_names.size(); ++i) {
     tags[i] = qualified_names[i]->LocalName();
+  }
   return tags;
 }
 
@@ -2530,21 +2530,19 @@ unsigned Internals::numberOfScrollableAreas(Document* document) {
 
   unsigned count = 0;
   LocalFrame* frame = document->GetFrame();
-  if (frame->View()->UserScrollableAreas()) {
-    for (const auto& scrollable_area :
-         frame->View()->UserScrollableAreas()->Values()) {
-      if (scrollable_area->ScrollsOverflow())
-        count++;
+  for (const auto& scrollable_area :
+       frame->View()->ScrollableAreas().Values()) {
+    if (scrollable_area->ScrollsOverflow()) {
+      count++;
     }
   }
 
   for (Frame* child = frame->Tree().FirstChild(); child;
        child = child->Tree().NextSibling()) {
     auto* child_local_frame = DynamicTo<LocalFrame>(child);
-    if (child_local_frame && child_local_frame->View() &&
-        child_local_frame->View()->UserScrollableAreas()) {
+    if (child_local_frame && child_local_frame->View()) {
       for (const auto& scrollable_area :
-           child_local_frame->View()->UserScrollableAreas()->Values()) {
+           child_local_frame->View()->ScrollableAreas().Values()) {
         if (scrollable_area->ScrollsOverflow())
           count++;
       }
@@ -2854,6 +2852,10 @@ CallbackFunctionTest* Internals::callbackFunctionTest() const {
   return MakeGarbageCollected<CallbackFunctionTest>();
 }
 
+NADCAttributeTest* Internals::nadcAttributeTest() const {
+  return MakeGarbageCollected<NADCAttributeTest>();
+}
+
 Vector<String> Internals::getReferencedFilePaths() const {
   if (!GetFrame())
     return Vector<String>();
@@ -3157,8 +3159,7 @@ DOMArrayBuffer* Internals::serializeObject(
 ScriptValue Internals::deserializeBuffer(v8::Isolate* isolate,
                                          DOMArrayBuffer* buffer) const {
   scoped_refptr<SerializedScriptValue> serialized_value =
-      SerializedScriptValue::Create(base::make_span(
-          static_cast<const uint8_t*>(buffer->Data()), buffer->ByteLength()));
+      SerializedScriptValue::Create(buffer->ByteSpan());
   return ScriptValue(isolate, serialized_value->Deserialize(isolate));
 }
 
@@ -3702,7 +3703,7 @@ String Internals::getProgrammaticScrollAnimationState(Node* node) const {
 }
 
 void Internals::crash() {
-  CHECK(false) << "Intentional crash";
+  NOTREACHED() << "Intentional crash";
 }
 
 String Internals::evaluateInInspectorOverlay(const String& script) {

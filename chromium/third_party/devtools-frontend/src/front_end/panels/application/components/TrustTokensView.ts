@@ -3,19 +3,23 @@
 // found in the LICENSE file.
 
 import '../../../ui/components/icon_button/icon_button.js';
+import '../../../ui/legacy/components/data_grid/data_grid.js';
 
 import * as i18n from '../../../core/i18n/i18n.js';
 import * as SDK from '../../../core/sdk/sdk.js';
 import type * as Protocol from '../../../generated/protocol.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
-import * as DataGrid from '../../../ui/components/data_grid/data_grid.js';
 import * as LegacyWrapper from '../../../ui/components/legacy_wrapper/legacy_wrapper.js';
 import * as RenderCoordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
-import * as LitHtml from '../../../ui/lit-html/lit-html.js';
+import * as Lit from '../../../ui/lit/lit.js';
 
-import trustTokensViewStyles from './trustTokensView.css.js';
+import trustTokensViewStylesRaw from './trustTokensView.css.js';
 
-const {html} = LitHtml;
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const trustTokensViewStyles = new CSSStyleSheet();
+trustTokensViewStyles.replaceSync(trustTokensViewStylesRaw.cssContent);
+
+const {html} = Lit;
 
 const UIStrings = {
   /**
@@ -54,8 +58,6 @@ export interface TrustTokensViewData {
   deleteClickHandler: (issuerOrigin: string) => void;
 }
 
-const coordinator = RenderCoordinator.RenderCoordinator.RenderCoordinator.instance();
-
 /** Fetch the Trust Token data regularly from the backend while the panel is open */
 const REFRESH_INTERVAL_MS = 1000;
 
@@ -79,10 +81,11 @@ export class TrustTokensView extends LegacyWrapper.LegacyWrapper.WrappableCompon
       return;
     }
     const {tokens} = await mainTarget.storageAgent().invoke_getTrustTokens();
+    tokens.sort((a, b) => a.issuerOrigin.localeCompare(b.issuerOrigin));
 
-    await coordinator.write('Render TrustTokensView', () => {
+    await RenderCoordinator.write('Render TrustTokensView', () => {
       // clang-format off
-      LitHtml.render(html`
+      Lit.render(html`
         <div>
           <span class="heading">${i18nString(UIStrings.trustTokens)}</span>
           <devtools-icon name="info" title=${i18nString(UIStrings.allStoredTrustTokensAvailableIn)}></devtools-icon>
@@ -96,74 +99,37 @@ export class TrustTokensView extends LegacyWrapper.LegacyWrapper.WrappableCompon
     });
   }
 
-  #renderGridOrNoDataMessage(tokens: Protocol.Storage.TrustTokens[]): LitHtml.TemplateResult {
+  #renderGridOrNoDataMessage(tokens: Protocol.Storage.TrustTokens[]): Lit.TemplateResult {
     if (tokens.length === 0) {
       return html`<div class="no-tt-message">${i18nString(UIStrings.noTrustTokensStored)}</div>`;
     }
 
-    const gridData: DataGrid.DataGridController.DataGridControllerData = {
-      columns: [
-        {
-          id: 'issuer',
-          title: i18nString(UIStrings.issuer),
-          widthWeighting: 10,
-          hideable: false,
-          visible: true,
-          sortable: true,
-        },
-        {
-          id: 'count',
-          title: i18nString(UIStrings.storedTokenCount),
-          widthWeighting: 5,
-          hideable: false,
-          visible: true,
-          sortable: true,
-        },
-        {
-          id: 'delete-button',
-          title: '',
-          widthWeighting: 1,
-          hideable: false,
-          visible: true,
-          sortable: false,
-        },
-      ],
-      rows: this.#buildRowsFromTokens(tokens),
-      initialSort: {
-        columnId: 'issuer',
-        direction: DataGrid.DataGridUtils.SortDirection.ASC,
-      },
-    };
-
-    return html`
-      <devtools-data-grid-controller .data=${gridData}></devtools-data-grid-controller>
-    `;
-  }
-
-  #buildRowsFromTokens(tokens: Protocol.Storage.TrustTokens[]): DataGrid.DataGridUtils.Row[] {
-    return tokens.filter(token => token.count > 0)
-        .map(token => ({
-               cells: [
-                 {
-                   columnId: 'delete-button',
-                   value: removeTrailingSlash(token.issuerOrigin),
-                   renderer: this.#deleteButtonRendererForDataGridCell.bind(this),
-                 },
-                 {columnId: 'issuer', value: removeTrailingSlash(token.issuerOrigin)},
-                 {columnId: 'count', value: token.count},
-               ],
-             }));
-  }
-
-  #deleteButtonRendererForDataGridCell(issuer: DataGrid.DataGridUtils.CellValue): LitHtml.TemplateResult {
     // clang-format off
     return html`
-      <devtools-button .iconName=${'bin'}
-                       .jslogContext=${'delete-all'}
-                       .size=${Buttons.Button.Size.SMALL}
-                       .title=${i18nString(UIStrings.deleteTrustTokens, {PH1: issuer as string})}
-                       .variant=${Buttons.Button.Variant.ICON}
-                       @click=${this.#deleteClickHandler.bind(this, issuer as string)}></devtools-button>
+      <devtools-data-grid striped inline>
+        <table>
+          <tr>
+            <th id="issuer" weight="10" sortable>${i18nString(UIStrings.issuer)}</th>
+            <th id="count" weight="5" sortable>${i18nString(UIStrings.storedTokenCount)}</th>
+            <th id="delete-button" weight="1" sortable></th>
+          </tr>
+          ${tokens.filter(token => token.count > 0)
+                .map(token => html`
+              <tr>
+                <td>${removeTrailingSlash(token.issuerOrigin)}</td>
+                <td>${token.count}</td>
+                <td>
+                  <devtools-button .iconName=${'bin'}
+                                   .jslogContext=${'delete-all'}
+                                   .size=${Buttons.Button.Size.SMALL}
+                                   .title=${i18nString(UIStrings.deleteTrustTokens, {PH1: removeTrailingSlash(token.issuerOrigin)})}
+                                   .variant=${Buttons.Button.Variant.ICON}
+                                   @click=${this.#deleteClickHandler.bind(this, removeTrailingSlash(token.issuerOrigin))}></devtools-button>
+                </td>
+              </tr>
+            `)}
+        </table>
+      </devtools-data-grid>
     `;
     // clang-format on
   }

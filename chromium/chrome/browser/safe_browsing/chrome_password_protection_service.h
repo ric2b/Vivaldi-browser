@@ -246,7 +246,7 @@ class ChromePasswordProtectionService : public PasswordProtectionService,
           matching_reused_credentials) override;
 
 #if BUILDFLAG(IS_ANDROID)
-  LoginReputationClientRequest::ReferringAppInfo GetReferringAppInfo(
+  ReferringAppInfo GetReferringAppInfo(
       content::WebContents* web_contents) override;
 #endif
   // Returns the PasswordReuseManager associated with this instance.
@@ -260,10 +260,6 @@ class ChromePasswordProtectionService : public PasswordProtectionService,
   // account and is accessible only when the user is signed in and non syncing.
   password_manager::PasswordStoreInterface* GetAccountPasswordStore() const;
 
-  // Gets the type of sync account associated with current profile or
-  // |NOT_SIGNED_IN|.
-  LoginReputationClientRequest::PasswordReuseEvent::SyncAccountType
-  GetSyncAccountType() const override;
   safe_browsing::LoginReputationClientRequest::UrlDisplayExperiment
   GetUrlDisplayExperiment() const override;
 
@@ -419,8 +415,6 @@ class ChromePasswordProtectionService : public PasswordProtectionService,
       VerifyPasswordReuseLookupEventNotRecordedFeatureNotEnabled);
   FRIEND_TEST_ALL_PREFIXES(ChromePasswordProtectionServiceTest,
                            VerifyPasswordReuseLookupUserEventRecorded);
-  FRIEND_TEST_ALL_PREFIXES(ChromePasswordProtectionServiceTest,
-                           VerifyGetSyncAccountType);
   FRIEND_TEST_ALL_PREFIXES(ChromePasswordProtectionServiceTest,
                            VerifyUpdateSecurityState);
   FRIEND_TEST_ALL_PREFIXES(ChromePasswordProtectionServiceTest,

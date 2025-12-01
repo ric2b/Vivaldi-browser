@@ -35,7 +35,7 @@ void PushBackUrl(const std::string& url, std::vector<std::string>* parameters) {
   assert(parameters != nullptr);
   // TODO: HTML-escape the "url".
   parameters->push_back("<a href=\"" + url + "\">");
-  parameters->push_back("</a>");
+  parameters->emplace_back("</a>");
 }
 
 }  // namespace
@@ -55,8 +55,6 @@ std::string GetEnglishString(int message_id) {
 }  // namespace
 
 Localization::Localization() : get_string_(&GetEnglishString) {}
-
-Localization::~Localization() = default;
 
 std::string Localization::GetString(int message_id) const {
   return get_string_(message_id);

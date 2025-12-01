@@ -37,6 +37,7 @@
 #include "components/sync/service/glue/sync_transport_data_prefs.h"
 #include "components/sync/test/fake_sync_manager.h"
 #include "components/sync/test/mock_sync_invalidations_service.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "services/network/test/test_network_connection_tracker.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -53,7 +54,7 @@ namespace {
 
 static const base::FilePath::CharType kTestSyncDir[] =
     FILE_PATH_LITERAL("sync-test");
-constexpr char kTestGaiaId[] = "test_gaia_id";
+constexpr GaiaId::Literal kTestGaiaId("test_gaia_id");
 constexpr char kTestCacheGuid[] = "test_cache_guid";
 constexpr char kTestBirthday[] = "test_birthday";
 
@@ -194,7 +195,7 @@ class SyncEngineImplTest : public testing::Test {
 
   // Synchronously initializes the backend.
   void InitializeBackend(bool expect_success = true,
-                         const std::string& gaia_id = kTestGaiaId) {
+                         const GaiaId& gaia_id = kTestGaiaId) {
     SyncEngine::InitParams params;
     params.host = &mock_host_;
     params.http_factory_getter = base::BindOnce(&CreateHttpBridgeFactory);
@@ -208,7 +209,7 @@ class SyncEngineImplTest : public testing::Test {
             testing::InvokeWithoutArgs(this, &SyncEngineImplTest::QuitRunLoop));
     backend_->Initialize(std::move(params));
     PumpSyncThread();
-    // |fake_manager_| is set on the sync thread, but we can rely on the message
+    // `fake_manager_` is set on the sync thread, but we can rely on the message
     // loop barriers to guarantee that we see the updated value.
     DCHECK(fake_manager_);
 

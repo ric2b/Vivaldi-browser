@@ -14,7 +14,6 @@
 #include "base/notreached.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "components/lens/buildflags.h"
 #include "components/lens/lens_features.h"
@@ -139,13 +138,13 @@ const AcceleratorMapping kAcceleratorMap[] = {
     {ui::VKEY_F6, ui::EF_NONE, IDC_FOCUS_NEXT_PANE},
     {ui::VKEY_F6, ui::EF_SHIFT_DOWN, IDC_FOCUS_PREVIOUS_PANE},
     {ui::VKEY_F6, ui::EF_CONTROL_DOWN, IDC_FOCUS_WEB_CONTENTS_PANE},
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     // On Chrome OS, Control + Search + the seventh key from escape (most
     // commonly Brightness Up) toggles caret browsing.
     // Note that VKEY_F7 is not a typo; Search + the seventh function key maps
     // to F7 for accelerators.
     {ui::VKEY_F7, ui::EF_CONTROL_DOWN, IDC_CARET_BROWSING_TOGGLE},
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
     {ui::VKEY_F10, ui::EF_NONE, IDC_FOCUS_MENU_BAR},
     {ui::VKEY_F11, ui::EF_NONE, IDC_FULLSCREEN},
     {ui::VKEY_M, ui::EF_SHIFT_DOWN | ui::EF_PLATFORM_ACCELERATOR,
@@ -192,10 +191,10 @@ const AcceleratorMapping kAcceleratorMap[] = {
     {ui::VKEY_BROWSER_FAVORITES, ui::EF_NONE, IDC_SHOW_BOOKMARK_MANAGER},
     {ui::VKEY_BROWSER_STOP, ui::EF_NONE, IDC_STOP},
     // On Chrome OS, Search + Esc is used to call out task manager.
-    {ui::VKEY_ESCAPE, ui::EF_COMMAND_DOWN, IDC_TASK_MANAGER},
+    {ui::VKEY_ESCAPE, ui::EF_COMMAND_DOWN, IDC_TASK_MANAGER_SHORTCUT},
     {ui::VKEY_Z, ui::EF_COMMAND_DOWN, IDC_TOGGLE_MULTITASK_MENU},
 #else   // BUILDFLAG(IS_CHROMEOS)
-    {ui::VKEY_ESCAPE, ui::EF_SHIFT_DOWN, IDC_TASK_MANAGER},
+    {ui::VKEY_ESCAPE, ui::EF_SHIFT_DOWN, IDC_TASK_MANAGER_SHORTCUT},
     {ui::VKEY_LMENU, ui::EF_NONE, IDC_FOCUS_MENU_BAR},
     {ui::VKEY_MENU, ui::EF_NONE, IDC_FOCUS_MENU_BAR},
     {ui::VKEY_RMENU, ui::EF_NONE, IDC_FOCUS_MENU_BAR},
@@ -260,16 +259,6 @@ const AcceleratorMapping kDevToolsAcceleratorMap[] = {
 #endif  // !BUILDFLAG(IS_MAC)
 };
 
-#if BUILDFLAG(ENABLE_LENS_DESKTOP_GOOGLE_BRANDED_FEATURES)
-// Accelerators to enable if lens::features::kEnableRegionSearchKeyboardShortcut
-// is true.
-constexpr AcceleratorMapping kRegionSearchAcceleratorMap[] = {
-    // TODO(nguyenbryan): This is a temporary hotkey; update when finalized.
-    {ui::VKEY_E, ui::EF_SHIFT_DOWN | ui::EF_PLATFORM_ACCELERATOR,
-     IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH},
-};
-#endif  // BUILDFLAG(ENABLE_LENS_DESKTOP_GOOGLE_BRANDED_FEATURES)
-
 constexpr int kDebugModifier =
     ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN;
 
@@ -309,19 +298,11 @@ std::vector<AcceleratorMapping> GetAcceleratorList() {
     // contains Ctrl+Alt keys but we don't enable those for the public.
 #if DCHECK_IS_ON()
     constexpr int kCtrlAlt = ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN;
-    for (auto& mapping : *accelerators)
+    for (auto& mapping : *accelerators) {
       DCHECK((mapping.modifiers & kCtrlAlt) != kCtrlAlt)
           << "Accelerators with Ctrl+Alt are reserved by Windows.";
-#endif
-
-#if BUILDFLAG(ENABLE_LENS_DESKTOP_GOOGLE_BRANDED_FEATURES)
-    if (base::FeatureList::IsEnabled(
-            lens::features::kEnableRegionSearchKeyboardShortcut)) {
-      accelerators->insert(accelerators->begin(),
-                           std::begin(kRegionSearchAcceleratorMap),
-                           std::end(kRegionSearchAcceleratorMap));
     }
-#endif  // BUILDFLAG(ENABLE_LENS_DESKTOP_GOOGLE_BRANDED_FEATURES)
+#endif
 
     if (base::FeatureList::IsEnabled(features::kUIDebugTools)) {
       accelerators->insert(accelerators->begin(),

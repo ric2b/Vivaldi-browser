@@ -5,6 +5,7 @@
 #include "components/autofill/core/browser/data_model/address.h"
 
 #include <stddef.h>
+
 #include <algorithm>
 #include <memory>
 
@@ -16,13 +17,13 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "components/autofill/core/browser/autofill_data_util.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/autofill_profile_comparator.h"
 #include "components/autofill/core/browser/data_model/autofill_structured_address_component.h"
 #include "components/autofill/core/browser/data_model/autofill_structured_address_utils.h"
+#include "components/autofill/core/browser/data_quality/autofill_data_util.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/geo/autofill_country.h"
 #include "components/autofill/core/browser/geo/country_names.h"
@@ -149,13 +150,10 @@ void Address::SetRawInfoWithVerificationStatus(FieldType type,
   Root()->SetValueForType(type, value, status);
 }
 
-void Address::GetMatchingTypesWithProfileSources(
-    const std::u16string& text,
-    const std::string& app_locale,
-    FieldTypeSet* matching_types,
-    PossibleProfileValueSources* profile_value_sources) const {
-  FormGroup::GetMatchingTypesWithProfileSources(
-      text, app_locale, matching_types, profile_value_sources);
+void Address::GetMatchingTypes(const std::u16string& text,
+                               const std::string& app_locale,
+                               FieldTypeSet* matching_types) const {
+  FormGroup::GetMatchingTypes(text, app_locale, matching_types);
 
   std::string country_code = GetRoot().GetCountryCode().value();
 
@@ -193,8 +191,13 @@ void Address::GetSupportedTypes(FieldTypeSet* supported_types) const {
   GetRoot().GetSupportedTypes(supported_types);
 }
 
-std::u16string Address::GetInfoImpl(const AutofillType& type,
-                                    const std::string& locale) const {
+std::u16string Address::GetInfo(FieldType type,
+                                const std::string& app_locale) const {
+  return GetInfo(AutofillType(type), app_locale);
+}
+
+std::u16string Address::GetInfo(const AutofillType& type,
+                                const std::string& locale) const {
   std::string country_code =
       base::UTF16ToUTF8(GetRoot().GetValueForType(ADDRESS_HOME_COUNTRY));
 
@@ -209,10 +212,10 @@ std::u16string Address::GetInfoImpl(const AutofillType& type,
   return GetRawInfo(storable_type);
 }
 
-bool Address::SetInfoWithVerificationStatusImpl(const AutofillType& type,
-                                                const std::u16string& value,
-                                                const std::string& locale,
-                                                VerificationStatus status) {
+bool Address::SetInfoWithVerificationStatus(const AutofillType& type,
+                                            const std::u16string& value,
+                                            const std::string& locale,
+                                            VerificationStatus status) {
   if (type.html_type() == HtmlFieldType::kCountryCode) {
     std::string country_code =
         base::IsStringASCII(value)
@@ -261,7 +264,7 @@ bool Address::SetInfoWithVerificationStatusImpl(const AutofillType& type,
   return true;
 }
 
-VerificationStatus Address::GetVerificationStatusImpl(FieldType type) const {
+VerificationStatus Address::GetVerificationStatus(FieldType type) const {
   return GetRoot().GetVerificationStatusForType(type);
 }
 

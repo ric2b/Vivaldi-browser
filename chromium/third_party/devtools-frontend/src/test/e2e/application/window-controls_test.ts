@@ -21,12 +21,12 @@ describe('The Window Controls Overlay', () => {
     await navigateToApplicationTab(target, TEST_HTML_FILE);
     const windowControlsCheckbox =
         await (await waitFor('[title="Emulate the Window Controls Overlay on"]')).toElement('input');
-    const controlsDropDown = await waitFor('.chrome-select');
+    const controlsDropDown = await waitFor('select');
 
     // Verify dropdown options
     const options = await controlsDropDown.$$('option');
     const values = await Promise.all(options.map(option => option.evaluate(el => el.value)));
-    assert.deepStrictEqual(values, ['Windows', 'Mac', 'Linux']);
+    assert.deepEqual(values, ['Windows', 'Mac', 'Linux']);
 
     // Verify selecting an option
     void selectOption(await controlsDropDown.toElement('select'), 'Linux');

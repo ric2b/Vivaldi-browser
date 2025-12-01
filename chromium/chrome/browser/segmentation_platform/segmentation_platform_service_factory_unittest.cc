@@ -121,7 +121,8 @@ class SegmentationPlatformServiceFactoryTest : public testing::Test {
          {features::kSegmentationPlatformAndroidHomeModuleRanker, {}},
          {features::kSegmentationPlatformURLVisitResumptionRanker, {}},
          {features::kSegmentationPlatformEphemeralCardRanker, {}},
-         {features::kSegmentationSurveyPage, {}}},
+         {features::kSegmentationSurveyPage, {}},
+         {features::kSegmentationPlatformFedCmUser, {}}},
         {});
 
     // Creating profile and initialising segmentation service.
@@ -486,15 +487,14 @@ TEST_F(SegmentationPlatformServiceFactoryTest, TabResupmtionRanker) {
 #endif  //! BUILDFLAG(IS_CHROMEOS)
 
 TEST_F(SegmentationPlatformServiceFactoryTest, MetricsClustering) {
-  InitServiceAndCacheResults(
-      segmentation_platform::MetricsClustering::kMetricsClusteringKey);
+  InitService();
 
   segmentation_platform::PredictionOptions prediction_options =
-      PredictionOptions::ForCached();
+      PredictionOptions::ForOnDemand();
 
   ExpectGetAnnotatedNumericResult(
       segmentation_platform::MetricsClustering::kMetricsClusteringKey,
-      prediction_options, nullptr, PredictionStatus::kSucceeded);
+      prediction_options, nullptr, PredictionStatus::kFailed);
 }
 
 #if BUILDFLAG(IS_ANDROID)
@@ -669,11 +669,21 @@ TEST_F(SegmentationPlatformServiceFactoryTest, EphemeralHomeMdouleBackend) {
   auto input_context = base::MakeRefCounted<InputContext>();
 
   // No cards are added, the model fetches no results and fails.
-  std::vector<std::string> result = {};
-  ExpectGetClassificationResult(
+  ExpectGetAnnotatedNumericResult(
       kEphemeralHomeModuleBackendKey, prediction_options, input_context,
-      /*expected_status=*/segmentation_platform::PredictionStatus::kSucceeded,
-      /*expected_labels=*/result);
+      /*expected_status=*/segmentation_platform::PredictionStatus::kSucceeded);
+}
+
+TEST_F(SegmentationPlatformServiceFactoryTest, TestFedCmUserModel) {
+  InitService();
+  PredictionOptions prediction_options;
+  prediction_options.on_demand_execution = true;
+
+  ExpectGetClassificationResult(
+      kFedCmUserKey, prediction_options, nullptr,
+      /*expected_status=*/PredictionStatus::kSucceeded,
+      /*expected_labels=*/
+      std::vector<std::string>(1, "FedCmUserLoud"));
 }
 
 }  // namespace

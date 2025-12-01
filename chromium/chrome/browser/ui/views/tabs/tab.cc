@@ -2,16 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "chrome/browser/ui/views/tabs/tab.h"
 
 #include <stddef.h>
 
 #include <algorithm>
+#include <array>
 #include <limits>
 #include <memory>
 #include <utility>
@@ -44,8 +40,8 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/tabs/alert_indicator_button.h"
 #include "chrome/browser/ui/views/tabs/browser_tab_strip_controller.h"
+#include "chrome/browser/ui/views/tabs/dragging/tab_drag_controller.h"
 #include "chrome/browser/ui/views/tabs/tab_close_button.h"
-#include "chrome/browser/ui/views/tabs/tab_drag_controller.h"
 #include "chrome/browser/ui/views/tabs/tab_hover_card_bubble_view.h"
 #include "chrome/browser/ui/views/tabs/tab_icon.h"
 #include "chrome/browser/ui/views/tabs/tab_slot_controller.h"
@@ -278,6 +274,16 @@ Tab::Tab(TabSlotController* controller)
   SetProperty(views::kElementIdentifierKey, kTabElementId);
 
   GetViewAccessibility().SetRole(ax::mojom::Role::kTab);
+  UpdateAccessibleName();
+
+  // Tab hover cards replace tooltips for tabs.
+  SetTooltipText(std::u16string());
+
+  root_name_changed_subscription_ =
+      GetViewAccessibility().AddStringAttributeChangedCallback(
+          ax::mojom::StringAttribute::kName,
+          base::BindRepeating(&Tab::OnAXNameChanged,
+                              weak_ptr_factory_.GetWeakPtr()));
 }
 
 Tab::~Tab() {
@@ -702,19 +708,35 @@ void Tab::OnGestureEvent(ui::GestureEvent* event) {
   event->SetHandled();
 }
 
-std::u16string Tab::GetTooltipText(const gfx::Point& p) const {
-  // Tab hover cards replace tooltips for tabs.
-  return std::u16string();
-}
-
-void Tab::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+// This function updates the accessible name for the tab whenever any of the
+// parameters that influence the accessible name change. It ultimately calls
+// BrowserView::GetAccessibleTabLabel to get the updated accessible name.
+//
+// Note: If any new parameters are added or existing ones are removed that
+// affect the accessible name, ensure that the corresponding logic in
+// BrowserView::GetAccessibleTabLabel is updated accordingly to maintain
+// consistency.
+void Tab::UpdateAccessibleName() {
   std::u16string name = controller_->GetAccessibleTabName(this);
   if (!name.empty()) {
-    node_data->SetNameChecked(name);
+    GetViewAccessibility().SetName(name);
   } else {
     // Under some conditions, |GetAccessibleTabName| returns an empty string.
-    node_data->SetNameExplicitlyEmpty();
+    GetViewAccessibility().SetName(
+        std::string(), ax::mojom::NameFrom::kAttributeExplicitlyEmpty);
   }
+}
+
+void Tab::OnAXNameChanged(ax::mojom::StringAttribute attribute,
+                          const std::optional<std::string>& name) {
+  if (GetWidget()) {
+    GetWidget()->UpdateAccessibleNameForRootView();
+  }
+}
+
+void Tab::SetGroup(std::optional<tab_groups::TabGroupId> group) {
+  TabSlotView::SetGroup(group);
+  UpdateAccessibleName();
 }
 
 gfx::Size Tab::CalculatePreferredSize(
@@ -819,6 +841,7 @@ ui::ColorId Tab::GetAlertIndicatorColor(TabAlertState state) const {
       break;
     case TabAlertState::TAB_CAPTURING:
     case TabAlertState::PIP_PLAYING:
+    case TabAlertState::GLIC_ACCESSING:
       group = 1;
       break;
     case TabAlertState::AUDIO_PLAYING:
@@ -833,19 +856,19 @@ ui::ColorId Tab::GetAlertIndicatorColor(TabAlertState state) const {
       break;
   }
 
-  const ui::ColorId color_ids[3][2][2] = {
-      {{kColorTabAlertMediaRecordingInactiveFrameInactive,
-        kColorTabAlertMediaRecordingInactiveFrameActive},
-       {kColorTabAlertMediaRecordingActiveFrameInactive,
-        kColorTabAlertMediaRecordingActiveFrameActive}},
-      {{kColorTabAlertPipPlayingInactiveFrameInactive,
-        kColorTabAlertPipPlayingInactiveFrameActive},
-       {kColorTabAlertPipPlayingActiveFrameInactive,
-        kColorTabAlertPipPlayingActiveFrameActive}},
-      {{kColorTabAlertAudioPlayingInactiveFrameInactive,
-        kColorTabAlertAudioPlayingInactiveFrameActive},
-       {kColorTabAlertAudioPlayingActiveFrameInactive,
-        kColorTabAlertAudioPlayingActiveFrameActive}}};
+  static constexpr std::array<std::array<std::array<ui::ColorId, 2>, 2>, 3>
+      color_ids{{{{{kColorTabAlertMediaRecordingInactiveFrameInactive,
+                    kColorTabAlertMediaRecordingInactiveFrameActive},
+                   {kColorTabAlertMediaRecordingActiveFrameInactive,
+                    kColorTabAlertMediaRecordingActiveFrameActive}}},
+                 {{{kColorTabAlertPipPlayingInactiveFrameInactive,
+                    kColorTabAlertPipPlayingInactiveFrameActive},
+                   {kColorTabAlertPipPlayingActiveFrameInactive,
+                    kColorTabAlertPipPlayingActiveFrameActive}}},
+                 {{{kColorTabAlertAudioPlayingInactiveFrameInactive,
+                    kColorTabAlertAudioPlayingInactiveFrameActive},
+                   {kColorTabAlertAudioPlayingActiveFrameInactive,
+                    kColorTabAlertAudioPlayingActiveFrameActive}}}}};
   return color_ids[group][tab_style_views()->GetApparentActiveState() ==
                           TabActive::kActive]
                   [GetWidget()->ShouldPaintAsActive()];
@@ -888,6 +911,25 @@ bool Tab::HasThumbnail() const {
   return data().thumbnail && data().thumbnail->has_data();
 }
 
+// This function checks for the parameters that influence the accessible name
+// change. Note: If any new parameters are added or existing ones are removed
+// that affect the accessible name, ensure that the corresponding logic in
+// BrowserView::GetAccessibleTabLabel is updated accordingly to maintain
+// consistency.
+bool Tab::ShouldUpdateAccessibleName(TabRendererData& old_data,
+                                     TabRendererData& new_data) {
+  return ((old_data.network_state != new_data.network_state) ||
+          old_data.crashed_status != new_data.crashed_status ||
+          old_data.alert_state != new_data.alert_state ||
+          old_data.should_show_discard_status !=
+              new_data.should_show_discard_status ||
+          old_data.discarded_memory_savings_in_bytes !=
+              new_data.discarded_memory_savings_in_bytes ||
+          old_data.tab_resource_usage != new_data.tab_resource_usage ||
+          old_data.pinned != new_data.pinned ||
+          old_data.title != new_data.title);
+}
+
 void Tab::SetData(TabRendererData data) {
   DCHECK(GetWidget());
 
@@ -901,6 +943,9 @@ void Tab::SetData(TabRendererData data) {
   icon_->SetData(data_);
   icon_->SetCanPaintToLayer(controller_->CanPaintThrobberToLayer());
   UpdateTabIconNeedsAttentionBlocked();
+  if (ShouldUpdateAccessibleName(old, data_)) {
+    UpdateAccessibleName();
+  }
 
   std::u16string title = data_.title;
   if (title.empty() && !data_.should_render_empty_title) {

@@ -203,40 +203,40 @@ public class AccountSelectionCoordinator
     }
 
     @Override
-    public void showAccounts(
+    public boolean showAccounts(
             String rpEtldPlusOne,
-            String idpEtldPlusOne,
             List<Account> accounts,
-            IdentityProviderData idpData,
+            List<IdentityProviderData> idpDataList,
             boolean isAutoReauthn,
             List<Account> newAccounts) {
-        mMediator.showAccounts(
-                rpEtldPlusOne, idpEtldPlusOne, accounts, idpData, isAutoReauthn, newAccounts);
+        return mMediator.showAccounts(
+                rpEtldPlusOne, accounts, idpDataList, isAutoReauthn, newAccounts);
     }
 
     @Override
-    public void showFailureDialog(
+    public boolean showFailureDialog(
             String rpForDisplay,
             String idpForDisplay,
             IdentityProviderMetadata idpMetadata,
             @RpContext.EnumType int rpContext) {
-        mMediator.showFailureDialog(rpForDisplay, idpForDisplay, idpMetadata, rpContext);
+        return mMediator.showFailureDialog(rpForDisplay, idpForDisplay, idpMetadata, rpContext);
     }
 
     @Override
-    public void showErrorDialog(
+    public boolean showErrorDialog(
             String rpForDisplay,
             String idpForDisplay,
             IdentityProviderMetadata idpMetadata,
             @RpContext.EnumType int rpContext,
             IdentityCredentialTokenError error) {
-        mMediator.showErrorDialog(rpForDisplay, idpForDisplay, idpMetadata, rpContext, error);
+        return mMediator.showErrorDialog(
+                rpForDisplay, idpForDisplay, idpMetadata, rpContext, error);
     }
 
     @Override
-    public void showLoadingDialog(
+    public boolean showLoadingDialog(
             String rpForDisplay, String idpForDisplay, @RpContext.EnumType int rpContext) {
-        mMediator.showLoadingDialog(rpForDisplay, idpForDisplay, rpContext);
+        return mMediator.showLoadingDialog(rpForDisplay, idpForDisplay, rpContext);
     }
 
     @Override

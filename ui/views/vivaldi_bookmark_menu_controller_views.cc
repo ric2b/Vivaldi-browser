@@ -24,9 +24,11 @@ views::MenuItemView* BookmarkMenuController::GetNextSiblingMenu(
   int start_index;
   const bookmarks::BookmarkNode* node = vivaldi::GetNextNode(
       menu_delegate_->GetBookmarkModel(), next, &start_index, rect);
-  if (!node || !node->is_folder())
+  if (!node || !node->is_folder() ||
+      menu_delegate_->GetBookmarkModel()->is_root_node(node))
     return nullptr;
-  menu_delegate_->SetActiveMenu(node, start_index);
+  menu_delegate_->SetActiveMenu(BookmarkParentFolder::FromFolderNode(node),
+                                start_index);
   *has_mnemonics = true;
   *anchor = views::MenuAnchorPosition::kTopLeft;
   return this->menu();

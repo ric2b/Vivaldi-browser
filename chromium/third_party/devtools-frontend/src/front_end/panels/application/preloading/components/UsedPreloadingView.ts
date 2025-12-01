@@ -14,17 +14,21 @@ import {assertNotNullOrUndefined} from '../../../../core/platform/platform.js';
 import * as SDK from '../../../../core/sdk/sdk.js';
 import * as Protocol from '../../../../generated/protocol.js';
 import * as LegacyWrapper from '../../../../ui/components/legacy_wrapper/legacy_wrapper.js';
-import * as Coordinator from '../../../../ui/components/render_coordinator/render_coordinator.js';
+import * as RenderCoordinator from '../../../../ui/components/render_coordinator/render_coordinator.js';
 import * as UI from '../../../../ui/legacy/legacy.js';
-import * as LitHtml from '../../../../ui/lit-html/lit-html.js';
+import * as Lit from '../../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../../ui/visual_logging/visual_logging.js';
 import * as PreloadingHelper from '../helper/helper.js';
 
 import type * as MismatchedPreloadingGrid from './MismatchedPreloadingGrid.js';
 import {prefetchFailureReason, prerenderFailureReason} from './PreloadingString.js';
-import usedPreloadingStyles from './usedPreloadingView.css.js';
+import usedPreloadingStylesRaw from './usedPreloadingView.css.js';
 
-const {html} = LitHtml;
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const usedPreloadingStyles = new CSSStyleSheet();
+usedPreloadingStyles.replaceSync(usedPreloadingStylesRaw.cssContent);
+
+const {html} = Lit;
 
 const UIStrings = {
   /**
@@ -122,8 +126,6 @@ const UIStrings = {
 const str_ = i18n.i18n.registerUIStrings('panels/application/preloading/components/UsedPreloadingView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
-const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
-
 export interface UsedPreloadingViewData {
   pageURL: Platform.DevToolsPath.UrlString;
   previousAttempts: SDK.PreloadingModel.PreloadingAttempt[];
@@ -160,12 +162,12 @@ export class UsedPreloadingView extends LegacyWrapper.LegacyWrapper.WrappableCom
   }
 
   async #render(): Promise<void> {
-    await coordinator.write('UsedPreloadingView render', () => {
-      LitHtml.render(this.#renderInternal(), this.#shadow, {host: this});
+    await RenderCoordinator.write('UsedPreloadingView render', () => {
+      Lit.render(this.#renderInternal(), this.#shadow, {host: this});
     });
   }
 
-  #renderInternal(): LitHtml.LitTemplate {
+  #renderInternal(): Lit.LitTemplate {
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
     return html`
@@ -186,7 +188,7 @@ export class UsedPreloadingView extends LegacyWrapper.LegacyWrapper.WrappableCom
     // clang-format on
   }
 
-  #speculativeLoadingStatusForThisPageSections(): LitHtml.LitTemplate {
+  #speculativeLoadingStatusForThisPageSections(): Lit.LitTemplate {
     const pageURL = Common.ParsedURL.ParsedURL.urlWithoutHash(this.#data.pageURL);
     const forThisPage = this.#data.previousAttempts.filter(
         attempt => Common.ParsedURL.ParsedURL.urlWithoutHash(attempt.key.url) === pageURL);
@@ -253,7 +255,7 @@ export class UsedPreloadingView extends LegacyWrapper.LegacyWrapper.WrappableCom
       maybeFailureReasonMessage = prerenderFailureReason(prerender as SDK.PreloadingModel.PrerenderAttempt);
     }
 
-    let maybeFailureReason: LitHtml.LitTemplate = LitHtml.nothing;
+    let maybeFailureReason: Lit.LitTemplate = Lit.nothing;
     if (maybeFailureReasonMessage !== undefined) {
       // Disabled until https://crbug.com/1079231 is fixed.
       // clang-format off
@@ -289,9 +291,9 @@ export class UsedPreloadingView extends LegacyWrapper.LegacyWrapper.WrappableCom
     // clang-format on
   }
 
-  #maybeMismatchedSections(kind: UsedKind): LitHtml.LitTemplate {
+  #maybeMismatchedSections(kind: UsedKind): Lit.LitTemplate {
     if (kind !== UsedKind.NO_PRELOADS || this.#data.previousAttempts.length === 0) {
-      return LitHtml.nothing;
+      return Lit.nothing;
     }
 
     const rows = this.#data.previousAttempts.map(attempt => {
@@ -324,12 +326,12 @@ export class UsedPreloadingView extends LegacyWrapper.LegacyWrapper.WrappableCom
     // clang-format on
   }
 
-  #maybeMismatchedHTTPHeadersSections(): LitHtml.LitTemplate {
+  #maybeMismatchedHTTPHeadersSections(): Lit.LitTemplate {
     const attempt = this.#data.previousAttempts.find(
         attempt =>
             attempt.action === Protocol.Preload.SpeculationAction.Prerender && attempt.mismatchedHeaders !== null);
     if (attempt === undefined) {
-      return LitHtml.nothing;
+      return Lit.nothing;
     }
 
     if (attempt.key.url !== this.#data.pageURL) {
@@ -351,7 +353,7 @@ export class UsedPreloadingView extends LegacyWrapper.LegacyWrapper.WrappableCom
     // clang-format on
   }
 
-  #speculationsInitiatedByThisPageSummarySections(): LitHtml.LitTemplate {
+  #speculationsInitiatedByThisPageSummarySections(): Lit.LitTemplate {
     const count = this.#data.currentAttempts.reduce((acc, attempt) => {
       acc.set(attempt.status, (acc.get(attempt.status) ?? 0) + 1);
       return acc;
@@ -412,7 +414,7 @@ export class UsedPreloadingView extends LegacyWrapper.LegacyWrapper.WrappableCom
     // clang-format on
   }
 
-  #badgeSuccess(count?: number): LitHtml.LitTemplate {
+  #badgeSuccess(count?: number): Lit.LitTemplate {
     let message;
     if (count === undefined) {
       message = i18nString(UIStrings.badgeSuccess);
@@ -422,7 +424,7 @@ export class UsedPreloadingView extends LegacyWrapper.LegacyWrapper.WrappableCom
     return this.#badge('status-badge status-badge-success', 'check-circle', message);
   }
 
-  #badgeFailure(count?: number): LitHtml.LitTemplate {
+  #badgeFailure(count?: number): Lit.LitTemplate {
     let message;
     if (count === undefined) {
       message = i18nString(UIStrings.badgeFailure);
@@ -432,11 +434,11 @@ export class UsedPreloadingView extends LegacyWrapper.LegacyWrapper.WrappableCom
     return this.#badge('status-badge status-badge-failure', 'cross-circle', message);
   }
 
-  #badgeNeutral(message: string): LitHtml.LitTemplate {
+  #badgeNeutral(message: string): Lit.LitTemplate {
     return this.#badge('status-badge status-badge-neutral', 'clear', message);
   }
 
-  #badge(klass: string, iconName: string, message: string): LitHtml.LitTemplate {
+  #badge(klass: string, iconName: string, message: string): Lit.LitTemplate {
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
     return html`

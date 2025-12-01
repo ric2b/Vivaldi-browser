@@ -51,7 +51,7 @@ more details, you can always go to one of the following pages:
 *   However, some extra steps are needed to [build a test
             image](/system/errors/NodeNotFound).
 *   Once built, a clone of this [image should be created to run in a
-            VM](http://www.chromium.org/chromium-os/developer-guide#TOC-Building-an-image-to-run-in-a-virtu).
+            VM](/chromium-os/developer-guide#TOC-Building-an-image-to-run-in-a-virtu).
 *   Here are some instructions to [run the image on a
             VM](/chromium-os/developer-library/guides/containers/cros-vm/).
 *   Here's how to build and run [autotest tests on the
@@ -259,5 +259,5 @@ Then go grab a coffee...
 ### Debugging
 
 You can use [chromium os debugging
-tips](/chromium-os/how-tos-and-troubleshooting/debugging-tips#TOC-We-recommend-that-developers-use-gd)
+tips](/chromium-os/developer-library/guides/debugging/debugging-tips#TOC-We-recommend-that-developers-use-gd)
 on VM as well.

@@ -21,7 +21,6 @@
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/observer_list.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
@@ -251,8 +250,7 @@ const char* ContentSettingToString(ContentSetting setting) {
       return "DetectImportantContent";
     case CONTENT_SETTING_DEFAULT:
     case CONTENT_SETTING_NUM_SETTINGS:
-      NOTREACHED_IN_MIGRATION();
-      return nullptr;
+      NOTREACHED();
   }
 }
 
@@ -525,7 +523,7 @@ void HostContentSettingsMap::SetWebsiteSettingCustomScope(
     DCHECK_EQ(value, clone);
 #endif
   }
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 bool HostContentSettingsMap::CanSetNarrowestContentSetting(
@@ -730,11 +728,14 @@ void HostContentSettingsMap::RecordExceptionMetrics() {
       };
       bool empty = num_requester.empty();
       int max_requester =
-          empty ? 0 : base::ranges::max(num_requester, {}, get_value).second;
+          empty
+              ? 0
+              : std::ranges::max_element(num_requester, {}, get_value)->second;
       base::UmaHistogramCounts1000(histogram_name + ".MaxRequester",
                                    max_requester);
       int max_toplevel =
-          empty ? 0 : base::ranges::max(num_toplevel, {}, get_value).second;
+          empty ? 0
+                : std::ranges::max_element(num_toplevel, {}, get_value)->second;
       base::UmaHistogramCounts1000(histogram_name + ".MaxTopLevel",
                                    max_toplevel);
     }
@@ -1276,7 +1277,7 @@ void HostContentSettingsMap::DeleteNearlyExpiredSettingsAndMaybeScheduleNextRun(
     } else {
       // For non-modifiable providers there exists no expiry method and
       // SetWebsiteSettingCustomScope cannot work.
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
     }
   }
 

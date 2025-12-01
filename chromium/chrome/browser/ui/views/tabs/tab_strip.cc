@@ -2,16 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 
 #include <stddef.h>
 
 #include <algorithm>
+#include <array>
 #include <iterator>
 #include <limits>
 #include <memory>
@@ -37,7 +33,6 @@
 #include "base/not_fatal_until.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/observer_list.h"
-#include "base/ranges/algorithm.h"
 #include "base/scoped_observation.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -61,9 +56,9 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/tabs/browser_tab_strip_controller.h"
 #include "chrome/browser/ui/views/tabs/compound_tab_container.h"
+#include "chrome/browser/ui/views/tabs/dragging/tab_drag_controller.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
 #include "chrome/browser/ui/views/tabs/tab_container_impl.h"
-#include "chrome/browser/ui/views/tabs/tab_drag_controller.h"
 #include "chrome/browser/ui/views/tabs/tab_group_header.h"
 #include "chrome/browser/ui/views/tabs/tab_group_highlight.h"
 #include "chrome/browser/ui/views/tabs/tab_group_underline.h"
@@ -77,9 +72,9 @@
 #include "chrome/browser/ui/views/tabs/tab_strip_types.h"
 #include "chrome/browser/ui/views/tabs/z_orderable_tab_container_element.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "components/crash/core/common/crash_key.h"
 #include "components/tab_groups/tab_group_color.h"
 #include "components/tab_groups/tab_group_id.h"
@@ -199,8 +194,8 @@ class TabStrip::TabDragContextImpl : public TabDragContext,
     // a different tab strip owns `TabDragController`. `EndDrag()` exits early
     // if `drag_controller_` is null, so we use this dedicated method to notify
     // `TabDragController`.
-    if (TabDragController::IsSystemDragAndDropSessionRunning()) {
-      TabDragController::OnSystemDragAndDropEnded();
+    if (TabDragController::IsSystemDnDSessionRunning()) {
+      TabDragController::OnSystemDnDEnded();
     } else {
       EndDrag(END_DRAG_COMPLETE);
     }
@@ -685,8 +680,8 @@ class TabStrip::TabDragContextImpl : public TabDragContext,
     // The index of `source_view` in the TabStrip's viewmodel.
     std::optional<int> source_view_model_index = GetIndexOf(source_view);
     // The index of `source_view` as a child of this TabDragContext.
-    int source_view_index = static_cast<int>(
-        base::ranges::find(views, source_view) - views.begin());
+    int source_view_index =
+        static_cast<int>(std::ranges::find(views, source_view) - views.begin());
 
     const auto should_animate_tab = [&](size_t index_in_views) {
       // If the tab at `index_in_views` is already animating, don't interrupt
@@ -1199,10 +1194,28 @@ void TabStrip::OnTabWillBeRemoved(content::WebContents* contents,
   drag_context_->OnTabWillBeRemoved(contents);
 }
 
+void TabStrip::MaybeUpdateGroupOnTabChanged(int model_index) {
+  Tab* tab = tab_at(model_index);
+  if (tab->group().has_value()) {
+    if (ListTabsInGroup(tab->group().value()).length() > 0) {
+      // Since tab group naming can be based on the name of the first tab in the
+      // group, update the tab group name if this tab is the first in the group.
+      std::optional<int> tab_model_index = GetModelIndexOf(tab);
+      std::optional<int> group_first_tab =
+          GetFirstTabInGroup(tab->group().value());
+      if (tab_model_index.has_value() && group_first_tab.has_value() &&
+          tab_model_index.value() == group_first_tab.value()) {
+        OnGroupContentsChanged(tab->group().value());
+      }
+    }
+  }
+}
+
 void TabStrip::SetTabData(int model_index, TabRendererData data) {
   Tab* tab = tab_at(model_index);
   const bool pinned = data.pinned;
   const bool pinned_state_changed = tab->data().pinned != pinned;
+  const bool tab_title_changed = tab->data().title != data.title;
   tab->SetData(std::move(data));
 
   if (HoverCardIsShowingForTab(tab)) {
@@ -1213,11 +1226,15 @@ void TabStrip::SetTabData(int model_index, TabRendererData data) {
     tab_container_->SetTabPinned(
         model_index, pinned ? TabPinned::kPinned : TabPinned::kUnpinned);
   }
+
+  if (tab_title_changed) {
+    MaybeUpdateGroupOnTabChanged(model_index);
+  }
 }
 
 void TabStrip::AddTabToGroup(std::optional<tab_groups::TabGroupId> group,
                              int model_index) {
-  tab_at(model_index)->set_group(group);
+  tab_at(model_index)->SetGroup(group);
 
   // Expand the group if the tab that is getting grouped is the active tab. This
   // can result in the group expanding in a series of actions where the final
@@ -1267,6 +1284,10 @@ void TabStrip::OnGroupClosed(const tab_groups::TabGroupId& group) {
 }
 
 bool TabStrip::ShouldDrawStrokes() const {
+#if BUILDFLAG(IS_CHROMEOS)
+  return false;
+#else   // BUILDFLAG(IS_CHROMEOS)
+
   // If the controller says we can't draw strokes, don't.
   if (!controller_->CanDrawStrokes()) {
     return false;
@@ -1287,12 +1308,6 @@ bool TabStrip::ShouldDrawStrokes() const {
     return false;
   }
 
-#if BUILDFLAG(IS_CHROMEOS)
-  if (chromeos::features::IsJellyrollEnabled()) {
-    return false;
-  }
-#endif  // BUILDFLAG(IS_CHROMEOS)
-
   // The tabstrip normally avoids strokes and relies on the active tab
   // contrasting sufficiently with the frame background.  When there isn't
   // enough contrast, fall back to a stroke.  Always compute the contrast ratio
@@ -1307,6 +1322,7 @@ bool TabStrip::ShouldDrawStrokes() const {
   const float contrast_ratio =
       color_utils::GetContrastRatio(background_color, frame_color);
   return contrast_ratio < kMinimumContrastRatioForOutlines;
+#endif  // BUILDFLAG(IS_CHROMEOS)
 }
 
 void TabStrip::SetSelection(const ui::ListSelectionModel& new_selection) {
@@ -1381,16 +1397,33 @@ void TabStrip::OnWidgetActivationChanged(views::Widget* widget, bool active) {
     tab_at(selected_tabs_.active().value())
         ->GetViewAccessibility()
         .SetIsSelected(true);
-  } else if (!active && selected_tabs_.active().has_value()) {
+
+    // When the browser window is activated, fire a selection event on the
+    // currently active tab, to help enable per-tab modes in assistive
+    // technologies.
+    // We need to make sure we fire the event manually here, because even
+    // though we set the tab to selected above, there are cases where the
+    // event will not be fired since the selected state was already set
+    // on the tab. Nevertheless, JAWS needs the event to be fired regardless,
+    // as per https://crbug.com/41450089.
     tab_at(selected_tabs_.active().value())
-        ->GetViewAccessibility()
-        .SetIsSelected(false);
+        ->NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
   }
+
   UpdateHoverCard(nullptr, HoverCardUpdateType::kEvent);
 }
 
 void TabStrip::SetTabNeedsAttention(int model_index, bool attention) {
   tab_at(model_index)->SetTabNeedsAttention(attention);
+}
+
+void TabStrip::SetTabGroupNeedsAttention(const tab_groups::TabGroupId& id,
+                                         bool attention) {
+  group_header(id)->SetTabGroupNeedsAttention(attention);
+}
+
+TabGroup* TabStrip::GetTabGroup(const tab_groups::TabGroupId& id) const {
+  return controller_->GetTabGroup(id);
 }
 
 std::optional<int> TabStrip::GetModelIndexOf(const TabSlotView* view) const {
@@ -1542,12 +1575,7 @@ void TabStrip::SelectTab(Tab* tab, const ui::Event& event) {
   const int model_index = maybe_model_index.value();
 
   if (!tab->IsActive()) {
-    base::UmaHistogramEnumeration("TabStrip.Tab.Views.ActivationAction",
-                                  TabActivationTypes::kTab);
-
-    if (tab->group().has_value()) {
-      base::RecordAction(base::UserMetricsAction("TabGroups_SwitchGroupedTab"));
-    }
+    controller_->RecordMetricsOnTabSelectionChange(tab->group());
   }
 
   controller_->SelectTab(model_index, event);
@@ -1697,11 +1725,12 @@ void TabStrip::ToggleTabGroupCollapsedState(
   }
 }
 
-void TabStrip::NotifyTabGroupEditorBubbleOpened() {
-  tab_container_->NotifyTabGroupEditorBubbleOpened();
+void TabStrip::NotifyTabstripBubbleOpened() {
+  tab_container_->NotifyTabstripBubbleOpened();
 }
-void TabStrip::NotifyTabGroupEditorBubbleClosed() {
-  tab_container_->NotifyTabGroupEditorBubbleClosed();
+
+void TabStrip::NotifyTabstripBubbleClosed() {
+  tab_container_->NotifyTabstripBubbleClosed();
 }
 
 void TabStrip::ShowContextMenuForTab(Tab* tab,
@@ -1737,7 +1766,8 @@ bool TabStrip::IsFocusInTabs() const {
 }
 
 bool TabStrip::ShouldCompactLeadingEdge() const {
-  return controller_->IsFrameButtonsRightAligned() &&
+  return !features::IsTabstripComboButtonEnabled() &&
+         controller_->IsFrameButtonsRightAligned() &&
          tabs::GetTabSearchTrailingTabstrip(controller_->GetProfile());
 }
 
@@ -1874,11 +1904,11 @@ SkColor TabStrip::GetTabForegroundColor(TabActive active) const {
     return gfx::kPlaceholderColor;
   }
 
-  constexpr ChromeColorIds kColorIds[2][2] = {
-      {kColorTabForegroundInactiveFrameInactive,
-       kColorTabForegroundInactiveFrameActive},
-      {kColorTabForegroundActiveFrameInactive,
-       kColorTabForegroundActiveFrameActive}};
+  static constexpr std::array<std::array<ChromeColorIds, 2>, 2> kColorIds = {
+      {{kColorTabForegroundInactiveFrameInactive,
+        kColorTabForegroundInactiveFrameActive},
+       {kColorTabForegroundActiveFrameInactive,
+        kColorTabForegroundActiveFrameActive}}};
 
   const bool tab_active = active == TabActive::kActive;
   const bool frame_active = GetWidget()->ShouldPaintAsActive();
@@ -2130,7 +2160,6 @@ const Tab* TabStrip::GetLastVisibleTab() const {
 }
 
 void TabStrip::CloseTabInternal(int model_index, CloseTabSource source) {
-
   if (!tab_container_->InTabClose() && IsAnimating()) {
     // Cancel any current animations. We do this as remove uses the current
     // ideal bounds and we need to know ideal bounds is in a good state.

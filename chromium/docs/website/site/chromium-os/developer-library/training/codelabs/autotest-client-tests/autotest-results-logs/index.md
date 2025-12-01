@@ -194,4 +194,4 @@ test_loggables-df, dmesg, installed_packages, schedstat, meminfo, slabinfo,
 interrupts
 
 If you have come this far, you may also be interested in reading the autotest
-client tests [codelab](autotest-client-tests).
+client tests [codelab](../).

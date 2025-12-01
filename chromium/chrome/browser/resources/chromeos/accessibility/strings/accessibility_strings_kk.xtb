@@ -131,7 +131,6 @@
 <translation id="1722567105086139392">Сілтеме</translation>
 <translation id="1727806147743597030">ftr</translation>
 <translation id="1730447754326314349">ChromeVox оқулығына қош келдіңіз. Осы оқулықтан кез келген уақытта шығу үшін пернетақтаның жоғарғы сол жақ бұрышындағы Esc пернесін басыңыз. ChromeVox оқулығын өшіру үшін Ctrl және Alt пернелерін басып тұрып, Z пернесін басыңыз. Дайын болған кезде, келесі сабаққа өту үшін бос орын пернесін басыңыз.</translation>
-<translation id="1735957571918073979">Көзіңізді жыпылықтатыңыз.</translation>
 <translation id="174268867904053074">Келесі график</translation>
 <translation id="1756785467854861272">Қошқыл күрең</translation>
 <translation id="1758693804775271377">Осы тақырыптың сабақтарын шолу үшін бір саусақпен солға не оңға сырғытыңыз.</translation>
@@ -242,6 +241,7 @@
 <translation id="2556326187583116255">Қазір оқылып жатқан кез келген сөзді тоқтату үшін 2 саусақпен түртіңіз.</translation>
 <translation id="2573256689920773241">Негізгі навигация</translation>
 <translation id="257674075312929031">Топ</translation>
+<translation id="2577127557293415225">Екі көзіңізді бір мезетке жұмыңыз</translation>
 <translation id="2582407057977008361">Шетке</translation>
 <translation id="2592212930811759050">Екі рет түртіп, өзгерте бастаңыз</translation>
 <translation id="2598495320872286378">Грамматикалық қате</translation>
@@ -845,6 +845,7 @@
 <translation id="6385591741672306837">баған</translation>
 <translation id="6387719785439924554">aside</translation>
 <translation id="6393014464788431702">Барлық іс-шара сүзгілерін өшіру</translation>
+<translation id="6406989068857078334">Тінтуір жылдамдығы азайтылды. Басу үшін қайтадан <ph name="GESTURE" />.</translation>
 <translation id="6411569524720229058">Күз</translation>
 <translation id="6417265370957905582">Google Assistant</translation>
 <translation id="641759969622533235">{COUNT,plural, =1{қос нүкте}other{# қос нүкте}}</translation>
@@ -1098,6 +1099,7 @@
 <translation id="8205922869661890178">Әзірлеуші журналының бетін ашу</translation>
 <translation id="8212109599554677485">Дисплейді қатар ашылатын етіп өзгерту.</translation>
 <translation id="8215202828671303819">Көп таңдау</translation>
+<translation id="822316432305106615">Дәл басуды бастау</translation>
 <translation id="8249864170673238087"><ph name="COLOR" />, <ph name="OPACITY_PERCENTAGE" />% бұлдырлық.</translation>
 <translation id="8261506727792406068">Жою</translation>
 <translation id="826825447994856889">Кіріспе</translation>

@@ -35,7 +35,6 @@
 #include "components/prefs/pref_service.h"
 #include "components/tracing/common/background_tracing_state_manager.h"
 #include "components/tracing/common/pref_names.h"
-#include "components/variations/variations_params_manager.h"
 #include "content/public/browser/background_tracing_manager.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -158,30 +157,6 @@ void SetSessionState(base::Value::Dict dict) {
   PrefService* local_state = g_browser_process->local_state();
   local_state->Set(tracing::kBackgroundTracingSessionState,
                    base::Value(std::move(dict)));
-}
-
-IN_PROC_BROWSER_TEST_F(ChromeTracingDelegateBrowserTest,
-                       BackgroundTracingSessionRanLong) {
-  base::Value::Dict dict;
-  dict.Set("state",
-           static_cast<int>(tracing::BackgroundTracingState::RAN_30_SECONDS));
-  SetSessionState(std::move(dict));
-  tracing::BackgroundTracingStateManager::GetInstance().ResetForTesting();
-
-  EXPECT_TRUE(
-      StartScenario(content::BackgroundTracingManager::NO_DATA_FILTERING));
-}
-
-IN_PROC_BROWSER_TEST_F(ChromeTracingDelegateBrowserTest,
-                       BackgroundTracingFinalizationStarted) {
-  base::Value::Dict dict;
-  dict.Set("state", static_cast<int>(
-                        tracing::BackgroundTracingState::FINALIZATION_STARTED));
-  SetSessionState(std::move(dict));
-  tracing::BackgroundTracingStateManager::GetInstance().ResetForTesting();
-
-  EXPECT_TRUE(
-      StartScenario(content::BackgroundTracingManager::NO_DATA_FILTERING));
 }
 
 // If we need a PII-stripped trace, any existing OTR session should block the

@@ -120,7 +120,7 @@ class TapFriendlinessChecker;
 class TransformState;
 class WebPluginContainerImpl;
 struct DraggableRegionValue;
-struct IntrinsicSizingInfo;
+struct NaturalSizingInfo;
 struct PhysicalOffset;
 struct PhysicalRect;
 
@@ -156,6 +156,13 @@ class CORE_EXPORT LocalFrameView final
 
     // Called after the layout lifecycle phase.
     virtual void DidFinishLayout() {}
+
+    // Called when the lifecycle is complete and an update has been pushed to the
+    // compositor.
+    // This hook should be preferred for updating state that needs the lifecycle to
+    // be clean but don't need to update state that is pushed further in the
+    // rendering pipeline.
+    virtual void DidFinishPostLifecycleSteps(const LocalFrameView&) {}
   };
 
   explicit LocalFrameView(LocalFrame&);
@@ -268,7 +275,7 @@ class CORE_EXPORT LocalFrameView final
     return layout_size_fixed_to_frame_size_;
   }
 
-  bool GetIntrinsicSizingInfo(IntrinsicSizingInfo&) const override;
+  bool GetIntrinsicSizingInfo(NaturalSizingInfo&) const override;
   bool HasIntrinsicSizingInfo() const override;
 
   void Dispose() override;
@@ -487,9 +494,6 @@ class CORE_EXPORT LocalFrameView final
   using ScrollableAreaSet = HeapHashSet<Member<PaintLayerScrollableArea>>;
   void AddScrollAnchoringScrollableArea(PaintLayerScrollableArea*);
   void RemoveScrollAnchoringScrollableArea(PaintLayerScrollableArea*);
-  const ScrollableAreaSet* ScrollAnchoringScrollableAreas() const {
-    return scroll_anchoring_scrollable_areas_.Get();
-  }
 
   void AddAnimatingScrollableArea(PaintLayerScrollableArea*);
   void RemoveAnimatingScrollableArea(PaintLayerScrollableArea*);
@@ -497,11 +501,18 @@ class CORE_EXPORT LocalFrameView final
     return animating_scrollable_areas_.Get();
   }
 
-  void AddUserScrollableArea(PaintLayerScrollableArea*);
-  void RemoveUserScrollableArea(PaintLayerScrollableArea*);
-  const ScrollableAreaMap* UserScrollableAreas() const {
-    return user_scrollable_areas_.Get();
-  }
+  // Used when UnifiedScrollableAreas is disabled.
+  void AddUserScrollableArea(PaintLayerScrollableArea&);
+  void RemoveUserScrollableArea(PaintLayerScrollableArea&);
+  // Used when UnifiedScrollableAreas is enabled.
+  void AddScrollableArea(PaintLayerScrollableArea&);
+  // Removes the scrollable area from all scrollable area sets/maps.
+  // Used regardless of UnifiedScrollableAreas.
+  void RemoveScrollableArea(PaintLayerScrollableArea&);
+  const ScrollableAreaMap& ScrollableAreas() const { return scrollable_areas_; }
+
+  void AddScrollableAreaWithScrollNode(PaintLayerScrollableArea&);
+  void RemoveScrollableAreaWithScrollNode(PaintLayerScrollableArea&);
 
   void ServiceScrollAnimations(base::TimeTicks);
 
@@ -706,9 +717,11 @@ class CORE_EXPORT LocalFrameView final
   String MainThreadScrollingReasonsAsText();
 
   bool MapToVisualRectInRemoteRootFrame(PhysicalRect& rect,
-                                        bool apply_overflow_clip = true);
+                                        bool apply_overflow_clip = true,
+                                        bool apply_viewport_transform = false);
 
-  void MapLocalToRemoteMainFrame(TransformState&);
+  void MapLocalToRemoteMainFrame(TransformState&,
+                                 bool apply_remote_main_frame_scroll_offset);
 
   void CrossOriginToNearestMainFrameChanged();
   void CrossOriginToParentFrameChanged();
@@ -873,7 +886,7 @@ class CORE_EXPORT LocalFrameView final
     base::AutoReset<bool> value_;
   };
 
-  class DisallowThrottlingScope {
+  class CORE_EXPORT DisallowThrottlingScope {
     STACK_ALLOCATED();
 
    public:
@@ -958,7 +971,6 @@ class CORE_EXPORT LocalFrameView final
 
   void PaintTree(PaintBenchmarkMode, std::optional<PaintController>&);
   void PushPaintArtifactToCompositor(bool repainted);
-  void CreatePaintTimelineEvents();
 
   void ClearLayoutSubtreeRootsAndMarkContainingBlocks();
 
@@ -1012,7 +1024,6 @@ class CORE_EXPORT LocalFrameView final
   bool RunScrollSnapshotClientSteps();
   bool ShouldDeferLayoutSnap() const;
 
-  bool UpdateLastSuccessfulPositionFallbacks();
   bool NotifyResizeObservers();
   bool RunResizeObserverSteps(DocumentLifecycle::LifecycleState target_state);
   void ClearResizeObserverLimit();
@@ -1101,8 +1112,10 @@ class CORE_EXPORT LocalFrameView final
   // Needed for calculating scroll anchoring.
   Member<ScrollableAreaSet> scroll_anchoring_scrollable_areas_;
   Member<ScrollableAreaSet> animating_scrollable_areas_;
-  // Scrollable areas which are user-scrollable, whether they overflow or not.
-  Member<ScrollableAreaMap> user_scrollable_areas_;
+  // All scrollable areas in the frame's document,
+  // or user-scrollable ones if UnifiedScrollableAreas is disabled.
+  ScrollableAreaMap scrollable_areas_;
+  ScrollableAreaSet scrollable_areas_with_scroll_node_;
   BoxModelObjectSet background_attachment_fixed_objects_;
   Member<FrameViewAutoSizeInfo> auto_size_info_;
 
@@ -1158,6 +1171,14 @@ class CORE_EXPORT LocalFrameView final
   gfx::Vector2dF accumulated_scroll_delta_since_last_intersection_update_;
 
   mojom::blink::ViewportIntersectionState last_intersection_state_;
+
+  // DOM stats can be calculated on every frame update, however the operation
+  // to measure DOM stats is not trivial so we should only do it if we detect
+  // the DOM has changed.
+  //
+  // This field will track the DOM version of the most recent DOM stats event
+  // added to the trace.
+  uint64_t last_dom_stats_version_ = 0;
 
   // True if the frame has deferred commits at least once per document load.
   // We won't defer again for the same document. This is only meaningful for

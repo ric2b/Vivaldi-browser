@@ -19,7 +19,6 @@
 #include "include/core/SkTypes.h"
 #include "include/core/SkYUVAInfo.h"
 #include "include/private/base/SkAlign.h"
-#include "include/private/base/SkMalloc.h"
 #include "include/private/base/SkTemplates.h"
 #include "modules/skcms/skcms.h"
 #include "src/codec/SkCodecPriv.h"
@@ -252,16 +251,19 @@ SkISize SkJpegCodec::onGetScaledDimensions(float desiredScale) const {
         num = 1;
     }
 
-    // Set up a fake decompress struct in order to use libjpeg to calculate output dimensions
+    // Set up a fake decompress struct in order to use libjpeg to calculate output dimensions.
+    // This isn't conventional use of libjpeg-turbo but initializing the decompress struct with
+    // jpeg_create_decompress allows for less violation of the API regardless of the version.
     jpeg_decompress_struct dinfo;
-    sk_bzero(&dinfo, sizeof(dinfo));
+    jpeg_create_decompress(&dinfo);
     dinfo.image_width = this->dimensions().width();
     dinfo.image_height = this->dimensions().height();
     dinfo.global_state = fReadyState;
     calc_output_dimensions(&dinfo, num, denom);
+    SkISize outputDimensions = SkISize::Make(dinfo.output_width, dinfo.output_height);
+    jpeg_destroy_decompress(&dinfo);
 
-    // Return the calculated output dimensions for the given scale
-    return SkISize::Make(dinfo.output_width, dinfo.output_height);
+    return outputDimensions;
 }
 
 bool SkJpegCodec::onRewind() {
@@ -361,9 +363,11 @@ bool SkJpegCodec::onDimensionsSupported(const SkISize& size) {
     const unsigned int dstHeight = size.height();
 
     // Set up a fake decompress struct in order to use libjpeg to calculate output dimensions
+    // This isn't conventional use of libjpeg-turbo but initializing the decompress struct with
+    // jpeg_create_decompress allows for less violation of the API regardless of the version.
     // FIXME: Why is this necessary?
     jpeg_decompress_struct dinfo;
-    sk_bzero(&dinfo, sizeof(dinfo));
+    jpeg_create_decompress(&dinfo);
     dinfo.image_width = this->dimensions().width();
     dinfo.image_height = this->dimensions().height();
     dinfo.global_state = fReadyState;
@@ -376,6 +380,7 @@ bool SkJpegCodec::onDimensionsSupported(const SkISize& size) {
 
         // Return a failure if we have tried all of the possible scales
         if (1 == num || dstWidth > dinfo.output_width || dstHeight > dinfo.output_height) {
+            jpeg_destroy_decompress(&dinfo);
             return false;
         }
 
@@ -383,18 +388,20 @@ bool SkJpegCodec::onDimensionsSupported(const SkISize& size) {
         num -= 1;
         calc_output_dimensions(&dinfo, num, denom);
     }
+    jpeg_destroy_decompress(&dinfo);
 
     fDecoderMgr->dinfo()->scale_num = num;
     fDecoderMgr->dinfo()->scale_denom = denom;
     return true;
 }
 
-int SkJpegCodec::readRows(const SkImageInfo& dstInfo, void* dst, size_t rowBytes, int count,
-                          const Options& opts) {
+SkCodec::Result SkJpegCodec::readRows(const SkImageInfo& dstInfo, void* dst, size_t rowBytes, int count,
+                          const Options& opts, int* rowsDecoded) {
     // Set the jump location for libjpeg-turbo errors
     skjpeg_error_mgr::AutoPushJmpBuf jmp(fDecoderMgr->errorMgr());
     if (setjmp(jmp)) {
-        return 0;
+        *rowsDecoded = 0;
+        return kInvalidInput;
     }
 
     // When fSwizzleSrcRow is non-null, it means that we need to swizzle.  In this case,
@@ -430,7 +437,8 @@ int SkJpegCodec::readRows(const SkImageInfo& dstInfo, void* dst, size_t rowBytes
     for (int y = 0; y < count; y++) {
         uint32_t lines = jpeg_read_scanlines(fDecoderMgr->dinfo(), &decodeDst, 1);
         if (0 == lines) {
-            return y;
+            *rowsDecoded = y;
+            return kSuccess;
         }
 
         if (fSwizzler) {
@@ -446,7 +454,8 @@ int SkJpegCodec::readRows(const SkImageInfo& dstInfo, void* dst, size_t rowBytes
         swizzleDst = SkTAddOffset<uint32_t>(swizzleDst, swizzleDstRowBytes);
     }
 
-    return count;
+    *rowsDecoded = count;
+    return kSuccess;
 }
 
 /*
@@ -487,7 +496,11 @@ SkCodec::Result SkJpegCodec::onGetPixels(const SkImageInfo& dstInfo,
         return fDecoderMgr->returnFailure("setjmp", kInvalidInput);
     }
 
-    if (!jpeg_start_decompress(dinfo)) {
+    const bool isProgressive = dinfo->progressive_mode;
+    if (isProgressive) {
+       dinfo->buffered_image = TRUE;
+       jpeg_start_decompress(dinfo);
+    } else if (!jpeg_start_decompress(dinfo)) {
         return fDecoderMgr->returnFailure("startDecompress", kInvalidInput);
     }
 
@@ -504,11 +517,49 @@ SkCodec::Result SkJpegCodec::onGetPixels(const SkImageInfo& dstInfo,
         return kInternalError;
     }
 
-    int rows = this->readRows(dstInfo, dst, dstRowBytes, dstInfo.height(), options);
-    if (rows < dstInfo.height()) {
-        *rowsDecoded = rows;
-        return fDecoderMgr->returnFailure("Incomplete image data", kIncompleteInput);
-    }
+    if (isProgressive) {
+      // Keep consuming input until we can't anymore, and only output/read scanlines
+      // if there is at least one valid output.
+      int last_scan_completed = 0;
+      while (!jpeg_input_complete(dinfo)) {
+        // Call the progress monitor hook if present, to prevent decoder from hanging.
+        if (dinfo->progress) {
+           dinfo->progress->progress_monitor((j_common_ptr)dinfo);
+        }
+        const int res = jpeg_consume_input(dinfo);
+        if (res == JPEG_SUSPENDED) {
+           break;
+        }
+        if (res == JPEG_SCAN_COMPLETED) {
+           last_scan_completed = dinfo->input_scan_number;
+        }
+      }
+      if (last_scan_completed >  0) {
+        jpeg_start_output(dinfo, last_scan_completed);
+        int rows = 0;
+         SkCodec::Result readResult = this->readRows(dstInfo, dst, dstRowBytes,
+                                                     dstInfo.height(), options, &rows);
+         // Checks if scan was called too many times to not stall the decoder.
+         jpeg_finish_output(dinfo);
+         if (readResult != kSuccess) {
+            return fDecoderMgr->returnFailure("readRows", readResult);
+         }
+         if (rows < dstInfo.height()) {
+             *rowsDecoded = rows;
+             return fDecoderMgr->returnFailure("Incomplete image data", kIncompleteInput);
+         }
+      } else {
+           return fDecoderMgr->returnFailure("Incomplete image data", kIncompleteInput);
+      }
+    } else {
+      // Baseline image
+      int rows = 0;
+      this->readRows(dstInfo, dst, dstRowBytes, dstInfo.height(), options, &rows);
+      if (rows < dstInfo.height()) {
+          *rowsDecoded = rows;
+          return fDecoderMgr->returnFailure("Incomplete image data", kIncompleteInput);
+      }
+  }
 
     return kSuccess;
 }
@@ -671,7 +722,8 @@ SkCodec::Result SkJpegCodec::onStartScanlineDecode(const SkImageInfo& dstInfo,
 }
 
 int SkJpegCodec::onGetScanlines(void* dst, int count, size_t dstRowBytes) {
-    int rows = this->readRows(this->dstInfo(), dst, dstRowBytes, count, this->options());
+    int rows = 0;
+    this->readRows(this->dstInfo(), dst, dstRowBytes, count, this->options(), &rows);
     if (rows < count) {
         // This allows us to skip calling jpeg_finish_decompress().
         fDecoderMgr->dinfo()->output_scanline = this->dstInfo().height();

@@ -25,7 +25,8 @@ const CGFloat kCountBorderWidth = 24;
 
 - (instancetype)initWithFrame:(CGRect)frame {
   self = [super initWithFrame:frame
-                     tileType:ContentSuggestionsTileType::kShortcuts];
+                     tileType:ContentSuggestionsTileType::kShortcuts
+                 inMagicStack:YES];
   if (self) {
     _iconView = [[UIImageView alloc] initWithFrame:self.bounds];
     _iconView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -74,7 +75,7 @@ const CGFloat kCountBorderWidth = 24;
 - (void)updateConfiguration:(ContentSuggestionsMostVisitedActionItem*)config {
   _config = config;
   self.titleLabel.text = config.title;
-    self.titleLabel.font = [self titleLabelFont];
+  self.titleLabel.font = [self titleLabelFont];
   self.accessibilityTraits =
       UIAccessibilityTraitButton | config.accessibilityTraits;
   self.accessibilityLabel = config.accessibilityLabel.length

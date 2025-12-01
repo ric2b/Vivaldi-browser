@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.bookmarks;
 
 import static org.chromium.components.browser_ui.widget.BrowserUiListMenuUtils.buildMenuListItem;
 
+import android.app.Activity;
 import android.content.Context;
 import android.text.TextUtils;
 
@@ -14,6 +15,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
+import androidx.lifecycle.LifecycleOwner;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.recyclerview.widget.RecyclerView.OnScrollListener;
 
@@ -38,7 +40,6 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.sync.ui.bookmark_batch_upload_card.BookmarkBatchUploadCardCoordinator;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.native_page.BasicNativePage;
-import org.chromium.chrome.browser.ui.signin.SyncPromoController.SyncPromoState;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkItem;
 import org.chromium.components.bookmarks.BookmarkType;
@@ -60,30 +61,33 @@ import org.chromium.components.power_bookmarks.PowerBookmarkType;
 import org.chromium.ui.accessibility.AccessibilityState;
 import org.chromium.ui.listmenu.ListMenu;
 import org.chromium.ui.listmenu.ListMenuItemProperties;
+import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modelutil.MVCListAdapter.ListItem;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.modelutil.PropertyModel;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.Stack;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 // Vivaldi
 import android.graphics.Rect;
 import android.view.View;
-import android.widget.FrameLayout;
+
 import java.util.Collections;
 import java.util.Comparator;
 
-import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.vivaldi.browser.bookmarks.VivaldiBookmarksPageObserver;
 import org.vivaldi.browser.panels.PanelUtils;
+import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 
 /** Responsible for BookmarkManager business logic. */
@@ -97,10 +101,6 @@ class BookmarkManagerMediator
 
     // Vivaldi
     private VivaldiBookmarksPageObserver mBookmarksPageObserver;
-
-    /** Vivaldi **/
-    public static final String PREF_BOOKMARKS_SORT_ORDER = "bookmarks_sort_order";
-    public static final String PREF_BOOKMARKS_SORT_ASC_DESC = "bookmarks_sort_ascending_descending";
 
     enum SortOrder {
         MANUAL(0),
@@ -196,7 +196,6 @@ class BookmarkManagerMediator
                     if (!mIsBookmarkModelReorderingInProgress) {
                         mPendingRefresh.post();
                     }
-                    mIsBookmarkModelReorderingInProgress = false;
                 }
 
                 @Override
@@ -236,7 +235,7 @@ class BookmarkManagerMediator
                                 // local bookmarks.
                                 if (mBookmarkBatchUploadCardCoordinator != null) {
                                     mBookmarkBatchUploadCardCoordinator
-                                            .hideBatchUploadCardAndUpdate();
+                                            .immediatelyHideBatchUploadCardAndUpdateItsVisibility();
                                 }
                             }
                         }
@@ -298,7 +297,9 @@ class BookmarkManagerMediator
                     removeUiObserver(mBookmarkUiObserver);
                     getSelectionDelegate().removeObserver(mSelectionObserver);
                     if (!ChromeApplicationImpl.isVivaldi())
-                    mPromoHeaderManager.destroy();
+                    if (mPromoHeaderManager != null) {
+                        mPromoHeaderManager.destroy();
+                    }
                 }
 
                 @Override
@@ -348,7 +349,11 @@ class BookmarkManagerMediator
                 @Override
                 public void onSwap() {
                     mIsBookmarkModelReorderingInProgress = true;
-                    setOrder();
+                    try {
+                        setOrder();
+                    } finally {
+                        mIsBookmarkModelReorderingInProgress = false;
+                    }
                 }
             };
 
@@ -453,7 +458,7 @@ class BookmarkManagerMediator
     private final boolean mIsDialogUi;
     private final ObservableSupplierImpl<Boolean> mBackPressStateSupplier;
     private final Profile mProfile;
-    private final BookmarkPromoHeader mPromoHeaderManager;
+    private final @Nullable BookmarkPromoHeader mPromoHeaderManager;
     private final BookmarkUndoController mBookmarkUndoController;
     private final BookmarkQueryHandler mBookmarkQueryHandler;
     private final ModelList mModelList;
@@ -462,6 +467,7 @@ class BookmarkManagerMediator
     private final BookmarkImageFetcher mBookmarkImageFetcher;
     private final ShoppingService mShoppingService;
     private final SnackbarManager mSnackbarManager;
+    private final BooleanSupplier mCanShowSigninPromo;
     private final ImprovedBookmarkRowCoordinator mImprovedBookmarkRowCoordinator;
     private final Set<PowerBookmarkType> mCurrentPowerFilter = new HashSet<>();
     private final CallbackController mCallbackController = new CallbackController();
@@ -489,7 +495,9 @@ class BookmarkManagerMediator
     private BookmarkId mCurrentFolder;
 
     BookmarkManagerMediator(
-            Context context,
+            Activity activity,
+            LifecycleOwner lifecycleOwner,
+            ModalDialogManager modalDialogManager,
             BookmarkModel bookmarkModel,
             BookmarkOpener bookmarkOpener,
             SelectableListLayout<BookmarkId> selectableListLayout,
@@ -506,9 +514,10 @@ class BookmarkManagerMediator
             BookmarkImageFetcher bookmarkImageFetcher,
             ShoppingService shoppingService,
             SnackbarManager snackbarManager,
+            BooleanSupplier canShowSigninPromo,
             Consumer<OnScrollListener> onScrollListenerConsumer,
             BookmarkMoveSnackbarManager bookmarkMoveSnackbarManager) {
-        mContext = context;
+        mContext = activity;
         mBookmarkModel = bookmarkModel;
         mBookmarkModel.addObserver(mBookmarkModelObserver);
         mBookmarkOpener = bookmarkOpener;
@@ -532,16 +541,21 @@ class BookmarkManagerMediator
         mBookmarkImageFetcher = bookmarkImageFetcher;
         mShoppingService = shoppingService;
         mSnackbarManager = snackbarManager;
-        mPromoHeaderManager =
-                new BookmarkPromoHeader(
-                        mContext, mProfile.getOriginalProfile(), this::updateHeader);
+        mCanShowSigninPromo = canShowSigninPromo;
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.UNO_PHASE_2_FOLLOW_UP)) {
             mBookmarkBatchUploadCardCoordinator =
                     new BookmarkBatchUploadCardCoordinator(
-                            mContext,
+                            activity,
+                            lifecycleOwner,
+                            modalDialogManager,
                             mProfile.getOriginalProfile(),
                             mSnackbarManager,
                             this::updateBatchUploadCard);
+            mPromoHeaderManager = null;
+        } else {
+            mPromoHeaderManager =
+                    new BookmarkPromoHeader(
+                            mContext, mProfile.getOriginalProfile(), this::updateHeader);
         }
         mBookmarkUndoController = bookmarkUndoController;
         mBookmarkMoveSnackbarManager = bookmarkMoveSnackbarManager;
@@ -664,6 +678,10 @@ class BookmarkManagerMediator
         return false;
     }
 
+    void onPromoVisibilityChange() {
+        updateHeader();
+    }
+
     /** See BookmarkManager(Coordinator)#setBasicNativePage. */
     void setBasicNativePage(BasicNativePage nativePage) {
         mNativePage = nativePage;
@@ -688,6 +706,7 @@ class BookmarkManagerMediator
         }
     }
 
+    @Nullable
     BookmarkPromoHeader getPromoHeaderManager() {
         return mPromoHeaderManager;
     }
@@ -720,13 +739,24 @@ class BookmarkManagerMediator
         int endIndex = getBookmarkItemEndIndex();
 
         // Get the new order for the IDs.
-        long[] newOrder = new long[endIndex - startIndex + 1];
+        List<Long> newOrder = new ArrayList<>(endIndex - startIndex + 1);
         for (int i = startIndex; i <= endIndex; i++) {
             BookmarkItem bookmarkItem = getItemByPosition(i).getBookmarkItem();
+            // The parter bookmark folder is under "Mobile boomkmarks", but can't be reordered.
+            if (!bookmarkItem.isReorderable()) {
+                assert i == endIndex
+                        : "Partner bookmarks should always be at the end of the list when mobile"
+                                + " bookmark children are re-ordered.";
+                continue;
+            }
             assert bookmarkItem != null;
-            newOrder[i - startIndex] = bookmarkItem.getId().getId();
+            newOrder.add(bookmarkItem.getId().getId());
         }
-        mBookmarkModel.reorderBookmarks(getCurrentFolderId(), newOrder);
+        long[] newOrderArr = new long[newOrder.size()];
+        for (int i = 0; i < newOrder.size(); i++) {
+            newOrderArr[i] = newOrder.get(i);
+        }
+        mBookmarkModel.reorderBookmarks(getCurrentFolderId(), newOrderArr);
         if (mDragStateDelegate.getDragActive()) {
             RecordUserAction.record("MobileBookmarkManagerDragReorder");
         }
@@ -980,6 +1010,7 @@ class BookmarkManagerMediator
         }
 
         // Search states should only be the top most state. Back button should not restore them.
+        if (!ChromeApplicationImpl.isVivaldi())
         if (currentUiMode == BookmarkUiMode.SEARCHING && state.mUiMode == BookmarkUiMode.FOLDER) {
             mStateStack.pop();
         }
@@ -1198,19 +1229,14 @@ class BookmarkManagerMediator
             return ViewType.INVALID;
         }
 
-        final @SyncPromoState int promoState = mPromoHeaderManager.getPromoState();
-        switch (promoState) {
-            case SyncPromoState.NO_PROMO:
-                return ViewType.INVALID;
-            case SyncPromoState.PROMO_FOR_SIGNED_OUT_STATE:
-                return ViewType.PERSONALIZED_SIGNIN_PROMO;
-            case SyncPromoState.PROMO_FOR_SIGNED_IN_STATE:
-                return ViewType.PERSONALIZED_SYNC_PROMO;
-            case SyncPromoState.PROMO_FOR_SYNC_TURNED_OFF_STATE:
-                return ViewType.SYNC_PROMO;
-            default:
-                assert false : "Unexpected value for promo state!";
-                return ViewType.INVALID;
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.UNO_PHASE_2_FOLLOW_UP)) {
+            return mCanShowSigninPromo.getAsBoolean() ? ViewType.SIGNIN_PROMO : ViewType.INVALID;
+        }
+
+        if (mPromoHeaderManager.shouldShowPromo()) {
+            return ViewType.SIGNIN_PROMO;
+        } else {
+            return ViewType.INVALID;
         }
     }
 
@@ -1276,7 +1302,8 @@ class BookmarkManagerMediator
     }
 
     private int getCurrentPromoHeaderIndex() {
-        return searchForFirstIndexOfType(/* endIndex= */ PROMO_MAX_INDEX, this::isPromoType);
+        return searchForFirstIndexOfType(
+                /* endIndex= */ PROMO_MAX_INDEX, (type) -> type == ViewType.SIGNIN_PROMO);
     }
 
     private int getCurrentSearchBoxIndex() {
@@ -1308,17 +1335,11 @@ class BookmarkManagerMediator
         return -1;
     }
 
-    private boolean isPromoType(@ViewType int viewType) {
-        return viewType == ViewType.PERSONALIZED_SIGNIN_PROMO
-                || viewType == ViewType.PERSONALIZED_SYNC_PROMO
-                || viewType == ViewType.SYNC_PROMO;
-    }
-
     /** Removes all promo and section headers from the current list. */
     private void removePromoAndSectionHeaders() {
         for (int i = mModelList.size() - 1; i >= 0; i--) {
             final @ViewType int viewType = mModelList.get(i).type;
-            if (viewType == ViewType.SECTION_HEADER || isPromoType(viewType)) {
+            if (viewType == ViewType.SECTION_HEADER || viewType == ViewType.SIGNIN_PROMO) {
                 mModelList.removeAt(i);
             }
         }
@@ -1884,6 +1905,35 @@ class BookmarkManagerMediator
     Comparator<BookmarkListEntry> mBookmarkListComparator = new Comparator<>() {
         @Override
         public int compare(BookmarkListEntry entry, BookmarkListEntry t1) {
+            int folderComparison = Boolean.compare(t1.getBookmarkItem().isFolder(),
+                    entry.getBookmarkItem().isFolder());
+            if (folderComparison != 0) {
+                return folderComparison;
+            }
+            switch (mSortOrder) {
+                case TITLE:
+                    return entry.getBookmarkItem().getTitle().compareTo(
+                            t1.getBookmarkItem().getTitle());
+                case ADDRESS:
+                    return entry.getBookmarkItem().getUrl().getSpec().compareTo(
+                            t1.getBookmarkItem().getUrl().getSpec());
+                case NICK:
+                    return entry.getBookmarkItem().getNickName().compareToIgnoreCase(
+                            t1.getBookmarkItem().getNickName());
+                case DESCRIPTION:
+                    return entry.getBookmarkItem().getDescription().compareToIgnoreCase(
+                            t1.getBookmarkItem().getDescription());
+                case DATE:
+                    return Long.compare(entry.getBookmarkItem().getCreated(),
+                            t1.getBookmarkItem().getCreated());
+                default: return 0;
+            }
+        }
+    };
+
+    Comparator<BookmarkListEntry> mBookmarkListDescendingComparator = new Comparator<>() {
+        @Override
+        public int compare(BookmarkListEntry t1, BookmarkListEntry entry) {
             int folderComparison = Boolean.compare(entry.getBookmarkItem().isFolder(),
                     t1.getBookmarkItem().isFolder());
             if (folderComparison != 0) {
@@ -1897,24 +1947,15 @@ class BookmarkManagerMediator
                     return entry.getBookmarkItem().getUrl().getSpec().compareTo(
                             t1.getBookmarkItem().getUrl().getSpec());
                 case NICK:
-                    if (entry.getBookmarkItem().getNickName().isEmpty())
-                        return 1;
-                    else if (t1.getBookmarkItem().getNickName().isEmpty())
-                        return -1;
                     return entry.getBookmarkItem().getNickName().compareToIgnoreCase(
                             t1.getBookmarkItem().getNickName());
                 case DESCRIPTION:
-                    if (entry.getBookmarkItem().getDescription().isEmpty())
-                        return 1;
-                    else if (t1.getBookmarkItem().getDescription().isEmpty())
-                        return -1;
                     return entry.getBookmarkItem().getDescription().compareToIgnoreCase(
                             t1.getBookmarkItem().getDescription());
                 case DATE:
                     return Long.compare(entry.getBookmarkItem().getCreated(),
                             t1.getBookmarkItem().getCreated());
-                default:
-                    return 0;
+                default: return 0;
             }
         }
     };
@@ -1953,21 +1994,21 @@ class BookmarkManagerMediator
             mSortAscOrDesc = SortAscOrDesc.NONE;
         }
         ChromeSharedPreferences.getInstance().writeString(
-                PREF_BOOKMARKS_SORT_ORDER, mSortOrder.name());
+                VivaldiPreferences.PREF_BOOKMARKS_SORT_ORDER, mSortOrder.name());
         ChromeSharedPreferences.getInstance().writeString(
-                PREF_BOOKMARKS_SORT_ASC_DESC, mSortAscOrDesc.name());
+                VivaldiPreferences.PREF_BOOKMARKS_SORT_ASC_DESC, mSortAscOrDesc.name());
     }
 
     @Override
     public SortOrder getSortOrder() {
        return SortOrder.valueOf(ChromeSharedPreferences.getInstance().readString(
-                PREF_BOOKMARKS_SORT_ORDER, SortOrder.MANUAL.name()));
+                VivaldiPreferences.PREF_BOOKMARKS_SORT_ORDER, SortOrder.MANUAL.name()));
     }
 
     @Override
     public SortAscOrDesc getSortAscendingDescending() {
        return SortAscOrDesc.valueOf(ChromeSharedPreferences.getInstance().readString(
-               PREF_BOOKMARKS_SORT_ASC_DESC, SortAscOrDesc.ASCENDING.name()));
+               VivaldiPreferences.PREF_BOOKMARKS_SORT_ASC_DESC, SortAscOrDesc.ASCENDING.name()));
     }
 
     /**
@@ -1978,11 +2019,11 @@ class BookmarkManagerMediator
        if (sortOrder != SortOrder.MANUAL) {
             mSortOrder = sortOrder;
             mSortAscOrDesc = sortAscOrDesc;
-           if (mSortAscOrDesc == SortAscOrDesc.DESCENDING) {
-               Collections.sort(entries, mBookmarkListComparator.reversed());
-           } else {
-               Collections.sort(entries, mBookmarkListComparator);
-           }
+            if (mSortAscOrDesc == SortAscOrDesc.DESCENDING) {
+                Collections.sort(entries, mBookmarkListDescendingComparator);
+            } else {
+                Collections.sort(entries, mBookmarkListComparator);
+            }
        }
        return entries;
     }

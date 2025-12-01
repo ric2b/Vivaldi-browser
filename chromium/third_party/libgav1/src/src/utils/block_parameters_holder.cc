@@ -15,6 +15,8 @@
 #include "src/utils/block_parameters_holder.h"
 
 #include <algorithm>
+#include <atomic>
+#include <new>
 
 #include "src/utils/common.h"
 #include "src/utils/constants.h"

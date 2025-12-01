@@ -14,6 +14,9 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import static org.chromium.components.tab_group_sync.SyncedGroupTestHelper.SYNC_GROUP_ID1;
+import static org.chromium.components.tab_group_sync.SyncedGroupTestHelper.SYNC_GROUP_ID2;
+
 import android.util.Pair;
 
 import org.junit.Assert;
@@ -27,7 +30,7 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 import org.robolectric.annotation.Config;
 
-import org.chromium.base.FeatureList;
+import org.chromium.base.FeatureOverrides;
 import org.chromium.base.Token;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -58,8 +61,6 @@ public class TabGroupSyncUtilsUnitTest {
     private static final int ROOT_ID_1 = 1;
     private static final Token TOKEN_1 = new Token(2, 3);
     private static final Token TOKEN_2 = new Token(5, 8);
-    private static final String SYNC_GROUP_ID1 = "remote one";
-    private static final String SYNC_GROUP_ID2 = "remote two";
     private static final LocalTabGroupId LOCAL_TAB_GROUP_ID_1 = new LocalTabGroupId(TOKEN_1);
     private static final LocalTabGroupId LOCAL_TAB_GROUP_ID_2 = new LocalTabGroupId(TOKEN_2);
 
@@ -86,14 +87,13 @@ public class TabGroupSyncUtilsUnitTest {
     @Test
     public void testStaleGroupsNotAddedToSync() {
         // Override the finch param to 90 days.
-        FeatureList.TestValues testValues = new FeatureList.TestValues();
-        testValues.addFeatureFlagOverride(ChromeFeatureList.TAB_GROUP_SYNC_ANDROID, true);
-        testValues.addFieldTrialParamOverride(
-                ChromeFeatureList.TAB_GROUP_SYNC_ANDROID,
-                TabGroupSyncUtils
-                        .PARAM_MAX_DAYS_OF_STALENESS_ACCEPTED_FOR_ADDING_TAB_GROUP_TO_SYNC_ON_STARTUP,
-                String.valueOf(90));
-        FeatureList.setTestValues(testValues);
+        FeatureOverrides.newBuilder()
+                .enable(ChromeFeatureList.TAB_GROUP_SYNC_ANDROID)
+                .param(
+                        TabGroupSyncUtils
+                                .PARAM_MAX_DAYS_OF_STALENESS_ACCEPTED_FOR_ADDING_TAB_GROUP_TO_SYNC_ON_STARTUP,
+                        90)
+                .apply();
 
         long now = System.currentTimeMillis();
 

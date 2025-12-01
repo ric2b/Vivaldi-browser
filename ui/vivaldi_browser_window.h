@@ -82,12 +82,14 @@ class VivaldiToolbarButtonProvider : public ToolbarButtonProvider {
   gfx::Size GetToolbarButtonSize() const override;
   views::View* GetDefaultExtensionDialogAnchorView() override;
   PageActionIconView* GetPageActionIconView(PageActionIconType type) override;
+  page_actions::PageActionView* GetPageActionView(
+      actions::ActionId action_id) override;
   AppMenuButton* GetAppMenuButton() override;
   gfx::Rect GetFindBarBoundingBox(int contents_bottom) override;
   void FocusToolbar() override;
   views::AccessiblePaneView* GetAsAccessiblePaneView() override;
   views::View* GetAnchorView(
-      std::optional<PageActionIconType> type) override;  // the one
+      std::optional<actions::ActionId> type) override;  // the one
   void ZoomChangedForActiveTab(bool can_show_bubble) override;
   AvatarToolbarButton* GetAvatarToolbarButton() override;
   ToolbarButton* GetBackButton() override;
@@ -455,6 +457,7 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   void UpdateCustomTabBarVisibility(bool visible, bool animate) override {}
   SharingDialog* ShowSharingDialog(content::WebContents* contents,
                                    SharingDialogData data) override;
+  void SetContentScrimVisibility(bool visible) override {}
   void ShowHatsDialog(
       const std::string& site_id,
       const std::optional<std::string>& histogram_name,

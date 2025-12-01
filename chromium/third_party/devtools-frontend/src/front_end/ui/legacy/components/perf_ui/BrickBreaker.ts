@@ -22,11 +22,11 @@ const UIStrings = {
 const str_ = i18n.i18n.registerUIStrings('ui/legacy/components/perf_ui/BrickBreaker.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
-type Brick = {
-  x: number,
-  y: number,
-  width: number,
-};
+interface Brick {
+  x: number;
+  y: number;
+  width: number;
+}
 
 const MAX_DELTA = 16;
 const MIN_DELTA = 10;
@@ -108,7 +108,7 @@ const colorPallettes: ColorPalette[] = [
   },
 ];
 
-/* rulesdir/no_underscored_properties, rulesdir/ban_style_tags_in_lit_html, rulesdir/ban_a_tags_in_lit_html, rulesdir/lit_html_host_this */
+/* rulesdir/no-underscored-properties, rulesdir/no-a-tags-in-lit */
 export class BrickBreaker extends HTMLElement {
   #canvas: HTMLCanvasElement;
   #ctx: CanvasRenderingContext2D;
@@ -149,13 +149,13 @@ export class BrickBreaker extends HTMLElement {
   #currentPalette: ColorPalette;
   constructor(private timelineFlameChart: FlameChart) {
     super();
-    this.#canvas = (this.createChild('canvas', 'fill') as HTMLCanvasElement);
+    this.#canvas = this.createChild('canvas', 'fill');
     this.#ctx = this.#canvas.getContext('2d') as CanvasRenderingContext2D;
     this.#helperCanvas = document.createElement('canvas');
     this.#helperCanvasCtx = this.#helperCanvas.getContext('2d') as CanvasRenderingContext2D;
     const randomPaletteIndex = Math.floor(Math.random() * colorPallettes.length);
     this.#currentPalette = colorPallettes[randomPaletteIndex];
-    this.#scorePanel = (this.createChild('div') as HTMLElement);
+    this.#scorePanel = this.createChild('div');
     this.#scorePanel.classList.add('scorePanel');
     this.#scorePanel.style.borderImage =
         'linear-gradient(' + this.#currentPalette.mediumDarker + ',' + this.#currentPalette.dark + ') 1';
@@ -163,7 +163,7 @@ export class BrickBreaker extends HTMLElement {
   }
 
   initButton(): void {
-    const button = (this.createChild('div') as HTMLElement);
+    const button = this.createChild('div');
     button.classList.add('game-close-button');
     button.innerHTML = '<b><span style=\'font-size: 1.2em; color: white\'>x</span></b>';
     button.style.background = this.#currentPalette.dark;

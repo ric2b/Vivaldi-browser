@@ -30,16 +30,21 @@ pub mod libyuv {
     use crate::reformat::*;
     use crate::*;
 
-    pub fn yuv_to_rgb(_image: &image::Image, _rgb: &mut rgb::Image) -> AvifResult<bool> {
+    pub(crate) fn yuv_to_rgb(_image: &image::Image, _rgb: &mut rgb::Image) -> AvifResult<bool> {
         Err(AvifError::NotImplemented)
     }
 
-    pub fn convert_to_half_float(_rgb: &mut rgb::Image, _scale: f32) -> AvifResult<()> {
+    pub(crate) fn convert_to_half_float(_rgb: &mut rgb::Image, _scale: f32) -> AvifResult<()> {
         Err(AvifError::NotImplemented)
     }
 
     impl image::Image {
-        pub fn scale(&mut self, width: u32, height: u32, _category: Category) -> AvifResult<()> {
+        pub(crate) fn scale(
+            &mut self,
+            width: u32,
+            height: u32,
+            _category: Category,
+        ) -> AvifResult<()> {
             if self.width == width && self.height == height {
                 return Ok(());
             }

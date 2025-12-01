@@ -26,9 +26,10 @@ WindowRegistryServiceFactory::WindowRegistryServiceFactory()
 
 WindowRegistryServiceFactory::~WindowRegistryServiceFactory() {}
 
-KeyedService* WindowRegistryServiceFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+WindowRegistryServiceFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
-  return new WindowRegistryService();
+  return std::make_unique<WindowRegistryService>();
 }
 
 content::BrowserContext*

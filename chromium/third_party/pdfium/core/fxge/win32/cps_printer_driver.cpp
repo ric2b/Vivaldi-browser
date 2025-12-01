@@ -40,7 +40,7 @@ CFX_PSRenderer::RenderingLevel RenderingLevelFromWindowsPrintMode(
       return CFX_PSRenderer::RenderingLevel::kLevel3Type42;
     default:
       // |mode| should be PostScript.
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -73,7 +73,8 @@ CPSPrinterDriver::CPSPrinterDriver(HDC hDC,
     DWORD dwCount = ::GetRegionData(hRgn, 0, nullptr);
     if (dwCount) {
       DataVector<uint8_t> buffer(dwCount);
-      RGNDATA* pData = reinterpret_cast<RGNDATA*>(buffer.data());
+      // TODO(crbug.com/42271176): Resolve safety issue.
+      UNSAFE_TODO(RGNDATA* pData = reinterpret_cast<RGNDATA*>(buffer.data()));
       if (::GetRegionData(hRgn, dwCount, pData)) {
         CFX_Path path;
         for (uint32_t i = 0; i < pData->rdh.nCount; i++) {
@@ -113,7 +114,7 @@ int CPSPrinterDriver::GetDeviceCaps(int caps_id) const {
     case FXDC_VERT_SIZE:
       return m_VertSize;
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -210,11 +211,11 @@ bool CPSPrinterDriver::DrawDeviceText(
 bool CPSPrinterDriver::MultiplyAlpha(float alpha) {
   // PostScript doesn't support transparency. All callers are using
   // `CFX_DIBitmap`-backed raster devices anyway.
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 bool CPSPrinterDriver::MultiplyAlphaMask(RetainPtr<const CFX_DIBitmap> mask) {
   // PostScript doesn't support transparency. All callers are using
   // `CFX_DIBitmap`-backed raster devices anyway.
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }

@@ -201,7 +201,8 @@ views::View* VideoProgress::GetTooltipHandlerForPoint(const gfx::Point& point) {
   return nullptr;
 }
 
-std::u16string VideoProgress::GetTooltipText(const gfx::Point& p) const {
+std::u16string VideoProgress::GetRenderedTooltipText(
+    const gfx::Point& p) const {
   std::u16string time;
   if (allows_click_ && progress_bar_->bounds().Contains(p)) {
     base::DurationFormatWidth time_format = duration_delta_ >= base::Days(1)

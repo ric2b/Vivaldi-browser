@@ -117,6 +117,12 @@
   </translations>
   <release seq="1">
     <messages fallback_to_english="true">
+      <message name="IDS_READER_FOR_ACCESSIBILITY_TITLE" desc="Title of preference that allows the user to use simplified view on any articles, even if the page is mobile-friendly. Simplified view is the new user-facing name for Reader Mode, which extracts the content of an article and removes clutter from a web page and puts the result in a easier-to-read format.">
+        Reader view for web pages
+      </message>
+      <message name="IDS_READER_FOR_ACCESSIBILITY_SUMMARY" desc="Summary of preference that allows the user to use simplified view on any supported articles, even if the page is mobile-friendly.">
+        Show a toggle in the main menu when an article can be shown in Reader View
+      </message>
     </messages>
   </release>
 </grit>

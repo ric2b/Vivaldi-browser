@@ -13,6 +13,7 @@
 //  encoding scheme for RTC video applications.
 
 #include <assert.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <math.h>
 #include <stdio.h>
@@ -121,9 +122,11 @@ static const struct arg_enum_list tune_content_enum[] = {
 };
 static const arg_def_t tune_content_arg = ARG_DEF_ENUM(
     NULL, "tune-content", 1, "Tune content type", tune_content_enum);
+#if CONFIG_CWG_E050
 static const arg_def_t multilayer_metadata_file_arg =
     ARG_DEF("ml", "multilayer_metadata_file", 1,
             "Experimental: path to multilayer metadata file");
+#endif
 
 #if CONFIG_AV1_HIGHBITDEPTH
 static const struct arg_enum_list bitdepth_enum[] = { { "8", AOM_BITS_8 },
@@ -135,17 +138,36 @@ static const arg_def_t bitdepth_arg = ARG_DEF_ENUM(
 #endif  // CONFIG_AV1_HIGHBITDEPTH
 
 static const arg_def_t *svc_args[] = {
-  &frames_arg,          &outputfile,     &width_arg,
-  &height_arg,          &timebase_arg,   &bitrate_arg,
-  &spatial_layers_arg,  &kf_dist_arg,    &scale_factors_arg,
-  &min_q_arg,           &max_q_arg,      &temporal_layers_arg,
-  &layering_mode_arg,   &threads_arg,    &aqmode_arg,
+  &frames_arg,
+  &outputfile,
+  &width_arg,
+  &height_arg,
+  &timebase_arg,
+  &bitrate_arg,
+  &spatial_layers_arg,
+  &kf_dist_arg,
+  &scale_factors_arg,
+  &min_q_arg,
+  &max_q_arg,
+  &temporal_layers_arg,
+  &layering_mode_arg,
+  &threads_arg,
+  &aqmode_arg,
 #if CONFIG_AV1_HIGHBITDEPTH
   &bitdepth_arg,
 #endif
-  &speed_arg,           &bitrates_arg,   &dropframe_thresh_arg,
-  &error_resilient_arg, &output_obu_arg, &test_decode_arg,
-  &tune_content_arg,    &psnr_arg,       NULL,
+  &speed_arg,
+  &bitrates_arg,
+  &dropframe_thresh_arg,
+  &error_resilient_arg,
+  &output_obu_arg,
+  &test_decode_arg,
+  &tune_content_arg,
+  &psnr_arg,
+#if CONFIG_CWG_E050
+  &multilayer_metadata_file_arg,
+#endif
+  NULL,
 };
 
 #define zero(Dest) memset(&(Dest), 0, sizeof(Dest))
@@ -402,8 +424,10 @@ static void parse_command_line(int argc, const char **argv_,
       app_input->show_psnr = 1;
     } else if (arg_match(&arg, &ext_rc_arg, argi)) {
       app_input->use_external_rc = true;
+#if CONFIG_CWG_E050
     } else if (arg_match(&arg, &multilayer_metadata_file_arg, argi)) {
       app_input->multilayer_metadata_file = arg.val;
+#endif
     } else {
       ++argj;
     }
@@ -491,10 +515,10 @@ static void parse_command_line(int argc, const char **argv_,
       enc_cfg->rc_target_bitrate, enc_cfg->kf_max_dist);
 }
 
-static int mode_to_num_temporal_layers[12] = {
+static const int mode_to_num_temporal_layers[12] = {
   1, 2, 3, 3, 2, 1, 1, 3, 3, 3, 3, 3,
 };
-static int mode_to_num_spatial_layers[12] = {
+static const int mode_to_num_spatial_layers[12] = {
   1, 1, 1, 1, 1, 2, 3, 2, 3, 3, 3, 3,
 };
 
@@ -1363,14 +1387,17 @@ static void set_layer_pattern(
   }
 }
 
-static void write_literal(struct aom_write_bit_buffer *wb, int data, int bits,
-                          int offset = 0) {
-  const int to_write = data - offset;
-  if (to_write < 0 || to_write >= (1 << bits)) {
-    die("Invalid data, value %d out of range [%d, %d]\n", data, offset,
-        offset + (1 << bits) - 1);
+static void write_literal(struct aom_write_bit_buffer *wb, uint32_t data,
+                          uint8_t bits, uint32_t offset = 0) {
+  if (bits > 32) {
+    die("Invalid bits value %d > 32\n", bits);
   }
-  aom_wb_write_literal(wb, to_write, bits);
+  const uint32_t max = static_cast<uint32_t>(((uint64_t)1 << bits) - 1);
+  if (data < offset || (data - offset) > max) {
+    die("Invalid data, value %u out of range [%u, %" PRIu64 "]\n", data, offset,
+        (uint64_t)max + offset);
+  }
+  aom_wb_write_unsigned_literal(wb, data - offset, bits);
 }
 
 static void write_depth_representation_element(
@@ -1382,12 +1409,11 @@ static void write_depth_representation_element(
   }
   write_literal(buffer, element.first.sign_flag, 1);
   write_literal(buffer, element.first.exponent, 7);
-  int mantissa_len = 1;
-  while (mantissa_len < 32 && (element.first.mantissa >> mantissa_len != 0)) {
-    ++mantissa_len;
+  if (element.first.mantissa_len == 0 || element.first.mantissa_len > 32) {
+    die("Invalid mantissan_len %d\n", element.first.mantissa_len);
   }
-  write_literal(buffer, mantissa_len - 1, 5);
-  write_literal(buffer, element.first.mantissa, mantissa_len);
+  write_literal(buffer, element.first.mantissa_len - 1, 5);
+  write_literal(buffer, element.first.mantissa, element.first.mantissa_len);
 }
 
 static void write_color_properties(
@@ -1444,97 +1470,93 @@ static void add_multilayer_metadata(
     }
     assert(buffer.bit_offset % 8 == 0);
 
-    if (multilayer.use_case < 12) {
-      if (layer.layer_type == libaom_examples::MULTIALYER_LAYER_TYPE_ALPHA &&
-          layer.layer_metadata_scope >= libaom_examples::SCOPE_GLOBAL) {
-        const libaom_examples::AlphaInformation &alpha_info =
-            layer.global_alpha_info;
-        write_literal(&buffer, alpha_info.alpha_use_idc, 3);
-        write_literal(&buffer, alpha_info.alpha_bit_depth, 3, /*offset=*/8);
-        write_literal(&buffer, alpha_info.alpha_clip_idc, 2);
-        write_literal(&buffer, alpha_info.alpha_incr_flag, 1);
-        write_literal(&buffer, alpha_info.alpha_transparent_value,
-                      alpha_info.alpha_bit_depth);
-        write_literal(&buffer, alpha_info.alpha_opaque_value,
-                      alpha_info.alpha_bit_depth);
-        if (buffer.bit_offset % 8 != 0) {
-          // ai_byte_alignment_bits
-          write_literal(&buffer, 0, 8 - (buffer.bit_offset % 8));
-        }
-        assert(buffer.bit_offset % 8 == 0);
-
-        if (alpha_info.alpha_use_idc == libaom_examples::ALPHA_STRAIGHT) {
-          write_literal(&buffer, 0, 6);  // ai_reserved_6bits
-          write_color_properties(&buffer, alpha_info.alpha_color_description);
-        } else if (alpha_info.alpha_use_idc ==
-                   libaom_examples::ALPHA_SEGMENTATION) {
-          write_literal(&buffer, 0, 7);  // ai_reserved_7bits
-          write_literal(&buffer, !alpha_info.label_type_id.empty(), 1);
-          if (!alpha_info.label_type_id.empty()) {
-            const size_t num_values =
-                std::abs(alpha_info.alpha_transparent_value -
-                         alpha_info.alpha_opaque_value) +
-                1;
-            if (!alpha_info.label_type_id.empty() &&
-                alpha_info.label_type_id.size() != num_values) {
-              die("Invalid multilayer metadata, label_type_id size must be "
-                  "equal to the range of alpha values between "
-                  "alpha_transparent_value and alpha_opaque_value (expected "
-                  "%d values, found %d values)\n",
-                  (int)num_values, (int)alpha_info.label_type_id.size());
-            }
-            for (size_t j = 0; j < num_values; ++j) {
-              write_literal(&buffer, alpha_info.label_type_id[j], 16);
-            }
-          }
-        }
-        assert(buffer.bit_offset % 8 == 0);
-      } else if (layer.layer_type ==
-                     libaom_examples::MULTIALYER_LAYER_TYPE_DEPTH &&
-                 layer.layer_metadata_scope >= libaom_examples::SCOPE_GLOBAL) {
-        const libaom_examples::DepthInformation &depth_info =
-            layer.global_depth_info;
-        write_literal(&buffer, depth_info.z_near.second, 1);
-        write_literal(&buffer, depth_info.z_far.second, 1);
-        write_literal(&buffer, depth_info.d_min.second, 1);
-        write_literal(&buffer, depth_info.d_max.second, 1);
-        write_literal(&buffer, depth_info.depth_representation_type, 4);
-        if (depth_info.d_min.second || depth_info.d_max.second) {
-          write_literal(&buffer, depth_info.disparity_ref_view_id, 2);
-        }
-        write_depth_representation_element(&buffer, depth_info.z_near);
-        write_depth_representation_element(&buffer, depth_info.z_far);
-        write_depth_representation_element(&buffer, depth_info.d_min);
-        write_depth_representation_element(&buffer, depth_info.d_max);
-        if (depth_info.depth_representation_type == 3) {
-          write_literal(&buffer, depth_info.depth_nonlinear_precision, 4,
-                        /*offset=*/8);
-          if (depth_info.depth_nonlinear_representation_model.empty() ||
-              depth_info.depth_nonlinear_representation_model.size() >
-                  (1 << 6)) {
-            die("Invalid multilayer metadata, if depth_nonlinear_precision "
-                "== 3, depth_nonlinear_representation_model must have 1 to "
-                "%d elements, found %d elements\n",
-                1 << 6,
-                (int)depth_info.depth_nonlinear_representation_model.size());
-          }
-          write_literal(
-              &buffer,
-              (int)depth_info.depth_nonlinear_representation_model.size() - 1,
-              6);
-          const int bit_depth =
-              depth_info.depth_nonlinear_precision + 8;  // XXX + 9 ???
-          for (const uint32_t v :
-               depth_info.depth_nonlinear_representation_model) {
-            write_literal(&buffer, v, bit_depth);
-          }
-        }
-        if (buffer.bit_offset % 8 != 0) {
-          write_literal(&buffer, 0, 8 - (buffer.bit_offset % 8));
-        }
-        assert(buffer.bit_offset % 8 == 0);
+    if (layer.layer_type == libaom_examples::MULTILAYER_LAYER_TYPE_ALPHA &&
+        layer.layer_metadata_scope >= libaom_examples::SCOPE_GLOBAL) {
+      const libaom_examples::AlphaInformation &alpha_info =
+          layer.global_alpha_info;
+      write_literal(&buffer, alpha_info.alpha_use_idc, 3);
+      write_literal(&buffer, alpha_info.alpha_bit_depth, 3, /*offset=*/8);
+      write_literal(&buffer, alpha_info.alpha_clip_idc, 2);
+      write_literal(&buffer, alpha_info.alpha_incr_flag, 1);
+      write_literal(&buffer, alpha_info.alpha_transparent_value,
+                    alpha_info.alpha_bit_depth + 1);
+      write_literal(&buffer, alpha_info.alpha_opaque_value,
+                    alpha_info.alpha_bit_depth + 1);
+      if (buffer.bit_offset % 8 != 0) {
+        // ai_byte_alignment_bits
+        write_literal(&buffer, 0, 8 - (buffer.bit_offset % 8));
       }
+      assert(buffer.bit_offset % 8 == 0);
+
+      if (alpha_info.alpha_use_idc == libaom_examples::ALPHA_STRAIGHT) {
+        write_literal(&buffer, 0, 6);  // ai_reserved_6bits
+        write_color_properties(&buffer, alpha_info.alpha_color_description);
+      } else if (alpha_info.alpha_use_idc ==
+                 libaom_examples::ALPHA_SEGMENTATION) {
+        write_literal(&buffer, 0, 7);  // ai_reserved_7bits
+        write_literal(&buffer, !alpha_info.label_type_id.empty(), 1);
+        if (!alpha_info.label_type_id.empty()) {
+          const size_t num_values =
+              std::abs(alpha_info.alpha_transparent_value -
+                       alpha_info.alpha_opaque_value) +
+              1;
+          if (!alpha_info.label_type_id.empty() &&
+              alpha_info.label_type_id.size() != num_values) {
+            die("Invalid multilayer metadata, label_type_id size must be "
+                "equal to the range of alpha values between "
+                "alpha_transparent_value and alpha_opaque_value (expected "
+                "%d values, found %d values)\n",
+                (int)num_values, (int)alpha_info.label_type_id.size());
+          }
+          for (size_t j = 0; j < num_values; ++j) {
+            write_literal(&buffer, alpha_info.label_type_id[j], 16);
+          }
+        }
+      }
+      assert(buffer.bit_offset % 8 == 0);
+    } else if (layer.layer_type ==
+                   libaom_examples::MULTILAYER_LAYER_TYPE_DEPTH &&
+               layer.layer_metadata_scope >= libaom_examples::SCOPE_GLOBAL) {
+      const libaom_examples::DepthInformation &depth_info =
+          layer.global_depth_info;
+      write_literal(&buffer, depth_info.z_near.second, 1);
+      write_literal(&buffer, depth_info.z_far.second, 1);
+      write_literal(&buffer, depth_info.d_min.second, 1);
+      write_literal(&buffer, depth_info.d_max.second, 1);
+      write_literal(&buffer, depth_info.depth_representation_type, 4);
+      if (depth_info.d_min.second || depth_info.d_max.second) {
+        write_literal(&buffer, depth_info.disparity_ref_view_id, 2);
+      }
+      write_depth_representation_element(&buffer, depth_info.z_near);
+      write_depth_representation_element(&buffer, depth_info.z_far);
+      write_depth_representation_element(&buffer, depth_info.d_min);
+      write_depth_representation_element(&buffer, depth_info.d_max);
+      if (depth_info.depth_representation_type == 3) {
+        write_literal(&buffer, depth_info.depth_nonlinear_precision, 4,
+                      /*offset=*/8);
+        if (depth_info.depth_nonlinear_representation_model.empty() ||
+            depth_info.depth_nonlinear_representation_model.size() > (1 << 6)) {
+          die("Invalid multilayer metadata, if depth_nonlinear_precision "
+              "== 3, depth_nonlinear_representation_model must have 1 to "
+              "%d elements, found %d elements\n",
+              1 << 6,
+              (int)depth_info.depth_nonlinear_representation_model.size());
+        }
+        write_literal(
+            &buffer,
+            (int)depth_info.depth_nonlinear_representation_model.size() - 1, 6);
+        const int bit_depth = depth_info.depth_nonlinear_precision;
+        for (const uint32_t v :
+             depth_info.depth_nonlinear_representation_model) {
+          write_literal(&buffer, v, bit_depth);
+        }
+      }
+      if (buffer.bit_offset % 8 != 0) {
+        write_literal(&buffer, 0, 8 - (buffer.bit_offset % 8));
+      }
+      assert(buffer.bit_offset % 8 == 0);
     }
+
     assert(buffer.bit_offset % 8 == 0);
 
     const int metadata_size_bytes = (buffer.bit_offset - metadata_start) / 8;
@@ -1864,8 +1886,10 @@ int main(int argc, const char **argv) {
 
   libaom_examples::MultilayerMetadata multilayer_metadata;
   if (app_input.multilayer_metadata_file != NULL) {
-    multilayer_metadata = libaom_examples::parse_multilayer_file(
-        app_input.multilayer_metadata_file);
+    if (!libaom_examples::parse_multilayer_file(
+            app_input.multilayer_metadata_file, &multilayer_metadata)) {
+      die("Failed to parse multilayer metadata");
+    }
     libaom_examples::print_multilayer_metadata(multilayer_metadata);
   }
 

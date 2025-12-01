@@ -38,7 +38,7 @@ locations:
 -   [//ash/ash_strings.grd](https://source.chromium.org/chromium/chromium/src/+/main:ash/ash_strings.grd)
 -   [//chromeos/chromeos_strings.grd](https://source.chromium.org/chromium/chromium/src/+/main:chromeos/chromeos_strings.grd)
 -   [Settings Strings](https://source.chromium.org/chromium/chromium/src/+/main:chrome/app/os_settings_strings.grdp)
--   [Nearby Share Strings](https://source.chromium.org/chromium/chromium/src/+/main:chrome/app/nearby_share_strings.grdp)
+-   [Quick Share (formerly Nearby Share) Strings](https://source.chromium.org/chromium/chromium/src/+/main:chrome/app/nearby_share_strings.grdp)
 -   [Printing Strings](https://source.chromium.org/chromium/chromium/src/+/main:chrome/app/printing_strings.grdp)
 
 If you're adding a new entry as opposed to modifying an existing one, use this
@@ -78,7 +78,7 @@ meaning to an existing string will trigger a retranslation.
 
 -   Most strings are "Sentence case" with the first word capitalized and other
     words not capitalized.
--   Specific features may be capitalized (e.g. "Bluetooth", "Nearby Share") even
+-   Specific features may be capitalized (e.g. "Bluetooth", "Quick Share") even
     if they appear in the middle of a string.
 -   Most strings do not end in a period (e.g. "Show settings").
 -   Multi-phrase strings that contain a period in the middle also have a period
@@ -86,7 +86,7 @@ meaning to an existing string will trigger a retranslation.
 
 Note: String token names must start with `IDS_`. For guidance on writing useful
 descriptions and meanings, see
-[here](https://www.chromium.org/developers/design-documents/ui-localization/#give-context-to-translators).
+[here](/developers/design-documents/ui-localization/#give-context-to-translators).
 Additionally, you can always reach out to the UX writers for any guidance with
 writing descriptions and meanings.
 
@@ -251,7 +251,7 @@ go/cr-strings-process.
 
 ## Other Resources
 
--   [Adding a new .grd(p) file](https://www.chromium.org/developers/design-documents/ui-localization/#add-a-new-grdp-file):
+-   [Adding a new .grd(p) file](/developers/design-documents/ui-localization/#add-a-new-grdp-file):
     should rarely be done.
 -   go/chrome-translation-process: More detailed look of the internals of how
     strings are translated/localized.

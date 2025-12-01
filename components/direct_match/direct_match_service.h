@@ -3,6 +3,8 @@
 #ifndef DIRECT_MATCH_SERVICE_H_
 #define DIRECT_MATCH_SERVICE_H_
 
+#include <set>
+
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
 #include "base/memory/ref_counted.h"
@@ -10,6 +12,7 @@
 #include "base/values.h"
 #include "components/direct_match/qwerty_weighted_distance.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/prefs/pref_service.h"
 #include "net/base/backoff_entry.h"
 #include "url/gurl.h"
 
@@ -26,6 +29,12 @@ class SimpleURLLoader;
 
 namespace direct_match {
 constexpr float kNeighborWeight = 0.7;
+constexpr size_t kInvalidCategory = static_cast<size_t>(-1);
+
+// If certain direct match providers have the "blocker_safe" property false,
+// check if one or more trakcer blocker extensions listed are installed.
+// If true skip loading the direct match provider
+extern const std::set<std::string> blocker_extension_ids;
 
 class DirectMatchService : public KeyedService {
  public:
@@ -41,6 +50,7 @@ class DirectMatchService : public KeyedService {
       bool sd_dialog = false;
     };
 
+    int id;
     std::string name;
     std::string title;
     std::string redirect_url;
@@ -49,40 +59,52 @@ class DirectMatchService : public KeyedService {
     base::Value::List alternative_names;
     base::Value::List blocked_names;
     std::string image_path;
-    size_t category;
+    size_t category = kInvalidCategory;
     size_t position;
     DisplayLocations display_locations;
+    bool blocker_safe;
   };
 
-  public:
-    class Observer : public base::CheckedObserver {
-     public:
-      ~Observer() override;
-      virtual void OnFinishedDownloadingDirectMatchUnits() {}
-      virtual void OnFinishedDownloadingDirectMatchUnitsIcon() {}
-    };
+ public:
+  class Observer : public base::CheckedObserver {
+   public:
+    ~Observer() override;
+    virtual void OnFinishedDownloadingDirectMatchUnits() {}
+    virtual void OnFinishedDownloadingDirectMatchUnitsIcon() {}
+  };
 
   DirectMatchService();
   ~DirectMatchService() override;
 #if BUILDFLAG(IS_IOS)
   void Load(
-      const scoped_refptr<network::SharedURLLoaderFactory>& url_loader_factory);
+      const scoped_refptr<network::SharedURLLoaderFactory>& url_loader_factory,
+      PrefService* prefs);
 #else
   void Load(Profile* profile);
 #endif
+
+  void OnExtensionUnloaded(std::string id);
+  void OnExtensionReady(std::string id);
   // Returns the best direct match for query and a bool telling if it is
   // allowed to be the default option (autocompleted) in the address field.
-  std::pair<DirectMatchService::DirectMatchUnit*, bool> GetDirectMatch(std::string query);
+  std::pair<DirectMatchService::DirectMatchUnit*, bool> GetDirectMatch(
+      std::string query);
+
+  bool HideDirectMatchFromOmnibox(std::string url);
+  void ResetHiddenDirectMatch();
+
+  std::set<int> hidden_direct_matches_;
+  std::set<std::string> installed_blocker_extension_ids_;
 
   // Returns direct match items for provided `category_id` sorted asc by
   // `position` and filtered by `display_locations`.
   std::vector<const DirectMatchService::DirectMatchUnit*>
-      GetDirectMatchesForCategory(size_t category_id) const;
+  GetDirectMatchesForCategory(size_t category_id) const;
 
   // Returns popular sites from direct match units.
   // These are the same direct match units except only sorted asc by `position`.
-  std::vector<const DirectMatchService::DirectMatchUnit*>
-      GetPopularSites() const;
+  std::vector<const DirectMatchService::DirectMatchUnit*> GetPopularSites()
+      const;
   float GetAcceptableDirectMatchDistance(std::u16string name);
 
   void AddObserver(Observer* observer);
@@ -92,6 +114,7 @@ class DirectMatchService : public KeyedService {
   void OnDirectMatchDownloadDone(const size_t loader_idx,
                                  std::unique_ptr<std::string> response_body);
   void RunDirectMatchDownload();
+  void LoadHiddenProviders();
   float QwertyWeightedDamerauLevenshtein(std::string name,
                                          std::string typed_text,
                                          bool similarity);
@@ -123,9 +146,8 @@ class DirectMatchService : public KeyedService {
   // predicate to each unit,
   // collects the ones that satisfy the predicate, and
   // then sorts the resulting list by 'position' in ascending order.
-  std::vector<const DirectMatchService::DirectMatchUnit*>
-      GetMatchingUnits(
-          std::function<bool(const DirectMatchUnit&)> predicate) const;
+  std::vector<const DirectMatchService::DirectMatchUnit*> GetMatchingUnits(
+      std::function<bool(const DirectMatchUnit&)> predicate) const;
 
   std::vector<std::unique_ptr<network::SimpleURLLoader>> simple_url_loader_;
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
@@ -135,6 +157,7 @@ class DirectMatchService : public KeyedService {
   net::BackoffEntry report_backoff_;
 
   base::ObserverList<Observer> observers_;
+  raw_ptr<PrefService> prefs_;
 };
 
 }  // namespace direct_match

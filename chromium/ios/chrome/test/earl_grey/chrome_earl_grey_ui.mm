@@ -8,9 +8,9 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #import "components/strings/grit/components_strings.h"
+#import "ios/chrome/browser/settings/ui_bundled/cells/clear_browsing_data_constants.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_constants.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
-#import "ios/chrome/browser/ui/settings/cells/clear_browsing_data_constants.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
@@ -68,8 +68,9 @@ id<GREYAction> PageSheetScrollDown() {
 
   // But for very small devices (like the SE), this is too big.
   UIWindow* currentWindow = chrome_test_util::GetAnyKeyWindow();
-  if (currentWindow.rootViewController.view.frame.size.height < 600)
+  if (currentWindow.rootViewController.view.frame.size.height < 600) {
     menu_scroll_displacement = 250;
+  }
   return grey_scrollInDirection(kGREYDirectionDown, menu_scroll_displacement);
 }
 

@@ -58,6 +58,10 @@ void StubPasswordManagerClient::NotifyUserCouldBeAutoSignedIn(
 void StubPasswordManagerClient::NotifySuccessfulLoginWithExistingPassword(
     std::unique_ptr<PasswordFormManagerForUI> submitted_manager) {}
 
+bool StubPasswordManagerClient::IsPasswordChangeOngoing() {
+  return false;
+}
+
 void StubPasswordManagerClient::NotifyStorePasswordCalled() {}
 
 void StubPasswordManagerClient::NotifyKeychainError() {}
@@ -98,6 +102,11 @@ PasswordReuseManager* StubPasswordManagerClient::GetPasswordReuseManager()
   return nullptr;
 }
 
+PasswordChangeServiceInterface*
+StubPasswordManagerClient::GetPasswordChangeService() const {
+  return nullptr;
+}
+
 const PasswordManagerInterface* StubPasswordManagerClient::GetPasswordManager()
     const {
   return nullptr;
@@ -116,7 +125,7 @@ const CredentialsFilter* StubPasswordManagerClient::GetStoreResultFilter()
   return &credentials_filter_;
 }
 
-autofill::LogManager* StubPasswordManagerClient::GetLogManager() {
+autofill::LogManager* StubPasswordManagerClient::GetCurrentLogManager() {
   return &log_manager_;
 }
 
@@ -193,18 +202,21 @@ version_info::Channel StubPasswordManagerClient::GetChannel() const {
     BUILDFLAG(IS_CHROMEOS)
 void StubPasswordManagerClient::OpenPasswordDetailsBubble(
     const password_manager::PasswordForm& form) {}
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) ||
+        // BUILDFLAG(IS_CHROMEOS)
 
+#if !BUILDFLAG(IS_IOS)
 std::unique_ptr<
     password_manager::PasswordCrossDomainConfirmationPopupController>
 StubPasswordManagerClient::ShowCrossDomainConfirmationPopup(
     const gfx::RectF& element_bounds,
     base::i18n::TextDirection text_direction,
     const GURL& domain,
-    const std::u16string& password_origin,
+    const std::u16string& password_hostname,
+    bool show_warning_text,
     base::OnceClosure confirmation_callback) {
   return nullptr;
 }
-#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) ||
-        // BUILDFLAG(IS_CHROMEOS)
+#endif  // !BUILDFLAG(IS_IOS)
 
 }  // namespace password_manager

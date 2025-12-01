@@ -113,7 +113,7 @@ ShellContentBrowserClient::CreateBrowserMainParts(bool is_integration_test) {
 void ShellContentBrowserClient::RenderProcessWillLaunch(
     content::RenderProcessHost* host) {
 #if BUILDFLAG(ENABLE_NACL)
-  int render_process_id = host->GetID();
+  int render_process_id = host->GetDeprecatedID();
   BrowserContext* browser_context = browser_main_parts_->browser_context();
 
   // PluginInfoMessageFilter is not required because app_shell does not have
@@ -128,9 +128,9 @@ bool ShellContentBrowserClient::ShouldUseProcessPerSite(
     content::BrowserContext* browser_context,
     const GURL& site_url) {
   // This ensures that all render views created for a single app will use the
-  // same render process (see content::SiteInstance::GetProcess). Otherwise the
-  // default behavior of ContentBrowserClient will lead to separate render
-  // processes for the background page and each app window view.
+  // same render process (see content::SiteInstance::GetOrCreateProcess).
+  // Otherwise the default behavior of ContentBrowserClient will lead to
+  // separate render processes for the background page and each app window view.
   return true;
 }
 
@@ -168,7 +168,7 @@ void ShellContentBrowserClient::SiteInstanceGotProcessAndSite(
   }
 
   ProcessMap::Get(browser_main_parts_->browser_context())
-      ->Insert(extension->id(), site_instance->GetProcess()->GetID());
+      ->Insert(extension->id(), site_instance->GetProcess()->GetDeprecatedID());
 }
 
 void ShellContentBrowserClient::AppendExtraCommandLineSwitches(
@@ -220,15 +220,16 @@ void ShellContentBrowserClient::ExposeInterfacesToRenderer(
     service_manager::BinderRegistry* registry,
     blink::AssociatedInterfaceRegistry* associated_registry,
     content::RenderProcessHost* render_process_host) {
-  associated_registry->AddInterface<mojom::RendererHost>(base::BindRepeating(
-      &RendererStartupHelper::BindForRenderer, render_process_host->GetID()));
+  associated_registry->AddInterface<mojom::RendererHost>(
+      base::BindRepeating(&RendererStartupHelper::BindForRenderer,
+                          render_process_host->GetDeprecatedID()));
 }
 
 void ShellContentBrowserClient::
     RegisterAssociatedInterfaceBindersForRenderFrameHost(
         content::RenderFrameHost& render_frame_host,
         blink::AssociatedInterfaceRegistry& associated_registry) {
-  int render_process_id = render_frame_host.GetProcess()->GetID();
+  int render_process_id = render_frame_host.GetProcess()->GetDeprecatedID();
   associated_registry.AddInterface<mojom::EventRouter>(
       base::BindRepeating(&EventRouter::BindForRenderer, render_process_id));
   associated_registry.AddInterface<mojom::RendererHost>(base::BindRepeating(
@@ -259,6 +260,11 @@ ShellContentBrowserClient::CreateThrottlesForNavigation(
                navigation_handle->GetWebContents()->GetBrowserContext())) {
     throttles.push_back(
         std::make_unique<ExtensionNavigationThrottle>(navigation_handle));
+  }
+
+  if (auto throttle =
+          WebViewGuest::MaybeCreateNavigationThrottle(navigation_handle)) {
+    throttles.push_back(std::move(throttle));
   }
   return throttles;
 }

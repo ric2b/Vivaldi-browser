@@ -7,6 +7,8 @@
 
 #include "src/pdf/SkPDFDevice.h"
 
+#include "include/codec/SkCodec.h"
+#include "include/codec/SkJpegDecoder.h"
 #include "include/core/SkAlphaType.h"
 #include "include/core/SkBitmap.h"
 #include "include/core/SkBlendMode.h"
@@ -140,17 +142,6 @@ void SkPDFDevice::MarkedContentManager::accumulate(const SkPoint& p) {
     fCurrentlyActiveMark.accumulate(p);
 }
 
-#ifndef SK_PDF_MASK_QUALITY
-    // If MASK_QUALITY is in [0,100], will be used for JpegEncoder.
-    // Otherwise, just encode masks losslessly.
-    #define SK_PDF_MASK_QUALITY 50
-    // Since these masks are used for blurry shadows, we shouldn't need
-    // high quality.  Raise this value if your shadows have visible JPEG
-    // artifacts.
-    // If SkJpegEncoder::Encode fails, we will fall back to the lossless
-    // encoding.
-#endif
-
 // This function destroys the mask and either frees or takes the pixels.
 sk_sp<SkImage> mask_to_greyscale_image(SkMaskBuilder* mask) {
     sk_sp<SkImage> img;
@@ -162,8 +153,11 @@ sk_sp<SkImage> mask_to_greyscale_image(SkMaskBuilder* mask) {
         SkDynamicMemoryWStream buffer;
         SkJpegEncoder::Options jpegOptions;
         jpegOptions.fQuality = imgQuality;
+        // By encoding this into jpeg, it be embedded efficiently during drawImage.
         if (SkJpegEncoder::Encode(&buffer, pm, jpegOptions)) {
-            img = SkImages::DeferredFromEncodedData(buffer.detachAsData());
+            std::unique_ptr<SkCodec> codec = SkJpegDecoder::Decode(buffer.detachAsData(), nullptr);
+            SkASSERT(codec);
+            img = SkCodecs::DeferredImage(std::move(codec));
             SkASSERT(img);
             if (img) {
                 SkMaskBuilder::FreeImage(mask->image());
@@ -1298,8 +1292,8 @@ static void populate_graphic_state_entry_from_paint(
         if (as_SB(shader)->type() == SkShaderBase::ShaderType::kColor) {
             auto colorShader = static_cast<SkColorShader*>(shader);
             // We don't have to set a shader just for a color.
-            color = SkColor4f::FromColor(colorShader->color());
-            entry->fColor = {color.fR, color.fG, color.fB, 1};
+            color = colorShader->color();
+            entry->fColor = colorShader->color().makeOpaque();
         } else {
             // PDF positions patterns relative to the initial transform, so
             // we need to apply the current transform to the shader parameters.

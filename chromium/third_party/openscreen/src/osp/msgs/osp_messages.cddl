@@ -116,7 +116,7 @@ auth-status = {
 
 ; type key 1005
 auth-spake2-handshake = {
-  0: auth-initiation-token ; token
+  0: auth-initiation-token ; initiation-token
   1: auth-spake2-psk-status ; psk-status
   2: bytes ; public-value
 }

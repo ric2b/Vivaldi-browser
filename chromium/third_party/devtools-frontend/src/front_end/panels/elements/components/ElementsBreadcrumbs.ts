@@ -8,15 +8,19 @@ import '../../../ui/components/node_text/node_text.js';
 import * as i18n from '../../../core/i18n/i18n.js';
 import type * as SDK from '../../../core/sdk/sdk.js';
 import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
-import * as Coordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
-import * as LitHtml from '../../../ui/lit-html/lit-html.js';
+import * as RenderCoordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
+import * as Lit from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
-import elementsBreadcrumbsStyles from './elementsBreadcrumbs.css.js';
+import elementsBreadcrumbsStylesRaw from './elementsBreadcrumbs.css.js';
 import {crumbsToRender, type UserScrollPosition} from './ElementsBreadcrumbsUtils.js';
 import type {DOMNode} from './Helper.js';
 
-const {html} = LitHtml;
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const elementsBreadcrumbsStyles = new CSSStyleSheet();
+elementsBreadcrumbsStyles.replaceSync(elementsBreadcrumbsStylesRaw.cssContent);
+
+const {html} = Lit;
 
 const UIStrings = {
   /**
@@ -50,7 +54,6 @@ export interface ElementsBreadcrumbsData {
   selectedNode: DOMNode|null;
   crumbs: DOMNode[];
 }
-const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
 
 export class ElementsBreadcrumbs extends HTMLElement {
   readonly #shadow = this.attachShadow({mode: 'open'});
@@ -102,11 +105,11 @@ export class ElementsBreadcrumbs extends HTMLElement {
       return;
     }
 
-    const crumbWindowWidth = await coordinator.read<number>(() => {
+    const crumbWindowWidth = await RenderCoordinator.read<number>(() => {
       return crumbWindow.clientWidth;
     });
 
-    const scrollContainerWidth = await coordinator.read<number>(() => {
+    const scrollContainerWidth = await RenderCoordinator.read<number>(() => {
       return crumbScrollContainer.clientWidth;
     });
 
@@ -175,11 +178,11 @@ export class ElementsBreadcrumbs extends HTMLElement {
       return;
     }
 
-    const crumbWindowWidth = await coordinator.read<number>(() => {
+    const crumbWindowWidth = await RenderCoordinator.read<number>(() => {
       return crumbWindow.clientWidth;
     });
 
-    const scrollContainerWidth = await coordinator.read<number>(() => {
+    const scrollContainerWidth = await RenderCoordinator.read<number>(() => {
       return crumbScrollContainer.clientWidth;
     });
 
@@ -265,8 +268,8 @@ export class ElementsBreadcrumbs extends HTMLElement {
     };
   }
 
-  #renderOverflowButton(direction: 'left'|'right', disabled: boolean): LitHtml.TemplateResult {
-    const buttonStyles = LitHtml.Directives.classMap({
+  #renderOverflowButton(direction: 'left'|'right', disabled: boolean): Lit.TemplateResult {
+    const buttonStyles = Lit.Directives.classMap({
       overflow: true,
       [direction]: true,
       hidden: !this.#overflowing,
@@ -298,7 +301,7 @@ export class ElementsBreadcrumbs extends HTMLElement {
 
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
-    LitHtml.render(html`
+    Lit.render(html`
       <nav class="crumbs" aria-label=${i18nString(UIStrings.breadcrumbs)} jslog=${VisualLogging.elementsBreadcrumbs()}>
         ${this.#renderOverflowButton('left', this.#userScrollPosition === 'start')}
 
@@ -309,9 +312,9 @@ export class ElementsBreadcrumbs extends HTMLElement {
                 crumb: true,
                 selected: crumb.selected,
               };
-              // eslint-disable-next-line rulesdir/ban_a_tags_in_lit_html
+              // eslint-disable-next-line rulesdir/no-a-tags-in-lit
               return html`
-                <li class=${LitHtml.Directives.classMap(crumbClasses)}
+                <li class=${Lit.Directives.classMap(crumbClasses)}
                   data-node-id=${crumb.node.id}
                   data-crumb="true"
                 >
@@ -361,7 +364,7 @@ export class ElementsBreadcrumbs extends HTMLElement {
     const activeCrumb = this.#shadow.querySelector(`.crumb[data-node-id="${activeCrumbId}"]`);
 
     if (activeCrumb) {
-      await coordinator.scroll(() => {
+      await RenderCoordinator.scroll(() => {
         activeCrumb.scrollIntoView({
           // We only want to scroll smoothly when the user is clicking the
           // buttons manually. If we are automatically scrolling, we could be

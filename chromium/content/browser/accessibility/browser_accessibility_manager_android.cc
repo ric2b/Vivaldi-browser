@@ -11,6 +11,7 @@
 #include "base/i18n/char_iterator.h"
 #include "content/browser/accessibility/browser_accessibility_android.h"
 #include "content/browser/accessibility/web_contents_accessibility_android.h"
+#include "content/public/common/content_features.h"
 #include "ui/accessibility/ax_event_generator.h"
 #include "ui/accessibility/ax_role_properties.h"
 #include "ui/accessibility/ax_selection.h"
@@ -260,16 +261,7 @@ void BrowserAccessibilityManagerAndroid::FireGeneratedEvent(
 
   switch (event_type) {
     case ui::AXEventGenerator::Event::ALERT: {
-      // When an alertdialog is shown, we will announce the hint, which
-      // (should) contain the description set by the author. If it is
-      // empty, then we will try GetTextContentUTF16() as a fallback.
-      std::u16string text = android_node->GetHint();
-      if (text.empty()) {
-        text = android_node->GetTextContentUTF16();
-      }
-
-      wcax->AnnounceLiveRegionText(text);
-      wcax->HandleDialogModalOpened(android_node->GetUniqueId());
+      wcax->HandlePaneOpened(android_node->GetUniqueId());
       break;
     }
     case ui::AXEventGenerator::Event::CHECKED_STATE_CHANGED:
@@ -294,15 +286,21 @@ void BrowserAccessibilityManagerAndroid::FireGeneratedEvent(
     case ui::AXEventGenerator::Event::EXPANDED: {
       if (ui::IsComboBox(android_node->GetRole()) &&
           GetFocus()->IsDescendantOf(android_node)) {
-        wcax->AnnounceLiveRegionText(android_node->GetComboboxExpandedText());
+        wcax->HandlePaneOpened(android_node->GetUniqueId());
       }
       break;
     }
     case ui::AXEventGenerator::Event::LIVE_REGION_NODE_CHANGED: {
       // This event is fired when an object appears in a live region.
-      // Speak its text.
-      std::u16string text = android_node->GetTextContentUTF16();
-      wcax->AnnounceLiveRegionText(text);
+      // Speak its text unless the experimental deprecation of the announce
+      // approach is enabled, in which case we do nothing. The node will have a
+      // live region type set, and the window content change event will inform
+      // the framework of the node change.
+      if (!base::FeatureList::IsEnabled(
+              features::kAccessibilityDeprecateTypeAnnounce)) {
+        std::u16string text = android_node->GetTextContentUTF16();
+        wcax->AnnounceLiveRegionText(text);
+      }
       break;
     }
     case ui::AXEventGenerator::Event::NAME_CHANGED: {
@@ -331,7 +329,7 @@ void BrowserAccessibilityManagerAndroid::FireGeneratedEvent(
       // When this happens, we want to generate a TYPE_WINDOW_STATE_CHANGED
       // event and populate the node's paneTitle with the dialog description.
       if (android_node->GetRole() == ax::mojom::Role::kDialog) {
-        wcax->HandleDialogModalOpened(android_node->GetUniqueId());
+        wcax->HandlePaneOpened(android_node->GetUniqueId());
       }
       break;
     }
@@ -428,7 +426,12 @@ void BrowserAccessibilityManagerAndroid::FireAriaNotificationEvent(
     return;
   }
 
-  wcax->AnnounceLiveRegionText(base::UTF8ToUTF16(announcement));
+  // TODO(aleventhal): If aria-notification becomes a web standard, a solution
+  // that doesn't use a forced announcement must be implemented.
+  if (!base::FeatureList::IsEnabled(
+          features::kAccessibilityDeprecateTypeAnnounce)) {
+    wcax->AnnounceLiveRegionText(base::UTF8ToUTF16(announcement));
+  }
 }
 
 void BrowserAccessibilityManagerAndroid::SendLocationChangeEvents(

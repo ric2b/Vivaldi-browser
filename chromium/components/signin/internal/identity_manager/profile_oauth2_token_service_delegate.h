@@ -80,6 +80,15 @@ class ProfileOAuth2TokenServiceDelegate {
   virtual bool RefreshTokenIsAvailable(
       const CoreAccountId& account_id) const = 0;
 
+#if BUILDFLAG(IS_IOS)
+  // Returns |true| if a refresh token is available for |account_id| on the
+  // device, and |false| otherwise. Note: Implementations must make sure that
+  // |RefreshTokenIsAvailable| returns |true| if and only if |account_id| is
+  // contained in the list of accounts returned by |GetAccountsOnDevice|.
+  virtual bool RefreshTokenIsAvailableOnDevice(
+      const CoreAccountId& account_id) const = 0;
+#endif  // BUILDFLAG(IS_IOS)
+
   virtual GoogleServiceAuthError GetAuthError(
       const CoreAccountId& account_id) const;
   virtual void UpdateAuthError(const CoreAccountId& account_id,
@@ -106,14 +115,25 @@ class ProfileOAuth2TokenServiceDelegate {
   virtual void GenerateRefreshTokenBindingKeyAssertionForMultilogin(
       const CoreAccountId& account_id,
       std::string_view challenge,
+      std::string_view ephemeral_public_key,
       TokenBindingHelper::GenerateAssertionCallback callback) = 0;
 #endif  // BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
 
   // Returns a list of accounts for which a refresh token is maintained by
-  // |this| instance, in the order the refresh tokens were added.
+  // |this| instance, i.e. the accounts available in this profile, in the order
+  // the refresh tokens were added.
   // Note: If tokens have not been fully loaded yet, an empty list is returned.
   // Also, see |RefreshTokenIsAvailable|.
+  // TODO(crbug.com/368409110): Rename to GetAccountsInProfile(), to distinguish
+  // from GetAccountsOnDevice().
   virtual std::vector<CoreAccountId> GetAccounts() const;
+
+#if BUILDFLAG(IS_IOS)
+  // Returns a list of accounts that exist on the device, including those that
+  // are assigned to different profiles, in the order provided by the system
+  // (usually the order in which the accounts were added).
+  virtual std::vector<AccountInfo> GetAccountsOnDevice() const;
+#endif  // BUILDFLAG(IS_IOS)
 
   virtual void OnAccessTokenInvalidated(
       const CoreAccountId& account_id,
@@ -224,7 +244,7 @@ class ProfileOAuth2TokenServiceDelegate {
 #if BUILDFLAG(IS_ANDROID)
   // Triggers platform specific implementation to reload accounts from system.
   virtual void SeedAccountsThenReloadAllAccountsWithPrimaryAccount(
-      const std::vector<CoreAccountInfo>& core_account_infos,
+      const std::vector<AccountInfo>& accounts,
       const std::optional<CoreAccountId>& primary_account_id) {}
 
   // Returns a reference to the corresponding Java object.
@@ -271,6 +291,10 @@ class ProfileOAuth2TokenServiceDelegate {
   virtual void FireRefreshTokensLoaded();
   void FireAuthErrorChanged(const CoreAccountId& account_id,
                             const GoogleServiceAuthError& error);
+#if BUILDFLAG(IS_IOS)
+  void FireAccountsOnDeviceChanged();
+  void FireAccountOnDeviceUpdated(const AccountInfo& account_info);
+#endif
 
   // Helper class to scope batch changes.
   class ScopedBatchChange {

@@ -279,6 +279,7 @@
 <translation id="5582839680698949063">Главни мени</translation>
 <translation id="5614553682702429503">Сачувати лозинку?</translation>
 <translation id="5623842676595125836">Евиденција</translation>
+<translation id="5624959475330585145">Питај пре коришћења небезбедних веза</translation>
 <translation id="5638309510554459422">Пронађите проширења и теме у <ph name="BEGIN_LINK" />Chrome веб продавници<ph name="END_LINK" /></translation>
 <translation id="5677928146339483299">Блокирано</translation>
 <translation id="5707185214361380026">Неуспешно учитавање проширења из:</translation>
@@ -468,6 +469,7 @@
 <translation id="9218430445555521422">Постави као подразумевано</translation>
 <translation id="93766956588638423">Поправи проширење</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
+<translation id="961856697154696964">Брисање података прегледања</translation>
 <translation id="994289308992179865">&amp;Понављај</translation>
 <translation id="998747458861718449">&amp;Испитај</translation>
 </translationbundle>

@@ -43,9 +43,9 @@ import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.util.ActivityTestUtils;
-import org.chromium.chrome.test.util.browser.signin.AccountManagerTestRule;
 import org.chromium.chrome.test.util.browser.signin.SigninTestRule;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
+import org.chromium.components.signin.test.util.TestAccounts;
 import org.chromium.components.sync.SyncService;
 import org.chromium.content_public.browser.test.NativeLibraryTestUtils;
 import org.chromium.ui.test.util.BlankUiTestActivity;
@@ -68,24 +68,16 @@ public class HistorySyncRenderTest {
         private static List<ParameterSet> sParams =
                 Arrays.asList(
                         new ParameterSet()
-                                .value(
-                                        /* nightModeEnabled= */ false,
-                                        Configuration.ORIENTATION_PORTRAIT)
+                                .value(/* firstArg= */ false, Configuration.ORIENTATION_PORTRAIT)
                                 .name("NightModeDisabled_Portrait"),
                         new ParameterSet()
-                                .value(
-                                        /* nightModeEnabled= */ false,
-                                        Configuration.ORIENTATION_LANDSCAPE)
+                                .value(/* firstArg= */ false, Configuration.ORIENTATION_LANDSCAPE)
                                 .name("NightModeDisabled_Landscape"),
                         new ParameterSet()
-                                .value(
-                                        /* nightModeEnabled= */ true,
-                                        Configuration.ORIENTATION_PORTRAIT)
+                                .value(/* firstArg= */ true, Configuration.ORIENTATION_PORTRAIT)
                                 .name("NightModeEnabled_Portrait"),
                         new ParameterSet()
-                                .value(
-                                        /* nightModeEnabled= */ true,
-                                        Configuration.ORIENTATION_LANDSCAPE)
+                                .value(/* firstArg= */ true, Configuration.ORIENTATION_LANDSCAPE)
                                 .name("NightModeEnabled_Landscape"));
 
         @Override
@@ -144,7 +136,7 @@ public class HistorySyncRenderTest {
     @ParameterAnnotations.UseMethodParameter(
             HistorySyncRenderTest.NightModeAndOrientationParameterProvider.class)
     public void testHistorySyncView(boolean nightModeEnabled, int orientation) throws IOException {
-        mSigninTestRule.addAccountThenSignin(AccountManagerTestRule.AADC_ADULT_ACCOUNT);
+        mSigninTestRule.addAccountThenSignin(TestAccounts.AADC_ADULT_ACCOUNT);
 
         buildHistorySyncCoordinator(orientation);
 
@@ -159,7 +151,7 @@ public class HistorySyncRenderTest {
             HistorySyncRenderTest.NightModeAndOrientationParameterProvider.class)
     public void testHistorySyncViewWithMinorModeRestrictions(
             boolean nightModeEnabled, int orientation) throws IOException {
-        mSigninTestRule.addAccountThenSignin(AccountManagerTestRule.AADC_MINOR_ACCOUNT);
+        mSigninTestRule.addAccountThenSignin(TestAccounts.AADC_MINOR_ACCOUNT);
         buildHistorySyncCoordinator(orientation);
 
         onViewWaiting(withId(R.id.button_primary));
@@ -175,7 +167,7 @@ public class HistorySyncRenderTest {
     @EnableFeatures({ChromeFeatureList.USE_ALTERNATE_HISTORY_SYNC_ILLUSTRATION})
     public void testHistorySyncViewWithAlternateIllustration(
             boolean nightModeEnabled, int orientation) throws IOException {
-        mSigninTestRule.addAccountThenSignin(AccountManagerTestRule.AADC_ADULT_ACCOUNT);
+        mSigninTestRule.addAccountThenSignin(TestAccounts.AADC_ADULT_ACCOUNT);
 
         buildHistorySyncCoordinator(orientation);
 
@@ -196,7 +188,7 @@ public class HistorySyncRenderTest {
                                     new HistorySyncConfig(),
                                     SigninAccessPoint.UNKNOWN,
                                     /* showEmailInFooter= */ false,
-                                    /* signOutOnDecline= */ false,
+                                    /* shouldSignOutOnDecline= */ false,
                                     null);
                     mActivityTestRule
                             .getActivity()

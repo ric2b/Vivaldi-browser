@@ -13,7 +13,6 @@
 #include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "components/viz/common/surfaces/subtree_capture_id.h"
-#include "components/viz/service/display_embedder/server_shared_bitmap_manager.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "components/viz/service/surfaces/pending_copy_output_request.h"
@@ -36,13 +35,10 @@ const uint64_t kBeginFrameSourceId = 1337;
 
 class SurfaceTest : public testing::Test {
  public:
-  SurfaceTest()
-      : frame_sink_manager_(
-            FrameSinkManagerImpl::InitParams(&shared_bitmap_manager_)) {}
+  SurfaceTest() : frame_sink_manager_(FrameSinkManagerImpl::InitParams()) {}
 
  protected:
   std::unique_ptr<base::SimpleTestTickClock> now_src_;
-  ServerSharedBitmapManager shared_bitmap_manager_;
   FrameSinkManagerImpl frame_sink_manager_;
 };
 
@@ -166,8 +162,8 @@ TEST_F(SurfaceTest, CopyRequestLifetime) {
   EXPECT_TRUE(surface_manager->GetSurfaceForId(surface_id));
   EXPECT_FALSE(copy_called);
 
-  int max_frame = 3, start_id = 200;
-  for (int i = 0; i < max_frame; ++i) {
+  uint64_t max_frame = 3, start_id = 200;
+  for (uint64_t i = 0; i < max_frame; ++i) {
     frame = CompositorFrameBuilder().Build();
     frame.render_pass_list.push_back(CompositorRenderPass::Create());
     frame.render_pass_list.back()->id =
@@ -183,6 +179,7 @@ TEST_F(SurfaceTest, CopyRequestLifetime) {
   }
 
   CompositorRenderPassId last_pass_id{(max_frame - 1) * 3 + start_id + 2};
+
   // The copy request should stay on the Surface until TakeCopyOutputRequests
   // is called.
   EXPECT_FALSE(copy_called);

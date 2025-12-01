@@ -215,7 +215,7 @@ each change out into an easily identifiable step in the document.
 Backsliding (others submitting changes which reverse the intended change) is
 something which cannot be completely avoided in all cases. A useful technique
 to reduce them is to use Tricium (see
-[go/luci/tricium [internal, Googlers only]](https://goto.google.com/luci/tricium)
+[go/luci/tricium [internal, Googlers only]](http://go/luci/tricium)
 for details) or Presubmit.
 
 ### Docs for Domain Reviewers
@@ -308,4 +308,4 @@ willing and capable of doing reviews, you probably shouldn't be an OWNER.
 [ChromeOS Platform LSC Template]: https://docs.google.com/document/d/1iLGbamQyUEgfsYXX8a4p2oop9MDzxi3S6-NeXG6bJqE/preview
 [ChromeOS LSC Workflow]: /chromium-os/developer-library/guides/lsc/lsc-workflow/
 [chromeos-lsc-review]: https://groups.google.com/a/chromium.org/g/chromeos-lsc-review
-[Google LSC process]: https://goto.google.com/lsc
+[Google LSC process]: http://go/lsc

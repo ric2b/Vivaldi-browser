@@ -948,7 +948,7 @@ llvm-cov report -instr-profile=default.profdata -object=/build/$BOARD/tmp/portag
 [Functional tests]: https://en.wikipedia.org/wiki/Functional_testing
 [Tast]: https://chromium.googlesource.com/chromiumos/platform/tast/
 [Autotest]: https://chromium.googlesource.com/chromiumos/third_party/autotest/+/HEAD/docs/user-doc.md
-[commit queue]: https://www.chromium.org/developers/testing/commit-queue/design/
+[commit queue]: /developers/testing/commit-queue/design/
 [Google Mock]: https://github.com/google/googletest/blob/HEAD/googlemock/README.md
 [Google Test]: https://github.com/google/googletest
 ["Should we officially deprecate GMock?"]: https://groups.google.com/a/chromium.org/forum/#!msg/chromium-dev/-KH_IP0rIWQ/HynALJ3rsk0J

@@ -6,11 +6,6 @@ import("//build/timestamp.gni")
 import("./node.gni")
 import("./vars.gni")
 
-declare_args() {
-  # Whether to enable CSS hot reloading with `watch` script or not.
-  devtools_css_hot_reload_enabled = false
-}
-
 template("generate_css") {
   node_action(target_name) {
     forward_variables_from(invoker, [ "sources" ])
@@ -26,21 +21,15 @@ template("generate_css") {
     args = [
       build_timestamp,
       "$is_debug",
-      "${invoker.legacy}",
       target_name,
       _src,
       _dest,
       string_join(",", sources),
-      "$devtools_css_hot_reload_enabled",
     ]
 
     outputs = []
     foreach(_input, sources) {
-      _file_name = _input
-      if (invoker.legacy) {
-        _file_name = "$_file_name.legacy"
-      }
-      outputs += [ "$target_gen_dir/$_file_name.js" ]
+      outputs += [ "$target_gen_dir/$_input.js" ]
     }
 
     data = outputs
@@ -51,8 +40,4 @@ template("generate_css") {
       }
     }
   }
-}
-
-set_defaults("generate_css") {
-  legacy = false
 }

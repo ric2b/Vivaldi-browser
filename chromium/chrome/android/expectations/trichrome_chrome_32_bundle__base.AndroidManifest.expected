@@ -74,10 +74,10 @@
   <uses-permission-sdk-23 android:name="android.permission.READ_MEDIA_VIDEO"/>
   <uses-permission-sdk-23 android:name="android.permission.REORDER_TASKS"/>
   <uses-permission-sdk-23 android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
-  <uses-permission-sdk-23 android:name="android.permission.SCENE_UNDERSTANDING"/>
+  <uses-permission-sdk-23 android:name="android.permission.SCENE_UNDERSTANDING_FINE"/>
   <uses-permission-sdk-23 android:name="android.permission.USE_BIOMETRIC"/>
   <uses-permission-sdk-23 android:name="android.permission.USE_FINGERPRINT"/>
-  <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="34"/>
+  <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="35"/>
   <application
       android:name="org.chromium.chrome.browser.base.SplitChromeApplication"
       android:allowAudioPlaybackCapture="false"
@@ -116,8 +116,13 @@
     <meta-data android:name="com.google.ar.core.session_settings" android:value="allow_front_facing_motion_tracking_6dof,"/>
     <meta-data android:name="com.samsung.android.sdk.multiwindow.enable" android:value="true"/>
     <meta-data android:name="com.samsung.android.sdk.multiwindow.penwindow.enable" android:value="true"/>
-    <meta-data android:name="org.chromium.content.browser.NUM_PRIVILEGED_SERVICES" android:value="5"/>
+    <meta-data android:name="org.chromium.content.browser.NUM_PRIVILEGED_SERVICES" android:value="10"/>
     <meta-data android:name="org.chromium.content.browser.NUM_SANDBOXED_SERVICES" android:value="40"/>
+    <provider  # DIFF-ANCHOR: 3b9c6c31
+        android:name="org.chromium.chrome.browser.autofill.AutofillThirdPartyModeContentProvider"
+        android:authorities="$PACKAGE.AutofillThirdPartyModeContentProvider"
+        android:exported="true">
+    </provider>  # DIFF-ANCHOR: 3b9c6c31
     <provider  # DIFF-ANCHOR: b73a881a
         android:name="org.chromium.chrome.browser.download.DownloadFileProvider"
         android:authorities="$PACKAGE.DownloadFileProvider"
@@ -137,6 +142,12 @@
         android:exported="true">
       <path-permission android:path="/bookmarks/search_suggest_query" android:readPermission="android.permission.GLOBAL_SEARCH"/>
     </provider>  # DIFF-ANCHOR: f1c2d7e1
+    <provider  # DIFF-ANCHOR: 6e040436
+        android:name="org.chromium.chrome.browser.provider.PageContentProvider"
+        android:authorities="$PACKAGE.PageContentProvider"
+        android:exported="false"
+        android:grantUriPermissions="true">
+    </provider>  # DIFF-ANCHOR: 6e040436
     <provider  # DIFF-ANCHOR: 67014fab
         android:name="org.chromium.chrome.browser.util.ChromeFileProvider"
         android:authorities="$PACKAGE.FileProvider"
@@ -231,6 +242,41 @@
         android:permission="$PACKAGE.permission.CHILD_SERVICE"
         android:process=":privileged_process4">
     </service>  # DIFF-ANCHOR: 52303702
+    <service  # DIFF-ANCHOR: 31202801
+        android:name="org.chromium.content.app.PrivilegedProcessService5"
+        android:exported="false"
+        android:isolatedProcess="false"
+        android:permission="$PACKAGE.permission.CHILD_SERVICE"
+        android:process=":privileged_process5">
+    </service>  # DIFF-ANCHOR: 31202801
+    <service  # DIFF-ANCHOR: f3d04117
+        android:name="org.chromium.content.app.PrivilegedProcessService6"
+        android:exported="false"
+        android:isolatedProcess="false"
+        android:permission="$PACKAGE.permission.CHILD_SERVICE"
+        android:process=":privileged_process6">
+    </service>  # DIFF-ANCHOR: f3d04117
+    <service  # DIFF-ANCHOR: 996f3c1a
+        android:name="org.chromium.content.app.PrivilegedProcessService7"
+        android:exported="false"
+        android:isolatedProcess="false"
+        android:permission="$PACKAGE.permission.CHILD_SERVICE"
+        android:process=":privileged_process7">
+    </service>  # DIFF-ANCHOR: 996f3c1a
+    <service  # DIFF-ANCHOR: 702086b6
+        android:name="org.chromium.content.app.PrivilegedProcessService8"
+        android:exported="false"
+        android:isolatedProcess="false"
+        android:permission="$PACKAGE.permission.CHILD_SERVICE"
+        android:process=":privileged_process8">
+    </service>  # DIFF-ANCHOR: 702086b6
+    <service  # DIFF-ANCHOR: 40feb0a4
+        android:name="org.chromium.content.app.PrivilegedProcessService9"
+        android:exported="false"
+        android:isolatedProcess="false"
+        android:permission="$PACKAGE.permission.CHILD_SERVICE"
+        android:process=":privileged_process9">
+    </service>  # DIFF-ANCHOR: 40feb0a4
     <service  # DIFF-ANCHOR: b1e3e8bd
         android:name="org.chromium.content.app.SandboxedProcessService0"
         android:exported="False"
@@ -512,6 +558,7 @@
         android:permission="$PACKAGE.permission.CHILD_SERVICE"
         android:process=":sandboxed_process9">
     </service>  # DIFF-ANCHOR: e2f3bbbd
+    <uses-native-library android:name="libopenxr.google.so" android:required="false"/>
     <uses-static-library android:name="org.chromium.trichromelibrary" android:certDigest="32a2fc74d731105859e5a85df16d95f102d85b22099b8064c5d8915c61dad1e0" android:version="OFFSET=30"/>
   </application>
 </manifest>

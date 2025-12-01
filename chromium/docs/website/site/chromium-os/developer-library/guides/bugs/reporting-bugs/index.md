@@ -194,7 +194,7 @@ If you think you've identified a bug in ChromeOS, please do the following:
 [public issue tracker]: https://crbug.com/
 [new.crbug.com]: https://new.crbug.com/
 [crbug.com/new]: https://crbug.com/new
-[go/newcrosbug]: https://goto.google.com/newcrosbug
+[go/newcrosbug]: http://go/newcrosbug
 [ChromeOS Security Severity Guidelines]: /chromium-os/developer-library/guides/bugs/security-severity-guidelines/
 [instructions on filing bugs in ChromeOS ]: /chromium-os/developer-library/guides/bugs/platform-public-tracker/
 [ChromeOS Issue Tracker]: https://issuetracker.google.com

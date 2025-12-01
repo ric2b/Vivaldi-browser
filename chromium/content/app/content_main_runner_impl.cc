@@ -2,17 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/342213636): Remove this and spanify to fix the errors.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "content/app/content_main_runner_impl.h"
 
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include <array>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -55,10 +51,10 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "components/discardable_memory/service/discardable_shared_memory_manager.h"
 #include "components/download/public/common/download_task_runner.h"
 #include "components/power_monitor/make_power_monitor_device_source.h"
+#include "components/variations/net/variations_command_line.h"
 #include "components/variations/variations_ids_provider.h"
 #include "content/app/mojo_ipc_support.h"
 #include "content/browser/browser_main.h"
@@ -127,7 +123,6 @@
 #include <malloc.h>
 #include <cstring>
 
-#include "base/trace_event/trace_event_etw_export_win.h"
 #include "ui/base/l10n/l10n_util_win.h"
 #include "ui/display/win/dpi.h"
 #elif BUILDFLAG(IS_MAC)
@@ -161,11 +156,6 @@
 #include "sandbox/policy/linux/sandbox_linux.h"
 #include "third_party/boringssl/src/include/openssl/crypto.h"
 #include "third_party/webrtc_overrides/init_webrtc.h"  // nogncheck
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "chromeos/startup/browser_init_params.h"
-#include "chromeos/startup/startup_switches.h"
-#endif
 
 #if BUILDFLAG(ENABLE_PPAPI)
 #include "content/common/pepper_plugin_list.h"
@@ -340,10 +330,6 @@ pid_t LaunchZygoteHelper(base::CommandLine* cmd_line,
       switches::kRegisterPepperPlugins,
       switches::kV,
       switches::kVModule,
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-      switches::kCrosWidevineBundledDir,
-      switches::kCrosWidevineComponentUpdatedHintFile,
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
   };
   cmd_line->CopySwitchesFrom(*base::CommandLine::ForCurrentProcess(),
                              kForwardSwitches);
@@ -356,11 +342,6 @@ pid_t LaunchZygoteHelper(base::CommandLine* cmd_line,
       PosixFileDescriptorInfoImpl::Create());
   additional_remapped_fds->Share(
       GetSandboxFD(), SandboxHostLinux::GetInstance()->GetChildSocket());
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  GetContentClient()->browser()->GetAdditionalMappedFilesForZygote(
-      cmd_line, additional_remapped_fds.get());
-#endif
 
   return ZygoteHostImpl::GetInstance()->LaunchZygote(
       cmd_line, control_fd, additional_remapped_fds->GetMapping());
@@ -535,13 +516,12 @@ void InstallConsoleControlHandler(bool is_browser_process) {
 
 bool ShouldAllowSystemTracingConsumer() {
 // System tracing consumer support is currently only supported on ChromeOS.
-// TODO(crbug.com/40167100): Also enable for Lacros-Chrome.
 #if BUILDFLAG(IS_CHROMEOS)
   // The consumer should only be enabled when the delegate allows it.
   return GetContentClient()->browser()->IsSystemWideTracingEnabled();
-#else   // BUILDFLAG(IS_CHROMEOS_ASH)
+#else
   return false;
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 }
 
 void CreateChildThreadPool(const std::string& process_type) {
@@ -745,14 +725,14 @@ NO_STACK_PROTECTOR int RunOtherNamedProcessTypeMain(
   if (delegate->ShouldHandleConsoleControlEvents())
     InstallConsoleControlHandler(/*is_browser_process=*/false);
 #endif
-  static const MainFunction kMainFunctions[] = {
+  static const auto kMainFunctions = std::to_array<MainFunction>({
 #if BUILDFLAG(ENABLE_PPAPI)
-    {switches::kPpapiPluginProcess, PpapiPluginMain},
+      {switches::kPpapiPluginProcess, PpapiPluginMain},
 #endif  // BUILDFLAG(ENABLE_PPAPI)
-    {switches::kUtilityProcess, UtilityMain},
-    {switches::kRendererProcess, RendererMain},
-    {switches::kGpuProcess, GpuMain},
-  };
+      {switches::kUtilityProcess, UtilityMain},
+      {switches::kRendererProcess, RendererMain},
+      {switches::kGpuProcess, GpuMain},
+  });
 
   // The hang watcher needs to be started once the feature list is available
   // but before the IO thread is started.
@@ -869,6 +849,9 @@ int ContentMainRunnerImpl::Initialize(ContentMainParams params) {
                  base::GlobalDescriptors::kBaseDescriptor);
   g_fds->Set(kTraceConfigSharedMemoryDescriptor,
              kTraceConfigSharedMemoryDescriptor +
+                 base::GlobalDescriptors::kBaseDescriptor);
+  g_fds->Set(kTraceOutputSharedMemoryDescriptor,
+             kTraceOutputSharedMemoryDescriptor +
                  base::GlobalDescriptors::kBaseDescriptor);
 #endif  // !BUILDFLAG(IS_ANDROID)
 
@@ -1174,7 +1157,7 @@ int ContentMainRunnerImpl::RunBrowser(MainFunctionParams main_params,
           switches::kSingleProcess)) {
     mojo::SyncCallRestrictions::DisableSyncCallInterrupts();
   }
-
+  variations::MaybeUnpackVariationsStateFile();
   if (!mojo_ipc_support_) {
     const ContentMainDelegate::InvokedInBrowserProcess invoked_in_browser{
         .is_running_test = !main_params.ui_task.is_null()};
@@ -1240,11 +1223,8 @@ int ContentMainRunnerImpl::RunBrowser(MainFunctionParams main_params,
     // The FeatureList needs to be created before starting the ThreadPool.
     StartBrowserThreadPool();
 
-    BrowserTaskExecutor::PostFeatureListSetup();
-
-    tracing::PerfettoTracedProcess::Get()
-        ->SetAllowSystemTracingConsumerCallback(
-            base::BindRepeating(&ShouldAllowSystemTracingConsumer));
+    tracing::PerfettoTracedProcess::Get().SetAllowSystemTracingConsumerCallback(
+        base::BindRepeating(&ShouldAllowSystemTracingConsumer));
     tracing::InitTracingPostThreadPoolStartAndFeatureList(
         /* enable_consumer */ true);
 

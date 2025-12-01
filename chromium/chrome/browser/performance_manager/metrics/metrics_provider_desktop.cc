@@ -33,12 +33,7 @@ MetricsProviderDesktop* g_metrics_provider = nullptr;
 
 uint64_t kBytesPerMb = 1024 * 1024;
 
-#if BUILDFLAG(IS_MAC)
-uint64_t kKilobytesPerMb = 1024;
-#endif
-
-base::TimeDelta kCpuThroughputSamplingInterval = base::Minutes(5);
-
+#if SHOULD_COLLECT_CPU_FREQUENCY_METRICS()
 enum class CpuThroughputEstimatedStatus {
   kNormal,
   kUnknown,
@@ -203,6 +198,7 @@ void EmitCpuStatusSamplingTraceEvents(base::TimeTicks posted_at_time,
       kCpuEstimationEventCategory, kCpuEstimationDescheduledEvent,
       TRACE_ID_LOCAL(id), started_running_time + wall_time);
 }
+#endif  // SHOULD_COLLECT_CPU_FREQUENCY_METRICS()
 
 }  // namespace
 
@@ -357,14 +353,9 @@ MetricsProviderDesktop::MetricsProviderDesktop(PrefService* local_state)
   DCHECK(!g_metrics_provider);
   g_metrics_provider = this;
 
-  available_memory_metrics_timer_.Start(
-      FROM_HERE, base::Minutes(2),
-      base::BindRepeating(&MetricsProviderDesktop::RecordAvailableMemoryMetrics,
-                          base::Unretained(this)));
-
-  if constexpr (ShouldCollectCpuFrequencyMetrics()) {
-    ScheduleCpuFrequencyTask();
-  }
+#if SHOULD_COLLECT_CPU_FREQUENCY_METRICS()
+  ScheduleCpuFrequencyTask();
+#endif  // SHOULD_COLLECT_CPU_FREQUENCY_METRICS()
 }
 
 void MetricsProviderDesktop::OnBatterySaverActiveChanged(bool is_active) {
@@ -425,32 +416,6 @@ bool MetricsProviderDesktop::IsMemorySaverEnabled() const {
          static_cast<int>(MemorySaverModeState::kDisabled);
 }
 
-void MetricsProviderDesktop::RecordAvailableMemoryMetrics() {
-  auto available_bytes = base::SysInfo::AmountOfAvailablePhysicalMemory();
-  auto total_bytes = base::SysInfo::AmountOfPhysicalMemory();
-
-  base::UmaHistogramMemoryLargeMB("Memory.Experimental.AvailableMemoryMB",
-                                  available_bytes / kBytesPerMb);
-  base::UmaHistogramPercentage("Memory.Experimental.AvailableMemoryPercent",
-                               available_bytes * 100 / total_bytes);
-
-#if BUILDFLAG(IS_MAC)
-  base::SystemMemoryInfoKB info;
-  if (base::GetSystemMemoryInfo(&info)) {
-    base::UmaHistogramMemoryLargeMB(
-        "Memory.Experimental.MacFileBackedMemoryMB2",
-        info.file_backed / kKilobytesPerMb);
-    // `info.file_backed` is in kb, so multiply it by 1024 to get the amount of
-    // bytes
-    base::UmaHistogramPercentage(
-        "Memory.Experimental.MacAvailableMemoryPercentFreePageCache2",
-        (available_bytes +
-         (base::checked_cast<uint64_t>(info.file_backed) * 1024u)) *
-            100u / total_bytes);
-  }
-#endif
-}
-
 void MetricsProviderDesktop::ResetTrackers() {
   battery_saver_mode_tracker_ = std::make_unique<ScopedTimeInModeTracker>(
       battery_saver_enabled_,
@@ -460,15 +425,11 @@ void MetricsProviderDesktop::ResetTrackers() {
       "PerformanceManager.UserTuning.MemorySaverModeEnabledPercent");
 }
 
+#if SHOULD_COLLECT_CPU_FREQUENCY_METRICS()
 // static
 void MetricsProviderDesktop::RecordCpuFrequencyMetrics(
     base::TimeTicks posted_at_time) {
   auto started_running_time = base::TimeTicks::Now();
-
-  // Check this after computing started_running_time so that
-  // started_running_time is as close to reality as possible.
-  CHECK(ShouldCollectCpuFrequencyMetrics());
-
   auto queued_time = started_running_time - posted_at_time;
 
   static const double kHzInMhz = 1000 * 1000;
@@ -565,6 +526,8 @@ void MetricsProviderDesktop::RecordCpuFrequencyMetrics(
 
 // static
 void MetricsProviderDesktop::ScheduleCpuFrequencyTask() {
+  static constexpr base::TimeDelta kCpuThroughputSamplingInterval =
+      base::Minutes(5);
   base::ThreadPool::PostDelayedTask(
       FROM_HERE,
       {base::TaskPriority::USER_VISIBLE,
@@ -582,6 +545,7 @@ void MetricsProviderDesktop::PostCpuFrequencyEstimation() {
       base::BindOnce(&MetricsProviderDesktop::RecordCpuFrequencyMetrics,
                      base::TimeTicks::Now()));
 }
+#endif  // SHOULD_COLLECT_CPU_FREQUENCY_METRICS()
 
 void MetricsProviderDesktop::RecordDiskMetrics() {
   if (!pending_disk_metrics_) {

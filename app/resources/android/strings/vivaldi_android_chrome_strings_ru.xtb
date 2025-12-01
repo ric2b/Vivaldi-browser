@@ -14,13 +14,17 @@
 <translation id="2433507940547922241">Внешний вид</translation>
 <translation id="2501278716633472235">Переход назад</translation>
 <translation id="2633278372998075009">Приватные вкладки</translation>
+<translation id="265156376773362237">Стандартная предзагрузка</translation>
 <translation id="272026394418727548">Главная страница Vivaldi</translation>
+<translation id="2871733351037274014">Предзагрузка страниц</translation>
 <translation id="2951071800649516099">Добавьте страницы в список чтения</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> закладка}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> закладок}}</translation>
 <translation id="3076631378407175873">© Vivaldi Technologies AS, <ph name="YEAR" />. Все права защищены.</translation>
+<translation id="3232293466644486101">Удалить данные просмотра…</translation>
 <translation id="3234355010754616171">Приватная вкладка</translation>
+<translation id="3237087289225714896">Стандартная предзагрузка:</translation>
 <translation id="3377025655491224618">Приватная вкладка</translation>
 <translation id="3504699618187058974">Вкладки в группу</translation>
 <translation id="3518985090088779359">Принять и продолжить</translation>
@@ -28,6 +32,7 @@
 <translation id="3602290021589620013">Скриншот</translation>
 <translation id="3700829948786686853">Добро пожаловать в Vivaldi</translation>
 <translation id="3719826155360621982">Домой</translation>
+<translation id="3738139272394829648">Быстрый поиск</translation>
 <translation id="385051799172605136">Назад</translation>
 <translation id="399014816462153200">Прочитанные статьи:</translation>
 <translation id="4121750346708795461">Используя это приложение, вы принимаете <ph name="BEGIN_LINK1" />Условия использования<ph name="END_LINK1" /> и <ph name="BEGIN_LINK2" />Политику безопасности<ph name="END_LINK2" /> Vivaldi.</translation>
@@ -36,6 +41,7 @@
 <translation id="4195643157523330669">Открыть в новой вкладке</translation>
 <translation id="4225895483398857530">Кнопка на панели инструментов</translation>
 <translation id="4243710787042215766">Открыть в приватной вкладке</translation>
+<translation id="4291407919474070700"><ph name="BEGIN_LINK" />Включить блокировку экрана в настройках Android<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Менеджер паролей</translation>
 <translation id="451872707440238414">Искать в закладках</translation>
 <translation id="4526803704855831732">Приватные вкладки</translation>
@@ -57,24 +63,34 @@
 <translation id="572328651809341494">Недавние вкладки</translation>
 <translation id="6150320133806434356">Закладка сохранена</translation>
 <translation id="6336451774241870485">Приватная вкладка</translation>
+<translation id="6337323516034698937">Чтобы отправить эту вкладку на другое устройство, войдите в Vivaldi Sync на обоих устройствах. Убедитесь, что вы ввели пароль шифрования, если необходимо.</translation>
 <translation id="6404511346730675251">Изменить закладку</translation>
 <translation id="6585139692466700358">Предлагать перевод страниц при помощи сервиса Vivaldi</translation>
+<translation id="6588043302623806746">Использовать безопасный DNS-сервер</translation>
 <translation id="6593061639179217415">Вид для ПК</translation>
 <translation id="6610147964972079463">Закрыть приватные вкладки</translation>
 <translation id="7029995644714925509">Когда сайт запрашивает предзагрузку ссылок на свою страницу, Vivaldi шифрует и предзагружает страницы через серверы Google без файлов cookie. Это скрывает вашу личность от предзагруженного сайта.</translation>
 <translation id="706339621163631076">Политика безопасности</translation>
 <translation id="732145680195464316">Закладка сохранена в <ph name="PRODUCT_NAME" /></translation>
+<translation id="7324354302972299151">Отправлять запрос Do Not Track</translation>
+<translation id="7359002509206457351">Доступ к способам оплаты</translation>
+<translation id="7419565702166471774">Всегда использовать безопасные соединения</translation>
 <translation id="7427132068601343474">О браузере Vivaldi</translation>
+<translation id="7456774706094330779">Расширенная предзагрузка</translation>
 <translation id="7465104139234185284">Закрыть приватные вкладки</translation>
 <translation id="7481312909269577407">Вперёд</translation>
 <translation id="7968014550143838305">Добавлено в список чтения</translation>
 <translation id="804786196054284061">Условия использования Vivaldi</translation>
+<translation id="8062594758852531064">Расширенная предзагрузка:</translation>
 <translation id="8127542551745560481">Изменить главную страницу</translation>
+<translation id="8348430946834215779">Использовать по возможности протокол HTTPS и предупреждать перед загрузкой сайтов, которые его не поддерживают</translation>
 <translation id="8560602726703398413">Список чтения находится в закладках</translation>
 <translation id="85991616550051997">Переход на домашнюю страницу</translation>
 <translation id="8820817407110198400">Закладки</translation>
 <translation id="9042893549633094279">Приватность и безопасность</translation>
 <translation id="9063523880881406963">Отключить полную версию сайта</translation>
 <translation id="9080642952018487277">Работать приватно</translation>
+<translation id="930124987204876019">Удалить историю, файлы cookie, данные сайтов, кэш и другие данные…</translation>
+<translation id="961856697154696964">Удалить данные просмотра</translation>
 <translation id="96681097142096641">Читать страницу в упрощённом виде?</translation>
 </translationbundle>

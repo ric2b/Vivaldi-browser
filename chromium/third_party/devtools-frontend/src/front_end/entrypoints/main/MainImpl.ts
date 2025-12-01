@@ -50,10 +50,12 @@ import * as Logs from '../../models/logs/logs.js';
 import * as Persistence from '../../models/persistence/persistence.js';
 import * as Workspace from '../../models/workspace/workspace.js';
 import * as Snippets from '../../panels/snippets/snippets.js';
+import * as Buttons from '../../ui/components/buttons/buttons.js';
 import * as IconButton from '../../ui/components/icon_button/icon_button.js';
 import * as Components from '../../ui/legacy/components/utils/utils.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as ThemeSupport from '../../ui/legacy/theme_support/theme_support.js';
+import {html, render} from '../../ui/lit/lit.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
 import {ExecutionContextSelector} from './ExecutionContextSelector.js';
@@ -334,11 +336,6 @@ export class MainImpl {
     // New cookie features.
     Root.Runtime.experiments.register('experimental-cookie-features', 'Enable experimental cookie features');
 
-    // CSS <length> authoring tool.
-    Root.Runtime.experiments.register(
-        'css-type-component-length-deprecate', 'Deprecate CSS <length> authoring tool in the Styles tab', undefined,
-        'https://goo.gle/devtools-deprecate-length-tools', 'https://crbug.com/1522657');
-
     // Integrate CSS changes in the Styles pane.
     Root.Runtime.experiments.register(
         Root.Runtime.ExperimentName.STYLES_PANE_CSS_CHANGES, 'Sync CSS changes in the Styles tab');
@@ -380,21 +377,6 @@ export class MainImpl {
     );
 
     Root.Runtime.experiments.register(
-        Root.Runtime.ExperimentName.TIMELINE_ANNOTATIONS,
-        'Performance panel: enable annotations',
-    );
-
-    Root.Runtime.experiments.register(
-        Root.Runtime.ExperimentName.TIMELINE_INSIGHTS,
-        'Performance panel: enable performance insights',
-    );
-
-    Root.Runtime.experiments.register(
-        Root.Runtime.ExperimentName.TIMELINE_OBSERVATIONS,
-        'Performance panel: enable live metrics landing page',
-    );
-
-    Root.Runtime.experiments.register(
         Root.Runtime.ExperimentName.TIMELINE_SERVER_TIMINGS,
         'Performance panel: enable server timings in the timeline',
     );
@@ -418,14 +400,18 @@ export class MainImpl {
         'Performance panel: enable a switch to an alternative timeline navigation option',
     );
 
+    Root.Runtime.experiments.register(
+        Root.Runtime.ExperimentName.TIMELINE_THIRD_PARTY_DEPENDENCIES,
+        'Performance panel: enable third party dependency features',
+    );
+
     Root.Runtime.experiments.enableExperimentsByDefault([
-      'css-type-component-length-deprecate',
       Root.Runtime.ExperimentName.AUTOFILL_VIEW,
-      Root.Runtime.ExperimentName.TIMELINE_INSIGHTS,
-      Root.Runtime.ExperimentName.TIMELINE_OBSERVATIONS,
-      Root.Runtime.ExperimentName.TIMELINE_ANNOTATIONS,
       Root.Runtime.ExperimentName.NETWORK_PANEL_FILTER_BAR_REDESIGN,
       Root.Runtime.ExperimentName.FLOATING_ENTRY_POINTS_FOR_AI_ASSISTANCE,
+      Root.Runtime.ExperimentName.TIMELINE_ALTERNATIVE_NAVIGATION,
+      Root.Runtime.ExperimentName.TIMELINE_THIRD_PARTY_DEPENDENCIES,
+      Root.Runtime.ExperimentName.TIMELINE_DIM_UNRELATED_EVENTS,
       ...(Root.Runtime.Runtime.queryParam('isChromeForTesting') ? ['protocol-monitor'] : []),
     ]);
 
@@ -551,10 +537,8 @@ export class MainImpl {
 
     AutofillManager.AutofillManager.AutofillManager.instance();
 
-    if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.TIMELINE_OBSERVATIONS)) {
-      LiveMetrics.LiveMetrics.instance({forceNew: true});
-      CrUXManager.CrUXManager.instance({forceNew: true});
-    }
+    LiveMetrics.LiveMetrics.instance();
+    CrUXManager.CrUXManager.instance();
 
     new PauseListener();
 
@@ -626,7 +610,38 @@ export class MainImpl {
     this.#resolveReadyForTestPromise();
     // Asynchronously run the extensions.
     window.setTimeout(this.#lateInitialization.bind(this), 100);
+    await this.#maybeInstallVeInspectionBinding();
+
     MainImpl.timeEnd('Main._initializeTarget');
+  }
+
+  async #maybeInstallVeInspectionBinding(): Promise<void> {
+    const primaryPageTarget = SDK.TargetManager.TargetManager.instance().primaryPageTarget();
+    const url = primaryPageTarget?.targetInfo()?.url;
+    const origin = url ? Common.ParsedURL.ParsedURL.extractOrigin(url as Platform.DevToolsPath.UrlString) : undefined;
+
+    const binding = '__devtools_ve_inspection_binding__';
+    if (primaryPageTarget && await VisualLogging.isUnderInspection(origin)) {
+      const runtimeModel = primaryPageTarget.model(SDK.RuntimeModel.RuntimeModel);
+      await runtimeModel?.addBinding({name: binding});
+      runtimeModel?.addEventListener(SDK.RuntimeModel.Events.BindingCalled, event => {
+        if (event.data.name === binding) {
+          VisualLogging.setVeDebuggingEnabled(event.data.payload === 'true', (query: string) => {
+            VisualLogging.setVeDebuggingEnabled(false);
+            void runtimeModel?.defaultExecutionContext()?.evaluate(
+                {
+                  expression: `window.inspect(${JSON.stringify(query)})`,
+                  includeCommandLineAPI: false,
+                  silent: true,
+                  returnByValue: false,
+                  generatePreview: false,
+                },
+                /* userGesture */ false,
+                /* awaitPromise */ false);
+          });
+        }
+      });
+    }
   }
 
   // TODO(crbug.com/350668580) Move this to AISettingsTab once the setting is only available
@@ -849,53 +864,64 @@ export class MainMenuItem implements UI.Toolbar.Provider {
   }
 
   #handleContextMenu(contextMenu: UI.ContextMenu.ContextMenu): void {
-    if (UI.DockController.DockController.instance().canDock()) {
+    const dockController = UI.DockController.DockController.instance();
+    if (dockController.canDock()) {
       const dockItemElement = document.createElement('div');
-      dockItemElement.classList.add('flex-centered');
-      dockItemElement.classList.add('flex-auto');
-      dockItemElement.classList.add('location-menu');
-      dockItemElement.tabIndex = -1;
-      UI.ARIAUtils.setLabel(dockItemElement, UIStrings.dockSide + UIStrings.dockSideNaviation);
-      const titleElement = dockItemElement.createChild('span', 'dockside-title');
-      titleElement.textContent = i18nString(UIStrings.dockSide);
-      const toggleDockSideShorcuts =
-          UI.ShortcutRegistry.ShortcutRegistry.instance().shortcutsForAction('main.toggle-dock');
-      UI.Tooltip.Tooltip.install(
-          titleElement,
-          i18nString(UIStrings.placementOfDevtoolsRelativeToThe, {PH1: toggleDockSideShorcuts[0].title()}));
-      dockItemElement.appendChild(titleElement);
-      const dockItemToolbar = new UI.Toolbar.Toolbar('', dockItemElement);
+      dockItemElement.classList.add('flex-auto', 'flex-centered', 'location-menu');
       dockItemElement.setAttribute(
           'jslog', `${VisualLogging.item('dock-side').track({keydown: 'ArrowDown|ArrowLeft|ArrowRight'})}`);
-      const undock = new UI.Toolbar.ToolbarToggle(
-          i18nString(UIStrings.undockIntoSeparateWindow), 'dock-window', undefined, 'current-dock-state-undock');
-      const bottom = new UI.Toolbar.ToolbarToggle(
-          i18nString(UIStrings.dockToBottom), 'dock-bottom', undefined, 'current-dock-state-bottom');
-      const right = new UI.Toolbar.ToolbarToggle(
-          i18nString(UIStrings.dockToRight), 'dock-right', undefined, 'current-dock-state-right');
-      const left = new UI.Toolbar.ToolbarToggle(
-          i18nString(UIStrings.dockToLeft), 'dock-left', undefined, 'current-dock-state-left');
-      undock.addEventListener(UI.Toolbar.ToolbarButton.Events.MOUSE_DOWN, event => event.data.consume());
-      bottom.addEventListener(UI.Toolbar.ToolbarButton.Events.MOUSE_DOWN, event => event.data.consume());
-      right.addEventListener(UI.Toolbar.ToolbarButton.Events.MOUSE_DOWN, event => event.data.consume());
-      left.addEventListener(UI.Toolbar.ToolbarButton.Events.MOUSE_DOWN, event => event.data.consume());
-      undock.addEventListener(
-          UI.Toolbar.ToolbarButton.Events.CLICK, setDockSide.bind(null, UI.DockController.DockState.UNDOCKED));
-      bottom.addEventListener(
-          UI.Toolbar.ToolbarButton.Events.CLICK, setDockSide.bind(null, UI.DockController.DockState.BOTTOM));
-      right.addEventListener(
-          UI.Toolbar.ToolbarButton.Events.CLICK, setDockSide.bind(null, UI.DockController.DockState.RIGHT));
-      left.addEventListener(
-          UI.Toolbar.ToolbarButton.Events.CLICK, setDockSide.bind(null, UI.DockController.DockState.LEFT));
-      undock.setToggled(
-          UI.DockController.DockController.instance().dockSide() === UI.DockController.DockState.UNDOCKED);
-      bottom.setToggled(UI.DockController.DockController.instance().dockSide() === UI.DockController.DockState.BOTTOM);
-      right.setToggled(UI.DockController.DockController.instance().dockSide() === UI.DockController.DockState.RIGHT);
-      left.setToggled(UI.DockController.DockController.instance().dockSide() === UI.DockController.DockState.LEFT);
-      dockItemToolbar.appendToolbarItem(undock);
-      dockItemToolbar.appendToolbarItem(left);
-      dockItemToolbar.appendToolbarItem(bottom);
-      dockItemToolbar.appendToolbarItem(right);
+      dockItemElement.tabIndex = -1;
+      UI.ARIAUtils.setLabel(dockItemElement, UIStrings.dockSide + UIStrings.dockSideNaviation);
+      const [toggleDockSideShorcut] =
+          UI.ShortcutRegistry.ShortcutRegistry.instance().shortcutsForAction('main.toggle-dock');
+
+      // clang-format off
+      render(html`
+        <span class="dockside-title"
+              title=${i18nString(UIStrings.placementOfDevtoolsRelativeToThe, {PH1: toggleDockSideShorcut.title()})}>
+          ${i18nString(UIStrings.dockSide)}
+        </span>
+        <devtools-toolbar @mousedown=${(event: Event) => event.consume()}>
+          <devtools-button class="toolbar-button"
+                           jslog=${VisualLogging.toggle().track({click: true}).context('current-dock-state-undock')}
+                           title=${i18nString(UIStrings.undockIntoSeparateWindow)}
+                           .iconName=${'dock-window'}
+                           .toggled=${dockController.dockSide() === UI.DockController.DockState.UNDOCKED}
+                           .toggledIconName=${'dock-window'}
+                           .toggleType=${Buttons.Button.ToggleType.PRIMARY}
+                           .variant=${Buttons.Button.Variant.ICON_TOGGLE}
+                           @click=${setDockSide.bind(null, UI.DockController.DockState.UNDOCKED)}></devtools-button>
+          <devtools-button class="toolbar-button"
+                           jslog=${VisualLogging.toggle().track({click: true}).context('current-dock-state-left')}
+                           title=${i18nString(UIStrings.dockToLeft)}
+                           .iconName=${'dock-left'}
+                           .toggled=${dockController.dockSide() === UI.DockController.DockState.LEFT}
+                           .toggledIconName=${'dock-left'}
+                           .toggleType=${Buttons.Button.ToggleType.PRIMARY}
+                           .variant=${Buttons.Button.Variant.ICON_TOGGLE}
+                           @click=${setDockSide.bind(null, UI.DockController.DockState.LEFT)}></devtools-button>
+          <devtools-button class="toolbar-button"
+                           jslog=${VisualLogging.toggle().track({click: true}).context('current-dock-state-bottom')}
+                           title=${i18nString(UIStrings.dockToBottom)}
+                           .iconName=${'dock-bottom'}
+                           .toggled=${dockController.dockSide() === UI.DockController.DockState.BOTTOM}
+                           .toggledIconName=${'dock-bottom'}
+                           .toggleType=${Buttons.Button.ToggleType.PRIMARY}
+                           .variant=${Buttons.Button.Variant.ICON_TOGGLE}
+                           @click=${setDockSide.bind(null, UI.DockController.DockState.BOTTOM)}></devtools-button>
+          <devtools-button class="toolbar-button"
+                           jslog=${VisualLogging.toggle().track({click: true}).context('current-dock-state-right')}
+                           title=${i18nString(UIStrings.dockToRight)}
+                           .iconName=${'dock-right'}
+                           .toggled=${dockController.dockSide() === UI.DockController.DockState.RIGHT}
+                           .toggledIconName=${'dock-right'}
+                           .toggleType=${Buttons.Button.ToggleType.PRIMARY}
+                           .variant=${Buttons.Button.Variant.ICON_TOGGLE}
+                           @click=${setDockSide.bind(null, UI.DockController.DockState.RIGHT)}></devtools-button>
+        </devtools-toolbar>
+      `, dockItemElement, {host: this});
+      // clang-format on
+
       dockItemElement.addEventListener('keydown', event => {
         let dir = 0;
         if (event.key === 'ArrowLeft') {
@@ -910,29 +936,24 @@ export class MainMenuItem implements UI.Toolbar.Provider {
           return;
         }
 
-        const buttons = [undock, left, bottom, right];
-        let index = buttons.findIndex(button => button.element.hasFocus());
+        const buttons = Array.from(dockItemElement.querySelectorAll('devtools-button'));
+        let index = buttons.findIndex(button => button.hasFocus());
         index = Platform.NumberUtilities.clamp(index + dir, 0, buttons.length - 1);
-
-        buttons[index].element.focus();
+        buttons[index].focus();
         event.consume(true);
       });
       contextMenu.headerSection().appendCustomItem(dockItemElement, 'dock-side');
     }
 
-    const button = (this.#itemInternal.element as HTMLButtonElement);
+    const button = this.#itemInternal.element;
 
     function setDockSide(side: UI.DockController.DockState): void {
-      void UI.DockController.DockController.instance()
-          .once(UI.DockController.Events.AFTER_DOCK_SIDE_CHANGED)
-          .then(() => {
-            button.focus();
-          });
-      UI.DockController.DockController.instance().setDockSide(side);
+      void dockController.once(UI.DockController.Events.AFTER_DOCK_SIDE_CHANGED).then(() => button.focus());
+      dockController.setDockSide(side);
       contextMenu.discard();
     }
 
-    if (UI.DockController.DockController.instance().dockSide() === UI.DockController.DockState.UNDOCKED) {
+    if (dockController.dockSide() === UI.DockController.DockState.UNDOCKED) {
       const mainTarget = SDK.TargetManager.TargetManager.instance().primaryPageTarget();
       if (mainTarget && mainTarget.type() === SDK.Target.Type.FRAME) {
         contextMenu.defaultSection().appendAction('inspector-main.focus-debuggee', i18nString(UIStrings.focusDebuggee));
@@ -998,9 +1019,7 @@ let settingsButtonProviderInstance: SettingsButtonProvider;
 export class SettingsButtonProvider implements UI.Toolbar.Provider {
   readonly #settingsButton: UI.Toolbar.ToolbarButton;
   private constructor() {
-    const settingsActionId = 'settings.show';
-    this.#settingsButton =
-        UI.Toolbar.Toolbar.createActionButtonForId(settingsActionId, {showLabel: false, userActionCode: undefined});
+    this.#settingsButton = UI.Toolbar.Toolbar.createActionButton('settings.show');
   }
 
   static instance(opts: {
@@ -1056,6 +1075,7 @@ export class ReloadActionDelegate implements UI.ActionRegistration.ActionDelegat
     switch (actionId) {
       case 'main.debug-reload':
         Components.Reload.reload();
+
         return true;
     }
     return false;

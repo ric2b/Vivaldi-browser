@@ -65,7 +65,7 @@ cc_library(
         "//conditions:default": [],
     }),
     copts = [
-        "-std=gnu11",
+        "-std=c11",
     ] + select({
         ":optimized_build": ["-O2"],
         "//conditions:default": [],

@@ -30,7 +30,10 @@
 #import "ios/chrome/browser/drag_and_drop/model/drag_item_util.h"
 #import "ios/chrome/browser/drag_and_drop/model/url_drag_drop_handler.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
+#import "ios/chrome/browser/fullscreen/ui_bundled/fullscreen_controller.h"
+#import "ios/chrome/browser/fullscreen/ui_bundled/fullscreen_ui_updater.h"
 #import "ios/chrome/browser/infobars/model/infobar_metrics_recorder.h"
+#import "ios/chrome/browser/lens/ui_bundled/lens_entrypoint.h"
 #import "ios/chrome/browser/lens_overlay/coordinator/lens_overlay_availability.h"
 #import "ios/chrome/browser/location_bar/ui_bundled/location_bar_constants.h"
 #import "ios/chrome/browser/location_bar/ui_bundled/location_bar_consumer.h"
@@ -42,6 +45,13 @@
 #import "ios/chrome/browser/location_bar/ui_bundled/location_bar_view_controller.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_util.h"
+#import "ios/chrome/browser/omnibox/ui_bundled/chrome_omnibox_client_ios.h"
+#import "ios/chrome/browser/omnibox/ui_bundled/omnibox_controller_delegate.h"
+#import "ios/chrome/browser/omnibox/ui_bundled/omnibox_coordinator.h"
+#import "ios/chrome/browser/omnibox/ui_bundled/omnibox_focus_delegate.h"
+#import "ios/chrome/browser/omnibox/ui_bundled/omnibox_text_field_ios.h"
+#import "ios/chrome/browser/omnibox/ui_bundled/popup/omnibox_popup_coordinator.h"
+#import "ios/chrome/browser/omnibox/ui_bundled/web_location_bar_impl.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_presenter.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/coordinator/layout_guide/layout_guide_util.h"
@@ -59,16 +69,6 @@
 #import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
 #import "ios/chrome/browser/shared/ui/util/pasteboard_util.h"
 #import "ios/chrome/browser/shared/ui/util/util_swift.h"
-#import "ios/chrome/browser/ui/fullscreen/fullscreen_controller.h"
-#import "ios/chrome/browser/ui/fullscreen/fullscreen_ui_updater.h"
-#import "ios/chrome/browser/ui/lens/lens_entrypoint.h"
-#import "ios/chrome/browser/ui/omnibox/chrome_omnibox_client_ios.h"
-#import "ios/chrome/browser/ui/omnibox/omnibox_controller_delegate.h"
-#import "ios/chrome/browser/ui/omnibox/omnibox_coordinator.h"
-#import "ios/chrome/browser/ui/omnibox/omnibox_focus_delegate.h"
-#import "ios/chrome/browser/ui/omnibox/omnibox_text_field_ios.h"
-#import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_coordinator.h"
-#import "ios/chrome/browser/ui/omnibox/web_location_bar_impl.h"
 #import "ios/chrome/browser/url_loading/model/image_search_param_generator.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_params.h"
@@ -166,8 +166,9 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 - (void)start {
   DCHECK(self.browser);
 
-  if (self.started)
+  if (self.started) {
     return;
+  }
 
   [self.browser->GetCommandDispatcher()
       startDispatchingToTarget:self
@@ -183,10 +184,11 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
   self.viewController.delegate = self;
   // TODO(crbug.com/40670043): Use HandlerForProtocol after commands protocol
   // clean up.
-  self.viewController.dispatcher =
-      static_cast<id<ActivityServiceCommands, ApplicationCommands,
+  self.viewController.dispatcher = static_cast<
+      id<ActivityServiceCommands, ApplicationCommands,
                      PopupMenuCommands, // Vivaldi
-                     LoadQueryCommands, LensOverlayCommands, OmniboxCommands>>(
+                     LoadQueryCommands,
+                     LensCommands, LensOverlayCommands, OmniboxCommands>>(
           self.browser->GetCommandDispatcher());
   self.viewController.tracker =
       feature_engagement::TrackerFactory::GetForProfile(
@@ -303,8 +305,9 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 }
 
 - (void)stop {
-  if (!self.started)
+  if (!self.started) {
     return;
+  }
   [self.browser->GetCommandDispatcher() stopDispatchingToTarget:self];
 
   [self.contextualPanelEntrypointCoordinator stop];
@@ -366,6 +369,11 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
   return self.omniboxCoordinator.toolbarOmniboxConsumer;
 }
 
+- (void)setFakeboxButtonsSnapshotProvider:
+    (id<FakeboxButtonsSnapshotProvider>)provider {
+  self.viewController.fakeboxButtonsSnapshotProvider = provider;
+}
+
 #pragma mark - LoadQueryCommands
 
 - (void)loadQuery:(NSString*)query immediately:(BOOL)immediately {
@@ -423,7 +431,6 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 }
 
 - (void)focusOmnibox {
-
   // When the NTP and fakebox are visible, make the fakebox animates into place
   // before focusing the omnibox.
   if (IsVisibleURLNewTabPage([self webState]) &&
@@ -439,6 +446,7 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
     } // End Vivaldi
 
   } else {
+    [self setFakeboxButtonsSnapshotProvider:nil];
     [self.omniboxCoordinator focusOmnibox];
   }
 }
@@ -644,14 +652,16 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 
 - (void)searchImage:(std::optional<gfx::Image>)optionalImage
           usingLens:(BOOL)usingLens {
-  if (!optionalImage)
+  if (!optionalImage) {
     return;
+  }
 
   // If the Browser has been destroyed, then the UI should
   // no longer be active. Return early to avoid crashing.
   Browser* browser = self.browser;
-  if (!browser)
+  if (!browser) {
     return;
+  }
 
   UIImage* image = optionalImage->ToUIImage();
   if (usingLens) {

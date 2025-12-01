@@ -13,12 +13,15 @@
 <translation id="1859234291848436338">Comhair an sgrìobhaidh</translation>
 <translation id="2297836609126180313"><ph name="QUANTITY" /> TB/s</translation>
 <translation id="3049748772180311791"><ph name="QUANTITY" /> MB</translation>
+<translation id="3240426699337459095">Chaidh lethbhreac dhen cheangal a dhèanamh</translation>
 <translation id="3291688615589870984">{DAYS, plural, one {# latha} two {# latha} few {# làithean} other {# latha}}</translation>
+<translation id="335581015389089642">Cainnt</translation>
 <translation id="3600566671520689681">{DAYS, plural, one {# latha air fhàgail} two {# latha air fhàgail} few {# làithean air fhàgail} other {# latha air fhàgail}}</translation>
 <translation id="3618849550573277856">Lorg “<ph name="LOOKUP_STRING" />”</translation>
 <translation id="3740362395218339114"><ph name="QUANTITY" /> GB/s</translation>
 <translation id="3757388668994797779"><ph name="QUANTITY" /> GB</translation>
 <translation id="3889424535448813030">An t-saighead dheas</translation>
+<translation id="4289300219472526559">Tòisich air bruidhinn</translation>
 <translation id="4968171027979920686">{SECONDS, plural, one {# diog} two {# dhiog} few {# diogan} other {# diog}}</translation>
 <translation id="5076340679995252485">&amp;Cuir ann</translation>
 <translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
@@ -28,6 +31,7 @@
 <translation id="5906667377645263094">{SECONDS, plural, one {# diog air fhàgail} two {# dhiog air fhàgail} few {# diogan air fhàgail} other {# diog air fhàgail}}</translation>
 <translation id="5943826764092288734">{HOURS, plural, one {# uair a thìde} two {# uair a thìde} few {# uairean a thìde} other {# uair a thìde}}</translation>
 <translation id="6142413573757616983"><ph name="QUANTITY" /> B/s</translation>
+<translation id="6397363302884558537">Sguir a bhruidhinn</translation>
 <translation id="6404817160109697034">{SECONDS, plural, one {# diog air ais} two {# dhiog air ais} few {# diogan air ais} other {# diog air ais}}</translation>
 <translation id="6483402905448010557">{SECONDS, plural, one {# diog air ais} two {# dhiog air ais} few {# diogan air ais} other {# diog air ais}}</translation>
 <translation id="6863590663815976734">{HOURS, plural, one {# uair a thìde air fhàgail} two {# uair a thìde air fhàgail} few {# uairean a thìde air fhàgail} other {# uair a thìde air fhàgail}}</translation>

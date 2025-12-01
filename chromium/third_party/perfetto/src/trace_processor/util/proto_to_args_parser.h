@@ -85,7 +85,7 @@ class ProtoToArgsParser {
                            const protozero::ConstChars& value) = 0;
     virtual void AddString(const Key& key, const std::string& value) = 0;
     virtual void AddDouble(const Key& key, double value) = 0;
-    virtual void AddPointer(const Key& key, const void* value) = 0;
+    virtual void AddPointer(const Key& key, uint64_t value) = 0;
     virtual void AddBoolean(const Key& key, bool value) = 0;
     virtual void AddBytes(const Key& key, const protozero::ConstBytes& value) {
       // In the absence of a better implementation default to showing
@@ -122,6 +122,8 @@ class ProtoToArgsParser {
       return interned_message_view->template GetOrCreateDecoder<
           typename FieldMetadata::cpp_field_type>();
     }
+
+    virtual bool ShouldAddDefaultArg(const Key&) { return true; }
 
    protected:
     virtual InternedMessageView* GetInternedMessageView(uint32_t field_id,

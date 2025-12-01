@@ -179,4 +179,14 @@ public class PageInfoContainer extends FrameLayout {
                         ? subPageTitle
                         : getResources().getString(R.string.accessibility_toolbar_btn_site_info));
     }
+
+    // Vivaldi
+    public Drawable getFavIcon() {
+        return mFavIcon.getDrawable();
+    }
+
+    // vivaldi
+    public String getTruncatedUrl() {
+        return mTruncatedUrlTitle.getText().toString();
+    }
 }

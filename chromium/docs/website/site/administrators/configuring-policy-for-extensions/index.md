@@ -17,7 +17,7 @@ together with the policies configured for them.
 
 This page documents how to configure policies for extensions, using the Managed
 Bookmarks extension as an example. Extensions can also be [installed via
-policy](http://www.chromium.org/administrators/policy-list-3#ExtensionInstallForcelist);
+policy](/administrators/policy-list-3#ExtensionInstallForcelist);
 the examples below assume that the Managed Bookmarks extension has been loaded
 as an unpacked extension from **chrome://extensions** and got the extension ID
 "gihmafigllmhbppdfjnfecimiohcljba".

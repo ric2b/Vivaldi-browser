@@ -20,9 +20,12 @@ import androidx.core.app.NotificationCompat;
 
 import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.components.browser_ui.notifications.channels.ChannelsInitializer;
 
 /** Wraps a {@link Notification.Builder} object. */
+@NullMarked
 public class NotificationWrapperStandardBuilder implements NotificationWrapperBuilder {
     private static final String TAG = "NotifStandardBuilder";
     private final Notification.Builder mBuilder;
@@ -36,10 +39,8 @@ public class NotificationWrapperStandardBuilder implements NotificationWrapperBu
             NotificationMetadata metadata) {
         mContext = context;
         mBuilder = new Notification.Builder(mContext);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            channelsInitializer.safeInitialize(channelId);
-            mBuilder.setChannelId(channelId);
-        }
+        channelsInitializer.safeInitialize(channelId);
+        mBuilder.setChannelId(channelId);
         mMetadata = metadata;
     }
 
@@ -50,14 +51,15 @@ public class NotificationWrapperStandardBuilder implements NotificationWrapperBu
     }
 
     @Override
-    public NotificationWrapperBuilder setContentIntent(PendingIntent contentIntent) {
+    public NotificationWrapperBuilder setContentIntent(@Nullable PendingIntent contentIntent) {
         mBuilder.setContentIntent(contentIntent);
         return this;
     }
 
     @Override
-    public NotificationWrapperBuilder setContentIntent(PendingIntentProvider contentIntent) {
-        mBuilder.setContentIntent(contentIntent.getPendingIntent());
+    public NotificationWrapperBuilder setContentIntent(
+            @Nullable PendingIntentProvider contentIntent) {
+        mBuilder.setContentIntent(contentIntent == null ? null : contentIntent.getPendingIntent());
         return this;
     }
 
@@ -214,9 +216,6 @@ public class NotificationWrapperStandardBuilder implements NotificationWrapperBu
     @Override
     @SuppressWarnings("deprecation")
     public NotificationWrapperBuilder setPriorityBeforeO(int pri) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            mBuilder.setPriority(pri);
-        }
         return this;
     }
 

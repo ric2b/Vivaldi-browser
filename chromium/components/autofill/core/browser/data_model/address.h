@@ -29,15 +29,24 @@ class Address : public FormGroup {
   bool operator==(const Address& other) const;
 
   // FormGroup:
+  std::u16string GetInfo(FieldType type,
+                         const std::string& app_locale) const override;
+  std::u16string GetInfo(const AutofillType& type,
+                         const std::string& app_locale) const override;
   std::u16string GetRawInfo(FieldType type) const override;
   void SetRawInfoWithVerificationStatus(FieldType type,
                                         const std::u16string& value,
                                         VerificationStatus status) override;
-  void GetMatchingTypesWithProfileSources(
-      const std::u16string& text,
-      const std::string& locale,
-      FieldTypeSet* matching_types,
-      PossibleProfileValueSources* profile_value_sources) const override;
+  // TODO(crbug.com/40264633): Change `AutofillType` into `FieldType`.
+  bool SetInfoWithVerificationStatus(const AutofillType& type,
+                                     const std::u16string& value,
+                                     const std::string& locale,
+                                     VerificationStatus status) override;
+  void GetMatchingTypes(const std::u16string& text,
+                        const std::string& locale,
+                        FieldTypeSet* matching_types) const override;
+  // Return the verification status of a structured name value.
+  VerificationStatus GetVerificationStatus(FieldType type) const override;
 
   // Derives all missing tokens in the structured representation of the address
   // either parsing missing tokens from their assigned parent or by formatting
@@ -83,15 +92,6 @@ class Address : public FormGroup {
  private:
   // FormGroup:
   void GetSupportedTypes(FieldTypeSet* supported_types) const override;
-  std::u16string GetInfoImpl(const AutofillType& type,
-                             const std::string& locale) const override;
-  bool SetInfoWithVerificationStatusImpl(const AutofillType& type,
-                                         const std::u16string& value,
-                                         const std::string& locale,
-                                         VerificationStatus status) override;
-
-  // Return the verification status of a structured name value.
-  VerificationStatus GetVerificationStatusImpl(FieldType type) const override;
 
   // Updates the address' country, builds the hierarchy model corresponding to
   // `country_code` and transfers the content of the old data model into the new

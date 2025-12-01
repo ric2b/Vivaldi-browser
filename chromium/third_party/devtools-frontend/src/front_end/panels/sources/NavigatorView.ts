@@ -193,9 +193,11 @@ export class NavigatorView extends UI.Widget.VBox implements SDK.TargetManager.O
   private groupByFolder?: boolean;
   constructor(jslogContext: string, enableAuthoredGrouping?: boolean) {
     super(true);
+    this.registerRequiredCSS(navigatorViewStyles);
 
     this.placeholder = null;
     this.scriptsTree = new UI.TreeOutline.TreeOutlineInShadow(UI.TreeOutline.TreeVariant.NAVIGATION_TREE);
+    this.scriptsTree.registerRequiredCSS(navigatorTreeStyles);
 
     this.scriptsTree.hideOverflow();
     this.scriptsTree.setComparator(NavigatorView.treeElementsCompare);
@@ -1024,7 +1026,7 @@ export class NavigatorView extends UI.Widget.VBox implements SDK.TargetManager.O
   }
 
   private async removeUISourceCodeFromProject(node: NavigatorTreeNode): Promise<void> {
-    node.children().forEach(async child => {
+    node.children().slice(0).forEach(async child => {
       await this.removeUISourceCodeFromProject(child);
     });
 
@@ -1120,6 +1122,13 @@ export class NavigatorView extends UI.Widget.VBox implements SDK.TargetManager.O
               project.remove();
             }
           }, {jslogContext: 'remove-folder-from-workspace'});
+
+          if (UI.ActionRegistry.ActionRegistry.instance().hasAction('ai-assistance.filesystem')) {
+            contextMenu.headerSection().appendAction(
+                'ai-assistance.filesystem',
+            );
+            UI.Context.Context.instance().setFlavor(Persistence.FileSystemWorkspaceBinding.FileSystem, project);
+          }
         }
       } else {
         if (!(node instanceof NavigatorGroupTreeNode)) {
@@ -1233,11 +1242,6 @@ export class NavigatorView extends UI.Widget.VBox implements SDK.TargetManager.O
     if (targetNode) {
       targetNode.setTitle(target.name());
     }
-  }
-  override wasShown(): void {
-    super.wasShown();
-    this.scriptsTree.registerCSSFiles([navigatorTreeStyles]);
-    this.registerCSSFiles([navigatorViewStyles]);
   }
 }
 
@@ -1418,6 +1422,7 @@ export class NavigatorSourceTreeElement extends UI.TreeOutline.TreeElement {
     if (!this.aiButtonContainer) {
       this.aiButtonContainer = this.listItemElement.createChild('span', 'ai-button-container');
       const floatingButton = new FloatingButton.FloatingButton.FloatingButton({
+        title: action.title(),
         iconName: 'smart-assistant',
       });
       floatingButton.addEventListener('click', ev => {
@@ -1507,18 +1512,17 @@ export class NavigatorSourceTreeElement extends UI.TreeOutline.TreeElement {
   }
 }
 
-export type NavigatorRecursiveTreeNodeProperties = {
-  exclusivelySourceMapped: boolean|null,
-  exclusivelyIgnored: boolean|null,
-  exclusivelyThirdParty: boolean|null,
-  exclusivelyContentScripts: boolean|null,
-};
+export interface NavigatorRecursiveTreeNodeProperties {
+  exclusivelySourceMapped: boolean|null;
+  exclusivelyIgnored: boolean|null;
+  exclusivelyThirdParty: boolean|null;
+  exclusivelyContentScripts: boolean|null;
+}
 
 export class NavigatorTreeNode {
   id: string;
   protected navigatorView: NavigatorView;
   type: string;
-  childrenInternal: Map<string, NavigatorTreeNode>;
   private populated: boolean;
   isMerged: boolean;
   parent!: NavigatorTreeNode|null;
@@ -1526,11 +1530,13 @@ export class NavigatorTreeNode {
   tooltip?: string;
   recursiveProperties: NavigatorRecursiveTreeNodeProperties;
 
+  #children: NavigatorTreeNode[] = [];
+  readonly #childById = new Map<string, NavigatorTreeNode>();
+
   constructor(navigatorView: NavigatorView, id: string, type: string, tooltip?: string) {
     this.id = id;
     this.navigatorView = navigatorView;
     this.type = type;
-    this.childrenInternal = new Map();
     this.tooltip = tooltip;
 
     this.populated = false;
@@ -1617,32 +1623,46 @@ export class NavigatorTreeNode {
   }
 
   isEmpty(): boolean {
-    return !this.childrenInternal.size;
+    return !this.#children.length;
   }
 
-  children(): NavigatorTreeNode[] {
-    return [...this.childrenInternal.values()];
+  children(): readonly NavigatorTreeNode[] {
+    return this.#children;
   }
 
   child(id: string): NavigatorTreeNode|null {
-    return this.childrenInternal.get(id) || null;
+    return this.#childById.get(id) ?? null;
   }
 
   appendChild(node: NavigatorTreeNode): void {
-    this.childrenInternal.set(node.id, node);
+    this.#children.push(node);
+    this.#childById.set(node.id, node);
     node.parent = this;
     this.didAddChild(node);
   }
 
   removeChild(node: NavigatorTreeNode): void {
     this.willRemoveChild(node);
-    this.childrenInternal.delete(node.id);
+    const idx = this.#children.findIndex(n => n.id === node.id);
+    if (idx >= 0) {
+      this.#children.splice(idx, 1);
+    }
+    this.#childById.delete(node.id);
     node.parent = null;
     node.dispose();
   }
 
   reset(): void {
-    this.childrenInternal.clear();
+    this.#children = [];
+    this.#childById.clear();
+  }
+
+  updateId(newId: string): void {
+    if (this.parent) {
+      this.parent.#childById.delete(this.id);
+      this.parent.#childById.set(newId, this);
+    }
+    this.id = newId;
   }
 }
 
@@ -1740,9 +1760,7 @@ export class NavigatorUISourceCodeTreeNode extends NavigatorTreeNode {
     this.treeElement.tooltip = tooltip;
     this.treeElement.updateAccessibleName();
 
-    this.parent?.childrenInternal.delete(this.id);
-    this.id = 'UISourceCode:' + this.uiSourceCodeInternal.canononicalScriptId();
-    this.parent?.childrenInternal.set(this.id, this);
+    this.updateId('UISourceCode:' + this.uiSourceCodeInternal.canononicalScriptId());
   }
 
   override hasChildren(): boolean {

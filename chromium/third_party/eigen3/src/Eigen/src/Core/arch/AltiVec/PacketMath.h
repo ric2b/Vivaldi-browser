@@ -193,6 +193,7 @@ struct packet_traits<float> : default_packet_traits {
 #endif
     HasTanh = EIGEN_FAST_MATH,
     HasErf = EIGEN_FAST_MATH,
+    HasErfc = EIGEN_FAST_MATH,
 #else
     HasSqrt = 0,
     HasRsqrt = 0,
@@ -2310,6 +2311,11 @@ EIGEN_STRONG_INLINE Packet8bf pexp<Packet8bf>(const Packet8bf& a) {
 }
 
 template <>
+EIGEN_STRONG_INLINE Packet8bf pexp2<Packet8bf>(const Packet8bf& a) {
+  BF16_TO_F32_UNARY_OP_WRAPPER(generic_exp2, a);
+}
+
+template <>
 EIGEN_STRONG_INLINE Packet4f pldexp<Packet4f>(const Packet4f& a, const Packet4f& exponent) {
   return pldexp_generic(a, exponent);
 }
@@ -3177,6 +3183,8 @@ struct packet_traits<double> : default_packet_traits {
     HasSin = EIGEN_FAST_MATH,
     HasCos = EIGEN_FAST_MATH,
     HasTanh = EIGEN_FAST_MATH,
+    HasErf = EIGEN_FAST_MATH,
+    HasErfc = EIGEN_FAST_MATH,
     HasATanh = 1,
     HasATan = 0,
     HasLog = 0,

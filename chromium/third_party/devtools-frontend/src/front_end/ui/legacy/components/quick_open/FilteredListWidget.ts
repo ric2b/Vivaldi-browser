@@ -61,6 +61,7 @@ export class FilteredListWidget extends Common.ObjectWrapper.eventMixin<EventTyp
 
   constructor(provider: Provider|null, promptHistory?: string[], queryChangedCallback?: ((arg0: string) => void)) {
     super(true);
+    this.registerRequiredCSS(filteredListWidgetStyles);
     this.promptHistory = promptHistory || [];
 
     this.scoringTimer = 0;
@@ -172,10 +173,11 @@ export class FilteredListWidget extends Common.ObjectWrapper.eventMixin<EventTyp
 
     this.dialog = new UI.Dialog.Dialog('quick-open');
     UI.ARIAUtils.setLabel(this.dialog.contentElement, dialogTitle);
-    this.dialog.setMaxContentSize(new UI.Geometry.Size(504, 340));
+    this.dialog.setMaxContentSize(new UI.Geometry.Size(576, 320));
     this.dialog.setSizeBehavior(UI.GlassPane.SizeBehavior.SET_EXACT_WIDTH_MAX_HEIGHT);
     this.dialog.setContentPosition(null, 22);
-    this.dialog.contentElement.style.setProperty('border-radius', '4px');
+    this.dialog.contentElement.style.setProperty('border-radius', 'var(--sys-shape-corner-medium)');
+    this.dialog.contentElement.style.setProperty('box-shadow', 'var(--sys-elevation-level3)');
     this.show(this.dialog.contentElement);
     UI.ARIAUtils.setExpanded(this.contentElement, true);
     void this.dialog.once(UI.Dialog.Events.HIDDEN).then(() => {
@@ -224,7 +226,7 @@ export class FilteredListWidget extends Common.ObjectWrapper.eventMixin<EventTyp
   }
 
   override wasShown(): void {
-    this.registerCSSFiles([filteredListWidgetStyles]);
+    super.wasShown();
     this.attachProvider();
   }
 
@@ -534,7 +536,9 @@ export class FilteredListWidget extends Common.ObjectWrapper.eventMixin<EventTyp
     let handled = false;
     switch (keyboardEvent.key) {
       case Platform.KeyboardUtilities.ENTER_KEY:
-        this.onEnter(keyboardEvent);
+        if (!keyboardEvent.isComposing) {  // Ignore ENTER to confirm selection in an IME
+          this.onEnter(keyboardEvent);
+        }
         return;
       case Platform.KeyboardUtilities.TAB_KEY:
         if (keyboardEvent.shiftKey) {
@@ -588,9 +592,9 @@ export const enum Events {
   HIDDEN = 'hidden',
 }
 
-export type EventTypes = {
-  [Events.HIDDEN]: void,
-};
+export interface EventTypes {
+  [Events.HIDDEN]: void;
+}
 
 export class Provider {
   private refreshCallback!: () => void;
@@ -664,8 +668,8 @@ export function getRegisteredProviders(): ProviderRegistration[] {
 export interface ProviderRegistration {
   prefix: string;
   iconName: string;
-  iconWidth: string;
   provider: () => Promise<Provider>;
+  helpTitle: (() => string);
   titlePrefix: (() => string);
   titleSuggestion?: (() => string);
 }

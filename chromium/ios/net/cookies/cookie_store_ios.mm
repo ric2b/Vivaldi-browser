@@ -70,8 +70,9 @@ class NotificationTrampoline {
 #pragma mark NotificationTrampoline implementation
 
 NotificationTrampoline* NotificationTrampoline::GetInstance() {
-  if (!g_notification_trampoline)
+  if (!g_notification_trampoline) {
     g_notification_trampoline = new NotificationTrampoline;
+  }
   return g_notification_trampoline;
 }
 
@@ -84,8 +85,9 @@ void NotificationTrampoline::RemoveObserver(CookieNotificationObserver* obs) {
 }
 
 void NotificationTrampoline::NotifyCookiesChanged() {
-  for (auto& observer : observer_list_)
+  for (auto& observer : observer_list_) {
     observer.OnSystemCookiesChanged();
+  }
 }
 
 // Global instance of NotificationTrampoline.
@@ -111,8 +113,9 @@ void OnlyCookiesWithName(const net::CookieAccessResultList& cookies,
                          const std::string& name,
                          net::CookieList* filtered) {
   for (const auto& cookie_with_access_result : cookies) {
-    if (cookie_with_access_result.cookie.Name() == name)
+    if (cookie_with_access_result.cookie.Name() == name) {
       filtered->push_back(cookie_with_access_result.cookie);
+    }
   }
 }
 
@@ -242,7 +245,7 @@ void CookieStoreIOS::SetCanonicalCookieAsync(
       access_scheme == CookieAccessScheme::kNonCryptographic) {
     if (!callback.is_null()) {
       access_result.status.AddExclusionReason(
-          net::CookieInclusionStatus::EXCLUDE_SECURE_ONLY);
+          net::CookieInclusionStatus::ExclusionReason::EXCLUDE_SECURE_ONLY);
       std::move(callback).Run(access_result);
     }
     return;
@@ -259,7 +262,7 @@ void CookieStoreIOS::SetCanonicalCookieAsync(
 
   if (!callback.is_null()) {
     access_result.status.AddExclusionReason(
-        net::CookieInclusionStatus::EXCLUDE_FAILURE_TO_STORE);
+        net::CookieInclusionStatus::ExclusionReason::EXCLUDE_FAILURE_TO_STORE);
     std::move(callback).Run(access_result);
   }
 }
@@ -468,6 +471,7 @@ void CookieStoreIOS::DeleteCookiesMatchingInfoAsync(
             bool delegate_treats_url_as_trustworthy = false;
             net::CookieAccessParams params = {
                 net::CookieAccessSemantics::UNKNOWN,
+                net::CookieScopeSemantics::UNKNOWN,
                 delegate_treats_url_as_trustworthy};
             return delete_info.Matches(cc, params);
           },
@@ -487,8 +491,9 @@ void CookieStoreIOS::DeleteCookiesMatchingPredicateAsync(
   system_store_->GetAllCookiesAsync(
       base::BindOnce(^(NSArray<NSHTTPCookie*>* cookies) {
         if (!weak_system_store) {
-          if (!shared_callback.is_null())
+          if (!shared_callback.is_null()) {
             std::move(shared_callback).Run(0);
+          }
           return;
         }
         int to_delete_count = 0;
@@ -497,8 +502,9 @@ void CookieStoreIOS::DeleteCookiesMatchingPredicateAsync(
               weak_system_store->GetCookieCreationTime(cookie);
           std::unique_ptr<net::CanonicalCookie> canonical_cookie =
               CanonicalCookieFromSystemCookie(cookie, creation_time);
-          if (!canonical_cookie)
+          if (!canonical_cookie) {
             continue;
+          }
           if (shared_predicate.Run(*std::move(canonical_cookie))) {
             weak_system_store->DeleteCookieAsync(
                 cookie, SystemCookieStore::SystemCookieCallback());
@@ -506,8 +512,9 @@ void CookieStoreIOS::DeleteCookiesMatchingPredicateAsync(
           }
         }
 
-        if (!shared_callback.is_null())
+        if (!shared_callback.is_null()) {
           std::move(shared_callback).Run(to_delete_count);
+        }
       }));
 }
 
@@ -521,8 +528,9 @@ void CookieStoreIOS::OnSystemCookiesChanged() {
   }
 
   // Do not schedule a flush if one is already scheduled.
-  if (!flush_closure_.IsCancelled())
+  if (!flush_closure_.IsCancelled()) {
     return;
+  }
 
   flush_closure_.Reset(base::BindOnce(&CookieStoreIOS::FlushStore,
                                       weak_factory_.GetWeakPtr(),
@@ -607,8 +615,9 @@ void CookieStoreIOS::RunCallbacksForCookies(
     const std::vector<net::CanonicalCookie>& cookies,
     net::CookieChangeCause cause) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  if (cookies.empty())
+  if (cookies.empty()) {
     return;
+  }
 
   std::pair<GURL, std::string> key(url, name);
   CookieChangeCallbackList* callbacks = hook_map_[key].get();
@@ -655,29 +664,33 @@ void CookieStoreIOS::UpdateCachesFromCookieMonster() {
 void CookieStoreIOS::UpdateCachesAfterSet(SetCookiesCallback callback,
                                           net::CookieAccessResult result) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  if (result.status.IsInclude())
+  if (result.status.IsInclude()) {
     UpdateCachesFromCookieMonster();
-  if (!callback.is_null())
+  }
+  if (!callback.is_null()) {
     std::move(callback).Run(result);
+  }
 }
 
 void CookieStoreIOS::UpdateCachesAfterDelete(DeleteCallback callback,
                                              uint32_t num_deleted) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   UpdateCachesFromCookieMonster();
-  if (!callback.is_null())
+  if (!callback.is_null()) {
     std::move(callback).Run(num_deleted);
+  }
 }
 
 void CookieStoreIOS::UpdateCachesAfterClosure(base::OnceClosure callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   UpdateCachesFromCookieMonster();
-  if (!callback.is_null())
+  if (!callback.is_null()) {
     std::move(callback).Run();
+  }
 }
 
-net::CookieList
-CookieStoreIOS::CanonicalCookieListFromSystemCookies(NSArray* cookies) {
+net::CookieList CookieStoreIOS::CanonicalCookieListFromSystemCookies(
+    NSArray* cookies) {
   net::CookieList cookie_list;
   cookie_list.reserve([cookies count]);
   for (NSHTTPCookie* cookie in cookies) {

@@ -10,7 +10,6 @@
 
 #include "base/functional/bind.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/apps/platform_apps/audio_focus_web_contents_observer.h"
 #include "chrome/browser/favicon/favicon_utils.h"
@@ -112,8 +111,9 @@ void OpenURLAfterCheckIsDefaultBrowser(
   // open it.
   Profile* profile = Profile::FromBrowserContext(source->GetBrowserContext());
   DCHECK(profile);
-  if (!profile)
+  if (!profile) {
     return;
+  }
   switch (state) {
     case shell_integration::IS_DEFAULT:
       OpenURLFromTabInternal(profile, params,
@@ -123,7 +123,7 @@ void OpenURLAfterCheckIsDefaultBrowser(
     case shell_integration::UNKNOWN_DEFAULT:
     case shell_integration::OTHER_MODE_IS_DEFAULT:
       platform_util::OpenExternal(
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
           profile,
 #endif
           params.url);
@@ -153,13 +153,13 @@ void ChromeAppDelegate::RelinquishKeepAliveAfterTimeout(
 class ChromeAppDelegate::NewWindowContentsDelegate
     : public content::WebContentsDelegate {
  public:
-  NewWindowContentsDelegate() {}
+  NewWindowContentsDelegate() = default;
 
   NewWindowContentsDelegate(const NewWindowContentsDelegate&) = delete;
   NewWindowContentsDelegate& operator=(const NewWindowContentsDelegate&) =
       delete;
 
-  ~NewWindowContentsDelegate() override {}
+  ~NewWindowContentsDelegate() override = default;
 
   void BecomeOwningDeletageOf(
       std::unique_ptr<content::WebContents> web_contents) {
@@ -351,7 +351,7 @@ bool ChromeAppDelegate::CheckMediaAccessPermission(
 }
 
 int ChromeAppDelegate::PreferredIconSize() const {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   // Use a size appropriate for the ash shelf (see ash::kShelfSize).
   return extension_misc::EXTENSION_ICON_MEDIUM;
 #else
@@ -362,8 +362,9 @@ int ChromeAppDelegate::PreferredIconSize() const {
 void ChromeAppDelegate::SetWebContentsBlocked(
     content::WebContents* web_contents,
     bool blocked) {
-  if (!blocked)
+  if (!blocked) {
     web_contents->Focus();
+  }
   // RenderFrameHost may be NULL during shutdown.
   content::RenderFrameHost* host = web_contents->GetPrimaryMainFrame();
   if (host && host->IsRenderFrameLive()) {
@@ -428,6 +429,7 @@ void ChromeAppDelegate::ExitPictureInPicture() {
 }
 
 void ChromeAppDelegate::OnAppTerminating() {
-  if (!terminating_callback_.is_null())
+  if (!terminating_callback_.is_null()) {
     std::move(terminating_callback_).Run();
+  }
 }

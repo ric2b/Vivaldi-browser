@@ -98,7 +98,7 @@ bool AutoplayPolicy::IsDocumentAllowedToPlay(const Document& document) {
 
   bool permissions_policy_enabled =
       document.GetExecutionContext()->IsFeatureEnabled(
-          mojom::blink::PermissionsPolicyFeature::kAutoplay);
+          network::mojom::PermissionsPolicyFeature::kAutoplay);
 
   for (Frame* frame = document.GetFrame(); frame;
        frame = frame->Tree().Parent()) {
@@ -358,7 +358,7 @@ bool AutoplayPolicy::IsGestureNeededForPlayback() const {
 bool AutoplayPolicy::CanPlayWhileHidden() const {
   return element_->GetExecutionContext() &&
          element_->GetExecutionContext()->IsFeatureEnabled(
-             mojom::blink::PermissionsPolicyFeature::
+             network::mojom::PermissionsPolicyFeature::
                  kMediaPlaybackWhileNotVisible);
 }
 
@@ -445,7 +445,7 @@ void AutoplayPolicy::MaybeSetAutoplayInitiated() {
   bool permissions_policy_enabled =
       element_->GetExecutionContext() &&
       element_->GetExecutionContext()->IsFeatureEnabled(
-          mojom::blink::PermissionsPolicyFeature::kAutoplay);
+          network::mojom::PermissionsPolicyFeature::kAutoplay);
 
   for (Frame* frame = element_->GetDocument().GetFrame(); frame;
        frame = frame->Tree().Parent()) {

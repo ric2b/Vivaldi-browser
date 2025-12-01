@@ -6,9 +6,7 @@ import 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js'
 
 import {MetricsBrowserProxyImpl, ReadAloudSettingsChange, ReadAnythingLogger, ReadAnythingSettingsChange, SpeechControls, TimeFrom, TimeTo} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 import {assertEquals, assertGT, assertLE} from 'chrome-untrusted://webui-test/chai_assert.js';
-// <if expr="chromeos_ash">
 import {ReadAnythingVoiceType} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
-// </if>
 import {createSpeechSynthesisVoice} from './common.js';
 import {TestMetricsBrowserProxy} from './test_metrics_browser_proxy.js';
 
@@ -77,6 +75,13 @@ suite('Logger', () => {
     assertEquals(2, metrics.getCallCount('recordHighlightOff'));
   });
 
+  test('highlight granularity change', () => {
+    logger.logHighlightGranularity(0);
+    logger.logHighlightGranularity(4);
+
+    assertEquals(2, metrics.getCallCount('recordHighlightGranularity'));
+  });
+
   test('text settings', async () => {
     logger.logTextSettingsChange(ReadAnythingSettingsChange.FONT_SIZE_CHANGE);
     assertEquals(
@@ -118,7 +123,6 @@ suite('Logger', () => {
     assertEquals(5, metrics.getCallCount('recordVoiceSpeed'));
   });
 
-  // <if expr="chromeos_ash">
   test('logSpeechPlaySession with natural voice', async () => {
     logger.logSpeechPlaySession(
         defaultSpeechStartTime,
@@ -139,12 +143,24 @@ suite('Logger', () => {
         await metrics.whenCalled('recordVoiceType'));
   });
 
-  test('logSpeechPlaySession with other voice', async () => {
+  // <if expr="is_chromeos">
+  test('logSpeechPlaySession with other voice on ChromeOS', async () => {
     logger.logSpeechPlaySession(
         defaultSpeechStartTime, createSpeechSynthesisVoice({name: 'Sleepy'}));
 
     assertEquals(
         ReadAnythingVoiceType.CHROMEOS,
+        await metrics.whenCalled('recordVoiceType'));
+  });
+  // </if>
+
+  // <if expr="not is_chromeos">
+  test('logSpeechPlaySession with other voice on Desktop', async () => {
+    logger.logSpeechPlaySession(
+        defaultSpeechStartTime, createSpeechSynthesisVoice({name: 'Dopey'}));
+
+    assertEquals(
+        ReadAnythingVoiceType.SYSTEM,
         await metrics.whenCalled('recordVoiceType'));
   });
   // </if>

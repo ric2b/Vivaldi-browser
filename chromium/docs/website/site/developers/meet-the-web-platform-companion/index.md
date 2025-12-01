@@ -14,7 +14,7 @@ born on the cutting edge, where various organizations experiment with new
 capabilities. Those capabilities that capture the imagination of the broader
 community may eventually become a formal part of the web platform.
 The demos in the [Meet the Web Platform
-videos](http://www.youtube.com/watch?v=3i4dtgh3ym0&list=PL0207724E1C9C22A6&feature=plpp_play_all)
+videos](https://youtube.com/watch?v=3i4dtgh3ym0&list=PL0207724E1C9C22A6&feature=plpp_play_all)
 show a few examples of some of the cool stuff you can do on the cutting edge of
 the web platform. Not all of these capabilities have been standardized yet, some
 only work in Chrome today, and some are still actively being implemented in
@@ -32,7 +32,7 @@ on each demo and the technology that powers them.
             Mozilla
 *   Standardization status: All specifications under Web Components
             umbrella are being developed in the [W3C WebApps Working
-            Group](http://www.w3.org/2008/webapps/)
+            Group](https://www.w3.org/2008/webapps/)
 *   Learn more:
     *   A comprehensive [introduction to Web
                 components](http://dvcs.w3.org/hg/webcomponents/raw-file/tip/explainer/index.html)
@@ -74,8 +74,8 @@ on each demo and the technology that powers them.
 *   Standardization status: Fully standardized
 *   Learn more:
     *   The improved [Flexbox
-                specification](http://www.w3.org/TR/css3-flexbox/)
-    *   [Grid layout specification](http://www.w3.org/TR/css3-layout/)
+                specification](https://www.w3.org/TR/css3-flexbox/)
+    *   [Grid layout specification](https://www.w3.org/TR/css3-layout/)
                 (another app layout CSS module that is being actively
                 standardized)
 

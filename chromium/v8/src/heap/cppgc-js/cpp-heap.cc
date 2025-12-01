@@ -234,7 +234,7 @@ void FatalOutOfMemoryHandlerImpl(const std::string& reason,
   if (v8_flags.heap_snapshot_on_oom) {
     cppgc::internal::ClassNameAsHeapObjectNameScope names_scope(
         cpp_heap->AsBase());
-    isolate->heap_profiler()->WriteSnapshotToDiskAfterGC(
+    isolate->heap()->heap_profiler()->WriteSnapshotToDiskAfterGC(
         v8::HeapProfiler::HeapSnapshotMode::kExposeInternals);
   }
   V8::FatalProcessOutOfMemory(isolate, reason.c_str());
@@ -480,11 +480,18 @@ CppHeap::CppHeap(
 
 CppHeap::~CppHeap() {
   if (isolate_) {
+    // TODO(ahaas): Delete this code once `v8::Isolate::DetachCppHeap` has been
+    // deleted.
     isolate_->heap()->DetachCppHeap();
   }
+  Terminate();
 }
 
 void CppHeap::Terminate() {
+  // TODO(ahaas): Remove `already_terminated_` once the V8 API
+  // CppHeap::Terminate has been removed.
+  if (already_terminated_) return;
+  already_terminated_ = true;
   // Must not be attached to a heap when invoking termination GCs.
   CHECK(!isolate_);
   // Gracefully terminate the C++ heap invoking destructors.
@@ -563,13 +570,17 @@ class MoveListenerImpl final : public HeapProfilerNativeMoveListener,
 }  // namespace
 
 void CppHeap::AttachIsolate(Isolate* isolate) {
+#if DEBUG
+  // Since a new isolate is attached, we are also allowed to detach it again.
+  is_detached_ = false;
+#endif  // DEBUG
   CHECK(!in_detached_testing_mode_);
   CHECK_NULL(isolate_);
   isolate_ = isolate;
   heap_ = isolate->heap();
   static_cast<CppgcPlatformAdapter*>(platform())
       ->SetIsolate(reinterpret_cast<v8::Isolate*>(isolate_));
-  if (auto* heap_profiler = isolate_->heap_profiler()) {
+  if (auto* heap_profiler = heap()->heap_profiler()) {
     heap_profiler->AddBuildEmbedderGraphCallback(&CppGraphBuilder::Run, this);
     heap_profiler->set_native_move_listener(
         std::make_unique<MoveListenerImpl>(heap_profiler, this));
@@ -594,7 +605,11 @@ void CppHeap::AttachIsolate(Isolate* isolate) {
   }
 }
 
-void CppHeap::DetachIsolate() {
+void CppHeap::StartDetachingIsolate() {
+#if DEBUG
+  DCHECK(!is_detached_);
+  is_detached_ = true;
+#endif  // DEBUG
   // TODO(chromium:1056170): Investigate whether this can be enforced with a
   // CHECK across all relevant embedders and setups.
   if (!isolate_) return;
@@ -605,10 +620,12 @@ void CppHeap::DetachIsolate() {
         i::GarbageCollectionReason::kExternalFinalize);
   }
   sweeper_.FinishIfRunning();
+}
 
+void CppHeap::DetachIsolate() {
   sweeping_on_mutator_thread_observer_.reset();
 
-  if (auto* heap_profiler = isolate_->heap_profiler()) {
+  if (auto* heap_profiler = heap()->heap_profiler()) {
     heap_profiler->RemoveBuildEmbedderGraphCallback(&CppGraphBuilder::Run,
                                                     this);
     heap_profiler->set_native_move_listener(nullptr);
@@ -623,7 +640,9 @@ void CppHeap::DetachIsolate() {
     detached_override_stack_state_ = heap_->overridden_stack_state();
     override_stack_state_scope_.reset();
   }
-
+  // Store the last thread that owned the isolate, as it is the thread CppHeap
+  // should also get terminated with.
+  heap_thread_id_ = v8::base::OS::GetCurrentThreadId();
   isolate_ = nullptr;
   heap_ = nullptr;
   // Any future garbage collections will ignore the V8->C++ references.
@@ -863,12 +882,9 @@ void CppHeap::ReEnableConcurrentMarking() {
 }
 
 void CppHeap::WriteBarrier(void* object) {
-  isolate()
-      ->heap()
-      ->mark_compact_collector()
-      ->local_marking_worklists()
-      ->cpp_marking_state()
-      ->MarkAndPush(object);
+  auto& header = cppgc::internal::HeapObjectHeader::FromObject(object);
+  marker_->WriteBarrierForObject<
+      cppgc::internal::MarkerBase::WriteBarrierType::kDijkstra>(header);
 }
 
 namespace {
@@ -1305,13 +1321,13 @@ bool CppHeap::IsGCForbidden() const {
          HeapBase::IsGCForbidden();
 }
 
-bool CppHeap::IsCurrentThread(int thread_id) const {
+bool CppHeap::CurrentThreadIsHeapThread() const {
   if (isolate_ && V8_UNLIKELY(isolate_->was_locker_ever_used())) {
     // If v8::Locker has been used, we only check if the isolate is now locked
     // by the current thread.
     return isolate_->thread_manager()->IsLockedByCurrentThread();
   }
-  return HeapBase::IsCurrentThread(thread_id);
+  return HeapBase::CurrentThreadIsHeapThread();
 }
 
 }  // namespace internal

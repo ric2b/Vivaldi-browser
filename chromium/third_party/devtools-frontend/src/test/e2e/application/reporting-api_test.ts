@@ -12,7 +12,6 @@ import {
   goToResource,
   waitFor,
 } from '../../shared/helper.js';
-
 import {navigateToApplicationTab} from '../helpers/application-helpers.js';
 import {getDataGrid, getDataGridRows, getInnerTextOfDataGridCells} from '../helpers/datagrid-helpers.js';
 
@@ -60,8 +59,7 @@ describe('The Reporting API Page', () => {
     if (!endpointsGrid) {
       assert.fail('Could not find data-grid');
     }
-    const dataGrid = await getDataGrid(endpointsGrid);
-    const innerText = await getInnerTextOfDataGridCells(dataGrid, 2, true);
+    const innerText = await getInnerTextOfDataGridCells(endpointsGrid, 2, true);
     assert.strictEqual(innerText[0][0], `https://localhost:${getTestServerPort()}`);
     assert.strictEqual(innerText[0][1], 'default');
     assert.strictEqual(innerText[0][2], 'https://reports.example/default');

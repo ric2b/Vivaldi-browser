@@ -164,6 +164,7 @@ cc_library(
         "//tensorflow/compiler/tf2xla/kernels:xla_ops",
         "//tensorflow/core:core_cpu_internal",
         "//tensorflow/core:lib",
+        "//tensorflow/core:protos_all_cc",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/strings",
         "@local_xla//xla/stream_executor:platform_manager",
@@ -258,7 +259,6 @@ cc_library(
         "@com_google_absl//absl/synchronization",
         "@local_tsl//tsl/platform:statusor",
         "@local_xla//xla:util",
-        "@local_xla//xla/client:global_data",
         "@local_xla//xla/client:local_client",
     ],
 )
@@ -676,7 +676,8 @@ tf_cc_test(
         "@local_tsl//tsl/platform:statusor",
         "@local_xla//xla/pjrt:pjrt_client",
         "@local_xla//xla/pjrt:pjrt_common",
-        "@local_xla//xla/pjrt:tfrt_cpu_pjrt_client",
+        "@local_xla//xla/pjrt/plugin/xla_cpu:cpu_client_options",
+        "@local_xla//xla/pjrt/plugin/xla_cpu:xla_cpu_pjrt_client",
         "@local_xla//xla/tests:literal_test_util",
         "@local_xla//xla/tsl/framework:device_id_utils",
         "@local_xla//xla/tsl/lib/core:status_test_util",
@@ -1329,7 +1330,7 @@ tf_cc_test(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
         "@com_google_googletest//:gtest",
-        "@local_xla//xla:test",
+        "@local_xla//xla/hlo/testlib:test",
     ],
 )
 
@@ -1378,7 +1379,7 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:optional",
         "@com_google_absl//absl/types:span",
-        "@local_xla//xla:test",
+        "@local_xla//xla/hlo/testlib:test",
     ],
 )
 
@@ -1750,8 +1751,8 @@ cc_library(
         "//tensorflow/compiler/tf2xla:common",
         "//tensorflow/core:framework",
         "@local_xla//xla:shape_util",
-        "@local_xla//xla/stream_executor",
         "@local_xla//xla/stream_executor:device_memory",
+        "@local_xla//xla/stream_executor:stream",
         "@tf_runtime//:async_value",
     ],
 )
@@ -1769,8 +1770,8 @@ cc_library(
         "//tensorflow/compiler/tf2xla:common",
         "//tensorflow/core:framework",
         "@local_xla//xla:shape_util",
-        "@local_xla//xla/stream_executor",
         "@local_xla//xla/stream_executor:device_memory",
+        "@local_xla//xla/stream_executor:stream",
         "@tf_runtime//:async_value",
     ],
 )
@@ -1796,9 +1797,10 @@ tf_cuda_only_cc_test(
         "//tensorflow/core/framework:tensor_testutil",
         "@com_google_googletest//:gtest_main",
         "@local_xla//xla:shape_util",
-        "@local_xla//xla/stream_executor",
         "@local_xla//xla/stream_executor:device_memory",
         "@local_xla//xla/stream_executor:platform_manager",
+        "@local_xla//xla/stream_executor:stream",
+        "@local_xla//xla/stream_executor:stream_executor_h",
     ],
 )
 
@@ -1858,7 +1860,8 @@ tf_cc_test(
         "@local_xla//xla/client:executable_build_options",
         "@local_xla//xla/client:local_client",
         "@local_xla//xla/pjrt:pjrt_client",
-        "@local_xla//xla/pjrt:tfrt_cpu_pjrt_client",
+        "@local_xla//xla/pjrt/plugin/xla_cpu:cpu_client_options",
+        "@local_xla//xla/pjrt/plugin/xla_cpu:xla_cpu_pjrt_client",
     ],
 )
 
@@ -1976,6 +1979,7 @@ tf_cuda_cc_test(
         "//tensorflow/core/tfrt/common:pjrt_util",
         "//tensorflow/core/tpu:tpu_defs",
         "@com_google_googletest//:gtest_main",
-        "@local_xla//xla/pjrt:tfrt_cpu_pjrt_client",
+        "@local_xla//xla/pjrt/plugin/xla_cpu:cpu_client_options",
+        "@local_xla//xla/pjrt/plugin/xla_cpu:xla_cpu_pjrt_client",
     ],
 )

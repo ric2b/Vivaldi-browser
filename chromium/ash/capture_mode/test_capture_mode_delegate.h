@@ -46,6 +46,9 @@ class TestCaptureModeDelegate : public CaptureModeDelegate {
   }
   void set_is_allowed_by_dlp(bool value) { is_allowed_by_dlp_ = value; }
   void set_is_allowed_by_policy(bool value) { is_allowed_by_policy_ = value; }
+  void set_is_search_allowed_by_policy(bool value) {
+    is_search_allowed_by_policy_ = value;
+  }
   void set_should_save_after_dlp_check(bool value) {
     should_save_after_dlp_check_ = value;
   }
@@ -64,6 +67,9 @@ class TestCaptureModeDelegate : public CaptureModeDelegate {
   int num_capture_image_attempts() const { return num_capture_image_attempts_; }
   int num_multimodal_search_requests() const {
     return num_multimodal_search_requests_;
+  }
+  void set_lens_detected_text(std::string text) {
+    lens_detected_text_ = std::move(text);
   }
 
   // Resets |is_allowed_by_policy_| and |is_allowed_by_dlp_| back to true.
@@ -105,6 +111,7 @@ class TestCaptureModeDelegate : public CaptureModeDelegate {
       const gfx::Rect& bounds,
       OnCaptureModeDlpRestrictionChecked callback) override;
   bool IsCaptureAllowedByPolicy() const override;
+  bool IsSearchAllowedByPolicy() const override;
   void StartObservingRestrictedContent(
       const aura::Window* window,
       const gfx::Rect& bounds,
@@ -123,6 +130,7 @@ class TestCaptureModeDelegate : public CaptureModeDelegate {
   base::FilePath GetAndroidFilesPath() const override;
   base::FilePath GetLinuxFilesPath() const override;
   base::FilePath GetOneDriveMountPointPath() const override;
+  base::FilePath GetOneDriveVirtualPath() const override;
   PolicyCapturePath GetPolicyCapturePath() const override;
   void ConnectToVideoSourceProvider(
       mojo::PendingReceiver<video_capture::mojom::VideoSourceProvider> receiver)
@@ -142,7 +150,8 @@ class TestCaptureModeDelegate : public CaptureModeDelegate {
   void FinalizeSavedFile(
       base::OnceCallback<void(bool, const base::FilePath&)> callback,
       const base::FilePath& path,
-      const gfx::Image& thumbnail) override;
+      const gfx::Image& thumbnail,
+      bool for_video) override;
   base::FilePath RedirectFilePath(const base::FilePath& path) override;
   std::unique_ptr<AshWebView> CreateSearchResultsView() const override;
   MOCK_METHOD(void,
@@ -151,11 +160,15 @@ class TestCaptureModeDelegate : public CaptureModeDelegate {
               (override));
   void SendRegionSearch(const SkBitmap& image,
                         const gfx::Rect& region,
-                        OnSearchUrlFetchedCallback callback) override;
+                        ash::OnSearchUrlFetchedCallback search_callback,
+                        ash::OnTextDetectionComplete text_callback) override;
   void SendMultimodalSearch(const SkBitmap& image,
                             const gfx::Rect& region,
                             const std::string& text,
                             ash::OnSearchUrlFetchedCallback callback) override;
+  MOCK_METHOD(bool, IsNetworkConnectionOffline, (), (const, override));
+  void DeleteRemoteFile(const base::FilePath& path,
+                        base::OnceCallback<void(bool)> callback) override;
 
  private:
   std::unique_ptr<recording::RecordingServiceTestApi> recording_service_;
@@ -165,6 +178,7 @@ class TestCaptureModeDelegate : public CaptureModeDelegate {
   bool is_session_active_ = false;
   bool is_allowed_by_dlp_ = true;
   bool is_allowed_by_policy_ = true;
+  bool is_search_allowed_by_policy_ = true;
   bool should_save_after_dlp_check_ = true;
   bool is_camera_disabled_by_policy_ = false;
   bool is_audio_capture_disabled_by_policy_ = false;
@@ -179,6 +193,7 @@ class TestCaptureModeDelegate : public CaptureModeDelegate {
   int64_t fake_drive_fs_free_bytes_ = std::numeric_limits<int64_t>::max();
   PolicyCapturePath policy_capture_path_ = {base::FilePath(),
                                             CapturePathEnforcement::kNone};
+  std::string lens_detected_text_;
 };
 
 }  // namespace ash

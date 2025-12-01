@@ -34,6 +34,7 @@
   flex-shrink: 0;
   background-repeat: no-repeat;
   background-size: contain;
+  /* stylelint-disable-next-line custom-property-pattern */
   background-image: var(--image-file-lighthouse_logo);
 }
 
@@ -112,7 +113,7 @@ input[type="radio"] {
     margin-bottom: 0;
   }
 
-  &:not(:has(span[is="dt-checkbox"])) {
+  &:not(:has(dt-checkbox)) {
     margin-bottom: 6px;
   }
 }

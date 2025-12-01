@@ -10,8 +10,10 @@
 
 #include "chrome/browser/ui/android/plus_addresses/plus_address_creation_view_android.h"
 #include "chrome/browser/ui/plus_addresses/plus_address_creation_controller.h"
-#include "components/autofill/core/browser/autofill_client.h"
+#include "components/autofill/core/browser/foundations/autofill_client.h"
+#include "components/autofill/core/common/plus_address_survey_type.h"
 #include "components/plus_addresses/metrics/plus_address_metrics.h"
+#include "components/plus_addresses/plus_address_hats_utils.h"
 #include "components/plus_addresses/plus_address_types.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_user_data.h"
@@ -35,6 +37,7 @@ class PlusAddressCreationControllerAndroid
 
   // PlusAddressCreationController implementation:
   void OfferCreation(const url::Origin& main_frame_origin,
+                     bool is_manual_fallback,
                      PlusAddressCallback callback) override;
   void TryAgainToReservePlusAddress() override;
   void OnRefreshClicked() override;
@@ -67,11 +70,17 @@ class PlusAddressCreationControllerAndroid
 
   // Records the modal outcome and the time between `modal_shown_time_` and now
   // as modal shown duration and clear `modal_shown_time_`.
-  void RecordModalShownOutcome(metrics::PlusAddressModalCompletionStatus status,
-                               bool was_notice_shown);
+  void RecordModalShownOutcome(
+      metrics::PlusAddressModalCompletionStatus status,
+      const std::optional<PlusAddressCreationErrorStateInfo>&
+          modal_error_state_info,
+      bool was_notice_shown);
 
   // Returns whether the onboarding screen with the notice should be shown.
   bool ShouldShowNotice() const;
+
+  // Shows an applicable user perception survey.
+  void TriggerUserPerceptionSurvey(hats::SurveyType survey_type);
 
   PlusAddressService* GetPlusAddressService();
   PlusAddressSettingService* GetPlusAddressSettingService();
@@ -80,6 +89,7 @@ class PlusAddressCreationControllerAndroid
 
   std::unique_ptr<PlusAddressCreationViewAndroid> view_;
   url::Origin relevant_origin_;
+  bool is_manual_fallback_ = false;
   PlusAddressCallback callback_;
   bool suppress_ui_for_testing_ = false;
   // This is set by OnPlusAddressReserved and cleared when it's confirmed or
@@ -89,6 +99,8 @@ class PlusAddressCreationControllerAndroid
   // This is set on `OfferCreation`.
   std::optional<base::TimeTicks> modal_shown_time_;
   std::optional<metrics::PlusAddressModalCompletionStatus> modal_error_status_;
+  // Stores the error state info for failed creation requests.
+  std::optional<PlusAddressCreationErrorStateInfo> modal_error_state_info_;
   // The number of responses from calls to reserve a plus address that a user
   // has made. This equals 1 + number of refreshes.
   int reserve_response_count_ = 0;

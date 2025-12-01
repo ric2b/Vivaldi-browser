@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "components/user_education/common/feature_promo/feature_promo_specification.h"
 
 #include <string>
@@ -408,10 +413,13 @@ FeaturePromoSpecification FeaturePromoSpecification::CreateForTesting(
     ui::ElementIdentifier anchor_element_id,
     int body_text_string_id,
     PromoType type,
-    PromoSubtype subtype) {
+    PromoSubtype subtype,
+    CustomActionCallback custom_action_callback) {
   FeaturePromoSpecification result(&feature, type, anchor_element_id,
                                    body_text_string_id);
   result.set_promo_subtype_for_testing(subtype);  // IN-TEST
+  CHECK_EQ(!custom_action_callback.is_null(), type == PromoType::kCustomAction);
+  result.custom_action_callback_ = std::move(custom_action_callback);
   return result;
 }
 
@@ -534,11 +542,28 @@ FeaturePromoSpecification& FeaturePromoSpecification::SetHighlightedMenuItem(
 }
 
 ui::TrackedElement* FeaturePromoSpecification::GetAnchorElement(
-    ui::ElementContext context) const {
-  // Should not be called directly on a rotating promo.
-  CHECK_NE(PromoType::kRotating, promo_type_);
+    ui::ElementContext context,
+    std::optional<int> index) const {
+  if (index) {
+    CHECK_EQ(PromoType::kRotating, promo_type_);
+    return rotating_promos_.at(*index)->GetAnchorElement(context, std::nullopt);
+  } else {
+    // Should not be called directly on a rotating promo.
+    CHECK_NE(PromoType::kRotating, promo_type_);
+    return AnchorElementProviderCommon::GetAnchorElement(context, index);
+  }
+}
 
-  return AnchorElementProviderCommon::GetAnchorElement(context);
+int FeaturePromoSpecification::GetNextValidIndex(int starting_index) const {
+  CHECK_EQ(PromoType::kRotating, promo_type_);
+  int index = starting_index;
+  while (!rotating_promos_.at(index).has_value()) {
+    index = (index + 1) % rotating_promos_.size();
+    CHECK_NE(index, starting_index)
+        << "Wrapped around while looking for a valid rotating promo; this "
+           "should have been caught during promo registration.";
+  }
+  return index;
 }
 
 // static

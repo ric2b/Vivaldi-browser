@@ -12,11 +12,11 @@
 
 // A Java counterpart will be generated for this enum.
 // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.ui
-enum OverscrollAction {
-  NONE = 0,
-  PULL_TO_REFRESH = 1,
-  HISTORY_NAVIGATION = 2,
-  PULL_FROM_BOTTOM_EDGE = 3
+enum class OverscrollAction {
+  kNone = 0,
+  kPullToRefresh = 1,
+  kHistoryNavigation = 2,
+  kPullFromBottomEdge = 3
 };
 
 namespace cc {
@@ -43,7 +43,9 @@ class UI_ANDROID_EXPORT OverscrollRefresh {
  public:
   // The default distance in dp from a side of the device to start a navigation
   // from.
+  // LINT.IfChange
   static constexpr int kDefaultNavigationEdgeWidth = 24;
+  // LINT.ThenChange(//ui/android/java/src/org/chromium/ui/OverscrollRefreshHandler.java:kDefaultNavigationEdgeWidth)
 
   OverscrollRefresh(OverscrollRefreshHandler* handler, float edge_width);
 
@@ -109,10 +111,10 @@ class UI_ANDROID_EXPORT OverscrollRefresh {
   bool bottom_at_scroll_start_;
   bool overflow_y_hidden_;
 
-  enum ScrollConsumptionState {
-    DISABLED,
-    AWAITING_SCROLL_UPDATE_ACK,
-    ENABLED,
+  enum class ScrollConsumptionState {
+    kDisabled,
+    kAwaitingScrollUpdateAck,
+    kEnabled,
   } scroll_consumption_state_;
 
   float viewport_width_;

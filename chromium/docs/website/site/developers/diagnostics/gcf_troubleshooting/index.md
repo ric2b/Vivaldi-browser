@@ -22,7 +22,7 @@ This document describes the troubleshooting flow for Google Chrome Frame users.
 
 If the problem has serious security implications please report it using
 guidelines posted here:
-<http://www.chromium.org/Home/chromium-security/reporting-security-bugs>
+<https://www.chromium.org/Home/chromium-security/reporting-security-bugs>
 
 Before you file any bug, please search Google Chrome Frame bug tracker:
 <http://code.google.com/p/chromium/issues/list?q=Area%3DChromeFrame> If your
@@ -62,7 +62,7 @@ available the following should work:
 2.  Chrome Frame is enabled: you can verify that it is enabled by
             accessing ‘Manage Addons’ dialog via Tools menu in IE.
 3.  To make sure that web sites can see chrome frame, visit
-            [whatsmyuseragent.com](http://www.google.com/url?q=http%3A%2F%2Fwhatsmyuseragent.com&sa=D&sntz=1&usg=AFQjCNFVJf0_Aui3AZpzlWQ1o7wZEHbkeg)
+            [whatsmyuseragent.com](https://www.google.com/url?q=http%3A%2F%2Fwhatsmyuseragent.com&sa=D&sntz=1&usg=AFQjCNFVJf0_Aui3AZpzlWQ1o7wZEHbkeg)
             and see if “chromeframe/...” appears in the user-agent string.
 
 ## Common Issues
@@ -71,7 +71,7 @@ available the following should work:
 
 Make sure that Chrome Frame is installed and enabled. Chrome Frame plugs into
 Internet Explorer as a
-[BHO](http://www.google.com/url?q=http%3A%2F%2Fmsdn.microsoft.com%2Fen-us%2Flibrary%2Fbb250436(v%3Dvs.85).aspx%23bho_whatare&sa=D&sntz=1&usg=AFQjCNFTOgksXW5aAjZ0PIjbS5dDJiKVsw).
+[BHO](https://www.google.com/url?q=http%3A%2F%2Fmsdn.microsoft.com%2Fen-us%2Flibrary%2Fbb250436(v%3Dvs.85).aspx%23bho_whatare&sa=D&sntz=1&usg=AFQjCNFTOgksXW5aAjZ0PIjbS5dDJiKVsw).
 When a new BHO is installed, it needs a browser restart to get loaded. However,
 after a fresh install, a site can use a script on the landing page that makes
 sure the current browser instance gets Chrome Frame activated.
@@ -123,9 +123,9 @@ thread:<http://groups.google.com/group/google-chrome-frame/browse_thread/thread/
             automatically turn on for every site.
 3.  Make sure that the site XYZ is sending the ChromeFrame &lt;meta&gt;
             tag, or the HTTP headers as described here:
-            <http://www.chromium.org/developers/how-tos/chrome-frame-getting-started#TOC-Making-Your-Pages-Work-With-Google->
+            <https://www.chromium.org/developers/how-tos/chrome-frame-getting-started#TOC-Making-Your-Pages-Work-With-Google->
 4.  If the user wants Chrome Frame on for every site, see
-            <http://www.chromium.org/developers/how-tos/chrome-frame-getting-started#TOC-Testing-Your-Sites>
+            <https://www.chromium.org/developers/how-tos/chrome-frame-getting-started#TOC-Testing-Your-Sites>
 
 Example support threads:
 
@@ -225,9 +225,9 @@ the crash is happening at random then having a crash dump is quite useful.
 #### How to generate a crash dump
 
 A freely available tool called ‘Debugging Tools For Windows’ ([32 bit
-download](http://www.google.com/url?q=http%3A%2F%2Fwww.microsoft.com%2Fwhdc%2Fdevtools%2Fdebugging%2Finstallx86.mspx&sa=D&sntz=1&usg=AFQjCNFhPKf3h5kZ1oBJmIEdrRMkPigeZA)
+download](https://www.google.com/url?q=http%3A%2F%2Fwww.microsoft.com%2Fwhdc%2Fdevtools%2Fdebugging%2Finstallx86.mspx&sa=D&sntz=1&usg=AFQjCNFhPKf3h5kZ1oBJmIEdrRMkPigeZA)
 [64 bit
-download](http://www.google.com/url?q=http%3A%2F%2Fwww.microsoft.com%2Fwhdc%2Fdevtools%2Fdebugging%2Finstall64bit.mspx%2520&sa=D&sntz=1&usg=AFQjCNEZnFyqlcxNJW3A16kQXP4ZSSj_1w))
+download](https://www.google.com/url?q=http%3A%2F%2Fwww.microsoft.com%2Fwhdc%2Fdevtools%2Fdebugging%2Finstall64bit.mspx%2520&sa=D&sntz=1&usg=AFQjCNEZnFyqlcxNJW3A16kQXP4ZSSj_1w))
 or ‘WinDbg’ in short, can be used to collect crash dumps. Once you have
 downloaded and installed the correct flavor of WinDbg then run Internet Explorer
 under the debugger using the command line:

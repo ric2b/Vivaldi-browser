@@ -82,6 +82,7 @@
 #include "third_party/blink/renderer/core/page/viewport_description.h"
 #include "third_party/blink/renderer/core/permissions_policy/policy_helper.h"
 #include "third_party/blink/renderer/core/speculation_rules/speculation_rule_set.h"
+#include "third_party/blink/renderer/platform/allow_discouraged_type.h"
 #include "third_party/blink/renderer/platform/bindings/source_location.h"
 #include "third_party/blink/renderer/platform/exported/wrapped_resource_response.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
@@ -126,10 +127,6 @@ struct JavaScriptFrameworkDetectionResult;
 namespace mojom {
 enum class CommitResult : int32_t;
 }  // namespace mojom
-
-namespace {
-struct SameSizeAsDocumentLoader;
-}  // namespace
 
 enum class FirePopstate { kYes, kNo };
 
@@ -252,6 +249,7 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
                                    scoped_refptr<SerializedScriptValue>,
                                    WebFrameLoadType,
                                    FirePopstate,
+                                   bool should_skip_screenshot,
                                    bool is_browser_initiated = false,
                                    bool is_synchronously_committed = true,
                                    std::optional<scheduler::TaskAttributionId>
@@ -271,7 +269,10 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
       bool is_browser_initiated,
       bool is_synchronously_committed,
       std::optional<scheduler::TaskAttributionId>
-          soft_navigation_heuristics_task_id);
+          soft_navigation_heuristics_task_id,
+      bool has_transient_user_activation,
+      bool has_ua_visual_transition,
+      bool should_skip_screenshot);
 
   const ResourceResponse& GetResponse() const { return response_; }
 
@@ -323,7 +324,8 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
       bool is_browser_initiated,
       bool has_ua_visual_transition,
       std::optional<scheduler::TaskAttributionId>
-          soft_navigation_heuristics_task_id);
+          soft_navigation_heuristics_task_id,
+      bool should_skip_screenshot);
 
   void SetDefersLoading(LoaderFreezeMode);
 
@@ -517,7 +519,6 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   Member<MHTMLArchive> archive_;
 
  private:
-  friend struct SameSizeAsDocumentLoader;
   class BodyData;
   class EncodedBodyData;
 
@@ -554,7 +555,8 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
       mojom::blink::TriggeringEventInfo,
       std::optional<scheduler::TaskAttributionId>
           soft_navigation_heuristics_task_id,
-      bool has_ua_visual_transition);
+      bool has_ua_visual_transition,
+      bool should_skip_screenshot);
 
   // Use these method only where it's guaranteed that |m_frame| hasn't been
   // cleared.
@@ -575,7 +577,7 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
 
   // Process a redirect to update the redirect chain, current URL, referrer,
   // etc.
-  void HandleRedirect(WebNavigationParams::RedirectInfo& redirect);
+  void HandleRedirect(const WebNavigationParams::RedirectInfo& redirect);
   void HandleResponse();
 
   void InitializeEmptyResponse();
@@ -600,7 +602,7 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   ProcessBackgroundDataCallback TakeProcessBackgroundDataCallback() override;
 
   void ApplyClientHintsConfig(
-      const WebVector<network::mojom::WebClientHintsType>&
+      const std::vector<network::mojom::WebClientHintsType>&
           enabled_client_hints);
 
   // If the page was loaded from a signed exchange which has "allowed-alt-sxg"
@@ -816,8 +818,10 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   // the previously committed document did, and the navigation was same-site.
   bool should_have_sticky_user_activation_ = false;
 
-  WebVector<WebHistoryItem> navigation_api_back_entries_;
-  WebVector<WebHistoryItem> navigation_api_forward_entries_;
+  std::vector<WebHistoryItem> navigation_api_back_entries_
+      ALLOW_DISCOURAGED_TYPE("Matches WebNavigationParams");
+  std::vector<WebHistoryItem> navigation_api_forward_entries_
+      ALLOW_DISCOURAGED_TYPE("Matches WebNavigationParams");
   Member<HistoryItem> navigation_api_previous_entry_;
 
   // This is the interface that handles generated code cache

@@ -37,7 +37,7 @@ copy it from your build directory, but it's easier to use sshfs to mount that
 directory directly on the netbook. Also, chrome will be too large to debug
 natively on the netbook. Instead you'll need to use gdbserver. So do this:
 [Set up sshfs
-here](/chromium-os/how-tos-and-troubleshooting/debugging-tips/host-file-access).
+here](chromium-os/developer-library/guides/debugging/host-file-access).
 
 # Open port so that gdbserver can be reached
 

@@ -57,8 +57,9 @@ std::vector<T> MergeWithoutDuplicates(const std::vector<std::vector<T>>& tss) {
   for (const auto& ts : tss) {
     merged.insert(merged.end(), ts.begin(), ts.end());
   }
-  base::ranges::sort(merged);
-  merged.erase(base::ranges::unique(merged), merged.end());
+  std::ranges::sort(merged);
+  auto repeated = std::ranges::unique(merged);
+  merged.erase(repeated.begin(), repeated.end());
   return merged;
 }
 

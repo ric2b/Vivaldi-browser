@@ -233,7 +233,7 @@ FPDF_InitLibraryWithConfig(const FPDF_LIBRARY_CONFIG* config) {
   FX_InitializeMemoryAllocators();
   CFX_Timer::InitializeGlobals();
   CFX_GEModule::Create(config ? config->m_pUserFontPaths : nullptr);
-  CPDF_PageModule::Create();
+  pdfium::InitializePageModule();
 
 #if defined(PDF_USE_SKIA)
   CFX_GlyphCache::InitializeGlobals();
@@ -271,7 +271,7 @@ FPDF_EXPORT void FPDF_CALLCONV FPDF_DestroyLibrary() {
   CFX_GlyphCache::DestroyGlobals();
 #endif
 
-  CPDF_PageModule::Destroy();
+  pdfium::DestroyPageModule();
   CFX_GEModule::Destroy();
   CFX_Timer::DestroyGlobals();
   FX_DestroyMemoryAllocators();
@@ -1236,12 +1236,13 @@ FPDF_EXPORT FPDF_RESULT FPDF_CALLCONV FPDF_BStr_Init(FPDF_BSTR* bstr) {
 FPDF_EXPORT FPDF_RESULT FPDF_CALLCONV FPDF_BStr_Set(FPDF_BSTR* bstr,
                                                     const char* cstr,
                                                     int length) {
-  if (!bstr || !cstr)
+  if (!bstr || !cstr) {
     return -1;
-
-  if (length == -1)
-    length = pdfium::checked_cast<int>(strlen(cstr));
-
+  }
+  if (length == -1) {
+    // SAFETY: required from caller.
+    length = pdfium::checked_cast<int>(UNSAFE_BUFFERS(strlen(cstr)));
+  }
   if (length == 0) {
     FPDF_BStr_Clear(bstr);
     return 0;

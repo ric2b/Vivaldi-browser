@@ -8,7 +8,7 @@ namespace  {
 // Constants for layout configurations
 const CGFloat kSpacing = 16.0;
 const CGFloat kTopInsetForHiddenToolbar = 0;
-const CGFloat kMinimumSidePadding = 16.0;
+const CGFloat kMinimumSidePadding = 12.0;
 const CGFloat kListStyleItemHeight = 76.0;
 const CGFloat kMinimumItemWidthDecrease = 1.0;
 
@@ -109,7 +109,13 @@ const CGFloat kMinimumSidePaddingPreview = 2.0;
 
   CGFloat itemHeight = self.layoutStyle == VivaldiStartPageLayoutStyleList ?
       kListStyleItemHeight : itemWidth;
-  self.itemSize = CGSizeMake(itemWidth, itemHeight);
+
+  // Add a rounding adjustment for the item width for the cases when calculated
+  // column width combined might go above available space due to rounding error.
+  CGFloat roundingAdjustment = kMinimumItemWidthDecrease * 2;
+
+  self.itemSize = CGSizeMake((itemWidth-roundingAdjustment),
+                             (itemHeight-roundingAdjustment));
 }
 
 /// Returns the minimum height needed to render the items

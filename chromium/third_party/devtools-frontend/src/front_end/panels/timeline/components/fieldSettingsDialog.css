@@ -13,14 +13,7 @@
 }
 
 devtools-dialog {
-  --override-transparent: color-mix(in sRGB, var(--color-background) 80%, transparent);
-}
-
-.title {
-  font-size: var(--sys-typescale-headline4-size);
-  line-height: var(--sys-typescale-headline4-line-height);
-  font-weight: var(--ref-typeface-weight-medium);
-  margin: 0;
+  --override-transparent: color-mix(in srgb, var(--color-background) 80%, transparent);
 }
 
 .section-title {
@@ -51,7 +44,7 @@ details > summary {
 
 .content {
   max-width: 360px;
-  padding: 16px 20px 18px;
+  padding: 0 var(--sys-size-8) var(--sys-size-2);
   box-sizing: border-box;
 }
 
@@ -65,11 +58,15 @@ details > summary {
   margin-top: 8px;
 }
 
+.origin-mapping-description {
+  margin-bottom: 8px;
+}
+
 .origin-mapping-button-section {
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin-top: 6px;
+  margin-top: var(--sys-size-6);
 }
 
 .config-button {

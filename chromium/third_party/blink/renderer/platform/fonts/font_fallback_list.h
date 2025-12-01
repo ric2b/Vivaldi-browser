@@ -24,6 +24,7 @@
 #include "third_party/blink/renderer/platform/fonts/fallback_list_composite_key.h"
 #include "third_party/blink/renderer/platform/fonts/font_cache.h"
 #include "third_party/blink/renderer/platform/fonts/font_selector.h"
+#include "third_party/blink/renderer/platform/fonts/shaping/font_features.h"
 #include "third_party/blink/renderer/platform/fonts/shaping/ng_shape_cache.h"
 #include "third_party/blink/renderer/platform/fonts/shaping/shape_cache.h"
 #include "third_party/blink/renderer/platform/fonts/simple_font_data.h"
@@ -68,13 +69,6 @@ class PLATFORM_EXPORT FontFallbackList
   FontSelector* GetFontSelector() const { return font_selector_.Get(); }
   uint16_t Generation() const { return generation_; }
 
-  NGShapeCache& GetNGShapeCache(const FontDescription& font_description) {
-    if (!ng_shape_cache_) {
-      ng_shape_cache_ = MakeGarbageCollected<NGShapeCache>();
-    }
-    return *ng_shape_cache_;
-  }
-
   ShapeCache* GetShapeCache(const FontDescription& font_description) {
     if (!shape_cache_) {
       FallbackListCompositeKey key(font_description);
@@ -100,6 +94,9 @@ class PLATFORM_EXPORT FontFallbackList
   }
   const FontData* FontDataAt(const FontDescription&, unsigned index);
 
+  const FontFeatures& GetFontFeatures(const FontDescription&);
+  bool HasNonInitialFontFeatures(const FontDescription&);
+
   bool CanShapeWordByWord(const FontDescription&);
 
   void SetCanShapeWordByWordForTesting(bool b) {
@@ -122,6 +119,7 @@ class PLATFORM_EXPORT FontFallbackList
   const SimpleFontData* DeterminePrimarySimpleFontDataCore(
       const FontDescription&);
 
+  void ComputeFontFeatures(const FontDescription&);
   bool ComputeCanShapeWordByWord(const FontDescription&);
 
   HeapVector<Member<const FontData>, 1> font_list_;
@@ -129,14 +127,17 @@ class PLATFORM_EXPORT FontFallbackList
   const Member<FontSelector> font_selector_;
   int family_index_ = 0;
   const uint16_t generation_;
-  bool has_loading_fallback_ : 1;
-  bool has_custom_font_ : 1;
-  bool can_shape_word_by_word_ : 1;
-  bool can_shape_word_by_word_computed_ : 1;
-  bool is_invalid_ : 1;
-  bool nullify_primary_font_data_for_test_ : 1;
+  FontFeatures font_features_;
 
-  Member<NGShapeCache> ng_shape_cache_;
+  bool has_loading_fallback_ : 1 = false;
+  bool has_custom_font_ : 1 = false;
+  bool can_shape_word_by_word_ : 1 = false;
+  bool can_shape_word_by_word_computed_ : 1 = false;
+  bool is_invalid_ : 1 = false;
+  bool nullify_primary_font_data_for_test_ : 1 = false;
+  bool is_font_features_computed_ : 1 = false;
+  bool has_non_initial_font_features_ : 1 = false;
+
   Member<ShapeCache> shape_cache_;
 };
 

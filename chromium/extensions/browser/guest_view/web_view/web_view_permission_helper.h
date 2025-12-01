@@ -70,15 +70,7 @@ class WebViewPermissionHelper {
   static WebViewPermissionHelper* FromRenderFrameHostId(
       const content::GlobalRenderFrameHostId& render_frame_host_id);
 
-  void RegisterProtocolHandler(content::RenderFrameHost* requesting_frame,
-                               const std::string& protocol,
-                               const GURL& url,
-                               bool user_gesture);
-
-  void OnProtocolPermissionResponse(bool allow, const std::string& user_input);
-
-  void RequestMediaAccessPermission(content::WebContents* source,
-                                    const content::MediaStreamRequest& request,
+  void RequestMediaAccessPermission(const content::MediaStreamRequest& request,
                                     content::MediaResponseCallback callback);
 
   void RequestMediaAccessPermissionForControlledFrame(
@@ -99,7 +91,8 @@ class WebViewPermissionHelper {
                    const std::string& request_method,
                    base::OnceCallback<void(bool)> callback);
   void RequestPointerLockPermission(bool user_gesture,
-                                    bool last_unlocked_by_target);
+                                    bool last_unlocked_by_target,
+                                    base::OnceCallback<void(bool)> callback);
 
   // Requests Geolocation Permission from the embedder.
   void RequestGeolocationPermission(const GURL& requesting_frame,
@@ -141,6 +134,13 @@ class WebViewPermissionHelper {
   }
 
   // Vivaldi
+  void RegisterProtocolHandler(content::RenderFrameHost* requesting_frame,
+                               const std::string& protocol,
+                               const GURL& url,
+                               bool user_gesture);
+
+  void OnProtocolPermissionResponse(bool allow, const std::string& user_input);
+
   void SetDownloadInformation(const content::DownloadInformation& info);
 
  protected:

@@ -529,6 +529,7 @@ export class TextLayerElement extends PolymerElement {
     const highlightedText = this.getHighlightedText();
     const lines = this.getHighlightedLines();
     const containingRect = this.getContainingRect(lines);
+    const formulas = this.getFormulas();
     this.dispatchEvent(new CustomEvent<SelectedTextContextMenuData>(
         'show-selected-text-context-menu', {
           bubbles: true,
@@ -545,14 +546,23 @@ export class TextLayerElement extends PolymerElement {
           },
         }));
 
-    // On selection complete, send the selected text to C++.
-    this.browserProxy.handler.issueTextSelectionRequest(
-        highlightedText.replaceAll('\r\n', ' '), this.selectionStartIndex,
-        this.selectionEndIndex, this.shouldRenderTranslateWords);
-    recordLensOverlayInteraction(
-        INVOCATION_SOURCE,
-        this.shouldRenderTranslateWords ? UserAction.kTranslateTextSelection :
-                                          UserAction.kTextSelection);
+    if (formulas.length === 1) {
+      // Send the selected text together with the formula to C++.
+      this.browserProxy.handler.issueMathSelectionRequest(
+          highlightedText.replaceAll('\r\n', ' '), formulas[0],
+          this.selectionStartIndex, this.selectionEndIndex);
+      recordLensOverlayInteraction(
+          INVOCATION_SOURCE, UserAction.kMathSelection);
+    } else {
+      // On selection complete, send the selected text to C++.
+      this.browserProxy.handler.issueTextSelectionRequest(
+          highlightedText.replaceAll('\r\n', ' '), this.selectionStartIndex,
+          this.selectionEndIndex, this.shouldRenderTranslateWords);
+      recordLensOverlayInteraction(
+          INVOCATION_SOURCE,
+          this.shouldRenderTranslateWords ? UserAction.kTranslateTextSelection :
+                                            UserAction.kTextSelection);
+    }
   }
 
   selectAndSendWords(selectionStartIndex: number, selectionEndIndex: number) {
@@ -639,7 +649,7 @@ export class TextLayerElement extends PolymerElement {
 
     // Flatten Text structure to a list of arrays for easier rendering and
     // referencing.
-    for (const paragraph of text.textLayout.paragraphs) {
+    for (const paragraph of text.textLayout?.paragraphs ?? []) {
       const hasParagraphTranslation = paragraph.translation !== null;
       // We are looking for translated paragraphs first. If they do not exist,
       // we should default to the detected text. Just because we have
@@ -989,6 +999,22 @@ export class TextLayerElement extends PolymerElement {
           return word.plainText + separator;
         })
         .join('');
+  }
+
+  private getFormulas(): string[] {
+    // Return early if there isn't a valid selection.
+    if (this.selectionStartIndex === -1 || this.selectionEndIndex === -1) {
+      return [];
+    }
+
+    const startIndex =
+        Math.min(this.selectionStartIndex, this.selectionEndIndex);
+    const endIndex = Math.max(this.selectionStartIndex, this.selectionEndIndex);
+
+    const selectedWords = this.renderedWords.slice(startIndex, endIndex + 1);
+    return selectedWords.flatMap(
+        (word) =>
+            word?.formulaMetadata?.latex ? [word.formulaMetadata.latex] : []);
   }
 
   /** @return The CSS styles string for the given word. */

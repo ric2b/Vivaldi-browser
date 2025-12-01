@@ -4,31 +4,28 @@
 
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_trust_checker.h"
 
+#include <algorithm>
+
 #include "base/check_is_test.h"
 #include "base/feature_list.h"
 #include "base/functional/callback.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_features.h"
+#include "chrome/browser/web_applications/isolated_web_apps/policy/isolated_web_app_external_install_options.h"
 #include "chrome/common/chrome_features.h"
+#include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/web_package/signed_web_bundles/signed_web_bundle_id.h"
 #include "content/public/common/content_features.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
-#include "chrome/browser/web_applications/isolated_web_apps/policy/isolated_web_app_external_install_options.h"
-#include "chrome/common/pref_names.h"
-#include "components/prefs/pref_service.h"
-#endif
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/ash/app_mode/isolated_web_app/kiosk_iwa_trust_check.h"
+#include "chrome/browser/ash/app_mode/isolated_web_app/kiosk_iwa_policy_util.h"
 #include "chrome/common/chromeos/extensions/chromeos_system_extension_info.h"  // nogncheck
 #include "chromeos/ash/components/browser_context_helper/browser_context_types.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 namespace web_app {
 
@@ -40,6 +37,20 @@ GetTrustedWebBundleIdsForTesting() {
       trusted_web_bundle_ids_for_testing;
   return *trusted_web_bundle_ids_for_testing;
 }
+
+#if BUILDFLAG(IS_CHROMEOS)
+// Returns `true` if this Web Bundle ID is configured and currently running as
+// a kiosk. Kiosk mode is configured via DeviceLocalAccounts enterprise
+// policy.
+bool IsTrustedAsKiosk(const web_package::SignedWebBundleId& web_bundle_id) {
+  std::optional<ash::KioskIwaPolicyData> kiosk_iwa_policy_data =
+      ash::GetCurrentKioskIwaPolicyData();
+  if (!kiosk_iwa_policy_data) {
+    return false;
+  }
+  return kiosk_iwa_policy_data->web_bundle_id == web_bundle_id;
+}
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 }  // namespace
 
@@ -56,25 +67,21 @@ IsolatedWebAppTrustChecker::Result IsolatedWebAppTrustChecker::IsTrusted(
             .message = "Web Bundle IDs of type ProxyMode are not supported."};
   }
 
-#if BUILDFLAG(IS_CHROMEOS)
   if (IsTrustedViaPolicy(web_bundle_id)) {
     return {.status = Result::Status::kTrusted};
   }
-#endif  // BUILDFLAG(IS_CHROMEOS)
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  if (ash::IsTrustedAsKioskIwa(web_bundle_id)) {
+#if BUILDFLAG(IS_CHROMEOS)
+  if (IsTrustedAsKiosk(web_bundle_id)) {
     return {.status = Result::Status::kTrusted};
   }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
-// TODO(b/292227137): Migrate Shimless RMA app to LaCrOS.
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // TODO(crbug.com/292227137): Migrate Shimless RMA app to LaCrOS.
   if (ash::IsShimlessRmaAppBrowserContext(&*profile_) &&
       chromeos::Is3pDiagnosticsIwaId(web_bundle_id)) {
     return {.status = Result::Status::kTrusted};
   }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
   if (is_dev_mode_bundle && IsIwaDevModeEnabled(&*profile_)) {
     return {.status = Result::Status::kTrusted};
@@ -89,7 +96,6 @@ IsolatedWebAppTrustChecker::Result IsolatedWebAppTrustChecker::IsTrusted(
           .message = "The public key(s) are not trusted."};
 }
 
-#if BUILDFLAG(IS_CHROMEOS)
 bool IsolatedWebAppTrustChecker::IsTrustedViaPolicy(
     const web_package::SignedWebBundleId& web_bundle_id) const {
   const PrefService::Preference* pref = profile_->GetPrefs()->FindPreference(
@@ -98,7 +104,7 @@ bool IsolatedWebAppTrustChecker::IsTrustedViaPolicy(
     NOTREACHED();
   }
 
-  return base::ranges::any_of(
+  return std::ranges::any_of(
       pref->GetValue()->GetList(),
       [&web_bundle_id](const base::Value& force_install_entry) {
         auto options =
@@ -107,13 +113,12 @@ bool IsolatedWebAppTrustChecker::IsTrustedViaPolicy(
         return options.has_value() && options->web_bundle_id() == web_bundle_id;
       });
 }
-#endif  // BUILDFLAG(IS_CHROMEOS)
 
 void SetTrustedWebBundleIdsForTesting(  // IN-TEST
     base::flat_set<web_package::SignedWebBundleId> trusted_web_bundle_ids) {
   DCHECK(
-      base::ranges::none_of(trusted_web_bundle_ids,
-                            &web_package::SignedWebBundleId::is_for_proxy_mode))
+      std::ranges::none_of(trusted_web_bundle_ids,
+                           &web_package::SignedWebBundleId::is_for_proxy_mode))
       << "Cannot trust Web Bundle IDs of type ProxyMode";
 
   GetTrustedWebBundleIdsForTesting() =  // IN-TEST

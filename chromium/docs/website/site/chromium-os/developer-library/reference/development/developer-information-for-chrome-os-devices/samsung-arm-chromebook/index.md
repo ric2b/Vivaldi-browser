@@ -2,7 +2,7 @@
 breadcrumbs:
 - - /chromium-os
   - ChromiumOS
-- - /chromium-os/developer-information-for-chrome-os-devices
+- - /chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices
   - Developer Information for ChromeOS Devices
 page_name: samsung-arm-chromebook
 title: Samsung ARM Chromebook
@@ -13,7 +13,7 @@ title: Samsung ARM Chromebook
 ## Introduction
 
 This page contains information about the [ARM Samsung Series 3
-Chromebook](http://www.google.com/intl/en/chrome/devices/samsung-chromebook.html)
+Chromebook](https://www.google.com/intl/en/chrome/devices/samsung-chromebook.html)
 that is interesting and/or useful to software developers. For general
 information about getting started with developing on ChromiumOS (the
 open-source version of the software on the Chrome Notebook), see the [Chromium
@@ -36,14 +36,14 @@ OS Developer Guide](/chromium-os/developer-guide).
 *   WiFi: 802.11 a/b/g/n
     *   USB slot can handle Ethernet dongle
 *   Power supply: 12V <img alt="image"
-            src="/chromium-os/developer-information-for-chrome-os-devices/direct-current.svg"
-            height=5> ([DC](http://en.wikipedia.org/wiki/Direct_current)) 3.33A
+            src="/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/direct-current.svg"
+            height=5> ([DC](https://en.wikipedia.org/wiki/Direct_current)) 3.33A
             <img alt="image"
-            src="/chromium-os/developer-information-for-chrome-os-devices/center-positive-polarity.svg"
+            src="/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/center-positive-polarity.svg"
             height=12> ([positive polarity
-            tip](http://en.wikipedia.org/wiki/Polarity_symbols))
+            tip](https://en.wikipedia.org/wiki/Polarity_symbols))
 *   No [Kensington Security
-            Slot](http://en.wikipedia.org/wiki/Kensington_Security_Slot)
+            Slot](https://en.wikipedia.org/wiki/Kensington_Security_Slot)
 *   [Servo header](/chromium-os/servo): 1x42 header (now obsolete)
 
 ## Developer Mode
@@ -259,17 +259,17 @@ and all paperwork your received first. If you just want to see what the inside
 looks like, gaze upon this (click for a high res version):
 
 [<img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/samsung-arm-chromebook/arm-chromebook-inside.jpg"
+src="arm-chromebook-inside.jpg"
 height=224
-width=320>](/chromium-os/developer-information-for-chrome-os-devices/samsung-arm-chromebook/arm-chromebook-inside.jpg)
+width=320>](./arm-chromebook-inside.jpg)
 [<img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/samsung-arm-chromebook/snow-bottom-guts.jpg"
+src="snow-bottom-guts.jpg"
 height=140
-width=320>](/chromium-os/developer-information-for-chrome-os-devices/samsung-arm-chromebook/snow-bottom-guts.jpg)
+width=320>](./snow-bottom-guts.jpg)
 [<img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/samsung-arm-chromebook/snow-top-guts.jpg"
+src="snow-top-guts.jpg"
 height=140
-width=320>](/chromium-os/developer-information-for-chrome-os-devices/samsung-arm-chromebook/snow-top-guts.jpg)
+width=320>](./snow-top-guts.jpg)
 
 However, we acknowledge that some people like to tinker. So here's a quick guide
 to taking it apart:

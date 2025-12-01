@@ -471,6 +471,34 @@ TEST_F(WebRtcVideoEngineTest, DefaultRtxCodecHasAssociatedPayloadTypeSet) {
   FAIL() << "No RTX codec found among default codecs.";
 }
 
+// Test that we prefer to assign RTX payload types as "primary codec PT + 1".
+// This is purely for backwards compatibility (see https://crbug.com/391132280).
+// The spec does NOT mandate we do this and note that this is best-effort, if
+// "PT + 1" is already in-use the PT suggester would pick a different PT.
+TEST_F(WebRtcVideoEngineTest,
+       DefaultRtxCodecIsAssignedAssociatedPayloadTypePlusOne) {
+  AddSupportedVideoCodecType("VP8");
+  AddSupportedVideoCodecType("VP9");
+  AddSupportedVideoCodecType("AV1");
+  AddSupportedVideoCodecType("H264");
+  for (const Codec& codec : engine_.send_codecs()) {
+    if (codec.name != kRtxCodecName)
+      continue;
+    int associated_payload_type;
+    ASSERT_TRUE(codec.GetParam(kCodecParamAssociatedPayloadType,
+                               &associated_payload_type));
+    EXPECT_EQ(codec.id, associated_payload_type + 1);
+  }
+  for (const Codec& codec : engine_.recv_codecs()) {
+    if (codec.name != kRtxCodecName)
+      continue;
+    int associated_payload_type;
+    ASSERT_TRUE(codec.GetParam(kCodecParamAssociatedPayloadType,
+                               &associated_payload_type));
+    EXPECT_EQ(codec.id, associated_payload_type + 1);
+  }
+}
+
 TEST_F(WebRtcVideoEngineTest, SupportsTimestampOffsetHeaderExtension) {
   ExpectRtpCapabilitySupport(RtpExtension::kTimestampOffsetUri, true);
 }
@@ -4519,8 +4547,7 @@ class WebRtcVideoChannelFlexfecRecvTest : public WebRtcVideoChannelTest {
 };
 
 TEST_F(WebRtcVideoChannelFlexfecRecvTest,
-       DefaultFlexfecCodecHasTransportCcAndRembFeedbackParam) {
-  EXPECT_TRUE(cricket::HasTransportCc(GetEngineCodec("flexfec-03")));
+       DefaultFlexfecCodecHasRembFeedbackParam) {
   EXPECT_TRUE(cricket::HasRemb(GetEngineCodec("flexfec-03")));
 }
 
@@ -8481,12 +8508,299 @@ TEST_F(WebRtcVideoChannelTest, FallbackForUnsetOrUnsupportedScalabilityMode) {
   EXPECT_TRUE(send_channel_->SetVideoSend(last_ssrc_, nullptr, nullptr));
 }
 
+#ifdef RTC_ENABLE_H265
+TEST_F(
+    WebRtcVideoChannelTest,
+    NoLayeringValueUsedIfModeIsUnsetOrUnsupportedByH265AndDefaultUnsupported) {
+  const absl::InlinedVector<ScalabilityMode, webrtc::kScalabilityModeCount>
+      kSupportedModes = {ScalabilityMode::kL1T1, ScalabilityMode::kL1T3};
+
+  encoder_factory_->AddSupportedVideoCodec(webrtc::SdpVideoFormat(
+      "H265", webrtc::CodecParameterMap(), kSupportedModes));
+  cricket::VideoSenderParameters send_parameters;
+  send_parameters.codecs.push_back(GetEngineCodec("H265"));
+  EXPECT_TRUE(send_channel_->SetSenderParameters(send_parameters));
+
+  FakeVideoSendStream* stream = SetUpSimulcast(true, /*with_rtx=*/false);
+
+  // Send a full size frame so all simulcast layers are used when reconfiguring.
+  webrtc::test::FrameForwarder frame_forwarder;
+  VideoOptions options;
+  EXPECT_TRUE(
+      send_channel_->SetVideoSend(last_ssrc_, &options, &frame_forwarder));
+  send_channel_->SetSend(true);
+  frame_forwarder.IncomingCapturedFrame(frame_source_.GetFrame());
+
+  // Set scalability mode.
+  webrtc::RtpParameters parameters =
+      send_channel_->GetRtpSendParameters(last_ssrc_);
+  EXPECT_EQ(kNumSimulcastStreams, parameters.encodings.size());
+  parameters.encodings[0].scalability_mode = std::nullopt;
+  parameters.encodings[1].scalability_mode = "L1T3";  // Supported.
+  parameters.encodings[2].scalability_mode = "L3T3";  // Unsupported.
+  EXPECT_TRUE(send_channel_->SetRtpSendParameters(last_ssrc_, parameters).ok());
+
+  // Verify that the new value is propagated down to the encoder.
+  // Check that WebRtcVideoSendStream updates VideoEncoderConfig correctly.
+  const std::optional<ScalabilityMode> kDefaultScalabilityMode =
+      webrtc::ScalabilityModeFromString(webrtc::kNoLayeringScalabilityModeStr);
+  EXPECT_EQ(2, stream->num_encoder_reconfigurations());
+  webrtc::VideoEncoderConfig encoder_config = stream->GetEncoderConfig().Copy();
+  EXPECT_EQ(kNumSimulcastStreams, encoder_config.number_of_streams);
+  EXPECT_THAT(encoder_config.simulcast_layers,
+              ElementsAre(Field(&webrtc::VideoStream::scalability_mode,
+                                kDefaultScalabilityMode),
+                          Field(&webrtc::VideoStream::scalability_mode,
+                                ScalabilityMode::kL1T3),
+                          Field(&webrtc::VideoStream::scalability_mode,
+                                kDefaultScalabilityMode)));
+
+  // FakeVideoSendStream calls CreateEncoderStreams, test that the vector of
+  // VideoStreams are created appropriately for the simulcast case.
+  EXPECT_THAT(stream->GetVideoStreams(),
+              ElementsAre(Field(&webrtc::VideoStream::scalability_mode,
+                                kDefaultScalabilityMode),
+                          Field(&webrtc::VideoStream::scalability_mode,
+                                ScalabilityMode::kL1T3),
+                          Field(&webrtc::VideoStream::scalability_mode,
+                                kDefaultScalabilityMode)));
+
+  // GetParameters.
+  parameters = send_channel_->GetRtpSendParameters(last_ssrc_);
+  EXPECT_THAT(
+      parameters.encodings,
+      ElementsAre(
+          Field(&webrtc::RtpEncodingParameters::scalability_mode,
+                webrtc::kNoLayeringScalabilityModeStr),
+          Field(&webrtc::RtpEncodingParameters::scalability_mode, "L1T3"),
+          Field(&webrtc::RtpEncodingParameters::scalability_mode,
+                webrtc::kNoLayeringScalabilityModeStr)));
+
+  // No parameters changed, encoder should not be reconfigured.
+  EXPECT_TRUE(send_channel_->SetRtpSendParameters(last_ssrc_, parameters).ok());
+  EXPECT_EQ(2, stream->num_encoder_reconfigurations());
+
+  EXPECT_TRUE(send_channel_->SetVideoSend(last_ssrc_, nullptr, nullptr));
+}
+
+TEST_F(WebRtcVideoChannelTest,
+       SetRtpParametersForH265ShouldSucceedIgnoreLowerLevelId) {
+  encoder_factory_->AddSupportedVideoCodec(
+      webrtc::SdpVideoFormat("H265",
+                             {{"profile-id", "1"},
+                              {"tier-flag", "0"},
+                              {"level-id", "156"},
+                              {"tx-mode", "SRST"}},
+                             {ScalabilityMode::kL1T1}));
+  cricket::VideoSenderParameters send_parameters;
+  send_parameters.codecs.push_back(GetEngineCodec("H265"));
+  for (auto& codec : send_parameters.codecs) {
+    if (absl::EqualsIgnoreCase(codec.name, "H265")) {
+      codec.params["level-id"] = "156";
+    }
+  }
+
+  EXPECT_TRUE(send_channel_->SetSenderParameters(send_parameters));
+  FakeVideoSendStream* stream = AddSendStream();
+  ASSERT_TRUE(stream);
+
+  webrtc::test::FrameForwarder frame_forwarder;
+  VideoOptions options;
+  EXPECT_TRUE(
+      send_channel_->SetVideoSend(last_ssrc_, &options, &frame_forwarder));
+  send_channel_->SetSend(true);
+  frame_forwarder.IncomingCapturedFrame(frame_source_.GetFrame());
+
+  webrtc::RtpParameters parameters =
+      send_channel_->GetRtpSendParameters(last_ssrc_);
+
+  webrtc::RtpCodecParameters matched_codec;
+  for (const auto& codec : parameters.codecs) {
+    if (absl::EqualsIgnoreCase(codec.name, "H265")) {
+      EXPECT_EQ(codec.parameters.at("level-id"), "156");
+      matched_codec = codec;
+    }
+  }
+
+  FakeVideoSendStream* send_stream = fake_call_->GetVideoSendStreams().front();
+  ASSERT_TRUE(send_stream);
+  webrtc::VideoEncoderConfig encoder_config =
+      send_stream->GetEncoderConfig().Copy();
+  EXPECT_EQ(encoder_config.video_format.parameters.at("level-id"), "156");
+
+  // Set the level-id parameter to lower than the negotiated codec level-id.
+  EXPECT_EQ(1u, parameters.encodings.size());
+  matched_codec.parameters["level-id"] = "120";
+  parameters.encodings[0].codec = matched_codec;
+
+  EXPECT_TRUE(send_channel_->SetRtpSendParameters(last_ssrc_, parameters).ok());
+  webrtc::RtpParameters parameters2 =
+      send_channel_->GetRtpSendParameters(last_ssrc_);
+
+  for (const auto& codec : parameters2.codecs) {
+    if (absl::EqualsIgnoreCase(codec.name, "H265")) {
+      EXPECT_EQ(codec.parameters.at("level-id"), "156");
+    }
+  }
+
+  FakeVideoSendStream* send_stream2 = fake_call_->GetVideoSendStreams().front();
+  ASSERT_TRUE(send_stream2);
+  webrtc::VideoEncoderConfig encoder_config2 =
+      send_stream2->GetEncoderConfig().Copy();
+  EXPECT_EQ(encoder_config2.video_format.parameters.at("level-id"), "156");
+
+  EXPECT_TRUE(send_channel_->SetVideoSend(last_ssrc_, nullptr, nullptr));
+}
+
+TEST_F(WebRtcVideoChannelTest,
+       SetRtpParametersForH265WithSameLevelIdShouldSucceed) {
+  encoder_factory_->AddSupportedVideoCodec(
+      webrtc::SdpVideoFormat("H265",
+                             {{"profile-id", "1"},
+                              {"tier-flag", "0"},
+                              {"level-id", "156"},
+                              {"tx-mode", "SRST"}},
+                             {ScalabilityMode::kL1T1}));
+  cricket::VideoSenderParameters send_parameters;
+  send_parameters.codecs.push_back(GetEngineCodec("H265"));
+  for (auto& codec : send_parameters.codecs) {
+    if (absl::EqualsIgnoreCase(codec.name, "H265")) {
+      codec.params["level-id"] = "156";
+    }
+  }
+
+  EXPECT_TRUE(send_channel_->SetSenderParameters(send_parameters));
+  FakeVideoSendStream* stream = AddSendStream();
+  ASSERT_TRUE(stream);
+
+  webrtc::test::FrameForwarder frame_forwarder;
+  VideoOptions options;
+  EXPECT_TRUE(
+      send_channel_->SetVideoSend(last_ssrc_, &options, &frame_forwarder));
+  send_channel_->SetSend(true);
+  frame_forwarder.IncomingCapturedFrame(frame_source_.GetFrame());
+
+  webrtc::RtpParameters parameters =
+      send_channel_->GetRtpSendParameters(last_ssrc_);
+
+  webrtc::RtpCodecParameters matched_codec;
+  for (const auto& codec : parameters.codecs) {
+    if (absl::EqualsIgnoreCase(codec.name, "H265")) {
+      EXPECT_EQ(codec.parameters.at("level-id"), "156");
+      matched_codec = codec;
+    }
+  }
+
+  FakeVideoSendStream* send_stream = fake_call_->GetVideoSendStreams().front();
+  ASSERT_TRUE(send_stream);
+  webrtc::VideoEncoderConfig encoder_config =
+      send_stream->GetEncoderConfig().Copy();
+  EXPECT_EQ(encoder_config.video_format.parameters.at("level-id"), "156");
+
+  // Set the level-id parameter to the same as the negotiated codec level-id.
+  EXPECT_EQ(1u, parameters.encodings.size());
+  matched_codec.parameters["level-id"] = "156";
+  parameters.encodings[0].codec = matched_codec;
+
+  EXPECT_TRUE(send_channel_->SetRtpSendParameters(last_ssrc_, parameters).ok());
+
+  webrtc::RtpParameters parameters2 =
+      send_channel_->GetRtpSendParameters(last_ssrc_);
+
+  for (const auto& codec : parameters2.codecs) {
+    if (absl::EqualsIgnoreCase(codec.name, "H265")) {
+      EXPECT_EQ(codec.parameters.at("level-id"), "156");
+      matched_codec = codec;
+    }
+  }
+
+  FakeVideoSendStream* send_stream2 = fake_call_->GetVideoSendStreams().front();
+  ASSERT_TRUE(send_stream2);
+  webrtc::VideoEncoderConfig encoder_config2 =
+      send_stream2->GetEncoderConfig().Copy();
+  EXPECT_EQ(encoder_config2.video_format.parameters.at("level-id"), "156");
+
+  EXPECT_TRUE(send_channel_->SetVideoSend(last_ssrc_, nullptr, nullptr));
+}
+
+TEST_F(WebRtcVideoChannelTest,
+       SetRtpParametersForH265ShouldSucceedIgnoreHigherLevelId) {
+  encoder_factory_->AddSupportedVideoCodec(
+      webrtc::SdpVideoFormat("H265",
+                             {{"profile-id", "1"},
+                              {"tier-flag", "0"},
+                              {"level-id", "156"},
+                              {"tx-mode", "SRST"}},
+                             {ScalabilityMode::kL1T1}));
+  cricket::VideoSenderParameters send_parameters;
+  send_parameters.codecs.push_back(GetEngineCodec("H265"));
+  for (auto& codec : send_parameters.codecs) {
+    if (absl::EqualsIgnoreCase(codec.name, "H265")) {
+      codec.params["level-id"] = "156";
+    }
+  }
+
+  EXPECT_TRUE(send_channel_->SetSenderParameters(send_parameters));
+  FakeVideoSendStream* stream = AddSendStream();
+  ASSERT_TRUE(stream);
+
+  webrtc::test::FrameForwarder frame_forwarder;
+  VideoOptions options;
+  EXPECT_TRUE(
+      send_channel_->SetVideoSend(last_ssrc_, &options, &frame_forwarder));
+  send_channel_->SetSend(true);
+  frame_forwarder.IncomingCapturedFrame(frame_source_.GetFrame());
+
+  webrtc::RtpParameters parameters =
+      send_channel_->GetRtpSendParameters(last_ssrc_);
+
+  webrtc::RtpCodecParameters matched_codec;
+  for (const auto& codec : parameters.codecs) {
+    if (absl::EqualsIgnoreCase(codec.name, "H265")) {
+      EXPECT_EQ(codec.parameters.at("level-id"), "156");
+      matched_codec = codec;
+    }
+  }
+
+  FakeVideoSendStream* send_stream = fake_call_->GetVideoSendStreams().front();
+  ASSERT_TRUE(send_stream);
+  webrtc::VideoEncoderConfig encoder_config =
+      send_stream->GetEncoderConfig().Copy();
+  EXPECT_EQ(encoder_config.video_format.parameters.at("level-id"), "156");
+
+  // Set the level-id parameter to higher than the negotiated codec level-id.
+  EXPECT_EQ(1u, parameters.encodings.size());
+  matched_codec.parameters["level-id"] = "180";
+  parameters.encodings[0].codec = matched_codec;
+
+  EXPECT_TRUE(send_channel_->SetRtpSendParameters(last_ssrc_, parameters).ok());
+
+  webrtc::RtpParameters parameters2 =
+      send_channel_->GetRtpSendParameters(last_ssrc_);
+
+  for (const auto& codec : parameters2.codecs) {
+    if (absl::EqualsIgnoreCase(codec.name, "H265")) {
+      EXPECT_EQ(codec.parameters.at("level-id"), "156");
+    }
+  }
+  FakeVideoSendStream* send_stream2 = fake_call_->GetVideoSendStreams().front();
+  ASSERT_TRUE(send_stream2);
+  webrtc::VideoEncoderConfig encoder_config2 =
+      send_stream2->GetEncoderConfig().Copy();
+  EXPECT_EQ(encoder_config2.video_format.parameters.at("level-id"), "156");
+
+  EXPECT_TRUE(send_channel_->SetVideoSend(last_ssrc_, nullptr, nullptr));
+}
+#endif
+
 TEST_F(WebRtcVideoChannelTest,
        DefaultValueUsedIfScalabilityModeIsUnsupportedByCodec) {
-  encoder_factory_->AddSupportedVideoCodec(webrtc::SdpVideoFormat(
-      "VP8", webrtc::CodecParameterMap(), {ScalabilityMode::kL1T1}));
-  encoder_factory_->AddSupportedVideoCodec(webrtc::SdpVideoFormat(
-      "VP9", webrtc::CodecParameterMap(), {ScalabilityMode::kL3T3}));
+  encoder_factory_->AddSupportedVideoCodec(
+      webrtc::SdpVideoFormat("VP8", webrtc::CodecParameterMap(),
+                             {ScalabilityMode::kL1T1, ScalabilityMode::kL1T2}));
+  encoder_factory_->AddSupportedVideoCodec(
+      webrtc::SdpVideoFormat("VP9", webrtc::CodecParameterMap(),
+                             {ScalabilityMode::kL1T2, ScalabilityMode::kL3T3}));
 
   cricket::VideoSenderParameters send_parameters;
   send_parameters.codecs.push_back(GetEngineCodec("VP9"));
@@ -8938,6 +9252,33 @@ TEST_F(WebRtcVideoChannelTest, SetMixedCodecSimulcastStreamConfig) {
   EXPECT_EQ(config.rtp.stream_configs[1].payload_type, vp8.id);
   EXPECT_EQ(config.rtp.stream_configs[2].payload_type, vp9.id);
 }
+
+#if RTC_DCHECK_IS_ON && GTEST_HAS_DEATH_TEST && !defined(WEBRTC_ANDROID)
+TEST_F(WebRtcVideoChannelTest,
+       SetMixedCodecSimulcastWithDifferentConfigSettingsSizes) {
+  webrtc::test::ScopedKeyValueConfig field_trials(
+      field_trials_, "WebRTC-MixedCodecSimulcast/Enabled/");
+  AddSendStream();
+
+  cricket::VideoSenderParameters parameters;
+  cricket::Codec vp8 = GetEngineCodec("VP8");
+  parameters.codecs.push_back(vp8);
+
+  // `codec_settings_list.size()` is 1 after this in the
+  EXPECT_TRUE(send_channel_->SetSenderParameters(parameters));
+
+  // It sets 2 sizes of config ssrc.
+  StreamParams sp = CreateSimStreamParams("cname", {123, 456});
+  std::vector<cricket::RidDescription> rid_descriptions2;
+  rid_descriptions2.emplace_back("f", cricket::RidDirection::kSend);
+  rid_descriptions2.emplace_back("h", cricket::RidDirection::kSend);
+  sp.set_rids(rid_descriptions2);
+
+  // `WebRtcVideoSendStream::SetCodec` test for different sizes
+  // between parameters_.config.rtp.ssrcs.size() and codec_settings_list.size().
+  EXPECT_DEATH(send_channel_->AddSendStream(sp), "");
+}
+#endif
 
 // Test that min and max bitrate values set via RtpParameters are correctly
 // propagated to the underlying encoder for a single stream.

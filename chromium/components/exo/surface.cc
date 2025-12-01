@@ -4,6 +4,7 @@
 
 #include "components/exo/surface.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "ash/display/output_protection_delegate.h"
@@ -14,11 +15,12 @@
 #include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/stringprintf.h"
+#include "base/system/sys_info.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/traced_value.h"
 #include "build/build_config.h"
@@ -80,21 +82,11 @@ DEFINE_UI_CLASS_PROPERTY_TYPE(exo::Surface*)
 
 namespace exo {
 
-BASE_FEATURE(kExoPerSurfaceOcclusion,
-             "ExoPerSurfaceOcclusion",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kDisableNonYUVOverlaysFromExo,
              "DisableNonYUVOverlaysFromExo",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 namespace {
-
-bool IsExoOcclusionEnabled() {
-  static bool is_enabled =
-      base::FeatureList::IsEnabled(kExoPerSurfaceOcclusion);
-  return is_enabled;
-}
 
 // A property key containing the surface that is associated with
 // window. If unset, no surface is associated with window.
@@ -108,7 +100,7 @@ DEFINE_UI_CLASS_PROPERTY_KEY(bool, kStylusOnlyKey, false)
 // with |key|.
 template <typename T, typename U>
 typename T::iterator FindListEntry(T& list, U key) {
-  return base::ranges::find(list, key, &T::value_type::first);
+  return std::ranges::find(list, key, &T::value_type::first);
 }
 
 // Helper function that returns true if |list| contains an entry with |key|.
@@ -124,9 +116,18 @@ bool FormatHasAlpha(gfx::BufferFormat format) {
 // TODO(crbug.com/369003507): Remove this check once we found the root
 // cause of crash on specific hatch platform.
 bool ShouldDisableOverlay(gfx::BufferFormat format) {
-  static bool is_enabled =
-      base::FeatureList::IsEnabled(kDisableNonYUVOverlaysFromExo);
-  if (!is_enabled) {
+  static bool is_blocked_device = false;
+  static bool is_initialized = false;
+  if (!is_initialized) {
+    is_initialized = true;
+    std::string device_model = base::SysInfo::HardwareModelName();
+    if (device_model == "DRALLION" || device_model == "HATCH") {
+      // We only disable overlays for affected devices reported in this bug.
+      is_blocked_device = true;
+    }
+  }
+
+  if (!is_blocked_device) {
     return false;
   }
   switch (format) {
@@ -224,7 +225,9 @@ class CustomWindowDelegate : public aura::WindowDelegate {
 
   // Overridden from aura::WindowDelegate:
   gfx::Size GetMinimumSize() const override { return gfx::Size(); }
-  gfx::Size GetMaximumSize() const override { return gfx::Size(); }
+  std::optional<gfx::Size> GetMaximumSize() const override {
+    return std::nullopt;
+  }
   void OnBoundsChanged(const gfx::Rect& old_bounds,
                        const gfx::Rect& new_bounds) override {}
   gfx::NativeCursor GetCursor(const gfx::Point& point) override {
@@ -329,7 +332,7 @@ void ImmediateExplicitRelease(
 
 }  // namespace
 
-DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(std::string, kClientSurfaceIdKey, nullptr)
+DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(std::string, kClientSurfaceIdKey)
 
 // A property key to store the window session Id set by client or full_restore
 // component.
@@ -1600,19 +1603,32 @@ static bool IsOccludedByPreviousSqs(
     const gfx::Transform& quad_to_target_transform,
     const gfx::Rect& quad_rect,
     const gfx::MaskFilterInfo& msk) {
-  viz::SharedQuadState* prev_sqs =
+  const viz::SharedQuadState* prev_sqs =
       !render_pass->shared_quad_state_list.empty()
           ? render_pass->shared_quad_state_list.back()
           : nullptr;
-  // Limit the cases here to pixel aligned occlusions so all tests are known to
-  // be in the same space.
-  if (prev_sqs && quad_to_target_transform.IsIdentity() &&
-      prev_sqs->quad_to_target_transform.IsIdentity() &&
-      prev_sqs->are_contents_opaque && prev_sqs->opacity == 1.f) {
-    if (prev_sqs->clip_rect && !prev_sqs->clip_rect->Contains(quad_rect)) {
+
+  if (!prev_sqs ||
+      !prev_sqs->quad_to_target_transform
+           .NonDegeneratePreserves2dAxisAlignment() ||
+      !quad_to_target_transform.NonDegeneratePreserves2dAxisAlignment()) {
+    return false;
+  }
+
+  if (prev_sqs->are_contents_opaque && prev_sqs->opacity == 1.f) {
+    const gfx::Rect quad_rect_in_target_space =
+        cc::MathUtil::MapEnclosedRectWith2dAxisAlignedTransform(
+            quad_to_target_transform, quad_rect);
+    if (prev_sqs->clip_rect &&
+        !prev_sqs->clip_rect->Contains(quad_rect_in_target_space)) {
       return false;
     }
-    if (prev_sqs->quad_layer_rect.Contains(quad_rect)) {
+
+    const gfx::Rect sqs_rect_in_target =
+        cc::MathUtil::MapEnclosedRectWith2dAxisAlignedTransform(
+            prev_sqs->quad_to_target_transform,
+            prev_sqs->visible_quad_layer_rect);
+    if (sqs_rect_in_target.Contains(quad_rect_in_target_space)) {
       if (msk == prev_sqs->mask_filter_info) {
         return true;
       }
@@ -1689,6 +1705,7 @@ void Surface::AppendContentsToFrame(const gfx::PointF& parent_to_root_px,
                                     bool needs_full_damage,
                                     std::optional<float> device_scale_factor,
                                     viz::CompositorFrame* frame) {
+  UMA_HISTOGRAM_BOOLEAN("Graphics.Exo.Surface.AppendContentsToFrame", true);
   const std::unique_ptr<viz::CompositorRenderPass>& render_pass =
       frame->render_pass_list.back();
   gfx::PointF parent_to_root_dp = gfx::ScalePoint(
@@ -1808,13 +1825,13 @@ void Surface::AppendContentsToFrame(const gfx::PointF& parent_to_root_px,
     }
   }
 
-  if (IsExoOcclusionEnabled() &&
-      IsOccludedByPreviousSqs(render_pass, quad_to_target_transform, quad_rect,
+  if (IsOccludedByPreviousSqs(render_pass, quad_to_target_transform, quad_rect,
                               msk)) {
     render_pass->damage_rect.Union(gfx::ToEnclosedRect(damage_rect_px));
     if (current_resource_.id) {
       frame->resource_list.push_back(current_resource_);
     }
+    UMA_HISTOGRAM_BOOLEAN("Graphics.Exo.Surface.Occluded", true);
     return;
   }
 
@@ -1859,6 +1876,7 @@ void Surface::AppendContentsToFrame(const gfx::PointF& parent_to_root_px,
       // Draw quad is only needed if buffer is not fully transparent.
 
       if (requires_texture_draw_quad) {
+        UMA_HISTOGRAM_BOOLEAN("Graphics.Exo.Surface.TextureDrawQuad", true);
         viz::TextureDrawQuad* texture_quad =
             render_pass->CreateAndAppendDrawQuad<viz::TextureDrawQuad>();
         texture_quad->SetNew(quad_state, quad_rect, quad_rect,
@@ -1866,7 +1884,7 @@ void Surface::AppendContentsToFrame(const gfx::PointF& parent_to_root_px,
                              current_resource_.id,
                              /* premultiplied*/ true, uv_crop.origin(),
                              uv_crop.bottom_right(), background_color,
-                             /* flipped=*/false, /* nearest*/ false,
+                             /* nearest*/ false,
                              state_.basic_state.only_visible_on_secure_output,
                              gfx::ProtectedVideoType::kClear);
         if (current_resource_.is_overlay_candidate)
@@ -1911,6 +1929,7 @@ void Surface::AppendContentsToFrame(const gfx::PointF& parent_to_root_px,
           damage_rect_px = gfx::RectF();
         }
       } else {
+        UMA_HISTOGRAM_BOOLEAN("Graphics.Exo.Surface.TileDrawQuad", true);
         viz::TileDrawQuad* tile_quad =
             render_pass->CreateAndAppendDrawQuad<viz::TileDrawQuad>();
         // TODO(crbug.com/40229946): Support AA quads coming from exo.
@@ -1927,6 +1946,7 @@ void Surface::AppendContentsToFrame(const gfx::PointF& parent_to_root_px,
     }
     frame->resource_list.push_back(current_resource_);
   } else if (state_.basic_state.alpha != 0.0f) {
+    UMA_HISTOGRAM_BOOLEAN("Graphics.Exo.Surface.SolidColorDrawQuad", true);
     const viz::SharedQuadState* quad_state = AppendOrCreateSharedQuadState(
         viz::DrawQuad::Material::kSolidColor, state_.basic_state.alpha,
         render_pass, quad_to_target_transform, quad_rect, msk, quad_clip_rect,

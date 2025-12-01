@@ -43,23 +43,6 @@ You can disable type checking for TypeScript by using `devtools_skip_typecheck` 
 gn gen out/fast-build --args="devtools_skip_typecheck=true"
 ```
 
-#### Faster incremental builds & CSS hot reload
-In addition to that, you can enable CSS hot reload while using `watch` script with `devtools_css_hot_reload_enabled` argument:
-```bash
-gn gen out/fast-build --args="devtools_css_hot_reload_enabled=true"
-```
-
-with this and `devtools_skip_typecheck=true` in place, you can use `watch` script by:
-```bash
-npm run watch -- --target=fast-build
-```
-which will automatically apply CSS changes & instantly build changed TS files.
-
-> Caution! `watch` script is not based on `ninja` thus the build output and behavior
-> might differ with the official ninja build. In addition to that,
-> there might be some cases that `watch` build doesn't reliably handle, so you
-> might need to run `autoninja` and restart the script from time to time.
-
 ### Update to latest
 
 To update to latest tip of tree version:
@@ -87,7 +70,10 @@ and a separate CL with a proper roll.
 
 ### Run in a pre-built Chromium
 
-You can run a [build](#Build) of DevTools frontend in a pre-built Chromium in order to avoid the expensive Chromium build. For example, you can use the latest version of Chrome Canary, or the downloaded binary in `third_party/chrome`.
+You can run a [build](#Build) of DevTools frontend in a pre-built Chrome or Chromium in order to avoid the expensive build. Options:
+
+- Use the downloaded Chrome for Testing binary in `third_party/chrome`.
+- Use the latest Chrome Canary. This includes any DevTools features that are only available in regular Chrome builds (`is_official_build` + `is_chrome_branded`), such as GenAI-related features.
 
 #### Running from file system
 

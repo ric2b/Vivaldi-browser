@@ -6,19 +6,17 @@ import * as Trace from '../../../models/trace/trace.js';
 import {renderElementIntoDOM} from '../../../testing/DOMHelpers.js';
 import {describeWithEnvironment} from '../../../testing/EnvironmentHelpers.js';
 import {TraceLoader} from '../../../testing/TraceLoader.js';
-import * as Coordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
+import * as RenderCoordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
 
 import * as TimelineComponents from './components.js';
 
 describeWithEnvironment('SidebarAnnotationsTab', () => {
   const {SidebarAnnotationsTab} = TimelineComponents.SidebarAnnotationsTab;
-  const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
-
   it('renders annotations tab in the sidebar', async () => {
     const component = new SidebarAnnotationsTab();
     renderElementIntoDOM(component);
 
-    await coordinator.done();
+    await RenderCoordinator.done();
 
     assert.isNotNull(component.shadowRoot);
     const annotationsWrapperElement = component.shadowRoot.querySelector<HTMLElement>('.annotations');
@@ -46,9 +44,9 @@ describeWithEnvironment('SidebarAnnotationsTab', () => {
     const labelledTimeRangeAnnotation: Trace.Types.File.Annotation = {
       type: 'TIME_RANGE',
       bounds: {
-        min: Trace.Types.Timing.MicroSeconds(0),
-        max: Trace.Types.Timing.MicroSeconds(10),
-        range: Trace.Types.Timing.MicroSeconds(10),
+        min: Trace.Types.Timing.Micro(0),
+        max: Trace.Types.Timing.Micro(10),
+        range: Trace.Types.Timing.Micro(10),
       },
       label: 'Labelled Time Range',
     };
@@ -63,7 +61,7 @@ describeWithEnvironment('SidebarAnnotationsTab', () => {
 
     assert.isNotNull(component.shadowRoot);
 
-    await coordinator.done();
+    await RenderCoordinator.done();
 
     const annotationsWrapperElement = component.shadowRoot.querySelector<HTMLElement>('.annotations');
     assert.isNotNull(annotationsWrapperElement);
@@ -75,10 +73,10 @@ describeWithEnvironment('SidebarAnnotationsTab', () => {
     // 2 entry labels and 1 labelled time range
     const annotationEntryIdentifierElements =
         component.shadowRoot.querySelectorAll<HTMLElement>('.annotation-identifier');
-    assert.strictEqual(annotationEntryIdentifierElements.length, 3);
+    assert.lengthOf(annotationEntryIdentifierElements, 3);
 
     const annotationEntryLabelElements = component.shadowRoot.querySelectorAll<HTMLElement>('.label');
-    assert.strictEqual(annotationEntryIdentifierElements.length, 3);
+    assert.lengthOf(annotationEntryIdentifierElements, 3);
 
     assert.strictEqual(annotationEntryLabelElements[0].innerText, 'Entry Label 1');
     assert.strictEqual(annotationEntryIdentifierElements[0].style['backgroundColor'], 'rgb(82, 252, 3)');
@@ -99,7 +97,7 @@ describeWithEnvironment('SidebarAnnotationsTab', () => {
     };
     component.annotations = [entryLabelAnnotation];
     assert.isNotNull(component.shadowRoot);
-    await coordinator.done();
+    await RenderCoordinator.done();
 
     const deleteButton = component.shadowRoot.querySelector<HTMLElement>('.delete-button');
     assert.isNotNull(deleteButton);
@@ -122,12 +120,12 @@ describeWithEnvironment('SidebarAnnotationsTab', () => {
     const component = new SidebarAnnotationsTab();
     renderElementIntoDOM(component);
     component.annotations = [annotation];
-    await coordinator.done();
+    await RenderCoordinator.done();
 
     assert.isNotNull(component.shadowRoot);
 
     const label = component.shadowRoot.querySelector<HTMLElement>('.annotation-identifier');
-    assert.strictEqual(label?.innerText, 'private-aggregation-test.js (shared-sto…');
+    assert.strictEqual(label?.innerText, 'private-aggregation-test.js (shared-storage-demo-content-producer.web.app)');
   });
 
   it('dispatches RemoveAnnotation Events when delete annotation button is clicked', async function() {
@@ -148,7 +146,7 @@ describeWithEnvironment('SidebarAnnotationsTab', () => {
     };
 
     component.annotations = [entryLabelAnnotation];
-    await coordinator.done();
+    await RenderCoordinator.done();
     assert.isNotNull(component.shadowRoot);
 
     const deleteButton = component.shadowRoot.querySelector<HTMLElement>('.delete-button');
@@ -181,16 +179,16 @@ describeWithEnvironment('SidebarAnnotationsTab', () => {
     component.annotations = [entryLabelAnnotation, entryLabelAnnotation2];
     assert.isNotNull(component.shadowRoot);
 
-    await coordinator.done();
+    await RenderCoordinator.done();
 
     const annotationsWrapperElement = component.shadowRoot.querySelector<HTMLElement>('.annotations');
     assert.isNotNull(annotationsWrapperElement);
 
     // Ensure there are 2 labels and their entry identifiers and labels and rendered
     const annotationIdentifierElements = component.shadowRoot.querySelectorAll<HTMLElement>('.annotation-identifier');
-    assert.strictEqual(annotationIdentifierElements.length, 2);
+    assert.lengthOf(annotationIdentifierElements, 2);
     let annotationLabelElements = component.shadowRoot.querySelectorAll<HTMLElement>('.label');
-    assert.strictEqual(annotationIdentifierElements.length, 2);
+    assert.lengthOf(annotationIdentifierElements, 2);
 
     assert.strictEqual(annotationLabelElements[0].innerText, 'Entry Label 1');
     assert.strictEqual(annotationLabelElements[1].innerText, 'Entry Label 2');
@@ -202,20 +200,20 @@ describeWithEnvironment('SidebarAnnotationsTab', () => {
     const labelledTimeRangeAnnotation: Trace.Types.File.Annotation = {
       type: 'TIME_RANGE',
       bounds: {
-        min: Trace.Types.Timing.MicroSeconds(0),
-        max: Trace.Types.Timing.MicroSeconds(10),
-        range: Trace.Types.Timing.MicroSeconds(10),
+        min: Trace.Types.Timing.Micro(0),
+        max: Trace.Types.Timing.Micro(10),
+        range: Trace.Types.Timing.Micro(10),
       },
       label: 'Labelled Time Range',
     };
 
     component.annotations = [entryLabelAnnotation, entryLabelAnnotation2, labelledTimeRangeAnnotation];
-    await coordinator.done();
+    await RenderCoordinator.done();
 
     annotationLabelElements = component.shadowRoot.querySelectorAll<HTMLElement>('.label');
 
     // Ensure the labels changed to new ones and a labbel range was added
-    assert.strictEqual(annotationLabelElements.length, 3);
+    assert.lengthOf(annotationLabelElements, 3);
     assert.strictEqual(annotationLabelElements[0].innerText, 'New Entry Label 1');
     assert.strictEqual(annotationLabelElements[1].innerText, 'New Entry Label 2');
     assert.strictEqual(annotationLabelElements[2].innerText, 'Labelled Time Range');
@@ -243,14 +241,14 @@ describeWithEnvironment('SidebarAnnotationsTab', () => {
     component.annotations = [entryLabelAnnotation, entriesLink];
     assert.isNotNull(component.shadowRoot);
 
-    await coordinator.done();
+    await RenderCoordinator.done();
 
     const annotationsWrapperElement = component.shadowRoot.querySelector<HTMLElement>('.annotations');
     assert.isNotNull(annotationsWrapperElement);
 
     // Ensure there is only one annotation displayed
     const annotationIdentifierElements = component.shadowRoot.querySelectorAll<HTMLElement>('.annotation-identifier');
-    assert.strictEqual(annotationIdentifierElements.length, 1);
+    assert.lengthOf(annotationIdentifierElements, 1);
   });
 
   it('displays multiple not started annotations if they are not different entries', async function() {
@@ -276,14 +274,13 @@ describeWithEnvironment('SidebarAnnotationsTab', () => {
     component.annotations = [entryLabelAnnotation, entriesLink];
     assert.isNotNull(component.shadowRoot);
 
-    await coordinator.done();
+    await RenderCoordinator.done();
 
     const annotationsWrapperElement = component.shadowRoot.querySelector<HTMLElement>('.annotations');
     assert.isNotNull(annotationsWrapperElement);
 
     // Ensure both annotations are displayed
     const annotationIdentifierElements = component.shadowRoot.querySelectorAll<HTMLElement>('.annotation-identifier');
-    assert.strictEqual(annotationIdentifierElements.length, 2);
+    assert.lengthOf(annotationIdentifierElements, 2);
   });
-
 });

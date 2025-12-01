@@ -7,11 +7,9 @@ import '../icon_button/icon_button.js';
 import * as Common from '../../../core/common/common.js';
 import type * as Host from '../../../core/host/host.js';
 import * as i18n from '../../../core/i18n/i18n.js';
-import * as LitHtml from '../../lit-html/lit-html.js';
+import {html, render} from '../../lit/lit.js';
 
 import surveyLinkStyles from './surveyLink.css.js';
-
-const {html} = LitHtml;
 
 const UIStrings = {
   /**
@@ -52,17 +50,12 @@ const enum State {
 // A link to a survey. The link is rendered aysnchronously because we need to first check if
 // canShowSurvey succeeds.
 export class SurveyLink extends HTMLElement {
-
   readonly #shadow = this.attachShadow({mode: 'open'});
   #trigger = '';
   #promptText = Common.UIString.LocalizedEmptyString;
   #canShowSurvey: (trigger: string, callback: CanShowSurveyCallback) => void = () => {};
   #showSurvey: (trigger: string, callback: ShowSurveyCallback) => void = () => {};
   #state: State = State.CHECKING;
-
-  connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [surveyLinkStyles];
-  }
 
   // Re-setting data will cause the state to go back to 'Checking' which hides the link.
   set data(data: SurveyLinkData) {
@@ -123,15 +116,16 @@ export class SurveyLink extends HTMLElement {
     const ariaDisabled = this.#state !== State.SHOW_LINK;
 
     // clang-format off
-    // eslint-disable-next-line rulesdir/ban_style_tags_in_lit_html
+
     const output = html`
+      <style>${surveyLinkStyles.cssContent}</style>
       <button class="link ${linkState}" tabindex=${ariaDisabled ? '-1' : '0'} .disabled=${ariaDisabled} aria-disabled=${ariaDisabled} @click=${this.#sendSurvey}>
         <devtools-icon class="link-icon" .data=${{iconName: 'review', color: 'var(--sys-color-primary)', width: 'var(--issue-link-icon-size, 16px)', height: 'var(--issue-link-icon-size, 16px)'}}></devtools-icon><!--
       -->${linkText}
       </button>
     `;
     // clang-format on
-    LitHtml.render(output, this.#shadow, {host: this});
+    render(output, this.#shadow, {host: this});
   }
 }
 

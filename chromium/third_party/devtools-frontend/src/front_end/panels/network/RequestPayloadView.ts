@@ -38,20 +38,25 @@ import * as i18n from '../../core/i18n/i18n.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Buttons from '../../ui/components/buttons/buttons.js';
 import * as ObjectUI from '../../ui/legacy/components/object_ui/object_ui.js';
-// eslint-disable-next-line rulesdir/es_modules_import
+// eslint-disable-next-line rulesdir/es-modules-import
 import objectPropertiesSectionStyles from '../../ui/legacy/components/object_ui/objectPropertiesSection.css.js';
-// eslint-disable-next-line rulesdir/es_modules_import
+// eslint-disable-next-line rulesdir/es-modules-import
 import objectValueStyles from '../../ui/legacy/components/object_ui/objectValue.css.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
 import requestPayloadTreeStyles from './requestPayloadTree.css.js';
 import requestPayloadViewStyles from './requestPayloadView.css.js';
+
 const UIStrings = {
   /**
-   *@description A context menu item in the Watch Expressions Sidebar Pane of the Sources panel and Network pane request.
+   *@description A context menu item Payload View of the Network panel to copy a parsed value.
    */
   copyValue: 'Copy value',
+  /**
+   *@description A context menu item Payload View of the Network panel to copy the payload.
+   */
+  copyPayload: 'Copy',
   /**
    * @description Text in Request Payload View of the Network panel. This is a noun-phrase meaning the
    * payload of a network request.
@@ -125,6 +130,7 @@ export class RequestPayloadView extends UI.Widget.VBox {
 
   constructor(request: SDK.NetworkRequest.NetworkRequest) {
     super();
+    this.registerRequiredCSS(requestPayloadViewStyles);
     this.element.classList.add('request-payload-view');
     this.element.setAttribute('jslog', `${VisualLogging.pane('payload').track({resize: true})}`);
 
@@ -137,7 +143,7 @@ export class RequestPayloadView extends UI.Widget.VBox {
     }
 
     const root = new UI.TreeOutline.TreeOutlineInShadow();
-    root.registerCSSFiles([objectValueStyles, objectPropertiesSectionStyles, requestPayloadTreeStyles]);
+    root.registerRequiredCSS(objectValueStyles, objectPropertiesSectionStyles, requestPayloadTreeStyles);
     root.element.classList.add('request-payload-tree');
     root.makeDense();
     this.element.appendChild(root.element);
@@ -148,7 +154,7 @@ export class RequestPayloadView extends UI.Widget.VBox {
   }
 
   override wasShown(): void {
-    this.registerCSSFiles([requestPayloadViewStyles]);
+    super.wasShown();
     this.request.addEventListener(SDK.NetworkRequest.Events.REQUEST_HEADERS_CHANGED, this.refreshFormData, this);
 
     this.refreshQueryString();
@@ -160,17 +166,16 @@ export class RequestPayloadView extends UI.Widget.VBox {
     this.request.removeEventListener(SDK.NetworkRequest.Events.REQUEST_HEADERS_CHANGED, this.refreshFormData, this);
   }
 
-  private addEntryContextMenuHandler(treeElement: UI.TreeOutline.TreeElement, value: string): void {
+  private addEntryContextMenuHandler(
+      treeElement: UI.TreeOutline.TreeElement, menuItem: string, jslogContext: string, getValue: () => string): void {
     treeElement.listItemElement.addEventListener('contextmenu', event => {
       event.consume(true);
       const contextMenu = new UI.ContextMenu.ContextMenu(event);
-      const decodedValue = decodeURIComponent(value);
-      const copyDecodedValueHandler = (): void => {
+      const copyValueHandler = (): void => {
         Host.userMetrics.actionTaken(Host.UserMetrics.Action.NetworkPanelCopyValue);
-        Host.InspectorFrontendHost.InspectorFrontendHostInstance.copyText(decodedValue);
+        Host.InspectorFrontendHost.InspectorFrontendHostInstance.copyText(getValue());
       };
-      contextMenu.clipboardSection().appendItem(
-          i18nString(UIStrings.copyValue), copyDecodedValueHandler, {jslogContext: 'copy-value'});
+      contextMenu.clipboardSection().appendItem(menuItem, copyValueHandler, {jslogContext});
       void contextMenu.show();
     });
   }
@@ -183,7 +188,7 @@ export class RequestPayloadView extends UI.Widget.VBox {
       if (value.indexOf('%') >= 0) {
         try {
           value = decodeURIComponent(value);
-        } catch (e) {
+        } catch {
           errorDecoding = true;
         }
       }
@@ -232,7 +237,7 @@ export class RequestPayloadView extends UI.Widget.VBox {
       try {
         const json = JSON.parse(formData);
         this.refreshRequestJSONPayload(json, formData);
-      } catch (e) {
+      } catch {
         this.populateTreeElementWithSourceText(this.requestPayloadCategory, formData);
       }
     }
@@ -249,8 +254,10 @@ export class RequestPayloadView extends UI.Widget.VBox {
     sourceTextElement.textContent = trim ? text.substr(0, MAX_LENGTH) : text;
 
     const sourceTreeElement = new UI.TreeOutline.TreeElement(sourceTextElement);
+
     treeElement.removeChildren();
     treeElement.appendChild(sourceTreeElement);
+    this.addEntryContextMenuHandler(sourceTreeElement, i18nString(UIStrings.copyPayload), 'copy-payload', () => text);
     if (!trim) {
       return;
     }
@@ -350,7 +357,8 @@ export class RequestPayloadView extends UI.Widget.VBox {
       }
 
       const paramTreeElement = new UI.TreeOutline.TreeElement(paramNameValue);
-      this.addEntryContextMenuHandler(paramTreeElement, param.value);
+      this.addEntryContextMenuHandler(
+          paramTreeElement, i18nString(UIStrings.copyValue), 'copy-value', () => decodeURIComponent(param.value));
       paramsTreeElement.appendChild(paramTreeElement);
     }
 

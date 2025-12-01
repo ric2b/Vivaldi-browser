@@ -12,6 +12,7 @@
 #include "base/notreached.h"
 #include "base/values.h"
 #include "components/account_id/account_id.h"
+#include "google_apis/gaia/gaia_id.h"
 
 namespace user_manager {
 
@@ -33,7 +34,8 @@ std::optional<AccountId> LoadAccountId(const base::Value::Dict& dict) {
     case AccountType::GOOGLE:
       if (email || gaia_id) {
         return AccountId::FromUserEmailGaiaId(
-            email ? *email : std::string(), gaia_id ? *gaia_id : std::string());
+            email ? *email : std::string(),
+            gaia_id ? GaiaId(*gaia_id) : GaiaId());
       }
       break;
     case AccountType::ACTIVE_DIRECTORY:
@@ -42,7 +44,7 @@ std::optional<AccountId> LoadAccountId(const base::Value::Dict& dict) {
       }
       break;
     default:
-      NOTREACHED_IN_MIGRATION() << "Unknown account type";
+      NOTREACHED() << "Unknown account type";
   }
   return std::nullopt;
 }
@@ -61,7 +63,7 @@ bool AccountIdMatches(const AccountId& account_id,
   switch (account_id.GetAccountType()) {
     case AccountType::GOOGLE: {
       const std::string* gaia_id = dict.FindString(kGAIAIdKey);
-      if (gaia_id && account_id.GetGaiaId() == *gaia_id) {
+      if (gaia_id && account_id.GetGaiaId() == GaiaId(*gaia_id)) {
         return true;
       }
       break;
@@ -93,7 +95,7 @@ void StoreAccountId(const AccountId& account_id, base::Value::Dict& dict) {
   switch (account_id.GetAccountType()) {
     case AccountType::GOOGLE:
       if (!account_id.GetGaiaId().empty()) {
-        dict.Set(kGAIAIdKey, account_id.GetGaiaId());
+        dict.Set(kGAIAIdKey, account_id.GetGaiaId().ToString());
       }
       break;
     case AccountType::ACTIVE_DIRECTORY:

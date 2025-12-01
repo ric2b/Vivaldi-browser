@@ -139,7 +139,7 @@ InformedRestoreItemView::InformedRestoreItemView(
   for (int i = 0; i < static_cast<int>(favicons.size()); ++i) {
     const GURL& url = favicons[i];
     delegate->GetFaviconForUrl(
-        url.spec(), /*lacros_profile_id=*/0,
+        url.spec(),
         base::BindOnce(&InformedRestoreItemView::OnOneFaviconLoaded,
                        GetWeakPtr(), barrier, i),
         &cancelable_favicon_task_tracker_);
@@ -156,10 +156,10 @@ void InformedRestoreItemView::OnOneFaviconLoaded(IndexedImageCallback callback,
 
 void InformedRestoreItemView::OnAllFaviconsLoaded(
     std::vector<IndexedImagePair> indexed_favicons) {
-  base::ranges::sort(indexed_favicons,
-                     [](const auto& element_a, const auto& element_b) {
-                       return element_a.first < element_b.first;
-                     });
+  std::ranges::sort(indexed_favicons,
+                    [](const auto& element_a, const auto& element_b) {
+                      return element_a.first < element_b.first;
+                    });
 
   bool needs_layout = false;
   const size_t elements = indexed_favicons.size();

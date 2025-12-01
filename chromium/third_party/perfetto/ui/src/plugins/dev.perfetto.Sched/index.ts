@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {sqlTableRegistry} from '../../frontend/widgets/sql/table/sql_table_registry';
 import {TrackNode} from '../../public/workspace';
 import {Trace} from '../../public/trace';
 import {PerfettoPlugin} from '../../public/plugin';
 import {ActiveCPUCountTrack, CPUType} from './active_cpu_count';
-import {RunnableThreadCountTrack} from './runnable_thread_count';
-import {getSchedTable} from './table';
-import {extensions} from '../../public/lib/extensions';
+import {
+  RunnableThreadCountTrack,
+  UninterruptibleSleepThreadCountTrack,
+} from './thread_count';
 
 export default class implements PerfettoPlugin {
   static readonly id = 'dev.perfetto.Sched';
@@ -28,16 +28,33 @@ export default class implements PerfettoPlugin {
     ctx.tracks.registerTrack({
       uri: runnableThreadCountUri,
       title: 'Runnable thread count',
-      track: new RunnableThreadCountTrack({
-        trace: ctx,
-        uri: runnableThreadCountUri,
-      }),
+      track: new RunnableThreadCountTrack(ctx, runnableThreadCountUri),
     });
     ctx.commands.registerCommand({
       id: 'dev.perfetto.Sched.AddRunnableThreadCountTrackCommand',
       name: 'Add track: runnable thread count',
       callback: () =>
         addPinnedTrack(ctx, runnableThreadCountUri, 'Runnable thread count'),
+    });
+
+    const uninterruptibleSleepThreadCountUri = `/uninterruptible_sleep_thread_count`;
+    ctx.tracks.registerTrack({
+      uri: uninterruptibleSleepThreadCountUri,
+      title: 'Uninterruptible Sleep thread count',
+      track: new UninterruptibleSleepThreadCountTrack(
+        ctx,
+        uninterruptibleSleepThreadCountUri,
+      ),
+    });
+    ctx.commands.registerCommand({
+      id: 'dev.perfetto.Sched.AddUninterruptibleSleepThreadCountTrackCommand',
+      name: 'Add track: uninterruptible sleep thread count',
+      callback: () =>
+        addPinnedTrack(
+          ctx,
+          uninterruptibleSleepThreadCountUri,
+          'Uninterruptible Sleep thread count',
+        ),
     });
 
     const uri = uriForActiveCPUCountTrack();
@@ -68,17 +85,6 @@ export default class implements PerfettoPlugin {
         callback: () => addPinnedTrack(ctx, uri, title),
       });
     }
-
-    sqlTableRegistry['sched'] = getSchedTable();
-    ctx.commands.registerCommand({
-      id: 'perfetto.ShowTable.sched',
-      name: 'Open table: sched',
-      callback: () => {
-        extensions.addSqlTableTab(ctx, {
-          table: getSchedTable(),
-        });
-      },
-    });
   }
 }
 

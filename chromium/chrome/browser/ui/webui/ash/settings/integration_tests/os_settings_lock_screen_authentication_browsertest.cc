@@ -19,7 +19,7 @@ using PasswordType = ash::AshAuthFactor;
 // Name and value of the metric that records authentication on the lock screen
 // page.
 const char kPinUnlockUmaHistogramName[] = "Settings.PinUnlockSetup";
-const base::HistogramBase::Sample kEnterPasswordCorrectly = 1;
+const base::HistogramBase::Sample32 kEnterPasswordCorrectly = 1;
 
 }  // namespace
 
@@ -52,7 +52,8 @@ class OSSettingsLockScreenAuthenticationTest
 INSTANTIATE_TEST_SUITE_P(OSSettingsLockScreenAuthenticationTests,
                          OSSettingsLockScreenAuthenticationTest,
                          testing::Values(ash::AshAuthFactor::kGaiaPassword,
-                                         ash::AshAuthFactor::kLocalPassword));
+                                         ash::AshAuthFactor::kLocalPassword,
+                                         ash::AshAuthFactor::kCryptohomePin));
 
 IN_PROC_BROWSER_TEST_P(OSSettingsLockScreenAuthenticationTest,
                        SuccessfulUnlock) {

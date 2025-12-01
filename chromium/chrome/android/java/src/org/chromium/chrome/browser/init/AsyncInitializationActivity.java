@@ -95,7 +95,6 @@ public abstract class AsyncInitializationActivity extends ChromeBaseAppCompatAct
     private Bundle mSavedInstanceState;
     private int mCurrentOrientation;
     private boolean mDestroyed;
-    private long mLastUserInteractionTime;
     private boolean mIsTablet;
     private boolean mHadWarmStart;
     private boolean mIsWarmOnResume;
@@ -822,23 +821,12 @@ public abstract class AsyncInitializationActivity extends ChromeBaseAppCompatAct
         return mIsWarmOnResume;
     }
 
-    @Override
-    public void onUserInteraction() {
-        mLastUserInteractionTime = SystemClock.elapsedRealtime();
-    }
-
     /**
-     * @return timestamp when the last user interaction was made.
-     */
-    public long getLastUserInteractionTime() {
-        return mLastUserInteractionTime;
-    }
-
-    /**
-     * Called when the orientation of the device changes.  The orientation is checked/detected on
+     * Called when the orientation of the device changes. The orientation is checked/detected on
      * root view layouts.
-     * @param orientation One of {@link Configuration#ORIENTATION_PORTRAIT} or
-     *                    {@link Configuration#ORIENTATION_LANDSCAPE}.
+     *
+     * @param orientation One of {@link Configuration#ORIENTATION_PORTRAIT} or {@link
+     *     Configuration#ORIENTATION_LANDSCAPE}.
      */
     protected void onOrientationChange(int orientation) {}
 

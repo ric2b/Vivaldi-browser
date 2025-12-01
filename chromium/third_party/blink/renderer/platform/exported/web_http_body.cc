@@ -78,7 +78,7 @@ bool WebHTTPBody::ElementAt(size_t index, Element& result) const {
   switch (element.type_) {
     case FormDataElement::kData:
       result.type = HTTPBodyElementType::kTypeData;
-      result.data.Assign(element.data_.data(), element.data_.size());
+      result.data.Assign(base::as_byte_span(element.data_));
       break;
     case FormDataElement::kEncodedFile:
       result.type = HTTPBodyElementType::kTypeFile;
@@ -107,13 +107,15 @@ bool WebHTTPBody::ElementAt(size_t index, Element& result) const {
 
 void WebHTTPBody::AppendData(const WebData& data) {
   EnsureMutable();
-  // FIXME: FormDataElement::m_data should be a SharedBuffer<char>.  Then we
+  if (data.IsEmpty()) {
+    return;
+  }
+  // FIXME: FormDataElement::m_data should be a SharedBuffer<char>. Then we
   // could avoid this buffer copy.
-  data.ForEachSegment([this](const char* segment, size_t segment_size,
-                             size_t segment_offset) {
-    private_->AppendData(segment, base::checked_cast<wtf_size_t>(segment_size));
-    return true;
-  });
+  const SharedBuffer& buffer = data;
+  for (const auto segment : buffer) {
+    private_->AppendData(segment);
+  }
 }
 
 void WebHTTPBody::AppendFileRange(

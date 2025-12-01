@@ -302,23 +302,35 @@ Parameters:
       .combine('samplePoints', kSamplePointMethods)
       .combine('C', ['i32', 'u32'] as const)
       .combine('A', ['i32', 'u32'] as const)
+      .combine('depthOrArrayLayers', [1, 8] as const)
   )
   .beforeAllSubcases(t => {
     t.skipIfTextureFormatNotSupported(t.params.format);
     skipIfNeedsFilteringAndIsUnfilterableOrSelectDevice(t, t.params.filt, t.params.format);
   })
   .fn(async t => {
-    const { format, stage, samplePoints, C, A, modeU, modeV, filt: minFilter, offset } = t.params;
+    const {
+      format,
+      stage,
+      samplePoints,
+      C,
+      A,
+      modeU,
+      modeV,
+      filt: minFilter,
+      offset,
+      depthOrArrayLayers,
+    } = t.params;
 
     // We want at least 4 blocks or something wide enough for 3 mip levels.
     const [width, height] = chooseTextureSize({ minSize: 8, minBlocks: 4, format });
-    const depthOrArrayLayers = 4;
 
     const descriptor: GPUTextureDescriptor = {
       format,
       size: { width, height, depthOrArrayLayers },
       mipLevelCount: 3,
       usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.TEXTURE_BINDING,
+      ...(t.isCompatibility && { textureBindingViewDimension: '2d-array' }),
     };
     const { texels, texture } = await createTextureWithRandomDataAndGetTexels(t, descriptor);
     const sampler: GPUSamplerDescriptor = {
@@ -351,7 +363,7 @@ Parameters:
       };
     });
     const textureType = appendComponentTypeForFormatToTextureType('texture_2d_array', format);
-    const viewDescriptor = {};
+    const viewDescriptor: GPUTextureViewDescriptor = { dimension: '2d-array' };
     const results = await doTextureCalls(
       t,
       texture,
@@ -512,7 +524,10 @@ Parameters:
       .beginSubcases()
       .combine('samplePoints', kSamplePointMethods)
   )
-  .beforeAllSubcases(t => t.selectDeviceForTextureFormatOrSkipTestCase(t.params.format))
+  .beforeAllSubcases(t => {
+    t.skipIfDepthTextureCanNotBeUsedWithNonComparisonSampler();
+    t.selectDeviceForTextureFormatOrSkipTestCase(t.params.format);
+  })
   .fn(async t => {
     const { format, stage, samplePoints, modeU, modeV, offset } = t.params;
 
@@ -591,7 +606,10 @@ Parameters:
       .beginSubcases()
       .combine('samplePoints', kCubeSamplePointMethods)
   )
-  .beforeAllSubcases(t => t.selectDeviceForTextureFormatOrSkipTestCase(t.params.format))
+  .beforeAllSubcases(t => {
+    t.skipIfDepthTextureCanNotBeUsedWithNonComparisonSampler();
+    t.selectDeviceForTextureFormatOrSkipTestCase(t.params.format);
+  })
   .fn(async t => {
     const { format, stage, samplePoints, mode } = t.params;
 
@@ -686,23 +704,25 @@ Parameters:
       .beginSubcases()
       .combine('samplePoints', kSamplePointMethods)
       .combine('A', ['i32', 'u32'] as const)
+      .combine('depthOrArrayLayers', [1, 8] as const)
   )
   .beforeAllSubcases(t => {
+    t.skipIfDepthTextureCanNotBeUsedWithNonComparisonSampler();
     t.skipIfTextureFormatNotSupported(t.params.format);
     t.selectDeviceForTextureFormatOrSkipTestCase(t.params.format);
   })
   .fn(async t => {
-    const { format, stage, samplePoints, A, modeU, modeV, offset } = t.params;
+    const { format, stage, samplePoints, A, modeU, modeV, offset, depthOrArrayLayers } = t.params;
 
     // We want at least 4 blocks or something wide enough for 3 mip levels.
     const [width, height] = chooseTextureSize({ minSize: 8, minBlocks: 4, format });
-    const depthOrArrayLayers = 4;
 
     const descriptor: GPUTextureDescriptor = {
       format,
       size: { width, height, depthOrArrayLayers },
       mipLevelCount: 3,
       usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.TEXTURE_BINDING,
+      ...(t.isCompatibility && { textureBindingViewDimension: '2d-array' }),
     };
     const { texels, texture } = await createTextureWithRandomDataAndGetTexels(t, descriptor);
     const sampler: GPUSamplerDescriptor = {
@@ -729,7 +749,7 @@ Parameters:
       };
     });
     const textureType = 'texture_depth_2d_array';
-    const viewDescriptor = {};
+    const viewDescriptor: GPUTextureViewDescriptor = { dimension: '2d-array' };
     const results = await doTextureCalls(
       t,
       texture,
@@ -779,6 +799,7 @@ Parameters:
       .combine('A', ['i32', 'u32'] as const)
   )
   .beforeAllSubcases(t => {
+    t.skipIfDepthTextureCanNotBeUsedWithNonComparisonSampler();
     t.skipIfTextureViewDimensionNotSupported('cube-array');
     t.selectDeviceForTextureFormatOrSkipTestCase(t.params.format);
   })

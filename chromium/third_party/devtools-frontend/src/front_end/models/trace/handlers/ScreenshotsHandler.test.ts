@@ -2,66 +2,53 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {defaultTraceEvent} from '../../../testing/TraceHelpers.js';
 import {TraceLoader} from '../../../testing/TraceLoader.js';
 import * as Trace from '../trace.js';
 
 describe('ScreenshotsHandler', function() {
-  const baseEvent = {
-    ...defaultTraceEvent,
-    name: 'Screenshot',
-    // Ensure that the screenshots are held against the pid & tid values
-    // that match the Browser process and CrBrowserMain in defaultTraceEvents.
-    pid: Trace.Types.Events.ProcessID(8017),
-    tid: Trace.Types.Events.ThreadID(775),
-    ts: Trace.Types.Timing.MicroSeconds(0),
-    args: {},
-    cat: 'test',
-    ph: Trace.Types.Events.Phase.OBJECT_SNAPSHOT,
-  };
-
-  let baseEvents: readonly Trace.Types.Events.Event[];
-
   beforeEach(async function() {
-    // The screenshot handler requires the meta handler because it needs
-    // to know the browser process and thread IDs. Here, then, we reset
-    // and later we will pass events to the meta handler, otherwise the
-    // screenshots handler will fail.
     Trace.Handlers.ModelHandlers.Meta.reset();
-
     Trace.Handlers.ModelHandlers.Screenshots.reset();
   });
+  describe('supporting old and new screenshot formats', () => {
+    async function runHandler(events: readonly Trace.Types.Events.Event[]) {
+      Trace.Helpers.SyntheticEvents.SyntheticEventsManager.createAndActivate(events);
 
-  describe('frames', () => {
-    it('obtains them if present', async function() {
-      const defaultTraceEvents = await TraceLoader.rawEvents(this, 'basic.json.gz');
-
-      baseEvents = [
-        ...defaultTraceEvents,
-        {...baseEvent, ts: Trace.Types.Timing.MicroSeconds(100)},
-        {...baseEvent, ts: Trace.Types.Timing.MicroSeconds(200)},
-      ];
-      Trace.Helpers.SyntheticEvents.SyntheticEventsManager.createAndActivate(baseEvents);
-
-      for (const event of baseEvents) {
+      for (const event of events) {
         Trace.Handlers.ModelHandlers.Meta.handleEvent(event);
         Trace.Handlers.ModelHandlers.Screenshots.handleEvent(event);
       }
 
       await Trace.Handlers.ModelHandlers.Meta.finalize();
       await Trace.Handlers.ModelHandlers.Screenshots.finalize();
+    }
 
-      const data = Trace.Handlers.ModelHandlers.Screenshots.data().all;
-      assert.strictEqual(data.length, 2);
+    it('finds the screenshots in traces using the OBJECT_SNAPSHOT screenshot format', async function() {
+      const events = await TraceLoader.rawEvents(this, 'web-dev-with-commit.json.gz');
+      await runHandler(events);
+      const data = Trace.Handlers.ModelHandlers.Screenshots.data();
+      assert.isOk(data.legacySyntheticScreenshots);
+      assert.isNull(data.screenshots);
+      assert.lengthOf(data.legacySyntheticScreenshots, 18);
+    });
+
+    // TODO: leave explainer comment here
+    it('finds the screenshots in traces using the new instant event screenshot format', async function() {
+      const events = await TraceLoader.rawEvents(this, 'web-dev-screenshot-source-ids.json.gz');
+      await runHandler(events);
+      const data = Trace.Handlers.ModelHandlers.Screenshots.data();
+      assert.isOk(data.screenshots);
+      assert.isNull(data.legacySyntheticScreenshots);
+      assert.lengthOf(data.screenshots, 20);
     });
   });
 
   describe('presentation timestamps', () => {
     function getMsDifferences(
-        syntheticScreenshots: Trace.Types.Events.SyntheticScreenshot[],
-        originalScreenshotEvents: Trace.Types.Events.Screenshot[]): number[] {
+        syntheticScreenshots: Trace.Types.Events.LegacySyntheticScreenshot[],
+        originalScreenshotEvents: Trace.Types.Events.LegacyScreenshot[]): number[] {
       return syntheticScreenshots.map((synEvent, i) => {
-        const origEvent = originalScreenshotEvents.at(i) as Trace.Types.Events.Screenshot;
+        const origEvent = originalScreenshotEvents.at(i) as Trace.Types.Events.LegacyScreenshot;
         const msDifference = (synEvent.ts - origEvent.ts) / 1000;
         return msDifference;
       });
@@ -77,8 +64,9 @@ describe('ScreenshotsHandler', function() {
       await Trace.Handlers.ModelHandlers.Meta.finalize();
       await Trace.Handlers.ModelHandlers.Screenshots.finalize();
 
-      const syntheticScreenshots = Trace.Handlers.ModelHandlers.Screenshots.data().all;
-      const originalScreenshotEvents = events.filter(Trace.Types.Events.isScreenshot);
+      const syntheticScreenshots = Trace.Handlers.ModelHandlers.Screenshots.data().legacySyntheticScreenshots;
+      assert.isOk(syntheticScreenshots);
+      const originalScreenshotEvents = events.filter(Trace.Types.Events.isLegacyScreenshot);
       assert.strictEqual(syntheticScreenshots.length, originalScreenshotEvents.length);
 
       for (const oEvent of originalScreenshotEvents) {
@@ -87,7 +75,7 @@ describe('ScreenshotsHandler', function() {
 
       const msDifferences = getMsDifferences(syntheticScreenshots, originalScreenshotEvents);
       // These values indicate all the screenshots true timings are a tad more to the left.
-      assert.deepStrictEqual(msDifferences, [
+      assert.deepEqual(msDifferences, [
         -13.079, -16.381, -12.503, -5.405,  -14.108, -14.661, -11.944, -14.322, -3.532, -15.821, 0.254,
         -32.22,  -15.156, -13.219, -14.464, -16.135, -16.501, -33.165, -15.71,  -32.39, -32.445, -30.512,
       ]);
@@ -103,8 +91,9 @@ describe('ScreenshotsHandler', function() {
       await Trace.Handlers.ModelHandlers.Meta.finalize();
       await Trace.Handlers.ModelHandlers.Screenshots.finalize();
 
-      const syntheticScreenshots = Trace.Handlers.ModelHandlers.Screenshots.data().all;
-      const originalScreenshotEvents = events.filter(Trace.Types.Events.isScreenshot);
+      const syntheticScreenshots = Trace.Handlers.ModelHandlers.Screenshots.data().legacySyntheticScreenshots;
+      const originalScreenshotEvents = events.filter(Trace.Types.Events.isLegacyScreenshot);
+      assert.isOk(syntheticScreenshots);
       assert.strictEqual(syntheticScreenshots.length, originalScreenshotEvents.length);
 
       for (const oEvent of originalScreenshotEvents) {
@@ -113,7 +102,7 @@ describe('ScreenshotsHandler', function() {
 
       const msDifferences = getMsDifferences(syntheticScreenshots, originalScreenshotEvents);
       // No adjustment made.
-      assert.deepStrictEqual(msDifferences, [
+      assert.deepEqual(msDifferences, [
         0,
         0,
         0,

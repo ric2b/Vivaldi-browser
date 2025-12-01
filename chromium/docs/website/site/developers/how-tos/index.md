@@ -11,7 +11,7 @@ title: How-Tos
             [Mac OS
             X](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/mac_build_instructions.md),
             [Linux](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/linux/build_instructions.md),
-            [ChromeOS](http://www.chromium.org/developers/how-tos/build-instructions-chromeos),
+            [ChromeOS](/developers/how-tos/build-instructions-chromeos),
             [Android](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/android_build_instructions.md),
             and
             [iOS](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/ios/build_instructions.md)

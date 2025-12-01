@@ -73,6 +73,7 @@
 <translation id="1577977504532381335">Consulter la règle de l'administrateur</translation>
 <translation id="158849752021629804">Réseau domestique requis</translation>
 <translation id="1589128298353575783"><ph name="NUMBER_OF_PB" /> Po</translation>
+<translation id="1601786938618212857">Compresser</translation>
 <translation id="1620510694547887537">Caméra</translation>
 <translation id="162175252992296058">Portugais avec clavier international américain</translation>
 <translation id="1629521517399325891">Le certificat utilisateur n'est pas disponible pour l'authentification réseau.</translation>
@@ -322,7 +323,7 @@
 <translation id="3557414470514932909">Déplacement de <ph name="FILE_NAME" /> vers la corbeille…</translation>
 <translation id="3567221313191587603">Sélectionnez un fichier, puis activez/désactivez <ph name="OFFLINE_CHECKBOX_NAME" /> pour qu'il soit accessible ou non hors connexion.</translation>
 <translation id="357479282490346887">Lituanien</translation>
-<translation id="3587482841069643663">Tous</translation>
+<translation id="3587482841069643663">Complète</translation>
 <translation id="3592251141500063301">Impossible de mettre <ph name="FILE_NAME" /> à disposition hors connexion</translation>
 <translation id="3601151620448429694"><ph name="NETWORK_NAME" /> · <ph name="CARRIER_NAME" /></translation>
 <translation id="3603385196401704894">Français canadien</translation>
@@ -394,7 +395,6 @@
 <translation id="4179621117429069925">Cet élément se trouve dans la corbeille</translation>
 <translation id="4186579485882418952">Activer le mode hors connexion</translation>
 <translation id="4193154014135846272">Document Google</translation>
-<translation id="4197674956721858839">Compresser les fichiers sélectionnés au format .zip</translation>
 <translation id="4202378258276439759">Espagnol (Amérique latine)</translation>
 <translation id="4202977638116331303">Géorgien</translation>
 <translation id="421017592316736757">Pour accéder à ce fichier, vous devez être connecté à Internet.</translation>

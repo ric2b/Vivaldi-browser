@@ -2,13 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/webui/shortcut_customization_ui/backend/accelerator_layout_table.h"
-
 #include <cstddef>
 
+#include "ash/webui/shortcut_customization_ui/backend/accelerator_layout_table.h"
 #include "base/hash/md5.h"
 #include "base/hash/md5_boringssl.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/to_string.h"
 #include "build/branding_buildflags.h"
 #include "chrome/browser/ui/views/accelerator_table.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -22,12 +22,12 @@ namespace {
 // The total number of Chrome accelerators (available on Chrome OS).
 constexpr int kChromeAcceleratorsTotalNum = 103;
 // The hash of Chrome accelerators (available on Chrome OS).
-constexpr char kChromeAcceleratorsHash[] = "f397b21373050f42d9328999912a3ff0";
+constexpr char kChromeAcceleratorsHash[] = "0b83abd23bca45738c58668d94337f48";
 #else
 // The total number of Chrome accelerators (available on Chrome OS).
 constexpr int kChromeAcceleratorsTotalNum = 101;
 // The hash of Chrome accelerators (available on Chrome OS).
-constexpr char kChromeAcceleratorsHash[] = "37fa9d482540e23e4eb38e766e2b51c5";
+constexpr char kChromeAcceleratorsHash[] = "b294aad5a7b11a754d8c81940979e47c";
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
 const char kCommonMessage[] =
@@ -37,16 +37,13 @@ const char kCommonMessage[] =
     "accelerator_layout_table.h and the following value(s) on the "
     "top of this file:\n";
 
-const char* BooleanToString(bool value) {
-  return value ? "true" : "false";
-}
-
 std::string ModifiersToString(int modifiers) {
-  return base::StringPrintf("shift=%s control=%s alt=%s search=%s",
-                            BooleanToString(modifiers & ui::EF_SHIFT_DOWN),
-                            BooleanToString(modifiers & ui::EF_CONTROL_DOWN),
-                            BooleanToString(modifiers & ui::EF_ALT_DOWN),
-                            BooleanToString(modifiers & ui::EF_COMMAND_DOWN));
+  return base::StringPrintf(
+      "shift=%s control=%s alt=%s search=%s",
+      base::ToString<bool>(modifiers & ui::EF_SHIFT_DOWN),
+      base::ToString<bool>(modifiers & ui::EF_CONTROL_DOWN),
+      base::ToString<bool>(modifiers & ui::EF_ALT_DOWN),
+      base::ToString<bool>(modifiers & ui::EF_COMMAND_DOWN));
 }
 
 struct ChromeAcceleratorMappingCmp {

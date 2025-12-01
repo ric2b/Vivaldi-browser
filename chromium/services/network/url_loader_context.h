@@ -43,6 +43,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoaderContext {
   virtual mojom::TrustTokenAccessObserver* GetTrustTokenAccessObserver()
       const = 0;
   virtual mojom::CrossOriginEmbedderPolicyReporter* GetCoepReporter() const = 0;
+  virtual mojom::DocumentIsolationPolicyReporter* GetDipReporter() const = 0;
   virtual mojom::DevToolsObserver* GetDevToolsObserver() const = 0;
   virtual mojom::NetworkContextClient* GetNetworkContextClient() const = 0;
   virtual mojom::TrustedURLLoaderHeaderClient* GetUrlLoaderHeaderClient()
@@ -54,6 +55,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoaderContext {
       const = 0;
   virtual orb::PerFactoryState& GetMutableOrbState() = 0;
   virtual bool DataUseUpdatesEnabled() = 0;
+  virtual mojom::DeviceBoundSessionAccessObserver*
+  GetDeviceBoundSessionAccessObserver() const = 0;
 
  protected:
   // `protected` destructor = can only destruct via concrete implementations

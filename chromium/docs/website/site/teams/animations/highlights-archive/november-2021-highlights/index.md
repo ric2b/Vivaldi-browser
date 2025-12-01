@@ -86,7 +86,7 @@ title: November 2021 highlights
 
 <td><td colspan=2><img alt="image" src="https://lh3.googleusercontent.com/eQgY9T3BlD0XhA5IFVBydHJTeyPH_KGqkUDgk0OM0wJzgwMZ1F95a5vxvqKep4XCZX3Me0Ttl1ADeo-PAvrVMfiSREfDPFtbb-PjPPSSX8fy56kPS5-LcWnbsN97Y_JwKGh27FjNuK4PnlZ1Y83myXTdkTYueB005g07du6VYfKCagVx" height=287 width=576></td></td>
 
-<td><td colspan=2>skobes@ has landed a patch that changes reporting "main thread scrolling reasons" in a way that makes sense post <a href="https://bugs.chromium.org/p/chromium/issues/detail?id=476553">Scroll Unification</a>. <a href="http://crbug.com/1082590">crbug/1082590</a></td></td>
+<td><td colspan=2>skobes@ has landed a patch that changes reporting "main thread scrolling reasons" in a way that makes sense post <a href="https://bugs.chromium.org/p/chromium/issues/detail?id=476553">Scroll Unification</a>. <a href="https://crbug.com/1082590">crbug/1082590</a></td></td>
 
 <td></tr></td>
 <td><tr></td>

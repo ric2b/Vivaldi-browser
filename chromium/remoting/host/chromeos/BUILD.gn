@@ -26,7 +26,6 @@ source_set("chromeos") {
 
   public_deps = [
     "//ash",
-    "//build:chromeos_buildflags",
     "//cc",
     "//components/prefs",
     "//components/viz/host",
@@ -50,13 +49,6 @@ source_set("chromeos") {
     "//ui/display/manager",
     "//ui/wm",
   ]
-}
-
-# ChromeOS enterprise specific stuff that is also accessed from other areas
-# like //remoting/host/it2me.
-# Split out in its own target to prevent cyclic dependencies.
-source_set("enterprise_support") {
-  sources = [ "chromeos_enterprise_params.h" ]
 }
 
 source_set("browser_interop") {
@@ -86,7 +78,7 @@ source_set("remoting_service") {
   ]
 
   public_deps = [
-    ":enterprise_support",
+    "//remoting/host:enterprise_params",
     "//remoting/host/it2me:chrome_os_host",
     "//remoting/host/it2me:common",
   ]
@@ -168,6 +160,8 @@ source_set("unit_tests") {
     "//testing/gtest",
     "//ui/display/manager",
   ]
+
+  public_deps = [ "//services/viz/privileged/mojom/compositing" ]
 }
 
 source_set("features") {

@@ -15,7 +15,8 @@
 
 // Setter
 -(void)configureNoteWithTitle:(NSString*)title
-                    createdAt:(NSDate*)createdAt;
+                    createdAt:(NSDate*)createdAt
+                   modifiedAt:(NSDate*)modifiedAt;
 
 @end
 

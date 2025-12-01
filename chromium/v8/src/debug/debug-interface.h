@@ -274,6 +274,8 @@ class WasmScript : public Script {
 
   uint32_t GetFunctionHash(int function_index);
 
+  Maybe<v8::MemorySpan<const uint8_t>> GetModuleBuildId() const;
+
   int CodeOffset() const;
   int CodeLength() const;
 };
@@ -550,7 +552,7 @@ int64_t GetNextRandomInt64(v8::Isolate* isolate);
 
 MaybeLocal<Value> CallFunctionOn(Local<Context> context,
                                  Local<Function> function, Local<Value> recv,
-                                 int argc, Global<Value> argv[],
+                                 base::Vector<Local<Value>> args,
                                  bool throw_on_side_effect);
 
 enum class EvaluateGlobalMode {

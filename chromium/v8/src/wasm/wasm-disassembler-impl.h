@@ -87,6 +87,10 @@ V8_EXPORT_PRIVATE void PrintSignatureOneLine(
     NamesProvider* names, bool param_names,
     IndexAsComment indices_as_comments = NamesProvider::kDontPrintIndex);
 
+V8_EXPORT_PRIVATE void PrintStringAsJSON(StringBuilder& out,
+                                         const uint8_t* start,
+                                         WireBytesRef ref);
+
 ////////////////////////////////////////////////////////////////////////////////
 // OffsetsProvider.
 
@@ -159,6 +163,7 @@ class OffsetsProvider : public ITracer {
   void Description(const char* desc) override {}
   void Description(const char* desc, size_t length) override {}
   void Description(uint32_t number) override {}
+  void Description(uint64_t number) override {}
   void Description(ValueType type) override {}
   void Description(HeapType type) override {}
   void Description(const FunctionSig* sig) override {}

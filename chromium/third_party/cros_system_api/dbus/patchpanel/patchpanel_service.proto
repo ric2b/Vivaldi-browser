@@ -973,6 +973,7 @@ message NetworkConfig {
   repeated IPAddrCIDR excluded_route_prefixes = 8;
   repeated IPAddrCIDR included_route_prefixes = 9;
   repeated Route rfc3442_routes = 10;
+  optional IPAddrCIDR pref64 = 16;
 
   repeated bytes dns_servers = 11;
   repeated string dns_search_domains = 12;

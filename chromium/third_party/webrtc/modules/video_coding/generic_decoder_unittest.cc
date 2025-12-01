@@ -53,19 +53,7 @@ class MockCorruptionScoreCalculator : public CorruptionScoreCalculator {
 
 class ReceiveCallback : public VCMReceiveCallback {
  public:
-  int32_t FrameToRender(VideoFrame& frame,
-                        std::optional<uint8_t> qp,
-                        TimeDelta decode_time,
-                        VideoContentType content_type,
-                        VideoFrameType frame_type) override {
-    return OnFrameToRender({.video_frame = frame,
-                            .qp = qp,
-                            .decode_time = decode_time,
-                            .content_type = content_type,
-                            .frame_type = frame_type});
-  }
-
-  int32_t OnFrameToRender(const struct FrameToRender& arguments) override {
+  int32_t OnFrameToRender(const FrameToRender& arguments) override {
     frames_.push_back(arguments.video_frame);
     last_corruption_score_ = arguments.corruption_score;
     return 0;
@@ -218,8 +206,7 @@ TEST_F(GenericDecoderTest, IsLowLatencyStreamActivatedByPlayoutDelay) {
   EncodedFrame encoded_frame;
   const VideoPlayoutDelay kPlayoutDelay(TimeDelta::Zero(),
                                         TimeDelta::Millis(50));
-  timing_.set_min_playout_delay(kPlayoutDelay.min());
-  timing_.set_max_playout_delay(kPlayoutDelay.max());
+  timing_.set_playout_delay(kPlayoutDelay);
   generic_decoder_.Decode(encoded_frame, clock_->CurrentTime());
   time_controller_.AdvanceTime(TimeDelta::Millis(10));
   std::optional<VideoFrame> decoded_frame = user_callback_.PopLastFrame();

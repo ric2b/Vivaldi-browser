@@ -2,7 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include <limits>
+
 #include "mojo/public/cpp/test_support/test_utils.h"
 #include "skia/ext/skcolorspace_primaries.h"
 #include "skia/public/mojom/bitmap.mojom.h"
@@ -178,7 +184,7 @@ TEST(StructTraitsTest, SkColorSpace) {
       in_null_cs, out_null_cs));
   EXPECT_EQ(out_null_cs.get(), nullptr);
 
-  SkColorSpacePrimaries in_p = SkNamedPrimariesExt::kGenericFilm;
+  SkColorSpacePrimaries in_p = SkNamedPrimaries::kGenericFilm;
   SkColorSpacePrimaries out_p;
   ASSERT_TRUE(
       mojo::test::SerializeAndDeserialize<skia::mojom::SkColorSpacePrimaries>(

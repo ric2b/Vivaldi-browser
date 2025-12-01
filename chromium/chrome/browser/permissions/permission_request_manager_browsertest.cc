@@ -38,6 +38,7 @@
 #include "components/permissions/request_type.h"
 #include "components/permissions/test/mock_permission_prompt_factory.h"
 #include "components/permissions/test/mock_permission_request.h"
+#include "components/permissions/test/mock_permission_ui_selector.h"
 #include "components/permissions/test/permission_request_observer.h"
 #include "content/public/browser/permission_controller.h"
 #include "content/public/browser/render_frame_host.h"
@@ -66,44 +67,11 @@ const char* kPermissionsKillSwitchBlockedValue =
     permissions::PermissionContextBase::kPermissionsKillSwitchBlockedValue;
 const char kPermissionsKillSwitchTestGroup[] = "TestGroup";
 
-// Test implementation of PermissionUiSelector that always returns a canned
-// decision.
-class TestQuietNotificationPermissionUiSelector
-    : public permissions::PermissionUiSelector {
- public:
-  explicit TestQuietNotificationPermissionUiSelector(
-      const Decision& canned_decision)
-      : canned_decision_(canned_decision) {}
-
-  TestQuietNotificationPermissionUiSelector(
-      const TestQuietNotificationPermissionUiSelector&) = delete;
-  TestQuietNotificationPermissionUiSelector& operator=(
-      const TestQuietNotificationPermissionUiSelector&) = delete;
-
-  ~TestQuietNotificationPermissionUiSelector() override = default;
-
- protected:
-  // permissions::PermissionUiSelector:
-  void SelectUiToUse(permissions::PermissionRequest* request,
-                     DecisionMadeCallback callback) override {
-    std::move(callback).Run(canned_decision_);
-  }
-
-  bool IsPermissionRequestSupported(
-      permissions::RequestType request_type) override {
-    return request_type == permissions::RequestType::kNotifications;
-  }
-
- private:
-  Decision canned_decision_;
-};
-
 class PermissionRequestManagerBrowserTest : public InProcessBrowserTest {
  public:
   PermissionRequestManagerBrowserTest() {
     scoped_feature_list_.InitWithFeatures(
-        {permissions::features::kBlockRepeatedNotificationPermissionPrompts},
-        {permissions::features::kBackForwardCacheUnblockPermissionRequest});
+        {}, {permissions::features::kBackForwardCacheUnblockPermissionRequest});
   }
 
   PermissionRequestManagerBrowserTest(
@@ -721,7 +689,7 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestManagerBrowserTest,
   bubble_factory()->WaitForPermissionBubble();
 
   content::RenderFrameHost* main_frame = GetActiveMainFrame();
-  int main_frame_process_id = main_frame->GetProcess()->GetID();
+  int main_frame_process_id = main_frame->GetProcess()->GetDeprecatedID();
   int main_frame_routing_id = main_frame->GetRoutingID();
 
   ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(
@@ -748,7 +716,7 @@ class PermissionRequestManagerQuietUiBrowserTest
   void SetCannedUiDecision(std::optional<QuietUiReason> quiet_ui_reason,
                            std::optional<WarningReason> warning_reason) {
     GetPermissionRequestManager()->set_permission_ui_selector_for_testing(
-        std::make_unique<TestQuietNotificationPermissionUiSelector>(
+        std::make_unique<MockPermissionUiSelector>(
             UiDecision(quiet_ui_reason, warning_reason)));
   }
 
@@ -802,7 +770,7 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestManagerQuietUiBrowserTest,
   std::optional<permissions::PermissionPromptDisposition> disposition =
       manager->current_request_prompt_disposition_for_testing();
   auto disposition_from_prompt_bubble =
-      manager->view_for_testing()->GetPromptDisposition();
+      manager->GetCurrentPrompt()->GetPromptDisposition();
 
   manager->Dismiss();
   base::RunLoop().RunUntilIdle();
@@ -830,7 +798,7 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestManagerQuietUiBrowserTest,
   bubble_factory()->WaitForPermissionBubble();
   auto* manager = GetPermissionRequestManager();
   auto disposition_from_prompt_bubble =
-      manager->view_for_testing()->GetPromptDisposition();
+      manager->GetCurrentPrompt()->GetPromptDisposition();
 
   // There will be no instance of PermissionPromptImpl after a new tab is opened
   // and existing tab marked as HIDDEN.
@@ -1348,7 +1316,7 @@ IN_PROC_BROWSER_TEST_F(
   bubble_factory()->WaitForPermissionBubble();
   content::RenderFrameHostWrapper rfh_a(GetActiveMainFrame());
   content::RenderFrameHost* main_frame = GetActiveMainFrame();
-  int main_frame_process_id = main_frame->GetProcess()->GetID();
+  int main_frame_process_id = main_frame->GetProcess()->GetDeprecatedID();
   int main_frame_routing_id = main_frame->GetRoutingID();
 
   ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(
@@ -1379,7 +1347,7 @@ IN_PROC_BROWSER_TEST_F(
 
   content::RenderFrameHostWrapper rfh_a(GetActiveMainFrame());
   content::RenderFrameHost* main_frame = GetActiveMainFrame();
-  int main_frame_process_id = main_frame->GetProcess()->GetID();
+  int main_frame_process_id = main_frame->GetProcess()->GetDeprecatedID();
   int main_frame_routing_id = main_frame->GetRoutingID();
   // Request is not cancelled.
   EXPECT_FALSE(request_1.cancelled());

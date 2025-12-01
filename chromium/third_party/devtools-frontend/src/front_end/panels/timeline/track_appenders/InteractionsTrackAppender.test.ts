@@ -47,7 +47,7 @@ describeWithEnvironment('InteractionsTrackAppender', function() {
     it('marks all levels used by the track with the `TrackAppender` type', async function() {
       const {entryTypeByLevel} = await renderTrackAppender(this, 'slow-interaction-button-click.json.gz');
       // All events fit on the top level
-      assert.strictEqual(entryTypeByLevel.length, 1);
+      assert.lengthOf(entryTypeByLevel, 1);
       assert.deepEqual(entryTypeByLevel, [
         Timeline.TimelineFlameChartDataProvider.EntryType.TRACK_APPENDER,
       ]);
@@ -56,7 +56,7 @@ describeWithEnvironment('InteractionsTrackAppender', function() {
     it('takes over no levels if there are no interactions', async function() {
       // animation trace has no interactions in it.
       const {entryTypeByLevel} = await renderTrackAppender(this, 'animation.json.gz');
-      assert.strictEqual(entryTypeByLevel.length, 0);
+      assert.lengthOf(entryTypeByLevel, 0);
     });
 
     it('only shows the top level interactions', async function() {
@@ -66,7 +66,7 @@ describeWithEnvironment('InteractionsTrackAppender', function() {
 
     it('creates a flamechart group', async function() {
       const {flameChartData} = await renderTrackAppender(this, 'slow-interaction-button-click.json.gz');
-      assert.strictEqual(flameChartData.groups.length, 1);
+      assert.lengthOf(flameChartData.groups, 1);
       assert.strictEqual(flameChartData.groups[0].name, 'Interactions');
     });
 
@@ -77,8 +77,7 @@ describeWithEnvironment('InteractionsTrackAppender', function() {
       for (const event of events) {
         const markerIndex = entryData.indexOf(event);
         assert.exists(markerIndex);
-        assert.strictEqual(
-            flameChartData.entryStartTimes[markerIndex], Trace.Helpers.Timing.microSecondsToMilliseconds(event.ts));
+        assert.strictEqual(flameChartData.entryStartTimes[markerIndex], Trace.Helpers.Timing.microToMilli(event.ts));
       }
     });
 
@@ -90,7 +89,7 @@ describeWithEnvironment('InteractionsTrackAppender', function() {
         const markerIndex = entryData.indexOf(event);
         assert.exists(markerIndex);
         const expectedTotalTimeForEvent =
-            Trace.Helpers.Timing.microSecondsToMilliseconds((event.dur || 0) as Trace.Types.Timing.MicroSeconds);
+            Trace.Helpers.Timing.microToMilli((event.dur || 0) as Trace.Types.Timing.Micro);
         assert.strictEqual(flameChartData.entryTotalTimes[markerIndex], expectedTotalTimeForEvent);
       }
     });
@@ -107,7 +106,7 @@ describeWithEnvironment('InteractionsTrackAppender', function() {
     assert.deepEqual(decorationsForEntry, [
       {
         type: PerfUI.FlameChart.FlameChartDecorationType.CANDY,
-        startAtTime: Trace.Types.Timing.MicroSeconds(200_000),
+        startAtTime: Trace.Types.Timing.Micro(200_000),
         endAtTime: longInteraction.processingEnd,
       },
       {

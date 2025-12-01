@@ -184,10 +184,6 @@ class QUICHE_NO_EXPORT ObjectMessage : public TestMessageBase {
       QUIC_LOG(INFO) << "OBJECT Object Status mismatch";
       return false;
     }
-    if (cast.forwarding_preference != object_.forwarding_preference) {
-      QUIC_LOG(INFO) << "OBJECT Object Send Order mismatch";
-      return false;
-    }
     if (cast.subgroup_id != object_.subgroup_id) {
       QUIC_LOG(INFO) << "OBJECT Subgroup ID mismatch";
       return false;
@@ -210,7 +206,6 @@ class QUICHE_NO_EXPORT ObjectMessage : public TestMessageBase {
       /*object_id=*/6,
       /*publisher_priority=*/7,
       /*object_status=*/MoqtObjectStatus::kNormal,
-      /*forwarding_preference=*/MoqtForwardingPreference::kTrack,
       /*subgroup_id=*/std::nullopt,
       /*payload_length=*/3,
   };
@@ -220,7 +215,6 @@ class QUICHE_NO_EXPORT ObjectDatagramMessage : public ObjectMessage {
  public:
   ObjectDatagramMessage() : ObjectMessage() {
     SetWireImage(raw_packet_, sizeof(raw_packet_));
-    object_.forwarding_preference = MoqtForwardingPreference::kDatagram;
   }
 
   void ExpandVarints() override { ExpandVarintsImpl("vvvv-v---", false); }
@@ -235,54 +229,10 @@ class QUICHE_NO_EXPORT ObjectDatagramMessage : public ObjectMessage {
 
 // Concatentation of the base header and the object-specific header. Follow-on
 // object headers are handled in a different class.
-class QUICHE_NO_EXPORT StreamHeaderTrackMessage : public ObjectMessage {
- public:
-  StreamHeaderTrackMessage() : ObjectMessage() {
-    SetWireImage(raw_packet_, sizeof(raw_packet_));
-    object_.forwarding_preference = MoqtForwardingPreference::kTrack;
-    object_.payload_length = 3;
-  }
-
-  void ExpandVarints() override { ExpandVarintsImpl("vv-vvv", false); }
-
- private:
-  // Some tests check that a FIN sent at the halfway point of a message results
-  // in an error. Without the unnecessary expanded varint 0x0405, the halfway
-  // point falls at the end of the Stream Header, which is legal. Expand the
-  // varint so that the FIN would be illegal.
-  uint8_t raw_packet_[9] = {
-      0x02,                    // type field
-      0x04,                    // varints
-      0x07,                    // publisher priority
-      0x05, 0x06,              // object middler
-      0x03, 0x66, 0x6f, 0x6f,  // payload = "foo"
-  };
-};
-
-// Used only for tests that process multiple objects on one stream.
-class QUICHE_NO_EXPORT StreamMiddlerTrackMessage : public ObjectMessage {
- public:
-  StreamMiddlerTrackMessage() : ObjectMessage() {
-    SetWireImage(raw_packet_, sizeof(raw_packet_));
-    object_.forwarding_preference = MoqtForwardingPreference::kTrack;
-    object_.group_id = 9;
-    object_.object_id = 10;
-  }
-
-  void ExpandVarints() override { ExpandVarintsImpl("vvv", false); }
-
- private:
-  uint8_t raw_packet_[6] = {
-      0x09, 0x0a,              // object middler
-      0x03, 0x62, 0x61, 0x72,  // payload = "bar"
-  };
-};
-
 class QUICHE_NO_EXPORT StreamHeaderSubgroupMessage : public ObjectMessage {
  public:
   StreamHeaderSubgroupMessage() : ObjectMessage() {
     SetWireImage(raw_packet_, sizeof(raw_packet_));
-    object_.forwarding_preference = MoqtForwardingPreference::kSubgroup;
     object_.subgroup_id = 8;
   }
 
@@ -313,7 +263,6 @@ class QUICHE_NO_EXPORT StreamMiddlerSubgroupMessage : public ObjectMessage {
  public:
   StreamMiddlerSubgroupMessage() : ObjectMessage() {
     SetWireImage(raw_packet_, sizeof(raw_packet_));
-    object_.forwarding_preference = MoqtForwardingPreference::kSubgroup;
     object_.subgroup_id = 8;
     object_.object_id = 9;
   }
@@ -362,7 +311,6 @@ class QUICHE_NO_EXPORT StreamMiddlerFetchMessage : public ObjectMessage {
  public:
   StreamMiddlerFetchMessage() : ObjectMessage() {
     SetWireImage(raw_packet_, sizeof(raw_packet_));
-    object_.forwarding_preference = MoqtForwardingPreference::kTrack;
     object_.subgroup_id = 8;
     object_.object_id = 9;
   }
@@ -382,8 +330,8 @@ class QUICHE_NO_EXPORT ClientSetupMessage : public TestMessageBase {
     if (webtrans) {
       // Should not send PATH.
       client_setup_.path = std::nullopt;
-      raw_packet_[2] = 0x0a;  // adjust payload length (-5)
-      raw_packet_[6] = 0x02;  // only two parameters
+      raw_packet_[2] = 0x07;  // adjust payload length (-5)
+      raw_packet_[6] = 0x01;  // only two parameters
       SetWireImage(raw_packet_, sizeof(raw_packet_) - 5);
     } else {
       SetWireImage(raw_packet_, sizeof(raw_packet_));
@@ -404,10 +352,6 @@ class QUICHE_NO_EXPORT ClientSetupMessage : public TestMessageBase {
         return false;
       }
     }
-    if (cast.role != client_setup_.role) {
-      QUIC_LOG(INFO) << "CLIENT_SETUP role mismatch";
-      return false;
-    }
     if (cast.path != client_setup_.path) {
       QUIC_LOG(INFO) << "CLIENT_SETUP path mismatch";
       return false;
@@ -421,11 +365,11 @@ class QUICHE_NO_EXPORT ClientSetupMessage : public TestMessageBase {
 
   void ExpandVarints() override {
     if (client_setup_.path.has_value()) {
-      ExpandVarintsImpl("--vvvvvvv-vv-vv---");
+      ExpandVarintsImpl("--vvvvvvv-vv---");
       // first two bytes are already a 2B varint. Also, don't expand parameter
       // varints because that messes up the parameter length field.
     } else {
-      ExpandVarintsImpl("--vvvvvvv-vv-");
+      ExpandVarintsImpl("--vvvvvvv-");
     }
   }
 
@@ -434,18 +378,16 @@ class QUICHE_NO_EXPORT ClientSetupMessage : public TestMessageBase {
   }
 
  private:
-  uint8_t raw_packet_[18] = {
-      0x40, 0x40, 0x0f,              // type
+  uint8_t raw_packet_[15] = {
+      0x40, 0x40, 0x0c,              // type
       0x02, 0x01, 0x02,              // versions
-      0x03,                          // 3 parameters
-      0x00, 0x01, 0x03,              // role = PubSub
+      0x02,                          // 3 parameters
       0x02, 0x01, 0x32,              // max_subscribe_id = 50
       0x01, 0x03, 0x66, 0x6f, 0x6f,  // path = "foo"
   };
   MoqtClientSetup client_setup_ = {
       /*supported_versions=*/std::vector<MoqtVersion>(
           {static_cast<MoqtVersion>(1), static_cast<MoqtVersion>(2)}),
-      /*role=*/MoqtRole::kPubSub,
       /*path=*/"foo",
       /*max_subscribe_id=*/50,
   };
@@ -463,10 +405,6 @@ class QUICHE_NO_EXPORT ServerSetupMessage : public TestMessageBase {
       QUIC_LOG(INFO) << "SERVER_SETUP selected version mismatch";
       return false;
     }
-    if (cast.role != server_setup_.role) {
-      QUIC_LOG(INFO) << "SERVER_SETUP role mismatch";
-      return false;
-    }
     if (cast.max_subscribe_id != server_setup_.max_subscribe_id) {
       QUIC_LOG(INFO) << "SERVER_SETUP max_subscribe_id mismatch";
       return false;
@@ -475,8 +413,8 @@ class QUICHE_NO_EXPORT ServerSetupMessage : public TestMessageBase {
   }
 
   void ExpandVarints() override {
-    ExpandVarintsImpl("--vvvvv-vv-");  // first two bytes are already a 2b
-                                       // varint
+    ExpandVarintsImpl("--vvvvv-");  // first two bytes are already a 2b
+                                    // varint
   }
 
   MessageStructuredData structured_data() const override {
@@ -484,15 +422,13 @@ class QUICHE_NO_EXPORT ServerSetupMessage : public TestMessageBase {
   }
 
  private:
-  uint8_t raw_packet_[11] = {
-      0x40, 0x41, 0x08,  // type
-      0x01, 0x02,        // version, two parameters
-      0x00, 0x01, 0x03,  // role = PubSub
+  uint8_t raw_packet_[8] = {
+      0x40, 0x41, 0x05,  // type
+      0x01, 0x01,        // version, two parameters
       0x02, 0x01, 0x32,  // max_subscribe_id = 50
   };
   MoqtServerSetup server_setup_ = {
       /*selected_version=*/static_cast<MoqtVersion>(1),
-      /*role=*/MoqtRole::kPubSub,
       /*max_subscribe_id=*/50,
   };
 };
@@ -1015,7 +951,7 @@ class QUICHE_NO_EXPORT AnnounceCancelMessage : public TestMessageBase {
 
   MoqtAnnounceCancel announce_cancel_ = {
       /*track_namespace=*/FullTrackName{"foo"},
-      /*error_code=*/1,
+      /*error_code=*/MoqtAnnounceErrorCode::kAnnounceNotSupported,
       /*reason_phrase=*/"bar",
   };
 };
@@ -1264,13 +1200,13 @@ class QUICHE_NO_EXPORT SubscribeAnnouncesErrorMessage : public TestMessageBase {
  private:
   uint8_t raw_packet_[12] = {
       0x13, 0x0a, 0x01, 0x03, 0x66, 0x6f, 0x6f,  // track_namespace = "foo"
-      0x01,                                      // error_code = 1
+      0x04,                                      // error_code = 4
       0x03, 0x62, 0x61, 0x72,                    // reason_phrase = "bar"
   };
 
   MoqtSubscribeAnnouncesError subscribe_namespace_error_ = {
       /*track_namespace=*/FullTrackName{"foo"},
-      /*error_code=*/MoqtAnnounceErrorCode::kAnnounceNotSupported,
+      /*error_code=*/SubscribeErrorCode::kUnauthorized,
       /*reason_phrase=*/"bar",
   };
 };
@@ -1669,8 +1605,6 @@ static inline std::unique_ptr<TestMessageBase> CreateTestDataStream(
   switch (type) {
     case MoqtDataStreamType::kObjectDatagram:
       return std::make_unique<ObjectDatagramMessage>();
-    case MoqtDataStreamType::kStreamHeaderTrack:
-      return std::make_unique<StreamHeaderTrackMessage>();
     case MoqtDataStreamType::kStreamHeaderSubgroup:
       return std::make_unique<StreamHeaderSubgroupMessage>();
     case MoqtDataStreamType::kStreamHeaderFetch:

@@ -20,6 +20,7 @@
 #include "core/fxcrt/fx_extension.h"
 #include "core/fxcrt/fx_memcpy_wrappers.h"
 #include "core/fxcrt/fx_safe_types.h"
+#include "core/fxcrt/fx_string.h"
 #include "core/fxcrt/fx_system.h"
 #include "core/fxcrt/numerics/safe_math.h"
 #include "core/fxcrt/span_util.h"
@@ -59,198 +60,203 @@ constexpr wchar_t kWideTrimChars[] = L"\x09\x0a\x0b\x0c\x0d\x20";
 std::optional<size_t> GuessSizeForVSWPrintf(const wchar_t* pFormat,
                                             va_list argList) {
   size_t nMaxLen = 0;
-  UNSAFE_TODO({
-    for (const wchar_t* pStr = pFormat; *pStr != 0; pStr++) {
-      if (*pStr != '%' || *(pStr = pStr + 1) == '%') {
-        ++nMaxLen;
-        continue;
-      }
-      int iWidth = 0;
-      for (; *pStr != 0; pStr++) {
-        if (*pStr == '#') {
-          nMaxLen += 2;
-        } else if (*pStr == '*') {
-          iWidth = va_arg(argList, int);
-        } else if (*pStr != '-' && *pStr != '+' && *pStr != '0' &&
-                   *pStr != ' ') {
-          break;
-        }
-      }
-      if (iWidth == 0) {
-        iWidth = FXSYS_wtoi(pStr);
-        while (FXSYS_IsDecimalDigit(*pStr))
-          ++pStr;
-      }
-      if (iWidth < 0 || iWidth > 128 * 1024) {
-        return std::nullopt;
-      }
-      uint32_t nWidth = static_cast<uint32_t>(iWidth);
-      int iPrecision = 0;
-      if (*pStr == '.') {
-        pStr++;
-        if (*pStr == '*') {
-          iPrecision = va_arg(argList, int);
-          pStr++;
-        } else {
-          iPrecision = FXSYS_wtoi(pStr);
-          while (FXSYS_IsDecimalDigit(*pStr)) {
-            ++pStr;
-          }
-        }
-      }
-      if (iPrecision < 0 || iPrecision > 128 * 1024) {
-        return std::nullopt;
-      }
-      uint32_t nPrecision = static_cast<uint32_t>(iPrecision);
-      int nModifier = 0;
-      if (*pStr == L'I' && *(pStr + 1) == L'6' && *(pStr + 2) == L'4') {
-        pStr += 3;
-        nModifier = FORCE_INT64;
-      } else {
-        switch (*pStr) {
-          case 'h':
-            nModifier = FORCE_ANSI;
-            pStr++;
-            break;
-          case 'l':
-            nModifier = FORCE_UNICODE;
-            pStr++;
-            break;
-          case 'F':
-          case 'N':
-          case 'L':
-            pStr++;
-            break;
-        }
-      }
-      size_t nItemLen = 0;
-      switch (*pStr | nModifier) {
-        case 'c':
-        case 'C':
-          nItemLen = 2;
-          va_arg(argList, int);
-          break;
-        case 'c' | FORCE_ANSI:
-        case 'C' | FORCE_ANSI:
-          nItemLen = 2;
-          va_arg(argList, int);
-          break;
-        case 'c' | FORCE_UNICODE:
-        case 'C' | FORCE_UNICODE:
-          nItemLen = 2;
-          va_arg(argList, int);
-          break;
-        case 's': {
-          const wchar_t* pstrNextArg = va_arg(argList, const wchar_t*);
-          if (pstrNextArg) {
-            nItemLen = wcslen(pstrNextArg);
-            if (nItemLen < 1) {
-              nItemLen = 1;
-            }
-          } else {
-            nItemLen = 6;
-          }
-        } break;
-        case 'S': {
-          const char* pstrNextArg = va_arg(argList, const char*);
-          if (pstrNextArg) {
-            nItemLen = strlen(pstrNextArg);
-            if (nItemLen < 1) {
-              nItemLen = 1;
-            }
-          } else {
-            nItemLen = 6;
-          }
-        } break;
-        case 's' | FORCE_ANSI:
-        case 'S' | FORCE_ANSI: {
-          const char* pstrNextArg = va_arg(argList, const char*);
-          if (pstrNextArg) {
-            nItemLen = strlen(pstrNextArg);
-            if (nItemLen < 1) {
-              nItemLen = 1;
-            }
-          } else {
-            nItemLen = 6;
-          }
-        } break;
-        case 's' | FORCE_UNICODE:
-        case 'S' | FORCE_UNICODE: {
-          const wchar_t* pstrNextArg = va_arg(argList, wchar_t*);
-          if (pstrNextArg) {
-            nItemLen = wcslen(pstrNextArg);
-            if (nItemLen < 1) {
-              nItemLen = 1;
-            }
-          } else {
-            nItemLen = 6;
-          }
-        } break;
-      }
-      if (nItemLen != 0) {
-        if (nPrecision != 0 && nItemLen > nPrecision) {
-          nItemLen = nPrecision;
-        }
-        if (nItemLen < nWidth) {
-          nItemLen = nWidth;
-        }
-      } else {
-        switch (*pStr) {
-          case 'd':
-          case 'i':
-          case 'u':
-          case 'x':
-          case 'X':
-          case 'o':
-            if (nModifier & FORCE_INT64) {
-              va_arg(argList, int64_t);
-            } else {
-              va_arg(argList, int);
-            }
-            nItemLen = 32;
-            if (nItemLen < nWidth + nPrecision) {
-              nItemLen = nWidth + nPrecision;
-            }
-            break;
-          case 'a':
-          case 'A':
-          case 'e':
-          case 'E':
-          case 'g':
-          case 'G':
-            va_arg(argList, double);
-            nItemLen = 128;
-            if (nItemLen < nWidth + nPrecision) {
-              nItemLen = nWidth + nPrecision;
-            }
-            break;
-          case 'f':
-            if (nWidth + nPrecision > 100) {
-              nItemLen = nPrecision + nWidth + 128;
-            } else {
-              double f;
-              char pszTemp[256];
-              f = va_arg(argList, double);
-              FXSYS_snprintf(pszTemp, sizeof(pszTemp), "%*.*f", nWidth,
-                             nPrecision + 6, f);
-              nItemLen = strlen(pszTemp);
-            }
-            break;
-          case 'p':
-            va_arg(argList, void*);
-            nItemLen = 32;
-            if (nItemLen < nWidth + nPrecision) {
-              nItemLen = nWidth + nPrecision;
-            }
-            break;
-          case 'n':
-            va_arg(argList, int*);
-            break;
-        }
-      }
-      nMaxLen += nItemLen;
+  for (WideStringView view(pFormat); !view.IsEmpty(); view = view.Substr(1u)) {
+    if (view.Front() != '%') {
+      ++nMaxLen;
+      continue;
     }
-  });
+
+    view = view.Substr(1u);
+    if (view.Front() == '%') {
+      ++nMaxLen;
+      continue;
+    }
+    int iWidth = 0;
+    for (; !view.IsEmpty(); view = view.Substr(1u)) {
+      const wchar_t c = view.Front();
+      if (c == '#') {
+        nMaxLen += 2;
+      } else if (c == '*') {
+        iWidth = va_arg(argList, int);
+      } else if (c != '-' && c != '+' && c != '0' && c != ' ') {
+        break;
+      }
+    }
+    if (iWidth == 0) {
+      iWidth = StringToInt(view);
+      while (FXSYS_IsDecimalDigit(static_cast<wchar_t>(view.Front()))) {
+        view = view.Substr(1u);
+      }
+    }
+    if (iWidth < 0 || iWidth > 128 * 1024) {
+      return std::nullopt;
+    }
+    uint32_t nWidth = static_cast<uint32_t>(iWidth);
+    int iPrecision = 0;
+    if (view.Front() == '.') {
+      view = view.Substr(1u);
+      if (view.Front() == '*') {
+        iPrecision = va_arg(argList, int);
+        view = view.Substr(1u);
+      } else {
+        iPrecision = StringToInt(view);
+        while (FXSYS_IsDecimalDigit(static_cast<wchar_t>(view.Front()))) {
+          view = view.Substr(1u);
+        }
+      }
+    }
+    if (iPrecision < 0 || iPrecision > 128 * 1024) {
+      return std::nullopt;
+    }
+    uint32_t nPrecision = static_cast<uint32_t>(iPrecision);
+    int nModifier = 0;
+    if (view.First(3u) == L"I64") {
+      view = view.Substr(3u);
+      nModifier = FORCE_INT64;
+    } else {
+      switch (view.Front()) {
+        case 'h':
+          nModifier = FORCE_ANSI;
+          view = view.Substr(1u);
+          break;
+        case 'l':
+          nModifier = FORCE_UNICODE;
+          view = view.Substr(1u);
+          break;
+        case 'F':
+        case 'N':
+        case 'L':
+          view = view.Substr(1u);
+          break;
+      }
+    }
+    size_t nItemLen = 0;
+    switch (view.Front() | nModifier) {
+      case 'c':
+      case 'C':
+        nItemLen = 2;
+        va_arg(argList, int);
+        break;
+      case 'c' | FORCE_ANSI:
+      case 'C' | FORCE_ANSI:
+        nItemLen = 2;
+        va_arg(argList, int);
+        break;
+      case 'c' | FORCE_UNICODE:
+      case 'C' | FORCE_UNICODE:
+        nItemLen = 2;
+        va_arg(argList, int);
+        break;
+      case 's': {
+        const wchar_t* pstrNextArg = va_arg(argList, const wchar_t*);
+        if (pstrNextArg) {
+          nItemLen = UNSAFE_TODO(wcslen(pstrNextArg));
+          if (nItemLen < 1) {
+            nItemLen = 1;
+          }
+        } else {
+          nItemLen = 6;
+        }
+      } break;
+      case 'S': {
+        const char* pstrNextArg = va_arg(argList, const char*);
+        if (pstrNextArg) {
+          nItemLen = UNSAFE_TODO(strlen(pstrNextArg));
+          if (nItemLen < 1) {
+            nItemLen = 1;
+          }
+        } else {
+          nItemLen = 6;
+        }
+      } break;
+      case 's' | FORCE_ANSI:
+      case 'S' | FORCE_ANSI: {
+        const char* pstrNextArg = va_arg(argList, const char*);
+        if (pstrNextArg) {
+          nItemLen = UNSAFE_TODO(strlen(pstrNextArg));
+          if (nItemLen < 1) {
+            nItemLen = 1;
+          }
+        } else {
+          nItemLen = 6;
+        }
+      } break;
+      case 's' | FORCE_UNICODE:
+      case 'S' | FORCE_UNICODE: {
+        const wchar_t* pstrNextArg = va_arg(argList, wchar_t*);
+        if (pstrNextArg) {
+          nItemLen = UNSAFE_TODO(wcslen(pstrNextArg));
+          if (nItemLen < 1) {
+            nItemLen = 1;
+          }
+        } else {
+          nItemLen = 6;
+        }
+      } break;
+    }
+    if (nItemLen != 0) {
+      if (nPrecision != 0 && nItemLen > nPrecision) {
+        nItemLen = nPrecision;
+      }
+      if (nItemLen < nWidth) {
+        nItemLen = nWidth;
+      }
+    } else {
+      switch (view.Front()) {
+        case 'd':
+        case 'i':
+        case 'u':
+        case 'x':
+        case 'X':
+        case 'o':
+          if (nModifier & FORCE_INT64) {
+            va_arg(argList, int64_t);
+          } else {
+            va_arg(argList, int);
+          }
+          nItemLen = 32;
+          if (nItemLen < nWidth + nPrecision) {
+            nItemLen = nWidth + nPrecision;
+          }
+          break;
+        case 'a':
+        case 'A':
+        case 'e':
+        case 'E':
+        case 'g':
+        case 'G':
+          va_arg(argList, double);
+          nItemLen = 128;
+          if (nItemLen < nWidth + nPrecision) {
+            nItemLen = nWidth + nPrecision;
+          }
+          break;
+        case 'f':
+          if (nWidth + nPrecision > 100) {
+            nItemLen = nPrecision + nWidth + 128;
+          } else {
+            double f;
+            char pszTemp[256];
+            f = va_arg(argList, double);
+            FXSYS_snprintf(pszTemp, sizeof(pszTemp), "%*.*f", nWidth,
+                           nPrecision + 6, f);
+            nItemLen = UNSAFE_TODO(strlen(pszTemp));
+          }
+          break;
+        case 'p':
+          va_arg(argList, void*);
+          nItemLen = 32;
+          if (nItemLen < nWidth + nPrecision) {
+            nItemLen = nWidth + nPrecision;
+          }
+          break;
+        case 'n':
+          va_arg(argList, int*);
+          break;
+      }
+    }
+    nMaxLen += nItemLen;
+  }
   nMaxLen += 32;  // Fudge factor.
   return nMaxLen;
 }
@@ -275,7 +281,7 @@ std::optional<WideString> TryVSWPrintf(size_t size,
     // See https://crbug.com/705912.
     UNSAFE_BUFFERS(
         FXSYS_memset(buffer.data(), 0, (size + 1) * sizeof(wchar_t)));
-    int ret = vswprintf(buffer.data(), size + 1, pFormat, argList);
+    int ret = UNSAFE_TODO(vswprintf(buffer.data(), size + 1, pFormat, argList));
     bool bSufficientBuffer = ret >= 0 || buffer[size - 1] == 0;
     if (!bSufficientBuffer)
       return std::nullopt;
@@ -354,7 +360,8 @@ static_assert(sizeof(WideString) <= sizeof(wchar_t*),
 // static
 WideString WideString::FormatInteger(int i) {
   wchar_t wbuf[32];
-  swprintf(wbuf, std::size(wbuf), L"%d", i);
+  // SAFTEY: 32 bytes accommodates biggest int representation plus NUL.
+  UNSAFE_BUFFERS(swprintf(wbuf, std::size(wbuf), L"%d", i));
   return WideString(wbuf);
 }
 
@@ -405,7 +412,8 @@ WideString::WideString(wchar_t ch) {
 }
 
 WideString::WideString(const wchar_t* ptr)
-    : WideString(ptr, ptr ? wcslen(ptr) : 0) {}
+    // SAFETY: caller ensures `ptr` is NUL-terminated.
+    : UNSAFE_BUFFERS(WideString(ptr, ptr ? wcslen(ptr) : 0)) {}
 
 WideString::WideString(WideStringView stringSrc) {
   if (!stringSrc.IsEmpty()) {
@@ -444,12 +452,14 @@ WideString::WideString(const std::initializer_list<WideStringView>& list) {
   }
 }
 
+// Should be UNSAFE_BUFFER_USAGE.
 WideString& WideString::operator=(const wchar_t* str) {
-  if (!str || !str[0])
+  if (!str || !str[0]) {
     clear();
-  else
-    AssignCopy(str, wcslen(str));
-
+  } else {
+    // SAFETY: required from caller.
+    AssignCopy(str, UNSAFE_BUFFERS(wcslen(str)));
+  }
   return *this;
 }
 
@@ -476,10 +486,12 @@ WideString& WideString::operator=(WideString&& that) noexcept {
   return *this;
 }
 
+// Should be UNSAFE_BUFFER_USAGE.
 WideString& WideString::operator+=(const wchar_t* str) {
-  if (str)
-    Concat(str, wcslen(str));
-
+  if (str) {
+    // SAFETY: required from caller.
+    Concat(str, UNSAFE_BUFFERS(wcslen(str)));
+  }
   return *this;
 }
 
@@ -502,16 +514,19 @@ WideString& WideString::operator+=(WideStringView str) {
   return *this;
 }
 
+// Should be UNSAFE_BUFFER_USAGE.
 bool WideString::operator==(const wchar_t* ptr) const {
-  if (!m_pData)
+  if (!m_pData) {
     return !ptr || !ptr[0];
-
-  if (!ptr)
+  }
+  if (!ptr) {
     return m_pData->m_nDataLength == 0;
+  }
 
-  // SAFTEY: `wsclen()` comparison ensures there are `m_nDataLength` wchars at
-  // `ptr` before the terminator, and `m_nDataLength` is within `m_String`.
-  return wcslen(ptr) == m_pData->m_nDataLength &&
+  // SAFTEY: `wsclen()` comparison (whose own safety depends upoon the caller)
+  // ensures there are `m_nDataLength` wchars at `ptr` before the terminator,
+  // and `m_nDataLength` is within `m_String`.
+  return UNSAFE_BUFFERS(wcslen(ptr)) == m_pData->m_nDataLength &&
          UNSAFE_BUFFERS(FXSYS_wmemcmp(ptr, m_pData->m_String,
                                       m_pData->m_nDataLength)) == 0;
 }
@@ -538,9 +553,11 @@ bool WideString::operator==(const WideString& other) const {
   if (other.IsEmpty())
     return false;
 
+  // SAFETY: m_nDataLength bytes available at m_String.
   return other.m_pData->m_nDataLength == m_pData->m_nDataLength &&
-         wmemcmp(other.m_pData->m_String, m_pData->m_String,
-                 m_pData->m_nDataLength) == 0;
+         UNSAFE_BUFFERS(FXSYS_wmemcmp(other.m_pData->m_String,
+                                      m_pData->m_String,
+                                      m_pData->m_nDataLength)) == 0;
 }
 
 bool WideString::operator<(const wchar_t* ptr) const {
@@ -784,9 +801,12 @@ WideString WideString::FromUTF16BE(pdfium::span<const uint8_t> data) {
   return result;
 }
 
+// Should be UNSAFE_BUFFER_USAGE/
 int WideString::Compare(const wchar_t* str) const {
-  if (m_pData)
-    return str ? wcscmp(m_pData->m_String, str) : 1;
+  if (m_pData) {
+    // SAFETY: required from caller.
+    return str ? UNSAFE_BUFFERS(wcscmp(m_pData->m_String, str)) : 1;
+  }
   return (!str || str[0] == 0) ? 0 : -1;
 }
 
@@ -829,7 +849,7 @@ void WideString::TrimWhitespaceBack() {
   TrimBack(kWideTrimChars);
 }
 int WideString::GetInteger() const {
-  return m_pData ? FXSYS_wtoi(m_pData->m_String) : 0;
+  return m_pData ? StringToInt(m_pData->m_String) : 0;
 }
 
 std::wostream& operator<<(std::wostream& os, const WideString& str) {

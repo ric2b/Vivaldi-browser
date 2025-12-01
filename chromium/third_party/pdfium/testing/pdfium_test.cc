@@ -334,7 +334,7 @@ int ExampleAppResponse(IPDF_JSPLATFORM*,
 
 int ExampleDocGetFilePath(IPDF_JSPLATFORM*, void* file_path, int length) {
   static const char kPath[] = "myfile.pdf";
-  constexpr int kRequired = static_cast<int>(sizeof(kPath));
+  static constexpr int kRequired = static_cast<int>(sizeof(kPath));
   if (file_path && length >= kRequired)
     memcpy(file_path, kPath, kRequired);
   return kRequired;
@@ -386,7 +386,7 @@ void ExampleDocGotoPage(IPDF_JSPLATFORM*, int page_number) {
 
 int ExampleFieldBrowse(IPDF_JSPLATFORM*, void* file_path, int length) {
   static const char kPath[] = "selected.txt";
-  constexpr int kRequired = static_cast<int>(sizeof(kPath));
+  static constexpr int kRequired = static_cast<int>(sizeof(kPath));
   if (file_path && length >= kRequired)
     memcpy(file_path, kPath, kRequired);
   return kRequired;
@@ -731,11 +731,9 @@ bool ParseCommandLine(const std::vector<std::string>& args,
       fprintf(stderr, "Unrecognized argument %s\n", cur_arg.c_str());
       return false;
     } else {
-      break;
+      files->push_back(cur_arg);
     }
   }
-  for (size_t i = cur_idx; i < args.size(); i++)
-    files->push_back(args[i]);
 
   return true;
 }
@@ -1499,6 +1497,15 @@ bool PdfProcessor::ProcessPage(const int page_index) {
   }
 #endif  // _WIN32
 
+  // Client programs will be setting these values when rendering.
+  // This is a sample color scheme with distinct colors.
+  // Used only when `options().forced_color` is true.
+  static constexpr FPDF_COLORSCHEME kColorScheme = {
+      .path_fill_color = 0xFFFF0000,
+      .path_stroke_color = 0xFF00FF00,
+      .text_fill_color = 0xFF0000FF,
+      .text_stroke_color = 0xFF00FFFF};
+
   if (!renderer) {
     // Use a rasterizing page renderer by default.
     if (options().render_oneshot) {
@@ -1506,18 +1513,9 @@ bool PdfProcessor::ProcessPage(const int page_index) {
           page, /*width=*/width, /*height=*/height, /*flags=*/flags, idler(),
           std::move(writer));
     } else {
-      // Client programs will be setting these values when rendering.
-      // This is a sample color scheme with distinct colors.
-      // Used only when `options().forced_color` is true.
-      FPDF_COLORSCHEME color_scheme;
-      color_scheme.path_fill_color = 0xFFFF0000;
-      color_scheme.path_stroke_color = 0xFF00FF00;
-      color_scheme.text_fill_color = 0xFF0000FF;
-      color_scheme.text_stroke_color = 0xFF00FFFF;
-
       renderer = std::make_unique<ProgressiveBitmapPageRenderer>(
           page, /*width=*/width, /*height=*/height, /*flags=*/flags, idler(),
-          std::move(writer), options().forced_color ? &color_scheme : nullptr);
+          std::move(writer), options().forced_color ? &kColorScheme : nullptr);
     }
   }
 
@@ -1897,15 +1895,18 @@ int main(int argc, const char* argv[]) {
 
 #if defined(PDF_ENABLE_SKIA)
     case RendererType::kSkia:
-#if defined(BUILD_WITH_CHROMIUM)
-      // Needed to support Chromium's copy of Skia, which uses a
-      // `DiscardableMemoryAllocator`.
-      chromium_support::InitializeDiscardableMemoryAllocator();
-#endif  // defined(BUILD_WITH_CHROMIUM)
       config.m_RendererType = FPDF_RENDERERTYPE_SKIA;
       break;
 #endif  // defined(PDF_ENABLE_SKIA)
   }
+
+#if defined(PDF_ENABLE_SKIA) && defined(BUILD_WITH_CHROMIUM)
+  // Needed to support Chromium's copy of Skia, which uses a
+  // `DiscardableMemoryAllocator`.
+  if (config.m_RendererType == FPDF_RENDERERTYPE_SKIA) {
+    chromium_support::InitializeDiscardableMemoryAllocator();
+  }
+#endif
 
   std::function<void()> idler = []() {};
 #ifdef PDF_ENABLE_V8

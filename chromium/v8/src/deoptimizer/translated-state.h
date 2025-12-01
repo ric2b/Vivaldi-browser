@@ -87,12 +87,13 @@ class TranslatedValue {
     kDouble,
     kHoleyDouble,
     kSimd128,
-    kCapturedObject,   // Object captured by the escape analysis.
-                       // The number of nested objects can be obtained
-                       // with the DeferredObjectLength() method
-                       // (the values of the nested objects follow
-                       // this value in the depth-first order.)
-    kDuplicatedObject  // Duplicated object of a deferred object.
+    kCapturedObject,    // Object captured by the escape analysis.
+                        // The number of nested objects can be obtained
+                        // with the DeferredObjectLength() method
+                        // (the values of the nested objects follow
+                        // this value in the depth-first order.)
+    kDuplicatedObject,  // Duplicated object of a deferred object.
+    kCapturedStringConcat
   };
 
   enum MaterializationState : uint8_t {
@@ -115,6 +116,7 @@ class TranslatedValue {
   static TranslatedValue NewDeferredObject(TranslatedState* container,
                                            int length, int object_index);
   static TranslatedValue NewDuplicateObject(TranslatedState* container, int id);
+  static TranslatedValue NewStringConcat(TranslatedState* container, int id);
   static TranslatedValue NewFloat(TranslatedState* container, Float32 value);
   static TranslatedValue NewDouble(TranslatedState* container, Float64 value);
   static TranslatedValue NewHoleyDouble(TranslatedState* container,
@@ -194,6 +196,8 @@ class TranslatedValue {
   Simd128 simd_value() const;
   int object_length() const;
   int object_index() const;
+  // TODO(dmercadier): use object_index instead of string_concat_index.
+  int string_concat_index() const;
 };
 
 class TranslatedFrame {
@@ -218,11 +222,11 @@ class TranslatedFrame {
 
   Kind kind() const { return kind_; }
   BytecodeOffset bytecode_offset() const { return bytecode_offset_; }
-  Handle<SharedFunctionInfo> shared_info() const {
+  DirectHandle<SharedFunctionInfo> shared_info() const {
     CHECK_EQ(handle_state_, kHandles);
     return shared_info_;
   }
-  Handle<BytecodeArray> bytecode_array() const {
+  DirectHandle<BytecodeArray> bytecode_array() const {
     CHECK_EQ(handle_state_, kHandles);
     return bytecode_array_;
   }
@@ -232,10 +236,14 @@ class TranslatedFrame {
   // height, but must undergo additional mutations to arrive at the real stack
   // frame height (e.g.: addition/subtraction of context, accumulator, fixed
   // frame sizes, padding).
-  int height() const { return height_; }
+  uint32_t height() const { return height_; }
 
   int return_value_offset() const { return return_value_offset_; }
   int return_value_count() const { return return_value_count_; }
+  int formal_parameter_count() const {
+    DCHECK_EQ(kind(), kInlinedExtraArguments);
+    return formal_parameter_count_;
+  }
 
   Tagged<SharedFunctionInfo> raw_shared_info() const {
     CHECK_EQ(handle_state_, kRawPointers);
@@ -317,48 +325,48 @@ class TranslatedFrame {
   // Constructor static methods.
   static TranslatedFrame UnoptimizedJSFrame(
       BytecodeOffset bytecode_offset, Tagged<SharedFunctionInfo> shared_info,
-      Tagged<BytecodeArray> bytecode_array, int height, int return_value_offset,
-      int return_value_count);
+      Tagged<BytecodeArray> bytecode_array, uint32_t height,
+      int return_value_offset, int return_value_count);
   static TranslatedFrame AccessorFrame(Kind kind,
                                        Tagged<SharedFunctionInfo> shared_info);
   static TranslatedFrame InlinedExtraArguments(
-      Tagged<SharedFunctionInfo> shared_info, int height);
+      Tagged<SharedFunctionInfo> shared_info, uint32_t height,
+      uint32_t formal_parameter_count);
   static TranslatedFrame ConstructCreateStubFrame(
-      Tagged<SharedFunctionInfo> shared_info, int height);
+      Tagged<SharedFunctionInfo> shared_info, uint32_t height);
   static TranslatedFrame ConstructInvokeStubFrame(
       Tagged<SharedFunctionInfo> shared_info);
   static TranslatedFrame BuiltinContinuationFrame(
       BytecodeOffset bailout_id, Tagged<SharedFunctionInfo> shared_info,
-      int height);
+      uint32_t height);
 #if V8_ENABLE_WEBASSEMBLY
   static TranslatedFrame WasmInlinedIntoJSFrame(
       BytecodeOffset bailout_id, Tagged<SharedFunctionInfo> shared_info,
-      int height);
+      uint32_t height);
   static TranslatedFrame JSToWasmBuiltinContinuationFrame(
       BytecodeOffset bailout_id, Tagged<SharedFunctionInfo> shared_info,
-      int height, std::optional<wasm::ValueKind> return_type);
-  static TranslatedFrame LiftoffFrame(BytecodeOffset bailout_id, int height,
-                                      int function_index);
+      uint32_t height, std::optional<wasm::ValueKind> return_type);
+  static TranslatedFrame LiftoffFrame(BytecodeOffset bailout_id,
+                                      uint32_t height, uint32_t function_index);
 #endif  // V8_ENABLE_WEBASSEMBLY
   static TranslatedFrame JavaScriptBuiltinContinuationFrame(
       BytecodeOffset bailout_id, Tagged<SharedFunctionInfo> shared_info,
-      int height);
+      uint32_t height);
   static TranslatedFrame JavaScriptBuiltinContinuationWithCatchFrame(
       BytecodeOffset bailout_id, Tagged<SharedFunctionInfo> shared_info,
-      int height);
+      uint32_t height);
   static TranslatedFrame InvalidFrame() {
-    return TranslatedFrame(kInvalid, SharedFunctionInfo());
+    return TranslatedFrame(kInvalid, {}, {}, 0);
   }
 
   static void AdvanceIterator(std::deque<TranslatedValue>::iterator* iter);
 
   explicit TranslatedFrame(Kind kind,
-                           Tagged<SharedFunctionInfo> raw_shared_info = {},
-                           Tagged<BytecodeArray> raw_bytecode_array = {},
-                           int height = 0, int return_value_offset = 0,
+                           Tagged<SharedFunctionInfo> raw_shared_info,
+                           Tagged<BytecodeArray> raw_bytecode_array,
+                           uint32_t height, int return_value_offset = 0,
                            int return_value_count = 0)
       : kind_(kind),
-        bytecode_offset_(BytecodeOffset::None()),
         raw_shared_info_(raw_shared_info),
         raw_bytecode_array_(raw_bytecode_array),
         height_(height),
@@ -371,7 +379,7 @@ class TranslatedFrame {
   void Handlify(Isolate* isolate);
 
   Kind kind_;
-  BytecodeOffset bytecode_offset_;
+  BytecodeOffset bytecode_offset_ = BytecodeOffset::None();
 
   // Object references are stored as either raw pointers (before Handlify is
   // called) or handles (afterward).
@@ -384,9 +392,10 @@ class TranslatedFrame {
     IndirectHandle<BytecodeArray> bytecode_array_;
   };
 
-  int height_;
+  uint32_t height_;
   int return_value_offset_;
   int return_value_count_;
+  int formal_parameter_count_ = -1;
 
   enum HandleState { kRawPointers, kHandles } handle_state_;
 
@@ -539,13 +548,16 @@ class TranslatedState {
       TranslatedFrame* frame, int* value_index, TranslatedValue* slot,
       DirectHandle<Map> map, const DisallowGarbageCollection& no_gc);
 
+  Handle<HeapObject> ResolveStringConcat(TranslatedValue* slot);
+
   void ReadUpdateFeedback(DeoptTranslationIterator* iterator,
                           Tagged<DeoptimizationLiteralArray> literal_array,
                           FILE* trace_file);
 
   TranslatedValue* ResolveCapturedObject(TranslatedValue* slot);
   TranslatedValue* GetValueByObjectIndex(int object_index);
-  Handle<Object> GetValueAndAdvance(TranslatedFrame* frame, int* value_index);
+  DirectHandle<Object> GetValueAndAdvance(TranslatedFrame* frame,
+                                          int* value_index);
   TranslatedValue* GetResolvedSlot(TranslatedFrame* frame, int value_index);
   TranslatedValue* GetResolvedSlotAndAdvance(TranslatedFrame* frame,
                                              int* value_index);

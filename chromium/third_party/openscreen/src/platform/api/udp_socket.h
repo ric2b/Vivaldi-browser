@@ -31,7 +31,6 @@ class UdpSocket {
   // Client for the UdpSocket class.
   class Client {
    public:
-
     // Method called when the UDP socket is bound. Default implementation
     // does nothing, as clients may not care about the socket bind state.
     virtual void OnBound(UdpSocket* socket) {}

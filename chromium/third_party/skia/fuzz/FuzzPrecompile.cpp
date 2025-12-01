@@ -17,6 +17,7 @@
 #include "include/core/SkRefCnt.h"
 #include "include/effects/SkColorMatrix.h"
 #include "include/gpu/graphite/Context.h"
+#include "include/gpu/graphite/PrecompileContext.h"
 #include "include/gpu/graphite/Surface.h"
 #include "include/gpu/graphite/precompile/Precompile.h"
 #include "include/gpu/graphite/precompile/PrecompileColorFilter.h"
@@ -300,7 +301,8 @@ void check_draw(Context* context,
 }
 
 void fuzz_graphite(Fuzz* fuzz, Context* context, int depth = 9) {
-    auto recorder = context->makeRecorder();
+    std::unique_ptr<PrecompileContext> precompileContext = context->makePrecompileContext();
+    std::unique_ptr<Recorder> recorder = context->makeRecorder();
     ShaderCodeDictionary* dict = context->priv().shaderCodeDictionary();
 
     SkColorInfo ci = SkColorInfo(kRGBA_8888_SkColorType, kPremul_SkAlphaType,
@@ -326,14 +328,11 @@ void fuzz_graphite(Fuzz* fuzz, Context* context, int depth = 9) {
     fuzz->next(&temp);
     Coverage coverage = coverageOptions[temp % 3];
 
-    DstReadRequirement dstReadReq = DstReadRequirement::kNone;
     const SkBlenderBase* blender = as_BB(paint.getBlender());
-    if (blender) {
-        dstReadReq = GetDstReadRequirement(recorder->priv().caps(),
-                                           blender->asBlendMode(),
-                                           coverage);
-    }
-
+    bool dstReadRequired = blender ? IsDstReadRequired(recorder->priv().caps(),
+                                                       blender->asBlendMode(),
+                                                       coverage)
+                                   : false;
     UniquePaintParamsID paintID = ExtractPaintData(recorder.get(),
                                                    &gatherer,
                                                    &builder,
@@ -341,9 +340,9 @@ void fuzz_graphite(Fuzz* fuzz, Context* context, int depth = 9) {
                                                    {},
                                                    PaintParams(paint,
                                                                /* primitiveBlender= */ nullptr,
-                                                               /* analyticClip= */ {},
+                                                               /* nonMSAAClip= */ {},
                                                                /* clipShader= */ nullptr,
-                                                               dstReadReq,
+                                                               dstReadRequired,
                                                                /* skipColorXform= */ false),
                                                    {},
                                                    ci);
@@ -389,7 +388,8 @@ void fuzz_graphite(Fuzz* fuzz, Context* context, int depth = 9) {
         context->priv().globalCache()->resetGraphicsPipelines();
 
         int before = context->priv().globalCache()->numGraphicsPipelines();
-        Precompile(context, paintOptions, kDrawType, { kDefaultRenderPassProperties });
+        Precompile(precompileContext.get(), paintOptions, kDrawType,
+                   { kDefaultRenderPassProperties });
         int after = context->priv().globalCache()->numGraphicsPipelines();
 
         SkASSERT_RELEASE(before == 0);

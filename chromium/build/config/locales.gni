@@ -182,6 +182,19 @@ if (is_android) {
   platform_pak_locales -= _non_android_locales
   extended_locales -= _non_android_locales
 } else {
+  if (is_vivaldi && is_ios) {
+    # Note: (@prio@vivaldi.com) (VIB-411) Chrome do not support few languages
+    # we want to support, so those locale has been removed from subtraction
+    # list.
+    extended_locales -= [
+      "be",
+      "is",
+      "ka",
+      "pa",
+      "sr-Latn",
+    ]
+  } # End Vivaldi
+
   platform_pak_locales -= extended_locales
 }
 
@@ -197,6 +210,24 @@ if (is_chromeos) {
   ]
   platform_pak_locales -= [ "ur" ]
 } else if (is_ios) {
+  if (is_vivaldi) {
+    # Note: (@prio@vivaldi.com) (VIB-411) Chrome do not support few languages
+    # we want to support, so those locale has been removed from subtraction
+    # list.
+    platform_pak_locales -= [
+      "am",
+      "fil",
+      "gu",
+      "kn",
+      "lv",
+      "ml",
+      "mr",
+      "sw",
+      "ta",
+      "te",
+      "ur",
+    ]
+  } else {
   platform_pak_locales -= [
     "af",
     "am",
@@ -214,6 +245,7 @@ if (is_chromeos) {
     "te",
     "ur",
   ]
+  } # End Vivaldi
 }
 
 # List for Android locale names in .xml exports. Note: needs to stay in sync
@@ -260,6 +292,21 @@ if (!enable_pseudolocales) {
 }
 
 if (is_apple) {
+  if (is_vivaldi && is_ios) {
+    # Note: (@prio@vivaldi.com) (VIB-411) Language Chrome supports but we don't.
+    platform_pak_locales -= [
+      "ar",
+      "he",
+      "hi",
+      "hr",
+      "ms",
+      "th",
+      "lt",
+      "fa",
+      "ro",
+      "vi",
+    ]
+  }
   # Same as the locales list but in the format Mac expects for output files:
   # it uses underscores instead of hyphens, and "en" instead of "en-US".
   locales_as_apple_outputs = []

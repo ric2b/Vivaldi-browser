@@ -73,11 +73,11 @@ OffscreenCanvas* HTMLCanvasElementModule::TransferControlToOffscreenInternal(
     ExceptionState& exception_state) {
   OffscreenCanvas* offscreen_canvas =
       OffscreenCanvas::Create(script_state, canvas.width(), canvas.height());
-  offscreen_canvas->SetFilterQuality(canvas.FilterQuality());
 
   DOMNodeId canvas_id = canvas.GetDomNodeId();
   canvas.RegisterPlaceholderCanvas(static_cast<int>(canvas_id));
   offscreen_canvas->SetPlaceholderCanvasId(canvas_id);
+  offscreen_canvas->SetTextDirection(canvas.GetTextDirection(nullptr));
 
   SurfaceLayerBridge* bridge = canvas.SurfaceLayerBridge();
   if (bridge) {

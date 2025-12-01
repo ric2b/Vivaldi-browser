@@ -17,23 +17,24 @@ Fast Pair Tast tests.
 For an overview of Bluetooth automated tests in general, including what test
 suites and test frameworks are in use, check out the
 [Connectivity EngProd docs](http://g3doc/company/teams/chrome/ops/chromeos/engprod/connectivity/bluetooth/automated_tests_and_lab)
-and [go/cros-conn-bluetooth-engprod-tast](http://goto.google.com/cros-conn-bluetooth-engprod-tast)
+and [go/cros-conn-bluetooth-engprod-tast](http://go/cros-conn-bluetooth-engprod-tast)
 
-Tast test results run in the lab can be viewed at [go/stainless](http://goto.google.com/stainless) Bluetooth Tast
-test results are organized from Stainless at [go/cros-bt-test-dashboards](http://goto.google.com/cros-bt-test-dashboards), where
+Tast test results run in the lab can be viewed at [go/stainless](http://go/stainless) Bluetooth Tast
+test results are organized from Stainless at [go/cros-bt-test-dashboards](http://go/cros-bt-test-dashboards), where
 you can split by board/form factor/etc.
 
 ### Running Tast tests
 
-Check out the [automated E2E test](e2e_tests.md) section to learn more about
+Check out the [automated E2E test](../e2e-tests) section to learn more about
 running Tast tests, including how to setup your local DUT, how to enter the
 chroot, and how to write good Tast tests.
 
 ### Running Tast tests on lab machines
 
-Check out the [Crosfleet](crosfleet.md) section to learn more about leasing lab
-machines for use. There are also helpful pointers within
-[go/run-nearby-tast-tests](http://goto.google.com/run-nearby-tast-tests)for using crosfleet.
+Check out the [Crosfleet](/chromium-os/developer-library/guides/device/crosfleet)
+section to learn more about leasing lab machines for use. There are also helpful
+pointers within [go/run-nearby-tast-tests](http://go/run-nearby-tast-tests) for
+using crosfleet.
 
 Only certain lab machines are equipped with Bluetooth-enabled Raspberry Pis ("bt
 peers") which are necessary for running most Bluetooth tests. To check for
@@ -55,7 +56,7 @@ described
 ### Running Autotest (Tauto) tests
 
 If you need to run Bluetooth Autotest tests, you should probably consult their
-documentation instead: [go/crosbt-autotest](http://goto.google.com/crosbt-autotest). There are no Cross Device features
+documentation instead: [go/crosbt-autotest](http://go/crosbt-autotest). There are no Cross Device features
 currently being tested on Autotest (although Fast Pair tests were on Autotest
 originally). However, the test bed setup is identical for Tast and Autotest.
 
@@ -94,7 +95,7 @@ The following setup instructions are based on this
 [AVL testbed setup guide](https://chromeos.google.com/partner/dlm/docs/component-qual/wf_bt_device_prep.html##raspberry-pi).
 
 Tip: To setup the enclosure (recommended), you'll probably want to follow some
-[YouTube tutorials](https://www.youtube.com/watch?v=BP44pCxQWAY).
+[YouTube tutorials](https://youtube.com/watch?v=BP44pCxQWAY).
 
 Follow the setup instructions on the official
 [Raspberry Pi](https://projects.raspberrypi.org/en/projects/raspberry-pi-setting-up)
@@ -124,7 +125,7 @@ to connect a display and run the command `ifconfig`.
 
 At this point, you should have your Raspberry Pi and DUTs setup on the same
 local network shown in Figure 1. You can setup your DUT using the
-[automated E2E test](e2e_tests.md) docs. I **highly recommend** using wired
+[automated E2E test](../e2e-tests) docs. I **highly recommend** using wired
 (ethernet) connections between all of the devices on your local network since
 those IP addresses tend to be more stable. You may need to purchase an ethernet
 switch if your router doesn't have enough ports. You should also know the
@@ -291,7 +292,7 @@ in SecureShell for the bt peer and DUT, respectively.
 -   [Chameleon WFH Quick Start](https://docs.google.com/document/d/16K6depBwoxSRs6iI6UZkoJVllY1gAMR_F7hL9aDXwpQ/edit#heading=h.9lf16cckkrd)
 -   [How to run tests on Chameleon v2](https://docs.google.com/document/d/1ykCAvyQXN94tCpujaPGR4vTxw8Z_HQz5epg7efJGWNw/edit#heading=h.jc2s1arhb57e)
 -   [Setup ssh to access lab DUTs](https://g3doc.corp.google.com/company/teams/chrome/ops/fleet/systems/access_lab_duts.md)
--   [go/cros-conn-bluetooth-engprod-tast](http://goto.google.com/cros-conn-bluetooth-engprod-tast)
+-   [go/cros-conn-bluetooth-engprod-tast](http://go/cros-conn-bluetooth-engprod-tast)
 -   [Connectivity EngProd docs](http://g3doc/company/teams/chrome/ops/chromeos/engprod/connectivity/bluetooth/automated_tests_and_lab)
 -   Code references
     -   [Fast Pair gatt service running on bt peer](https://source.chromium.org/chromiumos/chromiumos/codesearch/+/main:src/platform/chameleon/chameleond/utils/bluez_le_fast_pair_service.py?q=chameleond%2Futils%2Fbluez_le_fast_pair_service.py)

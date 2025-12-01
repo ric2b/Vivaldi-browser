@@ -11,7 +11,6 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/version.h"
-#include "build/chromeos_buildflags.h"
 #include "components/signin/public/base/gaia_id_hash.h"
 #include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/account_info.h"
@@ -22,6 +21,7 @@
 #include "components/sync/service/sync_prefs.h"
 #include "components/sync/service/sync_service_crypto.h"
 #include "components/version_info/version_info.h"
+#include "google_apis/gaia/gaia_id.h"
 
 #include "app/vivaldi_apptools.h"
 
@@ -29,7 +29,7 @@ namespace syncer {
 
 namespace {
 
-// Converts |selected_types| to the corresponding DataTypeSet (e.g.
+// Converts `selected_types` to the corresponding DataTypeSet (e.g.
 // {kExtensions} becomes {EXTENSIONS, EXTENSION_SETTINGS}).
 DataTypeSet UserSelectableTypesToDataTypes(
     UserSelectableTypeSet selected_types) {
@@ -444,7 +444,7 @@ bool SyncUserSettingsImpl::IsEncryptedDatatypePreferred() const {
 }
 
 std::string SyncUserSettingsImpl::GetEncryptionBootstrapToken() const {
-  const std::string& gaia_id = delegate_->GetSyncAccountInfoForPrefs().gaia;
+  const GaiaId& gaia_id = delegate_->GetSyncAccountInfoForPrefs().gaia;
   if (gaia_id.empty()) {
     return std::string();
   }
@@ -455,7 +455,7 @@ std::string SyncUserSettingsImpl::GetEncryptionBootstrapToken() const {
 
 void SyncUserSettingsImpl::SetEncryptionBootstrapToken(
     const std::string& token) {
-  const std::string& gaia_id = delegate_->GetSyncAccountInfoForPrefs().gaia;
+  const GaiaId& gaia_id = delegate_->GetSyncAccountInfoForPrefs().gaia;
   if (gaia_id.empty()) {
     // TODO(crbug.com/40945692): Convert to NOTREACHED.
     DUMP_WILL_BE_NOTREACHED() << "Must not set passphrase while signed out";

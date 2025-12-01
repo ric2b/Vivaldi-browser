@@ -5,7 +5,6 @@
 import {getValuesOfAllBodyRows} from '../../../testing/DataGridHelpers.js';
 import {
   dispatchClickEvent,
-  getElementWithinComponent,
   renderElementIntoDOM,
 } from '../../../testing/DOMHelpers.js';
 import {createTarget} from '../../../testing/EnvironmentHelpers.js';
@@ -13,30 +12,28 @@ import {
   describeWithMockConnection,
   setMockConnectionResponseHandler,
 } from '../../../testing/MockConnection.js';
-import * as DataGrid from '../../../ui/components/data_grid/data_grid.js';
-import * as Coordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
+import * as RenderCoordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
 
 import * as ApplicationComponents from './components.js';
-
-const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
 
 async function renderBounceTrackingMitigationsView():
     Promise<ApplicationComponents.BounceTrackingMitigationsView.BounceTrackingMitigationsView> {
   const component = new ApplicationComponents.BounceTrackingMitigationsView.BounceTrackingMitigationsView();
+  component.style.display = 'block';
+  component.style.width = '640px';
+  component.style.height = '480px';
   renderElementIntoDOM(component);
 
   // The data-grid's renderer is scheduled, so we need to wait until the coordinator
   // is done before we can test against it.
-  await coordinator.done();
+  await RenderCoordinator.done();
 
   return component;
 }
 
 function getInternalDataGridShadowRoot(
     component: ApplicationComponents.BounceTrackingMitigationsView.BounceTrackingMitigationsView): ShadowRoot {
-  const dataGridController = getElementWithinComponent(
-      component, 'devtools-data-grid-controller', DataGrid.DataGridController.DataGridController);
-  const dataGrid = getElementWithinComponent(dataGridController, 'devtools-data-grid', DataGrid.DataGrid.DataGrid);
+  const dataGrid = component.shadowRoot!.querySelector('devtools-data-grid')!;
   assert.isNotNull(dataGrid.shadowRoot);
   return dataGrid.shadowRoot;
 }
@@ -48,9 +45,9 @@ describeWithMockConnection('BounceTrackingMitigationsView', () => {
     setMockConnectionResponseHandler('Storage.runBounceTrackingMitigations', () => ({deletedSites: []}));
 
     const component = await renderBounceTrackingMitigationsView();
-    await coordinator.done();
+    await RenderCoordinator.done();
 
-    const nullGridElement = component.shadowRoot!.querySelector('devtools-data-grid-controller');
+    const nullGridElement = component.shadowRoot!.querySelector('devtools-data-grid');
     assert.isNull(nullGridElement);
 
     const sections = component.shadowRoot!.querySelectorAll('devtools-report-section');
@@ -60,7 +57,7 @@ describeWithMockConnection('BounceTrackingMitigationsView', () => {
       'Learn more: Bounce Tracking Mitigations',
     ];
 
-    assert.deepStrictEqual(sectionsText, expected);
+    assert.deepEqual(sectionsText, expected);
   });
 
   it('shows a message explaining that Bounce Tracking Mitigations must be enabled to use the panel', async () => {
@@ -68,9 +65,9 @@ describeWithMockConnection('BounceTrackingMitigationsView', () => {
     setMockConnectionResponseHandler('SystemInfo.getFeatureState', () => ({featureEnabled: false}));
 
     const component = await renderBounceTrackingMitigationsView();
-    await coordinator.done();
+    await RenderCoordinator.done();
 
-    const nullGridElement = component.shadowRoot!.querySelector('devtools-data-grid-controller');
+    const nullGridElement = component.shadowRoot!.querySelector('devtools-data-grid');
     assert.isNull(nullGridElement);
 
     const sections = component.shadowRoot!.querySelectorAll('devtools-report-section');
@@ -79,7 +76,7 @@ describeWithMockConnection('BounceTrackingMitigationsView', () => {
       'Bounce tracking mitigations are disabled. To enable them, set the flag at Bounce Tracking Mitigations Feature Flag to "Enabled With Deletion".',
     ];
 
-    assert.deepStrictEqual(sectionsText, expected);
+    assert.deepEqual(sectionsText, expected);
   });
 
   it('hides deleted sites table and shows explanation message when there are no deleted tracking sites', async () => {
@@ -93,16 +90,16 @@ describeWithMockConnection('BounceTrackingMitigationsView', () => {
     });
 
     const component = await renderBounceTrackingMitigationsView();
-    await coordinator.done();
+    await RenderCoordinator.done();
 
     const forceRunButton = component.shadowRoot!.querySelector('[aria-label="Force run"]');
     assert.instanceOf(forceRunButton, HTMLElement);
     dispatchClickEvent(forceRunButton);
     await runBounceTrackingMitigationsPromise;
 
-    await coordinator.done();
+    await RenderCoordinator.done();
 
-    const nullGridElement = component.shadowRoot!.querySelector('devtools-data-grid-controller');
+    const nullGridElement = component.shadowRoot!.querySelector('devtools-data-grid');
     assert.isNull(nullGridElement);
 
     const sections = component.shadowRoot!.querySelectorAll('devtools-report-section');
@@ -113,7 +110,7 @@ describeWithMockConnection('BounceTrackingMitigationsView', () => {
       'Learn more: Bounce Tracking Mitigations',
     ];
 
-    assert.deepStrictEqual(sectionsText, expected);
+    assert.deepEqual(sectionsText, expected);
   });
 
   it('renders deleted sites in a table', async () => {
@@ -123,13 +120,13 @@ describeWithMockConnection('BounceTrackingMitigationsView', () => {
         'Storage.runBounceTrackingMitigations', () => ({deletedSites: ['tracker-1.example', 'tracker-2.example']}));
 
     const component = await renderBounceTrackingMitigationsView();
-    await coordinator.done();
+    await RenderCoordinator.done();
 
     const forceRunButton = component.shadowRoot!.querySelector('[aria-label="Force run"]');
     assert.instanceOf(forceRunButton, HTMLElement);
     dispatchClickEvent(forceRunButton);
 
-    await coordinator.done({waitForWork: true});
+    await RenderCoordinator.done({waitForWork: true});
 
     const dataGridShadowRoot = getInternalDataGridShadowRoot(component);
     const rowValues = getValuesOfAllBodyRows(dataGridShadowRoot);

@@ -18,7 +18,7 @@ import {sqliteString} from '../../base/string_utils';
 import {
   BaseCounterTrack,
   CounterOptions,
-} from '../../frontend/base_counter_track';
+} from '../../components/tracks/base_counter_track';
 import {TrackContext} from '../../public/track';
 import {Button} from '../../widgets/button';
 import {Trace} from '../../public/trace';
@@ -33,17 +33,14 @@ export class ActiveCPUCountTrack extends BaseCounterTrack {
   private readonly cpuType?: CPUType;
 
   constructor(ctx: TrackContext, trace: Trace, cpuType?: CPUType) {
-    super({
-      trace,
-      uri: ctx.trackUri,
-    });
+    super(trace, ctx.trackUri);
     this.cpuType = cpuType;
   }
 
   getTrackShellButtons(): m.Children {
     return m(Button, {
       onclick: () => {
-        this.trace.workspace.findTrackByUri(this.uri)?.remove();
+        this.trace.workspace.getTrackByUri(this.uri)?.remove();
       },
       icon: Icons.Close,
       title: 'Close',

@@ -175,6 +175,10 @@ class SystemExitMock(Exception):
     pass
 
 
+class ParserErrorMock(Exception):
+    pass
+
+
 class TestGitClBasic(unittest.TestCase):
     def setUp(self):
         mock.patch('sys.exit', side_effect=SystemExitMock).start()
@@ -5227,6 +5231,113 @@ class CMDFormatTestCase(unittest.TestCase):
         ]
         self._check_yapf_filtering(files, expected)
 
+    @mock.patch('gclient_paths.GetPrimarySolutionPath')
+    def testRunMetricsXMLFormatSkipIfPresubmit(self, find_top_dir):
+        """Verifies that it skips the formatting if opts.presubmit is True."""
+        find_top_dir.return_value = self._top_dir
+        mock_opts = mock.Mock(full=True,
+                              dry_run=True,
+                              diff=False,
+                              presubmit=True)
+        files = [
+            os.path.join(self._top_dir, 'tools', 'metrics', 'ukm', 'ukm.xml'),
+        ]
+        return_value = git_cl._RunMetricsXMLFormat(mock_opts, files,
+                                                   self._top_dir, 'HEAD')
+        git_cl.RunCommand.assert_not_called()
+        self.assertEqual(0, return_value)
+
+    @mock.patch('gclient_paths.GetPrimarySolutionPath')
+    def testRunMetricsFormatWithUkm(self, find_top_dir):
+        """Checks if the command line arguments do not contain the input path.
+        """
+        find_top_dir.return_value = self._top_dir
+        mock_opts = mock.Mock(full=True,
+                              dry_run=False,
+                              diff=False,
+                              presubmit=False)
+        files = [
+            os.path.join(self._top_dir, 'tools', 'metrics', 'ukm', 'ukm.xml'),
+        ]
+        git_cl._RunMetricsXMLFormat(mock_opts, files, self._top_dir, 'HEAD')
+        git_cl.RunCommand.assert_called_with([
+            mock.ANY,
+            os.path.join(self._top_dir, 'tools', 'metrics', 'ukm',
+                         'pretty_print.py'),
+            '--non-interactive',
+        ],
+                                             cwd=self._top_dir)
+
+    @mock.patch('gclient_paths.GetPrimarySolutionPath')
+    def testRunMetricsFormatWithHistograms(self, find_top_dir):
+        """Checks if the command line arguments contain the input file paths."""
+        find_top_dir.return_value = self._top_dir
+        mock_opts = mock.Mock(full=True,
+                              dry_run=False,
+                              diff=False,
+                              presubmit=False)
+        files = [
+            os.path.join(self._top_dir, 'tools', 'metrics', 'histograms',
+                         'enums.xml'),
+            os.path.join(self._top_dir, 'tools', 'metrics', 'histograms',
+                         'test_data', 'enums.xml'),
+        ]
+        git_cl._RunMetricsXMLFormat(mock_opts, files, self._top_dir, 'HEAD')
+
+        pretty_print_path = os.path.join(self._top_dir, 'tools', 'metrics',
+                                         'histograms', 'pretty_print.py')
+        git_cl.RunCommand.assert_has_calls([
+            mock.call(
+                [mock.ANY, pretty_print_path, '--non-interactive', files[0]],
+                cwd=self._top_dir),
+            mock.call(
+                [mock.ANY, pretty_print_path, '--non-interactive', files[1]],
+                cwd=self._top_dir),
+        ])
+
+    @mock.patch('subprocess2.call')
+    def testLUCICfgFormatWorks(self, mock_call):
+        """Checks if lucicfg is given then input file path."""
+        mock_opts = mock.Mock(dry_run=False)
+        files = ['test/main.star']
+        mock_call.return_value = 0
+        ret = git_cl._RunLUCICfgFormat(mock_opts, files, self._top_dir, 'HEAD')
+        mock_call.assert_called_with([
+            mock.ANY,
+            'fmt',
+            'test/main.star',
+        ])
+        self.assertEqual(ret, 0)
+
+    @mock.patch('subprocess2.call')
+    def testLUCICfgFormatWithDryRun(self, mock_call):
+        """Tests the command with --dry-run."""
+        mock_opts = mock.Mock(dry_run=True)
+        files = ['test/main.star']
+        git_cl._RunLUCICfgFormat(mock_opts, files, self._top_dir, 'HEAD')
+        mock_call.assert_called_with([
+            mock.ANY,
+            'fmt',
+            '--dry-run',
+            'test/main.star',
+        ])
+
+    @mock.patch('subprocess2.call')
+    def testLUCICfgFormatWithDryRunReturnCode(self, mock_call):
+        """Tests that it returns 2 for non-zero exit codes."""
+        mock_opts = mock.Mock(dry_run=True)
+        files = ['test/main.star']
+        run = git_cl._RunLUCICfgFormat
+
+        mock_call.return_value = 0
+        self.assertEqual(run(mock_opts, files, self._top_dir, 'HEAD'), 0)
+        mock_call.return_value = 1
+        self.assertEqual(run(mock_opts, files, self._top_dir, 'HEAD'), 2)
+        mock_call.return_value = 2
+        self.assertEqual(run(mock_opts, files, self._top_dir, 'HEAD'), 2)
+        mock_call.return_value = 255
+        self.assertEqual(run(mock_opts, files, self._top_dir, 'HEAD'), 2)
+
 
 @unittest.skipIf(gclient_utils.IsEnvCog(),
                 'not supported in non-git environment')
@@ -5483,6 +5594,31 @@ Change-Id: I25699146b24c7ad8776f17775f489b9d41499595
 """
         self.assertEqual(git_cl._create_commit_message(orig_message, bug),
                          expected_message)
+
+
+@unittest.skipIf(gclient_utils.IsEnvCog(),
+                 'not supported in non-git environment')
+class CMDSplitTestCase(CMDTestCaseBase):
+
+    def setUp(self):
+        super(CMDTestCaseBase, self).setUp()
+        mock.patch('git_cl.Settings.GetRoot', return_value='root').start()
+
+    @mock.patch("split_cl.SplitCl", return_value=0)
+    @mock.patch("git_cl.OptionParser.error", side_effect=ParserErrorMock)
+    def testDescriptionFlagRequired(self, _, mock_split_cl):
+        # --description-file is mandatory...
+        self.assertRaises(ParserErrorMock, git_cl.main, ['split'])
+        self.assertEqual(mock_split_cl.call_count, 0)
+
+        self.assertEqual(git_cl.main(['split', '--description=SomeFile.txt']),
+                         0)
+        self.assertEqual(mock_split_cl.call_count, 1)
+
+        # Unless we're doing a dry run
+        mock_split_cl.reset_mock()
+        self.assertEqual(git_cl.main(['split', '-n']), 0)
+        self.assertEqual(mock_split_cl.call_count, 1)
 
 
 if __name__ == '__main__':

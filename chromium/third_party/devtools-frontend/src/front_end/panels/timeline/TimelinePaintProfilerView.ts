@@ -137,7 +137,7 @@ export class TimelinePaintProfilerView extends UI.SplitWidget.SplitWidget {
     return tracingLayerTree ? tracingLayerTree.pictureForRasterTile(data.tileId.id_ref) : null;
   }
 
-  private update(): void {
+  update(): void {
     this.logTreeView.setCommandLog([]);
     void this.paintProfilerView.setSnapshotAndLog(null, [], null);
 
@@ -210,10 +210,11 @@ export class TimelinePaintImageView extends UI.Widget.Widget {
   private maskRectangle?: Protocol.DOM.Rect|null;
   constructor() {
     super(true);
+    this.registerRequiredCSS(timelinePaintProfilerStyles);
 
     this.contentElement.classList.add('fill', 'paint-profiler-image-view');
     this.imageContainer = this.contentElement.createChild('div', 'paint-profiler-image-container');
-    this.imageElement = (this.imageContainer.createChild('img') as HTMLImageElement);
+    this.imageElement = this.imageContainer.createChild('img');
     this.maskElement = this.imageContainer.createChild('div');
     this.imageElement.addEventListener('load', this.updateImagePosition.bind(this), false);
     this.transformController =
@@ -276,9 +277,5 @@ export class TimelinePaintImageView extends UI.Widget.Widget {
   setMask(maskRectangle: Protocol.DOM.Rect|null): void {
     this.maskRectangle = maskRectangle;
     this.maskElement.classList.toggle('hidden', !maskRectangle);
-  }
-  override wasShown(): void {
-    super.wasShown();
-    this.registerCSSFiles([timelinePaintProfilerStyles]);
   }
 }

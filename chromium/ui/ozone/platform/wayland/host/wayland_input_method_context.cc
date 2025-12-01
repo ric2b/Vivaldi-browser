@@ -23,7 +23,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_offset_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "build/chromeos_buildflags.h"
 #include "ui/base/ime/composition_text.h"
 #include "ui/base/ime/ime_text_span.h"
 #include "ui/base/ime/text_input_client.h"
@@ -36,6 +35,7 @@
 #include "ui/events/ozone/events_ozone.h"
 #include "ui/events/types/event_type.h"
 #include "ui/gfx/range/range.h"
+#include "ui/ozone/platform/wayland/common/wayland_util.h"
 #include "ui/ozone/platform/wayland/host/wayland_connection.h"
 #include "ui/ozone/platform/wayland/host/wayland_seat.h"
 #include "ui/ozone/platform/wayland/host/wayland_window.h"
@@ -48,23 +48,13 @@
 #include "ui/events/ozone/layout/xkb/xkb_keyboard_layout_engine.h"
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "base/check.h"
-#include "chromeos/crosapi/mojom/crosapi.mojom.h"
-#include "chromeos/startup/browser_params_proxy.h"
-#endif
-
 namespace ui {
 namespace {
 
 // Only enable the preedit string for sequence mode (i.e. when using dead keys
 // or the Compose key) on Linux ozone/wayland (see b/220370007).
 constexpr CharacterComposer::PreeditStringMode kPreeditStringMode =
-#if BUILDFLAG(IS_LINUX)
     CharacterComposer::PreeditStringMode::kAlwaysEnabled;
-#else
-    CharacterComposer::PreeditStringMode::kHexModeOnly;
-#endif  // BUILDFLAG(IS_LINUX)
 
 std::optional<size_t> OffsetFromUTF8Offset(std::string_view text,
                                            uint32_t offset) {
@@ -92,21 +82,6 @@ bool IsImeEnabled() {
   if (base::FeatureList::IsEnabled(features::kWaylandTextInputV3)) {
     return true;
   }
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  // On Lacros chrome, we check whether ash-chrome supports IME, then
-  // enable IME if so. This allows us to control IME enabling state in
-  // Lacros-chrome side, which helps us on releasing.
-  // TODO(crbug.com/40737321): In the future, we may want to unify the behavior
-  // of ozone/wayland across platforms.
-  const chromeos::BrowserParamsProxy* init_params =
-      chromeos::BrowserParamsProxy::Get();
-  if (init_params->ExoImeSupport() !=
-      crosapi::mojom::ExoImeSupport::kUnsupported) {
-    return true;
-  }
-#endif
-
   // Do not enable wayland IME by default.
   return false;
 }
@@ -209,7 +184,7 @@ std::optional<OffsetText> TrimSurroundingTextForExtension(
   // offsets.
   // Note: exo's implementation does not have 4000 bytes limit of the message.
   static constexpr size_t kMaxSurroundingTextBytes = 500;
-  const auto& [min_offset, max_offset] = base::ranges::minmax(offsets);
+  const auto& [min_offset, max_offset] = std::ranges::minmax(offsets);
 
   size_t start_index =
       min_offset - std::min(min_offset, kMaxSurroundingTextBytes);
@@ -552,6 +527,7 @@ void WaylandInputMethodContext::OnPreeditString(
     const gfx::Range& preedit_cursor) {
   CompositionText composition_text;
   composition_text.text = base::UTF8ToUTF16(text);
+  bool has_composition_style = false;
   for (const auto& span : spans) {
     auto start_offset = OffsetFromUTF8Offset(text, span.index);
     if (!start_offset)
@@ -562,8 +538,17 @@ void WaylandInputMethodContext::OnPreeditString(
     const auto& style = span.style;
     if (!style.has_value())
       continue;
+    if (style->type == ImeTextSpan::Type::kComposition) {
+      has_composition_style = true;
+    }
     composition_text.ime_text_spans.emplace_back(style->type, *start_offset,
                                                  *end_offset, style->thickness);
+  }
+  if (!composition_text.text.empty() && !has_composition_style) {
+    // If no explicit composition style is specified, add default composition
+    // style to the composition text.
+    composition_text.ime_text_spans.emplace_back(
+        ImeTextSpan::Type::kComposition, 0, composition_text.text.length());
   }
   if (!preedit_cursor.IsValid()) {
     // This is the case if a preceding preedit_cursor event in text-input-v1 was
@@ -663,10 +648,13 @@ void WaylandInputMethodContext::OnCursorPosition(int32_t index,
 
   const gfx::Range new_selection_range =
       gfx::Range(offsets[1] + utf16_offset, offsets[0] + utf16_offset);
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  // Cursor position may be wrong on Lacros due to timing issue for some
+
+  // TODO(crbug.com/374244479): this might still be useful for Linux. If it's
+  // not, consider removing this. It was left here intentionally.
+  constexpr bool kWorkaroundSurroundingTextTimingIssue = false;
+  // Cursor position may have been wrong on Lacros due to timing issue for some
   // scenario when surrounding text is longer than wayland message size
-  // limitation (4000 bytes) such as:
+  // limitation (4000 bytes) such as (does it apply to Wayland/Linux as well?):
   // 1. Set surrounding text with 8000 bytes and send the selection adjusted to
   // 4000 bytes (wayland message size maximum).
   // 2. Exo requests to delete surrounding text sent from 1.
@@ -678,12 +666,13 @@ void WaylandInputMethodContext::OnCursorPosition(int32_t index,
   //
   // This timing issue will be fixed by sending whole surrounding text instead
   // of trimmed text.
-  if (selection == new_selection_range) {
-    pending_keep_selection_ = true;
-  } else {
-    NOTIMPLEMENTED_LOG_ONCE();
+  if (kWorkaroundSurroundingTextTimingIssue) {
+    if (selection == new_selection_range) {
+      pending_keep_selection_ = true;
+    } else {
+      NOTIMPLEMENTED_LOG_ONCE();
+    }
   }
-#endif
 
   surrounding_text_tracker_.OnSetEditableSelectionRange(new_selection_range);
 }

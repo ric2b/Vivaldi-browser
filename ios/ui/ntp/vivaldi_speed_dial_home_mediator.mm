@@ -16,6 +16,7 @@
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/bookmarks/model/bookmark_model_bridge_observer.h"
 #import "ios/chrome/browser/bookmarks/model/managed_bookmark_service_factory.h"
+#import "ios/chrome/browser/bookmarks/ui_bundled/bookmark_utils_ios.h"
 #import "ios/chrome/browser/features/vivaldi_features.h"
 #import "ios/chrome/browser/first_run/ui_bundled/first_run_util.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
@@ -30,6 +31,7 @@
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/ntp/top_toolbar/top_toolbar_swift.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
+#import "ios/ui/ntp/vivaldi_speed_dial_page_type.h"
 #import "ios/ui/settings/start_page/vivaldi_start_page_prefs_helper.h"
 #import "ios/ui/settings/start_page/vivaldi_start_page_prefs.h"
 #import "prefs/vivaldi_pref_names.h"
@@ -73,15 +75,15 @@ using l10n_util::GetNSString;
     VivaldiMostVisitedSitesManager* mostVisitedSiteManager;
 // Most visited items from the MostVisitedSites service currently displayed.
 @property(nonatomic,strong) MostVisitedTilesConfig* mostVisitedConfig;
-// Speed dial folders collection
-@property(nonatomic,strong) NSMutableArray* speedDialFolders;
-// Bool to keep track the initial loading of the speed dial folders.
-@property(nonatomic,assign) BOOL isFirstLoad;
+// Collection of toolbar items
+@property(nonatomic, strong)
+    NSMutableArray<VivaldiNTPTopToolbarItem*>* toolbarItems;
+// Collection of cached toolbar items. This is used to compare whether toolbar
+// items count is changed due to CRUD operation either initiated by user or sync.
+@property(nonatomic, strong)
+    NSMutableArray<VivaldiNTPTopToolbarItem*>* cachedToolbarItems;
 // Bool to keep track of extensive changes.
 @property(nonatomic,assign) BOOL runningExtensiveChanges;
-// Bool to keep track if top sites result is ready. The results can be empty,
-// this only checks if we got a response from backend for the query.
-@property(nonatomic,assign) BOOL isTopSitesResultsAvailable;
 @end
 
 @implementation VivaldiSpeedDialHomeMediator {
@@ -92,8 +94,8 @@ using l10n_util::GetNSString;
 }
 
 @synthesize consumer = _consumer;
-@synthesize speedDialFolders = _speedDialFolders;
-@synthesize isFirstLoad = _isFirstLoad;
+@synthesize toolbarItems = _toolbarItems;
+@synthesize cachedToolbarItems = _cachedToolbarItems;
 @synthesize runningExtensiveChanges = _runningExtensiveChanges;
 
 #pragma mark - INITIALIZERS
@@ -156,7 +158,8 @@ using l10n_util::GetNSString;
 
     [VivaldiStartPagePrefs setPrefService:profile->GetPrefs()];
 
-    self.isTopSitesResultsAvailable = NO;
+    self.toolbarItems = [[NSMutableArray alloc] init];
+    self.cachedToolbarItems = [[NSMutableArray alloc] init];
   }
   return self;
 }
@@ -165,7 +168,6 @@ using l10n_util::GetNSString;
 
 - (void)startMediating {
   DCHECK(self.consumer);
-  self.isFirstLoad = YES;
   [self computeSpeedDialFolders];
 }
 
@@ -205,6 +207,18 @@ using l10n_util::GetNSString;
   _showCustomizeStartPageButton = nil;
 }
 
+- (void)setConsumer:(id<SpeedDialHomeConsumer>)consumer {
+  _consumer = consumer;
+  if (!self.consumer) {
+    return;
+  }
+
+  [self.consumer refreshMenuItems:self.toolbarItems];
+  if (self.toolbarItems.count > 0) {
+    [self.consumer selectToolbarItemWithIndex:self.selectedMenuItemIndex];
+  }
+}
+
 - (void)removeMostVisited:(VivaldiSpeedDialItem*)item {
   for (ContentSuggestionsMostVisitedItem *tile in
           _mostVisitedConfig.mostVisitedItems) {
@@ -221,63 +235,52 @@ using l10n_util::GetNSString;
   }
 
   if (_bookmarkModel && _bookmarkModel->loaded())
-    [self fetchSpeedDialFolders];
+    [self computeTopToolbarItems];
 }
 
 - (void)computeSpeedDialChildItems:(VivaldiSpeedDialItem*)item {
   // If an item is provided fetch the children of that item.
-  // Otherwise fetch all children of all speed dial folder items.
-  if (item) {
-    NSArray* childItems =
-      [self fetchSpeedDialChildrenOf:item];
-    // Return the sorted items based on selected mode
-    NSArray* sortedArray = [self sortSpeedDials:childItems
-                                         byMode:self.currentSortingMode];
-    [self.consumer refreshChildItems:sortedArray
-                   topSitesAvailable:self.isTopSitesResultsAvailable];
-
+  // Otherwise fetch all children of all speed dial folder items and notify
+  // consumers to update them.
+  if (item && item.bookmarkNode) {
+    [self reloadChildrenForBookmarkNode:item.bookmarkNode];
   } else {
 
-    NSMutableArray* childItemsCollection = [[NSMutableArray alloc] init];
-    for (id folder in self.speedDialFolders) {
-      NSArray* childItems =
-        [self fetchSpeedDialChildrenOf:folder];
-      [childItemsCollection addObject:childItems];
+    for (VivaldiNTPTopToolbarItem* group in self.toolbarItems) {
+
+      if ([group.uuid length] <= 0)
+        continue;
+
+      std::string uuidString =
+          base::SysNSStringToUTF8([group.uuid lowercaseString]);
+      base::Uuid uuid = base::Uuid::ParseLowercase(uuidString);
+
+      const bookmarks::BookmarkNode* node =
+          _bookmarkModel.get()->GetNodeByUuid(uuid,
+              bookmarks::BookmarkModel::
+                  NodeTypeForUuidLookup::kLocalOrSyncableNodes);
+
+      [self reloadChildrenForBookmarkNode:node];
     }
-
-    // Sort items if needed
-    [self computeSortedItems:childItemsCollection
-                      byMode:self.currentSortingMode];
   }
-
-  self.isFirstLoad = NO;
 }
 
-- (void)computeSortedItems:(NSMutableArray*)items
-                    byMode:(SpeedDialSortingMode)mode {
+- (void)moveSpeedDialItem:(VivaldiSpeedDialItem*)item
+                 position:(NSInteger)position {
+  _bookmarkModel.get()->Move(item.bookmarkNode,
+                             item.parent,
+                             position);
+}
 
-  NSMutableArray* sortedItems = [[NSMutableArray alloc] initWithArray:@[]];
-
-  if (IsTopSitesEnabled() && [self showFrequentlyVisited]) {
-    NSMutableArray* frequentlyVisitedPages = [[NSMutableArray alloc] init];
-    for (ContentSuggestionsMostVisitedItem* tile in
-              _mostVisitedConfig.mostVisitedItems) {
-      VivaldiSpeedDialItem* item =
-          [[VivaldiSpeedDialItem alloc] initWithTitle:tile.title url:tile.URL];
-      item.imageDataSource = _mostVisitedConfig.imageDataSource;
-      [frequentlyVisitedPages addObject:item];
-    }
-    // Add frequently visited pages at the front.
-    [sortedItems addObject:frequentlyVisitedPages];
+- (void)deleteSpeedDialItem:(VivaldiSpeedDialItem*)item {
+  if (_bookmarkModel.get()->loaded() && item.bookmarkNode) {
+    std::vector<const bookmarks::BookmarkNode*> nodes;
+    nodes.push_back(item.bookmarkNode);
+    const BookmarkNode* trashFolder = _bookmarkModel.get()->trash_node();
+    bookmark_utils_ios::MoveBookmarks(nodes,
+                                      _bookmarkModel.get(),
+                                      trashFolder);
   }
-
-  for (id childItems in items) {
-    NSArray* sortedArray = [self sortSpeedDials:childItems byMode:mode];
-    [sortedItems addObject:sortedArray];
-  }
-
-  [self.consumer refreshChildItems:sortedItems
-                 topSitesAvailable:self.isTopSitesResultsAvailable];
 }
 
 #pragma mark - PRIVATE METHODS
@@ -297,165 +300,181 @@ using l10n_util::GetNSString;
   return [VivaldiStartPagePrefsHelper getSDSortingOrder];
 }
 
-/// Fetches speed dial folders and their children and notifies the consumers.
-- (void)fetchSpeedDialFolders {
+/// Fetches speed dial folders and their children, notifies consumers.
+- (void)computeTopToolbarItems {
 
-  bookmarks::ManagedBookmarkService* managedBookmarkService =
-      ManagedBookmarkServiceFactory::GetForProfile(_profile.get());
+  // Clear old data so we don’t retain stale groups.
+  [self.toolbarItems removeAllObjects];
 
-  _speedDialFolders = [[NSMutableArray alloc] init];
-  NSMutableArray* speedDialFolderChildren = [[NSMutableArray alloc] init];
+  if ([self showSpeedDials]) {
 
-  std::vector<const BookmarkNode*> bookmarkList;
+    std::vector<const BookmarkNode*> root_nodes;
 
-  // Stack for Depth-First Search of bookmark model.
-  base::stack<const BookmarkNode*> stk;
-
-  if (!_bookmarkModel.get()->bookmark_bar_node()->children().empty()) {
-    bookmarkList.push_back(_bookmarkModel.get()->bookmark_bar_node());
-  }
-
-  if (!_bookmarkModel.get()->mobile_node()->children().empty()) {
-    bookmarkList.push_back(_bookmarkModel.get()->mobile_node());
-  }
-
-  if (!_bookmarkModel.get()->other_node()->children().empty()) {
-    bookmarkList.push_back(_bookmarkModel.get()->other_node());
-  }
-
-  // Push all top folders in stack and give them depth of 0.
-  for (std::vector<const BookmarkNode*>::reverse_iterator it =
-           bookmarkList.rbegin();
-       it != bookmarkList.rend();
-       ++it) {
-    stk.push(*it);
-  }
-
-  while (!stk.empty()) {
-    const BookmarkNode* node = stk.top();
-    stk.pop();
-
-    if (GetSpeeddial(node) && !IsSeparator(node)) {
-      VivaldiSpeedDialItem* item =
-          [[VivaldiSpeedDialItem alloc] initWithBookmark:node];
-      [self.speedDialFolders addObject:item];
-
-      NSMutableArray *items = [[NSMutableArray alloc] init];
-
-      if (node->children().size() > 0)
-        for (const auto& child : node->children()) {
-          const BookmarkNode* childNode = child.get();
-          [items addObject:[[VivaldiSpeedDialItem alloc]
-                            initWithBookmark:childNode]];
-        }
-      [speedDialFolderChildren addObject:items];
+    // Push top-level nodes if they have children
+    if (!_bookmarkModel->bookmark_bar_node()->children().empty()) {
+      root_nodes.push_back(_bookmarkModel.get()->bookmark_bar_node());
+    }
+    if (!_bookmarkModel->mobile_node()->children().empty()) {
+      root_nodes.push_back(_bookmarkModel.get()->mobile_node());
+    }
+    if (!_bookmarkModel->other_node()->children().empty()) {
+      root_nodes.push_back(_bookmarkModel.get()->other_node());
     }
 
-    bookmarkList.clear();
-    for (const auto& child : node->children()) {
-      if (child->is_folder() &&
-          !managedBookmarkService->IsNodeManaged(child.get())) {
-        bookmarkList.push_back(child.get());
+    bookmarks::ManagedBookmarkService* managedBookmarkService =
+        ManagedBookmarkServiceFactory::GetForProfile(_profile.get());
+
+    // Stack for Depth-First Search of bookmark model.
+    base::stack<const BookmarkNode*> stack;
+
+    for (std::vector<const BookmarkNode*>::reverse_iterator it =
+        root_nodes.rbegin();
+         it != root_nodes.rend();
+         ++it) {
+      stack.push(*it);
+    }
+
+    while (!stack.empty()) {
+      const BookmarkNode* node = stack.top();
+      stack.pop();
+
+      if (GetSpeeddial(node) && !IsSeparator(node)) {
+        VivaldiNTPTopToolbarItem* toolbarItem = [self buildGroupForNode:node];
+        [self.toolbarItems addObject:toolbarItem];
+      }
+
+      root_nodes.clear();
+
+      for (const auto& child : node->children()) {
+        if (child->is_folder() &&
+            !managedBookmarkService->IsNodeManaged(child.get())) {
+          root_nodes.push_back(child.get());
+        }
+      }
+
+      for (auto it = root_nodes.rbegin();
+           it != root_nodes.rend();
+           ++it) {
+        stack.push(*it);
       }
     }
-
-    for (auto it = bookmarkList.rbegin();
-         it != bookmarkList.rend();
-         ++it) {
-      stk.push(*it);
-    }
   }
 
-  // Create a collection of array with speed dial folder item title.
-  NSMutableArray *menuItems = [[NSMutableArray alloc] init];
-
+  // If top sites is enabled
   if (IsTopSitesEnabled() && [self showFrequentlyVisited]) {
-    [menuItems addObject:
-        [self toolbarItemWithId:nil
-            title:GetNSString(IDS_IOS_START_PAGE_FREQUENTLY_VISITED_TITLE)]];
+    VivaldiNTPTopToolbarItem* toolbarItem =
+        [[VivaldiNTPTopToolbarItem alloc]
+             initWithPrimaryId:nil
+                          uuid:nil
+                title:GetNSString(IDS_IOS_START_PAGE_FREQUENTLY_VISITED_TITLE)
+                      pageType:VivaldiSpeedDialPageTypeTopSites];
+    toolbarItem.children = [self listTopSiteItems];;
+    [self.toolbarItems insertObject:toolbarItem
+                            atIndex:0];
   }
 
-  // Only proceed to add dynamic items if they are visible
-  if ([self showSpeedDials]) {
-    for (VivaldiSpeedDialItem *item in self.speedDialFolders) {
-      [menuItems addObject:[self toolbarItemWithId:item.idValue
-                                             title:item.title]];
-    }
+  // Add extra "Add Group" item
+  [self.toolbarItems addObject:
+     [[VivaldiNTPTopToolbarItem alloc]
+          initWithPrimaryId:nil
+                       uuid:nil
+                      title:@""
+                   pageType:VivaldiSpeedDialPageTypeAddGroup]];
+
+  // Refresh the UI
+  [self.consumer refreshMenuItems:self.toolbarItems];
+
+  // Update the toolbar index only when toolbar items are changed which may
+  // happen after sync or if user adds/removes any group.
+  // This prevents reloading the toolbar and index for every sync cycle when
+  // this function is called but nothing is changed.
+  BOOL areEqual =
+      [VivaldiNTPTopToolbarItemHelper
+          compareEqualityForFirst:self.toolbarItems
+                           second:self.cachedToolbarItems];
+  if (self.toolbarItems.count > 0 && !areEqual) {
+    self.cachedToolbarItems = [self.toolbarItems copy];
+    [self.consumer selectToolbarItemWithIndex:self.selectedMenuItemIndex];
   }
-  // Add an extra menu item with empty string at the end for 'Add Group' page.
-  // We do not need the title since the item will not have any title.
-  [menuItems addObject:[self toolbarItemWithId:nil
-                                         title:@""]];
-
-  // Refresh menu items
-  [self.consumer refreshMenuItems:menuItems
-                        SDFolders:self.speedDialFolders];
-  // Refresh child items
-  [self computeSortedItems:speedDialFolderChildren
-                    byMode:self.currentSortingMode];
-
-  self.isFirstLoad = NO;
 }
 
-/// Returns the children of a node.
-- (NSArray*)fetchSpeedDialChildrenOf:(VivaldiSpeedDialItem*)item {
+// Create and return a ToolbarItem from provided BookmarkNode computing the
+// children of that node.
+- (VivaldiNTPTopToolbarItem*)buildGroupForNode:(const BookmarkNode*)node {
 
-  NSMutableArray *items = [[NSMutableArray alloc] init];
-
-  std::vector<const BookmarkNode*> bookmarkList;
-
-  // Stack for Depth-First Search of bookmark model.
-  base::stack<const BookmarkNode*> stk;
-
-  if (!_bookmarkModel.get()->bookmark_bar_node()->children().empty()) {
-    bookmarkList.push_back(_bookmarkModel.get()->bookmark_bar_node());
+  NSString* uuidString;
+  if (node->uuid().is_valid()) {
+    uuidString = base::SysUTF8ToNSString(node->uuid().AsLowercaseString());
   }
 
-  if (!_bookmarkModel.get()->mobile_node()->children().empty()) {
-    bookmarkList.push_back(_bookmarkModel.get()->mobile_node());
+  VivaldiNTPTopToolbarItem* groupItem =
+      [[VivaldiNTPTopToolbarItem alloc]
+           initWithPrimaryId:@(node->id())
+                        uuid:uuidString
+                       title:bookmark_utils_ios::TitleForBookmarkNode(node)
+                    pageType:VivaldiSpeedDialPageTypeSpeedDial];
+
+  NSMutableArray* childrens = [[NSMutableArray alloc] init];
+  if (node->is_folder()) {
+    for (const auto& child : node->children()) {
+      const BookmarkNode* childNode = child.get();
+      if (IsSeparator(childNode))
+        continue;
+      [childrens addObject:
+          [[VivaldiSpeedDialItem alloc] initWithBookmark:childNode]];
+    }
+
+    groupItem.children = [self sortSpeedDials:childrens
+                                       byMode:self.currentSortingMode];
+  }
+  return groupItem;
+}
+
+// Reload only the children of the provided BookmarkNode and notify the
+// consumers.
+- (void)reloadChildrenForBookmarkNode:(const BookmarkNode*)bookmarkNode {
+  if (!bookmarkNode)
+    return;
+  VivaldiNTPTopToolbarItem* groupItem = [self buildGroupForNode:bookmarkNode];
+  [self.consumer refreshChildItems:groupItem.children parent:groupItem];
+}
+
+// Reloads only the top site items and notify the consumers.
+- (void)reloadChildrenForTopSite {
+
+  if (!IsTopSitesEnabled() || ![self showFrequentlyVisited]) {
+    return;
   }
 
-  if (!_bookmarkModel.get()->other_node()->children().empty()) {
-    bookmarkList.push_back(_bookmarkModel.get()->other_node());
-  }
+  VivaldiNTPTopToolbarItem* toolbarItem;
+  NSMutableArray<VivaldiSpeedDialItem*>* topSites = [self listTopSiteItems];
 
-  // Push all top folders in stack and give them depth of 0.
-  for (std::vector<const BookmarkNode*>::reverse_iterator it =
-           bookmarkList.rbegin();
-       it != bookmarkList.rend();
-       ++it) {
-    stk.push(*it);
-  }
-
-  while (!stk.empty()) {
-    const BookmarkNode* node = stk.top();
-    stk.pop();
-    // Match
-    if (node->id() == item.id) {
-      if (node->children().size() > 0)
-        for (const auto& child : node->children()) {
-          const BookmarkNode* childNode = child.get();
-          if (IsSeparator(childNode))
-            continue;
-          [items addObject:[[VivaldiSpeedDialItem alloc]
-                              initWithBookmark:childNode]];
-        }
-    } else {
-      if (node->children().size() > 0)
-        for (const auto& child : node->children()) {
-          if (child->is_folder()) {
-            stk.push(child.get());
-          }
-        }
+  // Find the toolbar item with matching page type
+  for (NSUInteger i = 0; i < self.toolbarItems.count; i++) {
+    VivaldiNTPTopToolbarItem *item = self.toolbarItems[i];
+    if (item.pageType == VivaldiSpeedDialPageTypeTopSites) {
+      toolbarItem = item;
+      toolbarItem.children = topSites;
+      break;
     }
   }
 
-  return items;
+  [self.consumer refreshChildItems:topSites parent:toolbarItem];
 }
 
-- (VivaldiNTPTopToolbarItem*)toolbarItemWithId:(NSNumber*)idValue
-                                         title:(NSString*)title {
-  return [[VivaldiNTPTopToolbarItem alloc] initWithId:idValue title:title];
+// Returns the mapped item for top site items loaded into the model.
+// If the model is not loaded, it returns an empty array.
+- (NSMutableArray<VivaldiSpeedDialItem*>*)listTopSiteItems {
+  NSMutableArray<VivaldiSpeedDialItem*>* topSites =
+      [[NSMutableArray alloc] init];
+  for (ContentSuggestionsMostVisitedItem* tile in
+            _mostVisitedConfig.mostVisitedItems) {
+    VivaldiSpeedDialItem* item =
+        [[VivaldiSpeedDialItem alloc] initWithTitle:tile.title url:tile.URL];
+    item.imageDataSource = _mostVisitedConfig.imageDataSource;
+    [topSites addObject:item];
+  }
+  return topSites;
 }
 
 /// Sort and return children of a speed dial folder
@@ -527,9 +546,9 @@ using l10n_util::GetNSString;
 }
 
 - (void)refreshContents {
-  if (self.isFirstLoad || self.runningExtensiveChanges)
+  if (self.runningExtensiveChanges)
     return;
-  [self.consumer refreshContents];
+  [self computeSpeedDialFolders];
 }
 
 - (BOOL)showFrequentlyVisited {
@@ -542,6 +561,68 @@ using l10n_util::GetNSString;
   if (!_showSpeedDials)
     return YES;
   return [_showSpeedDials value];
+}
+
+/// Returns the intended selected index for toolbar items
+/// depending on user pref and current toolbar items count.
+- (NSInteger)selectedMenuItemIndex {
+
+  if (_runningExtensiveChanges) {
+    return [self indexForLastVisitedGroup];
+  }
+
+  // Retrieve the user's preference for the start page opening item.
+  VivaldiStartPageStartItemType openWith =
+      [VivaldiStartPagePrefs getReopenStartPageWithItem];
+
+  NSInteger index = 0; // Default index
+
+  switch (openWith) {
+    // Case when the user prefers to open with the first group or
+    // default preference.
+    case VivaldiStartPageStartItemTypeFirstGroup:
+    default: {
+      // If "Frequently Visited" is not shown, select the first
+      // menu item (index 0).
+      if (!self.showFrequentlyVisited) {
+        index = 0;
+      } else {
+        // If there are items in toolbar,
+        // select the second menu item (index 1); otherwise, select the first.
+        index = self.toolbarItems.count > 0 ? 1 : 0;
+      }
+      break;
+    }
+
+    // Case when the user prefers to open with "Top Sites".
+    case VivaldiStartPageStartItemTypeTopSites:
+      // Always select the first menu item (index 0).
+      index = 0;
+      break;
+
+    // Case when the user prefers to open with the last visited group.
+    case VivaldiStartPageStartItemTypeLastVisited: {
+      index = [self indexForLastVisitedGroup];
+      break;
+    }
+  }
+
+  // Safety Check: Ensure that the index is within
+  // the bounds of speedDialMenuItems.
+  if (self.toolbarItems.count == 0) {
+    // No menu items are available;
+    // return 0 to indicate no valid selection.
+    return 0;
+  } else if (index >= (NSInteger)self.toolbarItems.count) {
+    // Adjust the index to the last valid index if it's out of bounds.
+    index = self.toolbarItems.count - 1;
+  }
+  return index;
+}
+
+/// Returns the selected item index for last visiter group
+- (NSUInteger)indexForLastVisitedGroup {
+  return [VivaldiStartPagePrefs getStartPageLastVisitedGroupIndex];
 }
 
 #pragma mark - BooleanObserver
@@ -579,25 +660,53 @@ using l10n_util::GetNSString;
 }
 
 - (void)didChangeNode:(const bookmarks::BookmarkNode*)bookmarkNode {
-  [self.consumer refreshNode:bookmarkNode];
+  // If the node is a group reload the toolbar beceause it can be
+  // that a Group is renamed. Otherwise, refresh the node.
+  if (bookmarkNode->is_folder() && GetSpeeddial(bookmarkNode)) {
+    [self computeTopToolbarItems];
+  } else {
+    [self.consumer refreshNode:bookmarkNode];
+  }
 }
 
 - (void)didChangeChildrenForNode:(const bookmarks::BookmarkNode*)bookmarkNode {
-  [self refreshContents];
+  if (_runningExtensiveChanges)
+    return;
+  // This method gets called when any item added/removed/or reordered.
+  // TODO: @prio: When reordered by user we should skip observing this method.
+  if (bookmarkNode->is_folder()) {
+    [self reloadChildrenForBookmarkNode:bookmarkNode];
+  }
 }
 
 - (void)didMoveNode:(const bookmarks::BookmarkNode*)bookmarkNode
          fromParent:(const bookmarks::BookmarkNode*)oldParent
            toParent:(const bookmarks::BookmarkNode*)newParent {
-  [self refreshContents];
+  // No need to do a full refresh when movement happened within same folder.
+  if (oldParent == newParent) {
+    return;
+  }
+
+  // If the node that is moved is a group reload the toolbar beceause it can be
+  // that a Group is removed. Otherwise, refresh the old and new parent.
+  if (bookmarkNode->is_folder() && GetSpeeddial(bookmarkNode)) {
+    [self computeTopToolbarItems];
+  } else {
+    [self reloadChildrenForBookmarkNode:oldParent];
+    [self reloadChildrenForBookmarkNode:newParent];
+  }
 }
 
 - (void)didDeleteNode:(const bookmarks::BookmarkNode*)node
            fromFolder:(const bookmarks::BookmarkNode*)folder {
-  [self refreshContents];
+  // No op since this is only called for us when items removed from trash
+  // which has no UX with StartPage.
 }
 
 - (void)didChangeFaviconForNode:(const bookmarks::BookmarkNode*)bookmarkNode {
+  if (_runningExtensiveChanges)
+    return;
+
   // Only urls have favicons.
   if (!bookmarkNode->is_url())
     return;
@@ -614,6 +723,9 @@ using l10n_util::GetNSString;
 }
 
 - (void)bookmarkMetaInfoChanged:(const bookmarks::BookmarkNode*)bookmarkNode {
+  if (_runningExtensiveChanges)
+    return;
+
   if (bookmarkNode->is_folder()) {
     [self refreshContents];
   }
@@ -625,14 +737,14 @@ using l10n_util::GetNSString;
 
 - (void)extensiveBookmarkChangesEnded {
   _runningExtensiveChanges = NO;
-  [self refreshContents];
+  [self computeTopToolbarItems];
 }
 
 #pragma mark - VivaldiMostVisitedSitesConsumer
 - (void)setMostVisitedTilesConfig:(MostVisitedTilesConfig*)config {
   _mostVisitedConfig = config;
-  self.isTopSitesResultsAvailable = YES;
-  [self refreshContents];
+  [self.consumer topSitesModelDidLoad];
+  [self reloadChildrenForTopSite];
 }
 
 @end

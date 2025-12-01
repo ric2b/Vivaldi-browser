@@ -170,6 +170,7 @@
 <translation id="3838085852053358637">Utvidelsen kunne ikke lastes inn</translation>
 <translation id="383891835335927981">Ingen nettsteder er zoomet inn eller ut</translation>
 <translation id="385051799172605136">Tilbake</translation>
+<translation id="3861977424605124250">Vis ved oppstart</translation>
 <translation id="3867944738977021751">Sertifikatfelter</translation>
 <translation id="3905761538810670789">Reparer app</translation>
 <translation id="3908501907586732282">Aktiver utvidelse</translation>
@@ -278,6 +279,7 @@
 <translation id="5582839680698949063">Hovedmeny</translation>
 <translation id="5614553682702429503">Lagre passord?</translation>
 <translation id="5623842676595125836">Logg</translation>
+<translation id="5624959475330585145">Spør før bruk av usikre tilkoblinger</translation>
 <translation id="5638309510554459422">Finn utvidelser og temaer i <ph name="BEGIN_LINK" />Chrome Nettmarked<ph name="END_LINK" /></translation>
 <translation id="5677928146339483299">Blokkert</translation>
 <translation id="5707185214361380026">Kunne ikke laste inn utvidelse fra:</translation>
@@ -467,6 +469,7 @@ Ta godt vare på nøkkelfilen. Du vil trenge den for å lage nye versjoner av ut
 <translation id="9218430445555521422">Sett som standard</translation>
 <translation id="93766956588638423">Reparer utvidelse</translation>
 <translation id="961012016278832836">Microsoft Edge (gammel)</translation>
+<translation id="961856697154696964">Slett surfedata</translation>
 <translation id="994289308992179865">&amp;Gjenta</translation>
 <translation id="998747458861718449">I&amp;nspiser</translation>
 </translationbundle>

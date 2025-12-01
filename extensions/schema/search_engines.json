@@ -358,10 +358,15 @@
         }
       },
       {
-        "name": "markSwitchPromptAsSeen",
+        "name": "acknowledgeSwitchPrompt",
         "type": "function",
-        "description": "Mark the current switch search engine prompt as seen.",
-        "parameters": []
+        "description": "Acknowledge swtich prompt - depending on value of seenDialog parameter, either mark it as seen, or ignore current version for now.",
+        "parameters": [
+          {
+            "name": "seenDialog",
+            "type": "boolean"
+          }
+        ]
       }
     ],
     "events": [

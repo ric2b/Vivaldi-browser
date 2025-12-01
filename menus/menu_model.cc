@@ -104,10 +104,24 @@ void Menu_Model::LoadFinished(std::unique_ptr<MenuLoadDetails> details) {
       if (index != -1) {
         root_.Remove(index);
       }
+      // For a reset operation we want to keep knowledge about processed expired
+      // entries to prevent unnecessary tests during the next regular upgrade.
+      // Note: This does not always work. If we do a full reset of the context
+      // menu file before it has been read (It is possible to open Settings with
+      // a shortcut. We load and fill the menu model not until the first time we
+      // show a context menu). We then loose the information leading to a bit
+      // longer menu upgrade time then next time that takes place.
+      std::vector<std::string> expired;
+      if (control_) {
+        expired = control_->expired;
+      }
       std::unique_ptr<Menu_Node> mainmenu_node(details->release_mainmenu_node());
       mainmenu_node_ = mainmenu_node.get();
       root_.Add(std::move(mainmenu_node));
       control_ = details->release_control();
+      if (control_->expired.size() == 0) {
+        control_->expired = expired;
+      }
       Save();
     } else if (details->mode() == MenuLoadDetails::kResetByName) {
       // Reset named menu entry. Works even if old is missing. A menu is in this

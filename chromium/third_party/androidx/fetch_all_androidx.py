@@ -6,10 +6,10 @@
 """A script to generate build.gradle from template and run fetch_all.py
 
 More specifically, to generate build.gradle:
-  - It downloads the BUILD_INFO file for the latest androidx snapshot from
-    https://androidx.dev/snapshots/builds
+  - It downloads the index page for the latest androidx snapshot from
+    https://androidx.dev/snapshots/latest/artifacts
   - It replaces {{androidx_repository_url}} with the URL for the latest snapshot
-  - For each dependency, it looks up the version in the BUILD_INFO file and
+  - For each dependency, it looks up the version in the index page's HTML and
     substitutes the version into {{androidx_dependency_version}}.
 """
 
@@ -22,6 +22,7 @@ import pathlib
 import re
 import shutil
 import stat
+import sys
 import subprocess
 import tempfile
 import urllib
@@ -29,24 +30,35 @@ from urllib import request
 
 _ANDROIDX_PATH = os.path.normpath(os.path.join(__file__, '..'))
 _CIPD_PATH = os.path.join(_ANDROIDX_PATH, 'cipd')
+_SRC_PATH = os.path.normpath(os.path.join(_ANDROIDX_PATH, '..', '..'))
+
+sys.path.insert(1, os.path.join(_SRC_PATH, 'third_party', 'depot_tools'))
+import gclient_eval
 
 _FETCH_ALL_PATH = os.path.normpath(
     os.path.join(_ANDROIDX_PATH, '..', 'android_deps', 'fetch_all.py'))
 
-# URL to BUILD_INFO in latest androidx snapshot.
-_ANDROIDX_LATEST_SNAPSHOT_BUILD_INFO_URL = 'https://androidx.dev/snapshots/latest/artifacts/BUILD_INFO'
+# URL to artifacts in latest androidx snapshot.
+_ANDROIDX_LATEST_SNAPSHOT_ARTIFACTS_URL = 'https://androidx.dev/snapshots/latest/artifacts'
+# URL to artifacts in a specific androidx snapshot.
+_ANDROIDX_VERSIONED_ARTIFACTS_URL = 'https://androidx.dev/snapshots/builds/{{version}}/artifacts'
+
+# Path to package listed in //DEPS
+_DEPS_PACKAGE = 'src/third_party/androidx/cipd'
+# CIPD package name
+_CIPD_PACKAGE = 'chromium/third_party/androidx'
 
 # Snapshot repository URL with {{version}} placeholder.
 _SNAPSHOT_REPOSITORY_URL = 'https://androidx.dev/snapshots/builds/{{version}}/artifacts/repository'
 
-# When androidx roller is breaking, and a fix is not immenent, use this to pin a
+# When androidx roller is breaking, and a fix is not imminent, use this to pin a
 # broken library to an old known-working version.
 # * The first element of each tuple is the path to the artifact of the latest
 #   version of the library. It could change if the version is rev'ed in a new
 #   snapshot.
 # * The second element is a URL to replace the file with. Find the URL for older
-#   versions of libraries by looking in the BUILD_INFO for the older version
-#   (e.g.: https://androidx.dev/snapshots/builds/8545498/artifacts/BUILD_INFO)
+#   versions of libraries by looking through the artifacts for the older version
+#   (e.g.: https://androidx.dev/snapshots/builds/8545498/artifacts)
 _OVERRIDES = [
     # Example:
     #('androidx_core_core/core-1.9.0-SNAPSHOT.aar',
@@ -72,14 +84,14 @@ def _parse_dir_list(dir_list):
             continue
         dir_components = stripped_dir.split('/')
         # Expected format:
-        # "repository/androidx/library_group/library_name/library_version/pom_or_jar"
-        if len(dir_components) < 6:
+        # "repository/androidx/library_group/library_name/library_version"
+        if len(dir_components) < 5:
             continue
-        dependency_package = 'androidx.' + '.'.join(dir_components[2:-3])
+        dependency_package = 'androidx.' + '.'.join(dir_components[2:-2])
         dependency_module = '{}:{}'.format(dependency_package,
-                                           dir_components[-3])
+                                           dir_components[-2])
         if dependency_module not in dependency_version_map:
-            dependency_version_map[dependency_module] = dir_components[-2]
+            dependency_version_map[dependency_module] = dir_components[-1]
     return dependency_version_map
 
 
@@ -92,39 +104,90 @@ def _build_dir():
         shutil.rmtree(dirname)
 
 
-def _download_and_parse_build_info():
-    """Downloads and parses BUILD_INFO file."""
+def _get_latest_androidx_version():
+    androidx_artifacts_response = request.urlopen(
+        _ANDROIDX_LATEST_SNAPSHOT_ARTIFACTS_URL)
+    # Get the versioned url from the redirect destination.
+    androidx_artifacts_url = androidx_artifacts_response.url
+    androidx_artifacts_response.close()
+    logging.info('URL for the latest build info: %s', androidx_artifacts_url)
+    # Strip '/repository' from pattern.
+    resolved_snapshot_repository_url_pattern = (
+        _build_snapshot_repository_url('([0-9]*)').rsplit('/', 1)[0])
+    match = re.match(resolved_snapshot_repository_url_pattern,
+                     androidx_artifacts_url)
+    assert match is not None
+    version = match.group(1)
+    return version
+
+
+def _query_cipd_tags(version):
+    cipd_output = subprocess.check_output(
+        ['cipd', 'describe', _CIPD_PACKAGE, '-version', version],
+        encoding='utf-8')
+    # Output looks like:
+    # Package:       chromium/third_party/androidx
+    # Instance ID:   gUjEawxv5mQO8yfbuC8W-rx4V3zYE-4LTWggXpZHI4sC
+    # Registered by: user:chromium-cipd-builder@chops-service-accounts.iam.gserviceaccount.com
+    # Registered at: 2025-01-06 17:54:48.034135 +0000 UTC
+    # Refs:
+    #   latest
+    # Tags:
+    #   details0:version-cr-012873390
+    #   version:cr-012873390
+    lines = cipd_output.split('\n')
+    tags = {}
+    parsing_tags = False
+    for line in lines:
+        if not line.strip():
+            continue
+        if line.startswith('Tags:'):
+            parsing_tags = True
+            continue
+        if parsing_tags:
+            tag, value = line.strip().split(':', 1)
+            tags[tag] = value
+    return tags
+
+
+def _get_current_cipd_instance():
+    with open(os.path.join(_SRC_PATH, 'DEPS'), 'rt') as f:
+        gclient_dict = gclient_eval.Exec(f.read())
+        return gclient_eval.GetCIPD(gclient_dict, _DEPS_PACKAGE, _CIPD_PACKAGE)
+
+
+def _get_current_androidx_version():
+    cipd_instance = _get_current_cipd_instance()
+    cipd_tags = _query_cipd_tags(cipd_instance)
+    version_string = cipd_tags['version']
+    version = version_string[len('cr-0'):]
+    return version
+
+
+def _download_and_parse_artifacts(version):
+    """Downloads and parses the artifacts HTML."""
     with _build_dir() as build_dir:
-        androidx_build_info_response = request.urlopen(
-            _ANDROIDX_LATEST_SNAPSHOT_BUILD_INFO_URL)
-        androidx_build_info_url = androidx_build_info_response.geturl()
-        logging.info('URL for the latest build info: %s',
-                     androidx_build_info_url)
-        androidx_build_info_path = os.path.join(build_dir, 'BUILD_INFO')
-        with open(androidx_build_info_path, 'w') as f:
-            f.write(androidx_build_info_response.read().decode('utf-8'))
+        androidx_artifacts_url = _ANDROIDX_VERSIONED_ARTIFACTS_URL.replace(
+            '{{version}}', version)
+        androidx_artifacts_response = request.urlopen(androidx_artifacts_url)
 
-        # Strip '/repository' from pattern.
-        resolved_snapshot_repository_url_pattern = (
-            _build_snapshot_repository_url('([0-9]*)').rsplit('/', 1)[0])
+        androidx_artifacts_path = os.path.join(build_dir, 'artifacts.html')
+        artifacts_contents = androidx_artifacts_response.read().decode('utf-8')
 
-        version = re.match(resolved_snapshot_repository_url_pattern,
-                           androidx_build_info_url).group(1)
+        # Not sure why we wrote BUILD_INFO to disk before, for debugging bots?
+        with open(androidx_artifacts_path, 'w') as f:
+            f.write(artifacts_contents)
 
-        with open(androidx_build_info_path, 'r') as f:
-            build_info_dict = json.loads(f.read())
-        dir_list = build_info_dict['target']['dir_list']
-
-        return dir_list, version
+        matches = re.findall(r'<h5>(.*?)</h5>', artifacts_contents)
+        return matches
 
 
 def _create_local_dir_list(repo_path):
     repo_path = repo_path.rstrip('/')
     prefix_len = len(repo_path) + 1
     ret = []
-    for dirpath, _, filenames in os.walk(repo_path):
-        for name in filenames:
-            ret.append(os.path.join('repository', dirpath[prefix_len:], name))
+    for dirpath, _, _ in os.walk(repo_path):
+        ret.append(os.path.join('repository', dirpath[prefix_len:]))
     return ret
 
 
@@ -224,15 +287,16 @@ def main():
     parser.add_argument('--local-repo',
                         help='Path to a locally androidx maven repo to use '
                         'instead of fetching the latest.')
+    parser.add_argument(
+        '--no-roll',
+        action='store_true',
+        help='If passed then we will not try rolling the '
+        'latest androidx but use the currently rolled version.')
     args = parser.parse_args()
 
     logging.basicConfig(
         level=logging.WARNING - 10 * args.verbose_count,
         format='%(levelname).1s %(relativeCreated)6d %(message)s')
-
-    if os.path.exists(_CIPD_PATH):
-        shutil.rmtree(_CIPD_PATH)
-    os.mkdir(_CIPD_PATH)
 
     if args.local_repo:
         version = 'local'
@@ -240,11 +304,22 @@ def main():
         androidx_snapshot_repository_url = ('file://' +
                                             os.path.abspath(args.local_repo))
     else:
-        dir_list, version = _download_and_parse_build_info()
+        if args.no_roll:
+            version = _get_current_androidx_version()
+            logging.info('Resolved current androidx version to %s', version)
+        else:
+            version = _get_latest_androidx_version()
+            logging.info('Resolved latest androidx version to %s', version)
+
+        dir_list = _download_and_parse_artifacts(version)
         androidx_snapshot_repository_url = _build_snapshot_repository_url(
             version)
         # Prepend '0' to version to avoid conflicts with previous version format.
         version = 'cr-0' + version
+
+    if os.path.exists(_CIPD_PATH):
+        shutil.rmtree(_CIPD_PATH)
+    os.mkdir(_CIPD_PATH)
 
     dependency_version_map = _parse_dir_list(dir_list)
     _process_build_gradle(
@@ -263,7 +338,10 @@ def main():
     if not args.local_repo:
         for subpath, url in _OVERRIDES:
             fetch_all_cmd += ['--override-artifact', f'{subpath}:{url}']
-    subprocess.run(fetch_all_cmd, check=True)
+    env = os.environ.copy()
+    # Silence the --local warning in fetch_all.py that is not applicable here.
+    env['SWARMING_TASK_ID'] = '1'
+    subprocess.run(fetch_all_cmd, check=True, env=env)
 
     version_txt_path = os.path.join(_CIPD_PATH, 'VERSION.txt')
     with open(version_txt_path, 'w') as f:

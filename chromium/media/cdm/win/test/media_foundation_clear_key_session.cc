@@ -12,11 +12,13 @@
 #include <mfapi.h>
 #include <mferror.h>
 #include <wrl/client.h>
+
 #include <memory>
 #include <string>
 
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
+#include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
 #include "media/base/cdm_callback_promise.h"
 #include "media/base/win/mf_helpers.h"
@@ -281,8 +283,9 @@ STDMETHODIMP MediaFoundationClearKeySession::GetKeyStatuses(
       return E_OUTOFMEMORY;
     }
 
+    // Crash on special crash key ID.
     if (keys_info_[i]->key_id == kCrashKeyId) {
-      CHECK(false) << "Crash on special crash key ID.";
+      base::ImmediateCrash();
     }
 
     key_status_array[i].eMediaKeyStatus = ToMFKeyStatus(keys_info_[i]->status);

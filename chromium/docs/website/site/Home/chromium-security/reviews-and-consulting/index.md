@@ -25,7 +25,7 @@ stay engaged with the rest of Chromium engineering.
 
 Third party code is a hot spot for security vulnerabilities, so make sure to
 [give security a head's up by getting a code
-review](http://www.chromium.org/developers/adding-3rd-party-libraries#TOC-Get-a-Review).
+review](/developers/adding-3rd-party-libraries#TOC-Get-a-Review).
 
 **One-off questions**
 

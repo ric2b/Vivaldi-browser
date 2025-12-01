@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
 
+#include <algorithm>
 #include <iterator>
 #include <memory>
 #include <optional>
@@ -32,7 +33,6 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/one_shot_event.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
@@ -69,8 +69,6 @@
 #include "chrome/browser/ash/system_web_apps/system_web_app_background_task.h"
 #include "chrome/browser/ash/system_web_apps/system_web_app_icon_checker.h"
 #include "chrome/browser/ash/system_web_apps/system_web_app_manager_factory.h"
-#include "chrome/browser/ash/system_web_apps/types/system_web_app_background_task_info.h"
-#include "chrome/browser/ash/system_web_apps/types/system_web_app_delegate.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profiles_state.h"
@@ -78,6 +76,7 @@
 #include "chrome/browser/web_applications/manifest_update_manager.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/policy/web_app_policy_manager.h"
+#include "chrome/browser/web_applications/proto/web_app_install_state.pb.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
@@ -85,6 +84,8 @@
 #include "chrome/browser/web_applications/web_app_system_web_app_delegate_map_utils.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/common/chrome_features.h"
+#include "chromeos/ash/experiences/system_web_apps/types/system_web_app_background_task_info.h"
+#include "chromeos/ash/experiences/system_web_apps/types/system_web_app_delegate.h"
 #include "components/prefs/pref_service.h"
 #include "components/version_info/version_info.h"
 #include "components/webapps/browser/install_result_code.h"
@@ -101,11 +102,6 @@
 #endif  // !defined(OFFICIAL_BUILD)
 
 namespace ash {
-
-const constexpr char kIconHealthMetricName[] =
-    "Webapp.SystemApps.IconsAreHealthyInSession";
-const constexpr char kIconsFixedOnReinstallMetricName[] =
-    "Webapp.SystemApps.IconsFixedOnReinstall";
 
 namespace {
 
@@ -212,17 +208,13 @@ web_app::ExternalInstallOptions CreateInstallOptionsForSystemApp(
       delegate.ShouldHandleFileOpenIntents();
 
   const auto& search_terms = delegate.GetAdditionalSearchTerms();
-  base::ranges::transform(
+  std::ranges::transform(
       search_terms, std::back_inserter(install_options.additional_search_terms),
       &l10n_util::GetStringUTF8);
   return install_options;
 }
 
 }  // namespace
-
-// static
-const char SystemWebAppManager::kInstallResultHistogramName[];
-const char SystemWebAppManager::kInstallDurationHistogramName[];
 
 SystemWebAppManager::SystemWebAppManager(Profile* profile)
     : profile_(profile),
@@ -555,7 +547,8 @@ std::optional<SystemWebAppType> SystemWebAppManager::GetSystemAppForURL(
   }
 
   std::optional<webapps::AppId> app_id =
-      provider_->registrar_unsafe().FindAppWithUrlInScope(url);
+      provider_->registrar_unsafe().FindBestAppWithUrlInScope(
+          url, web_app::WebAppFilter::InstalledInChrome());
   if (!app_id.has_value()) {
     return std::nullopt;
   }
@@ -650,7 +643,7 @@ void SystemWebAppManager::RecordSystemWebAppInstallDuration(
   DCHECK_GE(install_duration.InMilliseconds(), 0);
 
   if (!shutting_down_) {
-    base::UmaHistogramMediumTimes(kInstallDurationHistogramName,
+    base::UmaHistogramMediumTimes(kFreshInstallDurationHistogramName,
                                   install_duration);
   }
 }
@@ -664,7 +657,7 @@ void SystemWebAppManager::RecordSystemWebAppInstallResults(
   // the install success rate.
   std::map<GURL, web_app::ExternallyManagedAppManager::InstallResult>
       results_to_report;
-  base::ranges::copy_if(
+  std::ranges::copy_if(
       install_results,
       std::inserter(results_to_report, results_to_report.end()),
       [](const auto& url_and_result) {
@@ -778,17 +771,17 @@ void SystemWebAppManager::OnIconCheckResult(
     case SystemWebAppIconChecker::IconState::kNoAppInstalled:
       break;
     case SystemWebAppIconChecker::IconState::kBroken:
-      base::UmaHistogramBoolean(kIconHealthMetricName, false);
+      base::UmaHistogramBoolean(kIconsAreHealthyInSessionHistorgramName, false);
       if (PreviousSessionHadBrokenIcons()) {
-        base::UmaHistogramBoolean(kIconsFixedOnReinstallMetricName, false);
+        base::UmaHistogramBoolean(kIconsFixedOnReinstallHistogramName, false);
       }
       pref_service_->SetBoolean(kSystemWebAppSessionHasBrokenIconsPrefName,
                                 true);
       break;
     case SystemWebAppIconChecker::IconState::kOk:
-      base::UmaHistogramBoolean(kIconHealthMetricName, true);
+      base::UmaHistogramBoolean(kIconsAreHealthyInSessionHistorgramName, true);
       if (PreviousSessionHadBrokenIcons()) {
-        base::UmaHistogramBoolean(kIconsFixedOnReinstallMetricName, true);
+        base::UmaHistogramBoolean(kIconsFixedOnReinstallHistogramName, true);
       }
       pref_service_->ClearPref(kSystemWebAppSessionHasBrokenIconsPrefName);
       pref_service_->ClearPref(prefs::kSystemWebAppInstallFailureCount);

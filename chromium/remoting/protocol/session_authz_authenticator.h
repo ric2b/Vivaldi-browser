@@ -60,12 +60,18 @@ class SessionAuthzAuthenticator : public Authenticator {
   // will be an empty string.
   const std::string& session_id() const { return session_id_; }
 
+  // The host token returned by the SessionAuthz server. This is only set if
+  // the GenerateHostToken API call has completed and succeeded. Otherwise, this
+  // will be an empty string.
+  const std::string& host_token() const { return host_token_; }
+
   // Authenticator implementation.
   CredentialsType credentials_type() const override;
   const Authenticator& implementing_authenticator() const override;
   State state() const override;
   bool started() const override;
   RejectionReason rejection_reason() const override;
+  RejectionDetails rejection_details() const override;
   void ProcessMessage(const jingle_xmpp::XmlElement* message,
                       base::OnceClosure resume_callback) override;
   std::unique_ptr<jingle_xmpp::XmlElement> GetNextMessage() override;
@@ -77,6 +83,7 @@ class SessionAuthzAuthenticator : public Authenticator {
   void SetReauthorizerForTesting(
       std::unique_ptr<SessionAuthzReauthorizer> reauthorizer);
   void SetSessionIdForTesting(std::string_view session_id);
+  void SetHostTokenForTesting(std::string_view host_token);
 
  private:
   enum class SessionAuthzState {
@@ -142,6 +149,8 @@ class SessionAuthzAuthenticator : public Authenticator {
   // SessionAuthz. If |session_authz_state_| is NOT `ERROR`, the actual
   // rejection reason is delegated to `underlying_->rejection_reason()`.
   RejectionReason session_authz_rejection_reason_;
+
+  RejectionDetails rejection_details_;
 
   std::string session_id_;
   std::string host_token_;

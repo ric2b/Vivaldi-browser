@@ -11,22 +11,25 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
 #include "base/command_line.h"
 #include "base/i18n/number_formatting.h"
 #include "base/i18n/rtl.h"
+#include "base/i18n/string_search.h"
 #include "base/i18n/time_formatting.h"
 #include "base/process/process_handle.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/task_manager/sampling/task_group.h"
 #include "chrome/browser/task_manager/task_manager_interface.h"
+#include "chrome/browser/task_manager/task_manager_observer.h"
 #include "chrome/browser/ui/task_manager/task_manager_columns.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
@@ -84,37 +87,87 @@ bool IsSharedByGroup(int column_id) {
 // Used to sort various column values.
 template <class T>
 int ValueCompare(T value1, T value2) {
-  if (value1 == value2)
+  if (value1 == value2) {
     return 0;
+  }
   return value1 < value2 ? -1 : 1;
 }
 
 // This forces NaN values to the bottom of the table.
 template <>
 int ValueCompare(double value1, double value2) {
-  if (std::isnan(value1))
+  if (std::isnan(value1)) {
     return std::isnan(value2) ? 0 : -1;
-  if (std::isnan(value2))
+  }
+  if (std::isnan(value2)) {
     return 1;
-  if (value1 == value2)
+  }
+  if (value1 == value2) {
     return 0;
+  }
   return value1 < value2 ? -1 : 1;
 }
 
 // This is used to sort process priority. We want the backgrounded process (with
 // a true value) to come first.
 int BooleanCompare(bool value1, bool value2) {
-  if (value1 == value2)
+  if (value1 == value2) {
     return 0;
+  }
 
   return value1 ? -1 : 1;
 }
 
 // Used when one or both of the results to compare are unavailable.
 int OrderUnavailableValue(bool v1, bool v2) {
-  if (!v1 && !v2)
+  if (!v1 && !v2) {
     return 0;
+  }
   return v1 ? 1 : -1;
+}
+
+bool ShouldKeepTaskForTabsAndExtensions(Task::Type type,
+                                        Task::SubType subtype) {
+  switch (type) {
+    case Task::RENDERER:
+      return subtype != Task::SubType::kSpareRenderer &&
+             subtype != Task::SubType::kUnknownRenderer;
+    case Task::EXTENSION:
+    case Task::GUEST:
+    case Task::PLUGIN:
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool ShouldKeepTaskForSystem(Task::Type type, Task::SubType subtype) {
+  // These major types are categorized as "System" processes, because they
+  // have some special interaction with Chromium internals.
+  switch (type) {
+    case Task::BROWSER:
+    case Task::GPU:
+    case Task::ARC:
+    case Task::CROSTINI:
+    case Task::PLUGIN_VM:
+    case Task::ZYGOTE:
+    case Task::UTILITY:
+    case Task::PLUGIN:
+    case Task::SANDBOX_HELPER:
+      return true;
+    default:
+      break;
+  }
+
+  // The subtypes are normal renderers, however killing these is not beneficial
+  // to the user, so they are categorized under System.
+  switch (subtype) {
+    case Task::SubType::kSpareRenderer:
+    case Task::SubType::kUnknownRenderer:
+      return true;
+    default:
+      return false;
+  }
 }
 
 }  // namespace
@@ -142,22 +195,25 @@ class TaskManagerValuesStringifier {
   ~TaskManagerValuesStringifier() = default;
 
   std::u16string GetCpuUsageText(double cpu_usage) {
-    if (std::isnan(cpu_usage))
+    if (std::isnan(cpu_usage)) {
       return n_a_string_;
-    return base::UTF8ToUTF16(base::StringPrintf(kCpuTextFormatString,
-                                                cpu_usage));
+    }
+    return base::UTF8ToUTF16(
+        base::StringPrintf(kCpuTextFormatString, cpu_usage));
   }
 
   std::u16string GetStartTimeText(base::Time start_time) {
-    if (start_time.is_null())
+    if (start_time.is_null()) {
       return n_a_string_;
+    }
 
     return base::TimeFormatShortDateAndTime(start_time);
   }
 
   std::u16string GetCpuTimeText(base::TimeDelta cpu_time) {
-    if (cpu_time.is_zero())
+    if (cpu_time.is_zero()) {
       return n_a_string_;
+    }
 
     std::u16string duration;
     return base::TimeDurationFormatWithSeconds(
@@ -167,8 +223,9 @@ class TaskManagerValuesStringifier {
   }
 
   std::u16string GetMemoryUsageText(int64_t memory_usage, bool has_duplicates) {
-    if (memory_usage == -1)
+    if (memory_usage == -1) {
       return n_a_string_;
+    }
 
 #if BUILDFLAG(IS_MAC)
     // System expectation is to show "100 kB", "200 MB", etc.
@@ -179,26 +236,29 @@ class TaskManagerValuesStringifier {
     std::u16string memory_text = base::FormatNumber(memory_usage / 1024);
     // Adjust number string if necessary.
     base::i18n::AdjustStringForLocaleDirection(&memory_text);
-    memory_text = l10n_util::GetStringFUTF16(IDS_TASK_MANAGER_MEM_CELL_TEXT,
-                                             memory_text);
+    memory_text =
+        l10n_util::GetStringFUTF16(IDS_TASK_MANAGER_MEM_CELL_TEXT, memory_text);
 #endif  // BUILDFLAG(IS_MAC)
 
-    if (has_duplicates)
+    if (has_duplicates) {
       memory_text += asterisk_string_;
+    }
 
     return memory_text;
   }
 
   std::u16string GetIdleWakeupsText(int idle_wakeups) {
-    if (idle_wakeups == -1)
+    if (idle_wakeups == -1) {
       return n_a_string_;
+    }
 
     return base::FormatNumber(idle_wakeups);
   }
 
   std::u16string GetHardFaultsText(int hard_faults) {
-    if (hard_faults == -1)
+    if (hard_faults == -1) {
       return n_a_string_;
+    }
 
     return base::FormatNumber(hard_faults);
   }
@@ -206,11 +266,13 @@ class TaskManagerValuesStringifier {
   std::u16string GetNaClPortText(int nacl_port) {
     // Only called if NaCl debug stub ports are enabled.
 
-    if (nacl_port == nacl::kGdbDebugStubPortUnused)
+    if (nacl_port == nacl::kGdbDebugStubPortUnused) {
       return n_a_string_;
+    }
 
-    if (nacl_port == nacl::kGdbDebugStubPortUnknown)
+    if (nacl_port == nacl::kGdbDebugStubPortUnknown) {
       return unknown_string_;
+    }
 
     return base::NumberToString16(nacl_port);
   }
@@ -222,11 +284,13 @@ class TaskManagerValuesStringifier {
   }
 
   std::u16string GetNetworkUsageText(int64_t network_usage) {
-    if (network_usage == -1)
+    if (network_usage == -1) {
       return n_a_string_;
+    }
 
-    if (network_usage == 0)
+    if (network_usage == 0) {
       return zero_string_;
+    }
 
     std::u16string net_byte = ui::FormatSpeed(network_usage);
     // Force number string to have LTR directionality.
@@ -250,8 +314,9 @@ class TaskManagerValuesStringifier {
   }
 
   std::u16string GetKeepaliveCountText(int keepalive_count) const {
-    if (keepalive_count < 0)
+    if (keepalive_count < 0) {
       return n_a_string();
+    }
     return base::NumberToString16(keepalive_count);
   }
 
@@ -299,20 +364,18 @@ class TaskManagerValuesStringifier {
 ////////////////////////////////////////////////////////////////////////////////
 
 TableSortDescriptor::TableSortDescriptor()
-    : sorted_column_id(-1),
-      is_ascending(false) {
-}
+    : sorted_column_id(-1), is_ascending(false) {}
 
 TableSortDescriptor::TableSortDescriptor(int col_id, bool ascending)
-    : sorted_column_id(col_id),
-      is_ascending(ascending) {
-}
+    : sorted_column_id(col_id), is_ascending(ascending) {}
 
 ////////////////////////////////////////////////////////////////////////////////
 // TaskManagerTableModel:
 ////////////////////////////////////////////////////////////////////////////////
 
-TaskManagerTableModel::TaskManagerTableModel(TableViewDelegate* delegate)
+TaskManagerTableModel::TaskManagerTableModel(
+    TableViewDelegate* delegate,
+    DisplayCategory initial_display_category)
     : TaskManagerObserver(base::Milliseconds(kRefreshTimeMS),
                           REFRESH_TYPE_NONE),
       table_view_delegate_(delegate),
@@ -321,10 +384,11 @@ TaskManagerTableModel::TaskManagerTableModel(TableViewDelegate* delegate)
 #if BUILDFLAG(ENABLE_NACL)
       is_nacl_debugging_flag_enabled_(
           base::CommandLine::ForCurrentProcess()->HasSwitch(
-              switches::kEnableNaClDebug)) {
+              switches::kEnableNaClDebug)),
 #else
-      is_nacl_debugging_flag_enabled_(false) {
+      is_nacl_debugging_flag_enabled_(false),
 #endif  // BUILDFLAG(ENABLE_NACL)
+      display_category_(initial_display_category) {
   DCHECK(delegate);
   StartUpdating();
 }
@@ -338,8 +402,9 @@ size_t TaskManagerTableModel::RowCount() {
 }
 
 std::u16string TaskManagerTableModel::GetText(size_t row, int column) {
-  if (IsSharedByGroup(column) && !IsTaskFirstInGroup(row))
+  if (IsSharedByGroup(column) && !IsTaskFirstInGroup(row)) {
     return std::u16string();
+  }
 
   switch (column) {
     case IDS_TASK_MANAGER_TASK_COLUMN:
@@ -405,22 +470,25 @@ std::u16string TaskManagerTableModel::GetText(size_t row, int column) {
 
     case IDS_TASK_MANAGER_WEBCORE_IMAGE_CACHE_COLUMN: {
       blink::WebCacheResourceTypeStats stats;
-      if (observed_task_manager()->GetWebCacheStats(tasks_[row], &stats))
+      if (observed_task_manager()->GetWebCacheStats(tasks_[row], &stats)) {
         return stringifier_->GetWebCacheStatText(stats.images);
+      }
       return stringifier_->n_a_string();
     }
 
     case IDS_TASK_MANAGER_WEBCORE_SCRIPTS_CACHE_COLUMN: {
       blink::WebCacheResourceTypeStats stats;
-      if (observed_task_manager()->GetWebCacheStats(tasks_[row], &stats))
+      if (observed_task_manager()->GetWebCacheStats(tasks_[row], &stats)) {
         return stringifier_->GetWebCacheStatText(stats.scripts);
+      }
       return stringifier_->n_a_string();
     }
 
     case IDS_TASK_MANAGER_WEBCORE_CSS_CACHE_COLUMN: {
       blink::WebCacheResourceTypeStats stats;
-      if (observed_task_manager()->GetWebCacheStats(tasks_[row], &stats))
+      if (observed_task_manager()->GetWebCacheStats(tasks_[row], &stats)) {
         return stringifier_->GetWebCacheStatText(stats.css_style_sheets);
+      }
       return stringifier_->n_a_string();
     }
 
@@ -438,8 +506,7 @@ std::u16string TaskManagerTableModel::GetText(size_t row, int column) {
 
     case IDS_TASK_MANAGER_JAVASCRIPT_MEMORY_ALLOCATED_COLUMN: {
       int64_t v8_allocated, v8_used;
-      if (observed_task_manager()->GetV8Memory(tasks_[row],
-                                               &v8_allocated,
+      if (observed_task_manager()->GetV8Memory(tasks_[row], &v8_allocated,
                                                &v8_used)) {
         return stringifier_->FormatAllocatedAndUsedMemory(v8_allocated,
                                                           v8_used);
@@ -448,16 +515,17 @@ std::u16string TaskManagerTableModel::GetText(size_t row, int column) {
     }
 
     case IDS_TASK_MANAGER_NACL_DEBUG_STUB_PORT_COLUMN:
-      if (!is_nacl_debugging_flag_enabled_)
+      if (!is_nacl_debugging_flag_enabled_) {
         return stringifier_->disabled_nacl_debugging_string();
+      }
 
       return stringifier_->GetNaClPortText(
           observed_task_manager()->GetNaClDebugStubPort(tasks_[row]));
 
     case IDS_TASK_MANAGER_PROCESS_PRIORITY_COLUMN:
       return observed_task_manager()->IsTaskOnBackgroundedProcess(tasks_[row])
-          ? stringifier_->backgrounded_string()
-          : stringifier_->foregrounded_string();
+                 ? stringifier_->backgrounded_string()
+                 : stringifier_->foregrounded_string();
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
     case IDS_TASK_MANAGER_OPEN_FD_COUNT_COLUMN: {
@@ -482,8 +550,7 @@ ui::ImageModel TaskManagerTableModel::GetIcon(size_t row) {
       observed_task_manager()->GetIcon(tasks_[row]));
 }
 
-void TaskManagerTableModel::SetObserver(
-    ui::TableModelObserver* observer) {
+void TaskManagerTableModel::SetObserver(ui::TableModelObserver* observer) {
   table_model_observer_ = observer;
 }
 
@@ -572,8 +639,9 @@ int TaskManagerTableModel::CompareValues(size_t row1,
           observed_task_manager()->GetWebCacheStats(tasks_[row1], &stats1);
       bool row2_stats_valid =
           observed_task_manager()->GetWebCacheStats(tasks_[row2], &stats2);
-      if (!row1_stats_valid || !row2_stats_valid)
+      if (!row1_stats_valid || !row2_stats_valid) {
         return OrderUnavailableValue(row1_stats_valid, row2_stats_valid);
+      }
 
       switch (column_id) {
         case IDS_TASK_MANAGER_WEBCORE_IMAGE_CACHE_COLUMN:
@@ -590,23 +658,21 @@ int TaskManagerTableModel::CompareValues(size_t row1,
 
     case IDS_TASK_MANAGER_VIDEO_MEMORY_COLUMN: {
       bool has_duplicates;
-      return ValueCompare(
-          observed_task_manager()->GetGpuMemoryUsage(tasks_[row1],
-                                                     &has_duplicates),
-          observed_task_manager()->GetGpuMemoryUsage(tasks_[row2],
-                                                     &has_duplicates));
+      return ValueCompare(observed_task_manager()->GetGpuMemoryUsage(
+                              tasks_[row1], &has_duplicates),
+                          observed_task_manager()->GetGpuMemoryUsage(
+                              tasks_[row2], &has_duplicates));
     }
 
     case IDS_TASK_MANAGER_JAVASCRIPT_MEMORY_ALLOCATED_COLUMN: {
       int64_t allocated1, allocated2, used1, used2;
-      bool row1_valid = observed_task_manager()->GetV8Memory(tasks_[row1],
-                                                             &allocated1,
-                                                             &used1);
-      bool row2_valid = observed_task_manager()->GetV8Memory(tasks_[row2],
-                                                             &allocated2,
-                                                             &used2);
-      if (!row1_valid || !row2_valid)
+      bool row1_valid = observed_task_manager()->GetV8Memory(
+          tasks_[row1], &allocated1, &used1);
+      bool row2_valid = observed_task_manager()->GetV8Memory(
+          tasks_[row2], &allocated2, &used2);
+      if (!row1_valid || !row2_valid) {
         return OrderUnavailableValue(row1_valid, row2_valid);
+      }
 
       return ValueCompare(allocated1, allocated2);
     }
@@ -666,7 +732,19 @@ void TaskManagerTableModel::GetRowsGroupRange(size_t row_index,
   *out_length = limit - i;
 }
 
+void TaskManagerTableModel::FilterTaskList(std::vector<TaskId>& tasks) {
+  std::erase_if(tasks, [this](const TaskId& task_id) {
+    // Remove each node whose root doesn't match the Type criteria.
+    return !ShouldKeepTask(task_id);
+  });
+}
+
 void TaskManagerTableModel::OnTaskAdded(TaskId id) {
+  if (!search_terms_.empty()) {
+    // Update matched process id if task manager is in search mode.
+    UpdateMatchedProcessSetById(id);
+  }
+
   // For the table view scrollbar to behave correctly we must inform it that
   // a new task has been added.
 
@@ -674,35 +752,44 @@ void TaskManagerTableModel::OnTaskAdded(TaskId id) {
   // adding |id| to |tasks_| because we want to keep |tasks_| sorted by proc IDs
   // and then by Task IDs.
   tasks_ = observed_task_manager()->GetTaskIdsList();
+  FilterTaskList(tasks_);
+
+  if (!ShouldKeepTask(id)) {
+    return;
+  }
 
   if (table_model_observer_) {
     std::vector<TaskId>::difference_type index =
-        base::ranges::find(tasks_, id) - tasks_.begin();
+        std::ranges::find(tasks_, id) - tasks_.begin();
     table_model_observer_->OnItemsAdded(index, 1);
   }
 }
 
 void TaskManagerTableModel::OnTaskToBeRemoved(TaskId id) {
-  auto index = base::ranges::find(tasks_, id);
-  if (index == tasks_.end())
+  if (!search_terms_.empty() && !HasMatchInTasksSharingSameProcess(id)) {
+    // Update matched process set if task manager is in search mode.
+    matched_process_set_.erase(observed_task_manager()->GetProcessId(id));
+  }
+
+  if (!ShouldKeepTask(id)) {
     return;
+  }
+
+  auto index = std::ranges::find(tasks_, id);
+  if (index == tasks_.end()) {
+    return;
+  }
   auto removed_index = static_cast<size_t>(index - tasks_.begin());
   tasks_.erase(index);
-  if (table_model_observer_)
+  if (table_model_observer_) {
     table_model_observer_->OnItemsRemoved(removed_index, 1);
-}
-
-void TaskManagerTableModel::OnTasksRefreshed(
-    const TaskIdList& task_ids) {
-  tasks_ = task_ids;
-  OnRefresh();
-}
-
-void TaskManagerTableModel::OnActiveTaskFetched(TaskId id) {
-  if (!active_task_id_.has_value()) {
-    active_task_id_ = id;
-    table_view_delegate_->MaybeHighlightActiveTask();
   }
+}
+
+void TaskManagerTableModel::OnTasksRefreshed(const TaskIdList& task_ids) {
+  tasks_ = task_ids;
+  FilterTaskList(tasks_);
+  OnRefresh();
 }
 
 void TaskManagerTableModel::ActivateTask(size_t row_index) {
@@ -818,19 +905,22 @@ void TaskManagerTableModel::UpdateRefreshTypes(int column_id, bool visibility) {
       NOTREACHED();
   }
 
-  if (needs_refresh)
+  if (needs_refresh) {
     AddRefreshType(type);
-  else
+  } else {
     RemoveRefreshType(type);
+  }
 }
 
 bool TaskManagerTableModel::IsTaskKillable(size_t row_index) const {
   return observed_task_manager()->IsTaskKillable(tasks_[row_index]);
 }
 
-void TaskManagerTableModel::RetrieveSavedColumnsSettingsAndUpdateTable() {
-  if (!g_browser_process->local_state())
+void TaskManagerTableModel::RetrieveSavedColumnsSettingsAndUpdateTable(
+    bool default_sorted_column_to_cpu) {
+  if (!g_browser_process->local_state()) {
     return;
+  }
 
   const base::Value::Dict& dictionary =
       g_browser_process->local_state()->GetDict(
@@ -846,8 +936,9 @@ void TaskManagerTableModel::RetrieveSavedColumnsSettingsAndUpdateTable() {
     const int col_id = kColumns[i].id;
     const std::string col_id_key(GetColumnIdAsString(col_id));
 
-    if (col_id_key.empty())
+    if (col_id_key.empty()) {
       continue;
+    }
 
     bool col_visibility = dictionary.FindBoolByDottedPath(col_id_key)
                               .value_or(kColumns[i].default_visibility);
@@ -862,6 +953,13 @@ void TaskManagerTableModel::RetrieveSavedColumnsSettingsAndUpdateTable() {
       if (sorted_col_id && *sorted_col_id == col_id_key) {
         table_view_delegate_->SetSortDescriptor(
             TableSortDescriptor(col_id, sort_is_ascending));
+      } else if (default_sorted_column_to_cpu && !sorted_col_id &&
+                 col_id_key ==
+                     GetColumnIdAsString(IDS_TASK_MANAGER_CPU_COLUMN)) {
+        // If there is no user selected column, the sorting default should be
+        // the CPU column if it's visible.
+        table_view_delegate_->SetSortDescriptor(
+            TableSortDescriptor(IDS_TASK_MANAGER_CPU_COLUMN, false));
       }
     }
   }
@@ -869,8 +967,9 @@ void TaskManagerTableModel::RetrieveSavedColumnsSettingsAndUpdateTable() {
 
 void TaskManagerTableModel::StoreColumnsSettings() {
   PrefService* local_state = g_browser_process->local_state();
-  if (!local_state)
+  if (!local_state) {
     return;
+  }
 
   ScopedDictPrefUpdate dict_update(local_state,
                                    prefs::kTaskManagerColumnVisibility);
@@ -903,9 +1002,10 @@ std::optional<size_t> TaskManagerTableModel::GetRowForWebContents(
     content::WebContents* web_contents) {
   TaskId task_id =
       observed_task_manager()->GetTaskIdForWebContents(web_contents);
-  auto index = base::ranges::find(tasks_, task_id);
-  if (index == tasks_.end())
+  auto index = std::ranges::find(tasks_, task_id);
+  if (index == tasks_.end()) {
     return std::nullopt;
+  }
   return static_cast<size_t>(index - tasks_.begin());
 }
 
@@ -913,7 +1013,7 @@ std::optional<size_t> TaskManagerTableModel::GetRowForActiveTask() {
   if (!active_task_id_.has_value()) {
     return std::nullopt;
   }
-  auto index = base::ranges::find(tasks_, active_task_id_.value());
+  auto index = std::ranges::find(tasks_, active_task_id_.value());
   if (index == tasks_.end()) {
     return std::nullopt;
   }
@@ -922,15 +1022,15 @@ std::optional<size_t> TaskManagerTableModel::GetRowForActiveTask() {
 
 void TaskManagerTableModel::StartUpdating() {
   TaskManagerInterface::GetTaskManager()->AddObserver(this);
-  tasks_ = observed_task_manager()->GetTaskIdsList();
-  OnRefresh();
+  OnTasksRefreshed(observed_task_manager()->GetTaskIdsList());
 
   // In order for the scrollbar of the TableView to work properly on startup of
   // the task manager, we must invoke TableModelObserver::OnModelChanged() which
   // in turn will invoke TableView::NumRowsChanged(). This will adjust the
   // vertical scrollbar correctly. crbug.com/570966.
-  if (table_model_observer_)
+  if (table_model_observer_) {
     table_model_observer_->OnModelChanged();
+  }
 }
 
 void TaskManagerTableModel::StopUpdating() {
@@ -938,23 +1038,176 @@ void TaskManagerTableModel::StopUpdating() {
 }
 
 void TaskManagerTableModel::OnRefresh() {
-  if (table_model_observer_)
+  if (table_model_observer_) {
     table_model_observer_->OnItemsChanged(0, RowCount());
+  }
 }
 
 bool TaskManagerTableModel::IsTaskFirstInGroup(size_t row_index) const {
-  if (row_index == 0)
+  if (row_index == 0) {
     return true;
+  }
 
   if (observed_task_manager()->GetProcessId(tasks_[row_index - 1]) !=
-      observed_task_manager()->GetProcessId(tasks_[row_index]))
+      observed_task_manager()->GetProcessId(tasks_[row_index])) {
     return true;
+  }
 
   if (observed_task_manager()->IsRunningInVM(tasks_[row_index - 1]) !=
-      observed_task_manager()->IsRunningInVM(tasks_[row_index]))
+      observed_task_manager()->IsRunningInVM(tasks_[row_index])) {
     return true;
+  }
 
   return false;
+}
+
+bool TaskManagerTableModel::ShouldKeepTaskForSupportedType(
+    TaskId task_id) const {
+  // TODO(crbug.com/364926055): Remove when the refreshed Task Manager launches.
+  // Used for backward compatibility with the prod. task manager.
+  if (display_category_ == DisplayCategory::kAll) {
+    return true;
+  }
+
+  const TaskId root = observed_task_manager()->GetRootTaskId(task_id);
+  const Task::Type type = observed_task_manager()->GetType(root);
+  const Task::SubType subtype = observed_task_manager()->GetSubType(root);
+
+  return ShouldKeepTaskForTabsAndExtensions(type, subtype) ||
+         ShouldKeepTaskForSystem(type, subtype);
+}
+
+bool TaskManagerTableModel::ShouldKeepTask(TaskId task_id) const {
+  if (!search_terms_.empty()) {
+    // In search mode, keep the task if it falls in a supported category as well
+    // as if it is in the same task group with tasks matching the current search
+    // term.
+    return ShouldKeepTaskForSupportedType(task_id) &&
+           matched_process_set_.contains(
+               observed_task_manager()->GetProcessId(task_id));
+  }
+
+  // TODO(crbug.com/364926055): Remove when the refreshed Task Manager launches.
+  // Used for backward compatibility with the prod. task manager.
+  if (display_category_ == DisplayCategory::kAll) {
+    return true;
+  }
+
+  // Keep any TaskId iff the task that spawned it (root node) has a type that
+  // matches the current category.
+  const TaskId root = observed_task_manager()->GetRootTaskId(task_id);
+  const Task::Type type = observed_task_manager()->GetType(root);
+  const Task::SubType subtype = observed_task_manager()->GetSubType(root);
+
+  switch (display_category_) {
+    case DisplayCategory::kTabsAndExtensions:
+      return ShouldKeepTaskForTabsAndExtensions(type, subtype);
+    case DisplayCategory::kSystem:
+      return ShouldKeepTaskForSystem(type, subtype);
+    default:
+      NOTREACHED();
+  }
+}
+
+bool TaskManagerTableModel::HasMatchInTasksSharingSameProcess(
+    TaskId task_id) const {
+  if (tasks_.empty()) {
+    return false;
+  }
+
+  for (TaskId id :
+       observed_task_manager()->GetIdsOfTasksSharingSameProcess(task_id)) {
+    if (base::i18n::StringSearchIgnoringCaseAndAccents(
+            search_terms_, observed_task_manager()->GetTitle(id),
+            /*match_index=*/nullptr, /*match_length=*/nullptr) &&
+        std::ranges::find(tasks_, id) != tasks_.end()) {
+      // There is at least one matched task in task group, we need to
+      // keep it.
+      return true;
+    }
+  }
+  return false;
+}
+
+void TaskManagerTableModel::UpdateMatchedProcessSet() {
+  matched_process_set_.clear();
+
+  if (search_terms_.empty()) {
+    return;
+  }
+
+  for (TaskId task_id : observed_task_manager()->GetTaskIdsList()) {
+    UpdateMatchedProcessSetById(task_id);
+  }
+}
+
+void TaskManagerTableModel::UpdateMatchedProcessSetById(TaskId task_id) {
+  // Excludes the task from search term match if it does not fall in any
+  // category.
+  if (ShouldKeepTaskForSupportedType(task_id) &&
+      base::i18n::StringSearchIgnoringCaseAndAccents(
+          search_terms_, observed_task_manager()->GetTitle(task_id),
+          /*match_index=*/nullptr, /*match_length=*/nullptr)) {
+    matched_process_set_.insert(observed_task_manager()->GetProcessId(task_id));
+  }
+}
+
+bool TaskManagerTableModel::UpdateModel(const DisplayCategory display_category,
+                                        const std::u16string& search_term) {
+  if (search_terms_ == search_term && display_category_ == display_category) {
+    // Early return if no real change happens.
+    return false;
+  }
+
+  search_terms_ = search_term;
+  display_category_ = display_category;
+
+  // Precalculate matched processes for search terms.
+  UpdateMatchedProcessSet();
+
+  if (!table_model_observer_) {
+    return false;
+  }
+
+  // Task list which will be used for filter logic.
+  const auto task_list = observed_task_manager()->GetTaskIdsList();
+
+  // The final task list after applying the filter logic. It will be used to
+  // find the insert position for the new task in the final list.
+  auto filtered_task_list = task_list;
+  FilterTaskList(filtered_task_list);
+
+  for (TaskId id : task_list) {
+    auto filtered_iter = std::ranges::find(filtered_task_list, id);
+    bool should_keep_task = filtered_iter != filtered_task_list.end();
+    // Indicate if the task is in current task list.
+    auto task_iter = std::ranges::find(tasks_, id);
+    bool task_id_exists = task_iter != tasks_.end();
+    if (should_keep_task == task_id_exists) {
+      // The task already displays as the filter logic.
+      // Case 1 : The task in the complete task list which matches the filter
+      // logic already exists in current task list.
+      // Case 2 : The task in the complete task list which does not match  the
+      // filter logic does not exist in current task list.
+      continue;
+    }
+
+    if (should_keep_task) {
+      // Need to find a place to insert the task and update the table model.
+      std::vector<TaskId>::difference_type index =
+          filtered_iter - filtered_task_list.begin();
+      CHECK_LE(static_cast<size_t>(index), tasks_.size())
+          << " out of bounds insert index " << index;
+      tasks_.insert(tasks_.begin() + index, id);
+      table_model_observer_->OnItemsAdded(index, 1);
+    } else {
+      // Need to remove the task and update the table model.
+      auto removed_index = static_cast<size_t>(task_iter - tasks_.begin());
+      tasks_.erase(task_iter);
+      table_model_observer_->OnItemsRemoved(removed_index, 1);
+    }
+  }
+  return true;
 }
 
 }  // namespace task_manager

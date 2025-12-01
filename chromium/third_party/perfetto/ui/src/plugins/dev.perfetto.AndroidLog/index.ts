@@ -17,13 +17,10 @@ import {LogFilteringCriteria, LogPanel} from './logs_panel';
 import {ANDROID_LOGS_TRACK_KIND} from '../../public/track_kinds';
 import {Trace} from '../../public/trace';
 import {PerfettoPlugin} from '../../public/plugin';
-import {sqlTableRegistry} from '../../frontend/widgets/sql/table/sql_table_registry';
 import {NUM} from '../../trace_processor/query_result';
-import {AndroidLogTrack} from './logs_track';
+import {createAndroidLogTrack} from './logs_track';
 import {exists} from '../../base/utils';
 import {TrackNode} from '../../public/workspace';
-import {getAndroidLogsTable} from './table';
-import {extensions} from '../../public/lib/extensions';
 
 const VERSION = 1;
 
@@ -63,7 +60,7 @@ export default class implements PerfettoPlugin {
         uri,
         title,
         tags: {kind: ANDROID_LOGS_TRACK_KIND},
-        track: new AndroidLogTrack(ctx.engine),
+        track: createAndroidLogTrack(ctx, uri),
       });
       const track = new TrackNode({title, uri});
       ctx.workspace.addChildInOrder(track);
@@ -95,17 +92,6 @@ export default class implements PerfettoPlugin {
       name: 'Show android logs tab',
       callback: () => {
         ctx.tabs.showTab(androidLogsTabUri);
-      },
-    });
-
-    sqlTableRegistry['android_logs'] = getAndroidLogsTable();
-    ctx.commands.registerCommand({
-      id: 'perfetto.ShowTable.android_logs',
-      name: 'Open table: android_logs',
-      callback: () => {
-        extensions.addSqlTableTab(ctx, {
-          table: getAndroidLogsTable(),
-        });
       },
     });
   }

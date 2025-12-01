@@ -108,7 +108,7 @@ IncrementalMarking::IncrementalMarking(Heap* heap, WeakObjects* weak_objects)
 void IncrementalMarking::MarkBlackBackground(Tagged<HeapObject> obj,
                                              int object_size) {
   CHECK(marking_state()->TryMark(obj));
-  base::MutexGuard guard(&background_live_bytes_mutex_);
+  base::SpinningMutexGuard guard(&background_live_bytes_mutex_);
   background_live_bytes_[MutablePageMetadata::FromHeapObject(obj)] +=
       static_cast<intptr_t>(object_size);
 }
@@ -551,7 +551,7 @@ void IncrementalMarking::UpdateExternalPointerTableAfterScavenge() {
         // 1) Resolve object start from the marking bitmap. Note that it's safe
         //    since there is no black allocation for the young space (and hence
         //    no range or page marking).
-        // 2) Get a relocated object from the forwaring reference stored in the
+        // 2) Get a relocated object from the forwarding reference stored in the
         //    map.
         // 3) Compute offset from the original object start to the handle
         //    location.
@@ -598,8 +598,20 @@ void IncrementalMarking::UpdateExternalPointerTableAfterScavenge() {
         DCHECK_LT(old_handle_location, object.address() + object_size);
 #endif  // DEBUG
 
+        if (!HeapLayout::InYoungGeneration(moved_object)) {
+          // If the object was promoted, it's external pointers were evacuated
+          // into the old EPT by IterateAndScavengePromotedObjectsVisitor.
+          // Ignore this evacuation entry.
+          return kNullAddress;
+        }
+
         const ptrdiff_t handle_offset = old_handle_location - base;
-        return moved_object.address() + handle_offset;
+        const Address result = moved_object.address() + handle_offset;
+        // Check that the migrated and the original handles are the same.
+        DCHECK_EQ(
+            *reinterpret_cast<ExternalPointerHandle*>(old_handle_location),
+            *reinterpret_cast<ExternalPointerHandle*>(result));
+        return result;
       });
 #endif  // V8_COMPRESS_POINTERS
 }

@@ -55,6 +55,9 @@ void HTMLButtonElement::setType(const AtomicString& type) {
 
 LayoutObject* HTMLButtonElement::CreateLayoutObject(
     const ComputedStyle& style) {
+  if (style.IsVerticalWritingMode()) {
+    UseCounter::Count(GetDocument(), WebFeature::kVerticalFormControls);
+  }
   // https://html.spec.whatwg.org/C/#button-layout
   EDisplay display = style.Display();
   if (display == EDisplay::kInlineGrid || display == EDisplay::kGrid ||
@@ -138,7 +141,7 @@ Element* HTMLButtonElement::commandForElement() {
   }
 
   if (!IsInTreeScope() || IsDisabledFormControl() ||
-      (Form() && CanBeSuccessfulSubmitButton())) {
+      (Form() && FastHasAttribute(html_names::kTypeAttr) && type_ == kSubmit)) {
     return nullptr;
   }
 
@@ -193,6 +196,10 @@ CommandEventType HTMLButtonElement::GetCommandEventType() const {
     return CommandEventType::kNone;
   }
 
+  if (EqualIgnoringASCIICase(action, keywords::kRequestClose)) {
+    return CommandEventType::kRequestClose;
+  }
+
   // Input/Select Cases
   if (EqualIgnoringASCIICase(action, keywords::kShowPicker)) {
     return CommandEventType::kShowPicker;
@@ -245,22 +252,42 @@ CommandEventType HTMLButtonElement::GetCommandEventType() const {
 
 void HTMLButtonElement::DefaultEventHandler(Event& event) {
   if (event.type() == event_type_names::kDOMActivate) {
+    bool potentialCommand = (FastHasAttribute(html_names::kCommandforAttr) ||
+                             FastHasAttribute(html_names::kCommandAttr));
+    bool implicitSubmit =
+        type_ == kSubmit && !FastHasAttribute(html_names::kTypeAttr);
+
     if (!IsDisabledFormControl()) {
-      if (Form() && type_ == kSubmit && !OwnerSelect()) {
+      if (Form() && type_ == kSubmit) {
+        if (implicitSubmit && potentialCommand) {
+          AddConsoleMessage(mojom::blink::ConsoleMessageSource::kOther,
+                            mojom::blink::ConsoleMessageLevel::kWarning,
+                            "Buttons associated with forms that include "
+                            "command or commandfor attributes are "
+                            "ambiguous, and require a type=button attribute. "
+                            "No action will be taken.");
+          return;
+        } else if (potentialCommand) {
+          DCHECK(FastHasAttribute(html_names::kTypeAttr));
+          AddConsoleMessage(
+              mojom::blink::ConsoleMessageSource::kOther,
+              mojom::blink::ConsoleMessageLevel::kWarning,
+              "Buttons with an explicit type=submit will always submit a form, "
+              "so command or commandfor attributes will be ignored.");
+        }
         Form()->PrepareForSubmission(&event, this);
         event.SetDefaultHandled();
         return;
       }
       if (Form() && type_ == kReset) {
+        if (potentialCommand) {
+          AddConsoleMessage(mojom::blink::ConsoleMessageSource::kOther,
+                            mojom::blink::ConsoleMessageLevel::kWarning,
+                            "Buttons with a type of reset will ignore the "
+                            "command or commandfor attributes.");
+        }
         Form()->reset();
         event.SetDefaultHandled();
-        return;
-      }
-      if (Form() && type_ != kButton && commandForElement()) {
-        AddConsoleMessage(
-            mojom::blink::ConsoleMessageSource::kOther,
-            mojom::blink::ConsoleMessageLevel::kWarning,
-            "commandfor is ignored on form buttons without type=button.");
         return;
       }
     }
@@ -294,11 +321,7 @@ void HTMLButtonElement::DefaultEventHandler(Event& event) {
     }
   }
 
-  // The OwnerSelect check is here in order to make sure that pressing the
-  // spacebar opens customizable <select>s.
-  // MenuListSelectType::DefaultEventHandler likes to see all more detailed
-  // events than the simulated click that HandleKeyboardActivation does.
-  if (!OwnerSelect() && HandleKeyboardActivation(event)) {
+  if (HandleKeyboardActivation(event)) {
     return;
   }
 
@@ -401,6 +424,13 @@ HTMLSelectElement* HTMLButtonElement::OwnerSelect() const {
     }
   }
   return nullptr;
+}
+
+bool HTMLButtonElement::IsInertRoot() const {
+  if (OwnerSelect() && !RuntimeEnabledFeatures::CSSInertEnabled()) {
+    return true;
+  }
+  return HTMLFormControlElement::IsInertRoot();
 }
 
 }  // namespace blink

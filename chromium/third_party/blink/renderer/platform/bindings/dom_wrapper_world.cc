@@ -37,7 +37,6 @@
 #include "base/notreached.h"
 #include "third_party/blink/public/platform/web_isolated_world_info.h"
 #include "third_party/blink/renderer/platform/bindings/dom_data_store.h"
-#include "third_party/blink/renderer/platform/bindings/v8_object_data_store.h"
 #include "third_party/blink/renderer/platform/bindings/v8_per_isolate_data.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
@@ -117,7 +116,7 @@ DOMWrapperWorld::DOMWrapperWorld(PassKey,
       dom_data_store_(
           MakeGarbageCollected<DOMDataStore>(isolate,
                                              is_default_world_of_isolate)),
-      v8_object_data_store_(MakeGarbageCollected<V8ObjectDataStore>()) {
+      isolate_(isolate) {
   switch (world_type_) {
     case WorldType::kMain:
       // The main world is managed separately from worldMap(). See worldMap().
@@ -147,7 +146,7 @@ void DOMWrapperWorld::AllWorldsInIsolate(
     v8::Isolate* isolate,
     HeapVector<Member<DOMWrapperWorld>>& worlds) {
   DCHECK(worlds.empty());
-  WTF::CopyValuesToVector(GetWorldMap(), worlds);
+  worlds.assign(GetWorldMap().Values());
   if (IsMainThread()) {
     worlds.push_back(&MainWorld(isolate));
   }
@@ -314,7 +313,6 @@ bool DOMWrapperWorld::ClearWrapperInAnyNonInlineStorageWorldIfEqualTo(
 
 void DOMWrapperWorld::Trace(Visitor* visitor) const {
   visitor->Trace(dom_data_store_);
-  visitor->Trace(v8_object_data_store_);
 }
 
 }  // namespace blink

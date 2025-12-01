@@ -68,9 +68,9 @@ class MockNamedTestView : public views::View {
   METADATA_HEADER(MockNamedTestView, views::View)
 
  public:
-  // For custom properties test.
-  std::u16string GetTooltipText(const gfx::Point& p) const override {
-    return u"This is the tooltip";
+  MockNamedTestView() {
+    // For custom properties test.
+    SetTooltipText(u"This is the tooltip");
   }
 
   int GetBoolProperty() const { return bool_property_; }

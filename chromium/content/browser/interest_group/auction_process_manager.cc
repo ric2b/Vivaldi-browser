@@ -53,6 +53,11 @@ void RecordRequestWorkletServiceOutcomeUMA(
                     "RequestWorkletServiceOutcome"}),
       result);
 }
+
+void RecordIdleProcessExpiredUma(bool result) {
+  base::UmaHistogramBoolean("Ads.InterestGroup.Auction.IdleProcessExpired",
+                            result);
+}
 }  // namespace
 
 constexpr size_t AuctionProcessManager::kMaxBidderProcesses = 10;
@@ -95,9 +100,10 @@ AuctionProcessManager::WorkletProcess::WorkletProcess(
     remove_idle_process_from_manager_timer_.Start(
         FROM_HERE,
         features::kFledgeStartAnticipatoryProcessExpirationTime.Get(),
-        base::BindOnce(&WorkletProcess::RemoveFromProcessManager,
-                       base::Unretained(this),
-                       /*on_destruction=*/false));
+        base::BindOnce(&RecordIdleProcessExpiredUma, true)
+            .Then(base::BindOnce(&WorkletProcess::RemoveFromProcessManager,
+                                 base::Unretained(this),
+                                 /*on_destruction=*/false)));
   }
 }
 
@@ -161,6 +167,7 @@ void AuctionProcessManager::WorkletProcess::ActivateAndBindIfUnbound(
     OnBoundToOrigin();
   }
   is_idle_ = false;
+  RecordIdleProcessExpiredUma(false);
   remove_idle_process_from_manager_timer_.Stop();
 }
 
@@ -244,13 +251,15 @@ void AuctionProcessManager::WorkletProcess::OnBoundToOrigin() {
   DCHECK(is_bound_to_origin_);
 
   // If the TrustedSignalsCache exists (and thus is enabled), pass a pipe to
-  // for KVv2 bidding signals fetches. Seller signals are not yet supported, so
-  // only do this for bidder worklets.
+  // for KVv2 bidding signals fetches.
   auto* trusted_signals_cache =
       auction_process_manager_->trusted_signals_cache_.get();
-  if (trusted_signals_cache && worklet_type_ == WorkletType::kBidder) {
+  if (trusted_signals_cache) {
     service_->SetTrustedSignalsCache(trusted_signals_cache->CreateRemote(
-        TrustedSignalsCacheImpl::SignalsType::kBidding, origin_));
+        worklet_type_ == WorkletType::kBidder
+            ? TrustedSignalsCacheImpl::SignalsType::kBidding
+            : TrustedSignalsCacheImpl::SignalsType::kScoring,
+        origin_));
   }
 }
 
@@ -781,7 +790,7 @@ InRendererAuctionProcessManager::CreateProcessInternal(
   }
 
   mojo::PendingRemote<auction_worklet::mojom::AuctionWorkletService> service;
-  site_instance->GetProcess()->Init();
+  site_instance->GetOrCreateProcess()->Init();
   site_instance->GetProcess()->BindReceiver(
       service.InitWithNewPipeAndPassReceiver());
   return WorkletProcess::ProcessContext(std::move(service),

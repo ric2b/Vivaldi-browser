@@ -99,7 +99,7 @@ Dev Contact: Eric Uhrhane (ericu)
 
 Availability: basic in m8, sync api in m9 for web workers
 
-Spec: [w3c spec](http://www.w3.org/TR/file-writer-api/)
+Spec: [w3c spec](https://www.w3.org/TR/file-writer-api/)
 
 Tickets: [webk.it/44358](https://bugs.webkit.org/show_bug.cgi?id=44358)
 
@@ -215,7 +215,7 @@ draft](http://dev.w3.org/2006/webapi/XMLHttpRequest-2/#dom-xmlhttprequest-send)
 
 Dev Contact: Eric Uhrhane (ericu)
 
-Tickets: [crbug.com/51267](http://crbug.com/51267)
+Tickets: [crbug.com/51267](https://crbug.com/51267)
 
 #### XHR supports xhr.send(FormData)
 
@@ -242,7 +242,7 @@ error when `.responseType` is set.
 
 Spec: [w3 draft](http://dev.w3.org/2006/webapi/XMLHttpRequest-2/#xmlhttprequest)
 
-Tickets: [crbug.com/52486](http://crbug.com/52486) (arraybuffer works, blob does
+Tickets: [crbug.com/52486](https://crbug.com/52486) (arraybuffer works, blob does
 not)
 
 Dev Contact: Michael Nordman (michaeln)
@@ -274,7 +274,7 @@ Also can register 'online' and 'offline' event handlers.
 
 Availability: m14
 
-Tickets: [~~crbug.com/7469~~](http://crbug.com/7469)
+Tickets: [~~crbug.com/7469~~](https://crbug.com/7469)
 
 Notes: <https://developer.mozilla.org/en/Online_and_offline_events>
 
@@ -302,7 +302,7 @@ Allow specifying a directory to upload (`<input type="file" multiple
 webkitdirectory />`), which is just be an extension of existing form
 mime-multipart file upload.
 
-Availability: m8. m21 [landed](http://crbug.com/58977) dragging and dropping a
+Availability: m8. m21 [landed](https://crbug.com/58977) dragging and dropping a
 folder onto an &lt;input type="file" webkidirectory&gt; element).
 
 Demo:
@@ -490,7 +490,7 @@ Dev Contact: Kinuko Yasuda (kinuko)
 
 Availability: m12
 
-Spec: [w3 spec](http://www.w3.org/TR/css3-3d-transforms/)
+Spec: [w3 spec](https://www.w3.org/TR/css3-3d-transforms/)
 
 Notes: Associated GPU rendering quirkiness actively being worked on in prep for
 beta channel release.
@@ -621,7 +621,7 @@ For now, chrome supports both. But you should use the new one!
 Availability: started landing in m18. m21 has the latest and full implementation
 with a bunch of properties renamed.
 
-Spec: [w3 spec](http://www.w3.org/TR/css3-flexbox/)
+Spec: [w3 spec](https://www.w3.org/TR/css3-flexbox/)
 
 Tickets: [webk.it/62048](https://bugs.webkit.org/show_bug.cgi?id=62048)
 
@@ -677,7 +677,7 @@ unprefixed in m10
 [demo](http://peter.sh/files/examples/cross-fading.html)
 
 **image-resolution()**: [landed](http://trac.webkit.org/changeset/119984) for
-m21 [spec](http://www.w3.org/TR/2012/CR-css3-images-20120417/#image-resolution)
+m21 [spec](https://www.w3.org/TR/2012/CR-css3-images-20120417/#image-resolution)
 
 **clip-path:**
 [landed](https://plus.google.com/118075919496626375791/posts/2n8PTisLztW) for
@@ -686,10 +686,10 @@ m24. Prefixed -webkit-clip-path.
 
 **@viewport**: [spec](http://dev.w3.org/csswg/css-device-adapt/), bug
 
-**@supports:** [spec](http://www.w3.org/TR/css3-conditional/#at-supports), bug,
+**@supports:** [spec](https://www.w3.org/TR/css3-conditional/#at-supports), bug,
 
 **CSS viewport % lengths (vw, vh, vmin, vmax):**
-[spec](http://www.w3.org/TR/css3-values/), Availability: m20
+[spec](https://www.w3.org/TR/css3-values/), Availability: m20
 
 ## Graphics
 
@@ -699,7 +699,7 @@ Provides an API to draw 2D graphics
 
 Availability: m1, Safari, Firefox, Opera, IE9
 
-Notes: Accelerated 2D canvas [targeting](http://crbug.com/61526) m14 for
+Notes: Accelerated 2D canvas [targeting](https://crbug.com/61526) m14 for
 windows/linux; perhaps m15 for mac. Currently, available in about:flags.
 
 webp format: `canvas.toDataURL("image/webp")`
@@ -771,7 +771,7 @@ input](http://updates.html5rocks.com/2012/09/Live-Web-Audio-Input-Enabled)
 calls](https://code.google.com/p/chromium/issues/detail?id=160176) to the latest
 spec.
 
-Android availability: TBD ([issue 166003](http://crbug.com/166003))
+Android availability: TBD ([issue 166003](https://crbug.com/166003))
 
 Spec: [W3C Audio Incubator Group
 Proposal](http://chromium.googlecode.com/svn/trunk/samples/audio/specification/specification.html)
@@ -867,7 +867,7 @@ examples](http://tools.ietf.org/html/draft-alvestrand-constraints-resolution-00#
 in Chrome Dev channel:
 
 -
-[proposal](http://www.chromium.org/developers/design-documents/extensions/proposed-changes/apis-under-development/webrtc-tab-content-capture)
+[proposal](/developers/design-documents/extensions/proposed-changes/apis-under-development/webrtc-tab-content-capture)
 
 - [documentation for
 chrome.tabCapture](http://developer.chrome.com/trunk/extensions/tabCapture.html)
@@ -1042,7 +1042,7 @@ Demo: <http://kinlan-presentations.appspot.com/>
 
 Predefined data/options for controls
 
-Spec: [W3C](http://www.w3.org/TR/html-markup/datalist.html)
+Spec: [W3C](https://www.w3.org/TR/html-markup/datalist.html)
 
 Availability: m20. See [html5rocks.com
 update](http://updates.html5rocks.com/2012/04/datalist-landed-in-Chrome-Canary)
@@ -1060,7 +1060,7 @@ window.
 [WHATWG](http://www.whatwg.org/specs/web-apps/current-work/multipage/commands.html#the-dialog-element)
 
 #### Bug:
-[webk.it/](goog_742956014)[84635](https://bugs.webkit.org/show_bug.cgi?id=84635)
+[webk.it/84635](https://bugs.webkit.org/show_bug.cgi?id=84635)
 
 #### Availability: Behind a flag in m25. Enable "Experimental WebKit Features"
 in about:flags.
@@ -1114,7 +1114,7 @@ clearState](http://dev.w3.org/html5/spec-author-view/history.html#dom-history-pu
 methods provide applications with programmatic control over session history.
 
 Availability: m5. `history.state` was implemented in m18. popstate firing after
-page load: [crbug.com/63040](http://crbug.com/63040)
+page load: [crbug.com/63040](https://crbug.com/63040)
 
 Documentation:
 [MDN](https://developer.mozilla.org/en/DOM/Manipulating_the_browser_history)
@@ -1137,7 +1137,7 @@ Spec: [W3C Editor's
 draft](http://dvcs.w3.org/hg/webevents/raw-file/default/gamepad.html)
 Dev contact: scottmg
 
-Notes: [Chromium tracking issue](http://crbug.com/72754). Enabled in about:flags
+Notes: [Chromium tracking issue](https://crbug.com/72754). Enabled in about:flags
 
 #### Battery Status
 
@@ -1318,7 +1318,7 @@ Specify and onload or onerror event for a stylesheet to load.
 
 Availability: m19?
 
-Spec: [W3C](http://www.w3.org/TR/html5/the-link-element.html#the-link-element)
+Spec: [W3C](https://www.w3.org/TR/html5/the-link-element.html#the-link-element)
 
 #### Touch Events
 
@@ -1328,7 +1328,7 @@ Android Availability: m16 (0.16)
 
 Availability: m24
 
-Spec: [w3c spec](http://www.w3.org/TR/MathML3/)
+Spec: [w3c spec](https://www.w3.org/TR/MathML3/)
 
 **JS Internationalization API**
 
@@ -1345,7 +1345,7 @@ Spec:
 
 Availability: m25
 
-Spec: [w3c](http://www.w3.org/TR/2011/WD-resource-timing-20110524/)
+Spec: [w3c](https://www.w3.org/TR/2011/WD-resource-timing-20110524/)
 
 **User Timing API**
 
@@ -1365,7 +1365,7 @@ Info:
 ## Webforms
 
 Availability: **See [HTML5 Forms
-Status](http://www.chromium.org/developers/web-platform-status/forms) for all
+Status](/developers/web-platform-status/forms) for all
 details.** (Updated as recently as Nov 28th, 2012).
 
 Includes details in input types (like date and color), input attributes,
@@ -1385,7 +1385,7 @@ spec](http://www.whatwg.org/specs/web-apps/current-work/multipage/association-of
 
 ## DOM APIs
 
-[Element.matchesSelector](http://www.w3.org/TR/selectors-api2/#matchtesting) -
+[Element.matchesSelector](https://www.w3.org/TR/selectors-api2/#matchtesting) -
 m4
 
 Element.outerHTML - m1

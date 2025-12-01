@@ -140,7 +140,13 @@ class V8_EXPORT String : public Name {
    * Returns the number of bytes in the UTF-8 encoded
    * representation of this string.
    */
+  V8_DEPRECATED("Use Utf8LengthV2 instead.")
   int Utf8Length(Isolate* isolate) const;
+
+  /**
+   * Returns the number of bytes needed for the Utf8 encoding of this string.
+   */
+  size_t Utf8LengthV2(Isolate* isolate) const;
 
   /**
    * Returns whether this string is known to contain only one byte data,
@@ -194,14 +200,68 @@ class V8_EXPORT String : public Name {
   };
 
   // 16-bit character codes.
+  V8_DEPRECATED("Use WriteV2 instead.")
   int Write(Isolate* isolate, uint16_t* buffer, int start = 0, int length = -1,
             int options = NO_OPTIONS) const;
   // One byte characters.
+  V8_DEPRECATED("Use WriteOneByteV2 instead.")
   int WriteOneByte(Isolate* isolate, uint8_t* buffer, int start = 0,
                    int length = -1, int options = NO_OPTIONS) const;
   // UTF-8 encoded characters.
+  V8_DEPRECATED("Use WriteUtf8V2 instead.")
   int WriteUtf8(Isolate* isolate, char* buffer, int length = -1,
                 int* nchars_ref = nullptr, int options = NO_OPTIONS) const;
+
+  struct WriteFlags {
+    enum {
+      kNone = 0,
+      // Indicates that the output string should be null-terminated. In that
+      // case, the output buffer must include sufficient space for the
+      // additional null character.
+      kNullTerminate = 1,
+      // Used by WriteUtf8 to replace orphan surrogate code units with the
+      // unicode replacement character. Needs to be set to guarantee valid UTF-8
+      // output.
+      kReplaceInvalidUtf8 = 2
+    };
+  };
+
+  /**
+   * Write the contents of the string to an external buffer.
+   *
+   * Copies length characters into the output buffer starting at offset. The
+   * output buffer must have sufficient space for all characters and the null
+   * terminator if null termination is requested through the flags.
+   *
+   * \param offset The position within the string at which copying begins.
+   * \param length The number of characters to copy from the string.
+   * \param buffer The buffer into which the string will be copied.
+   * \param flags Various flags that influence the behavior of this operation.
+   */
+  void WriteV2(Isolate* isolate, uint32_t offset, uint32_t length,
+               uint16_t* buffer, int flags = WriteFlags::kNone) const;
+  void WriteOneByteV2(Isolate* isolate, uint32_t offset, uint32_t length,
+                      uint8_t* buffer, int flags = WriteFlags::kNone) const;
+
+  /**
+   * Encode the contents of the string as Utf8 into an external buffer.
+   *
+   * Encodes the characters of this string as Utf8 and writes them into the
+   * output buffer until either all characters were encoded or the buffer is
+   * full. Will not write partial UTF-8 sequences, preferring to stop before
+   * the end of the buffer. If null termination is requested, the output buffer
+   * will always be null terminated even if not all characters fit. In that
+   * case, the capacity must be at least one. The required size of the output
+   * buffer can be determined using Utf8Length().
+   *
+   * \param buffer The buffer into which the string will be written.
+   * \param capacity The number of bytes available in the output buffer.
+   * \param flags Various flags that influence the behavior of this operation.
+   * \return The number of bytes copied to the buffer including the null
+   * terminator (if written).
+   */
+  size_t WriteUtf8V2(Isolate* isolate, char* buffer, size_t capacity,
+                     int flags = WriteFlags::kNone) const;
 
   /**
    * A zero length string.
@@ -246,6 +306,13 @@ class V8_EXPORT String : public Name {
      * subclasses to control how allocated external bytes are accounted.
      */
     virtual void Unaccount(Isolate* isolate) {}
+
+    /**
+     * Returns an estimate of the memory occupied by this external string, to be
+     * used by V8 when producing a heap snapshot. If this function returns -1,
+     * then V8 will estimate the external size based on the string length.
+     */
+    virtual int EstimateMemoryUsage() const { return -1; }
 
     // Disallow copying and assigning.
     ExternalStringResourceBase(const ExternalStringResourceBase&) = delete;
@@ -558,7 +625,7 @@ class V8_EXPORT String : public Name {
     ~Utf8Value();
     char* operator*() { return str_; }
     const char* operator*() const { return str_; }
-    int length() const { return length_; }
+    size_t length() const { return length_; }
 
     // Disallow copying and assigning.
     Utf8Value(const Utf8Value&) = delete;
@@ -566,7 +633,7 @@ class V8_EXPORT String : public Name {
 
    private:
     char* str_;
-    int length_;
+    size_t length_;
   };
 
   /**
@@ -588,7 +655,7 @@ class V8_EXPORT String : public Name {
     ~Value();
     uint16_t* operator*() { return str_; }
     const uint16_t* operator*() const { return str_; }
-    int length() const { return length_; }
+    uint32_t length() const { return length_; }
 
     // Disallow copying and assigning.
     Value(const Value&) = delete;
@@ -596,7 +663,7 @@ class V8_EXPORT String : public Name {
 
    private:
     uint16_t* str_;
-    int length_;
+    uint32_t length_;
   };
 
   /**
@@ -625,7 +692,7 @@ class V8_EXPORT String : public Name {
 #endif
       return data16_;
     }
-    int length() const { return length_; }
+    uint32_t length() const { return length_; }
     bool is_one_byte() const { return is_one_byte_; }
 
     // Disallow copying and assigning.
@@ -640,7 +707,7 @@ class V8_EXPORT String : public Name {
       const uint8_t* data8_;
       const uint16_t* data16_;
     };
-    int length_;
+    uint32_t length_;
     bool is_one_byte_;
     // Avoid exposing the internal DisallowGarbageCollection scope.
     alignas(internal::Internals::

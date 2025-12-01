@@ -57,6 +57,28 @@
             "type": "boolean"
           }
         }
+      },
+      {
+        "id": "SearchResults",
+        "type": "object",
+        "description": "Results object from mail search.",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Error message. If any."
+          },
+          "search_list_ids": {
+            "type": "array",
+            "description": "Resulting search list ids.",
+            "items": {
+              "type": "number"
+            }
+          },
+          "success": {
+            "type": "boolean",
+            "description": "Indicates if error occurred."
+          }
+        }
       }
     ],
     "functions": [
@@ -508,12 +530,8 @@
           "optional": true,
           "parameters": [
             {
-              "name": "results",
-              "description": "Messages matching the search value",
-              "type": "array",
-              "items": {
-                "type": "number"
-              }
+              "name": "options",
+              "$ref": "SearchResults"
             }
           ]
         }
@@ -589,6 +607,32 @@
               "name": "result",
               "description": "Boolean stating if deleting the files was successful.",
               "type": "boolean"
+            }
+          ]
+        }
+      },
+      {
+        "name": "checkMailSearchDBHealth",
+        "type": "function",
+        "description": "Checks mail search db for errors.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "MailSearchDBHealth",
+              "type": "object",
+              "description": "Result object after checking mail search db health.",
+              "properties": {
+                "message": {
+                  "type": "string",
+                  "description": "Error message. If any."
+                },
+                "result": {
+                  "type": "boolean",
+                  "description": "Indicates if db has error(s)."
+                }
+              }
             }
           ]
         }

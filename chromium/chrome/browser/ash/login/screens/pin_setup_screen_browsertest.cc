@@ -46,6 +46,7 @@
 #include "chromeos/ash/components/osauth/public/auth_session_storage.h"
 #include "components/user_manager/user_type.h"
 #include "content/public/test/browser_test.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/chromeos/devicetype_utils.h"
@@ -74,6 +75,12 @@ const test::UIPath kPinKeyboardInput = {kPinSetupScreen, "pinKeyboard",
                                         "pinKeyboard", "pinInput"};
 const test::UIPath kSetupTitle = {kPinSetupScreen, "setupTitle"};
 const test::UIPath kSetupSubtitle = {kPinSetupScreen, "setupSubtitle"};
+
+const test::UIPath kPinInputField = {kPinSetupScreen, "pinKeyboard",
+                                     "pinKeyboard", "pinInput"};
+
+const test::UIPath kShowHidePinButton = {kPinSetupScreen, "pinKeyboard",
+                                         "pinKeyboard", "showPinButton"};
 
 // PasswordSelectionScreen elements.
 const test::UIPath kGaiaPasswordButton = {"password-selection",
@@ -265,7 +272,7 @@ class PinSetupScreenTest : public OobeBaseTest {
         auto user_context = LoginManagerMixin::CreateDefaultUserContext(
             LoginManagerMixin::TestUserInfo(
                 AccountId::FromUserEmailGaiaId(test::kTestEmail,
-                                               test::kTestGaiaId),
+                                               GaiaId(test::kTestGaiaId)),
                 /*factors=*/{}));
         login_manager_mixin_.LoginAsNewRegularUser(std::move(user_context));
       } else {
@@ -384,8 +391,9 @@ class PinSetupScreenTest : public OobeBaseTest {
   EmbeddedPolicyTestServerMixin policy_server_{&mixin_host_};
   UserPolicyMixin user_policy_mixin_{
       &mixin_host_,
-      AccountId::FromUserEmailGaiaId(FakeGaiaMixin::kEnterpriseUser1,
-                                     FakeGaiaMixin::kEnterpriseUser1GaiaId),
+      AccountId::FromUserEmailGaiaId(
+          FakeGaiaMixin::kEnterpriseUser1,
+          GaiaId(FakeGaiaMixin::kEnterpriseUser1GaiaId)),
       &policy_server_};
   LoginManagerMixin login_manager_mixin_{&mixin_host_};
   CryptohomeMixin cryptohome_{&mixin_host_};
@@ -734,6 +742,26 @@ IN_PROC_BROWSER_TEST_F(PinSetupScreenTestAsMainFactor,
       LoginDisplayHost::default_host()
           ->GetWizardContext()
           ->extra_factors_token.value()));
+}
+
+// Ensures that the 'eye' icon for showing/hiding the PIN works.
+IN_PROC_BROWSER_TEST_F(PinSetupScreenTestAsMainFactor, ShowHidePin) {
+  ShowPinSetupScreen();
+  WaitForScreenShown();
+
+  test::OobeJS().CreateVisibilityWaiter(true, kShowHidePinButton)->Wait();
+
+  // Input field should have the 'password' type by default.
+  test::OobeJS().ExpectAttributeEQ("type", kPinInputField,
+                                   std::string{"password"});
+  // Clicking should make the PIN visible.
+  test::OobeJS().ClickOnPath(kShowHidePinButton);
+  test::OobeJS().ExpectAttributeEQ("type", kPinInputField, std::string{"text"});
+
+  // Back to hidden
+  test::OobeJS().ClickOnPath(kShowHidePinButton);
+  test::OobeJS().ExpectAttributeEQ("type", kPinInputField,
+                                   std::string{"password"});
 }
 
 // Tests that the 'Back' button logic on the PasswordSelectionScreen can bring

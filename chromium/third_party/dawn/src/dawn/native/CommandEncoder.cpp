@@ -36,6 +36,7 @@
 #include "dawn/common/Enumerator.h"
 #include "dawn/common/Math.h"
 #include "dawn/common/NonMovable.h"
+#include "dawn/native/Adapter.h"
 #include "dawn/native/ApplyClearColorValueWithDrawHelper.h"
 #include "dawn/native/BindGroup.h"
 #include "dawn/native/BlitBufferToDepthStencil.h"
@@ -609,8 +610,10 @@ MaybeError ValidateRenderPassDepthStencilAttachment(
     UsageValidationMode usageValidationMode,
     RenderPassValidationState* validationState) {
     DAWN_ASSERT(depthStencilAttachment != nullptr);
+    UnpackedPtr<RenderPassDepthStencilAttachment> unpacked;
+    DAWN_TRY_ASSIGN(unpacked, ValidateAndUnpack(depthStencilAttachment));
 
-    TextureViewBase* attachment = depthStencilAttachment->view;
+    TextureViewBase* attachment = unpacked->view;
     DAWN_TRY(device->ValidateObject(attachment));
     DAWN_TRY(
         ValidateCanUseAs(attachment, wgpu::TextureUsage::RenderAttachment, usageValidationMode));
@@ -634,64 +637,59 @@ MaybeError ValidateRenderPassDepthStencilAttachment(
                     format.format);
 
     // Read only, or depth doesn't exist.
-    if (depthStencilAttachment->depthReadOnly ||
-        !IsSubset(Aspect::Depth, attachment->GetAspects())) {
-        DAWN_INVALID_IF(depthStencilAttachment->depthLoadOp != wgpu::LoadOp::Undefined ||
-                            depthStencilAttachment->depthStoreOp != wgpu::StoreOp::Undefined,
+    if (unpacked->depthReadOnly || !IsSubset(Aspect::Depth, attachment->GetAspects())) {
+        DAWN_INVALID_IF(unpacked->depthLoadOp != wgpu::LoadOp::Undefined ||
+                            unpacked->depthStoreOp != wgpu::StoreOp::Undefined,
                         "Both depthLoadOp (%s) and depthStoreOp (%s) must not be set if the "
                         "attachment (%s) has no depth aspect or depthReadOnly (%u) is true.",
-                        depthStencilAttachment->depthLoadOp, depthStencilAttachment->depthStoreOp,
-                        attachment, depthStencilAttachment->depthReadOnly);
+                        unpacked->depthLoadOp, unpacked->depthStoreOp, attachment,
+                        unpacked->depthReadOnly);
     } else {
-        DAWN_TRY(ValidateLoadOp(depthStencilAttachment->depthLoadOp));
-        DAWN_TRY(ValidateStoreOp(depthStencilAttachment->depthStoreOp));
-        DAWN_INVALID_IF(depthStencilAttachment->depthLoadOp == wgpu::LoadOp::Undefined ||
-                            depthStencilAttachment->depthStoreOp == wgpu::StoreOp::Undefined,
+        DAWN_TRY(ValidateLoadOp(unpacked->depthLoadOp));
+        DAWN_TRY(ValidateStoreOp(unpacked->depthStoreOp));
+        DAWN_INVALID_IF(unpacked->depthLoadOp == wgpu::LoadOp::Undefined ||
+                            unpacked->depthStoreOp == wgpu::StoreOp::Undefined,
                         "Both depthLoadOp (%s) and depthStoreOp (%s) must be set if the attachment "
                         "(%s) has a depth aspect or depthReadOnly (%u) is false.",
-                        depthStencilAttachment->depthLoadOp, depthStencilAttachment->depthStoreOp,
-                        attachment, depthStencilAttachment->depthReadOnly);
+                        unpacked->depthLoadOp, unpacked->depthStoreOp, attachment,
+                        unpacked->depthReadOnly);
     }
 
-    DAWN_INVALID_IF(depthStencilAttachment->depthLoadOp == wgpu::LoadOp::ExpandResolveTexture ||
-                        depthStencilAttachment->stencilLoadOp == wgpu::LoadOp::ExpandResolveTexture,
+    DAWN_INVALID_IF(unpacked->depthLoadOp == wgpu::LoadOp::ExpandResolveTexture ||
+                        unpacked->stencilLoadOp == wgpu::LoadOp::ExpandResolveTexture,
                     "%s is not supported on depth/stencil attachment",
                     wgpu::LoadOp::ExpandResolveTexture);
 
     // Read only, or stencil doesn't exist.
-    if (depthStencilAttachment->stencilReadOnly ||
-        !IsSubset(Aspect::Stencil, attachment->GetAspects())) {
-        DAWN_INVALID_IF(depthStencilAttachment->stencilLoadOp != wgpu::LoadOp::Undefined ||
-                            depthStencilAttachment->stencilStoreOp != wgpu::StoreOp::Undefined,
+    if (unpacked->stencilReadOnly || !IsSubset(Aspect::Stencil, attachment->GetAspects())) {
+        DAWN_INVALID_IF(unpacked->stencilLoadOp != wgpu::LoadOp::Undefined ||
+                            unpacked->stencilStoreOp != wgpu::StoreOp::Undefined,
                         "Both stencilLoadOp (%s) and stencilStoreOp (%s) must not be set if the "
                         "attachment (%s) has no stencil aspect or stencilReadOnly (%u) is true.",
-                        depthStencilAttachment->stencilLoadOp,
-                        depthStencilAttachment->stencilStoreOp, attachment,
-                        depthStencilAttachment->stencilReadOnly);
+                        unpacked->stencilLoadOp, unpacked->stencilStoreOp, attachment,
+                        unpacked->stencilReadOnly);
     } else {
-        DAWN_TRY(ValidateLoadOp(depthStencilAttachment->stencilLoadOp));
-        DAWN_TRY(ValidateStoreOp(depthStencilAttachment->stencilStoreOp));
-        DAWN_INVALID_IF(depthStencilAttachment->stencilLoadOp == wgpu::LoadOp::Undefined ||
-                            depthStencilAttachment->stencilStoreOp == wgpu::StoreOp::Undefined,
+        DAWN_TRY(ValidateLoadOp(unpacked->stencilLoadOp));
+        DAWN_TRY(ValidateStoreOp(unpacked->stencilStoreOp));
+        DAWN_INVALID_IF(unpacked->stencilLoadOp == wgpu::LoadOp::Undefined ||
+                            unpacked->stencilStoreOp == wgpu::StoreOp::Undefined,
                         "Both stencilLoadOp (%s) and stencilStoreOp (%s) must be set if the "
                         "attachment (%s) has a stencil aspect or stencilReadOnly (%u) is false.",
-                        depthStencilAttachment->stencilLoadOp,
-                        depthStencilAttachment->stencilStoreOp, attachment,
-                        depthStencilAttachment->stencilReadOnly);
+                        unpacked->stencilLoadOp, unpacked->stencilStoreOp, attachment,
+                        unpacked->stencilReadOnly);
     }
 
-    if (depthStencilAttachment->depthLoadOp == wgpu::LoadOp::Clear &&
+    if (unpacked->depthLoadOp == wgpu::LoadOp::Clear &&
         IsSubset(Aspect::Depth, attachment->GetAspects())) {
         DAWN_INVALID_IF(
-            std::isnan(depthStencilAttachment->depthClearValue),
+            std::isnan(unpacked->depthClearValue),
             "depthClearValue (%f) must be set and must not be a NaN value if the attachment "
             "(%s) has a depth aspect and depthLoadOp is clear.",
-            depthStencilAttachment->depthClearValue, attachment);
-        DAWN_INVALID_IF(depthStencilAttachment->depthClearValue < 0.0f ||
-                            depthStencilAttachment->depthClearValue > 1.0f,
+            unpacked->depthClearValue, attachment);
+        DAWN_INVALID_IF(unpacked->depthClearValue < 0.0f || unpacked->depthClearValue > 1.0f,
                         "depthClearValue (%f) must be between 0.0 and 1.0 if the attachment (%s) "
                         "has a depth aspect and depthLoadOp is clear.",
-                        depthStencilAttachment->depthClearValue, attachment);
+                        unpacked->depthClearValue, attachment);
     }
 
     DAWN_TRY(ValidateAttachmentArrayLayersAndLevelCount(attachment));
@@ -754,8 +752,10 @@ ResultOrError<UnpackedPtr<RenderPassDescriptor>> ValidateRenderPassDescriptor(
     uint32_t maxColorAttachments = device->GetLimits().v1.maxColorAttachments;
     DAWN_INVALID_IF(
         descriptor->colorAttachmentCount > maxColorAttachments,
-        "Color attachment count (%u) exceeds the maximum number of color attachments (%u).",
-        descriptor->colorAttachmentCount, maxColorAttachments);
+        "Color attachment count (%u) exceeds the maximum number of color attachments (%u).%s",
+        descriptor->colorAttachmentCount, maxColorAttachments,
+        DAWN_INCREASE_LIMIT_MESSAGE(device->GetAdapter(), maxColorAttachments,
+                                    descriptor->colorAttachmentCount));
 
     auto colorAttachments = ityp::SpanFromUntyped<ColorAttachmentIndex>(
         descriptor->colorAttachments, descriptor->colorAttachmentCount);
@@ -788,12 +788,7 @@ ResultOrError<UnpackedPtr<RenderPassDescriptor>> ValidateRenderPassDescriptor(
     }
 
     if (descriptor->timestampWrites != nullptr) {
-        QuerySetBase* querySet = descriptor->timestampWrites->querySet;
-        DAWN_ASSERT(querySet != nullptr);
-        uint32_t beginningOfPassWriteIndex = descriptor->timestampWrites->beginningOfPassWriteIndex;
-        uint32_t endOfPassWriteIndex = descriptor->timestampWrites->endOfPassWriteIndex;
-        DAWN_TRY_CONTEXT(ValidatePassTimestampWrites(device, querySet, beginningOfPassWriteIndex,
-                                                     endOfPassWriteIndex),
+        DAWN_TRY_CONTEXT(ValidatePassTimestampWrites(device, descriptor->timestampWrites),
                          "validating timestampWrites.");
     }
 
@@ -854,12 +849,7 @@ MaybeError ValidateComputePassDescriptor(const DeviceBase* device,
     }
 
     if (descriptor->timestampWrites != nullptr) {
-        QuerySetBase* querySet = descriptor->timestampWrites->querySet;
-        DAWN_ASSERT(querySet != nullptr);
-        uint32_t beginningOfPassWriteIndex = descriptor->timestampWrites->beginningOfPassWriteIndex;
-        uint32_t endOfPassWriteIndex = descriptor->timestampWrites->endOfPassWriteIndex;
-        DAWN_TRY_CONTEXT(ValidatePassTimestampWrites(device, querySet, beginningOfPassWriteIndex,
-                                                     endOfPassWriteIndex),
+        DAWN_TRY_CONTEXT(ValidatePassTimestampWrites(device, descriptor->timestampWrites),
                          "validating timestampWrites.");
     }
 
@@ -968,6 +958,25 @@ bool ShouldUseTextureToBufferBlit(const DeviceBase* device,
         device->IsToggleEnabled(Toggle::UseBlitForRGB9E5UfloatTextureCopy)) {
         return true;
     }
+    // RG11B10Ufloat
+    if (format.format == wgpu::TextureFormat::RG11B10Ufloat &&
+        device->IsToggleEnabled(Toggle::UseBlitForRG11B10UfloatTextureCopy)) {
+        return true;
+    }
+    // float16
+    if ((format.format == wgpu::TextureFormat::R16Float ||
+         format.format == wgpu::TextureFormat::RG16Float ||
+         format.format == wgpu::TextureFormat::RGBA16Float) &&
+        device->IsToggleEnabled(Toggle::UseBlitForFloat16TextureCopy)) {
+        return true;
+    }
+    // float32
+    if ((format.format == wgpu::TextureFormat::R32Float ||
+         format.format == wgpu::TextureFormat::RG32Float ||
+         format.format == wgpu::TextureFormat::RGBA32Float) &&
+        device->IsToggleEnabled(Toggle::UseBlitForFloat32TextureCopy)) {
+        return true;
+    }
     // Depth
     if (aspect == Aspect::Depth &&
         ((format.format == wgpu::TextureFormat::Depth16Unorm &&
@@ -1001,6 +1010,11 @@ bool ShouldUseT2B2TForT2T(const DeviceBase* device,
     // sRGB <-> non-sRGB
     if (srcFormat.format != dstFormat.format && srcFormat.baseFormat == dstFormat.baseFormat &&
         device->IsToggleEnabled(Toggle::UseT2B2TForSRGBTextureCopy)) {
+        return true;
+    }
+    // Snorm
+    if (srcFormat.IsSnorm() &&
+        device->IsToggleEnabled(Toggle::UseBlitForSnormTextureToBufferCopy)) {
         return true;
     }
     return false;

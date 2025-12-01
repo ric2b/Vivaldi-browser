@@ -42,7 +42,7 @@ import * as Formatter from '../../models/formatter/formatter.js';
 import * as SourceMapScopes from '../../models/source_map_scopes/source_map_scopes.js';
 import * as Buttons from '../../ui/components/buttons/buttons.js';
 import * as ObjectUI from '../../ui/legacy/components/object_ui/object_ui.js';
-// eslint-disable-next-line rulesdir/es_modules_import
+// eslint-disable-next-line rulesdir/es-modules-import
 import objectValueStyles from '../../ui/legacy/components/object_ui/objectValue.css.js';
 import * as Components from '../../ui/legacy/components/utils/utils.js';
 import * as UI from '../../ui/legacy/legacy.js';
@@ -102,6 +102,7 @@ export class WatchExpressionsSidebarPane extends UI.ThrottledWidget.ThrottledWid
   private readonly linkifier: Components.Linkifier.Linkifier;
   private constructor() {
     super(true);
+    this.registerRequiredCSS(watchExpressionsSidebarPaneStyles, objectValueStyles);
 
     // TODO(szuend): Replace with a Set once the web test
     // panels/sources/debugger-ui/watch-expressions-preserve-expansion.js is either converted
@@ -125,6 +126,7 @@ export class WatchExpressionsSidebarPane extends UI.ThrottledWidget.ThrottledWid
     this.contentElement.setAttribute('jslog', `${VisualLogging.section('sources.watch')}`);
     this.contentElement.addEventListener('contextmenu', this.contextMenu.bind(this), false);
     this.treeOutline = new ObjectUI.ObjectPropertiesSection.ObjectPropertiesSectionsTreeOutline();
+    this.treeOutline.registerRequiredCSS(watchExpressionsSidebarPaneStyles);
     this.treeOutline.hideOverflow();
 
     this.treeOutline.setShowSelectionOnKeyboardFocus(/* show */ true);
@@ -184,7 +186,7 @@ export class WatchExpressionsSidebarPane extends UI.ThrottledWidget.ThrottledWid
     this.contentElement.removeChildren();
     this.treeOutline.removeChildren();
     this.watchExpressions = [];
-    this.emptyElement = (this.contentElement.createChild('div', 'gray-info-message') as HTMLElement);
+    this.emptyElement = this.contentElement.createChild('div', 'gray-info-message');
     this.emptyElement.textContent = i18nString(UIStrings.noWatchExpressions);
     this.emptyElement.tabIndex = -1;
     const watchExpressionStrings = this.watchExpressionsSetting.get();
@@ -300,12 +302,6 @@ export class WatchExpressionsSidebarPane extends UI.ThrottledWidget.ThrottledWid
     }
 
     contextMenu.debugSection().appendAction('sources.add-to-watch');
-  }
-
-  override wasShown(): void {
-    super.wasShown();
-    this.treeOutline.registerCSSFiles([watchExpressionsSidebarPaneStyles]);
-    this.registerCSSFiles([watchExpressionsSidebarPaneStyles, objectValueStyles]);
   }
 }
 
@@ -601,6 +597,6 @@ const enum Events {
   EXPRESSION_UPDATED = 'ExpressionUpdated',
 }
 
-type EventTypes = {
-  [Events.EXPRESSION_UPDATED]: WatchExpression,
-};
+interface EventTypes {
+  [Events.EXPRESSION_UPDATED]: WatchExpression;
+}

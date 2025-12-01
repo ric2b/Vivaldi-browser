@@ -11,6 +11,7 @@
 
 #include <stdint.h>
 
+#include <algorithm>
 #include <utility>
 
 #include "base/android/jni_android.h"
@@ -18,7 +19,6 @@
 #include "base/android/jni_string.h"
 #include "base/functional/bind.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/system/system_monitor.h"
 #include "base/task/single_thread_task_runner.h"
@@ -646,7 +646,8 @@ void VideoCaptureDeviceAndroid::SendIncomingDataToClient(
     return;
   client_->OnIncomingCapturedData(
       data, length, capture_format_, capture_color_space_, rotation,
-      false /* flip_y */, reference_time, timestamp, std::nullopt);
+      false /* flip_y */, reference_time, timestamp,
+      /*capture_begin_timestamp=*/std::nullopt, /*metadata=*/std::nullopt);
 }
 
 VideoPixelFormat VideoCaptureDeviceAndroid::GetColorspace() {

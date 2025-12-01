@@ -419,11 +419,10 @@ void MenubarController::PopulateBookmarks() {
       browser_->window()->GetNativeWindow());
   bookmark_menu_delegate_.reset(new BookmarkMenuDelegate(
       browser_,
-      parent));
-  bookmark_menu_delegate_->Init(this, bookmark_menu_,
-                                model->bookmark_bar_node(), 0,
-                                BookmarkMenuDelegate::HIDE_PERMANENT_FOLDERS,
-                                BookmarkLaunchLocation::kNone);
+      parent,
+      this, BookmarkLaunchLocation::kNone
+    ));
+  bookmark_menu_delegate_->BuildFullMenu(bookmark_menu_);
 }
 
 void MenubarController::PopulateMenu(views::MenuItemView* parent,

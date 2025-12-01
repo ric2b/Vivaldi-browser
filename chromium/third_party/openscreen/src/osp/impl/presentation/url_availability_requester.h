@@ -9,6 +9,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "osp/msgs/osp_messages.h"
@@ -36,6 +37,9 @@ class UrlAvailabilityRequester {
   UrlAvailabilityRequester& operator=(UrlAvailabilityRequester&&) noexcept =
       delete;
   ~UrlAvailabilityRequester();
+
+  void CreateReceiverRequester(std::string_view instance_name,
+                               uint64_t instance_id);
 
   // Adds a persistent availability request for `urls` to all known receivers.
   // These URLs will also be queried for any receivers discovered in the future.
@@ -78,11 +82,11 @@ class UrlAvailabilityRequester {
   // during the following watch period.  Before a watch will expire, it needs to
   // send a new request to restart the watch, as long as there are active
   // observers for a given URL.
-  class ReceiverRequester final : public ConnectRequestCallback,
-                                  public MessageDemuxer::MessageCallback {
+  class ReceiverRequester final : public MessageDemuxer::MessageCallback {
    public:
     ReceiverRequester(UrlAvailabilityRequester& listener,
-                      const std::string& instance_name);
+                      std::string_view instance_name,
+                      uint64_t instance_id);
     ReceiverRequester(const ReceiverRequester&) = delete;
     ReceiverRequester& operator=(const ReceiverRequester&) = delete;
     ReceiverRequester(ReceiverRequester&&) noexcept = delete;
@@ -102,10 +106,6 @@ class UrlAvailabilityRequester {
     void RemoveUnobservedRequests(const std::set<std::string>& unobserved_urls);
     void RemoveUnobservedWatches(const std::set<std::string>& unobserved_urls);
     void RemoveReceiver();
-
-    // ProtocolConnectionClient::ConnectRequestCallback overrides.
-    void OnConnectSucceed(uint64_t request_id, uint64_t instance_id) override;
-    void OnConnectFailed(uint64_t request_id) override;
 
     // MessageDemuxer::MessageCallback overrides.
     ErrorOr<size_t> OnStreamMessage(uint64_t instance_id,
@@ -134,9 +134,8 @@ class UrlAvailabilityRequester {
 
     uint64_t next_watch_id_ = 1;
     const std::string instance_name_;
-    uint64_t instance_id_{0};
+    const uint64_t instance_id_;
 
-    ConnectRequest connect_request_;
     // TODO(btolsch): Observe connection and restart all the things on close.
     std::unique_ptr<ProtocolConnection> connection_;
 

@@ -31,8 +31,8 @@ void TextTraceLoggingPlatform::LogTrace(TraceEvent event,
                                         Clock::time_point end_time) {
   const auto total_runtime = (end_time - event.start_time);
   std::stringstream ss;
-  ss << "[TRACE"
-     << " (" << std::dec << total_runtime << ")] " << event.ToString();
+  ss << "[TRACE" << " (" << std::dec << total_runtime << ")] "
+     << event.ToString();
   LogTraceMessage(ss.str());
 }
 

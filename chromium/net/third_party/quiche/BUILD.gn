@@ -49,9 +49,6 @@ config("quiche_config") {
 }
 
 component("quiche") {
-  # TODO(crbug.com/325102878): Remove once usage of the deprecated version of
-  # absl::HexStringToBytes have been removed.
-  cflags = [ "-Wno-deprecated-declarations" ]
   sources = [
               "overrides/quiche_platform_impl/quiche_bug_tracker_impl.h",
               "overrides/quiche_platform_impl/quiche_client_stats_impl.h",
@@ -59,8 +56,6 @@ component("quiche") {
               "overrides/quiche_platform_impl/quiche_export_impl.h",
               "overrides/quiche_platform_impl/quiche_iovec_impl.h",
               "overrides/quiche_platform_impl/quiche_logging_impl.h",
-              "overrides/quiche_platform_impl/quiche_mutex_impl.cc",
-              "overrides/quiche_platform_impl/quiche_mutex_impl.h",
               "overrides/quiche_platform_impl/quiche_reference_counted_impl.h",
               "overrides/quiche_platform_impl/quiche_server_stats_impl.h",
               "overrides/quiche_platform_impl/quiche_stack_trace_impl.cc",
@@ -71,7 +66,6 @@ component("quiche") {
               "overrides/quiche_platform_impl/quiche_url_utils_impl.h",
               "src/quiche/common/platform/default/quiche_platform_impl/quiche_flags_impl.cc",
               "src/quiche/common/platform/default/quiche_platform_impl/quiche_flags_impl.h",
-              "src/quiche/common/platform/default/quiche_platform_impl/quiche_prefetch_impl.h",
               "src/quiche/http2/hpack/hpack_static_table_entries.inc",
             ] + quiche_core_hdrs + quiche_core_srcs + binary_http_srcs +
             binary_http_hdrs + oblivious_http_srcs + oblivious_http_hdrs
@@ -134,9 +128,6 @@ proto_library("net_quic_test_tools_proto") {
 
 if (build_epoll_based_tools) {
   static_library("epoll_tool_support") {
-    # TODO(crbug.com/325102878): Remove once usage of the deprecated version of
-    # absl::HexStringToBytes have been removed.
-    cflags = [ "-Wno-deprecated-declarations" ]
     testonly = true
     sources = [
                 "overrides/quiche_platform_impl/quiche_udp_socket_platform_impl.h",
@@ -214,9 +205,6 @@ if (build_epoll_based_tools) {
   executable("masque_client") {
     testonly = true
 
-    # TODO(crbug.com/325102878): Remove once usage of the deprecated version of
-    # absl::HexStringToBytes have been removed.
-    cflags = [ "-Wno-deprecated-declarations" ]
     sources = [ "src/quiche/quic/masque/masque_client_bin.cc" ]
 
     configs += [ ":quiche_internal_config" ]
@@ -270,14 +258,8 @@ if (build_epoll_based_tools) {
 static_library("quiche_test_support") {
   testonly = true
 
-  # TODO(crbug.com/325102878): Remove once usage of the deprecated version of
-  # absl::HexStringToBytes have been removed.
-  cflags = [ "-Wno-deprecated-declarations" ]
   sources = [
               "overrides/quiche_platform_impl/quiche_expect_bug_impl.h",
-              "overrides/quiche_platform_impl/quiche_mock_log_impl.h",
-              "overrides/quiche_platform_impl/quiche_test_helpers_impl.cc",
-              "overrides/quiche_platform_impl/quiche_test_helpers_impl.h",
               "overrides/quiche_platform_impl/quiche_test_impl.cc",
               "overrides/quiche_platform_impl/quiche_test_impl.h",
               "overrides/quiche_platform_impl/quiche_test_output_impl.cc",
@@ -336,9 +318,6 @@ if (!is_ios) {
   source_set("quic_client_core") {
     testonly = true
 
-    # TODO(crbug.com/325102878): Remove once usage of the deprecated version of
-    # absl::HexStringToBytes have been removed.
-    cflags = [ "-Wno-deprecated-declarations" ]
     sources = [
       "src/quiche/quic/tools/quic_toy_client.cc",
       "src/quiche/quic/tools/quic_toy_client.h",
@@ -372,9 +351,6 @@ if (!is_ios) {
   executable("quic_packet_printer") {
     testonly = true
 
-    # TODO(crbug.com/325102878): Remove once usage of the deprecated version of
-    # absl::HexStringToBytes have been removed.
-    cflags = [ "-Wno-deprecated-declarations" ]
     sources = [ "src/quiche/quic/tools/quic_packet_printer_bin.cc" ]
 
     configs += [ ":quiche_internal_config" ]
@@ -393,9 +369,6 @@ if (!is_ios) {
   executable("quic_crypto_message_printer") {
     testonly = true
 
-    # TODO(crbug.com/325102878): Remove once usage of the deprecated version of
-    # absl::HexStringToBytes have been removed.
-    cflags = [ "-Wno-deprecated-declarations" ]
     sources = [ "src/quiche/quic/tools/crypto_message_printer_bin.cc" ]
 
     configs += [ ":quiche_internal_config" ]
@@ -462,14 +435,12 @@ bundle_data("test_data") {
 source_set("quiche_tests") {
   testonly = true
 
-  # TODO(crbug.com/325102878): Remove once usage of the deprecated version of
-  # absl::HexStringToBytes have been removed.
-  cflags = [ "-Wno-deprecated-declarations" ]
   sources = [
     "src/quiche/binary_http/binary_http_message_test.cc",
     "src/quiche/blind_sign_auth/blind_sign_auth_test.cc",
     "src/quiche/blind_sign_auth/cached_blind_sign_auth_test.cc",
     "src/quiche/common/btree_scheduler_test.cc",
+    "src/quiche/common/bug_utils_test.cc",
     "src/quiche/common/capsule_test.cc",
     "src/quiche/common/http/http_header_block_test.cc",
     "src/quiche/common/http/http_header_storage_test.cc",
@@ -512,6 +483,8 @@ source_set("quiche_tests") {
     "src/quiche/http2/adapter/recording_http2_visitor_test.cc",
     "src/quiche/http2/adapter/window_manager_test.cc",
     "src/quiche/http2/core/array_output_buffer_test.cc",
+    "src/quiche/http2/core/http2_constants_test.cc",
+    "src/quiche/http2/core/http2_structures_test.cc",
     "src/quiche/http2/core/priority_write_scheduler_test.cc",
     "src/quiche/http2/core/spdy_alt_svc_wire_format_test.cc",
     "src/quiche/http2/core/spdy_frame_builder_test.cc",
@@ -559,8 +532,6 @@ source_set("quiche_tests") {
     "src/quiche/http2/hpack/varint/hpack_varint_decoder_test.cc",
     "src/quiche/http2/hpack/varint/hpack_varint_encoder_test.cc",
     "src/quiche/http2/hpack/varint/hpack_varint_round_trip_test.cc",
-    "src/quiche/http2/http2_constants_test.cc",
-    "src/quiche/http2/http2_structures_test.cc",
     "src/quiche/http2/test_tools/hpack_block_builder_test.cc",
     "src/quiche/http2/test_tools/hpack_example_test.cc",
     "src/quiche/http2/test_tools/http2_frame_builder_test.cc",
@@ -635,7 +606,6 @@ source_set("quiche_tests") {
     "src/quiche/quic/core/internet_checksum_test.cc",
     "src/quiche/quic/core/legacy_quic_stream_id_manager_test.cc",
     "src/quiche/quic/core/packet_number_indexed_queue_test.cc",
-    "src/quiche/quic/core/qpack/qpack_blocking_manager_test.cc",
     "src/quiche/quic/core/qpack/qpack_decoded_headers_accumulator_test.cc",
     "src/quiche/quic/core/qpack/qpack_decoder_stream_receiver_test.cc",
     "src/quiche/quic/core/qpack/qpack_decoder_stream_sender_test.cc",
@@ -729,6 +699,7 @@ source_set("quiche_tests") {
     "src/quiche/quic/tools/quic_tcp_like_trace_converter_test.cc",
     "src/quiche/quic/tools/simple_ticket_crypter_test.cc",
     "src/quiche/web_transport/encapsulated/encapsulated_web_transport_test.cc",
+    "src/quiche/web_transport/test_tools/in_memory_stream_test.cc",
     "src/quiche/web_transport/web_transport_headers_test.cc",
   ]
 

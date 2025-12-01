@@ -14,7 +14,6 @@
 #include "services/webnn/buildflags.h"
 #include "services/webnn/error.h"
 #include "services/webnn/public/cpp/context_properties.h"
-#include "services/webnn/public/mojom/webnn_context_provider.mojom-forward.h"
 #include "services/webnn/public/mojom/webnn_context_provider.mojom.h"
 #include "services/webnn/public/mojom/webnn_error.mojom.h"
 #include "services/webnn/webnn_context_impl.h"
@@ -161,7 +160,8 @@ void WebNNContextProviderImpl::BindWebNNContextProvider(
 // static
 void WebNNContextProviderImpl::CreateForTesting(
     mojo::PendingReceiver<mojom::WebNNContextProvider> receiver,
-    WebNNStatus status) {
+    WebNNStatus status,
+    LoseAllContextsCallback lose_all_contexts_callback) {
   CHECK_IS_TEST();
 
   gpu::GpuFeatureInfo gpu_feature_info;
@@ -183,7 +183,6 @@ void WebNNContextProviderImpl::CreateForTesting(
         DISABLE_WEBNN_FOR_NPU);
   }
 
-  LoseAllContextsCallback lose_all_contexts_callback = base::BindOnce([]() {});
   mojo::MakeSelfOwnedReceiver<WebNNContextProvider>(
       base::WrapUnique(new WebNNContextProviderImpl(
           /*shared_context_state=*/nullptr, std::move(gpu_feature_info),

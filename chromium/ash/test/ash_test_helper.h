@@ -81,6 +81,10 @@ class AshTestHelper : public aura::test::AuraTestHelper {
 
     // True if the user should log in.
     bool start_session = true;
+
+    // True if the signin pref services should be created.
+    bool create_signin_pref_service = true;
+
     // If this is not set, a TestShellDelegate will be used automatically.
     std::unique_ptr<ShellDelegate> delegate;
     raw_ptr<PrefService> local_state = nullptr;
@@ -93,6 +97,12 @@ class AshTestHelper : public aura::test::AuraTestHelper {
 
     // True if a global `QuickPairMediator` should be created.
     bool create_quick_pair_mediator = true;
+
+    // True to auto create prefs services.
+    bool auto_create_prefs_services = true;
+
+    // Whether or not to destroy the screen in the destructor.
+    bool destroy_screen = true;
   };
 
   // Instantiates/destroys an AshTestHelper. This can happen in a
@@ -133,17 +143,14 @@ class AshTestHelper : public aura::test::AuraTestHelper {
   void SimulateUserLogin(
       const AccountId& account_id,
       user_manager::UserType user_type = user_manager::UserType::kRegular,
-      bool is_new_profile = false);
+      bool is_new_profile = false,
+      std::unique_ptr<PrefService> pref_service = nullptr);
 
   // Stabilizes the variable UI components (such as the battery view).
   void StabilizeUIForPixelTest();
 
   TestSessionControllerClient* test_session_controller_client() {
     return session_controller_client_.get();
-  }
-  void set_test_session_controller_client(
-      std::unique_ptr<TestSessionControllerClient> session_controller_client) {
-    session_controller_client_ = std::move(session_controller_client);
   }
   TestNotifierSettingsController* notifier_settings_controller() {
     return notifier_settings_controller_.get();
@@ -205,8 +212,7 @@ class AshTestHelper : public aura::test::AuraTestHelper {
       std::make_unique<base::test::ScopedCommandLine>();
   std::unique_ptr<system::ScopedFakeStatisticsProvider> statistics_provider_ =
       std::make_unique<system::ScopedFakeStatisticsProvider>();
-  std::unique_ptr<TestPrefServiceProvider> prefs_provider_ =
-      std::make_unique<TestPrefServiceProvider>();
+  std::unique_ptr<TestPrefServiceProvider> prefs_provider_;
   std::unique_ptr<TestNotifierSettingsController>
       notifier_settings_controller_ =
           std::make_unique<TestNotifierSettingsController>();
@@ -254,6 +260,8 @@ class AshTestHelper : public aura::test::AuraTestHelper {
   bool create_global_cras_audio_handler_ = true;
   // True if a fake `QuickPairMediator` should be created.
   bool create_quick_pair_mediator_ = true;
+  // True if a screen instance should be destroyed.
+  bool destroy_screen_ = true;
 };
 
 }  // namespace ash

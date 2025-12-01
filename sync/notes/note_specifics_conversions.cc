@@ -82,7 +82,7 @@ std::string InferGuidForLegacyNote(
 
   static_assert(base::kSHA1Length >= 16, "16 bytes needed to infer Uuid");
 
-  const std::string guid = ComputeGuidFromBytes(base::make_span(hash));
+  const std::string guid = ComputeGuidFromBytes(base::span(hash));
   DCHECK(base::Uuid::ParseLowercase(guid).is_valid());
   return guid;
 }
@@ -261,8 +261,7 @@ const vivaldi::NoteNode* CreateNoteNodeFromSpecifics(
                               creation_time, last_modification_time, guid);
   }
 
-  NOTREACHED_IN_MIGRATION();
-  return nullptr;
+  NOTREACHED();
 }
 
 void UpdateNoteNodeFromSpecifics(const sync_pb::NotesSpecifics& specifics,
@@ -351,7 +350,7 @@ const vivaldi::NoteNode* ReplaceNoteNodeUuid(const vivaldi::NoteNode* node,
 
 bool IsValidNotesSpecifics(const sync_pb::NotesSpecifics& specifics) {
   bool is_valid = true;
-  if (specifics.ByteSize() == 0) {
+  if (specifics.ByteSizeLong() == 0) {
     DLOG(ERROR) << "Invalid note: empty specifics.";
     is_valid = false;
   }

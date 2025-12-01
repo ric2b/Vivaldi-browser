@@ -34,6 +34,8 @@ limitations under the License.
 #include "absl/log/log.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
+#include "xla/backends/gpu/codegen/triton/support.h"
+#include "xla/backends/gpu/codegen/triton/support_legacy.h"
 #include "xla/hlo/ir/hlo_casting_utils.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_instructions.h"
@@ -41,8 +43,6 @@ limitations under the License.
 #include "xla/hlo/utils/hlo_query.h"
 #include "xla/layout.h"
 #include "xla/permutation_util.h"
-#include "xla/service/gpu/fusions/triton/triton_support.h"
-#include "xla/service/gpu/fusions/triton/triton_support_legacy.h"
 #include "xla/service/instruction_fusion.h"
 #include "xla/shape.h"
 #include "xla/shape_util.h"
@@ -779,14 +779,17 @@ DimOrderMapOrError GetPropagatedDimOrdersForDimAlteringOp(
     Fragments& dst_fragments_order = dst_dim_order.TensorFragmentsOrder();
     FragmentOrders& dst_dim_fragments_order =
         dst_dim_order.DimFragmentsOrders();
-    // Remember which dimensions are present before a broadcast;
-    // skip cases when already present dimension is being expanded.
-    absl::flat_hash_set<int> dim_numbers_present_in_dst;
+    // Remember which nontrivial dimensions are present before a broadcast to
+    // skip cases expanding already present nontrivial dimensions.
+    absl::flat_hash_set<int> nontrivial_dim_numbers_present_in_dst;
     for (const int64_t dim_idx : dst->shape().layout().minor_to_major()) {
       for (const Fragment* subdim : dst_logical[dim_idx]) {
         dst_fragments_order.push_back(*subdim);
         src_to_dst[subdim] = dst_fragments_order.size() - 1;
-        dim_numbers_present_in_dst.insert(subdim->dst_dim_number());
+        if (subdim->full_count() > 1) {
+          nontrivial_dim_numbers_present_in_dst.insert(
+              subdim->dst_dim_number());
+        }
       }
     }
     for (const auto& [dim_index, dim_sequence] :
@@ -796,7 +799,7 @@ DimOrderMapOrError GetPropagatedDimOrdersForDimAlteringOp(
         if (it == src_to_dst.cend()) {
           if (hlo.opcode() == HloOpcode::kBroadcast &&
               src_fragments_order[fragment_number].full_count() > 1 &&
-              dim_numbers_present_in_dst.contains(dim_index)) {
+              nontrivial_dim_numbers_present_in_dst.contains(dim_index)) {
             return FusionDecision::Forbid("Unsupported broadcast");
           }
           continue;
@@ -1036,63 +1039,51 @@ GetPropagatedDimOrdersAndRequirementsIfProfitablyFusible(
   }
   DimOrdersAndReqs dim_orders_and_requirements =
       std::move(std::get<DimOrdersAndReqs>(result_or_error));
-  int fusion_level =
-      hlo.GetModule()->config().debug_options().xla_gpu_triton_fusion_level();
   // TODO(ROCm): Check fusion level for ROCm.
   if (transform_direction == TransformDirection::kOutputToInput) {
-    if (fusion_level < 2) {
-      if (hlo.opcode() == HloOpcode::kConvert) {
-        if (FusionDecision decision = IsConversionWorthFusing(hlo, gpu_version);
-            !decision) {
-          return decision;
-        }
-      } else if (hlo.IsElementwise() && hlo.opcode() != HloOpcode::kCopy) {
-        return FusionDecision::Forbid("Ignored elementwise operation");
-      }
-    } else {
-      // Exception for binary elementwise operations: in most cases these are
-      // not trivial to fuse because they increase DRAM traffic but if one
-      // of the inputs is for example a broadcast that can be fused too it
-      // becomes worth fusing. Look ahead and analyze operands here.
-      bool accepted = false;
-      if (hlo.IsElementwise() && hlo.operand_count() == 2) {
-        for (const HloInstruction* operand : hlo.operands()) {
-          if (operand->opcode() == HloOpcode::kBroadcast &&
-              (operand->operand(0)->opcode() == HloOpcode::kParameter ||
-               operand->operand(0)->opcode() == HloOpcode::kConstant) &&
-              std::holds_alternative<DimOrdersAndReqs>(
-                  GetPropagatedDimOrdersAndRequirementsIfProfitablyFusible(
-                      *operand, TransformDirection::kOutputToInput,
-                      /*src_operand_index=*/std::nullopt,
-                      /*src_dim_order=*/
-                      dim_orders_and_requirements.dim_orders.at(operand),
-                      gpu_version, properties))) {
-            accepted = true;
-            break;
-          }
+    // Exception for binary elementwise operations: in most cases these are
+    // not trivial to fuse because they increase DRAM traffic but if one
+    // of the inputs is for example a broadcast that can be fused too it
+    // becomes worth fusing. Look ahead and analyze operands here.
+    bool accepted = false;
+    if (hlo.IsElementwise() && hlo.operand_count() == 2) {
+      for (const HloInstruction* operand : hlo.operands()) {
+        if (operand->opcode() == HloOpcode::kBroadcast &&
+            (operand->operand(0)->opcode() == HloOpcode::kParameter ||
+             operand->operand(0)->opcode() == HloOpcode::kConstant) &&
+            std::holds_alternative<DimOrdersAndReqs>(
+                GetPropagatedDimOrdersAndRequirementsIfProfitablyFusible(
+                    *operand, TransformDirection::kOutputToInput,
+                    /*src_operand_index=*/std::nullopt,
+                    /*src_dim_order=*/
+                    dim_orders_and_requirements.dim_orders.at(operand),
+                    gpu_version, properties))) {
+          accepted = true;
+          break;
         }
       }
-      if (!accepted && !IsInputWorthFusing(hlo)) {
-        return FusionDecision::Forbid(
-            "Not obviously profitable to fuse as input.");
-      }
+    }
+    if (!accepted && !IsInputWorthFusing(hlo)) {
+      return FusionDecision::Forbid(
+          "Not obviously profitable to fuse as input.");
     }
   } else {
-    if (fusion_level < 2) {
-      return FusionDecision::Forbid(
-          "Skipping fusing outputs at low fusion levels.");
-    }
     for (int i = 0; i < hlo.operand_count(); ++i) {
       const HloInstruction* operand = hlo.operand(i);
       // Skip source operand.
       if (i == *src_operand_index) {
         continue;
       }
-      // Currently only broadcasts of scalars or parameters are accepted as
-      // other inputs of non-unary operations in the output fusion.
+      // Currently only
+      //  - effective parameters
+      //  - broadcasts of effective parameters
+      //  - broadcasts of scalars
+      // are accepted as other inputs of non-unary operations in
+      // the output fusion.
       if ((operand->opcode() == HloOpcode::kBroadcast &&
-           ShapeUtil::IsScalar(operand->operand(0)->shape())) ||
-          operand->opcode() == HloOpcode::kParameter) {
+           (ShapeUtil::IsScalar(operand->operand(0)->shape()) ||
+            hlo_query::IsEffectiveParameter(*operand->operand(0)))) ||
+          hlo_query::IsEffectiveParameter(*operand)) {
         continue;
       }
       return FusionDecision::Forbid(

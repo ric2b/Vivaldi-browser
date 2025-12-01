@@ -20,6 +20,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/rand_util.h"
 #include "base/synchronization/atomic_flag.h"
 #include "base/synchronization/lock.h"
 #include "base/thread_annotations.h"
@@ -30,10 +31,6 @@
 #include "gpu/command_buffer/service/sequence_id.h"
 #include "gpu/gpu_export.h"
 
-namespace base {
-class SingleThreadTaskRunner;
-}  // namespace base
-
 namespace gpu {
 
 class SyncPointClient;
@@ -41,14 +38,20 @@ class SyncPointClientState;
 class SyncPointManager;
 
 // The cause of fence sync releases.
+//
+// These values are logged to UMA. Entries should not be renumbered and
+// numeric values should never be reused. Please keep in sync with ReleaseCause
+// in tools/metrics/histograms/metadata/gpu/enums.xml
 enum class ReleaseCause {
   // Releases done by clients explicitly during task execution.
-  kExplicitClientRelease,
+  kExplicitClientRelease = 0,
   // Releases done automatically at task completion, according to task info
   // specified by clients.
-  kTaskCompletionRelease,
+  kTaskCompletionRelease = 1,
   // Releases done forcefully to resolve invalid waits.
-  kForceRelease
+  kForceRelease = 2,
+
+  kMaxValue = kForceRelease
 };
 
 class GPU_EXPORT SyncPointOrderData
@@ -188,25 +191,6 @@ class GPU_EXPORT SyncPointClientState
   CommandBufferId command_buffer_id() const { return command_buffer_id_; }
   SequenceId sequence_id() const { return order_data_->sequence_id(); }
 
-  // This behaves similarly to SyncPointManager::Wait but uses the order data
-  // to guarantee no deadlocks with other clients. Must be called on order
-  // number processing thread.
-  bool Wait(const SyncToken& sync_token, base::OnceClosure callback)
-      LOCKS_EXCLUDED(fence_sync_lock_);
-
-  // Like Wait but runs the callback on the given task runner's thread. Must be
-  // called on order number processing thread.
-  // TODO(elgarawany): Rename this method to instead make it explicit that the
-  // callback is going to run on |task_runner|.
-  bool WaitNonThreadSafe(
-      const SyncToken& sync_token,
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-      base::OnceClosure callback) LOCKS_EXCLUDED(fence_sync_lock_);
-
-  // Release fence sync and run queued callbacks. Must be called on order number
-  // processing thread.
-  void ReleaseFenceSync(uint64_t release) LOCKS_EXCLUDED(fence_sync_lock_);
-
  private:
   friend class base::RefCountedThreadSafe<SyncPointClientState>;
   friend class SyncPointManager;
@@ -332,20 +316,13 @@ class GPU_EXPORT SyncPointManager {
   // released. If the wait is invalid, the callback is NOT run. The callback
   // runs on the thread the sync point is released. Clients should use
   // SyncPointClient::Wait because that uses order data to prevent deadlocks.
+  //
+  // Note: Should only be used to implement gpu::TaskGraph and its executors
+  // (e.g., gpu::Scheduler, gpu::BlockingSequenceRunner).
   bool Wait(const SyncToken& sync_token,
             SequenceId sequence_id,
             uint32_t wait_order_num,
             base::OnceClosure callback) LOCKS_EXCLUDED(lock_);
-
-  // Like Wait but runs the callback on the given task runner's thread.
-  // TODO(elgarawany): Rename this method to instead make it explicit that the
-  // callback is going to run on |task_runner|.
-  bool WaitNonThreadSafe(
-      const SyncToken& sync_token,
-      SequenceId sequence_id,
-      uint32_t wait_order_num,
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-      base::OnceClosure callback) LOCKS_EXCLUDED(lock_);
 
   // Used by SyncPointOrderData.
   uint32_t GenerateOrderNumber();
@@ -362,6 +339,9 @@ class GPU_EXPORT SyncPointManager {
       LOCKS_EXCLUDED(lock_, client_state->fence_sync_lock_);
 
   // Ensures release count reaches `release`.
+  //
+  // Note: Should only be used to implement gpu::TaskGraph and its executors
+  // (e.g., gpu::Scheduler, gpu::BlockingSequenceRunner).
   void EnsureFenceSyncReleased(const SyncToken& release, ReleaseCause cause)
       LOCKS_EXCLUDED(lock_);
 
@@ -415,6 +395,8 @@ class GPU_EXPORT SyncPointManager {
   OrderDataMap order_data_map_ GUARDED_BY(lock_);
 
   SequenceId::Generator sequence_id_generator_ GUARDED_BY(lock_);
+
+  base::MetricsSubSampler metrics_subsampler_ GUARDED_BY(lock_);
 
   mutable base::Lock lock_;
 

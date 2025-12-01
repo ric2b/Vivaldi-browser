@@ -184,11 +184,11 @@ void EnclaveAuthenticator::MakeCredential(CtapMakeCredentialRequest request,
         ui_request_->secret.has_value());
   CHECK(ui_request_->key_version.has_value());
 
-  if (base::ranges::any_of(request.exclude_list, [this](const auto& excluded) {
-        return base::ranges::any_of(ui_request_->existing_cred_ids,
-                                    [&excluded](const auto& existing_cred_id) {
-                                      return existing_cred_id == excluded.id;
-                                    });
+  if (std::ranges::any_of(request.exclude_list, [this](const auto& excluded) {
+        return std::ranges::any_of(ui_request_->existing_cred_ids,
+                                   [&excluded](const auto& existing_cred_id) {
+                                     return existing_cred_id == excluded.id;
+                                   });
       })) {
     std::move(callback).Run(
         MakeCredentialStatus::kUserConsentButCredentialExcluded, std::nullopt);
@@ -341,7 +341,7 @@ void EnclaveAuthenticator::ProcessMakeCredentialResponse(
   std::string error_description;
   auto parse_result = ParseMakeCredentialResponse(
       std::move(response), pending_make_credential_request_->request,
-      *ui_request_->key_version, ui_request_->user_verified);
+      *ui_request_->key_version, ui_request_->up_and_uv_bits);
   if (absl::holds_alternative<ErrorResponse>(parse_result)) {
     auto& error_details = absl::get<ErrorResponse>(parse_result);
     ProcessErrorResponse(error_details);
@@ -390,7 +390,7 @@ void EnclaveAuthenticator::ProcessGetAssertionResponse(
   cbor::Value& response = maybe_response.value();
   const std::string& cred_id_str = ui_request_->entity->credential_id();
   auto parse_result = ParseGetAssertionResponse(
-      std::move(response), base::as_bytes(base::make_span(cred_id_str)));
+      std::move(response), base::as_byte_span(cred_id_str));
   if (absl::holds_alternative<ErrorResponse>(parse_result)) {
     auto& error_details = absl::get<ErrorResponse>(parse_result);
     ProcessErrorResponse(error_details);

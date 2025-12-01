@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 
+#include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
 #include "chrome/browser/complex_tasks/task_tab_helper.h"
 #include "chrome/browser/history/history_service_factory.h"
@@ -376,6 +377,8 @@ void HistoryTabHelper::DidFinishNavigation(
 
   // Update history. Note that this needs to happen after the entry is complete,
   // which WillNavigate[Main,Sub]Frame will do before this function is called.
+  UMA_HISTOGRAM_BOOLEAN("History.IsErrorNavigation",
+                        navigation_handle->ShouldUpdateHistory());
   if (!navigation_handle->ShouldUpdateHistory())
     return;
 
@@ -544,11 +547,11 @@ bool HistoryTabHelper::IsEligibleTab(
 #if BUILDFLAG(IS_ANDROID)
 static void JNI_HistoryTabHelper_SetAppIdNative(
     JNIEnv* env,
-    const base::android::JavaParamRef<jstring>& japp_id,
+    std::string& app_id,
     const base::android::JavaParamRef<jobject>& jweb_contents) {
   auto* web_contents = content::WebContents::FromJavaWebContents(jweb_contents);
   auto* history_tab_helper = HistoryTabHelper::FromWebContents(web_contents);
-  history_tab_helper->SetAppId(base::android::ConvertJavaStringToUTF8(japp_id));
+  history_tab_helper->SetAppId(app_id);
 }
 #endif
 WEB_CONTENTS_USER_DATA_KEY_IMPL(HistoryTabHelper);

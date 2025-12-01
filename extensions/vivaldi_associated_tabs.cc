@@ -13,8 +13,12 @@
 
 namespace vivaldi {
 namespace {
+
+int IdForTab(content::WebContents* contents) {
+  return sessions::SessionTabHelper::IdForTab(contents).id();
+}
+
 void DoRelatedMoves(std::vector<int> moved_tabs_vector) {
-  using sessions::SessionTabHelper;
   using ::vivaldi::ParentTabUserData;
 
   std::set<int> moved_tabs(moved_tabs_vector.begin(), moved_tabs_vector.end());
@@ -28,7 +32,7 @@ void DoRelatedMoves(std::vector<int> moved_tabs_vector) {
 
     for (int i = 0; i < tab_strip->count(); ++i) {
       auto * contents = tab_strip->GetWebContentsAt(i);
-      int tab_id = SessionTabHelper::IdForTab(contents).id();
+      int tab_id = IdForTab(contents);
       if (tab_id == -1)
         continue;
 
@@ -78,7 +82,6 @@ void DoRelatedMoves(std::vector<int> moved_tabs_vector) {
 }
 
 std::vector<int> FindAssociatedTabs(std::vector<int> parent_tabs_vector) {
-  using sessions::SessionTabHelper;
   using ::vivaldi::ParentTabUserData;
 
   std::set<int> parent_tabs(parent_tabs_vector.begin(),
@@ -96,14 +99,13 @@ std::vector<int> FindAssociatedTabs(std::vector<int> parent_tabs_vector) {
         continue;
       if (!parent_tabs.count(*parent_id))
         continue;
-      res.push_back(SessionTabHelper::IdForTab(contents).id());
+      res.push_back(IdForTab(contents));
     }
   }
   return res;
 }
 
 void RemoveChildren(std::vector<int> parent_tabs) {
-  using sessions::SessionTabHelper;
   using ::vivaldi::ParentTabUserData;
 
   std::set<int> tabs(parent_tabs.begin(), parent_tabs.end());
@@ -113,19 +115,73 @@ void RemoveChildren(std::vector<int> parent_tabs) {
       continue;
     for (int i = 0; i < tab_strip->count(); ++i) {
       auto * contents = tab_strip->GetWebContentsAt(i);
-      int tab_id = SessionTabHelper::IdForTab(contents).id();
+      int tab_id = IdForTab(contents);
       if (tabs.count(tab_id)) {
+        tabs.erase(tab_id);
         tab_strip->DetachAndDeleteWebContentsAt(i);
         i = -1;
       }
     }
   }
 }
+
+struct FoundTab {
+  Browser * browser = nullptr;
+  TabStripModel * tab_strip = nullptr;
+  content::WebContents * contents = nullptr;
+  int index = -1;
+
+  void Delete() {
+    tab_strip->DetachAndDeleteWebContentsAt(index);
+  }
+};
+
+bool FindTab(int tab_id, FoundTab * result) {
+  for (Browser* browser : *BrowserList::GetInstance()) {
+    TabStripModel *tab_strip = browser->tab_strip_model();
+    if (!tab_strip)
+      continue;
+    for (int i = 0; i < tab_strip->count(); ++i) {
+      auto * contents = tab_strip->GetWebContentsAt(i);
+      if (!contents)
+        continue;
+      if (IdForTab(contents) == tab_id) {
+        result->contents = contents;
+        result->browser = browser;
+        result->tab_strip = tab_strip;
+        result->index = i;
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+void HandleDetachedTabInternal(int tab_id) {
+  FoundTab found_tab;
+  if (!FindTab(tab_id, &found_tab))
+    return;
+
+  if (::vivaldi::ParentTabUserData::IsWebPanel(found_tab.contents)) {
+    found_tab.Delete();
+  }
+}
+
 } // namespace
+
+void HandleDetachedTab(int tab_id) {
+  if (tab_id == -1)
+    return;
+
+  // This function is called from the WebContents observer.
+  // A WebContents should never be deleted while it is notifying observers.
+  // Post the deletion to the UI thread to avoid the crash.
+  content::GetUIThreadTaskRunner()->PostTask(
+      FROM_HERE, base::BindOnce(HandleDetachedTabInternal, tab_id));
+}
 
 void HandleAssociatedTabs(TabStripModel* tab_strip_model,
                           const TabStripModelChange& change) {
-  using sessions::SessionTabHelper;
   using ::vivaldi::ParentTabUserData;
 
   if (change.type() == TabStripModelChange::kInserted) {
@@ -136,8 +192,7 @@ void HandleAssociatedTabs(TabStripModel* tab_strip_model,
         // Ignore children tabs.
         if (ParentTabUserData::GetParentTabId(context_with_index.contents))
           continue;
-        moved.push_back(
-            SessionTabHelper::IdForTab(context_with_index.contents).id());
+        moved.push_back(IdForTab(context_with_index.contents));
       }
 
       if (!moved.empty()) {
@@ -157,8 +212,7 @@ void HandleAssociatedTabs(TabStripModel* tab_strip_model,
       // Ignore children tabs.
       if (ParentTabUserData::GetParentTabId(context_with_index.contents))
         continue;
-      removed.push_back(
-          SessionTabHelper::IdForTab(context_with_index.contents).id());
+      removed.push_back(IdForTab(context_with_index.contents));
     }
 
     // Collect the children of the tabs.
@@ -178,4 +232,5 @@ void AddVivaldiTabItemsToEvent(content::WebContents* contents,
     object_args.Set("parentTabId", *parent_tab_id);
   }
 }
+
 } // namespace vivaldi

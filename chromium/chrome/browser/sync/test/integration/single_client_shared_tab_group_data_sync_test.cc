@@ -21,6 +21,7 @@
 #include "components/saved_tab_groups/public/saved_tab_group_tab.h"
 #include "components/saved_tab_groups/public/tab_group_sync_service.h"
 #include "components/saved_tab_groups/public/types.h"
+#include "components/saved_tab_groups/public/utils.h"
 #include "components/saved_tab_groups/test_support/saved_tab_group_test_utils.h"
 #include "components/sync/base/data_type.h"
 #include "components/sync/protocol/saved_tab_group_specifics.pb.h"
@@ -98,7 +99,7 @@ class SingleClientSharedTabGroupDataSyncTest : public SyncTest {
   SingleClientSharedTabGroupDataSyncTest() : SyncTest(SINGLE_CLIENT) {
     feature_overrides_.InitWithFeatures(
         {data_sharing::features::kDataSharingFeature,
-         tab_groups::kTabGroupsSaveUIUpdate, tab_groups::kTabGroupsSaveV2,
+         tab_groups::kTabGroupsSaveV2,
          tab_groups::kTabGroupSyncServiceDesktopMigration},
         {});
   }
@@ -138,8 +139,10 @@ class SingleClientSharedTabGroupDataSyncTest : public SyncTest {
 
   void MakeTabGroupShared(const LocalTabGroupID& local_group_id,
                           std::string_view collaboration_id) {
-    GetTabGroupSyncService()->MakeTabGroupShared(local_group_id,
-                                                 collaboration_id);
+    // TODO(crbug.com/382557489): use the proper callback.
+    GetTabGroupSyncService()->MakeTabGroupShared(
+        local_group_id, collaboration_id,
+        TabGroupSyncService::TabGroupSharingCallback());
   }
 
   // Returns the only saved tab group specifics from the fake server. The group
@@ -203,13 +206,19 @@ IN_PROC_BROWSER_TEST_F(SingleClientSharedTabGroupDataSyncTest,
 
   ASSERT_TRUE(SetupSync());
 
-  ASSERT_THAT(GetAllTabGroups(),
+  std::vector<SavedTabGroup> service_groups = GetAllTabGroups();
+  ASSERT_THAT(service_groups,
               UnorderedElementsAre(HasSharedGroupMetadata(
                   "title", TabGroupColorId::kCyan, collaboration_id)));
+  const SavedTabGroup& group = service_groups.front();
+  EXPECT_FALSE(group.creation_time_windows_epoch_micros().is_null());
   EXPECT_THAT(
-      GetAllTabGroups().front().saved_tabs(),
+      group.saved_tabs(),
       UnorderedElementsAre(HasTabMetadata("tab 1", "http://google.com/1"),
                            HasTabMetadata("tab 2", "http://google.com/2")));
+  for (const SavedTabGroupTab& tab : group.saved_tabs()) {
+    EXPECT_FALSE(tab.creation_time_windows_epoch_micros().is_null());
+  }
 }
 
 IN_PROC_BROWSER_TEST_F(SingleClientSharedTabGroupDataSyncTest,
@@ -241,13 +250,19 @@ IN_PROC_BROWSER_TEST_F(SingleClientSharedTabGroupDataSyncTest,
   MakeTabGroupShared(local_group_id, "collaboration");
 
   // Saved tab group remains intact, hence verify only that the shared tab group
-  // is committed.
-  EXPECT_TRUE(
-      ServerSharedTabGroupMatchChecker(
-          UnorderedElementsAre(HasSpecificsSharedTabGroup(
-                                   "title", sync_pb::SharedTabGroup::BLUE),
-                               HasSpecificsSharedTab(kDefaultTabTitle, kUrl)))
-          .Wait());
+  // is committed. Page title will be sanitized when convering a saved tab group
+  // to a shared tab group, thus is may not match the original title.
+  // TODO(crbug.com/374221675): test the case that title is from optimization
+  // guide.
+  EXPECT_TRUE(ServerSharedTabGroupMatchChecker(
+                  UnorderedElementsAre(
+                      HasSpecificsSharedTabGroup("title",
+                                                 sync_pb::SharedTabGroup::BLUE),
+                      HasSpecificsSharedTab(
+                          base::UTF16ToUTF8(
+                              tab_groups::GetTitleFromUrlForDisplay(kUrl)),
+                          kUrl)))
+                  .Wait());
 
   std::vector<sync_pb::SyncEntity> server_entities_shared =
       GetFakeServer()->GetSyncEntitiesByDataType(syncer::SHARED_TAB_GROUP_DATA);

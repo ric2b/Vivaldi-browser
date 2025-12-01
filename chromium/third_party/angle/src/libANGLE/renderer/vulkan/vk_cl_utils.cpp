@@ -8,37 +8,33 @@
 //
 
 #include "libANGLE/renderer/vulkan/vk_cl_utils.h"
+#include "vulkan/vulkan_core.h"
 
 namespace rx
 {
 namespace cl_vk
 {
 
-VkExtent3D GetExtentFromDescriptor(cl::ImageDescriptor desc)
+VkExtent3D GetExtent(const cl::Extents &extent)
 {
-    VkExtent3D extent{};
+    VkExtent3D vkExtent{};
 
-    extent.width  = static_cast<uint32_t>(desc.width);
-    extent.height = static_cast<uint32_t>(desc.height);
-    extent.depth  = static_cast<uint32_t>(desc.depth);
+    vkExtent.width  = static_cast<uint32_t>(extent.width);
+    vkExtent.height = static_cast<uint32_t>(extent.height);
+    vkExtent.depth  = static_cast<uint32_t>(extent.depth);
 
-    // user can supply random values for height and depth for formats that dont need them
-    switch (desc.type)
-    {
-        case cl::MemObjectType::Image1D:
-        case cl::MemObjectType::Image1D_Array:
-        case cl::MemObjectType::Image1D_Buffer:
-            extent.height = 1;
-            extent.depth  = 1;
-            break;
-        case cl::MemObjectType::Image2D:
-        case cl::MemObjectType::Image2D_Array:
-            extent.depth = 1;
-            break;
-        default:
-            break;
-    }
-    return extent;
+    return vkExtent;
+}
+
+VkOffset3D GetOffset(const cl::Offset &offset)
+{
+    VkOffset3D vkOffset{};
+
+    vkOffset.x = static_cast<uint32_t>(offset.x);
+    vkOffset.y = static_cast<uint32_t>(offset.y);
+    vkOffset.z = static_cast<uint32_t>(offset.z);
+
+    return vkOffset;
 }
 
 VkImageType GetImageType(cl::MemObjectType memObjectType)
@@ -103,7 +99,8 @@ VkBufferUsageFlags GetBufferUsageFlags(cl::MemFlags memFlags)
     // The buffer usage flags don't particularly affect the buffer in any known drivers, use all the
     // bits that ANGLE needs.
     return VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-           VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+           VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+           VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
 }
 
 }  // namespace cl_vk

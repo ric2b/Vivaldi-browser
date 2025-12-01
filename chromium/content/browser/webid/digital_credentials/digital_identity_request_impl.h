@@ -35,7 +35,8 @@ class RenderFrameHost;
 class CONTENT_EXPORT DigitalIdentityRequestImpl
     : public DocumentService<blink::mojom::DigitalIdentityRequest> {
  public:
-  static void Create(
+  // The return value is only intended to be used in tests.
+  static base::WeakPtr<DigitalIdentityRequestImpl> CreateInstance(
       RenderFrameHost&,
       mojo::PendingReceiver<blink::mojom::DigitalIdentityRequest>);
 
@@ -43,8 +44,8 @@ class CONTENT_EXPORT DigitalIdentityRequestImpl
   static std::optional<DigitalIdentityInterstitialType> ComputeInterstitialType(
       const url::Origin& rp_origin,
       const DigitalIdentityProvider* provider,
-      const std::optional<std::string>& protocol,
-      const data_decoder::DataDecoder::ValueOrError& request);
+      const std::string& protocol,
+      const data_decoder::DataDecoder::ValueOrError& request_data);
 
   DigitalIdentityRequestImpl(const DigitalIdentityRequestImpl&) = delete;
   DigitalIdentityRequestImpl& operator=(const DigitalIdentityRequestImpl&) =
@@ -53,9 +54,15 @@ class CONTENT_EXPORT DigitalIdentityRequestImpl
   ~DigitalIdentityRequestImpl() override;
 
   // blink::mojom::DigitalIdentityRequest:
-  void Request(std::vector<blink::mojom::DigitalCredentialProviderPtr>
-                   digital_credential_providers,
-               RequestCallback) override;
+  void Get(std::vector<blink::mojom::DigitalCredentialRequestPtr>
+               digital_credential_requests,
+           blink::mojom::GetRequestFormat format,
+           GetCallback) override;
+
+  void Create(
+      blink::mojom::DigitalCredentialRequestPtr digital_credential_request,
+      CreateCallback) override;
+
   void Abort() override;
 
  private:
@@ -63,9 +70,15 @@ class CONTENT_EXPORT DigitalIdentityRequestImpl
       RenderFrameHost&,
       mojo::PendingReceiver<blink::mojom::DigitalIdentityRequest>);
 
-  // Called when the request JSON has been parsed.
-  void OnRequestJsonParsed(
-      std::optional<std::string> protocol,
+  // Called when the get request JSON has been parsed.
+  void OnGetRequestJsonParsed(
+      std::string protocol,
+      base::Value request_to_send,
+      data_decoder::DataDecoder::ValueOrError parsed_result);
+
+  // Called when the create request JSON has been parsed.
+  void OnCreateRequestJsonParsed(
+      std::string protocol,
       base::Value request_to_send,
       data_decoder::DataDecoder::ValueOrError parsed_result);
 
@@ -77,9 +90,9 @@ class CONTENT_EXPORT DigitalIdentityRequestImpl
           response);
 
   // Called when the user has fulfilled the interstitial requirement. Will be
-  // called immediately after OnRequestJsonParsed() if no interstitial is
+  // called immediately after OnGetRequestJsonParsed() if no interstitial is
   // needed.
-  void OnInterstitialDone(std::optional<std::string> protocol,
+  void OnInterstitialDone(std::string protocol,
                           base::Value request_to_send,
                           DigitalIdentityProvider::RequestStatusForMetrics
                               status_after_interstitial);
@@ -103,7 +116,7 @@ class CONTENT_EXPORT DigitalIdentityRequestImpl
           response);
 
   std::unique_ptr<DigitalIdentityProvider> provider_;
-  RequestCallback callback_;
+  GetCallback callback_;
 
   // Callback which updates interstitial to inform user that the credential
   // request has been aborted.

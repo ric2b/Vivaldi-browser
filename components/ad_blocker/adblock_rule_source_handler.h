@@ -29,6 +29,7 @@ class RuleSourceHandler {
       void(RuleGroup group, const ActiveRuleSource&, base::Value::Dict)>;
   using RulesCompiler =
       base::RepeatingCallback<bool(const ParseResult& parse_result,
+                                   const RuleSourceSettings& source_settings,
                                    const base::FilePath& output_path,
                                    std::string& checksum)>;
 

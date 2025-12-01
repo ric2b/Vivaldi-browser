@@ -4,7 +4,7 @@
 
 import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
-import * as Coordinator from '../components/render_coordinator/render_coordinator.js';
+import * as RenderCoordinator from '../components/render_coordinator/render_coordinator.js';
 
 import {processForDebugging, processStartLoggingForDebugging} from './Debugging.js';
 import {getDomState, visibleOverlap} from './DomState.js';
@@ -138,12 +138,11 @@ function flushPendingChangeEvents(): void {
   }
 }
 
-export async function scheduleProcessing(): Promise<void> {
+export function scheduleProcessing(): void {
   if (!processingThrottler) {
     return;
   }
-  void processingThrottler.schedule(
-      () => Coordinator.RenderCoordinator.RenderCoordinator.instance().read('processForLogging', process));
+  void processingThrottler.schedule(() => RenderCoordinator.read('processForLogging', process));
 }
 
 const viewportRects = new Map<Document, DOMRect>();
@@ -221,7 +220,13 @@ async function process(): Promise<void> {
           loggingState.pendingChangeContext = event.inputType;
           pendingChange.add(element);
         }, {capture: true});
-        element.addEventListener('change', () => logPendingChange(element), {capture: true});
+        element.addEventListener('change', (event: Event) => {
+          const target = event?.target ?? element;
+          if (['checkbox', 'radio'].includes((target as HTMLInputElement).type)) {
+            loggingState.pendingChangeContext = (target as HTMLInputElement).checked ? 'on' : 'off';
+          }
+          logPendingChange(element);
+        }, {capture: true});
         element.addEventListener('focusout', () => {
           if (loggingState.pendingChangeContext) {
             void logPendingChange(element);
@@ -300,9 +305,6 @@ function logPendingChange(element: Element): void {
   const loggingState = getLoggingState(element);
   if (!loggingState) {
     return;
-  }
-  if (['checkbox', 'radio'].includes((element as HTMLInputElement).type)) {
-    loggingState.pendingChangeContext = (element as HTMLInputElement).checked ? 'on' : 'off';
   }
   void logChange(element);
   delete loggingState.pendingChangeContext;

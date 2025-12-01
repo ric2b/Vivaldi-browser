@@ -2,13 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "chrome/browser/component_updater/pki_metadata_component_installer.h"
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
@@ -27,7 +23,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/sequence_checker.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
@@ -69,7 +64,7 @@ namespace {
 // if it is set). This should never be decreased since that will cause CT
 // enforcement to eventually stop. This should also only be increased if Chrome
 // is compatible with the version it is being incremented to.
-const uint64_t kMaxSupportedCTCompatibilityVersion = 2;
+const uint64_t kMaxSupportedCTCompatibilityVersion = 3;
 
 // This is the last version of key pins lists that this version of Chrome will
 // accept. If a list is delivered with a compatibility version higher than this,
@@ -155,8 +150,7 @@ void PKIMetadataComponentInstallerService::ConfigureChromeRootStore() {
             std::string file_contents = LoadBinaryProtoFromDisk(pb_path);
             if (file_contents.size()) {
               return mojo_base::ProtoWrapper(
-                  base::as_bytes(base::make_span(file_contents)),
-                  kChromeRootStoreProto,
+                  base::as_byte_span(file_contents), kChromeRootStoreProto,
                   mojo_base::ProtoWrapperBytes::GetPassKey());
             }
             return std::nullopt;
@@ -464,10 +458,9 @@ PKIMetadataComponentInstallerPolicy::BytesArrayFromProtoBytes(
     google::protobuf::RepeatedPtrField<std::string> proto_bytes) {
   std::vector<std::vector<uint8_t>> bytes;
   bytes.reserve(proto_bytes.size());
-  base::ranges::transform(
+  std::ranges::transform(
       proto_bytes, std::back_inserter(bytes), [](std::string element) {
-        const auto bytes =
-            base::as_bytes(base::make_span(element.data(), element.length()));
+        const auto bytes = base::as_byte_span(element);
         return std::vector<uint8_t>(bytes.begin(), bytes.end());
       });
   return bytes;

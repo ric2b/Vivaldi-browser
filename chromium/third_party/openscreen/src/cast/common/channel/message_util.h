@@ -17,87 +17,87 @@ class Value;
 namespace openscreen::cast {
 
 // Reserved message namespaces for internal messages.
-static constexpr char kCastInternalNamespacePrefix[] =
+inline constexpr char kCastInternalNamespacePrefix[] =
     "urn:x-cast:com.google.cast.";
-static constexpr char kTransportNamespacePrefix[] =
+inline constexpr char kTransportNamespacePrefix[] =
     "urn:x-cast:com.google.cast.tp.";
-static constexpr char kAuthNamespace[] =
+inline constexpr char kAuthNamespace[] =
     "urn:x-cast:com.google.cast.tp.deviceauth";
-static constexpr char kHeartbeatNamespace[] =
+inline constexpr char kHeartbeatNamespace[] =
     "urn:x-cast:com.google.cast.tp.heartbeat";
-static constexpr char kConnectionNamespace[] =
+inline constexpr char kConnectionNamespace[] =
     "urn:x-cast:com.google.cast.tp.connection";
-static constexpr char kReceiverNamespace[] =
+inline constexpr char kReceiverNamespace[] =
     "urn:x-cast:com.google.cast.receiver";
-static constexpr char kBroadcastNamespace[] =
+inline constexpr char kBroadcastNamespace[] =
     "urn:x-cast:com.google.cast.broadcast";
-static constexpr char kMediaNamespace[] = "urn:x-cast:com.google.cast.media";
+inline constexpr char kMediaNamespace[] = "urn:x-cast:com.google.cast.media";
 
 // Sender and receiver IDs to use for platform messages.
-static constexpr char kPlatformSenderId[] = "sender-0";
-static constexpr char kPlatformReceiverId[] = "receiver-0";
+inline constexpr char kPlatformSenderId[] = "sender-0";
+inline constexpr char kPlatformReceiverId[] = "receiver-0";
 
-static constexpr char kBroadcastId[] = "*";
+inline constexpr char kBroadcastId[] = "*";
 
-static constexpr proto::CastMessage_ProtocolVersion
+inline constexpr proto::CastMessage_ProtocolVersion
     kDefaultOutgoingMessageVersion =
         proto::CastMessage_ProtocolVersion_CASTV2_1_0;
 
 // JSON message key strings.
-static constexpr char kMessageKeyType[] = "type";
-static constexpr char kMessageKeyProtocolVersion[] = "protocolVersion";
-static constexpr char kMessageKeyProtocolVersionList[] = "protocolVersionList";
-static constexpr char kMessageKeyReasonCode[] = "reasonCode";
-static constexpr char kMessageKeyAppId[] = "appId";
-static constexpr char kMessageKeyRequestId[] = "requestId";
-static constexpr char kMessageKeyResponseType[] = "responseType";
-static constexpr char kMessageKeyTransportId[] = "transportId";
-static constexpr char kMessageKeySessionId[] = "sessionId";
+inline constexpr char kMessageKeyType[] = "type";
+inline constexpr char kMessageKeyProtocolVersion[] = "protocolVersion";
+inline constexpr char kMessageKeyProtocolVersionList[] = "protocolVersionList";
+inline constexpr char kMessageKeyReasonCode[] = "reasonCode";
+inline constexpr char kMessageKeyAppId[] = "appId";
+inline constexpr char kMessageKeyRequestId[] = "requestId";
+inline constexpr char kMessageKeyResponseType[] = "responseType";
+inline constexpr char kMessageKeyTransportId[] = "transportId";
+inline constexpr char kMessageKeySessionId[] = "sessionId";
 
 // JSON message field values.
-static constexpr char kMessageTypeConnect[] = "CONNECT";
-static constexpr char kMessageTypeClose[] = "CLOSE";
-static constexpr char kMessageTypeConnected[] = "CONNECTED";
-static constexpr char kMessageValueAppAvailable[] = "APP_AVAILABLE";
-static constexpr char kMessageValueAppUnavailable[] = "APP_UNAVAILABLE";
+inline constexpr char kMessageTypeConnect[] = "CONNECT";
+inline constexpr char kMessageTypeClose[] = "CLOSE";
+inline constexpr char kMessageTypeConnected[] = "CONNECTED";
+inline constexpr char kMessageValueAppAvailable[] = "APP_AVAILABLE";
+inline constexpr char kMessageValueAppUnavailable[] = "APP_UNAVAILABLE";
 
 // JSON message key strings specific to CONNECT messages.
-static constexpr char kMessageKeyBrowserVersion[] = "browserVersion";
-static constexpr char kMessageKeyConnType[] = "connType";
-static constexpr char kMessageKeyConnectionType[] = "connectionType";
-static constexpr char kMessageKeyUserAgent[] = "userAgent";
-static constexpr char kMessageKeyOrigin[] = "origin";
-static constexpr char kMessageKeyPlatform[] = "platform";
-static constexpr char kMessageKeySdkType[] = "skdType";
-static constexpr char kMessageKeySenderInfo[] = "senderInfo";
-static constexpr char kMessageKeyVersion[] = "version";
+inline constexpr char kMessageKeyBrowserVersion[] = "browserVersion";
+inline constexpr char kMessageKeyConnType[] = "connType";
+inline constexpr char kMessageKeyConnectionType[] = "connectionType";
+inline constexpr char kMessageKeyUserAgent[] = "userAgent";
+inline constexpr char kMessageKeyOrigin[] = "origin";
+inline constexpr char kMessageKeyPlatform[] = "platform";
+inline constexpr char kMessageKeySdkType[] = "skdType";
+inline constexpr char kMessageKeySenderInfo[] = "senderInfo";
+inline constexpr char kMessageKeyVersion[] = "version";
 
 // JSON message key strings specific to application control messages.
-static constexpr char kMessageKeyAvailability[] = "availability";
-static constexpr char kMessageKeyAppParams[] = "appParams";
-static constexpr char kMessageKeyApplications[] = "applications";
-static constexpr char kMessageKeyControlType[] = "controlType";
-static constexpr char kMessageKeyDisplayName[] = "displayName";
-static constexpr char kMessageKeyIsIdleScreen[] = "isIdleScreen";
-static constexpr char kMessageKeyLaunchedFromCloud[] = "launchedFromCloud";
-static constexpr char kMessageKeyLevel[] = "level";
-static constexpr char kMessageKeyMuted[] = "muted";
-static constexpr char kMessageKeyName[] = "name";
-static constexpr char kMessageKeyNamespaces[] = "namespaces";
-static constexpr char kMessageKeyReason[] = "reason";
-static constexpr char kMessageKeyStatus[] = "status";
-static constexpr char kMessageKeyStepInterval[] = "stepInterval";
-static constexpr char kMessageKeyUniversalAppId[] = "universalAppId";
-static constexpr char kMessageKeyUserEq[] = "userEq";
-static constexpr char kMessageKeyVolume[] = "volume";
+inline constexpr char kMessageKeyAvailability[] = "availability";
+inline constexpr char kMessageKeyAppParams[] = "appParams";
+inline constexpr char kMessageKeyApplications[] = "applications";
+inline constexpr char kMessageKeyControlType[] = "controlType";
+inline constexpr char kMessageKeyDisplayName[] = "displayName";
+inline constexpr char kMessageKeyIsIdleScreen[] = "isIdleScreen";
+inline constexpr char kMessageKeyLaunchedFromCloud[] = "launchedFromCloud";
+inline constexpr char kMessageKeyLevel[] = "level";
+inline constexpr char kMessageKeyMuted[] = "muted";
+inline constexpr char kMessageKeyName[] = "name";
+inline constexpr char kMessageKeyNamespaces[] = "namespaces";
+inline constexpr char kMessageKeyReason[] = "reason";
+inline constexpr char kMessageKeyStatus[] = "status";
+inline constexpr char kMessageKeyStepInterval[] = "stepInterval";
+inline constexpr char kMessageKeyUniversalAppId[] = "universalAppId";
+inline constexpr char kMessageKeyUserEq[] = "userEq";
+inline constexpr char kMessageKeyVolume[] = "volume";
 
 // JSON message field value strings specific to application control messages.
-static constexpr char kMessageValueAttenuation[] = "attenuation";
-static constexpr char kMessageValueBadParameter[] = "BAD_PARAMETER";
-static constexpr char kMessageValueInvalidSessionId[] = "INVALID_SESSION_ID";
-static constexpr char kMessageValueInvalidCommand[] = "INVALID_COMMAND";
-static constexpr char kMessageValueNotFound[] = "NOT_FOUND";
-static constexpr char kMessageValueSystemError[] = "SYSTEM_ERROR";
+inline constexpr char kMessageValueAttenuation[] = "attenuation";
+inline constexpr char kMessageValueBadParameter[] = "BAD_PARAMETER";
+inline constexpr char kMessageValueInvalidSessionId[] = "INVALID_SESSION_ID";
+inline constexpr char kMessageValueInvalidCommand[] = "INVALID_COMMAND";
+inline constexpr char kMessageValueNotFound[] = "NOT_FOUND";
+inline constexpr char kMessageValueSystemError[] = "SYSTEM_ERROR";
 
 enum class CastMessageType {
   // Heartbeat messages.

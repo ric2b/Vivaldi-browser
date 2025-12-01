@@ -125,6 +125,7 @@ export class AXNodeSubPane extends AccessibilitySubPane {
   private readonly ignoredReasonsTree: UI.TreeOutline.TreeOutline;
   constructor() {
     super(i18nString(UIStrings.computedProperties));
+    this.registerRequiredCSS(accessibilityNodeStyles);
 
     this.axNode = null;
 
@@ -222,10 +223,6 @@ export class AXNodeSubPane extends AccessibilitySubPane {
   override setNode(node: SDK.DOMModel.DOMNode|null): void {
     super.setNode(node);
     this.axNode = null;
-  }
-  override wasShown(): void {
-    super.wasShown();
-    this.registerCSSFiles([accessibilityNodeStyles]);
   }
 }
 

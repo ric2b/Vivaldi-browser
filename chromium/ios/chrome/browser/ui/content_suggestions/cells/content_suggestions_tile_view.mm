@@ -4,7 +4,6 @@
 
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_tile_view.h"
 
-#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/dynamic_type_util.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_tile_layout_util.h"
@@ -35,11 +34,15 @@ const CGFloat kCornerRadius = 8.0;
   ContentSuggestionsTileType _type;
 }
 
+@synthesize inMagicStack = _inMagicStack;
+
 - (instancetype)initWithFrame:(CGRect)frame
-                     tileType:(ContentSuggestionsTileType)type {
+                     tileType:(ContentSuggestionsTileType)type
+                 inMagicStack:(BOOL)inMagicStack {
   self = [super initWithFrame:frame];
   if (self) {
     _type = type;
+    _inMagicStack = inMagicStack;
     _titleLabel = [[UILabel alloc] init];
     _titleLabel.textColor = [UIColor colorNamed:kTextSecondaryColor];
     _titleLabel.font = [self titleLabelFont];
@@ -145,8 +148,9 @@ const CGFloat kCornerRadius = 8.0;
                        styleForRegion:(UIPointerRegion*)region {
   // The preview APIs require the view to be in a window. Ensure they are before
   // proceeding.
-  if (!self.window)
+  if (!self.window) {
     return nil;
+  }
 
   UITargetedPreview* preview =
       [[UITargetedPreview alloc] initWithView:_imageContainerView];
@@ -162,19 +166,20 @@ const CGFloat kCornerRadius = 8.0;
 // size if it is in the Magic Stack since the Magic Stack has a fixed height,
 // limiting the space available for multiple lines of text.
 - (void)updateTitleLabelNumberOfLines {
-  if (_type == ContentSuggestionsTileType::kMostVisited &&
-      !ShouldPutMostVisitedSitesInMagicStack()) {
+  if (!self.inMagicStack) {
     return;
   }
 
   UIContentSizeCategory category =
       self.traitCollection.preferredContentSizeCategory;
   NSComparisonResult result = UIContentSizeCategoryCompareToCategory(
-      category, UIContentSizeCategoryExtraLarge);
+      category, UIContentSizeCategoryExtraExtraExtraLarge);
   if (result == NSOrderedAscending) {
     self.titleLabel.numberOfLines = kLabelNumLines;
+    self.titleLabel.lineBreakMode = NSLineBreakByCharWrapping;
   } else {
     self.titleLabel.numberOfLines = 1;
+    self.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
   }
 }
 

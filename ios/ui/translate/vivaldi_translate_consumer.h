@@ -5,9 +5,16 @@
 
 #import "ios/ui/translate/vivaldi_translate_language_item.h"
 
+@class VivaldiTranslateHistoryItem;
+
 /// A protocol implemented by translate view to observe changes
 /// from mediator.
 @protocol VivaldiTranslateConsumer
+
+- (void)translateHistoryDidLoad:
+    (NSArray<VivaldiTranslateHistoryItem*>*)historyItems;
+
+- (void)translateHistoryDidRemove:(NSArray<NSString*>*)historyItems;
 
 - (void)supportedLanguageListDidLoad:
     (NSArray<VivaldiTranslateLanguageItem*>*)languages;

@@ -9,6 +9,18 @@ load("@builtin//lib/gn.star", "gn")
 load("@builtin//struct.star", "module")
 load("./config.star", "config")
 
+# TODO: crbug.com/323091468 - Propagate target android ABI and
+# android SDK version from GN, and remove the hardcoded filegroups.
+__archs = [
+    "aarch64-linux-android",
+    "arm-linux-androideabi",
+    "i686-linux-android",
+    "riscv64-linux-android",
+    "x86_64-linux-android",
+]
+
+__versions = list(range(21, 34))
+
 def __enabled(ctx):
     if "args.gn" in ctx.metadata:
         gn_args = gn.args(ctx)
@@ -17,10 +29,27 @@ def __enabled(ctx):
     return False
 
 def __filegroups(ctx):
-    return {}
+    fg = {}
+    for arch in __archs:
+        for ver in __versions:
+            group = "third_party/android_toolchain/ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/%s/%d:link" % (arch, ver)
+            fg[group] = {
+                "type": "glob",
+                "includes": ["*"],
+            }
+    return fg
 
 def __step_config(ctx, step_config):
     remote_run = True  # Turn this to False when you do file access trace.
+
+    # Run static analysis steps locally when build server is enabled.
+    # https://chromium.googlesource.com/chromium/src/+/main/docs/android_build_instructions.md#asynchronous-static-analysis
+    remote_run_static_analysis = True
+    if "args.gn" in ctx.metadata:
+        gn_args = gn.args(ctx)
+        if gn_args.get("android_static_analysis") == '"build_server"':
+            remote_run_static_analysis = False
+
     step_config["rules"].extend([
         # See also https://chromium.googlesource.com/chromium/src/build/+/HEAD/android/docs/java_toolchain.md
         {
@@ -69,6 +98,16 @@ def __step_config(ctx, step_config):
             "name": "android/compile_java",
             "command_prefix": "python3 ../../build/android/gyp/compile_java.py",
             "handler": "android_compile_java",
+            "exclude_input_patterns": [
+                "*.a",
+                "*.cc",
+                "*.h",
+                "*.inc",
+                "*.info",
+                "*.o",
+                "*.pak",
+                "*.sql",
+            ],
             # Don't include files under --generated-dir.
             # This is probably optimization for local incrmental builds.
             # However, this is harmful for remote build cache hits.
@@ -80,9 +119,38 @@ def __step_config(ctx, step_config):
             "timeout": "2m",
         },
         {
+            "name": "android/errorprone",
+            "command_prefix": "python3 ../../build/android/gyp/errorprone.py",
+            "handler": "android_compile_java",
+            "exclude_input_patterns": [
+                "*.a",
+                "*.cc",
+                "*.h",
+                "*.inc",
+                "*.info",
+                "*.o",
+                "*.pak",
+                "*.sql",
+            ],
+            "remote": remote_run_static_analysis,
+            "platform_ref": "large",
+            "canonicalize_dir": True,
+            "timeout": "2m",
+        },
+        {
             "name": "android/compile_kt",
             "command_prefix": "python3 ../../build/android/gyp/compile_kt.py",
             "handler": "android_compile_java",
+            "exclude_input_patterns": [
+                "*.a",
+                "*.cc",
+                "*.h",
+                "*.inc",
+                "*.info",
+                "*.o",
+                "*.pak",
+                "*.sql",
+            ],
             # Don't include files under --generated-dir.
             # This is probably optimization for local incrmental builds.
             # However, this is harmful for remote build cache hits.
@@ -409,6 +477,7 @@ __handlers = {
 android = module(
     "android",
     enabled = __enabled,
+    archs = __archs,
     step_config = __step_config,
     filegroups = __filegroups,
     handlers = __handlers,

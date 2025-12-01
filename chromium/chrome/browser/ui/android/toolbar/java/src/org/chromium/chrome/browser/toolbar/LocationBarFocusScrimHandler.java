@@ -11,7 +11,7 @@ import org.chromium.base.Callback;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.chrome.browser.omnibox.LocationBarDataProvider;
 import org.chromium.chrome.browser.omnibox.UrlFocusChangeListener;
-import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
+import org.chromium.components.browser_ui.widget.scrim.ScrimManager;
 import org.chromium.components.browser_ui.widget.scrim.ScrimProperties;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -25,7 +25,7 @@ public class LocationBarFocusScrimHandler implements UrlFocusChangeListener {
     /** The params used to control how the scrim behaves when shown for the omnibox. */
     private PropertyModel mScrimModel;
 
-    private final ScrimCoordinator mScrimCoordinator;
+    private final ScrimManager mScrimManager;
 
     /** Whether the scrim was shown on focus. */
     private boolean mScrimShown;
@@ -43,7 +43,7 @@ public class LocationBarFocusScrimHandler implements UrlFocusChangeListener {
     private int mTopMargin;
 
     /**
-     * @param scrimCoordinator Coordinator responsible for showing and hiding the scrim view.
+     * @param scrimManager Coordinator responsible for showing and hiding the scrim view.
      * @param visibilityChangeCallback Callback used to obscure/unobscure tabs when the scrim is
      *     shown/hidden.
      * @param context Context for retrieving resources.
@@ -53,14 +53,14 @@ public class LocationBarFocusScrimHandler implements UrlFocusChangeListener {
      * @param tabStripHeightSupplier Supplier for the tab strip height.
      */
     public LocationBarFocusScrimHandler(
-            ScrimCoordinator scrimCoordinator,
+            ScrimManager scrimManager,
             Callback<Boolean> visibilityChangeCallback,
             Context context,
             LocationBarDataProvider locationBarDataProvider,
             Runnable clickDelegate,
             View scrimTarget,
             ObservableSupplier<Integer> tabStripHeightSupplier) {
-        mScrimCoordinator = scrimCoordinator;
+        mScrimManager = scrimManager;
         mLocationBarDataProvider = locationBarDataProvider;
         mClickDelegate = clickDelegate;
         mContext = context;
@@ -71,11 +71,9 @@ public class LocationBarFocusScrimHandler implements UrlFocusChangeListener {
                 new PropertyModel.Builder(ScrimProperties.ALL_KEYS)
                         .with(ScrimProperties.ANCHOR_VIEW, scrimTarget)
                         .with(ScrimProperties.SHOW_IN_FRONT_OF_ANCHOR_VIEW, true)
-                        .with(ScrimProperties.AFFECTS_STATUS_BAR, false)
                         .with(ScrimProperties.TOP_MARGIN, topMargin)
                         .with(ScrimProperties.CLICK_DELEGATE, mClickDelegate)
                         .with(ScrimProperties.VISIBILITY_CALLBACK, visibilityChangeCallback)
-                        .with(ScrimProperties.BACKGROUND_COLOR, ScrimProperties.INVALID_COLOR)
                         .build();
 
         mTabStripHeightSupplier = tabStripHeightSupplier;
@@ -102,12 +100,13 @@ public class LocationBarFocusScrimHandler implements UrlFocusChangeListener {
                 // Keep the scrim view hidden when we focus the url bar on a new tab.
                 if (!VivaldiPreferences.getSharedPreferencesManager().readBoolean(
                             VivaldiPreferences.FOCUS_ADDRESS_BAR_ON_NEW_TAB, false)) {
-            mScrimCoordinator.showScrim(mScrimModel);
+
+            mScrimManager.showScrim(mScrimModel);
             mScrimShown = true;
                 }
             }
         } else if (!hasFocus && mScrimShown) {
-            mScrimCoordinator.hideScrim(true);
+            mScrimManager.hideScrim(mScrimModel, /* animate= */ true);
             mScrimShown = false;
         }
     }
@@ -115,7 +114,7 @@ public class LocationBarFocusScrimHandler implements UrlFocusChangeListener {
     @Override
     public void onUrlAnimationFinished(boolean hasFocus) {
         if (hasFocus && showScrimAfterAnimationCompletes()) {
-            mScrimCoordinator.showScrim(mScrimModel);
+            mScrimManager.showScrim(mScrimModel);
             mScrimShown = true;
         }
     }

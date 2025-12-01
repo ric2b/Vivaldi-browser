@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "chrome/browser/resource_coordinator/session_restore_policy.h"
 
 #include <math.h>
@@ -61,8 +66,8 @@ bool IsInternalPage(content::WebContents* contents) {
 
 class SysInfoDelegate : public SessionRestorePolicy::Delegate {
  public:
-  SysInfoDelegate() {}
-  ~SysInfoDelegate() override {}
+  SysInfoDelegate() = default;
+  ~SysInfoDelegate() override = default;
 
   size_t GetNumberOfCores() const override {
     return base::SysInfo::NumberOfProcessors();
@@ -531,9 +536,9 @@ void SessionRestorePolicy::UpdateSiteEngagementScoreForTesting(
   it->second->site_engagement = score;
 }
 
-SessionRestorePolicy::Delegate::Delegate() {}
+SessionRestorePolicy::Delegate::Delegate() = default;
 
-SessionRestorePolicy::Delegate::~Delegate() {}
+SessionRestorePolicy::Delegate::~Delegate() = default;
 
 SessionRestorePolicy::TabData::TabData() = default;
 

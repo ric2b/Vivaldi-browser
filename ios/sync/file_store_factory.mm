@@ -4,8 +4,6 @@
 
 #include "ios/sync/file_store_factory.h"
 
-#include "components/keyed_service/ios/browser_state_dependency_manager.h"
-#include "ios/chrome/browser/shared/model/browser_state/browser_state_otr_helper.h"
 #include "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #include "sync/file_sync/file_store.h"
 #include "sync/file_sync/file_store_impl.h"
@@ -13,8 +11,9 @@
 // static
 file_sync::SyncedFileStore* SyncedFileStoreFactory::GetForProfile(
   ProfileIOS* profile) {
-  return static_cast<file_sync::SyncedFileStore*>(
-      GetInstance()->GetServiceForBrowserState(profile, true));
+  return GetInstance()
+      ->GetServiceForProfileAs<file_sync::SyncedFileStore>(
+          profile, /*create=*/true);
 }
 
 // static
@@ -24,9 +23,9 @@ SyncedFileStoreFactory* SyncedFileStoreFactory::GetInstance() {
 }
 
 SyncedFileStoreFactory::SyncedFileStoreFactory()
-    : BrowserStateKeyedServiceFactory(
-          "SyncedFileStore",
-          BrowserStateDependencyManager::GetInstance()) {}
+    : ProfileKeyedServiceFactoryIOS("SyncedFileStore",
+                                    ProfileSelection::kRedirectedInIncognito,
+                                    TestingCreation::kNoServiceForTests) {}
 
 SyncedFileStoreFactory::~SyncedFileStoreFactory() = default;
 
@@ -36,13 +35,4 @@ std::unique_ptr<KeyedService> SyncedFileStoreFactory::BuildServiceInstanceFor(
       std::make_unique<file_sync::SyncedFileStoreImpl>(context->GetStatePath());
   synced_file_store->Load();
   return synced_file_store;
-}
-
-web::BrowserState* SyncedFileStoreFactory::GetBrowserStateToUse(
-    web::BrowserState* context) const {
-  return GetBrowserStateRedirectedInIncognito(context);
-}
-
-bool SyncedFileStoreFactory::ServiceIsNULLWhileTesting() const {
-  return true;
 }

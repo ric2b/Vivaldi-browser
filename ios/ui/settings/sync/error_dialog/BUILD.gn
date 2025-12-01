@@ -1,0 +1,54 @@
+# Copyright 2025 Vivaldi Technologies. All rights reserved.
+
+import("//build/config/apple/swift_source_set.gni")
+
+source_set("vivaldi_sync_error_dialog") {
+  sources = [
+    "vivaldi_sync_error_dialog_coordinator.h",
+    "vivaldi_sync_error_dialog_coordinator.mm",
+    "vivaldi_sync_error_dialog_delegate.h",
+    "vivaldi_sync_error_dialog_prefs.h",
+    "vivaldi_sync_error_dialog_prefs.mm",
+  ]
+
+  deps = [
+    ":vivaldi_sync_error_dialog_swift",
+    "//base",
+    "//ui/base",
+    "//components/prefs",
+    "//ios/chrome/browser/shared/coordinator/chrome_coordinator",
+    "//ios/chrome/browser/shared/model/browser",
+    "//ios/chrome/browser/shared/model/prefs",
+    "//ios/chrome/browser/shared/model/prefs:pref_names",
+    "//ios/chrome/browser/shared/model/utils",
+  ]
+
+  frameworks = [
+    "Foundation.framework",
+    "UIKit.framework"
+  ]
+}
+
+swift_source_set("vivaldi_sync_error_dialog_swift") {
+  bridge_header = "vivaldi_sync_error_dialog_swift_bridge.h"
+  sources = [
+    "vivaldi_sync_error_dialog_constants.swift",
+    "vivaldi_sync_error_dialog_state.swift",
+    "vivaldi_sync_error_dialog_view_provider.swift",
+    "vivaldi_sync_error_dialog_view.swift",
+  ]
+
+  deps = [
+    "//base",
+    "//ui/base",
+    "//ios/chrome/common/ui/colors:swift",
+    "//vivaldi/ios/ui/helpers:helpers_swift",
+  ]
+
+  frameworks = [
+    "Foundation.framework",
+    "UIKit.framework",
+    "SwiftUI.framework",
+    "Combine.framework",
+  ]
+}

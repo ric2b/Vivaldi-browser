@@ -1348,6 +1348,8 @@ message RecoveryExtendedInfoReply {
   // The list begins with the current recovery_id and contains |max_depth| or
   // the total number of ids generated so far whichever is bigger.
   repeated string recovery_ids = 1;
+  // Used to generate recovery ids.
+  string recovery_seed = 2;
 }
 
 // Send a request to Cryptohome to lock the AuthFactor with auth_factor_type
@@ -1648,14 +1650,6 @@ message MountCompleted {
   // fails. On success these fields will be left unset.
   CryptohomeErrorCode error = 2;
   CryptohomeErrorInfo error_info = 3;
-}
-
-// The message sent in signal EvictedKeyRestoreSignal
-message EvictedKeyRestored {
-  // Unique ID associated with the current suspend request,
-  // when RestoreDeviceKey completes, correlated to a unique
-  // suspend attempt.
-  int64 eviction_id = 1;
 }
 
 // GetRecoverableKeyStores fetches all of the recoverable key stores of the

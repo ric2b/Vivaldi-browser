@@ -150,10 +150,25 @@ Check that the feature's explainer follows the [W3C TAG's guidance for writing
 good explainers](https://tag.w3.org/explainers/), especially by focusing on what
 problems the feature will solve for end users. Especially in the initial stages,
 the feature team should be open to adopting alternative solutions, and the
-explainer should make that clear, e.g., by documenting alternatives considered
-or calling out areas where better ideas are appreciated. If the feature team
+explainer should make that clear, for example by calling out areas where better
+ideas are appreciated. If the feature team
 seems too attached to their initial design, you should help coach them to be
 more flexible.
+
+Teams often forget to describe alternatives they or others considered when
+trying to solve the use case. Ensure that the explainer has a [Considered
+Alternatives](https://github.com/w3ctag/tag.w3.org/blob/main/explainers/template.md#considered-alternatives)
+section. The team should search for prior art and include it in this section.
+You may need to help the team think of places to look for prior art. There might
+be some breadcrumbs in the issues, including closed issues, for the
+specifications that will eventually define the feature, and in any extension
+registries that seem related to the feature.
+
+It may be useful to check [Mozilla's internal guidance for
+explainers](https://github.com/mozilla/explainers?tab=readme-ov-file#minimum-viable-explainer)
+in order to ensure you're not missing anything that would be useful for external
+review. Chromium developers aren't required to follow that process, but it
+contains useful reminders.
 
 #### Picking an incubation venue
 

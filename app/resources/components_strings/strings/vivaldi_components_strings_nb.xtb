@@ -7,9 +7,9 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> avsluttet tilkoblingen uventet.</translation>
 <translation id="1161325031994447685">Kobler til Wi-Fi på nytt</translation>
 <translation id="1175364870820465910">&amp;Skriv ut...</translation>
-<translation id="132390688737681464">Lagre og fyll ut adresser</translation>
 <translation id="1375198122581997741">Om versjon</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> sendte ikke noe data.</translation>
+<translation id="1555191101192706055">Angripere på nettstedet du prøvde å besøke, kan lure deg til å installere skadelig programvare som påvirker måten du surfer på – for eksempel ved å endre startsiden eller vise deg ekstra annonser på nettstedene du besøker.</translation>
 <translation id="1559528461873125649">Ingen slik fil eller mappe</translation>
 <translation id="1640244768702815859">Prøv <ph name="BEGIN_LINK" />å besøke sidens forside<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Protokollen støttes ikke</translation>
@@ -22,6 +22,7 @@
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Sjekk mellomtjeneren og brannmuren<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Utstedt til <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Denne siden kan ikke tilby en sikker tilkobling</translation>
+<translation id="2178904466768126352">Angripere på nettstedet du prøvde å besøke, kan muligens installere skadelig programvare som stjeler eller sletter ting som passord, bilder, meldinger eller kredittkortnumre.</translation>
 <translation id="2187317261103489799">Oppdag (standard)</translation>
 <translation id="2224337661447660594">Mangler internettilgang</translation>
 <translation id="2283340219607151381">Lagre og fyll ut adresser</translation>
@@ -50,6 +51,7 @@
 <translation id="2991571918955627853">Du kan ikke besøke <ph name="SITE" /> akkurat nå, fordi nettsiden bruker HSTS. Nettverksfeil og -angrep er ofte midlertidige, så denne siden vil trolig virke igjen senere.</translation>
 <translation id="3005723025932146533">Vis lagret kopi</translation>
 <translation id="301521992641321250">Automatisk blokkert</translation>
+<translation id="3037605927509011580">Å, fillern!</translation>
 <translation id="3041612393474885105">Sertifikatinformasjon</translation>
 <translation id="3109728660330352905">Du har ikke tillatelse til å vise denne siden.</translation>
 <translation id="31207688938192855"><ph name="BEGIN_LINK" />Prøv å kjøre Tilkoblingsdiagnostikk<ph name="END_LINK" />.</translation>
@@ -62,7 +64,6 @@
 <translation id="3234666976984236645">Alltid oppdag viktig innhold på dette nettstedet</translation>
 <translation id="3308738399950580893">reklame</translation>
 <translation id="3384522979010096022">Organisasjonen din tillater deg ikke å se dette nettstedet</translation>
-<translation id="3387261909427947069">Betalingsmetoder</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> kan ikke nås for øyeblikket.</translation>
 <translation id="3427092606871434483">Tillat (standard)</translation>
 <translation id="3447661539832366887">Eieren av denne enheten har slått av dinosaurspillet.</translation>
@@ -92,6 +93,7 @@
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Sjekk brannmur- og antiviruskonfigurasjoner<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Prøv å kjøre Nettverksdiagnose<ph name="END_LINK" />.</translation>
 <translation id="4235360514405112390">Gyldig</translation>
+<translation id="4241830393007970744">Angripere på nettstedet du prøvde å besøke, kan lure deg til å installere programvare eller oppgi ting som passord, telefonnumre eller kredittkortnumre.</translation>
 <translation id="4250431568374086873">Tilkoblingen til dette nettstedet er ikke helt sikker</translation>
 <translation id="4265872034478892965">Tillatt av administratoren</translation>
 <translation id="4305666528087210886">Fikk ikke tilgang til filen</translation>
@@ -102,6 +104,7 @@
 <translation id="4522570452068850558">Detaljer</translation>
 <translation id="4558551763791394412">Prøv å deaktivere utvidelsene dine.</translation>
 <translation id="4592951414987517459">Tilkoblingen til <ph name="DOMAIN" /> er kryptert med en moderne chifferpakke.</translation>
+<translation id="4598641255230617220">Lim inn og gå</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Tilkoblingen din ble forstyrret</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Kjør Windows Nettverksdiagnose<ph name="END_LINK" /></translation>
@@ -111,6 +114,7 @@
 <translation id="4764776831041365478">Nettsiden på <ph name="URL" /> er kanskje midlertidig nede eller kan ha flyttet permanent til en ny adresse.</translation>
 <translation id="483241715238664915">Slå på advarsler</translation>
 <translation id="4943872375798546930">Ingen resultater</translation>
+<translation id="5017554619425969104">Teksten du kopierte</translation>
 <translation id="5023310440958281426">Sjekk administratorens retningslinjer</translation>
 <translation id="5039804452771397117">Tillat</translation>
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 i bruk)} other {(# i bruk)}}</translation>
@@ -120,7 +124,6 @@
 <translation id="5386426401304769735">Sertifikatkjeden for dette nettstedet inneholder et sertifikat signert med SHA-1.</translation>
 <translation id="5452270690849572955">Denne <ph name="HOST_NAME" />-siden ble ikke funnet</translation>
 <translation id="5457113250005438886">Ugyldig</translation>
-<translation id="5490432419156082418">Adresser og mer</translation>
 <translation id="5492298309214877701">Denne siden på bedriftens, organisasjonens eller skolens intranett har samme URL som en ekstern nettside.
     <ph name="LINE_BREAK" />
     Kontakt systemadministratoren din.</translation>
@@ -165,7 +168,7 @@
 <translation id="7108819624672055576">Tillatt av en utvidelse</translation>
 <translation id="7111012039238467737">(Gyldig)</translation>
 <translation id="7113310725918019676">Tillat <ph name="BLOCKED_TYPE" /> fra <ph name="DOMAIN" /></translation>
-<translation id="7179323680825933600">Lagre og fyll ut betalingsmetoder</translation>
+<translation id="7126644664682723998">Lim inn og søk</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> følger ikke sikkerhetsstandarder.</translation>
 <translation id="7219179957768738017">Tilkoblinger bruker <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Vis varsler</translation>
@@ -217,6 +220,7 @@
 <translation id="9062620674789239642">Den kan ha blitt flyttet, redigert eller slettet.</translation>
 <translation id="9069693763241529744">Blokkert av en utvidelse</translation>
 <translation id="9073799351042754113">Du har valgt å slå av sikkerhetsadvarsler for dette nettstedet.</translation>
+<translation id="9168814207360376865">Tillatt nettsteder å sjekke om du har noen lagrede betalingsmåter</translation>
 <translation id="9169664750068251925">Alltid blokker på dette nettstedet</translation>
 <translation id="9180553614777056266">Reklameblokkering</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> bruker en protokoll som ikke støttes.</translation>

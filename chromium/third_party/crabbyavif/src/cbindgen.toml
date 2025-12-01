@@ -59,6 +59,4 @@ include = [
   "avifPlanesFlags",
   "avifStrictFlag",
 ]
-exclude = [
-  "Box"
-]
+exclude = ["Box"]

@@ -83,7 +83,7 @@ TEST_F(FPDFEditPageEmbedderTest, Rotation) {
 }
 
 TEST_F(FPDFEditPageEmbedderTest, HasTransparencyImage) {
-  constexpr int kExpectedObjectCount = 39;
+  static constexpr int kExpectedObjectCount = 39;
   ASSERT_TRUE(OpenDocument("embedded_images.pdf"));
   ScopedEmbedderTestPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
@@ -103,7 +103,7 @@ TEST_F(FPDFEditPageEmbedderTest, HasTransparencyInvalid) {
 }
 
 TEST_F(FPDFEditPageEmbedderTest, HasTransparencyPath) {
-  constexpr int kExpectedObjectCount = 8;
+  static constexpr int kExpectedObjectCount = 8;
   ASSERT_TRUE(OpenDocument("rectangles.pdf"));
   ScopedEmbedderTestPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
@@ -119,7 +119,7 @@ TEST_F(FPDFEditPageEmbedderTest, HasTransparencyPath) {
 }
 
 TEST_F(FPDFEditPageEmbedderTest, HasTransparencyText) {
-  constexpr int kExpectedObjectCount = 2;
+  static constexpr int kExpectedObjectCount = 2;
   ASSERT_TRUE(OpenDocument("text_render_mode.pdf"));
   ScopedEmbedderTestPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
@@ -135,8 +135,8 @@ TEST_F(FPDFEditPageEmbedderTest, HasTransparencyText) {
 }
 
 TEST_F(FPDFEditPageEmbedderTest, GetFillAndStrokeForImage) {
-  constexpr int kExpectedObjectCount = 39;
-  constexpr int kImageObjectsStartIndex = 33;
+  static constexpr int kExpectedObjectCount = 39;
+  static constexpr int kImageObjectsStartIndex = 33;
   ASSERT_TRUE(OpenDocument("embedded_images.pdf"));
   ScopedEmbedderTestPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
@@ -182,7 +182,7 @@ TEST_F(FPDFEditPageEmbedderTest, DashingArrayAndPhase) {
                                           set_array.size(), 5.0f));
   }
 
-  constexpr int kExpectedObjectCount = 3;
+  static constexpr int kExpectedObjectCount = 3;
   ASSERT_TRUE(OpenDocument("dashed_lines.pdf"));
   ScopedEmbedderTestPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
@@ -317,10 +317,10 @@ TEST_F(FPDFEditPageEmbedderTest, GetBoundsForNormalText) {
   FPDF_PAGEOBJECT obj = FPDFPage_GetObject(page.get(), 0);
   ASSERT_EQ(FPDF_PAGEOBJ_TEXT, FPDFPageObj_GetType(obj));
 
-  constexpr float kExpectedLeft = 20.348f;
-  constexpr float kExpectedBottom = 48.164f;
-  constexpr float kExpectedRight = 83.36f;
-  constexpr float kExpectedTop = 58.328f;
+  static constexpr float kExpectedLeft = 20.348f;
+  static constexpr float kExpectedBottom = 48.164f;
+  static constexpr float kExpectedRight = 83.36f;
+  static constexpr float kExpectedTop = 58.328f;
 
   float left;
   float bottom;
@@ -352,10 +352,10 @@ TEST_F(FPDFEditPageEmbedderTest, GetBoundsForRotatedText) {
   FPDF_PAGEOBJECT obj = FPDFPage_GetObject(page.get(), 0);
   ASSERT_EQ(FPDF_PAGEOBJ_TEXT, FPDFPageObj_GetType(obj));
 
-  constexpr float kExpectedLeft = 98.9478f;
-  constexpr float kExpectedBottom = 78.2607f;
-  constexpr float kExpectedRight = 126.32983f;
-  constexpr float kExpectedTop = 105.64272f;
+  static constexpr float kExpectedLeft = 98.9478f;
+  static constexpr float kExpectedBottom = 78.2607f;
+  static constexpr float kExpectedRight = 126.32983f;
+  static constexpr float kExpectedTop = 105.64272f;
 
   float left;
   float bottom;
@@ -387,10 +387,10 @@ TEST_F(FPDFEditPageEmbedderTest, GetBoundsForNormalImage) {
   FPDF_PAGEOBJECT obj = FPDFPage_GetObject(page.get(), 2);
   ASSERT_EQ(FPDF_PAGEOBJ_IMAGE, FPDFPageObj_GetType(obj));
 
-  constexpr float kExpectedLeft = 0.0f;
-  constexpr float kExpectedBottom = 90.0f;
-  constexpr float kExpectedRight = 40.0f;
-  constexpr float kExpectedTop = 150.0f;
+  static constexpr float kExpectedLeft = 0.0f;
+  static constexpr float kExpectedBottom = 90.0f;
+  static constexpr float kExpectedRight = 40.0f;
+  static constexpr float kExpectedTop = 150.0f;
 
   float left;
   float bottom;
@@ -422,10 +422,10 @@ TEST_F(FPDFEditPageEmbedderTest, GetBoundsForRotatedImage) {
   FPDF_PAGEOBJECT obj = FPDFPage_GetObject(page.get(), 0);
   ASSERT_EQ(FPDF_PAGEOBJ_IMAGE, FPDFPageObj_GetType(obj));
 
-  constexpr float kExpectedLeft = 100.0f;
-  constexpr float kExpectedBottom = 70.0f;
-  constexpr float kExpectedRight = 170.0f;
-  constexpr float kExpectedTop = 140.0f;
+  static constexpr float kExpectedLeft = 100.0f;
+  static constexpr float kExpectedBottom = 70.0f;
+  static constexpr float kExpectedRight = 170.0f;
+  static constexpr float kExpectedTop = 140.0f;
 
   float left;
   float bottom;
@@ -450,8 +450,8 @@ TEST_F(FPDFEditPageEmbedderTest, GetBoundsForRotatedImage) {
 }
 
 TEST_F(FPDFEditPageEmbedderTest, VerifyDashArraySaved) {
-  constexpr float kDashArray[] = {2.5, 3.6};
-  constexpr float kDashPhase = 1.2;
+  static constexpr float kDashArray[] = {2.5, 3.6};
+  static constexpr float kDashPhase = 1.2;
 
   CreateEmptyDocument();
   {
@@ -496,7 +496,7 @@ TEST_F(FPDFEditPageEmbedderTest, VerifyDashArraySaved) {
   CloseSavedDocument();
 }
 
-TEST_F(FPDFEditPageEmbedderTest, PageObjectSetIsActive) {
+TEST_F(FPDFEditPageEmbedderTest, PageObjectActiveState) {
   const char* one_rectangle_inactive_checksum = []() {
     if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
       return "cf5bb4e61609162c03f4c8a6d9791230";
@@ -541,9 +541,22 @@ TEST_F(FPDFEditPageEmbedderTest, PageObjectSetIsActive) {
   // Mark one of the page objects as inactive.  It is still present in the page.
   FPDF_PAGEOBJECT page_obj = FPDFPage_GetObject(page.get(), 4);
   ASSERT_TRUE(page_obj);
+
+  // Negative testing.
+  EXPECT_FALSE(FPDFPageObj_GetIsActive(page_obj, nullptr));
+  FPDF_BOOL page_obj_is_active;
+  EXPECT_FALSE(FPDFPageObj_GetIsActive(nullptr, &page_obj_is_active));
+  EXPECT_FALSE(FPDFPageObj_GetIsActive(nullptr, nullptr));
+
+  // Positive testing.
+  page_obj_is_active = false;
+  EXPECT_TRUE(FPDFPageObj_GetIsActive(page_obj, &page_obj_is_active));
+  EXPECT_TRUE(page_obj_is_active);
   ASSERT_TRUE(FPDFPageObj_SetIsActive(page_obj, /*active=*/false));
   EXPECT_TRUE(FPDFPage_GenerateContent(page.get()));
   EXPECT_EQ(8, FPDFPage_CountObjects(page.get()));
+  EXPECT_TRUE(FPDFPageObj_GetIsActive(page_obj, &page_obj_is_active));
+  EXPECT_FALSE(page_obj_is_active);
 
   {
     // Save a copy, open the copy, and render it.
@@ -563,6 +576,10 @@ TEST_F(FPDFEditPageEmbedderTest, PageObjectSetIsActive) {
     CloseSavedPage(saved_page);
     CloseSavedDocument();
   }
+
+  // Negative testing.
+  EXPECT_FALSE(FPDFPageObj_SetIsActive(nullptr, false));
+  EXPECT_FALSE(FPDFPageObj_SetIsActive(nullptr, true));
 }
 
 TEST_F(FPDFEditPageEmbedderTest, Bug378120423) {
@@ -628,6 +645,116 @@ TEST_F(FPDFEditPageEmbedderTest, Bug378120423) {
     ScopedFPDFBitmap bitmap = RenderSavedPage(saved_page);
     CompareBitmap(bitmap.get(), page_width, page_height, kChecksum);
     EXPECT_EQ(1, FPDFPage_CountObjects(saved_page));
+
+    CloseSavedPage(saved_page);
+    CloseSavedDocument();
+  }
+}
+
+TEST_F(FPDFEditPageEmbedderTest, Bug378464305) {
+  ASSERT_TRUE(OpenDocument("rectangles.pdf"));
+  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ASSERT_TRUE(page);
+  const int page_width = static_cast<int>(FPDF_GetPageWidth(page.get()));
+  const int page_height = static_cast<int>(FPDF_GetPageHeight(page.get()));
+  static constexpr int kOriginalObjectCount = 8;
+  {
+    // Sanity check rectangles.pdf before modifying it.
+    ScopedFPDFBitmap bitmap = RenderLoadedPage(page.get());
+    CompareBitmap(bitmap.get(), page_width, page_height,
+                  pdfium::RectanglesChecksum());
+    EXPECT_EQ(kOriginalObjectCount, FPDFPage_CountObjects(page.get()));
+  }
+
+  // Add a new path.
+  static constexpr int kObjectCountWithNewPath = kOriginalObjectCount + 1;
+  ScopedFPDFPageObject path_wrapper(FPDFPageObj_CreateNewPath(50, 50));
+  FPDF_PAGEOBJECT path = path_wrapper.get();
+  ASSERT_TRUE(path);
+  EXPECT_TRUE(
+      FPDFPath_SetDrawMode(path, FPDF_FILLMODE_WINDING, /*stroke=*/false));
+  EXPECT_TRUE(
+      FPDFPageObj_SetFillColor(path, /*R=*/255, /*G=*/0, /*B=*/0, /*A=*/127));
+  EXPECT_TRUE(FPDFPath_LineTo(path, 40, 60));
+  EXPECT_TRUE(FPDFPath_LineTo(path, 40, 50));
+  EXPECT_TRUE(FPDFPath_Close(path));
+  FPDFPage_InsertObject(page.get(), path_wrapper.release());
+  EXPECT_TRUE(FPDFPage_GenerateContent(page.get()));
+
+  // Render `page` with the new path.
+  const char* new_path_checksum = []() {
+    if (CFX_DefaultRenderDevice::UseSkiaRenderer()) {
+      return "34b57c038e2927ac490c20dc2c7fb706";
+    }
+    return "725702098ecb591a356827d54bd26cb2";
+  }();
+  {
+    ScopedFPDFBitmap bitmap = RenderLoadedPage(page.get());
+    CompareBitmap(bitmap.get(), page_width, page_height, new_path_checksum);
+    EXPECT_EQ(kObjectCountWithNewPath, FPDFPage_CountObjects(page.get()));
+  }
+  {
+    // Save a copy, open the copy, and render it.
+    EXPECT_TRUE(FPDF_SaveAsCopy(document(), this, 0));
+    ASSERT_TRUE(OpenSavedDocument());
+    FPDF_PAGE saved_page = LoadSavedPage(0);
+    ASSERT_TRUE(saved_page);
+
+    ScopedFPDFBitmap bitmap = RenderSavedPage(saved_page);
+    CompareBitmap(bitmap.get(), page_width, page_height, new_path_checksum);
+    EXPECT_EQ(kObjectCountWithNewPath, FPDFPage_CountObjects(saved_page));
+
+    CloseSavedPage(saved_page);
+    CloseSavedDocument();
+  }
+
+  // Deactivate `path` and render.
+  ASSERT_TRUE(FPDFPageObj_SetIsActive(path, false));
+  EXPECT_TRUE(FPDFPage_GenerateContent(page.get()));
+  {
+    ScopedFPDFBitmap bitmap = RenderLoadedPage(page.get());
+    CompareBitmap(bitmap.get(), page_width, page_height,
+                  pdfium::RectanglesChecksum());
+    // `path` can still be found. It is just deactivated.
+    EXPECT_EQ(kObjectCountWithNewPath, FPDFPage_CountObjects(page.get()));
+  }
+
+  {
+    // Save a copy, open the copy, and render it.
+    EXPECT_TRUE(FPDF_SaveAsCopy(document(), this, 0));
+    ASSERT_TRUE(OpenSavedDocument());
+    FPDF_PAGE saved_page = LoadSavedPage(0);
+    ASSERT_TRUE(saved_page);
+
+    ScopedFPDFBitmap bitmap = RenderSavedPage(saved_page);
+    CompareBitmap(bitmap.get(), page_width, page_height,
+                  pdfium::RectanglesChecksum());
+    // `path` did not get written out to the saved PDF.
+    EXPECT_EQ(kOriginalObjectCount, FPDFPage_CountObjects(saved_page));
+
+    CloseSavedPage(saved_page);
+    CloseSavedDocument();
+  }
+
+  // Reactivate `path` and render.
+  ASSERT_TRUE(FPDFPageObj_SetIsActive(path, true));
+  EXPECT_TRUE(FPDFPage_GenerateContent(page.get()));
+  {
+    ScopedFPDFBitmap bitmap = RenderLoadedPage(page.get());
+    CompareBitmap(bitmap.get(), page_width, page_height, new_path_checksum);
+    EXPECT_EQ(kObjectCountWithNewPath, FPDFPage_CountObjects(page.get()));
+  }
+
+  {
+    // Save a copy, open the copy, and render it.
+    EXPECT_TRUE(FPDF_SaveAsCopy(document(), this, 0));
+    ASSERT_TRUE(OpenSavedDocument());
+    FPDF_PAGE saved_page = LoadSavedPage(0);
+    ASSERT_TRUE(saved_page);
+
+    ScopedFPDFBitmap bitmap = RenderSavedPage(saved_page);
+    CompareBitmap(bitmap.get(), page_width, page_height, new_path_checksum);
+    EXPECT_EQ(kObjectCountWithNewPath, FPDFPage_CountObjects(saved_page));
 
     CloseSavedPage(saved_page);
     CloseSavedDocument();

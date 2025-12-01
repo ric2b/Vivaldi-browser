@@ -21,7 +21,6 @@ import org.mockito.junit.MockitoRule;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.privacy_sandbox.PrivacySandboxBridgeJni;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -48,9 +47,7 @@ import org.chromium.components.user_prefs.UserPrefsJni;
  * compressed if @ParameterizedTest from JUnit5 can be used.
  */
 @RunWith(BaseRobolectricTestRunner.class)
-@EnableFeatures({ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS})
 public class StepDisplayHandlerImplTest {
-    @Rule public JniMocker mMocker = new JniMocker();
     @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
 
     @Mock private SafeBrowsingBridge.Natives mSBNativesMock;
@@ -67,27 +64,23 @@ public class StepDisplayHandlerImplTest {
 
     @Before
     public void setUp() {
-        mMocker.mock(UserPrefsJni.TEST_HOOKS, mUserPrefsNativesMock);
+        UserPrefsJni.setInstanceForTesting(mUserPrefsNativesMock);
         when(mUserPrefsNativesMock.get(mProfile)).thenReturn(mPrefServiceMock);
 
-        mMocker.mock(WebsitePreferenceBridgeJni.TEST_HOOKS, mWebsitePreferenceNativesMock);
+        WebsitePreferenceBridgeJni.setInstanceForTesting(mWebsitePreferenceNativesMock);
 
         IdentityServicesProvider.setInstanceForTests(mIdentityServicesProvider);
         when(mIdentityServicesProvider.getIdentityManager(mProfile)).thenReturn(mIdentityManager);
 
         SyncServiceFactory.setInstanceForTesting(mSyncService);
-        mMocker.mock(SafeBrowsingBridgeJni.TEST_HOOKS, mSBNativesMock);
-        mMocker.mock(PrivacySandboxBridgeJni.TEST_HOOKS, mPrivacySandboxBridgeJni);
+        SafeBrowsingBridgeJni.setInstanceForTesting(mSBNativesMock);
+        PrivacySandboxBridgeJni.setInstanceForTesting(mPrivacySandboxBridgeJni);
 
         mStepDisplayHandler = new StepDisplayHandlerImpl(mProfile);
     }
 
     private void setSBState(@SafeBrowsingState int sbState) {
         when(mSBNativesMock.getSafeBrowsingState(eq(mProfile))).thenReturn(sbState);
-    }
-
-    private void setSyncState(boolean enabled) {
-        when(mSyncService.isSyncFeatureEnabled()).thenReturn(enabled);
     }
 
     private void setCookieState(@CookieControlsMode int cookieControlsMode, boolean allowCookies) {
@@ -114,20 +107,6 @@ public class StepDisplayHandlerImplTest {
     public void testDontDisplaySBWhenSBUnsafe() {
         setSBState(SafeBrowsingState.NO_SAFE_BROWSING);
         assertFalse(mStepDisplayHandler.shouldDisplaySafeBrowsing());
-    }
-
-    @Test
-    @DisableFeatures({ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS})
-    public void testDisplayHistorySyncWhenSyncOn() {
-        setSyncState(true);
-        assertTrue(mStepDisplayHandler.shouldDisplayHistorySync());
-    }
-
-    @Test
-    @DisableFeatures({ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS})
-    public void testDontDisplayHistorySyncWhenSyncOff() {
-        setSyncState(false);
-        assertFalse(mStepDisplayHandler.shouldDisplayHistorySync());
     }
 
     @Test

@@ -1,14 +1,18 @@
 // Copyright 2024 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+
 import * as i18n from '../../../../core/i18n/i18n.js';
+import * as Platform from '../../../../core/platform/platform.js';
 import type * as Trace from '../../../../models/trace/trace.js';
-import * as LitHtml from '../../../../ui/lit-html/lit-html.js';
+import {html, render} from '../../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../../ui/visual_logging/visual_logging.js';
 
-import styles from './timeRangeOverlay.css.js';
+import stylesRaw from './timeRangeOverlay.css.js';
 
-const {html} = LitHtml;
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const styles = new CSSStyleSheet();
+styles.replaceSync(stylesRaw.cssContent);
 
 const UIStrings = {
   /**
@@ -37,7 +41,7 @@ export class TimeRangeRemoveEvent extends Event {
 
 export class TimeRangeOverlay extends HTMLElement {
   readonly #shadow = this.attachShadow({mode: 'open'});
-  #duration: Trace.Types.Timing.MicroSeconds|null = null;
+  #duration: Trace.Types.Timing.Micro|null = null;
   #canvasRect: DOMRect|null = null;
   #label: string;
 
@@ -83,7 +87,7 @@ export class TimeRangeOverlay extends HTMLElement {
     this.#render();
   }
 
-  set duration(duration: Trace.Types.Timing.MicroSeconds|null) {
+  set duration(duration: Trace.Types.Timing.Micro|null) {
     if (duration === this.#duration) {
       return;
     }
@@ -236,7 +240,7 @@ export class TimeRangeOverlay extends HTMLElement {
     // as the end of the label input and blur the input field.
     // If the text field is empty when `Enter` or `Escape` are pressed,
     // dispatch an event to remove the time range.
-    if (event.key === 'Enter' || event.key === 'Escape') {
+    if (event.key === Platform.KeyboardUtilities.ENTER_KEY || event.key === Platform.KeyboardUtilities.ESCAPE_KEY) {
       // In DevTools, the `Escape` button will by default toggle the console
       // drawer, which we don't want here, so we need to call
       // `stopPropagation()`.
@@ -254,7 +258,7 @@ export class TimeRangeOverlay extends HTMLElement {
   #render(): void {
     const durationText = this.#duration ? i18n.TimeUtilities.formatMicroSecondsTime(this.#duration) : '';
     // clang-format off
-    LitHtml.render(
+    render(
         html`
           <span class="range-container" role="region" aria-label=${i18nString(UIStrings.timeRange)}>
             <span

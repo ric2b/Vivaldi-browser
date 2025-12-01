@@ -11,13 +11,13 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
 #import "components/strings/grit/components_strings.h"
+#import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey.h"
+#import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey_ui_test_util.h"
 #import "ios/chrome/browser/bookmarks/model/bookmark_storage_type.h"
 #import "ios/chrome/browser/bookmarks/ui_bundled/bookmark_earl_grey.h"
 #import "ios/chrome/browser/bookmarks/ui_bundled/bookmark_earl_grey_ui.h"
 #import "ios/chrome/browser/bookmarks/ui_bundled/bookmark_ui_constants.h"
 #import "ios/chrome/browser/signin/model/fake_system_identity.h"
-#import "ios/chrome/browser/ui/authentication/signin_earl_grey.h"
-#import "ios/chrome/browser/ui/authentication/signin_earl_grey_ui_test_util.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_actions.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
@@ -133,7 +133,7 @@ BookmarkStorageType kindOfTestToStorageType(KindOfTest kind) {
       performAction:grey_tap()];
 
   // Verify default parent folder is 'Mobile Bookmarks'.
-  [BookmarkEarlGreyUI assertChangeFolderIsCorrectlySet:@"Mobile Bookmarks"
+  [BookmarkEarlGreyUI assertChangeFolderIsCorrectlySet:@"Mobile bookmarks"
                                             kindOfTest:kindOfTest];
 
   // Close folder editor.
@@ -198,7 +198,7 @@ BookmarkStorageType kindOfTestToStorageType(KindOfTest kind) {
       renameBookmarkFolderWithFolderTitle:@"Title For New Folder"];
 
   // Verify current parent folder (Change Folder) is Bookmarks folder.
-  [BookmarkEarlGreyUI assertChangeFolderIsCorrectlySet:@"Mobile Bookmarks"
+  [BookmarkEarlGreyUI assertChangeFolderIsCorrectlySet:@"Mobile bookmarks"
                                             kindOfTest:kindOfTest];
 
   // Choose new parent folder (Change Folder).
@@ -307,7 +307,7 @@ BookmarkStorageType kindOfTestToStorageType(KindOfTest kind) {
 }
 
 // TODO(crbug.com/337774320) Test is flaky on ios-fieldtrial-rel.
-- (void)DISABLED_testNavigateAwayFromFolderBeingEditedAccount {
+- (void)FLAKY_testNavigateAwayFromFolderBeingEditedAccount {
   [SigninEarlGreyUI signinWithFakeIdentity:[FakeSystemIdentity fakeIdentity1]];
   [self util_testNavigateAwayFromFolderBeingEdited:KindOfTest::kAccount];
 }
@@ -533,7 +533,7 @@ BookmarkStorageType kindOfTestToStorageType(KindOfTest kind) {
 
   // Long press on Mobile Bookmarks.
   [[EarlGrey selectElementWithMatcher:TappableBookmarkNodeWithLabel(
-                                          @"Mobile Bookmarks", kindOfTest)]
+                                          @"Mobile bookmarks", kindOfTest)]
       performAction:grey_longPress()];
 
   // We cannot locate new context menus any way, therefore we'll use the
@@ -614,7 +614,7 @@ BookmarkStorageType kindOfTestToStorageType(KindOfTest kind) {
       tapOnContextMenuButton:IDS_IOS_BOOKMARK_CONTEXT_MENU_EDIT_FOLDER
                   openEditor:kBookmarkFolderEditViewContainerIdentifier
            setParentFolderTo:@"Folder 1.1"
-                        from:@"Mobile Bookmarks"
+                        from:@"Mobile bookmarks"
                   kindOfTest:kindOfTest];
 
   // Verify edit mode remains.
@@ -720,9 +720,8 @@ BookmarkStorageType kindOfTestToStorageType(KindOfTest kind) {
   [self util_testMoveAndUndoFromModel:KindOfTest::kAccount
                               toModel:KindOfTest::kAccount];
 }
-// TODO(crbug.com/326425036): Moving the bookmarks fails in test but not when
-// reproduced manually.
-- (void)DISABLED_testMoveAndUndoLocalToAccount {
+
+- (void)testMoveAndUndoLocalToAccount {
   [SigninEarlGreyUI signinWithFakeIdentity:[FakeSystemIdentity fakeIdentity1]];
   [self util_testMoveAndUndoFromModel:KindOfTest::kLocal
                               toModel:KindOfTest::kAccount];
@@ -864,7 +863,7 @@ BookmarkStorageType kindOfTestToStorageType(KindOfTest kind) {
 
   // Verify current parent folder for "Title For New Folder" folder is "Mobile
   // Bookmarks" folder.
-  [BookmarkEarlGreyUI assertChangeFolderIsCorrectlySet:@"Mobile Bookmarks"
+  [BookmarkEarlGreyUI assertChangeFolderIsCorrectlySet:@"Mobile bookmarks"
                                             kindOfTest:destinationKind];
 
   // Choose new parent folder for "Title For New Folder" folder.
@@ -992,7 +991,7 @@ BookmarkStorageType kindOfTestToStorageType(KindOfTest kind) {
 
   // Verify current parent folder for "Title For New Folder" folder is "Mobile
   // Bookmarks" folder.
-  [BookmarkEarlGreyUI assertChangeFolderIsCorrectlySet:@"Mobile Bookmarks"
+  [BookmarkEarlGreyUI assertChangeFolderIsCorrectlySet:@"Mobile bookmarks"
                                             kindOfTest:kindOfTest];
 
   // Tap Done to close bookmark move flow.
@@ -1413,7 +1412,7 @@ BookmarkStorageType kindOfTestToStorageType(KindOfTest kind) {
       label = base::i18n::MessageFormatter::FormatWithNamedArgs(
           l10n_util::GetStringUTF16(
               IDS_IOS_BOOKMARK_PAGE_SAVED_FOLDER_TO_DEVICE),
-          "count", 1, "title", "Mobile Bookmarks");
+          "count", 1, "title", "Mobile bookmarks");
       break;
     case KindOfTest::kAccount:
       label = base::i18n::MessageFormatter::FormatWithNamedArgs(
@@ -1448,7 +1447,7 @@ BookmarkStorageType kindOfTestToStorageType(KindOfTest kind) {
                                           kBookmarkEditViewContainerIdentifier)]
       assertWithMatcher:grey_notNil()];
 
-  [BookmarkEarlGreyUI assertChangeFolderIsCorrectlySet:@"Mobile Bookmarks"
+  [BookmarkEarlGreyUI assertChangeFolderIsCorrectlySet:@"Mobile bookmarks"
                                             kindOfTest:kindOfTest];
 
   // Tap the Folder button.

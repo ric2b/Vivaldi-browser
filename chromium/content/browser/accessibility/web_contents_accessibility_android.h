@@ -196,7 +196,9 @@ class CONTENT_EXPORT WebContentsAccessibilityAndroid
                        const base::android::JavaParamRef<jstring>& element_type,
                        jboolean forwards,
                        jboolean can_wrap_to_last_element,
-                       jboolean use_default_predicate);
+                       jboolean use_default_predicate,
+                       jboolean is_talkback_enabled,
+                       jboolean is_only_talkback_enabled);
 
   // Respond to a ACTION_[NEXT/PREVIOUS]_AT_MOVEMENT_GRANULARITY action
   // and move the cursor/selection within the given node id. We keep track
@@ -375,7 +377,7 @@ class CONTENT_EXPORT WebContentsAccessibilityAndroid
   void HandleClicked(int32_t unique_id);
   void HandleScrollPositionChanged(int32_t unique_id);
   void HandleScrolledToAnchor(int32_t unique_id);
-  void HandleDialogModalOpened(int32_t unique_id);
+  void HandlePaneOpened(int32_t unique_id);
   void AnnounceLiveRegionText(const std::u16string& text);
   void HandleTextContentChanged(int32_t unique_id);
   void HandleTextSelectionChanged(int32_t unique_id);

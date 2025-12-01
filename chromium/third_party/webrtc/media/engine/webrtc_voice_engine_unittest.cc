@@ -48,6 +48,7 @@
 #include "call/audio_state.h"
 #include "call/call.h"
 #include "call/call_config.h"
+#include "call/payload_type_picker.h"
 #include "media/base/codec.h"
 #include "media/base/fake_media_engine.h"
 #include "media/base/fake_network_interface.h"
@@ -116,6 +117,8 @@ const cricket::Codec kTelephoneEventCodec1 =
     cricket::CreateAudioCodec(106, "telephone-event", 8000, 1);
 const cricket::Codec kTelephoneEventCodec2 =
     cricket::CreateAudioCodec(107, "telephone-event", 32000, 1);
+const cricket::Codec kUnknownCodec =
+    cricket::CreateAudioCodec(127, "XYZ", 32000, 1);
 
 const uint32_t kSsrc0 = 0;
 const uint32_t kSsrc1 = 1;
@@ -305,14 +308,6 @@ class WebRtcVoiceEngineTestFake : public ::testing::TestWithParam<bool> {
              receive_channel_.get()](const std::set<uint32_t>& choices) {
           receive_channel->ChooseReceiverReportSsrc(choices);
         });
-    send_channel_->SetSendCodecChangedCallback(
-        [receive_channel = receive_channel_.get(),
-         send_channel = send_channel_.get()]() {
-          receive_channel->SetReceiveNackEnabled(
-              send_channel->SendCodecHasNack());
-          receive_channel->SetReceiveNonSenderRttEnabled(
-              send_channel->SenderNonSenderRttEnabled());
-        });
     return true;
   }
 
@@ -402,6 +397,15 @@ class WebRtcVoiceEngineTestFake : public ::testing::TestWithParam<bool> {
   void SetSenderParameters(const cricket::AudioSenderParameter& params) {
     ASSERT_TRUE(send_channel_);
     EXPECT_TRUE(send_channel_->SetSenderParameters(params));
+    if (receive_channel_) {
+      receive_channel_->SetRtcpMode(params.rtcp.reduced_size
+                                        ? webrtc::RtcpMode::kReducedSize
+                                        : webrtc::RtcpMode::kCompound);
+      receive_channel_->SetReceiveNackEnabled(
+          send_channel_->SendCodecHasNack());
+      receive_channel_->SetReceiveNonSenderRttEnabled(
+          send_channel_->SenderNonSenderRttEnabled());
+    }
   }
 
   void SetAudioSend(uint32_t ssrc,
@@ -956,18 +960,6 @@ TEST_P(WebRtcVoiceEngineTestFake, CreateRecvStream) {
   EXPECT_EQ("", config.sync_group);
 }
 
-TEST_P(WebRtcVoiceEngineTestFake, OpusSupportsTransportCc) {
-  const std::vector<cricket::Codec>& codecs = engine_->send_codecs();
-  bool opus_found = false;
-  for (const cricket::Codec& codec : codecs) {
-    if (codec.name == "opus") {
-      EXPECT_TRUE(HasTransportCc(codec));
-      opus_found = true;
-    }
-  }
-  EXPECT_TRUE(opus_found);
-}
-
 // Test that we set our inbound codecs properly, including changing PT.
 TEST_P(WebRtcVoiceEngineTestFake, SetRecvCodecs) {
   EXPECT_TRUE(SetupChannel());
@@ -993,7 +985,7 @@ TEST_P(WebRtcVoiceEngineTestFake, SetRecvCodecsUnsupportedCodec) {
   EXPECT_TRUE(SetupChannel());
   cricket::AudioReceiverParameters parameters;
   parameters.codecs.push_back(kOpusCodec);
-  parameters.codecs.push_back(cricket::CreateAudioCodec(127, "XYZ", 32000, 1));
+  parameters.codecs.push_back(kUnknownCodec);
   EXPECT_FALSE(receive_channel_->SetReceiverParameters(parameters));
 }
 
@@ -1743,6 +1735,22 @@ TEST_P(WebRtcVoiceEngineTestFake, SetSendCodecsRedFmtpAmountOfRedundancy) {
   EXPECT_EQ(std::nullopt, send_codec_spec3.red_payload_type);
 }
 
+// Test that we use Opus/Red by default if an unknown codec
+// is before RED and Opus.
+TEST_P(WebRtcVoiceEngineTestFake, SetSendCodecRedWithUnknownCodec) {
+  EXPECT_TRUE(SetupSendStream());
+  cricket::AudioSenderParameter parameters;
+  parameters.codecs.push_back(kUnknownCodec);
+  parameters.codecs.push_back(kRed48000Codec);
+  parameters.codecs.back().params[""] = "111/111";
+  parameters.codecs.push_back(kOpusCodec);
+  SetSenderParameters(parameters);
+  const auto& send_codec_spec = *GetSendStreamConfig(kSsrcX).send_codec_spec;
+  EXPECT_EQ(111, send_codec_spec.payload_type);
+  EXPECT_STRCASEEQ("opus", send_codec_spec.format.name.c_str());
+  EXPECT_EQ(112, send_codec_spec.red_payload_type);
+}
+
 // Test that WebRtcVoiceEngine reconfigures, rather than recreates its
 // AudioSendStream.
 TEST_P(WebRtcVoiceEngineTestFake, DontRecreateSendStream) {
@@ -2038,6 +2046,73 @@ TEST_P(WebRtcVoiceEngineTestFake, AddRecvStreamEnableNack) {
   EXPECT_EQ(kRtpHistoryMs, GetRecvStreamConfig(kSsrcY).rtp.nack.rtp_history_ms);
   EXPECT_TRUE(AddRecvStream(kSsrcZ));
   EXPECT_EQ(kRtpHistoryMs, GetRecvStreamConfig(kSsrcZ).rtp.nack.rtp_history_ms);
+}
+
+// Test that we can enable RTCP reduced size mode with opus as callee.
+TEST_P(WebRtcVoiceEngineTestFake, SetSendCodecEnableRtcpReducedSizeAsCallee) {
+  EXPECT_TRUE(SetupRecvStream());
+  cricket::AudioSenderParameter parameters;
+  parameters.codecs.push_back(kOpusCodec);
+  parameters.rtcp.reduced_size = true;
+  EXPECT_EQ(webrtc::RtcpMode::kCompound,
+            GetRecvStreamConfig(kSsrcX).rtp.rtcp_mode);
+  SetSenderParameters(parameters);
+  // Reduced size mode should be enabled even with no send stream.
+  EXPECT_EQ(webrtc::RtcpMode::kReducedSize,
+            GetRecvStreamConfig(kSsrcX).rtp.rtcp_mode);
+
+  EXPECT_TRUE(send_channel_->AddSendStream(
+      cricket::StreamParams::CreateLegacy(kSsrcX)));
+}
+
+// Test that we can enable RTCP reduced size mode on receive streams.
+TEST_P(WebRtcVoiceEngineTestFake,
+       SetSendCodecEnableRtcpReducedSizeRecvStreams) {
+  EXPECT_TRUE(SetupSendStream());
+  EXPECT_TRUE(AddRecvStream(kSsrcY));
+  cricket::AudioSenderParameter parameters;
+  parameters.codecs.push_back(kOpusCodec);
+  parameters.rtcp.reduced_size = true;
+  EXPECT_EQ(webrtc::RtcpMode::kCompound,
+            GetRecvStreamConfig(kSsrcY).rtp.rtcp_mode);
+  SetSenderParameters(parameters);
+  EXPECT_EQ(webrtc::RtcpMode::kReducedSize,
+            GetRecvStreamConfig(kSsrcY).rtp.rtcp_mode);
+}
+
+// Test that we can disable RTCP reduced size mode on receive streams.
+TEST_P(WebRtcVoiceEngineTestFake,
+       SetSendCodecDisableRtcpReducedSizeRecvStreams) {
+  EXPECT_TRUE(SetupSendStream());
+  EXPECT_TRUE(AddRecvStream(kSsrcY));
+  cricket::AudioSenderParameter parameters;
+  parameters.codecs.push_back(kOpusCodec);
+  parameters.rtcp.reduced_size = true;
+  SetSenderParameters(parameters);
+  EXPECT_EQ(webrtc::RtcpMode::kReducedSize,
+            GetRecvStreamConfig(kSsrcY).rtp.rtcp_mode);
+
+  parameters.rtcp.reduced_size = false;
+  SetSenderParameters(parameters);
+  EXPECT_EQ(webrtc::RtcpMode::kCompound,
+            GetRecvStreamConfig(kSsrcY).rtp.rtcp_mode);
+}
+
+// Test that RTCP reduced size mode is enabled on a new receive stream.
+TEST_P(WebRtcVoiceEngineTestFake, AddRecvStreamEnableRtcpReducedSize) {
+  EXPECT_TRUE(SetupSendStream());
+  cricket::AudioSenderParameter parameters;
+  parameters.codecs.push_back(kOpusCodec);
+  parameters.codecs.push_back(kCn16000Codec);
+  parameters.rtcp.reduced_size = true;
+  SetSenderParameters(parameters);
+
+  EXPECT_TRUE(AddRecvStream(kSsrcY));
+  EXPECT_EQ(webrtc::RtcpMode::kReducedSize,
+            GetRecvStreamConfig(kSsrcY).rtp.rtcp_mode);
+  EXPECT_TRUE(AddRecvStream(kSsrcZ));
+  EXPECT_EQ(webrtc::RtcpMode::kReducedSize,
+            GetRecvStreamConfig(kSsrcZ).rtp.rtcp_mode);
 }
 
 // Test that we can switch back and forth between Opus and PCMU with CN.

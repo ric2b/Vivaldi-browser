@@ -26,13 +26,11 @@
 #include "internal/test/fake_clock.h"
 #include "internal/test/fake_device_info.h"
 #include "internal/test/fake_task_runner.h"
-#include "sharing/fake_nearby_connections_manager.h"
 #include "sharing/internal/public/logging.h"
 #include "sharing/nearby_connection_impl.h"
 #include "sharing/proto/wire_format.pb.h"
 
-namespace nearby {
-namespace sharing {
+namespace nearby::sharing {
 namespace {
 
 using ::nearby::sharing::service::proto::ConnectionResponseFrame;
@@ -102,19 +100,18 @@ std::optional<std::vector<uint8_t>> GetInvalidFrame() {
 class IncomingFramesReaderTest : public testing::Test {
  public:
   IncomingFramesReaderTest() {
-    nearby_connection_ = std::make_unique<NearbyConnectionImpl>(
-        fake_device_info_, &fake_nearby_connections_manager_, "endpoint_id");
+    nearby_connection_ =
+        std::make_unique<NearbyConnectionImpl>(fake_device_info_);
   }
   ~IncomingFramesReaderTest() override = default;
 
   void SetUp() override {
-    FakeTaskRunner::ResetPendingTasksCount();
     frames_reader_ = std::make_shared<IncomingFramesReader>(
         fake_task_runner_, nearby_connection_.get());
   }
 
   NearbyConnectionImpl& connection() {
-    NL_CHECK(nearby_connection_);
+    CHECK(nearby_connection_);
     return *nearby_connection_;
   }
 
@@ -137,7 +134,6 @@ class IncomingFramesReaderTest : public testing::Test {
   FakeClock fake_clock_;
   FakeTaskRunner fake_task_runner_ {&fake_clock_, 1};
   FakeDeviceInfo fake_device_info_;
-  FakeNearbyConnectionsManager fake_nearby_connections_manager_;
   std::unique_ptr<NearbyConnectionImpl> nearby_connection_;
   std::shared_ptr<IncomingFramesReader> frames_reader_ = nullptr;
 };
@@ -370,5 +366,4 @@ TEST_F(IncomingFramesReaderTest, SkipInvalidFrame) {
 }
 
 }  // namespace
-}  // namespace sharing
-}  // namespace nearby
+}  // namespace nearby::sharing

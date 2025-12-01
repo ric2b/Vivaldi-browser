@@ -18,16 +18,36 @@
 #include <dlfcn.h>
 #include <stdlib.h>
 
+#include <string>
+#include <vector>
+
 #include "absl/strings/string_view.h"
 #include "tensorflow/lite/experimental/litert/c/litert_common.h"
 #include "tensorflow/lite/experimental/litert/c/litert_logging.h"
 
-namespace litert {
+namespace litert::internal {
 
 constexpr absl::string_view kLiteRtSharedLibPrefix = "libLiteRt";
 
-// Loads shared library at given path.
-LiteRtStatus OpenLib(absl::string_view so_path, void** lib_handle);
+// Check for null and print the last dlerror.
+inline void LogDlError() {
+  char* err = ::dlerror();
+  if (err == nullptr) {
+    return;
+  }
+  LITERT_LOG(LITERT_WARNING, "::dlerror() : %s", err);
+}
+
+// Probes for a list of shared library at given paths and returns when the first
+// one is found. Returns kLiteRtStatusErrorDynamicLoading if none of the shared
+// libraries are found.
+LiteRtStatus OpenLib(const std::vector<std::string>& so_paths,
+                     void** lib_handle);
+
+// Loads shared library at given path. Logging can be disabled to probe for
+// shared libraries.
+LiteRtStatus OpenLib(absl::string_view so_path, void** lib_handle,
+                     bool log_failure = true);
 
 // Closes reference to loaded shared library held by lib_handle.
 LiteRtStatus CloseLib(void* lib_handle);
@@ -39,19 +59,21 @@ inline static LiteRtStatus ResolveLibSymbol(void* lib_handle,
                                             Sym* sym_handle) {
   Sym ptr = (Sym)::dlsym(lib_handle, sym_name.data());
   if (ptr == nullptr) {
-    LITERT_LOG(LITERT_ERROR, "Faild to resolve symbol: %s, with err: %s\n",
-               sym_name, ::dlerror());
+    LITERT_LOG(LITERT_ERROR, "Faild to resolve symbol: %s\n", sym_name.data());
+    LogDlError();
     return kLiteRtStatusErrorDynamicLoading;
   }
   *sym_handle = ptr;
   return kLiteRtStatusOk;
 }
 
-// All internal dynamically linked dependencies for litert should be prefixed
-// "libLiteRt". Find all litert shared libraries in "search_path"
+// Find all litert shared libraries in "search_path" and return
+// kLiteRtStatusErrorInvalidArgument if the provided search_path doesn't
+// exist. All internal dynamically linked dependencies for litert should be
+// prefixed with "libLiteRtCompilerPlugin".
 LiteRtStatus FindLiteRtSharedLibs(absl::string_view search_path,
                                   std::vector<std::string>& results);
 
-}  // namespace litert
+}  // namespace litert::internal
 
 #endif  // TENSORFLOW_LITE_EXPERIMENTAL_LITERT_CORE_DYNAMIC_LOADING_H_

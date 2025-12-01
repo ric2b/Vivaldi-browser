@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import type * as Platform from '../../../../core/platform/platform.js';
+import * as Platform from '../../../../core/platform/platform.js';
 import * as SDK from '../../../../core/sdk/sdk.js';
 import * as Protocol from '../../../../generated/protocol.js';
 import {assertGridContents} from '../../../../testing/DataGridHelpers.js';
@@ -10,18 +10,18 @@ import {
   renderElementIntoDOM,
 } from '../../../../testing/DOMHelpers.js';
 import {describeWithEnvironment} from '../../../../testing/EnvironmentHelpers.js';
-import * as Coordinator from '../../../../ui/components/render_coordinator/render_coordinator.js';
+import * as RenderCoordinator from '../../../../ui/components/render_coordinator/render_coordinator.js';
 
 import * as PreloadingComponents from './components.js';
 
-const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
+const {urlString} = Platform.DevToolsPath;
 
 async function renderPreloadingMismatchedHeadersGrid(data: SDK.PreloadingModel.PrerenderAttempt): Promise<HTMLElement> {
   const component = new PreloadingComponents.PreloadingMismatchedHeadersGrid.PreloadingMismatchedHeadersGrid();
   component.data = data;
   renderElementIntoDOM(component);
   assert.isNotNull(component.shadowRoot);
-  await coordinator.done();
+  await RenderCoordinator.done();
 
   return component;
 }
@@ -33,8 +33,9 @@ async function testPreloadingMismatchedHeadersGrid(
     key: {
       loaderId: 'loaderId:1' as Protocol.Network.LoaderId,
       action: Protocol.Preload.SpeculationAction.Prerender,
-      url: 'https://example.com/prerendered.html' as Platform.DevToolsPath.UrlString,
+      url: urlString`https://example.com/prerendered.html`,
     },
+    pipelineId: 'pipelineId:1' as Protocol.Preload.PreloadPipelineId,
     status: SDK.PreloadingModel.PreloadingStatus.FAILURE,
     prerenderStatus: Protocol.Preload.PrerenderFinalStatus.ActivationNavigationParameterMismatch,
     disallowedMojoInterface: null,

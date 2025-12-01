@@ -2,20 +2,31 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="cs">
 <translation id="1063263220330818888">Soukromé vyhledávání</translation>
+<translation id="1097355661841455597">Rádi bychom věděli, co si myslíte.</translation>
 <translation id="1137850887415122856">Pro uzamknutí vašich soukromých listů nastavte Touch ID, Face ID nebo kódový zámek.</translation>
 <translation id="1310184829257917508">Ptát se na otevření odkazů z jiných aplikací v soukromém okně</translation>
+<translation id="1561609750546413721">Vivaldi překladač</translation>
 <translation id="207677936531967364">Stránka nového soukromého listu</translation>
+<translation id="2394192052244849643">Vložit a vyhledat</translation>
+<translation id="2418705169960294134">Nový soukromý list</translation>
 <translation id="2899836479226240291">Odkazy můžete ve Vivaldi otevírat automaticky tím, že z něj uděláte výchozí aplikaci prohlížeče.</translation>
+<translation id="3365529507898144230">Uložit do Fotek</translation>
+<translation id="3434473769478814796">Vložit a přejít</translation>
+<translation id="3463990832590571933">Otevřít v soukromém listu</translation>
 <translation id="3473652525653758699">Nové soukromé okno</translation>
 <translation id="3501504415290398157">Použijte <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> pro odemknutí vašich soukromých listů.</translation>
 <translation id="3692650606013198282">Otevřít v soukromí</translation>
 <translation id="3981599532037327317">Otevřít ${url} v soukromí</translation>
 <translation id="398477389655464998">Kopírovat odkaz do zvýraznění</translation>
+<translation id="4026745073321351206">🙄 Našli jste chybu?</translation>
 <translation id="4755216899422789286">Otevřít URL pomocí Vivaldi</translation>
+<translation id="5431239785743546285">Přečtené stránky</translation>
+<translation id="5962477178930921574">Vložit a vyhledat</translation>
 <translation id="6233792867654386826">Otevře zadané URL adresy pomocí Vivaldi.</translation>
 <translation id="6827597288286078054">Soukromé vyhledávání</translation>
 <translation id="7307970171564921489">Odemkněte soukromé listy pomocí <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
 <translation id="7347289093190902150">Otevřít v soukromí?</translation>
 <translation id="7549299604720382000">Nový soukromý list</translation>
+<translation id="7920949005883349320">Soukromí a bezpečí</translation>
 <translation id="8326104954595890674">Nový soukromý list</translation>
 </translationbundle>

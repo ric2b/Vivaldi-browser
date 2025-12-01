@@ -2,25 +2,47 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="zh-TW">
 <translation id="1063263220330818888">私密搜尋</translation>
+<translation id="1097355661841455597">我們很樂意聽聽您的想法。</translation>
 <translation id="1137850887415122856">要鎖定您的無痕分頁，請設定 Touch ID、Face ID 或密碼。</translation>
 <translation id="1310184829257917508">要求在無痕模式下開啟其它應用程式的連結</translation>
+<translation id="1561609750546413721">Vivaldi 翻譯</translation>
 <translation id="207677936531967364">新的無痕分頁頁面</translation>
+<translation id="2353953000228441783">預設網站檢視</translation>
+<translation id="2394192052244849643">貼上並搜尋</translation>
 <translation id="2418705169960294134">新增無痕分頁</translation>
+<translation id="2783161812871838616">切換為電腦版網站</translation>
 <translation id="2899836479226240291">只要將 Vivaldi 設為預設瀏覽器應用程式，即可自動在 Vivaldi 中開啟連結。</translation>
+<translation id="3365529507898144230">儲存在相簿中</translation>
+<translation id="3434473769478814796">貼上並前往</translation>
 <translation id="3463990832590571933">在新無痕分頁中開啟</translation>
 <translation id="3473652525653758699">新增無痕視窗</translation>
 <translation id="3501504415290398157">使用 <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> 以解鎖您的無痕分頁。</translation>
 <translation id="3692650606013198282">在無痕模式中開啟</translation>
 <translation id="3981599532037327317">以無痕模式開啟 ${url}</translation>
 <translation id="398477389655464998">複製圈選文字的連結</translation>
+<translation id="4026745073321351206">🙄發現問題了嗎？</translation>
+<translation id="4304713468139749426">密碼管理工具</translation>
+<translation id="473775607612524610">更新</translation>
 <translation id="4755216899422789286">在 Vivaldi 中開啟網址</translation>
+<translation id="4802185666270672526">隱藏切換為電腦版網站</translation>
+<translation id="5217245356412073535">您可以在「設定」&gt;「內容設定」中將預設的網站檢視變更成電腦版</translation>
+<translation id="5271549068863921519">儲存密碼</translation>
+<translation id="5317780077021120954">儲存</translation>
 <translation id="5431239785743546285">您已讀的頁面</translation>
+<translation id="5614553682702429503">要儲存密碼嗎？</translation>
+<translation id="570209299585559496">您可以到設定中的內容設定將網站預設檢視變更成電腦版</translation>
+<translation id="5962477178930921574">貼上並搜尋</translation>
 <translation id="6233792867654386826">在 Vivaldi 中開啟輸入的網址。</translation>
+<translation id="6680416467695217368">自定義選單</translation>
 <translation id="6827597288286078054">私密搜尋</translation>
+<translation id="6851516051005285358">切換為電腦版網站</translation>
 <translation id="7307970171564921489">使用 <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> 解鎖無痕分頁</translation>
 <translation id="7347289093190902150">要在無痕模式中開啟連結嗎？</translation>
 <translation id="7549299604720382000">新增無痕分頁</translation>
+<translation id="755255281989213264">自定義選單</translation>
 <translation id="7920949005883349320">隱私和安全性</translation>
-<translation id="8031932676440435547">儲存在照片中</translation>
+<translation id="7961015016161918242">一律不要</translation>
 <translation id="8326104954595890674">新增無痕分頁</translation>
+<translation id="8756969031206844760">要更新密碼嗎？</translation>
+<translation id="9094033019050270033">更新密碼</translation>
 </translationbundle>

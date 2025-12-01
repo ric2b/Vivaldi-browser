@@ -17,6 +17,7 @@
 #include "components/signin/public/identity_manager/access_token_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "google_apis/gaia/gaia_constants.h"
+#include "third_party/abseil-cpp/absl/status/status.h"
 
 namespace {
 constexpr base::TimeDelta kTokenRefreshTimeBuffer = base::Seconds(10);
@@ -36,7 +37,7 @@ DataSharingPageHandler::DataSharingPageHandler(
   RequestAccessToken();
 }
 
-DataSharingPageHandler::~DataSharingPageHandler() {}
+DataSharingPageHandler::~DataSharingPageHandler() = default;
 
 void DataSharingPageHandler::ShowUI() {
   auto embedder = webui_controller_->embedder();
@@ -46,11 +47,13 @@ void DataSharingPageHandler::ShowUI() {
 }
 
 void DataSharingPageHandler::CloseUI(int status_code) {
-  // TODO(crbug.com/368634445): In addition to closing the WebUI bubble some special
-  // codes should trigger follow up native info dialogs.
   auto embedder = webui_controller_->embedder();
   if (embedder) {
     embedder->CloseUI();
+  }
+
+  if (absl::StatusCode(status_code) != absl::StatusCode::kOk) {
+    webui_controller_->ShowErrorDialog(status_code);
   }
 }
 
@@ -148,10 +151,10 @@ void DataSharingPageHandler::OnAccessTokenFetched(
 }
 
 void DataSharingPageHandler::ReadGroups(
-    std::vector<std::string> group_ids,
+    data_sharing::mojom::ReadGroupsParamsPtr read_group_params,
     data_sharing::mojom::Page::ReadGroupsCallback callback) {
   CHECK(api_initialized_);
-  page_->ReadGroups(group_ids, std::move(callback));
+  page_->ReadGroups(std::move(read_group_params), std::move(callback));
 }
 
 void DataSharingPageHandler::DeleteGroup(
@@ -159,4 +162,11 @@ void DataSharingPageHandler::DeleteGroup(
     data_sharing::mojom::Page::DeleteGroupCallback callback) {
   CHECK(api_initialized_);
   page_->DeleteGroup(group_id, std::move(callback));
+}
+
+void DataSharingPageHandler::LeaveGroup(
+    std::string group_id,
+    data_sharing::mojom::Page::LeaveGroupCallback callback) {
+  CHECK(api_initialized_);
+  page_->LeaveGroup(group_id, std::move(callback));
 }

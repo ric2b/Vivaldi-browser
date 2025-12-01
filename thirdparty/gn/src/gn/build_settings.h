@@ -134,11 +134,11 @@ class BuildSettings {
 
   // A list of files that can call exec_script(). If the returned pointer is
   // null, exec_script may be called from anywhere.
-  const SourceFileSet* exec_script_whitelist() const {
-    return exec_script_whitelist_.get();
+  const SourceFileSet* exec_script_allowlist() const {
+    return exec_script_allowlist_.get();
   }
-  void set_exec_script_whitelist(std::unique_ptr<SourceFileSet> list) {
-    exec_script_whitelist_ = std::move(list);
+  void set_exec_script_allowlist(std::unique_ptr<SourceFileSet> list) {
+    exec_script_allowlist_ = std::move(list);
   }
 
   // Register a list of label path aliases for actual paths relative
@@ -173,7 +173,7 @@ class BuildSettings {
   ItemDefinedCallback item_defined_callback_;
   PrintCallback print_callback_;
 
-  std::unique_ptr<SourceFileSet> exec_script_whitelist_;
+  std::unique_ptr<SourceFileSet> exec_script_allowlist_;
 
   struct path_mapper {
     std::string prefix;      // "//foo/" always coded as "foo"

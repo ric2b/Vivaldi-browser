@@ -6,7 +6,10 @@
 
 #include <utility>
 
+#include "base/feature_list.h"
+#include "base/time/time.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/interest_group/ad_auction_constants.h"
 #include "third_party/blink/renderer/bindings/core/v8/idl_types.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
@@ -28,9 +31,12 @@ v8::Local<v8::Value> MakeV8Val(ScriptState* script_state,
                                const FeatureVal& val) {
   if (const bool* bool_val = absl::get_if<bool>(&val)) {
     return ToV8Traits<IDLBoolean>::ToV8(script_state, *bool_val);
+  } else if (const size_t* size_t_val = absl::get_if<size_t>(&val)) {
+    return ToV8Traits<IDLUnsignedLongLong>::ToV8(script_state, *size_t_val);
   } else {
-    return ToV8Traits<IDLUnsignedLongLong>::ToV8(script_state,
-                                                 absl::get<size_t>(val));
+    const double* double_val = absl::get_if<double>(&val);
+    CHECK(double_val);
+    return ToV8Traits<IDLDouble>::ToV8(script_state, *double_val);
   }
 }
 
@@ -66,6 +72,9 @@ WTF::Vector<std::pair<String, FeatureVal>> MakeFeatureStatusVector(
       String("trustedSignalsKVv2"),
       FeatureVal(RuntimeEnabledFeatures::FledgeTrustedSignalsKVv2SupportEnabled(
           execution_context)));
+  feature_status.emplace_back(
+      String("maxGroupLifetimeMs"),
+      FeatureVal(MaxInterestGroupLifetime().InMillisecondsF()));
   return feature_status;
 }
 
@@ -82,7 +91,7 @@ ScriptValue ProtectedAudience::queryFeatureSupport(ScriptState* script_state,
     for (const auto& kv : feature_status_) {
       features_obj.AddV8Value(kv.first, MakeV8Val(script_state, kv.second));
     }
-    return features_obj.GetScriptValue();
+    return features_obj.ToScriptObject();
   } else {
     for (const auto& kv : feature_status_) {
       if (kv.first == feature_name) {

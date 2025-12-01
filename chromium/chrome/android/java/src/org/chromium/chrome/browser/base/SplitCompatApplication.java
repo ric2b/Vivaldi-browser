@@ -73,6 +73,10 @@ public class SplitCompatApplication extends Application {
     private Supplier<Impl> mImplSupplier;
     private Impl mImpl;
     private ServiceTracingProxyProvider mServiceTracingProxyProvider;
+    // This doesn't work in Monochrome, since we try to load the WebView library as well when
+    // loading Chrome's library, and WebView requires attachBaseContext to have finished before
+    // you may attempt to load it's library. See crbug.com/390730928.
+    protected boolean mPreloadLibraryAttachBaseContext = true;
 
     /**
      * Holds the implementation of application logic. Will be called by {@link
@@ -129,15 +133,6 @@ public class SplitCompatApplication extends Application {
     protected void attachBaseContext(Context context) {
         boolean isIsolatedProcess = ContextUtils.isIsolatedProcess();
         boolean isBrowserProcess = isBrowserProcess();
-        Log.i(
-                TAG,
-                "version=%s (%s) minSdkVersion=%s isBundle=%s processName=%s isIsolatedProcess=%s",
-                VersionConstants.PRODUCT_VERSION,
-                BuildConfig.VERSION_CODE,
-                BuildConfig.MIN_SDK_VERSION,
-                BuildConfig.IS_BUNDLE,
-                ContextUtils.getProcessName(),
-                isIsolatedProcess);
 
         if (isBrowserProcess) {
             UmaUtils.recordMainEntryPointTime();
@@ -159,6 +154,17 @@ public class SplitCompatApplication extends Application {
         super.attachBaseContext(context);
         // Perform initialization of globals common to all processes.
         ContextUtils.initApplicationContext(this);
+
+        Log.i(
+                TAG,
+                "version=%s (%s) minSdkVersion=%s isBundle=%s processName=%s isIsolatedProcess=%s",
+                VersionConstants.PRODUCT_VERSION,
+                BuildConfig.VERSION_CODE,
+                BuildConfig.MIN_SDK_VERSION,
+                // BundleUtils uses getApplicationContext, so logging after we init it.
+                BundleUtils.isBundle(),
+                ContextUtils.getProcessName(),
+                isIsolatedProcess);
 
         if (isBrowserProcess) {
             // This must come as early as possible to avoid early loading of the native library from
@@ -190,7 +196,7 @@ public class SplitCompatApplication extends Application {
 
         maybeInitProcessType();
 
-        if (isBrowserProcess) {
+        if (isBrowserProcess && !ChromeFeatureList.sSkipIsolatedSplitPreload.isEnabled()) {
             performBrowserProcessPreloading(context);
         }
 
@@ -256,15 +262,19 @@ public class SplitCompatApplication extends Application {
                             // by reflection from there.
                             return (JavaExceptionReporter)
                                     BundleUtils.newInstance(
-                                            createChromeContext(
-                                                    ContextUtils.getApplicationContext()),
-                                            "org.chromium.chrome.browser.crash.ChromePureJavaExceptionReporter");
+                                            "org.chromium.chrome.browser.crash.ChromePureJavaExceptionReporter",
+                                            CHROME_SPLIT_NAME);
                         }
                     };
             PureJavaExceptionHandler.installHandler(factory);
             CustomAssertionHandler.installPreNativeHandler(factory);
         }
 
+        // Skipping tests since some use "--disable-native-initialization", and some tests manually
+        // test loading the native library themselves.
+        if (mPreloadLibraryAttachBaseContext) {
+            maybeInitChromeSplitAndPreloadNativeLibrary();
+        }
         TraceEvent.end(ATTACH_BASE_CONTEXT_EVENT);
     }
 
@@ -275,8 +285,19 @@ public class SplitCompatApplication extends Application {
         // they use under-the-hood) does not work until after it returns.
         FontPreloadingWorkaround.maybeInstallWorkaround(this);
         MemoryPressureMonitor.INSTANCE.registerComponentCallbacks();
-
+        if (!mPreloadLibraryAttachBaseContext) {
+            maybeInitChromeSplitAndPreloadNativeLibrary();
+        }
         getImpl().onCreate();
+    }
+
+    private void maybeInitChromeSplitAndPreloadNativeLibrary() {
+        if (isBrowserProcess()
+                && ChromeFeatureList.sSkipIsolatedSplitPreload.isEnabled()
+                && !BuildConfig.IS_FOR_TEST) {
+            new Thread(() -> LibraryLoader.getInstance().loadNow()).start();
+            performBrowserProcessPreloading(this, true);
+        }
     }
 
     @Override
@@ -320,20 +341,14 @@ public class SplitCompatApplication extends Application {
      */
     protected void performBrowserProcessPreloading(Context context) {}
 
+    protected void performBrowserProcessPreloading(Context context, boolean blockingLoad) {}
+
     public boolean isWebViewProcess() {
         return false;
     }
 
     public static boolean isBrowserProcess() {
         return !ContextUtils.getProcessName().contains(":");
-    }
-
-    /** Creates a context which can be used to load code and resources in the chrome split. */
-    public static Context createChromeContext(Context base) {
-        if (!BundleUtils.isIsolatedSplitInstalled(CHROME_SPLIT_NAME)) {
-            return base;
-        }
-        return BundleUtils.createIsolatedSplitContext(base, CHROME_SPLIT_NAME);
     }
 
     public static boolean cannotLoadIn64Bit() {

@@ -17,7 +17,7 @@ INCLUDE PERFETTO MODULE android.slices;
 INCLUDE PERFETTO MODULE android.binder;
 INCLUDE PERFETTO MODULE slices.with_context;
 
-CREATE PERFETTO FUNCTION _is_relevant_blocking_call(name STRING, depth INT)
+CREATE PERFETTO FUNCTION _is_relevant_blocking_call(name STRING, depth LONG)
 RETURNS BOOL AS SELECT
   $name = 'measure'
   OR $name = 'layout'
@@ -39,6 +39,8 @@ RETURNS BOOL AS SELECT
   OR $name GLOB 'NotificationStackScrollLayout#onMeasure'
   OR $name GLOB 'ExpNotRow#*'
   OR $name GLOB 'GC: Wait For*'
+  OR $name GLOB 'Recomposer:*'
+  OR $name GLOB 'Compose:*'
   OR (
     -- Some top level handler slices
     $depth = 0
@@ -64,7 +66,8 @@ SELECT
   s.id,
   s.process_name,
   thread.utid,
-  s.upid
+  s.upid,
+  s.ts + s.dur AS ts_end
 FROM thread_slice s JOIN
 thread USING (utid)
 WHERE
@@ -79,6 +82,7 @@ SELECT
   tx.binder_txn_id AS id,
   tx.client_process as process_name,
   tx.client_utid as utid,
-  tx.client_upid as upid
+  tx.client_upid as upid,
+  tx.client_ts + tx.client_dur AS ts_end
 FROM android_binder_txns AS tx
 WHERE aidl_name IS NOT NULL AND is_sync = 1;

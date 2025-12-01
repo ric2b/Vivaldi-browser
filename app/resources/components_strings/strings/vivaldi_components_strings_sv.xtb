@@ -7,7 +7,6 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> stängde oväntat ner anslutningen.</translation>
 <translation id="1161325031994447685">Ansluta till det trådlösa nätet på nytt</translation>
 <translation id="1175364870820465910">&amp;Skriv ut...</translation>
-<translation id="132390688737681464">Spara och fyll i adresser</translation>
 <translation id="1375198122581997741">Om version</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> skickade ingen data.</translation>
 <translation id="1555191101192706055">Angripare på webbplatsen du försökte besöka kan lura dig att installera skadlig programvara som påverkar hur du surfar – till exempel genom att ändra din startsida eller visa dig extra annonser på webbplatser du besöker.</translation>
@@ -52,6 +51,7 @@
 <translation id="2991571918955627853">Du kan inte besöka <ph name="SITE" /> just nu eftersom webbplatsen använder HSTS. Nätverksfel och attacker är ofta tillfälliga, så sidan kommer förmodligen att fungera senare.</translation>
 <translation id="3005723025932146533">Visa sparad kopia</translation>
 <translation id="301521992641321250">Blockerades automatiskt</translation>
+<translation id="3037605927509011580">Oj, ett fel har uppstått!</translation>
 <translation id="3041612393474885105">Certifikatinformation</translation>
 <translation id="3109728660330352905">Du är inte behörig att se den här sidan.</translation>
 <translation id="31207688938192855"><ph name="BEGIN_LINK" />Testa att köra anslutningsdiagnostik<ph name="END_LINK" />.</translation>
@@ -64,7 +64,6 @@
 <translation id="3234666976984236645">Upptäck alltid viktigt innehåll på den här webbplatsen</translation>
 <translation id="3308738399950580893">annonser</translation>
 <translation id="3384522979010096022">Din organisation tillåter inte att du visar den här webbplatsen</translation>
-<translation id="3387261909427947069">Betalningsmetoder</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> kan inte nås för tillfället.</translation>
 <translation id="3427092606871434483">Tillåt (standard)</translation>
 <translation id="3447661539832366887">Enhetens ägare har stängt av dinosauriespelet.</translation>
@@ -125,7 +124,6 @@
 <translation id="5386426401304769735">Certifikatkedjan för den här webbplatsen innehåller ett certifikat som signerades med SHA-1.</translation>
 <translation id="5452270690849572955">Sidan på <ph name="HOST_NAME" /> kan inte hittas</translation>
 <translation id="5457113250005438886">Ogiltigt</translation>
-<translation id="5490432419156082418">Adresser och annat</translation>
 <translation id="5492298309214877701">Webbplatsen på företagets, organisationens eller skolans intranät har samma webbadress som en extern webbplats.
     <ph name="LINE_BREAK" />
     Testa med att kontakta systemadministratören.</translation>
@@ -171,7 +169,6 @@
 <translation id="7111012039238467737">(Giltigt)</translation>
 <translation id="7113310725918019676">Tillåt <ph name="BLOCKED_TYPE" /> från <ph name="DOMAIN" /></translation>
 <translation id="7126644664682723998">Klistra in och sök</translation>
-<translation id="7179323680825933600">Spara och fyll i betalningsmetoder</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> följer inte säkerhetsstandarderna.</translation>
 <translation id="7219179957768738017">För anslutningen används <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Visa aviseringar</translation>
@@ -223,6 +220,7 @@
 <translation id="9062620674789239642">Den kan ha flyttats, ändrats eller tagits bort.</translation>
 <translation id="9069693763241529744">Blockerades av ett tillägg</translation>
 <translation id="9073799351042754113">Du har valt att stänga av säkerhetsvarningar för den här webbplatsen.</translation>
+<translation id="9168814207360376865">Tillåt webbplatser att kontrollera om du har sparade betalningsmetoder</translation>
 <translation id="9169664750068251925">Blockera alltid på den här webbplatsen</translation>
 <translation id="9180553614777056266">Annonsblockerare</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> använder ett protokoll som inte stöds.</translation>

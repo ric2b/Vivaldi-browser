@@ -138,8 +138,7 @@ Major design docs:
     [Threaded
     compositing](/developers/design-documents/compositor-thread-architecture)
 
-    [Impl-side
-    painting](http://www.chromium.org/developers/design-documents/impl-side-painting)
+    [Impl-side painting](/developers/design-documents/impl-side-painting)
 
     [Zero-input latency
     scheduler](https://docs.google.com/a/chromium.org/document/d/1LUFA8MDpJcDHE0_L2EHvrcwqOMJhzl5dqb0AlBSqHOY/edit)
@@ -219,8 +218,7 @@ More design docs:
 
 **Infrastructure**
 
-*   [GPU
-            Testing](http://www.chromium.org/developers/testing/gpu-testing)
+*   [GPU Testing](/developers/testing/gpu-testing)
 *   [Rendering
             Benchmarks](/developers/design-documents/rendering-benchmarks)
 

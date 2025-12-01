@@ -31,7 +31,7 @@ class DefaultSelectDelegate
   DefaultSelectDelegate() = default;
   DefaultSelectDelegate(const DefaultSelectDelegate&) = delete;
   auto operator=(const DefaultSelectDelegate&) = delete;
-  ~DefaultSelectDelegate() override {}
+  ~DefaultSelectDelegate() override = default;
 
   void Select(const std::string& extension_id,
               const net::CertificateList& certs,
@@ -100,10 +100,11 @@ ExtensionPlatformKeysServiceFactory::ExtensionPlatformKeysServiceFactory()
 ExtensionPlatformKeysServiceFactory::~ExtensionPlatformKeysServiceFactory() =
     default;
 
-KeyedService* ExtensionPlatformKeysServiceFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+ExtensionPlatformKeysServiceFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
-  ExtensionPlatformKeysService* const service =
-      new ExtensionPlatformKeysService(context);
+  std::unique_ptr<ExtensionPlatformKeysService> service =
+      std::make_unique<ExtensionPlatformKeysService>(context);
 
   service->SetSelectDelegate(std::make_unique<DefaultSelectDelegate>());
   return service;

@@ -279,6 +279,7 @@
 <translation id="5582839680698949063">Menu principale</translation>
 <translation id="5614553682702429503">Salvare la password?</translation>
 <translation id="5623842676595125836">Registro</translation>
+<translation id="5624959475330585145">Chiedi prima di usare connessioni non sicure</translation>
 <translation id="5638309510554459422">Trova estensioni e temi nel <ph name="BEGIN_LINK" />Chrome Web Store<ph name="END_LINK" /></translation>
 <translation id="5677928146339483299">Bloccato</translation>
 <translation id="5707185214361380026">Impossibile caricare l'estensione da:</translation>
@@ -468,6 +469,7 @@ Conserva il file di chiave in un luogo sicuro. Ti servirà per creare nuove vers
 <translation id="9218430445555521422">Imposta come predefinito</translation>
 <translation id="93766956588638423">Ripara estensione</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
+<translation id="961856697154696964">Elimina dati di navigazione</translation>
 <translation id="994289308992179865">&amp;Ripeti</translation>
 <translation id="998747458861718449">I&amp;speziona</translation>
 </translationbundle>

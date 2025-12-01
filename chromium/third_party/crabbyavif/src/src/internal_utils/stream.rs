@@ -33,7 +33,7 @@ impl IBitStream<'_> {
         Ok((byte >> shift) & 0x01)
     }
 
-    pub fn read(&mut self, n: usize) -> AvifResult<u32> {
+    pub(crate) fn read(&mut self, n: usize) -> AvifResult<u32> {
         assert!(n <= 32);
         let mut value: u32 = 0;
         for _i in 0..n {
@@ -43,12 +43,12 @@ impl IBitStream<'_> {
         Ok(value)
     }
 
-    pub fn read_bool(&mut self) -> AvifResult<bool> {
+    pub(crate) fn read_bool(&mut self) -> AvifResult<bool> {
         let bit = self.read_bit()?;
         Ok(bit == 1)
     }
 
-    pub fn skip(&mut self, n: usize) -> AvifResult<()> {
+    pub(crate) fn skip(&mut self, n: usize) -> AvifResult<()> {
         if checked_add!(self.bit_offset, n)? > checked_mul!(self.data.len(), 8)? {
             return Err(AvifError::BmffParseFailed("Not enough bytes".into()));
         }
@@ -56,7 +56,7 @@ impl IBitStream<'_> {
         Ok(())
     }
 
-    pub fn skip_uvlc(&mut self) -> AvifResult<()> {
+    pub(crate) fn skip_uvlc(&mut self) -> AvifResult<()> {
         // See the section 4.10.3. uvlc() of the AV1 specification.
         let mut leading_zeros = 0u128; // leadingZeros
         while !self.read_bool()? {
@@ -68,7 +68,7 @@ impl IBitStream<'_> {
         Ok(())
     }
 
-    pub fn remaining_bits(&self) -> AvifResult<usize> {
+    pub(crate) fn remaining_bits(&self) -> AvifResult<usize> {
         checked_sub!(checked_mul!(self.data.len(), 8)?, self.bit_offset)
     }
 }
@@ -80,7 +80,7 @@ pub struct IStream<'a> {
 }
 
 impl IStream<'_> {
-    pub fn create(data: &[u8]) -> IStream {
+    pub(crate) fn create(data: &[u8]) -> IStream {
         IStream { data, offset: 0 }
     }
 
@@ -91,7 +91,7 @@ impl IStream<'_> {
         Ok(())
     }
 
-    pub fn sub_stream(&mut self, size: &BoxSize) -> AvifResult<IStream> {
+    pub(crate) fn sub_stream(&mut self, size: &BoxSize) -> AvifResult<IStream> {
         let offset = self.offset;
         checked_incr!(
             self.offset,
@@ -109,7 +109,7 @@ impl IStream<'_> {
         })
     }
 
-    pub fn sub_bit_stream(&mut self, size: usize) -> AvifResult<IBitStream> {
+    pub(crate) fn sub_bit_stream(&mut self, size: usize) -> AvifResult<IBitStream> {
         self.check(size)?;
         let offset = self.offset;
         checked_incr!(self.offset, size);
@@ -119,25 +119,25 @@ impl IStream<'_> {
         })
     }
 
-    pub fn bytes_left(&self) -> AvifResult<usize> {
+    pub(crate) fn bytes_left(&self) -> AvifResult<usize> {
         if self.data.len() < self.offset {
             return Err(AvifError::UnknownError("".into()));
         }
         Ok(self.data.len() - self.offset)
     }
 
-    pub fn has_bytes_left(&self) -> AvifResult<bool> {
+    pub(crate) fn has_bytes_left(&self) -> AvifResult<bool> {
         Ok(self.bytes_left()? > 0)
     }
 
-    pub fn get_slice(&mut self, size: usize) -> AvifResult<&[u8]> {
+    pub(crate) fn get_slice(&mut self, size: usize) -> AvifResult<&[u8]> {
         self.check(size)?;
         let offset_start = self.offset;
         checked_incr!(self.offset, size);
         Ok(&self.data[offset_start..offset_start + size])
     }
 
-    pub fn get_immutable_vec(&self, size: usize) -> AvifResult<Vec<u8>> {
+    pub(crate) fn get_immutable_vec(&self, size: usize) -> AvifResult<Vec<u8>> {
         self.check(size)?;
         Ok(self.data[self.offset..self.offset + size].to_vec())
     }
@@ -146,62 +146,60 @@ impl IStream<'_> {
         Ok(self.get_slice(size)?.to_vec())
     }
 
-    pub fn read_u8(&mut self) -> AvifResult<u8> {
+    pub(crate) fn read_u8(&mut self) -> AvifResult<u8> {
         self.check(1)?;
         let value = self.data[self.offset];
         checked_incr!(self.offset, 1);
         Ok(value)
     }
 
-    pub fn read_u16(&mut self) -> AvifResult<u16> {
+    pub(crate) fn read_u16(&mut self) -> AvifResult<u16> {
         Ok(u16::from_be_bytes(self.get_slice(2)?.try_into().unwrap()))
     }
 
-    pub fn read_u24(&mut self) -> AvifResult<u32> {
+    pub(crate) fn read_u24(&mut self) -> AvifResult<u32> {
         Ok(self.read_uxx(3)? as u32)
     }
 
-    pub fn read_u32(&mut self) -> AvifResult<u32> {
+    pub(crate) fn read_u32(&mut self) -> AvifResult<u32> {
         Ok(u32::from_be_bytes(self.get_slice(4)?.try_into().unwrap()))
     }
 
-    pub fn read_u64(&mut self) -> AvifResult<u64> {
+    pub(crate) fn read_u64(&mut self) -> AvifResult<u64> {
         Ok(u64::from_be_bytes(self.get_slice(8)?.try_into().unwrap()))
     }
 
-    pub fn read_i32(&mut self) -> AvifResult<i32> {
-        // For now this is used only for gainmap fractions where we need
-        // wrapping conversion from u32 to i32.
+    pub(crate) fn read_i32(&mut self) -> AvifResult<i32> {
         Ok(self.read_u32()? as i32)
     }
 
-    pub fn skip_u16(&mut self) -> AvifResult<()> {
-        self.skip(2)
+    pub(crate) fn read_i16(&mut self) -> AvifResult<i16> {
+        Ok(self.read_u16()? as i16)
     }
 
-    pub fn skip_u32(&mut self) -> AvifResult<()> {
+    pub(crate) fn skip_u32(&mut self) -> AvifResult<()> {
         self.skip(4)
     }
 
-    pub fn skip_u64(&mut self) -> AvifResult<()> {
+    pub(crate) fn skip_u64(&mut self) -> AvifResult<()> {
         self.skip(8)
     }
 
-    pub fn read_fraction(&mut self) -> AvifResult<Fraction> {
+    pub(crate) fn read_fraction(&mut self) -> AvifResult<Fraction> {
         Ok(Fraction(self.read_i32()?, self.read_u32()?))
     }
 
-    pub fn read_ufraction(&mut self) -> AvifResult<UFraction> {
+    pub(crate) fn read_ufraction(&mut self) -> AvifResult<UFraction> {
         Ok(UFraction(self.read_u32()?, self.read_u32()?))
     }
 
     // Reads size characters of a non-null-terminated string.
-    pub fn read_string(&mut self, size: usize) -> AvifResult<String> {
+    pub(crate) fn read_string(&mut self, size: usize) -> AvifResult<String> {
         Ok(String::from_utf8(self.get_vec(size)?).unwrap_or("".into()))
     }
 
     // Reads an xx-byte unsigner integer.
-    pub fn read_uxx(&mut self, xx: u8) -> AvifResult<u64> {
+    pub(crate) fn read_uxx(&mut self, xx: u8) -> AvifResult<u64> {
         let n: usize = xx.into();
         if n == 0 {
             return Ok(0);
@@ -216,7 +214,7 @@ impl IStream<'_> {
     }
 
     // Reads a null-terminated string.
-    pub fn read_c_string(&mut self) -> AvifResult<String> {
+    pub(crate) fn read_c_string(&mut self) -> AvifResult<String> {
         self.check(1)?;
         let null_position = self.data[self.offset..]
             .iter()
@@ -227,13 +225,13 @@ impl IStream<'_> {
         Ok(String::from_utf8(self.data[range].to_vec()).unwrap_or("".into()))
     }
 
-    pub fn read_version_and_flags(&mut self) -> AvifResult<(u8, u32)> {
+    pub(crate) fn read_version_and_flags(&mut self) -> AvifResult<(u8, u32)> {
         let version = self.read_u8()?;
         let flags = self.read_u24()?;
         Ok((version, flags))
     }
 
-    pub fn read_and_enforce_version_and_flags(
+    pub(crate) fn read_and_enforce_version_and_flags(
         &mut self,
         enforced_version: u8,
     ) -> AvifResult<(u8, u32)> {
@@ -244,18 +242,18 @@ impl IStream<'_> {
         Ok((version, flags))
     }
 
-    pub fn skip(&mut self, size: usize) -> AvifResult<()> {
+    pub(crate) fn skip(&mut self, size: usize) -> AvifResult<()> {
         self.check(size)?;
         checked_incr!(self.offset, size);
         Ok(())
     }
 
-    pub fn rewind(&mut self, size: usize) -> AvifResult<()> {
+    pub(crate) fn rewind(&mut self, size: usize) -> AvifResult<()> {
         checked_decr!(self.offset, size);
         Ok(())
     }
 
-    pub fn read_uleb128(&mut self) -> AvifResult<u32> {
+    pub(crate) fn read_uleb128(&mut self) -> AvifResult<u32> {
         // See the section 4.10.5. of the AV1 specification.
         let mut value: u64 = 0;
         for i in 0..8 {

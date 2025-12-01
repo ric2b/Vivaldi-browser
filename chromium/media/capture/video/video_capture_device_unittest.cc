@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "media/capture/video/video_capture_device.h"
 
 #include <stddef.h>
@@ -344,13 +349,14 @@ class VideoCaptureDeviceTest
                   base::BindOnce(&VideoCaptureDeviceTest::OnFrameCaptured,
                                  base::Unretained(this), frame_format));
             })));
-    ON_CALL(*result, OnIncomingCapturedGfxBuffer)
+    ON_CALL(*result, OnIncomingCapturedImage)
         .WillByDefault(WithArgs<0, 1>(
-            Invoke([this](gfx::GpuMemoryBuffer* buffer,
+            Invoke([this](scoped_refptr<gpu::ClientSharedImage> shared_image,
                           const media::VideoCaptureFormat& frame_format) {
-              ASSERT_TRUE(buffer);
-              ASSERT_GT(buffer->GetSize().width() * buffer->GetSize().height(),
-                        0);
+              ASSERT_TRUE(shared_image);
+              ASSERT_GT(
+                  shared_image->size().width() * shared_image->size().height(),
+                  0);
               main_thread_task_runner_->PostTask(
                   FROM_HERE,
                   base::BindOnce(&VideoCaptureDeviceTest::OnFrameCaptured,

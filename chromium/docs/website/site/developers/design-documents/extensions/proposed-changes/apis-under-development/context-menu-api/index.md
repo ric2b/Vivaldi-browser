@@ -167,7 +167,7 @@ var searchText = (info.selectionText.length &lt;= maxLength) ?
 
 info.selectionText : info.selectionText.substr(0, maxLength);
 
-var url = "http://www.google.com/search?q=define:" + escape(searchText);
+var url = "https://www.google.com/search?q=define:" + escape(searchText);
 
 chrome.tabs.create({"url": url});
 

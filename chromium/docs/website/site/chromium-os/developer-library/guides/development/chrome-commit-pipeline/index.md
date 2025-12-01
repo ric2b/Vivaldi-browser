@@ -85,7 +85,7 @@ of the uprev CLs as well as the age of the current chrome version on ChromeOS.
 
 [contributing code]: /chromium-os/developer-library/guides/development/contributing/
 [commit queue]: https://chromium.googlesource.com/chromium/src/+/HEAD/infra/config/generated/cq-builders.md
-[chromium.org]: https://www.chromium.org
+[chromium.org]: /
 [Gerrit]: https://chromium-review.googlesource.com/
 [android]: https://ci.chromium.org/p/chromium/g/tryserver.chromium.android
 [cros]: https://ci.chromium.org/p/chromium/g/tryserver.chromium.chromiumos

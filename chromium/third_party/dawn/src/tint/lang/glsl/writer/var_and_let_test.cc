@@ -123,7 +123,6 @@ TEST_F(GlslWriterTest, VarInBuiltin) {
         core::IOAttributes attrs = {};
         attrs.builtin = core::BuiltinValue::kLocalInvocationIndex;
         v->SetAttributes(attrs);
-        v->SetBindingPoint(1, 2);
     });
 
     ASSERT_TRUE(Generate()) << err_ << output_.glsl;
@@ -150,7 +149,7 @@ TEST_F(GlslWriterTest, VarIn) {
     EXPECT_EQ(output_.glsl, GlslHeader() + R"(precision highp float;
 precision highp int;
 
-layout(location = 1) flat in uint v;
+layout(location = 1) flat in uint tint_interstage_location1;
 void main() {
 }
 )");

@@ -170,6 +170,7 @@
 <translation id="3838085852053358637">Error al cargar la extensión</translation>
 <translation id="383891835335927981">No se ha ampliado ni reducido ningún sitio</translation>
 <translation id="385051799172605136">Atrás</translation>
+<translation id="3861977424605124250">Mostrar al iniciar</translation>
 <translation id="3867944738977021751">Campos de certificado</translation>
 <translation id="3905761538810670789">Reparar aplicación</translation>
 <translation id="3908501907586732282">Activar extensión</translation>
@@ -278,6 +279,7 @@
 <translation id="5582839680698949063">Menú principal</translation>
 <translation id="5614553682702429503">¿Guardar contraseña?</translation>
 <translation id="5623842676595125836">Registro</translation>
+<translation id="5624959475330585145">Preguntar antes de usar conexiones no seguras</translation>
 <translation id="5638309510554459422">Busca extensiones y temas en <ph name="BEGIN_LINK" />Chrome Web Store<ph name="END_LINK" /></translation>
 <translation id="5677928146339483299">Bloqueado</translation>
 <translation id="5707185214361380026">Error al cargar la extensión desde:</translation>
@@ -467,6 +469,7 @@ Guarda tu archivo de clave en un lugar seguro. Lo necesitarás para crear versio
 <translation id="9218430445555521422">Establecer por defecto</translation>
 <translation id="93766956588638423">Reparar extensión</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
+<translation id="961856697154696964">Borrar datos de navegación</translation>
 <translation id="994289308992179865">&amp;En bucle</translation>
 <translation id="998747458861718449">I&amp;nspeccionar</translation>
 </translationbundle>

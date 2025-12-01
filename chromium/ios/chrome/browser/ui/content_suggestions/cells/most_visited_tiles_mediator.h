@@ -9,9 +9,8 @@
 
 #include <memory>
 
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_image_data_source.h"
-
 #import "ios/chrome/browser/ui/content_suggestions/cells/most_visited_tiles_commands.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_image_data_source.h"
 
 namespace favicon {
 class LargeIconService;
@@ -58,6 +57,9 @@ class UrlLoadingBrowserAgent;
 @property(nonatomic, strong, readonly)
     MostVisitedTilesConfig* mostVisitedConfig;
 
+// Whether the most visited tiles should be located within the magic stack.
+@property(nonatomic, readonly) BOOL inMagicStack;
+
 // Recorder for content suggestions metrics.
 @property(nonatomic, weak)
     ContentSuggestionsMetricsRecorder* contentSuggestionsMetricsRecorder;
@@ -100,6 +102,9 @@ class UrlLoadingBrowserAgent;
 
 // Trigger a refresh of the Most Visited tiles.
 - (void)refreshMostVisitedTiles;
+
+// Disable the most visited sites module.
+- (void)disableModule;
 
 @end
 

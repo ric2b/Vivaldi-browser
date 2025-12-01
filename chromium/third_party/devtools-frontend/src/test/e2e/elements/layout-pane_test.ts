@@ -5,7 +5,6 @@
 import {assert} from 'chai';
 
 import {goToResource, step} from '../../shared/helper.js';
-
 import {
   expandSelectedNodeRecursively,
   getGridsInLayoutPane,
@@ -41,7 +40,7 @@ describe('Layout Pane in the Elements Tab', function() {
     await openLayoutPane();
 
     const grids = await getGridsInLayoutPane();
-    assert.strictEqual(grids.length, 1, 'Without UA shadow DOM, there is only one grid');
+    assert.lengthOf(grids, 1, 'Without UA shadow DOM, there is only one grid');
 
     await togglePreferenceInSettingsTab('Show user agent shadow DOM');
 

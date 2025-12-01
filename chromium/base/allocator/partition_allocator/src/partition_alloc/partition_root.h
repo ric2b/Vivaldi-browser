@@ -71,6 +71,7 @@
 #include "partition_alloc/partition_lock.h"
 #include "partition_alloc/partition_oom.h"
 #include "partition_alloc/partition_page.h"
+#include "partition_alloc/partition_shared_mutex.h"
 #include "partition_alloc/reservation_offset_table.h"
 #include "partition_alloc/tagging.h"
 #include "partition_alloc/thread_cache.h"
@@ -165,9 +166,11 @@ struct PartitionOptions {
   static constexpr auto kEnabled = EnableToggle::kEnabled;
 
   EnableToggle thread_cache = kDisabled;
-  AllowToggle star_scan_quarantine = kDisallowed;
   EnableToggle backup_ref_ptr = kDisabled;
   AllowToggle use_configurable_pool = kDisallowed;
+
+  // TODO(https://crbug.com/371135823): Remove after the investigation.
+  size_t backup_ref_ptr_extra_extras_size = 0;
 
   EnableToggle scheduler_loop_quarantine = kDisabled;
   size_t scheduler_loop_quarantine_branch_capacity_in_bytes = 0;
@@ -179,6 +182,7 @@ struct PartitionOptions {
   // compression ratio of freed memory inside partially allocated pages (due to
   // fragmentation).
   EnableToggle eventually_zero_freed_memory = kDisabled;
+  EnableToggle fewer_memory_regions = kDisabled;
 
   struct {
     EnableToggle enabled = kDisabled;
@@ -258,9 +262,14 @@ struct alignas(64) PA_COMPONENT_EXPORT(PARTITION_ALLOC) PartitionRoot {
     size_t in_slot_metadata_size = 0;
 #endif  // PA_BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
     bool use_configurable_pool = false;
+    // Despite its name, `FreeFlags` for zapping is deleted and does not exist.
+    // This value is used for SchedulerLoopQuarantine.
+    // TODO(https://crbug.com/351974425): group this setting and quarantine
+    // setting in one place.
     bool zapping_by_free_flags = false;
     bool eventually_zero_freed_memory = false;
     bool scheduler_loop_quarantine = false;
+    bool fewer_memory_regions = false;
 #if PA_BUILDFLAG(HAS_MEMORY_TAGGING)
     bool memory_tagging_enabled_ = false;
     bool use_random_memory_tagging_ = false;
@@ -386,6 +395,12 @@ struct alignas(64) PA_COMPONENT_EXPORT(PARTITION_ALLOC) PartitionRoot {
   // Not overriding the global one to only change it for this partition.
   internal::base::TimeTicks (*now_maybe_overridden_for_testing)() =
       internal::base::TimeTicks::Now;
+
+#if PA_CONFIG(ENABLE_SHADOW_METADATA)
+  // Locks not to run EnableShadowMetadata() and PartitionDirectMap()
+  // at the same time.
+  static internal::SharedMutex g_shadow_metadata_init_mutex_;
+#endif  // PA_CONFIG(ENABLE_SHADOW_METADATA)
 
   PartitionRoot();
   explicit PartitionRoot(PartitionOptions opts);
@@ -882,6 +897,14 @@ struct alignas(64) PA_COMPONENT_EXPORT(PARTITION_ALLOC) PartitionRoot {
   internal::LightweightQuarantineBranch&
   GetSchedulerLoopQuarantineBranchForTesting() {
     return GetSchedulerLoopQuarantineBranch();
+  }
+
+  void SetSchedulerLoopQuarantineThreadLocalBranchCapacity(
+      size_t capacity_in_bytes) {
+    ThreadCache* thread_cache = this->GetOrCreateThreadCache();
+    PA_CHECK(ThreadCache::IsValid(thread_cache));
+    thread_cache->GetSchedulerLoopQuarantineBranch().SetCapacityInBytes(
+        capacity_in_bytes);
   }
 
   const internal::PartitionFreelistDispatcher* get_freelist_dispatcher() {
@@ -1499,16 +1522,11 @@ PA_ALWAYS_INLINE void PartitionRoot::FreeInline(void* object) {
   // cacheline ping-pong.
   PA_PREFETCH(slot_span);
 
-  // Further down, we may zap the memory, no point in doing it twice.  We may
-  // zap twice if kZap is enabled without kSchedulerLoopQuarantine. Make sure it
-  // does not happen. This is not a hard requirement: if this is deemed cheap
-  // enough, it can be relaxed, the static_assert() is here to make it a
-  // conscious decision.
-  static_assert(!ContainsFlags(flags, FreeFlags::kZap) ||
-                    ContainsFlags(flags, FreeFlags::kSchedulerLoopQuarantine),
-                "kZap and kSchedulerLoopQuarantine should be used together to "
-                "avoid double zapping");
-  if constexpr (ContainsFlags(flags, FreeFlags::kZap)) {
+  // TODO(crbug.com/40287058): Collecting objects for
+  // `kSchedulerLoopQuarantineBranch` here means it "delays" other checks (BRP
+  // refcount, cookie, etc.)
+  // For better debuggability, we should do these checks before quarantining.
+  if constexpr (ContainsFlags(flags, FreeFlags::kSchedulerLoopQuarantine)) {
     // No need to zap direct mapped allocations, as they are unmapped right
     // away. This also ensures that we don't needlessly memset() very large
     // allocations.
@@ -1517,12 +1535,7 @@ PA_ALWAYS_INLINE void PartitionRoot::FreeInline(void* object) {
       internal::SecureMemset(object, internal::kFreedByte,
                              GetSlotUsableSize(slot_span));
     }
-  }
-  // TODO(crbug.com/40287058): Collecting objects for
-  // `kSchedulerLoopQuarantineBranch` here means it "delays" other checks (BRP
-  // refcount, cookie, etc.)
-  // For better debuggability, we should do these checks before quarantining.
-  if constexpr (ContainsFlags(flags, FreeFlags::kSchedulerLoopQuarantine)) {
+
     if (settings.scheduler_loop_quarantine) {
 #if PA_BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
       // TODO(keishi): Add `[[likely]]` when brp is fully enabled as

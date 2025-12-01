@@ -85,7 +85,7 @@ general, the following strategies will likely apply:
 If you are analyzing GPU overdraw for animations or creating automated
 performance tests then overdraw feedback in the form of trace events can be
 useful. See [The Trace Event Profiling Tool
-(about:tracing)](http://www.chromium.org/developers/how-tos/trace-event-profiling-tool)
+(about:tracing)](/developers/how-tos/trace-event-profiling-tool)
 for more details about how to record tracing runs. Enable the viz.overdraw
 tracing category to have Chrome record the amount of overdraw for each frame.
 The result is presented as a GPU Overdraw counter that changes over time as

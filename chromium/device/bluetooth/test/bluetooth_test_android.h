@@ -9,6 +9,8 @@
 
 #include "base/android/scoped_java_ref.h"
 #include "base/memory/raw_ptr.h"
+#include "base/test/task_environment.h"
+#include "device/bluetooth/bluetooth_common.h"
 #include "device/bluetooth/test/bluetooth_test.h"
 
 namespace device {
@@ -17,6 +19,8 @@ namespace device {
 class BluetoothTestAndroid : public BluetoothTestBase {
  public:
   BluetoothTestAndroid();
+  explicit BluetoothTestAndroid(
+      base::test::TaskEnvironment::TimeSource time_source);
   ~BluetoothTestAndroid() override;
 
   // Test overrides:
@@ -30,6 +34,7 @@ class BluetoothTestAndroid : public BluetoothTestBase {
   void InitWithFakeAdapter() override;
   bool DenyPermission() override;
   BluetoothDevice* SimulateLowEnergyDevice(int device_ordinal) override;
+  BluetoothDevice* SimulateClassicDevice() override;
   void RememberDeviceForSubsequentAction(BluetoothDevice* device) override;
   void SimulateGattConnection(BluetoothDevice* device) override;
   void SimulateGattConnectionError(BluetoothDevice* device,
@@ -101,6 +106,23 @@ class BluetoothTestAndroid : public BluetoothTestBase {
   void SimulateGattDescriptorWriteWillFailSynchronouslyOnce(
       BluetoothRemoteGattDescriptor* descriptor) override;
 
+  // Instruct the fake adapter to enable/disable BT classic and BLE.
+  void SetEnabledDeviceTransport(BluetoothTransport transport);
+
+  // Creates a fake paired classic device
+  //
+  // |device_ordinal| selects between multiple fake device data sets to produce:
+  //   0: Name: kTestDeviceName
+  //      Address: kTestDeviceAddress3
+  //      UUID: <empty>
+  //   1: Name: kTestDeviceNameEmpty
+  //      Address: kTestDeviceAddress1
+  //      UUID: kTestUUIDSerial
+  //   2: Name: kTestDeviceName
+  //      Address: kTestDeviceAddress2
+  //      UUID: kTestUUIDSerial
+  void SimulatePairedClassicDevice(int device_ordinal);
+
   // Instruct the fake adapter to claim that location services are off for the
   // device.
   void SimulateLocationServicesOff();
@@ -108,6 +130,10 @@ class BluetoothTestAndroid : public BluetoothTestBase {
   // Instruct the fake adapter to throw an IllegalStateException for
   // startScan and stopScan.
   void ForceIllegalStateException();
+
+  // Instruct the fake LE scanner to invoke the failure callback with
+  // |error_code|.
+  void FailCurrentLeScan(int error_code);
 
   // Records that Java FakeBluetoothDevice connectGatt was called.
   void OnFakeBluetoothDeviceConnectGattCalled(JNIEnv* env);
@@ -148,6 +174,13 @@ class BluetoothTestAndroid : public BluetoothTestBase {
   void PostTaskFromJava(JNIEnv* env,
                         const base::android::JavaParamRef<jobject>& runnable);
 
+  // Posts a delayed task to be run on the current message loop.
+  void PostDelayedTaskFromJava(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& runnable,
+      jlong delayMillis);
+
+  base::android::ScopedJavaGlobalRef<jobject> j_default_bluetooth_adapter_;
   base::android::ScopedJavaGlobalRef<jobject> j_fake_bluetooth_adapter_;
 
   int gatt_open_connections_ = 0;

@@ -43,13 +43,12 @@ message StartArcMiniInstanceRequest {
     MODE_DISABLED = 2;
   }
 
+  // Override with ndk_translation. Useful for ARC++ only, for ARCVM see
+  // native_bridge_experiment in StartArcVmRequest.
   optional bool native_bridge_experiment = 1 [default = false];
 
   // The density value passed to "ro.sf.lcd_density" property.
   optional int32 lcd_density = 2 [default = -1];
-
-  // Experiment flag for go/arc-file-picker.
-  optional bool arc_file_picker_experiment = 3 [default = false];
 
   // Optional mode for play store auto-update.
   optional PlayStoreAutoUpdate play_store_auto_update = 4
@@ -57,17 +56,6 @@ message StartArcMiniInstanceRequest {
 
   // Experiment flag for ARC Custom Tabs.
   optional bool arc_custom_tabs_experiment = 5 [default = false];
-
-  // Experiment flag for ARC Print Spooler.
-  optional bool arc_print_spooler_experiment = 6
-      [default = false, deprecated = true];
-
-  reserved 7;
-
-  // Option to disable by hiding default apps shipped on the system image.
-  // To be used locally in development that involves overriding these apps.
-  optional bool disable_system_default_app = 8
-      [default = false, deprecated = true];
 
   // Optional mode for dalvik memory profile.
   optional DalvikMemoryProfile dalvik_memory_profile = 9
@@ -86,17 +74,11 @@ message StartArcMiniInstanceRequest {
   // rosters.
   optional bool arc_generate_pai = 11 [default = false];
 
-  // Enables use of new notifications ui.
-  optional bool enable_notifications_refresh = 13
-      [default = false, deprecated = true];
-
   // Option to enable TTS caching
   optional bool enable_tts_caching = 14 [default = false];
 
   // Option to enable disable consumer auto update toggle.
   optional bool enable_consumer_auto_update_toggle = 15 [default = false];
-
-  reserved 16;
 
   // Option to enable privacy hub for chrome in android settings.
   optional bool enable_privacy_hub_for_chrome = 17 [default = false];
@@ -122,6 +104,8 @@ message StartArcMiniInstanceRequest {
   // Flag that would enable ARC Attestation, and would make ARC
   // RemotelyProvisionedComponentDevice visible to Keystore.
   optional bool enable_arc_attestation = 23 [default = false];
+
+  reserved 6, 7, 8, 13, 16;
 
   // Next ID to use: 24
 }
@@ -165,8 +149,6 @@ message UpgradeArcContainerRequest {
   // managed.
   optional bool is_managed_adb_sideloading_allowed = 16;
 
-  reserved 15;
-
   // Option to disable ACTION_BOOT_COMPLETED broadcast for 3rd party apps.
   optional bool skip_boot_completed_broadcast = 2 [default = false];
 
@@ -175,10 +157,6 @@ message UpgradeArcContainerRequest {
 
   // Option to disable GMS CORE cache.
   optional bool skip_gms_core_cache = 13 [default = false];
-
-  // Option to notify ARC if the account is a child, allowing us to provide
-  // special behavior for child account on ARC.
-  optional bool OBSOLETE_is_child = 9 [deprecated = true];
 
   // Whether the container is being upgraded for a Chrome OS demo session.
   optional bool is_demo_session = 10;
@@ -204,6 +182,8 @@ message UpgradeArcContainerRequest {
 
   // Option to skip pregenerated TTS cache setup.
   optional bool skip_tts_cache = 18 [default = false];
+
+  reserved 9, 15;
 
   // Next ID to use: 19
 }

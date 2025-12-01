@@ -38,13 +38,42 @@ LensOverlayTabHelper::~LensOverlayTabHelper() {
 void LensOverlayTabHelper::SetLensOverlayUIAttachedAndAlive(
     bool is_ui_attached_and_alive) {
   is_ui_attached_and_alive_ = is_ui_attached_and_alive;
+  invokation_navigation_id_ = 0;
+
   if (IsLensOverlaySameTabNavigationEnabled() && is_ui_attached_and_alive &&
       web_state_) {
-    invokation_navigation_id_ =
-        web_state_->GetNavigationManager()->GetVisibleItem()->GetUniqueID();
-  } else {
-    invokation_navigation_id_ = 0;
+    const web::NavigationManager* navigation_manager =
+        web_state_->GetNavigationManager();
+
+    if (navigation_manager && navigation_manager->GetVisibleItem()) {
+      invokation_navigation_id_ =
+          navigation_manager->GetVisibleItem()->GetUniqueID();
+    }
   }
+}
+
+bool LensOverlayTabHelper::IsLensOverlayInvokedOnMostRecentBackItem() {
+  std::vector<web::NavigationItem*> backItems =
+      web_state_->GetNavigationManager()->GetBackwardItems();
+  return is_ui_attached_and_alive_ && backItems.size() > 0 &&
+         invokation_navigation_id_ == backItems[0]->GetUniqueID();
+}
+
+bool LensOverlayTabHelper::IsLensOverlayInvokedOnCurrentNavigationItem() {
+  if (!is_ui_attached_and_alive_) {
+    return false;
+  }
+
+  bool is_lens_overlay_invoked = false;
+
+  if (web_state_->GetNavigationManager() &&
+      web_state_->GetNavigationManager()->GetVisibleItem()) {
+    is_lens_overlay_invoked =
+        invokation_navigation_id_ ==
+        web_state_->GetNavigationManager()->GetVisibleItem()->GetUniqueID();
+  }
+
+  return is_lens_overlay_invoked;
 }
 
 #pragma mark - WebStateObserver
@@ -52,15 +81,21 @@ void LensOverlayTabHelper::SetLensOverlayUIAttachedAndAlive(
 void LensOverlayTabHelper::DidStartNavigation(
     web::WebState* web_state,
     web::NavigationContext* navigation_context) {
+  const web::NavigationManager* navigation_manager =
+      web_state_->GetNavigationManager();
+  const web::NavigationItem* pending_item =
+      navigation_manager ? navigation_manager->GetPendingItem() : nullptr;
+
   if (IsLensOverlaySameTabNavigationEnabled() && is_ui_attached_and_alive_ &&
-      navigation_context && !navigation_context->IsSameDocument()) {
-    if (invokation_navigation_id_ ==
-        web_state_->GetNavigationManager()->GetPendingItem()->GetUniqueID()) {
+      navigation_context && !navigation_context->IsSameDocument() &&
+      pending_item) {
+    if (invokation_navigation_id_ == pending_item->GetUniqueID()) {
       [commands_handler_ showLensUI:NO];
     } else {
-      [commands_handler_ hideLensUI:NO];
+      [commands_handler_ hideLensUI:NO completion:nil];
     }
   }
+
   if (web_state_ && snapshot_controller_) {
     NewTabPageTabHelper* NTPHelper =
         NewTabPageTabHelper::FromWebState(web_state_);
@@ -71,10 +106,40 @@ void LensOverlayTabHelper::DidStartNavigation(
   }
 }
 
+void LensOverlayTabHelper::DidFinishNavigation(
+    web::WebState* web_state,
+    web::NavigationContext* navigation_context) {
+  const web::NavigationManager* navigation_manager =
+      web_state_->GetNavigationManager();
+  const web::NavigationItem* navigation_item =
+      navigation_manager ? navigation_manager->GetVisibleItem() : nullptr;
+
+  // Fallback if invokation failed during startNavigation (e.g GetPendingItem
+  // returns null)
+  if (IsLensOverlaySameTabNavigationEnabled() && is_ui_attached_and_alive_ &&
+      navigation_item) {
+    if (invokation_navigation_id_ == navigation_item->GetUniqueID()) {
+      [commands_handler_ showLensUI:NO];
+    } else {
+      [commands_handler_ hideLensUI:NO completion:nil];
+    }
+  }
+}
+
 void LensOverlayTabHelper::WasShown(web::WebState* web_state) {
   CHECK_EQ(web_state, web_state_, kLensOverlayNotFatalUntil);
 
-  if (is_ui_attached_and_alive_) {
+  if (IsLensOverlaySameTabNavigationEnabled()) {
+    if (web_state_->GetNavigationManager()) {
+      web::NavigationItem* visibleItem =
+          web_state_->GetNavigationManager()->GetVisibleItem();
+
+      if (is_ui_attached_and_alive_ && visibleItem &&
+          invokation_navigation_id_ == visibleItem->GetUniqueID()) {
+        [commands_handler_ showLensUI:YES];
+      }
+    }
+  } else if (is_ui_attached_and_alive_) {
     [commands_handler_ showLensUI:YES];
   }
 }
@@ -87,7 +152,7 @@ void LensOverlayTabHelper::WasHidden(web::WebState* web_state) {
   }
 
   if (is_ui_attached_and_alive_) {
-    [commands_handler_ hideLensUI:YES];
+    [commands_handler_ hideLensUI:YES completion:nil];
   }
 }
 
@@ -131,6 +196,13 @@ void LensOverlayTabHelper::UpdateSnapshot() {
 }
 
 void LensOverlayTabHelper::UpdateSnapshotStorage() {
+  // Skip updating the snapshot storage if the Lens Overlay is not invoked on
+  // the current navigation item.
+  if (IsLensOverlaySameTabNavigationEnabled() &&
+      !IsLensOverlayInvokedOnCurrentNavigationItem()) {
+    return;
+  }
+
   SnapshotTabHelper* snapshotTabHelper =
       SnapshotTabHelper::FromWebState(web_state_);
 

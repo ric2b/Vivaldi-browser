@@ -12,7 +12,6 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
@@ -37,6 +36,7 @@
 #include "chrome/browser/ui/views/side_panel/side_panel_ui.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/commerce/core/commerce_feature_list.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/sessions/core/tab_restore_service_observer.h"
@@ -52,7 +52,7 @@
 #include "net/base/network_change_notifier.h"
 #include "ui/base/ui_base_features.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "ash/constants/ash_switches.h"
 #include "ash/wm/window_pin_util.h"
 #include "ui/aura/window.h"
@@ -66,7 +66,7 @@ namespace chrome {
 
 class BrowserCommandControllerBrowserTest : public InProcessBrowserTest {
  public:
-  BrowserCommandControllerBrowserTest() {}
+  BrowserCommandControllerBrowserTest() = default;
 
   BrowserCommandControllerBrowserTest(
       const BrowserCommandControllerBrowserTest&) = delete;
@@ -76,7 +76,7 @@ class BrowserCommandControllerBrowserTest : public InProcessBrowserTest {
   ~BrowserCommandControllerBrowserTest() override = default;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     command_line->AppendSwitch(
         ash::switches::kIgnoreUserProfileMappingForTests);
 #endif
@@ -199,7 +199,7 @@ IN_PROC_BROWSER_TEST_F(BrowserCommandControllerBrowserTest,
   EXPECT_FALSE(chrome::IsCommandEnabled(browser(), IDC_MOVE_TAB_TO_NEW_WINDOW));
 }
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(BrowserCommandControllerBrowserTest,
                        NewAvatarMenuEnabledInGuestMode) {
   EXPECT_EQ(1U, BrowserList::GetInstance()->size());
@@ -212,7 +212,7 @@ IN_PROC_BROWSER_TEST_F(BrowserCommandControllerBrowserTest,
 }
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 class BrowserCommandControllerBrowserTestLockedFullscreen
     : public BrowserCommandControllerBrowserTest {
  protected:
@@ -421,7 +421,7 @@ IN_PROC_BROWSER_TEST_F(BrowserCommandControllerBrowserTest,
   ASSERT_EQ(false, commandController->IsCommandEnabled(IDC_OPEN_FILE));
 }
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(BrowserCommandControllerBrowserTestRefreshOnly,
                        ExecuteProfileMenuCustomizeChrome) {
   EXPECT_TRUE(chrome::ExecuteCommand(browser(), IDC_CUSTOMIZE_CHROME));
@@ -462,7 +462,8 @@ IN_PROC_BROWSER_TEST_F(BrowserCommandControllerBrowserTestRefreshOnly,
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   if (!features::IsToolbarPinningEnabled()) {
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("chrome://new-tab-page/")));
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(),
+                                             GURL("chrome://new-tab-page/")));
   }
   content::WaitForLoadStop(web_contents);
   EXPECT_TRUE(
@@ -478,7 +479,8 @@ IN_PROC_BROWSER_TEST_F(BrowserCommandControllerBrowserTestRefreshOnly,
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   if (!features::IsToolbarPinningEnabled()) {
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL("chrome://new-tab-page/")));
+    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(),
+                                             GURL("chrome://new-tab-page/")));
   }
   content::WaitForLoadStop(web_contents);
   EXPECT_TRUE(
@@ -595,15 +597,8 @@ IN_PROC_BROWSER_TEST_F(BrowserCommandControllerBrowserTestToolbarPinningOnly,
 }
 
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
-class CreateShortcutBrowserCommandControllerNavTest
-    : public BrowserCommandControllerBrowserTest {
- public:
-  CreateShortcutBrowserCommandControllerNavTest() = default;
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_{
-      features::kShortcutsNotApps};
-};
+using CreateShortcutBrowserCommandControllerNavTest =
+    BrowserCommandControllerBrowserTest;
 
 IN_PROC_BROWSER_TEST_F(CreateShortcutBrowserCommandControllerNavTest,
                        ErrorUrlDisabled) {
@@ -617,5 +612,53 @@ IN_PROC_BROWSER_TEST_F(CreateShortcutBrowserCommandControllerNavTest,
 }
 
 #endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
+
+// Tests for comparison table submenu.
+class BrowserCommandControllerBrowserTestCompare
+    : public BrowserCommandControllerBrowserTest {
+ public:
+  BrowserCommandControllerBrowserTestCompare() {
+    scoped_feature_list_.InitWithFeatures(
+        {commerce::kProductSpecifications,
+         commerce::kCompareManagementInterface},
+        {});
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(BrowserCommandControllerBrowserTestCompare,
+                       AddToTableMenu_UrlSchemeHttp) {
+  GURL url = GURL("http://example.com");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
+
+  browser()->command_controller()->TabStateChanged();
+
+  EXPECT_TRUE(browser()->command_controller()->IsCommandEnabled(
+      IDC_ADD_TO_COMPARISON_TABLE_MENU));
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserCommandControllerBrowserTestCompare,
+                       AddToTableMenu_UrlSchemeHttps) {
+  GURL url = GURL("https://example.com");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
+
+  browser()->command_controller()->TabStateChanged();
+
+  EXPECT_TRUE(browser()->command_controller()->IsCommandEnabled(
+      IDC_ADD_TO_COMPARISON_TABLE_MENU));
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserCommandControllerBrowserTestCompare,
+                       AddToTableMenu_UrlSchemeNotHttpOrHttps) {
+  GURL url = GURL("chrome://history");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
+
+  browser()->command_controller()->TabStateChanged();
+
+  EXPECT_FALSE(browser()->command_controller()->IsCommandEnabled(
+      IDC_ADD_TO_COMPARISON_TABLE_MENU));
+}
 
 }  // namespace chrome

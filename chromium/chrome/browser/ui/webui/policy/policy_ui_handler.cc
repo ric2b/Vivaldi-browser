@@ -24,6 +24,7 @@
 #include "base/json/json_writer.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/task_traits.h"
@@ -31,7 +32,6 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/enterprise/browser_management/management_service_factory.h"
@@ -51,7 +51,6 @@
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/chrome_select_file_policy.h"
 #include "chrome/browser/ui/webui/policy/policy_ui.h"
-#include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/grit/branded_strings.h"
 #include "components/crx_file/id_util.h"
@@ -66,6 +65,7 @@
 #include "components/policy/core/common/cloud/cloud_policy_manager.h"
 #include "components/policy/core/common/cloud/cloud_policy_refresh_scheduler.h"
 #include "components/policy/core/common/cloud/cloud_policy_util.h"
+#include "components/policy/core/common/cloud/enterprise_metrics.h"
 #include "components/policy/core/common/local_test_policy_loader.h"
 #include "components/policy/core/common/local_test_policy_provider.h"
 #include "components/policy/core/common/policy_details.h"
@@ -92,8 +92,9 @@
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
+#include "ui/webui/webui_util.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
 #include "chrome/browser/ash/policy/core/device_cloud_policy_store_ash.h"
 #include "chrome/browser/ash/policy/core/device_local_account_policy_service.h"
@@ -108,7 +109,7 @@
 
 #if !BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/ui/ui_features.h"
-#endif // !BUILDFLAG(IS_ANDROID)
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 // LINT.IfChange
 
@@ -119,7 +120,7 @@ constexpr char kExtensionsKey[] = "extensions";
 
 #if !BUILDFLAG(IS_ANDROID)
 constexpr char kPolicyPromotionBannerLocale[] = "en-US";
-#endif // !BUILDFLAG(IS_ANDROID)
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 }  // namespace
 
@@ -255,6 +256,10 @@ void PolicyUIHandler::RegisterMessages() {
       "setBannerDismissed",
       base::BindRepeating(&PolicyUIHandler::HandleSetBannerDismissed,
                           base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "recordBannerRedirected",
+      base::BindRepeating(&PolicyUIHandler::HandleRecordBannerRedirected,
+                          base::Unretained(this)));
 #if !BUILDFLAG(IS_CHROMEOS)
   web_ui()->RegisterMessageCallback(
       "uploadReport", base::BindRepeating(&PolicyUIHandler::HandleUploadReport,
@@ -304,7 +309,7 @@ void PolicyUIHandler::HandleListenPoliciesUpdates(
 
 void PolicyUIHandler::HandleReloadPolicies(const base::Value::List& args) {
   reload_policies_count_ += 1;
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   // Allow user to manually fetch remote commands. Useful for testing or when
   // the invalidation service is not working properly.
   policy::CloudPolicyManager* const device_manager =
@@ -473,7 +478,6 @@ void PolicyUIHandler::HandleUploadReport(const base::Value::List& args) {
   // scheduler are ready. On at least show an error message to ask people
   // to try again.
   OnReportUploaded(callback_id);
-
 }
 #endif  // !BUILDFLAG(IS_CHROMEOS)
 
@@ -502,33 +506,44 @@ void PolicyUIHandler::SendStatus() {
 void PolicyUIHandler::HandleShouldShowPromotion(const base::Value::List& args) {
   AllowJavascript();
 #if !BUILDFLAG(IS_ANDROID)
-  ResolveJavascriptCallback(
-      args[0],
-      base::Value(
-          base::FeatureList::IsEnabled(
-              features::kEnablePolicyPromotionBanner) // feature is on
-              &&
-          policy::ManagementServiceFactory::GetForProfile(
-              Profile::FromWebUI(web_ui()))
-              ->IsAccountManaged() // the user is dasher managed
-              &&
-          g_browser_process->GetApplicationLocale() ==
-              kPolicyPromotionBannerLocale // the user is under en-US locale
-              &&
-          !Profile::FromWebUI(web_ui())->GetPrefs()->GetBoolean(
-              policy::policy_prefs::kHasDismissedPolicyPagePromotionBanner)
-              // the user has not dismissed the banner
-              ));
+  const bool should_show_promotion =
+      // The promotion banner should be shown if:
+      // 1. The feature is enabled
+      // 2. The user is dasher managed
+      // 3. The user is under en-US locale
+      // 4. The user has not dismissed the banner
+      base::FeatureList::IsEnabled(features::kEnablePolicyPromotionBanner) &&
+      policy::ManagementServiceFactory::GetForProfile(
+          Profile::FromWebUI(web_ui()))
+          ->IsAccountManaged() &&
+      g_browser_process->GetApplicationLocale() ==
+          kPolicyPromotionBannerLocale &&
+      !Profile::FromWebUI(web_ui())->GetPrefs()->GetBoolean(
+          policy::policy_prefs::kHasDismissedPolicyPagePromotionBanner);
+  // Log the UMA metric for the promotion banner displayed.
+  base::UmaHistogramBoolean("Enterprise.PolicyPromotionBannerDisplayed",
+                            should_show_promotion);
+  ResolveJavascriptCallback(args[0], should_show_promotion);
 #else
   // If the build is on Android, still handle the request but return false
-  // so the banner does not show
+  // so the banner does not show.
   ResolveJavascriptCallback(args[0], false);
 #endif
 }
 
 void PolicyUIHandler::HandleSetBannerDismissed(const base::Value::List& args) {
+  base::UmaHistogramEnumeration(
+      "Enterprise.PolicyPromotionBannerAction",
+      policy::PolicyPromotionBannerAction::kBannerDismissed);
   Profile::FromWebUI(web_ui())->GetPrefs()->SetBoolean(
       policy::policy_prefs::kHasDismissedPolicyPagePromotionBanner, true);
+}
+
+void PolicyUIHandler::HandleRecordBannerRedirected(
+    const base::Value::List& args) {
+  base::UmaHistogramEnumeration(
+      "Enterprise.PolicyPromotionBannerAction",
+      policy::PolicyPromotionBannerAction::kBannerRedirected);
 }
 
 #if !BUILDFLAG(IS_CHROMEOS)

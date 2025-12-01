@@ -15,7 +15,6 @@
 #include "components/country_codes/country_codes.h"
 #include "components/os_crypt/async/browser/test_utils.h"
 #include "components/search_engines/keyword_web_data_service.h"
-#include "components/search_engines/prepopulated_engines.h"
 #include "components/search_engines/search_engine_choice/search_engine_choice_service.h"
 #include "components/search_engines/search_engines_pref_names.h"
 #include "components/search_engines/search_engines_test_environment.h"
@@ -29,6 +28,7 @@
 #include "components/webdata/common/webdata_constants.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/search_engines_data/resources/definitions/prepopulated_engines.h"
 
 namespace {
 
@@ -41,7 +41,6 @@ std::unique_ptr<TemplateURLData> CreatePrepopulateTemplateURLData(
       "" /* new_tab_url */, "" /* contextual_search_url */, "" /* logo_url */,
       "" /* doodle_url */, "" /* search_url_post_params */,
       "" /* suggest_url_post_params */, "" /* image_url_post_params */,
-      "" /* side_search_param */, "" /* side_image_search_param */,
       "" /* image_translate_source_language_param_key */,
       "" /* image_translate_target_language_param_key */,
       std::vector<std::string>() /* search_intent_params */,

@@ -16,7 +16,7 @@ import * as NetworkForward from '../../../panels/network/forward/forward.js';
 import * as Sources from '../../../panels/sources/sources.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
 import * as UI from '../../../ui/legacy/legacy.js';
-import * as LitHtml from '../../../ui/lit-html/lit-html.js';
+import {html, nothing, render} from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
 import {
@@ -31,9 +31,11 @@ import {
   type HeaderSectionRowData,
   isValidHeaderName,
 } from './HeaderSectionRow.js';
-import responseHeaderSectionStyles from './ResponseHeaderSection.css.js';
+import responseHeaderSectionStylesRaw from './ResponseHeaderSection.css.js';
 
-const {render, html} = LitHtml;
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const responseHeaderSectionStyles = new CSSStyleSheet();
+responseHeaderSectionStyles.replaceSync(responseHeaderSectionStylesRaw.cssContent);
 
 const UIStrings = {
   /**
@@ -80,8 +82,6 @@ const UIStrings = {
 const str_ = i18n.i18n.registerUIStrings('panels/network/components/ResponseHeaderSection.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 const i18nLazyString = i18n.i18n.getLazilyComputedLocalizedString.bind(undefined, str_);
-
-const plusIconUrl = new URL('../../../Images/plus.svg', import.meta.url).toString();
 
 export const RESPONSE_HEADER_SECTION_DATA_KEY = 'ResponseHeaderSection';
 
@@ -292,7 +292,7 @@ export class ResponseHeaderSection extends ResponseHeaderSectionBase {
       for (const header of this.#headerEditors) {
         header.valueEditable = this.#isEditingAllowed;
       }
-    } catch (error) {
+    } catch {
       console.error(
           'Failed to parse', this.#uiSourceCode?.url() || 'source code file', 'for locally overriding headers.');
       this.#resetEditorState();
@@ -551,12 +551,12 @@ export class ResponseHeaderSection extends ResponseHeaderSectionBase {
         <devtools-button
           class="add-header-button"
           .variant=${Buttons.Button.Variant.OUTLINED}
-          .iconUrl=${plusIconUrl}
+          .iconName=${'plus'}
           @click=${this.#onAddHeaderClick}
           jslog=${VisualLogging.action('add-header').track({click: true})}>
           ${i18nString(UIStrings.addHeader)}
         </devtools-button>
-      ` : LitHtml.nothing}
+      ` : nothing}
     `, this.shadow, {host: this});
     // clang-format on
   }

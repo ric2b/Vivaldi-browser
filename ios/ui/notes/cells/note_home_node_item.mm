@@ -70,7 +70,8 @@ using l10n_util::GetNSString;
     TableViewNoteCell* noteCell =
         base::apple::ObjCCastStrict<TableViewNoteCell>(cell);
     [noteCell configureNoteWithTitle:[self noteTitle]
-                     createdAt:[self createdAt]];
+                           createdAt:[self createdAt]
+                          modifiedAt:[self lastModified]];
     noteCell.accessibilityLabel = [noteCell accessibilityLabelString];
     noteCell.accessibilityTraits |= UIAccessibilityTraitButton;
     noteCell.imageView.image = [UIImage imageNamed:vNotesIcon];

@@ -12,11 +12,13 @@
 #include <unordered_map>
 
 #include "src/base/bounds.h"
-#include "src/base/functional.h"
+#include "src/base/hashing.h"
 #include "src/wasm/value-type.h"
 #include "src/wasm/wasm-module.h"
 
 namespace v8::internal::wasm {
+
+class CanonicalTypeNamesProvider;
 
 // We use ValueType instances constructed from canonical type indices, so we
 // can't let them get bigger than what we have storage space for.
@@ -64,22 +66,14 @@ class TypeCanonicalizer {
   TypeCanonicalizer(TypeCanonicalizer&& other) = delete;
   TypeCanonicalizer& operator=(TypeCanonicalizer&& other) = delete;
 
-  // Registers {size} types of {module} as a recursive group, starting at
-  // {start_index}, and possibly canonicalizes it if an identical one has been
-  // found. Modifies {module->isorecursive_canonical_type_ids}.
-  V8_EXPORT_PRIVATE void AddRecursiveGroup(WasmModule* module, uint32_t size,
-                                           uint32_t start_index);
-
-  // Same as above, except it registers the last {size} types in the module.
+  // Register the last {size} types of {module} as a recursive group and
+  // possibly canonicalize it if an identical one has been found.
+  // Modifies {module->isorecursive_canonical_type_ids}.
   V8_EXPORT_PRIVATE void AddRecursiveGroup(WasmModule* module, uint32_t size);
 
   // Same as above, but for a group of size 1 (using the last type in the
   // module).
   V8_EXPORT_PRIVATE void AddRecursiveSingletonGroup(WasmModule* module);
-
-  // Same as above, but receives an explicit start index.
-  V8_EXPORT_PRIVATE void AddRecursiveSingletonGroup(WasmModule* module,
-                                                    uint32_t start_index);
 
   // Adds a module-independent signature as a recursive group, and canonicalizes
   // it if an identical is found. Returns the canonical index of the added
@@ -87,8 +81,12 @@ class TypeCanonicalizer {
   V8_EXPORT_PRIVATE CanonicalTypeIndex
   AddRecursiveGroup(const FunctionSig* sig);
 
-  // Retrieve back a function signature from a canonical index later.
+  // Retrieve back a type from a canonical index later.
   V8_EXPORT_PRIVATE const CanonicalSig* LookupFunctionSignature(
+      CanonicalTypeIndex index) const;
+  V8_EXPORT_PRIVATE const CanonicalStructType* LookupStruct(
+      CanonicalTypeIndex index) const;
+  V8_EXPORT_PRIVATE const CanonicalArrayType* LookupArray(
       CanonicalTypeIndex index) const;
 
   // Returns if {canonical_sub_index} is a canonical subtype of
@@ -109,7 +107,7 @@ class TypeCanonicalizer {
 
   size_t EstimateCurrentMemoryConsumption() const;
 
-  size_t GetCurrentNumberOfTypes() const;
+  V8_EXPORT_PRIVATE size_t GetCurrentNumberOfTypes() const;
 
   // Prepares wasm for the provided canonical type index. This reserves enough
   // space in the canonical rtts and the JSToWasm wrappers on the isolate roots.
@@ -120,7 +118,13 @@ class TypeCanonicalizer {
   V8_EXPORT_PRIVATE static void ClearWasmCanonicalTypesForTesting(
       Isolate* isolate);
 
-  bool IsFunctionSignature(CanonicalTypeIndex index) const;
+  V8_EXPORT_PRIVATE bool IsFunctionSignature(CanonicalTypeIndex index) const;
+  V8_EXPORT_PRIVATE bool IsStruct(CanonicalTypeIndex index) const;
+  V8_EXPORT_PRIVATE bool IsArray(CanonicalTypeIndex index) const;
+
+  bool IsHeapSubtype(CanonicalValueType sub, CanonicalValueType super) const;
+  bool IsCanonicalSubtype_Locked(CanonicalTypeIndex sub_index,
+                                 CanonicalTypeIndex super_index) const;
 
   CanonicalTypeIndex FindIndex_Slow(const CanonicalSig* sig) const;
 
@@ -179,11 +183,11 @@ class TypeCanonicalizer {
   // Define the range of a recursion group; for use in {CanonicalHashing} and
   // {CanonicalEquality}.
   struct RecursionGroupRange {
-    const CanonicalTypeIndex start;
-    const CanonicalTypeIndex end;
+    const CanonicalTypeIndex first;
+    const CanonicalTypeIndex last;
 
     bool Contains(CanonicalTypeIndex index) const {
-      return base::IsInRange(index.index, start.index, end.index);
+      return base::IsInRange(index.index, first.index, last.index);
     }
   };
 
@@ -204,10 +208,10 @@ class TypeCanonicalizer {
       // separate index space (note that collisions in hashing are OK though).
       uint32_t is_relative = recgroup.Contains(type.supertype) ? 1 : 0;
       uint32_t supertype_index =
-          type.supertype.index - is_relative * recgroup.start.index;
-      static_assert(kMaxCanonicalTypes <= kMaxUInt32 >> 2);
-      uint32_t metadata =
-          (supertype_index << 2) | (is_relative << 1) | (type.is_final ? 1 : 0);
+          type.supertype.index - is_relative * recgroup.first.index;
+      static_assert(kMaxCanonicalTypes <= kMaxUInt32 >> 3);
+      uint32_t metadata = (supertype_index << 3) | (type.is_shared << 2) |
+                          (is_relative << 1) | (type.is_final << 0);
       hasher.Add(metadata);
       switch (type.kind) {
         case CanonicalType::kFunction:
@@ -230,7 +234,7 @@ class TypeCanonicalizer {
         // though).
         static_assert(kMaxCanonicalTypes <= kMaxUInt32 / 2);
         hasher.Add(value_type.kind());
-        hasher.Add((value_type.ref_index().index - recgroup.start.index) +
+        hasher.Add((value_type.ref_index().index - recgroup.first.index) +
                    kMaxCanonicalTypes);
       } else {
         hasher.Add(value_type);
@@ -274,8 +278,8 @@ class TypeCanonicalizer {
       if (relative_index != recgroup2.Contains(index2)) return false;
       if (relative_index) {
         // Compare relative type indexes within the respective recgroups.
-        uint32_t rel_type1 = index1.index - recgroup1.start.index;
-        uint32_t rel_type2 = index2.index - recgroup2.start.index;
+        uint32_t rel_type1 = index1.index - recgroup1.first.index;
+        uint32_t rel_type2 = index2.index - recgroup2.first.index;
         if (rel_type1 != rel_type2) return false;
       } else if (index1 != index2) {
         return false;
@@ -352,25 +356,25 @@ class TypeCanonicalizer {
   };
 
   struct CanonicalGroup {
-    CanonicalGroup(Zone* zone, size_t size, CanonicalTypeIndex start)
-        : types(zone->AllocateVector<CanonicalType>(size)), start(start) {
+    CanonicalGroup(Zone* zone, size_t size, CanonicalTypeIndex first)
+        : types(zone->AllocateVector<CanonicalType>(size)), first(first) {
       // size >= 2; otherwise a `CanonicalSingletonGroup` should have been used.
       DCHECK_LE(2, size);
     }
 
     bool operator==(const CanonicalGroup& other) const {
-      CanonicalTypeIndex end{start.index +
-                             static_cast<uint32_t>(types.size() - 1)};
-      CanonicalTypeIndex other_end{
-          other.start.index + static_cast<uint32_t>(other.types.size() - 1)};
-      CanonicalEquality equality{{start, end}, {other.start, other_end}};
+      CanonicalTypeIndex last{first.index +
+                              static_cast<uint32_t>(types.size() - 1)};
+      CanonicalTypeIndex other_last{
+          other.first.index + static_cast<uint32_t>(other.types.size() - 1)};
+      CanonicalEquality equality{{first, last}, {other.first, other_last}};
       return equality.EqualTypes(types, other.types);
     }
 
     size_t hash_value() const {
-      CanonicalTypeIndex end{start.index + static_cast<uint32_t>(types.size()) -
-                             1};
-      CanonicalHashing hasher{{start, end}};
+      CanonicalTypeIndex last{first.index +
+                              static_cast<uint32_t>(types.size()) - 1};
+      CanonicalHashing hasher{{first, last}};
       for (CanonicalType t : types) {
         hasher.Add(t);
       }
@@ -379,7 +383,7 @@ class TypeCanonicalizer {
 
     // The storage of this vector is the TypeCanonicalizer's zone_.
     const base::Vector<CanonicalType> types;
-    const CanonicalTypeIndex start;
+    const CanonicalTypeIndex first;
   };
 
   struct CanonicalSingletonGroup {
@@ -412,25 +416,28 @@ class TypeCanonicalizer {
       ModuleTypeIndex recgroup_start,
       CanonicalTypeIndex canonical_recgroup_start);
 
-  CanonicalTypeIndex AddRecursiveGroup(CanonicalType type);
-
   void CheckMaxCanonicalIndex() const;
+
+  const CanonicalType* get(CanonicalTypeIndex index) const {
+    return canonical_types_[index.index];
+  }
+  const CanonicalType* get(CanonicalValueType type) const {
+    DCHECK(type.has_index());
+    return get(type.ref_index());
+  }
+
+  bool IsShared(CanonicalValueType type) const;
 
   std::vector<CanonicalTypeIndex> canonical_supertypes_;
   // Set of all known canonical recgroups of size >=2.
-  std::unordered_set<CanonicalGroup, base::hash<CanonicalGroup>>
-      canonical_groups_;
+  std::unordered_set<CanonicalGroup> canonical_groups_;
   // Set of all known canonical recgroups of size 1.
-  std::unordered_set<CanonicalSingletonGroup,
-                     base::hash<CanonicalSingletonGroup>>
-      canonical_singleton_groups_;
-  // Maps canonical indices back to the function signature.
-  std::unordered_map<CanonicalTypeIndex, const CanonicalSig*,
-                     base::hash<CanonicalTypeIndex>>
-      canonical_function_sigs_;
+  std::unordered_set<CanonicalSingletonGroup> canonical_singleton_groups_;
+  // Maps canonical indices back to the types.
+  std::vector<const CanonicalType*> canonical_types_;
   AccountingAllocator allocator_;
   Zone zone_{&allocator_, "canonical type zone"};
-  mutable base::Mutex mutex_;
+  mutable base::SpinningMutex mutex_;
 };
 
 // Returns a reference to the TypeCanonicalizer shared by the entire process.

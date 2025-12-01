@@ -4,11 +4,17 @@
 
 #include "chromeos/ash/components/demo_mode/utils/demo_session_utils.h"
 
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "chromeos/ash/components/install_attributes/install_attributes.h"
+#include "chromeos/dbus/power/power_policy_controller.h"
 #include "components/prefs/pref_registry_simple.h"
 
 namespace ash::demo_mode {
+
+namespace {
+bool g_force_enable_demo_account_sign_in = false;
+}
 
 bool IsDeviceInDemoMode() {
   if (!InstallAttributes::IsInitialized()) {
@@ -35,6 +41,26 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
 
   // Demo login controller prefs:
   registry->RegisterStringPref(prefs::kDemoAccountGaiaId, std::string());
+  registry->RegisterStringPref(prefs::kDemoModeSessionIdentifier,
+                               std::string());
+}
+
+void SetForceEnableDemoAccountSignIn(bool force_enabled) {
+  g_force_enable_demo_account_sign_in = force_enabled;
+}
+
+bool IsDemoAccountSignInEnabled() {
+  return IsDeviceInDemoMode() && (features::IsDemoModeSignInEnabled() ||
+                                  g_force_enable_demo_account_sign_in);
+}
+
+void SetDoNothingWhenPowerIdle() {
+  chromeos::PowerPolicyController::Get()
+      ->SetShouldDoNothingWhenIdleInDemoMode();
+}
+
+bool ForceSessionLengthCountFromSessionStarts() {
+  return IsDemoAccountSignInEnabled();
 }
 
 }  // namespace ash::demo_mode

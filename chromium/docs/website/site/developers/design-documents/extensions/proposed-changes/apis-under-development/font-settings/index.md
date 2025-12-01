@@ -37,7 +37,7 @@ Chrome UI simple.
 Specifically, Chrome/WebKit recently added per-script font settings, so e.g.,
 the "sans-serif" font setting for Simplified Chinese script can be different
 than the one for Traditional Chinese, or Japanese, etc. We want users to have
-access to these preferences. This is [crbug.com/2685](http://crbug.com/2685).
+access to these preferences. This is [crbug.com/2685](https://crbug.com/2685).
 
 Furthermore, there are other font settings not currently exposed in the UI, such
 as for fantasy and cursive fonts. This API would allow extensions for those
@@ -94,7 +94,7 @@ using your API that would not be reversed when that consumer is removed from the
 system?
 
 No. It just uses the standard [extension-controlled
-preferences](http://www.chromium.org/developers/design-documents/preferences#TOC-Extension-Controlled-Preferences)
+preferences](/developers/design-documents/preferences#TOC-Extension-Controlled-Preferences)
 feature which handles cleanup when the extension is uninstalled.
 
 How would you implement your desired features if this API didn't exist?

@@ -15,15 +15,17 @@
 import {
   createQueryCounterTrack,
   SqlDataSource,
-} from '../../public/lib/tracks/query_counter_track';
+} from '../../components/tracks/query_counter_track';
 import {PerfettoPlugin} from '../../public/plugin';
-import {
-  getOrCreateGroupForProcess,
-  getOrCreateGroupForThread,
-} from '../../public/standard_groups';
 import {Trace} from '../../public/trace';
+import {COUNTER_TRACK_KIND, SLICE_TRACK_KIND} from '../../public/track_kinds';
 import {TrackNode} from '../../public/workspace';
-import {NUM_NULL} from '../../trace_processor/query_result';
+import {NUM, NUM_NULL, STR} from '../../trace_processor/query_result';
+import ProcessThreadGroupsPlugin from '../dev.perfetto.ProcessThreadGroups';
+import StandardGroupsPlugin from '../dev.perfetto.StandardGroups';
+import TraceProcessorTrackPlugin from '../dev.perfetto.TraceProcessorTrack';
+import {TraceProcessorCounterTrack} from '../dev.perfetto.TraceProcessorTrack/trace_processor_counter_track';
+import {createTraceProcessorSliceTrack} from '../dev.perfetto.TraceProcessorTrack/trace_processor_slice_track';
 
 async function registerAllocsTrack(
   ctx: Trace,
@@ -44,6 +46,12 @@ async function registerAllocsTrack(
 
 export default class implements PerfettoPlugin {
   static readonly id = 'dev.perfetto.AndroidDmabuf';
+  static readonly dependencies = [
+    ProcessThreadGroupsPlugin,
+    StandardGroupsPlugin,
+    TraceProcessorTrackPlugin,
+  ];
+
   async onTraceLoad(ctx: Trace): Promise<void> {
     const e = ctx.engine;
     await e.query(`INCLUDE PERFETTO MODULE android.memory.dmabuf`);
@@ -66,9 +74,10 @@ export default class implements PerfettoPlugin {
                  WHERE upid = ${it.upid}`,
         };
         await registerAllocsTrack(ctx, uri, config);
-        getOrCreateGroupForProcess(ctx.workspace, it.upid).addChildInOrder(
-          new TrackNode({uri, title: 'dmabuf allocs'}),
-        );
+        ctx.plugins
+          .getPlugin(ProcessThreadGroupsPlugin)
+          .getGroupForProcess(it.upid)
+          ?.addChildInOrder(new TrackNode({uri, title: 'dmabuf allocs'}));
       } else if (it.utid != null) {
         const uri = `/android_process_dmabuf_utid_${it.utid}`;
         const config: SqlDataSource = {
@@ -76,10 +85,79 @@ export default class implements PerfettoPlugin {
                  WHERE utid = ${it.utid}`,
         };
         await registerAllocsTrack(ctx, uri, config);
-        getOrCreateGroupForThread(ctx.workspace, it.utid).addChildInOrder(
-          new TrackNode({uri, title: 'dmabuf allocs'}),
-        );
+        ctx.plugins
+          .getPlugin(ProcessThreadGroupsPlugin)
+          .getGroupForThread(it.utid)
+          ?.addChildInOrder(new TrackNode({uri, title: 'dmabuf allocs'}));
       }
     }
+    const memoryGroupFn = () => {
+      return ctx.plugins
+        .getPlugin(StandardGroupsPlugin)
+        .getOrCreateStandardGroup(ctx.workspace, 'MEMORY');
+    };
+    const node = await addGlobalCounter(ctx, memoryGroupFn);
+    await addGlobalAllocs(ctx, () => {
+      return node ?? memoryGroupFn();
+    });
   }
+}
+
+async function addGlobalCounter(ctx: Trace, parent: () => TrackNode) {
+  const track = await ctx.engine.query(`
+    select id, name
+    from track
+    where type = 'android_dma_heap'
+  `);
+  const it = track.maybeFirstRow({id: NUM, name: STR});
+  if (!it) {
+    return undefined;
+  }
+  const {id, name: title} = it;
+  const uri = `/android_dmabuf_counter`;
+  ctx.tracks.registerTrack({
+    uri,
+    title,
+    tags: {
+      kind: COUNTER_TRACK_KIND,
+      trackIds: [id],
+    },
+    track: new TraceProcessorCounterTrack(ctx, uri, {}, id, title),
+  });
+  const node = new TrackNode({
+    uri,
+    title,
+  });
+  parent().addChildInOrder(node);
+  return node;
+}
+
+async function addGlobalAllocs(ctx: Trace, parent: () => TrackNode) {
+  const track = await ctx.engine.query(`
+    select name, group_concat(id) as trackIds
+    from track
+    where type = 'android_dma_allocations'
+    group by name
+  `);
+  const it = track.maybeFirstRow({trackIds: STR, name: STR});
+  if (!it) {
+    return undefined;
+  }
+  const {trackIds, name: title} = it;
+  const uri = `/android_dmabuf_allocs`;
+  const ids = trackIds.split(',').map((x) => Number(x));
+  ctx.tracks.registerTrack({
+    uri,
+    title,
+    tags: {
+      kind: SLICE_TRACK_KIND,
+      trackIds: ids,
+    },
+    track: createTraceProcessorSliceTrack(ctx, uri, undefined, ids),
+  });
+  const node = new TrackNode({
+    uri,
+    title,
+  });
+  parent().addChildInOrder(node);
 }

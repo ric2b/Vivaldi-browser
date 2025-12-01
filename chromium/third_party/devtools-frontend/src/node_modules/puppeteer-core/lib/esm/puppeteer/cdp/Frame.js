@@ -97,7 +97,7 @@ let CdpFrame = (() => {
                 [MAIN_WORLD]: new IsolatedWorld(this, this._frameManager.timeoutSettings),
                 [PUPPETEER_WORLD]: new IsolatedWorld(this, this._frameManager.timeoutSettings),
             };
-            this.accessibility = new Accessibility(this.worlds[MAIN_WORLD]);
+            this.accessibility = new Accessibility(this.worlds[MAIN_WORLD], frameId);
             this.on(FrameEvent.FrameSwappedByActivation, () => {
                 // Emulate loading process for swapped frames.
                 this._onLoadingStarted();
@@ -249,10 +249,8 @@ let CdpFrame = (() => {
             return this._frameManager._deviceRequestPromptManager(this.#client);
         }
         async addPreloadScript(preloadScript) {
-            // TODO: this might be not correct and we might be adding a preload
-            // script multiple times to the nested frames.
-            if (this.#client === this._frameManager.client &&
-                this !== this._frameManager.mainFrame()) {
+            const parentFrame = this.parentFrame();
+            if (parentFrame && this.#client === parentFrame.client) {
                 return;
             }
             if (preloadScript.getIdForFrame(this)) {
@@ -330,6 +328,18 @@ let CdpFrame = (() => {
         }
         exposeFunction() {
             throw new UnsupportedOperation();
+        }
+        async frameElement() {
+            const parent = this.parentFrame();
+            if (!parent) {
+                return null;
+            }
+            const { backendNodeId } = await parent.client.send('DOM.getFrameOwner', {
+                frameId: this._id,
+            });
+            return (await parent
+                .mainRealm()
+                .adoptBackendNode(backendNodeId));
         }
     };
 })();

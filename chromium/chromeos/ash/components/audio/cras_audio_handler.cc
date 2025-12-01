@@ -21,7 +21,6 @@
 #include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
@@ -688,6 +687,12 @@ void CrasAudioHandler::RefreshVoiceIsolationState() {
   CrasAudioClient::Get()->SetVoiceIsolationUIEnabled(GetVoiceIsolationState());
 }
 
+void CrasAudioHandler::RecordVoiceIsolationEnabledChangeSource(
+    AudioSettingsChangeSource source) {
+  base::UmaHistogramEnumeration(kVoiceIsolationEnabledChangeSourceHistogramName,
+                                source);
+}
+
 uint32_t CrasAudioHandler::GetVoiceIsolationPreferredEffect() const {
   return audio_pref_handler_->GetVoiceIsolationPreferredEffect();
 }
@@ -695,6 +700,12 @@ uint32_t CrasAudioHandler::GetVoiceIsolationPreferredEffect() const {
 void CrasAudioHandler::RefreshVoiceIsolationPreferredEffect() {
   CrasAudioClient::Get()->SetVoiceIsolationUIPreferredEffect(
       GetVoiceIsolationPreferredEffect());
+}
+
+void CrasAudioHandler::RecordVoiceIsolationPreferredEffectChange(
+    audio_config::mojom::AudioEffectType preferred_effect) {
+  base::UmaHistogramEnumeration(
+      kVoiceIsolationPreferredEffectChangeHistogramName, preferred_effect);
 }
 
 bool CrasAudioHandler::IsNoiseCancellationSupportedForDevice(
@@ -1775,6 +1786,11 @@ void CrasAudioHandler::OnAudioPolicyPrefChanged() {
   ApplyAudioPolicy();
 }
 
+void CrasAudioHandler::OnVoiceIsolationPrefChanged() {
+  RefreshVoiceIsolationState();
+  RefreshVoiceIsolationPreferredEffect();
+}
+
 const AudioDevice* CrasAudioHandler::GetDeviceFromId(uint64_t device_id) const {
   AudioDeviceMap::const_iterator it = audio_devices_.find(device_id);
   if (it == audio_devices_.end()) {
@@ -2580,8 +2596,8 @@ void CrasAudioHandler::SwitchToTopPriorityDevice(
   // When the audio selection improvement flag is on, no user priority will be
   // maintained. Use built-in priority rather than user priority.
   AudioDevice top_device = features::IsAudioSelectionImprovementEnabled()
-                               ? base::ranges::max(devices, LessBuiltInPriority)
-                               : base::ranges::max(devices, LessUserPriority);
+                               ? std::ranges::max(devices, LessBuiltInPriority)
+                               : std::ranges::max(devices, LessUserPriority);
   if (!top_device.is_for_simple_usage()) {
     return;
   }

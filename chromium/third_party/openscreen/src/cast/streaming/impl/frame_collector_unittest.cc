@@ -21,7 +21,7 @@ using testing::ElementsAreArray;
 namespace openscreen::cast {
 namespace {
 
-const FrameId kSomeFrameId = FrameId::first() + 39;
+constexpr FrameId kSomeFrameId = FrameId(39);
 constexpr RtpTimeTicks kSomeRtpTimestamp =
     RtpTimeTicks() + RtpTimeDelta::FromTicks(90000);
 

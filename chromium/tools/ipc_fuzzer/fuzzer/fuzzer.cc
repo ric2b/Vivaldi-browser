@@ -536,7 +536,7 @@ struct FuzzTraits<base::Value> {
           size_t bin_length = RandInRange(sizeof(tmp));
           fuzzer->FuzzData(tmp, bin_length);
           random_value =
-              base::Value(base::as_bytes(base::make_span(tmp, bin_length)));
+              base::Value(base::as_bytes(base::span(tmp, bin_length)));
           break;
         }
         case base::Value::Type::STRING: {
@@ -758,12 +758,18 @@ struct FuzzTraits<gfx::GpuMemoryBufferHandle> {
     int type;
     if (!FuzzParam(&type, fuzzer))
       return false;
+    p->type = static_cast<gfx::GpuMemoryBufferType>(type);
     if (!FuzzParam(&p->offset, fuzzer))
       return false;
     if (!FuzzParam(&p->stride, fuzzer))
       return false;
-    if (!FuzzParam(&p->region, fuzzer))
+    // This reduces fuzzing coverage somewhat, but the UnsafeSharedMemoryRegion
+    // can only be set for GpuMemoryBufferHandle's of the correct type.
+    if ((p->type == gfx::SHARED_MEMORY_BUFFER ||
+         p->type == gfx::DXGI_SHARED_HANDLE) &&
+        !FuzzParam(&p->region(), fuzzer)) {
       return false;
+    }
     p->type = static_cast<gfx::GpuMemoryBufferType>(type);
     return true;
   }

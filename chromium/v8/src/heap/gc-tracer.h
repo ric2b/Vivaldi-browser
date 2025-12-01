@@ -15,6 +15,7 @@
 #include "src/heap/base/bytes.h"
 #include "src/init/heap-symbols.h"
 #include "src/logging/counters.h"
+#include "src/tracing/trace-event.h"
 #include "testing/gtest/include/gtest/gtest_prod.h"  // nogncheck
 
 namespace v8 {
@@ -354,34 +355,35 @@ class V8_EXPORT_PRIVATE GCTracer {
   double IncrementalMarkingSpeedInBytesPerMillisecond() const;
 
   // Compute the average embedder speed in bytes/millisecond.
-  // Returns a conservative value if no events have been recorded.
-  double EmbedderSpeedInBytesPerMillisecond() const;
+  // Returns nullopt if no events have been recorded.
+  std::optional<double> EmbedderSpeedInBytesPerMillisecond() const;
 
   // Average estimaged young generation speed in bytes/millisecond. This factors
   // in concurrency and assumes that the level of concurrency provided by the
   // embedder is stable. E.g., receiving lower concurrency than previously
   // recorded events will yield in lower current speed.
   //
-  // Returns 0 if no events have been recorded.
-  double YoungGenerationSpeedInBytesPerMillisecond(
+  // Returns nullopt if no events have been recorded.
+  std::optional<double> YoungGenerationSpeedInBytesPerMillisecond(
       YoungGenerationSpeedMode mode) const;
 
   // Compute the average compaction speed in bytes/millisecond.
-  // Returns 0 if not enough events have been recorded.
-  double CompactionSpeedInBytesPerMillisecond() const;
+  // Returns nullopt if not enough events have been recorded.
+  std::optional<double> CompactionSpeedInBytesPerMillisecond() const;
 
   // Compute the average mark-sweep speed in bytes/millisecond.
-  // Returns 0 if no events have been recorded.
-  double MarkCompactSpeedInBytesPerMillisecond() const;
+  // Returns nullopt if no events have been recorded.
+  std::optional<double> MarkCompactSpeedInBytesPerMillisecond() const;
 
   // Compute the average incremental mark-sweep finalize speed in
   // bytes/millisecond.
-  // Returns 0 if no events have been recorded.
-  double FinalIncrementalMarkCompactSpeedInBytesPerMillisecond() const;
+  // Returns nullopt if no events have been recorded.
+  std::optional<double> FinalIncrementalMarkCompactSpeedInBytesPerMillisecond()
+      const;
 
   // Compute the overall old generation mark compact speed including incremental
   // steps and the final mark-compact step.
-  double OldGenerationSpeedInBytesPerMillisecond();
+  std::optional<double> OldGenerationSpeedInBytesPerMillisecond();
 
   // Allocation throughput in the new space in bytes/millisecond.
   // Returns 0 if no allocation events have been recorded.
@@ -430,6 +432,8 @@ class V8_EXPORT_PRIVATE GCTracer {
   V8_INLINE void AddScopeSample(Scope::ScopeId id, base::TimeDelta duration);
 
   void RecordGCPhasesHistograms(RecordGCPhasesInfo::Mode mode);
+
+  void RecordGCSizeCounters() const;
 
   void RecordEmbedderMarkingSpeed(size_t bytes, base::TimeDelta duration);
 
@@ -532,7 +536,7 @@ class V8_EXPORT_PRIVATE GCTracer {
   size_t old_generation_allocation_counter_bytes_ = 0;
   size_t embedder_allocation_counter_bytes_ = 0;
 
-  double combined_mark_compact_speed_cache_ = 0.0;
+  std::optional<double> combined_mark_compact_speed_cache_;
 
   // Used for computing average mutator utilization.
   double average_mutator_duration_ = 0.0;
@@ -590,8 +594,12 @@ class V8_EXPORT_PRIVATE GCTracer {
   v8::metrics::GarbageCollectionFullMainThreadBatchedIncrementalSweep
       incremental_sweep_batched_events_;
 
-  mutable base::Mutex background_scopes_mutex_;
+  mutable base::SpinningMutex background_scopes_mutex_;
   base::TimeDelta background_scopes_[Scope::NUMBER_OF_SCOPES];
+
+#if defined(V8_USE_PERFETTO)
+  perfetto::ThreadTrack parent_track_;
+#endif
 
   FRIEND_TEST(GCTracerTest, AllocationThroughput);
   FRIEND_TEST(GCTracerTest, BackgroundScavengerScope);

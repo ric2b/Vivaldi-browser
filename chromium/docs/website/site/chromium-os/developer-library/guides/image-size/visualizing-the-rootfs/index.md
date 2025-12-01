@@ -20,7 +20,7 @@ In order to use, you need to have:
 To use:
 
 1.  mount the image onto a directory -- you can do this easily with
-            [mount_gpt_image.sh](/chromium-os/how-tos-and-troubleshooting/helper-scripts#TOC-mount_gpt_image.sh)
+            [mount_gpt_image.sh](/chromium-os/developer-library/reference/tools/helper-scripts#TOC-mount_gpt_image.sh)
             (in `~/src/scripts`). You should use the `--safe` option to ensure
             you do not make accidental changes to the Root FS. By default it
             will mount the rootfs onto `/tmp/m`. You can use the `--from=<path

@@ -1,10 +1,10 @@
 #!/usr/bin/python3 -i
 #
-# Copyright (c) 2015-2024 The Khronos Group Inc.
-# Copyright (c) 2015-2024 Valve Corporation
-# Copyright (c) 2015-2024 LunarG, Inc.
-# Copyright (c) 2015-2024 Google Inc.
-# Copyright (c) 2023-2024 RasterGrid Kft.
+# Copyright (c) 2015-2025 The Khronos Group Inc.
+# Copyright (c) 2015-2025 Valve Corporation
+# Copyright (c) 2015-2025 LunarG, Inc.
+# Copyright (c) 2015-2025 Google Inc.
+# Copyright (c) 2023-2025 RasterGrid Kft.
 #
 # SPDX-License-Identifier: Apache-2.0
 
@@ -139,10 +139,10 @@ class SafeStructOutputGenerator(BaseGenerator):
 
             /***************************************************************************
             *
-            * Copyright (c) 2015-2024 The Khronos Group Inc.
-            * Copyright (c) 2015-2024 Valve Corporation
-            * Copyright (c) 2015-2024 LunarG, Inc.
-            * Copyright (c) 2015-2024 Google Inc.
+            * Copyright (c) 2015-2025 The Khronos Group Inc.
+            * Copyright (c) 2015-2025 Valve Corporation
+            * Copyright (c) 2015-2025 LunarG, Inc.
+            * Copyright (c) 2015-2025 Google Inc.
             *
             * SPDX-License-Identifier: Apache-2.0
             *
@@ -400,6 +400,7 @@ void FreePnextChain(const void *pNext) {
             #include <vulkan/utility/vk_safe_struct.hpp>
             #include <vulkan/utility/vk_struct_helper.hpp>
 
+            #include <cstddef>
             #include <cstring>
 
             namespace vku {
@@ -487,9 +488,9 @@ void FreePnextChain(const void *pNext) {
                         }
                     }
                 ''',
-                # TODO: VkPushDescriptorSetWithTemplateInfoKHR needs a custom constructor to handle pData
-                # https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/7169
-                'VkPushDescriptorSetWithTemplateInfoKHR': '''
+                # TODO: VkPushDescriptorSetWithTemplateInfo needs a custom constructor to handle pData
+                # https://github.com/KhronosGroup/Vulkan-Utility-Libraries/issues/193
+                'VkPushDescriptorSetWithTemplateInfo': '''
                 ''',
             }
 
@@ -725,21 +726,13 @@ void FreePnextChain(const void *pNext) {
 
             safe_name = self.convertName(struct.name)
             if struct.union:
-                if struct.name in self.union_of_pointers:
-                    default_init_list = ' type_at_end {0},'
-                    out.append(f'''
-                        {safe_name}::{safe_name}(const {struct.name}* in_struct{self.custom_construct_params.get(struct.name, '')}, [[maybe_unused]] PNextCopyState* copy_state{copy_pnext_param})
-                        {{
-                        {copy_pnext + construct_txt}}}
-                        ''')
-                else:
-                    # Unions don't allow multiple members in the initialization list, so just call initialize
-                    out.append(f'''
-                        {safe_name}::{safe_name}(const {struct.name}* in_struct{self.custom_construct_params.get(struct.name, '')}, PNextCopyState*)
-                        {{
-                            initialize(in_struct);
-                        }}
-                        ''')
+                # Unions don't allow multiple members in the initialization list, so just call initialize
+                out.append(f'''
+                    {safe_name}::{safe_name}(const {struct.name}* in_struct{self.custom_construct_params.get(struct.name, '')}, PNextCopyState*)
+                    {{
+                        initialize(in_struct);
+                    }}
+                    ''')
             else:
                 out.append(f'''
                     {safe_name}::{safe_name}(const {struct.name}* in_struct{self.custom_construct_params.get(struct.name, '')}, [[maybe_unused]] PNextCopyState* copy_state{copy_pnext_param}) :{init_list}
@@ -747,7 +740,11 @@ void FreePnextChain(const void *pNext) {
                     {copy_pnext_if + construct_txt}}}
                     ''')
             if '' != default_init_list:
+                # trim trailing comma from initializer list
                 default_init_list = f' :{default_init_list[:-1]}'
+                # truncate union initializer list to first element
+                if struct.union:
+                    default_init_list = default_init_list.split(',')[0]
             default_init_body = '\n' + custom_defeault_construct_txt[struct.name] if struct.name in custom_defeault_construct_txt else ''
             out.append(f'''
                 {safe_name}::{safe_name}(){default_init_list}

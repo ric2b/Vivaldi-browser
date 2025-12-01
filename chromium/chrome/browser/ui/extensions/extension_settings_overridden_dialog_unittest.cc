@@ -54,8 +54,9 @@ class ExtensionSettingsOverriddenDialogUnitTest
       bool include_extra_perms = true) {
     extensions::ExtensionBuilder builder(name);
     builder.SetLocation(location);
-    if (include_extra_perms)
+    if (include_extra_perms) {
       builder.AddAPIPermission("storage");
+    }
     scoped_refptr<const extensions::Extension> extension = builder.Build();
     service()->AddExtension(extension.get());
     return extension.get();
@@ -126,8 +127,9 @@ TEST_F(ExtensionSettingsOverriddenDialogUnitTest,
                                       DialogResult::kChangeSettingsBack, 1);
 
   EXPECT_TRUE(registry()->disabled_extensions().Contains(extension->id()));
-  EXPECT_EQ(extensions::disable_reason::DISABLE_USER_ACTION,
-            GetExtensionPrefs()->GetDisableReasons(extension->id()));
+  EXPECT_THAT(GetExtensionPrefs()->GetDisableReasons(extension->id()),
+              testing::UnorderedElementsAre(
+                  extensions::disable_reason::DISABLE_USER_ACTION));
   EXPECT_FALSE(IsExtensionAcknowledged(extension->id()));
 }
 

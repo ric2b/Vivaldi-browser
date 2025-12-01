@@ -16,7 +16,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/notreached.h"
 #include "base/observer_list.h"
-#include "base/ranges/algorithm.h"
 #include "build/build_config.h"
 #include "components/affiliations/core/browser/affiliation_utils.h"
 #include "components/autofill/core/common/save_password_progress_logger.h"
@@ -57,9 +56,9 @@ std::vector<std::unique_ptr<PasswordForm>> ConvertToUniquePtr(
 template <typename Form>
 base::span<Form> NonFederatedSameSchemeMatches(base::span<Form> non_federated,
                                                PasswordForm::Scheme scheme) {
-  auto same_scheme_count = base::ranges::count_if(
-      non_federated, [scheme](auto& form) { return form.scheme == scheme; });
-  return non_federated.subspan(0, same_scheme_count);
+  const auto same_scheme_count = static_cast<size_t>(
+      std::ranges::count(non_federated, scheme, &Form::scheme));
+  return non_federated.first(same_scheme_count);
 }
 }  // namespace
 
@@ -91,7 +90,7 @@ void FormFetcherImpl::Fetch() {
   std::unique_ptr<BrowserSavePasswordProgressLogger> logger;
   if (password_manager_util::IsLoggingActive(client_)) {
     logger = std::make_unique<BrowserSavePasswordProgressLogger>(
-        client_->GetLogManager());
+        client_->GetCurrentLogManager());
     logger->LogMessage(Logger::STRING_FETCH_METHOD);
     logger->LogNumber(Logger::STRING_FORM_FETCHER_STATE,
                       static_cast<int>(state_));
@@ -175,9 +174,7 @@ base::span<const PasswordForm> FormFetcherImpl::GetFederatedMatches() const {
 }
 
 bool FormFetcherImpl::IsBlocklisted() const {
-  if (client_->GetPasswordFeatureManager()->IsOptedInForAccountStorage() &&
-      client_->GetPasswordFeatureManager()->GetDefaultPasswordStore() ==
-          PasswordForm::Store::kAccountStore) {
+  if (client_->GetPasswordFeatureManager()->IsAccountStorageEnabled()) {
     return is_blocklisted_in_account_store_;
   }
   return is_blocklisted_in_profile_store_;
@@ -444,7 +441,7 @@ void FormFetcherImpl::AggregatePasswordStoreResults(
   }
 
   if (password_manager_util::IsLoggingActive(client_)) {
-    BrowserSavePasswordProgressLogger logger(client_->GetLogManager());
+    BrowserSavePasswordProgressLogger logger(client_->GetCurrentLogManager());
     logger.LogMessage(Logger::STRING_ON_GET_STORE_RESULTS_METHOD);
     logger.LogNumber(Logger::STRING_NUMBER_RESULTS, partial_results_.size());
   }

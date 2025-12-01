@@ -8,16 +8,13 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.Context;
-import android.os.Build;
-
-import androidx.annotation.RequiresApi;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.notifications.NotificationWrapperBuilderFactory;
 import org.chromium.chrome.browser.notifications.channels.ChromeChannelDefinitions;
-import org.chromium.components.browser_ui.notifications.NotificationManagerProxy;
 import org.chromium.components.browser_ui.notifications.NotificationManagerProxyImpl;
+import org.chromium.components.browser_ui.notifications.NotificationProxyUtils;
 import org.chromium.components.browser_ui.notifications.NotificationWrapperBuilder;
 import org.chromium.ui.accessibility.AccessibilityState;
 
@@ -26,7 +23,6 @@ public class TracingNotificationManager {
     private static final String TRACING_NOTIFICATION_TAG = "tracing_status";
     private static final int TRACING_NOTIFICATION_ID = 100;
 
-    private static NotificationManagerProxy sNotificationManagerOverride;
     private static NotificationWrapperBuilder sTracingActiveNotificationBuilder;
     private static int sTracingActiveNotificationBufferPercentage;
 
@@ -46,45 +42,22 @@ public class TracingNotificationManager {
 
     // TODO(eseckler): Consider recording UMAs, see e.g. IncognitoNotificationManager.
 
-    private static NotificationManagerProxy getNotificationManager(Context context) {
-        return sNotificationManagerOverride != null
-                ? sNotificationManagerOverride
-                : new NotificationManagerProxyImpl(context);
-    }
-
     /**
-     * Instruct the TracingNotificationManager to use a different NotificationManager during a test.
-     *
-     * @param notificationManager the manager to use instead.
-     */
-    public static void overrideNotificationManagerForTesting(
-            NotificationManagerProxy notificationManager) {
-        sNotificationManagerOverride = notificationManager;
-    }
-
-    /**
-     * @return whether notifications posted to the BROWSER notification channel are enabled by
-     * the user. True if the state can't be determined.
+     * @return whether notifications posted to the BROWSER notification channel are enabled by the
+     *     user. True if the state can't be determined.
      */
     public static boolean browserNotificationsEnabled() {
-        if (!getNotificationManager(ContextUtils.getApplicationContext())
-                .areNotificationsEnabled()) {
+        if (!NotificationProxyUtils.areNotificationsEnabled()) {
             return false;
         }
 
         // On Android O and above, the BROWSER channel may have independently been disabled, too.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            return notificationChannelEnabled(ChromeChannelDefinitions.ChannelId.BROWSER);
-        }
-
-        return true;
+        return notificationChannelEnabled(ChromeChannelDefinitions.ChannelId.BROWSER);
     }
 
-    @RequiresApi(Build.VERSION_CODES.O)
     private static boolean notificationChannelEnabled(String channelId) {
         NotificationChannel channel =
-                getNotificationManager(ContextUtils.getApplicationContext())
-                        .getNotificationChannel(channelId);
+                NotificationManagerProxyImpl.getInstance().getNotificationChannel(channelId);
         // Can't determine the state if the channel doesn't exist, assume notifications are enabled.
         if (channel == null) return true;
         return channel.getImportance() != NotificationManager.IMPORTANCE_NONE;
@@ -183,9 +156,8 @@ public class TracingNotificationManager {
 
     /** Dismiss any active tracing notification if there is one. */
     public static void dismissNotification() {
-        NotificationManagerProxy manager =
-                getNotificationManager(ContextUtils.getApplicationContext());
-        manager.cancel(TRACING_NOTIFICATION_TAG, TRACING_NOTIFICATION_ID);
+        NotificationManagerProxyImpl.getInstance()
+                .cancel(TRACING_NOTIFICATION_TAG, TRACING_NOTIFICATION_ID);
         sTracingActiveNotificationBuilder = null;
     }
 
@@ -199,8 +171,7 @@ public class TracingNotificationManager {
     }
 
     private static void showNotification(Notification notification) {
-        NotificationManagerProxy manager =
-                getNotificationManager(ContextUtils.getApplicationContext());
-        manager.notify(TRACING_NOTIFICATION_TAG, TRACING_NOTIFICATION_ID, notification);
+        NotificationManagerProxyImpl.getInstance()
+                .notify(TRACING_NOTIFICATION_TAG, TRACING_NOTIFICATION_ID, notification);
     }
 }

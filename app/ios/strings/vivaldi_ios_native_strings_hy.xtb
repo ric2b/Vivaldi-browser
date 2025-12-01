@@ -101,12 +101,12 @@
 <translation id="2884735088411646852">Դասավորում</translation>
 <translation id="2898963176829412617">Նոր պանակ…</translation>
 <translation id="2924890236896835588">Խմբի անուն</translation>
+<translation id="294138200684170250">Գովազդի ու հետևիչների արգելափակիչ և կայքերի կարգավորումներ</translation>
 <translation id="2961573414320947355">Ուզո՞ւմ եք բոլոր հղումները բացել Vivaldi-ում։ Դարձրեք այն հիմնական բրաուզերը։</translation>
 <translation id="3006429105107822794">Ձեզ պետք չի լինի հիշել այս գաղտնաբառը։ Այլ կպահպանվի Vivaldi-ի գաղտնաբառերի կառավարչում։</translation>
 <translation id="3018244467214569202">Հունարեն (<ph name="ORIGIN" />)</translation>
 <translation id="3039671569659952257">Ջնջել պանակը</translation>
 <translation id="3073196329485613487">Մուտք գործել հաշիվ</translation>
-<translation id="307859903981308731">Շարունակելով՝ Դուք համաձայնում եք Vivaldi-ի</translation>
 <translation id="3086746722712840547">նոթ</translation>
 <translation id="3087734570205094154">Ներքևում</translation>
 <translation id="3091563570137981919">Հետևիչների և գովազդի արգելափակում</translation>
@@ -123,6 +123,7 @@
 <translation id="3365991203476235715">Անգլերեն (<ph name="ORIGIN" />)</translation>
 <translation id="3368960138304620657">Լիտվերեն (<ph name="ORIGIN" />)</translation>
 <translation id="3377025655491224618">Գաղտնի ներդիր</translation>
+<translation id="3394474617110693560">Կատեգորիաներ</translation>
 <translation id="3435896845095436175">Միացնել</translation>
 <translation id="3438160227308459316">Ռումիներեն (<ph name="ORIGIN" />)</translation>
 <translation id="3451162533623145500">Ստեղծեք հաշիվ</translation>
@@ -183,7 +184,6 @@
 <translation id="4461652107878667683">Առաջ նավիգացիա</translation>
 <translation id="4474581062946673155">Դուք այս պահին չունեք սինքրոնացված ներդիրներ այլ սարքերից։</translation>
 <translation id="4488900295693536220">Կիրառելի է, երբ հասցեի երիզը ներքևում է, հեշտացնում է լավագույն առաջարկներին հասնելը։</translation>
-<translation id="4493850495402472953">և</translation>
 <translation id="4497115807425788318">Վայր</translation>
 <translation id="4507213865286211606">Չափի դիտում</translation>
 <translation id="4515084385531683114">Գաղտնաբառերն այս սարքում պահպանվում են գաղտնաբառերի կառավարչում։</translation>
@@ -263,6 +263,7 @@
 <translation id="5871497086027727873">1 նոթ տեղափոխված է</translation>
 <translation id="5898502570200301364">Դուք կարող եք Vivaldi-ի գաղտնաբառերի կառավարչում Ձեր պահպանած գաղտնաբառերն օգտագործել iPhone-ի այլ հավելվածներում։</translation>
 <translation id="5900160494089383343">Այս օգտվողի անունը հասանելի չէ։</translation>
+<translation id="591684450784861763">Ավելացնել էջը…</translation>
 <translation id="6005497458542935062">Պանակից դուրս հանել</translation>
 <translation id="6042308850641462728">Ավելին</translation>
 <translation id="6077943432358741146">Արագ կոճակ</translation>
@@ -270,6 +271,7 @@
 <translation id="6147094071357011481">Վերջերս փակված ներդիրները հասանելի չեն</translation>
 <translation id="6193995664633100765">Հնդկական (<ph name="ORIGIN" />)</translation>
 <translation id="6224086034182508647">Կայքերի տեսքի ընտրանքներ</translation>
+<translation id="6253990869902066991">Vivaldi-ն անսպասելիորեն էջերը կրկին բեռնում է</translation>
 <translation id="6365929278691047681">Գերմաներեն (<ph name="ORIGIN" />)</translation>
 <translation id="6406506848690869874">Սինքրոնացում</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> ընտրված</translation>
@@ -349,7 +351,9 @@
 <translation id="7850070199083838600">Ստեղծե՞լ նոր խումբ։</translation>
 <translation id="7914995060146784406">Խմբագրել նոթը</translation>
 <translation id="7925340978147141704">Ցույց տալ գաղտնաբառը</translation>
+<translation id="7930665886069596866">Ինչ-որ ֆունկցիա ճիշտ չի աշխատում</translation>
 <translation id="8008214489230610096">Հաստատեք վերականգնման էլ. փոստի հասցեն</translation>
+<translation id="8038592796033755028"><ph name="USERNAME" />-ի սարքերը</translation>
 <translation id="8046542428651654244">Թարմացնել մանրապատկերը</translation>
 <translation id="804786196054284061">Օգտագործման պայմաններին</translation>
 <translation id="8053851743673939284">Ֆրանսերեն (<ph name="ORIGIN" />)</translation>
@@ -374,11 +378,13 @@
 <translation id="8347535536909603600">Հեռացնել քուքիների զգուշացումները (<ph name="TYPE" />)</translation>
 <translation id="8359194106448244241">Այլ սարքերի ներդիրները տեսնելու համար, Դուք պետք է միացնեք սինքրոնացումը։</translation>
 <translation id="8366175803122817174">Բացել բոլոր նոթերի հասցեները</translation>
+<translation id="8395378633507873708">Հասցեի երիզ</translation>
 <translation id="839736845446313156">Գրանցվել</translation>
 <translation id="8414685983518053656">Նոթեր</translation>
 <translation id="8423076545503792640">Հարցումը ձախողվեց սխալի պատճառով։ Նորից փորձեք ավելի ուշ։</translation>
 <translation id="8428213095426709021">Կարգավորումներ</translation>
 <translation id="8458397775385147834">1 նոթ ջնջված է</translation>
+<translation id="8466547766474747336">Ինձ անհրաժեշտ ֆունկցիան բացակայում է</translation>
 <translation id="8500459200727969761">Վերականգնել ներկառուցված ցանկերը</translation>
 <translation id="8503813439785031346">Օգտվողի անուն</translation>
 <translation id="8515808232153642813">Վերծանել</translation>

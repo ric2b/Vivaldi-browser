@@ -14,10 +14,11 @@
   PrefService* _prefService;
 
   PrefBackedBoolean* _showFullAddressEnabled;
-  PrefBackedBoolean* _bookmarksMatchingEnabled;
-  PrefBackedBoolean* _bookmarksNicknameMatchingEnabled;
+  PrefBackedBoolean* _bookmarksBoostedEnabled;
+  PrefBackedBoolean* _bookmarkNicknamesEnabled;
   PrefBackedBoolean* _directMatchEnabled;
   PrefBackedBoolean* _directMatchPrioritizationEnabled;
+  PrefBackedBoolean* _showXForSuggestionsEnabled;
 }
 @end
 
@@ -36,19 +37,19 @@
     [_showFullAddressEnabled setObserver:self];
     [self booleanDidChange:_showFullAddressEnabled];
 
-    _bookmarksMatchingEnabled =
+    _bookmarksBoostedEnabled =
         [[PrefBackedBoolean alloc]
             initWithPrefService:originalPrefService
-                 prefName:vivaldiprefs::kAddressBarOmniboxShowBookmarks];
-    [_bookmarksMatchingEnabled setObserver:self];
-    [self booleanDidChange:_bookmarksMatchingEnabled];
+                 prefName:vivaldiprefs::kAddressBarOmniboxBookmarksBoosted];
+    [_bookmarksBoostedEnabled setObserver:self];
+    [self booleanDidChange:_bookmarksBoostedEnabled];
 
-    _bookmarksNicknameMatchingEnabled =
+    _bookmarkNicknamesEnabled =
         [[PrefBackedBoolean alloc]
            initWithPrefService:originalPrefService
               prefName:vivaldiprefs::kAddressBarOmniboxShowNicknames];
-    [_bookmarksNicknameMatchingEnabled setObserver:self];
-    [self booleanDidChange:_bookmarksNicknameMatchingEnabled];
+    [_bookmarkNicknamesEnabled setObserver:self];
+    [self booleanDidChange:_bookmarkNicknamesEnabled];
 
     _directMatchEnabled =
         [[PrefBackedBoolean alloc]
@@ -64,6 +65,12 @@
     [_directMatchPrioritizationEnabled setObserver:self];
     [self booleanDidChange:_directMatchPrioritizationEnabled];
 
+    _showXForSuggestionsEnabled =
+        [[PrefBackedBoolean alloc]
+           initWithPrefService:localPrefs
+              prefName:vivaldiprefs::kVivaldiShowXForSuggestionEnabled];
+    [_showXForSuggestionsEnabled setObserver:self];
+    [self booleanDidChange:_showXForSuggestionsEnabled];
   }
   return self;
 }
@@ -73,13 +80,13 @@
   [_showFullAddressEnabled setObserver:nil];
   _showFullAddressEnabled = nil;
 
-  [_bookmarksMatchingEnabled stop];
-  [_bookmarksMatchingEnabled setObserver:nil];
-  _bookmarksMatchingEnabled = nil;
+  [_bookmarksBoostedEnabled stop];
+  [_bookmarksBoostedEnabled setObserver:nil];
+  _bookmarksBoostedEnabled = nil;
 
-  [_bookmarksNicknameMatchingEnabled stop];
-  [_bookmarksNicknameMatchingEnabled setObserver:nil];
-  _bookmarksNicknameMatchingEnabled = nil;
+  [_bookmarkNicknamesEnabled stop];
+  [_bookmarkNicknamesEnabled setObserver:nil];
+  _bookmarkNicknamesEnabled = nil;
 
   [_directMatchEnabled stop];
   [_directMatchEnabled setObserver:nil];
@@ -88,6 +95,10 @@
   [_directMatchPrioritizationEnabled stop];
   [_directMatchPrioritizationEnabled setObserver:nil];
   _directMatchPrioritizationEnabled = nil;
+
+  [_showXForSuggestionsEnabled stop];
+  [_showXForSuggestionsEnabled setObserver:nil];
+  _showXForSuggestionsEnabled = nil;
 
   _prefService = nil;
   _consumer = nil;
@@ -101,18 +112,18 @@
   return [_showFullAddressEnabled value];
 }
 
-- (BOOL)isBookmarksMatchingEnabled {
-  if (!_bookmarksMatchingEnabled) {
+- (BOOL)isBookmarksBoostedEnabled {
+  if (!_bookmarksBoostedEnabled) {
     return NO;
   }
-  return [_bookmarksMatchingEnabled value];
+  return [_bookmarksBoostedEnabled value];
 }
 
-- (BOOL)isBookmarksNicknameMatchingEnabled {
-  if (!_bookmarksNicknameMatchingEnabled) {
+- (BOOL)isBookmarkNicknamesEnabled {
+  if (!_bookmarkNicknamesEnabled) {
     return NO;
   }
-  return [_bookmarksNicknameMatchingEnabled value];
+  return [_bookmarkNicknamesEnabled value];
 }
 
 - (BOOL)isDirectMatchEnabled {
@@ -129,19 +140,29 @@
   return [_directMatchPrioritizationEnabled value];
 }
 
+- (BOOL)isShowXForSuggestionsEnabled {
+  if (!_showXForSuggestionsEnabled) {
+    return NO;
+  }
+  return [_showXForSuggestionsEnabled value];
+}
+
 #pragma mark - Properties
 
 - (void)setConsumer:(id<VivaldiAddressBarSettingsConsumer>)consumer {
   _consumer = consumer;
   [self.consumer setPreferenceForShowFullAddress:[self showFullAddressEnabled]];
-  [self.consumer setPreferenceForEnableBookmarksMatching:
-      [self isBookmarksMatchingEnabled]];
-  [self.consumer setPreferenceForEnableBookmarksNicknameMatching:
-      [self isBookmarksNicknameMatchingEnabled]];
+  [self.consumer setPreferenceForEnableBookmarksBoosted:
+      [self isBookmarksBoostedEnabled]];
+  [self.consumer setPreferenceForEnableBookmarkNicknames:
+      [self isBookmarkNicknamesEnabled]];
   [self.consumer setPreferenceForEnableDirectMatch:[self isDirectMatchEnabled]];
   [self.consumer
       setPreferenceForEnableDirectMatchPrioritization:
           [self isDirectMatchPrioritizationEnabled]];
+  [self.consumer
+      setPreferenceForShowXForSugggestions:
+          [self isShowXForSuggestionsEnabled]];
 }
 
 #pragma mark - VivaldiAddressBarSettingsConsumer
@@ -150,14 +171,14 @@
     [_showFullAddressEnabled setValue:show];
 }
 
-- (void)setPreferenceForEnableBookmarksMatching:(BOOL)enableMatching {
-  if (enableMatching != [self isBookmarksMatchingEnabled])
-    [_bookmarksMatchingEnabled setValue:enableMatching];
+- (void)setPreferenceForEnableBookmarksBoosted:(BOOL)enableMatching {
+  if (enableMatching != [self isBookmarksBoostedEnabled])
+    [_bookmarksBoostedEnabled setValue:enableMatching];
 }
 
-- (void)setPreferenceForEnableBookmarksNicknameMatching:(BOOL)enableMatching {
-  if (enableMatching != [self isBookmarksNicknameMatchingEnabled])
-    [_bookmarksNicknameMatchingEnabled setValue:enableMatching];
+- (void)setPreferenceForEnableBookmarkNicknames:(BOOL)enableMatching {
+  if (enableMatching != [self isBookmarkNicknamesEnabled])
+    [_bookmarkNicknamesEnabled setValue:enableMatching];
 }
 
 - (void)setPreferenceForEnableDirectMatch:(BOOL)enable {
@@ -170,16 +191,21 @@
     [_directMatchPrioritizationEnabled setValue:enable];
 }
 
+- (void)setPreferenceForShowXForSugggestions:(BOOL)show {
+  if (show != [self isShowXForSuggestionsEnabled])
+    [_showXForSuggestionsEnabled setValue:show];
+}
+
 #pragma mark - BooleanObserver
 
 - (void)booleanDidChange:(id<ObservableBoolean>)observableBoolean {
   if (observableBoolean == _showFullAddressEnabled) {
     [self.consumer setPreferenceForShowFullAddress:[observableBoolean value]];
-  } else if (observableBoolean == _bookmarksMatchingEnabled) {
+  } else if (observableBoolean == _bookmarksBoostedEnabled) {
     [self.consumer
-        setPreferenceForEnableBookmarksMatching:[observableBoolean value]];
-  } else if (observableBoolean == _bookmarksNicknameMatchingEnabled) {
-    [self.consumer setPreferenceForEnableBookmarksNicknameMatching:
+        setPreferenceForEnableBookmarksBoosted:[observableBoolean value]];
+  } else if (observableBoolean == _bookmarkNicknamesEnabled) {
+    [self.consumer setPreferenceForEnableBookmarkNicknames:
         [observableBoolean value]];
   } else if (observableBoolean == _directMatchEnabled) {
     [self.consumer setPreferenceForEnableDirectMatch:[observableBoolean value]];
@@ -187,6 +213,9 @@
     [self.consumer
         setPreferenceForEnableDirectMatchPrioritization:
             [observableBoolean value]];
+  } else if (observableBoolean == _showXForSuggestionsEnabled) {
+    [self.consumer
+        setPreferenceForShowXForSugggestions:[observableBoolean value]];
   }
 }
 

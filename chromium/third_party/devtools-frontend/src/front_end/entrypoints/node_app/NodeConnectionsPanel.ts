@@ -37,6 +37,8 @@ const UIStrings = {
 const str_ = i18n.i18n.registerUIStrings('entrypoints/node_app/NodeConnectionsPanel.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
+const nodejsIconUrl = new URL('../../Images/node-stack-icon.svg', import.meta.url).toString();
+
 export class NodeConnectionsPanel extends UI.Panel.Panel {
   #config!: Adb.Config;
   readonly #networkDiscoveryView: NodeConnectionsView;
@@ -47,8 +49,8 @@ export class NodeConnectionsPanel extends UI.Panel.Panel {
 
     const container = this.contentElement.createChild('div', 'node-panel-center');
 
-    const image = (container.createChild('img', 'node-panel-logo') as HTMLImageElement);
-    image.src = 'https://nodejs.org/static/images/logos/nodejs-new-pantone-black.svg';
+    const image = container.createChild('img', 'node-panel-logo');
+    image.src = nodejsIconUrl;
 
     Host.InspectorFrontendHost.InspectorFrontendHostInstance.events.addEventListener(
         Host.InspectorFrontendHostAPI.Events.DevicesDiscoveryConfigChanged, this.#devicesDiscoveryConfigChanged, this);
@@ -73,7 +75,7 @@ export class NodeConnectionsPanel extends UI.Panel.Panel {
   }
   override wasShown(): void {
     super.wasShown();
-    this.registerCSSFiles([nodeConnectionsPanelStyles]);
+    this.registerRequiredCSS(nodeConnectionsPanelStyles);
   }
 }
 
@@ -97,7 +99,7 @@ export class NodeConnectionsView extends UI.Widget.VBox implements UI.ListWidget
         i18n.i18n.getFormatLocalizedString(str_, UIStrings.specifyNetworkEndpointAnd, {PH1: documentationLink}));
 
     this.#list = new UI.ListWidget.ListWidget(this);
-
+    this.#list.registerRequiredCSS(nodeConnectionsPanelStyles);
     this.#list.element.classList.add('network-discovery-list');
     const placeholder = document.createElement('div');
     placeholder.classList.add('network-discovery-list-empty');
@@ -191,9 +193,5 @@ export class NodeConnectionsView extends UI.Widget.VBox implements UI.ListWidget
         errorMessage: undefined,
       };
     }
-  }
-  override wasShown(): void {
-    super.wasShown();
-    this.#list.registerCSSFiles([nodeConnectionsPanelStyles]);
   }
 }

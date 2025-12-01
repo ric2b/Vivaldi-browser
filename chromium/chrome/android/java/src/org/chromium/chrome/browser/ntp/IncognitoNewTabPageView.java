@@ -86,6 +86,7 @@ public class IncognitoNewTabPageView extends FrameLayout {
         // FOCUS_BEFORE_DESCENDANTS is needed to support keyboard shortcuts. Otherwise, pressing
         // any shortcut causes the UrlBar to be focused. See ViewRootImpl.leaveTouchMode().
         mScrollView.setDescendantFocusability(FOCUS_BEFORE_DESCENDANTS);
+        if (!ChromeApplicationImpl.isVivaldi()) { // Vivaldi Remove fading shadow
         mFadingShadowBottom = findViewById(R.id.shadow_bottom);
         mFadingShadowBottom.init(bgColor, FadingShadow.POSITION_BOTTOM);
         mScrollView.setOnScrollChangeListener(
@@ -97,6 +98,7 @@ public class IncognitoNewTabPageView extends FrameLayout {
                                 mScrollView.canScrollVertically(1) ? View.VISIBLE : View.GONE);
                     }
                 });
+        } // End Vivaldi
     }
 
     private void inflateConditionalLayouts() {

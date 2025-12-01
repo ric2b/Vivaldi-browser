@@ -70,7 +70,7 @@ however behind on shipping as CSS contain has yet to ship to beta.
 Owner(s):skobes, ymalik
 Score:1.00
 
-http://crbug.com/575 \[mid quarter\] On track, looking good. \[end of quarter\]
+https://crbug.com/575 \[mid quarter\] On track, looking good. \[end of quarter\]
 Enabled on trunk in time for the M49 branch.
 
 ### Intersection observer on trunk
@@ -208,7 +208,7 @@ documentation added as header comments to all key layout classes.
 Owner(s):wkorman
 Score:0.00
 
-http://crbug.com/535637 \[mid quarter\] Delayed to focus on paint performance.
+https://crbug.com/535637 \[mid quarter\] Delayed to focus on paint performance.
 At risk. \[end of quarter\] De-emphasized to focus on slimming paint which is
 higher performance. Will carry over to Q1.
 

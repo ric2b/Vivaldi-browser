@@ -24,6 +24,7 @@
 #include "chrome/browser/profiles/profile_manager_observer.h"
 #include "chrome/browser/profiles/profile_observer.h"
 #include "chrome/browser/safe_browsing/phishy_interaction_tracker.h"
+#include "chrome/browser/safe_browsing/safe_browsing_pref_change_handler.h"
 #include "chrome/browser/safe_browsing/services_delegate.h"
 #include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/content/browser/safe_browsing_service_interface.h"
@@ -140,6 +141,10 @@ class SafeBrowsingServiceImpl : public SafeBrowsingServiceInterface,
   virtual scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory(
       content::BrowserContext* browser_context);
 
+  // Returns the minimum allowed timestamp for referrer chains. Used by the
+  // URL lookup service.
+  base::Time GetMinAllowedTimestampForReferrerChains(Profile* profile);
+
   // Flushes above two interfaces to avoid races in tests.
   void FlushNetworkInterfaceForTesting(
       content::BrowserContext* browser_context);
@@ -158,7 +163,7 @@ class SafeBrowsingServiceImpl : public SafeBrowsingServiceInterface,
       content::BrowserContext* browser_context) override;
 
 #if BUILDFLAG(IS_ANDROID)
-  ReferringAppInfo GetReferringAppInfo(
+  internal::ReferringAppInfo GetReferringAppInfo(
       content::WebContents* web_contents) override;
 #endif
 
@@ -286,6 +291,22 @@ class SafeBrowsingServiceImpl : public SafeBrowsingServiceInterface,
   FRIEND_TEST_ALL_PREFIXES(
       SafeBrowsingServiceTest,
       SaveExtendedReportingPrefValueOnProfileAddedFeatureFlagDisabled);
+  FRIEND_TEST_ALL_PREFIXES(SafeBrowsingServiceTest,
+                           TestMinAllowedTimeForReferrerChains);
+  FRIEND_TEST_ALL_PREFIXES(
+      SafeBrowsingServiceTest,
+      TestMinAllowedTimeForReferrerChains_EsbEnabledOnStartup);
+  FRIEND_TEST_ALL_PREFIXES(
+      SafeBrowsingServiceTest,
+      TestMinAllowedTimeForReferrerChains_MbbEnabledOnStartup);
+  FRIEND_TEST_ALL_PREFIXES(
+      SafeBrowsingServiceTest,
+      TestMinAllowedTimeForReferrerChains_MultipleProfiles);
+  FRIEND_TEST_ALL_PREFIXES(SafeBrowsingServiceTest,
+                           EnhancedProtectionPrefChange_SingleProfile);
+  FRIEND_TEST_ALL_PREFIXES(
+      SafeBrowsingServiceTest,
+      EnhancedProtectionPrefChange_SupportsMultipleProfiles);
 
   void SetDatabaseManagerForTest(SafeBrowsingDatabaseManager* database_manager);
 
@@ -309,14 +330,22 @@ class SafeBrowsingServiceImpl : public SafeBrowsingServiceInterface,
   // Creates services for |profile|, which may be normal or off the record.
   void CreateServicesForProfile(Profile* profile);
 
-  // Refreshes the state (calls RefreshState()) and potentially shows a toast
-  // about Enhanced Protection setting changes when its preference value
-  // updates.
+  // Refreshes the state (calls RefreshState()), updates the min allowed time
+  // for referrer chains, and potentially shows a toast about Enhanced
+  // Protection setting changes when its preference value updates.
   void EnhancedProtectionPrefChange(Profile* profile);
+
+  // Maybe show a toast about Enhanced Protection setting changes. Called when
+  // its preference value updates.
+  void MaybeShowEnhancedProtectionSettingChangeToast(Profile* profile);
 
   // Checks if any profile is currently using the safe browsing service, and
   // starts or stops the service accordingly.
   void RefreshState();
+
+  // Updates the minimum allowed timestamp for referrer chains based on pref
+  // changes.
+  void UpdateMinAllowedTimeForReferrerChains(Profile* profile);
 
   void CreateTriggerManager();
 
@@ -376,6 +405,10 @@ class SafeBrowsingServiceImpl : public SafeBrowsingServiceInterface,
   std::map<PrefService*, std::unique_ptr<PrefChangeRegistrar>>
       user_population_prefs_;
 
+  // Maps each profile to the time that real-time URL lookups are enabled.
+  std::map<Profile*, std::optional<base::Time>>
+      min_allowed_time_for_referrer_chains_;
+
   // Callbacks when SafeBrowsing state might have changed.
   // Should only be accessed on the UI thread.
   base::RepeatingClosureList state_callback_list_;
@@ -393,6 +426,11 @@ class SafeBrowsingServiceImpl : public SafeBrowsingServiceInterface,
 
   scoped_refptr<network::SharedURLLoaderFactory>
       url_loader_factory_for_testing_;
+
+  // Manages the logic for handling preference changes, including displaying
+  // specific UI elements in response to certain preference changes.
+  std::map<Profile*, std::unique_ptr<SafeBrowsingPrefChangeHandler>>
+      pref_change_handlers_map_;
 };
 
 // TODO(crbug.com/41437292): Remove this once dependencies are using the

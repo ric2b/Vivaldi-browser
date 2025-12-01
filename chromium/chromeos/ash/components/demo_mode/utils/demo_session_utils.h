@@ -26,6 +26,29 @@ bool IsDeviceInDemoMode();
 COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_DEMO_MODE)
 void RegisterLocalStatePrefs(PrefRegistrySimple* registry);
 
+COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_DEMO_MODE)
+// Force enable demo account sign in. Called before sign in and session start.
+void SetForceEnableDemoAccountSignIn(bool force_enabled);
+
+COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_DEMO_MODE)
+// True when device is in demo mode and demo account sign in is enable via
+// growth, or feature flag.
+// `SetForceEnableDemoAccountSignInByGrowth` will be called before the
+// `AccountId` is populated, and this function should only be called after it.
+// TODO(387572263): Update flag usage in
+// chrome/browser/policy/profile_policy_connector.cc.
+bool IsDemoAccountSignInEnabled();
+
+COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_DEMO_MODE)
+// Set to power idle action policy to do nothing and use the DemoModeIdleHandler
+// when idle.
+void SetDoNothingWhenPowerIdle();
+
+COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_DEMO_MODE)
+// Whether force the session length count from ChromeOS session instead of first
+// user activity.
+bool ForceSessionLengthCountFromSessionStarts();
+
 }  // namespace ash::demo_mode
 
 #endif  // CHROMEOS_ASH_COMPONENTS_DEMO_MODE_UTILS_DEMO_SESSION_UTILS_H_

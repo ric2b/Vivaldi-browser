@@ -101,7 +101,7 @@ src="/developers/design-documents/about-conflicts/incompatibility_thumb.png">](/
     32bithash1 | 32bithash2 | 32bithash3 | string | string | bitmask
     If the link is clicked, it would (hypothetically) navigate to something like:
 
-    http://www.google.com/support/chrome/bin/answer.py?answer=&lt;someid&gt;&topic=&lt;sometopic&gt;&hl=&lt;language&gt;&n=&lt;hash1&gt;&l=&lt;hash2&gt;&d=&lt;hash3&gt;&s=&lt;hash3&gt;
+    https://www.google.com/support/chrome/bin/answer.py?answer=&lt;someid&gt;&topic=&lt;sometopic&gt;&hl=&lt;language&gt;&n=&lt;hash1&gt;&l=&lt;hash2&gt;&d=&lt;hash3&gt;&s=&lt;hash3&gt;
 
     The detection mechanism
     The client code will enumerate all modules loaded into the browser process and all registered modules of interest (ie. shell extensions). We'll need to enumerate the registered modules as well because some modules load on-demand only (and might even crash the browser while doing so).

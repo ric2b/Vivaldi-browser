@@ -72,6 +72,8 @@ wgpu::RenderPipeline create_blit_render_pipeline(const DawnSharedContext* shared
     wgpu::FragmentState fragment;
     fragment.module = std::move(fsModule);
     fragment.entryPoint = "main";
+    fragment.constantCount = 0;
+    fragment.constants = nullptr;
     fragment.targetCount = 1;
     fragment.targets = &colorTarget;
     descriptor.fragment = &fragment;
@@ -462,15 +464,19 @@ sk_sp<DawnTexture> DawnResourceProvider::findOrCreateDiscardableMSAALoadTexture(
 
 sk_sp<GraphicsPipeline> DawnResourceProvider::createGraphicsPipeline(
         const RuntimeEffectDictionary* runtimeDict,
+        const UniqueKey& pipelineKey,
         const GraphicsPipelineDesc& pipelineDesc,
         const RenderPassDesc& renderPassDesc,
-        SkEnumBitMask<PipelineCreationFlags> pipelineCreationFlags) {
+        SkEnumBitMask<PipelineCreationFlags> pipelineCreationFlags,
+        uint32_t compilationID) {
     return DawnGraphicsPipeline::Make(this->dawnSharedContext(),
                                       this,
                                       runtimeDict,
+                                      pipelineKey,
                                       pipelineDesc,
                                       renderPassDesc,
-                                      pipelineCreationFlags);
+                                      pipelineCreationFlags,
+                                      compilationID);
 }
 
 sk_sp<ComputePipeline> DawnResourceProvider::createComputePipeline(
@@ -478,13 +484,8 @@ sk_sp<ComputePipeline> DawnResourceProvider::createComputePipeline(
     return DawnComputePipeline::Make(this->dawnSharedContext(), desc);
 }
 
-sk_sp<Texture> DawnResourceProvider::createTexture(SkISize dimensions,
-                                                   const TextureInfo& info,
-                                                   skgpu::Budgeted budgeted) {
-    return DawnTexture::Make(this->dawnSharedContext(),
-                             dimensions,
-                             info,
-                             budgeted);
+sk_sp<Texture> DawnResourceProvider::createTexture(SkISize dimensions, const TextureInfo& info) {
+    return DawnTexture::Make(this->dawnSharedContext(), dimensions, info);
 }
 
 sk_sp<Buffer> DawnResourceProvider::createBuffer(size_t size,
@@ -715,6 +716,11 @@ const wgpu::BindGroup& DawnResourceProvider::findOrCreateSingleTextureSamplerBin
 
 void DawnResourceProvider::onFreeGpuResources() {
     fIntrinsicConstantsManager->freeGpuResources();
+    // The wgpu::Textures and wgpu::Buffers held by the BindGroups should be explicitly destroyed
+    // when the DawnTexture and DawnBuffer is destroyed, but removing the bind groups themselves
+    // helps reduce CPU memory periodically.
+    fSingleTextureSamplerBindGroups.reset();
+    fUniformBufferBindGroupCache.reset();
 }
 
 void DawnResourceProvider::onPurgeResourcesNotUsedSince(StdSteadyClock::time_point purgeTime) {

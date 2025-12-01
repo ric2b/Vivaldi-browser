@@ -15,12 +15,15 @@
 #include <stdint.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "absl/functional/any_invocable.h"
-#include "absl/memory/memory.h"
 #include "absl/strings/string_view.h"
+#include "api/array_view.h"
+#include "api/field_trials_view.h"
+#include "rtc_base/buffer.h"
 #include "rtc_base/ssl_certificate.h"
 #include "rtc_base/ssl_identity.h"
 #include "rtc_base/stream.h"
@@ -90,9 +93,17 @@ enum SSLProtocolVersion {
   SSL_PROTOCOL_TLS_10 = 0,  // Deprecated and no longer supported.
   SSL_PROTOCOL_TLS_11 = 1,  // Deprecated and no longer supported.
   SSL_PROTOCOL_TLS_12 = 2,
+  SSL_PROTOCOL_TLS_13 = 3,
   SSL_PROTOCOL_DTLS_10 = 1,  // Deprecated and no longer supported.
   SSL_PROTOCOL_DTLS_12 = SSL_PROTOCOL_TLS_12,
+  SSL_PROTOCOL_DTLS_13 = SSL_PROTOCOL_TLS_13,
 };
+
+// Versions returned from BoringSSL.
+const uint16_t kDtls10VersionBytes = 0xfeff;
+const uint16_t kDtls12VersionBytes = 0xfefd;
+const uint16_t kDtls13VersionBytes = 0xfefc;
+
 enum class SSLPeerCertificateDigestError {
   NONE,
   UNKNOWN_ALGORITHM,
@@ -113,7 +124,8 @@ class SSLStreamAdapter : public StreamInterface {
   // Caller is responsible for freeing the returned object.
   static std::unique_ptr<SSLStreamAdapter> Create(
       std::unique_ptr<StreamInterface> stream,
-      absl::AnyInvocable<void(SSLHandshakeError)> handshake_error = nullptr);
+      absl::AnyInvocable<void(SSLHandshakeError)> handshake_error = nullptr,
+      const webrtc::FieldTrialsView* field_trials = nullptr);
 
   SSLStreamAdapter() = default;
   ~SSLStreamAdapter() override = default;
@@ -170,13 +182,16 @@ class SSLStreamAdapter : public StreamInterface {
   // channel (such as the signaling channel). This must specify the terminal
   // certificate, not just a CA. SSLStream makes a copy of the digest value.
   //
-  // Returns true if successful.
-  // `error` is optional and provides more information about the failure.
-  virtual bool SetPeerCertificateDigest(
+  // Returns SSLPeerCertificateDigestError::NONE if successful.
+  virtual SSLPeerCertificateDigestError SetPeerCertificateDigest(
       absl::string_view digest_alg,
-      const unsigned char* digest_val,
-      size_t digest_len,
-      SSLPeerCertificateDigestError* error = nullptr) = 0;
+      rtc::ArrayView<const uint8_t> digest_val) = 0;
+  [[deprecated(
+      "Use SetPeerCertificateDigest with ArrayView instead")]] virtual bool
+  SetPeerCertificateDigest(absl::string_view digest_alg,
+                           const unsigned char* digest_val,
+                           size_t digest_len,
+                           SSLPeerCertificateDigestError* error = nullptr);
 
   // Retrieves the peer's certificate chain including leaf certificate, if a
   // connection has been established.
@@ -200,15 +215,6 @@ class SSLStreamAdapter : public StreamInterface {
   // Key Exporter interface from RFC 5705
   virtual bool ExportSrtpKeyingMaterial(
       rtc::ZeroOnFreeBuffer<uint8_t>& keying_material) = 0;
-  [[deprecated("Use ExportSrtpKeyingMaterial instead")]] virtual bool
-  ExportKeyingMaterial(absl::string_view label,
-                       const uint8_t* context,
-                       size_t context_len,
-                       bool use_context,
-                       uint8_t* result,
-                       size_t result_len) {
-    return false;
-  }
 
   // Returns the signature algorithm or 0 if not applicable.
   virtual uint16_t GetPeerSignatureAlgorithm() const = 0;
@@ -241,6 +247,9 @@ class SSLStreamAdapter : public StreamInterface {
   // Use our timeutils.h source of timing in BoringSSL, allowing us to test
   // using a fake clock.
   static void EnableTimeCallbackForTesting();
+
+  // Return max DTLS SSLProtocolVersion supported by implementation.
+  static SSLProtocolVersion GetMaxSupportedDTLSProtocolVersion();
 
   // Deprecated. Do not use this API outside of testing.
   // Do not set this to false outside of testing.

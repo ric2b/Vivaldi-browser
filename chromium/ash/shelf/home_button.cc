@@ -40,6 +40,7 @@
 #include "base/time/time.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
+#include "home_button.h"
 #include "ui/aura/window.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -430,15 +431,13 @@ void HomeButton::Layout(PassKey) {
   }
 }
 
+void HomeButton::AddedToWidget() {
+  UpdateTooltipText();
+}
+
 void HomeButton::OnGestureEvent(ui::GestureEvent* event) {
   if (!controller_.MaybeHandleGestureEvent(event))
     Button::OnGestureEvent(event);
-}
-
-std::u16string HomeButton::GetTooltipText(const gfx::Point& p) const {
-  // Don't show a tooltip if we're already showing the app list.
-  return IsShowingAppList() ? std::u16string()
-                            : GetViewAccessibility().GetCachedName();
 }
 
 void HomeButton::OnShelfButtonAboutToRequestFocusFromTabTraversal(
@@ -519,6 +518,7 @@ void HomeButton::HandleLocaleChange() {
   GetViewAccessibility().SetName(
       l10n_util::GetStringUTF16(IDS_ASH_SHELF_APP_LIST_LAUNCHER_TITLE));
   TooltipTextChanged();
+  UpdateTooltipText();
   // Reset the bounds rect so the child layer bounds get updated on next shelf
   // layout if the RTL changed.
   SetBoundsRect(gfx::Rect());
@@ -674,6 +674,12 @@ void HomeButton::CreateExpandableContainer() {
   expandable_container_->layer()->SetRoundedCornerRadius(
       gfx::RoundedCornersF(home_button_width / 2.f));
   expandable_container_->layer()->SetName("NudgeLabelContainer");
+}
+
+void HomeButton::UpdateTooltipText() {
+  // Don't show a tooltip if we're already showing the app list.
+  SetTooltipText(IsShowingAppList() ? std::u16string()
+                                    : GetViewAccessibility().GetCachedName());
 }
 
 void HomeButton::CreateNudgeLabel() {

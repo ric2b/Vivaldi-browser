@@ -61,13 +61,6 @@ using ui_test_utils::BrowserChangeObserver;
 namespace web_app {
 namespace {
 using ClientMode = LaunchHandler::ClientMode;
-
-std::string LinkCapturingVersionToString(
-    const testing::TestParamInfo<apps::test::LinkCapturingFeatureVersion>&
-        version) {
-  return apps::test::ToString(version.param);
-}
-
 // Tests that links are captured correctly into an installed WebApp using the
 // 'tabbed' display mode, which allows the webapp window to have multiple tabs.
 class WebAppLinkCapturingBrowserTest
@@ -80,10 +73,11 @@ class WebAppLinkCapturingBrowserTest
             &WebAppLinkCapturingBrowserTest::prerender_web_contents,
             base::Unretained(this))) {
 #if BUILDFLAG(IS_CHROMEOS)
-    CHECK(GetParam() == apps::test::LinkCapturingFeatureVersion::kV1DefaultOff);
+    CHECK(GetParam() ==
+              apps::test::LinkCapturingFeatureVersion::kV1DefaultOff ||
+          GetParam() == apps::test::LinkCapturingFeatureVersion::kV2DefaultOff);
 #else
     CHECK(GetParam() != apps::test::LinkCapturingFeatureVersion::kV1DefaultOff);
-    CHECK(GetParam() != apps::test::LinkCapturingFeatureVersion::kV1DefaultOn);
 #endif
     feature_list_.InitWithFeaturesAndParameters(
         apps::test::GetFeaturesToEnableLinkCapturingUX(GetParam()),
@@ -266,8 +260,10 @@ IN_PROC_BROWSER_TEST_P(WebAppLinkCapturingBrowserTest,
   const auto [app_id, in_scope_1, _, scope] = InstallTestApp(
       "/web_apps/get_manifest.html?"
       "launch_handler_client_mode_navigate_existing.json");
-  EXPECT_EQ(GetLaunchHandler(app_id),
-            (LaunchHandler{ClientMode::kNavigateExisting}));
+  auto launch_handler = GetLaunchHandler(app_id);
+  EXPECT_EQ(ClientMode::kNavigateExisting,
+            launch_handler->parsed_client_mode());
+  EXPECT_TRUE(launch_handler->client_mode_valid_and_specified());
 
   ASSERT_EQ(apps::test::EnableLinkCapturingByUser(profile(), app_id),
             base::ok());
@@ -714,12 +710,13 @@ INSTANTIATE_TEST_SUITE_P(
     ,
     WebAppLinkCapturingBrowserTest,
 #if BUILDFLAG(IS_CHROMEOS)
-    testing::Values(apps::test::LinkCapturingFeatureVersion::kV1DefaultOff),
+    testing::Values(apps::test::LinkCapturingFeatureVersion::kV1DefaultOff,
+                    apps::test::LinkCapturingFeatureVersion::kV2DefaultOff),
 #else
     testing::Values(apps::test::LinkCapturingFeatureVersion::kV2DefaultOff,
                     apps::test::LinkCapturingFeatureVersion::kV2DefaultOn),
 #endif
-    LinkCapturingVersionToString);
+    apps::test::LinkCapturingVersionToString);
 
 // TODO(crbug.com/376922620): Add tabbed mode support for navigation capturing.
 #if BUILDFLAG(IS_CHROMEOS)
@@ -796,8 +793,9 @@ IN_PROC_BROWSER_TEST_P(WebAppTabStripLinkCapturingBrowserTest,
 INSTANTIATE_TEST_SUITE_P(
     ,
     WebAppTabStripLinkCapturingBrowserTest,
-    testing::Values(apps::test::LinkCapturingFeatureVersion::kV1DefaultOff),
-    LinkCapturingVersionToString);
+    testing::Values(apps::test::LinkCapturingFeatureVersion::kV1DefaultOff,
+                    apps::test::LinkCapturingFeatureVersion::kV2DefaultOff),
+    apps::test::LinkCapturingVersionToString);
 #endif
 
 }  // namespace

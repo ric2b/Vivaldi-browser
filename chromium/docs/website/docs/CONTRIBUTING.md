@@ -13,7 +13,7 @@ you to [edit.chromium.org](https://edit.chromium.org/edit?repo=chromium/website/
 and open the page in the editor automatically.
 
 You can edit the Markdown text directly, and, once you're ready to upload
-the change, if you you click on the "Create Change" box in the bottom right
+the change, if you click on the "Create Change" box in the bottom right
 corner of the page, that will create a Gerrit CL for review. A builder
 will automatically run to build out a copy of the site containing your
 changes so that you can preview them.

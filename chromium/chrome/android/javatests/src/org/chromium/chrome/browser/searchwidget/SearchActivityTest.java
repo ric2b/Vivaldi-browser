@@ -13,7 +13,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
-import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.Instrumentation;
 import android.app.Instrumentation.ActivityMonitor;
@@ -44,10 +43,8 @@ import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
-import org.chromium.base.test.util.CriteriaNotSatisfiedException;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.DoNotBatch;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.app.metrics.LaunchCauseMetrics;
@@ -175,7 +172,6 @@ public class SearchActivityTest {
     // Needed for CT connection cleanup.
     public @Rule CustomTabActivityTestRule mCustomTabActivityTestRule =
             new CustomTabActivityTestRule();
-    public @Rule JniMocker mJniMocker = new JniMocker();
     public @Rule MockitoRule mMockitoRule = MockitoJUnit.rule();
 
     private @Mock AutocompleteController.Natives mAutocompleteControllerJniMock;
@@ -191,7 +187,7 @@ public class SearchActivityTest {
         MockitoAnnotations.initMocks(this);
         doReturn(true).when(mHandler).isVoiceSearchEnabled();
 
-        mJniMocker.mock(AutocompleteControllerJni.TEST_HOOKS, mAutocompleteControllerJniMock);
+        AutocompleteControllerJni.setInstanceForTesting(mAutocompleteControllerJniMock);
         doReturn(mAutocompleteController).when(mAutocompleteControllerJniMock).getForProfile(any());
 
         doAnswer(
@@ -212,7 +208,7 @@ public class SearchActivityTest {
 
     @After
     public void tearDown() {
-        mJniMocker.mock(AutocompleteControllerJni.TEST_HOOKS, null);
+        AutocompleteControllerJni.setInstanceForTesting(null);
     }
 
     private AutocompleteMatch buildSimpleAutocompleteMatch(String url) {
@@ -278,7 +274,7 @@ public class SearchActivityTest {
         mOmnibox.checkSuggestionsShown();
 
         // Type in anything.
-        mOmnibox.typeText("text", /* commit= */ false);
+        mOmnibox.typeText("text", /* execute= */ false);
         mOmnibox.checkText(Matchers.equalTo("text"), null);
 
         // Clear omnibox focus. This should always clear uncommitted text and hide suggestions.
@@ -617,27 +613,5 @@ public class SearchActivityTest {
                     Criteria.checkThat(tab.getUrl().getSpec(), Matchers.is(expectedUrl));
                 });
         mActivityTestRule.setActivity(cta);
-    }
-
-    @SuppressLint("SetTextI18n")
-    private void setUrlBarText(final Activity activity, final String url) {
-        CriteriaHelper.pollUiThread(
-                () -> {
-                    UrlBar urlBar = activity.findViewById(R.id.url_bar);
-                    try {
-                        Criteria.checkThat(
-                                "UrlBar not focusable", urlBar.isFocusable(), Matchers.is(true));
-                        Criteria.checkThat(
-                                "UrlBar does not have focus", urlBar.hasFocus(), Matchers.is(true));
-                    } catch (CriteriaNotSatisfiedException ex) {
-                        urlBar.requestFocus();
-                        throw ex;
-                    }
-                });
-        ThreadUtils.runOnUiThreadBlocking(
-                () -> {
-                    UrlBar urlBar = activity.findViewById(R.id.url_bar);
-                    urlBar.setText(url);
-                });
     }
 }

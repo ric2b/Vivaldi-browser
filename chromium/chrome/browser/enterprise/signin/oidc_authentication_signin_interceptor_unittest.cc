@@ -112,14 +112,16 @@ class FakeBubbleHandle : public ScopedWebSigninInterceptionBubbleHandle {
         base::BindOnce(
             [](base::OnceClosure done,
                signin::SigninChoiceOperationResult expected_result,
-               signin::SigninChoiceOperationResult result) {
+               signin::SigninChoiceOperationResult result,
+               signin::SigninChoiceErrorType error_type) {
               CHECK_EQ(result, expected_result);
               std::move(done).Run();
             },
             std::move(done_callback_), expected_operation_result_),
         base::BindRepeating(
             [](signin::SigninChoiceOperationResult expected_result,
-               signin::SigninChoiceOperationResult result) {
+               signin::SigninChoiceOperationResult result,
+               signin::SigninChoiceErrorType error_type) {
               CHECK_EQ(result, expected_result);
               // Retry callback should only be used in case of registration
               // timeout.
@@ -461,12 +463,13 @@ class OidcAuthenticationSigninInterceptorTest
     auto* mock_client_ptr = mock_client.get();
 
     if (expect_registration_attempt == RegistrationResult::kFailure) {
-      EXPECT_CALL(*mock_client_ptr, RegisterWithOidcResponse(
-                                        _, kExampleOidcTokens.auth_token,
-                                        kExampleOidcTokens.id_token, _, _, _))
+      EXPECT_CALL(
+          *mock_client_ptr,
+          RegisterWithOidcResponse(_, kExampleOidcTokens.auth_token,
+                                   kExampleOidcTokens.id_token, _, _, _, _))
           .WillOnce(Invoke([&](const RegistrationParameters&,
                                const std::string&, const std::string&,
-                               const std::string&, const base::TimeDelta&,
+                               const std::string&, const base::TimeDelta&, bool,
                                CloudPolicyClient::ResultCallback callback) {
             mock_client_ptr->SetStatus(policy::DM_STATUS_TEMPORARY_UNAVAILABLE);
             mock_client_ptr->NotifyClientError();
@@ -475,12 +478,13 @@ class OidcAuthenticationSigninInterceptorTest
             register_run_loop.Quit();
           }));
     } else if (expect_registration_attempt == RegistrationResult::kTimeout) {
-      EXPECT_CALL(*mock_client_ptr, RegisterWithOidcResponse(
-                                        _, kExampleOidcTokens.auth_token,
-                                        kExampleOidcTokens.id_token, _, _, _))
+      EXPECT_CALL(
+          *mock_client_ptr,
+          RegisterWithOidcResponse(_, kExampleOidcTokens.auth_token,
+                                   kExampleOidcTokens.id_token, _, _, _, _))
           .WillOnce(Invoke([&](const RegistrationParameters&,
                                const std::string&, const std::string&,
-                               const std::string&, const base::TimeDelta&,
+                               const std::string&, const base::TimeDelta&, bool,
                                CloudPolicyClient::ResultCallback callback) {
             mock_client_ptr->SetStatus(policy::DM_STATUS_TEMPORARY_UNAVAILABLE);
             mock_client_ptr->NotifyClientError();
@@ -490,12 +494,13 @@ class OidcAuthenticationSigninInterceptorTest
             register_run_loop.Quit();
           }));
     } else if (expect_registration_attempt == RegistrationResult::kSuccess) {
-      EXPECT_CALL(*mock_client_ptr, RegisterWithOidcResponse(
-                                        _, kExampleOidcTokens.auth_token,
-                                        kExampleOidcTokens.id_token, _, _, _))
+      EXPECT_CALL(
+          *mock_client_ptr,
+          RegisterWithOidcResponse(_, kExampleOidcTokens.auth_token,
+                                   kExampleOidcTokens.id_token, _, _, _, _))
           .WillOnce(Invoke([&](const RegistrationParameters&,
                                const std::string&, const std::string&,
-                               const std::string&, const base::TimeDelta&,
+                               const std::string&, const base::TimeDelta&, bool,
                                CloudPolicyClient::ResultCallback callback) {
             mock_client_ptr->SetDMToken(kExampleDmToken);
             mock_client_ptr->SetStatus(policy::DM_STATUS_SUCCESS);

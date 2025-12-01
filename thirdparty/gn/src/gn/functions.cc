@@ -1721,7 +1721,7 @@ Value RunFunction(Scope* scope,
   if (found_function->second.self_evaluating_args_runner) {
     // Self evaluating args functions are special weird built-ins like foreach.
     // Rather than force them all to check that they have a block or no block
-    // and risk bugs for new additions, check a whitelist here.
+    // and risk bugs for new additions, check an allowlist here.
     if (found_function->second.self_evaluating_args_runner != &RunForEach) {
       if (!VerifyNoBlockForFunctionCall(function, block, err))
         return Value();

@@ -279,6 +279,7 @@
 <translation id="5582839680698949063">Главное меню</translation>
 <translation id="5614553682702429503">Сохранить пароль?</translation>
 <translation id="5623842676595125836">Журнал</translation>
+<translation id="5624959475330585145">Спрашивать перед использованием незащищённого подключения</translation>
 <translation id="5638309510554459422">Найдите полезные расширения в <ph name="BEGIN_LINK" />библиотеке расширений<ph name="END_LINK" /></translation>
 <translation id="5677928146339483299">Заблокировано</translation>
 <translation id="5707185214361380026">Не удалась загрузка расширения с:</translation>
@@ -468,6 +469,7 @@
 <translation id="9218430445555521422">Назначить основным</translation>
 <translation id="93766956588638423">Восстановить расширение</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
+<translation id="961856697154696964">Удалить данные просмотра</translation>
 <translation id="994289308992179865">&amp;Повтор</translation>
 <translation id="998747458861718449">И&amp;нспектировать</translation>
 </translationbundle>

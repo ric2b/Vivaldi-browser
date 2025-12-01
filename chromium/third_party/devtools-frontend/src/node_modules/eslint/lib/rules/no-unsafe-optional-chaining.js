@@ -23,17 +23,20 @@ module.exports = {
     meta: {
         type: "problem",
 
+        defaultOptions: [{
+            disallowArithmeticOperators: false
+        }],
+
         docs: {
             description: "Disallow use of optional chaining in contexts where the `undefined` value is not allowed",
             recommended: true,
-            url: "https://eslint.org/docs/rules/no-unsafe-optional-chaining"
+            url: "https://eslint.org/docs/latest/rules/no-unsafe-optional-chaining"
         },
         schema: [{
             type: "object",
             properties: {
                 disallowArithmeticOperators: {
-                    type: "boolean",
-                    default: false
+                    type: "boolean"
                 }
             },
             additionalProperties: false
@@ -46,8 +49,7 @@ module.exports = {
     },
 
     create(context) {
-        const options = context.options[0] || {};
-        const disallowArithmeticOperators = (options.disallowArithmeticOperators) || false;
+        const [{ disallowArithmeticOperators }] = context.options;
 
         /**
          * Reports unsafe usage of optional chaining
@@ -94,7 +96,7 @@ module.exports = {
                     break;
                 case "SequenceExpression":
                     checkUndefinedShortCircuit(
-                        node.expressions[node.expressions.length - 1],
+                        node.expressions.at(-1),
                         reportFunc
                     );
                     break;

@@ -21,6 +21,7 @@
 #include "components/request_filter/adblock_filter/adblock_cosmetic_filter.h"
 #include "components/request_filter/adblock_filter/interstitial/document_blocked_throttle.h"
 #include "components/request_filter/adblock_filter/mojom/adblock_cosmetic_filter.mojom.h"
+#include "components/panel/vivaldi_panels_filter.h"
 #include "extraparts/vivaldi_browser_main_extra_parts.h"
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -73,6 +74,9 @@ VivaldiContentBrowserClient::CreateThrottlesForNavigation(
           handle, &throttles);
     }
   }
+
+  throttles.push_back(
+      std::make_unique<VivaldiPanelsThrottle>(handle));
 
   throttles.push_back(
       std::make_unique<adblock_filter::DocumentBlockedThrottle>(handle));

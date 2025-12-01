@@ -16,7 +16,11 @@ devtools_module("types") {
     "TraceEvents.ts",
   ]
 
-  deps = [ "../../../generated" ]
+  deps = [
+    "../../../core/sdk:bundle",
+    "../../../generated",
+    "../../crux-manager:bundle",
+  ]
 }
 
 devtools_entrypoint("bundle") {

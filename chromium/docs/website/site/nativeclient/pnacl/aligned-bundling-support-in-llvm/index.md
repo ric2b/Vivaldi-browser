@@ -91,9 +91,8 @@ Native Client, see the following resources:
 
 *   <http://src.chromium.org/viewvc/native_client/data/site/NaCl_SFI.pdf>
             \[PDF link\]
-*   <http://www.chromium.org/nativeclient/reference/arm-overview#TOC-The-Native-Client-Solution:-Bundles->
-*   Other papers listed at[
-            http://www.chromium.org/nativeclient/reference/research-papers](http://www.chromium.org/nativeclient/reference/research-papers)
+*   <https://www.chromium.org/nativeclient/reference/arm-overview#TOC-The-Native-Client-Solution:-Bundles->
+*   Other papers listed at <https://www.chromium.org/nativeclient/reference/research-papers>
 
 ## Implementation in LLVM MC
 

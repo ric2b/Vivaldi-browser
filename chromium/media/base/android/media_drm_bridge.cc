@@ -12,6 +12,7 @@
 #include <stddef.h>
 #include <sys/system_properties.h>
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
@@ -25,11 +26,11 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/system/sys_info.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/types/pass_key.h"
 #include "media/base/android/android_util.h"
 #include "media/base/android/media_codec_util.h"
 #include "media/base/android/media_drm_bridge_client.h"
@@ -449,10 +450,11 @@ MediaDrmBridge::CdmCreationResult MediaDrmBridge::CreateInternal(
   // TODO(crbug.com/41433110): Check that |origin_id| is specified on devices
   // that support it.
 
-  scoped_refptr<MediaDrmBridge> media_drm_bridge(new MediaDrmBridge(
-      scheme_uuid, origin_id, security_level, message, requires_media_crypto,
-      std::move(storage), std::move(create_fetcher_cb), session_message_cb,
-      session_closed_cb, session_keys_change_cb, session_expiration_update_cb));
+  auto media_drm_bridge = base::MakeRefCounted<MediaDrmBridge>(
+      base::PassKey<MediaDrmBridge>(), scheme_uuid, origin_id, security_level,
+      message, requires_media_crypto, std::move(storage),
+      std::move(create_fetcher_cb), session_message_cb, session_closed_cb,
+      session_keys_change_cb, session_expiration_update_cb);
 
   if (!media_drm_bridge->j_media_drm_) {
     DCHECK_NE(media_drm_bridge->last_create_error_,
@@ -685,13 +687,13 @@ bool MediaDrmBridge::IsSecureCodecRequired() {
   // TODO(xhwang): This is specific to Widevine. See http://crbug.com/459400.
   // To fix it, we could call MediaCrypto.requiresSecureDecoderComponent().
   // See http://crbug.com/727918.
-  if (base::ranges::equal(scheme_uuid_, kWidevineUuid)) {
+  if (std::ranges::equal(scheme_uuid_, kWidevineUuid)) {
     return SECURITY_LEVEL_1 == GetSecurityLevel();
   }
 
   // If UUID is ClearKey, we should automatically return false since secure
   // codecs should not be required.
-  if (base::ranges::equal(scheme_uuid_, kClearKeyUuid)) {
+  if (std::ranges::equal(scheme_uuid_, kClearKeyUuid)) {
     return false;
   }
 
@@ -993,6 +995,7 @@ void MediaDrmBridge::OnCreateError(JNIEnv* env, jint j_error_code) {
 // The following are private methods.
 
 MediaDrmBridge::MediaDrmBridge(
+    base::PassKey<MediaDrmBridge>,
     const std::vector<uint8_t>& scheme_uuid,
     const std::string& origin_id,
     SecurityLevel security_level,

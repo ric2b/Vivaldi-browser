@@ -18,9 +18,9 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
-#include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/country_type.h"
 #include "components/autofill/core/browser/form_structure.h"
+#include "components/autofill/core/browser/test_utils/autofill_test_utils.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill_ai/core/browser/autofill_ai_features.h"
 #include "components/optimization_guide/core/mock_optimization_guide_model_executor.h"
@@ -75,7 +75,7 @@ class UserAnnotationsServiceTest : public testing::Test {
     logs_service_ = std::make_unique<
         optimization_guide::TestModelQualityLogsUploaderService>(&local_state_);
     service_ = std::make_unique<UserAnnotationsService>(
-        &model_executor_, temp_dir_.GetPath(), os_crypt_.get(),
+        &model_executor_, logs_service_.get(), temp_dir_.GetPath(), os_crypt_.get(),
         optimization_guide_decider_.get());
   }
 
@@ -164,7 +164,9 @@ TEST_F(UserAnnotationsServiceTest, ShouldAddFormSubmissionForURL) {
 }
 
 TEST_F(UserAnnotationsServiceTest, RetrieveAllEntriesNoDB) {
+  base::HistogramTester histogram_tester;
   auto entries = GetAllUserAnnotationsEntries();
+  histogram_tester.ExpectUniqueSample("UserAnnotations.EntryCount", 0, 1);
   EXPECT_TRUE(entries.empty());
 }
 
@@ -588,6 +590,7 @@ TEST_F(UserAnnotationsServiceTest, ParallelFormSubmissions) {
 }
 
 TEST_F(UserAnnotationsServiceTest, SaveAutofillProfile) {
+  base::HistogramTester histogram_tester;
   autofill::AutofillProfile autofill_profile(AddressCountryCode("US"));
   autofill::test::SetProfileInfo(&autofill_profile, "Jane", "J", "Doe",
                                  "jd@example.com", "", "123 Main St", "",
@@ -596,6 +599,7 @@ TEST_F(UserAnnotationsServiceTest, SaveAutofillProfile) {
   service()->SaveAutofillProfile(autofill_profile, test_future.GetCallback());
   ASSERT_TRUE(test_future.Wait());
   const UserAnnotationsEntries entries = GetAllUserAnnotationsEntries();
+  histogram_tester.ExpectUniqueSample("UserAnnotations.EntryCount", 10, 1);
   EXPECT_EQ(entries.size(), 10u);
   EXPECT_EQ(entries[0].key(), "First Name");
   EXPECT_EQ(entries[0].value(), "Jane");

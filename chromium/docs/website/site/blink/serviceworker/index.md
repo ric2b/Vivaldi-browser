@@ -35,7 +35,7 @@ level in many popular browsers.
 
 ### File Bugs
 
-Go to <http://crbug.com/new> and include "service worker" in the summary. You
+Go to <https://crbug.com/new> and include "service worker" in the summary. You
 should get a response from an engineer in about one week.
 
 If the browser **crashed** while you were doing Service Worker development, go
@@ -71,7 +71,7 @@ service-worker-discuss@chromium.org](https://groups.google.com/a/chromium.org/fo
 ### Links
 
 *   Spec [issues](https://github.com/slightlyoff/ServiceWorker),
-            [FPWD](http://www.w3.org/TR/2014/WD-service-workers-20140508/),
+            [FPWD](https://www.w3.org/TR/2014/WD-service-workers-20140508/),
             [ED](https://slightlyoff.github.io/ServiceWorker/spec/service_worker/)
 *   [Testing](/blink/serviceworker/testing)
 *   Implementation bugs use the

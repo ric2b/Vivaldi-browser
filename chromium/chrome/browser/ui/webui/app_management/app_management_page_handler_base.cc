@@ -10,7 +10,6 @@
 #include <utility>
 #include <vector>
 
-#include "ash/components/arc/app/arc_app_constants.h"
 #include "base/containers/fixed_flat_set.h"
 #include "base/functional/callback_helpers.h"
 #include "base/i18n/message_formatter.h"
@@ -19,7 +18,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -27,6 +25,7 @@
 #include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/ash/experiences/arc/app/arc_app_constants.h"
 #include "components/app_constants/constants.h"
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
 #include "components/services/app_service/public/cpp/app_types.h"
@@ -47,7 +46,7 @@
 #include "url/gurl.h"
 #include "url/origin.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ash/app_list/arc/arc_app_utils.h"
 #endif
 
@@ -81,7 +80,7 @@ bool ShouldHidePinToShelf(const std::string& app_id) {
 }
 
 bool ShouldHideStoragePermission(const std::string& app_id) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   constexpr auto kAppIdsWithHiddenStoragePermission =
       base::MakeFixedFlatSet<std::string_view>({
           arc::kPlayStoreAppId,
@@ -106,7 +105,7 @@ bool CanShowDefaultAppAssociationsUi() {
 
 }  // namespace
 
-AppManagementPageHandlerBase::~AppManagementPageHandlerBase() {}
+AppManagementPageHandlerBase::~AppManagementPageHandlerBase() = default;
 
 void AppManagementPageHandlerBase::GetApps(GetAppsCallback callback) {
   std::vector<app_management::mojom::AppPtr> app_management_apps;
@@ -239,7 +238,7 @@ AppManagementPageHandlerBase::CreateAppFromAppUpdate(
         // Mime types are ignored.
         std::set<std::string> mime_types;
         for (auto& filter : filters) {
-          bool is_potential_file_handler_action = base::ranges::any_of(
+          bool is_potential_file_handler_action = std::ranges::any_of(
               filter->conditions.begin(), filter->conditions.end(),
               [](const std::unique_ptr<apps::Condition>& condition) {
                 if (condition->condition_type != apps::ConditionType::kAction) {

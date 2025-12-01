@@ -1,6 +1,6 @@
-// Copyright 2023 The Khronos Group Inc.
-// Copyright 2023 Valve Corporation
-// Copyright 2023 LunarG, Inc.
+// Copyright 2023-2025 The Khronos Group Inc.
+// Copyright 2023-2025 Valve Corporation
+// Copyright 2023-2025 LunarG, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -412,6 +412,18 @@ TEST(format_utils, vkuFindMultiplaneExtentDivisors) {
     EXPECT_EQ(vkuFindMultiplaneExtentDivisors(VK_FORMAT_G16_B16R16_2PLANE_422_UNORM, VK_IMAGE_ASPECT_PLANE_2_BIT).height, 1u);
 }
 
+TEST(format_utils, vkuFormatIsDepthStencilWithColorSizeCompatible) {
+    EXPECT_FALSE(
+        vkuFormatIsDepthStencilWithColorSizeCompatible(VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16, VK_FORMAT_D16_UNORM));
+    EXPECT_FALSE(vkuFormatIsDepthStencilWithColorSizeCompatible(VK_FORMAT_D16_UNORM, VK_FORMAT_R16_SFLOAT));
+    EXPECT_FALSE(vkuFormatIsDepthStencilWithColorSizeCompatible(VK_FORMAT_R8_UINT, VK_FORMAT_D16_UNORM_S8_UINT));
+    EXPECT_FALSE(vkuFormatIsDepthStencilWithColorSizeCompatible(VK_FORMAT_R16_UNORM, VK_FORMAT_S8_UINT));
+
+    EXPECT_TRUE(vkuFormatIsDepthStencilWithColorSizeCompatible(VK_FORMAT_R16_SFLOAT, VK_FORMAT_D16_UNORM));
+    EXPECT_TRUE(vkuFormatIsDepthStencilWithColorSizeCompatible(VK_FORMAT_R16_UNORM, VK_FORMAT_D16_UNORM_S8_UINT));
+    EXPECT_TRUE(vkuFormatIsDepthStencilWithColorSizeCompatible(VK_FORMAT_R8_UINT, VK_FORMAT_S8_UINT));
+}
+
 TEST(format_utils, vkuFormatComponentCount) {
     for (auto [format, format_str] : magic_enum::enum_entries<VkFormat>()) {
         if (vkuFormatIsCompressed(format)) {
@@ -503,43 +515,29 @@ TEST(format_utils, vkuFormatCompatibilityClass) {
         }
     }
 }
-TEST(format_utils, vkuFormatElementIsTexel) {
-    constexpr auto formats = magic_enum::enum_values<VkFormat>();
-    for (auto format : formats) {
-        if (!(vkuFormatIsPacked(format) || vkuFormatIsCompressed(format) || vkuFormatIsSinglePlane_422(format) ||
-              vkuFormatIsMultiplane(format))) {
-            EXPECT_TRUE(vkuFormatElementIsTexel(format));
-        } else {
-            EXPECT_FALSE(vkuFormatElementIsTexel(format));
-        }
-    }
+
+TEST(format_utils, vkuFormatTexelsPerBlock) {
+    EXPECT_EQ(vkuFormatTexelsPerBlock(VK_FORMAT_R64G64_SFLOAT), 1u);
+    EXPECT_EQ(vkuFormatTexelsPerBlock(VK_FORMAT_BC6H_UFLOAT_BLOCK), 16u);
+    EXPECT_EQ(vkuFormatTexelsPerBlock(VK_FORMAT_ASTC_5x4_SRGB_BLOCK), 20u);
+    EXPECT_EQ(vkuFormatTexelsPerBlock(VK_FORMAT_ASTC_5x5_SRGB_BLOCK), 25u);
+    EXPECT_EQ(vkuFormatTexelsPerBlock(VK_FORMAT_ASTC_12x12_SRGB_BLOCK), 144u);
+    EXPECT_EQ(vkuFormatTexelsPerBlock(VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM), 1u);
+    EXPECT_EQ(vkuFormatTexelsPerBlock(VK_FORMAT_D32_SFLOAT), 1u);
+    EXPECT_EQ(vkuFormatTexelsPerBlock(VK_FORMAT_D32_SFLOAT_S8_UINT), 1u);
+    EXPECT_EQ(vkuFormatTexelsPerBlock(VK_FORMAT_S8_UINT), 1u);
 }
-TEST(format_utils, vkuFormatElementSizeWithAspect) {
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_R64G64_SFLOAT, VK_IMAGE_ASPECT_NONE), 16u);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_R64G64_SFLOAT, VK_IMAGE_ASPECT_STENCIL_BIT), 0u);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_R64G64_SFLOAT, VK_IMAGE_ASPECT_DEPTH_BIT), 0u);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_ASTC_5x4_SRGB_BLOCK, VK_IMAGE_ASPECT_NONE), 16u);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_ASTC_5x4_SRGB_BLOCK, VK_IMAGE_ASPECT_PLANE_0_BIT), 16u);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_ASTC_5x4_SRGB_BLOCK, VK_IMAGE_ASPECT_PLANE_1_BIT), 16u);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_ASTC_5x4_SRGB_BLOCK, VK_IMAGE_ASPECT_PLANE_2_BIT), 16u);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_ASTC_5x4_SRGB_BLOCK, VK_IMAGE_ASPECT_STENCIL_BIT), 0u);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_ASTC_5x4_SRGB_BLOCK, VK_IMAGE_ASPECT_DEPTH_BIT), 0u);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM, VK_IMAGE_ASPECT_NONE), 0u);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM, VK_IMAGE_ASPECT_PLANE_0_BIT), 2u);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM, VK_IMAGE_ASPECT_PLANE_1_BIT), 2u);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM, VK_IMAGE_ASPECT_PLANE_2_BIT), 2u);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM, VK_IMAGE_ASPECT_STENCIL_BIT), 0u);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM, VK_IMAGE_ASPECT_DEPTH_BIT), 0u);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_D32_SFLOAT, VK_IMAGE_ASPECT_NONE), 4u);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_D32_SFLOAT, VK_IMAGE_ASPECT_STENCIL_BIT), 0u);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_D32_SFLOAT, VK_IMAGE_ASPECT_DEPTH_BIT), 4u);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_D32_SFLOAT_S8_UINT, VK_IMAGE_ASPECT_NONE), 5u);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_D32_SFLOAT_S8_UINT, VK_IMAGE_ASPECT_STENCIL_BIT), 1u);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_D32_SFLOAT_S8_UINT, VK_IMAGE_ASPECT_DEPTH_BIT), 4u);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_S8_UINT, VK_IMAGE_ASPECT_NONE), 1u);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_S8_UINT, VK_IMAGE_ASPECT_STENCIL_BIT), 1u);
-    EXPECT_EQ(vkuFormatElementSizeWithAspect(VK_FORMAT_S8_UINT, VK_IMAGE_ASPECT_DEPTH_BIT), 0u);
+
+TEST(format_utils, vkuFormatTexelBlockSize) {
+    EXPECT_EQ(vkuFormatTexelBlockSize(VK_FORMAT_R64G64_SFLOAT), 16u);
+    EXPECT_EQ(vkuFormatTexelBlockSize(VK_FORMAT_ASTC_5x4_SRGB_BLOCK), 16u);
+    EXPECT_EQ(vkuFormatTexelBlockSize(VK_FORMAT_ASTC_5x5_SRGB_BLOCK), 16u);
+    EXPECT_EQ(vkuFormatTexelBlockSize(VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM), 6u);
+    EXPECT_EQ(vkuFormatTexelBlockSize(VK_FORMAT_D32_SFLOAT), 4u);
+    EXPECT_EQ(vkuFormatTexelBlockSize(VK_FORMAT_D32_SFLOAT_S8_UINT), 5u);
+    EXPECT_EQ(vkuFormatTexelBlockSize(VK_FORMAT_S8_UINT), 1u);
 }
+
 TEST(format_utils, vkuFormatTexelSizeWithAspect) {
     EXPECT_EQ(vkuFormatTexelSizeWithAspect(VK_FORMAT_R64G64_SFLOAT, VK_IMAGE_ASPECT_NONE), 16);
     EXPECT_EQ(vkuFormatTexelSizeWithAspect(VK_FORMAT_R64G64_SFLOAT, VK_IMAGE_ASPECT_STENCIL_BIT), 0);

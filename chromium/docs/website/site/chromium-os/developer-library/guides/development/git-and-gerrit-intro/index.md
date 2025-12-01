@@ -340,7 +340,7 @@ be quite far down depending on how busy the repository is and how long it’s be
 since it was submitted.) Now you can create another feature branch and start
 again, building on the changes you’ve already submitted.
 
-[Gerrit guide]: https://dev.chromium.org/chromium-os/developer-guide/gerrit-guide
+[Gerrit guide]: /chromium-os/developer-guide/gerrit-guide
 [Gerrit slides]: https://docs.google.com/presentation/d/1C73UgQdzZDw0gzpaEqIC6SPujZJhqamyqO1XOHjH-uk/edit?usp=sharing
 [Git slides]: https://docs.google.com/presentation/d/1IQCRPHEIX-qKo7QFxsD3V62yhyGA9_5YsYXFOiBpgkk/edit?usp=sharing
 [depot_tools]: https://commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools_tutorial.html#_setting_up

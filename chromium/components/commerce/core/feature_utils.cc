@@ -4,16 +4,34 @@
 
 #include "components/commerce/core/feature_utils.h"
 
+#include "base/feature_list.h"
 #include "components/commerce/core/account_checker.h"
 #include "components/commerce/core/commerce_feature_list.h"
 #include "components/commerce/core/pref_names.h"
 #include "components/commerce/core/product_specifications/product_specifications_service.h"
 #include "components/optimization_guide/core/feature_registry/feature_registration.h"
+#include "components/optimization_guide/core/optimization_guide_features.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/base/data_type.h"
 #include "components/sync/base/user_selectable_type.h"
 
 namespace commerce {
+namespace {
+bool CanFetchProductSpecificationsData(AccountChecker* account_checker,
+                                       bool skip_enterprise_check) {
+  // msbb, enterprise, parental controls, sync type, and model execution
+  // features.
+  return account_checker &&
+         (skip_enterprise_check || IsProductSpecificationsAllowedForEnterprise(
+                                       account_checker->GetPrefs())) &&
+         account_checker->IsSignedIn() &&
+         account_checker->IsAnonymizedUrlDataCollectionEnabled() &&
+         !account_checker->IsSubjectToParentalControls() &&
+         account_checker->CanUseModelExecutionFeatures() &&
+         IsSyncingProductSpecifications(account_checker) &&
+         CanLoadProductSpecificationsFullPageUi(account_checker);
+}
+}  // namespace
 
 bool IsShoppingListEligible(AccountChecker* account_checker) {
   if (!commerce::IsRegionLockedFeatureEnabled(
@@ -30,7 +48,8 @@ bool IsShoppingListEligible(AccountChecker* account_checker) {
   // Make sure the user allows subscriptions to be made and that we can fetch
   // store data.
   if (!account_checker || !account_checker->IsSignedIn() ||
-      !account_checker->IsSyncingBookmarks() ||
+      !account_checker->IsSyncTypeEnabled(
+          syncer::UserSelectableType::kBookmarks) ||
       !account_checker->IsAnonymizedUrlDataCollectionEnabled() ||
       account_checker->IsSubjectToParentalControls()) {
     return false;
@@ -39,10 +58,29 @@ bool IsShoppingListEligible(AccountChecker* account_checker) {
   return true;
 }
 
+bool IsPriceInsightsApiEnabled(AccountChecker* account_checker) {
+  return account_checker &&
+         commerce::IsRegionLockedFeatureEnabled(
+             kPriceInsights, kPriceInsightsRegionLaunched,
+             account_checker->GetCountry(), account_checker->GetLocale());
+}
+
+bool IsPriceInsightsEligible(AccountChecker* account_checker) {
+  return IsPriceInsightsApiEnabled(account_checker) &&
+         account_checker->IsAnonymizedUrlDataCollectionEnabled();
+}
+
 bool IsSubscriptionsApiEnabled(AccountChecker* account_checker) {
   return IsRegionLockedFeatureEnabled(
       kSubscriptionsApi, kSubscriptionsApiRegionLaunched,
       account_checker->GetCountry(), account_checker->GetLocale());
+}
+
+bool IsPriceAnnotationsEnabled(AccountChecker* account_checker) {
+  return account_checker &&
+         commerce::IsRegionLockedFeatureEnabled(
+             kPriceAnnotations, kPriceAnnotationsRegionLaunched,
+             account_checker->GetCountry(), account_checker->GetLocale());
 }
 
 bool IsProductSpecificationsAllowedForEnterprise(PrefService* prefs) {
@@ -114,18 +152,48 @@ bool CanManageProductSpecificationsSets(
 }
 
 bool CanFetchProductSpecificationsData(AccountChecker* account_checker) {
-  // msbb, enterprise, parental controls, sync type, model execution
-  // features, and default search engine selection (namely Google).
-  return account_checker &&
-         IsProductSpecificationsAllowedForEnterprise(
-             account_checker->GetPrefs()) &&
-         account_checker->IsSignedIn() &&
-         account_checker->IsAnonymizedUrlDataCollectionEnabled() &&
-         !account_checker->IsSubjectToParentalControls() &&
-         account_checker->CanUseModelExecutionFeatures() &&
-         account_checker->IsDefaultSearchEngineGoogle() &&
-         IsSyncingProductSpecifications(account_checker) &&
-         CanLoadProductSpecificationsFullPageUi(account_checker);
+  return CanFetchProductSpecificationsData(account_checker,
+                                           /*skip_enterprise_check=*/false);
 }
 
+bool IsProductSpecificationsSettingVisible(AccountChecker* account_checker) {
+  DCHECK(base::FeatureList::IsEnabled(
+      optimization_guide::features::kAiSettingsPageEnterpriseDisabledUi));
+  return CanFetchProductSpecificationsData(account_checker,
+                                           /*skip_enterprise_check=*/true);
+}
+
+bool IsDiscountInfoApiEnabled(AccountChecker* account_checker) {
+  return account_checker &&
+         commerce::IsRegionLockedFeatureEnabled(
+             kEnableDiscountInfoApi, kEnableDiscountInfoApiRegionLaunched,
+             account_checker->GetCountry(), account_checker->GetLocale());
+}
+
+bool IsDiscountEligibleToShowOnNavigation(AccountChecker* account_checker) {
+  return IsDiscountInfoApiEnabled(account_checker) &&
+         account_checker->IsSignedIn() &&
+         account_checker->IsAnonymizedUrlDataCollectionEnabled();
+}
+
+bool IsMerchantViewerEnabled(AccountChecker* account_checker) {
+  return account_checker &&
+         commerce::IsRegionLockedFeatureEnabled(
+             kCommerceMerchantViewer, kCommerceMerchantViewerRegionLaunched,
+             account_checker->GetCountry(), account_checker->GetLocale());
+}
+
+bool IsShoppingPageTypesApiEnabled(AccountChecker* account_checker) {
+  return account_checker &&
+         commerce::IsRegionLockedFeatureEnabled(
+             kShoppingPageTypes, kShoppingPageTypesRegionLaunched,
+             account_checker->GetCountry(), account_checker->GetLocale());
+}
+
+bool IsParcelTrackingEligible(AccountChecker* account_checker) {
+  return account_checker && account_checker->IsSignedIn() &&
+         commerce::IsRegionLockedFeatureEnabled(
+             kParcelTracking, kParcelTrackingRegionLaunched,
+             account_checker->GetCountry(), account_checker->GetLocale());
+}
 }  // namespace commerce

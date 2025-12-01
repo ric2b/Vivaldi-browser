@@ -14,6 +14,7 @@
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/public/cpp/orb/orb_api.h"
 #include "services/network/public/mojom/cookie_access_observer.mojom.h"
+#include "services/network/public/mojom/device_bound_sessions.mojom.h"
 #include "services/network/public/mojom/devtools_observer.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/trust_token_access_observer.mojom.h"
@@ -78,6 +79,7 @@ class URLLoaderFactory : public mojom::URLLoaderFactory,
   mojom::CookieAccessObserver* GetCookieAccessObserver() const override;
   mojom::TrustTokenAccessObserver* GetTrustTokenAccessObserver() const override;
   mojom::CrossOriginEmbedderPolicyReporter* GetCoepReporter() const override;
+  mojom::DocumentIsolationPolicyReporter* GetDipReporter() const override;
   mojom::DevToolsObserver* GetDevToolsObserver() const override;
   mojom::NetworkContextClient* GetNetworkContextClient() const override;
   mojom::TrustedURLLoaderHeaderClient* GetUrlLoaderHeaderClient()
@@ -89,6 +91,8 @@ class URLLoaderFactory : public mojom::URLLoaderFactory,
       const override;
   orb::PerFactoryState& GetMutableOrbState() override;
   bool DataUseUpdatesEnabled() override;
+  mojom::DeviceBoundSessionAccessObserver* GetDeviceBoundSessionAccessObserver()
+      const override;
 
   // Allows starting a URLLoader with a synchronous URLLoaderClient as an
   // optimization.
@@ -112,20 +116,6 @@ class URLLoaderFactory : public mojom::URLLoaderFactory,
   static constexpr int kMaxTotalKeepaliveRequestSize = 512 * 1024;
 
  private:
-  // Starts the timer to call
-  // URLLoaderNetworkServiceObserver::OnLoadingStateUpdate(), if
-  // needed.
-  void MaybeStartUpdateLoadInfoTimer();
-
-  // Invoked once the browser has acknowledged receiving the previous LoadInfo.
-  // Sets |waiting_on_load_state_ack_| to false, and calls
-  // MaybeStartUpdateLoadeInfoTimer.
-  void AckUpdateLoadInfo();
-
-  // Finds the most relevant URLLoader that is outstanding and asks it to
-  // send an update.
-  void UpdateLoadInfo();
-
   // The NetworkContext that indirectly owns |this|.
   const raw_ptr<NetworkContext> context_;
   mojom::URLLoaderFactoryParamsPtr params_;
@@ -147,9 +137,8 @@ class URLLoaderFactory : public mojom::URLLoaderFactory,
   mojo::Remote<mojom::CookieAccessObserver> cookie_observer_;
   mojo::Remote<mojom::TrustTokenAccessObserver> trust_token_observer_;
   mojo::Remote<mojom::DevToolsObserver> devtools_observer_;
-
-  base::OneShotTimer update_load_info_timer_;
-  bool waiting_on_load_state_ack_ = false;
+  mojo::Remote<mojom::DeviceBoundSessionAccessObserver>
+      device_bound_session_observer_;
 };
 
 }  // namespace network

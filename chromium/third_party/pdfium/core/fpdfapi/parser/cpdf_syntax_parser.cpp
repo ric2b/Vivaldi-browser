@@ -6,8 +6,6 @@
 
 #include "core/fpdfapi/parser/cpdf_syntax_parser.h"
 
-#include <ctype.h>
-
 #include <algorithm>
 #include <utility>
 
@@ -335,7 +333,7 @@ DataVector<uint8_t> CPDF_SyntaxParser::ReadHexString() {
     if (ch == '>')
       break;
 
-    if (isxdigit(ch)) {
+    if (FXSYS_IsHexDigit(ch)) {
       int val = FXSYS_HexCharToInt(ch);
       if (bFirst) {
         code = val * 16;
@@ -763,8 +761,9 @@ RetainPtr<CPDF_Stream> CPDF_SyntaxParser::ReadStream(
     // Earlier version of PDF specification doesn't require EOL marker before
     // 'endstream' keyword. If keyword 'endstream' follows the bytes in
     // specified length, it signals the end of stream.
-    if (memcmp(m_WordBuffer.data(), kEndStreamStr.unterminated_unsigned_str(),
-               kEndStreamStr.GetLength()) != 0) {
+    if (UNSAFE_TODO(memcmp(m_WordBuffer.data(),
+                           kEndStreamStr.unterminated_unsigned_str(),
+                           kEndStreamStr.GetLength())) != 0) {
       substream.Reset();
       len = -1;
       SetPos(streamStartPos);
@@ -829,8 +828,9 @@ RetainPtr<CPDF_Stream> CPDF_SyntaxParser::ReadStream(
   int numMarkers = ReadEOLMarkers(GetPos());
   if (m_WordSize == static_cast<unsigned int>(kEndObjStr.GetLength()) &&
       numMarkers != 0 &&
-      memcmp(m_WordBuffer.data(), kEndObjStr.unterminated_unsigned_str(),
-             kEndObjStr.GetLength()) == 0) {
+      UNSAFE_TODO(memcmp(m_WordBuffer.data(),
+                         kEndObjStr.unterminated_unsigned_str(),
+                         kEndObjStr.GetLength())) == 0) {
     SetPos(end_stream_offset);
   }
   return stream;
@@ -915,19 +915,29 @@ FX_FILESIZE CPDF_SyntaxParser::FindTag(ByteStringView tag) {
   const int32_t taglen = tag.GetLength();
   DCHECK_GT(taglen, 0);
 
-  int32_t match = 0;
   while (true) {
-    uint8_t ch;
-    if (!GetNextChar(ch))
-      return -1;
+    const FX_FILESIZE match_start_pos = GetPos();
+    bool match_found = true;
 
-    if (ch == tag[match]) {
-      match++;
-      if (match == taglen)
-        return GetPos() - startpos - taglen;
-    } else {
-      match = ch == tag[0] ? 1 : 0;
+    for (int32_t i = 0; i < taglen; i++) {
+      uint8_t ch;
+      if (!GetNextChar(ch)) {
+        return -1;
+      }
+
+      if (ch != tag[i]) {
+        match_found = false;
+        break;
+      }
     }
+
+    if (match_found) {
+      return match_start_pos - startpos;
+    }
+
+    // On running into a mismatch, the code restarts from one place ahead w.r.t.
+    // the previous iteration.
+    SetPos(match_start_pos + 1);
   }
 }
 

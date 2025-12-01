@@ -9,13 +9,14 @@ from recipe_engine import recipe_api
 PYTHON_VERSION_COMPATIBILITY = 'PY3'
 
 DEPS = [
-  'gclient',
-  'presubmit',
-  'recipe_engine/buildbucket',
-  'recipe_engine/context',
-  'recipe_engine/path',
-  'recipe_engine/properties',
-  'recipe_engine/runtime',
+    'gclient',
+    'presubmit',
+    'recipe_engine/buildbucket',
+    'recipe_engine/context',
+    'recipe_engine/path',
+    'recipe_engine/properties',
+    'recipe_engine/raw_io',
+    'recipe_engine/runtime',
 ]
 
 
@@ -43,3 +44,21 @@ def GenTests(api):
          api.post_process(post_process.MustRun, 'gclient runhooks') +
          api.post_process(post_process.StatusSuccess) +
          api.post_process(post_process.DropExpectation))
+
+  yield api.test(
+      'failed_commit',
+      api.runtime(is_experimental=False),
+      api.buildbucket.try_build(project='infra'),
+      api.step_data(
+          'commit-git-patch',
+          retcode=1,
+          stdout=api.raw_io.output_text(
+              'nothing to commit, working tree clean'),
+      ),
+      api.expect_status('FAILURE'),
+      api.post_check(
+          post_process.SummaryMarkdownRE,
+          'Was an identical diff already submitted elsewhere?',
+      ),
+      api.post_process(post_process.DropExpectation),
+  )

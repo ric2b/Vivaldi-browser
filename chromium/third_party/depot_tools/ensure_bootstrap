@@ -4,15 +4,34 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-# This is a shell script to ensure that all of the "depot_tools" bootstrap
-# programs are locally downloaded and ready for execution.
-#
-# Unlike "update_depot_tools", this script works with the current
-# checkout, and will not update/sync the "depot_tools" repository.
-#
 # TODO: This duplicates logic in "update_depot_tools". Update that script to
 # invoke this script instead of manually calling "cipd_bin_setup" and other
 # operations.
+
+usage() {
+  cat <<EOF
+Usage: $0
+
+This is a shell script to ensure that all of the "depot_tools" bootstrap
+programs are locally downloaded and ready for execution.
+
+Unlike "update_depot_tools", this script works with the current
+checkout, and will not update/sync the "depot_tools" repository.
+EOF
+}
+
+if [ $# -ne 0 ]; then
+  case $1 in
+  -h|--help)
+    usage
+    exit 0
+    ;;
+  *)
+    echo "$0: ERROR: script takes no arguments: $*" >&2
+    exit 1
+    ;;
+  esac
+fi
 
 # Export for other depot_tools scripts to re-use.
 export DEPOT_TOOLS_DIR="${DEPOT_TOOLS_DIR:-$(dirname "${BASH_SOURCE[0]}")}"

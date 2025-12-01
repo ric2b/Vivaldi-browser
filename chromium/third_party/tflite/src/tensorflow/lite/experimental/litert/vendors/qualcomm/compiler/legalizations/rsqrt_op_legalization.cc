@@ -21,9 +21,9 @@
 #include "third_party/qairt/latest/include/QNN/QnnTypes.h"
 #include "tensorflow/lite/experimental/litert/c/litert_common.h"
 #include "tensorflow/lite/experimental/litert/c/litert_op_code.h"
-#include "tensorflow/lite/experimental/litert/c/litert_support.h"
+#include "tensorflow/lite/experimental/litert/cc/litert_expected.h"
+#include "tensorflow/lite/experimental/litert/cc/litert_macros.h"
 #include "tensorflow/lite/experimental/litert/cc/litert_model.h"
-#include "tensorflow/lite/experimental/litert/cc/litert_support.h"
 #include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/graph_mapper.h"
 #include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/legalizations/util.h"
 
@@ -40,10 +40,10 @@ LiteRtStatus RsqrtOpLegalization::LegalizeOp(const litert::Op& src,
     return kLiteRtStatusLegalizeNoMatch;
   }
   std::string op_name = absl::StrFormat(kRsqrtOpFmt, op_counter_++);
-  LITERT_RETURN_STATUS_IF_NOT_OK(SetOpInfo(op_name.c_str(),
-                                           kDefaultQnnOpPackageName.data(),
-                                           kQnnRsqrtOpTypeName.data(), dest));
-  LITERT_RETURN_STATUS_IF_NOT_OK(LegalizeSimpleOp(src, dest, graph_mapper));
+  LITERT_RETURN_IF_ERROR(SetOpInfo(op_name.c_str(),
+                                   kDefaultQnnOpPackageName.data(),
+                                   kQnnRsqrtOpTypeName.data(), dest));
+  LITERT_RETURN_IF_ERROR(LegalizeSimpleOp(src, dest, graph_mapper));
   LITERT_LOG(LITERT_INFO, "Legalized rsqrt op", "");
   return kLiteRtStatusOk;
 }

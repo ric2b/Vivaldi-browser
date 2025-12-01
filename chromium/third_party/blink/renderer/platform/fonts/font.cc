@@ -161,15 +161,15 @@ void DrawBlobs(cc::PaintCanvas* canvas,
 }  // anonymous ns
 
 void Font::DrawText(cc::PaintCanvas* canvas,
-                    const TextRunPaintInfo& run_info,
+                    const TextRun& run,
                     const gfx::PointF& point,
                     const cc::PaintFlags& flags,
                     DrawType draw_type) const {
-  DrawText(canvas, run_info, point, cc::kInvalidNodeId, flags, draw_type);
+  DrawText(canvas, run, point, cc::kInvalidNodeId, flags, draw_type);
 }
 
 void Font::DrawText(cc::PaintCanvas* canvas,
-                    const TextRunPaintInfo& run_info,
+                    const TextRun& run,
                     const gfx::PointF& point,
                     cc::NodeId node_id,
                     const cc::PaintFlags& flags,
@@ -181,7 +181,8 @@ void Font::DrawText(cc::PaintCanvas* canvas,
 
   CachingWordShaper word_shaper(*this);
   ShapeResultBuffer buffer;
-  word_shaper.FillResultBuffer(run_info, &buffer);
+  word_shaper.FillResultBuffer(run, &buffer);
+  TextRunPaintInfo run_info(run);
   ShapeResultBloberizer::FillGlyphs bloberizer(
       GetFontDescription(), run_info, buffer,
       draw_type == Font::DrawType::kGlyphsOnly
@@ -235,9 +236,9 @@ bool Font::DrawBidiText(cc::PaintCanvas* canvas,
     const String text_with_override =
         BidiParagraph::StringWithDirectionalOverride(run.ToStringView(),
                                                      run.Direction());
-    TextRun run_with_override = run_info.run;
-    run_with_override.SetText(text_with_override);
-    run_with_override.SetDirectionalOverride(false);
+    TextRun run_with_override(text_with_override, run.Direction(),
+                              /* directional_override */ false,
+                              run.NormalizeSpace());
     return DrawBidiText(canvas, TextRunPaintInfo(run_with_override), point,
                         custom_font_not_ready_action, flags, draw_type);
   }
@@ -260,9 +261,8 @@ bool Font::DrawBidiText(cc::PaintCanvas* canvas,
       continue;
     }
 
-    TextRun subrun = run.SubRun(bidi_run.start, bidi_run.Length());
-    subrun.SetDirection(bidi_run.Direction());
-
+    TextRun subrun =
+        run.SubRun(bidi_run.start, bidi_run.Length(), bidi_run.Direction());
     TextRunPaintInfo subrun_info(subrun);
     CharacterRange range(0, 0, 0, 0);
     if (is_sub_run) [[unlikely]] {
@@ -278,7 +278,7 @@ bool Font::DrawBidiText(cc::PaintCanvas* canvas,
     }
 
     ShapeResultBuffer buffer;
-    word_shaper.FillResultBuffer(subrun_info, &buffer);
+    word_shaper.FillResultBuffer(subrun, &buffer);
 
     // Fix regression with -ftrivial-auto-var-init=pattern. See
     // crbug.com/1055652.
@@ -302,8 +302,9 @@ bool Font::DrawBidiText(cc::PaintCanvas* canvas,
   return true;
 }
 
+// This function is not used if TextCombineEmphasisNG flag is enabled.
 void Font::DrawEmphasisMarks(cc::PaintCanvas* canvas,
-                             const TextRunPaintInfo& run_info,
+                             const TextRun& run,
                              const AtomicString& mark,
                              const gfx::PointF& point,
                              const cc::PaintFlags& flags) const {
@@ -318,7 +319,8 @@ void Font::DrawEmphasisMarks(cc::PaintCanvas* canvas,
 
   CachingWordShaper word_shaper(*this);
   ShapeResultBuffer buffer;
-  word_shaper.FillResultBuffer(run_info, &buffer);
+  word_shaper.FillResultBuffer(run, &buffer);
+  TextRunPaintInfo run_info(run);
   ShapeResultBloberizer::FillTextEmphasisGlyphs bloberizer(
       GetFontDescription(), run_info, buffer, emphasis_glyph_data);
   DrawBlobs(canvas, flags, bloberizer.Blobs(), point);
@@ -397,8 +399,8 @@ float Font::SubRunWidth(const TextRun& run,
     // Measure the subrun.
     TextRun text_run(
         StringView(run.ToStringView(), visual_run.start, visual_run.Length()),
-        visual_run.Direction(), /* directional_override */ false);
-    text_run.SetNormalizeSpace(true);
+        visual_run.Direction(), /* directional_override */ false,
+        /* normalize_space */ true);
     CharacterRange character_range =
         shaper.GetCharacterRange(text_run, run_from, run_to);
 
@@ -468,23 +470,6 @@ void GetTextInterceptsInternal(const ShapeResultBloberizer::BlobBuffer& blobs,
 
 }  // anonymous namespace
 
-void Font::GetTextIntercepts(const TextRunPaintInfo& run_info,
-                             const cc::PaintFlags& flags,
-                             const std::tuple<float, float>& bounds,
-                             Vector<TextIntercept>& intercepts) const {
-  if (ShouldSkipDrawing())
-    return;
-
-  CachingWordShaper word_shaper(*this);
-  ShapeResultBuffer buffer;
-  word_shaper.FillResultBuffer(run_info, &buffer);
-  ShapeResultBloberizer::FillGlyphs bloberizer(
-      GetFontDescription(), run_info, buffer,
-      ShapeResultBloberizer::Type::kTextIntercepts);
-
-  GetTextInterceptsInternal(bloberizer.Blobs(), flags, bounds, intercepts);
-}
-
 void Font::GetTextIntercepts(const TextFragmentPaintInfo& text_info,
                              const cc::PaintFlags& flags,
                              const std::tuple<float, float>& bounds,
@@ -532,8 +517,12 @@ int Font::OffsetForPosition(const TextRun& run,
   return shaper.OffsetForPosition(run, x_float, partial_glyphs, break_glyphs);
 }
 
-NGShapeCache& Font::GetNGShapeCache() const {
-  return EnsureFontFallbackList()->GetNGShapeCache(font_description_);
+const FontFeatures& Font::GetFontFeatures() const {
+  return EnsureFontFallbackList()->GetFontFeatures(font_description_);
+}
+
+bool Font::HasNonInitialFontFeatures() const {
+  return EnsureFontFallbackList()->HasNonInitialFontFeatures(font_description_);
 }
 
 ShapeCache* Font::GetShapeCache() const {

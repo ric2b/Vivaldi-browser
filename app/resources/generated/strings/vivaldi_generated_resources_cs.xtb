@@ -279,6 +279,7 @@
 <translation id="5582839680698949063">Hlavní nabídka</translation>
 <translation id="5614553682702429503">Uložit heslo?</translation>
 <translation id="5623842676595125836">Nízká</translation>
+<translation id="5624959475330585145">Před použitím nezabezpečených připojení se zeptat</translation>
 <translation id="5638309510554459422">Rozšíření a motivy najdete v <ph name="BEGIN_LINK" />Internetovém obchodě Chrome<ph name="END_LINK" /></translation>
 <translation id="5677928146339483299">Blokováno</translation>
 <translation id="5707185214361380026">Nepodařilo se načíst rozšíření z:</translation>
@@ -467,6 +468,7 @@ Svůj soubor klíče uchovávejte na bezpečném místě. Budete jej potřebovat
 <translation id="9218430445555521422">Nastavit jako výchozí</translation>
 <translation id="93766956588638423">Opravit rozšíření</translation>
 <translation id="961012016278832836">Zastaralý Microsoft Edge</translation>
+<translation id="961856697154696964">Vymazat údaje o prohlížení</translation>
 <translation id="994289308992179865">&amp;Opakovat</translation>
 <translation id="998747458861718449">&amp;Prozkoumat</translation>
 </translationbundle>

@@ -286,7 +286,7 @@ class _Authenticator(object):
                         SSOAuthenticator(),
                         # GCE detection can't distinguish cloud workstations.
                         GceAuthenticator(),
-                        LuciAuthAuthenticator(),
+                        GitCredsAuthenticator(),
                         NoAuthenticator(),
                     ]
                     if skip_sso:
@@ -850,19 +850,34 @@ class LuciContextAuthenticator(_Authenticator):
         return ''
 
 
-class LuciAuthAuthenticator(LuciContextAuthenticator):
-    """_Authenticator implementation that uses `luci-auth` credentials.
+class GitCredsAuthenticator(_Authenticator):
+    """_Authenticator implementation that uses `git-credential-luci` with OAuth.
 
-    This is the same as LuciContextAuthenticator, except that it is for local
-    non-google.com developer credentials.
+    This is similar to LuciContextAuthenticator, except that it is for
+    local non-google.com developer credentials.
     """
+
+    def __init__(self):
+        self._authenticator = auth.GerritAuthenticator()
+
+    @property
+    def luci_auth(self) -> auth.Authenticator:
+        return self._authenticator
+
+    def authenticate(self, conn: HttpConn):
+        conn.req_headers[
+            'Authorization'] = f'Bearer {self._authenticator.get_access_token()}'
+
+    def debug_summary_state(self) -> str:
+        # TODO(b/343230702) - report ambient account name.
+        return ''
 
     @classmethod
     def gerrit_account_exists(cls, host: str) -> bool:
         """Return True if the Gerrit account exists.
 
-        This checks the user currently logged in with luci-auth.
-        If the user is not logged in with luci-auth, returns False.
+        This checks the user currently logged in with git-credential-luci.
+        If the user is not logged in with git-credential-luci, returns False.
 
         This method caches positive results in the user's Git config.
         """
@@ -878,9 +893,9 @@ class LuciAuthAuthenticator(LuciContextAuthenticator):
             return True
         try:
             info = GetAccountDetails(host, authenticator=cls())
-        except auth.LoginRequiredError:
+        except auth.GitLoginRequiredError:
             LOGGER.debug(
-                "Cannot check Gerrit account existence; missing luci-auth login"
+                "Cannot check Gerrit account existence; missing git-credential-luci login"
             )
             return False
         except GerritError as e:
@@ -895,7 +910,18 @@ class LuciAuthAuthenticator(LuciContextAuthenticator):
             LOGGER.debug("Gerrit account does not exist on %r", host)
             return False
         LOGGER.debug("Gerrit account exists on %r", host)
-        scm.GIT.SetConfig(cwd, 'depot-tools.hostHasAccount', host, append=True)
+        try:
+            scm.GIT.SetConfig(cwd,
+                              'depot-tools.hostHasAccount',
+                              host,
+                              append=True)
+        except subprocess2.CalledProcessError as e:
+            # This may be called outside of a Git repository (e.g., when
+            # fetching from scratch), in which case we don't have a Git
+            # repository to cache the results of our check, so skip the
+            # caching.
+            LOGGER.debug(
+                "Got error trying to cache 'depot-tools.hostHasAccount': %s", e)
         return True
 
     def is_applicable(self, *, conn: Optional[HttpConn] = None):
@@ -1443,7 +1469,10 @@ def SubmitChange(host, change):
     """Submits a Gerrit change via Gerrit."""
     path = 'changes/%s/submit' % change
     conn = CreateHttpConn(host, path, reqtype='POST')
-    return ReadHttpJsonResponse(conn)
+    # If a submit fails due to a merge conflict, Gerrit returns 409. Retrying
+    # more than once probably won't help since the merge conflict will still
+    # exist.
+    return ReadHttpJsonResponse(conn, max_tries=2)
 
 
 def GetChangesSubmittedTogether(host, change):
@@ -1677,8 +1706,12 @@ def SetReview(host,
               msg=None,
               labels=None,
               notify=None,
-              ready=None):
-    """Sets labels and/or adds a message to a code review."""
+              ready=None,
+              automatic_attention_set_update: Optional[bool] = None):
+    """Sets labels and/or adds a message to a code review.
+
+    https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#set-review
+    """
     if not msg and not labels:
         return
     path = f'changes/{change}/revisions/{revision}/review'
@@ -1691,6 +1724,9 @@ def SetReview(host,
         body['notify'] = 'ALL' if notify else 'NONE'
     if ready:
         body['ready'] = True
+    if automatic_attention_set_update is not None:
+        body[
+            'ignore_automatic_attention_set_rules'] = not automatic_attention_set_update
     conn = CreateHttpConn(host, path, reqtype='POST', body=body)
     response = ReadHttpJsonResponse(conn)
     if labels:

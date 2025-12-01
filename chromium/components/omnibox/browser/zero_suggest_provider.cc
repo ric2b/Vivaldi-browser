@@ -272,7 +272,9 @@ ResultType ResultTypeForInput(const AutocompleteInput& input) {
   // Open Web and Search Results Page.
   if (omnibox::IsOtherWebPage(page_class) ||
       omnibox::IsSearchResultsPage(page_class)) {
-    if (focus_type_input_type.second == OIT::URL && is_ios) {
+    if (focus_type_input_type.second == OIT::URL &&
+        (is_ios || base::FeatureList::IsEnabled(
+                       omnibox::kFocusTriggersWebAndSRPZeroSuggest))) {
       return ResultType::kRemoteSendURL;
     }
     if (focus_type_input_type.second == OIT::EMPTY && !is_ios) {
@@ -494,6 +496,7 @@ void ZeroSuggestProvider::Stop(bool clear_cached_results,
 
   if (clear_cached_results) {
     experiment_stats_v2s_.clear();
+    gws_event_id_hashes_.clear();
   }
 }
 
@@ -670,6 +673,7 @@ void ZeroSuggestProvider::ConvertSuggestResultsToAutocompleteMatches(
   matches_.clear();
   suggestion_groups_map_.clear();
   experiment_stats_v2s_.clear();
+  gws_event_id_hashes_.clear();
 
   if (results.field_trial_triggered) {
     client()->GetOmniboxTriggeredFeatureService()->FeatureTriggered(
@@ -716,5 +720,10 @@ void ZeroSuggestProvider::ConvertSuggestResultsToAutocompleteMatches(
   // Update the list of experiment stats from the server response.
   for (const auto& experiment_stats_v2 : results.experiment_stats_v2s) {
     experiment_stats_v2s_.push_back(experiment_stats_v2);
+  }
+
+  // Update the list of GWS event ID hashes from the server response.
+  for (const auto& gws_event_id_hash : results.gws_event_id_hashes) {
+    gws_event_id_hashes_.push_back(gws_event_id_hash);
   }
 }

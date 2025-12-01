@@ -33,6 +33,7 @@
 #include "dawn/native/Commands.h"
 #include "dawn/native/d3d/UtilsD3D.h"
 #include "dawn/native/d3d12/BufferD3D12.h"
+#include "dawn/native/d3d12/ResourceAllocatorManagerD3D12.h"
 #include "dawn/native/d3d12/TextureD3D12.h"
 #include "dawn/native/d3d12/d3d12_platform.h"
 #include "dawn/native/dawn_platform.h"
@@ -72,11 +73,13 @@ void RecordBufferTextureCopy(BufferTextureCopyDirection direction,
 
 void SetDebugName(Device* device, ID3D12Object* object, const char* prefix, std::string label = "");
 
-bool CanCopyBufferToBufferWithCopyResource(Buffer* sourceBuffer,
-                                           uint64_t sourceOffset,
-                                           Buffer* destinationBuffer,
-                                           uint64_t destinationOffset,
-                                           uint64_t copySize);
+constexpr DXGI_FORMAT GetNullRTVDXGIFormatForD3D12RenderPass() {
+    return DXGI_FORMAT_R8G8B8A8_UNORM;
+}
+
+D3D12_HEAP_TYPE GetD3D12HeapType(ResourceHeapKind resourceHeapKind);
+
+D3D12_HEAP_PROPERTIES GetD3D12HeapProperties(ResourceHeapKind resourceHeapKind);
 
 }  // namespace dawn::native::d3d12
 

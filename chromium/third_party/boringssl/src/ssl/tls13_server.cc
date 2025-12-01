@@ -1,16 +1,16 @@
-/* Copyright (c) 2016, Google Inc.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
- * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
- * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
- * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. */
+// Copyright 2016 The BoringSSL Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <openssl/ssl.h>
 
@@ -42,6 +42,30 @@ static const uint8_t kZeroes[EVP_MAX_MD_SIZE] = {0};
 // drift between client and server clock rate since the ticket was issued.
 // See RFC 8446, section 8.3.
 static const int32_t kMaxTicketAgeSkewSeconds = 60;
+
+static bool resolve_pake_secret(SSL_HANDSHAKE *hs) {
+  uint8_t verifier_share[spake2plus::kShareSize];
+  uint8_t verifier_confirm[spake2plus::kConfirmSize];
+  uint8_t shared_secret[spake2plus::kSecretSize];
+  if (!hs->pake_verifier->ProcessProverShare(verifier_share, verifier_confirm,
+                                             shared_secret,
+                                             hs->pake_share->pake_message)) {
+    OPENSSL_PUT_ERROR(SSL, SSL_R_DECODE_ERROR);
+    ssl_send_alert(hs->ssl, SSL3_AL_FATAL, SSL_AD_ILLEGAL_PARAMETER);
+    return false;
+  }
+
+  bssl::ScopedCBB cbb;
+  if (!CBB_init(cbb.get(), sizeof(verifier_share) + sizeof(verifier_confirm)) ||
+      !CBB_add_bytes(cbb.get(), verifier_share, sizeof(verifier_share)) ||
+      !CBB_add_bytes(cbb.get(), verifier_confirm, sizeof(verifier_confirm)) ||
+      !CBBFinishArray(cbb.get(), &hs->pake_share_bytes)) {
+    return false;
+  }
+
+  return tls13_advance_key_schedule(
+      hs, MakeConstSpan(shared_secret, sizeof(shared_secret)));
+}
 
 static bool resolve_ecdhe_secret(SSL_HANDSHAKE *hs,
                                  const SSL_CLIENT_HELLO *client_hello) {
@@ -99,9 +123,9 @@ static bool resolve_ecdhe_secret(SSL_HANDSHAKE *hs,
 static int ssl_ext_supported_versions_add_serverhello(SSL_HANDSHAKE *hs,
                                                       CBB *out) {
   CBB contents;
-  if (!CBB_add_u16(out, TLSEXT_TYPE_supported_versions) ||
-      !CBB_add_u16_length_prefixed(out, &contents) ||
-      !CBB_add_u16(&contents, hs->ssl->s3->version) ||
+  if (!CBB_add_u16(out, TLSEXT_TYPE_supported_versions) ||  //
+      !CBB_add_u16_length_prefixed(out, &contents) ||       //
+      !CBB_add_u16(&contents, hs->ssl->s3->version) ||      //
       !CBB_flush(out)) {
     return 0;
   }
@@ -121,17 +145,20 @@ static const SSL_CIPHER *choose_tls13_cipher(
                                  ssl->config->aes_hw_override
                                      ? ssl->config->aes_hw_override_value
                                      : EVP_has_aes_hardware(),
-                                 version, ssl->config->tls13_cipher_policy);
+                                 version, ssl->config->compliance_policy);
 }
 
 static bool add_new_session_tickets(SSL_HANDSHAKE *hs, bool *out_sent_tickets) {
   SSL *const ssl = hs->ssl;
-  if (// If the client doesn't accept resumption with PSK_DHE_KE, don't send a
-      // session ticket.
+  if (  // If the client doesn't accept resumption with PSK_DHE_KE, don't send a
+        // session ticket.
       !hs->accept_psk_mode ||
       // We only implement stateless resumption in TLS 1.3, so skip sending
       // tickets if disabled.
-      (SSL_get_options(ssl) & SSL_OP_NO_TICKET)) {
+      (SSL_get_options(ssl) & SSL_OP_NO_TICKET) ||
+      // Don't send tickets for PAKE connections. We don't support resumption
+      // with PAKEs.
+      hs->pake_verifier != nullptr) {
     *out_sent_tickets = false;
     return true;
   }
@@ -141,6 +168,7 @@ static bool add_new_session_tickets(SSL_HANDSHAKE *hs, bool *out_sent_tickets) {
   ssl_session_rebase_time(ssl, hs->new_session.get());
 
   assert(ssl->session_ctx->num_tickets <= kMaxTickets);
+  bool sent_tickets = false;
   for (size_t i = 0; i < ssl->session_ctx->num_tickets; i++) {
     UniquePtr<SSL_SESSION> session(
         SSL_SESSION_dup(hs->new_session.get(), SSL_SESSION_INCLUDE_NONAUTH));
@@ -152,17 +180,17 @@ static bool add_new_session_tickets(SSL_HANDSHAKE *hs, bool *out_sent_tickets) {
       return false;
     }
     session->ticket_age_add_valid = true;
-    // TODO(crbug.com/42290594): Remove the SSL_is_dtls check once we support
+    // TODO(crbug.com/381113363): Remove the SSL_is_dtls check once we support
     // 0-RTT for DTLS 1.3.
     bool enable_early_data =
         ssl->enable_early_data &&
-        (!ssl->quic_method || !ssl->config->quic_early_data_context.empty()) &&
+        (!SSL_is_quic(ssl) || !ssl->config->quic_early_data_context.empty()) &&
         !SSL_is_dtls(ssl);
     if (enable_early_data) {
       // QUIC does not use the max_early_data_size parameter and always sets it
       // to a fixed value. See RFC 9001, section 4.6.1.
       session->ticket_max_early_data =
-          ssl->quic_method != nullptr ? 0xffffffff : kMaxEarlyDataAccepted;
+          SSL_is_quic(ssl) ? 0xffffffff : kMaxEarlyDataAccepted;
     }
 
     static_assert(kMaxTickets < 256, "Too many tickets");
@@ -177,10 +205,18 @@ static bool add_new_session_tickets(SSL_HANDSHAKE *hs, bool *out_sent_tickets) {
         !CBB_add_u32(&body, session->ticket_age_add) ||
         !CBB_add_u8_length_prefixed(&body, &nonce_cbb) ||
         !CBB_add_bytes(&nonce_cbb, nonce, sizeof(nonce)) ||
-        !CBB_add_u16_length_prefixed(&body, &ticket) ||
         !tls13_derive_session_psk(session.get(), nonce, SSL_is_dtls(ssl)) ||
-        !ssl_encrypt_ticket(hs, &ticket, session.get()) ||
-        !CBB_add_u16_length_prefixed(&body, &extensions)) {
+        !CBB_add_u16_length_prefixed(&body, &ticket) ||
+        !ssl_encrypt_ticket(hs, &ticket, session.get())) {
+      return false;
+    }
+
+    if (CBB_len(&ticket) == 0) {
+      // The caller decided not to encrypt a ticket. Skip the message.
+      continue;
+    }
+
+    if (!CBB_add_u16_length_prefixed(&body, &extensions)) {
       return false;
     }
 
@@ -204,14 +240,16 @@ static bool add_new_session_tickets(SSL_HANDSHAKE *hs, bool *out_sent_tickets) {
     if (!ssl_add_message_cbb(ssl, cbb.get())) {
       return false;
     }
+    sent_tickets = true;
   }
 
-  *out_sent_tickets = true;
+  *out_sent_tickets = sent_tickets;
   return true;
 }
 
-static bool check_credential(SSL_HANDSHAKE *hs, const SSL_CREDENTIAL *cred,
-                             uint16_t *out_sigalg) {
+static bool check_signature_credential(SSL_HANDSHAKE *hs,
+                                       const SSL_CREDENTIAL *cred,
+                                       uint16_t *out_sigalg) {
   switch (cred->type) {
     case SSLCredentialType::kX509:
       break;
@@ -224,9 +262,12 @@ static bool check_credential(SSL_HANDSHAKE *hs, const SSL_CREDENTIAL *cred,
         return false;
       }
       break;
+    default:
+      OPENSSL_PUT_ERROR(SSL, SSL_R_UNKNOWN_CERTIFICATE_TYPE);
+      return false;
   }
 
-  // All currently supported credentials require a signature. If |cred| is a
+  // If we reach here then the credential requires a signature. If |cred| is a
   // delegated credential, this also checks that the peer supports delegated
   // credentials and matched |dc_cert_verify_algorithm|.
   if (!tls1_choose_signature_algorithm(hs, cred, out_sigalg)) {
@@ -235,6 +276,21 @@ static bool check_credential(SSL_HANDSHAKE *hs, const SSL_CREDENTIAL *cred,
   // Use this credential if it either matches a requested issuer,
   // or does not require issuer matching.
   return ssl_credential_matches_requested_issuers(hs, cred);
+}
+
+static bool check_pake_credential(SSL_HANDSHAKE *hs,
+                                  const SSL_CREDENTIAL *cred) {
+  assert(cred->type == SSLCredentialType::kSPAKE2PlusV1Server);
+  // Look for a client PAKE share that matches |cred|.
+  if (hs->pake_share == nullptr ||
+      hs->pake_share->named_pake != SSL_PAKE_SPAKE2PLUSV1 ||
+      hs->pake_share->client_identity != Span(cred->client_identity) ||
+      hs->pake_share->server_identity != Span(cred->server_identity)) {
+    OPENSSL_PUT_ERROR(SSL, SSL_R_PEER_PAKE_MISMATCH);
+    return false;
+  }
+
+  return true;
 }
 
 static enum ssl_hs_wait_t do_select_parameters(SSL_HANDSHAKE *hs) {
@@ -247,7 +303,7 @@ static enum ssl_hs_wait_t do_select_parameters(SSL_HANDSHAKE *hs) {
     return ssl_hs_error;
   }
 
-  if (ssl->quic_method != nullptr && client_hello.session_id_len > 0) {
+  if (SSL_is_quic(ssl) && client_hello.session_id_len > 0) {
     OPENSSL_PUT_ERROR(SSL, SSL_R_UNEXPECTED_COMPATIBILITY_MODE);
     ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_ILLEGAL_PARAMETER);
     return ssl_hs_error;
@@ -258,7 +314,7 @@ static enum ssl_hs_wait_t do_select_parameters(SSL_HANDSHAKE *hs) {
   // would in a TLS 1.3 handshake.
   if (!SSL_is_dtls(ssl)) {
     hs->session_id.CopyFrom(
-        MakeConstSpan(client_hello.session_id, client_hello.session_id_len));
+        Span(client_hello.session_id, client_hello.session_id_len));
   }
 
   Array<SSL_CREDENTIAL *> creds;
@@ -274,15 +330,32 @@ static enum ssl_hs_wait_t do_select_parameters(SSL_HANDSHAKE *hs) {
   // Select the credential to use.
   for (SSL_CREDENTIAL *cred : creds) {
     ERR_clear_error();
-    uint16_t sigalg;
-    if (check_credential(hs, cred, &sigalg)) {
-      hs->credential = UpRef(cred);
-      hs->signature_algorithm = sigalg;
-      break;
+    if (cred->type == SSLCredentialType::kSPAKE2PlusV1Server) {
+      if (check_pake_credential(hs, cred)) {
+        hs->credential = UpRef(cred);
+        hs->pake_verifier = MakeUnique<spake2plus::Verifier>();
+        if (hs->pake_verifier == nullptr ||
+            !hs->pake_verifier->Init(cred->pake_context, cred->client_identity,
+                                     cred->server_identity,
+                                     cred->password_verifier_w0,
+                                     cred->registration_record)) {
+          ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_INTERNAL_ERROR);
+          return ssl_hs_error;
+        }
+        break;
+      }
+    } else {
+      uint16_t sigalg;
+      if (check_signature_credential(hs, cred, &sigalg)) {
+        hs->credential = UpRef(cred);
+        hs->signature_algorithm = sigalg;
+        break;
+      }
     }
   }
   if (hs->credential == nullptr) {
     // The error from the last attempt is in the error queue.
+    assert(ERR_peek_error() != 0);
     ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_HANDSHAKE_FAILURE);
     return ssl_hs_error;
   }
@@ -349,6 +422,12 @@ static enum ssl_ticket_aead_result_t select_session(
     return ssl_ticket_aead_ignore_ticket;
   }
 
+  // We do not currently support resumption with PAKEs.
+  if (hs->credential != nullptr &&
+      hs->credential->type == SSLCredentialType::kSPAKE2PlusV1Server) {
+    return ssl_ticket_aead_ignore_ticket;
+  }
+
   // TLS 1.3 session tickets are renewed separately as part of the
   // NewSessionTicket.
   bool unused_renew;
@@ -375,8 +454,7 @@ static enum ssl_ticket_aead_result_t select_session(
   client_ticket_age -= session->ticket_age_add;
   client_ticket_age /= 1000;
 
-  struct OPENSSL_timeval now;
-  ssl_get_current_time(ssl, &now);
+  OPENSSL_timeval now = ssl_ctx_get_current_time(ssl->ctx.get());
 
   // Compute the server ticket age in seconds.
   assert(now.tv_sec >= session->time);
@@ -475,19 +553,24 @@ static enum ssl_hs_wait_t do_select_session(SSL_HANDSHAKE *hs) {
 
   // Record connection properties in the new session.
   hs->new_session->cipher = hs->new_cipher;
-  if (!tls1_get_shared_group(hs, &hs->new_session->group_id)) {
-    OPENSSL_PUT_ERROR(SSL, SSL_R_NO_SHARED_GROUP);
-    ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_HANDSHAKE_FAILURE);
-    return ssl_hs_error;
-  }
 
-  // Determine if we need HelloRetryRequest.
-  bool found_key_share;
-  if (!ssl_ext_key_share_parse_clienthello(hs, &found_key_share,
-                                           /*out_key_share=*/nullptr, &alert,
-                                           &client_hello)) {
-    ssl_send_alert(ssl, SSL3_AL_FATAL, alert);
-    return ssl_hs_error;
+  // If using key shares, resolve the supported group and determine if we need
+  // HelloRetryRequest.
+  bool need_hrr = false;
+  if (hs->pake_verifier == nullptr) {
+    if (!tls1_get_shared_group(hs, &hs->new_session->group_id)) {
+      OPENSSL_PUT_ERROR(SSL, SSL_R_NO_SHARED_GROUP);
+      ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_HANDSHAKE_FAILURE);
+      return ssl_hs_error;
+    }
+    bool found_key_share;
+    if (!ssl_ext_key_share_parse_clienthello(hs, &found_key_share,
+                                             /*out_key_share=*/nullptr, &alert,
+                                             &client_hello)) {
+      ssl_send_alert(ssl, SSL3_AL_FATAL, alert);
+      return ssl_hs_error;
+    }
+    need_hrr = !found_key_share;
   }
 
   // Determine if we're negotiating 0-RTT.
@@ -504,12 +587,12 @@ static enum ssl_hs_wait_t do_select_session(SSL_HANDSHAKE *hs) {
   } else if (hs->channel_id_negotiated) {
     // Channel ID is incompatible with 0-RTT.
     ssl->s3->early_data_reason = ssl_early_data_channel_id;
-  } else if (MakeConstSpan(ssl->s3->alpn_selected) != session->early_alpn) {
+  } else if (Span(ssl->s3->alpn_selected) != session->early_alpn) {
     // The negotiated ALPN must match the one in the ticket.
     ssl->s3->early_data_reason = ssl_early_data_alpn_mismatch;
   } else if (hs->new_session->has_application_settings !=
                  session->has_application_settings ||
-             MakeConstSpan(hs->new_session->local_application_settings) !=
+             Span(hs->new_session->local_application_settings) !=
                  session->local_application_settings) {
     ssl->s3->early_data_reason = ssl_early_data_alps_mismatch;
   } else if (ssl->s3->ticket_age_skew < -kMaxTicketAgeSkewSeconds ||
@@ -517,7 +600,7 @@ static enum ssl_hs_wait_t do_select_session(SSL_HANDSHAKE *hs) {
     ssl->s3->early_data_reason = ssl_early_data_ticket_age_skew;
   } else if (!quic_ticket_compatible(session.get(), hs->config)) {
     ssl->s3->early_data_reason = ssl_early_data_quic_parameter_mismatch;
-  } else if (!found_key_share) {
+  } else if (need_hrr) {
     ssl->s3->early_data_reason = ssl_early_data_hello_retry_request;
   } else {
     // |ssl_session_is_resumable| forbids cross-cipher resumptions even if the
@@ -548,7 +631,7 @@ static enum ssl_hs_wait_t do_select_session(SSL_HANDSHAKE *hs) {
   }
 
   // Copy the QUIC early data context to the session.
-  if (ssl->enable_early_data && ssl->quic_method) {
+  if (ssl->enable_early_data && SSL_is_quic(ssl)) {
     if (!hs->new_session->quic_early_data_context.CopyFrom(
             hs->config->quic_early_data_context)) {
       ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_INTERNAL_ERROR);
@@ -569,8 +652,8 @@ static enum ssl_hs_wait_t do_select_session(SSL_HANDSHAKE *hs) {
 
   // Set up the key schedule and incorporate the PSK into the running secret.
   if (!tls13_init_key_schedule(hs, ssl->s3->session_reused
-                                       ? MakeConstSpan(hs->new_session->secret)
-                                       : MakeConstSpan(kZeroes, hash_len)) ||
+                                       ? Span(hs->new_session->secret)
+                                       : Span(kZeroes, hash_len)) ||
       !ssl_hash_message(hs, msg)) {
     return ssl_hs_error;
   }
@@ -583,7 +666,7 @@ static enum ssl_hs_wait_t do_select_session(SSL_HANDSHAKE *hs) {
     ssl->s3->skip_early_data = true;
   }
 
-  if (!found_key_share) {
+  if (need_hrr) {
     ssl->method->next_message(ssl);
     if (!hs->transcript.UpdateForHelloRetryRequest()) {
       return ssl_hs_error;
@@ -592,8 +675,22 @@ static enum ssl_hs_wait_t do_select_session(SSL_HANDSHAKE *hs) {
     return ssl_hs_ok;
   }
 
-  if (!resolve_ecdhe_secret(hs, &client_hello)) {
-    return ssl_hs_error;
+  if (hs->pake_verifier) {
+    assert(!ssl->s3->session_reused);
+    // Revealing the PAKE share (notably confirmV) allows the client to confirm
+    // one PAKE guess, so we must deduct from the brute force limit.
+    if (!hs->credential->ClaimPAKEAttempt()) {
+      OPENSSL_PUT_ERROR(SSL, SSL_R_PAKE_EXHAUSTED);
+      ssl_send_alert(hs->ssl, SSL3_AL_FATAL, SSL_AD_INTERNAL_ERROR);
+      return ssl_hs_error;
+    }
+    if (!resolve_pake_secret(hs)) {
+      return ssl_hs_error;
+    }
+  } else {
+    if (!resolve_ecdhe_secret(hs, &client_hello)) {
+      return ssl_hs_error;
+    }
   }
 
   ssl->method->next_message(ssl);
@@ -608,6 +705,9 @@ static enum ssl_hs_wait_t do_send_hello_retry_request(SSL_HANDSHAKE *hs) {
     return ssl_hs_hints_ready;
   }
 
+  // Although a server could HelloRetryRequest with PAKEs to request a cookie,
+  // we never do so.
+  assert(hs->pake_verifier == nullptr);
   ScopedCBB cbb;
   CBB body, session_id, extensions;
   if (!ssl->method->init_message(ssl, cbb.get(), &body, SSL3_MT_SERVER_HELLO) ||
@@ -643,7 +743,7 @@ static enum ssl_hs_wait_t do_send_hello_retry_request(SSL_HANDSHAKE *hs) {
     // Now that the message is encoded, fill in the whole value.
     size_t offset = hrr.size() - ECH_CONFIRMATION_SIGNAL_LEN;
     if (!ssl_ech_accept_confirmation(
-            hs, MakeSpan(hrr).last(ECH_CONFIRMATION_SIGNAL_LEN),
+            hs, Span(hrr).last(ECH_CONFIRMATION_SIGNAL_LEN),
             ssl->s3->client_random, hs->transcript, /*is_hrr=*/true, hrr,
             offset)) {
       return ssl_hs_error;
@@ -765,6 +865,9 @@ static enum ssl_hs_wait_t do_read_second_client_hello(SSL_HANDSHAKE *hs) {
     }
   }
 
+  // Although a server could HelloRetryRequest with PAKEs to request a cookie,
+  // we never do so.
+  assert(hs->pake_verifier == nullptr);
   if (!resolve_ecdhe_secret(hs, &client_hello)) {
     return ssl_hs_error;
   }
@@ -822,6 +925,7 @@ static enum ssl_hs_wait_t do_send_server_hello(SSL_HANDSHAKE *hs) {
       !CBB_add_u8(&body, 0) ||
       !CBB_add_u16_length_prefixed(&body, &extensions) ||
       !ssl_ext_pre_shared_key_add_serverhello(hs, &extensions) ||
+      !ssl_ext_pake_add_serverhello(hs, &extensions) ||
       !ssl_ext_key_share_add_serverhello(hs, &extensions) ||
       !ssl_ext_supported_versions_add_serverhello(hs, &extensions) ||
       !ssl->method->finish_message(ssl, cbb.get(), &server_hello)) {
@@ -841,7 +945,7 @@ static enum ssl_hs_wait_t do_send_server_hello(SSL_HANDSHAKE *hs) {
 
     // Update |server_hello|.
     Span<uint8_t> server_hello_out =
-        MakeSpan(server_hello).subspan(offset, ECH_CONFIRMATION_SIGNAL_LEN);
+        Span(server_hello).subspan(offset, ECH_CONFIRMATION_SIGNAL_LEN);
     OPENSSL_memcpy(server_hello_out.data(), random_suffix.data(),
                    ECH_CONFIRMATION_SIGNAL_LEN);
   }
@@ -872,7 +976,7 @@ static enum ssl_hs_wait_t do_send_server_hello(SSL_HANDSHAKE *hs) {
     return ssl_hs_error;
   }
 
-  if (!ssl->s3->session_reused) {
+  if (!ssl->s3->session_reused && !hs->pake_verifier) {
     // Determine whether to request a client certificate.
     hs->cert_request = !!(hs->config->verify_mode & SSL_VERIFY_PEER);
     // Only request a certificate if Channel ID isn't negotiated.
@@ -916,7 +1020,7 @@ static enum ssl_hs_wait_t do_send_server_hello(SSL_HANDSHAKE *hs) {
   }
 
   // Send the server Certificate message, if necessary.
-  if (!ssl->s3->session_reused) {
+  if (!ssl->s3->session_reused && !hs->pake_verifier) {
     if (!tls13_add_certificate(hs)) {
       return ssl_hs_error;
     }
@@ -956,8 +1060,8 @@ static enum ssl_hs_wait_t do_send_server_finished(SSL_HANDSHAKE *hs) {
   hs->can_release_private_key = true;
   if (!tls13_add_finished(hs) ||
       // Update the secret to the master secret and derive traffic keys.
-      !tls13_advance_key_schedule(
-          hs, MakeConstSpan(kZeroes, hs->transcript.DigestLen())) ||
+      !tls13_advance_key_schedule(hs,
+                                  Span(kZeroes, hs->transcript.DigestLen())) ||
       !tls13_derive_application_secrets(hs) ||
       !tls13_set_traffic_key(ssl, ssl_encryption_application, evp_aead_seal,
                              hs->new_session.get(),
@@ -977,10 +1081,9 @@ static enum ssl_hs_wait_t do_send_half_rtt_ticket(SSL_HANDSHAKE *hs) {
     // the wire sooner and also avoids triggering a write on |SSL_read| when
     // processing the client Finished. This requires computing the client
     // Finished early. See RFC 8446, section 4.6.1.
-    static const uint8_t kEndOfEarlyData[4] = {SSL3_MT_END_OF_EARLY_DATA, 0,
-                                               0, 0};
-    if (ssl->quic_method == nullptr &&
-        !hs->transcript.Update(kEndOfEarlyData)) {
+    static const uint8_t kEndOfEarlyData[4] = {SSL3_MT_END_OF_EARLY_DATA, 0, 0,
+                                               0};
+    if (!SSL_is_quic(ssl) && !hs->transcript.Update(kEndOfEarlyData)) {
       OPENSSL_PUT_ERROR(SSL, ERR_R_INTERNAL_ERROR);
       return ssl_hs_error;
     }
@@ -999,6 +1102,9 @@ static enum ssl_hs_wait_t do_send_half_rtt_ticket(SSL_HANDSHAKE *hs) {
 
     // Feed the predicted Finished into the transcript. This allows us to derive
     // the resumption secret early and send half-RTT tickets.
+    //
+    // TODO(crbug.com/381113363): Don't use half-RTT tickets with DTLS 1.3.
+    // TODO(crbug.com/376939532): Perhaps don't use half-RTT tickets at all.
     assert(!SSL_is_dtls(hs->ssl));
     assert(hs->expected_client_finished.size() <= 0xff);
     uint8_t header[4] = {
@@ -1020,7 +1126,7 @@ static enum ssl_hs_wait_t do_send_half_rtt_ticket(SSL_HANDSHAKE *hs) {
 static bool uses_end_of_early_data(const SSL *ssl) {
   // DTLS and QUIC omit the EndOfEarlyData message. See RFC 9001, section 8.3,
   // and RFC 9147, section 5.6.
-  return ssl->quic_method == nullptr && !SSL_is_dtls(ssl);
+  return !SSL_is_quic(ssl) && !SSL_is_dtls(ssl);
 }
 
 static enum ssl_hs_wait_t do_read_second_client_flight(SSL_HANDSHAKE *hs) {
@@ -1221,8 +1327,8 @@ static enum ssl_hs_wait_t do_read_channel_id(SSL_HANDSHAKE *hs) {
   if (!ssl->method->get_message(ssl, &msg)) {
     return ssl_hs_read_message;
   }
-  if (!ssl_check_message_type(ssl, msg, SSL3_MT_CHANNEL_ID) ||
-      !tls1_verify_channel_id(hs, msg) ||
+  if (!ssl_check_message_type(ssl, msg, SSL3_MT_CHANNEL_ID) ||  //
+      !tls1_verify_channel_id(hs, msg) ||                       //
       !ssl_hash_message(hs, msg)) {
     return ssl_hs_error;
   }
@@ -1250,7 +1356,7 @@ static enum ssl_hs_wait_t do_read_client_finished(SSL_HANDSHAKE *hs) {
   }
 
   if (!ssl->s3->early_data_accepted) {
-    if (!ssl_hash_message(hs, msg) ||
+    if (!ssl_hash_message(hs, msg) ||  //
         !tls13_derive_resumption_secret(hs)) {
       return ssl_hs_error;
     }
@@ -1262,27 +1368,37 @@ static enum ssl_hs_wait_t do_read_client_finished(SSL_HANDSHAKE *hs) {
     hs->tls13_state = state13_done;
   }
 
+  if (hs->credential != nullptr &&
+      hs->credential->type == SSLCredentialType::kSPAKE2PlusV1Server) {
+    // The client has now confirmed that it does know the correct password, so
+    // this connection no longer counts towards the brute force limit.
+    hs->credential->RestorePAKEAttempt();
+  }
+
   ssl->method->next_message(ssl);
+  if (SSL_is_dtls(ssl)) {
+    ssl->method->schedule_ack(ssl);
+    return ssl_hs_flush;
+  }
   return ssl_hs_ok;
 }
 
 static enum ssl_hs_wait_t do_send_new_session_ticket(SSL_HANDSHAKE *hs) {
+  SSL *const ssl = hs->ssl;
   bool sent_tickets;
   if (!add_new_session_tickets(hs, &sent_tickets)) {
     return ssl_hs_error;
   }
 
   hs->tls13_state = state13_done;
-  // In TLS 1.3, the NewSessionTicket isn't flushed until the server performs a
-  // write, to prevent a non-reading client from causing the server to hang in
-  // the case of a small server write buffer. Consumers which don't write data
-  // to the client will need to do a zero-byte write if they wish to flush the
+  // In QUIC and DTLS, we can flush the ticket to the transport immediately. In
+  // TLS over TCP-like transports, we defer until the server performs a write.
+  // This prevents a non-reading client from causing the server to hang in the
+  // case of a small server write buffer. Consumers which don't write data to
+  // the client will need to do a zero-byte write if they wish to flush the
   // tickets.
-  if ((hs->ssl->quic_method != nullptr || SSL_is_dtls(hs->ssl)) &&
-      sent_tickets) {
-    return ssl_hs_flush;
-  }
-  return ssl_hs_ok;
+  bool should_flush = sent_tickets && (SSL_is_dtls(ssl) || SSL_is_quic(ssl));
+  return should_flush ? ssl_hs_flush : ssl_hs_ok;
 }
 
 enum ssl_hs_wait_t tls13_server_handshake(SSL_HANDSHAKE *hs) {

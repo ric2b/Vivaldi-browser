@@ -17,7 +17,7 @@ class EventGenerator;
 }  // namespace ui::test
 
 namespace ash {
-class BirchChipButton;
+class CoralChipButton;
 class TabAppSelectionHost;
 
 // Test struct that holds a string and a GURL or additional string. Simplifies
@@ -51,7 +51,10 @@ TabAppSelectionHost* ShowAndGetSelectorMenu(
     ui::test::EventGenerator* event_generator);
 
 // Gets the first coral button on the primary root window.
-BirchChipButton* GetFirstCoralButton();
+CoralChipButton* GetFirstCoralButton();
+
+// Gets the number of coral chips on the primary root window.
+size_t GetCoralButtonNum();
 
 }  // namespace ash
 

@@ -7,6 +7,8 @@
 #include <utility>
 
 #include "base/i18n/case_conversion.h"
+#include "base/i18n/char_iterator.h"
+#include "base/i18n/unicodestring.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -17,14 +19,16 @@
 #include "components/autofill/core/browser/data_model/autofill_structured_address_format_provider.h"
 #include "components/autofill/core/browser/data_model/autofill_structured_address_regex_provider.h"
 #include "components/autofill/core/browser/data_model/autofill_structured_address_utils.h"
+#include "components/autofill/core/browser/data_model/transliterator.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/common/autofill_features.h"
 
 namespace autofill {
 
 std::u16string ReduceToInitials(const std::u16string& value) {
-  if (value.empty())
+  if (value.empty()) {
     return std::u16string();
+  }
 
   std::vector<std::u16string> middle_name_tokens =
       base::SplitString(value, base::ASCIIToUTF16(kNameSeparators),
@@ -81,10 +85,46 @@ NameLastConjunction::NameLastConjunction()
 
 NameLastConjunction::~NameLastConjunction() = default;
 
+NameLastPrefix::NameLastPrefix()
+    : AddressComponent(NAME_LAST_PREFIX, {}, MergeMode::kDefault) {}
+
+NameLastPrefix::~NameLastPrefix() = default;
+
+NameLastCore::NameLastCore()
+    : AddressComponent(NAME_LAST_CORE, {}, MergeMode::kDefault) {
+  RegisterChildNode(&last_first_);
+  RegisterChildNode(&last_conjuntion_);
+  RegisterChildNode(&last_second_);
+}
+
+NameLastCore::~NameLastCore() = default;
+
+void NameLastCore::ParseValueAndAssignSubcomponentsByFallbackMethod() {
+  SetValueForType(NAME_LAST_SECOND, GetValue(), VerificationStatus::kParsed);
+}
+
+std::vector<const re2::RE2*>
+NameLastCore::GetParseRegularExpressionsByRelevance() const {
+  auto* pattern_provider = StructuredAddressesRegExProvider::Instance();
+  DCHECK(pattern_provider);
+
+  // Check if the name has the characteristics of an Hispanic/Latinx name.
+  if (HasHispanicLatinxNameCharacteristics(base::UTF16ToUTF8(GetValue()))) {
+    return {pattern_provider->GetRegEx(RegEx::kParseHispanicLastNameCore)};
+  }
+  return {
+      pattern_provider->GetRegEx(RegEx::kParseLastNameCoreIntoSecondLastName)};
+}
+
 std::vector<const re2::RE2*> NameLast::GetParseRegularExpressionsByRelevance()
     const {
   auto* pattern_provider = StructuredAddressesRegExProvider::Instance();
   DCHECK(pattern_provider);
+
+  if (base::FeatureList::IsEnabled(features::kAutofillSupportLastNamePrefix)) {
+    return {pattern_provider->GetRegEx(RegEx::kParseLastName)};
+  }
+
   // Check if the name has the characteristics of an Hispanic/Latinx name.
   if (HasHispanicLatinxNameCharacteristics(base::UTF16ToUTF8(GetValue()))) {
     return {pattern_provider->GetRegEx(RegEx::kParseHispanicLastName)};
@@ -98,15 +138,24 @@ NameLastSecond::NameLastSecond()
 NameLastSecond::~NameLastSecond() = default;
 
 NameLast::NameLast() : AddressComponent(NAME_LAST, {}, MergeMode::kDefault) {
-  RegisterChildNode(&last_first_);
-  RegisterChildNode(&last_conjuntion_);
-  RegisterChildNode(&last_second_);
+  if (base::FeatureList::IsEnabled(features::kAutofillSupportLastNamePrefix)) {
+    RegisterChildNode(&last_prefix_);
+    RegisterChildNode(&last_core_);
+  } else {
+    RegisterChildNode(&last_first_);
+    RegisterChildNode(&last_conjuntion_);
+    RegisterChildNode(&last_second_);
+  }
 }
 
 NameLast::~NameLast() = default;
 
 void NameLast::ParseValueAndAssignSubcomponentsByFallbackMethod() {
-  SetValueForType(NAME_LAST_SECOND, GetValue(), VerificationStatus::kParsed);
+  if (base::FeatureList::IsEnabled(features::kAutofillSupportLastNamePrefix)) {
+    SetValueForType(NAME_LAST_CORE, GetValue(), VerificationStatus::kParsed);
+  } else {
+    SetValueForType(NAME_LAST_SECOND, GetValue(), VerificationStatus::kParsed);
+  }
 }
 
 // TODO(crbug.com/40143553): Honorifics are temporally disabled.
@@ -125,8 +174,9 @@ NameFull::NameFull(const NameFull& other) : NameFull() {
 
 void NameFull::MigrateLegacyStructure() {
   // Only if the name was imported from a legacy structure, the component has no
-  if (GetVerificationStatus() != VerificationStatus::kNoStatus)
+  if (GetVerificationStatus() != VerificationStatus::kNoStatus) {
     return;
+  }
 
   // If the value of the component is set, use this value as a basis to migrate
   // the name.
@@ -154,9 +204,10 @@ void NameFull::MigrateLegacyStructure() {
   // Otherwise, at least one of the subcomponents should be set.
   // Set its verification status to observed.
   for (AddressComponent* subcomponent : Subcomponents()) {
-    if (!subcomponent->GetValue().empty())
+    if (!subcomponent->GetValue().empty()) {
       subcomponent->SetValue(subcomponent->GetValue(),
                              VerificationStatus::kObserved);
+    }
   }
 
   // If no subcomponent is set, the name is empty. In any case, the name was
@@ -220,18 +271,62 @@ std::u16string NameFull::GetFormatString() const {
 
 NameFull::~NameFull() = default;
 
+AlternativeNameAddressComponent::AlternativeNameAddressComponent(
+    FieldType storage_type,
+    SubcomponentsList subcomponents,
+    unsigned int merge_mode)
+    : AddressComponent(storage_type, subcomponents, merge_mode) {}
+
+bool AlternativeNameAddressComponent::SameAs(
+    const AddressComponent& other) const {
+  if (this == &other) {
+    return true;
+  }
+
+  if (GetStorageType() != other.GetStorageType()) {
+    return false;
+  }
+
+  if (GetValueForComparison(GetValue(), other) !=
+          other.GetValueForComparison(other.GetValue(), *this) ||
+      GetVerificationStatus() != other.GetVerificationStatus()) {
+    return false;
+  }
+
+  for (size_t i = 0; i < other.Subcomponents().size(); i++) {
+    if (!(Subcomponents()[i]->SameAs(*other.Subcomponents()[i]))) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+std::u16string AlternativeNameAddressComponent::GetValueForComparison(
+    const std::u16string& value,
+    const AddressComponent& other) const {
+  return TransliterateAlternativeName(
+      AddressComponent::GetValueForComparison(GetValue(), other));
+}
+
 AlternativeGivenName::AlternativeGivenName()
-    : AddressComponent(ALTERNATIVE_GIVEN_NAME, {}, MergeMode::kDefault) {}
+    : AlternativeNameAddressComponent(ALTERNATIVE_GIVEN_NAME,
+                                      {},
+                                      MergeMode::kDefault) {}
 
 AlternativeGivenName::~AlternativeGivenName() = default;
 
 AlternativeFamilyName::AlternativeFamilyName()
-    : AddressComponent(ALTERNATIVE_FAMILY_NAME, {}, MergeMode::kDefault) {}
+    : AlternativeNameAddressComponent(ALTERNATIVE_FAMILY_NAME,
+                                      {},
+                                      MergeMode::kDefault) {}
 
 AlternativeFamilyName::~AlternativeFamilyName() = default;
 
 AlternativeFullName::AlternativeFullName()
-    : AddressComponent(ALTERNATIVE_FULL_NAME, {}, MergeMode::kDefault) {
+    : AlternativeNameAddressComponent(ALTERNATIVE_FULL_NAME,
+                                      {},
+                                      MergeMode::kDefault) {
   RegisterChildNode(&given_name_);
   RegisterChildNode(&family_name_);
 }
@@ -240,6 +335,8 @@ AlternativeFullName::AlternativeFullName(const AlternativeFullName& other)
     : AlternativeFullName() {
   CopyFrom(other);
 }
+
+AlternativeFullName::~AlternativeFullName() = default;
 
 std::vector<const re2::RE2*>
 AlternativeFullName::GetParseRegularExpressionsByRelevance() const {
@@ -267,7 +364,5 @@ std::u16string AlternativeFullName::GetFormatString() const {
   return pattern_provider->GetPattern(GetStorageType(), /*country_code=*/"",
                                       info);
 }
-
-AlternativeFullName::~AlternativeFullName() = default;
 
 }  // namespace autofill

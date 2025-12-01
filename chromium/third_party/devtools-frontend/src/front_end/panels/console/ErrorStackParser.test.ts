@@ -2,25 +2,26 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import type * as Platform from '../../core/platform/platform.js';
+import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import type * as Protocol from '../../generated/protocol.js';
 
 import * as Console from './console.js';
 
+const {urlString} = Platform.DevToolsPath;
 const {parseSourcePositionsFromErrorStack} = Console.ErrorStackParser;
 
 describe('ErrorStackParser', () => {
   let runtimeModel;
   let parseErrorStack: (stack: string) => Console.ErrorStackParser.ParsedErrorFrame[] | null;
-  const fileTestingUrl = 'file:///testing.js' as Platform.DevToolsPath.UrlString;
+  const fileTestingUrl = urlString`file:///testing.js`;
 
   beforeEach(() => {
     // TODO(crbug/1280141): Remove complicated stubbing code once `parseSourcePositionsFromErrorStack`
     //                      no longer needs a RuntimeModel.
     runtimeModel = sinon.createStubInstance(SDK.RuntimeModel.RuntimeModel, {
       target: sinon.createStubInstance(SDK.Target.Target, {
-        inspectedURL: 'http://www.example.org' as Platform.DevToolsPath.UrlString,
+        inspectedURL: urlString`http://www.example.org`,
       }),
       debuggerModel: sinon.createStubInstance(SDK.DebuggerModel.DebuggerModel, {
         scriptsForSourceURL: [],
@@ -84,7 +85,7 @@ describe('ErrorStackParser', () => {
         at foo (file:///testing.js:10:3)`);
 
     assert.exists(frames);
-    assert.deepStrictEqual(frames[1].link, {
+    assert.deepEqual(frames[1].link, {
       url: fileTestingUrl,
       prefix: '        at foo (',
       suffix: ')',
@@ -99,7 +100,7 @@ describe('ErrorStackParser', () => {
         at foo (file:///testing.js)`);
 
     assert.exists(frames);
-    assert.deepStrictEqual(frames[1].link, {
+    assert.deepEqual(frames[1].link, {
       url: fileTestingUrl,
       prefix: '        at foo (',
       suffix: ')',
@@ -114,7 +115,7 @@ describe('ErrorStackParser', () => {
         at file:///testing.js:42:3`);
 
     assert.exists(frames);
-    assert.deepStrictEqual(frames[1].link, {
+    assert.deepEqual(frames[1].link, {
       url: fileTestingUrl,
       prefix: '        at ',
       suffix: '',
@@ -129,7 +130,7 @@ describe('ErrorStackParser', () => {
         at async file:///testing.js:42:3`);
 
     assert.exists(frames);
-    assert.deepStrictEqual(frames[1].link, {
+    assert.deepEqual(frames[1].link, {
       url: fileTestingUrl,
       prefix: '        at async ',
       suffix: '',
@@ -140,15 +141,14 @@ describe('ErrorStackParser', () => {
   });
 
   it('detects URLs with parens', () => {
-    const url =
-        'http://localhost:5173/src/routes/(v2-routes)/project/+layout.ts?ts=12345' as Platform.DevToolsPath.UrlString;
+    const url = urlString`http://localhost:5173/src/routes/(v2-routes)/project/+layout.ts?ts=12345`;
     const frames = parseErrorStack(`ZodError:
         at load (${url}:33:5)
         at ${url}:1:1`);
 
     assert.exists(frames);
     assert.lengthOf(frames, 3);
-    assert.deepStrictEqual(frames[1].link, {
+    assert.deepEqual(frames[1].link, {
       url,
       prefix: '        at load (',
       suffix: ')',
@@ -156,7 +156,7 @@ describe('ErrorStackParser', () => {
       columnNumber: 4,  // 0-based.
       enclosedInBraces: true,
     });
-    assert.deepStrictEqual(frames[2].link, {
+    assert.deepEqual(frames[2].link, {
       url,
       prefix: '        at ',
       suffix: '',
@@ -167,13 +167,13 @@ describe('ErrorStackParser', () => {
   });
 
   it('correctly handles eval frames', () => {
-    const url = 'http://www.chromium.org/foo.js' as Platform.DevToolsPath.UrlString;
+    const url = urlString`http://www.chromium.org/foo.js`;
     const frames = parseErrorStack(`Error: MyError
     at eval (eval at <anonymous> (${url}:42:1), <anonymous>:1:1)`);
 
     assert.exists(frames);
     assert.lengthOf(frames, 2);
-    assert.deepStrictEqual(frames[1].link, {
+    assert.deepEqual(frames[1].link, {
       url,
       prefix: '    at eval (eval at <anonymous> (',
       suffix: '), <anonymous>:1:1)',
@@ -188,7 +188,7 @@ describe('ErrorStackParser', () => {
         at foo (testing.js:10:3)`);
 
     assert.exists(frames);
-    assert.strictEqual(frames[1].link?.url, 'http://www.example.org/testing.js' as Platform.DevToolsPath.UrlString);
+    assert.strictEqual(frames[1].link?.url, urlString`http://www.example.org/testing.js`);
   });
 
   it('uses the inspected target URL to complete relative URLs in eval frames', () => {
@@ -198,8 +198,8 @@ describe('ErrorStackParser', () => {
 
     assert.exists(frames);
     assert.lengthOf(frames, 3);
-    assert.deepStrictEqual(frames[2].link, {
-      url: 'http://www.example.org/inspected-page.html' as Platform.DevToolsPath.UrlString,
+    assert.deepEqual(frames[2].link, {
+      url: urlString`http://www.example.org/inspected-page.html`,
       prefix: '    at eval (eval at testFunction (',
       suffix: '), <anonymous>:1:10)',
       lineNumber: 28,    // 0-based.
@@ -216,24 +216,24 @@ describe('ErrorStackParser', () => {
 
     assert.exists(frames);
     assert.lengthOf(frames, 4);
-    assert.deepStrictEqual(frames[1].link, {
-      url: 'http://www.example.org/(abc)/foo.js' as Platform.DevToolsPath.UrlString,
+    assert.deepEqual(frames[1].link, {
+      url: urlString`http://www.example.org/(abc)/foo.js`,
       prefix: '        at foo (',
       suffix: ')',
       lineNumber: 1,    // 0-based.
       columnNumber: 2,  // 0-based.
       enclosedInBraces: true,
     });
-    assert.deepStrictEqual(frames[2].link, {
-      url: 'http://www.example.org/(abc)/foo.js' as Platform.DevToolsPath.UrlString,
+    assert.deepEqual(frames[2].link, {
+      url: urlString`http://www.example.org/(abc)/foo.js`,
       prefix: '        at async bar (',
       suffix: ')',
       lineNumber: 0,    // 0-based.
       columnNumber: 1,  // 0-based.
       enclosedInBraces: true,
     });
-    assert.deepStrictEqual(frames[3].link, {
-      url: 'http://www.example.org/(abc)/foo.js' as Platform.DevToolsPath.UrlString,
+    assert.deepEqual(frames[3].link, {
+      url: urlString`http://www.example.org/(abc)/foo.js`,
       prefix: '        at ',
       suffix: '',
       lineNumber: 9,     // 0-based.
@@ -319,6 +319,26 @@ describe('ErrorStackParser', () => {
       assert.strictEqual(parsedFrames[1].link?.scriptId, sid('25'));
       assert.isUndefined(parsedFrames[2].link);
       assert.strictEqual(parsedFrames[3].link?.scriptId, sid('30'));
+    });
+
+    it('combines builtin frames', () => {
+      const parsedFrames = parseErrorStack(`Error: some error
+        at foo (http://example.com/a.js:6:3)
+        at Array.forEach (<anonymous>)
+        at JSON.parse (<anonymous>)
+        at bar (http://example.com/b.js:43:14)`);
+      assert.exists(parsedFrames);
+
+      assert.isUndefined(parsedFrames[0].link);
+      assert.isUndefined(parsedFrames[0].isCallFrame);
+      assert.strictEqual(parsedFrames[1].link?.url, urlString`http://example.com/a.js`);
+      assert.isTrue(parsedFrames[1].isCallFrame);
+      assert.isUndefined(parsedFrames[2].link);
+      assert.isTrue(parsedFrames[2].isCallFrame);
+      assert.strictEqual(
+          parsedFrames[2].line, '        at Array.forEach (<anonymous>)\n        at JSON.parse (<anonymous>)');
+      assert.strictEqual(parsedFrames[3].link?.url, urlString`http://example.com/b.js`);
+      assert.isTrue(parsedFrames[3].isCallFrame);
     });
   });
 });

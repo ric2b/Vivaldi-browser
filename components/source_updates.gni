@@ -292,6 +292,9 @@ update_target("//components/input:input") {
   sources += [
     "//vivaldi/components/input/vivaldi_render_input_router.cc",
   ]
+  deps += [
+    "//content/common:buildflags",
+  ]
 }
 
 if (is_win) {
@@ -316,6 +319,19 @@ if (is_linux && !is_android) {
   update_target("//content/zygote:zygote") {
     sources += [
       "//vivaldi/content/zygote/zygote_linux_utils.cc"
+    ]
+  }
+}
+
+if (!is_android) {
+  update_target("//chrome/browser:browser") {
+    sources += [
+      "//vivaldi/components/drm_helper/vivaldi_drm_tab_helper.cc",
+      "//vivaldi/components/drm_helper/vivaldi_drm_tab_helper.h",
+    ]
+
+    public_deps += [
+      "//vivaldi/renderer/mojo:encrypted_media_access",
     ]
   }
 }

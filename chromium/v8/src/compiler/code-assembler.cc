@@ -6,11 +6,15 @@
 
 #include <optional>
 #include <ostream>
+#include <thread>  // NOLINT(build/c++11) (for this_thread::yield())
 
 #include "src/builtins/builtins-inl.h"
+#include "src/builtins/constants-table-builder.h"
+#include "src/codegen/compiler.h"
 #include "src/codegen/interface-descriptors-inl.h"
 #include "src/codegen/machine-type.h"
 #include "src/codegen/tnode.h"
+#include "src/compiler-dispatcher/optimizing-compile-dispatcher.h"
 #include "src/compiler/backend/instruction-selector.h"
 #include "src/compiler/js-graph.h"
 #include "src/compiler/linkage.h"
@@ -35,13 +39,13 @@ constexpr MachineType MachineTypeOf<MaybeObject>::value;
 
 namespace compiler {
 
-static_assert(std::is_convertible<TNode<Number>, TNode<Object>>::value,
+static_assert(std::is_convertible_v<TNode<Number>, TNode<Object>>,
               "test subtyping");
 static_assert(
-    std::is_convertible<TNode<Number>, TNode<UnionOf<Smi, HeapObject>>>::value,
+    std::is_convertible_v<TNode<Number>, TNode<UnionOf<Smi, HeapObject>>>,
     "test subtyping");
 static_assert(
-    !std::is_convertible<TNode<UnionOf<Smi, HeapObject>>, TNode<Number>>::value,
+    !std::is_convertible_v<TNode<UnionOf<Smi, HeapObject>>, TNode<Number>>,
     "test subtyping");
 
 CodeAssemblerState::CodeAssemblerState(
@@ -54,15 +58,6 @@ CodeAssemblerState::CodeAssemblerState(
           Linkage::GetStubCallDescriptor(
               zone, descriptor, descriptor.GetStackParameterCount(),
               CallDescriptor::kNoFlags, Operator::kNoProperties),
-          kind, name, builtin) {}
-
-CodeAssemblerState::CodeAssemblerState(Isolate* isolate, Zone* zone,
-                                       int parameter_count, CodeKind kind,
-                                       const char* name, Builtin builtin)
-    : CodeAssemblerState(
-          isolate, zone,
-          Linkage::GetJSCallDescriptor(zone, false, parameter_count,
-                                       CallDescriptor::kCanUseRoots),
           kind, name, builtin) {}
 
 CodeAssemblerState::CodeAssemblerState(Isolate* isolate, Zone* zone,
@@ -163,25 +158,81 @@ bool CodeAssembler::Word32ShiftIsSafe() const {
   return raw_assembler()->machine()->Word32ShiftIsSafe();
 }
 
-// static
-Handle<Code> CodeAssembler::GenerateCode(
-    CodeAssemblerState* state, const AssemblerOptions& options,
-    const ProfileDataFromFile* profile_data) {
-  DCHECK(!state->code_generated_);
+CodeAssembler::BuiltinCompilationScheduler::~BuiltinCompilationScheduler() {
+  // Did you forget to call AwaitAndFinalizeCurrentBatch()?
+  CHECK_EQ(0, current_batch_zone_size_);
+  CHECK(main_thread_output_queue_.empty());
+}
 
-  RawMachineAssembler* rasm = state->raw_assembler_.get();
+void CodeAssembler::BuiltinCompilationScheduler::CompileCode(
+    Isolate* isolate, std::unique_ptr<TurbofanCompilationJob> job) {
+#ifdef V8_USE_ADDRESS_SANITIZER
+  constexpr size_t kInputZoneBatchSize = 128UL * MB;
+#else   // !V8_USE_ADDRESS_SANITIZER
+  constexpr size_t kInputZoneBatchSize = 1536UL * MB;
+#endif  // V8_USE_ADDRESS_SANITIZER
 
-  Handle<Code> code;
-  Graph* graph = rasm->ExportForOptimization();
+  // This must be called from the main thread.
+  DCHECK_EQ(ThreadId::Current(), isolate->thread_id());
 
-  code = Pipeline::GenerateCodeForCodeStub(
-             rasm->isolate(), rasm->call_descriptor(), graph, state->jsgraph_,
-             rasm->source_positions(), state->kind_, state->name_,
-             state->builtin_, options, profile_data)
-             .ToHandleChecked();
+  DCHECK(job->compilation_info()->code_kind() == CodeKind::BUILTIN ||
+         job->compilation_info()->code_kind() == CodeKind::BYTECODE_HANDLER);
 
-  state->code_generated_ = true;
-  return code;
+  CHECK_EQ(CompilationJob::SUCCEEDED, job->PrepareJob(isolate));
+
+  if (current_batch_zone_size_ >= kInputZoneBatchSize) {
+    AwaitAndFinalizeCurrentBatch(isolate);
+  }
+
+  QueueJob(isolate, std::move(job));
+}
+
+void CodeAssembler::BuiltinCompilationScheduler::QueueJob(
+    Isolate* isolate, std::unique_ptr<TurbofanCompilationJob> job) {
+  current_batch_zone_size_ +=
+      job->compilation_info()->zone()->allocation_size();
+  if (v8_flags.concurrent_builtin_generation) {
+    auto* dispatcher = isolate->optimizing_compile_dispatcher();
+    // Spin until we can queue the job.
+    while (!dispatcher->TryQueueForOptimization(job)) {
+      std::this_thread::yield();
+    }
+  } else {
+    CHECK_EQ(CompilationJob::SUCCEEDED,
+             job->ExecuteJob(isolate->counters()->runtime_call_stats(),
+                             isolate->main_thread_local_isolate()));
+    if (!v8_flags.turbo_profiling) {
+      main_thread_output_queue_.push_back(std::move(job));
+    } else {
+      // When profiling builtins for PGO, each builtin must be completely
+      // generated one at a time (i.e. PrepareJob, ExecuteJob, and FinalizeJob)
+      // instead of batched.
+      FinalizeJobOnMainThread(isolate, job.get());
+    }
+  }
+}
+
+void CodeAssembler::BuiltinCompilationScheduler::FinalizeJobOnMainThread(
+    Isolate* isolate, TurbofanCompilationJob* job) {
+  CHECK_EQ(CompilationJob::SUCCEEDED, job->FinalizeJob(isolate));
+  builtins_installed_count_++;
+}
+
+void CodeAssembler::BuiltinCompilationScheduler::AwaitAndFinalizeCurrentBatch(
+    Isolate* isolate) {
+  if (v8_flags.concurrent_builtin_generation) {
+    auto* dispatcher = isolate->optimizing_compile_dispatcher();
+    dispatcher->AwaitCompileTasks();
+    builtins_installed_count_ =
+        dispatcher->InstallGeneratedBuiltins(builtins_installed_count_);
+  } else {
+    DCHECK_IMPLIES(v8_flags.turbo_profiling, main_thread_output_queue_.empty());
+    while (!main_thread_output_queue_.empty()) {
+      FinalizeJobOnMainThread(isolate, main_thread_output_queue_.front().get());
+      main_thread_output_queue_.pop_front();
+    }
+  }
+  current_batch_zone_size_ = 0;
 }
 
 bool CodeAssembler::Is64() const { return raw_assembler()->machine()->Is64(); }
@@ -201,6 +252,13 @@ bool CodeAssembler::IsFloat64RoundTiesEvenSupported() const {
 
 bool CodeAssembler::IsFloat64RoundTruncateSupported() const {
   return raw_assembler()->machine()->Float64RoundTruncate().IsSupported();
+}
+
+bool CodeAssembler::IsTruncateFloat64ToFloat16RawBitsSupported() const {
+  return raw_assembler()
+      ->machine()
+      ->TruncateFloat64ToFloat16RawBits()
+      .IsSupported();
 }
 
 bool CodeAssembler::IsInt32AbsWithOverflowSupported() const {
@@ -284,11 +342,27 @@ TNode<Smi> CodeAssembler::SmiConstant(int value) {
   return SmiConstant(Smi::FromInt(value));
 }
 
+void CodeAssembler::CanonicalizeEmbeddedBuiltinsConstantIfNeeded(
+    Handle<HeapObject> object) {
+  // This must be called on the main thread so that the builtins constant
+  // indices are reproducible from run to run of mksnapshot.
+  DCHECK_EQ(ThreadId::Current(), isolate()->thread_id());
+  RootIndex dummy_root;
+  Builtin dummy_builtin;
+  if (isolate()->IsGeneratingEmbeddedBuiltins() &&
+      !isolate()->roots_table().IsRootHandle(object, &dummy_root) &&
+      !isolate()->builtins()->IsBuiltinHandle(object, &dummy_builtin) &&
+      !IsInstructionStream(*object)) {
+    isolate()->builtins_constants_table_builder()->AddObject(object);
+  }
+}
+
 // This emits an untyped heap constant that is never a hole.
 TNode<HeapObject> CodeAssembler::UntypedHeapConstantNoHole(
     Handle<HeapObject> object) {
   // jsgraph()->HeapConstantNoHole does a CHECK that it is in fact a hole
   // value.
+  CanonicalizeEmbeddedBuiltinsConstantIfNeeded(object);
   return UncheckedCast<HeapObject>(jsgraph()->HeapConstantNoHole(object));
 }
 
@@ -296,18 +370,21 @@ TNode<HeapObject> CodeAssembler::UntypedHeapConstantNoHole(
 // Only use this if you really need to and cannot use *NoHole or *Hole.
 TNode<HeapObject> CodeAssembler::UntypedHeapConstantMaybeHole(
     Handle<HeapObject> object) {
+  CanonicalizeEmbeddedBuiltinsConstantIfNeeded(object);
   return UncheckedCast<HeapObject>(jsgraph()->HeapConstantMaybeHole(object));
 }
 
 // This is used to emit an untyped heap constant that can only be Hole values.
 TNode<HeapObject> CodeAssembler::UntypedHeapConstantHole(
     Handle<HeapObject> object) {
+  CanonicalizeEmbeddedBuiltinsConstantIfNeeded(object);
   return UncheckedCast<HeapObject>(jsgraph()->HeapConstantHole(object));
 }
 
 TNode<String> CodeAssembler::StringConstant(const char* str) {
   Handle<String> internalized_string =
       factory()->InternalizeString(base::OneByteVector(str));
+  CanonicalizeEmbeddedBuiltinsConstantIfNeeded(internalized_string);
   return UncheckedCast<String>(HeapConstantNoHole(internalized_string));
 }
 
@@ -1367,7 +1444,7 @@ Node* CodeAssembler::CallJSStubImpl(
     inputs.Add(*new_target);
   }
   inputs.Add(arity);
-#ifdef V8_ENABLE_LEAPTIERING
+#ifdef V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE
   if (dispatch_handle) {
     inputs.Add(*dispatch_handle);
   }
@@ -1437,7 +1514,7 @@ void CodeAssembler::TailCallJSCode(TNode<Code> code, TNode<Context> context,
       CallDescriptor::kFixedTargetRegister, Operator::kNoProperties,
       StubCallMode::kCallCodeObject);
 
-#ifdef V8_ENABLE_LEAPTIERING
+#ifdef V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE
   Node* nodes[] = {code,      function,        new_target,
                    arg_count, dispatch_handle, context};
 #else
@@ -1480,20 +1557,34 @@ void CodeAssembler::Goto(Label* label) {
   raw_assembler()->Goto(label->label_);
 }
 
-void CodeAssembler::GotoIf(TNode<IntegralT> condition, Label* true_label) {
+void CodeAssembler::GotoIf(TNode<IntegralT> condition, Label* true_label,
+                           GotoHint goto_hint) {
   Label false_label(this);
-  Branch(condition, true_label, &false_label);
+  BranchHint branch_hint = BranchHint::kNone;
+  if (goto_hint == GotoHint::kLabel) {
+    branch_hint = BranchHint::kTrue;
+  } else if (goto_hint == GotoHint::kFallthrough) {
+    branch_hint = BranchHint::kFalse;
+  }
+  Branch(condition, true_label, &false_label, branch_hint);
   Bind(&false_label);
 }
 
-void CodeAssembler::GotoIfNot(TNode<IntegralT> condition, Label* false_label) {
+void CodeAssembler::GotoIfNot(TNode<IntegralT> condition, Label* false_label,
+                              GotoHint goto_hint) {
   Label true_label(this);
-  Branch(condition, &true_label, false_label);
+  BranchHint branch_hint = BranchHint::kNone;
+  if (goto_hint == GotoHint::kLabel) {
+    branch_hint = BranchHint::kFalse;
+  } else if (goto_hint == GotoHint::kFallthrough) {
+    branch_hint = BranchHint::kTrue;
+  }
+  Branch(condition, &true_label, false_label, branch_hint);
   Bind(&true_label);
 }
 
 void CodeAssembler::Branch(TNode<IntegralT> condition, Label* true_label,
-                           Label* false_label) {
+                           Label* false_label, BranchHint branch_hint) {
   int32_t constant;
   if (TryToInt32Constant(condition, &constant)) {
     if ((true_label->is_used() || true_label->is_bound()) &&
@@ -1504,7 +1595,7 @@ void CodeAssembler::Branch(TNode<IntegralT> condition, Label* true_label,
   true_label->MergeVariables();
   false_label->MergeVariables();
   return raw_assembler()->Branch(condition, true_label->label_,
-                                 false_label->label_);
+                                 false_label->label_, branch_hint);
 }
 
 void CodeAssembler::Branch(TNode<BoolT> condition,

@@ -7,9 +7,9 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" />、意外やけど途中で接続切ってきたわ。</translation>
 <translation id="1161325031994447685">Wi-Fiにもっかい接ぐ</translation>
 <translation id="1175364870820465910">刷るわ... (&amp;P)</translation>
-<translation id="132390688737681464">住所保存して自動入力</translation>
 <translation id="1375198122581997741">バージョン情報</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" />からデータ送信されへんかったわ。</translation>
+<translation id="1555191101192706055">アクセスしようとしたサイトな、ユーザー騙してブラウジングに影響出る（あんたがホームにしてるページ勝手に変えたり、行く先々のサイトで余計な広告出したり）有害ソフトウェアをインストールしてきよるかもしれへんで。</translation>
 <translation id="1559528461873125649">そんなファイルとかフォルダーないみたいやわ</translation>
 <translation id="1640244768702815859"><ph name="BEGIN_LINK" />サイトのトップページにアクセス<ph name="END_LINK" />してみて。</translation>
 <translation id="1645368109819982629">対応してへんプロトコル</translation>
@@ -22,6 +22,7 @@
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />プロキシーとファイアウォール確認する<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">発行先: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">このサイト、安全に接続できへんわ</translation>
+<translation id="2178904466768126352">アクセスしようとしたサイトな、パスワード、写真、メッセージ、クレジットカード番号盗んだり消したりする有害ソフトウェアをインストールしてきよるかもしれへんで。</translation>
 <translation id="2187317261103489799">検出（デフォルト）</translation>
 <translation id="2224337661447660594">ネット繋がってへん</translation>
 <translation id="2283340219607151381">住所保存して自動入力</translation>
@@ -50,6 +51,7 @@
 <translation id="2991571918955627853"><ph name="SITE" />はHSTSが使われてるから、今アクセスできへんわ。ネットワークエラーとかネットワーク攻撃って大抵一時的なもんやから、時間置いたらアクセスできるようになるんちゃう。</translation>
 <translation id="3005723025932146533">保存したコピー出す</translation>
 <translation id="301521992641321250">自動ブロックされたわ</translation>
+<translation id="3037605927509011580">あ、あかんわ！</translation>
 <translation id="3041612393474885105">証明書情報</translation>
 <translation id="3109728660330352905">このページ表示する権限がないねん。</translation>
 <translation id="31207688938192855"><ph name="BEGIN_LINK" />接続診断ツール使ってみて<ph name="END_LINK" />。</translation>
@@ -62,7 +64,6 @@
 <translation id="3234666976984236645">このサイトの重要なコンテンツを常に検出</translation>
 <translation id="3308738399950580893">広告</translation>
 <translation id="3384522979010096022">このサイトの表示、あんたの組織が許可してへんわ</translation>
-<translation id="3387261909427947069">支払方法</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" />、今アクセスできへんわ。</translation>
 <translation id="3427092606871434483">ええよ（デフォルト）</translation>
 <translation id="3447661539832366887">このデバイスの所有者が恐竜ゲーム無効にしてるわ。</translation>
@@ -92,6 +93,7 @@
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />ファイアウォールとウイルス対策の設定確認する<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />ネットワーク診断を試してみて<ph name="END_LINK" />。</translation>
 <translation id="4235360514405112390">有効</translation>
+<translation id="4241830393007970744">アクセスしようとしたサイトな、わざとソフトウェアをインストールさせようとしてきたり、パスワード、電話番号、クレジットカード番号を出すようユーザー騙してくる可能性あるで。</translation>
 <translation id="4250431568374086873">このサイトへの接続、完全には保護されてへんで</translation>
 <translation id="4265872034478892965">管理者に許可されとる</translation>
 <translation id="4305666528087210886">ファイルにアクセスできへんかったわ</translation>
@@ -102,6 +104,7 @@
 <translation id="4522570452068850558">細かいこと</translation>
 <translation id="4558551763791394412">拡張機能、無効にしてみて。</translation>
 <translation id="4592951414987517459"><ph name="DOMAIN" /> への接続はおニューの暗号スイートで暗号化されてるで。</translation>
+<translation id="4598641255230617220">貼り付けて移動</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">接続が途中で切れたわ</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Windowsのネットワーク診断使う<ph name="END_LINK" /></translation>
@@ -111,6 +114,7 @@
 <translation id="4764776831041365478"><ph name="URL" />のウェブページは今だけダウンしてるか、新しいウェブアドレスに引っ越したんかも。</translation>
 <translation id="483241715238664915">警告オンにする</translation>
 <translation id="4943872375798546930">見つからへんわ</translation>
+<translation id="5017554619425969104">コピーしたテキスト</translation>
 <translation id="5023310440958281426">管理者ポリシー確認してもうてもええかな</translation>
 <translation id="5039804452771397117">ええよ</translation>
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1{（1 個が使用中）}other{（# 個が使用中）}}</translation>
@@ -120,7 +124,6 @@
 <translation id="5386426401304769735">このサイトの証明書チェーンには SHA-1 使て署名された証明書が含まれてるわ。</translation>
 <translation id="5452270690849572955">この<ph name="HOST_NAME" />ページ、どこにも見当たらへん</translation>
 <translation id="5457113250005438886">無効</translation>
-<translation id="5490432419156082418">住所、その他</translation>
 <translation id="5492298309214877701">このサイトは企業、団体か学校のイントラネット上にあるんやけどな、外部のウェブサイトと同じURLが使われてるねん。
     <ph name="LINE_BREAK" />
     システム管理者に聞いてみて。</translation>
@@ -165,7 +168,7 @@
 <translation id="7108819624672055576">拡張機能で許可されとる</translation>
 <translation id="7111012039238467737">（有効）</translation>
 <translation id="7113310725918019676"><ph name="DOMAIN" />からの<ph name="BLOCKED_TYPE" />はOKする</translation>
-<translation id="7179323680825933600">支払方法保存して自動入力</translation>
+<translation id="7126644664682723998">貼り付けて検索</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" />、セキュリティ規格遵守しとらへんわ。</translation>
 <translation id="7219179957768738017">この接続には <ph name="SSL_VERSION" /> を使うてんで。</translation>
 <translation id="7221855153210829124">通知出す</translation>
@@ -201,7 +204,7 @@
 <translation id="8288807391153049143">証明書出す</translation>
 <translation id="8289355894181816810">確認方法わからへんかったら、ネットワーク管理者に聞いてみ。</translation>
 <translation id="8332188693563227489"><ph name="HOST_NAME" />へのアクセス断られたわ</translation>
-<translation id="8473863474539038330">住所、その他</translation>
+<translation id="8473863474539038330">住所とか</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" />からの応答がタイムアウトしたわ。</translation>
 <translation id="8503813439785031346">ユーザーの芸名</translation>
 <translation id="8703575177326907206"><ph name="DOMAIN" /> への接続、暗号化されてへんで。</translation>
@@ -217,6 +220,7 @@
 <translation id="9062620674789239642">他のとこ行ったか、編集されたか、消された可能性あるわ。</translation>
 <translation id="9069693763241529744">拡張機能にブロックされたわ</translation>
 <translation id="9073799351042754113">このサイトに対するセキュリティ警告無効にしたで。</translation>
+<translation id="9168814207360376865">支払方法保存しているかの確認をサイトに許可する</translation>
 <translation id="9169664750068251925">このサイトではいつもブロック</translation>
 <translation id="9180553614777056266">広告ブロッカー</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" />、サポートされていないプロトコル使っとるわ。</translation>

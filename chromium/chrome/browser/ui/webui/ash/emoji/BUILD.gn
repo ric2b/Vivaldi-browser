@@ -2,10 +2,9 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/chromeos/ui_mode.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 
-assert(is_chromeos_ash)
+assert(is_chromeos)
 
 mojom("mojo_bindings") {
   sources = [
@@ -77,7 +76,6 @@ static_library("emoji") {
     "//chrome/app:generated_resources",
     "//chrome/browser/resources/chromeos/emoji_picker:resources",
     "//chrome/browser/resources/chromeos/seal:resources",
-    "//chrome/browser/ui/webui:webui_util",
     "//chromeos/ash/components/emoji:resources",
     "//components/prefs",
     "//net",
@@ -90,7 +88,6 @@ static_library("emoji") {
     "//ui/base/metadata",
     "//ui/display",
     "//ui/gfx/geometry",
-    "//ui/resources:webui_resources_grd",
     "//ui/webui",
   ]
 }

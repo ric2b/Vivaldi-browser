@@ -6,15 +6,16 @@
 
 import 'chrome://personalization/strings.m.js';
 
-import {GooglePhotosAlbum, Paths, PersonalizationBreadcrumbElement, PersonalizationRouterElement, TopicSource} from 'chrome://personalization/js/personalization_app.js';
+import type {GooglePhotosAlbum} from 'chrome://personalization/js/personalization_app.js';
+import {Paths, PersonalizationBreadcrumbElement, PersonalizationRouterElement, TopicSource} from 'chrome://personalization/js/personalization_app.js';
 import {SeaPenTemplateId} from 'chrome://resources/ash/common/sea_pen/sea_pen_generated.mojom-webui.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {flushTasks, waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 
 import {baseSetup, initElement} from './personalization_app_test_utils.js';
-import {TestPersonalizationStore} from './test_personalization_store.js';
-import {TestWallpaperProvider} from './test_wallpaper_interface_provider.js';
+import type {TestPersonalizationStore} from './test_personalization_store.js';
+import type {TestWallpaperProvider} from './test_wallpaper_interface_provider.js';
 
 suite('PersonalizationBreadcrumbElementTest', function() {
   let breadcrumbElement: PersonalizationBreadcrumbElement|null;
@@ -572,9 +573,9 @@ suite('PersonalizationBreadcrumbElementTest', function() {
       'seaPenTemplateId': SeaPenTemplateId.kFlower.toString(),
     });
 
-    const breadcrumb = (breadcrumbElement.shadowRoot!.querySelector(
-                            '#seaPenDropdown') as HTMLElement)
-                           .parentElement;
+    const breadcrumb =
+        breadcrumbElement.shadowRoot!
+            .querySelector<HTMLElement>('#seaPenDropdown')!.parentElement;
     breadcrumb!.click();
 
     const dropdownMenu =
@@ -595,8 +596,9 @@ suite('PersonalizationBreadcrumbElementTest', function() {
       'path': Paths.SEA_PEN_RESULTS,
       'seaPenTemplateId': SeaPenTemplateId.kFlower.toString(),
     });
-    const dropdownIcon = breadcrumbElement.shadowRoot!.querySelector(
-                             '#seaPenDropdown') as HTMLElement;
+    const dropdownIcon =
+        breadcrumbElement.shadowRoot!.querySelector<HTMLElement>(
+            '#seaPenDropdown');
     dropdownIcon!.click();
     const dropdownMenu =
         breadcrumbElement.shadowRoot!.querySelector('cr-action-menu');

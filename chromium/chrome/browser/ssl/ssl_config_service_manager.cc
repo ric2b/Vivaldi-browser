@@ -213,7 +213,7 @@ network::mojom::SSLConfigPtr SSLConfigServiceManager::GetSSLConfigFromPrefs()
   if (rev_checking_enabled_.IsManaged())
     config->rev_checking_enabled = rev_checking_enabled_.GetValue();
   else
-    config->rev_checking_enabled = vivaldi::IsVivaldiRunning();
+    config->rev_checking_enabled = vivaldi::IsVivaldiRunning() && rev_checking_enabled_.GetValue();
   config->rev_checking_required_local_anchors =
       rev_checking_required_local_anchors_.GetValue();
   std::string version_min_str = ssl_version_min_.GetValue();

@@ -25,16 +25,17 @@
 #include "api/crypto/frame_decryptor_interface.h"
 #include "api/crypto/frame_encryptor_interface.h"
 #include "api/dtmf_sender_interface.h"
+#include "api/environment/environment.h"
 #include "api/environment/environment_factory.h"
 #include "api/make_ref_counted.h"
 #include "api/media_stream_interface.h"
 #include "api/rtc_error.h"
-#include "api/rtc_event_log/rtc_event_log.h"
 #include "api/rtp_parameters.h"
 #include "api/rtp_receiver_interface.h"
 #include "api/scoped_refptr.h"
 #include "api/test/fake_frame_decryptor.h"
 #include "api/test/fake_frame_encryptor.h"
+#include "api/test/rtc_error_matchers.h"
 #include "api/video/builtin_video_bitrate_allocator_factory.h"
 #include "api/video/video_bitrate_allocator_factory.h"
 #include "api/video/video_codec_constants.h"
@@ -47,9 +48,9 @@
 #include "media/base/stream_params.h"
 #include "media/base/test_utils.h"
 #include "media/engine/fake_webrtc_call.h"
-#include "p2p/base/dtls_transport_internal.h"
-#include "p2p/base/fake_dtls_transport.h"
 #include "p2p/base/p2p_constants.h"
+#include "p2p/dtls/dtls_transport_internal.h"
+#include "p2p/dtls/fake_dtls_transport.h"
 #include "pc/audio_rtp_receiver.h"
 #include "pc/audio_track.h"
 #include "pc/dtls_srtp_transport.h"
@@ -61,20 +62,12 @@
 #include "pc/video_rtp_receiver.h"
 #include "pc/video_track.h"
 #include "rtc_base/checks.h"
-#include "rtc_base/gunit.h"
 #include "rtc_base/thread.h"
 #include "rtc_base/unique_id_generator.h"
 #include "test/gmock.h"
 #include "test/gtest.h"
 #include "test/run_loop.h"
-#include "test/scoped_key_value_config.h"
-
-using ::testing::_;
-using ::testing::ContainerEq;
-using ::testing::Exactly;
-using ::testing::InvokeWithoutArgs;
-using ::testing::Return;
-using RidList = std::vector<std::string>;
+#include "test/wait_until.h"
 
 namespace {
 
@@ -87,7 +80,6 @@ static const uint32_t kAudioSsrc = 99;
 static const uint32_t kAudioSsrc2 = 101;
 static const uint32_t kVideoSsrcSimulcast = 102;
 static const uint32_t kVideoSimulcastLayerCount = 2;
-static const int kDefaultTimeout = 10000;  // 10 seconds.
 
 class MockSetStreamsObserver
     : public webrtc::RtpSenderBase::SetStreamsObserver {
@@ -98,6 +90,9 @@ class MockSetStreamsObserver
 }  // namespace
 
 namespace webrtc {
+
+using ::testing::ContainerEq;
+using RidList = std::vector<std::string>;
 
 class RtpSenderReceiverTest
     : public ::testing::Test,
@@ -111,7 +106,7 @@ class RtpSenderReceiverTest
         // Create fake media engine/etc. so we can create channels to use to
         // test RtpSenders/RtpReceivers.
         media_engine_(std::make_unique<cricket::FakeMediaEngine>()),
-        fake_call_(CreateEnvironment(), worker_thread_, network_thread_),
+        fake_call_(env_, worker_thread_, network_thread_),
         local_stream_(MediaStream::Create(kStreamId1)) {
     rtp_dtls_transport_ = std::make_unique<cricket::FakeDtlsTransport>(
         "fake_dtls_transport", cricket::ICE_CANDIDATE_COMPONENT_RTP);
@@ -166,7 +161,7 @@ class RtpSenderReceiverTest
 
   std::unique_ptr<RtpTransportInternal> CreateDtlsSrtpTransport() {
     auto dtls_srtp_transport = std::make_unique<DtlsSrtpTransport>(
-        /*rtcp_mux_required=*/true, field_trials_);
+        /*rtcp_mux_required=*/true, env_.field_trials());
     dtls_srtp_transport->SetDtlsTransports(rtp_dtls_transport_.get(),
                                            /*rtcp_dtls_transport=*/nullptr);
     return dtls_srtp_transport;
@@ -432,7 +427,7 @@ class RtpSenderReceiverTest
   // This test assumes that some layers have already been disabled.
   void RunSetLastLayerAsInactiveTest(VideoRtpSender* sender) {
     auto parameters = sender->GetParameters();
-    if (parameters.encodings.size() == 0) {
+    if (parameters.encodings.empty()) {
       return;
     }
 
@@ -519,7 +514,7 @@ class RtpSenderReceiverTest
   test::RunLoop run_loop_;
   rtc::Thread* const network_thread_;
   rtc::Thread* const worker_thread_;
-  RtcEventLogNull event_log_;
+  const Environment env_ = CreateEnvironment();
   // The `rtp_dtls_transport_` and `rtp_transport_` should be destroyed after
   // the `channel_manager`.
   std::unique_ptr<cricket::DtlsTransportInternal> rtp_dtls_transport_;
@@ -544,7 +539,6 @@ class RtpSenderReceiverTest
   rtc::scoped_refptr<MediaStreamInterface> local_stream_;
   rtc::scoped_refptr<VideoTrackInterface> video_track_;
   rtc::scoped_refptr<AudioTrackInterface> audio_track_;
-  test::ScopedKeyValueConfig field_trials_;
 };
 
 // Test that `voice_channel_` is updated when an audio track is associated
@@ -1786,8 +1780,11 @@ TEST_F(RtpSenderReceiverTest, InsertDtmf) {
   dtmf_sender->InsertDtmf("012", expected_duration, 100);
 
   // Verify
-  ASSERT_EQ_WAIT(3U, voice_media_send_channel()->dtmf_info_queue().size(),
-                 kDefaultTimeout);
+  ASSERT_THAT(
+      WaitUntil(
+          [&] { return voice_media_send_channel()->dtmf_info_queue().size(); },
+          ::testing::Eq(3U)),
+      IsRtcOk());
   const uint32_t send_ssrc =
       voice_media_send_channel()->send_streams()[0].first_ssrc();
   EXPECT_TRUE(CompareDtmfInfo(voice_media_send_channel()->dtmf_info_queue()[0],

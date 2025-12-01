@@ -29,13 +29,15 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/geometry/rect.h"
 
+#include "app/vivaldi_apptools.h"
+
 using content::BrowserThread;
 
 AccessibilityLabelsMenuObserver::AccessibilityLabelsMenuObserver(
     RenderViewContextMenuProxy* proxy)
     : proxy_(proxy) {}
 
-AccessibilityLabelsMenuObserver::~AccessibilityLabelsMenuObserver() {}
+AccessibilityLabelsMenuObserver::~AccessibilityLabelsMenuObserver() = default;
 
 void AccessibilityLabelsMenuObserver::InitMenu(
     const content::ContextMenuParams& params) {
@@ -106,6 +108,12 @@ void AccessibilityLabelsMenuObserver::ExecuteCommand(int command_id) {
 }
 
 bool AccessibilityLabelsMenuObserver::ShouldShowLabelsItem() {
+  if (vivaldi::IsVivaldiRunning()) {
+    // TODO(espen@vivaldi.com): Hide "Get image descriptions from Google" until
+    // properly supported. VB-113649
+    return false;
+  }
+
   // Disabled by policy.
   Profile* profile = Profile::FromBrowserContext(proxy_->GetBrowserContext());
   if (!profile->GetPrefs()->GetBoolean(

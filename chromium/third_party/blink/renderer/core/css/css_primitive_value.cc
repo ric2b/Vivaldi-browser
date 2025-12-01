@@ -124,14 +124,14 @@ CSSPrimitiveValue::UnitCategory CSSPrimitiveValue::UnitTypeToUnitCategory(
   }
 }
 
-bool CSSPrimitiveValue::IsCalculatedPercentageWithLength() const {
+bool CSSPrimitiveValue::IsResolvableBeforeLayout() const {
   // TODO(crbug.com/979895): Move this function to |CSSMathFunctionValue|.
   if (!IsCalculated()) {
-    return false;
+    return true;
   }
   CalculationResultCategory category =
       To<CSSMathFunctionValue>(this)->Category();
-  return category == kCalcLengthFunction || category == kCalcIntrinsicSize;
+  return category != kCalcLengthFunction && category != kCalcIntrinsicSize;
 }
 
 bool CSSPrimitiveValue::IsResolution() const {
@@ -391,7 +391,8 @@ int CSSPrimitiveValue::ComputeInteger(
 
 double CSSPrimitiveValue::ComputeNumber(
     const CSSLengthResolver& length_resolver) const {
-  DCHECK(IsNumber());
+  DCHECK(IsNumber() || IsPercentage());
+  // NOTE: Division by 100 will be done by ComputeNumber() if needed.
   return IsCalculated()
              ? To<CSSMathFunctionValue>(this)->ComputeNumber(length_resolver)
              : To<CSSNumericLiteralValue>(this)->ComputeNumber();
@@ -407,14 +408,19 @@ double CSSPrimitiveValue::ComputePercentage(
 
 double CSSPrimitiveValue::ComputeValueInCanonicalUnit(
     const CSSLengthResolver& length_resolver) const {
-  // Don't use it for mix of length and percentage, as it would compute 10px +
-  // 10% to 20.
-  DCHECK(!IsCalculatedPercentageWithLength());
+  // Don't use it for mix of length and percentage or similar,
+  // as it would compute 10px + 10% to 20.
+  DCHECK(IsResolvableBeforeLayout());
   return IsCalculated()
              ? To<CSSMathFunctionValue>(this)->ComputeValueInCanonicalUnit(
                    length_resolver)
              : To<CSSNumericLiteralValue>(this)->ComputeInCanonicalUnit(
                    length_resolver);
+}
+
+std::optional<double> CSSPrimitiveValue::GetValueIfKnown() const {
+  return IsCalculated() ? To<CSSMathFunctionValue>(this)->GetValueIfKnown()
+                        : To<CSSNumericLiteralValue>(this)->GetValueIfKnown();
 }
 
 double CSSPrimitiveValue::ComputeLengthDouble(
@@ -557,8 +563,8 @@ Length CSSPrimitiveValue::ConvertToLength(
   if (IsPercentage()) {
     if (IsNumericLiteralValue() ||
         !To<CSSMathFunctionValue>(this)->AllowsNegativePercentageReference()) {
-      return Length::Percent(
-          CSSValueClampingUtils::ClampLength(GetDoubleValueWithoutClamping()));
+      return Length::Percent(CSSValueClampingUtils::ClampLength(
+          ComputePercentage(length_resolver)));
     }
   }
   DCHECK(IsCalculated());
@@ -572,26 +578,6 @@ double CSSPrimitiveValue::GetDoubleValue() const {
 double CSSPrimitiveValue::GetDoubleValueWithoutClamping() const {
   return IsCalculated() ? To<CSSMathFunctionValue>(this)->DoubleValue()
                         : To<CSSNumericLiteralValue>(this)->DoubleValue();
-}
-
-CSSPrimitiveValue::BoolStatus CSSPrimitiveValue::IsZero() const {
-  return IsCalculated() ? To<CSSMathFunctionValue>(this)->IsZero()
-                        : To<CSSNumericLiteralValue>(this)->IsZero();
-}
-
-CSSPrimitiveValue::BoolStatus CSSPrimitiveValue::IsOne() const {
-  return IsCalculated() ? To<CSSMathFunctionValue>(this)->IsOne()
-                        : To<CSSNumericLiteralValue>(this)->IsOne();
-}
-
-CSSPrimitiveValue::BoolStatus CSSPrimitiveValue::IsHundred() const {
-  return IsCalculated() ? To<CSSMathFunctionValue>(this)->IsHundred()
-                        : To<CSSNumericLiteralValue>(this)->IsHundred();
-}
-
-CSSPrimitiveValue::BoolStatus CSSPrimitiveValue::IsNegative() const {
-  return IsCalculated() ? To<CSSMathFunctionValue>(this)->IsNegative()
-                        : To<CSSNumericLiteralValue>(this)->IsNegative();
 }
 
 CSSPrimitiveValue::UnitType CSSPrimitiveValue::CanonicalUnitTypeForCategory(

@@ -38,7 +38,7 @@ import * as VisualLogging from '../visual_logging/visual_logging.js';
 
 import * as ARIAUtils from './ARIAUtils.js';
 import {SuggestBox, type SuggestBoxDelegate, type Suggestion} from './SuggestBox.js';
-import textPromptStyles from './textPrompt.css.legacy.js';
+import textPromptStyles from './textPrompt.css.js';
 import * as ThemeSupport from './theme_support/theme_support.js';
 import {Tooltip} from './Tooltip.js';
 import {ElementFocusRestorer} from './UIUtils.js';
@@ -88,7 +88,7 @@ export class TextPrompt extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
     this.ghostTextElement.setAttribute('contenteditable', 'false');
     this.leftParenthesesIndices = [];
     this.changed = false;
-    ARIAUtils.markAsHidden(this.ghostTextElement);
+    ARIAUtils.setHidden(this.ghostTextElement, true);
   }
 
   initialize(
@@ -808,6 +808,6 @@ export const enum Events {
   TEXT_CHANGED = 'TextChanged',
 }
 
-export type EventTypes = {
-  [Events.TEXT_CHANGED]: void,
-};
+export interface EventTypes {
+  [Events.TEXT_CHANGED]: void;
+}

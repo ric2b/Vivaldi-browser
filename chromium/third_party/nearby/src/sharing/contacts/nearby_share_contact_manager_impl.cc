@@ -31,11 +31,13 @@
 #include "absl/synchronization/notification.h"
 #include "absl/time/time.h"
 #include "internal/crypto_cros/secure_hash.h"
+#include "internal/flags/nearby_flags.h"
 #include "internal/platform/clock.h"
 #include "internal/platform/implementation/account_manager.h"
 #include "sharing/common/nearby_share_prefs.h"
 #include "sharing/contacts/nearby_share_contact_manager.h"
 #include "sharing/contacts/nearby_share_contacts_sorter.h"
+#include "sharing/flags/generated/nearby_sharing_feature_flags.h"
 #include "sharing/internal/api/preference_manager.h"
 #include "sharing/internal/api/sharing_rpc_client.h"
 #include "sharing/internal/base/encode.h"
@@ -172,7 +174,10 @@ NearbyShareContactManagerImpl::NearbyShareContactManagerImpl(
               /*require_connectivity=*/true,
               prefs::kNearbySharingSchedulerContactDownloadAndUploadName,
               [&] { DownloadContacts(); })),
-      executor_(context->CreateSequencedTaskRunner()) {}
+      executor_(context->CreateSequencedTaskRunner()),
+      use_identity_api_(NearbyFlags::GetInstance().GetBoolFlag(
+          config_package_nearby::nearby_sharing_feature::
+              kCallNearbyIdentityApi)) {}
 
 NearbyShareContactManagerImpl::~NearbyShareContactManagerImpl() = default;
 
@@ -183,16 +188,15 @@ void NearbyShareContactManagerImpl::OnContactsDownloadCompleted(
     OnContactsDownloadFailure();
     return;
   }
-  NL_LOG(INFO) << __func__ << ": Completed to download contacts from backend";
-  NL_VLOG(1) << __func__ << ": Removed "
-             << num_unreachable_contacts_filtered_out
-             << " unreachable contacts.";
+  LOG(INFO) << "Finished downloading contacts from backend";
+  VLOG(1) << "Removed " << num_unreachable_contacts_filtered_out
+          << " unreachable contacts.";
   OnContactsDownloadSuccess(std::move(*contacts),
                             num_unreachable_contacts_filtered_out);
 }
 
 void NearbyShareContactManagerImpl::ContactDownloadContext::FetchNextPage() {
-  NL_LOG(INFO) << __func__ << ": Downloading page=" << page_number_++;
+  LOG(INFO) << "Downloading contacts page=" << page_number_++;
   ListContactPeopleRequest request;
   if (next_page_token_.has_value()) {
     request.set_page_token(*next_page_token_);
@@ -202,15 +206,14 @@ void NearbyShareContactManagerImpl::ContactDownloadContext::FetchNextPage() {
       [this](
           const absl::StatusOr<ListContactPeopleResponse>& response) mutable {
         if (!response.ok()) {
-          NL_LOG(WARNING) << __func__ << ": Failed to download contacts: "
-                          << response.status();
+          LOG(WARNING) << "Failed to download contacts: " << response.status();
           std::move(download_callback_)(
               response.status(), /*num_unreachable_contacts_filtered_out=*/0);
           return;
         }
 
         contacts_.insert(contacts_.end(), response->contact_records().begin(),
-                        response->contact_records().end());
+                         response->contact_records().end());
 
         if (response->next_page_token().empty()) {
           // We should filter here because we only care about contacts that we
@@ -230,21 +233,20 @@ void NearbyShareContactManagerImpl::ContactDownloadContext::FetchNextPage() {
 }
 
 void NearbyShareContactManagerImpl::DownloadContacts() {
+  if (use_identity_api_) {
+    LOG(INFO) << __func__ << ": [Call Identity API] Skipping DownloadContacts";
+    return;
+  }
   executor_->PostTask([this]() {
-    NL_LOG(INFO) << __func__ << ": Start to download contacts";
+    LOG(INFO) << "Started to download contacts";
     if (!is_running()) {
-      NL_LOG(WARNING) << __func__
-                      << ": Ignore to download contacts due to manager is not "
-                         "running.";
+      LOG(WARNING) << "Ignore contacts download, manager is not running.";
       return;
     }
 
-    std::vector<ContactRecord> contacts;
     if (!account_manager_.GetCurrentAccount().has_value()) {
-      NL_LOG(WARNING)
-          << __func__
-          << ": Ignore to download certificates due to no login account.";
-      OnContactsDownloadSuccess(contacts, 0);
+      LOG(WARNING) << "Ignore contacts download, no logged in account.";
+      contact_download_and_upload_scheduler_->HandleResult(/*success=*/true);
       return;
     }
 
@@ -260,19 +262,15 @@ void NearbyShareContactManagerImpl::DownloadContacts() {
 
 void NearbyShareContactManagerImpl::GetContacts(ContactsCallback callback) {
   executor_->PostTask([this, callback = std::move(callback)]() mutable {
-    NL_LOG(INFO) << __func__ << ": Start to download contacts";
+    LOG(INFO) << "Start downloading contacts";
     if (!is_running()) {
-      NL_LOG(WARNING) << __func__
-                      << ": Ignore to download contacts due to manager is not "
-                         "running.";
+      LOG(WARNING) << "Ignore contacts download, manager is not running.";
       return;
     }
 
     std::vector<ContactRecord> contacts;
     if (!account_manager_.GetCurrentAccount().has_value()) {
-      NL_LOG(WARNING)
-          << __func__
-          << ": Ignore to download certificates due to no login account.";
+      LOG(WARNING) << "Ignore contacts download, no logged in account.";
       std::move(callback)(contacts,
                           /*num_unreachable_contacts_filtered_out=*/0);
       return;
@@ -287,39 +285,47 @@ void NearbyShareContactManagerImpl::GetContacts(ContactsCallback callback) {
 }
 
 void NearbyShareContactManagerImpl::OnStart() {
+  if (use_identity_api_) {
+    LOG(INFO) << __func__
+              << ": [Call Identity API] Skipping "
+                 "contact_download_and_upload_scheduler start.";
+    return;
+  }
   contact_download_and_upload_scheduler_->Start();
 }
 
 void NearbyShareContactManagerImpl::OnStop() {
+  if (use_identity_api_) {
+    LOG(INFO) << __func__
+              << ": [Call Identity API] Skipping "
+                 "contact_download_and_upload_scheduler stop.";
+    return;
+  }
   contact_download_and_upload_scheduler_->Stop();
 }
 
 void NearbyShareContactManagerImpl::OnContactsDownloadSuccess(
     std::vector<ContactRecord> contacts,
     uint32_t num_unreachable_contacts_filtered_out) {
-  NL_LOG(INFO) << __func__ << ": Nearby Share download of " << contacts.size()
-               << " contacts succeeded.";
-
+  LOG(INFO) << "Download of " << contacts.size() << " contacts succeeded.";
+  std::optional<AccountManager::Account> account =
+      account_manager_.GetCurrentAccount();
+  if (!account.has_value()) {
+    // Skip uploading contacts if user is not logged in.
+    // This also skips uploading private certificates.
+    LOG(WARNING)
+        << "Cannot upload contacts, user logged out since download started.";
+    contact_download_and_upload_scheduler_->HandleResult(/*success=*/true);
+    return;
+  }
 
   // Notify observers that the contact list was downloaded.
   NotifyAllObserversContactsDownloaded(contacts,
                                        num_unreachable_contacts_filtered_out);
 
-  std::vector<Contact> contacts_to_upload =
-      ContactRecordsToContacts(contacts);
-
-  // Enable cross-device self-share by adding your account to the list of
-  // contacts. It is also marked as a selected contact.
-  std::optional<AccountManager::Account> account =
-      account_manager_.GetCurrentAccount();
-
-  if (!account.has_value()) {
-    NL_LOG(WARNING) << __func__
-                    << ": Profile user name is not valid; could not "
-                    << "add self to list of contacts to upload.";
-  } else {
-    contacts_to_upload.push_back(CreateLocalContact(account->email));
-  }
+  std::vector<Contact> contacts_to_upload = ContactRecordsToContacts(contacts);
+  // Enable self-share by adding your account to the list of contacts.
+  contacts_to_upload.push_back(CreateLocalContact(account->email));
 
   std::string last_contact_upload_hash = preference_manager_.GetString(
       prefs::kNearbySharingContactUploadHashName, "");
@@ -335,9 +341,8 @@ void NearbyShareContactManagerImpl::OnContactsDownloadSuccess(
   // Request a contacts upload if the contact list or allowlist has changed
   // since the last successful upload or max upload interval has passed.
   if (did_contacts_change_since_last_upload) {
-    NL_LOG(INFO) << __func__ << ": Contact list changed since last "
-                 << "successful upload at "
-                 << absl::FromUnixSeconds(last_contact_upload_time);
+    LOG(INFO) << "Contact list changed since last successful upload at "
+              << absl::FromUnixSeconds(last_contact_upload_time);
     absl::Notification notification;
     bool upload_success = false;
     local_device_data_manager_->UploadContacts(std::move(contacts_to_upload),
@@ -347,8 +352,7 @@ void NearbyShareContactManagerImpl::OnContactsDownloadSuccess(
                                                });
 
     notification.WaitForNotification();
-    NL_LOG(INFO) << __func__ << ": Completed to upload contacts with result:"
-                 << upload_success;
+    LOG(INFO) << "Finished contacts upload, result: " << upload_success;
 
     OnContactsUploadFinished(did_contacts_change_since_last_upload,
                              contact_upload_hash, now, upload_success);
@@ -360,7 +364,7 @@ void NearbyShareContactManagerImpl::OnContactsDownloadSuccess(
 }
 
 void NearbyShareContactManagerImpl::OnContactsDownloadFailure() {
-  NL_LOG(WARNING) << __func__ << ": Nearby Share contacts download failed.";
+  LOG(WARNING) << "Contacts download failed.";
 
   contact_download_and_upload_scheduler_->HandleResult(/*success=*/false);
 }
@@ -369,9 +373,8 @@ void NearbyShareContactManagerImpl::OnContactsUploadFinished(
     bool did_contacts_change_since_last_upload,
     absl::string_view contact_upload_hash, absl::Time upload_time,
     bool success) {
-  NL_LOG(INFO) << __func__ << ": Upload of contacts to Nearby Share server "
-               << (success ? "succeeded." : "failed.")
-               << " Contact upload hash: " << contact_upload_hash;
+  LOG(INFO) << "Upload of contacts " << (success ? "succeeded." : "failed.")
+            << " Contact upload hash: " << contact_upload_hash;
   if (success) {
     std::string last_contact_upload_hash = preference_manager_.GetString(
         prefs::kNearbySharingContactUploadHashName, "");
@@ -382,12 +385,10 @@ void NearbyShareContactManagerImpl::OnContactsUploadFinished(
                                  absl::ToUnixSeconds(upload_time));
 
     if (last_contact_upload_hash.empty()) {
-      // If no contacts are uploaded before, set the flag to false in order to
-      // prevent the certificate manager from regenerating certificates.
-      NL_LOG(WARNING) << __func__
-                      << ": Mark contacts change flag to false due to no "
-                         "contacts upload before.";
-      did_contacts_change_since_last_upload = false;
+      // If no contacts are uploaded before, set the flag to true in order to
+      // force a certificate regeneration and upload.
+      LOG(WARNING) << "Set contacts change flag to true, no previous upload.";
+      did_contacts_change_since_last_upload = true;
     }
     NotifyContactsUploaded(did_contacts_change_since_last_upload);
   }

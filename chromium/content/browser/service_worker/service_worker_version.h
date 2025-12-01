@@ -673,12 +673,6 @@ class CONTENT_EXPORT ServiceWorkerVersion
     return receiver_;
   }
 
-  void set_reporting_observer_receiver(
-      mojo::PendingReceiver<blink::mojom::ReportingObserver>
-          reporting_observer_receiver) {
-    reporting_observer_receiver_ = std::move(reporting_observer_receiver);
-  }
-
   void set_policy_container_host(
       scoped_refptr<PolicyContainerHost> policy_container_host) {
     policy_container_host_ = std::move(policy_container_host);
@@ -723,10 +717,6 @@ class CONTENT_EXPORT ServiceWorkerVersion
   blink::AssociatedInterfaceProvider* associated_interface_provider() {
     return associated_interface_provider_.get();
   }
-
-  // Check if the static router API is enabled. It checks if the feature flag is
-  // enabled or having a valid trial token.
-  bool IsStaticRouterEnabled();
 
   // Check if the static router should be evaluated.
   bool NeedRouterEvaluate() const;
@@ -1280,9 +1270,6 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // the browser process beforehand. This is valid only when it's a new worker
   // that is going to be registered from now on.
   blink::mojom::WorkerMainScriptLoadParamsPtr main_script_load_params_;
-
-  mojo::PendingReceiver<blink::mojom::ReportingObserver>
-      reporting_observer_receiver_;
 
   // Lives while the ServiceWorkerVersion is alive.
   // See comments at the definition of storage::mojom::ServiceWorkerVersionRef

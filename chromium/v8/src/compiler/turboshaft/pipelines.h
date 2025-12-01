@@ -39,6 +39,12 @@ namespace v8::internal::compiler::turboshaft {
 
 inline constexpr char kTempZoneName[] = "temp-zone";
 
+struct SimplificationAndNormalizationPhase {
+  DECL_TURBOSHAFT_PHASE_CONSTANTS(SimplificationAndNormalization)
+
+  void Run(PipelineData* data, Zone* temp_zone);
+};
+
 class Pipeline {
  public:
   explicit Pipeline(PipelineData* data) : data_(data) {}
@@ -123,13 +129,13 @@ class Pipeline {
     }
   }
 
-  bool CreateGraphWithMaglev() {
+  bool CreateGraphWithMaglev(Linkage* linkage) {
     UnparkedScopeIfNeeded unparked_scope(data_->broker());
 
     BeginPhaseKind("V8.TFGraphCreation");
     turboshaft::Tracing::Scope tracing_scope(data_->info());
     std::optional<BailoutReason> bailout =
-        Run<turboshaft::MaglevGraphBuildingPhase>();
+        Run<turboshaft::MaglevGraphBuildingPhase>(linkage);
     EndPhaseKind();
 
     if (bailout.has_value()) {
@@ -150,7 +156,6 @@ class Pipeline {
 
     turboshaft::Tracing::Scope tracing_scope(data_->info());
 
-    DCHECK(!v8_flags.turboshaft_from_maglev);
     if (std::optional<BailoutReason> bailout =
             Run<turboshaft::BuildGraphPhase>(turbofan_data, linkage)) {
       info()->AbortOptimization(*bailout);
@@ -166,6 +171,8 @@ class Pipeline {
                                     v8_flags.turboshaft_trace_emitted);
 
     turboshaft::Tracing::Scope tracing_scope(data_->info());
+
+    BeginPhaseKind("V8.TurboshaftOptimize");
 
 #ifdef V8_ENABLE_WEBASSEMBLY
     // TODO(dlehmann,353475584): Once the Wasm-in-JS TS inlining MVP is feature-
@@ -224,6 +231,10 @@ class Pipeline {
 #endif  // V8_ENABLE_DEBUG_CODE
 
     return true;
+  }
+
+  void RunSimplificationAndNormalizationPhase() {
+    Run<SimplificationAndNormalizationPhase>();
   }
 
   void PrepareForInstructionSelection(
@@ -512,13 +523,10 @@ class Pipeline {
     return FinalizeCode();
   }
 
-  MaybeHandle<Code> GenerateCode(
+  [[nodiscard]] bool GenerateCode(
       Linkage* linkage, std::shared_ptr<OsrHelper> osr_helper = {},
       JumpOptimizationInfo* jump_optimization_info = nullptr,
       const ProfileDataFromFile* profile = nullptr, int initial_graph_hash = 0);
-
-  void RecreateTurbofanGraph(compiler::TFPipelineData* turbofan_data,
-                             Linkage* linkage);
 
   OptimizedCompilationInfo* info() { return data_->info(); }
 
@@ -593,6 +601,10 @@ class Pipeline {
   }
 
  private:
+#ifdef DEBUG
+  virtual bool IsBuiltinPipeline() const { return false; }
+#endif
+
   PipelineData* data_;
 };
 
@@ -601,6 +613,10 @@ class BuiltinPipeline : public Pipeline {
   explicit BuiltinPipeline(PipelineData* data) : Pipeline(data) {}
 
   void OptimizeBuiltin();
+
+#ifdef DEBUG
+  bool IsBuiltinPipeline() const override { return true; }
+#endif
 };
 
 }  // namespace v8::internal::compiler::turboshaft

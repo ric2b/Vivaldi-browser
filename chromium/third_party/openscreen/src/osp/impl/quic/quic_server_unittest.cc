@@ -32,9 +32,12 @@ class MockConnectRequestCallback final : public ConnectRequestCallback {
  public:
   ~MockConnectRequestCallback() override = default;
 
-  MOCK_METHOD2(OnConnectSucceed,
-               void(uint64_t request_id, uint64_t instance_id));
-  MOCK_METHOD1(OnConnectFailed, void(uint64_t request_id));
+  MOCK_METHOD3(OnConnectSucceed,
+               void(uint64_t request_id,
+                    std::string_view instance_name,
+                    uint64_t instance_id));
+  MOCK_METHOD2(OnConnectFailed,
+               void(uint64_t request_id, std::string_view instance_name));
 };
 
 class MockConnectionObserver final : public ProtocolConnection::Observer {
@@ -58,12 +61,14 @@ class QuicServerTest : public Test {
                                           connect_request_,
                                           &mock_connect_request_callback);
     std::unique_ptr<ProtocolConnection> stream;
-    EXPECT_CALL(mock_connect_request_callback, OnConnectSucceed(_, _))
-        .WillOnce(Invoke([this](uint64_t request_id, uint64_t instance_id) {
-          client_connection_ =
-              quic_bridge_.GetQuicClient()->CreateProtocolConnection(
-                  instance_id);
-        }));
+    EXPECT_CALL(mock_connect_request_callback, OnConnectSucceed(_, _, _))
+        .WillOnce(
+            Invoke([this](uint64_t request_id, std::string_view instance_name,
+                          uint64_t instance_id) {
+              client_connection_ =
+                  quic_bridge_.GetQuicClient()->CreateProtocolConnection(
+                      instance_id);
+            }));
     EXPECT_CALL(quic_bridge_.mock_server_observer(),
                 OnIncomingConnectionMock(_))
         .WillOnce(

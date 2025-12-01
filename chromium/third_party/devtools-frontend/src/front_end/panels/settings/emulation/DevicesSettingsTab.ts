@@ -2,10 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import '../../../ui/components/cards/cards.js';
+
 import * as i18n from '../../../core/i18n/i18n.js';
 import * as EmulationModel from '../../../models/emulation/emulation.js';
 import type * as Buttons from '../../../ui/components/buttons/buttons.js';
-import * as Cards from '../../../ui/components/cards/cards.js';
 import * as UI from '../../../ui/legacy/legacy.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
@@ -24,7 +25,7 @@ const UIStrings = {
   /**
    *@description Button to add a custom device (e.g. phone, tablet) the Device Toolbar.
    */
-  addCustomDevice: 'Add custom device...',
+  addCustomDevice: 'Add custom device',
   /**
    *@description Label/title for UI to add a new custom device type. Device means mobile/tablet etc.
    */
@@ -85,6 +86,7 @@ export class DevicesSettingsTab extends UI.Widget.VBox implements
 
   constructor() {
     super();
+    this.registerRequiredCSS(devicesSettingsTabStyles);
 
     this.element.setAttribute('jslog', `${VisualLogging.pane('devices')}`);
 
@@ -93,6 +95,7 @@ export class DevicesSettingsTab extends UI.Widget.VBox implements
     this.containerElement.classList.add('settings-card-container', 'ignore-list-settings');
 
     this.#defaultDeviceList = new UI.ListWidget.ListWidget(this, false /* delegatesFocus */);
+    this.#defaultDeviceList.registerRequiredCSS(devicesSettingsTabStyles);
     this.#defaultDeviceList.element.classList.add('devices-list', 'device-card-content');
 
     this.muteUpdate = false;
@@ -115,31 +118,23 @@ export class DevicesSettingsTab extends UI.Widget.VBox implements
     const deviceList = customSettings.createChild('div');
     customSettings.appendChild(this.addCustomButton);
 
-    const customDevicesCard = new Cards.Card.Card();
-    customDevicesCard.data = {
-      heading: i18nString(UIStrings.customDevices),
-      content: [customSettings],
-    };
-    this.containerElement.appendChild(customDevicesCard);
+    const customDevicesCard = this.containerElement.createChild('devtools-card');
+    customDevicesCard.heading = i18nString(UIStrings.customDevices);
+    customDevicesCard.append(customSettings);
 
     this.#customDeviceList = new UI.ListWidget.ListWidget(this, false /* delegatesFocus */);
+    this.#customDeviceList.registerRequiredCSS(devicesSettingsTabStyles);
     this.#customDeviceList.element.classList.add('devices-list');
     this.#customDeviceList.show(deviceList);
 
-    const defaultDevicesCard = new Cards.Card.Card();
-    defaultDevicesCard.data = {
-      heading: i18nString(UIStrings.defaultDevices),
-      content: [this.#defaultDeviceList.element],
-    };
-    this.containerElement.appendChild(defaultDevicesCard);
+    const defaultDevicesCard = this.containerElement.createChild('devtools-card');
+    defaultDevicesCard.heading = i18nString(UIStrings.defaultDevices);
+    defaultDevicesCard.append(this.#defaultDeviceList.element);
   }
 
   override wasShown(): void {
     super.wasShown();
     this.devicesUpdated();
-    this.registerCSSFiles([devicesSettingsTabStyles]);
-    this.#defaultDeviceList.registerCSSFiles([devicesSettingsTabStyles]);
-    this.#customDeviceList.registerCSSFiles([devicesSettingsTabStyles]);
   }
 
   private devicesUpdated(): void {
@@ -189,7 +184,7 @@ export class DevicesSettingsTab extends UI.Widget.VBox implements
   renderItem(device: EmulationModel.EmulatedDevices.EmulatedDevice, editable: boolean): Element {
     const label = document.createElement('label');
     label.classList.add('devices-list-item');
-    const checkbox = (label.createChild('input', 'devices-list-checkbox') as HTMLInputElement);
+    const checkbox = label.createChild('input', 'devices-list-checkbox');
     checkbox.type = 'checkbox';
     checkbox.checked = device.show();
     checkbox.addEventListener('click', onItemClicked.bind(this), false);

@@ -31,9 +31,11 @@ static_library("core_internal") {
     "collaboration_service_impl.h",
     "empty_collaboration_service.cc",
     "empty_collaboration_service.h",
+    "metrics.cc",
+    "metrics.h",
   ]
 
-  deps = []
+  deps = [ "//components/sync/service:service" ]
 
   public_deps = [
     "//base",
@@ -50,23 +52,68 @@ static_library("core_internal") {
 
     deps += [
       ":core_jni_headers",
+      "//components/collaboration/public:conversion_utils",
       "//components/collaboration/public:core_jni_headers",
+      "//components/data_sharing/public:android_utils",
+      "//components/saved_tab_groups/public:conversion_utils",
     ]
   }
+}
+
+source_set("collaboration_finder") {
+  sources = [
+    "collaboration_finder_impl.cc",
+    "collaboration_finder_impl.h",
+  ]
+
+  deps = [
+    "//base:base",
+    "//components/data_sharing/public",
+    "//components/saved_tab_groups/public",
+  ]
 }
 
 static_library("messaging_internal") {
   sources = [
     "messaging/configuration.cc",
     "messaging/configuration.h",
+    "messaging/data_sharing_change_notifier.cc",
+    "messaging/data_sharing_change_notifier.h",
+    "messaging/data_sharing_change_notifier_impl.cc",
+    "messaging/data_sharing_change_notifier_impl.h",
+    "messaging/empty_messaging_backend_service.cc",
+    "messaging/empty_messaging_backend_service.h",
     "messaging/messaging_backend_service_impl.cc",
     "messaging/messaging_backend_service_impl.h",
+    "messaging/storage/collaboration_message_util.cc",
+    "messaging/storage/collaboration_message_util.h",
+    "messaging/storage/empty_messaging_backend_database.cc",
+    "messaging/storage/empty_messaging_backend_database.h",
+    "messaging/storage/messaging_backend_database.cc",
+    "messaging/storage/messaging_backend_database.h",
+    "messaging/storage/messaging_backend_database_impl.cc",
+    "messaging/storage/messaging_backend_database_impl.h",
+    "messaging/storage/messaging_backend_store.h",
+    "messaging/storage/messaging_backend_store_impl.cc",
+    "messaging/storage/messaging_backend_store_impl.h",
+    "messaging/tab_group_change_notifier.cc",
+    "messaging/tab_group_change_notifier.h",
+    "messaging/tab_group_change_notifier_impl.cc",
+    "messaging/tab_group_change_notifier_impl.h",
   ]
 
   deps = [
     "//base",
+    "//components/collaboration/internal/messaging/storage/protocol",
     "//components/collaboration/public:messaging_public",
+    "//components/data_sharing/public",
     "//components/saved_tab_groups/public",
+    "//components/sqlite_proto",
+    "//components/strings",
+    "//components/url_formatter",
+    "//google_apis",
+    "//sql",
+    "//ui/base",
   ]
 
   if (is_android) {
@@ -91,6 +138,7 @@ group("unit_tests") {
   visibility = [ "//components/collaboration:unit_tests" ]
 
   deps = [
+    ":collaboration_finder_unit_tests",
     ":core_unit_tests",
     ":messaging_unit_tests",
   ]
@@ -102,6 +150,7 @@ source_set("core_unit_tests") {
   visibility = [ ":*" ]
 
   sources = [
+    "collaboration_controller_unittest.cc",
     "collaboration_service_impl_unittest.cc",
     "empty_collaboration_service_unittest.cc",
   ]
@@ -109,37 +158,69 @@ source_set("core_unit_tests") {
   deps = [
     ":internal",
     "//base/test:test_support",
+    "//components/collaboration:test_support",
     "//components/data_sharing:test_support",
     "//components/data_sharing/public",
+    "//components/saved_tab_groups/test_support:test_support",
     "//components/signin/public/identity_manager:test_support",
+    "//components/sync:test_support",
     "//testing/gtest",
   ]
 }
 
 source_set("messaging_unit_tests") {
   testonly = true
-  sources = []
-  deps = []
+  sources = [
+    "messaging/data_sharing_change_notifier_impl_unittest.cc",
+    "messaging/messaging_backend_service_impl_unittest.cc",
+    "messaging/storage/messaging_backend_database_impl_unittest.cc",
+    "messaging/storage/messaging_backend_store_impl_unittest.cc",
+    "messaging/tab_group_change_notifier_impl_unittest.cc",
+  ]
+  deps = [
+    ":messaging_internal",
+    "//base",
+    "//base/test:test_support",
+    "//components/collaboration/internal/messaging/storage/protocol",
+    "//components/collaboration/public:messaging_public",
+    "//components/data_sharing:test_support",
+    "//components/data_sharing/public",
+    "//components/saved_tab_groups/public",
+    "//components/saved_tab_groups/test_support:test_support",
+    "//components/signin/public/identity_manager:test_support",
+    "//components/tab_groups",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
 
   if (is_android) {
     sources +=
         [ "android/messaging/messaging_backend_service_bridge_unittest.cc" ]
 
     deps += [
-      ":messaging_internal",
       ":messaging_native_j_unittests_jni_headers",
       ":messaging_native_java_unittests_java",
-      "//base",
-      "//base/test:test_support",
+      "//components/collaboration:test_support",
       "//components/collaboration/public:messaging_public",
       "//components/data_sharing/public",
-      "//components/saved_tab_groups/public",
       "//components/saved_tab_groups/public:conversion_utils",
-      "//components/tab_groups",
-      "//testing/gmock",
-      "//testing/gtest",
     ]
   }
+}
+
+source_set("collaboration_finder_unit_tests") {
+  testonly = true
+
+  sources = [ "collaboration_finder_impl_unittest.cc" ]
+
+  deps = [
+    ":collaboration_finder",
+    "//base/test:test_support",
+    "//components/data_sharing:test_support",
+    "//components/data_sharing/public",
+    "//components/saved_tab_groups/public",
+    "//testing/gtest",
+  ]
 }
 
 if (is_android) {
@@ -162,6 +243,7 @@ if (is_android) {
       "//components/collaboration/public:java",
       "//components/data_sharing/public:public_java",
       "//third_party/jni_zero:jni_zero_java",
+      "//url:url_java",
     ]
   }
 
@@ -195,6 +277,7 @@ if (is_android) {
       "//components/collaboration/public:messaging_java",
       "//components/data_sharing/public:public_java",
       "//components/saved_tab_groups/public:java",
+      "//components/signin/public/android:java",
       "//components/tab_groups:tab_groups_java",
       "//third_party/androidx:androidx_annotation_annotation_java",
       "//third_party/jni_zero:jni_zero_java",

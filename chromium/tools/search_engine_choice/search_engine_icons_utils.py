@@ -9,7 +9,8 @@ import sys
 
 config_file_path = 'tools/search_engine_choice/generate_search_engine_icons_config.json'
 search_engines_countries_src_path = 'components/search_engines/search_engine_countries-inc.cc'
-prepopulated_engines_file_path = 'components/search_engines/prepopulated_engines.json'
+#prepopulated_engines_file_path = 'third_party/search_engines_data/resources/definitions/prepopulated_engines.json'
+prepopulated_engines_file_path = '../components/search_engines/search_engines.json'
 
 
 def keyword_to_identifer(keyword):
@@ -77,6 +78,8 @@ def get_used_engines_with_keywords(src_dir):
     engine_data = json.loads(json_comment_eater.Nom(engines_json.read()))
     used_engines = get_used_engines(src_dir)
     for used_engine in used_engines:
+      if used_engine not in engine_data['elements']:
+        continue;
       used_engines_with_keywords.add(
           (used_engine, engine_data['elements'][used_engine]['keyword']))
   return used_engines_with_keywords

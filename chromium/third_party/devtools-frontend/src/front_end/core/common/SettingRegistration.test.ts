@@ -57,7 +57,7 @@ describe('SettingRegistration', () => {
       assert.strictEqual(
           preRegisteredSetting.category(), settingCategory, 'Setting category is not returned correctly');
       assert.isNotTrue(preRegisteredSetting.get(), 'Setting value is not returned correctly');
-    } catch (error) {
+    } catch {
       assert.fail('Failed to find setting registration');
     }
   });
@@ -70,10 +70,8 @@ describe('SettingRegistration', () => {
     const enableSettingCommands = allCommands.filter(
         command => command.title === enableTitle &&
             command.category === Common.Settings.getLocalizedSettingsCategory(settingCategory));
-    assert.strictEqual(
-        disableSettingCommands.length, 1, 'Commands for changing a setting\'s value were not added correctly');
-    assert.strictEqual(
-        enableSettingCommands.length, 1, 'Commands for changing a setting\'s value were not added correctly');
+    assert.lengthOf(disableSettingCommands, 1, 'Commands for changing a setting\'s value were not added correctly');
+    assert.lengthOf(enableSettingCommands, 1, 'Commands for changing a setting\'s value were not added correctly');
   });
 
   it('triggers a setting\'s change listener when a setting is set', () => {

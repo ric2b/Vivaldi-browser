@@ -12,7 +12,7 @@ title: Frequently Asked Questions
 
 ****Why should we use Google Chrome? What would it give my organization?****
 
-> **Google Chrome offers a number of benefits, including security, speed, stability, and simplicity. Find out about all the features of Google Chrome [here](http://google.com/chrome).**
+> **Google Chrome offers a number of benefits, including security, speed, stability, and simplicity. Find out about all the features of Google Chrome [here](https://google.com/chrome).**
 
 **What is Google Chrome for Enterprise? Is it a different build than the Google
 Chrome I install from google.com?**
@@ -33,7 +33,7 @@ Chrome I install from google.com?**
 
 **How do I install Google Chrome?**
 
-> You can download Google Chrome from <http://www.google.com/chrome>.
+> You can download Google Chrome from <https://www.google.com/chrome>.
 
 **Do you have an offline installer or an MSI?**
 
@@ -187,8 +187,8 @@ platforms?**
 **What other support resources are available?**
 
 > Google Chrome has a full [help
-> center](http://www.google.com/support/chrome/?hl=en-US), along with a [help
-> forum](http://www.google.com/support/forum/p/Chrome?hl=en&utm_source=HC&utm_medium=leftnav&utm_campaign=chrome),
+> center](https://www.google.com/support/chrome/?hl=en-US), along with a [help
+> forum](https://www.google.com/support/forum/p/Chrome?hl=en&utm_source=HC&utm_medium=leftnav&utm_campaign=chrome),
 > and [public bug tracker](https://issues.chromium.org/).
 
 **I found a bug in Chrome that I need fixed. Who should I contact and when can I

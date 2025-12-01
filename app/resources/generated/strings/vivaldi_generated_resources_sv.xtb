@@ -279,6 +279,7 @@
 <translation id="5582839680698949063">Huvudmeny</translation>
 <translation id="5614553682702429503">Vill du spara lösenordet?</translation>
 <translation id="5623842676595125836">Logg</translation>
+<translation id="5624959475330585145">Fråga innan du använder osäkra anslutningar</translation>
 <translation id="5638309510554459422">Hitta tillägg och teman i <ph name="BEGIN_LINK" />Chrome Webbutik<ph name="END_LINK" /></translation>
 <translation id="5677928146339483299">Blockerad</translation>
 <translation id="5707185214361380026">Misslyckades läsa tillägg från:</translation>
@@ -468,6 +469,7 @@ Spara nyckelfilen på ett säkert ställe. Den behövs om du ska skapa nya versi
 <translation id="9218430445555521422">Använd som standard</translation>
 <translation id="93766956588638423">Reparera tillägg</translation>
 <translation id="961012016278832836">Äldre Microsoft Edge</translation>
+<translation id="961856697154696964">Radera webbläsardata</translation>
 <translation id="994289308992179865">&amp;Repetera</translation>
 <translation id="998747458861718449">I&amp;nspektera</translation>
 </translationbundle>

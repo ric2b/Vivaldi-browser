@@ -633,6 +633,8 @@ void VivaldiPrefsDefinitions::RegisterProfilePrefs(
 #if BUILDFLAG(IS_ANDROID)
   registry->RegisterBooleanPref(vivaldiprefs::kPWADisabled,
                                 true);
+  registry->RegisterBooleanPref(vivaldiprefs::kAddressBarDeleteDirectMatch,
+                                false);
 #if defined(OEM_MERCEDES_BUILD) || defined(OEM_LYNKCO_BUILD)
   registry->RegisterBooleanPref(vivaldiprefs::kBackgroundMediaPlaybackAllowed,
                                 true);
@@ -697,6 +699,17 @@ void VivaldiPrefsDefinitions::MigrateObsoleteProfilePrefs(
     profile_prefs->ClearPref(vivaldiprefs::kAddressBarInlineSearchSuggestEnabled);
   }
 #endif // !IS_IOS
+if (profile_prefs->HasPrefPath(vivaldiprefs::kAddressBarOmniboxShowBookmarks)) {
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+  auto pref = vivaldiprefs::kAddressBarOmniboxBookmarksBoosted;
+#else
+  auto pref = vivaldiprefs::kAddressBarOmniboxBookmarks;
+#endif
+    profile_prefs->SetBoolean(
+        pref,
+        profile_prefs->GetBoolean(vivaldiprefs::kAddressBarOmniboxShowBookmarks));
+    profile_prefs->ClearPref(vivaldiprefs::kAddressBarOmniboxShowBookmarks);
+  }
 }
 
 std::optional<sync_preferences::SyncablePrefMetadata>

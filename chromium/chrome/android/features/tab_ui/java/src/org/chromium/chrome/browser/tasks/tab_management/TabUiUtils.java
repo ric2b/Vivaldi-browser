@@ -15,6 +15,9 @@ import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 
 import org.chromium.base.Callback;
+import org.chromium.base.Token;
+import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.chrome.browser.collaboration.CollaborationServiceFactory;
 import org.chromium.chrome.browser.data_sharing.DataSharingServiceFactory;
 import org.chromium.chrome.browser.data_sharing.DataSharingTabManager;
 import org.chromium.chrome.browser.data_sharing.ui.shared_image_tiles.SharedImageTilesCoordinator;
@@ -23,21 +26,22 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.TabLaunchType;
-import org.chromium.chrome.browser.tab.TabUtils;
 import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncServiceFactory;
 import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncUtils;
 import org.chromium.chrome.browser.tabmodel.TabClosureParams;
-import org.chromium.chrome.browser.tabmodel.TabCreator;
 import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
+import org.chromium.chrome.browser.tabmodel.TabGroupTitleUtils;
 import org.chromium.chrome.browser.tabmodel.TabList;
 import org.chromium.chrome.browser.tabmodel.TabModel;
-import org.chromium.chrome.browser.tabmodel.TabModelUtils;
+import org.chromium.chrome.browser.tabmodel.TabModelActionListener;
+import org.chromium.chrome.browser.tasks.tab_management.ActionConfirmationManager.MaybeBlockingResult;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.components.browser_ui.widget.ActionConfirmationResult;
+import org.chromium.components.collaboration.CollaborationService;
 import org.chromium.components.data_sharing.DataSharingService;
+import org.chromium.components.data_sharing.GroupData;
 import org.chromium.components.data_sharing.PeopleGroupActionOutcome;
-import org.chromium.components.embedder_support.util.UrlConstants;
+import org.chromium.components.data_sharing.member_role.MemberRole;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.identitymanager.IdentityManager;
@@ -45,7 +49,6 @@ import org.chromium.components.tab_group_sync.LocalTabGroupId;
 import org.chromium.components.tab_group_sync.SavedTabGroup;
 import org.chromium.components.tab_group_sync.TabGroupSyncService;
 import org.chromium.components.tab_groups.TabGroupColorId;
-import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogUtils;
 
@@ -58,19 +61,14 @@ public class TabUiUtils {
      * Closes a tab group and maybe shows a confirmation dialog.
      *
      * @param filter The {@link TabGroupModelFilter} to act on.
-     * @param actionConfirmationManager The {@link ActionConfirmationManager} to use to confirm
-     *     actions.
      * @param tabId The ID of one of the tabs in the tab group.
      * @param hideTabGroups Whether to hide or delete the tab group.
-     * @param isSyncEnabled Whether the Tab Group Sync flag is enabled.
      * @param didCloseCallback Run after the close confirmation to indicate if a close happened.
      */
     public static void closeTabGroup(
             TabGroupModelFilter filter,
-            ActionConfirmationManager actionConfirmationManager,
             int tabId,
             boolean hideTabGroups,
-            boolean isSyncEnabled,
             @Nullable Callback<Boolean> didCloseCallback) {
         TabModel tabModel = filter.getTabModel();
         @Nullable Tab tab = tabModel.getTabById(tabId);
@@ -79,85 +77,56 @@ public class TabUiUtils {
             return;
         }
         int rootId = tab.getRootId();
-        List<Tab> tabs = filter.getRelatedTabListForRootId(rootId);
-        boolean isIncognito = filter.isIncognitoBranded();
+        TabClosureParams closureParams =
+                TabClosureParams.forCloseTabGroup(filter, rootId)
+                        .hideTabGroups(hideTabGroups)
+                        .allowUndo(true)
+                        .build();
 
-        if (hideTabGroups || isIncognito || !isSyncEnabled || actionConfirmationManager == null) {
-            filter.closeTabs(TabClosureParams.closeTabs(tabs).hideTabGroups(hideTabGroups).build());
-            Callback.runNullSafe(didCloseCallback, true);
-        } else {
-            List<Integer> tabIds = TabUtils.getTabIds(tabs);
+        @Nullable TabModelActionListener listener = buildMaybeDidCloseTabListener(didCloseCallback);
+        tabModel.getTabRemover().closeTabs(closureParams, /* allowDialog= */ true, listener);
+    }
 
-            // Present a confirmation dialog to the user before closing the tab group.
-            Callback<Integer> onResult =
-                    (@ActionConfirmationResult Integer result) -> {
-                        if (result != ActionConfirmationResult.CONFIRMATION_NEGATIVE) {
-                            boolean allowUndo =
-                                    result == ActionConfirmationResult.IMMEDIATE_CONTINUE;
-                            List<Tab> tabsToClose =
-                                    TabModelUtils.getTabsById(
-                                            tabIds,
-                                            filter.getTabModel(),
-                                            /* allowClosing= */ false);
-                            filter.closeTabs(
-                                    TabClosureParams.closeTabs(tabsToClose)
-                                            .allowUndo(allowUndo)
-                                            .hideTabGroups(hideTabGroups)
-                                            .build());
-                            Callback.runNullSafe(didCloseCallback, true);
-                        } else {
-                            Callback.runNullSafe(didCloseCallback, false);
-                        }
-                    };
-            actionConfirmationManager.processDeleteGroupAttempt(onResult);
-        }
+    /**
+     * Returns a {@link TabModelActionListener} that will invoke {@code didCloseCallback} with
+     * whether tabs were closed or null if {@code didCloseCallback} is null.
+     */
+    public static @Nullable TabModelActionListener buildMaybeDidCloseTabListener(
+            @Nullable Callback<Boolean> didCloseCallback) {
+        if (didCloseCallback == null) return null;
+
+        return new TabModelActionListener() {
+            @Override
+            public void onConfirmationDialogResult(
+                    @DialogType int dialogType, @ActionConfirmationResult int result) {
+                // Cases:
+                // - DialogType.NONE: will always close tabs as no interrupt happened.
+                // - DialogType.COLLABORATION: will always perform the action. The dialog is used to
+                //   confirm if the group should remain.
+                // - DialogType.SYNC: a dialog interrupts the flow. If the action was positive the
+                //   tabs will be closed.
+                // The goal is to differentiate whether tabs were closed which can be inferred from
+                // the combination of `dialogType` and `result`.
+                boolean didCloseTabs =
+                        dialogType != DialogType.SYNC
+                                || result != ActionConfirmationResult.CONFIRMATION_NEGATIVE;
+                didCloseCallback.onResult(didCloseTabs);
+            }
+        };
     }
 
     /**
      * Ungroups a tab group and maybe shows a confirmation dialog.
      *
      * @param filter The {@link TabGroupModelFilter} to act on.
-     * @param actionConfirmationManager The {@link ActionConfirmationManager} to use to confirm
-     *     actions.
      * @param tabId The ID of one of the tabs in the tab group.
-     * @param isSyncEnabled Whether the Tab Group Sync flag is enabled.
      */
-    public static void ungroupTabGroup(
-            TabGroupModelFilter filter,
-            ActionConfirmationManager actionConfirmationManager,
-            int tabId,
-            boolean isSyncEnabled) {
+    public static void ungroupTabGroup(TabGroupModelFilter filter, int tabId) {
         TabModel tabModel = filter.getTabModel();
         int rootId = tabModel.getTabById(tabId).getRootId();
-        boolean isIncognito = filter.getTabModel().isIncognito();
-        List<Tab> tabs = filter.getRelatedTabListForRootId(rootId);
-        List<Integer> tabIds = TabUtils.getTabIds(tabs);
+        if (rootId == Tab.INVALID_TAB_ID) return;
 
-        if (isIncognito || !isSyncEnabled || actionConfirmationManager == null) {
-            for (Tab tab : tabs) {
-                filter.moveTabOutOfGroupInDirection(tab.getId(), /* trailing= */ true);
-            }
-        } else {
-            // Present a confirmation dialog to the user before ungrouping the tab group.
-            Callback<Integer> onResult =
-                    (@ActionConfirmationResult Integer result) -> {
-                        if (result != ActionConfirmationResult.CONFIRMATION_NEGATIVE) {
-                            List<Tab> tabsToUngroup =
-                                    TabModelUtils.getTabsById(
-                                            tabIds,
-                                            filter.getTabModel(),
-                                            /* allowClosing= */ false,
-                                            tab -> filter.isTabInTabGroup(tab));
-
-                            for (Tab tab : tabsToUngroup) {
-                                filter.moveTabOutOfGroupInDirection(
-                                        tab.getId(), /* trailing= */ true);
-                            }
-                        }
-                    };
-
-            actionConfirmationManager.processUngroupAttempt(onResult);
-        }
+        filter.getTabUngrouper().ungroupTabs(rootId, /* trailing= */ true, /* allowDialog= */ true);
     }
 
     /**
@@ -198,63 +167,7 @@ public class TabUiUtils {
     }
 
     /**
-     * Opens a new tab page in the last position of the tab group and selects the new tab.
-     *
-     * @param filter The {@link TabGroupModelFilter} to act on.
-     * @param tabCreator The {@link TabCreator} to use to create new tab.
-     * @param tabId The ID of one of the tabs in the tab group.
-     * @param type The launch type of the new tab.
-     */
-    public static void openNtpInGroup(
-            TabGroupModelFilter filter, TabCreator tabCreator, int tabId, @TabLaunchType int type) {
-        List<Tab> relatedTabs = filter.getRelatedTabList(tabId);
-        assert relatedTabs.size() > 0;
-
-        Tab parentTabToAttach = relatedTabs.get(relatedTabs.size() - 1);
-        tabCreator.createNewTab(new LoadUrlParams(UrlConstants.NTP_URL), type, parentTabToAttach);
-    }
-
-    /**
-     * Deletes a shared tab group, prompting to user to verify first.
-     *
-     * @param context Used to load resources.
-     * @param filter Used to pull dependencies from.
-     * @param actionConfirmationManager Used to show a confirmation dialog.
-     * @param modalDialogManager Used to show error dialogs.
-     * @param tabId The local id of the tab being deleted.
-     */
-    public static void deleteSharedTabGroup(
-            Context context,
-            TabGroupModelFilter filter,
-            ActionConfirmationManager actionConfirmationManager,
-            ModalDialogManager modalDialogManager,
-            int tabId) {
-        assert ChromeFeatureList.isEnabled(ChromeFeatureList.DATA_SHARING);
-        TabModel tabModel = filter.getTabModel();
-        Profile profile = tabModel.getProfile();
-        TabGroupSyncService tabGroupSyncService = TabGroupSyncServiceFactory.getForProfile(profile);
-        DataSharingService dataSharingService = DataSharingServiceFactory.getForProfile(profile);
-
-        @Nullable
-        SavedTabGroup savedTabGroup =
-                TabGroupSyncUtils.getSavedTabGroupFromTabId(tabId, tabModel, tabGroupSyncService);
-        if (savedTabGroup == null || TextUtils.isEmpty(savedTabGroup.collaborationId)) return;
-
-        assert actionConfirmationManager != null;
-
-        actionConfirmationManager.processDeleteSharedGroupAttempt(
-                savedTabGroup.title,
-                (@ActionConfirmationResult Integer result) -> {
-                    if (result != ActionConfirmationResult.CONFIRMATION_NEGATIVE) {
-                        dataSharingService.deleteGroup(
-                                savedTabGroup.collaborationId,
-                                bindOnLeaveOrDeleteGroup(context, modalDialogManager));
-                    }
-                });
-    }
-
-    /**
-     * Leaves a shared tab group, prompting to user to verify first.
+     * Leave or deletes a shared tab group, prompting to user to verify first.
      *
      * @param context Used to load resources.
      * @param filter Used to pull dependencies from.
@@ -262,40 +175,132 @@ public class TabUiUtils {
      * @param modalDialogManager Used to show error dialogs.
      * @param tabId The local id of the tab being left.
      */
-    public static void leaveTabGroup(
+    public static void exitSharedTabGroupWithDialog(
             Context context,
             TabGroupModelFilter filter,
             ActionConfirmationManager actionConfirmationManager,
             ModalDialogManager modalDialogManager,
             int tabId) {
         assert ChromeFeatureList.isEnabled(ChromeFeatureList.DATA_SHARING);
+        assert actionConfirmationManager != null;
+
         TabModel tabModel = filter.getTabModel();
         Profile profile = tabModel.getProfile();
         TabGroupSyncService tabGroupSyncService = TabGroupSyncServiceFactory.getForProfile(profile);
         DataSharingService dataSharingService = DataSharingServiceFactory.getForProfile(profile);
         IdentityManager identityManager =
                 IdentityServicesProvider.get().getIdentityManager(profile);
+        CollaborationService collaborationService =
+                CollaborationServiceFactory.getForProfile(profile);
 
         @Nullable
         SavedTabGroup savedTabGroup =
                 TabGroupSyncUtils.getSavedTabGroupFromTabId(tabId, tabModel, tabGroupSyncService);
-        if (savedTabGroup == null || TextUtils.isEmpty(savedTabGroup.collaborationId)) return;
         @Nullable
         CoreAccountInfo account = identityManager.getPrimaryAccountInfo(ConsentLevel.SIGNIN);
-        if (account == null) return;
+        if (savedTabGroup == null
+                || TextUtils.isEmpty(savedTabGroup.collaborationId)
+                || account == null) {
+            showGenericErrorDialog(context, modalDialogManager);
+            return;
+        }
 
-        assert actionConfirmationManager != null;
+        String collaborationId = savedTabGroup.collaborationId;
+        @Nullable GroupData shareGroup = collaborationService.getGroupData(collaborationId);
+        if (shareGroup == null) {
+            showGenericErrorDialog(context, modalDialogManager);
+            return;
+        }
 
-        actionConfirmationManager.processLeaveGroupAttempt(
-                savedTabGroup.title,
-                (@ActionConfirmationResult Integer result) -> {
-                    if (result != ActionConfirmationResult.CONFIRMATION_NEGATIVE) {
-                        dataSharingService.removeMember(
-                                savedTabGroup.collaborationId,
-                                account.getEmail(),
-                                bindOnLeaveOrDeleteGroup(context, modalDialogManager));
+        @MemberRole
+        int memberRole = TabShareUtils.getSelfMemberRole(shareGroup, account.getGaiaId());
+        Callback<MaybeBlockingResult> onActionConfirmation =
+                (MaybeBlockingResult maybeBlockingResult) -> {
+                    if (maybeBlockingResult.result
+                            != ActionConfirmationResult.CONFIRMATION_NEGATIVE) {
+                        assert maybeBlockingResult.finishBlocking != null;
+                        exitCollaborationWithoutWarning(
+                                context,
+                                modalDialogManager,
+                                dataSharingService,
+                                collaborationId,
+                                memberRole,
+                                maybeBlockingResult.finishBlocking);
+                    } else if (maybeBlockingResult.finishBlocking != null) {
+                        assert false : "Should not be reachable.";
+                        // Do the safe thing and run the runnable anyway.
+                        maybeBlockingResult.finishBlocking.run();
                     }
-                });
+                };
+
+        // The default title is not included in the savedTabGroup data. Use the filter to get the
+        // last known title for the tab group.
+        String title = savedTabGroup.title;
+        @Nullable Tab tab = tabModel.getTabById(tabId);
+        if (tab != null) {
+            int rootId = tab.getRootId();
+            title = TabGroupTitleUtils.getDisplayableTitle(context, filter, rootId);
+        }
+
+        if (memberRole == MemberRole.OWNER) {
+            actionConfirmationManager.processDeleteSharedGroupAttempt(title, onActionConfirmation);
+        } else if (memberRole == MemberRole.MEMBER) {
+            actionConfirmationManager.processLeaveGroupAttempt(title, onActionConfirmation);
+        } else {
+            showGenericErrorDialog(context, modalDialogManager);
+        }
+    }
+
+    /**
+     * Returns whether an IPH should be shown for Tab Group Sync for the given tab group ID.
+     *
+     * @param tabGroupSyncService The sync service to get tab group data form.
+     * @param tabGroupId The local tab group ID.
+     * @return Whether to show Tab Group Sync IPH.
+     */
+    public static boolean shouldShowIphForSync(
+            TabGroupSyncService tabGroupSyncService, Token tabGroupId) {
+        if (tabGroupSyncService == null || tabGroupId == null) return false;
+        @Nullable
+        SavedTabGroup savedTabGroup = tabGroupSyncService.getGroup(new LocalTabGroupId(tabGroupId));
+        // Don't try to show the IPH if the group is:
+        // 1) Not in TabGroupSyncService for some reason.
+        // 2) A shared tab group.
+        // 3) Created locally.
+        if (savedTabGroup == null
+                || TabShareUtils.isCollaborationIdValid(savedTabGroup.collaborationId)
+                || !tabGroupSyncService.isRemoteDevice(savedTabGroup.creatorCacheGuid)) {
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Leaves or deletes a given collaboration.
+     *
+     * @param context Used to load resources.
+     * @param modalDialogManager Used to show error dialogs.
+     * @param dataSharingService Called to do the actual leave or delete action.
+     * @param collaborationId Used to identify the collaboration.
+     * @param memberRole Used to decide which way to exit the group.
+     * @param finishedRunnable Invoked when the server RPC is complete.
+     */
+    public static void exitCollaborationWithoutWarning(
+            Context context,
+            ModalDialogManager modalDialogManager,
+            DataSharingService dataSharingService,
+            String collaborationId,
+            @MemberRole int memberRole,
+            @Nullable Runnable finishedRunnable) {
+        Callback<Integer> callback =
+                bindOnLeaveOrDeleteGroup(context, modalDialogManager, finishedRunnable);
+        if (memberRole == MemberRole.OWNER) {
+            dataSharingService.deleteGroup(collaborationId, callback);
+        } else if (memberRole == MemberRole.MEMBER) {
+            dataSharingService.leaveGroup(collaborationId, callback);
+        } else {
+            showGenericErrorDialog(context, modalDialogManager);
+        }
     }
 
     /**
@@ -307,21 +312,18 @@ public class TabUiUtils {
      *     UI and DataSharing services.
      * @param tabId The local id of the tab.
      * @param tabGroupDisplayName The display name of the current group title.
-     * @param onGroupSharedCallback The callback to execute after the create share flow is
-     *     completed.
      */
     public static void startShareTabGroupFlow(
             Activity activity,
             TabGroupModelFilter filter,
             DataSharingTabManager dataSharingTabManager,
             int tabId,
-            String tabGroupDisplayName,
-            Callback<Boolean> onGroupSharedCallback) {
+            String tabGroupDisplayName) {
         Tab tab = filter.getTabModel().getTabById(tabId);
         LocalTabGroupId localTabGroupId = TabGroupSyncUtils.getLocalTabGroupId(tab);
 
-        dataSharingTabManager.createGroupFlow(
-                activity, tabGroupDisplayName, localTabGroupId, onGroupSharedCallback);
+        dataSharingTabManager.createOrManageFlow(
+                activity, /* syncId= */ null, localTabGroupId, (ignored) -> {});
     }
 
     /**
@@ -350,19 +352,34 @@ public class TabUiUtils {
     }
 
     private static Callback<Integer> bindOnLeaveOrDeleteGroup(
-            Context context, ModalDialogManager modalDialogManager) {
+            Context context,
+            ModalDialogManager modalDialogManager,
+            @Nullable Runnable finishedRunnable) {
         return (@PeopleGroupActionOutcome Integer outcome) -> {
-            if (outcome == PeopleGroupActionOutcome.SUCCESS) {
-                // TODO(crbug.com/345854578): Do we need to actively remove things from the UI?
-            } else {
-                ModalDialogUtils.showOneButtonConfirmation(
-                        modalDialogManager,
-                        context.getResources(),
-                        R.string.data_sharing_generic_failure_title,
-                        R.string.data_sharing_generic_failure_description,
-                        R.string.data_sharing_invitation_failure_button);
+            // Invoke the runnable first since it may be necessary to hide the prior dialog before
+            // showing the error.
+            if (finishedRunnable != null) finishedRunnable.run();
+
+            if (outcome != PeopleGroupActionOutcome.SUCCESS) {
+                showGenericErrorDialog(context, modalDialogManager);
             }
         };
+    }
+
+    /**
+     * Shows a generic error when a data sharing action fails.
+     *
+     * @param context Used to load resources.
+     * @param modalDialogManager Used to show the dialog.
+     */
+    public static void showGenericErrorDialog(
+            Context context, ModalDialogManager modalDialogManager) {
+        ModalDialogUtils.showOneButtonConfirmation(
+                modalDialogManager,
+                context.getResources(),
+                R.string.data_sharing_generic_failure_title,
+                R.string.data_sharing_generic_failure_description,
+                R.string.data_sharing_invitation_failure_button);
     }
 
     /**
@@ -374,23 +391,38 @@ public class TabUiUtils {
      * @param contentSensitivitySetter Function that sets the content sensitivity on the tab
      *     switcher view. The parameter of this function is a boolean, which is true if the content
      *     is sensitive.
+     * @param histogram Boolean histogram that records the content sensitivity.
      */
     @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
     public static void updateViewContentSensitivityForTabs(
-            @Nullable TabList tabList, Callback<Boolean> contentSensitivitySetter) {
+            @Nullable TabList tabList,
+            Callback<Boolean> contentSensitivitySetter,
+            String histogram) {
         if (tabList == null) {
             return;
         }
 
         for (int i = 0; i < tabList.getCount(); i++) {
             if (tabList.getTabAt(i).getTabHasSensitiveContent()) {
-                contentSensitivitySetter.onResult(/* contentIsSensitive= */ true);
+                contentSensitivitySetter.onResult(/* result= */ true);
+                RecordHistogram.recordBooleanHistogram(histogram, /* sample= */ true);
                 return;
             }
         }
         // If not marked as not sensitive, the tab switcher might remain sensitive from a previous
         // set of tabs.
-        contentSensitivitySetter.onResult(/* contentIsSensitive= */ false);
+        contentSensitivitySetter.onResult(/* result= */ false);
+        RecordHistogram.recordBooleanHistogram(histogram, /* sample= */ false);
+    }
+
+    /** Returns whether any tabs have sensitive content. */
+    public static boolean anySensitiveContent(List<Tab> tabs) {
+        for (Tab tab : tabs) {
+            if (tab.getTabHasSensitiveContent()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -402,20 +434,19 @@ public class TabUiUtils {
      * @param contentSensitivitySetter Function that sets the content sensitivity on the tab
      *     switcher view. The parameter of this function is a boolean, which is true if the content
      *     is sensitive.
+     * @param histogram Boolean histogram that records the content sensitivity.
      */
     @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
     public static void updateViewContentSensitivityForTabs(
-            @Nullable List<Tab> tabList, Callback<Boolean> contentSensitivitySetter) {
+            @Nullable List<Tab> tabList,
+            Callback<Boolean> contentSensitivitySetter,
+            String histogram) {
         if (tabList == null) {
             return;
         }
 
-        if (tabList.stream().anyMatch(tab -> tab.getTabHasSensitiveContent())) {
-            contentSensitivitySetter.onResult(/* contentIsSensitive= */ true);
-        } else {
-            // If not marked as not sensitive, the tab switcher might remain sensitive from a
-            // previous set of tabs.
-            contentSensitivitySetter.onResult(/* contentIsSensitive= */ false);
-        }
+        boolean isSensitive = anySensitiveContent(tabList);
+        contentSensitivitySetter.onResult(isSensitive);
+        RecordHistogram.recordBooleanHistogram(histogram, isSensitive);
     }
 }

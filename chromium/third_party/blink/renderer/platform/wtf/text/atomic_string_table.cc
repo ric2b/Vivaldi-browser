@@ -9,6 +9,7 @@
 
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string_table.h"
 
+#include "base/containers/heap_array.h"
 #include "base/notreached.h"
 #include "third_party/blink/renderer/platform/wtf/text/character_visitor.h"
 #include "third_party/blink/renderer/platform/wtf/text/convert_to_8bit_hash_reader.h"
@@ -55,7 +56,7 @@ class UCharBuffer {
         hash_(ComputeHashAndMaskTop8Bits(chars, len, encoding)),
         encoding_(encoding) {}
 
-  const UChar* characters() const { return characters_; }
+  base::span<const UChar> characters() const { return {characters_, length_}; }
   unsigned length() const { return length_; }
   unsigned hash() const { return hash_; }
   AtomicStringUCharEncoding encoding() const { return encoding_; }
@@ -83,7 +84,7 @@ struct UCharBufferTranslator {
   static unsigned GetHash(const UCharBuffer& buf) { return buf.hash(); }
 
   static bool Equal(StringImpl* const& str, const UCharBuffer& buf) {
-    return WTF::Equal(str, buf.characters(), buf.length());
+    return WTF::Equal(str, buf.characters());
   }
 
   static void Store(StringImpl*& location,
@@ -361,8 +362,7 @@ struct LCharBufferTranslator {
   static unsigned GetHash(const LCharBuffer& buf) { return buf.hash(); }
 
   static bool Equal(StringImpl* const& str, const LCharBuffer& buf) {
-    auto chars = buf.characters();
-    return WTF::Equal(str, chars.data(), chars.size());
+    return WTF::Equal(str, buf.characters());
   }
 
   static void Store(StringImpl*& location,
@@ -442,8 +442,8 @@ scoped_refptr<StringImpl> AtomicStringTable::Add(
 }
 
 scoped_refptr<StringImpl> AtomicStringTable::AddUTF8(
-    const char* characters_start,
-    const char* characters_end) {
+    const uint8_t* characters_start,
+    const uint8_t* characters_end) {
   bool seen_non_ascii = false;
   bool seen_non_latin1 = false;
   unsigned utf16_length = unicode::CalculateStringLengthFromUTF8(
@@ -452,16 +452,16 @@ scoped_refptr<StringImpl> AtomicStringTable::AddUTF8(
     return Add((const LChar*)characters_start, utf16_length);
   }
 
-  std::unique_ptr<UChar[]> utf16_buf(new UChar[utf16_length]);
-  const char* source = characters_start;
-  UChar* dptr = utf16_buf.get();
-  if (unicode::ConvertUTF8ToUTF16(&source, characters_end, &dptr,
-                                  utf16_buf.get() + utf16_length) !=
+  auto utf16_buf = base::HeapArray<UChar>::Uninit(utf16_length);
+  base::span<const uint8_t> source_buffer(
+      reinterpret_cast<const uint8_t*>(characters_start),
+      static_cast<size_t>(characters_end - characters_start));
+  if (unicode::ConvertUTF8ToUTF16(source_buffer, utf16_buf).status !=
       unicode::kConversionOK) {
     NOTREACHED();
   }
 
-  UCharBuffer buffer(utf16_buf.get(), utf16_length,
+  UCharBuffer buffer(utf16_buf.data(), utf16_buf.size(),
                      seen_non_latin1 ? AtomicStringUCharEncoding::kIs16Bit
                                      : AtomicStringUCharEncoding::kIs8Bit);
   return AddToStringTable<UCharBuffer, UCharBufferTranslator>(buffer);

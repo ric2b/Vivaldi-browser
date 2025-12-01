@@ -72,6 +72,7 @@ class StorageFrontend : public BrowserContextKeyedAPI {
       scoped_refptr<value_store::ValueStoreFactory> storage_factory,
       content::BrowserContext* context);
 
+  explicit StorageFrontend(content::BrowserContext* context);
   StorageFrontend(const StorageFrontend&) = delete;
   StorageFrontend& operator=(const StorageFrontend&) = delete;
 
@@ -162,9 +163,6 @@ class StorageFrontend : public BrowserContextKeyedAPI {
                    raw_ptr<ValueStoreCache, CtnExperimental>>
       CacheMap;
 
-  // Constructor for normal BrowserContextKeyedAPI usage.
-  explicit StorageFrontend(content::BrowserContext* context);
-
   // Constructor for tests.
   StorageFrontend(scoped_refptr<value_store::ValueStoreFactory> storage_factory,
                   content::BrowserContext* context);
@@ -172,9 +170,9 @@ class StorageFrontend : public BrowserContextKeyedAPI {
   void Init(scoped_refptr<value_store::ValueStoreFactory> storage_factory);
 
   // Should be called on the UI thread after a read has been performed in
-  // `storage_area`. Fires `callback` with the keys from `get_result`.
+  // `storage_area`. Fires `callback` with the keys from `result`.
   void OnReadKeysFinished(base::OnceCallback<void(GetKeysResult)> callback,
-                          GetResult get_result);
+                          value_store::ValueStore::ReadResult result);
 
   // Should be called on the UI thread after a read has been performed in
   // `storage_area`. Fires `callback` with the `result` from the read

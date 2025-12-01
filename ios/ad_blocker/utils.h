@@ -11,6 +11,7 @@ namespace adblock_filter {
 
 namespace rules_json {
 constexpr char kVersion[] = "version";
+constexpr char kPartnerListAllowedDocuments[] = "partner-list-allowed-documents";
 constexpr char kNetworkRules[] = "network";
 constexpr char kCosmeticRules[] = "cosmetic";
 constexpr char kScriptletRules[] = "scriptlet";

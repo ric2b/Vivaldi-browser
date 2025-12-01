@@ -23,13 +23,13 @@ CREATE PERFETTO FUNCTION _get_devfreq_counters(
 )
 RETURNS TABLE(
   -- Unique identifier for this counter.
-  id INT,
+  id LONG,
   -- Starting timestamp of the counter.
-  ts LONG,
+  ts TIMESTAMP,
   -- Duration in which counter is constant and frequency doesn't chamge.
-  dur INT,
+  dur DURATION,
   -- Frequency in kHz of the device that corresponds to the counter.
-  freq INT
+  freq LONG
 ) AS
 SELECT
   count_w_dur.id,
@@ -40,8 +40,8 @@ FROM counter_leading_intervals!((
   SELECT c.*
   FROM counter c
   JOIN track t ON t.id = c.track_id
-  WHERE t.classification = 'linux_device_frequency'
-    AND EXTRACT_ARG(t.dimension_arg_set_id, 'device_name') = $device_name
+  WHERE t.type = 'linux_device_frequency'
+    AND EXTRACT_ARG(t.dimension_arg_set_id, 'linux_device') GLOB $device_name
 )) AS count_w_dur;
 
 -- ARM DSU device frequency counters. This table will only be populated on
@@ -49,14 +49,14 @@ FROM counter_leading_intervals!((
 -- and from ARM devices with the DSU (DynamIQ Shared Unit) hardware.
 CREATE PERFETTO TABLE linux_devfreq_dsu_counter(
   -- Unique identifier for this counter.
-  id INT,
+  id LONG,
   -- Starting timestamp of the counter.
-  ts LONG,
+  ts TIMESTAMP,
   -- Duration in which counter is constant and frequency doesn't chamge.
-  dur INT,
+  dur DURATION,
   -- Frequency in kHz of the device that corresponds to the counter.
-  dsu_freq INT
+  dsu_freq LONG
 ) AS
 SELECT
   id, ts, dur, freq as dsu_freq
-FROM _get_devfreq_counters("dsufreq");
+FROM _get_devfreq_counters("*devfreq_dsu");

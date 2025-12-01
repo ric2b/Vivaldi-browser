@@ -1,10 +1,8 @@
 # Copyright 2023 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
-import("//build/config/chrome_build.gni")
-import("//build/config/chromeos/ui_mode.gni")
 
-assert(is_chromeos_ash, "Non-ChromeOS builds cannot depend on //ash")
+assert(is_chromeos, "Non-ChromeOS builds cannot depend on //chromeos/ash")
 
 component("growth") {
   sources = [
@@ -26,10 +24,13 @@ component("growth") {
     ":utils",
     "//ash/constants",
     "//ash/resources/vector_icons",
+    "//ash/webui/mall/resources:resources_grit",
+    "//ash/webui/print_management/resources:resources_grit",
     "//base",
     "//build:branding_buildflags",
     "//chromeos/ash/components/channel",
     "//chromeos/ash/components/demo_mode",
+    "//chromeos/ash/components/scalable_iph:buildflags",
     "//chromeos/ash/resources",
     "//chromeos/ui/vector_icons",
     "//components/account_id",

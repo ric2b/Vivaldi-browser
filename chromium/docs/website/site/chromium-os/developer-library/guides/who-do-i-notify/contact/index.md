@@ -62,7 +62,7 @@ nights & weekends), so please be patient when first joining.
     or JS at all).
 
 For more specific developer groups, see this page:
-https://dev.chromium.org/developers/technical-discussion-groups
+https://www.chromium.org/developers/technical-discussion-groups
 
 ## Issue tracker (bugs & features)
 
@@ -142,6 +142,6 @@ It has a section specifically about filing security sensitive bugs.
 [Crouton]: https://github.com/dnschneid/crouton
 [Google Chrome Help Center]: https://www.google.com/support/chrome/
 [Report a problem or send feedback]: https://support.google.com/chromebook/answer/2982029
-[Reporting a Crash Bug]: https://dev.chromium.org/for-testers/bug-reporting-guidelines/reporting-crash-bug
+[Reporting a Crash Bug]: /for-testers/bug-reporting-guidelines/reporting-crash-bug
 [Reporting ChromeOS bugs]: /chromium-os/developer-library/guides/bugs/reporting-bugs/
 [VM/containers]: /chromium-os/developer-library/guides/containers/containers-and-vms/

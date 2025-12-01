@@ -22,7 +22,7 @@ tracker for tracking and fixing.
 Breakpad is disabled by default. The cross-platform way to turn on crash
 reporting is to perform an official, branded build of Chromium by setting GN
 arguments is_chrome_branded=true and is_official_build=true, which will require
-a [src-internal](https://goto.google.com/src-internal) checkout.
+a [src-internal](http://go/src-internal) checkout.
 
 To enable Breakpad without doing a branded build, each platform has a unique way
 of enabling breakpad:
@@ -112,7 +112,7 @@ The tools used by the processor to symbolize the stack are effectively the same
 as the minidump_stackwalk and minidump_dump tools available in Breakpad.
 
 Once a crash report is processed, it is made available for view in the [crash
-dashboard](https://goto.google.com/crash/root). The dashboard allows developers
+dashboard](http://go/crash/root). The dashboard allows developers
 to drill down into crash reports, grouped by metadata. More documentation on
 this is available internally, linked to from the dashboard. The original
 minidump file can be downloaded from this frontend, as well.
@@ -145,8 +145,8 @@ other heuristics. This signature is highly simplified, which gives it good
 bucketing properties and protection against callstack variance, but the
 signature can often be generated for disjoint crashes from different versions.
 More information can be found in the processor's [design
-document](https://goto.google.com/xgqgp) and this
-[explanation](https://goto.google.com/gvqex).
+document](http://go/xgqgp) and this
+[explanation](http://go/gvqex).
 
 # Working with Minidumps
 
@@ -205,24 +205,24 @@ a good percentage of crashes, especially since the symbolized stack may be
 available on the crash server.
 
 See also
-<http://www.chromium.org/chromium-os/how-tos-and-troubleshooting/crash-reporting/debugging-a-minidump>
+<https://www.chromium.org/chromium-os/how-tos-and-troubleshooting/crash-reporting/debugging-a-minidump>
 
 ## Symbolizing Minidumps
 
 To symbolize a minidump that was not uploaded, you can use the
-[crsym](https://goto.google.com/crsym/) tool (internal instance of
+[crsym](http://go/crsym/) tool (internal instance of
 <https://github.com/chromium/crsym/>):
 
 1.  Build minidump_stackwalk from inside the Chromium or Breakpad trees.
 2.  Run minidump_stackwalk -m /path/to/minidump.dmp &gt; /tmp/stack.txt
-3.  Go to [crsym](https://goto.google.com/crsym/) and set the input type
+3.  Go to [crsym](http://go/crsym/) and set the input type
             to be a Minidump Stackwalk.
 4.  Paste the contents of /tmp/stack.txt into the input field.
 5.  Press the Symbolize button and wait for the output.
 
 To symbolize a minidump for a local build, follow the steps in
 <https://code.google.com/p/chromium/issues/detail?id=304846#c14> for Mac, and
-see <http://www.chromium.org/developers/decoding-crash-dumps> for linux.
+see <https://www.chromium.org/developers/decoding-crash-dumps> for linux.
 
 # Production Debugging
 

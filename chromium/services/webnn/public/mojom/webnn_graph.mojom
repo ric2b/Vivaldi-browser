@@ -4,9 +4,7 @@
 
 module webnn.mojom;
 
-import "mojo/public/mojom/base/big_buffer.mojom";
 import "services/webnn/public/mojom/webnn_context_properties.mojom";
-import "services/webnn/public/mojom/webnn_error.mojom";
 import "third_party/blink/public/mojom/tokens/tokens.mojom";
 
 // Represents the `MLOperandType` in the WebIDL definition.
@@ -271,6 +269,7 @@ struct ElementWiseBinary {
     kGreaterOrEqual,
     kLesser,
     kLesserOrEqual,
+    kNotEqual,
     kLogicalAnd,
     kLogicalOr,
     kLogicalXor,
@@ -1029,6 +1028,18 @@ struct Reshape {
   string label;
 };
 
+// Represents an operation of reversing the order of input along specified axes.
+struct Reverse {
+  // The input operand (referenced by input_operand_id) must be distinct from
+  // the output operand (referenced by output_operand_id).
+  uint64 input_operand_id;
+  uint64 output_operand_id;
+  // The axes to reverse along.
+  array<uint32> axes;
+  // User defined label from MLOperatorOptions.
+  string label;
+};
+
 // Represents ScatterElements operation that first copies the values of `input`
 // tensor to `output` tensor, and then overwrites the values of `output` tensor
 // to values specified by `updates` tensor at specific index positions specified
@@ -1382,6 +1393,7 @@ union Operation {
   Relu relu;
   Resample2d resample2d;
   Reshape reshape;
+  Reverse reverse;
   ScatterElements scatter_elements;
   ScatterND scatter_nd;
   Sigmoid sigmoid;
@@ -1400,7 +1412,6 @@ union Operation {
 // Describes an entire WebNN graph information.
 struct GraphInfo {
   // A map of all operands used in this `GraphInfo`, the key is the operand id.
-  // The operand ids must be increasing from 1 and contiguous.
   map<uint64, Operand> id_to_operand_map;
   // The id array from the `GraphInfo.id_to_operand_map` is used to identify the
   // input operands of this graph.
@@ -1411,15 +1422,11 @@ struct GraphInfo {
   // The operations are sorted in the topological order.
   array<Operation> operations;
   // The constant weight data specified through the MLGraphBuilder.constant()
-  // method defined in the WebIDL, the key is the constant operand id.
-  map<uint64, mojo_base.mojom.BigBuffer> constant_id_to_buffer_map;
-};
-
-// Represents the return value of `WebNNGraph::Compute()`. Let it be
-// `named_outputs` if the computation was successful and `error` otherwise.
-union ComputeResult {
-  map<string, mojo_base.mojom.BigBuffer> named_outputs;
-  Error error;
+  // method defined in the WebIDL. The key is the ID of the constant operand,
+  // while the value is a handle - minted previously by the sending process -
+  // which identifies the respective pending constant operand.
+  map<uint64, blink.mojom.WebNNPendingConstantToken>
+      constant_operand_ids_to_handles;
 };
 
 // WebNNGraph runs in the GPU process and is called by the renderer process to
@@ -1428,16 +1435,8 @@ union ComputeResult {
 interface WebNNGraph {
   // Called by the renderer process to carry out the computational workload of
   // the compiled graph. The key of map is the name of input/output to identify
-  // the tensor in the graph, the value is the shared memory to reduce memory
-  // copy for inference.
-  Compute(map<string, mojo_base.mojom.BigBuffer> named_inputs)
-      => (ComputeResult result);
-
-  // Called by the renderer process to carry out the computational workload of
-  // the compiled graph. The key of map is the name of input/output to identify
   // the tensor in the graph, the value is the MLTensor containing the tensor
   // data.
-  // TODO(crbug.com/331351967): remove Compute().
   Dispatch(map<string, blink.mojom.WebNNTensorToken> named_inputs,
            map<string, blink.mojom.WebNNTensorToken> named_outputs);
 };

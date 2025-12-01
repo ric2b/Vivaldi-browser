@@ -190,7 +190,7 @@ power-hungry components like the display panel, while in Lucid Sleep Chrome
 minimizes its usage of the CPU.
 
 Chrome has a multi-process architecture (for more details see
-[here](http://www.chromium.org/developers/design-documents/multi-process-architecture).)
+[here](/developers/design-documents/multi-process-architecture).)
 All apps, extensions, and web pages run inside renderer processes, which
 represent the biggest consumers of the CPU in the system. To minimize the power
 they consume (for example by running the CPU at a high load), Chrome freezes

@@ -26,13 +26,13 @@ export class TestLensOverlayPageHandler extends TestBrowserProxy implements
       'closeRequestedByOverlayCloseButton',
       'closeRequestedByOverlayBackgroundClick',
       'addBackgroundBlur',
-      'closeSearchBubble',
       'closePreselectionBubble',
       'feedbackRequestedByOverlay',
       'getOverlayInvocationSource',
       'infoRequestedByOverlay',
       'issueLensRegionRequest',
       'issueLensObjectRequest',
+      'issueMathSelectionRequest',
       'issueTextSelectionRequest',
       'issueTranslateSelectionRequest',
       'issueTranslateFullPageRequest',
@@ -63,10 +63,6 @@ export class TestLensOverlayPageHandler extends TestBrowserProxy implements
 
   addBackgroundBlur() {
     this.methodCalled('addBackgroundBlur');
-  }
-
-  closeSearchBubble() {
-    this.methodCalled('closeSearchBubble');
   }
 
   closePreselectionBubble() {
@@ -100,6 +96,10 @@ export class TestLensOverlayPageHandler extends TestBrowserProxy implements
 
   issueTranslateSelectionRequest(query: string) {
     this.methodCalled('issueTranslateSelectionRequest', query);
+  }
+
+  issueMathSelectionRequest(query: string, formula: string) {
+    this.methodCalled('issueMathSelectionRequest', query, formula);
   }
 
   issueTranslateFullPageRequest(

@@ -4,6 +4,8 @@
 
 #include "components/viz/service/display/overlay_processor_win.h"
 
+#include <algorithm>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -12,7 +14,6 @@
 #include "base/check.h"
 #include "base/feature_list.h"
 #include "base/memory/raw_ptr_exclusion.h"
-#include "base/ranges/algorithm.h"
 #include "base/trace_event/trace_event.h"
 #include "base/types/expected.h"
 #include "components/viz/common/display/renderer_settings.h"
@@ -263,12 +264,12 @@ DelegationStatus OverlayProcessorWin::ProcessOverlaysForDelegation(
         frames_since_using_dc_layers_map_,
         [&surface_content_render_passes](const auto& frames_since_kv) {
           const auto& [pass_id, _num_frames] = frames_since_kv;
-          return base::ranges::none_of(surface_content_render_passes,
-                                       [&pass_id](const auto& overlay_data_kv) {
-                                         const auto& [pass, _data] =
-                                             overlay_data_kv;
-                                         return pass_id == pass->id;
-                                       });
+          return std::ranges::none_of(surface_content_render_passes,
+                                      [&pass_id](const auto& overlay_data_kv) {
+                                        const auto& [pass, _data] =
+                                            overlay_data_kv;
+                                        return pass_id == pass->id;
+                                      });
         });
 
     for (auto& [render_pass, overlay_data] : surface_content_render_passes) {
@@ -512,19 +513,24 @@ OverlayProcessorWin::TryDelegatedCompositing(
 
   int draw_quad_rounded_corner_count = 0;
 
-  // Try to promote all the quads in the root pass to overlay.
-  for (auto it = root_render_pass->quad_list.begin();
-       it != root_render_pass->quad_list.end(); ++it) {
-    const DrawQuad* quad = *it;
+  // The quad that renders underneath the current quad in the following loop.
+  const DrawQuad* quad_below = nullptr;
 
+  // Try to promote all the quads in the root pass to overlay.
+  for (const auto* quad : root_render_pass->quad_list.BackToFront()) {
     std::optional<OverlayCandidate> dc_layer;
     if (is_full_delegated_compositing) {
       // Try to promote videos like DCLayerOverlay does first, then fall back to
       // OverlayCandidateFactory. This is because Windows has some specific
       // details on how it promotes e.g. protected videos that we want to
       // preserve.
+      const bool is_possible_full_screen_letterboxing =
+          is_page_fullscreen_mode_ &&
+          DCLayerOverlayProcessor::IsPossibleFullScreenLetterboxing(
+              quad_below, root_render_pass->output_rect);
       dc_layer = dc_layer_overlay_processor_->FromTextureOrYuvQuad(
-          resource_provider, root_render_pass, it, is_page_fullscreen_mode_);
+          resource_provider, root_render_pass, *quad,
+          is_possible_full_screen_letterboxing);
     } else {
       // In the partial delegated compositing case, we don't expect
       // video/canvas/etc content in the UI.
@@ -556,8 +562,8 @@ OverlayProcessorWin::TryDelegatedCompositing(
     // compositing.
     if (dc_layer->rpdq) {
       auto render_pass_it =
-          base::ranges::find(render_passes, dc_layer->rpdq->render_pass_id,
-                             &AggregatedRenderPass::id);
+          std::ranges::find(render_passes, dc_layer->rpdq->render_pass_id,
+                            &AggregatedRenderPass::id);
       CHECK(render_pass_it != render_passes.end());
 
       result.promoted_render_passes_info.promoted_render_passes.insert(
@@ -576,6 +582,9 @@ OverlayProcessorWin::TryDelegatedCompositing(
         return base::unexpected(DelegationStatus::kCompositedTooManyQuads);
       }
     }
+
+    // Iterating back-to-front means this quad will appear below the next one.
+    quad_below = quad;
   }
 
   return base::ok(std::move(result));
@@ -614,7 +623,7 @@ DCLayerOverlayProcessor::RenderPassOverlayDataMap OverlayProcessorWin::
         }
 
         // Check if any embedders need to read the backing.
-        if (base::ranges::any_of(embedders, [](const auto& embedder) {
+        if (std::ranges::any_of(embedders, [](const auto& embedder) {
               if (!embedder.is_overlay) {
                 // Non-overlay embedders need to be read in viz
                 return true;
@@ -655,7 +664,7 @@ DCLayerOverlayProcessor::RenderPassOverlayDataMap OverlayProcessorWin::
     for (const auto* quad : pass->quad_list) {
       if (const auto* rpdq =
               quad->DynamicCast<AggregatedRenderPassDrawQuad>()) {
-        auto it = base::ranges::find(
+        auto it = std::ranges::find(
             promoted_render_passes_info.promoted_render_passes,
             rpdq->render_pass_id, &AggregatedRenderPass ::id);
         if (it == promoted_render_passes_info.promoted_render_passes.end()) {
@@ -666,7 +675,7 @@ DCLayerOverlayProcessor::RenderPassOverlayDataMap OverlayProcessorWin::
 
         embedders[(*it)->id].push_back(Embedder{
             .rpdq = rpdq,
-            .is_overlay = base::ranges::find(
+            .is_overlay = std::ranges::find(
                               promoted_render_passes_info.promoted_rpdqs, rpdq,
                               [](const auto& rpdq) { return &rpdq.get(); }) !=
                           promoted_render_passes_info.promoted_rpdqs.end(),
@@ -719,7 +728,7 @@ gfx::Rect OverlayProcessorWin::InsertSurfaceContentOverlaysAndSetPlaneZOrder(
          const OverlayCandidate& candidate)
       -> DCLayerOverlayProcessor::RenderPassOverlayDataMap::value_type* {
     if (candidate.rpdq) {
-      if (auto it = base::ranges::find(
+      if (auto it = std::ranges::find(
               surface_content_render_passes, candidate.rpdq->render_pass_id,
               [](const auto& kv) { return kv.first->id; });
           it != surface_content_render_passes.end()) {
@@ -774,13 +783,12 @@ gfx::Rect OverlayProcessorWin::InsertSurfaceContentOverlaysAndSetPlaneZOrder(
         }
       };
 
-  // We inserted into candidates in front-to-back order, but |plane_z_order|s
-  // increment back-to-front, so we want to invert the iteration so we can
-  // insert in ascending z-order.
   int current_z_index = 1;
   // We don't use an iterator since we're pushing to the end of |candidates|
   // during our iteration, which may invalidate iterators.
-  for (int rpdq_index = candidates.size() - 1; rpdq_index >= 0; rpdq_index--) {
+  const size_t size_before_surface_content_overlays = candidates.size();
+  for (size_t rpdq_index = 0; rpdq_index < size_before_surface_content_overlays;
+       rpdq_index++) {
     auto* surface_content_overlay_data = TryGetSurfaceContentOverlayData(
         surface_content_render_passes, candidates[rpdq_index]);
     if (!surface_content_overlay_data) {
@@ -801,8 +809,8 @@ gfx::Rect OverlayProcessorWin::InsertSurfaceContentOverlaysAndSetPlaneZOrder(
     auto& [render_pass, overlay_data] = *surface_content_overlay_data;
 
     // Sort the child overlays so we can iterate them back-to-front.
-    base::ranges::sort(overlay_data.promoted_overlays, base::ranges::less(),
-                       &OverlayCandidate::plane_z_order);
+    std::ranges::sort(overlay_data.promoted_overlays, std::ranges::less(),
+                      &OverlayCandidate::plane_z_order);
 
     const gfx::Rect surface_bounds_in_root = gfx::ToRoundedRect(
         OverlayCandidate::DisplayRectInTargetSpace(candidates[rpdq_index]));

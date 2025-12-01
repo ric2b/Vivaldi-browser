@@ -516,7 +516,7 @@ void Scope::SetScriptScopeInfo(IsolateT* isolate,
                                DeclarationScope* script_scope) {
   if (script_scope->scope_info_.is_null()) {
     script_scope->SetScriptScopeInfo(
-        ReadOnlyRoots(isolate).global_this_binding_scope_info_handle());
+        isolate->factory()->global_this_binding_scope_info());
   }
 }
 
@@ -722,7 +722,7 @@ bool DeclarationScope::Analyze(ParseInfo* info) {
   }
 
   if (!scope->AllocateVariables(info)) return false;
-  scope->GetScriptScope()->RewriteReplGlobalVariables();
+  scope->RewriteReplGlobalVariables();
 
 #ifdef DEBUG
   if (v8_flags.print_scopes) {
@@ -1643,6 +1643,7 @@ void DeclarationScope::ResetAfterPreparsing(AstValueFactory* ast_value_factory,
 
   // Reset all non-trivial members.
   params_.DropAndClear();
+  num_parameters_ = 0;
   decls_.Clear();
   locals_.Clear();
   inner_scope_ = nullptr;
@@ -1760,14 +1761,15 @@ void DeclarationScope::AnalyzePartially(Parser* parser,
   unresolved_list_ = std::move(new_unresolved_list);
 }
 
-void DeclarationScope::RewriteReplGlobalVariables() {
-  DCHECK(is_script_scope());
-  if (!is_repl_mode_scope()) return;
+void Scope::RewriteReplGlobalVariables() {
+  if (!GetScriptScope()->is_repl_mode_scope()) return;
 
-  for (VariableMap::Entry* p = variables_.Start(); p != nullptr;
-       p = variables_.Next(p)) {
-    Variable* var = reinterpret_cast<Variable*>(p->value);
-    var->RewriteLocationForRepl();
+  for (Scope* scope = this; scope != nullptr; scope = scope->outer_scope_) {
+    for (VariableMap::Entry* p = scope->variables_.Start(); p != nullptr;
+         p = scope->variables_.Next(p)) {
+      Variable* var = reinterpret_cast<Variable*>(p->value);
+      if (var->scope()->is_repl_mode_scope()) var->RewriteLocationForRepl();
+    }
   }
 }
 
@@ -2654,12 +2656,9 @@ void Scope::AllocateScopeInfosRecursively(
   auto it = scope_infos_to_reuse.find(UniqueIdInScript());
   if (it != scope_infos_to_reuse.end()) {
     scope_info_ = it->second;
-    CHECK(NeedsContext());
-    // The ScopeInfo chain mirrors the context chain, so we only link to the
-    // next outer scope that needs a context.
-    next_outer_scope = scope_info_;
     DCHECK(!scope_info_.is_null());
     CHECK_EQ(scope_info_->scope_type(), scope_type_);
+    CHECK_EQ(scope_info_->HasContext(), NeedsContext());
     CHECK_EQ(scope_info_->ContextLength(), num_heap_slots_);
 #ifdef DEBUG
     // Consume the scope info.
@@ -2674,10 +2673,11 @@ void Scope::AllocateScopeInfosRecursively(
       DCHECK_EQ(UniqueIdInScript(), scope_info_->UniqueIdInScript());
     }
 #endif
-    // The ScopeInfo chain mirrors the context chain, so we only link to the
-    // next outer scope that needs a context.
-    if (NeedsContext()) next_outer_scope = scope_info_;
   }
+
+  // The ScopeInfo chain mirrors the context chain, so we only link to the
+  // next outer scope that needs a context.
+  if (NeedsContext()) next_outer_scope = scope_info_;
 
   // Allocate ScopeInfos for inner scopes.
   for (Scope* scope = inner_scope_; scope != nullptr; scope = scope->sibling_) {
@@ -2690,6 +2690,15 @@ void Scope::AllocateScopeInfosRecursively(
         scope->AsDeclarationScope()->ShouldEagerCompile()) {
       scope->AllocateScopeInfosRecursively(isolate, next_outer_scope,
                                            scope_infos_to_reuse);
+    } else if (v8_flags.reuse_scope_infos) {
+      auto scope_it = scope_infos_to_reuse.find(scope->UniqueIdInScript());
+      if (scope_it != scope_infos_to_reuse.end()) {
+        scope->scope_info_ = scope_it->second;
+#ifdef DEBUG
+        // Consume the scope info
+        scope_it->second = {};
+#endif
+      }
     }
   }
 }
@@ -2746,10 +2755,10 @@ void DeclarationScope::RecordNeedsPrivateNameContextChainRecalc() {
 
 // static
 template <typename IsolateT>
-void DeclarationScope::AllocateScopeInfos(ParseInfo* info,
+void DeclarationScope::AllocateScopeInfos(ParseInfo* parse_info,
                                           DirectHandle<Script> script,
                                           IsolateT* isolate) {
-  DeclarationScope* scope = info->literal()->scope();
+  DeclarationScope* scope = parse_info->literal()->scope();
 
   // No one else should have allocated a scope info for this scope yet.
   DCHECK(scope->scope_info_.is_null());
@@ -2767,23 +2776,23 @@ void DeclarationScope::AllocateScopeInfos(ParseInfo* info,
   Tagged<WeakFixedArray> infos = script->infos();
   std::unordered_map<int, Handle<ScopeInfo>> scope_infos_to_reuse;
   if (v8_flags.reuse_scope_infos && infos->length() != 0) {
-    Tagged<SharedFunctionInfo> sfi = *info->literal()->shared_function_info();
-    Tagged<ScopeInfo> outer = sfi->HasOuterScopeInfo()
-                                  ? sfi->GetOuterScopeInfo()
+    Tagged<SharedFunctionInfo> parse_info_sfi =
+        *parse_info->literal()->shared_function_info();
+    Tagged<ScopeInfo> outer = parse_info_sfi->HasOuterScopeInfo()
+                                  ? parse_info_sfi->GetOuterScopeInfo()
                                   : Tagged<ScopeInfo>();
     // Look at all inner functions whether they have scope infos that we should
     // reuse. Also look at the compiled function itself, and reuse its function
     // scope info if it exists.
-    for (int i = info->literal()->function_literal_id();
-         i <= info->max_info_id(); ++i) {
+    for (int i = parse_info->literal()->function_literal_id();
+         i <= parse_info->max_info_id(); ++i) {
       Tagged<MaybeObject> maybe_info = infos->get(i);
       if (maybe_info.IsWeak()) {
         Tagged<Object> info = maybe_info.GetHeapObjectAssumeWeak();
         Tagged<ScopeInfo> scope_info;
         if (Is<SharedFunctionInfo>(info)) {
           Tagged<SharedFunctionInfo> sfi = Cast<SharedFunctionInfo>(info);
-          if (!sfi->scope_info()->IsEmpty() &&
-              sfi->scope_info()->HasContext()) {
+          if (!sfi->scope_info()->IsEmpty()) {
             scope_info = sfi->scope_info();
           } else if (sfi->HasOuterScopeInfo()) {
             scope_info = sfi->GetOuterScopeInfo();
@@ -2798,23 +2807,13 @@ void DeclarationScope::AllocateScopeInfos(ParseInfo* info,
           int id = scope_info->UniqueIdInScript();
           auto it = scope_infos_to_reuse.find(id);
           if (it != scope_infos_to_reuse.end()) {
-            Tagged<ScopeInfo> duplicate = *it->second;
-            // TODO(verwaest): We should be able to turn on this check, but
-            // that's failing currently.
-            if (v8_flags.verify_scope_info_reuse) {
-              CHECK_EQ(*it->second, scope_info);
+            if (V8_LIKELY(*it->second == scope_info)) break;
+            if constexpr (std::is_same_v<IsolateT, Isolate>) {
+              isolate->PushStackTraceAndDie(
+                  reinterpret_cast<void*>(it->second->ptr()),
+                  reinterpret_cast<void*>(scope_info->ptr()));
             }
-            while (scope_info != duplicate) {
-              CHECK_EQ(scope_info->scope_type(), duplicate->scope_type());
-              CHECK_EQ(scope_info->ContextLength(), duplicate->ContextLength());
-              if (!scope_info->HasOuterScopeInfo()) {
-                CHECK(!duplicate->HasOuterScopeInfo());
-                break;
-              }
-              scope_info = scope_info->OuterScopeInfo();
-              duplicate = duplicate->OuterScopeInfo();
-            }
-            break;
+            UNREACHABLE();
           }
           scope_infos_to_reuse[id] = handle(scope_info, isolate);
           if (!scope_info->HasOuterScopeInfo()) break;
@@ -2838,8 +2837,10 @@ void DeclarationScope::AllocateScopeInfos(ParseInfo* info,
 
   // Ensuring that the outer script scope has a scope info avoids having
   // special case for native contexts vs other contexts.
-  if (info->script_scope() && info->script_scope()->scope_info_.is_null()) {
-    info->script_scope()->scope_info_ = isolate->factory()->empty_scope_info();
+  if (parse_info->script_scope() &&
+      parse_info->script_scope()->scope_info_.is_null()) {
+    parse_info->script_scope()->scope_info_ =
+        isolate->factory()->empty_scope_info();
   }
 }
 

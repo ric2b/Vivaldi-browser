@@ -11,7 +11,7 @@ title: Monday, August 31, 2015
 ---
 
 Updates since last meeting (on Monday, August 24th):
-Scrolling (skobes, szager) \[[crbug.com/417782](http://crbug.com/417782)\]
+Scrolling (skobes, szager) \[[crbug.com/417782](https://crbug.com/417782)\]
 - Tracked down issue with scroll bounds change and determined that the
 failing tests where due to a bug in the old implementation. New test
 results are correct. Will require a rebaseline. (szager)
@@ -19,17 +19,17 @@ results are correct. Will require a rebaseline. (szager)
 figure out why the fix is causing a perf regression. Happy with code
 change and convinced the fix is correct and that the new behavior is
 better. (szager)
-CSS Flexbox (cbiesinger) \[[crbug.com/426898](http://crbug.com/426898)\]
+CSS Flexbox (cbiesinger) \[[crbug.com/426898](https://crbug.com/426898)\]
 - Unprefixed sizing keywords.
 - Continuing work to bring implementation up to spec.
 - Various bug fixes.
-CSS Grid Layout (svillar) \[[crbug.com/79180](http://crbug.com/79180)\]
+CSS Grid Layout (svillar) \[[crbug.com/79180](https://crbug.com/79180)\]
 - No update since last week.
 Region-based multi-column support (mstensho)
-\[[crbug.com/334335](http://crbug.com/334335)\]
+\[[crbug.com/334335](https://crbug.com/334335)\]
 - Continuing work on multicol balancing and nesting.
 Add API for layout (leviw, pilgrim, ojan)
-\[[crbug.com/495288](http://crbug.com/495288)\]
+\[[crbug.com/495288](https://crbug.com/495288)\]
 - Landed several API patches. Estimate a couple of days worth of work
 remains. (pilgrim)
 Text (eae, drott, kojii)

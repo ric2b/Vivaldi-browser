@@ -6,6 +6,7 @@
 #include "base/files/file_path.h"
 #include "base/scoped_observation.h"
 #include "components/db/mail_client/mail_client_service.h"
+#include "components/db/mail_client/message_type.h"
 #include "extensions/browser/api/file_system/file_system_api.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
@@ -304,7 +305,7 @@ class MailPrivateUpdateMessageFunction : public MailPrivateAsyncFunction {
   ResponseAction Run() override;
 
   // Callback for the AddMessageBody function to provide results.
-  void UpdateMessageComplete(mail_client::MessageResult result);
+  void UpdateMessageComplete(mail_client::StatusCB status);
 
   // The task tracker for the MailClientService callbacks.
   base::CancelableTaskTracker task_tracker_;
@@ -322,7 +323,7 @@ class MailPrivateSearchMessagesFunction : public MailPrivateAsyncFunction {
   ResponseAction Run() override;
 
   // Callback for the MessageSearch function to provide results.
-  void MessagesSearchComplete(mail_client::SearchListIDs results);
+  void MessagesSearchComplete(mail_client::MailSearchCB cb);
 
   base::CancelableTaskTracker task_tracker_;
 };
@@ -379,6 +380,20 @@ class MailPrivateDeleteMailSearchDBFunction : public MailPrivateAsyncFunction {
  private:
   ~MailPrivateDeleteMailSearchDBFunction() override = default;
   void OnDeleteFinished(bool success);
+  // ExtensionFunction:
+  ResponseAction Run() override;
+  base::CancelableTaskTracker task_tracker_;
+};
+
+class MailPrivateCheckMailSearchDBHealthFunction
+    : public MailPrivateAsyncFunction {
+  DECLARE_EXTENSION_FUNCTION("mailPrivate.checkMailSearchDBHealth",
+                             MAIL_CHECK_DB_HEALTH)
+ public:
+  ~MailPrivateCheckMailSearchDBHealthFunction() = default;
+
+ private:
+  void OnCheckDBFinished(mail_client::StatusCB result);
   // ExtensionFunction:
   ResponseAction Run() override;
   base::CancelableTaskTracker task_tracker_;

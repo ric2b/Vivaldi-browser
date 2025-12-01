@@ -25,6 +25,9 @@ const options = commandLineArgs(yargs(process.argv.slice(2)))
                     .options('debug-driver', {type: 'boolean', hidden: true, desc: 'Debug the driver part of tests'})
                     .options('verbose', {alias: 'v', type: 'count', desc: 'Increases the log level'})
                     .options('bail', {alias: 'b', desc: ' bail after first test failure'})
+                    .options('auto-watch', {
+                      desc: 'watch changes to files and run tests automatically on file change (only for unit tests)'
+                    })
                     .positional('tests', {
                       type: 'string',
                       desc: 'Path to the test suite, starting from out/Target/gen directory.',
@@ -33,7 +36,8 @@ const options = commandLineArgs(yargs(process.argv.slice(2)))
                           f => path.relative(process.cwd(), path.join(SOURCE_ROOT, f))),
                     })
                     .strict()
-                    .argv;
+                    .parseSync();
+
 const CONSUMED_OPTIONS = ['tests', 'skip-ninja', 'debug-driver', 'bail', 'b', 'verbose', 'v', 'watch'];
 
 let logLevel = 'error';
@@ -82,6 +86,7 @@ function ninja(stdio: 'inherit'|'pipe', ...args: string[]) {
 class Tests {
   readonly suite: PathPair;
   readonly extraPaths: PathPair[];
+  protected readonly cwd = path.dirname(GEN_DIR);
   constructor(suite: string, ...extraSuites: string[]) {
     const suitePath = PathPair.get(suite);
     if (!suitePath) {
@@ -104,6 +109,7 @@ class Tests {
   protected run(tests: PathPair[], args: string[], positionalTestArgs = true) {
     const argumentsForNode = [
       ...args,
+      ...(options['auto-watch'] ? ['--auto-watch', '--no-single-run'] : []),
       '--',
       ...tests.map(t => positionalTestArgs ? t.buildPath : `--tests=${t.buildPath}`),
       ...forwardOptions(),
@@ -113,8 +119,12 @@ class Tests {
     } else if (options['debug']) {
       argumentsForNode.unshift('--inspect');
     }
-    const result = runProcess(
-        process.argv[0], argumentsForNode, {encoding: 'utf-8', stdio: 'inherit', cwd: path.dirname(GEN_DIR)});
+
+    const result = runProcess(process.argv[0], argumentsForNode, {
+      encoding: 'utf-8',
+      stdio: 'inherit',
+      cwd: this.cwd,
+    });
     return !result.error && (result.status ?? 1) === 0;
   }
 }
@@ -136,6 +146,32 @@ class MochaTests extends Tests {
   }
 }
 
+/**
+ * Workaround the fact that these test don't have
+ * build output in out/Default like dir.
+ */
+class ScriptPathPair extends PathPair {
+  static getFromPair(pair: PathPair) {
+    return new ScriptPathPair(pair.sourcePath, pair.sourcePath);
+  }
+}
+
+class ScriptsMochaTests extends Tests {
+  override readonly cwd = SOURCE_ROOT;
+  override run(tests: PathPair[]) {
+    return super.run(
+        tests.map(test => ScriptPathPair.getFromPair(test)!),
+        [
+          path.join(SOURCE_ROOT, 'node_modules', 'mocha', 'bin', 'mocha'),
+        ],
+    );
+  }
+
+  override match(path: PathPair): boolean {
+    return super.match(ScriptPathPair.getFromPair(path)!);
+  }
+}
+
 class KarmaTests extends Tests {
   override run(tests: PathPair[]) {
     return super.run(tests, [
@@ -151,13 +187,15 @@ class KarmaTests extends Tests {
 // TODO(333423685)
 // - watch
 function main() {
-  const tests: string[] = options['tests'];
-
+  const tests: string[] = typeof options['tests'] === 'string' ? [options['tests']] : options['tests'];
   const testKinds = [
     new KarmaTests(path.join(GEN_DIR, 'front_end'), path.join(GEN_DIR, 'inspector_overlay')),
     new MochaTests(path.join(GEN_DIR, 'test/interactions')),
     new MochaTests(path.join(GEN_DIR, 'test/e2e')),
     new MochaTests(path.join(GEN_DIR, 'test/perf')),
+    new ScriptsMochaTests(path.join(SOURCE_ROOT, 'scripts/eslint_rules/tests')),
+    new ScriptsMochaTests(path.join(SOURCE_ROOT, 'scripts/stylelint_rules/tests')),
+    new ScriptsMochaTests(path.join(SOURCE_ROOT, 'scripts/build/tests')),
   ];
 
   if (!options['skip-ninja']) {

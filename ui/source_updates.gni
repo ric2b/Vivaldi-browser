@@ -14,6 +14,7 @@ update_target("//components/input:input") {
   ]
   if ((is_linux || is_win) && (target_cpu == "arm64" || target_cpu == "arm")) {
     deps += [
+      "//components/language_detection/content/common",
       "//components/services/storage/public/mojom",
       "//components/services/storage/privileged/mojom",
       "//components/services/quarantine/public/mojom",
@@ -67,6 +68,8 @@ update_target("//chrome/browser/ui:ui") {
       "//vivaldi/ui/vivaldi_quit_confirmation_dialog.h",
       "//vivaldi/ui/vivaldi_ui_utils.cc",
       "//vivaldi/ui/vivaldi_ui_utils.h",
+      "//vivaldi/ui/vivaldi_infobar_delegate.cc",
+      "//vivaldi/ui/vivaldi_infobar_delegate.h",
     ]
     deps += [
       "//vivaldi/ui/vector_icons:vector_icons",

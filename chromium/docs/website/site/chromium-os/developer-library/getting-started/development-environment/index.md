@@ -74,7 +74,7 @@ PATH.
 
 ```
 $ git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
-$ echo 'PATH="$PWD/depot_tools:$PATH' >> ~/.bashrc
+$ echo 'PATH=$PWD/depot_tools:$PATH' >> ~/.bashrc
 $ source ~/.bashrc
 ```
 

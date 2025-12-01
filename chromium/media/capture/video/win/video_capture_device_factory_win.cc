@@ -37,7 +37,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/not_fatal_until.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/cstring_view.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
@@ -104,8 +103,9 @@ enum BlockedCameraNames {
   BLOCKED_CAMERA_IP_CAMERA = 1,
   BLOCKED_CAMERA_CYBERLINK_WEBCAM_SPLITTER = 2,
   BLOCKED_CAMERA_EPOCCAM = 3,
+  BLOCKED_CAMERA_PLEORA_EBUS = 4,
   // This one must be last, and equal to the previous enumerated value.
-  BLOCKED_CAMERA_MAX = BLOCKED_CAMERA_EPOCCAM,
+  BLOCKED_CAMERA_MAX = BLOCKED_CAMERA_PLEORA_EBUS,
 };
 
 #define UWP_ENUM_ERROR_HANDLER(hr, err_log)                         \
@@ -123,6 +123,7 @@ const char* const kBlockedCameraNames[] = {
     "IP Camera [JPEG/MJPEG]",
     "CyberLink Webcam Splitter",
     "EpocCam",
+    "eBUS DirectShow Source",
 };
 static_assert(std::size(kBlockedCameraNames) == BLOCKED_CAMERA_MAX + 1,
               "kBlockedCameraNames should be same size as "
@@ -329,7 +330,7 @@ bool DevicesInfoContainsDeviceId(const DevicesInfo& devices_info,
 DevicesInfo::const_iterator FindNonDirectShowDeviceInfoByNameAndModel(
     const DevicesInfo& devices_info,
     const std::string& name_and_model) {
-  return base::ranges::find_if(
+  return std::ranges::find_if(
       devices_info,
       [name_and_model](const VideoCaptureDeviceInfo& device_info) {
         return device_info.descriptor.capture_api !=

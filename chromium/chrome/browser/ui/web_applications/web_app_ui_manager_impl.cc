@@ -268,24 +268,22 @@ bool WebAppUiManagerImpl::IsAppInQuickLaunchBar(
   return false;
 }
 
-bool WebAppUiManagerImpl::IsInAppWindow(
-    content::WebContents* web_contents) const {
-  Browser* browser = chrome::FindBrowserWithTab(web_contents);
-  return AppBrowserController::IsWebApp(browser);
-}
-
-const webapps::AppId* WebAppUiManagerImpl::GetAppIdForWindow(
-    const content::WebContents* web_contents) const {
-  Browser* browser = chrome::FindBrowserWithTab(web_contents);
-  if (AppBrowserController::IsWebApp(browser)) {
-    return &browser->app_controller()->app_id();
-  }
-  return nullptr;
-}
-
 bool WebAppUiManagerImpl::CanReparentAppTabToWindow(
     const webapps::AppId& app_id,
-    bool shortcut_created) const {
+    bool shortcut_created,
+    content::WebContents* web_contents) const {
+  CHECK(web_contents);
+  const WebAppTabHelper* tab_helper =
+      WebAppTabHelper::FromWebContents(web_contents);
+  bool is_in_app_window = false;
+  if (tab_helper) {
+    // The tab helper doesn't exist in unit tests.
+    is_in_app_window = tab_helper->is_in_app_window();
+  }
+  // App-to-app reparenting is not currently supported.
+  if (is_in_app_window) {
+    return false;
+  }
 #if BUILDFLAG(IS_MAC)
   // On macOS it is only possible to reparent the window when the shortcut (app
   // shim) was created. See https://crbug.com/915571.
@@ -299,7 +297,7 @@ Browser* WebAppUiManagerImpl::ReparentAppTabToWindow(
     content::WebContents* contents,
     const webapps::AppId& app_id,
     bool shortcut_created) {
-  DCHECK(CanReparentAppTabToWindow(app_id, shortcut_created));
+  DCHECK(CanReparentAppTabToWindow(app_id, shortcut_created, contents));
   // Reparent the tab into an app window immediately.
   return ReparentWebContentsIntoAppBrowser(contents, app_id);
 }
@@ -419,12 +417,10 @@ bool WebAppUiManagerImpl::IsWebContentsActiveTabInBrowser(
 }
 
 void WebAppUiManagerImpl::TriggerInstallDialog(
-    content::WebContents* web_contents) {
-  web_app::CreateWebAppFromManifest(
-      web_contents,
-      // TODO(issuetracker.google.com/283034487): Consider passing in the
-      // install source from the caller.
-      webapps::WebappInstallSource::OMNIBOX_INSTALL_ICON, base::DoNothing());
+    content::WebContents* web_contents,
+    webapps::WebappInstallSource source,
+    InstallCallback callback) {
+  web_app::CreateWebAppFromManifest(web_contents, source, std::move(callback));
 }
 
 void WebAppUiManagerImpl::PresentUserUninstallDialog(
@@ -613,13 +609,16 @@ void WebAppUiManagerImpl::OnBrowserRemoved(Browser* browser) {
 #if BUILDFLAG(IS_CHROMEOS)
 void WebAppUiManagerImpl::TabCloseCancelled(
     const content::WebContents* contents) {
-  const webapps::AppId* app_id = GetAppIdForWindow(contents);
-  if (!app_id) {
+  CHECK(contents);
+  const WebAppTabHelper* tab_helper =
+      WebAppTabHelper::FromWebContents(contents);
+  if (!tab_helper || !tab_helper->window_app_id()) {
     return;
   }
 
   ShowNonclosableAppToast(
-      WebAppProvider::GetForWebApps(profile_)->registrar_unsafe(), *app_id);
+      WebAppProvider::GetForWebApps(profile_)->registrar_unsafe(),
+      *tab_helper->window_app_id());
 }
 #endif  // BUILDFLAG(IS_CHROMEOS)
 

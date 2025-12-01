@@ -7,14 +7,18 @@ import '../../../ui/legacy/legacy.js';
 import * as i18n from '../../../core/i18n/i18n.js';
 import * as Platform from '../../../core/platform/platform.js';
 import type * as SDK from '../../../core/sdk/sdk.js';
-import * as LitHtml from '../../../ui/lit-html/lit-html.js';
+import * as Lit from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 import * as NetworkForward from '../forward/forward.js';
 
 import {EditingAllowedStatus, type HeaderDescriptor} from './HeaderSectionRow.js';
-import requestHeaderSectionStyles from './RequestHeaderSection.css.js';
+import requestHeaderSectionStylesRaw from './RequestHeaderSection.css.js';
 
-const {render, html} = LitHtml;
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const requestHeaderSectionStyles = new CSSStyleSheet();
+requestHeaderSectionStyles.replaceSync(requestHeaderSectionStylesRaw.cssContent);
+
+const {render, html} = Lit;
 
 const UIStrings = {
   /**
@@ -91,9 +95,9 @@ export class RequestHeaderSection extends HTMLElement {
     // clang-format on
   }
 
-  #maybeRenderProvisionalHeadersWarning(): LitHtml.LitTemplate {
+  #maybeRenderProvisionalHeadersWarning(): Lit.LitTemplate {
     if (!this.#request || this.#request.requestHeadersText() !== undefined) {
-      return LitHtml.nothing;
+      return Lit.nothing;
     }
 
     let cautionText;

@@ -13,7 +13,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/observer_list.h"
-#include "base/ranges/algorithm.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "components/page_load_metrics/browser/metrics_lifecycle_observer.h"
@@ -72,11 +71,6 @@ UserInitiatedInfo CreateUserInitiatedInfo(
   return UserInitiatedInfo::RenderInitiated(
       navigation_handle->HasUserGesture(),
       !navigation_handle->NavigationInputStart().is_null());
-}
-
-bool ShouldTrackSchemeForNonWebUI(std::string_view scheme) {
-  return scheme == url::kHttpsScheme || scheme == url::kHttpScheme ||
-         scheme == url::kDataScheme || scheme == url::kFileScheme;
 }
 
 }  // namespace
@@ -379,7 +373,7 @@ void MetricsWebContentsObserver::WillStartNavigationRequestImpl(
       source_id = ukm::NoURLSourceId();
     }
   } else {
-    NOTREACHED_IN_MIGRATION();
+    NOTREACHED();
   }
 
   // For prerendered page activations, we don't create a new PageLoadTracker,
@@ -572,7 +566,7 @@ void MetricsWebContentsObserver::OnCookiesAccessedImpl(
     PageLoadTracker& tracker,
     const content::CookieAccessDetails& details) {
   // TODO(altimin): Propagate `CookieAccessDetails` further.
-  bool is_partitioned_access = base::ranges::all_of(
+  bool is_partitioned_access = std::ranges::all_of(
       details.cookie_access_result_list,
       [](const net::CookieWithAccessResult& cookie_with_access_result) {
         return cookie_with_access_result.cookie.IsPartitioned();
@@ -976,6 +970,7 @@ void MetricsWebContentsObserver::NavigationStopped() {
 }
 
 void MetricsWebContentsObserver::OnInputEvent(
+    const content::RenderWidgetHost& widget,
     const blink::WebInputEvent& event) {
   // Ignore browser navigation or reload which comes with type Undefined.
   if (event.GetType() == blink::WebInputEvent::Type::kUndefined) {
@@ -1327,6 +1322,13 @@ bool MetricsWebContentsObserver::ShouldTrackScheme(
   }
 
   return ShouldTrackSchemeForNonWebUI(scheme);
+}
+
+bool MetricsWebContentsObserver::ShouldTrackSchemeForNonWebUI(
+    std::string_view scheme) const {
+  return scheme == url::kHttpsScheme || scheme == url::kHttpScheme ||
+         scheme == url::kDataScheme || scheme == url::kFileScheme ||
+         embedder_interface_->ShouldObserveScheme(scheme);
 }
 
 void MetricsWebContentsObserver::OnBrowserFeatureUsage(

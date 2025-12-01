@@ -910,40 +910,6 @@ Affects:
     libavformat/demux.c
 
 ------------------------------------------------------------------
-commit ae639da286e6b99393d03f87baa6badbdc63730a
-Author: Dale Curtis <dalecurtis@chromium.org>
-Date:   Tue Aug 13 21:49:29 2024 +0000
-
-    Allocate H.274 film grain metadata dynamically. Saves ~779kb.
-
-    Film grain support adds a huge amount of overhead to the H264Context
-    structure for a feature that is rarely used. On low end devices or
-    pages that have lots of media this bloats memory usage rapidly.
-
-    This changes the static film grain metadata allocations to be dynamic
-    which reduces the H264Context size from 851808 bytes to 53444 bytes.
-
-    This is slightly different than the version upstreamed in that it
-    doesn't apply the hevc changes, but we don't need those in Chrome.
-
-    R=tguilbert
-
-    Bug: https://crbug.com/359358875
-    Change-Id: I0269324edc2d58ef5a645c4585d903c1d01a1a00
-    Signed-off-by: Dale Curtis <dalecurtis@chromium.org>
-    Reviewed-on: https://chromium-review.googlesource.com/c/chromium/third_party/ffmpeg/+/5786487
-    Reviewed-by: Thomas Guilbert <tguilbert@chromium.org>
-
-Affects:
-    libavcodec/h2645_sei.c
-    libavcodec/h2645_sei.h
-    libavcodec/h264_picture.c
-    libavcodec/h264_sei.c
-    libavcodec/h264_slice.c
-    libavcodec/h264dec.c
-    libavcodec/h264dec.h
-
-------------------------------------------------------------------
 commit 468b9c8a52555953618ba1677fffb0a778dd6d87
 Author: Ho Cheung <hocheung@chromium.org>
 Date:   Sun Sep 1 08:43:04 2024 +0800
@@ -1004,36 +970,72 @@ Affects:
     libavcodec/aac/aacdec.c
 
 ------------------------------------------------------------------
-commit 686d6944501a6ee9c849581e3fe343273d4af3f6
-Author: Dan Sanders <sandersd@chromium.org>
-Date:   Tue Oct 1 12:09:08 2024 -0700
+commit 3ea8d0a2ce7dde53c1574d8f032b803e584a6355
+Author: Eugene Zemtsov <eugene@chromium.org>
+Date:   Wed Oct 23 18:29:41 2024 -0700
 
-    Fix lookup of film_grain_characteristics
+    Fix crash when trying to get a fragment time for a non-existing fragment
 
-    This should not be taking an address now that the field is a pointer.
-
-    Bug: 369956909
-    Change-Id: I502a859885741635436910ba6219147b25761606
-    Reviewed-on: https://chromium-review.googlesource.com/c/chromium/third_party/ffmpeg/+/5901863
+    Bug: https://issues.chromium.org/issues/372994341
+    Change-Id: I695d625717c078ed6f84f44e58c34da858af4d3b
+    Reviewed-on: https://chromium-review.googlesource.com/c/chromium/third_party/ffmpeg/+/5958151
     Reviewed-by: Dale Curtis <dalecurtis@chromium.org>
+
+Affects:
+    libavformat/mov.c
+
+------------------------------------------------------------------
+commit 590dd6169ac0b8ee102086cfb40c51dee5a47072
+Author: Ted Meyer <tmathmeyer@chromium.org>
+Date:   Mon Dec 9 16:16:13 2024 -0800
+
+    Guard use of ff_aom_uninit_film_grain_params
+
+    All other use of the dynamic allocation operations for aom_film_grain
+    are guarded by this flag as well.
 
 Affects:
     libavcodec/h2645_sei.c
 
 ------------------------------------------------------------------
-commit 99f17d50d3b4d28740ebc6fb092050363113fce9
-Author: Eugene Zemtsov <eugene@chromium.org>
-Date:   Mon Oct 21 16:22:36 2024 -0700
+commit e89a63b83dbfbce2f69f392b228e3ebe6f8a77b7
+Author: Ted Meyer <tmathmeyer@chromium.org>
+Date:   Mon Dec 9 16:24:28 2024 -0800
 
-    Fix incorrect enum type used for a local variable
+    Guard use of ff_dvdclut* functions with a CONFIG
 
-    It's AVPacketSideDataType, not AVFrameSideDataType.
-
-    Bug: https://issues.chromium.org/issues/374797732
-    Change-Id: If75702c6d639ca63827cc3370477de00544d3c0f
-    Reviewed-on: https://chromium-review.googlesource.com/c/chromium/third_party/ffmpeg/+/5950926
-    Reviewed-by: Ted (Chromium) Meyer <tmathmeyer@chromium.org>
+    This functions are implemented in libavformat/dvdclut.c which is only
+    built when CONFIG_DVDVIDEO_DEMUXER is set. Chromium does not use this
+    demuxer, or set this flag, so the symbols are missing.
 
 Affects:
-    libavcodec/decode.c
+    libavformat/mov.c
 
+------------------------------------------------------------------
+commit 89a09990a932e5442c603b902916cf013436246a
+Author: Ted Meyer <tmathmeyer@chromium.org>
+Date:   Thu Dec 12 17:19:33 2024 -0800
+
+    add __attribute__((used)) to ff_h264_cabac_tables
+
+    Bug: 383824580
+
+
+Affects:
+    libavcodec/cabac.c
+
+------------------------------------------------------------------
+commit 818bf360d55593a8676346864195b377699b2f13
+Author: Ted Meyer <tmathmeyer@chromium.org>
+Date:   Fri Dec 13 16:55:41 2024 -0800
+
+    Guard memmove length calculations
+
+    stts_count and ctts_count aren't guaranteed to be larger than
+    index_entry_pos, which could cause overflow of the unsigned size
+    argument for memmove, leading to massive out of bounds memory writes.
+
+    Bug: 383454674
+
+Affects:
+    libavformat/mov.c

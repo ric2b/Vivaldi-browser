@@ -19,48 +19,37 @@ import metadata.fields.field_types as field_types
 import metadata.fields.util as util
 import metadata.validation_result as vr
 
-# Pattern for CPE 2.3 URI binding (also compatible with CPE 2.2).
-_PATTERN_CPE_URI = re.compile(
-    r"^c[pP][eE]:/[AHOaho]?(:[A-Za-z0-9._\-~%]*){0,6}$")
+# Pattern that will match CPE 2.2 and CPE 2.3 URN format.
+#
+# Adapted from https://csrc.nist.gov/schema/cpe/2.3/cpe-naming_2.3.xsd.
+# We added a capture group (i.e. `match.group(1)`) for components-list, so we
+# can determine if the CPE prefix provides sufficient information (see
+# `is_adequate_cpe_urn` below).
+_PATTERN_CPE_URN = re.compile(
+    r"^[c][pP][eE]:/[AHOaho]?((:[A-Za-z0-9\._\-~%]*){0,6})$")
 
-# Pattern that will match CPE 2.3 formatted string binding.
-_PATTERN_CPE_FORMATTED_STRING = re.compile(r"^cpe:2\.3:[aho\-\*](:[^:]+){10}$")
+# Pattern that will match CPE 2.3 string format.
+# Taken from https://csrc.nist.gov/schema/cpe/2.3/cpe-naming_2.3.xsd
+_PATTERN_CPE_FORMATTED_STRING = re.compile(
+    r"^cpe:2\.3:[aho\*\-](:(((\?*|\*?)([a-zA-Z0-9\-\._]|(\\[\\\*\?!\"#$$%&'\(\)\+,/:;<=>@\[\]\^`\{\|}~]))+(\?*|\*?))|[\*\-])){5}(:(([a-zA-Z]{2,3}(-([a-zA-Z]{2}|[0-9]{3}))?)|[\*\-]))(:(((\?*|\*?)([a-zA-Z0-9\-\._]|(\\[\\\*\?!\"#$$%&'\(\)\+,/:;<=>@\[\]\^`\{\|}~]))+(\?*|\*?))|[\*\-])){4}$"
+)
 
 
-def is_uri_cpe(value: str) -> bool:
-    """Returns whether the value conforms to the CPE 2.3 URI binding
-    (which is compatible with CPE 2.2), with the additional constraint
-    that at least one component other than "part" has been specified.
+def is_adequate_cpe_urn(value) -> bool:
+    """Returns whether a given `value` conforms to CPE 2.3 and CPE 2.2 URN
+    format, and the given `value` provides at least one component other than
+    "part".
 
-    For reference, see section 6.1 of the CPE Naming Specification
-    Version 2.3 at
-    https://nvlpubs.nist.gov/nistpubs/Legacy/IR/nistir7695.pdf.
+    See CPE Naming Specification: https://csrc.nist.gov/pubs/ir/7695/final.
     """
-    if not util.matches(_PATTERN_CPE_URI, value):
+    m = _PATTERN_CPE_URN.match(value)
+    if not m:
+        # Didn't match CPE URN format.
         return False
 
-    components = value.split(":")
-    if len(components) < 3:
-        # At most, only part was provided.
-        return False
-
-    # Check at least one component other than "part" has been specified.
-    for component in components[2:]:
-        if component:
-            return True
-
-    return False
-
-
-def is_formatted_string_cpe(value: str) -> bool:
-    """Returns whether the value conforms to the CPE 2.3 formatted
-    string binding.
-
-    For reference, see section 6.2 of the CPE Naming Specification
-    Version 2.3 at
-    https://nvlpubs.nist.gov/nistpubs/Legacy/IR/nistir7695.pdf.
-    """
-    return util.matches(_PATTERN_CPE_FORMATTED_STRING, value)
+    cpe_components = m.group(1).split(':')
+    non_empty_components = list(filter(len, cpe_components))
+    return len(non_empty_components) > 0
 
 
 class CPEPrefixField(field_types.SingleLineTextField):
@@ -69,8 +58,8 @@ class CPEPrefixField(field_types.SingleLineTextField):
         super().__init__(name="CPEPrefix")
 
     def _is_valid(self, value: str) -> bool:
-        return (util.is_unknown(value) or is_formatted_string_cpe(value)
-                or is_uri_cpe(value))
+        return util.is_unknown(value) or is_adequate_cpe_urn(
+            value) or util.matches(_PATTERN_CPE_FORMATTED_STRING, value)
 
     def validate(self, value: str) -> Optional[vr.ValidationResult]:
         """Checks the given value is either 'unknown', or conforms to
@@ -86,6 +75,9 @@ class CPEPrefixField(field_types.SingleLineTextField):
                 "or 'unknown'.",
                 "Search for a CPE tag for the package at "
                 "https://nvd.nist.gov/products/cpe/search.",
+                "Please provide at least one CPE component other than part "
+                "(e.g. a for Application, h for Hardware, o for Operating "
+                "System)."
                 f"Current value: '{value}'.",
             ])
 

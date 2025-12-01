@@ -83,6 +83,10 @@ std::ostream& operator<<(std::ostream& out,
       return out << "kRemoteDebugging";
     case ProfileKeepAliveOrigin::kHeadlessCommand:
       return out << "kHeadlessCommand";
+    case ProfileKeepAliveOrigin::kGlicView:
+      return out << "kGlicView";
+    case ProfileKeepAliveOrigin::kWaitingForGlicView:
+      return out << "kWaitingForGlicView";
   }
   NOTREACHED();
 }

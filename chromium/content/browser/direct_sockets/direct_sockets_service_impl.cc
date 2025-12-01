@@ -29,12 +29,12 @@
 #include "services/network/public/cpp/ip_address_space_util.h"
 #include "services/network/public/cpp/simple_host_resolver.h"
 #include "services/network/public/mojom/network_context.mojom.h"
+#include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-shared.h"
 #include "services/network/public/mojom/restricted_udp_socket.mojom.h"
 #include "services/network/public/mojom/tcp_socket.mojom.h"
 #include "services/network/public/mojom/udp_socket.mojom.h"
 #include "third_party/blink/public/common/features_generated.h"
 #include "third_party/blink/public/mojom/direct_sockets/direct_sockets.mojom.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom-shared.h"
 
 #if BUILDFLAG(IS_WIN)
 #include <winsock2.h>
@@ -87,39 +87,30 @@ void FulfillWithError(base::OnceCallback<void(int32_t, Args...)> callback,
   std::move(callback).Run(net_error, std::remove_cvref_t<Args>()...);
 }
 
-bool IsAPIAccessAllowed(RenderFrameHost& rfh) {
+bool ValidateRequest(RenderFrameHost& rfh,
+                     const std::string& address,
+                     uint16_t port,
+                     DirectSocketsDelegate::ProtocolType protocol) {
   auto* delegate = GetContentClient()->browser()->GetDirectSocketsDelegate();
   if (!delegate) {
     // No additional rules from the embedder.
     return true;
   }
-  return delegate->IsAPIAccessAllowed(rfh);
+  return delegate->ValidateRequest(rfh, {address, port, protocol});
 }
 
-bool ValidateAddressAndPort(RenderFrameHost& rfh,
-                            const std::string& address,
-                            uint16_t port,
-                            DirectSocketsDelegate::ProtocolType protocol) {
-  auto* delegate = GetContentClient()->browser()->GetDirectSocketsDelegate();
-  if (!delegate) {
-    // No additional rules from the embedder.
-    return true;
-  }
-  return delegate->ValidateAddressAndPort(rfh, address, port, protocol);
+bool ValidateRequest(RenderFrameHost& rfh,
+                     const net::IPEndPoint& ip_endpoint,
+                     DirectSocketsDelegate::ProtocolType protocol) {
+  return ValidateRequest(rfh, ip_endpoint.address().ToString(),
+                         ip_endpoint.port(), protocol);
 }
 
-bool ValidateAddressAndPort(RenderFrameHost& rfh,
-                            const net::IPEndPoint& ip_endpoint,
-                            DirectSocketsDelegate::ProtocolType protocol) {
-  return ValidateAddressAndPort(rfh, ip_endpoint.address().ToString(),
-                                ip_endpoint.port(), protocol);
-}
-
-bool ValidateAddressAndPort(RenderFrameHost& rfh,
-                            const net::HostPortPair& host_port_pair,
-                            DirectSocketsDelegate::ProtocolType protocol) {
-  return ValidateAddressAndPort(rfh, host_port_pair.host(),
-                                host_port_pair.port(), protocol);
+bool ValidateRequest(RenderFrameHost& rfh,
+                     const net::HostPortPair& host_port_pair,
+                     DirectSocketsDelegate::ProtocolType protocol) {
+  return ValidateRequest(rfh, host_port_pair.host(), host_port_pair.port(),
+                         protocol);
 }
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -132,7 +123,7 @@ bool ShouldOpenFirewallHole(const net::IPAddress& address) {
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 bool RequiresPrivateNetworkAccess(const net::AddressList& addresses) {
-  return base::ranges::any_of(
+  return std::ranges::any_of(
       addresses.endpoints(), [](const net::IPEndPoint& ip_endpoint) {
         return network::IPAddressToIPAddressSpace(ip_endpoint.address()) ==
                network::mojom::IPAddressSpace::kPrivate;
@@ -142,7 +133,7 @@ bool RequiresPrivateNetworkAccess(const net::AddressList& addresses) {
 void RequestPrivateNetworkAccess(content::RenderFrameHost& rfh,
                                  base::OnceCallback<void(bool)> callback) {
   if (!rfh.IsFeatureEnabled(
-          blink::mojom::PermissionsPolicyFeature::kDirectSocketsPrivate)) {
+          network::mojom::PermissionsPolicyFeature::kDirectSocketsPrivate)) {
     std::move(callback).Run(/*access_allowed=*/false);
     return;
   }
@@ -183,6 +174,60 @@ void RequestPrivateNetworkAccessAndCreateSocket(
                           std::move(create_socket_callback),
                           std::move(finish_callback)));
 }
+
+// Deletes the DirectSocketsServiceImpl when the connected document is
+// destroyed.
+class DocumentHelper
+    : public DocumentService<blink::mojom::DirectSocketsService> {
+ public:
+  DocumentHelper(
+      std::unique_ptr<DirectSocketsServiceImpl> service,
+      RenderFrameHost* render_frame_host,
+      mojo::PendingReceiver<blink::mojom::DirectSocketsService> receiver)
+      : DocumentService(*render_frame_host, std::move(receiver)),
+        service_(std::move(service)) {}
+
+  DocumentHelper(const DocumentHelper&) = delete;
+  DocumentHelper& operator=(const DocumentHelper&) = delete;
+
+  ~DocumentHelper() override = default;
+
+  // blink::mojom::DirectSocketsService:
+  void OpenTCPSocket(
+      blink::mojom::DirectTCPSocketOptionsPtr options,
+      mojo::PendingReceiver<network::mojom::TCPConnectedSocket> socket,
+      mojo::PendingRemote<network::mojom::SocketObserver> observer,
+      OpenTCPSocketCallback callback) override {
+    service_->OpenTCPSocket(std::move(options), std::move(socket),
+                            std::move(observer), std::move(callback));
+  }
+  void OpenConnectedUDPSocket(
+      blink::mojom::DirectConnectedUDPSocketOptionsPtr options,
+      mojo::PendingReceiver<network::mojom::RestrictedUDPSocket> receiver,
+      mojo::PendingRemote<network::mojom::UDPSocketListener> listener,
+      OpenConnectedUDPSocketCallback callback) override {
+    service_->OpenConnectedUDPSocket(std::move(options), std::move(receiver),
+                                     std::move(listener), std::move(callback));
+  }
+  void OpenBoundUDPSocket(
+      blink::mojom::DirectBoundUDPSocketOptionsPtr options,
+      mojo::PendingReceiver<network::mojom::RestrictedUDPSocket> receiver,
+      mojo::PendingRemote<network::mojom::UDPSocketListener> listener,
+      OpenBoundUDPSocketCallback callback) override {
+    service_->OpenBoundUDPSocket(std::move(options), std::move(receiver),
+                                 std::move(listener), std::move(callback));
+  }
+  void OpenTCPServerSocket(
+      blink::mojom::DirectTCPServerSocketOptionsPtr options,
+      mojo::PendingReceiver<network::mojom::TCPServerSocket> socket,
+      OpenTCPServerSocketCallback callback) override {
+    service_->OpenTCPServerSocket(std::move(options), std::move(socket),
+                                  std::move(callback));
+  }
+
+ private:
+  const std::unique_ptr<DirectSocketsServiceImpl> service_;
+};
 
 }  // namespace
 
@@ -278,9 +323,8 @@ class DirectSocketsServiceImpl::FirewallHoleDelegate
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 DirectSocketsServiceImpl::DirectSocketsServiceImpl(
-    RenderFrameHost* render_frame_host,
-    mojo::PendingReceiver<blink::mojom::DirectSocketsService> receiver)
-    : DocumentService(*render_frame_host, std::move(receiver)),
+    RenderFrameHost* render_frame_host)
+    : context_(render_frame_host),
       resolver_(network::SimpleHostResolver::Create(
           /*network_context_factory=*/base::BindRepeating(
               &DirectSocketsServiceImpl::GetNetworkContext,
@@ -304,7 +348,7 @@ void DirectSocketsServiceImpl::CreateForFrame(
     return;
   }
   if (!render_frame_host->IsFeatureEnabled(
-          blink::mojom::PermissionsPolicyFeature::kDirectSockets)) {
+          network::mojom::PermissionsPolicyFeature::kDirectSockets)) {
     mojo::ReportBadMessage(
         "Permissions policy blocks access to Direct Sockets.");
     return;
@@ -314,7 +358,9 @@ void DirectSocketsServiceImpl::CreateForFrame(
         "Frame is not sufficiently isolated to use Direct Sockets.");
     return;
   }
-  new DirectSocketsServiceImpl(render_frame_host, std::move(receiver));
+  new DocumentHelper(
+      base::WrapUnique(new DirectSocketsServiceImpl(render_frame_host)),
+      render_frame_host, std::move(receiver));
 }
 
 void DirectSocketsServiceImpl::OpenTCPSocket(
@@ -324,9 +370,8 @@ void DirectSocketsServiceImpl::OpenTCPSocket(
     OpenTCPSocketCallback callback) {
   net::HostPortPair remote_addr = options->remote_addr;
 
-  if (!IsAPIAccessAllowed(render_frame_host()) ||
-      !ValidateAddressAndPort(render_frame_host(), remote_addr,
-                              DirectSocketsDelegate::ProtocolType::kTcp)) {
+  if (!ValidateRequest(render_frame_host(), remote_addr,
+                       DirectSocketsDelegate::ProtocolType::kTcp)) {
     FulfillWithError(std::move(callback), net::ERR_ACCESS_DENIED);
     return;
   }
@@ -355,10 +400,8 @@ void DirectSocketsServiceImpl::OpenConnectedUDPSocket(
     OpenConnectedUDPSocketCallback callback) {
   net::HostPortPair remote_addr = options->remote_addr;
 
-  if (!IsAPIAccessAllowed(render_frame_host()) ||
-      !ValidateAddressAndPort(
-          render_frame_host(), remote_addr,
-          DirectSocketsDelegate::ProtocolType::kConnectedUdp)) {
+  if (!ValidateRequest(render_frame_host(), remote_addr,
+                       DirectSocketsDelegate::ProtocolType::kConnectedUdp)) {
     FulfillWithError(std::move(callback), net::ERR_ACCESS_DENIED);
     return;
   }
@@ -385,9 +428,8 @@ void DirectSocketsServiceImpl::OpenBoundUDPSocket(
     mojo::PendingReceiver<network::mojom::RestrictedUDPSocket> receiver,
     mojo::PendingRemote<network::mojom::UDPSocketListener> listener,
     OpenBoundUDPSocketCallback callback) {
-  if (!IsAPIAccessAllowed(render_frame_host()) ||
-      !ValidateAddressAndPort(render_frame_host(), options->local_addr,
-                              DirectSocketsDelegate::ProtocolType::kBoundUdp)) {
+  if (!ValidateRequest(render_frame_host(), options->local_addr,
+                       DirectSocketsDelegate::ProtocolType::kBoundUdp)) {
     FulfillWithError(std::move(callback), net::ERR_ACCESS_DENIED);
     return;
   }
@@ -440,10 +482,8 @@ void DirectSocketsServiceImpl::OpenTCPServerSocket(
     blink::mojom::DirectTCPServerSocketOptionsPtr options,
     mojo::PendingReceiver<network::mojom::TCPServerSocket> socket,
     OpenTCPServerSocketCallback callback) {
-  if (!IsAPIAccessAllowed(render_frame_host()) ||
-      !ValidateAddressAndPort(
-          render_frame_host(), options->local_addr,
-          DirectSocketsDelegate::ProtocolType::kTcpServer)) {
+  if (!ValidateRequest(render_frame_host(), options->local_addr,
+                       DirectSocketsDelegate::ProtocolType::kTcpServer)) {
     FulfillWithError(std::move(callback), net::ERR_ACCESS_DENIED);
     return;
   }

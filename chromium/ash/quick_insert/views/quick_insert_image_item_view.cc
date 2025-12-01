@@ -25,7 +25,7 @@ constexpr int kQuickInsertImageItemCornerRadius = 8;
 
 }  // namespace
 
-PickerImageItemView::PickerImageItemView(
+QuickInsertImageItemView::QuickInsertImageItemView(
     std::unique_ptr<views::ImageView> image,
     std::u16string accessible_name,
     SelectItemCallback select_item_callback)
@@ -42,9 +42,9 @@ PickerImageItemView::PickerImageItemView(
   image_view_->SetCanProcessEventsWithinSubtree(false);
 }
 
-PickerImageItemView::~PickerImageItemView() = default;
+QuickInsertImageItemView::~QuickInsertImageItemView() = default;
 
-void PickerImageItemView::SetAction(QuickInsertActionType action) {
+void QuickInsertImageItemView::SetAction(QuickInsertActionType action) {
   switch (action) {
     case QuickInsertActionType::kDo:
       GetViewAccessibility().SetName(accessible_name_);
@@ -65,7 +65,16 @@ void PickerImageItemView::SetAction(QuickInsertActionType action) {
   }
 }
 
-BEGIN_METADATA(PickerImageItemView)
+void QuickInsertImageItemView::FitToWidth(int width) {
+  const gfx::Size original_dimensions = image_view_->GetImageBounds().size();
+  const int height = original_dimensions.width() == 0
+                         ? 0
+                         : (width * original_dimensions.height()) /
+                               original_dimensions.width();
+  image_view_->SetImageSize(gfx::Size(width, height));
+}
+
+BEGIN_METADATA(QuickInsertImageItemView)
 END_METADATA
 
 }  // namespace ash

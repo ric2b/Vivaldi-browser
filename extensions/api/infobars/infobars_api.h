@@ -9,6 +9,19 @@
 #include "extensions/browser/extension_function.h"
 
 namespace extensions {
+class InfobarsShowInfobarFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("infobars.showInfobar",
+                             INFOBARS_SHOWINFOBAR)
+
+  InfobarsShowInfobarFunction() = default;
+
+ private:
+  ~InfobarsShowInfobarFunction() override = default;
+
+  // BookmarksFunction:
+  ResponseAction Run() override;
+};
 
 class InfobarsSendButtonActionFunction : public ExtensionFunction {
  public:

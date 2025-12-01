@@ -34,9 +34,12 @@
 #include <config.h>  // Must come first
 #endif
 
-#include <climits>
-#include <cstdlib>
-#include <ctime>
+#include "processor/static_address_map-inl.h"
+
+#include <limits.h>
+#include <stdlib.h>
+#include <time.h>
+
 #include <string>
 #include <iostream>
 #include <sstream>
@@ -44,7 +47,6 @@
 #include "breakpad_googletest_includes.h"
 #include "common/using_std_string.h"
 #include "processor/address_map-inl.h"
-#include "processor/static_address_map-inl.h"
 #include "processor/simple_serializer-inl.h"
 #include "map_serializers-inl.h"
 

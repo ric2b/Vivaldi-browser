@@ -11,12 +11,13 @@ import android.util.Size;
 import android.view.View;
 import android.view.WindowInsets;
 
-import androidx.annotation.NonNull;
 import androidx.core.graphics.Insets;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsCompat.Type.InsetsType;
 
 import org.chromium.base.ObserverList;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.ui.InsetObserver.WindowInsetsConsumer;
 import org.chromium.ui.util.WindowInsetsUtils;
 
@@ -37,6 +38,7 @@ import java.util.List;
  * <li>1. Android version is at least R.
  * <li>2. WindowInsets of given type has insets from one side exactly.
  */
+@NullMarked
 public class InsetsRectProvider implements WindowInsetsConsumer {
     /** Observer interface that's interested in bounding rect updates. */
     public interface Observer {
@@ -50,7 +52,7 @@ public class InsetsRectProvider implements WindowInsetsConsumer {
     private final ObserverList<Observer> mObservers = new ObserverList<>();
     private final InsetObserver mInsetObserver;
 
-    private WindowInsetsCompat mCachedInsets;
+    private @Nullable WindowInsetsCompat mCachedInsets;
     private List<Rect> mBoundingRects;
     private Rect mWidestUnoccludedRect = new Rect();
 
@@ -61,17 +63,20 @@ public class InsetsRectProvider implements WindowInsetsConsumer {
      * @param insetObserver {@link InsetObserver} that's attached to the root view.
      * @param insetType {@link InsetsType} this provider is observing.
      * @param initialInsets The initial window insets that will be used to read the bounding rects.
+     * @param insetConsumerSource The {@link InsetConsumerSource} of inset observation and
+     *     consumption.
      */
     public InsetsRectProvider(
-            @NonNull InsetObserver insetObserver,
+            InsetObserver insetObserver,
             @InsetsType int insetType,
-            WindowInsetsCompat initialInsets) {
+            WindowInsetsCompat initialInsets,
+            @InsetConsumerSource int insetConsumerSource) {
         mInsetType = insetType;
         mBoundingRects = List.of();
         mInsetObserver = insetObserver;
 
         assert VERSION.SDK_INT >= VERSION_CODES.R;
-        mInsetObserver.addInsetsConsumer(this);
+        mInsetObserver.addInsetsConsumer(this, insetConsumerSource);
         if (initialInsets != null) {
             maybeUpdateWidestUnoccludedRect(initialInsets);
         }
@@ -87,7 +92,6 @@ public class InsetsRectProvider implements WindowInsetsConsumer {
      * is an area within the window insets that is not covered by the bounding rects of that window
      * insets.
      */
-    @NonNull
     public Rect getWidestUnoccludedRect() {
         return mWidestUnoccludedRect;
     }
@@ -123,10 +127,10 @@ public class InsetsRectProvider implements WindowInsetsConsumer {
     }
 
     // Implements WindowInsetsConsumer
-    @NonNull
+
     @Override
     public WindowInsetsCompat onApplyWindowInsets(
-            @NonNull View view, @NonNull WindowInsetsCompat windowInsetsCompat) {
+            View view, WindowInsetsCompat windowInsetsCompat) {
         // Ignore the input by version check.
         if (VERSION.SDK_INT < VERSION_CODES.R) {
             return windowInsetsCompat;

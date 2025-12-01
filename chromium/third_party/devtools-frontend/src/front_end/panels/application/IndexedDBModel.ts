@@ -30,8 +30,8 @@
 
 import * as Common from '../../core/common/common.js';
 import * as SDK from '../../core/sdk/sdk.js';
-import * as Protocol from '../../generated/protocol.js';
 import type * as ProtocolProxyApi from '../../generated/protocol-proxy-api.js';
+import * as Protocol from '../../generated/protocol.js';
 
 const DEFAULT_BUCKET = '';  // Empty string is not a valid bucket name
 
@@ -485,13 +485,13 @@ export enum Events {
   /* eslint-enable @typescript-eslint/naming-convention */
 }
 
-export type EventTypes = {
-  [Events.DatabaseAdded]: {model: IndexedDBModel, databaseId: DatabaseId},
-  [Events.DatabaseRemoved]: {model: IndexedDBModel, databaseId: DatabaseId},
-  [Events.DatabaseLoaded]: {model: IndexedDBModel, database: Database, entriesUpdated: boolean},
-  [Events.DatabaseNamesRefreshed]: void,
-  [Events.IndexedDBContentUpdated]: {model: IndexedDBModel, databaseId: DatabaseId, objectStoreName: string},
-};
+export interface EventTypes {
+  [Events.DatabaseAdded]: {model: IndexedDBModel, databaseId: DatabaseId};
+  [Events.DatabaseRemoved]: {model: IndexedDBModel, databaseId: DatabaseId};
+  [Events.DatabaseLoaded]: {model: IndexedDBModel, database: Database, entriesUpdated: boolean};
+  [Events.DatabaseNamesRefreshed]: void;
+  [Events.IndexedDBContentUpdated]: {model: IndexedDBModel, databaseId: DatabaseId, objectStoreName: string};
+}
 
 export class Entry {
   key: SDK.RemoteObject.RemoteObject;

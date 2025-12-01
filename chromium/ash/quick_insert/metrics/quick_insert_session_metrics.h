@@ -22,7 +22,7 @@ class PrefService;
 namespace ash {
 
 // Records metrics for a session of using Quick Insert.
-class ASH_EXPORT PickerSessionMetrics {
+class ASH_EXPORT QuickInsertSessionMetrics {
  public:
   // These values are persisted to logs. Entries should not be renumbered and
   // numeric values should never be reused.
@@ -46,9 +46,9 @@ class ASH_EXPORT PickerSessionMetrics {
     kMaxValue = kCreate,
   };
 
-  PickerSessionMetrics();
-  explicit PickerSessionMetrics(PrefService* prefs);
-  ~PickerSessionMetrics();
+  QuickInsertSessionMetrics();
+  explicit QuickInsertSessionMetrics(PrefService* prefs);
+  ~QuickInsertSessionMetrics();
 
   // Registers prefs to the provided `registry`.
   static void RegisterProfilePrefs(PrefRegistrySimple* registry);
@@ -68,7 +68,7 @@ class ASH_EXPORT PickerSessionMetrics {
   // Updates the search query to latest and accumulates total edits.
   void UpdateSearchQuery(std::u16string_view search_query);
 
-  // Records CrOS event metrics when a picker session starts.
+  // Records CrOS event metrics when a Quick Insert session starts.
   void OnStartSession(ui::TextInputClient* client);
 
   // Records if caps lock toggle is displayed in the zero state view.
@@ -77,7 +77,7 @@ class ASH_EXPORT PickerSessionMetrics {
   SessionOutcome GetOutcomeForTesting() { return outcome_; }
 
  private:
-  // Records CrOS event metrics when a picker session finishes.
+  // Records CrOS event metrics when a Quick Insert session finishes.
   void OnFinishSession();
 
   // Updates caps lock related prefs.

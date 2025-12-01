@@ -44,7 +44,7 @@ title: August 2021 (Vol.2) - New features, Code health, Stability/security fixes
 
 <td><td><img alt="image" src="https://lh3.googleusercontent.com/BlgpoWYHjGO-GwxXaaDY5Bx0AFAp6cww8WbcxkZecQRKvkvY5tIw60xzDE6XiWEbGIzGoH7f9deTeZKU_0QNoQkLwKJzl9PGfYVYW_SI3iFnwP-9j3zQ2EWUpytmUK4qtebbkwU6_w=s0" height=47 width=283></td></td>
 
-<td><td>There is a performance regression (<a href="http://crbug.com/1238554">crbug.com/1238554</a>) that has been addressed as well. It was fixed by this <a href="https://chromium-review.googlesource.com/c/chromium/src/+/3099785">CL</a> where we found that we were doing a lot of un-necessary work which slows it down.</td></td>
+<td><td>There is a performance regression (<a href="https://crbug.com/1238554">crbug.com/1238554</a>) that has been addressed as well. It was fixed by this <a href="https://chromium-review.googlesource.com/c/chromium/src/+/3099785">CL</a> where we found that we were doing a lot of un-necessary work which slows it down.</td></td>
 
 <td><td>Note that the above curve has improved, but didn’t go back to the original level. With further investigation, we found that the root cause is because the tests aren’t well written. Specifically, the tests contains background-color animation on a solid-color layer, and our system has optimizations towards solid-color layer which is not implemented in CompositeBGColorAnimation yet.</td></td>
 

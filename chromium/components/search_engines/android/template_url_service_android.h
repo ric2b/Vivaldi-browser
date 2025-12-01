@@ -54,9 +54,7 @@ class TemplateUrlServiceAndroid : public TemplateURLServiceObserver {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
       const base::android::JavaParamRef<jstring>& jquery,
-      const base::android::JavaParamRef<jobjectArray>& jsearch_params,
-      const base::android::JavaParamRef<jobject>& post_params,
-      jint type);
+      const base::android::JavaParamRef<jobjectArray>& jsearch_params);
   base::android::ScopedJavaLocalRef<jstring> GetSearchQueryForUrl(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
@@ -146,17 +144,17 @@ class TemplateUrlServiceAndroid : public TemplateURLServiceObserver {
     jint type
   );
 
+  // Vivaldi
+  base::android::ScopedJavaLocalRef<jobject> VivaldiGetSearchEngineForHost(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jstring>& jhost
+    );
+
   // Get the image search url and the post content.
   base::android::ScopedJavaLocalRef<jobjectArray> GetImageUrlAndPostContent(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
-
-  // Returns whether the device is from an EEA country. This is consistent with
-  // countries which are eligible for the EEA default search engine choice
-  // prompt. "Default country" or "country at install" are used for
-  // SearchEngineChoiceCountry. It might be different than what LocaleUtils
-  // returns.
-  jboolean IsEeaChoiceCountry(JNIEnv* env);
 
  private:
   bool IsDefaultSearchEngineGoogle();

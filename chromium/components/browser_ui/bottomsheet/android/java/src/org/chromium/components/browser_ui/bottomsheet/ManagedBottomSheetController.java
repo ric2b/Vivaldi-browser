@@ -4,12 +4,14 @@
 
 package org.chromium.components.browser_ui.bottomsheet;
 
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateManager.AppHeaderObserver;
 
 /**
  * An interface for the owning object to manage interaction between the bottom sheet and the rest of
  * the system.
  */
+@NullMarked
 public interface ManagedBottomSheetController
         extends BottomSheetController, BottomSheetControllerProvider.Unowned, AppHeaderObserver {
     /**
@@ -44,9 +46,13 @@ public interface ManagedBottomSheetController
 
     /**
      * Set the hidden ratio of the browser controls.
+     *
      * @param ratio The hidden ratio of the browser controls in range [0, 1].
      */
     void setBrowserControlsHiddenRatio(float ratio);
+
+    /** Set the current height of the bottom controls. */
+    void setBottomControlsHeight(int bottomControlsHeight);
 
     /** Clean up any state maintained by the controller. */
     void destroy();

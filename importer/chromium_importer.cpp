@@ -89,12 +89,11 @@ void ChromiumImporter::StartImport(
   }
 
   if ((items & importer::EXTENSIONS) && !cancelled()) {
+    bridge_->NotifyItemStarted(importer::EXTENSIONS);
     ImportExtensions();
-  } else {
-    // When importing extensions Vivaldi ProfileWriter
-    // is responsible for reprorting that import has finished.
-    bridge_->NotifyEnded();
+    bridge_->NotifyItemEnded(importer::EXTENSIONS);
   }
+  bridge_->NotifyEnded();
 }
 
 #if BUILDFLAG(IS_WIN)
@@ -183,7 +182,7 @@ bool ChromiumImporter::ReadAndParseSignons(
     const base::FilePath& sqlite_file,
     std::vector<importer::ImportedPasswordForm>* forms,
     importer::ImporterType importer_type) {
-  sql::Database db;
+  sql::Database db("Importer");
   if (!db.Open(sqlite_file))
     return false;
 
@@ -292,7 +291,7 @@ void ChromiumImporter::ImportHistory() {
 
 bool ChromiumImporter::ReadAndParseHistory(const base::FilePath& sqlite_file,
                                            std::vector<ImporterURLRow>* forms) {
-  sql::Database db;
+  sql::Database db("Importer");
   if (!db.Open(sqlite_file))
     return false;
 
@@ -320,16 +319,11 @@ bool ChromiumImporter::ReadAndParseHistory(const base::FilePath& sqlite_file,
 }
 
 void ChromiumImporter::ImportExtensions() {
-  bridge_->NotifyItemStarted(importer::EXTENSIONS);
-
   const auto extensions =
       extension_importer::ChromiumExtensionsImporter::GetImportableExtensions(
           profile_dir_);
   if (!extensions.empty() && !cancelled()) {
     bridge_->AddExtensions(extensions);
-  } else {
-    bridge_->NotifyItemEnded(importer::EXTENSIONS);
-    bridge_->NotifyEnded();
   }
 }
 

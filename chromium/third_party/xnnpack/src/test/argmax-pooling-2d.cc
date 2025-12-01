@@ -20,6 +20,7 @@
 #include "xnnpack/subgraph.h"
 #include "xnnpack/buffer.h"
 #include "replicable_random_device.h"
+#include "runtime-flags.h"
 
 namespace {
 inline size_t compute_output_dimension(size_t padded_input_dimension, size_t kernel_dimension)
@@ -122,7 +123,6 @@ TEST_F(ArgmaxPoolingTestF32, define)
   ASSERT_EQ(subgraph->num_nodes, 1);
   const struct xnn_node* node = &subgraph->nodes[0];
   ASSERT_EQ(node->type, xnn_node_type_argmax_pooling_2d);
-  ASSERT_EQ(node->compute_type, xnn_compute_type_fp32);
   ASSERT_EQ(node->params.pooling_2d.padding_top, input_padding_top);
   ASSERT_EQ(node->params.pooling_2d.padding_right, input_padding_right);
   ASSERT_EQ(node->params.pooling_2d.padding_bottom, input_padding_bottom);
@@ -210,7 +210,7 @@ TEST_F(ArgmaxPoolingTestF32, matches_operator_api)
                           subgraph, input_padding_top, input_padding_right, input_padding_bottom, input_padding_left,
                           pooling_height, pooling_width, input_id, output_value_id, output_index_id,
                           /*flags=*/0));
-  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, /*flags=*/0, &runtime));
+  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, xnn_test_runtime_flags(), &runtime));
   ASSERT_NE(nullptr, runtime);
   std::unique_ptr<xnn_runtime, decltype(&xnn_delete_runtime)> auto_runtime(runtime, xnn_delete_runtime);
   std::array<xnn_external_value, 3> external = {
@@ -262,7 +262,6 @@ TEST_F(ArgmaxPoolingTestF32, reshape_output)
   ASSERT_EQ(subgraph->num_nodes, 1);
   struct xnn_node* node = &subgraph->nodes[0];
   ASSERT_EQ(node->type, xnn_node_type_argmax_pooling_2d);
-  ASSERT_EQ(node->compute_type, xnn_compute_type_fp32);
   ASSERT_EQ(node->num_inputs, 1);
   ASSERT_EQ(node->inputs[0], input_id);
   ASSERT_EQ(node->num_outputs, 2);
@@ -271,7 +270,7 @@ TEST_F(ArgmaxPoolingTestF32, reshape_output)
   ASSERT_EQ(node->flags, 0);
 
   xnn_runtime_t runtime = nullptr;
-  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, /*flags=*/0, &runtime));
+  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, xnn_test_runtime_flags(), &runtime));
   ASSERT_NE(nullptr, runtime);
   std::unique_ptr<xnn_runtime, decltype(&xnn_delete_runtime)> auto_runtime(runtime, xnn_delete_runtime);
 

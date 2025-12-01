@@ -4,7 +4,6 @@
 
 #include "ui/views/context_menu_controller.h"
 
-#include "base/auto_reset.h"
 #include "ui/base/mojom/menu_source_type.mojom-forward.h"
 
 namespace views {
@@ -18,8 +17,9 @@ void ContextMenuController::ShowContextMenuForView(
     const gfx::Point& point,
     ui::mojom::MenuSourceType source_type) {
   // Use a boolean flag to early-exit out of re-entrant behavior.
-  if (is_opening_)
+  if (is_opening_) {
     return;
+  }
   is_opening_ = true;
 
   // We might get deleted while showing the context menu (including as a result
@@ -29,8 +29,9 @@ void ContextMenuController::ShowContextMenuForView(
 
   ShowContextMenuForViewImpl(source, point, source_type);
 
-  if (!weak_ptr)
+  if (!weak_ptr) {
     return;
+  }
 
   is_opening_ = false;
 }

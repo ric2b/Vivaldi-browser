@@ -81,6 +81,8 @@ class MenuUpgrade {
               const std::string& parent_guid,
               base::Value::List& profile_list);
 
+  // Contains a list of actions we want to remove from the list.
+  std::vector<std::string> expired_;
   std::vector<std::string> deleted_;
   bool needs_fixup_ = false;
 };

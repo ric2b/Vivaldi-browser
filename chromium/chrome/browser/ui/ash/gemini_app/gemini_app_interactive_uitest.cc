@@ -35,7 +35,6 @@
 #include "chrome/browser/ash/login/test/guest_session_mixin.h"
 #include "chrome/browser/ash/login/test/logged_in_user_mixin.h"
 #include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
-#include "chrome/browser/chromeos/echo/echo_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -51,6 +50,7 @@
 #include "chrome/test/base/mixin_based_in_process_browser_test.h"
 #include "chrome/test/interaction/interactive_browser_test.h"
 #include "chromeos/ash/components/file_manager/app_id.h"
+#include "chromeos/ash/components/report/utils/time_utils.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "components/app_constants/constants.h"
 #include "components/session_manager/session_manager_types.h"
@@ -111,7 +111,7 @@ void FindDescendantsOfClass(views::View* parent,
 // Returns the index of `value` in the specified `range`.
 template <typename Range, typename Value>
 std::optional<size_t> FindIndex(const Range& range, const Value* value) {
-  auto it = base::ranges::find(range, value);
+  auto it = std::ranges::find(range, value);
   return it != range.end()
              ? std::make_optional<size_t>(std::distance(range.begin(), it))
              : std::make_optional<size_t>();
@@ -133,14 +133,14 @@ std::vector<raw_ptr<views::MenuItemView>> FindMenuItemViews() {
 // with the specified command `id`.
 views::MenuItemView* FindMenuItemViewForCommand(int id) {
   std::vector<raw_ptr<views::MenuItemView>> views = FindMenuItemViews();
-  auto it = base::ranges::find(views, id, &views::MenuItemView::GetCommand);
+  auto it = std::ranges::find(views, id, &views::MenuItemView::GetCommand);
   return it != views.end() ? *it : nullptr;
 }
 
 // Returns the `ash::ShelfItem` for the given web app `id`.
 const ash::ShelfItem* FindShelfItemForWebApp(std::string_view id) {
   const ash::ShelfItems& items = ash::ShelfModel::Get()->items();
-  auto it = base::ranges::find_if(
+  auto it = std::ranges::find_if(
       items, [id](const ash::ShelfItem& item) { return item.id.app_id == id; });
   return it != items.end() ? &*it : nullptr;
 }
@@ -320,12 +320,11 @@ class GeminiAppInteractiveUiTestBase
     AppListClientImpl::GetInstance()->UpdateProfile();
 
     // Fetch `device_info` from echo.
-    base::test::TestFuture<std::optional<base::Time>> oobe_timestamp;
-    chromeos::echo_util::GetOobeTimestamp(oobe_timestamp.GetCallback());
-    ASSERT_TRUE(oobe_timestamp.Wait());
-    ASSERT_TRUE(oobe_timestamp.Get().has_value());
+    std::optional<base::Time> oobe_timestamp =
+        ash::report::utils::GetFirstActiveWeek();
+    ASSERT_TRUE(oobe_timestamp.has_value());
     web_app::DeviceInfo device_info;
-    device_info.oobe_timestamp = oobe_timestamp.Get().value();
+    device_info.oobe_timestamp = oobe_timestamp.value();
 
     // Cache install info for the Gemini app.
     gemini_app_install_info_ =
@@ -488,9 +487,10 @@ IN_PROC_BROWSER_TEST_P(GeminiAppInteractiveUiTest, LaunchFromAppList) {
       AssignView(kGmailAppElementName, std::ref(gmail_app)),
 
       // Check Gemini app title.
-      CheckView(kGeminiAppElementName,
-                base::BindOnce(&ash::AppListItemView::title),
-                Property(&views::Label::GetText, Eq(GetGeminiAppTitle()))),
+      CheckView(
+          kGeminiAppElementName,
+          [](ash::AppListItemView* item) { return item->title(); },
+          Property(&views::Label::GetText, Eq(GetGeminiAppTitle()))),
 
       // Check Gemini app position.
       Check([&]() {
@@ -904,7 +904,7 @@ INSTANTIATE_TEST_SUITE_P(
       std::vector<IneligibilityReason> reasons(
           static_cast<int>(IneligibilityReason::kMaxValue) -
           static_cast<int>(IneligibilityReason::kMinValue) + 1);
-      base::ranges::generate(
+      std::ranges::generate(
           reasons.begin(), reasons.end(),
           [i = static_cast<int>(IneligibilityReason::kMinValue)]() mutable {
             return static_cast<IneligibilityReason>(i++);
@@ -937,7 +937,7 @@ IN_PROC_BROWSER_TEST_P(GeminiAppInteractiveUiIneligibilityTest,
             std::vector<raw_ptr<ash::AppListItemView>> apps;
             FindDescendantsOfClass(apps_grid_view, apps);
             return apps.size() &&
-                   base::ranges::none_of(apps, [&](ash::AppListItemView* app) {
+                   std::ranges::none_of(apps, [&](ash::AppListItemView* app) {
                      return IsAppListItemViewForWebApp(ash::kGeminiAppId, app);
                    });
           }));
@@ -952,7 +952,7 @@ IN_PROC_BROWSER_TEST_P(GeminiAppInteractiveUiIneligibilityTest,
         std::vector<raw_ptr<ash::ShelfAppButton>> apps;
         FindDescendantsOfClass(shelf, apps);
         return apps.size() &&
-               base::ranges::none_of(
+               std::ranges::none_of(
                    apps, [&, shelf = raw_ptr(shelf)](ash::ShelfAppButton* app) {
                      return IsShelfAppButtonForWebApp(std::cref(shelf),
                                                       ash::kGeminiAppId, app);

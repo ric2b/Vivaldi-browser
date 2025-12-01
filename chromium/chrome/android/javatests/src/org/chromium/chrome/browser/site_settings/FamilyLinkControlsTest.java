@@ -16,6 +16,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
+import android.os.Build;
+
 import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceScreen;
 import androidx.test.filters.SmallTest;
@@ -31,8 +33,8 @@ import org.mockito.MockitoAnnotations;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DoNotBatch;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.settings.SettingsActivity;
 import org.chromium.chrome.browser.signin.SigninCheckerProvider;
@@ -52,6 +54,7 @@ import org.chromium.components.signin.identitymanager.ConsentLevel;
 @DoNotBatch(
         reason = "Activity must be destroyed between tests to ensure the child account is removed.")
 @RunWith(ChromeJUnit4ClassRunner.class)
+@DisableIf.Build(sdk_equals = Build.VERSION_CODES.S_V2, message = "crbug.com/41488000")
 public class FamilyLinkControlsTest {
 
     public final SigninTestRule mSigninTestRule = new SigninTestRule();
@@ -64,7 +67,6 @@ public class FamilyLinkControlsTest {
     public final RuleChain mRuleChain =
             RuleChain.outerRule(mSigninTestRule).around(mActivityTestRule);
 
-    @Rule public JniMocker mocker = new JniMocker();
     @Mock public WebsitePreferenceBridge.Natives mWebsitePreferenceBridgeJniMock;
 
     @Before
@@ -124,7 +126,7 @@ public class FamilyLinkControlsTest {
     @Test
     @SmallTest
     public void testDeletingOnDeviceDataAllowedForSupervisedUsers() throws InterruptedException {
-        mocker.mock(WebsitePreferenceBridgeJni.TEST_HOOKS, mWebsitePreferenceBridgeJniMock);
+        WebsitePreferenceBridgeJni.setInstanceForTesting(mWebsitePreferenceBridgeJniMock);
         when(mWebsitePreferenceBridgeJniMock.isContentSettingManagedByCustodian(
                         any(), eq(ContentSettingsType.COOKIES)))
                 .thenReturn(false);

@@ -66,6 +66,8 @@ const char kPriceNotificationsUsed[] = "price_notifications_used";
 const char kDefaultBrowserPromoShown[] = "default_browser_promo_shown";
 const char kDefaultBrowserPromoRemindMeLater[] =
     "default_browser_promo_remind_me_later";
+const char kNonModalDefaultBrowserPromoUrlPasteTrigger[] =
+    "non_modal_default_browser_promo_url_paste_trigger";
 const char kPasswordManagerWidgetPromoTriggered[] =
     "password_manager_widget_promo_trigger";
 const char kPasswordManagerWidgetPromoUsed[] =
@@ -143,6 +145,9 @@ const char kIOSContextualPanelPriceInsightsEntrypointExplicitlyDismissed[] =
     "ios_contextual_panel_price_insights_entrypoint_explicitly_dismissed";
 const char kHomeCustomizationMenuUsed[] = "home_customization_menu_used";
 const char kLensOverlayEntrypointUsed[] = "lens_overlay_entrypoint_used";
+const char kIOSTabReminderScheduled[] = "tab_reminder_scheduled";
+const char kIOSReminderNotificationsOverflowMenuBubbleIPHTrigger[] =
+    "ios_reminder_notifications_overflow_menu_bubble_iph_trigger";
 #endif  // BUILDFLAG(IS_IOS)
 
 #if BUILDFLAG(IS_ANDROID)

@@ -354,10 +354,6 @@ config("common_config") {
     defines += [ "WEBRTC_ABSL_MUTEX" ]
   }
 
-  if (rtc_enable_libevent) {
-    defines += [ "WEBRTC_ENABLE_LIBEVENT" ]
-  }
-
   if (rtc_disable_logging) {
     defines += [ "RTC_DISABLE_LOGGING" ]
   }
@@ -560,7 +556,6 @@ if (!build_with_chromium) {
       "media",
       "modules",
       "modules/video_capture:video_capture_internal_impl",
-      "p2p:rtc_p2p",
       "pc:libjingle_peerconnection",
       "pc:rtc_pc",
       "sdk",
@@ -644,6 +639,7 @@ if (rtc_include_tests && !build_with_chromium) {
       "api/task_queue:pending_task_safety_flag_unittests",
       "api/test/metrics:metrics_unittests",
       "api/transport:stun_unittest",
+      "api/transport/rtp:corruption_detection_message_unittest",
       "api/video/test:rtc_api_video_unittests",
       "api/video_codecs:libaom_av1_encoder_factory_test",
       "api/video_codecs:simple_encoder_wrapper_unittests",
@@ -696,7 +692,6 @@ if (rtc_include_tests && !build_with_chromium) {
       deps += [
         "sdk/android:native_unittests",
         "sdk/android:native_unittests_java",
-        "//testing/android/native_test:native_test_support",
       ]
       shard_timeout = 900
     }
@@ -745,11 +740,7 @@ if (rtc_include_tests && !build_with_chromium) {
     data = video_engine_tests_resources
     if (is_android) {
       use_default_launcher = false
-      deps += [
-        "//build/android/gtest_apk:native_test_instrumentation_test_runner_java",
-        "//testing/android/native_test:native_test_java",
-        "//testing/android/native_test:native_test_support",
-      ]
+      deps += [ "//build/android/gtest_apk:native_test_instrumentation_test_runner_java" ]
       shard_timeout = 900
     }
     if (is_ios) {
@@ -794,11 +785,7 @@ if (rtc_include_tests && !build_with_chromium) {
     data = webrtc_perf_tests_resources
     if (is_android) {
       use_default_launcher = false
-      deps += [
-        "//build/android/gtest_apk:native_test_instrumentation_test_runner_java",
-        "//testing/android/native_test:native_test_java",
-        "//testing/android/native_test:native_test_support",
-      ]
+      deps += [ "//build/android/gtest_apk:native_test_instrumentation_test_runner_java" ]
       shard_timeout = 4500
     }
     if (is_ios) {
@@ -810,7 +797,6 @@ if (rtc_include_tests && !build_with_chromium) {
     testonly = true
     deps = [ "rtc_base:rtc_base_nonparallel_tests" ]
     if (is_android) {
-      deps += [ "//testing/android/native_test:native_test_support" ]
       shard_timeout = 900
     }
   }

@@ -2,12 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <algorithm>
 #include <optional>
 #include <string>
 #include <vector>
 
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
+#include "ash/shell.h"
 #include "ash/webui/help_app_ui/buildflags.h"
 #include "ash/webui/help_app_ui/help_app_manager.h"
 #include "ash/webui/help_app_ui/help_app_manager_factory.h"
@@ -18,7 +20,6 @@
 #include "ash/webui/web_applications/test/sandboxed_web_ui_test_base.h"
 #include "base/command_line.h"
 #include "base/containers/to_vector.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -28,7 +29,6 @@
 #include "base/values.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/app_install/app_install_service_ash.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
@@ -83,6 +83,7 @@
 #include "ui/display/screen.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/events/test/event_generator.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
@@ -914,12 +915,8 @@ IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest,
   content::TestNavigationObserver navigation_observer(test_url);
   navigation_observer.StartWatchingNewWebContents();
 
-  std::string dialog_name =
-      base::FeatureList::IsEnabled(::features::kWebAppUniversalInstall)
-          ? "WebAppSimpleInstallDialog"
-          : "PWAConfirmationBubbleView";
   views::NamedWidgetShownWaiter waiter(views::test::AnyWidgetTestPasskey(),
-                                       dialog_name);
+                                       "WebAppSimpleInstallDialog");
 
   // Script that tells the Help App to call the
   // OpenUrlInBrowserAndTriggerInstallDialog Mojo function.
@@ -1180,7 +1177,7 @@ IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest,
   auto& tasks = GetManager().GetBackgroundTasksForTesting();
 
   // Find the help app's background task.
-  const auto& help_task = base::ranges::find(
+  const auto& help_task = std::ranges::find(
       tasks, bg_task_url, &SystemWebAppBackgroundTask::url_for_testing);
   ASSERT_NE(help_task, tasks.end());
 
@@ -1228,26 +1225,6 @@ IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest,
                    }));
   search_run_loop.Run();
 #endif
-}
-
-IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest, HelpAppV2CanOpenAlmanacScheme) {
-  WaitForTestSystemAppInstall();
-  content::WebContents* web_contents = LaunchApp(SystemWebAppType::HELP);
-
-  base::test::TestFuture<apps::PackageId> future;
-  apps::AppInstallServiceAsh::InstallAppCallbackForTesting() =
-      future.GetCallback();
-  constexpr char kScript[] = R"(
-    (() => {
-      location.href = 'almanac://install-app?package_id=web:test';
-      return true;
-    })();
-  )";
-  EXPECT_EQ(true,
-            content::EvalJs(
-                SandboxedWebUiAppTestBase::GetAppFrame(web_contents), kScript));
-  EXPECT_EQ(future.Get<apps::PackageId>(),
-            apps::PackageId::FromString("web:test"));
 }
 
 IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest, HelpAppV2CanOpenCrosAppsScheme) {
@@ -1304,9 +1281,8 @@ IN_PROC_BROWSER_TEST_P(HelpAppAllProfilesIntegrationTest,
 #endif
   content::TestNavigationObserver navigation_observer(expected_url);
   navigation_observer.StartWatchingNewWebContents();
-  ASSERT_TRUE(ui_test_utils::SendKeyPressSync(
-      browser(), ui::VKEY_OEM_2, /*control=*/true,
-      /*shift=*/false, /*alt=*/false, /*command=*/false));
+  ui::test::EventGenerator generator(ash::Shell::GetPrimaryRootWindow());
+  generator.PressKeyAndModifierKeys(ui::VKEY_OEM_2, ui::EF_CONTROL_DOWN);
   navigation_observer.Wait();
 
 #if BUILDFLAG(ENABLE_CROS_HELP_APP)

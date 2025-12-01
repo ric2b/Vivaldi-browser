@@ -137,6 +137,9 @@ class ASH_EXPORT BirchBarView : public views::BoxLayoutView {
     kTwoByTwo,
   };
 
+  // Creates a chip for given `item`.
+  std::unique_ptr<BirchChipButtonBase> CreateChipForItem(BirchItem* item);
+
   void AttachChip(std::unique_ptr<BirchChipButtonBase> chip);
 
   // Remove all current chips.

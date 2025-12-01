@@ -35,12 +35,14 @@
 #include "src/tint/lang/core/type/bool.h"
 #include "src/tint/lang/core/type/f16.h"
 #include "src/tint/lang/core/type/f32.h"
+#include "src/tint/lang/core/type/function.h"
 #include "src/tint/lang/core/type/i32.h"
 #include "src/tint/lang/core/type/i8.h"
 #include "src/tint/lang/core/type/invalid.h"
 #include "src/tint/lang/core/type/matrix.h"
 #include "src/tint/lang/core/type/pointer.h"
 #include "src/tint/lang/core/type/reference.h"
+#include "src/tint/lang/core/type/storage_texture.h"
 #include "src/tint/lang/core/type/type.h"
 #include "src/tint/lang/core/type/u32.h"
 #include "src/tint/lang/core/type/u8.h"
@@ -60,6 +62,10 @@ Manager::~Manager() = default;
 
 const core::type::Invalid* Manager::invalid() {
     return Get<core::type::Invalid>();
+}
+
+const core::type::Function* Manager::function() {
+    return Get<core::type::Function>();
 }
 
 const core::type::Void* Manager::void_() {
@@ -141,6 +147,13 @@ const core::type::Vector* Manager::vec4(const core::type::Type* inner) {
     return vec(inner, 4);
 }
 
+const core::type::StorageTexture* Manager::storage_texture(TextureDimension dim,
+                                                           core::TexelFormat format,
+                                                           core::Access access) {
+    const auto* subtype = StorageTexture::SubtypeFor(format, *this);
+    return Get<core::type::StorageTexture>(dim, format, access, subtype);
+}
+
 const core::type::Matrix* Manager::mat(const core::type::Type* inner,
                                        uint32_t cols,
                                        uint32_t rows) {
@@ -189,9 +202,9 @@ const core::type::Matrix* Manager::mat4x4(const core::type::Type* inner) {
 
 const core::type::SubgroupMatrix* Manager::subgroup_matrix(SubgroupMatrixKind kind,
                                                            const core::type::Type* inner,
-                                                           uint32_t rows,
-                                                           uint32_t cols) {
-    return Get<core::type::SubgroupMatrix>(kind, inner, rows, cols);
+                                                           uint32_t cols,
+                                                           uint32_t rows) {
+    return Get<core::type::SubgroupMatrix>(kind, inner, cols, rows);
 }
 
 const core::type::Array* Manager::array(const core::type::Type* elem_ty,

@@ -20,4 +20,4 @@ sheriffs need to ensure that:
 3.  **Existing test failures are repaired**, for the same reason
 
 The file is continued under [Chrome Sheriffing How
-To - Internal Only](http://goto.google.com/chrome-sheriffing-how-to).
+To - Internal Only](http://go/chrome-sheriffing-how-to).

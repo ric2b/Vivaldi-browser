@@ -15,6 +15,8 @@ void verifySizeOf(const MatrixType&) {
   if (MatrixType::RowsAtCompileTime != Dynamic && MatrixType::ColsAtCompileTime != Dynamic)
     VERIFY_IS_EQUAL(std::ptrdiff_t(sizeof(MatrixType)),
                     std::ptrdiff_t(sizeof(Scalar)) * std::ptrdiff_t(MatrixType::SizeAtCompileTime));
+  else if (MatrixType::RowsAtCompileTime != Dynamic || MatrixType::ColsAtCompileTime != Dynamic)
+    VERIFY_IS_EQUAL(sizeof(MatrixType), sizeof(Scalar*) + sizeof(Index));
   else
     VERIFY_IS_EQUAL(sizeof(MatrixType), sizeof(Scalar*) + 2 * sizeof(Index));
 }
@@ -35,6 +37,8 @@ EIGEN_DECLARE_TEST(sizeof) {
   CALL_SUBTEST(verifySizeOf(Vector2d()));
   CALL_SUBTEST(verifySizeOf(Vector4f()));
   CALL_SUBTEST(verifySizeOf(Matrix4d()));
+  CALL_SUBTEST(verifySizeOf(Matrix<float, 300, Eigen::Dynamic>()));
+  CALL_SUBTEST(verifySizeOf(Matrix<float, Eigen::Dynamic, 300>()));
   CALL_SUBTEST(verifySizeOf(Matrix<double, 4, 2>()));
   CALL_SUBTEST(verifySizeOf(Matrix<bool, 7, 5>()));
   CALL_SUBTEST(verifySizeOf(MatrixXcf(3, 3)));

@@ -620,8 +620,6 @@ class ExceptionHandlerTrampolineBuilder {
       DCHECK(!source->allocation().IsRegister());
 
       switch (source->properties().value_representation()) {
-        case ValueRepresentation::kIntPtr:
-          UNREACHABLE();
         case ValueRepresentation::kTagged:
           direct_moves->RecordMove(
               source, source->allocation(),
@@ -631,6 +629,7 @@ class ExceptionHandlerTrampolineBuilder {
           break;
         case ValueRepresentation::kInt32:
         case ValueRepresentation::kUint32:
+        case ValueRepresentation::kIntPtr:
           materialising_moves->emplace_back(target, source);
           break;
         case ValueRepresentation::kFloat64:
@@ -807,12 +806,12 @@ class MaglevCodeGeneratingNodeProcessor {
     PatchJumps(node);
 
     // Emit Phi moves before visiting the control node.
-    if (std::is_base_of<UnconditionalControlNode, NodeT>::value) {
+    if (std::is_base_of_v<UnconditionalControlNode, NodeT>) {
       EmitBlockEndGapMoves(node->template Cast<UnconditionalControlNode>(),
                            state);
     }
 
-    if (v8_flags.debug_code && !std::is_same_v<NodeT, Phi>) {
+    if (v8_flags.slow_debug_code && !std::is_same_v<NodeT, Phi>) {
       // Check that all int32/uint32 inputs are zero extended.
       // Note that we don't do this for Phis, since they are virtual operations
       // whose inputs aren't actual inputs but are injected on incoming
@@ -850,7 +849,7 @@ class MaglevCodeGeneratingNodeProcessor {
     masm()->set_allow_deferred_call(false);
 #endif
 
-    if (std::is_base_of<ValueNode, NodeT>::value) {
+    if (std::is_base_of_v<ValueNode, NodeT>) {
       ValueNode* value_node = node->template Cast<ValueNode>();
       if (value_node->has_valid_live_range() && value_node->is_spilled()) {
         compiler::AllocatedOperand source =
@@ -919,9 +918,9 @@ class MaglevCodeGeneratingNodeProcessor {
           continue;
         }
         Input& input = phi->input(state.block()->predecessor_id());
-        ValueNode* node = input.node();
+        ValueNode* input_node = input.node();
         compiler::InstructionOperand source = input.operand();
-        compiler::AllocatedOperand target =
+        compiler::AllocatedOperand target_operand =
             compiler::AllocatedOperand::cast(phi->result().operand());
         if (v8_flags.code_comments) {
           std::stringstream ss;
@@ -931,16 +930,18 @@ class MaglevCodeGeneratingNodeProcessor {
         }
         if (phi->use_double_register()) {
           DCHECK(!phi->decompresses_tagged_result());
-          double_register_moves.RecordMove(node, source, target, false);
+          double_register_moves.RecordMove(input_node, source, target_operand,
+                                           false);
         } else {
-          register_moves.RecordMove(node, source, target,
+          register_moves.RecordMove(input_node, source, target_operand,
                                     kDoesNotNeedDecompression);
         }
-        if (target.IsAnyRegister()) {
+        if (target_operand.IsAnyRegister()) {
           if (phi->use_double_register()) {
-            double_registers_set_by_phis.set(target.GetDoubleRegister());
+            double_registers_set_by_phis.set(
+                target_operand.GetDoubleRegister());
           } else {
-            registers_set_by_phis.set(target.GetRegister());
+            registers_set_by_phis.set(target_operand.GetRegister());
           }
         }
       }
@@ -1337,7 +1338,8 @@ class MaglevFrameTranslationBuilder {
                              const VirtualObject::List& virtual_objects) {
     translation_array_builder_->BeginInlinedExtraArguments(
         GetDeoptLiteral(GetSharedFunctionInfo(frame)),
-        static_cast<uint32_t>(frame.arguments().size()));
+        static_cast<uint32_t>(frame.arguments().size()),
+        GetBytecodeArray(frame).parameter_count());
 
     // Closure
     BuildDeoptFrameSingleValue(frame.closure(), current_input_location,
@@ -1377,7 +1379,7 @@ class MaglevFrameTranslationBuilder {
     int height = frame.parameters().length();
 
     constexpr int kExtraFixedJSFrameParameters =
-        V8_ENABLE_LEAPTIERING_BOOL ? 4 : 3;
+        V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE_BOOL ? 4 : 3;
     if (frame.is_javascript()) {
       translation_array_builder_->BeginJavaScriptBuiltinContinuationFrame(
           bailout_id, literal_id, height + kExtraFixedJSFrameParameters);
@@ -1407,7 +1409,7 @@ class MaglevFrameTranslationBuilder {
                     .GetRegisterParameterCount(),
                 kExtraFixedJSFrameParameters);
       static_assert(kExtraFixedJSFrameParameters ==
-                    3 + (V8_ENABLE_LEAPTIERING_BOOL ? 1 : 0));
+                    3 + (V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE_BOOL ? 1 : 0));
       // kJavaScriptCallTargetRegister
       translation_array_builder_->StoreLiteral(
           GetDeoptLiteral(frame.javascript_target()));
@@ -1417,10 +1419,10 @@ class MaglevFrameTranslationBuilder {
       // kJavaScriptCallArgCountRegister
       translation_array_builder_->StoreLiteral(GetDeoptLiteral(
           Smi::FromInt(Builtins::GetStackParameterCount(frame.builtin_id()))));
-#ifdef V8_ENABLE_LEAPTIERING
+#ifdef V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE
       // kJavaScriptCallDispatchHandleRegister
       translation_array_builder_->StoreLiteral(
-          GetDeoptLiteral(Smi::FromInt(kInvalidDispatchHandle)));
+          GetDeoptLiteral(Smi::FromInt(kInvalidDispatchHandle.value())));
 #endif
     }
 
@@ -1433,7 +1435,8 @@ class MaglevFrameTranslationBuilder {
                                ValueRepresentation repr) {
     switch (repr) {
       case ValueRepresentation::kIntPtr:
-        UNREACHABLE();
+        translation_array_builder_->StoreIntPtrRegister(operand.GetRegister());
+        break;
       case ValueRepresentation::kTagged:
         translation_array_builder_->StoreRegister(operand.GetRegister());
         break;
@@ -1459,7 +1462,8 @@ class MaglevFrameTranslationBuilder {
     int stack_slot = DeoptStackSlotFromStackSlot(operand);
     switch (repr) {
       case ValueRepresentation::kIntPtr:
-        UNREACHABLE();
+        translation_array_builder_->StoreIntPtrStackSlot(stack_slot);
+        break;
       case ValueRepresentation::kTagged:
         translation_array_builder_->StoreStackSlot(stack_slot);
         break;
@@ -1641,8 +1645,8 @@ class MaglevFrameTranslationBuilder {
     }
 
     // Context
-    ValueNode* value = checkpoint_state->context(compilation_unit);
-    BuildDeoptFrameSingleValue(value, input_location, virtual_objects);
+    ValueNode* context_value = checkpoint_state->context(compilation_unit);
+    BuildDeoptFrameSingleValue(context_value, input_location, virtual_objects);
 
     // Locals
     {
@@ -1721,8 +1725,7 @@ MaglevCodeGenerator::MaglevCodeGenerator(
     Graph* graph)
     : local_isolate_(isolate),
       safepoint_table_builder_(compilation_info->zone(),
-                               graph->tagged_stack_slots(),
-                               graph->untagged_stack_slots()),
+                               graph->tagged_stack_slots()),
       frame_translation_builder_(compilation_info->zone()),
       code_gen_state_(compilation_info, &safepoint_table_builder_),
       masm_(isolate->GetMainThreadIsolateUnsafe(), compilation_info->zone(),
@@ -1929,7 +1932,7 @@ void MaglevCodeGenerator::EmitMetadata() {
   // Final alignment before starting on the metadata section.
   masm()->Align(InstructionStream::kMetadataAlignment);
 
-  safepoint_table_builder_.Emit(masm());
+  safepoint_table_builder_.Emit(masm(), stack_slot_count_with_fixed_frame());
 
   // Exception handler table.
   handler_table_offset_ = HandlerTable::EmitReturnTableStart(masm());

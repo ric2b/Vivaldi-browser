@@ -16,8 +16,8 @@ import {assert} from '../util/assert.js';
 
 import {BidiCdpSession} from './CDPSession.js';
 import type {
-  Commands as BidiCommands,
   BidiEvents,
+  Commands as BidiCommands,
   Connection,
 } from './core/Connection.js';
 
@@ -28,15 +28,15 @@ const debugProtocolReceive = debug('puppeteer:webDriverBiDi:RECV ◀');
  * @internal
  */
 export interface Commands extends BidiCommands {
-  'cdp.sendCommand': {
+  'goog:cdp.sendCommand': {
     params: Bidi.Cdp.SendCommandParameters;
     returnType: Bidi.Cdp.SendCommandResult;
   };
-  'cdp.getSession': {
+  'goog:cdp.getSession': {
     params: Bidi.Cdp.GetSessionParameters;
     returnType: Bidi.Cdp.GetSessionResult;
   };
-  'cdp.resolveRealm': {
+  'goog:cdp.resolveRealm': {
     params: Bidi.Cdp.ResolveRealmParameters;
     returnType: Bidi.Cdp.ResolveRealmResult;
   };
@@ -61,7 +61,7 @@ export class BidiConnection
     url: string,
     transport: ConnectionTransport,
     delay = 0,
-    timeout?: number
+    timeout?: number,
   ) {
     super();
     this.#url = url;
@@ -87,7 +87,7 @@ export class BidiConnection
 
   override emit<Key extends keyof EventsWithWildcard<BidiEvents>>(
     type: Key,
-    event: EventsWithWildcard<BidiEvents>[Key]
+    event: EventsWithWildcard<BidiEvents>[Key],
   ): boolean {
     for (const emitter of this.#emitters) {
       emitter.emit(type, event);
@@ -98,7 +98,7 @@ export class BidiConnection
   send<T extends keyof Commands>(
     method: T,
     params: Commands[T]['params'],
-    timeout?: number
+    timeout?: number,
   ): Promise<{result: Commands[T]['returnType']}> {
     assert(!this.#closed, 'Protocol error: Connection closed.');
 
@@ -136,7 +136,7 @@ export class BidiConnection
           this.#callbacks.reject(
             object.id,
             createProtocolError(object),
-            `${object.error}: ${object.message}`
+            `${object.error}: ${object.message}`,
           );
           return;
         case 'event':
@@ -149,7 +149,7 @@ export class BidiConnection
           // SAFETY: We know the method and parameter still match here.
           this.emit(
             object.method,
-            object.params as BidiEvents[keyof BidiEvents]
+            object.params as BidiEvents[keyof BidiEvents],
           );
           return;
       }
@@ -160,7 +160,7 @@ export class BidiConnection
       this.#callbacks.reject(
         (object as {id: number}).id,
         `Protocol Error. Message is not in BiDi protocol format: '${message}'`,
-        object.message
+        object.message,
       );
     }
     debugError(object);
@@ -208,5 +208,5 @@ function createProtocolError(object: Bidi.ErrorResponse): string {
 }
 
 function isCdpEvent(event: Bidi.ChromiumBidi.Event): event is Bidi.Cdp.Event {
-  return event.method.startsWith('cdp.');
+  return event.method.startsWith('goog:cdp.');
 }

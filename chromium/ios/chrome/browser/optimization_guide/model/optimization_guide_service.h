@@ -16,16 +16,14 @@
 #include "components/optimization_guide/core/optimization_guide_decider.h"
 #include "components/optimization_guide/core/optimization_guide_decision.h"
 #include "components/optimization_guide/core/optimization_guide_model_provider.h"
+#include "components/optimization_guide/core/optimization_guide_on_device_capability_provider.h"
 #include "components/optimization_guide/core/optimization_metadata.h"
 #import "components/optimization_guide/optimization_guide_buildflags.h"
 #include "components/optimization_guide/proto/hints.pb.h"
 #include "ios/chrome/browser/download/model/background_service/background_download_service_factory.h"
 #include "url/gurl.h"
-
-#if BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
 #include "components/optimization_guide/core/model_execution/model_execution_features_controller.h"
 #include "components/optimization_guide/core/optimization_guide_model_executor.h"
-#endif  // BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
 
 namespace leveldb_proto {
 class ProtoDatabaseProvider;
@@ -35,16 +33,13 @@ namespace network {
 class SharedURLLoaderFactory;
 }  // namespace network
 
-#if BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
-namespace optimization_guide {
-class ModelExecutionManager;
-class OnDeviceModelAvailabilityObserver;
-class OnDeviceModelComponentStateManager;
-}  // namespace optimization_guide
-#endif  // BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
-
 namespace optimization_guide {
 class HintsManager;
+class ModelExecutionManager;
+#if BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
+class OnDeviceModelAvailabilityObserver;
+class OnDeviceModelComponentStateManager;
+#endif  // BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
 class OptimizationGuideStore;
 class OptimizationTargetModelObserver;
 class PredictionManager;
@@ -71,8 +66,9 @@ class PrefService;
 class OptimizationGuideService
     : public KeyedService,
       public optimization_guide::OptimizationGuideDecider,
-#if BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
       public optimization_guide::OptimizationGuideModelExecutor,
+#if BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
+      public optimization_guide::OptimizationGuideOnDeviceCapabilityProvider,
 #endif
       public optimization_guide::OptimizationGuideModelProvider {
  public:
@@ -117,10 +113,26 @@ class OptimizationGuideService
 
 #if BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
   // optimization_guide::OptimizationGuideModelExecutor implementation:
-  bool CanCreateOnDeviceSession(
+  void AddOnDeviceModelAvailabilityChangeObserver(
       optimization_guide::ModelBasedCapabilityKey feature,
-      optimization_guide::OnDeviceModelEligibilityReason*
-          on_device_model_eligibility_reason) override;
+      optimization_guide::OnDeviceModelAvailabilityObserver* observer) override;
+  void RemoveOnDeviceModelAvailabilityChangeObserver(
+      optimization_guide::ModelBasedCapabilityKey feature,
+      optimization_guide::OnDeviceModelAvailabilityObserver* observer) override;
+
+  // optimization_guide::OptimizationGuideOnDeviceCapabilityProvider
+  // implementation:
+  optimization_guide::OnDeviceModelEligibilityReason
+  GetOnDeviceModelEligibility(
+      optimization_guide::ModelBasedCapabilityKey feature) override;
+  std::optional<optimization_guide::SamplingParamsConfig>
+  GetSamplingParamsConfig(
+      optimization_guide::ModelBasedCapabilityKey feature) override;
+  std::optional<const optimization_guide::proto::Any> GetFeatureMetadata(
+      optimization_guide::ModelBasedCapabilityKey feature) override;
+
+#endif
+
   std::unique_ptr<Session> StartSession(
       optimization_guide::ModelBasedCapabilityKey feature,
       const std::optional<optimization_guide::SessionConfigParams>&
@@ -131,13 +143,6 @@ class OptimizationGuideService
       const std::optional<base::TimeDelta>& execution_timeout,
       optimization_guide::OptimizationGuideModelExecutionResultCallback
           callback) override;
-  void AddOnDeviceModelAvailabilityChangeObserver(
-      optimization_guide::ModelBasedCapabilityKey feature,
-      optimization_guide::OnDeviceModelAvailabilityObserver* observer) override;
-  void RemoveOnDeviceModelAvailabilityChangeObserver(
-      optimization_guide::ModelBasedCapabilityKey feature,
-      optimization_guide::OnDeviceModelAvailabilityObserver* observer) override;
-#endif
 
   // optimization_guide::OptimizationGuideModelProvider implementation:
   void AddObserverForOptimizationTargetModel(
@@ -228,10 +233,11 @@ class OptimizationGuideService
   scoped_refptr<optimization_guide::OnDeviceModelComponentStateManager>
       on_device_model_state_manager_;
 
+#endif
+
   // Manages the model execution. Not created for off the record profiles.
   std::unique_ptr<optimization_guide::ModelExecutionManager>
       model_execution_manager_;
-#endif
 
   // The PrefService of the profile this service is linked to.
   const raw_ptr<PrefService> pref_service_ = nullptr;

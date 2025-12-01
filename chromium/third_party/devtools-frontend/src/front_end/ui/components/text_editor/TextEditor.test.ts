@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 import * as Common from '../../../core/common/common.js';
-import type * as Platform from '../../../core/platform/platform.js';
+import * as Platform from '../../../core/platform/platform.js';
 import * as SDK from '../../../core/sdk/sdk.js';
 import type * as Protocol from '../../../generated/protocol.js';
 import * as Bindings from '../../../models/bindings/bindings.js';
@@ -21,6 +21,8 @@ import * as CodeMirror from '../../../third_party/codemirror.next/codemirror.nex
 import * as UI from '../../legacy/legacy.js';
 
 import * as TextEditor from './text_editor.js';
+
+const {urlString} = Platform.DevToolsPath;
 
 function makeState(doc: string, extensions: CodeMirror.Extension = []) {
   return CodeMirror.EditorState.create({
@@ -56,15 +58,15 @@ describeWithEnvironment('TextEditor', () => {
       const editor = new TextEditor.TextEditor.TextEditor(
           makeState('line1  \n  line2( )\n\tline3  ', TextEditor.Config.showWhitespace.instance()));
       renderElementIntoDOM(editor);
-      assert.strictEqual(editor.editor.dom.querySelectorAll('.cm-trailingWhitespace, .cm-highlightedSpaces').length, 0);
+      assert.lengthOf(editor.editor.dom.querySelectorAll('.cm-trailingWhitespace, .cm-highlightedSpaces'), 0);
       Common.Settings.Settings.instance().moduleSetting('show-whitespaces-in-editor').set('all');
-      assert.strictEqual(editor.editor.dom.querySelectorAll('.cm-highlightedSpaces').length, 4);
-      assert.strictEqual(editor.editor.dom.querySelectorAll('.cm-highlightedTab').length, 1);
+      assert.lengthOf(editor.editor.dom.querySelectorAll('.cm-highlightedSpaces'), 4);
+      assert.lengthOf(editor.editor.dom.querySelectorAll('.cm-highlightedTab'), 1);
       Common.Settings.Settings.instance().moduleSetting('show-whitespaces-in-editor').set('trailing');
-      assert.strictEqual(editor.editor.dom.querySelectorAll('.cm-highlightedSpaces').length, 0);
-      assert.strictEqual(editor.editor.dom.querySelectorAll('.cm-trailingWhitespace').length, 2);
+      assert.lengthOf(editor.editor.dom.querySelectorAll('.cm-highlightedSpaces'), 0);
+      assert.lengthOf(editor.editor.dom.querySelectorAll('.cm-trailingWhitespace'), 2);
       Common.Settings.Settings.instance().moduleSetting('show-whitespaces-in-editor').set('none');
-      assert.strictEqual(editor.editor.dom.querySelectorAll('.cm-trailingWhitespace, .cm-highlightedSpaces').length, 0);
+      assert.lengthOf(editor.editor.dom.querySelectorAll('.cm-trailingWhitespace, .cm-highlightedSpaces'), 0);
       editor.remove();
     });
 
@@ -230,8 +232,8 @@ describeWithMockConnection('TextEditor autocompletion', () => {
     const {pluginManager} = Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance(
         {forceNew: true, targetManager, resourceMapping});
     const testScript = debuggerModel.parsedScriptSource(
-        '1' as Protocol.Runtime.ScriptId, 'script://1' as Platform.DevToolsPath.UrlString, 0, 0, 0, 0,
-        executionContext.id, '', undefined, false, undefined, false, false, 0, null, null, null, null, null, null);
+        '1' as Protocol.Runtime.ScriptId, urlString`script://1`, 0, 0, 0, 0, executionContext.id, '', undefined, false,
+        undefined, false, false, 0, null, null, null, null, null, null);
     const payload: Protocol.Debugger.CallFrame = {
       callFrameId: '0' as Protocol.Debugger.CallFrameId,
       functionName: 'test',

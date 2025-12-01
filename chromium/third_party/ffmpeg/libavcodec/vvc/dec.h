@@ -101,6 +101,8 @@ typedef struct VVCFrame {
      * A combination of VVC_FRAME_FLAG_*
      */
     uint8_t flags;
+
+    void *hwaccel_picture_private; ///< hardware accelerator private data
 } VVCFrame;
 
 typedef struct SliceContext {
@@ -159,9 +161,7 @@ typedef struct VVCFrameContext {
         uint8_t *skip;                                  ///< CuSkipFlag[][]
         uint8_t *ispmf;                                 ///< intra_sub_partitions_mode_flag
         uint8_t *msm[2];                                ///< MttSplitMode[][][] in 32 pixels
-        uint8_t *imf;                                   ///< IntraMipFlag[][]
-        uint8_t *imtf;                                  ///< intra_mip_transposed_flag[][]
-        uint8_t *imm;                                   ///< intra_mip_mode[][]
+        uint8_t *imf;                                   ///< IntraMipFlag[][], intra_mip_transposed_flag[][], intra_mip_mode[][]
         uint8_t *ipm;                                   ///< IntraPredModeY[][]
         uint8_t *cpm[2];                                ///< CuPredMode[][][]
         uint8_t *msf;                                   ///< MergeSubblockFlag[][]
@@ -241,6 +241,8 @@ typedef struct VVCContext {
 
     uint64_t nb_frames;     ///< processed frames
     int nb_delayed;         ///< delayed frames
+
+    enum AVPixelFormat pix_fmt; ///< pix format of current frame
 }  VVCContext ;
 
 #endif /* AVCODEC_VVC_DEC_H */

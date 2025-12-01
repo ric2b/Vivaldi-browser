@@ -3,17 +3,7 @@
 // found in the LICENSE file.
 
 import {describeWithEnvironment} from '../../../testing/EnvironmentHelpers.js';
-import {getFirstOrError, getInsightOrError} from '../../../testing/InsightHelpers.js';
-import {TraceLoader} from '../../../testing/TraceLoader.js';
-
-export async function processTrace(testContext: Mocha.Suite|Mocha.Context|null, traceFile: string) {
-  const {parsedTrace, insights} = await TraceLoader.traceEngine(testContext, traceFile);
-  if (!insights) {
-    throw new Error('No insights');
-  }
-
-  return {data: parsedTrace, insights};
-}
+import {getFirstOrError, getInsightOrError, processTrace} from '../../../testing/InsightHelpers.js';
 
 describeWithEnvironment('FontDisplay', function() {
   it('finds no requests for remote fonts', async () => {
@@ -22,7 +12,7 @@ describeWithEnvironment('FontDisplay', function() {
     const insight =
         getInsightOrError('FontDisplay', insights, getFirstOrError(data.Meta.navigationsByNavigationId.values()));
 
-    assert.strictEqual(insight.fonts.length, 0);
+    assert.lengthOf(insight.fonts, 0);
   });
 
   it('finds requests for remote fonts', async () => {
@@ -31,7 +21,7 @@ describeWithEnvironment('FontDisplay', function() {
     const insight =
         getInsightOrError('FontDisplay', insights, getFirstOrError(data.Meta.navigationsByNavigationId.values()));
 
-    assert.deepStrictEqual(insight.fonts.map(f => ({...f, request: f.request.args.data.url})), [
+    assert.deepEqual(insight.fonts.map(f => ({...f, request: f.request.args.data.url})), [
       {
         request: 'https://fonts.gstatic.com/s/ptsans/v17/jizaRExUiTo99u79D0KExcOPIDU.woff2',
         display: 'auto',

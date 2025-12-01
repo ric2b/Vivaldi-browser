@@ -7,10 +7,10 @@
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "components/search_engines/prepopulated_engines.h"
 #include "components/search_engines/search_engines_switches.h"
 #include "components/search_engines/template_url_data_util.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
+#include "components/search_engines/prepopulated_engines.h"
 
 ReconcilingTemplateURLDataHolder::ReconcilingTemplateURLDataHolder(
     PrefService* pref_service,
@@ -63,7 +63,7 @@ ReconcilingTemplateURLDataHolder::FindMatchingBuiltInDefinitionsByKeyword(
           pref_service_, search_engine_choice_service_);
 
   auto engine_iter =
-      base::ranges::find(prepopulated_urls, keyword, &TemplateURLData::keyword);
+      std::ranges::find(prepopulated_urls, keyword, &TemplateURLData::keyword);
 
   std::unique_ptr<TemplateURLData> result;
   if (engine_iter != prepopulated_urls.end()) {
@@ -88,8 +88,8 @@ ReconcilingTemplateURLDataHolder::FindMatchingBuiltInDefinitionsById(
       TemplateURLPrepopulateData::GetPrepopulatedEngines(
           pref_service_, search_engine_choice_service_);
 
-  auto engine_iter = base::ranges::find(prepopulated_urls, prepopulate_id,
-                                        &TemplateURLData::prepopulate_id);
+  auto engine_iter = std::ranges::find(prepopulated_urls, prepopulate_id,
+                                       &TemplateURLData::prepopulate_id);
 
   std::unique_ptr<TemplateURLData> result;
   if (engine_iter != prepopulated_urls.end()) {

@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_ASH_POLICY_REPORTING_USER_SESSION_ACTIVITY_USER_SESSION_ACTIVITY_REPORTER_H_
 #define CHROME_BROWSER_ASH_POLICY_REPORTING_USER_SESSION_ACTIVITY_USER_SESSION_ACTIVITY_REPORTER_H_
 
+#include <optional>
+
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
@@ -40,8 +42,12 @@ static constexpr base::TimeDelta kActiveIdleStateCollectionFrequency =
 //
 // The following events imply that the user is active
 // * Keyboard, mouse interaction
-// * Media playing
+// * Video playing
 // * Changing the device's power source
+//
+// Note: Audio activity is excluded from user activity because
+// `chrome/browser/ash/power/ml/idle_event_notifier.cc` does not currently track
+// audio activity.
 //
 // The following types of user sessions are reported:
 // * Managed guest sessions
@@ -84,15 +90,18 @@ class UserSessionActivityReporter
 
     // Adds an active or idle state to the current session activity state.
     virtual void AddActiveIdleState(bool user_is_active,
-                                    const user_manager::User*) = 0;
+                                    const user_manager::User*,
+                                    const std::string& session_id) = 0;
 
     // Sets the session start field in the session activity state.
     virtual void SetSessionStartEvent(reporting::SessionStartEvent::Reason,
-                                      const user_manager::User*) = 0;
+                                      const user_manager::User*,
+                                      const std::string& session_id) = 0;
 
     // Sets the session end field in the session activity state.
     virtual void SetSessionEndEvent(reporting::SessionEndEvent::Reason,
-                                    const user_manager::User*) = 0;
+                                    const user_manager::User*,
+                                    const std::string& session_id) = 0;
 
    protected:
     Delegate() = default;
@@ -130,6 +139,10 @@ class UserSessionActivityReporter
   // ManagedSessionService::Observer
   // Called when device is locked.
   void OnLocked() override;
+
+  // ManagedSessionService::Observer
+  // Called when device is unlocked.
+  void OnUnlocked() override;
 
  private:
   // Starts the user session. Called by OnLogin() and OnUnlocked().
@@ -185,6 +198,8 @@ class UserSessionActivityReporter
   // User of an active session. Null when there's no active session.
   raw_ptr<const user_manager::User> session_user_
       GUARDED_BY_CONTEXT(sequence_checker_);
+
+  std::optional<std::string> session_id_;
 
   // Must be the last member.
   base::WeakPtrFactory<UserSessionActivityReporter> weak_ptr_factory_{this};

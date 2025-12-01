@@ -46,7 +46,7 @@ suggestions that may come from browsing history, bookmarks, or Instant Suggest.
 There is also inline autocomplete, which is an autocomplete result inserted into
 the text edit area itself. Inline autocomplete seems to be already disabled
 during IME composition as it would otherwise interfere with composition (see
-<http://crbug.com/64983> and <http://crbug.com/75651>).
+<https://crbug.com/64983> and <https://crbug.com/75651>).
 
 ### The IME
 

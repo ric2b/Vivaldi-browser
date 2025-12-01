@@ -476,6 +476,14 @@ int PropertyTreeManager::EnsureCompositorTransformNode(
     transform_tree_.AddNodeAffectedByOuterViewportBoundsDelta(id);
   }
 
+  if (base::FeatureList::IsEnabled(
+          features::kDynamicSafeAreaInsetsSupportedByCC)) {
+    if (transform_node.IsAffectedBySafeAreaBottom()) {
+      compositor_node.moved_by_safe_area_bottom = true;
+      transform_tree_.AddNodeAffectedBySafeAreaInsetBottom(id);
+    }
+  }
+
   compositor_node.in_subtree_of_page_scale_layer =
       transform_node.IsInSubtreeOfPageScale();
 
@@ -492,8 +500,8 @@ int PropertyTreeManager::EnsureCompositorTransformNode(
         transform_tree_.EnsureStickyPositionData(id);
     sticky_data.constraints = *sticky_constraint;
     const auto& scroll_ancestor = transform_node.NearestScrollTranslationNode();
-    sticky_data.scroll_ancestor = EnsureCompositorScrollAndTransformNode(
-        scroll_ancestor, InfiniteIntRect());
+    sticky_data.scroll_ancestor =
+        EnsureCompositorScrollAndTransformNode(scroll_ancestor);
     const auto& scroll_ancestor_compositor_node =
         *scroll_tree_.Node(sticky_data.scroll_ancestor);
     if (scroll_ancestor_compositor_node.scrolls_outer_viewport)
@@ -665,8 +673,7 @@ int PropertyTreeManager::EnsureCompositorScrollNodeInternal(
 }
 
 int PropertyTreeManager::EnsureCompositorScrollAndTransformNode(
-    const TransformPaintPropertyNode& scroll_translation,
-    const gfx::Rect& scrolling_contents_cull_rect) {
+    const TransformPaintPropertyNode& scroll_translation) {
   EnsureCompositorTransformNode(scroll_translation);
   int id = scroll_translation.ScrollNode()->CcNodeId(new_sequence_number_);
   DCHECK(scroll_tree_.Node(id));
@@ -675,16 +682,14 @@ int PropertyTreeManager::EnsureCompositorScrollAndTransformNode(
 
 int PropertyTreeManager::EnsureCompositorInnerScrollAndTransformNode(
     const TransformPaintPropertyNode& scroll_translation) {
-  int node_id = EnsureCompositorScrollAndTransformNode(scroll_translation,
-                                                       InfiniteIntRect());
+  int node_id = EnsureCompositorScrollAndTransformNode(scroll_translation);
   scroll_tree_.Node(node_id)->scrolls_inner_viewport = true;
   return node_id;
 }
 
 int PropertyTreeManager::EnsureCompositorOuterScrollAndTransformNode(
     const TransformPaintPropertyNode& scroll_translation) {
-  int node_id = EnsureCompositorScrollAndTransformNode(scroll_translation,
-                                                       InfiniteIntRect());
+  int node_id = EnsureCompositorScrollAndTransformNode(scroll_translation);
   scroll_tree_.Node(node_id)->scrolls_outer_viewport = true;
   return node_id;
 }
@@ -727,7 +732,7 @@ void PropertyTreeManager::EmitClipMaskLayer() {
   mask_layer->SetTransformTreeIndex(
       EnsureCompositorTransformNode(*current_.transform));
   int scroll_id = EnsureCompositorScrollAndTransformNode(
-      current_.transform->NearestScrollTranslationNode(), InfiniteIntRect());
+      current_.transform->NearestScrollTranslationNode());
   mask_layer->SetScrollTreeIndex(scroll_id);
   mask_layer->SetClipTreeIndex(mask_effect.clip_id);
   mask_layer->SetEffectTreeIndex(mask_effect.id);

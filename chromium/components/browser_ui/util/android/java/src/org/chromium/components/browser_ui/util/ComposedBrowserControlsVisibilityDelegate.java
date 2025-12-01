@@ -4,13 +4,19 @@
 
 package org.chromium.components.browser_ui.util;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import org.chromium.base.Callback;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.cc.input.BrowserControlsState;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /** Delegate for the visibility of browser controls that combines the results of other delegates. */
+@NullMarked
 public class ComposedBrowserControlsVisibilityDelegate extends BrowserControlsVisibilityDelegate {
     private final List<BrowserControlsVisibilityDelegate> mDelegates;
     private final Callback<Integer> mConstraintsUpdatedCallback;
@@ -25,20 +31,61 @@ public class ComposedBrowserControlsVisibilityDelegate extends BrowserControlsVi
             BrowserControlsVisibilityDelegate... delegates) {
         super(BrowserControlsState.BOTH);
         mSetDisabled = true;
-        mDelegates = new ArrayList<>();
+        mDelegates = new ArrayList<>(Arrays.asList(delegates));
         mConstraintsUpdatedCallback = (constraints) -> super.set(calculateVisibilityConstraints());
-        for (int i = 0; i < delegates.length; i++) addDelegate(delegates[i]);
-        super.set(calculateVisibilityConstraints());
+        // We start initially with no observers and we don't actively update the set() value here.
+        // It will be calculated on-demand in get() instead.
     }
 
     /**
      * Adds an additional delegate to the composed visibility delegate that will determine the
      * overall visibility constraints.
+     *
      * @param delegate The delegate to be added.
      */
     public void addDelegate(BrowserControlsVisibilityDelegate delegate) {
         mDelegates.add(delegate);
-        delegate.addObserver(mConstraintsUpdatedCallback);
+        if (hasObservers()) {
+            delegate.addObserver(mConstraintsUpdatedCallback);
+            // Update the set() value now, so get() right after this call will return the right
+            // value.
+            super.set(calculateVisibilityConstraints());
+        }
+    }
+
+    @Override
+    public @Nullable Integer addObserver(Callback<Integer> obs) {
+        if (!hasObservers()) {
+            for (int i = 0; i < mDelegates.size(); i++) {
+                mDelegates.get(i).addObserver(mConstraintsUpdatedCallback);
+            }
+            // Since the observer is not added yet, we need to trigger an update manually.
+            super.set(calculateVisibilityConstraints());
+        }
+        return super.addObserver(obs);
+    }
+
+    @Override
+    public void removeObserver(Callback<Integer> obs) {
+        super.removeObserver(obs);
+        if (!hasObservers()) {
+            // One of the delegates can be activity-scoped and live longer than e.g. a tab-scoped
+            // observer. Unsubscribe when the last observer goes away, to keep the behavior
+            // consistent with using the wrapped delegate directly, and to prevent memory leaks.
+            for (int i = 0; i < mDelegates.size(); i++) {
+                mDelegates.get(i).removeObserver(mConstraintsUpdatedCallback);
+            }
+        }
+    }
+
+    @Override
+    public @Nullable Integer get() {
+        // When there are no observers, we don't actively update the set() value and calculate a
+        // fresh value on demand.
+        if (!hasObservers()) {
+            return calculateVisibilityConstraints();
+        }
+        return super.get();
     }
 
     @Override
@@ -55,7 +102,7 @@ public class ComposedBrowserControlsVisibilityDelegate extends BrowserControlsVi
     private @BrowserControlsState int calculateVisibilityConstraints() {
         boolean shouldBeShown = false;
         for (int i = 0; i < mDelegates.size(); i++) {
-            @BrowserControlsState int delegateConstraints = mDelegates.get(i).get();
+            @BrowserControlsState int delegateConstraints = assumeNonNull(mDelegates.get(i).get());
             if (delegateConstraints == BrowserControlsState.HIDDEN) {
                 return BrowserControlsState.HIDDEN;
             }

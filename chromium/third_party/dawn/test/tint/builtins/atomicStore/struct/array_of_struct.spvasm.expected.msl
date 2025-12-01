@@ -53,9 +53,9 @@ void compute_main_inner(uint local_invocation_index_2, threadgroup tint_array<S_
       break;
     }
     uint const x_28 = idx;
-    (*(tint_symbol_1))[x_28].x = 0;
-    atomic_store_explicit(&((*(tint_symbol_1))[x_28].a), 0u, memory_order_relaxed);
-    (*(tint_symbol_1))[x_28].y = 0u;
+    (*(tint_symbol_1))[min(x_28, 9u)].x = 0;
+    atomic_store_explicit(&((*(tint_symbol_1))[min(x_28, 9u)].a), 0u, memory_order_relaxed);
+    (*(tint_symbol_1))[min(x_28, 9u)].y = 0u;
     {
       idx = (idx + 1u);
     }

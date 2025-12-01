@@ -26,7 +26,6 @@ import org.robolectric.annotation.Config;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.browser.browserservices.ui.TrustedWebActivityModel;
-import org.chromium.chrome.browser.browserservices.ui.trustedwebactivity.FilledLazy;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
@@ -50,7 +49,7 @@ public class DisclosureInfobarTest {
         mInfobar =
                 new DisclosureInfobar(
                         RuntimeEnvironment.application.getResources(),
-                        new FilledLazy<>(mSnackbarManager),
+                        () -> mSnackbarManager,
                         mModel,
                         mLifecycleDispatcher);
     }

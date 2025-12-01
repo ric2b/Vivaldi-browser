@@ -104,7 +104,6 @@ struct SymbolDecoderContext {
   // Returns the cdf array index for inter_tx_type or intra_tx_type based on
   // |tx_set|.
   static int TxTypeIndex(TransformSet tx_set) {
-    assert(tx_set != kTransformSetDctOnly);
     switch (tx_set) {
       case kTransformSetInter1:
       case kTransformSetIntra1:
@@ -115,7 +114,10 @@ struct SymbolDecoderContext {
       case kTransformSetInter3:
         return 2;
       default:
-        return -1;
+        // This path should not be hit. 0 is returned rather than -1 to avoid
+        // -Warray-bounds.
+        assert(tx_set != kTransformSetDctOnly && tx_set != kNumTransformSets);
+        return 0;
     }
   }
 

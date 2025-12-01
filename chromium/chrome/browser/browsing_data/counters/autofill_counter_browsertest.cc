@@ -2,13 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "components/browsing_data/core/counters/autofill_counter.h"
 
+#include <array>
 #include <memory>
 
 #include "base/functional/bind.h"
@@ -18,6 +14,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
+#include "base/test/test_future.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
 #include "base/uuid.h"
@@ -27,15 +24,15 @@
 #include "chrome/browser/user_annotations/user_annotations_service_factory.h"
 #include "chrome/browser/webdata_services/web_data_service_factory.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "components/autofill/core/browser/address_data_manager.h"
-#include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/autofill_type.h"
+#include "components/autofill/core/browser/data_manager/addresses/address_data_manager.h"
+#include "components/autofill/core/browser/data_manager/payments/payments_data_manager.h"
+#include "components/autofill/core/browser/data_manager/personal_data_manager.h"
+#include "components/autofill/core/browser/data_manager/personal_data_manager_test_utils.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
-#include "components/autofill/core/browser/payments_data_manager.h"
-#include "components/autofill/core/browser/personal_data_manager.h"
-#include "components/autofill/core/browser/personal_data_manager_test_utils.h"
-#include "components/autofill/core/browser/test_autofill_clock.h"
+#include "components/autofill/core/browser/test_utils/autofill_test_utils.h"
+#include "components/autofill/core/browser/test_utils/test_autofill_clock.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/browsing_data/core/browsing_data_utils.h"
 #include "components/browsing_data/core/pref_names.h"
@@ -47,6 +44,10 @@
 
 namespace {
 
+using browsing_data::AutofillCounter;
+typedef base::test::TestFuture<
+    std::unique_ptr<browsing_data::BrowsingDataCounter::Result>>
+    CounterFuture;
 class AutofillCounterTest : public InProcessBrowserTest {
  public:
   AutofillCounterTest() = default;
@@ -54,7 +55,7 @@ class AutofillCounterTest : public InProcessBrowserTest {
   AutofillCounterTest(const AutofillCounterTest&) = delete;
   AutofillCounterTest& operator=(const AutofillCounterTest&) = delete;
 
-  ~AutofillCounterTest() override {}
+  ~AutofillCounterTest() override = default;
 
   void SetUpOnMainThread() override {
     personal_data_manager_ =
@@ -189,65 +190,60 @@ class AutofillCounterTest : public InProcessBrowserTest {
     return user_annotations_service_.get();
   }
 
-  // Callback and result retrieval ---------------------------------------------
-
-  void WaitForCounting() {
-    run_loop_ = std::make_unique<base::RunLoop>();
-    run_loop_->Run();
-  }
+  // Result retrieval ---------------------------------------------
 
   browsing_data::BrowsingDataCounter::ResultInt GetNumSuggestions() {
-    DCHECK(finished_);
     return num_suggestions_;
   }
 
   browsing_data::BrowsingDataCounter::ResultInt GetNumCreditCards() {
-    DCHECK(finished_);
     return num_credit_cards_;
   }
 
   browsing_data::BrowsingDataCounter::ResultInt GetNumAddresses() {
-    DCHECK(finished_);
     return num_addresses_;
   }
 
   browsing_data::BrowsingDataCounter::ResultInt GetNumUserAnnotations() {
-    DCHECK(finished_);
     return num_user_annotations_;
   }
 
-  void Callback(
-      std::unique_ptr<browsing_data::BrowsingDataCounter::Result> result) {
-    finished_ = result->Finished();
-
-    if (finished_) {
-      browsing_data::AutofillCounter::AutofillResult* autofill_result =
-          static_cast<browsing_data::AutofillCounter::AutofillResult*>(
-              result.get());
-
-      num_suggestions_ = autofill_result->Value();
-      num_credit_cards_ = autofill_result->num_credit_cards();
-      num_addresses_ = autofill_result->num_addresses();
-      num_user_annotations_ = autofill_result->num_user_annotation_entries();
-
-      if (run_loop_)
-        run_loop_->Quit();
-    }
+  browsing_data::AutofillCounter::ResultInt GetCounterValue() {
+    return counter_value_;
   }
+
+  void WaitForResult() {
+    std::unique_ptr<browsing_data::BrowsingDataCounter::Result> result =
+        future.Take();
+    while (!result->Finished()) {
+      future.Clear();
+      result = future.Take();
+    }
+
+    AutofillCounter::AutofillResult* autofill_result =
+        static_cast<AutofillCounter::AutofillResult*>(result.get());
+    counter_value_ = autofill_result->Value();
+    num_credit_cards_ = autofill_result->num_credit_cards();
+    num_addresses_ = autofill_result->num_addresses();
+    num_user_annotations_ = autofill_result->num_user_annotation_entries();
+  }
+
+ protected:
+  CounterFuture future;
 
  private:
   autofill::test::AutofillBrowserTestEnvironment autofill_test_environment_;
-  std::unique_ptr<base::RunLoop> run_loop_;
-
   std::vector<std::string> credit_card_ids_;
   std::vector<std::string> address_ids_;
+
+  std::unique_ptr<base::RunLoop> run_loop_;
 
   raw_ptr<autofill::PersonalDataManager> personal_data_manager_;
   scoped_refptr<autofill::AutofillWebDataService> web_data_service_;
   std::unique_ptr<user_annotations::TestUserAnnotationsService>
       user_annotations_service_;
 
-  bool finished_;
+  browsing_data::BrowsingDataCounter::ResultInt counter_value_;
   browsing_data::BrowsingDataCounter::ResultInt num_suggestions_;
   browsing_data::BrowsingDataCounter::ResultInt num_credit_cards_;
   browsing_data::BrowsingDataCounter::ResultInt num_addresses_;
@@ -260,38 +256,38 @@ IN_PROC_BROWSER_TEST_F(AutofillCounterTest, AutocompleteSuggestions) {
   browsing_data::AutofillCounter counter(
       GetPersonalDataManager(), GetWebDataService(),
       /*user_annotations_service=*/nullptr, /*sync_service=*/nullptr);
+
   counter.Init(profile->GetPrefs(),
                browsing_data::ClearBrowsingDataTab::ADVANCED,
-               base::BindRepeating(&AutofillCounterTest::Callback,
-                                   base::Unretained(this)));
+               future.GetRepeatingCallback());
   counter.Restart();
-  WaitForCounting();
-  EXPECT_EQ(0, GetNumSuggestions());
+  WaitForResult();
+  EXPECT_EQ(0, GetCounterValue());
 
   AddAutocompleteSuggestion("email", "example@example.com");
   counter.Restart();
-  WaitForCounting();
-  EXPECT_EQ(1, GetNumSuggestions());
+  WaitForResult();
+  EXPECT_EQ(1, GetCounterValue());
 
   AddAutocompleteSuggestion("tel", "+123456789");
   counter.Restart();
-  WaitForCounting();
-  EXPECT_EQ(2, GetNumSuggestions());
+  WaitForResult();
+  EXPECT_EQ(2, GetCounterValue());
 
   AddAutocompleteSuggestion("tel", "+987654321");
   counter.Restart();
-  WaitForCounting();
-  EXPECT_EQ(3, GetNumSuggestions());
+  WaitForResult();
+  EXPECT_EQ(3, GetCounterValue());
 
   RemoveAutocompleteSuggestion("email", "example@example.com");
   counter.Restart();
-  WaitForCounting();
-  EXPECT_EQ(2, GetNumSuggestions());
+  WaitForResult();
+  EXPECT_EQ(2, GetCounterValue());
 
   ClearAutocompleteSuggestions();
   counter.Restart();
-  WaitForCounting();
-  EXPECT_EQ(0, GetNumSuggestions());
+  WaitForResult();
+  EXPECT_EQ(0, GetCounterValue());
 }
 
 // Tests that we count the correct number of credit cards.
@@ -300,37 +296,43 @@ IN_PROC_BROWSER_TEST_F(AutofillCounterTest, CreditCards) {
   browsing_data::AutofillCounter counter(
       GetPersonalDataManager(), GetWebDataService(),
       /*user_annotations_service=*/nullptr, /*sync_service=*/nullptr);
+
   counter.Init(profile->GetPrefs(),
                browsing_data::ClearBrowsingDataTab::ADVANCED,
-               base::BindRepeating(&AutofillCounterTest::Callback,
-                                   base::Unretained(this)));
+               future.GetRepeatingCallback());
   counter.Restart();
-  WaitForCounting();
+  WaitForResult();
+
   EXPECT_EQ(0, GetNumCreditCards());
 
   AddCreditCard("0000-0000-0000-0000", "1", "2015", "1");
   counter.Restart();
-  WaitForCounting();
+  WaitForResult();
+
   EXPECT_EQ(1, GetNumCreditCards());
 
   AddCreditCard("0123-4567-8910-1112", "10", "2015", "1");
   counter.Restart();
-  WaitForCounting();
+  WaitForResult();
+
   EXPECT_EQ(2, GetNumCreditCards());
 
   AddCreditCard("1211-1098-7654-3210", "10", "2030", "1");
   counter.Restart();
-  WaitForCounting();
+  WaitForResult();
+
   EXPECT_EQ(3, GetNumCreditCards());
 
   RemoveLastCreditCard();
   counter.Restart();
-  WaitForCounting();
+  WaitForResult();
+
   EXPECT_EQ(2, GetNumCreditCards());
 
   ClearCreditCardsAndAddresses();
   counter.Restart();
-  WaitForCounting();
+  WaitForResult();
+
   EXPECT_EQ(0, GetNumCreditCards());
 }
 
@@ -340,37 +342,43 @@ IN_PROC_BROWSER_TEST_F(AutofillCounterTest, Addresses) {
   browsing_data::AutofillCounter counter(
       GetPersonalDataManager(), GetWebDataService(),
       /*user_annotations_service=*/nullptr, /*sync_service=*/nullptr);
+
   counter.Init(profile->GetPrefs(),
                browsing_data::ClearBrowsingDataTab::ADVANCED,
-               base::BindRepeating(&AutofillCounterTest::Callback,
-                                   base::Unretained(this)));
+               future.GetRepeatingCallback());
   counter.Restart();
-  WaitForCounting();
+
+  WaitForResult();
   EXPECT_EQ(0, GetNumAddresses());
 
   AddAddress("John", "Doe", "Main Street 12345");
   counter.Restart();
-  WaitForCounting();
+  WaitForResult();
+
   EXPECT_EQ(1, GetNumAddresses());
 
   AddAddress("Jane", "Smith", "Main Street 12346");
   counter.Restart();
-  WaitForCounting();
+  WaitForResult();
+
   EXPECT_EQ(2, GetNumAddresses());
 
   AddAddress("John", "Smith", "Side Street 47");
   counter.Restart();
-  WaitForCounting();
+  WaitForResult();
+
   EXPECT_EQ(3, GetNumAddresses());
 
   RemoveLastAddress();
   counter.Restart();
-  WaitForCounting();
+  WaitForResult();
+
   EXPECT_EQ(2, GetNumAddresses());
 
   ClearCreditCardsAndAddresses();
   counter.Restart();
-  WaitForCounting();
+  WaitForResult();
+
   EXPECT_EQ(0, GetNumAddresses());
 }
 
@@ -382,16 +390,15 @@ IN_PROC_BROWSER_TEST_F(AutofillCounterTest, UserAnnotations) {
       GetUserAnnotationsService(), /*sync_service=*/nullptr);
   counter.Init(profile->GetPrefs(),
                browsing_data::ClearBrowsingDataTab::ADVANCED,
-               base::BindRepeating(&AutofillCounterTest::Callback,
-                                   base::Unretained(this)));
+               future.GetRepeatingCallback());
   counter.Restart();
-  WaitForCounting();
+  WaitForResult();
   EXPECT_EQ(0, GetNumUserAnnotations());
 
   SetUserAnnotations(
       std::vector(10, optimization_guide::proto::UserAnnotationsEntry{}));
   counter.Restart();
-  WaitForCounting();
+  WaitForResult();
   EXPECT_EQ(10, GetNumUserAnnotations());
 }
 
@@ -415,13 +422,15 @@ IN_PROC_BROWSER_TEST_F(AutofillCounterTest, ComplexResult) {
   browsing_data::AutofillCounter counter(
       GetPersonalDataManager(), GetWebDataService(),
       /*user_annotations_service=*/nullptr, /*sync_service=*/nullptr);
+
   counter.Init(profile->GetPrefs(),
                browsing_data::ClearBrowsingDataTab::ADVANCED,
-               base::BindRepeating(&AutofillCounterTest::Callback,
-                                   base::Unretained(this)));
+               future.GetRepeatingCallback());
   counter.Restart();
-  WaitForCounting();
-  EXPECT_EQ(5, GetNumSuggestions());
+
+  WaitForResult();
+
+  EXPECT_EQ(5, GetCounterValue());
   EXPECT_EQ(2, GetNumCreditCards());
   EXPECT_EQ(3, GetNumAddresses());
 }
@@ -459,46 +468,55 @@ IN_PROC_BROWSER_TEST_F(AutofillCounterTest, TimeRanges) {
     const browsing_data::BrowsingDataCounter::ResultInt expected_num_addresses;
     const browsing_data::BrowsingDataCounter::ResultInt
         expected_num_user_annotations;
-  } test_cases[] = {{base::Time(), 2, 3, 3, 0},
-                    {kTime1, 2, 3, 3, 0},
-                    {kTime2, 1, 2, 2, 0},
-                    {kTime3, 1, 1, 0, 0}};
+  };
+  auto test_cases = std::to_array<TestCase>({
+      {base::Time(), 2, 3, 3, 0},
+      {kTime1, 2, 3, 3, 0},
+      {kTime2, 1, 2, 2, 0},
+      {kTime3, 1, 1, 0, 0},
+  });
 
   Profile* profile = browser()->profile();
   browsing_data::AutofillCounter counter(
       GetPersonalDataManager(), GetWebDataService(),
       /*user_annotations_service=*/nullptr, /*sync_service=*/nullptr);
+
   counter.Init(profile->GetPrefs(),
                browsing_data::ClearBrowsingDataTab::ADVANCED,
-               base::BindRepeating(&AutofillCounterTest::Callback,
-                                   base::Unretained(this)));
+               future.GetRepeatingCallback());
 
   for (size_t i = 0; i < std::size(test_cases); i++) {
     SCOPED_TRACE(base::StringPrintf("Test case %zu", i));
     const auto& test_case = test_cases[i];
     counter.SetPeriodStartForTesting(test_case.period_start);
     counter.Restart();
-    WaitForCounting();
-    EXPECT_EQ(test_case.expected_num_suggestions, GetNumSuggestions());
+
+    WaitForResult();
+
+    EXPECT_EQ(test_case.expected_num_suggestions, GetCounterValue());
     EXPECT_EQ(test_case.expected_num_credit_cards, GetNumCreditCards());
     EXPECT_EQ(test_case.expected_num_addresses, GetNumAddresses());
     EXPECT_EQ(test_case.expected_num_user_annotations, GetNumUserAnnotations());
+    future.Clear();
   }
 
   // Test the results for different ending points and base::Time as start.
   counter.SetPeriodStartForTesting(base::Time());
   counter.SetPeriodEndForTesting(kTime2);
   counter.Restart();
-  WaitForCounting();
-  EXPECT_EQ(1, GetNumSuggestions());
+
+  WaitForResult();
+  EXPECT_EQ(1, GetCounterValue());
   EXPECT_EQ(1, GetNumCreditCards());
   EXPECT_EQ(1, GetNumAddresses());
   EXPECT_EQ(0, GetNumUserAnnotations());
 
   counter.SetPeriodEndForTesting(kTime3);
   counter.Restart();
-  WaitForCounting();
-  EXPECT_EQ(1, GetNumSuggestions());
+
+  WaitForResult();
+
+  EXPECT_EQ(1, GetCounterValue());
   EXPECT_EQ(2, GetNumCreditCards());
   EXPECT_EQ(3, GetNumAddresses());
   EXPECT_EQ(0, GetNumUserAnnotations());

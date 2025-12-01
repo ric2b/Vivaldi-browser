@@ -8,7 +8,6 @@
 
 #include "base/command_line.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/extensions/test_extension_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/browser/signin/account_consistency_mode_manager.h"
@@ -29,13 +28,9 @@
 #include "ui/events/event_constants.h"
 #include "ui/gfx/range/range.h"
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/ui/views/profiles/profile_menu_view.h"
-#endif
-
 class BookmarkBubbleSignInDelegateTest : public InProcessBrowserTest {
  public:
-  BookmarkBubbleSignInDelegateTest() {}
+  BookmarkBubbleSignInDelegateTest() = default;
 
   BookmarkBubbleSignInDelegateTest(const BookmarkBubbleSignInDelegateTest&) =
       delete;

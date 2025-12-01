@@ -533,10 +533,29 @@ void InlineBoxFragmentPainter::PaintAllFragments(
   InlineCursor first_container_cursor(*block_flow);
   first_container_cursor.MoveTo(layout_inline);
 
-  wtf_size_t container_fragment_idx =
-      first_container_cursor.ContainerFragmentIndex() + fragment_data_idx;
-  const PhysicalBoxFragment* container_fragment =
-      block_flow->GetPhysicalFragment(container_fragment_idx);
+  const PhysicalBoxFragment* container_fragment = nullptr;
+  // If the container is marked as potentially non-contiguous, beware of
+  // container fragments with no items. This LayoutInline isn't represented in
+  // such container fragments. We can trust InlineCursor to have taken us to the
+  // correct container fragment where the inline starts, though, so it's only
+  // necessary to do this if the index is larger than 0.
+  if (block_flow->MayBeNonContiguousIfc() && fragment_data_idx > 0) {
+    for (wtf_size_t idx = 0;;
+         first_container_cursor.MoveToNextFragmentainer()) {
+      CHECK(first_container_cursor.Current());
+      const PhysicalBoxFragment& candidate =
+          first_container_cursor.ContainerFragment();
+      if (candidate.HasItems() && idx++ == fragment_data_idx) {
+        container_fragment = &candidate;
+        break;
+      }
+    }
+  } else {
+    wtf_size_t container_fragment_idx =
+        first_container_cursor.ContainerFragmentIndex() + fragment_data_idx;
+    container_fragment =
+        block_flow->GetPhysicalFragment(container_fragment_idx);
+  }
 
   InlineCursor cursor(*container_fragment);
   cursor.MoveTo(layout_inline);

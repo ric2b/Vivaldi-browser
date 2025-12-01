@@ -16,6 +16,7 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/strcat.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/trace_event/memory_usage_estimator.h"
 #include "base/trace_event/trace_event.h"
@@ -29,6 +30,7 @@
 #include "components/sync/engine/data_type_processor_metrics.h"
 #include "components/sync/engine/data_type_processor_proxy.h"
 #include "components/sync/model/client_tag_based_remote_update_handler.h"
+#include "components/sync/model/data_type_activation_request.h"
 #include "components/sync/model/data_type_local_change_processor.h"
 #include "components/sync/model/processor_entity.h"
 #include "components/sync/model/type_entities_count.h"
@@ -44,6 +46,58 @@ namespace syncer {
 namespace {
 
 const char kErrorSiteHistogramPrefix[] = "Sync.DataTypeErrorSite.";
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+//
+// LINT.IfChange(SyncMetadataConsistency)
+enum class SyncMetadataConsistency {
+  // Stored metadata is consistent with the activation request.
+  kMetadataConsistent = 0,
+
+  // The following cases will result in metadata being cleared.
+  kCacheGuidMismatch = 1,
+  kDataTypeIdMismatch = 2,
+
+  // The following cases won't result in metadata being cleared.
+  kEmptyPersistedAuthenticatedAccountId = 3,
+  kAuthenticatedAccountIdMismatch = 4,
+
+  kMaxValue = kAuthenticatedAccountIdMismatch,
+};
+// LINT.ThenChange(//tools/metrics/histograms/metadata/sync/enums.xml:SyncMetadataConsistency)
+
+SyncMetadataConsistency GetSyncMetadataConsistency(
+    const sync_pb::DataTypeState& data_type_state,
+    const DataTypeActivationRequest& activation_request,
+    DataType type) {
+  // Check for a mismatch between the cache guid or the data type id stored
+  // in `data_type_state` and the one received from sync. A mismatch indicates
+  // that the stored metadata are invalid (e.g. has been manipulated) and
+  // don't belong to the current syncing client.
+  if (data_type_state.cache_guid() != activation_request.cache_guid) {
+    return SyncMetadataConsistency::kCacheGuidMismatch;
+  }
+
+  if (data_type_state.progress_marker().data_type_id() !=
+      GetSpecificsFieldNumberFromDataType(type)) {
+    return SyncMetadataConsistency::kDataTypeIdMismatch;
+  }
+
+  // Check for a mismatch in authenticated account id. The id can change after
+  // restart (and this does not mean the account has changed, this is checked
+  // above by cache_guid mismatch).
+  if (data_type_state.authenticated_account_id().empty()) {
+    return SyncMetadataConsistency::kEmptyPersistedAuthenticatedAccountId;
+  }
+
+  if (data_type_state.authenticated_account_id() !=
+      activation_request.authenticated_account_id.ToString()) {
+    return SyncMetadataConsistency::kAuthenticatedAccountIdMismatch;
+  }
+
+  return SyncMetadataConsistency::kMetadataConsistent;
+}
 
 size_t CountDuplicateClientTags(const EntityMetadataMap& metadata_map) {
   size_t count = 0u;
@@ -130,7 +184,7 @@ void ClientTagBasedDataTypeProcessor::OnSyncStarting(
   start_callback_ = std::move(start_callback);
   activation_request_ = request;
 
-  // Notify the bridge sync is starting before calling the |start_callback_|
+  // Notify the bridge sync is starting before calling the `start_callback_`
   // which in turn creates the worker.
   bridge_->OnSyncStarting(request);
 
@@ -243,8 +297,8 @@ void ClientTagBasedDataTypeProcessor::ConnectIfReady() {
           weak_ptr_factory_for_worker_.GetWeakPtr(),
           base::SequencedTaskRunner::GetCurrentDefault());
 
-  // Defer invoking of |start_callback_| to avoid synchronous call from the
-  // |bridge_|. It might cause a situation when inside the ModelReadyToSync()
+  // Defer invoking of `start_callback_` to avoid synchronous call from the
+  // `bridge_`. It might cause a situation when inside the ModelReadyToSync()
   // another methods of the bridge eventually were called. This behavior would
   // be complicated and be unexpected in some bridges.
   // See crbug.com/1055584 for more details.
@@ -273,7 +327,7 @@ void ClientTagBasedDataTypeProcessor::OnSyncStopping(
   switch (metadata_fate) {
     case KEEP_METADATA: {
       bridge_->OnSyncPaused();
-      // The model is still ready to sync (with the same |bridge_|) and same
+      // The model is still ready to sync (with the same `bridge_`) and same
       // sync metadata.
       ResetState(KEEP_METADATA);
       DUMP_WILL_BE_CHECK(model_ready_to_sync_);
@@ -478,7 +532,7 @@ void ClientTagBasedDataTypeProcessor::Put(
                                   DataTypeHistogramValue(type_));
   }
 
-  // |data->specifics| is about to be committed, and therefore represents the
+  // `data->specifics` is about to be committed, and therefore represents the
   // imminent server-side state in most cases.
   sync_pb::EntitySpecifics trimmed_specifics =
       bridge_->TrimAllSupportedFieldsFromRemoteSpecifics(data->specifics);
@@ -493,7 +547,7 @@ void ClientTagBasedDataTypeProcessor::Put(
       entity_tracker_->GetEntityForStorageKey(storage_key);
   if (entity == nullptr) {
     // The bridge is creating a new entity. The bridge may or may not populate
-    // |data->client_tag_hash|, so let's ask for the client tag if needed.
+    // `data->client_tag_hash`, so let's ask for the client tag if needed.
     if (data->client_tag_hash.value().empty()) {
       DUMP_WILL_BE_CHECK(bridge_->SupportsGetClientTag());
       data->client_tag_hash =
@@ -758,7 +812,7 @@ void ClientTagBasedDataTypeProcessor::OnCommitCompleted(
   const DataType data_type = type_;
   base::debug::Alias(&data_type);
 
-  // |error_response_list| is ignored, because all errors are treated as
+  // `error_response_list` is ignored, because all errors are treated as
   // transientand the processor with eventually retry.
 
   std::unique_ptr<MetadataChangeList> metadata_change_list =
@@ -786,8 +840,10 @@ void ClientTagBasedDataTypeProcessor::OnCommitCompleted(
 
     if (CommitOnlyTypes().Has(type_)) {
       if (!entity->IsUnsynced()) {
+        // EntityData() is not used for commit-only types although it could be
+        // created from the entity metadata.
         entity_change_list.push_back(
-            EntityChange::CreateDelete(entity->storage_key()));
+            EntityChange::CreateDelete(entity->storage_key(), EntityData()));
         RemoveEntity(entity->storage_key(), metadata_change_list.get());
       }
       // If unsynced, we could theoretically update persisted metadata to have
@@ -847,7 +903,7 @@ void ClientTagBasedDataTypeProcessor::OnCommitFailed(
     case DataTypeSyncBridge::CommitAttemptFailedBehavior::
         kShouldRetryOnNextCycle:
       // Entities weren't committed. Reset their
-      // |commit_requested_sequence_number| to commit them again on next sync
+      // `commit_requested_sequence_number` to commit them again on next sync
       // cycle.
       entity_tracker_->ClearTransientSyncState();
       break;
@@ -1311,7 +1367,7 @@ void ClientTagBasedDataTypeProcessor::GetAllNodesForDebugging(
     // the authoritative source of truth.
     const ProcessorEntity* entity =
         entity_tracker_->GetEntityForStorageKey(storage_key);
-    // |entity| could be null if there are some unapplied changes.
+    // `entity` could be null if there are some unapplied changes.
     if (entity != nullptr) {
       const sync_pb::EntityMetadata& metadata = entity->metadata();
       // Set id value as the legacy Directory implementation, "s" means server.
@@ -1414,39 +1470,38 @@ void ClientTagBasedDataTypeProcessor::
   if (!entity_tracker_) {
     return;
   }
-  const sync_pb::DataTypeState& data_type_state =
-      entity_tracker_->data_type_state();
 
-  // Check for a mismatch in authenticated account id. The id can change after
-  // restart (and this does not mean the account has changed, this is checked
-  // later here by cache_guid mismatch). Easy to fix in place.
-  // TODO(crbug.com/40897441): This doesn't fit the method name. It's also not
-  // clear if this codepath is even required
-  if (data_type_state.authenticated_account_id() !=
-      activation_request_.authenticated_account_id.ToString()) {
-    sync_pb::DataTypeState update_data_type_state = data_type_state;
-    update_data_type_state.set_authenticated_account_id(
-        activation_request_.authenticated_account_id.ToString());
-    entity_tracker_->set_data_type_state(update_data_type_state);
+  const SyncMetadataConsistency sync_metadata_consistency =
+      GetSyncMetadataConsistency(entity_tracker_->data_type_state(),
+                                 activation_request_, type_);
+  base::UmaHistogramEnumeration(
+      base::StrCat({"Sync.DataTypeMetadataConsistency.",
+                    DataTypeToHistogramSuffix(type_)}),
+      sync_metadata_consistency);
+
+  switch (sync_metadata_consistency) {
+    case SyncMetadataConsistency::kMetadataConsistent:
+      break;
+    case SyncMetadataConsistency::kEmptyPersistedAuthenticatedAccountId:
+    case SyncMetadataConsistency::kAuthenticatedAccountIdMismatch: {
+      // Fix the field in place.
+      // TODO(crbug.com/40897441): This doesn't fit the method name. It's also
+      // not clear if this codepath is even required.
+      sync_pb::DataTypeState update_data_type_state =
+          entity_tracker_->data_type_state();
+      update_data_type_state.set_authenticated_account_id(
+          activation_request_.authenticated_account_id.ToString());
+      entity_tracker_->set_data_type_state(update_data_type_state);
+      break;
+    }
+    // Deeper issues where we need to restart sync for this type.
+    case SyncMetadataConsistency::kCacheGuidMismatch:
+    case SyncMetadataConsistency::kDataTypeIdMismatch:
+      ClearAllTrackedMetadataAndResetState();
+      // Not having `entity_tracker_` results in doing the initial sync again.
+      DUMP_WILL_BE_CHECK(!entity_tracker_);
+      break;
   }
-
-  // Check for deeper issues where we need to restart sync for this type.
-  const bool valid_cache_guid =
-      data_type_state.cache_guid() == activation_request_.cache_guid;
-  // Check for a mismatch between the cache guid or the data type id stored
-  // in |data_type_state_| and the one received from sync. A mismatch indicates
-  // that the stored metadata are invalid (e.g. has been manipulated) and
-  // don't belong to the current syncing client.
-  const bool valid_data_type_id =
-      data_type_state.progress_marker().data_type_id() ==
-      GetSpecificsFieldNumberFromDataType(type_);
-  if (valid_cache_guid && valid_data_type_id) {
-    return;
-  }
-
-  ClearAllTrackedMetadataAndResetState();
-  // Not having `entity_tracker_` results in doing the initial sync again.
-  DUMP_WILL_BE_CHECK(!entity_tracker_);
 }
 
 void ClientTagBasedDataTypeProcessor::GetTypeEntitiesCountForDebugging(

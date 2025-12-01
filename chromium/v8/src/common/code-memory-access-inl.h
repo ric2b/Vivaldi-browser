@@ -37,7 +37,7 @@ RwxMemoryWriteScope::~RwxMemoryWriteScope() {
 
 WritableJitAllocation::~WritableJitAllocation() {
 #ifdef DEBUG
-  if (enforce_write_api_) {
+  if (enforce_write_api_ && page_ref_.has_value()) {
     // We disabled RWX write access for debugging. But we'll need it in the
     // destructor again to release the jit page reference.
     write_scope_.emplace("~WritableJitAllocation");
@@ -64,17 +64,23 @@ WritableJitAllocation::WritableJitAllocation(
     // all Write functions of this class instead.
     write_scope_.reset();
   }
+#else
+  // Suppress -Wunused-private-field warning.
+  (void)enforce_write_api_;
 #endif
 }
 
 WritableJitAllocation::WritableJitAllocation(
-    Address addr, size_t size, ThreadIsolation::JitAllocationType type)
-    : address_(addr), allocation_(size, type) {}
+    Address addr, size_t size, ThreadIsolation::JitAllocationType type,
+    bool enforce_write_api)
+    : address_(addr),
+      allocation_(size, type),
+      enforce_write_api_(enforce_write_api) {}
 
 // static
 WritableJitAllocation WritableJitAllocation::ForNonExecutableMemory(
     Address addr, size_t size, ThreadIsolation::JitAllocationType type) {
-  return WritableJitAllocation(addr, size, type);
+  return WritableJitAllocation(addr, size, type, false);
 }
 
 std::optional<RwxMemoryWriteScope>
@@ -87,22 +93,39 @@ WritableJitAllocation::WriteScopeForApiEnforcement() const {
   return {};
 }
 
+#ifdef V8_ENABLE_WEBASSEMBLY
+
 WritableJumpTablePair::WritableJumpTablePair(Address jump_table_address,
                                              size_t jump_table_size,
                                              Address far_jump_table_address,
                                              size_t far_jump_table_size)
-    : write_scope_("WritableJumpTablePair"),
+    : writable_jump_table_(jump_table_address, jump_table_size,
+                           ThreadIsolation::JitAllocationType::kWasmJumpTable,
+                           true),
+      writable_far_jump_table_(
+          far_jump_table_address, far_jump_table_size,
+          ThreadIsolation::JitAllocationType::kWasmFarJumpTable, true),
+      write_scope_("WritableJumpTablePair"),
       // Always split the pages since we are not guaranteed that the jump table
       // and far jump table are on the same JitPage.
       jump_table_pages_(ThreadIsolation::SplitJitPages(
           far_jump_table_address, far_jump_table_size, jump_table_address,
-          jump_table_size)),
-      jump_table_(jump_table_pages_.second.LookupAllocation(
-          jump_table_address, jump_table_size,
-          ThreadIsolation::JitAllocationType::kWasmJumpTable)),
-      far_jump_table_(jump_table_pages_.first.LookupAllocation(
-          far_jump_table_address, far_jump_table_size,
-          ThreadIsolation::JitAllocationType::kWasmFarJumpTable)) {}
+          jump_table_size)) {
+  CHECK(jump_table_pages_.value().second.Contains(
+      jump_table_address, jump_table_size,
+      ThreadIsolation::JitAllocationType::kWasmJumpTable));
+  CHECK(jump_table_pages_.value().first.Contains(
+      far_jump_table_address, far_jump_table_size,
+      ThreadIsolation::JitAllocationType::kWasmFarJumpTable));
+
+#ifdef DEBUG
+  // Reset the write scope for debugging. We'll create fine-grained scopes in
+  // all Write functions of this class instead.
+  write_scope_.SetExecutable();
+#endif
+}
+
+#endif
 
 template <typename T, size_t offset>
 void WritableJitAllocation::WriteHeaderSlot(T value) {
@@ -206,6 +229,17 @@ V8_INLINE void WritableJitAllocation::WriteValue(Address address, T value) {
   base::Memory<T>(address) = value;
 }
 
+template <typename T>
+V8_INLINE void WritableJitAllocation::WriteValue(Address address, T value,
+                                                 RelaxedStoreTag) {
+  std::optional<RwxMemoryWriteScope> write_scope =
+      WriteScopeForApiEnforcement();
+  DCHECK_GE(address, address_);
+  DCHECK_LT(address - address_, size());
+  reinterpret_cast<std::atomic<T>*>(address)->store(value,
+                                                    std::memory_order_relaxed);
+}
+
 void WritableJitAllocation::CopyCode(size_t dst_offset, const uint8_t* src,
                                      size_t num_bytes) {
   std::optional<RwxMemoryWriteScope> write_scope =
@@ -236,7 +270,7 @@ WritableJitAllocation WritableJitPage::LookupAllocationContaining(
     Address addr) {
   auto pair = page_ref_.AllocationContaining(addr);
   return WritableJitAllocation(pair.first, pair.second.Size(),
-                               pair.second.Type());
+                               pair.second.Type(), false);
 }
 
 V8_INLINE WritableFreeSpace WritableJitPage::FreeRange(Address addr,

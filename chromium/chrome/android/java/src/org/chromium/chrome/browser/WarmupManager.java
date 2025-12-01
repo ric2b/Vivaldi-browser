@@ -87,7 +87,7 @@ import org.vivaldi.browser.common.VivaldiUtils;
  * This class is a singleton that holds utilities for warming up Chrome and prerendering urls
  * without creating the Activity.
  *
- * This class is not thread-safe and must only be used on the UI thread.
+ * <p>This class is not thread-safe and must only be used on the UI thread.
  */
 public class WarmupManager {
     private static final String TAG = "WarmupManager";
@@ -293,7 +293,7 @@ public class WarmupManager {
 
         // These are effectively unused as they will be set when finishing reparenting.
         TabDelegateFactory delegateFactory = CustomTabDelegateFactory.createEmpty();
-        WindowAndroid window = new WindowAndroid(context);
+        WindowAndroid window = new WindowAndroid(context, /* trackOcclusion= */ false);
 
         // TODO(crbug.com/40174356): Set isIncognito flag here if spare tabs are allowed for
         // incognito mode.
@@ -326,7 +326,7 @@ public class WarmupManager {
      * @param type TabLaunchType of the requested tab.
      * @return the spare Tab.
      */
-    public Tab takeSpareTab(Profile profile, @TabLaunchType int type) {
+    public Tab takeSpareTab(Profile profile, boolean initiallyHidden, @TabLaunchType int type) {
         ThreadUtils.assertOnUiThread();
         try (TraceEvent e = TraceEvent.scoped("WarmupManager.takeSpareTab")) {
             if (mSpareTab.getProfile() != profile) {
@@ -338,6 +338,10 @@ public class WarmupManager {
 
             spareTab.setTabLaunchType(type);
             mSpareTabFinalStatus = SpareTabFinalStatus.TAB_USED;
+
+            if (!initiallyHidden) {
+                spareTab.getWebContents().updateWebContentsVisibility(Visibility.VISIBLE);
+            }
 
             // Record the SpareTabFinalStatus once its used.
             recordSpareTabFinalStatusHistogram(mSpareTabFinalStatus);
@@ -440,7 +444,10 @@ public class WarmupManager {
         // TODO(twellington): Look at improving code sharing with ChromeBaseAppCompatActivity
         // if the number of these overlays grows. The two below are experimental / are planned to be
         // removed by mid 2025 or sooner.
-        if (ChromeFeatureList.sAndroidElegantTextHeight.isEnabled()) {
+        // TODO(https://crbug.com/392634251): Explore setting elegantTextHeight to 'true' on older
+        // OS versions.
+        if (ChromeFeatureList.sAndroidElegantTextHeight.isEnabled()
+                && Build.VERSION.SDK_INT >= VERSION_CODES.TIRAMISU) {
             int elegantTextHeightOverlay = R.style.ThemeOverlay_BrowserUI_ElegantTextHeight;
             context.getTheme().applyStyle(elegantTextHeightOverlay, true);
         }
@@ -713,7 +720,7 @@ public class WarmupManager {
                             /* initiallyHidden= */ true,
                             /* targetNetwork= */ NetId.INVALID);
             mObserver = new RenderProcessGoneObserver();
-            mSpareWebContents.addObserver(mObserver);
+            mObserver.observe(mSpareWebContents);
         }
     }
 
@@ -748,7 +755,7 @@ public class WarmupManager {
             WebContents result = mSpareWebContents;
             if (result == null) return null;
             mSpareWebContents = null;
-            result.removeObserver(mObserver);
+            mObserver.observe(null);
             mObserver = null;
             if (!initiallyHidden) result.updateWebContentsVisibility(Visibility.VISIBLE);
             return result;
@@ -763,7 +770,7 @@ public class WarmupManager {
     }
 
     private void destroySpareWebContentsInternal() {
-        mSpareWebContents.removeObserver(mObserver);
+        mObserver.observe(null);
         mSpareWebContents.destroy();
         mSpareWebContents = null;
         mObserver = null;

@@ -128,7 +128,6 @@ component("features") {
     "model_execution/feature_keys.h",
     "model_execution/model_execution_prefs.cc",
     "model_execution/model_execution_prefs.h",
-    "model_quality/feature_type_map.h",
     "optimization_guide_constants.cc",
     "optimization_guide_constants.h",
     "optimization_guide_enums.h",
@@ -150,6 +149,7 @@ component("features") {
     "//components/variations",
     "//google_apis",
     "//net",
+    "//services/preferences/public/cpp",
     "//third_party/metrics_proto:metrics_proto",
     "//ui/base",
   ]
@@ -205,6 +205,7 @@ static_library("core") {
     "optimization_guide_model_provider.h",
     "optimization_guide_navigation_data.cc",
     "optimization_guide_navigation_data.h",
+    "optimization_guide_on_device_capability_provider.h",
     "optimization_guide_permissions_util.cc",
     "optimization_guide_permissions_util.h",
     "optimization_guide_proto_util.cc",
@@ -231,7 +232,7 @@ static_library("core") {
     "url_pattern_with_wildcards.cc",
     "url_pattern_with_wildcards.h",
   ]
-  if (!is_fuchsia || !optimize_for_size) {
+  if (build_with_model_execution) {
     sources += [
       "model_execution/aqa_response_parser.cc",
       "model_execution/aqa_response_parser.h",
@@ -247,6 +248,12 @@ static_library("core") {
       "model_execution/model_execution_manager.h",
       "model_execution/model_execution_util.cc",
       "model_execution/model_execution_util.h",
+      "model_execution/multimodal_message.cc",
+      "model_execution/multimodal_message.h",
+      "model_execution/on_device_context.cc",
+      "model_execution/on_device_context.h",
+      "model_execution/on_device_execution.cc",
+      "model_execution/on_device_execution.h",
       "model_execution/on_device_model_access_controller.cc",
       "model_execution/on_device_model_access_controller.h",
       "model_execution/on_device_model_adaptation_controller.cc",
@@ -327,6 +334,7 @@ static_library("core") {
   deps = [
     ":bloomfilter",
     "//base",
+    "//components/optimization_guide/optimization_guide_internals/webui:mojo_bindings",
     "//components/prefs",
     "//components/signin/public/identity_manager:identity_manager",
     "//components/unified_consent",
@@ -343,7 +351,7 @@ static_library("core") {
     "//url:url",
   ]
 
-  if (!is_fuchsia || !optimize_for_size) {
+  if (build_with_model_execution) {
     deps += [
       ":on_device_model_execution_proto_generator",
       "//components/component_updater",
@@ -399,8 +407,8 @@ static_library("test_support") {
   sources = [
     "mock_optimization_guide_decider.cc",
     "mock_optimization_guide_decider.h",
-    "mock_optimization_guide_model_executor.cc",
-    "mock_optimization_guide_model_executor.h",
+    "mock_optimization_guide_on_device_capability_provider.cc",
+    "mock_optimization_guide_on_device_capability_provider.h",
     "mock_push_notification_manager.cc",
     "mock_push_notification_manager.h",
     "model_quality/test_model_quality_logs_uploader_service.cc",
@@ -426,6 +434,12 @@ static_library("test_support") {
       "test_tflite_model_executor.cc",
       "test_tflite_model_executor.h",
       "test_tflite_model_handler.h",
+    ]
+  }
+  if (build_with_model_execution) {
+    sources += [
+      "mock_optimization_guide_model_executor.cc",
+      "mock_optimization_guide_model_executor.h",
     ]
   }
 
@@ -482,7 +496,6 @@ source_set("unit_tests") {
     "insertion_ordered_set_unittest.cc",
     "model_execution/performance_class_unittest.cc",
     "model_handler_unittest.cc",
-    "model_quality/model_execution_logging_wrappers_unittest.cc",
     "model_quality/model_quality_log_entry_unittest.cc",
     "model_quality/model_quality_logs_uploader_service_unittest.cc",
     "model_quality/model_quality_util_unittest.cc",
@@ -510,7 +523,7 @@ source_set("unit_tests") {
     "url_pattern_with_wildcards_unittest.cc",
   ]
 
-  if (!is_fuchsia || !optimize_for_size) {
+  if (build_with_model_execution) {
     sources += [
       "model_execution/aqa_response_parser_unittest.cc",
       "model_execution/json_response_parser_unittest.cc",
@@ -518,8 +531,10 @@ source_set("unit_tests") {
       "model_execution/model_execution_features_unittest.cc",
       "model_execution/model_execution_fetcher_unittest.cc",
       "model_execution/model_execution_manager_unittest.cc",
+      "model_execution/multimodal_message_unittest.cc",
       "model_execution/on_device_model_adaptation_loader_unittest.cc",
       "model_execution/on_device_model_component_unittest.cc",
+      "model_execution/on_device_model_execution_proto_descriptors_unittest.cc",
       "model_execution/on_device_model_execution_proto_value_utils_unittest.cc",
       "model_execution/on_device_model_feature_adapter_unittest.cc",
       "model_execution/on_device_model_metadata_unittest.cc",
@@ -541,6 +556,7 @@ source_set("unit_tests") {
       "model_execution/test/response_holder.h",
       "model_execution/test/test_on_device_model_component_state_manager.cc",
       "model_execution/test/test_on_device_model_component_state_manager.h",
+      "model_quality/model_execution_logging_wrappers_unittest.cc",
     ]
   }
   if (build_with_tflite_lib) {
@@ -567,7 +583,6 @@ source_set("unit_tests") {
     "//base",
     "//base/test:test_proto",
     "//base/test:test_support",
-    "//build:chromeos_buildflags",
     "//components/download/public/background_service/test:test_support",
     "//components/leveldb_proto:test_support",
     "//components/optimization_guide/proto:optimization_guide_proto",
@@ -595,7 +610,7 @@ source_set("unit_tests") {
     deps += [ "//components/services/unzip/content" ]
   }
 
-  if (!is_fuchsia || !optimize_for_size) {
+  if (build_with_model_execution) {
     deps += [ "//components/component_updater" ]
   }
 
@@ -653,40 +668,11 @@ action("on_device_model_execution_proto_generator") {
   script =
       "//components/optimization_guide/tools/gen_on_device_proto_descriptors.py"
 
-  inputs = [
-    "$root_gen_dir/components/optimization_guide/proto/compose.descriptor",
-    "$root_gen_dir/components/optimization_guide/proto/string_value.descriptor",
-    "$root_gen_dir/components/optimization_guide/proto/tab_organization.descriptor",
-    "$root_gen_dir/components/optimization_guide/proto/history_answer.descriptor",
-    "$root_gen_dir/components/optimization_guide/proto/prompt_api.descriptor",
-    "$root_gen_dir/components/optimization_guide/proto/summarize.descriptor",
-    "$root_gen_dir/components/optimization_guide/proto/history_query_intent.descriptor",
-  ]
+  inputs = [ "$root_gen_dir/components/optimization_guide/proto/optimization_guide_proto.descriptor" ]
   outputs = [ output_proto_descriptors_cc_file ]
 
-  args = [
-    "--output_cc=" +
-        rebase_path(output_proto_descriptors_cc_file, root_build_dir),
-    "--include=\"components/optimization_guide/proto/features/compose.pb.h\"",
-    "--include=\"components/optimization_guide/proto/string_value.pb.h\"",
-    "--include=\"components/optimization_guide/proto/features/tab_organization.pb.h\"",
-    "--include=\"components/optimization_guide/proto/features/history_answer.pb.h\"",
-    "--include=\"components/optimization_guide/proto/features/prompt_api.pb.h\"",
-    "--include=\"components/optimization_guide/proto/features/summarize.pb.h\"",
-    "--include=\"components/optimization_guide/proto/features/history_query_intent.pb.h\"",
-    "--request=.optimization_guide.proto.ComposeRequest",
-    "--request=.optimization_guide.proto.TabOrganizationRequest",
-    "--request=.optimization_guide.proto.HistoryAnswerRequest",
-    "--request=.optimization_guide.proto.StringValue",
-    "--request=.optimization_guide.proto.SummarizeRequest",
-    "--request=.optimization_guide.proto.PromptApiRequest",
-    "--request=.optimization_guide.proto.HistoryQueryIntentRequest",
-    "--response=.optimization_guide.proto.ComposeResponse",
-    "--response=.optimization_guide.proto.TabOrganizationResponse",
-    "--response=.optimization_guide.proto.HistoryAnswerResponse",
-    "--response=.optimization_guide.proto.HistoryQueryIntentResponse",
-    "--response=.optimization_guide.proto.StringValue",
-  ]
+  args = [ "--output_cc=" +
+           rebase_path(output_proto_descriptors_cc_file, root_build_dir) ]
   foreach(file, inputs) {
     args += [
       "--input_file",
@@ -695,13 +681,7 @@ action("on_device_model_execution_proto_generator") {
   }
 
   deps = [
-    "//components/optimization_guide/proto:compose_proto_descriptor",
-    "//components/optimization_guide/proto:history_answer_proto_descriptor",
-    "//components/optimization_guide/proto:history_query_intent_proto_descriptor",
-    "//components/optimization_guide/proto:prompt_api_proto_descriptor",
-    "//components/optimization_guide/proto:string_value_proto_descriptor",
-    "//components/optimization_guide/proto:summarize_descriptor",
-    "//components/optimization_guide/proto:tab_organization_proto_descriptor",
+    "//components/optimization_guide/proto:optimization_guide_proto_descriptors",
     "//third_party/protobuf:py_proto_runtime",
   ]
 }

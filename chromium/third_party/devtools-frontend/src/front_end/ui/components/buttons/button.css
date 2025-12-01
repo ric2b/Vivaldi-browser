@@ -82,6 +82,14 @@ button {
       --icon-size: var(--sys-size-8);
     }
 
+    &.micro {
+      --button-height: var(--sys-size-8);
+      --button-width: var(--sys-size-8);
+      --icon-size: var(--sys-size-8);
+
+      border-radius: var(--sys-shape-corner-extra-small);
+    }
+
     &.toggled devtools-icon {
       color: var(--toggle-color); /* stylelint-disable-line plugin/use_theme_colors */
 
@@ -168,24 +176,6 @@ button {
     devtools-icon {
       color: var(--icon-primary);
     }
-
-    &.micro {
-      --button-height: var(--sys-size-7);
-
-      padding: 0 var(--sys-size-5);
-      font-size: var(--sys-typescale-body4-size);
-      font-weight: var(--ref-typeface-weight-medium);
-      line-height: var(--sys-typescale-body4-line-height);
-
-      &:not(.icon):has(devtools-icon) {
-        padding-left: var(--sys-size-3);
-      }
-
-      &:not(.icon) devtools-icon {
-        height: var(--sys-size-6);
-        width: var(--sys-size-6);
-      }
-    }
   }
 
   &:disabled {
@@ -216,7 +206,7 @@ button {
     }
   }
 
-  &:not(.icon):not(.toolbar).only-icon {
+  &:not(.icon, .toolbar).only-icon {
     width: 100%;
     padding: 0;
 
@@ -252,11 +242,11 @@ button {
     background-color: var(--hover-layer-color); /* stylelint-disable-line plugin/use_theme_colors */
 
     &.primary {
-      border: var(--button-border-size) solid color-mix(in sRGB, var(--sys-color-primary), var(--sys-color-state-hover-on-prominent) 6%);
+      border: var(--button-border-size) solid color-mix(in srgb, var(--sys-color-primary), var(--sys-color-state-hover-on-prominent) 6%);
     }
 
     &.tonal {
-      background: color-mix(in sRGB, var(--sys-color-tonal-container), var(--sys-color-state-hover-on-subtle));
+      background: color-mix(in srgb, var(--sys-color-tonal-container), var(--sys-color-state-hover-on-subtle));
     }
 
     &.toobar {
@@ -278,11 +268,11 @@ button {
     background-color: var(--active-layer-color); /* stylelint-disable-line plugin/use_theme_colors */
 
     &.primary {
-      border: var(--button-border-size) solid color-mix(in sRGB, var(--sys-color-primary), var(--sys-color-state-ripple-primary) 32%);
+      border: var(--button-border-size) solid color-mix(in srgb, var(--sys-color-primary), var(--sys-color-state-ripple-primary) 32%);
     }
 
     &.tonal {
-      background: color-mix(in sRGB, var(--sys-color-tonal-container), var(--sys-color-state-ripple-primary) 50%);
+      background: color-mix(in srgb, var(--sys-color-tonal-container), var(--sys-color-state-ripple-primary) 50%);
     }
 
     &.toolbar {

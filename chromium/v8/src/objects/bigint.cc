@@ -84,13 +84,13 @@ V8_OBJECT class MutableBigInt : public FreshlyAllocatedBigInt {
                                               DirectHandle<BigIntBase> x);
 
   // Specialized helpers for shift operations.
-  static MaybeHandle<BigInt> LeftShiftByAbsolute(Isolate* isolate,
-                                                 Handle<BigIntBase> x,
-                                                 Handle<BigIntBase> y);
-  static Handle<BigInt> RightShiftByAbsolute(Isolate* isolate,
-                                             Handle<BigIntBase> x,
-                                             Handle<BigIntBase> y);
-  static Handle<BigInt> RightShiftByMaximum(Isolate* isolate, bool sign);
+  static MaybeDirectHandle<BigInt> LeftShiftByAbsolute(Isolate* isolate,
+                                                       Handle<BigIntBase> x,
+                                                       Handle<BigIntBase> y);
+  static DirectHandle<BigInt> RightShiftByAbsolute(Isolate* isolate,
+                                                   Handle<BigIntBase> x,
+                                                   Handle<BigIntBase> y);
+  static DirectHandle<BigInt> RightShiftByMaximum(Isolate* isolate, bool sign);
   static Maybe<digit_t> ToShiftAmount(Handle<BigIntBase> x);
 
   static double ToDouble(DirectHandle<BigIntBase> x);
@@ -132,7 +132,7 @@ V8_OBJECT class MutableBigInt : public FreshlyAllocatedBigInt {
 
   static bool IsMutableBigInt(Tagged<MutableBigInt> o) { return IsBigInt(o); }
 
-  static_assert(std::is_same<bigint::digit_t, BigIntBase::digit_t>::value,
+  static_assert(std::is_same_v<bigint::digit_t, BigIntBase::digit_t>,
                 "We must be able to call BigInt library functions");
 
   NEVER_READ_ONLY_SPACE
@@ -289,7 +289,7 @@ void MutableBigInt::InitializeDigits(uint32_t length, uint8_t value) {
 MaybeHandle<BigInt> MutableBigInt::MakeImmutable(
     MaybeHandle<MutableBigInt> maybe) {
   Handle<MutableBigInt> result;
-  if (!maybe.ToHandle(&result)) return MaybeHandle<BigInt>();
+  if (!maybe.ToHandle(&result)) return {};
   return MakeImmutable(result);
 }
 
@@ -338,18 +338,16 @@ template Handle<BigInt> BigInt::Zero(Isolate* isolate,
 template Handle<BigInt> BigInt::Zero(LocalIsolate* isolate,
                                      AllocationType allocation);
 
-Handle<BigInt> BigInt::UnaryMinus(Isolate* isolate, Handle<BigInt> x) {
+Handle<BigInt> BigInt::UnaryMinus(Isolate* isolate, DirectHandle<BigInt> x) {
   // Special case: There is no -0n.
-  if (x->is_zero()) {
-    return x;
-  }
+  if (x->is_zero()) return indirect_handle(x, isolate);
   Handle<MutableBigInt> result = MutableBigInt::Copy(isolate, x);
   result->set_sign(!x->sign());
   return MutableBigInt::MakeImmutable(result);
 }
 
-MaybeHandle<BigInt> BigInt::BitwiseNot(Isolate* isolate,
-                                       DirectHandle<BigInt> x) {
+MaybeDirectHandle<BigInt> BigInt::BitwiseNot(Isolate* isolate,
+                                             DirectHandle<BigInt> x) {
   MaybeHandle<MutableBigInt> result;
   if (x->sign()) {
     // ~(-x) == ~(~(x-1)) == x-1
@@ -361,8 +359,9 @@ MaybeHandle<BigInt> BigInt::BitwiseNot(Isolate* isolate,
   return MutableBigInt::MakeImmutable(result);
 }
 
-MaybeHandle<BigInt> BigInt::Exponentiate(Isolate* isolate, Handle<BigInt> base,
-                                         DirectHandle<BigInt> exponent) {
+MaybeDirectHandle<BigInt> BigInt::Exponentiate(Isolate* isolate,
+                                               DirectHandle<BigInt> base,
+                                               DirectHandle<BigInt> exponent) {
   // 1. If exponent is < 0, throw a RangeError exception.
   if (exponent->sign()) {
     THROW_NEW_ERROR(isolate, NewRangeError(MessageTemplate::kMustBePositive));
@@ -399,9 +398,8 @@ MaybeHandle<BigInt> BigInt::Exponentiate(Isolate* isolate, Handle<BigInt> base,
     // Fast path for 2^n.
     int needed_digits = 1 + (n / kDigitBits);
     Handle<MutableBigInt> result;
-    if (!MutableBigInt::New(isolate, needed_digits).ToHandle(&result)) {
-      return MaybeHandle<BigInt>();
-    }
+    if (!MutableBigInt::New(isolate, needed_digits).ToHandle(&result))
+      return {};
     result->InitializeDigits(needed_digits);
     // All bits are zero. Now set the n-th bit.
     digit_t msd = static_cast<digit_t>(1) << (n % kDigitBits);
@@ -410,13 +408,13 @@ MaybeHandle<BigInt> BigInt::Exponentiate(Isolate* isolate, Handle<BigInt> base,
     if (base->sign()) result->set_sign((n & 1) != 0);
     return MutableBigInt::MakeImmutable(result);
   }
-  Handle<BigInt> result;
-  Handle<BigInt> running_square = base;
+  DirectHandle<BigInt> result;
+  DirectHandle<BigInt> running_square = base;
   // This implicitly sets the result's sign correctly.
   if (n & 1) result = base;
   n >>= 1;
   for (; n != 0; n >>= 1) {
-    MaybeHandle<BigInt> maybe_result =
+    MaybeDirectHandle<BigInt> maybe_result =
         Multiply(isolate, running_square, running_square);
     if (!maybe_result.ToHandle(&running_square)) return maybe_result;
     if (n & 1) {
@@ -431,15 +429,15 @@ MaybeHandle<BigInt> BigInt::Exponentiate(Isolate* isolate, Handle<BigInt> base,
   return result;
 }
 
-MaybeHandle<BigInt> BigInt::Multiply(Isolate* isolate, Handle<BigInt> x,
-                                     Handle<BigInt> y) {
-  if (x->is_zero()) return x;
-  if (y->is_zero()) return y;
+MaybeHandle<BigInt> BigInt::Multiply(Isolate* isolate, DirectHandle<BigInt> x,
+                                     DirectHandle<BigInt> y) {
+  if (x->is_zero()) return indirect_handle(x, isolate);
+  if (y->is_zero()) return indirect_handle(y, isolate);
   uint32_t result_length =
       bigint::MultiplyResultLength(x->digits(), y->digits());
   Handle<MutableBigInt> result;
   if (!MutableBigInt::New(isolate, result_length).ToHandle(&result)) {
-    return MaybeHandle<BigInt>();
+    return {};
   }
   DisallowGarbageCollection no_gc;
   bigint::Status status = isolate->bigint_processor()->Multiply(
@@ -453,7 +451,7 @@ MaybeHandle<BigInt> BigInt::Multiply(Isolate* isolate, Handle<BigInt> x,
   return MutableBigInt::MakeImmutable(result);
 }
 
-MaybeHandle<BigInt> BigInt::Divide(Isolate* isolate, Handle<BigInt> x,
+MaybeHandle<BigInt> BigInt::Divide(Isolate* isolate, DirectHandle<BigInt> x,
                                    DirectHandle<BigInt> y) {
   // 1. If y is 0n, throw a RangeError exception.
   if (y->is_zero()) {
@@ -467,7 +465,8 @@ MaybeHandle<BigInt> BigInt::Divide(Isolate* isolate, Handle<BigInt> x,
   }
   bool result_sign = x->sign() != y->sign();
   if (y->length() == 1 && y->digit(0) == 1) {
-    return result_sign == x->sign() ? x : UnaryMinus(isolate, x);
+    return result_sign == x->sign() ? indirect_handle(x, isolate)
+                                    : UnaryMinus(isolate, x);
   }
   Handle<MutableBigInt> quotient;
   uint32_t result_length = bigint::DivideResultLength(x->digits(), y->digits());
@@ -486,7 +485,7 @@ MaybeHandle<BigInt> BigInt::Divide(Isolate* isolate, Handle<BigInt> x,
   return MutableBigInt::MakeImmutable(quotient);
 }
 
-MaybeHandle<BigInt> BigInt::Remainder(Isolate* isolate, Handle<BigInt> x,
+MaybeHandle<BigInt> BigInt::Remainder(Isolate* isolate, DirectHandle<BigInt> x,
                                       DirectHandle<BigInt> y) {
   // 1. If y is 0n, throw a RangeError exception.
   if (y->is_zero()) {
@@ -494,7 +493,8 @@ MaybeHandle<BigInt> BigInt::Remainder(Isolate* isolate, Handle<BigInt> x,
   }
   // 2. Return the BigInt representing x modulo y.
   // See https://github.com/tc39/proposal-bigint/issues/84 though.
-  if (bigint::Compare(x->digits(), y->digits()) < 0) return x;
+  if (bigint::Compare(x->digits(), y->digits()) < 0)
+    return indirect_handle(x, isolate);
   if (y->length() == 1 && y->digit(0) == 1) return Zero(isolate);
   Handle<MutableBigInt> remainder;
   uint32_t result_length = bigint::ModuloResultLength(y->digits());
@@ -513,10 +513,10 @@ MaybeHandle<BigInt> BigInt::Remainder(Isolate* isolate, Handle<BigInt> x,
   return MutableBigInt::MakeImmutable(remainder);
 }
 
-MaybeHandle<BigInt> BigInt::Add(Isolate* isolate, Handle<BigInt> x,
-                                Handle<BigInt> y) {
-  if (x->is_zero()) return y;
-  if (y->is_zero()) return x;
+MaybeHandle<BigInt> BigInt::Add(Isolate* isolate, DirectHandle<BigInt> x,
+                                DirectHandle<BigInt> y) {
+  if (x->is_zero()) return indirect_handle(y, isolate);
+  if (y->is_zero()) return indirect_handle(x, isolate);
   bool xsign = x->sign();
   bool ysign = y->sign();
   uint32_t result_length =
@@ -533,9 +533,9 @@ MaybeHandle<BigInt> BigInt::Add(Isolate* isolate, Handle<BigInt> x,
   return MutableBigInt::MakeImmutable(result);
 }
 
-MaybeHandle<BigInt> BigInt::Subtract(Isolate* isolate, Handle<BigInt> x,
-                                     Handle<BigInt> y) {
-  if (y->is_zero()) return x;
+MaybeHandle<BigInt> BigInt::Subtract(Isolate* isolate, DirectHandle<BigInt> x,
+                                     DirectHandle<BigInt> y) {
+  if (y->is_zero()) return indirect_handle(x, isolate);
   if (x->is_zero()) return UnaryMinus(isolate, y);
   bool xsign = x->sign();
   bool ysign = y->sign();
@@ -624,11 +624,11 @@ MaybeHandle<BigInt> BigInt::Decrement(Isolate* isolate,
 
 Maybe<ComparisonResult> BigInt::CompareToString(Isolate* isolate,
                                                 DirectHandle<BigInt> x,
-                                                Handle<String> y) {
+                                                DirectHandle<String> y) {
   // a. Let ny be StringToBigInt(y);
-  MaybeHandle<BigInt> maybe_ny = StringToBigInt(isolate, y);
+  MaybeDirectHandle<BigInt> maybe_ny = StringToBigInt(isolate, y);
   // b. If ny is NaN, return undefined.
-  Handle<BigInt> ny;
+  DirectHandle<BigInt> ny;
   if (!maybe_ny.ToHandle(&ny)) {
     if (isolate->has_exception()) {
       return Nothing<ComparisonResult>();
@@ -641,11 +641,11 @@ Maybe<ComparisonResult> BigInt::CompareToString(Isolate* isolate,
 }
 
 Maybe<bool> BigInt::EqualToString(Isolate* isolate, DirectHandle<BigInt> x,
-                                  Handle<String> y) {
+                                  DirectHandle<String> y) {
   // a. Let n be StringToBigInt(y).
-  MaybeHandle<BigInt> maybe_n = StringToBigInt(isolate, y);
+  MaybeDirectHandle<BigInt> maybe_n = StringToBigInt(isolate, y);
   // b. If n is NaN, return false.
-  Handle<BigInt> n;
+  DirectHandle<BigInt> n;
   if (!maybe_n.ToHandle(&n)) {
     if (isolate->has_exception()) {
       return Nothing<bool>();
@@ -657,7 +657,7 @@ Maybe<bool> BigInt::EqualToString(Isolate* isolate, DirectHandle<BigInt> x,
   return Just(EqualToBigInt(*x, *n));
 }
 
-bool BigInt::EqualToNumber(DirectHandle<BigInt> x, Handle<Object> y) {
+bool BigInt::EqualToNumber(DirectHandle<BigInt> x, DirectHandle<Object> y) {
   DCHECK(IsNumber(*y));
   // a. If x or y are any of NaN, +∞, or -∞, return false.
   // b. If the mathematical value of x is equal to the mathematical value of y,
@@ -919,8 +919,8 @@ MaybeHandle<String> BigInt::ToString(Isolate* isolate,
   return result;
 }
 
-Handle<String> BigInt::NoSideEffectsToString(Isolate* isolate,
-                                             DirectHandle<BigInt> bigint) {
+DirectHandle<String> BigInt::NoSideEffectsToString(
+    Isolate* isolate, DirectHandle<BigInt> bigint) {
   if (bigint->is_zero()) {
     return isolate->factory()->zero_string();
   }
@@ -935,9 +935,10 @@ Handle<String> BigInt::NoSideEffectsToString(Isolate* isolate,
   uint32_t chars_allocated =
       bigint::ToStringResultLength(bigint->digits(), 10, bigint->sign());
   DCHECK_LE(chars_allocated, String::kMaxLength);
-  Handle<SeqOneByteString> result = isolate->factory()
-                                        ->NewRawOneByteString(chars_allocated)
-                                        .ToHandleChecked();
+  DirectHandle<SeqOneByteString> result =
+      isolate->factory()
+          ->NewRawOneByteString(chars_allocated)
+          .ToHandleChecked();
   uint32_t chars_written = chars_allocated;
   DisallowGarbageCollection no_gc;
   char* characters = reinterpret_cast<char*>(result->GetChars(no_gc));
@@ -951,7 +952,7 @@ Handle<String> BigInt::NoSideEffectsToString(Isolate* isolate,
 }
 
 MaybeHandle<BigInt> BigInt::FromNumber(Isolate* isolate,
-                                       Handle<Object> number) {
+                                       DirectHandle<Object> number) {
   DCHECK(IsNumber(*number));
   if (IsSmi(*number)) {
     return MutableBigInt::NewFromInt(isolate, Smi::ToInt(*number));
@@ -964,7 +965,10 @@ MaybeHandle<BigInt> BigInt::FromNumber(Isolate* isolate,
   return MutableBigInt::NewFromDouble(isolate, value);
 }
 
-MaybeHandle<BigInt> BigInt::FromObject(Isolate* isolate, Handle<Object> obj) {
+template <template <typename> typename HandleType>
+  requires(std::is_convertible_v<HandleType<Object>, DirectHandle<Object>>)
+typename HandleType<BigInt>::MaybeType BigInt::FromObject(
+    Isolate* isolate, HandleType<Object> obj) {
   if (IsJSReceiver(*obj)) {
     ASSIGN_RETURN_ON_EXCEPTION(
         isolate, obj,
@@ -980,12 +984,12 @@ MaybeHandle<BigInt> BigInt::FromObject(Isolate* isolate, Handle<Object> obj) {
     return Cast<BigInt>(obj);
   }
   if (IsString(*obj)) {
-    Handle<BigInt> n;
+    HandleType<BigInt> n;
     if (!StringToBigInt(isolate, Cast<String>(obj)).ToHandle(&n)) {
       if (isolate->has_exception()) {
-        return MaybeHandle<BigInt>();
+        return {};
       } else {
-        Handle<String> str = Cast<String>(obj);
+        DirectHandle<String> str = Cast<String>(obj);
         constexpr uint32_t kMaxRenderedLength = 1000;
         if (str->length() > kMaxRenderedLength) {
           Factory* factory = isolate->factory();
@@ -1007,12 +1011,18 @@ MaybeHandle<BigInt> BigInt::FromObject(Isolate* isolate, Handle<Object> obj) {
                   NewTypeError(MessageTemplate::kBigIntFromObject, obj));
 }
 
-Handle<Number> BigInt::ToNumber(Isolate* isolate, DirectHandle<BigInt> x) {
-  if (x->is_zero()) return Handle<Smi>(Smi::zero(), isolate);
+template V8_EXPORT_PRIVATE MaybeDirectHandle<BigInt> BigInt::FromObject(
+    Isolate* isolate, DirectHandle<Object> obj);
+template V8_EXPORT_PRIVATE MaybeIndirectHandle<BigInt> BigInt::FromObject(
+    Isolate* isolate, IndirectHandle<Object> obj);
+
+DirectHandle<Number> BigInt::ToNumber(Isolate* isolate,
+                                      DirectHandle<BigInt> x) {
+  if (x->is_zero()) return direct_handle(Smi::zero(), isolate);
   if (x->length() == 1 && x->digit(0) < Smi::kMaxValue) {
     int value = static_cast<int>(x->digit(0));
     if (x->sign()) value = -value;
-    return Handle<Smi>(Smi::FromInt(value), isolate);
+    return direct_handle(Smi::FromInt(value), isolate);
   }
   double result = MutableBigInt::ToDouble(x);
   return isolate->factory()->NewHeapNumber(result);
@@ -1141,9 +1151,7 @@ MaybeHandle<MutableBigInt> MutableBigInt::AbsoluteAddOne(
   uint32_t result_length = input_length + will_overflow;
   Handle<MutableBigInt> result(result_storage, isolate);
   if (result_storage.is_null()) {
-    if (!New(isolate, result_length).ToHandle(&result)) {
-      return MaybeHandle<MutableBigInt>();
-    }
+    if (!New(isolate, result_length).ToHandle(&result)) return {};
   } else {
     DCHECK(result->length() == result_length);
   }
@@ -1279,7 +1287,8 @@ MaybeHandle<BigInt> BigInt::FromSerializedDigits(
   return MutableBigInt::MakeImmutable(result);
 }
 
-Handle<BigInt> BigInt::AsIntN(Isolate* isolate, uint64_t n, Handle<BigInt> x) {
+DirectHandle<BigInt> BigInt::AsIntN(Isolate* isolate, uint64_t n,
+                                    DirectHandle<BigInt> x) {
   if (x->is_zero() || n > kMaxLengthBits) return x;
   if (n == 0) return MutableBigInt::Zero(isolate);
   int needed_length =
@@ -1293,8 +1302,8 @@ Handle<BigInt> BigInt::AsIntN(Isolate* isolate, uint64_t n, Handle<BigInt> x) {
   return MutableBigInt::MakeImmutable(result);
 }
 
-MaybeHandle<BigInt> BigInt::AsUintN(Isolate* isolate, uint64_t n,
-                                    Handle<BigInt> x) {
+MaybeDirectHandle<BigInt> BigInt::AsUintN(Isolate* isolate, uint64_t n,
+                                          DirectHandle<BigInt> x) {
   if (x->is_zero()) return x;
   if (n == 0) return MutableBigInt::Zero(isolate);
   Handle<MutableBigInt> result;
@@ -1350,9 +1359,9 @@ Handle<BigInt> BigInt::FromUint64(Isolate* isolate, uint64_t n) {
   return MutableBigInt::MakeImmutable(result);
 }
 
-MaybeHandle<BigInt> BigInt::FromWords64(Isolate* isolate, int sign_bit,
-                                        uint32_t words64_count,
-                                        const uint64_t* words) {
+MaybeDirectHandle<BigInt> BigInt::FromWords64(Isolate* isolate, int sign_bit,
+                                              uint32_t words64_count,
+                                              const uint64_t* words) {
   if (words64_count > kMaxLength / (64 / kDigitBits)) {
     return ThrowBigIntTooBig<BigInt>(isolate);
   }
@@ -1363,9 +1372,7 @@ MaybeHandle<BigInt> BigInt::FromWords64(Isolate* isolate, int sign_bit,
   if (kDigitBits == 32 && words[words64_count - 1] <= (1ULL << 32)) length--;
 
   Handle<MutableBigInt> result;
-  if (!MutableBigInt::New(isolate, length).ToHandle(&result)) {
-    return MaybeHandle<BigInt>();
-  }
+  if (!MutableBigInt::New(isolate, length).ToHandle(&result)) return {};
 
   result->set_sign(sign_bit);
   if (kDigitBits == 64) {

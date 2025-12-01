@@ -6,15 +6,12 @@ package org.chromium.chrome.browser.notifications.channels;
 
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
-import android.os.Build;
 import android.os.Build.VERSION;
 import android.os.Build.VERSION_CODES;
 import android.text.TextUtils;
 
-import androidx.annotation.RequiresApi;
 import androidx.annotation.StringDef;
 
-import org.chromium.base.ContextUtils;
 import org.chromium.chrome.browser.notifications.R;
 import org.chromium.components.browser_ui.notifications.NotificationManagerProxy;
 import org.chromium.components.browser_ui.notifications.NotificationManagerProxyImpl;
@@ -42,7 +39,6 @@ import java.util.Set;
  * <br>
  * See the README.md in this directory for more information before adding or changing any channels.
  */
-@RequiresApi(Build.VERSION_CODES.O)
 public class ChromeChannelDefinitions extends ChannelDefinitions {
     /**
      * Version number identifying the current set of channels. This must be incremented whenever the
@@ -76,6 +72,7 @@ public class ChromeChannelDefinitions extends ChannelDefinitions {
      */
     @StringDef({
         ChannelId.BROWSER,
+        ChannelId.COLLABORATION,
         ChannelId.DOWNLOADS,
         ChannelId.INCOGNITO,
         ChannelId.MEDIA_PLAYBACK,
@@ -102,6 +99,7 @@ public class ChromeChannelDefinitions extends ChannelDefinitions {
     @Retention(RetentionPolicy.SOURCE)
     public @interface ChannelId {
         String BROWSER = "browser";
+        String COLLABORATION = "collaboration";
         String DOWNLOADS = "downloads";
         String INCOGNITO = "incognito";
         String MEDIA_PLAYBACK = "media";
@@ -168,6 +166,14 @@ public class ChromeChannelDefinitions extends ChannelDefinitions {
                             NotificationManager.IMPORTANCE_LOW,
                             ChannelGroupId.GENERAL));
             startup.add(ChannelId.BROWSER);
+
+            map.put(
+                    ChannelId.COLLABORATION,
+                    PredefinedChannel.create(
+                            ChannelId.COLLABORATION,
+                            R.string.notification_category_collaboration,
+                            NotificationManager.IMPORTANCE_LOW,
+                            ChannelGroupId.GENERAL));
 
             map.put(
                     ChannelId.DOWNLOADS,
@@ -320,7 +326,7 @@ public class ChromeChannelDefinitions extends ChannelDefinitions {
             int priceDropDefaultChannelImportance = NotificationManager.IMPORTANCE_DEFAULT;
             if (VERSION.SDK_INT >= VERSION_CODES.O) {
                 NotificationManagerProxy notificationManager =
-                        new NotificationManagerProxyImpl(ContextUtils.getApplicationContext());
+                        NotificationManagerProxyImpl.getInstance();
                 NotificationChannel priceDropChannel =
                         notificationManager.getNotificationChannel(ChannelId.PRICE_DROP);
                 if (priceDropChannel != null) {

@@ -32,6 +32,8 @@ NS_DESIGNATED_INITIALIZER;
     withSearchString:(NSString*)searchString;
 - (void)dismissPanelModalControllerAnimated:(BOOL)animated;
 - (void)panelDismissed;
+- (BOOL)isPresenting;
+- (BOOL)hasPresentedModalViewController;
 // The parent controller on top of which the UI needs to be presented.
 @property(nonatomic, weak) UIViewController* parentController;
 

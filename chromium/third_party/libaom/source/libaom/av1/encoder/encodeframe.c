@@ -287,6 +287,8 @@ static inline void setup_delta_q(AV1_COMP *const cpi, ThreadData *td,
     current_qindex = av1_get_sbq_user_rating_based(cpi, mi_row, mi_col);
   } else if (cpi->oxcf.q_cfg.enable_hdr_deltaq) {
     current_qindex = av1_get_q_for_hdr(cpi, x, sb_size, mi_row, mi_col);
+  } else if (cpi->oxcf.q_cfg.deltaq_mode == DELTA_Q_VARIANCE_BOOST) {
+    current_qindex = av1_get_sbq_variance_boost(cpi, x);
   }
 
   x->rdmult_cur_qindex = current_qindex;
@@ -546,6 +548,11 @@ static inline void encode_nonrd_sb(AV1_COMP *cpi, ThreadData *td,
     if (sf->rt_sf.use_fast_fixed_part &&
         x->content_state_sb.source_sad_nonrd < kLowSad) {
       bsize_select = cm->seq_params->sb_size;
+    }
+    if (cpi->sf.rt_sf.skip_encoding_non_reference_slide_change &&
+        cpi->rc.high_source_sad && cpi->ppi->rtc_ref.non_reference_frame) {
+      bsize_select = cm->seq_params->sb_size;
+      x->force_zeromv_skip_for_sb = 1;
     }
     const BLOCK_SIZE bsize = seg_skip ? sb_size : bsize_select;
     if (x->content_state_sb.source_sad_nonrd > kZeroSad)
@@ -1757,6 +1764,43 @@ static void free_block_hash_buffers(uint32_t *block_hash_values[2][2],
   }
 }
 
+/*!\brief Determines delta_q_res value for Variance Boost modulation.
+ */
+static int aom_get_variance_boost_delta_q_res(int qindex) {
+  // Signaling delta_q changes across superblocks comes with inherent syntax
+  // element overhead, which adds up to total payload size. This overhead
+  // becomes proportionally bigger the higher the base qindex (i.e. lower
+  // quality, smaller file size), so a balance needs to be struck.
+  // - Smaller delta_q_res: more granular delta_q control, more bits spent
+  // signaling deltas.
+  // - Larger delta_q_res: coarser delta_q control, less bits spent signaling
+  // deltas.
+  //
+  // At the same time, SB qindex fluctuations become larger the higher
+  // the base qindex (between lowest and highest-variance regions):
+  // - For QP 5: up to 8 qindexes
+  // - For QP 60: up to 52 qindexes
+  //
+  // With these factors in mind, it was found that the best strategy that
+  // maximizes quality per bitrate is by having very finely-grained delta_q
+  // values for the lowest picture qindexes (to preserve tiny qindex SB deltas),
+  // and progressively making them coarser as base qindex increases (to reduce
+  // total signaling overhead).
+  int delta_q_res = 1;
+
+  if (qindex >= 160) {
+    delta_q_res = 8;
+  } else if (qindex >= 120) {
+    delta_q_res = 4;
+  } else if (qindex >= 80) {
+    delta_q_res = 2;
+  } else {
+    delta_q_res = 1;
+  }
+
+  return delta_q_res;
+}
+
 /*!\brief Encoder setup(only for the current frame), encoding, and recontruction
  * for a single frame
  *
@@ -1925,6 +1969,9 @@ static inline void encode_frame_internal(AV1_COMP *cpi) {
       cm->delta_q_info.delta_q_res = DEFAULT_DELTA_Q_RES_PERCEPTUAL;
     else if (deltaq_mode == DELTA_Q_HDR)
       cm->delta_q_info.delta_q_res = DEFAULT_DELTA_Q_RES_PERCEPTUAL;
+    else if (deltaq_mode == DELTA_Q_VARIANCE_BOOST)
+      cm->delta_q_info.delta_q_res =
+          aom_get_variance_boost_delta_q_res(quant_params->base_qindex);
     // Set delta_q_present_flag before it is used for the first time
     cm->delta_q_info.delta_lf_res = DEFAULT_DELTA_LF_RES;
     cm->delta_q_info.delta_q_present_flag = deltaq_mode != NO_DELTA_Q;

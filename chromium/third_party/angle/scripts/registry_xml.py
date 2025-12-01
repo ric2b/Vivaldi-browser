@@ -89,6 +89,7 @@ gles_requestable_extensions = [
     "GL_ANGLE_texture_usage",
     "GL_APPLE_clip_distance",
     "GL_ARB_sync",
+    "GL_ARM_rgba8",
     "GL_ARM_shader_framebuffer_fetch",
     "GL_ARM_shader_framebuffer_fetch_depth_stencil",
     "GL_EXT_base_instance",
@@ -111,6 +112,7 @@ gles_requestable_extensions = [
     "GL_EXT_EGL_image_array",
     "GL_EXT_EGL_image_external_wrap_modes",
     "GL_EXT_EGL_image_storage",
+    "GL_EXT_EGL_image_storage_compression",
     "GL_EXT_external_buffer",
     "GL_EXT_float_blend",
     "GL_EXT_frag_depth",
@@ -162,6 +164,7 @@ gles_requestable_extensions = [
     "GL_EXT_texture_sRGB_R8",
     "GL_EXT_texture_sRGB_RG8",
     "GL_EXT_texture_storage",
+    "GL_EXT_texture_storage_compression",
     "GL_EXT_texture_type_2_10_10_10_REV",
     "GL_EXT_unpack_subimage",
     "GL_EXT_YUV_target",
@@ -207,6 +210,7 @@ gles_requestable_extensions = [
     "GL_OES_get_program_binary",
     "GL_OES_gpu_shader5",
     "GL_OES_mapbuffer",
+    "GL_OES_required_internalformat",
     "GL_OES_rgb8_rgba8",
     "GL_OES_sample_shading",
     "GL_OES_sample_variables",
@@ -293,6 +297,7 @@ gles_es_only_extensions = [
 
 # ES1 (Possibly the min set of extensions needed by Android)
 gles1_extensions = [
+    "GL_OES_blend_subtract",
     "GL_OES_draw_texture",
     "GL_OES_framebuffer_object",
     "GL_OES_matrix_palette",
@@ -300,6 +305,7 @@ gles1_extensions = [
     "GL_OES_point_sprite",
     "GL_OES_query_matrix",
     "GL_OES_texture_cube_map",
+    "GL_OES_texture_mirrored_repeat",
 ]
 
 
@@ -335,11 +341,13 @@ supported_egl_extensions = [
     "EGL_ANGLE_device_d3d",
     "EGL_ANGLE_device_d3d11",
     "EGL_ANGLE_device_d3d9",
+    "EGL_ANGLE_device_vulkan",
     "EGL_ANGLE_display_semaphore_share_group",
     "EGL_ANGLE_display_texture_share_group",
     "EGL_ANGLE_external_context_and_surface",
     "EGL_ANGLE_feature_control",
     "EGL_ANGLE_ggp_stream_descriptor",
+    "EGL_ANGLE_memory_usage_report",
     "EGL_ANGLE_metal_create_context_ownership_identity",
     "EGL_ANGLE_metal_shared_event_sync",
     "EGL_ANGLE_no_error",
@@ -372,6 +380,7 @@ supported_egl_extensions = [
     "EGL_EXT_platform_base",
     "EGL_EXT_platform_device",
     "EGL_EXT_protected_content",
+    "EGL_EXT_surface_compression",
     "EGL_IMG_context_priority",
     "EGL_KHR_debug",
     "EGL_KHR_fence_sync",

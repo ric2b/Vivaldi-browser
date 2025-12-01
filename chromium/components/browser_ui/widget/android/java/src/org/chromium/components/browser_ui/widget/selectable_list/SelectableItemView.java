@@ -13,10 +13,11 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import androidx.annotation.Nullable;
 import androidx.appcompat.widget.AppCompatImageButton;
 import androidx.core.widget.ImageViewCompat;
 
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.components.browser_ui.widget.R;
 
 // Vivaldi
@@ -28,6 +29,7 @@ import org.chromium.build.BuildConfig;
  *
  * @param <E> The type of the item associated with this SelectableItemViewBase.
  */
+@NullMarked
 public abstract class SelectableItemView<E> extends CheckableSelectableItemView<E> {
     /** The LinearLayout containing the rest of the views for the selectable item. */
     protected LinearLayout mContentView;
@@ -123,7 +125,7 @@ public abstract class SelectableItemView<E> extends CheckableSelectableItemView<
     }
 
     /** Returns the drawable set for the start icon view, if any. */
-    protected Drawable getStartIconDrawable() {
+    protected @Nullable Drawable getStartIconDrawable() {
         return getIconDrawable();
     }
 }

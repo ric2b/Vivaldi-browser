@@ -4,7 +4,7 @@
 
 // This file contains business logic for power bookmarks side panel content.
 
-import type {BookmarkProductInfo} from '//resources/cr_components/commerce/shopping_service.mojom-webui.js';
+import type {BookmarkProductInfo} from '//resources/cr_components/commerce/shared.mojom-webui.js';
 import {PageImageServiceBrowserProxy} from '//resources/cr_components/page_image_service/browser_proxy.js';
 import {ClientId as PageImageServiceClientId} from '//resources/cr_components/page_image_service/page_image_service.mojom-webui.js';
 import {loadTimeData} from '//resources/js/load_time_data.js';
@@ -40,7 +40,6 @@ interface PowerBookmarksDelegate {
   onBookmarkRemoved(bookmark: chrome.bookmarks.BookmarkTreeNode): void;
   getTrackedProductInfos(): {[key: string]: BookmarkProductInfo};
   getAvailableProductInfos(): Map<string, BookmarkProductInfo>;
-  getSelectedBookmarks(): {[key: string]: boolean};
   getProductImageUrl(bookmark: chrome.bookmarks.BookmarkTreeNode): string;
 }
 
@@ -373,13 +372,6 @@ export class PowerBookmarksService {
     return availableProductInfos.get(bookmark.id);
   }
 
-  bookmarkIsSelected(bookmark: chrome.bookmarks.BookmarkTreeNode): boolean {
-    const selectedBookmarks = this.delegate_.getSelectedBookmarks();
-    return Object.entries(selectedBookmarks)
-               .find(([key, _val]) => key === bookmark.id)?.[1] ?? false;
-  }
-
-
   private applySearchQueryAndLabels_(
       labels: Label[], searchQuery: string|undefined,
       shownBookmarks: chrome.bookmarks.BookmarkTreeNode[],
@@ -558,10 +550,10 @@ export class PowerBookmarksService {
                 {suggestImages: false, optimizationGuideImages: true});
     this.activeImageServiceRequestCount_--;
 
-    if (result) {
-      this.delegate_.setImageUrl(bookmark, result.imageUrl.url);
-      this.bookmarksWithCachedImages_.add(bookmark.id.toString());
-    }
+    // If there is no result, cache an empty URL because we are unlikely to get
+    // a different result in the same session.
+    this.delegate_.setImageUrl(bookmark, result ? result.imageUrl.url : '');
+    this.bookmarksWithCachedImages_.add(bookmark.id.toString());
 
     if (this.inactiveImageServiceRequests_.size > 0) {
       this.findBookmarkImageUrl_(

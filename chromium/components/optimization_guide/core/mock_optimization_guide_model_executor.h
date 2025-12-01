@@ -7,6 +7,7 @@
 
 #include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
+#include "components/optimization_guide/core/model_execution/multimodal_message.h"
 #include "components/optimization_guide/core/optimization_guide_model_executor.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
@@ -17,12 +18,6 @@ class MockOptimizationGuideModelExecutor
  public:
   MockOptimizationGuideModelExecutor();
   ~MockOptimizationGuideModelExecutor() override;
-
-  MOCK_METHOD(bool,
-              CanCreateOnDeviceSession,
-              (ModelBasedCapabilityKey feature,
-               OnDeviceModelEligibilityReason* debug_reason),
-              (override));
 
   MOCK_METHOD(std::unique_ptr<Session>,
               StartSession,
@@ -64,6 +59,7 @@ class MockSession : public OptimizationGuideModelExecutor::Session {
               GetTokenLimits,
               (),
               (const, override));
+  MOCK_METHOD(void, SetInput, (MultimodalMessage request));
   MOCK_METHOD(void,
               AddContext,
               (const google::protobuf::MessageLite& request_metadata));

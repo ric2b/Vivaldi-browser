@@ -5,6 +5,8 @@
 #include <optional>
 
 #include "base/stl_util.h"
+#include "components/ad_blocker/adblock_rule_manager.h"
+#include "components/request_filter/adblock_filter/adblock_rule_service_impl.h"
 #include "components/request_filter/adblock_filter/adblock_tab_state_and_logs.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_handle.h"
@@ -64,9 +66,9 @@ class TabStateAndLogsImpl
   }
 
   void ArmAdAttribution() {
-    if (!has_ongoing_navigations_)
-      ad_attribution_enabled_ = true;
-    else
+    // Avoid enabling Ad Attribution as a result of preloading. See the comment
+    // in LogTabActivation for more details.
+    if (has_ongoing_navigations_)
       new_ad_attribution_enabled_ = true;
   }
 
@@ -80,6 +82,10 @@ class TabStateAndLogsImpl
     ad_click_time_ = base::TimeTicks::Now();
     current_ad_click_domain_ = ad_url.host_piece();
     ad_query_triggers_.swap(triggers);
+
+    // Only the first matching ad-query-trigger rule should be used. This
+    // prevents further matches to succeed.
+    ad_attribution_enabled_ = false;
   }
 
   bool DoesAdAttributionMatch(std::string_view tracker_url_spec,
@@ -126,11 +132,15 @@ class TabStateAndLogsImpl
   }
 
   void LogTabActivations(RuleGroup group, TabActivations states) {
-    if (!has_ongoing_navigations_)
-      tab_activation_states_[static_cast<size_t>(group)] = std::move(states);
-    else
-      new_tab_activation_states_[static_cast<size_t>(group)] =
-          std::move(states);
+    // Tab Activations are normally be set when loading the main frame,
+    // so a navigation should be ongoing. On some websites (e.g.: Google), we
+    // may be receiving these because of one or another form of preloading.
+    // These should be ignored to ensure the reported tab activations match the
+    // currrently loaded page.
+    if(has_ongoing_navigations_) {
+      did_set_activation_states_[static_cast<size_t>(group)] = true;
+      new_tab_activation_states_[static_cast<size_t>(group)] = std::move(states);
+    }
   }
 
   const std::string& GetCurrentAdLandingDomain() const override {
@@ -164,7 +174,6 @@ class TabStateAndLogsImpl
       : WebContentsObserver(contents),
         WebContentsUserData<TabStateAndLogsImpl>(*contents),
         state_and_logs_(state_and_logs) {
-
     // NOTE: |contents| might have already started loading. We need to call
     // didstart from here in case.
     if (contents->IsWaitingForResponse()) {
@@ -211,7 +220,7 @@ class TabStateAndLogsImpl
     HasStartedNavigation();
   }
 
-  void HasStartedNavigation(){
+  void HasStartedNavigation() {
     // Start recording blocked URLs from the beginning of the latest triggered
     // navigation. We might have cancelled ongoing navigations before starting
     // this one, so make sure we remove the records from any previous
@@ -219,9 +228,9 @@ class TabStateAndLogsImpl
     new_blocked_urls_ = std::array<TabBlockedUrlInfo, kRuleGroupCount>();
     new_ad_attribution_enabled_ = false;
     new_allowed_attribution_trackers_.clear();
-    new_tab_activation_states_ =
-        std::array<TabActivations, kRuleGroupCount>();
+    new_tab_activation_states_ = std::array<TabActivations, kRuleGroupCount>();
     ad_query_triggers_.clear();
+    did_set_activation_states_ = {false, false};
   }
 
   void DidRedirectNavigation(
@@ -239,10 +248,20 @@ class TabStateAndLogsImpl
         navigation_handle->IsSameDocument())
       return;
 
-    has_ongoing_navigations_ = false;
-
-    if (!navigation_handle->HasCommitted())
+    if (!navigation_handle->HasCommitted()) {
+      has_ongoing_navigations_ = false;
       return;
+    }
+
+    for (auto group :
+         {RuleGroup::kTrackingRules, RuleGroup::kAdBlockingRules}) {
+      if (!did_set_activation_states_[static_cast<size_t>(group)]) {
+        state_and_logs_->ComputeMissingActivationsForNavigation(
+            group, navigation_handle->GetRenderFrameHost());
+      }
+    }
+
+    has_ongoing_navigations_ = false;
 
     if (!current_ad_landing_domain_.empty()) {
       if (current_ad_landing_domain_ ==
@@ -374,6 +393,8 @@ class TabStateAndLogsImpl
   bool ad_attribution_enabled_ = false;
   bool new_ad_attribution_enabled_ = false;
 
+  std::array<bool, kRuleGroupCount> did_set_activation_states_ = {false, false};
+
   // Information related to clicked ad.
   std::string current_ad_click_domain_;
   std::vector<std::string> ad_query_triggers_;
@@ -438,11 +459,13 @@ std::optional<FrameInfo> GetFrameInfo(StateAndLogsImpl* state_and_logs,
 StateAndLogsImpl::StateAndLogsImpl(base::Time reporting_start,
                                    CounterGroup blocked_domains,
                                    CounterGroup blocked_for_origin,
+                                   RuleServiceImpl* rules_service,
                                    base::RepeatingClosure schedule_save)
     : reporting_start_(reporting_start),
       blocked_domains_(std::move(blocked_domains)),
       blocked_for_origin_(std::move(blocked_for_origin)),
       schedule_save_(schedule_save),
+      rules_service_(rules_service),
       weak_factory_(this) {
   if (reporting_start.is_null())
     ClearBlockedCounters();
@@ -498,10 +521,15 @@ void StateAndLogsImpl::ResetFrameBlockState(RuleGroup group,
                                                frame->GetFrameTreeNodeId());
 }
 
-void StateAndLogsImpl::LogTabActivations(
+void StateAndLogsImpl::ReportTabActivations(
     RuleGroup group,
     content::RenderFrameHost* frame,
     const RulesIndex::ActivationResults& activations) {
+  if (!frame || !frame->IsInPrimaryMainFrame()) {
+    // Only log this for the top level frame, for the time
+    return;
+  }
+
   std::optional<FrameInfo> frame_info = GetFrameInfo(this, true, frame, false);
   if (!frame_info) {
     return;
@@ -539,6 +567,12 @@ void StateAndLogsImpl::LogTabActivations(
 
   TabStateAndLogs::TabActivations logged_activations;
   for (const auto& [activation_type, activation_result] : activations) {
+    if (activation_type == flat::ActivationType_ATTRIBUTE_ADS &&
+        activation_result.GetDecision().value_or(flat::Decision_MODIFY) ==
+            flat::Decision_PASS) {
+      frame_info->tab_helper->ArmAdAttribution();
+    }
+
     TabStateAndLogs::TabActivationState state;
     state.source = [type = activation_result.type]() {
       switch (type) {
@@ -615,14 +649,6 @@ void StateAndLogsImpl::OnUrlBlocked(RuleGroup group,
   PrepareNewNotifications();
 }
 
-void StateAndLogsImpl::ArmAdAttribution(content::RenderFrameHost* frame) {
-  std::optional<FrameInfo> frame_info = GetFrameInfo(this, true, frame, false);
-  if (!frame_info || frame_info->web_contents->GetPrimaryMainFrame() != frame) {
-    return;
-  }
-  frame_info->tab_helper->ArmAdAttribution();
-}
-
 void StateAndLogsImpl::SetTabAdQueryTriggers(
     const GURL& ad_url,
     std::vector<std::string> ad_query_triggers,
@@ -697,6 +723,27 @@ void StateAndLogsImpl::OnAllowAttributionChanged(
   }
 }
 
+bool StateAndLogsImpl::IsOriginWanted(RuleGroup group, url::Origin origin) {
+  return !rules_service_->GetRuleManager()->IsExemptOfFiltering(group, origin);
+}
+
+void StateAndLogsImpl::ComputeMissingActivationsForNavigation(
+    RuleGroup group,
+    content::RenderFrameHost* frame) {
+  RulesIndex* index = rules_service_->GetRuleIndex(group);
+
+  if (!index) {
+    return;
+  }
+
+  ReportTabActivations(
+      group, frame,
+      index->GetActivationsForFrame(
+          base::BindRepeating(&StateAndLogsImpl::IsOriginWanted,
+                              base::Unretained(this), group),
+          frame));
+}
+
 void StateAndLogsImpl::AddObserver(Observer* observer) {
   observers_.AddObserver(observer);
 }
@@ -728,6 +775,10 @@ void StateAndLogsImpl::PrepareNewNotifications() {
 TabStateAndLogs* StateAndLogsImpl::GetTabHelper(
     content::WebContents* contents) const {
   return TabStateAndLogsImpl::FromWebContents(contents);
+}
+
+void StateAndLogsImpl::CreateTabHelper(content::WebContents* contents) {
+  TabStateAndLogsImpl::CreateForWebContents(contents, AsWeakPtr());
 }
 
 void StateAndLogsImpl::SendNotifications() {

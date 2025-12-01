@@ -11,6 +11,7 @@
 #include "base/check_op.h"
 #include "base/containers/fixed_flat_map.h"
 #include "base/containers/fixed_flat_set.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -25,7 +26,6 @@
 #include "chrome/browser/external_protocol/constants.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -52,6 +52,10 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "components/url_formatter/elide_url.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
+#endif
+
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+#include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -174,8 +178,10 @@ void LaunchUrlWithoutSecurityCheckWithDelegate(
     return;
   }
 
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   g_browser_process->safe_browsing_service()->ReportExternalAppRedirect(
       web_contents, url.scheme(), url.possibly_invalid_spec());
+#endif
 
   // |web_contents| is only passed in to find browser context. Do not assume
   // that the external protocol request came from the main frame.
@@ -329,8 +335,8 @@ bool IsSchemeOriginPairAllowedByPolicy(const std::string& scheme,
 
   url_matcher::URLMatcher matcher;
   base::MatcherStringPattern::ID id(0);
-  url_matcher::util::AddFilters(&matcher, true /* allowed */, &id,
-                                *origin_patterns);
+  url_matcher::util::AddFiltersWithLimit(&matcher, true /* allowed */, &id,
+                                         *origin_patterns);
 
   auto matching_set = matcher.MatchURL(initiating_origin->GetURL());
   return !matching_set.empty();

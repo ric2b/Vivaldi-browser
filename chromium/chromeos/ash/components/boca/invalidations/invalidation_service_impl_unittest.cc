@@ -17,6 +17,7 @@
 #include "components/gcm_driver/gcm_driver.h"
 #include "components/gcm_driver/instance_id/instance_id_driver.h"
 #include "google_apis/common/request_sender.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -30,7 +31,7 @@ namespace ash::boca {
 
 namespace {
 constexpr char kTestEmail[] = "testemail";
-constexpr char kGaiaId[] = "123";
+constexpr GaiaId::Literal kGaiaId("123");
 constexpr int kTokenValidationPeriodMinutesDefault = 60 * 24;
 
 class MockSessionClientImpl : public SessionClientImpl {
@@ -47,10 +48,9 @@ class MockSessionClientImpl : public SessionClientImpl {
 class MockSessionManager : public BocaSessionManager {
  public:
   explicit MockSessionManager(SessionClientImpl* session_client_impl)
-      : BocaSessionManager(
-            session_client_impl,
-            AccountId::FromUserEmailGaiaId(kTestEmail, kGaiaId),
-            /*is_producer=*/false) {}
+      : BocaSessionManager(session_client_impl,
+                           AccountId::FromUserEmailGaiaId(kTestEmail, kGaiaId),
+                           /*is_producer=*/false) {}
   MOCK_METHOD(void, LoadCurrentSession, (bool), (override));
   ~MockSessionManager() override = default;
 };

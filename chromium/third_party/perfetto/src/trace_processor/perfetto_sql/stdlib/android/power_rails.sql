@@ -22,11 +22,11 @@ INCLUDE PERFETTO MODULE time.conversion;
 -- NOTE: Requires dedicated hardware - table is only populated on Pixels.
 CREATE PERFETTO TABLE android_power_rails_counters (
     -- `counter.id`
-    id INT,
+    id LONG,
     -- Timestamp of the energy measurement.
-    ts INT,
+    ts TIMESTAMP,
     -- Time until the next energy measurement.
-    dur INT,
+    dur DURATION,
     -- Power rail name. Alias of `counter_track.name`.
     power_rail_name STRING,
     -- Raw power rail name.
@@ -45,7 +45,7 @@ CREATE PERFETTO TABLE android_power_rails_counters (
     -- measurement in microwatt-seconds (uWs) (AKA micro-joules).
     energy_delta DOUBLE,
     -- Power rail track id. Alias of `counter_track.id`.
-    track_id INT,
+    track_id JOINID(track.id),
     -- DEPRECATED. Use `energy_since_boot` instead.
     value DOUBLE
 ) AS
@@ -64,7 +64,7 @@ SELECT
     EXTRACT_ARG(source_arg_set_id, 'raw_name') AS raw_power_rail_name,
     c.value AS energy_since_boot,
     c.next_value AS energy_since_boot_at_end,
-    1e3*(c.delta_value/(time_to_s(c.dur))) AS average_power,
+    1e6*(c.delta_value/c.dur) AS average_power,
     c.delta_value AS energy_delta,
     c.track_id,
     c.value

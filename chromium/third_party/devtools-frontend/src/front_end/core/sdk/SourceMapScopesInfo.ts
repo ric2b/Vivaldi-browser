@@ -5,20 +5,13 @@
 import * as Protocol from '../../generated/protocol.js';
 
 import type {CallFrame, ScopeChainEntry} from './DebuggerModel.js';
-import type {SourceMap, SourceMapV3Object} from './SourceMap.js';
+import type {SourceMap} from './SourceMap.js';
 import {SourceMapScopeChainEntry} from './SourceMapScopeChainEntry.js';
-import {
-  decodeGeneratedRanges,
-  decodeOriginalScopes,
-  type GeneratedRange,
-  type OriginalPosition,
-  type OriginalScope,
-} from './SourceMapScopes.js';
+import type {GeneratedRange, OriginalPosition, OriginalScope, Position,} from './SourceMapScopes.js';
 
 export class SourceMapScopesInfo {
-  /* eslint-disable-next-line no-unused-private-class-members */
   readonly #sourceMap: SourceMap;
-  readonly #originalScopes: OriginalScope[];
+  readonly #originalScopes: (OriginalScope|undefined)[];
   readonly #generatedRanges: GeneratedRange[];
 
   #cachedVariablesAndBindingsPresent: boolean|null = null;
@@ -29,16 +22,16 @@ export class SourceMapScopesInfo {
     this.#generatedRanges = generatedRanges;
   }
 
-  static parseFromMap(
-      sourceMap: SourceMap,
-      sourceMapJson: Pick<SourceMapV3Object, 'names'|'originalScopes'|'generatedRanges'>): SourceMapScopesInfo {
-    if (!sourceMapJson.originalScopes || !sourceMapJson.generatedRanges) {
-      throw new Error('Cant create SourceMapScopesInfo without encoded scopes');
+  addOriginalScopes(scopes: (OriginalScope|undefined)[]): void {
+    for (const scope of scopes) {
+      this.#originalScopes.push(scope);
     }
-    const scopeTrees = decodeOriginalScopes(sourceMapJson.originalScopes, sourceMapJson.names ?? []);
-    const originalScopes = scopeTrees.map(tree => tree.root);
-    const generatedRanges = decodeGeneratedRanges(sourceMapJson.generatedRanges, scopeTrees, sourceMapJson.names ?? []);
-    return new SourceMapScopesInfo(sourceMap, originalScopes, generatedRanges);
+  }
+
+  addGeneratedRanges(ranges: GeneratedRange[]): void {
+    for (const range of ranges) {
+      this.#generatedRanges.push(range);
+    }
   }
 
   /**
@@ -65,7 +58,7 @@ export class SourceMapScopesInfo {
         // Record the name and call-site if the range corresponds to an inlined function.
         result.inlinedFunctions.push({name: range.originalScope?.name ?? '', callsite: range.callsite});
       }
-      if (range.isFunctionScope) {
+      if (range.isStackFrame) {
         // We arrived at an actual generated JS function, don't go further.
         // The corresponding original scope could not actually be a function
         // (e.g. a block scope transpiled down to a JS function), but we'll
@@ -137,8 +130,12 @@ export class SourceMapScopesInfo {
     // We check whether any original scope has a non-empty list of variables, and
     // generated ranges with a non-empty binding list.
 
-    function walkTree(nodes: OriginalScope[]|GeneratedRange[]): boolean {
+    function walkTree(nodes: (OriginalScope|undefined)[]|GeneratedRange[]): boolean {
       for (const node of nodes) {
+        if (!node) {
+          continue;
+        }
+
         if ('variables' in node && node.variables.length > 0) {
           return true;
         }
@@ -233,6 +230,71 @@ export class SourceMapScopesInfo {
     }
 
     return rangeChain;
+  }
+
+  /**
+   * Returns the authored function name of the function containing the provided generated position.
+   */
+  findOriginalFunctionName({line, column}: Position): string|null {
+    // There are 2 approaches:
+    //   1) Find the inner-most generated range containing the provided generated position
+    //      and use it's OriginalScope (then walk it outwards until we hit a function).
+    //   2) Use the mappings to turn the generated position into an original position.
+    //      Then find the inner-most original scope containing that original position.
+    //      Then walk it outwards until we hit a function.
+    //
+    // Both approaches should yield the same result (assuming the mappings are spec compliant
+    // w.r.t. generated ranges). But in the case of "pasta" scopes and extension provided
+    // scope info, we only have the OriginalScope parts and mappings without GeneratedRanges.
+
+    let originalInnerMostScope: OriginalScope|undefined;
+
+    if (this.#generatedRanges.length > 0) {
+      const rangeChain = this.#findGeneratedRangeChain(line, column);
+      originalInnerMostScope = rangeChain.at(-1)?.originalScope;
+    } else {
+      // No GeneratedRanges. Try to use mappings.
+      const entry = this.#sourceMap.findEntry(line, column);
+      if (entry === null || entry.sourceIndex === undefined) {
+        return null;
+      }
+      originalInnerMostScope =
+          this.#findOriginalScopeChain(
+                  {sourceIndex: entry.sourceIndex, line: entry.sourceLineNumber, column: entry.sourceColumnNumber})
+              .at(-1);
+    }
+
+    // Walk the original scope chain outwards until we find a function.
+    for (let originalScope = originalInnerMostScope; originalScope; originalScope = originalScope.parent) {
+      if (originalScope.isStackFrame) {
+        return originalScope.name ?? '';
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Given an original position, this returns all the surrounding original scopes from outer
+   * to inner.
+   */
+  #findOriginalScopeChain({sourceIndex, line, column}: OriginalPosition): OriginalScope[] {
+    const scope = this.#originalScopes[sourceIndex];
+    if (!scope) {
+      return [];
+    }
+
+    const result: OriginalScope[] = [];
+    (function walkScopes(scopes: OriginalScope[]) {
+      for (const scope of scopes) {
+        if (!contains(scope, line, column)) {
+          continue;
+        }
+        result.push(scope);
+        walkScopes(scope.children);
+      }
+    })([scope]);
+
+    return result;
   }
 }
 

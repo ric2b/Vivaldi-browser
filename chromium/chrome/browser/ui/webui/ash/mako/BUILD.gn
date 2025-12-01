@@ -2,9 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/chromeos/ui_mode.gni")
-
-assert(is_chromeos_ash)
+assert(is_chromeos)
 
 static_library("mako") {
   sources = [
@@ -25,7 +23,6 @@ static_library("mako") {
   public_deps = [
     "//base",
     "//chrome/browser/ui/webui/top_chrome",
-    "//chromeos/ash/services/orca/public/mojom",
     "//chromeos/components/magic_boost/public/cpp",
     "//skia:skia_core_public_headers",
     "//third_party/abseil-cpp:absl",
@@ -49,9 +46,9 @@ static_library("mako") {
     "//chrome/browser/profiles:profile",
     "//chrome/browser/resources/chromeos/mako:resources",
     "//chrome/browser/ui/views/bubble",
-    "//chrome/browser/ui/webui:webui_util",
     "//chrome/browser/ui/webui/ash/lobster:lobster",
     "//chrome/common:mojo_bindings",
+    "//chromeos/ash/services/orca/public/mojom",
     "//chromeos/constants",
     "//components/input",
     "//content/public/browser",
@@ -62,6 +59,7 @@ static_library("mako") {
     "//ui/aura",
     "//ui/base/ime/ash",
     "//ui/display",
+    "//ui/webui",
   ]
 
   allow_circular_includes_from = [

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 load("//third_party/cpptoolchains/windows_llvm/build_defs:windows.bzl", "windows")
+load("//tools/build_defs/apple:apple.bzl", "apple_static_xcframework")
 
 package(default_visibility = [
     "//connections:__subpackages__",
@@ -28,7 +29,6 @@ cc_library(
         "nc_def.h",
         "nc_types.h",
     ],
-    compatible_with = ["//buildenv/target:non_prod"],
 )
 
 cc_library(
@@ -36,7 +36,6 @@ cc_library(
     srcs = [
         "nc.cc",
     ],
-    compatible_with = ["//buildenv/target:non_prod"],
     copts = ["-DNC_DLL"],
     deps = [
         ":nc_types",
@@ -55,10 +54,32 @@ cc_library(
     ],
 )
 
+apple_static_xcframework(
+    name = "NearbyConnections",
+    avoid_deps = [],
+    bundle_name = "NearbyConnections",
+    ios = {
+        "simulator": [
+            "arm64",
+            "x86_64",
+        ],
+        "device": [
+            "arm64",
+        ],
+    },
+    minimum_os_versions = {
+        "ios": "15.0",
+    },
+    deps = [
+        ":nc",
+        "//internal/platform/implementation/apple",
+        "//internal/platform/implementation/apple/Mediums",
+    ],
+)
+
 windows.cc_windows_dll(
     name = "nc_windows",
     srcs = [],
-    compatible_with = ["//buildenv/target:non_prod"],
     copts = ["-DNC_DLL"],
     tags = ["windows-dll"],
     deps = [

@@ -11,21 +11,18 @@
 #include <vector>
 
 class Profile;
-class ExternalProcessImporterHost;
 
 namespace extension_importer {
 
 class ChromiumExtensionsImporter {
  public:
-  ChromiumExtensionsImporter(Profile* profile,
-                             base::WeakPtr<ExternalProcessImporterHost> host);
+  explicit ChromiumExtensionsImporter(Profile* profile);
   ~ChromiumExtensionsImporter();
 
   void OnExtensionAdded(bool success,
                         const std::string& error,
                         extensions::webstore_install::Result result);
-  void AddExtensions(const std::vector<std::string>& extensions);
-  void FinishExtensionProcessing();
+  void AddExtensions(const std::vector<std::string> extensions);
 
   static bool CanImportExtensions(const base::FilePath& profile_dir);
   static std::vector<std::string> GetImportableExtensions(
@@ -33,9 +30,6 @@ class ChromiumExtensionsImporter {
 
  private:
   const raw_ptr<Profile> profile_;
-  const base::WeakPtr<ExternalProcessImporterHost> host_;
-  size_t extensions_size_;
-  size_t extensions_processed_;
 
   base::WeakPtrFactory<ChromiumExtensionsImporter> weak_ptr_factory_{this};
 };

@@ -12,11 +12,6 @@
 
 namespace openscreen::cast {
 
-const IPAddress kAddressV4 = {192, 168, 0, 0};
-const IPAddress kAddressV6 = {1, 2, 3, 4, 5, 6, 7, 8};
-const IPEndpoint kEndpointV4 = {kAddressV4, kPort};
-const IPEndpoint kEndpointV6 = {kAddressV6, kPort};
-
 discovery::DnsSdTxtRecord CreateValidTxt() {
   discovery::DnsSdTxtRecord txt;
   txt.SetValue(kUniqueIdKey, kTestUniqueId);

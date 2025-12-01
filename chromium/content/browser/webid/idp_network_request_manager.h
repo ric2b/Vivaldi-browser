@@ -117,6 +117,7 @@ class CONTENT_EXPORT IdpNetworkRequestManager {
     GURL client_metadata;
     GURL metrics;
     GURL disconnect;
+    GURL issuance;
   };
 
   struct CONTENT_EXPORT WellKnown {
@@ -289,6 +290,7 @@ class CONTENT_EXPORT IdpNetworkRequestManager {
       const GURL& token_url,
       const std::string& account,
       const std::string& url_encoded_post_data,
+      bool idp_blindness,
       TokenRequestCallback callback,
       ContinueOnCallback continue_on,
       RecordErrorMetricsCallback record_error_metrics_callback);
@@ -304,6 +306,7 @@ class CONTENT_EXPORT IdpNetworkRequestManager {
   // Sends error code to metrics endpoint when token generation fails.
   virtual void SendFailedTokenRequestMetrics(
       const GURL& metrics_endpoint_url,
+      bool did_show_ui,
       MetricsEndpointErrorCode error_code);
 
   // Send logout request to a single target.

@@ -170,6 +170,7 @@
 <translation id="3838085852053358637">Η φόρτωση της επέκτασης απέτυχε</translation>
 <translation id="383891835335927981">Δεν έχει γίνει μεγέθυνση ή σμίκρυνση κανενός ιστοτόπου</translation>
 <translation id="385051799172605136">Πίσω</translation>
+<translation id="3861977424605124250">Εμφάνιση κατά την εκκίνηση</translation>
 <translation id="3867944738977021751">Πεδία πιστοποιητικού</translation>
 <translation id="3905761538810670789">Επισκευή εφαρμογής</translation>
 <translation id="3908501907586732282">Ενεργοποίηση επέκτασης</translation>
@@ -278,6 +279,7 @@
 <translation id="5582839680698949063">Κύριο μενού</translation>
 <translation id="5614553682702429503">Αποθήκευση κωδικού πρόσβασης;</translation>
 <translation id="5623842676595125836">Αρχείο Καταγραφής</translation>
+<translation id="5624959475330585145">Ερώτηση πριν από τη χρήση μη ασφαλών συνδέσεων</translation>
 <translation id="5638309510554459422">Βρείτε επεκτάσεις και θέματα στο <ph name="BEGIN_LINK" />Chrome Web Store<ph name="END_LINK" /></translation>
 <translation id="5677928146339483299">Αποκλεισμένα</translation>
 <translation id="5707185214361380026">Αποτυχία φόρτωσης επέκτασης από:</translation>
@@ -467,6 +469,7 @@
 <translation id="9218430445555521422">Ορισμός ως προεπιλογή</translation>
 <translation id="93766956588638423">Επισκευή επέκτασης</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
+<translation id="961856697154696964">Διαγραφή δεδομένων περιήγησης</translation>
 <translation id="994289308992179865">&amp;Επανάληψη</translation>
 <translation id="998747458861718449">Έ&amp;λεγχος</translation>
 </translationbundle>

@@ -73,7 +73,7 @@
 #include "third_party/blink/public/web/web_navigation_params.h"
 #include "third_party/blink/public/web/web_settings.h"
 #include "third_party/blink/public/web/web_view_client.h"
-#include "third_party/blink/renderer/core/frame/csp/conversion_util.h"
+#include "third_party/blink/renderer/core/frame/csp/test_util.h"
 #include "third_party/blink/renderer/core/frame/web_frame_widget_impl.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/frame/web_remote_frame_impl.h"
@@ -379,7 +379,8 @@ void SwapRemoteFrame(
                       std::move(frame_host)),
                   mojo::AssociatedRemote<mojom::blink::RemoteFrame>()
                       .BindNewEndpointAndPassDedicatedReceiver(),
-                  std::move(replicated_state));
+                  std::move(replicated_state),
+                  /*devtools_frame_token=*/std::nullopt);
 }
 
 WebViewHelper::WebViewHelper(
@@ -735,6 +736,7 @@ void WebViewHelper::InitializeWebView(
   if (is_prerendering) {
     prerender_param = blink::mojom::PrerenderParam::New();
     prerender_param->page_metric_suffix = "for_testing";
+    prerender_param->should_prepare_paint_tree = true;
   }
 
   web_view_ = To<WebViewImpl>(
@@ -798,7 +800,8 @@ WebViewImpl* WebViewHelper::CreateWebView(WebViewClient* web_view_client,
 int TestWebFrameClient::loads_in_progress_ = 0;
 
 TestWebFrameClient::TestWebFrameClient()
-    : associated_interface_provider_(new AssociatedInterfaceProvider(nullptr)),
+    : associated_interface_provider_(new AssociatedInterfaceProvider(
+          base::SingleThreadTaskRunner::GetCurrentDefault())),
       effective_connection_type_(WebEffectiveConnectionType::kTypeUnknown) {}
 
 TestWebFrameClient::~TestWebFrameClient() = default;
@@ -1006,6 +1009,15 @@ void TestWebFrameWidget::DispatchThroughCcInputHandler(
           },
           WrapWeakPersistent(this)));
   FlushInputHandlerTasks();
+}
+
+void TestWebFrameWidget::RequestDecode(
+    const cc::DrawImage&,
+    base::OnceCallback<void(bool)> callback) {
+  // TODO(paint-dev): probably this should `std::move(callback).Run(true)`, but
+  // that could cause deep recursion into
+  // ResourceFetcher::MaybeStartSpeculativeImageDecode(). Currently, nothing
+  // depends on the callback actually running, so we just drop it.
 }
 
 display::ScreenInfo TestWebFrameWidget::GetInitialScreenInfo() {

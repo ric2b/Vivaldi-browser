@@ -21,7 +21,6 @@ import {
   waitForFunction,
   withControlOrMetaKey,
 } from '../../shared/helper.js';
-
 import {CONSOLE_TAB_SELECTOR, focusConsolePrompt, getCurrentConsoleMessages} from '../helpers/console-helpers.js';
 import {openSoftContextMenuAndClickOnItem} from '../helpers/context-menu-helpers.js';
 import {reloadDevTools} from '../helpers/cross-tool-helper.js';
@@ -60,7 +59,7 @@ async function waitForTextContent(selector: string) {
   return await element.evaluate(({textContent}) => textContent);
 }
 
-const DEVTOOLS_LINK = '.toolbar-item .devtools-link';
+const DEVTOOLS_LINK = 'devtools-toolbar .devtools-link';
 const INFOBAR_TEXT = '.infobar-info-text';
 
 describe('The Sources Tab', function() {

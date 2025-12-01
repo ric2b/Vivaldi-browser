@@ -8,14 +8,13 @@ import * as i18n from '../../../../core/i18n/i18n.js';
 import * as Platform from '../../../../core/platform/platform.js';
 import type {RenderBlockingInsightModel} from '../../../../models/trace/insights/RenderBlocking.js';
 import type * as Trace from '../../../../models/trace/trace.js';
-import * as LitHtml from '../../../../ui/lit-html/lit-html.js';
+import * as Lit from '../../../../ui/lit/lit.js';
 import type * as Overlays from '../../overlays/overlays.js';
 
+import {BaseInsightComponent} from './BaseInsightComponent.js';
 import {eventRef} from './EventRef.js';
-import {BaseInsightComponent, shouldRenderForCategory} from './Helpers.js';
-import {Category} from './types.js';
 
-const {html} = LitHtml;
+const {html} = Lit;
 
 const UIStrings = {
   /**
@@ -26,14 +25,17 @@ const UIStrings = {
    *@description Label used for a time duration.
    */
   duration: 'Duration',
+  /**
+   * @description Text status indicating that no requests blocked the initial render of a navigation
+   */
+  noRenderBlocking: 'No render blocking requests for this navigation',
 };
 
 const str_ = i18n.i18n.registerUIStrings('panels/timeline/components/insights/RenderBlocking.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
 export class RenderBlocking extends BaseInsightComponent<RenderBlockingInsightModel> {
-  static override readonly litTagName = LitHtml.literal`devtools-performance-render-blocking-requests`;
-  override insightCategory: Category = Category.LCP;
+  static override readonly litTagName = Lit.StaticHtml.literal`devtools-performance-render-blocking-requests`;
   override internalName: string = 'render-blocking-requests';
 
   override createOverlays(): Overlays.Overlays.TimelineOverlay[] {
@@ -52,55 +54,41 @@ export class RenderBlocking extends BaseInsightComponent<RenderBlockingInsightMo
     };
   }
 
-  #renderRenderBlocking(insightResult: Trace.Insights.Types.InsightModels['RenderBlocking']): LitHtml.LitTemplate {
+  override getEstimatedSavingsTime(): Trace.Types.Timing.Milli|null {
+    return this.model?.metricSavings?.FCP ?? null;
+  }
+
+  override renderContent(): Lit.LitTemplate {
     if (!this.model) {
-      return LitHtml.nothing;
+      return Lit.nothing;
     }
 
-    const estimatedSavings = insightResult.metricSavings?.FCP;
     const MAX_REQUESTS = 3;
-    const topRequests = insightResult.renderBlockingRequests.slice(0, MAX_REQUESTS);
+    const topRequests = this.model.renderBlockingRequests.slice(0, MAX_REQUESTS);
+
+    if (!topRequests.length) {
+      return html`<div class="insight-section">${i18nString(UIStrings.noRenderBlocking)}</div>`;
+    }
 
     // clang-format off
     return html`
-        <div class="insights">
-          <devtools-performance-sidebar-insight .data=${{
-            title: this.model.title,
-            description: this.model.description,
-            internalName: this.internalName,
-            expanded: this.isActive(),
-            estimatedSavingsTime: estimatedSavings,
-          }}
-          @insighttoggleclick=${this.onSidebarClick} >
-            <div slot="insight-content" class="insight-section">
-              ${html`<devtools-performance-table
-                .data=${{
-                  insight: this,
-                  headers: [i18nString(UIStrings.renderBlockingRequest), i18nString(UIStrings.duration)],
-                  rows: topRequests.map(request => ({
-                    values: [
-                      eventRef(request),
-                      i18n.TimeUtilities.millisToString(Platform.Timing.microSecondsToMilliSeconds(request.dur)),
-                    ],
-                    overlays: [this.#createOverlayForRequest(request)],
-                  })),
-                }}>
-              </devtools-performance-table>`}
-            </div>
-          </devtools-performance-sidebar-insight>
-      </div>`;
-            // clang-format on
-  }
-
-  override render(): void {
-    const model = this.model;
-    const hasBlockingRequests = model?.renderBlockingRequests && model.renderBlockingRequests.length > 0;
-    const matchesCategory = shouldRenderForCategory({
-      activeCategory: this.data.activeCategory,
-      insightCategory: this.insightCategory,
-    });
-    const output = hasBlockingRequests && matchesCategory ? this.#renderRenderBlocking(model) : LitHtml.nothing;
-    LitHtml.render(output, this.shadow, {host: this});
+      <div class="insight-section">
+        <devtools-performance-table
+          .data=${{
+            insight: this,
+            headers: [i18nString(UIStrings.renderBlockingRequest), i18nString(UIStrings.duration)],
+            rows: topRequests.map(request => ({
+              values: [
+                eventRef(request),
+                i18n.TimeUtilities.millisToString(Platform.Timing.microSecondsToMilliSeconds(request.dur)),
+              ],
+              overlays: [this.#createOverlayForRequest(request)],
+            })),
+          }}>
+        </devtools-performance-table>
+      </div>
+    `;
+    // clang-format on
   }
 }
 

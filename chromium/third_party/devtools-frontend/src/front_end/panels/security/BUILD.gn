@@ -10,6 +10,7 @@ import("../visibility.gni")
 
 generate_css("css_files") {
   sources = [
+    "cookieControlsView.css",
     "cookieReportView.css",
     "lockIcon.css",
     "mainView.css",
@@ -20,6 +21,8 @@ generate_css("css_files") {
 
 devtools_module("security") {
   sources = [
+    "CookieControlsTreeElement.ts",
+    "CookieControlsView.ts",
     "CookieReportTreeElement.ts",
     "CookieReportView.ts",
     "OriginTreeElement.ts",
@@ -35,8 +38,14 @@ devtools_module("security") {
     "../../core/i18n:bundle",
     "../../core/sdk:bundle",
     "../../generated:protocol",
+    "../../models/issues_manager:bundle",
     "../../panels/network/forward:bundle",
+    "../../ui/components/buttons:bundle",
+    "../../ui/components/cards:bundle",
+    "../../ui/components/chrome_link:bundle",
+    "../../ui/components/switch:bundle",
     "../../ui/legacy:bundle",
+    "../../ui/legacy/components/data_grid:bundle",
   ]
 }
 
@@ -51,6 +60,7 @@ devtools_entrypoint("bundle") {
   visibility = [
     ":*",
     "../../entrypoints/*",
+    "../console/*",
   ]
 
   visibility += devtools_panels_visibility
@@ -72,6 +82,8 @@ ts_library("unittests") {
   testonly = true
 
   sources = [
+    "CookieControlsView.test.ts",
+    "CookieReportView.test.ts",
     "SecurityModel.test.ts",
     "SecurityPanel.test.ts",
   ]

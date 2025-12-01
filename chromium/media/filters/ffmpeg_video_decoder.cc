@@ -35,8 +35,6 @@
 #include "media/ffmpeg/ffmpeg_decoding_loop.h"
 #include "media/filters/ffmpeg_glue.h"
 
-#include "app/vivaldi_apptools.h"
-
 namespace media {
 
 namespace {
@@ -200,12 +198,12 @@ int FFmpegVideoDecoder::GetVideoBuffer(struct AVCodecContext* codec_context,
   // Round up the allocation, but keep `allocation_size` as the usable
   // allocation after aligning `data`.
   void* fb_priv = nullptr;
-  uint8_t* data = frame_pool_->GetFrameBuffer(allocation_size, &fb_priv);
-  if (!data) {
+  auto span = frame_pool_->GetFrameBuffer(allocation_size, &fb_priv);
+  if (span.empty() || !fb_priv) {
     return AVERROR(EINVAL);
   }
 
-  data = base::bits::AlignUp(data, layout->buffer_addr_align());
+  uint8_t* data = base::bits::AlignUp(span.data(), layout->buffer_addr_align());
 
   for (size_t plane = 0; plane < num_planes; ++plane) {
     frame->data[plane] = data + layout->planes()[plane].offset;
@@ -495,13 +493,6 @@ bool FFmpegVideoDecoder::ConfigureDecoder(const VideoDecoderConfig& config,
   codec_context_->opaque = this;
   codec_context_->get_buffer2 = GetVideoBufferImpl;
   codec_context_->flags |= AV_CODEC_FLAG_COPY_OPAQUE;
-
-  if (!vivaldi::IsVivaldiRunning() &&
-      base::FeatureList::IsEnabled(kFFmpegAllowLists)) {
-    // Note: FFmpeg will try to free this string, so we must duplicate it.
-    codec_context_->codec_whitelist =
-        av_strdup(FFmpegGlue::GetAllowedVideoDecoders());
-  }
 
   if (decode_nalus_) {
     codec_context_->flags2 |= AV_CODEC_FLAG2_CHUNKS;

@@ -7,7 +7,6 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> het die verbinding onverwags gesluit.</translation>
 <translation id="1161325031994447685">Herverbind tans aan Wi-Fi</translation>
 <translation id="1175364870820465910">&amp;Druk Af…</translation>
-<translation id="132390688737681464">Bewaar en vul adresse in</translation>
 <translation id="1375198122581997741">Oor Weergawe</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> het geen data verstuur nie.</translation>
 <translation id="1555191101192706055">Aanvallers op die werf wat u probeer besoek het, kan u dalk mislei om skadelike programmatuur te installeer wat ’n invloed kan hê op hoe u blaai – byvoorbeeld deur u tuisblad te verander of vir u ekstra advertensies te wys op werwe wat u besoek.</translation>
@@ -52,6 +51,7 @@
 <translation id="2991571918955627853">U kan nie nou <ph name="SITE" /> besoek nie omdat die webwerf HSTS gebruik. Netwerkfoute en -aanvalle is gewoonlik tydelik, dus sal hierdie blad waarskynlik later werk.</translation>
 <translation id="3005723025932146533">Toon bewaarde kopie</translation>
 <translation id="301521992641321250">Outomaties versper</translation>
+<translation id="3037605927509011580">O, mapstieks!</translation>
 <translation id="3041612393474885105">Sertifikaatinligting</translation>
 <translation id="3109728660330352905">U is nie gemagtig om hierdie blad te sien nie.</translation>
 <translation id="31207688938192855"><ph name="BEGIN_LINK" />Probeer die verbindingsdiagnose<ph name="END_LINK" />.</translation>
@@ -64,7 +64,6 @@
 <translation id="3234666976984236645">Bespeur altyd belangrike inhoud op hierdie werf</translation>
 <translation id="3308738399950580893">advertensies</translation>
 <translation id="3384522979010096022">U organisasie laat u nie toe om hierdie werf te bekyk nie</translation>
-<translation id="3387261909427947069">Betaalmetodes</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> is tans onbereikbaar.</translation>
 <translation id="3427092606871434483">Laat Toe (verstek)</translation>
 <translation id="3447661539832366887">Die eienaar van hierdie toestel het die dinosourusspel afgeskakel.</translation>
@@ -105,6 +104,7 @@
 <translation id="4522570452068850558">Details</translation>
 <translation id="4558551763791394412">Probeer u uitbreidings deaktiveer.</translation>
 <translation id="4592951414987517459">U verbinding aan <ph name="DOMAIN" /> is d.m.v. ’n moderne syfersuite geënkripteer.</translation>
+<translation id="4598641255230617220">Plak en gaan</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">U verbinding is onderbreek</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Windows Netwerkdiagnose loop tans<ph name="END_LINK" /></translation>
@@ -114,6 +114,7 @@
 <translation id="4764776831041365478">Die webblad by <ph name="URL" /> is dalk tydelik af of is permanent na ’n nuwe webadres verskuif.</translation>
 <translation id="483241715238664915">Skakel waarskuwings aan</translation>
 <translation id="4943872375798546930">Geen resultate</translation>
+<translation id="5017554619425969104">Teks wat u gekopieer het</translation>
 <translation id="5023310440958281426">Gaan u administrateur se beleide na</translation>
 <translation id="5039804452771397117">Laat Toe</translation>
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 in gebruik)} other {(# in gebruik)}}</translation>
@@ -123,7 +124,6 @@
 <translation id="5386426401304769735">Die sertifikaatketting vir hierdie werf bevat ’n sertifikaat wat met SHA-1 onderteken is.</translation>
 <translation id="5452270690849572955">Hierdie <ph name="HOST_NAME" /> blad kan nie gevind word nie</translation>
 <translation id="5457113250005438886">Ongeldig</translation>
-<translation id="5490432419156082418">Adresse en meer</translation>
 <translation id="5492298309214877701">Hierdie werf op die maatskappy, organisasie of skool se intranet het dieselfde bronadres as ’n eksterne webwerf.
     <ph name="LINE_BREAK" />
     Probeer u stelseladministrateur kontak.</translation>
@@ -168,7 +168,7 @@
 <translation id="7108819624672055576">Deur ’n uitbreiding toegelaat</translation>
 <translation id="7111012039238467737">(Geldig)</translation>
 <translation id="7113310725918019676">Laat <ph name="BLOCKED_TYPE" /> van <ph name="DOMAIN" /> toe</translation>
-<translation id="7179323680825933600">Bewaar en vul betaalmetodes in</translation>
+<translation id="7126644664682723998">Plak en soek</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> voldoen nie aan sekuriteitstandaarde nie.</translation>
 <translation id="7219179957768738017">Die verbinding gebruik <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Toon kennisgewings</translation>
@@ -220,6 +220,7 @@
 <translation id="9062620674789239642">Dit is dalk geskuif, gewysig of geskrap.</translation>
 <translation id="9069693763241529744">Deur ’n uitbreiding versper</translation>
 <translation id="9073799351042754113">U het gekies om sekuriteitwaarskuwings vir hierdie werf af te skakel.</translation>
+<translation id="9168814207360376865">Laat werwe toe om na te gaan of u bewaarde betaalmetodes het</translation>
 <translation id="9169664750068251925">Versper altyd hierdie werf</translation>
 <translation id="9180553614777056266">Advertensieversperring</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> gebruik ’n onondersteunde protokol.</translation>

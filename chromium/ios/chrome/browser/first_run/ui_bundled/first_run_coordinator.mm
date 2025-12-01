@@ -12,18 +12,19 @@
 #import "base/notreached.h"
 #import "base/time/time.h"
 #import "components/signin/public/base/signin_metrics.h"
+#import "ios/chrome/browser/authentication/ui_bundled/history_sync/history_sync_coordinator.h"
+#import "ios/chrome/browser/authentication/ui_bundled/signin/signin_constants.h"
 #import "ios/chrome/browser/docking_promo/coordinator/docking_promo_coordinator.h"
 #import "ios/chrome/browser/first_run/model/first_run_metrics.h"
 #import "ios/chrome/browser/first_run/ui_bundled/default_browser/default_browser_screen_coordinator.h"
 #import "ios/chrome/browser/first_run/ui_bundled/first_run_screen_delegate.h"
 #import "ios/chrome/browser/first_run/ui_bundled/first_run_util.h"
 #import "ios/chrome/browser/first_run/ui_bundled/signin/signin_screen_coordinator.h"
+#import "ios/chrome/browser/screen/ui_bundled/screen_provider.h"
+#import "ios/chrome/browser/screen/ui_bundled/screen_type.h"
+#import "ios/chrome/browser/search_engine_choice/ui_bundled/search_engine_choice_coordinator.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
-#import "ios/chrome/browser/ui/authentication/history_sync/history_sync_coordinator.h"
-#import "ios/chrome/browser/ui/screen/screen_provider.h"
-#import "ios/chrome/browser/ui/screen/screen_type.h"
-#import "ios/chrome/browser/ui/search_engine_choice/search_engine_choice_coordinator.h"
 #import "ios/public/provider/chrome/browser/signin/choice_api.h"
 
 // Vivaldi
@@ -106,22 +107,17 @@
 }
 
 - (void)stop {
-
-  if (vivaldi::IsVivaldiRunning()) {
-    [self dismissOnboarding];
-  } // End Vivaldi
-
   if (self.childCoordinator) {
     // If the child coordinator is not nil, then the FRE is stopped because
     // Chrome is being shutdown.
+    base::UmaHistogramEnumeration(first_run::kFirstRunStageHistogram,
+                                  first_run::kFirstRunInterrupted);
     InterruptibleChromeCoordinator* interruptibleChildCoordinator =
         base::apple::ObjCCast<InterruptibleChromeCoordinator>(
             self.childCoordinator);
-    [interruptibleChildCoordinator
-        interruptWithAction:SigninCoordinatorInterrupt::UIShutdownNoDismiss
-                 completion:nil];
-    [self.childCoordinator stop];
-    self.childCoordinator = nil;
+    [interruptibleChildCoordinator interruptWithAction:SynchronousStopAction()
+                                            completion:nil];
+    [self stopChildCoordinator];
   }
   [self.baseViewController dismissViewControllerAnimated:YES completion:nil];
   _navigationController = nil;
@@ -131,8 +127,7 @@
 #pragma mark - FirstRunScreenDelegate
 
 - (void)screenWillFinishPresenting {
-  [self.childCoordinator stop];
-  self.childCoordinator = nil;
+  [self stopChildCoordinator];
 
   // Vivaldi
   _onboardingVC = nil;
@@ -169,7 +164,7 @@
                                    browser:self.browser
                                   delegate:self
                                accessPoint:signin_metrics::AccessPoint::
-                                               ACCESS_POINT_START_PAGE
+                                               kStartPage
                                promoAction:signin_metrics::PromoAction::
                                                PROMO_ACTION_NO_SIGNIN_PROMO];
     case kHistorySync:
@@ -181,7 +176,7 @@
                              showUserEmail:NO
                                 isOptional:YES
                                accessPoint:signin_metrics::AccessPoint::
-                                               ACCESS_POINT_START_PAGE];
+                                               kStartPage];
     case kDefaultBrowserPromo:
       return [[DefaultBrowserScreenCoordinator alloc]
           initWithBaseNavigationController:self.navigationController
@@ -210,6 +205,13 @@
                      declinedByUser:(BOOL)declined {
   CHECK_EQ(self.childCoordinator, historySyncCoordinator);
   [self screenWillFinishPresenting];
+}
+
+#pragma mark - Private
+
+- (void)stopChildCoordinator {
+  [self.childCoordinator stop];
+  self.childCoordinator = nil;
 }
 
 #pragma mark: - VIVALDI
@@ -341,5 +343,6 @@
   [self.modalPageCoordinator stop];
   self.modalPageCoordinator = nil;
 }
+// End Vivaldi
 
 @end

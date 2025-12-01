@@ -122,7 +122,7 @@ bool AddVivaldiNewPage(bool welcome_run_none, std::vector<GURL>* startup_urls) {
 }
 
 #if BUILDFLAG(IS_WIN)
-void DoCleanShutdownIfNeeded(const base::CommandLine& command_line) {
+bool DoCleanShutdownIfNeeded(const base::CommandLine& command_line) {
   if (command_line.HasSwitch(switches::kCleanShutdown)) {
     // Make sure we save current session.
     for (Browser* browser : *BrowserList::GetInstance()) {
@@ -135,13 +135,11 @@ void DoCleanShutdownIfNeeded(const base::CommandLine& command_line) {
       }
 #endif  // BUILDFLAG(ENABLE_SESSION_SERVICE)
     }
-    // This will not show the "close window", "exit Vivaldi" and "running
-    // downloads" dialogs.
-    KeepAliveRegistry::GetInstance()->SetIsShuttingDown(true);
+    chrome::ExitIgnoreUnloadHandlers();
+    return true;
   }
+  return false;
 }
 #endif  // BUILDFLAG(IS_WIN)
-
-
 
 }  // namespace vivaldi

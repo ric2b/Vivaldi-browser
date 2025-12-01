@@ -65,7 +65,6 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
@@ -264,13 +263,13 @@ void ShowDeskRemovalUndoToast(const std::string& toast_id,
       toast_id, ash::ToastCatalogName::kUndoCloseAll,
       l10n_util::GetStringUTF16(IDS_ASH_DESKS_CLOSE_ALL_TOAST_TEXT),
       use_persistent_toast ? ToastData::kInfiniteDuration
-                           : ToastData::kDefaultToastDuration,
-      /*visible_on_lock_screen=*/false,
-      /*has_dismiss_button=*/true,
-      l10n_util::GetStringUTF16(IDS_ASH_DESKS_CLOSE_ALL_UNDO_TEXT));
+                           : ToastData::kDefaultToastDuration);
   undo_toast_data.persist_on_hover = true;
   undo_toast_data.show_on_all_root_windows = true;
-  undo_toast_data.dismiss_callback = std::move(dismiss_callback);
+  undo_toast_data.button_type = ToastData::ButtonType::kTextButton;
+  undo_toast_data.button_text =
+      l10n_util::GetStringUTF16(IDS_ASH_DESKS_CLOSE_ALL_UNDO_TEXT);
+  undo_toast_data.button_callback = std::move(dismiss_callback);
   undo_toast_data.expired_callback = std::move(expired_callback);
   undo_toast_data.activatable = use_persistent_toast;
   ToastManager::Get()->Show(std::move(undo_toast_data));
@@ -559,7 +558,7 @@ Desk* DesksController::GetPreviousDesk(bool use_target_active_desk) const {
 }
 
 Desk* DesksController::GetDeskByUuid(const base::Uuid& desk_uuid) const {
-  auto it = base::ranges::find(desks_, desk_uuid, &Desk::uuid);
+  auto it = std::ranges::find(desks_, desk_uuid, &Desk::uuid);
   return it != desks_.end() ? it->get() : nullptr;
 }
 
@@ -827,9 +826,10 @@ void DesksController::ActivateDesk(const Desk* desk, DesksSwitchSource source) {
     return;
   }
 
-  if (source == DesksSwitchSource::kLaunchTemplate) {
-    // Desk switch due to launching a template will immediately activate the new
-    // desk without animation.
+  if (source == DesksSwitchSource::kLaunchTemplate ||
+      source == DesksSwitchSource::kCoral) {
+    // Desk switch due to launching a template or a coral group will immediately
+    // activate the new desk without animation.
     ActivateDeskInternal(desk, /*update_window_activation=*/true);
     return;
   }
@@ -917,99 +917,20 @@ bool DesksController::MoveWindowFromActiveDeskTo(
     Desk* target_desk,
     aura::Window* target_root,
     DesksMoveWindowFromActiveDeskSource source) {
-  DCHECK_NE(active_desk_, target_desk);
+  return MoveWindowFromSourceDeskTo(window, active_desk_, target_desk,
+                                    target_root, source);
+}
 
-  // An active window might be an always-on-top or pip which doesn't belong to
-  // the active desk, and cannot be removed. Except floated window, which is
-  // handled by `FloatController::OnMovingFloatedWindowToDesk`.
-  const bool is_floated = WindowState::Get(window)->IsFloated();
-  if (!base::Contains(active_desk_->windows(), window) && !is_floated)
-    return false;
-
-  const bool visible_on_all_desks =
-      desks_util::IsWindowVisibleOnAllWorkspaces(window);
-  if (visible_on_all_desks) {
-    if (source == DesksMoveWindowFromActiveDeskSource::kDragAndDrop) {
-      // Since a visible on all desks window is on all desks, prevent users from
-      // moving them manually in overview.
-      return false;
-    } else if (source !=
-                   DesksMoveWindowFromActiveDeskSource::kVisibleOnAllDesks &&
-               source != DesksMoveWindowFromActiveDeskSource::kCoral) {
-      // When moving windows, remove visible on all desks property unless it was
-      // already visible on all desks, and the desk was activated, or it was
-      // moved as a result of launching a coral group.
-      window->SetProperty(aura::client::kWindowWorkspaceKey,
-                          aura::client::kWindowWorkspaceUnassignedWorkspace);
-    }
-  }
-
-  base::AutoReset<bool> in_progress(&are_desks_being_modified_, true);
-
-  auto* overview_controller = Shell::Get()->overview_controller();
-  const bool in_overview = overview_controller->InOverviewSession();
-
-  // The below order matters:
-  // If in overview, remove the item from overview first, before calling
-  // MoveWindowToDesk(), since MoveWindowToDesk() unminimizes the window (if it
-  // was minimized) before updating the mini views. We shouldn't change the
-  // window's minimized state before removing it from overview, since overview
-  // handles minimized windows differently.
-  if (in_overview) {
-    auto* overview_session = overview_controller->overview_session();
-    // `item` can be null when we are switching users.
-    if (auto* item = overview_session->GetOverviewItemForWindow(window)) {
-      item->OnMovingItemToAnotherDesk();
-      // The item no longer needs to be in the overview grid.
-      overview_session->RemoveItem(item);
-    } else if (visible_on_all_desks) {
-      // Create an item for a visible on all desks window if it doesn't have one
-      // already. This can happen when launching a template. When we are in the
-      // saved desk grid, there are no items.
-      overview_session->AppendItem(window,
-                                   /*reposition=*/true, /*animate=*/true);
-    }
-  }
-
-  // Floated window doesn't belong to the desk container, float controller
-  // handles its desk-window relationship.
-  if (is_floated) {
-    Shell::Get()->float_controller()->OnMovingFloatedWindowToDesk(
-        window, active_desk_, target_desk, target_root);
-  } else {
-    active_desk_->MoveWindowToDesk(window, target_desk, target_root,
-                                   /*unminimize=*/true);
-  }
-
-  // We don't update shelf items if we're moving an all-desk window, since we
-  // are in that case about to switch to `target_desk` and the app will be on
-  // that desk as well.
-  if (source != DesksMoveWindowFromActiveDeskSource::kVisibleOnAllDesks) {
-    MaybeUpdateShelfItems(/*windows_on_inactive_desk=*/{window},
-                          /*windows_on_active_desk=*/{});
-  }
-
-  Shell::Get()
-      ->accessibility_controller()
-      ->TriggerAccessibilityAlertWithMessage(l10n_util::GetStringFUTF8(
-          IDS_ASH_VIRTUAL_DESKS_ALERT_WINDOW_MOVED_FROM_ACTIVE_DESK,
-          window->GetTitle(), active_desk_->name(), target_desk->name()));
-
-  if (source != DesksMoveWindowFromActiveDeskSource::kVisibleOnAllDesks) {
-    // A visible on all desks window is moved from the active desk to the next
-    // active desk during desk switch so we log its usage (when a user pins a
-    // window to all desks) in other locations.
-    UMA_HISTOGRAM_ENUMERATION(kMoveWindowFromActiveDeskHistogramName, source);
-  }
-  ReportNumberOfWindowsPerDeskHistogram();
-
-  // A window moving out of the active desk cannot be active.
-  // If we are in overview, we should not change the window activation as we do
-  // below, since the dummy "OverviewModeFocusedWidget" should remain active
-  // while overview mode is active.
-  if (!in_overview)
-    wm::DeactivateWindow(window);
-  return true;
+bool DesksController::MoveWindowFromDeskAtIndexTo(
+    aura::Window* window,
+    size_t index,
+    Desk* target_desk,
+    aura::Window* target_root,
+    DesksMoveWindowFromActiveDeskSource source) {
+  Desk* source_desk = GetDeskAtIndex(index);
+  DCHECK(source_desk);
+  return MoveWindowFromSourceDeskTo(window, source_desk, target_desk,
+                                    target_root, source);
 }
 
 void DesksController::AddVisibleOnAllDesksWindow(aura::Window* window) {
@@ -1204,6 +1125,15 @@ bool DesksController::BelongsToActiveDesk(aura::Window* window) {
   return desks_util::BelongsToActiveDesk(window);
 }
 
+bool DesksController::BelongsToDesk(aura::Window* window, size_t index) {
+  Desk* desk = GetDeskAtIndex(index);
+  if (!desk) {
+    return false;
+  }
+
+  return desks_util::BelongsToDesk(window, desk);
+}
+
 int DesksController::GetActiveDeskIndex() const {
   return GetDeskIndex(active_desk_);
 }
@@ -1244,13 +1174,14 @@ void DesksController::SendToDeskAtIndex(aura::Window* window, int desk_index) {
 void DesksController::CaptureActiveDeskAsSavedDesk(
     GetDeskTemplateCallback callback,
     DeskTemplateType template_type,
-    aura::Window* root_window_to_show) const {
+    aura::Window* root_window_to_show,
+    const base::flat_set<std::string>& coral_app_id_allowlist) const {
   DCHECK(current_account_id_.is_valid());
 
   restore_data_collector_.CaptureActiveDeskAsSavedDesk(
       std::move(callback), template_type,
       base::UTF16ToUTF8(active_desk_->name()), root_window_to_show,
-      current_account_id_);
+      current_account_id_, coral_app_id_allowlist);
 }
 
 Desk* DesksController::CreateNewDeskForSavedDesk(
@@ -1288,9 +1219,8 @@ Desk* DesksController::CreateNewDeskForSavedDesk(
       NewDesk(DesksCreationRemovalSource::kFloatingWorkspace);
       break;
     case DeskTemplateType::kCoral:
-      // TODO(crbug.com/371447150): Create a new desk with a new creation
-      // source.
-      return nullptr;
+      NewDesk(DesksCreationRemovalSource::kCoral);
+      break;
     case DeskTemplateType::kUnknown:
       return nullptr;
   }
@@ -1337,6 +1267,46 @@ Desk* DesksController::CreateNewDeskForSavedDesk(
     DCHECK(!animation_);
   }
 
+  return desk;
+}
+
+Desk* DesksController::CreateNewDeskForCoralGroup(
+    const std::u16string& coral_desk_name) {
+  CHECK(CanCreateDesks());
+
+  // If there is an ongoing animation, we should stop it before creating and
+  // activating the new desk, which triggers its own animation.
+  if (animation_) {
+    animation_.reset();
+  }
+
+  auto* session = Shell::Get()->overview_controller()->overview_session();
+  CHECK(session);
+  for (auto& grid : session->grid_list()) {
+    grid->RemoveAllItemsForSavedDeskLaunch();
+  }
+
+  NewDesk(DesksCreationRemovalSource::kCoral, coral_desk_name);
+  desks_restore_util::UpdatePrimaryUserDeskNamesPrefs();
+  Desk* desk = desks().back().get();
+
+  CHECK(active_desk_);
+
+  // Since we're going to move certain windows from the currently active desk,
+  // this is going to implicitly modify that list. We therefore grab a copy of
+  // it to avoid issues with concurrent iteration and modification of the
+  // list.
+  auto active_desk_windows = active_desk_->windows();
+  for (aura::Window* window : active_desk_windows) {
+    if (window->GetProperty(kOverviewUiKey)) {
+      aura::Window* destination_container =
+          desk->GetDeskContainerForRoot(window->GetRootWindow());
+      destination_container->AddChild(window);
+    }
+  }
+
+  ActivateDesk(desk, DesksSwitchSource::kCoral);
+  CHECK(!animation_);
   return desk;
 }
 
@@ -1536,7 +1506,7 @@ bool DesksController::RequestFocusOnUndoDeskRemovalToast() {
     return false;
   }
 
-  return ToastManager::Get()->RequestFocusOnActiveToastDismissButton(
+  return ToastManager::Get()->RequestFocusOnActiveToastButton(
       temporary_removed_desk_->toast_id());
 }
 
@@ -1574,8 +1544,7 @@ bool DesksController::CanEndOverview() const {
   // be jarring if the screenshot is different from the appearance of the new
   // desk), so we don't want to allow overview to be exited before the animation
   // ends.
-  return !features::IsOverviewDeskNavigationEnabled() || !animation_ ||
-         animation_->CanEndOverview();
+  return !animation_ || animation_->CanEndOverview();
 }
 
 void DesksController::OnWindowActivating(ActivationReason reason,
@@ -1762,8 +1731,7 @@ void DesksController::ActivateDeskInternal(const Desk* desk,
   DCHECK(old_active);
   old_active->Deactivate(update_window_activation);
   active_desk_->Activate(update_window_activation);
-  if (features::IsOverviewDeskNavigationEnabled() && animation_ &&
-      was_in_overview) {
+  if (animation_ && was_in_overview) {
     overview_controller->StartOverview(OverviewStartAction::kOverviewDeskSwitch,
                                        OverviewEnterExitType::kImmediateEnter);
   }
@@ -1815,7 +1783,7 @@ void DesksController::RemoveDeskInternal(const Desk* desk,
 
   base::AutoReset<bool> in_progress(&are_desks_being_modified_, true);
 
-  auto iter = base::ranges::find(desks_, desk, &std::unique_ptr<Desk>::get);
+  auto iter = std::ranges::find(desks_, desk, &std::unique_ptr<Desk>::get);
   DCHECK(iter != desks_.end());
 
   const int removed_desk_index = std::distance(desks_.begin(), iter);
@@ -2234,9 +2202,8 @@ void DesksController::MaybeCommitPendingDeskRemoval(
 }
 
 bool DesksController::IsUndoToastFocused() const {
-  return temporary_removed_desk_ &&
-         ToastManager::Get()->IsToastDismissButtonFocused(
-             temporary_removed_desk_->toast_id());
+  return temporary_removed_desk_ && ToastManager::Get()->IsToastButtonFocused(
+                                        temporary_removed_desk_->toast_id());
 }
 
 void DesksController::TrackWindowOnAllDesks(aura::Window* window) {
@@ -2397,12 +2364,122 @@ void DesksController::ReportClosedWindowsCountPerSourceHistogram(
 
 void DesksController::ReportCustomDeskNames() const {
   int custom_names_count =
-      base::ranges::count(desks_, true, &Desk::is_name_set_by_user);
+      std::ranges::count(desks_, true, &Desk::is_name_set_by_user);
 
   base::UmaHistogramCounts100(kNumberOfCustomNamesHistogramName,
                               custom_names_count);
   base::UmaHistogramPercentage(kPercentageOfCustomNamesHistogramName,
                                custom_names_count * 100 / desks_.size());
+}
+
+bool DesksController::MoveWindowFromSourceDeskTo(
+    aura::Window* window,
+    Desk* source_desk,
+    Desk* target_desk,
+    aura::Window* target_root,
+    DesksMoveWindowFromActiveDeskSource source) {
+  DCHECK_NE(source_desk, target_desk);
+
+  // An active window might be an always-on-top or pip which doesn't belong to
+  // the active desk, and cannot be removed. Except floated window, which is
+  // handled by `FloatController::OnMovingFloatedWindowToDesk`.
+  const bool is_floated = WindowState::Get(window)->IsFloated();
+  if (!base::Contains(source_desk->windows(), window) && !is_floated) {
+    return false;
+  }
+
+  const bool visible_on_all_desks =
+      desks_util::IsWindowVisibleOnAllWorkspaces(window);
+  if (visible_on_all_desks) {
+    if (source == DesksMoveWindowFromActiveDeskSource::kDragAndDrop) {
+      // Since a visible on all desks window is on all desks, prevent users from
+      // moving them manually in overview.
+      return false;
+    } else if (source !=
+                   DesksMoveWindowFromActiveDeskSource::kVisibleOnAllDesks &&
+               source != DesksMoveWindowFromActiveDeskSource::kCoral) {
+      // When moving windows, remove visible on all desks property unless it was
+      // already visible on all desks, and the desk was activated, or it was
+      // moved as a result of launching a coral group.
+      window->SetProperty(aura::client::kWindowWorkspaceKey,
+                          aura::client::kWindowWorkspaceUnassignedWorkspace);
+    }
+  }
+
+  base::AutoReset<bool> in_progress(&are_desks_being_modified_, true);
+
+  auto* overview_controller = Shell::Get()->overview_controller();
+  const bool in_overview = overview_controller->InOverviewSession();
+
+  // The below order matters:
+  // If in overview, remove the item from overview first, before calling
+  // MoveWindowToDesk(), since MoveWindowToDesk() unminimizes the window (if it
+  // was minimized) before updating the mini views. We shouldn't change the
+  // window's minimized state before removing it from overview, since overview
+  // handles minimized windows differently.
+  if (in_overview) {
+    auto* overview_session = overview_controller->overview_session();
+    // `item` can be null when we are switching users.
+    if (auto* item = overview_session->GetOverviewItemForWindow(window)) {
+      item->OnMovingItemToAnotherDesk();
+      // The item no longer needs to be in the overview grid.
+      overview_session->RemoveItem(item);
+    } else if (visible_on_all_desks) {
+      // Create an item for a visible on all desks window if it doesn't have one
+      // already. This can happen when launching a template. When we are in the
+      // saved desk grid, there are no items.
+      overview_session->AppendItem(window,
+                                   /*reposition=*/true, /*animate=*/true);
+    }
+  }
+
+  // Floated window doesn't belong to the desk container, float controller
+  // handles its desk-window relationship.
+  if (is_floated) {
+    Shell::Get()->float_controller()->OnMovingFloatedWindowToDesk(
+        window, source_desk, target_desk, target_root);
+    // Append item for the floating `window` to overview when the target desk is
+    // the `active_desk_`.
+    if (in_overview && target_desk == active_desk_) {
+      overview_controller->overview_session()->AppendItem(window,
+                                                          /*reposition=*/true,
+                                                          /*animate=*/true);
+    }
+  } else {
+    source_desk->MoveWindowToDesk(window, target_desk, target_root,
+                                  /*unminimize=*/true);
+  }
+
+  // We don't update shelf items if we're moving an all-desk window, since we
+  // are in that case about to switch to `target_desk` and the app will be on
+  // that desk as well.
+  if (source != DesksMoveWindowFromActiveDeskSource::kVisibleOnAllDesks) {
+    MaybeUpdateShelfItems(/*windows_on_inactive_desk=*/{window},
+                          /*windows_on_active_desk=*/{});
+  }
+
+  Shell::Get()
+      ->accessibility_controller()
+      ->TriggerAccessibilityAlertWithMessage(l10n_util::GetStringFUTF8(
+          IDS_ASH_VIRTUAL_DESKS_ALERT_WINDOW_MOVED_FROM_ACTIVE_DESK,
+          window->GetTitle(), source_desk->name(), target_desk->name()));
+
+  if (source != DesksMoveWindowFromActiveDeskSource::kVisibleOnAllDesks) {
+    // A visible on all desks window is moved from the active desk to the next
+    // active desk during desk switch so we log its usage (when a user pins a
+    // window to all desks) in other locations.
+    UMA_HISTOGRAM_ENUMERATION(kMoveWindowFromActiveDeskHistogramName, source);
+  }
+  ReportNumberOfWindowsPerDeskHistogram();
+
+  // A window moving out of the active desk cannot be active.
+  // If we are in overview, we should not change the window activation as we do
+  // below, since the dummy "OverviewModeFocusedWidget" should remain active
+  // while overview mode is active.
+  if (!in_overview) {
+    wm::DeactivateWindow(window);
+  }
+  return true;
 }
 
 // static

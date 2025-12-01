@@ -290,7 +290,7 @@ suite('LanguageMenu', () => {
         assertFalse(getToast().$.toast.open);
       });
 
-      // <if expr="chromeos_ash">
+      // <if expr="is_chromeos">
       test('it shows downloaded toast', async () => {
         enabledLangs = ['Italian', 'English (United States)'];
         languageMenu.enabledLangs = enabledLangs;
@@ -322,7 +322,8 @@ suite('LanguageMenu', () => {
         document.body.appendChild(languageMenu);
         await microtasksFinished();
         const closeButton =
-            languageMenu.$.languageMenu.querySelector<HTMLElement>('#close');
+            languageMenu.$.languageMenu.$.dialog.querySelector<HTMLElement>(
+                '#close');
         closeButton!.click();
         await microtasksFinished();
         notify('it', VoiceClientSideStatusCode.INSTALLED_AND_UNAVAILABLE);

@@ -760,7 +760,7 @@ int RunGen(const std::vector<std::string>& args) {
   // regeneration can be restarted if interrupted.
   if (command_line->HasSwitch(switches::kRegeneration)) {
     if (!commands::PrepareForRegeneration(&setup->build_settings())) {
-      return false;
+      return 1;
     }
   }
 

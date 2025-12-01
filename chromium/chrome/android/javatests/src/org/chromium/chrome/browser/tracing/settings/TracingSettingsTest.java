@@ -43,10 +43,11 @@ import org.chromium.chrome.browser.settings.SettingsActivity;
 import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
 import org.chromium.chrome.browser.settings.SettingsNavigationFactory;
 import org.chromium.chrome.browser.tracing.TracingController;
-import org.chromium.chrome.browser.tracing.TracingNotificationManager;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
+import org.chromium.components.browser_ui.notifications.BaseNotificationManagerProxyFactory;
 import org.chromium.components.browser_ui.notifications.MockNotificationManagerProxy;
+import org.chromium.components.browser_ui.notifications.NotificationProxyUtils;
 import org.chromium.components.browser_ui.settings.ButtonPreference;
 import org.chromium.components.browser_ui.settings.SettingsNavigation;
 import org.chromium.components.browser_ui.settings.TextMessagePreference;
@@ -74,12 +75,12 @@ public class TracingSettingsTest {
     @Before
     public void setUp() {
         mMockNotificationManager = new MockNotificationManagerProxy();
-        TracingNotificationManager.overrideNotificationManagerForTesting(mMockNotificationManager);
+        BaseNotificationManagerProxyFactory.setInstanceForTesting(mMockNotificationManager);
     }
 
     @After
     public void tearDown() {
-        TracingNotificationManager.overrideNotificationManagerForTesting(null);
+        NotificationProxyUtils.setNotificationEnabledForTest(null);
     }
 
     /**
@@ -272,7 +273,7 @@ public class TracingSettingsTest {
     @SmallTest
     @Feature({"Preferences"})
     public void testNotificationsDisabledMessage() throws Exception {
-        mMockNotificationManager.setNotificationsEnabled(false);
+        NotificationProxyUtils.setNotificationEnabledForTest(false);
 
         mSettingsActivityTestRule.startSettingsActivity();
         final PreferenceFragmentCompat fragment = mSettingsActivityTestRule.getFragment();
@@ -287,8 +288,6 @@ public class TracingSettingsTest {
         Assert.assertFalse(startTracingButton.isEnabled());
         Assert.assertEquals(
                 TracingSettings.MSG_NOTIFICATIONS_DISABLED, statusPreference.getTitle());
-
-        mMockNotificationManager.setNotificationsEnabled(true);
     }
 
     public static class CategoryParams implements ParameterProvider {

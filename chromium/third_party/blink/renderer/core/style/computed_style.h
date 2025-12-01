@@ -103,7 +103,6 @@ class NinePieceImage;
 class ShadowList;
 class ShapeValue;
 class StyleAdjuster;
-class StyleContentAlignmentData;
 class StyleDifference;
 class StyleImage;
 class StyleInheritedVariables;
@@ -398,24 +397,12 @@ class ComputedStyle final : public ComputedStyleBase {
                                       const ComputedStyle* old_style,
                                       const ComputedStyle* new_style);
 
-  ContentPosition ResolvedJustifyContentPosition(
-      const StyleContentAlignmentData& normal_value_behavior) const;
-  ContentDistributionType ResolvedJustifyContentDistribution(
-      const StyleContentAlignmentData& normal_value_behavior) const;
-  ContentPosition ResolvedAlignContentPosition(
-      const StyleContentAlignmentData& normal_value_behavior) const;
-  ContentDistributionType ResolvedAlignContentDistribution(
-      const StyleContentAlignmentData& normal_value_behavior) const;
   StyleSelfAlignmentData ResolvedAlignSelf(
       const StyleSelfAlignmentData& normal_value_behavior,
       const ComputedStyle* parent_style = nullptr) const;
-  StyleContentAlignmentData ResolvedAlignContent(
-      const StyleContentAlignmentData& normal_behaviour) const;
   StyleSelfAlignmentData ResolvedJustifySelf(
       const StyleSelfAlignmentData& normal_value_behavior,
       const ComputedStyle* parent_style = nullptr) const;
-  StyleContentAlignmentData ResolvedJustifyContent(
-      const StyleContentAlignmentData& normal_behaviour) const;
 
   CORE_EXPORT StyleDifference
   VisualInvalidationDiff(const Document&, const ComputedStyle&) const;
@@ -589,10 +576,10 @@ class ComputedStyle final : public ComputedStyleBase {
   }
 
   // column-rule-width
-  uint16_t ColumnRuleWidth() const {
-    if (ColumnRuleStyle() == EBorderStyle::kNone ||
-        ColumnRuleStyle() == EBorderStyle::kHidden) {
-      return 0;
+  GapDataList<int> ColumnRuleWidth() const {
+    if (ColumnRuleStyle().GetLegacyValue() == EBorderStyle::kNone ||
+        ColumnRuleStyle().GetLegacyValue() == EBorderStyle::kHidden) {
+      return GapDataList<int>(0);
     }
     return ColumnRuleWidthInternal();
   }
@@ -609,15 +596,9 @@ class ComputedStyle final : public ComputedStyleBase {
       DCHECK(RuntimeEnabledFeatures::CSSLineClampEnabled());
       return StandardLineClamp();
     }
-    if (RuntimeEnabledFeatures::CSSLineClampWebkitBoxBlockificationEnabled()) {
-      if (IsSpecifiedDisplayWebkitBox()) {
-        DCHECK_EQ(BoxOrient(), EBoxOrient::kVertical);
-        return WebkitLineClamp();
-      }
-    } else {
-      if (IsDeprecatedWebkitBox() && BoxOrient() == EBoxOrient::kVertical) {
-        return WebkitLineClamp();
-      }
+    if (IsSpecifiedDisplayWebkitBox()) {
+      DCHECK_EQ(BoxOrient(), EBoxOrient::kVertical);
+      return WebkitLineClamp();
     }
     return 0;
   }
@@ -949,22 +930,9 @@ class ComputedStyle final : public ComputedStyleBase {
                                   other.CounterDirectivesInternal().get());
   }
 
-  bool IsDeprecatedWebkitBox() const {
+  bool IsDeprecatedFlexbox() const {
     return Display() == EDisplay::kWebkitBox ||
            Display() == EDisplay::kWebkitInlineBox;
-  }
-  bool IsDeprecatedFlexboxUsingFlexLayout() const {
-    if (RuntimeEnabledFeatures::CSSLineClampWebkitBoxBlockificationEnabled()) {
-      return IsDeprecatedWebkitBox();
-    }
-    return IsDeprecatedWebkitBox() &&
-           !IsDeprecatedWebkitBoxWithVerticalLineClamp();
-  }
-  bool IsDeprecatedWebkitBoxWithVerticalLineClamp() const {
-    DCHECK(
-        !RuntimeEnabledFeatures::CSSLineClampWebkitBoxBlockificationEnabled());
-    return IsDeprecatedWebkitBox() && BoxOrient() == EBoxOrient::kVertical &&
-           HasLineClamp();
   }
 
   // Variables.
@@ -1005,30 +973,30 @@ class ComputedStyle final : public ComputedStyleBase {
   }
   bool ColumnRuleEquivalent(const ComputedStyle& other_style) const;
   bool HasColumnRule() const {
-    if (!SpecifiesColumns()) [[likely]] {
+    if (!SpecifiesColumns() && Display() != EDisplay::kGrid) [[likely]] {
       return false;
     }
-    return ColumnRuleWidth() && !ColumnRuleIsTransparent() &&
-           BorderStyleIsVisible(ColumnRuleStyle());
+    return ColumnRuleWidth().GetLegacyValue() && !ColumnRuleIsTransparent() &&
+           BorderStyleIsVisible(ColumnRuleStyle().GetLegacyValue());
   }
 
   // Flex utility functions.
   bool ResolvedIsColumnFlexDirection() const {
-    if (IsDeprecatedWebkitBox()) {
+    if (IsDeprecatedFlexbox()) {
       return BoxOrient() == EBoxOrient::kVertical;
     }
     return FlexDirection() == EFlexDirection::kColumn ||
            FlexDirection() == EFlexDirection::kColumnReverse;
   }
   bool ResolvedIsRowReverseFlexDirection() const {
-    if (IsDeprecatedWebkitBox()) {
+    if (IsDeprecatedFlexbox()) {
       return BoxOrient() == EBoxOrient::kHorizontal &&
              BoxDirection() == EBoxDirection::kReverse;
     }
     return FlexDirection() == EFlexDirection::kRowReverse;
   }
   bool ResolvedIsReverseFlexDirection() const {
-    if (IsDeprecatedWebkitBox()) {
+    if (IsDeprecatedFlexbox()) {
       return BoxDirection() == EBoxDirection::kReverse;
     }
     return FlexDirection() == EFlexDirection::kRowReverse ||
@@ -1036,13 +1004,13 @@ class ComputedStyle final : public ComputedStyleBase {
   }
   bool HasBoxReflect() const { return BoxReflect(); }
   float ResolvedFlexGrow(const ComputedStyle& box_style) const {
-    if (box_style.IsDeprecatedWebkitBox()) {
+    if (box_style.IsDeprecatedFlexbox()) {
       return BoxFlex() > 0 ? BoxFlex() : 0.0f;
     }
     return FlexGrow();
   }
   float ResolvedFlexShrink(const ComputedStyle& box_style) const {
-    if (box_style.IsDeprecatedWebkitBox()) {
+    if (box_style.IsDeprecatedFlexbox()) {
       return BoxFlex() > 0 ? BoxFlex() : 0.0f;
     }
     return FlexShrink();
@@ -1083,12 +1051,74 @@ class ComputedStyle final : public ComputedStyleBase {
            kInternalAutoFlowAlgorithmDense;
   }
 
+  // Masonry utility functions.
+  GridTrackSizingDirection MasonryTrackSizingDirection() const {
+    switch (MasonryDirection()) {
+      case EMasonryDirection::kColumn:
+      case EMasonryDirection::kColumnReverse:
+        return kForColumns;
+      case EMasonryDirection::kRow:
+      case EMasonryDirection::kRowReverse:
+        return kForRows;
+    }
+    NOTREACHED();
+  }
+
+  // Grid axis utility functions, usable in Grid and Masonry.
+  const NGGridTrackList& AutoTracks(
+      GridTrackSizingDirection track_direction) const {
+    if (IsDisplayMasonryBox(Display())) {
+      DCHECK_EQ(track_direction, MasonryTrackSizingDirection())
+          << "Masonry containers have a single grid axis, we shouldn't try to "
+             "get the auto tracks of its stacking axis.";
+      return MasonryAutoTracks();
+    }
+    return (track_direction == kForColumns) ? GridAutoColumns()
+                                            : GridAutoRows();
+  }
+  const ComputedGridTrackList& TemplateTracks(
+      GridTrackSizingDirection track_direction) const {
+    if (IsDisplayMasonryBox(Display())) {
+      DCHECK_EQ(track_direction, MasonryTrackSizingDirection())
+          << "Masonry containers have a single grid axis, we shouldn't try to "
+             "get the template tracks of its stacking axis.";
+      return MasonryTemplateTracks();
+    }
+    return (track_direction == kForColumns) ? GridTemplateColumns()
+                                            : GridTemplateRows();
+  }
+
+  // In the following masonry methods, `TrackStart` and `TrackEnd`,
+  // `track_direction` should be the same orientation as masonry's track
+  // direction. Otherwise, the positions should be auto.
+  const GridPosition& TrackStart(
+      GridTrackSizingDirection track_direction) const {
+    if (IsDisplayMasonryBox()) {
+      DCHECK(track_direction == MasonryTrackSizingDirection());
+      return MasonryTrackStart();
+    }
+    const bool is_for_columns = track_direction == kForColumns;
+    return is_for_columns ? GridColumnStart() : GridRowStart();
+  }
+
+  const GridPosition& TrackEnd(GridTrackSizingDirection track_direction) const {
+    if (IsDisplayMasonryBox()) {
+      DCHECK(track_direction == MasonryTrackSizingDirection());
+      return MasonryTrackEnd();
+    }
+    const bool is_for_columns = track_direction == kForColumns;
+    return is_for_columns ? GridColumnEnd() : GridRowEnd();
+  }
+
   // Writing mode utility functions.
   WritingDirectionMode GetWritingDirection() const {
     return {GetWritingMode(), Direction()};
   }
   bool IsHorizontalWritingMode() const {
     return blink::IsHorizontalWritingMode(GetWritingMode());
+  }
+  bool IsVerticalWritingMode() const {
+    return blink::IsVerticalWritingMode(GetWritingMode());
   }
   bool IsHorizontalTypographicMode() const {
     return blink::IsHorizontalTypographicMode(GetWritingMode());
@@ -1596,6 +1626,7 @@ class ComputedStyle final : public ComputedStyleBase {
   bool IsDisplayTableBox() const { return IsDisplayTableBox(Display()); }
   bool IsDisplayFlexibleBox() const { return IsDisplayFlexibleBox(Display()); }
   bool IsDisplayGridBox() const { return IsDisplayGridBox(Display()); }
+  bool IsDisplayMasonryBox() const { return IsDisplayMasonryBox(Display()); }
   bool IsDisplayFlexibleOrGridBox() const {
     return IsDisplayFlexibleBox(Display()) || IsDisplayGridBox(Display());
   }
@@ -2117,13 +2148,6 @@ class ComputedStyle final : public ComputedStyleBase {
                                                 pseudo);
   }
 
-  // Note: CanContainAbsolutePositionObjects should return true if
-  // CanContainFixedPositionObjects.  We currently never use this value
-  // directly, always OR'ing it with CanContainFixedPositionObjects.
-  bool CanContainAbsolutePositionObjects() const {
-    return GetPosition() != EPosition::kStatic;
-  }
-
   // This function may return values not defined as the enum values. See
   // `EWhiteSpace`. Prefer using semantic functions below.
   EWhiteSpace WhiteSpace() const {
@@ -2259,8 +2283,8 @@ class ComputedStyle final : public ComputedStyleBase {
   }
 
   // -webkit-appearance utility functions.
-  static bool HasEffectiveAppearance(ControlPart effective_appearance) {
-    return effective_appearance != kNoControlPart;
+  static bool HasEffectiveAppearance(AppearanceValue effective_appearance) {
+    return effective_appearance != AppearanceValue::kNone;
   }
   bool HasEffectiveAppearance() const {
     return HasEffectiveAppearance(EffectiveAppearance());
@@ -2287,13 +2311,17 @@ class ComputedStyle final : public ComputedStyleBase {
     }
     if (pseudo == kPseudoIdScrollMarkerGroupBefore) {
       return ScrollMarkerGroup() == EScrollMarkerGroup::kBefore &&
-             IsScrollContainer() &&
-             HasPseudoElementStyle(kPseudoIdScrollMarkerGroup);
+             IsScrollContainer();
     }
     if (pseudo == kPseudoIdScrollMarkerGroupAfter) {
       return ScrollMarkerGroup() == EScrollMarkerGroup::kAfter &&
-             IsScrollContainer() &&
-             HasPseudoElementStyle(kPseudoIdScrollMarkerGroup);
+             IsScrollContainer();
+    }
+    if (pseudo == kPseudoIdScrollButtonBlockStart ||
+        pseudo == kPseudoIdScrollButtonInlineStart ||
+        pseudo == kPseudoIdScrollButtonInlineEnd ||
+        pseudo == kPseudoIdScrollButtonBlockEnd) {
+      return HasPseudoElementStyle(kPseudoIdScrollButton);
     }
     if (!HasPseudoElementStyle(pseudo)) {
       return false;
@@ -2304,8 +2332,8 @@ class ComputedStyle final : public ComputedStyleBase {
     // For display: contents elements, we still need to generate ::before and
     // ::after, but the rest of the pseudo-elements should only be used for
     // elements with an actual layout object.
-    return pseudo == kPseudoIdCheck || pseudo == kPseudoIdBefore ||
-           pseudo == kPseudoIdAfter || pseudo == kPseudoIdSelectArrow;
+    return pseudo == kPseudoIdCheckMark || pseudo == kPseudoIdBefore ||
+           pseudo == kPseudoIdAfter || pseudo == kPseudoIdPickerIcon;
   }
 
   bool HasScrollMarkerGroupBefore() const {
@@ -2431,6 +2459,10 @@ class ComputedStyle final : public ComputedStyleBase {
     return display == EDisplay::kGrid || display == EDisplay::kInlineGrid;
   }
 
+  static bool IsDisplayMasonryBox(EDisplay display) {
+    return display == EDisplay::kMasonry || display == EDisplay::kInlineMasonry;
+  }
+
   static bool IsDisplayMathBox(EDisplay display) {
     return display == EDisplay::kMath || display == EDisplay::kBlockMath;
   }
@@ -2495,7 +2527,7 @@ class ComputedStyle final : public ComputedStyleBase {
 
   StyleColor DecorationColorIncludingFallback(bool visited_link) const;
 
-  bool HasAppearance() const { return Appearance() != kNoControlPart; }
+  bool HasAppearance() const { return Appearance() != AppearanceValue::kNone; }
 
   void ApplyMotionPathTransform(float origin_x,
                                 float origin_y,
@@ -2721,7 +2753,7 @@ class ComputedStyleBuilder final : public ComputedStyleBuilderBase {
     return ComputedStyle::HasEffectiveAppearance(EffectiveAppearance());
   }
   bool HasBaseSelectAppearance() const {
-    return Appearance() == ControlPart::kBaseSelectPart;
+    return Appearance() == AppearanceValue::kBaseSelect;
   }
 
   // backdrop-filter
@@ -2836,7 +2868,7 @@ class ComputedStyleBuilder final : public ComputedStyleBuilderBase {
   }
 
   // column-rule-width
-  void SetColumnRuleWidth(uint16_t w) { SetColumnRuleWidthInternal(w); }
+  void SetColumnRuleWidth(GapDataList<int> w) { SetColumnRuleWidthInternal(w); }
 
   // column-width
   void SetColumnWidth(float f) {
@@ -3294,8 +3326,8 @@ class ComputedStyleBuilder final : public ComputedStyleBuilderBase {
                                    bool is_inherited_property) const;
   CORE_EXPORT StyleInheritedVariables& MutableInheritedVariables();
   CORE_EXPORT StyleNonInheritedVariables& MutableNonInheritedVariables();
-  void CopyInheritedVariablesFrom(const ComputedStyle*);
-  void CopyNonInheritedVariablesFrom(const ComputedStyle*);
+  void SetInheritedVariablesFrom(const ComputedStyle*);
+  void SetNonInheritedVariablesFrom(const ComputedStyle*);
   CORE_EXPORT void SetVariableData(const AtomicString& name,
                                    CSSVariableData* value,
                                    bool is_inherited_property) {

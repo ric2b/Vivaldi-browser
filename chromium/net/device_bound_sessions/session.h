@@ -9,12 +9,12 @@
 #include <optional>
 #include <string>
 
-#include "base/types/strong_alias.h"
 #include "components/unexportable_keys/service_error.h"
 #include "components/unexportable_keys/unexportable_key_id.h"
 #include "net/base/net_export.h"
 #include "net/device_bound_sessions/cookie_craving.h"
 #include "net/device_bound_sessions/session_inclusion_rules.h"
+#include "net/device_bound_sessions/session_key.h"
 #include "net/device_bound_sessions/session_params.h"
 #include "url/gurl.h"
 
@@ -31,7 +31,7 @@ class Session;
 // This class represents a DBSC (Device Bound Session Credentials) session.
 class NET_EXPORT Session {
  public:
-  using Id = base::StrongAlias<class IdTag, std::string>;
+  using Id = SessionKey::Id;
   using KeyIdOrError =
       unexportable_keys::ServiceErrorOr<unexportable_keys::UnexportableKeyId>;
 
@@ -68,6 +68,8 @@ class NET_EXPORT Session {
     return cached_challenge_;
   }
 
+  const base::Time& creation_date() const { return creation_date_; }
+
   const base::Time& expiry_date() const { return expiry_date_; }
 
   bool should_defer_when_expired() const { return should_defer_when_expired_; }
@@ -78,10 +80,17 @@ class NET_EXPORT Session {
     cached_challenge_ = std::move(challenge);
   }
 
+  void set_creation_date(base::Time creation_date) {
+    creation_date_ = creation_date;
+  }
+
   void set_expiry_date(base::Time expiry_date) { expiry_date_ = expiry_date; }
 
   // On use of a session, extend the TTL.
   void RecordAccess();
+
+  // Whether the URL is in-scope for the session.
+  bool IncludesUrl(const GURL& url) const;
 
  private:
   Session(Id id, url::Origin origin, GURL refresh);
@@ -90,6 +99,7 @@ class NET_EXPORT Session {
           SessionInclusionRules inclusion_rules,
           std::vector<CookieCraving> cookie_cravings,
           bool should_defer_when_expired,
+          base::Time creation_date,
           base::Time expiry_date);
 
   // The unique server-issued identifier of the session.
@@ -112,6 +122,8 @@ class NET_EXPORT Session {
   // and will be signed using the cached challenge if present, if not signed
   // using a default value for challenge.
   bool should_defer_when_expired_ = true;
+  // Date the session was created.
+  base::Time creation_date_;
   // Expiry date for session, 400 days from last refresh similar to cookies.
   base::Time expiry_date_;
   // Unexportable key for this session.

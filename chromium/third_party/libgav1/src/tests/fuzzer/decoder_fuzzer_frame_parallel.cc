@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <deque>
 #include <memory>
+#include <new>
 #include <vector>
 
 #include "examples/file_reader.h"

@@ -7,7 +7,6 @@ import {DuplexMode} from 'chrome://print/print_preview.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {fakeDataBind} from 'chrome://webui-test/polymer_test_util.js';
-import {eventToPromise} from 'chrome://webui-test/test_util.js';
 
 import {selectOption} from './print_preview_test_utils.js';
 
@@ -46,7 +45,7 @@ suite('DuplexSettingsTest', function() {
   });
 
   // Tests that setting the setting updates the UI.
-  test('set setting', async () => {
+  test('set setting', () => {
     const checkbox = duplexSection.shadowRoot!.querySelector('cr-checkbox')!;
     const collapse = duplexSection.shadowRoot!.querySelector('cr-collapse')!;
     assertFalse(checkbox.checked);
@@ -60,7 +59,6 @@ suite('DuplexSettingsTest', function() {
     assertEquals(DuplexMode.LONG_EDGE.toString(), select.value);
 
     duplexSection.setSetting('duplexShortEdge', true);
-    await eventToPromise('process-select-change', duplexSection);
     assertEquals(DuplexMode.SHORT_EDGE.toString(), select.value);
   });
 
@@ -100,7 +98,7 @@ suite('DuplexSettingsTest', function() {
   // <if expr="is_chromeos">
   // Tests that if settings are enforced by enterprise policy the
   // appropriate UI is disabled.
-  test('disabled by policy', function() {
+  test('disabled by global policy', function() {
     const checkbox = duplexSection.shadowRoot!.querySelector('cr-checkbox')!;
     assertFalse(checkbox.disabled);
 
@@ -108,11 +106,11 @@ suite('DuplexSettingsTest', function() {
     const select = duplexSection.shadowRoot!.querySelector('select')!;
     assertFalse(select.disabled);
 
-    model.set('settings.duplex.setByPolicy', true);
+    model.set('settings.duplex.setByGlobalPolicy', true);
     assertTrue(checkbox.disabled);
     assertFalse(select.disabled);
 
-    model.set('settings.duplexShortEdge.setByPolicy', true);
+    model.set('settings.duplexShortEdge.setByGlobalPolicy', true);
     assertTrue(checkbox.disabled);
     assertTrue(select.disabled);
   });

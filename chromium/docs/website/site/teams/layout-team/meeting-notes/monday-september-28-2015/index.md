@@ -11,7 +11,7 @@ title: Monday, September 28, 2015
 ---
 
 Updates since last meeting (on Monday, September 14th):
-Scrolling (skobes, szager) \[[crbug.com/417782](http://crbug.com/417782)\]
+Scrolling (skobes, szager) \[[crbug.com/417782](https://crbug.com/417782)\]
 - Getting closer to enabling coordinated scrollbars everywhere. Currently
 enabled everywhere on Mac and Android but only for the main frame on
 Windows and Linux. With these changes the main frame will no longer be
@@ -26,17 +26,17 @@ a lot of dependent bugs, lots of of duplicate bug reports. (szager)
 - Leading space char clusterfuzz bugs. (szager)
 - Pushing forward to enable root layer scrolling for layout tests and
 starting to triage failures. (szager)
-CSS Flexbox (cbiesinger) \[[crbug.com/426898](http://crbug.com/426898)\]
+CSS Flexbox (cbiesinger) \[[crbug.com/426898](https://crbug.com/426898)\]
 - Adding a use-counter for deprecated intrinsic sizing.
 - Fixing up css working group test suite for flebox, hope patches will
 be accepted/merged soon.
 - Import css test suite into layout test. Plan is that the css working
 group repository is the source of truth that we mirror periodically.
 - Plan to upstream some more of our tests.
-CSS Grid Layout (svillar) \[[crbug.com/79180](http://crbug.com/79180)\]
+CSS Grid Layout (svillar) \[[crbug.com/79180](https://crbug.com/79180)\]
 - No update since last week.
 Region-based multi-column support (mstensho)
-\[[crbug.com/334335](http://crbug.com/334335)\]
+\[[crbug.com/334335](https://crbug.com/334335)\]
 - Multicol balancing refactoring (do it after layout). The multicol part
 of it has been ready for weeks, but before landing it, some changes to
 strut handling in the LayoutBlockFlow neighborhood are required. I've
@@ -46,7 +46,7 @@ breaking under its own weight. (mstensho)
 - Still working on pagination strut rewrite. Want to get it right and as
 pretty as possible first before landing. (mstensho)
 Add API for layout (leviw, pilgrim, ojan)
-\[[crbug.com/495288](http://crbug.com/495288)\]
+\[[crbug.com/495288](https://crbug.com/495288)\]
 - Landed several large line layout patches, after one that is pending
 review we will have gotten rid of all LayoutObject references in
 InlineTextBox, i.e. we'll use go through the API for all layout calls.

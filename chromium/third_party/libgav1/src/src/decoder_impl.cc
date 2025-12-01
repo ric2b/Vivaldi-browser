@@ -18,7 +18,10 @@
 #include <atomic>
 #include <cassert>
 #include <cmath>
+#include <condition_variable>  // NOLINT (unapproved c++11 header)
 #include <iterator>
+#include <memory>
+#include <mutex>  // NOLINT (unapproved c++11 header)
 #include <new>
 #include <utility>
 #include <vector>

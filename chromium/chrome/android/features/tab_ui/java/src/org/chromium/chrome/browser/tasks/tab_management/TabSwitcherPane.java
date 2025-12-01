@@ -25,6 +25,7 @@ import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
+import org.chromium.chrome.browser.compositor.CompositorViewHolder;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.hub.DelegateButtonData;
 import org.chromium.chrome.browser.hub.HubColorScheme;
@@ -56,8 +57,6 @@ import org.chromium.chrome.browser.user_education.UserEducationHelper;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.components.sensitive_content.SensitiveContentFeatures;
-import org.chromium.components.tab_group_sync.LocalTabGroupId;
-import org.chromium.components.tab_group_sync.SavedTabGroup;
 import org.chromium.components.tab_group_sync.TabGroupSyncService;
 
 import java.util.function.DoubleConsumer;
@@ -119,6 +118,7 @@ public class TabSwitcherPane extends TabSwitcherPaneBase implements TabSwitcherD
      * @param onToolbarAlphaChange Observer to notify when alpha changes during animations.
      * @param userEducationHelper Used for showing IPHs.
      * @param edgeToEdgeSupplier Supplier to the {@link EdgeToEdgeController} instance.
+     * @param compositorViewHolderSupplier Supplier to the {@link CompositorViewHolder} instance.
      */
     TabSwitcherPane(
             @NonNull Context context,
@@ -130,15 +130,16 @@ public class TabSwitcherPane extends TabSwitcherPaneBase implements TabSwitcherD
             @NonNull TabSwitcherPaneDrawableCoordinator tabSwitcherDrawableCoordinator,
             @NonNull DoubleConsumer onToolbarAlphaChange,
             @NonNull UserEducationHelper userEducationHelper,
-            @NonNull ObservableSupplier<EdgeToEdgeController> edgeToEdgeSupplier) {
+            @NonNull ObservableSupplier<EdgeToEdgeController> edgeToEdgeSupplier,
+            @NonNull ObservableSupplier<CompositorViewHolder> compositorViewHolderSupplier) {
         super(
                 context,
-                profileProviderSupplier,
                 factory,
                 /* isIncognito= */ false,
                 onToolbarAlphaChange,
                 userEducationHelper,
-                edgeToEdgeSupplier);
+                edgeToEdgeSupplier,
+                compositorViewHolderSupplier);
         mSharedPreferences = sharedPreferences;
         mTabGroupModelFilterSupplier = tabGroupModelFilterSupplier;
         mTabSwitcherPaneDrawableCoordinator = tabSwitcherDrawableCoordinator;
@@ -155,7 +156,6 @@ public class TabSwitcherPane extends TabSwitcherPaneBase implements TabSwitcherD
                                 R.string.button_new_tab,
                                 R.drawable.tab_switcher_new_tab_56dp), // Vivaldi
                         () -> {
-                            notifyNewTabButtonClick();
                             newTabButtonClickListener.onClick(null);
                         }));
 
@@ -195,8 +195,8 @@ public class TabSwitcherPane extends TabSwitcherPaneBase implements TabSwitcherD
     }
 
     @Override
-    public int getCurrentTabId() {
-        return TabModelUtils.getCurrentTabId(mTabGroupModelFilterSupplier.get().getTabModel());
+    public @Nullable Tab getCurrentTab() {
+        return TabModelUtils.getCurrentTab(mTabGroupModelFilterSupplier.get().getTabModel());
     }
 
     @Override
@@ -241,7 +241,9 @@ public class TabSwitcherPane extends TabSwitcherPaneBase implements TabSwitcherD
                     && ChromeFeatureList.isEnabled(
                             SensitiveContentFeatures.SENSITIVE_CONTENT_WHILE_SWITCHING_TABS)) {
                 TabUiUtils.updateViewContentSensitivityForTabs(
-                        filter.getTabModel(), coordinator::setTabSwitcherContentSensitivity);
+                        filter.getTabModel(),
+                        coordinator::setTabSwitcherContentSensitivity,
+                        "SensitiveContent.TabSwitching.RegularTabSwitcherPane.Sensitivity");
             }
 
             finishWaitForTabStateInitializedTimer();
@@ -286,7 +288,7 @@ public class TabSwitcherPane extends TabSwitcherPaneBase implements TabSwitcherD
         Profile profile = profileProvider.getOriginalProfile();
         mTabGroupSyncService = TabGroupSyncServiceFactory.getForProfile(profile);
 
-        if (!PriceTrackingFeatures.isPriceTrackingEnabled(profileProvider.getOriginalProfile())
+        if (!PriceTrackingFeatures.isPriceAnnotationsEnabled(profileProvider.getOriginalProfile())
                 && getTabListMode() == TabListMode.GRID) {
             return;
         }
@@ -361,7 +363,12 @@ public class TabSwitcherPane extends TabSwitcherPaneBase implements TabSwitcherD
         if (paneHubController == null) return;
 
         TabSwitcherPaneCoordinator coordinator = getTabSwitcherPaneCoordinator();
-        if (coordinator == null) return;
+        // Skip showing IPH if the tab grid dialog is open as it will appear atop the dialog which
+        // looks incorrect.
+        if (coordinator == null
+                || Boolean.TRUE.equals(coordinator.getTabGridDialogVisibilitySupplier().get())) {
+            return;
+        }
 
         TabGroupModelFilter filter = mTabGroupModelFilterSupplier.get();
         @Nullable Pair<Integer, Integer> range = coordinator.getVisibleRange();
@@ -374,12 +381,7 @@ public class TabSwitcherPane extends TabSwitcherPaneBase implements TabSwitcherD
             if (tab == null || !filter.isTabInTabGroup(tab)) continue;
 
             @Nullable Token tabGroupId = tab.getTabGroupId();
-            if (tabGroupId == null) return;
-            @Nullable
-            SavedTabGroup savedTabGroup =
-                    mTabGroupSyncService.getGroup(new LocalTabGroupId(tabGroupId));
-            if (savedTabGroup == null) return;
-            if (!mTabGroupSyncService.isRemoteDevice(savedTabGroup.creatorCacheGuid)) return;
+            if (!TabUiUtils.shouldShowIphForSync(mTabGroupSyncService, tabGroupId)) continue;
 
             @Nullable View anchorView = coordinator.getViewByIndex(viewIndex);
             if (anchorView == null) continue;

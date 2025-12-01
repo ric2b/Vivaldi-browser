@@ -7,7 +7,7 @@ import * as Helpers from '../helpers/helpers.js';
 import {type SelectorTiming, SelectorTimingsKey} from '../types/TraceEvents.js';
 import * as Types from '../types/types.js';
 
-import type {InsightModel, InsightSetContext, RequiredData} from './types.js';
+import {InsightCategory, type InsightModel, type InsightSetContext, type RequiredData} from './types.js';
 
 const UIStrings = {
   /**
@@ -30,7 +30,7 @@ export function deps(): ['SelectorStats'] {
 }
 
 export type SlowCSSSelectorInsightModel = InsightModel<{
-  totalElapsedMs: Types.Timing.MilliSeconds,
+  totalElapsedMs: Types.Timing.Milli,
   totalMatchAttempts: number,
   totalMatchCount: number,
   topElapsedMs: Types.Events.SelectorTiming[],
@@ -68,8 +68,15 @@ function aggregateSelectorStats(
   return [...selectorMap.values()];
 }
 
-function finalize(partialModel: Omit<SlowCSSSelectorInsightModel, 'title'|'description'>): SlowCSSSelectorInsightModel {
-  return {title: i18nString(UIStrings.title), description: i18nString(UIStrings.description), ...partialModel};
+function finalize(partialModel: Omit<SlowCSSSelectorInsightModel, 'title'|'description'|'category'|'shouldShow'>):
+    SlowCSSSelectorInsightModel {
+  return {
+    title: i18nString(UIStrings.title),
+    description: i18nString(UIStrings.description),
+    category: InsightCategory.ALL,
+    shouldShow: partialModel.topElapsedMs.length !== 0 && partialModel.topMatchAttempts.length !== 0,
+    ...partialModel,
+  };
 }
 
 export function generateInsight(
@@ -105,7 +112,7 @@ export function generateInsight(
   return finalize({
     // TODO: should we identify UpdateLayout events as linked to this insight?
     relatedEvents: [],
-    totalElapsedMs: Types.Timing.MilliSeconds(totalElapsedUs / 1000.0),
+    totalElapsedMs: Types.Timing.Milli(totalElapsedUs / 1000.0),
     totalMatchAttempts,
     totalMatchCount,
     topElapsedMs: sortByElapsedMs.slice(0, 3),

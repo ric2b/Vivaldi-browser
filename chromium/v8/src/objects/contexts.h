@@ -362,6 +362,8 @@ enum ContextLookupFlags {
   V(WASM_SUSPENDER_CONSTRUCTOR_INDEX, JSFunction, wasm_suspender_constructor)  \
   V(WASM_SUSPENDING_MAP, Map, wasm_suspending_map)                             \
   V(WASM_SUSPENDING_PROTOTYPE, JSObject, wasm_suspending_prototype)            \
+  V(WASM_MEMORY_MAP_DESCRIPTOR_CONSTRUCTOR_INDEX, JSFunction,                  \
+    wasm_memory_map_descriptor_constructor)                                    \
   V(TEMPLATE_WEAKMAP_INDEX, HeapObject, template_weakmap)                      \
   V(TYPED_ARRAY_FUN_INDEX, JSFunction, typed_array_function)                   \
   V(TYPED_ARRAY_PROTOTYPE_INDEX, JSObject, typed_array_prototype)              \
@@ -381,8 +383,6 @@ enum ContextLookupFlags {
   V(MAP_GET_INDEX, JSFunction, map_get)                                        \
   V(MAP_HAS_INDEX, JSFunction, map_has)                                        \
   V(MAP_SET_INDEX, JSFunction, map_set)                                        \
-  V(FINALIZATION_REGISTRY_CLEANUP_SOME, JSFunction,                            \
-    finalization_registry_cleanup_some)                                        \
   V(FUNCTION_HAS_INSTANCE_INDEX, JSFunction, function_has_instance)            \
   V(FUNCTION_TO_STRING_INDEX, JSFunction, function_to_string)                  \
   V(OBJECT_TO_STRING, JSFunction, object_to_string)                            \
@@ -405,6 +405,8 @@ enum ContextLookupFlags {
   V(WASM_COMPILE_ERROR_FUNCTION_INDEX, JSFunction,                             \
     wasm_compile_error_function)                                               \
   V(WASM_LINK_ERROR_FUNCTION_INDEX, JSFunction, wasm_link_error_function)      \
+  V(WASM_SUSPEND_ERROR_FUNCTION_INDEX, JSFunction,                             \
+    wasm_suspend_error_function)                                               \
   V(WASM_RUNTIME_ERROR_FUNCTION_INDEX, JSFunction,                             \
     wasm_runtime_error_function)                                               \
   V(WEAKMAP_SET_INDEX, JSFunction, weakmap_set)                                \
@@ -630,7 +632,7 @@ class Context : public TorqueGeneratedContext<Context, HeapObject> {
   inline bool HasSameSecurityTokenAs(Tagged<Context> that) const;
 
   Handle<Object> ErrorMessageForCodeGenerationFromStrings();
-  Handle<Object> ErrorMessageForWasmCodeGeneration();
+  DirectHandle<Object> ErrorMessageForWasmCodeGeneration();
 
 #define NATIVE_CONTEXT_FIELD_ACCESSORS(index, type, name)   \
   inline void set_##name(Tagged<UNPAREN(type)> value);      \
@@ -682,7 +684,7 @@ class Context : public TorqueGeneratedContext<Context, HeapObject> {
       DirectHandle<Context> context, size_t index,
       ContextSidePropertyCell::Property property, Isolate* isolate);
 
-  ContextSidePropertyCell::Property GetScriptContextSideProperty(
+  std::optional<ContextSidePropertyCell::Property> GetScriptContextSideProperty(
       size_t index) const;
 
   static DirectHandle<Object> LoadScriptContextElement(
@@ -789,8 +791,8 @@ class NativeContext : public Context {
   int GetErrorsThrown();
 
 #ifdef V8_ENABLE_JAVASCRIPT_PROMISE_HOOKS
-  void RunPromiseHook(PromiseHookType type, Handle<JSPromise> promise,
-                      Handle<Object> parent);
+  void RunPromiseHook(PromiseHookType type, DirectHandle<JSPromise> promise,
+                      DirectHandle<Object> parent);
 #endif
 
  private:
@@ -842,7 +844,7 @@ class ScriptContextTable
   // valid information about its location.
   // If it returns false, `result` is untouched.
   V8_WARN_UNUSED_RESULT
-  V8_EXPORT_PRIVATE bool Lookup(Handle<String> name,
+  V8_EXPORT_PRIVATE bool Lookup(DirectHandle<String> name,
                                 VariableLookupResult* result);
 
   V8_WARN_UNUSED_RESULT

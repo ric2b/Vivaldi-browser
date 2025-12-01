@@ -4,6 +4,7 @@
 
 #include "chrome/browser/google/google_brand.h"
 
+#include <algorithm>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -11,7 +12,6 @@
 #include "base/containers/contains.h"
 #include "base/containers/fixed_flat_set.h"
 #include "base/no_destructor.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -42,12 +42,14 @@ bool GetBrand(std::string* brand) {
   static const base::NoDestructor<std::optional<std::string>> brand_code(
       []() -> std::optional<std::string> {
         std::wstring brandw;
-        if (!GoogleUpdateSettings::GetBrand(&brandw))
+        if (!GoogleUpdateSettings::GetBrand(&brandw)) {
           return std::nullopt;
+        }
         return base::WideToASCII(brandw);
       }());
-  if (!brand_code->has_value())
+  if (!brand_code->has_value()) {
     return false;
+  }
   brand->assign(**brand_code);
   return true;
 }
@@ -55,8 +57,9 @@ bool GetBrand(std::string* brand) {
 bool GetReactivationBrand(std::string* brand) {
   std::wstring brandw;
   bool ret = GoogleUpdateSettings::GetReactivationBrand(&brandw);
-  if (ret)
+  if (ret) {
     brand->assign(base::WideToASCII(brandw));
+  }
   return ret;
 }
 
@@ -114,8 +117,9 @@ bool IsOrganic(const std::string& brand) {
   }
 
   // The Chrome enterprise brand code is the only GGR* brand to be non-organic.
-  if (brand == "GGRV")
+  if (brand == "GGRV") {
     return false;
+  }
 
   return base::StartsWith(brand, "EUB", base::CompareCase::SENSITIVE) ||
          base::StartsWith(brand, "EUC", base::CompareCase::SENSITIVE) ||
@@ -134,8 +138,8 @@ bool IsOrganicFirstRun(const std::string& brand) {
 
 bool IsInternetCafeBrandCode(const std::string& brand) {
   const char* const kBrands[] = {
-    "CHIQ", "CHSG", "HLJY", "NTMO", "OOBA", "OOBB", "OOBC", "OOBD", "OOBE",
-    "OOBF", "OOBG", "OOBH", "OOBI", "OOBJ", "IDCM",
+      "CHIQ", "CHSG", "HLJY", "NTMO", "OOBA", "OOBB", "OOBC", "OOBD",
+      "OOBE", "OOBF", "OOBG", "OOBH", "OOBI", "OOBJ", "IDCM",
   };
   return base::Contains(kBrands, brand);
 }
@@ -152,7 +156,7 @@ bool IsEnterprise(const std::string& brand) {
       "GCT", "GCU", "GCV", "GCW",
   };
   return brand == "GGRV" ||
-         base::ranges::any_of(kEnterpriseBrands, [&brand](const char* br) {
+         std::ranges::any_of(kEnterpriseBrands, [&brand](const char* br) {
            return base::StartsWith(brand, br, base::CompareCase::SENSITIVE);
          });
 }

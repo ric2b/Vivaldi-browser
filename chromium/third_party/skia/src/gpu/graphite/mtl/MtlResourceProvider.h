@@ -37,14 +37,14 @@ private:
     const MtlSharedContext* mtlSharedContext();
 
     sk_sp<GraphicsPipeline> createGraphicsPipeline(const RuntimeEffectDictionary*,
+                                                   const UniqueKey&,
                                                    const GraphicsPipelineDesc&,
                                                    const RenderPassDesc&,
-                                                   SkEnumBitMask<PipelineCreationFlags>) override;
+                                                   SkEnumBitMask<PipelineCreationFlags>,
+                                                   uint32_t compilationID) override;
     sk_sp<ComputePipeline> createComputePipeline(const ComputePipelineDesc&) override;
 
-    sk_sp<Texture> createTexture(SkISize,
-                                 const TextureInfo&,
-                                 skgpu::Budgeted) override;
+    sk_sp<Texture> createTexture(SkISize, const TextureInfo&) override;
     sk_sp<Texture> onCreateWrappedTexture(const BackendTexture&) override;
     sk_sp<Buffer> createBuffer(size_t size, BufferType type, AccessPattern) override;
     sk_sp<Sampler> createSampler(const SamplerDesc&) override;

@@ -3,12 +3,17 @@
 // found in the LICENSE file.
 
 import * as i18n from '../../../../core/i18n/i18n.js';
-import * as LitHtml from '../../../lit-html/lit-html.js';
+import * as Buttons from '../../../components/buttons/buttons.js';
+import * as Lit from '../../../lit/lit.js';
 import * as VisualLogging from '../../../visual_logging/visual_logging.js';
-import textButtonStyles from '../../textButton.css.legacy.js';
-import * as ThemeSupport from '../../theme_support/theme_support.js';
 
-import linkSwatchStyles from './linkSwatch.css.js';
+import linkSwatchStylesRaw from './linkSwatch.css.js';
+
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const linkSwatchStyles = new CSSStyleSheet();
+linkSwatchStyles.replaceSync(linkSwatchStylesRaw.cssContent);
+const textButtonStyles = new CSSStyleSheet();
+textButtonStyles.replaceSync(Buttons.textButtonStyles.cssContent);
 
 const UIStrings = {
   /**
@@ -19,7 +24,7 @@ const UIStrings = {
 };
 const str_ = i18n.i18n.registerUIStrings('ui/legacy/components/inline_editor/LinkSwatch.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
-const {render, html, Directives: {ifDefined, classMap}} = LitHtml;
+const {render, html, Directives: {ifDefined, classMap}} = Lit;
 
 interface BaseLinkSwatchRenderData {
   text: string;
@@ -35,8 +40,7 @@ class BaseLinkSwatch extends HTMLElement {
   #linkElement: HTMLSpanElement|undefined;
 
   connectedCallback(): void {
-    this.shadow.adoptedStyleSheets = [linkSwatchStyles];
-    ThemeSupport.ThemeSupport.instance().appendStyle(this.shadow, textButtonStyles);
+    this.shadow.adoptedStyleSheets = [linkSwatchStyles, textButtonStyles];
   }
 
   set data(data: BaseLinkSwatchRenderData) {

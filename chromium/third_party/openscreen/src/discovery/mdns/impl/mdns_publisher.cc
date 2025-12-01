@@ -18,7 +18,7 @@ namespace openscreen::discovery {
 namespace {
 
 // Minimum delay between announcements of a given record in seconds.
-constexpr std::chrono::seconds kMinAnnounceDelay{1};
+constexpr std::chrono::seconds kMinAnnounceDelay(1);
 
 // Intervals between successive announcements must increase by at least a
 // factor of 2.
@@ -26,7 +26,7 @@ constexpr int kIntervalIncreaseFactor = 2;
 
 // TTL for a goodbye record in seconds. This constant is called out in RFC 6762
 // section 10.1.
-constexpr std::chrono::seconds kGoodbyeTtl{0};
+constexpr std::chrono::seconds kGoodbyeTtl(0);
 
 // Timespan between sending batches of announcement and goodbye records, in
 // microseconds.

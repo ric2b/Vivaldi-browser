@@ -803,10 +803,8 @@ Rebasing
 <div class="paragraph"><p>Things get interesting when there are merge conflicts on rebase. The <strong>most
 common</strong> cause for conflicts is when your branch has been committed to the
 upstream in squashed form, ala <a href="git-squash-branch.html">git-squash-branch(1)</a>, which is what
-<a href="git-cl.html">git-cl(1)</a> and the <em>Commit Queue</em> will do. Because of that, <code>git
-rebase-update</code> will attempt to squash your conflicted branch to see if the
-squashed version applies cleanly to its upstream.</p></div>
-<div class="paragraph"><p>If it does not apply cleanly, then your original (non-squashed) branch will be
+<a href="git-cl.html">git-cl(1)</a> and the <em>Commit Queue</em> will do.</p></div>
+<div class="paragraph"><p>If it does not apply cleanly, then your original branch will be
 left in mid-rebase and <code>git rebase-update</code> will exit. You can deal with this
 like any other conflicted rebase. When you&#8217;re done, just <code>git rebase-update</code>
 again to pick up where you left off.</p></div>

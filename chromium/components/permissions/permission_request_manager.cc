@@ -4,6 +4,7 @@
 
 #include "components/permissions/permission_request_manager.h"
 
+#include <algorithm>
 #include <string>
 
 #include "base/auto_reset.h"
@@ -16,11 +17,9 @@
 #include "base/metrics/user_metrics_action.h"
 #include "base/observer_list.h"
 #include "base/rand_util.h"
-#include "base/ranges/algorithm.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
-#include "build/chromeos_buildflags.h"
 #include "components/back_forward_cache/back_forward_cache_disable.h"
 #include "components/content_settings/core/browser/content_settings_registry.h"
 #include "components/content_settings/core/common/content_settings.h"
@@ -205,9 +204,7 @@ void PermissionRequestManager::AddRequest(
         "Permissions.Prompt.Notifications.EnabledAppLevel",
         app_level_settings_allow_site_notifications);
 
-    if (!app_level_settings_allow_site_notifications &&
-        base::FeatureList::IsEnabled(
-            features::kBlockNotificationPromptsIfDisabledOnAppLevel)) {
+    if (!app_level_settings_allow_site_notifications) {
       // Automatically cancel site Notification requests when Chrome is not able
       // to send notifications in an app level.
       request->Cancelled();
@@ -552,15 +549,7 @@ void PermissionRequestManager::OnVisibilityChanged(
           break;
         case PermissionPrompt::TabSwitchingBehavior::
             kDestroyPromptAndIgnoreRequest:
-// Lacros has an issue with focus switching if a view is destroyed while the
-// webcontents is losing visibility, therefore the Ignore() call gets delayed.
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-          base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-              FROM_HERE, base::BindOnce(&PermissionRequestManager::Ignore,
-                                        weak_factory_.GetWeakPtr()));
-#else   // BUILDFLAG(IS_CHROMEOS_LACROS)
           Ignore();
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
           break;
         case PermissionPrompt::TabSwitchingBehavior::kKeepPromptAlive:
           break;
@@ -674,9 +663,7 @@ void PermissionRequestManager::Deny() {
   // trapped in request loops where the website automatically navigates
   // cross-origin (e.g. to another subdomain) to be able to prompt again after
   // a rejection.
-  if (base::FeatureList::IsEnabled(
-          features::kBlockRepeatedNotificationPermissionPrompts) &&
-      base::Contains(requests_, ContentSettingsType::NOTIFICATIONS,
+  if (base::Contains(requests_, ContentSettingsType::NOTIFICATIONS,
                      &PermissionRequest::GetContentSettingsType)) {
     is_notification_prompt_cooldown_active_ = true;
   }
@@ -881,6 +868,10 @@ bool PermissionRequestManager::RecreateView() {
   return true;
 }
 
+const PermissionPrompt* PermissionRequestManager::GetCurrentPrompt() const {
+  return view_.get();
+}
+
 std::optional<gfx::Rect>
 PermissionRequestManager::GetPromptBubbleViewBoundsInScreen() const {
   return view_ ? view_->GetViewBoundsInScreen() : std::nullopt;
@@ -974,7 +965,7 @@ void PermissionRequestManager::DequeueRequestIfNeeded() {
         permission_ui_selectors_[selector_index]->IsPermissionRequestSupported(
             requests_.front()->request_type())) {
       permission_ui_selectors_[selector_index]->SelectUiToUse(
-          requests_.front(),
+          web_contents(), requests_.front(),
           base::BindOnce(&PermissionRequestManager::OnPermissionUiSelectorDone,
                          weak_factory_.GetWeakPtr(), selector_index));
       continue;
@@ -1009,11 +1000,18 @@ void PermissionRequestManager::ShowPrompt() {
     return;
   }
 
-  if (!ReprioritizeCurrentRequestIfNeeded())
+  // We check `requests_.empty()` after some following calls
+  // (`ReprioritizeCurrentRequestIfNeeded` and `RecreateView`) to prevent
+  // accidentally finalizing the requests, which could be triggered in the
+  // callback chains or error handling (e.g the factory implementation can't
+  // show a permission prompt).
+  if (!ReprioritizeCurrentRequestIfNeeded() || requests_.empty()) {
     return;
+  }
 
-  if (!RecreateView())
+  if (!RecreateView() || requests_.empty()) {
     return;
+  }
 
   if (!current_request_already_displayed_) {
     PermissionUmaUtil::PermissionPromptShown(requests_);
@@ -1047,7 +1045,10 @@ void PermissionRequestManager::ShowPrompt() {
         DetermineCurrentRequestUIDispositionReasonForUMA(),
         requests_[0]->GetGestureType(),
         /*prompt_display_duration=*/std::nullopt, /*is_post_prompt=*/false,
-        web_contents()->GetLastCommittedURL(),
+        web_contents()
+            ->GetPrimaryMainFrame()
+            ->GetLastCommittedOrigin()
+            .GetURL(),
         current_request_pepc_prompt_position_,
         GetRequestInitialStatus(requests_[0]),
         hats_shown_callback_.has_value()
@@ -1090,6 +1091,7 @@ void PermissionRequestManager::ResetViewStateForCurrentRequest() {
   current_request_decision_time_ = base::Time();
   current_request_prompt_disposition_.reset();
   prediction_grant_likelihood_.reset();
+  permission_request_relevance_.reset();
   current_request_ui_to_use_.reset();
   was_decision_held_back_.reset();
   selector_decisions_.clear();
@@ -1145,8 +1147,9 @@ void PermissionRequestManager::CurrentRequestsDecided(
         DetermineCurrentRequestUIDisposition(),
         DetermineCurrentRequestUIDispositionReasonForUMA(),
         view_ ? std::optional(view_->GetPromptVariants()) : std::nullopt,
-        prediction_grant_likelihood_, was_decision_held_back_, ignore_reason,
-        did_show_prompt_, did_click_manage_, did_click_learn_more_);
+        prediction_grant_likelihood_, permission_request_relevance_,
+        was_decision_held_back_, ignore_reason, did_show_prompt_,
+        did_click_manage_, did_click_learn_more_);
   }
 
   std::optional<QuietUiReason> quiet_ui_reason;
@@ -1276,7 +1279,7 @@ PermissionRequestManager::VisitDuplicateRequests(
 void PermissionRequestManager::PermissionGrantedIncludingDuplicates(
     PermissionRequest* request,
     bool is_one_time) {
-  DCHECK_EQ(1ul, base::ranges::count(requests_, request) +
+  DCHECK_EQ(1ul, std::ranges::count(requests_, request) +
                      pending_permission_requests_.Count(request))
       << "Only requests in [pending_permission_]requests_ can have duplicates";
   request->PermissionGranted(is_one_time);
@@ -1292,7 +1295,7 @@ void PermissionRequestManager::PermissionGrantedIncludingDuplicates(
 
 void PermissionRequestManager::PermissionDeniedIncludingDuplicates(
     PermissionRequest* request) {
-  DCHECK_EQ(1ul, base::ranges::count(requests_, request) +
+  DCHECK_EQ(1ul, std::ranges::count(requests_, request) +
                      pending_permission_requests_.Count(request))
       << "Only requests in [pending_permission_]requests_ can have duplicates";
   request->PermissionDenied();
@@ -1307,7 +1310,7 @@ void PermissionRequestManager::PermissionDeniedIncludingDuplicates(
 void PermissionRequestManager::CancelledIncludingDuplicates(
     PermissionRequest* request,
     bool is_final_decision) {
-  DCHECK_EQ(1ul, base::ranges::count(requests_, request) +
+  DCHECK_EQ(1ul, std::ranges::count(requests_, request) +
                      pending_permission_requests_.Count(request))
       << "Only requests in [pending_permission_]requests_ can have duplicates";
   request->Cancelled(is_final_decision);
@@ -1323,7 +1326,7 @@ void PermissionRequestManager::CancelledIncludingDuplicates(
 
 void PermissionRequestManager::RequestFinishedIncludingDuplicates(
     PermissionRequest* request) {
-  DCHECK_EQ(1ul, base::ranges::count(requests_, request) +
+  DCHECK_EQ(1ul, std::ranges::count(requests_, request) +
                      pending_permission_requests_.Count(request))
       << "Only requests in [pending_permission_]requests_ can have duplicates";
   auto duplicate_list = VisitDuplicateRequests(
@@ -1495,6 +1498,11 @@ void PermissionRequestManager::OnPermissionUiSelectorDone(
     if (!prediction_grant_likelihood_.has_value()) {
       prediction_grant_likelihood_ = permission_ui_selectors_[decision_index]
                                          ->PredictedGrantLikelihoodForUKM();
+    }
+
+    if (!permission_request_relevance_.has_value()) {
+      permission_request_relevance_ = permission_ui_selectors_[decision_index]
+                                          ->PermissionRequestRelevanceForUKM();
     }
 
     if (!was_decision_held_back_.has_value()) {

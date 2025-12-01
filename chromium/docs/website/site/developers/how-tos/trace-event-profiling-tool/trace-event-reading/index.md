@@ -249,7 +249,7 @@ This trace assumes that you have opened up a fresh browser, and opened Wikipedia
 in one tab and about:tracing in another, hit record in the tracing tab and
 scrolled a bit in the WikiPedia tab, then stopped the recording. More detailed
 directions on how to do that are[
-here](http://www.chromium.org/developers/how-tos/trace-event-profiling-tool).
+here](/developers/how-tos/trace-event-profiling-tool).
 
 #### Processes & Timelines
 
@@ -578,7 +578,7 @@ console.timeEnd("Foo");
 }
 
 See [this
-page](http://www.chromium.org/developers/how-tos/trace-event-profiling-tool/tracing-event-instrumentation)
+page](/developers/how-tos/trace-event-profiling-tool/tracing-event-instrumentation)
 for more information on adding your own trace events to C++ code.
 
 #### *Determining which IPC message is active*

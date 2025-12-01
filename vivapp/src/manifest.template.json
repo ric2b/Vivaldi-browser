@@ -61,6 +61,7 @@
     "contextMenus",
     "cookies",
     "devtoolsPrivate",
+    "directMatch",
     "downloads",
     "downloads.open",
     "downloads.shelf",

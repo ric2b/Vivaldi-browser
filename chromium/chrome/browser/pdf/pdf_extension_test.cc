@@ -4,6 +4,7 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <string>
 #include <tuple>
 #include <variant>
@@ -17,7 +18,6 @@
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/path_service.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -117,6 +117,7 @@
 #include "ui/base/clipboard/test/test_clipboard.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/native_theme/native_theme_features.h"
 #include "url/gurl.h"
 
 #if defined(TOOLKIT_VIEWS) && !BUILDFLAG(IS_MAC)
@@ -269,7 +270,7 @@ class InnerWebContentsAttachDelayer {
       content::RenderFrameHost* outer_frame) {
     auto* mime_handler_view_helper =
         extensions::MimeHandlerViewAttachHelper::Get(
-            outer_frame->GetProcess()->GetID());
+            outer_frame->GetProcess()->GetDeprecatedID());
     mime_handler_view_helper->set_resume_attach_callback_for_testing(
         base::BindOnce(&InnerWebContentsAttachDelayer::ResumeAttachCallback,
                        base::Unretained(this)));
@@ -549,6 +550,23 @@ IN_PROC_BROWSER_TEST_P(PDFExtensionBlobNavigationTest, NewTab) {
       new_tab_contents, /*allow_multiple_frames=*/false));
 }
 
+IN_PROC_BROWSER_TEST_P(PDFExtensionBlobNavigationTest,
+                       NewTabWithCrossOriginEmbedderPolicy) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL(
+                     "/pdf/test-coep-blob-navigation-new-tab.html")));
+
+  content::TestNavigationObserver navigation_observer(nullptr);
+  navigation_observer.StartWatchingNewWebContents();
+  ASSERT_TRUE(content::ExecJs(GetActiveWebContents(), "openBlobPdfInNewTab()"));
+  navigation_observer.Wait();
+
+  ASSERT_EQ(browser()->tab_strip_model()->count(), 2);
+  EXPECT_TRUE(EnsureFullPagePDFHasLoadedWithValidFrameTree(
+      browser()->tab_strip_model()->GetWebContentsAt(1),
+      /*allow_multiple_frames=*/false));
+}
+
 IN_PROC_BROWSER_TEST_P(PDFExtensionBlobNavigationTest, SameTab) {
   ASSERT_TRUE(ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(
       browser(),
@@ -614,8 +632,8 @@ IN_PROC_BROWSER_TEST_P(PDFExtensionTest, LoadInPlatformApp) {
 
 class DownloadAwaiter : public content::DownloadManager::Observer {
  public:
-  DownloadAwaiter() {}
-  ~DownloadAwaiter() override {}
+  DownloadAwaiter() = default;
+  ~DownloadAwaiter() override = default;
 
   const GURL& GetLastUrl() {
     // Wait until the download has been created.
@@ -1127,7 +1145,7 @@ IN_PROC_BROWSER_TEST_P(PDFExtensionTest, MAYBE_PdfZoomWithoutBubble) {
   // picked up by the browser zoom, then zoom to the next zoom level. This
   // ensures the test passes regardless of the initial default zoom level.
   std::vector<double> preset_zoom_levels = zoom::PageZoom::PresetZoomLevels(0);
-  auto it = base::ranges::find(preset_zoom_levels, 0);
+  auto it = std::ranges::find(preset_zoom_levels, 0);
   ASSERT_NE(it, preset_zoom_levels.end());
   it++;
   ASSERT_NE(it, preset_zoom_levels.end());
@@ -1137,9 +1155,11 @@ IN_PROC_BROWSER_TEST_P(PDFExtensionTest, MAYBE_PdfZoomWithoutBubble) {
   // We expect a ZoomChangedEvent with can_show_bubble == false if the PDF
   // extension behaviour is properly picked up. The test times out otherwise.
   zoom::ZoomChangedWatcher watcher(
-      zoom_controller, zoom::ZoomController::ZoomChangedEventData(
-                           web_contents, 0, new_zoom_level,
-                           zoom::ZoomController::ZOOM_MODE_MANUAL, false));
+      zoom_controller,
+      zoom::ZoomController::ZoomChangedEventData(
+          web_contents,
+          web_contents->GetPrimaryMainFrame()->GetFrameTreeNodeId(), 0,
+          new_zoom_level, zoom::ZoomController::ZOOM_MODE_MANUAL, false));
 
   // Zoom PDF via script.
 #if defined(TOOLKIT_VIEWS) && !BUILDFLAG(IS_MAC)
@@ -1406,7 +1426,7 @@ IN_PROC_BROWSER_TEST_P(PDFExtensionScrollTest,
                                        /*command=*/false);
   ASSERT_NO_FATAL_FAILURE(scroll_waiter.Wait());
 #if BUILDFLAG(IS_WIN)
-  constexpr int kFirstPosition = 915;
+  const int kFirstPosition = ui::IsFluentScrollbarEnabled() ? 917 : 915;
 #elif BUILDFLAG(IS_CHROMEOS)
   constexpr int kFirstPosition = 937;
 #else
@@ -1425,7 +1445,7 @@ IN_PROC_BROWSER_TEST_P(PDFExtensionScrollTest,
                                        /*command=*/false);
   ASSERT_NO_FATAL_FAILURE(scroll_waiter.Wait());
 #if BUILDFLAG(IS_WIN)
-  constexpr int kSecondPosition = 1831;
+  const int kSecondPosition = ui::IsFluentScrollbarEnabled() ? 1834 : 1831;
 #elif BUILDFLAG(IS_CHROMEOS)
   constexpr int kSecondPosition = 1875;
 #else
@@ -3093,7 +3113,15 @@ IN_PROC_BROWSER_TEST_P(PDFExtensionTest, DISABLED_TabInAndOutOfPDFPlugin) {
 // Test that a PDF with COEP: require-corp header can load successfully.
 IN_PROC_BROWSER_TEST_P(PDFExtensionTest,
                        CrossOriginEmbedderPolicyRequireCorpPdf) {
-  EXPECT_TRUE(LoadPdf(embedded_test_server()->GetURL("/pdf/test-coep.pdf")));
+  EXPECT_TRUE(LoadPdf(
+      embedded_test_server()->GetURL("/pdf/test-coep-require-corp.pdf")));
+}
+
+// Test that a PDF with COEP: credentialless header can load successfully.
+IN_PROC_BROWSER_TEST_P(PDFExtensionTest,
+                       CrossOriginEmbedderPolicyCredentiallessPdf) {
+  EXPECT_TRUE(LoadPdf(
+      embedded_test_server()->GetURL("/pdf/test-coep-credentialless.pdf")));
 }
 
 // Test that a PDF without the COEP: require-corp header fails to load when
@@ -3111,6 +3139,14 @@ IN_PROC_BROWSER_TEST_P(PDFExtensionTest,
   EXPECT_TRUE(
       pdf_extension_test_util::GetPdfPluginFrames(web_contents).empty());
   EXPECT_EQ(0u, pdf_extension_test_util::CountPdfPluginProcesses(browser()));
+}
+
+// Test that a data: URL PDF embed can load successfully when embedded in a page
+// that has the COEP: require-corp header.
+IN_PROC_BROWSER_TEST_P(PDFExtensionTest,
+                       CrossOriginEmbedderPolicyDataUrlPdfIframe) {
+  EXPECT_TRUE(LoadPdfInFirstChild(
+      embedded_test_server()->GetURL("/pdf/test-coep-data-pdf-embed.html")));
 }
 
 class PDFExtensionPrerenderTest : public PDFExtensionTest {
@@ -4269,6 +4305,38 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionOopifTest, MetricsPDFLoadStatusPartialLoad) {
   // The PDF.LoadStatus2 metric should be incremented.
   histograms.ExpectBucketCount(kPdfLoadStatusMetric,
                                PDFLoadStatus::kLoadedFullPagePdfWithPdfium, 1);
+}
+
+// Test that loading a blob PDF inside an embedder page with strict CSP should
+// still have styling.
+IN_PROC_BROWSER_TEST_F(PDFExtensionOopifTest,
+                       EmbedderCSPDoesNotBlockPdfIframeStyling) {
+  const GURL main_url(
+      embedded_test_server()->GetURL("/pdf/blob_pdf_iframe_csp.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), main_url));
+
+  content::WebContents* web_contents = GetActiveWebContents();
+
+  // Open the blob PDF in an iframe.
+  content::TestNavigationObserver navigation_observer(web_contents);
+  ASSERT_TRUE(content::ExecJs(web_contents->GetPrimaryMainFrame(),
+                              "openBlobPdfInIframe()"));
+  navigation_observer.Wait();
+  ASSERT_TRUE(navigation_observer.last_navigation_succeeded());
+
+  content::RenderFrameHost* embedder_host = ChildFrameAt(web_contents, 0);
+  ASSERT_TRUE(GetTestPdfViewerStreamManager(web_contents)
+                  ->WaitUntilPdfLoaded(embedder_host));
+
+  // The PDF embedder CSS sets the margin to 0px. Without the CSS, the margin
+  // would be 8px.
+  std::string embedder_margin =
+      content::EvalJs(
+          embedder_host,
+          "window.getComputedStyle(document.body).getPropertyValue('margin')")
+          .ExtractString();
+  // TODO(crbug.com/343754409): Margin should be 0px.
+  EXPECT_EQ("8px", embedder_margin);
 }
 
 class PDFExtensionOopifBlockPdfFrameNavigationTest

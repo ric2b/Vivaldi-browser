@@ -143,7 +143,7 @@ const UIStrings = {
   /**
    *@description Title of an action in the sources tool to close all
    */
-  closeAll: 'Close All',
+  closeAll: 'Close all',
   /**
    *@description Text in the Shortcuts page to explain a keyboard shortcut (jump to previous editing location in text editor)
    */
@@ -417,6 +417,10 @@ const UIStrings = {
    */
   symbol: 'Symbol',
   /**
+   *@description Text for help title of go to symbol menu
+   */
+  goToSymbol: 'Go to symbol',
+  /**
    *@description Text for command prefix of open a file
    */
   open: 'Open',
@@ -425,8 +429,12 @@ const UIStrings = {
    */
   file: 'File',
   /**
+   *@description Text for help title of open file menu
+   */
+  openFile: 'Open file',
+  /**
    * @description  Title of a setting under the Sources category in Settings. If this option is off,
-   * the sources panel will not be automatically be focsed whenever the application hits a breakpoint
+   * the sources panel will not be automatically be focused whenever the application hits a breakpoint
    * and comes to a halt.
    */
   disableAutoFocusOnDebuggerPaused: 'Do not focus Sources panel when triggering a breakpoint',
@@ -909,6 +917,22 @@ UI.ActionRegistration.registerActionExtension({
     return new Sources.SourcesView.ActionDelegate();
   },
   title: i18nLazyString(UIStrings.closeAll),
+  bindings: [
+    {
+      platform: UI.ActionRegistration.Platforms.WINDOWS_LINUX,
+      shortcut: 'Ctrl+K W',
+      keybindSets: [
+        UI.ActionRegistration.KeybindSet.VS_CODE,
+      ],
+    },
+    {
+      platform: UI.ActionRegistration.Platforms.MAC,
+      shortcut: 'Meta+K W',
+      keybindSets: [
+        UI.ActionRegistration.KeybindSet.VS_CODE,
+      ],
+    },
+  ],
 });
 
 UI.ActionRegistration.registerActionExtension({
@@ -1953,7 +1977,6 @@ UI.Toolbar.registerToolbarItem({
   actionId: 'sources.add-folder-to-workspace',
   location: UI.Toolbar.ToolbarItemLocation.FILES_NAVIGATION_TOOLBAR,
   label: i18nLazyString(UIStrings.addFolder),
-  showLabel: true,
   loadItem: undefined,
   order: undefined,
   separator: undefined,
@@ -2004,11 +2027,11 @@ UI.ContextMenu.registerItem({
 QuickOpen.FilteredListWidget.registerProvider({
   prefix: '@',
   iconName: 'symbol',
-  iconWidth: '20px',
   async provider() {
     const Sources = await loadSourcesModule();
     return new Sources.OutlineQuickOpen.OutlineQuickOpen();
   },
+  helpTitle: i18nLazyString(UIStrings.goToSymbol),
   titlePrefix: i18nLazyString(UIStrings.goTo),
   titleSuggestion: i18nLazyString(UIStrings.symbol),
 });
@@ -2016,11 +2039,11 @@ QuickOpen.FilteredListWidget.registerProvider({
 QuickOpen.FilteredListWidget.registerProvider({
   prefix: ':',
   iconName: 'colon',
-  iconWidth: '20px',
   async provider() {
     const Sources = await loadSourcesModule();
     return new Sources.GoToLineQuickOpen.GoToLineQuickOpen();
   },
+  helpTitle: i18nLazyString(UIStrings.goToLine),
   titlePrefix: i18nLazyString(UIStrings.goTo),
   titleSuggestion: i18nLazyString(UIStrings.line),
 });
@@ -2028,11 +2051,11 @@ QuickOpen.FilteredListWidget.registerProvider({
 QuickOpen.FilteredListWidget.registerProvider({
   prefix: '',
   iconName: 'document',
-  iconWidth: '20px',
   async provider() {
     const Sources = await loadSourcesModule();
     return new Sources.OpenFileQuickOpen.OpenFileQuickOpen();
   },
+  helpTitle: i18nLazyString(UIStrings.openFile),
   titlePrefix: i18nLazyString(UIStrings.open),
   titleSuggestion: i18nLazyString(UIStrings.file),
 });

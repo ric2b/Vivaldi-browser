@@ -7,14 +7,13 @@ package org.chromium.chrome.browser.compositor.overlays.strip;
 import android.animation.Animator;
 import android.animation.Animator.AnimatorListener;
 
-import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
 import org.chromium.chrome.browser.layouts.animation.CompositorAnimationHandler;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 
 import java.util.List;
 
 /** Host for animations in the tab strip. */
-interface AnimationHost {
+public interface AnimationHost {
     /**
      * @return The {@link CompositorAnimationHandler} associated with this animation host.
      */
@@ -36,7 +35,4 @@ interface AnimationHost {
      * @param listener The {@link AnimatorListener} for the given animations.
      */
     void startAnimations(List<Animator> animationList, AnimatorListener listener);
-
-    /** Wrapper for {@link LayoutUpdateHost#requestUpdate()}. */
-    void requestUpdate();
 }

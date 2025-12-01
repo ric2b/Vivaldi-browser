@@ -529,4 +529,8 @@ noteHomeViewControllerWantsDismissal:(NoteHomeViewController*)controller
                                     completion:nil];
 }
 
+- (BOOL)isEditorPresented {
+  return _parentController.presentedViewController != nil;
+}
+
 @end

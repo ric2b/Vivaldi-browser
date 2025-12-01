@@ -1,7 +1,7 @@
 # DO NOT EDIT EXCEPT FOR LOCAL TESTING.
 
 vars = {
-  "upstream_commit_id": "I5bbf556ecd353886c9042669aa0afbfd7e7266e9",
+  "upstream_commit_id": "I60b0329de8b4a6638adce6bee0616d21dfe61647",
 
   # The path of the sysroots.json file.
   # This is used by vendor builds like Electron.
@@ -278,7 +278,7 @@ hooks = [
   {
     'name': 'Fetch Android AFDO profile',
     'pattern': '.',
-    'condition': 'checkout_android',
+    'condition': 'checkout_android and checkout_pgo_profiles',
     'action': [ 'python3',
                 'chromium/tools/download_optimization_profile.py',
                 '--newest_state=chromium/chrome/android/profiles/newest.txt',
@@ -290,7 +290,7 @@ hooks = [
   {
     'name': 'Fetch Android Arm AFDO profile',
     'pattern': '.',
-    'condition': 'checkout_android',
+    'condition': 'checkout_android and checkout_pgo_profiles',
     'action': [ 'python3',
                 'chromium/tools/download_optimization_profile.py',
                 '--newest_state=chromium/chrome/android/profiles/arm.newest.txt',
@@ -393,7 +393,7 @@ hooks = [
     'pattern': '.',
     # Always download profiles on Android builds. The GN arg `is_official_build`
     # is required to consider the profiles during build time.
-    'condition': 'checkout_pgo_profiles or checkout_android',
+    'condition': 'checkout_pgo_profiles',
     'action': [ 'python3',
                 'chromium/v8/tools/builtins-pgo/download_profiles.py',
                 'download',

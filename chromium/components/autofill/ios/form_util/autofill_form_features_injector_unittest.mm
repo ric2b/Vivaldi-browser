@@ -59,7 +59,10 @@ TEST_F(AutofillFormInjectorTest, InjectFlagsWebFrames) {
   ScopedFeatureList features;
   features.InitWithFeatures(
       /* enabled_features= */ {kAutofillIsolatedWorldForJavascriptIos,
-                               autofill::features::kAutofillAcrossIframesIos},
+                               autofill::features::kAutofillAcrossIframesIos,
+                               autofill::features::
+                                   kAutofillAcrossIframesIosThrottling,
+                               kAutofillFixPaymentSheetSpam},
       /* disabled_features= */ {});
 
   AutofillFormFeaturesInjector injector(&fake_web_state_,
@@ -69,11 +72,16 @@ TEST_F(AutofillFormInjectorTest, InjectFlagsWebFrames) {
   for (auto* web_frame : fake_web_frames_manager_->GetAllWebFrames()) {
     auto* fake_frame = static_cast<FakeWebFrame*>(web_frame);
 
-    EXPECT_THAT(fake_frame->GetJavaScriptCallHistory(),
-                UnorderedElementsAre(u"__gCrWeb.autofill_form_features."
-                                     u"setAutofillIsolatedContentWorld(true);",
-                                     u"__gCrWeb.autofill_form_features."
-                                     u"setAutofillAcrossIframes(true);"));
+    EXPECT_THAT(
+        fake_frame->GetJavaScriptCallHistory(),
+        UnorderedElementsAre(u"__gCrWeb.autofill_form_features."
+                             u"setAutofillIsolatedContentWorld(true);",
+                             u"__gCrWeb.autofill_form_features."
+                             u"setAutofillAcrossIframes(true);",
+                             u"__gCrWeb.autofill_form_features."
+                             u"setAutofillAcrossIframesThrottling(true);",
+                             u"__gCrWeb.autofill_form_features."
+                             u"setAutofillFixPaymentSheetSpam(true);"));
   }
 }
 

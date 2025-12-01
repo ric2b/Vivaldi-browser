@@ -3,6 +3,7 @@
 #include "components/ad_blocker/adblock_content_injection_rule.h"
 
 #include <iomanip>
+#include <ostream>
 
 namespace adblock_filter {
 

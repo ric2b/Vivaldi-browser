@@ -2,7 +2,7 @@
 breadcrumbs:
 - - /chromium-os
   - ChromiumOS
-- - /chromium-os/developer-information-for-chrome-os-devices
+- - /chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices
   - Developer Information for ChromeOS Devices
 page_name: acer-c7-chromebook
 title: Acer C7 Chromebook
@@ -13,7 +13,7 @@ title: Acer C7 Chromebook
 ## Introduction
 
 This page contains information about the [Acer C7
-Chromebook](http://www.google.com/intl/en/chrome/devices/acer-c7-chromebook.html)
+Chromebook](https://www.google.com/intl/en/chrome/devices/acer-c7-chromebook.html)
 that is interesting and/or useful to software developers. For general
 information about getting started with developing on ChromiumOS (the
 open-source version of the software on the Chrome Notebook), see the [Chromium
@@ -21,12 +21,12 @@ OS Developer Guide](/chromium-os/developer-guide).
 
 ### Specifications
 
-*   CPU: Intel [Sandy Bridge](http://en.wikipedia.org/wiki/Sandy_Bridge)
+*   CPU: Intel [Sandy Bridge](https://en.wikipedia.org/wiki/Sandy_Bridge)
             Celeron (might vary on specific model)
     *   Some later models shipped [Ivy
-                Bridge](http://en.wikipedia.org/wiki/Ivy_Bridge_(microarchitecture));
+                Bridge](https://en.wikipedia.org/wiki/Ivy_Bridge_(microarchitecture));
                 those will use the parrot_ivb board
-*   GPU: Intel [Sandy Bridge](http://en.wikipedia.org/wiki/Sandy_Bridge)
+*   GPU: Intel [Sandy Bridge](https://en.wikipedia.org/wiki/Sandy_Bridge)
             Mobile
     *   11.6" 1366x768 16:9
     *   HDMI port
@@ -34,21 +34,21 @@ OS Developer Guide](/chromium-os/developer-guide).
 *   RAM: 2 GiB or 4GiB DDR3 (might vary on specific model)
 *   Disk: 320 GiB HD or 16 GiB SSD (might vary on specific model)
     *   USB expansion ports
-    *   [SD slot](http://en.wikipedia.org/wiki/Secure_Digital) (SDXC
+    *   [SD slot](https://en.wikipedia.org/wiki/Secure_Digital) (SDXC
                 compatible)
 *   Networking
     *   WiFi 802.11 a/b/g/n
     *   Dedicated Ethernet port
     *   USB ports can handle Ethernet dongles
 *   Power supply: 19V <img alt="image"
-            src="/chromium-os/developer-information-for-chrome-os-devices/direct-current.svg"
-            height=5> ([DC](http://en.wikipedia.org/wiki/Direct_current)) 2.15A
+            src="/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/direct-current.svg"
+            height=5> ([DC](https://en.wikipedia.org/wiki/Direct_current)) 2.15A
             <img alt="image"
-            src="/chromium-os/developer-information-for-chrome-os-devices/center-positive-polarity.svg"
+            src="/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/center-positive-polarity.svg"
             height=12> ([positive polarity
-            tip](http://en.wikipedia.org/wiki/Polarity_symbols))
+            tip](https://en.wikipedia.org/wiki/Polarity_symbols))
 *   [Kensington Security
-            Slot](http://en.wikipedia.org/wiki/Kensington_Security_Slot)
+            Slot](https://en.wikipedia.org/wiki/Kensington_Security_Slot)
 *   [Servo header](/chromium-os/servo): 1x50 header (now obsolete)
 
 ## Developer Mode
@@ -142,14 +142,14 @@ and all paperwork your received first. If you just want to see what the inside
 looks like, gaze upon this (click for high res versions):
 
 [<img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/acer-c7-chromebook/acer-c7-bottom-guts.jpg"
+src="acer-c7-bottom-guts.jpg"
 height=221
-width=320>](/chromium-os/developer-information-for-chrome-os-devices/acer-c7-chromebook/acer-c7-bottom-guts.jpg)
+width=320>](./acer-c7-bottom-guts.jpg)
 
 [<img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/acer-c7-chromebook/acer-c7-top-guts.jpg"
+src="acer-c7-top-guts.jpg"
 height=226
-width=320>](/chromium-os/developer-information-for-chrome-os-devices/acer-c7-chromebook/acer-c7-top-guts.jpg)
+width=320>](./acer-c7-top-guts.jpg)
 
 However, we acknowledge that some people like to tinker. So here's a quick guide
 to taking it apart.
@@ -160,7 +160,7 @@ This is very easy to do and gets you access to all the pieces you most likely
 care about:
 
 <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/acer-c7-chromebook/acer-c7-case-bottom.jpg"
+src="acer-c7-case-bottom.jpg"
 height=277 width=400>
 
 *   The hard drive is easy to remove & replace/upgrade
@@ -198,7 +198,7 @@ Check out the high res picture above for overview.
 While it is possible to remove the motherboard entirely, there isn't much of a
 point. You can see a high res image of what it looks like above if you just want
 that.<img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/acer-c7-chromebook/acer-c7-bottom-screws.jpg"
+src="acer-c7-bottom-screws.jpg"
 height=222 width=320>
 
 If you really want to remove it, then here's how:

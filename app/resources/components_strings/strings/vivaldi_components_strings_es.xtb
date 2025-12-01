@@ -7,9 +7,9 @@
 <translation id="1158211211994409885">El sitio <ph name="HOST_NAME" /> ha cerrado inesperadamente la conexión.</translation>
 <translation id="1161325031994447685">Reconectarte a una red Wi-Fi</translation>
 <translation id="1175364870820465910">&amp;Imprimir...</translation>
-<translation id="132390688737681464">Guardar y autocompletar direcciones</translation>
 <translation id="1375198122581997741">Información de la versión</translation>
 <translation id="139305205187523129">El sitio <ph name="HOST_NAME" /> no envió datos.</translation>
+<translation id="1555191101192706055">Es posible que los atacantes del sitio que has intentado visitar te engañen para que instales software dañino que afecte a tu navegación (por ejemplo, que cambie tu página principal o te muestre anuncios adicionales en los sitios que visites).</translation>
 <translation id="1559528461873125649">No existe el archivo o carpeta</translation>
 <translation id="1640244768702815859">Prueba a <ph name="BEGIN_LINK" />visitar la página principal del sitio<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Protocolo no admitido</translation>
@@ -22,6 +22,7 @@
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Revisar el proxy y el cortafuegos<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Emitido para: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Este sitio no puede proporcionar una conexión segura</translation>
+<translation id="2178904466768126352">Es posible que los atacantes del sitio que has intentado visitar instalen software dañino que robe o elimine cosas como tus contraseñas, fotos, mensajes o números de tarjeta de crédito.</translation>
 <translation id="2187317261103489799">Detectar (por defecto)</translation>
 <translation id="2224337661447660594">Sin conexión a internet</translation>
 <translation id="2283340219607151381">Guardar y autocompletar direcciones</translation>
@@ -50,6 +51,7 @@
 <translation id="2991571918955627853">Ahora mismo no puedes acceder a <ph name="SITE" /> porque el sitio web usa HSTS. Los ataques y errores de red suelen ser temporales, por lo que es probable que esta página funcione más tarde.</translation>
 <translation id="3005723025932146533">Mostrar copia guardada</translation>
 <translation id="301521992641321250">Bloqueado automáticamente</translation>
+<translation id="3037605927509011580">¡Vaya!</translation>
 <translation id="3041612393474885105">Información del certificado</translation>
 <translation id="3109728660330352905">No tienes autorización para ver esta página.</translation>
 <translation id="31207688938192855"><ph name="BEGIN_LINK" />Prueba a ejecutar el diagnóstico de conectividad<ph name="END_LINK" />.</translation>
@@ -62,7 +64,6 @@
 <translation id="3234666976984236645">Detectar siempre contenido importante en este sitio</translation>
 <translation id="3308738399950580893">anuncios</translation>
 <translation id="3384522979010096022">Tu organización no te permite ver este sitio</translation>
-<translation id="3387261909427947069">Métodos de pago</translation>
 <translation id="3422472998109090673">No se puede acceder a <ph name="HOST_NAME" /> en este momento.</translation>
 <translation id="3427092606871434483">Permitir (por defecto)</translation>
 <translation id="3447661539832366887">El propietario de este dispositivo desactivó el juego del dinosaurio.</translation>
@@ -92,6 +93,7 @@
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Revisar la configuración del cortafuegos y del antivirus<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Prueba a ejecutar el diagnóstico de red<ph name="END_LINK" />.</translation>
 <translation id="4235360514405112390">Válido</translation>
+<translation id="4241830393007970744">Es posible que los atacantes del sitio que has intentado visitar te engañen para que instales software o proporciones información como tus contraseñas, tu teléfono o tus números de tarjeta de crédito.</translation>
 <translation id="4250431568374086873">La conexión con el sitio no es totalmente segura</translation>
 <translation id="4265872034478892965">Permitido por tu administrador</translation>
 <translation id="4305666528087210886">No se ha podido acceder al archivo</translation>
@@ -102,6 +104,7 @@
 <translation id="4522570452068850558">Detalles</translation>
 <translation id="4558551763791394412">Prueba a desactivar tus extensiones.</translation>
 <translation id="4592951414987517459">Tu conexión con <ph name="DOMAIN" /> está cifrada con un conjunto de cifrado moderno.</translation>
+<translation id="4598641255230617220">Pegar e ir</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Tu conexión se ha interrumpido</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Ejecutar el diagnóstico de red de Windows<ph name="END_LINK" /></translation>
@@ -111,6 +114,7 @@
 <translation id="4764776831041365478">Es posible que la página web <ph name="URL" /> esté temporalmente inactiva o que haya sido trasladada definitivamente a otra dirección.</translation>
 <translation id="483241715238664915">Activar advertencias</translation>
 <translation id="4943872375798546930">Sin resultados</translation>
+<translation id="5017554619425969104">Texto copiado</translation>
 <translation id="5023310440958281426">Revisa las políticas del administrador</translation>
 <translation id="5039804452771397117">Permitir</translation>
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 en uso)} other {(# en uso)}}</translation>
@@ -120,7 +124,6 @@
 <translation id="5386426401304769735">La cadena de certificados de este sitio contiene un certificado firmado con SHA-1.</translation>
 <translation id="5452270690849572955">No se puede encontrar el sitio (<ph name="HOST_NAME" />)</translation>
 <translation id="5457113250005438886">No válido</translation>
-<translation id="5490432419156082418">Direcciones y más</translation>
 <translation id="5492298309214877701">Este sitio en la intranet de la empresa, organización o centro educativo tiene la misma URL que un sitio web externo.
     <ph name="LINE_BREAK" />
     Prueba a contactar con tu administrador del sistema.</translation>
@@ -165,7 +168,7 @@
 <translation id="7108819624672055576">Permitido por una extensión</translation>
 <translation id="7111012039238467737">(Válido)</translation>
 <translation id="7113310725918019676">Permitir <ph name="BLOCKED_TYPE" /> de <ph name="DOMAIN" /></translation>
-<translation id="7179323680825933600">Guardar y autocompletar métodos de pago</translation>
+<translation id="7126644664682723998">Pegar y buscar</translation>
 <translation id="7210863904660874423">El sitio <ph name="HOST_NAME" /> no cumple con los estándares de seguridad.</translation>
 <translation id="7219179957768738017">La conexión usa <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Mostrar notificaciones</translation>
@@ -201,7 +204,7 @@
 <translation id="8288807391153049143">Mostrar certificado</translation>
 <translation id="8289355894181816810">Si tienes alguna duda, contacta con tu administrador de red.</translation>
 <translation id="8332188693563227489">Se le ha denegado el acceso a <ph name="HOST_NAME" /></translation>
-<translation id="8473863474539038330">Direcciones y más</translation>
+<translation id="8473863474539038330">Direcciones y mucho más</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> ha tardado demasiado tiempo en responder.</translation>
 <translation id="8503813439785031346">Nombre de usuario</translation>
 <translation id="8703575177326907206">Tu conexión con <ph name="DOMAIN" /> no está cifrada.</translation>
@@ -217,6 +220,7 @@
 <translation id="9062620674789239642">Es posible que haya sido trasladado, editado o eliminado.</translation>
 <translation id="9069693763241529744">Bloqueado por una extensión</translation>
 <translation id="9073799351042754113">Has elegido desactivar las advertencias de seguridad para este sitio.</translation>
+<translation id="9168814207360376865">Permite a los sitios comprobar si tienes métodos de pago guardados</translation>
 <translation id="9169664750068251925">Bloquear siempre en este sitio</translation>
 <translation id="9180553614777056266">Bloqueador de anuncios</translation>
 <translation id="9183425211371246419">El sitio <ph name="HOST_NAME" /> usa un protocolo no admitido.</translation>

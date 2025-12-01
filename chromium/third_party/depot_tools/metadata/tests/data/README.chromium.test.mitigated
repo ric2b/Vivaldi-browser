@@ -1,0 +1,21 @@
+Name: Test dependency with mitigated CVEs
+Short Name: cve-test
+URL: https://www.example.com/metadata
+Version: 1.0.12
+Date: 2020-12-03
+License: MIT
+License File: LICENSE
+Security Critical: yes
+Shipped: yes
+CPEPrefix: unknown
+Mitigated: CVE-2011-4061, CVE-2024-7255 ,CVE-2024-7256
+CVE-2011-4061: This copy of DependencyA only includes rainbows
+that spill beautifully over multiple lines and are handled
+ ~~ Perfectly ~~
+Even: this line with colons that mentions CVE-2000-2000: an unrelated cve.
+CVE-2024-7255: This copy of DependencyA only includes unicorns
+CVE-2024-7256: This also doesn't apply because of good reasons
+Description: A test dependency with mitigated CVE entries.
+
+Local Modifications:
+None.

@@ -9,9 +9,13 @@ import("../../visibility.gni")
 
 devtools_module("handlers") {
   sources = [
+    "AnimationFramesHandler.ts",
     "AnimationHandler.ts",
+    "AsyncJSCallsHandler.ts",
     "AuctionWorkletsHandler.ts",
+    "DOMStatsHandler.ts",
     "ExtensionTraceDataHandler.ts",
+    "FlowsHandler.ts",
     "FramesHandler.ts",
     "GPUHandler.ts",
     "ImagePaintingHandler.ts",
@@ -37,12 +41,14 @@ devtools_module("handlers") {
     "UserTimingsHandler.ts",
     "WarningsHandler.ts",
     "WorkersHandler.ts",
+    "helpers.ts",
     "types.ts",
   ]
 
   deps = [
     "../../../core/platform:bundle",
     "../../../generated",
+    "../../../third_party/third-party-web:bundle",
     "../../cpu_profile:bundle",
     "../helpers:bundle",
     "../types:bundle",
@@ -64,9 +70,13 @@ ts_library("unittests") {
   testonly = true
 
   sources = [
+    "AnimationFramesHandler.test.ts",
     "AnimationHandler.test.ts",
+    "AsyncJSCallsHandler.test.ts",
     "AuctionWorkletsHandler.test.ts",
+    "DOMStatsHandler.test.ts",
     "ExtensionTraceDataHandler.test.ts",
+    "FlowsHandler.test.ts",
     "FramesHandler.test.ts",
     "GPUHandler.test.ts",
     "ImagePaintingHandler.test.ts",
@@ -91,6 +101,7 @@ ts_library("unittests") {
     "UserTimingsHandler.test.ts",
     "WarningsHandler.test.ts",
     "WorkersHandler.test.ts",
+    "helpers.test.ts",
   ]
 
   deps = [

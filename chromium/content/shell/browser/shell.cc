@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "content/shell/browser/shell.h"
 
 #include <stddef.h>
@@ -123,8 +128,8 @@ Shell* Shell::CreateShell(std::unique_ptr<WebContents> web_contents,
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(switches::kForceWebRtcIPHandlingPolicy)) {
     raw_web_contents->GetMutableRendererPrefs()->webrtc_ip_handling_policy =
-        command_line->GetSwitchValueASCII(
-            switches::kForceWebRtcIPHandlingPolicy);
+        blink::ToWebRTCIPHandlingPolicy(command_line->GetSwitchValueASCII(
+            switches::kForceWebRtcIPHandlingPolicy));
   }
 
   g_platform->SetContents(shell);
@@ -697,7 +702,9 @@ bool Shell::IsBackForwardCacheSupported(WebContents& web_contents) {
   return true;
 }
 
-PreloadingEligibility Shell::IsPrerender2Supported(WebContents& web_contents) {
+PreloadingEligibility Shell::IsPrerender2Supported(
+    WebContents& web_contents,
+    PreloadingTriggerType trigger_type) {
   return PreloadingEligibility::kEligible;
 }
 

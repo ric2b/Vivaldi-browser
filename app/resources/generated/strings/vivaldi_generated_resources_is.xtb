@@ -279,6 +279,7 @@
 <translation id="5582839680698949063">Aðalvalmynd</translation>
 <translation id="5614553682702429503">Vista lykilorð?</translation>
 <translation id="5623842676595125836">Atburðaskrá</translation>
+<translation id="5624959475330585145">Spyrja áður en ótryggar tengingar eru notaðar</translation>
 <translation id="5638309510554459422">Þú finnur viðbætur og þemu í <ph name="BEGIN_LINK" />vefverslun Chrome<ph name="END_LINK" /></translation>
 <translation id="5677928146339483299">Hamlað</translation>
 <translation id="5707185214361380026">Mistókst að hlaða upp viðbót frá:</translation>
@@ -468,6 +469,7 @@ Geymdu lyklaskrána þína á öruggum stað. Þú munt þurfa á henni að hald
 <translation id="9218430445555521422">Setja sem sjálfgefið</translation>
 <translation id="93766956588638423">Laga viðbót</translation>
 <translation id="961012016278832836">Microsoft Edge (gömul útgáfa)</translation>
+<translation id="961856697154696964">Eyða sögu vafranotkunar</translation>
 <translation id="994289308992179865">&amp;Endurtaka</translation>
 <translation id="998747458861718449">Ra&amp;nnsaka</translation>
 </translationbundle>

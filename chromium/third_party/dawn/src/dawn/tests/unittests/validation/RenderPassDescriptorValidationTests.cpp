@@ -134,7 +134,7 @@ TEST_F(RenderPassDescriptorValidationTest, ErrorEncoderLingeringAttachmentState)
 
     wgpu::CommandEncoder commandEncoder;
     ASSERT_DEVICE_ERROR(commandEncoder = device.CreateCommandEncoder(&commandEncoderDesc));
-    ASSERT_DEVICE_ERROR(commandEncoder.BeginRenderPass(&descriptor));
+    commandEncoder.BeginRenderPass(&descriptor);
 
     ExpectDeviceDestruction();
     device = nullptr;
@@ -576,6 +576,20 @@ TEST_F(RenderPassDescriptorValidationTest, TextureViewDepthSliceOverlaps) {
         renderPass.cColorAttachments[1].depthSlice = 0;
         AssertBeginRenderPassError(&renderPass);
     }
+}
+
+// Check that the render pass depth attachment should not have any chained structs on it.
+TEST_F(RenderPassDescriptorValidationTest, DepthAttachmentChained) {
+    wgpu::TextureView renderView =
+        Create2DAttachment(device, 1, 1, wgpu::TextureFormat::Depth32Float);
+    utils::ComboRenderPassDescriptor renderPass({}, renderView);
+    renderPass.cDepthStencilAttachmentInfo.stencilLoadOp = wgpu::LoadOp::Undefined;
+    renderPass.cDepthStencilAttachmentInfo.stencilStoreOp = wgpu::StoreOp::Undefined;
+
+    wgpu::ChainedStruct chain = {};
+    renderPass.cDepthStencilAttachmentInfo.nextInChain = &chain;
+
+    AssertBeginRenderPassError(&renderPass);
 }
 
 // Check that the render pass depth attachment must have the RenderAttachment usage.

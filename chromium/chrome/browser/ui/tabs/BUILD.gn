@@ -4,11 +4,15 @@
 
 assert(is_win || is_mac || is_linux || is_chromeos || is_android)
 
+import("//chrome/common/features.gni")
+
 # This is the public interface for tabs in a desktop browser. Most features in
 # //chrome/browser depend on this interface, and thus to prevent circular
 # dependencies this interface should not depend on anything else in //chrome.
 source_set("tabs_public") {
   public = [
+    "public/supports_handles.h",
+    "public/tab_dialog_manager.h",
     "public/tab_features.h",
     "public/tab_interface.h",
     "tab_network_state.h",
@@ -16,6 +20,7 @@ source_set("tabs_public") {
   sources = [ "tab_network_state.cc" ]
   public_deps = [
     "//base",
+    "//chrome/common:buildflags",
     "//components/tab_groups:tab_groups",
   ]
   deps = [ "//content/public/browser" ]
@@ -119,6 +124,7 @@ if (!is_android) {
   source_set("tab_model") {
     sources = [
       "existing_base_sub_menu_model.h",
+      "existing_comparison_table_sub_menu_model.h",
       "existing_tab_group_sub_menu_model.h",
       "existing_window_sub_menu_model.h",
       "recent_tabs_sub_menu_model.h",
@@ -130,11 +136,14 @@ if (!is_android) {
       ":tabs",
       ":tabs_public",
       "//base",
+      "//components/back_forward_cache",
+      "//components/commerce/core/product_specifications:product_specifications",
       "//components/constrained_window",
       "//components/favicon/core",
       "//components/sessions",
       "//components/sync_sessions",
       "//components/tab_groups",
+      "//components/web_modal",
       "//content/public/browser",
       "//ui/base",
       "//ui/menus",
@@ -150,6 +159,7 @@ if (!is_android) {
 
     sources = [
       "existing_base_sub_menu_model.cc",
+      "existing_comparison_table_sub_menu_model.cc",
       "existing_tab_group_sub_menu_model.cc",
       "existing_window_sub_menu_model.cc",
       "tab_model.cc",
@@ -162,9 +172,12 @@ if (!is_android) {
       ":tab_strip",
       ":tabs",
       "//chrome/app/vector_icons",
+      "//chrome/browser/commerce:commerce",
       "//chrome/browser/profiles:profile",
       "//chrome/browser/ui:ui_features",
       "//chrome/browser/ui/browser_window",
+      "//chrome/browser/ui/commerce:commerce",
+      "//components/commerce/core/product_specifications:product_specifications",
       "//components/tab_groups",
     ]
 
@@ -224,6 +237,7 @@ if (!is_android) {
       "//chrome/browser/reading_list",
       "//chrome/browser/ui:browser_list",
       "//chrome/browser/ui:ui_features",
+      "//chrome/browser/ui/commerce:commerce",
       "//chrome/browser/web_applications",
       "//components/commerce/core:utils",
       "//components/content_settings/core/browser",
@@ -244,11 +258,9 @@ if (!is_android) {
       "pinned_tab_collection.h",
       "pinned_tab_service.h",
       "pinned_tab_service_factory.h",
-      "supports_handles.h",
       "tab_collection.cc",
       "tab_collection.h",
       "tab_collection_storage.h",
-      "tab_contents_data.h",
       "tab_renderer_data.h",
       "tab_style.h",
       "tab_types.h",
@@ -266,6 +278,7 @@ if (!is_android) {
       "//chrome/browser/ui:browser_list",
       "//chrome/browser/ui/color:color_headers",
       "//chrome/browser/ui/startup:startup_tab",
+      "//components/collaboration/public:public",
       "//components/keyed_service/core",
       "//content/public/browser",
       "//skia",
@@ -284,6 +297,8 @@ if (!is_android) {
     public_deps = [ "//chrome/browser:browser_public_dependencies" ]
 
     sources = [
+      "disconnect_file_chooser_on_background_controller.cc",
+      "disconnect_file_chooser_on_background_controller.h",
       "features.cc",
       "hover_tab_selector.cc",
       "pinned_tab_codec.cc",
@@ -292,7 +307,7 @@ if (!is_android) {
       "pinned_tab_service_factory.cc",
       "recent_tabs_sub_menu_model.cc",
       "tab_collection_storage.cc",
-      "tab_contents_data.cc",
+      "tab_dialog_manager.cc",
       "tab_features.cc",
       "tab_renderer_data.cc",
       "tab_style.cc",
@@ -319,12 +334,14 @@ if (!is_android) {
       "//chrome/browser/search",
       "//chrome/browser/sync",
       "//chrome/browser/sync:factories",
+      "//chrome/browser/task_manager:task_manager",
       "//chrome/browser/themes",
       "//chrome/browser/ui:browser_list",
       "//chrome/browser/ui:ui_features",
       "//chrome/browser/ui/browser_window:browser_window",
       "//chrome/browser/ui/commerce",
       "//chrome/browser/ui/lens",
+      "//chrome/browser/ui/views/page_action",
       "//chrome/browser/ui/views/side_panel",
       "//chrome/browser/ui/webui:webui_util",
       "//chrome/browser/web_applications",
@@ -334,6 +351,7 @@ if (!is_android) {
       "//components/favicon/core",
       "//components/fingerprinting_protection_filter/common:features",
       "//components/image_fetcher/core",
+      "//components/metrics:content",
       "//components/performance_manager",
       "//components/permissions",
       "//components/pref_registry",
@@ -341,7 +359,16 @@ if (!is_android) {
       "//components/sessions",
       "//components/sync_sessions",
       "//components/tab_groups",
+      "//ui/webui",
     ]
+
+    if (use_ozone) {
+      deps += [ "//ui/ozone" ]
+    }
+
+    if (enable_glic) {
+      deps += [ "//chrome/browser/glic" ]
+    }
   }
 
   # This is a separate component to avoid possible circular deps.
@@ -422,7 +449,6 @@ if (!is_android) {
       ":test_support",
       "//base",
       "//base/test:test_support",
-      "//build:chromeos_buildflags",
       "//chrome/browser",
       "//chrome/browser/policy:test_support",
       "//chrome/browser/profiles:profile",
@@ -458,6 +484,7 @@ if (!is_android) {
     testonly = true
     sources = [
       "existing_base_sub_menu_model_unittest.cc",
+      "existing_comparison_table_sub_menu_model_unittest.cc",
       "existing_tab_group_sub_menu_model_unittest.cc",
       "existing_window_sub_menu_model_unittest.cc",
       "pinned_tab_codec_unittest.cc",
@@ -489,7 +516,6 @@ if (!is_android) {
       ":tabs",
       ":test_support",
       "//base/test:test_support",
-      "//build:chromeos_buildflags",
       "//chrome/app:command_ids",
       "//chrome/app:generated_resources",
       "//chrome/browser",

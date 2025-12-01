@@ -20,10 +20,12 @@ module.exports = {
     meta: {
         type: "suggestion",
 
+        defaultOptions: [{ builtinGlobals: true }],
+
         docs: {
             description: "Disallow variable redeclaration",
             recommended: true,
-            url: "https://eslint.org/docs/rules/no-redeclare"
+            url: "https://eslint.org/docs/latest/rules/no-redeclare"
         },
 
         messages: {
@@ -36,7 +38,7 @@ module.exports = {
             {
                 type: "object",
                 properties: {
-                    builtinGlobals: { type: "boolean", default: true }
+                    builtinGlobals: { type: "boolean" }
                 },
                 additionalProperties: false
             }
@@ -44,13 +46,8 @@ module.exports = {
     },
 
     create(context) {
-        const options = {
-            builtinGlobals: Boolean(
-                context.options.length === 0 ||
-                context.options[0].builtinGlobals
-            )
-        };
-        const sourceCode = context.getSourceCode();
+        const [{ builtinGlobals }] = context.options;
+        const sourceCode = context.sourceCode;
 
         /**
          * Iterate declarations of a given variable.
@@ -58,7 +55,7 @@ module.exports = {
          * @returns {IterableIterator<{type:string,node:ASTNode,loc:SourceLocation}>} The declarations.
          */
         function *iterateDeclarations(variable) {
-            if (options.builtinGlobals && (
+            if (builtinGlobals && (
                 variable.eslintImplicitGlobalSetting === "readonly" ||
                 variable.eslintImplicitGlobalSetting === "writable"
             )) {
@@ -129,7 +126,7 @@ module.exports = {
          * @private
          */
         function checkForBlock(node) {
-            const scope = context.getScope();
+            const scope = sourceCode.getScope(node);
 
             /*
              * In ES5, some node type such as `BlockStatement` doesn't have that scope.
@@ -141,8 +138,8 @@ module.exports = {
         }
 
         return {
-            Program() {
-                const scope = context.getScope();
+            Program(node) {
+                const scope = sourceCode.getScope(node);
 
                 findVariablesInScope(scope);
 

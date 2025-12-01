@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "services/proxy_resolver/proxy_resolver_v8.h"
 
 #include <algorithm>
@@ -395,14 +400,10 @@ class SharedIsolateFactory {
         v8::V8::SetFlagsFromString(kOptimizeForSize, strlen(kOptimizeForSize));
 
         // Running v8 in jitless mode allows dynamic code to be disabled in the
-        // process.
+        // process. Note that this also disables WebAssembly, further reducing
+        // the potential attack surface.
         static const char kJitless[] = "--jitless";
         v8::V8::SetFlagsFromString(kJitless, strlen(kJitless));
-
-        // WebAssembly isn't encountered during resolution, so reduce the
-        // potential attack surface.
-        static const char kNoExposeWasm[] = "--no-expose-wasm";
-        v8::V8::SetFlagsFromString(kNoExposeWasm, strlen(kNoExposeWasm));
 
         gin::IsolateHolder::Initialize(
             gin::IsolateHolder::kNonStrictMode,

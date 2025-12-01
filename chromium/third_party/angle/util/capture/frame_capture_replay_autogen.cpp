@@ -158,6 +158,9 @@ void ReplayTraceFunctionCall(const CallCapture &call, const TraceFunctionMap &cu
         case angle::EntryPoint::GLBlendEquation:
             glBlendEquation(captures[0].value.GLenumVal);
             break;
+        case angle::EntryPoint::GLBlendEquationOES:
+            glBlendEquationOES(captures[0].value.GLenumVal);
+            break;
         case angle::EntryPoint::GLBlendEquationSeparate:
             glBlendEquationSeparate(captures[0].value.GLenumVal, captures[1].value.GLenumVal);
             break;
@@ -3485,6 +3488,18 @@ void ReplayTraceFunctionCall(const CallCapture &call, const TraceFunctionMap &cu
                                          captures[2].value.GLenumVal, captures[3].value.GLsizeiVal,
                                          captures[4].value.GLsizeiVal, captures[5].value.GLsizeiVal,
                                          captures[6].value.GLbooleanVal);
+            break;
+        case angle::EntryPoint::GLTexStorageAttribs2DEXT:
+            glTexStorageAttribs2DEXT(captures[0].value.GLenumVal, captures[1].value.GLsizeiVal,
+                                     captures[2].value.GLenumVal, captures[3].value.GLsizeiVal,
+                                     captures[4].value.GLsizeiVal,
+                                     captures[5].value.GLintConstPointerVal);
+            break;
+        case angle::EntryPoint::GLTexStorageAttribs3DEXT:
+            glTexStorageAttribs3DEXT(captures[0].value.GLenumVal, captures[1].value.GLsizeiVal,
+                                     captures[2].value.GLenumVal, captures[3].value.GLsizeiVal,
+                                     captures[4].value.GLsizeiVal, captures[5].value.GLsizeiVal,
+                                     captures[6].value.GLintConstPointerVal);
             break;
         case angle::EntryPoint::GLTexStorageMem2DEXT:
             glTexStorageMem2DEXT(captures[0].value.GLenumVal, captures[1].value.GLsizeiVal,

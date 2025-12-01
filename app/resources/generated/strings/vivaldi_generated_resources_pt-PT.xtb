@@ -279,6 +279,7 @@
 <translation id="5582839680698949063">Menu principal</translation>
 <translation id="5614553682702429503">Guardar a palavra-passe?</translation>
 <translation id="5623842676595125836">Registo</translation>
+<translation id="5624959475330585145">Perguntar antes de usar ligações inseguras</translation>
 <translation id="5638309510554459422">Encontre extensões e temas na <ph name="BEGIN_LINK" />Web Store do Chrome<ph name="END_LINK" /></translation>
 <translation id="5677928146339483299">Bloqueado</translation>
 <translation id="5707185214361380026">Falha ao carregar extensão de:</translation>
@@ -468,6 +469,7 @@ Mantenha o seu ficheiro de chave num local seguro, pois irá precisar dele para 
 <translation id="9218430445555521422">Definir como pré-definição</translation>
 <translation id="93766956588638423">Reparar extensão</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
+<translation id="961856697154696964">Eliminar dados de navegação</translation>
 <translation id="994289308992179865">Cic&amp;lo</translation>
 <translation id="998747458861718449">I&amp;nspecionar</translation>
 </translationbundle>

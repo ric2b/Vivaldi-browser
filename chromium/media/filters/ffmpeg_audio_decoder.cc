@@ -31,8 +31,6 @@
 #include "media/ffmpeg/ffmpeg_decoding_loop.h"
 #include "media/filters/ffmpeg_glue.h"
 
-#include "app/vivaldi_apptools.h"
-
 namespace media {
 
 // Return the number of channels from the data in |frame|.
@@ -336,13 +334,6 @@ bool FFmpegAudioDecoder::ConfigureDecoder(const AudioDecoderConfig& config) {
 
   codec_context_->opaque = this;
   codec_context_->get_buffer2 = GetAudioBufferImpl;
-
-  if (!vivaldi::IsVivaldiRunning() &&
-      base::FeatureList::IsEnabled(kFFmpegAllowLists)) {
-    // Note: FFmpeg will try to free this string, so we must duplicate it.
-    codec_context_->codec_whitelist =
-        av_strdup(FFmpegGlue::GetAllowedAudioDecoders());
-  }
 
   if (!config.should_discard_decoder_delay())
     codec_context_->flags2 |= AV_CODEC_FLAG2_SKIP_MANUAL;

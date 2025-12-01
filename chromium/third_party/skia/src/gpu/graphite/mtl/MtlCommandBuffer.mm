@@ -8,7 +8,7 @@
 #include "src/gpu/graphite/mtl/MtlCommandBuffer.h"
 
 #include "include/gpu/graphite/BackendSemaphore.h"
-#include "include/gpu/graphite/mtl/MtlGraphiteTypes.h"
+#include "include/gpu/graphite/mtl/MtlGraphiteTypesUtils.h"
 #include "src/gpu/graphite/ContextUtils.h"
 #include "src/gpu/graphite/Log.h"
 #include "src/gpu/graphite/RenderPassDesc.h"
@@ -399,8 +399,7 @@ void MtlCommandBuffer::addDrawPass(const DrawPass* drawPass) {
             }
             case DrawPassCommands::Type::kSetScissor: {
                 auto ss = static_cast<DrawPassCommands::SetScissor*>(cmdPtr);
-                const SkIRect& rect = ss->fScissor;
-                this->setScissor(rect.fLeft, rect.fTop, rect.width(), rect.height());
+                this->setScissor(ss->fScissor);
                 break;
             }
             case DrawPassCommands::Type::kDraw: {
@@ -484,7 +483,7 @@ void MtlCommandBuffer::bindGraphicsPipeline(const GraphicsPipeline* graphicsPipe
     uint32_t stencilRefValue = mtlPipeline->stencilReferenceValue();
     fActiveRenderCommandEncoder->setStencilReferenceValue(stencilRefValue);
 
-    if (graphicsPipeline->dstReadRequirement() == DstReadRequirement::kTextureCopy) {
+    if (graphicsPipeline->dstReadStrategy() == DstReadStrategy::kTextureCopy) {
         // The last texture binding is reserved for the dstCopy texture, which is not included in
         // the list on each BindTexturesAndSamplers command. We can set it once now and any
         // subsequent BindTexturesAndSamplers commands in a DrawPass will set the other N-1.
@@ -583,22 +582,17 @@ void MtlCommandBuffer::bindTextureAndSampler(const Texture* texture,
     fActiveRenderCommandEncoder->setFragmentSamplerState(mtlSamplerState, bindIndex);
 }
 
-void MtlCommandBuffer::setScissor(unsigned int left, unsigned int top,
-                                  unsigned int width, unsigned int height) {
+void MtlCommandBuffer::setScissor(const Scissor& scissor) {
     SkASSERT(fActiveRenderCommandEncoder);
-    SkIRect scissor = SkIRect::MakeXYWH(
-            left + fReplayTranslation.x(), top + fReplayTranslation.y(), width, height);
-    fDrawIsOffscreen = !scissor.intersect(SkIRect::MakeSize(fColorAttachmentSize)) ||
-                       (!fReplayClip.isEmpty() && !scissor.intersect(fReplayClip));
-    if (fDrawIsOffscreen) {
-        scissor.setEmpty();
-    }
+
+    SkIRect rect = scissor.getRect(fReplayTranslation, fReplayClip);
+    fDrawIsOffscreen = rect.isEmpty();
 
     fActiveRenderCommandEncoder->setScissorRect({
-            static_cast<unsigned int>(scissor.x()),
-            static_cast<unsigned int>(scissor.y()),
-            static_cast<unsigned int>(scissor.width()),
-            static_cast<unsigned int>(scissor.height()),
+            static_cast<unsigned int>(rect.x()),
+            static_cast<unsigned int>(rect.y()),
+            static_cast<unsigned int>(rect.width()),
+            static_cast<unsigned int>(rect.height()),
     });
 }
 
@@ -616,7 +610,7 @@ void MtlCommandBuffer::setViewport(float x, float y, float width, float height,
 
 void MtlCommandBuffer::updateIntrinsicUniforms(SkIRect viewport) {
     UniformManager intrinsicValues{Layout::kMetal};
-    CollectIntrinsicUniforms(fSharedContext->caps(), viewport, fDstCopyBounds, &intrinsicValues);
+    CollectIntrinsicUniforms(fSharedContext->caps(), viewport, fDstReadBounds, &intrinsicValues);
     SkSpan<const char> bytes = intrinsicValues.finish();
     fActiveRenderCommandEncoder->setVertexBytes(
             bytes.data(), bytes.size_bytes(), MtlGraphicsPipeline::kIntrinsicUniformBufferIndex);

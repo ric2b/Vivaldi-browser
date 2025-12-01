@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include <optional>
 
 #include "base/base64.h"
@@ -1112,7 +1117,7 @@ class SecurityStateLoadingTest : public SecurityStateTabHelperTest {
   SecurityStateLoadingTest(const SecurityStateLoadingTest&) = delete;
   SecurityStateLoadingTest& operator=(const SecurityStateLoadingTest&) = delete;
 
-  ~SecurityStateLoadingTest() override {}
+  ~SecurityStateLoadingTest() override = default;
 
  protected:
   void SetUpOnMainThread() override {

@@ -263,7 +263,7 @@ are only output if the result of that expression is true. Your Python expression
 has access to the following objects and functions:
 
 * `lang` is the language code
-  ([IETF language tag](http://en.wikipedia.org/wiki/IETF_language_tag)) being
+  ([IETF language tag](https://en.wikipedia.org/wiki/IETF_language_tag)) being
   output, taken directly from the 'lang' attribute of the `<output>` node
   currently controlling the output.
 * `defs` is a map of C preprocessor defines to their values, e.g.,

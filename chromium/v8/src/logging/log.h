@@ -70,9 +70,9 @@ class Profiler;
 class SourcePosition;
 class Ticker;
 
-#if defined(V8_OS_WIN) && defined(V8_ENABLE_ETW_STACK_WALKING)
+#if defined(V8_ENABLE_ETW_STACK_WALKING)
 class ETWJitLogger;
-#endif
+#endif  // V8_ENABLE_ETW_STACK_WALKING
 
 #undef LOG
 #define LOG(isolate, Call)                                             \
@@ -102,9 +102,9 @@ class ExistingCodeLogger {
       LogEventListener::CodeTag tag = LogEventListener::CodeTag::kFunction);
   void LogCodeObject(Tagged<AbstractCode> object);
 
-#if defined(V8_OS_WIN) && defined(V8_ENABLE_ETW_STACK_WALKING)
+#if defined(V8_ENABLE_ETW_STACK_WALKING)
   void LogInterpretedFunctions();
-#endif  // V8_OS_WIN && V8_ENABLE_ETW_STACK_WALKING
+#endif  // V8_ENABLE_ETW_STACK_WALKING
 
  private:
   Isolate* isolate_;
@@ -135,10 +135,10 @@ class V8FileLogger : public LogEventListener {
   // Sets the current code event handler.
   void SetCodeEventHandler(uint32_t options, JitCodeEventHandler event_handler);
 
-#if defined(V8_OS_WIN) && defined(V8_ENABLE_ETW_STACK_WALKING)
+#if defined(V8_ENABLE_ETW_STACK_WALKING)
   void SetEtwCodeEventHandler(uint32_t options);
   void ResetEtwCodeEventHandler();
-#endif
+#endif  // V8_ENABLE_ETW_STACK_WALKING
 
   sampler::Sampler* sampler();
   V8_EXPORT_PRIVATE std::string file_name() const;
@@ -223,13 +223,14 @@ class V8FileLogger : public LogEventListener {
 
   void CodeNameEvent(Address addr, int pos, const char* code_name);
 
-  void ICEvent(const char* type, bool keyed, Handle<Map> map,
+  void ICEvent(const char* type, bool keyed, DirectHandle<Map> map,
                DirectHandle<Object> key, char old_state, char new_state,
                const char* modifier, const char* slow_stub_reason);
 
-  void MapEvent(const char* type, Handle<Map> from, Handle<Map> to,
-                const char* reason = nullptr,
-                Handle<HeapObject> name_or_sfi = Handle<HeapObject>());
+  void MapEvent(
+      const char* type, DirectHandle<Map> from, DirectHandle<Map> to,
+      const char* reason = nullptr,
+      DirectHandle<HeapObject> name_or_sfi = DirectHandle<HeapObject>());
   void MapCreate(Tagged<Map> map);
   void MapDetails(Tagged<Map> map);
   void MapMoveEvent(Tagged<Map> from, Tagged<Map> to);
@@ -266,18 +267,18 @@ class V8FileLogger : public LogEventListener {
 
   bool is_listening_to_code_events() override {
     return
-#if defined(V8_OS_WIN) && defined(V8_ENABLE_ETW_STACK_WALKING)
+#if defined(V8_ENABLE_ETW_STACK_WALKING)
         etw_jit_logger_ != nullptr ||
-#endif
+#endif  // V8_ENABLE_ETW_STACK_WALKING
         is_logging() || jit_logger_ != nullptr;
   }
 
   bool allows_code_compaction() override {
-#if defined(V8_OS_WIN) && defined(V8_ENABLE_ETW_STACK_WALKING)
+#if defined(V8_ENABLE_ETW_STACK_WALKING)
     return etw_jit_logger_ == nullptr;
-#else
+#else   // V8_ENABLE_ETW_STACK_WALKING
     return true;
-#endif
+#endif  // V8_ENABLE_ETW_STACK_WALKING
   }
 
   void LogExistingFunction(Handle<SharedFunctionInfo> shared,
@@ -296,9 +297,9 @@ class V8FileLogger : public LogEventListener {
   // Converts tag to a corresponding NATIVE_... if the script is native.
   V8_INLINE static CodeTag ToNativeByScript(CodeTag tag, Tagged<Script> script);
 
-#if defined(V8_OS_WIN) && defined(V8_ENABLE_ETW_STACK_WALKING)
+#if defined(V8_ENABLE_ETW_STACK_WALKING)
   void LogInterpretedFunctions();
-#endif  // V8_OS_WIN && V8_ENABLE_ETW_STACK_WALKING
+#endif  // V8_ENABLE_ETW_STACK_WALKING
 
  private:
   Logger* logger() const;
@@ -329,7 +330,7 @@ class V8FileLogger : public LogEventListener {
   // each script is logged only once.
   bool EnsureLogScriptSource(Tagged<Script> script);
 
-  void LogSourceCodeInformation(Handle<AbstractCode> code,
+  void LogSourceCodeInformation(DirectHandle<AbstractCode> code,
                                 DirectHandle<SharedFunctionInfo> shared);
   void LogCodeDisassemble(DirectHandle<AbstractCode> code);
 
@@ -367,9 +368,9 @@ class V8FileLogger : public LogEventListener {
 #ifdef ENABLE_GDB_JIT_INTERFACE
   std::unique_ptr<JitLogger> gdb_jit_logger_;
 #endif
-#if defined(V8_OS_WIN) && defined(V8_ENABLE_ETW_STACK_WALKING)
+#if defined(V8_ENABLE_ETW_STACK_WALKING)
   std::unique_ptr<ETWJitLogger> etw_jit_logger_;
-#endif
+#endif  // V8_ENABLE_ETW_STACK_WALKING
   std::set<int> logged_source_code_;
   uint32_t next_source_info_id_ = 0;
 
@@ -465,10 +466,10 @@ class V8_EXPORT_PRIVATE CodeEventLogger : public LogEventListener {
 
   virtual void LogRecordedBuffer(Tagged<AbstractCode> code,
                                  MaybeHandle<SharedFunctionInfo> maybe_shared,
-                                 const char* name, int length) = 0;
+                                 const char* name, size_t length) = 0;
 #if V8_ENABLE_WEBASSEMBLY
   virtual void LogRecordedBuffer(const wasm::WasmCode* code, const char* name,
-                                 int length) = 0;
+                                 size_t length) = 0;
 #endif  // V8_ENABLE_WEBASSEMBLY
 
   std::unique_ptr<NameBuffer> name_buffer_;

@@ -6,6 +6,7 @@ from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
 
+import http
 import json
 import logging
 import six
@@ -14,6 +15,7 @@ from google.appengine.ext import ndb
 
 from dashboard import alerts
 from dashboard import chart_handler
+from dashboard import short_uri
 from dashboard import update_test_suites
 from dashboard.common import cloud_metric
 from dashboard.common import request_handler
@@ -21,6 +23,7 @@ from dashboard.common import utils
 from dashboard.models import alert_group
 from dashboard.models import anomaly
 from dashboard.models import page_state
+from dashboard.models import skia_helper
 from dashboard.services import perf_issue_service_client
 
 from flask import request, make_response
@@ -108,6 +111,194 @@ def GroupReportPost():
     return make_response(json.dumps({'error': str(error)}))
 
 
+def SkiaPostAlertsByIntegerKeys():
+  try:
+    data = json.loads(request.data)
+  except json.JSONDecodeError as e:
+    return make_response(
+        json.dumps({'error': str(e)}), http.HTTPStatus.BAD_REQUEST.value)
+
+  logging.debug(
+      '[SkiaTriage] Received get anomalies by keys request from Skia: %s', data)
+
+  keys = data.get('keys', '')
+  if not keys:
+    return make_response(
+        json.dumps({'error': 'No key is found from the request.'}),
+        http.HTTPStatus.BAD_REQUEST.value)
+  try:
+    # Try converting to validate keys before converting to sid.
+    _ = [ndb.Key('Anomaly', int(k)) for k in keys.split(',')]
+  except Exception as e:  # pylint: disable=broad-except
+    return make_response(
+        json.dumps({'error': 'Invalid Anomaly key given.'}),
+        http.HTTPStatus.BAD_REQUEST.value)
+  sid = short_uri.GetOrCreatePageState(keys)
+
+  # The current POST call from does not need the alert list.
+  return MakeResponseForSkiaAlerts([], data.get('host', ''), sid)
+
+
+def ListSkiaAlertsByRev(rev):
+  alert_list = []
+  if not rev:
+    return make_response(
+        json.dumps({'error': 'No rev is found from the request.'}),
+        http.HTTPStatus.BAD_REQUEST.value)
+
+  logging.debug(
+      '[SkiaTriage] Received get anomalies by revision request from Skia: %s',
+      rev)
+
+  try:
+    alert_list = GetAlertsAroundRevision(rev)
+  except request_handler.InvalidInputError as e:
+    return make_response(
+        json.dumps({'error': str(e)}), http.HTTPStatus.BAD_REQUEST.value)
+  return MakeResponseForSkiaAlerts(alert_list, request.values.get('host'))
+
+
+def ListSkiaAlertsByGroupId(group_id):
+  alert_list = []
+  if not group_id:
+    return make_response(
+        json.dumps({'error': 'No group_id is found from the request.'}),
+        http.HTTPStatus.BAD_REQUEST.value)
+
+  logging.debug(
+      '[SkiaTriage] Received get anomalies by group id request from Skia: %s',
+      group_id)
+
+  try:
+    alert_list = GetAlertsForGroupID(group_id)
+  except request_handler.InvalidInputError as e:
+    return make_response(
+        json.dumps({'error': str(e)}), http.HTTPStatus.BAD_REQUEST.value)
+
+  return MakeResponseForSkiaAlerts(alert_list, request.values.get('host'))
+
+
+def SkiaGetAlertsBySid():
+  alert_list = []
+  sid = request.values.get('sid')
+  if not sid:
+    return make_response(
+        json.dumps({'error': 'No sid is found from the request.'}),
+        http.HTTPStatus.BAD_REQUEST.value)
+
+  logging.debug(
+      '[SkiaTriage] Received get anomalies by sid request from Skia: %s', sid)
+
+  state = ndb.Key(page_state.PageState, sid).get()
+  if not state:
+    return make_response(
+        json.dumps({'error': 'No state is found from the sid %s.' % sid}),
+        http.HTTPStatus.BAD_REQUEST.value)
+
+  keys = state.value.decode("utf-8")
+  keys_list = []
+  try:
+    keys_list = keys.split(',')
+    alert_list = GetAlertsForKeys(keys_list, is_urlsafe=False)
+  except Exception as e:  # pylint: disable=broad-except
+    return make_response(
+        json.dumps({'error': str(e)}), http.HTTPStatus.BAD_REQUEST.value)
+
+  return MakeResponseForSkiaAlerts(
+      alert_list, request.values.get('host'), selected_keys=keys_list)
+
+
+def SkiaGetAlertsByIntegerKey():
+  alert_list = []
+  key = request.values.get('key')
+  if not key:
+    return make_response(
+        json.dumps({'error': 'No key is found from the request.'}),
+        http.HTTPStatus.BAD_REQUEST.value)
+
+  logging.debug(
+      '[SkiaTriage] Received get anomalies by key request from Skia: %s', key)
+
+  try:
+    alert_list = GetAlertsForKeys([key], is_urlsafe=False)
+  except Exception as e:  # pylint: disable=broad-except
+    return make_response(
+        json.dumps({'error': str(e)}), http.HTTPStatus.BAD_REQUEST.value)
+
+  return MakeResponseForSkiaAlerts(
+      alert_list, request.values.get('host'), selected_keys=[key])
+
+
+def SkiaGetAlertsByBugId():
+  alert_list = []
+  bug_id = request.values.get('bug_id')
+  if not bug_id:
+    return make_response(
+        json.dumps({'error': 'No bug id is found from the request.'}),
+        http.HTTPStatus.BAD_REQUEST.value)
+
+  logging.debug(
+      '[SkiaTriage] Received get anomalies by bug id request from Skia: %s',
+      bug_id)
+
+  try:
+    alert_list, _, _ = anomaly.Anomaly.QueryAsync(
+        bug_id=bug_id, limit=_QUERY_LIMIT).get_result()
+  except ValueError as e:
+    return make_response(
+        json.dumps({'error': 'Invalid bug ID "%s". %s' % (bug_id, str(e))}),
+        http.HTTPStatus.BAD_REQUEST.value)
+
+  return MakeResponseForSkiaAlerts(alert_list, request.values.get('host'))
+
+
+def MakeResponseForSkiaAlerts(alert_list, host, sid=None, selected_keys=None):
+  """Make response for the anomaly list request specifically from Skia.
+
+  Args:
+    alert_list: a list of anomaly IDs in string
+    host: the Skia instance name, which is used to get the master names it
+          is correlated to, and whether it is an internal instance. Those
+          values will be used to filter the anomalies before returning to
+          Skia.
+    sid: the page state id used to represent a list of anomaly keys.
+    selected_keys: the keys from the original request, which will be used
+          to tell which anomalies should be checked in the report page.
+
+  Returns:
+    A response in json format:
+    {
+      'anomaly_list': the list of anomalies to return
+      'sid':          the state id.
+      'selected_keys': the keys of the anomalies which should be checked.
+      'error':        error message if any.
+    }
+  """
+  if not host:
+    return make_response(
+        json.dumps(
+            {'error': 'Host value is missing to load anomalies to Skia.'}),
+        http.HTTPStatus.BAD_REQUEST.value)
+
+  masters, is_internal = skia_helper.GetMastersAndIsInternalForHost(host)
+  # If the request is from a internal instance, no filtering is needed;
+  # otherwise, show external only.
+  if not is_internal:
+    alert_list = [a for a in alert_list if a.internal_only != True]
+  if masters:
+    alert_list = [a for a in alert_list if a.master_name in masters]
+
+  values = {
+      'anomaly_list': alerts.AnomalyDicts(alert_list, skia=True),
+  }
+  if sid:
+    values['sid'] = sid
+  if selected_keys:
+    values['selected_keys'] = selected_keys
+
+  return make_response(json.dumps(values))
+
+
 def GetAlertsAroundRevision(rev):
   """Gets the alerts whose revision range includes the given revision.
 
@@ -130,7 +321,7 @@ def GetAlertsAroundRevision(rev):
   return [a for a in anomalies if a.start_revision <= rev]
 
 
-def GetAlertsForKeys(keys):
+def GetAlertsForKeys(keys, is_urlsafe=True):
   """Get alerts for |keys|.
 
   Query for anomalies with overlapping revision. The |keys|
@@ -143,10 +334,12 @@ def GetAlertsForKeys(keys):
   Returns:
     list of anomaly.Anomaly
   """
-  urlsafe_keys = keys
-
+  original_keys = keys
   try:
-    keys = [ndb.Key(urlsafe=k) for k in urlsafe_keys]
+    if is_urlsafe:
+      keys = [ndb.Key(urlsafe=k) for k in original_keys]
+    else:
+      keys = [ndb.Key('Anomaly', int(k)) for k in original_keys]
   # Errors that can be thrown here include ProtocolBufferDecodeError
   # in google.net.proto.ProtocolBuffer. We want to catch any errors here
   # because they're almost certainly urlsafe key decoding errors.
@@ -159,7 +352,7 @@ def GetAlertsForKeys(keys):
   for i, anomaly_entity in enumerate(requested_anomalies):
     if anomaly_entity is None:
       raise request_handler.InvalidInputError('No Anomaly found for key %s.' %
-                                              urlsafe_keys[i])
+                                              original_keys[i])
 
   if not requested_anomalies:
     raise request_handler.InvalidInputError('No anomalies found.')
@@ -183,7 +376,10 @@ def GetAlertsForKeys(keys):
     def _IsValidAlert(a):
       if a.key in requested_anomalies_set:
         return False
-      return a.bug_id is None or a.bug_id > 0
+      # The edit_anomalies request may set the bug_id to 0, which is equivalent
+      # to setting the bug_id to None in Chromeperf. Here we only want to
+      # filter out those with value -1 or -2.
+      return a.bug_id is None or a.bug_id >= 0
 
     anomalies = [a for a in anomalies if _IsValidAlert(a)]
     anomalies = _GetOverlaps(anomalies, min_range[0], min_range[1])

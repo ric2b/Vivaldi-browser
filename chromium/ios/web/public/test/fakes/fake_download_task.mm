@@ -18,8 +18,9 @@ FakeDownloadTask::FakeDownloadTask(const GURL& original_url,
 
 FakeDownloadTask::~FakeDownloadTask() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  for (auto& observer : observers_)
+  for (auto& observer : observers_) {
     observer.OnDownloadDestroyed(this);
+  }
 }
 
 WebState* FakeDownloadTask::GetWebState() {
@@ -65,6 +66,11 @@ NSString* FakeDownloadTask::GetIdentifier() const {
 const GURL& FakeDownloadTask::GetOriginalUrl() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return original_url_;
+}
+
+NSString* FakeDownloadTask::GetOriginatingHost() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return originating_host_;
 }
 
 NSString* FakeDownloadTask::GetHttpMethod() const {
@@ -222,8 +228,9 @@ void FakeDownloadTask::SetPerformedBackgroundDownload(bool flag) {
 
 void FakeDownloadTask::OnDownloadUpdated() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  for (auto& observer : observers_)
+  for (auto& observer : observers_) {
     observer.OnDownloadUpdated(this);
+  }
 }
 
 }  // namespace web

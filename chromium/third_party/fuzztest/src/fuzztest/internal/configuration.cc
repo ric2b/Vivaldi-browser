@@ -206,9 +206,11 @@ std::string Configuration::Serialize() const {
              SpaceFor(binary_identifier) + SpaceFor(fuzz_tests) +
              SpaceFor(fuzz_tests_in_current_shard) +
              SpaceFor(reproduce_findings_as_separate_tests) +
+             SpaceFor(replay_coverage_inputs) + SpaceFor(only_replay) +
+             SpaceFor(execution_id) + SpaceFor(print_subprocess_log) +
              SpaceFor(stack_limit) + SpaceFor(rss_limit) +
              SpaceFor(time_limit_per_input_str) + SpaceFor(time_limit_str) +
-             SpaceFor(time_budget_type_str) +
+             SpaceFor(time_budget_type_str) + SpaceFor(jobs) +
              SpaceFor(crashing_input_to_reproduce) +
              SpaceFor(reproduction_command_template));
   size_t offset = 0;
@@ -218,11 +220,16 @@ std::string Configuration::Serialize() const {
   offset = WriteVectorOfStrings(out, offset, fuzz_tests);
   offset = WriteVectorOfStrings(out, offset, fuzz_tests_in_current_shard);
   offset = WriteIntegral(out, offset, reproduce_findings_as_separate_tests);
+  offset = WriteIntegral(out, offset, replay_coverage_inputs);
+  offset = WriteIntegral(out, offset, only_replay);
+  offset = WriteOptionalString(out, offset, execution_id);
+  offset = WriteIntegral(out, offset, print_subprocess_log);
   offset = WriteIntegral(out, offset, stack_limit);
   offset = WriteIntegral(out, offset, rss_limit);
   offset = WriteString(out, offset, time_limit_per_input_str);
   offset = WriteString(out, offset, time_limit_str);
   offset = WriteString(out, offset, time_budget_type_str);
+  offset = WriteIntegral(out, offset, jobs);
   offset = WriteOptionalString(out, offset, crashing_input_to_reproduce);
   offset = WriteOptionalString(out, offset, reproduction_command_template);
   CHECK_EQ(offset, out.size());
@@ -240,11 +247,16 @@ absl::StatusOr<Configuration> Configuration::Deserialize(
                      ConsumeVectorOfStrings(serialized));
     ASSIGN_OR_RETURN(reproduce_findings_as_separate_tests,
                      Consume<bool>(serialized));
+    ASSIGN_OR_RETURN(replay_coverage_inputs, Consume<bool>(serialized));
+    ASSIGN_OR_RETURN(only_replay, Consume<bool>(serialized));
+    ASSIGN_OR_RETURN(execution_id, ConsumeOptionalString(serialized));
+    ASSIGN_OR_RETURN(print_subprocess_log, Consume<bool>(serialized));
     ASSIGN_OR_RETURN(stack_limit, Consume<size_t>(serialized));
     ASSIGN_OR_RETURN(rss_limit, Consume<size_t>(serialized));
     ASSIGN_OR_RETURN(time_limit_per_input_str, ConsumeString(serialized));
     ASSIGN_OR_RETURN(time_limit_str, ConsumeString(serialized));
     ASSIGN_OR_RETURN(time_budget_type_str, ConsumeString(serialized));
+    ASSIGN_OR_RETURN(jobs, Consume<size_t>(serialized));
     ASSIGN_OR_RETURN(crashing_input_to_reproduce,
                      ConsumeOptionalString(serialized));
     ASSIGN_OR_RETURN(reproduction_command_template,
@@ -264,11 +276,16 @@ absl::StatusOr<Configuration> Configuration::Deserialize(
                          *std::move(fuzz_tests),
                          *std::move(fuzz_tests_in_current_shard),
                          *reproduce_findings_as_separate_tests,
+                         *replay_coverage_inputs,
+                         *only_replay,
+                         *std::move(execution_id),
+                         *print_subprocess_log,
                          *stack_limit,
                          *rss_limit,
                          *time_limit_per_input,
                          *time_limit,
                          *time_budget_type,
+                         *jobs,
                          *std::move(crashing_input_to_reproduce),
                          *std::move(reproduction_command_template)};
   }();

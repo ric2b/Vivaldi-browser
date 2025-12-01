@@ -523,7 +523,6 @@ LoginDisplayHostWebUI::~LoginDisplayHostWebUI() {
 
   ResetKeyboardOverscrollBehavior();
 
-  views::FocusManager::set_arrow_key_traversal_enabled(false);
   ResetLoginWindowAndView();
 
   CHECK(!views::WidgetObserver::IsInObserverList());
@@ -952,7 +951,7 @@ void LoginDisplayHostWebUI::InitLoginWindowAndView() {
   }
 
   if (system::InputDeviceSettings::ForceKeyboardDrivenUINavigation()) {
-    views::FocusManager::set_arrow_key_traversal_enabled(true);
+    arrow_key_traversal_enabler_.emplace();
     focus_ring_controller_ = std::make_unique<FocusRingController>();
     focus_ring_controller_->SetVisible(true);
 
@@ -971,6 +970,7 @@ void LoginDisplayHostWebUI::InitLoginWindowAndView() {
       &params, kShellWindowId_LockScreenContainer);
   login_window_ = new views::Widget;
   login_window_->Init(std::move(params));
+  Shell::UpdateAccessibilityForStatusAreaWidget();
 
   login_view_ = new WebUILoginView(weak_factory_.GetWeakPtr());
   login_view_->Init();
@@ -1013,6 +1013,7 @@ void LoginDisplayHostWebUI::ResetLoginWindowAndView() {
     login_window_->RemoveRemovalsObserver(this);
     login_window_->RemoveObserver(this);
     login_window_ = nullptr;
+    Shell::UpdateAccessibilityForStatusAreaWidget();
   }
 
   // Release wizard controller with the webui and hosting window so that it

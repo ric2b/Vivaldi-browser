@@ -12,7 +12,7 @@
 #include "chrome/grit/branded_strings.h"
 #include "components/grit/components_resources.h"
 #include "components/strings/grit/components_branded_strings.h"
-#include "components/version_ui/version_ui_constants.h"
+#include "components/webui/version/version_ui_constants.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "ui/base/l10n/l10n_util.h"
 

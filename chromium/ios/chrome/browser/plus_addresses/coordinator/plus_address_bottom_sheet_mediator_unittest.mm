@@ -6,6 +6,7 @@
 
 #import "base/functional/bind.h"
 #import "base/strings/sys_string_conversions.h"
+#import "base/test/metrics/user_action_tester.h"
 #import "base/test/scoped_feature_list.h"
 #import "base/test/task_environment.h"
 #import "base/types/expected.h"
@@ -92,14 +93,18 @@ TEST_F(PlusAddressBottomSheetMediatorTest, ReservePlusAddress) {
 TEST_F(PlusAddressBottomSheetMediatorTest, ReservePlusAddressError) {
   service().set_should_fail_to_reserve(true);
   OCMExpect([consumer_
-      notifyError:plus_addresses::metrics::PlusAddressModalCompletionStatus::
-                      kReservePlusAddressError]);
+              notifyError:plus_addresses::metrics::
+                              PlusAddressModalCompletionStatus::
+                                  kReservePlusAddressError
+      withCreateErrorType:
+          plus_addresses::PlusAddressCreationBottomSheetErrorType::kNoError]);
   [mediator() reservePlusAddress];
   EXPECT_OCMOCK_VERIFY(consumer_);
 }
 
 // Ensure the consumer is notified when plus addresses are confirmed.
 TEST_F(PlusAddressBottomSheetMediatorTest, ConfirmPlusAddress) {
+  base::UserActionTester user_action_tester;
   OCMExpect([consumer_
       didReservePlusAddress:base::SysUTF8ToNSString(
                                 plus_addresses::test::kFakePlusAddress)]);
@@ -112,9 +117,6 @@ TEST_F(PlusAddressBottomSheetMediatorTest, ConfirmPlusAddress) {
 
 // Tests that the settings service is informed that the notice was accepted.
 TEST_F(PlusAddressBottomSheetMediatorTest, AcceptNoticeNotifiesService) {
-  base::test::ScopedFeatureList features_{
-      plus_addresses::features::kPlusAddressUserOnboardingEnabled};
-
   ON_CALL(plus_address_setting_service(), GetHasAcceptedNotice())
       .WillByDefault(Return(false));
   EXPECT_CALL(plus_address_setting_service(), SetHasAcceptedNotice());
@@ -126,9 +128,6 @@ TEST_F(PlusAddressBottomSheetMediatorTest, AcceptNoticeNotifiesService) {
 // Tests that the settings service is not informed when the bottomsheet was
 // accepted if the notice has already been accepted before.
 TEST_F(PlusAddressBottomSheetMediatorTest, NoticeAlreadyAccepted) {
-  base::test::ScopedFeatureList features_{
-      plus_addresses::features::kPlusAddressUserOnboardingEnabled};
-
   ON_CALL(plus_address_setting_service(), GetHasAcceptedNotice())
       .WillByDefault(Return(true));
   EXPECT_CALL(plus_address_setting_service(), SetHasAcceptedNotice()).Times(0);
@@ -144,9 +143,12 @@ TEST_F(PlusAddressBottomSheetMediatorTest, ConfirmPlusAddressError) {
                                 plus_addresses::test::kFakePlusAddress)]);
   [mediator() reservePlusAddress];
   EXPECT_OCMOCK_VERIFY(consumer_);
-  OCMExpect([consumer_
-      notifyError:plus_addresses::metrics::PlusAddressModalCompletionStatus::
-                      kConfirmPlusAddressError]);
+  OCMExpect([consumer_ notifyError:plus_addresses::metrics::
+                                       PlusAddressModalCompletionStatus::
+                                           kConfirmPlusAddressError
+               withCreateErrorType:plus_addresses::
+                                       PlusAddressCreationBottomSheetErrorType::
+                                           kCreateGeneric]);
   service().set_should_fail_to_confirm(true);
   [mediator() confirmPlusAddress];
   EXPECT_OCMOCK_VERIFY(consumer_);
@@ -180,4 +182,30 @@ TEST_F(PlusAddressBottomSheetMediatorTest, DidTapRefresh) {
   OCMExpect([consumer_ didConfirmPlusAddress]);
   [mediator() confirmPlusAddress];
   EXPECT_OCMOCK_VERIFY(consumer_);
+}
+
+// Ensure the consumer is notified when affiliated suggestion is accepted during
+// creation.
+TEST_F(PlusAddressBottomSheetMediatorTest,
+       DidAcceptAffiliatedPlusAddressSuggestion) {
+  base::UserActionTester user_action_tester;
+  EXPECT_OCMOCK_VERIFY(consumer_);
+  OCMExpect([consumer_ dismissBottomSheet]);
+  [mediator() didAcceptAffiliatedPlusAddressSuggestion];
+  EXPECT_OCMOCK_VERIFY(consumer_);
+  EXPECT_EQ(user_action_tester.GetActionCount(
+                "PlusAddresses.AffiliationErrorFilledExisting"),
+            1);
+}
+
+// Ensure the consumer is notified when the user tries again to confirm.
+TEST_F(PlusAddressBottomSheetMediatorTest, DidSelectTryAgainToConfirm) {
+  base::UserActionTester user_action_tester;
+  EXPECT_OCMOCK_VERIFY(consumer_);
+  OCMExpect([consumer_ didSelectTryAgainToConfirm]);
+  [mediator() didSelectTryAgainToConfirm];
+  EXPECT_OCMOCK_VERIFY(consumer_);
+  EXPECT_EQ(user_action_tester.GetActionCount(
+                "PlusAddresses.CreateErrorTryAgainClicked"),
+            1);
 }

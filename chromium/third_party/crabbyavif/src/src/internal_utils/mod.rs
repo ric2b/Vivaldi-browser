@@ -61,13 +61,13 @@ impl IFraction {
         a as i32
     }
 
-    pub fn simplified(n: i32, d: i32) -> Self {
+    pub(crate) fn simplified(n: i32, d: i32) -> Self {
         let mut fraction = IFraction(n, d);
         fraction.simplify();
         fraction
     }
 
-    pub fn simplify(&mut self) {
+    pub(crate) fn simplify(&mut self) {
         let gcd = Self::gcd(self.0, self.1);
         if gcd > 1 {
             self.0 /= gcd;
@@ -75,16 +75,16 @@ impl IFraction {
         }
     }
 
-    pub fn get_i32(&self) -> i32 {
+    pub(crate) fn get_i32(&self) -> i32 {
         assert!(self.1 != 0);
         self.0 / self.1
     }
 
-    pub fn get_u32(&self) -> AvifResult<u32> {
+    pub(crate) fn get_u32(&self) -> AvifResult<u32> {
         u32_from_i32(self.get_i32())
     }
 
-    pub fn is_integer(&self) -> bool {
+    pub(crate) fn is_integer(&self) -> bool {
         self.0 % self.1 == 0
     }
 
@@ -113,7 +113,7 @@ impl IFraction {
         Ok(())
     }
 
-    pub fn add(&mut self, val: &IFraction) -> AvifResult<()> {
+    pub(crate) fn add(&mut self, val: &IFraction) -> AvifResult<()> {
         let mut val = *val;
         val.simplify();
         self.common_denominator(&mut val)?;
@@ -125,7 +125,7 @@ impl IFraction {
         Ok(())
     }
 
-    pub fn sub(&mut self, val: &IFraction) -> AvifResult<()> {
+    pub(crate) fn sub(&mut self, val: &IFraction) -> AvifResult<()> {
         let mut val = *val;
         val.simplify();
         self.common_denominator(&mut val)?;
@@ -140,7 +140,7 @@ impl IFraction {
 
 macro_rules! conversion_function {
     ($func:ident, $to: ident, $from:ty) => {
-        pub fn $func(value: $from) -> AvifResult<$to> {
+        pub(crate) fn $func(value: $from) -> AvifResult<$to> {
             $to::try_from(value).or(Err(AvifError::BmffParseFailed("".into())))
         }
     };
@@ -166,7 +166,7 @@ conversion_function!(i32_from_usize, i32, usize);
 
 macro_rules! clamp_function {
     ($func:ident, $type:ty) => {
-        pub fn $func(value: $type, low: $type, high: $type) -> $type {
+        pub(crate) fn $func(value: $type, low: $type, high: $type) -> $type {
             if value < low {
                 low
             } else if value > high {
@@ -182,8 +182,17 @@ clamp_function!(clamp_u16, u16);
 clamp_function!(clamp_f32, f32);
 clamp_function!(clamp_i32, i32);
 
+macro_rules! find_property {
+    ($properties:expr, $property_name:ident) => {
+        $properties.iter().find_map(|p| match p {
+            ItemProperty::$property_name(value) => Some(value.clone()),
+            _ => None,
+        })
+    };
+}
+
 // Returns the colr nclx property. Returns an error if there are multiple ones.
-pub fn find_nclx(properties: &[ItemProperty]) -> AvifResult<Option<&Nclx>> {
+pub(crate) fn find_nclx(properties: &[ItemProperty]) -> AvifResult<Option<&Nclx>> {
     let mut single_nclx: Option<&Nclx> = None;
     for property in properties {
         if let ItemProperty::ColorInformation(ColorInformation::Nclx(nclx)) = property {
@@ -199,7 +208,7 @@ pub fn find_nclx(properties: &[ItemProperty]) -> AvifResult<Option<&Nclx>> {
 }
 
 // Returns the colr icc property. Returns an error if there are multiple ones.
-pub fn find_icc(properties: &[ItemProperty]) -> AvifResult<Option<&Vec<u8>>> {
+pub(crate) fn find_icc(properties: &[ItemProperty]) -> AvifResult<Option<&Vec<u8>>> {
     let mut single_icc: Option<&Vec<u8>> = None;
     for property in properties {
         if let ItemProperty::ColorInformation(ColorInformation::Icc(icc)) = property {
@@ -212,7 +221,7 @@ pub fn find_icc(properties: &[ItemProperty]) -> AvifResult<Option<&Vec<u8>>> {
     Ok(single_icc)
 }
 
-pub fn check_limits(width: u32, height: u32, size_limit: u32, dimension_limit: u32) -> bool {
+pub(crate) fn check_limits(width: u32, height: u32, size_limit: u32, dimension_limit: u32) -> bool {
     if height == 0 {
         return false;
     }
@@ -234,7 +243,7 @@ fn limited_to_full(min: i32, max: i32, full: i32, v: u16) -> u16 {
     ) as u16
 }
 
-pub fn limited_to_full_y(depth: u8, v: u16) -> u16 {
+pub(crate) fn limited_to_full_y(depth: u8, v: u16) -> u16 {
     match depth {
         8 => limited_to_full(16, 235, 255, v),
         10 => limited_to_full(64, 940, 1023, v),
@@ -243,7 +252,7 @@ pub fn limited_to_full_y(depth: u8, v: u16) -> u16 {
     }
 }
 
-pub fn create_vec_exact<T>(size: usize) -> AvifResult<Vec<T>> {
+pub(crate) fn create_vec_exact<T>(size: usize) -> AvifResult<Vec<T>> {
     let mut v = Vec::<T>::new();
     let allocation_size = size
         .checked_mul(std::mem::size_of::<T>())
@@ -264,14 +273,14 @@ pub fn create_vec_exact<T>(size: usize) -> AvifResult<Vec<T>> {
 }
 
 #[cfg(test)]
-pub fn assert_eq_f32_array(a: &[f32], b: &[f32]) {
+pub(crate) fn assert_eq_f32_array(a: &[f32], b: &[f32]) {
     assert_eq!(a.len(), b.len());
     for i in 0..a.len() {
         assert!((a[i] - b[i]).abs() <= std::f32::EPSILON);
     }
 }
 
-pub fn check_slice_range(len: usize, range: &Range<usize>) -> AvifResult<()> {
+pub(crate) fn check_slice_range(len: usize, range: &Range<usize>) -> AvifResult<()> {
     if range.start >= len || range.end > len {
         return Err(AvifError::NoContent);
     }

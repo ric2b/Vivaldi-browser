@@ -10,7 +10,7 @@ android_library("java") {
   visibility = [
     ":*",
     "//chrome/android:chrome_all_java",
-    "//chrome/android:chrome_test_java",
+    "//chrome/android/javatests:*",
     "//chrome/browser/ui/android/edge_to_edge/test:*",
   ]
   sources = [
@@ -27,6 +27,7 @@ android_library("java") {
   ]
   deps = [
     "//base:base_java",
+    "//cc:cc_java",
     "//chrome/browser/android/lifecycle:java",
     "//chrome/browser/browser_controls/android:java",
     "//chrome/browser/flags:java",
@@ -63,6 +64,7 @@ robolectric_library("junit") {
     "//base:base_java",
     "//base:base_java_test_support",
     "//base:base_junit_test_support",
+    "//cc:cc_java",
     "//chrome/browser/browser_controls/android:java",
     "//chrome/browser/flags:java",
     "//chrome/browser/fullscreen/android:java",
@@ -74,6 +76,7 @@ robolectric_library("junit") {
     "//components/browser_ui/edge_to_edge/android:java",
     "//components/browser_ui/widget/android:java",
     "//content/public/android:content_java",
+    "//content/public/test/android:content_java_test_support",
     "//third_party/androidx:androidx_appcompat_appcompat_java",
     "//third_party/androidx:androidx_core_core_java",
     "//third_party/androidx:androidx_recyclerview_recyclerview_java",

@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"boringssl.googlesource.com/boringssl/ssl/test/runner/hpke"
+	"boringssl.googlesource.com/boringssl/ssl/test/runner/spake2plus"
 	"golang.org/x/crypto/cryptobyte"
 )
 
@@ -40,6 +41,7 @@ type clientHandshakeState struct {
 	session        *ClientSessionState
 	finishedBytes  []byte
 	peerPublicKey  crypto.PublicKey
+	pakeContext    *spake2plus.Context
 }
 
 func mapClientHelloVersion(vers uint16, isDTLS bool) uint16 {
@@ -673,6 +675,41 @@ func (hs *clientHandshakeState) createClientHello(innerHello *clientHelloMsg, ec
 		}
 	}
 
+	for _, id := range c.config.Bugs.OfferExtraPAKEs {
+		hello.pakeClientID = c.config.Bugs.OfferExtraPAKEClientID
+		hello.pakeServerID = c.config.Bugs.OfferExtraPAKEServerID
+		hello.pakeShares = append(hello.pakeShares, pakeShare{id: id, msg: []byte{1}})
+	}
+	if cred := c.config.Credential; cred != nil && cred.Type == CredentialTypeSPAKE2PlusV1 {
+		if maxVersion < VersionTLS13 {
+			panic("The PAKE extension is only supported in TLS 1.3")
+		}
+		w0, w1, _, err := spake2plus.Register(cred.PAKEPassword, cred.PAKEClientID, cred.PAKEServerID)
+		if err != nil {
+			return nil, err
+		}
+		hs.pakeContext, err = spake2plus.NewProver(cred.PAKEContext, cred.PAKEClientID, cred.PAKEServerID, w0, w1)
+		if err != nil {
+			return nil, err
+		}
+		share, err := hs.pakeContext.GenerateProverShare()
+		if err != nil {
+			return nil, err
+		}
+		if c.config.Bugs.TruncatePAKEMessage {
+			share = share[:len(share)-1]
+		}
+		hello.pakeClientID = cred.PAKEClientID
+		hello.pakeServerID = cred.PAKEServerID
+		id := spakeID
+		if cred.OverridePAKECodepoint != 0 {
+			id = cred.OverridePAKECodepoint
+		}
+		hello.pakeShares = append(hello.pakeShares, pakeShare{id: id, msg: share})
+		hello.hasKeyShares = false
+		hello.keyShares = nil
+	}
+
 	possibleCipherSuites := c.config.cipherSuites()
 	hello.cipherSuites = make([]uint16, 0, len(possibleCipherSuites))
 
@@ -848,7 +885,7 @@ func (hs *clientHandshakeState) createClientHello(innerHello *clientHelloMsg, ec
 		if session.vers < VersionTLS13 {
 			version = VersionTLS13
 			if c.isDTLS {
-				version = VersionDTLS125Experimental
+				version = VersionDTLS13
 			}
 		}
 		generatePSKBinders(version, c.isDTLS, hello, session, nil, nil, c.config)
@@ -871,11 +908,15 @@ func (hs *clientHandshakeState) encryptClientHello(hello, innerHello *clientHell
 
 	if c.config.Bugs.MinimalClientHelloOuter {
 		*hello = clientHelloMsg{
+			isDTLS:             c.isDTLS,
 			vers:               VersionTLS12,
 			random:             hello.random,
 			sessionID:          hello.sessionID,
 			cipherSuites:       []uint16{0x0a0a},
 			compressionMethods: hello.compressionMethods,
+		}
+		if c.isDTLS {
+			hello.vers = VersionDTLS12
 		}
 	}
 
@@ -1082,8 +1123,9 @@ func (hs *clientHandshakeState) doTLS13Handshake(msg any) error {
 		return fmt.Errorf("tls: server sent non-matching cipher suite %04x vs %04x", hs.suite.id, hs.serverHello.cipherSuite)
 	}
 
+	// ServerHello must be consistent with HelloRetryRequest, if any.
 	if haveHelloRetryRequest {
-		if helloRetryRequest.hasSelectedGroup && helloRetryRequest.selectedGroup != hs.serverHello.keyShare.group {
+		if helloRetryRequest.hasSelectedGroup && (!hs.serverHello.hasKeyShare || helloRetryRequest.selectedGroup != hs.serverHello.keyShare.group) {
 			c.sendAlert(alertHandshakeFailure)
 			return errors.New("tls: ServerHello parameters did not match HelloRetryRequest")
 		}
@@ -1119,29 +1161,55 @@ func (hs *clientHandshakeState) doTLS13Handshake(msg any) error {
 	}
 	hs.finishedHash.addEntropy(pskSecret)
 
-	if !hs.serverHello.hasKeyShare {
-		c.sendAlert(alertUnsupportedExtension)
-		return errors.New("tls: server omitted KeyShare on resumption.")
-	}
-
-	// Resolve ECDHE and compute the handshake secret.
-	ecdheSecret := zeroSecret
-	if !c.config.Bugs.MissingKeyShare && !c.config.Bugs.SecondClientHelloMissingKeyShare {
-		kem, ok := hs.keyShares[hs.serverHello.keyShare.group]
-		if !ok {
-			c.sendAlert(alertHandshakeFailure)
-			return errors.New("tls: server selected an unsupported group")
+	sharedSecret := zeroSecret
+	if len(hs.serverHello.pakeMessage) != 0 {
+		if c.didResume {
+			return errors.New("server resumed and returned a PAKE extension")
 		}
-		c.curveID = hs.serverHello.keyShare.group
+		if hs.pakeContext == nil {
+			return errors.New("server selected a PAKE unexpectedly")
+		}
+		if hs.serverHello.pakeID != spakeID {
+			return errors.New("server selected an unknown PAKE")
+		}
+		if expected := 65 + 32; len(hs.serverHello.pakeMessage) != expected {
+			return fmt.Errorf("wrong length SPAKE2+ message, got %d, want %d", len(hs.serverHello.pakeMessage), expected)
+		}
+		if hs.serverHello.hasKeyShare || hs.serverHello.hasPSKIdentity {
+			return errors.New("server included invalid extension with PAKE extension")
+		}
 
 		var err error
-		ecdheSecret, err = kem.decap(c.config, hs.serverHello.keyShare.keyExchange)
-		if err != nil {
-			return err
+		if _, sharedSecret, err = hs.pakeContext.ComputeProverConfirmation(hs.serverHello.pakeMessage[:65], hs.serverHello.pakeMessage[65:]); err != nil {
+			return fmt.Errorf("while computing SPAKE2+ confirmation: %w", err)
+		}
+	} else if hs.pakeContext != nil {
+		return errors.New("server didn't respond with PAKE message")
+	} else {
+		if !hs.serverHello.hasKeyShare {
+			c.sendAlert(alertUnsupportedExtension)
+			return errors.New("tls: server omitted KeyShare on resumption.")
+		}
+
+		// Resolve ECDHE and compute the handshake secret.
+		if !c.config.Bugs.MissingKeyShare && !c.config.Bugs.SecondClientHelloMissingKeyShare {
+			kem, ok := hs.keyShares[hs.serverHello.keyShare.group]
+			if !ok {
+				c.sendAlert(alertHandshakeFailure)
+				return errors.New("tls: server selected an unsupported group")
+			}
+			c.curveID = hs.serverHello.keyShare.group
+
+			var err error
+			sharedSecret, err = kem.decap(c.config, hs.serverHello.keyShare.keyExchange)
+			if err != nil {
+				return err
+			}
 		}
 	}
+
 	hs.finishedHash.nextSecret()
-	hs.finishedHash.addEntropy(ecdheSecret)
+	hs.finishedHash.addEntropy(sharedSecret)
 	hs.writeServerHash(hs.serverHello.marshal())
 
 	// Derive handshake traffic keys and switch read key to handshake
@@ -1152,15 +1220,9 @@ func (hs *clientHandshakeState) doTLS13Handshake(msg any) error {
 		return err
 	}
 
-	msg, err := c.readHandshake()
+	encryptedExtensions, err := readHandshakeType[encryptedExtensionsMsg](c)
 	if err != nil {
 		return err
-	}
-
-	encryptedExtensions, ok := msg.(*encryptedExtensionsMsg)
-	if !ok {
-		c.sendAlert(alertUnexpectedMessage)
-		return unexpectedMessageError(encryptedExtensions, msg)
 	}
 	hs.writeServerHash(encryptedExtensions.marshal())
 
@@ -1180,6 +1242,8 @@ func (hs *clientHandshakeState) doTLS13Handshake(msg any) error {
 		c.peerCertificates = hs.session.serverCertificates
 		c.sctList = hs.session.sctList
 		c.ocspResponse = hs.session.ocspResponse
+	} else if hs.pakeContext != nil {
+		// The PAKE authenticates the connection.
 	} else {
 		msg, err := c.readHandshake()
 		if err != nil {
@@ -1277,14 +1341,9 @@ func (hs *clientHandshakeState) doTLS13Handshake(msg any) error {
 		c.ocspResponse = certMsg.certificates[0].ocspResponse
 		c.sctList = certMsg.certificates[0].sctList
 
-		msg, err = c.readHandshake()
+		certVerifyMsg, err := readHandshakeType[certificateVerifyMsg](c)
 		if err != nil {
 			return err
-		}
-		certVerifyMsg, ok := msg.(*certificateVerifyMsg)
-		if !ok {
-			c.sendAlert(alertUnexpectedMessage)
-			return unexpectedMessageError(certVerifyMsg, msg)
 		}
 
 		c.peerSignatureAlgorithm = certVerifyMsg.signatureAlgorithm
@@ -1301,16 +1360,10 @@ func (hs *clientHandshakeState) doTLS13Handshake(msg any) error {
 		hs.writeServerHash(certVerifyMsg.marshal())
 	}
 
-	msg, err = c.readHandshake()
+	serverFinished, err := readHandshakeType[finishedMsg](c)
 	if err != nil {
 		return err
 	}
-	serverFinished, ok := msg.(*finishedMsg)
-	if !ok {
-		c.sendAlert(alertUnexpectedMessage)
-		return unexpectedMessageError(serverFinished, msg)
-	}
-
 	verify := hs.finishedHash.serverSum(serverHandshakeTrafficSecret)
 	if len(verify) != len(serverFinished.verifyData) ||
 		subtle.ConstantTimeCompare(verify, serverFinished.verifyData) != 1 {
@@ -1341,13 +1394,9 @@ func (hs *clientHandshakeState) doTLS13Handshake(msg any) error {
 		// BoringSSL will always send two tickets half-RTT when
 		// negotiating 0-RTT.
 		for i := 0; i < shimConfig.HalfRTTTickets; i++ {
-			msg, err := c.readHandshake()
+			newSessionTicket, err := readHandshakeType[newSessionTicketMsg](c)
 			if err != nil {
 				return fmt.Errorf("tls: error reading half-RTT ticket: %s", err)
-			}
-			newSessionTicket, ok := msg.(*newSessionTicketMsg)
-			if !ok {
-				return errors.New("tls: expected half-RTT ticket")
 			}
 			// Defer processing until the resumption secret is computed.
 			deferredTickets = append(deferredTickets, newSessionTicket)
@@ -1498,9 +1547,6 @@ func (hs *clientHandshakeState) doTLS13Handshake(msg any) error {
 	if c.config.Bugs.SendExtraFinished {
 		c.writeRecord(recordTypeHandshake, finished.marshal())
 	}
-	if err := c.flushHandshake(); err != nil {
-		return err
-	}
 
 	if data := c.config.Bugs.AppDataBeforeTLS13KeyChange; data != nil {
 		c.writeRecord(recordTypeApplicationData, data)
@@ -1509,6 +1555,16 @@ func (hs *clientHandshakeState) doTLS13Handshake(msg any) error {
 	// Switch to application data keys.
 	c.useOutTrafficSecret(uint16(encryptionApplication), c.wireVersion, hs.suite, clientTrafficSecret)
 	c.resumptionSecret = hs.finishedHash.deriveSecret(resumptionLabel)
+
+	if err := c.flushHandshake(); err != nil {
+		return err
+	}
+	if c.isDTLS && len(c.expectedACK) != 0 && !c.config.Bugs.SkipImplicitACKRead {
+		if err := c.readRecord(recordTypeACK); err != nil {
+			return err
+		}
+	}
+
 	for _, ticket := range deferredTickets {
 		if err := c.processTLS13NewSessionTicket(ticket, hs.suite); err != nil {
 			return err
@@ -1616,15 +1672,9 @@ func (hs *clientHandshakeState) doFullHandshake() error {
 
 	var leaf *x509.Certificate
 	if hs.suite.flags&suitePSK == 0 {
-		msg, err := c.readHandshake()
+		certMsg, err := readHandshakeType[certificateMsg](c)
 		if err != nil {
 			return err
-		}
-
-		certMsg, ok := msg.(*certificateMsg)
-		if !ok {
-			c.sendAlert(alertUnexpectedMessage)
-			return unexpectedMessageError(certMsg, msg)
 		}
 		hs.writeServerHash(certMsg.marshal())
 
@@ -1635,14 +1685,9 @@ func (hs *clientHandshakeState) doFullHandshake() error {
 	}
 
 	if hs.serverHello.extensions.ocspStapling {
-		msg, err := c.readHandshake()
+		cs, err := readHandshakeType[certificateStatusMsg](c)
 		if err != nil {
 			return err
-		}
-		cs, ok := msg.(*certificateStatusMsg)
-		if !ok {
-			c.sendAlert(alertUnexpectedMessage)
-			return unexpectedMessageError(cs, msg)
 		}
 		hs.writeServerHash(cs.marshal())
 
@@ -1888,8 +1933,7 @@ func (hs *clientHandshakeState) verifyCertificates(certMsg *certificateMsg) erro
 func (hs *clientHandshakeState) establishKeys() error {
 	c := hs.c
 
-	clientMAC, serverMAC, clientKey, serverKey, clientIV, serverIV :=
-		keysFromMasterSecret(c.vers, hs.suite, hs.masterSecret, hs.hello.random, hs.serverHello.random, hs.suite.macLen, hs.suite.keyLen, hs.suite.ivLen(c.vers))
+	clientMAC, serverMAC, clientKey, serverKey, clientIV, serverIV := keysFromMasterSecret(c.vers, hs.suite, hs.masterSecret, hs.hello.random, hs.serverHello.random, hs.suite.macLen, hs.suite.keyLen, hs.suite.ivLen(c.vers))
 	var clientCipher, serverCipher any
 	var clientHash, serverHash macFunction
 	if hs.suite.cipher != nil {
@@ -2170,14 +2214,9 @@ func (hs *clientHandshakeState) readFinished(out []byte) error {
 		return err
 	}
 
-	msg, err := c.readHandshake()
+	serverFinished, err := readHandshakeType[finishedMsg](c)
 	if err != nil {
 		return err
-	}
-	serverFinished, ok := msg.(*finishedMsg)
-	if !ok {
-		c.sendAlert(alertUnexpectedMessage)
-		return unexpectedMessageError(serverFinished, msg)
 	}
 
 	if c.config.Bugs.EarlyChangeCipherSpec == 0 {
@@ -2227,14 +2266,13 @@ func (hs *clientHandshakeState) readSessionTicket() error {
 		return errors.New("tls: received unexpected NewSessionTicket")
 	}
 
-	msg, err := c.readHandshake()
+	sessionTicketMsg, err := readHandshakeType[newSessionTicketMsg](c)
 	if err != nil {
 		return err
 	}
-	sessionTicketMsg, ok := msg.(*newSessionTicketMsg)
-	if !ok {
-		c.sendAlert(alertUnexpectedMessage)
-		return unexpectedMessageError(sessionTicketMsg, msg)
+
+	if c.config.Bugs.ExpectNoNonEmptyNewSessionTicket && len(sessionTicketMsg.ticket) != 0 {
+		return errors.New("tls: received unexpected non-empty NewSessionTicket")
 	}
 
 	session.sessionTicket = sessionTicketMsg.ticket
@@ -2304,9 +2342,6 @@ func (hs *clientHandshakeState) sendFinished(out []byte, isResume bool) error {
 	if c.config.Bugs.FragmentAcrossChangeCipherSpec {
 		c.writeRecord(recordTypeHandshake, postCCSMsgs[0][:5])
 		postCCSMsgs[0] = postCCSMsgs[0][5:]
-	} else if c.config.Bugs.SendUnencryptedFinished {
-		c.writeRecord(recordTypeHandshake, postCCSMsgs[0])
-		postCCSMsgs = postCCSMsgs[1:]
 	}
 
 	if !c.config.Bugs.SkipChangeCipherSpec &&

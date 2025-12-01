@@ -554,13 +554,10 @@ class GnParser(object):
       # See https://source.chromium.org/chromium/chromium/src/+/main:third_party/jni_zero/jni_zero.gni;l=421;drc=78e8e27142ed3fddf04fbcd122507517a87cb9ad
       # for more details
       target.transitive_jni_java_sources.update(
-          metadata.get("jni_source_files_abs", set()))
-      self.jni_java_sources.update(metadata.get("jni_source_files_abs", set()))
-    elif target.type == 'copy':
-      # TODO: copy rules are not currently implemented.
-      pass
-    elif target.type == 'group':
-      # Groups are bubbled upward without creating an equivalent GN target.
+          metadata.get("jni_source_files", set()))
+      self.jni_java_sources.update(metadata.get("jni_source_files", set()))
+    elif target.type in ('copy', 'group'):
+      # copy and group are bubbled upward without creating an equivalent GN target.
       pass
     elif target.type in ["rust_library", "rust_proc_macro"]:
       target.arch[arch].sources.update(source
@@ -611,6 +608,8 @@ class GnParser(object):
 
       if dep.type == 'proto_library':
         target.proto_deps.add(dep.name)
+      elif dep.type == 'copy':
+        target.update(dep, arch)
       elif dep.type == 'group':
         target.update(dep, arch)  # Bubble up groups's cflags/ldflags etc.
         target.transitive_jni_java_sources.update(
@@ -631,7 +630,7 @@ class GnParser(object):
           'rust_binary', "rust_library", "rust_proc_macro", "rust_bindgen"
       ]:
         target.arch[arch].deps.add(dep.name)
-      if dep.type in ['static_library', 'source_set']:
+      if dep.type in ['static_library', 'source_set', 'rust_library']:
         # Bubble up static_libs and source_set. Necessary, since soong does not propagate
         # static_libs up the build tree.
         # Source sets are later translated to static_libraries, so it makes sense

@@ -5,7 +5,6 @@
 package org.chromium.media;
 
 import android.media.MediaCodec;
-import android.media.MediaCodec.CryptoInfo;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecInfo.CodecCapabilities;
 import android.media.MediaCodecInfo.CodecProfileLevel;
@@ -15,12 +14,15 @@ import android.media.MediaFormat;
 import android.os.Build;
 
 import androidx.annotation.IntDef;
-import androidx.annotation.Nullable;
 
 import org.jni_zero.CalledByNative;
 import org.jni_zero.JNINamespace;
+import org.jni_zero.JniType;
+import org.jni_zero.NativeMethods;
 
 import org.chromium.base.Log;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -30,12 +32,13 @@ import java.util.NoSuchElementException;
 
 /** A collection of MediaCodec utility functions. */
 @JNINamespace("media")
+@NullMarked
 class MediaCodecUtil {
     private static final String TAG = "MediaCodecUtil";
 
     /** Information returned by createDecoder() */
     public static class CodecCreationInfo {
-        public MediaCodec mediaCodec;
+        public @Nullable MediaCodec mediaCodec;
         public boolean supportsAdaptivePlayback;
         public @BitrateAdjuster.Type int bitrateAdjuster = BitrateAdjuster.Type.NO_ADJUSTMENT;
     }
@@ -73,7 +76,7 @@ class MediaCodecUtil {
 
         @SuppressWarnings("deprecation")
         private int getCodecCount() {
-            if (hasNewMediaCodecList()) return mCodecList.length;
+            if (mCodecList != null) return mCodecList.length;
             try {
                 return MediaCodecList.getCodecCount();
             } catch (RuntimeException e) {
@@ -85,15 +88,11 @@ class MediaCodecUtil {
 
         @SuppressWarnings("deprecation")
         private MediaCodecInfo getCodecInfoAt(int index) {
-            if (hasNewMediaCodecList()) return mCodecList[index];
+            if (mCodecList != null) return mCodecList[index];
             return MediaCodecList.getCodecInfoAt(index);
         }
 
-        private boolean hasNewMediaCodecList() {
-            return mCodecList != null;
-        }
-
-        private MediaCodecInfo[] mCodecList;
+        private MediaCodecInfo @Nullable [] mCodecList;
 
         private class CodecInfoIterator implements Iterator<MediaCodecInfo> {
             private int mPosition;
@@ -183,11 +182,12 @@ class MediaCodecUtil {
 
     /**
      * Get a list of encoder supported color formats for specified MIME type.
+     *
      * @param mime MIME type of the media format.
      * @return a list of encoder supported color formats.
      */
     @CalledByNative
-    private static int[] getEncoderColorFormatsForMime(String mime) {
+    private static int @Nullable [] getEncoderColorFormatsForMime(String mime) {
         MediaCodecListHelper codecListHelper = new MediaCodecListHelper();
         for (MediaCodecInfo info : codecListHelper) {
             if (!info.isEncoder()) continue;
@@ -221,7 +221,7 @@ class MediaCodecUtil {
         }
 
         MediaCodecListHelper codecListHelper = new MediaCodecListHelper();
-        if (codecListHelper.hasNewMediaCodecList()) {
+        if (codecListHelper.mCodecList != null) {
             for (MediaCodecInfo info : codecListHelper) {
                 if (info.isEncoder()) continue;
 
@@ -313,13 +313,14 @@ class MediaCodecUtil {
 
     /**
      * Creates MediaCodec decoder.
+     *
      * @param mime MIME type of the media.
      * @param codecType Type of codec to create.
      * @param mediaCrypto Crypto of the media.
      * @return CodecCreationInfo object
      */
     static CodecCreationInfo createDecoder(
-            String mime, @CodecType int codecType, MediaCrypto mediaCrypto) {
+            String mime, @CodecType int codecType, @Nullable MediaCrypto mediaCrypto) {
         // Always return a valid CodecCreationInfo, its |mediaCodec| field will be null
         // if we cannot create the codec.
 
@@ -401,47 +402,14 @@ class MediaCodecUtil {
     }
 
     /**
-     * This is a way to handle misbehaving devices.
-     * Some devices cannot decode certain codecs, while other codecs work fine.
-     *
-     * Do not access MediaCodec or MediaCodecList in this function since it's
-     * used from the renderer process.
+     * This is a way to handle misbehaving devices. Some devices cannot decode certain codecs, while
+     * other codecs work fine.
      *
      * @param mime MIME type as passed to mediaCodec.createDecoderByType(mime).
      * @return true if this codec is supported for decoder on this device.
      */
-    @CalledByNative
     static boolean isDecoderSupportedForDevice(String mime) {
-        // *************************************************************
-        // *** DO NOT ADD ANY NEW CODECS WITHOUT UPDATING MIME_UTIL. ***
-        // *************************************************************
-        if (mime.equals(MimeTypes.VIDEO_VP8)) {
-            // MediaTek decoders do not work properly on vp8. See http://crbug.com/446974 and
-            // http://crbug.com/597836.
-            if (Build.HARDWARE.startsWith("mt")) {
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return false;
-                // MediaTek chipsets after 'Android T' are compatible with vp8.
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-                    // The following chipsets have been confirmed by MediaTek to work on P+
-                    return Build.HARDWARE.startsWith("mt5599")
-                            || Build.HARDWARE.startsWith("mt5895")
-                            || Build.HARDWARE.startsWith("mt8768")
-                            || Build.HARDWARE.startsWith("mt8696")
-                            || Build.HARDWARE.startsWith("mt5887");
-                }
-            }
-        } else if (mime.equals(MimeTypes.VIDEO_VP9)) {
-            // Nexus Player VP9 decoder performs poorly at >= 1080p resolution.
-            if (Build.MODEL.equals("Nexus Player")) {
-                return false;
-            }
-        } else if (mime.equals(MimeTypes.VIDEO_AV1)) {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false;
-        }
-        // *************************************************************
-        // *** DO NOT ADD ANY NEW CODECS WITHOUT UPDATING MIME_UTIL. ***
-        // *************************************************************
-        return true;
+        return MediaCodecUtilJni.get().isDecoderSupportedForDevice(mime);
     }
 
     /**
@@ -574,8 +542,8 @@ class MediaCodecUtil {
         // if we cannot create the codec.
         CodecCreationInfo result = new CodecCreationInfo();
 
-        @Nullable
         @HWEncoder
+        @Nullable
         Integer encoderProperties = findHWEncoder(mime);
         if (encoderProperties == null) return result;
 
@@ -663,12 +631,8 @@ class MediaCodecUtil {
         return null;
     }
 
-    /**
-     * Sets the encryption pattern value if and only if CryptoInfo.setPattern method is supported.
-     * Note that if platformSupportsCbcsEncryption returns true, then this function will set the
-     * pattern.
-     */
-    static void setPatternIfSupported(CryptoInfo cryptoInfo, int encrypt, int skip) {
-        cryptoInfo.setPattern(new CryptoInfo.Pattern(encrypt, skip));
+    @NativeMethods
+    interface Natives {
+        boolean isDecoderSupportedForDevice(@JniType("std::string") String mimeType);
     }
 }

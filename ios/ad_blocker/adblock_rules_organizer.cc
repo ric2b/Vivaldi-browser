@@ -137,6 +137,8 @@ base::Value OrganizeRules(
   base::Value::List all_cosmetic_allow_and_generic_allow_rules;
   all_cosmetic_allow_and_generic_allow_rules.reserve(kMaxGenericAllowRules);
 
+  base::Value::List all_partner_list_allowed_documents;
+
   base::Value::Dict merged_scriptlet_rules;
 
   base::Value::Dict metadata;
@@ -189,6 +191,16 @@ base::Value OrganizeRules(
         rules.FindDict(rules_json::kScriptletRules);
     if (scriptlet_rules)
       MergeRules(*scriptlet_rules, merged_scriptlet_rules);
+
+    const base::Value::List* partner_list_allowed_documents =
+        rules.FindList(rules_json::kPartnerListAllowedDocuments);
+    if (partner_list_allowed_documents) {
+      for (const auto& partner_list_allowed_document :
+           *partner_list_allowed_documents) {
+        all_partner_list_allowed_documents.Append(
+            partner_list_allowed_document.GetString());
+      }
+    }
   }
 
   if (all_network_allow_rules.size() > kMaxAllowRules ||
@@ -365,6 +377,8 @@ base::Value OrganizeRules(
   non_ios_rules_and_metadata.Set(rules_json::kMetadata, std::move(metadata));
   non_ios_rules_and_metadata.Set(rules_json::kScriptletRules,
                                  std::move(merged_scriptlet_rules));
+  non_ios_rules_and_metadata.Set(rules_json::kPartnerListAllowedDocuments,
+                                 std::move(all_partner_list_allowed_documents));
 
   base::Value::Dict result;
   result.Set(rules_json::kNonIosRulesAndMetadata,

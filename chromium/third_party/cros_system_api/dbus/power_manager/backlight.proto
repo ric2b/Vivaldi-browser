@@ -45,6 +45,8 @@ message SetBacklightBrightnessRequest {
     // Brightness was restored to the previous user preference (typically on the
     // login screen).
     RESTORED_FROM_USER_PREFERENCE = 3;
+    // Brightness was changed due to a battery saver state change.
+    BATTERY_SAVER_STATE_CHANGED = 4;
   }
   optional Cause cause = 3;
 

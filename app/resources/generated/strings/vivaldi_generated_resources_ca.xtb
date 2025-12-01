@@ -279,6 +279,7 @@
 <translation id="5582839680698949063">Menú principal</translation>
 <translation id="5614553682702429503">Vols desar la contrasenya?</translation>
 <translation id="5623842676595125836">Registre</translation>
+<translation id="5624959475330585145">Pregunta abans d'utilitzar connexions no segures</translation>
 <translation id="5638309510554459422">Cerca complements i temes a la <ph name="BEGIN_LINK" />Botiga web de Chrome<ph name="END_LINK" /></translation>
 <translation id="5677928146339483299">Bloquejades</translation>
 <translation id="5707185214361380026">No s'ha pogut carregar el complement des de:</translation>
@@ -468,6 +469,7 @@ Desa el fitxer de clau a una ubicació segura. El necessitaràs per crear versio
 <translation id="9218430445555521422">Estableix com a predeterminat</translation>
 <translation id="93766956588638423">Repara el complement</translation>
 <translation id="961012016278832836">Microsoft Edge llegat</translation>
+<translation id="961856697154696964">Suprimeix les dades de navegació</translation>
 <translation id="994289308992179865">&amp;Bucle</translation>
 <translation id="998747458861718449">I&amp;nspecciona</translation>
 </translationbundle>

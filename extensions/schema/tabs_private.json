@@ -957,6 +957,11 @@
             "type": "boolean",
             "name": "fromDevtools",
             "description": "True if the shortcut comes from a devtools window"
+          },
+          {
+            "type": "boolean",
+            "name": "forcedBrowserPriority",
+            "description": "True if shortcut forced browser priority."
           }
         ]
       },

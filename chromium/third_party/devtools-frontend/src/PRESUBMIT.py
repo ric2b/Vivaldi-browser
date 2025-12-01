@@ -179,33 +179,10 @@ def _CheckFormat(input_api, output_api):
                 'Non-git environment detected, skipping _CheckFormat.')
         ]
 
-    files_with_potential_large_diffs = _getAffectedFiles(
-        input_api, [
-            input_api.os_path.join(input_api.PresubmitLocalPath(),
-                                   'node_modules'),
-            input_api.os_path.join(input_api.PresubmitLocalPath(), 'front_end',
-                                   'third_party'),
-            input_api.os_path.join(input_api.PresubmitLocalPath(), 'front_end',
-                                   'generated'),
-            input_api.os_path.join(input_api.PresubmitLocalPath(), 'front_end',
-                                   'models', 'javascript_metadata'),
-        ], [], [])
-
-    # Changes to the above directories can produce large diffs. This is a problem on Windows,
-    # where clang-format-diff.py specifies all the diff ranges on the command line when invoking
-    # clang-format. Since command line length is limited on Win, the invocation fails.
-    # As a heuristic, we'll format all touched files fully if we suspect that the diff could
-    # be large.
-    # TODO(crbug.com/1068198): Remove once `git cl format --js` can handle large CLs.
-    additional_args = []
-    if (len(files_with_potential_large_diffs) > 0):
-        additional_args = ['--full']
-
     results = [output_api.PresubmitNotifyResult('Running Format Checks:')]
 
     return _ExecuteSubProcess(input_api, output_api,
-                              ['git', 'cl', 'format', '--js'] +
-                              additional_args, [], results)
+                              ['git', 'cl', 'format', '--js'], [], results)
 
 
 def _CheckDevToolsRunESLintTests(input_api, output_api):
@@ -232,7 +209,7 @@ def _CheckDevToolsRunESLintTests(input_api, output_api):
 
     mocha_path = devtools_paths.mocha_path()
     eslint_tests_path = input_api.os_path.join(eslint_rules_dir_path, 'tests',
-                                               '*_test.js')
+                                               '*.test.js')
 
     results = [output_api.PresubmitNotifyResult('ESLint rules unit tests')]
     results.extend(
@@ -280,7 +257,7 @@ def _CheckDevToolsRunBuildTests(input_api, output_api):
 def _CheckDevToolsLint(input_api, output_api):
     results = [output_api.PresubmitNotifyResult('Lint Check:')]
     lint_path = input_api.os_path.join(input_api.PresubmitLocalPath(),
-                                       'scripts', 'test', 'run_lint_check.js')
+                                       'scripts', 'test', 'run_lint_check.mjs')
 
     front_end_directory = input_api.os_path.join(
         input_api.PresubmitLocalPath(), 'front_end')
@@ -308,27 +285,26 @@ def _CheckDevToolsLint(input_api, output_api):
                                'stylelint'),
         input_api.os_path.join(input_api.PresubmitLocalPath(), 'node_modules',
                                '@typescript-eslint'),
-        input_api.os_path.join(input_api.PresubmitLocalPath(), '.eslintrc.js'),
         input_api.os_path.join(input_api.PresubmitLocalPath(),
-                               '.eslintignore'),
-        input_api.os_path.join(front_end_directory, '.eslintrc.js'),
-        input_api.os_path.join(component_docs_directory, '.eslintrc.js'),
-        input_api.os_path.join(test_directory, '.eslintrc.js'),
-        input_api.os_path.join(scripts_directory, '.eslintrc.js'),
+                               'eslint.config.mjs'),
         input_api.os_path.join(scripts_directory, 'eslint_rules'),
         input_api.os_path.join(input_api.PresubmitLocalPath(),
                                '.stylelintrc.json'),
         input_api.os_path.join(input_api.PresubmitLocalPath(),
                                '.stylelintignore'),
-        input_api.os_path.join(scripts_directory, 'test', 'run_lint_check.js'),
+        # This file includes the LitAnalyzer rules
+        input_api.os_path.join(input_api.PresubmitLocalPath(),
+                               'tsconfig.json'),
+        input_api.os_path.join(scripts_directory, 'test',
+                               'run_lint_check.mjs'),
     ]
 
     lint_config_files = _getAffectedFiles(input_api, lint_related_files, [],
-                                          ['.js', '.py', '.eslintignore'])
+                                          ['.js', '.py'])
 
     should_bail_out, files_to_lint = _getFilesToLint(
         input_api, output_api, lint_config_files, default_linted_directories,
-        ['.css', '.js', '.ts'], results)
+        ['.css', '.mjs', '.js', '.ts'], results)
     if should_bail_out:
         return results
 
@@ -340,6 +316,7 @@ def _CheckDevToolsLint(input_api, output_api):
     results.extend(
         _checkWithNodeScript(input_api, output_api, lint_path, files_to_lint))
     return results
+
 
 def _CheckDevToolsNonJSFileLicenseHeaders(input_api, output_api):
     results = [
@@ -717,7 +694,8 @@ def _getFilesToLint(input_api, output_api, lint_config_files,
         # Exclude front_end/third_party and front_end/generated files.
         files_to_lint = [
             file for file in files_to_lint
-            if "third_party" not in file or "generated" not in file
+            if "front_end/third_party" not in file
+            and "front_end/generated" not in file
         ]
 
         if len(files_to_lint) == 0:

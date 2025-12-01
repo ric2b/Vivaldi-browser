@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//chrome/common/features.gni")
 import("//components/enterprise/buildflags/buildflags.gni")
 import("//components/safe_browsing/buildflags.gni")
 import("//components/services/on_device_translation/buildflags/features.gni")
@@ -63,6 +64,7 @@ source_set("impl") {
     "//chrome/browser/profiles:profile_util",
     "//chrome/browser/search",
     "//chrome/browser/sync",
+    "//chrome/browser/task_manager",
     "//chrome/browser/ui/hats",
     "//chrome/browser/ui/prefs",
     "//chrome/browser/ui/safety_hub",
@@ -122,6 +124,7 @@ source_set("impl") {
     "//components/ukm",
     "//components/update_client",
     "//components/variations/service",
+    "//components/webui/chrome_urls",
     "//services/preferences/public/cpp/tracked",
     "//services/preferences/public/mojom",
     "//services/preferences/tracked",
@@ -130,7 +133,6 @@ source_set("impl") {
   if (is_chromeos) {
     deps += [
       "//ash",
-      "//ash/components/arc:prefs",
       "//chrome/browser/apps/app_discovery_service",
       "//chrome/browser/apps/app_preload_service",
       "//chrome/browser/apps/app_service",
@@ -192,7 +194,6 @@ source_set("impl") {
       "//chrome/browser/ash/printing/enterprise",
       "//chrome/browser/ash/release_notes",
       "//chrome/browser/ash/scanning",
-      "//chrome/browser/ash/scheduler_config",
       "//chrome/browser/ash/settings",
       "//chrome/browser/ash/system",
       "//chrome/browser/ash/system_web_apps/apps/help_app",
@@ -202,7 +203,6 @@ source_set("impl") {
       "//chrome/browser/chromeos/extensions/echo_private:echo_private_api_util",
       "//chrome/browser/chromeos/extensions/login_screen/login",
       "//chrome/browser/chromeos/policy/dlp",
-      "//chrome/browser/chromeos/quickoffice",
       "//chrome/browser/chromeos/reporting",
       "//chrome/browser/chromeos/upload_office_to_cloud",
       "//chrome/browser/extensions/api/document_scan:profile_prefs_registry_util",
@@ -210,6 +210,7 @@ source_set("impl") {
       "//chrome/browser/extensions/api/shared_storage",
       "//chrome/browser/nearby_sharing/common",
       "//chrome/browser/policy:onc",
+      "//chrome/browser/policy:system_features_disable_list",
       "//chrome/browser/ui/ash/projector",
       "//chrome/browser/ui/ash/shelf",
       "//chrome/browser/ui/webui/ash/edu_coexistence",
@@ -217,15 +218,18 @@ source_set("impl") {
       "//chrome/browser/ui/webui/ash/settings",
       "//chrome/browser/ui/webui/signin/ash",
       "//chromeos/ash/components/audio",
+      "//chromeos/ash/components/boca/babelorca",
       "//chromeos/ash/components/boca/on_task",
       "//chromeos/ash/components/carrier_lock",
       "//chromeos/ash/components/demo_mode",
       "//chromeos/ash/components/local_search_service",
       "//chromeos/ash/components/network",
       "//chromeos/ash/components/policy",
+      "//chromeos/ash/components/quickoffice",
       "//chromeos/ash/components/report",
-      "//chromeos/ash/components/standalone_browser",
+      "//chromeos/ash/components/scheduler_config",
       "//chromeos/ash/components/timezone",
+      "//chromeos/ash/experiences/arc:prefs",
       "//chromeos/ash/services/assistant/public/cpp",
       "//chromeos/ash/services/auth_factor_config",
       "//chromeos/ash/services/bluetooth_config",
@@ -241,7 +245,7 @@ source_set("impl") {
   if (is_win || is_mac || is_linux) {
     deps += [ "//chrome/browser/ui/webui/whats_new" ]
     if (is_win || is_mac) {
-      deps += [ "//components/os_crypt/sync:os_crypt" ]
+      deps += [ "//components/os_crypt/sync" ]
     }
   }
 
@@ -251,11 +255,10 @@ source_set("impl") {
 
   if (is_android) {
     deps += [
-      "//chrome/browser/android/bookmarks",
       "//chrome/browser/notifications",
       "//chrome/browser/notifications:notifications_java_enum_srcjar",
+      "//chrome/browser/partnerbookmarks:android",
       "//chrome/browser/password_manager/android:utils",
-      "//chrome/browser/promos:utils",
       "//chrome/browser/readaloud/android:native",
       "//chrome/browser/search_engines",
     ]
@@ -266,7 +269,6 @@ source_set("impl") {
       "//chrome/browser/search/background",
       "//chrome/browser/search_engine_choice",
       "//chrome/browser/search_engines",
-      "//chrome/browser/task_manager",
       "//chrome/browser/ui/commerce",
       "//chrome/browser/ui/tabs",
       "//chrome/browser/ui/tabs:tab_strip",
@@ -274,21 +276,22 @@ source_set("impl") {
       "//components/headless/policy",
       "//components/live_caption",
       "//components/live_caption:live_translate",
-      "//components/user_notes:user_notes_prefs",
     ]
   }
 
   if (enable_extensions) {
     deps += [
       "//chrome/browser/apps/platform_apps",
-      "//chrome/browser/extensions",
       "//extensions/browser/api/audio",
       "//extensions/browser/api/runtime",
     ]
   }
 
   if (enable_extensions_core) {
-    deps += [ "//extensions/browser" ]
+    deps += [
+      "//chrome/browser/extensions",
+      "//extensions/browser",
+    ]
   }
 
   if (enable_on_device_translation) {
@@ -309,6 +312,13 @@ source_set("impl") {
 
   if (is_mac) {
     deps += [ "//chrome/browser/web_applications" ]
+  }
+
+  if (enable_glic) {
+    deps += [
+      "//chrome/browser/glic",
+      "//chrome/browser/glic/launcher",
+    ]
   }
 }
 
@@ -362,6 +372,7 @@ source_set("unit_tests") {
     "chrome_command_line_pref_store_proxy_unittest.cc",
     "chrome_command_line_pref_store_ssl_manager_unittest.cc",
     "chrome_command_line_pref_store_unittest.cc",
+    "chrome_pref_service_factory_unittest.cc",
     "chrome_pref_service_unittest.cc",
     "incognito_mode_prefs_unittest.cc",
     "profile_pref_store_manager_unittest.cc",
@@ -413,10 +424,6 @@ source_set("unit_tests") {
     "//ui/base",
     "//url",
   ]
-
-  if (is_chromeos) {
-    sources += [ "chrome_pref_service_factory_ash_unittest.cc" ]
-  }
 }
 
 if (!is_android) {

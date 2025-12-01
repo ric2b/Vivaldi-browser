@@ -75,14 +75,17 @@ sql::InitStatus FailedMigrationTo(int version_num) {
 }  // namespace
 
 WebDatabase::WebDatabase()
-    : db_({.wal_mode = base::FeatureList::IsEnabled(kSqlWALModeOnWebDatabase),
-           // We don't store that much data in the tables so use a small page
-           // size. This provides a large benefit for empty tables (which is
-           // very likely with the tables we create).
-           .page_size = 2048,
-           // We shouldn't have much data and what access we currently have is
-           // quite infrequent. So we go with a small cache size.
-           .cache_size = 32}) {}
+    : db_(sql::DatabaseOptions()
+              .set_wal_mode(
+                  base::FeatureList::IsEnabled(kSqlWALModeOnWebDatabase))
+              // We don't store that much data in the tables so use a small page
+              // size. This provides a large benefit for empty tables (which is
+              // very likely with the tables we create).
+              .set_page_size(2048)
+              // We shouldn't have much data and what access we currently have
+              // is quite infrequent. So we go with a small cache size.
+              .set_cache_size(32),
+          /*tag=*/"Web") {}
 
 WebDatabase::~WebDatabase() {
   for (auto& [key, table] : tables_) {
@@ -95,7 +98,9 @@ void WebDatabase::AddTable(WebDatabaseTable* table) {
 }
 
 WebDatabaseTable* WebDatabase::GetTable(WebDatabaseTable::TypeKey key) {
-  return tables_[key];
+  WebDatabaseTable* table = tables_[key];
+  CHECK(table);
+  return table;
 }
 
 void WebDatabase::BeginTransaction() {
@@ -122,7 +127,6 @@ sql::InitStatus WebDatabase::Init(const base::FilePath& db_name,
   if (!encryptor) {
     CHECK_IS_TEST();
   }
-  db_.set_histogram_tag("Web");
 
   if ((db_name.value() == kInMemoryPath) ? !db_.OpenInMemory()
                                          : !db_.Open(db_name)) {

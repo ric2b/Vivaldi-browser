@@ -110,6 +110,8 @@ const kMaxPolymorphism:
 const kFixedFrameSizeAboveFp: constexpr int32
     generates 'CommonFrameConstants::kFixedFrameSizeAboveFp';
 
+extern macro WasmCrossInstanceCallSymbolConstant(): Symbol;
+
 extern macro WasmBuiltinsAssembler::LoadTrustedDataFromInstance(
     WasmInstanceObject): WasmTrustedInstanceData;
 
@@ -132,10 +134,6 @@ extern macro WasmBuiltinsAssembler::LoadContextFromWasmOrJsFrame():
     NativeContext;
 
 extern macro WasmBuiltinsAssembler::StringToFloat64(String): float64;
-
-// This doesn't return, but the return type {never} confuses the CSA graph.
-extern macro WasmBuiltinsAssembler::SignatureCheckFail(
-    WasmInternalFunction, uintptr): Smi;
 
 extern macro SwitchToTheCentralStackIfNeeded(): RawPtr;
 extern macro SwitchFromTheCentralStack(RawPtr): void;
@@ -710,7 +708,7 @@ macro UpdateCallRefOrIndirectIC(
     // Monomorphic miss.
     dcheck(
         Is<WasmFuncRef>(firstSlot) || Is<Smi>(firstSlot) ||
-        IsUndefined(firstSlot));
+        firstSlot == WasmCrossInstanceCallSymbolConstant());
     const newEntries = UnsafeCast<FixedArray>(AllocateFixedArray(
         ElementsKind::PACKED_ELEMENTS, 4, AllocationFlag::kNone));
     newEntries.objects[0] = firstSlot;
@@ -732,22 +730,14 @@ struct TargetAndImplicitArg {
 }
 
 builtin CallRefIC(
-    vector: FixedArray, vectorIndex: int32, signatureHash: uintptr,
+    vector: FixedArray, vectorIndex: int32,
     funcref: WasmFuncRef): TargetAndImplicitArg {
   dcheck(Is<WasmFuncRef>(funcref));
   UpdateCallRefOrIndirectIC(vector, Convert<intptr>(vectorIndex), funcref);
 
   const internal = funcref.internal;
-  @if(V8_ENABLE_SANDBOX) {
-    if (signatureHash != internal.signature_hash) deferred {
-        SignatureCheckFail(internal, signatureHash);
-      }
-  }
-  @ifnot(V8_ENABLE_SANDBOX) {
-    dcheck(signatureHash == 0);  // Avoids "unused variable" warning.
-  }
   return TargetAndImplicitArg{
-    target: internal.call_target,
+    target: internal.raw_call_target,
     implicit_arg: internal.implicit_arg
   };
 }
@@ -756,12 +746,12 @@ builtin CallIndirectIC(
     vector: FixedArray, vectorIndex: int32, target: WasmCodePointer,
     implicitArg: WasmTrustedInstanceData|WasmImportData): TargetAndImplicitArg {
   // If this is a cross-instance call, don't track the precise target (we can
-  // only correctly inline same-instance calls anyway). Mark it as `Undefined`,
+  // only correctly inline same-instance calls anyway). Instead mark it as such,
   // so that we can prevent a deopt loop, see `TransitiveTypeFeedbackProcessor`.
   const instance = LoadInstanceDataFromFrame();
   const truncatedTargetOrCrossInstance = TaggedEqual(implicitArg, instance) ?
       SmiTag(Signed(Convert<uintptr>(target) & kSmiMaxValue)) :
-      Undefined;
+      WasmCrossInstanceCallSymbolConstant();
   UpdateCallRefOrIndirectIC(
       vector, Convert<intptr>(vectorIndex), truncatedTargetOrCrossInstance);
 
@@ -1214,7 +1204,7 @@ builtin WasmStringEqual(a: String, b: String): int32 {
 }
 
 builtin WasmStringIsUSVSequence(str: String): int32 {
-  if (IsOneByteStringInstanceType(str.instanceType)) return 1;
+  if (IsOneByteStringMap(str.map)) return 1;
   const length = runtime::WasmStringMeasureUtf8(LoadContextFromFrame(), str);
   if (NumberToInt32(length) < 0) return 0;
   return 1;

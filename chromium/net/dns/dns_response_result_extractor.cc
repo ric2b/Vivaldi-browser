@@ -7,6 +7,7 @@
 #include <limits.h>
 #include <stdint.h>
 
+#include <algorithm>
 #include <iterator>
 #include <map>
 #include <memory>
@@ -26,7 +27,6 @@
 #include "base/numerics/checked_math.h"
 #include "base/numerics/ostream_operators.h"
 #include "base/rand_util.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
@@ -254,7 +254,16 @@ RecordsOrError ExtractResponseRecords(
   std::string final_chain_name;
   ExtractionError name_and_alias_validation_error = ValidateNamesAndAliases(
       response.GetSingleDottedName(), aliases, data_records, final_chain_name);
-  if (name_and_alias_validation_error != ExtractionError::kOk) {
+  bool has_extraction_error =
+      name_and_alias_validation_error != ExtractionError::kOk;
+
+  if (query_type == DnsQueryType::A || query_type == DnsQueryType::AAAA) {
+    UMA_HISTOGRAM_BOOLEAN(
+        DnsResponseResultExtractor::kHasValidCnameRecordsHistogram,
+        !has_extraction_error && !aliases.empty());
+  }
+
+  if (has_extraction_error) {
     return base::unexpected(name_and_alias_validation_error);
   }
 
@@ -589,8 +598,8 @@ ResultsOrError ExtractHttpsResults(const DnsResponse& response,
 
   // Ignore all records if any are an alias record. Chrome does not yet support
   // alias records, but aliases take precedence over any other records.
-  if (base::ranges::any_of(https_records.value(), &RecordIsAlias,
-                           &UnwrapRecordPtr)) {
+  if (std::ranges::any_of(https_records.value(), &RecordIsAlias,
+                          &UnwrapRecordPtr)) {
     metadatas.clear();
   }
 

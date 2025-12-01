@@ -11,16 +11,16 @@ title: Monday, February 8, 2016
 ---
 
 Updates since last meeting (on Monday, February 1st):
-Scrolling (skobes, szager) \[[crbug.com/417782](http://crbug.com/417782)\]
+Scrolling (skobes, szager) \[[crbug.com/417782](https://crbug.com/417782)\]
 - Basic implementation of scroll anchoring landed behind the
 --enable-blink-features=ScrollAnchoring flag. (skobes)
 - Working on adding more test cases for scroll anchoring. (skobes)
 - Adding about:flags entry so folks can try on mobile canary. (skobes)
-CSS Flexbox (cbiesinger) \[[crbug.com/426898](http://crbug.com/426898)\]
+CSS Flexbox (cbiesinger) \[[crbug.com/426898](https://crbug.com/426898)\]
 - Continued triage.
 - Fixed main size calculation for overflow:auto.
 CSS Grid Layout (svillar, jfernandez, rego, javif)
-\[[crbug.com/79180](http://crbug.com/79180)\]
+\[[crbug.com/79180](https://crbug.com/79180)\]
 (since last grid update in late December)
 - Fix auto track sizing with min-size:auto (svillar)
 - Add support for repeat(auto-fill|auto-fit,) (svillar)
@@ -30,7 +30,7 @@ CSS Grid Layout (svillar, jfernandez, rego, javif)
 - Layout tests refactoring (jfernandez)
 - Investigating issues in orthogonal grids (jfernandez)
 - Add "normal" for content alignment (jfernandez)
-CSS Multi-column (mstensho) \[[crbug.com/334335](http://crbug.com/334335)\]
+CSS Multi-column (mstensho) \[[crbug.com/334335](https://crbug.com/334335)\]
 - Working on cleaning up mapLocalToAncestor() in order to make it easier
 and cleaner to fix a multicol bug.
 - Intent to ship discussions continues, we might be able to unprefix
@@ -41,15 +41,15 @@ resolved.
 CSS Houdini (ikilpatrick)
 - Stay tuned for a separate blonk-wide update on Houdini progress.
 Add API for layout (leviw, pilgrim, dgrogan)
-\[[crbug.com/495288](http://crbug.com/495288)\]
+\[[crbug.com/495288](https://crbug.com/495288)\]
 - Converted BlockPainter to new line layout API. (pilgrim)
 - Convert last use of RootInlineBox to the API. (dgrogan)
 - Shim AXLayoutObject uses of InlineBox-&gt;layoutObject(). (dgrogan)
-CSS Containment (leviw) \[[crbug.com/312978](http://crbug.com/312978)\]
+CSS Containment (leviw) \[[crbug.com/312978](https://crbug.com/312978)\]
 - Discussions about containment at CSS Working Group meeting with
 standard body and other browser vendors. (leviw)
 Intersection Observer (szager, mpb)
-\[[crbug.com/540528](http://crbug.com/540528)\]
+\[[crbug.com/540528](https://crbug.com/540528)\]
 - Fixed handling of zero-sized target elements for observations.
 (szager)
 - Fixed handling of cross-origin observations. (szager)

@@ -10,9 +10,12 @@
 #include "src/execution/isolate.h"
 #include "src/heap/heap-layout-inl.h"
 #include "src/heap/heap.h"
+#include "src/heap/read-only-spaces.h"
 #include "src/heap/visit-object.h"
 #include "src/objects/heap-object-inl.h"
+#include "src/objects/objects-inl.h"
 #include "src/sandbox/external-pointer-table.h"
+#include "src/utils/ostreams.h"
 
 namespace v8 {
 namespace internal {
@@ -346,7 +349,7 @@ class ReadOnlyPromotionImpl final : public AllStatic {
 #ifdef V8_ENABLE_LEAPTIERING
     // Iterate all entries in the JSDispatchTable as they could contain
     // pointers to promoted Code objects.
-    JSDispatchTable* const jdt = GetProcessWideJSDispatchTable();
+    JSDispatchTable* const jdt = IsolateGroup::current()->js_dispatch_table();
     jdt->IterateActiveEntriesIn(heap->js_dispatch_table_space(),
                                 [&](JSDispatchHandle handle) {
                                   Tagged<Code> old_code = jdt->GetCode(handle);
@@ -451,7 +454,8 @@ class ReadOnlyPromotionImpl final : public AllStatic {
       // read_only_external_pointer_space) now.
       RecordProcessedSlotIfDebug(slot.address());
       Address slot_value = slot.load(isolate_);
-      slot.init(isolate_, host, slot_value);
+      DCHECK(slot.ExactTagIsKnown());
+      slot.init(isolate_, host, slot_value, slot.exact_tag());
 
       if (V8_UNLIKELY(v8_flags.trace_read_only_promotion_verbose)) {
         LogUpdatedExternalPointerTableEntry(host, slot, slot_value);

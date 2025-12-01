@@ -13,7 +13,6 @@
 #include "base/functional/callback_forward.h"
 #include "base/functional/callback_helpers.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/reauth_result.h"
@@ -36,6 +35,8 @@
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/accounts_in_cookie_jar_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
+#include "components/signin/public/identity_manager/tribool.h"
+#include "components/supervised_user/core/common/features.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
 #include "google_apis/gaia/core_account_id.h"
@@ -53,7 +54,6 @@
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/signin/chrome_signout_confirmation_prompt.h"
-#include "chrome/browser/ui/signin/signin_reauth_view_controller.h"
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/webui_url_constants.h"
@@ -215,7 +215,7 @@ GURL GetSigninUrlForDiceSigninTab(
   // Note: It is expected with the below sign in reason and access point
   // that there is no primary account. Maybe move to a `CHECK` later.
   if (signin_reason == signin_metrics::Reason::kAddSecondaryAccount &&
-      access_point == signin_metrics::AccessPoint::ACCESS_POINT_EXTENSIONS &&
+      access_point == signin_metrics::AccessPoint::kExtensions &&
       !identity_manager.HasPrimaryAccount(signin::ConsentLevel::kSignin) &&
       switches::IsExplicitBrowserSigninUIOnDesktopEnabled()) {
     // Extensions wants the user to sign in to Chrome.
@@ -231,38 +231,6 @@ GURL GetSigninUrlForDiceSigninTab(
   return signin::GetAddAccountURLForDice(email_hint, continue_url);
 }
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
-
-// If this is destroyed before SignalReauthDone is called, will call
-// |close_modal_signin_callback_| to stop the ongoing reauth.
-class ReauthAbortHandleImpl : public SigninViewController::ReauthAbortHandle {
- public:
-  explicit ReauthAbortHandleImpl(base::OnceClosure close_modal_signin_callback);
-  ReauthAbortHandleImpl(const ReauthAbortHandleImpl&) = delete;
-  ReauthAbortHandleImpl operator=(const ReauthAbortHandleImpl&) = delete;
-  ~ReauthAbortHandleImpl() override;
-
-  // Nullifies |close_modal_signin_callback_|.
-  void SignalReauthDone();
-
- private:
-  base::OnceClosure close_modal_signin_callback_;
-};
-
-ReauthAbortHandleImpl::ReauthAbortHandleImpl(
-    base::OnceClosure close_modal_signin_callback)
-    : close_modal_signin_callback_(std::move(close_modal_signin_callback)) {
-  DCHECK(close_modal_signin_callback_);
-}
-
-ReauthAbortHandleImpl::~ReauthAbortHandleImpl() {
-  if (close_modal_signin_callback_) {
-    std::move(close_modal_signin_callback_).Run();
-  }
-}
-
-void ReauthAbortHandleImpl::SignalReauthDone() {
-  close_modal_signin_callback_.Reset();
-}
 
 }  // namespace
 
@@ -335,7 +303,7 @@ void SigninViewController::SignoutOrReauthWithPrompt(
 }
 
 void SigninViewController::MaybeShowChromeSigninDialogForExtensions(
-    std::string_view extension_name,
+    const std::u16string& extension_name_for_display,
     base::OnceClosure on_complete) {
   // TODO(b/321900930): Consider using `CHECK()` instead on `DVLOG()`.
   signin::IdentityManager* identity_manager =
@@ -376,8 +344,8 @@ void SigninViewController::MaybeShowChromeSigninDialogForExtensions(
         ntp_tab_index, TabStripUserGestureDetails(
                            TabStripUserGestureDetails::GestureType::kOther));
     ShowChromeSigninDialogForExtensions(
-        extension_name, std::move(on_complete), account_info_for_promos,
-        tab_strip->GetWebContentsAt(ntp_tab_index));
+        extension_name_for_display, std::move(on_complete),
+        account_info_for_promos, tab_strip->GetWebContentsAt(ntp_tab_index));
     return;
   }
 
@@ -392,17 +360,17 @@ void SigninViewController::MaybeShowChromeSigninDialogForExtensions(
   content::WebContents* web_contents = Navigate(&params)->GetWebContents();
   // `base::Unretained(this)` is safe as `this` owns
   // `new_tab_web_contents_observer_`.
-  base::OnceCallback<void(content::WebContents*)> callback =
-      base::BindOnce(&SigninViewController::ShowChromeSigninDialogForExtensions,
-                     base::Unretained(this), std::string(extension_name),
-                     std::move(on_complete), account_info_for_promos);
+  base::OnceCallback<void(content::WebContents*)> callback = base::BindOnce(
+      &SigninViewController::ShowChromeSigninDialogForExtensions,
+      base::Unretained(this), std::u16string(extension_name_for_display),
+      std::move(on_complete), account_info_for_promos);
 
   new_tab_web_contents_observer_ = std::make_unique<NewTabWebContentsObserver>(
       web_contents, std::move(callback));
 }
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
-#if BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
 void SigninViewController::ShowModalProfileCustomizationDialog(
     bool is_local_profile_creation) {
   CloseModalSignin();
@@ -426,49 +394,7 @@ void SigninViewController::ShowModalSigninEmailConfirmationDialog(
           std::move(callback)),
       GetOnModalDialogClosedCallback());
 }
-
-std::unique_ptr<SigninViewController::ReauthAbortHandle>
-SigninViewController::ShowReauthPrompt(
-    const CoreAccountId& account_id,
-    signin_metrics::ReauthAccessPoint access_point,
-    base::OnceCallback<void(signin::ReauthResult)> reauth_callback) {
-  CloseModalSignin();
-
-  auto abort_handle = std::make_unique<ReauthAbortHandleImpl>(base::BindOnce(
-      &SigninViewController::CloseModalSignin, weak_ptr_factory_.GetWeakPtr()));
-
-  // Wrap |reauth_callback| so that it also signals to |reauth_abort_handle|
-  // when executed. The handle outlives the callback because it calls
-  // CloseModalSignin on destruction, and this runs the callback (with a
-  // "cancelled" result). So base::Unretained can be used.
-  auto wrapped_reauth_callback = base::BindOnce(
-      [](ReauthAbortHandleImpl* handle,
-         base::OnceCallback<void(signin::ReauthResult)> cb,
-         signin::ReauthResult result) {
-        handle->SignalReauthDone();
-        std::move(cb).Run(result);
-      },
-      base::Unretained(abort_handle.get()), std::move(reauth_callback));
-
-  signin::IdentityManager* identity_manager =
-      IdentityManagerFactory::GetForProfile(browser_->profile());
-  // For now, Reauth is restricted to the primary account only.
-  // TODO(crbug.com/40131388): add support for secondary accounts.
-  CoreAccountId primary_account_id =
-      identity_manager->GetPrimaryAccountId(signin::ConsentLevel::kSignin);
-
-  if (account_id != primary_account_id) {
-    std::move(wrapped_reauth_callback)
-        .Run(signin::ReauthResult::kAccountNotSignedIn);
-    return abort_handle;
-  }
-
-  dialog_ = std::make_unique<SigninReauthViewController>(
-      browser_, account_id, access_point, GetOnModalDialogClosedCallback(),
-      std::move(wrapped_reauth_callback));
-  return abort_handle;
-}
-#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
 void SigninViewController::ShowModalSyncConfirmationDialog(
     bool is_signin_intercept,
@@ -486,8 +412,7 @@ void SigninViewController::ShowModalSyncConfirmationDialog(
 void SigninViewController::ShowModalManagedUserNoticeDialog(
     std::unique_ptr<signin::EnterpriseProfileCreationDialogParams>
         create_param) {
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
-    BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
   CloseModalSignin();
   dialog_ = std::make_unique<SigninModalDialogImpl>(
       SigninViewControllerDelegate::CreateManagedUserNoticeDelegate(
@@ -578,7 +503,7 @@ void SigninViewController::ShowDiceSigninTab(
       signin_reason, email_hint, continue_url);
 
   content::WebContents* active_contents = nullptr;
-  if (access_point == signin_metrics::AccessPoint::ACCESS_POINT_START_PAGE) {
+  if (access_point == signin_metrics::AccessPoint::kStartPage) {
     active_contents = browser_->tab_strip_model()->GetActiveWebContents();
     content::OpenURLParams params(signin_url, content::Referrer(),
                                   WindowOpenDisposition::CURRENT_TAB,
@@ -589,14 +514,18 @@ void SigninViewController::ShowDiceSigninTab(
     TabStripModel* tab_strip = browser_->tab_strip_model();
     int dice_tab_index = FindDiceSigninTab(tab_strip, signin_url);
     if (dice_tab_index != -1) {
-      if (access_point !=
-          signin_metrics::AccessPoint::ACCESS_POINT_EXTENSIONS) {
+      if (access_point != signin_metrics::AccessPoint::kExtensions) {
         // Extensions do not activate the tab to prevent misbehaving
         // extensions to keep focusing the signin tab.
         tab_strip->ActivateTabAt(
             dice_tab_index,
             TabStripUserGestureDetails(
                 TabStripUserGestureDetails::GestureType::kOther));
+
+        // Update the access point of the signin tab, so that the next signin
+        // is recorded from the latest access point.
+        DiceTabHelper::FromWebContents(tab_strip->GetActiveTab()->GetContents())
+            ->SetAccessPoint(access_point);
       }
       // Do not create a new signin tab, because there is already one.
       return;
@@ -699,8 +628,9 @@ void SigninViewController::SignoutOrReauthWithPromptWithUnsyncedDataTypes(
     signin_metrics::ProfileSignout profile_signout_source,
     signin_metrics::SourceForRefreshTokenOperation token_signout_source,
     syncer::DataTypeSet unsynced_datatypes) {
+  Profile* profile = browser_->profile();
   signin::IdentityManager* identity_manager =
-      IdentityManagerFactory::GetForProfile(browser_->profile());
+      IdentityManagerFactory::GetForProfile(profile);
   CoreAccountId primary_account_id =
       identity_manager->GetPrimaryAccountId(signin::ConsentLevel::kSignin);
   if (primary_account_id.empty()) {
@@ -712,6 +642,11 @@ void SigninViewController::SignoutOrReauthWithPromptWithUnsyncedDataTypes(
       identity_manager->HasAccountWithRefreshTokenInPersistentErrorState(
           primary_account_id);
   bool sign_out_immediately = unsynced_datatypes.empty() && needs_reauth;
+
+  // Do not show the dialog to users with implicit signin.
+  if (!profile->GetPrefs()->GetBoolean(prefs::kExplicitBrowserSignin)) {
+    sign_out_immediately = true;
+  }
 
   base::OnceCallback<void(ChromeSignoutConfirmationChoice)> callback =
       base::BindOnce(&HandleSignoutConfirmationChoice, browser_->AsWeakPtr(),
@@ -731,13 +666,25 @@ void SigninViewController::SignoutOrReauthWithPromptWithUnsyncedDataTypes(
                            kUnsyncedDataWithReauthButton
                      : ChromeSignoutConfirmationPromptVariant::kUnsyncedData;
   }
+  auto extended_account_info =
+      identity_manager->FindExtendedAccountInfoByAccountId(primary_account_id);
+  if (base::FeatureList::IsEnabled(
+          supervised_user::kEnableSupervisedUserVersionSignOutDialog) &&
+      extended_account_info.capabilities.is_subject_to_parental_controls() ==
+          signin::Tribool::kTrue) {
+    prompt_variant =
+        ChromeSignoutConfirmationPromptVariant::kProfileWithParentalControls;
+  }
+
   // Show confirmation prompt where the user can reauth or sign out.
+  // TODO(crbug.com/390219535): Show the WebUI version of the prompt instead and
+  // migrate all browser tests.
   ShowChromeSignoutConfirmationPrompt(*browser_, prompt_variant,
                                       std::move(callback));
 }
 
 void SigninViewController::ShowChromeSigninDialogForExtensions(
-    std::string_view extension_name,
+    const std::u16string& extension_name_for_display,
     base::OnceClosure on_complete,
     const AccountInfo& account_info_for_promos,
     content::WebContents* contents) {
@@ -758,18 +705,18 @@ void SigninViewController::ShowChromeSigninDialogForExtensions(
         if (identity_manager) {
           identity_manager->GetPrimaryAccountMutator()->SetPrimaryAccount(
               account_id, signin::ConsentLevel::kSignin,
-              signin_metrics::AccessPoint::ACCESS_POINT_EXTENSIONS);
+              signin_metrics::AccessPoint::kExtensions);
         }
       },
       browser_->profile()->GetWeakPtr(), account_info_for_promos.account_id);
 
   std::u16string title =
-      extension_name.empty()
+      extension_name_for_display.empty()
           ? l10n_util::GetStringUTF16(
                 IDS_EXTENSION_ASKS_IDENTITY_WHILE_SIGNED_IN_WEB_ONLY_TITLE_FALLBACK)
           : l10n_util::GetStringFUTF16(
                 IDS_EXTENSION_ASKS_IDENTITY_WHILE_SIGNED_IN_WEB_ONLY_TITLE,
-                base::UTF8ToUTF16(extension_name));
+                extension_name_for_display);
 
   std::u16string continue_as_text =
       base::UTF8ToUTF16(!account_info_for_promos.given_name.empty()
@@ -796,6 +743,17 @@ void SigninViewController::ShowChromeSigninDialogForExtensions(
 
   chrome::ShowTabModal(dialog_builder.Build(), contents);
 }
+
+void SigninViewController::ShowSignoutConfirmationPromptForTesting(
+    ChromeSignoutConfirmationPromptVariant prompt_variant) {
+  CloseModalSignin();
+  dialog_ = std::make_unique<SigninModalDialogImpl>(
+      SigninViewControllerDelegate::CreateSignoutConfirmationDelegate(
+          browser_, prompt_variant,
+          base::BindOnce([](ChromeSignoutConfirmationChoice choice) {})),
+      GetOnModalDialogClosedCallback());
+}
+
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
 content::WebContents*

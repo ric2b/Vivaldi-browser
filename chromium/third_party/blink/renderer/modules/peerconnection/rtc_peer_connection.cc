@@ -41,6 +41,7 @@
 #include <string>
 #include <utility>
 
+#include "base/containers/to_vector.h"
 #include "base/feature_list.h"
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
@@ -320,7 +321,8 @@ webrtc::PeerConnectionInterface::RTCConfiguration ParseConfiguration(
   }
 
   if (configuration->hasIceServers()) {
-    WebVector<webrtc::PeerConnectionInterface::IceServer> ice_servers;
+    std::vector<webrtc::PeerConnectionInterface::IceServer>& ice_servers =
+        web_configuration.servers;
     for (const RTCIceServer* ice_server : configuration->iceServers()) {
       Vector<String> url_strings;
       std::vector<std::string> converted_urls;
@@ -379,18 +381,12 @@ webrtc::PeerConnectionInterface::RTCConfiguration ParseConfiguration(
       }
       ice_servers.emplace_back(std::move(converted_ice_server));
     }
-    web_configuration.servers = ice_servers.ReleaseVector();
   }
 
   if (configuration->hasCertificates()) {
-    const HeapVector<Member<RTCCertificate>>& certificates =
-        configuration->certificates();
-    WebVector<rtc::scoped_refptr<rtc::RTCCertificate>> certificates_copy(
-        certificates.size());
-    for (wtf_size_t i = 0; i < certificates.size(); ++i) {
-      certificates_copy[i] = certificates[i]->Certificate();
-    }
-    web_configuration.certificates = certificates_copy.ReleaseVector();
+    web_configuration.certificates = base::ToVector(
+        configuration->certificates(),
+        [](const auto& certificate) { return certificate->Certificate(); });
   }
 
   web_configuration.ice_candidate_pool_size =
@@ -1370,9 +1366,7 @@ ScriptPromise<RTCCertificate> RTCPeerConnection::generateCertificate(
   // attribute.
   std::optional<DOMTimeStamp> expires;
   if (keygen_algorithm->IsObject()) {
-    Dictionary keygen_algorithm_dict(script_state->GetIsolate(),
-                                     keygen_algorithm->GetAsObject().V8Value(),
-                                     exception_state);
+    Dictionary keygen_algorithm_dict(keygen_algorithm->GetAsObject());
     if (exception_state.HadException())
       return EmptyPromise();
 
@@ -2105,14 +2099,14 @@ RTCRtpSender* RTCPeerConnection::FindSenderForTrackAndStream(
 
 HeapVector<Member<RTCRtpSender>>::iterator RTCPeerConnection::FindSender(
     const RTCRtpSenderPlatform& web_sender) {
-  return base::ranges::find_if(rtp_senders_, [&](const auto& sender) {
+  return std::ranges::find_if(rtp_senders_, [&](const auto& sender) {
     return sender->web_sender()->Id() == web_sender.Id();
   });
 }
 
 HeapVector<Member<RTCRtpReceiver>>::iterator RTCPeerConnection::FindReceiver(
     const RTCRtpReceiverPlatform& platform_receiver) {
-  return base::ranges::find_if(rtp_receivers_, [&](const auto& receiver) {
+  return std::ranges::find_if(rtp_receivers_, [&](const auto& receiver) {
     return receiver->platform_receiver()->Id() == platform_receiver.Id();
   });
 }
@@ -2120,7 +2114,7 @@ HeapVector<Member<RTCRtpReceiver>>::iterator RTCPeerConnection::FindReceiver(
 HeapVector<Member<RTCRtpTransceiver>>::iterator
 RTCPeerConnection::FindTransceiver(
     const RTCRtpTransceiverPlatform& platform_transceiver) {
-  return base::ranges::find_if(transceivers_, [&](const auto& transceiver) {
+  return std::ranges::find_if(transceivers_, [&](const auto& transceiver) {
     return transceiver->platform_transceiver()->Id() ==
            platform_transceiver.Id();
   });

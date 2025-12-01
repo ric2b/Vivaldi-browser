@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/ash/holding_space/holding_space_keyed_service.h"
 
+#include <algorithm>
 #include <vector>
 
 #include "ash/constants/ash_features.h"
@@ -21,7 +22,6 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/path_service.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
 #include "base/strings/stringprintf.h"
@@ -93,8 +93,9 @@ base::FilePath CreateTextFile(const base::FilePath& root_path,
           "%s.txt", base::UnguessableToken::Create().ToString().c_str())));
 
   base::ScopedAllowBlockingForTesting allow_blocking;
-  if (!base::CreateDirectory(path.DirName()))
+  if (!base::CreateDirectory(path.DirName())) {
     return base::FilePath();
+  }
   if (!base::WriteFile(path, /*data=*/std::string())) {
     return base::FilePath();
   }
@@ -107,7 +108,7 @@ base::FilePath CreateTextFile(const base::FilePath& root_path,
 void WaitForItemAddition(
     base::RepeatingCallback<bool(const HoldingSpaceItem*)> predicate) {
   auto* const model = HoldingSpaceController::Get()->model();
-  if (base::ranges::any_of(model->items(), [&predicate](const auto& item) {
+  if (std::ranges::any_of(model->items(), [&predicate](const auto& item) {
         return predicate.Run(item.get());
       })) {
     return;
@@ -139,13 +140,14 @@ void WaitForItemInitialization(
   WaitForItemAddition(predicate);
 
   auto* const model = HoldingSpaceController::Get()->model();
-  auto item_it = base::ranges::find_if(
+  auto item_it = std::ranges::find_if(
       model->items(),
       [&predicate](const auto& item) { return predicate.Run(item.get()); });
 
   DCHECK(item_it != model->items().end());
-  if (item_it->get()->IsInitialized())
+  if (item_it->get()->IsInitialized()) {
     return;
+  }
 
   testing::NiceMock<MockHoldingSpaceModelObserver> mock;
   base::ScopedObservation<HoldingSpaceModel, HoldingSpaceModelObserver>
@@ -155,8 +157,9 @@ void WaitForItemInitialization(
   base::RunLoop run_loop;
   ON_CALL(mock, OnHoldingSpaceItemInitialized)
       .WillByDefault([&](const HoldingSpaceItem* item) {
-        if (item == item_it->get())
+        if (item == item_it->get()) {
           run_loop.Quit();
+        }
       });
   ON_CALL(mock, OnHoldingSpaceItemsRemoved)
       .WillByDefault([&](const std::vector<const HoldingSpaceItem*>& items) {
@@ -240,8 +243,9 @@ class HoldingSpaceKeyedServiceBrowserTest : public InProcessBrowserTest {
   // InProcessBrowserTest:
   bool SetUpUserDataDirectory() override {
     base::FilePath user_data_dir;
-    if (!base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir))
+    if (!base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir)) {
       return false;
+    }
 
     // Mount test volumes under user data dir to ensure it gets persisted after
     // PRE test runs.
@@ -629,8 +633,7 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceKeyedServiceBrowserTest,
   HoldingSpaceKeyedService* const holding_space_service =
       HoldingSpaceKeyedServiceFactory::GetInstance()->GetService(
           browser()->profile());
-  holding_space_service->AddPinnedFiles(
-      {file_system_url}, holding_space_metrics::EventSource::kTest);
+  holding_space_service->AddPinnedFiles({file_system_url});
 
   base::FilePath relative_path;
   ASSERT_TRUE(drive_integration_service()->GetRelativeDrivePath(

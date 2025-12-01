@@ -13,6 +13,7 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/views/bubble_anchor_util_views.h"
+#include "chrome/browser/ui/views/chrome_widget_sublevel.h"
 #include "chrome/browser/ui/views/device_chooser_content_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_bubble_delegate_view.h"
 #include "chrome/browser/ui/views/title_origin_label.h"
@@ -172,8 +173,9 @@ void ChooserBubbleUiViewDelegate::UpdateAnchor(Browser* browser) {
   AnchorConfiguration configuration = GetChooserAnchorConfiguration(browser);
   SetAnchorView(configuration.anchor_view);
   SetHighlightedButton(configuration.highlighted_button);
-  if (!configuration.anchor_view)
+  if (!configuration.anchor_view) {
     SetAnchorRect(GetChooserAnchorRect(browser));
+  }
   SetArrow(configuration.bubble_arrow);
 }
 
@@ -187,8 +189,9 @@ base::OnceClosure ChooserBubbleUiViewDelegate::MakeCloseClosure() {
 }
 
 void ChooserBubbleUiViewDelegate::Close() {
-  if (GetWidget())
+  if (GetWidget()) {
     GetWidget()->CloseWithReason(views::Widget::ClosedReason::kUnspecified);
+  }
 }
 
 BEGIN_METADATA(ChooserBubbleUiViewDelegate)
@@ -205,11 +208,13 @@ base::OnceClosure ShowDeviceChooserDialogForExtension(
     std::unique_ptr<permissions::ChooserController> controller) {
   auto* contents = content::WebContents::FromRenderFrameHost(owner);
   auto* browser = chrome::FindBrowserWithTab(contents);
-  if (!browser)
+  if (!browser) {
     return base::DoNothing();
+  }
 
-  if (browser->tab_strip_model()->GetActiveWebContents() != contents)
+  if (browser->tab_strip_model()->GetActiveWebContents() != contents) {
     return base::DoNothing();
+  }
 
   if(!vivaldi::IsVivaldiRunning()) {
   // `GetExtensionsToolbarContainer` may return `nullptr`, for instance in
@@ -285,11 +290,13 @@ base::OnceClosure ShowDeviceChooserDialog(
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
   auto* browser = chrome::FindBrowserWithTab(contents);
-  if (!browser)
+  if (!browser) {
     return base::DoNothing();
+  }
 
-  if (browser->tab_strip_model()->GetActiveWebContents() != contents)
+  if (browser->tab_strip_model()->GetActiveWebContents() != contents) {
     return base::DoNothing();
+  }
 
   auto bubble = std::make_unique<ChooserBubbleUiViewDelegate>(
       browser, contents, std::move(controller));
@@ -305,10 +312,12 @@ base::OnceClosure ShowDeviceChooserDialog(
   base::OnceClosure close_closure = bubble->MakeCloseClosure();
   views::Widget* widget =
       views::BubbleDialogDelegateView::CreateBubble(std::move(bubble));
-  if (browser->window()->IsActive())
+  widget->SetZOrderSublevel(ChromeWidgetSublevel::kSublevelSecurity);
+  if (browser->window()->IsActive()) {
     widget->Show();
-  else
+  } else {
     widget->ShowInactive();
+  }
 
   // If we're opening this device chooser dialog on a picture-in-picture window,
   // then our widget is also always-on-top and needs to be tracked by the

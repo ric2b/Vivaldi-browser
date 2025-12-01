@@ -210,7 +210,8 @@ chrome.accessibilityPrivate.SyntheticMouseEventButton = {
  *   mouseButton: (!chrome.accessibilityPrivate.SyntheticMouseEventButton|undefined),
  *   isDoubleClick: (boolean|undefined),
  *   isTripleClick: (boolean|undefined),
- *   useRewriters: (boolean|undefined)
+ *   useRewriters: (boolean|undefined),
+ *   forceNotSynthetic: (boolean|undefined)
  * }}
  */
 chrome.accessibilityPrivate.SyntheticMouseEvent;
@@ -281,7 +282,6 @@ chrome.accessibilityPrivate.AccessibilityFeature = {
   DICTATION_CONTEXT_CHECKING: 'dictationContextChecking',
   FACE_GAZE: 'faceGaze',
   GOOGLE_TTS_HIGH_QUALITY_VOICES: 'googleTtsHighQualityVoices',
-  FACE_GAZE_GRAVITY_WELLS: 'faceGazeGravityWells',
 };
 
 /**
@@ -617,8 +617,7 @@ chrome.accessibilityPrivate.setNativeChromeVoxArcSupportForCurrentApp = function
  *     should occur if the key event should be held. Otherwise, the key event
  *     should not repeat.
  */
-chrome.accessibilityPrivate.sendSyntheticKeyEvent = function(
-    keyEvent, useRewriters, isRepeat) {};
+chrome.accessibilityPrivate.sendSyntheticKeyEvent = function(keyEvent, useRewriters, isRepeat) {};
 
 /**
  * Enables or disables mouse events in accessibility extensions
@@ -647,13 +646,6 @@ chrome.accessibilityPrivate.sendSyntheticMouseEvent = function(mouseEvent) {};
  * @param {!chrome.accessibilityPrivate.SelectToSpeakState} state
  */
 chrome.accessibilityPrivate.setSelectToSpeakState = function(state) {};
-
-/**
- * Called by the Select-to-Speak extension to request a clipboard copy in the
- * active Lacros Google Docs tab for the copy-paste fallback.
- * @param {string} url URL of the Google Docs tab.
- */
-chrome.accessibilityPrivate.clipboardCopyInActiveLacrosGoogleDoc = function(url) {};
 
 /**
  * Called by the Accessibility Common extension when
@@ -786,13 +778,6 @@ chrome.accessibilityPrivate.getTtsDlcContents = function(dlc, variant, callback)
  *     callback A callback that is run when the result is returned.
  */
 chrome.accessibilityPrivate.getDisplayBounds = function(callback) {};
-
-/**
- * Gets whether new browser windows and tabs should be in Lacros browser.
- * @param {function(boolean): void} callback A callback that is run when the
- *     result is returned.
- */
-chrome.accessibilityPrivate.isLacrosPrimary = function(callback) {};
 
 /**
  * Displays an accessibility-related toast.

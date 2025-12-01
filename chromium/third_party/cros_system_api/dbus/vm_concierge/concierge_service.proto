@@ -364,9 +364,6 @@ message StartArcVmRequest {
   // Whether to lock guest memory (for the purpose of disabling host swap).
   bool lock_guest_memory = 18;
 
-  // Whether broadcast anr prenotify is enabled.
-  bool enable_broadcast_anr_prenotify = 25;
-
   // Whether virtio blk data is enabled
   bool enable_virtio_blk_data = 27;
 
@@ -416,7 +413,7 @@ message StartArcVmRequest {
     BINARY_TRANSLATION_TYPE_NDK_TRANSLATION = 2;
   }
 
-  // Type of binary translation used in natvie bridge experiment
+  // Type of binary translation used in native bridge experiment
   BinaryTranslationType native_bridge_experiment = 39;
 
   enum UreadaheadMode {
@@ -508,7 +505,7 @@ message StartVmResponse {
     SUCCESS = 1;
 
     // The disk mount succeeded, but some data loss is
-    // likely. Currently this occurrs when the initial mount fails,
+    // likely. Currently this occurs when the initial mount fails,
     // but succeeds on a retry with -o usebackuproots.
     PARTIAL_DATA_LOSS = 2;
 
@@ -526,6 +523,30 @@ message StartVmResponse {
   // Whether the free_bytes field has been filled in. If false, ignore whatever
   // value is in the field.
   bool free_bytes_has_value = 7;
+}
+
+// Message used to communicate install status for VM.
+message VmInstallStateSignal {
+  enum State {
+    UNKNOWN = 0;
+    IN_PROGRESS = 1;
+    FAILED = 2;
+    SUCCEEDED = 3;
+  }
+  State state = 1;
+  enum Step {
+    unknown = 0;
+    launcher_start = 1;
+    core_start = 2;
+    install_fetch_image = 3;
+    install_configure = 4;
+    install_done = 5;
+    install_success = 6;
+    install_failure = 7;
+  }
+  Step in_progress_step = 2;
+  int64 in_progress_percent = 3;
+  string failed_reason = 4;
 }
 
 // Message used in the signal for when a VM has started, and can be controlled
@@ -589,12 +610,13 @@ message StopVmRequest {
   string owner_id = 2;
 }
 
-// Response sent back by vm_concierge when it receives a StopVm dbus message.
-message StopVmResponse {
-  // If true, the requested VM was stopped.
+// Response sent back by vm_concierge when DBus RPC is simple.
+message SuccessFailureResponse {
+  // If true, what was requested with the DBus request was successful.
   bool success = 1;
 
-  // The failure_reason if the requested VM could not be stopped.
+  // The reason of failure in human readable English text form.
+  // TODO(b/380358552): Revisit this to be an enum or remove altogether.
   string failure_reason = 2;
 }
 
@@ -654,14 +676,6 @@ message SuspendVmRequest {
   string owner_id = 2;
 }
 
-message SuspendVmResponse {
-  // If true, the requested VM was suspended.
-  bool success = 1;
-
-  // The failure_reason if the requested VM could not be suspended.
-  string failure_reason = 2;
-}
-
 // Information that must be included with every ResumeVm dbus message.
 message ResumeVmRequest {
   // The name of the VM to be stopped.
@@ -669,14 +683,6 @@ message ResumeVmRequest {
 
   // The owner of the vm.
   string owner_id = 2;
-}
-
-message ResumeVmResponse {
-  // If true, the requested VM was suspended.
-  bool success = 1;
-
-  // The failure_reason if the requested VM could not be suspended.
-  string failure_reason = 2;
 }
 
 // Response to a SyncTimes RPC.
@@ -758,15 +764,6 @@ message ArcVmCompleteBootResponse {
 message SetBalloonTimerRequest {
   // The interval of the balloon timer in milliseconds.
   uint64 timer_interval_millis = 1;
-}
-
-// Response sent back by vm_concierge for a SetBalloonTimerRequest dbus message.
-message SetBalloonTimerResponse {
-  // If true, the request succeeded.
-  bool success = 1;
-
-  // The failure_reason if the request could not be processed.
-  string failure_reason = 2;
 }
 
 // The type of storage location for a disk image.
@@ -1030,17 +1027,6 @@ message CancelDiskImageRequest {
   string command_uuid = 1;
 }
 
-// Response to CancelDiskImageRequest.
-message CancelDiskImageResponse {
-  // If true, the request was successfully canceled. The request will
-  // fail if it is unknown, or if it has already completed (successfully
-  // or unsuccessfully).
-  bool success = 1;
-
-  // The failure reason if the command could not be completed.
-  string failure_reason = 2;
-}
-
 // Request to list all VM disk images in the given storage area.
 message ListVmDisksRequest {
   // The cryptohome id for the user's encrypted storage.
@@ -1177,16 +1163,6 @@ message DetachUsbDeviceRequest {
   uint32 guest_port = 3;
 }
 
-// Response sent back by vm_concierge after it receives a
-// DetachUsbDeviceRequest call.
-message DetachUsbDeviceResponse {
-  // Was the USB device successfully detached?
-  bool success = 1;
-
-  // The reason for the failure, if there was one.
-  string reason = 2;
-}
-
 // Request sent to get a list of all USB devices attached to a guest VM.
 message ListUsbDeviceRequest {
   // The name of the VM.
@@ -1259,16 +1235,6 @@ message DetachNetDeviceRequest {
   uint32 guest_bus = 3;
 }
 
-// Response sent back by vm_concierge after it receives a
-// DetachNetDeviceRequest call.
-message DetachNetDeviceResponse {
-  // Was the device successfully detached?
-  bool success = 1;
-
-  // The reason for failure, if success is false.
-  string failure_reason = 2;
-}
-
 // Response sent back by vm_concierge after it receives a GetDnsSettings call.
 // Also being broadcast via DnsSettingsChanged signal.
 message DnsSettings {
@@ -1330,15 +1296,6 @@ message AdjustVmRequest {
   // Additional parameters for the adjustment operation.
   repeated string params = 4;
 }
-
-// Response to an AdjustVmRequest.
-message AdjustVmResponse {
-  // If true, the adjustment was done.
-  bool success = 1;
-
-  // If the attempt to adjust VM failed, the reason for the failure.
-  string failure_reason = 2;
-};
 
 // Request to reclaim memory of a given VM.
 message ReclaimVmMemoryRequest {
@@ -1477,15 +1434,6 @@ message SwapVmRequest {
   SwapOperation operation = 3;
 }
 
-// Response to an SwapVmRequest.
-message SwapVmResponse {
-  // If true, the swap state changing operation of the VM was success.
-  bool success = 1;
-
-  // If the attempt to change swap state failed, the reason for failure.
-  string failure_reason = 2;
-}
-
 // Message used in the signal for notify a VM experiencing vmm swap IN/OUT.
 message VmSwappingSignal {
   // The name of the VM.
@@ -1511,16 +1459,6 @@ message InstallPflashRequest {
   string owner_id = 2;
 }
 
-// The response of the |InstallPflashRequest|.
-message InstallPflashResponse {
-  // Whether the request succeeded or not.
-  bool success = 1;
-
-  // The reason for failure for not being able to install the Pflash. Only
-  // valid when |success| is false.
-  string failure_reason = 2;
-}
-
 // Request sent to vm_concierge to inflate balloon in a vm until perceptible
 // processes are tried to kill.
 message AggressiveBalloonRequest {
@@ -1532,15 +1470,6 @@ message AggressiveBalloonRequest {
 
   // Whether enable inflating aggressive balloon or not.
   bool enable = 3;
-}
-
-// Response to an AggressiveBalloonRequest.
-message AggressiveBalloonResponse {
-  // Whether inflating balloon succeeds or not.
-  bool success = 1;
-
-  // The reason for failure.
-  string failure_reason = 2;
 }
 
 // Request to get an open FD to the VM Memory Management kills server.
@@ -1590,4 +1519,28 @@ message SetUpVmUserResponse {
   // this is the corresponding username. Otherwise, this is the
   // username specified in SetUpVmUserRequest.
   string username = 3;
+}
+
+// Fake battery set action
+enum FakePowerAction {
+  // VM starts reporting fake power status
+  SET = 0;
+  // VM stops reporting fake power status
+  CANCEL = 1;
+}
+
+// Request send to SET/CANCEL fake battery config
+message ModifyFakePowerConfigRequest {
+  // The name of the VM which has started.
+  string name = 1;
+
+  // The owner of the vm.
+  string owner_id = 2;
+
+  // Whether to set or cancel the fake power configuration
+  FakePowerAction action = 3;
+
+  // The maximum battery capacity bat device can report to guest. This field
+  // should only be set when the action is SET.
+  uint32 capacity_limit = 4;
 }

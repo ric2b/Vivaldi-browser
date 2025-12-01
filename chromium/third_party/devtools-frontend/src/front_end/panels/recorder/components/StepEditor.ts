@@ -8,13 +8,13 @@ import * as Platform from '../../../core/platform/platform.js';
 import type * as Puppeteer from '../../../third_party/puppeteer/puppeteer.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
 import * as SuggestionInput from '../../../ui/components/suggestion_input/suggestion_input.js';
-import * as LitHtml from '../../../ui/lit-html/lit-html.js';
+import * as Lit from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 import * as Controllers from '../controllers/controllers.js';
 import * as Models from '../models/models.js';
 import * as Util from '../util/util.js';
 
-import stepEditorStyles from './stepEditor.css.js';
+import stepEditorStylesRaw from './stepEditor.css.js';
 import {
   ArrayAssignments,
   assert,
@@ -29,7 +29,11 @@ import {
   type RequiredKeys,
 } from './util.js';
 
-const {html, Decorators, Directives, LitElement} = LitHtml;
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const stepEditorStyles = new CSSStyleSheet();
+stepEditorStyles.replaceSync(stepEditorStylesRaw.cssContent);
+
+const {html, Decorators, Directives, LitElement} = Lit;
 const {customElement, property, state} = Decorators;
 const {live} = Directives;
 
@@ -486,7 +490,7 @@ class RecorderSelectorPickerButton extends LitElement {
     void this.#picker.stop();
   }
 
-  protected override render(): LitHtml.TemplateResult|undefined {
+  protected override render(): Lit.TemplateResult|undefined {
     if (this.disabled) {
       return;
     }
@@ -654,7 +658,7 @@ export class StepEditor extends LitElement {
   };
 
   #renderInlineButton(opts: {class: string, title: string, iconName: string, onClick: (event: MouseEvent) => void}):
-      LitHtml.TemplateResult|undefined {
+      Lit.TemplateResult|undefined {
     if (this.disabled) {
       return;
     }
@@ -673,7 +677,7 @@ export class StepEditor extends LitElement {
     `;
   }
 
-  #renderDeleteButton(attribute: Attribute): LitHtml.TemplateResult|undefined {
+  #renderDeleteButton(attribute: Attribute): Lit.TemplateResult|undefined {
     if (this.disabled) {
       return;
     }
@@ -705,7 +709,7 @@ export class StepEditor extends LitElement {
     // clang-format on
   }
 
-  #renderTypeRow(editable: boolean): LitHtml.TemplateResult {
+  #renderTypeRow(editable: boolean): Lit.TemplateResult {
     this.#renderedAttributes.add('type');
     // clang-format off
     return html`<div class="row attribute" data-attribute="type" jslog=${VisualLogging.treeItem('type')}>
@@ -721,7 +725,7 @@ export class StepEditor extends LitElement {
     // clang-format on
   }
 
-  #renderRow(attribute: Attribute): LitHtml.TemplateResult|undefined {
+  #renderRow(attribute: Attribute): Lit.TemplateResult|undefined {
     this.#renderedAttributes.add(attribute);
     const attributeValue = this.state[attribute]?.toString();
     if (attributeValue === undefined) {
@@ -765,7 +769,7 @@ export class StepEditor extends LitElement {
     // clang-format on
   }
 
-  #renderFrameRow(): LitHtml.TemplateResult|undefined {
+  #renderFrameRow(): Lit.TemplateResult|undefined {
     this.#renderedAttributes.add('frame');
     if (this.state.frame === undefined) {
       return;
@@ -837,7 +841,7 @@ export class StepEditor extends LitElement {
     // clang-format on
   }
 
-  #renderSelectorsRow(): LitHtml.TemplateResult|undefined {
+  #renderSelectorsRow(): Lit.TemplateResult|undefined {
     this.#renderedAttributes.add('selectors');
     if (this.state.selectors === undefined) {
       return;
@@ -960,7 +964,7 @@ export class StepEditor extends LitElement {
     // clang-format on
   }
 
-  #renderAssertedEvents(): LitHtml.TemplateResult|undefined {
+  #renderAssertedEvents(): Lit.TemplateResult|undefined {
     this.#renderedAttributes.add('assertedEvents');
     if (this.state.assertedEvents === undefined) {
       return;
@@ -1025,7 +1029,7 @@ export class StepEditor extends LitElement {
     // clang-format on
   }
 
-  #renderAttributesRow(): LitHtml.TemplateResult|undefined {
+  #renderAttributesRow(): Lit.TemplateResult|undefined {
     this.#renderedAttributes.add('attributes');
     if (this.state.attributes === undefined) {
       return;
@@ -1134,7 +1138,7 @@ export class StepEditor extends LitElement {
     // clang-format on
   }
 
-  #renderAddRowButtons(): Array<LitHtml.TemplateResult|undefined> {
+  #renderAddRowButtons(): Array<Lit.TemplateResult|undefined> {
     const attributes = attributesByType[this.state.type];
     return [...attributes.optional].filter(attr => this.state[attr] === undefined).map(attr => {
       // clang-format off
@@ -1160,7 +1164,7 @@ export class StepEditor extends LitElement {
     });
   };
 
-  protected override render(): LitHtml.TemplateResult {
+  protected override render(): Lit.TemplateResult {
     this.#renderedAttributes = new Set();
 
     // clang-format off

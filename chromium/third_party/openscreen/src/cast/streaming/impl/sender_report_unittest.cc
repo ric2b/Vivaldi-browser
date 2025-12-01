@@ -12,8 +12,8 @@
 namespace openscreen::cast {
 namespace {
 
-constexpr Ssrc kSenderSsrc{1};
-constexpr Ssrc kReceiverSsrc{2};
+constexpr Ssrc kSenderSsrc = 1;
+constexpr Ssrc kReceiverSsrc = 2;
 
 class SenderReportTest : public testing::Test {
  public:
@@ -52,7 +52,7 @@ TEST_F(SenderReportTest, Parsing) {
     0x00, 0x00, 0x83, 0xfa,  // Delay since last Sender Report.
   };
 
-  constexpr NtpTimestamp kNtpTimestampInSenderReport{0xe0732e5480000000};
+  constexpr NtpTimestamp kNtpTimestampInSenderReport = 0xe0732e5480000000;
 
   const uint8_t kOtherPacket[] = {
     0b10000000,  // Version=2, Padding=no, ItemCount=0 byte.
@@ -161,7 +161,7 @@ TEST_F(SenderReportTest, BuildPackets) {
 TEST_F(SenderReportTest, ComputesTimePointsFromReportIds) {
   // Note: The time_points can be off by up to 16 µs because of the loss of
   // precision caused by truncating the NtpTimestamps into StatusReportIds.
-  constexpr std::chrono::microseconds kEpsilon{16};
+  constexpr std::chrono::microseconds kEpsilon(16);
 
   // Test a sampling of time points over the last 65536 seconds to confirm the
   // rollover correction logic is working.

@@ -4,6 +4,8 @@
 
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_win.h"
 
+#include <dwmapi.h>
+
 #include <algorithm>
 #include <utility>
 #include <vector>
@@ -12,7 +14,6 @@
 #include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/ranges/algorithm.h"
 #include "base/trace_event/trace_event.h"
 #include "base/win/win_util.h"
 #include "third_party/skia/include/core/SkPath.h"
@@ -165,6 +166,19 @@ void DesktopWindowTreeHostWin::FinishTouchDrag(gfx::Point screen_point) {
     ui::SendMouseEvent(screen_point, MOUSEEVENTF_LEFTUP | MOUSEEVENTF_ABSOLUTE);
   }
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// DesktopWindowTreeHostWin, WidgetObserver implementation:
+void DesktopWindowTreeHostWin::OnWidgetThemeChanged(Widget* widget) {
+  // Ensure that DWM knows to apply the correct color scheme to the window
+  // backdrop whenever it changes.
+  BOOL use_dark_mode =
+      widget->GetColorMode() == ui::ColorProviderKey::ColorMode::kDark;
+  HRESULT hr = DwmSetWindowAttribute(GetHWND(), DWMWA_USE_IMMERSIVE_DARK_MODE,
+                                     &use_dark_mode, sizeof(use_dark_mode));
+  CHECK_EQ(hr, S_OK);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // DesktopWindowTreeHostWin, DesktopWindowTreeHost implementation:
 
@@ -173,8 +187,9 @@ void DesktopWindowTreeHostWin::Init(const Widget::InitParams& params) {
 
   wm::SetAnimationHost(content_window(), this);
   if (params.type == Widget::InitParams::TYPE_WINDOW &&
-      !params.remove_standard_frame)
+      !params.remove_standard_frame) {
     content_window()->SetProperty(aura::client::kAnimationsDisabledKey, true);
+  }
 
   message_handler_ = HWNDMessageHandler::Create(
       this, native_widget_delegate_->AsWidget()->GetName(),
@@ -185,8 +200,9 @@ void DesktopWindowTreeHostWin::Init(const Widget::InitParams& params) {
                         native_widget_delegate_.get());
 
   HWND parent_hwnd = nullptr;
-  if (params.parent && params.parent->GetHost())
+  if (params.parent && params.parent->GetHost()) {
     parent_hwnd = params.parent->GetHost()->GetAcceleratedWidget();
+  }
 
   remove_standard_frame_ = params.remove_standard_frame;
   has_non_client_view_ = Widget::RequiresNonClientView(params.type);
@@ -196,6 +212,35 @@ void DesktopWindowTreeHostWin::Init(const Widget::InitParams& params) {
   gfx::Rect pixel_bounds =
       display::win::ScreenWin::DIPToScreenRect(nullptr, params.bounds);
   message_handler_->Init(parent_hwnd, pixel_bounds);
+
+  // If the Redirection Surface is removed, there needs to be a replacement
+  // "background" of the Chromium window. `DWM_SYSTEMBACKDROP_TYPE` tells DWM
+  // to blur the contents behind the chromium window to yield a translucent
+  // "frosted glass" effect. This will show whenever the GPU crashes or is not
+  // ready by the time the window updates size or shape. Translucent windows
+  // do not need a backdrop as it would show up in unexpected ways - i.e. a
+  // gutter.
+  if (((message_handler_->window_ex_style() & WS_EX_NOREDIRECTIONBITMAP) ==
+       WS_EX_NOREDIRECTIONBITMAP) &&
+      !message_handler_->is_translucent()) {
+    // Observe the widget to update the backdrop when the color mode changes.
+    widget_observation_.Observe(GetWidget());
+
+    // Ensure that the hwnd has been created.
+    CHECK(GetHWND());
+    DWM_SYSTEMBACKDROP_TYPE backdrop = DWMSBT_TRANSIENTWINDOW;
+    HRESULT hr = DwmSetWindowAttribute(GetHWND(), DWMWA_SYSTEMBACKDROP_TYPE,
+                                       &backdrop, sizeof(backdrop));
+    CHECK_EQ(hr, S_OK);
+
+    // Ensure that the backdrop honors the OS dark mode setting.
+    BOOL use_dark_mode =
+        GetWidget()->GetColorMode() == ui::ColorProviderKey::ColorMode::kDark;
+    hr = DwmSetWindowAttribute(GetHWND(), DWMWA_USE_IMMERSIVE_DARK_MODE,
+                               &use_dark_mode, sizeof(use_dark_mode));
+    CHECK_EQ(hr, S_OK);
+  }
+
   CreateCompositor(params.force_software_compositing);
   OnAcceleratedWidgetAvailable();
   InitHost();
@@ -214,8 +259,9 @@ void DesktopWindowTreeHostWin::OnNativeWidgetCreated(
   // The cursor is not necessarily visible when the root window is created.
   aura::client::CursorClient* cursor_client =
       aura::client::GetCursorClient(window());
-  if (cursor_client)
+  if (cursor_client) {
     is_cursor_visible_ = cursor_client->IsCursorVisible();
+  }
 
   window()->SetProperty(kContentWindowForRootWindow, content_window());
   window()->SetProperty(kDesktopWindowTreeHostKey, this);
@@ -251,8 +297,9 @@ void DesktopWindowTreeHostWin::Close() {
   if (should_animate_window_close_) {
     pending_close_ = true;
     // Animation may not start for a number of reasons.
-    if (!window_layer->GetAnimator()->is_animating())
+    if (!window_layer->GetAnimator()->is_animating()) {
       message_handler_->Close();
+    }
     // else case, OnWindowHidingAnimationCompleted does the actual Close.
   } else {
     message_handler_->Close();
@@ -302,8 +349,9 @@ void DesktopWindowTreeHostWin::SetSize(const gfx::Size& size) {
 
 void DesktopWindowTreeHostWin::StackAbove(aura::Window* window) {
   HWND hwnd = HWNDForNativeView(window);
-  if (hwnd)
+  if (hwnd) {
     message_handler_->StackAbove(hwnd);
+  }
 }
 
 void DesktopWindowTreeHostWin::StackAtTop() {
@@ -386,8 +434,9 @@ void DesktopWindowTreeHostWin::SetShape(
     }
     shape.setRects(&sk_rects[0], static_cast<int>(sk_rects.size()));
   } else {
-    for (const gfx::Rect& rect : *native_shape)
+    for (const gfx::Rect& rect : *native_shape) {
       shape.op(gfx::RectToSkIRect(rect), SkRegion::kUnion_Op);
+    }
   }
 
   message_handler_->SetRegion(gfx::CreateHRGNFromSkRegion(shape));
@@ -449,8 +498,9 @@ ui::ZOrderLevel DesktopWindowTreeHostWin::GetZOrderLevel() const {
   bool window_always_on_top = message_handler_->IsAlwaysOnTop();
   bool level_always_on_top = z_order_ != ui::ZOrderLevel::kNormal;
 
-  if (window_always_on_top == level_always_on_top)
+  if (window_always_on_top == level_always_on_top) {
     return z_order_;
+  }
 
   // If something external has forced a window to be always-on-top, map it to
   // kFloatingWindow as a reasonable equivalent.
@@ -464,11 +514,13 @@ bool DesktopWindowTreeHostWin::IsStackedAbove(aura::Window* window) {
 
   // Child windows are always above their parent windows.
   // Check to see if HWNDs have a Parent-Child relationship.
-  if (IsChild(below, above))
+  if (IsChild(below, above)) {
     return true;
+  }
 
-  if (IsChild(above, below))
+  if (IsChild(above, below)) {
     return false;
+  }
 
   // Check all HWNDs with lower z order than current HWND
   // to see if it matches or is a parent to the "below" HWND.
@@ -533,9 +585,10 @@ void DesktopWindowTreeHostWin::SetVisibilityChangedAnimationsEnabled(
 
 std::unique_ptr<NonClientFrameView>
 DesktopWindowTreeHostWin::CreateNonClientFrameView() {
-  return ShouldUseNativeFrame() ? std::make_unique<NativeFrameView>(
-                                      native_widget_delegate_->AsWidget())
-                                : nullptr;
+  return (ShouldUseNativeFrame() && native_widget_delegate_)
+             ? std::make_unique<NativeFrameView>(
+                   native_widget_delegate_->AsWidget())
+             : nullptr;
 }
 
 bool DesktopWindowTreeHostWin::ShouldUseNativeFrame() const {
@@ -560,8 +613,9 @@ void DesktopWindowTreeHostWin::SetFullscreen(bool fullscreen,
                                              int64_t target_display_id) {
   auto weak_ptr = GetWeakPtr();
   message_handler_->SetFullscreen(fullscreen, target_display_id);
-  if (!weak_ptr)
+  if (!weak_ptr) {
     return;
+  }
   // TODO(sky): workaround for ScopedFullscreenVisibility showing window
   // directly. Instead of this should listen for visibility changes and then
   // update window.
@@ -637,8 +691,9 @@ void DesktopWindowTreeHostWin::ShowImpl() {
 }
 
 void DesktopWindowTreeHostWin::HideImpl() {
-  if (!pending_close_)
+  if (!pending_close_) {
     message_handler_->Hide();
+  }
 }
 
 // GetBoundsInPixels and SetBoundsInPixels work in pixel coordinates, whereas
@@ -687,13 +742,15 @@ void DesktopWindowTreeHostWin::SetBoundsInPixels(const gfx::Rect& bounds) {
 
 gfx::Rect
 DesktopWindowTreeHostWin::GetBoundsInAcceleratedWidgetPixelCoordinates() {
-  if (message_handler_->IsMinimized())
+  if (message_handler_->IsMinimized()) {
     return gfx::Rect();
+  }
   const gfx::Rect client_bounds =
       message_handler_->GetClientAreaBoundsInScreen();
   const gfx::Rect window_bounds = message_handler_->GetWindowBoundsInScreen();
-  if (window_bounds == client_bounds)
+  if (window_bounds == client_bounds) {
     return gfx::Rect(window_bounds.size());
+  }
   const gfx::Vector2d offset = client_bounds.origin() - window_bounds.origin();
   DCHECK(offset.x() >= 0 && offset.y() >= 0);
   return gfx::Rect(gfx::Point() + offset, client_bounds.size());
@@ -747,8 +804,9 @@ void DesktopWindowTreeHostWin::SetCursorNative(gfx::NativeCursor cursor) {
 }
 
 void DesktopWindowTreeHostWin::OnCursorVisibilityChangedNative(bool show) {
-  if (is_cursor_visible_ == show)
+  if (is_cursor_visible_ == show) {
     return;
+  }
   is_cursor_visible_ = show;
   ::ShowCursor(!!show);
 }
@@ -788,8 +846,9 @@ void DesktopWindowTreeHostWin::SetHostTransitionOffsets(
 }
 
 void DesktopWindowTreeHostWin::OnWindowHidingAnimationCompleted() {
-  if (pending_close_)
+  if (pending_close_) {
     message_handler_->Close();
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -850,8 +909,9 @@ bool DesktopWindowTreeHostWin::CanMinimize() const {
 }
 
 bool DesktopWindowTreeHostWin::CanActivate() const {
-  if (IsModalWindowActive())
+  if (IsModalWindowActive()) {
     return true;
+  }
   return native_widget_delegate_ ? native_widget_delegate_->CanActivate()
                                  : false;
 }
@@ -880,6 +940,9 @@ int DesktopWindowTreeHostWin::GetInitialShowState() const {
 
 int DesktopWindowTreeHostWin::GetNonClientComponent(
     const gfx::Point& point) const {
+  if (!native_widget_delegate_) {
+    return HTTRANSPARENT;
+  }
   gfx::Point dip_position =
       display::win::ScreenWin::ClientToDIPPoint(GetHWND(), point);
   return native_widget_delegate_->GetNonClientComponent(dip_position);
@@ -958,8 +1021,9 @@ void DesktopWindowTreeHostWin::HandleActivationChanged(bool active) {
   // This can be invoked from HWNDMessageHandler::Init(), at which point we're
   // not in a good state and need to ignore it.
   // TODO(beng): Do we need this still now the host owns the dispatcher?
-  if (!dispatcher())
+  if (!dispatcher()) {
     return;
+  }
 
   desktop_native_widget_aura_->HandleActivationChanged(active);
 }
@@ -1002,13 +1066,16 @@ void DesktopWindowTreeHostWin::HandleAccelerator(
 }
 
 void DesktopWindowTreeHostWin::HandleCreate() {
-  native_widget_delegate_->OnNativeWidgetCreated();
+  if (native_widget_delegate_) {
+    native_widget_delegate_->OnNativeWidgetCreated();
+  }
 }
 
 void DesktopWindowTreeHostWin::HandleDestroying() {
   drag_drop_client_->OnNativeWidgetDestroying(GetHWND());
-  if (native_widget_delegate_)
+  if (native_widget_delegate_) {
     native_widget_delegate_->OnNativeWidgetDestroying();
+  }
 
   // Destroy the compositor before destroying the HWND since shutdown
   // may try to swap to the window.
@@ -1075,20 +1142,24 @@ void DesktopWindowTreeHostWin::HandleWindowMinimizedOrRestored(bool restored) {
   // done. If a window is created minimized, and then activated, restoring
   // focus will fail because the root window is not visible, which is exposed by
   // ExtensionWindowCreateTest.AcceptState.
-  if (!native_widget_delegate_->IsNativeWidgetInitialized())
+  if (!native_widget_delegate_ ||
+      !native_widget_delegate_->IsNativeWidgetInitialized()) {
     return;
+  }
 
-  if (restored)
+  if (restored) {
     window()->Show();
-  else
+  } else {
     window()->Hide();
+  }
 }
 
 void DesktopWindowTreeHostWin::HandleClientSizeChanged(
     const gfx::Size& new_size) {
   CheckForMonitorChange();
-  if (dispatcher())
+  if (dispatcher()) {
     OnHostResizedInPixels(new_size);
+  }
 }
 
 void DesktopWindowTreeHostWin::HandleFrameChanged() {
@@ -1108,8 +1179,9 @@ void DesktopWindowTreeHostWin::HandleNativeBlur(HWND focused_window) {
 
 bool DesktopWindowTreeHostWin::HandleMouseEvent(ui::MouseEvent* event) {
   // Ignore native platform events for test purposes
-  if (ui::PlatformEventSource::ShouldIgnoreNativePlatformEvents())
+  if (ui::PlatformEventSource::ShouldIgnoreNativePlatformEvents()) {
     return true;
+  }
 
   SendEventToSink(event);
   return event->handled();
@@ -1215,8 +1287,9 @@ void DesktopWindowTreeHostWin::HandleInputLanguageChange(
 
 void DesktopWindowTreeHostWin::HandlePaintAccelerated(
     const gfx::Rect& invalid_rect) {
-  if (compositor())
+  if (compositor()) {
     compositor()->ScheduleRedrawRect(invalid_rect);
+  }
 }
 
 void DesktopWindowTreeHostWin::HandleMenuLoop(bool in_menu_loop) {
@@ -1249,8 +1322,9 @@ bool DesktopWindowTreeHostWin::HandleGestureEvent(ui::GestureEvent* event) {
 }
 
 void DesktopWindowTreeHostWin::HandleWindowSizeChanging() {
-  if (compositor())
+  if (compositor()) {
     compositor()->DisableSwapUntilResize();
+  }
 }
 
 void DesktopWindowTreeHostWin::HandleWindowSizeUnchanged() {
@@ -1258,8 +1332,9 @@ void DesktopWindowTreeHostWin::HandleWindowSizeUnchanged() {
   // changed (can occur on Windows 10 when snapping a window to the side of
   // the screen). In that case do a resize to the current size to reenable
   // swaps.
-  if (compositor())
+  if (compositor()) {
     compositor()->ReenableSwap();
+  }
 }
 
 void DesktopWindowTreeHostWin::HandleWindowScaleFactorChanged(
@@ -1346,22 +1421,24 @@ HWND DesktopWindowTreeHostWin::GetHWND() const {
 bool DesktopWindowTreeHostWin::IsModalWindowActive() const {
   // This function can get called during window creation which occurs before
   // dispatcher() has been created.
-  if (!dispatcher())
+  if (!dispatcher()) {
     return false;
+  }
 
   const auto is_active = [](const aura::Window* child) {
     return child->GetProperty(aura::client::kModalKey) !=
                ui::mojom::ModalType::kNone &&
            child->TargetVisibility();
   };
-  return base::ranges::any_of(window()->children(), is_active);
+  return std::ranges::any_of(window()->children(), is_active);
 }
 
 void DesktopWindowTreeHostWin::CheckForMonitorChange() {
   HMONITOR monitor_from_window =
       ::MonitorFromWindow(GetHWND(), MONITOR_DEFAULTTOPRIMARY);
-  if (monitor_from_window == last_monitor_from_window_)
+  if (monitor_from_window == last_monitor_from_window_) {
     return;
+  }
   last_monitor_from_window_ = monitor_from_window;
   OnHostDisplayChanged();
 }

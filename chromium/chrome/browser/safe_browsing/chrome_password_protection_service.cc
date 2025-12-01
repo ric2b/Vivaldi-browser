@@ -4,6 +4,7 @@
 
 #include "chrome/browser/safe_browsing/chrome_password_protection_service.h"
 
+#include <algorithm>
 #include <memory>
 #include <string>
 
@@ -15,7 +16,6 @@
 #include "base/metrics/user_metrics_action.h"
 #include "base/observer_list.h"
 #include "base/rand_util.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -52,12 +52,12 @@
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
+#include "components/safe_browsing/content/browser/content_unsafe_resource_util.h"
 #include "components/safe_browsing/content/browser/password_protection/password_protection_commit_deferring_condition.h"
 #include "components/safe_browsing/content/browser/password_protection/password_protection_request_content.h"
 #include "components/safe_browsing/content/browser/safe_browsing_navigation_observer_manager.h"
 #include "components/safe_browsing/content/browser/triggers/trigger_throttler.h"
 #include "components/safe_browsing/content/browser/ui_manager.h"
-#include "components/safe_browsing/content/browser/unsafe_resource_util.h"
 #include "components/safe_browsing/content/browser/web_contents_key.h"
 #include "components/safe_browsing/content/browser/web_ui/safe_browsing_ui.h"
 #include "components/safe_browsing/core/browser/db/database_manager.h"
@@ -71,10 +71,12 @@
 #include "components/safe_browsing/core/common/safebrowsing_constants.h"
 #include "components/safe_browsing/core/common/utils.h"
 #include "components/security_interstitials/core/unsafe_resource.h"
+#include "components/security_interstitials/core/unsafe_resource_locator.h"
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/account_managed_status_finder.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
+#include "components/signin/public/identity_manager/signin_constants.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/sync/protocol/user_event_specifics.pb.h"
 #include "components/sync/service/sync_service.h"
@@ -131,6 +133,7 @@ using PasswordReuseEvent =
     safe_browsing::LoginReputationClientRequest::PasswordReuseEvent;
 using SafeBrowsingStatus =
     GaiaPasswordReuse::PasswordReuseDetected::SafeBrowsingStatus;
+using signin::constants::kNoHostedDomainFound;
 
 namespace safe_browsing {
 
@@ -423,8 +426,6 @@ bool ChromePasswordProtectionService::ShouldShowPasswordReusePageInfoBubble(
 safe_browsing::LoginReputationClientRequest::UrlDisplayExperiment
 ChromePasswordProtectionService::GetUrlDisplayExperiment() const {
   safe_browsing::LoginReputationClientRequest::UrlDisplayExperiment experiment;
-  experiment.set_simplified_url_display_enabled(
-      base::FeatureList::IsEnabled(safe_browsing::kSimplifiedUrlDisplay));
   // Delayed warnings parameters:
   experiment.set_delayed_warnings_enabled(
       base::FeatureList::IsEnabled(safe_browsing::kDelayedWarnings));
@@ -562,8 +563,8 @@ void ChromePasswordProtectionService::ShowInterstitial(
       base::NumberToString(static_cast<std::underlying_type_t<PasswordType>>(
           ConvertReusedPasswordAccountTypeToPasswordType(password_type)));
 
-  params.post_data = network::ResourceRequestBody::CreateFromBytes(
-      post_data.data(), post_data.size());
+  params.post_data = network::ResourceRequestBody::CreateFromCopyOfBytes(
+      base::as_byte_span(post_data));
   web_contents->OpenURL(params, /*navigation_handle_callback=*/{});
 
   LogWarningAction(WarningUIType::INTERSTITIAL, WarningAction::SHOWN,
@@ -662,8 +663,10 @@ void ChromePasswordProtectionService::MaybeStartThreatDetailsCollection(
         SBThreatType::SB_THREAT_TYPE_SIGNED_IN_NON_SYNC_PASSWORD_REUSE;
   }
   resource.url = web_contents->GetLastCommittedURL();
-  resource.render_process_id = primary_main_frame_id.child_id;
-  resource.render_frame_token = primary_main_frame->GetFrameToken().value();
+  resource.rfh_locator =
+      security_interstitials::UnsafeResourceLocator::CreateForRenderFrameToken(
+          primary_main_frame_id.child_id,
+          primary_main_frame->GetFrameToken().value());
   resource.token = token;
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory =
       profile_->GetDefaultStoragePartition()
@@ -676,8 +679,8 @@ void ChromePasswordProtectionService::MaybeStartThreatDetailsCollection(
       url_loader_factory, /*history_service=*/nullptr,
       SafeBrowsingNavigationObserverManagerFactory::GetForBrowserContext(
           profile_),
-      TriggerManager::GetSBErrorDisplayOptions(*profile_->GetPrefs(),
-                                               web_contents));
+      TriggerManager::GetDataCollectionPermissions(*profile_->GetPrefs(),
+                                                   web_contents));
 }
 
 void ChromePasswordProtectionService::MaybeFinishCollectingThreatDetails(
@@ -694,8 +697,8 @@ void ChromePasswordProtectionService::MaybeFinishCollectingThreatDetails(
       safe_browsing::TriggerType::GAIA_PASSWORD_REUSE,
       GetWebContentsKey(web_contents), base::Milliseconds(0), did_proceed,
       /*num_visits=*/0,
-      TriggerManager::GetSBErrorDisplayOptions(*profile_->GetPrefs(),
-                                               web_contents));
+      TriggerManager::GetDataCollectionPermissions(*profile_->GetPrefs(),
+                                                   web_contents));
 }
 
 void ChromePasswordProtectionService::MaybeLogPasswordReuseDetectedEvent(
@@ -1249,7 +1252,7 @@ std::string ChromePasswordProtectionService::GetOrganizationName(
   if (base::FeatureList::IsEnabled(
           safe_browsing::kEnterprisePasswordReuseUiRefresh)) {
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
-    return GetPrefs()->GetString(prefs::kEnterpriseCustomLabel);
+    return GetPrefs()->GetString(prefs::kEnterpriseCustomLabelForProfile);
 #else
     return std::string();
 #endif
@@ -1657,8 +1660,8 @@ AccountInfo ChromePasswordProtectionService::GetAccountInfoForUsername(
 
   std::vector<CoreAccountInfo> signed_in_accounts =
       identity_manager->GetAccountsWithRefreshTokens();
-  auto account_iterator = base::ranges::find_if(
-      signed_in_accounts, [username](const auto& account) {
+  auto account_iterator =
+      std::ranges::find_if(signed_in_accounts, [username](const auto& account) {
         return password_manager::AreUsernamesSame(
             account.email,
             /*is_username1_gaia_account=*/true, username,
@@ -1677,20 +1680,6 @@ bool ChromePasswordProtectionService::IsInExcludedCountry() {
     return false;
   return base::Contains(GetExcludedCountries(),
                         variations_service->GetLatestCountry());
-}
-
-PasswordReuseEvent::SyncAccountType
-ChromePasswordProtectionService::GetSyncAccountType() const {
-  const AccountInfo account_info = GetAccountInfo();
-  if (!IsPrimaryAccountSignedIn()) {
-    return PasswordReuseEvent::NOT_SIGNED_IN;
-  }
-
-  // For gmail or googlemail account, the hosted_domain will always be
-  // kNoHostedDomainFound.
-  return account_info.hosted_domain == kNoHostedDomainFound
-             ? PasswordReuseEvent::GMAIL
-             : PasswordReuseEvent::GSUITE;
 }
 
 void ChromePasswordProtectionService::
@@ -1891,12 +1880,13 @@ void ChromePasswordProtectionService::RemovePhishedSavedPasswordCredential(
 }
 
 #if BUILDFLAG(IS_ANDROID)
-LoginReputationClientRequest::ReferringAppInfo
-ChromePasswordProtectionService::GetReferringAppInfo(
+ReferringAppInfo ChromePasswordProtectionService::GetReferringAppInfo(
     content::WebContents* web_contents) {
-  ReferringAppInfo info_struct =
-      safe_browsing::GetReferringAppInfo(web_contents);
-  LoginReputationClientRequest::ReferringAppInfo info_proto;
+  // Do not get WebAPK info for PhishGuard. We don't consume referring WebAPK
+  // data for password reuse events.
+  internal::ReferringAppInfo info_struct = safe_browsing::GetReferringAppInfo(
+      web_contents, /*get_webapk_info=*/false);
+  ReferringAppInfo info_proto;
   info_proto.set_referring_app_source(info_struct.referring_app_source);
   info_proto.set_referring_app_name(info_struct.referring_app_name);
   return info_proto;

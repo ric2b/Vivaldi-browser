@@ -22,7 +22,7 @@ export function getHtml(this: DataSectionElement) {
         <cr-toggle id="toggle"
             @checked-changed=${this.onToggleChanged_}
             ?checked="${!this.disabled_}"
-            aria-label="${this.titleWithoutCount_}">
+            aria-label="${this.getToggleAriaLabel_()}">
         </cr-toggle>
       </div>
       <cr-collapse id="collapse" .opened="${this.expanded_}">
@@ -33,14 +33,14 @@ export function getHtml(this: DataSectionElement) {
             <cr-checkbox class="item-checkbox"
                 data-id="${item.id}"
                 ?checked="${this.isCheckboxChecked_(item.id)}"
-                @change="${this.onCheckedChanged_}">
+                @change="${this.onCheckedChanged_}"
+                @focus="${this.onCheckboxFocused_}">
                 ${item.title}, ${item.subtitle}
             </cr-checkbox>
             <div class="data-item-content">
               <div class="item-icon-container"
                   ?hidden="${this.isStrEmpty_(item.iconUrl)}">
-                <img class="item-icon" alt=""
-                    src="${this.getFaviconUrl_(item.iconUrl)}">
+                <img class="item-icon" alt="" src="${item.iconUrl}">
               </div>
               <div class="item-info">
                 <div class="item-title text-elide" aria-hidden="true">

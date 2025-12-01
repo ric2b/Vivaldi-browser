@@ -57,7 +57,7 @@ public class IncognitoNotificationManager {
             builder.setSmallIcon(R.drawable.vivaldi_private_page_favicon_small);
 
         NotificationWrapper notification = builder.buildNotificationWrapper();
-        BaseNotificationManagerProxyFactory.create(context).notify(notification);
+        BaseNotificationManagerProxyFactory.create().notify(notification);
         NotificationUmaTracker.getInstance()
                 .onNotificationShown(
                         NotificationUmaTracker.SystemNotificationType.CLOSE_INCOGNITO,
@@ -66,8 +66,7 @@ public class IncognitoNotificationManager {
 
     /** Dismisses the incognito notification. */
     public static void dismissIncognitoNotification() {
-        Context context = ContextUtils.getApplicationContext();
-        BaseNotificationManagerProxyFactory.create(context)
+        BaseNotificationManagerProxyFactory.create()
                 .cancel(INCOGNITO_TABS_OPEN_TAG, INCOGNITO_TABS_OPEN_ID);
     }
 }

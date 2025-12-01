@@ -23,7 +23,7 @@ including additional round trips for connection setup, slow-start delays, and a
 constant rationing by the client where it tries to avoid opening too many
 connections to a single server. HTTP "pipelining" doesn't help, as each
 connection may be blocked on the request at the <a
-href="http://en.wikipedia.org/wiki/Head-of-line_blocking">head of the line</a>;
+href="https://en.wikipedia.org/wiki/Head-of-line_blocking">head of the line</a>;
 in addition, many proxies have poor support for pipelining. Web applications, in
 their desire to create many connections, create many sub-domains to work around
 browser per-domain connection throttling.</td>
@@ -407,7 +407,7 @@ used in a frames which are part of this stream.</td>
 <td> NV entries: (16 bits) The number of name/value pairs that follow. </td>
 
 <td>The <a
-href="http://www.chromium.org/spdy-protocol/spdy-protocol-draft2#TOC-Name-Value-header-block-format">Name/Value
+href="https://www.chromium.org/spdy-protocol/spdy-protocol-draft2#TOC-Name-Value-header-block-format">Name/Value
 block</a> is described below.</td>
 
 <td>If an endpoint receives multiple SYN_REPLY frames for the same active stream
@@ -851,7 +851,7 @@ applications. This means that, from the perspective of the server business logic
 or application API, the features of HTTP must not change. To achieve this, all
 of the application request and response header semantics are preserved, although
 the syntax of conveying those semantics has changed. Thus, the rules from the <a
-href="http://www.w3.org/Protocols/rfc2616/rfc2616.html">HTTP/1.1 specification
+href="https://www.w3.org/Protocols/rfc2616/rfc2616.html">HTTP/1.1 specification
 in RFC 2616</a> apply with the changes in the sections below.</td>
 
 <td>Standard Transactions</td>
@@ -1045,7 +1045,7 @@ asynchronously in the stream.</td>
 
 <td>TODO(mbelshe): Define how HTTP Trailers should work: "For HTTP, the rules
 for http trailers apply, as specified in: <a
-href="http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.40">http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.40</a>"</td>
+href="https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.40">https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.40</a>"</td>
 
 <td>### Deployment</td>
 

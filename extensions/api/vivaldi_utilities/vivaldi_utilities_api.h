@@ -29,9 +29,9 @@
 
 #include "browser/translate/vivaldi_translate_server_request.h"
 #include "components/datasource/vivaldi_image_store.h"
-#include "components/direct_match/direct_match_service.h"
 #include "extensions/schema/vivaldi_utilities.h"
 #include "ui/lights/razer_chroma_handler.h"
+#include "chrome/common/extensions/webstore_install_result.h"
 
 class Browser;
 class Profile;
@@ -95,7 +95,7 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
 
   // PowerObserver implementation
   void OnBatteryPowerStatusChange(base::PowerStateObserver::BatteryPowerStatus
-                              battery_power_status) override;
+                                      battery_power_status) override;
   void OnSuspend() override;
   void OnResume() override;
 
@@ -103,7 +103,7 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
   void OnManagerInitialized() override;
   void ManagerGoingDown(content::DownloadManager* manager) override;
   void OnDownloadCreated(content::DownloadManager* manager,
-                                   download::DownloadItem* item) override;
+                         download::DownloadItem* item) override;
 
   // DownloadItem::Observer
   void OnDownloadUpdated(download::DownloadItem* download) override;
@@ -119,7 +119,7 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
   // Set RGB color of the configured Razer Chroma devices.
   bool SetRazerChromaColors(RazerChromaColors& colors);
 
-  //history::TopSitesObserver
+  // history::TopSitesObserver
   void TopSitesLoaded(history::TopSites* top_sites) override;
   void TopSitesChanged(
       history::TopSites* top_sites,
@@ -1070,45 +1070,11 @@ class UtilitiesReadImageFunction : public ExtensionFunction {
 
 class UtilitiesIsRTLFunction : public ExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("utilities.isRTL",
-                             UTILITIES_IS_RTL)
+  DECLARE_EXTENSION_FUNCTION("utilities.isRTL", UTILITIES_IS_RTL)
   UtilitiesIsRTLFunction() = default;
 
  private:
   ~UtilitiesIsRTLFunction() override = default;
-  ResponseAction Run() override;
-};
-
-class UtilitiesGetDirectMatchFunction : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("utilities.getDirectMatch",
-                             UTILITIES_GET_DIRECT_MATCH)
-  UtilitiesGetDirectMatchFunction() = default;
-
- private:
-  ~UtilitiesGetDirectMatchFunction() override = default;
-  ResponseAction Run() override;
-};
-
-class UtilitiesGetDirectMatchPopularSitesFunction : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("utilities.GetDirectMatchPopularSites",
-                             UTILITIES_GET_DIRECT_MATCH_POPULAR_SITES)
-  UtilitiesGetDirectMatchPopularSitesFunction() = default;
-
- private:
-  ~UtilitiesGetDirectMatchPopularSitesFunction() override = default;
-  ResponseAction Run() override;
-};
-
-class UtilitiesGetDirectMatchesForCategoryFunction : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("utilities.GetDirectMatchesForCategory",
-                             UTILITIES_GET_DIRECT_MATCH_FOR_CATEGORY)
-  UtilitiesGetDirectMatchesForCategoryFunction() = default;
-
- private:
-  ~UtilitiesGetDirectMatchesForCategoryFunction() override = default;
   ResponseAction Run() override;
 };
 
@@ -1180,6 +1146,20 @@ class UtilitiesAcknowledgeCrashedSessionFunction : public ExtensionFunction {
  private:
   ~UtilitiesAcknowledgeCrashedSessionFunction() override = default;
   ResponseAction Run() override;
+};
+
+class UtilitiesSilentlyInstallExtensionFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.silentlyInstallExtension",
+                             UTILITIES_SILENTLY_INSTALL_EXTENSION)
+  UtilitiesSilentlyInstallExtensionFunction() = default;
+
+ private:
+  ~UtilitiesSilentlyInstallExtensionFunction() override = default;
+  ResponseAction Run() override;
+  void OnExtensionInstalled(bool success,
+                            const std::string& error,
+                            webstore_install::Result result);
 };
 
 }  // namespace extensions

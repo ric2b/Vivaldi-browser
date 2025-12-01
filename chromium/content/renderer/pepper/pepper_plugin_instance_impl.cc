@@ -9,6 +9,7 @@
 
 #include "content/renderer/pepper/pepper_plugin_instance_impl.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "base/containers/contains.h"
@@ -19,7 +20,6 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/not_fatal_until.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_offset_string_conversions.h"
@@ -752,6 +752,7 @@ void PepperPluginInstanceImpl::PassCommittedTextureToTextureLayer() {
       weak_factory_.GetWeakPtr(), committed_texture_,
       committed_texture_graphics_3d_));
 
+  committed_texture_.origin = kBottomLeft_GrSurfaceOrigin;
   IncrementTextureReferenceCount(committed_texture_);
   texture_layer_->SetTransferableResource(committed_texture_,
                                           std::move(callback));
@@ -945,8 +946,8 @@ bool PepperPluginInstanceImpl::
   // Set the composition target.
   for (size_t i = 0; i < ime_text_spans.size(); ++i) {
     if (ime_text_spans[i].thickness == ui::ImeTextSpan::Thickness::kThick) {
-      auto it = base::ranges::find(event.composition_segment_offsets,
-                                   utf8_offsets[2 * i + 2]);
+      auto it = std::ranges::find(event.composition_segment_offsets,
+                                  utf8_offsets[2 * i + 2]);
       if (it != event.composition_segment_offsets.end()) {
         event.composition_target_segment =
             it - event.composition_segment_offsets.begin();
@@ -1783,7 +1784,6 @@ void PepperPluginInstanceImpl::UpdateLayer(bool force_creation) {
       texture_layer_ = cc::TextureLayer::CreateForMailbox(this);
       bound_graphics_2d_platform_->AttachedToNewLayer();
       opaque = bound_graphics_2d_platform_->IsAlwaysOpaque();
-      texture_layer_->SetFlipped(false);
     }
 
     // Ignore transparency in fullscreen.
@@ -1799,13 +1799,12 @@ void PepperPluginInstanceImpl::UpdateLayer(bool force_creation) {
 }
 
 bool PepperPluginInstanceImpl::PrepareTransferableResource(
-    cc::SharedBitmapIdRegistrar* bitmap_registrar,
     viz::TransferableResource* transferable_resource,
     viz::ReleaseCallback* release_callback) {
   if (!bound_graphics_2d_platform_)
     return false;
   return bound_graphics_2d_platform_->PrepareTransferableResource(
-      bitmap_registrar, transferable_resource, release_callback);
+      transferable_resource, release_callback);
 }
 
 void PepperPluginInstanceImpl::OnDestruct() {
@@ -2690,8 +2689,8 @@ void PepperPluginInstanceImpl::ConvertDIPToViewport(gfx::Rect* rect) const {
 
 void PepperPluginInstanceImpl::IncrementTextureReferenceCount(
     const viz::TransferableResource& resource) {
-  auto it = base::ranges::find(texture_ref_counts_, resource.mailbox(),
-                               &MailboxRefCount::first);
+  auto it = std::ranges::find(texture_ref_counts_, resource.mailbox(),
+                              &MailboxRefCount::first);
   if (it == texture_ref_counts_.end()) {
     texture_ref_counts_.emplace_back(resource.mailbox(), 1);
     return;
@@ -2702,8 +2701,8 @@ void PepperPluginInstanceImpl::IncrementTextureReferenceCount(
 
 bool PepperPluginInstanceImpl::DecrementTextureReferenceCount(
     const viz::TransferableResource& resource) {
-  auto it = base::ranges::find(texture_ref_counts_, resource.mailbox(),
-                               &MailboxRefCount::first);
+  auto it = std::ranges::find(texture_ref_counts_, resource.mailbox(),
+                              &MailboxRefCount::first);
   CHECK(it != texture_ref_counts_.end(), base::NotFatalUntil::M130);
 
   if (it->second == 1) {

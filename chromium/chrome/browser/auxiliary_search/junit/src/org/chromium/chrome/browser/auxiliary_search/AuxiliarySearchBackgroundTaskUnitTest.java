@@ -37,13 +37,13 @@ import org.chromium.base.FakeTimeTestRule;
 import org.chromium.base.TimeUtils;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.HistogramWatcher;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.auxiliary_search.AuxiliarySearchBackgroundTask.DonateResult;
 import org.chromium.chrome.browser.auxiliary_search.AuxiliarySearchGroupProto.AuxiliarySearchEntry;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper.FaviconImageCallback;
+import org.chromium.chrome.browser.ui.favicon.FaviconHelperJni;
 import org.chromium.components.background_task_scheduler.BackgroundTask;
 import org.chromium.components.background_task_scheduler.NativeBackgroundTask;
 import org.chromium.components.background_task_scheduler.TaskIds;
@@ -61,9 +61,10 @@ import java.util.Map;
         shadows = {ShadowSystemClock.class})
 @RunWith(BaseRobolectricTestRunner.class)
 public class AuxiliarySearchBackgroundTaskUnitTest {
+    private static final long FAKE_NATIVE_PTR = 1L;
+
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
-    @Rule public JniMocker mJniMocker = new JniMocker();
-    public @Rule FakeTimeTestRule mFakeTime = new FakeTimeTestRule();
+    @Rule public FakeTimeTestRule mFakeTime = new FakeTimeTestRule();
 
     private static final int TAB_ID_1 = 1;
     private static final int TAB_ID_2 = 2;
@@ -73,6 +74,7 @@ public class AuxiliarySearchBackgroundTaskUnitTest {
     private static final GURL URL_1 = JUnitTestGURLs.URL_1;
     private static final GURL URL_2 = JUnitTestGURLs.URL_2;
 
+    @Mock private FaviconHelper.Natives mFaviconHelperJniMock;
     @Mock private Context mContext;
     @Mock private Resources mResources;
     @Mock private Profile mProfile;
@@ -88,6 +90,9 @@ public class AuxiliarySearchBackgroundTaskUnitTest {
 
     @Before
     public void setUp() throws Exception {
+        FaviconHelperJni.setInstanceForTesting(mFaviconHelperJniMock);
+        when(mFaviconHelperJniMock.init()).thenReturn(FAKE_NATIVE_PTR);
+
         ProfileManager.setLastUsedProfileForTesting(mProfile);
 
         when(mContext.getResources()).thenReturn(mResources);

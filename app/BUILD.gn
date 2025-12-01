@@ -315,8 +315,12 @@ if(is_ios) {
       "//vivaldi/app:vivaldi_native_strings",
       "//vivaldi/app:vivaldi_ios_native_strings",
     ]
-    input_locales = vivaldi_pending_locales - ["ca@valencia"] + ["ca-valencia"]
-    output_locales = vivaldi_pending_locales - ["ca@valencia"] + ["ca-valencia"]
+    input_locales =
+        vivaldi_pending_locales -
+            vivaldi_pending_ios_unsupported_locales
+    output_locales =
+        vivaldi_pending_locales -
+            vivaldi_pending_ios_unsupported_locales
     copy_data_to_bundle = true
   }
 }

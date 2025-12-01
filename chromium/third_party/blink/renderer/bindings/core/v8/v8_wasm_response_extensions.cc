@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "third_party/blink/renderer/bindings/core/v8/v8_wasm_response_extensions.h"
 
 #include "base/debug/dump_without_crashing.h"
@@ -40,7 +35,7 @@
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/loader/fetch/cached_metadata.h"
-#include "third_party/blink/renderer/platform/loader/fetch/script_cached_metadata_handler.h"
+#include "third_party/blink/renderer/platform/loader/fetch/url_loader/cached_metadata_handler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_copier_base.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
@@ -132,9 +127,11 @@ class WasmCodeCachingCallback {
         kWasmModuleTag, kWireBytesDigestSize + base::checked_cast<wtf_size_t>(
                                                    serialized_module.size));
     serialized_data.AppendSpan(base::span(wire_bytes_digest));
-    serialized_data.Append(
+    // SAFETY: v8::CompiledWasmModule::Serialize ensures the
+    // serialized_module.buffer size is equal to serialized_module.size.
+    serialized_data.AppendSpan(UNSAFE_BUFFERS(base::span(
         reinterpret_cast<const uint8_t*>(serialized_module.buffer.get()),
-        base::checked_cast<wtf_size_t>(serialized_module.size));
+        serialized_module.size)));
 
     // Make sure the data could be copied.
     if (serialized_data.size() < serialized_module.size)
@@ -170,7 +167,7 @@ class FetchDataLoaderForWasmStreaming final : public FetchDataLoader,
       const String& url,
       std::shared_ptr<v8::WasmStreaming> streaming,
       ScriptState* script_state,
-      ScriptCachedMetadataHandler* cache_handler,
+      CachedMetadataHandler* cache_handler,
       std::shared_ptr<WasmCodeCachingCallback> code_caching_callback)
       : url_(url),
         streaming_(std::move(streaming)),
@@ -417,7 +414,7 @@ class FetchDataLoaderForWasmStreaming final : public FetchDataLoader,
   Member<FetchDataLoader::Client> client_;
   std::shared_ptr<v8::WasmStreaming> streaming_;
   const Member<ScriptState> script_state_;
-  Member<ScriptCachedMetadataHandler> cache_handler_;
+  Member<CachedMetadataHandler> cache_handler_;
   std::shared_ptr<WasmCodeCachingCallback> code_caching_callback_;
   CodeCacheState code_cache_state_ = CodeCacheState::kBeforeFirstByte;
   Digestor digestor_{kHashAlgorithmSha256};

@@ -108,7 +108,7 @@ When present, we tend to use variations on a theme for the announcement box on
 top of the waterfall (and some other) pages. We use the announcement to
 abbreviate and present other interesting state information. The top bar and it's
 color represents the
-[state](http://www.chromium.org/developers/tree-sheriffs/sheriff-details-chromium-os#TOC-How-do-I-read-the-waterfall-)
+[state](/developers/tree-sheriffs/sheriff-details-chromium-os#TOC-How-do-I-read-the-waterfall-)
 of the tree, including the current
 [message](http://chromiumos-status.appspot.com/). Under that there are 2 panes.
 
@@ -147,7 +147,7 @@ have an idea about to understand the big picture:
 
 Currently the set of columns and the allocations of bots to back them is managed
 by the Chrome Infrastructure team, please file an
-[Infrastructure](https://goto.google.com/cros-infra-bug)
+[Infrastructure](http://go/cros-infra-bug)
 bug OS-Chrome to start the process of correcting it. Please
 describe the type of build, and the cbuildbot configuration it should be
 running.

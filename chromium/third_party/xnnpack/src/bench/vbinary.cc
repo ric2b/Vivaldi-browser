@@ -40,7 +40,7 @@ struct UniformDistribution<xnn_float16> {
 
   template <class Generator>
   xnn_float16 operator()(Generator& g) {
-    return dist(g);
+    return static_cast<xnn_float16>(dist(g));
   }
 };
 
@@ -212,5 +212,5 @@ static void vbinary(benchmark::State& state, uint64_t arch_flags,
 #undef XNN_UKERNEL_WITH_PARAMS
 
 #ifndef XNNPACK_BENCHMARK_NO_MAIN
-BENCHMARK_MAIN();
+XNN_BENCHMARK_MAIN();
 #endif

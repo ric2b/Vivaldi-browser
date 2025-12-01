@@ -56,7 +56,7 @@ title: July 2019
 
 <td><td>Complex Crash Bugs</td></td>
 
-<td><td>Chromium is a big codebase, and sometimes simple looking crash bugs can turn out to have complex causes. Thankfully these bugs are no match for Rob (flackr@) and guest star Dana (danakj@) who tackled <a href="http://crbug.com/974218">such a bug</a> this sprint.</td></td>
+<td><td>Chromium is a big codebase, and sometimes simple looking crash bugs can turn out to have complex causes. Thankfully these bugs are no match for Rob (flackr@) and guest star Dana (danakj@) who tackled <a href="https://crbug.com/974218">such a bug</a> this sprint.</td></td>
 <td><td>After multiple weeks of effort they tracked the crash to an old scheduler experiment which was unexpectedly re-ordering IPC calls! <a href="https://chromium-review.googlesource.com/c/chromium/src/+/1692577">Disable the experiment</a>, and the crash was fixed. Magic, or perhaps just <a href="https://en.wikipedia.org/wiki/Clarke%27s_three_laws">sufficiently advanced debugging</a>.</td></td>
 
 <td><td><img alt="image" src="https://lh5.googleusercontent.com/_d5BW7phRaKRlndSuxtEz8gidiwiNmYZ8NzvSpX5Iv9FplDwBinrCUcp1SgTKN1oazrAqRZYAvm3E68YfGx08KfLUEATZgD4wvIyuRd2LTGxTvOc21iS9aQIxwW-YQwC3oZmao53" height=121 width=286></td></td>
@@ -76,7 +76,7 @@ title: July 2019
 
 <td>It's a colorful world</td>
 
-<td>While discussing a <a href="http://crbug.com/981326">color interpolation bug</a> that Xida (xidachen@) was working on, he and George (gtsteel@) realized that by spec colors interpolate in the sRGB colorspace. This is unfortunate as sRGB is a non-linear space which results in less natural looking animations than the linear RGB space. George began investigating the possibility of adding RGB interpolation support to the various animation specs, however luckily we discovered that the <a href="https://www.w3.org/TR/css-color-4">css-color-4</a> spec is working on allowing web developers to <a href="https://www.w3.org/TR/css-color-4/#working-color-space">change the page's color space</a> which should also fix animations for developers who opt in.</td>
+<td>While discussing a <a href="https://crbug.com/981326">color interpolation bug</a> that Xida (xidachen@) was working on, he and George (gtsteel@) realized that by spec colors interpolate in the sRGB colorspace. This is unfortunate as sRGB is a non-linear space which results in less natural looking animations than the linear RGB space. George began investigating the possibility of adding RGB interpolation support to the various animation specs, however luckily we discovered that the <a href="https://www.w3.org/TR/css-color-4">css-color-4</a> spec is working on allowing web developers to <a href="https://www.w3.org/TR/css-color-4/#working-color-space">change the page's color space</a> which should also fix animations for developers who opt in.</td>
 
 </tr>
 </table>

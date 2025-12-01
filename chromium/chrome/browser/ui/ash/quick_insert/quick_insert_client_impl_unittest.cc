@@ -9,7 +9,6 @@
 #include <string>
 #include <utility>
 
-#include "ash/constants/ash_features.h"
 #include "ash/quick_insert/quick_insert_controller.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
@@ -47,6 +46,7 @@
 #include "components/omnibox/browser/autocomplete_provider.h"
 #include "components/user_manager/fake_user_manager.h"
 #include "content/public/test/test_utils.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -74,26 +74,6 @@ using ::testing::UnorderedElementsAre;
 using ::testing::VariantWith;
 
 namespace fmp = extensions::api::file_manager_private;
-
-class TestFaviconService : public favicon::MockFaviconService {
- public:
-  TestFaviconService() = default;
-  TestFaviconService(const TestFaviconService&) = delete;
-  TestFaviconService& operator=(const TestFaviconService&) = delete;
-  ~TestFaviconService() override = default;
-
-  // favicon::FaviconService:
-  base::CancelableTaskTracker::TaskId GetFaviconImageForPageURL(
-      const GURL& page_url,
-      favicon_base::FaviconImageCallback callback,
-      base::CancelableTaskTracker* tracker) override {
-    page_url_ = page_url;
-    std::move(callback).Run(favicon_base::FaviconImageResult());
-    return {};
-  }
-
-  GURL page_url_;
-};
 
 bool CreateTestFile(const base::FilePath& path) {
   base::ScopedAllowBlockingForTesting allow_blocking;
@@ -194,20 +174,6 @@ class QuickInsertClientImplTest : public BrowserWithTestWindowTest {
  public:
   QuickInsertClientImplTest() = default;
 
-  void SetUp() override {
-    ash::CrosDisksClient::InitializeFake();
-    ash::disks::DiskMountManager::InitializeForTesting(
-        new ash::disks::FakeDiskMountManager());
-
-    BrowserWithTestWindowTest::SetUp();
-  }
-  void TearDown() override {
-    BrowserWithTestWindowTest::TearDown();
-
-    ash::disks::DiskMountManager::Shutdown();
-    ash::CrosDisksClient::Shutdown();
-  }
-
   scoped_refptr<network::SharedURLLoaderFactory> GetSharedURLLoaderFactory() {
     return test_shared_url_loader_factory_;
   }
@@ -218,17 +184,16 @@ class QuickInsertClientImplTest : public BrowserWithTestWindowTest {
 
   // Creates a user and profile for a given `email`. Note that this class will
   // keep the ownership of the created object.
-  TestingProfile* CreateMultiUserProfile(const std::string& email) {
-    LogIn(email);
+  TestingProfile* CreateMultiUserProfile(const std::string& email,
+                                         const GaiaId& gaia_id) {
+    LogIn(email, gaia_id);
     return CreateProfile(email);
   }
 
   TestingProfile* CreateProfile(const std::string& profile_name) override {
-    auto* profile = profile_manager()->CreateTestingProfile(
+    return profile_manager()->CreateTestingProfile(
         profile_name, GetTestingFactories(), /*is_main_profile=*/false,
         test_shared_url_loader_factory_);
-    OnUserProfileCreated(profile_name, profile);
-    return profile;
   }
 
   TestingProfile::TestingFactories GetTestingFactories() override {
@@ -256,11 +221,10 @@ class QuickInsertClientImplTest : public BrowserWithTestWindowTest {
                 &ash::input_method::EditorMediatorFactory::BuildInstanceFor)}};
   }
 
-  void LogIn(const std::string& email) override {
+  void LogIn(std::string_view email, const GaiaId& gaia_id) override {
     // DriveFS needs the account to have an ID.
-    const AccountId account_id = AccountId::FromUserEmailGaiaId(email, email);
-    user_manager()->AddUser(account_id);
-    ash_test_helper()->test_session_controller_client()->AddUserSession(email);
+    const AccountId account_id = AccountId::FromUserEmailGaiaId(email, gaia_id);
+    user_manager()->AddGaiaUser(account_id, user_manager::UserType::kRegular);
     user_manager()->UserLoggedIn(
         account_id,
         user_manager::FakeUserManager::GetFakeUsernameHash(account_id),
@@ -270,7 +234,7 @@ class QuickInsertClientImplTest : public BrowserWithTestWindowTest {
 
   void SwitchActiveUser(const std::string& email) override {
     user_manager()->SwitchActiveUser(
-        AccountId::FromUserEmailGaiaId(email, email));
+        AccountId::FromUserEmailGaiaId(email, GaiaId(email)));
   }
 
  private:
@@ -547,82 +511,12 @@ TEST_F(QuickInsertClientImplTest, GetRecentDriveFilesTruncates) {
   EXPECT_THAT(future.Get(), SizeIs(1));
 }
 
-TEST_F(QuickInsertClientImplTest, GetSuggestedLinkResultsReturnsLinks) {
-  ash::QuickInsertController controller;
-  QuickInsertClientImpl client(&controller, user_manager());
-  const base::Time now = base::Time::Now();
-  AddSearchToHistory(profile(), GURL("http://a.com/history"),
-                     now - base::Seconds(1));
-  AddSearchToHistory(profile(), GURL("http://b.com/history"), now);
-  TestFaviconService favicon_service;
-  client.get_link_suggester_for_test()->set_favicon_service_for_test(
-      &favicon_service);
-
-  base::test::TestFuture<std::vector<ash::QuickInsertSearchResult>> future;
-  client.GetSuggestedLinkResults(100u, future.GetRepeatingCallback());
-
-  EXPECT_THAT(
-      future.Get(),
-      ElementsAre(VariantWith<ash::QuickInsertBrowsingHistoryResult>(
-                      Field("url", &ash::QuickInsertBrowsingHistoryResult::url,
-                            GURL("http://b.com/history"))),
-                  VariantWith<ash::QuickInsertBrowsingHistoryResult>(
-                      Field("url", &ash::QuickInsertBrowsingHistoryResult::url,
-                            GURL("http://a.com/history")))));
-  EXPECT_EQ(favicon_service.page_url_, GURL("http://a.com/history"));
-}
-
-TEST_F(QuickInsertClientImplTest,
-       GetSuggestedLinkResultsAreTruncatedToMostRecent) {
-  ash::QuickInsertController controller;
-  QuickInsertClientImpl client(&controller, user_manager());
-  const base::Time now = base::Time::Now();
-  AddSearchToHistory(profile(), GURL("http://a.com/history"),
-                     now - base::Seconds(1));
-  AddSearchToHistory(profile(), GURL("http://b.com/history"), now);
-  TestFaviconService favicon_service;
-  client.get_link_suggester_for_test()->set_favicon_service_for_test(
-      &favicon_service);
-
-  base::test::TestFuture<std::vector<ash::QuickInsertSearchResult>> future;
-  client.GetSuggestedLinkResults(1u, future.GetRepeatingCallback());
-
-  EXPECT_THAT(future.Get(),
-              ElementsAre(VariantWith<ash::QuickInsertBrowsingHistoryResult>(
-                  Field("url", &ash::QuickInsertBrowsingHistoryResult::url,
-                        GURL("http://b.com/history")))));
-  EXPECT_EQ(favicon_service.page_url_, GURL("http://b.com/history"));
-}
-
-TEST_F(QuickInsertClientImplTest,
-       GetSuggestedLinkResultsFiltersOutPersonalizedLinks) {
-  base::test::ScopedFeatureList features(ash::features::kPickerFilterLinks);
-  ash::QuickInsertController controller;
-  QuickInsertClientImpl client(&controller, user_manager());
-  const base::Time now = base::Time::Now();
-  AddSearchToHistory(profile(),
-                     GURL("https://mail.google.com/mail/u/0/#inbox/aaa"), now);
-  AddSearchToHistory(profile(),
-                     GURL("https://mail.google.com/chat/u/0/#chat/aaa"), now);
-  AddSearchToHistory(profile(), GURL("https://mail.google.com"), now);
-  TestFaviconService favicon_service;
-  client.get_link_suggester_for_test()->set_favicon_service_for_test(
-      &favicon_service);
-
-  base::test::TestFuture<std::vector<ash::QuickInsertSearchResult>> future;
-  client.GetSuggestedLinkResults(100u, future.GetRepeatingCallback());
-
-  EXPECT_THAT(future.Get(),
-              ElementsAre(VariantWith<ash::QuickInsertBrowsingHistoryResult>(
-                  Field("url", &ash::QuickInsertBrowsingHistoryResult::url,
-                        GURL("https://mail.google.com")))));
-}
-
 TEST_F(QuickInsertClientImplTest,
        SearchAfterSwitchingActiveUserReturnsResultsFromNewUser) {
   ash::QuickInsertController controller;
   QuickInsertClientImpl client(&controller, user_manager());
-  TestingProfile* secondary_profile = CreateMultiUserProfile("secondary@test");
+  TestingProfile* secondary_profile =
+      CreateMultiUserProfile("secondary@test", GaiaId("fakegaia2"));
   AddSearchToHistory(profile(), GURL("https://foo.com/primary"));
   AddSearchToHistory(secondary_profile, GURL("https://foo.com/secondary"));
   client.StartCrosSearch(u"foo", /*category=*/std::nullopt, base::DoNothing());
@@ -655,7 +549,8 @@ TEST_F(QuickInsertClientImplTest,
        SearchCategoryAfterSwitchingActiveUserReturnsResultsFromNewUser) {
   ash::QuickInsertController controller;
   QuickInsertClientImpl client(&controller, user_manager());
-  TestingProfile* secondary_profile = CreateMultiUserProfile("secondary@test");
+  TestingProfile* secondary_profile =
+      CreateMultiUserProfile("secondary@test", GaiaId("fakegaia2"));
   AddSearchToHistory(profile(), GURL("https://foo.com/primary"));
   AddSearchToHistory(secondary_profile, GURL("https://foo.com/secondary"));
   client.StartCrosSearch(u"foo", ash::QuickInsertCategory::kLinks,
@@ -715,7 +610,7 @@ TEST_F(QuickInsertClientImplEditorTest,
   ash::QuickInsertController controller;
   QuickInsertClientImpl client(&controller, user_manager());
   GetEditorMediator(profile()).OverrideEditorModeForTesting(
-      ash::input_method::EditorMode::kHardBlocked);
+      chromeos::editor_menu::EditorMode::kHardBlocked);
 
   EXPECT_FALSE(client.IsEligibleForEditor());
 }
@@ -726,7 +621,7 @@ TEST_F(QuickInsertClientImplEditorTest,
   ash::QuickInsertController controller;
   QuickInsertClientImpl client(&controller, user_manager());
   GetEditorMediator(profile()).OverrideEditorModeForTesting(
-      ash::input_method::EditorMode::kHardBlocked);
+      chromeos::editor_menu::EditorMode::kHardBlocked);
 
   EXPECT_FALSE(client.IsEligibleForEditor());
 }
@@ -737,7 +632,7 @@ TEST_F(QuickInsertClientImplEditorTest,
   ash::QuickInsertController controller;
   QuickInsertClientImpl client(&controller, user_manager());
   GetEditorMediator(profile()).OverrideEditorModeForTesting(
-      ash::input_method::EditorMode::kSoftBlocked);
+      chromeos::editor_menu::EditorMode::kSoftBlocked);
 
   EXPECT_TRUE(client.IsEligibleForEditor());
 }
@@ -747,7 +642,7 @@ TEST_F(QuickInsertClientImplEditorTest,
   ash::QuickInsertController controller;
   QuickInsertClientImpl client(&controller, user_manager());
   GetEditorMediator(profile()).OverrideEditorModeForTesting(
-      ash::input_method::EditorMode::kHardBlocked);
+      chromeos::editor_menu::EditorMode::kHardBlocked);
 
   EXPECT_TRUE(client.CacheEditorContext().is_null());
 }
@@ -758,7 +653,7 @@ TEST_F(QuickInsertClientImplEditorTest,
   ash::QuickInsertController controller;
   QuickInsertClientImpl client(&controller, user_manager());
   GetEditorMediator(profile()).OverrideEditorModeForTesting(
-      ash::input_method::EditorMode::kSoftBlocked);
+      chromeos::editor_menu::EditorMode::kSoftBlocked);
 
   EXPECT_TRUE(client.CacheEditorContext().is_null());
 }
@@ -769,7 +664,7 @@ TEST_F(QuickInsertClientImplEditorTest,
   ash::QuickInsertController controller;
   QuickInsertClientImpl client(&controller, user_manager());
   GetEditorMediator(profile()).OverrideEditorModeForTesting(
-      ash::input_method::EditorMode::kConsentNeeded);
+      chromeos::editor_menu::EditorMode::kConsentNeeded);
 
   EXPECT_FALSE(client.CacheEditorContext().is_null());
 }
@@ -779,7 +674,7 @@ TEST_F(QuickInsertClientImplEditorTest, CacheEditorContextCachesCaretBounds) {
   ash::QuickInsertController controller;
   QuickInsertClientImpl client(&controller, user_manager());
   GetEditorMediator(profile()).OverrideEditorModeForTesting(
-      ash::input_method::EditorMode::kConsentNeeded);
+      chromeos::editor_menu::EditorMode::kConsentNeeded);
   ui::FakeTextInputClient text_input_client(
       &ime(), {
                   .type = ui::TEXT_INPUT_TYPE_TEXT,
@@ -800,7 +695,7 @@ TEST_F(QuickInsertClientImplEditorTest, GetSuggestedEditorResults) {
   ash::QuickInsertController controller;
   QuickInsertClientImpl client(&controller, user_manager());
   GetEditorMediator(profile()).OverrideEditorModeForTesting(
-      ash::input_method::EditorMode::kRewrite);
+      chromeos::editor_menu::EditorMode::kRewrite);
   ui::FakeTextInputClient text_input_client(&ime(),
                                             {.type = ui::TEXT_INPUT_TYPE_TEXT});
   text_input_client.Focus();
@@ -819,7 +714,7 @@ TEST_F(QuickInsertClientImplEditorTest,
   ash::QuickInsertController controller;
   QuickInsertClientImpl client(&controller, user_manager());
   GetEditorMediator(profile()).OverrideEditorModeForTesting(
-      ash::input_method::EditorMode::kSoftBlocked);
+      chromeos::editor_menu::EditorMode::kSoftBlocked);
   ui::FakeTextInputClient text_input_client(&ime(),
                                             {.type = ui::TEXT_INPUT_TYPE_TEXT});
   text_input_client.Focus();

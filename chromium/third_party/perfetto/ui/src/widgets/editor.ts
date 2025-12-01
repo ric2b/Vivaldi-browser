@@ -64,6 +64,7 @@ export class Editor implements m.ClassComponent<EditorAttrs> {
             text = selectedText;
           }
           onExecute(text);
+          m.redraw();
           return true;
         },
       });
@@ -75,6 +76,7 @@ export class Editor implements m.ClassComponent<EditorAttrs> {
         view.update([tr]);
         const text = view.state.doc.toString();
         onUpdate(text);
+        m.redraw();
       };
     }
 

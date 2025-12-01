@@ -14,7 +14,7 @@
 - (void)updateLocationFolder:(NSString*)title
                folderIsGroup:(BOOL)folderIsGroup;
 
-/// Notifies the consumers when top sites are ready.
+/// Notifies the consumers when popular sites are ready.
 - (void)popularSitesDidLoad:(NSArray<VivaldiNSDDirectMatchItem*>*)popularSites;
 
 /// Notifies the consumers when direct match category items

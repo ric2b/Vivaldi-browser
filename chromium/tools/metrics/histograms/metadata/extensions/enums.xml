@@ -144,10 +144,11 @@ chromium-metrics-reviews@google.com.
   <int value="262144" label="DEPRECATED_DISABLE_REMOTELY_FOR_MALWARE"/>
   <int value="524288" label="DISABLE_REINSTALL"/>
   <int value="1048576" label="DISABLE_NOT_ALLOWLISTED"/>
-  <int value="2097152" label="DISABLE_NOT_ASH_KEEPLISTED"/>
+  <int value="2097152" label="DEPRECATED_DISABLE_NOT_ASH_KEEPLISTED"/>
   <int value="4194304" label="DISABLE_PUBLISHED_IN_STORE_REQUIRED_BY_POLICY"/>
   <int value="8388608" label="DISABLE_UNSUPPORTED_MANIFEST_VERSION"/>
   <int value="16777216" label="DISABLE_UNSUPPORTED_DEVELOPER_EXTENSION"/>
+  <int value="33554432" label="DISABLE_UNKNOWN"/>
 </enum>
 
 <enum name="ExtensionEvents">
@@ -407,7 +408,7 @@ Called by update_extension_histograms.py.-->
   <int value="243" label="SYNC_FILE_SYSTEM_ON_FILE_STATUS_CHANGED"/>
   <int value="244" label="SYNC_FILE_SYSTEM_ON_SERVICE_STATUS_CHANGED"/>
   <int value="245" label="SYSTEM_DISPLAY_ON_DISPLAY_CHANGED"/>
-  <int value="246" label="SYSTEM_INDICATOR_ON_CLICKED"/>
+  <int value="246" label="DELETED_SYSTEM_INDICATOR_ON_CLICKED"/>
   <int value="247" label="SYSTEM_PRIVATE_ON_BRIGHTNESS_CHANGED"/>
   <int value="248" label="SYSTEM_PRIVATE_ON_SCREEN_UNLOCKED"/>
   <int value="249" label="SYSTEM_PRIVATE_ON_VOLUME_CHANGED"/>
@@ -763,6 +764,8 @@ Called by update_extension_histograms.py.-->
   <int value="560" label="TTS_ENGINE_ON_INSTALL_LANGUAGE_REQUEST"/>
   <int value="561" label="TTS_ENGINE_ON_LANGUAGE_STATUS_REQUEST"/>
   <int value="562" label="TTS_ENGINE_ON_UNINSTALL_LANGUAGE_REQUEST"/>
+  <int value="563" label="PDF_VIEWER_PRIVATE_ON_SHOULD_UPDATE_VIEWPORT"/>
+  <int value="564" label="OMNIBOX_ON_ACTION_EXECUTED"/>
 </enum>
 
 <enum name="ExtensionForceInstalledPreInstalledDeprecatedSite">
@@ -914,7 +917,7 @@ Called by update_extension_histograms.py.-->
   <int value="127" label="WEBREQUEST_HANDLERBEHAVIORCHANGED"/>
   <int value="128" label="INPUT_IME_SETCURSORPOSITION"/>
   <int value="129" label="OMNIBOX_SENDSUGGESTIONS"/>
-  <int value="130" label="SYSTEMINDICATOR_ENABLE"/>
+  <int value="130" label="DELETED_SYSTEMINDICATOR_ENABLE"/>
   <int value="131" label="EVENTS_GETRULES"/>
   <int value="132" label="BOOKMARKMANAGERPRIVATE_COPY"/>
   <int value="133" label="SOCKET_RECVFROM"/>
@@ -1114,7 +1117,7 @@ Called by update_extension_histograms.py.-->
   <int value="326" label="ALARMS_CLEARALL"/>
   <int value="327" label="FONTSETTINGS_GETDEFAULTFIXEDFONTSIZE"/>
   <int value="328" label="FILEMANAGERPRIVATEINTERNAL_ZIPSELECTION"/>
-  <int value="329" label="SYSTEMINDICATOR_DISABLE"/>
+  <int value="329" label="DELETED_SYSTEMINDICATOR_DISABLE"/>
   <int value="330" label="DELETED_SCRIPTBADGE_SETPOPUP"/>
   <int value="331" label="EXTENSION_ISALLOWEDFILESCHEMEACCESS"/>
   <int value="332" label="EXPERIMENTAL_IDENTITY_LAUNCHWEBAUTHFLOW"/>
@@ -1164,7 +1167,7 @@ Called by update_extension_histograms.py.-->
   <int value="376" label="APP_WINDOW_CREATE"/>
   <int value="377" label="RUNTIME_RELOAD"/>
   <int value="378" label="EXPERIMENTAL_POWER_REQUESTKEEPAWAKE"/>
-  <int value="379" label="SYSTEMINDICATOR_SETICON"/>
+  <int value="379" label="DELETED_SYSTEMINDICATOR_SETICON"/>
   <int value="380" label="FILEMANAGERPRIVATE_ADDMOUNT"/>
   <int value="381" label="APP_CURRENTWINDOWINTERNAL_FOCUS"/>
   <int value="382" label="EVENTS_REMOVERULES"/>
@@ -1826,7 +1829,7 @@ Called by update_extension_histograms.py.-->
   <int value="1013" label="AUTOFILLPRIVATE_SAVEADDRESS"/>
   <int value="1014" label="AUTOFILLPRIVATE_GETADDRESSCOMPONENTS"/>
   <int value="1015" label="AUTOFILLPRIVATE_SAVECREDITCARD"/>
-  <int value="1016" label="AUTOFILLPRIVATE_REMOVEENTRY"/>
+  <int value="1016" label="DELETED_AUTOFILLPRIVATE_REMOVEENTRY"/>
   <int value="1017" label="DELETED_AUTOFILLPRIVATE_VALIDATEPHONENUMBERS"/>
   <int value="1018" label="DELETED_AUTOFILLPRIVATE_MASKCREDITCARD"/>
   <int value="1019" label="INSTANCEID_GETID"/>
@@ -2444,7 +2447,7 @@ Called by update_extension_histograms.py.-->
   <int value="1594" label="INPUTMETHODPRIVATE_GETTEXTFIELDBOUNDS"/>
   <int value="1595" label="PASSWORDSPRIVATE_GETURLCOLLECTION"/>
   <int value="1596" label="PASSWORDSPRIVATE_ADDPASSWORD"/>
-  <int value="1597" label="PASSWORDSPRIVATE_ISACCOUNTSTOREDEFAULT"/>
+  <int value="1597" label="DELETED_PASSWORDSPRIVATE_ISACCOUNTSTOREDEFAULT"/>
   <int value="1598" label="WEB_AUTHENTICATION_PROXY_ATTACH"/>
   <int value="1599" label="WEB_AUTHENTICATION_PROXY_DETACH"/>
   <int value="1600" label="FILEMANAGERPRIVATE_CANCELIOTASK"/>
@@ -2489,7 +2492,7 @@ Called by update_extension_histograms.py.-->
   <int value="1638" label="TERMINALPRIVATE_SETPREFS"/>
   <int value="1639" label="DELETED_AUTOTESTPRIVATE_GETCRYPTOHOMERECOVERYDATA"/>
   <int value="1640" label="TERMINALPRIVATE_OPENSETTINGSSUBPAGE"/>
-  <int value="1641" label="AUTOTESTPRIVATE_GETLACROSINFO"/>
+  <int value="1641" label="DELETED_AUTOTESTPRIVATE_GETLACROSINFO"/>
   <int value="1642" label="LOGIN_LAUNCHSAMLUSERSESSION"/>
   <int value="1643" label="LOGIN_LOCKCURRENTSESSION"/>
   <int value="1644" label="LOGIN_UNLOCKCURRENTSESSION"/>
@@ -2628,7 +2631,7 @@ Called by update_extension_histograms.py.-->
       label="DELETED_SMARTCARDPROVIDERPRIVATE_REPORTDISCONNECTRESULT"/>
   <int value="1770" label="WMDESKSPRIVATE_GETDESKBYID"/>
   <int value="1771" label="AUTOFILLPRIVATE_ISVALIDIBAN"/>
-  <int value="1772" label="ACCESSIBILITY_PRIVATE_ISLACROSPRIMARY"/>
+  <int value="1772" label="DELETED_ACCESSIBILITY_PRIVATE_ISLACROSPRIMARY"/>
   <int value="1773" label="POWER_REPORTACTIVITY"/>
   <int value="1774" label="PASSWORDSPRIVATE_CONTINUEIMPORT"/>
   <int value="1775" label="PASSWORDSPRIVATE_RESETIMPORTER"/>
@@ -2689,7 +2692,7 @@ Called by update_extension_histograms.py.-->
   <int value="1828" label="OS_DIAGNOSTICS_CANCELROUTINE"/>
   <int value="1829" label="OS_DIAGNOSTICS_ISMEMORYROUTINEARGUMENTSUPPORTED"/>
   <int value="1830"
-      label="ACCESSIBILITY_PRIVATE_CLIPBOARDCOPYINACTIVELACROSGOOGLEDOC"/>
+      label="DELETED_ACCESSIBILITY_PRIVATE_CLIPBOARDCOPYINACTIVELACROSGOOGLEDOC"/>
   <int value="1831" label="USERSCRIPTS_UPDATE"/>
   <int value="1832" label="INPUTMETHODPRIVATE_GETLANGUAGEPACKSTATUS"/>
   <int value="1833" label="OS_DIAGNOSTICS_RUNFANROUTINE"/>
@@ -2754,8 +2757,8 @@ Called by update_extension_histograms.py.-->
   <int value="1887" label="PASSWORDSPRIVATE_DISCONNECTCLOUDAUTHENTICATOR"/>
   <int value="1888" label="PASSWORDSPRIVATE_ISCONNECTEDTOCLOUDAUTHENTICATOR"/>
   <int value="1889" label="WEBSTOREPRIVATE_GETMV2DEPRECATIONSTATUS"/>
-  <int value="1890" label="PERMISSIONS_ADDSITEACCESSREQUEST"/>
-  <int value="1891" label="PERMISSIONS_REMOVESITEACCESSREQUEST"/>
+  <int value="1890" label="PERMISSIONS_ADDHOSTACCESSREQUEST"/>
+  <int value="1891" label="PERMISSIONS_REMOVEHOSTACCESSREQUEST"/>
   <int value="1892" label="ACCESSIBILITY_PRIVATE_SETCHROMEVOXFOCUS"/>
   <int value="1893" label="PASSWORDSPRIVATE_DELETEALLPASSWORDMANAGERDATA"/>
   <int value="1894"
@@ -2782,6 +2785,13 @@ Called by update_extension_histograms.py.-->
   <int value="1912" label="TTSENGINE_UPDATELANGUAGE"/>
   <int value="1913" label="ODFSCONFIGPRIVATE_OPENINOFFICEAPP"/>
   <int value="1914" label="COOKIES_GETPARTITIONKEY"/>
+  <int value="1915" label="CONTROLLEDFRAMEINTERNAL_SETCLIENTHINTSENABLED"/>
+  <int value="1916" label="DEVELOPERPRIVATE_UPLOADEXTENSIONTOACCOUNT"/>
+  <int value="1917" label="USERSCRIPTS_EXECUTE"/>
+  <int value="1918" label="EXPERIMENTALAIDATA_PRIVATE_GETAIDATAWITHSPECIFIER"/>
+  <int value="1919" label="AUTOTESTPRIVATE_OVERRIDELOBSTERRESPONSE"/>
+  <int value="1920" label="AUTOFILLPRIVATE_REMOVEADDRESS"/>
+  <int value="1921" label="AUTOFILLPRIVATE_REMOVEPAYMENTSENTITY"/>
 </enum>
 
 <enum name="ExtensionInstallationCrxInstallError">
@@ -3109,7 +3119,7 @@ Called by update_extension_permission.py.-->
   <int value="202" label="kVirtualKeyboard"/>
   <int value="203" label="kDeleted_NetworkingCastPrivate"/>
   <int value="204" label="kMediaPerceptionPrivate"/>
-  <int value="205" label="kLockScreen"/>
+  <int value="205" label="kDeleted_LockScreen"/>
   <int value="206" label="kNewTabPageOverride"/>
   <int value="207" label="kDeclarativeNetRequest"/>
   <int value="208" label="kLockWindowFullscreenPrivate"/>
@@ -3165,6 +3175,7 @@ Called by update_extension_permission.py.-->
   <int value="258" label="kChromeOSDiagnosticsNetworkInfoForMlab"/>
   <int value="259" label="kAILanguageModelOriginTrial"/>
   <int value="260" label="kExperimentalAiData"/>
+  <int value="261" label="kOmniboxDirectInput"/>
 </enum>
 
 <enum name="ExtensionPolicyReinstallReason">
@@ -3285,6 +3296,7 @@ Called by update_extension_permission.py.-->
   <int value="2" label="mime handler view"/>
   <int value="3" label="extension options"/>
   <int value="4" label="app view"/>
+  <int value="5" label="controlled frame"/>
 </enum>
 
 <enum name="HostPermissionsAccess">
@@ -3361,17 +3373,44 @@ Called by update_extension_permission.py.-->
   <int value="3" label="Manifest Version 3 extensions only"/>
 </enum>
 
-<enum name="MessageDeliveryStage">
-  <int value="0" label="Unknown Stage"/>
-  <int value="1" label="Browser received open channel request from renderer"/>
-</enum>
-
 <enum name="MV2ExtensionState">
   <int value="0" label="Unaffected"/>
   <int value="1" label="Soft-disabled by Chrome"/>
   <int value="2" label="Re-enabled by user"/>
   <int value="3" label="Other (e.g. disabled for another reason)"/>
   <int value="4" label="Hard-disabled by Chrome"/>
+</enum>
+
+<enum name="OpenChannelMessagePipelineResult">
+  <int value="0" label="Unknown"/>
+  <int value="1" label="Channel opened"/>
+  <int value="2" label="Channel not opened (hung)"/>
+  <int value="3" label="Channel not opened (no receivers)"/>
+  <int value="4" label="Channel not opened (no enabled extension)"/>
+  <int value="5" label="Channel not opened (not externally connectable)"/>
+  <int value="6" label="Worker started for channel open"/>
+  <int value="7"
+      label="Channel not opened (source channel invalid, opener port invaid,
+             no receiver port, or receiver port invalid)"/>
+  <int value="8" label="Channel not opened (receiver port isn't valid)"/>
+  <int value="9"
+      label="Channel not opened (dispatched connect, but no port created)"/>
+  <int value="10" label="Open channel acked"/>
+  <int value="11" label="Port disconnected before response"/>
+  <int value="12" label="Channel closed before response"/>
+  <int value="13"
+      label="Channel not opened (source endpoint invalid/doesn't exist)"/>
+  <int value="14"
+      label="Channel not opened (opener port invalid/doesn't exist)"/>
+  <int value="15"
+      label="Channel not opened (source endpoint closed while channel open
+             in-flight)"/>
+  <int value="16"
+      label="Channel not opened (opener port closed while channel open
+             in-flight)"/>
+  <int value="17"
+      label="Channel not opened (extension uninstalled/disabled while channel
+             open in-flight)"/>
 </enum>
 
 <enum name="ReadDynamicRulesJSONStatus">
@@ -3425,6 +3464,7 @@ Called by update_extension_permission.py.-->
   <int value="7" label="(Obsolete) ARC Kiosk"/>
   <int value="8" label="Active Directory"/>
   <int value="9" label="Web App Kiosk"/>
+  <int value="10" label="Isolated Web App Kiosk"/>
 </enum>
 
 <enum name="SettingsOverriddenDialogResult">
@@ -3470,6 +3510,29 @@ Called by update_extension_permission.py.-->
   <int value="6" label="Misc Js File"/>
   <int value="7" label="Misc File"/>
 </enum>
+
+<!-- LINT.IfChange(WebRequestProxyDecision) -->
+
+<enum name="WebRequest.ProxyDecision">
+  <int value="0" label="kWillNotProxy"/>
+  <int value="1" label="kWillProxyForExtension"/>
+  <int value="2" label="kWillProxyForWebUI"/>
+  <int value="3" label="kWillProxyForEmbedderWebView"/>
+  <int value="4" label="kWillProxyForTelemetry"/>
+</enum>
+
+<!-- LINT.ThenChange(/extensions/browser/api/web_request/web_request_api.h:ProxyDecision) -->
+
+<!-- LINT.IfChange(WebRequestProxyDecisionDetailsForExtension) -->
+
+<enum name="WebRequest.ProxyDecisionDetailsForExtension">
+  <int value="0" label="kOnlyForWebRequest"/>
+  <int value="1" label="kOnlyForDeclarativeRequest"/>
+  <int value="2" label="kOnlyForWebView"/>
+  <int value="3" label="kForMixedReasons"/>
+</enum>
+
+<!-- LINT.ThenChange(/extensions/browser/api/web_request/web_request_api.cc:ProxyDecisionDetailsForExtension) -->
 
 <enum name="WebRequest.RequestHeader">
   <int value="0" label="kNone"/>

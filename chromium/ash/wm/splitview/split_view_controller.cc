@@ -62,11 +62,11 @@
 #include "base/auto_reset.h"
 #include "base/containers/flat_map.h"
 #include "base/debug/crash_logging.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/time/time.h"
 #include "chromeos/ui/base/app_types.h"
 #include "chromeos/ui/base/window_properties.h"
@@ -78,10 +78,10 @@
 #include "ui/aura/window_delegate.h"
 #include "ui/base/ime/ash/ime_bridge.h"
 #include "ui/base/ime/input_method.h"
+#include "ui/compositor/compositor_metrics_tracker.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/compositor/presentation_time_recorder.h"
-#include "ui/compositor/throughput_tracker.h"
 #include "ui/display/screen.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/gfx/animation/slide_animation.h"
@@ -160,10 +160,9 @@ bool InTabletMode() {
 bool IsExactlyOneRootInSplitView() {
   const aura::Window::Windows all_root_windows = Shell::GetAllRootWindows();
   return 1 ==
-         base::ranges::count_if(
-             all_root_windows, [](aura::Window* root_window) {
-               return SplitViewController::Get(root_window)->InSplitViewMode();
-             });
+         std::ranges::count_if(all_root_windows, [](aura::Window* root_window) {
+           return SplitViewController::Get(root_window)->InSplitViewMode();
+         });
 }
 
 ui::InputMethod* GetCurrentInputMethod() {
@@ -278,7 +277,8 @@ class SplitViewController::DividerSnapAnimation
         std::make_unique<views::CompositorAnimationRunner>(widget, FROM_HERE));
     SetContainer(container);
 
-    tracker_.emplace(widget->GetCompositor()->RequestNewThroughputTracker());
+    tracker_.emplace(
+        widget->GetCompositor()->RequestNewCompositorMetricsTracker());
     tracker_->Start(
         metrics_util::ForSmoothnessV3(base::BindRepeating([](int smoothness) {
           UMA_HISTOGRAM_PERCENTAGE(kDividerAnimationSmoothness, smoothness);
@@ -820,8 +820,6 @@ void SplitViewController::AttachToBeSnappedWindow(
   // clamshell transition or multi-user transition. If neither `snap_ratio` nor
   // `divider_position_` exists, calculate the divider position with the default
   // snap ratio i.e. `chromeos::kDefaultSnapRatio`.
-  // TODO(michelefan): See if it is a valid case to not having `snap_ratio`
-  // while `divider_position` is less than 0.
   bool do_snap_animation = false;
   int divider_position =
       split_view_divider_.divider_widget() ? GetDividerPosition() : -1;
@@ -2090,8 +2088,6 @@ bool SplitViewController::ShouldEndSplitViewAfterResizingAtEdge() {
   if (!InTabletSplitViewMode()) {
     // `SplitViewDivider::CleanUpWindowResizing()` may be called after a display
     // change, after which we have ended split view.
-    // TODO(sophiewen): Only call `SplitViewDivider::CleanUpWindowResizing()` if
-    // we actually ended resizing.
     return false;
   }
   const int divider_position = GetDividerPosition();

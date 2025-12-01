@@ -20,7 +20,6 @@
 #include "base/task/thread_pool.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/download/download_prefs.h"
@@ -54,14 +53,11 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS)
-#include "components/drive/file_system_core_util.h"
-#endif
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/drive/drive_integration_service.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ui/ash/holding_space/holding_space_keyed_service.h"
 #include "chrome/browser/ui/ash/holding_space/holding_space_keyed_service_factory.h"
+#include "components/drive/file_system_core_util.h"
 #include "components/user_manager/user.h"
 #endif
 
@@ -85,7 +81,7 @@ class PrintingContextDelegate : public PrintingContext::Delegate {
 };
 
 const AccountId& GetAccountId(Profile* profile) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   const auto* user = ash::ProfileHelper::Get()->GetUserByProfile(profile);
   return user ? user->GetAccountId() : EmptyAccountId();
 #else
@@ -192,7 +188,7 @@ void PrintToPdfCallback(scoped_refptr<base::RefCountedMemory> data,
 void OnPdfPrintedCallback(const AccountId& account_id,
                           const base::FilePath& path,
                           base::OnceClosure pdf_file_saved_closure) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   Profile* profile =
       ash::ProfileHelper::Get()->GetProfileByAccountId(account_id);
   if (profile) {
@@ -205,8 +201,9 @@ void OnPdfPrintedCallback(const AccountId& account_id,
     }
   }
 #endif
-  if (!pdf_file_saved_closure.is_null())
+  if (!pdf_file_saved_closure.is_null()) {
     std::move(pdf_file_saved_closure).Run();
+  }
 }
 
 base::FilePath CreateDirectoryIfNotExists(const base::FilePath& path) {
@@ -218,8 +215,9 @@ base::FilePath CreateDirectoryIfNotExists(const base::FilePath& path) {
 
 base::FilePath SelectSaveDirectory(const base::FilePath& path,
                                    const base::FilePath& default_path) {
-  if (base::DirectoryExists(path))
+  if (base::DirectoryExists(path)) {
     return path;
+  }
   return CreateDirectoryIfNotExists(default_path);
 }
 
@@ -248,8 +246,9 @@ PdfPrinterHandler::PdfPrinterHandler(
       sticky_settings_(sticky_settings) {}
 
 PdfPrinterHandler::~PdfPrinterHandler() {
-  if (select_file_dialog_.get())
+  if (select_file_dialog_.get()) {
     select_file_dialog_->ListenerDestroyed();
+  }
 }
 
 void PdfPrinterHandler::Reset() {
@@ -367,8 +366,9 @@ base::FilePath PdfPrinterHandler::GetFileNameForPrintJobTitle(
   base::FilePath::StringType ext = default_filename.Extension();
   if (!ext.empty()) {
     ext = ext.substr(1);
-    if (ext == kPdfExtension)
+    if (ext == kPdfExtension) {
       return default_filename;
+    }
   }
   return default_filename.AddExtension(kPdfExtension);
 }
@@ -394,8 +394,9 @@ base::FilePath PdfPrinterHandler::GetFileNameForURL(const GURL& url) {
     name = base::FilePath::FromUTF16Unsafe(
         url_formatter::IDNToUnicode(url.host()));
   }
-  if (name.AsUTF8Unsafe() == url.host())
+  if (name.AsUTF8Unsafe() == url.host()) {
     return name.AddExtension(kPdfExtension);
+  }
   return name.ReplaceExtension(kPdfExtension);
 }
 
@@ -476,8 +477,9 @@ void PdfPrinterHandler::PostPrintToPdfTask() {
 
   print_to_pdf_path_.clear();
 
-  if (print_callback_)
+  if (print_callback_) {
     std::move(print_callback_).Run(base::Value());
+  }
 }
 
 void PdfPrinterHandler::OnGotUniqueFileName(const base::FilePath& path) {
@@ -487,8 +489,9 @@ void PdfPrinterHandler::OnGotUniqueFileName(const base::FilePath& path) {
 void PdfPrinterHandler::OnDirectorySelected(const base::FilePath& filename,
                                             const base::FilePath& directory) {
   // Early return if the select file dialog is already active.
-  if (select_file_dialog_)
+  if (select_file_dialog_) {
     return;
+  }
 
   base::FilePath path = directory.Append(filename);
 
@@ -526,7 +529,7 @@ void PdfPrinterHandler::OnDirectorySelected(const base::FilePath& filename,
 }
 
 base::FilePath PdfPrinterHandler::GetSaveLocation() const {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   drive::DriveIntegrationService* drive_service =
       drive::DriveIntegrationServiceFactory::GetForProfile(profile_);
   if (use_drive_mount_ && drive_service && drive_service->IsMounted()) {

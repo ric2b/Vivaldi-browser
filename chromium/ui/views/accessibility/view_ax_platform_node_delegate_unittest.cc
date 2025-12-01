@@ -156,6 +156,8 @@ class ViewAXPlatformNodeDelegateTest : public ViewsTestBase {
     ViewsTestBase::TearDown();
   }
 
+  Widget* widget() { return widget_.get(); }
+
   ViewAXPlatformNodeDelegate* button_accessibility() {
     return static_cast<ViewAXPlatformNodeDelegate*>(
         &button_->GetViewAccessibility());
@@ -189,8 +191,9 @@ class ViewAXPlatformNodeDelegateTest : public ViewsTestBase {
     View* parent_view =
         widget_->GetRootView()->AddChildView(std::make_unique<View>());
     View::Views views{parent_view};
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 4; i++) {
       views.push_back(parent_view->AddChildView(std::make_unique<View>()));
+    }
     return views;
   }
 
@@ -319,8 +322,9 @@ class ViewAXPlatformNodeDelegateMenuTest
   }
 
   void TearDown() override {
-    if (owner_)
+    if (owner_) {
       owner_->CloseNow();
+    }
     ViewAXPlatformNodeDelegateTest::TearDown();
   }
 
@@ -362,6 +366,216 @@ TEST_F(ViewAXPlatformNodeDelegateTest, FocusBehaviorShouldAffectIgnoredState) {
   EXPECT_FALSE(button_accessibility()->HasState(ax::mojom::State::kIgnored));
   EXPECT_EQ(ax::mojom::Role::kStaticText, label_accessibility()->GetRole());
   EXPECT_FALSE(label_accessibility()->HasState(ax::mojom::State::kIgnored));
+}
+
+TEST_F(ViewAXPlatformNodeDelegateTest, IgnoredWhenAncestorFocusable) {
+  auto view1 = std::make_unique<View>();
+  view1->GetViewAccessibility().SetRole(ax::mojom::Role::kMenu);
+  view1->SetVisible(true);
+
+  auto view2 = std::make_unique<View>();
+  view2->GetViewAccessibility().SetRole(ax::mojom::Role::kButton);
+  view2->SetVisible(true);
+
+  auto view3 = std::make_unique<View>();
+  view3->GetViewAccessibility().SetRole(ax::mojom::Role::kLink);
+  view3->SetVisible(true);
+
+  auto view4 = std::make_unique<View>();
+  view4->GetViewAccessibility().SetRole(ax::mojom::Role::kRadioButton);
+  view4->SetVisible(true);
+
+  auto widget = std::make_unique<Widget>();
+  Widget::InitParams params = CreateParams(
+      Widget::InitParams::CLIENT_OWNS_WIDGET, Widget::InitParams::TYPE_POPUP);
+  params.bounds = gfx::Rect(50, 50, 650, 650);
+  widget->Init(std::move(params));
+  auto* root = widget->GetRootView();
+  auto* button = view1->AddChildView(std::move(view2));
+  auto* link = button->AddChildView(std::move(view3));
+  auto* radio_button = view1->AddChildView(std::move(view4));
+  auto* menu = root->AddChildView(std::move(view1));
+
+  // This is the tree structure:
+  // Root
+  //   Menu
+  //     Button
+  //       Link
+  //     radio_button
+
+  // No view should be ignored.
+  ui::AXNodeData data =
+      static_cast<ViewAXPlatformNodeDelegate*>(&menu->GetViewAccessibility())
+          ->GetData();
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kIgnored));
+  data =
+      static_cast<ViewAXPlatformNodeDelegate*>(&button->GetViewAccessibility())
+          ->GetData();
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kIgnored));
+  data = static_cast<ViewAXPlatformNodeDelegate*>(&link->GetViewAccessibility())
+             ->GetData();
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kIgnored));
+  data = static_cast<ViewAXPlatformNodeDelegate*>(
+             &radio_button->GetViewAccessibility())
+             ->GetData();
+  static_cast<ViewAXPlatformNodeDelegate*>(
+      &radio_button->GetViewAccessibility())
+      ->GetAccessibleNodeData(&data);
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kIgnored));
+
+  // Setting the focus behavior on the radio button to always (anything not
+  // NEVER) should result in it still not being ignored.
+  radio_button->SetFocusBehavior(View::FocusBehavior::ALWAYS);
+  data = static_cast<ViewAXPlatformNodeDelegate*>(
+             &radio_button->GetViewAccessibility())
+             ->GetData();
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kIgnored));
+
+  // Setting the focus behavior on the button to ALWAYS (anything not NEVER)
+  // should result in the link being ignored, since it does not have its focus
+  // behavior not set to NEVER.
+  button->SetFocusBehavior(View::FocusBehavior::ALWAYS);
+  data =
+      static_cast<ViewAXPlatformNodeDelegate*>(&button->GetViewAccessibility())
+          ->GetData();
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kIgnored));
+  data = static_cast<ViewAXPlatformNodeDelegate*>(&link->GetViewAccessibility())
+             ->GetData();
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kIgnored));
+
+  // Setting the focusable behavior on the button to NEVER should result in the
+  // button and link not being ignored.
+  button->SetFocusBehavior(View::FocusBehavior::NEVER);
+  data =
+      static_cast<ViewAXPlatformNodeDelegate*>(&button->GetViewAccessibility())
+          ->GetData();
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kIgnored));
+  data = static_cast<ViewAXPlatformNodeDelegate*>(&link->GetViewAccessibility())
+             ->GetData();
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kIgnored));
+
+  // If we set the focus behavior of the radio button to NEVER, and then set the
+  //  menu's to ALWAYS, the radio button, button, and link should be ignored.
+  radio_button->SetFocusBehavior(View::FocusBehavior::NEVER);
+  menu->SetFocusBehavior(View::FocusBehavior::ALWAYS);
+  data = static_cast<ViewAXPlatformNodeDelegate*>(
+             &radio_button->GetViewAccessibility())
+             ->GetData();
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kIgnored));
+  data = static_cast<ViewAXPlatformNodeDelegate*>(&menu->GetViewAccessibility())
+             ->GetData();
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kIgnored));
+  data =
+      static_cast<ViewAXPlatformNodeDelegate*>(&button->GetViewAccessibility())
+          ->GetData();
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kIgnored));
+  data = static_cast<ViewAXPlatformNodeDelegate*>(&link->GetViewAccessibility())
+             ->GetData();
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kIgnored));
+
+  // If we set the focus behavior of the button to ALWAYS, the button should now
+  // not be ignored but the link should.
+  button->SetFocusBehavior(View::FocusBehavior::ALWAYS);
+  data =
+      static_cast<ViewAXPlatformNodeDelegate*>(&button->GetViewAccessibility())
+          ->GetData();
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kIgnored));
+  data = static_cast<ViewAXPlatformNodeDelegate*>(&link->GetViewAccessibility())
+             ->GetData();
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kIgnored));
+
+  // If we set the focus behavior of the menu to NEVER, the menu, button, and
+  // radio button should not be ignored, but the link should since the button
+  // should keep its focusable state to ALWAYS.
+  menu->SetFocusBehavior(View::FocusBehavior::NEVER);
+  data = static_cast<ViewAXPlatformNodeDelegate*>(&menu->GetViewAccessibility())
+             ->GetData();
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kIgnored));
+  data =
+      static_cast<ViewAXPlatformNodeDelegate*>(&button->GetViewAccessibility())
+          ->GetData();
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kIgnored));
+  data = static_cast<ViewAXPlatformNodeDelegate*>(&link->GetViewAccessibility())
+             ->GetData();
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kIgnored));
+  data = static_cast<ViewAXPlatformNodeDelegate*>(
+             &radio_button->GetViewAccessibility())
+             ->GetData();
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kIgnored));
+}
+
+TEST_F(ViewAXPlatformNodeDelegateTest,
+       IgnoredWhenAddedToTreeWithFocusableAncestor) {
+  auto view1 = std::make_unique<View>();
+  view1->GetViewAccessibility().SetRole(ax::mojom::Role::kMenu);
+  view1->SetVisible(true);
+
+  auto view2 = std::make_unique<View>();
+  view2->GetViewAccessibility().SetRole(ax::mojom::Role::kButton);
+  view2->SetFocusBehavior(View::FocusBehavior::ALWAYS);
+  view2->SetVisible(true);
+
+  auto view3 = std::make_unique<View>();
+  view3->GetViewAccessibility().SetRole(ax::mojom::Role::kLink);
+  view3->SetFocusBehavior(View::FocusBehavior::NEVER);
+  view3->SetVisible(true);
+
+  auto view4 = std::make_unique<View>();
+  view4->GetViewAccessibility().SetRole(ax::mojom::Role::kStaticText);
+  view4->SetFocusBehavior(View::FocusBehavior::NEVER);
+  view4->SetVisible(true);
+
+  auto view5 = std::make_unique<View>();
+  view5->GetViewAccessibility().SetRole(ax::mojom::Role::kStaticText);
+  view5->SetFocusBehavior(View::FocusBehavior::NEVER);
+  view5->SetVisible(true);
+
+  auto* static_text_2 = view4->AddChildView(std::move(view5));
+
+  auto widget = std::make_unique<Widget>();
+  Widget::InitParams params = CreateParams(
+      Widget::InitParams::CLIENT_OWNS_WIDGET, Widget::InitParams::TYPE_POPUP);
+  params.bounds = gfx::Rect(50, 50, 650, 650);
+  widget->Init(std::move(params));
+  auto* root = widget->GetRootView();
+  auto* button = view1->AddChildView(std::move(view2));
+  auto* link = button->AddChildView(std::move(view3));
+  root->AddChildView(std::move(view1));
+
+  // This is the tree structure:
+  // Root
+  //   Menu
+  //     Button
+  //       Link
+
+  ui::AXNodeData data;
+  data =
+      static_cast<ViewAXPlatformNodeDelegate*>(&button->GetViewAccessibility())
+          ->GetData();
+  EXPECT_FALSE(data.HasState(ax::mojom::State::kIgnored));
+  data = static_cast<ViewAXPlatformNodeDelegate*>(&link->GetViewAccessibility())
+             ->GetData();
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kIgnored));
+  EXPECT_TRUE(link->GetViewAccessibility().has_focusable_ancestor());
+
+  auto* static_text = link->AddChildView(std::move(view4));
+
+  // This is the tree structure:
+  // Root
+  //   Menu
+  //     Button
+  //       Link
+  //         StaticText
+  //           StaticText
+
+  data = static_cast<ViewAXPlatformNodeDelegate*>(
+             &static_text->GetViewAccessibility())
+             ->GetData();
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kIgnored));
+  data = static_cast<ViewAXPlatformNodeDelegate*>(
+             &static_text_2->GetViewAccessibility())
+             ->GetData();
+  EXPECT_TRUE(data.HasState(ax::mojom::State::kIgnored));
 }
 
 TEST_F(ViewAXPlatformNodeDelegateTest, BoundsShouldMatch) {
@@ -1196,6 +1410,14 @@ TEST_F(ViewAXPlatformNodeDelegateMenuTest, MenuTest) {
   EXPECT_EQ(title_item->GetSetSize(), 7);
   EXPECT_EQ(title_item->GetChildCount(), 0u);
   EXPECT_EQ(title_item->GetIndexInParent(), 7u);
+}
+
+TEST_F(ViewAXPlatformNodeDelegateTest, AccessibleURL) {
+  const GURL test_url("https://example.com");
+  widget_->UpdateAccessibleURLForRootView(test_url);
+  ViewAXPlatformNodeDelegate* root_delegate =
+      view_accessibility(widget_->GetRootView());
+  EXPECT_EQ(root_delegate->GetRootURL(), test_url.spec());
 }
 
 #if defined(USE_AURA)

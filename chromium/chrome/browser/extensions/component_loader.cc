@@ -54,6 +54,7 @@
 #include "extensions/common/manifest_constants.h"
 #include "pdf/buildflags.h"
 #include "printing/buildflags/buildflags.h"
+#include "ui/accessibility/accessibility_features.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 
@@ -63,19 +64,14 @@
 #include "ash/constants/ash_switches.h"
 #include "ash/keyboard/ui/grit/keyboard_resources.h"
 #include "base/system/sys_info.h"
-#include "chrome/browser/ash/crosapi/browser_util.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/storage_partition.h"
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/common/switches.h"
 #include "storage/browser/file_system/file_system_context.h"
-#include "ui/accessibility/accessibility_features.h"
 #include "ui/file_manager/grit/file_manager_resources.h"
-#endif
-
-#if BUILDFLAG(IS_CHROMEOS)
-#include "chromeos/constants/chromeos_features.h"
 #endif
 
 #if BUILDFLAG(ENABLE_PDF)
@@ -379,8 +375,13 @@ void ComponentLoader::AddHangoutServicesExtension() {
 #endif  // BUILDFLAG(ENABLE_HANGOUT_SERVICES_EXTENSION)
 
 void ComponentLoader::AddNetworkSpeechSynthesisExtension() {
-  Add(IDR_NETWORK_SPEECH_SYNTHESIS_MANIFEST,
-      base::FilePath(FILE_PATH_LITERAL("network_speech_synthesis")));
+  if (::features::IsExtensionManifestV3NetworkSpeechSynthesisEnabled()) {
+    Add(IDR_NETWORK_SPEECH_SYNTHESIS_MANIFEST_MV3,
+        base::FilePath(FILE_PATH_LITERAL("network_speech_synthesis/mv3")));
+  } else {
+    Add(IDR_NETWORK_SPEECH_SYNTHESIS_MANIFEST,
+        base::FilePath(FILE_PATH_LITERAL("network_speech_synthesis")));
+  }
 }
 
 void ComponentLoader::AddWithNameAndDescription(
@@ -428,9 +429,7 @@ void ComponentLoader::AddWebStoreApp() {
 void ComponentLoader::AddChromeApp() {
   AddWithNameAndDescription(
       IDR_CHROME_APP_MANIFEST, base::FilePath(FILE_PATH_LITERAL("chrome_app")),
-      crosapi::browser_util::IsAshWebBrowserEnabled()
-          ? l10n_util::GetStringUTF8(IDS_SHORT_PRODUCT_NAME)
-          : "Ash Chrome",  // Because this is debug only, we do not need i18n.
+      l10n_util::GetStringUTF8(IDS_SHORT_PRODUCT_NAME),
       l10n_util::GetStringUTF8(IDS_CHROME_SHORTCUT_DESCRIPTION));
 }
 
@@ -519,10 +518,7 @@ void ComponentLoader::AddDefaultComponentExtensions(
   if (!skip_session_components) {
     AddWebStoreApp();
 #if BUILDFLAG(IS_CHROMEOS)
-    if (crosapi::browser_util::IsAshWebBrowserEnabled() ||
-        ash::switches::IsAshDebugBrowserEnabled()) {
-      AddChromeApp();
-    }
+    AddChromeApp();
 #endif  // BUILDFLAG(IS_CHROMEOS)
 #if BUILDFLAG(ENABLE_PDF)
     Add(pdf_extension_util::GetManifest(),

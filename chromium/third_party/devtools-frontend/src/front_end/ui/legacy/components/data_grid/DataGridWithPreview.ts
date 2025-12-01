@@ -35,6 +35,10 @@ import {type ColumnDescriptor, DataGridImpl, DataGridNode, Events} from './DataG
 
 const UIStrings = {
   /**
+   *@description Text that shows in the Applicaiton Panel if no value is selected for preview
+   */
+  noPreviewSelected: 'No value selected',
+  /**
    *@description Preview text when viewing storage in Application panel
    */
   selectAValueToPreview: 'Select a value to preview',
@@ -130,6 +134,10 @@ export class DataGridWithPreview {
     return this.#dataGrid;
   }
 
+  get previewPanelForTesting(): Widget.VBox {
+    return this.#previewPanel;
+  }
+
   clearItems(): void {
     this.#dataGrid.rootNode().removeChildren();
     this.#dataGrid.addCreationNode(false);
@@ -194,13 +202,13 @@ export class DataGridWithPreview {
         continue;
       }
       selectedKey = node.data.key;
-      void this.#previewEntry(node);
       break;
     }
     rootNode.removeChildren();
     let selectedNode: DataGridNode<unknown>|null = null;
     const sortDirection = this.#dataGrid.isSortOrderAscending() ? 1 : -1;
-    const filteredList = items.sort(function(item1: string[], item2: string[]): number {
+    // Make a copy to avoid sorting the original array.
+    const filteredList = [...items].sort(function(item1: string[], item2: string[]): number {
       return sortDirection * (item1[0] > item2[0] ? 1 : -1);
     });
     for (const item of filteredList) {
@@ -271,7 +279,8 @@ export class DataGridWithPreview {
       this.#preview.detach();
     }
     if (!preview) {
-      preview = new EmptyWidget.EmptyWidget(i18nString(UIStrings.selectAValueToPreview));
+      preview = new EmptyWidget.EmptyWidget(
+          i18nString(UIStrings.noPreviewSelected), i18nString(UIStrings.selectAValueToPreview));
     }
     this.#previewValue = value;
     this.#preview = preview;
@@ -281,7 +290,7 @@ export class DataGridWithPreview {
   async #previewEntry(entry: DataGridNode<unknown>|null): Promise<void> {
     const value = entry && entry.data && entry.data.value;
     if (entry && entry.data && entry.data.value) {
-      const preview = await this.#callbacks.createPreview(entry.key, value as string);
+      const preview = await this.#callbacks.createPreview(entry.data.key, value as string);
       // Selection could've changed while the preview was loaded
       if (entry.selected) {
         this.showPreview(preview, value);

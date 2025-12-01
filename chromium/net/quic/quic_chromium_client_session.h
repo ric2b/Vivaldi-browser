@@ -30,6 +30,7 @@
 #include "base/timer/timer.h"
 #include "base/values.h"
 #include "net/base/completion_once_callback.h"
+#include "net/base/connection_migration_information.h"
 #include "net/base/load_timing_info.h"
 #include "net/base/net_error_details.h"
 #include "net/base/net_export.h"
@@ -199,7 +200,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
 
     // Called when |session| encounters write error on |network|.
     // A write error may be caused by the change in the underlying network
-    // interface, and can be pre-emptive hints of connectivity quality changes
+    // interface, and can be preemptive hints of connectivity quality changes
     // based on the |error_code|.
     virtual void OnSessionEncounteringWriteError(
         QuicChromiumClientSession* session,
@@ -308,6 +309,11 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
     // closed.
     quic::QuicPacketLength GetGuaranteedLargestMessagePayload() const;
 
+    // Returns the connection migration information diff since the
+    // initialization of the Handler.
+    const ConnectionMigrationInformation GetConnectionMigrationInfoSinceInit()
+        const;
+
 #if BUILDFLAG(ENABLE_WEBSOCKETS)
     // This method returns nullptr on failure, such as when a new bidirectional
     // stream could not be made.
@@ -322,6 +328,10 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
    private:
     friend class QuicChromiumClientSession;
     friend class QuicChromiumClientSession::StreamRequest;
+
+#if BUILDFLAG(ENABLE_WEBSOCKETS)
+    friend class WebSocketHttp3HandshakeStream;
+#endif  // BUILDFLAG(ENABLE_WEBSOCKETS)
 
     // Waits for the handshake to be confirmed and invokes |callback| when
     // that happens. If the handshake has already been confirmed, returns OK.
@@ -342,7 +352,8 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
                          bool quic_connection_migration_attempted,
                          bool quic_connection_migration_successful,
                          LoadTimingInfo::ConnectTiming connect_timing,
-                         bool was_ever_used);
+                         bool was_ever_used,
+                         const ConnectionMigrationInformation& migration_info);
 
     // Called by |request| to create a stream.
     int TryCreateStream(StreamRequest* request);
@@ -372,6 +383,20 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
     quic::QuicServerId server_id_;
     quic::ParsedQuicVersion quic_version_;
     LoadTimingInfo::ConnectTiming connect_timing_;
+
+    // The initial set of migration information.  Note that this does not
+    // include migration information during handshake or connection confirmation
+    // for the first  generated Handler (i.e. the first request in the session).
+    // This is
+    // because the first `Handle` is initialized after these events, and the
+    // current implementation can only record `ConnectionMigrationInformation`
+    // after the initialization.
+    //
+    // TODO(crbug.com/379516116): Include connection migration information for
+    // handshake / connection confirmation as well.
+    const ConnectionMigrationInformation initial_migration_information_;
+    // The last known set of migration information
+    ConnectionMigrationInformation last_migration_information_;
 
     bool was_ever_used_ = false;
   };
@@ -664,7 +689,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   // Attempts to create a new stream.  If the stream can be
   // created immediately, returns OK.  If the open stream limit
   // has been reached, returns ERR_IO_PENDING, and |request|
-  // will be added to the stream requets queue and will
+  // will be added to the stream requests queue and will
   // be completed asynchronously.
   // TODO(rch): remove |stream| from this and use setter on |request|
   // and fix in spdy too.
@@ -830,6 +855,10 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
     return session_key_.server_id();
   }
 
+  const ConnectionMigrationInformation& migration_info() const {
+    return migration_info_;
+  }
+
   const QuicSessionKey& quic_session_key() const { return session_key_; }
 
   const QuicSessionAliasKey& session_alias_key() const {
@@ -938,6 +967,10 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   }
 
   void SetGoingAwayForTesting(bool going_away) { going_away_ = going_away; }
+  void SetConnectionMigrationInformationForTesting(
+      net::ConnectionMigrationInformation migration_info) {
+    migration_info_ = migration_info;
+  }
 
  protected:
   // quic::QuicSession methods:
@@ -1165,6 +1198,9 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   bool attempted_zero_rtt_ = false;
 
   size_t num_migrations_ = 0;
+
+  // Connection migration information for the session.
+  ConnectionMigrationInformation migration_info_;
 
   // The reason for the last 1-RTT key update on the connection. Will be
   // kInvalid if no key updates have occurred.

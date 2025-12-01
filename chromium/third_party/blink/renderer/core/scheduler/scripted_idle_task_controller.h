@@ -6,6 +6,8 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_SCHEDULER_SCRIPTED_IDLE_TASK_CONTROLLER_H_
 
 #include "base/feature_list.h"
+#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/task/delayed_task_handle.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -21,7 +23,7 @@
 
 namespace blink {
 
-CORE_EXPORT BASE_DECLARE_FEATURE(kScriptedIdleTaskControllerOOMFix);
+CORE_EXPORT BASE_DECLARE_FEATURE(kRemoveCancelledScriptedIdleTasks);
 
 class IdleRequestOptions;
 class ScriptedIdleTaskController;
@@ -49,10 +51,8 @@ class CORE_EXPORT IdleTask : public GarbageCollected<IdleTask>,
 
  private:
   friend class ScriptedIdleTaskController;
-
   probe::AsyncTaskContext async_task_context_;
-  // Handle to the associated "scheduler timeout task" (only used when the
-  // "ScriptedIdleTaskControllerOOMFix" feature is enabled).
+  // Handle to the associated "scheduler timeout task".
   base::DelayedTaskHandle delayed_task_handle_;
 };
 
@@ -68,6 +68,21 @@ class CORE_EXPORT ScriptedIdleTaskController
   USING_PRE_FINALIZER(ScriptedIdleTaskController, Dispose);
 
  public:
+  using RefCountedCounter = scoped_refptr<base::RefCountedData<size_t>>;
+
+  // A move-only type which decrements a ref-counted counter on deletion.
+  class DecrementOnDelete {
+   public:
+    explicit DecrementOnDelete(RefCountedCounter counter);
+    ~DecrementOnDelete();
+
+    DecrementOnDelete(DecrementOnDelete&&);
+    DecrementOnDelete& operator=(DecrementOnDelete&&);
+
+   private:
+    RefCountedCounter counter_;
+  };
+
   static const char kSupplementName[];
 
   static ScriptedIdleTaskController& From(ExecutionContext& context);
@@ -86,38 +101,25 @@ class CORE_EXPORT ScriptedIdleTaskController
   int RegisterCallback(IdleTask*, const IdleRequestOptions*);
   void CancelCallback(CallbackId);
 
+  // Returns true iff there is a registered callback with `id`.
+  bool HasCallback(CallbackId id) const;
+
   // ExecutionContextLifecycleStateObserver interface.
   void ContextDestroyed() override;
   void ContextLifecycleStateChanged(mojom::FrameLifecycleState) override;
 
  private:
-  // A helper class to cancel a "scheduler timeout task". Calls `CancelTask()`
-  // for the passed `delayed_task_handle` in dtor.
-  class DelayedTaskCanceler {
-   public:
-    DelayedTaskCanceler();
-    DelayedTaskCanceler(base::DelayedTaskHandle delayed_task_handle);
-    DelayedTaskCanceler(DelayedTaskCanceler&&);
-    DelayedTaskCanceler& operator=(DelayedTaskCanceler&&);
-
-    ~DelayedTaskCanceler();
-
-   private:
-    base::DelayedTaskHandle delayed_task_handle_;
-  };
-
   // Posts a "scheduler idle task" and a "scheduler timeout task" to run the
   // `IdleTask` identified by `id`.
   void PostSchedulerIdleAndTimeoutTasks(CallbackId id, uint32_t timeout_millis);
 
   // Posts a "scheduler idle task" to run the `IdleTask` identified by `id`.
-  // `canceler` is bound to that task (only used when the
-  // "ScriptedIdleTaskControllerOOMFix" feature is disabled).
-  void PostSchedulerIdleTask(CallbackId id, DelayedTaskCanceler canceler);
+  void PostSchedulerIdleTask(CallbackId id);
 
   void SchedulerIdleTask(CallbackId id,
-                         DelayedTaskCanceler canceler,
+                         DecrementOnDelete decrement_on_delete,
                          base::TimeTicks deadline);
+
   void SchedulerTimeoutTask(CallbackId id);
 
   void RunIdleTask(CallbackId id,
@@ -144,13 +146,8 @@ class CORE_EXPORT ScriptedIdleTaskController
   // Pending `IdleTask`s.
   HeapHashMap<CallbackId, Member<IdleTask>> idle_tasks_;
 
-  // `IdleTask`s for which `SchedulerTimeoutTask` ran while paused. They'll be
-  // rescheduled when unpaused.
-  Vector<CallbackId> idle_tasks_with_expired_timeout_;
-
   // `IdleTask`s for which `SchedulerIdleTask` ran while paused. They'll be
-  // rescheduled when unpaused. Only used when the
-  // "ScriptedIdleTaskControllerOOMFix" feature is enabled.
+  // rescheduled when unpaused.
   Vector<CallbackId> idle_tasks_to_reschedule_;
 
   // Id that will be assigned to the `IdleTask` registered with this.
@@ -159,11 +156,15 @@ class CORE_EXPORT ScriptedIdleTaskController
   // Whether the execution context is paused.
   bool paused_ = false;
 
-  // Number of "scheduler idle tasks" posted to `scheduler_` which did not run
-  // yet. Not necessarily equal to the size of `idle_tasks_`
-  // (e.g. `ContextUnpaused` may cause multiple "scheduler idle tasks" for the
-  // same `idle_tasks_` entry).
-  size_t num_pending_scheduler_idle_tasks_ = 0;
+  // Number of outstanding scheduler idle tasks.
+  scoped_refptr<base::RefCountedData<size_t>> num_scheduler_idle_tasks_ =
+      base::MakeRefCounted<base::RefCountedData<size_t>>(0);
+
+ public:
+  // Type of SchedulerIdleTask(), used to define callback cancellation traits in
+  // the implementation file.
+  using SchedulerIdleTaskDeclType =
+      decltype(&ScriptedIdleTaskController::SchedulerIdleTask);
 };
 
 }  // namespace blink

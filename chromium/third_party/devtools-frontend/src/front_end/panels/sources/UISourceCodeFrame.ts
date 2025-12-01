@@ -30,7 +30,7 @@
 
 import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
-import * as FormatterActions from '../../entrypoints/formatter_worker/FormatterActions.js';  // eslint-disable-line rulesdir/es_modules_import
+import * as FormatterActions from '../../entrypoints/formatter_worker/FormatterActions.js';  // eslint-disable-line rulesdir/es-modules-import
 import * as IssuesManager from '../../models/issues_manager/issues_manager.js';
 import * as Persistence from '../../models/persistence/persistence.js';
 import * as TextUtils from '../../models/text_utils/text_utils.js';
@@ -577,9 +577,9 @@ export const enum Events {
   TOOLBAR_ITEMS_CHANGED = 'ToolbarItemsChanged',
 }
 
-export type EventTypes = {
-  [Events.TOOLBAR_ITEMS_CHANGED]: void,
-};
+export interface EventTypes {
+  [Events.TOOLBAR_ITEMS_CHANGED]: void;
+}
 
 const pluginCompartment = new CodeMirror.Compartment();
 
@@ -786,12 +786,9 @@ function renderMessage(message: RowMessage, count: number): HTMLElement {
     icon.classList.add('text-editor-row-message-icon');
     icon.addEventListener('click', () => (message.clickHandler() || Math.min)());
   } else {
-    const repeatCountElement =
-        document.createElement('span', {is: 'dt-small-bubble'}) as UI.UIUtils.DevToolsSmallBubble;
+    const repeatCountElement = element.createChild('dt-small-bubble', 'text-editor-row-message-repeat-count');
     repeatCountElement.textContent = String(count);
-    repeatCountElement.classList.add('text-editor-row-message-repeat-count');
     repeatCountElement.style.flexShrink = '0';
-    element.appendChild(repeatCountElement);
     repeatCountElement.type = getBubbleTypePerLevel(message.level());
   }
   const linesContainer = element.createChild('div');
@@ -803,6 +800,10 @@ function renderMessage(message: RowMessage, count: number): HTMLElement {
 }
 
 const rowMessageTheme = CodeMirror.EditorView.baseTheme({
+  '.cm-line::selection': {
+    backgroundColor: 'transparent',
+    color: 'currentColor',
+  },
   '.cm-tooltip-message': {
     padding: '4px',
   },

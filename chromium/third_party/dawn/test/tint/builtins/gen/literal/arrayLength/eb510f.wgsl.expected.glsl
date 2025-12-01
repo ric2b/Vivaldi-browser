@@ -1,13 +1,16 @@
+//
+// fragment_main
+//
 #version 310 es
 precision highp float;
 precision highp int;
 
 layout(binding = 0, std430)
-buffer prevent_dce_block_1_ssbo {
+buffer f_prevent_dce_block_ssbo {
   uint inner;
 } v;
 layout(binding = 1, std430)
-buffer SB_RW_1_ssbo {
+buffer f_SB_RW_ssbo {
   uint arg_0[];
 } sb_rw;
 uint arrayLength_eb510f() {
@@ -17,6 +20,9 @@ uint arrayLength_eb510f() {
 void main() {
   v.inner = arrayLength_eb510f();
 }
+//
+// compute_main
+//
 #version 310 es
 
 layout(binding = 0, std430)

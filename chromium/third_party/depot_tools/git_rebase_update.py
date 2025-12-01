@@ -161,68 +161,22 @@ def rebase_branch(branch, parent, start_hash):
     if git.hash_one(parent) != start_hash:
         # Try a plain rebase first
         print('Rebasing:', branch)
-        consider_squashing = git.get_num_commits(branch) != 1
-        rebase_ret = git.rebase(parent,
-                                start_hash,
-                                branch,
-                                abort=consider_squashing)
+        rebase_ret = git.rebase(parent, start_hash, branch, abort=False)
         if not rebase_ret.success:
             mid_rebase_message = textwrap.dedent("""\
                 Your working copy is in mid-rebase. Either:
                  * completely resolve like a normal git-rebase; OR
+                 * try squashing your branch first
+                   (git rebase --abort && git squash-branch) and try
+                   again; OR
                  * abort the rebase and mark this branch as dormant:
                        git rebase --abort && \\
                        git config branch.%s.dormant true
 
                 And then run `git rebase-update -n` to resume.
                 """ % branch)
-            if not consider_squashing:
-                print(mid_rebase_message)
-                return False
-            print("Failed! Attempting to squash", branch, "...", end=' ')
-            sys.stdout.flush()
-            squash_branch = branch + "_squash_attempt"
-            git.run('checkout', '-b', squash_branch)
-            git.squash_current_branch(merge_base=start_hash)
-
-            # Try to rebase the branch_squash_attempt branch to see if it's
-            # empty.
-            squash_ret = git.rebase(parent,
-                                    start_hash,
-                                    squash_branch,
-                                    abort=True)
-            empty_rebase = git.hash_one(squash_branch) == git.hash_one(parent)
-            git.run('checkout', branch)
-            git.run('branch', '-D', squash_branch)
-            if squash_ret.success and empty_rebase:
-                print('Success!')
-                git.squash_current_branch(merge_base=start_hash)
-                git.rebase(parent, start_hash, branch)
-            else:
-                print("Failed!")
-                print()
-
-                # rebase and leave in mid-rebase state.
-                # This second rebase attempt should always fail in the same
-                # way that the first one does.  If it magically succeeds then
-                # something very strange has happened.
-                second_rebase_ret = git.rebase(parent, start_hash, branch)
-                if second_rebase_ret.success:  # pragma: no cover
-                    print("Second rebase succeeded unexpectedly!")
-                    print("Please see: http://crbug.com/425696")
-                    print("First rebased failed with:")
-                    print(rebase_ret.stderr)
-                else:
-                    print("Here's what git-rebase (squashed) had to say:")
-                    print()
-                    print(squash_ret.stdout)
-                    print(squash_ret.stderr)
-                    print(
-                        textwrap.dedent("""\
-          Squashing failed. You probably have a real merge conflict.
-          """))
-                    print(mid_rebase_message)
-                    return False
+            print(mid_rebase_message)
+            return False
     else:
         print('%s up-to-date' % branch)
 
@@ -275,6 +229,7 @@ def main(args=None):
                         '-e',
                         action='store_true',
                         help='Do not automatically delete empty branches.')
+
     opts = parser.parse_args(args)
 
     if opts.verbose:  # pragma: no cover

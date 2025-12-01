@@ -3,14 +3,16 @@
 // found in the LICENSE file.
 
 import * as Common from '../../core/common/common.js';
-import type * as Platform from '../../core/platform/platform.js';
+import * as Platform from '../../core/platform/platform.js';
 
 import * as Sources from './sources.js';
+
+const {urlString} = Platform.DevToolsPath;
 
 describe('TabbedEditorContainer', () => {
   describe('HistoryItem', () => {
     const {HistoryItem} = Sources.TabbedEditorContainer;
-    const url = 'http://localhost' as Platform.DevToolsPath.UrlString;
+    const url = urlString`http://localhost`;
 
     describe('fromObject', () => {
       it('rejects invalid resource type names', () => {
@@ -51,16 +53,16 @@ describe('TabbedEditorContainer', () => {
         assert.lengthOf(keys, 3);
         assert.propertyVal(keys[0], 'url', 'http://localhost/foo.js');
         assert.propertyVal(keys[0], 'resourceType', Common.ResourceType.resourceTypes.Script);
-        assert.strictEqual(history.selectionRange(keys[0]), undefined);
-        assert.strictEqual(history.scrollLineNumber(keys[0]), undefined);
+        assert.isUndefined(history.selectionRange(keys[0]));
+        assert.isUndefined(history.scrollLineNumber(keys[0]));
         assert.propertyVal(keys[1], 'url', 'webpack:///src/foo.vue');
         assert.propertyVal(keys[1], 'resourceType', Common.ResourceType.resourceTypes.SourceMapScript);
-        assert.strictEqual(history.selectionRange(keys[1]), undefined);
+        assert.isUndefined(history.selectionRange(keys[1]));
         assert.strictEqual(history.scrollLineNumber(keys[1]), 5);
         assert.propertyVal(keys[2], 'url', 'http://localhost/foo.js');
         assert.propertyVal(keys[2], 'resourceType', Common.ResourceType.resourceTypes.SourceMapScript);
-        assert.strictEqual(history.selectionRange(keys[2]), undefined);
-        assert.strictEqual(history.scrollLineNumber(keys[2]), undefined);
+        assert.isUndefined(history.selectionRange(keys[2]));
+        assert.isUndefined(history.scrollLineNumber(keys[2]));
       });
 
       it('gracefully ignores items with invalid resource type names', () => {
@@ -79,14 +81,10 @@ describe('TabbedEditorContainer', () => {
     describe('toObject', () => {
       it('serializes correctly', () => {
         const history = new History([
+          new HistoryItem(urlString`http://localhost/foo.js`, Common.ResourceType.resourceTypes.Script),
           new HistoryItem(
-              'http://localhost/foo.js' as Platform.DevToolsPath.UrlString, Common.ResourceType.resourceTypes.Script),
-          new HistoryItem(
-              'webpack:///src/foo.vue' as Platform.DevToolsPath.UrlString,
-              Common.ResourceType.resourceTypes.SourceMapScript, undefined, 5),
-          new HistoryItem(
-              'http://localhost/foo.js' as Platform.DevToolsPath.UrlString,
-              Common.ResourceType.resourceTypes.SourceMapScript),
+              urlString`webpack:///src/foo.vue`, Common.ResourceType.resourceTypes.SourceMapScript, undefined, 5),
+          new HistoryItem(urlString`http://localhost/foo.js`, Common.ResourceType.resourceTypes.SourceMapScript),
         ]);
         const serializedHistory = history.toObject();
         assert.lengthOf(serializedHistory, 3);
@@ -103,22 +101,17 @@ describe('TabbedEditorContainer', () => {
     describe('update', () => {
       it('moves items referenced by keys to the beginning', () => {
         const history = new History([
-          new HistoryItem(
-              'webpack:///src/foo.vue' as Platform.DevToolsPath.UrlString,
-              Common.ResourceType.resourceTypes.SourceMapScript),
-          new HistoryItem(
-              'http://localhost/foo.js' as Platform.DevToolsPath.UrlString, Common.ResourceType.resourceTypes.Script),
-          new HistoryItem(
-              'http://localhost/foo.js' as Platform.DevToolsPath.UrlString,
-              Common.ResourceType.resourceTypes.SourceMapScript),
+          new HistoryItem(urlString`webpack:///src/foo.vue`, Common.ResourceType.resourceTypes.SourceMapScript),
+          new HistoryItem(urlString`http://localhost/foo.js`, Common.ResourceType.resourceTypes.Script),
+          new HistoryItem(urlString`http://localhost/foo.js`, Common.ResourceType.resourceTypes.SourceMapScript),
         ]);
         history.update([{
-          url: 'http://localhost/foo.js' as Platform.DevToolsPath.UrlString,
+          url: urlString`http://localhost/foo.js`,
           resourceType: Common.ResourceType.resourceTypes.Script,
         }]);
         assert.strictEqual(
             history.index({
-              url: 'http://localhost/foo.js' as Platform.DevToolsPath.UrlString,
+              url: urlString`http://localhost/foo.js`,
               resourceType: Common.ResourceType.resourceTypes.Script,
             }),
             0,

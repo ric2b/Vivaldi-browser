@@ -1886,6 +1886,10 @@ class WasmDecoder : public Decoder {
     size_t num_memories = module_->memories.size();
     if (imm.index > 0 || imm.length > 1) {
       this->detected_->add_multi_memory();
+      if (v8_flags.wasm_jitless) {
+        DecodeError(pc, "Multiple memories not supported in Wasm jitless mode");
+        return false;
+      }
     }
 
     if (!VALIDATE(imm.index < num_memories)) {
@@ -6241,10 +6245,9 @@ class WasmFullDecoder : public WasmDecoder<ValidationTag, decoding_mode> {
   // Pop multiple values at once; faster than multiple individual {Pop}s.
   // Returns an array of the popped values if there are multiple, or the popped
   // value itself if a single type is passed.
-  template <typename... ValueTypes,
-            typename = std::enable_if_t<
-                // Pop is only allowed to be called with ValueType parameters.
-                std::conjunction_v<std::is_same<ValueType, ValueTypes>...>>>
+  template <typename... ValueTypes>
+  // Pop is only allowed to be called with ValueType parameters.
+    requires(std::is_same_v<ValueType, ValueTypes> && ...)
   V8_INLINE std::conditional_t<sizeof...(ValueTypes) == 1, Value,
                                std::array<Value, sizeof...(ValueTypes)>>
   Pop(ValueTypes... expected_types) {

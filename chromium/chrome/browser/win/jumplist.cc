@@ -245,9 +245,9 @@ base::FilePath GenerateJumplistIconDirName(
 
 }  // namespace
 
-JumpList::UpdateTransaction::UpdateTransaction() {}
+JumpList::UpdateTransaction::UpdateTransaction() = default;
 
-JumpList::UpdateTransaction::~UpdateTransaction() {}
+JumpList::UpdateTransaction::~UpdateTransaction() = default;
 
 // static
 bool JumpList::Enabled() {

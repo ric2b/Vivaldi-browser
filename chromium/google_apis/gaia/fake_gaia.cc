@@ -2,8 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "google_apis/gaia/fake_gaia.h"
 
+#include <algorithm>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -18,7 +24,6 @@
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/path_service.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -27,6 +32,7 @@
 #include "base/values.h"
 #include "google_apis/gaia/gaia_auth_consumer.h"
 #include "google_apis/gaia/gaia_constants.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/base/url_util.h"
 #include "net/cookies/parsed_cookie.h"
@@ -137,7 +143,7 @@ std::string FormatSyncTrustedRecoveryMethods(
 }
 
 std::string FormatSyncTrustedVaultKeysHeader(
-    const std::string& gaia_id,
+    const GaiaId& gaia_id,
     const FakeGaia::SyncTrustedVaultKeys& sync_trusted_vault_keys) {
   // Single line used because this string populates HTTP headers. Similarly,
   // base64 encoding is used to avoid line breaks and meanwhile adopt JSON
@@ -151,7 +157,7 @@ std::string FormatSyncTrustedVaultKeysHeader(
       "\"fakeTrustedRecoveryMethods\":[%s]"
       "}";
   return base::StringPrintf(
-      format, gaia_id.c_str(),
+      format, gaia_id.ToString().c_str(),
       base::Base64Encode(sync_trusted_vault_keys.encryption_key).c_str(),
       sync_trusted_vault_keys.encryption_key_version,
       FormatSyncTrustedRecoveryMethods(
@@ -233,7 +239,7 @@ void FakeGaia::UpdateConfiguration(const Configuration& params) {
 }
 
 void FakeGaia::MapEmailToGaiaId(const std::string& email,
-                                const std::string& gaia_id) {
+                                const GaiaId& gaia_id) {
   DCHECK(!email.empty());
   DCHECK(!gaia_id.empty());
   email_to_gaia_id_map_[email] = gaia_id;
@@ -246,13 +252,12 @@ void FakeGaia::SetSyncTrustedVaultKeys(
   email_to_sync_trusted_vault_keys_map_[email] = sync_trusted_vault_keys;
 }
 
-std::string FakeGaia::GetGaiaIdOfEmail(const std::string& email) const {
+GaiaId FakeGaia::GetGaiaIdOfEmail(const std::string& email) const {
   const auto it = email_to_gaia_id_map_.find(email);
-  return it == email_to_gaia_id_map_.end() ? std::string(kDefaultGaiaId)
-                                           : it->second;
+  return it == email_to_gaia_id_map_.end() ? GetDefaultGaiaId() : it->second;
 }
 
-std::string FakeGaia::GetEmailOfGaiaId(const std::string& gaia_id) const {
+std::string FakeGaia::GetEmailOfGaiaId(const GaiaId& gaia_id) const {
   for (const auto& email_and_gaia_id : email_to_gaia_id_map_) {
     if (email_and_gaia_id.second == gaia_id)
       return email_and_gaia_id.first;
@@ -266,7 +271,8 @@ void FakeGaia::AddGoogleAccountsSigninHeader(BasicHttpResponse* http_response,
   http_response->AddCustomHeader(
       "google-accounts-signin",
       base::StringPrintf("email=\"%s\", obfuscatedid=\"%s\", sessionindex=0",
-                         email.c_str(), GetGaiaIdOfEmail(email).c_str()));
+                         email.c_str(),
+                         GetGaiaIdOfEmail(email).ToString().c_str()));
 }
 
 void FakeGaia::SetOAuthCodeCookie(BasicHttpResponse* http_response) const {
@@ -367,7 +373,7 @@ void FakeGaia::Initialize() {
 
 FakeGaia::RequestHandlerMap::iterator FakeGaia::FindHandlerByPathPrefix(
     const std::string& request_path) {
-  return base::ranges::find_if(
+  return std::ranges::find_if(
       request_handlers_,
       [request_path](std::pair<std::string, HttpRequestHandlerCallback> entry) {
         return base::StartsWith(request_path, entry.first,
@@ -462,10 +468,10 @@ void FakeGaia::SetFixedResponse(const GURL& gaia_url,
   }
 }
 
-GURL FakeGaia::GetFakeRemoveLocalAccountURL(const std::string& gaia_id) const {
+GURL FakeGaia::GetFakeRemoveLocalAccountURL(const GaiaId& gaia_id) const {
   GURL url =
       GaiaUrls::GetInstance()->gaia_url().Resolve(kFakeRemoveLocalAccountPath);
-  return net::AppendQueryParameter(url, "gaia_id", gaia_id);
+  return net::AppendQueryParameter(url, "gaia_id", gaia_id.ToString());
 }
 
 void FakeGaia::SetRefreshTokenToDeviceIdMap(
@@ -728,7 +734,7 @@ void FakeGaia::HandleTokenInfo(const HttpRequest& request,
         base::Value::Dict()
             .Set("issued_to", token_info->issued_to)
             .Set("audience", token_info->audience)
-            .Set("user_id", token_info->user_id)
+            .Set("user_id", token_info->user_id.ToString())
             .Set("scope", base::JoinString(std::vector<std::string_view>(
                                                token_info->scopes.begin(),
                                                token_info->scopes.end()),
@@ -775,15 +781,15 @@ void FakeGaia::HandleListAccounts(const HttpRequest& request,
   std::vector<std::string> listed_accounts;
   listed_accounts.push_back(base::StringPrintf(
       kIndividualListedAccountResponseFormat, configuration_.email.c_str(),
-      kDefaultGaiaId.data(), kAccountIsSignedIn));
+      GetDefaultGaiaId().ToString(), kAccountIsSignedIn));
 
-  for (const std::string& gaia_id : configuration_.signed_out_gaia_ids) {
-    DCHECK_NE(kDefaultGaiaId, gaia_id);
+  for (const GaiaId& gaia_id : configuration_.signed_out_gaia_ids) {
+    DCHECK_NE(GetDefaultGaiaId(), gaia_id);
 
     const std::string email = GetEmailOfGaiaId(gaia_id);
     listed_accounts.push_back(base::StringPrintf(
-        kIndividualListedAccountResponseFormat, email.c_str(), gaia_id.c_str(),
-        kAccountIsSignedOut));
+        kIndividualListedAccountResponseFormat, email.c_str(),
+        gaia_id.ToString().c_str(), kAccountIsSignedOut));
   }
 
   http_response->set_content(
@@ -802,11 +808,12 @@ void FakeGaia::HandleOAuthUserInfo(const HttpRequest& request,
   }
 
   if (token_info) {
-    auto response_dict = base::Value::Dict()
-                             .Set("id", GetGaiaIdOfEmail(token_info->email))
-                             .Set("email", token_info->email)
-                             .Set("verified_email", token_info->email)
-                             .Set("id_token", token_info->id_token);
+    auto response_dict =
+        base::Value::Dict()
+            .Set("id", GetGaiaIdOfEmail(token_info->email).ToString())
+            .Set("email", token_info->email)
+            .Set("verified_email", token_info->email)
+            .Set("id_token", token_info->id_token);
     FormatOkJSONResponse(response_dict, http_response);
   } else {
     http_response->set_code(net::HTTP_BAD_REQUEST);
@@ -920,8 +927,9 @@ void FakeGaia::HandleFakeRemoveLocalAccount(
     net::test_server::BasicHttpResponse* http_response) {
   DCHECK(http_response);
 
-  std::string gaia_id;
-  GetQueryParameter(request.GetURL().query(), "gaia_id", &gaia_id);
+  std::string gaia_id_str;
+  GetQueryParameter(request.GetURL().query(), "gaia_id", &gaia_id_str);
+  GaiaId gaia_id(gaia_id_str);
 
   if (!std::erase(configuration_.signed_out_gaia_ids, gaia_id)) {
     http_response->set_code(net::HTTP_BAD_REQUEST);
@@ -930,7 +938,7 @@ void FakeGaia::HandleFakeRemoveLocalAccount(
 
   http_response->AddCustomHeader(
       "Google-Accounts-RemoveLocalAccount",
-      base::StringPrintf("obfuscatedid=\"%s\"", gaia_id.c_str()));
+      base::StringPrintf("obfuscatedid=\"%s\"", gaia_id.ToString().c_str()));
   http_response->set_content("");
   http_response->set_code(net::HTTP_OK);
 }

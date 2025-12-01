@@ -24,6 +24,7 @@
 #include "xnnpack/node-type.h"
 #include "xnnpack/subgraph.h"
 #include "replicable_random_device.h"
+#include "runtime-flags.h"
 
 template <class T>
 class ScaledDotProductAttentionTestBase : public ::testing::Test {
@@ -250,7 +251,6 @@ TEST_F(ScaledDotProductAttentionTestF16, define) {
   EXPECT_EQ(subgraph->num_nodes, 1);
   const struct xnn_node* node = &subgraph->nodes[0];
   EXPECT_EQ(node->type, xnn_node_type_scaled_dot_product_attention);
-  EXPECT_EQ(node->compute_type, xnn_compute_type_fp16);
   EXPECT_EQ(node->num_inputs, 5);
   EXPECT_EQ(node->inputs[0], query_id);
   EXPECT_EQ(node->inputs[1], key_id);
@@ -327,7 +327,6 @@ TEST_F(ScaledDotProductAttentionTestF32, define) {
   EXPECT_EQ(subgraph->num_nodes, 1);
   const struct xnn_node* node = &subgraph->nodes[0];
   EXPECT_EQ(node->type, xnn_node_type_scaled_dot_product_attention);
-  EXPECT_EQ(node->compute_type, xnn_compute_type_fp32);
   EXPECT_EQ(node->num_inputs, 5);
   EXPECT_EQ(node->inputs[0], query_id);
   EXPECT_EQ(node->inputs[1], key_id);
@@ -439,7 +438,7 @@ TEST_F(ScaledDotProductAttentionTestF16, matches_operator_api) {
       subgraph, cap_type, &cap_params, query_id, key_id, value_id, scale_id, mask_id, output_id, /*flags=*/0));
 
   xnn_runtime_t runtime = nullptr;
-  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, /*flags=*/0, &runtime));
+  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, xnn_test_runtime_flags(), &runtime));
   ASSERT_NE(nullptr, runtime);
   std::unique_ptr<xnn_runtime, decltype(&xnn_delete_runtime)> auto_runtime(runtime, xnn_delete_runtime);
   std::array<xnn_external_value, 6> external = {
@@ -556,7 +555,7 @@ TEST_F(ScaledDotProductAttentionTestF32, matches_operator_api) {
       subgraph, cap_type, &cap_params, query_id, key_id, value_id, scale_id, mask_id, output_id, /*flags=*/0));
 
   xnn_runtime_t runtime = nullptr;
-  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, /*flags=*/0, &runtime));
+  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, xnn_test_runtime_flags(), &runtime));
   ASSERT_NE(nullptr, runtime);
   std::unique_ptr<xnn_runtime, decltype(&xnn_delete_runtime)> auto_runtime(runtime, xnn_delete_runtime);
   std::array<xnn_external_value, 6> external = {
@@ -723,7 +722,7 @@ TEST_F(ScaledDotProductAttentionTestF32, matches_operator_api_dynamic_shape_no_r
       subgraph, cap_type, &cap_params, query_id, key_id, value_id, scale_id, mask_id, output_id, /*flags=*/0));
 
   xnn_runtime_t runtime = nullptr;
-  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, /*flags=*/0, &runtime));
+  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, xnn_test_runtime_flags(), &runtime));
   ASSERT_NE(nullptr, runtime);
   std::unique_ptr<xnn_runtime, decltype(&xnn_delete_runtime)> auto_runtime(runtime, xnn_delete_runtime);
 
@@ -924,7 +923,7 @@ TEST_F(ScaledDotProductAttentionTestF32, matches_operator_api_dynamic_shape_requ
       subgraph, cap_type, &cap_params, query_id, key_id, value_id, scale_id, mask_id, output_id, /*flags=*/0));
 
   xnn_runtime_t runtime = nullptr;
-  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, /*flags=*/0, &runtime));
+  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, xnn_test_runtime_flags(), &runtime));
   ASSERT_NE(nullptr, runtime);
   std::unique_ptr<xnn_runtime, decltype(&xnn_delete_runtime)> auto_runtime(runtime, xnn_delete_runtime);
 

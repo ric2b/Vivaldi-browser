@@ -32,12 +32,6 @@ BASE_FEATURE(kCalculateNativeWinOcclusion,
              "CalculateNativeWinOcclusion",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// If enabled, listen for screen power state change and factor into the native
-// window occlusion detection - Windows-only.
-BASE_FEATURE(kScreenPowerListenerForNativeWinOcclusion,
-             "ScreenPowerListenerForNativeWinOcclusion",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // Once enabled, the exact behavior is dictated by the field trial param
 // name `kApplyNativeOcclusionToCompositorType`.
 BASE_FEATURE(kApplyNativeOcclusionToCompositor,
@@ -86,14 +80,6 @@ BASE_FEATURE(kNotificationsIgnoreRequireInteraction,
 
 bool IsNotificationsIgnoreRequireInteractionEnabled() {
   return base::FeatureList::IsEnabled(kNotificationsIgnoreRequireInteraction);
-}
-
-BASE_FEATURE(kShortcutCustomization,
-             "ShortcutCustomization",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-bool IsShortcutCustomizationEnabled() {
-  return base::FeatureList::IsEnabled(kShortcutCustomization);
 }
 
 // Enables settings that allow users to remap the F11 and F12 keys in the
@@ -162,25 +148,6 @@ BASE_FEATURE(kInputMethodSettingsUiUpdate,
              "InputMethodSettingsUiUpdate",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Enables percent-based scrolling for mousewheel and keyboard initiated
-// scrolls and impulse curve animations.
-const enum base::FeatureState kWindowsScrollingPersonalityDefaultStatus =
-    base::FEATURE_DISABLED_BY_DEFAULT;
-static_assert(!BUILDFLAG(IS_MAC) ||
-                  (BUILDFLAG(IS_MAC) &&
-                   kWindowsScrollingPersonalityDefaultStatus ==
-                       base::FEATURE_DISABLED_BY_DEFAULT),
-              "Do not enable this on the Mac. The animation does not match the "
-              "system scroll animation curve to such an extent that it makes "
-              "Chromium stand out in a bad way.");
-BASE_FEATURE(kWindowsScrollingPersonality,
-             "WindowsScrollingPersonality",
-             kWindowsScrollingPersonalityDefaultStatus);
-
-bool IsPercentBasedScrollingEnabled() {
-  return base::FeatureList::IsEnabled(features::kWindowsScrollingPersonality);
-}
-
 // Uses a stylus-specific tap slop region parameter for gestures.  Stylus taps
 // tend to slip more than touch taps (presumably because the user doesn't feel
 // the movement friction with a stylus).  As a result, it is harder to tap with
@@ -188,11 +155,6 @@ bool IsPercentBasedScrollingEnabled() {
 // touch slop.
 BASE_FEATURE(kStylusSpecificTapSlop,
              "StylusSpecificTapSlop",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// Allows system caption style for WebVTT Captions.
-BASE_FEATURE(kSystemCaptionStyle,
-             "SystemCaptionStyle",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // When enabled, the feature will query the OS for a default cursor size,
@@ -243,6 +205,12 @@ BASE_FEATURE(kUiCompositorScrollWithLayers,
 #endif
 );
 
+// TODO(crbug.com/389771428): Switch the ui::Compositor to use
+// cc::PropertyTrees and layer lists rather than layer trees.
+BASE_FEATURE(kUiCompositorUsesLayerLists,
+             "UiCompositorUsesLayerLists",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Enables the use of a touch fling curve that is based on the behavior of
 // native apps on Windows.
 BASE_FEATURE(kExperimentalFlingAnimation,
@@ -255,13 +223,7 @@ BASE_FEATURE(kExperimentalFlingAnimation,
 );
 
 #if BUILDFLAG(IS_ANDROID)
-BASE_FEATURE(kClipboardFiles,
-             "ClipboardFiles",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kDragDropEmpty, "DragDropEmpty", base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kDragDropFiles, "DragDropFiles", base::FEATURE_ENABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_WIN)
@@ -282,13 +244,7 @@ BASE_FEATURE(kFocusFollowsCursor,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_CHROMEOS)
-// This feature supersedes kNewShortcutMapping.
-BASE_FEATURE(kImprovedKeyboardShortcuts,
-             "ImprovedKeyboardShortcuts",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 bool IsImprovedKeyboardShortcutsEnabled() {
-#if BUILDFLAG(IS_CHROMEOS)
   // TODO(crbug.com/40203434): Remove this once kDeviceI18nShortcutsEnabled
   // policy is deprecated.
   if (::ui::ShortcutMappingPrefDelegate::IsInitialized()) {
@@ -298,9 +254,7 @@ bool IsImprovedKeyboardShortcutsEnabled() {
       return instance->IsI18nShortcutPrefEnabled();
     }
   }
-#endif  // BUILDFLAG(IS_CHROMEOS)
-
-  return base::FeatureList::IsEnabled(kImprovedKeyboardShortcuts);
+  return true;
 }
 
 #endif  // BUILDFLAG(IS_CHROMEOS)
@@ -464,20 +418,9 @@ BASE_FEATURE(kBubbleMetricsApi,
              "BubbleMetricsApi",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-#if BUILDFLAG(IS_APPLE)
-// Font Smoothing was enabled by default prior to introducing this feature.
-// We want to experiment with disabling it to align with CR2023 designs.
-BASE_FEATURE(kCr2023MacFontSmoothing,
-             "Cr2023MacFontSmoothing",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-#endif  // BUILDFLAG(IS_APPLE)
-
 #if BUILDFLAG(IS_WIN)
 BASE_FEATURE(kUseGammaContrastRegistrySettings,
              "UseGammaContrastRegistrySettings",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-BASE_FEATURE(kIncreaseWindowsTextContrast,
-             "IncreaseWindowsTextContrast",
              base::FEATURE_ENABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_WIN)
 
@@ -487,7 +430,12 @@ BASE_FEATURE(kBubbleFrameViewTitleIsHeading,
 
 BASE_FEATURE(kEnableGestureBeginEndTypes,
              "EnableGestureBeginEndTypes",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+#if !BUILDFLAG(IS_CHROMEOS)
+             base::FEATURE_ENABLED_BY_DEFAULT
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT
+#endif  // !BUILDFLAG(IS_CHROMEOS)
+);
 
 BASE_FEATURE(kUseUtf8EncodingForSvgImage,
              "UseUtf8EncodingForSvgImage",

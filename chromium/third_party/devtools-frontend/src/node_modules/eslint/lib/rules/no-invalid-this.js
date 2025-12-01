@@ -35,10 +35,12 @@ module.exports = {
     meta: {
         type: "suggestion",
 
+        defaultOptions: [{ capIsConstructor: true }],
+
         docs: {
             description: "Disallow use of `this` in contexts where the value of `this` is `undefined`",
             recommended: false,
-            url: "https://eslint.org/docs/rules/no-invalid-this"
+            url: "https://eslint.org/docs/latest/rules/no-invalid-this"
         },
 
         schema: [
@@ -46,8 +48,7 @@ module.exports = {
                 type: "object",
                 properties: {
                     capIsConstructor: {
-                        type: "boolean",
-                        default: true
+                        type: "boolean"
                     }
                 },
                 additionalProperties: false
@@ -60,10 +61,9 @@ module.exports = {
     },
 
     create(context) {
-        const options = context.options[0] || {};
-        const capIsConstructor = options.capIsConstructor !== false;
+        const [{ capIsConstructor }] = context.options;
         const stack = [],
-            sourceCode = context.getSourceCode();
+            sourceCode = context.sourceCode;
 
         /**
          * Gets the current checking context.
@@ -74,7 +74,7 @@ module.exports = {
          *   an object which has a flag that whether or not `this` keyword is valid.
          */
         stack.getCurrent = function() {
-            const current = this[this.length - 1];
+            const current = this.at(-1);
 
             if (!current.init) {
                 current.init = true;
@@ -95,8 +95,8 @@ module.exports = {
                 }
 
                 if (codePath.origin === "program") {
-                    const scope = context.getScope();
-                    const features = context.parserOptions.ecmaFeatures || {};
+                    const scope = sourceCode.getScope(node);
+                    const features = context.languageOptions.parserOptions.ecmaFeatures || {};
 
                     // `this` at the top level of scripts always refers to the global object
                     stack.push({
@@ -120,7 +120,7 @@ module.exports = {
                  * always valid, so we can set `init: true` right away.
                  */
                 stack.push({
-                    init: !context.getScope().isStrict,
+                    init: !sourceCode.getScope(node).isStrict,
                     node,
                     valid: true
                 });

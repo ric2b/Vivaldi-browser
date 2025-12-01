@@ -12,7 +12,7 @@ namespace dnssd {
 
 TEST(TxtRecordTest, TestCaseInsensitivity) {
   DnsSdTxtRecord txt;
-  std::vector<uint8_t> data{'a', 'b', 'c'};
+  std::vector<uint8_t> data = {'a', 'b', 'c'};
   EXPECT_TRUE(txt.SetValue("key", data).ok());
   EXPECT_TRUE(txt.GetValue("KEY").is_value());
 
@@ -34,7 +34,7 @@ TEST(TxtRecordTest, TestEmptyValue) {
 
 TEST(TxtRecordTest, TestSetAndGetValue) {
   DnsSdTxtRecord txt;
-  std::vector<uint8_t> data{'a', 'b', 'c'};
+  std::vector<uint8_t> data = {'a', 'b', 'c'};
   EXPECT_TRUE(txt.SetValue("key", data).ok());
   ASSERT_TRUE(txt.GetValue("key").is_value());
   ByteView value = txt.GetValue("key").value();
@@ -43,7 +43,7 @@ TEST(TxtRecordTest, TestSetAndGetValue) {
   EXPECT_EQ(value[1], 'b');
   EXPECT_EQ(value[2], 'c');
 
-  std::vector<uint8_t> data2{'a', 'b'};
+  std::vector<uint8_t> data2 = {'a', 'b'};
   EXPECT_TRUE(txt.SetValue("key", data2).ok());
   ASSERT_TRUE(txt.GetValue("key").is_value());
   ByteView value2 = txt.GetValue("key").value();
@@ -69,7 +69,7 @@ TEST(TxtRecordTest, TestSetAndGetValue) {
 
 TEST(TxtRecordTest, TestClearValue) {
   DnsSdTxtRecord txt;
-  std::vector<uint8_t> data{'a', 'b', 'c'};
+  std::vector<uint8_t> data = {'a', 'b', 'c'};
   EXPECT_TRUE(txt.SetValue("key", data).ok());
   txt.ClearValue("key");
 
@@ -98,7 +98,7 @@ TEST(TxtRecordTest, TestClearFlag) {
 
 TEST(TxtRecordTest, TestGettingWrongRecordTypeFails) {
   DnsSdTxtRecord txt;
-  std::vector<uint8_t> data{'a', 'b', 'c'};
+  std::vector<uint8_t> data = {'a', 'b', 'c'};
   EXPECT_TRUE(txt.SetValue("key", data).ok());
   EXPECT_TRUE(txt.SetFlag("key2", true).ok());
   EXPECT_FALSE(txt.GetValue("key2").is_value());
@@ -106,14 +106,14 @@ TEST(TxtRecordTest, TestGettingWrongRecordTypeFails) {
 
 TEST(TxtRecordTest, TestClearWrongRecordTypeFails) {
   DnsSdTxtRecord txt;
-  std::vector<uint8_t> data{'a', 'b', 'c'};
+  std::vector<uint8_t> data = {'a', 'b', 'c'};
   EXPECT_TRUE(txt.SetValue("key", data).ok());
   EXPECT_TRUE(txt.SetFlag("key2", true).ok());
 }
 
 TEST(TxtRecordTest, TestGetDataWorks) {
   DnsSdTxtRecord txt;
-  std::vector<uint8_t> data{'a', 'b', 'c'};
+  std::vector<uint8_t> data = {'a', 'b', 'c'};
   EXPECT_TRUE(txt.SetValue("key", data).ok());
   EXPECT_TRUE(txt.SetFlag("bool", true).ok());
   std::vector<std::vector<uint8_t>> results = txt.GetData();

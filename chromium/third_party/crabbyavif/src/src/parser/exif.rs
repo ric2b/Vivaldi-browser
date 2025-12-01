@@ -33,7 +33,7 @@ fn parse_exif_tiff_header_offset(stream: &mut IStream) -> AvifResult<u32> {
     Err(AvifError::InvalidExifPayload)
 }
 
-pub fn parse(stream: &mut IStream) -> AvifResult<()> {
+pub(crate) fn parse(stream: &mut IStream) -> AvifResult<()> {
     // unsigned int(32) exif_tiff_header_offset;
     let offset = stream.read_u32().or(Err(AvifError::InvalidExifPayload))?;
 

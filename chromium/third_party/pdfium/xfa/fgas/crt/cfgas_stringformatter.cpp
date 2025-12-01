@@ -217,7 +217,8 @@ bool GetNumericDotIndex(const WideString& wsNum,
       continue;
     }
     if (ccf + spDotSymbol.size() <= spNum.size() &&
-        wcsncmp(&spNum[ccf], spDotSymbol.data(), spDotSymbol.size()) == 0) {
+        UNSAFE_TODO(wcsncmp(&spNum[ccf], spDotSymbol.data(),
+                            spDotSymbol.size())) == 0) {
       *iDotIndex = ccf;
       return true;
     }
@@ -740,7 +741,7 @@ CFGAS_StringFormatter::DateTimeType AddDateToDatelessType(
     case CFGAS_StringFormatter::DateTimeType::kTime:
       return CFGAS_StringFormatter::DateTimeType::kTimeDate;
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -752,7 +753,7 @@ CFGAS_StringFormatter::DateTimeType AddTimeToTimelessType(
     case CFGAS_StringFormatter::DateTimeType::kDate:
       return CFGAS_StringFormatter::DateTimeType::kDateTime;
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 

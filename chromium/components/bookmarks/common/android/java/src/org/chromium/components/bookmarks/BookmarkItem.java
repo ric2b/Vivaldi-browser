@@ -4,11 +4,13 @@
 
 package org.chromium.components.bookmarks;
 
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.components.url_formatter.SchemeDisplay;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.url.GURL;
 
 /** Contains data about a bookmark or bookmark folder. */
+@NullMarked
 public class BookmarkItem {
     private final String mTitle;
     private final GURL mUrl;
@@ -47,6 +49,15 @@ public class BookmarkItem {
         mRead = read;
         mDateLastOpened = dateLastOpened;
         mIsAccountBookmark = isAccountBookmark;
+
+        // Vivaldi: init default values
+        mIsSpeedDial = false;
+        mNickName = "";
+        mDescription = "";
+        mThumbnailPath = "";
+        mThemeColor = 0;
+        mCreated = 0;
+        mGUID = "";
     }
 
     /** Returns the title of the bookmark item. */
@@ -131,58 +142,58 @@ public class BookmarkItem {
         mForceEditableForTesting = true;
     }
 
-        /** Vivaldi specific members. */
-        private boolean mIsSpeedDial;
-        private String mNickName;
-        private String mDescription;
-        private String mThumbnailPath;
-        private int mThemeColor;
-        private long mCreated;
-        private String mGUID;
+    /** Vivaldi specific members. */
+    private boolean mIsSpeedDial;
+    private String mNickName;
+    private String mDescription;
+    private String mThumbnailPath;
+    private int mThemeColor;
+    private long mCreated;
+    private String mGUID;
 
-        /** Constructor used with Vivaldi. */
-        public BookmarkItem(BookmarkId id, String title, GURL url, boolean isFolder,
-                             BookmarkId parentId, boolean isEditable, boolean isManaged,
-                             long dateAdded, boolean read, boolean isSpeedDial,
-                             String nickName, String description, int themeColor,
-                             long created, String thumbnailPath, String guid) {
-            this(id, title, url, isFolder, parentId, isEditable, isManaged, dateAdded, read,
-                    created, false);
-            mIsSpeedDial = isSpeedDial;
-            mNickName = nickName;
-            mDescription = description;
-            mThumbnailPath = thumbnailPath;
-            mThemeColor = themeColor;
-            mCreated = created;
-            mGUID = guid;
-        }
+    /** Constructor used with Vivaldi. */
+    public BookmarkItem(BookmarkId id, String title, GURL url, boolean isFolder,
+                         BookmarkId parentId, boolean isEditable, boolean isManaged,
+                         long dateAdded, boolean read, boolean isSpeedDial,
+                         String nickName, String description, int themeColor,
+                         long created, String thumbnailPath, String guid) {
+        this(id, title, url, isFolder, parentId, isEditable, isManaged, dateAdded, read,
+                created, false);
+        mIsSpeedDial = isSpeedDial;
+        mNickName = nickName;
+        mDescription = description;
+        mThumbnailPath = thumbnailPath;
+        mThemeColor = themeColor;
+        mCreated = created;
+        mGUID = guid;
+    }
 
-        /** @return (Vivaldi) Whether this is a speed dial bookmark. */
-        public boolean isSpeeddial() { return mIsSpeedDial; }
+    /** @return (Vivaldi) Whether this is a speed dial bookmark. */
+    public boolean isSpeeddial() { return mIsSpeedDial; }
 
-        /** @return (Vivaldi) Nickname of the bookmark item. */
-        public String getNickName() { return mNickName; }
+    /** @return (Vivaldi) Nickname of the bookmark item. */
+    public String getNickName() { return mNickName; }
 
-        /** @return (Vivaldi) Description of the bookmark item. */
-        public String getDescription() { return mDescription; }
+    /** @return (Vivaldi) Description of the bookmark item. */
+    public String getDescription() { return mDescription; }
 
-        /** @return (Vivaldi) Thumbnail path of the bookmark item. */
-        public String getThumbnailPath() { return mThumbnailPath; }
+    /** @return (Vivaldi) Thumbnail path of the bookmark item. */
+    public String getThumbnailPath() { return mThumbnailPath; }
 
-        /** @return (Vivaldi) Theme color of the bookmark item's site. */
-        public int getThemeColor() { return mThemeColor; }
+    /** @return (Vivaldi) Theme color of the bookmark item's site. */
+    public int getThemeColor() { return mThemeColor; }
 
-        /** @return (Vivaldi) Created date of the bookmark item */
-        public long getCreated() { return mCreated; }
+    /** @return (Vivaldi) Created date of the bookmark item */
+    public long getCreated() { return mCreated; }
 
-        /** @return (Vivaldi) GUID of item */
-        public String getGUID() { return mGUID; }
+    /** @return (Vivaldi) GUID of item */
+    public String getGUID() { return mGUID; }
 
-        /** @return (Vivaldi) Whether this is a default (pre-installed) bookmark. */
-        public boolean isDefaultBookmark() {
-            return mThumbnailPath != null && mThumbnailPath.startsWith("/resources");
-        }
+    /** @return (Vivaldi) Whether this is a default (pre-installed) bookmark. */
+    public boolean isDefaultBookmark() {
+        return mThumbnailPath != null && mThumbnailPath.startsWith("/resources");
+    }
 
-        /** Vivaldi **/
-        public void setThumbnailPath(String path) { mThumbnailPath = path; }
+    /** Vivaldi **/
+    public void setThumbnailPath(String path) { mThumbnailPath = path; }
 }

@@ -93,6 +93,8 @@ class ChannelWin : public Channel,
   }
 
   void Write(MessagePtr message) override {
+    RecordSentMessageMetrics(message->data_num_bytes());
+
     if (remote_process().IsValid()) {
       // If we know the remote process handle, we transfer all outgoing handles
       // to the process now rewriting them in the message.
@@ -304,7 +306,7 @@ class ChannelWin : public Channel,
 
     BOOL ok =
         ::ReadFile(handle_.get(), buffer, static_cast<DWORD>(buffer_capacity),
-                   NULL, &read_context_.overlapped);
+                   NULL, read_context_.GetOverlapped());
     if (ok || GetLastError() == ERROR_IO_PENDING) {
       is_read_pending_ = true;
       AddRef();
@@ -334,7 +336,7 @@ class ChannelWin : public Channel,
     DCHECK(handle_.is_valid());
     BOOL ok = WriteFile(handle_.get(), message->data(),
                         static_cast<DWORD>(message->data_num_bytes()), NULL,
-                        &write_context_.overlapped);
+                        write_context_.GetOverlapped());
     if (ok || GetLastError() == ERROR_IO_PENDING) {
       is_write_pending_ = true;
       AddRef();

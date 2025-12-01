@@ -24,7 +24,7 @@
 
 namespace {
 
-#include "components/search_engines/search_engines_default.inc"
+#include "third_party/search_engines_data/search_engines_default.inc"
 
 constexpr char kSearchEnginesJson[] = "search_engines.json";
 constexpr char kSearchEnginesJsonUpdated[] = "search_engines.json.update";

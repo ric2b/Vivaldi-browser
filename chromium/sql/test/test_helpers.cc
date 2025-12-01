@@ -2,16 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "sql/test/test_helpers.h"
 
 #include <stddef.h>
 #include <stdint.h>
 
+#include <array>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -28,7 +24,6 @@
 #include "base/numerics/byte_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_restrictions.h"
-#include "sql/database.h"
 #include "sql/statement.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/sqlite/sqlite3.h"
@@ -67,7 +62,7 @@ std::optional<int> GetRootPage(sql::Database& db, std::string_view tree_name) {
   // See http://www.sqlite.org/fileformat2.html#database_header
   constexpr size_t kHeaderSize = 100;
   constexpr int64_t kHeaderOffset = 0;
-  uint8_t header[kHeaderSize];
+  std::array<uint8_t, kHeaderSize> header;
   base::File file(db_path, base::File::FLAG_OPEN | base::File::FLAG_READ);
   if (!file.IsValid())
     return false;
@@ -162,7 +157,7 @@ bool CorruptSizeInHeader(const base::FilePath& db_path) {
     // This function doesn't reliably work if connections to the DB are still
     // open. The database is opened in excusive mode. Open will fail if any
     // other connection exists on the database.
-    sql::Database db({.wal_mode = true});
+    Database db(DatabaseOptions().set_wal_mode(true), kTestTag);
     if (!db.Open(db_path))
       return false;
     int wal_log_size = 0;
@@ -201,7 +196,7 @@ bool CorruptSizeInHeader(const base::FilePath& db_path) {
 
 bool CorruptSizeInHeaderWithLock(const base::FilePath& db_path) {
   base::ScopedAllowBlockingForTesting allow_blocking;
-  sql::Database db;
+  Database db(kTestTag);
   if (!db.Open(db_path))
     return false;
 
@@ -219,7 +214,7 @@ bool CorruptIndexRootPage(const base::FilePath& db_path,
   if (!page_size.has_value())
     return false;
 
-  sql::Database db;
+  Database db(kTestTag);
   if (!db.Open(db_path))
     return false;
 
@@ -238,27 +233,27 @@ bool CorruptIndexRootPage(const base::FilePath& db_path,
   return file.WriteAndCheck(page_offset, page_buffer);
 }
 
-size_t CountSQLTables(sql::Database* db) {
+size_t CountSQLTables(Database* db) {
   return CountSQLItemsOfType(db, "table");
 }
 
-size_t CountSQLIndices(sql::Database* db) {
+size_t CountSQLIndices(Database* db) {
   return CountSQLItemsOfType(db, "index");
 }
 
-size_t CountTableColumns(sql::Database* db, const char* table) {
+size_t CountTableColumns(Database* db, const char* table) {
   // TODO(shess): sql::Database::QuoteForSQL() would make sense.
   std::string quoted_table;
   {
     static const char kQuoteSQL[] = "SELECT quote(?)";
-    sql::Statement s(db->GetUniqueStatement(kQuoteSQL));
+    Statement s(db->GetUniqueStatement(kQuoteSQL));
     s.BindCString(0, table);
     EXPECT_TRUE(s.Step());
     quoted_table = s.ColumnString(0);
   }
 
   std::string sql = "PRAGMA table_info(" + quoted_table + ")";
-  sql::Statement s(db->GetUniqueStatement(sql));
+  Statement s(db->GetUniqueStatement(sql));
   size_t rows = 0;
   while (s.Step()) {
     ++rows;
@@ -267,13 +262,13 @@ size_t CountTableColumns(sql::Database* db, const char* table) {
   return rows;
 }
 
-bool CountTableRows(sql::Database* db, const char* table, size_t* count) {
+bool CountTableRows(Database* db, const char* table, size_t* count) {
   // TODO(shess): Table should probably be quoted with [] or "".  See
   // http://www.sqlite.org/lang_keywords.html .  Meanwhile, odd names
   // will throw an error.
   std::string sql = "SELECT COUNT(*) FROM ";
   sql += table;
-  sql::Statement s(db->GetUniqueStatement(sql));
+  Statement s(db->GetUniqueStatement(sql));
   if (!s.Step())
     return false;
 
@@ -290,7 +285,7 @@ bool CreateDatabaseFromSQL(const base::FilePath& db_path,
   if (!base::ReadFileToString(sql_path, &sql))
     return false;
 
-  sql::Database db;
+  Database db(kTestTag);
   if (!db.Open(db_path))
     return false;
 
@@ -303,23 +298,23 @@ bool CreateDatabaseFromSQL(const base::FilePath& db_path,
   return db.Execute(sql);
 }
 
-std::string IntegrityCheck(sql::Database& db) {
+std::string IntegrityCheck(Database& db) {
   std::vector<std::string> messages;
   EXPECT_TRUE(db.FullIntegrityCheck(&messages));
 
   return base::JoinString(messages, "\n");
 }
 
-std::string ExecuteWithResult(sql::Database* db, const base::cstring_view sql) {
-  sql::Statement s(db->GetUniqueStatement(sql));
+std::string ExecuteWithResult(Database* db, const base::cstring_view sql) {
+  Statement s(db->GetUniqueStatement(sql));
   return s.Step() ? s.ColumnString(0) : std::string();
 }
 
-std::string ExecuteWithResults(sql::Database* db,
+std::string ExecuteWithResults(Database* db,
                                const base::cstring_view sql,
                                const base::cstring_view column_sep,
                                const base::cstring_view row_sep) {
-  sql::Statement s(db->GetUniqueStatement(sql));
+  Statement s(db->GetUniqueStatement(sql));
   std::string ret;
   while (s.Step()) {
     if (!ret.empty())
@@ -333,14 +328,14 @@ std::string ExecuteWithResults(sql::Database* db,
   return ret;
 }
 
-int GetPageCount(sql::Database* db) {
-  sql::Statement statement(db->GetUniqueStatement("PRAGMA page_count"));
+int GetPageCount(Database* db) {
+  Statement statement(db->GetUniqueStatement("PRAGMA page_count"));
   CHECK(statement.Step());
   return statement.ColumnInt(0);
 }
 
 // static
-ColumnInfo ColumnInfo::Create(sql::Database* db,
+ColumnInfo ColumnInfo::Create(Database* db,
                               const std::string& db_name,
                               const std::string& table_name,
                               const std::string& column_name) {

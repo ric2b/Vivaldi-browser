@@ -9,7 +9,7 @@ import * as SDK from '../../core/sdk/sdk.js';
 import * as CodeMirror from '../../third_party/codemirror.next/codemirror.next.js';
 import * as TextEditor from '../../ui/components/text_editor/text_editor.js';
 import * as ObjectUI from '../../ui/legacy/components/object_ui/object_ui.js';
-// eslint-disable-next-line rulesdir/es_modules_import
+// eslint-disable-next-line rulesdir/es-modules-import
 import objectValueStyles from '../../ui/legacy/components/object_ui/objectValue.css.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
@@ -61,6 +61,7 @@ export class ConsolePinPane extends UI.ThrottledWidget.ThrottledWidget {
   private readonly pinsSetting: Common.Settings.Setting<string[]>;
   constructor(private readonly liveExpressionButton: UI.Toolbar.ToolbarButton, private readonly focusOut: () => void) {
     super(true, 250);
+    this.registerRequiredCSS(consolePinPaneStyles, objectValueStyles);
     this.contentElement.classList.add('console-pins', 'monospace');
     this.contentElement.addEventListener('contextmenu', this.contextMenuEventFired.bind(this), false);
     this.contentElement.setAttribute('jslog', `${VisualLogging.pane('console-pins')}`);
@@ -72,12 +73,8 @@ export class ConsolePinPane extends UI.ThrottledWidget.ThrottledWidget {
     }
   }
 
-  override wasShown(): void {
-    super.wasShown();
-    this.registerCSSFiles([consolePinPaneStyles, objectValueStyles]);
-  }
-
   override willHide(): void {
+    super.willHide();
     for (const pin of this.pins) {
       pin.setHovered(false);
     }
@@ -182,7 +179,7 @@ export class ConsolePin {
   private deletePinIcon: UI.UIUtils.DevToolsCloseButton;
 
   constructor(expression: string, private readonly pinPane: ConsolePinPane, private readonly focusOut: () => void) {
-    this.deletePinIcon = document.createElement('div', {is: 'dt-close-button'}) as UI.UIUtils.DevToolsCloseButton;
+    this.deletePinIcon = document.createElement('dt-close-button');
     this.deletePinIcon.classList.add('close-button');
     this.deletePinIcon.setTabbable(true);
     if (expression.length) {
@@ -344,7 +341,9 @@ export class ConsolePin {
   appendToContextMenu(contextMenu: UI.ContextMenu.ContextMenu): void {
     if (this.lastResult && !('error' in this.lastResult) && this.lastResult.object) {
       contextMenu.appendApplicableItems(this.lastResult.object);
-      // Prevent result from being released manually. It will release along with 'console' group.
+      // Prevent result from being released automatically, since it may be used by
+      // the context menu action. It will be released when the console is cleared,
+      // where we release the 'live-expression' object group.
       this.lastResult = null;
     }
   }
@@ -359,7 +358,7 @@ export class ConsolePin {
     const timeout = throwOnSideEffect ? 250 : undefined;
     const executionContext = UI.Context.Context.instance().flavor(SDK.RuntimeModel.ExecutionContext);
     const {preview, result} = await ObjectUI.JavaScriptREPL.JavaScriptREPL.evaluateAndBuildPreview(
-        text, throwOnSideEffect, true /* replMode */, timeout, !isEditing /* allowErrors */, 'console',
+        text, throwOnSideEffect, true /* replMode */, timeout, !isEditing /* allowErrors */, 'live-expression',
         true /* awaitPromise */, true /* silent */);
     if (this.lastResult && this.lastExecutionContext) {
       this.lastExecutionContext.runtimeModel.releaseEvaluationResult(this.lastResult);
@@ -371,8 +370,7 @@ export class ConsolePin {
     if (!previewText || previewText !== this.pinPreview.deepTextContent()) {
       this.pinPreview.removeChildren();
       if (result && SDK.RuntimeModel.RuntimeModel.isSideEffectFailure(result)) {
-        const sideEffectLabel =
-            (this.pinPreview.createChild('span', 'object-value-calculate-value-button') as HTMLElement);
+        const sideEffectLabel = this.pinPreview.createChild('span', 'object-value-calculate-value-button');
         sideEffectLabel.textContent = '(…)';
         UI.Tooltip.Tooltip.install(sideEffectLabel, i18nString(UIStrings.evaluateAllowingSideEffects));
       } else if (previewText) {

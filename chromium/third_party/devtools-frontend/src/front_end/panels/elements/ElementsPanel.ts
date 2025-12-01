@@ -49,6 +49,7 @@ import type {AXTreeNodeData} from './AccessibilityTreeUtils.js';
 import {AccessibilityTreeView} from './AccessibilityTreeView.js';
 import {ColorSwatchPopoverIcon} from './ColorSwatchPopoverIcon.js';
 import * as ElementsComponents from './components/components.js';
+import {ComputedStyleModel} from './ComputedStyleModel.js';
 import {ComputedStyleWidget} from './ComputedStyleWidget.js';
 import elementsPanelStyles from './elementsPanel.css.js';
 import type {ElementsTreeElement} from './ElementsTreeElement.js';
@@ -145,6 +146,10 @@ const UIStrings = {
    * @description Accessible name for the DOM tree explorer view.
    */
   domTreeExplorer: 'DOM tree explorer',
+  /**
+   * @description A context menu item to reveal a submenu with badge settings.
+   */
+  adornerSettings: 'Badge settings',
 };
 
 const str_ = i18n.i18n.registerUIStrings('panels/elements/ElementsPanel.ts', UIStrings);
@@ -166,7 +171,7 @@ const createAccessibilityTreeToggleButton = (isActive: boolean): HTMLElement => 
   button.data = {
     active: isActive,
     variant: Buttons.Button.Variant.TOOLBAR,
-    iconUrl: new URL('../../Images/person.svg', import.meta.url).toString(),
+    iconName: 'person',
     title,
     jslogContext: 'toggle-accessibility-tree',
   };
@@ -202,7 +207,6 @@ export class ElementsPanel extends UI.Panel.Panel implements UI.SearchableView.S
   private currentSearchResultIndex: number;
   pendingNodeReveal: boolean;
   private readonly adornerManager: ElementsComponents.AdornerManager.AdornerManager;
-  private adornerSettingsPane: ElementsComponents.AdornerSettingsPane.AdornerSettingsPane|null;
   private readonly adornersByName: Map<string, Set<Adorners.Adorner.Adorner>>;
   accessibilityTreeButton?: HTMLElement;
   domTreeButton?: HTMLElement;
@@ -225,6 +229,7 @@ export class ElementsPanel extends UI.Panel.Panel implements UI.SearchableView.S
 
   constructor() {
     super('elements');
+    this.registerRequiredCSS(elementsPanelStyles);
 
     this.splitWidget = new UI.SplitWidget.SplitWidget(true, true, 'elements-panel-split-view-state', 325, 325);
     this.splitWidget.addEventListener(
@@ -276,9 +281,10 @@ export class ElementsPanel extends UI.Panel.Panel implements UI.SearchableView.S
 
     crumbsContainer.appendChild(this.breadcrumbs);
 
-    this.stylesWidget = StylesSidebarPane.instance();
-    this.computedStyleWidget = new ComputedStyleWidget();
-    this.metricsWidget = new MetricsSidebarPane();
+    const computedStyleModel = new ComputedStyleModel();
+    this.stylesWidget = new StylesSidebarPane(computedStyleModel);
+    this.computedStyleWidget = new ComputedStyleWidget(computedStyleModel);
+    this.metricsWidget = new MetricsSidebarPane(computedStyleModel);
 
     Common.Settings.Settings.instance()
         .moduleSetting('sidebar-position')
@@ -300,7 +306,6 @@ export class ElementsPanel extends UI.Panel.Panel implements UI.SearchableView.S
 
     this.adornerManager = new ElementsComponents.AdornerManager.AdornerManager(
         Common.Settings.Settings.instance().moduleSetting('adorner-settings'));
-    this.adornerSettingsPane = null;
     this.adornersByName = new Map();
   }
 
@@ -476,7 +481,6 @@ export class ElementsPanel extends UI.Panel.Panel implements UI.SearchableView.S
   override wasShown(): void {
     super.wasShown();
     UI.Context.Context.instance().setFlavor(ElementsPanel, this);
-    this.registerCSSFiles([elementsPanelStyles]);
 
     for (const treeOutline of this.treeOutlines) {
       // Attach heavy component lazily
@@ -1186,30 +1190,23 @@ export class ElementsPanel extends UI.Panel.Panel implements UI.SearchableView.S
     }
   }
 
-  showAdornerSettingsPane(): void {
-    // Delay the initialization of the pane to the first showing
-    // since usually this pane won't be used.
-    if (!this.adornerSettingsPane) {
-      this.adornerSettingsPane = new ElementsComponents.AdornerSettingsPane.AdornerSettingsPane();
-      this.adornerSettingsPane.addEventListener('adornersettingupdated', (event: Event) => {
-        const {adornerName, isEnabledNow, newSettings} =
-            (event as ElementsComponents.AdornerSettingsPane.AdornerSettingUpdatedEvent).data;
-        const adornersToUpdate = this.adornersByName.get(adornerName);
+  populateAdornerSettingsContextMenu(contextMenu: UI.ContextMenu.ContextMenu): void {
+    const adornerSubMenu = contextMenu.viewSection().appendSubMenuItem(
+        i18nString(UIStrings.adornerSettings), false, 'show-adorner-settings');
+    const adornerSettings = this.adornerManager.getSettings();
+    for (const [adorner, isEnabled] of adornerSettings) {
+      adornerSubMenu.defaultSection().appendCheckboxItem(adorner, () => {
+        const updatedIsEnabled = !isEnabled;
+        const adornersToUpdate = this.adornersByName.get(adorner);
         if (adornersToUpdate) {
-          for (const adorner of adornersToUpdate) {
-            isEnabledNow ? adorner.show() : adorner.hide();
+          for (const adornerToUpdate of adornersToUpdate) {
+            updatedIsEnabled ? adornerToUpdate.show() : adornerToUpdate.hide();
           }
         }
-        this.adornerManager.updateSettings(newSettings);
-      });
-      this.searchableViewInternal.element.prepend(this.adornerSettingsPane);
+        this.adornerManager.getSettings().set(adorner, updatedIsEnabled);
+        this.adornerManager.updateSettings(adornerSettings);
+      }, {checked: isEnabled, jslogContext: adorner});
     }
-
-    const adornerSettings = this.adornerManager.getSettings();
-    this.adornerSettingsPane.data = {
-      settings: adornerSettings,
-    };
-    this.adornerSettingsPane.show();
   }
 
   isAdornerEnabled(adornerText: string): boolean {

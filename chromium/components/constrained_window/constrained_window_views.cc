@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/check_op.h"
+#include "base/debug/crash_logging.h"
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/no_destructor.h"
@@ -39,8 +40,7 @@ using web_modal::ModalDialogHostObserver;
 
 DEFINE_UI_CLASS_PROPERTY_TYPE(ModalDialogHostObserver*)
 DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(ModalDialogHostObserver,
-                                   kModalDialogHostObserverKey,
-                                   nullptr)
+                                   kModalDialogHostObserverKey)
 
 namespace constrained_window {
 
@@ -272,6 +272,9 @@ views::Widget* CreateWebModalDialogViews(views::WidgetDelegate* dialog,
   if (!manager) {
     const GURL& url = web_contents->GetLastCommittedURL();
     DEBUG_ALIAS_FOR_GURL(url_alias, url);
+
+    SCOPED_CRASH_KEY_STRING32("WebModal", "scheme", url.scheme_piece());
+    SCOPED_CRASH_KEY_STRING32("WebModal", "host", url.host_piece());
     LOG_IF(FATAL, !manager)
         << "CreateWebModalDialogViews without a manager"
         << ", scheme=" << url.scheme_piece() << ", host=" << url.host_piece();
@@ -380,7 +383,7 @@ bool SupportsGlobalScreenCoordinates() {
 }
 
 bool PlatformClipsChildrenToViewport() {
-#if BUILDFLAG(IS_CHROMEOS_LACROS) || BUILDFLAG(IS_LINUX)
+#if BUILDFLAG(IS_LINUX)
   return true;
 #else
   return false;

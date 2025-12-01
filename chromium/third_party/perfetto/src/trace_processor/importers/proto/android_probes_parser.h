@@ -43,24 +43,26 @@ class AndroidProbesParser {
   void ParseInitialDisplayState(int64_t ts, ConstBytes);
   void ParseAndroidSystemProperty(int64_t ts, ConstBytes);
   void ParseAndroidGameIntervention(ConstBytes);
+  void ParseBtTraceEvent(int64_t ts, ConstBytes);
 
  private:
   TraceProcessorContext* const context_;
 
-  const StringId batt_charge_id_;
-  const StringId batt_capacity_id_;
-  const StringId batt_current_id_;
-  const StringId batt_current_avg_id_;
-  const StringId batt_voltage_id_;
-  const StringId batt_power_id_;
-  const StringId screen_state_id_;
-  const StringId device_state_id_;
   const StringId battery_status_id_;
   const StringId plug_type_id_;
   const StringId rail_packet_timestamp_id_;
   const StringId energy_consumer_id_;
   const StringId consumer_type_id_;
   const StringId ordinal_id_;
+  const StringId bt_trace_event_id_;
+  const StringId bt_packet_type_id_;
+  const StringId bt_count_id_;
+  const StringId bt_length_id_;
+  const StringId bt_duration_id_;
+  const StringId bt_op_code_id_;
+  const StringId bt_event_code_id_;
+  const StringId bt_subevent_code_id_;
+  const StringId bt_handle_id_;
 };
 }  // namespace perfetto::trace_processor
 

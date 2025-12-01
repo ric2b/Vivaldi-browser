@@ -6,17 +6,15 @@ import './NodeLink.js';
 
 import type {ViewportInsightModel} from '../../../../models/trace/insights/Viewport.js';
 import type * as Trace from '../../../../models/trace/trace.js';
-import * as LitHtml from '../../../../ui/lit-html/lit-html.js';
+import * as Lit from '../../../../ui/lit/lit.js';
 import type * as Overlays from '../../overlays/overlays.js';
 
-import {BaseInsightComponent, shouldRenderForCategory} from './Helpers.js';
-import {Category} from './types.js';
+import {BaseInsightComponent} from './BaseInsightComponent.js';
 
-const {html} = LitHtml;
+const {html} = Lit;
 
 export class Viewport extends BaseInsightComponent<ViewportInsightModel> {
-  static override readonly litTagName = LitHtml.literal`devtools-performance-viewport`;
-  override insightCategory: Category = Category.INP;
+  static override readonly litTagName = Lit.StaticHtml.literal`devtools-performance-viewport`;
   override internalName: string = 'viewport';
 
   override createOverlays(): Overlays.Overlays.TimelineOverlay[] {
@@ -24,45 +22,33 @@ export class Viewport extends BaseInsightComponent<ViewportInsightModel> {
     return [];
   }
 
-  #render(insight: Trace.Insights.Types.InsightModels['Viewport']): LitHtml.LitTemplate {
-    if (!this.model) {
-      return LitHtml.nothing;
+  override getEstimatedSavingsTime(): Trace.Types.Timing.Milli|null {
+    return this.model?.metricSavings?.INP ?? null;
+  }
+
+  renderContent(): Lit.LitTemplate {
+    if (!this.model || !this.model.viewportEvent) {
+      return Lit.nothing;
     }
 
-    const backendNodeId = insight.viewportEvent?.args.data.node_id;
+    const backendNodeId = this.model.viewportEvent.args.data.node_id;
+    if (backendNodeId === undefined) {
+      return Lit.nothing;
+    }
 
     // clang-format off
     return html`
-        <div class="insights">
-            <devtools-performance-sidebar-insight .data=${{
-              title: this.model.title,
-              description: this.model.description,
-              expanded: this.isActive(),
-              internalName: this.internalName,
-              estimatedSavingsTime: insight.metricSavings?.INP,
-            }}
-            @insighttoggleclick=${this.onSidebarClick}>
-              ${backendNodeId !== undefined ? html`<devtools-performance-node-link
-                .data=${{
-                  backendNodeId,
-                  options: {tooltip: insight.viewportEvent?.args.data.content},
-                }}>
-              </devtools-performance-node-link>` : LitHtml.nothing}
-            </devtools-performance-sidebar-insight>
-        </div>`;
-              // clang-format on
-  }
-
-  override render(): void {
-    const model = this.model;
-    const shouldShow = model && model.mobileOptimized === false;
-
-    const matchesCategory = shouldRenderForCategory({
-      activeCategory: this.data.activeCategory,
-      insightCategory: this.insightCategory,
-    });
-    const output = shouldShow && matchesCategory ? this.#render(model) : LitHtml.nothing;
-    LitHtml.render(output, this.shadow, {host: this});
+      <div>
+        <devtools-performance-node-link
+          .data=${{
+            backendNodeId,
+            frame: this.model.viewportEvent.args.data.frame ?? '',
+            options: {tooltip: this.model.viewportEvent.args.data.content},
+            fallbackHtmlSnippet: `<meta name=viewport content="${this.model.viewportEvent.args.data.content}">`,
+          }}>
+        </devtools-performance-node-link>
+      </div>`;
+    // clang-format on
   }
 }
 

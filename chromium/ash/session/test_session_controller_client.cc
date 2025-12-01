@@ -4,6 +4,7 @@
 
 #include "ash/session/test_session_controller_client.h"
 
+#include <ranges>
 #include <string>
 
 #include "ash/login/login_screen_controller.h"
@@ -14,12 +15,12 @@
 #include "ash/wallpaper/wallpaper_controller_impl.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
-#include "base/strings/stringprintf.h"
+#include "base/strings/string_util.h"
 #include "base/task/single_thread_task_runner.h"
 #include "components/account_id/account_id.h"
 #include "components/prefs/pref_service.h"
+#include "components/prefs/testing_pref_service.h"
 #include "components/session_manager/session_manager_types.h"
 #include "components/user_manager/user_type.h"
 #include "ui/views/widget/widget.h"
@@ -28,30 +29,27 @@ namespace ash {
 
 namespace {
 
-bool g_provide_signin_pref_service = true;
-
 // Returns the "canonicalized" email from a given |email| address. Note
 // production code should use gaia::CanonicalizeEmail. This is used in tests
 // without introducing dependency on google_api.
-std::string GetUserIdFromEmail(const std::string& email) {
-  std::string user_id = email;
-  base::ranges::transform(user_id, user_id.begin(), ::tolower);
-  return user_id;
+std::string GetUserIdFromEmail(std::string_view email) {
+  return base::ToLowerASCII(email);
 }
 
 }  // namespace
 
-// static
-void TestSessionControllerClient::DisableAutomaticallyProvideSigninPref() {
-  g_provide_signin_pref_service = false;
-}
-
 TestSessionControllerClient::TestSessionControllerClient(
     SessionControllerImpl* controller,
-    TestPrefServiceProvider* prefs_provider)
+    TestPrefServiceProvider* prefs_provider,
+    bool create_signin_pref_service)
     : controller_(controller), prefs_provider_(prefs_provider) {
-  DCHECK(controller_);
+  CHECK(controller_);
+  CHECK(prefs_provider_);
   Reset();
+
+  if (create_signin_pref_service) {
+    prefs_provider_->CreateSigninPrefsIfNeeded();
+  }
 }
 
 TestSessionControllerClient::~TestSessionControllerClient() = default;
@@ -64,8 +62,7 @@ void TestSessionControllerClient::InitializeAndSetClient() {
   session_info_.state = controller_->GetSessionState();
 
   controller_->SetClient(this);
-  if (g_provide_signin_pref_service && prefs_provider_)
-    controller_->EnsureSigninScreenPrefService();
+  controller_->EnsureSigninScreenPrefService();
 }
 
 void TestSessionControllerClient::Reset() {
@@ -77,9 +74,6 @@ void TestSessionControllerClient::Reset() {
 
   controller_->ClearUserSessionsForTest();
   controller_->SetSessionInfo(session_info_);
-
-  if (g_provide_signin_pref_service && prefs_provider_)
-    prefs_provider_->CreateSigninPrefsIfNeeded();
 }
 
 void TestSessionControllerClient::SetCanLockScreen(bool can_lock) {
@@ -117,44 +111,26 @@ void TestSessionControllerClient::SetIsDemoSession() {
   controller_->SetSessionInfo(session_info_);
 }
 
-void TestSessionControllerClient::CreatePredefinedUserSessions(int count) {
-  DCHECK_GT(count, 0);
-
-  // Resets the controller's state.
-  Reset();
-
-  // Adds user sessions with numbered emails if more are needed.
-  for (int numbered_user_index = 0; numbered_user_index < count;
-       ++numbered_user_index) {
-    AddUserSession(base::StringPrintf("user%d@tray", numbered_user_index));
-  }
-
-  // Sets the first user as active.
-  SwitchActiveUser(controller_->GetUserSession(0)->user_info.account_id);
-
-  // Updates session state after adding user sessions.
-  SetSessionState(session_manager::SessionState::ACTIVE);
-}
-
 void TestSessionControllerClient::AddUserSession(
-    const std::string& display_email,
+    std::string_view display_email,
     user_manager::UserType user_type,
-    bool provide_pref_service,
+    std::variant<bool, std::unique_ptr<PrefService>> provide_or_pref_service,
     bool is_new_profile,
     const std::string& given_name,
     bool is_account_managed) {
   auto account_id = AccountId::FromUserEmail(
       use_lower_case_user_id_ ? GetUserIdFromEmail(display_email)
                               : display_email);
-  AddUserSession(account_id, display_email, user_type, provide_pref_service,
-                 is_new_profile, given_name, is_account_managed);
+  AddUserSession(account_id, display_email, user_type,
+                 std::move(provide_or_pref_service), is_new_profile, given_name,
+                 is_account_managed);
 }
 
 void TestSessionControllerClient::AddUserSession(
     const AccountId& account_id,
-    const std::string& display_email,
+    std::string_view display_email,
     user_manager::UserType user_type,
-    bool provide_pref_service,
+    std::variant<bool, std::unique_ptr<PrefService>> provide_or_pref_service,
     bool is_new_profile,
     const std::string& given_name,
     bool is_account_managed) {
@@ -162,6 +138,24 @@ void TestSessionControllerClient::AddUserSession(
   // account.
   bool is_ephemeral = user_type == user_manager::UserType::kGuest ||
                       user_type == user_manager::UserType::kPublicAccount;
+
+  if (std::holds_alternative<bool>(provide_or_pref_service)) {
+    bool provide = std::get<bool>(provide_or_pref_service);
+    if (!default_provide_pref_service_) {
+      CHECK(GetUserPrefService(account_id));
+    } else if (provide && !controller_->GetUserPrefServiceForUser(account_id)) {
+      ProvidePrefServiceForUser(account_id, /*notify*=*/false);
+    }
+  } else {
+    CHECK(std::holds_alternative<std::unique_ptr<PrefService>>(
+        provide_or_pref_service));
+    auto& pref_service =
+        std::get<std::unique_ptr<PrefService>>(provide_or_pref_service);
+    CHECK(pref_service);
+    CHECK(!controller_->GetUserPrefServiceForUser(account_id));
+
+    prefs_provider_->SetUserPrefs(account_id, std::move(pref_service));
+  }
 
   UserSession session;
   session.session_id = ++fake_session_id_;
@@ -178,20 +172,19 @@ void TestSessionControllerClient::AddUserSession(
   session.user_info.is_managed = is_account_managed;
   controller_->UpdateUserSession(std::move(session));
 
-  if (provide_pref_service && prefs_provider_ &&
-      !controller_->GetUserPrefServiceForUser(account_id)) {
-    ProvidePrefServiceForUser(account_id);
-  }
-
   MaybeNotifyFirstSessionReady();
 }
 
-void TestSessionControllerClient::ProvidePrefServiceForUser(
-    const AccountId& account_id) {
-  DCHECK(!controller_->GetUserPrefServiceForUser(account_id));
+PrefService* TestSessionControllerClient::ProvidePrefServiceForUser(
+    const AccountId& account_id,
+    bool notify) {
+  CHECK(!controller_->GetUserPrefServiceForUser(account_id));
+
   prefs_provider_->CreateUserPrefs(account_id);
-  controller_->OnProfilePrefServiceInitialized(
-      account_id, prefs_provider_->GetUserPrefs(account_id));
+  if (notify) {
+    NotifyUserPrefServiceInitialized(account_id);
+  }
+  return GetUserPrefService(account_id);
 }
 
 void TestSessionControllerClient::LockScreen() {
@@ -214,15 +207,13 @@ void TestSessionControllerClient::SetSigninScreenPrefService(
       prefs_provider_->GetSigninPrefs());
 }
 
-void TestSessionControllerClient::SetUserPrefService(
+void TestSessionControllerClient::SetUnownedUserPrefService(
     const AccountId& account_id,
-    std::unique_ptr<PrefService> pref_service) {
-  DCHECK(!controller_->GetUserPrefServiceForUser(account_id));
-  prefs_provider_->SetUserPrefs(account_id, std::move(pref_service));
-  if (controller_->IsActiveUserSessionStarted()) {
-    controller_->OnProfilePrefServiceInitialized(
-        account_id, prefs_provider_->GetUserPrefs(account_id));
-  }
+    raw_ptr<PrefService> unowned_pref_service) {
+  CHECK(!controller_->GetUserPrefServiceForUser(account_id));
+
+  prefs_provider_->SetUnownedUserPrefs(account_id,
+                                       std::move(unowned_pref_service));
 }
 
 void TestSessionControllerClient::RequestLockScreen() {
@@ -292,7 +283,7 @@ void TestSessionControllerClient::CycleActiveUser(
     session_id = 1u;
 
   // Maps session id to AccountId and call SwitchActiveUser.
-  auto it = base::ranges::find_if(
+  auto it = std::ranges::find_if(
       sessions, [session_id](const std::unique_ptr<UserSession>& session) {
         return session && session->session_id == session_id;
       });
@@ -319,12 +310,12 @@ void TestSessionControllerClient::ShowMultiProfileLogin() {
 void TestSessionControllerClient::EmitAshInitialized() {}
 
 PrefService* TestSessionControllerClient::GetSigninScreenPrefService() {
-  return prefs_provider_ ? prefs_provider_->GetSigninPrefs() : nullptr;
+  return prefs_provider_->GetSigninPrefs();
 }
 
 PrefService* TestSessionControllerClient::GetUserPrefService(
     const AccountId& account_id) {
-  return prefs_provider_ ? prefs_provider_->GetUserPrefs(account_id) : nullptr;
+  return prefs_provider_->GetUserPrefs(account_id);
 }
 
 base::FilePath TestSessionControllerClient::GetProfilePath(
@@ -339,6 +330,12 @@ std::tuple<bool, bool> TestSessionControllerClient::IsEligibleForSeaPen(
 
 std::optional<int> TestSessionControllerClient::GetExistingUsersCount() const {
   return existing_users_count_;
+}
+
+int TestSessionControllerClient::NumberOfLoggedInUsers() const {
+  // This should be migrated to GetExistingUserCount when
+  // TestSessionControllerImpl is removed.
+  return controller_->NumberOfLoggedInUsers();
 }
 
 void TestSessionControllerClient::DoSwitchUser(const AccountId& account_id,
@@ -367,6 +364,13 @@ void TestSessionControllerClient::MaybeNotifyFirstSessionReady() {
     first_session_ready_fired_ = true;
     controller_->NotifyFirstSessionReady();
   }
+}
+
+void TestSessionControllerClient::NotifyUserPrefServiceInitialized(
+    const AccountId& account_id) {
+  CHECK(controller_->IsActiveUserSessionStarted());
+  controller_->OnProfilePrefServiceInitialized(
+      account_id, prefs_provider_->GetUserPrefs(account_id));
 }
 
 }  // namespace ash

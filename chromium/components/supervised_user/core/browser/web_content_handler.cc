@@ -7,6 +7,7 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "components/supervised_user/core/browser/supervised_user_settings_service.h"
+#include "components/supervised_user/core/common/supervised_user_constants.h"
 
 namespace {
 
@@ -15,12 +16,6 @@ constexpr char kLocalWebApprovalDurationHistogramName[] =
 constexpr char kLocalWebApprovalResultHistogramName[] =
     "FamilyLinkUser.LocalWebApprovalResult";
 
-// Records the outcome of the local web approval flow.
-void RecordLocalWebApprovalResultMetric(
-    supervised_user::WebContentHandler::LocalApprovalResult result) {
-  base::UmaHistogramEnumeration(kLocalWebApprovalResultHistogramName, result);
-}
-
 // Records the duration of a complete local web approval flow.
 void RecordTimeToApprovalDurationMetric(base::TimeDelta durationMs) {
   base::UmaHistogramLongTimes(kLocalWebApprovalDurationHistogramName,
@@ -28,15 +23,15 @@ void RecordTimeToApprovalDurationMetric(base::TimeDelta durationMs) {
 }
 
 std::string LocalApprovalResultToString(
-    supervised_user::WebContentHandler::LocalApprovalResult value) {
+    supervised_user::LocalApprovalResult value) {
   switch (value) {
-    case supervised_user::WebContentHandler::LocalApprovalResult::kApproved:
+    case supervised_user::LocalApprovalResult::kApproved:
       return "Approved";
-    case supervised_user::WebContentHandler::LocalApprovalResult::kDeclined:
+    case supervised_user::LocalApprovalResult::kDeclined:
       return "Rejected";
-    case supervised_user::WebContentHandler::LocalApprovalResult::kCanceled:
+    case supervised_user::LocalApprovalResult::kCanceled:
       return "Incomplete";
-    case supervised_user::WebContentHandler::LocalApprovalResult::kError:
+    case supervised_user::LocalApprovalResult::kError:
       return "Error";
   }
 }
@@ -48,6 +43,11 @@ namespace supervised_user {
 WebContentHandler::WebContentHandler() = default;
 
 WebContentHandler::~WebContentHandler() = default;
+
+void WebContentHandler::RecordLocalWebApprovalResultMetric(
+    LocalApprovalResult result) {
+  base::UmaHistogramEnumeration(kLocalWebApprovalResultHistogramName, result);
+}
 
 void WebContentHandler::OnLocalApprovalRequestCompleted(
     supervised_user::SupervisedUserSettingsService& settings_service,
@@ -68,7 +68,6 @@ void WebContentHandler::OnLocalApprovalRequestCompleted(
       RecordTimeToApprovalDurationMetric(base::TimeTicks::Now() - start_time);
       break;
     case LocalApprovalResult::kCanceled:
-      break;
     case LocalApprovalResult::kError:
       break;
   }

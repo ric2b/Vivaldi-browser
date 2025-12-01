@@ -26,6 +26,7 @@
 #import "components/reading_list/core/reading_list_model.h"
 #import "components/reading_list/ios/reading_list_model_bridge_observer.h"
 #import "components/search_engines/template_url_service.h"
+#import "components/send_tab_to_self/features.h"
 #import "components/supervised_user/core/common/features.h"
 #import "components/supervised_user/core/common/supervised_user_constants.h"
 #import "components/sync/service/sync_service.h"
@@ -50,9 +51,11 @@
 #import "ios/chrome/browser/policy/model/policy_util.h"
 #import "ios/chrome/browser/policy/ui_bundled/user_policy_util.h"
 #import "ios/chrome/browser/reading_list/model/offline_url_utils.h"
+#import "ios/chrome/browser/reading_list/ui_bundled/reading_list_utils.h"
 #import "ios/chrome/browser/search_engines/model/search_engine_observer_bridge.h"
 #import "ios/chrome/browser/search_engines/model/search_engines_util.h"
 #import "ios/chrome/browser/settings/model/sync/utils/identity_error_util.h"
+#import "ios/chrome/browser/settings/ui_bundled/clear_browsing_data/features.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
@@ -78,7 +81,9 @@
 #import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/sharing/ui_bundled/sharing_params.h"
 #import "ios/chrome/browser/supervised_user/model/supervised_user_capabilities.h"
+#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_utils.h"
 #import "ios/chrome/browser/translate/model/chrome_ios_translate_client.h"
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/destination_usage_history/constants.h"
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/destination_usage_history/destination_usage_history.h"
@@ -88,10 +93,6 @@
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/overflow_menu_orderer.h"
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/overflow_menu_swift.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
-#import "ios/chrome/browser/ui/reading_list/reading_list_utils.h"
-#import "ios/chrome/browser/ui/settings/clear_browsing_data/features.h"
-#import "ios/chrome/browser/ui/sharing/sharing_params.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_utils.h"
 #import "ios/chrome/browser/ui/whats_new/whats_new_util.h"
 #import "ios/chrome/browser/web/model/font_size/font_size_tab_helper.h"
 #import "ios/chrome/browser/web/model/web_navigation_browser_agent.h"
@@ -252,6 +253,10 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
 
 @property(nonatomic, strong) OverflowMenuAction* editActionsAction;
 @property(nonatomic, strong) OverflowMenuAction* lensOverlayAction;
+
+@property(nonatomic, strong) OverflowMenuAction* AIPrototypeAction;
+
+@property(nonatomic, strong) OverflowMenuAction* setTabReminderAction;
 
 // Vivaldi
 @property(nonatomic, strong) OverflowMenuActionGroup* vivaldiActionsGroup;
@@ -486,8 +491,9 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
 }
 
 - (void)setWebContentAreaShowingOverlay:(BOOL)webContentAreaShowingOverlay {
-  if (_webContentAreaShowingOverlay == webContentAreaShowingOverlay)
+  if (_webContentAreaShowingOverlay == webContentAreaShowingOverlay) {
     return;
+  }
   _webContentAreaShowingOverlay = webContentAreaShowingOverlay;
   [self updateModel];
 }
@@ -795,6 +801,16 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   if (IsLensOverlayAvailable()) {
     self.lensOverlayAction = [self openLensOverlayAction];
   }
+
+  if (experimental_flags::EnableAIPrototypingMenu()) {
+    self.AIPrototypeAction = [self openAIPrototypeAction];
+  }
+
+  if (send_tab_to_self::
+          IsSendTabIOSPushNotificationsEnabledWithTabReminders()) {
+    self.setTabReminderAction = [self newSetTabReminderAction];
+  }
+
   self.editActionsAction.automaticallyUnhighlight = NO;
   self.editActionsAction.useButtonStyling = YES;
 
@@ -922,6 +938,21 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
                                  }];
 }
 
+- (OverflowMenuAction*)openAIPrototypeAction {
+  __weak __typeof(self) weakSelf = self;
+  return [self
+      createOverflowMenuActionWithNameID:IDS_IOS_CONTENT_CONTEXT_OPENAIPROTOTYPE
+                              actionType:overflow_menu::ActionType::AIPrototype
+                              symbolName:kMagicStackSymbol
+                            systemSymbol:YES
+                        monochromeSymbol:NO
+                         accessibilityID:kToolsMenuOpenAIPrototype
+                            hideItemText:nil
+                                 handler:^{
+                                   [weakSelf startAIPrototype];
+                                 }];
+}
+
 - (OverflowMenuAction*)newReadLaterAction {
   __weak __typeof(self) weakSelf = self;
   NSString* hideItemText =
@@ -945,6 +976,31 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
                                  handler:^{
                                    [weakSelf addToReadingList];
                                  }];
+}
+
+// Creates the "Set a Reminder" action for the overflow menu.
+// This action allows users to set a reminder for a tab.
+- (OverflowMenuAction*)newSetTabReminderAction {
+  CHECK(
+      send_tab_to_self::IsSendTabIOSPushNotificationsEnabledWithTabReminders());
+
+  NSString* hideItemText = l10n_util::GetNSString(
+      IDS_IOS_REMINDER_NOTIFICATIONS_HIDE_SET_A_REMINDER);
+
+  return
+      [self createOverflowMenuActionWithNameID:
+                IDS_IOS_REMINDER_NOTIFICATIONS_SET_A_REMINDER
+                                    actionType:overflow_menu::ActionType::
+                                                   SetTabReminder
+                                    symbolName:kBellBadgeSymbol
+                                  systemSymbol:YES
+                              monochromeSymbol:NO
+                               accessibilityID:kToolsMenuSetTabReminder
+                                  hideItemText:hideItemText
+                                       handler:^{
+                                           // TODO(crbug.com/389912106): Display
+                                           // the new 'Set a Reminder' UI.
+                                       }];
 }
 
 - (OverflowMenuAction*)newClearBrowsingDataAction {
@@ -2082,8 +2138,9 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
 #pragma mark - PrefObserverDelegate
 
 - (void)onPreferenceChanged:(const std::string&)preferenceName {
-  if (preferenceName == bookmarks::prefs::kEditBookmarksEnabled)
+  if (preferenceName == bookmarks::prefs::kEditBookmarksEnabled) {
     [self updateModel];
+  }
 }
 
 #pragma mark - IOSLanguageDetectionTabHelperObserving
@@ -2265,19 +2322,28 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
     };
   } // End Vivaldi
 
-  ActionRanking actions = {
-      overflow_menu::ActionType::Follow,
-      overflow_menu::ActionType::Bookmark,
-      overflow_menu::ActionType::ReadingList,
-      overflow_menu::ActionType::ClearBrowsingData,
-      overflow_menu::ActionType::Translate,
-      overflow_menu::ActionType::DesktopSite,
-      overflow_menu::ActionType::FindInPage,
-      overflow_menu::ActionType::TextZoom,
-  };
+  ActionRanking actions;
+
+  if (send_tab_to_self::
+          IsSendTabIOSPushNotificationsEnabledWithTabReminders()) {
+    actions.push_back(overflow_menu::ActionType::SetTabReminder);
+  }
+
+  actions.push_back(overflow_menu::ActionType::Follow);
+  actions.push_back(overflow_menu::ActionType::Bookmark);
+  actions.push_back(overflow_menu::ActionType::ReadingList);
+  actions.push_back(overflow_menu::ActionType::ClearBrowsingData);
+  actions.push_back(overflow_menu::ActionType::Translate);
+  actions.push_back(overflow_menu::ActionType::DesktopSite);
+  actions.push_back(overflow_menu::ActionType::FindInPage);
+  actions.push_back(overflow_menu::ActionType::TextZoom);
 
   if (IsLensOverlayAvailable()) {
     actions.push_back(overflow_menu::ActionType::LensOverlay);
+  }
+
+  if (experimental_flags::EnableAIPrototypingMenu()) {
+    actions.push_back(overflow_menu::ActionType::AIPrototype);
   }
 
   return actions;
@@ -2345,6 +2411,10 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
       return self.editActionsAction;
     case overflow_menu::ActionType::LensOverlay:
       return self.lensOverlayAction;
+    case overflow_menu::ActionType::AIPrototype:
+      return self.AIPrototypeAction;
+    case overflow_menu::ActionType::SetTabReminder:
+      return self.setTabReminderAction;
 
     // Vivaldi
     case overflow_menu::ActionType::vBookmarks:
@@ -2405,6 +2475,11 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
       return [self newTextZoomAction];
     case overflow_menu::ActionType::LensOverlay:
       return [self openLensOverlayAction];
+    case overflow_menu::ActionType::AIPrototype:
+      return [self openAIPrototypeAction];
+    case overflow_menu::ActionType::SetTabReminder:
+      return [self newSetTabReminderAction];
+
 
     // Vivaldi
     case overflow_menu::ActionType::vBookmarks:
@@ -2493,8 +2568,9 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
 - (void)followWebPage:(WebPageURLs*)webPage {
   // FollowBrowserAgent may be null after -disconnect has been called.
   FollowBrowserAgent* followBrowserAgent = self.followBrowserAgent;
-  if (followBrowserAgent)
+  if (followBrowserAgent) {
     followBrowserAgent->FollowWebSite(webPage, FollowSource::OverflowMenu);
+  }
   [self dismissMenu];
 }
 
@@ -2502,8 +2578,9 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
 - (void)unfollowWebPage:(WebPageURLs*)webPage {
   // FollowBrowserAgent may be null after -disconnect has been called.
   FollowBrowserAgent* followBrowserAgent = self.followBrowserAgent;
-  if (followBrowserAgent)
+  if (followBrowserAgent) {
     followBrowserAgent->UnfollowWebSite(webPage, FollowSource::OverflowMenu);
+  }
   [self dismissMenu];
 }
 
@@ -2648,6 +2725,12 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
       createAndShowLensUI:YES
                entrypoint:LensOverlayEntrypoint::kOverflowMenu
                completion:nil];
+}
+
+// Creates and opens the AIPrototype UI.
+- (void)startAIPrototype {
+  [self dismissMenu];
+  [self.applicationHandler openAIMenu];
 }
 
 #pragma mark - Destinations Handlers

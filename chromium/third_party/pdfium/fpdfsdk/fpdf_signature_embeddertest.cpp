@@ -54,7 +54,7 @@ TEST_F(FPDFSignatureEmbedderTest, GetContents) {
   std::vector<char> contents(size);
   ASSERT_EQ(size,
             FPDFSignatureObj_GetContents(signature, contents.data(), size));
-  ASSERT_EQ(0, memcmp(kExpectedContents, contents.data(), size));
+  ASSERT_EQ(0, UNSAFE_TODO(memcmp(kExpectedContents, contents.data(), size)));
 
   // FPDFSignatureObj_GetContents() negative testing.
   ASSERT_EQ(0U, FPDFSignatureObj_GetContents(nullptr, nullptr, 0));
@@ -108,7 +108,8 @@ TEST_F(FPDFSignatureEmbedderTest, GetSubFilter) {
   std::vector<char> sub_filter(size);
   ASSERT_EQ(size,
             FPDFSignatureObj_GetSubFilter(signature, sub_filter.data(), size));
-  ASSERT_EQ(0, memcmp(kExpectedSubFilter, sub_filter.data(), size));
+  ASSERT_EQ(0,
+            UNSAFE_TODO(memcmp(kExpectedSubFilter, sub_filter.data(), size)));
 
   // FPDFSignatureObj_GetSubFilter() negative testing.
   ASSERT_EQ(0U, FPDFSignatureObj_GetSubFilter(nullptr, nullptr, 0));
@@ -138,10 +139,10 @@ TEST_F(FPDFSignatureEmbedderTest, GetReason) {
   EXPECT_TRUE(signature);
 
   // FPDFSignatureObj_GetReason() positive testing.
-  constexpr char kReason[] = "test reason";
+  static constexpr char kReason[] = "test reason";
   // Return value includes the terminating NUL that is provided.
-  constexpr unsigned long kReasonUTF16Size = std::size(kReason) * 2;
-  constexpr wchar_t kReasonWide[] = L"test reason";
+  static constexpr unsigned long kReasonUTF16Size = std::size(kReason) * 2;
+  static constexpr wchar_t kReasonWide[] = L"test reason";
   unsigned long size = FPDFSignatureObj_GetReason(signature, nullptr, 0);
   ASSERT_EQ(kReasonUTF16Size, size);
 
@@ -174,7 +175,7 @@ TEST_F(FPDFSignatureEmbedderTest, GetTime) {
   std::vector<char> time_buffer(size);
   ASSERT_EQ(size,
             FPDFSignatureObj_GetTime(signature, time_buffer.data(), size));
-  ASSERT_EQ(0, memcmp(kExpectedTime, time_buffer.data(), size));
+  ASSERT_EQ(0, UNSAFE_TODO(memcmp(kExpectedTime, time_buffer.data(), size)));
 
   // FPDFSignatureObj_GetTime() negative testing.
   ASSERT_EQ(0U, FPDFSignatureObj_GetTime(nullptr, nullptr, 0));

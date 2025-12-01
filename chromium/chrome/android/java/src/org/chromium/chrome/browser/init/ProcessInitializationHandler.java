@@ -220,6 +220,7 @@ public class ProcessInitializationHandler {
     /** Performs the shared class initialization. */
     @CallSuper
     protected void handlePreNativeInitialization() {
+        ChromeCachedFlags.getInstance().setFullListOfFlags();
         setProcessStateSummaryForAnrs(false);
     }
 
@@ -267,7 +268,7 @@ public class ProcessInitializationHandler {
         // - Nokia 1 (Android Go): 20-200 ms
         warmUpSharedPrefs();
 
-        DeviceUtils.addDeviceSpecificUserAgentSwitch();
+        DeviceUtils.updateDeviceSpecificUserAgentSwitch(ContextUtils.getApplicationContext());
         ApplicationStatus.registerStateListenerForAllActivities(
                 (activity, newState) -> {
                     if (newState == ActivityState.CREATED || newState == ActivityState.DESTROYED) {
@@ -738,7 +739,7 @@ public class ProcessInitializationHandler {
                         optimizationGuideBridge.onDeferredStartup();
                     }
                     // TODO(crbug.com/40236066) Move to PersistedTabData.onDeferredStartup
-                    if (PriceTrackingFeatures.isPriceTrackingEligible(profile)) {
+                    if (PriceTrackingFeatures.isPriceAnnotationsEligible(profile)) {
                         ShoppingPersistedTabData.onDeferredStartup();
                     }
                 });

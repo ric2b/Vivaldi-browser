@@ -143,7 +143,7 @@ TEST_F('OptionsWebUITest', 'testSetBooleanPrefTriggers', function() {
 
 ~~```none
 // Not meant to run on ChromeOS at this time.
-// Not finishing in windows. http://crbug.com/81723
+// Not finishing in windows. https://crbug.com/81723
 GEN('#if defined(OS_CHROMEOS) || defined(OS_MACOSX) || defined(OS_WIN) \\');
 GEN('    || defined(TOUCH_UI)');
 GEN('#define MAYBE_testRefreshStaysOnCurrentPage \\');
@@ -192,7 +192,7 @@ TEST_F('OptionsWebUITest', 'MAYBE_testRefreshStaysOnCurrentPage', function() {
 
 ~~### Caveats~~
 
-*   ~~\[[crbug.com/88104](http://crbug.com/88104)\] The generator relies
+*   ~~\[[crbug.com/88104](https://crbug.com/88104)\] The generator relies
             on d8 to be built for the host. Currently the v8.gyp rules aren't
             correct for Arm as they have conditionals on the 'target_host' and
             don't heed the 'toolset". A gyp condition only runs the js2webui

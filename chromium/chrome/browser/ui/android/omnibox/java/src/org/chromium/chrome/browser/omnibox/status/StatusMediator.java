@@ -432,6 +432,9 @@ public class StatusMediator
         final @ColorInt int separatorColor =
                 OmniboxResourceProvider.getStatusSeparatorColor(mContext, mBrandedColorScheme);
         mModel.set(StatusProperties.SEPARATOR_COLOR, separatorColor);
+        if (BuildConfig.IS_VIVALDI && mPageSecurityLevel == ConnectionSecurityLevel.DANGEROUS) {
+            mNavigationIconTintRes = R.color.default_red; // Vivaldi VAB-10658
+        } else
         mNavigationIconTintRes = ThemeUtils.getThemedToolbarIconTintRes(mBrandedColorScheme);
 
         final @ColorInt int textColor = getTextColor();
@@ -882,9 +885,14 @@ public class StatusMediator
                         profile.isOffTheRecord() ? profile.getOriginalProfile() : null;
                 if (mCookieControlsBridge == null) {
                     mCookieControlsBridge =
-                            new CookieControlsBridge(this, webContents, originalBrowserContext);
+                            new CookieControlsBridge(
+                                    this,
+                                    webContents,
+                                    originalBrowserContext,
+                                    profile.isIncognitoBranded());
                 } else if (mLastTabId != currentTab.getId() || mCurrentTabCrashed) {
-                    mCookieControlsBridge.updateWebContents(webContents, originalBrowserContext);
+                    mCookieControlsBridge.updateWebContents(
+                            webContents, originalBrowserContext, profile.isIncognitoBranded());
                     mCurrentTabCrashed = false;
                 }
             }

@@ -15,26 +15,20 @@
 #ifndef TENSORFLOW_LITE_EXPERIMENTAL_LITERT_TOOLS_APPLY_PLUGIN_H_
 #define TENSORFLOW_LITE_EXPERIMENTAL_LITERT_TOOLS_APPLY_PLUGIN_H_
 
-#include <functional>
 #include <iostream>
 #include <memory>
-#include <ostream>
+#include <optional>
+#include <vector>
 
 #include "absl/strings/string_view.h"
 #include "tensorflow/lite/experimental/litert/c/litert_common.h"
+#include "tensorflow/lite/experimental/litert/tools/outstream.h"
 
 namespace litert::tools {
 
 struct ApplyPluginRun {
   // NOTE: All StrFlagT are expected to have static storage duration.
-  using StrFlagT = absl::string_view;
-  using StrFlagListT = std::vector<StrFlagT>;
-  using OptStrFlagT = std::optional<StrFlagT>;
-  using OutStreamT = std::reference_wrapper<std::ostream>;
-  using OutStreamtListT = std::vector<OutStreamT>;
-  using OptOutStreamT = std::optional<OutStreamT>;
   using Ptr = std::unique_ptr<ApplyPluginRun>;
-  using ShrPtr = std::shared_ptr<ApplyPluginRun>;
 
   // A specific command implemented by the tool to run.
   enum class Cmd {
@@ -47,7 +41,6 @@ struct ApplyPluginRun {
     // "soc_models": Ignored.
     // "outs": Required, must be size one.
     // "dump_out": Optional.
-    // "serialization": Ignored.
     INFO,
 
     // Does nothing and simply de-serializes and re-serializes the given model.
@@ -60,7 +53,6 @@ struct ApplyPluginRun {
     // "soc_models": Ignored.
     // "outs": Required, must be size one.
     // "dump_out": Optional.
-    // "serialization": Ignored.
     NOOP,
 
     // Runs the entire end to end flow. This is the standard compiler plugin
@@ -77,7 +69,6 @@ struct ApplyPluginRun {
     // "soc_models": Required, at least one.
     // "outs": Required, must be size equal to "soc_models".
     // "dump_out": Optional.
-    // "serialization": Required.
     //
     // TODO: Support multi target compilation.
     APPLY,
@@ -96,7 +87,6 @@ struct ApplyPluginRun {
     // "soc_models": Ignored.
     // "outs": Required, must be size one.
     // "dump_out": Optional.
-    // "serialization": Ignored.
     PARTITION,
 
     // Skip partitioning and run the entire input model through compilation
@@ -112,7 +102,6 @@ struct ApplyPluginRun {
     // "soc_models": Required, at least one.
     // "out": Required, must be size equal to "soc_models".
     // "dump_out": Optional.
-    // "serialization": Required.
     //
     // TODO: Support multi target compilation.
     COMPILE,
@@ -126,53 +115,29 @@ struct ApplyPluginRun {
   // select the first ".so" file found with prefix "libLiteRtPlugin" that has
   // the "soc_manufacturer" tag passed. Providing more than one plugin shared
   // library for the same manufacturer results in an error.
-  StrFlagListT lib_search_paths = {};
+  std::vector<absl::string_view> lib_search_paths = {};
 
   // Path to ".tflite" model the tool should operated on.
-  OptStrFlagT model = {};
+  std::optional<absl::string_view> model = {};
 
   // A tag representing a manufacturer the tool should target for compilation.
   // This is used to select the appropriate plugin if multiple plugins are found
   // in "lib_search_paths".
-  OptStrFlagT soc_manufacturer = {};
+  std::optional<absl::string_view> soc_manufacturer = {};
 
   // Collection of soc models tags the tool should target for compilation.
-  StrFlagListT soc_models = {};
+  std::vector<absl::string_view> soc_models = {};
 
   // Where the tool should write its result file(s) to. If the command runs
   // compilation, an "out" stream should be passed for each "soc_model" target
   // requested for compilation. Output for the "ith" target will be written to
   // the "ith" outs stream.
-  OutStreamtListT outs = {std::cout};
+  std::vector<OutStream> outs = {std::cout};
 
   // Where to direct logging for this run. Passing nullopt here indicates
   // "silent" behavior and should only be used when this tool is part of a
   // larger pipeline like an end2end test.
-  OptOutStreamT dump_out = std::cerr;
-
-  // Dictates how the final model with compiled assets should be serialized.
-  // Only relevant to runs with a compilation step.
-  enum class Serialization {
-    // Write the compiled module into a metadata buffer using the
-    // soc_manufacturer as a key. This is for testing and debugging as it allows
-    // the contents of the byte code to be rendered by exisitng flatbuffer
-    // tooling. Custom op options will contain only a string identifying the
-    // respective entry point.
-    METADATA,
-
-    // Appends the compiled byte code to the end of the ".tflite" file. Custom
-    // op options will contain both an entry point string and an offset into the
-    // file where the byte code starts. Options will be a string of the form
-    // "\"<entry_point_name:<byte_offset>\"". byte_offset is a size_t offset
-    // where the compiled module starts in the file. Currently only single
-    // shared byte code modules are supported and so all ops will have the same
-    // offset.
-    // TODO: Implement.
-    APPEND,
-  };
-
-  // Serialization strategy to use, see above.
-  Serialization serialization = Serialization::METADATA;
+  UserStream dump_out;
 };
 
 LiteRtStatus ApplyPlugin(ApplyPluginRun::Ptr run);

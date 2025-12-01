@@ -61,7 +61,7 @@ If you want to add more fields, they should go in [os-release] instead.
 
 ### Examples
 
-See the [lsb-release](./lsb-release.md) document for more details.
+See the [lsb-release](../lsb-release) document for more details.
 
 ## /etc/os-release
 

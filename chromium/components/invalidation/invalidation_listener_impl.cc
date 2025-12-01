@@ -4,6 +4,8 @@
 
 #include "components/invalidation/invalidation_listener_impl.h"
 
+#include <stdint.h>
+
 #include "base/containers/map_util.h"
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
@@ -89,21 +91,19 @@ void Upsert(std::map<Topic, DirectInvalidation>& map,
 InvalidationListenerImpl::InvalidationListenerImpl(
     gcm::GCMDriver* gcm_driver,
     instance_id::InstanceIDDriver* instance_id_driver,
-    std::string project_number,
+    int64_t project_number,
     std::string log_prefix)
     : gcm_driver_(gcm_driver),
       instance_id_driver_(instance_id_driver),
-      project_number_(std::move(project_number)),
-      gcm_app_id_(base::StrCat({kFmAppId, "-", project_number_})),
-      log_prefix_(base::StrCat({log_prefix, "-", project_number_})),
-      registration_retry_backoff_(&kRegistrationRetryBackoffPolicy) {
-  LOG(WARNING) << log_prefix_
-               << " Created for project_number: " << project_number_;
-}
+      project_number_(project_number),
+      gcm_app_id_(
+          base::StrCat({kFmAppId, "-", base::NumberToString(project_number_)})),
+      log_prefix_(base::StrCat(
+          {log_prefix, "-", base::NumberToString(project_number_)})),
+      registration_retry_backoff_(&kRegistrationRetryBackoffPolicy) {}
 
 InvalidationListenerImpl::~InvalidationListenerImpl() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  LOG(WARNING) << log_prefix_ << " Destroying";
 }
 
 // InvalidationListener overrides.
@@ -111,8 +111,6 @@ void InvalidationListenerImpl::AddObserver(Observer* observer) {
   const std::string type = observer->GetType();
   CHECK(!type_to_handler_.contains(type));
   CHECK(!observers_.HasObserver(observer));
-
-  LOG(WARNING) << log_prefix_ << " Observed by " << observer->GetType();
 
   observers_.AddObserver(observer);
   type_to_handler_[type] = observer;
@@ -133,17 +131,12 @@ void InvalidationListenerImpl::RemoveObserver(const Observer* observer) {
   CHECK(type_to_handler_.contains(type));
   type_to_handler_.erase(type);
   observers_.RemoveObserver(observer);
-
-  LOG(WARNING) << log_prefix_ << " Stopped observation by "
-               << observer->GetType();
 }
 
 void InvalidationListenerImpl::Start(
     RegistrationTokenHandler* registration_token_handler) {
   // Does not allow double start.
   CHECK(!registration_token_handler_);
-
-  LOG(WARNING) << log_prefix_ << " Starting";
 
   // Note that `AddAppHandler()` causes an immediate replay of all received
   // invalidations in background on Android.
@@ -170,7 +163,7 @@ void InvalidationListenerImpl::SetRegistrationUploadStatus(
   UpdateObserversExpectations();
 }
 
-const std::string& InvalidationListenerImpl::project_number() const {
+int64_t InvalidationListenerImpl::project_number() const {
   return project_number_;
 }
 
@@ -191,9 +184,9 @@ void InvalidationListenerImpl::OnMessage(const std::string& app_id,
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CHECK_EQ(app_id, gcm_app_id_);
 
-  LOG(WARNING) << log_prefix_ << " Message received";
+  VLOG(2) << log_prefix_ << " Message received";
   for (const auto& [key, value] : message.data) {
-    LOG(WARNING) << log_prefix_ << " " << key << "->" << value;
+    VLOG(2) << log_prefix_ << " " << key << "->" << value;
   }
 
   const DirectInvalidation invalidation = ParseIncomingMessage(message);
@@ -235,7 +228,7 @@ void InvalidationListenerImpl::OnSendAcknowledged(
 void InvalidationListenerImpl::FetchRegistrationToken() {
   instance_id_driver_->GetInstanceID(gcm_app_id_)
       ->GetToken(
-          project_number_, instance_id::kGCMScope,
+          base::NumberToString(project_number_), instance_id::kGCMScope,
           /*time_to_live=*/kRegistrationTokenTimeToLive,
           /*flags=*/{instance_id::InstanceID::Flags::kIsLazy},
           base::BindOnce(&InvalidationListenerImpl::OnRegistrationTokenReceived,
@@ -256,14 +249,12 @@ void InvalidationListenerImpl::OnRegistrationTokenReceived(
 
   if (succeeded) {
     registration_token_ = new_registration_token;
-    LOG(WARNING) << log_prefix_
-                 << " Registration token: " << new_registration_token;
     registration_token_handler_->OnRegistrationTokenReceived(
         registration_token_.value(),
         base::Time::Now() + kRegistrationTokenTimeToLive);
     registration_retry_backoff_.Reset();
   } else {
-    LOG(WARNING) << log_prefix_ << " Message subscription failed: " << result;
+    VLOG(2) << log_prefix_ << " Message subscription failed: " << result;
     registration_token_ = std::nullopt;
   }
 

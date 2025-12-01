@@ -23,6 +23,7 @@
 #include "services/network/public/cpp/url_request_param_mojom_traits.h"
 #include "services/network/public/mojom/cookie_access_observer.mojom.h"
 #include "services/network/public/mojom/data_pipe_getter.mojom.h"
+#include "services/network/public/mojom/device_bound_sessions.mojom.h"
 #include "services/network/public/mojom/devtools_observer.mojom.h"
 #include "services/network/public/mojom/ip_address_space.mojom.h"
 #include "services/network/public/mojom/trust_token_access_observer.mojom.h"
@@ -34,53 +35,6 @@
 #include "url/mojom/url_gurl_mojom_traits.h"
 
 namespace mojo {
-
-network::mojom::SourceType
-EnumTraits<network::mojom::SourceType, net::SourceStream::SourceType>::ToMojom(
-    net::SourceStream::SourceType type) {
-  switch (type) {
-    case net::SourceStream::SourceType::TYPE_BROTLI:
-      return network::mojom::SourceType::kBrotli;
-    case net::SourceStream::SourceType::TYPE_DEFLATE:
-      return network::mojom::SourceType::kDeflate;
-    case net::SourceStream::SourceType::TYPE_GZIP:
-      return network::mojom::SourceType::kGzip;
-    case net::SourceStream::SourceType::TYPE_ZSTD:
-      return network::mojom::SourceType::kZstd;
-    case net::SourceStream::SourceType::TYPE_NONE:
-      return network::mojom::SourceType::kNone;
-    case net::SourceStream::SourceType::TYPE_UNKNOWN:
-      return network::mojom::SourceType::kUnknown;
-  }
-  NOTREACHED();
-}
-
-bool EnumTraits<network::mojom::SourceType, net::SourceStream::SourceType>::
-    FromMojom(network::mojom::SourceType in,
-              net::SourceStream::SourceType* out) {
-  switch (in) {
-    case network::mojom::SourceType::kBrotli:
-      *out = net::SourceStream::SourceType::TYPE_BROTLI;
-      return true;
-    case network::mojom::SourceType::kDeflate:
-      *out = net::SourceStream::SourceType::TYPE_DEFLATE;
-      return true;
-    case network::mojom::SourceType::kGzip:
-      *out = net::SourceStream::SourceType::TYPE_GZIP;
-      return true;
-    case network::mojom::SourceType::kZstd:
-      *out = net::SourceStream::SourceType::TYPE_ZSTD;
-      return true;
-    case network::mojom::SourceType::kNone:
-      *out = net::SourceStream::SourceType::TYPE_NONE;
-      return true;
-    case network::mojom::SourceType::kUnknown:
-      *out = net::SourceStream::SourceType::TYPE_UNKNOWN;
-      return true;
-  }
-
-  NOTREACHED();
-}
 
 bool StructTraits<network::mojom::TrustedUrlRequestParamsDataView,
                   network::ResourceRequest::TrustedParams>::
@@ -102,6 +56,8 @@ bool StructTraits<network::mojom::TrustedUrlRequestParamsDataView,
       mojo::PendingRemote<network::mojom::URLLoaderNetworkServiceObserver>>();
   out->devtools_observer = data.TakeDevtoolsObserver<
       mojo::PendingRemote<network::mojom::DevToolsObserver>>();
+  out->device_bound_session_observer = data.TakeDeviceBoundSessionObserver<
+      mojo::PendingRemote<network::mojom::DeviceBoundSessionAccessObserver>>();
   if (!data.ReadClientSecurityState(&out->client_security_state)) {
     return false;
   }
@@ -164,6 +120,7 @@ bool StructTraits<
       !data.ReadCredentialsMode(&out->credentials_mode) ||
       !data.ReadRedirectMode(&out->redirect_mode) ||
       !data.ReadFetchIntegrity(&out->fetch_integrity) ||
+      !data.ReadExpectedSignatures(&out->expected_signatures) ||
       !data.ReadRequestBody(&out->request_body) ||
       !data.ReadThrottlingProfileId(&out->throttling_profile_id) ||
       !data.ReadFetchWindowId(&out->fetch_window_id) ||
@@ -178,6 +135,7 @@ bool StructTraits<
       !data.ReadNavigationRedirectChain(&out->navigation_redirect_chain) ||
       !data.ReadAttributionReportingSrcToken(
           &out->attribution_reporting_src_token) ||
+      !data.ReadKeepaliveToken(&out->keepalive_token) ||
       !data.ReadStorageAccessApiStatus(&out->storage_access_api_status) ||
       !data.ReadSocketTag(&out->socket_tag)) {
     // Note that data.ReadTrustTokenParams is temporarily handled below.

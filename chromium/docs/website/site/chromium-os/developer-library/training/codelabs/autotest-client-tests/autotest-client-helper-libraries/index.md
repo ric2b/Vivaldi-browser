@@ -76,4 +76,4 @@ test            - main test class
 unit_test       - main unit_test class
 
 If you have come this far, you may also be interested in reading the autotest
-client tests [codelab](autotest-client-tests).
+client tests [codelab](../).

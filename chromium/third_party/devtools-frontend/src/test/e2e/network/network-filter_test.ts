@@ -299,7 +299,7 @@ describe('The Network Tab', function() {
     await navigateToNetworkTab('third-party-resources.html');
     await waitForSomeRequestsToAppear(1);
 
-    assert.deepStrictEqual(await getAllRequestNames(), ['external_image.svg']);
+    assert.deepEqual(await getAllRequestNames(), ['external_image.svg']);
   });
 });
 
@@ -329,8 +329,8 @@ describe('The Network Tab', function() {
       assert.isTrue(await checkOpacityCheckmark(thirdPartyFilter, '1'));
 
       names = await getAllRequestNames();
-      assert.deepEqual(1, names.length);
-      assert.deepStrictEqual(names, ['external_image.svg'], 'The right request names should appear in the list');
+      assert.lengthOf(names, 1);
+      assert.deepEqual(names, ['external_image.svg'], 'The right request names should appear in the list');
     });
 
     await step('verify the dropdown state and the requests when 3rd-party filter is deselected', async () => {
@@ -338,8 +338,8 @@ describe('The Network Tab', function() {
       assert.isTrue(await checkOpacityCheckmark(thirdPartyFilter, '0'));
 
       names = await getAllRequestNames();
-      assert.deepEqual(3, names.length);
-      assert.deepStrictEqual(
+      assert.lengthOf(names, 3);
+      assert.deepEqual(
           names, ['third-party-resources.html', 'image.svg', 'external_image.svg'],
           'The right request names should appear in the list');
     });

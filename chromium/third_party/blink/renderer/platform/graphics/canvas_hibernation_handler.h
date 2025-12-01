@@ -6,16 +6,20 @@
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_GRAPHICS_CANVAS_HIBERNATION_HANDLER_H_
 
 #include "base/feature_list.h"
+#include "base/memory/raw_ref.h"
 #include "base/no_destructor.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/trace_event/memory_dump_provider.h"
 #include "third_party/blink/renderer/platform/graphics/memory_managed_paint_recorder.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_canvas.h"
+#include "third_party/blink/renderer/platform/instrumentation/histogram.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/wtf.h"
 
 namespace blink {
+
+class CanvasResourceHost;
 
 PLATFORM_EXPORT BASE_DECLARE_FEATURE(kCanvasHibernationSnapshotZstd);
 
@@ -41,12 +45,23 @@ class PLATFORM_EXPORT CanvasHibernationHandler {
     kMaxValue = kHibernationAbortedBecauseNoSurface,
   };
 
+  static void ReportHibernationEvent(
+      CanvasHibernationHandler::HibernationEvent event) {
+    UMA_HISTOGRAM_ENUMERATION("Blink.Canvas.HibernationEvents", event);
+  }
+
+  explicit CanvasHibernationHandler(CanvasResourceHost& resource_host);
+  CanvasHibernationHandler(const CanvasHibernationHandler&) = delete;
+  CanvasHibernationHandler& operator=(const CanvasHibernationHandler&) = delete;
+
   ~CanvasHibernationHandler();
   // Semi-arbitrary threshold. Some past experiments (e.g. tile discard) have
   // shown that taking action after 5 minutes has a positive impact on memory,
   // and a minimal impact on tab switching latency (and on needless
   // compression).
   static constexpr base::TimeDelta kBeforeCompressionDelay = base::Minutes(5);
+
+  void InitiateHibernationIfNecessary();
 
   void SaveForHibernation(sk_sp<SkImage>&& image,
                           std::unique_ptr<MemoryManagedPaintRecorder> recorder);
@@ -130,6 +145,10 @@ class PLATFORM_EXPORT CanvasHibernationHandler {
       sk_sp<SkData> encoded);
   scoped_refptr<base::SingleThreadTaskRunner> GetMainThreadTaskRunner() const;
   static size_t ImageMemorySize(const SkImage& image);
+  static void HibernateOrLogFailure(
+      base::WeakPtr<CanvasHibernationHandler> handler,
+      base::TimeTicks /*idleDeadline*/);
+  void Hibernate();
 
   // Incremented each time the canvas is hibernated.
   uint64_t epoch_ = 0;
@@ -149,6 +168,8 @@ class PLATFORM_EXPORT CanvasHibernationHandler {
   int height_;
   int bytes_per_pixel_;
 
+  bool hibernation_scheduled_ = false;
+  const base::raw_ref<CanvasResourceHost> resource_host_;
   base::WeakPtrFactory<CanvasHibernationHandler> weak_ptr_factory_{this};
 };
 

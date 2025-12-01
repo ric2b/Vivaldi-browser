@@ -60,7 +60,6 @@ lucicfg.config(
         "luci-milo.cfg",
         "luci-scheduler.cfg",
         "realms.cfg",
-        "tricium-prod.cfg",
     ],
     fail_on_warnings = True,
 )
@@ -72,7 +71,6 @@ luci.project(
     milo = "luci-milo",
     scheduler = "luci-scheduler",
     swarming = "chromium-swarm.appspot.com",
-    tricium = "tricium-prod.appspot.com",
     acls = [
         acl.entry(
             [
@@ -85,6 +83,12 @@ luci.project(
         ),
         acl.entry([acl.SCHEDULER_OWNER], groups = ["project-chromium-website-committers"]),
         acl.entry([acl.LOGDOG_WRITER], groups = ["luci-logdog-chromium-website-writers"]),
+    ],
+    bindings = [
+        luci.binding(
+            roles = "role/configs.validator",
+            users = ["chromium-website-try-builder@chops-service-accounts.iam.gserviceaccount.com"],
+        ),
     ],
 )
 
@@ -131,6 +135,14 @@ luci.recipe(
     use_python3 = True,
 )
 
+luci.recipe(
+    name = "presubmit",
+    cipd_package = RECIPE_CIPD_PACKAGE,
+    cipd_version = "refs/heads/main",
+    use_bbagent = True,
+    use_python3 = True,
+)
+
 luci.builder(
     name = "chromium-website-ci-builder",
     bucket = "ci",
@@ -165,7 +177,7 @@ luci.cq_group(
             groups = ["project-chromium-website-committers"],
         ),
         acl.entry(
-            [acl.CQ_DRY_RUNNER],
+            [acl.CQ_DRY_RUNNER, acl.CQ_NEW_PATCHSET_RUN_TRIGGERER],
             groups = ["project-chromium-website-tryjob-access"],
         ),
     ],
@@ -180,7 +192,16 @@ luci.cq_group(
         luci.cq_tryjob_verifier(
             builder = "chromium-website-try-builder",
             mode_allowlist = [
-                cq.MODE_ANALYZER_RUN,
+                cq.MODE_NEW_PATCHSET_RUN,
+                cq.MODE_DRY_RUN,
+                cq.MODE_FULL_RUN,
+            ],
+        ),
+        luci.cq_tryjob_verifier(
+            builder = "chromium-website-presubmit",
+            disable_reuse = True,
+            mode_allowlist = [
+                cq.MODE_NEW_PATCHSET_RUN,
                 cq.MODE_DRY_RUN,
                 cq.MODE_FULL_RUN,
             ],
@@ -191,8 +212,7 @@ luci.cq_group(
 luci.bucket(name = "try", acls = [
     acl.entry(
         [acl.BUILDBUCKET_TRIGGERER],
-        groups = ["project-chromium-website-tryjob-access", "service-account-cq"],
-        users = ["tricium-prod@appspot.gserviceaccount.com"],
+        groups = ["project-chromium-website-tryjob-access"],
     ),
 ])
 
@@ -208,6 +228,22 @@ luci.builder(
     executable = RECIPE_NAME,
     service_account = "chromium-website-try-builder@chops-service-accounts.iam.gserviceaccount.com",
     execution_timeout = 1 * time.hour,
+    dimensions = {"cpu": "x86-64", "os": _LINUX_OS, "pool": "luci.flex.try"},
+    build_numbers = True,
+)
+
+luci.builder(
+    name = "chromium-website-presubmit",
+    bucket = "try",
+    executable = "presubmit",
+    service_account = "chromium-website-try-builder@chops-service-accounts.iam.gserviceaccount.com",
+    properties = {
+        "repo_name": "website",
+        "$depot_tools/presubmit": {
+            "runhooks": True,
+            "timeout_s": 600,
+        },
+    },
     dimensions = {"cpu": "x86-64", "os": _LINUX_OS, "pool": "luci.flex.try"},
     build_numbers = True,
 )

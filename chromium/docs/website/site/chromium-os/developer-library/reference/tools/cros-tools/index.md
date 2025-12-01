@@ -51,7 +51,8 @@ It allows giving a [sysroot][build-glossary], build target (board), or a list of
 #### cros_sdk
 
 The cros_sdk script lives in the [chromite] repo.
-The implementation can be found [here](cros_sdk_src), while its executable can be found in [Chromite's bin directory](chromite_bin).
+The implementation can be found [here](https://chromium.googlesource.com/chromiumos/chromite/+/HEAD/scripts/cros_sdk.py),
+while its executable can be found in [Chromite's bin directory](https://chromium.googlesource.com/chromiumos/chromite/+/HEAD/bin/).
 cros_sdk is used to manage the SDK/chroot.
 This is one of the first scripts that needs to be run in most cases, to create the chroot.
 

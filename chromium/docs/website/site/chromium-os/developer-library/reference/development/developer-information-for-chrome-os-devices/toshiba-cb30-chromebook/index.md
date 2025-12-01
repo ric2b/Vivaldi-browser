@@ -2,7 +2,7 @@
 breadcrumbs:
 - - /chromium-os
   - ChromiumOS
-- - /chromium-os/developer-information-for-chrome-os-devices
+- - /chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices
   - Developer Information for ChromeOS Devices
 page_name: toshiba-cb30-chromebook
 title: Toshiba CB30 Chromebook
@@ -13,7 +13,7 @@ title: Toshiba CB30 Chromebook
 ## Introduction
 
 This page contains information about the [Toshiba CB30
-Chromebook](http://www.google.com/intl/en/chrome/devices/chromebooks.html#toshiba)
+Chromebook](https://www.google.com/intl/en/chrome/devices/chromebooks.html#toshiba)
 that is interesting and/or useful to software developers. For general
 information about getting started with developing on ChromiumOS (the
 open-source version of the software on the Chrome Notebook), see the [Chromium
@@ -28,7 +28,7 @@ OS Developer Guide](/chromium-os/developer-guide).
 *   I/O:
     *   HDMI port
     *   2 x USB 3
-    *   [SD slot](http://en.wikipedia.org/wiki/Secure_Digital) (SDXC
+    *   [SD slot](https://en.wikipedia.org/wiki/Secure_Digital) (SDXC
                 compatible)
     *   Headphone/mic combo jack
     *   Camera & mic
@@ -38,7 +38,7 @@ OS Developer Guide](/chromium-os/developer-guide).
     *   USB ports can handle some Ethernet dongles
     *   [Servo header](/chromium-os/servo): Standard 2x25 / AXK750347G
 *   [Kensington Security
-            Slot](http://en.wikipedia.org/wiki/Kensington_Security_Slot)
+            Slot](https://en.wikipedia.org/wiki/Kensington_Security_Slot)
 
 ## Developer Mode
 
@@ -46,7 +46,7 @@ OS Developer Guide](/chromium-os/developer-guide).
 cause hardware, software or security issues and may void warranty.**
 
 Details for working with developer mode can be found [on this
-page](/chromium-os/developer-information-for-chrome-os-devices/acer-c720-chromebook).
+page](../acer-c720-chromebook).
 
 ## Running ChromiumOS
 
@@ -106,6 +106,6 @@ picture below. Then, boot the system and run "flashrom --wp-disable" to enable
 writing to the write protected regions of flash.
 
 [<img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/toshiba-cb30-chromebook/chromebook_leon_write_protect.jpg"
+src="chromebook_leon_write_protect.jpg"
 height=295
-width=400>](/chromium-os/developer-information-for-chrome-os-devices/toshiba-cb30-chromebook/chromebook_leon_write_protect.jpg)
+width=400>](./chromebook_leon_write_protect.jpg)

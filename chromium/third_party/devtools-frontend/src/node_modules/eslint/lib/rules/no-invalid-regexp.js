@@ -8,9 +8,9 @@
 // Requirements
 //------------------------------------------------------------------------------
 
-const RegExpValidator = require("regexpp").RegExpValidator;
+const RegExpValidator = require("@eslint-community/regexpp").RegExpValidator;
 const validator = new RegExpValidator();
-const validFlags = /[dgimsuy]/gu;
+const validFlags = "dgimsuvy";
 const undefined1 = void 0;
 
 //------------------------------------------------------------------------------
@@ -22,10 +22,12 @@ module.exports = {
     meta: {
         type: "problem",
 
+        defaultOptions: [{}],
+
         docs: {
             description: "Disallow invalid regular expression strings in `RegExp` constructors",
             recommended: true,
-            url: "https://eslint.org/docs/rules/no-invalid-regexp"
+            url: "https://eslint.org/docs/latest/rules/no-invalid-regexp"
         },
 
         schema: [{
@@ -47,16 +49,29 @@ module.exports = {
     },
 
     create(context) {
+        const [{ allowConstructorFlags }] = context.options;
+        let allowedFlags = [];
 
-        const options = context.options[0];
-        let allowedFlags = null;
-
-        if (options && options.allowConstructorFlags) {
-            const temp = options.allowConstructorFlags.join("").replace(validFlags, "");
+        if (allowConstructorFlags) {
+            const temp = allowConstructorFlags.join("").replace(new RegExp(`[${validFlags}]`, "gu"), "");
 
             if (temp) {
-                allowedFlags = new RegExp(`[${temp}]`, "giu");
+                allowedFlags = [...new Set(temp)];
             }
+        }
+
+        /**
+         * Reports error with the provided message.
+         * @param {ASTNode} node The node holding the invalid RegExp
+         * @param {string} message The message to report.
+         * @returns {void}
+         */
+        function report(node, message) {
+            context.report({
+                node,
+                messageId: "regexMessage",
+                data: { message }
+            });
         }
 
         /**
@@ -94,12 +109,14 @@ module.exports = {
         /**
          * Check syntax error in a given pattern.
          * @param {string} pattern The RegExp pattern to validate.
-         * @param {boolean} uFlag The Unicode flag.
+         * @param {Object} flags The RegExp flags to validate.
+         * @param {boolean} [flags.unicode] The Unicode flag.
+         * @param {boolean} [flags.unicodeSets] The UnicodeSets flag.
          * @returns {string|null} The syntax error.
          */
-        function validateRegExpPattern(pattern, uFlag) {
+        function validateRegExpPattern(pattern, flags) {
             try {
-                validator.validatePattern(pattern, undefined1, undefined1, uFlag);
+                validator.validatePattern(pattern, undefined1, undefined1, flags);
                 return null;
             } catch (err) {
                 return err.message;
@@ -108,48 +125,85 @@ module.exports = {
 
         /**
          * Check syntax error in a given flags.
-         * @param {string} flags The RegExp flags to validate.
+         * @param {string|null} flags The RegExp flags to validate.
+         * @param {string|null} flagsToCheck The RegExp invalid flags.
+         * @param {string} allFlags all valid and allowed flags.
          * @returns {string|null} The syntax error.
          */
-        function validateRegExpFlags(flags) {
-            try {
-                validator.validateFlags(flags);
-                return null;
-            } catch {
-                return `Invalid flags supplied to RegExp constructor '${flags}'`;
+        function validateRegExpFlags(flags, flagsToCheck, allFlags) {
+            const duplicateFlags = [];
+
+            if (typeof flagsToCheck === "string") {
+                for (const flag of flagsToCheck) {
+                    if (allFlags.includes(flag)) {
+                        duplicateFlags.push(flag);
+                    }
+                }
             }
+
+            /*
+             * `regexpp` checks the combination of `u` and `v` flags when parsing `Pattern` according to `ecma262`,
+             * but this rule may check only the flag when the pattern is unidentifiable, so check it here.
+             * https://tc39.es/ecma262/multipage/text-processing.html#sec-parsepattern
+             */
+            if (flags && flags.includes("u") && flags.includes("v")) {
+                return "Regex 'u' and 'v' flags cannot be used together";
+            }
+
+            if (duplicateFlags.length > 0) {
+                return `Duplicate flags ('${duplicateFlags.join("")}') supplied to RegExp constructor`;
+            }
+
+            if (!flagsToCheck) {
+                return null;
+            }
+
+            return `Invalid flags supplied to RegExp constructor '${flagsToCheck}'`;
         }
 
         return {
             "CallExpression, NewExpression"(node) {
-                if (node.callee.type !== "Identifier" || node.callee.name !== "RegExp" || !isString(node.arguments[0])) {
+                if (node.callee.type !== "Identifier" || node.callee.name !== "RegExp") {
                     return;
                 }
-                const pattern = node.arguments[0].value;
-                let flags = getFlags(node);
 
-                if (flags && allowedFlags) {
-                    flags = flags.replace(allowedFlags, "");
+                const flags = getFlags(node);
+                let flagsToCheck = flags;
+                const allFlags = allowedFlags.length > 0 ? validFlags.split("").concat(allowedFlags) : validFlags.split("");
+
+                if (flags) {
+                    allFlags.forEach(flag => {
+                        flagsToCheck = flagsToCheck.replace(flag, "");
+                    });
                 }
 
-                const message =
-                    (
-                        flags && validateRegExpFlags(flags)
-                    ) ||
-                    (
-
-                        // If flags are unknown, report the regex only if its pattern is invalid both with and without the "u" flag
-                        flags === null
-                            ? validateRegExpPattern(pattern, true) && validateRegExpPattern(pattern, false)
-                            : validateRegExpPattern(pattern, flags.includes("u"))
-                    );
+                let message = validateRegExpFlags(flags, flagsToCheck, allFlags);
 
                 if (message) {
-                    context.report({
-                        node,
-                        messageId: "regexMessage",
-                        data: { message }
-                    });
+                    report(node, message);
+                    return;
+                }
+
+                if (!isString(node.arguments[0])) {
+                    return;
+                }
+
+                const pattern = node.arguments[0].value;
+
+                message = (
+
+                    // If flags are unknown, report the regex only if its pattern is invalid both with and without the "u" flag
+                    flags === null
+                        ? (
+                            validateRegExpPattern(pattern, { unicode: true, unicodeSets: false }) &&
+                            validateRegExpPattern(pattern, { unicode: false, unicodeSets: true }) &&
+                            validateRegExpPattern(pattern, { unicode: false, unicodeSets: false })
+                        )
+                        : validateRegExpPattern(pattern, { unicode: flags.includes("u"), unicodeSets: flags.includes("v") })
+                );
+
+                if (message) {
+                    report(node, message);
                 }
             }
         };

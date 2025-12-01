@@ -23,7 +23,7 @@ The full list of oncall resources can be found on go/cros-oncall-site.
 ChromeOS maintains a weekly oncall chat that gives quick access to all the
 relevant oncallers and sheriffs from each rotation. Use go/cros-oncall-weekly to
 access the current week's chat (see more
-[go/cros-oncall-chat-tool](http://goto.google.com/cros-oncall-chat-tool)).
+[go/cros-oncall-chat-tool](http://go/cros-oncall-chat-tool)).
 
 To avoid inconveniencing the oncallers with non-critical problems, please check
 for solutions from teammates first before utilizing the chat.

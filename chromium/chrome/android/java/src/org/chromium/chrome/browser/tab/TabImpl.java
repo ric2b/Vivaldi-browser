@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.tab;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.ComponentName;
 import android.content.Context;
 import android.graphics.Rect;
 import android.net.Uri;
@@ -16,6 +17,7 @@ import android.view.View;
 import android.view.View.OnAttachStateChangeListener;
 import android.view.ViewStructure;
 import android.view.accessibility.AccessibilityEvent;
+import android.view.autofill.AutofillManager;
 import android.view.autofill.AutofillValue;
 
 import androidx.annotation.ColorInt;
@@ -28,6 +30,7 @@ import org.jni_zero.CalledByNative;
 import org.jni_zero.JniType;
 import org.jni_zero.NativeMethods;
 
+import org.chromium.base.Callback;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
@@ -64,6 +67,7 @@ import org.chromium.chrome.browser.ui.native_page.NativePage;
 import org.chromium.chrome.browser.ui.native_page.NativePage.SmoothTransitionDelegate;
 import org.chromium.components.autofill.AutofillFeatures;
 import org.chromium.components.autofill.AutofillProvider;
+import org.chromium.components.autofill.AutofillProviderUMA;
 import org.chromium.components.autofill.AutofillSelectionActionMenuDelegate;
 import org.chromium.components.autofill.AutofillSelectionMenuItemHelper;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
@@ -108,7 +112,7 @@ import org.vivaldi.browser.common.VivaldiUrlConstants;
  * Implementation of the interface {@link Tab}. Contains and manages a {@link ContentView}. This
  * class is not intended to be extended.
  */
-class TabImpl implements Tab, SensitiveContentClient.Observer {
+class TabImpl implements Tab {
     /** Used for logging. */
     private static final String TAG = "Tab";
 
@@ -116,6 +120,8 @@ class TabImpl implements Tab, SensitiveContentClient.Observer {
             "Android.Tab.BackgroundColorChange.PreOptimization";
     private static final String BACKGROUND_COLOR_CHANGE_HISTOGRAM =
             "Android.Tab.BackgroundColorChange";
+    private static final String UMA_AUTOFILL_THIRD_PARTY_MODE_DISABLED_PROVIDER =
+            "Autofill.ThirdPartyModeDisabled.Provider";
 
     /**
      * A pref from //components/autofill/core/common/autofill_prefs.h which allows the use of
@@ -206,6 +212,9 @@ class TabImpl implements Tab, SensitiveContentClient.Observer {
     /** Whether or not the Tab is currently visible to the user. */
     private boolean mIsHidden = true;
 
+    /** Called when the current window's occlusion changes. */
+    private final Callback<Boolean> mOcclusionCallback = (v) -> updateWebContentsVisibility();
+
     /**
      * Importance of the WebContents currently attached to this tab. Note the key difference from
      * |mIsHidden| is that a tab is hidden when the application is hidden, but the importance is not
@@ -288,6 +297,12 @@ class TabImpl implements Tab, SensitiveContentClient.Observer {
     private String mPendingNativePageHost;
 
     private SmoothTransitionDelegate mNativePageSmoothTransitionDelegate;
+
+    /**
+     * Notified when the content sensitivity changes, and sets the content sensitivity property on
+     * the {@link TabState}.
+     */
+    private SensitiveContentClient.Observer mSensitiveContentClientObserver;
 
     /** Tracks the origin of a background color change. */
     @IntDef({
@@ -508,7 +523,7 @@ class TabImpl implements Tab, SensitiveContentClient.Observer {
 
     @CalledByNative
     @Override
-    public String getTitle() {
+    public @JniType("std::u16string") String getTitle() {
         if (TextUtils.isEmpty(mTitle)) updateTitle();
         return mTitle;
     }
@@ -633,6 +648,7 @@ class TabImpl implements Tab, SensitiveContentClient.Observer {
         // We must check this as an additional condition to detachment for this case to continue
         // to work. See https://crbug.com/1501849.
         mIsDetached = window == null || !windowHasActivity(window);
+        updateWebContentsVisibility();
     }
 
     private boolean checkAttached() {
@@ -836,13 +852,25 @@ class TabImpl implements Tab, SensitiveContentClient.Observer {
             initWebContents(webContents);
             loadUrl(mPendingLoadParams);
             mPendingLoadParams = null;
-            return true;
+        } else {
+            restoreIfNeeded(caller);
+        }
+
+        // If we are trying to share a tab, and it has never been loaded, then it will not have its
+        // physical backing size set, which means it will never produce any frames. In this case,
+        // set the physical backing size to an estimate of what it would be if it were shown.
+        if (caller == TabLoadIfNeededCaller.MEDIA_CAPTURE_PICKER && !hasBacking()) {
+            var display = mWindowAndroid.getDisplay();
+            int width = (int) (mWebContents.getWidth() * display.getDipScale());
+            int height = (int) (mWebContents.getHeight() * display.getDipScale());
+            TabImplJni.get()
+                    .onPhysicalBackingSizeChanged(mNativeTabAndroid, mWebContents, width, height);
         }
 
         if (ChromeApplicationImpl.isVivaldi())
             switchUserAgentIfNeeded(UseDesktopUserAgentCaller.LOAD_IF_NEEDED + caller);
         // End Vivaldi
-        restoreIfNeeded(caller);
+
         return true;
     }
 
@@ -942,6 +970,19 @@ class TabImpl implements Tab, SensitiveContentClient.Observer {
         return mIsDestroyed;
     }
 
+    private void updateWebContentsVisibility() {
+        var webContents = getWebContents();
+        if (webContents == null) return;
+        if (mIsHidden) {
+            webContents.updateWebContentsVisibility(Visibility.HIDDEN);
+        } else if (!mIsDetached && mWindowAndroid.getOcclusionSupplier().get()) {
+            // If we are not attached to a window, occlusion does not make sense.
+            webContents.updateWebContentsVisibility(Visibility.OCCLUDED);
+        } else {
+            webContents.updateWebContentsVisibility(Visibility.VISIBLE);
+        }
+    }
+
     @Override
     public final void show(@TabSelectionType int type, @TabLoadIfNeededCaller int caller) {
         try {
@@ -967,9 +1008,7 @@ class TabImpl implements Tab, SensitiveContentClient.Observer {
             // call.
             TabImplJni.get().onShow(mNativeTabAndroid);
 
-            if (getWebContents() != null) {
-                getWebContents().updateWebContentsVisibility(Visibility.VISIBLE);
-            }
+            updateWebContentsVisibility();
 
             // If the NativePage was frozen while in the background (see NativePageAssassin),
             // recreate the NativePage now.
@@ -1016,13 +1055,25 @@ class TabImpl implements Tab, SensitiveContentClient.Observer {
     public final void hide(@TabHidingType int type) {
         try {
             TraceEvent.begin("Tab.hide");
+
+            if (ChromeFeatureList.isEnabled(
+                    ChromeFeatureList
+                            .ANDROID_DISCONNECT_FILE_CHOOSER_ON_TAB_DEACTIVATE_KILL_SWITCH)) {
+                WebContents webContents = getWebContents();
+                // File select related dialogs typical does not have indication on which origin or
+                // tab made the request. So to avoid security issues from user confusion, if a tab
+                // changes makes this no longer the active tab, then disconnect any file select
+                // dialogs. Notably only want to do this for tab change, but not (as an example)
+                // for hiding the activity.
+                if (type == TabHidingType.CHANGED_TABS && webContents != null) {
+                    webContents.disconnectFileSelectListenerIfAny();
+                }
+            }
+
             if (isHidden()) return;
             mIsHidden = true;
             updateInteractableState();
-
-            if (getWebContents() != null) {
-                getWebContents().updateWebContentsVisibility(Visibility.HIDDEN);
-            }
+            updateWebContentsVisibility();
 
             // Allow this tab's NativePage to be frozen if it stays hidden for a while.
             NativePageAssassin.getInstance().tabHidden(this);
@@ -1071,6 +1122,10 @@ class TabImpl implements Tab, SensitiveContentClient.Observer {
 
         TabImportanceManager.tabDestroyed(this);
 
+        if (mWindowAndroid != null) {
+            mWindowAndroid.getOcclusionSupplier().removeObserver(mOcclusionCallback);
+        }
+
         // Destroys the native tab after destroying the ContentView but before destroying the
         // InfoBarContainer. The native tab should be destroyed before the infobar container as
         // destroying the native tab cleanups up any remaining infobars. The infobar container
@@ -1082,16 +1137,17 @@ class TabImpl implements Tab, SensitiveContentClient.Observer {
     }
 
     /**
-     * WARNING: This method is deprecated. Consider other ways such as passing the dependencies
-     *          to the constructor, rather than accessing ChromeActivity from Tab and using getters.
-     * @return {@link ChromeActivity} that currently contains this {@link Tab} in its
-     *         {@link TabModel}.
+     * WARNING: This method is deprecated. Consider other ways such as passing the dependencies to
+     * the constructor, rather than accessing ChromeActivity from Tab and using getters.
+     *
+     * @return {@link ChromeActivity} that currently contains this {@link Tab} in its {@link
+     *     TabModel}.
      */
     @Deprecated
-    ChromeActivity<?> getActivity() {
+    ChromeActivity getActivity() {
         if (getWindowAndroid() == null) return null;
         Activity activity = ContextUtils.activityFromContext(getWindowAndroid().getContext().get());
-        if (activity instanceof ChromeActivity) return (ChromeActivity<?>) activity;
+        if (activity instanceof ChromeActivity) return (ChromeActivity) activity;
         return null;
     }
 
@@ -1293,10 +1349,19 @@ class TabImpl implements Tab, SensitiveContentClient.Observer {
     void updateWindowAndroid(WindowAndroid windowAndroid) {
         // TODO(yusufo): mWindowAndroid can never be null until crbug.com/657007 is fixed.
         assert windowAndroid != null;
+
+        if (mWindowAndroid != null) {
+            mWindowAndroid.getOcclusionSupplier().removeObserver(mOcclusionCallback);
+        }
+
         mWindowAndroid = windowAndroid;
         WebContents webContents = getWebContents();
         if (webContents != null) webContents.setTopLevelNativeWindow(mWindowAndroid);
 
+        windowAndroid.getOcclusionSupplier().addObserver(mOcclusionCallback);
+
+        // updateIsDetached will also update the web contents visibility if the
+        // occlusion has changed.
         updateIsDetached(windowAndroid);
     }
 
@@ -1421,6 +1486,7 @@ class TabImpl implements Tab, SensitiveContentClient.Observer {
                     // Navigating back to native pages.
                     mNativePageSmoothTransitionDelegate.start(
                             () -> {
+                                if (isDestroyed()) return;
                                 getWebContents().onContentForNavigationEntryShown();
                                 notifyContentChanged();
                             });
@@ -1755,7 +1821,7 @@ class TabImpl implements Tab, SensitiveContentClient.Observer {
                                         bounds.bottom);
                     }
                     initWebContents(webContents);
-                    webContents.updateWebContentsVisibility(Visibility.VISIBLE);
+                    updateWebContentsVisibility();
                 });
 
         if (didStartLoad) {
@@ -1839,11 +1905,11 @@ class TabImpl implements Tab, SensitiveContentClient.Observer {
     /**
      * Initializes the {@link WebContents}. Completes the browser content components initialization
      * around a native WebContents pointer.
-     * <p>
-     * {@link #getNativePage()} will still return the {@link NativePage} if there is one.
-     * All initialization that needs to reoccur after a web contents swap should be added here.
-     * <p />
-     * NOTE: If you attempt to pass a native WebContents that does not have the same incognito
+     *
+     * <p>{@link #getNativePage()} will still return the {@link NativePage} if there is one. All
+     * initialization that needs to reoccur after a web contents swap should be added here.
+     *
+     * <p>NOTE: If you attempt to pass a native WebContents that does not have the same incognito
      * state as this tab this call will fail.
      *
      * @param webContents The WebContents object that will initialize all the browser components.
@@ -1912,9 +1978,14 @@ class TabImpl implements Tab, SensitiveContentClient.Observer {
                     && ChromeFeatureList.isEnabled(SensitiveContentFeatures.SENSITIVE_CONTENT)
                     && ChromeFeatureList.isEnabled(
                             SensitiveContentFeatures.SENSITIVE_CONTENT_WHILE_SWITCHING_TABS)) {
+                mSensitiveContentClientObserver = this::setTabHasSensitiveContent;
                 // Adding the observation has to happen after the native `initWebContents`, so that
                 // the {@link SensitiveContentClient} is properly initialized.
-                SensitiveContentClient.fromWebContents(webContents).addObserver(this);
+                SensitiveContentClient sensitiveContentClient =
+                        SensitiveContentClient.fromWebContents(webContents);
+                sensitiveContentClient.addObserver(mSensitiveContentClientObserver);
+                sensitiveContentClient.restoreContentSensitivityFromTabState(
+                        getTabHasSensitiveContent());
             }
         } finally {
             TraceEvent.end("ChromeTab.initWebContents");
@@ -2132,6 +2203,7 @@ class TabImpl implements Tab, SensitiveContentClient.Observer {
     private boolean prepareAutofillProvider(WebContents newWebContents) {
         assert isInitialized();
         if (!providesAutofillStructure()) {
+            maybeLogAutofillProviderDoesntUseVirtualStructureMetric();
             mAutofillProvider = null;
             return false; // Autofill provider can't be prepared.
         }
@@ -2149,6 +2221,42 @@ class TabImpl implements Tab, SensitiveContentClient.Observer {
         }
         addAutofillItemsToSelectionActionMenu(newWebContents);
         return true;
+    }
+
+    private void maybeLogAutofillProviderDoesntUseVirtualStructureMetric() {
+        if (!ChromeFeatureList.isEnabled(
+                AutofillFeatures.AUTOFILL_VIRTUAL_VIEW_STRUCTURE_ANDROID)) {
+            return;
+        }
+        AutofillManager manager =
+                ContextUtils.getApplicationContext().getSystemService(AutofillManager.class);
+        if (manager == null) {
+            return;
+        }
+        if (!manager.isAutofillSupported()) {
+            // If Android Autofill is not supported, the metric shouldn't be logged because it tells
+            // about cases when 3P mode could be used, but it isn't used.
+            return;
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            ComponentName componentName = null;
+            try {
+                componentName = manager.getAutofillServiceComponentName();
+            } catch (Exception e) {
+                // The exception is com.android.internal.util.SyncResultReceiver.TimeoutException,
+                // can't handle it because:
+                // - The exception isn't public in the Android API.
+                // - Different Android versions handle it differently.
+                // The generic Exception is used to catch various cases. (See: crbug.com/1186406)
+            }
+            if (componentName != null) {
+                RecordHistogram.recordEnumeratedHistogram(
+                        UMA_AUTOFILL_THIRD_PARTY_MODE_DISABLED_PROVIDER,
+                        AutofillProviderUMA.getCurrentProvider(componentName.getPackageName()),
+                        AutofillProviderUMA.Provider.MAX_VALUE);
+            }
+        }
     }
 
     private void addAutofillItemsToSelectionActionMenu(WebContents webContents) {
@@ -2255,6 +2363,11 @@ class TabImpl implements Tab, SensitiveContentClient.Observer {
     }
 
     @VisibleForTesting
+    boolean hasBacking() {
+        return !TabImplJni.get().isPhysicalBackingSizeEmpty(mNativeTabAndroid, mWebContents);
+    }
+
+    @VisibleForTesting
     protected void setTitle(String title) {
         mTitle = title;
     }
@@ -2329,7 +2442,8 @@ class TabImpl implements Tab, SensitiveContentClient.Observer {
                 && ChromeFeatureList.isEnabled(SensitiveContentFeatures.SENSITIVE_CONTENT)
                 && ChromeFeatureList.isEnabled(
                         SensitiveContentFeatures.SENSITIVE_CONTENT_WHILE_SWITCHING_TABS)) {
-            SensitiveContentClient.fromWebContents(mWebContents).removeObserver(this);
+            SensitiveContentClient.fromWebContents(mWebContents)
+                    .removeObserver(mSensitiveContentClientObserver);
         }
 
         if (mAutofillProvider != null) {
@@ -2501,21 +2615,15 @@ class TabImpl implements Tab, SensitiveContentClient.Observer {
         }
     }
 
-    // SensitiveContentClient.Observer
-    @Override
-    public void onContentSensitivityChanged(boolean contentIsSensitive) {
-        setTabHasSensitiveContent(contentIsSensitive);
-    }
-
     private boolean isVivaldiPanelPage(String url) {
-     return (VivaldiUrlConstants.VIVALDI_BOOKMARKS_URL.equals(url)
+        return (VivaldiUrlConstants.VIVALDI_BOOKMARKS_URL.equals(url)
                 || VivaldiUrlConstants.VIVALDI_DOWNLOADS_URL.equals(url)
                 || VivaldiUrlConstants.VIVALDI_HISTORY_URL.equals(url)
                 || VivaldiUrlConstants.VIVALDI_NOTES_URL.equals(url)
-             || VivaldiUrlConstants.VIVALDI_CHROME_BOOKMARKS_URL.equals(url)
-             || VivaldiUrlConstants.VIVALDI_CHROME_DOWNLOADS_URL.equals(url)
-             || VivaldiUrlConstants.VIVALDI_CHROME_HISTORY_URL.equals(url)
-             || VivaldiUrlConstants.VIVALDI_CHROME_NOTES_URL.equals(url)
+                || VivaldiUrlConstants.VIVALDI_CHROME_BOOKMARKS_URL.equals(url)
+                || VivaldiUrlConstants.VIVALDI_CHROME_DOWNLOADS_URL.equals(url)
+                || VivaldiUrlConstants.VIVALDI_CHROME_HISTORY_URL.equals(url)
+                || VivaldiUrlConstants.VIVALDI_CHROME_NOTES_URL.equals(url)
                 || UrlConstants.BOOKMARKS_URL.equals(url)
                 || UrlConstants.DOWNLOADS_URL.equals(url)
                 || UrlConstants.HISTORY_URL.equals(url));
@@ -2561,10 +2669,15 @@ class TabImpl implements Tab, SensitiveContentClient.Observer {
 
         void releaseWebContents(long nativeTabAndroid);
 
+        boolean isPhysicalBackingSizeEmpty(long nativeTabAndroid, WebContents webContents);
+
         void onPhysicalBackingSizeChanged(
                 long nativeTabAndroid, WebContents webContents, int width, int height);
 
-        void setActiveNavigationEntryTitleForUrl(long nativeTabAndroid, String url, String title);
+        void setActiveNavigationEntryTitleForUrl(
+                long nativeTabAndroid,
+                @JniType("std::string") String url,
+                @JniType("std::u16string") String title);
 
         void loadOriginalImage(long nativeTabAndroid);
 
@@ -2575,5 +2688,11 @@ class TabImpl implements Tab, SensitiveContentClient.Observer {
         // Vivaldi: Native exchange of webcontents.
         void changeWebContents(long nativeTabAndroid, WebContents newWebContents,
                 boolean didStartLoad, boolean didFinishLoad);
+    }
+
+    @VisibleForTesting
+    @ChildProcessImportance
+    int getImportance() {
+        return mImportance;
     }
 }

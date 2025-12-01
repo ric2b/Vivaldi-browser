@@ -47,19 +47,16 @@ class ReadOnlyHeap final {
   // deserializer is provided). Then attaches the read-only heap to the isolate.
   // If the deserializer is not provided, then the read-only heap will be only
   // finish initializing when initial heap object creation in the Isolate is
-  // completed, which is signalled by calling OnCreateHeapObjectsComplete. When
-  // V8_SHARED_RO_HEAP is enabled, a lock will be held until that method is
-  // called.
+  // completed, which is signalled by calling OnCreateHeapObjectsComplete.
+  // A lock will be held until that method is called.
   // TODO(v8:7464): Ideally we'd create this without needing a heap.
   static void SetUp(Isolate* isolate, SnapshotData* read_only_snapshot_data,
                     bool can_rehash);
 
-  static void TearDown(Isolate* isolate);
-
   // Indicates that the isolate has been set up and all read-only space objects
   // have been created and will not be written to. This should only be called if
-  // a deserializer was not previously provided to Setup. When V8_SHARED_RO_HEAP
-  // is enabled, this releases the ReadOnlyHeap creation lock.
+  // a deserializer was not previously provided to Setup. This releases the
+  // ReadOnlyHeap creation lock.
   V8_EXPORT_PRIVATE void OnCreateHeapObjectsComplete(Isolate* isolate);
   // Indicates that all objects reachable by the read only roots table have been
   // set up.
@@ -74,29 +71,21 @@ class ReadOnlyHeap final {
   // Returns whether the object resides in the read-only space.
   V8_EXPORT_PRIVATE static bool Contains(Tagged<HeapObject> object);
   V8_EXPORT_PRIVATE static bool SandboxSafeContains(Tagged<HeapObject> object);
-  // Gets read-only roots from an appropriate root list. Shared read only root
-  // must be initialized
-  V8_EXPORT_PRIVATE inline static ReadOnlyRoots GetReadOnlyRoots(
-      Tagged<HeapObject> object);
   // Returns the current isolates roots table during initialization as opposed
   // to the shared one in case the latter is not initialized yet.
   V8_EXPORT_PRIVATE inline static ReadOnlyRoots EarlyGetReadOnlyRoots(
       Tagged<HeapObject> object);
-  V8_EXPORT_PRIVATE inline static ReadOnlyHeap* GetSharedReadOnlyHeap();
 
   ReadOnlySpace* read_only_space() const { return read_only_space_; }
 
 #ifdef V8_ENABLE_SANDBOX
   CodePointerTable::Space* code_pointer_space() { return &code_pointer_space_; }
+#endif  // V8_ENABLE_SANDBOX
+#ifdef V8_ENABLE_LEAPTIERING
   JSDispatchTable::Space* js_dispatch_table_space() {
     return &js_dispatch_table_space_;
   }
-#endif
-
-  static constexpr bool IsReadOnlySpaceShared() {
-    // TODO(dbezhetskov): inline me.
-    return V8_SHARED_RO_HEAP_BOOL;
-  }
+#endif  // V8_ENABLE_LEAPTIERING
 
   void InitializeIsolateRoots(Isolate* isolate);
   void InitializeFromIsolateRoots(Isolate* isolate);
@@ -108,8 +97,8 @@ class ReadOnlyHeap final {
 
   // Creates a new read-only heap and attaches it to the provided isolate. Only
   // used the first time when creating a ReadOnlyHeap for sharing.
-  static ReadOnlyHeap* CreateInitialHeapForBootstrapping(
-      Isolate* isolate, ReadOnlyArtifacts* artifacts);
+  static void CreateInitialHeapForBootstrapping(Isolate* isolate,
+                                                ReadOnlyArtifacts* artifacts);
   // Runs the read-only deserializer and calls InitFromIsolate to complete
   // read-only heap initialization.
   void DeserializeIntoIsolate(Isolate* isolate,
@@ -128,14 +117,13 @@ class ReadOnlyHeap final {
   // The read-only heap has its own code pointer space. Entries in this space
   // are never deallocated.
   CodePointerTable::Space code_pointer_space_;
-  JSDispatchTable::Space js_dispatch_table_space_;
 #endif  // V8_ENABLE_SANDBOX
-
-#ifndef V8_COMPRESS_POINTERS_IN_MULTIPLE_CAGES
-  V8_EXPORT_PRIVATE static ReadOnlyHeap* shared_ro_heap_;
-#endif
+#ifdef V8_ENABLE_LEAPTIERING
+  JSDispatchTable::Space js_dispatch_table_space_;
+#endif  // V8_ENABLE_LEAPTIERING
 
  private:
+  friend ReadOnlyRoots GetReadOnlyRoots();
   Address read_only_roots_[kEntriesCount];
 };
 

@@ -98,9 +98,7 @@ class AXRangePhysicalPixelRectDelegate : public AXRangeRectDelegate {
   raw_ptr<AXPlatformNodeTextRangeProviderWin> host_;
 };
 
-AXPlatformNodeTextRangeProviderWin::AXPlatformNodeTextRangeProviderWin() {
-  DVLOG(1) << __func__;
-}
+AXPlatformNodeTextRangeProviderWin::AXPlatformNodeTextRangeProviderWin() {}
 
 AXPlatformNodeTextRangeProviderWin::~AXPlatformNodeTextRangeProviderWin() {}
 
@@ -668,20 +666,6 @@ HRESULT AXPlatformNodeTextRangeProviderWin::GetAttributeValue(
     if (FAILED(hr))
       return E_FAIL;
 
-    if (attribute_id == UIA_AnnotationTypesAttributeId &&
-        current_value.Type() == VT_EMPTY) {
-      // This attribute UIA_AnnotationTypesAttributeId is different than others
-      // in the sense that its default value is null. When it gets queried for a
-      // text range that contains both a spelling error and other words without
-      // annotations, the returned value should solely be the spelling
-      // annotation, not the mixed attribute.
-      //
-      // Example: "The quik[spelling error] brown fox.". This text range
-      // contains only one annotation (quik) because the other segments would
-      // return VT_EMPTY.
-      continue;
-    }
-
     if (attribute_value.Type() == VT_EMPTY) {
       attribute_value = std::move(current_value);
     } else if (attribute_value != current_value) {
@@ -900,8 +884,7 @@ HRESULT AXPlatformNodeTextRangeProviderWin::MoveEndpointByUnitImpl(
           MoveEndpointByCharacter(position_to_move, count, units_moved);
       break;
     case TextUnit_Format:
-      new_position = MoveEndpointByFormat(position_to_move, is_start_endpoint,
-                                          count, units_moved);
+      new_position = MoveEndpointByFormat(position_to_move, count, units_moved);
       break;
     case TextUnit_Word:
       new_position = MoveEndpointByWord(position_to_move, count, units_moved);
@@ -1379,14 +1362,11 @@ AXPlatformNodeTextRangeProviderWin::MoveEndpointByLine(
 AXPlatformNodeTextRangeProviderWin::AXPositionInstance
 AXPlatformNodeTextRangeProviderWin::MoveEndpointByFormat(
     const AXPositionInstance& endpoint,
-    const bool is_start_endpoint,
     const int count,
     int* units_moved) {
   return MoveEndpointByUnitHelper(std::move(endpoint),
-                                  is_start_endpoint
-                                      ? ax::mojom::TextBoundary::kFormatStart
-                                      : ax::mojom::TextBoundary::kFormatEnd,
-                                  count, units_moved);
+                                  ax::mojom::TextBoundary::kFormatStart, count,
+                                  units_moved);
 }
 
 AXPlatformNodeTextRangeProviderWin::AXPositionInstance

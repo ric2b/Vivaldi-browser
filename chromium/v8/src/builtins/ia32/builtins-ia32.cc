@@ -649,6 +649,7 @@ void Builtins::Generate_ResumeGeneratorTrampoline(MacroAssembler* masm) {
     __ movd(xmm0, ebx);
 
     // Copy the function arguments from the generator object's register file.
+    // TODO(olivf, 40931165): Load the parameter count from the JSDispatchTable.
     __ mov(ecx, FieldOperand(edi, JSFunction::kSharedFunctionInfoOffset));
     __ movzx_w(ecx, FieldOperand(
                         ecx, SharedFunctionInfo::kFormalParameterCountOffset));
@@ -909,8 +910,9 @@ void Builtins::Generate_InterpreterEntryTrampoline(
                         Label::kNear);
 
 #ifndef V8_JITLESS
+#ifndef V8_ENABLE_LEAPTIERING
   // If feedback vector is valid, check for optimized code and update invocation
-  // count. Load the optimization state from the feedback vector and re-use the
+  // count. Load the optimization state from the feedback vector and reuse the
   // register.
   Label flags_need_processing;
   Register flags = ecx;
@@ -921,6 +923,7 @@ void Builtins::Generate_InterpreterEntryTrampoline(
 
   // Reload the feedback vector.
   __ movd(feedback_vector, saved_feedback_vector);
+#endif  // !V8_ENABLE_LEAPTIERING
 
   ResetFeedbackVectorOsrUrgency(masm, feedback_vector, scratch);
 
@@ -1100,12 +1103,14 @@ void Builtins::Generate_InterpreterEntryTrampoline(
   __ jmp(&after_stack_check_interrupt);
 
 #ifndef V8_JITLESS
+#ifndef V8_ENABLE_LEAPTIERING
   __ bind(&flags_need_processing);
   {
     // Restore actual argument count.
     __ movd(eax, xmm0);
     __ OptimizeCodeOrTailCallOptimizedCodeSlot(flags, xmm1);
   }
+#endif  // !V8_ENABLE_LEAPTIERING
 
   __ bind(&compile_lazy);
   // Restore actual argument count.
@@ -1114,6 +1119,7 @@ void Builtins::Generate_InterpreterEntryTrampoline(
 
   __ bind(&is_baseline);
   {
+#ifndef V8_ENABLE_LEAPTIERING
     __ movd(xmm2, ecx);  // Save baseline data.
     // Load the feedback vector from the closure.
     __ mov(feedback_vector,
@@ -1145,6 +1151,8 @@ void Builtins::Generate_InterpreterEntryTrampoline(
     __ JumpCodeObject(ecx);
 
     __ bind(&install_baseline_code);
+#endif  // !V8_ENABLE_LEAPTIERING
+
     __ movd(eax, xmm0);  // Recover argument count.
     __ GenerateTailCallToReturnedCode(Runtime::kInstallBaselineCode);
   }
@@ -1868,7 +1876,10 @@ void Builtins::Generate_BaselineOutOfLinePrologue(MacroAssembler* masm) {
   __ AssertFeedbackVector(feedback_vector, scratch);
   feedback_cell = no_reg;
 
-  // Load the optimization state from the feedback vector and re-use the
+#ifdef V8_ENABLE_LEAPTIERING
+  __ movd(saved_feedback_vector, feedback_vector);
+#else
+  // Load the optimization state from the feedback vector and reuse the
   // register.
   Label flags_need_processing;
   Register flags = ecx;
@@ -1877,6 +1888,7 @@ void Builtins::Generate_BaselineOutOfLinePrologue(MacroAssembler* masm) {
 
   // Reload the feedback vector.
   __ movd(feedback_vector, saved_feedback_vector);
+#endif  // !V8_ENABLE_LEAPTIERING
 
   {
     DCHECK_EQ(arg_count, eax);
@@ -1941,6 +1953,7 @@ void Builtins::Generate_BaselineOutOfLinePrologue(MacroAssembler* masm) {
   __ LoadRoot(kInterpreterAccumulatorRegister, RootIndex::kUndefinedValue);
   __ Ret();
 
+#ifndef V8_ENABLE_LEAPTIERING
   __ bind(&flags_need_processing);
   {
     ASM_CODE_COMMENT_STRING(masm, "Optimized marker check");
@@ -1953,6 +1966,7 @@ void Builtins::Generate_BaselineOutOfLinePrologue(MacroAssembler* masm) {
     __ OptimizeCodeOrTailCallOptimizedCodeSlot(flags, saved_feedback_vector);
     __ Trap();
   }
+#endif  //! V8_ENABLE_LEAPTIERING
 
   __ bind(&call_stack_guard);
   {
@@ -1961,7 +1975,7 @@ void Builtins::Generate_BaselineOutOfLinePrologue(MacroAssembler* masm) {
       // Push the baseline code return address now, as if it had been pushed by
       // the call to this builtin.
       __ PushReturnAddressFrom(return_address, scratch);
-      FrameScope frame_scope(masm, StackFrame::INTERNAL);
+      FrameScope manual_frame_scope(masm, StackFrame::INTERNAL);
       // Save incoming new target or generator
       __ Push(kJavaScriptCallNewTargetRegister);
       __ SmiTag(frame_size);
@@ -2463,10 +2477,10 @@ void Builtins::Generate_CallOrConstructForwardVarargs(MacroAssembler* masm,
 
   __ movd(xmm0, esi);  // Spill the context.
 
-  Register scratch = esi;
-
   // Check if new.target has a [[Construct]] internal method.
   if (mode == CallOrConstructMode::kConstruct) {
+    Register scratch = esi;
+
     Label new_target_constructor, new_target_not_constructor;
     __ JumpIfSmi(edx, &new_target_not_constructor, Label::kNear);
     __ mov(scratch, FieldOperand(edx, HeapObject::kMapOffset));
@@ -2969,7 +2983,8 @@ enum class OsrSourceTier {
 };
 
 void OnStackReplacement(MacroAssembler* masm, OsrSourceTier source,
-                        Register maybe_target_code) {
+                        Register maybe_target_code,
+                        Register expected_param_count) {
   Label jump_to_optimized_code;
   {
     // If maybe_target_code is not null, no need to call into runtime. A
@@ -3018,6 +3033,9 @@ void OnStackReplacement(MacroAssembler* masm, OsrSourceTier source,
     __ leave();
   }
 
+  // The sandbox would rely on testing expected_parameter_count here.
+  static_assert(!V8_ENABLE_SANDBOX_BOOL);
+
   // Load deoptimization data from the code object.
   __ mov(ecx, Operand(eax, Code::kDeoptimizationDataOrInterpreterDataOffset -
                                kHeapObjectTag));
@@ -3040,19 +3058,21 @@ void OnStackReplacement(MacroAssembler* masm, OsrSourceTier source,
 
 void Builtins::Generate_InterpreterOnStackReplacement(MacroAssembler* masm) {
   using D = OnStackReplacementDescriptor;
-  static_assert(D::kParameterCount == 1);
+  static_assert(D::kParameterCount == 2);
   OnStackReplacement(masm, OsrSourceTier::kInterpreter,
-                     D::MaybeTargetCodeRegister());
+                     D::MaybeTargetCodeRegister(),
+                     D::ExpectedParameterCountRegister());
 }
 
 void Builtins::Generate_BaselineOnStackReplacement(MacroAssembler* masm) {
   using D = OnStackReplacementDescriptor;
-  static_assert(D::kParameterCount == 1);
+  static_assert(D::kParameterCount == 2);
 
   __ mov(kContextRegister,
          MemOperand(ebp, BaselineFrameConstants::kContextOffset));
   OnStackReplacement(masm, OsrSourceTier::kBaseline,
-                     D::MaybeTargetCodeRegister());
+                     D::MaybeTargetCodeRegister(),
+                     D::ExpectedParameterCountRegister());
 }
 
 #if V8_ENABLE_WEBASSEMBLY
@@ -3465,6 +3485,10 @@ void SwitchToAllocatedStack(MacroAssembler* masm, Register wrapper_buffer,
   // the parent frame.
   __ mov(original_fp, ebp);
   LoadTargetJumpBuffer(masm, target_continuation, wasm::JumpBuffer::Suspended);
+  // Return address slot. The builtin itself returns by switching to the parent
+  // jump buffer and does not actually use this slot, but it is read by the
+  // profiler.
+  __ Push(Immediate(0));
   // Push the loaded ebp. We know it is null, because there is no frame yet,
   // so we could also push 0 directly. In any case we need to push it, because
   // this marks the base of the stack segment for the stack frame iterator.
@@ -5368,15 +5392,11 @@ void Builtins::Generate_DeoptimizationEntry_Lazy(MacroAssembler* masm) {
   Generate_DeoptimizationEntry(masm, DeoptimizeKind::kLazy);
 }
 
-namespace {
-
-// Restarts execution either at the current or next (in execution order)
-// bytecode. If there is baseline code on the shared function info, converts an
+// If there is baseline code on the shared function info, converts an
 // interpreter frame into a baseline frame and continues execution in baseline
 // code. Otherwise execution continues with bytecode.
-void Generate_BaselineOrInterpreterEntry(MacroAssembler* masm,
-                                         bool next_bytecode,
-                                         bool is_osr = false) {
+void Builtins::Generate_InterpreterOnStackReplacement_ToBaseline(
+    MacroAssembler* masm) {
   Label start;
   __ bind(&start);
 
@@ -5396,26 +5416,10 @@ void Generate_BaselineOrInterpreterEntry(MacroAssembler* masm,
       code_obj,
       FieldOperand(code_obj, SharedFunctionInfo::kTrustedFunctionDataOffset));
 
-  // Check if we have baseline code. For OSR entry it is safe to assume we
-  // always have baseline code.
-  if (!is_osr) {
-    Label start_with_baseline;
-    __ CmpObjectType(code_obj, CODE_TYPE, kInterpreterBytecodeOffsetRegister);
-    __ j(equal, &start_with_baseline);
-
-    // Start with bytecode as there is no baseline code.
-    __ pop(kInterpreterAccumulatorRegister);
-    Builtin builtin = next_bytecode ? Builtin::kInterpreterEnterAtNextBytecode
-                                    : Builtin::kInterpreterEnterAtBytecode;
-    __ TailCallBuiltin(builtin);
-
-    __ bind(&start_with_baseline);
-  } else if (v8_flags.debug_code) {
+  // For OSR entry it is safe to assume we always have baseline code.
+  if (v8_flags.debug_code) {
     __ CmpObjectType(code_obj, CODE_TYPE, kInterpreterBytecodeOffsetRegister);
     __ Assert(equal, AbortReason::kExpectedBaselineData);
-  }
-
-  if (v8_flags.debug_code) {
     AssertCodeIsBaseline(masm, code_obj, ecx);
   }
 
@@ -5452,34 +5456,13 @@ void Generate_BaselineOrInterpreterEntry(MacroAssembler* masm,
   feedback_vector = no_reg;
 
   // Compute baseline pc for bytecode offset.
-  ExternalReference get_baseline_pc_extref;
-  if (next_bytecode || is_osr) {
-    get_baseline_pc_extref =
-        ExternalReference::baseline_pc_for_next_executed_bytecode();
-  } else {
-    get_baseline_pc_extref =
-        ExternalReference::baseline_pc_for_bytecode_offset();
-  }
   Register get_baseline_pc = ecx;
-  __ LoadAddress(get_baseline_pc, get_baseline_pc_extref);
-
-  // If the code deoptimizes during the implicit function entry stack interrupt
-  // check, it will have a bailout ID of kFunctionEntryBytecodeOffset, which is
-  // not a valid bytecode offset.
-  // TODO(pthier): Investigate if it is feasible to handle this special case
-  // in TurboFan instead of here.
-  Label valid_bytecode_offset, function_entry_bytecode;
-  if (!is_osr) {
-    __ cmp(kInterpreterBytecodeOffsetRegister,
-           Immediate(BytecodeArray::kHeaderSize - kHeapObjectTag +
-                     kFunctionEntryBytecodeOffset));
-    __ j(equal, &function_entry_bytecode);
-  }
+  __ LoadAddress(get_baseline_pc,
+                 ExternalReference::baseline_pc_for_next_executed_bytecode());
 
   __ sub(kInterpreterBytecodeOffsetRegister,
          Immediate(BytecodeArray::kHeaderSize - kHeapObjectTag));
 
-  __ bind(&valid_bytecode_offset);
   // Get bytecode array from the stack frame.
   __ mov(kInterpreterBytecodeArrayRegister,
          MemOperand(ebp, InterpreterFrameConstants::kBytecodeArrayFromFp));
@@ -5497,28 +5480,12 @@ void Generate_BaselineOrInterpreterEntry(MacroAssembler* masm,
   __ add(code_obj, kReturnRegister0);
   __ pop(kInterpreterAccumulatorRegister);
 
-  if (is_osr) {
-    DCHECK_EQ(feedback_cell, no_reg);
-    closure = ecx;
-    __ mov(closure, MemOperand(ebp, StandardFrameConstants::kFunctionOffset));
-    ResetJSFunctionAge(masm, closure, closure);
-    Generate_OSREntry(masm, code_obj);
-  } else {
-    __ jmp(code_obj);
-  }
+  DCHECK_EQ(feedback_cell, no_reg);
+  closure = ecx;
+  __ mov(closure, MemOperand(ebp, StandardFrameConstants::kFunctionOffset));
+  ResetJSFunctionAge(masm, closure, closure);
+  Generate_OSREntry(masm, code_obj);
   __ Trap();  // Unreachable.
-
-  if (!is_osr) {
-    __ bind(&function_entry_bytecode);
-    // If the bytecode offset is kFunctionEntryOffset, get the start address of
-    // the first bytecode.
-    __ mov(kInterpreterBytecodeOffsetRegister, Immediate(0));
-    if (next_bytecode) {
-      __ LoadAddress(get_baseline_pc,
-                     ExternalReference::baseline_pc_for_bytecode_offset());
-    }
-    __ jmp(&valid_bytecode_offset);
-  }
 
   __ bind(&install_baseline_code);
   // Pop/re-push the accumulator so that it's spilled within the below frame
@@ -5539,23 +5506,6 @@ void Generate_BaselineOrInterpreterEntry(MacroAssembler* masm,
   }
   // Retry from the start after installing baseline code.
   __ jmp(&start);
-}
-
-}  // namespace
-
-void Builtins::Generate_BaselineOrInterpreterEnterAtBytecode(
-    MacroAssembler* masm) {
-  Generate_BaselineOrInterpreterEntry(masm, false);
-}
-
-void Builtins::Generate_BaselineOrInterpreterEnterAtNextBytecode(
-    MacroAssembler* masm) {
-  Generate_BaselineOrInterpreterEntry(masm, true);
-}
-
-void Builtins::Generate_InterpreterOnStackReplacement_ToBaseline(
-    MacroAssembler* masm) {
-  Generate_BaselineOrInterpreterEntry(masm, false, true);
 }
 
 void Builtins::Generate_RestartFrameTrampoline(MacroAssembler* masm) {

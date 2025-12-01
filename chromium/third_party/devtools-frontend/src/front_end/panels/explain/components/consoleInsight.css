@@ -119,8 +119,7 @@ main {
   line-height: 20px;
 
   p {
-    margin-block-start: 1em;
-    margin-block-end: 1em;
+    margin-block: 1em;
   }
 
   ul {
@@ -210,7 +209,7 @@ textarea {
   gap: 5px;
 }
 
-@media (max-width: 500px) {
+@media (width <= 500px) {
   .buttons {
     flex-wrap: wrap;
   }
@@ -276,16 +275,32 @@ summary {
 }
 
 details {
-  --collapsed-height: 20px;
-
   overflow: hidden;
-  height: var(--collapsed-height);
   margin-top: 10px;
 }
 
-details[open] {
-  height: calc(var(--list-height) + var(--collapsed-height) + /* margin */ 8px);
-  transition: height var(--sys-motion-duration-short4) var(--sys-motion-easing-emphasized);
+/* stylelint-disable-next-line selector-pseudo-element-no-unknown */
+::details-content {
+  height: 0;
+  transition:
+    height var(--sys-motion-duration-short4) var(--sys-motion-easing-emphasized),
+    content-visibility var(--sys-motion-duration-short4) var(--sys-motion-easing-emphasized) allow-discrete;
+}
+
+/* stylelint-disable-next-line selector-pseudo-element-no-unknown */
+[open]::details-content {
+  height: auto;
+}
+
+details.references {
+  /* This transition is only added because there is no `transitionend` event in
+     JS for the `::details-content` transition. */
+  transition: margin-top var(--sys-motion-duration-short4) var(--sys-motion-easing-emphasized);
+}
+
+details.references[open] {
+  /* This transition does not affect the actual UI. */
+  margin-top: 11px;
 }
 
 h2 {
@@ -327,4 +342,48 @@ h2:focus-visible {
 
 .close-button {
   align-self: flex-start;
+}
+
+.sources-list {
+  padding-left: var(--sys-size-6);
+  margin-bottom: var(--sys-size-6);
+  list-style: none;
+  counter-reset: sources;
+  display: grid;
+  grid-template-columns: var(--sys-size-9) auto;
+  list-style-position: inside;
+}
+
+.sources-list li {
+  display: contents;
+}
+
+.sources-list li::before {
+  counter-increment: sources;
+  content: "[" counter(sources) "]";
+  display: table-cell;
+}
+
+.sources-list x-link.highlighted { /* stylelint-disable-line selector-type-no-unknown */
+  background-color: var(--sys-color-yellow-container);
+}
+
+.references-list {
+  padding-left: var(--sys-size-8);
+}
+
+.references-list li {
+  padding-left: var(--sys-size-3);
+}
+
+details h3 {
+  font-size: 10px;
+  font-weight: var(--ref-typeface-weight-medium);
+  text-transform: uppercase;
+  color: var(--sys-color-on-surface-subtle);
+  padding-left: var(--sys-size-6);
+}
+
+.error-message {
+  font: var(--sys-typescale-body4-bold);
 }

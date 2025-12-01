@@ -285,7 +285,7 @@ the delay.
 ## Recovery button always triggers recovery mode
 
 The device will have a mechanism through which it always boots in [recovery
-mode](http://www.chromium.org/chromium-os/chromiumos-design-docs/firmware-boot-and-recovery),
+mode](/chromium-os/chromiumos-design-docs/firmware-boot-and-recovery),
 regardless of the position of the developer mode switch. This provides a path
 for users and developers to get back to Google Chrome OS, with all its safety
 and autoupdates.
@@ -316,7 +316,7 @@ contained in the firmware; only the signing structure and checksums are used to
 The recovery boot image is Google-signed software on a removable drive. The
 recovery boot image is what copies new firmware and software from the removable
 drive to the fixed drive when booted in [recovery
-mode](http://www.chromium.org/chromium-os/chromiumos-design-docs/firmware-boot-and-recovery).
+mode](/chromium-os/chromiumos-design-docs/firmware-boot-and-recovery).
 Recovery mode firmware will load only Google-signed software from the removable
 drive. Those kernels contain their own initramfs, which copies the recovery
 image onto the fixed drive.

@@ -57,19 +57,21 @@ class ReduceOperatorTester {
       this->input_shape_.begin(), this->input_shape_.end(), size_t(1), std::multiplies<size_t>());
   }
 
-  ReduceOperatorTester& reduction_axes(std::initializer_list<size_t> reduction_axes) {
+  ReduceOperatorTester& reduction_axes(
+      std::initializer_list<int64_t> reduction_axes) {
     assert(reduction_axes.size() <= XNN_MAX_TENSOR_DIMS);
-    this->reduction_axes_ = std::vector<size_t>(reduction_axes);
+    this->reduction_axes_ = std::vector<int64_t>(reduction_axes);
     return *this;
   }
 
-  ReduceOperatorTester& reduction_axes(const std::vector<size_t> reduction_axes) {
+  ReduceOperatorTester& reduction_axes(
+      const std::vector<int64_t> reduction_axes) {
     assert(reduction_axes.size() <= XNN_MAX_TENSOR_DIMS);
     this->reduction_axes_ = reduction_axes;
     return *this;
   }
 
-  const std::vector<size_t>& reduction_axes() const {
+  const std::vector<int64_t>& reduction_axes() const {
     return this->reduction_axes_;
   }
 
@@ -111,15 +113,13 @@ class ReduceOperatorTester {
 
    struct QuantizationConfig {
      // Zero means no quantization.
-     float input_scale = 0;
-     float output_scale;
-     int32_t input_zero_point;
-     int32_t output_zero_point;
+     xnn_quantization_params input = {0, 0};
+     xnn_quantization_params output = {0, 0};
      int32_t quantized_output_min;
      int32_t quantized_output_max;
 
-     bool IsQuantized() const { return input_scale != 0; }
-     static QuantizationConfig Invalid() { return {0}; }
+     bool IsQuantized() const { return input.scale != 0; }
+     static QuantizationConfig Invalid() { return {}; }
    };
 
   struct QS8Config {
@@ -138,13 +138,11 @@ class ReduceOperatorTester {
     static QuantizationConfig GenerateQuantization(xnnpack::ReplicableRandomDevice& rng,
                                                    std::uniform_int_distribution<int32_t>& dist) {
       QuantizationConfig q{
-          /*input_scale=*/0.5,
-          /*output_scale=*/0.75,
-          /*input_zero_point=*/dist(rng),
-          /*output_zero_point=*/dist(rng),
+        /*input=*/{dist(rng), 0.5f},
+        /*output=*/{dist(rng), 0.75f},
       };
-      q.quantized_output_min = xnn_qs8_quantize(-INFINITY, q.output_scale, q.output_zero_point);
-      q.quantized_output_max = xnn_qs8_quantize(INFINITY, q.output_scale, q.output_zero_point);
+      q.quantized_output_min = xnn_qs8_quantize(-INFINITY, q.output.scale, q.output.zero_point);
+      q.quantized_output_max = xnn_qs8_quantize(INFINITY, q.output.scale, q.output.zero_point);
       return q;
     }
   };
@@ -165,13 +163,11 @@ class ReduceOperatorTester {
     static QuantizationConfig GenerateQuantization(xnnpack::ReplicableRandomDevice& rng,
                                                    std::uniform_int_distribution<int32_t>& dist) {
       QuantizationConfig q{
-          /*input_scale=*/0.5,
-          /*output_scale=*/0.75,
-          /*input_zero_point=*/dist(rng),
-          /*output_zero_point=*/dist(rng),
+          /*input=*/{dist(rng), 0.5f},
+          /*output=*/{dist(rng), 0.75f},
       };
-      q.quantized_output_min = xnn_qu8_quantize(-INFINITY, q.output_scale, q.output_zero_point);
-      q.quantized_output_max = xnn_qu8_quantize(INFINITY, q.output_scale, q.output_zero_point);
+      q.quantized_output_min = xnn_qu8_quantize(-INFINITY, q.output.scale, q.output.zero_point);
+      q.quantized_output_max = xnn_qu8_quantize(INFINITY, q.output.scale, q.output.zero_point);
       return q;
     }
   };
@@ -197,7 +193,7 @@ class ReduceOperatorTester {
     using StorageType = float;
     using AccumulatorType = double;
 
-    static double GetTolerance() { return 3e-6; }
+    static double GetTolerance() { return 5e-6; }
     static xnn_datatype GetXNNDatatype() { return xnn_datatype_fp32; };
 
     static std::uniform_real_distribution<float> BuildRngDistribution() {
@@ -224,7 +220,10 @@ class ReduceOperatorTester {
     std::fill(output_dims.begin(), output_dims.end(), 1);
     std::copy(input_shape().cbegin(), input_shape().cend(), input_dims.end() - num_input_dims());
     std::copy(input_dims.cbegin(), input_dims.cend(), output_dims.begin());
-    for (size_t axis : reduction_axes()) {
+    for (int64_t axis : reduction_axes()) {
+      if (axis < 0) {
+        axis = num_input_dims() + axis;
+      }
       (output_dims.end() - num_input_dims())[axis] = 1;
     }
     const size_t num_output_elements =
@@ -300,16 +299,16 @@ class ReduceOperatorTester {
           // Shift by input zero point.
           output_ref[idx] =
               static_cast<float>(static_cast<int64_t>(accumulator[idx]) -
-                                 q.input_zero_point * num_reduced_elements);
+                                 q.input.zero_point * num_reduced_elements);
           // Apply scaling & clamp.
-          output_ref[idx] *= q.input_scale * reduce_scale / q.output_scale;
+          output_ref[idx] *= q.input.scale * reduce_scale / q.output.scale;
           output_ref[idx] = std::min<double>(
-              output_ref[idx], q.quantized_output_max - q.output_zero_point);
+              output_ref[idx], q.quantized_output_max - q.output.zero_point);
           output_ref[idx] = std::max<double>(
-              output_ref[idx], q.quantized_output_min - q.output_zero_point);
+              output_ref[idx], q.quantized_output_min - q.output.zero_point);
           // Shift by output zero point.
           output_ref[idx] = static_cast<StorageType>(
-              std::lrintf(output_ref[idx]) + q.output_zero_point);
+              std::lrintf(output_ref[idx]) + q.output.zero_point);
         }
       } else {
         for (size_t i = 0; i < accumulator.size(); ++i) {
@@ -320,10 +319,8 @@ class ReduceOperatorTester {
       // Create, setup, run, and destroy a reduce operator.
       ASSERT_EQ(xnn_status_success, xnn_initialize(nullptr /* allocator */));
       xnn_operator_t reduce_op = nullptr;
-      const float scale = q.IsQuantized() ? q.input_scale / q.output_scale : 1;
       const xnn_status status =
-          xnn_create_reduce_nd(operation(), Config::GetXNNDatatype(), scale,
-                               q.input_zero_point, q.output_zero_point,
+          xnn_create_reduce_nd(operation(), Config::GetXNNDatatype(), &q.input, &q.output,
                                /*flags=*/0, &reduce_op);
       if (status == xnn_status_unsupported_hardware) {
         GTEST_SKIP();
@@ -347,7 +344,6 @@ class ReduceOperatorTester {
       ASSERT_EQ(xnn_status_success,
         xnn_reshape_reduce_nd(
           reduce_op,
-          Config::GetXNNDatatype(),
           num_reduction_axes(),
           reduction_axes().data(),
           num_input_dims(),
@@ -396,7 +392,7 @@ class ReduceOperatorTester {
 
  private:
   std::vector<size_t> input_shape_;
-  std::vector<size_t> reduction_axes_;
+  std::vector<int64_t> reduction_axes_;
   bool multithreaded_{false};
   size_t iterations_{3};
   enum xnn_reduce_operator reduce_operator_;
@@ -415,6 +411,7 @@ struct TestParam {
   int dims;
   int reduction_axes;
   bool multithreaded;
+  bool use_neg_axes;
 
   static std::string GetName(const testing::TestParamInfo<TestParam>& info) {
     std::stringstream sstr;
@@ -443,6 +440,9 @@ struct TestParam {
       sstr << ((param.reduction_axes & (uint32_t(1) << 4)) != 0 ? "_5" : "");
       sstr << ((param.reduction_axes & (uint32_t(1) << 5)) != 0 ? "_6" : "");
     }
+    if (param.use_neg_axes) {
+      sstr << "_neg_axes";
+    }
     if(param.multithreaded) {
       sstr << "_multithreaded";
     }
@@ -457,7 +457,7 @@ class ReduceNDTest : public testing::TestWithParam<TestParam> {
                                reference_shape.begin() + params.dims);
   }
 
-  std::vector<size_t> GetReductionAxes(const TestParam& param) {
+  std::vector<int64_t> GetReductionAxes(const TestParam& param) {
     const bool reduce_dims[6] = {
       (param.reduction_axes & (uint32_t(1) << 0)) != 0,
       (param.reduction_axes & (uint32_t(1) << 1)) != 0,
@@ -467,10 +467,14 @@ class ReduceNDTest : public testing::TestWithParam<TestParam> {
       (param.reduction_axes & (uint32_t(1) << 5)) != 0
     };
 
-    std::vector<size_t> reduction_axes;
+    std::vector<int64_t> reduction_axes;
     for(int i = 0; i < param.dims; ++i) {
       if(reduce_dims[i]) {
-        reduction_axes.push_back(i);
+        if (param.use_neg_axes) {
+          reduction_axes.push_back(i - param.dims);
+        } else {
+          reduction_axes.push_back(i);
+        }
       }
     }
     return reduction_axes;
@@ -488,7 +492,7 @@ constexpr std::array<size_t, 6> ReduceNDTest::reference_shape;
 TEST_P(ReduceNDTest, reduce) {
   TestParam param(GetParam());
     const std::vector<size_t> input_shape = GetInputShape(param);
-    const std::vector<size_t> reduction_axes = GetReductionAxes(param);
+    const std::vector<int64_t> reduction_axes = GetReductionAxes(param);
     ASSERT_FALSE(input_shape.empty());
     ASSERT_FALSE(reduction_axes.empty());
 
@@ -521,13 +525,15 @@ std::vector<TestParam> GenerateTests() {
                                       xnn_datatype_qint8, xnn_datatype_quint8}) {
       for(int dims = 1; dims <= 6; ++dims) {
         for(int reduction_axes = 1; reduction_axes < (1 << dims); ++reduction_axes) {
-          for(bool multithreaded : {false, true}) {
-            params.push_back(TestParam{
-              operation, datatype, dims, reduction_axes, multithreaded
-            });
-            if(dims != 6 || reduction_axes != (1 << dims)-1) {
-              break; // Only do the multithreaded test when we have 6 dims and
-                     // reduce over all the axes.
+          for (bool use_neg_axes : {false, true}) {
+            for (bool multithreaded : {false, true}) {
+              params.push_back(TestParam{operation, datatype, dims,
+                                         reduction_axes, multithreaded,
+                                         use_neg_axes});
+              if (dims != 6 || reduction_axes != (1 << dims) - 1) {
+                break;  // Only do the multithreaded test when we have 6 dims
+                        // and reduce over all the axes.
+              }
             }
           }
         }

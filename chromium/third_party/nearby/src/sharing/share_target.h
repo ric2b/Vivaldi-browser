@@ -57,6 +57,8 @@ struct ShareTarget {
   bool for_self_share = false;
   // Vendor ID of the target. This can change over the lifetime of the target.
   uint8_t vendor_id = 0;
+  // True if the share target is not ready for receiving.
+  bool receive_disabled = false;
 };
 
 }  // namespace sharing

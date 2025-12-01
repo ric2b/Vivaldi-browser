@@ -1,5 +1,7 @@
 # Chromium DevTools Issues Guidelines
 
+[goo.gle/chromium-devtools-issues](https://goo.gle/chromium-devtools-issues)
+
 This document explains how Chromium DevTools (related) issues are tracked in the
 `Chromium>Platform>DevTools` component tree of [crbug], how we define and manage
 priorities and Service Level Objectives (SLOs), as well as the overall bug life
@@ -128,17 +130,18 @@ The following components in [crbug] are owned by the Chrome DevTools team.
 | ------------------------------------------ | ------------------------------------------------------------- |
 | `Chromium>Platform>DevTools`               | Issues that don't fit any specific category                   |
 | `Chromium>Platform>DevTools>Accessibility` | DevTools' accessibility                                       |
-| `Chromium>Platform>DevTools>AI`            | Console Insights and Freestyler panel                         |
+| `Chromium>Platform>DevTools>AI`            | Console Insights and AI Assistance panel                      |
 | `Chromium>Platform>DevTools>Animations`    | Animations panel                                              |
 | `Chromium>Platform>DevTools>Application`   | Application panel                                             |
 | `Chromium>Platform>DevTools>Console`       | Console panel                                                 |
 | `Chromium>Platform>DevTools>Elements`      | Elements panel                                                |
+| `Chromium>Platform>DevTools>Infra`         | Issues related to DevTools' infrastructure                    |
 | `Chromium>Platform>DevTools>Issues`        | Issues panel                                                  |
 | `Chromium>Platform>DevTools>Memory`        | Heap/Memory Profiling, Memory Analysis                        |
 | `Chromium>Platform>DevTools>Mobile`        | Mobile Emulation / Debugging                                  |
 | `Chromium>Platform>DevTools>Network`       | Network, Network conditions,  Network request blocking panels |
 | `Chromium>Platform>DevTools>Performance`   | Performance, Performance Monitor, Performance Insights panels |
-| `Chromium>Platform>DevTools>Platform`      | Protocol, Backend, DevTools Extensions                        |
+| `Chromium>Platform>DevTools>Extensions`    | Issues related to DevTools extensions and extensibility       |
 | `Chromium>Platform>DevTools>Recorder`      | Recorder panel                                                |
 | `Chromium>Platform>DevTools>Security`      | Security panel                                                |
 | `Chromium>Platform>DevTools>Sources`       | Sources panel                                                 |
@@ -176,15 +179,15 @@ untriaged issues due to this fact.
 We use the T-Shirt sizes approach to estimate effort for the `Chromium>Platform>DevTools`
 component tree, based on the following guidelines:
 
-| Size | Description                              | Examples                                                                                                                                                      |
-| :--- | :--------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| XXS  | Trivial CSS or logic change              | [Styles bar loses focus in Chrome OS DevTools](http://crbug.com/338348417), [Add 20x CPU throttling preset](https://crbug.com/324978881) |
-| XS   | One CL change                            | [Remove 'Consistent source map variable experiment'](http://crbug.com/40944633), [Autofill tab breaks with phone numbers starting with '+'](https://b.corp.google.com/issues/335409093) |
-| S    | series of CLs or a large CL              | [Local overrides for New Tab Page misses one "/" in folder name](http://crbug.com/328210785), [Memory tool should highlight common problems and opportunities](http://crbug.com/337094903), [Improve the developer experience of using compression dictionaries](http://crbug.com/333756098) |
-| M    | quarter-long single-person project       | [Exceptions in promise constructor should be treated as promise rejection](http://crbug.com/40283985) |
-| L    | multi-quarter or -person project         | [Replace regex-matching in the StylesSidebarPane](http://crbug.com/40945390) |
-| XL   | multi-quarter and -person project        | [MPArch migration](http://crbug.com/40238399), [GM3 adoption](http://crbug.com/40273199) |
-| XXL  | multi-year project with a dedicated team | [Performance Insights](http://crbug.com/40810111) |
+| Size | Description                                 | Examples                                                                                                                                                      |
+| :--- | :------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| XXS  | Small CL                                    | [Styles bar loses focus in Chrome OS DevTools](http://crbug.com/338348417), [Add 20x CPU throttling preset](https://crbug.com/324978881), [Remove 'Consistent source map variable experiment'](http://crbug.com/40944633), [Autofill tab breaks with phone numbers starting with '+'](https://b.corp.google.com/issues/335409093) |
+| XS   | Medium-sized CL or series of trivial CLs    | [Local overrides for New Tab Page misses one "/" in folder name](http://crbug.com/328210785), [Memory tool should highlight common problems and opportunities](http://crbug.com/337094903), [Improve the developer experience of using compression dictionaries](http://crbug.com/333756098) |
+| S    | Large-sized CL or series of non-trivial CLs | [Excluding sensitive data from HARs (HTTP Archives) by default](https://crbug.com/361717594) |
+| M    | quarter-long single-person project          | [Exceptions in promise constructor should be treated as promise rejection](http://crbug.com/40283985) |
+| L    | multi-quarter or -person project            | [Replace regex-matching in the StylesSidebarPane](http://crbug.com/40945390) |
+| XL   | multi-quarter and -person project           | [MPArch migration](http://crbug.com/40238399), [GM3 adoption](http://crbug.com/40273199) |
+| XXL  | multi-year project with a dedicated team    | [Performance Insights](http://crbug.com/40810111) |
 
 ## SLOs
 

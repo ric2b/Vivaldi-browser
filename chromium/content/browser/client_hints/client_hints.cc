@@ -439,10 +439,6 @@ void AddEctHeader(net::HttpRequestHeaders* headers,
                   network::NetworkQualityTracker* network_quality_tracker,
                   const GURL& url) {
   DCHECK(headers);
-  DCHECK_EQ(network::kWebEffectiveConnectionTypeMappingCount,
-            net::EFFECTIVE_CONNECTION_TYPE_4G + 1u);
-  DCHECK_EQ(network::kWebEffectiveConnectionTypeMappingCount,
-            static_cast<size_t>(net::EFFECTIVE_CONNECTION_TYPE_LAST));
 
   std::optional<net::EffectiveConnectionType> web_holdback_ect =
       GetWebHoldbackEffectiveConnectionType();
@@ -558,7 +554,7 @@ struct ClientHintsExtendedData {
       // See crbug.com/1470634.
       const std::optional<FencedFrameProperties>& fenced_frame_properties =
           frame_tree_node->GetFencedFrameProperties();
-      base::span<const blink::mojom::PermissionsPolicyFeature> permissions;
+      base::span<const network::mojom::PermissionsPolicyFeature> permissions;
       if (fenced_frame_properties) {
         permissions = fenced_frame_properties->effective_enabled_permissions();
       }
@@ -569,7 +565,7 @@ struct ClientHintsExtendedData {
           frame_tree_node->frame_tree().GetMainFrame();
       main_frame_origin = main_frame->GetLastCommittedOrigin();
       permissions_policy = blink::PermissionsPolicy::CopyStateFrom(
-          main_frame->permissions_policy());
+          main_frame->GetPermissionsPolicy());
     }
 
     const base::TimeTicks start_time = base::TimeTicks::Now();
@@ -695,9 +691,10 @@ void UpdateNavigationRequestClientUaHeadersImpl(
     NavigatorDelegate* nav_delegate =
         frame_tree_node ? frame_tree_node->navigator().GetDelegate() : nullptr;
     ua_metadata =
-        nav_delegate ? nav_delegate->GetUserAgentOverride().GetUaMetaDataOverride(
+        nav_delegate ? nav_delegate->GetUserAgentOverride(frame_tree_node->frame_tree())
+                           .GetUaMetaDataOverride(
                   request_url.value_or(GURL()).host(), override_ua)
-                     : std::nullopt;
+            : std::nullopt;
     // If a custom UA override is set, but no value is provided for UA client
     // hints, disable them.
     disable_due_to_custom_ua = override_ua && !ua_metadata.has_value();
@@ -938,10 +935,6 @@ void AddPrefetchNavigationRequestClientHintsHeaders(
     bool is_ua_override_on,
     bool is_javascript_enabled) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK_EQ(network::kWebEffectiveConnectionTypeMappingCount,
-            net::EFFECTIVE_CONNECTION_TYPE_4G + 1u);
-  DCHECK_EQ(network::kWebEffectiveConnectionTypeMappingCount,
-            static_cast<size_t>(net::EFFECTIVE_CONNECTION_TYPE_LAST));
   DCHECK(context);
 
   // Since prefetch navigation doesn't have a related frame tree node,
@@ -967,10 +960,6 @@ void AddNavigationRequestClientHintsHeaders(
     const std::optional<GURL>& request_url) {
   DCHECK(frame_tree_node);
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK_EQ(network::kWebEffectiveConnectionTypeMappingCount,
-            net::EFFECTIVE_CONNECTION_TYPE_4G + 1u);
-  DCHECK_EQ(network::kWebEffectiveConnectionTypeMappingCount,
-            static_cast<size_t>(net::EFFECTIVE_CONNECTION_TYPE_LAST));
   DCHECK(context);
   if (!ShouldAddClientHints(origin, frame_tree_node, delegate, request_url)) {
     return;

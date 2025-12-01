@@ -3,18 +3,8 @@
 // found in the LICENSE file.
 
 import {describeWithEnvironment} from '../../../testing/EnvironmentHelpers.js';
-import {getFirstOrError, getInsightOrError} from '../../../testing/InsightHelpers.js';
-import {TraceLoader} from '../../../testing/TraceLoader.js';
+import {getFirstOrError, getInsightOrError, processTrace} from '../../../testing/InsightHelpers.js';
 import * as Types from '../types/types.js';
-
-export async function processTrace(testContext: Mocha.Suite|Mocha.Context|null, traceFile: string) {
-  const {parsedTrace, insights} = await TraceLoader.traceEngine(testContext, traceFile);
-  if (!insights) {
-    throw new Error('No insights');
-  }
-
-  return {data: parsedTrace, insights};
-}
 
 describeWithEnvironment('LCPPhases', function() {
   it('calculates text lcp phases', async () => {
@@ -24,8 +14,8 @@ describeWithEnvironment('LCPPhases', function() {
 
     assert.strictEqual(insight.lcpMs, 106.482);
 
-    const wantTtfb = Types.Timing.MilliSeconds(6.115);
-    const wantRenderDelay = Types.Timing.MilliSeconds(100.367);
+    const wantTtfb = Types.Timing.Milli(6.115);
+    const wantRenderDelay = Types.Timing.Milli(100.367);
     assert.deepEqual(insight.phases, {ttfb: wantTtfb, renderDelay: wantRenderDelay});
   });
 
@@ -55,8 +45,8 @@ describeWithEnvironment('LCPPhases', function() {
       const firstNav = getFirstOrError(data.Meta.navigationsByNavigationId.values());
       const insight = getInsightOrError('LCPPhases', insights, firstNav);
 
-      assert.strictEqual(insight.lcpMs, undefined);
-      assert.strictEqual(insight.phases, undefined);
+      assert.isUndefined(insight.lcpMs);
+      assert.isUndefined(insight.phases);
       assert.strictEqual(insight.warnings?.[0], 'NO_LCP');
     });
 
@@ -66,7 +56,7 @@ describeWithEnvironment('LCPPhases', function() {
       const insight = getInsightOrError('LCPPhases', insights, firstNav);
 
       assert.strictEqual(insight.lcpMs, 204.909);
-      assert.strictEqual(insight.phases, undefined);
+      assert.isUndefined(insight.phases);
       assert.strictEqual(insight.warnings?.[0], 'NO_DOCUMENT_REQUEST');
     });
   });

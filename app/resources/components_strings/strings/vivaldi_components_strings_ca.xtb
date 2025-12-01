@@ -7,7 +7,6 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> ha tancat la connexió de manera inesperada.</translation>
 <translation id="1161325031994447685">Reconnectant a la xarxa Wi-Fi</translation>
 <translation id="1175364870820465910">&amp;Imprimeix...</translation>
-<translation id="132390688737681464">Desa i omple les adreces</translation>
 <translation id="1375198122581997741">Sobre la versió</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> no ha enviat dades.</translation>
 <translation id="1555191101192706055">Els atacants del lloc web que has provat de visitar poden enganyar-te perquè instal·lis programari nociu que afecti la manera com navegues. Per exemple, poden canviar-te la pàgina d'inici o mostrar-te anuncis addicionals als llocs web que visites.</translation>
@@ -52,6 +51,7 @@
 <translation id="2991571918955627853">En aquest moment no pots visitar la pàgina <ph name="SITE" /> perquè el lloc web fa servir HSTS. Els atacs i els errors de xarxa acostumen a ser temporals, o sigui que probablement la pàgina funcionarà més endavant.</translation>
 <translation id="3005723025932146533">Mostra la còpia desada</translation>
 <translation id="301521992641321250">Bloquejat automàticament</translation>
+<translation id="3037605927509011580">Vaja!</translation>
 <translation id="3041612393474885105">Informació del certificat</translation>
 <translation id="3109728660330352905">No tens permís per veure aquesta pàgina.</translation>
 <translation id="31207688938192855"><ph name="BEGIN_LINK" />Prova d'executar el diagnòstic de connectivitat<ph name="END_LINK" />.</translation>
@@ -64,7 +64,6 @@
 <translation id="3234666976984236645">Detecta sempre el contingut important en aquest lloc</translation>
 <translation id="3308738399950580893">anuncis</translation>
 <translation id="3384522979010096022">La teva organització no et permet veure aquest lloc</translation>
-<translation id="3387261909427947069">Formes de pagament</translation>
 <translation id="3422472998109090673">Actualment no es pot accedir a <ph name="HOST_NAME" />.</translation>
 <translation id="3427092606871434483">Permet (predeterminat)</translation>
 <translation id="3447661539832366887">El propietari d'aquest dispositiu ha desactivat el joc de dinosaures.</translation>
@@ -125,7 +124,6 @@
 <translation id="5386426401304769735">La cadena de certificats d'aquest lloc conté un certificat que s'ha signat amb SHA-1.</translation>
 <translation id="5452270690849572955">No s'ha trobat aquesta pàgina de <ph name="HOST_NAME" /></translation>
 <translation id="5457113250005438886">Invàlid</translation>
-<translation id="5490432419156082418">Adreces i més</translation>
 <translation id="5492298309214877701">Aquest lloc de la intranet de l'empresa, organització o centre educatiu té el mateix URL que un lloc web extern.
     <ph name="LINE_BREAK" />
     Prova de contactar amb l'administrador del sistema.</translation>
@@ -171,7 +169,6 @@
 <translation id="7111012039238467737">(Vàlid)</translation>
 <translation id="7113310725918019676">Permet <ph name="BLOCKED_TYPE" /> de <ph name="DOMAIN" /></translation>
 <translation id="7126644664682723998">Enganxa i cerca</translation>
-<translation id="7179323680825933600">Desa i omple els mètodes de pagament</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> no compleix la normativa de seguretat.</translation>
 <translation id="7219179957768738017">La connexió usa <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Mostra les notificacions</translation>
@@ -223,11 +220,12 @@
 <translation id="9062620674789239642">És possible que s'hagi mogut, editat o suprimit.</translation>
 <translation id="9069693763241529744">Bloquejat per un complement</translation>
 <translation id="9073799351042754113">Has decidit desactivar els advertiments de seguretat per a aquest lloc web.</translation>
+<translation id="9168814207360376865">Permet que els llocs web comprovin si tens formes de pagament desades</translation>
 <translation id="9169664750068251925">Bloqueja sempre en aquest lloc</translation>
 <translation id="9180553614777056266">Bloquejador d'anuncis</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> fa servir un protocol no admès.</translation>
 <translation id="936602727769022409">Podries perdre l'accés al compte de Google. Vivaldi et recomana que canviïs la contrasenya ara. Hauràs d'iniciar la sessió.</translation>
 <translation id="969892804517981540">Compilació oficial</translation>
-<translation id="984275831282074731">Formes de pagament</translation>
+<translation id="984275831282074731">Mètodes de pagament</translation>
 <translation id="988159990683914416">Versió del desenvolupador</translation>
 </translationbundle>

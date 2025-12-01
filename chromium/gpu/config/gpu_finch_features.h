@@ -31,7 +31,6 @@ GPU_EXPORT BASE_DECLARE_FEATURE(kWebViewSurfaceControl);
 GPU_EXPORT BASE_DECLARE_FEATURE(kWebViewSurfaceControlForTV);
 GPU_EXPORT BASE_DECLARE_FEATURE(kLimitAImageReaderMaxSizeToOne);
 GPU_EXPORT BASE_DECLARE_FEATURE(kWebViewThreadSafeMediaDefault);
-GPU_EXPORT BASE_DECLARE_FEATURE(kIncreaseBufferCountForHighFrameRate);
 GPU_EXPORT BASE_DECLARE_FEATURE(kUseHardwareBufferUsageFlagsFromVulkan);
 GPU_EXPORT BASE_DECLARE_FEATURE(
     kAllowHardwareBufferUsageFlagsFromVulkanForScanout);
@@ -72,6 +71,8 @@ GPU_EXPORT extern const base::FeatureParam<bool>
     kSkiaGraphiteDawnSkipValidation;
 GPU_EXPORT extern const base::FeatureParam<bool>
     kSkiaGraphiteDawnBackendValidation;
+GPU_EXPORT extern const base::FeatureParam<bool>
+    kSkiaGraphiteDawnBackendDebugLabels;
 
 #if BUILDFLAG(IS_WIN)
 GPU_EXPORT BASE_DECLARE_FEATURE(kSkiaGraphiteDawnUseD3D12);
@@ -85,8 +86,6 @@ GPU_EXPORT BASE_DECLARE_FEATURE(
     kFastInkHostAddScanoutUsageOnlyIfSupportedBySharedImage);
 GPU_EXPORT BASE_DECLARE_FEATURE(
     kRoundedDisplayAddScanoutUsageOnlyIfSupportedBySharedImage);
-GPU_EXPORT BASE_DECLARE_FEATURE(
-    kSWVideoFrameAddScanoutUsageOnlyIfSupportedBySharedImage);
 GPU_EXPORT BASE_DECLARE_FEATURE(
     kViewTreeHostAddScanoutUsageOnlyIfSupportedBySharedImage);
 
@@ -108,8 +107,8 @@ GPU_EXPORT BASE_DECLARE_FEATURE(kEnableDrDcVulkan);
 
 GPU_EXPORT BASE_DECLARE_FEATURE(kWebGPUService);
 GPU_EXPORT BASE_DECLARE_FEATURE(kWebGPUBlobCache);
-GPU_EXPORT BASE_DECLARE_FEATURE(kWebGPUUseDXC);
 GPU_EXPORT BASE_DECLARE_FEATURE(kWebGPUUseTintIR);
+GPU_EXPORT BASE_DECLARE_FEATURE(kWebGPUUseVulkanMemoryModel);
 GPU_EXPORT extern const base::FeatureParam<std::string> kWebGPUUnsafeFeatures;
 GPU_EXPORT extern const base::FeatureParam<std::string> kWGSLUnsafeFeatures;
 
@@ -122,6 +121,11 @@ GPU_EXPORT BASE_DECLARE_FEATURE(kD3DBackingUploadWithUpdateSubresource);
 #endif
 
 GPU_EXPORT BASE_DECLARE_FEATURE(kHandleOverlaysSwapFailure);
+
+GPU_EXPORT BASE_DECLARE_FEATURE(kGPUBlockListTestGroup);
+GPU_EXPORT extern const base::FeatureParam<int> kGPUBlockListTestGroupId;
+GPU_EXPORT BASE_DECLARE_FEATURE(kGPUDriverBugListTestGroup);
+GPU_EXPORT extern const base::FeatureParam<int> kGPUDriverBugListTestGroupId;
 
 GPU_EXPORT bool UseGles2ForOopR();
 GPU_EXPORT bool IsUsingVulkan();

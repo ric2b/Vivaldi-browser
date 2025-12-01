@@ -6,7 +6,8 @@
 @class VivaldiNTPTopToolbarItem;
 
 @protocol VivaldiNTPTopToolbarViewConsumer
-- (void)didSelectItemWithIndex:(NSInteger)index;
+- (void)didSelectItemWithIndex:(NSInteger)index
+       supportsSortingChildren:(BOOL)supportsSortingChildren;
 - (void)didTriggerRenameToolbarItem:(VivaldiNTPTopToolbarItem*)toolbarItem;
 - (void)didTriggerRemoveToolbarItem:(VivaldiNTPTopToolbarItem*)toolbarItem;
 @end

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_CSS_PARSER_CSS_PARSER_TOKEN_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_CSS_PARSER_CSS_PARSER_TOKEN_H_
 
@@ -73,8 +78,6 @@ enum HashTokenType {
 };
 
 class CORE_EXPORT CSSParserToken {
-  USING_FAST_MALLOC(CSSParserToken);
-
  public:
   enum BlockType {
     kNotBlock,
@@ -132,17 +135,7 @@ class CORE_EXPORT CSSParserToken {
     return static_cast<CSSParserTokenType>(type_);
   }
   StringView Value() const {
-    if (value_is_inline_) {
-      DCHECK(value_is_8bit_);
-      return StringView(reinterpret_cast<const LChar*>(value_data_char_inline_),
-                        value_length_);
-    }
-    if (value_is_8bit_) {
-      return StringView(reinterpret_cast<const LChar*>(value_data_char_raw_),
-                        value_length_);
-    }
-    return StringView(reinterpret_cast<const UChar*>(value_data_char_raw_),
-                      value_length_);
+    return value_is_8bit_ ? StringView(Span8()) : StringView(Span16());
   }
 
   bool IsEOF() const { return type_ == static_cast<unsigned>(kEOFToken); }
@@ -243,6 +236,19 @@ class CORE_EXPORT CSSParserToken {
       return value_data_char_raw_;
     }
   }
+  base::span<const LChar> Span8() const {
+    DCHECK(value_is_8bit_);
+    // SAFETY: InitValueFromStringView() ensures the expression is safe.
+    return UNSAFE_BUFFERS(
+        {static_cast<const LChar*>(ValueDataCharRaw()), value_length_});
+  }
+  base::span<const UChar> Span16() const {
+    DCHECK(!value_is_8bit_);
+    DCHECK(!value_is_inline_);
+    // SAFETY: InitValueFromStringView() ensures the expression is safe.
+    return UNSAFE_BUFFERS(
+        {static_cast<const UChar*>(value_data_char_raw_), value_length_});
+  }
 
   // Bitfields are all declared as type `unsigned` based on observation that
   // on Windows, adjacent bitfields of differing types do not get packed
@@ -269,7 +275,7 @@ class CORE_EXPORT CSSParserToken {
   unsigned value_is_8bit_ : 1;
 
   // These are free bits. You may take from them if you need.
-  unsigned padding_ : 12;
+  [[maybe_unused]] unsigned padding_ : 12;
 
   unsigned value_length_;
   union {

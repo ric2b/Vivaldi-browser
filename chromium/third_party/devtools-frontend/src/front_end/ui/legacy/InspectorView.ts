@@ -32,10 +32,12 @@ import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Root from '../../core/root/root.js';
+import * as Buttons from '../../ui/components/buttons/buttons.js';
 import * as IconButton from '../components/icon_button/icon_button.js';
 import * as VisualLogging from '../visual_logging/visual_logging.js';
 
 import type {ActionDelegate as ActionDelegateInterface} from './ActionRegistration.js';
+import {ActionRegistry} from './ActionRegistry.js';
 import * as ARIAUtils from './ARIAUtils.js';
 import type {Context} from './Context.js';
 import type {ContextMenu} from './ContextMenu.js';
@@ -43,7 +45,7 @@ import {Dialog} from './Dialog.js';
 import {DockController, DockState} from './DockController.js';
 import {GlassPane} from './GlassPane.js';
 import {Infobar, Type as InfobarType} from './Infobar.js';
-import inspectorViewTabbedPaneStyles from './inspectorViewTabbedPane.css.legacy.js';
+import inspectorViewTabbedPaneStyles from './inspectorViewTabbedPane.css.js';
 import {KeyboardShortcut} from './KeyboardShortcut.js';
 import type {Panel} from './Panel.js';
 import {ShowMode, SplitWidget} from './SplitWidget.js';
@@ -67,6 +69,10 @@ const UIStrings = {
    *@description The aria label for main tabbed pane that contains Panels
    */
   panels: 'Panels',
+  /**
+   *@description Title of an action that reloads the tab currently being debugged by DevTools
+   */
+  reloadDebuggedTab: 'Reload',
   /**
    *@description Title of an action that reloads the DevTools
    */
@@ -208,7 +214,7 @@ export class InspectorView extends VBox implements ViewLocationResolver {
     // to prevent to prevent a shift in the tab layout. Note that when DevTools cannot be docked,
     // the Device mode button is not added and so the allocated space is smaller.
     const allocatedSpace = Root.Runtime.conditions.canDock() ? '69px' : '41px';
-    this.tabbedPane.leftToolbar().element.style.minWidth = allocatedSpace;
+    this.tabbedPane.leftToolbar().style.minWidth = allocatedSpace;
     this.tabbedPane.registerRequiredCSS(inspectorViewTabbedPaneStyles);
     this.tabbedPane.addEventListener(
         TabbedPaneEvents.TabSelected,
@@ -332,10 +338,10 @@ export class InspectorView extends VBox implements ViewLocationResolver {
       let icon: IconButton.Icon.Icon|null = null;
       if (warnings.length !== 0) {
         const warning = warnings.length === 1 ? warnings[0] : '· ' + warnings.join('\n· ');
-        icon = IconButton.Icon.create('warning-filled');
+        icon = IconButton.Icon.create('warning-filled', 'warning');
         Tooltip.install(icon, warning);
       }
-      tabbedPane.setTabIcon(tabId, icon);
+      tabbedPane.setTrailingTabIcon(tabId, icon);
     }
   }
 
@@ -476,6 +482,40 @@ export class InspectorView extends VBox implements ViewLocationResolver {
     }
   }
 
+  displayDebuggedTabReloadRequiredWarning(message: string): void {
+    if (!this.reloadRequiredInfobar) {
+      const infobar = new Infobar(
+          InfobarType.INFO, message,
+          [
+            {
+              text: i18nString(UIStrings.reloadDebuggedTab),
+              highlight: true,
+              delegate: () => {
+                reloadDebuggedTab();
+                this.removeDebuggedTabReloadRequiredWarning();
+              },
+              dismiss: false,
+              buttonVariant: Buttons.Button.Variant.PRIMARY,
+              icon: 'refresh',
+              jslogContext: 'main.debug-reload',
+            },
+          ],
+          undefined, 'reload-required');
+      infobar.setParentView(this);
+      this.attachInfobar(infobar);
+      this.reloadRequiredInfobar = infobar;
+      infobar.setCloseCallback(() => {
+        delete this.reloadRequiredInfobar;
+      });
+    }
+  }
+
+  removeDebuggedTabReloadRequiredWarning(): void {
+    if (this.reloadRequiredInfobar) {
+      this.reloadRequiredInfobar.dispose();
+    }
+  }
+
   displayReloadRequiredWarning(message: string): void {
     if (!this.reloadRequiredInfobar) {
       const infobar = new Infobar(
@@ -489,7 +529,7 @@ export class InspectorView extends VBox implements ViewLocationResolver {
               jslogContext: 'main.debug-reload',
             },
           ],
-          undefined, undefined, 'reload-required');
+          undefined, 'reload-required');
       infobar.setParentView(this);
       this.attachInfobar(infobar);
       this.reloadRequiredInfobar = infobar;
@@ -512,7 +552,7 @@ export class InspectorView extends VBox implements ViewLocationResolver {
               jslogContext: 'select-folder',
             },
           ],
-          undefined, undefined, 'select-override-folder');
+          undefined, 'select-override-folder');
       infobar.setParentView(this);
       this.attachInfobar(infobar);
       this.#selectOverrideFolderInfobar = infobar;
@@ -592,7 +632,7 @@ function createLocaleInfobar(): Infobar {
           jslogContext: 'set-to-specific-language',
         },
       ],
-      getDisableLocaleInfoBarSetting(), undefined, 'language-mismatch');
+      getDisableLocaleInfoBarSetting(), 'language-mismatch');
 }
 
 function reloadDevTools(): void {
@@ -600,6 +640,10 @@ function reloadDevTools(): void {
     Host.InspectorFrontendHost.InspectorFrontendHostInstance.setIsDocked(true, function() {});
   }
   Host.InspectorFrontendHost.InspectorFrontendHostInstance.reattach(() => window.location.reload());
+}
+
+function reloadDebuggedTab(): void {
+  void ActionRegistry.instance().getAction('inspector-main.reload').execute();
 }
 
 export class ActionDelegate implements ActionDelegateInterface {

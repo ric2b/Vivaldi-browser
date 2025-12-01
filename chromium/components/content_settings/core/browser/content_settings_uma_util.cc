@@ -4,6 +4,8 @@
 
 #include "components/content_settings/core/browser/content_settings_uma_util.h"
 
+#include <functional>
+
 #include "base/containers/fixed_flat_map.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
@@ -147,6 +149,10 @@ constexpr auto kHistogramValue = base::MakeFixedFlatMap<ContentSettingsType,
     {ContentSettingsType::HAND_TRACKING, 128},
     {ContentSettingsType::WEB_APP_INSTALLATION, 129},
     {ContentSettingsType::DIRECT_SOCKETS_PRIVATE_NETWORK_ACCESS, 130},
+    {ContentSettingsType::LEGACY_COOKIE_SCOPE, 131},
+    {ContentSettingsType::ARE_SUSPICIOUS_NOTIFICATIONS_ALLOWLISTED_BY_USER,
+     132},
+    {ContentSettingsType::CONTROLLED_FRAME, 133},
 
     // As mentioned at the top, please don't forget to update ContentType in
     // enums.xml when you add entries here!
@@ -154,9 +160,9 @@ constexpr auto kHistogramValue = base::MakeFixedFlatMap<ContentSettingsType,
 // LINT.ThenChange(//tools/metrics/histograms/enums.xml:ContentType)
 
 constexpr int kkHistogramValueMax =
-    base::ranges::max_element(kHistogramValue,
-                              base::ranges::less{},
-                              &decltype(kHistogramValue)::value_type::second)
+    std::ranges::max_element(kHistogramValue,
+                             std::ranges::less{},
+                             &decltype(kHistogramValue)::value_type::second)
         ->second;
 
 std::string GetProviderNameForHistograms(
@@ -190,8 +196,7 @@ std::string GetProviderNameForHistograms(
     case ProviderType::kOtherProviderForTests:
       return "OtherProviderForTests";
     case ProviderType::kNone:
-      NOTREACHED_IN_MIGRATION();
-      return "";
+      NOTREACHED();
   }
 }
 
@@ -219,8 +224,7 @@ int ContentSettingTypeToHistogramValue(ContentSettingsType content_setting) {
         << "Used for deprecated settings: " << static_cast<int>(found->first);
     return found->second;
   }
-  NOTREACHED_IN_MIGRATION();
-  return -1;
+  NOTREACHED();
 }
 
 void RecordActiveExpiryEvent(content_settings::ProviderType provider_type,

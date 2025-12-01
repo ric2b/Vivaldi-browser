@@ -78,12 +78,12 @@
 #import "ios/chrome/browser/signin/model/system_identity.h"
 #import "ios/chrome/browser/signin/model/system_identity_manager.h"
 #import "ios/chrome/browser/supervised_user/model/supervised_user_service_factory.h"
+#import "ios/chrome/browser/toolbar/ui_bundled/test/toolbar_test_navigation_manager.h"
 #import "ios/chrome/browser/ui/popup_menu//overflow_menu/overflow_menu_orderer.h"
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/destination_usage_history/constants.h"
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/feature_flags.h"
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/overflow_menu_swift.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
-#import "ios/chrome/browser/ui/toolbar/test/toolbar_test_navigation_manager.h"
 #import "ios/chrome/browser/ui/whats_new/constants.h"
 #import "ios/chrome/browser/ui/whats_new/whats_new_util.h"
 #import "ios/chrome/browser/web/model/font_size/font_size_java_script_feature.h"
@@ -371,13 +371,15 @@ class OverflowMenuMediatorTest : public PlatformTest {
 
   bool HasItem(NSString* accessibility_identifier, BOOL enabled) {
     for (OverflowMenuDestination* destination in mediator_.model.destinations) {
-      if (destination.accessibilityIdentifier == accessibility_identifier)
+      if (destination.accessibilityIdentifier == accessibility_identifier) {
         return YES;
+      }
     }
     for (OverflowMenuActionGroup* group in mediator_.model.actionGroups) {
       for (OverflowMenuAction* action in group.actions) {
-        if (action.accessibilityIdentifier == accessibility_identifier)
+        if (action.accessibilityIdentifier == accessibility_identifier) {
           return action.enabled == enabled;
+        }
       }
     }
     return NO;
@@ -385,8 +387,9 @@ class OverflowMenuMediatorTest : public PlatformTest {
 
   bool HasEnterpriseInfoItem() {
     for (OverflowMenuActionGroup* group in mediator_.model.actionGroups) {
-      if (group.footer.accessibilityIdentifier == kTextMenuEnterpriseInfo)
+      if (group.footer.accessibilityIdentifier == kTextMenuEnterpriseInfo) {
         return YES;
+      }
     }
     return NO;
   }
@@ -428,7 +431,7 @@ class OverflowMenuMediatorTest : public PlatformTest {
     fake_system_identity_manager()->AddIdentityWithUnknownCapabilities(
         identity);
     AuthenticationServiceFactory::GetForProfile(profile_.get())
-        ->SignIn(identity, signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+        ->SignIn(identity, signin_metrics::AccessPoint::kUnknown);
     CoreAccountInfo core_account_info =
         identity_manager()->GetPrimaryAccountInfo(
             signin::ConsentLevel::kSignin);
@@ -653,9 +656,8 @@ TEST_F(OverflowMenuMediatorTest, TestEnterpriseInfoShownForUserLevelPolicies) {
       AuthenticationServiceFactory::GetForProfile(profile_.get());
   ChromeAccountManagerService* account_manager =
       ChromeAccountManagerServiceFactory::GetForProfile(profile_.get());
-  authentication_service->SignIn(
-      account_manager->GetDefaultIdentity(),
-      signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+  authentication_service->SignIn(account_manager->GetDefaultIdentity(),
+                                 signin_metrics::AccessPoint::kUnknown);
   EXPECT_TRUE(authentication_service->HasPrimaryIdentityManaged(
       signin::ConsentLevel::kSignin));
 

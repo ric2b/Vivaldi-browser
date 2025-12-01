@@ -12,12 +12,13 @@
 #include "chrome/common/channel_info.h"
 #include "components/autofill/core/browser/logging/log_router.h"
 #include "components/embedder_support/user_agent_utils.h"
-#include "components/grit/dev_ui_components_resources.h"
+#include "components/grit/autofill_and_password_manager_internals_resources.h"
+#include "components/grit/autofill_and_password_manager_internals_resources_map.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/version_info/version_info.h"
-#include "components/version_ui/version_handler_helper.h"
-#include "components/version_ui/version_ui_constants.h"
+#include "components/webui/version/version_handler_helper.h"
+#include "components/webui/version/version_ui_constants.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
 #include "content/public/browser/web_ui.h"
@@ -39,9 +40,10 @@ void CreateAndAddInternalsHTMLSource(Profile* profile,
   source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ScriptSrc,
       "script-src chrome://resources chrome://webui-test 'self';");
-  source->AddResourcePath("autofill_and_password_manager_internals.js",
-                          IDR_AUTOFILL_AND_PASSWORD_MANAGER_INTERNALS_JS);
-  source->SetDefaultResource(IDR_AUTOFILL_AND_PASSWORD_MANAGER_INTERNALS_HTML);
+  source->AddResourcePaths(kAutofillAndPasswordManagerInternalsResources);
+  source->AddResourcePath(
+      "",
+      IDR_AUTOFILL_AND_PASSWORD_MANAGER_INTERNALS_AUTOFILL_AND_PASSWORD_MANAGER_INTERNALS_HTML);
   // Data strings:
   source->AddString(version_ui::kVersion,
                     std::string(version_info::GetVersionNumber()));
@@ -192,26 +194,30 @@ void InternalsUIHandler::OnResetAccountStorageNotice(
 void InternalsUIHandler::StartSubscription() {
   LogRouter* log_router =
       get_log_router_function_.Run(Profile::FromWebUI(web_ui()));
-  if (!log_router)
+  if (!log_router) {
     return;
+  }
 
   registered_with_log_router_ = true;
   log_router->RegisterReceiver(this);
 }
 
 void InternalsUIHandler::EndSubscription() {
-  if (!registered_with_log_router_)
+  if (!registered_with_log_router_) {
     return;
+  }
   registered_with_log_router_ = false;
   LogRouter* log_router =
       get_log_router_function_.Run(Profile::FromWebUI(web_ui()));
-  if (log_router)
+  if (log_router) {
     log_router->UnregisterReceiver(this);
+  }
 }
 
 void InternalsUIHandler::LogEntry(const base::Value::Dict& entry) {
-  if (!registered_with_log_router_)
+  if (!registered_with_log_router_) {
     return;
+  }
   FireWebUIListener("add-structured-log", entry);
 }
 

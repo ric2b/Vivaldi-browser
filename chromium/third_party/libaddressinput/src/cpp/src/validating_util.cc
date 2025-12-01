@@ -85,7 +85,7 @@ void ValidatingUtil::Wrap(time_t timestamp, std::string* data) {
   assert(data != nullptr);
   char timestamp_string[2 + 3 * sizeof timestamp];
   int size = std::snprintf(timestamp_string, sizeof(timestamp_string), "%ld",
-                                             static_cast<long>(timestamp));
+                           static_cast<long>(timestamp));
   assert(size > 0);
   assert(size < sizeof timestamp_string);
   (void)size;

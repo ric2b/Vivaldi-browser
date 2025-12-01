@@ -299,4 +299,4 @@ bootloader when you see the developer mode boot screen.
 [recovery process]: https://www.google.com/chromeos/recovery
 [blocked Developer Mode]: https://support.google.com/chrome/a/answer/6150653
 [old-style CBFS creation guide]: https://groups.google.com/a/chromium.org/g/chromium-os-dev/c/xtR0nUwF-Fo/m/sgzY1JC2CQAJ
-[Mode Transition Wipe]: https://www.chromium.org/chromium-os/chromiumos-design-docs/developer-mode/#mode-transition-wipe
+[Mode Transition Wipe]: /chromium-os/chromiumos-design-docs/developer-mode/#mode-transition-wipe

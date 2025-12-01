@@ -7,7 +7,6 @@
 <translation id="1158211211994409885">A(z) <ph name="HOST_NAME" /> váratlanul megszakította a kapcsolatot.</translation>
 <translation id="1161325031994447685">Újracsatlakozás Wi-Fi-hálózathoz</translation>
 <translation id="1175364870820465910">&amp;Nyomtatás...</translation>
-<translation id="132390688737681464">Címek mentése és kitöltése</translation>
 <translation id="1375198122581997741">A verzióról</translation>
 <translation id="139305205187523129">A(z) <ph name="HOST_NAME" /> nem küldött adatokat.</translation>
 <translation id="1555191101192706055">A felkeresni kívánt webhelyen tartózkodó támadók megpróbálhatnak rávenni olyan kártékony szoftver telepítésére, amely befolyásolja a böngészés módját – például módosítja a kezdőlapot, vagy további hirdetéseket jelenít meg a felkeresett webhelyeken.</translation>
@@ -52,6 +51,7 @@
 <translation id="2991571918955627853">A(z) <ph name="SITE" /> webhelyet pillanatnyilag nem tudod felkeresni, mert a webhely HSTS-t használ. A hálózati hibák és támadások rendszerint átmenetiek, ezért az említett oldal működése később valószínűleg helyreáll.</translation>
 <translation id="3005723025932146533">Mentett másolat megjelenítése</translation>
 <translation id="301521992641321250">Automatikusan letiltva</translation>
+<translation id="3037605927509011580">A manóba!</translation>
 <translation id="3041612393474885105">Tanúsítvány adatai</translation>
 <translation id="3109728660330352905">Nincs jogosultsága az oldal megjelenítésére.</translation>
 <translation id="31207688938192855"><ph name="BEGIN_LINK" />Próbálkozz a kapcsolódási diagnosztika futtatásával<ph name="END_LINK" />.</translation>
@@ -64,7 +64,6 @@
 <translation id="3234666976984236645">Mindig észlelje a fontos tartalmat ezen a webhelyen</translation>
 <translation id="3308738399950580893">Reklámok</translation>
 <translation id="3384522979010096022">Szervezeted nem engedélyezi a webhely megtekintését</translation>
-<translation id="3387261909427947069">Fizetési módok</translation>
 <translation id="3422472998109090673">A(z) <ph name="HOST_NAME" /> jelenleg nem érhető el.</translation>
 <translation id="3427092606871434483">Engedélyezés (alapértelmezett)</translation>
 <translation id="3447661539832366887">Az eszköz tulajdonosa kikapcsolta a dinoszauruszos játékot.</translation>
@@ -125,7 +124,6 @@
 <translation id="5386426401304769735">A webhely tanúsítványlánca SHA-1 titkosítással aláírt tanúsítványt tartalmaz.</translation>
 <translation id="5452270690849572955">Ez a(z) <ph name="HOST_NAME" /> oldal nem található</translation>
 <translation id="5457113250005438886">Érvénytelen</translation>
-<translation id="5490432419156082418">Címek és egyebek</translation>
 <translation id="5492298309214877701">Ennek a vállalati, szervezeti vagy iskolai intraneten található webhelynek az URL-címe megegyezik egy külső webhely URL-címével.
     <ph name="LINE_BREAK" />
     Javasoljuk, hogy forduljon a rendszergazdához.</translation>
@@ -171,7 +169,6 @@
 <translation id="7111012039238467737">(Érvényes)</translation>
 <translation id="7113310725918019676"><ph name="BLOCKED_TYPE" /> engedélyezése innen: <ph name="DOMAIN" /></translation>
 <translation id="7126644664682723998">Beillesztés és keresés</translation>
-<translation id="7179323680825933600">Fizetési módok mentése és kitöltése</translation>
 <translation id="7210863904660874423">A(z) <ph name="HOST_NAME" /> nem felel meg a biztonsági szabványoknak.</translation>
 <translation id="7219179957768738017">A kapcsolat a következőt használja: <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Értesítéseket megjelenítése</translation>
@@ -223,6 +220,7 @@
 <translation id="9062620674789239642">Előfordulhat, hogy át lett helyezve, szerkesztve vagy törlésre került.</translation>
 <translation id="9069693763241529744">Bővítmény által letiltva</translation>
 <translation id="9073799351042754113">Kikapcsoltad a biztonsági figyelmeztetéseket ezen a webhelyen.</translation>
+<translation id="9168814207360376865">Engedélyezés a webhelyek számára, hogy ellenőrizzék, van-e elmentett fizetési mód</translation>
 <translation id="9169664750068251925">Mindig tiltsa ezen az oldalon</translation>
 <translation id="9180553614777056266">Reklámblokkoló</translation>
 <translation id="9183425211371246419">A(z) <ph name="HOST_NAME" /> egy nem támogatott protokollt használ.</translation>

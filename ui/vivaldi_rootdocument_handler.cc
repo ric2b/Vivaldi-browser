@@ -49,9 +49,10 @@ VivaldiRootDocumentHandlerFactory::VivaldiRootDocumentHandlerFactory()
 
 VivaldiRootDocumentHandlerFactory::~VivaldiRootDocumentHandlerFactory() {}
 
-KeyedService* VivaldiRootDocumentHandlerFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+VivaldiRootDocumentHandlerFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
-  return new VivaldiRootDocumentHandler(context);
+  return std::make_unique<VivaldiRootDocumentHandler>(context);
 }
 
 bool VivaldiRootDocumentHandlerFactory::ServiceIsNULLWhileTesting() const {

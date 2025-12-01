@@ -79,66 +79,6 @@ a {
   padding-inline-start: 0;
 }
 
-#error-information-button {
-  content: url((../../../../chromium/components/neterror/resources/images/help_outline.svg);
-  height: 24px;
-  vertical-align: -.15em;
-  width: 24px;
-}
-
-.use-popup-container#error-information-popup-container
-  #error-information-popup {
-  align-items: center;
-  background-color: var(--popup-container-background-color);
-  display: flex;
-  height: 100%;
-  left: 0;
-  position: fixed;
-  top: 0;
-  width: 100%;
-  z-index: 100;
-}
-
-.use-popup-container#error-information-popup-container
-  #error-information-popup-content > p {
-  margin-bottom: 11px;
-  margin-inline-start: 20px;
-}
-
-.use-popup-container#error-information-popup-container #suggestions-list ul {
-  margin-inline-start: 15px;
-}
-
-.use-popup-container#error-information-popup-container
-  #error-information-popup-box {
-  background-color: var(--background-color);
-  left: 5%;
-  padding-bottom: 15px;
-  padding-top: 15px;
-  position: fixed;
-  width: 90%;
-  z-index: 101;
-}
-
-.use-popup-container#error-information-popup-container div.error-code {
-  margin-inline-start: 20px;
-}
-
-.use-popup-container#error-information-popup-container #suggestions-list p {
-  margin-inline-start: 20px;
-}
-
-:not(.use-popup-container)#error-information-popup-container
-  #error-information-popup-close {
-  display: none;
-}
-
-#error-information-popup-close {
-  margin-bottom: 0;
-  margin-inline-end: 35px;
-  margin-top: 15px;
-  text-align: end;
-}
 
 .link-button {
   color: rgb(66, 133, 244);
@@ -156,11 +96,6 @@ a {
   /* Not done on mobile for performance reasons. */
   text-shadow: 0 1px 0 rgba(255,255,255,0.3);
 </if>
-}
-
-[jscontent=hostName],
-[jscontent=failedUrl] {
-  overflow-wrap: break-word;
 }
 
 .secondary-button {
@@ -235,6 +170,12 @@ a {
   .suggestion-header {
     margin-bottom: 0;
   }
+}
+
+#cancel-save-page-button {
+  background-image: url(../../../../chromium/components/neterror/resources/images/animated_offline_pin.svg);
+  background-position: right 27px center;
+}
 }
 
 #download-link,
@@ -401,22 +342,6 @@ a {
   display: none;
 }
 
-.image-video {
-  content: url(../../../../chromium/components/neterror/resources/images/video.svg);
-}
-
-.image-music-note {
-  content: url(../../../../chromium/components/neterror/resources/images/music-note.svg);
-}
-
-.image-earth {
-  content: url(../../../../chromium/components/neterror/resources/images/generic-globe.svg);
-}
-
-.image-file {
-  content: url(../../../../chromium/components/neterror/resources/images/file.svg);
-}
-
 .offline-content-suggestion-texts {
   display: flex;
   flex-direction: column;
@@ -511,7 +436,7 @@ div.offline-content-suggestion {
 }
 
 .suggestion-with-image .offline-content-suggestion-pin {
-  content: url(../../../../chromium/components/neterror/resources/images/offline_pin.svg);
+  content: url(../../../../chromium/components/neterror/resources/images/animated_offline_pin.svg);
   flex-shrink: 0;
   height: 1.4em;
   margin-inline-start: .4em;
@@ -1037,10 +962,6 @@ html[dir='rtl'].offline .icon-offline {
     color: var(--link-color);
   }
 
-  #error-information-button {
-    filter: invert(0.6);
-  }
-
   .slow-speed-option {
     background: var(--google-gray-800);
     color: var(--google-gray-100);
@@ -1098,5 +1019,17 @@ html[dir='rtl'].offline .icon-offline {
   .logo-holder {
     grid-area: icon;
     image-rendering: pixelated;
+  }
+}
+
+#main-frame-error:not(.showing-details) #details {
+  display: none;
+}
+
+@media (min-width: 240px) and (max-width: 420px) and (min-height: 401px),
+       (min-height: 240px) and (max-height: 560px) and (min-width: 421px) {
+  #main-frame-error.showing-details #main-content,
+  #main-frame-error.showing-details .runner-container {
+    display: none;
   }
 }

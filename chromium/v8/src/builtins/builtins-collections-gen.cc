@@ -152,11 +152,10 @@ void BaseCollectionsAssembler::AddConstructorEntries(
       // the iteator and execute iterator closing protocol. It might be
       // non-trivial in case "return" callback is added somewhere in the
       // iterator's prototype chain.
-      TNode<NativeContext> native_context = LoadNativeContext(context);
       TNode<IntPtrT> next_index =
           IntPtrAdd(var_index.value(), IntPtrConstant(1));
       var_iterator_object = CreateArrayIterator(
-          native_context, UncheckedCast<JSArray>(initial_entries),
+          LoadNativeContext(context), UncheckedCast<JSArray>(initial_entries),
           IterationKind::kValues, SmiTag(next_index));
       Goto(&if_exception);
     }
@@ -2603,7 +2602,7 @@ TNode<HeapObject> WeakCollectionsBuiltinsAssembler::AllocateTable(
   TNode<FixedArray> table = CAST(AllocateFixedArray(HOLEY_ELEMENTS, length));
 
   TNode<Map> map =
-      HeapConstantNoHole(EphemeronHashTable::GetMap(ReadOnlyRoots(isolate())));
+      HeapConstantNoHole(EphemeronHashTable::GetMap(isolate()->roots_table()));
   StoreMapNoWriteBarrier(table, map);
   StoreFixedArrayElement(table, EphemeronHashTable::kNumberOfElementsIndex,
                          SmiConstant(0), SKIP_WRITE_BARRIER);
@@ -2641,13 +2640,16 @@ TNode<IntPtrT> WeakCollectionsBuiltinsAssembler::EntryMask(
 
 TNode<IntPtrT> WeakCollectionsBuiltinsAssembler::Coefficient(
     TNode<IntPtrT> capacity) {
+  static_assert(EphemeronHashTableShape::kDoHashSpreading);
+  DCHECK_GE(EphemeronHashTableShape::kHashBits, 1);
+  DCHECK_LE(EphemeronHashTableShape::kHashBits, 32);
   TVARIABLE(IntPtrT, coeff, IntPtrConstant(1));
   Label done(this, &coeff);
-  GotoIf(IntPtrLessThan(capacity,
-                        IntPtrConstant(1 << PropertyArray::HashField::kSize)),
+  GotoIf(IntPtrLessThan(
+             capacity, IntPtrConstant(1 << EphemeronHashTableShape::kHashBits)),
          &done);
   coeff = Signed(
-      WordShr(capacity, IntPtrConstant(PropertyArray::HashField::kSize)));
+      WordShr(capacity, IntPtrConstant(EphemeronHashTableShape::kHashBits)));
   Goto(&done);
   BIND(&done);
   return coeff.value();

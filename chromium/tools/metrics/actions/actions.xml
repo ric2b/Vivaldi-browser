@@ -4254,6 +4254,25 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Assistant.NewEntryPoint.AssistantKey">
+  <owner>yawano@google.com</owner>
+  <owner>assistive-eng@google.com</owner>
+  <description>
+    User has pressed Assistant key to open Assistant new entry point. Note that
+    there can be a chance that the actual key combo is not Assistant key as this
+    shortcut is configurable for now: https://crbug.com/387507743.
+  </description>
+</action>
+
+<action name="Assistant.NewEntryPoint.Launcher">
+  <owner>yawano@google.com</owner>
+  <owner>assistive-eng@google.com</owner>
+  <description>
+    User has opened the new entry point by activating a button in the launcher
+    (app list).
+  </description>
+</action>
+
 <action name="AutoDetectChange">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -6556,7 +6575,6 @@ should be able to be added at any place in this file.
 
 <action name="ChromeOS.SystemTray.Network.SettingsButtonPressed">
   <owner>khorimoto@chromium.org</owner>
-  <owner>tjohnsonkanu@chromium.org</owner>
   <owner>chadduffin@chromium.org</owner>
   <owner>cros-device-enablement@google.com</owner>
   <description>
@@ -7003,6 +7021,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Commerce.AddToCart">
+  <obsolete>Deprecated due to feature removal in 11/2024.</obsolete>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
   <description>Triggered when the user adds a product to cart.</description>
@@ -7681,6 +7700,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Commerce.Purchase">
+  <obsolete>Deprecated due to feature removal in 11/2024.</obsolete>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
   <description>Triggered when the user makes the purchase.</description>
@@ -7711,12 +7731,14 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Commerce.VisitCart">
+  <obsolete>Deprecated due to feature removal in 11/2024.</obsolete>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
   <description>Triggered when the user visits the cart page.</description>
 </action>
 
 <action name="Commerce.VisitCheckout">
+  <obsolete>Deprecated due to feature removal in 11/2024.</obsolete>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
   <description>Triggered when ther user visits the checkout page.</description>
@@ -9483,19 +9505,28 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="DemoMode.ExitFromShelf">
-  <owner>michaelpg@chromium.org</owner>
-  <owner>wzang@chromium.org</owner>
+  <owner>wanghaifan@google.com</owner>
+  <owner>cros-demo-mode-eng@google.com</owner>
   <description>
-    Recorded when user exits Demo Mode from the logout button on the shelf.
+    Recorded when the user exits Demo Mode from the logout button on the shelf.
   </description>
 </action>
 
 <action name="DemoMode.ExitFromSystemTray">
-  <owner>michaelpg@chromium.org</owner>
-  <owner>wzang@chromium.org</owner>
+  <owner>wanghaifan@google.com</owner>
+  <owner>cros-demo-mode-eng@google.com</owner>
   <description>
     Recorded when user exits Demo Mode from the logout button in the system
     tray.
+  </description>
+</action>
+
+<action name="DemoMode.ExitFromSystemTrayPowerButton">
+  <owner>wanghaifan@google.com</owner>
+  <owner>cros-demo-mode-eng@google.com</owner>
+  <description>
+    Recorded when the user exits Demo Mode from the power button in the system
+    tray. It can be either &quot;Sign out&quot; or &quot;Restart&quot;.
   </description>
 </action>
 
@@ -9505,6 +9536,34 @@ should be able to be added at any place in this file.
   <description>
     Recorded when the retry button during the demo mode setup process is
     clicked. The retry button appears when there is a setup failure.
+  </description>
+</action>
+
+<action name="DemoMode.SignedIn.ExitFromShelf">
+  <owner>wanghaifan@google.com</owner>
+  <owner>cros-demo-mode-eng@google.com</owner>
+  <description>
+    Recorded when the user exits signed-in Demo Mode from the logout button on
+    the shelf.
+  </description>
+</action>
+
+<action name="DemoMode.SignedIn.ExitFromSystemTray">
+  <owner>wanghaifan@google.com</owner>
+  <owner>cros-demo-mode-eng@google.com</owner>
+  <description>
+    Recorded when the user exits signed-in Demo Mode from the logout button in
+    the system tray.
+  </description>
+</action>
+
+<action name="DemoMode.SignedIn.ExitFromSystemTrayPowerButton">
+  <owner>wanghaifan@google.com</owner>
+  <owner>cros-demo-mode-eng@google.com</owner>
+  <description>
+    Recorded when the user exits signed-in Demo Mode from the power button in
+    the system tray. It can be either &quot;Sign out&quot; or
+    &quot;Restart&quot;.
   </description>
 </action>
 
@@ -12142,6 +12201,102 @@ should be able to be added at any place in this file.
     User performed an action in the tasks glanceables. This aggregates all user
     actions that the user can perform intaskss glanceable.
   </description>
+</action>
+
+<action name="GlicOsEntrypoint.ContextMenuSelection.Exit">
+  <owner>agale@chromium.org</owner>
+  <owner>erikchen@chromium.org</owner>
+  <description>
+    Tracks clicks on the exit option from the glic os launcher context menu.
+  </description>
+</action>
+
+<action name="GlicOsEntrypoint.ContextMenuSelection.OpenGlic">
+  <owner>agale@chromium.org</owner>
+  <owner>erikchen@chromium.org</owner>
+  <description>
+    Tracks clicks on the open glic option from the glic os launcher context
+    menu.
+  </description>
+</action>
+
+<action name="GlicOsEntrypoint.ContextMenuSelection.OpenHotkeySettings">
+  <owner>agale@chromium.org</owner>
+  <owner>erikchen@chromium.org</owner>
+  <description>
+    Tracks clicks on the open hotkey settings option from the glic os launcher
+    context menu.
+  </description>
+</action>
+
+<action name="GlicOsEntrypoint.ContextMenuSelection.OpenSettings">
+  <owner>agale@chromium.org</owner>
+  <owner>erikchen@chromium.org</owner>
+  <description>
+    Tracks clicks on the open glic settings option from the glic os launcher
+    context menu.
+  </description>
+</action>
+
+<action name="GlicOsEntrypoint.ContextMenuSelection.RemoveIcon">
+  <owner>agale@chromium.org</owner>
+  <owner>erikchen@chromium.org</owner>
+  <description>
+    Tracks clicks on the remove glic icon option from the glic os launcher
+    context menu.
+  </description>
+</action>
+
+<action name="GlicResponse">
+  <owner>carlosk@chromium.org</owner>
+  <owner>harringtond@chromium.org</owner>
+  <owner>erikchen@chromium.org</owner>
+  <description>
+    This is the canonical metric to track for glic usage. It tracks an input,
+    followed by a response start that was visible to the user.
+  </description>
+</action>
+
+<action name="GlicResponseInputSubmit">
+  <owner>carlosk@chromium.org</owner>
+  <owner>harringtond@chromium.org</owner>
+  <owner>erikchen@chromium.org</owner>
+  <description>Tracks a single input submission into glic.</description>
+</action>
+
+<action name="GlicResponseStart">
+  <owner>carlosk@chromium.org</owner>
+  <owner>harringtond@chromium.org</owner>
+  <owner>erikchen@chromium.org</owner>
+  <description>Tracks a single response start in glic.</description>
+</action>
+
+<action name="GlicResponseStop">
+  <owner>carlosk@chromium.org</owner>
+  <owner>harringtond@chromium.org</owner>
+  <owner>erikchen@chromium.org</owner>
+  <description>Tracks a single response stop in glic.</description>
+</action>
+
+<action name="GlicSessionEnd">
+  <owner>carlosk@chromium.org</owner>
+  <owner>harringtond@chromium.org</owner>
+  <owner>erikchen@chromium.org</owner>
+  <description>Tracks a session in glic is terminated.</description>
+</action>
+
+<action name="GlicSessionWebClientCrash">
+  <owner>carlosk@chromium.org</owner>
+  <owner>harringtond@chromium.org</owner>
+  <owner>erikchen@chromium.org</owner>
+  <description>Tracks when the glic web client crashes.</description>
+</action>
+
+<action name="GlicSessionWebUiCrash">
+  <owner>carlosk@chromium.org</owner>
+  <owner>harringtond@chromium.org</owner>
+  <owner>erikchen@chromium.org</owner>
+  <description>Tracks when glic webui crashes.</description>
 </action>
 
 <action name="Go">
@@ -14790,6 +14945,15 @@ should be able to be added at any place in this file.
   <owner>gambard@chromium.org</owner>
   <description>
     The user reset the zoom level on a webpage. iOS only.
+  </description>
+</action>
+
+<action name="IOS.PasswordManager.Settings.DeleteAllSavedData.Clicked">
+  <owner>mxlg@google.com</owner>
+  <owner>bling-transactions@google.com</owner>
+  <description>
+    Reported when the user clicks on the delete all data button in the password
+    settings.
   </description>
 </action>
 
@@ -20156,6 +20320,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="ManagementBubble_OpenedFromManagementToolbarButton">
+  <obsolete>Deprecated as of 9/2024.</obsolete>
   <owner>ydago@chromium.org</owner>
   <description>
     The management bubble was opened by clicking on the management toolbar
@@ -20405,42 +20570,6 @@ should be able to be added at any place in this file.
     The user tapped on the &quot;Autofill Form&quot; button of a password
     suggestion from the Password Manual Fallback view to fill the current form
     with the suggestion. iOS only.
-  </description>
-</action>
-
-<action name="ManualFallback_PlusAddress_OpenCreatePlusAddress">
-  <owner>vidhanj@google.com</owner>
-  <owner>jkeitel@google.com</owner>
-  <description>
-    The user tapped on &quot;Create plus address&quot; in the Address/Password
-    Manual Fallback view.
-  </description>
-</action>
-
-<action name="ManualFallback_PlusAddress_OpenManagePlusAddress">
-  <owner>vidhanj@google.com</owner>
-  <owner>jkeitel@google.com</owner>
-  <description>
-    The user tapped on &quot;Manage plus addresses&quot; in the Address/Password
-    Manual Fallback view.
-  </description>
-</action>
-
-<action name="ManualFallback_PlusAddress_OpenSelectPlusAddress">
-  <owner>vidhanj@google.com</owner>
-  <owner>jkeitel@google.com</owner>
-  <description>
-    The user tapped on &quot;Select plus addresses&quot; in the Address/Password
-    Manual Fallback view.
-  </description>
-</action>
-
-<action name="ManualFallback_PlusAddress_SelectPlusAddress">
-  <owner>vidhanj@google.com</owner>
-  <owner>jkeitel@google.com</owner>
-  <description>
-    The user tapped on the plus address in the Address/Password manual fill
-    view.
   </description>
 </action>
 
@@ -21214,11 +21343,79 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="MerchantTrust.BubbleClosed">
+  <owner>tommasin@chromium.org</owner>
+  <owner>privacy-on-the-web@google.com</owner>
+  <description>
+    Triggered when user closes the merchant trust bubble.
+  </description>
+</action>
+
+<action name="MerchantTrust.BubbleOpenedFromLocationBarChip">
+  <owner>tommasin@chromium.org</owner>
+  <owner>privacy-on-the-web@google.com</owner>
+  <description>
+    Triggered when user opens the merchant trust bubble from the location bar
+    chip.
+  </description>
+</action>
+
+<action name="MerchantTrust.BubbleOpenedFromPageInfo">
+  <owner>tommasin@chromium.org</owner>
+  <owner>privacy-on-the-web@google.com</owner>
+  <description>
+    Triggered when user opens the merchant trust bubble from the page info row.
+  </description>
+</action>
+
 <action name="MerchantTrust.Message.Tapped">
   <owner>ayman@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
   <description>
     Triggered when user taps the merchant trust message.
+  </description>
+</action>
+
+<action name="MerchantTrust.PageInfoRowSeen">
+  <owner>tommasin@chromium.org</owner>
+  <owner>privacy-on-the-web@google.com</owner>
+  <description>
+    Triggered when user sees the merchant trust page info row.
+  </description>
+</action>
+
+<action name="MerchantTrust.SidePanelClosed">
+  <owner>tommasin@chromium.org</owner>
+  <owner>privacy-on-the-web@google.com</owner>
+  <description>
+    Triggered when user closes the merchant trust side panel.
+  </description>
+</action>
+
+<action name="MerchantTrust.SidePanelClosedOnSameTabNavigation">
+  <owner>tommasin@chromium.org</owner>
+  <owner>privacy-on-the-web@google.com</owner>
+  <description>
+    Triggered when the side panel is opened and the user navigates to a
+    non-merchant site on the same tab, causing the panel to close.
+  </description>
+</action>
+
+<action name="MerchantTrust.SidePanelOpened">
+  <owner>tommasin@chromium.org</owner>
+  <owner>privacy-on-the-web@google.com</owner>
+  <description>
+    Triggered when user opens the merchant trust side panel.
+  </description>
+</action>
+
+<action name="MerchantTrust.SidePanelOpenedOnSameTabNavigation">
+  <owner>tommasin@chromium.org</owner>
+  <owner>privacy-on-the-web@google.com</owner>
+  <description>
+    Triggered when the side panel is already opened on a merchant site and the
+    user navigates to a another merchant site on the same tab, which opens a new
+    panel on the same tab.
   </description>
 </action>
 
@@ -23045,6 +23242,14 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="MobileKeyCommandGoToTabGroupsPanel">
+  <owner>lpromero@google.com</owner>
+  <owner>alionadangla@google.com</owner>
+  <description>
+    The user has performed the key command to go to the Tab Groups panel.
+  </description>
+</action>
+
 <action name="MobileKeyCommandOpenLocation">
   <owner>lpromero@google.com</owner>
   <owner>alionadangla@google.com</owner>
@@ -23500,6 +23705,14 @@ should be able to be added at any place in this file.
   <description>
     The user tapped the &quot;Incognito Search&quot; button in the mobile menu
     displayed when long pressing the New Tab button.
+  </description>
+</action>
+
+<action name="MobileMenuItemDownloadPage">
+  <owner>polardz@google.com</owner>
+  <owner>ckitagawa@chromium.org</owner>
+  <description>
+    User pressed the download page menu item in the tablet app menu.
   </description>
 </action>
 
@@ -25440,7 +25653,7 @@ should be able to be added at any place in this file.
 
 <action name="MobileSyncEncryptionSettingsClose">
   <owner>jlebel@chromium.org</owner>
-  <owner>fernandex@chromium.org</owner>
+  <owner>fernandex@google.com</owner>
   <description>
     Sync Encryption Settings UI was dismissed. iOS only.
   </description>
@@ -25448,7 +25661,7 @@ should be able to be added at any place in this file.
 
 <action name="MobileSyncPassphraseSettingsClose">
   <owner>jlebel@chromium.org</owner>
-  <owner>fernandex@chromium.org</owner>
+  <owner>fernandex@google.com</owner>
   <description>
     Sync Passphrase Settings UI was dismissed. iOS only.
   </description>
@@ -27429,7 +27642,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="MultiWindowResizerClick">
-  <owner>michelefan@chromium.org</owner>
+  <owner>sophiewen@chromium.org</owner>
   <owner>xdai@chromium.org</owner>
   <description>
     Recorded when the multi window resize widget is clicked on.
@@ -27437,7 +27650,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="MultiWindowResizerClick_TwoWindowsSnapped">
-  <owner>michelefan@chromium.org</owner>
+  <owner>sophiewen@chromium.org</owner>
   <owner>xdai@chromium.org</owner>
   <description>
     Recorded when the multi window resize widget is clicked on when two windows
@@ -27446,7 +27659,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="MultiWindowResizerShow">
-  <owner>michelefan@chromium.org</owner>
+  <owner>sophiewen@chromium.org</owner>
   <owner>xdai@chromium.org</owner>
   <description>
     Recorded when the resize widget shows on mouse hover on the ResizeWindows.
@@ -27454,7 +27667,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="MultiWindowResizerShow_TwoWindowsSnapped">
-  <owner>michelefan@chromium.org</owner>
+  <owner>sophiewen@chromium.org</owner>
   <owner>xdai@chromium.org</owner>
   <description>
     Recorded when the resize widget shows on mouse hover on the ResizeWindows
@@ -27613,6 +27826,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="NewTabPage.Carts.AcceptDiscountConsent">
+  <obsolete>Deprecated due to feature removal in 11/2024.</obsolete>
   <owner>meiliang@chromium.org</owner>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -27623,6 +27837,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="NewTabPage.Carts.DisableDiscount">
+  <obsolete>Deprecated due to feature removal in 11/2024.</obsolete>
   <owner>meiliang@chromium.org</owner>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -27632,6 +27847,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="NewTabPage.Carts.DismissDiscountConsent">
+  <obsolete>Deprecated due to feature removal in 11/2024.</obsolete>
   <owner>meiliang@chromium.org</owner>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -27643,6 +27859,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="NewTabPage.Carts.DismissLastCartHidesModule">
+  <obsolete>Deprecated due to feature removal in 11/2024.</obsolete>
   <owner>wychen@chromium.org</owner>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -27653,6 +27870,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="NewTabPage.Carts.EnableDiscount">
+  <obsolete>Deprecated due to feature removal in 11/2024.</obsolete>
   <owner>meiliang@chromium.org</owner>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -27662,6 +27880,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="NewTabPage.Carts.HideModule">
+  <obsolete>Deprecated due to feature removal in 11/2024.</obsolete>
   <owner>wychen@chromium.org</owner>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -27672,6 +27891,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="NewTabPage.Carts.LeftScrollClick">
+  <obsolete>Deprecated due to feature removal in 11/2024.</obsolete>
   <owner>wychen@chromium.org</owner>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -27682,6 +27902,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="NewTabPage.Carts.RejectDiscountConsent">
+  <obsolete>Deprecated due to feature removal in 11/2024.</obsolete>
   <owner>meiliang@chromium.org</owner>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -27692,6 +27913,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="NewTabPage.Carts.RemoveModule">
+  <obsolete>Deprecated due to feature removal in 11/2024.</obsolete>
   <owner>wychen@chromium.org</owner>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -27702,6 +27924,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="NewTabPage.Carts.RestoreLastCartRestoresModule">
+  <obsolete>Deprecated due to feature removal in 11/2024.</obsolete>
   <owner>wychen@chromium.org</owner>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -27712,6 +27935,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="NewTabPage.Carts.RightScrollClick">
+  <obsolete>Deprecated due to feature removal in 11/2024.</obsolete>
   <owner>wychen@chromium.org</owner>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -27722,6 +27946,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="NewTabPage.Carts.ShowInterestInDiscountConsent">
+  <obsolete>Deprecated due to feature removal in 11/2024.</obsolete>
   <owner>meiliang@chromium.org</owner>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -27731,6 +27956,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="NewTabPage.Carts.UndoHideModule">
+  <obsolete>Deprecated due to feature removal in 11/2024.</obsolete>
   <owner>wychen@chromium.org</owner>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -27740,6 +27966,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="NewTabPage.Carts.UndoRemoveModule">
+  <obsolete>Deprecated due to feature removal in 11/2024.</obsolete>
   <owner>wychen@chromium.org</owner>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -27895,6 +28122,51 @@ should be able to be added at any place in this file.
 <action name="NewWindow">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="NoticeQueue.PrivacySandboxNotice.QueueOnStartup">
+  <owner>aashnas@google.com</owner>
+  <owner>koilos@google.com</owner>
+  <description>
+    Recorded when a Privacy Sandbox notice is required on startup and added to
+    the queue.
+  </description>
+</action>
+
+<action name="NoticeQueue.PrivacySandboxNotice.QueueOnThOrNav">
+  <owner>aashnas@google.com</owner>
+  <owner>koilos@google.com</owner>
+  <description>
+    Recorded when a Privacy Sandbox notice is required on tab helper creation or
+    user navigation and added to the queue.
+  </description>
+</action>
+
+<action name="NoticeQueue.PrivacySandboxNotice.ReleaseOnDMA">
+  <owner>aashnas@google.com</owner>
+  <owner>koilos@google.com</owner>
+  <description>
+    Recorded when a Privacy Sandbox notice is suppressed for the rest of the
+    session after a DMA notice and removed from the queue.
+  </description>
+</action>
+
+<action name="NoticeQueue.PrivacySandboxNotice.ReleaseOnShown">
+  <owner>aashnas@google.com</owner>
+  <owner>koilos@google.com</owner>
+  <description>
+    Recorded when a Privacy Sandbox notice is successfully shown and removed
+    from the queue.
+  </description>
+</action>
+
+<action name="NoticeQueue.PrivacySandboxNotice.ReleaseOnThOrNav">
+  <owner>aashnas@google.com</owner>
+  <owner>koilos@google.com</owner>
+  <description>
+    Recorded when a Privacy Sandbox notice is not required on tab helper
+    creation or user navigation and removed from the queue.
+  </description>
 </action>
 
 <action name="Notifications.Mute">
@@ -32419,6 +32691,24 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="PlusAddresses.CreateSuggestionOnAddressManualFallbackSelected">
+  <owner>vizcay@google.com</owner>
+  <owner>jkeitel@google.com</owner>
+  <description>
+    The user tapped on &quot;Create plus address&quot; in the Address Manual
+    Fallback view.
+  </description>
+</action>
+
+<action name="PlusAddresses.CreateSuggestionOnPasswordManualFallbackSelected">
+  <owner>vizcay@google.com</owner>
+  <owner>jkeitel@google.com</owner>
+  <description>
+    The user tapped on &quot;Create plus address&quot; in the Password Manual
+    Fallback view.
+  </description>
+</action>
+
 <action name="PlusAddresses.CreateSuggestionShown">
   <owner>vizcay@google.com</owner>
   <owner>jkeitel@google.com</owner>
@@ -32436,10 +32726,45 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="PlusAddresses.FillAddressSuggestionUndone">
+  <owner>vizcay@google.com</owner>
+  <owner>jkeitel@google.com</owner>
+  <description>
+    User undoes the filling of an address suggestion using a plus address email
+    override and rolls back to the original email address.
+  </description>
+</action>
+
 <action name="PlusAddresses.FillStandaloneSuggestionAccepted">
   <owner>vizcay@google.com</owner>
   <owner>jkeitel@google.com</owner>
   <description>User accepted to fill a plus address suggestion.</description>
+</action>
+
+<action name="PlusAddresses.ManageOptionOnAddressManualFallbackSelected">
+  <owner>vizcay@google.com</owner>
+  <owner>jkeitel@google.com</owner>
+  <description>
+    The user tapped on &quot;Manage plus addresses&quot; in the Address Manual
+    Fallback view.
+  </description>
+</action>
+
+<action name="PlusAddresses.ManageOptionOnPasswordManualFallbackSelected">
+  <owner>vizcay@google.com</owner>
+  <owner>jkeitel@google.com</owner>
+  <description>
+    The user tapped on &quot;Manage plus addresses&quot; in the Password Manual
+    Fallback view.
+  </description>
+</action>
+
+<action name="PlusAddresses.ManageOptionOnSettingsSelected">
+  <owner>vizcay@google.com</owner>
+  <owner>jkeitel@google.com</owner>
+  <description>
+    The user tapped on &quot;Manage plus addresses&quot; in Chrome Settings.
+  </description>
 </action>
 
 <action name="PlusAddresses.ManualFallbackDesktopContextManualFallbackSelected">
@@ -32488,6 +32813,53 @@ should be able to be added at any place in this file.
   <description>
     User clicked on &quot;cancel&quot; in the plus address dialog or bottomsheet
     after receiving a reserve error.
+  </description>
+</action>
+
+<action name="PlusAddresses.ReserveErrorTryAgainClicked">
+  <owner>vizcay@google.com</owner>
+  <owner>jkeitel@google.com</owner>
+  <description>
+    User tried again reserving a plus address after receiving a reserve error.
+    Only available on Mobile platforms.
+  </description>
+</action>
+
+<action
+    name="PlusAddresses.SelectPlusAddressOptionOnAddressManualFallbackSelected">
+  <owner>vizcay@google.com</owner>
+  <owner>jkeitel@google.com</owner>
+  <description>
+    The user tapped on &quot;Select plus addresses&quot; in the Address Manual
+    Fallback view.
+  </description>
+</action>
+
+<action
+    name="PlusAddresses.SelectPlusAddressOptionOnPasswordManualFallbackSelected">
+  <owner>vizcay@google.com</owner>
+  <owner>jkeitel@google.com</owner>
+  <description>
+    The user tapped on &quot;Select plus addresses&quot; in the Password Manual
+    Fallback view.
+  </description>
+</action>
+
+<action
+    name="PlusAddresses.StandaloneFillSuggestionOnAddressManualFallbackAccepted">
+  <owner>vizcay@google.com</owner>
+  <owner>jkeitel@google.com</owner>
+  <description>
+    The user tapped on the plus address in the Address manual fill view.
+  </description>
+</action>
+
+<action
+    name="PlusAddresses.StandaloneFillSuggestionOnPasswordManualFallbackAccepted">
+  <owner>vizcay@google.com</owner>
+  <owner>jkeitel@google.com</owner>
+  <description>
+    The user tapped on the plus address in the Password manual fill view.
   </description>
 </action>
 
@@ -33381,6 +33753,23 @@ should be able to be added at any place in this file.
   <description>
     User clicks the standard protection expand arrow in the Safe Browsing
     setting page.
+  </description>
+</action>
+
+<action name="SafeBrowsing.SyncedEsbDialog.OkButtonClicked">
+  <owner>zackhan@chromium.org</owner>
+  <owner>chrome-safebrowsing-alerts@google.com</owner>
+  <description>
+    User clicked the ok button on the ESB synced to enabled dialog.
+  </description>
+</action>
+
+<action name="SafeBrowsing.SyncedEsbDialog.TurnOnButtonClicked">
+  <owner>zackhan@chromium.org</owner>
+  <owner>chrome-safebrowsing-alerts@google.com</owner>
+  <description>
+    User clicked the turn on button to turn on ESB on the ESB synced to disabled
+    dialog.
   </description>
 </action>
 
@@ -34289,6 +34678,16 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Settings.AiPage.AutofillAIEntryPointClick">
+  <owner>brunobraga@google.com</owner>
+  <owner>rainhard@chromium.org</owner>
+  <owner>chrome-browser-privacy-team@google.com</owner>
+  <description>
+    Reported when user clicks on the Auofill AI row in the chrome://settings/ai
+    page.
+  </description>
+</action>
+
 <action name="Settings.AiPage.Compare.FeatureLinkClicked">
   <owner>zalmashni@google.com</owner>
   <owner>rainhard@chromium.org</owner>
@@ -34409,6 +34808,16 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Settings.AiPage.PasswordChangeEntryPointClick">
+  <owner>vsemeniuk@google.com</owner>
+  <owner>rainhard@chromium.org</owner>
+  <owner>chrome-browser-privacy-team@google.com</owner>
+  <description>
+    Reported when user clicks on the Password Change row in the
+    chrome://settings/ai page.
+  </description>
+</action>
+
 <action name="Settings.AiPage.TabOrganization.LearnMoreClicked">
   <owner>zalmashni@google.com</owner>
   <owner>rainhard@chromium.org</owner>
@@ -34521,14 +34930,14 @@ should be able to be added at any place in this file.
 
 <action name="Settings.GoogleServices">
   <owner>jlebel@chromium.org</owner>
-  <owner>fernandex@chromium.org</owner>
+  <owner>fernandex@google.com</owner>
   <description>
     Reported when user navigates to Google Services Settings. iOS only.
   </description>
 </action>
 
 <action name="Settings.GoogleServices.FromSigninNotificationInfobar">
-  <owner>fernandex@chromium.org</owner>
+  <owner>fernandex@google.com</owner>
   <description>
     Reported when user navigates to Google Services Settings from the sign-in
     notification infobar. iOS only.
@@ -34583,7 +34992,7 @@ should be able to be added at any place in this file.
 
 <action name="Settings.MyAccount">
   <owner>jlebel@chromium.org</owner>
-  <owner>fernandex@chromium.org</owner>
+  <owner>fernandex@google.com</owner>
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded when the user taps on the account item in the settings. Recorded
@@ -34597,15 +35006,6 @@ should be able to be added at any place in this file.
   <owner>treib@chromium.org</owner>
   <description>
     Reported when the user navigates to &quot;Notifications&quot; in settings.
-    iOS only.
-  </description>
-</action>
-
-<action name="Settings.PlusAddresses">
-  <owner>mreichhoff@chromium.org</owner>
-  <owner>treib@chromium.org</owner>
-  <description>
-    Reported when the user navigates to &quot;Plus Addresses&quot; in settings.
     iOS only.
   </description>
 </action>
@@ -34771,6 +35171,15 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Settings.PrivacyGuide.CompletionAiSettingsClick">
+  <owner>zalmashni@google.com</owner>
+  <owner>rainhard@chromium.org</owner>
+  <owner>chrome-browser-privacy-team@google.com</owner>
+  <description>
+    User clicks on the AI settings link on the completion step of Privacy guide.
+  </description>
+</action>
+
 <action name="Settings.PrivacyGuide.CompletionPSClick">
   <owner>harrisonsean@chromium.org</owner>
   <owner>rainhard@chromium.org</owner>
@@ -34903,6 +35312,14 @@ should be able to be added at any place in this file.
   <description>User opened Ad measurement subpage.</description>
 </action>
 
+<action name="Settings.PrivacySandbox.AdMeasurement.PrivacyPolicyLinkClicked">
+  <owner>jacobstanley@google.com</owner>
+  <owner>koilos@google.com</owner>
+  <description>
+    User clicked on the Privacy Policy link in the Ad Measurement setting page.
+  </description>
+</action>
+
 <action name="Settings.PrivacySandbox.AdPersonalization.LearnMoreClicked">
   <owner>dullweber@google.com</owner>
   <owner>sauski@google.com</owner>
@@ -34940,6 +35357,14 @@ should be able to be added at any place in this file.
     User removed a topic that was previously in their allowed topics list.
     TODO(crbug.com/40244046): Deprecate this action in favor of
     Settings.PrivacySandbox.Topics.TopicRemoved after the feature is launched.
+  </description>
+</action>
+
+<action name="Settings.PrivacySandbox.AdTopics.PrivacyPolicyLinkClicked">
+  <owner>jacobstanley@google.com</owner>
+  <owner>koilos@google.com</owner>
+  <description>
+    User clicked on the Privacy Policy link in the Ad Topics setting page.
   </description>
 </action>
 
@@ -35050,6 +35475,22 @@ should be able to be added at any place in this file.
   <description>User is shown the Privacy Sandbox consent.</description>
 </action>
 
+<action name="Settings.PrivacySandbox.ConsentDialog.AckClicked">
+  <owner>aashnas@google.com</owner>
+  <owner>koilos@google.com</owner>
+  <description>
+    Recorded on privacy sandbox consent accept button click.
+  </description>
+</action>
+
+<action name="Settings.PrivacySandbox.ConsentDialog.NoClicked">
+  <owner>aashnas@google.com</owner>
+  <owner>koilos@google.com</owner>
+  <description>
+    Recorded on privacy sandbox consent no button click.
+  </description>
+</action>
+
 <action name="Settings.PrivacySandbox.Fledge.AllSitesOpened">
   <owner>rubindl@google.com</owner>
   <owner>sauski@google.com</owner>
@@ -35143,6 +35584,24 @@ should be able to be added at any place in this file.
   <description>User acknowledged the Privacy Sandbox notice.</description>
 </action>
 
+<action name="Settings.PrivacySandbox.Notice.AdsMeasurementLearnMoreClosed">
+  <owner>jacobstanley@google.com</owner>
+  <owner>koilos@google.com</owner>
+  <description>
+    User closed the Ads Measurement Learn More in the Privacy Sandbox Notice.
+    This is part of the Ads API UX Enhancements.
+  </description>
+</action>
+
+<action name="Settings.PrivacySandbox.Notice.AdsMeasurementLearnMoreExpanded">
+  <owner>jacobstanley@google.com</owner>
+  <owner>koilos@google.com</owner>
+  <description>
+    User expanded the Ads Measurement Learn More in the Privacy Sandbox Notice.
+    This is part of the Ads API UX Enhancements.
+  </description>
+</action>
+
 <action name="Settings.PrivacySandbox.Notice.ClosedNoInteraction">
   <owner>harrisonsean@chromium.org</owner>
   <owner>sauski@google.com</owner>
@@ -35213,12 +35672,70 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Settings.PrivacySandbox.Notice.PrivacyPolicyLinkClicked">
+  <owner>chrstne@google.com</owner>
+  <owner>koilos@google.com</owner>
+  <description>
+    User clicked on the Privacy Policy Link in the Privacy Sandbox Notice.
+  </description>
+</action>
+
 <action name="Settings.PrivacySandbox.Notice.Shown">
   <owner>harrisonsean@chromium.org</owner>
   <owner>sauski@google.com</owner>
   <owner>msramek@chromium.org</owner>
   <owner>kartoffel-core@google.com</owner>
   <description>User is shown the Privacy Sandbox notice.</description>
+</action>
+
+<action name="Settings.PrivacySandbox.Notice.SiteSuggestedAdsLearnMoreClosed">
+  <owner>jacobstanley@google.com</owner>
+  <owner>koilos@google.com</owner>
+  <description>
+    User closed the Site Suggested Ads Learn More in the Privacy Sandbox Notice.
+    This is part of the Ads API UX Enhancements.
+  </description>
+</action>
+
+<action name="Settings.PrivacySandbox.Notice.SiteSuggestedAdsLearnMoreExpanded">
+  <owner>jacobstanley@google.com</owner>
+  <owner>koilos@google.com</owner>
+  <description>
+    User expanded the Site Suggested Ads Learn More in the Privacy Sandbox
+    Notice. This is part of the Ads API UX Enhancements.
+  </description>
+</action>
+
+<action name="Settings.PrivacySandbox.NoticeEeaDialog.AckClicked">
+  <owner>aashnas@google.com</owner>
+  <owner>koilos@google.com</owner>
+  <description>
+    Recorded on privacy sandbox notice accept button click (EEA region).
+  </description>
+</action>
+
+<action name="Settings.PrivacySandbox.NoticeEeaDialog.OpenSettingsClicked">
+  <owner>aashnas@google.com</owner>
+  <owner>koilos@google.com</owner>
+  <description>
+    Recorded on privacy sandbox notice settings button click (EEA region).
+  </description>
+</action>
+
+<action name="Settings.PrivacySandbox.NoticeRowDialog.AckClicked">
+  <owner>aashnas@google.com</owner>
+  <owner>koilos@google.com</owner>
+  <description>
+    Recorded on privacy sandbox notice accept button click (ROW region).
+  </description>
+</action>
+
+<action name="Settings.PrivacySandbox.NoticeRowDialog.OpenSettingsClicked">
+  <owner>aashnas@google.com</owner>
+  <owner>koilos@google.com</owner>
+  <description>
+    Recorded on privacy sandbox notice settings button click (ROW region).
+  </description>
 </action>
 
 <action name="Settings.PrivacySandbox.OpenedFromCookiesPageToast">
@@ -35329,6 +35846,33 @@ should be able to be added at any place in this file.
   <owner>kartoffel-core@google.com</owner>
   <owner>kartoffel-core-eng@google.com</owner>
   <description>Restricted Privacy Sandbox notice is shown.</description>
+</action>
+
+<action name="Settings.PrivacySandbox.RestrictedNoticeDialog.AckClicked">
+  <owner>aashnas@google.com</owner>
+  <owner>koilos@google.com</owner>
+  <description>
+    Recorded on privacy sandbox restricted notice accept button click.
+  </description>
+</action>
+
+<action
+    name="Settings.PrivacySandbox.RestrictedNoticeDialog.OpenSettingsClicked">
+  <owner>aashnas@google.com</owner>
+  <owner>koilos@google.com</owner>
+  <description>
+    Recorded on privacy sandbox restricted notice settings button click.
+  </description>
+</action>
+
+<action
+    name="Settings.PrivacySandbox.SiteSuggestedAds.PrivacyPolicyLinkClicked">
+  <owner>jacobstanley@google.com</owner>
+  <owner>koilos@google.com</owner>
+  <description>
+    User clicked on the Privacy Policy link in the Site Suggested Ads setting
+    page.
+  </description>
 </action>
 
 <action name="Settings.PrivacySandbox.SpamFraud.Opened">
@@ -35626,7 +36170,7 @@ should be able to be added at any place in this file.
 
 <action name="Settings.Sync">
   <owner>jlebel@chromium.org</owner>
-  <owner>fernandex@chromium.org</owner>
+  <owner>fernandex@google.com</owner>
   <description>
     Reported when user navigates to Google Sync Settings. iOS only.
   </description>
@@ -36813,6 +37357,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="SidePanel.Companion.Pinned.BySidePanelHeaderButton">
+  <obsolete>Deprecated 11/2024. Companion was deprecated and removed.</obsolete>
   <owner>corising@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
   <description>
@@ -36822,6 +37367,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="SidePanel.Companion.Shown">
+  <obsolete>Deprecated 11/2024. Companion was deprecated and removed.</obsolete>
   <owner>corising@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
   <description>
@@ -36830,6 +37376,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="SidePanel.Companion.Unpinned.ByPinnedButtonContextMenu">
+  <obsolete>Deprecated 11/2024. Companion was deprecated and removed.</obsolete>
   <owner>corising@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
   <description>
@@ -36839,6 +37386,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="SidePanel.Companion.Unpinned.BySidePanelHeaderButton">
+  <obsolete>Deprecated 11/2024. Companion was deprecated and removed.</obsolete>
   <owner>corising@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
   <description>
@@ -36931,12 +37479,29 @@ should be able to be added at any place in this file.
   <description>Recorded when the Lens side panel entry is shown.</description>
 </action>
 
+<action name="SidePanel.LensOverlayResults.NewTabButtonClicked">
+  <owner>lens-chrome-eng@google.com</owner>
+  <owner>nguyenbryan@google.com</owner>
+  <description>
+    Recorded when the new tab button is clicked with the Lens Overlay side panel
+    entry showing.
+  </description>
+</action>
+
 <action name="SidePanel.LensOverlayResults.Shown">
   <owner>lens-chrome-eng@google.com</owner>
   <owner>juanmojica@google.com</owner>
   <owner>mercerd@google.com</owner>
   <description>
     Recorded when the Lens Overlay side panel entry is shown.
+  </description>
+</action>
+
+<action name="SidePanel.MerchantTrust.Shown">
+  <owner>tommasin@chromium.org</owner>
+  <owner>privacy-on-the-web@google.com</owner>
+  <description>
+    Recorded when the merchant trust side panel entry is shown.
   </description>
 </action>
 
@@ -37890,6 +38455,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_Impression_FromSearchCompanion">
+  <obsolete>Deprecated 11/2024. Companion was deprecated and removed.</obsolete>
   <owner>shaktisahu@google.com</owner>
   <owner>chrome-signin-team@chromium.org</owner>
   <description>
@@ -37967,8 +38533,7 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded when the personalized sign-in promo is shown with an account in the
-    avatar bubble.
-    (signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN).
+    avatar bubble. (signin_metrics::AccessPoint::kAvatarBubbleSignIn).
   </description>
 </action>
 
@@ -37978,8 +38543,7 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded when the personalized sign-in promo is shown with an account in the
-    bookmark bubble.
-    (signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_BUBBLE).
+    bookmark bubble. (signin_metrics::AccessPoint::kBookmarkBubble).
   </description>
 </action>
 
@@ -37989,8 +38553,7 @@ should be able to be added at any place in this file.
   <owner>jlebel@chromium.org</owner>
   <description>
     Recorded when the personalized sign-in promo is shown with an account in the
-    in the bookmark manager.
-    (signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_MANAGER).
+    in the bookmark manager. (signin_metrics::AccessPoint::kBookmarkManager).
   </description>
 </action>
 
@@ -38001,7 +38564,7 @@ should be able to be added at any place in this file.
   <description>
     Recorded when the personalized sign-in promo is shown with an account in the
     extension install bubble.
-    (signin_metrics::AccessPoint::ACCESS_POINT_EXTENSION_INSTALL_BUBBLE).
+    (signin_metrics::AccessPoint::kExtensionInstallBubble).
   </description>
 </action>
 
@@ -38012,8 +38575,7 @@ should be able to be added at any place in this file.
   <owner>battre@chromium.org</owner>
   <description>
     Recorded when the personalized sign-in promo is shown with an account in the
-    manage cards bubble.
-    (signin_metrics::AccessPoint::ACCESS_POINT_MANAGE_CARDS_BUBBLE).
+    manage cards bubble. (signin_metrics::AccessPoint::kManageCardsBubble).
   </description>
 </action>
 
@@ -38024,7 +38586,7 @@ should be able to be added at any place in this file.
   <description>
     Recorded when starting sign-in using the promo view, with a default account,
     from NTP content suggestions
-    (signin_metrics::AccessPoint::ACCESS_POINT_NTP_CONTENT_SUGGESTIONS).
+    (signin_metrics::AccessPoint::kNtpContentSuggestions).
   </description>
 </action>
 
@@ -38036,8 +38598,7 @@ should be able to be added at any place in this file.
   <owner>jlebel@chromium.org</owner>
   <description>
     Recorded when starting sign-in using the promo view, with a default account,
-    from NTP Feed top section
-    (signin_metrics::AccessPoint::ACCESS_POINT_NTP_FEED_TOP_PROMO).
+    from NTP Feed top section (signin_metrics::AccessPoint::kNtpFeedTopPromo).
   </description>
 </action>
 
@@ -38047,8 +38608,7 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded when the personalized sign-in promo is shown with an account in the
-    password saved bubble.
-    (signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE).
+    password saved bubble. (signin_metrics::AccessPoint::kPasswordBubble).
   </description>
 </action>
 
@@ -38058,7 +38618,7 @@ should be able to be added at any place in this file.
   <owner>jlebel@chromium.org</owner>
   <description>
     Recorded when starting sign-in using the promo view, with a default account,
-    from recent tabs (signin_metrics::AccessPoint::ACCESS_POINT_RECENT_TABS).
+    from recent tabs (signin_metrics::AccessPoint::kRecentTabs).
   </description>
 </action>
 
@@ -38069,8 +38629,7 @@ should be able to be added at any place in this file.
   <owner>battre@chromium.org</owner>
   <description>
     Recorded when the personalized sign-in promo is shown with an account in the
-    save card bubble.
-    (signin_metrics::AccessPoint::ACCESS_POINT_SAVE_CARD_BUBBLE).
+    save card bubble. (signin_metrics::AccessPoint::kSaveCardBubble).
   </description>
 </action>
 
@@ -38080,7 +38639,7 @@ should be able to be added at any place in this file.
   <owner>jlebel@chromium.org</owner>
   <description>
     Recorded when starting sign-in using the promo view, with a default account,
-    from settings (signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS).
+    from settings (signin_metrics::AccessPoint::kSettings).
   </description>
 </action>
 
@@ -38090,7 +38649,7 @@ should be able to be added at any place in this file.
   <owner>jlebel@chromium.org</owner>
   <description>
     Recorded when starting sign-in using the promo view, with a default account,
-    from tab switcher (signin_metrics::AccessPoint::ACCESS_POINT_TAB_SWITCHER).
+    from tab switcher (signin_metrics::AccessPoint::kTabSwitcher).
   </description>
 </action>
 
@@ -38100,8 +38659,7 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded when the personalized sign-in promo is shown with no account in the
-    avatar bubble.
-    (signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN).
+    avatar bubble. (signin_metrics::AccessPoint::kAvatarBubbleSignIn).
   </description>
 </action>
 
@@ -38111,8 +38669,7 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded when the personalized sign-in promo is shown with no account in the
-    bookmark bubble.
-    (signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_BUBBLE).
+    bookmark bubble. (signin_metrics::AccessPoint::kBookmarkBubble).
   </description>
 </action>
 
@@ -38123,7 +38680,7 @@ should be able to be added at any place in this file.
   <description>
     Recorded when starting sign-in using the promo view, with no default
     account, from bookmarks manager
-    (signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_MANAGER).
+    (signin_metrics::AccessPoint::kBookmarkManager).
   </description>
 </action>
 
@@ -38134,7 +38691,7 @@ should be able to be added at any place in this file.
   <description>
     Recorded when the personalized sign-in promo is shown with no account in the
     extension install bubble.
-    (signin_metrics::AccessPoint::ACCESS_POINT_EXTENSION_INSTALL_BUBBLE).
+    (signin_metrics::AccessPoint::kExtensionInstallBubble).
   </description>
 </action>
 
@@ -38170,7 +38727,7 @@ should be able to be added at any place in this file.
   <description>
     Recorded when starting sign-in using the promo view, with no default
     account, from NTP content suggestions
-    (signin_metrics::AccessPoint::ACCESS_POINT_NTP_FEED_TOP_PROMO).
+    (signin_metrics::AccessPoint::kNTPFeedTopPromo).
   </description>
 </action>
 
@@ -38180,8 +38737,7 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded when the personalized sign-in promo is shown with no account in the
-    password saved bubble.
-    (signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE).
+    password saved bubble. (signin_metrics::AccessPoint::kPasswordBubble).
   </description>
 </action>
 
@@ -38191,8 +38747,7 @@ should be able to be added at any place in this file.
   <owner>jlebel@chromium.org</owner>
   <description>
     Recorded when starting sign-in using the promo view, with no default
-    account, from recent tabs
-    (signin_metrics::AccessPoint::ACCESS_POINT_RECENT_TABS).
+    account, from recent tabs (signin_metrics::AccessPoint::kRecentTabs).
   </description>
 </action>
 
@@ -38214,7 +38769,7 @@ should be able to be added at any place in this file.
   <owner>jlebel@chromium.org</owner>
   <description>
     Recorded when starting sign-in using the promo view, with no default
-    account, from settings (signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS).
+    account, from settings (signin_metrics::AccessPoint::kSettings).
   </description>
 </action>
 
@@ -38224,14 +38779,13 @@ should be able to be added at any place in this file.
   <owner>jlebel@chromium.org</owner>
   <description>
     Recorded when starting sign-in using the promo view, with no default
-    account, from tab switcher
-    (signin_metrics::AccessPoint::ACCESS_POINT_TAB_SWITCHER).
+    account, from tab switcher (signin_metrics::AccessPoint::kTabSwitcher).
   </description>
 </action>
 
 <action name="Signin_Interrupt_Signin">
   <owner>jlebel@chromium.org</owner>
-  <owner>fernandex@chromium.org</owner>
+  <owner>fernandex@google.com</owner>
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded when the user chooses to interrupt the sign in process. It closes
@@ -38366,7 +38920,7 @@ should be able to be added at any place in this file.
   <owner>chrome-signin-team@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_CONSISTENCY_SERVICE.
+    signin_metrics::AccessPoint::kAccountConsistencyService.
   </description>
 </action>
 
@@ -38375,7 +38929,7 @@ should be able to be added at any place in this file.
   <owner>chrome-signin-team@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_MENU.
+    signin_metrics::AccessPoint::kAccountMenu.
   </description>
 </action>
 
@@ -38384,7 +38938,7 @@ should be able to be added at any place in this file.
   <owner>chrome-signin-team@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_MENU_FAILED_SWITCH.
+    signin_metrics::AccessPoint::kAccountMenuFailedSwitch.
   </description>
 </action>
 
@@ -38392,7 +38946,7 @@ should be able to be added at any place in this file.
   <owner>amelies@chromium.com</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_ADDRESS_BUBBLE.
+    signin_metrics::AccessPoint::kAddressBubble.
   </description>
 </action>
 
@@ -38411,7 +38965,7 @@ should be able to be added at any place in this file.
   <owner>battre@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_AUTOFILL_DROPDOWN.
+    signin_metrics::AccessPoint::kAutofillDropdown.
   </description>
 </action>
 
@@ -38419,7 +38973,7 @@ should be able to be added at any place in this file.
   <owner>gogerald@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN.
+    signin_metrics::AccessPoint::kAvatarBubbleSignIn.
   </description>
 </action>
 
@@ -38427,7 +38981,7 @@ should be able to be added at any place in this file.
   <owner>droger@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN_WITH_SYNC_PROMO.
+    signin_metrics::AccessPoint::kAvatarBubbleSignInWithSyncPromo.
   </description>
 </action>
 
@@ -38435,7 +38989,7 @@ should be able to be added at any place in this file.
   <owner>gogerald@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_BUBBLE.
+    signin_metrics::AccessPoint::kBookmarkBubble.
   </description>
 </action>
 
@@ -38443,7 +38997,7 @@ should be able to be added at any place in this file.
   <owner>gogerald@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_MANAGER.
+    signin_metrics::AccessPoint::kBookmarkManager.
   </description>
 </action>
 
@@ -38466,6 +39020,15 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Signin_Signin_FromCollaborationTabGroup">
+  <owner>gambard@chromium.org</owner>
+  <owner>chrome-signin-team@google.com</owner>
+  <description>
+    Recorded on sign in start from access point
+    signin_metrics::AccessPoint::kCollaborationTabGroup.
+  </description>
+</action>
+
 <action name="Signin_Signin_FromContentArea">
   <obsolete>Removed in M116.</obsolete>
   <owner>gogerald@chromium.org</owner>
@@ -38479,8 +39042,7 @@ should be able to be added at any place in this file.
   <owner>wry@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_CREATOR_FEED_FOLLOW on Android
-    Only.
+    signin_metrics::AccessPoint::kCreatorFeedFollow on Android Only.
   </description>
 </action>
 
@@ -38488,7 +39050,7 @@ should be able to be added at any place in this file.
   <owner>gogerald@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_DEVICES_PAGE.
+    signin_metrics::AccessPoint::kDevicesPage.
   </description>
 </action>
 
@@ -38504,7 +39066,7 @@ should be able to be added at any place in this file.
   <owner>gogerald@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_EXTENSION_INSTALL_BUBBLE.
+    signin_metrics::AccessPoint::kExtensionInstallBubble.
   </description>
 </action>
 
@@ -38512,7 +39074,7 @@ should be able to be added at any place in this file.
   <owner>gogerald@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_EXTENSIONS.
+    signin_metrics::AccessPoint::kExtensions.
   </description>
 </action>
 
@@ -38531,6 +39093,15 @@ should be able to be added at any place in this file.
   <description>
     Recorded when a user taps in the sign-in promo in the Desktop First Run
     Experience
+  </description>
+</action>
+
+<action name="Signin_Signin_FromGlicLaunchButton">
+  <owner>harringtond@chromium.org</owner>
+  <owner>chrome-signin-team@chromium.org</owner>
+  <description>
+    Recorded when a user taps the Glic button on the tab strip, and is directed
+    to sign in.
   </description>
 </action>
 
@@ -38565,7 +39136,7 @@ should be able to be added at any place in this file.
   <owner>gogerald@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_MENU.
+    signin_metrics::AccessPoint::kMenu.
   </description>
 </action>
 
@@ -38574,7 +39145,7 @@ should be able to be added at any place in this file.
   <owner>scottyoder@google.com</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_NOTIFICATIONS_OPT_IN_SCREEN_CONTENT_TOGGLE.
+    signin_metrics::AccessPoint::kNotificationsOptInScreenContentToggle.
   </description>
 </action>
 
@@ -38582,7 +39153,7 @@ should be able to be added at any place in this file.
   <owner>gogerald@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_NTP_LINK.
+    signin_metrics::AccessPoint::kNTPLink.
   </description>
 </action>
 
@@ -38616,7 +39187,7 @@ should be able to be added at any place in this file.
   <owner>mrefaat@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_NTP_FEED_TOP_PROMO.
+    signin_metrics::AccessPoint::kNTPFeedTopPromo.
   </description>
 </action>
 
@@ -38624,7 +39195,7 @@ should be able to be added at any place in this file.
   <owner>treib@chromium.org</owner>
   <description>
     Recorded on signin start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_NTP_IDENTITY_DISC.
+    signin_metrics::AccessPoint::kNTPIdentityDisc.
   </description>
 </action>
 
@@ -38633,7 +39204,7 @@ should be able to be added at any place in this file.
   <owner>jlebel@chromium.org</owner>
   <description>
     Recorded on signin start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_NTP_SIGNED_OUT_ICON.
+    signin_metrics::AccessPoint::kNTPSignedOutIcon.
   </description>
 </action>
 
@@ -38642,7 +39213,7 @@ should be able to be added at any place in this file.
   <owner>ydago@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_OIDC_REDIRECTION_INTERCEPTION.
+    signin_metrics::AccessPoint::kOIDCRedirectionInterception.
   </description>
 </action>
 
@@ -38650,7 +39221,7 @@ should be able to be added at any place in this file.
   <owner>gogerald@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE.
+    signin_metrics::AccessPoint::kPasswordBubble.
   </description>
 </action>
 
@@ -38675,7 +39246,7 @@ should be able to be added at any place in this file.
   <owner>bling-get-set-up@google.com</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_POST_DEVICE_RESTORE_SIGNIN_PROMO.
+    signin_metrics::AccessPoint::kPostDeviceRestoreSigninPromo.
   </description>
 </action>
 
@@ -38683,7 +39254,7 @@ should be able to be added at any place in this file.
   <owner>chrome-shopping@google.com</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_PRODUCT_SPECIFICATIONS.
+    signin_metrics::AccessPoint::kProductSpecifications.
   </description>
 </action>
 
@@ -38692,7 +39263,7 @@ should be able to be added at any place in this file.
   <owner>chrome-signin-team@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_READING_LIST.
+    signin_metrics::AccessPoint::kReadingList.
   </description>
 </action>
 
@@ -38701,7 +39272,7 @@ should be able to be added at any place in this file.
   <owner>chrome-signin-team@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_REAUTH_INFO_BAR.
+    signin_metrics::AccessPoint::kReauthInfoBar.
   </description>
 </action>
 
@@ -38709,7 +39280,7 @@ should be able to be added at any place in this file.
   <owner>gogerald@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_RECENT_TABS.
+    signin_metrics::AccessPoint::kRecentTabs.
   </description>
 </action>
 
@@ -38717,7 +39288,7 @@ should be able to be added at any place in this file.
   <owner>bzanotti@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_RESIGNIN_INFOBAR.
+    signin_metrics::AccessPoint::kResigninInfobar.
   </description>
 </action>
 
@@ -38732,11 +39303,12 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_Signin_FromSearchCompanion">
+  <obsolete>Deprecated 11/2024. Companion was deprecated and removed.</obsolete>
   <owner>shaktisahu@google.com</owner>
   <owner>chrome-signin-team@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_SEARCH_COMPANION.
+    signin_metrics::AccessPoint::kSearchCompanion.
   </description>
 </action>
 
@@ -38745,7 +39317,7 @@ should be able to be added at any place in this file.
   <owner>harrisonsean@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_SEND_TAB_TO_SELF_PROMO.
+    signin_metrics::AccessPoint::kSendTabToSelfPromo.
   </description>
 </action>
 
@@ -38753,7 +39325,7 @@ should be able to be added at any place in this file.
   <owner>gogerald@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS.
+    signin_metrics::AccessPoint::kSettings.
   </description>
 </action>
 
@@ -38762,7 +39334,7 @@ should be able to be added at any place in this file.
   <owner>bling-get-set-up@google.com</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_SET_UP_LIST. iOS only.
+    signin_metrics::AccessPoint::kSetUpList. iOS only.
   </description>
 </action>
 
@@ -38770,7 +39342,7 @@ should be able to be added at any place in this file.
   <owner>alexilin@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_SIGNIN_INTERCEPT_FIRST_RUN_EXPERIENCE.
+    signin_metrics::AccessPoint::kSigninInterceptFirstRunExperience.
   </description>
 </action>
 
@@ -38778,7 +39350,7 @@ should be able to be added at any place in this file.
   <owner>gogerald@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_SIGNIN_PROMO.
+    signin_metrics::AccessPoint::kSigninPromo.
   </description>
 </action>
 
@@ -38786,7 +39358,7 @@ should be able to be added at any place in this file.
   <owner>gogerald@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_START_PAGE.
+    signin_metrics::AccessPoint::kStartPage.
   </description>
 </action>
 
@@ -38794,7 +39366,7 @@ should be able to be added at any place in this file.
   <owner>gogerald@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_SUPERVISED_USER.
+    signin_metrics::AccessPoint::kSupervisedUser.
   </description>
 </action>
 
@@ -38803,7 +39375,7 @@ should be able to be added at any place in this file.
   <owner>chrome-desktop-ui-sea@google.com</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_TAB_ORGANIZATION.
+    signin_metrics::AccessPoint::kTabOrganization.
   </description>
 </action>
 
@@ -38811,7 +39383,7 @@ should be able to be added at any place in this file.
   <owner>bzanotti@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_TAB_SWITCHER.
+    signin_metrics::AccessPoint::kTabSwitcher.
   </description>
 </action>
 
@@ -38819,7 +39391,7 @@ should be able to be added at any place in this file.
   <owner>scottyoder@google.com</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_TIPS_NOTIFICATION. iOS Only.
+    signin_metrics::AccessPoint::kTipsNotification. iOS Only.
   </description>
 </action>
 
@@ -38827,7 +39399,7 @@ should be able to be added at any place in this file.
   <owner>gogerald@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN.
+    signin_metrics::AccessPoint::kUnknown.
   </description>
 </action>
 
@@ -38844,7 +39416,7 @@ should be able to be added at any place in this file.
   <owner>gogerald@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_USER_MANAGER.
+    signin_metrics::AccessPoint::kUserManager.
   </description>
 </action>
 
@@ -38904,8 +39476,7 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN, with a new
-    account.
+    signin_metrics::AccessPoint::kAvatarBubbleSignIn, with a new account.
   </description>
 </action>
 
@@ -38915,8 +39486,7 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_BUBBLE, with a new
-    account.
+    signin_metrics::AccessPoint::kBookmarkBubble, with a new account.
   </description>
 </action>
 
@@ -38927,8 +39497,7 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_MANAGER, with a new
-    account.
+    signin_metrics::AccessPoint::kBookmarkManager, with a new account.
   </description>
 </action>
 
@@ -38938,8 +39507,7 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_EXTENSION_INSTALL_BUBBLE, with a
-    new account.
+    signin_metrics::AccessPoint::kExtensionInstallBubble, with a new account.
   </description>
 </action>
 
@@ -38960,8 +39528,7 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE, with a new
-    account.
+    signin_metrics::AccessPoint::kPasswordBubble, with a new account.
   </description>
 </action>
 
@@ -38972,7 +39539,7 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_RECENT_TABS, with a new account.
+    signin_metrics::AccessPoint::kRecentTabs, with a new account.
   </description>
 </action>
 
@@ -38996,7 +39563,7 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS, with a new account.
+    signin_metrics::AccessPoint::kSettings, with a new account.
   </description>
 </action>
 
@@ -39007,7 +39574,7 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_TAB_SWITCHER, with a new account.
+    signin_metrics::AccessPoint::kTabSwitcher, with a new account.
   </description>
 </action>
 
@@ -39017,8 +39584,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN, with a new
-    account, while Chrome already has other accounts.
+    signin_metrics::AccessPoint::kAvatarBubbleSignIn, with a new account, while
+    Chrome already has other accounts.
   </description>
 </action>
 
@@ -39028,8 +39595,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_BUBBLE, with a new
-    account, while Chrome already has other accounts.
+    signin_metrics::AccessPoint::kBookmarkBubble, with a new account, while
+    Chrome already has other accounts.
   </description>
 </action>
 
@@ -39040,8 +39607,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_MANAGER, with a new
-    account, while Chrome already has other accounts.
+    signin_metrics::AccessPoint::kBookmarkManager, with a new account, while
+    Chrome already has other accounts.
   </description>
 </action>
 
@@ -39052,8 +39619,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_EXTENSION_INSTALL_BUBBLE, with a
-    new account, while Chrome already has other accounts.
+    signin_metrics::AccessPoint::kExtensionInstallBubble, with a new account,
+    while Chrome already has other accounts.
   </description>
 </action>
 
@@ -39087,8 +39654,8 @@ should be able to be added at any place in this file.
   <owner>jlebel@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_NTP_FEED_TOP_PROMO, with a new
-    account, while Chrome already has other accounts.
+    signin_metrics::AccessPoint::kNTPFeedTopPromo, with a new account, while
+    Chrome already has other accounts.
   </description>
 </action>
 
@@ -39098,8 +39665,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE, with a new
-    account, while Chrome already has other accounts.
+    signin_metrics::AccessPoint::kPasswordBubble, with a new account, while
+    Chrome already has other accounts.
   </description>
 </action>
 
@@ -39110,8 +39677,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_RECENT_TABS, with a new account,
-    while Chrome already has other accounts.
+    signin_metrics::AccessPoint::kRecentTabs, with a new account, while Chrome
+    already has other accounts.
   </description>
 </action>
 
@@ -39135,8 +39702,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS, with a new account,
-    while Chrome already has other accounts.
+    signin_metrics::AccessPoint::kSettings, with a new account, while Chrome
+    already has other accounts.
   </description>
 </action>
 
@@ -39147,8 +39714,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_TAB_SWITCHER, with a new account,
-    while Chrome already has other accounts.
+    signin_metrics::AccessPoint::kTabSwitcher, with a new account, while Chrome
+    already has other accounts.
   </description>
 </action>
 
@@ -39158,8 +39725,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN, with a new
-    account, while Chrome does not have other accounts.
+    signin_metrics::AccessPoint::kAvatarBubbleSignIn, with a new account, while
+    Chrome does not have other accounts.
   </description>
 </action>
 
@@ -39169,8 +39736,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_BUBBLE, with a new
-    account, while Chrome does not have other accounts.
+    signin_metrics::AccessPoint::kBookmarkBubble, with a new account, while
+    Chrome does not have other accounts.
   </description>
 </action>
 
@@ -39181,8 +39748,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_MANAGER, with a new
-    account, while Chrome does not have other accounts.
+    signin_metrics::AccessPoint::kBookmarkManager, with a new account, while
+    Chrome does not have other accounts.
   </description>
 </action>
 
@@ -39193,8 +39760,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_EXTENSION_INSTALL_BUBBLE, with a
-    new account, while Chrome does not have other accounts.
+    signin_metrics::AccessPoint::kExtensionInstallBubble, with a new account,
+    while Chrome does not have other accounts.
   </description>
 </action>
 
@@ -39231,8 +39798,8 @@ should be able to be added at any place in this file.
   <owner>jlebel@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_NTP_FEED_TOP_PROMO, with a new
-    account, while Chrome does not have other accounts.
+    signin_metrics::AccessPoint::kNTPFeedTopPromo, with a new account, while
+    Chrome does not have other accounts.
   </description>
 </action>
 
@@ -39242,8 +39809,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE, with a new
-    account, while Chrome does not have other accounts.
+    signin_metrics::AccessPoint::kPasswordBubble, with a new account, while
+    Chrome does not have other accounts.
   </description>
 </action>
 
@@ -39254,8 +39821,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_RECENT_TABS, with a new account,
-    while Chrome does not have other accounts.
+    signin_metrics::AccessPoint::kRecentTabs, with a new account, while Chrome
+    does not have other accounts.
   </description>
 </action>
 
@@ -39280,8 +39847,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS, with a new account,
-    while Chrome does not have other accounts.
+    signin_metrics::AccessPoint::kSettings, with a new account, while Chrome
+    does not have other accounts.
   </description>
 </action>
 
@@ -39292,8 +39859,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_TAB_SWITCHER, with a new account,
-    while Chrome does not have other accounts.
+    signin_metrics::AccessPoint::kTabSwitcher, with a new account, while Chrome
+    does not have other accounts.
   </description>
 </action>
 
@@ -39303,8 +39870,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN, with a new
-    account, on desktop pre-Dice.
+    signin_metrics::AccessPoint::kAvatarBubbleSignIn, with a new account, on
+    desktop pre-Dice.
   </description>
 </action>
 
@@ -39314,8 +39881,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_BUBBLE, with a new
-    account, on desktop pre-Dice.
+    signin_metrics::AccessPoint::kBookmarkBubble, with a new account, on desktop
+    pre-Dice.
   </description>
 </action>
 
@@ -39326,8 +39893,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_MANAGER, with a new
-    account, on desktop pre-Dice.
+    signin_metrics::AccessPoint::kBookmarkManager, with a new account, on
+    desktop pre-Dice.
   </description>
 </action>
 
@@ -39337,8 +39904,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_EXTENSION_INSTALL_BUBBLE, with a
-    new account, on desktop pre-Dice.
+    signin_metrics::AccessPoint::kExtensionInstallBubble, with a new account, on
+    desktop pre-Dice.
   </description>
 </action>
 
@@ -39372,8 +39939,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE, with a new
-    account, on desktop pre-Dice.
+    signin_metrics::AccessPoint::kPasswordBubble, with a new account, on desktop
+    pre-Dice.
   </description>
 </action>
 
@@ -39384,8 +39951,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_RECENT_TABS, with a new account,
-    on desktop pre-Dice.
+    signin_metrics::AccessPoint::kRecentTabs, with a new account, on desktop
+    pre-Dice.
   </description>
 </action>
 
@@ -39409,8 +39976,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS, with a new account, on
-    desktop pre-Dice.
+    signin_metrics::AccessPoint::kSettings, with a new account, on desktop
+    pre-Dice.
   </description>
 </action>
 
@@ -39421,8 +39988,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_TAB_SWITCHER, with a new account,
-    on desktop pre-Dice.
+    signin_metrics::AccessPoint::kTabSwitcher, with a new account, on desktop
+    pre-Dice.
   </description>
 </action>
 
@@ -39432,8 +39999,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN, using
-    another account than the default one.
+    signin_metrics::AccessPoint::kAvatarBubbleSignIn, using another account than
+    the default one.
   </description>
 </action>
 
@@ -39443,8 +40010,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_BUBBLE, using another
-    account than the default one.
+    signin_metrics::AccessPoint::kBookmarkBubble, using another account than the
+    default one.
   </description>
 </action>
 
@@ -39455,8 +40022,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_MANAGER, using another
-    account than the default one.
+    signin_metrics::AccessPoint::kBookmarkManager, using another account than
+    the default one.
   </description>
 </action>
 
@@ -39466,8 +40033,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_EXTENSION_INSTALL_BUBBLE, using
-    another account than the default one.
+    signin_metrics::AccessPoint::kExtensionInstallBubble, using another account
+    than the default one.
   </description>
 </action>
 
@@ -39500,8 +40067,8 @@ should be able to be added at any place in this file.
   <owner>jlebel@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_NTP_FEED_TOP_PROMO, using another
-    account than the default one.
+    signin_metrics::AccessPoint::kNTPFeedTopPromo, using another account than
+    the default one.
   </description>
 </action>
 
@@ -39511,8 +40078,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE, using another
-    account than the default one.
+    signin_metrics::AccessPoint::kPasswordBubble, using another account than the
+    default one.
   </description>
 </action>
 
@@ -39523,8 +40090,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_RECENT_TABS, using another account
-    than the default one.
+    signin_metrics::AccessPoint::kRecentTabs, using another account than the
+    default one.
   </description>
 </action>
 
@@ -39548,8 +40115,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS, using another account
-    than the default one.
+    signin_metrics::AccessPoint::kSettings, using another account than the
+    default one.
   </description>
 </action>
 
@@ -39560,8 +40127,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_TAB_SWITCHER, using another
-    account than the default one.
+    signin_metrics::AccessPoint::kTabSwitcher, using another account than the
+    default one.
   </description>
 </action>
 
@@ -39581,8 +40148,7 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN, using the
-    default account.
+    signin_metrics::AccessPoint::kAvatarBubbleSignIn, using the default account.
   </description>
 </action>
 
@@ -39592,8 +40158,7 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_BUBBLE, using the default
-    account.
+    signin_metrics::AccessPoint::kBookmarkBubble, using the default account.
   </description>
 </action>
 
@@ -39604,8 +40169,7 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_MANAGER, using the
-    default account.
+    signin_metrics::AccessPoint::kBookmarkManager, using the default account.
   </description>
 </action>
 
@@ -39615,8 +40179,8 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_EXTENSION_INSTALL_BUBBLE, using
-    the default account.
+    signin_metrics::AccessPoint::kExtensionInstallBubble, using the default
+    account.
   </description>
 </action>
 
@@ -39649,8 +40213,7 @@ should be able to be added at any place in this file.
   <owner>jlebel@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_NTP_FEED_TOP_PROMO, using the
-    default account.
+    signin_metrics::AccessPoint::kNTPFeedTopPromo, using the default account.
   </description>
 </action>
 
@@ -39660,8 +40223,7 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE, using the default
-    account.
+    signin_metrics::AccessPoint::kPasswordBubble, using the default account.
   </description>
 </action>
 
@@ -39672,8 +40234,7 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_RECENT_TABS, using the default
-    account.
+    signin_metrics::AccessPoint::kRecentTabs, using the default account.
   </description>
 </action>
 
@@ -39697,8 +40258,7 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS, using the default
-    account.
+    signin_metrics::AccessPoint::kSettings, using the default account.
   </description>
 </action>
 
@@ -39709,8 +40269,7 @@ should be able to be added at any place in this file.
   <owner>msarda@chromium.org</owner>
   <description>
     Recorded on sign in start from access point
-    signin_metrics::AccessPoint::ACCESS_POINT_TAB_SWITCHER, using the default
-    account.
+    signin_metrics::AccessPoint::kTabSwitcher, using the default account.
   </description>
 </action>
 
@@ -39750,6 +40309,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_Signout_Confirm_ForcedSignin">
+  <obsolete>Deprecated 01/2025 after sync-the-feature deprecation</obsolete>
   <owner>chrome-signin-team@chromium.org</owner>
   <owner>arthurmilchior@chromium.org</owner>
   <description>
@@ -39769,6 +40329,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_Signout_Confirm_Managed_NotSyncing">
+  <obsolete>Deprecated 01/2025 after sync-the-feature deprecation</obsolete>
   <owner>chrome-signin-team@chromium.org</owner>
   <owner>arthurmilchior@chromium.org</owner>
   <description>
@@ -39787,6 +40348,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_Signout_Confirm_Regular_NotSyncing">
+  <obsolete>Deprecated 01/2025 after sync-the-feature deprecation</obsolete>
   <owner>chrome-signin-team@chromium.org</owner>
   <owner>arthurmilchior@chromium.org</owner>
   <description>
@@ -39796,6 +40358,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_Signout_Confirm_Regular_Syncing_KeepData">
+  <obsolete>Deprecated 01/2025 after sync-the-feature deprecation</obsolete>
   <owner>chrome-signin-team@chromium.org</owner>
   <owner>arthurmilchior@chromium.org</owner>
   <description>
@@ -39805,6 +40368,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Signin_Signout_Confirm_Regular_Syncing_RemoveData">
+  <obsolete>Deprecated 01/2025 after sync-the-feature deprecation</obsolete>
   <owner>chrome-signin-team@chromium.org</owner>
   <owner>arthurmilchior@chromium.org</owner>
   <description>
@@ -39913,7 +40477,6 @@ should be able to be added at any place in this file.
 
 <action name="SnapGroups_ActivateViaKeyboard">
   <owner>sophiewen@chromium.org</owner>
-  <owner>michelefan@chromium.org</owner>
   <owner>xdai@chromium.org</owner>
   <description>
     Recorded when the divider is activated via the keyboard.
@@ -39927,7 +40490,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="SnapGroups_DoubleTapWindowSwapAttempts">
-  <owner>michelefan@chromium.org</owner>
+  <owner>sophiewen@chromium.org</owner>
   <owner>cros-snap-groups@google.com</owner>
   <description>
     Tracks the number of times users attempt to swap windows within a Snap Group
@@ -39936,7 +40499,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="SnapGroups_DoubleTapWindowSwapSuccess">
-  <owner>michelefan@chromium.org</owner>
+  <owner>sophiewen@chromium.org</owner>
   <owner>cros-snap-groups@google.com</owner>
   <description>
     Recorded when two windows in a Snap Group are successfully swapped via
@@ -39992,7 +40555,6 @@ should be able to be added at any place in this file.
 
 <action name="SnapGroups_ResizeViaKeyboard">
   <owner>sophiewen@chromium.org</owner>
-  <owner>michelefan@chromium.org</owner>
   <owner>xdai@chromium.org</owner>
   <description>
     Recorded when the divider is resized via the keyboard.
@@ -40149,7 +40711,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="SplitView_SwapWindowsButtonSwapWindows">
-  <owner>michelefan@chromium.org</owner>
+  <owner>sophiewen@chromium.org</owner>
   <owner>xdai@chromium.org</owner>
   <description>
     Recorded when the user clicks on the swap windows button in the expanded
@@ -42304,6 +42866,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="TabGroupConfirmation.CloseTab.Abort">
+  <obsolete>Merged with CloseTabFullGroup.Abort.</obsolete>
   <owner>zheliooo@google.com</owner>
   <owner>clank-tab-dev@google.com</owner>
   <description>
@@ -42313,6 +42876,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="TabGroupConfirmation.CloseTab.Proceed">
+  <obsolete>Merged with CloseTabFullGroup.Proceed.</obsolete>
   <owner>zheliooo@google.com</owner>
   <owner>clank-tab-dev@google.com</owner>
   <description>
@@ -42322,6 +42886,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="TabGroupConfirmation.CloseTab.StopShowing">
+  <obsolete>Merged with CloseTabFullGroup.StopShowing.</obsolete>
   <owner>zheliooo@google.com</owner>
   <owner>clank-tab-dev@google.com</owner>
   <description>
@@ -42476,6 +43041,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="TabGroupConfirmation.RemoveTab.Abort">
+  <obsolete>Merged with RemoveTabFullGroup.Abort.</obsolete>
   <owner>ckitagawa@chromium.org</owner>
   <owner>clank-tab-dev@google.com</owner>
   <description>
@@ -42484,6 +43050,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="TabGroupConfirmation.RemoveTab.Proceed">
+  <obsolete>Merged with RemoveTabFullGroup.Proceed.</obsolete>
   <owner>ckitagawa@chromium.org</owner>
   <owner>clank-tab-dev@google.com</owner>
   <description>
@@ -42492,6 +43059,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="TabGroupConfirmation.RemoveTab.StopShowing">
+  <obsolete>Merged with RemoveTabFullGroup.StopShowing.</obsolete>
   <owner>ckitagawa@chromium.org</owner>
   <owner>clank-tab-dev@google.com</owner>
   <description>
@@ -42599,12 +43167,29 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="TabGroupItemMenu.ShareGroup">
+  <owner>ckitagawa@chromium.org</owner>
+  <owner>clank-tab-dev@google.com</owner>
+  <description>
+    Recorded when a user clicks the share option on a tab group item in the tab
+    switcher.
+  </description>
+</action>
+
 <action name="TabGroupItemMenu.Ungroup">
   <owner>ckitagawa@chromium.org</owner>
   <owner>clank-tab-dev@google.com</owner>
   <description>
     Recorded when a user clicks the ungroup option on a tab group item in the
     tab switcher.
+  </description>
+</action>
+
+<action name="TabGroups.Shared.SwitchGroupedTab">
+  <owner>dljames@chromium.org</owner>
+  <owner>chrome-desktop-ui-sea@google.com</owner>
+  <description>
+    User switched to a tab that belongs to a shared group.
   </description>
 </action>
 
@@ -42679,10 +43264,33 @@ should be able to be added at any place in this file.
 
 <action
     name="TabGroups_SavedTabGroups_CreateNewGroupTriggeredFromEverythingMenu">
+  <obsolete>
+    Replaced with
+    &quot;TabGroups_SavedTabGroups_CreateNewGroupTriggeredFromEverythingMenu_2&quot;.
+  </obsolete>
   <owner>dljames@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
   <description>
     User pressed &quot;Create New Tab Group&quot; from the Everything menu.
+  </description>
+</action>
+
+<action
+    name="TabGroups_SavedTabGroups_CreateNewGroupTriggeredFromEverythingMenu_2">
+  <owner>dljames@chromium.org</owner>
+  <owner>chrome-desktop-ui-sea@google.com</owner>
+  <description>
+    User pressed &quot;Create New Tab Group&quot; from the Everything menu in
+    the bookmarks bar.
+  </description>
+</action>
+
+<action
+    name="TabGroups_SavedTabGroups_CreateNewGroupTriggeredFromTabGroupsAppMenu">
+  <owner>dljames@chromium.org</owner>
+  <owner>chrome-desktop-ui-sea@google.com</owner>
+  <description>
+    User pressed &quot;Create New Tab Group&quot; from the TabGroups app menu.
   </description>
 </action>
 
@@ -42731,11 +43339,33 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="TabGroups_SavedTabGroups_OpenedFromEverythingMenu">
+  <obsolete>
+    Replaced with
+    &quot;TabGroups_SavedTabGroups_OpenedFromEverythingMenu_2&quot;.
+  </obsolete>
   <owner>dljames@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
   <description>
     User opened a SavedTabGroup by clicking a menu item from the Everything
     menu.
+  </description>
+</action>
+
+<action name="TabGroups_SavedTabGroups_OpenedFromEverythingMenu_2">
+  <owner>dljames@chromium.org</owner>
+  <owner>chrome-desktop-ui-sea@google.com</owner>
+  <description>
+    User opened a SavedTabGroup by clicking a menu item from the Everything menu
+    in the bookmarks bar.
+  </description>
+</action>
+
+<action name="TabGroups_SavedTabGroups_OpenedFromTabGroupsAppMenu">
+  <owner>dljames@chromium.org</owner>
+  <owner>chrome-desktop-ui-sea@google.com</owner>
+  <description>
+    User opened a SavedTabGroup by clicking the open group submenu item from the
+    tab groups app menu.
   </description>
 </action>
 
@@ -43016,12 +43646,22 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="Tabs.ArchivedDuplicateTab">
+  <owner>bjfong@google.com</owner>
+  <owner>wylieb@chromium.org</owner>
+  <owner>clank-tab-dev@google.com</owner>
+  <description>
+    Recorded when a duplicate tab that is not the most recently used copy is
+    archived. This is happens when tabs share the same URL.
+  </description>
+</action>
+
 <action name="Tabs.ArchivedTabAutoDeleted">
   <owner>wylieb@chromium.org</owner>
   <owner>clank-tab-dev@google.com</owner>
   <description>
     Recorded when an archived tab is deleted. This happens when the tab's last
-    archived tab exceeds the limit for auto-deletion.
+    archived time exceeds the limit for auto-deletion.
   </description>
 </action>
 
@@ -43957,6 +44597,24 @@ should be able to be added at any place in this file.
   <description>
     Records when a user connects to a UI DevTools HTTP server, i.e., by clicking
     on the 'inspect' link on chrome://inspect/#other.
+  </description>
+</action>
+
+<action name="UMA_OnBackgrounded">
+  <owner>lucnguyen@google.com</owner>
+  <description>
+    Emitted when the UMA metrics collection system has received a notification
+    that the application has been backgrounded. This includes hiding an embedded
+    WebView within a hosting app. Only applicable on mobile.
+  </description>
+</action>
+
+<action name="UMA_OnForegrounded">
+  <owner>lucnguyen@google.com</owner>
+  <description>
+    Emitted when the UMA metrics collection system has received a notification
+    that the application has been foregrounded. This includes displaying an
+    embedded WebView within a hosting app. Only applicable on mobile.
   </description>
 </action>
 
@@ -46588,7 +47246,6 @@ should be able to be added at any place in this file.
 </action>
 
 <action-suffix separator="." ordering="suffix">
-  <suffix name="EnhancedProtection" label="EnhancedProtection"/>
   <suffix name="FamilyLink" label="Family Link"/>
   <suffix name="GANslate" label="GANslate"/>
   <suffix name="GeminiShortcut" label="Gemini Shortcut"/>
@@ -46601,10 +47258,12 @@ should be able to be added at any place in this file.
   <suffix name="HistoryEmbeddings" label="History Embeddings Search"/>
   <suffix name="LensOverlayTranslateButton"
       label="Lens Overlay Translate Button"/>
-  <suffix name="Passkeys" label="Passkeys"/>
   <suffix name="PdfSearchify" label="PDF Searchify"/>
   <suffix name="PerformanceInterventionUI" label="Performance Intervention"/>
-  <suffix name="SafetyCheck" label="Safety Check"/>
+  <suffix name="ReadAnythingReadAloud" label="Read Anything Read Aloud"/>
+  <suffix name="SafetyEnhancedprotection" label="SafetyEnhancedprotection"/>
+  <suffix name="SafetyPasskeys" label="SafetyPasskeys"/>
+  <suffix name="SafetySafetycheck" label="Safety Check"/>
   <suffix name="SaveTabGroups" label="Saved Tab Groups"/>
   <suffix name="SearchBoxSuggestions" label="Search Box Suggestions"/>
   <suffix name="SidePanelPinning" label="Side Panel Pinning"/>
@@ -46652,6 +47311,8 @@ should be able to be added at any place in this file.
 </action-suffix>
 
 <action-suffix separator="_" ordering="suffix">
+  <suffix name="AccountSettingsHistorySync"
+      label="For the history opt-in toggle in account settings on Android."/>
   <suffix name="AdaptiveButtonInTopToolbarCustomization_AddToBookmarks"
       label="For AdaptiveButtonInTopToolbarCustomization add to bookmarks
              feature."/>
@@ -46675,14 +47336,14 @@ should be able to be added at any place in this file.
       label="For AutoDarkUserEducationMessage feature."/>
   <suffix name="AutoDarkUserEducationMessageOptIn"
       label="For AutoDarkUserEducationMessageOptIn feature."/>
+  <suffix name="AutofillCardInfoRetrievalSuggestion"
+      label="For AutofillCardInfoRetrievalSuggestion feature."/>
   <suffix name="AutofillCreditCardBenefit"
       label="For Autofill credit card benefit message."/>
   <suffix name="AutofillDisabledVirtualCardSuggestion"
       label="For AutofillDisabledVirtualCardSuggestion feature."/>
   <suffix name="AutofillExternalAccountProfileSuggestion"
       label="For AutofillExternalAccountProfileSuggestion feature."/>
-  <suffix name="AutofillManualFallback"
-      label="For AutofillManualFallback feature."/>
   <suffix name="AutofillPredictionImprovements"
       label="For AutofillPredictionImprovements feature."/>
   <suffix name="AutofillPredictionImprovementsBootstrapping"
@@ -46834,6 +47495,7 @@ should be able to be added at any place in this file.
       label="For Follow While-Browsing IPH feature."/>
   <suffix name="GenericAlwaysTriggerHelpUiFeature"
       label="For generic always show help UI feature."/>
+  <suffix name="GlicPromo" label="For Glic feature."/>
   <suffix name="GlobalMediaControls" label="For GlobalMediaControls feature."/>
   <suffix name="GMCCastStartStop"
       label="For Global Media Controls Cast start and stop feature."/>
@@ -46905,6 +47567,9 @@ should be able to be added at any place in this file.
       label="For generivc default browser promo."/>
   <suffix name="iOSPromoMadeForIOS"
       label="For Made for iOS default browser promo."/>
+  <suffix name="iOSPromoNonModalUrlPasteDefaultBrowser"
+      label="howing the non-modal Default Browser Promo from omnibox paste on
+             iOS."/>
   <suffix name="iOSPromoPasswordManagerWidget"
       label="For iOSPromoPasswordManagerWidget feature"/>
   <suffix name="iOSPromoPostRestore" label="For iOSPromoPostRestore feature"/>
@@ -46914,10 +47579,14 @@ should be able to be added at any place in this file.
   <suffix name="iOSPromoWhatsNew" label="For iOSPromoWhatsNew feature"/>
   <suffix name="iOSPullToRefreshFeature"
       label="For iOSPullToRefreshFeature feature"/>
+  <suffix name="iOSReminderNotificationsOverflowMenuBubbleFeature"
+      label="For iOSReminderNotificationsOverflowMenuBubbleFeature feature"/>
   <suffix name="iOSReplaceSyncPromosWithSignInPromos"
       label="For iOSReplaceSyncPromosWithSignInPromos feature"/>
   <suffix name="iOSSavedTabGroupClosed"
       label="For Saved Tab Group closed for the first time."/>
+  <suffix name="iOSSharedTabGroupForeground"
+      label="For Shared Tab Group reminder on foreground."/>
   <suffix name="iOSSwipeBackForwardFeature"
       label="For iOSSwipeBackForwardFeature feature"/>
   <suffix name="iOSSwipeToolbarToChangeTabFeature"
@@ -46933,6 +47602,8 @@ should be able to be added at any place in this file.
       label="For Default browser promo with messages on omnibox paste."/>
   <suffix name="IPH_DefaultBrowserPromoSettingCard"
       label="For Default browser promo in Chrome settings."/>
+  <suffix name="IPH_iOSDefaultBrowserBannerPromoFeature"
+      label="For iOS Default browser banner promo."/>
   <suffix name="KeyboardAccessoryAddressFilling"
       label="For KeyboardAccessoryAddressFilling feature."/>
   <suffix name="KeyboardAccessoryBarSwiping"
@@ -46952,6 +47623,7 @@ should be able to be added at any place in this file.
   <suffix name="LowUserEngagementDetector"
       label="For LowUserEngagementDetector feature."/>
   <suffix name="MediaDownload" label="For MediaDownload feature."/>
+  <suffix name="MerchantTrust" label="For MerchantTrust feature."/>
   <suffix name="MicToolbar" label="In product help for toolbar mic."/>
   <suffix name="NewTab" label="For NewTab feature."/>
   <suffix name="NewTabPageButton" label="Deprecated in M79-."/>
@@ -47002,8 +47674,6 @@ should be able to be added at any place in this file.
       label="For Android PWA install menu."/>
   <suffix name="PwaQuietNotification"
       label="In product help for the PWA quiet notification icon."/>
-  <suffix name="QuietNotificationPrompts"
-      label="For the quiet notification prompts feature."/>
   <suffix name="ReadAloudAppMenuFeature" label="For ReadAloudAppMenu feature."/>
   <suffix name="ReadAloudExpandedPlayerFeature"
       label="For ReadAloud expanded player feature."/>
@@ -47133,6 +47803,8 @@ should be able to be added at any place in this file.
       label="For displaying the supervised user sign-in IPH."/>
   <suffix name="TabAudioMuting" label="For TabAudioMuting feature."/>
   <suffix name="TabGroupsDragAndDrop" label="For drop-to-merge in tab group."/>
+  <suffix name="TabGroupShareNotificationBubbleOnStrip"
+      label="For tab group share notification bubble on tablet tab strip."/>
   <suffix name="TabGroupsQuicklyComparePages"
       label="For long press links to create tab groups."/>
   <suffix name="TabGroupsRemoteGroup" label="For a synced tab group."/>
@@ -47144,7 +47816,8 @@ should be able to be added at any place in this file.
   <suffix name="TabGroupsSurfaceOnHide"
       label="For tab group surface after hiding a tab group while on the GTS."/>
   <suffix name="TabGroupsTapToSeeAnotherTab" label="For tab strip."/>
-  <suffix name="TabGroupSyncOnStrip" label="For tab group sync on tab strip."/>
+  <suffix name="TabGroupSyncOnStrip"
+      label="For tab group sync on tablet tab strip."/>
   <suffix name="TabGroupsYourTabsTogether"
       label="For tab switcher with tab groups."/>
   <suffix name="TabOrganizationSuccess"
@@ -47842,6 +48515,30 @@ should be able to be added at any place in this file.
       label="Enhanced Protection setting has been synced to Off"/>
   <affected-action name="Toast.ActionButtonClicked"/>
   <affected-action name="Toast.CloseButtonClicked"/>
+</action-suffix>
+
+<action-suffix separator="." ordering="suffix">
+  <suffix name="FamiliarSite" label="Recorded on a familiar site."/>
+  <affected-action name="MerchantTrust.BubbleClosed"/>
+  <affected-action name="MerchantTrust.BubbleOpenedFromLocationBarChip"/>
+  <affected-action name="MerchantTrust.BubbleOpenedFromPageInfo"/>
+  <affected-action name="MerchantTrust.PageInfoRowSeen"/>
+  <affected-action name="MerchantTrust.SidePanelClosed"/>
+  <affected-action name="MerchantTrust.SidePanelClosedOnSameTabNavigation"/>
+  <affected-action name="MerchantTrust.SidePanelOpened"/>
+  <affected-action name="MerchantTrust.SidePanelOpenedOnSameTabNavigation"/>
+</action-suffix>
+
+<action-suffix separator="." ordering="suffix">
+  <suffix name="UnfamiliarSite" label="Recorded on an unfamiliar site."/>
+  <affected-action name="MerchantTrust.BubbleClosed"/>
+  <affected-action name="MerchantTrust.BubbleOpenedFromLocationBarChip"/>
+  <affected-action name="MerchantTrust.BubbleOpenedFromPageInfo"/>
+  <affected-action name="MerchantTrust.PageInfoRowSeen"/>
+  <affected-action name="MerchantTrust.SidePanelClosed"/>
+  <affected-action name="MerchantTrust.SidePanelClosedOnSameTabNavigation"/>
+  <affected-action name="MerchantTrust.SidePanelOpened"/>
+  <affected-action name="MerchantTrust.SidePanelOpenedOnSameTabNavigation"/>
 </action-suffix>
 
 </actions>

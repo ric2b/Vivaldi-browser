@@ -3,8 +3,8 @@
 #ifndef IOS_UI_SETTINGS_START_PAGE_VIVALDI_START_PAGE_SETTINGS_VIEW_CONTROLLER_H_
 #define IOS_UI_SETTINGS_START_PAGE_VIVALDI_START_PAGE_SETTINGS_VIEW_CONTROLLER_H_
 
-#import "ios/chrome/browser/ui/settings/settings_controller_protocol.h"
-#import "ios/chrome/browser/ui/settings/settings_root_table_view_controller.h"
+#import "ios/chrome/browser/settings/ui_bundled/settings_controller_protocol.h"
+#import "ios/chrome/browser/settings/ui_bundled/settings_root_table_view_controller.h"
 #import "ios/ui/settings/start_page/vivaldi_start_page_settings_consumer.h"
 
 class Browser;

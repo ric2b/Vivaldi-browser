@@ -80,6 +80,7 @@ template("_invoke_jni_zero") {
     inputs += rebase_path([
                             "codegen/called_by_native_header.py",
                             "codegen/convert_type.py",
+                            "codegen/gen_jni_java.py",
                             "codegen/header_common.py",
                             "codegen/natives_header.py",
                             "codegen/placeholder_gen_jni_java.py",
@@ -119,12 +120,6 @@ template("_invoke_jni_zero") {
 #   manual_jni_registration: Manually do JNI registration - required for feature
 #     splits which provide their own native library. (optional)
 #   namespace: Registration functions will be wrapped into this. (optional)
-#   require_native_mocks: Enforce that any native calls using
-#     org.jni_zero.NativeMethods must have a mock set
-#     (optional).
-#   enable_native_mocks: Allow native calls using
-#     org.jni_zero.NativeMethods to be mocked in tests
-#     (optional).
 #   priority_java_targets: List of java targets that, if using multiplexing,
 #     will always be placed first in the sequential switch numbers. (optional)
 #
@@ -153,23 +148,19 @@ template("generate_jni_registration") {
     walk_keys = [ "java_walk_keys" ]
   }
 
-  if (defined(invoker.priority_java_targets)) {
-    if (enable_jni_multiplexing) {
-      # This is intended for WebView, so we can only look at Java sources. This
-      # is becuase WebView's java is a strict subset of it's native, so we don't
-      # need to take the intersection of it's native and java.
-      _priority_java_sources_list =
-          "$target_gen_dir/$target_name.priority_javasources.txt"
-      jni_sources_list("${target_name}__priority_java_sources") {
-        deps = invoker.priority_java_targets
-        output = _priority_java_sources_list
+  if (enable_jni_multiplexing && defined(invoker.priority_java_targets)) {
+    # This is intended for WebView, so we can only look at Java sources. This
+    # is becuase WebView's java is a strict subset of it's native, so we don't
+    # need to take the intersection of it's native and java.
+    _priority_java_sources_list =
+        "$target_gen_dir/$target_name.priority_javasources.txt"
+    jni_sources_list("${target_name}__priority_java_sources") {
+      deps = invoker.priority_java_targets
+      output = _priority_java_sources_list
 
-        # When apk or bundle module targets are uses, do not pull metadata from
-        # their native library deps.
-        walk_keys = [ "java_walk_keys" ]
-      }
-    } else {
-      not_needed(invoker, [ "priority_java_targets" ])
+      # When apk or bundle module targets are uses, do not pull metadata from
+      # their native library deps.
+      walk_keys = [ "java_walk_keys" ]
     }
   }
 
@@ -218,15 +209,6 @@ template("generate_jni_registration") {
       args += [ "--use-proxy-hash" ]
     }
 
-    if (defined(invoker.enable_native_mocks) && invoker.enable_native_mocks) {
-      args += [ "--enable-proxy-mocks" ]
-
-      if (defined(invoker.require_native_mocks) &&
-          invoker.require_native_mocks) {
-        args += [ "--require-mocks" ]
-      }
-    }
-
     if (defined(invoker.remove_uncalled_jni) && invoker.remove_uncalled_jni) {
       args += [ "--remove-uncalled-methods" ]
     }
@@ -254,13 +236,24 @@ template("generate_jni_registration") {
       }
       if (enable_jni_multiplexing) {
         args += [ "--enable-jni-multiplexing" ]
+
+        if (defined(_priority_java_sources_list)) {
+          args += [
+            "--priority-java-sources-file",
+            rebase_path(_priority_java_sources_list, root_build_dir),
+          ]
+        }
+        if (defined(invoker.never_omit_switch_num) &&
+            invoker.never_omit_switch_num) {
+          args += [ "--never-omit-switch-num" ]
+        }
       }
-      if (defined(_priority_java_sources_list)) {
-        args += [
-          "--priority-java-sources-file",
-          rebase_path(_priority_java_sources_list, root_build_dir),
-        ]
-      }
+    } else {
+      not_needed(invoker,
+                 [
+                   "never_omit_switch_num",
+                   "priority_java_targets",
+                 ])
     }
 
     if (defined(invoker.namespace)) {
@@ -584,7 +577,6 @@ template("native_with_jni") {
       native_deps = invoker.deps
 
       if (defined(invoker.testonly) && invoker.testonly) {
-        enable_native_mocks = true
         if (!defined(invoker.add_stubs_for_missing_jni)) {
           add_stubs_for_missing_jni = true
         }
@@ -602,6 +594,7 @@ template("native_with_jni") {
                                "manual_jni_registration",
                                "module_name",
                                "namespace",
+                               "never_omit_switch_num",
                                "remove_uncalled_jni",
                                "priority_java_targets",
                              ])
@@ -614,6 +607,7 @@ template("native_with_jni") {
                  "manual_jni_registration",
                  "module_name",
                  "namespace",
+                 "never_omit_switch_num",
                  "remove_uncalled_jni",
                  "priority_java_targets",
                ])

@@ -33,6 +33,10 @@ extern const char kVivaldiAccountServerUrlIdentity[];
 extern const char kVivaldiSyncServerUrl[];
 extern const char kVivaldiSyncNotificationsServerUrl[];
 
+//sync error
+extern const char kVivaldiLastSyncErrorDialogShownDate[];
+extern const char kVivaldiShouldAskSyncErrorAgain[];
+
 extern const char kVivaldiClientHintsBrand[];
 extern const char kVivaldiClientHintsBrandAppendVivaldi[];
 extern const char kVivaldiClientHintsBrandCustomBrand[];
@@ -64,6 +68,7 @@ extern const char kVivaldiEnableSearchEngineNickname[];
 
 // Address bar
 extern const char kVivaldiShowFullAddressEnabled[];
+extern const char kVivaldiShowXForSuggestionEnabled[];
 
 // Tabs
 // Desktop style tabs enabled status
@@ -136,13 +141,13 @@ extern const char kVivaldiPreferTranslatePanel[];
 // Content Settings
 // Global page zoom value
 extern const char kVivaldiPageZoomLevel[];
-extern const char kGlobalPageZoomEnabled[];
 #endif
 
 #if BUILDFLAG(IS_ANDROID)
 // Background media playback for YouTube.
 extern const char kBackgroundMediaPlaybackAllowed[];
 extern const char kPWADisabled[];
+extern const char kAddressBarDeleteDirectMatch[];
 #endif
 }  // namespace vivaldiprefs
 

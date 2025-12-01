@@ -388,6 +388,7 @@ void MaglevAssembler::TruncateDoubleToInt32(Register dst, DoubleRegister src) {
 
 void MaglevAssembler::TryTruncateDoubleToInt32(Register dst, DoubleRegister src,
                                                Label* fail) {
+  DCHECK_NE(src, kScratchDoubleReg);
   // Truncating conversion of the input float64 value to an int32.
   Cvttpd2dq(kScratchDoubleReg, src);
   // Convert that int32 value back to float64.
@@ -471,13 +472,13 @@ void MaglevAssembler::OSRPrologue(Graph* graph) {
   uint32_t source_frame_size =
       graph->min_maglev_stackslots_for_unoptimized_frame_size();
 
-  if (v8_flags.maglev_assert_stack_size && v8_flags.debug_code) {
+  if (V8_ENABLE_SANDBOX_BOOL || v8_flags.debug_code) {
     movq(kScratchRegister, rbp);
     subq(kScratchRegister, rsp);
     cmpq(kScratchRegister,
          Immediate(source_frame_size * kSystemPointerSize +
                    StandardFrameConstants::kFixedFrameSizeFromFp));
-    Assert(equal, AbortReason::kOsrUnexpectedStackSize);
+    SbxCheck(equal, AbortReason::kOsrUnexpectedStackSize);
   }
 
   uint32_t target_frame_size =
@@ -514,6 +515,7 @@ void MaglevAssembler::Prologue(Graph* graph) {
     BindJumpTarget(code_gen_state()->entry_label());
   }
 
+#ifndef V8_ENABLE_LEAPTIERING
   // Tiering support.
   if (v8_flags.turbofan) {
     using D = MaglevOptimizeCodeOrTailCallOptimizedCodeSlotDescriptor;
@@ -528,6 +530,7 @@ void MaglevAssembler::Prologue(Graph* graph) {
                     CheckFeedbackVectorFlagsNeedsProcessing(feedback_vector,
                                                             CodeKind::MAGLEV));
   }
+#endif  // !V8_ENABLE_LEAPTIERING
 
   EnterFrame(StackFrame::MAGLEV);
   // Save arguments in frame.

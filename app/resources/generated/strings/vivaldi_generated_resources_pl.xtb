@@ -279,6 +279,7 @@
 <translation id="5582839680698949063">Menu główne</translation>
 <translation id="5614553682702429503">Zapisać hasło?</translation>
 <translation id="5623842676595125836">Log</translation>
+<translation id="5624959475330585145">Pytaj przed użyciem niezabezpieczonych połączeń</translation>
 <translation id="5638309510554459422">Znajdź rozszerzenia i motywy w <ph name="BEGIN_LINK" />Chrome Web Store<ph name="END_LINK" /></translation>
 <translation id="5677928146339483299">Zablokowane</translation>
 <translation id="5707185214361380026">Nie udało się załadować rozszerzenia z:</translation>
@@ -468,6 +469,7 @@ Przechowuj plik klucza w bezpiecznym miejscu. Będzie on potrzebny do utworzenia
 <translation id="9218430445555521422">Ustaw jako domyślny</translation>
 <translation id="93766956588638423">Napraw rozszerzenie</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
+<translation id="961856697154696964">Usuń dane przeglądania</translation>
 <translation id="994289308992179865">&amp;Powtarzaj</translation>
 <translation id="998747458861718449">&amp;Zbadaj element</translation>
 </translationbundle>

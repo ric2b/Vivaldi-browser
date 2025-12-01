@@ -43,6 +43,7 @@
 #include "third_party/blink/renderer/core/css/css_resolution_units.h"
 #include "third_party/blink/renderer/core/css/css_to_length_conversion_data.h"
 #include "third_party/blink/renderer/core/css/css_unparsed_declaration_value.h"
+#include "third_party/blink/renderer/core/css/media_eval_utils.h"
 #include "third_party/blink/renderer/core/css/media_feature_names.h"
 #include "third_party/blink/renderer/core/css/media_features.h"
 #include "third_party/blink/renderer/core/css/media_list.h"
@@ -90,30 +91,6 @@ void MaybeRecordMediaFeatureValue(
         .Add(surface, IdentifiableToken(value))
         .Record(document->UkmRecorder());
     document->SetMediaFeatureEvaluated(static_cast<int>(feature_name));
-  }
-}
-
-KleeneValue KleeneOr(KleeneValue a, KleeneValue b) {
-  switch (a) {
-    case KleeneValue::kTrue:
-      return KleeneValue::kTrue;
-    case KleeneValue::kFalse:
-      return b;
-    case KleeneValue::kUnknown:
-      return (b == KleeneValue::kTrue) ? KleeneValue::kTrue
-                                       : KleeneValue::kUnknown;
-  }
-}
-
-KleeneValue KleeneAnd(KleeneValue a, KleeneValue b) {
-  switch (a) {
-    case KleeneValue::kTrue:
-      return b;
-    case KleeneValue::kFalse:
-      return KleeneValue::kFalse;
-    case KleeneValue::kUnknown:
-      return (b == KleeneValue::kFalse) ? KleeneValue::kFalse
-                                        : KleeneValue::kUnknown;
   }
 }
 
@@ -216,64 +193,10 @@ KleeneValue MediaQueryEvaluator::Eval(const MediaQueryExpNode& node) const {
 KleeneValue MediaQueryEvaluator::Eval(
     const MediaQueryExpNode& node,
     MediaQueryResultFlags* result_flags) const {
-  if (auto* n = DynamicTo<MediaQueryNestedExpNode>(node)) {
-    return Eval(n->Operand(), result_flags);
-  }
-  if (auto* n = DynamicTo<MediaQueryFunctionExpNode>(node)) {
-    return Eval(n->Operand(), result_flags);
-  }
-  if (auto* n = DynamicTo<MediaQueryNotExpNode>(node)) {
-    return EvalNot(n->Operand(), result_flags);
-  }
-  if (auto* n = DynamicTo<MediaQueryAndExpNode>(node)) {
-    return EvalAnd(n->Left(), n->Right(), result_flags);
-  }
-  if (auto* n = DynamicTo<MediaQueryOrExpNode>(node)) {
-    return EvalOr(n->Left(), n->Right(), result_flags);
-  }
-  if (IsA<MediaQueryUnknownExpNode>(node)) {
-    return KleeneValue::kUnknown;
-  }
-  return EvalFeature(To<MediaQueryFeatureExpNode>(node), result_flags);
-}
-
-KleeneValue MediaQueryEvaluator::EvalNot(
-    const MediaQueryExpNode& operand_node,
-    MediaQueryResultFlags* result_flags) const {
-  switch (Eval(operand_node, result_flags)) {
-    case KleeneValue::kTrue:
-      return KleeneValue::kFalse;
-    case KleeneValue::kFalse:
-      return KleeneValue::kTrue;
-    case KleeneValue::kUnknown:
-      return KleeneValue::kUnknown;
-  }
-}
-
-KleeneValue MediaQueryEvaluator::EvalAnd(
-    const MediaQueryExpNode& left_node,
-    const MediaQueryExpNode& right_node,
-    MediaQueryResultFlags* result_flags) const {
-  KleeneValue left = Eval(left_node, result_flags);
-  // Short-circuiting before calling Eval on |right_node| prevents
-  // unnecessary entries in |results|.
-  if (left == KleeneValue::kFalse) {
-    return left;
-  }
-  return KleeneAnd(left, Eval(right_node, result_flags));
-}
-
-KleeneValue MediaQueryEvaluator::EvalOr(
-    const MediaQueryExpNode& left_node,
-    const MediaQueryExpNode& right_node,
-    MediaQueryResultFlags* result_flags) const {
-  KleeneValue left = Eval(left_node, result_flags);
-  // Short-circuiting before calling Eval on |right_node| prevents
-  // unnecessary entries in |results|.
-  if (left == KleeneValue::kTrue) {
-    return left;
-  }
-  return KleeneOr(left, Eval(right_node, result_flags));
+  return MediaEval(
+      node, [this, result_flags](const MediaQueryFeatureExpNode& feature) {
+        return EvalFeature(feature, result_flags);
+      });
 }
 
 bool MediaQueryEvaluator::DidResultsChange(
@@ -1574,49 +1497,52 @@ static bool SnappedMediaFeatureEval(const MediaQueryExpValue& value,
       return media_values.SnappedBlock();
     case CSSValueID::kInline:
       return media_values.SnappedInline();
+    case CSSValueID::kBoth:
+      return media_values.SnappedX() && media_values.SnappedY();
     default:
       NOTREACHED();
   }
 }
 
-static bool OverflowingMediaFeatureEval(const MediaQueryExpValue& value,
-                                        MediaQueryOperator op,
-                                        const MediaValues& media_values) {
+static bool ScrollableMediaFeatureEval(const MediaQueryExpValue& value,
+                                       MediaQueryOperator op,
+                                       const MediaValues& media_values) {
   if (!value.IsValid()) {
-    return media_values.Overflowing();
+    return media_values.Scrollable();
   }
+
+  constexpr ContainerScrollableFlags scrollable_start =
+      static_cast<ContainerScrollableFlags>(ContainerScrollable::kStart);
+  constexpr ContainerScrollableFlags scrollable_end =
+      static_cast<ContainerScrollableFlags>(ContainerScrollable::kEnd);
+
   switch (value.Id()) {
     case CSSValueID::kNone:
-      return !media_values.Overflowing();
+      return !media_values.Scrollable();
     case CSSValueID::kTop:
-      return media_values.OverflowingVertical() &
-             static_cast<ContainerOverflowingFlags>(
-                 ContainerOverflowing::kStart);
+      return media_values.ScrollableVertical() & scrollable_start;
     case CSSValueID::kLeft:
-      return media_values.OverflowingHorizontal() &
-             static_cast<ContainerOverflowingFlags>(
-                 ContainerOverflowing::kStart);
+      return media_values.ScrollableHorizontal() & scrollable_start;
     case CSSValueID::kBottom:
-      return media_values.OverflowingVertical() &
-             static_cast<ContainerOverflowingFlags>(ContainerOverflowing::kEnd);
+      return media_values.ScrollableVertical() & scrollable_end;
     case CSSValueID::kRight:
-      return media_values.OverflowingHorizontal() &
-             static_cast<ContainerOverflowingFlags>(ContainerOverflowing::kEnd);
+      return media_values.ScrollableHorizontal() & scrollable_end;
     case CSSValueID::kBlockStart:
-      return media_values.OverflowingBlock() &
-             static_cast<ContainerOverflowingFlags>(
-                 ContainerOverflowing::kStart);
-      ;
+      return media_values.ScrollableBlock() & scrollable_start;
     case CSSValueID::kBlockEnd:
-      return media_values.OverflowingBlock() &
-             static_cast<ContainerOverflowingFlags>(ContainerOverflowing::kEnd);
+      return media_values.ScrollableBlock() & scrollable_end;
     case CSSValueID::kInlineStart:
-      return media_values.OverflowingInline() &
-             static_cast<ContainerOverflowingFlags>(
-                 ContainerOverflowing::kStart);
+      return media_values.ScrollableInline() & scrollable_start;
     case CSSValueID::kInlineEnd:
-      return media_values.OverflowingInline() &
-             static_cast<ContainerOverflowingFlags>(ContainerOverflowing::kEnd);
+      return media_values.ScrollableInline() & scrollable_end;
+    case CSSValueID::kX:
+      return media_values.ScrollableHorizontal() != 0;
+    case CSSValueID::kY:
+      return media_values.ScrollableVertical() != 0;
+    case CSSValueID::kBlock:
+      return media_values.ScrollableBlock() != 0;
+    case CSSValueID::kInline:
+      return media_values.ScrollableInline() != 0;
     default:
       NOTREACHED();
   }
@@ -1803,7 +1729,7 @@ KleeneValue MediaQueryEvaluator::EvalStyleFeature(
 
     if (computed == query_computed ||
         (computed && query_computed &&
-         computed->EqualsIgnoringTaint(*query_computed))) {
+         computed->EqualsIgnoringAttrTainting(*query_computed))) {
       return KleeneValue::kTrue;
     }
     return KleeneValue::kFalse;

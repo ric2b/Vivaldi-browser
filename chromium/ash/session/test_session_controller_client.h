@@ -8,13 +8,16 @@
 #include <stdint.h>
 
 #include <memory>
+#include <optional>
 #include <string>
+#include <variant>
 
 #include "ash/public/cpp/session/session_controller_client.h"
 #include "ash/public/cpp/session/session_types.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/token.h"
+#include "components/prefs/pref_service.h"
 #include "components/user_manager/user_type.h"
 
 namespace views {
@@ -37,18 +40,17 @@ class TestPrefServiceProvider;
 // SessionControllerClient created, e.g. InProcessBrowserTest based tests. On
 // the other hand, tests code in chrome can use this class as long as it does
 // not run BrowserMain, e.g. testing::Test based test.
-class TestSessionControllerClient : public SessionControllerClient {
+class TestSessionControllerClient final : public SessionControllerClient {
  public:
   TestSessionControllerClient(SessionControllerImpl* controller,
-                              TestPrefServiceProvider* prefs_provider);
+                              TestPrefServiceProvider* prefs_provider,
+                              bool create_signin_pref_service);
 
   TestSessionControllerClient(const TestSessionControllerClient&) = delete;
   TestSessionControllerClient& operator=(const TestSessionControllerClient&) =
       delete;
 
   ~TestSessionControllerClient() override;
-
-  static void DisableAutomaticallyProvideSigninPref();
 
   // Initialize using existing info in |controller| and set as its client.
   void InitializeAndSetClient();
@@ -79,25 +81,23 @@ class TestSessionControllerClient : public SessionControllerClient {
   void SetIsRunningInAppMode(bool app_mode);
   void SetIsDemoSession();
 
-  // Creates the |count| pre-defined user sessions. The users are named by
-  // numbers using "user%d@tray" template. The first user is set as active user
-  // to be consistent with crash-and-restore scenario.  Note that existing user
-  // sessions prior this call will be removed without sending out notifications.
-  void CreatePredefinedUserSessions(int count);
-
-  // Adds a user session from a given display email. If |provide_pref_service|
-  // is true, eagerly inject a PrefService for this user. |is_new_profile|
+  // Adds a user session from a given display email. If `provide_pref_service`
+  // is true, eagerly inject a PrefService for this user. `is_new_profile`
   // indicates whether the user has a newly created profile on the device.
   //
-  // For convenience |display_email| is used to create an |AccountId|. For
-  // testing behavior where |AccountId|s are compared, prefer the method of the
-  // same name that takes an |AccountId| created with a valid storage key
-  // instead. See the documentation for|AccountId::GetUserEmail| for
-  // discussion.
+  // For convenience `display_email` is used to create an `AccountId`. For
+  // testing behavior where `AccountId`s are compared, prefer the method of the
+  // same name that takes an `AccountId` created with a valid storage key
+  // instead. See the documentation for`AccountId::GetUserEmail` for discussion.
+  // `provide_or_pref_service` is a variant of bool, which indicates if the perf
+  // service should be automatically created (true) or not(false), or a
+  // PrefService instance which will be used for the session. Passing nullptr
+  // will result in a check failure.
   void AddUserSession(
-      const std::string& display_email,
+      std::string_view display_email,
       user_manager::UserType user_type = user_manager::UserType::kRegular,
-      bool provide_pref_service = true,
+      std::variant<bool, std::unique_ptr<PrefService>> provide_or_pref_service =
+          true,
       bool is_new_profile = false,
       const std::string& given_name = std::string(),
       bool is_account_managed = false);
@@ -105,15 +105,18 @@ class TestSessionControllerClient : public SessionControllerClient {
   // Adds a user session from a given AccountId.
   void AddUserSession(
       const AccountId& account_id,
-      const std::string& display_email,
+      std::string_view display_email,
       user_manager::UserType user_type = user_manager::UserType::kRegular,
-      bool provide_pref_service = true,
+      std::variant<bool, std::unique_ptr<PrefService>> provide_or_pref_service =
+          true,
       bool is_new_profile = false,
       const std::string& given_name = std::string(),
       bool is_account_managed = false);
 
-  // Creates a test PrefService and associates it with the user.
-  void ProvidePrefServiceForUser(const AccountId& account_id);
+  // Creates a test PrefService and associates it with the user. When `notify`
+  // is true, it will call `SessionController::OnProfilePrefServiceInitialized`.
+  PrefService* ProvidePrefServiceForUser(const AccountId& account_id,
+                                         bool notify = true);
 
   // Synchronously lock screen by requesting screen lock and waiting for the
   // request to complete.
@@ -122,7 +125,7 @@ class TestSessionControllerClient : public SessionControllerClient {
   // Simulates screen unlocking. It is virtual so that test cases can override
   // it. The default implementation sets the session state of SessionController
   // to be ACTIVE.
-  virtual void UnlockScreen();
+  void UnlockScreen();
 
   // Spins message loop to finish pending lock screen request if any.
   void FlushForTest();
@@ -131,8 +134,8 @@ class TestSessionControllerClient : public SessionControllerClient {
   void SetSigninScreenPrefService(std::unique_ptr<PrefService> pref_service);
 
   // Use |pref_service| for the user identified by |account_id|.
-  void SetUserPrefService(const AccountId& account_id,
-                          std::unique_ptr<PrefService> pref_service);
+  void SetUnownedUserPrefService(const AccountId& account_id,
+                                 raw_ptr<PrefService> unowned_pref_service);
 
   // ash::SessionControllerClient:
   void RequestLockScreen() override;
@@ -167,12 +170,21 @@ class TestSessionControllerClient : public SessionControllerClient {
     existing_users_count_ = existing_users_count;
   }
 
+  void set_default_provide_pref_service(bool default_provide_pref_service) {
+    default_provide_pref_service_ = default_provide_pref_service;
+  }
+
+  int NumberOfLoggedInUsers() const;
+
  private:
   void DoSwitchUser(const AccountId& account_id, bool switch_user);
 
   // Notify first session ready if the notification has not sent, there
   // is at least one user session created, and session state is ACTIVE.
   void MaybeNotifyFirstSessionReady();
+
+  // Notify user prefs initialized if user session has started.
+  void NotifyUserPrefServiceInitialized(const AccountId& account_id);
 
   const raw_ptr<SessionControllerImpl, DanglingUntriaged> controller_;
   const raw_ptr<TestPrefServiceProvider> prefs_provider_;
@@ -181,6 +193,10 @@ class TestSessionControllerClient : public SessionControllerClient {
   SessionInfo session_info_;
   bool first_session_ready_fired_ = false;
 
+  // Whether to auto create user prefs for `AddSession` if
+  // `provide_pref_service` is not specified.
+  bool default_provide_pref_service_ = true;
+
   bool use_lower_case_user_id_ = true;
   int request_hide_lock_screen_count_ = 0;
   int request_sign_out_count_ = 0;
@@ -188,8 +204,6 @@ class TestSessionControllerClient : public SessionControllerClient {
   int attempt_restart_chrome_count_ = 0;
 
   bool should_show_lock_screen_ = false;
-
-  bool is_enterprise_managed_ = false;
 
   std::tuple<bool, bool> is_eligible_for_background_replace_ = {true, true};
 

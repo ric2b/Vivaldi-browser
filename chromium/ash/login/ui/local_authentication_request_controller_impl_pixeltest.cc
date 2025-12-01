@@ -33,6 +33,7 @@
 #include "components/session_manager/session_manager_types.h"
 #include "components/user_manager/fake_user_manager.h"
 #include "components/user_manager/scoped_user_manager.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "ui/chromeos/resources/grit/ui_chromeos_resources.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/views/controls/button/label_button.h"
@@ -45,8 +46,9 @@ namespace {
 
 using ::cryptohome::KeyLabel;
 
-const char kTestAccount[] = "user@test.com";
-const char kExpectedPassword[] = "qwerty";
+constexpr char kTestAccount[] = "user@test.com";
+constexpr GaiaId::Literal kFakeGaia("fake_gaia");
+constexpr char kExpectedPassword[] = "qwerty";
 
 class LocalAuthenticationRequestControllerImplPixelTest : public AshTestBase {
  public:
@@ -82,11 +84,14 @@ class LocalAuthenticationRequestControllerImplPixelTest : public AshTestBase {
     UserDataAuthClient::InitializeFake();
     SystemSaltGetter::Initialize();
 
-    test_account_id_ = AccountId::FromUserEmail(kTestAccount);
+    test_account_id_ = AccountId::FromUserEmailGaiaId(kTestAccount, kFakeGaia);
 
     SetExpectedCredentialsWithDbusClient(test_account_id_, kExpectedPassword);
-    auto fake_user_manager = std::make_unique<user_manager::FakeUserManager>();
-    fake_user_manager->AddUser(test_account_id_);
+
+    auto fake_user_manager =
+        std::make_unique<user_manager::FakeUserManager>(local_state());
+    fake_user_manager->AddGaiaUser(test_account_id_,
+                                   user_manager::UserType::kRegular);
     scoped_user_manager_ = std::make_unique<user_manager::ScopedUserManager>(
         std::move(fake_user_manager));
   }

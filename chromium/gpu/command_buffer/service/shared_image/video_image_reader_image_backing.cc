@@ -354,12 +354,12 @@ class VideoImageReaderImageBacking::SkiaGraphiteDawnImageRepresentation
 
   std::vector<skgpu::graphite::BackendTexture> BeginReadAccess() override {
     DCHECK(!scoped_hardware_buffer_);
-    auto* stream_texture_sii = video_backing()->stream_texture_sii_.get();
 
     // Obtain the AHB for the current video frame.
     {
       base::AutoLockMaybe auto_lock(GetDrDcLockPtr());
-      scoped_hardware_buffer_ = stream_texture_sii->GetAHardwareBuffer();
+      scoped_hardware_buffer_ =
+          video_backing()->stream_texture_sii_->GetAHardwareBuffer();
     }
     if (!scoped_hardware_buffer_) {
       LOG(ERROR) << "Failed to get the hardware buffer.";
@@ -412,7 +412,7 @@ class VideoImageReaderImageBacking::SkiaGraphiteDawnImageRepresentation
     base::ScopedFD sync_fd = scoped_hardware_buffer_->TakeFence();
 
     if (sync_fd.is_valid()) {
-      wgpu::SharedFenceVkSemaphoreSyncFDDescriptor sync_fd_desc;
+      wgpu::SharedFenceSyncFDDescriptor sync_fd_desc;
       // NOTE: There is no ownership transfer here, as Dawn internally dup()s
       // the passed-in handle.
       sync_fd_desc.handle = sync_fd.get();
@@ -475,17 +475,13 @@ class VideoImageReaderImageBacking::SkiaGraphiteDawnImageRepresentation
 
     if (shared_texture_memory_.EndAccess(texture_, &end_access_desc) !=
         wgpu::Status::Success) {
+      // NOTE: Dawn ensures that `end_access_desc.fenceCount` is set to zero in
+      // the case of an error, so there is no need to early-out here.
       LOG(ERROR) << "Failed to end access for texture";
-      ResetStorage();
-      return;
-    }
-
-    if (end_access_desc.initialized) {
-      SetCleared();
     }
 
     wgpu::SharedFenceExportInfo export_info;
-    wgpu::SharedFenceVkSemaphoreSyncFDExportInfo sync_fd_export_info;
+    wgpu::SharedFenceSyncFDExportInfo sync_fd_export_info;
     export_info.nextInChain = &sync_fd_export_info;
 
     if (end_access_desc.fenceCount) {
@@ -725,6 +721,13 @@ VideoImageReaderImageBacking::ProduceSkiaGraphite(
     MemoryTypeTracker* tracker,
     scoped_refptr<SharedContextState> context_state) {
   base::AutoLockMaybe auto_lock(GetDrDcLockPtr());
+
+  // For (old) overlays, we don't have a texture owner, but overlay promotion
+  // might not happen for some reasons. In that case, it will try to draw
+  // which should result in no image.
+  if (!stream_texture_sii_->HasTextureOwner()) {
+    return nullptr;
+  }
 
   return std::make_unique<SkiaGraphiteDawnImageRepresentation>(
       manager, this, tracker, context_state, GetDrDcLock());

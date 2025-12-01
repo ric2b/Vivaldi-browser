@@ -28,13 +28,15 @@
 #include "xnnpack/operator.h"
 #include "xnnpack/subgraph.h"
 #include "replicable_random_device.h"
+#include "runtime-flags.h"
 
 struct Param {
-  using TupleT = std::tuple<xnn_datatype, xnn_reduce_operator, bool>;
+  using TupleT = std::tuple<xnn_datatype, xnn_reduce_operator, bool, bool>;
   explicit Param(TupleT p)
       : datatype(std::get<0>(p)),
         reduce_operator(std::get<1>(p)),
-        keep_dims(std::get<2>(p)) {}
+        keep_dims(std::get<2>(p)),
+        use_neg_axes(std::get<3>(p)) {}
 
   std::string Name() const {
     std::stringstream sstr;
@@ -53,30 +55,17 @@ struct Param {
     if (keep_dims) {
       sstr << "_keep_dims";
     }
+    if (use_neg_axes) {
+      sstr << "_use_neg_axes";
+    }
     return sstr.str();
   }
 
   xnn_datatype datatype;
   xnn_reduce_operator reduce_operator;
   bool keep_dims;
+  bool use_neg_axes;
 };
-
-namespace {
-constexpr xnn_compute_type GetComputeType(xnn_datatype t) {
-  switch (t) {
-    case xnn_datatype_fp16:
-      return xnn_compute_type_fp16;
-    case xnn_datatype_fp32:
-      return xnn_compute_type_fp32;
-    case xnn_datatype_qint8:
-      return xnn_compute_type_qs8;
-    case xnn_datatype_quint8:
-      return xnn_compute_type_qu8;
-    default:
-      XNN_UNREACHABLE;
-  }
-}
-}  // namespace
 
 namespace xnnpack {
 template <class T>
@@ -115,6 +104,11 @@ class ReduceTestBase : public ::testing::TestWithParam<Param> {
     num_output_elements =
         std::accumulate(output_shape.cbegin(), output_shape.cend(), size_t(1),
                         std::multiplies<size_t>());
+    if (p.use_neg_axes) {
+      for (int i = 0; i < reduction_axes.size(); i++) {
+        reduction_axes[i] = reduction_axes[i] - num_input_dims;
+      }
+    }
 
     input = xnnpack::Buffer<char>(XNN_EXTRA_BYTES / sizeof(char) +
                                   num_input_elements * xnn_datatype_size_bytes(p.datatype));
@@ -125,34 +119,32 @@ class ReduceTestBase : public ::testing::TestWithParam<Param> {
   }
 
   struct QuantizationParams {
-    float input_scale;
-    float output_scale;
-    int32_t input_zero_point;
-    int32_t output_zero_point;
+    xnn_quantization_params input;
+    xnn_quantization_params output;
 
-    constexpr bool IsQuantized() const { return input_scale != 0; }
+    constexpr bool IsQuantized() const { return input.scale != 0; }
   };
 
   QuantizationParams RandomQuantizationParams(xnn_datatype t) {
     QuantizationParams qp;
     switch (t) {
       case xnn_datatype_qint8:
-        qp.input_scale = scale_dist(rng);
-        qp.output_scale = scale_dist(rng);
-        qp.input_zero_point = i8dist(rng);
-        qp.output_zero_point = i8dist(rng);
+        qp.input.scale = scale_dist(rng);
+        qp.output.scale = scale_dist(rng);
+        qp.input.zero_point = i8dist(rng);
+        qp.output.zero_point = i8dist(rng);
         break;
       case xnn_datatype_quint8:
-        qp.input_scale = scale_dist(rng);
-        qp.output_scale = scale_dist(rng);
-        qp.input_zero_point = u8dist(rng);
-        qp.output_zero_point = u8dist(rng);
+        qp.input.scale = scale_dist(rng);
+        qp.output.scale = scale_dist(rng);
+        qp.input.zero_point = u8dist(rng);
+        qp.output.zero_point = u8dist(rng);
         break;
       default:
-        qp.input_scale = 0;
-        qp.output_scale = 0;
-        qp.input_zero_point = 0;
-        qp.output_zero_point = 0;
+        qp.input.scale = 0;
+        qp.output.scale = 0;
+        qp.input.zero_point = 0;
+        qp.output.zero_point = 0;
     }
     return qp;
   }
@@ -163,7 +155,7 @@ class ReduceTestBase : public ::testing::TestWithParam<Param> {
     if (qp.IsQuantized()) {
       ASSERT_EQ(xnn_status_success,
                 xnn_define_quantized_tensor_value(
-                    subgraph, p.datatype, qp.input_zero_point, qp.input_scale,
+                    subgraph, p.datatype, qp.input.zero_point, qp.input.scale,
                     input_shape.size(), input_shape.data(), nullptr,
                     /*external_id=*/0,
                     /*flags=*/XNN_VALUE_FLAG_EXTERNAL_INPUT, &input_id));
@@ -171,7 +163,7 @@ class ReduceTestBase : public ::testing::TestWithParam<Param> {
 
       ASSERT_EQ(xnn_status_success,
                 xnn_define_quantized_tensor_value(
-                    subgraph, p.datatype, qp.output_zero_point, qp.output_scale,
+                    subgraph, p.datatype, qp.output.zero_point, qp.output.scale,
                     output_shape.size(), output_shape.data(), nullptr,
                     /*external_id=*/1,
                     /*flags=*/XNN_VALUE_FLAG_EXTERNAL_OUTPUT, &output_id));
@@ -268,7 +260,7 @@ class ReduceTestBase : public ::testing::TestWithParam<Param> {
           std::numeric_limits<uint8_t>::min(),
           std::numeric_limits<uint8_t>::max());
 
-  std::vector<size_t> reduction_axes;
+  std::vector<int64_t> reduction_axes;
   std::vector<size_t> input_shape;
   size_t num_input_elements;
   std::vector<size_t> output_shape;
@@ -294,7 +286,8 @@ INSTANTIATE_TEST_SUITE_P(ReduceTest, ReduceTest,
                          testing::ConvertGenerator<Param::TupleT>(Combine(
                              Values(xnn_datatype_fp16, xnn_datatype_fp32,
                                     xnn_datatype_qint8, xnn_datatype_quint8),
-                             Values(xnn_reduce_sum, xnn_reduce_mean), Bool())),
+                             Values(xnn_reduce_sum, xnn_reduce_mean), Bool(),
+                             Bool())),
                          [](auto p) { return p.param.Name(); });
 
 TEST_P(ReduceTest, define) {
@@ -313,7 +306,7 @@ TEST_P(ReduceTest, define) {
                    output_id);
 
   ASSERT_EQ(xnn_status_success,
-            xnn_define_static_reduce(
+            xnn_define_static_reduce_v2(
                 subgraph, p.reduce_operator, reduction_axes.size(),
                 reduction_axes.data(), input_id, output_id,
                 /*flags=*/p.keep_dims ? XNN_FLAG_KEEP_DIMS : 0));
@@ -321,7 +314,6 @@ TEST_P(ReduceTest, define) {
   ASSERT_EQ(subgraph->num_nodes, 1);
   const struct xnn_node* node = &subgraph->nodes[0];
   ASSERT_EQ(node->type, xnn_reduce_operator_to_node_type(p.reduce_operator));
-  ASSERT_EQ(node->compute_type, GetComputeType(p.datatype));
   ASSERT_EQ(node->params.reduce.num_reduction_axes, reduction_axes.size());
   for (size_t i = 0; i < reduction_axes.size(); i++) {
     ASSERT_EQ(node->params.reduce.reduction_axes[i], reduction_axes[i]);
@@ -344,11 +336,8 @@ TEST_P(ReduceTest, matches_operator_api) {
   const uint32_t flags = p.keep_dims ? XNN_FLAG_KEEP_DIMS : 0;
   const QuantizationParams qp = RandomQuantizationParams(p.datatype);
   // Call operator API.
-  const float scale =
-      qp.output_scale == 0 ? 0 : qp.input_scale / qp.output_scale;
   const xnn_status status = xnn_create_reduce_nd(
-      p.reduce_operator, p.datatype, scale, qp.input_zero_point,
-      qp.output_zero_point, flags, &op);
+      p.reduce_operator, p.datatype, &qp.input, &qp.output, flags, &op);
   if (status == xnn_status_unsupported_hardware) {
     GTEST_SKIP();
   }
@@ -361,7 +350,7 @@ TEST_P(ReduceTest, matches_operator_api) {
   size_t workspace_size = SIZE_MAX;
   size_t workspace_alignment = SIZE_MAX;
   ASSERT_EQ(xnn_status_success,
-            xnn_reshape_reduce_nd(op, p.datatype, reduction_axes.size(),
+            xnn_reshape_reduce_nd(op, reduction_axes.size(),
                                   reduction_axes.data(), input_shape.size(),
                                   input_shape.data(), &workspace_size,
                                   &workspace_alignment,
@@ -397,7 +386,7 @@ TEST_P(ReduceTest, matches_operator_api) {
   if (qp.IsQuantized()) {
     ASSERT_EQ(xnn_status_success,
               xnn_define_quantized_tensor_value(
-                  subgraph, p.datatype, qp.input_zero_point, qp.input_scale,
+                  subgraph, p.datatype, qp.input.zero_point, qp.input.scale,
                   input_shape.size(), input_shape.data(), nullptr,
                   /*external_id=*/0, XNN_VALUE_FLAG_EXTERNAL_INPUT, &input_id));
     ASSERT_NE(input_id, XNN_INVALID_NODE_ID);
@@ -405,7 +394,7 @@ TEST_P(ReduceTest, matches_operator_api) {
     ASSERT_EQ(
         xnn_status_success,
         xnn_define_quantized_tensor_value(
-            subgraph, p.datatype, qp.output_zero_point, qp.output_scale,
+            subgraph, p.datatype, qp.output.zero_point, qp.output.scale,
             output_shape.size(), output_shape.data(), nullptr,
             /*external_id=*/1, XNN_VALUE_FLAG_EXTERNAL_OUTPUT, &output_id));
     ASSERT_NE(output_id, XNN_INVALID_NODE_ID);
@@ -426,14 +415,14 @@ TEST_P(ReduceTest, matches_operator_api) {
   }
 
   ASSERT_EQ(xnn_status_success,
-            xnn_define_static_reduce(
+            xnn_define_static_reduce_v2(
                 subgraph, p.reduce_operator, reduction_axes.size(),
                 reduction_axes.data(), input_id, output_id, flags));
 
   xnn_runtime_t runtime = nullptr;
   ASSERT_EQ(
       xnn_status_success,
-      xnn_create_runtime_v3(subgraph, nullptr, nullptr, /*flags=*/0, &runtime));
+      xnn_create_runtime_v3(subgraph, nullptr, nullptr, xnn_test_runtime_flags(), &runtime));
   ASSERT_NE(nullptr, runtime);
   std::unique_ptr<xnn_runtime, decltype(&xnn_delete_runtime)> auto_runtime(
       runtime, xnn_delete_runtime);
@@ -469,7 +458,7 @@ TEST_P(ReduceTest, reshape) {
   if (qp.IsQuantized()) {
     ASSERT_EQ(xnn_status_success,
               xnn_define_quantized_tensor_value(
-                  subgraph, p.datatype, qp.input_zero_point, qp.input_scale,
+                  subgraph, p.datatype, qp.input.zero_point, qp.input.scale,
                   input_shape.size(), input_shape.data(), nullptr,
                   /*external_id=*/0, XNN_VALUE_FLAG_EXTERNAL_INPUT, &input_id));
     ASSERT_NE(input_id, XNN_INVALID_NODE_ID);
@@ -477,7 +466,7 @@ TEST_P(ReduceTest, reshape) {
     ASSERT_EQ(
         xnn_status_success,
         xnn_define_quantized_tensor_value(
-            subgraph, p.datatype, qp.output_zero_point, qp.output_scale,
+            subgraph, p.datatype, qp.output.zero_point, qp.output.scale,
             output_num_dims, output_shape.data(), nullptr, /*external_id=*/1,
             XNN_VALUE_FLAG_EXTERNAL_OUTPUT, &output_id));
     ASSERT_NE(output_id, XNN_INVALID_NODE_ID);
@@ -497,7 +486,7 @@ TEST_P(ReduceTest, reshape) {
     ASSERT_NE(output_id, XNN_INVALID_NODE_ID);
   }
 
-  ASSERT_EQ(xnn_define_static_reduce(
+  ASSERT_EQ(xnn_define_static_reduce_v2(
                 subgraph, p.reduce_operator, reduction_axes.size(),
                 reduction_axes.data(), input_id, output_id,
                 /*flags=*/p.keep_dims ? XNN_FLAG_KEEP_DIMS : 0),
@@ -505,7 +494,7 @@ TEST_P(ReduceTest, reshape) {
 
   xnn_runtime_t runtime = nullptr;
   xnn_status status =
-      xnn_create_runtime_v3(subgraph, nullptr, nullptr, /*flags=*/0, &runtime);
+      xnn_create_runtime_v3(subgraph, nullptr, nullptr, xnn_test_runtime_flags(), &runtime);
   if (status == xnn_status_unsupported_hardware) {
     GTEST_SKIP();
   }
@@ -527,7 +516,12 @@ TEST_P(ReduceTest, reshape) {
             xnn_reshape_external_value(runtime, input_id, input_shape.size(),
                                        input_shape.data()));
   const struct xnn_node* node = &subgraph->nodes[0];
-  std::vector<size_t> unique_reduction_axes = reduction_axes;
+  std::vector<int64_t> unique_reduction_axes = reduction_axes;
+  for (int i = 0; i < unique_reduction_axes.size(); i++) {
+    if (unique_reduction_axes[i] < 0) {
+      unique_reduction_axes[i] = input_shape.size() + unique_reduction_axes[i];
+    }
+  }
   std::sort(unique_reduction_axes.begin(), unique_reduction_axes.end());
   auto end =
       std::unique(unique_reduction_axes.begin(), unique_reduction_axes.end());

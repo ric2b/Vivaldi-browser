@@ -29,6 +29,7 @@
 #include "third_party/blink/public/common/frame/fenced_frame_sandbox_flags.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/color_scheme.mojom-blink.h"
+#include "third_party/blink/public/mojom/frame/deferred_fetch_policy.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom-blink.h"
 #include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-blink.h"
@@ -36,10 +37,10 @@
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
-#include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/events/current_input_event.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/exported/web_plugin_container_impl.h"
+#include "third_party/blink/renderer/core/fetch/fetch_later_util.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
@@ -201,11 +202,7 @@ Node::InsertionNotificationRequest HTMLFrameOwnerElement::InsertedInto(
   // perform some bookkeeping that ordinarily would only be done deeper in the
   // frame setup logic that gets triggered in the *NON* state-preserving atomic
   // move flow.
-  if (GetDocument().StatePreservingAtomicMoveInProgress()) {
-    // State-preserving atomic moves can only be in-progress when all elements
-    // are connected, and when `HTMLFrameOwnerElement` is connected, it must
-    // have a non-null `ContentFrame()`.
-    CHECK(ContentFrame());
+  if (GetDocument().StatePreservingAtomicMoveInProgress() && ContentFrame()) {
     // During a state-preserving atomic move, we must specifically inform all of
     // `this`'s ancestor nodes of the new connected frame they are adopting.
     //
@@ -231,7 +228,8 @@ void HTMLFrameOwnerElement::RemovedFrom(ContainerNode& insertion_point) {
   // Not doing (1) is a good thing, since we're trying to preserve the frame,
   // but we still have to do (2) manually to maintain bookkeeping consistency
   // among the ancestor nodes.
-  if (GetDocument().StatePreservingAtomicMoveInProgress()) {
+  if (GetDocument().StatePreservingAtomicMoveInProgress() &&
+      insertion_point.isConnected()) {
     // `this` is no longer connected, so we have to decrement our subframe count
     // separately from our old ancestors's subframe count (i.e.,
     // `insertion_point`).
@@ -370,9 +368,10 @@ void HTMLFrameOwnerElement::SetSandboxFlags(
   }
 }
 
-bool HTMLFrameOwnerElement::IsKeyboardFocusable(
+bool HTMLFrameOwnerElement::IsKeyboardFocusableSlow(
     UpdateBehavior update_behavior) const {
-  return content_frame_ && HTMLElement::IsKeyboardFocusable(update_behavior);
+  return content_frame_ &&
+         HTMLElement::IsKeyboardFocusableSlow(update_behavior);
 }
 
 void HTMLFrameOwnerElement::DisposePluginSoon(WebPluginContainerImpl* plugin) {
@@ -422,6 +421,29 @@ void HTMLFrameOwnerElement::UpdateRequiredPolicy() {
   if (ContentFrame()) {
     frame->GetLocalFrameHostRemote().DidChangeFramePolicy(
         ContentFrame()->GetFrameToken(), frame_policy_);
+  }
+}
+
+void HTMLFrameOwnerElement::UpdateDeferredFetchPolicy(const KURL& to_url) {
+  if (!IsFetchLaterUseDeferredFetchPolicyEnabled()) {
+    return;
+  }
+  frame_policy_.deferred_fetch_policy =
+      FetchLaterUtil::GetContainerDeferredFetchPolicyOnNavigation(this, to_url);
+  DidChangeContainerPolicy();
+}
+
+void HTMLFrameOwnerElement::MaybeClearDeferredFetchPolicy() {
+  if (!IsFetchLaterUseDeferredFetchPolicyEnabled()) {
+    return;
+  }
+
+  // Must only be called from content frame.
+  CHECK(ContentFrame());
+  if (FetchLaterUtil::ShouldClearDeferredFetchPolicy(ContentFrame())) {
+    frame_policy_.deferred_fetch_policy =
+        mojom::blink::DeferredFetchPolicy::kDisabled;
+    DidChangeContainerPolicy();
   }
 }
 
@@ -510,6 +532,9 @@ void HTMLFrameOwnerElement::ReportFallbackResourceTimingIfNeeded() {
 void HTMLFrameOwnerElement::DispatchLoad() {
   ReportFallbackResourceTimingIfNeeded();
   DispatchScopedEvent(*Event::Create(event_type_names::kLoad));
+  if (RuntimeEnabledFeatures::PotentialPermissionsPolicyReportingEnabled()) {
+    CheckPotentialPermissionsPolicyViolation();
+  }
 }
 
 Document* HTMLFrameOwnerElement::getSVGDocument(
@@ -852,7 +877,7 @@ ParsedPermissionsPolicy HTMLFrameOwnerElement::GetLegacyFramePolicies() {
     //  context is unable to use the API, regardless of origin.
     // https://fullscreen.spec.whatwg.org/#model
     ParsedPermissionsPolicyDeclaration allowlist(
-        mojom::blink::PermissionsPolicyFeature::kFullscreen);
+        network::mojom::PermissionsPolicyFeature::kFullscreen);
     container_policy.push_back(allowlist);
   }
   {
@@ -863,8 +888,8 @@ ParsedPermissionsPolicy HTMLFrameOwnerElement::GetLegacyFramePolicies() {
     // frame for the origin.
     // https://fergald.github.io/docs/explainers/permissions-policy-deprecate-unload.html
     ParsedPermissionsPolicyDeclaration allowlist(
-        mojom::blink::PermissionsPolicyFeature::kUnload, {}, std::nullopt,
-        /*allowed_by_default=*/true, /*matches_all_origins=*/true);
+        network::mojom::PermissionsPolicyFeature::kUnload, {}, std::nullopt,
+        /*matches_all_origins=*/true, /*matches_opaque_src=*/true);
     container_policy.push_back(allowlist);
   }
   return container_policy;

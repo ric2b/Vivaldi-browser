@@ -15,7 +15,7 @@ describe('issuesAssociatedWith', () => {
   it('should return no issues if no issues exist', () => {
     const request = SDK.NetworkRequest.NetworkRequest.create(
         requestId1, Platform.DevToolsPath.EmptyUrlString, Platform.DevToolsPath.EmptyUrlString, null, null, null);
-    assert.strictEqual(IssuesManager.RelatedIssue.issuesAssociatedWith([], request).length, 0);
+    assert.lengthOf(IssuesManager.RelatedIssue.issuesAssociatedWith([], request), 0);
   });
 
   it('should return no issues if issues dont affect any resources', () => {
@@ -23,7 +23,7 @@ describe('issuesAssociatedWith', () => {
     const request = SDK.NetworkRequest.NetworkRequest.create(
         requestId1, Platform.DevToolsPath.EmptyUrlString, Platform.DevToolsPath.EmptyUrlString, null, null, null);
 
-    assert.strictEqual(IssuesManager.RelatedIssue.issuesAssociatedWith([issue], request).length, 0);
+    assert.lengthOf(IssuesManager.RelatedIssue.issuesAssociatedWith([issue], request), 0);
   });
 
   it('should correctly filter issues associated with a given request id', () => {
@@ -36,8 +36,8 @@ describe('issuesAssociatedWith', () => {
     const request2 = SDK.NetworkRequest.NetworkRequest.create(
         requestId2, Platform.DevToolsPath.EmptyUrlString, Platform.DevToolsPath.EmptyUrlString, null, null, null);
 
-    assert.deepStrictEqual(IssuesManager.RelatedIssue.issuesAssociatedWith(issues, request1), issues);
-    assert.deepStrictEqual(IssuesManager.RelatedIssue.issuesAssociatedWith(issues, request2), [issue1]);
+    assert.deepEqual(IssuesManager.RelatedIssue.issuesAssociatedWith(issues, request1), issues);
+    assert.deepEqual(IssuesManager.RelatedIssue.issuesAssociatedWith(issues, request2), [issue1]);
   });
 
   function createTestCookie(name: string): SDK.Cookie.Cookie {
@@ -57,8 +57,8 @@ describe('issuesAssociatedWith', () => {
     const cookie2 = createTestCookie('c2');
     const cookie3 = createTestCookie('c3');
 
-    assert.deepStrictEqual(IssuesManager.RelatedIssue.issuesAssociatedWith(issues, cookie1), [issue1, issue3]);
-    assert.deepStrictEqual(IssuesManager.RelatedIssue.issuesAssociatedWith(issues, cookie2), [issue1]);
-    assert.deepStrictEqual(IssuesManager.RelatedIssue.issuesAssociatedWith(issues, cookie3), [issue2]);
+    assert.deepEqual(IssuesManager.RelatedIssue.issuesAssociatedWith(issues, cookie1), [issue1, issue3]);
+    assert.deepEqual(IssuesManager.RelatedIssue.issuesAssociatedWith(issues, cookie2), [issue1]);
+    assert.deepEqual(IssuesManager.RelatedIssue.issuesAssociatedWith(issues, cookie3), [issue2]);
   });
 });

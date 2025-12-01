@@ -9,6 +9,7 @@ import android.util.DisplayMetrics;
 
 import org.jni_zero.CalledByNative;
 import org.jni_zero.JNINamespace;
+import org.jni_zero.JniType;
 import org.jni_zero.NativeClassQualifiedName;
 import org.jni_zero.NativeMethods;
 
@@ -24,13 +25,6 @@ import java.util.Locale;
 /** Bridge for FeedService-related calls. */
 @JNINamespace("feed")
 public final class FeedServiceBridge {
-    // Access to JNI test hooks for other libraries. This can go away once more Feed code is
-    // migrated to chrome/browser/feed.
-    public static org.jni_zero.JniStaticTestMocker<FeedServiceBridge.Natives>
-            getTestHooksForTesting() {
-        return FeedServiceBridgeJni.TEST_HOOKS;
-    }
-
     public static ProcessScope xSurfaceProcessScope() {
         return XSurfaceProcessScopeProvider.getProcessScope();
     }
@@ -46,7 +40,7 @@ public final class FeedServiceBridge {
 
     // Java functionality needed for the native FeedService.
     @CalledByNative
-    public static String getLanguageTag() {
+    public static @JniType("std::string") String getLanguageTag() {
         return getLocale(ContextUtils.getApplicationContext()).toLanguageTag();
     }
 
@@ -64,7 +58,7 @@ public final class FeedServiceBridge {
     }
 
     @CalledByNative
-    public static void prefetchImage(String url) {
+    public static void prefetchImage(@JniType("std::string") String url) {
         ProcessScope processScope = xSurfaceProcessScope();
         if (processScope != null) {
             ImageCacheHelper imageCacheHelper = processScope.provideImageCacheHelper();

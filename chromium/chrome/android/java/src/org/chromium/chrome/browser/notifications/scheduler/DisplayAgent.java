@@ -219,8 +219,7 @@ public class DisplayAgent {
     }
 
     private static void closeNotification(String guid) {
-        BaseNotificationManagerProxyFactory.create(ContextUtils.getApplicationContext())
-                .cancel(DISPLAY_AGENT_TAG, guid.hashCode());
+        BaseNotificationManagerProxyFactory.create().cancel(DISPLAY_AGENT_TAG, guid.hashCode());
     }
 
     /** Contains Android platform specific data to construct a notification. */
@@ -332,7 +331,7 @@ public class DisplayAgent {
 
             // TODO(xingliu): Support button icon. See https://crbug.com/983354
             builder.addAction(
-                    /* icon_id= */ 0,
+                    /* icon= */ 0,
                     button.text,
                     PendingIntentProvider.getBroadcast(
                             context,
@@ -345,8 +344,7 @@ public class DisplayAgent {
         }
 
         NotificationWrapper notification = builder.buildNotificationWrapper();
-        BaseNotificationManagerProxyFactory.create(ContextUtils.getApplicationContext())
-                .notify(notification);
+        BaseNotificationManagerProxyFactory.create().notify(notification);
         NotificationUmaTracker.getInstance()
                 .onNotificationShown(
                         platformData.systemNotificationType, notification.getNotification());

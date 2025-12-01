@@ -30,11 +30,11 @@
 
 #include "third_party/blink/renderer/controller/blink_initializer.h"
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
 #include "base/command_line.h"
-#include "base/ranges/algorithm.h"
 #include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "mojo/public/cpp/bindings/binder_map.h"
@@ -49,7 +49,6 @@
 #include "third_party/blink/renderer/controller/blink_leak_detector.h"
 #include "third_party/blink/renderer/controller/dev_tools_frontend_impl.h"
 #include "third_party/blink/renderer/controller/javascript_call_stack_generator.h"
-#include "third_party/blink/renderer/controller/memory_tracer.h"
 #include "third_party/blink/renderer/controller/performance_manager/renderer_resource_coordinator_impl.h"
 #include "third_party/blink/renderer/controller/performance_manager/v8_detailed_memory_reporter_impl.h"
 #include "third_party/blink/renderer/core/animation/animation_clock.h"
@@ -227,12 +226,12 @@ bool IsIsolatedContext() {
 
 // Function defined in third_party/blink/public/web/blink.h.
 void SetCorsExemptHeaderList(
-    const WebVector<WebString>& web_cors_exempt_header_list) {
+    const std::vector<WebString>& web_cors_exempt_header_list) {
   Vector<String> cors_exempt_header_list(
       base::checked_cast<wtf_size_t>(web_cors_exempt_header_list.size()));
-  base::ranges::transform(web_cors_exempt_header_list,
-                          cors_exempt_header_list.begin(),
-                          &WebString::operator WTF::String);
+  std::ranges::transform(web_cors_exempt_header_list,
+                         cors_exempt_header_list.begin(),
+                         &WebString::operator WTF::String);
   LoaderFactoryForFrame::SetCorsExemptHeaderList(
       std::move(cors_exempt_header_list));
 }
@@ -307,9 +306,6 @@ void BlinkInitializer::RegisterMemoryWatchers(Platform* platform) {
   // Start reporting the highest private memory footprint after the first
   // navigation.
   HighestPmfReporter::Initialize(main_thread_task_runner);
-
-  // And tracing memory metrics to "system_metrics" when enabled.
-  MemoryTracer::Initialize();
 #endif
 
 #if BUILDFLAG(IS_ANDROID)

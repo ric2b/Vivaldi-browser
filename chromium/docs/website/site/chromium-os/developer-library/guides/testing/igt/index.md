@@ -18,10 +18,10 @@ tests) but each can be used for different context (production vs fast developmen
 
 This document assumes you have a Chromebook that you can ssh to, and are able to
 `emerge` and `deploy` packages to your DUT. If not, please start with this [Developer
-Guide](https://www.chromium.org/chromium-os/developer-library/guides/development/developer-guide).
+Guide](/chromium-os/developer-library/guides/development/developer-guide).
 For Chamelium tests, it also assumes that you have a working reachable Chamelium device.
 
-The document uses the ChromeOS [typography convention](https://www.chromium.org/chromium-os/developer-library/guides/development/developer-guide/#typography-conventions).
+The document uses the ChromeOS [typography convention](/chromium-os/developer-library/guides/development/developer-guide/#typography-conventions).
 
 [TOC]
 
@@ -33,13 +33,13 @@ Source code and everything in between to run, develop and test IGT.
 - [ChromiumOS Git](https://chromium.googlesource.com/chromiumos/third_party/igt-gpu-tools)
 
 ### Google lab links
-- [Everything IGT](http://goto.google.com/igtlab)
-- [IGT KMS](http://goto.google.com/igtlab-kms)
-- [IGT Chamelium](http://goto.google.com/igtlab-chamelium)
-- [IGT for Intel Devices](http://goto.google.com/igtlab-intel)
-- [IGT for AMD Devices](http://goto.google.com/igtlab-amd)
-- [IGT for Qcom Devices](http://goto.google.com/igtlab-qcom)
-- [IGT for MTK Devices](http://goto.google.com/igtlab-mtk)
+- [Everything IGT](http://go/igtlab)
+- [IGT KMS](http://go/igtlab-kms)
+- [IGT Chamelium](http://go/igtlab-chamelium)
+- [IGT for Intel Devices](http://go/igtlab-intel)
+- [IGT for AMD Devices](http://go/igtlab-amd)
+- [IGT for Qcom Devices](http://go/igtlab-qcom)
+- [IGT for MTK Devices](http://go/igtlab-mtk)
 
 
 ### Upstream

@@ -62,9 +62,9 @@ namespace {
 bool CanBeHitTestTargetPseudoNodeStyle(const ComputedStyle& style) {
   switch (style.StyleType()) {
     case kPseudoIdBefore:
-    case kPseudoIdCheck:
+    case kPseudoIdCheckMark:
     case kPseudoIdAfter:
-    case kPseudoIdSelectArrow:
+    case kPseudoIdPickerIcon:
     case kPseudoIdFirstLetter:
       return true;
     default:
@@ -226,17 +226,18 @@ bool LayoutInline::ComputeInitialShouldCreateBoxFragment(
     }
   }
 
-  return ComputeIsAbsoluteContainer(&style) ||
-         HasPaintedOutline(style, GetNode()) ||
+  return HasPaintedOutline(style, GetNode()) ||
          CanBeHitTestTargetPseudoNodeStyle(style);
 }
 
 bool LayoutInline::ComputeInitialShouldCreateBoxFragment() const {
   NOT_DESTROYED();
   const ComputedStyle& style = StyleRef();
-  if (HasSelfPaintingLayer() || ComputeInitialShouldCreateBoxFragment(style) ||
-      ShouldApplyPaintContainment() || ShouldApplyLayoutContainment())
+  if (HasSelfPaintingLayer() || CanContainAbsolutePositionObjects() ||
+      ComputeInitialShouldCreateBoxFragment(style) ||
+      ShouldApplyPaintContainment() || ShouldApplyLayoutContainment()) {
     return true;
+  }
 
   const ComputedStyle& first_line_style = FirstLineStyleRef();
   if (&style != &first_line_style &&
@@ -826,25 +827,6 @@ bool LayoutInline::MapToVisualRectInAncestorSpaceInternal(
 
   return container->MapToVisualRectInAncestorSpaceInternal(
       ancestor, transform_state, visual_rect_flags);
-}
-
-PhysicalOffset LayoutInline::OffsetFromContainerInternal(
-    const LayoutObject* container,
-    MapCoordinatesFlags mode) const {
-  NOT_DESTROYED();
-  DCHECK_EQ(container, Container());
-
-  PhysicalOffset offset;
-  if (IsStickyPositioned() && !(mode & kIgnoreStickyOffset)) {
-    offset += StickyPositionOffset();
-  }
-
-  if (container->IsScrollContainer()) {
-    offset +=
-        OffsetFromScrollableContainer(container, mode & kIgnoreScrollOffset);
-  }
-
-  return offset;
 }
 
 PaintLayerType LayoutInline::LayerTypeRequired() const {

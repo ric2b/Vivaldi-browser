@@ -13,7 +13,7 @@ OS distribution.**
 Select the area that you're interested in:
 
 *   [Licensing Handling For Package
-            Owners](chromium-os/developer-library/reference/licensing/licensing-for-chromiumos-package-owners)
+            Owners](/chromium-os/developer-library/reference/licensing/licensing-for-chromiumos-package-owners)
     *   e.g. people writing ebuilds
 *   [Licensing Handling For OS
             Builders](/chromium-os/licensing/building-a-distro)

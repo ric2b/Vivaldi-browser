@@ -47,6 +47,7 @@ export class ClassesPaneWidget extends UI.Widget.Widget {
 
   constructor() {
     super(true);
+    this.registerRequiredCSS(classesPaneWidgetStyles);
     this.contentElement.className = 'styles-element-classes-pane';
     this.contentElement.setAttribute('jslog', `${VisualLogging.pane('elements-classes')}`);
     const container = this.contentElement.createChild('div', 'title-container');
@@ -154,10 +155,9 @@ export class ClassesPaneWidget extends UI.Widget.Widget {
   override wasShown(): void {
     super.wasShown();
     this.update();
-    this.registerCSSFiles([classesPaneWidgetStyles]);
   }
 
-  private update(): void {
+  update(): void {
     if (!this.isShowing()) {
       return;
     }
@@ -179,8 +179,8 @@ export class ClassesPaneWidget extends UI.Widget.Widget {
     const keys = [...classes.keys()];
     keys.sort(Platform.StringUtilities.caseInsensetiveComparator);
     for (const className of keys) {
-      const label =
-          UI.UIUtils.CheckboxLabel.create(className, classes.get(className), undefined, 'element-class', true);
+      const label = UI.UIUtils.CheckboxLabel.createWithStringLiteral(
+          className, classes.get(className), undefined, 'element-class', true);
       label.classList.add('monospace');
       label.checkboxElement.addEventListener('click', this.onClick.bind(this, className), false);
       this.classesContainer.appendChild(label);

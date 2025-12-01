@@ -10,6 +10,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/cancelable_callback.h"
@@ -44,7 +45,6 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/media_session/public/cpp/media_position.h"
-#include "third_party/blink/public/platform/media/video_frame_compositor.h"
 #include "third_party/blink/public/platform/media/web_media_player_builder.h"
 #include "third_party/blink/public/platform/media/web_media_player_delegate.h"
 #include "third_party/blink/public/platform/web_audio_source_provider.h"
@@ -212,7 +212,7 @@ class PLATFORM_EXPORT WebMediaPlayerImpl
   bool HasAudio() const override;
 
   void EnabledAudioTracksChanged(
-      const WebVector<WebMediaPlayer::TrackId>& enabled_track_ids) override;
+      const std::vector<WebMediaPlayer::TrackId>& enabled_track_ids) override;
   void SelectedVideoTrackChanged(
       std::optional<WebMediaPlayer::TrackId> selected_track_id) override;
 
@@ -324,7 +324,7 @@ class PLATFORM_EXPORT WebMediaPlayerImpl
   bool DidLazyLoad() const override;
   void OnBecameVisible() override;
   bool IsOpaque() const override;
-  int GetDelegateId() override;
+  int GetPlayerId() override { return player_id_; }
   std::optional<viz::SurfaceId> GetSurfaceId() override;
   GURL GetSrcAfterRedirects() override;
   void RequestVideoFrameCallback() override;
@@ -391,7 +391,7 @@ class PLATFORM_EXPORT WebMediaPlayerImpl
   // so we won't even compile in strings such as "Media.TimeToPlayReady.All"
   // if it's not specified.
   template <uint32_t Flags, typename... T>
-  void WriteSplitHistogram(void (*UmaFunction)(const std::string&, T...),
+  void WriteSplitHistogram(void (*UmaFunction)(std::string_view, T...),
                            SplitHistogramName key,
                            const T&... value);
 
@@ -866,6 +866,8 @@ class PLATFORM_EXPORT WebMediaPlayerImpl
   // TODO(sandersd): The delegate should be implementing deduplication.
   DelegateState delegate_state_ = DelegateState::GONE;
   bool delegate_has_audio_ = false;
+
+  const int player_id_;
 
   WebMediaPlayerBuilder::DeferLoadCB defer_load_cb_;
 

@@ -12,7 +12,7 @@ title: Logging
 
 You can view verbose logs (`VLOG`s and `LOG(VERBOSE)`) by passing runtime
 arguments to enable logging. You must first enable passing runtime arguments;
-see the [Getting Started](/chromium-os/developer-library/getting-started).
+see the [Setup Chromebook Optional Steps](/chromium-os/developer-library/getting-started/setup-chromebook/#optional-enable-runtime-argument-passing).
 
 Once you’ve done that, specific flags need to be added to the
 `/etc/chrome_dev.conf` file.
@@ -109,8 +109,8 @@ file:///var/log/chrome/chrome
 
 If you wish to move log files from your test device onto your workstation and
 your workstation is a ChromeOS device, you can use
-[Nearby Share](https://www.howtogeek.com/719022/how-to-use-nearby-share-on-a-chromebook/)
-to transfer files over. In order to use Nearby Share, the log files must be
+[Quick Share](https://support.google.com/chromebook/answer/10751738?hl=en) to
+transfer files over. In order to use Quick Share, the log files must be
 accessible from the Files app. To move a file, such as `/var/log/chrome/chrome`,
 into the Downloads folder, ssh into your test device, then run:
 

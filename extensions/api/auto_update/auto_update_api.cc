@@ -1,17 +1,28 @@
 // Copyright (c) 2020 Vivaldi Technologies AS. All rights reserved
 
 #include "extensions/api/auto_update/auto_update_api.h"
+#include "components/update_client/crx_update_item.h"
 
 #include "extensions/schema/autoupdate.h"
 #include "extensions/tools/vivaldi_tools.h"
 
 #include "base/lazy_instance.h"
 
+#if !BUILDFLAG(IS_ANDROID)
+#include "chrome/browser/browser_process.h"
+#include "chrome/updater/constants.h"
+#endif
+
 namespace auto_update = extensions::vivaldi::auto_update;
 
 namespace extensions {
 
 namespace {
+
+#if !BUILDFLAG(IS_ANDROID)
+static constexpr char kWidevineComponentID[] =
+    "oimompecagnajdejgnnjijobebaeigek";
+#endif
 
 std::string GetVersionString(const base::Version& version) {
   if (!version.IsValid())
@@ -26,6 +37,9 @@ AutoUpdateAPI::AutoUpdateAPI(content::BrowserContext* context)
   LOG(INFO) << "AutoUpdateAPI::Init";
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   InitUpgradeDetection();
+#endif
+#if !BUILDFLAG(IS_ANDROID)
+  InitWidevineMonitoring();
 #endif
 }
 
@@ -93,7 +107,7 @@ void AutoUpdateAPI::SendWillInstallUpdateOnQuit(const base::Version& version) {
 
 /* static */
 void AutoUpdateAPI::SendNeedRestartToReloadCodecs() {
-  LOG(INFO) << "FFMPEG library updated";
+  LOG(INFO) << "A/V support updated";
   ::vivaldi::BroadcastEventToAllProfiles(
       auto_update::OnNeedRestartToReloadCodecs::kEventName);
 }
@@ -123,6 +137,99 @@ void AutoUpdateAPI::SendUpdateFinished() {
   ::vivaldi::BroadcastEventToAllProfiles(
       auto_update::OnUpdateFinished::kEventName);
 }
+
+#if !BUILDFLAG(IS_ANDROID)
+void AutoUpdateAPI::InitWidevineMonitoring() {
+  auto* component_updater = g_browser_process->component_updater();
+
+  if (!component_updater) {
+    LOG(ERROR) << "Could not get component updater. Widevine update monitoring "
+                  "not available.";
+    return;
+  }
+
+  // Already available, no need to do anything here...
+  widevine_was_available_ = false;
+
+  for (const auto& ci : component_updater->GetComponents()) {
+    if (ci.id == kWidevineComponentID) {
+      widevine_was_available_ =
+          (ci.version.IsValid() &&
+           (ci.version != base::Version{updater::kNullVersion}));
+      break;
+    }
+  }
+
+  // Attach a scoped observer to component updater.
+  observer_.Observe(component_updater);
+}
+
+// Called on component_updater events.
+void AutoUpdateAPI::OnEvent(const update_client::CrxUpdateItem& item) {
+  if (item.id == kWidevineComponentID) {
+    if (item.state == update_client::ComponentState::kUpdated) {
+      LOG(INFO) << "AutoUpdateAPI: Informing widevine was updated.";
+      HandleWidevineUpdated();
+      return;
+    }
+  }
+}
+
+void AutoUpdateAPI::HandleWidevineUpdated() {
+  widevine_was_updated_ = true;
+
+  // We can de-register the observer now.
+  observer_.Reset();
+
+  // Consider if we need a restart - Linux only.
+  HandleRequestedWidevineUpdate();
+}
+
+void AutoUpdateAPI::HandleRequestedWidevineUpdate() {
+#if BUILDFLAG(IS_LINUX)
+  // Note: This handles Restart to reload on linux. For other platforms, we reload the tab in DRMContentTabHelper
+  if (widevine_was_available_ || !widevine_was_updated_ ||
+      !widevine_was_requested_)
+    return;
+
+  SendNeedRestartToReloadCodecs();
+#endif
+}
+
+void AutoUpdateAPI::HandleWidevineRequested() {
+  // This gets called from DRMContentTabHelper and handles needed steps to
+  // install widevine CDM if that wasn't yet available.
+  if (widevine_was_requested_) {
+    // We already saw a request to install widevine.
+    // We handle this case here in case the update happened before we were able
+    // to signal it to user.
+    HandleRequestedWidevineUpdate();
+    return;
+  }
+
+  widevine_was_requested_ = true;
+
+  auto* component_updater = g_browser_process->component_updater();
+  if (!component_updater) {
+    LOG(ERROR)
+        << "Could not get component updater. Widevine update not possible.";
+    return;
+  }
+  auto& on_demand_updater = component_updater->GetOnDemandUpdater();
+
+  // In time, this will invoke OnEvent for installed update.
+  on_demand_updater.OnDemandUpdate(
+      kWidevineComponentID,
+      component_updater::OnDemandUpdater::Priority::BACKGROUND,
+      base::BindOnce([](update_client::Error error) {
+      }));  // We're listening to component changes, no need to handle here...
+
+  // For all situations we look if the conditions are right for restart
+  // notification.
+  HandleRequestedWidevineUpdate();
+}
+
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 void AutoUpdateGetUpdateStatusFunction::SendResult(
     std::optional<AutoUpdateStatus> status,

@@ -14,10 +14,6 @@
 #include <utility>
 #include <vector>
 
-#include "ash/components/arc/arc_features.h"
-#include "ash/components/arc/arc_prefs.h"
-#include "ash/components/arc/arc_util.h"
-#include "ash/components/arc/session/arc_bridge_service.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/login_types.h"
@@ -54,6 +50,10 @@
 #include "chrome/browser/ash/login/oobe_screen.h"
 #include "chrome/browser/ash/login/quick_unlock/quick_unlock_utils.h"
 #include "chrome/browser/ash/login/quickstart_controller.h"
+#include "chromeos/ash/experiences/arc/arc_features.h"
+#include "chromeos/ash/experiences/arc/arc_prefs.h"
+#include "chromeos/ash/experiences/arc/arc_util.h"
+#include "chromeos/ash/experiences/arc/session/arc_bridge_service.h"
 // Make sure to include new screen to all relevant metric enums.
 // LINT.IfChange(UsageMetrics)
 #include "chrome/browser/ash/login/screens/account_selection_screen.h"
@@ -493,9 +493,7 @@ void WizardController::Init(OobeScreenId first_screen) {
   //
   // TODO (ygorshenin@): implement handling of the local state
   // corruption in the case of asynchronous loading.
-  bool is_enterprise_managed =
-      ash::InstallAttributes::Get()->IsEnterpriseManaged();
-  if (!is_enterprise_managed) {
+  if (!ash::InstallAttributes::Get()->IsEnterpriseManaged()) {
     const PrefService::PrefInitializationStatus status =
         GetLocalState()->GetInitializationStatus();
     if (status == PrefService::INITIALIZATION_STATUS_ERROR) {
@@ -518,11 +516,8 @@ void WizardController::Init(OobeScreenId first_screen) {
     }
   }
 
-  const bool device_is_owned =
-      is_enterprise_managed ||
-      !user_manager::UserManager::Get()->GetUsers().empty();
   // Do not show the HID Detection screen if device is owned.
-  if (!device_is_owned && HIDDetectionScreen::CanShowScreen() &&
+  if (!StartupUtils::IsDeviceOwned() && HIDDetectionScreen::CanShowScreen() &&
       first_screen == ash::OOBE_SCREEN_UNKNOWN) {
     // TODO(https://crbug.com/1275960): Move logic into
     // HIDDetectionScreen::MaybeSkip.
@@ -1047,6 +1042,11 @@ void WizardController::ShowQuickStartScreen() {
 }
 
 void WizardController::ShowNetworkScreen() {
+  if (switches::IsOOBENetworkSetupSkippedForTesting()) {
+    OnNetworkScreenExit(NetworkScreen::Result::NOT_APPLICABLE);
+    return;
+  }
+
   SetCurrentScreen(GetScreen(NetworkScreenView::kScreenId));
 }
 
@@ -2843,11 +2843,13 @@ void WizardController::OnDeviceModificationCanceled() {
   }
 
   LOG(WARNING) << "No previous screen on unowned device";
-  if (prescribed_enrollment_config_.should_enroll()) {
-    ShowPackagedLicenseScreen();
-  } else {
-    ShowLoginScreen();
+  // The WelcomeView is not available when we enter OOBE from the login screen.
+  // TODO(crbug.com/393041544) Determine if safeguard is really required.
+  if (HasScreen(WelcomeView::kScreenId)) {
+    ShowWelcomeScreen();
+    return;
   }
+  ShowLoginScreen();
 }
 
 void WizardController::OnManagementTransitionScreenExit() {
@@ -3066,8 +3068,15 @@ void WizardController::SetCurrentScreen(BaseScreen* new_current) {
     return;
   }
 
+  // WizardController should not save the pending screen during demo mode, nor
+  // should it save it while exercising the recovery path.
+  const bool isEligibleForSavingPendingScreen =
+      !demo_setup_controller_ &&
+      wizard_context_->knowledge_factor_setup.auth_setup_flow !=
+          WizardContext::AuthChangeFlow::kRecovery;
+
   // First remember how far have we reached so that we can resume if needed.
-  if (!demo_setup_controller_) {
+  if (isEligibleForSavingPendingScreen) {
     if (!wizard_context_->is_add_person_flow &&
         IsResumableOobeScreen(current_screen_->screen_id())) {
       StartupUtils::SaveOobePendingScreen(current_screen_->screen_id().name);

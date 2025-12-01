@@ -7,14 +7,15 @@
 #import "base/apple/foundation_util.h"
 #import "base/containers/contains.h"
 #import "base/containers/fixed_flat_set.h"
+#import "base/feature_list.h"
 #import "base/ios/block_types.h"
 #import "base/ios/ios_util.h"
 #import "base/memory/raw_ptr.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/strings/sys_string_conversions.h"
-#import "components/autofill/core/browser/address_data_manager.h"
-#import "components/autofill/core/browser/payments_data_manager.h"
-#import "components/autofill/core/browser/personal_data_manager.h"
+#import "components/autofill/core/browser/data_manager/addresses/address_data_manager.h"
+#import "components/autofill/core/browser/data_manager/payments/payments_data_manager.h"
+#import "components/autofill/core/browser/data_manager/personal_data_manager.h"
 #import "components/autofill/core/common/autofill_features.h"
 #import "components/autofill/ios/browser/form_suggestion.h"
 #import "components/autofill/ios/browser/form_suggestion_provider.h"
@@ -25,10 +26,10 @@
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/autofill/model/bottom_sheet/autofill_bottom_sheet_observer_bridge.h"
 #import "ios/chrome/browser/autofill/model/bottom_sheet/autofill_bottom_sheet_tab_helper.h"
+#import "ios/chrome/browser/autofill/model/features.h"
 #import "ios/chrome/browser/autofill/model/form_input_accessory_view_handler.h"
 #import "ios/chrome/browser/autofill/model/form_input_suggestions_provider.h"
 #import "ios/chrome/browser/autofill/model/form_suggestion_tab_helper.h"
-#import "ios/chrome/browser/autofill/ui_bundled/features.h"
 #import "ios/chrome/browser/autofill/ui_bundled/form_input_accessory/form_input_accessory_chromium_text_data.h"
 #import "ios/chrome/browser/autofill/ui_bundled/form_input_accessory/form_input_accessory_consumer.h"
 #import "ios/chrome/browser/autofill/ui_bundled/form_input_accessory/form_input_accessory_mediator_handler.h"
@@ -52,6 +53,7 @@
 #import "ios/web/common/url_scheme_util.h"
 #import "ios/web/public/js_messaging/web_frame.h"
 #import "ios/web/public/js_messaging/web_frames_manager.h"
+#import "ios/web/public/navigation/navigation_context.h"
 #import "ios/web/public/web_state.h"
 #import "ios/web/public/web_state_observer_bridge.h"
 #import "ui/base/l10n/l10n_util_mac.h"
@@ -534,6 +536,16 @@ bool IsSuggestionRefreshAllowed() {
 - (void)webState:(web::WebState*)webState
     didFinishNavigation:(web::NavigationContext*)navigation {
   DCHECK_EQ(_webState, webState);
+
+  // The keyboard accessory shouldn't be reset if the finished navigation
+  // happened within the same document. If reset, the keyboard accessory
+  // suggestions can suddenly disappear if a form field is still focused.
+  // See crbug.com/339851686.
+  if (base::FeatureList::IsEnabled(
+          kSkipKeyboardAccessoryResetForSameDocumentNavigation) &&
+      navigation->IsSameDocument()) {
+    return;
+  }
   [self reset];
 }
 
@@ -800,6 +812,17 @@ bool IsSuggestionRefreshAllowed() {
 
 - (void)didSelectSuggestion:(FormSuggestion*)formSuggestion
                     atIndex:(NSInteger)index {
+  if (base::FeatureList::IsEnabled(kStatelessFormSuggestionController)) {
+    // When using the stateless FormSuggestionsController, ensure the params
+    // attached to the suggestion are the same as the ones held by this mediator
+    // to keep the status quo as this mediator should be the source of truth
+    // when it is used instead of directly using the suggestions provider for
+    // accepting the suggestions.
+    formSuggestion = [FormSuggestion copy:formSuggestion
+                             andSetParams:_lastSeenParams
+                                 provider:formSuggestion.provider];
+  }
+
   [self logReauthenticationEvent:ReauthenticationEvent::kAttempt
                             type:formSuggestion.type];
 

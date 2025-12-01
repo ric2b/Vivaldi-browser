@@ -188,8 +188,10 @@ void product(const MatrixType& m) {
     VERIFY(areNotApprox(res2, square2 + m2.transpose() * m1, not_approx_epsilon));
   }
 
-  VERIFY_IS_APPROX(res.col(r).noalias() = square.adjoint() * square.col(r), (square.adjoint() * square.col(r)).eval());
-  VERIFY_IS_APPROX(res.col(r).noalias() = square * square.col(r), (square * square.col(r)).eval());
+  res.col(r).noalias() = square.adjoint() * square.col(r);
+  VERIFY_IS_APPROX(res.col(r), (square.adjoint() * square.col(r)).eval());
+  res.col(r).noalias() = square * square.col(r);
+  VERIFY_IS_APPROX(res.col(r), (square * square.col(r)).eval());
 
   // vector at runtime (see bug 1166)
   {

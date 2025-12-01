@@ -279,6 +279,7 @@
 <translation id="5582839680698949063">Päävalikko</translation>
 <translation id="5614553682702429503">Tallennetaanko salasana?</translation>
 <translation id="5623842676595125836">Vähäinen</translation>
+<translation id="5624959475330585145">Kysy ennen suojaamattomien yhteyksien käyttöä</translation>
 <translation id="5638309510554459422">Etsi laajennuksia ja teemoja <ph name="BEGIN_LINK" />Chrome Web Storesta<ph name="END_LINK" /></translation>
 <translation id="5677928146339483299">Estetyt</translation>
 <translation id="5707185214361380026">Laajennuksen lataus epäonnistui lähteestä:</translation>
@@ -468,6 +469,7 @@ Tallenna avaintiedosto turvalliseen pakkaan. Sitä tarvitaan uusien laajennusver
 <translation id="9218430445555521422">Aseta oletukseksi</translation>
 <translation id="93766956588638423">Korjaa laajennus</translation>
 <translation id="961012016278832836">Vanha Microsoft Edge</translation>
+<translation id="961856697154696964">Poista selaustiedot</translation>
 <translation id="994289308992179865">&amp;Jatkuva toisto</translation>
 <translation id="998747458861718449">&amp;Tarkastele</translation>
 </translationbundle>

@@ -24,7 +24,6 @@
 #include "base/debug/dump_without_crashing.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
-#include "base/ranges/algorithm.h"
 #include "base/trace_event/trace_event.h"
 #include "chromeos/ash/components/login/login_state/login_state.h"
 #include "components/app_constants/constants.h"
@@ -93,7 +92,7 @@ bool HasBrowserIcon(const ShelfModel* model) {
 }
 
 bool HasPendingIcon(const ShelfModel* model) {
-  return base::ranges::any_of(model->items(), [](const ShelfItem& item) {
+  return std::ranges::any_of(model->items(), [](const ShelfItem& item) {
     return item.image.isNull();
   });
 }
@@ -483,8 +482,15 @@ void LoginUnlockThroughputRecorder::SetLoginFinishedReportedForTesting() {
 }
 
 void LoginUnlockThroughputRecorder::StartDeferredTaskRunner() {
-  if (!post_login_deferred_task_runner_->Started()) {
-    post_login_deferred_task_runner_->Start();
+  if (post_login_deferred_task_runner_->Started()) {
+    return;
+  }
+
+  post_login_deferred_task_runner_->Start();
+
+  auto now = base::TimeTicks::Now();
+  for (auto& obs : observers_) {
+    obs.OnDeferredTasksStarted(now);
   }
 }
 

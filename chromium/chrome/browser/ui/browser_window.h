@@ -15,7 +15,6 @@
 #include "base/functional/callback_helpers.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/link_capturing/intent_picker_info.h"
 #include "chrome/browser/lifetime/browser_close_manager.h"
 #include "chrome/browser/share/share_attempt.h"
@@ -93,7 +92,7 @@ namespace ui {
 class ColorProvider;
 class NativeTheme;
 class ThemeProvider;
-}
+}  // namespace ui
 
 namespace views {
 class Button;
@@ -329,6 +328,9 @@ class BrowserWindow : public ui::BaseWindow,
   // Updates whether or not the custom tab bar is visible. Animates the
   // transition if |animate| is true.
   virtual void UpdateCustomTabBarVisibility(bool visible, bool animate) = 0;
+
+  // Updates the visibility of the scrim that covers the content area.
+  virtual void SetContentScrimVisibility(bool visible) = 0;
 
   // Resets the toolbar's tab state for |contents|.
   virtual void ResetToolbarTabState(content::WebContents* contents) = 0;
@@ -611,6 +613,12 @@ class BrowserWindow : public ui::BaseWindow,
   virtual void CreateTabSearchBubble(
       tab_search::mojom::TabSearchSection section,
       tab_search::mojom::TabOrganizationFeature organization_feature) = 0;
+  void CreateTabSearchBubble(tab_search::mojom::TabSearchSection section =
+                                 tab_search::mojom::TabSearchSection::kSearch) {
+    CreateTabSearchBubble(section,
+                          tab_search::mojom::TabOrganizationFeature::kNone);
+  }
+
   // Closes the tab search bubble if open for the given browser instance.
   virtual void CloseTabSearchBubble() = 0;
 

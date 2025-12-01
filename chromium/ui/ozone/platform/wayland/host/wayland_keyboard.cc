@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "ui/ozone/platform/wayland/host/wayland_keyboard.h"
 
 #include <keyboard-extension-unstable-v1-client-protocol.h>
@@ -192,19 +197,7 @@ void WaylandKeyboard::OnUnhandledKeyEvent(const KeyEvent& key_event) {
   extended_keyboard_->AckKey(serial, false);
 }
 
-// Two different behaviors are currently implemented for KeyboardLock support
-// on Wayland:
-//
-// 1. On Lacros, shortcuts are kept inhibited since the window initialization.
-// Such approach relies on the Exo-specific zcr-keyboard-extension protocol
-// extension, which allows Lacros (ozone/wayland based) to report back to the
-// Wayland compositor that a given key was not processed by the client, giving
-// it a chance of processing global shortcuts (even with a shortcuts inhibitor
-// in place), which is not currently possible with standard Wayland protocol
-// and extensions. That is also required to keep Lacros behaving just like Ash
-// Chrome's classic browser.
-//
-// 2. Otherwise, keyboard shortcuts will be inhibited only when in fullscreen
+// Keyboard shortcuts will be inhibited only when in fullscreen
 // and when a WaylandKeyboardHook is in place for a given widget. See
 // KeyboardLock spec for more details: https://wicg.github.io/keyboard-lock
 //
@@ -214,13 +207,8 @@ std::unique_ptr<PlatformKeyboardHook> WaylandKeyboard::CreateKeyboardHook(
     std::optional<base::flat_set<DomCode>> dom_codes,
     PlatformKeyboardHook::KeyEventCallback callback) {
   DCHECK(window);
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  return std::make_unique<BaseKeyboardHook>(std::move(dom_codes),
-                                            std::move(callback));
-#else
   return std::make_unique<WaylandKeyboardHook>(
       CreateShortcutsInhibitor(window));
-#endif
 }
 
 wl::Object<zwp_keyboard_shortcuts_inhibitor_v1>

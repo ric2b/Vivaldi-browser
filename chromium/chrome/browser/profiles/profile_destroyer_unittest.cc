@@ -4,7 +4,9 @@
 
 #include "chrome/browser/profiles/profile_destroyer.h"
 
+#include <array>
 #include <vector>
+
 #include "base/feature_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
@@ -74,7 +76,8 @@ class ProfileDestroyerTest : public testing::Test,
   content::RenderProcessHost* CreatedRendererProcessHost(Profile* profile) {
     site_instances_.emplace_back(content::SiteInstance::Create(profile));
 
-    content::RenderProcessHost* rph = site_instances_.back()->GetProcess();
+    content::RenderProcessHost* rph =
+        site_instances_.back()->GetOrCreateProcess();
     EXPECT_TRUE(rph);
     rph->SetIsUsed();
     return rph;
@@ -355,7 +358,7 @@ TEST_P(ProfileDestroyerTest, MultipleOTRPRofile) {
   CreateOTRProfile();
 
   // Create a renderer process associated with every OTR profiles.
-  content::RenderProcessHost* render_process_host[3] = {
+  std::array<content::RenderProcessHost*, 3> render_process_host = {
       CreatedRendererProcessHost(OtrProfile(0)),
       CreatedRendererProcessHost(OtrProfile(1)),
       CreatedRendererProcessHost(OtrProfile(2)),

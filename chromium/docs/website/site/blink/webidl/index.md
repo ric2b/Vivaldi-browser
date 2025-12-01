@@ -127,9 +127,8 @@ Style guidelines are to generally follow [Blink style](/blink/coding-style) for
 C++, with a few points highlighted, addenda, and exceptions. These are not
 enforced by a pre-submit test, but do assist legibility:
 
-*   Include the [current Blink license
-            header](http://www.chromium.org/blink/coding-style#TOC-License) in
-            new files
+*   Include the [current Blink license header](/blink/coding-style#TOC-License)
+            in new files
 *   For IDL based on standards/specifications:
     *   Include a comment with the URL of the spec (and specific
                 section, if possible) where the IDL is defined.

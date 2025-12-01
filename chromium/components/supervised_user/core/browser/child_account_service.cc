@@ -14,7 +14,6 @@
 #include "base/no_destructor.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "components/policy/core/common/policy_pref_names.h"
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/base/signin_switches.h"
@@ -107,7 +106,7 @@ ChildAccountService::AuthState ChildAccountService::GetGoogleAuthState() const {
       identity_manager_->GetAccountsInCookieJar();
   bool primary_account_has_cookie =
       accounts_in_cookie_jar_info.AreAccountsFresh() &&
-      base::ranges::any_of(
+      std::ranges::any_of(
           accounts_in_cookie_jar_info.GetPotentiallyInvalidSignedInAccounts(),
           [primary_account_id](const gaia::ListedAccount& account) {
             return account.id == primary_account_id && account.valid;

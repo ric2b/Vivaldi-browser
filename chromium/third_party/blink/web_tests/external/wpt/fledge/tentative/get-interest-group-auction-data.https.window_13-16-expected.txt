@@ -1,7 +1,10 @@
 This is a testharness.js-based test.
+Harness Error. harness_status.status = 1 , harness_status.message = Unhandled rejection: assert_not_own_property: unexpected property "error" is found on object
 [FAIL] getInterestGroupAdAuctionData() with multiple buyers
-  assert_true: valid key Id expected true got false
+  promise_test: Unhandled rejection with value: object "TypeError: Failed to execute 'getInterestGroupAdAuctionData' on 'Navigator': Invalid Coordinator"
 [FAIL] getInterestGroupAdAuctionData() uses perBuyerConfig to select buyers
-  assert_true: valid key Id expected true got false
+  promise_test: Unhandled rejection with value: object "TypeError: Failed to execute 'getInterestGroupAdAuctionData' on 'Navigator': Invalid Coordinator"
+[FAIL] getInterestGroupAdAuctionData() requests k-anon.
+  promise_test: Unhandled rejection with value: object "TypeError: Failed to execute 'getInterestGroupAdAuctionData' on 'Navigator': Invalid Coordinator"
 Harness: the test ran to completion.
 

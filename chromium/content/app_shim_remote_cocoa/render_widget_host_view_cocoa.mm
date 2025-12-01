@@ -232,6 +232,9 @@ void ExtractUnderlines(NSAttributedString* string,
 
   // This ivar is the cocoa delegate of the NSResponder.
   NSObject<RenderWidgetHostViewMacDelegate>* __strong _responderDelegate;
+  NSRange _preContextualMenuSelectionRange;
+  BOOL _willInvokeContextMenuWithEmptySelection;
+  BOOL _textSelectionChangedForContextualMenu;
   BOOL _canBeKeyView;
   BOOL _closeOnDeactivate;
   std::unique_ptr<content::RenderWidgetHostViewMacEditCommandHelper>
@@ -291,6 +294,7 @@ void ExtractUnderlines(NSAttributedString* string,
   // full string in the renderer.
   std::u16string _availableText;
   size_t _availableTextOffset;
+  NSUInteger _availableTextChangeCounter;
   gfx::Range _textSelectionRange;
 
   // The composition range, cached from the RenderWidgetHostView. This is only
@@ -483,6 +487,8 @@ void ExtractUnderlines(NSAttributedString* string,
   NSRect textRectInViewCoordinates =
       [self convertRect:textRectInWindowCoordinates fromView:nil];
 
+  NSUInteger capturedChangeCounter = _availableTextChangeCounter;
+
   [self.spellChecker
       showCorrectionIndicatorOfType:NSCorrectionIndicatorTypeDefault
                       primaryString:candidateResult.replacementString
@@ -491,12 +497,14 @@ void ExtractUnderlines(NSAttributedString* string,
                                view:self
                   completionHandler:^(NSString* acceptedString) {
                     [self didAcceptReplacementString:acceptedString
-                               forTextCheckingResult:candidateResult];
+                               forTextCheckingResult:candidateResult
+                                    withChangeNumber:capturedChangeCounter];
                   }];
 }
 
 - (void)didAcceptReplacementString:(NSString*)acceptedString
-             forTextCheckingResult:(NSTextCheckingResult*)correction {
+             forTextCheckingResult:(NSTextCheckingResult*)correction
+                  withChangeNumber:(NSUInteger)changeNumber {
   // TODO: Keep NSSpellChecker up to date on the user's response via
   // -recordResponse:toCorrection:forWord:language:inSpellDocumentWithTag:.
   // Call it to report whether they initially accepted or rejected the
@@ -526,6 +534,19 @@ void ExtractUnderlines(NSAttributedString* string,
     if ([self.spellChecker preventsAutocorrectionBeforeString:trailingString
                                                      language:nil])
       return;
+
+    // Gather some info in case -doubleClickAtIndex: throws an exception.
+    // This change will eventually be reverted.
+    NSString* info = [NSString
+        stringWithFormat:@"%lu == %lu %lu %@ %@ %@ %@", changeNumber,
+                         _availableTextChangeCounter, attString.string.length,
+                         NSStringFromRange(availableTextRange),
+                         NSStringFromRange(correction.range),
+                         NSStringFromRange(trailingRange),
+                         NSStringFromRange(trailingRangeInAvailableText)];
+    SCOPED_CRASH_KEY_STRING256("RenderWidgetHostViewCocoa", "didAcceptTR",
+                               base::SysNSStringToUTF8(info));
+
     if ([attString doubleClickAtIndex:trailingRangeInAvailableText.location]
             .location < trailingRangeInAvailableText.location)
       return;
@@ -646,6 +667,7 @@ void ExtractUnderlines(NSAttributedString* string,
                        range:(gfx::Range)range {
   _availableText = text;
   _availableTextOffset = offset;
+  _availableTextChangeCounter++;
   _textSelectionRange = range;
   _substitutionWasApplied = NO;
   [NSSpellChecker.sharedSpellChecker dismissCorrectionIndicatorForView:self];
@@ -812,7 +834,58 @@ void ExtractUnderlines(NSAttributedString* string,
   return _host == (_dummyHost.is_bound() ? _dummyHost.get() : nullptr);
 }
 
+- (void)characterPaletteWillOrderFront:(NSNotification*)notification {
+  if (!_textSelectionChangedForContextualMenu) {
+    return;
+  }
+
+  // The user has invoked the emoji palette from the contextual menu of an
+  // input field, and the text selection changed with the control-click. This
+  // means _preContextualMenuSelectionRange has a zero length, but the current
+  // selection has an extent (see setShowingContextMenu:). If the user selects
+  // a character from the palette, it will replace the selection, which is not
+  // what the user wants. We need to restore the insertion point.
+  //
+  // If the current selection extends beyond the original insertion point, we
+  // want to restore the insertion point to the start of the current selection.
+  // Otherwise, place the insertion point at the end of the current selection.
+  // We can use moveLeft: / moveRight: to both position the insertion point at
+  // either end of the selection and to clear the selection. Note that these
+  // methods flip their behavior if we're in RTL, which is what we want.
+  //
+  // An edge case we won't address is when the insertion point started off in
+  // the middle of a word or span of whitespace. A control click in this
+  // situation (empirically) creates a selection with the original insertion
+  // point somewhere in the middle. We could use moveLeft: to position the
+  // insertion point at the start of the range and call moveRight: in a loop to
+  // return to our original insertion point, but that seems kind of gross.
+  if (NSMaxRange([self selectedRange]) >
+      _preContextualMenuSelectionRange.location) {
+    [self doCommandBySelector:@selector(moveLeft:)];
+  } else {
+    [self doCommandBySelector:@selector(moveRight:)];
+  }
+
+  _textSelectionChangedForContextualMenu = NO;
+}
+
 - (void)setShowingContextMenu:(BOOL)showing {
+  // When you control-click in an input field with no existing selection, blink
+  // forces the creation of a selection. This is standard Mac behavior,
+  // fulfilling the Mac expectation that a selection exists for the contextual
+  // menu to act on. This selection change creates a problem if the user
+  // invokes the emoji palette from the contextual menu because whatever
+  // character they choose will replace the now-selected text. We make a note
+  // here of this situation so that we can restore the selection once we're
+  // sure the user has invoked the emoji panel.
+  if (_willInvokeContextMenuWithEmptySelection) {
+    if (!NSEqualRanges(_preContextualMenuSelectionRange,
+                       [self selectedRange])) {
+      _textSelectionChangedForContextualMenu = YES;
+    }
+    _willInvokeContextMenuWithEmptySelection = NO;
+  }
+
   _showingContextMenu = showing;
 
   // Create a fake mouse event to inform the render widget that the mouse
@@ -900,6 +973,18 @@ void ExtractUnderlines(NSAttributedString* string,
 
 - (void)mouseEvent:(NSEvent*)theEvent {
   TRACE_EVENT0("browser", "RenderWidgetHostViewCocoa::mouseEvent");
+
+  _textSelectionChangedForContextualMenu = NO;
+  if ((theEvent.type == NSEventTypeLeftMouseDown &&
+       (theEvent.modifierFlags & NSEventModifierFlagControl)) ||
+      theEvent.type == NSEventTypeRightMouseDown) {
+    _preContextualMenuSelectionRange = [self selectedRange];
+
+    if (_preContextualMenuSelectionRange.length == 0) {
+      _willInvokeContextMenuWithEmptySelection = YES;
+    }
+  }
+
   if (_responderDelegate &&
       [_responderDelegate respondsToSelector:@selector(handleEvent:)]) {
     BOOL handled = [_responderDelegate handleEvent:theEvent];
@@ -1669,6 +1754,9 @@ void ExtractUnderlines(NSAttributedString* string,
     [notificationCenter removeObserver:self
                                   name:NSWindowDidResignKeyNotification
                                 object:oldWindow];
+    [notificationCenter removeObserver:self
+                                  name:@"ChromeWillOrderFrontCharacterPalette"
+                                object:nil];
   }
   if (newWindow) {
     [notificationCenter
@@ -1697,6 +1785,10 @@ void ExtractUnderlines(NSAttributedString* string,
                            selector:@selector(windowDidResignKey:)
                                name:NSWindowDidResignKeyNotification
                              object:newWindow];
+    [notificationCenter addObserver:self
+                           selector:@selector(characterPaletteWillOrderFront:)
+                               name:@"ChromeWillOrderFrontCharacterPalette"
+                             object:nil];
   }
 
   _hostHelper->SetAccessibilityWindow(newWindow);
@@ -2312,16 +2404,17 @@ extern NSString* NSTextInputReplacementRangeAttributeName;
       _markedRange.length = length;
     }
 
-    if (fixLiveConversion && newSelRange.location != NSNotFound) {
+    if (fixLiveConversion && newSelRange.location != NSNotFound &&
+        _markedRange.location <= std::numeric_limits<uint32_t>::max()) {
       CHECK_NE(_markedRange.location, static_cast<NSUInteger>(NSNotFound));
-      CHECK_LE(_markedRange.location, std::numeric_limits<uint32_t>::max());
       CHECK_LE(newSelRange.location, std::numeric_limits<uint32_t>::max());
       // `_markedRange.location + NSMaxRange(newSelRange)` can be larger than
       // the maximum uint32_t. See crbug.com/40060200.
       uint32_t new_end = base::saturated_cast<uint32_t>(
           _markedRange.location + NSMaxRange(newSelRange));
-      _textSelectionRange =
-          gfx::Range(_markedRange.location + newSelRange.location, new_end);
+      uint32_t new_start = base::saturated_cast<uint32_t>(
+          _markedRange.location + newSelRange.location);
+      _textSelectionRange = gfx::Range(new_start, new_end);
     }
   } else {
     // An empty text means the composition is about to be cancelled,

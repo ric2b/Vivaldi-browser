@@ -40,7 +40,6 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/flat_tree_traversal.h"
-#include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/pseudo_element.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/frame/event_handler_registry.h"
@@ -149,6 +148,16 @@ bool HostIsInputFile(const Element* element) {
     }
   }
   return false;
+}
+
+// We need to avoid to inlinify children of <fieldset>, <audio>, and <video>.
+// They create dedicated LayoutObjects, and assume only block children.
+bool ShouldBeInlinified(const Element* element) {
+  if (!element) {
+    return true;
+  }
+  const Element* parent = element->ParentOrShadowHostElement();
+  return !IsA<HTMLFieldSetElement>(parent) && !IsA<HTMLMediaElement>(parent);
 }
 
 }  // namespace
@@ -670,8 +679,9 @@ void StyleAdjuster::AdjustOverflow(ComputedStyleBuilder& builder,
 // g-issues.chromium.org/issues/349835587
 // https://github.com/WICG/canvas-place-element
 static bool IsCanvasPlacedElement(const Element* element) {
-  if (RuntimeEnabledFeatures::CanvasPlaceElementEnabled() && element) {
-    // Only want to do the different layout if placeElement has been called.
+  if (RuntimeEnabledFeatures::CanvasPlaceElementEnabled() && element &&
+      element->IsInCanvasSubtree()) {
+    // Placed elements are always immediate children of the canvas.
     if (const auto* canvas =
             DynamicTo<HTMLCanvasElement>(element->parentElement())) {
       return canvas->HasPlacedElements();
@@ -681,10 +691,23 @@ static bool IsCanvasPlacedElement(const Element* element) {
   return false;
 }
 
-static void AdjustStyleForDisplay(ComputedStyleBuilder& builder,
-                                  const ComputedStyle& layout_parent_style,
-                                  const Element* element,
-                                  Document* document) {
+static bool IsCanvasWithPlacedElements(const Element* element) {
+  if (!RuntimeEnabledFeatures::CanvasPlaceElementEnabled() || !element) {
+    return false;
+  }
+
+  if (const auto* canvas = DynamicTo<HTMLCanvasElement>(element)) {
+    return canvas->HasPlacedElements();
+  }
+
+  return false;
+}
+
+void StyleAdjuster::AdjustStyleForDisplay(
+    ComputedStyleBuilder& builder,
+    const ComputedStyle& layout_parent_style,
+    const Element* element,
+    Document* document) {
   bool is_canvas_placed_element = IsCanvasPlacedElement(element);
 
   if ((layout_parent_style.BlockifiesChildren() && !HostIsInputFile(element)) ||
@@ -706,11 +729,8 @@ static void AdjustStyleForDisplay(ComputedStyleBuilder& builder,
     }
   }
 
-  // We need to avoid to inlinify children of a <fieldset>, which creates a
-  // dedicated LayoutObject and it assumes only block children.
   if (layout_parent_style.InlinifiesChildren() &&
-      !builder.HasOutOfFlowPosition() &&
-      !(element && IsA<HTMLFieldSetElement>(element->parentNode()))) {
+      !builder.HasOutOfFlowPosition() && ShouldBeInlinified(element)) {
     if (builder.IsFloating()) {
       builder.SetFloating(EFloat::kNone);
       if (document) {
@@ -729,9 +749,7 @@ static void AdjustStyleForDisplay(ComputedStyleBuilder& builder,
     }
   }
 
-  // TODO(332396355): Remove temporary blockifing of ::scroll-marker pseudo
-  // elements.
-  if (builder.StyleType() == kPseudoIdScrollMarker) {
+  if (builder.StyleType() == kPseudoIdScrollMarkerGroup) {
     builder.SetDisplay(EquivalentBlockDisplay(builder.Display()));
   }
 
@@ -768,8 +786,7 @@ static void AdjustStyleForDisplay(ComputedStyleBuilder& builder,
   }
 
   // display: -webkit-box when used with (-webkit)-line-clamp
-  if (RuntimeEnabledFeatures::CSSLineClampWebkitBoxBlockificationEnabled() &&
-      builder.BoxOrient() == EBoxOrient::kVertical &&
+  if (builder.BoxOrient() == EBoxOrient::kVertical &&
       (builder.WebkitLineClamp() != 0 || builder.StandardLineClamp() != 0 ||
        builder.HasAutoStandardLineClamp())) {
     if (builder.Display() == EDisplay::kWebkitBox) {
@@ -889,18 +906,34 @@ void StyleAdjuster::AdjustEffectiveTouchAction(
     element_touch_action &= ~TouchAction::kInternalPanXScrolls;
   }
 
-  // TODO(crbug.com/1346169): Full style invalidation is needed when this
+  const bool is_writable = IsEditableElement(element, builder) &&
+                           !IsPasswordFieldWithUnrevealedPassword(element);
+  // TODO(crbug.com/40232387): Full style invalidation is needed when this
   // feature status changes at runtime as it affects the computed style.
   if (RuntimeEnabledFeatures::StylusHandwritingEnabled() &&
       (element_touch_action & TouchAction::kPan) == TouchAction::kPan &&
-      IsEditableElement(element, builder) &&
-      !IsPasswordFieldWithUnrevealedPassword(element)) {
+      is_writable) {
     element_touch_action &= ~TouchAction::kInternalNotWritable;
   }
 
+  const TouchAction effective_touch_action =
+      (element_touch_action & inherited_action) | enforced_by_policy;
   // Apply the adjusted parent effective touch actions.
-  builder.SetEffectiveTouchAction((element_touch_action & inherited_action) |
-                                  enforced_by_policy);
+  builder.SetEffectiveTouchAction(effective_touch_action);
+
+  // crbug.com/378027646 : This use counter counts how many pages would lose
+  // handwriting capabilities on platforms that support it if the handwriting
+  // keyword were implemented on this CSS attribute. Please see the linked bug
+  // for more information.
+  const bool would_lose_handwriting =
+      is_writable && effective_touch_action != TouchAction::kNone &&
+      (effective_touch_action & TouchAction::kInternalHandwriting) !=
+          TouchAction::kInternalHandwriting;
+  if (would_lose_handwriting) {
+    UseCounter::Count(
+        element->GetDocument(),
+        WebFeature::kNonNoneTouchActionWouldLoseEditableHandwriting);
+  }
 
   // Propagate touch action to child frames.
   if (auto* frame_owner = DynamicTo<HTMLFrameOwnerElement>(element)) {
@@ -919,11 +952,12 @@ static void AdjustStyleForInert(ComputedStyleBuilder& builder,
   }
 
   Document& document = element->GetDocument();
-  if (element->IsInertRoot()) {
-    UseCounter::Count(document, WebFeature::kInertAttribute);
-    builder.SetIsHTMLInert(true);
-    builder.SetIsHTMLInertIsInherited(false);
-    return;
+  if (!RuntimeEnabledFeatures::CSSInertEnabled()) {
+    if (element->IsInertRoot()) {
+      builder.SetIsHTMLInert(true);
+      builder.SetIsHTMLInertIsInherited(false);
+      return;
+    }
   }
 
   const Element* modal_element = document.ActiveModalDialog();
@@ -1079,8 +1113,24 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
     AdjustStyleForFirstLetter(builder);
     AdjustStyleForMarker(builder, parent_style, &state.GetElement());
 
-    AdjustStyleForDisplay(builder, layout_parent_style, element,
-                          element ? &element->GetDocument() : nullptr);
+    if (builder.StyleType() != kPseudoIdScrollMarker) {
+      AdjustStyleForDisplay(builder, layout_parent_style, element,
+                            element ? &element->GetDocument() : nullptr);
+    }
+
+    if (builder.StyleType() == kPseudoIdScrollMarkerGroup) {
+      // A scroll marker group always needs layout containment, since it
+      // modifies its layout box structure during layout. Only in-flow
+      // positioned scroll marker groups need size containment, though, since
+      // the size of out-of-flow positioned scroll marker groups don't affect
+      // anything on the outside (which is precisely why we DO need it for
+      // in-flow groups).
+      unsigned containment = builder.Contain() | kContainsLayout;
+      if (!builder.HasOutOfFlowPosition()) {
+        containment |= kContainsSize;
+      }
+      builder.SetContain(containment);
+    }
 
     // If this is a child of a LayoutCustom, we need the name of the parent
     // layout function for invalidation purposes.
@@ -1118,7 +1168,7 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
       builder.Overlay() == EOverlay::kAuto ||
       builder.StyleType() == kPseudoIdBackdrop ||
       builder.StyleType() == kPseudoIdViewTransition ||
-      IsCanvasPlacedElement(element)) {
+      IsCanvasPlacedElement(element) || IsCanvasWithPlacedElements(element)) {
     builder.SetForcesStackingContext(true);
   }
 
@@ -1234,9 +1284,7 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state,
     builder.SetElementIsViewTransitionParticipant();
   }
 
-  if (RuntimeEnabledFeatures::
-          CSSContentVisibilityImpliesContainIntrinsicSizeAutoEnabled() &&
-      builder.ContentVisibility() == EContentVisibility::kAuto) {
+  if (builder.ContentVisibility() == EContentVisibility::kAuto) {
     builder.SetContainIntrinsicSizeAuto();
   }
 }

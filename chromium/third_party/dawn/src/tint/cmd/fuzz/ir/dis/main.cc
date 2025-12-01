@@ -36,7 +36,7 @@
 #include "src/tint/lang/core/ir/disassembler.h"
 #include "src/tint/lang/spirv/writer/writer.h"
 #include "src/tint/lang/wgsl/writer/writer.h"
-#include "src/tint/utils/cli/cli.h"
+#include "src/tint/utils/command/cli.h"
 #include "src/tint/utils/containers/transform.h"
 #include "src/tint/utils/macros/defer.h"
 #include "src/tint/utils/text/color_mode.h"
@@ -49,6 +49,8 @@
 TINT_BEGIN_DISABLE_PROTOBUF_WARNINGS();
 #include "src/tint/utils/protos/ir_fuzz/ir_fuzz.pb.h"
 TINT_END_DISABLE_PROTOBUF_WARNINGS();
+
+TINT_BEGIN_DISABLE_WARNING(UNSAFE_BUFFER_USAGE);
 
 namespace {
 
@@ -411,3 +413,5 @@ int main(int argc, const char** argv) {
 
     return EXIT_SUCCESS;
 }
+
+TINT_END_DISABLE_WARNING(UNSAFE_BUFFER_USAGE);

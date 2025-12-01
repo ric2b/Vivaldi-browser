@@ -7,6 +7,7 @@
 #import <optional>
 
 #import "base/check_deref.h"
+#import "components/autofill/core/browser/data_manager/payments/payments_data_manager.h"
 #import "components/autofill/core/browser/payments/credit_card_cvc_authenticator.h"
 #import "components/autofill/core/browser/payments/payments_autofill_client.h"
 #import "components/autofill/core/browser/payments/payments_network_interface.h"
@@ -28,7 +29,7 @@ IOSWebViewPaymentsAutofillClient::IOSWebViewPaymentsAutofillClient(
               base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
                   web_state->GetBrowserState()->GetURLLoaderFactory()),
               client->GetIdentityManager(),
-              &client->GetPersonalDataManager()->payments_data_manager(),
+              &client->GetPersonalDataManager().payments_data_manager(),
               web_state->GetBrowserState()->IsOffTheRecord())),
       web_state_(CHECK_DEREF(web_state)) {}
 
@@ -96,9 +97,9 @@ void IOSWebViewPaymentsAutofillClient::OpenPromoCodeOfferDetailsURL(
       /*is_renderer_initiated=*/false));
 }
 
-void IOSWebViewPaymentsAutofillClient::set_bridge(
-    id<CWVAutofillClientIOSBridge> bridge) {
-  bridge_ = bridge;
+const PaymentsDataManager&
+IOSWebViewPaymentsAutofillClient::GetPaymentsDataManager() const {
+  return client_->GetPersonalDataManager().payments_data_manager();
 }
 
 }  // namespace autofill::payments

@@ -13,6 +13,7 @@
 
 #include "base/functional/callback.h"
 #include "build/build_config.h"
+#include "components/input/render_input_router.mojom.h"
 #include "components/viz/common/vertical_scroll_direction.h"
 #include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 #include "content/common/content_export.h"
@@ -86,11 +87,12 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // The RenderWidgetHost is going to be deleted.
   virtual void RenderWidgetDeleted(RenderWidgetHostImpl* render_widget_host) {}
 
-  // If a main frame navigation is in progress, this will return the zoom level
-  // for the pending page. Otherwise, this returns the zoom level for the
-  // current page. Note that subframe navigations do not affect the zoom level,
-  // which is tracked at the level of the page.
-  virtual double GetPendingPageZoomLevel();
+  // If a frame navigation is in progress for the frame that owns `rwh`, this
+  // will return the pending zoom level for that frame. Otherwise, this returns
+  // the zoom level for the current frame. Note that subframe navigations only
+  // affect the zoom level if the frame has requested independent zoom via
+  // HostZoomMap.
+  virtual double GetPendingZoomLevel(RenderWidgetHostImpl* rwh);
 
   // The RenderWidget was resized.
   virtual void RenderWidgetWasResized(RenderWidgetHostImpl* render_widget_host,
@@ -174,7 +176,7 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // Request the renderer to Move the caret to the new position.
   virtual void MoveCaret(const gfx::Point& extent) {}
 
-  virtual uint32_t GetCompositorFrameSinkGroupingId() const;
+  virtual base::UnguessableToken GetCompositorFrameSinkGroupingId() const;
 
   virtual input::RenderWidgetHostInputEventRouter* GetInputEventRouter();
 
@@ -368,6 +370,10 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
 
   // Notifies when an input event is ignored.
   virtual void OnInputIgnored(const blink::WebInputEvent& event) {}
+
+  // Get remote for making calls to RenderInputRouterDelegate interface.
+  virtual input::mojom::RenderInputRouterDelegate*
+  GetRenderInputRouterDelegateRemote();
 
  protected:
   virtual ~RenderWidgetHostDelegate() {}

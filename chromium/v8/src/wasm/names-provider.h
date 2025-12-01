@@ -13,6 +13,7 @@
 #include <string>
 
 #include "src/base/vector.h"
+#include "src/utils/utils.h"
 #include "src/wasm/wasm-module.h"
 
 namespace v8 {
@@ -86,7 +87,7 @@ class V8_EXPORT_PRIVATE NamesProvider {
 
   // Lazy loading must guard against concurrent modifications from multiple
   // {WasmModuleObject}s.
-  mutable base::Mutex mutex_;
+  mutable base::SpinningMutex mutex_;
   bool has_decoded_{false};
   bool has_computed_function_import_names_{false};
   bool has_computed_import_names_{false};
@@ -98,6 +99,36 @@ class V8_EXPORT_PRIVATE NamesProvider {
   std::map<uint32_t, std::string> import_export_memory_names_;
   std::map<uint32_t, std::string> import_export_global_names_;
   std::map<uint32_t, std::string> import_export_tag_names_;
+};
+
+// Specialized version for canonical type names.
+class CanonicalTypeNamesProvider {
+ public:
+  CanonicalTypeNamesProvider() = default;
+
+  void DecodeNameSections();
+  void DecodeNames(NativeModule* native_module);
+
+  void PrintTypeName(StringBuilder& out, CanonicalTypeIndex type_index,
+                     NamesProvider::IndexAsComment index_as_comment =
+                         NamesProvider::kDontPrintIndex);
+  void PrintValueType(StringBuilder& out, CanonicalValueType type);
+
+  void PrintFieldName(StringBuilder& out, CanonicalTypeIndex struct_index,
+                      uint32_t field_index);
+
+  size_t EstimateCurrentMemoryConsumption() const;
+
+ private:
+  // TODO(jkummerow): Use Zone allocation for the character payloads?
+  using StringT = base::OwnedVector<char>;
+
+  size_t DetectInlineStringThreshold();
+
+  std::vector<StringT> type_names_;
+  std::map<uint32_t, std::vector<StringT>> field_names_;
+  mutable base::SpinningMutex mutex_;
+  size_t payload_size_estimate_{0};
 };
 
 }  // namespace wasm

@@ -5,6 +5,7 @@
 #include "chrome/browser/feedback/system_logs/log_sources/chrome_internal_log_source.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -16,10 +17,10 @@
 #include "base/json/json_string_value_serializer.h"
 #include "base/logging.h"
 #include "base/path_service.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/system/sys_info.h"
-#include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
@@ -75,6 +76,13 @@
 
 #if BUILDFLAG(IS_MAC)
 #include "base/mac/mac_util.h"
+#include "chrome/browser/updater/browser_updater_client.h"
+#endif
+
+#if !BUILDFLAG(IS_CHROMEOS)
+#include "base/base64.h"
+#include "base/feature_list.h"
+#include "components/variations/net/variations_command_line.h"
 #endif
 
 namespace system_logs {
@@ -118,12 +126,16 @@ constexpr char kUsbKeyboardDetected[] = "usb_keyboard_detected";
 constexpr char kIsEnrolledToDomain[] = "enrolled_to_domain";
 constexpr char kInstallerBrandCode[] = "installer_brand_code";
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-constexpr char kUpdateErrorCode[] = "update_error_code";
-constexpr char kUpdateHresult[] = "update_hresult";
 constexpr char kInstallResultCode[] = "install_result_code";
 constexpr char kInstallLocation[] = "install_location";
 #endif
 #endif  // BUILDFLAG(IS_WIN)
+
+#if (BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)) || \
+    BUILDFLAG(IS_MAC)
+constexpr char kUpdateErrorCode[] = "update_error_code";
+constexpr char kUpdateHresult[] = "update_hresult";
+#endif
 
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
 constexpr char kCpuArch[] = "cpu_arch";
@@ -353,7 +365,9 @@ std::string MacCpuArchAsString() {
       return "arm64";
   }
 }
-#elif BUILDFLAG(IS_WIN)
+#endif  // BUILDFLAG(IS_MAC)
+
+#if BUILDFLAG(IS_WIN)
 std::string WinCpuArchAsString() {
 #if defined(ARCH_CPU_ARM64)
   return "arm64";
@@ -372,7 +386,23 @@ std::string WinCpuArchAsString() {
 #endif  // defined(ARCH_CPU_X86)
 #endif  // defined(ARCH_CPU_ARM64)
 }
-#endif
+
+void PopulateUsbKeyboardDetected(std::unique_ptr<SystemLogsResponse> response,
+                                 SysLogsSourceCallback callback) {
+  auto on_keyboard_check = [](std::unique_ptr<SystemLogsResponse> response,
+                              SysLogsSourceCallback callback, bool result,
+                              std::string reason) {
+    reason.insert(0, result ? "Keyboard Detected:\n" : "No Keyboard:\n");
+    response->emplace(kUsbKeyboardDetected, reason);
+    std::move(callback).Run(std::move(response));
+  };
+
+  base::win::IsDeviceSlateWithKeyboard(
+      ui::GetHiddenWindow(),
+      base::BindOnce(on_keyboard_check, std::move(response),
+                     std::move(callback)));
+}
+#endif  // BUILDFLAG(IS_WIN)
 
 }  // namespace
 
@@ -384,8 +414,7 @@ ChromeInternalLogSource::ChromeInternalLogSource()
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
-ChromeInternalLogSource::~ChromeInternalLogSource() {
-}
+ChromeInternalLogSource::~ChromeInternalLogSource() = default;
 
 void ChromeInternalLogSource::Fetch(SysLogsSourceCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -406,10 +435,16 @@ void ChromeInternalLogSource::Fetch(SysLogsSourceCallback callback) {
   PopulateSyncLogs(response.get());
   PopulateExtensionInfoLogs(response.get());
   PopulatePowerApiLogs(response.get());
+#if !BUILDFLAG(IS_CHROMEOS)
+  if (base::FeatureList::IsEnabled(variations::kFeedbackIncludeVariations)) {
+    PopulateVariations(response.get());
+  }
+#endif
 #if BUILDFLAG(IS_WIN)
-  PopulateUsbKeyboardDetected(response.get());
   PopulateEnrolledToDomain(response.get());
   PopulateInstallerBrandCode(response.get());
+#endif
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
   PopulateLastUpdateState(response.get());
 #endif
 
@@ -460,6 +495,10 @@ void ChromeInternalLogSource::Fetch(SysLogsSourceCallback callback) {
       cros_display_config_.get(), response.get(),
       base::BindOnce(&OnPopulateMonitorInfoAsync, std::move(response),
                      std::move(callback)));
+#elif BUILDFLAG(IS_WIN)
+  // Fetch keyboard info then run callback. Keyboard info may require some
+  // expensive WMI queries which should not run on the UI thread.
+  PopulateUsbKeyboardDetected(std::move(response), std::move(callback));
 #else
   // On other platforms, we're done. Invoke the callback.
   std::move(callback).Run(std::move(response));
@@ -539,6 +578,20 @@ void ChromeInternalLogSource::PopulatePowerApiLogs(
     response->emplace(kPowerApiListKey, info);
 }
 
+#if !BUILDFLAG(IS_CHROMEOS)
+void ChromeInternalLogSource::PopulateVariations(SystemLogsResponse* response) {
+  std::vector<uint8_t> ciphertext;
+  auto status =
+      variations::VariationsCommandLine::GetForCurrentProcess().EncryptToString(
+          &ciphertext);
+  if (status == variations::VariationsStateEncryptionStatus::kSuccess) {
+    std::string base64_encoded =
+        base::Base64Encode(std::string(ciphertext.begin(), ciphertext.end()));
+    response->emplace("variations", base64_encoded);
+  }
+}
+#endif
+
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 void ChromeInternalLogSource::PopulateLocalStateSettings(
     SystemLogsResponse* response) {
@@ -594,15 +647,6 @@ void ChromeInternalLogSource::PopulateOnboardingTime(
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(IS_WIN)
-void ChromeInternalLogSource::PopulateUsbKeyboardDetected(
-    SystemLogsResponse* response) {
-  std::string reason;
-  bool result =
-      base::win::IsKeyboardPresentOnSlate(ui::GetHiddenWindow(), &reason);
-  reason.insert(0, result ? "Keyboard Detected:\n" : "No Keyboard:\n");
-  response->emplace(kUsbKeyboardDetected, reason);
-}
-
 void ChromeInternalLogSource::PopulateEnrolledToDomain(
     SystemLogsResponse* response) {
   response->emplace(kIsEnrolledToDomain, base::win::IsEnrolledToDomain()
@@ -641,5 +685,24 @@ void ChromeInternalLogSource::PopulateLastUpdateState(
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 }
 #endif  // BUILDFLAG(IS_WIN)
+
+#if BUILDFLAG(IS_MAC)
+void ChromeInternalLogSource::PopulateLastUpdateState(
+    SystemLogsResponse* response) {
+  const std::optional<updater::UpdateService::UpdateState> update_state =
+      BrowserUpdaterClient::GetLastOnDemandUpdateState();
+  if (!update_state) {
+    return;  // There is nothing to include if no update check has completed.
+  }
+  response->emplace(
+      kUpdateErrorCode,
+      base::StrCat(
+          {base::NumberToString(static_cast<int>(update_state->error_category)),
+           "/", base::NumberToString(update_state->error_code)}));
+  // `extra_code1` is not an HRESULT on macOS, but has similar semantics.
+  response->emplace(kUpdateHresult,
+                    base::NumberToString(update_state->extra_code1));
+}
+#endif  // BUILDFLAG(IS_MAC)
 
 }  // namespace system_logs

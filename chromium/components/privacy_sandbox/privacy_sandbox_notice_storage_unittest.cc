@@ -8,6 +8,7 @@
 #include "base/test/metrics/histogram_variants_reader.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
+#include "base/version_info/version_info.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/privacy_sandbox/privacy_sandbox_notice_constants.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -31,6 +32,7 @@ class PrivacySandboxNoticeStorageTest : public testing::Test {
   PrivacySandboxNoticeData NoticeTestData() {
     PrivacySandboxNoticeData data;
     data.schema_version = 1;
+    data.chrome_version = version_info::GetVersionNumber();
     data.notice_action_taken = NoticeActionTaken::kAck;
     data.notice_action_taken_time =
         base::Time::FromMillisecondsSinceUnixEpoch(200);
@@ -67,6 +69,7 @@ class PrivacySandboxNoticeStorageTest : public testing::Test {
   void CompareNoticeData(const PrivacySandboxNoticeData& expected,
                          const PrivacySandboxNoticeData& actual) {
     EXPECT_EQ(expected.schema_version, actual.schema_version);
+    EXPECT_EQ(expected.chrome_version, actual.chrome_version);
     EXPECT_EQ(expected.notice_action_taken, actual.notice_action_taken);
     EXPECT_EQ(expected.notice_action_taken_time,
               actual.notice_action_taken_time);
@@ -237,11 +240,12 @@ TEST_F(PrivacySandboxNoticeStorageTest, StartupStateFlowCompleteAck) {
 
 TEST_F(PrivacySandboxNoticeStorageTest, NoNoticeNameExpectCrash) {
   PrivacySandboxNoticeData data = NoticeTestData();
+  data.chrome_version = "";
   EXPECT_DEATH_IF_SUPPORTED(SaveNoticeData(data, "Notice1"), "");
 }
 
 TEST_F(PrivacySandboxNoticeStorageTest, SetsValuesAndReadsData) {
-  const auto expected = NoticeTestData();
+  auto expected = NoticeTestData();
   SaveNoticeData(expected, kTopicsConsentModal);
   const auto actual =
       notice_storage()->ReadNoticeData(prefs(), kTopicsConsentModal);
@@ -264,7 +268,9 @@ TEST_F(PrivacySandboxNoticeStorageTest, SetsValuesAndReadsData) {
 TEST_F(PrivacySandboxNoticeStorageTest,
        ReActionDoesNotRegisterAndEmitsHistogram) {
   std::string notice_name = kTopicsConsentModal;
-  SaveNoticeData(NoticeTestData(), notice_name);
+  auto data = NoticeTestData();
+  SaveNoticeData(data, notice_name);
+
   auto actual = notice_storage()->ReadNoticeData(prefs(), notice_name);
   EXPECT_EQ(NoticeActionTaken::kAck, actual->notice_action_taken);
   histogram_tester_.ExpectBucketCount(
@@ -285,7 +291,8 @@ TEST_F(PrivacySandboxNoticeStorageTest,
 }
 
 TEST_F(PrivacySandboxNoticeStorageTest, UpdateNoticeShownValue) {
-  SaveNoticeData(NoticeTestData(), kTopicsConsentModal);
+  auto data = NoticeTestData();
+  SaveNoticeData(data, kTopicsConsentModal);
   auto actual = notice_storage()->ReadNoticeData(prefs(), kTopicsConsentModal);
   EXPECT_EQ(base::Time::FromMillisecondsSinceUnixEpoch(100),
             actual->notice_first_shown);
@@ -293,6 +300,9 @@ TEST_F(PrivacySandboxNoticeStorageTest, UpdateNoticeShownValue) {
             actual->notice_last_shown);
   EXPECT_EQ(base::Milliseconds(100), actual->notice_shown_duration);
 
+  histogram_tester_.ExpectBucketCount(
+      "PrivacySandbox.Notice.NoticeShownForFirstTime.TopicsConsentDesktopModal",
+      true, 1);
   histogram_tester_.ExpectBucketCount(
       "PrivacySandbox.Notice.NoticeAction.TopicsConsentDesktopModal",
       NoticeActionTaken::kAck, 1);
@@ -312,6 +322,10 @@ TEST_F(PrivacySandboxNoticeStorageTest, UpdateNoticeShownValue) {
       prefs(), kTopicsConsentModal,
       base::Time::FromMillisecondsSinceUnixEpoch(150));
   actual = notice_storage()->ReadNoticeData(prefs(), kTopicsConsentModal);
+  // Sets twice in SaveNoticeData(...) and then once again above.
+  histogram_tester_.ExpectBucketCount(
+      "PrivacySandbox.Notice.NoticeShownForFirstTime.TopicsConsentDesktopModal",
+      false, 2);
   EXPECT_EQ(base::Time::FromMillisecondsSinceUnixEpoch(100),
             actual->notice_first_shown);
   EXPECT_EQ(base::Time::FromMillisecondsSinceUnixEpoch(150),
@@ -320,7 +334,7 @@ TEST_F(PrivacySandboxNoticeStorageTest, UpdateNoticeShownValue) {
 
 TEST_F(PrivacySandboxNoticeStorageTest, SetMultipleNotices) {
   // Notice data 1.
-  const auto expected_notice1 = NoticeTestData();
+  auto expected_notice1 = NoticeTestData();
   SaveNoticeData(expected_notice1, kTopicsConsentModal);
   const auto actual_notice1 =
       notice_storage()->ReadNoticeData(prefs(), kTopicsConsentModal);
@@ -414,7 +428,8 @@ TEST_F(PrivacySandboxNoticeStorageTest,
 
 TEST_F(PrivacySandboxNoticeStorageTest,
        MigrateNoticeDataAllValuesMigratePrefsSuccess) {
-  const auto expected_notice = NoticeTestData();
+  auto expected_notice = NoticeTestData();
+  expected_notice.chrome_version = "";
   std::string notice_name = kTopicsConsentModal;
 
   notice_storage()->MigratePrivacySandboxNoticeData(prefs(), expected_notice,
@@ -442,7 +457,8 @@ TEST_F(PrivacySandboxNoticeStorageTest,
 TEST_F(PrivacySandboxNoticeStorageTest,
        MigrateNoticeDataReNoticeActionDoesNotOverwrite) {
   // Original notice.
-  const auto expected_notice = NoticeTestData();
+  auto expected_notice = NoticeTestData();
+  expected_notice.chrome_version = "";
   std::string notice_name = kTopicsConsentModal;
 
   notice_storage()->MigratePrivacySandboxNoticeData(prefs(), expected_notice,
@@ -478,6 +494,7 @@ TEST_F(PrivacySandboxNoticeStorageTest,
        MigrateNoticeDataReNoticeShownDoesNotOverwrite) {
   // Original notice.
   auto expected_notice = NoticeTestData();
+  expected_notice.chrome_version = "";
   std::string notice_name = kTopicsConsentModal;
 
   notice_storage()->MigratePrivacySandboxNoticeData(prefs(), expected_notice,

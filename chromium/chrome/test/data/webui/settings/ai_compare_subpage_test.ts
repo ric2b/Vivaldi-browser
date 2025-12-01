@@ -8,7 +8,7 @@ import {AiEnterpriseFeaturePrefName, AiPageActions} from 'chrome://settings/lazy
 import type {SettingsPrefsElement} from 'chrome://settings/settings.js';
 import {AiPageCompareInteractions, CrSettingsPrefs, loadTimeData, MetricsBrowserProxyImpl, OpenWindowProxyImpl, ModelExecutionEnterprisePolicyValue} from 'chrome://settings/settings.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
-import {assertEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
+import {assertEquals, assertTrue, assertFalse} from 'chrome://webui-test/chai_assert.js';
 import {TestOpenWindowProxy} from 'chrome://webui-test/test_open_window_proxy.js';
 
 import {TestMetricsBrowserProxy} from './test_metrics_browser_proxy.js';
@@ -26,6 +26,13 @@ suite('CompareSubpage', function() {
     openWindowProxy = new TestOpenWindowProxy();
     OpenWindowProxyImpl.setInstance(openWindowProxy);
     return CrSettingsPrefs.initialized;
+  });
+
+  teardown(function() {
+    // Reset pref policy to ALLOW.
+    settingsPrefs.set(
+        `prefs.${AiEnterpriseFeaturePrefName.COMPARE}.value`,
+        ModelExecutionEnterprisePolicyValue.ALLOW);
   });
 
   function createPage() {
@@ -53,12 +60,25 @@ suite('CompareSubpage', function() {
     const linkout = subpage.shadowRoot!.querySelector('cr-link-row');
     assertTrue(!!linkout);
 
+    const noLinkRow = subpage.shadowRoot!.querySelector('.cr-row');
+    assertFalse(!!noLinkRow);
+
     linkout.click();
     await assertFeatureInteractionMetrics(
         AiPageCompareInteractions.FEATURE_LINK_CLICKED,
         AiPageActions.COMPARE_FEATURE_LINK_CLICKED);
     const url = await openWindowProxy.whenCalled('openUrl');
     assertEquals(url, loadTimeData.getString('compareDataHomeUrl'));
+  });
+
+  test('compareLinkoutDisabled', async function() {
+    settingsPrefs.set(
+        `prefs.${AiEnterpriseFeaturePrefName.COMPARE}.value`,
+        ModelExecutionEnterprisePolicyValue.DISABLE);
+    await createPage();
+
+    const linkout = subpage.shadowRoot!.querySelector('cr-link-row');
+    assertFalse(!!linkout);
   });
 
   test('compareLearnMore', async () => {
@@ -86,5 +106,15 @@ suite('CompareSubpage', function() {
     assertEquals(
         learnMoreLink.href,
         loadTimeData.getString('compareLearnMoreManagedUrl'));
+  });
+
+  test('comparePolicyIndicatorPref', async () => {
+    await createPage();
+
+    const indicator =
+        subpage.shadowRoot!.querySelector('settings-ai-policy-indicator');
+    assertTrue(!!indicator);
+    assertTrue(!!indicator.pref);
+    assertEquals(AiEnterpriseFeaturePrefName.COMPARE, indicator.pref.key);
   });
 });

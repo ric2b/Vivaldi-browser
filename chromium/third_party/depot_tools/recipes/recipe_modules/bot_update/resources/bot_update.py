@@ -16,6 +16,7 @@ import optparse
 import os
 import pprint
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -1142,7 +1143,15 @@ def checkout(options, git_slns, specs, revisions, step_text):
   properties['git_cache_epoch'] = cache_epoch
 
   usage = disk_usage()
-  # TODO(ukai): remove cleanup_dir if available disk space is small?
+  # successfully checked out. remove cleanup_dir to get free disk space.
+  if os.path.exists(options.cleanup_dir):
+    prev_usage = usage
+    print('Removing cleanup_dir %s' % options.cleanup_dir)
+    shutil.rmtree(options.cleanup_dir, ignore_errors=True)
+    usage = disk_usage()
+    print('Release %dGB (%d%%)' %
+          (prev_usage[0] - usage[0], prev_usage[2] - usage[2]))
+
   step_text = step_text + (' -> [%dGB/%dGB used (%d%%)]' % usage)
 
   # Tell recipes information such as root, got_revision, etc.

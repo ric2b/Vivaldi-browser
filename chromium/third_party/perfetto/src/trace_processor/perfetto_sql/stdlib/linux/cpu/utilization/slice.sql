@@ -21,24 +21,24 @@ INCLUDE PERFETTO MODULE slices.with_context;
 
 -- CPU cycles per each slice.
 CREATE PERFETTO TABLE cpu_cycles_per_thread_slice(
-  -- Id of a slice. Alias of `slice.id`.
-  id INT,
+  -- Id of a slice.
+  id JOINID(slice.id),
   -- Name of the slice.
   name STRING,
-  -- Id of the thread the slice is running on. Alias of `thread.id`.
-  utid INT,
+  -- Id of the thread the slice is running on.
+  utid JOINID(thread.id),
   -- Name of the thread.
   thread_name STRING,
-  -- Id of the process the slice is running on. Alias of `process.id`.
-  upid INT,
+  -- Id of the process the slice is running on.
+  upid JOINID(process.id),
   -- Name of the process.
   process_name STRING,
   -- Sum of CPU millicycles. Null if frequency couldn't be fetched for any
   -- period during the runtime of the slice.
-  millicycles INT,
+  millicycles LONG,
   -- Sum of CPU megacycles. Null if frequency couldn't be fetched for any
   -- period during the runtime of the slice.
-  megacycles INT
+  megacycles LONG
 ) AS
 WITH intersected AS (
   SELECT
@@ -68,35 +68,35 @@ LEFT JOIN intersected ON slice_id = ts.id AND ts.dur = intersected.dur;
 
 -- CPU cycles per each slice in interval.
 CREATE PERFETTO FUNCTION cpu_cycles_per_thread_slice_in_interval(
-    -- Start of the interval.
-    ts INT,
-    -- Duration of the interval.
-    dur INT
+  -- Start of the interval.
+  ts TIMESTAMP,
+  -- Duration of the interval.
+  dur DURATION
 )
 RETURNS TABLE(
-  -- Id of a slice. Alias of `slice.id`.
-  id INT,
+  -- Thread slice.
+  id JOINID(slice.id),
   -- Name of the slice.
   name STRING,
-  -- Id of the thread the slice is running on. Alias of `thread.id`.
-  utid INT,
+  -- Thread the slice is running on.
+  utid JOINID(thread.id),
   -- Name of the thread.
   thread_name STRING,
-  -- Id of the process the slice is running on. Alias of `process.id`.
-  upid INT,
+  -- Process the slice is running on.
+  upid JOINID(process.id),
   -- Name of the process.
   process_name STRING,
   -- Sum of CPU millicycles. Null if frequency couldn't be fetched for any
   -- period during the runtime of the slice.
-  millicycles INT,
+  millicycles LONG,
   -- Sum of CPU megacycles. Null if frequency couldn't be fetched for any
   -- period during the runtime of the slice.
-  megacycles INT
+  megacycles LONG
 ) AS
 WITH cut_thread_slice AS (
   SELECT id, ii.ts, ii.dur, thread_slice.*
   FROM _interval_intersect_single!(
-    $ts, $dur, 
+    $ts, $dur,
     (SELECT * FROM thread_slice WHERE dur > 0 AND utid > 0)) ii
   JOIN thread_slice USING (id)
 ),

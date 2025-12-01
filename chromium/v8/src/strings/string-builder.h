@@ -92,6 +92,7 @@ class IncrementalStringBuilder {
 
   template <typename SrcChar>
   V8_INLINE void AppendCString(const SrcChar* s);
+  V8_INLINE void AppendString(std::string_view str);
 
   V8_INLINE void AppendInt(int i);
 
@@ -105,9 +106,6 @@ class IncrementalStringBuilder {
 
   void AppendString(DirectHandle<String> string);
 
-  template <typename SrcChar>
-  void AppendSubstring(const SrcChar* src, size_t from, size_t to);
-
   MaybeDirectHandle<String> Finish();
 
   V8_INLINE bool HasOverflowed() const { return overflowed_; }
@@ -117,49 +115,6 @@ class IncrementalStringBuilder {
   // Change encoding to two-byte.
   V8_INLINE void ChangeEncoding();
 
-  template <typename DestChar>
-  class NoExtend {
-   public:
-    inline NoExtend(Tagged<String> string, int offset,
-                    const DisallowGarbageCollection& no_gc);
-
-#ifdef DEBUG
-    inline ~NoExtend();
-#endif
-
-    V8_INLINE void Append(DestChar c) { *(cursor_++) = c; }
-    V8_INLINE void AppendCString(const char* s) {
-      const uint8_t* u = reinterpret_cast<const uint8_t*>(s);
-      while (*u != '\0') Append(*(u++));
-    }
-
-    int written() { return static_cast<int>(cursor_ - start_); }
-
-   private:
-    DestChar* start_;
-    DestChar* cursor_;
-#ifdef DEBUG
-    Tagged<String> string_;
-#endif
-    DISALLOW_GARBAGE_COLLECTION(no_gc_)
-  };
-
-  template <typename DestChar>
-  class NoExtendBuilder : public NoExtend<DestChar> {
-   public:
-    inline NoExtendBuilder(IncrementalStringBuilder* builder,
-                           int required_length,
-                           const DisallowGarbageCollection& no_gc);
-
-    ~NoExtendBuilder() {
-      builder_->current_index_ += NoExtend<DestChar>::written();
-      DCHECK(builder_->HasValidCurrentIndex());
-    }
-
-   private:
-    IncrementalStringBuilder* builder_;
-  };
-
   Isolate* isolate() { return isolate_; }
 
  private:
@@ -168,13 +123,13 @@ class IncrementalStringBuilder {
   V8_INLINE DirectHandle<String> accumulator() { return accumulator_; }
 
   V8_INLINE void set_accumulator(DirectHandle<String> string) {
-    accumulator_.PatchValue(*string);
+    accumulator_.SetValue(*string);
   }
 
   V8_INLINE DirectHandle<String> current_part() { return current_part_; }
 
   V8_INLINE void set_current_part(DirectHandle<String> string) {
-    current_part_.PatchValue(*string);
+    current_part_.SetValue(*string);
   }
 
   // Add the current part to the accumulator.
@@ -195,7 +150,7 @@ class IncrementalStringBuilder {
   static const int kMaxPartLength = 16 * 1024;
   static const int kPartLengthGrowthFactor = 2;
   // sizeof(string) includes \0.
-  static const int kIntToCStringBufferSize = sizeof("-2147483648");
+  static const int kIntToStringViewBufferSize = sizeof("-2147483648") - 1;
 
   Isolate* isolate_;
   String::Encoding encoding_;

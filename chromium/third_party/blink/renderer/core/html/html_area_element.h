@@ -60,8 +60,9 @@ class CORE_EXPORT HTMLAreaElement final : public HTMLAnchorElementBase {
 
  private:
   void ParseAttribute(const AttributeModificationParams&) override;
-  bool IsKeyboardFocusable(UpdateBehavior update_behavior =
-                               UpdateBehavior::kStyleAndLayout) const override;
+  bool IsKeyboardFocusableSlow(
+      UpdateBehavior update_behavior =
+          UpdateBehavior::kStyleAndLayout) const override;
   FocusableState IsFocusableState(
       UpdateBehavior update_behavior) const override;
   bool IsFocusableStyle(UpdateBehavior update_behavior =
@@ -69,9 +70,6 @@ class CORE_EXPORT HTMLAreaElement final : public HTMLAnchorElementBase {
   void UpdateSelectionOnFocus(SelectionBehaviorOnFocus,
                               const FocusOptions*) override;
   void SetFocused(bool, mojom::blink::FocusType) override;
-
-  Element* interestTargetElement() override;
-  AtomicString interestAction() const override;
 
   enum Shape { kDefault, kPoly, kRect, kCircle };
   void InvalidateCachedPath();

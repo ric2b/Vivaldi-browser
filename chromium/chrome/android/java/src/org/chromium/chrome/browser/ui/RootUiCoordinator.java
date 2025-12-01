@@ -18,6 +18,7 @@ import android.view.ViewGroup;
 import android.view.ViewStub;
 
 import androidx.annotation.CallSuper;
+import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
@@ -42,6 +43,8 @@ import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.ActivityUtils;
 import org.chromium.chrome.browser.ChromeActionModeHandler;
 import org.chromium.chrome.browser.IntentHandler;
+import org.chromium.chrome.browser.ai.AiAssistantService;
+import org.chromium.chrome.browser.ai.PageSummaryButtonController;
 import org.chromium.chrome.browser.app.tabmodel.ArchivedTabModelOrchestrator;
 import org.chromium.chrome.browser.automotivetoolbar.AutomotiveBackButtonToolbarCoordinator;
 import org.chromium.chrome.browser.back_press.BackPressManager;
@@ -68,6 +71,8 @@ import org.chromium.chrome.browser.data_sharing.DataSharingTabManager;
 import org.chromium.chrome.browser.device_lock.DeviceLockActivityLauncherImpl;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.dom_distiller.ReaderModeToolbarButtonController;
+import org.chromium.chrome.browser.download.DownloadMetrics.OpenWithExternalAppsSource;
+import org.chromium.chrome.browser.download.DownloadUtils;
 import org.chromium.chrome.browser.ephemeraltab.EphemeralTabCoordinator;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.findinpage.FindToolbarManager;
@@ -123,8 +128,6 @@ import org.chromium.chrome.browser.share.ShareButtonController;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.share.ShareDelegate.ShareOrigin;
 import org.chromium.chrome.browser.share.ShareUtils;
-import org.chromium.chrome.browser.share.page_info_sheet.PageInfoSharingControllerImpl;
-import org.chromium.chrome.browser.share.page_info_sheet.PageSummaryButtonController;
 import org.chromium.chrome.browser.share.qrcode.QrCodeDialog;
 import org.chromium.chrome.browser.share.scroll_capture.ScrollCaptureManager;
 import org.chromium.chrome.browser.tab.AccessibilityVisibilityHandler;
@@ -180,11 +183,11 @@ import org.chromium.components.browser_ui.bottomsheet.ManagedBottomSheetControll
 import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateManager;
 import org.chromium.components.browser_ui.device_lock.DeviceLockActivityLauncher;
 import org.chromium.components.browser_ui.device_lock.DeviceLockActivityLauncherSupplier;
-import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgeStateProvider;
+import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgeManager;
 import org.chromium.components.browser_ui.util.ComposedBrowserControlsVisibilityDelegate;
 import org.chromium.components.browser_ui.widget.MenuOrKeyboardActionController;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
-import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
+import org.chromium.components.browser_ui.widget.scrim.ScrimManager;
 import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.components.messages.DismissReason;
@@ -199,11 +202,13 @@ import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.IntentRequestTracker;
+import org.chromium.ui.base.MimeTypeUtils;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.display.DisplayAndroid;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogManager.ModalDialogManagerObserver;
 import org.chromium.ui.modelutil.PropertyModel;
+import org.chromium.ui.widget.Toast;
 
 import java.util.Arrays;
 import java.util.List;
@@ -214,6 +219,7 @@ import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.ui.KeyboardVisibilityDelegate;
+import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.panels.PanelManager;
 import org.vivaldi.browser.panels.PanelUtils;
 
@@ -285,7 +291,7 @@ public class RootUiCoordinator
     private ManagedBottomSheetController mBottomSheetController;
     private SnackbarManager mBottomSheetSnackbarManager;
 
-    private ScrimCoordinator mScrimCoordinator;
+    private ScrimManager mScrimManager;
     private List<ButtonDataProvider> mButtonDataProviders;
     @Nullable private AdaptiveToolbarButtonController mAdaptiveToolbarButtonController;
     private ContextualPageActionController mContextualPageActionController;
@@ -341,7 +347,7 @@ public class RootUiCoordinator
     private final boolean mIsIncognitoReauthPendingOnRestore;
     protected final ExpandedSheetHelper mExpandedBottomSheetHelper;
     protected final BottomControlsStacker mBottomControlsStacker;
-    private final Supplier<Long> mLastUserInteractionTimeSupplier;
+    @NonNull protected final ObservableSupplier<Integer> mOverviewColorSupplier;
     @Nullable private ContextualSearchObserver mReadAloudContextualSearchObserver;
     @Nullable private PageZoomCoordinator mPageZoomCoordinator;
     private AppMenuObserver mAppMenuObserver;
@@ -353,9 +359,7 @@ public class RootUiCoordinator
     private @Nullable EdgeToEdgeController mEdgeToEdgeController;
     private ComposedBrowserControlsVisibilityDelegate mAppBrowserControlsVisibilityDelegate;
     private @Nullable BoardingPassController mBoardingPassController;
-    private final @Nullable ObservableSupplier<Integer> mOverviewColorSupplier;
-    private final @Nullable View mBaseChromeLayout;
-    private final @NonNull EdgeToEdgeStateProvider mEdgeToEdgeStateProvider;
+    private final @NonNull EdgeToEdgeManager mEdgeToEdgeManager;
     private CommerceBottomSheetContentCoordinator mCommerceBottomSheetContentCoordinator;
     private AutomotiveBackButtonToolbarCoordinator mAutomotiveBackButtonToolbarCoordinator;
 
@@ -381,7 +385,6 @@ public class RootUiCoordinator
      * @param incognitoTabSwitcherSupplier Supplier of the incognito {@link TabSwitcher}.
      * @param intentMetadataOneshotSupplier Supplier with information about the launching intent.
      * @param layoutStateProviderOneshotSupplier Supplier of the {@link LayoutStateProvider}.
-     * @param lastUserInteractionTimeSupplier Supplies the last user interaction time.
      * @param browserControlsManager Manages the browser controls.
      * @param windowAndroid The current {@link WindowAndroid}.
      * @param activityLifecycleDispatcher Allows observation of the activity lifecycle.
@@ -408,11 +411,7 @@ public class RootUiCoordinator
      * @param backPressManager The {@link BackPressManager} handling back press.
      * @param savedInstanceState The saved bundle for the last recorded state.
      * @param overviewColorSupplier Notifies when the overview color changes.
-     * @param baseChromeLayout The base view hosting Chrome that certain views (e.g. the omnibox
-     *     suggestion list) will position themselves relative to. If null, the content view will be
-     *     used.
-     * @param edgeToEdgeStateProvider Provides the edge-to-edge state and allows for requests to
-     *     draw edge-to-edge.
+     * @param edgeToEdgeManager Manages core edge-to-edge state and logic.
      */
     public RootUiCoordinator(
             @NonNull AppCompatActivity activity,
@@ -427,7 +426,6 @@ public class RootUiCoordinator
             @NonNull OneshotSupplier<TabSwitcher> incognitoTabSwitcherSupplier,
             @NonNull OneshotSupplier<ToolbarIntentMetadata> intentMetadataOneshotSupplier,
             @NonNull OneshotSupplier<LayoutStateProvider> layoutStateProviderOneshotSupplier,
-            @NonNull Supplier<Long> lastUserInteractionTimeSupplier,
             @NonNull BrowserControlsManager browserControlsManager,
             @NonNull ActivityWindowAndroid windowAndroid,
             @NonNull ActivityLifecycleDispatcher activityLifecycleDispatcher,
@@ -453,9 +451,8 @@ public class RootUiCoordinator
             boolean initializeUiWithIncognitoColors,
             @Nullable BackPressManager backPressManager,
             @Nullable Bundle savedInstanceState,
-            @Nullable ObservableSupplier<Integer> overviewColorSupplier,
-            @Nullable View baseChromeLayout,
-            @NonNull EdgeToEdgeStateProvider edgeToEdgeStateProvider) {
+            @NonNull ObservableSupplier<Integer> overviewColorSupplier,
+            @NonNull EdgeToEdgeManager edgeToEdgeManager) {
         mCallbackController = new CallbackController();
         mActivity = activity;
         mWindowAndroid = windowAndroid;
@@ -528,7 +525,6 @@ public class RootUiCoordinator
         mLayoutStateProviderOneShotSupplier.onAvailable(
                 mCallbackController.makeCancelable(this::setLayoutStateProvider));
 
-        mLastUserInteractionTimeSupplier = lastUserInteractionTimeSupplier;
         mTabSwitcherSupplier = tabSwitcherSupplier;
         mIncognitoTabSwitcherSupplier = incognitoTabSwitcherSupplier;
         mIntentMetadataOneshotSupplier = intentMetadataOneshotSupplier;
@@ -552,7 +548,8 @@ public class RootUiCoordinator
                         mLayoutManagerSupplier,
                         mActivityLifecycleDispatcher,
                         mActivityTabProvider,
-                        mTopUiThemeColorProvider);
+                        mTopUiThemeColorProvider,
+                        edgeToEdgeManager.getEdgeToEdgeSystemBarColorHelper());
         mEphemeralTabCoordinatorSupplier = ephemeralTabCoordinatorSupplier;
 
         mPageZoomCoordinator =
@@ -581,9 +578,9 @@ public class RootUiCoordinator
         mExpandedBottomSheetHelper =
                 new ExpandedSheetHelperImpl(mModalDialogManagerSupplier, getTabObscuringHandler());
         mOverviewColorSupplier = overviewColorSupplier;
-        mBaseChromeLayout = baseChromeLayout;
-        mEdgeToEdgeStateProvider = edgeToEdgeStateProvider;
-        mBottomControlsStacker = new BottomControlsStacker(mBrowserControlsManager);
+        mEdgeToEdgeManager = edgeToEdgeManager;
+        mBottomControlsStacker =
+                new BottomControlsStacker(mBrowserControlsManager, mActivity, mWindowAndroid);
     }
 
     // TODO(pnoland, crbug.com/865801): remove this in favor of wiring it directly.
@@ -716,8 +713,8 @@ public class RootUiCoordinator
             mButtonDataProviders = null;
         }
 
-        if (mScrimCoordinator != null) mScrimCoordinator.destroy();
-        mScrimCoordinator = null;
+        if (mScrimManager != null) mScrimManager.destroy();
+        mScrimManager = null;
 
         if (mCaptureController != null) {
             mCaptureController.destroy();
@@ -826,7 +823,7 @@ public class RootUiCoordinator
 
     @Override
     public void onInflationComplete() {
-        mScrimCoordinator = buildScrimWidget();
+        mScrimManager = buildScrimWidget();
 
         initFindToolbarManager();
         initializeToolbar();
@@ -872,6 +869,7 @@ public class RootUiCoordinator
                 },
                 showWebSearchInActionMode(),
                 mShareDelegateSupplier,
+                mBrowserControlsManager,
                 mReadAloudControllerSupplier);
 
         mCaptureController =
@@ -990,6 +988,8 @@ public class RootUiCoordinator
         if (BuildInfo.getInstance().isAutomotive
                 && ChromeFeatureList.isEnabled(
                         ChromeFeatureList.AUTOMOTIVE_FULLSCREEN_TOOLBAR_IMPROVEMENTS)) {
+            // Vivaldi
+            if (!VivaldiUtils.isAutomotiveToolbarEnabled()) return;
             mAutomotiveBackButtonToolbarCoordinator =
                     new AutomotiveBackButtonToolbarCoordinator(
                             mActivity,
@@ -1017,13 +1017,12 @@ public class RootUiCoordinator
                         mActivity,
                         profile,
                         this,
-                        mScrimCoordinator,
+                        mScrimManager,
                         mActivityTabProvider,
                         mFullscreenManager,
                         mBrowserControlsManager,
                         mWindowAndroid,
                         mTabModelSelectorSupplier.get(),
-                        mLastUserInteractionTimeSupplier,
                         mEdgeToEdgeControllerSupplier));
     }
 
@@ -1045,7 +1044,8 @@ public class RootUiCoordinator
                 mToolbarManager,
                 canContextualSearchPromoteToNewTab(),
                 mIntentRequestTracker,
-                getDesktopWindowStateManager());
+                getDesktopWindowStateManager(),
+                mBottomControlsStacker);
     }
 
     public ObservableSupplier<ContextualSearchManager> getContextualSearchManagerSupplier() {
@@ -1326,6 +1326,25 @@ public class RootUiCoordinator
             TrackerFactory.getTrackerForProfile(tab.getProfile())
                     .notifyEvent(EventConstants.PAGE_ZOOM_OPENED);
             mPageZoomCoordinator.show(tab.getWebContents());
+        } else if (id == R.id.open_with_id) {
+            Tab tab = mActivityTabProvider.get();
+            assert tab != null && tab.isNativePage() && tab.getNativePage() instanceof PdfPage;
+            Uri uri = ((PdfPage) tab.getNativePage()).getUri();
+            if (uri == null
+                    || !DownloadUtils.openFileWithExternalApps(
+                            uri.toString(),
+                            MimeTypeUtils.PDF_MIME_TYPE,
+                            /* originalUrl= */ null,
+                            /* referrer= */ null,
+                            mActivity,
+                            OpenWithExternalAppsSource.APP_MENU)) {
+                Toast.makeText(
+                                mActivity,
+                                mActivity.getString(R.string.download_cant_open_file),
+                                Toast.LENGTH_SHORT)
+                        .show();
+            }
+            return true;
         }
 
         return false;
@@ -1547,10 +1566,9 @@ public class RootUiCoordinator
             PageSummaryButtonController pageSummaryButtonController =
                     new PageSummaryButtonController(
                             mActivity,
-                            mBottomSheetController,
                             mModalDialogManagerSupplier.get(),
                             mActivityTabProvider,
-                            PageInfoSharingControllerImpl.getInstance());
+                            new AiAssistantService());
 
             if (ChromeFeatureList.sEnableDiscountInfoApi.isEnabled()) {
                 DiscountsButtonController discountsButtonController =
@@ -1655,7 +1673,7 @@ public class RootUiCoordinator
                             mShareDelegateSupplier,
                             mButtonDataProviders,
                             mActivityTabProvider,
-                            mScrimCoordinator,
+                            mScrimManager,
                             mActionModeControllerCallback,
                             mFindToolbarManager,
                             mProfileSupplier,
@@ -1682,7 +1700,6 @@ public class RootUiCoordinator
                             mInitializeUiWithIncognitoColors,
                             mBackPressManager,
                             mOverviewColorSupplier,
-                            mBaseChromeLayout,
                             mReadAloudControllerSupplier,
                             getDesktopWindowStateManager());
             if (!mSupportsAppMenuSupplier.getAsBoolean()) {
@@ -1711,30 +1728,20 @@ public class RootUiCoordinator
     }
 
     /**
-     * Gives concrete implementation of {@link ScrimCoordinator.SystemUiScrimDelegate} and
-     * constructs {@link ScrimCoordinator}.
+     * Constructs a {@link ScrimManager} and sets up observers. Lifetime of all these objects should
+     * match.
      */
-    protected ScrimCoordinator buildScrimWidget() {
+    protected ScrimManager buildScrimWidget() {
         ViewGroup coordinator = mActivity.findViewById(R.id.coordinator);
-        ScrimCoordinator.SystemUiScrimDelegate delegate =
-                new ScrimCoordinator.SystemUiScrimDelegate() {
-                    @Override
-                    public void setStatusBarScrimFraction(float scrimFraction) {
-                        RootUiCoordinator.this.setStatusBarScrimFraction(scrimFraction);
-                    }
-
-                    @Override
-                    public void setNavigationBarScrimFraction(float scrimFraction) {}
-                };
-        return new ScrimCoordinator(
-                mActivity,
-                delegate,
-                coordinator,
-                coordinator.getContext().getColor(R.color.omnibox_focused_fading_background_color));
+        ScrimManager scrimManager = new ScrimManager(mActivity, coordinator);
+        scrimManager
+                .getStatusBarColorSupplier()
+                .addObserver(RootUiCoordinator.this::onScrimColorChanged);
+        return scrimManager;
     }
 
-    protected void setStatusBarScrimFraction(float scrimFraction) {
-        mStatusBarColorController.setStatusBarScrimFraction(scrimFraction);
+    protected void onScrimColorChanged(@ColorInt int scrimColor) {
+        mStatusBarColorController.setScrimColor(scrimColor);
     }
 
     protected void setLayoutStateProvider(LayoutStateProvider layoutStateProvider) {
@@ -1969,7 +1976,7 @@ public class RootUiCoordinator
         // suppliers.
         mBottomSheetController =
                 BottomSheetControllerFactory.createBottomSheetController(
-                        () -> mScrimCoordinator,
+                        () -> mScrimManager,
                         sheetInitializedCallback,
                         mActivity.getWindow(),
                         mWindowAndroid.getKeyboardDelegate(),
@@ -2021,21 +2028,18 @@ public class RootUiCoordinator
         UmaSessionStats.registerSyntheticFieldTrial(
                 "EdgeToEdgeChinEligibility", eligible ? "Eligible" : "Not Eligible");
 
-        if (supportsEdgeToEdge()) {
+        if (supportsEdgeToEdge() && EdgeToEdgeUtils.isEdgeToEdgeBottomChinEnabled()) {
             mEdgeToEdgeController =
                     EdgeToEdgeControllerFactory.create(
                             mActivity,
                             mWindowAndroid,
                             mActivityTabProvider,
-                            mEdgeToEdgeStateProvider,
+                            mEdgeToEdgeManager,
                             mBrowserControlsManager,
                             mLayoutManagerSupplier,
                             mFullscreenManager);
             mEdgeToEdgeControllerSupplier.set(mEdgeToEdgeController);
-
-            if (EdgeToEdgeUtils.isEdgeToEdgeBottomChinEnabled()) {
-                mEdgeToEdgeBottomChin = createEdgeToEdgeBottomChin();
-            }
+            mEdgeToEdgeBottomChin = createEdgeToEdgeBottomChin();
         }
     }
 
@@ -2094,11 +2098,9 @@ public class RootUiCoordinator
         return mBrowserControlsManager;
     }
 
-    /**
-     * @return The {@link ScrimCoordinator} to control activity's primary scrim.
-     */
-    public ScrimCoordinator getScrimCoordinator() {
-        return mScrimCoordinator;
+    /** Returns the {@link ScrimManager} to control scrims over the activity. */
+    public ScrimManager getScrimManager() {
+        return mScrimManager;
     }
 
     /** @return The {@link SnackbarManager} for the {@link BottomSheetController}. */
@@ -2262,10 +2264,6 @@ public class RootUiCoordinator
 
     public AppMenuCoordinator getAppMenuCoordinatorForTesting() {
         return mAppMenuCoordinator;
-    }
-
-    public ScrimCoordinator getScrimCoordinatorForTesting() {
-        return mScrimCoordinator;
     }
 
     public void destroyActivityForTesting() {

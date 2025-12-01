@@ -85,6 +85,9 @@ public class PhoneNumberUtil {
   // considered to be an area code.
   private static final Set<Integer> GEO_MOBILE_COUNTRIES_WITHOUT_MOBILE_AREA_CODES;
 
+  // Set of country codes that doesn't have national prefix, but it has area codes.
+  private static final Set<Integer> COUNTRIES_WITHOUT_NATIONAL_PREFIX_WITH_AREA_CODES;
+
   // Set of country calling codes that have geographically assigned mobile numbers. This may not be
   // complete; we add calling codes case by case, as we find geographical mobile numbers or hear
   // from user reports. Note that countries like the US, where we can't distinguish between
@@ -126,6 +129,11 @@ public class PhoneNumberUtil {
     geoMobileCountriesWithoutMobileAreaCodes.add(86);  // China
     GEO_MOBILE_COUNTRIES_WITHOUT_MOBILE_AREA_CODES =
         Collections.unmodifiableSet(geoMobileCountriesWithoutMobileAreaCodes);
+
+    HashSet<Integer> countriesWithoutNationalPrefixWithAreaCodes = new HashSet<>();
+    countriesWithoutNationalPrefixWithAreaCodes.add(52);  // Mexico
+    COUNTRIES_WITHOUT_NATIONAL_PREFIX_WITH_AREA_CODES = 
+    		Collections.unmodifiableSet(countriesWithoutNationalPrefixWithAreaCodes);
 
     HashSet<Integer> geoMobileCountries = new HashSet<>();
     geoMobileCountries.add(52);  // Mexico
@@ -305,6 +313,27 @@ public class PhoneNumberUtil {
   // version.
   private static final String EXTN_PATTERNS_FOR_PARSING = createExtnPattern(true);
   static final String EXTN_PATTERNS_FOR_MATCHING = createExtnPattern(false);
+
+  // Regular expression of valid global-number-digits for the phone-context parameter, following the
+  // syntax defined in RFC3966.
+  private static final String RFC3966_VISUAL_SEPARATOR = "[\\-\\.\\(\\)]?";
+  private static final String RFC3966_PHONE_DIGIT =
+      "(" + DIGITS + "|" + RFC3966_VISUAL_SEPARATOR + ")";
+  private static final String RFC3966_GLOBAL_NUMBER_DIGITS =
+      "^\\" + PLUS_SIGN + RFC3966_PHONE_DIGIT + "*" + DIGITS + RFC3966_PHONE_DIGIT + "*$";
+  static final Pattern RFC3966_GLOBAL_NUMBER_DIGITS_PATTERN =
+      Pattern.compile(RFC3966_GLOBAL_NUMBER_DIGITS);
+
+  // Regular expression of valid domainname for the phone-context parameter, following the syntax
+  // defined in RFC3966.
+  private static final String ALPHANUM = VALID_ALPHA + DIGITS;
+  private static final String RFC3966_DOMAINLABEL =
+      "[" + ALPHANUM + "]+((\\-)*[" + ALPHANUM + "])*";
+  private static final String RFC3966_TOPLABEL =
+      "[" + VALID_ALPHA + "]+((\\-)*[" + ALPHANUM + "])*";
+  private static final String RFC3966_DOMAINNAME =
+      "^(" + RFC3966_DOMAINLABEL + "\\.)*" + RFC3966_TOPLABEL + "\\.?$";
+  static final Pattern RFC3966_DOMAINNAME_PATTERN = Pattern.compile(RFC3966_DOMAINNAME);
 
   /**
    * Helper method for constructing regular expressions for parsing. Creates an expression that
@@ -872,14 +901,18 @@ public class PhoneNumberUtil {
     if (metadata == null) {
       return 0;
     }
-    // If a country doesn't use a national prefix, and this number doesn't have an Italian leading
-    // zero, we assume it is a closed dialling plan with no area codes.
-    if (!metadata.hasNationalPrefix() && !number.isItalianLeadingZero()) {
-      return 0;
-    }
 
     PhoneNumberType type = getNumberType(number);
     int countryCallingCode = number.getCountryCode();
+    // If a country doesn't use a national prefix, and this number doesn't have an Italian leading
+    // zero, we assume it is a closed dialling plan with no area codes.
+    // Note:this is our general assumption, but there are exceptions which are tracked in
+    // COUNTRIES_WITHOUT_NATIONAL_PREFIX_WITH_AREA_CODES.
+    if (!metadata.hasNationalPrefix() && !number.isItalianLeadingZero() 
+    && !COUNTRIES_WITHOUT_NATIONAL_PREFIX_WITH_AREA_CODES.contains(countryCallingCode)) {
+      return 0;
+    }
+
     if (type == PhoneNumberType.MOBILE
         // Note this is a rough heuristic; it doesn't cover Indonesia well, for example, where area
         // codes are present for some mobile phones but not for others. We have no better way of
@@ -1254,14 +1287,12 @@ public class PhoneNumberUtil {
    * @return  the formatted phone number
    */
   public String format(PhoneNumber number, PhoneNumberFormat numberFormat) {
-    if (number.getNationalNumber() == 0 && number.hasRawInput()) {
+    if (number.getNationalNumber() == 0) {
       // Unparseable numbers that kept their raw input just use that.
       // This is the only case where a number can be formatted as E164 without a
       // leading '+' symbol (but the original number wasn't parseable anyway).
-      // TODO: Consider removing the 'if' above so that unparseable
-      // strings without raw input format to the empty string instead of "+00".
       String rawInput = number.getRawInput();
-      if (rawInput.length() > 0) {
+      if (rawInput.length() > 0 || !number.hasCountryCode()) {
         return rawInput;
       }
     }
@@ -3339,26 +3370,70 @@ public class PhoneNumberUtil {
   }
 
   /**
+   * Extracts the value of the phone-context parameter of numberToExtractFrom where the index of
+   * ";phone-context=" is the parameter indexOfPhoneContext, following the syntax defined in
+   * RFC3966.
+   *
+   * @return the extracted string (possibly empty), or null if no phone-context parameter is found.
+   */
+  private String extractPhoneContext(String numberToExtractFrom, int indexOfPhoneContext) {
+    // If no phone-context parameter is present
+    if (indexOfPhoneContext == -1) {
+      return null;
+    }
+
+    int phoneContextStart = indexOfPhoneContext + RFC3966_PHONE_CONTEXT.length();
+    // If phone-context parameter is empty
+    if (phoneContextStart >= numberToExtractFrom.length()) {
+      return "";
+    }
+
+    int phoneContextEnd = numberToExtractFrom.indexOf(';', phoneContextStart);
+    // If phone-context is not the last parameter
+    if (phoneContextEnd != -1) {
+      return numberToExtractFrom.substring(phoneContextStart, phoneContextEnd);
+    } else {
+      return numberToExtractFrom.substring(phoneContextStart);
+    }
+  }
+
+  /**
+   * Returns whether the value of phoneContext follows the syntax defined in RFC3966.
+   */
+  private boolean isPhoneContextValid(String phoneContext) {
+    if (phoneContext == null) {
+      return true;
+    }
+    if (phoneContext.length() == 0) {
+      return false;
+    }
+
+    // Does phone-context value match pattern of global-number-digits or domainname
+    return RFC3966_GLOBAL_NUMBER_DIGITS_PATTERN.matcher(phoneContext).matches()
+        || RFC3966_DOMAINNAME_PATTERN.matcher(phoneContext).matches();
+  }
+
+  /**
    * Converts numberToParse to a form that we can parse and write it to nationalNumber if it is
    * written in RFC3966; otherwise extract a possible number out of it and write to nationalNumber.
    */
-  private void buildNationalNumberForParsing(String numberToParse, StringBuilder nationalNumber) {
+  private void buildNationalNumberForParsing(String numberToParse, StringBuilder nationalNumber)
+      throws NumberParseException {
     int indexOfPhoneContext = numberToParse.indexOf(RFC3966_PHONE_CONTEXT);
-    if (indexOfPhoneContext >= 0) {
-      int phoneContextStart = indexOfPhoneContext + RFC3966_PHONE_CONTEXT.length();
+
+    String phoneContext = extractPhoneContext(numberToParse, indexOfPhoneContext);
+    if (!isPhoneContextValid(phoneContext)) {
+      throw new NumberParseException(NumberParseException.ErrorType.NOT_A_NUMBER,
+          "The phone-context value is invalid.");
+    }
+    if (phoneContext != null) {
       // If the phone context contains a phone number prefix, we need to capture it, whereas domains
       // will be ignored.
-      if (phoneContextStart < (numberToParse.length() - 1)
-          && numberToParse.charAt(phoneContextStart) == PLUS_SIGN) {
+      if (phoneContext.charAt(0) == PLUS_SIGN) {
         // Additional parameters might follow the phone context. If so, we will remove them here
-        // because the parameters after phone context are not important for parsing the
-        // phone number.
-        int phoneContextEnd = numberToParse.indexOf(';', phoneContextStart);
-        if (phoneContextEnd > 0) {
-          nationalNumber.append(numberToParse.substring(phoneContextStart, phoneContextEnd));
-        } else {
-          nationalNumber.append(numberToParse.substring(phoneContextStart));
-        }
+        // because the parameters after phone context are not important for parsing the phone
+        // number.
+        nationalNumber.append(phoneContext);
       }
 
       // Now append everything between the "tel:" prefix and the phone-context. This should include
@@ -3366,8 +3441,8 @@ public class PhoneNumberUtil {
       // handle the case when "tel:" is missing, as we have seen in some of the phone number inputs.
       // In that case, we append everything from the beginning.
       int indexOfRfc3966Prefix = numberToParse.indexOf(RFC3966_PREFIX);
-      int indexOfNationalNumber = (indexOfRfc3966Prefix >= 0)
-          ? indexOfRfc3966Prefix + RFC3966_PREFIX.length() : 0;
+      int indexOfNationalNumber =
+          (indexOfRfc3966Prefix >= 0) ? indexOfRfc3966Prefix + RFC3966_PREFIX.length() : 0;
       nationalNumber.append(numberToParse.substring(indexOfNationalNumber, indexOfPhoneContext));
     } else {
       // Extract a possible number from the string passed in (this strips leading characters that

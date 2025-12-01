@@ -42,7 +42,7 @@ static void f32_rmin(
     init_params(&params);
   }
 
-  float output = std::nanf("");
+  float output;
   for (auto _ : state) {
     rmin(elements * sizeof(float), input.data(), &output, &params);
   }
@@ -297,5 +297,5 @@ BENCHMARK_CAPTURE(f32_rmin, scalar_u4_acc4,
   ->UseRealTime();
 
 #ifndef XNNPACK_BENCHMARK_NO_MAIN
-BENCHMARK_MAIN();
+XNN_BENCHMARK_MAIN();
 #endif

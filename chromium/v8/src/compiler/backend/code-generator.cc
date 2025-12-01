@@ -206,14 +206,12 @@ void CodeGenerator::AssembleCode() {
   // ultimately set the parameter count on the resulting Code object.
   if (call_descriptor->IsJSFunctionCall()) {
     parameter_count_ = call_descriptor->ParameterSlotCount();
-#ifdef DEBUG
     if (Builtins::IsBuiltinId(info->builtin())) {
-      DCHECK_EQ(parameter_count_,
-                Builtins::GetStackParameterCount(info->builtin()));
+      CHECK_EQ(parameter_count_,
+               Builtins::GetStackParameterCount(info->builtin()));
     } else if (info->has_bytecode_array()) {
-      DCHECK_EQ(parameter_count_, info->bytecode_array()->parameter_count());
+      CHECK_EQ(parameter_count_, info->bytecode_array()->parameter_count());
     }
-#endif  // DEBUG
   }
 
   // Open a frame scope to indicate that there is a frame on the stack.  The
@@ -495,7 +493,7 @@ base::OwnedVector<uint8_t> CodeGenerator::GetSourcePositionTable() {
 
 base::OwnedVector<uint8_t> CodeGenerator::GetProtectedInstructionsData() {
 #if V8_ENABLE_WEBASSEMBLY
-  return base::OwnedVector<uint8_t>::Of(
+  return base::OwnedCopyOf(
       base::Vector<uint8_t>::cast(base::VectorOf(protected_instructions_)));
 #else
   return {};
@@ -962,11 +960,11 @@ void CodeGenerator::AssembleGaps(Instruction* instr) {
 
 namespace {
 
-Handle<TrustedPodArray<InliningPosition>> CreateInliningPositions(
+DirectHandle<TrustedPodArray<InliningPosition>> CreateInliningPositions(
     OptimizedCompilationInfo* info, Isolate* isolate) {
   const OptimizedCompilationInfo::InlinedFunctionList& inlined_functions =
       info->inlined_functions();
-  Handle<TrustedPodArray<InliningPosition>> inl_positions =
+  DirectHandle<TrustedPodArray<InliningPosition>> inl_positions =
       TrustedPodArray<InliningPosition>::New(
           isolate, static_cast<int>(inlined_functions.size()));
   for (size_t i = 0; i < inlined_functions.size(); ++i) {
@@ -1022,7 +1020,7 @@ Handle<DeoptimizationData> CodeGenerator::GenerateDeoptimizationData() {
       isolate()->factory()->NewDeoptimizationLiteralArray(
           static_cast<int>(deoptimization_literals_.size()));
   for (unsigned i = 0; i < deoptimization_literals_.size(); i++) {
-    Handle<Object> object = deoptimization_literals_[i].Reify(isolate());
+    DirectHandle<Object> object = deoptimization_literals_[i].Reify(isolate());
     CHECK(!object.is_null());
     literals->set(i, *object);
   }
@@ -1202,7 +1200,7 @@ DeoptimizationEntry const& CodeGenerator::GetDeoptimizationEntry(
 void CodeGenerator::TranslateStateValueDescriptor(
     StateValueDescriptor* desc, StateValueList* nested,
     InstructionOperandIterator* iter) {
-  if (desc->IsNested()) {
+  if (desc->IsNestedObject()) {
     translations_.BeginCapturedObject(static_cast<int>(nested->size()));
     for (auto field : *nested) {
       TranslateStateValueDescriptor(field.desc, field.nested, iter);
@@ -1218,6 +1216,11 @@ void CodeGenerator::TranslateStateValueDescriptor(
   } else if (desc->IsPlain()) {
     InstructionOperand* op = iter->Advance();
     AddTranslationForOperand(iter->instruction(), op, desc->type());
+  } else if (desc->IsStringConcat()) {
+    translations_.StringConcat();
+    for (auto field : *nested) {
+      TranslateStateValueDescriptor(field.desc, field.nested, iter);
+    }
   } else {
     DCHECK(desc->IsOptimizedOut());
     translations_.StoreOptimizedOut();
@@ -1287,7 +1290,9 @@ void CodeGenerator::BuildTranslationForFrameStateDescriptor(
       break;
     }
     case FrameStateType::kInlinedExtraArguments:
-      translations_.BeginInlinedExtraArguments(shared_info_id, height);
+      translations_.BeginInlinedExtraArguments(
+          shared_info_id, height,
+          descriptor->bytecode_array().ToHandleChecked()->parameter_count());
       break;
     case FrameStateType::kConstructCreateStub:
       translations_.BeginConstructCreateStubFrame(shared_info_id, height);

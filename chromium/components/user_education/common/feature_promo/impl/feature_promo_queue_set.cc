@@ -5,6 +5,7 @@
 #include "components/user_education/common/feature_promo/impl/feature_promo_queue_set.h"
 
 #include "base/containers/map_util.h"
+#include "components/user_education/common/feature_promo/feature_promo_result.h"
 #include "components/user_education/common/feature_promo/feature_promo_session_policy.h"
 #include "components/user_education/common/feature_promo/impl/feature_promo_queue.h"
 
@@ -63,6 +64,24 @@ bool FeaturePromoQueueSet::IsQueued(const base::Feature& iph_feature) const {
   return false;
 }
 
+FeaturePromoResult FeaturePromoQueueSet::CanQueue(
+    const FeaturePromoSpecification& spec,
+    const FeaturePromoParams& promo_params) const {
+  const auto info = priority_provider_->GetPromoPriorityInfo(spec);
+  auto* const queue = base::FindOrNull(queues_, info.priority);
+  return queue ? queue->CanQueue(spec, promo_params)
+               : FeaturePromoResult::kError;
+}
+
+FeaturePromoResult FeaturePromoQueueSet::CanShow(
+    const FeaturePromoSpecification& spec,
+    const FeaturePromoParams& promo_params) const {
+  const auto info = priority_provider_->GetPromoPriorityInfo(spec);
+  auto* const queue = base::FindOrNull(queues_, info.priority);
+  return queue ? queue->CanShow(spec, promo_params)
+               : FeaturePromoResult::kError;
+}
+
 void FeaturePromoQueueSet::TryToQueue(const FeaturePromoSpecification& spec,
                                       FeaturePromoParams promo_params) {
   const auto info = priority_provider_->GetPromoPriorityInfo(spec);
@@ -85,9 +104,9 @@ bool FeaturePromoQueueSet::Cancel(const base::Feature& iph_feature) {
   return false;
 }
 
-std::optional<FeaturePromoParams>
-FeaturePromoQueueSet::UpdateAndGetNextEligiblePromo() {
-  std::optional<FeaturePromoParams> result;
+std::optional<FeaturePromoQueueSet::PromoInfo>
+FeaturePromoQueueSet::UpdateAndIdentifyNextEligiblePromo() {
+  std::optional<PromoInfo> result;
 
   // Check queues from higher to lower priority. If an eligible promo is found,
   // or a promo remains waiting in a higher-priority queue, do not check lower-
@@ -97,11 +116,27 @@ FeaturePromoQueueSet::UpdateAndGetNextEligiblePromo() {
     if (higher_priority_promo_found) {
       queue.RemoveIneligiblePromos();
     } else {
-      result = queue.UpdateAndGetNextEligiblePromo();
+      auto* const feature = queue.UpdateAndIdentifyNextEligiblePromo();
+      if (feature) {
+        result = std::make_pair(raw_ref(*feature), pri);
+      }
       higher_priority_promo_found = result.has_value() || !queue.is_empty();
     }
   }
   return result;
+}
+
+EligibleFeaturePromo FeaturePromoQueueSet::UnqueueEligiblePromo(
+    const PromoInfo& to_unqueue) {
+  auto* const queue = base::FindOrNull(queues_, to_unqueue.second);
+  CHECK(queue);
+  return queue->UnqueueEligiblePromo(*to_unqueue.first);
+}
+
+void FeaturePromoQueueSet::RemoveIneligiblePromos() {
+  for (auto& [pri, queue] : queues_) {
+    queue.RemoveIneligiblePromos();
+  }
 }
 
 void FeaturePromoQueueSet::FailAll(FeaturePromoResult::Failure failure_reason) {

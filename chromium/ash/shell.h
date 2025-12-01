@@ -377,6 +377,10 @@ class ASH_EXPORT Shell : public SessionObserver,
   // Returns true if a system-modal dialog window is currently open.
   static bool IsSystemModalWindowOpen();
 
+  // Updates next focus of status area widget delegate when lock screen or login
+  // screen is visible.
+  static void UpdateAccessibilityForStatusAreaWidget();
+
   // Track/Untrack InputMethod bounds.
   void TrackInputMethodBounds(ArcInputMethodBoundsTracker* tracker);
   void UntrackTrackInputMethodBounds(ArcInputMethodBoundsTracker* tracker);
@@ -1063,9 +1067,6 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<DesksController> desks_controller_;
   std::unique_ptr<SavedDeskController> saved_desk_controller_;
   std::unique_ptr<SavedDeskDelegate> saved_desk_delegate_;
-  std::unique_ptr<DetachableBaseHandler> detachable_base_handler_;
-  std::unique_ptr<DetachableBaseNotificationController>
-      detachable_base_notification_controller_;
   std::unique_ptr<diagnostics::DiagnosticsLogController>
       diagnostics_log_controller_;
   std::unique_ptr<DisplayHighlightController> display_highlight_controller_;
@@ -1139,6 +1140,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<PipController> pip_controller_;
   std::unique_ptr<PrivacyScreenController> privacy_screen_controller_;
   std::unique_ptr<PolicyRecommendationRestorer> policy_recommendation_restorer_;
+  // Must be after `session_controller_`.
   std::unique_ptr<ScannerController> scanner_controller_;
   std::unique_ptr<ScreenSwitchCheckController> screen_switch_check_controller_;
   std::unique_ptr<ShelfConfig> shelf_config_;
@@ -1150,6 +1152,9 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<AcceleratorTracker> accelerator_tracker_;
   std::unique_ptr<ShutdownControllerImpl> shutdown_controller_;
   std::unique_ptr<SystemNotificationController> system_notification_controller_;
+  std::unique_ptr<DetachableBaseHandler> detachable_base_handler_;
+  std::unique_ptr<DetachableBaseNotificationController>
+      detachable_base_notification_controller_;
   std::unique_ptr<SystemNudgePauseManagerImpl> system_nudge_pause_manager_;
   std::unique_ptr<SystemTrayModel> system_tray_model_;
   std::unique_ptr<SystemTrayNotifier> system_tray_notifier_;

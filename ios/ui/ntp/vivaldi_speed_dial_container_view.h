@@ -7,7 +7,7 @@
 
 #import "components/direct_match/direct_match_service.h"
 #import "ios/chrome/browser/favicon/model/favicon_loader.h"
-#import "ios/chrome/browser/ui/menu/browser_action_factory.h"
+#import "ios/chrome/browser/menu/ui_bundled/browser_action_factory.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_container_delegate.h"
 #import "ios/ui/settings/start_page/layout_settings/vivaldi_start_page_layout_column.h"
 #import "ios/ui/settings/start_page/layout_settings/vivaldi_start_page_layout_style.h"

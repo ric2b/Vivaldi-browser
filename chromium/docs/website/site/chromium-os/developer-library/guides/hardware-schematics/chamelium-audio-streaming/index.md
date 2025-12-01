@@ -25,7 +25,7 @@ Kevin image R57-9178.0.0 is a good example.
 ## Play sine tone on Chromebook
 
 Play a sine tone video on youtube, e.g. [1HR 528Hz sine
-tone](https://www.youtube.com/watch?v=dZ5G13MEMgc)
+tone](https://youtube.com/watch?v=dZ5G13MEMgc)
 Listen to it using headphone and find there is tick noise.
 
 ## Connect the audio path

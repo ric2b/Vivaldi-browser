@@ -86,7 +86,8 @@
                                      : -kBottomMagicStackPadding)]
   ]];
 
-  if (_mostVisitedTileConfig && !ShouldPutMostVisitedSitesInMagicStack()) {
+  if (_mostVisitedTileConfig.mostVisitedItems.count > 0) {
+    CHECK(!_mostVisitedTileConfig.inMagicStack);
     [self createAndInsertMostVisitedModule];
   }
 }
@@ -119,29 +120,29 @@
 #pragma mark - ContentSuggestionsConsumer
 
 - (void)setMostVisitedTilesConfig:(MostVisitedTilesConfig*)config {
+  CHECK(!config.inMagicStack);
   _mostVisitedTileConfig = config;
   if (self.mostVisitedModuleContainer) {
     [self.mostVisitedModuleContainer removeFromSuperview];
   }
-    self.mostVisitedModuleContainer =
-        [[MagicStackModuleContainer alloc] initWithFrame:CGRectZero];
-    [self.mostVisitedModuleContainer
-        configureWithConfig:_mostVisitedTileConfig];
-    // If viewDidLoad has been called before the first valid Most Visited Tiles
-    // are available, construct `mostVisitedStackView`.
-    if (self.verticalStackView &&
-        _mostVisitedTileConfig.mostVisitedItems.count > 0) {
-      [self createAndInsertMostVisitedModule];
-    }
+  self.mostVisitedModuleContainer =
+      [[MagicStackModuleContainer alloc] initWithFrame:CGRectZero];
+  [self.mostVisitedModuleContainer configureWithConfig:_mostVisitedTileConfig];
+  // If viewDidLoad has been called before the first valid Most Visited Tiles
+  // are available, construct `mostVisitedStackView`.
+  if (self.verticalStackView &&
+      _mostVisitedTileConfig.mostVisitedItems.count > 0) {
+    [self createAndInsertMostVisitedModule];
+  }
 
-    for (ContentSuggestionsMostVisitedItem* item in _mostVisitedTileConfig
-             .mostVisitedItems) {
-      [self.contentSuggestionsMetricsRecorder
-          recordMostVisitedTileShown:item
-                             atIndex:item.index];
-    }
+  for (ContentSuggestionsMostVisitedItem* item in _mostVisitedTileConfig
+           .mostVisitedItems) {
+    [self.contentSuggestionsMetricsRecorder
+        recordMostVisitedTileShown:item
+                           atIndex:item.index];
+  }
 
-    [self.contentSuggestionsMetricsRecorder recordMostVisitedTilesShown];
+  [self.contentSuggestionsMetricsRecorder recordMostVisitedTilesShown];
 }
 
 #pragma mark - Private
@@ -154,22 +155,19 @@
 }
 
 - (void)createAndInsertMostVisitedModule {
-  if (!ShouldPutMostVisitedSitesInMagicStack()) {
-    [self.verticalStackView
-        insertArrangedSubview:self.mostVisitedModuleContainer
-                      atIndex:0];
-    [self.verticalStackView setCustomSpacing:(IsHomeCustomizationEnabled()
-                                                  ? 0
-                                                  : kMostVisitedBottomMargin)
-                                   afterView:self.mostVisitedModuleContainer];
-    [NSLayoutConstraint activateConstraints:@[
-      [self.mostVisitedModuleContainer.widthAnchor
-          constraintEqualToAnchor:self.view.widthAnchor],
-      [self.mostVisitedModuleContainer.centerXAnchor
-          constraintEqualToAnchor:self.view.centerXAnchor],
-    ]];
-    [self.view layoutIfNeeded];
-  }
+  [self.verticalStackView insertArrangedSubview:self.mostVisitedModuleContainer
+                                        atIndex:0];
+  [self.verticalStackView
+      setCustomSpacing:(IsHomeCustomizationEnabled() ? 0
+                                                     : kMostVisitedBottomMargin)
+             afterView:self.mostVisitedModuleContainer];
+  [NSLayoutConstraint activateConstraints:@[
+    [self.mostVisitedModuleContainer.widthAnchor
+        constraintEqualToAnchor:self.view.widthAnchor],
+    [self.mostVisitedModuleContainer.centerXAnchor
+        constraintEqualToAnchor:self.view.centerXAnchor],
+  ]];
+  [self.view layoutIfNeeded];
 }
 
 @end

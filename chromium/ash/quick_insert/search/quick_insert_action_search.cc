@@ -45,7 +45,7 @@ bool IsMatch(const string_matching::TokenizedString& query,
 
 }  // namespace
 
-std::vector<QuickInsertSearchResult> PickerActionSearch(
+std::vector<QuickInsertSearchResult> QuickInsertActionSearch(
     base::span<const QuickInsertCategory> available_categories,
     bool caps_lock_state_to_search,
     bool search_case_transforms,
@@ -67,7 +67,7 @@ std::vector<QuickInsertSearchResult> PickerActionSearch(
                       ? IDS_PICKER_CAPS_LOCK_ON_MENU_LABEL
                       : IDS_PICKER_CAPS_LOCK_OFF_MENU_LABEL))) {
     matches.push_back(QuickInsertCapsLockResult(
-        caps_lock_state_to_search, GetPickerShortcutForCapsLock()));
+        caps_lock_state_to_search, GetQuickInsertShortcutForCapsLock()));
   }
 
   if (search_case_transforms) {

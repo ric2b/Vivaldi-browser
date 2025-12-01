@@ -22,17 +22,27 @@ import {
   SortDirection,
   withDirection,
 } from '../base/comparison_utils';
-import {
-  menuItem,
-  PopupMenuButton,
-  popupMenuIcon,
-  PopupMenuItem,
-} from './popup_menu';
-import {scheduleFullRedraw} from './raf';
+import {MenuItem, PopupMenu} from './menu';
+import {Button} from './button';
+
+// For a table column that can be sorted; the standard popup icon should
+// reflect the current sorting direction. This function returns an icon
+// corresponding to optional SortDirection according to which the column is
+// sorted. (Optional because column might be unsorted)
+export function popupMenuIcon(sortDirection?: SortDirection) {
+  switch (sortDirection) {
+    case undefined:
+      return 'more_horiz';
+    case 'DESC':
+      return 'arrow_drop_down';
+    case 'ASC':
+      return 'arrow_drop_up';
+  }
+}
 
 export interface ColumnDescriptorAttrs<T> {
   // Context menu items displayed on the column header.
-  contextMenu?: PopupMenuItem[];
+  contextMenu?: m.Child[];
 
   // Unique column ID, used to identify which column is currently sorted.
   columnId?: string;
@@ -49,7 +59,7 @@ export class ColumnDescriptor<T> {
   name: string;
   render: (row: T) => m.Child;
   id: string;
-  contextMenu?: PopupMenuItem[];
+  contextMenu?: m.Child[];
   ordering?: ComparisonFn<T>;
 
   constructor(
@@ -81,7 +91,7 @@ export class ColumnDescriptor<T> {
 export function numberColumn<T>(
   name: string,
   getter: (t: T) => number,
-  contextMenu?: PopupMenuItem[],
+  contextMenu?: m.Child[],
 ): ColumnDescriptor<T> {
   return new ColumnDescriptor<T>(name, getter, {contextMenu, sortKey: getter});
 }
@@ -89,7 +99,7 @@ export function numberColumn<T>(
 export function stringColumn<T>(
   name: string,
   getter: (t: T) => string,
-  contextMenu?: PopupMenuItem[],
+  contextMenu?: m.Child[],
 ): ColumnDescriptor<T> {
   return new ColumnDescriptor<T>(name, getter, {contextMenu, sortKey: getter});
 }
@@ -136,13 +146,11 @@ export class TableData<T> {
     if (this._sortingInfo !== undefined) {
       this.reorder(this._sortingInfo);
     }
-    scheduleFullRedraw();
   }
 
   resetOrder() {
     this.permutation = range(this.data.length);
     this._sortingInfo = undefined;
-    scheduleFullRedraw();
   }
 
   get sortingInfo(): SortingInfo<T> | undefined {
@@ -157,7 +165,6 @@ export class TableData<T> {
         info.direction,
       ),
     );
-    scheduleFullRedraw();
   }
 }
 
@@ -191,33 +198,42 @@ export class Table implements m.ClassComponent<TableAttrs<any>> {
     if (column.ordering !== undefined) {
       const ordering = column.ordering;
       currDirection = directionOnIndex(column.id, vnode.attrs.data.sortingInfo);
-      const newItems: PopupMenuItem[] = [];
+      const newItems: m.Child[] = [];
       if (currDirection !== 'ASC') {
         newItems.push(
-          menuItem('Sort ascending', () => {
-            vnode.attrs.data.reorder({
-              columnId: column.id,
-              direction: 'ASC',
-              ordering,
-            });
+          m(MenuItem, {
+            label: 'Sort ascending',
+            onclick: () => {
+              vnode.attrs.data.reorder({
+                columnId: column.id,
+                direction: 'ASC',
+                ordering,
+              });
+            },
           }),
         );
       }
       if (currDirection !== 'DESC') {
         newItems.push(
-          menuItem('Sort descending', () => {
-            vnode.attrs.data.reorder({
-              columnId: column.id,
-              direction: 'DESC',
-              ordering,
-            });
+          m(MenuItem, {
+            label: 'Sort descending',
+            onclick: () => {
+              vnode.attrs.data.reorder({
+                columnId: column.id,
+                direction: 'DESC',
+                ordering,
+              });
+            },
           }),
         );
       }
       if (currDirection !== undefined) {
         newItems.push(
-          menuItem('Restore original order', () => {
-            vnode.attrs.data.resetOrder();
+          m(MenuItem, {
+            label: 'Restore original order',
+            onclick: () => {
+              vnode.attrs.data.resetOrder();
+            },
           }),
         );
       }
@@ -227,12 +243,14 @@ export class Table implements m.ClassComponent<TableAttrs<any>> {
     return m(
       'td',
       column.name,
-      items === undefined
-        ? null
-        : m(PopupMenuButton, {
-            icon: popupMenuIcon(currDirection),
-            items,
-          }),
+      items &&
+        m(
+          PopupMenu,
+          {
+            trigger: m(Button, {icon: popupMenuIcon(currDirection)}),
+          },
+          items,
+        ),
     );
   }
 

@@ -15,9 +15,11 @@
 #include "src/motion_vector.h"
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstdint>
 #include <cstdlib>
+#include <iterator>
 #include <memory>
 
 #include "src/dsp/dsp.h"

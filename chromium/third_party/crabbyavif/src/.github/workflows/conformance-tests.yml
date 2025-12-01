@@ -95,6 +95,10 @@ jobs:
         token: ${{ github.token }}
         github-binarycache: true
 
+    - name: jpeg, zlib and png (for linux)
+      if: runner.os == 'Linux'
+      run: sudo apt install -y zlib1g libpng-dev libjpeg-dev
+
     - name: Configure libavif (cmake)
       if: steps.cache-ext-with-libavif.outputs.cache-hit != 'true'
       working-directory: ./external/libavif

@@ -67,7 +67,7 @@ size_t AXNode::GetChildCount() const {
   return children_.size();
 }
 
-#if DCHECK_IS_ON()
+#if AX_FAIL_FAST_BUILD()
 size_t AXNode::GetSubtreeCount() const {
   DCHECK(!tree_->GetTreeUpdateInProgressState());
   size_t count = 1;  // |this| counts as one.
@@ -76,7 +76,7 @@ size_t AXNode::GetSubtreeCount() const {
   }
   return count;
 }
-#endif  // DCHECK_IS_ON()
+#endif  // AX_FAIL_FAST_BUILD()
 
 size_t AXNode::GetChildCountCrossingTreeBoundary() const {
   DCHECK(!tree_->GetTreeUpdateInProgressState());
@@ -1931,10 +1931,15 @@ bool AXNode::SetRoleMatchesItemRole(const AXNode* ordered_set) const {
 
 bool AXNode::IsIgnoredContainerForOrderedSet() const {
   return IsIgnored() || IsEmbeddedGroup() ||
+         GetRole() == ax::mojom::Role::kCell ||
          GetRole() == ax::mojom::Role::kDetails ||
          GetRole() == ax::mojom::Role::kLabelText ||
+         GetRole() == ax::mojom::Role::kLayoutTableCell ||
+         GetRole() == ax::mojom::Role::kLayoutTableRow ||
          GetRole() == ax::mojom::Role::kListItem ||
          GetRole() == ax::mojom::Role::kGenericContainer ||
+         GetRole() == ax::mojom::Role::kGridCell ||
+         GetRole() == ax::mojom::Role::kRow ||
          GetRole() == ax::mojom::Role::kScrollView ||
          GetRole() == ax::mojom::Role::kUnknown;
 }

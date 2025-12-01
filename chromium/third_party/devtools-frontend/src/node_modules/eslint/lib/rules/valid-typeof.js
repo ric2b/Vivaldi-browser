@@ -5,6 +5,12 @@
 "use strict";
 
 //------------------------------------------------------------------------------
+// Requirements
+//------------------------------------------------------------------------------
+
+const astUtils = require("./utils/ast-utils");
+
+//------------------------------------------------------------------------------
 // Rule Definition
 //------------------------------------------------------------------------------
 
@@ -13,10 +19,14 @@ module.exports = {
     meta: {
         type: "problem",
 
+        defaultOptions: [{
+            requireStringLiterals: false
+        }],
+
         docs: {
             description: "Enforce comparing `typeof` expressions against valid strings",
             recommended: true,
-            url: "https://eslint.org/docs/rules/valid-typeof"
+            url: "https://eslint.org/docs/latest/rules/valid-typeof"
         },
 
         hasSuggestions: true,
@@ -26,8 +36,7 @@ module.exports = {
                 type: "object",
                 properties: {
                     requireStringLiterals: {
-                        type: "boolean",
-                        default: false
+                        type: "boolean"
                     }
                 },
                 additionalProperties: false
@@ -41,11 +50,10 @@ module.exports = {
     },
 
     create(context) {
-
         const VALID_TYPES = new Set(["symbol", "undefined", "object", "boolean", "number", "string", "function", "bigint"]),
             OPERATORS = new Set(["==", "===", "!=", "!=="]);
-
-        const requireStringLiterals = context.options[0] && context.options[0].requireStringLiterals;
+        const sourceCode = context.sourceCode;
+        const [{ requireStringLiterals }] = context.options;
 
         let globalScope;
 
@@ -77,18 +85,18 @@ module.exports = {
 
         return {
 
-            Program() {
-                globalScope = context.getScope();
+            Program(node) {
+                globalScope = sourceCode.getScope(node);
             },
 
             UnaryExpression(node) {
                 if (isTypeofExpression(node)) {
-                    const parent = context.getAncestors().pop();
+                    const { parent } = node;
 
                     if (parent.type === "BinaryExpression" && OPERATORS.has(parent.operator)) {
                         const sibling = parent.left === node ? parent.right : parent.left;
 
-                        if (sibling.type === "Literal" || sibling.type === "TemplateLiteral" && !sibling.expressions.length) {
+                        if (sibling.type === "Literal" || astUtils.isStaticTemplateLiteral(sibling)) {
                             const value = sibling.type === "Literal" ? sibling.value : sibling.quasis[0].value.cooked;
 
                             if (!VALID_TYPES.has(value)) {

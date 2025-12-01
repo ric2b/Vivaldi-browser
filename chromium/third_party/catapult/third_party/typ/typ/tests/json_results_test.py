@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
 import unittest
 
 from typ import json_results
@@ -20,6 +21,7 @@ from typ import json_results
 class FakeArtifacts(object):
     def __init__(self):
         self.artifacts = {}
+        self.in_memory_text_artifacts = {}
 
 
 class TestMakeUploadRequest(unittest.TestCase):
@@ -153,13 +155,15 @@ class TestMakeFullResults(unittest.TestCase):
     def test_artifacts_and_types_added(self):
         ar = FakeArtifacts()
         ar.artifacts = {'artifact_name': ['a/b/c.txt']}
+        ar.in_memory_text_artifacts = {'text_artifact': 'content'}
 
         test_names = [ 'foo_test.FooTest.foobar' ]
 
         result_set = json_results.ResultSet()
         result_set.add(json_results.Result(
                 'foo_test.FooTest.foobar', json_results.ResultType.Pass,
-                0, 0.2, 0, artifacts=ar.artifacts))
+                0, 0.2, 0, artifacts=ar.artifacts,
+                in_memory_text_artifacts=ar.in_memory_text_artifacts))
 
         full_results = json_results.make_full_results(
                 {'foo': 'bar'}, 0, test_names, result_set)
@@ -168,6 +172,9 @@ class TestMakeFullResults(unittest.TestCase):
         self.assertIn('artifacts', tests['foobar'])
         self.assertEqual(tests['foobar']['artifacts'],
                          {'artifact_name': ['a/b/c.txt']})
+        self.assertIn('in_memory_text_artifacts', tests['foobar'])
+        self.assertEqual(tests['foobar']['in_memory_text_artifacts'],
+                         {'text_artifact': 'content'})
 
     def test_artifacts_merged(self):
         test_names = [ 'foo_test.FooTest.foobar' ]
@@ -197,3 +204,39 @@ class TestMakeFullResults(unittest.TestCase):
         self.assertEqual(len(artifacts['artifact_name']), 2)
         self.assertIn('a/b/c.txt', artifacts['artifact_name'])
         self.assertIn('d/e/f.txt', artifacts['artifact_name'])
+
+    def test_in_memory_artifacts_duplicates_renamed(self):
+        test_names = [ 'foo_test.FooTest.foobar' ]
+        result_set = json_results.ResultSet()
+
+        ar = FakeArtifacts()
+        ar.in_memory_text_artifacts = {'artifact_name': 'content'}
+        result_set.add(json_results.Result(
+                'foo_test.FooTest.foobar', json_results.ResultType.Failure,
+                0, 0.2, 0,
+                in_memory_text_artifacts=ar.in_memory_text_artifacts))
+
+        ar2 = FakeArtifacts()
+        ar2.in_memory_text_artifacts = {'artifact_name': 'content2'}
+        result_set.add(json_results.Result(
+                'foo_test.FooTest.foobar', json_results.ResultType.Failure,
+                0, 0.2, 0,
+                in_memory_text_artifacts=ar2.in_memory_text_artifacts))
+
+        full_results = json_results.make_full_results(
+            {'foo': 'bar'}, 0, test_names, result_set)
+
+        tests = full_results['tests']['foo_test']['FooTest']
+        self.assertIn('in_memory_text_artifacts', tests['foobar'])
+        artifacts = tests['foobar']['in_memory_text_artifacts']
+        self.assertIn('artifact_name', artifacts)
+        self.assertEqual(artifacts['artifact_name'], 'content')
+
+        # Check that the duplicate artifact got auto-renamed to include the
+        # ISO-format timestamp.
+        iso_format_regex = re.compile(
+            r'artifact_name-\d\d\d\d-\d\d-\d\dT\d\d:\d\d:\d\d.\d+')
+        for artifact_name, artifact_content in artifacts.items():
+            if iso_format_regex.match(artifact_name):
+                self.assertEqual(artifact_content, 'content2')
+                break

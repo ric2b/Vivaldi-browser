@@ -554,7 +554,7 @@ export class NetworkPersistenceManager extends Common.ObjectWrapper.ObjectWrappe
       if (!headerOverrides.every(isHeaderOverride)) {
         throw 'Type mismatch after parsing';
       }
-    } catch (e) {
+    } catch {
       console.error('Failed to parse', uiSourceCode.url(), 'for locally overriding headers.');
       return [];
     }
@@ -995,11 +995,11 @@ export const enum Events {
   LOCAL_OVERRIDES_PROJECT_UPDATED = 'LocalOverridesProjectUpdated',
 }
 
-export type EventTypes = {
-  [Events.PROJECT_CHANGED]: Workspace.Workspace.Project|null,
-  [Events.REQUEST_FOR_HEADER_OVERRIDES_FILE_CHANGED]: Workspace.UISourceCode.UISourceCode,
-  [Events.LOCAL_OVERRIDES_PROJECT_UPDATED]: boolean,
-};
+export interface EventTypes {
+  [Events.PROJECT_CHANGED]: Workspace.Workspace.Project|null;
+  [Events.REQUEST_FOR_HEADER_OVERRIDES_FILE_CHANGED]: Workspace.UISourceCode.UISourceCode;
+  [Events.LOCAL_OVERRIDES_PROJECT_UPDATED]: boolean;
+}
 
 export interface HeaderOverride {
   applyTo: string;

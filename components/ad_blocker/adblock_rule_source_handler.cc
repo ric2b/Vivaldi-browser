@@ -139,7 +139,7 @@ RuleSourceHandler::RulesReadResult RuleSourceHandler::ReadRules(
   if (read_result.fetch_result != FetchResult::kSuccess)
     return read_result;
 
-  if (!rules_compiler.Run(parse_result, output_path, read_result.checksum))
+  if (!rules_compiler.Run(parse_result, source_settings, output_path, read_result.checksum))
     read_result.fetch_result = FetchResult::kFailedSavingParsedRules;
 
   return read_result;

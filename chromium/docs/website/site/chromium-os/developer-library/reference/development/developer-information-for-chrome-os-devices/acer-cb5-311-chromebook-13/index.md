@@ -2,7 +2,7 @@
 breadcrumbs:
 - - /chromium-os
   - ChromiumOS
-- - /chromium-os/developer-information-for-chrome-os-devices
+- - /chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices
   - Developer Information for ChromeOS Devices
 page_name: acer-cb5-311-chromebook-13
 title: Acer CB5-311 Chromebook 13
@@ -20,15 +20,15 @@ software on the Chrome Notebook), see the [ChromiumOS Developer
 Guide](/chromium-os/developer-guide).
 
 <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/acer-cb5-311-chromebook-13/gallery-Acer-Chromebook13-1-front.jpg"
+src="gallery-Acer-Chromebook13-1-front.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/acer-cb5-311-chromebook-13/gallery-Acer-Chromebook13-2-left.jpg"
+src="gallery-Acer-Chromebook13-2-left.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/acer-cb5-311-chromebook-13/gallery-Acer-Chromebook13-3-right.jpg"
+src="gallery-Acer-Chromebook13-3-right.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/acer-cb5-311-chromebook-13/gallery-Acer-Chromebook13-4-side-left.jpg"
+src="gallery-Acer-Chromebook13-4-side-left.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/acer-cb5-311-chromebook-13/gallery-Acer-Chromebook13-5-side-right.jpg"
+src="gallery-Acer-Chromebook13-5-side-right.jpg"
 height=150 width=200>
 
 ### Specifications
@@ -44,7 +44,7 @@ height=150 width=200>
 *   I/O:
     *   HDMI port
     *   2 x USB 3.0
-    *   [SD slot](http://en.wikipedia.org/wiki/Secure_Digital) (SDXC
+    *   [SD slot](https://en.wikipedia.org/wiki/Secure_Digital) (SDXC
                 compatible)
     *   Headphone/mic combo jack
     *   Camera & mic
@@ -54,7 +54,7 @@ height=150 width=200>
     *   Bluetooth 4.0
     *   USB ports can handle some Ethernet dongles
 *   no [Kensington Security
-            Slot](http://en.wikipedia.org/wiki/Kensington_Security_Slot)
+            Slot](https://en.wikipedia.org/wiki/Kensington_Security_Slot)
 *   Linux 3.10
 
 ## Developer Mode

@@ -26,8 +26,12 @@ include_directories(${PARENT_DIR})
 
 add_subdirectory(grammars)
 
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize-coverage=0")
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize-coverage=0")
+
+if (NOT COMPILER_GCC)
+  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize-coverage=0")
+  SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize-coverage=0")
+endif()
+
 
 fuzztest_cc_library(
   NAME
@@ -83,6 +87,7 @@ fuzztest_cc_library(
     "init_fuzztest.cc"
   DEPS
     fuzztest::configuration
+    fuzztest::flag_name
     fuzztest::googletest_adaptor
     fuzztest::io
     fuzztest::logging
@@ -118,16 +123,21 @@ fuzztest_cc_library(
   SRCS
     "llvm_fuzzer_wrapper.cc"
   DEPS
+    fuzztest::coverage
     fuzztest::domain_core
     fuzztest::fuzztest
     fuzztest::io
     fuzztest::llvm_fuzzer_main
+    fuzztest::logging
+    absl::core_headers
     absl::flags
     absl::log
+    absl::no_destructor
     absl::random_random
     absl::random_bit_gen_ref
     absl::strings
     absl::string_view
+    absl::synchronization
     re2::re2
 )
 
@@ -240,6 +250,8 @@ fuzztest_cc_library(
   SRCS
     "internal/coverage.cc"
   DEPS
+    fuzztest::domain_core
+    fuzztest::flag_name
     fuzztest::logging
     fuzztest::table_of_recent_compares
     absl::core_headers
@@ -267,6 +279,7 @@ fuzztest_cc_library(
     fuzztest::status
     fuzztest::type_support
     absl::core_headers
+    absl::no_destructor
     absl::flat_hash_map
     absl::flat_hash_set
     absl::random_random
@@ -297,6 +310,7 @@ fuzztest_cc_library(
     "internal/domains/flat_map_impl.h"
     "internal/domains/in_range_impl.h"
     "internal/domains/map_impl.h"
+    "internal/domains/mutation_metadata.h"
     "internal/domains/one_of_impl.h"
     "internal/domains/optional_of_impl.h"
     "internal/domains/overlap_of_impl.h"
@@ -311,7 +325,6 @@ fuzztest_cc_library(
   DEPS
     fuzztest::absl_helpers
     fuzztest::any
-    fuzztest::coverage
     fuzztest::logging
     fuzztest::meta
     fuzztest::printer
@@ -372,6 +385,13 @@ fuzztest_cc_test(
 
 fuzztest_cc_library(
   NAME
+    flag_name
+  HDRS
+    "internal/flag_name.h"
+)
+
+fuzztest_cc_library(
+  NAME
     googletest_adaptor
   HDRS
     "internal/googletest_adaptor.h"
@@ -380,6 +400,7 @@ fuzztest_cc_library(
   DEPS
     fuzztest::configuration
     fuzztest::corpus_database
+    fuzztest::flag_name
     fuzztest::io
     fuzztest::registry
     fuzztest::runtime
@@ -524,11 +545,13 @@ fuzztest_cc_library(
   SRCS
     "internal/runtime.cc"
   DEPS
+    fuzztest::bazel
     fuzztest::configuration
     fuzztest::corpus_database
     fuzztest::coverage
     fuzztest::domain_core
     fuzztest::fixture_driver
+    fuzztest::flag_name
     fuzztest::io
     fuzztest::logging
     fuzztest::printer
@@ -557,10 +580,13 @@ fuzztest_cc_test(
   SRCS
     "internal/runtime_test.cc"
   DEPS
+    fuzztest::configuration
     fuzztest::domain_core
+    fuzztest::flag_name
     fuzztest::runtime
     test_protobuf
     absl::time
+    absl::flags
     GTest::gmock_main
 )
 

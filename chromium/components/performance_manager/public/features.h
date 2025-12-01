@@ -15,10 +15,6 @@
 
 namespace performance_manager::features {
 
-// If enabled, the PM runs on the main (UI) thread *and* tasks posted to the PM
-// TaskRunner from the main (UI) thread run synchronously.
-BASE_DECLARE_FEATURE(kRunOnMainThreadSync);
-
 #if !BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_LINUX)
@@ -35,6 +31,19 @@ BASE_DECLARE_FEATURE(kUnthrottledTabProcessReporting);
 // Enable background tab loading of pages (restored via session restore)
 // directly from Performance Manager rather than via TabLoader.
 BASE_DECLARE_FEATURE(kBackgroundTabLoadingFromPerformanceManager);
+
+// Minimum site engagement score for a tab to be restored, if it doesn't
+// communicate in the background. If 0, engagement score doesn't prevent any tab
+// from being loaded.
+BASE_DECLARE_FEATURE_PARAM(size_t, kBackgroundTabLoadingMinSiteEngagement);
+
+// If false, the background tab loading policy won't set the main frame restored
+// state before restoring a tab. This gives it the same bugs as TabLoader: the
+// notification permission and features stored in SiteDataReader won't be used,
+// because they're looked up by url which isn't available without the restored
+// state. This minimizes behaviour differences between TabLoader and the
+// Performance Manager policy, for performance comparisons.
+BASE_DECLARE_FEATURE_PARAM(bool, kBackgroundTabLoadingRestoreMainFrameState);
 
 // Make the Battery Saver Modes available to users. If this is enabled, it
 // doesn't mean the mode is enabled, just that the user has the option of
@@ -76,12 +85,6 @@ extern const base::FeatureParam<int> kInterventionDialogStringVersion;
 // profile that is different from the last active browser.
 extern const base::FeatureParam<bool> kInterventionShowMixedProfileSuggestions;
 
-#if BUILDFLAG(IS_WIN)
-// Prefetch the main browser DLL when a new node is added to the PM graph
-// and no prefetch has been done within a reasonable timeframe.
-BASE_DECLARE_FEATURE(kPrefetchVirtualMemoryPolicy);
-#endif
-
 // This represents the duration that the performance intervention button
 // should remain in the toolbar after the user dismisses the intervention
 // dialog without taking the suggested action.
@@ -120,8 +123,6 @@ extern const base::FeatureParam<int> kMemoryFreeBytesThreshold;
 BASE_DECLARE_FEATURE(kPMProcessPriorityPolicy);
 
 extern const base::FeatureParam<bool> kInheritParentPriority;
-
-extern const base::FeatureParam<bool> kDownvoteAdFrames;
 
 BASE_DECLARE_FEATURE(kPMLoadingPageVoter);
 
@@ -175,6 +176,13 @@ BASE_DECLARE_FEATURE(kFreezingOnBatterySaver);
 // - Pretend that all tabs have high CPU usage in background.
 BASE_DECLARE_FEATURE(kFreezingOnBatterySaverForTesting);
 
+// When enabled, the freezing policy won't freeze pages that are opted out of
+// tab discarding.
+BASE_DECLARE_FEATURE(kFreezingFollowsDiscardOptOut);
+
+// When enabled, the freezing eligibility UKM event may be recorded.
+BASE_DECLARE_FEATURE(kRecordFreezingEligibilityUKM);
+
 // When enabled, Resource Attribution measurements will include contexts for
 // individual origins.
 BASE_DECLARE_FEATURE(kResourceAttributionIncludeOrigins);
@@ -189,6 +197,10 @@ BASE_DECLARE_FEATURE(kUnimportantFramesPriority);
 // When enabled, the begin frame rate of visible unimportant frames would be
 // reduced to half of normal frame rate.
 BASE_DECLARE_FEATURE(kThrottleUnimportantFrameRate);
+
+// When enabled, keep the default search engine render process host alive
+// (crbug.com/365958798).
+BASE_DECLARE_FEATURE(kKeepDefaultSearchEngineRendererAlive);
 
 }  // namespace performance_manager::features
 

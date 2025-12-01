@@ -51,7 +51,7 @@ title: Chrome Apps Migration
 
 # **<td>Planned</td>**
 
-# **<td><a href="http://crbug.com/891339">Notification Triggers</a></td>**
+# **<td><a href="https://crbug.com/891339">Notification Triggers</a></td>**
 
 # **<td>78</td>**
 
@@ -101,7 +101,7 @@ title: Chrome Apps Migration
 
 # **<td>Planned</td>**
 
-# **<td><a href="http://crbug.com/897326">Audio Device Client</a></td>**
+# **<td><a href="https://crbug.com/897326">Audio Device Client</a></td>**
 
 # **<td>84</td>**
 
@@ -220,7 +220,7 @@ title: Chrome Apps Migration
 
 # **<td>Partial Support</td>**
 
-# **<td><a href="http://crbug.com/853326">Native FileSystem API</a></td>**
+# **<td><a href="https://crbug.com/853326">Native FileSystem API</a></td>**
 
 # **<td>78</td>**
 
@@ -290,7 +290,7 @@ title: Chrome Apps Migration
 
 # **<td>Planned</td>**
 
-# **<td><a href="http://crbug.com/878979">User Idle Detection API</a></td>**
+# **<td><a href="https://crbug.com/878979">User Idle Detection API</a></td>**
 
 # **<td>82</td>**
 
@@ -323,7 +323,7 @@ title: Chrome Apps Migration
 
 # **<td>Planned</td>**
 
-# **<td><a href="http://crbug.com/853326">Native FileSystem API</a></td>**
+# **<td><a href="https://crbug.com/853326">Native FileSystem API</a></td>**
 
 # **<td>77</td>**
 

@@ -737,8 +737,8 @@ export namespace Audits {
     /**
      * The unique request id.
      */
-    requestId: Network.RequestId;
-    url?: string;
+    requestId?: Network.RequestId;
+    url: string;
   }
 
   /**
@@ -785,6 +785,26 @@ export namespace Audits {
   }
 
   /**
+   * Represents the category of insight that a cookie issue falls under.
+   */
+  export const enum InsightType {
+    GitHubResource = 'GitHubResource',
+    GracePeriod = 'GracePeriod',
+    Heuristics = 'Heuristics',
+  }
+
+  /**
+   * Information about the suggested solution to a cookie issue.
+   */
+  export interface CookieIssueInsight {
+    type: InsightType;
+    /**
+     * Link to table entry in third-party cookie migration readiness list.
+     */
+    tableEntryUrl?: string;
+  }
+
+  /**
    * This information is currently necessary, as the front-end has a difficult
    * time finding a specific cookie. With this, we can convey specific error
    * information without the cookie.
@@ -808,6 +828,10 @@ export namespace Audits {
     siteForCookies?: string;
     cookieUrl?: string;
     request?: AffectedRequest;
+    /**
+     * The recommended solution to the issue.
+     */
+    insight?: CookieIssueInsight;
   }
 
   export const enum MixedContentResolutionStatus {
@@ -891,6 +915,7 @@ export namespace Audits {
     CorpNotSameOriginAfterDefaultedToSameOriginByDip = 'CorpNotSameOriginAfterDefaultedToSameOriginByDip',
     CorpNotSameOriginAfterDefaultedToSameOriginByCoepAndDip = 'CorpNotSameOriginAfterDefaultedToSameOriginByCoepAndDip',
     CorpNotSameSite = 'CorpNotSameSite',
+    SRIMessageSignatureMismatch = 'SRIMessageSignatureMismatch',
   }
 
   /**
@@ -1216,6 +1241,7 @@ export namespace Audits {
     InvalidFieldsSpecified = 'InvalidFieldsSpecified',
     RelyingPartyOriginIsOpaque = 'RelyingPartyOriginIsOpaque',
     TypeNotMatching = 'TypeNotMatching',
+    UiDismissedNoEmbargo = 'UiDismissedNoEmbargo',
   }
 
   export interface FederatedAuthUserInfoRequestIssueDetails {
@@ -1258,6 +1284,23 @@ export namespace Audits {
      */
     failureMessage: string;
     requestId?: Network.RequestId;
+  }
+
+  export const enum SelectElementAccessibilityIssueReason {
+    DisallowedSelectChild = 'DisallowedSelectChild',
+    DisallowedOptGroupChild = 'DisallowedOptGroupChild',
+    NonPhrasingContentOptionChild = 'NonPhrasingContentOptionChild',
+    InteractiveContentOptionChild = 'InteractiveContentOptionChild',
+    InteractiveContentLegendChild = 'InteractiveContentLegendChild',
+  }
+
+  /**
+   * This issue warns about errors in the select element content model.
+   */
+  export interface SelectElementAccessibilityIssueDetails {
+    nodeId: DOM.BackendNodeId;
+    selectElementAccessibilityIssueReason: SelectElementAccessibilityIssueReason;
+    hasDisallowedAttributes: boolean;
   }
 
   export const enum StyleSheetLoadingIssueReason {
@@ -1336,6 +1379,7 @@ export namespace Audits {
     FederatedAuthUserInfoRequestIssue = 'FederatedAuthUserInfoRequestIssue',
     PropertyRuleIssue = 'PropertyRuleIssue',
     SharedDictionaryIssue = 'SharedDictionaryIssue',
+    SelectElementAccessibilityIssue = 'SelectElementAccessibilityIssue',
   }
 
   /**
@@ -1365,6 +1409,7 @@ export namespace Audits {
     propertyRuleIssueDetails?: PropertyRuleIssueDetails;
     federatedAuthUserInfoRequestIssueDetails?: FederatedAuthUserInfoRequestIssueDetails;
     sharedDictionaryIssueDetails?: SharedDictionaryIssueDetails;
+    selectElementAccessibilityIssueDetails?: SelectElementAccessibilityIssueDetails;
   }
 
   /**
@@ -1821,18 +1866,21 @@ export namespace Browser {
   }
 
   export const enum PermissionType {
-    AccessibilityEvents = 'accessibilityEvents',
+    Ar = 'ar',
     AudioCapture = 'audioCapture',
-    BackgroundSync = 'backgroundSync',
+    AutomaticFullscreen = 'automaticFullscreen',
     BackgroundFetch = 'backgroundFetch',
+    BackgroundSync = 'backgroundSync',
+    CameraPanTiltZoom = 'cameraPanTiltZoom',
     CapturedSurfaceControl = 'capturedSurfaceControl',
     ClipboardReadWrite = 'clipboardReadWrite',
     ClipboardSanitizedWrite = 'clipboardSanitizedWrite',
     DisplayCapture = 'displayCapture',
     DurableStorage = 'durableStorage',
-    Flash = 'flash',
     Geolocation = 'geolocation',
+    HandTracking = 'handTracking',
     IdleDetection = 'idleDetection',
+    KeyboardLock = 'keyboardLock',
     LocalFonts = 'localFonts',
     Midi = 'midi',
     MidiSysex = 'midiSysex',
@@ -1840,16 +1888,19 @@ export namespace Browser {
     Notifications = 'notifications',
     PaymentHandler = 'paymentHandler',
     PeriodicBackgroundSync = 'periodicBackgroundSync',
+    PointerLock = 'pointerLock',
     ProtectedMediaIdentifier = 'protectedMediaIdentifier',
     Sensors = 'sensors',
-    StorageAccess = 'storageAccess',
+    SmartCard = 'smartCard',
     SpeakerSelection = 'speakerSelection',
+    StorageAccess = 'storageAccess',
     TopLevelStorageAccess = 'topLevelStorageAccess',
     VideoCapture = 'videoCapture',
-    VideoCapturePanTiltZoom = 'videoCapturePanTiltZoom',
+    Vr = 'vr',
     WakeLockScreen = 'wakeLockScreen',
     WakeLockSystem = 'wakeLockSystem',
     WebAppInstallation = 'webAppInstallation',
+    WebPrinting = 'webPrinting',
     WindowManagement = 'windowManagement',
   }
 
@@ -2242,6 +2293,20 @@ export namespace CSS {
   }
 
   /**
+   * CSS style coming from animations with the name of the animation.
+   */
+  export interface CSSAnimationStyle {
+    /**
+     * The name of the animation.
+     */
+    name?: string;
+    /**
+     * The style coming from the animation.
+     */
+    style: CSSStyle;
+  }
+
+  /**
    * Inherited CSS rule collection from ancestor node.
    */
   export interface InheritedStyleEntry {
@@ -2253,6 +2318,20 @@ export namespace CSS {
      * Matches of CSS rules matching the ancestor node in the style inheritance chain.
      */
     matchedCSSRules: RuleMatch[];
+  }
+
+  /**
+   * Inherited CSS style collection for animated styles from ancestor node.
+   */
+  export interface InheritedAnimatedStyleEntry {
+    /**
+     * Styles coming from the animations of the ancestor, if any, in the style inheritance chain.
+     */
+    animationStyles?: CSSAnimationStyle[];
+    /**
+     * The style coming from the transitions of the ancestor, if any, in the style inheritance chain.
+     */
+    transitionsStyle?: CSSStyle;
   }
 
   /**
@@ -3136,6 +3215,13 @@ export namespace CSS {
      * Identifier of the frame where "via-inspector" stylesheet should be created.
      */
     frameId: Page.FrameId;
+    /**
+     * If true, creates a new stylesheet for every call. If false,
+     * returns a stylesheet previously created by a call with force=false
+     * for the frame's document if it exists or creates a new stylesheet
+     * (default: false).
+     */
+    force?: boolean;
   }
 
   export interface CreateStyleSheetResponse extends ProtocolResponseWithError {
@@ -3154,6 +3240,17 @@ export namespace CSS {
      * Element pseudo classes to force when computing the element's style.
      */
     forcedPseudoClasses: string[];
+  }
+
+  export interface ForceStartingStyleRequest {
+    /**
+     * The element id for which to force the starting-style state.
+     */
+    nodeId: DOM.NodeId;
+    /**
+     * Boolean indicating if this is on or off.
+     */
+    forced: boolean;
   }
 
   export interface GetBackgroundColorsRequest {
@@ -3194,6 +3291,44 @@ export namespace CSS {
     computedStyle: CSSComputedStyleProperty[];
   }
 
+  export interface ResolveValuesRequest {
+    /**
+     * Substitution functions (var()/env()/attr()) and cascade-dependent
+     * keywords (revert/revert-layer) do not work.
+     */
+    values: string[];
+    /**
+     * Id of the node in whose context the expression is evaluated
+     */
+    nodeId: DOM.NodeId;
+    /**
+     * Only longhands and custom property names are accepted.
+     */
+    propertyName?: string;
+    /**
+     * Pseudo element type, only works for pseudo elements that generate
+     * elements in the tree, such as ::before and ::after.
+     */
+    pseudoType?: DOM.PseudoType;
+    /**
+     * Pseudo element custom ident.
+     */
+    pseudoIdentifier?: string;
+  }
+
+  export interface ResolveValuesResponse extends ProtocolResponseWithError {
+    results: string[];
+  }
+
+  export interface GetLonghandPropertiesRequest {
+    shorthandName: string;
+    value: string;
+  }
+
+  export interface GetLonghandPropertiesResponse extends ProtocolResponseWithError {
+    longhandProperties: CSSProperty[];
+  }
+
   export interface GetInlineStylesForNodeRequest {
     nodeId: DOM.NodeId;
   }
@@ -3207,6 +3342,26 @@ export namespace CSS {
      * Attribute-defined element style (e.g. resulting from "width=20 height=100%").
      */
     attributesStyle?: CSSStyle;
+  }
+
+  export interface GetAnimatedStylesForNodeRequest {
+    nodeId: DOM.NodeId;
+  }
+
+  export interface GetAnimatedStylesForNodeResponse extends ProtocolResponseWithError {
+    /**
+     * Styles coming from animations.
+     */
+    animationStyles?: CSSAnimationStyle[];
+    /**
+     * Style coming from transitions.
+     */
+    transitionsStyle?: CSSStyle;
+    /**
+     * Inherited style entries for animationsStyle and transitionsStyle from
+     * the inheritance chain of the element.
+     */
+    inherited?: InheritedAnimatedStyleEntry[];
   }
 
   export interface GetMatchedStylesForNodeRequest {
@@ -3810,10 +3965,10 @@ export namespace DOM {
   export const enum PseudoType {
     FirstLine = 'first-line',
     FirstLetter = 'first-letter',
-    Check = 'check',
+    Checkmark = 'checkmark',
     Before = 'before',
     After = 'after',
-    SelectArrow = 'select-arrow',
+    PickerIcon = 'picker-icon',
     Marker = 'marker',
     Backdrop = 'backdrop',
     Column = 'column',
@@ -3826,8 +3981,7 @@ export namespace DOM {
     FirstLineInherited = 'first-line-inherited',
     ScrollMarker = 'scroll-marker',
     ScrollMarkerGroup = 'scroll-marker-group',
-    ScrollNextButton = 'scroll-next-button',
-    ScrollPrevButton = 'scroll-prev-button',
+    ScrollButton = 'scroll-button',
     Scrollbar = 'scrollbar',
     ScrollbarThumb = 'scrollbar-thumb',
     ScrollbarButton = 'scrollbar-button',
@@ -5893,73 +6047,6 @@ export namespace DOMStorage {
 
   export interface DomStorageItemsClearedEvent {
     storageId: StorageId;
-  }
-}
-
-export namespace Database {
-
-  /**
-   * Unique identifier of Database object.
-   */
-  export type DatabaseId = OpaqueIdentifier<string, 'Protocol.Database.DatabaseId'>;
-
-  /**
-   * Database object.
-   */
-  export interface Database {
-    /**
-     * Database ID.
-     */
-    id: DatabaseId;
-    /**
-     * Database domain.
-     */
-    domain: string;
-    /**
-     * Database name.
-     */
-    name: string;
-    /**
-     * Database version.
-     */
-    version: string;
-  }
-
-  /**
-   * Database error.
-   */
-  export interface Error {
-    /**
-     * Error message.
-     */
-    message: string;
-    /**
-     * Error code.
-     */
-    code: integer;
-  }
-
-  export interface ExecuteSQLRequest {
-    databaseId: DatabaseId;
-    query: string;
-  }
-
-  export interface ExecuteSQLResponse extends ProtocolResponseWithError {
-    columnNames?: string[];
-    values?: any[];
-    sqlError?: Error;
-  }
-
-  export interface GetDatabaseTableNamesRequest {
-    databaseId: DatabaseId;
-  }
-
-  export interface GetDatabaseTableNamesResponse extends ProtocolResponseWithError {
-    tableNames: string[];
-  }
-
-  export interface AddDatabaseEvent {
-    database: Database;
   }
 }
 
@@ -8562,6 +8649,7 @@ export namespace Network {
     CorpNotSameOriginAfterDefaultedToSameOriginByDip = 'corp-not-same-origin-after-defaulted-to-same-origin-by-dip',
     CorpNotSameOriginAfterDefaultedToSameOriginByCoepAndDip = 'corp-not-same-origin-after-defaulted-to-same-origin-by-coep-and-dip',
     CorpNotSameSite = 'corp-not-same-site',
+    SriMessageSignatureMismatch = 'sri-message-signature-mismatch',
   }
 
   /**
@@ -9085,6 +9173,7 @@ export namespace Network {
     StorageAccess = 'StorageAccess',
     TopLevelStorageAccess = 'TopLevelStorageAccess',
     Scheme = 'Scheme',
+    SameSiteNoneCookiesInSandbox = 'SameSiteNoneCookiesInSandbox',
   }
 
   /**
@@ -10046,6 +10135,21 @@ export namespace Network {
     resource: LoadNetworkResourcePageResult;
   }
 
+  export interface SetCookieControlsRequest {
+    /**
+     * Whether 3pc restriction is enabled.
+     */
+    enableThirdPartyCookieRestriction: boolean;
+    /**
+     * Whether 3pc grace period exception should be enabled; false by default.
+     */
+    disableThirdPartyCookieMetadata: boolean;
+    /**
+     * Whether 3pc heuristics exceptions should be enabled; false by default.
+     */
+    disableThirdPartyCookieHeuristics: boolean;
+  }
+
   /**
    * Fired when data chunk was received over the network.
    */
@@ -10572,6 +10676,9 @@ export namespace Network {
     blockedCookies: BlockedSetCookieWithReason[];
     /**
      * Raw response headers as they were received over the wire.
+     * Duplicate headers in the response are represented as a single key with their values
+     * concatentated using `\n` as the separator.
+     * See also `headersText` that contains verbatim text for HTTP/1.*.
      */
     headers: Headers;
     /**
@@ -10618,6 +10725,9 @@ export namespace Network {
     requestId: RequestId;
     /**
      * Raw response headers as they were received over the wire.
+     * Duplicate headers in the response are represented as a single key with their values
+     * concatentated using `\n` as the separator.
+     * See also `headersText` that contains verbatim text for HTTP/1.*.
      */
     headers: Headers;
   }
@@ -10635,6 +10745,7 @@ export namespace Network {
     InternalError = 'InternalError',
     UnknownError = 'UnknownError',
     FulfilledLocally = 'FulfilledLocally',
+    SiteIssuerLimit = 'SiteIssuerLimit',
   }
 
   /**
@@ -11613,6 +11724,7 @@ export namespace Page {
     ChUa = 'ch-ua',
     ChUaArch = 'ch-ua-arch',
     ChUaBitness = 'ch-ua-bitness',
+    ChUaHighEntropyValues = 'ch-ua-high-entropy-values',
     ChUaPlatform = 'ch-ua-platform',
     ChUaModel = 'ch-ua-model',
     ChUaMobile = 'ch-ua-mobile',
@@ -11630,6 +11742,7 @@ export namespace Page {
     ControlledFrame = 'controlled-frame',
     CrossOriginIsolated = 'cross-origin-isolated',
     DeferredFetch = 'deferred-fetch',
+    DeferredFetchMinimal = 'deferred-fetch-minimal',
     DigitalCredentialsGet = 'digital-credentials-get',
     DirectSockets = 'direct-sockets',
     DirectSocketsPrivate = 'direct-sockets-private',
@@ -13444,6 +13557,45 @@ export namespace Page {
     frame: Frame;
   }
 
+  export const enum FrameStartedNavigatingEventNavigationType {
+    Reload = 'reload',
+    ReloadBypassingCache = 'reloadBypassingCache',
+    Restore = 'restore',
+    RestoreWithPost = 'restoreWithPost',
+    HistorySameDocument = 'historySameDocument',
+    HistoryDifferentDocument = 'historyDifferentDocument',
+    SameDocument = 'sameDocument',
+    DifferentDocument = 'differentDocument',
+  }
+
+  /**
+   * Fired when a navigation starts. This event is fired for both
+   * renderer-initiated and browser-initiated navigations. For renderer-initiated
+   * navigations, the event is fired after `frameRequestedNavigation`.
+   * Navigation may still be cancelled after the event is issued. Multiple events
+   * can be fired for a single navigation, for example, when a same-document
+   * navigation becomes a cross-document navigation (such as in the case of a
+   * frameset).
+   */
+  export interface FrameStartedNavigatingEvent {
+    /**
+     * ID of the frame that is being navigated.
+     */
+    frameId: FrameId;
+    /**
+     * The URL the navigation started with. The final URL can be different.
+     */
+    url: string;
+    /**
+     * Loader identifier. Even though it is present in case of same-document
+     * navigation, the previously committed loaderId would not change unless
+     * the navigation changes from a same-document to a cross-document
+     * navigation.
+     */
+    loaderId: Network.LoaderId;
+    navigationType: FrameStartedNavigatingEventNavigationType;
+  }
+
   /**
    * Fired when a renderer-initiated navigation is requested.
    * Navigation may still be cancelled after the event is issued.
@@ -14334,7 +14486,6 @@ export namespace Storage {
    * Enum of possible storage types.
    */
   export const enum StorageType {
-    Appcache = 'appcache',
     Cookies = 'cookies',
     File_systems = 'file_systems',
     Indexeddb = 'indexeddb',
@@ -15105,6 +15256,25 @@ export namespace Storage {
     sets: RelatedWebsiteSet[];
   }
 
+  export interface GetAffectedUrlsForThirdPartyCookieMetadataRequest {
+    /**
+     * The URL of the page currently being visited.
+     */
+    firstPartyUrl: string;
+    /**
+     * The list of embedded resource URLs from the page.
+     */
+    thirdPartyUrls: string[];
+  }
+
+  export interface GetAffectedUrlsForThirdPartyCookieMetadataResponse extends ProtocolResponseWithError {
+    /**
+     * Array of matching URLs. If there is a primary pattern match for the first-
+     * party URL, only the first-party URL is returned in the array.
+     */
+    matchedUrls: string[];
+  }
+
   /**
    * A cache's contents have been modified.
    */
@@ -15600,6 +15770,16 @@ export namespace Target {
     port: integer;
   }
 
+  /**
+   * The state of the target window.
+   */
+  export const enum WindowState {
+    Normal = 'normal',
+    Minimized = 'minimized',
+    Maximized = 'maximized',
+    Fullscreen = 'fullscreen',
+  }
+
   export interface ActivateTargetRequest {
     targetId: TargetID;
   }
@@ -15687,29 +15867,42 @@ export namespace Target {
      */
     url: string;
     /**
-     * Frame width in DIP (headless chrome only).
+     * Frame left origin in DIP (requires newWindow to be true or headless shell).
+     */
+    left?: integer;
+    /**
+     * Frame top origin in DIP (requires newWindow to be true or headless shell).
+     */
+    top?: integer;
+    /**
+     * Frame width in DIP (requires newWindow to be true or headless shell).
      */
     width?: integer;
     /**
-     * Frame height in DIP (headless chrome only).
+     * Frame height in DIP (requires newWindow to be true or headless shell).
      */
     height?: integer;
+    /**
+     * Frame window state (requires newWindow to be true or headless shell).
+     * Default is normal.
+     */
+    windowState?: WindowState;
     /**
      * The browser context to create the page in.
      */
     browserContextId?: Browser.BrowserContextID;
     /**
-     * Whether BeginFrames for this target will be controlled via DevTools (headless chrome only,
+     * Whether BeginFrames for this target will be controlled via DevTools (headless shell only,
      * not supported on MacOS yet, false by default).
      */
     enableBeginFrameControl?: boolean;
     /**
-     * Whether to create a new Window or Tab (chrome-only, false by default).
+     * Whether to create a new Window or Tab (false by default, not supported by headless shell).
      */
     newWindow?: boolean;
     /**
-     * Whether to create the target in background or foreground (chrome-only,
-     * false by default).
+     * Whether to create the target in background or foreground (false by default, not supported
+     * by headless shell).
      */
     background?: boolean;
     /**
@@ -17325,6 +17518,17 @@ export namespace Preload {
   }
 
   /**
+   * Chrome manages different types of preloads together using a
+   * concept of preloading pipeline. For example, if a site uses a
+   * SpeculationRules for prerender, Chrome first starts a prefetch and
+   * then upgrades it to prerender.
+   *
+   * CDP events for them are emitted separately but they share
+   * `PreloadPipelineId`.
+   */
+  export type PreloadPipelineId = OpaqueIdentifier<string, 'Protocol.Preload.PreloadPipelineId'>;
+
+  /**
    * List of FinalStatus reasons for Prerender2.
    */
   export const enum PrerenderFinalStatus {
@@ -17489,6 +17693,7 @@ export namespace Preload {
    */
   export interface PrefetchStatusUpdatedEvent {
     key: PreloadingAttemptKey;
+    pipelineId: PreloadPipelineId;
     /**
      * The frame id of the frame initiating prefetch.
      */
@@ -17504,6 +17709,7 @@ export namespace Preload {
    */
   export interface PrerenderStatusUpdatedEvent {
     key: PreloadingAttemptKey;
+    pipelineId: PreloadPipelineId;
     status: PreloadingStatus;
     prerenderStatus?: PrerenderFinalStatus;
     /**
@@ -18030,6 +18236,17 @@ export namespace Debugger {
      * URL of the external symbol source.
      */
     externalURL?: string;
+  }
+
+  export interface ResolvedBreakpoint {
+    /**
+     * Breakpoint unique identifier.
+     */
+    breakpointId: BreakpointId;
+    /**
+     * Actual breakpoint location.
+     */
+    location: Location;
   }
 
   export const enum ContinueToLocationRequestTargetCallFrames {
@@ -18563,6 +18780,7 @@ export namespace Debugger {
 
   /**
    * Fired when breakpoint is resolved to an actual script and location.
+   * Deprecated in favor of `resolvedBreakpoints` in the `scriptParsed` event.
    */
   export interface BreakpointResolvedEvent {
     /**
@@ -18662,6 +18880,10 @@ export namespace Debugger {
      */
     hash: string;
     /**
+     * For Wasm modules, the content of the `build_id` custom section.
+     */
+    buildId: string;
+    /**
      * Embedder-specific auxiliary data likely matching {isDefault: boolean, type: 'default'|'isolated'|'worker', frameId: string}
      */
     executionContextAuxData?: any;
@@ -18737,6 +18959,10 @@ export namespace Debugger {
      */
     hash: string;
     /**
+     * For Wasm modules, the content of the `build_id` custom section.
+     */
+    buildId: string;
+    /**
      * Embedder-specific auxiliary data likely matching {isDefault: boolean, type: 'default'|'isolated'|'worker', frameId: string}
      */
     executionContextAuxData?: any;
@@ -18780,6 +19006,12 @@ export namespace Debugger {
      * The name the embedder supplied for this script.
      */
     embedderName?: string;
+    /**
+     * The list of set breakpoints in this script if calls to `setBreakpointByUrl`
+     * matches this script's URL or hash. Clients that use this list can ignore the
+     * `breakpointResolved` event. They are equivalent.
+     */
+    resolvedBreakpoints?: ResolvedBreakpoint[];
   }
 }
 
@@ -20044,13 +20276,21 @@ export namespace Runtime {
 
   export interface GetHeapUsageResponse extends ProtocolResponseWithError {
     /**
-     * Used heap size in bytes.
+     * Used JavaScript heap size in bytes.
      */
     usedSize: number;
     /**
-     * Allocated heap size in bytes.
+     * Allocated JavaScript heap size in bytes.
      */
     totalSize: number;
+    /**
+     * Used size in bytes in the embedder's garbage-collected heap.
+     */
+    embedderHeapUsedSize: number;
+    /**
+     * Size in bytes of backing storage for array buffers and external strings.
+     */
+    backingStorageSize: number;
   }
 
   export interface GetPropertiesRequest {

@@ -827,14 +827,13 @@ void LayoutShiftTracker::SendLayoutShiftRectsToHud(
     if (!cc_layer->layer_tree_host()->GetDebugState().show_layout_shift_regions)
       return;
     if (cc_layer->layer_tree_host()->hud_layer()) {
-      WebVector<gfx::Rect> rects;
+      std::vector<gfx::Rect> rects;
       cc::Region blink_region;
       for (const gfx::Rect& rect : int_rects)
         blink_region.Union(rect);
       for (gfx::Rect rect : blink_region)
         rects.emplace_back(rect);
-      cc_layer->layer_tree_host()->hud_layer()->SetLayoutShiftRects(
-          rects.ReleaseVector());
+      cc_layer->layer_tree_host()->hud_layer()->SetLayoutShiftRects(rects);
       cc_layer->layer_tree_host()->hud_layer()->SetNeedsPushProperties();
     }
   }

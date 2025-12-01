@@ -70,7 +70,8 @@ class COMPONENT_EXPORT(INPUT) ChildFrameInputHelper {
 
   void GestureEventAckHelper(const blink::WebGestureEvent& event,
                              blink::mojom::InputEventResultSource ack_source,
-                             blink::mojom::InputEventResultState ack_result);
+                             blink::mojom::InputEventResultState ack_result,
+                             bool is_vivaldi_guest = false);
 
   void ForwardTouchpadZoomEventIfNecessary(
       const blink::WebGestureEvent& event,

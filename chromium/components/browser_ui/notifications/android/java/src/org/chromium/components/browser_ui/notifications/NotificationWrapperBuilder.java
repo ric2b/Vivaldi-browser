@@ -15,14 +15,18 @@ import android.widget.RemoteViews;
 
 import androidx.core.app.NotificationCompat;
 
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+
 /** Abstraction over Notification.Builder and NotificationCompat.Builder interfaces. */
+@NullMarked
 public interface NotificationWrapperBuilder {
     NotificationWrapperBuilder setAutoCancel(boolean autoCancel);
 
     @Deprecated
-    NotificationWrapperBuilder setContentIntent(PendingIntent contentIntent);
+    NotificationWrapperBuilder setContentIntent(@Nullable PendingIntent contentIntent);
 
-    NotificationWrapperBuilder setContentIntent(PendingIntentProvider contentIntent);
+    NotificationWrapperBuilder setContentIntent(@Nullable PendingIntentProvider contentIntent);
 
     NotificationWrapperBuilder setContentTitle(CharSequence title);
 
@@ -122,6 +126,7 @@ public interface NotificationWrapperBuilder {
     NotificationWrapper buildWithBigTextStyle(String bigText);
 
     @Deprecated
+    @Nullable
     Notification build();
 
     NotificationWrapper buildNotificationWrapper();

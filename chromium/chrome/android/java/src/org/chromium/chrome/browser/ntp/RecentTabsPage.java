@@ -20,6 +20,7 @@ import org.chromium.base.Callback;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.tab_ui.InvalidationAwareThumbnailProvider;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeController;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeControllerFactory;
@@ -147,8 +148,6 @@ public class RecentTabsPage
                             mListView, mEdgeToEdgeSupplier);
         }
 
-        onUpdated();
-
         // Vivaldi
         mAccountObserver = this::onUpdated;
         mView.setPadding(0, 0, 0, 0);
@@ -159,6 +158,8 @@ public class RecentTabsPage
                 .setOnClickListener(v
                         -> mView.getContext().startActivity(
                                 new Intent(mView.getContext(), VivaldiSyncActivity.class)));
+
+        onUpdated();
     }
 
     // NativePage overrides
@@ -203,7 +204,7 @@ public class RecentTabsPage
 
     @Override
     public boolean supportsEdgeToEdge() {
-        return !EdgeToEdgeUtils.DISABLE_RECENT_TABS_E2E.getValue();
+        return !ChromeFeatureList.sDrawKeyNativeEdgeToEdgeDisableRecentTabsE2e.getValue();
     }
 
     @Override
@@ -372,9 +373,11 @@ public class RecentTabsPage
     public void onControlsOffsetChanged(
             int topOffset,
             int topControlsMinHeightOffset,
+            boolean topControlsMinHeightChanged,
             int bottomOffset,
             int bottomControlsMinHeightOffset,
-            boolean needsAnimate,
+            boolean bottomControlsMinHeightChanged,
+            boolean requestNewFrame,
             boolean isVisibilityForced) {
         updateMargins();
     }

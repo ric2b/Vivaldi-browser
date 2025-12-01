@@ -19,6 +19,7 @@
 using base::Value;
 using mail_client::MailClientService;
 using mail_client::MailClientServiceFactory;
+using mail_client::StatusCB;
 
 namespace {
 const base::FilePath::CharType kMailDirectory[] = FILE_PATH_LITERAL("Mail");
@@ -54,9 +55,8 @@ bool renameFile(base::FilePath file_path,
   if (!file_path.IsAbsolute()) {
     return false;
   }
-
-  file_path = file_path.Append(file_name);
   base::FilePath new_file_path = file_path.Append(new_file_name);
+  file_path = file_path.Append(file_name);
 
   if (!base::PathExists(file_path)) {
     return false;
@@ -66,7 +66,10 @@ bool renameFile(base::FilePath file_path,
     return false;
   }
 
-  return base::Move(file_path, new_file_path);
+  bool success = base::Move(file_path, new_file_path);
+  DCHECK(success);
+
+  return success;
 }
 
 base::FilePath::StringType FilePathAsString(const base::FilePath& path) {
@@ -114,6 +117,7 @@ namespace extensions {
 
 namespace mail_private = vivaldi::mail_private;
 
+namespace CheckMailSearchDBHealth = mail_private::CheckMailSearchDBHealth;
 namespace OnUpgradeProgress = vivaldi::mail_private::OnUpgradeProgress;
 namespace OnDeleteMessagesProgress =
     vivaldi::mail_private::OnDeleteMessagesProgress;
@@ -568,8 +572,7 @@ ExtensionFunction::ResponseAction MailPrivateReadFileToBufferFunction::Run() {
 
 void MailPrivateReadFileToBufferFunction::OnFinished(ReadFileResult result) {
   if (result.success == true) {
-    Respond(WithArguments(
-        base::Value(base::as_bytes(base::make_span(result.raw)))));
+    Respond(WithArguments(base::Value(base::as_bytes(base::span(result.raw)))));
   } else {
     Respond(Error(base::StringPrintf("Error reading file")));
   }
@@ -637,8 +640,7 @@ MailPrivateReadMessageFileToBufferFunction::Run() {
 void MailPrivateReadMessageFileToBufferFunction::OnFinished(
     ReadFileResult result) {
   if (result.success == true) {
-    Respond(WithArguments(
-        base::Value(base::as_bytes(base::make_span(result.raw)))));
+    Respond(WithArguments(base::Value(base::as_bytes(base::span(result.raw)))));
   } else {
     Respond(Error(base::StringPrintf("Error reading file")));
   }
@@ -843,13 +845,12 @@ ExtensionFunction::ResponseAction MailPrivateUpdateMessageFunction::Run() {
   return RespondLater();
 }
 
-void MailPrivateUpdateMessageFunction::UpdateMessageComplete(
-    mail_client::MessageResult results) {
-  if (!results.success) {
-    Respond(Error(results.message));
+void MailPrivateUpdateMessageFunction::UpdateMessageComplete(StatusCB status) {
+  if (!status.result) {
+    Respond(Error(status.message));
   } else {
     Respond(ArgumentList(
-        mail_private::UpdateMessage::Results::Create(results.success)));
+        mail_private::UpdateMessage::Results::Create(status.result)));
   }
 }
 
@@ -875,15 +876,20 @@ ExtensionFunction::ResponseAction MailPrivateSearchMessagesFunction::Run() {
 }
 
 void MailPrivateSearchMessagesFunction::MessagesSearchComplete(
-    mail_client::SearchListIDs rows) {
-  std::vector<double> results;
+    mail_client::MailSearchCB cb) {
+  mail_private::SearchResults res;
+  res.success = cb.success;
 
-  for (mail_client::SearchListIDs ::iterator it = rows.begin();
-       it != rows.end(); ++it) {
-    results.push_back(double(*it));
+  if (cb.success) {
+    mail_client::SearchListIDs ids = cb.search_list_ids;
+    for (mail_client::SearchListIDs ::iterator it = ids.begin();
+         it != ids.end(); ++it) {
+      res.search_list_ids.push_back(double(*it));
+    }
+    Respond(ArgumentList(mail_private::SearchMessages::Results::Create(res)));
+  } else {
+    Respond(Error(cb.message));
   }
-
-  Respond(ArgumentList(mail_private::SearchMessages::Results::Create(results)));
 }
 
 ExtensionFunction::ResponseAction MailPrivateMatchMessageFunction::Run() {
@@ -962,6 +968,28 @@ ExtensionFunction::ResponseAction MailPrivateDeleteMailSearchDBFunction::Run() {
 void MailPrivateDeleteMailSearchDBFunction::OnDeleteFinished(bool success) {
   Respond(
       ArgumentList(mail_private::DeleteMailSearchDB::Results::Create(success)));
+}
+
+ExtensionFunction::ResponseAction
+MailPrivateCheckMailSearchDBHealthFunction::Run() {
+  MailClientService* service =
+      MailClientServiceFactory::GetForProfile(GetProfile());
+
+  service->CheckDBHealth(
+      base::BindOnce(
+          &MailPrivateCheckMailSearchDBHealthFunction::OnCheckDBFinished, this),
+      &task_tracker_);
+  return RespondLater();
+}
+
+void MailPrivateCheckMailSearchDBHealthFunction::OnCheckDBFinished(
+    StatusCB status) {
+  CheckMailSearchDBHealth::Results::MailSearchDBHealth api_result;
+
+  api_result.result = status.result;
+  api_result.message = status.message;
+
+  Respond(ArgumentList(CheckMailSearchDBHealth::Results::Create(api_result)));
 }
 
 }  //  namespace extensions

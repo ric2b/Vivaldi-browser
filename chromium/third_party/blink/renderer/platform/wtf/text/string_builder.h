@@ -24,11 +24,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_WTF_TEXT_STRING_BUILDER_H_
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_WTF_TEXT_STRING_BUILDER_H_
 
@@ -56,15 +51,6 @@ class WTF_EXPORT StringBuilder {
 
   void Append(base::span<const UChar> chars);
   void Append(base::span<const LChar> chars);
-
-  // This is deprecated. Use a base::span overload.
-  void Append(const UChar*, unsigned length);
-  // This is deprecated. Use a base::span overload.
-  void Append(const LChar*, unsigned length);
-
-  ALWAYS_INLINE void Append(const char* characters, unsigned length) {
-    Append(reinterpret_cast<const LChar*>(characters), length);
-  }
 
   void Append(const StringBuilder& other) {
     if (!other.length_)
@@ -288,42 +274,6 @@ class WTF_EXPORT StringBuilder {
   bool is_8bit_ = true;
   bool has_buffer_ = false;
 };
-
-template <typename CharType>
-bool Equal(const StringBuilder& s, const CharType* buffer, unsigned length) {
-  if (s.length() != length)
-    return false;
-
-  if (s.Is8Bit())
-    return Equal(s.Span8().data(), buffer, length);
-
-  return Equal(s.Span16().data(), buffer, length);
-}
-
-template <typename CharType>
-bool DeprecatedEqualIgnoringCase(const StringBuilder& s,
-                                 const CharType* buffer,
-                                 unsigned length) {
-  if (s.length() != length)
-    return false;
-
-  if (s.Is8Bit())
-    return DeprecatedEqualIgnoringCase(s.Span8().data(), buffer, length);
-
-  return DeprecatedEqualIgnoringCase(s.Span16().data(), buffer, length);
-}
-
-// Unicode aware case insensitive string matching. Non-ASCII characters might
-// match to ASCII characters. This function is rarely used to implement web
-// platform features.
-// This function is deprecated. We should introduce EqualIgnoringASCIICase() or
-// EqualIgnoringUnicodeCase(). See crbug.com/627682
-inline bool DeprecatedEqualIgnoringCase(const StringBuilder& s,
-                                        const char* string) {
-  return DeprecatedEqualIgnoringCase(
-      s, reinterpret_cast<const LChar*>(string),
-      base::checked_cast<wtf_size_t>(strlen(string)));
-}
 
 template <typename StringType>
 bool Equal(const StringBuilder& a, const StringType& b) {

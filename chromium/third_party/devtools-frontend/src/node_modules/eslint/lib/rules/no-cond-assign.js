@@ -33,10 +33,12 @@ module.exports = {
     meta: {
         type: "problem",
 
+        defaultOptions: ["except-parens"],
+
         docs: {
             description: "Disallow assignment operators in conditional expressions",
             recommended: true,
-            url: "https://eslint.org/docs/rules/no-cond-assign"
+            url: "https://eslint.org/docs/latest/rules/no-cond-assign"
         },
 
         schema: [
@@ -54,10 +56,8 @@ module.exports = {
     },
 
     create(context) {
-
-        const prohibitAssign = (context.options[0] || "except-parens");
-
-        const sourceCode = context.getSourceCode();
+        const [prohibitAssign] = context.options;
+        const sourceCode = context.sourceCode;
 
         /**
          * Check whether an AST node is the test expression for a conditional statement.

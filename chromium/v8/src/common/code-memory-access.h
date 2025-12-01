@@ -117,6 +117,7 @@ class V8_NODISCARD RwxMemoryWriteScope {
  private:
   friend class RwxMemoryWriteScopeForTesting;
   friend class wasm::CodeSpaceWriteScope;
+  friend class WritableJumpTablePair;
 
   // {SetWritable} and {SetExecutable} implicitly enters/exits the scope.
   // These methods are exposed only for the purpose of implementing other
@@ -182,11 +183,15 @@ class V8_EXPORT ThreadIsolation {
   static WritableJitAllocation LookupJitAllocation(
       Address addr, size_t size, JitAllocationType type,
       bool enforce_write_api = false);
+
+#ifdef V8_ENABLE_WEBASSEMBLY
   // A special case of LookupJitAllocation since in Wasm, we sometimes have to
   // unlock two allocations (jump tables) together.
   static WritableJumpTablePair LookupJumpTableAllocations(
       Address jump_table_address, size_t jump_table_size,
       Address far_jump_table_address, size_t far_jump_table_size);
+#endif
+
   // Unlock a larger region. This allowsV us to lookup allocations in this
   // region more quickly without switching the write permissions all the time.
   static WritableJitPage LookupWritableJitPage(Address addr, size_t size);
@@ -274,6 +279,8 @@ class V8_EXPORT ThreadIsolation {
                                       JitAllocationType type);
     JitAllocation& LookupAllocation(base::Address addr, size_t size,
                                     JitAllocationType type);
+    bool Contains(base::Address addr, size_t size,
+                  JitAllocationType type) const;
     void UnregisterAllocation(base::Address addr);
     void UnregisterAllocationsExcept(base::Address start, size_t size,
                                      const std::vector<base::Address>& addr);
@@ -290,7 +297,7 @@ class V8_EXPORT ThreadIsolation {
     class JitPage* JitPage() { return jit_page_; }
 
    private:
-    base::MutexGuard page_lock_;
+    base::SpinningMutexGuard page_lock_;
     class JitPage* jit_page_;
     // We get the address from the key of the map when we do a JitPage lookup.
     // We can save some memory by storing it as part of the reference instead.
@@ -303,7 +310,7 @@ class V8_EXPORT ThreadIsolation {
     ~JitPage();
 
    private:
-    base::Mutex mutex_;
+    base::SpinningMutex mutex_;
     typedef std::map<Address, JitAllocation, std::less<Address>,
                      StlAllocator<std::pair<const Address, JitAllocation>>>
         AllocationMap;
@@ -335,7 +342,7 @@ class V8_EXPORT ThreadIsolation {
     int pkey = -1;
 #endif
 
-    base::Mutex* jit_pages_mutex_;
+    base::SpinningMutex* jit_pages_mutex_;
     JitPageMap* jit_pages_;
 
 #if DEBUG
@@ -429,6 +436,8 @@ class WritableJitAllocation {
   V8_INLINE void WriteUnalignedValue(Address address, T value);
   template <typename T>
   V8_INLINE void WriteValue(Address address, T value);
+  template <typename T>
+  V8_INLINE void WriteValue(Address address, T value, RelaxedStoreTag);
 
   V8_INLINE void ClearBytes(size_t offset, size_t len);
 
@@ -446,7 +455,8 @@ class WritableJitAllocation {
                                   bool enforce_write_api = false);
   // Used for non-executable memory.
   V8_INLINE WritableJitAllocation(Address addr, size_t size,
-                                  ThreadIsolation::JitAllocationType type);
+                                  ThreadIsolation::JitAllocationType type,
+                                  bool enforce_write_api);
 
   ThreadIsolation::JitPageReference& page_ref() { return page_ref_.value(); }
 
@@ -470,6 +480,7 @@ class WritableJitAllocation {
 
   friend class ThreadIsolation;
   friend class WritableJitPage;
+  friend class WritableJumpTablePair;
 };
 
 // Similar to the WritableJitAllocation, all writes to free space should go
@@ -534,25 +545,49 @@ class WritableJitPage {
   ThreadIsolation::JitPageReference page_ref_;
 };
 
-class WritableJumpTablePair {
+#ifdef V8_ENABLE_WEBASSEMBLY
+
+class V8_EXPORT_PRIVATE WritableJumpTablePair {
  public:
-  // TODO(sroettger): add functions to write to the jump tables.
-  RwxMemoryWriteScope& write_scope() { return write_scope_; }
+  WritableJitAllocation& jump_table() { return writable_jump_table_; }
+  WritableJitAllocation& far_jump_table() { return writable_far_jump_table_; }
+
+  ~WritableJumpTablePair();
+  WritableJumpTablePair(const WritableJumpTablePair&) = delete;
+  WritableJumpTablePair& operator=(const WritableJumpTablePair&) = delete;
+
+  static WritableJumpTablePair ForTesting(Address jump_table_address,
+                                          size_t jump_table_size,
+                                          Address far_jump_table_address,
+                                          size_t far_jump_table_size);
 
  private:
   V8_INLINE WritableJumpTablePair(Address jump_table_address,
                                   size_t jump_table_size,
                                   Address far_jump_table_address,
                                   size_t far_jump_table_size);
+
+  // This constructor is only used for testing.
+  struct ForTestingTag {};
+  WritableJumpTablePair(Address jump_table_address, size_t jump_table_size,
+                        Address far_jump_table_address,
+                        size_t far_jump_table_size, ForTestingTag);
+
+  // The WritableJitAllocation objects need to come before the write scope since
+  // we rely on the destructors to reset the write permissions in the right
+  // order when enforcing the write API in debug mode.
+  WritableJitAllocation writable_jump_table_;
+  WritableJitAllocation writable_far_jump_table_;
+
   RwxMemoryWriteScope write_scope_;
-  std::pair<ThreadIsolation::JitPageReference,
-            ThreadIsolation::JitPageReference>
+  std::optional<std::pair<ThreadIsolation::JitPageReference,
+                          ThreadIsolation::JitPageReference>>
       jump_table_pages_;
-  const ThreadIsolation::JitAllocation& jump_table_;
-  const ThreadIsolation::JitAllocation& far_jump_table_;
 
   friend class ThreadIsolation;
 };
+
+#endif
 
 template <class T>
 bool operator==(const ThreadIsolation::StlAllocator<T>&,

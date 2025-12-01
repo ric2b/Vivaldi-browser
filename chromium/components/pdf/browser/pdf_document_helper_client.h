@@ -24,8 +24,6 @@ class PDFDocumentHelperClient {
       content::RenderFrameHost* render_frame_host,
       int content_restrictions) = 0;
 
-  virtual void OnPDFHasUnsupportedFeature(content::WebContents* contents) = 0;
-
   virtual void OnSaveURL(content::WebContents* contents) = 0;
 
   // Sets whether the PDF plugin can handle file saving internally.
@@ -36,9 +34,8 @@ class PDFDocumentHelperClient {
   virtual void OnDidScroll(const gfx::SelectionBound& start,
                            const gfx::SelectionBound& end) {}
 
-  // See the comment for `OnSearchifyStateChange` in pdf/pdf.mojom.
-  virtual void OnSearchifyStateChange(bool busy,
-                                      content::WebContents* contents) = 0;
+  // Notifies that PDF searchifier started processing pages.
+  virtual void OnSearchifyStarted(content::WebContents* contents) = 0;
 };
 
 }  // namespace pdf

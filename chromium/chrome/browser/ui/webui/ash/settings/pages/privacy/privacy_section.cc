@@ -6,7 +6,6 @@
 
 #include <array>
 
-#include "ash/components/arc/arc_util.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
@@ -18,7 +17,6 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/branding_buildflags.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/ash/auth/legacy_fingerprint_engine.h"
 #include "chrome/browser/ash/login/quick_unlock/quick_unlock_utils.h"
 #include "chrome/browser/ash/privacy_hub/privacy_hub_util.h"
@@ -32,18 +30,19 @@
 #include "chrome/browser/ui/webui/ash/settings/search/search_tag_registry.h"
 #include "chrome/browser/ui/webui/settings/settings_secure_dns_handler.h"
 #include "chrome/browser/ui/webui/settings/shared_settings_localized_strings_provider.h"
-#include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/ash/components/browser_context_helper/browser_context_helper.h"
 #include "chromeos/ash/components/dbus/userdataauth/userdataauth_client.h"
+#include "chromeos/ash/experiences/arc/arc_util.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/chromeos/devicetype_utils.h"
+#include "ui/webui/webui_util.h"
 
 namespace ash::settings {
 
@@ -300,23 +299,42 @@ base::span<const SearchConcept> GetPrivacyControlsLocationSearchConcepts(
   return tags;
 }
 
+void AddChromeOsSecureDnsStrings(content::WebUIDataSource* html_source) {
+  webui::LocalizedString kLocalizedStrings[] = {
+      {"secureDnsOsSettingsTitle", IDS_OS_SETTINGS_SECURE_DNS_TITLE},
+      {"secureDnsWithIdentifiersDescription",
+       IDS_SETTINGS_SECURE_DNS_WITH_IDENTIFIERS_DESCRIPTION},
+      {"secureDnsWithIdentifiersAndDomainConfigDescription",
+       IDS_OS_SETTINGS_SECURE_DNS_WITH_IDENTIFIERS_AND_DOMAIN_CONFIG_DESCRIPTION},
+      {"secureDnsAutomaticModeDescription",
+       IDS_OS_SETTINGS_SECURE_DNS_AUTOMATIC_MODE_DESCRIPTION},
+      {"secureDnsSecureDropdownModeNetworkDefaultDescription",
+       IDS_OS_SETTINGS_SECURE_DNS_NETWORK_DEFAULT_MODE_DESCRIPTION},
+  };
+  const std::u16string product_os_name =
+      l10n_util::GetStringUTF16(IDS_SHORT_PRODUCT_OS_NAME);
+  html_source->AddString(
+      "secureDnsOsSettingsDescription",
+      l10n_util::GetStringFUTF16(IDS_OS_SETTINGS_SECURE_DNS_DESCRIPTION,
+                                 product_os_name));
+  html_source->AddString(
+      "secureDnsWithDomainConfigDescription",
+      l10n_util::GetStringFUTF16(
+          IDS_OS_SETTINGS_SECURE_DNS_WITH_DOMAIN_CONFIG_DESCRIPTION,
+          product_os_name));
+  html_source->AddLocalizedStrings(kLocalizedStrings);
+}
+
 }  // namespace
 
 PrivacySection::PrivacySection(Profile* profile,
                                SearchTagRegistry* search_tag_registry,
                                PrefService* pref_service)
     : OsSettingsSection(profile, search_tag_registry),
-      sync_subsection_(
-          ash::features::IsOsSettingsRevampWayfindingEnabled()
-              ? std::make_optional<SyncSection>(profile, search_tag_registry)
-              : std::nullopt),
+      sync_subsection_(profile, search_tag_registry),
       pref_service_(pref_service),
       auth_performer_(UserDataAuthClient::Get()),
       fp_engine_(&auth_performer_) {
-  if (ash::features::IsOsSettingsRevampWayfindingEnabled()) {
-    CHECK(sync_subsection_);
-  }
-
   SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
   updater.AddSearchTags(GetPrivacySearchConceptsSharedWithGuestMode());
   auto* user = BrowserContextHelper::Get()->GetUserByBrowserContext(profile);
@@ -378,63 +396,34 @@ void PrivacySection::AddHandlers(content::WebUI* web_ui) {
 
   web_ui->AddMessageHandler(std::make_unique<::settings::SecureDnsHandler>());
 
-  // `sync_subsection_` is initialized only if the feature revamp wayfinding is
-  // enabled.
-  if (sync_subsection_) {
-    sync_subsection_->AddHandlers(web_ui);
-  }
+  sync_subsection_.AddHandlers(web_ui);
 }
 
 void PrivacySection::AddLoadTimeData(content::WebUIDataSource* html_source) {
-  const bool kIsRevampEnabled =
-      ash::features::IsOsSettingsRevampWayfindingEnabled();
-
   webui::LocalizedString kLocalizedStrings[] = {
-      {"enableLogging", kIsRevampEnabled
-                            ? IDS_OS_SETTINGS_REVAMP_ENABLE_LOGGING_TOGGLE_TITLE
-                            : IDS_SETTINGS_ENABLE_LOGGING_TOGGLE_TITLE},
-      {"enableLoggingDesc",
-       kIsRevampEnabled
-           ? IDS_OS_SETTINGS_REVAMP_ENABLE_LOGGING_TOGGLE_DESCRIPTION
-           : IDS_SETTINGS_ENABLE_LOGGING_TOGGLE_DESC},
+      {"enableLogging", IDS_OS_SETTINGS_ENABLE_LOGGING_TOGGLE_TITLE},
+      {"enableLoggingDesc", IDS_OS_SETTINGS_ENABLE_LOGGING_TOGGLE_DESCRIPTION},
       {"enableContentProtectionAttestation",
        IDS_SETTINGS_ENABLE_CONTENT_PROTECTION_ATTESTATION},
       {"enableSuggestedContent",
-       kIsRevampEnabled ? IDS_OS_SETTINGS_REVAMP_ENABLE_SUGGESTED_CONTENT_TITLE
-                        : IDS_SETTINGS_ENABLE_SUGGESTED_CONTENT_TITLE},
+       IDS_OS_SETTINGS_ENABLE_SUGGESTED_CONTENT_TITLE},
       {"enableSuggestedContentDesc",
-       kIsRevampEnabled
-           ? IDS_OS_SETTINGS_REVAMP_ENABLE_SUGGESTED_CONTENT_DESCRIPTION
-           : IDS_SETTINGS_ENABLE_SUGGESTED_CONTENT_DESC},
+       IDS_OS_SETTINGS_ENABLE_SUGGESTED_CONTENT_DESCRIPTION},
       {"peripheralDataAccessProtectionToggleTitle",
-       kIsRevampEnabled
-           ? IDS_OS_SETTINGS_REVAMP_DATA_ACCESS_PROTECTION_TOGGLE_TITLE
-           : IDS_OS_SETTINGS_DATA_ACCESS_PROTECTION_TOGGLE_TITLE},
+       IDS_OS_SETTINGS_DATA_ACCESS_PROTECTION_TOGGLE_TITLE},
       {"peripheralDataAccessProtectionToggleDescription",
-       kIsRevampEnabled
-           ? IDS_OS_SETTINGS_REVAMP_DATA_ACCESS_PROTECTION_TOGGLE_DESCRIPTION
-           : IDS_OS_SETTINGS_DATA_ACCESS_PROTECTION_TOGGLE_DESCRIPTION},
+       IDS_OS_SETTINGS_DATA_ACCESS_PROTECTION_TOGGLE_DESCRIPTION},
       {"peripheralDataAccessProtectionWarningTitle",
-       kIsRevampEnabled
-           ? IDS_OS_SETTINGS_REVAMP_DISABLE_DATA_ACCESS_PROTECTION_CONFIRM_DIALOG_TITLE
-           : IDS_OS_SETTINGS_DISABLE_DATA_ACCESS_PROTECTION_CONFIRM_DIALOG_TITLE},
+       IDS_OS_SETTINGS_DISABLE_DATA_ACCESS_PROTECTION_CONFIRM_DIALOG_TITLE},
       {"peripheralDataAccessProtectionWarningDescription",
-       kIsRevampEnabled
-           ? IDS_OS_SETTINGS_REVAMP_DISABLE_DATA_ACCESS_PROTECTION_CONFIRM_DIALOG_DESCRIPTION
-           : IDS_OS_SETTINGS_DISABLE_DATA_ACCESS_PROTECTION_CONFIRM_DIALOG_DESCRIPTION},
+       IDS_OS_SETTINGS_DISABLE_DATA_ACCESS_PROTECTION_CONFIRM_DIALOG_DESCRIPTION},
       {"peripheralDataAccessProtectionWarningSubDescription",
-       kIsRevampEnabled
-           ? IDS_OS_SETTINGS_REVAMP_DISABLE_DATA_ACCESS_PROTECTION_CONFIRM_DIALOG_SUB_DESCRIPTION
-           : IDS_OS_SETTINGS_DISABLE_DATA_ACCESS_PROTECTION_CONFIRM_DIALOG_SUB_DESCRIPTION},
+       IDS_OS_SETTINGS_DISABLE_DATA_ACCESS_PROTECTION_CONFIRM_DIALOG_SUB_DESCRIPTION},
       {"peripheralDataAccessProtectionCancelButton",
        IDS_OS_SETTINGS_DATA_ACCESS_PROTECTION_CONFIRM_DIALOG_CANCEL_BUTTON_LABEL},
       {"peripheralDataAccessProtectionDisableButton",
-       kIsRevampEnabled
-           ? IDS_OS_SETTINGS_REVAMP_DATA_ACCESS_PROTECTION_CONFIRM_DIALOG_ALLOW_BUTTON_LABEL
-           : IDS_OS_SETTINGS_DATA_ACCESS_PROTECTION_CONFIRM_DIALOG_DISABLE_BUTTON_LABEL},
-      {"privacyPageTitle", kIsRevampEnabled
-                               ? IDS_OS_SETTINGS_REVAMP_PRIVACY_TITLE
-                               : IDS_OS_SETTINGS_PRIVACY_TITLE},
+       IDS_OS_SETTINGS_DATA_ACCESS_PROTECTION_CONFIRM_DIALOG_ALLOW_BUTTON_LABEL},
+      {"privacyPageTitle", IDS_OS_SETTINGS_PRIVACY_TITLE},
       {"privacyMenuItemDescription",
        IDS_OS_SETTINGS_PRIVACY_MENU_ITEM_DESCRIPTION},
       {"smartPrivacyTitle", IDS_OS_SETTINGS_SMART_PRIVACY_TITLE},
@@ -457,10 +446,6 @@ void PrivacySection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       {"privacyHubTitle", IDS_OS_SETTINGS_PRIVACY_HUB_TITLE},
       {"privacyHubSubtext", IDS_OS_SETTINGS_PRIVACY_HUB_SUBTEXT},
       {"cameraToggleTitle", IDS_OS_SETTINGS_PRIVACY_HUB_CAMERA_TOGGLE_TITLE},
-      {"cameraToggleSubtext",
-       IDS_OS_SETTINGS_PRIVACY_HUB_CAMERA_TOGGLE_SUBTEXT},
-      {"cameraToggleFallbackSubtext",
-       IDS_OS_SETTINGS_PRIVACY_HUB_FALLBACK_CAMERA_TOGGLE_SUBTEXT},
       {"privacyHubPageCameraRowSubtext",
        IDS_OS_SETTINGS_PRIVACY_HUB_PAGE_CAMERA_ROW_SUBTEXT},
       {"privacyHubPageCameraRowFallbackSubtext",
@@ -475,8 +460,6 @@ void PrivacySection::AddLoadTimeData(content::WebUIDataSource* html_source) {
        IDS_OS_SETTINGS_PRIVACY_HUB_NO_CAMERA_CONNECTED_TEXT},
       {"microphoneToggleTitle",
        IDS_OS_SETTINGS_PRIVACY_HUB_MICROPHONE_TOGGLE_TITLE},
-      {"microphoneToggleSubtext",
-       IDS_OS_SETTINGS_PRIVACY_HUB_MICROPHONE_TOGGLE_SUBTEXT},
       {"privacyHubPageMicrophoneRowSubtext",
        IDS_OS_SETTINGS_PRIVACY_HUB_PAGE_MICROPHONE_ROW_SUBTEXT},
       {"privacyHubMicrophoneSubpageMicrophoneToggleSubtext",
@@ -637,13 +620,6 @@ void PrivacySection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   html_source->AddBoolean("isAuthPanelEnabled",
                           ash::features::IsUseAuthPanelInSessionEnabled());
 
-  html_source->AddBoolean(
-      "isPrivacyHubHatsEnabled",
-      base::FeatureList::IsEnabled(
-          ::features::kHappinessTrackingPrivacyHubPostLaunch));
-  html_source->AddBoolean(
-      "showAppPermissionsInsidePrivacyHub",
-      ash::features::IsCrosPrivacyHubAppPermissionsEnabled());
   html_source->AddBoolean("showPrivacyHubLocationControl",
                           ash::features::IsCrosPrivacyHubLocationEnabled());
   html_source->AddBoolean("showSpeakOnMuteDetectionPage",
@@ -684,11 +660,9 @@ void PrivacySection::AddLoadTimeData(content::WebUIDataSource* html_source) {
 
   html_source->AddBoolean("showSecureDnsSetting", true);
   html_source->AddBoolean("showSecureDnsOsSettingLink", false);
-  html_source->AddBoolean(
-      "isDeprecateDnsDialogEnabled",
-      ash::features::IsOsSettingsDeprecateDnsDialogEnabled());
 
   ::settings::AddSecureDnsStrings(html_source);
+  AddChromeOsSecureDnsStrings(html_source);
 
   html_source->AddBoolean("isRevenBranding", switches::IsRevenBranding());
   if (switches::IsRevenBranding()) {
@@ -704,17 +678,11 @@ void PrivacySection::AddLoadTimeData(content::WebUIDataSource* html_source) {
             l10n_util::GetStringUTF16(IDS_INSTALLED_PRODUCT_OS_NAME)));
   }
 
-  // `sync_subsection_` is initialized only if the feature revamp wayfinding is
-  // enabled.
-  if (sync_subsection_) {
-    sync_subsection_->AddLoadTimeData(html_source);
-  }
+  sync_subsection_.AddLoadTimeData(html_source);
 }
 
 int PrivacySection::GetSectionNameMessageId() const {
-  return ash::features::IsOsSettingsRevampWayfindingEnabled()
-             ? IDS_OS_SETTINGS_REVAMP_PRIVACY_TITLE
-             : IDS_OS_SETTINGS_PRIVACY_TITLE;
+  return IDS_OS_SETTINGS_PRIVACY_TITLE;
 }
 
 mojom::Section PrivacySection::GetSection() const {
@@ -858,11 +826,7 @@ void PrivacySection::RegisterHierarchy(HierarchyGenerator* generator) const {
       mojom::SearchResultIcon::kCamera, mojom::SearchResultDefaultRank::kMedium,
       mojom::kPrivacyHubCameraSubpagePath);
 
-  // `sync_subsection_` is initialized only if the feature revamp wayfinding is
-  // enabled.
-  if (sync_subsection_) {
-    sync_subsection_->RegisterHierarchy(generator);
-  }
+  sync_subsection_.RegisterHierarchy(generator);
 }
 
 bool PrivacySection::AreFingerprintSettingsAllowed() {

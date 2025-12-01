@@ -318,7 +318,7 @@ class COMPONENT_EXPORT(AX_PLATFORM) AXPlatformNodeDelegate {
   // Returns true if this is a top-level browser window that doesn't have a
   // parent accessible node, or its parent is the application accessible node on
   // platforms that have one.
-  virtual bool IsToplevelBrowserWindow();
+  bool IsToplevelBrowserWindow() const;
 
   // If this object is exposed to the platform's accessibility layer, returns
   // this object. Otherwise, returns the platform leaf or lowest unignored
@@ -387,10 +387,13 @@ class COMPONENT_EXPORT(AX_PLATFORM) AXPlatformNodeDelegate {
   // clipping behavior is set to clipped, clipping is applied. If an offscreen
   // result address is provided, it will be populated depending on whether the
   // returned bounding box is onscreen or offscreen.
-  virtual gfx::Rect GetBoundsRect(
-      const AXCoordinateSystem coordinate_system,
-      const AXClippingBehavior clipping_behavior,
-      AXOffscreenResult* offscreen_result = nullptr) const;
+  virtual gfx::Rect GetBoundsRect(const AXCoordinateSystem coordinate_system,
+                                  const AXClippingBehavior clipping_behavior,
+                                  AXOffscreenResult* offscreen_result) const;
+  gfx::Rect GetBoundsRect(const AXCoordinateSystem coordinate_system,
+                          const AXClippingBehavior clipping_behavior) const {
+    return GetBoundsRect(coordinate_system, clipping_behavior, nullptr);
+  }
 
   // Derivative utils for AXPlatformNodeDelegate::GetBoundsRect
   gfx::Rect GetClippedScreenBoundsRect(
@@ -545,6 +548,9 @@ class COMPONENT_EXPORT(AX_PLATFORM) AXPlatformNodeDelegate {
   // uses the default interface language.
   std::string GetLanguage() const;
 
+  // Returns the URL associated with the root of the tree containing this node.
+  std::string GetRootURL() const;
+
   //
   // Tables. All of these should be called on a node that has a table-like
   // role, otherwise they return nullopt.
@@ -562,6 +568,8 @@ class COMPONENT_EXPORT(AX_PLATFORM) AXPlatformNodeDelegate {
   virtual std::vector<int32_t> GetColHeaderNodeIds(int col_index) const;
   virtual std::vector<int32_t> GetRowHeaderNodeIds() const;
   virtual std::vector<int32_t> GetRowHeaderNodeIds(int row_index) const;
+  virtual std::vector<int32_t> GetRowNodeIds() const;
+  virtual std::vector<AXNodeID> GetTableUniqueCellIds() const;
   virtual AXPlatformNode* GetTableCaption() const;
 
   //

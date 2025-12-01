@@ -17,17 +17,17 @@ export type ProtocolResponse<C extends ProtocolCommand> = ProtocolMapping.Comman
 export type ProtocolCommandHandler<C extends ProtocolCommand> = (...params: ProtocolCommandParams<C>) =>
     Omit<ProtocolResponse<C>, 'getError'>|{getError(): string};
 export type MessageCallback = (result: string|Object) => void;
-type Message = {
-  id: number,
-  method: ProtocolCommand,
-  params: unknown,
-  sessionId: string,
-};
+interface Message {
+  id: number;
+  method: ProtocolCommand;
+  params: unknown;
+  sessionId: string;
+}
 
-type OutgoingMessageListenerEntry = {
-  promise: Promise<void>,
-  resolve: Function,
-};
+interface OutgoingMessageListenerEntry {
+  promise: Promise<void>;
+  resolve: Function;
+}
 
 // Note that we can't set the Function to the correct handler on the basis
 // that we don't know which ProtocolCommand will be stored.
@@ -57,10 +57,7 @@ export function clearAllMockConnectionResponseHandlers() {
 export function registerListenerOnOutgoingMessage(method: ProtocolCommand): Promise<void> {
   let outgoingMessageListenerEntry = outgoingMessageListenerEntryMap.get(method);
   if (!outgoingMessageListenerEntry) {
-    let resolve = () => {};
-    const promise = new Promise<void>(r => {
-      resolve = r;
-    });
+    const {resolve, promise} = Promise.withResolvers<void>();
     outgoingMessageListenerEntry = {promise, resolve};
     outgoingMessageListenerEntryMap.set(method, outgoingMessageListenerEntry);
   }

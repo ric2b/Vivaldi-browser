@@ -13,14 +13,14 @@ class BrowserContext;
 }
 
 namespace adblock_filter {
-class RulesIndexManager;
+class RuleServiceImpl;
 
 class ContentInjectionProvider : public content_injection::Provider,
                                  public Resources::Observer {
  public:
   ContentInjectionProvider(
       content::BrowserContext* context,
-      std::array<RulesIndexManager*, kRuleGroupCount> index_managers,
+      RuleServiceImpl* rule_service,
       Resources* resources);
   ~ContentInjectionProvider() override;
   ContentInjectionProvider(const ContentInjectionProvider&) = delete;
@@ -40,7 +40,7 @@ class ContentInjectionProvider : public content_injection::Provider,
   void BuildStaticContent();
 
   const raw_ptr<content::BrowserContext> context_;
-  std::array<RulesIndexManager*, kRuleGroupCount> index_managers_;
+  const raw_ptr<RuleServiceImpl> rule_service_;
   const raw_ptr<Resources> resources_;
 
   std::optional<int> javascript_world_id_;

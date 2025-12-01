@@ -88,21 +88,21 @@ class ProfileReportGeneratorIOSTest : public PlatformTest {
             GetApplicationContext()->GetSystemIdentityManager());
     FakeSystemIdentity* fake_identity = [FakeSystemIdentity fakeIdentity1];
     fake_system_identity_manager->AddIdentity(fake_identity);
-    authentication_service_->SignIn(
-        fake_identity, signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+    authentication_service_->SignIn(fake_identity,
+                                    signin_metrics::AccessPoint::kUnknown);
     return fake_identity;
   }
 
   std::unique_ptr<em::ChromeUserProfileInfo> GenerateReport() {
     const base::FilePath path = profile_->GetStatePath();
-    const std::string& name = GetProfileName();
     std::unique_ptr<em::ChromeUserProfileInfo> report =
-        generator_.MaybeGenerate(path, name, ReportType::kFull);
+        generator_.MaybeGenerate(path, ReportType::kFull);
 
-    if (!report)
+    if (!report) {
       return nullptr;
+    }
 
-    EXPECT_EQ(name, report->name());
+    EXPECT_EQ(GetProfileName(), report->name());
     EXPECT_EQ(path.AsUTF8Unsafe(), report->id());
     EXPECT_TRUE(report->is_detail_available());
 

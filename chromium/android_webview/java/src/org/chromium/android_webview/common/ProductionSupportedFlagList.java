@@ -28,7 +28,6 @@ import org.chromium.content_public.common.ContentSwitches;
 import org.chromium.gpu.config.GpuFeatures;
 import org.chromium.gpu.config.GpuSwitches;
 import org.chromium.media.MediaFeatures;
-import org.chromium.net.CookieSwitches;
 import org.chromium.net.NetFeatures;
 import org.chromium.services.network.NetworkServiceFeatures;
 import org.chromium.services.tracing.TracingServiceFeatures;
@@ -79,8 +78,6 @@ public final class ProductionSupportedFlagList {
                 CcSwitches.SHOW_COMPOSITED_LAYER_BORDERS,
                 "Renders a border around compositor layers to help debug and study layer "
                         + "compositing."),
-        Flag.commandLine(
-                CcSwitches.ANIMATED_IMAGE_RESUME, "Resumes animated images from where they were."),
         Flag.commandLine(
                 AwSwitches.FINCH_SEED_EXPIRATION_AGE,
                 "Forces all variations seeds to be considered stale.",
@@ -179,6 +176,8 @@ public final class ProductionSupportedFlagList {
         Flag.baseFeature(
                 VizFeatures.WEBVIEW_ENABLE_ADPF, "Pass WebView threads to HWUI ADPF session"),
         Flag.baseFeature(
+                VizFeatures.WEBVIEW_ENABLE_ADPF_GPU_MAIN, "Include GPU Main into ADPF session"),
+        Flag.baseFeature(
                 VizFeatures.WEBVIEW_ENABLE_ADPF_RENDERER_MAIN,
                 "Include Renderer Main into ADPF session"),
         Flag.baseFeature(
@@ -191,10 +190,6 @@ public final class ProductionSupportedFlagList {
                 VizFeatures.DRAW_IMMEDIATELY_WHEN_INTERACTIVE,
                 "Enable optimization for immediate activation and draw when interactive."),
         Flag.baseFeature(GpuFeatures.USE_GLES2_FOR_OOP_R, "Force Skia context to use es2 only."),
-        Flag.baseFeature(NetFeatures.PRIORITY_HEADER, "Enables the HTTP priority header."),
-        Flag.baseFeature(
-                NetFeatures.ZSTD_CONTENT_ENCODING,
-                "Enables zstd content-encoding support in the browser."),
         Flag.baseFeature(
                 NetFeatures.USE_NEW_ALPS_CODEPOINT_QUIC,
                 "Enables using the new ALPS codepoint to negotiate application settings for QUIC."),
@@ -210,12 +205,15 @@ public final class ProductionSupportedFlagList {
         Flag.baseFeature(
                 NetFeatures.OPTIMIZE_PARSING_DATA_URLS, "Enables optimizing parsing data: URLs."),
         Flag.baseFeature(
+                NetFeatures.SIMDUTF_BASE64_SUPPORT,
+                "Use the simdutf library to base64 decode data: URLs."),
+        Flag.baseFeature(
+                NetFeatures.FURTHER_OPTIMIZE_PARSING_DATA_URLS,
+                "Further optimize parsing data: URLs."),
+        Flag.baseFeature(
                 AwFeatures.WEBVIEW_EXTRA_HEADERS_SAME_ORIGIN_ONLY,
                 "Only allow extra headers added via loadUrl() to be sent to the same origin "
                         + "as the original request."),
-        Flag.baseFeature(
-                AwFeatures.WEBVIEW_DISPLAY_CUTOUT,
-                "Enables display cutout (notch) support in WebView for Android P and above."),
         Flag.baseFeature(
                 BlinkFeatures.WEBVIEW_ACCELERATE_SMALL_CANVASES,
                 "Accelerate all canvases in webview."),
@@ -238,16 +236,18 @@ public final class ProductionSupportedFlagList {
                 AutofillFeatures.AUTOFILL_ACCEPT_DOM_MUTATION_AFTER_AUTOFILL_SUBMISSION,
                 "Accepts DOM_MUTATION_AFTER_AUTOFILL submissions detected on password forms."),
         Flag.baseFeature(
+                AutofillFeatures.AUTOFILL_BETTER_LOCAL_HEURISTIC_PLACEHOLDER_SUPPORT,
+                "Treats placeholders as a separate signal for Autofill local heuristics"),
+        Flag.baseFeature(
+                AutofillFeatures.AUTOFILL_ENABLE_EMAIL_HEURISTIC_OUTSIDE_FORMS,
+                "Enables heuristics for detecting email fields outside of forms."),
+        Flag.baseFeature(
                 AutofillFeatures.AUTOFILL_ENABLE_EXPIRATION_DATE_IMPROVEMENTS,
                 "Enables various improvements to handling expiration dates."),
         Flag.baseFeature(
                 AutofillFeatures.AUTOFILL_ENABLE_SUPPORT_FOR_PARSING_WITH_SHARED_LABELS,
                 "Splits Autofill labels among consecutive fields for better heuristic"
                         + " predictions."),
-        Flag.baseFeature(
-                AutofillFeatures.AUTOFILL_ENABLE_SUPPORT_FOR_PHONE_NUMBER_TRUNK_TYPES,
-                "Rationalizes city-and-number and city-code fields to the "
-                        + "correct trunk-prefix types."),
         Flag.baseFeature(
                 AutofillFeatures.AUTOFILL_FIX_CACHING_ON_JAVA_SCRIPT_CHANGES,
                 "When enabled, Autofill will reset the autofill state of fields modified by JS"),
@@ -267,21 +267,14 @@ public final class ProductionSupportedFlagList {
                 AutofillFeatures.AUTOFILL_FIX_CURRENT_VALUE_IN_IMPORT,
                 "Prevents the AutofillField's current value from being reset for import"),
         Flag.baseFeature(
-                AutofillFeatures.AUTOFILL_INFER_COUNTRY_CALLING_CODE,
-                "Infers the country calling code from the profile's country, if available."),
-        Flag.baseFeature(
-                AutofillFeatures.AUTOFILL_INFER_COUNTRY_CALLING_CODE,
-                "Infers the country calling code from the profile's country, if available."),
-        Flag.baseFeature(
                 AutofillFeatures.AUTOFILL_INFER_LABEL_FROM_DEFAULT_SELECT_TEXT,
                 "Considers the text of a <select> element's first <option> as a potential label"),
         Flag.baseFeature(
-                AutofillFeatures.AUTOFILL_DECOUPLE_AUTOFILL_COUNT_FROM_CACHE,
-                "Makes AutofillManager::GetCachedFormAndField return a form even if"
-                        + " form->autofill_count() == 0"),
-        Flag.baseFeature(
                 AutofillFeatures.AUTOFILL_DETECT_REMOVED_FORM_CONTROLS,
                 "Enables Autofill to detect if form controls are removed from the DOM"),
+        Flag.baseFeature(
+                AutofillFeatures.AUTOFILL_OPTIMIZE_FORM_EXTRACTION,
+                "Makes Autofill spend less time on extracting forms."),
         Flag.baseFeature(
                 AutofillFeatures.AUTOFILL_PAGE_LANGUAGE_DETECTION,
                 "Enables Autofill to retrieve the page language for form parsing."),
@@ -290,10 +283,6 @@ public final class ProductionSupportedFlagList {
                 "Classifies fields as email fields if their label or placeholder have valid email"
                         + " format."),
         Flag.baseFeature(
-                AutofillFeatures.AUTOFILL_PREFER_PARSED_PHONE_NUMBER,
-                "When enabled, Autofill will always prefer the phone number parsed using "
-                        + "libphonenumber over the format provided by the field during imports."),
-        Flag.baseFeature(
                 AutofillFeatures.AUTOFILL_PREFER_SAVED_FORM_AS_SUBMITTED_FORM,
                 "When enabled, Autofill will start preferring the saved form over performing form "
                         + "extraction at submission time, and only use the latter as a fallback."),
@@ -301,15 +290,6 @@ public final class ProductionSupportedFlagList {
                 AutofillFeatures.AUTOFILL_REPLACE_CACHED_WEB_ELEMENTS_BY_RENDERER_IDS,
                 "When enabled, AutofillAgent will store its cached form and fields as renderer ids "
                         + "instead of holding strong references to blink::WebElement objects."),
-        Flag.baseFeature(
-                AutofillFeatures.AUTOFILL_USE_AU_ADDRESS_MODEL,
-                "When enabled, Autofill uses a custom address model for Australia."),
-        Flag.baseFeature(
-                AutofillFeatures.AUTOFILL_USE_CA_ADDRESS_MODEL,
-                "When enabled, Autofill uses a custom address model for Canada."),
-        Flag.baseFeature(
-                AutofillFeatures.AUTOFILL_USE_DE_ADDRESS_MODEL,
-                "When enabled, Autofill uses a custom address model for Germany."),
         Flag.baseFeature(
                 AutofillFeatures.AUTOFILL_USE_FR_ADDRESS_MODEL,
                 "When enabled, Autofill uses a custom address model for France."),
@@ -326,21 +306,19 @@ public final class ProductionSupportedFlagList {
                 AutofillFeatures.AUTOFILL_USE_PL_ADDRESS_MODEL,
                 "When enabled, Autofill uses a custom address model for Poland."),
         Flag.baseFeature(
+                AutofillFeatures.AUTOFILL_SUPPORT_LAST_NAME_PREFIX,
+                "When enabled, Autofill uses a custom name hierarchy for parsing last names."),
+        Flag.baseFeature(
+                AutofillFeatures.AUTOFILL_USE_NEGATIVE_PATTERN_FOR_ALL_ATTRIBUTES,
+                "When enabled, parser won't try to match other attributes if any of the negative"
+                        + " patterns matched."),
+        Flag.baseFeature(
                 AutofillFeatures.AUTOFILL_USE_SUBMITTED_FORM_IN_HTML_SUBMISSION,
                 "When enabled, Autofill will start falling back to the saved form when HTML"
                         + " submission happens and form extraction fails."),
         Flag.baseFeature(
                 AutofillFeatures.AUTOFILL_GREEK_REGEXES,
                 "When enabled, Greek regexes are used for parsing in branded builds."),
-        Flag.baseFeature(
-                AutofillFeatures.AUTOFILL_ENABLE_EMAIL_HEURISTIC_ONLY_ADDRESS_FORMS,
-                "When enabled, Autofill supports forms consisting of only email fields."),
-        Flag.baseFeature(
-                AutofillFeatures.AUTOFILL_CARET_EXTRACTION,
-                "When enabled, autofill extracts the caret position on certain events."),
-        Flag.baseFeature(
-                AutofillFeatures.AUTOFILL_CONSIDER_PHONE_NUMBER_SEPARATORS_VALID_LABELS,
-                "Makes label inference accept strings made up of  '(', ')', and '-' as labels."),
         Flag.baseFeature(
                 AutofillFeatures.AUTOFILL_ENABLE_CACHE_FOR_REGEX_MATCHING,
                 "When enabled, autofill uses an extra cache for matching regular expressions "
@@ -355,15 +333,15 @@ public final class ProductionSupportedFlagList {
                         + " match different types. Applied only for parsing of address forms in"
                         + " Turkish."),
         Flag.baseFeature(
+                AutofillFeatures.AUTOFILL_SUPPORT_PHONETIC_NAME_FOR_JP,
+                "When enabled, Autofill will support phonetic name for Japan."),
+        Flag.baseFeature(
                 AutofillFeatures.AUTOFILL_UKM_EXPERIMENTAL_FIELDS,
                 "Enables UKM collection for experimental fields"),
         Flag.baseFeature(
                 FeatureConstants.KEYBOARD_ACCESSORY_PAYMENT_VIRTUAL_CARD_FEATURE,
                 "When enabled, merchant bound virtual cards will be offered in the keyboard "
                         + "accessory."),
-        Flag.baseFeature(
-                NetworkServiceFeatures.PRIVATE_STATE_TOKENS,
-                "Enables the prototype Private State Tokens API."),
         Flag.baseFeature(
                 NetworkServiceFeatures.MASKED_DOMAIN_LIST,
                 "When enabled, the masked domain list required for IP Protection is loaded."),
@@ -372,10 +350,6 @@ public final class ProductionSupportedFlagList {
                 "Enables use selective image inversion to automatically darken page, it will be"
                         + " used when WebView is in dark mode, but website doesn't provide dark"
                         + " style."),
-        Flag.baseFeature(
-                AwFeatures.WEBVIEW_FORCE_DARK_MODE_MATCH_THEME,
-                "Automatically darken page if"
-                        + " WebView is set to FORCE_DARK_AUTO and the app has dark theme"),
         Flag.baseFeature(
                 ContentFeatures.VERIFY_DID_COMMIT_PARAMS,
                 "Enables reporting of browser and renderer navigation inconsistencies on"
@@ -387,6 +361,9 @@ public final class ProductionSupportedFlagList {
         Flag.baseFeature(
                 ContentFeatures.COMPOSITE_BG_COLOR_ANIMATION,
                 "When enabled, the background-color animation runs on the compositor thread."),
+        Flag.baseFeature(
+                BlinkFeatures.COMPOSITE_CLIP_PATH_ANIMATION,
+                "When enabled, clip-path animations run on the compositor thread."),
         Flag.baseFeature(
                 CcFeatures.DEFER_IMPL_INVALIDATION,
                 "Allow main thread additional time to respond before creating a pending tree"),
@@ -402,8 +379,8 @@ public final class ProductionSupportedFlagList {
                 AndroidMetricsFeatures.ANDROID_METRICS_ASYNC_METRIC_LOGGING,
                 "Initiate metric uploading on a background thread."),
         Flag.baseFeature(
-                BlinkFeatures.SET_TIMEOUT_WITHOUT_CLAMP,
-                "Enables faster setTimeout(,0) by removing the 1 ms clamping."),
+                BlinkFeatures.SET_INTERVAL_WITHOUT_CLAMP,
+                "Enables faster setInterval(,0) by removing the 1 ms clamping."),
         Flag.baseFeature(
                 BlinkFeatures.PAINT_HOLDING_FOR_IFRAMES,
                 "Show stale paint from old Document until new Document is ready for subframe"
@@ -427,6 +404,9 @@ public final class ProductionSupportedFlagList {
                 AwFeatures.WEBVIEW_REDUCE_UA_ANDROID_VERSION_DEVICE_MODEL,
                 "Enables reduce webview user-agent android version and device model."),
         Flag.baseFeature(
+                BlinkFeatures.REDUCE_USER_AGENT_MINOR_VERSION,
+                "Enables reduce webview user-agent minor version."),
+        Flag.baseFeature(
                 BlinkFeatures.VIEWPORT_HEIGHT_CLIENT_HINT_HEADER,
                 "Enables the use of sec-ch-viewport-height client hint."),
         Flag.baseFeature(
@@ -437,9 +417,6 @@ public final class ProductionSupportedFlagList {
                 BlinkFeatures.ESTABLISH_GPU_CHANNEL_ASYNC,
                 "Enables establishing the GPU channel asnchronously when requesting a new "
                         + "layer tree frame sink."),
-        Flag.baseFeature(
-                BlinkFeatures.ELEMENT_GET_INNER_HTML,
-                "Enables the getInnerHTML() function on elements."),
         Flag.baseFeature(BlinkFeatures.TEXT_SIZE_ADJUST_IMPROVEMENTS, "Improved text-size-adjust."),
         Flag.baseFeature(
                 BlinkFeatures.PREFETCH_FONT_LOOKUP_TABLES,
@@ -451,9 +428,6 @@ public final class ProductionSupportedFlagList {
         Flag.baseFeature(
                 BaseFeatures.RUN_TASKS_BY_BATCHES,
                 "Run tasks in queue for 8ms before before sending a system message."),
-        Flag.baseFeature(
-                BlinkFeatures.CRABBY_AVIF,
-                "If enabled, CrabbyAvif will be used instead of libavif for decoding AVIF images."),
         Flag.baseFeature(
                 BlinkFeatures.DEPRECATE_UNLOAD,
                 "If false prevents the gradual deprecation of the unload event."),
@@ -473,9 +447,6 @@ public final class ProductionSupportedFlagList {
         Flag.baseFeature(
                 BlinkFeatures.CHECK_HTML_PARSER_BUDGET_LESS_OFTEN,
                 "If enabled, avoids calling the clock for every token in the HTML parser."),
-        Flag.baseFeature(
-                BlinkFeatures.DETAILS_STYLING,
-                "Enables support for improved styling of HTML details element."),
         Flag.baseFeature(BaseFeatures.ALIGN_WAKE_UPS, "Align delayed wake ups at 125 Hz"),
         Flag.baseFeature(
                 BlinkFeatures.THREADED_SCROLL_PREVENT_RENDERING_STARVATION,
@@ -504,10 +475,6 @@ public final class ProductionSupportedFlagList {
                 CcFeatures.USE_DMSAA_FOR_TILES,
                 "Switches skia to use DMSAA instead of MSAA for tile raster"),
         Flag.baseFeature(
-                CcFeatures.USE_DMSAA_FOR_TILES_ANDROID_GL,
-                "Switches skia to use DMSAA instead of MSAA for tile raster"
-                        + " on Android GL backend."),
-        Flag.baseFeature(
                 BlinkFeatures.THREADED_BODY_LOADER,
                 "If enabled, reads and decodes navigation body data off the main thread."),
         Flag.baseFeature(BlinkFeatures.HIT_TEST_OPAQUENESS),
@@ -517,12 +484,7 @@ public final class ProductionSupportedFlagList {
         Flag.baseFeature(CcFeatures.PRESERVE_DISCARDABLE_IMAGE_MAP_QUALITY),
         Flag.baseFeature(BlinkFeatures.SCROLLBAR_COLOR),
         Flag.baseFeature(
-                ContentFeatures.PERSISTENT_ORIGIN_TRIALS,
-                "If enabled, servers will be able to use persistent origin trials "
-                        + "on this device."),
-        Flag.baseFeature(
-                AwFeatures.WEBVIEW_DRAG_DROP_FILES,
-                "If enabled, files can be dropped into WebView"),
+                AwFeatures.WEBVIEW_FILE_SYSTEM_ACCESS, "Enables JS File System Access API"),
         Flag.baseFeature(
                 BlinkFeatures.WEB_RTC_COMBINED_NETWORK_AND_WORKER_THREAD,
                 "Combines WebRTC's worker thread and network thread onto a single thread."),
@@ -552,27 +514,15 @@ public final class ProductionSupportedFlagList {
                 "When enabled, media::VideoEncoder implementation is used in MediaRecorder API"
                         + " instead of using MediaRecorder own video encoder implementation."),
         Flag.baseFeature(
-                MetricsFeatures.METRICS_SERVICE_ALLOW_EARLY_LOG_CLOSE,
-                "Controls whether a log is allowed to be closed when Chrome"
-                        + " is backgrounded/foregrounded early."),
-        Flag.baseFeature(
                 MetricsFeatures.FLUSH_PERSISTENT_SYSTEM_PROFILE_ON_WRITE,
                 "Controls whether to schedule a flush of persistent histogram memory "
                         + "immediately after writing a system profile to it."),
-        Flag.baseFeature(
-                MetricsFeatures.METRICS_SERVICE_DELTA_SNAPSHOT_IN_BG,
-                "Controls whether to perform histogram delta snapshots in a background "
-                        + "thread (in contrast to snapshotting unlogged samples in the "
-                        + "background, then marking them as logged on the main thread)."),
         Flag.baseFeature(
                 MetricsFeatures.REPORTING_SERVICE_ALWAYS_FLUSH,
                 "Determines whether to always flush Local State immediately after an UMA/UKM "
                         + "log upload."),
         Flag.baseFeature(
                 MetricsFeatures.METRICS_LOG_TRIMMING, "Controls trimming for metrics logs."),
-        Flag.baseFeature(
-                ContentFeatures.MAIN_THREAD_COMPOSITING_PRIORITY,
-                "When enabled runs the main thread at compositing priority."),
         Flag.baseFeature(
                 ContentFeatures.REDUCE_SUBRESOURCE_RESPONSE_STARTED_IPC,
                 "When enabled, reduces SubresourceResponseStarted IPC by sending"
@@ -588,16 +538,6 @@ public final class ProductionSupportedFlagList {
                         + " updater downloading service in nonembedded WebView."
                         + " See https://crbug.com/1170468."),
         Flag.baseFeature(
-                BlinkFeatures.REPORT_VISIBLE_LINE_BOUNDS,
-                "When enabled, WebView reports rectangles which surround each line of"
-                        + " text in the currently focused element to Android. These rectangles "
-                        + "are sent for <input> and <textarea> elements."),
-        Flag.baseFeature(
-                BlinkFeatures.STYLUS_POINTER_ADJUSTMENT,
-                "When enabled, a hover icon is shown over editable HTML elements when"
-                        + " using a stylus and the rectangle to trigger stylus writing on"
-                        + " editable elements is expanded."),
-        Flag.baseFeature(
                 BlinkFeatures.STYLUS_RICH_GESTURES,
                 "When enabled, stylus input can be used to draw rich gestures which "
                         + "affect text in editable web content."),
@@ -612,10 +552,6 @@ public final class ProductionSupportedFlagList {
         Flag.baseFeature(
                 SafeBrowsingFeatures.HASH_PREFIX_REAL_TIME_LOOKUPS,
                 "When enabled, Safe Browsing checks will happen in real time"),
-        Flag.baseFeature(
-                SafeBrowsingFeatures.SAFE_BROWSING_ASYNC_REAL_TIME_CHECK,
-                "When enabled, the real time Safe Browsing check will be called asynchronously,"
-                        + " along with an additional v4 check which will be synchronous."),
         Flag.baseFeature(
                 "AddWarningShownTSToClientSafeBrowsingReport",
                 "When enabled, client reports will include a timestamp of when the warning was "
@@ -639,6 +575,8 @@ public final class ProductionSupportedFlagList {
                 NetFeatures.SPDY_HEADERS_TO_HTTP_RESPONSE_USE_BUILDER,
                 "Enables new optimized implementation of SpdyHeadersToHttpResponse. No behavior"
                         + " change."),
+        Flag.baseFeature(NetFeatures.HAPPY_EYEBALLS_V3, "Enables Happy Eyeballs V3"),
+        Flag.baseFeature(NetFeatures.ENABLE_TLS13_EARLY_DATA, "Enables TLS 1.3 Early Data"),
         Flag.baseFeature("MojoIpcz"),
         Flag.baseFeature(
                 "FixDataPipeTrapBug",
@@ -657,15 +595,8 @@ public final class ProductionSupportedFlagList {
         Flag.baseFeature(
                 UiAndroidFeatures.DEPRECATED_EXTERNAL_PICKER_FUNCTION,
                 "Deprecates old external file picker function."),
-        Flag.baseFeature(
-                NetworkServiceFeatures.ATTRIBUTION_REPORTING_CROSS_APP_WEB,
-                "Enable attribution reporting to cross the app/web barrier by letting "
-                        + "the WebView use OS-level attribution."),
         Flag.baseFeature(BaseFeatures.THREAD_POOL_CAP2, "Sets a fixed thread pool cap"),
         Flag.baseFeature("ThreadGroupSemaphore"),
-        Flag.baseFeature(
-                BlinkFeatures.CSS_LAZY_PARSING_FAST_PATH,
-                "Enables a fast-path for skipping lazily-parsed CSS declaration blocks"),
         Flag.baseFeature(
                 ContentFeatures.QUEUE_NAVIGATIONS_WHILE_WAITING_FOR_COMMIT,
                 "If enabled, allows navigations to be queued when there is "
@@ -733,23 +664,12 @@ public final class ProductionSupportedFlagList {
                         + "targeting a cross-origin iframe which has moved within its "
                         + "embedding page recently."),
         Flag.baseFeature(
-                ContentFeatures.SERVICE_WORKER_STATIC_ROUTER,
-                "Enables Service Worker static routing API."),
-        Flag.baseFeature(
                 ContentFeatures.BACK_FORWARD_CACHE_MEDIA_SESSION_SERVICE,
                 "Enables media session usage when bfcache is enabled"),
-        Flag.baseFeature(
-                ContentFeatures.SELECTION_MENU_ITEM_MODIFICATION,
-                "Enables text selection menu item modification based on "
-                        + "embedder implementation."),
         Flag.baseFeature(
                 AwFeatures.WEBVIEW_AUTO_SAA,
                 "Enable auto granting storage access API requests. This will be done "
                         + "if a relationship is detected between the app and the website."),
-        Flag.baseFeature(
-                AwFeatures.WEBVIEW_SUPERVISED_USER_SITE_DETECTION,
-                "Enable detection of the loading of mature sites on "
-                        + "WebViews running on supervised user accounts"),
         Flag.baseFeature(
                 AwFeatures.WEBVIEW_SUPERVISED_USER_SITE_BLOCK,
                 "Enable blocking the loading of mature sites on "
@@ -765,10 +685,14 @@ public final class ProductionSupportedFlagList {
         Flag.baseFeature(
                 "UseAAudioInput",
                 "Enables the use of AAudio for capturing audio input. (Android Q+ only)"),
+        Flag.baseFeature(
+                "AudioInputConfirmReadsViaShmem",
+                "Enables an audio input optimization that uses shared memory instead of"
+                        + " socket messages for audio IPC read confirmations."),
         Flag.baseFeature("UseRustJsonParser"),
         Flag.baseFeature("V8BaselineBatchCompilation"),
         Flag.baseFeature("V8ConcurrentSparkplug"),
-        Flag.baseFeature("V8CppGCEnableLargerCage"),
+        Flag.baseFeature("V8Flag_minor_gc_task_with_lower_priority"),
         Flag.baseFeature("V8FlushCodeBasedOnTabVisibility"),
         Flag.baseFeature("V8FlushCodeBasedOnTime"),
         Flag.baseFeature("V8MemoryReducer"),
@@ -784,8 +708,8 @@ public final class ProductionSupportedFlagList {
         Flag.baseFeature("V8GCSpeedUsesCounters"),
         Flag.baseFeature("WebAssemblyTurboshaft"),
         Flag.baseFeature("WebAssemblyTurboshaftInstructionSelection"),
-        Flag.baseFeature("WebAssemblyInlining"),
-        Flag.baseFeature("WebAssemblyLiftoffCodeFlushing"),
+        Flag.baseFeature("WebAssemblyDeopt"),
+        Flag.baseFeature("WebAssemblyInliningCallIndirect"),
         Flag.baseFeature(
                 AwFeatures.WEBVIEW_MEDIA_INTEGRITY_API_BLINK_EXTENSION,
                 "Enable the WebView Media Integrity API as a Blink extension. Only works if"
@@ -813,8 +737,6 @@ public final class ProductionSupportedFlagList {
                         + " to enable BFCache through AwSettings as well. If either of"
                         + " the flag / setting is enabled, BFCache will be enabled"),
         Flag.baseFeature(
-                ContentFeatures.WEBVIEW_SUPPRESS_TAP_DURING_FLING, "Supress tap during fling."),
-        Flag.baseFeature(
                 ContentFeatures.ACCESSIBILITY_MANAGE_BROADCAST_RECEIVER_ON_BACKGROUND,
                 "Register, un-register Accessibility broadcast receiver on a background thread."),
         Flag.baseFeature(
@@ -834,9 +756,6 @@ public final class ProductionSupportedFlagList {
         Flag.baseFeature(
                 BaseFeatures.POST_GET_MY_MEMORY_STATE_TO_BACKGROUND,
                 "If enabled, getMyMemoryState IPC will be posted to background."),
-        Flag.baseFeature(
-                BlinkFeatures.REGISTER_JS_SOURCE_LOCATION_BLOCKING_BF_CACHE,
-                "Starts capturing bfcache blocking details"),
         Flag.baseFeature(
                 "MojoChannelAssociatedSendUsesRunOrPostTask",
                 "Enables optimization for sending messages on channel-associated interfaces"),
@@ -920,14 +839,6 @@ public final class ProductionSupportedFlagList {
                 "InputStreamOptimizations", "Enables optimizations to input stream handling."),
         Flag.baseFeature("WebViewOptimizeXrwNavigationFlow"),
         Flag.baseFeature(
-                AwFeatures.WEBVIEW_ASYNC_DNS, "Enables the built-in DNS resolver (Async DNS)."),
-        Flag.baseFeature(
-                "UseMoveNotCopyInAXTreeCombiner",
-                "Enables moves instead of copies of snapshot tree data when combining updates."),
-        Flag.baseFeature(
-                "UseMoveNotCopyInMergeTreeUpdate",
-                "Enables moves instead of copies of snapshot tree data when merging udpates."),
-        Flag.baseFeature(
                 "EnableHangWatcher", "Controls whether hooks for hang detection are active"),
         Flag.baseFeature(
                 "MojoPredictiveAllocation",
@@ -936,6 +847,9 @@ public final class ProductionSupportedFlagList {
         Flag.baseFeature(
                 AwFeatures.WEBVIEW_PRELOAD_CLASSES,
                 "Preloads expensive classes during WebView startup."),
+        Flag.baseFeature(
+                AwFeatures.WEBVIEW_PREFETCH_NATIVE_LIBRARY,
+                "Prefetches the native WebView code to memory during startup."),
         Flag.baseFeature(
                 GfxSwitches.USE_SMART_REF_FOR_GPU_FENCE_HANDLE,
                 "Avoids cloning of gpu fences when possible"),
@@ -960,10 +874,11 @@ public final class ProductionSupportedFlagList {
         Flag.baseFeature("EnableCustomInputStreamBufferSize"),
         Flag.baseFeature("NetworkServiceDedicatedThread"),
         Flag.baseFeature("BrowserThreadPoolAdjustment"),
-        Flag.commandLine(
-                CookieSwitches.DISABLE_PARTITIONED_COOKIES_SWITCH,
-                "Disables paritioned cookies in WebView"),
-        Flag.baseFeature(ContentFeatures.DIPS, "Enables the Bounce Tracking Mitigations feature."),
+        Flag.baseFeature(
+                AwFeatures.WEBVIEW_DISABLE_CHIPS,
+                "Disables partitioned cookies in WebView by default. Will require an additional"
+                        + " restart of WebView to take effect."),
+        Flag.baseFeature(ContentFeatures.BTM, "Enables the Bounce Tracking Mitigations feature."),
         Flag.baseFeature(
                 "LevelDBProtoAsyncWrite",
                 "Makes writes to leveldb_proto databases asynchronous. This should reduce disk"
@@ -986,6 +901,7 @@ public final class ProductionSupportedFlagList {
         Flag.baseFeature(
                 CcFeatures.DONT_ALWAYS_PUSH_PICTURE_LAYER_IMPLS,
                 "Stop always pushing PictureLayerImpl properties on tree Activation."),
+        Flag.baseFeature(CcFeatures.CC_SLIMMING, "Reduce unnecessary work in CC frame updates."),
         Flag.baseFeature(
                 AccessibilityFeatures.ACCESSIBILITY_PRUNE_REDUNDANT_INLINE_TEXT,
                 "Prune redundant text for AX inline text boxes during serialization"),
@@ -995,10 +911,25 @@ public final class ProductionSupportedFlagList {
                         + "navigation starts"),
         Flag.baseFeature(ContentFeatures.PWA_NAVIGATION_CAPTURING),
         Flag.baseFeature("TransportSecurityFileWriterSchedule"),
-        Flag.commandLine(
-                AwSwitches.WEBVIEW_INTERCEPTED_COOKIE_HEADER,
-                "When enabled, the cookie header will be included in the request headers"
-                        + " for shouldInterceptRequest"),
+        Flag.baseFeature(
+                AwFeatures.WEBVIEW_INTERCEPTED_COOKIE_HEADER,
+                "When enabled, WebView performs normal processing work for cookie request headers"
+                    + " and response headers for the shouldInterceptRequest API. However, whether"
+                    + " the app is provided the cookie jar contents is controlled by "
+                        + AwFeatures.WEBVIEW_INTERCEPTED_COOKIE_HEADER_READ_WRITE
+                        + ". Whether Set-Cookie headers affect the cookie jar is also controlled by"
+                        + " "
+                        + AwFeatures.WEBVIEW_INTERCEPTED_COOKIE_HEADER_READ_WRITE
+                        + ". When this flag is disabled, set-cookie headers are ignored and the"
+                        + " cookie jar is never read."),
+        Flag.baseFeature(
+                AwFeatures.WEBVIEW_INTERCEPTED_COOKIE_HEADER_READ_WRITE,
+                "When enabled in conjunction with WebViewInterceptedCookieHeader flag, the cookie"
+                    + " header in the request headers will be included for shouldInterceptRequest."
+                    + " Also, the set-cookie header in the response headers will be processed for"
+                    + " shouldInterceptRequest. When disabled while WebViewInterceptedCookieHeader"
+                    + " is enabled, the response headers passed to the app remain unchanged. Also,"
+                    + " the set-cookie header has no effect on the cookie jar."),
         Flag.baseFeature(
                 VizFeatures.RENDER_PASS_DRAWN_RECT,
                 "Enable optimization for tracking damage in a drawn rect for each render pass."),
@@ -1008,8 +939,6 @@ public final class ProductionSupportedFlagList {
         Flag.baseFeature("MojoUseBinder"),
         Flag.baseFeature(
                 ContentFeatures.WEB_PERMISSIONS_API, "Enables navigator.permissions.query()"),
-        Flag.baseFeature(
-                MediaFeatures.BUILT_IN_H264_DECODER, "Controls use of FFmpeg for H.264 decoding"),
         Flag.baseFeature(
                 BlinkFeatures.DEFER_RENDERER_TASKS_AFTER_INPUT,
                 "If enabled, some renderer tasks will be deferred after discrete input events, e.g."
@@ -1068,10 +997,6 @@ public final class ProductionSupportedFlagList {
                 "Use origin calculated in the browser process rather than renderer process for"
                         + " navigations."),
         Flag.baseFeature(
-                AwFeatures.WEBVIEW_AUTO_GRANT_SANITIZED_CLIPBOARD_WRITE,
-                "Auto-grant clipboard sanitized text write permission with user gesture. "
-                        + "Enabled by default."),
-        Flag.baseFeature(
                 "AllowSensorsToEnterBfcache",
                 "Allow pages with sensors to enter back/forward cache."),
         Flag.baseFeature(
@@ -1093,6 +1018,38 @@ public final class ProductionSupportedFlagList {
                 "When enabled, Prerender2 by Speculation Rules API is delayed until LCP is"
                         + " finished."),
         Flag.baseFeature("SyntheticResponseReportUnexpectedHeader"),
+        Flag.baseFeature(
+                "SelectParserRelaxation",
+                "Enables new HTML parser behavior for the <select> element."),
+        Flag.baseFeature(
+                "CSSReadingFlow",
+                "Enables new CSS reading-flow property for focus navigation in visual order."),
+        Flag.baseFeature(
+                "SimpleCachePrioritizedCaching",
+                "When enabled, main frame navigation resources will be prioritized in Simple"
+                        + " Cache."),
+        Flag.baseFeature(
+                CcFeatures.PREVENT_DUPLICATE_IMAGE_DECODES,
+                "De-duplicate and share image decode requests between raster tasks "
+                        + "and javascript image decode requests."),
+        Flag.baseFeature(
+                CcFeatures.SEND_EXPLICIT_DECODE_REQUESTS_IMMEDIATELY,
+                "Forward javascript image decode requests to cc right away, "
+                        + "rather than bundling them into the next compositor commit."),
+        Flag.baseFeature(
+                BlinkFeatures.SPECULATIVE_IMAGE_DECODES,
+                "Start decoding in-viewport images as soon as they have loaded, "
+                        + "rather than waiting for them to appear in a raster task."),
+        Flag.baseFeature(
+                BlinkFeatures.WEB_SQL_WEBVIEW_ACCESS,
+                "If false, prevents access to WebSQL on webview."),
+        Flag.baseFeature(
+                MediaFeatures.MEDIA_CODEC_BLOCK_MODEL,
+                "Controls use of MediaCodec's LinearBlock mode."),
+        Flag.baseFeature(
+                AwFeatures.WEBVIEW_PARTITIONED_COOKIES_EXCLUDED,
+                "When enabled, WebView records if a site with partitioned cookies has any cookies"
+                    + " excluded due to a different cookie partition key than the current site's."),
         // Add new commandline switches and features above. The final entry should have a
         // trailing comma for cleaner diffs.
     };

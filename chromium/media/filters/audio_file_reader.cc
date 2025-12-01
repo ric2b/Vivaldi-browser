@@ -28,8 +28,6 @@
 #include "media/ffmpeg/scoped_av_packet.h"
 #include "media/formats/mpeg/mpeg1_audio_stream_parser.h"
 
-#include "app/vivaldi_apptools.h"
-
 namespace media {
 
 // AAC(M4A) decoding specific constants.
@@ -90,15 +88,6 @@ bool AudioFileReader::OpenDemuxer() {
       AVStreamToAVCodecContext(format_context->streams[stream_index_]);
   if (!codec_context_)
     return false;
-
-  // Future versions of ffmpeg may copy the allow list from the format context.
-  if (base::FeatureList::IsEnabled(kFFmpegAllowLists) &&
-      !vivaldi::IsVivaldiRunning() &&
-      !codec_context_->codec_whitelist) {
-    // Note: FFmpeg will try to free this string, so we must duplicate it.
-    codec_context_->codec_whitelist =
-        av_strdup(FFmpegGlue::GetAllowedAudioDecoders());
-  }
 
   DCHECK_EQ(codec_context_->codec_type, AVMEDIA_TYPE_AUDIO);
   return true;

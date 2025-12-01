@@ -241,6 +241,7 @@ export class CSSOverviewCompletedView extends UI.Widget.VBox {
 
   constructor(controller: OverviewController) {
     super();
+    this.registerRequiredCSS(cssOverviewCompletedViewStyles);
 
     this.#controller = controller;
     this.#formatter = new Intl.NumberFormat('en-US');
@@ -266,6 +267,7 @@ export class CSSOverviewCompletedView extends UI.Widget.VBox {
     this.#mainContainer.setVertical(false);
     this.#mainContainer.setSecondIsSidebar(true);
     this.#mainContainer.setSidebarMinimized(true);
+    this.#mainContainer.registerRequiredCSS(cssOverviewCompletedViewStyles);
 
     this.#sideBar = new CSSOverviewSidebarPanel();
     this.#sideBar.setMinimumSize(100, 25);
@@ -290,14 +292,6 @@ export class CSSOverviewCompletedView extends UI.Widget.VBox {
     this.#resultsContainer.element.addEventListener('click', this.#onClick.bind(this));
 
     this.#data = null;
-  }
-
-  override wasShown(): void {
-    super.wasShown();
-    this.#mainContainer.registerCSSFiles([cssOverviewCompletedViewStyles]);
-    this.registerCSSFiles([cssOverviewCompletedViewStyles]);
-
-    // TODO(paullewis): update the links in the panels in case source has been .
   }
 
   initializeModels(target: SDK.Target.Target): void {
@@ -702,7 +696,7 @@ export class CSSOverviewCompletedView extends UI.Widget.VBox {
 
     const total = values.reduce((prev, curr) => prev + curr[1].length, 0);
 
-    return UI.Fragment.Fragment.build`<ul>
+    return UI.Fragment.Fragment.build`<ul aria-label="${type}">
     ${values.map(([title, nodes]) => {
       const width = 100 * nodes.length / total;
       const itemLabel = i18nString(UIStrings.nOccurrences, {n: nodes.length});
@@ -710,7 +704,8 @@ export class CSSOverviewCompletedView extends UI.Widget.VBox {
       return UI.Fragment.Fragment.build`<li>
         <div class="title">${title}</div>
         <button data-type="${type}" data-path="${path}" data-${dataLabel}="${title}"
-        jslog="${VisualLogging.action().track({click: true}).context(`css-overview.${type}`)}">
+        jslog="${VisualLogging.action().track({click: true}).context(`css-overview.${type}`)}"
+        aria-label="${title}: ${itemLabel}">
           <div class="details">${itemLabel}</div>
           <div class="bar-container">
             <div class="bar" style="width: ${width}%;"></div>
@@ -877,9 +872,9 @@ export const enum Events {
   TAB_CLOSED = 'TabClosed',
 }
 
-export type EventTypes = {
-  [Events.TAB_CLOSED]: number,
-};
+export interface EventTypes {
+  [Events.TAB_CLOSED]: number;
+}
 
 export class ElementDetailsView extends UI.Widget.Widget {
   readonly #controller: OverviewController;

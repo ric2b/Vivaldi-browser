@@ -17,7 +17,6 @@
 #include "quiche/quic/core/quic_packet_number.h"
 #include "quiche/quic/core/quic_time.h"
 #include "quiche/quic/core/quic_types.h"
-#include "quiche/quic/platform/api/quic_expect_bug.h"
 #include "quiche/quic/platform/api/quic_flags.h"
 #include "quiche/quic/platform/api/quic_test.h"
 #include "quiche/quic/test_tools/quic_config_peer.h"
@@ -1267,6 +1266,15 @@ TEST_F(QuicSentPacketManagerTest, NegotiateCongestionControlFromOptions) {
   // The server does nothing on kPRGC.
   EXPECT_EQ(kRenoBytes, QuicSentPacketManagerPeer::GetSendAlgorithm(manager_)
                             ->GetCongestionControlType());
+
+  options.clear();
+  options.push_back(kCQBC);
+  QuicConfigPeer::SetReceivedConnectionOptions(&config, options);
+  EXPECT_CALL(*network_change_visitor_, OnCongestionChange());
+  manager_.SetFromConfig(config);
+  // The server does nothing on kCQBC.
+  EXPECT_EQ(kRenoBytes, QuicSentPacketManagerPeer::GetSendAlgorithm(manager_)
+                            ->GetCongestionControlType());
 }
 
 TEST_F(QuicSentPacketManagerTest, NegotiateClientCongestionControlFromOptions) {
@@ -1315,6 +1323,18 @@ TEST_F(QuicSentPacketManagerTest, NegotiateClientCongestionControlFromOptions) {
   EXPECT_EQ(kRenoBytes, QuicSentPacketManagerPeer::GetSendAlgorithm(manager_)
                             ->GetCongestionControlType());
 
+  // Prague Cubic is currently only supported on the client.
+  QuicSentPacketManagerPeer::SetPerspective(&manager_, Perspective::IS_SERVER);
+  options.clear();
+  options.push_back(kPRGC);
+  config.SetClientConnectionOptions(options);
+  EXPECT_CALL(*network_change_visitor_, OnCongestionChange());
+  manager_.SetFromConfig(config);
+  // This is the server, so the algorithm didn't change.
+  EXPECT_EQ(kRenoBytes, QuicSentPacketManagerPeer::GetSendAlgorithm(manager_)
+                            ->GetCongestionControlType());
+
+  QuicSentPacketManagerPeer::SetPerspective(&manager_, Perspective::IS_CLIENT);
   options.clear();
   options.push_back(kPRGC);
   config.SetClientConnectionOptions(options);
@@ -1323,15 +1343,33 @@ TEST_F(QuicSentPacketManagerTest, NegotiateClientCongestionControlFromOptions) {
   EXPECT_EQ(kPragueCubic, QuicSentPacketManagerPeer::GetSendAlgorithm(manager_)
                               ->GetCongestionControlType());
 
-  // Test that kPRGC is overriden by other options.
+  options.clear();
+  options.push_back(kCQBC);
+  config.SetClientConnectionOptions(options);
+  EXPECT_CALL(*network_change_visitor_, OnCongestionChange());
+  manager_.SetFromConfig(config);
+  EXPECT_EQ(kCubicBytes, QuicSentPacketManagerPeer::GetSendAlgorithm(manager_)
+                             ->GetCongestionControlType());
+
+  // Test that kPRGC is not overriden by other options.
   options.clear();
   options.push_back(kPRGC);
   options.push_back(kTBBR);
   config.SetClientConnectionOptions(options);
   EXPECT_CALL(*network_change_visitor_, OnCongestionChange());
   manager_.SetFromConfig(config);
-  EXPECT_EQ(kBBR, QuicSentPacketManagerPeer::GetSendAlgorithm(manager_)
-                      ->GetCongestionControlType());
+  EXPECT_EQ(kPragueCubic, QuicSentPacketManagerPeer::GetSendAlgorithm(manager_)
+                              ->GetCongestionControlType());
+
+  // Test that kCQBC is not overriden by other options.
+  options.clear();
+  options.push_back(kCQBC);
+  options.push_back(kTBBR);
+  config.SetClientConnectionOptions(options);
+  EXPECT_CALL(*network_change_visitor_, OnCongestionChange());
+  manager_.SetFromConfig(config);
+  EXPECT_EQ(kCubicBytes, QuicSentPacketManagerPeer::GetSendAlgorithm(manager_)
+                             ->GetCongestionControlType());
 }
 
 TEST_F(QuicSentPacketManagerTest, UseInitialRoundTripTimeToSend) {
@@ -3237,9 +3275,8 @@ TEST_F(QuicSentPacketManagerTest, GetAvailableCongestionWindow) {
 }
 
 TEST_F(QuicSentPacketManagerTest, EcnCountsAreStored) {
-  if (!GetQuicRestartFlag(quic_support_ect1)) {
-    return;
-  }
+  EXPECT_CALL(*send_algorithm_, EnableECT1()).WillOnce(Return(true));
+  manager_.EnableECT1();
   std::optional<QuicEcnCounts> ecn_counts1, ecn_counts2, ecn_counts3;
   ecn_counts1 = {1, 0, 3};
   ecn_counts2 = {0, 3, 1};
@@ -3307,9 +3344,8 @@ TEST_F(QuicSentPacketManagerTest, EcnCountsAreStored) {
 }
 
 TEST_F(QuicSentPacketManagerTest, EcnCountsReceived) {
-  if (!GetQuicRestartFlag(quic_support_ect1)) {
-    return;
-  }
+  EXPECT_CALL(*send_algorithm_, EnableECT1()).WillOnce(Return(true));
+  manager_.EnableECT1();
   // Basic ECN reporting test. The reported counts are equal to the total sent,
   // but more than the total acked. This is legal per the spec.
   for (uint64_t i = 1; i <= 3; ++i) {
@@ -3334,9 +3370,8 @@ TEST_F(QuicSentPacketManagerTest, EcnCountsReceived) {
 }
 
 TEST_F(QuicSentPacketManagerTest, PeerDecrementsEcnCounts) {
-  if (!GetQuicRestartFlag(quic_support_ect1)) {
-    return;
-  }
+  EXPECT_CALL(*send_algorithm_, EnableECT1()).WillOnce(Return(true));
+  manager_.EnableECT1();
   for (uint64_t i = 1; i <= 5; ++i) {
     SendDataPacket(i, ENCRYPTION_FORWARD_SECURE, ECN_ECT1);
   }
@@ -3376,9 +3411,8 @@ TEST_F(QuicSentPacketManagerTest, PeerDecrementsEcnCounts) {
 }
 
 TEST_F(QuicSentPacketManagerTest, TooManyEcnCountsReported) {
-  if (!GetQuicRestartFlag(quic_support_ect1)) {
-    return;
-  }
+  EXPECT_CALL(*send_algorithm_, EnableECT1()).WillOnce(Return(true));
+  manager_.EnableECT1();
   for (uint64_t i = 1; i <= 3; ++i) {
     SendDataPacket(i, ENCRYPTION_FORWARD_SECURE, ECN_ECT1);
   }
@@ -3404,9 +3438,8 @@ TEST_F(QuicSentPacketManagerTest, TooManyEcnCountsReported) {
 }
 
 TEST_F(QuicSentPacketManagerTest, PeerReportsWrongCodepoint) {
-  if (!GetQuicRestartFlag(quic_support_ect1)) {
-    return;
-  }
+  EXPECT_CALL(*send_algorithm_, EnableECT1()).WillOnce(Return(true));
+  manager_.EnableECT1();
   for (uint64_t i = 1; i <= 3; ++i) {
     SendDataPacket(i, ENCRYPTION_FORWARD_SECURE, ECN_ECT1);
   }
@@ -3432,9 +3465,8 @@ TEST_F(QuicSentPacketManagerTest, PeerReportsWrongCodepoint) {
 }
 
 TEST_F(QuicSentPacketManagerTest, TooFewEcnCountsReported) {
-  if (!GetQuicRestartFlag(quic_support_ect1)) {
-    return;
-  }
+  EXPECT_CALL(*send_algorithm_, EnableECT1()).WillOnce(Return(true));
+  manager_.EnableECT1();
   for (uint64_t i = 1; i <= 3; ++i) {
     SendDataPacket(i, ENCRYPTION_FORWARD_SECURE, ECN_ECT1);
   }
@@ -3460,9 +3492,8 @@ TEST_F(QuicSentPacketManagerTest, TooFewEcnCountsReported) {
 
 TEST_F(QuicSentPacketManagerTest,
        EcnCountsNotValidatedIfLargestAckedUnchanged) {
-  if (!GetQuicRestartFlag(quic_support_ect1)) {
-    return;
-  }
+  EXPECT_CALL(*send_algorithm_, EnableECT1()).WillOnce(Return(true));
+  manager_.EnableECT1();
   for (uint64_t i = 1; i <= 3; ++i) {
     SendDataPacket(i, ENCRYPTION_FORWARD_SECURE, ECN_ECT1);
   }
@@ -3503,9 +3534,8 @@ TEST_F(QuicSentPacketManagerTest,
 }
 
 TEST_F(QuicSentPacketManagerTest, EcnAckedButNoMarksReported) {
-  if (!GetQuicRestartFlag(quic_support_ect1)) {
-    return;
-  }
+  EXPECT_CALL(*send_algorithm_, EnableECT1()).WillOnce(Return(true));
+  manager_.EnableECT1();
   for (uint64_t i = 1; i <= 3; ++i) {
     SendDataPacket(i, ENCRYPTION_FORWARD_SECURE, ECN_ECT1);
   }

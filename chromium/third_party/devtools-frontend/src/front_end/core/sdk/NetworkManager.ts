@@ -147,6 +147,14 @@ export class NetworkManager extends SDKModel<EventTypes> {
     if (Common.Settings.Settings.instance().moduleSetting('cache-disabled').get()) {
       void this.#networkAgent.invoke_setCacheDisabled({cacheDisabled: true});
     }
+    if (Common.Settings.Settings.instance().getHostConfig().devToolsPrivacyUI?.enabled &&
+        Common.Settings.Settings.instance().getHostConfig().thirdPartyCookieControls?.managedBlockThirdPartyCookies !==
+            true &&
+        (Common.Settings.Settings.instance().createSetting('cookie-control-override-enabled', undefined).get() ||
+         Common.Settings.Settings.instance().createSetting('grace-period-mitigation-disabled', undefined).get() ||
+         Common.Settings.Settings.instance().createSetting('heuristic-mitigation-disabled', undefined).get())) {
+      this.cookieControlFlagsSettingChanged();
+    }
 
     void this.#networkAgent.invoke_enable({maxPostDataSize: MAX_EAGER_POST_REQUEST_BODY_LENGTH});
     void this.#networkAgent.invoke_setAttachDebugStack({enabled: true});
@@ -161,6 +169,16 @@ export class NetworkManager extends SDKModel<EventTypes> {
     Common.Settings.Settings.instance()
         .moduleSetting('cache-disabled')
         .addChangeListener(this.cacheDisabledSettingChanged, this);
+
+    Common.Settings.Settings.instance()
+        .createSetting('cookie-control-override-enabled', undefined)
+        .addChangeListener(this.cookieControlFlagsSettingChanged, this);
+    Common.Settings.Settings.instance()
+        .createSetting('grace-period-mitigation-disabled', undefined)
+        .addChangeListener(this.cookieControlFlagsSettingChanged, this);
+    Common.Settings.Settings.instance()
+        .createSetting('heuristic-mitigation-disabled', undefined)
+        .addChangeListener(this.cookieControlFlagsSettingChanged, this);
   }
 
   static forRequest(request: NetworkRequest): NetworkManager|null {
@@ -313,6 +331,23 @@ export class NetworkManager extends SDKModel<EventTypes> {
     void this.#networkAgent.invoke_setCacheDisabled({cacheDisabled: enabled});
   }
 
+  private cookieControlFlagsSettingChanged(): void {
+    const overridesEnabled =
+        Boolean(Common.Settings.Settings.instance().createSetting('cookie-control-override-enabled', undefined).get());
+    const gracePeriodEnabled = overridesEnabled ?
+        Boolean(
+            Common.Settings.Settings.instance().createSetting('grace-period-mitigation-disabled', undefined).get()) :
+        false;
+    const heuristicEnabled = overridesEnabled ?
+        Boolean(Common.Settings.Settings.instance().createSetting('heuristic-mitigation-disabled', undefined).get()) :
+        false;
+    void this.#networkAgent.invoke_setCookieControls({
+      enableThirdPartyCookieRestriction: overridesEnabled,
+      disableThirdPartyCookieMetadata: gracePeriodEnabled,
+      disableThirdPartyCookieHeuristics: heuristicEnabled,
+    });
+  }
+
   override dispose(): void {
     Common.Settings.Settings.instance()
         .moduleSetting('cache-disabled')
@@ -383,19 +418,19 @@ export interface MessageGeneratedEvent {
   warning: boolean;
 }
 
-export type EventTypes = {
-  [Events.RequestStarted]: RequestStartedEvent,
-  [Events.RequestUpdated]: NetworkRequest,
-  [Events.RequestFinished]: NetworkRequest,
-  [Events.RequestUpdateDropped]: RequestUpdateDroppedEventData,
-  [Events.ResponseReceived]: ResponseReceivedEvent,
-  [Events.MessageGenerated]: MessageGeneratedEvent,
-  [Events.RequestRedirected]: NetworkRequest,
-  [Events.LoadingFinished]: NetworkRequest,
-  [Events.ReportingApiReportAdded]: Protocol.Network.ReportingApiReport,
-  [Events.ReportingApiReportUpdated]: Protocol.Network.ReportingApiReport,
-  [Events.ReportingApiEndpointsChangedForOrigin]: Protocol.Network.ReportingApiEndpointsChangedForOriginEvent,
-};
+export interface EventTypes {
+  [Events.RequestStarted]: RequestStartedEvent;
+  [Events.RequestUpdated]: NetworkRequest;
+  [Events.RequestFinished]: NetworkRequest;
+  [Events.RequestUpdateDropped]: RequestUpdateDroppedEventData;
+  [Events.ResponseReceived]: ResponseReceivedEvent;
+  [Events.MessageGenerated]: MessageGeneratedEvent;
+  [Events.RequestRedirected]: NetworkRequest;
+  [Events.LoadingFinished]: NetworkRequest;
+  [Events.ReportingApiReportAdded]: Protocol.Network.ReportingApiReport;
+  [Events.ReportingApiReportUpdated]: Protocol.Network.ReportingApiReport;
+  [Events.ReportingApiEndpointsChangedForOrigin]: Protocol.Network.ReportingApiEndpointsChangedForOriginEvent;
+}
 
 /**
  * Define some built-in DevTools throttling presets.
@@ -1071,9 +1106,12 @@ export class NetworkDispatcher implements ProtocolProxyApi.NetworkDispatcher {
     if (loaderId) {
       this.#requestsByLoaderId.set(loaderId, networkRequest);
     }
-    // The following relies on the fact that loaderIds and requestIds are
-    // globally unique and that the main request has them equal.
-    if (networkRequest.loaderId === networkRequest.requestId()) {
+    // The following relies on the fact that loaderIds and requestIds
+    // are globally unique and that the main request has them equal. If
+    // loaderId is an empty string, it indicates a worker request. For the
+    // request to fetch the main worker script, the request ID is the future
+    // worker target ID and, therefore, it is unique.
+    if (networkRequest.loaderId === networkRequest.requestId() || networkRequest.loaderId === '') {
       MultitargetNetworkManager.instance().inflightMainResourceRequests.set(networkRequest.requestId(), networkRequest);
     }
 
@@ -1295,8 +1333,14 @@ export class MultitargetNetworkManager extends Common.ObjectWrapper.ObjectWrappe
     this.#updatingInterceptionPatternsPromise = null;
 
     // TODO(allada) Remove these and merge it with request interception.
+    const blockedPatternChanged: () => void = () => {
+      this.updateBlockedPatterns();
+      this.dispatchEventToListeners(MultitargetNetworkManager.Events.BLOCKED_PATTERNS_CHANGED);
+    };
     this.#blockingEnabledSetting = Common.Settings.Settings.instance().moduleSetting('request-blocking-enabled');
+    this.#blockingEnabledSetting.addChangeListener(blockedPatternChanged);
     this.#blockedPatternsSetting = Common.Settings.Settings.instance().createSetting('network-blocked-patterns', []);
+    this.#blockedPatternsSetting.addChangeListener(blockedPatternChanged);
     this.#effectiveBlockedURLs = [];
     this.updateBlockedPatterns();
 
@@ -1537,8 +1581,6 @@ export class MultitargetNetworkManager extends Common.ObjectWrapper.ObjectWrappe
 
   setBlockedPatterns(patterns: BlockedPattern[]): void {
     this.#blockedPatternsSetting.set(patterns);
-    this.updateBlockedPatterns();
-    this.dispatchEventToListeners(MultitargetNetworkManager.Events.BLOCKED_PATTERNS_CHANGED);
   }
 
   setBlockingEnabled(enabled: boolean): void {
@@ -1546,8 +1588,6 @@ export class MultitargetNetworkManager extends Common.ObjectWrapper.ObjectWrappe
       return;
     }
     this.#blockingEnabledSetting.set(enabled);
-    this.updateBlockedPatterns();
-    this.dispatchEventToListeners(MultitargetNetworkManager.Events.BLOCKED_PATTERNS_CHANGED);
   }
 
   private updateBlockedPatterns(): void {
@@ -1681,15 +1721,15 @@ export namespace MultitargetNetworkManager {
     REQUEST_FULFILLED = 'RequestFulfilled',
   }
 
-  export type EventTypes = {
-    [Events.BLOCKED_PATTERNS_CHANGED]: void,
-    [Events.CONDITIONS_CHANGED]: void,
-    [Events.USER_AGENT_CHANGED]: void,
-    [Events.INTERCEPTORS_CHANGED]: void,
-    [Events.ACCEPTED_ENCODINGS_CHANGED]: void,
-    [Events.REQUEST_INTERCEPTED]: string,
-    [Events.REQUEST_FULFILLED]: Platform.DevToolsPath.UrlString,
-  };
+  export interface EventTypes {
+    [Events.BLOCKED_PATTERNS_CHANGED]: void;
+    [Events.CONDITIONS_CHANGED]: void;
+    [Events.USER_AGENT_CHANGED]: void;
+    [Events.INTERCEPTORS_CHANGED]: void;
+    [Events.ACCEPTED_ENCODINGS_CHANGED]: void;
+    [Events.REQUEST_INTERCEPTED]: string;
+    [Events.REQUEST_FULFILLED]: Platform.DevToolsPath.UrlString;
+  }
 }
 
 export class InterceptedRequest {
@@ -1970,7 +2010,7 @@ export class ConditionsSerializer implements Serializer<Conditions, Conditions> 
     const parsed = JSON.parse(serialized);
     return {
       ...parsed,
-      // eslint-disable-next-line rulesdir/l10n_i18nString_call_only_with_uistrings
+      // eslint-disable-next-line rulesdir/l10n-i18nString-call-only-with-uistrings
       title: parsed.i18nTitleKey ? i18nLazyString(parsed.i18nTitleKey) : parsed.title,
     };
   }

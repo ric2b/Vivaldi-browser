@@ -10,6 +10,7 @@ import {
   getBrowserAndPages,
   goToResource,
   waitFor,
+  waitForFunction,
 } from '../../shared/helper.js';
 
 import {
@@ -35,15 +36,34 @@ export const reloadDockableFrontEnd = async () => {
   await reloadDevTools({canDock: true});
 };
 
-export const openDeviceToolbar = async () => {
+export const deviceModeIsEnabled = async () => {
   const deviceToolbarToggler = await waitFor(DEVICE_TOOLBAR_TOGGLER_SELECTOR);
-  const togglerARIAPressed = await deviceToolbarToggler.evaluate(element => element.getAttribute('aria-pressed'));
-  const isOpen = togglerARIAPressed === 'true';
-  if (isOpen) {
+  const pressed = await deviceToolbarToggler.evaluate(element => {
+    const button = element.shadowRoot?.querySelector('.primary-toggle') as HTMLButtonElement;
+    return button.getAttribute('aria-pressed');
+  });
+  return pressed === 'true';
+};
+
+export const clickDeviceModeToggler = async () => {
+  const deviceToolbarToggler = await waitFor(DEVICE_TOOLBAR_TOGGLER_SELECTOR);
+  await clickElement(deviceToolbarToggler);
+};
+
+export const openDeviceToolbar = async () => {
+  if (await deviceModeIsEnabled()) {
     return;
   }
-  await clickElement(deviceToolbarToggler);
+  await clickDeviceModeToggler();
   await waitFor(DEVICE_TOOLBAR_SELECTOR);
+};
+
+export const deviceModeButtonCanEnable = async () => {
+  const deviceToolbarToggler = await waitFor(DEVICE_TOOLBAR_TOGGLER_SELECTOR);
+  return await deviceToolbarToggler.evaluate(element => {
+    const button = element.shadowRoot?.querySelector('.primary-toggle') as HTMLButtonElement;
+    return !button.disabled;
+  });
 };
 
 export const showMediaQueryInspector = async () => {
@@ -100,32 +120,51 @@ export const selectToggleButton = async () => {
 export const selectEdit = async () => {
   await clickDevicesDropDown();
   await click(EDIT_MENU_ITEM_SELECTOR);
+  await waitForNotExpanded(DEVICE_LIST_DROPDOWN_SELECTOR);
 };
 
 export const selectDevice = async (name: string) => {
   await clickDevicesDropDown();
   await click(`[aria-label*="${name}, unchecked"]`);
+  await waitForNotExpanded(DEVICE_LIST_DROPDOWN_SELECTOR);
 };
 
 export const selectTestDevice = async () => {
   await clickDevicesDropDown();
   await click(TEST_DEVICE_MENU_ITEM_SELECTOR);
+  await waitForNotExpanded(DEVICE_LIST_DROPDOWN_SELECTOR);
 };
 
 // Test if span button works when emulating a dual screen device.
 export const selectDualScreen = async () => {
   await clickDevicesDropDown();
   await click(SURFACE_DUO_MENU_ITEM_SELECTOR);
+  await waitForNotExpanded(DEVICE_LIST_DROPDOWN_SELECTOR);
 };
 
 export const selectFoldableDevice = async () => {
   await clickDevicesDropDown();
   await click(FOLDABLE_DEVICE_MENU_ITEM_SELECTOR);
+  await waitForNotExpanded(DEVICE_LIST_DROPDOWN_SELECTOR);
+};
+
+const waitForNotExpanded = async (selector: string) => {
+  const toolbar = await waitFor(DEVICE_TOOLBAR_SELECTOR);
+  const dropdown = await waitFor(selector, toolbar);
+  await waitForFunction(async () => {
+    const expanded = await dropdown.evaluate(el => el.getAttribute('aria-expanded'));
+    return expanded === null;
+  });
+};
+
+export const waitForZoomDropDownNotExpanded = async () => {
+  await waitForNotExpanded(ZOOM_LIST_DROPDOWN_SELECTOR);
 };
 
 export const clickDevicePosture = async (name: string) => {
   await clickDevicePostureDropDown();
   await click(`[aria-label*="${name}, unchecked"]`);
+  await waitForNotExpanded(DEVICE_POSTURE_DROPDOWN_SELECTOR);
 };
 
 export const getDevicePostureDropDown = async () => {
@@ -155,6 +194,7 @@ export const getZoom = async () => {
 export const toggleAutoAdjustZoom = async () => {
   await clickZoomDropDown();
   await click(AUTO_AUTO_ADJUST_ZOOM_SELECTOR);
+  await waitForZoomDropDownNotExpanded();
 };
 
 const IPAD_MENU_ITEM_SELECTOR = '[aria-label*="iPad"]';
@@ -163,4 +203,5 @@ const IPAD_MENU_ITEM_SELECTOR = '[aria-label*="iPad"]';
 export const selectNonDualScreenDevice = async () => {
   await clickDevicesDropDown();
   await click(IPAD_MENU_ITEM_SELECTOR);
+  await waitForNotExpanded(DEVICE_LIST_DROPDOWN_SELECTOR);
 };

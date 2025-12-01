@@ -59,7 +59,7 @@ IS_WIN = sys.platform == 'win32'
 TEST_MODE = False
 
 
-def win_find_git():
+def win_find_git() -> str:
     for elem in os.environ.get('PATH', '').split(os.pathsep):
         for candidate in ('git.exe', 'git.bat'):
             path = os.path.join(elem, candidate)
@@ -70,14 +70,35 @@ def win_find_git():
                 # so we want to avoid it whenever possible, by extracting the
                 # path to git.exe from git.bat in depot_tools.
                 if candidate == 'git.bat':
-                    git_bat = open(path).readlines()
-                    new_path = os.path.join(elem, git_bat[-1][6:-5])
-                    if (git_bat[-1].startswith('"%~dp0')
-                            and git_bat[-1].endswith('" %*\n')
-                            and new_path.endswith('.exe')):
-                        path = new_path
+                    path = _extract_git_path_from_git_bat(path)
                 return path
     raise ValueError('Could not find Git on PATH.')
+
+
+def _extract_git_path_from_git_bat(path: str) -> str:
+    """Attempts to extract the path to git.exe from git.bat.
+
+    Args:
+        path: the absolute path to git.bat.
+
+    Returns:
+        The absolute path to git.exe if extraction succeeded,
+        otherwise returns the input path to git.bat.
+    """
+    with open(path, 'r') as f:
+        git_bat = f.readlines()
+        if git_bat[-1].endswith('" %*\n'):
+            if git_bat[-1].startswith('"%~dp0'):
+                # Handle relative path.
+                new_path = os.path.join(os.path.dirname(path),
+                                        git_bat[-1][6:-5])
+            elif git_bat[-1].startswith('"'):
+                # Handle absolute path.
+                new_path = git_bat[-1][1:-5]
+
+            if new_path.endswith('.exe'):
+                return new_path
+    return path
 
 
 GIT_EXE = 'git' if not IS_WIN else win_find_git()

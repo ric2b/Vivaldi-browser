@@ -279,6 +279,7 @@
 <translation id="5582839680698949063">기본 메뉴</translation>
 <translation id="5614553682702429503">비밀번호를 저장하시겠습니까?</translation>
 <translation id="5623842676595125836">로그</translation>
+<translation id="5624959475330585145">비보안 연결을 사용하기 전에 확인</translation>
 <translation id="5638309510554459422"><ph name="BEGIN_LINK" />Chrome 웹 스토어<ph name="END_LINK" />에서 확장 프로그램과 테마를 찾아보세요</translation>
 <translation id="5677928146339483299">차단됨</translation>
 <translation id="5707185214361380026">확장 프로그램을 불러오는 데 실패했습니다:</translation>
@@ -468,6 +469,7 @@
 <translation id="9218430445555521422">기본 브라우저로 설정</translation>
 <translation id="93766956588638423">확장 프로그램 복구</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
+<translation id="961856697154696964">인터넷 사용 기록 삭제</translation>
 <translation id="994289308992179865">반복 재생 (&amp;L)</translation>
 <translation id="998747458861718449">검사(&amp;N)</translation>
 </translationbundle>

@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "xnnpack.h"
 #include "xnnpack/common.h"
 #include "xnnpack/math.h"
 
@@ -248,12 +249,13 @@ union xnn_qu8_conv_minmax_params {
     int64_t rounding;
   } rndnu_scalar;
   struct {
+    uint8_t kernel_zero_point;
+    uint8_t padding[3];
     int32_t left_pre_shift;
     int16_t multiplier;
+    int16_t output_zero_point;
     uint8_t output_min;
     uint8_t output_max;
-    int16_t output_zero_point;
-    uint8_t kernel_zero_point;
   } rndnu16_scalar;
 #if XNN_ARCH_ARM
   struct {
@@ -267,7 +269,8 @@ union xnn_qu8_conv_minmax_params {
 #endif  // XNN_ARCH_ARM
 #if XNN_ARCH_ARM || XNN_ARCH_ARM64
   struct {
-    uint8_t kernel_zero_point[4];
+    uint8_t kernel_zero_point;
+    uint8_t padding[3];
     float scale;
     float magic_bias;
     int32_t magic_bias_less_output_zero_point;
@@ -275,14 +278,16 @@ union xnn_qu8_conv_minmax_params {
     uint8_t output_max;
   } fp32_neon;
   struct {
-    uint8_t kernel_zero_point[4];
+    uint8_t kernel_zero_point;
+    uint8_t padding[3];
     float scale;
     int16_t output_zero_point;
     uint8_t output_min;
     uint8_t output_max;
   } fp32_neonv8;
   struct {
-    uint8_t kernel_zero_point[4];
+    uint8_t kernel_zero_point;
+    uint8_t padding[3];
     int32_t right_pre_shift;
     int32_t multiplier;
     int32_t right_post_shift;
@@ -373,13 +378,24 @@ union xnn_qu8_mul_minmax_params {
 #endif  // XNN_ARCH_ARM || XNN_ARCH_ARM64
 };
 
+struct xnn_binary_reference_params {
+  float a_scale;
+  int32_t a_zero_point;
+  float b_scale;
+  int32_t b_zero_point;
+  float inv_output_scale;
+  int32_t output_zero_point;
+  struct xnn_binary_params params;
+};
+
 union xnn_binary_uparams {
-  struct xnn_qs8_add_minmax_params qs8_add;
-  struct xnn_qu8_add_minmax_params qu8_add;
+  struct xnn_qs8_add_minmax_params qs8_addsub;
+  struct xnn_qu8_add_minmax_params qu8_addsub;
   union xnn_qs8_mul_minmax_params qs8_mul;
   union xnn_qu8_mul_minmax_params qu8_mul;
-  union xnn_f16_minmax_params f16_minmax;
-  union xnn_f32_minmax_params f32_minmax;
+  union xnn_f16_minmax_params f16;
+  union xnn_f32_minmax_params f32;
+  struct xnn_binary_reference_params reference;
 };
 
 // RSum params used by RSUM & RDSUM microkernels.
@@ -387,22 +403,30 @@ struct xnn_qs8_rsum_params {
   char _;  // Dummy member variable to comply with the C standard
 };
 
-struct xnn_qs8_reduce_minmax_params {
-  struct {
-    float scale;
-    int32_t num_elements;
-    int8_t input_zero_point;
-    int8_t output_zero_point;
-  } scalar;
+struct xnn_f32_reduce_params {
+  float scale;
 };
 
-struct xnn_qu8_reduce_minmax_params {
-  struct {
-    float scale;
-    int32_t num_elements;
-    uint8_t input_zero_point;
-    uint8_t output_zero_point;
-  } scalar;
+struct xnn_qs8_reduce_params {
+  float scale;
+  float input_output_scale;
+  int8_t input_zero_point;
+  int8_t output_zero_point;
+};
+
+struct xnn_qu8_reduce_params {
+  float scale;
+  float input_output_scale;
+  uint8_t input_zero_point;
+  uint8_t output_zero_point;
+};
+
+struct xnn_reduce_params {
+  union {
+    struct xnn_f32_reduce_params f32;
+    struct xnn_qs8_reduce_params qs8;
+    struct xnn_qu8_reduce_params qu8;
+  };
 };
 
 // AvgPool w. Min+Max.
@@ -427,6 +451,13 @@ struct xnn_f16_qs8_cvt_params {
   } scalar;
 };
 
+struct xnn_f16_qu8_cvt_params {
+  struct {
+    xnn_float16 scale;
+    int16_t output_zero_point;
+  } scalar;
+};
+
 struct xnn_f32_qs8_cvt_params {
   struct {
     float scale;
@@ -441,30 +472,11 @@ struct xnn_f32_qu8_cvt_params {
   } scalar;
 };
 
-struct xnn_s32_f32_cvt_params {
-  struct {
-    int32_t zero_point;
-  } scalar;
-};
-
-struct xnn_u32_f32_cvt_params {
-  struct {
-    int32_t zero_point;
-  } scalar;
-};
-
 struct xnn_qs8_cvt_params {
   struct {
     int16_t input_zero_point;
     int32_t multiplier;
     int16_t output_zero_point;
-  } scalar;
-};
-
-struct xnn_qs16_qs8_cvt_params {
-  struct {
-    int32_t multiplier;
-    int32_t output_zero_point;
   } scalar;
 };
 
@@ -553,8 +565,26 @@ struct xnn_qs8_packw_params {
   int8_t input_zero_point;
 };
 
+struct xnn_qs8_qc4w_packing_params {
+  int8_t input_zero_point;
+  uint8_t kernel_zero_point;
+};
+
+struct xnn_qs8_qc8w_packing_params {
+  int8_t input_zero_point;
+  float scale_multiplier;
+};
+
 struct xnn_x32_packb_params {
   char _;  // Dummy member variable to comply with the C standard
+};
+
+struct xnn_unary_reference_params {
+  float x_scale;
+  float x_zero_point;
+  float inv_y_scale;
+  float y_zero_point;
+  union xnn_unary_params params;
 };
 
 union xnn_unary_uparams {
@@ -564,9 +594,6 @@ union xnn_unary_uparams {
   struct xnn_qs8_f32_cvt_params qs8_f32_cvt;
   struct xnn_qu8_f32_cvt_params qu8_f32_cvt;
   struct xnn_qs8_f16_cvt_params qs8_f16_cvt;
-  struct xnn_qs16_qs8_cvt_params qs16_qs8_cvt;
-  struct xnn_s32_f32_cvt_params s32_f32_cvt;
-  struct xnn_u32_f32_cvt_params u32_f32_cvt;
   struct xnn_qs8_cvt_params qs8_cvt;
   struct xnn_qu8_cvt_params qu8_cvt;
   struct xnn_f16_elu_params f16_elu;
@@ -579,6 +606,7 @@ union xnn_unary_uparams {
   union xnn_f16_minmax_params f16_minmax;
   struct xnn_s8_minmax_params s8_minmax;
   struct xnn_u8_minmax_params u8_minmax;
+  struct xnn_unary_reference_params reference;
 };
 
 struct subconvolution_params {

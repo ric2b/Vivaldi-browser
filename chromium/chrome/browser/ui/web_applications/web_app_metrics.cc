@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/web_applications/web_app_metrics.h"
 
+#include <algorithm>
 #include <optional>
 #include <string>
 
@@ -14,7 +15,6 @@
 #include "base/observer_list.h"
 #include "base/one_shot_event.h"
 #include "base/power_monitor/power_monitor.h"
-#include "base/ranges/algorithm.h"
 #include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
 #include "chrome/browser/after_startup_task_utils.h"
@@ -94,16 +94,19 @@ void WebAppMetrics::OnEngagementEvent(
     double old_score,
     site_engagement::EngagementType engagement_type,
     const std::optional<webapps::AppId>& app_id) {
-  if (!web_contents)
+  if (!web_contents) {
     return;
+  }
 
   Browser* browser = chrome::FindBrowserWithTab(web_contents);
-  if (!browser)
+  if (!browser) {
     return;
+  }
 
   // Number of apps is not yet counted.
-  if (num_user_installed_apps_ == kNumUserInstalledAppsNotCounted)
+  if (num_user_installed_apps_ == kNumUserInstalledAppsNotCounted) {
     return;
+  }
 
   // The engagement broken down by the number of apps installed must be recorded
   // for all engagement events, not just web apps.

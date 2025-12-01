@@ -16,6 +16,7 @@
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/sequence_checker.h"
+#include "base/strings/to_string.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
@@ -48,6 +49,7 @@
 #include "third_party/blink/renderer/modules/mediastream/web_media_player_ms_compositor.h"
 #include "third_party/blink/renderer/platform/media/media_player_client.h"
 #include "third_party/blink/renderer/platform/media/media_player_util.h"
+#include "third_party/blink/renderer/platform/media/player_id_generator.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_audio_track.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_component.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_descriptor.h"
@@ -363,6 +365,7 @@ WebMediaPlayerMS::WebMediaPlayerMS(
       client_(static_cast<MediaPlayerClient*>(client)),
       delegate_(delegate),
       delegate_id_(0),
+      player_id_(GetNextMediaPlayerId()),
       paused_(true),
       media_log_(std::move(media_log)),
       renderer_factory_(std::make_unique<MediaStreamRendererFactory>()),
@@ -643,7 +646,7 @@ void WebMediaPlayerMS::TrackRemoved(const WebString& track_id) {
 void WebMediaPlayerMS::ActiveStateChanged(bool is_active) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   SendLogMessage(String::Format("%s({is_active=%s})", __func__,
-                                is_active ? "true" : "false"));
+                                base::ToString(is_active).c_str()));
   // The case when the stream becomes active is handled by TrackAdded().
   if (is_active)
     return;
@@ -660,10 +663,6 @@ void WebMediaPlayerMS::ActiveStateChanged(bool is_active) {
   // track is expected to produce a black frame after becoming inactive.
   if (audio_renderer_)
     audio_renderer_->Stop();
-}
-
-int WebMediaPlayerMS::GetDelegateId() {
-  return delegate_id_;
 }
 
 std::optional<viz::SurfaceId> WebMediaPlayerMS::GetSurfaceId() {
@@ -1239,7 +1238,8 @@ void WebMediaPlayerMS::OnFrameHidden() {
 }
 
 void WebMediaPlayerMS::SetVolumeMultiplier(double multiplier) {
-  // TODO(perkj, magjed): See TODO in OnPlay().
+  volume_multiplier_ = multiplier;
+  SetVolume(volume_);
 }
 
 void WebMediaPlayerMS::ActivateSurfaceLayerForVideo(

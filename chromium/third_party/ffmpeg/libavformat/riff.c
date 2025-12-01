@@ -220,6 +220,9 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { AV_CODEC_ID_RAWVIDEO,     MKTAG( 3 ,  0 ,  0 ,  0 ) },
     { AV_CODEC_ID_RAWVIDEO,     MKTAG('I', '4', '2', '0') },
     { AV_CODEC_ID_RAWVIDEO,     MKTAG('Y', 'U', 'Y', '2') },
+    { AV_CODEC_ID_RAWVIDEO,     MKTAG('Y', '2', '1', '0') },
+    { AV_CODEC_ID_RAWVIDEO,     MKTAG('Y', '2', '1', '6') },
+    { AV_CODEC_ID_RAWVIDEO,     MKTAG('Y', '4', '1', '6') },
     { AV_CODEC_ID_RAWVIDEO,     MKTAG('Y', '4', '2', '2') },
     { AV_CODEC_ID_RAWVIDEO,     MKTAG('V', '4', '2', '2') },
     { AV_CODEC_ID_RAWVIDEO,     MKTAG('Y', '4', '1', '0') },
@@ -514,6 +517,7 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { AV_CODEC_ID_VMIX,         MKTAG('V', 'M', 'X', '1') },
     { AV_CODEC_ID_LEAD,         MKTAG('L', 'E', 'A', 'D') },
     { AV_CODEC_ID_EVC,          MKTAG('e', 'v', 'c', '1') },
+    { AV_CODEC_ID_RV60,         MKTAG('R', 'V', '6', '0') },
     { AV_CODEC_ID_NONE,         0 }
 };
 

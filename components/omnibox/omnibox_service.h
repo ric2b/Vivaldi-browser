@@ -10,6 +10,7 @@
 #define COMPONENTS_OMNIBOX_OMNIBOX_SERVICE_H_
 
 #include "components/omnibox/browser/autocomplete_controller.h"
+#include "components/omnibox/omnibox_input.h"
 
 namespace vivaldi_omnibox {
 
@@ -26,7 +27,10 @@ class OmniboxService : public KeyedService,
   //  Called from shutdown service before shutting down the browser
   void Shutdown() override;
 
-  void StartSearch(std::u16string input);
+  void StartSearch(
+      std::u16string input_text,
+      OmniboxPrivateInput input,
+      metrics::OmniboxEventProto::PageClassification page_classification);
 
   void OnResultChanged(AutocompleteController* controller,
                        bool default_match_changed) override;

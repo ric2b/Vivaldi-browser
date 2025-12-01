@@ -10,7 +10,6 @@
 //------------------------------------------------------------------------------
 
 const astUtils = require("./utils/ast-utils");
-const globals = require("globals");
 
 //------------------------------------------------------------------------------
 // Rule Definition
@@ -21,10 +20,12 @@ module.exports = {
     meta: {
         type: "suggestion",
 
+        defaultOptions: [{ exceptions: [] }],
+
         docs: {
             description: "Disallow extending native types",
             recommended: false,
-            url: "https://eslint.org/docs/rules/no-extend-native"
+            url: "https://eslint.org/docs/latest/rules/no-extend-native"
         },
 
         schema: [
@@ -49,11 +50,10 @@ module.exports = {
     },
 
     create(context) {
-
-        const config = context.options[0] || {};
-        const exceptions = new Set(config.exceptions || []);
+        const sourceCode = context.sourceCode;
+        const exceptions = new Set(context.options[0].exceptions);
         const modifiedBuiltins = new Set(
-            Object.keys(globals.builtin)
+            Object.keys(astUtils.ECMASCRIPT_GLOBALS)
                 .filter(builtin => builtin[0].toUpperCase() === builtin[0])
                 .filter(builtin => !exceptions.has(builtin))
         );
@@ -159,8 +159,8 @@ module.exports = {
 
         return {
 
-            "Program:exit"() {
-                const globalScope = context.getScope();
+            "Program:exit"(node) {
+                const globalScope = sourceCode.getScope(node);
 
                 modifiedBuiltins.forEach(builtin => {
                     const builtinVar = globalScope.set.get(builtin);

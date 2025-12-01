@@ -543,7 +543,7 @@ export class TabbedEditorContainer extends Common.ObjectWrapper.ObjectWrapper<Ev
     icon.data = {iconName: 'cross-circle-filled', color: 'var(--icon-error)', width: '14px', height: '14px'};
     UI.Tooltip.Tooltip.install(icon, i18nString(UIStrings.unableToLoadThisContent));
     if (this.tabbedPane.tabView(tabId)) {
-      this.tabbedPane.setTabIcon(tabId, icon);
+      this.tabbedPane.setTrailingTabIcon(tabId, icon);
     }
   }
 
@@ -631,7 +631,7 @@ export class TabbedEditorContainer extends Common.ObjectWrapper.ObjectWrapper<Ev
       } else {
         icon = Persistence.PersistenceUtils.PersistenceUtils.iconForUISourceCode(uiSourceCode);
       }
-      this.tabbedPane.setTabIcon(tabId, icon);
+      this.tabbedPane.setTrailingTabIcon(tabId, icon);
     }
   }
 
@@ -690,10 +690,10 @@ export interface EditorSelectedEvent {
   userGesture: boolean|undefined;
 }
 
-export type EventTypes = {
-  [Events.EDITOR_SELECTED]: EditorSelectedEvent,
-  [Events.EDITOR_CLOSED]: Workspace.UISourceCode.UISourceCode,
-};
+export interface EventTypes {
+  [Events.EDITOR_SELECTED]: EditorSelectedEvent;
+  [Events.EDITOR_CLOSED]: Workspace.UISourceCode.UISourceCode;
+}
 
 const MAX_PREVIOUSLY_VIEWED_FILES_COUNT = 30;
 const MAX_SERIALIZABLE_URL_LENGTH = 4096;
@@ -851,7 +851,7 @@ export class History {
     return serializedHistoryItems;
   }
 
-  // eslint-disable-next-line rulesdir/prefer_readonly_keyword
+  // eslint-disable-next-line rulesdir/prefer-readonly-keyword
   keys(): ReadonlyArray<HistoryItemKey> {
     return this.items;
   }

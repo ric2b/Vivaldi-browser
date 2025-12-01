@@ -38,12 +38,12 @@ In Chrome 105, Chrome began a platform-by-platform transition from relying on th
 The Chrome Root Program Policy below establishes the minimum requirements for self-signed root CA certificates to be included as trusted in a default installation of Chrome.
 
 ### Apply for Inclusion
-CA Owners that satisfy the requirements defined in the policy below may apply for self-signed root CA certificate inclusion in the Chrome Root Store using [these](https://www.chromium.org/Home/chromium-security/root-ca-policy/apply-for-inclusion/) instructions.
+CA Owners that satisfy the requirements defined in the policy below may apply for self-signed root CA certificate inclusion in the Chrome Root Store using [these](/Home/chromium-security/root-ca-policy/apply-for-inclusion/) instructions.
 
 ### Moving Forward, Together
 The June 2022 release (Version 1.1) of the Chrome Root Program Policy introduced the Chrome Root Program’s “Moving Forward, Together” initiative that set out to share our vision of the future that includes modern, reliable, highly agile, purpose-driven PKIs with a focus on automation, simplicity, and security.
 
-Learn more about priorities and initiatives that may influence future versions of this policy [here](https://www.chromium.org/Home/chromium-security/root-ca-policy/moving-forward-together/).
+Learn more about priorities and initiatives that may influence future versions of this policy [here](/Home/chromium-security/root-ca-policy/moving-forward-together/).
 
 ### Additional Information
 If you’re a Chrome user experiencing a certificate error and need help, please see [this support article](https://support.google.com/chrome/answer/6098869?hl=en).
@@ -321,7 +321,7 @@ To phase-in these requirements in a manner that reduces negative impact to the e
 
 To further reduce negative impact to the ecosystem, the Chrome Root Store may temporarily continue to include a root CA certificate past its defined term-limit on a case-by-case basis, if the corresponding CA Owner has submitted a Root Inclusion Request to the CCADB for a replacement root CA certificate at least one year in advance of the approximate removal date.
 
-Other circumstances may lead to the removal of a root CA certificate included in the Chrome Root Store before the completion of its term-limit (e.g., the future [phase-out](https://www.chromium.org/Home/chromium-security/root-ca-policy/moving-forward-together/#focusing-on-simplicity) of root CA certificates included in the Chrome Root Store that are not dedicated to TLS server authentication use cases).
+Other circumstances may lead to the removal of a root CA certificate included in the Chrome Root Store before the completion of its term-limit (e.g., the future [phase-out](/Home/chromium-security/root-ca-policy/moving-forward-together/#focusing-on-simplicity) of root CA certificates included in the Chrome Root Store that are not dedicated to TLS server authentication use cases).
 
 ### 4. Dedicated TLS Server Authentication PKI Hierarchies
 The Chrome Root Program will only accept CCADB “Root Inclusion Requests” from Applicant PKI hierarchies that are dedicated to TLS server authentication certificate issuance.

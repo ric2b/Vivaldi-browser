@@ -5,22 +5,20 @@
 #include "base/lazy_instance.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
-#include "components/ad_blocker/adblock_known_sources_handler.h"
-#include "components/search_engines/template_url_service.h"
-#include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "components/ad_blocker/adblock_known_sources_handler.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_content.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
 #include "components/request_filter/adblock_filter/adblock_state_and_logs.h"
 #include "components/request_filter/adblock_filter/adblock_tab_state_and_logs.h"
+#include "components/search_engines/template_url_service.h"
 #include "extensions/schema/content_blocking.h"
 #include "extensions/tools/vivaldi_tools.h"
 
 namespace extensions {
 
 namespace {
-
-constexpr const char *kPartnerListURL = "https://downloads.vivaldi.com/lists/vivaldi/partners-current.txt";
 
 std::optional<adblock_filter::RuleGroup> FromVivaldiContentBlockingRuleGroup(
     vivaldi::content_blocking::RuleGroup rule_group) {
@@ -95,6 +93,30 @@ vivaldi::content_blocking::FetchResult ToVivaldiContentBlockingFetchResult(
   }
 }
 
+vivaldi::content_blocking::PresetKind ToVivaldiContentBlockingPresetKind(
+    std::optional<adblock_filter::PresetKind> preset_kind) {
+  if (!preset_kind) {
+    return vivaldi::content_blocking::PresetKind::kNone;
+  }
+
+  switch (*preset_kind) {
+    case adblock_filter::PresetKind::kAds:
+      return vivaldi::content_blocking::PresetKind::kAds;
+    case adblock_filter::PresetKind::kTracking:
+      return vivaldi::content_blocking::PresetKind::kTrackers;
+    case adblock_filter::PresetKind::kAnnoyances:
+      return vivaldi::content_blocking::PresetKind::kAnnoyances;
+    case adblock_filter::PresetKind::kPartners:
+      return vivaldi::content_blocking::PresetKind::kPartners;
+    case adblock_filter::PresetKind::kCookieNotices:
+      return vivaldi::content_blocking::PresetKind::kCookieNotices;
+    case adblock_filter::PresetKind::kOther:
+      return vivaldi::content_blocking::PresetKind::kOther;
+    case adblock_filter::PresetKind::kRegional:
+      return vivaldi::content_blocking::PresetKind::kRegional;
+  }
+}
+
 vivaldi::content_blocking::RuleSource
 ToVivaldiContentBlockingRuleSourceFromCore(
     const adblock_filter::RuleSourceCore& core) {
@@ -114,6 +136,8 @@ ToVivaldiContentBlockingRuleSourceFromCore(
       core.settings().use_whole_document_allow;
 
   result.removable = true;
+  result.preset_id = "";
+  result.preset_kind = vivaldi::content_blocking::PresetKind::kNone;
   result.rules_list_checksum = "";
   result.unsafe_adblock_metadata.homepage = "";
   result.unsafe_adblock_metadata.title = "";
@@ -166,6 +190,9 @@ vivaldi::content_blocking::RuleSource ToVivaldiContentBlockingRuleSource(
   vivaldi::content_blocking::RuleSource result =
       ToVivaldiContentBlockingRuleSourceFromCore(known_source.core);
   result.removable = known_source.removable;
+  result.preset_id = known_source.preset_id.AsLowercaseString();
+  result.preset_kind =
+      ToVivaldiContentBlockingPresetKind(known_source.preset_kind);
 
   return result;
 }
@@ -880,21 +907,22 @@ ContentBlockingIsExemptByPartnerURLFunction::RunWithService(
 
   content::WebContents* web_contents;
   if (ExtensionTabUtil::GetTabById(tab_id, browser_context(), true,
-                                     &web_contents) &&
+                                   &web_contents) &&
       web_contents) {
-    uint32_t rule_source_id = adblock_filter::RuleSourceCore::FromUrl(GURL{kPartnerListURL})->id();
-
-    url_partner_info.status =
-        rules_service->HasDocumentActivationForRuleSource(
-              adblock_filter::RuleGroup::kAdBlockingRules, web_contents, rule_source_id);
+    url_partner_info.status = rules_service->HasDocumentActivationForRuleSource(
+        adblock_filter::RuleGroup::kAdBlockingRules, web_contents,
+        base::Uuid::ParseLowercase(
+            adblock_filter::KnownRuleSourcesHandler::kPartnersListUuid));
   }
 
   // detect template name based on url
-  auto *templateURLService = TemplateURLServiceFactory::GetForProfile(Profile::FromBrowserContext(browser_context()));
+  auto* templateURLService = TemplateURLServiceFactory::GetForProfile(
+      Profile::FromBrowserContext(browser_context()));
   TemplateURL* templateURL =
-    templateURLService->GetTemplateURLForHost(url.host());
+      templateURLService->GetTemplateURLForHost(url.host());
 
-  if (templateURL) url_partner_info.name = base::UTF16ToUTF8(templateURL->short_name());
+  if (templateURL)
+    url_partner_info.name = base::UTF16ToUTF8(templateURL->short_name());
 
   return ArgumentList(Results::Create(url_partner_info));
 }

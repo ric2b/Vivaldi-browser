@@ -29,6 +29,7 @@ export class ThreadsSidebarPane extends UI.Widget.VBox implements
 
   constructor() {
     super(true);
+    this.registerRequiredCSS(threadsSidebarPaneStyles);
 
     this.contentElement.setAttribute('jslog', `${VisualLogging.section('sources.threads')}`);
     this.items = new UI.ListModel.ListModel();
@@ -152,9 +153,5 @@ export class ThreadsSidebarPane extends UI.Widget.VBox implements
     if (hadFocus) {
       this.focus();
     }
-  }
-  override wasShown(): void {
-    super.wasShown();
-    this.registerCSSFiles([threadsSidebarPaneStyles]);
   }
 }

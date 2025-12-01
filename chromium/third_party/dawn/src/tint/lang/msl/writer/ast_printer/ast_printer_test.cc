@@ -230,16 +230,12 @@ struct tint_array {
     T elements[N];
 };
 
-#define TINT_ISOLATE_UB(VOLATILE_NAME) \
-  {volatile bool VOLATILE_NAME = false; if (VOLATILE_NAME) break;}
-
 struct tint_symbol_4 {
   tint_array<float2x2, 4> m;
 };
 
 void tint_zero_workgroup_memory(uint local_idx, threadgroup tint_array<float2x2, 4>* const tint_symbol) {
   for(uint idx = local_idx; (idx < 4u); idx = (idx + 1u)) {
-    TINT_ISOLATE_UB(tint_volatile_false);
     uint const i = idx;
     (*(tint_symbol))[i] = float2x2(float2(0.0f), float2(0.0f));
   }
@@ -426,17 +422,17 @@ float4x3 tint_unpack_vec3_in_composite_2(tint_array<tint_packed_vec3_f32_array_e
 }
 
 tint_array<tint_packed_vec3_f32_array_element, 2> tint_pack_vec3_in_composite(float2x3 in) {
-  tint_array<tint_packed_vec3_f32_array_element, 2> result = tint_array<tint_packed_vec3_f32_array_element, 2>{{.elements=packed_float3(in[0])}, {.elements=packed_float3(in[1])}};
+  tint_array<tint_packed_vec3_f32_array_element, 2> result = tint_array<tint_packed_vec3_f32_array_element, 2>{tint_packed_vec3_f32_array_element{.elements=packed_float3(in[0])}, tint_packed_vec3_f32_array_element{.elements=packed_float3(in[1])}};
   return result;
 }
 
 tint_array<tint_packed_vec3_f32_array_element, 3> tint_pack_vec3_in_composite_1(float3x3 in) {
-  tint_array<tint_packed_vec3_f32_array_element, 3> result = tint_array<tint_packed_vec3_f32_array_element, 3>{{.elements=packed_float3(in[0])}, {.elements=packed_float3(in[1])}, {.elements=packed_float3(in[2])}};
+  tint_array<tint_packed_vec3_f32_array_element, 3> result = tint_array<tint_packed_vec3_f32_array_element, 3>{tint_packed_vec3_f32_array_element{.elements=packed_float3(in[0])}, tint_packed_vec3_f32_array_element{.elements=packed_float3(in[1])}, tint_packed_vec3_f32_array_element{.elements=packed_float3(in[2])}};
   return result;
 }
 
 tint_array<tint_packed_vec3_f32_array_element, 4> tint_pack_vec3_in_composite_2(float4x3 in) {
-  tint_array<tint_packed_vec3_f32_array_element, 4> result = tint_array<tint_packed_vec3_f32_array_element, 4>{{.elements=packed_float3(in[0])}, {.elements=packed_float3(in[1])}, {.elements=packed_float3(in[2])}, {.elements=packed_float3(in[3])}};
+  tint_array<tint_packed_vec3_f32_array_element, 4> result = tint_array<tint_packed_vec3_f32_array_element, 4>{tint_packed_vec3_f32_array_element{.elements=packed_float3(in[0])}, tint_packed_vec3_f32_array_element{.elements=packed_float3(in[1])}, tint_packed_vec3_f32_array_element{.elements=packed_float3(in[2])}, tint_packed_vec3_f32_array_element{.elements=packed_float3(in[3])}};
   return result;
 }
 

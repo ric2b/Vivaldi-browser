@@ -36,7 +36,7 @@ IDs are of the format test.crossec.ota.pass%d@gmail.com
     the shared account to your own OTA.
 
 [Rhea]: https://rhea.corp.google.com/
-[go/get-test-accounts]: https://goto.google.com/get-test-accounts
-[go/cross-account-challenge-for-ota]: https://goto.google.com/cross-account-challenge-for-ota
+[go/get-test-accounts]: http://go/get-test-accounts
+[go/cross-account-challenge-for-ota]: http://go/cross-account-challenge-for-ota
 [team's Rhea dashboard]: https://rhea.corp.google.com/list?mdb_group=chromeos-security-core
 [chromeos-security-core.prod]: https://ganpati2.corp.google.com/group/chromeos-security-core.prod?tab=children

@@ -75,7 +75,7 @@ describe('Recorder', function() {
 
     const recording = await stopRecording();
     const steps = (recording as UserFlow).steps.slice(2);
-    assert.strictEqual(steps.length, 2);
+    assert.lengthOf(steps, 2);
     for (const step of steps) {
       assert.strictEqual(step.type, 'click');
       assert.isTrue('duration' in step && step.duration && step.duration > 350);
@@ -256,17 +256,18 @@ describe('Recorder', function() {
     assertRecordingMatchesSnapshot(recording);
   });
 
-  // TODO: remove flakiness from recording network conditions.
-  it.skip('[crbug.com/1224832]: should also record network conditions', async () => {
+  // Flaky.
+  it.skip('[crbug.com/382417597]: should also record network conditions', async () => {
     await startRecording('recorder/recorder.html', {
-      networkCondition: 'Fast 3G',
+      networkCondition: '3G',
     });
 
     const {frontend, target} = getBrowserAndPages();
     await target.bringToFront();
     await target.click('#test');
     await frontend.bringToFront();
-    await changeNetworkConditions('Slow 3G');
+    await changeNetworkConditions('Slow 4G');
+    await raf(frontend);
     await openRecorderPanel();
     await target.bringToFront();
     await target.click('#test');
@@ -295,7 +296,7 @@ describe('Recorder', function() {
   });
 
   // Blocking Chromium PINS roll
-  it.skip('[crbug.com/1482078] should capture keyboard events on non-text inputs', async () => {
+  it('should capture keyboard events on non-text inputs', async () => {
     await startRecording('recorder/input.html', {untrustedEvents: true});
 
     const {target} = getBrowserAndPages();
@@ -328,9 +329,7 @@ describe('Recorder', function() {
     assertRecordingMatchesSnapshot(recording);
   });
 
-  // skipped until we figure out why the keyup for Enter is not recorded in
-  // 1% of the runs.
-  it.skip('[crbug.com/1473597] should capture a change that causes navigation without blur or change', async () => {
+  it('should capture a change that causes navigation without blur or change', async () => {
     await startRecording('recorder/programmatic-navigation-on-keydown.html');
 
     const {target} = getBrowserAndPages();
@@ -398,41 +397,34 @@ describe('Recorder', function() {
     assertRecordingMatchesSnapshot(recording);
   });
 
-  // Flaky test.
-  it.skipOnPlatforms(['mac'], '[crbug.com/373417054] should record OOPIF interactions', async () => {
+  it('should record OOPIF interactions', async () => {
     const {target} = getBrowserAndPages();
     await startRecording('recorder/oopif.html', {untrustedEvents: true});
 
     await target.bringToFront();
     const frame = target.frames().find(frame => frame.url().endsWith('iframe1.html'));
-    const link = await frame?.waitForSelector('aria/To iframe 2');
+    const link = await frame!.waitForSelector('a');
     const frame2Promise = target.waitForFrame(
         frame => frame.url().endsWith('iframe2.html'),
     );
-    await link?.click();
+    await link!.click();
     const frame2 = await frame2Promise;
-    await frame2?.waitForSelector('aria/To iframe 1');
-    // Preventive timeout because apparently out-of-process targets might trigger late events that
-    // cause handled errors in DevTools.
-    await new Promise(resolve => setTimeout(resolve, 250));
+    await frame2?.waitForSelector('a');
 
     const recording = await stopRecording();
     assertRecordingMatchesSnapshot(recording);
   });
 
-  // Flaky on Mac
-  it.skipOnPlatforms(
-      ['mac'], '[crbug.com/1480253] should capture and store screenshots for every section', async () => {
-        const {target} = getBrowserAndPages();
-        await startRecording('recorder/recorder.html');
-        await target.bringToFront();
-        await raf(target);
-        await stopRecording();
-        await waitFor('.section .screenshot');
-      });
+  it('should capture and store screenshots for every section', async () => {
+    const {target} = getBrowserAndPages();
+    await startRecording('recorder/recorder.html');
+    await target.bringToFront();
+    await raf(target);
+    await stopRecording();
+    await waitFor('.section .screenshot');
+  });
 
-  // Flaky test
-  it.skip('[crbug.com/1443423]: should record interactions with popups', async () => {
+  it('should record interactions with popups', async () => {
     await startRecording('recorder/recorder.html', {untrustedEvents: true});
 
     const {target, browser} = getBrowserAndPages();

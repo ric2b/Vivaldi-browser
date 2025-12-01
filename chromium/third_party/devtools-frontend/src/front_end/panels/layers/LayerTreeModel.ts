@@ -30,9 +30,9 @@
 
 import * as Common from '../../core/common/common.js';
 import * as SDK from '../../core/sdk/sdk.js';
-import * as UI from '../../ui/legacy/legacy.js';
 import type * as ProtocolProxyApi from '../../generated/protocol-proxy-api.js';
 import type * as Protocol from '../../generated/protocol.js';
+import * as UI from '../../ui/legacy/legacy.js';
 
 export class LayerTreeModel extends SDK.SDKModel.SDKModel<EventTypes> {
   readonly layerTreeAgent: ProtocolProxyApi.LayerTreeApi;
@@ -149,10 +149,10 @@ export enum Events {
   /* eslint-enable @typescript-eslint/naming-convention */
 }
 
-export type EventTypes = {
-  [Events.LayerTreeChanged]: void,
-  [Events.LayerPainted]: AgentLayer,
-};
+export interface EventTypes {
+  [Events.LayerTreeChanged]: void;
+  [Events.LayerPainted]: AgentLayer;
+}
 
 export class AgentLayerTree extends SDK.LayerTreeBase.LayerTreeBase {
   private layerTreeModel: LayerTreeModel;

@@ -2,11 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/* Some view input callbacks might be handled outside of LitHtml and we
+/* Some view input callbacks might be handled outside of Lit and we
    bind all of them upfront. We disable the lit_html_host_this since we
-   do not define any host for LitHtml.render and the rule is not happy
+   do not define any host for Lit.render and the rule is not happy
    about it. */
-/* eslint-disable rulesdir/lit_html_host_this */
 
 import '../../../ui/components/icon_button/icon_button.js';
 import './StepEditor.js';
@@ -17,16 +16,20 @@ import * as Platform from '../../../core/platform/platform.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
 import * as Menus from '../../../ui/components/menus/menus.js';
 import * as UI from '../../../ui/legacy/legacy.js';
-import * as LitHtml from '../../../ui/lit-html/lit-html.js';
+import * as Lit from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 import type * as Converters from '../converters/converters.js';
 import * as Models from '../models/models.js';
 
 import type {StepEditedEvent} from './StepEditor.js';
-import stepViewStyles from './stepView.css.js';
+import stepViewStylesRaw from './stepView.css.js';
 import type {TimelineSectionData} from './TimelineSection.js';
 
-const {html} = LitHtml;
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const stepViewStyles = new CSSStyleSheet();
+stepViewStyles.replaceSync(stepViewStylesRaw.cssContent);
+
+const {html} = Lit;
 
 const UIStrings = {
   /**
@@ -272,13 +275,13 @@ export class RemoveBreakpointEvent extends Event {
 
 const COPY_ACTION_PREFIX = 'copy-step-as-';
 
-type Action = {
-  id: string,
-  label: string,
-  group: string,
-  groupTitle: string,
-  jslogContext?: string,
-};
+interface Action {
+  id: string;
+  label: string;
+  group: string;
+  groupTitle: string;
+  jslogContext?: string;
+}
 
 export interface ViewInput extends StepViewData {
   step?: Models.Schema.Step;
@@ -316,7 +319,7 @@ export type ViewOutput = unknown;
 function getStepTypeTitle(input: {
   step?: Models.Schema.Step,
   section?: Models.Section.Section,
-}): string|LitHtml.TemplateResult {
+}): string|Lit.TemplateResult {
   if (input.section) {
     return input.section.title ? input.section.title : html`<span class="fallback">(No Title)</span>`;
   }
@@ -366,8 +369,8 @@ function getElementRoleTitle(role: string): string {
   }
 }
 
-function getSelectorPreview(step?: Models.Schema.Step): string {
-  if (!step || !('selectors' in step)) {
+function getSelectorPreview(step: Models.Schema.Step): string {
+  if (!('selectors' in step)) {
     return '';
   }
 
@@ -392,7 +395,7 @@ function getSectionPreview(section?: Models.Section.Section): string {
   return section.url;
 }
 
-function renderStepActions(input: ViewInput): LitHtml.TemplateResult|null {
+function renderStepActions(input: ViewInput): Lit.TemplateResult|null {
   // clang-format off
   return html`
     <devtools-button
@@ -438,10 +441,10 @@ function viewFunction(input: ViewInput, _output: ViewOutput, target: HTMLElement
     step: input.step,
     section: input.section,
   });
-  const subtitle = input.step ? getSelectorPreview() : getSectionPreview();
+  const subtitle = input.step ? getSelectorPreview(input.step) : getSectionPreview();
 
   // clang-format off
-  LitHtml.render(
+  Lit.render(
     html`
     <devtools-timeline-section .data=${
       {
@@ -455,7 +458,7 @@ function viewFunction(input: ViewInput, _output: ViewOutput, target: HTMLElement
       input.stepIndex
     } data-section-index=${
       input.sectionIndex
-    } class=${LitHtml.Directives.classMap(stepClasses)}>
+    } class=${Lit.Directives.classMap(stepClasses)}>
       <svg slot="icon" width="24" height="24" height="100%" class="icon">
         <circle class="circle-icon"/>
         <g class="error-icon">

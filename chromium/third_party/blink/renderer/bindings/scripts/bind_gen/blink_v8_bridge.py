@@ -271,8 +271,15 @@ def blink_type_info(idl_type):
     if real_type.is_symbol:
         assert False, "Blink does not support/accept IDL symbol type."
 
-    if real_type.is_any or real_type.is_object:
+    if real_type.is_any:
         return TypeInfo("ScriptValue",
+                        ref_fmt="{}&",
+                        const_ref_fmt="const {}&",
+                        has_null_value=True,
+                        is_traceable=True)
+
+    if real_type.is_object:
+        return TypeInfo("ScriptObject",
                         ref_fmt="{}&",
                         const_ref_fmt="const {}&",
                         has_null_value=True,
@@ -365,14 +372,12 @@ def blink_type_info(idl_type):
                             clear_member_var_fmt="{}.clear()")
 
     if real_type.is_promise:
-        if "IDLTypeImplementedAsV8Promise" in real_type.extended_attributes:
-            type_name = "v8::Local<v8::Promise>"
-        else:
-            type_name = "ScriptPromise<{}>".format(
-                native_value_tag(real_type.result_type))
+        type_name = "ScriptPromise<{}>".format(
+            native_value_tag(real_type.result_type))
         return TypeInfo(type_name,
-                        ref_fmt="{}&",
-                        const_ref_fmt="const {}&",
+                        member_fmt="Member{}",
+                        ref_fmt="Member{}&",
+                        const_ref_fmt="const Member{}&",
                         is_traceable=True)
 
     if real_type.is_union:
@@ -702,6 +707,11 @@ def make_default_value_expr(idl_type, default_value):
             initializer_expr = "${isolate}, v8::Null(${isolate})"
             initializer_deps = ["isolate"]
             assignment_value = "ScriptValue::CreateNull(${isolate})"
+            assignment_deps = ["isolate"]
+        elif type_info.typename == "ScriptObject":
+            initializer_expr = "${isolate}, v8::Null(${isolate})"
+            initializer_deps = ["isolate"]
+            assignment_value = "ScriptObject::CreateNull(${isolate})"
             assignment_deps = ["isolate"]
         elif idl_type.unwrap().is_union:
             initializer_expr = "nullptr"

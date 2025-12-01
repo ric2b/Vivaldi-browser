@@ -11,6 +11,7 @@
 #import "ios/direct_match/direct_match_service_factory.h"
 #import "ios/ui/bookmarks_editor/vivaldi_bookmarks_constants.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
+#import "ios/ui/ntp/top_toolbar/top_toolbar_swift.h"
 #import "ios/ui/ntp/vivaldi_ntp_constants.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
 #import "ios/ui/ntp/vivaldi_speed_dial_container_view.h"
@@ -219,12 +220,8 @@
   // No op.
 }
 
-- (void)refreshContents {
-  BOOL loadable = self.bookmarks->loaded() &&
-                  self.currentItem;
-  if (!loadable)
-    return;
-  [self.mediator computeSpeedDialChildItems:self.currentItem];
+- (void)topSitesModelDidLoad {
+  // No op.
 }
 
 - (void)refreshNode:(const bookmarks::BookmarkNode*)bookmarkNode {
@@ -241,10 +238,23 @@
   // No op here since there's no menu in this view.
 }
 
-- (void)refreshChildItems:(NSArray*)items
-        topSitesAvailable:(BOOL)topSitesAvailable {
+- (void)refreshMenuItems:(NSArray<VivaldiNTPTopToolbarItem*>*)items {
+  // No op.
+}
+
+- (void)selectToolbarItemWithIndex:(NSInteger)index {
+  // No op.
+}
+
+- (void)refreshChildItems:(NSArray<VivaldiSpeedDialItem*>*)items
+                   parent:(VivaldiNTPTopToolbarItem*)parent {
+
   if (!self.currentItem || !self.faviconLoader)
     return;
+
+  if (self.currentItem.idValue != parent.primaryId) {
+    return;
+  }
 
   BrowserActionFactory* actionFactory =
       [[BrowserActionFactory alloc] initWithBrowser:_browser

@@ -89,6 +89,22 @@ class PresubmitDiffTest(unittest.TestCase):
             {"unchanged.txt": ""},
         )
 
+    @mock.patch('subprocess2.capture', return_value="".encode("utf-8"))
+    def test_create_diffs_executes_git_diff_with_unified(self, capture):
+        create_diffs = presubmit_diff.create_diffs
+        # None => no -U
+        create_diffs("host", "repo", "ref", self.root, ["unchanged.txt"], None)
+        capture.assert_called_with(
+            ["git", "diff", "--no-index", "--", mock.ANY, mock.ANY])
+        # 0 => -U0
+        create_diffs("host", "repo", "ref", self.root, ["unchanged.txt"], 0)
+        capture.assert_called_with(
+            ["git", "diff", "--no-index", "-U0", "--", mock.ANY, mock.ANY])
+        # 3 => -U3
+        create_diffs("host", "repo", "ref", self.root, ["unchanged.txt"], 3)
+        capture.assert_called_with(
+            ["git", "diff", "--no-index", "-U3", "--", mock.ANY, mock.ANY])
+
     def test_create_diffs_with_added_file(self):
         expected_diff = """diff --git a/added.txt b/added.txt
 new file mode 100644

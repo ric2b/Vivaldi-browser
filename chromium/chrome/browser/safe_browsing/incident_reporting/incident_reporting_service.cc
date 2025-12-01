@@ -7,6 +7,7 @@
 #include <math.h>
 #include <stddef.h>
 
+#include <algorithm>
 #include <array>
 #include <memory>
 #include <string>
@@ -18,7 +19,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/not_fatal_until.h"
 #include "base/process/process.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/task_traits.h"
@@ -218,8 +218,7 @@ IncidentReportingService::Receiver::Receiver(
     : service_(service),
       thread_runner_(base::SingleThreadTaskRunner::GetCurrentDefault()) {}
 
-IncidentReportingService::Receiver::~Receiver() {
-}
+IncidentReportingService::Receiver::~Receiver() = default;
 
 void IncidentReportingService::Receiver::AddIncidentForProfile(
     Profile* profile,
@@ -301,8 +300,7 @@ IncidentReportingService::UploadContext::UploadContext(
     std::unique_ptr<ClientIncidentReport> report)
     : report(std::move(report)) {}
 
-IncidentReportingService::UploadContext::~UploadContext() {
-}
+IncidentReportingService::UploadContext::~UploadContext() = default;
 
 // static
 bool IncidentReportingService::IsEnabledForProfile(Profile* profile) {
@@ -955,8 +953,8 @@ void IncidentReportingService::OnReportUploadResult(
 
   // The upload is no longer outstanding, so take ownership of the context (from
   // the collection of outstanding uploads) in this scope.
-  auto it = base::ranges::find(uploads_, context,
-                               &std::unique_ptr<UploadContext>::get);
+  auto it = std::ranges::find(uploads_, context,
+                              &std::unique_ptr<UploadContext>::get);
   CHECK(it != uploads_.end(), base::NotFatalUntil::M130);
   std::unique_ptr<UploadContext> upload(std::move(*it));
   uploads_.erase(it);

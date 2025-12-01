@@ -253,14 +253,8 @@ CalculateContributionBucketAndValue(
     value = value_opt.value();
   }
 
-  std::optional<uint64_t> filtering_id;
-  if (base::FeatureList::IsEnabled(
-          blink::features::kPrivateAggregationApiFilteringIds)) {
-    filtering_id = contribution->filtering_id;
-  }
-
   return blink::mojom::AggregatableReportHistogramContribution::New(
-      bucket, value, filtering_id);
+      bucket, value, contribution->filtering_id);
 }
 
 }  // namespace
@@ -481,6 +475,7 @@ void SplitContributionsIntoBatchesThenSendToHost(
         /*context_id=*/std::nullopt,
         /*timeout=*/std::nullopt, aggregation_coordinator_origin,
         PrivateAggregationHost::kDefaultFilteringIdMaxBytes,
+        /*max_contributions=*/std::nullopt,
         remote_host.BindNewPipeAndPassReceiver());
 
     // The worklet origin should be potentially trustworthy (and no context ID
@@ -511,11 +506,6 @@ bool HasValidFilteringId(
 }
 
 bool IsValidFilteringId(std::optional<uint64_t> filtering_id) {
-  if (!base::FeatureList::IsEnabled(
-          blink::features::kPrivateAggregationApiFilteringIds)) {
-    return filtering_id == std::nullopt;
-  }
-
   return filtering_id.value_or(0) <= 255;
 }
 

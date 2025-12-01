@@ -29,12 +29,6 @@ BASE_FEATURE(kConfirmSuggestionRemovals,
              "ConfirmNtpSuggestionRemovals",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// If enabled, Chrome theme color will be set to match the NTP background
-// on NTP Customize Chrome background change.
-BASE_FEATURE(kCustomizeChromeColorExtraction,
-             "CustomizeChromeColorExtraction",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // If enabled, shows an extension card within the Customize Chrome Side
 // Panel for access to the Chrome Web Store extensions.
 BASE_FEATURE(kCustomizeChromeSidePanelExtensionsCard,
@@ -164,11 +158,6 @@ BASE_FEATURE(kNtpModulesLoadedWithOtherModulesMaxInstanceCount,
              "NtpModulesLoadedWithOtherModulesMaxInstanceCount",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// If true, displays a horizontal scrollbar on overflowing modules.
-BASE_FEATURE(kNtpModulesOverflowScrollbar,
-             "NtpModulesOverflowScrollbar",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // If enabled, modules will be able to be reordered via dragging and dropping
 BASE_FEATURE(kNtpModulesDragAndDrop,
              "NtpModulesDragAndDrop",
@@ -181,11 +170,6 @@ BASE_FEATURE(kNtpModulesLoad,
              "NtpModulesLoad",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// If enabled, redesigned NTP launchpad + modules will be shown.
-BASE_FEATURE(kNtpModulesRedesigned,
-             "NtpModulesRedesigned",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // If enabled, OneGoogleBar will be shown.
 // This is a kill switch. Keep indefinitely.
 BASE_FEATURE(kNtpOneGoogleBar,
@@ -195,7 +179,7 @@ BASE_FEATURE(kNtpOneGoogleBar,
 // If enabled, outlook calendar module will be shown.
 BASE_FEATURE(kNtpOutlookCalendarModule,
              "NtpOutlookCalendarModule",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // If enabled, Google Photos module will be shown.
 BASE_FEATURE(kNtpPhotosModule,
@@ -236,16 +220,11 @@ BASE_FEATURE(kNtpSafeBrowsingModule,
 // If enabled, sharepoint module will be shown.
 BASE_FEATURE(kNtpSharepointModule,
              "NtpSharepointModule",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // If enabled, shortcuts will be shown.
 // This is a kill switch. Keep indefinitely.
 BASE_FEATURE(kNtpShortcuts, "NtpShortcuts", base::FEATURE_ENABLED_BY_DEFAULT);
-
-// If enabled, module headers will display an associated icon.
-BASE_FEATURE(kNtpModulesHeaderIcon,
-             "NtpModulesHeaderIcon",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // If enabled, the Tab Resumption module will be shown.
 BASE_FEATURE(kNtpMostRelevantTabResumptionModule,
@@ -256,6 +235,11 @@ BASE_FEATURE(kNtpMostRelevantTabResumptionModule,
 BASE_FEATURE(kNtpMostRelevantTabResumptionModuleDeviceIcon,
              "NtpMostRelevantTabResumptionModuleDeviceIcon",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// If enabled, the Tab Resumption module will use the synced fallback icon.
+BASE_FEATURE(kNtpMostRelevantTabResumptionUseIsKnownToSync,
+             "NtpMostRelevantTabResumptionUseIsKnownToSync",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kNtpTabResumptionModuleCategories,
              "NtpTabResumptionModuleCategories",
@@ -297,6 +281,11 @@ BASE_FEATURE(kNtpMobilePromo,
 // If enabled, the Microsoft Authentication module will be shown.
 BASE_FEATURE(kNtpMicrosoftAuthenticationModule,
              "NtpMicrosoftAuthenticationModule",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// If enabled, the OGB loader will request for the async bar parts payload type.
+BASE_FEATURE(kNtpOneGoogleBarAsyncBarParts,
+             "NtpOneGoogleBarAsyncBarParts",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 const char kNtpModuleIgnoredCriteriaThreshold[] =
@@ -381,6 +370,24 @@ const base::FeatureParam<base::TimeDelta>
         &ntp_features::kNtpCalendarModule,
         "NtpCalendarModuleWindowStartDeltaParam",
         base::Minutes(-15));
+const base::FeatureParam<bool> kNtpOutlookCalendarModuleAttachmentCheckParam(
+    &ntp_features::kNtpOutlookCalendarModule,
+    "NtpOutlookCalendarModuleAttachmentCheckParam",
+    true);
+extern const base::FeatureParam<bool>
+    kNtpOutlookCalendarModuleDisableAttachmentsParam(
+        &ntp_features::kNtpOutlookCalendarModule,
+        "NtpOutlookCalendarModuleDisableAttachmentsParam",
+        false);
+const base::FeatureParam<int> kNtpOutlookCalendarModuleMaxEventsParam(
+    &ntp_features::kNtpOutlookCalendarModule,
+    "NtpOutlookCalendarModuleMaxEventsParam",
+    5);
+const base::FeatureParam<base::TimeDelta>
+    kNtpOutlookCalendarModuleRetrievalWindowParam(
+        &ntp_features::kNtpOutlookCalendarModule,
+        "NtpOutlookCalendarModuleRetrievalWindowParam",
+        base::Hours(12));
 const base::FeatureParam<bool> kNtpRealboxCr23ExpandedStateBgMatchesOmnibox(
     &ntp_features::kRealboxCr23Theming,
     "kNtpRealboxCr23ExpandedStateBgMatchesOmnibox",
@@ -393,6 +400,31 @@ const base::FeatureParam<int> kNtpMobilePromoImpressionLimit(
     &ntp_features::kNtpMobilePromo,
     "kNtpMobilePromoImpressionLimit",
     10);
+const base::FeatureParam<bool>
+    kNtpMostRelevantTabResumptionModuleFilterLocalTabsParam{
+        &kNtpMostRelevantTabResumptionModule,
+        /*name=*/"local_tab_filter",
+        /*default_value=*/true};
+
+const base::FeatureParam<NtpSharepointModuleDataType>::Option
+    kNtpSharepointModuleDataTypeOptions[] = {
+        {NtpSharepointModuleDataType::kTrendingInsights, "trending-insights"},
+        {NtpSharepointModuleDataType::kNonInsights, "non-insights"},
+        {NtpSharepointModuleDataType::kTrendingInsightsFakeData,
+         "fake-trending"},
+        {NtpSharepointModuleDataType::kNonInsightsFakeData,
+         "fake-non-insights"}};
+
+const base::FeatureParam<NtpSharepointModuleDataType>
+    kNtpSharepointModuleDataParam{
+        &ntp_features::kNtpSharepointModule, "NtpSharepointModuleDataParam",
+        NtpSharepointModuleDataType::kTrendingInsights,
+        &kNtpSharepointModuleDataTypeOptions};
+
+const base::FeatureParam<int> kNtpMicrosoftFilesModuleMaxFilesParam(
+    &ntp_features::kNtpSharepointModule,
+    "NtpMicrosoftFilesModuleMaxFilesParam",
+    6);
 
 base::TimeDelta GetModulesLoadTimeout() {
   std::string param_value = base::GetFieldTrialParamValueByFeature(

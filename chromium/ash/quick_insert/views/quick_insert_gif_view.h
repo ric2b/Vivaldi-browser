@@ -11,6 +11,7 @@
 #include "ash/ash_export.h"
 #include "base/functional/callback_forward.h"
 #include "base/timer/timer.h"
+#include "services/network/public/cpp/simple_url_loader.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/controls/image_view.h"
@@ -23,29 +24,30 @@ namespace image_util {
 struct AnimationFrame;
 }  // namespace image_util
 
-class ASH_EXPORT PickerGifView : public views::ImageView {
-  METADATA_HEADER(PickerGifView, views::ImageView)
+class ASH_EXPORT QuickInsertGifView : public views::ImageView {
+  METADATA_HEADER(QuickInsertGifView, views::ImageView)
 
  public:
   using FramesFetchedCallback =
       base::OnceCallback<void(std::vector<image_util::AnimationFrame>)>;
-  using FramesFetcher = base::OnceCallback<void(FramesFetchedCallback)>;
+  using FramesFetcher =
+      base::OnceCallback<std::unique_ptr<network::SimpleURLLoader>(
+          FramesFetchedCallback)>;
 
   using PreviewImageFetchedCallback =
       base::OnceCallback<void(const gfx::ImageSkia&)>;
   using PreviewImageFetcher =
-      base::OnceCallback<void(PreviewImageFetchedCallback)>;
+      base::OnceCallback<std::unique_ptr<network::SimpleURLLoader>(
+          PreviewImageFetchedCallback)>;
 
-  PickerGifView(FramesFetcher frames_fetcher,
-                PreviewImageFetcher preview_image_fetcher,
-                const gfx::Size& original_dimensions);
-  PickerGifView(const PickerGifView&) = delete;
-  PickerGifView& operator=(const PickerGifView&) = delete;
-  ~PickerGifView() override;
+  QuickInsertGifView(FramesFetcher frames_fetcher,
+                     PreviewImageFetcher preview_image_fetcher,
+                     const gfx::Size& original_dimensions);
+  QuickInsertGifView(const QuickInsertGifView&) = delete;
+  QuickInsertGifView& operator=(const QuickInsertGifView&) = delete;
+  ~QuickInsertGifView() override;
 
   // views::ImageViewBase:
-  gfx::Size CalculatePreferredSize(
-      const views::SizeBounds& available_size) const override;
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
 
  private:
@@ -60,6 +62,9 @@ class ASH_EXPORT PickerGifView : public views::ImageView {
   // resizing.
   gfx::Size original_dimensions_;
 
+  std::unique_ptr<network::SimpleURLLoader> preview_request_;
+  std::unique_ptr<network::SimpleURLLoader> frames_request_;
+
   // The decoded gif frames.
   std::vector<image_util::AnimationFrame> frames_;
 
@@ -71,14 +76,14 @@ class ASH_EXPORT PickerGifView : public views::ImageView {
 
   std::optional<base::TimeTicks> fetch_frames_start_time_;
 
-  base::WeakPtrFactory<PickerGifView> weak_factory_{this};
+  base::WeakPtrFactory<QuickInsertGifView> weak_factory_{this};
 };
 
-BEGIN_VIEW_BUILDER(ASH_EXPORT, PickerGifView, views::ImageView)
+BEGIN_VIEW_BUILDER(ASH_EXPORT, QuickInsertGifView, views::ImageView)
 END_VIEW_BUILDER
 
 }  // namespace ash
 
-DEFINE_VIEW_BUILDER(ASH_EXPORT, ash::PickerGifView)
+DEFINE_VIEW_BUILDER(ASH_EXPORT, ash::QuickInsertGifView)
 
 #endif  // ASH_QUICK_INSERT_VIEWS_QUICK_INSERT_GIF_VIEW_H_

@@ -46,8 +46,7 @@ To enable debugging features, do the following:
     device](https://support.google.com/chrome/a/answer/1360642) to reset the
     device.
 2.  Set the device to Developer Mode (see [Developer Information for
-            ChromeOS
-            Devices](http://www.chromium.org/chromium-os/developer-information-for-chrome-os-devices)).
+            ChromeOS Devices](/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices)).
             The system reboots, then displays the “OS Verification is OFF"
             screen.
 3.  Press Ctrl+D to dismiss this screen. The device reboots and shows

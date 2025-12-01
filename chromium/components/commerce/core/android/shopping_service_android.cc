@@ -11,6 +11,7 @@
 #include "base/android/jni_string.h"
 #include "base/functional/bind.h"
 #include "components/bookmarks/browser/bookmark_node.h"
+#include "components/commerce/core/feature_utils.h"
 #include "components/commerce/core/subscriptions/commerce_subscription.h"
 #include "url/android/gurl_android.h"
 #include "url/gurl.h"
@@ -72,7 +73,7 @@ ScopedJavaLocalRef<jobjectArray> ConvertToJavaDiscountInfos(
     j_discount_infos.push_back(discount_info_java);
   }
   return base::android::ToTypedJavaArrayOfObjects(
-      env, base::make_span(j_discount_infos), discount_info_clazz);
+      env, base::span(j_discount_infos), discount_info_clazz);
 }
 
 }  // namespace
@@ -431,15 +432,8 @@ bool ShoppingServiceAndroid::IsMerchantViewerEnabled(
     const JavaParamRef<jobject>& obj) {
   CHECK(shopping_service_);
 
-  return shopping_service_->IsMerchantViewerEnabled();
-}
-
-bool ShoppingServiceAndroid::IsCommercePriceTrackingEnabled(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj) {
-  CHECK(shopping_service_);
-
-  return shopping_service_->IsCommercePriceTrackingEnabled();
+  return commerce::IsMerchantViewerEnabled(
+      shopping_service_->GetAccountChecker());
 }
 
 bool ShoppingServiceAndroid::IsPriceInsightsEligible(
@@ -447,7 +441,8 @@ bool ShoppingServiceAndroid::IsPriceInsightsEligible(
     const JavaParamRef<jobject>& obj) {
   CHECK(shopping_service_);
 
-  return shopping_service_->IsPriceInsightsEligible();
+  return commerce::IsPriceInsightsEligible(
+      shopping_service_->GetAccountChecker());
 }
 
 bool ShoppingServiceAndroid::IsDiscountEligibleToShowOnNavigation(
@@ -455,7 +450,8 @@ bool ShoppingServiceAndroid::IsDiscountEligibleToShowOnNavigation(
     const JavaParamRef<jobject>& obj) {
   CHECK(shopping_service_);
 
-  return shopping_service_->IsDiscountEligibleToShowOnNavigation();
+  return commerce::IsDiscountEligibleToShowOnNavigation(
+      shopping_service_->GetAccountChecker());
 }
 
 }  // namespace commerce

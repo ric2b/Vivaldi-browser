@@ -7,7 +7,6 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" />와(과)의 연결이 예기치 않게 종료되었습니다.</translation>
 <translation id="1161325031994447685">Wi-Fi에 다시 연결</translation>
 <translation id="1175364870820465910">인쇄... (&amp;P)</translation>
-<translation id="132390688737681464">주소 저장 및 자동 입력</translation>
 <translation id="1375198122581997741">버전 정보</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" />에서 전송한 데이터가 없습니다.</translation>
 <translation id="1555191101192706055">방문하려고 한 사이트의 공격자가 홈페이지를 변경하거나 방문하는 사이트에서 추가 광고를 표시하는 등 탐색 방식에 영향을 주는 유해한 소프트웨어를 설치하도록 유도할 수 있습니다.</translation>
@@ -52,6 +51,7 @@
 <translation id="2991571918955627853">웹사이트에서 HSTS를 사용하므로 지금은 <ph name="SITE" />에 방문할 수 없습니다. 네트워크 오류와 공격은 대체로 일시적이므로 나중에 이 페이지가 정상적으로 작동할 수 있습니다.</translation>
 <translation id="3005723025932146533">저장된 사본 표시</translation>
 <translation id="301521992641321250">자동으로 차단됨</translation>
+<translation id="3037605927509011580">이런!</translation>
 <translation id="3041612393474885105">인증서 정보</translation>
 <translation id="3109728660330352905">이 페이지를 볼 수 있는 권한이 없습니다.</translation>
 <translation id="31207688938192855"><ph name="BEGIN_LINK" />연결 진단 프로그램을 실행해보세요<ph name="END_LINK" />.</translation>
@@ -64,7 +64,6 @@
 <translation id="3234666976984236645">이 사이트에서 중요한 콘텐츠 항상 감지</translation>
 <translation id="3308738399950580893">광고</translation>
 <translation id="3384522979010096022">조직에서 이 사이트를 보도록 허용하지 않음</translation>
-<translation id="3387261909427947069">결제수단</translation>
 <translation id="3422472998109090673">현재 <ph name="HOST_NAME" />에 연결할 수 없습니다.</translation>
 <translation id="3427092606871434483">허용(기본값)</translation>
 <translation id="3447661539832366887">이 기기의 소유자가 공룡 게임을 사용 중지했습니다.</translation>
@@ -105,6 +104,7 @@
 <translation id="4522570452068850558">세부정보</translation>
 <translation id="4558551763791394412">확장 프로그램 사용 중지해보기.</translation>
 <translation id="4592951414987517459"><ph name="DOMAIN" />에 대한 연결은 최신 암호화 기술을 사용하여 암호화됩니다.</translation>
+<translation id="4598641255230617220">붙여넣기 및 이동</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">연결이 끊김</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Windows 네트워크 진단 실행<ph name="END_LINK" /></translation>
@@ -114,6 +114,7 @@
 <translation id="4764776831041365478"><ph name="URL" />의 웹페이지가 일시적으로 다운되었거나 새 웹 주소로 완전히 이동했을 수 있습니다.</translation>
 <translation id="483241715238664915">경고 켜기</translation>
 <translation id="4943872375798546930">검색결과 없음</translation>
+<translation id="5017554619425969104">복사한 텍스트</translation>
 <translation id="5023310440958281426">관리자 정책을 확인하세요</translation>
 <translation id="5039804452771397117">허용</translation>
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1{(1개 사용 중)}other{(#개 사용 중)}}</translation>
@@ -123,7 +124,6 @@
 <translation id="5386426401304769735">이 사이트의 인증서 체인은 SHA-1을 사용하여 서명된 인증서를 포함합니다.</translation>
 <translation id="5452270690849572955"><ph name="HOST_NAME" /> 페이지를 찾을 수 없음</translation>
 <translation id="5457113250005438886">유효하지 않음</translation>
-<translation id="5490432419156082418">주소 등</translation>
 <translation id="5492298309214877701">회사, 조직, 학교 인트라넷의 해당 사이트가 외부 웹사이트와 동일한 URL을 갖고 있습니다.
     <ph name="LINE_BREAK" />
     시스템 관리자에게 문의하세요.</translation>
@@ -168,7 +168,7 @@
 <translation id="7108819624672055576">확장 프로그램에 의해 허용됨</translation>
 <translation id="7111012039238467737">(유효)</translation>
 <translation id="7113310725918019676"><ph name="DOMAIN" />에서 <ph name="BLOCKED_TYPE" /> 허용</translation>
-<translation id="7179323680825933600">결제수단 저장 및 자동 입력</translation>
+<translation id="7126644664682723998">붙여넣기 및 검색</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" />에서 보안 기준을 준수하지 않습니다.</translation>
 <translation id="7219179957768738017"><ph name="SSL_VERSION" /> 연결입니다.</translation>
 <translation id="7221855153210829124">알림 표시</translation>
@@ -220,6 +220,7 @@
 <translation id="9062620674789239642">이동, 수정 또는 삭제되었을 수 있습니다.</translation>
 <translation id="9069693763241529744">확장 프로그램에서 차단함</translation>
 <translation id="9073799351042754113">이 사이트의 보안 경고를 끄기로 설정했습니다.</translation>
+<translation id="9168814207360376865">사이트에서 저장된 결제 수단이 있는지 확인하도록 허용</translation>
 <translation id="9169664750068251925">이 사이트에서 항상 차단</translation>
 <translation id="9180553614777056266">광고 차단기</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" />에서 지원되지 않는 프로토콜을 사용합니다.</translation>

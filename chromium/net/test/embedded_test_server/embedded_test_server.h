@@ -14,8 +14,10 @@
 #include <string_view>
 #include <vector>
 
+#include "base/callback_list.h"
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
@@ -357,11 +359,13 @@ class EmbeddedTestServer {
       base::RepeatingCallback<UpgradeResultOrHttpResponse(
           const HttpRequest& request,
           HttpConnection* connection)>;
-  typedef base::RepeatingCallback<std::unique_ptr<HttpResponse>(
-      const HttpRequest& request)>
-      HandleRequestCallback;
-  typedef base::RepeatingCallback<void(const HttpRequest& request)>
-      MonitorRequestCallback;
+
+  using HandleRequestCallback =
+      base::RepeatingCallback<std::unique_ptr<HttpResponse>(
+          const HttpRequest& request)>;
+
+  using MonitorRequestCallback =
+      base::RepeatingCallback<void(const HttpRequest& request)>;
 
   // Creates a http test server. StartAndReturnHandle() must be called to start
   // the server.
@@ -535,6 +539,18 @@ class EmbeddedTestServer {
   // directory.
   void AddDefaultHandlers();
 
+  // Registers an Auth handler for validating credentials in HTTP requests.
+  // The handler will check the Authorization header and compare the provided
+  // credentials to the expected values. If credentials are valid, the request
+  // processing will proceed; otherwise, the handler will respond with a 401
+  // Unauthorized. Note that:
+  // 1. All handlers must be registered before the server is started.
+  // 2. The server should be shutdown before any variables referred to by
+  //    |callback| (e.g., via base::Unretained(&local)) are deleted. Using the
+  //    Start*WithHandle() API variants is recommended for proper shutdown
+  //    handling.
+  void RegisterAuthHandler(const HandleRequestCallback& callback);
+
   // Adds a handler callback to process WebSocket upgrade requests.
   // |callback| will be invoked on the server's IO thread when a request
   // attempts to upgrade to a WebSocket connection. Note that:
@@ -579,6 +595,16 @@ class EmbeddedTestServer {
   // constructed with PROTOCOL_HTTP2. For the default host, use an empty
   // string.
   void SetAlpsAcceptCH(std::string hostname, std::string accept_ch);
+
+  // Registers a shutdown closure for WebSocket connections to safely
+  // disconnect. This method should only be called from handler callbacks and
+  // must be invoked on the server's callback thread.
+  //
+  // The closure registered here will be executed on the callback thread before
+  // the server completes its shutdown. This ensures that any resources specific
+  // to the callback thread are cleaned up safely.
+  base::CallbackListSubscription RegisterShutdownClosure(
+      base::OnceClosure closure);
 
  private:
   // Returns the file name of the certificate the server is using. The test
@@ -664,6 +690,11 @@ class EmbeddedTestServer {
 
   std::map<const StreamSocket*, std::unique_ptr<HttpConnection>> connections_;
 
+  // Optional Auth handler to validate HTTP requests. If set, this handler
+  // is checked first; requests without valid credentials return an error
+  // immediately without reaching other handlers.
+  HandleRequestCallback auth_handler_;
+
   // Vector of registered and default request handlers and monitors.
   std::vector<HandleUpgradeRequestCallback> upgrade_request_handlers_;
   std::vector<HandleRequestCallback> request_handlers_;
@@ -687,6 +718,9 @@ class EmbeddedTestServer {
   // HTTP server that handles AIA URLs that are embedded in this test server's
   // certificate when the server certificate is one of the CERT_AUTO variants.
   std::unique_ptr<EmbeddedTestServer> aia_http_server_;
+
+  // Closure list to manage shutdown closures for WebSocket connections.
+  base::OnceClosureList shutdown_closures_;
 
   base::WeakPtrFactory<EmbeddedTestServer> weak_factory_{this};
 };

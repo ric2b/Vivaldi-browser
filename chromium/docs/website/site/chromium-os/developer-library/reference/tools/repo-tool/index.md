@@ -47,19 +47,20 @@ While not strictly required, CrOS users should stick to the [depot_tools] copy.
 ## Source Repositories
 
 There are two source repositories to be aware of:
-*   https://chromium.googlesource.com/external/repo: CrOS fork.
-    *   This is used when running `repo` from [depot_tools].
 *   https://gerrit.googlesource.com/git-repo: The upstream repo project.
     *   This is used when running `repo` from standard locations.
+*   https://chromium.googlesource.com/external/repo: Historical CrOS fork.
+    *   This *was* used when running `repo` from [depot_tools] and in CrOS
+        recipes, but we've transitioned ToT to the upstream project.  You
+        might still come across old references to this project, and some local
+        user checkouts might still point to this repo.  Which is why we need to
+        keep it up-to-date with new releases/tags.
 
-The CrOS fork used to contain a lot of customizations, but nowadays is almost
-exactly the same as upstream.
-We are actively working to reduce the differences
-(we're down to [1 patch](https://crbug.com/825366)),
-and we do not want to add anymore custom code.
+The CrOS fork used to contain a lot of customizations, but nowadays is exactly
+the same as upstream (other than history).
+We do not want to add anymore custom code.
 That means any changes/requests should be sent to the upstream [repo tool]
-project for implementation, and once they're merged+released there, we can
-update our fork to the new release.
+project for implementation.
 
 ## Updating Repo Locally
 
@@ -121,8 +122,7 @@ repo launcher version 2.4       <-- ... this line!
 
 Here are all the places you'll want to update.
 
-*   [depot_tools]: Copy `repo` from external/repo to `repo_launcher` in
-    depot_tools.
+*   [depot_tools]: Copy `repo` from git-repo to `repo_launcher` in depot_tools.
     NB: Update the `repo_launcher` file instead of `repo` in here.
 *   Pinned depot_tools checkouts: Once [depot_tools] is updated with the new
     launcher, update the pinned commits to the new version.
@@ -415,12 +415,12 @@ This allows more CrOS infra developers to help in testing new changes.
 
 ### Who can push to the CrOS repo fork?
 
-Contact the [CrOS infra group](https://goto.google.com/cros-infra-help)
+Contact the [CrOS infra group](http://go/cros-infra-help)
 for assistance.
 
 ### Who can sign new tags?
 
-See [go/repo-release](https://goto.google.com/repo-release) for details.
+See [go/repo-release](http://go/repo-release) for details.
 
 ### Do we rebase our branches?
 
@@ -488,8 +488,8 @@ Check out our [source checkout] documentation.
 [cros_portage_upgrade]: /chromium-os/developer-library/guides/portage/package-upgrade-process/
 [depot_tools]: https://commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools_tutorial.html
 [dev-vcs/repo]: https://chromium.googlesource.com/chromiumos/overlays/portage-stable/+/HEAD/dev-vcs/repo
-[go/cros-infra-chat]: https://goto.google.com/cros-infra-chat
-[go/cros-oncall]: https://goto.google.com/cros-oncall
+[go/cros-infra-chat]: http://go/cros-infra-chat
+[go/cros-oncall]: http://go/cros-oncall
 [production]: #prod
 [repo tool]: https://gerrit.googlesource.com/git-repo
 [rollbacks]: #rollback

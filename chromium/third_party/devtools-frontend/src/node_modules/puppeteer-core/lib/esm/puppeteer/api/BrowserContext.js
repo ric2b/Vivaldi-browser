@@ -90,13 +90,25 @@ export class BrowserContext extends EventEmitter {
      * ```ts
      * await page.evaluate(() => window.open('https://www.example.com/'));
      * const newWindowTarget = await browserContext.waitForTarget(
-     *   target => target.url() === 'https://www.example.com/'
+     *   target => target.url() === 'https://www.example.com/',
      * );
      * ```
      */
     async waitForTarget(predicate, options = {}) {
         const { timeout: ms = 30000 } = options;
         return await firstValueFrom(merge(fromEmitterEvent(this, "targetcreated" /* BrowserContextEvent.TargetCreated */), fromEmitterEvent(this, "targetchanged" /* BrowserContextEvent.TargetChanged */), from(this.targets())).pipe(filterAsync(predicate), raceWith(timeout(ms))));
+    }
+    /**
+     * Removes cookie in the browser context
+     * @param cookies - {@link Cookie | cookie} to remove
+     */
+    async deleteCookie(...cookies) {
+        return await this.setCookie(...cookies.map(cookie => {
+            return {
+                ...cookie,
+                expires: 1,
+            };
+        }));
     }
     /**
      * Whether this {@link BrowserContext | browser context} is closed.

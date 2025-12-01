@@ -129,18 +129,14 @@ class QuicHttpStreamPeer {
 
 namespace {
 
-// Run QuicSessionPoolTest instances with all value combinations of version
-// and the `PriorityHeader` feature.
+// Run QuicSessionPoolTest instances with all values of version.
 struct TestParams {
   quic::ParsedQuicVersion version;
-  bool priority_header_enabled;
 };
 
 // Used by ::testing::PrintToStringParamName().
 std::string PrintToString(const TestParams& p) {
-  return base::StrCat({ParsedQuicVersionToString(p.version), "_",
-                       p.priority_header_enabled ? "PriorityHeaderEnabled"
-                                                 : "PriorityHeaderDisabled"});
+  return ParsedQuicVersionToString(p.version);
 }
 
 std::vector<TestParams> GetTestParams() {
@@ -148,8 +144,7 @@ std::vector<TestParams> GetTestParams() {
   quic::ParsedQuicVersionVector all_supported_versions =
       AllSupportedQuicVersions();
   for (const auto& version : all_supported_versions) {
-    params.push_back(TestParams{version, true});
-    params.push_back(TestParams{version, false});
+    params.push_back(TestParams{version});
   }
   return params;
 }
@@ -319,11 +314,6 @@ class QuicSessionPoolTest : public QuicSessionPoolTestBase,
   QuicSessionPoolTest()
       : QuicSessionPoolTestBase(GetParam().version),
         runner_(base::MakeRefCounted<TestTaskRunner>(context_.mock_clock())) {
-    if (GetParam().priority_header_enabled) {
-      feature_list_.InitAndEnableFeature(net::features::kPriorityHeader);
-    } else {
-      feature_list_.InitAndDisableFeature(net::features::kPriorityHeader);
-    }
   }
 
   void RunTestLoopUntilIdle();
@@ -402,9 +392,6 @@ class QuicSessionPoolTest : public QuicSessionPoolTestBase,
   }
 
   scoped_refptr<TestTaskRunner> runner_;
-
- private:
-  base::test::ScopedFeatureList feature_list_;
 };
 
 void QuicSessionPoolTest::RunTestLoopUntilIdle() {
@@ -571,7 +558,7 @@ void QuicSessionPoolTest::VerifyInitialization(
   QuicSessionPoolPeer::SetTaskRunner(factory_.get(), runner_.get());
 
   const AlternativeService alternative_service1(
-      kProtoQUIC, kDefaultServerHostName, kDefaultServerPort);
+      NextProto::kProtoQUIC, kDefaultServerHostName, kDefaultServerPort);
   AlternativeServiceInfoVector alternative_service_info_vector;
   base::Time expiration = base::Time::Now() + base::Days(1);
   alternative_service_info_vector.push_back(
@@ -583,7 +570,7 @@ void QuicSessionPoolTest::VerifyInitialization(
       network_anonymization_key1, alternative_service_info_vector);
 
   const AlternativeService alternative_service2(
-      kProtoQUIC, quic_server_id2.host(), quic_server_id2.port());
+      NextProto::kProtoQUIC, quic_server_id2.host(), quic_server_id2.port());
   AlternativeServiceInfoVector alternative_service_info_vector2;
   alternative_service_info_vector2.push_back(
       AlternativeServiceInfo::CreateQuicAlternativeServiceInfo(
@@ -12604,7 +12591,7 @@ TEST_P(QuicSessionPoolTest,
     QuicSessionPoolPeer::SetTaskRunner(factory_.get(), runner_.get());
 
     const AlternativeService alternative_service1(
-        kProtoQUIC, kDefaultServerHostName, kDefaultServerPort);
+        NextProto::kProtoQUIC, kDefaultServerHostName, kDefaultServerPort);
     AlternativeServiceInfoVector alternative_service_info_vector;
     base::Time expiration = base::Time::Now() + base::Days(1);
     alternative_service_info_vector.push_back(

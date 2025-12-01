@@ -4,6 +4,7 @@
 
 #include "ash/quick_insert/search/quick_insert_search_aggregator.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <iterator>
 #include <set>
@@ -23,7 +24,6 @@
 #include "base/location.h"
 #include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/substring_set_matcher/matcher_string_pattern.h"
 #include "base/time/time.h"
 #include "base/types/cxx23_to_underlying.h"
@@ -54,6 +54,8 @@ QuickInsertSectionType SectionTypeFromSearchSource(
     case QuickInsertSearchSource::kLobsterWithNoSelectedText:
     case QuickInsertSearchSource::kLobsterWithSelectedText:
       return QuickInsertSectionType::kContentEditor;
+    case QuickInsertSearchSource::kGifs:
+      return QuickInsertSectionType::kSearchedGifs;
   }
 }
 
@@ -200,7 +202,7 @@ void QuickInsertSearchAggregator::HandleSearchSourceResults(
     // Suggested results cannot have more results, since it's not a proper
     // category.
     CHECK(!has_more_results);
-    base::ranges::move(results, std::back_inserter(accumulated.results));
+    std::ranges::move(results, std::back_inserter(accumulated.results));
     return;
   }
 
@@ -316,7 +318,7 @@ void QuickInsertSearchAggregator::PublishBurnInResults() {
            QuickInsertSectionType::kClipboard,
        }) {
     if (UnpublishedResults* results = AccumulatedResultsForSection(type);
-        results && base::ranges::any_of(results->results, &ShouldPromote)) {
+        results && std::ranges::any_of(results->results, &ShouldPromote)) {
       sections.emplace_back(type, std::move(results->results),
                             results->has_more);
       published_types.insert(type);
@@ -330,6 +332,7 @@ void QuickInsertSearchAggregator::PublishBurnInResults() {
            QuickInsertSectionType::kLocalFiles,
            QuickInsertSectionType::kClipboard,
            QuickInsertSectionType::kContentEditor,
+           QuickInsertSectionType::kSearchedGifs,
        }) {
     if (published_types.contains(type)) {
       continue;

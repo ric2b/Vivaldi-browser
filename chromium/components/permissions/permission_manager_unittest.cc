@@ -11,7 +11,6 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_params.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/permissions/features.h"
 #include "components/permissions/permission_context_base.h"
@@ -36,7 +35,7 @@
 #include "url/origin.h"
 
 using blink::PermissionType;
-using blink::mojom::PermissionsPolicyFeature;
+using network::mojom::PermissionsPolicyFeature;
 
 namespace permissions {
 namespace {
@@ -645,7 +644,16 @@ TEST_F(PermissionManagerTest, RequestPermissionInDifferentStoragePartition) {
                 partitioned_child->GetLastCommittedOrigin().GetURL()));
 }
 
-TEST_F(PermissionManagerTest, UpdatePermissionStatusWithDeviceStatus) {
+// TODO(crbug.com/377264243): Enable the test when device permission is
+// supported in Android
+#if BUILDFLAG(IS_ANDROID)
+#define MAYBE_UpdatePermissionStatusWithDeviceStatus \
+  DISABLED_UpdatePermissionStatusWithDeviceStatus
+#else
+#define MAYBE_UpdatePermissionStatusWithDeviceStatus \
+  UpdatePermissionStatusWithDeviceStatus
+#endif
+TEST_F(PermissionManagerTest, MAYBE_UpdatePermissionStatusWithDeviceStatus) {
   struct {
     blink::mojom::PermissionStatus initial_status;
     bool has_device_permission;

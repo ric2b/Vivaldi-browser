@@ -607,19 +607,12 @@ class FocusManagerArrowKeyTraversalTest
   void SetUp() override {
     if (testing::UnitTest::GetInstance()->current_test_info()->value_param()) {
       is_rtl_ = GetParam();
-      if (is_rtl_)
+      if (is_rtl_) {
         base::i18n::SetICUDefaultLocale("he");
+      }
     }
 
     FocusManagerTest::SetUp();
-    previous_arrow_key_traversal_enabled_ =
-        FocusManager::arrow_key_traversal_enabled();
-  }
-
-  void TearDown() override {
-    FocusManager::set_arrow_key_traversal_enabled(
-        previous_arrow_key_traversal_enabled_);
-    FocusManagerTest::TearDown();
   }
 
   bool is_rtl_ = false;
@@ -627,8 +620,6 @@ class FocusManagerArrowKeyTraversalTest
  private:
   // Restores the locale to default when the destructor is called.
   base::test::ScopedRestoreICUDefaultLocale restore_locale_;
-
-  bool previous_arrow_key_traversal_enabled_ = false;
 };
 
 // Instantiate the Boolean which is used to toggle RTL in
@@ -658,8 +649,8 @@ TEST_P(FocusManagerArrowKeyTraversalTest, ArrowKeyTraversal) {
     v.push_back(view);
   }
 
-  // Arrow key traversal is off and arrow key does not change focus.
-  FocusManager::set_arrow_key_traversal_enabled(false);
+  GetWidget()->widget_delegate()->SetEnableArrowKeyTraversal(false);
+
   v[0]->RequestFocus();
   focus_manager->OnKeyEvent(right_key);
   EXPECT_EQ(v[0], focus_manager->GetFocusedView());
@@ -671,7 +662,7 @@ TEST_P(FocusManagerArrowKeyTraversalTest, ArrowKeyTraversal) {
   EXPECT_EQ(v[0], focus_manager->GetFocusedView());
 
   // Turn on arrow key traversal.
-  FocusManager::set_arrow_key_traversal_enabled(true);
+  GetWidget()->widget_delegate()->SetEnableArrowKeyTraversal(true);
   v[0]->RequestFocus();
   focus_manager->OnKeyEvent(is_rtl_ ? left_key : right_key);
   EXPECT_EQ(v[1], focus_manager->GetFocusedView());

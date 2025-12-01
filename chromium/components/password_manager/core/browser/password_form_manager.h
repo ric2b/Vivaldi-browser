@@ -42,6 +42,7 @@ class ElapsedTimer;
 
 namespace password_manager {
 
+class PasswordFormManagerObserver;
 class PasswordFormMetricsRecorder;
 class PasswordManagerClient;
 class PasswordManagerDriver;
@@ -139,6 +140,11 @@ class PasswordFormManager : public PasswordFormManagerForUI,
   void ProcessServerPredictions(
       const std::map<autofill::FormSignature, FormPredictions>& predictions);
 
+  // Stores model predictions in the `parser_`.
+  void ProcessModelPredictions(
+      const base::flat_map<autofill::FieldRendererId, autofill::FieldType>&
+          predictions);
+
   // Sends fill data to the renderer. If no server predictions exist, it
   // schedules to fill when they become available (or the wait times out).
   void Fill();
@@ -164,7 +170,6 @@ class PasswordFormManager : public PasswordFormManagerForUI,
   // the |observed_form()|.
   bool ObservedFormHasField(int driver_id,
                             autofill::FieldRendererId field_id) const;
-
   // PasswordFormManagerForUI:
   const GURL& GetURL() const override;
   base::span<const PasswordForm> GetBestMatches() const override;
@@ -275,6 +280,9 @@ class PasswordFormManager : public PasswordFormManagerForUI,
   }
 #endif
 
+  void SetObserver(base::WeakPtr<PasswordFormManagerObserver> observer);
+  void ResetObserver();
+
  protected:
   // Constructor for Credentials API.
   PasswordFormManager(
@@ -369,9 +377,9 @@ class PasswordFormManager : public PasswordFormManagerForUI,
       const base::LRUCache<PossibleUsernameFieldIdentifier,
                            PossibleUsernameData>& possible_usernames);
 
-  // Updates the predictions stored in `parser_` with predictions relevant for
-  // `observed_form_or_digest_`.
-  void UpdatePredictionsForObservedForm(
+  // Updates the server predictions stored in `parser_` with predictions
+  // relevant for `observed_form_or_digest_`.
+  void UpdateServerPredictionsForObservedForm(
       const std::map<autofill::FormSignature, FormPredictions>& predictions);
 
   // Creates a timer to wait for server side predictions. On timeout (or on
@@ -493,6 +501,8 @@ class PasswordFormManager : public PasswordFormManagerForUI,
 
   // For generating timing metrics on retrieving server-side predictions.
   std::unique_ptr<base::ElapsedTimer> server_side_predictions_timer_;
+
+  base::WeakPtr<PasswordFormManagerObserver> form_parsed_observer_;
 };
 
 // Returns whether `form_data` differs from the form observed by `form_manager`

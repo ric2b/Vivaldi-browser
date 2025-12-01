@@ -16,6 +16,7 @@
 
 #include <cstdarg>
 #include <cstdio>
+#include <ios>
 #include <sstream>
 #include <thread>  // NOLINT (unapproved c++11 header)
 

@@ -44,7 +44,6 @@
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "cc/tiles/raster_dark_mode_filter.h"
 #include "cc/trees/raster_context_provider_wrapper.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "media/base/audio_capturer_source.h"
@@ -52,16 +51,15 @@
 #include "media/base/audio_renderer_sink.h"
 #include "third_party/blink/public/common/security/protocol_handler_security_level.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
+#include "third_party/blink/public/mojom/peerconnection/webrtc_ip_handling_policy.mojom-forward.h"
 #include "third_party/blink/public/platform/audio/web_audio_device_source_type.h"
 #include "third_party/blink/public/platform/cross_variant_mojo_util.h"
 #include "third_party/blink/public/platform/url_loader_throttle_provider.h"
 #include "third_party/blink/public/platform/web_audio_device.h"
-#include "third_party/blink/public/platform/web_common.h"
 #include "third_party/blink/public/platform/web_data.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_v8_value_converter.h"
 #include "third_party/blink/public/platform/websocket_handshake_throttle_provider.h"
-#include "third_party/webrtc/api/video/video_codec_type.h"
 #include "ui/base/resource/resource_scale_factor.h"
 #include "ui/gl/angle_implementation.h"
 #include "v8/include/v8-local-handle.h"
@@ -138,7 +136,6 @@ class WebSandboxSupport;
 class WebSecurityOrigin;
 class WebThemeEngine;
 class WebVideoCaptureImplManager;
-class WebSecurityOrigin;
 struct WebContentSecurityPolicyHeader;
 
 namespace scheduler {
@@ -638,11 +635,12 @@ class BLINK_PLATFORM_EXPORT Platform {
   // |allow_mdns_obfuscation| following the latest spec on IP handling modes
   // with mDNS introduced
   // (https://tools.ietf.org/html/draft-ietf-rtcweb-ip-handling-12);
-  virtual void GetWebRTCRendererPreferences(WebLocalFrame* web_frame,
-                                            WebString* ip_handling_policy,
-                                            uint16_t* udp_min_port,
-                                            uint16_t* udp_max_port,
-                                            bool* allow_mdns_obfuscation) {}
+  virtual void GetWebRTCRendererPreferences(
+      WebLocalFrame* web_frame,
+      mojom::WebRtcIpHandlingPolicy* ip_handling_policy,
+      uint16_t* udp_min_port,
+      uint16_t* udp_max_port,
+      bool* allow_mdns_obfuscation) {}
 
   virtual bool IsWebRtcHWEncodingEnabled() { return true; }
 
@@ -792,13 +790,31 @@ class BLINK_PLATFORM_EXPORT Platform {
     return nullptr;
   }
 
+  // V8 Configuration ---------------------------------------------
+
+  // Returns whether V8 feature flag overrides were disallowed by the embedder.
+  virtual bool DisallowV8FeatureFlagOverrides() const { return false; }
+
   // Content Security Policy --------------------------------------
 
   // Appends to `csp`, the default CSP which should be applied to the given
   // `url`. This allows the embedder to customize the applied CSP.
   virtual void AppendContentSecurityPolicy(
       const WebURL& url,
-      blink::WebVector<blink::WebContentSecurityPolicyHeader>* csp) {}
+      std::vector<WebContentSecurityPolicyHeader>* csp) {}
+
+  // Cross-origin subframes are generally not allowed to display a file picker
+  // for security reasons. This method allows content embedders to specify
+  // whether a cross-origin subframe of a particular origin should be allowed to
+  // display the file picker.
+  //
+  // For example, Chrome's built-in PDF viewer may be hosted in a cross-origin
+  // subframe. To allow this viewer to function correctly, Chrome uses this
+  // method to grant it access to the file picker.
+  virtual bool IsFilePickerAllowedForCrossOriginSubframe(
+      const WebSecurityOrigin& origin) {
+    return false;
+  }
 
 #if BUILDFLAG(IS_ANDROID)
   // User Level Memory Pressure Signal Generator ------------------

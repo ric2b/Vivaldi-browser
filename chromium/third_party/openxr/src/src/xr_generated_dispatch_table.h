@@ -99,6 +99,9 @@ struct XrGeneratedDispatchTable {
     PFN_xrApplyHapticFeedback ApplyHapticFeedback;
     PFN_xrStopHapticFeedback StopHapticFeedback;
 
+    // ---- Core 1.1 commands
+    PFN_xrLocateSpaces LocateSpaces;
+
     // ---- XR_KHR_android_thread_settings extension commands
 #if defined(XR_USE_PLATFORM_ANDROID)
     PFN_xrSetAndroidApplicationThreadKHR SetAndroidApplicationThreadKHR;
@@ -143,6 +146,11 @@ struct XrGeneratedDispatchTable {
     PFN_xrGetD3D12GraphicsRequirementsKHR GetD3D12GraphicsRequirementsKHR;
 #endif // defined(XR_USE_GRAPHICS_API_D3D12)
 
+    // ---- XR_KHR_metal_enable extension commands
+#if defined(XR_USE_GRAPHICS_API_METAL)
+    PFN_xrGetMetalGraphicsRequirementsKHR GetMetalGraphicsRequirementsKHR;
+#endif // defined(XR_USE_GRAPHICS_API_METAL)
+
     // ---- XR_KHR_visibility_mask extension commands
     PFN_xrGetVisibilityMaskKHR GetVisibilityMaskKHR;
 
@@ -178,6 +186,9 @@ struct XrGeneratedDispatchTable {
 #if defined(XR_USE_GRAPHICS_API_VULKAN)
     PFN_xrGetVulkanGraphicsRequirements2KHR GetVulkanGraphicsRequirements2KHR;
 #endif // defined(XR_USE_GRAPHICS_API_VULKAN)
+
+    // ---- XR_KHR_locate_spaces extension commands
+    PFN_xrLocateSpacesKHR LocateSpacesKHR;
 
     // ---- XR_EXT_performance_settings extension commands
     PFN_xrPerfSettingsSetPerformanceLevelEXT PerfSettingsSetPerformanceLevelEXT;
@@ -367,6 +378,23 @@ struct XrGeneratedDispatchTable {
     PFN_xrDestroyExportedLocalizationMapML DestroyExportedLocalizationMapML;
     PFN_xrGetExportedLocalizationMapDataML GetExportedLocalizationMapDataML;
 
+    // ---- XR_ML_spatial_anchors extension commands
+    PFN_xrCreateSpatialAnchorsAsyncML CreateSpatialAnchorsAsyncML;
+    PFN_xrCreateSpatialAnchorsCompleteML CreateSpatialAnchorsCompleteML;
+    PFN_xrGetSpatialAnchorStateML GetSpatialAnchorStateML;
+
+    // ---- XR_ML_spatial_anchors_storage extension commands
+    PFN_xrCreateSpatialAnchorsStorageML CreateSpatialAnchorsStorageML;
+    PFN_xrDestroySpatialAnchorsStorageML DestroySpatialAnchorsStorageML;
+    PFN_xrQuerySpatialAnchorsAsyncML QuerySpatialAnchorsAsyncML;
+    PFN_xrQuerySpatialAnchorsCompleteML QuerySpatialAnchorsCompleteML;
+    PFN_xrPublishSpatialAnchorsAsyncML PublishSpatialAnchorsAsyncML;
+    PFN_xrPublishSpatialAnchorsCompleteML PublishSpatialAnchorsCompleteML;
+    PFN_xrDeleteSpatialAnchorsAsyncML DeleteSpatialAnchorsAsyncML;
+    PFN_xrDeleteSpatialAnchorsCompleteML DeleteSpatialAnchorsCompleteML;
+    PFN_xrUpdateSpatialAnchorsExpirationAsyncML UpdateSpatialAnchorsExpirationAsyncML;
+    PFN_xrUpdateSpatialAnchorsExpirationCompleteML UpdateSpatialAnchorsExpirationCompleteML;
+
     // ---- XR_MSFT_spatial_anchor_persistence extension commands
     PFN_xrCreateSpatialAnchorStoreConnectionMSFT CreateSpatialAnchorStoreConnectionMSFT;
     PFN_xrDestroySpatialAnchorStoreConnectionMSFT DestroySpatialAnchorStoreConnectionMSFT;
@@ -483,6 +511,21 @@ struct XrGeneratedDispatchTable {
     PFN_xrDestroyFaceTracker2FB DestroyFaceTracker2FB;
     PFN_xrGetFaceExpressionWeights2FB GetFaceExpressionWeights2FB;
 
+    // ---- XR_META_spatial_entity_sharing extension commands
+    PFN_xrShareSpacesMETA ShareSpacesMETA;
+
+    // ---- XR_META_environment_depth extension commands
+    PFN_xrCreateEnvironmentDepthProviderMETA CreateEnvironmentDepthProviderMETA;
+    PFN_xrDestroyEnvironmentDepthProviderMETA DestroyEnvironmentDepthProviderMETA;
+    PFN_xrStartEnvironmentDepthProviderMETA StartEnvironmentDepthProviderMETA;
+    PFN_xrStopEnvironmentDepthProviderMETA StopEnvironmentDepthProviderMETA;
+    PFN_xrCreateEnvironmentDepthSwapchainMETA CreateEnvironmentDepthSwapchainMETA;
+    PFN_xrDestroyEnvironmentDepthSwapchainMETA DestroyEnvironmentDepthSwapchainMETA;
+    PFN_xrEnumerateEnvironmentDepthSwapchainImagesMETA EnumerateEnvironmentDepthSwapchainImagesMETA;
+    PFN_xrGetEnvironmentDepthSwapchainStateMETA GetEnvironmentDepthSwapchainStateMETA;
+    PFN_xrAcquireEnvironmentDepthImageMETA AcquireEnvironmentDepthImageMETA;
+    PFN_xrSetEnvironmentDepthHandRemovalMETA SetEnvironmentDepthHandRemovalMETA;
+
     // ---- XR_QCOM_tracking_optimization_settings extension commands
     PFN_xrSetTrackingOptimizationSettingsHintQCOM SetTrackingOptimizationSettingsHintQCOM;
 
@@ -497,6 +540,12 @@ struct XrGeneratedDispatchTable {
     PFN_xrCreateSpatialAnchorHTC CreateSpatialAnchorHTC;
     PFN_xrGetSpatialAnchorNameHTC GetSpatialAnchorNameHTC;
 
+    // ---- XR_HTC_body_tracking extension commands
+    PFN_xrCreateBodyTrackerHTC CreateBodyTrackerHTC;
+    PFN_xrDestroyBodyTrackerHTC DestroyBodyTrackerHTC;
+    PFN_xrLocateBodyJointsHTC LocateBodyJointsHTC;
+    PFN_xrGetBodySkeletonHTC GetBodySkeletonHTC;
+
     // ---- XR_MNDX_force_feedback_curl extension commands
     PFN_xrApplyForceFeedbackCurlMNDX ApplyForceFeedbackCurlMNDX;
 
@@ -508,8 +557,37 @@ struct XrGeneratedDispatchTable {
     PFN_xrGetPlaneDetectionsEXT GetPlaneDetectionsEXT;
     PFN_xrGetPlanePolygonBufferEXT GetPlanePolygonBufferEXT;
 
+    // ---- XR_EXT_future extension commands
+    PFN_xrPollFutureEXT PollFutureEXT;
+    PFN_xrCancelFutureEXT CancelFutureEXT;
+
     // ---- XR_ML_user_calibration extension commands
     PFN_xrEnableUserCalibrationEventsML EnableUserCalibrationEventsML;
+
+    // ---- XR_ML_system_notifications extension commands
+    PFN_xrSetSystemNotificationsML SetSystemNotificationsML;
+
+    // ---- XR_ML_world_mesh_detection extension commands
+    PFN_xrCreateWorldMeshDetectorML CreateWorldMeshDetectorML;
+    PFN_xrDestroyWorldMeshDetectorML DestroyWorldMeshDetectorML;
+    PFN_xrRequestWorldMeshStateAsyncML RequestWorldMeshStateAsyncML;
+    PFN_xrRequestWorldMeshStateCompleteML RequestWorldMeshStateCompleteML;
+    PFN_xrGetWorldMeshBufferRecommendSizeML GetWorldMeshBufferRecommendSizeML;
+    PFN_xrAllocateWorldMeshBufferML AllocateWorldMeshBufferML;
+    PFN_xrFreeWorldMeshBufferML FreeWorldMeshBufferML;
+    PFN_xrRequestWorldMeshAsyncML RequestWorldMeshAsyncML;
+    PFN_xrRequestWorldMeshCompleteML RequestWorldMeshCompleteML;
+
+    // ---- XR_ML_facial_expression extension commands
+    PFN_xrCreateFacialExpressionClientML CreateFacialExpressionClientML;
+    PFN_xrDestroyFacialExpressionClientML DestroyFacialExpressionClientML;
+    PFN_xrGetFacialExpressionBlendShapePropertiesML GetFacialExpressionBlendShapePropertiesML;
+
+    // ---- XR_META_colocation_discovery extension commands
+    PFN_xrStartColocationDiscoveryMETA StartColocationDiscoveryMETA;
+    PFN_xrStopColocationDiscoveryMETA StopColocationDiscoveryMETA;
+    PFN_xrStartColocationAdvertisementMETA StartColocationAdvertisementMETA;
+    PFN_xrStopColocationAdvertisementMETA StopColocationAdvertisementMETA;
 };
 
 

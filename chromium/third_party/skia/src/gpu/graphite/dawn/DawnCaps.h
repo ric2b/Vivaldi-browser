@@ -57,8 +57,7 @@ public:
                               RenderPassDesc*,
                               const RendererProvider*) const override;
     UniqueKey makeComputePipelineKey(const ComputePipelineDesc&) const override;
-    ImmutableSamplerInfo getImmutableSamplerInfo(const TextureProxy* proxy) const override;
-    GraphiteResourceKey makeSamplerKey(const SamplerDesc&) const override;
+    ImmutableSamplerInfo getImmutableSamplerInfo(const TextureInfo&) const override;
     uint32_t channelMask(const TextureInfo&) const override;
     bool isRenderable(const TextureInfo&) const override;
     bool isStorage(const TextureInfo&) const override;
@@ -70,9 +69,10 @@ public:
     void buildKeyForTexture(SkISize dimensions,
                             const TextureInfo&,
                             ResourceType,
-                            Shareable,
                             GraphiteResourceKey*) const override;
     uint32_t getRenderPassDescKeyForPipeline(const RenderPassDesc& renderPassDesc) const;
+
+    bool supportsCommandBufferTimestamps() const { return fSupportsCommandBufferTimestamps; }
 
 private:
     const ColorTypeInfo* getColorTypeInfo(SkColorType, const TextureInfo&) const override;
@@ -151,6 +151,8 @@ private:
 
     bool fUseAsyncPipelineCreation = true;
     bool fAllowScopedErrorChecks = true;
+
+    bool fSupportsCommandBufferTimestamps = false;
 };
 
 } // namespace skgpu::graphite

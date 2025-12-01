@@ -74,7 +74,6 @@ import org.chromium.chrome.browser.ui.searchactivityutils.SearchActivityExtras.R
 import org.chromium.chrome.browser.ui.searchactivityutils.SearchActivityExtras.SearchType;
 import org.chromium.chrome.browser.ui.system.StatusBarColorController;
 import org.chromium.components.browser_ui.modaldialog.AppModalPresenter;
-import org.chromium.components.cached_flags.BooleanCachedFieldTrialParameter;
 import org.chromium.components.metrics.OmniboxEventProtos.OmniboxEventProto.PageClassification;
 import org.chromium.components.omnibox.OmniboxFeatures;
 import org.chromium.ui.base.ActivityKeyboardVisibilityDelegate;
@@ -149,11 +148,6 @@ public class SearchActivity extends AsyncInitializationActivity
     @VisibleForTesting
     /* package */ static final String HISTOGRAM_SESSION_TERMINATION_REASON =
             "Android.Omnibox.SearchActivity.SessionTerminationReason";
-
-    /** Controls whether Referrer App ID is passed to Search Results Page via client= param. */
-    public static final BooleanCachedFieldTrialParameter SEARCH_IN_CCT_APPLY_REFERRER_ID =
-            ChromeFeatureList.newBooleanCachedFieldTrialParameter(
-                    ChromeFeatureList.SEARCH_IN_CCT, "apply_referrer_id", false);
 
     // NOTE: This is used to capture HISTOGRAM_NAVIGATION_TARGET_TYPE.
     // Do not shuffle or reassign values.
@@ -273,7 +267,8 @@ public class SearchActivity extends AsyncInitializationActivity
                 /* listenToActivityState= */ true,
                 new ActivityKeyboardVisibilityDelegate(new WeakReference(this)),
                 getIntentRequestTracker(),
-                getInsetObserver()) {
+                getInsetObserver(),
+                /* trackOcclusion= */ true) {
             @Override
             public ModalDialogManager getModalDialogManager() {
                 return SearchActivity.this.getModalDialogManager();
@@ -313,7 +308,10 @@ public class SearchActivity extends AsyncInitializationActivity
         if (anchorViewBackground instanceof GradientDrawable) {
             int anchorViewColor =
                     ((GradientDrawable) anchorViewBackground).getColor().getDefaultColor();
-            StatusBarColorController.setStatusBarColor(this.getWindow(), anchorViewColor);
+            StatusBarColorController.setStatusBarColor(
+                    getEdgeToEdgeManager().getEdgeToEdgeSystemBarColorHelper(),
+                    this.getWindow(),
+                    anchorViewColor);
         }
 
         BackPressManager backPressManager = new BackPressManager();
@@ -378,12 +376,14 @@ public class SearchActivity extends AsyncInitializationActivity
                                 null),
                         null,
                         backPressManager,
-                        /* OmniboxSuggestionsDropdownScrollListener= */ null,
+                        /* omniboxSuggestionsDropdownScrollListener= */ null,
                         /* tabModelSelectorSupplier= */ null,
                         mLocationBarUiOverrides,
-                        null,
+                        findViewById(R.id.control_container),
                         /* bottomWindowPaddingSupplier */ () -> 0,
-                        /* onLongClickListener= */ null);
+                        /* onLongClickListener= */ null,
+                        /* browserControlsStateProvider= */ null,
+                        /* isToolbarPositionCustomizationEnabled= */ false);
         mLocationBarCoordinator.setUrlBarFocusable(true);
         mLocationBarCoordinator.setShouldShowMicButtonWhenUnfocused(true);
         mLocationBarCoordinator.getOmniboxStub().addUrlFocusChangeListener(this);
@@ -605,7 +605,7 @@ public class SearchActivity extends AsyncInitializationActivity
         // Start a new UMA session for the new activity.
         umaSessionResume();
         if (mIntentOrigin == IntentOrigin.CUSTOM_TAB
-                && SEARCH_IN_CCT_APPLY_REFERRER_ID.getValue()) {
+                && ChromeFeatureList.sSearchinCctApplyReferrerId.getValue()) {
             var referrer = SearchActivityUtils.getReferrer(getIntent());
             var referrerValid = !TextUtils.isEmpty(referrer);
             RecordHistogram.recordBooleanHistogram(HISTOGRAM_INTENT_REFERRER_VALID, referrerValid);
@@ -660,11 +660,7 @@ public class SearchActivity extends AsyncInitializationActivity
         RecordHistogram.recordBooleanHistogram(
                 HISTOGRAM_LAUNCHED_WITH_QUERY, !TextUtils.isEmpty(query));
 
-        mSearchBox.beginQuery(
-                mIntentOrigin,
-                mSearchType,
-                SearchActivityUtils.getIntentQuery(getIntent()),
-                getWindowAndroid());
+        mSearchBox.beginQuery(mIntentOrigin, mSearchType, query, getWindowAndroid());
     }
 
     @Override
@@ -710,7 +706,7 @@ public class SearchActivity extends AsyncInitializationActivity
     }
 
     private void openChromeBrowser(@Nullable OmniboxLoadUrlParams params) {
-        Intent intent = SearchActivityUtils.createIntentForStartActivity(this, params);
+        Intent intent = SearchActivityUtils.createIntentForStartActivity(params);
         if (intent == null) return;
 
         if (mIntentOrigin == IntentOrigin.SEARCH_WIDGET) {
@@ -755,7 +751,10 @@ public class SearchActivity extends AsyncInitializationActivity
         GradientDrawable anchorViewBackground = (GradientDrawable) mAnchorView.getBackground();
         anchorViewBackground.setColor(anchorViewBackgroundColor);
         // Update the status bar's color based on the toolbar color.
-        StatusBarColorController.setStatusBarColor(getWindow(), anchorViewBackgroundColor);
+        StatusBarColorController.setStatusBarColor(
+                getEdgeToEdgeManager().getEdgeToEdgeSystemBarColorHelper(),
+                getWindow(),
+                anchorViewBackgroundColor);
 
         GradientDrawable searchBoxBackground =
                 (GradientDrawable) ((LayerDrawable) mSearchBox.getBackground()).getDrawable(0);
@@ -872,7 +871,7 @@ public class SearchActivity extends AsyncInitializationActivity
                         && templateSvc.isSearchResultsPageFromDefaultSearchProvider(url);
         boolean isNative =
                 NativePage.isNativePageUrl(
-                        url, /* incognito= */ false, /* hasPdfDownload= */ false);
+                        url, /* isIncognito= */ false, /* hasPdfDownload= */ false);
 
         int targetType =
                 isNative
@@ -905,6 +904,7 @@ public class SearchActivity extends AsyncInitializationActivity
                         case IntentOrigin.QUICK_ACTION_SEARCH_WIDGET -> ".ShortcutsWidget";
                         case IntentOrigin.LAUNCHER -> ".Launcher";
                         case IntentOrigin.HUB -> ".Hub";
+                        case IntentOrigin.WEB_SEARCH -> ".WebSearch";
                         default -> ".SearchWidget";
                     };
             RecordHistogram.recordEnumeratedHistogram(histogramName + suffix, sample, max);
@@ -948,6 +948,14 @@ public class SearchActivity extends AsyncInitializationActivity
     @SuppressWarnings("MissingSuperCall")
     public void onTopResumedActivityChanged(boolean isTopResumedActivity) {
         super_onTopResumedActivityChanged(isTopResumedActivity);
+
+        // For hub search use in split screen and multi window mode, search activity should be
+        // dismissed when focus is lost to prevent focus from causing the suggestion list to flicker
+        // on window toggling.
+        if (!isTopResumedActivity && mIntentOrigin == IntentOrigin.HUB) {
+            finish(TerminationReason.ACTIVITY_FOCUS_LOST, null);
+            return;
+        }
 
         // TODO(crbug.com/329702834): Ensure showing Suggestions when activity resumes.
         // This may only happen when user enters tab switcher, and immediately returns to the

@@ -10,17 +10,8 @@ import("./visibility.gni")
 
 generate_css("css_files") {
   sources = [
-    "emptyWidget.css",
-    "inspectorCommon.css",
-  ]
-}
-
-generate_css("legacy_css_files") {
-  sources = [
-    "applicationColorTokens.css",
     "checkboxTextLabel.css",
     "confirmDialog.css",
-    "designTokens.css",
     "dialog.css",
     "dropTarget.css",
     "emptyWidget.css",
@@ -29,17 +20,14 @@ generate_css("legacy_css_files") {
     "infobar.css",
     "inlineButton.css",
     "inspectorCommon.css",
-    "inspectorSyntaxHighlight.css",
     "inspectorViewTabbedPane.css",
     "listWidget.css",
     "popover.css",
     "progressIndicator.css",
-    "radioButton.css",
     "remoteDebuggingTerminatedScreen.css",
     "reportView.css",
     "rootView.css",
     "searchableView.css",
-    "slider.css",
     "smallBubble.css",
     "softContextMenu.css",
     "softDropDown.css",
@@ -48,28 +36,15 @@ generate_css("legacy_css_files") {
     "suggestBox.css",
     "tabbedPane.css",
     "targetCrashedScreen.css",
-    "textButton.css",
     "textPrompt.css",
-    "themeColors.css",
-    "tokens.css",
     "toolbar.css",
     "treeoutline.css",
     "viewContainers.css",
   ]
-
-  legacy = true
 }
 
 copy_to_gen("copy_stylesheets_for_server") {
-  sources = [
-    "applicationColorTokens.css",
-    "designTokens.css",
-    "inspectorCommon.css",
-    "inspectorSyntaxHighlight.css",
-    "textButton.css",
-    "themeColors.css",
-    "tokens.css",
-  ]
+  sources = [ "inspectorCommon.css" ]
 }
 
 devtools_module("ui") {
@@ -90,7 +65,6 @@ devtools_module("ui") {
     "Fragment.ts",
     "Geometry.ts",
     "GlassPane.ts",
-    "HistoryInput.ts",
     "Infobar.ts",
     "InplaceEditor.ts",
     "InspectorView.ts",
@@ -142,11 +116,10 @@ devtools_module("ui") {
     "../../ui/legacy/theme_support:bundle",
     "../components/adorners:bundle",
     "../components/buttons:bundle",
-    "../components/buttons:bundle",
     "../components/helpers:bundle",
     "../components/icon_button:bundle",
     "../components/settings:bundle",
-    "../lit-html:bundle",
+    "../lit:bundle",
     "../visual_logging:bundle",
   ]
 }
@@ -155,7 +128,7 @@ devtools_entrypoint("bundle") {
   entrypoint = "legacy.ts"
 
   deps = [
-    ":legacy_css_files",
+    ":css_files",
     ":ui",
   ]
 
@@ -171,7 +144,10 @@ devtools_entrypoint("bundle") {
     "../../services/window_bounds/*",
     "../../testing/*",
     "../components/data_grid:*",
+    "../components/docs/combo_box/*",
     "../components/docs/performance_panel/*",
+    "../components/docs/radio_button/*",
+    "../components/docs/slider/*",
     "../components/issue_counter:unittests",
     "../components/legacy_wrapper:*",
     "../components/linear_memory_inspector:*",

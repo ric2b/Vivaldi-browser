@@ -32,8 +32,8 @@
 #import "ui/base/device_form_factor.h"
 #import "ui/base/l10n/l10n_util.h"
 
-using base::test::ios::WaitUntilConditionOrTimeout;
 using base::test::ios::kWaitForUIElementTimeout;
+using base::test::ios::WaitUntilConditionOrTimeout;
 
 // Test fixture for PassKitCoordinator class.
 class PassKitCoordinatorTest : public PlatformTest {
@@ -82,7 +82,13 @@ class PassKitCoordinatorTest : public PlatformTest {
 
 // Tests that PassKitCoordinator presents PKAddPassesViewController for the
 // valid PKPass object.
-TEST_F(PassKitCoordinatorTest, ValidPassKitObject) {
+// TODO(crbug.com/391920782): test fails on iOS18.2 Physical device.
+#if TARGET_IPHONE_SIMULATOR
+#define MAYBE_ValidPassKitObject ValidPassKitObject
+#else
+#define MAYBE_ValidPassKitObject DISABLED_ValidPassKitObject
+#endif
+TEST_F(PassKitCoordinatorTest, MAYBE_ValidPassKitObject) {
   std::string data = testing::GetTestFileContents(testing::kPkPassFilePath);
   NSData* nsdata = [NSData dataWithBytes:data.c_str() length:data.size()];
   PKPass* pass = [[PKPass alloc] initWithData:nsdata error:nil];
@@ -107,7 +113,7 @@ TEST_F(PassKitCoordinatorTest, ValidPassKitObject) {
 
     histogram_tester_.ExpectUniqueSample(
         kUmaPresentAddPassesDialogResult,
-        static_cast<base::HistogramBase::Sample>(
+        static_cast<base::HistogramBase::Sample32>(
             PresentAddPassesDialogResult::kSuccessful),
         1);
   }
@@ -138,7 +144,7 @@ TEST_F(PassKitCoordinatorTest, MultiplePassKitObjects) {
 
   histogram_tester_.ExpectUniqueSample(
       kUmaPresentAddPassesDialogResult,
-      static_cast<base::HistogramBase::Sample>(
+      static_cast<base::HistogramBase::Sample32>(
           PresentAddPassesDialogResult::kSuccessful),
       1);
 
@@ -154,7 +160,7 @@ TEST_F(PassKitCoordinatorTest, MultiplePassKitObjects) {
 
   histogram_tester_.ExpectBucketCount(
       kUmaPresentAddPassesDialogResult,
-      static_cast<base::HistogramBase::Sample>(
+      static_cast<base::HistogramBase::Sample32>(
           PresentAddPassesDialogResult::
               kAnotherAddPassesViewControllerIsPresented),
       1);
@@ -200,7 +206,7 @@ TEST_F(PassKitCoordinatorTest, AnotherViewControllerIsPresented) {
 
   histogram_tester_.ExpectBucketCount(
       kUmaPresentAddPassesDialogResult,
-      static_cast<base::HistogramBase::Sample>(
+      static_cast<base::HistogramBase::Sample32>(
           PresentAddPassesDialogResult::kAnotherViewControllerIsPresented),
       1);
 }

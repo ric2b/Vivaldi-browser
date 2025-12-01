@@ -9,8 +9,8 @@ title: Filter Effects
 ---
 
 Filter Effects in Chrome can be somewhat confusing. The
-[SVG](http://www.w3.org/TR/SVG/filters.html) and
-[CSS](http://www.w3.org/TR/filter-effects-1/) specs give us three different ways
+[SVG](https://www.w3.org/TR/SVG/filters.html) and
+[CSS](https://www.w3.org/TR/filter-effects-1/) specs give us three different ways
 of specifying filters (SVG-on-SVG, SVG-in-CSS, shorthand CSS), Chrome has two
 rendering modes (GPU-accelerated or CPU), and two filter implementations (Blink
 and Skia). This is an attempt to document the current situation, and where we're

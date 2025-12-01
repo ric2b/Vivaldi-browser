@@ -16,7 +16,6 @@
 #include "third_party/blink/renderer/core/css/properties/computed_style_utils.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_document_state.h"
 #include "third_party/blink/renderer/core/dom/flat_tree_traversal.h"
-#include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/layout/absolute_utils.h"
 #include "third_party/blink/renderer/core/layout/anchor_position_scroll_data.h"
@@ -25,6 +24,7 @@
 #include "third_party/blink/renderer/core/layout/column_layout_algorithm.h"
 #include "third_party/blink/renderer/core/layout/constraint_space_builder.h"
 #include "third_party/blink/renderer/core/layout/disable_layout_side_effects_scope.h"
+#include "third_party/blink/renderer/core/layout/geometry/box_sides.h"
 #include "third_party/blink/renderer/core/layout/geometry/writing_mode_converter.h"
 #include "third_party/blink/renderer/core/layout/grid/grid_layout_algorithm.h"
 #include "third_party/blink/renderer/core/layout/grid/grid_placement.h"
@@ -51,6 +51,7 @@
 #include "third_party/blink/renderer/core/view_transition/view_transition.h"
 #include "third_party/blink/renderer/core/view_transition/view_transition_utils.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/clear_collection_scope.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
 namespace blink {
 
@@ -163,17 +164,17 @@ class OOFCandidateStyleIterator {
   bool MoveToNextStyle() {
     CHECK(position_try_fallbacks_);
     CHECK(element_);
-    if (!try_fallback_index_.has_value()) {
-      try_fallback_index_ = 0;
+    std::optional<wtf_size_t> new_index = try_fallback_index_;
+    if (!new_index.has_value()) {
+      new_index = 0;
     } else {
-      ++*try_fallback_index_;
+      ++*new_index;
     }
     // Need to loop in case a @position-try fallback does not exist.
-    for (;
-         *try_fallback_index_ < position_try_fallbacks_->GetFallbacks().size();
-         ++*try_fallback_index_) {
-      if (const ComputedStyle* style = UpdateStyle(*try_fallback_index_)) {
-        style_ = style;
+    for (; *new_index < position_try_fallbacks_->GetFallbacks().size();
+         ++*new_index) {
+      UpdateStyle(*new_index);
+      if (style_) {
         return true;
       }
       // @position-try fallback does not exist.
@@ -183,18 +184,16 @@ class OOFCandidateStyleIterator {
 
   void MoveToLastSuccessfulOrStyleWithoutFallbacks() {
     CHECK(element_);
-    const CSSPropertyValueSet* try_set = nullptr;
-    TryTacticList try_tactics = kNoTryTactics;
+    std::optional<wtf_size_t> index;
     if (OutOfFlowData* out_of_flow_data = element_->GetOutOfFlowData()) {
       // No successful fallbacks for this pass. Clear out the new successful
       // fallback candidate.
       out_of_flow_data->ClearPendingSuccessfulPositionFallback();
       if (out_of_flow_data->HasLastSuccessfulPositionFallback()) {
-        try_set = out_of_flow_data->GetLastSuccessfulTrySet();
-        try_tactics = out_of_flow_data->GetLastSuccessfulTryTactics();
+        index = out_of_flow_data->GetLastSuccessfulIndex();
       }
     }
-    style_ = UpdateStyle(try_set, try_tactics);
+    UpdateStyle(index);
   }
 
   std::optional<const CSSPropertyValueSet*> TrySetFromFallback(
@@ -219,15 +218,14 @@ class OOFCandidateStyleIterator {
 
   void MoveToChosenTryFallbackIndex(std::optional<wtf_size_t> index) {
     CHECK(element_);
-    const CSSPropertyValueSet* try_set = nullptr;
-    TryTacticList try_tactics = kNoTryTactics;
     bool may_invalidate_last_successful = false;
     if (index.has_value()) {
       CHECK(position_try_fallbacks_);
       CHECK_LE(index.value(), position_try_fallbacks_->GetFallbacks().size());
+      const CSSPropertyValueSet* try_set = nullptr;
       const PositionTryFallback& fallback =
           position_try_fallbacks_->GetFallbacks()[*index];
-      try_tactics = fallback.GetTryTactic();
+      TryTacticList try_tactics = fallback.GetTryTactic();
       std::optional<const CSSPropertyValueSet*> opt_try_set =
           TrySetFromFallback(fallback);
       CHECK(opt_try_set.has_value());
@@ -246,11 +244,7 @@ class OOFCandidateStyleIterator {
           .GetStyleEngine()
           .MarkLastSuccessfulPositionFallbackDirtyForElement(*element_);
     }
-    if (index == try_fallback_index_) {
-      // We're already at this position.
-      return;
-    }
-    style_ = UpdateStyle(try_set, try_tactics);
+    UpdateStyle(index);
   }
 
  private:
@@ -271,7 +265,7 @@ class OOFCandidateStyleIterator {
       // reach this function, regardless of whether or not anchor positioning
       // is actually used.
       if (ElementStyleDependsOnAnchor(*element_, *style_)) {
-        style_ = UpdateStyle(/* try_set */ nullptr, kNoTryTactics);
+        UpdateStyle(std::nullopt, /*initial_update=*/true);
       }
     }
   }
@@ -300,34 +294,46 @@ class OOFCandidateStyleIterator {
   // Update the style using the specified index into `position_try_fallbacks_`
   // (which must exist), and return that updated style. Returns nullptr if
   // the fallback references a @position-try rule which doesn't exist.
-  const ComputedStyle* UpdateStyle(wtf_size_t try_fallback_index) {
+  void UpdateStyle(std::optional<wtf_size_t> try_fallback_index,
+                   bool initial_update = false) {
+    if (!initial_update && try_fallback_index_ == try_fallback_index) {
+      // We're already at this position.
+      return;
+    }
+
+    try_fallback_index_ = try_fallback_index;
+    style_ = nullptr;
+
     // Previously evaluated anchor is not relevant if another position fallback
     // is applied.
     anchor_evaluator_.ClearAccessibilityAnchor();
-    CHECK(position_try_fallbacks_);
-    CHECK_LE(try_fallback_index,
-             position_try_fallbacks_->GetFallbacks().size());
-    const PositionTryFallback& fallback =
-        position_try_fallbacks_->GetFallbacks()[try_fallback_index];
-    std::optional<const CSSPropertyValueSet*> try_set =
-        TrySetFromFallback(fallback);
-    if (!try_set.has_value()) {
-      // @position-try fallback does not exist.
-      return nullptr;
-    }
-    return UpdateStyle(try_set.value(), fallback.GetTryTactic());
-  }
 
-  const ComputedStyle* UpdateStyle(const CSSPropertyValueSet* try_set,
-                                   const TryTacticList& tactic_list) {
+    const CSSPropertyValueSet* try_set = nullptr;
+    TryTacticList try_tactics = kNoTryTactics;
+    if (try_fallback_index) {
+      CHECK(position_try_fallbacks_);
+      CHECK_LE(*try_fallback_index,
+               position_try_fallbacks_->GetFallbacks().size());
+      const PositionTryFallback& fallback =
+          position_try_fallbacks_->GetFallbacks()[*try_fallback_index];
+      try_tactics = fallback.GetTryTactic();
+      std::optional<const CSSPropertyValueSet*> try_set_opt =
+          TrySetFromFallback(fallback);
+      if (!try_set_opt.has_value()) {
+        // @position-try fallback does not exist.
+        return;
+      }
+      try_set = try_set_opt.value();
+    }
+
     CHECK(element_);
     element_->GetDocument().GetStyleEngine().UpdateStyleForOutOfFlow(
-        *element_, try_set, tactic_list, &anchor_evaluator_);
+        *element_, try_set, try_tactics, &anchor_evaluator_);
     CHECK(element_->GetLayoutObject());
     // Returns LayoutObject ComputedStyle instead of element style for layout
     // purposes. The style may be different, in particular for body -> html
     // propagation of writing modes.
-    return element_->GetLayoutObject()->Style();
+    style_ = element_->GetLayoutObject()->Style();
   }
 
   Element* element_ = nullptr;
@@ -354,15 +360,15 @@ class OOFCandidateStyleIterator {
 const Element* GetPositionAnchorElement(
     const BlockNode& node,
     const ComputedStyle& style,
-    const LogicalAnchorQuery* anchor_query) {
+    const PhysicalAnchorQuery* anchor_query) {
   if (!anchor_query) {
     return nullptr;
   }
   if (const ScopedCSSName* specifier = style.PositionAnchor()) {
-    if (const LogicalAnchorReference* reference =
-            anchor_query->AnchorReference(*node.GetLayoutBox(), specifier);
-        reference && reference->layout_object) {
-      return DynamicTo<Element>(reference->layout_object->GetNode());
+    if (const PhysicalAnchorReference* reference =
+            anchor_query->AnchorReference(*node.GetLayoutBox(), specifier)) {
+      DCHECK(!reference->element || reference->GetLayoutObject());
+      return reference->element;
     }
     return nullptr;
   }
@@ -375,7 +381,7 @@ const Element* GetPositionAnchorElement(
 const LayoutObject* GetPositionAnchorObject(
     const BlockNode& node,
     const ComputedStyle& style,
-    const LogicalAnchorQuery* anchor_query) {
+    const PhysicalAnchorQuery* anchor_query) {
   if (const Element* element =
           GetPositionAnchorElement(node, style, anchor_query)) {
     return element->GetLayoutObject();
@@ -383,17 +389,17 @@ const LayoutObject* GetPositionAnchorObject(
   return nullptr;
 }
 
-gfx::Vector2dF GetAnchorOffset(const BlockNode& node,
+PhysicalOffset GetAnchorOffset(const BlockNode& node,
                                const ComputedStyle& style,
-                               const LogicalAnchorQuery* anchor_query) {
+                               const PhysicalAnchorQuery* anchor_query) {
   if (const LayoutObject* anchor_object =
           GetPositionAnchorObject(node, style, anchor_query)) {
     if (const AnchorPositionScrollData* data =
             To<Element>(node.GetDOMNode())->GetAnchorPositionScrollData()) {
-      return data->TotalOffset(*anchor_object);
+      return data->TotalOffset(anchor_object);
     }
   }
-  return gfx::Vector2dF();
+  return PhysicalOffset();
 }
 
 // Updates `node`'s associated `PaintLayer` for `position-visibility`. See:
@@ -406,7 +412,7 @@ gfx::Vector2dF GetAnchorOffset(const BlockNode& node,
 void UpdatePositionVisibilityAfterLayout(
     const OutOfFlowLayoutPart::OffsetInfo& offset_info,
     const BlockNode& node,
-    const LogicalAnchorQuery* anchor_query) {
+    const PhysicalAnchorQuery* anchor_query) {
   if (!anchor_query) {
     return;
   }
@@ -444,6 +450,10 @@ void UpdatePositionVisibilityAfterLayout(
         observer->MonitorAnchor(nullptr);
       }
     }
+  }
+
+  if (AXObjectCache* cache = node.GetDocument().ExistingAXObjectCache()) {
+    cache->CSSAnchorChanged(node.GetLayoutBox());
   }
 }
 
@@ -662,18 +672,44 @@ void OutOfFlowLayoutPart::HandleFragmentation() {
 OutOfFlowLayoutPart::ContainingBlockInfo
 OutOfFlowLayoutPart::ApplyPositionAreaOffsets(
     const PositionAreaOffsets& offsets,
+    PhysicalOffset default_anchor_scroll_shift,
     const OutOfFlowLayoutPart::ContainingBlockInfo& container_info) const {
   ContainingBlockInfo adjusted_container_info(container_info);
-  PhysicalToLogical converter(container_info.writing_direction,
-                              offsets.top.value_or(LayoutUnit()),
-                              offsets.right.value_or(LayoutUnit()),
-                              offsets.bottom.value_or(LayoutUnit()),
-                              offsets.left.value_or(LayoutUnit()));
+
+  // If one inset for an axis is tethered to the default anchor, and the other
+  // one is tethered to the original containing block, and if the two tethering
+  // points live in different scroll contexts, the IMCB is affected by the
+  // default anchor scroll shift (so that where the anchor actually appears on
+  // screen determines the size of the IMCB). If none or both are tethered to
+  // the default anchor, this shift has no effect. Reset it in that case.
+  if (offsets.top.has_value() == offsets.bottom.has_value()) {
+    default_anchor_scroll_shift.top = LayoutUnit();
+  }
+  if (offsets.left.has_value() == offsets.right.has_value()) {
+    default_anchor_scroll_shift.left = LayoutUnit();
+  }
+
+  // Figure out which sides have an inset set, and what they might be.
+  PhysicalBoxSides physical_insets_set(
+      offsets.top.has_value(), offsets.right.has_value(),
+      offsets.bottom.has_value(), offsets.left.has_value());
+  LogicalBoxSides insets_set =
+      physical_insets_set.ToLogical(container_info.writing_direction);
+
+  // Substitute any missing insets with the default anchor scroll shift (or 0,
+  // if it's not applicable).
+  PhysicalBoxStrut physical_insets(
+      offsets.top.value_or(default_anchor_scroll_shift.top),
+      offsets.right.value_or(-default_anchor_scroll_shift.left),
+      offsets.bottom.value_or(-default_anchor_scroll_shift.top),
+      offsets.left.value_or(default_anchor_scroll_shift.left));
+  BoxStrut insets =
+      physical_insets.ConvertToLogical(container_info.writing_direction);
 
   // Reduce the container size and adjust the offset based on the position-area.
   adjusted_container_info.rect.ContractEdges(
-      converter.BlockStart(), converter.InlineEnd(), converter.BlockEnd(),
-      converter.InlineStart());
+      insets.block_start, insets.inline_end, insets.block_end,
+      insets.inline_start);
 
   // For 'center' values (aligned with start and end anchor sides), the
   // containing block is aligned and sized with the anchor, regardless of
@@ -681,28 +717,26 @@ OutOfFlowLayoutPart::ApplyPositionAreaOffsets(
   // ContractEdges above might have created a negative size if the position-area
   // is aligned with an anchor side outside the containing block.
   if (adjusted_container_info.rect.size.inline_size < LayoutUnit()) {
-    DCHECK(converter.InlineStart() == LayoutUnit() ||
-           converter.InlineEnd() == LayoutUnit())
-        << "If aligned to both anchor edges, the size should never be "
-           "negative.";
+    DCHECK(insets_set.inline_start != insets_set.inline_end)
+        << "If aligned to both anchor edges, or both original containing block "
+           "edges, the size should never be negative.";
+
     // Collapse the inline size to 0 and align with the single anchor edge
     // defined by the position-area.
-    if (converter.InlineStart() == LayoutUnit()) {
-      DCHECK(converter.InlineEnd() != LayoutUnit());
+    if (!insets_set.inline_start) {
       adjusted_container_info.rect.offset.inline_offset +=
           adjusted_container_info.rect.size.inline_size;
     }
     adjusted_container_info.rect.size.inline_size = LayoutUnit();
   }
   if (adjusted_container_info.rect.size.block_size < LayoutUnit()) {
-    DCHECK(converter.BlockStart() == LayoutUnit() ||
-           converter.BlockEnd() == LayoutUnit())
-        << "If aligned to both anchor edges, the size should never be "
-           "negative.";
+    DCHECK(insets_set.block_start != insets_set.block_end)
+        << "If aligned to both anchor edges, or both original containing block "
+           "edges, the size should never be negative.";
+
     // Collapse the block size to 0 and align with the single anchor edge
     // defined by the position-area.
-    if (converter.BlockStart() == LayoutUnit()) {
-      DCHECK(converter.BlockEnd() != LayoutUnit());
+    if (!insets_set.block_start) {
       adjusted_container_info.rect.offset.block_offset +=
           adjusted_container_info.rect.size.block_size;
     }
@@ -1325,8 +1359,8 @@ void OutOfFlowLayoutPart::LayoutOOFsInMulticol(
 
   // Layout the OOF positioned elements inside the inner multicol.
   OutOfFlowLayoutPart inner_part(&limited_multicol_container_builder);
-  inner_part.outer_container_builder_ =
-      outer_container_builder_ ? outer_container_builder_ : container_builder_;
+  inner_part.outer_oof_layout_part_ =
+      outer_oof_layout_part_ ? outer_oof_layout_part_ : this;
   inner_part.LayoutFragmentainerDescendants(
       &oof_nodes_to_layout, fragmentainer_progression,
       multicol_info->fixedpos_containing_block.Fragment(), &multicol_children);
@@ -1419,8 +1453,8 @@ void OutOfFlowLayoutPart::LayoutFragmentainerDescendants(
   outer_context_has_fixedpos_container_ = outer_context_has_fixedpos_container;
   DCHECK(multicol_children_ || !outer_context_has_fixedpos_container_);
 
-  BoxFragmentBuilder* builder_for_anchor_query = container_builder_;
-  if (outer_container_builder_) {
+  OutOfFlowLayoutPart* layout_part_for_anchor_query = this;
+  if (outer_oof_layout_part_) {
     // If this is an inner layout of the nested block fragmentation, and if this
     // block fragmentation context is block fragmented, |multicol_children|
     // doesn't have correct block offsets of fragmentainers anchor query needs.
@@ -1428,14 +1462,18 @@ void OutOfFlowLayoutPart::LayoutFragmentainerDescendants(
     // instead in order to get the correct offsets.
     for (const MulticolChildInfo& multicol_child : *multicol_children) {
       if (multicol_child.parent_break_token) {
-        builder_for_anchor_query = outer_container_builder_;
+        layout_part_for_anchor_query = outer_oof_layout_part_;
         break;
       }
     }
   }
-  LogicalAnchorQueryMap stitched_anchor_queries(
+
+  BoxFragmentBuilder* builder_for_anchor_query =
+      layout_part_for_anchor_query->container_builder_;
+  StitchedAnchorQueries stitched_anchor_queries(
       *builder_for_anchor_query->Node().GetLayoutBox(),
-      builder_for_anchor_query->Children(),
+      builder_for_anchor_query->SizeForAnchorQueries(),
+      layout_part_for_anchor_query->FragmentationContextChildren(),
       builder_for_anchor_query->GetWritingDirection());
 
   const bool may_have_anchors_on_oof =
@@ -1462,14 +1500,14 @@ void OutOfFlowLayoutPart::LayoutFragmentainerDescendants(
   // to add the fixed-positioned elements to those as well.
   wtf_size_t previous_repeaded_fixedpos_resume_idx = WTF::kNotFound;
 
-  while (descendants->size() > 0) {
+  while (!descendants->empty()) {
     ComputeInlineContainingBlocksForFragmentainer(*descendants);
 
     // When there are anchor queries, each containing block should be laid out
     // separately. This loop chunks |descendants| by their containing blocks, if
     // they have anchor queries.
     base::span<LogicalOofNodeForFragmentation> descendants_span =
-        base::make_span(*descendants);
+        base::span(*descendants);
     for (;;) {
       bool has_new_descendants_span = false;
       // The CSS containing block of the last descendant, to group |descendants|
@@ -1480,7 +1518,8 @@ void OutOfFlowLayoutPart::LayoutFragmentainerDescendants(
       // This will ensure that the descendants are laid out in the correct
       // order.
       DCHECK(!descendants_span.empty());
-      for (auto& descendant : descendants_span) {
+      for (size_t i = 0; i < descendants_span.size(); ++i) {
+        auto& descendant = descendants_span[i];
         if (GetFragmentainerType() == kFragmentColumn) {
           auto* containing_block = To<LayoutBox>(
               descendant.containing_block.Fragment()->GetLayoutObject());
@@ -1523,8 +1562,7 @@ void OutOfFlowLayoutPart::LayoutFragmentainerDescendants(
                 (last_css_containing_block->MayHaveAnchorQuery() ||
                  may_have_anchors_on_oof)) {
               has_new_descendants_span = true;
-              descendants_span = descendants_span.subspan(
-                  &descendant - descendants_span.data());
+              descendants_span = descendants_span.subspan(i);
               break;
             }
             last_css_containing_block = css_containing_block;
@@ -1660,7 +1698,7 @@ void OutOfFlowLayoutPart::LayoutFragmentainerDescendants(
       // them out, if OOFs have anchors, update the anchor queries.
       if (may_have_anchors_on_oof) {
         stitched_anchor_queries.SetChildren(
-            builder_for_anchor_query->Children());
+            layout_part_for_anchor_query->FragmentationContextChildren());
       }
     }
 
@@ -1692,7 +1730,7 @@ void OutOfFlowLayoutPart::LayoutFragmentainerDescendants(
 AnchorEvaluatorImpl OutOfFlowLayoutPart::CreateAnchorEvaluator(
     const ContainingBlockInfo& container_info,
     const BlockNode& candidate,
-    const LogicalAnchorQueryMap* anchor_queries) const {
+    const StitchedAnchorQueries* anchor_queries) const {
   const LayoutObject* implicit_anchor = nullptr;
   const LayoutBox& candidate_layout_box = *candidate.GetLayoutBox();
   if (const Element* element =
@@ -1703,13 +1741,13 @@ AnchorEvaluatorImpl OutOfFlowLayoutPart::CreateAnchorEvaluator(
     }
   }
 
-  LogicalSize container_content_size = container_info.rect.size;
   PhysicalSize container_physical_content_size = ToPhysicalSize(
-      container_content_size, GetConstraintSpace().GetWritingMode());
-  WritingDirectionMode self_writing_direction =
-      candidate.Style().GetWritingDirection();
+      container_info.rect.size, GetConstraintSpace().GetWritingMode());
   const WritingModeConverter container_converter(
-      container_info.writing_direction, container_physical_content_size);
+      container_info.writing_direction,
+      container_builder_->SizeForAnchorQueries());
+  PhysicalOffset offset_to_padding_box =
+      container_converter.ToPhysical(container_info.rect).offset;
   if (anchor_queries) {
     // When the containing block is block-fragmented, the |container_builder_|
     // is the fragmentainer, not the containing block, and the coordinate system
@@ -1718,17 +1756,15 @@ AnchorEvaluatorImpl OutOfFlowLayoutPart::CreateAnchorEvaluator(
     CHECK(css_containing_block);
     return AnchorEvaluatorImpl(
         candidate_layout_box, *anchor_queries, implicit_anchor,
-        *css_containing_block, container_converter, self_writing_direction,
-        container_converter.ToPhysical(container_info.rect).offset,
-        container_physical_content_size);
+        *css_containing_block, container_info.writing_direction,
+        offset_to_padding_box, container_physical_content_size);
   }
-  if (const LogicalAnchorQuery* anchor_query =
+  if (const PhysicalAnchorQuery* anchor_query =
           container_builder_->AnchorQuery()) {
     // Otherwise the |container_builder_| is the containing block.
     return AnchorEvaluatorImpl(
         candidate_layout_box, *anchor_query, implicit_anchor,
-        container_converter, self_writing_direction,
-        container_converter.ToPhysical(container_info.rect).offset,
+        container_info.writing_direction, offset_to_padding_box,
         container_physical_content_size);
   }
   return AnchorEvaluatorImpl();
@@ -1894,16 +1930,12 @@ const LayoutResult* OutOfFlowLayoutPart::LayoutOOFNode(
 namespace {
 
 // The spec says:
-//
-// "
-// Implementations may choose to impose an implementation-defined limit on the
+// "Implementations may choose to impose an implementation-defined limit on the
 // length of position fallbacks lists, to limit the amount of excess layout work
-// that may be required. This limit must be at least five.
-// "
-//
-// We use 6 here because the first attempt is without anything from the
-// position fallbacks list applied.
-constexpr unsigned kMaxTryAttempts = 6;
+// that may be required. This limit must be at least five."
+// The "+1" is because the first attempt is without anything from the position
+// fallbacks list applied.
+constexpr unsigned kMaxTryAttempts = 5 + 1;
 
 // When considering multiple candidate styles (i.e. position-try-fallbacks),
 // we keep track of each successful placement as a NonOverflowingCandidate.
@@ -1986,7 +2018,7 @@ void SortNonOverflowingCandidates(
 
 OutOfFlowLayoutPart::OffsetInfo OutOfFlowLayoutPart::CalculateOffset(
     const NodeInfo& node_info,
-    const LogicalAnchorQueryMap* anchor_queries) {
+    const StitchedAnchorQueries* anchor_queries) {
   // See non_overflowing_scroll_range.h for documentation.
   HeapVector<NonOverflowingScrollRange> non_overflowing_scroll_ranges;
 
@@ -2108,15 +2140,32 @@ OutOfFlowLayoutPart::TryCalculateOffset(
   DCHECK(base::ValuesEquivalent(node_info.node.Style().PositionAnchor(),
                                 candidate_style.PositionAnchor()));
 
-  const ContainingBlockInfo container_info = ([&]() -> ContainingBlockInfo {
-    ContainingBlockInfo container_info = node_info.base_container_info;
-    if (const std::optional<PositionAreaOffsets> offsets =
-            candidate_style.PositionAreaOffsets()) {
-      container_info =
-          ApplyPositionAreaOffsets(offsets.value(), container_info);
+  ContainingBlockInfo container_info = node_info.base_container_info;
+  if (const std::optional<PositionAreaOffsets> offsets =
+          candidate_style.PositionAreaOffsets()) {
+    PhysicalOffset default_anchor_scroll_shift;
+    if (RuntimeEnabledFeatures::CSSAnchorPositionAreaVisualPositionEnabled()) {
+      Element* elm = To<Element>(node_info.node.GetDOMNode());
+
+      if (const OutOfFlowData* oof_data = elm->GetOutOfFlowData()) {
+        default_anchor_scroll_shift =
+            oof_data->DefaultAnchorScrollShift().value_or(PhysicalOffset());
+      }
+
+      if (offsets->top.has_value() != offsets->bottom.has_value() ||
+          offsets->left.has_value() != offsets->right.has_value()) {
+        // When one inset for an axis is tethered to the default anchor, and the
+        // other one is tethered to the original containing block, the IMCB is
+        // affected by the default anchor scroll shift. Schedule for calculation
+        // of the default scroll shift.
+        elm->EnsureOutOfFlowData();
+        StyleEngine& style_engine = elm->GetDocument().GetStyleEngine();
+        style_engine.MarkForDefaultAnchorScrollShift(*elm);
+      }
     }
-    return container_info;
-  })();
+    container_info = ApplyPositionAreaOffsets(
+        *offsets, default_anchor_scroll_shift, container_info);
+  }
 
   const WritingDirectionMode candidate_writing_direction =
       candidate_style.GetWritingDirection();
@@ -2426,10 +2475,6 @@ const LayoutResult* OutOfFlowLayoutPart::Layout(
 
   UpdatePositionVisibilityAfterLayout(offset_info, node,
                                       container_builder_->AnchorQuery());
-
-  if (AXObjectCache* cache = node.GetDocument().ExistingAXObjectCache()) {
-    cache->CSSAnchorChanged(node.GetLayoutBox());
-  }
 
   return layout_result;
 }

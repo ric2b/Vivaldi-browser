@@ -36,7 +36,7 @@ import * as TextUtils from '../../../../models/text_utils/text_utils.js';
 import * as VisualLogging from '../../../visual_logging/visual_logging.js';
 import * as UI from '../../legacy.js';
 
-import fontViewStyles from './fontView.css.legacy.js';
+import fontViewStyles from './fontView.css.js';
 
 const UIStrings = {
   /**
@@ -107,7 +107,7 @@ export class FontView extends UI.View.SimpleView {
     if (!this.fontPreviewElement) {
       return;
     }
-    UI.ARIAUtils.markAsHidden(this.fontPreviewElement);
+    UI.ARIAUtils.setHidden(this.fontPreviewElement, true);
     this.fontPreviewElement.style.overflow = 'hidden';
     this.fontPreviewElement.style.setProperty('font-family', uniqueFontName);
     this.fontPreviewElement.style.setProperty('visibility', 'hidden');

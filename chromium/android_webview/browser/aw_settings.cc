@@ -321,7 +321,7 @@ void AwSettings::UpdateInitialPageScaleLocked(
     rvhe->SetInitialPageScale(-1);
   } else {
     float dip_scale =
-        static_cast<float>(Java_AwSettings_getDIPScaleLocked(env, obj));
+        static_cast<float>(Java_AwSettings_getDipScaleLocked(env, obj));
     rvhe->SetInitialPageScale(initial_page_scale_percent / dip_scale / 100.0f);
     initial_page_scale_is_non_default_ = true;
   }
@@ -359,6 +359,11 @@ void AwSettings::UpdateRendererPreferencesLocked(
     update_prefs = true;
   }
 
+  if (!prefs->uses_platform_autofill) {
+    prefs->uses_platform_autofill = true;
+    update_prefs = true;
+  }
+
   if (update_prefs)
     web_contents()->SyncRendererPrefs();
 
@@ -371,8 +376,12 @@ void AwSettings::UpdateRendererPreferencesLocked(
         aw_browser_context->GetDefaultStoragePartition();
     std::string expanded_language_list =
         net::HttpUtil::ExpandLanguageList(prefs->accept_languages);
+    std::string accept_language_header =
+        net::HttpUtil::GenerateAcceptLanguageHeader(expanded_language_list);
     storage_partition->GetNetworkContext()->SetAcceptLanguage(
-        net::HttpUtil::GenerateAcceptLanguageHeader(expanded_language_list));
+        accept_language_header);
+    aw_browser_context->UpdatePrefetchServiceDelegateAcceptLanguageHeader(
+        accept_language_header);
   }
 }
 
@@ -636,10 +645,10 @@ void AwSettings::PopulateWebPreferencesLocked(JNIEnv* env,
       Java_AwSettings_getJavaScriptEnabledLocked(env, obj);
 
   web_prefs->allow_universal_access_from_file_urls =
-      Java_AwSettings_getAllowUniversalAccessFromFileURLsLocked(env, obj);
+      Java_AwSettings_getAllowUniversalAccessFromFileUrlsLocked(env, obj);
 
   allow_file_access_from_file_urls_ =
-      Java_AwSettings_getAllowFileAccessFromFileURLsLocked(env, obj);
+      Java_AwSettings_getAllowFileAccessFromFileUrlsLocked(env, obj);
   web_prefs->allow_file_access_from_file_urls =
       allow_file_access_from_file_urls_;
 
@@ -684,7 +693,7 @@ void AwSettings::PopulateWebPreferencesLocked(JNIEnv* env,
           : blink::mojom::AutoplayPolicy::kNoUserGestureRequired;
 
   ScopedJavaLocalRef<jstring> url =
-      Java_AwSettings_getDefaultVideoPosterURLLocked(env, obj);
+      Java_AwSettings_getDefaultVideoPosterUrlLocked(env, obj);
   web_prefs->default_video_poster_url =
       url.obj() ? GURL(ConvertJavaStringToUTF8(url)) : GURL();
 
@@ -740,7 +749,7 @@ void AwSettings::PopulateWebPreferencesLocked(JNIEnv* env,
       Java_AwSettings_getDoNotUpdateSelectionOnMutatingSelectionRange(env, obj);
 
   web_prefs->css_hex_alpha_color_enabled =
-      Java_AwSettings_getCSSHexAlphaColorEnabledLocked(env, obj);
+      Java_AwSettings_getCssHexAlphaColorEnabledLocked(env, obj);
 
   // Keep spellcheck disabled on html elements unless the spellcheck="true"
   // attribute is explicitly specified. This "opt-in" behavior is for backward

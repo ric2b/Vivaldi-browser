@@ -20,7 +20,7 @@ use crate::*;
 use libyuv_sys::bindings::*;
 
 impl Image {
-    pub fn scale(&mut self, width: u32, height: u32, category: Category) -> AvifResult<()> {
+    pub(crate) fn scale(&mut self, width: u32, height: u32, category: Category) -> AvifResult<()> {
         if self.width == width && self.height == height {
             return Ok(());
         }
@@ -43,7 +43,7 @@ impl Image {
                 .map(
                     |plane| {
                         if plane.is_some() {
-                            Some(plane.unwrap_ref().clone())
+                            plane.unwrap_ref().try_clone().ok()
                         } else {
                             None
                         }
@@ -83,8 +83,8 @@ impl Image {
             #[allow(clippy::let_unit_value)]
             let _ret = unsafe {
                 if src.depth > 8 {
-                    let source_ptr = src.planes[plane.to_usize()].unwrap_ref().ptr16();
-                    let dst_ptr = self.planes[plane.to_usize()].unwrap_mut().ptr16_mut();
+                    let source_ptr = src.planes[plane.as_usize()].unwrap_ref().ptr16();
+                    let dst_ptr = self.planes[plane.as_usize()].unwrap_mut().ptr16_mut();
                     ScalePlane_12(
                         source_ptr,
                         i32_from_u32(src_pd.row_bytes / 2)?,
@@ -97,8 +97,8 @@ impl Image {
                         FilterMode_kFilterBox,
                     )
                 } else {
-                    let source_ptr = src.planes[plane.to_usize()].unwrap_ref().ptr();
-                    let dst_ptr = self.planes[plane.to_usize()].unwrap_mut().ptr_mut();
+                    let source_ptr = src.planes[plane.as_usize()].unwrap_ref().ptr();
+                    let dst_ptr = self.planes[plane.as_usize()].unwrap_mut().ptr_mut();
                     ScalePlane(
                         source_ptr,
                         i32_from_u32(src_pd.row_bytes)?,
@@ -144,15 +144,15 @@ mod tests {
             30, 40,
         ];
         for plane in planes {
-            yuv.planes[plane.to_usize()] = Some(if is_pointer_input {
+            yuv.planes[plane.as_usize()] = Some(if is_pointer_input {
                 Pixels::Pointer(unsafe {
                     PointerSlice::create(values.as_mut_ptr(), values.len()).unwrap()
                 })
             } else {
                 Pixels::Buffer(values.to_vec())
             });
-            yuv.row_bytes[plane.to_usize()] = 2;
-            yuv.image_owns_planes[plane.to_usize()] = !is_pointer_input;
+            yuv.row_bytes[plane.as_usize()] = 2;
+            yuv.image_owns_planes[plane.as_usize()] = !is_pointer_input;
         }
         let categories: &[Category] =
             if use_alpha { &[Category::Color, Category::Alpha] } else { &[Category::Color] };
@@ -182,7 +182,7 @@ mod tests {
                     30, 33, 38, 40,
                 ],
             };
-            match &yuv.planes[plane.to_usize()] {
+            match &yuv.planes[plane.as_usize()] {
                 Some(Pixels::Buffer(samples)) => {
                     assert_eq!(*samples, expected_samples)
                 }

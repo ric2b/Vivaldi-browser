@@ -50,7 +50,7 @@ be made in the upstream coreboot repository and subsequently downstreamed to the
 Chromium repo. See [downstreaming coreboot] for more information on the
 downstreaming process.
 
-[ChromeOS devices]: https://www.chromium.org/chromium-os/developer-information-for-chrome-os-devices/
+[ChromeOS devices]: /chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/
 [coreboot.org]: https://coreboot.org
 [coreboot documentation]: https://doc.coreboot.org/
 [coreboot upstream]: ./coreboot-upstream

@@ -48,12 +48,14 @@ ImageFrame::AlphaBlendSource ConvertAlphaBlendSource(
 
 }  // anonymous namespace
 
-SkiaImageDecoderBase::SkiaImageDecoderBase(AlphaOption alpha_option,
-                                           ColorBehavior color_behavior,
-                                           wtf_size_t max_decoded_bytes,
-                                           wtf_size_t reading_offset)
+SkiaImageDecoderBase::SkiaImageDecoderBase(
+    AlphaOption alpha_option,
+    ColorBehavior color_behavior,
+    wtf_size_t max_decoded_bytes,
+    wtf_size_t reading_offset,
+    HighBitDepthDecodingOption high_bit_depth_decoding_option)
     : ImageDecoder(alpha_option,
-                   ImageDecoder::kDefaultBitDepth,
+                   high_bit_depth_decoding_option,
                    color_behavior,
                    cc::AuxImage::kDefault,
                    max_decoded_bytes),
@@ -94,9 +96,12 @@ void SkiaImageDecoderBase::OnSetData(scoped_refptr<SegmentReader> data) {
                      static_cast<unsigned>(image_info.height()))) {
           return;
         }
-        if (const skcms_ICCProfile* profile = codec_->getICCProfile()) {
-          SetEmbeddedColorProfile(std::make_unique<ColorProfile>(*profile));
+        if (!IgnoresColorSpace()) {
+          if (const skcms_ICCProfile* profile = codec_->getICCProfile()) {
+            SetEmbeddedColorProfile(std::make_unique<ColorProfile>(*profile));
+          }
         }
+        orientation_ = static_cast<ImageOrientationEnum>(codec_->getOrigin());
         return;
       }
 
@@ -204,6 +209,14 @@ wtf_size_t SkiaImageDecoderBase::ClearCacheExceptFrame(wtf_size_t index) {
   return ClearCacheExceptTwoFrames(index, index2);
 }
 
+bool SkiaImageDecoderBase::ImageIsHighBitDepth() {
+  if (codec_) {
+    return codec_->hasHighBitDepthEncodedData();
+  }
+
+  return false;
+}
+
 wtf_size_t SkiaImageDecoderBase::DecodeFrameCount() {
   if (!codec_ || segment_stream_->IsCleared()) {
     return frame_buffer_cache_.size();
@@ -232,6 +245,13 @@ void SkiaImageDecoderBase::InitializeNewFrame(wtf_size_t index) {
   frame.SetRequiredPreviousFrameIndex(required_previous_frame_index);
   frame.SetDisposalMethod(ConvertDisposalMethod(frame_info.fDisposalMethod));
   frame.SetAlphaBlendSource(ConvertAlphaBlendSource(frame_info.fBlend));
+
+  if (high_bit_depth_decoding_option_ == kHighBitDepthToHalfFloat &&
+      ImageIsHighBitDepth()) {
+    frame.SetPixelFormat(ImageFrame::PixelFormat::kRGBA_F16);
+  } else {
+    frame.SetPixelFormat(ImageFrame::PixelFormat::kN32);
+  }
 }
 
 void SkiaImageDecoderBase::Decode(wtf_size_t index) {
@@ -248,7 +268,8 @@ void SkiaImageDecoderBase::Decode(wtf_size_t index) {
     wtf_size_t previous_frame_index = current_frame.previous_frame_index;
     frames_to_decode.pop();
 
-    if (!codec_ || segment_stream_->IsCleared() || IsFailedFrameIndex(current_frame_index)) {
+    if (!codec_ || segment_stream_->IsCleared() ||
+        IsFailedFrameIndex(current_frame_index)) {
       continue;
     }
 
@@ -276,16 +297,18 @@ void SkiaImageDecoderBase::Decode(wtf_size_t index) {
         // has been visited already, then if a viable reference frame exists.
         // If neither, decode required_previous_frame_index.
         if (previous_frame_index == kNotFound) {
-          previous_frame_index = GetViableReferenceFrameIndex(current_frame_index);
+          previous_frame_index =
+              GetViableReferenceFrameIndex(current_frame_index);
           if (previous_frame_index == kNotFound) {
-            frames_to_decode.push({current_frame_index, required_previous_frame_index});
+            frames_to_decode.push(
+                {current_frame_index, required_previous_frame_index});
             frames_to_decode.push({required_previous_frame_index, kNotFound});
             continue;
           }
         }
 
         if (IsFailedFrameIndex(previous_frame_index)) {
-            continue;
+          continue;
         }
 
         // We try to reuse |previous_frame| as starting state to avoid copying.
@@ -294,7 +317,7 @@ void SkiaImageDecoderBase::Decode(wtf_size_t index) {
         // In that case copy the data instead.
         ImageFrame& previous_frame = frame_buffer_cache_[previous_frame_index];
         if ((!CanReusePreviousFrameBuffer(current_frame_index) ||
-            !frame.TakeBitmapDataIfWritable(&previous_frame)) &&
+             !frame.TakeBitmapDataIfWritable(&previous_frame)) &&
             !frame.CopyBitmapData(previous_frame)) {
           SetFailedFrameIndex(current_frame_index);
           continue;
@@ -305,7 +328,8 @@ void SkiaImageDecoderBase::Decode(wtf_size_t index) {
 
     if (frame.GetStatus() == ImageFrame::kFrameInitialized) {
       SkCodec::FrameInfo frame_info;
-      bool frame_info_received = codec_->getFrameInfo(current_frame_index, &frame_info);
+      bool frame_info_received =
+          codec_->getFrameInfo(current_frame_index, &frame_info);
       DCHECK(frame_info_received);
 
       SkAlphaType alpha_type = kOpaque_SkAlphaType;
@@ -317,10 +341,21 @@ void SkiaImageDecoderBase::Decode(wtf_size_t index) {
         }
       }
 
+      SkColorType color_type = kUnknown_SkColorType;
+      switch (frame.GetPixelFormat()) {
+        case ImageFrame::PixelFormat::kRGBA_F16:
+          color_type = kRGBA_F16_SkColorType;
+          break;
+        case ImageFrame::PixelFormat::kN32:
+          color_type = kN32_SkColorType;
+          break;
+      }
+      DCHECK_NE(color_type, kUnknown_SkColorType);
+
       SkImageInfo image_info = codec_->getInfo()
-                                  .makeColorType(kN32_SkColorType)
-                                  .makeColorSpace(ColorSpaceForSkImages())
-                                  .makeAlphaType(alpha_type);
+                                   .makeColorType(color_type)
+                                   .makeColorSpace(ColorSpaceForSkImages())
+                                   .makeAlphaType(alpha_type);
 
       SkCodec::Options options;
       options.fFrameIndex = current_frame_index;
@@ -329,7 +364,7 @@ void SkiaImageDecoderBase::Decode(wtf_size_t index) {
 
       SkCodec::Result start_incremental_decode_result =
           codec_->startIncrementalDecode(image_info, frame.Bitmap().getPixels(),
-                                        frame.Bitmap().rowBytes(), &options);
+                                         frame.Bitmap().rowBytes(), &options);
       switch (start_incremental_decode_result) {
         case SkCodec::kSuccess:
           break;
@@ -346,7 +381,8 @@ void SkiaImageDecoderBase::Decode(wtf_size_t index) {
     switch (incremental_decode_result) {
       case SkCodec::kSuccess: {
         SkCodec::FrameInfo frame_info;
-        bool frame_info_received = codec_->getFrameInfo(current_frame_index, &frame_info);
+        bool frame_info_received =
+            codec_->getFrameInfo(current_frame_index, &frame_info);
         DCHECK(frame_info_received);
         frame.SetHasAlpha(frame_info.fAlphaType !=
                           SkAlphaType::kOpaque_SkAlphaType);

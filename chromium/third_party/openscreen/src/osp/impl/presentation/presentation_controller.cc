@@ -11,7 +11,6 @@
 #include "osp/impl/presentation/presentation_utils.h"
 #include "osp/impl/presentation/url_availability_requester.h"
 #include "osp/msgs/osp_messages.h"
-#include "osp/public/connect_request.h"
 #include "osp/public/message_demuxer.h"
 #include "osp/public/network_service_manager.h"
 #include "osp/public/request_response_handler.h"
@@ -55,13 +54,14 @@ struct TerminationRequest {
 };
 
 class Controller::MessageGroupStreams final
-    : public ConnectRequestCallback,
-      public ProtocolConnection::Observer,
+    : public ProtocolConnection::Observer,
       public RequestResponseHandler<StartRequest>::Delegate,
       public RequestResponseHandler<ConnectionOpenRequest>::Delegate,
       public RequestResponseHandler<TerminationRequest>::Delegate {
  public:
-  MessageGroupStreams(Controller* controller, const std::string& instance_name);
+  MessageGroupStreams(Controller* controller,
+                      std::string_view instance_name,
+                      uint64_t instance_id);
   MessageGroupStreams(const MessageGroupStreams&) = delete;
   MessageGroupStreams& operator=(const MessageGroupStreams&) = delete;
   MessageGroupStreams(MessageGroupStreams&&) noexcept = delete;
@@ -88,48 +88,57 @@ class Controller::MessageGroupStreams final
                          uint64_t instance_id) override;
   void OnError(TerminationRequest* request, const Error& error) override;
 
-  // ConnectRequestCallback overrides.
-  void OnConnectSucceed(uint64_t request_id, uint64_t instance_id) override;
-  void OnConnectFailed(uint64_t request_id) override;
-
   // ProtocolConnection::Observer overrides.
   void OnConnectionClosed(const ProtocolConnection& connection) override;
 
  private:
   uint64_t GetNextInternalRequestId() { return ++next_internal_request_id_; }
 
+  void CreateProtocolConnection(bool is_initiation);
+
   Controller* const controller_;
   const std::string instance_name_;
-
+  const uint64_t instance_id_;
   uint64_t next_internal_request_id_ = 1;
-  openscreen::osp::ConnectRequest initiation_connect_request_;
-  std::unique_ptr<ProtocolConnection> initiation_protocol_connection_;
-  openscreen::osp::ConnectRequest connection_connect_request_;
-  std::unique_ptr<ProtocolConnection> connection_protocol_connection_;
 
+  std::unique_ptr<ProtocolConnection> initiation_protocol_connection_;
   RequestResponseHandler<StartRequest> initiation_handler_;
-  RequestResponseHandler<ConnectionOpenRequest> connection_open_handler_;
   RequestResponseHandler<TerminationRequest> termination_handler_;
+
+  std::unique_ptr<ProtocolConnection> connection_protocol_connection_;
+  RequestResponseHandler<ConnectionOpenRequest> connection_open_handler_;
 };
 
 Controller::MessageGroupStreams::MessageGroupStreams(
     Controller* controller,
-    const std::string& instance_name)
+    std::string_view instance_name,
+    uint64_t instance_id)
     : controller_(controller),
       instance_name_(instance_name),
+      instance_id_(instance_id),
       initiation_handler_(*this),
-      connection_open_handler_(*this),
-      termination_handler_(*this) {}
+      termination_handler_(*this),
+      connection_open_handler_(*this) {}
 
-Controller::MessageGroupStreams::~MessageGroupStreams() = default;
+Controller::MessageGroupStreams::~MessageGroupStreams() {
+  // Both are used to avoid triggering `OnConnectionClosed` during the
+  // destruction process, which may cause error that delete one instance twice.
+  if (initiation_protocol_connection_) {
+    initiation_protocol_connection_->SetObserver(nullptr);
+  }
+
+  if (connection_protocol_connection_) {
+    connection_protocol_connection_->SetObserver(nullptr);
+  }
+}
 
 uint64_t Controller::MessageGroupStreams::SendStartRequest(
     StartRequest request) {
-  uint64_t request_id = GetNextInternalRequestId();
-  if (!initiation_protocol_connection_ && !initiation_connect_request_) {
-    NetworkServiceManager::Get()->GetProtocolConnectionClient()->Connect(
-        instance_name_, initiation_connect_request_, this);
+  if (!initiation_protocol_connection_) {
+    CreateProtocolConnection(/*is_initiation=*/true);
   }
+
+  uint64_t request_id = GetNextInternalRequestId();
   initiation_handler_.WriteMessage(request_id, std::move(request));
   return request_id;
 }
@@ -175,11 +184,11 @@ void Controller::MessageGroupStreams::OnError(StartRequest* request,
 
 uint64_t Controller::MessageGroupStreams::SendConnectionOpenRequest(
     ConnectionOpenRequest request) {
-  uint64_t request_id = GetNextInternalRequestId();
-  if (!connection_protocol_connection_ && !connection_connect_request_) {
-    NetworkServiceManager::Get()->GetProtocolConnectionClient()->Connect(
-        instance_name_, connection_connect_request_, this);
+  if (!connection_protocol_connection_) {
+    CreateProtocolConnection(/*is_initiation=*/false);
   }
+
+  uint64_t request_id = GetNextInternalRequestId();
   connection_open_handler_.WriteMessage(request_id, std::move(request));
   return request_id;
 }
@@ -227,10 +236,10 @@ void Controller::MessageGroupStreams::OnError(ConnectionOpenRequest* request,
 
 void Controller::MessageGroupStreams::SendTerminationRequest(
     TerminationRequest request) {
-  if (!initiation_protocol_connection_ && !initiation_connect_request_) {
-    NetworkServiceManager::Get()->GetProtocolConnectionClient()->Connect(
-        instance_name_, initiation_connect_request_, this);
+  if (!initiation_protocol_connection_) {
+    CreateProtocolConnection(/*is_initiation=*/true);
   }
+
   termination_handler_.WriteMessage(std::move(request));
 }
 
@@ -247,45 +256,45 @@ void Controller::MessageGroupStreams::OnMatchedResponse(
 void Controller::MessageGroupStreams::OnError(TerminationRequest* request,
                                               const Error& error) {}
 
-void Controller::MessageGroupStreams::OnConnectSucceed(uint64_t request_id,
-                                                       uint64_t instance_id) {
-  if (initiation_connect_request_ &&
-      initiation_connect_request_.request_id() == request_id) {
-    initiation_protocol_connection_ =
-        CreateClientProtocolConnection(instance_id);
-    initiation_protocol_connection_->SetObserver(this);
-    initiation_connect_request_.MarkComplete();
-    initiation_handler_.SetConnection(initiation_protocol_connection_.get());
-    termination_handler_.SetConnection(initiation_protocol_connection_.get());
-  } else if (connection_connect_request_ &&
-             connection_connect_request_.request_id() == request_id) {
-    connection_protocol_connection_ =
-        CreateClientProtocolConnection(instance_id);
-    connection_protocol_connection_->SetObserver(this);
-    connection_connect_request_.MarkComplete();
-    connection_open_handler_.SetConnection(
-        connection_protocol_connection_.get());
-  }
-}
-
-void Controller::MessageGroupStreams::OnConnectFailed(uint64_t request_id) {
-  if (initiation_connect_request_ &&
-      initiation_connect_request_.request_id() == request_id) {
-    initiation_connect_request_.MarkComplete();
-    initiation_handler_.Reset();
-    termination_handler_.Reset();
-  } else if (connection_connect_request_ &&
-             connection_connect_request_.request_id() == request_id) {
-    connection_connect_request_.MarkComplete();
-    connection_open_handler_.Reset();
-  }
-}
-
 void Controller::MessageGroupStreams::OnConnectionClosed(
     const ProtocolConnection& connection) {
-  if (&connection == initiation_protocol_connection_.get()) {
+  if (initiation_protocol_connection_ &&
+      initiation_protocol_connection_.get() == &connection) {
     initiation_handler_.Reset();
     termination_handler_.Reset();
+    initiation_protocol_connection_.reset();
+    return;
+  }
+
+  if (connection_protocol_connection_ &&
+      connection_protocol_connection_.get() == &connection) {
+    connection_open_handler_.Reset();
+    connection_protocol_connection_.reset();
+  }
+}
+
+void Controller::MessageGroupStreams::CreateProtocolConnection(
+    bool is_initiation) {
+  if (is_initiation) {
+    initiation_protocol_connection_ =
+        CreateClientProtocolConnection(instance_id_);
+    if (initiation_protocol_connection_) {
+      initiation_protocol_connection_->SetObserver(this);
+      initiation_handler_.SetConnection(initiation_protocol_connection_.get());
+      termination_handler_.SetConnection(initiation_protocol_connection_.get());
+    } else {
+      OSP_LOG_WARN << "There is no valid underlying connection.";
+    }
+  } else {
+    connection_protocol_connection_ =
+        CreateClientProtocolConnection(instance_id_);
+    if (connection_protocol_connection_) {
+      connection_protocol_connection_->SetObserver(this);
+      connection_open_handler_.SetConnection(
+          connection_protocol_connection_.get());
+    } else {
+      OSP_LOG_WARN << "There is no valid underlying connection.";
+    }
   }
 }
 
@@ -482,7 +491,6 @@ Controller::Controller(ClockNowFunctionPtr now_function) {
 }
 
 Controller::~Controller() {
-  connection_manager_.reset();
   NetworkServiceManager::Get()->GetServiceListener()->RemoveObserver(*this);
 }
 
@@ -550,6 +558,21 @@ void Controller::OnConnectionDestroyed(Connection* connection) {
       connections.end());
 
   connection_manager_->RemoveConnection(connection);
+}
+
+void Controller::BuildConnection(std::string_view instance_name) {
+  std::string name(instance_name);
+  auto requset_entry = connect_requests_by_instance_name_.find(name);
+  if (requset_entry != connect_requests_by_instance_name_.end()) {
+    OSP_LOG_WARN << "There is alreay a request in progress for connecting to "
+                 << instance_name;
+    return;
+  }
+
+  auto result = connect_requests_by_instance_name_.insert(
+      {std::move(name), openscreen::osp::ConnectRequest()});
+  NetworkServiceManager::Get()->GetProtocolConnectionClient()->Connect(
+      instance_name, result.first->second, this);
 }
 
 Controller::ReceiverWatch Controller::RegisterReceiverWatch(
@@ -661,13 +684,7 @@ void Controller::OnStopped() {}
 void Controller::OnSuspended() {}
 void Controller::OnSearching() {}
 
-void Controller::OnReceiverAdded(const ServiceInfo& info) {
-  auto group_streams =
-      std::make_unique<MessageGroupStreams>(this, info.instance_name);
-  group_streams_by_instance_name_[info.instance_name] =
-      std::move(group_streams);
-  availability_requester_->AddReceiver(info);
-}
+void Controller::OnReceiverAdded(const ServiceInfo& info) {}
 
 void Controller::OnReceiverChanged(const ServiceInfo& info) {
   availability_requester_->ChangeReceiver(info);
@@ -684,7 +701,41 @@ void Controller::OnAllReceiversRemoved() {
 }
 
 void Controller::OnError(const Error&) {}
-void Controller::OnMetrics(ServiceListener::Metrics) {}
+
+void Controller::OnConnectSucceed(uint64_t request_id,
+                                  std::string_view instance_name,
+                                  uint64_t instance_id) {
+  auto request_entry =
+      connect_requests_by_instance_name_.find(std::string(instance_name));
+  if (request_entry == connect_requests_by_instance_name_.end()) {
+    return;
+  }
+
+  OSP_CHECK_EQ(request_id, request_entry->second.request_id());
+  request_entry->second.MarkComplete();
+  connect_requests_by_instance_name_.erase(request_entry);
+
+  group_streams_by_instance_name_.emplace(
+      instance_name,
+      std::make_unique<MessageGroupStreams>(this, instance_name, instance_id));
+  availability_requester_->CreateReceiverRequester(instance_name, instance_id);
+  OSP_LOG_INFO << "Controller succeed to build the underlying connection to: "
+               << instance_name;
+}
+
+void Controller::OnConnectFailed(uint64_t request_id,
+                                 std::string_view instance_name) {
+  auto request_entry =
+      connect_requests_by_instance_name_.find(std::string(instance_name));
+  if (request_entry == connect_requests_by_instance_name_.end()) {
+    return;
+  }
+
+  request_entry->second.MarkComplete();
+  connect_requests_by_instance_name_.erase(request_entry);
+  OSP_LOG_WARN << "Controller failed to build the underlying connection to: "
+               << instance_name;
+}
 
 // static
 std::string Controller::MakePresentationId(const std::string& url,

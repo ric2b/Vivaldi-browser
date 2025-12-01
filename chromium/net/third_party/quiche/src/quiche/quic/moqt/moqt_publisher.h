@@ -15,6 +15,7 @@
 #include "quiche/quic/moqt/moqt_messages.h"
 #include "quiche/quic/moqt/moqt_priority.h"
 #include "quiche/common/platform/api/quiche_mem_slice.h"
+#include "quiche/common/quiche_callbacks.h"
 
 namespace moqt {
 
@@ -25,6 +26,7 @@ struct PublishedObject {
   MoqtObjectStatus status;
   MoqtPriority publisher_priority;
   quiche::QuicheMemSlice payload;
+  bool fin_after_this = false;
 };
 
 // MoqtObjectListener is an interface for any entity that is listening for
@@ -37,6 +39,12 @@ class MoqtObjectListener {
   // available.  The object payload itself may be retrieved via GetCachedObject
   // method of the associated track publisher.
   virtual void OnNewObjectAvailable(FullSequence sequence) = 0;
+  // Notifies that a pure FIN has arrived following |sequence|.
+  virtual void OnNewFinAvailable(FullSequence sequence) = 0;
+
+  // No further object will be published for the given group, usually due to a
+  // timeout. The owner of the Listener may want to reset the relevant streams.
+  virtual void OnGroupAbandoned(uint64_t group_id) = 0;
 
   // Notifies that the Publisher is being destroyed, so no more objects are
   // coming.
@@ -47,6 +55,8 @@ class MoqtObjectListener {
 // cancelled by deleting the object.
 class MoqtFetchTask {
  public:
+  using ObjectsAvailableCallback = quiche::MultiUseCallback<void()>;
+
   virtual ~MoqtFetchTask() = default;
 
   // Potential results of a GetNextObject() call.
@@ -65,11 +75,20 @@ class MoqtFetchTask {
   // Returns the next object received via the fetch, if available.
   virtual GetNextObjectResult GetNextObject(PublishedObject& output) = 0;
 
+  // Sets the callback that is called when GetNextObject() has previously
+  // returned kPending, but now a new object (or potentially an error or an
+  // end-of-fetch) is available. The application is responsible for calling
+  // GetNextObject() until it gets kPending; no further callback will occur
+  // until then.
+  virtual void SetObjectAvailableCallback(
+      ObjectsAvailableCallback callback) = 0;
+
   // Returns the error if fetch has completely failed, and OK otherwise.
   virtual absl::Status GetStatus() = 0;
 
-  // TODO: expose the largest sequence and the end of track bit returned in
-  // the FETCH_OK.
+  // Returns the highest sequence number that will be delivered by the fetch.
+  // It is the minimum of the end of the fetch range and the live edge.
+  virtual FullSequence GetLargestId() const = 0;
 };
 
 // MoqtTrackPublisher is an application-side API for an MoQT publisher

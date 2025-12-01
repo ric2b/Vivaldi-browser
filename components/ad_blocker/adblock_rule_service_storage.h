@@ -8,6 +8,7 @@
 
 #include "base/files/file_path.h"
 #include "base/files/important_file_writer.h"
+#include "base/uuid.h"
 #include "components/ad_blocker/adblock_known_sources_handler.h"
 #include "components/ad_blocker/adblock_rule_manager.h"
 #include "components/ad_blocker/adblock_rule_service.h"
@@ -31,7 +32,7 @@ class RuleServiceStorage : public base::ImportantFileWriter::DataSerializer {
     std::array<bool, kRuleGroupCount> groups_enabled = {true, true};
     std::array<ActiveRuleSources, kRuleGroupCount> rule_sources;
     std::array<std::vector<KnownRuleSource>, kRuleGroupCount> known_sources;
-    std::array<std::set<std::string>, kRuleGroupCount> deleted_presets;
+    std::array<std::set<base::Uuid>, kRuleGroupCount> deleted_presets;
     std::array<RuleManager::ExceptionsList, kRuleGroupCount>
         active_exceptions_lists = {RuleManager::kProcessList,
                                    RuleManager::kProcessList};

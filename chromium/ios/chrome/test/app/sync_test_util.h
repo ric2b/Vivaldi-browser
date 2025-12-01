@@ -7,6 +7,7 @@
 
 #import <Foundation/Foundation.h>
 
+#include <set>
 #include <string>
 
 #include "base/time/time.h"
@@ -14,9 +15,16 @@
 #include "third_party/metrics_proto/user_demographics.pb.h"
 #include "url/gurl.h"
 
+namespace base {
+class Uuid;
+}  // namespace base
 namespace synced_sessions {
 struct DistantSession;
 }  // namespace synced_sessions
+namespace tab_groups {
+class SavedTabGroup;
+class SavedTabGroupTab;
+}  // namespace tab_groups
 
 namespace chrome_test_util {
 
@@ -143,6 +151,25 @@ void AddBookmarkWithSyncPassphrase(const std::string& sync_passphrase);
 // passphrase to start. In order to work, this need to be called before the
 // primary user is signed-in.
 void AddSyncPassphrase(const std::string& sync_passphrase);
+
+// Adds the user to the collaboration for `collaboration_id`. No-op if the
+// user is already in this collaboration.
+void AddCollaboration(const std::string& collaboration_id);
+
+// Adds a group to the list of sync tabs on the server.
+void AddGroupToFakeServer(const tab_groups::SavedTabGroup& group);
+
+// Adds a tab to the list of sync tabs on the server.
+void AddTabToFakeServer(const tab_groups::SavedTabGroupTab& tab);
+
+// Deletes a tab or a group with `uuid` on the server.
+void DeleteTabOrGroupFromFakeServer(const base::Uuid& uuid);
+
+// Adds the `collaboration_id` on the server.
+void AddCollaborationGroupToFakeServer(const std::string& collaboration_id);
+
+// Deletes the shared group with `uuid` on the server.
+void DeleteSharedGroupFromFakeServer(const base::Uuid& uuid);
 
 }  // namespace chrome_test_util
 

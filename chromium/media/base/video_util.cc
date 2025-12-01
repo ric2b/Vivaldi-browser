@@ -9,6 +9,7 @@
 
 #include "media/base/video_util.h"
 
+#include <array>
 #include <cmath>
 
 #include "base/bits.h"
@@ -20,9 +21,9 @@
 #include "base/numerics/safe_math.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
+#include "components/viz/common/resources/shared_image_format.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/raster_interface.h"
-#include "gpu/command_buffer/common/capabilities.h"
 #include "media/base/limits.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_frame_pool.h"
@@ -100,39 +101,6 @@ VideoPixelFormat ReadbackFormat(const VideoFrame& frame) {
       // Currently unsupported.
       return PIXEL_FORMAT_UNKNOWN;
   }
-}
-
-bool ReadbackTexturePlaneToMemorySyncOOP(const VideoFrame& src_frame,
-                                         size_t src_plane,
-                                         gfx::Rect& src_rect,
-                                         uint8_t* dest_pixels,
-                                         size_t dest_stride,
-                                         gpu::raster::RasterInterface* ri) {
-  VideoPixelFormat format = ReadbackFormat(src_frame);
-  if (format == PIXEL_FORMAT_UNKNOWN) {
-    DLOG(ERROR) << "Readback is not possible for this frame: "
-                << src_frame.AsHumanReadableString();
-    return false;
-  }
-
-  bool has_alpha = !IsOpaque(format);
-  SkColorType sk_color_type = SkColorTypeForPlane(format, src_plane);
-  SkAlphaType sk_alpha_type =
-      has_alpha ? kUnpremul_SkAlphaType : kOpaque_SkAlphaType;
-
-  auto info = SkImageInfo::Make(src_rect.width(), src_rect.height(),
-                                sk_color_type, sk_alpha_type);
-
-  // Perform readback passing the appropriate `src_plane` for the mailbox.
-  auto mailbox = src_frame.shared_image()->mailbox();
-  auto sync_token = src_frame.acquire_sync_token();
-  ri->WaitSyncTokenCHROMIUM(sync_token.GetConstData());
-  bool result =
-      ri->ReadbackImagePixels(mailbox, info, dest_stride, src_rect.x(),
-                              src_rect.y(), src_plane, dest_pixels);
-
-  return result && ri->GetGraphicsResetStatusKHR() == GL_NO_ERROR &&
-         ri->GetError() == GL_NO_ERROR;
 }
 
 void LetterboxPlane(const gfx::Rect& view_area_in_bytes,
@@ -227,7 +195,7 @@ void ProcessAsyncMappingResult(
   }
 
   const size_t num_planes = VideoFrame::NumPlanes(video_frame->format());
-  uint8_t* plane_addrs[VideoFrame::kMaxPlanes] = {};
+  std::array<uint8_t*, VideoFrame::kMaxPlanes> plane_addrs = {};
   for (size_t i = 0; i < num_planes; i++) {
     plane_addrs[i] = scoped_mapping->Memory(i);
   }
@@ -601,7 +569,7 @@ scoped_refptr<VideoFrame> ConvertToMemoryMappedFrame(
   }
 
   const size_t num_planes = VideoFrame::NumPlanes(video_frame->format());
-  uint8_t* plane_addrs[VideoFrame::kMaxPlanes] = {};
+  std::array<uint8_t*, VideoFrame::kMaxPlanes> plane_addrs = {};
   for (size_t i = 0; i < num_planes; i++)
     plane_addrs[i] = scoped_mapping->Memory(i);
 
@@ -704,7 +672,6 @@ bool I420CopyWithPadding(const VideoFrame& src_frame, VideoFrame* dst_frame) {
 scoped_refptr<VideoFrame> ReadbackTextureBackedFrameToMemorySync(
     VideoFrame& txt_frame,
     gpu::raster::RasterInterface* ri,
-    const gpu::Capabilities& caps,
     VideoFramePool* pool) {
   DCHECK(ri);
 
@@ -737,7 +704,7 @@ scoped_refptr<VideoFrame> ReadbackTextureBackedFrameToMemorySync(
     gfx::Rect src_rect(0, 0, txt_frame.columns(plane), txt_frame.rows(plane));
     if (!ReadbackTexturePlaneToMemorySync(txt_frame, plane, src_rect,
                                           result->writable_data(plane),
-                                          result->stride(plane), ri, caps)) {
+                                          result->stride(plane), ri)) {
       return nullptr;
     }
   }
@@ -749,14 +716,38 @@ bool ReadbackTexturePlaneToMemorySync(VideoFrame& src_frame,
                                       gfx::Rect& src_rect,
                                       uint8_t* dest_pixels,
                                       size_t dest_stride,
-                                      gpu::raster::RasterInterface* ri,
-                                      const gpu::Capabilities& caps) {
+                                      gpu::raster::RasterInterface* ri) {
   DCHECK(ri);
+  VideoPixelFormat format = ReadbackFormat(src_frame);
+  if (format == PIXEL_FORMAT_UNKNOWN) {
+    DLOG(ERROR) << "Readback is not possible for this frame: "
+                << src_frame.AsHumanReadableString();
+    return false;
+  }
 
-  bool result = ReadbackTexturePlaneToMemorySyncOOP(
-      src_frame, src_plane, src_rect, dest_pixels, dest_stride, ri);
-  WaitAndReplaceSyncTokenClient client(ri);
-  src_frame.UpdateReleaseSyncToken(&client);
+  bool has_alpha = !IsOpaque(format);
+  auto sk_color_type = SkColorTypeForPlane(format, src_plane);
+  auto sk_alpha_type = has_alpha ? kUnpremul_SkAlphaType : kOpaque_SkAlphaType;
+
+  auto info = SkImageInfo::Make(src_rect.width(), src_rect.height(),
+                                sk_color_type, sk_alpha_type);
+
+  // Perform readback passing the appropriate `src_plane` for the mailbox.
+  auto mailbox = src_frame.shared_image()->mailbox();
+  auto sync_token = src_frame.acquire_sync_token();
+  ri->WaitSyncTokenCHROMIUM(sync_token.GetConstData());
+  bool readback_result =
+      ri->ReadbackImagePixels(mailbox, info, dest_stride, src_rect.x(),
+                              src_rect.y(), src_plane, dest_pixels);
+
+  bool result = readback_result &&
+                ri->GetGraphicsResetStatusKHR() == GL_NO_ERROR &&
+                ri->GetError() == GL_NO_ERROR;
+  if (result) {
+    WaitAndReplaceSyncTokenClient client(ri);
+    src_frame.UpdateReleaseSyncToken(&client);
+  }
+
   return result;
 }
 
@@ -835,7 +826,7 @@ scoped_refptr<VideoFrame> CreateFromSkImage(sk_sp<SkImage> sk_image,
 
   auto coded_size = gfx::Size(sk_image->width(), sk_image->height());
   auto layout = VideoFrameLayout::CreateWithStrides(
-      format, coded_size, std::vector<int32_t>(1, pm.rowBytes()));
+      format, coded_size, std::vector<size_t>(1, pm.rowBytes()));
   if (!layout)
     return nullptr;
 
@@ -853,28 +844,31 @@ scoped_refptr<VideoFrame> CreateFromSkImage(sk_sp<SkImage> sk_image,
   return frame;
 }
 
-std::tuple<SkYUVAInfo::PlaneConfig, SkYUVAInfo::Subsampling>
-VideoPixelFormatToSkiaValues(VideoPixelFormat video_format) {
-  // To expand support for additional VideoFormats expand this switch.
-  switch (video_format) {
-    case PIXEL_FORMAT_NV12:
-    case PIXEL_FORMAT_P010LE:
-      return {SkYUVAInfo::PlaneConfig::kY_UV, SkYUVAInfo::Subsampling::k420};
-    case PIXEL_FORMAT_NV16:
-    case PIXEL_FORMAT_P210LE:
-      return {SkYUVAInfo::PlaneConfig::kY_UV, SkYUVAInfo::Subsampling::k422};
-    case PIXEL_FORMAT_NV24:
-    case PIXEL_FORMAT_P410LE:
-      return {SkYUVAInfo::PlaneConfig::kY_UV, SkYUVAInfo::Subsampling::k444};
-    case PIXEL_FORMAT_NV12A:
-      return {SkYUVAInfo::PlaneConfig::kY_UV_A, SkYUVAInfo::Subsampling::k420};
-    case PIXEL_FORMAT_I420:
-      return {SkYUVAInfo::PlaneConfig::kY_U_V, SkYUVAInfo::Subsampling::k420};
-    case PIXEL_FORMAT_I420A:
-      return {SkYUVAInfo::PlaneConfig::kY_U_V_A, SkYUVAInfo::Subsampling::k420};
-    default:
-      return {SkYUVAInfo::PlaneConfig::kUnknown,
-              SkYUVAInfo::Subsampling::kUnknown};
+SkYUVAInfo::PlaneConfig ToSkYUVAPlaneConfig(viz::SharedImageFormat format) {
+  using PlaneConfig = viz::SharedImageFormat::PlaneConfig;
+  switch (format.plane_config()) {
+    case PlaneConfig::kY_U_V:
+      return SkYUVAInfo::PlaneConfig::kY_U_V;
+    case PlaneConfig::kY_V_U:
+      return SkYUVAInfo::PlaneConfig::kY_V_U;
+    case PlaneConfig::kY_UV:
+      return SkYUVAInfo::PlaneConfig::kY_UV;
+    case PlaneConfig::kY_UV_A:
+      return SkYUVAInfo::PlaneConfig::kY_UV_A;
+    case PlaneConfig::kY_U_V_A:
+      return SkYUVAInfo::PlaneConfig::kY_U_V_A;
+  }
+}
+
+SkYUVAInfo::Subsampling ToSkYUVASubsampling(viz::SharedImageFormat format) {
+  using Subsampling = viz::SharedImageFormat::Subsampling;
+  switch (format.subsampling()) {
+    case Subsampling::k420:
+      return SkYUVAInfo::Subsampling::k420;
+    case Subsampling::k422:
+      return SkYUVAInfo::Subsampling::k422;
+    case Subsampling::k444:
+      return SkYUVAInfo::Subsampling::k444;
   }
 }
 

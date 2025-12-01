@@ -31,7 +31,8 @@ bool LaunchVivaldi(const base::CommandLine& command_line,
 bool AddVivaldiNewPage(bool welcome_run_none, std::vector<GURL>* startup_urls);
 
 #if BUILDFLAG(IS_WIN)
-void DoCleanShutdownIfNeeded(const base::CommandLine& command_line);
+// Returns true if we initiated an exit.
+bool DoCleanShutdownIfNeeded(const base::CommandLine& command_line);
 #endif // IS_WIN
 
 class VivaldiStartupTabUserData : public base::SupportsUserData::Data {

@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "chromeos-arm64-generic-rel",
-              "project": "chromium-m132"
+              "project": "chromium-m134"
             },
             "builder_spec": {
               "builder_group": "chromium.chromiumos",
@@ -42,7 +42,7 @@
         {
           "bucket": "ci",
           "builder": "chromeos-arm64-generic-rel",
-          "project": "chromium-m132"
+          "project": "chromium-m134"
         }
       ],
       "targets_spec_directory": "src/infra/config/generated/builders/try/chromeos-arm64-generic-rel/targets"
@@ -52,11 +52,6 @@
     "check_for_flakiness": true,
     "check_for_flakiness_with_resultdb": true
   },
-  "$build/reclient": {
-    "instance": "rbe-chromium-untrusted",
-    "metrics_project": "chromium-reclient-metrics",
-    "scandeps_server": true
-  },
   "$build/siso": {
     "configs": [
       "builder",
@@ -65,7 +60,9 @@
     "enable_cloud_monitoring": true,
     "enable_cloud_profiler": true,
     "enable_cloud_trace": true,
-    "experiments": [],
+    "experiments": [
+      "no-fast-deps"
+    ],
     "metrics_project": "chromium-reclient-metrics",
     "output_local_strategy": "minimum",
     "project": "rbe-chromium-untrusted",

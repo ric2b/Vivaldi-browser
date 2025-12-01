@@ -21,8 +21,21 @@ limitations under the License.
 #include <memory>
 #include <vector>
 
+#include "absl/base/nullability.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
+#include "absl/types/span.h"
+#include "xla/hlo/ir/hlo_module.h"
+#include "xla/layout.h"
+#include "xla/literal.h"
 #include "xla/pjrt/pjrt_client.h"
+#include "xla/pjrt/pjrt_executable.h"
+#include "xla/service/computation_layout.h"
+#include "xla/service/computation_placer.h"
+#include "xla/service/executable.h"
+#include "xla/service/hlo_module_util.h"
 #include "xla/service/hlo_runner_interface.h"
+#include "xla/xla_data.pb.h"
 
 namespace xla {
 
@@ -41,7 +54,8 @@ class HloRunnerPjRt : public HloRunnerInterface {
 
   // Transfers data between the host and device.
   absl::StatusOr<std::unique_ptr<PjRtBuffer>> TransferLiteralToDevice(
-      const Literal& literal, int64_t memory_space);
+      const Literal& literal, absl::Nonnull<PjRtMemorySpace*> memory_space,
+      const Layout& on_device_layout);
   absl::StatusOr<std::vector<std::unique_ptr<PjRtBuffer>>>
   TransferLiteralsToDevice(const ComputationLayout& entry_layout,
                            absl::Span<const Literal* const> literals);
@@ -98,6 +112,11 @@ class HloRunnerPjRt : public HloRunnerInterface {
 
   absl::string_view Name() const override;
 
+  void UpdateEntryComputationLayout(HloModule* module) {
+    // TODO - b/391868033: Remove UpdateEntryComputationLayout from this class.
+    xla::UpdateEntryComputationLayout(module, device_shape_representation_fn_);
+  }
+
   DeviceShapeRepresentationFn device_shape_representation_fn() const override {
     return device_shape_representation_fn_;
   }
@@ -106,28 +125,26 @@ class HloRunnerPjRt : public HloRunnerInterface {
     return device_shape_size_fn_;
   }
 
+  int device_count() const override { return pjrt_client_->device_count(); }
+
+  bool HasProperty(HloRunnerPropertyTag::Type tag) const override;
+
  private:
-  std::unique_ptr<PjRtClient> pjrt_client_;
-  DeviceShapeRepresentationFn device_shape_representation_fn_;
-  DeviceShapeSizeFn device_shape_size_fn_;
-
-  std::vector<PjRtBuffer*> BufferVecToPointerVec(
-      const std::vector<std::unique_ptr<PjRtBuffer>>& buffer);
-
-  std::vector<std::vector<PjRtBuffer*>> BufferMatToPointerMat(
-      std::vector<std::vector<std::unique_ptr<PjRtBuffer>>>& buffer);
-
   absl::StatusOr<CompileOptions> GenerateDefaultCompileOptions(
       HloModule* module, bool run_hlo_passes);
 
   absl::StatusOr<std::vector<Literal>> ExecuteReplicatedImpl(
       std::function<absl::StatusOr<std::vector<std::unique_ptr<PjRtBuffer>>>(
-          absl::Span<const std::vector<PjRtBuffer*>>&)>
+          absl::Span<const std::vector<PjRtBuffer*>>)>
           execution_helper,
       std::function<int64_t(int64_t)> argument_count_provider,
       std::function<const Literal*(int64_t, int64_t)> argument_provider,
       const ReplicatedExecuteOptions& options,
       DeviceAssignment* device_assignment);
+
+  std::unique_ptr<PjRtClient> pjrt_client_;
+  DeviceShapeRepresentationFn device_shape_representation_fn_;
+  DeviceShapeSizeFn device_shape_size_fn_;
 };
 
 }  // namespace xla

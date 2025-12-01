@@ -32,6 +32,7 @@
 #include <algorithm>
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/command_line.h"
 #include "base/debug/crash_logging.h"
@@ -67,7 +68,6 @@
 #include "third_party/blink/public/platform/web_runtime_features.h"
 #include "third_party/blink/public/platform/web_text_input_info.h"
 #include "third_party/blink/public/platform/web_url_request.h"
-#include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/web_autofill_client.h"
 #include "third_party/blink/public/web/web_console_message.h"
 #include "third_party/blink/public/web/web_element.h"
@@ -429,9 +429,7 @@ void RecordPrerenderActivationSignalDelay(const String& metric_suffix) {
 #if !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_WIN)
 SkFontHinting RendererPreferencesToSkiaHinting(
     const blink::RendererPreferences& prefs) {
-// TODO(crbug.com/1052397): Revisit once build flag switch of lacros-chrome is
-// complete.
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_LINUX)
   if (!prefs.should_antialias_text) {
     // When anti-aliasing is off, GTK maps all non-zero hinting settings to
     // 'Normal' hinting so we do the same. Otherwise, folks who have 'Slight'
@@ -652,6 +650,8 @@ WebViewImpl::WebViewImpl(
         String(prerender_param->page_metric_suffix));
     page_->SetShouldWarmUpCompositorOnPrerender(
         prerender_param->should_warm_up_compositor);
+    page_->SetShouldPreparePaintTreeOnPrerender(
+        prerender_param->should_prepare_paint_tree);
   }
 
   if (fenced_frame_mode && features::IsFencedFramesEnabled()) {
@@ -1132,12 +1132,13 @@ void WebViewImpl::DisablePopupMouseWheelEventListener() {
   DCHECK(popup_mouse_wheel_event_listener_);
   Document* document =
       local_root_with_empty_mouse_wheel_listener_->GetDocument();
-  DCHECK(document);
-  // Document may have already removed the event listener, for instance, due
-  // to a navigation, but remove it anyway.
-  document->removeEventListener(event_type_names::kMousewheel,
-                                popup_mouse_wheel_event_listener_.Release(),
-                                false);
+  if (document) {
+    // Document may have already removed the event listener, for instance, due
+    // to a navigation, but remove it anyway.
+    document->removeEventListener(event_type_names::kMousewheel,
+                                  popup_mouse_wheel_event_listener_.Release(),
+                                  false);
+  }
   local_root_with_empty_mouse_wheel_listener_ = nullptr;
 }
 
@@ -1310,11 +1311,17 @@ void WebViewImpl::DidUpdateBrowserControls() {
     visual_viewport.SetBrowserControlsAdjustment(
         GetBrowserControls().UnreportedSizeAdjustment());
   }
+}
 
-  if (GetPage()->GetSettings().GetDynamicSafeAreaInsetsEnabled() &&
-      RuntimeEnabledFeatures::DynamicSafeAreaInsetsOnScrollEnabled()) {
-    GetPage()->UpdateSafeAreaInsetWithBrowserControls(GetBrowserControls());
+void WebViewImpl::DidUpdateMaxSafeAreaInsets(
+    const gfx::InsetsF& max_safe_area_insets) {
+  WebLocalFrameImpl* main_frame = MainFrameImpl();
+  if (!main_frame || !main_frame->IsOutermostMainFrame()) {
+    return;
   }
+
+  WebFrameWidgetImpl* widget = main_frame->LocalRootFrameWidget();
+  widget->SetMaxSafeAreaInsets(max_safe_area_insets);
 }
 
 BrowserControls& WebViewImpl::GetBrowserControls() {
@@ -1585,11 +1592,16 @@ void WebView::ApplyWebPreferences(const web_pref::WebPreferences& prefs,
       prefs.target_blank_implies_no_opener_enabled_will_be_removed);
   settings->SetAllowNonEmptyNavigatorPlugins(
       prefs.allow_non_empty_navigator_plugins);
-  RuntimeEnabledFeatures::SetDatabaseEnabled(prefs.databases_enabled);
   settings->SetShouldProtectAgainstIpcFlooding(
       !prefs.disable_ipc_flooding_protection);
   settings->SetHyperlinkAuditingEnabled(prefs.hyperlink_auditing_enabled);
   settings->SetCookieEnabled(prefs.cookie_enabled);
+
+  // By default, allow Android WebView to enable WebSQL. Rollout for disabling
+  // will happen via Finch.
+  if (base::FeatureList::IsEnabled(blink::features::kWebSQLWebViewAccess)) {
+    RuntimeEnabledFeatures::SetDatabaseEnabled(prefs.databases_enabled);
+  }
 
   // By default, allow_universal_access_from_file_urls is set to false and thus
   // we mitigate attacks from local HTML files by not granting file:// URLs
@@ -2526,11 +2538,11 @@ void WebViewImpl::SetPageLifecycleStateInternal(
 
   if (restoring_from_bfcache) {
     DCHECK(page_restore_params);
-    // Update the history offset and length value, as pages that are kept in
+    // Update the history index and length value, as pages that are kept in
     // the back-forward cache do not get notified about updates on these
     // values, so the currently saved value might be stale.
-    SetHistoryOffsetAndLength(page_restore_params->pending_history_list_offset,
-                              page_restore_params->current_history_list_length);
+    SetHistoryIndexAndLength(page_restore_params->pending_history_list_index,
+                             page_restore_params->current_history_list_length);
   }
   if (eviction_changed)
     HookBackForwardCacheEviction(new_state->eviction_enabled);
@@ -3419,16 +3431,12 @@ void WebViewImpl::UpdateFontRenderingFromRendererPrefs() {
       gfx::FontRenderParams::SUBPIXEL_RENDERING_NONE);
   WebFontRenderStyle::SetSubpixelPositioning(
       renderer_preferences_.use_subpixel_positioning);
-// TODO(crbug.com/1052397): Revisit once build flag switch of lacros-chrome is
-// complete.
-#if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)) && \
-    !BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_LINUX)
   if (!renderer_preferences_.system_font_family_name.empty()) {
     WebFontRenderStyle::SetSystemFontFamily(blink::WebString::FromUTF8(
         renderer_preferences_.system_font_family_name));
   }
-#endif  // (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)) &&
-        // !BUILDFLAG(IS_ANDROID)
+#endif  // BUILDFLAG(IS_LINUX)
 #endif  // BUILDFLAG(IS_WIN)
 #endif  // !BUILDFLAG(IS_MAC)
 }
@@ -3575,38 +3583,38 @@ void WebViewImpl::UpdateRendererPreferences(
   UpdateVivaldiRendererPreferences();
 }
 
-void WebViewImpl::SetHistoryOffsetAndLength(int32_t history_offset,
-                                            int32_t history_length) {
-  // -1 <= history_offset < history_length <= kMaxSessionHistoryEntries.
-  DCHECK_LE(-1, history_offset);
-  DCHECK_LT(history_offset, history_length);
+void WebViewImpl::SetHistoryIndexAndLength(int32_t history_index,
+                                           int32_t history_length) {
+  // -1 <= history_index < history_length <= kMaxSessionHistoryEntries.
+  DCHECK_LE(-1, history_index);
+  DCHECK_LT(history_index, history_length);
   DCHECK_LE(history_length, kMaxSessionHistoryEntries);
 
-  history_list_offset_ = history_offset;
+  history_list_index_ = history_index;
   history_list_length_ = history_length;
 }
 
 void WebViewImpl::SetHistoryListFromNavigation(
-    int32_t history_offset,
+    int32_t history_index,
     std::optional<int32_t> history_length) {
   if (!history_length.has_value()) {
-    history_list_offset_ = history_offset;
+    history_list_index_ = history_index;
     return;
   }
 
-  SetHistoryOffsetAndLength(history_offset, *history_length);
+  SetHistoryIndexAndLength(history_index, *history_length);
 }
 
 void WebViewImpl::IncreaseHistoryListFromNavigation() {
-  // Advance our offset in session history, applying the length limit.
+  // Advance our index in session history, applying the length limit.
   // There is now no forward history.
-  history_list_offset_ =
-      std::min(history_list_offset_ + 1, kMaxSessionHistoryEntries - 1);
-  history_list_length_ = history_list_offset_ + 1;
+  history_list_index_ =
+      std::min(history_list_index_ + 1, kMaxSessionHistoryEntries - 1);
+  history_list_length_ = history_list_index_ + 1;
 }
 
 int32_t WebViewImpl::HistoryBackListCount() const {
-  return std::max(history_list_offset_, 0);
+  return std::max(history_list_index_, 0);
 }
 
 int32_t WebViewImpl::HistoryForwardListCount() const {
@@ -4097,7 +4105,7 @@ void WebViewImpl::DraggableRegionsChanged() {
     return;
   }
 
-  WebVector<WebDraggableRegion> web_regions =
+  std::vector<WebDraggableRegion> web_regions =
       MainFrameImpl()->GetDocument().DraggableRegions();
 
   // If |supports_draggable_regions_| is false, the web view should only send

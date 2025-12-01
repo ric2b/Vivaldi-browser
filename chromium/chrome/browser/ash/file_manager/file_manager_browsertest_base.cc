@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <compare>
 #include <iterator>
 #include <map>
@@ -16,15 +17,6 @@
 #include <string_view>
 #include <utility>
 
-#include "ash/components/arc/arc_features.h"
-#include "ash/components/arc/arc_util.h"
-#include "ash/components/arc/mojom/file_system.mojom.h"
-#include "ash/components/arc/session/arc_bridge_service.h"
-#include "ash/components/arc/session/arc_service_manager.h"
-#include "ash/components/arc/session/connection_holder.h"
-#include "ash/components/arc/test/arc_util_test_support.h"
-#include "ash/components/arc/test/connection_holder_util.h"
-#include "ash/components/arc/test/fake_file_system_instance.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
@@ -62,7 +54,6 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/path_service.h"
 #include "base/process/process_handle.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
 #include "base/strings/escape.h"
@@ -71,6 +62,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/to_string.h"
 #include "base/synchronization/lock.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
@@ -170,6 +162,15 @@
 #include "chromeos/ash/components/smbfs/mojom/smbfs.mojom.h"
 #include "chromeos/ash/components/smbfs/smbfs_host.h"
 #include "chromeos/ash/components/smbfs/smbfs_mounter.h"
+#include "chromeos/ash/experiences/arc/arc_features.h"
+#include "chromeos/ash/experiences/arc/arc_util.h"
+#include "chromeos/ash/experiences/arc/mojom/file_system.mojom.h"
+#include "chromeos/ash/experiences/arc/session/arc_bridge_service.h"
+#include "chromeos/ash/experiences/arc/session/arc_service_manager.h"
+#include "chromeos/ash/experiences/arc/session/connection_holder.h"
+#include "chromeos/ash/experiences/arc/test/arc_util_test_support.h"
+#include "chromeos/ash/experiences/arc/test/connection_holder_util.h"
+#include "chromeos/ash/experiences/arc/test/fake_file_system_instance.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/dbus/constants/dbus_switches.h"
 #include "components/account_id/account_id.h"
@@ -195,6 +196,7 @@
 #include "extensions/browser/api/test/test_api_observer.h"
 #include "extensions/browser/api/test/test_api_observer_registry.h"
 #include "extensions/common/extension_id.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "media/base/media_switches.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -1005,10 +1007,8 @@ ash::LoggedInUserMixin::LogInType LogInTypeFor(
     TestAccountType test_account_type) {
   switch (test_account_type) {
     case kTestAccountTypeNotSet:
-      CHECK(false) << "test_account_type option must be set for "
+      NOTREACHED() << "test_account_type option must be set for "
                       "LoggedInUserFilesAppBrowserTest";
-      // TODO(crbug.com/40122554): `base::ImmediateCrash` is necessary.
-      base::ImmediateCrash();
     case kEnterprise:
     case kGoogler:
       return ash::LoggedInUserMixin::LogInType::kManaged;
@@ -1023,13 +1023,11 @@ ash::LoggedInUserMixin::LogInType LogInTypeFor(
 std::optional<AccountId> AccountIdFor(TestAccountType test_account_type) {
   switch (test_account_type) {
     case kTestAccountTypeNotSet:
-      CHECK(false) << "test_account_type option must be set for "
+      NOTREACHED() << "test_account_type option must be set for "
                       "LoggedInUserFilesAppBrowserTest";
-      // `base::ImmediateCrash` is necessary for https://crbug.com/1061742.
-      base::ImmediateCrash();
     case kGoogler:
       return AccountId::FromUserEmailGaiaId(
-          "user@google.com", FakeGaiaMixin::kEnterpriseUser1GaiaId);
+          "user@google.com", GaiaId(FakeGaiaMixin::kEnterpriseUser1GaiaId));
     case kChild:
     case kEnterprise:
     case kNonManaged:
@@ -2515,7 +2513,7 @@ bool FileManagerBrowserTestBase::SetUpUserDataDirectory() {
 AccountId FileManagerBrowserTestBase::GetAccountId() {
   return AccountId::FromUserEmailGaiaId(
       drive::FakeDriveFsHelper::kDefaultUserEmail,
-      drive::FakeDriveFsHelper::kDefaultGaiaId);
+      GaiaId(drive::FakeDriveFsHelper::kDefaultGaiaId));
 }
 
 void FileManagerBrowserTestBase::SetUpInProcessBrowserTestFixture() {
@@ -3103,7 +3101,7 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
   if (name == "isDevtoolsCoverageActive") {
     bool devtools_coverage_active = !devtools_code_coverage_dir_.empty();
     LOG(INFO) << "isDevtoolsCoverageActive: " << devtools_coverage_active;
-    *output = devtools_coverage_active ? "true" : "false";
+    *output = base::ToString(devtools_coverage_active);
     return;
   }
 
@@ -3470,40 +3468,6 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
     return;
   }
 
-  if (name == "setLocalFilesEnabled") {
-    std::optional<bool> enabled = value.FindBool("enabled");
-    ASSERT_TRUE(enabled.has_value());
-    g_browser_process->local_state()->SetBoolean(prefs::kLocalUserFilesAllowed,
-                                                 enabled.value());
-    return;
-  }
-
-  if (name == "setLocalFilesMigrationDestination") {
-    const std::string* provider = value.FindString("provider");
-    ASSERT_TRUE(provider);
-    ASSERT_TRUE(*provider == download_dir_util::kLocationGoogleDrive ||
-                *provider == download_dir_util::kLocationOneDrive);
-    g_browser_process->local_state()->SetString(
-        prefs::kLocalUserFilesMigrationDestination, *provider);
-    return;
-  }
-
-  if (name == "skipSkyVaultMigration") {
-    file_manager::VolumeManager* volume_manager = VolumeManager::Get(profile());
-    volume_manager->OnMigrationSucceededForTesting();
-    return;
-  }
-
-  if (name == "setDefaultLocation") {
-    const std::string* defaultLocation = value.FindString("defaultLocation");
-    ASSERT_TRUE(defaultLocation &&
-                (*defaultLocation == download_dir_util::kLocationGoogleDrive ||
-                 *defaultLocation == download_dir_util::kLocationOneDrive));
-    profile()->GetPrefs()->SetString(prefs::kFilesAppDefaultLocation,
-                                     *defaultLocation);
-    return;
-  }
-
   if (name == "setTrashEnabled") {
     std::optional<bool> enabled = value.FindBool("enabled");
     ASSERT_TRUE(enabled.has_value());
@@ -3772,7 +3736,7 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
 
   if (name == "getVolumesCount") {
     file_manager::VolumeManager* volume_manager = VolumeManager::Get(profile());
-    *output = base::NumberToString(base::ranges::count_if(
+    *output = base::NumberToString(std::ranges::count_if(
         volume_manager->GetVolumeList(),
         [](const auto& volume) { return !volume->hidden(); }));
     return;
@@ -3817,22 +3781,22 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
   }
 
   if (name == "isConflictDialogEnabled") {
-    *output = options.enable_conflict_dialog ? "true" : "false";
+    *output = base::ToString(options.enable_conflict_dialog);
     return;
   }
 
   if (name == "isSmbEnabled") {
-    *output = options.native_smb ? "true" : "false";
+    *output = base::ToString(options.native_smb);
     return;
   }
 
   if (name == "isBannersFrameworkEnabled") {
-    *output = options.enable_banners_framework ? "true" : "false";
+    *output = base::ToString(options.enable_banners_framework);
     return;
   }
 
   if (name == "isMirrorSyncEnabled") {
-    *output = options.enable_mirrorsync ? "true" : "false";
+    *output = base::ToString(options.enable_mirrorsync);
     return;
   }
 
@@ -3858,6 +3822,7 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
     ASSERT_TRUE(timezone);
     auto* user = user_manager::UserManager::Get()->GetActiveUser();
     ash::system::SetSystemTimezone(user, *timezone);
+    base::RunLoop().RunUntilIdle();
     return;
   }
 
@@ -4043,7 +4008,7 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
   }
 
   if (name == "isCrosComponents") {
-    *output = options.enable_cros_components ? "true" : "false";
+    *output = base::ToString(options.enable_cros_components);
     return;
   }
 

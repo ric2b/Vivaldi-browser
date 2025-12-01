@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "components/webcrypto/algorithms/ed25519.h"
 
 #include <string.h>
@@ -126,7 +131,7 @@ Status Ed25519Implementation::GenerateKey(
   // multiplication, but there aren't EVP APIs to avoid it without a lot of
   // boilerplate.
   blink::WebCryptoKey private_key;
-  status = CreateWebCryptoEd25519PrivateKey(base::make_span(privkey).first(32u),
+  status = CreateWebCryptoEd25519PrivateKey(base::span(privkey).first<32>(),
                                             key_algorithm, extractable,
                                             private_usages, &private_key);
   if (status.IsError())

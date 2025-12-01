@@ -38,7 +38,7 @@ DeviceLocalAccountPolicyStore::DeviceLocalAccountPolicyStore(
       session_manager_client_(session_manager_client),
       device_settings_service_(device_settings_service) {}
 
-DeviceLocalAccountPolicyStore::~DeviceLocalAccountPolicyStore() {}
+DeviceLocalAccountPolicyStore::~DeviceLocalAccountPolicyStore() = default;
 
 void DeviceLocalAccountPolicyStore::Load() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -146,9 +146,9 @@ void DeviceLocalAccountPolicyStore::UpdatePolicy(
     return;
   }
 
-  InstallPolicy(
-      std::move(validator->policy()), std::move(validator->policy_data()),
-      std::move(validator->payload()), signature_validation_public_key);
+  InstallPolicy(std::move(validator->policy_data()),
+                std::move(validator->payload()),
+                signature_validation_public_key);
   status_ = STATUS_OK;
   NotifyStoreLoaded();
 }

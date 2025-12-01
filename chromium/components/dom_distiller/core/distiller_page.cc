@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "components/dom_distiller/core/distiller_page.h"
 
 #include <stddef.h>
@@ -44,7 +49,7 @@ std::string GetDistillerScriptWithOptions(
       dom_distiller::proto::json::DomDistillerOptions::WriteToValue(options);
   std::string options_json;
   if (!base::JSONWriter::Write(options_value, &options_json)) {
-    NOTREACHED_IN_MIGRATION();
+    NOTREACHED();
   }
   size_t options_offset = script.find(kOptionsPlaceholder);
   DCHECK_NE(std::string::npos, options_offset);

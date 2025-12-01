@@ -10,14 +10,14 @@
 
 BackgroundSyncPermissionContext::BackgroundSyncPermissionContext(
     content::BrowserContext* browser_context)
-    : PermissionContextBase(browser_context,
-                            ContentSettingsType::BACKGROUND_SYNC,
-                            blink::mojom::PermissionsPolicyFeature::kNotFound) {
-}
+    : PermissionContextBase(
+          browser_context,
+          ContentSettingsType::BACKGROUND_SYNC,
+          network::mojom::PermissionsPolicyFeature::kNotFound) {}
 
 void BackgroundSyncPermissionContext::DecidePermission(
     permissions::PermissionRequestData request_Data,
     permissions::BrowserPermissionCallback callback) {
   // The user should never be prompted to authorize background sync.
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }

@@ -19,7 +19,6 @@
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/lcp_critical_path_predictor/lcp_critical_path_predictor.h"
-#include "third_party/blink/renderer/core/loader/subresource_integrity_helper.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/core/workers/worker_global_scope.h"
 #include "third_party/blink/renderer/platform/fonts/font_cache.h"
@@ -191,8 +190,7 @@ void RemoteFontFaceSource::NotifyFinished(Resource* resource) {
   // SRI failure and simulate network error if it happens.
   bool force_integrity_checks = resource->ForceIntegrityChecks();
   if (force_integrity_checks) {
-    SubresourceIntegrityHelper::DoReport(*execution_context,
-                                         resource->IntegrityReportInfo());
+    resource->IntegrityReport().SendReports(execution_context);
   }
 
   // font->GetCustomFontData() returns nullptr if network error happened
@@ -338,10 +336,7 @@ const SimpleFontData* RemoteFontFaceSource::CreateFontData(
           font_description.GetFontSelectionRequest(),
           font_selection_capabilities, font_description.FontOpticalSizing(),
           font_description.TextRendering(),
-          font_description.GetFontVariantAlternates()
-              ? font_description.GetFontVariantAlternates()
-                    ->GetResolvedFontFeatures()
-              : ResolvedFontFeatures(),
+          font_description.ResolveFontFeatures(),
           font_description.Orientation(), font_description.VariationSettings(),
           font_description.GetFontPalette()),
       MakeGarbageCollected<CustomFontData>());

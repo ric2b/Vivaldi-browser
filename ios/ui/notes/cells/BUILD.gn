@@ -15,11 +15,11 @@ source_set("cells") {
   ]
 
   deps = [
-    "//base",
     "//base:i18n",
+    "//base",
     "//ios/chrome/app/strings",
-    "//ios/chrome/browser/ui/authentication",
-    "//ios/chrome/browser/ui/authentication/cells",
+    "//ios/chrome/browser/authentication/ui_bundled",
+    "//ios/chrome/browser/authentication/ui_bundled/cells",
     "//ios/chrome/browser/shared/ui/symbols:icons",
     "//ios/chrome/browser/shared/ui/table_view:styler",
     "//ios/chrome/browser/shared/ui/table_view/cells",

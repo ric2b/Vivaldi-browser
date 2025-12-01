@@ -41,7 +41,9 @@
 #endif
 
 #include "src/tint/utils/macros/compiler.h"
-#include "src/tint/utils/socket/socket.h"
+#include "src/tint/utils/socket.h"
+
+TINT_BEGIN_DISABLE_WARNING(UNSAFE_BUFFER_USAGE);
 
 namespace {
 
@@ -450,10 +452,7 @@ bool RunServer(std::string port, bool verbose) {
                 }
 #if TINT_BUILD_MSL_WRITER && TINT_BUILD_IS_MAC
                 if (req.language == SourceLanguage::MSL) {
-                    auto version = tint::msl::validate::MslVersion::kMsl_2_2;
-                    if (req.version_major == 2 && req.version_minor == 3) {
-                        version = tint::msl::validate::MslVersion::kMsl_2_3;
-                    }
+                    auto version = tint::msl::validate::MslVersion::kMsl_2_3;
                     auto result = tint::msl::validate::ValidateUsingMetal(req.source, version);
                     CompileResponse resp;
                     if (result.failed) {
@@ -533,3 +532,5 @@ bool RunClient(std::string address,
     }
     return true;
 }
+
+TINT_END_DISABLE_WARNING(UNSAFE_BUFFER_USAGE);

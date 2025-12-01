@@ -25,7 +25,9 @@
 #include "absl/container/btree_map.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
+#include "connections/implementation/analytics/advertising_metadata_params.h"
 #include "connections/implementation/analytics/connection_attempt_metadata_params.h"
+#include "connections/implementation/analytics/discovery_metadata_params.h"
 #include "connections/payload_type.h"
 #include "connections/strategy.h"
 #include "internal/analytics/event_logger.h"
@@ -42,20 +44,24 @@ namespace analytics {
 class AnalyticsRecorder {
  public:
   explicit AnalyticsRecorder(::nearby::analytics::EventLogger *event_logger);
+  // For testing only.
+  AnalyticsRecorder(::nearby::analytics::EventLogger *event_logger,
+                    bool no_record_time_millis);
   virtual ~AnalyticsRecorder();
 
-  // TODO(edwinwu): Implement to pass real values for AdvertisingMetadata and
-  // DiscoveryMetaData: is_extended_advertisement_supported,
-  // connected_ap_frequency, and is_nfc_available. Set as default values for
-  // analytics recorder.
   // Advertising phase
   void OnStartAdvertising(
       connections::Strategy strategy,
       const std::vector<location::nearby::proto::connections::Medium> &mediums,
-      bool is_extended_advertisement_supported = false,
-      int connected_ap_frequency = 0, bool is_nfc_available = false)
+      AdvertisingMetadataParams *advertising_metadata_params)
       ABSL_LOCKS_EXCLUDED(mutex_);
   void OnStopAdvertising() ABSL_LOCKS_EXCLUDED(mutex_);
+
+  // In case the client calls the {@link BasePcp#updateAdvertisingOptions()}
+  // multiple times, adds one index value to group the mediums results within
+  // the same UpdateAdvertisingOptions call, this API is to return the largest
+  // index value in current_advertising_phase.
+  int GetNextAdvertisingUpdateIndex() ABSL_LOCKS_EXCLUDED(mutex_);
 
   // Connection listening
   void OnStartedIncomingConnectionListening(connections::Strategy strategy)
@@ -66,10 +72,15 @@ class AnalyticsRecorder {
   void OnStartDiscovery(
       connections::Strategy strategy,
       const std::vector<location::nearby::proto::connections::Medium> &mediums,
-      bool is_extended_advertisement_supported = false,
-      int connected_ap_frequency = 0, bool is_nfc_available = false)
+      DiscoveryMetadataParams *discovery_metadata_params)
       ABSL_LOCKS_EXCLUDED(mutex_);
   void OnStopDiscovery() ABSL_LOCKS_EXCLUDED(mutex_);
+
+  // In case the client calls the {@link BasePcp#updateDiscoveryOptions()}
+  // multiple times, adds one index value to group the medium results within the
+  // same UpdateDiscoveryOptions call, this
+  // API is to return the latest index value in current_discovery_phase.
+  int GetNextDiscoveryUpdateIndex() ABSL_LOCKS_EXCLUDED(mutex_);
   void OnEndpointFound(location::nearby::proto::connections::Medium medium)
       ABSL_LOCKS_EXCLUDED(mutex_);
 
@@ -92,6 +103,8 @@ class AnalyticsRecorder {
       ABSL_LOCKS_EXCLUDED(mutex_);
 
   // Connection attempt
+  // Records an attempt with meta data at establishing an incoming physical
+  // connection.
   void OnIncomingConnectionAttempt(
       location::nearby::proto::connections::ConnectionAttemptType type,
       location::nearby::proto::connections::Medium medium,
@@ -99,6 +112,8 @@ class AnalyticsRecorder {
       absl::Duration duration, const std::string &connection_token,
       ConnectionAttemptMetadataParams *connection_attempt_metadata_params)
       ABSL_LOCKS_EXCLUDED(mutex_);
+  // Records an attempt with meta data at establishing an outgoing physical
+  // connection.
   void OnOutgoingConnectionAttempt(
       const std::string &remote_endpoint_id,
       location::nearby::proto::connections::ConnectionAttemptType type,
@@ -107,9 +122,20 @@ class AnalyticsRecorder {
       absl::Duration duration, const std::string &connection_token,
       ConnectionAttemptMetadataParams *connection_attempt_metadata_params)
       ABSL_LOCKS_EXCLUDED(mutex_);
-  // TODO(edwinwu): Implement network operator, country code, tdls, wifi hotspot
-  //, max wifi tx/rx speed and channel width. Set as default values for
-  // analytics recorder.
+  static std::unique_ptr<AdvertisingMetadataParams>
+  BuildAdvertisingMetadataParams(
+      bool is_extended_advertisement_supported = false,
+      int connected_ap_frequency = 0, bool is_nfc_available = false,
+      const std::vector<location::nearby::analytics::proto::ConnectionsLog::
+                            OperationResultWithMedium>
+          &operation_result_with_mediums = {});
+  static std::unique_ptr<DiscoveryMetadataParams> BuildDiscoveryMetadataParams(
+      bool is_extended_advertisement_supported = false,
+      int connected_ap_frequency = 0, bool is_nfc_available = false,
+      const std::vector<location::nearby::analytics::proto::ConnectionsLog::
+                            OperationResultWithMedium>
+          &operation_result_with_mediums = {});
+
   static std::unique_ptr<ConnectionAttemptMetadataParams>
   BuildConnectionAttemptMetadataParams(
       location::nearby::proto::connections::ConnectionTechnology technology,
@@ -117,7 +143,13 @@ class AnalyticsRecorder {
       int try_count, const std::string &network_operator = {},
       const std::string &country_code = {}, bool is_tdls_used = false,
       bool wifi_hotspot_enabled = false, int max_wifi_tx_speed = 0,
-      int max_wifi_rx_speed = 0, int channel_width = -1);
+      int max_wifi_rx_speed = 0, int channel_width = -1,
+      location::nearby::proto::connections::OperationResultCode
+          operation_result_code = location::nearby::proto::connections::
+              OperationResultCode::DETAIL_UNKNOWN);
+  static location::nearby::proto::connections::OperationResultCode
+  GetChannelIoErrorResultCodeFromMedium(
+      location::nearby::proto::connections::Medium medium);
 
   // Connection establishedSafeDisconnectionResult
   void OnConnectionEstablished(
@@ -144,8 +176,9 @@ class AnalyticsRecorder {
       ABSL_LOCKS_EXCLUDED(mutex_);
   void OnIncomingPayloadDone(
       const std::string &endpoint_id, std::int64_t payload_id,
-      location::nearby::proto::connections::PayloadStatus status)
-      ABSL_LOCKS_EXCLUDED(mutex_);
+      location::nearby::proto::connections::PayloadStatus status,
+      location::nearby::proto::connections::OperationResultCode
+          operation_result_code) ABSL_LOCKS_EXCLUDED(mutex_);
   void OnOutgoingPayloadStarted(const std::vector<std::string> &endpoint_ids,
                                 std::int64_t payload_id,
                                 connections::PayloadType type,
@@ -157,8 +190,9 @@ class AnalyticsRecorder {
       ABSL_LOCKS_EXCLUDED(mutex_);
   void OnOutgoingPayloadDone(
       const std::string &endpoint_id, std::int64_t payload_id,
-      location::nearby::proto::connections::PayloadStatus status)
-      ABSL_LOCKS_EXCLUDED(mutex_);
+      location::nearby::proto::connections::PayloadStatus status,
+      location::nearby::proto::connections::OperationResultCode
+          operation_result_code) ABSL_LOCKS_EXCLUDED(mutex_);
 
   // BandwidthUpgrade
   void OnBandwidthUpgradeStarted(
@@ -172,7 +206,9 @@ class AnalyticsRecorder {
       const std::string &endpoint_id,
       location::nearby::proto::connections::BandwidthUpgradeResult result,
       location::nearby::proto::connections::BandwidthUpgradeErrorStage
-          error_stage) ABSL_LOCKS_EXCLUDED(mutex_);
+          error_stage,
+      location::nearby::proto::connections::OperationResultCode
+          operation_result_code) ABSL_LOCKS_EXCLUDED(mutex_);
   void OnBandwidthUpgradeSuccess(const std::string &endpoint_id)
       ABSL_LOCKS_EXCLUDED(mutex_);
 
@@ -180,7 +216,7 @@ class AnalyticsRecorder {
   void OnErrorCode(const ErrorCodeParams &params);
 
   // Log the start client session event with start client session logging
-  // resouces setup (e.g. client_session_, started_client_session_time_)
+  // resources setup (e.g. client_session_, started_client_session_time_)
   void LogStartSession() ABSL_LOCKS_EXCLUDED(mutex_);
 
   // Invokes event_logger_.Log() at the end of life of client. Log action is
@@ -189,6 +225,10 @@ class AnalyticsRecorder {
   void LogSession() ABSL_LOCKS_EXCLUDED(mutex_);
 
   bool IsSessionLogged();
+
+  location::nearby::proto::connections::OperationResultCategory
+  GetOperationResultCategory(
+      location::nearby::proto::connections::OperationResultCode result_code);
 
   // Waits until all logs are sent to the backend.
   // For testing only.
@@ -199,12 +239,21 @@ class AnalyticsRecorder {
   class PendingPayload {
    public:
     PendingPayload(location::nearby::proto::connections::PayloadType type,
-                   std::int64_t total_size_bytes)
+                   std::int64_t total_size_bytes, bool no_record_time_millis)
+        : PendingPayload(type, total_size_bytes, no_record_time_millis,
+                         location::nearby::proto::connections::
+                             OperationResultCode::DETAIL_UNKNOWN) {}
+    PendingPayload(location::nearby::proto::connections::PayloadType type,
+                   std::int64_t total_size_bytes, bool no_record_time_millis,
+                   location::nearby::proto::connections::OperationResultCode
+                       operation_result_code)
         : start_time_(SystemClock::ElapsedRealtime()),
           type_(type),
           total_size_bytes_(total_size_bytes),
           num_bytes_transferred_(0),
-          num_chunks_(0) {}
+          num_chunks_(0),
+          operation_result_code_(operation_result_code),
+          no_record_time_millis_(no_record_time_millis) {}
     ~PendingPayload() = default;
 
     void AddChunk(std::int64_t chunk_size_bytes);
@@ -218,19 +267,31 @@ class AnalyticsRecorder {
 
     std::int64_t total_size_bytes() const { return total_size_bytes_; }
 
+    void SetOperationResultCode(
+        location::nearby::proto::connections::OperationResultCode
+            operation_result_code) {
+      operation_result_code_ = operation_result_code;
+    }
+
    private:
     absl::Time start_time_;
     location::nearby::proto::connections::PayloadType type_;
     std::int64_t total_size_bytes_;
     std::int64_t num_bytes_transferred_;
     int num_chunks_;
+    location::nearby::proto::connections::OperationResultCode
+        operation_result_code_ = location::nearby::proto::connections::
+            OperationResultCode::DETAIL_UNKNOWN;
+    // For testing only.
+    bool no_record_time_millis_ = false;
   };
 
   class LogicalConnection {
    public:
     LogicalConnection(
         location::nearby::proto::connections::Medium initial_medium,
-        const std::string &connection_token) {
+        const std::string &connection_token, bool no_record_time_millis)
+        : no_record_time_millis_(no_record_time_millis) {
       PhysicalConnectionEstablished(initial_medium, connection_token);
     }
     LogicalConnection(const LogicalConnection &) = delete;
@@ -260,7 +321,9 @@ class AnalyticsRecorder {
     void ChunkReceived(std::int64_t payload_id, std::int64_t size_bytes);
     void IncomingPayloadDone(
         std::int64_t payload_id,
-        location::nearby::proto::connections::PayloadStatus status);
+        location::nearby::proto::connections::PayloadStatus status,
+        location::nearby::proto::connections::OperationResultCode
+            operation_result_code);
     void OutgoingPayloadStarted(
         std::int64_t payload_id,
         location::nearby::proto::connections::PayloadType type,
@@ -268,7 +331,9 @@ class AnalyticsRecorder {
     void ChunkSent(std::int64_t payload_id, std::int64_t size_bytes);
     void OutgoingPayloadDone(
         std::int64_t payload_id,
-        location::nearby::proto::connections::PayloadStatus status);
+        location::nearby::proto::connections::PayloadStatus status,
+        location::nearby::proto::connections::OperationResultCode
+            operation_result_code);
 
     std::vector<location::nearby::analytics::proto::ConnectionsLog::
                     EstablishedConnection>
@@ -286,6 +351,9 @@ class AnalyticsRecorder {
         absl::btree_map<std::int64_t, std::unique_ptr<PendingPayload>>
             &pending_payloads,
         location::nearby::proto::connections::DisconnectionReason reason);
+    location::nearby::proto::connections::OperationResultCode
+    GetPendingPayloadResultCodeFromReason(
+        location::nearby::proto::connections::DisconnectionReason reason);
 
     location::nearby::proto::connections::Medium current_medium_ =
         location::nearby::proto::connections::UNKNOWN_MEDIUM;
@@ -297,6 +365,8 @@ class AnalyticsRecorder {
         incoming_payloads_;
     absl::btree_map<std::int64_t, std::unique_ptr<PendingPayload>>
         outgoing_payloads_;
+    // For testing only.
+    bool no_record_time_millis_ = false;
   };
 
   bool CanRecordAnalyticsLocked(absl::string_view method_name)
@@ -312,10 +382,10 @@ class AnalyticsRecorder {
       connections::Strategy strategy,
       location::nearby::proto::connections::SessionRole role)
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_);
-  void RecordAdvertisingPhaseDurationLocked() const
+  void RecordAdvertisingPhaseDurationAndReasonLocked(bool on_stop) const
       ABSL_SHARED_LOCKS_REQUIRED(mutex_);
   void FinishAdvertisingPhaseLocked() ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_);
-  void RecordDiscoveryPhaseDurationLocked() const
+  void RecordDiscoveryPhaseDurationAndReasonLocked(bool on_stop) const
       ABSL_SHARED_LOCKS_REQUIRED(mutex_);
   void FinishDiscoveryPhaseLocked() ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   bool UpdateAdvertiserConnectionRequestLocked(
@@ -338,17 +408,54 @@ class AnalyticsRecorder {
   void MarkConnectionRequestIgnoredLocked(
       location::nearby::analytics::proto::ConnectionsLog::ConnectionRequest
           *request) ABSL_SHARED_LOCKS_REQUIRED(mutex_);
+  void OnIncomingConnectionAttemptLocked(
+      location::nearby::proto::connections::ConnectionAttemptType type,
+      location::nearby::proto::connections::Medium medium,
+      location::nearby::proto::connections::ConnectionAttemptResult result,
+      absl::Duration duration, const std::string &connection_token,
+      ConnectionAttemptMetadataParams *connection_attempt_metadata_params)
+      ABSL_SHARED_LOCKS_REQUIRED(mutex_);
+  void OnOutgoingConnectionAttemptLocked(
+      const std::string &remote_endpoint_id,
+      location::nearby::proto::connections::ConnectionAttemptType type,
+      location::nearby::proto::connections::Medium medium,
+      location::nearby::proto::connections::ConnectionAttemptResult result,
+      absl::Duration duration, const std::string &connection_token,
+      ConnectionAttemptMetadataParams *connection_attempt_metadata_params)
+      ABSL_SHARED_LOCKS_REQUIRED(mutex_);
+  bool ConnectionAttemptResultCodeExistedLocked(
+      location::nearby::proto::connections::Medium medium,
+      location::nearby::proto::connections::ConnectionAttemptDirection
+          direction,
+      const std::string &connection_token,
+      location::nearby::proto::connections::ConnectionAttemptType type,
+      location::nearby::proto::connections::OperationResultCode
+          operation_result_code) ABSL_SHARED_LOCKS_REQUIRED(mutex_);
+  bool EraseIfBandwidthUpgradeRecordExistedLocked(
+      const std::string &endpoint_id,
+      location::nearby::proto::connections::BandwidthUpgradeResult result,
+      location::nearby::proto::connections::BandwidthUpgradeErrorStage
+          error_stage,
+      location::nearby::proto::connections::OperationResultCode
+          operation_result_code) ABSL_SHARED_LOCKS_REQUIRED(mutex_);
   void FinishUpgradeAttemptLocked(
       const std::string &endpoint_id,
       location::nearby::proto::connections::BandwidthUpgradeResult result,
       location::nearby::proto::connections::BandwidthUpgradeErrorStage
           error_stage,
+      location::nearby::proto::connections::OperationResultCode
+          operation_result_code,
       bool erase_item = true) ABSL_SHARED_LOCKS_REQUIRED(mutex_);
   void FinishStrategySessionLocked() ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
   // Reset the client cession's logging resources (e.g. current_strategy_,
   // current_advertising_phase_, current_discovery_phase_, etc)
   void ResetClientSessionLoggingResoucesLocked()
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+
+  int GetLatestUpdateIndexLocked(
+      const std::vector<location::nearby::analytics::proto::ConnectionsLog::
+                            OperationResultWithMedium> &list)
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
   location::nearby::proto::connections::ConnectionsStrategy
@@ -363,6 +470,9 @@ class AnalyticsRecorder {
   SingleThreadExecutor serial_executor_;
   // Protects all sub-protos reading and writing in ConnectionLog.
   Mutex mutex_;
+
+  // For testing only.
+  bool no_record_time_millis_ = false;
 
   // ClientSession
   std::unique_ptr<

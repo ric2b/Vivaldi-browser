@@ -5,7 +5,9 @@
 #include "content/browser/attribution_reporting/attribution_manager_impl.h"
 
 #include <stddef.h>
+#include <stdint.h>
 
+#include <algorithm>
 #include <cmath>
 #include <functional>
 #include <optional>
@@ -32,7 +34,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/observer_list.h"
-#include "base/ranges/algorithm.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/task/updateable_sequenced_task_runner.h"
@@ -48,6 +49,8 @@
 #include "components/attribution_reporting/source_registration.h"
 #include "components/attribution_reporting/suitable_origin.h"
 #include "components/attribution_reporting/trigger_registration.h"
+#include "components/metrics/dwa/dwa_builders.h"
+#include "components/metrics/dwa/dwa_recorder.h"
 #include "content/browser/aggregation_service/aggregation_service.h"
 #include "content/browser/aggregation_service/aggregation_service_impl.h"
 #include "content/browser/aggregation_service/report_scheduler_timer.h"
@@ -87,7 +90,6 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "net/base/schemeful_site.h"
-#include "services/network/public/cpp/features.h"
 #include "services/network/public/mojom/network_change_manager.mojom-forward.h"
 #include "storage/browser/quota/special_storage_policy.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
@@ -245,6 +247,12 @@ void RecordCreateReportStatus(const CreateReportResult& result) {
   base::UmaHistogramEnumeration(
       "Conversions.AggregatableReport.CreateReportStatus4",
       result.aggregatable_status());
+
+  dwa::builders::AttributionConversionsCreateReport()
+      .SetContent(result.trigger().reporting_origin().Serialize())
+      .SetEventLevelStatus(static_cast<int64_t>(result.event_level_status()))
+      .SetAggregatableStatus(static_cast<int64_t>(result.aggregatable_status()))
+      .Record(metrics::dwa::DwaRecorder::Get());
 }
 
 void RecordReportRetriesEventLevel(int retry_attempts,
@@ -407,19 +415,61 @@ void LogMetricsOnReportSend(const AttributionReport& report, base::Time now) {
       report.data());
 }
 
+void RecordTimeSinceLastNavigationOnReportComplete(
+    base::Time last_navigation,
+    SendResult::Status status,
+    std::string_view report_type_string) {
+  base::Time now = base::Time::Now();
+  switch (status) {
+    case SendResult::Status::kSent:
+      base::UmaHistogramCustomTimes(
+          base::StrCat(
+              {"Conversions.TimeFromLastNavigationToDelivery_Succeeded.",
+               report_type_string}),
+          now - last_navigation, base::Seconds(1), base::Days(24),
+          /*buckets=*/100);
+      break;
+    case SendResult::Status::kTransientFailure:
+    case SendResult::Status::kFailure:
+      base::UmaHistogramCustomTimes(
+          base::StrCat({"Conversions.TimeFromLastNavigationToDelivery_Failed.",
+                        report_type_string}),
+          now - last_navigation, base::Seconds(1), base::Days(24),
+          /*buckets=*/100);
+      break;
+    case SendResult::Status::kDropped:
+    case SendResult::Status::kAssemblyFailure:
+    case SendResult::Status::kTransientAssemblyFailure:
+      break;
+  }
+}
+
 // Called when |report| is sent, failed or dropped, for logging metrics.
 void LogMetricsOnReportCompleted(const AttributionReport& report,
-                                 SendResult::Status status) {
+                                 SendResult::Status status,
+                                 std::optional<base::Time> last_navigation) {
   switch (report.GetReportType()) {
     case AttributionReport::Type::kEventLevel:
       base::UmaHistogramEnumeration(
           "Conversions.ReportSendOutcome3",
           ConvertToConversionReportSendOutcome(status));
+
+      if (last_navigation.has_value()) {
+        RecordTimeSinceLastNavigationOnReportComplete(
+            *last_navigation, status,
+            /*report_type_string=*/"EventLevelReport");
+      }
       break;
     case AttributionReport::Type::kAggregatableAttribution:
       base::UmaHistogramEnumeration(
           "Conversions.AggregatableReport.ReportSendOutcome2",
           ConvertToConversionReportSendOutcome(status));
+
+      if (last_navigation.has_value()) {
+        RecordTimeSinceLastNavigationOnReportComplete(
+            *last_navigation, status,
+            /*report_type_string=*/"AggregatableReport");
+      }
       break;
     case AttributionReport::Type::kNullAggregatable:
       break;
@@ -447,6 +497,10 @@ void LogMetricsOnReportSent(const AttributionReport& report,
           time_from_conversion_to_report_sent.InHours());
       RecordReportRetriesEventLevel(report.failed_send_attempts(),
                                     third_retry_enabled);
+      UMA_HISTOGRAM_BOOLEAN(
+          "Conversions."
+          "TimeFromTriggerToReportSentSuccessfullyExceeds30Days",
+          time_from_conversion_to_report_sent > base::Days(30));
       break;
     case AttributionReport::Type::kAggregatableAttribution:
       UMA_HISTOGRAM_CUSTOM_TIMES(
@@ -454,6 +508,11 @@ void LogMetricsOnReportSent(const AttributionReport& report,
           "TimeFromTriggerToReportSentSuccessfully",
           time_from_conversion_to_report_sent, base::Minutes(1), base::Days(24),
           50);
+
+      UMA_HISTOGRAM_BOOLEAN(
+          "Conversions.AggregatableReport."
+          "TimeFromTriggerToReportSentSuccessfullyExceeds30Days",
+          time_from_conversion_to_report_sent > base::Days(30));
 
       UMA_HISTOGRAM_CUSTOM_TIMES(
           "Conversions.AggregatableReport.ExtraReportDelayForSuccessfulSend",
@@ -468,9 +527,9 @@ void LogMetricsOnReportSent(const AttributionReport& report,
 }
 
 bool HasNonDefaultFilteringId(const AttributionTrigger& trigger) {
-  return base::ranges::any_of(
+  return std::ranges::any_of(
       trigger.registration().aggregatable_values, [](const auto& value) {
-        return base::ranges::any_of(value.values(), [](const auto& val) {
+        return std::ranges::any_of(value.values(), [](const auto& val) {
           return val.second.filtering_id() !=
                  attribution_reporting::kDefaultFilteringId;
         });
@@ -515,12 +574,10 @@ bool IsOperationAllowed(
 
 std::unique_ptr<AttributionOsLevelManager> CreateOsLevelManager() {
 #if BUILDFLAG(IS_ANDROID)
-  if (base::FeatureList::IsEnabled(
-          network::features::kAttributionReportingCrossAppWeb)) {
-    return std::make_unique<AttributionOsLevelManagerAndroid>();
-  }
-#endif
+  return std::make_unique<AttributionOsLevelManagerAndroid>();
+#else
   return std::make_unique<NoOpAttributionOsLevelManager>();
+#endif
 }
 
 // Returns new report time if any.
@@ -922,7 +979,8 @@ void AttributionManagerImpl::GetActiveSourcesForWebUI(
   OnUserVisibleTaskStarted();
 
   const int kMaxSources = 1000;
-  attribution_resolver_.AsyncCall(&AttributionResolver::GetActiveSources)
+  attribution_resolver_
+      .AsyncCall(&AttributionResolver::GetActiveSourcesWithLimit)
       .WithArgs(kMaxSources)
       .Then(std::move(callback).Then(
           base::BindOnce(&AttributionManagerImpl::OnUserVisibleTaskComplete,
@@ -934,7 +992,8 @@ void AttributionManagerImpl::GetPendingReportsForInternalUse(
     base::OnceCallback<void(std::vector<AttributionReport>)> callback) {
   OnUserVisibleTaskStarted();
 
-  attribution_resolver_.AsyncCall(&AttributionResolver::GetAttributionReports)
+  attribution_resolver_
+      .AsyncCall(&AttributionResolver::GetAttributionReportsWithLimit)
       .WithArgs(/*max_report_time=*/base::Time::Max(), limit)
       .Then(std::move(callback).Then(
           base::BindOnce(&AttributionManagerImpl::OnUserVisibleTaskComplete,
@@ -1050,6 +1109,11 @@ void AttributionManagerImpl::RemoveAttributionDataByDataKey(
           weak_factory_.GetWeakPtr(), /*was_user_visible=*/true)));
 }
 
+void AttributionManagerImpl::UpdateLastNavigationTime(
+    base::Time navigation_time) {
+  last_navigation_time_ = navigation_time;
+}
+
 void AttributionManagerImpl::GetReportsToSend() {
   // We only get the next report time strictly after now, because if we are
   // sending a report now but haven't finished doing so and it is still present
@@ -1060,7 +1124,7 @@ void AttributionManagerImpl::GetReportsToSend() {
   // TODO(apaseltiner): Consider limiting the number of reports being sent at
   // once, to avoid pulling an arbitrary number of reports into memory.
   attribution_resolver_.AsyncCall(&AttributionResolver::GetAttributionReports)
-      .WithArgs(/*max_report_time=*/base::Time::Now(), /*limit=*/-1)
+      .WithArgs(/*max_report_time=*/base::Time::Now())
       .Then(base::BindOnce(&AttributionManagerImpl::SendReports,
                            weak_factory_.GetWeakPtr()));
 }
@@ -1086,6 +1150,7 @@ void AttributionManagerImpl::SendReports(
   for (auto& report : reports) {
     SendReport(base::NullCallback(), now, std::move(report));
   }
+  report_sender_->SetInFirstBatch(/*in_first_batch=*/false);
 }
 
 // If `web_ui_callback` is null, assumes that `report` is being sent at its
@@ -1235,7 +1300,7 @@ void AttributionManagerImpl::OnReportSent(base::OnceClosure done,
       .WithArgs(report.id())
       .Then(std::move(then));
 
-  LogMetricsOnReportCompleted(report, info.status());
+  LogMetricsOnReportCompleted(report, info.status(), last_navigation_time_);
 }
 
 void AttributionManagerImpl::NotifyReportSent(bool is_debug_report,

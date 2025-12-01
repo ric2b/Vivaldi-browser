@@ -43,6 +43,10 @@ public:
     }
 #endif
 
+    bool startTimerQuery() override;
+    void endTimerQuery() override;
+    std::optional<GpuStats> gpuStats() override;
+
 private:
     DawnCommandBuffer(const DawnSharedContext* sharedContext,
                       DawnResourceProvider* resourceProvider);
@@ -92,7 +96,7 @@ private:
     void bindTextureAndSamplers(const DrawPass& drawPass,
                                 const DrawPassCommands::BindTexturesAndSamplers& command);
 
-    void setScissor(unsigned int left, unsigned int top, unsigned int width, unsigned int height);
+    void setScissor(const Scissor&);
     bool updateIntrinsicUniforms(SkIRect viewport);
     void setViewport(SkIRect viewport);
 
@@ -159,6 +163,11 @@ private:
 
     wgpu::Buffer fCurrentIndirectBuffer;
     size_t fCurrentIndirectBufferOffset = 0;
+
+    bool fWroteFirstPassTimestamps = false;
+    wgpu::QuerySet fTimestampQuerySet;
+    sk_sp<DawnBuffer> fTimestampQueryBuffer;
+    sk_sp<DawnBuffer> fTimestampQueryXferBuffer;
 
     const DawnGraphicsPipeline* fActiveGraphicsPipeline = nullptr;
     const DawnComputePipeline* fActiveComputePipeline = nullptr;

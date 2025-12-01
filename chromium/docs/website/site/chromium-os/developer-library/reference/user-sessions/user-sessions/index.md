@@ -49,7 +49,7 @@ unmounted/encrypted.
 [KeyedServices](https://source.chromium.org/chromium/chromium/src/+/main:components/keyed_service/core/keyed_service.h?q=KeyedService&ss=chromium%2Fchromium%2Fsrc)
 are separated from the Profile in the codebase in order to ensure the services
 are started up and torn down in the correct order. Read more about
-[Chromium Profile Architecture](https://www.chromium.org/developers/design-documents/profile-architecture/).
+[Chromium Profile Architecture](/developers/design-documents/profile-architecture/).
 Many features have per-profile data, so it would be a mess if every feature had
 to add its own fields to the BrowserContext or Profile objects.
 

@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "base/atomicops.h"
 #include "base/compiler_specific.h"
 #include "base/numerics/checked_math.h"
 #include "base/time/time.h"
@@ -46,7 +47,10 @@ struct MEDIA_SHMEM_EXPORT alignas(kParametersAlignment)
   uint32_t glitch_count;
   uint32_t size;
   uint32_t id;
-  bool key_pressed;
+  // Intentionally using deprecated Atomic32 instead of std::atomic to keep the
+  // struct as a trivial type.
+  // TODO(https://crbug.com/40259737): Switch to atomic_ref once it's available.
+  base::subtle::Atomic32 has_unread_data;
 };
 struct MEDIA_SHMEM_EXPORT alignas(kParametersAlignment)
     AudioOutputBufferParameters {
@@ -188,6 +192,8 @@ class MEDIA_SHMEM_EXPORT AudioParameters {
 
   // Bitmasks to determine whether certain platform (typically hardware) audio
   // effects should be enabled.
+  // Ensure that EffectsMaskToString() is updated to match the content of this
+  // enumerator when it is updated.
   enum PlatformEffectsMask {
     NO_EFFECTS = 0x0,
     ECHO_CANCELLER = 1 << 0,

@@ -33,20 +33,20 @@ BASE_FEATURE(kTabGroupSyncDisableNetworkLayer,
 // triggering, extension support etc. b/325123353
 BASE_FEATURE(kTabGroupsSaveV2,
              "TabGroupsSaveV2",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// This flag controls the UI update made to saved tab groups as well as model
-// and sync support for pinning saved tab groups.
-BASE_FEATURE(kTabGroupsSaveUIUpdate,
-             "TabGroupsSaveUIUpdate",
-             base::FEATURE_ENABLED_BY_DEFAULT
-);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Feature flag specific to Desktop platforms. When enabled, desktop platforms
 // will use the TabGroupSyncService. When disabled, desktop platforms will
 // continue to use SavedTabGroupKeyedService.
 BASE_FEATURE(kTabGroupSyncServiceDesktopMigration,
              "TabGroupSyncServiceDesktopMigration",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Feature flag specific to Desktop platforms. When enabled, desktop platforms
+// will defer remote navigations in a tab group when the tab is in a
+// backgrounded state.
+BASE_FEATURE(kTabGroupsDeferRemoteNavigations,
+             "TabGroupDeferRemoteNavigations",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Feature flag to disable auto-open of saved tab groups. Note that the
@@ -81,16 +81,26 @@ BASE_FEATURE(kForceRemoveClosedTabGroupsOnStartup,
              "ForceRemoveClosedTabGroupsOnStartup",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Enables sanitization of the tab title.
+BASE_FEATURE(kEnableTabTitleSanitization,
+             "EnableTabTitleSanitization",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables checking for URLs before syncing them to remote devices.
+BASE_FEATURE(kEnableUrlRestriction,
+             "EnableUrlRestriction",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 bool IsTabGroupsSaveV2Enabled() {
   return base::FeatureList::IsEnabled(kTabGroupsSaveV2);
 }
 
-bool IsTabGroupsSaveUIUpdateEnabled() {
-  return base::FeatureList::IsEnabled(kTabGroupsSaveUIUpdate);
-}
-
 bool IsTabGroupSyncServiceDesktopMigrationEnabled() {
   return base::FeatureList::IsEnabled(kTabGroupSyncServiceDesktopMigration);
+}
+
+bool IsTabGroupsDeferringRemoteNavigations() {
+  return base::FeatureList::IsEnabled(kTabGroupsDeferRemoteNavigations);
 }
 
 bool IsTabGroupSyncCoordinatorEnabled() {
@@ -110,7 +120,19 @@ bool DeferMediaLoadInBackgroundTab() {
 }
 
 bool ShouldForceRemoveClosedTabGroupsOnStartup() {
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
   return base::FeatureList::IsEnabled(kForceRemoveClosedTabGroupsOnStartup);
+#else
+  return false;
+#endif
+}
+
+bool IsTabTitleSanitizationEnabled() {
+  return base::FeatureList::IsEnabled(kEnableTabTitleSanitization);
+}
+
+bool IsUrlRestrictionEnabled() {
+  return base::FeatureList::IsEnabled(kEnableUrlRestriction);
 }
 
 }  // namespace tab_groups

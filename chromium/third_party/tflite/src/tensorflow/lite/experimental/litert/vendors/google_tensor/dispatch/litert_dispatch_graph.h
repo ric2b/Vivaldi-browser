@@ -18,24 +18,68 @@
 #include <cstddef>
 #include <map>
 
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
 #include "third_party/odml/infra/southbound/sb_api.h"
+#include "tensorflow/lite/experimental/litert/c/litert_common.h"
+#include "tensorflow/lite/experimental/litert/cc/litert_expected.h"
 #include "tensorflow/lite/experimental/litert/vendors/c/litert_dispatch.h"
+#include "tensorflow/lite/experimental/litert/vendors/google_tensor/dispatch/southbound.h"
 
 class LiteRtDispatchGraphT {
  public:
-  LiteRtDispatchGraphT(ThrGraph* thr_graph,
+  LiteRtDispatchGraphT(const litert::google_tensor::Southbound& southbound,
+                       ThrGraph* thr_graph,
                        LiteRtDispatchDeviceContext device_context)
-      : thr_graph_(thr_graph), device_context_(device_context) {}
+      : southbound_(southbound),
+        thr_graph_(thr_graph),
+        device_context_(device_context) {}
 
   ThrGraph* thr_graph() { return thr_graph_; }
 
   LiteRtDispatchDeviceContext device_context() { return device_context_; }
 
-  int NextNodeInputIndex(LiteRtDispatchNodeId node_id) {
-    return NextNodeIoIndex(node_id, next_node_input_index_);
+  litert::Expected<void> AddNode(LiteRtDispatchNodeId node_id,
+                                 LiteRtDispatchNodeType node_type);
+  litert::Expected<void> AddEdge(LiteRtDispatchEdgeId edge_id);
+
+  litert::Expected<LiteRtDispatchEdgeId> InputEdge(int input_index) const {
+    return IoEdge(input_index, input_edges_);
   }
+
+  litert::Expected<LiteRtDispatchEdgeId> OutputEdge(int output_index) const {
+    return IoEdge(output_index, output_edges_);
+  }
+
+  size_t NumOutputs() const { return output_edges_.size(); }
+
+  litert::Expected<void> ConnectNodeInput(LiteRtDispatchNodeId node_id,
+                                          int input_index,
+                                          LiteRtDispatchEdgeId edge_id);
+
+  litert::Expected<void> ConnectNodeOutput(LiteRtDispatchNodeId node_id,
+                                           int output_index,
+                                           LiteRtDispatchEdgeId edge_id);
+
+  litert::Expected<void> ConnectGraphInput(int input_index,
+                                           LiteRtDispatchEdgeId edge_id);
+
+  litert::Expected<void> ConnectGraphOutput(int output_index,
+                                            LiteRtDispatchEdgeId edge_id);
+
+  litert::Expected<void> AssignNodeFunction(
+      LiteRtDispatchNodeId node_id, LiteRtDispatchExecutableHandle exec_handle,
+      const char* function_name);
+
+  litert::Expected<void> AnnotateGraph(const char* key, const char* value);
+
+  litert::Expected<void> AnnotateNode(LiteRtDispatchNodeId node_id,
+                                      const char* key, const char* value);
+
+  litert::Expected<void> AnnotateEdge(LiteRtDispatchEdgeId edge_id,
+                                      const char* key, const char* value);
+
+ private:
+  using NextNodeIoIndexMap = std::map<LiteRtDispatchNodeId, int>;
+  using IoIndexToEdgeIdMap = std::map<int, LiteRtDispatchEdgeId>;
 
   int NextNodeOutputIndex(LiteRtDispatchNodeId node_id) {
     return NextNodeIoIndex(node_id, next_node_output_index_);
@@ -45,6 +89,24 @@ class LiteRtDispatchGraphT {
 
   int NextGraphOutputIndex() { return next_graph_output_index_++; }
 
+  int NextNodeIoIndex(LiteRtDispatchNodeId node_id, NextNodeIoIndexMap& map) {
+    return map[node_id]++;
+  }
+
+  litert::Expected<LiteRtDispatchEdgeId> IoEdge(
+      int io_index, const IoIndexToEdgeIdMap& map) const {
+    auto iter = map.find(io_index);
+    if (iter == map.end()) {
+      return litert::Unexpected(kLiteRtStatusErrorNotFound,
+                                "Unexpected graph input/output index");
+    }
+    return iter->second;
+  }
+
+  int NextNodeInputIndex(LiteRtDispatchNodeId node_id) {
+    return NextNodeIoIndex(node_id, next_node_input_index_);
+  }
+
   void AddInputEdge(int input_index, LiteRtDispatchEdgeId edge_id) {
     input_edges_[input_index] = edge_id;
   }
@@ -53,33 +115,7 @@ class LiteRtDispatchGraphT {
     output_edges_[output_index] = edge_id;
   }
 
-  absl::StatusOr<LiteRtDispatchEdgeId> InputEdge(int input_index) const {
-    return IoEdge(input_index, input_edges_);
-  }
-
-  absl::StatusOr<LiteRtDispatchEdgeId> OutputEdge(int output_index) const {
-    return IoEdge(output_index, output_edges_);
-  }
-
-  size_t NumOutputs() const { return output_edges_.size(); }
-
- private:
-  using NextNodeIoIndexMap = std::map<LiteRtDispatchNodeId, int>;
-  using IoIndexToEdgeIdMap = std::map<int, LiteRtDispatchEdgeId>;
-
-  int NextNodeIoIndex(LiteRtDispatchNodeId node_id, NextNodeIoIndexMap& map) {
-    return map[node_id]++;
-  }
-
-  absl::StatusOr<LiteRtDispatchEdgeId> IoEdge(
-      int io_index, const IoIndexToEdgeIdMap& map) const {
-    auto iter = map.find(io_index);
-    if (iter == map.end()) {
-      return absl::NotFoundError("Unexpected graph input/output index");
-    }
-    return iter->second;
-  }
-
+  const litert::google_tensor::Southbound& southbound_;
   ThrGraph* thr_graph_;
   LiteRtDispatchDeviceContext device_context_;
   NextNodeIoIndexMap next_node_input_index_;

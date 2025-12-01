@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// @ts-nocheck TODO(crbug.com/348449529)
-
 import {TraceLoader} from '../../../../testing/TraceLoader.js';
 import * as Trace from '../../trace.js';
 import * as Lantern from '../lantern.js';
@@ -24,9 +22,22 @@ describe('NetworkAnalyzer', () => {
     traceWithRedirect = toLanternTrace(await TraceLoader.rawEvents(this, 'lantern/redirect/trace.json.gz'));
   });
 
-  let recordId;
+  let recordId = 1;
 
-  function createRecord(opts) {
+  function createRecord(opts: {
+    // Real request ids are strings but we take a number here to make test
+    // setup easier.
+    requestId?: number,
+    connectionId?: number,
+    connectionReused?: boolean,
+    url?: string,
+    networkRequestTime?: number,
+    networkEndTime?: number,
+    protocol?: string,
+    transferSize?: number,
+    resourceType?: string,
+    timing?: {connectStart?: number, connectEnd?: number, sendStart?: number, receiveHeadersEnd?: number},
+  }): Trace.Lantern.Types.NetworkRequest {
     const url = opts.url || 'https://example.com';
     if (opts.networkRequestTime) {
       opts.networkRequestTime *= 1000;
@@ -34,45 +45,50 @@ describe('NetworkAnalyzer', () => {
     if (opts.networkEndTime) {
       opts.networkEndTime *= 1000;
     }
+    const requestId = opts.requestId ? String(opts.requestId) : String(recordId++);
+    delete opts.requestId;
+
     return Object.assign(
-        {
-          url,
-          requestId: recordId++,
-          connectionId: 0,
-          connectionReused: false,
-          networkRequestTime: 10,
-          networkEndTime: 10,
-          transferSize: 10000,
-          protocol: opts.protocol || 'http/1.1',
-          parsedURL: {scheme: url.match(/https?/)[0], securityOrigin: url.match(/.*\.com/)[0]},
-          timing: opts.timing || null,
-        },
-        opts,
-    );
+               {
+                 url,
+                 requestId,
+                 connectionId: 0,
+                 connectionReused: false,
+                 networkRequestTime: 10,
+                 networkEndTime: 10,
+                 transferSize: 10000,
+                 protocol: opts.protocol || 'http/1.1',
+                 parsedURL: {scheme: url.match(/https?/)?.[0], securityOrigin: url.match(/.*\.com/)?.[0]},
+                 timing: opts.timing || null,
+               },
+               opts,
+               ) as unknown as Trace.Lantern.Types.NetworkRequest;
   }
 
   beforeEach(() => {
     recordId = 1;
   });
 
-  function assertCloseEnough(valueA, valueB, threshold = 1) {
+  function assertCloseEnough(valueA: number, valueB: number, threshold = 1) {
     const message = `${valueA} was not close enough to ${valueB}`;
-    assert.ok(Math.abs(valueA - valueB) < threshold, message);
+    assert.isOk(Math.abs(valueA - valueB) < threshold, message);
   }
 
   describe('#estimateIfConnectionWasReused', () => {
     it('should use built-in value when trustworthy', () => {
       const records = [
-        {requestId: 1, connectionId: 1, connectionReused: false},
-        {requestId: 2, connectionId: 1, connectionReused: true},
-        {requestId: 3, connectionId: 2, connectionReused: false},
-        {requestId: 4, connectionId: 3, connectionReused: false},
-        {requestId: 5, connectionId: 2, connectionReused: true},
+        createRecord({requestId: 1, connectionId: 1, connectionReused: false}),
+        createRecord({requestId: 2, connectionId: 1, connectionReused: true}),
+        createRecord({requestId: 3, connectionId: 2, connectionReused: false}),
+        createRecord({requestId: 4, connectionId: 3, connectionReused: false}),
+        createRecord({requestId: 5, connectionId: 2, connectionReused: true}),
       ];
 
-      const result = NetworkAnalyzer.estimateIfConnectionWasReused(records);
-      const expected = new Map([[1, false], [2, true], [3, false], [4, false], [5, true]]);
-      assert.deepStrictEqual(result, expected);
+      // the `records` are not "full" NetworkRequest items but they are good enough for this test.
+      const result =
+          NetworkAnalyzer.estimateIfConnectionWasReused(records as unknown as Trace.Lantern.Types.NetworkRequest[]);
+      const expected = new Map([['1', false], ['2', true], ['3', false], ['4', false], ['5', true]]);
+      assert.deepEqual(result, expected);
     });
 
     it('should estimate values when not trustworthy (duplicate IDs)', () => {
@@ -83,9 +99,10 @@ describe('NetworkAnalyzer', () => {
         createRecord({requestId: 4, networkRequestTime: 30, networkEndTime: 40}),
       ];
 
-      const result = NetworkAnalyzer.estimateIfConnectionWasReused(records);
-      const expected = new Map([[1, false], [2, false], [3, true], [4, true]]);
-      assert.deepStrictEqual(result, expected);
+      const result =
+          NetworkAnalyzer.estimateIfConnectionWasReused(records as unknown as Trace.Lantern.Types.NetworkRequest[]);
+      const expected = new Map([['1', false], ['2', false], ['3', true], ['4', true]]);
+      assert.deepEqual(result, expected);
     });
 
     it('should estimate values when not trustworthy (connectionReused nonsense)', () => {
@@ -120,9 +137,10 @@ describe('NetworkAnalyzer', () => {
         }),
       ];
 
-      const result = NetworkAnalyzer.estimateIfConnectionWasReused(records);
-      const expected = new Map([[1, false], [2, false], [3, true], [4, true]]);
-      assert.deepStrictEqual(result, expected);
+      const result =
+          NetworkAnalyzer.estimateIfConnectionWasReused(records as unknown as Trace.Lantern.Types.NetworkRequest[]);
+      const expected = new Map([['1', false], ['2', false], ['3', true], ['4', true]]);
+      assert.deepEqual(result, expected);
     });
 
     it('should estimate with earliest allowed reuse', () => {
@@ -133,9 +151,10 @@ describe('NetworkAnalyzer', () => {
         createRecord({requestId: 4, networkRequestTime: 35, networkEndTime: 40}),
       ];
 
-      const result = NetworkAnalyzer.estimateIfConnectionWasReused(records);
-      const expected = new Map([[1, false], [2, false], [3, true], [4, true]]);
-      assert.deepStrictEqual(result, expected);
+      const result =
+          NetworkAnalyzer.estimateIfConnectionWasReused(records as unknown as Trace.Lantern.Types.NetworkRequest[]);
+      const expected = new Map([['1', false], ['2', false], ['3', true], ['4', true]]);
+      assert.deepEqual(result, expected);
     });
 
     it('should work on a real trace', async () => {
@@ -153,7 +172,7 @@ describe('NetworkAnalyzer', () => {
       const request = createRecord({networkRequestTime: 0, networkEndTime: 1, timing});
       const result = NetworkAnalyzer.estimateRTTByOrigin([request]);
       const expected = {min: 99, max: 99, avg: 99, median: 99};
-      assert.deepStrictEqual(result.get('https://example.com'), expected);
+      assert.deepEqual(result.get('https://example.com'), expected);
     });
 
     it('should infer only one estimate if tcp and ssl start times are equal', () => {
@@ -161,7 +180,7 @@ describe('NetworkAnalyzer', () => {
       const request = createRecord({networkRequestTime: 0, networkEndTime: 1, timing});
       const result = NetworkAnalyzer.estimateRTTByOrigin([request]);
       const expected = {min: 99, max: 99, avg: 99, median: 99};
-      assert.deepStrictEqual(result.get('https://example.com'), expected);
+      assert.deepEqual(result.get('https://example.com'), expected);
     });
 
     it('should infer from tcp and ssl timing when available', () => {
@@ -169,7 +188,7 @@ describe('NetworkAnalyzer', () => {
       const request = createRecord({networkRequestTime: 0, networkEndTime: 1, timing});
       const result = NetworkAnalyzer.estimateRTTByOrigin([request]);
       const expected = {min: 49, max: 50, avg: 49.5, median: 49.5};
-      assert.deepStrictEqual(result.get('https://example.com'), expected);
+      assert.deepEqual(result.get('https://example.com'), expected);
     });
 
     it('should infer from connection timing when available for h3 (one estimate)', () => {
@@ -177,7 +196,7 @@ describe('NetworkAnalyzer', () => {
       const request = createRecord({networkRequestTime: 0, networkEndTime: 1, timing, protocol: 'h3'});
       const result = NetworkAnalyzer.estimateRTTByOrigin([request]);
       const expected = {min: 99, max: 99, avg: 99, median: 99};
-      assert.deepStrictEqual(result.get('https://example.com'), expected);
+      assert.deepEqual(result.get('https://example.com'), expected);
     });
 
     it('should infer from sendStart when available', () => {
@@ -188,7 +207,7 @@ describe('NetworkAnalyzer', () => {
       const request = createRecord({networkRequestTime: 0, networkEndTime: 1, timing});
       const result = NetworkAnalyzer.estimateRTTByOrigin([request], {coarseEstimateMultiplier: 1});
       const expected = {min: 50, max: 50, avg: 50, median: 50};
-      assert.deepStrictEqual(result.get('https://example.com'), expected);
+      assert.deepEqual(result.get('https://example.com'), expected);
     });
 
     it('should infer from download timing when available', () => {
@@ -202,7 +221,7 @@ describe('NetworkAnalyzer', () => {
         useHeadersEndEstimates: false,
       });
       const expected = {min: 1000, max: 1000, avg: 1000, median: 1000};
-      assert.deepStrictEqual(result.get('https://example.com'), expected);
+      assert.deepEqual(result.get('https://example.com'), expected);
     });
 
     it('should infer from TTFB when available', () => {
@@ -217,7 +236,7 @@ describe('NetworkAnalyzer', () => {
       // server response time.
       // 600 ms / 4 = 150ms
       const expected = {min: 150, max: 150, avg: 150, median: 150};
-      assert.deepStrictEqual(result.get('https://example.com'), expected);
+      assert.deepEqual(result.get('https://example.com'), expected);
     });
 
     it('should use coarse estimates on a per-origin basis', () => {
@@ -226,8 +245,8 @@ describe('NetworkAnalyzer', () => {
         createRecord({url: 'https://example2.com', timing: {sendStart: 150}}),
       ];
       const result = NetworkAnalyzer.estimateRTTByOrigin(records);
-      assert.deepStrictEqual(result.get('https://example.com'), {min: 99, max: 99, avg: 99, median: 99});
-      assert.deepStrictEqual(result.get('https://example2.com'), {min: 15, max: 15, avg: 15, median: 15});
+      assert.deepEqual(result.get('https://example.com'), {min: 99, max: 99, avg: 99, median: 99});
+      assert.deepEqual(result.get('https://example2.com'), {min: 15, max: 15, avg: 15, median: 15});
     });
 
     it('should handle untrustworthy connection information', () => {
@@ -244,15 +263,15 @@ describe('NetworkAnalyzer', () => {
         coarseEstimateMultiplier: 1,
       });
       const expected = {min: 50, max: 50, avg: 50, median: 50};
-      assert.deepStrictEqual(result.get('https://example.com'), expected);
+      assert.deepEqual(result.get('https://example.com'), expected);
     });
 
     it('should work on a real trace', async () => {
       const requests = await createRequests(trace);
       const result = NetworkAnalyzer.estimateRTTByOrigin(requests);
-      assertCloseEnough(result.get('https://www.paulirish.com').min, 10);
-      assertCloseEnough(result.get('https://www.googletagmanager.com').min, 17);
-      assertCloseEnough(result.get('https://www.google-analytics.com').min, 10);
+      assertCloseEnough(result.get('https://www.paulirish.com')?.min ?? 0, 10);
+      assertCloseEnough(result.get('https://www.googletagmanager.com')?.min ?? 0, 17);
+      assertCloseEnough(result.get('https://www.google-analytics.com')?.min ?? 0, 10);
     });
 
     it('should approximate well with either method', async () => {
@@ -263,6 +282,8 @@ describe('NetworkAnalyzer', () => {
                                  forceCoarseEstimates: true,
                                })
                                .get(NetworkAnalyzer.summary);
+      assert.isOk(result);
+      assert.isOk(resultApprox);
       assertCloseEnough(result.min, resultApprox.min, 20);
       assertCloseEnough(result.avg, resultApprox.avg, 30);
       assertCloseEnough(result.median, resultApprox.median, 30);
@@ -276,7 +297,7 @@ describe('NetworkAnalyzer', () => {
       const rttByOrigin = new Map([[NetworkAnalyzer.summary, 0]]);
       const result = NetworkAnalyzer.estimateServerResponseTimeByOrigin([request], {rttByOrigin});
       const expected = {min: 100, max: 100, avg: 100, median: 100};
-      assert.deepStrictEqual(result.get('https://example.com'), expected);
+      assert.deepEqual(result.get('https://example.com'), expected);
     });
 
     it('should subtract out rtt', () => {
@@ -285,7 +306,7 @@ describe('NetworkAnalyzer', () => {
       const rttByOrigin = new Map([[NetworkAnalyzer.summary, 50]]);
       const result = NetworkAnalyzer.estimateServerResponseTimeByOrigin([request], {rttByOrigin});
       const expected = {min: 50, max: 50, avg: 50, median: 50};
-      assert.deepStrictEqual(result.get('https://example.com'), expected);
+      assert.deepEqual(result.get('https://example.com'), expected);
     });
 
     it('should compute rtts when not provided', () => {
@@ -293,15 +314,15 @@ describe('NetworkAnalyzer', () => {
       const request = createRecord({networkRequestTime: 0, networkEndTime: 1, timing});
       const result = NetworkAnalyzer.estimateServerResponseTimeByOrigin([request]);
       const expected = {min: 50, max: 50, avg: 50, median: 50};
-      assert.deepStrictEqual(result.get('https://example.com'), expected);
+      assert.deepEqual(result.get('https://example.com'), expected);
     });
 
     it('should work on a real trace', async () => {
       const requests = await createRequests(trace);
       const result = NetworkAnalyzer.estimateServerResponseTimeByOrigin(requests);
-      assertCloseEnough(result.get('https://www.paulirish.com').avg, 35);
-      assertCloseEnough(result.get('https://www.googletagmanager.com').avg, 8);
-      assertCloseEnough(result.get('https://www.google-analytics.com').avg, 8);
+      assertCloseEnough(result.get('https://www.paulirish.com')?.avg ?? 0, 35);
+      assertCloseEnough(result.get('https://www.googletagmanager.com')?.avg ?? 0, 8);
+      assertCloseEnough(result.get('https://www.google-analytics.com')?.avg ?? 0, 8);
     });
 
     it('should approximate well with either method', async () => {
@@ -314,6 +335,8 @@ describe('NetworkAnalyzer', () => {
                                  forceCoarseEstimates: true,
                                })
                                .get(NetworkAnalyzer.summary);
+      assert.isOk(result);
+      assert.isOk(resultApprox);
       assertCloseEnough(result.min, resultApprox.min, 20);
       assertCloseEnough(result.avg, resultApprox.avg, 30);
       assertCloseEnough(result.median, resultApprox.median, 30);
@@ -323,25 +346,26 @@ describe('NetworkAnalyzer', () => {
   describe('#estimateThroughput', () => {
     const estimateThroughput = NetworkAnalyzer.estimateThroughput;
 
-    function createThroughputRecord(responseHeadersEndTimeInS, networkEndTimeInS, extras) {
+    function createThroughputRecord(responseHeadersEndTimeInS: number, networkEndTimeInS: number, extras: object = {}):
+        Trace.Lantern.Types.NetworkRequest {
       return Object.assign(
-          {
-            responseHeadersEndTime: responseHeadersEndTimeInS * 1000,
-            networkEndTime: networkEndTimeInS * 1000,
-            transferSize: 1000,
-            finished: true,
-            failed: false,
-            statusCode: 200,
-            url: 'https://google.com/logo.png',
-            parsedURL: {scheme: 'https'},
-          },
-          extras,
-      );
+                 {
+                   responseHeadersEndTime: responseHeadersEndTimeInS * 1000,
+                   networkEndTime: networkEndTimeInS * 1000,
+                   transferSize: 1000,
+                   finished: true,
+                   failed: false,
+                   statusCode: 200,
+                   url: 'https://google.com/logo.png',
+                   parsedURL: {scheme: 'https'},
+                 },
+                 extras,
+                 ) as unknown as Trace.Lantern.Types.NetworkRequest;
     }
 
     it('should return null for no/missing records', () => {
-      assert.strictEqual(estimateThroughput([]), null);
-      assert.strictEqual(estimateThroughput([createThroughputRecord(0, 0, {finished: false})]), null);
+      assert.isNull(estimateThroughput([]));
+      assert.isNull(estimateThroughput([createThroughputRecord(0, 0, {finished: false})]));
     });
 
     it('should compute correctly for a basic waterfall', () => {
@@ -423,7 +447,7 @@ describe('NetworkAnalyzer', () => {
       const result = NetworkAnalyzer.computeRTTAndServerResponseTime(requests);
 
       expect(result.rtt).to.be.closeTo(0.082, 0.001);
-      assert.deepStrictEqual([...result.additionalRttByOrigin.entries()], [
+      assert.deepEqual([...result.additionalRttByOrigin.entries()], [
         [
           'https://www.paulirish.com',
           9.788999999999994,
@@ -468,12 +492,14 @@ describe('NetworkAnalyzer', () => {
     it('should find the main document', async () => {
       const requests = await createRequests(trace);
       const mainDocument = NetworkAnalyzer.findResourceForUrl(requests, 'https://www.paulirish.com/');
+      assert.isOk(mainDocument);
       assert.strictEqual(mainDocument.url, 'https://www.paulirish.com/');
     });
 
     it('should find the main document if the URL includes a fragment', async () => {
       const requests = await createRequests(trace);
       const mainDocument = NetworkAnalyzer.findResourceForUrl(requests, 'https://www.paulirish.com/#info');
+      assert.isOk(mainDocument);
       assert.strictEqual(mainDocument.url, 'https://www.paulirish.com/');
     });
   });
@@ -482,6 +508,7 @@ describe('NetworkAnalyzer', () => {
     it('should resolve to the same document when no redirect', async () => {
       const requests = await createRequests(trace);
       const mainDocument = NetworkAnalyzer.findResourceForUrl(requests, 'https://www.paulirish.com/');
+      assert.isOk(mainDocument);
       const finalDocument = NetworkAnalyzer.resolveRedirects(mainDocument);
       assert.strictEqual(mainDocument.url, finalDocument.url);
       assert.strictEqual(finalDocument.url, 'https://www.paulirish.com/');
@@ -490,6 +517,7 @@ describe('NetworkAnalyzer', () => {
     it('should resolve to the final document with redirects', async () => {
       const requests = await createRequests(traceWithRedirect);
       const mainDocument = NetworkAnalyzer.findResourceForUrl(requests, 'http://www.vkontakte.ru/');
+      assert.isOk(mainDocument);
       const finalDocument = NetworkAnalyzer.resolveRedirects(mainDocument);
       assert.notEqual(mainDocument.url, finalDocument.url);
       assert.strictEqual(finalDocument.url, 'https://m.vk.com/');

@@ -22,6 +22,7 @@
 #include "content/test/content_browser_test_utils_internal.h"
 #include "ui/accessibility/platform/ax_platform_node_auralinux.h"
 #include "ui/accessibility/platform/browser_accessibility.h"
+#include "ui/base/glib/scoped_gsignal.h"
 
 // TODO(crbug.com/40248581): Remove this again.
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
@@ -1927,6 +1928,17 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
   g_object_unref(container);
 }
 
+// Adapt a GCallback that sets a flag to a base::RepeatingCallback.
+base::RepeatingCallback<void(AtkObject*, gint)> AdaptGCallbackToSetFlag(
+    bool* flag) {
+  return base::BindRepeating(
+      [](bool* flag, AtkObject* object, gint offset) {
+        // Set the flag to true. This mimics the original GCallback's behavior.
+        *flag = true;
+      },
+      base::Unretained(flag));
+}
+
 IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
                        TestTextEventsInStaticText) {
   LoadInitialAccessibilityTreeFromHtml(std::string(
@@ -1941,29 +1953,30 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
   AtkObject* document = GetRendererAccessible();
   EXPECT_EQ(2, atk_object_get_n_accessible_children(document));
 
-  AtkText* div_element = ATK_TEXT(atk_object_ref_accessible_child(document, 0));
+  AtkObject* div_element = atk_object_ref_accessible_child(document, 0);
   EXPECT_EQ(1, atk_object_get_n_accessible_children(ATK_OBJECT(div_element)));
-  AtkText* text =
-      ATK_TEXT(atk_object_ref_accessible_child(ATK_OBJECT(div_element), 0));
-  AtkText* anonymous_block =
-      ATK_TEXT(atk_object_ref_accessible_child(document, 1));
-
-  auto callback = G_CALLBACK(+[](AtkText*, gint, bool* flag) { *flag = true; });
+  AtkObject* text = atk_object_ref_accessible_child(ATK_OBJECT(div_element), 0);
+  AtkObject* anonymous_block = atk_object_ref_accessible_child(document, 1);
 
   bool saw_caret_move_in_text = false;
-  g_signal_connect(text, "text-caret-moved", callback, &saw_caret_move_in_text);
+  ScopedGSignal caret_move_in_text_signal(
+      text, "text-caret-moved",
+      AdaptGCallbackToSetFlag(&saw_caret_move_in_text));
 
   bool saw_caret_move_in_div = false;
-  g_signal_connect(div_element, "text-caret-moved", callback,
-                   &saw_caret_move_in_div);
+  ScopedGSignal caret_move_in_div_signal(
+      div_element, "text-caret-moved",
+      AdaptGCallbackToSetFlag(&saw_caret_move_in_div));
 
   bool saw_caret_move_in_anonymous_block = false;
-  g_signal_connect(anonymous_block, "text-caret-moved", callback,
-                   &saw_caret_move_in_anonymous_block);
+  ScopedGSignal caret_move_in_anonymous_block_signal(
+      anonymous_block, "text-caret-moved",
+      AdaptGCallbackToSetFlag(&saw_caret_move_in_anonymous_block));
 
   bool saw_caret_move_in_document = false;
-  g_signal_connect(document, "text-caret-moved", callback,
-                   &saw_caret_move_in_document);
+  ScopedGSignal caret_move_in_document_signal(
+      document, "text-caret-moved",
+      AdaptGCallbackToSetFlag(&saw_caret_move_in_document));
 
   AccessibilityNotificationWaiter selection_waiter(
       shell()->web_contents(), ui::kAXModeComplete,
@@ -1990,7 +2003,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
   AccessibilityNotificationWaiter document_selection_waiter(
       shell()->web_contents(), ui::kAXModeComplete,
       ax::mojom::Event::kDocumentSelectionChanged);
-  atk_text_set_caret_offset(anonymous_block, 3);
+  atk_text_set_caret_offset(ATK_TEXT(anonymous_block), 3);
   ASSERT_TRUE(document_selection_waiter.WaitForNotification());
 
   EXPECT_FALSE(saw_caret_move_in_div);

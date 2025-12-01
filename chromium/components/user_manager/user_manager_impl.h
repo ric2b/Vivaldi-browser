@@ -28,17 +28,15 @@
 #include "components/user_manager/user_manager_export.h"
 #include "components/user_manager/user_type.h"
 
-class PrefRegistrySimple;
-
 namespace ash {
 class CrosSettings;
+class FakeChromeUserManager;
 class UserManagerTest;
 }  // namespace ash
 
 namespace user_manager {
 
-// Feature that removes legacy supervised users.
-BASE_DECLARE_FEATURE(kRemoveLegacySupervisedUsersOnStartup);
+class FakeUserManager;
 
 // Feature that removes deprecated ARC kiosk users.
 USER_MANAGER_EXPORT
@@ -142,10 +140,6 @@ class USER_MANAGER_EXPORT UserManagerImpl : public UserManager {
   // TODO(b/355590943): clean up once there is no ARC kiosk records.
   static const char kDeprecatedArcKioskUsersHistogramName[];
 
-  // Registers UserManagerImpl preferences.
-  static void RegisterPrefs(PrefRegistrySimple* registry);
-  static void RegisterProfilePrefs(PrefRegistrySimple* registry);
-
   // UserManager implementation:
   void Shutdown() override;
   const UserList& GetUsers() const override;
@@ -200,6 +194,9 @@ class USER_MANAGER_EXPORT UserManagerImpl : public UserManager {
   void RecordOwner(const AccountId& owner) override;
   void UpdateUserAccountData(const AccountId& account_id,
                              const UserAccountData& account_data) override;
+  void UpdateUserAccountLocale(const AccountId& account_id,
+                               const std::string& locale) override;
+
   bool IsOwnerUser(const User* user) const override;
   bool IsPrimaryUser(const User* user) const override;
   bool IsEphemeralUser(const User* user) const override;
@@ -253,20 +250,12 @@ class USER_MANAGER_EXPORT UserManagerImpl : public UserManager {
       const AccountId& account_id) const override;
   bool IsDeviceLocalAccountMarkedForRemoval(
       const AccountId& account_id) const override;
-  void SetUserAffiliated(const AccountId& account_id,
-                         bool is_affiliated) override;
+  void SetUserPolicyStatus(const AccountId& account_id,
+                           bool is_managed,
+                           bool is_affiliated) override;
   bool HasBrowserRestarted() const final;
-  MultiUserSignInPolicyController* GetMultiUserSignInPolicyController()
-      override;
 
   void Initialize() override;
-
-  // Creates and adds a kiosk user for testing with a given `account_id`
-  // and `username_hash` to identify homedir mount point.
-  // Returns a pointer to the user.
-  // Note: call `UserLoggedIn` if the user needs to be logged-in.
-  const User* AddKioskAppUserForTesting(const AccountId& account_id,
-                                        const std::string& username_hash);
 
   // Helper function that converts users from |users_list| to |users_vector| and
   // |users_set|. Duplicates and users already present in |existing_users| are
@@ -282,9 +271,20 @@ class USER_MANAGER_EXPORT UserManagerImpl : public UserManager {
   ash::CrosSettings* cros_settings() { return cros_settings_; }
   const ash::CrosSettings* cros_settings() const { return cros_settings_; }
 
-  // Adds |user| to users list, and adds it to front of LRU list. It is assumed
-  // that there is no user with same id.
-  virtual void AddUserRecord(User* user);
+  // Add a new regular user with a Gaia account. Returns the created user.
+  // `user_type` must be kRegular or kChild, which can hold a Gaia account.
+  // The added user is persisted in `local_state_`.
+  User* AddGaiaUser(const AccountId& account_id, UserType user_type);
+
+  // Add a new ephemeral user.
+  // Unlike AddGaiaUser, the created user will not be persisted.
+  User* AddEphemeralUser(const AccountId& account_id, UserType user_type);
+
+  // Add a new guest user.
+  User* AddGuestUser();
+
+  // Add a public account user.
+  User* AddPublicAccountUser(const AccountId& account_id);
 
   // Returns true if user may be removed.
   virtual bool CanUserBeRemoved(const User* user) const;
@@ -388,6 +388,11 @@ class USER_MANAGER_EXPORT UserManagerImpl : public UserManager {
   UserList lru_logged_in_users_;
 
  private:
+  // TODO(crbug.com/278643115): allows access to private members to support
+  // fake features for transition period.
+  friend class FakeUserManager;
+  friend class ash::FakeChromeUserManager;
+
   // Loads |users_| from Local State if the list has not been loaded yet.
   // Subsequent calls have no effect. Must be called on the UI thread.
   void EnsureUsersLoaded();
@@ -421,28 +426,26 @@ class USER_MANAGER_EXPORT UserManagerImpl : public UserManager {
   // Notifies observers that merge session state had changed.
   void NotifyMergeSessionStateChanged();
 
-  // Processes log-in for each type of users.
-  void RegularUserLoggedIn(const AccountId& account_id,
-                           const UserType user_type);
-  void GuestUserLoggedIn();
-  void PublicAccountUserLoggedIn(User* user);
-  void KioskAppLoggedIn(User* user);
+  // Handles the given user's log-in state update.
+  void OnUserLoggedIn(User& user, std::string_view username_hash);
 
-  // Insert |user| at the front of the LRU user list.
-  void SetLRUUser(User* user);
+  // Handles the event that a Primary user session is created.
+  void OnPrimaryUserLoggedIn(User& user);
 
-  // Updates num-users crash key.
-  void UpdateCrashKey(int num_users, std::optional<UserType> active_user_type);
+  // Handles the active user switching.
+  void OnActiveUserSwitched(User& new_active_user);
+
+  // Updates "num-users" crash key.
+  static void UpdateNumLoggedInUsersCrashKey(size_t num_users);
+
+  // Updates "session-type" crash key.
+  static void UpdateSessionTypeCrashKey(UserType active_user_type);
 
   // Sends metrics in response to a user with gaia account (regular) logging in.
   void SendGaiaUserLoginMetrics(const AccountId& account_id);
 
   // Sends metrics for multi user sign-in.
   void SendMultiUserSignInMetrics();
-
-  // Sets account locale for user with id |account_id|.
-  virtual void UpdateUserAccountLocale(const AccountId& account_id,
-                                       const std::string& locale);
 
   // Updates user account after locale was resolved.
   void DoUpdateAccountLocale(const AccountId& account_id,
@@ -455,6 +458,9 @@ class USER_MANAGER_EXPORT UserManagerImpl : public UserManager {
   bool IsDeprecatedArcKioskAccountId(const AccountId& account_id) const;
   void RemoveDeprecatedArcKioskUser(const AccountId& account_id);
 
+  // Returns whether the device is enterprise managed.
+  bool IsEnterpriseManaged() const;
+
   std::unique_ptr<Delegate> delegate_;
 
   SEQUENCE_CHECKER(sequence_checker_);
@@ -463,9 +469,6 @@ class USER_MANAGER_EXPORT UserManagerImpl : public UserManager {
 
   // Interface to the signed settings store.
   const raw_ptr<ash::CrosSettings> cros_settings_;
-
-  // Handles multi-user sign-in policy.
-  MultiUserSignInPolicyController multi_user_sign_in_policy_controller_;
 
   // Cached flag of whether the currently logged-in user existed before this
   // login.

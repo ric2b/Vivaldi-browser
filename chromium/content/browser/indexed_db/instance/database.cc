@@ -6,11 +6,9 @@
 
 #include <math.h>
 
-#include <algorithm>
 #include <cstddef>
 #include <utility>
 
-#include "base/auto_reset.h"
 #include "base/containers/contains.h"
 #include "base/containers/flat_set.h"
 #include "base/functional/bind.h"
@@ -164,10 +162,26 @@ PartitionedLockManager& Database::lock_manager() {
   return bucket_context_->lock_manager();
 }
 
+bool Database::OnlyHasOneClient() const {
+  if (connections_.empty()) {
+    return true;
+  }
+
+  const base::UnguessableToken& token = (*connections_.begin())->client_token();
+  return std::all_of(connections_.begin(), connections_.end(),
+                     [&token](Connection* connection) {
+                       return connection->client_token() == token;
+                     });
+}
+
 void Database::RequireBlockingTransactionClientsToBeActive(
     Transaction* current_transaction,
     std::vector<PartitionedLockManager::PartitionedLockRequest>&
         lock_requests) {
+  if (OnlyHasOneClient()) {
+    return;
+  }
+
   std::vector<PartitionedLockId> blocked_lock_ids =
       lock_manager().GetUnacquirableLocks(lock_requests);
 
@@ -183,16 +197,7 @@ void Database::RequireBlockingTransactionClientsToBeActive(
 
     // If any of the connection's transactions is holding one of the blocked
     // lock IDs, require that client to be active.
-    if (std::any_of(
-            connection->transactions().begin(),
-            connection->transactions().end(),
-            [&](const std::pair<const int64_t, std::unique_ptr<Transaction>>&
-                    existing_transaction) {
-              return !base::STLSetIntersection<std::vector<PartitionedLockId>>(
-                          blocked_lock_ids,
-                          existing_transaction.second->lock_ids())
-                          .empty();
-            })) {
+    if (connection->IsHoldingLocks(blocked_lock_ids)) {
       connection->DisallowInactiveClient(
           storage::mojom::DisallowInactiveClientReason::
               kTransactionIsAcquiringLocks,

@@ -64,7 +64,7 @@ describe('workspace', () => {
     expect(workspace.getTrackById('bar')).toBe(undefined);
   });
 
-  test('findTrackByUri()', () => {
+  test('getTrackByUri()', () => {
     const workspace = new Workspace();
 
     const group = new TrackNode();
@@ -75,7 +75,7 @@ describe('workspace', () => {
     // Add group to workspace
     workspace.addChildLast(group);
 
-    expect(workspace.findTrackByUri('foo')).toBe(track);
+    expect(workspace.getTrackByUri('foo')).toBe(track);
   });
 
   test('findClosestVisibleAncestor()', () => {
@@ -180,4 +180,93 @@ describe('TrackNode.addChildInOrder', () => {
     expect(container.children[0]).toBe(child2);
     expect(container.children[1]).toBe(child1);
   });
+});
+
+test('TrackNode::flatTracksOrdered', () => {
+  const root = new TrackNode();
+
+  const removeme = new TrackNode({id: 'removeme'});
+  root.addChildFirst(removeme);
+
+  const foo = new TrackNode({id: 'foo'});
+  root.addChildLast(foo);
+  foo.addChildLast(new TrackNode({id: 'fooBar'})); // <-- Note this one is added as a child of foo
+  const bar = new TrackNode({id: 'bar'});
+  root.addChildLast(bar);
+  root.addChildFirst(new TrackNode({id: 'baz'})); // <- Note this one is added first so should appear before the others in flatTracks
+
+  root.removeChild(removeme);
+
+  expect(root.flatTracksOrdered.map(({id}) => id)).toEqual([
+    'baz',
+    'foo',
+    'fooBar',
+    'bar',
+  ]);
+});
+
+test('TrackNode::flatTracks', () => {
+  const root = new TrackNode();
+
+  const removeme = new TrackNode({id: 'removeme'});
+  root.addChildFirst(removeme);
+
+  const foo = new TrackNode({id: 'foo'});
+  root.addChildLast(foo);
+  foo.addChildLast(new TrackNode({id: 'fooBar'})); // <-- Note this one is added as a child of foo
+  root.addChildLast(new TrackNode({id: 'bar'}));
+  root.addChildFirst(new TrackNode({id: 'baz'})); // <- Note this one is added first so should appear before the others in flatTracks
+
+  root.removeChild(removeme);
+
+  expect(root.flatTracks.map(({id}) => id)).toEqual(
+    expect.arrayContaining(['baz', 'foo', 'fooBar', 'bar']),
+  );
+  expect(root.flatTracks.length).toBe(4);
+});
+
+test('TrackNode::clone', () => {
+  const root = new TrackNode();
+  const childA = new TrackNode();
+  root.addChildLast(childA);
+
+  const childB = new TrackNode();
+  root.addChildLast(childB);
+
+  const cloned = root.clone();
+
+  expect(cloned.id).not.toBe(root.id); // id should be different
+  expect(cloned.uri).toBe(root.uri);
+  expect(cloned.expanded).toBe(root.expanded);
+  expect(cloned.title).toBe(root.title);
+  expect(cloned.headless).toBe(root.headless);
+  expect(cloned.isSummary).toBe(root.isSummary);
+  expect(cloned.removable).toBe(root.removable);
+  expect(cloned.children).toStrictEqual([]); // Children should not be copied
+});
+
+test('TrackNode::clone(deep)', () => {
+  const root = new TrackNode();
+  const childA = new TrackNode();
+  root.addChildLast(childA);
+
+  const childB = new TrackNode();
+  root.addChildLast(childB);
+
+  const cloned = root.clone(true);
+
+  expect(cloned.id).not.toBe(root.id); // id should be different
+  expect(cloned.uri).toBe(root.uri);
+  expect(cloned.expanded).toBe(root.expanded);
+  expect(cloned.title).toBe(root.title);
+  expect(cloned.headless).toBe(root.headless);
+  expect(cloned.isSummary).toBe(root.isSummary);
+  expect(cloned.removable).toBe(root.removable);
+  expect(cloned.children).toHaveLength(2);
+
+  expect(cloned.children[0].title).toBe(childA.title);
+  expect(cloned.children[0].uri).toBe(childA.uri);
+
+  expect(cloned.children[1].title).toBe(childB.title);
+  expect(cloned.children[1].uri).toBe(childB.uri);
 });

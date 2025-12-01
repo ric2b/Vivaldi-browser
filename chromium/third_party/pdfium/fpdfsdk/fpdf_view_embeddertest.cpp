@@ -572,7 +572,7 @@ TEST_F(FPDFViewEmbedderTest, SandboxDocument) {
   EXPECT_EQ(0u, buf[0]);
   CloseDocument();
 
-  constexpr unsigned long kNoSuchPolicy = 102;
+  static constexpr unsigned long kNoSuchPolicy = 102;
   FPDF_SetSandBoxPolicy(kNoSuchPolicy, true);
   CreateEmptyDocument();
   len = FPDF_GetMetaText(document(), "CreationDate", buf, sizeof(buf));
@@ -684,7 +684,7 @@ TEST_F(FPDFViewEmbedderTest, ViewerRef) {
 
   // Make sure |buf| does not get written into when it appears to be too small.
   // NOLINTNEXTLINE(runtime/printf)
-  strcpy(buf, "ABCD");
+  UNSAFE_TODO(strcpy(buf, "ABCD"));
   EXPECT_EQ(4U, FPDF_VIEWERREF_GetName(document(), "Foo", buf, 1));
   EXPECT_STREQ("ABCD", buf);
 
@@ -871,7 +871,7 @@ TEST_F(FPDFViewEmbedderTest, NamedDestsOldStyle) {
   EXPECT_TRUE(FPDF_GetNamedDestByName(document(), kLastAlternate));
 
   char buffer[512];
-  constexpr long kBufferSize = sizeof(buffer);
+  static constexpr long kBufferSize = sizeof(buffer);
   long size = kBufferSize;
 
   // Test bad indices.
@@ -1288,9 +1288,9 @@ TEST_F(FPDFViewEmbedderTest, GetXFAArrayData) {
 
   for (const auto& testcase : kTestCases) {
     char name_buffer[20] = {};
-    ASSERT_EQ(strlen(testcase.name) + 1,
+    ASSERT_EQ(UNSAFE_TODO(strlen(testcase.name)) + 1,
               FPDF_GetXFAPacketName(document(), testcase.index, nullptr, 0));
-    EXPECT_EQ(strlen(testcase.name) + 1,
+    EXPECT_EQ(UNSAFE_TODO(strlen(testcase.name)) + 1,
               FPDF_GetXFAPacketName(document(), testcase.index, name_buffer,
                                     sizeof(name_buffer)));
     EXPECT_STREQ(testcase.name, name_buffer);
@@ -1713,8 +1713,8 @@ TEST_F(FPDFViewEmbedderTest, MAYBE_LargeImageDoesNotRenderBlank) {
   ScopedEmbedderTestPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
-  constexpr int kWidth = 40000;
-  constexpr int kHeight = 100;
+  static constexpr int kWidth = 40000;
+  static constexpr int kHeight = 100;
   TestRenderPageBitmapWithMatrix(page.get(), kWidth, kHeight,
                                  {1000, 0, 0, 1, 0, 0}, {0, 0, kWidth, kHeight},
                                  kChecksum);
@@ -2127,8 +2127,8 @@ TEST_F(FPDFViewEmbedderTest, RenderTransparencyOnWhiteBackground) {
   ScopedEmbedderTestPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
-  constexpr int kWidth = 200;
-  constexpr int kHeight = 200;
+  static constexpr int kWidth = 200;
+  static constexpr int kHeight = 200;
   EXPECT_EQ(kWidth, static_cast<int>(FPDF_GetPageWidthF(page.get())));
   EXPECT_EQ(kHeight, static_cast<int>(FPDF_GetPageHeightF(page.get())));
   EXPECT_TRUE(FPDFPage_HasTransparency(page.get()));
@@ -2139,13 +2139,13 @@ TEST_F(FPDFViewEmbedderTest, RenderTransparencyOnWhiteBackground) {
                         /*start_y=*/0, kWidth, kHeight, /*rotate=*/0,
                         /*flags=*/0);
   // TODO(crbug.com/1302355): This page should not render blank.
-  EXPECT_EQ("eee4600ac08b458ac7ac2320e225674c", HashBitmap(bitmap.get()));
+  EXPECT_EQ(pdfium::kBlankPage200By200Checksum, HashBitmap(bitmap.get()));
 }
 
 TEST_F(FPDFViewEmbedderTest, Bug2112) {
-  constexpr int kWidth = 595;
-  constexpr int kHeight = 842;
-  constexpr int kStride = kWidth * 3;
+  static constexpr int kWidth = 595;
+  static constexpr int kHeight = 842;
+  static constexpr int kStride = kWidth * 3;
   std::vector<uint8_t> vec(kStride * kHeight);
   ScopedFPDFBitmap bitmap(FPDFBitmap_CreateEx(kWidth, kHeight, FPDFBitmap_BGR,
                                               vec.data(), kStride));
@@ -2175,9 +2175,10 @@ TEST_F(FPDFViewEmbedderTest, RenderAnnotsGrayScale) {
 }
 
 TEST_F(FPDFViewEmbedderTest, BadFillRectInput) {
-  constexpr int kWidth = 200;
-  constexpr int kHeight = 200;
-  constexpr char kExpectedChecksum[] = "acc736435c9f84aa82941ba561bc5dbc";
+  static constexpr int kWidth = 200;
+  static constexpr int kHeight = 200;
+  static constexpr char kExpectedChecksum[] =
+      "acc736435c9f84aa82941ba561bc5dbc";
   ScopedFPDFBitmap bitmap(FPDFBitmap_Create(200, 200, /*alpha=*/true));
   ASSERT_TRUE(FPDFBitmap_FillRect(bitmap.get(), /*left=*/0, /*top=*/0,
                                   /*width=*/kWidth,

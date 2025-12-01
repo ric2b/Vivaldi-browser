@@ -355,10 +355,10 @@ TEST_F(MessageDemuxerTest, BufferLimit) {
 }
 
 TEST_F(MessageDemuxerTest, DeserializeMessages) {
-  std::vector<uint8_t> kAgentInfoResponseSerialized{0x0B, 0xFF};
-  std::vector<uint8_t> kPresentationConnectionCloseEventSerialized{0x40, 0x71,
-                                                                   0x00};
-  std::vector<uint8_t> kAuthCapabilitiesSerialized{0x43, 0xE9, 0xFF, 0x00};
+  std::vector<uint8_t> kAgentInfoResponseSerialized = {0x0B, 0xFF};
+  std::vector<uint8_t> kPresentationConnectionCloseEventSerialized = {
+      0x40, 0x71, 0x00};
+  std::vector<uint8_t> kAuthCapabilitiesSerialized = {0x43, 0xE9, 0xFF, 0x00};
 
   size_t used_bytes;
   auto kAgentInfoResponseInfo =

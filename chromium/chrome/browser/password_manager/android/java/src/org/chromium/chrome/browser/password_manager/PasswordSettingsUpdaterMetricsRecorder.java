@@ -8,8 +8,6 @@ import static org.chromium.chrome.browser.password_manager.PasswordManagerSettin
 import static org.chromium.chrome.browser.password_manager.PasswordManagerSetting.BIOMETRIC_REAUTH_BEFORE_PWD_FILLING;
 import static org.chromium.chrome.browser.password_manager.PasswordManagerSetting.OFFER_TO_SAVE_PASSWORDS;
 
-import static java.util.function.Predicate.not;
-
 import android.os.SystemClock;
 import android.text.TextUtils;
 
@@ -18,9 +16,8 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.metrics.RecordHistogram;
 
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * Records metrics for an asynchronous job or a series of jobs. The job is expected to have started
@@ -92,27 +89,29 @@ class PasswordSettingsUpdaterMetricsRecorder {
     }
 
     private String getHistogramName(String metric, String storeType) {
-        List<String> histogramNameComponents =
-                Arrays.asList(
-                        PASSWORD_SETTINGS_HISTOGRAM_BASE,
-                        mFunctionSuffix,
-                        getSuffixForSetting(mSetting),
-                        storeType,
-                        metric);
-        return histogramNameComponents.stream()
-                .filter(not(TextUtils::isEmpty))
-                .collect(Collectors.joining("."));
+        List<String> histogramNameComponents = new ArrayList<>();
+        histogramNameComponents.add(PASSWORD_SETTINGS_HISTOGRAM_BASE);
+        if (!TextUtils.isEmpty(mFunctionSuffix)) {
+            histogramNameComponents.add(mFunctionSuffix);
+        }
+        histogramNameComponents.add(getSuffixForSetting(mSetting));
+        if (!TextUtils.isEmpty(storeType)) {
+            histogramNameComponents.add(storeType);
+        }
+        histogramNameComponents.add(metric);
+
+        return TextUtils.join(".", histogramNameComponents);
     }
 
     private void reportErrorMetrics(Exception exception) {
         @AndroidBackendErrorType
         int error = PasswordManagerAndroidBackendUtil.getBackendError(exception);
         RecordHistogram.recordEnumeratedHistogram(
-                getHistogramName("ErrorCode"), error, AndroidBackendErrorType.MAX_VALUE + 1);
+                getHistogramName("ErrorCode"), error, AndroidBackendErrorType.MAX_VALUE);
         RecordHistogram.recordEnumeratedHistogram(
                 getHistogramName("ErrorCode", mStoreType),
                 error,
-                AndroidBackendErrorType.MAX_VALUE + 1);
+                AndroidBackendErrorType.MAX_VALUE);
         if (error == AndroidBackendErrorType.EXTERNAL_ERROR) {
             int apiErrorCode = PasswordManagerAndroidBackendUtil.getApiErrorCode(exception);
             RecordHistogram.recordSparseHistogram(getHistogramName("APIError1"), apiErrorCode);

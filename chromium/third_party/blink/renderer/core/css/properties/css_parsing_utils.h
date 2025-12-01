@@ -55,6 +55,7 @@ enum class AllowTextValue { kAllow, kForbid };
 enum class AllowPathValue { kAllow, kForbid };
 enum class AllowBasicShapeRectValue { kAllow, kForbid };
 enum class AllowBasicShapeXYWHValue { kAllow, kForbid };
+enum class AllowShapeValue { kAllow, kForbid };
 enum class DefaultFill { kFill, kNoFill };
 enum class ParsingStyle { kLegacy, kNotLegacy };
 enum class TrackListType {
@@ -81,6 +82,7 @@ using IsResetOnlyFunction = bool (*)(CSSPropertyID);
 using IsPositionKeyword = bool (*)(CSSValueID);
 
 constexpr size_t kMaxNumAnimationLonghands = 12;
+constexpr size_t kMaxNumAnimationTriggerLonghands = 6;
 
 void Complete4Sides(CSSValue* side[4]);
 
@@ -366,6 +368,13 @@ CSSValue* ConsumeSingleTimelineName(CSSParserTokenStream&,
 CSSValue* ConsumeSingleTimelineInset(CSSParserTokenStream&,
                                      const CSSParserContext&);
 
+bool ConsumeAnimationTriggerShorthand(const StylePropertyShorthand&,
+                                      HeapVector<Member<CSSValueList>, kMaxNumAnimationTriggerLonghands>&,
+                                      CSSParserTokenStream&,
+                                      const CSSParserContext&);
+
+CSSValue* GetImpliedRangeEnd(const CSSValue* start_range);
+
 void AddBackgroundValue(CSSValue*& list, const CSSValue*);
 CSSValue* ConsumeBackgroundAttachment(CSSParserTokenStream&);
 CSSValue* ConsumeBackgroundBlendMode(CSSParserTokenStream&);
@@ -430,8 +439,9 @@ CSSValue* ParseBorderWidthSide(CSSParserTokenStream&,
 const CSSValue* ParseBorderStyleSide(CSSParserTokenStream&,
                                      const CSSParserContext&);
 
-CSSValue* ConsumeGapDecorationColorList(CSSParserTokenStream&,
-                                        const CSSParserContext&);
+CSSValue* ConsumeGapDecorationPropertyList(CSSParserTokenStream&,
+                                           const CSSParserContext&,
+                                           const CSSGapDecorationPropertyType);
 
 CSSValue* ConsumeShadow(CSSParserTokenStream&,
                         const CSSParserContext&,
@@ -533,7 +543,6 @@ CSSValue* ConsumeMarginOrOffset(CSSParserTokenStream&,
                                 CSSAnchorQueryTypes = kCSSAnchorQueryTypesNone);
 CSSValue* ConsumeScrollPadding(CSSParserTokenStream&, const CSSParserContext&);
 CSSValue* ConsumeScrollStart(CSSParserTokenStream&, const CSSParserContext&);
-CSSValue* ConsumeScrollStartTarget(CSSParserTokenStream&);
 CSSValue* ConsumeOffsetPath(CSSParserTokenStream&, const CSSParserContext&);
 CSSValue* ConsumePathOrNone(CSSParserTokenStream&);
 CSSValue* ConsumeOffsetRotate(CSSParserTokenStream&, const CSSParserContext&);
@@ -543,6 +552,7 @@ CSSValue* ConsumeBasicShape(
     CSSParserTokenStream&,
     const CSSParserContext&,
     AllowPathValue = AllowPathValue::kAllow,
+    AllowShapeValue = AllowShapeValue::kAllow,
     AllowBasicShapeRectValue = AllowBasicShapeRectValue::kAllow,
     AllowBasicShapeXYWHValue = AllowBasicShapeXYWHValue::kAllow);
 bool ConsumeRadii(std::array<CSSValue*, 4>& horizontal_radii,

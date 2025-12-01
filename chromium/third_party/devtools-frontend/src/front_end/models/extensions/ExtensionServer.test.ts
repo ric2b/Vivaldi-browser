@@ -4,7 +4,7 @@
 
 import type {Chrome} from '../../../extension-api/ExtensionAPI.js';
 import * as Common from '../../core/common/common.js';
-import type * as Platform from '../../core/platform/platform.js';
+import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
 import {createTarget, expectConsoleLogs} from '../../testing/EnvironmentHelpers.js';
@@ -21,6 +21,8 @@ import * as Logs from '../logs/logs.js';
 import * as TextUtils from '../text_utils/text_utils.js';
 import * as Workspace from '../workspace/workspace.js';
 
+const {urlString} = Platform.DevToolsPath;
+
 describeWithDevtoolsExtension('Extensions', {}, context => {
   it('are initialized after the target is initialized and navigated to a non-privileged URL', async () => {
     // This check is a proxy for verifying that the extension has been initialized. Outside of the test the extension
@@ -28,7 +30,7 @@ describeWithDevtoolsExtension('Extensions', {}, context => {
     assert.isUndefined(context.chrome.devtools);
 
     const addExtensionStub = sinon.stub(Extensions.ExtensionServer.ExtensionServer.instance(), 'addExtension');
-    createTarget().setInspectedURL('http://example.com' as Platform.DevToolsPath.UrlString);
+    createTarget().setInspectedURL(urlString`http://example.com`);
     assert.isTrue(addExtensionStub.calledOnceWithExactly(context.extensionDescriptor));
   });
 
@@ -38,14 +40,14 @@ describeWithDevtoolsExtension('Extensions', {}, context => {
     assert.isUndefined(context.chrome.devtools);
 
     const addExtensionStub = sinon.stub(Extensions.ExtensionServer.ExtensionServer.instance(), 'addExtension');
-    createTarget().setInspectedURL('chrome://version' as Platform.DevToolsPath.UrlString);
+    createTarget().setInspectedURL(urlString`chrome://version`);
     assert.isTrue(addExtensionStub.notCalled);
   });
 
   it('defers loading extensions until after navigation from a privileged to a non-privileged host', async () => {
     const addExtensionSpy = sinon.spy(Extensions.ExtensionServer.ExtensionServer.instance(), 'addExtension');
     const target = createTarget({type: SDK.Target.Type.FRAME});
-    target.setInspectedURL('chrome://abcdef' as Platform.DevToolsPath.UrlString);
+    target.setInspectedURL(urlString`chrome://abcdef`);
     assert.isTrue(addExtensionSpy.notCalled, 'addExtension not called');
 
     target.setInspectedURL(allowedUrl);
@@ -72,7 +74,7 @@ describeWithDevtoolsExtension('Extensions', {}, context => {
     const resources =
         await new Promise<Chrome.DevTools.Resource[]>(r => context.chrome.devtools!.inspectedWindow.getResources(r));
 
-    assert.deepStrictEqual(resources.map(r => r.url), ['https://example.com/', 'http://example.com']);
+    assert.deepEqual(resources.map(r => r.url), ['https://example.com/', 'http://example.com']);
   });
 });
 
@@ -82,7 +84,7 @@ describeWithDevtoolsExtension('Extensions', {}, context => {
     error: ['Extension server error: Object not found: <top>'],
   });
   beforeEach(() => {
-    createTarget().setInspectedURL('http://example.com' as Platform.DevToolsPath.UrlString);
+    createTarget().setInspectedURL(urlString`http://example.com`);
   });
 
   it('can register a recorder extension for export', async () => {
@@ -98,7 +100,7 @@ describeWithDevtoolsExtension('Extensions', {}, context => {
     await context.chrome.devtools?.recorder.registerRecorderExtensionPlugin(extensionPlugin, 'Test', 'text/javascript');
 
     const manager = Extensions.RecorderPluginManager.RecorderPluginManager.instance();
-    assert.strictEqual(manager.plugins().length, 1);
+    assert.lengthOf(manager.plugins(), 1);
     const plugin = manager.plugins()[0];
 
     const result = await plugin.stringify({
@@ -110,12 +112,12 @@ describeWithDevtoolsExtension('Extensions', {}, context => {
       type: 'scroll',
     });
 
-    assert.strictEqual(manager.plugins().length, 1);
+    assert.lengthOf(manager.plugins(), 1);
     assert.strictEqual(manager.plugins()[0].getMediaType(), 'text/javascript');
     assert.strictEqual(manager.plugins()[0].getName(), 'Test');
-    assert.deepStrictEqual(manager.plugins()[0].getCapabilities(), ['export']);
-    assert.deepStrictEqual(result, '{"name":"test","steps":[]}');
-    assert.deepStrictEqual(stepResult, '{"type":"scroll"}');
+    assert.deepEqual(manager.plugins()[0].getCapabilities(), ['export']);
+    assert.deepEqual(result, '{"name":"test","steps":[]}');
+    assert.deepEqual(stepResult, '{"type":"scroll"}');
 
     await context.chrome.devtools?.recorder.unregisterRecorderExtensionPlugin(extensionPlugin);
   });
@@ -130,7 +132,7 @@ describeWithDevtoolsExtension('Extensions', {}, context => {
     await context.chrome.devtools?.recorder.registerRecorderExtensionPlugin(extensionPlugin, 'Replay');
 
     const manager = Extensions.RecorderPluginManager.RecorderPluginManager.instance();
-    assert.strictEqual(manager.plugins().length, 1);
+    assert.lengthOf(manager.plugins(), 1);
     const plugin = manager.plugins()[0];
 
     await plugin.replay({
@@ -138,8 +140,8 @@ describeWithDevtoolsExtension('Extensions', {}, context => {
       steps: [],
     });
 
-    assert.strictEqual(manager.plugins().length, 1);
-    assert.deepStrictEqual(manager.plugins()[0].getCapabilities(), ['replay']);
+    assert.lengthOf(manager.plugins(), 1);
+    assert.deepEqual(manager.plugins()[0].getCapabilities(), ['replay']);
     assert.strictEqual(manager.plugins()[0].getName(), 'Replay');
 
     await context.chrome.devtools?.recorder.unregisterRecorderExtensionPlugin(extensionPlugin);
@@ -157,7 +159,7 @@ describeWithDevtoolsExtension('Extensions', {}, context => {
     await context.chrome.devtools?.recorder.registerRecorderExtensionPlugin(extensionPlugin, 'Replay');
     const manager = Extensions.RecorderPluginManager.RecorderPluginManager.instance();
 
-    assert.strictEqual(manager.plugins().length, 1);
+    assert.lengthOf(manager.plugins(), 1);
 
     const plugin = manager.plugins()[0];
 
@@ -183,8 +185,8 @@ describeWithDevtoolsExtension('Extensions', {}, context => {
     await context.chrome.devtools?.recorder.registerRecorderExtensionPlugin(extensionPlugin, 'Replay');
     const manager = Extensions.RecorderPluginManager.RecorderPluginManager.instance();
 
-    assert.strictEqual(manager.plugins().length, 1);
-    assert.strictEqual(manager.views().length, 1);
+    assert.lengthOf(manager.plugins(), 1);
+    assert.lengthOf(manager.views(), 1);
 
     const plugin = manager.plugins()[0];
     const onceShowRequested = manager.once(Extensions.RecorderPluginManager.Events.SHOW_VIEW_REQUESTED);
@@ -193,7 +195,7 @@ describeWithDevtoolsExtension('Extensions', {}, context => {
       steps: [],
     });
     const viewDescriptor = await onceShowRequested;
-    assert.deepStrictEqual(viewDescriptor.title, 'Test');
+    assert.deepEqual(viewDescriptor.title, 'Test');
 
     await context.chrome.devtools?.recorder.unregisterRecorderExtensionPlugin(extensionPlugin);
   });
@@ -211,8 +213,8 @@ describeWithDevtoolsExtension('Extensions', {}, context => {
     await context.chrome.devtools?.recorder.registerRecorderExtensionPlugin(extensionPlugin, 'Replay');
     const manager = Extensions.RecorderPluginManager.RecorderPluginManager.instance();
 
-    assert.strictEqual(manager.plugins().length, 1);
-    assert.strictEqual(manager.views().length, 1);
+    assert.lengthOf(manager.plugins(), 1);
+    assert.lengthOf(manager.views(), 1);
 
     const events: object[] = [];
     manager.addEventListener(Extensions.RecorderPluginManager.Events.SHOW_VIEW_REQUESTED, event => {
@@ -224,7 +226,7 @@ describeWithDevtoolsExtension('Extensions', {}, context => {
     // that the ShowViewRequested command was not actually dispatched.
     await new Promise(resolve => context.chrome.devtools?.inspectedWindow.eval('1', undefined, resolve));
 
-    assert.deepStrictEqual(events, []);
+    assert.deepEqual(events, []);
     await context.chrome.devtools?.recorder.unregisterRecorderExtensionPlugin(extensionPlugin);
   });
 
@@ -255,7 +257,7 @@ describeWithDevtoolsExtension('Extensions', {}, context => {
       steps: [],
     });
     const viewDescriptor = await onceShowRequested;
-    assert.deepStrictEqual(viewDescriptor.title, 'Test');
+    assert.deepEqual(viewDescriptor.title, 'Test');
 
     const descriptor = manager.getViewDescriptor(viewDescriptor.id);
 
@@ -289,7 +291,7 @@ describeWithDevtoolsExtension('Extensions', {}, context => {
   it('correcly installs blocked extensions after navigation', async () => {
     const target = SDK.TargetManager.TargetManager.instance().primaryPageTarget();
     assert.isOk(target);
-    target.setInspectedURL('chrome://version' as Platform.DevToolsPath.UrlString);
+    target.setInspectedURL(urlString`chrome://version`);
     const extensionServer = Extensions.ExtensionServer.ExtensionServer.instance();
 
     const addExtensionSpy = sinon.spy(extensionServer, 'addExtension');
@@ -299,9 +301,9 @@ describeWithDevtoolsExtension('Extensions', {}, context => {
       name: 'ext',
       exposeExperimentalAPIs: false,
     }));
-    target.setInspectedURL('http://example.com' as Platform.DevToolsPath.UrlString);
+    target.setInspectedURL(urlString`http://example.com`);
 
-    assert.deepStrictEqual(addExtensionSpy.returnValues, [undefined, true]);
+    assert.deepEqual(addExtensionSpy.returnValues, [undefined, true]);
   });
 
   it('correcly reenables extensions after navigation', async () => {
@@ -310,15 +312,15 @@ describeWithDevtoolsExtension('Extensions', {}, context => {
     const extensionServer = Extensions.ExtensionServer.ExtensionServer.instance();
 
     assert.isTrue(extensionServer.isEnabledForTest);
-    target.setInspectedURL('chrome://version' as Platform.DevToolsPath.UrlString);
+    target.setInspectedURL(urlString`chrome://version`);
     assert.isFalse(extensionServer.isEnabledForTest);
-    target.setInspectedURL('http://example.com' as Platform.DevToolsPath.UrlString);
+    target.setInspectedURL(urlString`http://example.com`);
     assert.isTrue(extensionServer.isEnabledForTest);
   });
 });
 
 const allowedUrl = FRAME_URL;
-const blockedUrl = 'http://web.dev' as Platform.DevToolsPath.UrlString;
+const blockedUrl = urlString`http://web.dev`;
 const hostsPolicy = {
   runtimeAllowedHosts: [allowedUrl],
   runtimeBlockedHosts: [allowedUrl, blockedUrl],
@@ -347,7 +349,7 @@ describeWithDevtoolsExtension('Runtime hosts policy', {hostsPolicy}, context => 
       const target = createTarget({type: SDK.Target.Type.FRAME});
       const addExtensionStub = sinon.stub(Extensions.ExtensionServer.ExtensionServer.instance(), 'addExtension');
 
-      target.setInspectedURL(`${protocol}://foo` as Platform.DevToolsPath.UrlString);
+      target.setInspectedURL(urlString`${`${protocol}://foo`}`);
       assert.isTrue(addExtensionStub.notCalled);
       assert.isUndefined(context.chrome.devtools);
     });
@@ -368,17 +370,15 @@ describeWithDevtoolsExtension('Runtime hosts policy', {hostsPolicy}, context => 
     target.setInspectedURL(allowedUrl);
     {
       const result = await new Promise<object>(cb => context.chrome.devtools?.network.getHAR(cb));
-      // eslint-disable-next-line rulesdir/compare_arrays_with_assert_deepequal
       assert.hasAnyKeys(result, ['entries']);
     }
   });
 
   it('allows API calls on non-blocked hosts', async () => {
     const target = createTarget({type: SDK.Target.Type.FRAME});
-    target.setInspectedURL('http://example.com2' as Platform.DevToolsPath.UrlString);
+    target.setInspectedURL(urlString`http://example.com2`);
     {
       const result = await new Promise<object>(cb => context.chrome.devtools?.network.getHAR(cb));
-      // eslint-disable-next-line rulesdir/compare_arrays_with_assert_deepequal
       assert.hasAnyKeys(result, ['entries']);
     }
   });
@@ -388,17 +388,17 @@ describeWithDevtoolsExtension('Runtime hosts policy', {hostsPolicy}, context => 
     const target = createTarget({type: SDK.Target.Type.FRAME});
     target.setInspectedURL(blockedUrl);
     assert.isTrue(addExtensionSpy.calledOnce, 'addExtension called once');
-    assert.deepStrictEqual(addExtensionSpy.returnValues, [undefined]);
+    assert.deepEqual(addExtensionSpy.returnValues, [undefined]);
 
     target.setInspectedURL(allowedUrl);
     assert.isTrue(addExtensionSpy.calledTwice, 'addExtension called twice');
-    assert.deepStrictEqual(addExtensionSpy.returnValues, [undefined, true]);
+    assert.deepEqual(addExtensionSpy.returnValues, [undefined, true]);
   });
 
   it('does not include blocked hosts in the HAR entries', async () => {
     Logs.NetworkLog.NetworkLog.instance();
     const target = createTarget({type: SDK.Target.Type.FRAME});
-    target.setInspectedURL('http://example.com2' as Platform.DevToolsPath.UrlString);
+    target.setInspectedURL(urlString`http://example.com2`);
     const networkManager = target.model(SDK.NetworkManager.NetworkManager);
     assert.exists(networkManager);
     const frameId = 'frame-id' as Protocol.Page.FrameId;
@@ -419,7 +419,7 @@ describeWithDevtoolsExtension('Runtime hosts policy', {hostsPolicy}, context => 
     const frame = parentFrame ? await addChildFrame(target, {url}) : getMainFrame(target, {url});
 
     if (executionContextOrigin) {
-      executionContextOrigin = new URL(executionContextOrigin).origin as Platform.DevToolsPath.UrlString;
+      executionContextOrigin = urlString`${new URL(executionContextOrigin).origin}`;
       const parentRuntimeModel = target.model(SDK.RuntimeModel.RuntimeModel);
       assert.exists(parentRuntimeModel);
       parentRuntimeModel.executionContextCreated({
@@ -445,14 +445,14 @@ describeWithDevtoolsExtension('Runtime hosts policy', {hostsPolicy}, context => 
         r => context.chrome.devtools?.inspectedWindow.eval(
             '4', {frameURL: childFrameUrl}, (result, error) => r({result, error})));
 
-    assert.deepStrictEqual(result.error?.details, ['Permission denied']);
+    assert.deepEqual(result.error?.details, ['Permission denied']);
   });
 
   it('doesn\'t block evaluation on blocked sub-executioncontexts with useContentScriptContext', async () => {
     assert.isUndefined(context.chrome.devtools);
 
     const parentFrameUrl = allowedUrl;
-    const childFrameUrl = `${allowedUrl}/2` as Platform.DevToolsPath.UrlString;
+    const childFrameUrl = urlString`${`${allowedUrl}/2`}`;
     const childExeContextOrigin = blockedUrl;
     const parentFrame = await setUpFrame('parent', parentFrameUrl, undefined, parentFrameUrl);
     const childFrame = await setUpFrame('child', childFrameUrl, parentFrame, childExeContextOrigin);
@@ -478,14 +478,14 @@ describeWithDevtoolsExtension('Runtime hosts policy', {hostsPolicy}, context => 
         r => context.chrome.devtools?.inspectedWindow.eval(
             '4', {frameURL: childFrameUrl, useContentScriptContext: true}, (result, error) => r({result, error})));
 
-    assert.deepStrictEqual(result.result, 4);
+    assert.deepEqual(result.result, 4);
   });
 
   it('blocks evaluation on blocked sub-executioncontexts with explicit scriptExecutionContextOrigin', async () => {
     assert.isUndefined(context.chrome.devtools);
 
     const parentFrameUrl = allowedUrl;
-    const childFrameUrl = `${allowedUrl}/2` as Platform.DevToolsPath.UrlString;
+    const childFrameUrl = urlString`${`${allowedUrl}/2`}`;
     const parentFrame = await setUpFrame('parent', parentFrameUrl, undefined, parentFrameUrl);
     const childFrame = await setUpFrame('child', childFrameUrl, parentFrame, parentFrameUrl);
 
@@ -508,14 +508,14 @@ describeWithDevtoolsExtension('Runtime hosts policy', {hostsPolicy}, context => 
             '4', {frameURL: childFrameUrl, scriptExecutionContext: childExeContextOrigin} as any,
             (result, error) => r({result, error})));
 
-    assert.deepStrictEqual(result.error?.details, ['Permission denied']);
+    assert.deepEqual(result.error?.details, ['Permission denied']);
   });
 
   it('blocks evaluation on blocked sub-executioncontexts', async () => {
     assert.isUndefined(context.chrome.devtools);
 
     const parentFrameUrl = allowedUrl;
-    const childFrameUrl = `${allowedUrl}/2` as Platform.DevToolsPath.UrlString;
+    const childFrameUrl = urlString`${`${allowedUrl}/2`}`;
     const childExeContextOrigin = blockedUrl;
     const parentFrame = await setUpFrame('parent', parentFrameUrl, undefined, parentFrameUrl);
     await setUpFrame('child', childFrameUrl, parentFrame, childExeContextOrigin);
@@ -524,7 +524,7 @@ describeWithDevtoolsExtension('Runtime hosts policy', {hostsPolicy}, context => 
         r => context.chrome.devtools?.inspectedWindow.eval(
             '4', {frameURL: childFrameUrl}, (result, error) => r({result, error})));
 
-    assert.deepStrictEqual(result.error?.details, ['Permission denied']);
+    assert.deepEqual(result.error?.details, ['Permission denied']);
   });
 
   async function createUISourceCode(
@@ -553,13 +553,13 @@ describeWithDevtoolsExtension('Runtime hosts policy', {hostsPolicy}, context => 
     assert.exists(context.chrome.devtools);
     const resources =
         await new Promise<Chrome.DevTools.Resource[]>(r => context.chrome.devtools?.inspectedWindow.getResources(r));
-    assert.deepStrictEqual(resources.map(r => r.url), [blockedUrl, allowedUrl]);
+    assert.deepEqual(resources.map(r => r.url), [blockedUrl, allowedUrl]);
 
     const resourceContents = await Promise.all(resources.map(
         resource => new Promise<{url: string, content?: string, encoding?: string}>(
             r => resource.getContent((content, encoding) => r({url: resource.url, content, encoding})))));
 
-    assert.deepStrictEqual(resourceContents, [
+    assert.deepEqual(resourceContents, [
       {url: blockedUrl, content: undefined, encoding: undefined},
       {url: allowedUrl, content: 'content', encoding: ''},
     ]);
@@ -600,7 +600,7 @@ describeWithDevtoolsExtension('Runtime hosts policy', {hostsPolicy}, context => 
 
     await waitForFunction(() => requests.length >= 1);
 
-    assert.strictEqual(requests.length, 1);
+    assert.lengthOf(requests, 1);
     assert.exists(requests.find(e => e.request.url === allowedUrl));
     assert.notExists(requests.find(e => e.request.url === blockedUrl));
   });
@@ -618,30 +618,29 @@ describeWithDevtoolsExtension('Runtime hosts policy', {hostsPolicy}, context => 
     assert.exists(context.chrome.devtools);
     const resources =
         await new Promise<Chrome.DevTools.Resource[]>(r => context.chrome.devtools?.inspectedWindow.getResources(r));
-    assert.deepStrictEqual(resources.map(r => r.url), [blockedUrl, allowedUrl]);
+    assert.deepEqual(resources.map(r => r.url), [blockedUrl, allowedUrl]);
 
-    assert.deepStrictEqual(project.uiSourceCodeForURL(allowedUrl)?.content(), 'content');
-    assert.deepStrictEqual(project.uiSourceCodeForURL(blockedUrl)?.content(), 'content');
+    assert.deepEqual(project.uiSourceCodeForURL(allowedUrl)?.content(), 'content');
+    assert.deepEqual(project.uiSourceCodeForURL(blockedUrl)?.content(), 'content');
     const responses = await Promise.all(resources.map(
                           resource => new Promise<Object|undefined>(r => resource.setContent('modified', true, r)))) as
         Array<undefined|{code: string, details: string[]}>;
 
-    assert.deepStrictEqual(responses.map(response => response?.code), ['E_FAILED', 'OK']);
-    assert.deepStrictEqual(responses.map(response => response?.details), [['Permission denied'], []]);
+    assert.deepEqual(responses.map(response => response?.code), ['E_FAILED', 'OK']);
+    assert.deepEqual(responses.map(response => response?.details), [['Permission denied'], []]);
 
-    assert.deepStrictEqual(project.uiSourceCodeForURL(allowedUrl)?.content(), 'modified');
-    assert.deepStrictEqual(project.uiSourceCodeForURL(blockedUrl)?.content(), 'content');
+    assert.deepEqual(project.uiSourceCodeForURL(allowedUrl)?.content(), 'modified');
+    assert.deepEqual(project.uiSourceCodeForURL(blockedUrl)?.content(), 'content');
   });
 });
 
 describe('ExtensionServer', () => {
   it('can correctly expand resource paths', async () => {
     // Ideally this would be a chrome-extension://, but that doesn't work with URL in chrome headless.
-    const extensionOrigin = 'chrome://abcdef' as Platform.DevToolsPath.UrlString;
-    const almostOrigin = `${extensionOrigin}/` as Platform.DevToolsPath.UrlString;
-    const expectation = `${extensionOrigin}/foo` as Platform.DevToolsPath.UrlString;
-    assert.strictEqual(
-        undefined,
+    const extensionOrigin = urlString`chrome://abcdef`;
+    const almostOrigin = urlString`${`${extensionOrigin}/`}`;
+    const expectation = urlString`${`${extensionOrigin}/foo`}`;
+    assert.isUndefined(
         Extensions.ExtensionServer.ExtensionServer.expandResourcePath(extensionOrigin, 'http://example.com/foo'));
     assert.strictEqual(
         expectation, Extensions.ExtensionServer.ExtensionServer.expandResourcePath(extensionOrigin, expectation));
@@ -650,8 +649,7 @@ describe('ExtensionServer', () => {
     assert.strictEqual(
         expectation, Extensions.ExtensionServer.ExtensionServer.expandResourcePath(extensionOrigin, 'foo'));
 
-    assert.strictEqual(
-        undefined,
+    assert.isUndefined(
         Extensions.ExtensionServer.ExtensionServer.expandResourcePath(almostOrigin, 'http://example.com/foo'));
     assert.strictEqual(
         expectation, Extensions.ExtensionServer.ExtensionServer.expandResourcePath(almostOrigin, expectation));
@@ -704,6 +702,20 @@ describe('ExtensionServer', () => {
       assert.isTrue(Extensions.ExtensionServer.ExtensionServer.canInspectURL(url), url);
     }
   });
+
+  it('cannot inspect non-HTTP URL schemes', () => {
+    const blockedUrls = [
+      'devtools://devtools/bundled/front_end/devtools_app.html',
+      'devtools://devtools/anything',
+      'chrome://extensions',
+      'chrome-untrusted://extensions',
+      'chrome-error://crash',
+      'chrome-search://foo/bar',
+    ];
+    for (const url of blockedUrls as Platform.DevToolsPath.UrlString[]) {
+      assert.isFalse(Extensions.ExtensionServer.ExtensionServer.canInspectURL(url), url);
+    }
+  });
 });
 
 function assertIsStatus<T>(value: T|
@@ -719,7 +731,7 @@ describeWithDevtoolsExtension('Wasm extension API', {}, context => {
   let stopId: unknown;
   beforeEach(() => {
     const target = createTarget();
-    target.setInspectedURL('http://example.com' as Platform.DevToolsPath.UrlString);
+    target.setInspectedURL(urlString`http://example.com`);
     const targetManager = target.targetManager();
     const resourceMapping =
         new Bindings.ResourceMapping.ResourceMapping(targetManager, Workspace.Workspace.WorkspaceImpl.instance());
@@ -773,10 +785,51 @@ describeWithDevtoolsExtension('Wasm extension API', {}, context => {
   });
 });
 
+class StubLanguageExtension implements Chrome.DevTools.LanguageExtensionPlugin {
+  async addRawModule(): Promise<string[]|{missingSymbolFiles: string[]}> {
+    return [];
+  }
+  async sourceLocationToRawLocation(): Promise<Chrome.DevTools.RawLocationRange[]> {
+    return [];
+  }
+  async rawLocationToSourceLocation(): Promise<Chrome.DevTools.SourceLocation[]> {
+    return [];
+  }
+  async getScopeInfo(): Promise<Chrome.DevTools.ScopeInfo> {
+    throw new Error('Method not implemented.');
+  }
+  async listVariablesInScope(): Promise<Chrome.DevTools.Variable[]> {
+    return [];
+  }
+  async removeRawModule(): Promise<void> {
+  }
+  async getFunctionInfo(): Promise<{frames: Array<Chrome.DevTools.FunctionInfo>, missingSymbolFiles: Array<string>}|
+                                   {missingSymbolFiles: Array<string>}|{frames: Array<Chrome.DevTools.FunctionInfo>}> {
+    return {frames: []};
+  }
+  async getInlinedFunctionRanges(): Promise<Chrome.DevTools.RawLocationRange[]> {
+    return [];
+  }
+  async getInlinedCalleesRanges(): Promise<Chrome.DevTools.RawLocationRange[]> {
+    return [];
+  }
+  async getMappedLines(): Promise<number[]|undefined> {
+    return undefined;
+  }
+  async evaluate(): Promise<Chrome.DevTools.RemoteObject|Chrome.DevTools.ForeignObject|null> {
+    return null;
+  }
+  async getProperties(): Promise<Chrome.DevTools.PropertyDescriptor[]> {
+    return [];
+  }
+  async releaseObject(): Promise<void> {
+  }
+}
+
 describeWithDevtoolsExtension('Language Extension API', {}, context => {
   it('reports loaded resources', async () => {
     const target = createTarget();
-    target.setInspectedURL('http://example.com' as Platform.DevToolsPath.UrlString);
+    target.setInspectedURL(urlString`http://example.com`);
 
     const pageResourceLoader =
         SDK.PageResourceLoader.PageResourceLoader.instance({forceNew: true, loadOverride: null, maxConcurrentLoads: 1});
@@ -788,10 +841,9 @@ describeWithDevtoolsExtension('Language Extension API', {}, context => {
 
     const resource = spy.args[0][0];
     const extensionId = getExtensionOrigin();
-    const expectedInitiator =
-        {target: null, frameId: null, initiatorUrl: extensionId as Platform.DevToolsPath.UrlString, extensionId};
+    const expectedInitiator = {target: null, frameId: null, initiatorUrl: urlString`${extensionId}`, extensionId};
     const expectedResource = {
-      url: 'test.dwo' as Platform.DevToolsPath.UrlString,
+      url: urlString`test.dwo`,
       initiator: expectedInitiator,
       success: true,
       size: 10,
@@ -800,3 +852,47 @@ describeWithDevtoolsExtension('Language Extension API', {}, context => {
     assert.deepEqual(resource, expectedResource);
   });
 });
+
+for (const allowFileAccess of [true, false]) {
+  describeWithDevtoolsExtension(
+      `Language Extension API with {allowFileAccess: ${allowFileAccess}}`, {allowFileAccess}, context => {
+        let target: SDK.Target.Target;
+        beforeEach(() => {
+          target = createTarget();
+          const targetManager = target.targetManager();
+          const workspace = Workspace.Workspace.WorkspaceImpl.instance();
+          const resourceMapping = new Bindings.ResourceMapping.ResourceMapping(targetManager, workspace);
+          target.setInspectedURL(urlString`http://example.com`);
+          const debuggerWorkspaceBinding = Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance(
+              {forceNew: true, targetManager, resourceMapping});
+          Bindings.IgnoreListManager.IgnoreListManager.instance({forceNew: true, debuggerWorkspaceBinding});
+        });
+
+        it('passes allowFileAccess to the LanguageExtensionEndpoint', async () => {
+          const endpointSpy =
+              sinon.spy(Extensions.LanguageExtensionEndpoint.LanguageExtensionEndpoint.prototype, 'handleScript');
+          const plugin = new StubLanguageExtension();
+          await context.chrome.devtools?.languageServices.registerLanguageExtensionPlugin(plugin, 'plugin', {
+            language: Protocol.Debugger.ScriptLanguage.JavaScript,
+            symbol_types: [Protocol.Debugger.DebugSymbolsType.SourceMap],
+          });
+
+          const debuggerModel = target.model(SDK.DebuggerModel.DebuggerModel);
+          assert.isOk(debuggerModel);
+          debuggerModel.parsedScriptSource(
+              '0' as Protocol.Runtime.ScriptId, urlString`file:///source/url`, 0, 0, 100, 100, 0, '', {}, false,
+              'file:///source/url.map', false, false, 200, true, null, null,
+              Protocol.Debugger.ScriptLanguage.JavaScript, [{
+                type: Protocol.Debugger.DebugSymbolsType.SourceMap,
+                externalURL: 'file:///source/url.map',
+              }],
+              null);
+
+          assert.isTrue(endpointSpy.calledOnce);
+          assert.strictEqual(
+              (endpointSpy.thisValues[0] as Extensions.LanguageExtensionEndpoint.LanguageExtensionEndpoint)
+                  .allowFileAccess,
+              allowFileAccess);
+        });
+      });
+}

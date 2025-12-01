@@ -34,11 +34,16 @@
 #include "absl/functional/any_invocable.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
+#include "internal/platform/byte_array.h"
 #include "internal/platform/cancellation_flag.h"
+#include "internal/platform/exception.h"
 #include "internal/platform/implementation/cancelable.h"
 #include "internal/platform/implementation/wifi_hotspot.h"
+#include "internal/platform/implementation/windows/nearby_client_socket.h"
+#include "internal/platform/implementation/windows/nearby_server_socket.h"
 #include "internal/platform/implementation/windows/scheduled_executor.h"
 #include "internal/platform/implementation/windows/submittable_executor.h"
+#include "internal/platform/implementation/windows/wifi_hotspot_native.h"
 
 // WinRT headers
 #include "absl/types/optional.h"
@@ -53,6 +58,8 @@
 #include "internal/platform/implementation/windows/generated/winrt/Windows.Security.Cryptography.h"
 #include "internal/platform/implementation/windows/generated/winrt/Windows.Storage.Streams.h"
 #include "internal/platform/implementation/windows/generated/winrt/base.h"
+#include "internal/platform/input_stream.h"
+#include "internal/platform/output_stream.h"
 #include "internal/platform/wifi_credential.h"
 
 namespace nearby {
@@ -107,6 +114,8 @@ using ::winrt::Windows::Networking::Sockets::
 // remote WiFi Hotspot service, also will return a WifiHotspotSocket to caller.
 class WifiHotspotSocket : public api::WifiHotspotSocket {
  public:
+  WifiHotspotSocket();
+  explicit WifiHotspotSocket(std::unique_ptr<NearbyClientSocket> socket);
   explicit WifiHotspotSocket(StreamSocket socket);
   explicit WifiHotspotSocket(SOCKET socket);
   WifiHotspotSocket(const WifiHotspotSocket&) = default;
@@ -132,6 +141,8 @@ class WifiHotspotSocket : public api::WifiHotspotSocket {
   // Returns Exception::kIo on error, Exception::kSuccess otherwise.
   Exception Close() override;
 
+  bool Connect(const std::string& ip_address, int port);
+
  private:
   enum class SocketType { kWinRTSocket = 0, kWin32Socket };
   // A simple wrapper to handle input stream of socket
@@ -139,6 +150,7 @@ class WifiHotspotSocket : public api::WifiHotspotSocket {
    public:
     explicit SocketInputStream(IInputStream input_stream);
     explicit SocketInputStream(SOCKET socket);
+    explicit SocketInputStream(NearbyClientSocket* client_socket);
     ~SocketInputStream() override = default;
 
     ExceptionOr<ByteArray> Read(std::int64_t size) override;
@@ -146,9 +158,12 @@ class WifiHotspotSocket : public api::WifiHotspotSocket {
     Exception Close() override;
 
    private:
+    bool enable_blocking_socket_ = false;
     IInputStream input_stream_{nullptr};
     SOCKET socket_ = INVALID_SOCKET;
     SocketType socket_type_ = SocketType::kWinRTSocket;
+    ByteArray read_buffer_;
+    NearbyClientSocket* client_socket_{nullptr};
   };
 
   // A simple wrapper to handle output stream of socket
@@ -156,6 +171,7 @@ class WifiHotspotSocket : public api::WifiHotspotSocket {
    public:
     explicit SocketOutputStream(IOutputStream output_stream);
     explicit SocketOutputStream(SOCKET socket);
+    explicit SocketOutputStream(NearbyClientSocket* client_socket);
     ~SocketOutputStream() override = default;
 
     Exception Write(const ByteArray& data) override;
@@ -163,9 +179,11 @@ class WifiHotspotSocket : public api::WifiHotspotSocket {
     Exception Close() override;
 
    private:
+    bool enable_blocking_socket_ = false;
     IOutputStream output_stream_{nullptr};
     SOCKET socket_ = INVALID_SOCKET;
     SocketType socket_type_ = SocketType::kWinRTSocket;
+    NearbyClientSocket* client_socket_{nullptr};
   };
 
   // Internal properties
@@ -173,6 +191,9 @@ class WifiHotspotSocket : public api::WifiHotspotSocket {
   StreamSocket stream_soket_{nullptr};
   SocketInputStream input_stream_{nullptr};
   SocketOutputStream output_stream_{nullptr};
+
+  bool enable_blocking_socket_ = false;
+  std::unique_ptr<NearbyClientSocket> client_socket_;
 };
 
 // WifiHotspotServerSocket provides the support to server socket, this server
@@ -212,6 +233,10 @@ class WifiHotspotServerSocket : public api::WifiHotspotServerSocket {
 
   // Binds to local port
   bool listen();
+
+  // Flag to enable blocking socket.
+  bool enable_blocking_socket_ = false;
+  NearbyServerSocket server_socket_;
 
  private:
   static constexpr int kSocketEventsCount = 2;
@@ -319,9 +344,16 @@ class WifiHotspotMedium : public api::WifiHotspotMedium {
   // Discoverer is connected with the Hotspot
   bool IsConnected() { return (medium_status_ & kMediumStatusConnected) != 0; }
 
+  bool ConnectWifiHotspotWithWinRt(HotspotCredentials* hotspot_credentials);
+  bool ConnectWifiHotspotWithNative(HotspotCredentials* hotspot_credentials);
+  bool DisconnectWifiHotspotWithWinRt();
+  bool DisconnectWifiHotspotWithNative();
+
   WiFiDirectAdvertisementPublisher publisher_{nullptr};
   WiFiDirectConnectionListener listener_{nullptr};
-  WiFiDirectDevice wifi_direct_device_{nullptr};
+
+  // The list of WiFiDirectDevice is used to keep hotspot connection alive.
+  std::list<WiFiDirectDevice> wifi_direct_devices_;
 
   fire_and_forget OnStatusChanged(
       WiFiDirectAdvertisementPublisher sender,
@@ -354,6 +386,10 @@ class WifiHotspotMedium : public api::WifiHotspotMedium {
 
   // Scheduled task for connection timeout.
   std::shared_ptr<api::Cancelable> connection_timeout_ = nullptr;
+
+  // connects Wi-Fi hotspot using native API.
+  WifiHotspotNative wifi_hotspot_native_;
+  std::optional<std::wstring> connected_hotspot_profile_name_;
 };
 
 }  // namespace windows

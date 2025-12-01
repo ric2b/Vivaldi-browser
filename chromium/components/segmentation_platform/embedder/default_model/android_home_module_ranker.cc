@@ -22,7 +22,7 @@ using proto::SegmentId;
 // Default parameters for AndroidHomeModuleRanker model.
 constexpr SegmentId kSegmentId =
     SegmentId::OPTIMIZATION_TARGET_SEGMENTATION_ANDROID_HOME_MODULE_RANKER;
-constexpr int64_t kModelVersion = 6;
+constexpr int64_t kModelVersion = 8;
 // Store 28 buckets of input data (28 days).
 constexpr int64_t kSignalStorageLength = 28;
 // Wait until we have 0 days of data.

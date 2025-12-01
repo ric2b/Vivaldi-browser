@@ -4,8 +4,6 @@
 
 #include "ui/ozone/platform/wayland/ozone_platform_wayland.h"
 
-#include <aura-shell-client-protocol.h>
-
 #include <memory>
 #include <string>
 #include <utility>
@@ -41,24 +39,26 @@
 #include "ui/ozone/platform/wayland/gpu/wayland_overlay_manager.h"
 #include "ui/ozone/platform/wayland/gpu/wayland_surface_factory.h"
 #include "ui/ozone/platform/wayland/host/drm_syncobj_ioctl_wrapper.h"
-#include "ui/ozone/platform/wayland/host/surface_augmenter.h"
+#include "ui/ozone/platform/wayland/host/linux_ui_delegate_wayland.h"
 #include "ui/ozone/platform/wayland/host/wayland_buffer_manager_connector.h"
 #include "ui/ozone/platform/wayland/host/wayland_buffer_manager_host.h"
+#include "ui/ozone/platform/wayland/host/wayland_clipboard.h"
 #include "ui/ozone/platform/wayland/host/wayland_connection.h"
+#include "ui/ozone/platform/wayland/host/wayland_cursor_factory.h"
 #include "ui/ozone/platform/wayland/host/wayland_event_source.h"
 #include "ui/ozone/platform/wayland/host/wayland_exchange_data_provider.h"
-#include "ui/ozone/platform/wayland/host/wayland_input_controller.h"
 #include "ui/ozone/platform/wayland/host/wayland_input_method_context.h"
 #include "ui/ozone/platform/wayland/host/wayland_menu_utils.h"
 #include "ui/ozone/platform/wayland/host/wayland_output_manager.h"
 #include "ui/ozone/platform/wayland/host/wayland_seat.h"
 #include "ui/ozone/platform/wayland/host/wayland_window.h"
 #include "ui/ozone/platform/wayland/host/wayland_window_manager.h"
-#include "ui/ozone/platform/wayland/host/wayland_zaura_shell.h"
 #include "ui/ozone/platform/wayland/wayland_utils.h"
 #include "ui/ozone/public/gpu_platform_support_host.h"
+#include "ui/ozone/public/input_controller.h"
 #include "ui/ozone/public/ozone_platform.h"
 #include "ui/ozone/public/platform_menu_utils.h"
+#include "ui/ozone/public/stub_input_controller.h"
 #include "ui/ozone/public/system_input_injector.h"
 #include "ui/platform_window/platform_window_init_properties.h"
 
@@ -67,16 +67,6 @@
 #include "ui/events/ozone/layout/xkb/xkb_keyboard_layout_engine.h"
 #else
 #include "ui/events/ozone/layout/stub/stub_keyboard_layout_engine.h"
-#endif
-
-#if BUILDFLAG(IS_LINUX)
-#include "ui/ozone/platform/wayland/host/wayland_cursor_factory.h"
-#else
-#include "ui/ozone/common/bitmap_cursor_factory.h"
-#endif
-
-#if BUILDFLAG(IS_LINUX)
-#include "ui/ozone/platform/wayland/host/linux_ui_delegate_wayland.h"
 #endif
 
 #if defined(WAYLAND_GBM)
@@ -295,20 +285,14 @@ class OzonePlatformWayland : public OzonePlatform,
 
     buffer_manager_connector_ = std::make_unique<WaylandBufferManagerConnector>(
         connection_->buffer_manager_host());
-#if BUILDFLAG(IS_LINUX)
     cursor_factory_ = std::make_unique<WaylandCursorFactory>(connection_.get());
-#else
-    cursor_factory_ = std::make_unique<BitmapCursorFactory>();
-#endif
-    input_controller_ = CreateWaylandInputController(connection_.get());
+    input_controller_ = std::make_unique<StubInputController>();
     gpu_platform_support_host_.reset(CreateStubGpuPlatformSupportHost());
 
     supported_buffer_formats_ =
         connection_->buffer_manager_host()->GetSupportedBufferFormats();
-#if BUILDFLAG(IS_LINUX)
     linux_ui_delegate_ =
         std::make_unique<LinuxUiDelegateWayland>(connection_.get());
-#endif
 
     menu_utils_ = std::make_unique<WaylandMenuUtils>(connection_.get());
     wayland_utils_ = std::make_unique<WaylandUtils>(connection_.get());
@@ -368,16 +352,12 @@ class OzonePlatformWayland : public OzonePlatform,
       // their parents. As for toplevel surfaces, clients simply don't know
       // their position on screens and always assume they are located at some
       // arbitrary position.
-      properties->supports_global_screen_coordinates =
-          kDefaultScreenCoordinateEnabled;
+      properties->supports_global_screen_coordinates = false;
 
-#if BUILDFLAG(IS_LINUX)
       // TODO(crbug.com/40800718): Revisit (and maybe remove) once proper
       // support, probably backed by org.freedesktop.portal.Screenshot.PickColor
-      // API is implemented. Note: this is restricted to Linux Desktop as Lacros
-      // implements it at a higher level layer using ChromeOS' mojo croapi.
+      // API is implemented.
       properties->supports_color_picker_dialog = false;
-#endif
 
       initialised = true;
     }
@@ -406,10 +386,6 @@ class OzonePlatformWayland : public OzonePlatform,
       properties.supports_overlays =
           connection_->ShouldUseOverlayDelegation() &&
           connection_->viewporter();
-      properties.supports_non_backed_solid_color_buffers =
-          connection_->ShouldUseOverlayDelegation() &&
-          connection_->buffer_manager_host()
-              ->SupportsNonBackedSolidColorBuffers();
       properties.supports_single_pixel_buffer =
           ui::IsWaylandOverlayDelegationEnabled() &&
           connection_->buffer_manager_host()->SupportsSinglePixelBuffer();
@@ -420,16 +396,7 @@ class OzonePlatformWayland : public OzonePlatform,
       properties.needs_background_image =
           connection_->ShouldUseOverlayDelegation() &&
           connection_->viewporter();
-      properties.supports_activation =
-          connection_->zaura_shell() &&
-          zaura_shell_get_version(connection_->zaura_shell()->wl_object()) >=
-              ZAURA_TOPLEVEL_ACTIVATE_SINCE_VERSION;
-      properties.supports_subwindows_as_accelerated_widgets =
-          connection_->ShouldUseOverlayDelegation()
-              ? connection_->surface_augmenter() &&
-                    connection_->surface_augmenter()
-                        ->SupportsCompositingOnlySurface()
-              : true;
+      properties.supports_subwindows_as_accelerated_widgets = true;
       properties.supports_per_window_scaling =
           (connection_->UsePerSurfaceScaling() &&
            override_supports_per_window_scaling_for_test ==
@@ -446,9 +413,6 @@ class OzonePlatformWayland : public OzonePlatform,
       DCHECK(has_initialized_gpu());
       // These properties are set when the GetPlatformRuntimeProperties is
       // called on the gpu process side.
-      properties.supports_non_backed_solid_color_buffers =
-          buffer_manager_->supports_overlays() &&
-          buffer_manager_->supports_non_backed_solid_color_buffers();
       properties.supports_single_pixel_buffer =
           ui::IsWaylandOverlayDelegationEnabled() &&
           buffer_manager_->supports_single_pixel_buffer();
@@ -458,13 +422,6 @@ class OzonePlatformWayland : public OzonePlatform,
           buffer_manager_->supports_viewporter();
       properties.supports_native_pixmaps =
           surface_factory_->SupportsNativePixmaps();
-      properties.supports_clip_rect = buffer_manager_->supports_clip_rect();
-      properties.supports_affine_transform =
-          buffer_manager_->supports_affine_transform();
-      properties.supports_out_of_window_clip_rect =
-          buffer_manager_->supports_out_of_window_clip_rect();
-      properties.has_transformation_fix =
-          buffer_manager_->has_transformation_fix();
     }
     return properties;
   }
@@ -499,11 +456,12 @@ class OzonePlatformWayland : public OzonePlatform,
     buffer_manager_->AddBindingWaylandBufferManagerGpu(std::move(receiver));
   }
 
-  void PostCreateMainMessageLoop(
-      base::OnceCallback<void()> shutdown_cb,
-      scoped_refptr<base::SingleThreadTaskRunner>) override {
+  void PostCreateMainMessageLoop(base::OnceCallback<void()> shutdown_cb,
+                                 scoped_refptr<base::SingleThreadTaskRunner>
+                                     user_input_task_runner) override {
     DCHECK(connection_);
     connection_->SetShutdownCb(std::move(shutdown_cb));
+    connection_->SetUserInputTaskRunner(std::move(user_input_task_runner));
   }
 
   void PostMainMessageLoopRun() override {
@@ -573,9 +531,7 @@ class OzonePlatformWayland : public OzonePlatform,
   DrmRenderNodePathFinder path_finder_;
 #endif
 
-#if BUILDFLAG(IS_LINUX)
   std::unique_ptr<LinuxUiDelegateWayland> linux_ui_delegate_;
-#endif
 };
 
 }  // namespace

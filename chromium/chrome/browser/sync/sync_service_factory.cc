@@ -64,8 +64,8 @@
 #include "chrome/common/buildflags.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_paths.h"
-#include "components/autofill/core/browser/address_data_manager.h"
-#include "components/autofill/core/browser/personal_data_manager.h"
+#include "components/autofill/core/browser/data_manager/addresses/address_data_manager.h"
+#include "components/autofill/core/browser/data_manager/personal_data_manager.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/browser_sync/common_controller_builder.h"
 #include "components/password_manager/core/browser/sharing/password_receiver_service.h"
@@ -96,7 +96,6 @@
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 #if BUILDFLAG(IS_CHROMEOS)
-#include "ash/components/arc/arc_util.h"
 #include "ash/constants/ash_features.h"
 #include "chrome/browser/ash/app_list/app_list_syncable_service_factory.h"
 #include "chrome/browser/ash/app_list/arc/arc_package_syncable_service.h"
@@ -107,6 +106,7 @@
 #include "chrome/browser/ash/printing/synced_printers_manager_factory.h"
 #include "chrome/browser/sync/desk_sync_service_factory.h"
 #include "chrome/browser/sync/wifi_configuration_sync_service_factory.h"
+#include "chromeos/ash/experiences/arc/arc_util.h"
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || \
@@ -153,7 +153,7 @@ tab_groups::TabGroupSyncService* GetTabGroupSyncService(Profile* profile) {
       tab_groups::IsTabGroupSyncEnabled(profile->GetPrefs()) &&
       !base::FeatureList::IsEnabled(
           tab_groups::kTabGroupSyncDisableNetworkLayer);
-  tab_groups::TabGroupTrial::OnTabgroupSyncEnabled(enable_tab_group_sync);
+  tab_groups::TabGroupTrial::OnTabGroupSyncEnabled(enable_tab_group_sync);
   if (!enable_tab_group_sync) {
     return nullptr;
   }

@@ -19,7 +19,7 @@ std::enable_if_t<internal::is_same<T1, T2>::value, bool> is_same_eq(const T1& a,
 }
 
 template <int Order, typename MatType>
-void check_auto_reshape4x4(MatType m) {
+void check_auto_reshape4x4(const MatType& m) {
   internal::VariableAndFixedInt<MatType::SizeAtCompileTime == Dynamic ? -1 : 1> v1(1);
   internal::VariableAndFixedInt<MatType::SizeAtCompileTime == Dynamic ? -1 : 2> v2(2);
   internal::VariableAndFixedInt<MatType::SizeAtCompileTime == Dynamic ? -1 : 4> v4(4);
@@ -50,10 +50,10 @@ void check_auto_reshape4x4(MatType m) {
 }
 
 template <typename MatType>
-void check_direct_access_reshape4x4(MatType, internal::FixedInt<RowMajorBit>) {}
+void check_direct_access_reshape4x4(const MatType&, internal::FixedInt<RowMajorBit>) {}
 
 template <typename MatType>
-void check_direct_access_reshape4x4(MatType m, internal::FixedInt<0>) {
+void check_direct_access_reshape4x4(const MatType& m, internal::FixedInt<0>) {
   VERIFY_IS_EQUAL(m.reshaped(1, 16).data(), m.data());
   VERIFY_IS_EQUAL(m.reshaped(1, 16).innerStride(), 1);
 
@@ -64,8 +64,9 @@ void check_direct_access_reshape4x4(MatType m, internal::FixedInt<0>) {
 
 // just test a 4x4 matrix, enumerate all combination manually
 template <typename MatType>
-void reshape4x4(MatType m) {
+void reshape4x4(const MatType& m0) {
   typedef typename MatType::Scalar Scalar;
+  MatType m = m0;
 
   internal::VariableAndFixedInt<MatType::SizeAtCompileTime == Dynamic ? -1 : 1> v1(1);
   internal::VariableAndFixedInt<MatType::SizeAtCompileTime == Dynamic ? -1 : 2> v2(2);

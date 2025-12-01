@@ -29,9 +29,6 @@ import org.robolectric.annotation.Implementation;
 import org.robolectric.annotation.Implements;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.util.Features.EnableFeatures;
-import org.chromium.base.test.util.JniMocker;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -77,8 +74,6 @@ public class SigninBridgeTest {
     @Rule
     public final MockitoRule mMockitoRule = MockitoJUnit.rule().strictness(Strictness.STRICT_STUBS);
 
-    @Rule public JniMocker mJniMocker = new JniMocker();
-
     @Mock private Tab mTabMock;
 
     @Mock private Profile mProfileMock;
@@ -110,7 +105,7 @@ public class SigninBridgeTest {
         lenient()
                 .when(mIdentityServicesProviderMock.getSigninManager(mProfileMock))
                 .thenReturn(mSigninManagerMock);
-        mJniMocker.mock(SigninMetricsUtilsJni.TEST_HOOKS, mSigninMetricsUtilsJniMock);
+        SigninMetricsUtilsJni.setInstanceForTesting(mSigninMetricsUtilsJniMock);
     }
 
     @After
@@ -197,7 +192,6 @@ public class SigninBridgeTest {
 
     @Test
     @SmallTest
-    @EnableFeatures({ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS})
     public void testAccountPickerShown() {
         when(mSigninManagerMock.isSyncOptInAllowed()).thenReturn(true);
         mAccountManagerTestRule.addAccount("account@test.com");

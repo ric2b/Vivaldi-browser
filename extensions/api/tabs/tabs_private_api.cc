@@ -60,6 +60,9 @@
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extensions_browser_client.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
+#include "services/device/public/cpp/geolocation/geoposition.h"
+#include "services/device/public/mojom/geolocation_context.mojom.h"
+#include "services/device/public/mojom/geoposition.mojom.h"
 #include "third_party/cld_3/src/src/nnet_language_identifier.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-shared.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
@@ -79,7 +82,9 @@
 #include "components/capture/capture_page.h"
 #include "extensions/schema/tabs_private.h"
 #include "extensions/schema/window_private.h"
+#include "extensions/schema/vivaldi_utilities.h"
 #include "extensions/tools/vivaldi_tools.h"
+#include "extensions/vivaldi_associated_tabs.h"
 #include "prefs/vivaldi_gen_pref_enums.h"
 #include "prefs/vivaldi_gen_prefs.h"
 #include "prefs/vivaldi_pref_names.h"
@@ -312,6 +317,9 @@ static const std::vector<tabs_private::TabAlertState> ConvertTabAlertState(
       case TabAlertState::VIDEO_RECORDING:
         types.push_back(tabs_private::TabAlertState::kVideoRecording);
         break;
+      case TabAlertState::GLIC_ACCESSING:
+        types.push_back(tabs_private::TabAlertState::kCapturing);
+        break;
     }
   }
 
@@ -525,6 +533,16 @@ VivaldiPrivateTabObserver::VivaldiPrivateTabObserver(
 
 VivaldiPrivateTabObserver::~VivaldiPrivateTabObserver() {
     TabResourceUsageCollector::Get()->RemoveObserver(this);
+}
+
+void VivaldiPrivateTabObserver::OnJavascriptDialogClosed(bool success) {
+  if (!success) {
+    namespace OnDialogCanceled =
+        ::extensions::vivaldi::utilities::OnDialogCanceled;
+    ::vivaldi::BroadcastEvent(OnDialogCanceled::kEventName,
+                              OnDialogCanceled::Create(),
+                              web_contents()->GetBrowserContext());
+  }
 }
 
 void VivaldiPrivateTabObserver::WebContentsDestroyed() {
@@ -766,6 +784,7 @@ void VivaldiPrivateTabObserver::OnPermissionAccessed(
 
 void VivaldiPrivateTabObserver::WebContentsDidDetach() {
   int tab_id = extensions::ExtensionTabUtil::GetTabId(web_contents());
+  ::vivaldi::HandleDetachedTab(tab_id);
   ::vivaldi::BroadcastEvent(
       tabs_private::OnTabIsDetached::kEventName,
       tabs_private::OnTabIsDetached::Create(
@@ -1468,6 +1487,19 @@ VivaldiGuestViewContentObserver::VivaldiGuestViewContentObserver(
           ->GetPrefs());
 
   prefs_registrar_.Add(
+      vivaldiprefs::kGeolocationLatitude,
+      base::BindRepeating(&VivaldiGuestViewContentObserver::OnPrefsChanged,
+                          weak_ptr_factory_.GetWeakPtr()));
+  prefs_registrar_.Add(
+      vivaldiprefs::kGeolocationLongitude,
+      base::BindRepeating(&VivaldiGuestViewContentObserver::OnPrefsChanged,
+                          weak_ptr_factory_.GetWeakPtr()));
+  prefs_registrar_.Add(
+      vivaldiprefs::kGeolocationAccuracy,
+      base::BindRepeating(&VivaldiGuestViewContentObserver::OnPrefsChanged,
+                          weak_ptr_factory_.GetWeakPtr()));
+
+  prefs_registrar_.Add(
       vivaldiprefs::kWebpagesFocusTrap,
       base::BindRepeating(&VivaldiGuestViewContentObserver::OnPrefsChanged,
                           weak_ptr_factory_.GetWeakPtr()));
@@ -1478,7 +1510,37 @@ VivaldiGuestViewContentObserver::~VivaldiGuestViewContentObserver() {}
 void VivaldiGuestViewContentObserver::WebContentsDestroyed() {}
 
 void VivaldiGuestViewContentObserver::OnPrefsChanged(const std::string& path) {
-  if (path == vivaldiprefs::kWebpagesFocusTrap) {
+
+  if (path == vivaldiprefs::kGeolocationLatitude ||
+      path == vivaldiprefs::kGeolocationLongitude ||
+      path == vivaldiprefs::kGeolocationAccuracy) {
+    content::WebContentsImpl* web_contents_impl =
+        static_cast<content::WebContentsImpl*>(web_contents());
+
+    auto* geolocation_context = web_contents_impl->GetGeolocationContext();
+
+    PrefService* prefs =
+        Profile::FromBrowserContext(web_contents()->GetBrowserContext())
+            ->GetPrefs();
+
+    device::mojom::GeopositionResultPtr geoposition;
+    auto position = device::mojom::Geoposition::New();
+    position->latitude = prefs->GetDouble(vivaldiprefs::kGeolocationLatitude);;
+    position->longitude = prefs->GetDouble(vivaldiprefs::kGeolocationLongitude);
+    position->accuracy = prefs->GetDouble(vivaldiprefs::kGeolocationAccuracy);
+    position->timestamp = base::Time::Now();
+    if (device::ValidateGeoposition(*position)) {
+      geoposition =
+          device::mojom::GeopositionResult::NewPosition(std::move(position));
+    } else {
+      geoposition = device::mojom::GeopositionResult::NewError(
+          device::mojom::GeopositionError::New(
+              device::mojom::GeopositionErrorCode::kPositionUnavailable,
+              /*error_message=*/"", /*error_technical=*/""));
+    }
+    geolocation_context->SetOverride(std::move(geoposition));
+
+  } else if (path == vivaldiprefs::kWebpagesFocusTrap) {
     UpdateAllowTabCycleIntoUI();
     CommitSettings();
   }
@@ -1539,7 +1601,7 @@ void VivaldiGuestViewContentObserver::RenderFrameCreated(
   const GURL& site = render_frame_host->GetSiteInstance()->GetSiteURL();
   if (::vivaldi::IsVivaldiApp(site.host())) {
     auto* security_policy = content::ChildProcessSecurityPolicy::GetInstance();
-    int process_id = render_frame_host->GetProcess()->GetID();
+    int process_id = render_frame_host->GetProcess()->GetID().value();
     security_policy->GrantRequestScheme(process_id, url::kFileScheme);
     security_policy->GrantRequestScheme(process_id, content::kViewSourceScheme);
   }

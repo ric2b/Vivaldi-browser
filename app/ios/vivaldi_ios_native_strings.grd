@@ -291,7 +291,7 @@ locale.  The strings in this file are specific to iOS.
         Descending
       </message>
       <message name="IDS_IOS_SEARCH_WITH_VIVALDI" desc="Menu item for search with Vivaldi functionality in context menu. [Length: 35em]">
-        Search with Vivaldi
+        Search
       </message>
       <!-- Notes-->
       <message name="IDS_VIVALDI_TOOLS_MENU_ADD_TO_NOTES" desc="The iOS menu item for adding the current page to the notes. This is a verb  [iOS only]" meaning="Add current page to notes. [Verb]">
@@ -338,6 +338,9 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_VIVALDI_NOTE_NEW_NOTE_UPDATED" desc="A description presented to the user that they just updated a note. [Length: 30em.] [iOS only]">
         Item updated
+      </message>
+      <message name="IDS_VIVALDI_NOTE_ROW_MODIFIED" desc="Text to specify date modified shown in note row [Length: 30em.]">
+        (Modified)
       </message>
       <message name="IDS_VIVALDI_NOTE_NEW_CANCEL_BUTTON_LABEL" desc="Accessibility label for a button that cancels the current action. [Length: 30em.]">
         Cancel
@@ -447,6 +450,12 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_VIVALDI_NOTE_CONTEXT_MENU_EDIT" desc="Text on the notes context menu to edit selected note">
         Edit Note
       </message>
+      <message name="IDS_VIVALDI_NOTE_CONTEXT_MENU_RENAME" desc="Text on the notes context menu to rename title for selected note">
+        Rename Title
+      </message>
+      <message name="IDS_VIVALDI_NOTE_CONTEXT_MENU_RENAME_PLACEHOLDER" desc="Placeholder text on rename title context menu for selected note">
+        Enter new title
+      </message>
       <message name="IDS_VIVALDI_NOTE_CONTEXT_MENU_EDIT_FOLDER" desc="Text on the notes context menu to edit selected note folder">
         Edit Folder
       </message>
@@ -477,6 +486,15 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_NOTE_VIEW_AS_HTML" desc="Title of the toggle button to render markdown as HTML. ">
         View as HTML
       </message>
+      <message name="IDS_VIVALDI_NOTE_MARKDOWN_URL_DIALOG_UPDATE_LINK" desc="Update link button when editing a link in markdown. ">
+        Update Link
+      </message>
+      <message name="IDS_VIVALDI_NOTE_MARKDOWN_URL_DIALOG_REMOVE_LINK" desc="Remove link button when editing a link in markdown. ">
+        Remove Link
+      </message>
+      <message name="IDS_VIVALDI_NOTE_MARKDOWN_URL_DIALOG_OPEN_LINK" desc="Open link button when editing a link in markdown. ">
+        Open Link
+      </message>
       <message name="IDS_VIVALDI_NOTE_MARKDOWN_URL_DIALOG_CONFIRM" desc="Confirm button when adding a link or an image in markdown. ">
         Confirm
       </message>
@@ -491,6 +509,12 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_VIVALDI_NOTE_MARKDOWN_ADD_IMAGE_TITLE_ENTRY" desc="Placeholder text in a textfield in the dialog where the image title is entered when adding an image in markdown. ">
         Enter Title
+      </message>
+      <message name="IDS_VIVALDI_NOTE_MARKDOWN_EDIT_LINK_TITLE" desc="Title of dialog when editing a link in markdown. ">
+        Edit Link
+      </message>
+      <message name="IDS_VIVALDI_NOTE_MARKDOWN_EDIT_LINK_MESSAGE" desc="Message in the dialog when editing a link in markdown. ">
+        You can change the link, remove it or open it in a new tab.
       </message>
       <message name="IDS_VIVALDI_NOTE_MARKDOWN_ADD_LINK_TITLE" desc="Title of dialog when adding a link in markdown. ">
         Input Link
@@ -1069,7 +1093,19 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_IDENTITY_ERROR_INFOBAR_KEEP_USING_YOUR_VIVALDI_DATA_MESSAGE" desc="Text letting user know that Vivaldi can not decrypt data without the passphrase">
         Keep using the synced data in your Vivaldi Account
       </message>
-
+      <message name="IDS_IOS_SYNC_ERROR_DIALOG_TITLE" desc="Sync error title when sync is logged out or not working">
+        Sync Error
+      </message>
+      <message name="IDS_IOS_SYNC_ERROR_DIALOG_DESC" desc="Sync error description when sync is logged out or not working">
+        <!--The '&#10;' is a newline character to force the desired line wrapping. Don't use '\n' here, use '&#10;' instead-->
+        Sync isn't working right now. &#10; Open settings to fix it.
+      </message>
+      <message name="IDS_IOS_SYNC_OPEN_SETTING_BUTTON" desc="Open settings button title for sync error dialog">
+        Open Settings
+      </message>
+      <message name="IDS_IOS_SYNC_NO_THANKS_BUTTON" desc="No thanks button title for sync error dialog">
+        No Thanks
+      </message>
       <!-- End Sync -->
       <!-- AD AND TRACKER BLOCKER -->
       <message name="IDS_IOS_PREFS_VIVALDI_AD_AND_TRACKER_BLOCKER" desc="Title for the ad and tracker blocker settings">
@@ -1315,6 +1351,18 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_VIVALDI_AD_AND_TRACKER_BLOCKER_APPLYING_SETTINGS" desc="Title for the ad and tracker blocker site settings in progress state">
         Applying New Blocker Settings...
       </message>
+      <message name="IDS_IOS_VIVALDI_AD_AND_TRACKER_BLOCKER_AD_EXCEPTIONS" desc="Title for the ad and tracker blocker Why am I seeing ads section.">
+        Why am I seeing ads
+      </message>
+      <message name="IDS_IOS_VIVALDI_AD_AND_TRACKER_BLOCKER_AD_EXCEPTIONS_EXPANDED" desc="Title for the expanded state on ad and tracker blocker Why am I seeing ads section.">
+        Ads in Search Results
+      </message>
+      <message name="IDS_IOS_VIVALDI_AD_AND_TRACKER_BLOCKER_AD_EXCEPTIONS_EXPANDED_DESCRIPTION" desc="Description for the ad and tracker blocker Why am I seeing ads section when visited page is a partner search engine.">
+        Vivaldi has partnered with <ph name="PARTNER_NAME">$1</ph> to not block ads on this page. These ads help fund the development of Vivaldi.
+      </message>
+      <message name="IDS_IOS_VIVALDI_AD_AND_TRACKER_BLOCKER_AD_EXCEPTIONS_EXPANDED_DESCRIPTION_GENERIC" desc="Description for the ad and tracker blocker Why am I seeing ads section when visited page is a partner URL.">
+        We have a partnership with this site and exempt ads in the search result from being blocked by default. These ads generate revenue for Vivaldi if you interact with them.
+      </message>
       <!-- END AD AND TRACKER BLOCKER -->
       <message name="IDS_VIVALDI_BOOKMARK_EMPTY_MESSAGE" desc="Message shown on the Bookmarks screen when there are no bookmarks">
         Add your first bookmark by tapping the plus icon below
@@ -1378,7 +1426,7 @@ locale.  The strings in this file are specific to iOS.
         Preview
       </message>
       <message name="IDS_IOS_VIVALDI_START_PAGE_SELECT_WALLPAPER" desc="Title for the start page select wallpaper settings">
-        Select as Wallapaper
+        Select as Wallpaper
       </message>
       <message name="IDS_IOS_VIVALDI_START_PAGE_WALLPAPER_PINCH" desc="Title for the start page wallpaper settings Pinch caption">
         Pinch to crop and position the image
@@ -1521,14 +1569,35 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_PAGEZOOM_SETTING_DONE_TITLE" desc="Done button Title for pagezoom settings">
         Done
       </message>
-      <message name="IDS_IOS_PAGEZOOM_SETTING_GLOBAL_TITLE" desc="Global switch title for pagezoom settings">
-        Set as Global Default Zoom
-      </message>
       <message name="IDS_IOS_PAGEZOOM_SETTING_GLOBAL_SUBTITLE" desc="Global switch subtitle for pagezoom settings">
         This will set the selected zoom level for all pages
       </message>
       <message name="IDS_IOS_PAGEZOOM_SETTING_HOST_TITLE" desc="Title showing zoom level for specific host">
         Zoom level for <ph name="HOST">$1<ex>example.com</ex></ph>
+      </message>
+      <message name="IDS_IOS_PAGEZOOM_WEBSITES_TITLE" desc="Title for the websites in zoom settings">
+        Websites
+      </message>
+      <message name="IDS_IOS_PAGEZOOM_RESET_ALL_TITLE" desc="Title for the reset all in zoom settings">
+        Reset All
+      </message>
+      <message name="IDS_IOS_PAGEZOOM_SPECIFIC_WEBSITE_ZOOM_TITLE" desc="Description for Specific Website Zoom settings">
+        Specific Website Zoom Settings
+      </message>
+      <message name="IDS_IOS_PAGEZOOM_PAGE_ZOOM_LEVELS_TITLE" desc="Title for the page zoom levels in zoom settings">
+        Page Zoom levels
+      </message>
+      <message name="IDS_IOS_PAGEZOOM_ZOOM_LEVEL_FOR_WEBSITES_TITLE" desc="Title for the page zoom levels settings">
+        Zoom level for websites
+      </message>
+      <message name="IDS_IOS_PAGEZOOM_RESET_ALL_WEBSITES_ZOOM_SETTINGS" desc="Title for the reset all websites zoom settings">
+        Reset all websites zoom settings
+      </message>
+      <message name="IDS_IOS_PAGEZOOM_WEBSITES_VIEW_ONLY_TITLE" desc="Title for the websites view only settings">
+        Websites (View Only)
+      </message>
+      <message name="IDS_IOS_PAGEZOOM_NO_WEBSITE_ZOOM_SETTINGS_AVAILABLE_TITLE" desc="Title when no website zoom settings available in settings">
+        No website zoom settings available
       </message>
       <!--END PAGEZOOM SETTINGS -->
       <!-- ADDRESSBAR SETTINGS -->
@@ -1541,17 +1610,23 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_ADDRESSBAR_SHOW_FULL_ADDRESS_DESCRIPTION" desc="Description for the show full address in address bar option for addressbar settings">
         Show Full Address in the Address Bar instead of Domain only.
       </message>
-      <message name="IDS_IOS_ADDRESSBAR_BOOKMARKS_MATCHING_TITLE" desc="Title for the bookmarks matching option for addressbar settings">
+      <message name="IDS_IOS_ADDRESSBAR_SHOW_X_TITLE" desc="Title for the show X option for deleteable/hideable items in autocomplete suggestions from omnibox.">
+        Show X for suggestions
+      </message>
+      <message name="IDS_IOS_ADDRESSBAR_SHOW_X_DESCRIPTION" desc="Description for the show X option for deleteable/hideable items in autocomplete suggestions from omnibox.">
+        Visible for deletable autocomplete suggestions such as Typed History and Direct Match.
+      </message>
+      <message name="IDS_IOS_ADDRESSBAR_BOOKMARKS_BOOSTED_TITLE" desc="Title for the prioritize bookmarks option for addressbar settings">
         Prioritize Bookmarks
       </message>
-      <message name="IDS_IOS_ADDRESSBAR_BOOKMARKS_MATCHING_DESCRIPTION" desc="Description for the bookmarks matching option for addressbar settings">
-        Prioritize bookmarks in autocomplete suggestions
+      <message name="IDS_IOS_ADDRESSBAR_BOOKMARKS_BOOSTED_DESCRIPTION" desc="Description for the prioritize bookmarks option for addressbar settings">
+        Prioritize bookmarks in autocomplete suggestions.
       </message>
-      <message name="IDS_IOS_ADDRESSBAR_NICKNAME_MATCHING_TITLE" desc="Title for the nickname matching option for addressbar settings">
-        Prioritize Bookmark Nicknames
+      <message name="IDS_IOS_ADDRESSBAR_BOOKMARK_NICKNAMES_TITLE" desc="Title for the bookmark nicknames option for addressbar settings">
+        Enable Bookmark Nicknames
       </message>
-      <message name="IDS_IOS_ADDRESSBAR_NICKNAME_MATCHING_DESCRIPTION" desc="Description for the nickname matching option for addressbar settings">
-        Prioritize bookmark nicknames in autocomplete suggestions
+      <message name="IDS_IOS_ADDRESSBAR_BOOKMARK_NICKNAMES_DESCRIPTION" desc="Description for the bookmark nicknames option for addressbar settings">
+        Enable bookmark nicknames in autocomplete suggestions.
       </message>
       <message name="IDS_IOS_ADDRESSBAR_ENABLE_DIRECT_MATCH_TITLE" desc="Title for the enable direct match option for addressbar settings">
         Enable Direct Match
@@ -1564,6 +1639,9 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_IOS_ADDRESSBAR_PRIORITIZE_DIRECT_MATCH_DESCRIPTION" desc="Description for the prioritize direct match option for addressbar settings">
         Prioritize Direct Match in autocomplete suggestions.
+      </message>
+      <message name="IDS_IOS_OMNIBOX_POPUP_DELETE_MATCH" desc="Label for the accessibility action for the address and search bar autocomplete suggestion. Using this will delete the match corresponding to the suggestion from autocomplete suggestions. [Read by Text-to-Speech]">
+        Delete suggestion
       </message>
       <!-- END ADDRESSBAR SETTINGS -->
       <!-- TOOLBAR -->
@@ -2171,6 +2249,9 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_VIVALDI_TRANSLATE_TITLE" desc="Title for the Vivaldi Translate panel item">
         Translate
       </message>
+      <message name="IDS_VIVALDI_TRANSLATE_HISTORY_TITLE" desc="Title for the Vivaldi Translate History panel item">
+        Translate History
+      </message>
       <message name="IDS_IOS_TRANSLATE_CLOSE_BUTTON_ACC_TITLE" desc="Accessibility title for the close button on the translate page.">
         Close the translation view
       </message>
@@ -2219,7 +2300,63 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_TRANSLATE_FAILED_MESSAGE" desc="Message to show when translation is failed on the translate page toolbar.">
         Translation failed!
       </message>
+      <message name="IDS_VIVALDI_TRANSLATE_HISTORY_SECTION_TITLE" desc="Title for the section header of Translate History. [iPad Only]">
+        History
+      </message>
+      <message name="IDS_VIVALDI_TRANSLATE_HISTORY_EDIT_TITLE" desc="Title for the toolbar Edit button on the Translate History that triggers editing mode.">
+        Edit
+      </message>
+      <message name="IDS_VIVALDI_TRANSLATE_HISTORY_CANCEL_TITLE" desc="Title for the toolbar Cancel button on the Translate History that cancels editing mode.">
+        Cancel
+      </message>
+      <message name="IDS_VIVALDI_TRANSLATE_HISTORY_DELETE_ALL_TITLE" desc="Title for the toolbar Delete All history items button on the Translate History editing mode.">
+        Delete All
+      </message>
+      <message name="IDS_VIVALDI_TRANSLATE_HISTORY_MORE_TITLE" desc="Title for the toolbar More button on the Translate History editing mode that provides related actions to items selected.">
+        More...
+      </message>
+      <message name="IDS_VIVALDI_TRANSLATE_HISTORY_ACTION_DELETE_TITLE" desc="Title for the context menu Delete action for a Translate History item.">
+        Delete
+      </message>
+      <message name="IDS_VIVALDI_TRANSLATE_HISTORY_ACTION_COPY_SOURCE_TITLE" desc="Title for the context menu and bottom sheet Copy Source action for a Translate History item. This action allows copying source text for one or many items depending on selection.">
+        Copy Source
+      </message>
+      <message name="IDS_VIVALDI_TRANSLATE_HISTORY_ACTION_COPY_TRANSLATED_TITLE" desc="Title for the context menu and bottom sheet Copy Source action for a Translate History item. This action allows copying translated text for one or many items depending on selection.">
+        Copy Translated
+      </message>
+      <message name="IDS_VIVALDI_TRANSLATE_HISTORY_ACTION_COPY_BOTH_TITLE" desc="Title for the context menu and bottom sheet Copy Both action for a Translate History item. This action allows copying both source and translated string for one or many items depending on selection.">
+        Copy Both
+      </message>
+      <message name="IDS_VIVALDI_TRANSLATE_HISTORY_ACTION_DELETE_SELCTED_TITLE" desc="Title for the Delete Selected bottom sheet action on the Translate History.">
+        Delete Selected
+      </message>
+      <message name="IDS_VIVALDI_TRANSLATE_HISTORY_ROW_META_ACCESSIBILITY_LABEL" desc="Accessibility label for the source and destination language on the Translate History item row.">
+        Translation from <ph name="SOURCE_LANGUAGE">$1</ph> to <ph name="DESTINATION_LANGUAGE">$2</ph>
+      </message>
+      <message name="IDS_VIVALDI_TRANSLATE_HISTORY_ROW_CONTENT_ACCESSIBILITY_LABEL" desc="Accessibility label for the source and destination texts on the Translate History item row.">
+        Source text is <ph name="SOURCE_TEXT">$1</ph> and Translated text is <ph name="TRANSLATED_TEXT">$2</ph>
+      </message>
+      <message name="IDS_VIVALDI_TRANSLATE_HISTORY_ROW_CONTENT_ACCESSIBILITY_HINT" desc="Accessibility hint for the Translate History item row.">
+        Tap for more options or double tap to open.
+      </message>
       <!-- END VIVALDI TRANSLATE -->
+      <!-- SEARCH ENGINE CHANGE PROMPT -->
+      <message name="IDS_IOS_SE_CHANGE_NEW_SEARCH_ENGINE_TITLE" desc="Title for the Search Engine change prompt at the app launch which is triggered only if certain criteria matched. [Length: unlimited]">
+        A new Search Engine
+      </message>
+      <message name="IDS_IOS_SE_CHANGE_NEW_SEARCH_ENGINE_STARTPAGE_DESCRIPTION" desc="Description for the Search Engine change prompt at the app launch which is triggered only if certain criteria matched. This description is for the case when new search engine is Startpage. [Length: unlimited]">
+        To support the development of Vivaldi, we have partnered with <ph name="NEW_SEARCH_ENGINE_1">$1</ph> and set it as your new default search engine. <ph name="NEW_SEARCH_ENGINE_2">$2</ph> is a private search engine we like, and we hope you like it too.
+      </message>
+      <message name="IDS_IOS_SE_CHANGE_NEW_SEARCH_ENGINE_DESCRIPTION" desc="Description for the Search Engine change prompt at the app launch which is triggered only if certain criteria matched. [Length: unlimited]">
+        To support the development of Vivaldi, we have partnered with <ph name="NEW_SEARCH_ENGINE">$1</ph> and set it as your new default search engine.
+      </message>
+      <message name="IDS_IOS_SE_CHANGE_USE_NEW_ENGINE_TITLE" desc="Title for Use New Engine button on the Search Engine change prompt. [Length: unlimited]">
+        Use <ph name="NEW_SEARCH_ENGINE">$1</ph>
+      </message>
+      <message name="IDS_IOS_SE_CHANGE_USE_OLD_ENGINE_TITLE" desc="Title for Keep using Old Engine button on the Search Engine change prompt. [Length: unlimited]">
+        Keep using <ph name="OLD_SEARCH_ENGINE">$1</ph>
+      </message>
+      <!-- END SEARCH ENGINE CHANGE PROMPT -->
       <message name="IDS_IOS_PANEL_PREFER_TRANSLATE_PANEL" desc="Title for the option in Settings for showing translate panel instead of dialog from web page text selection. [Length: unlimited] [iOS only]">
         Prefer translate panel
       </message>
@@ -2288,6 +2425,9 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_IOS_SD_TOP_SITES_TITLE" desc="Title for the Top Sites section of the new speed dial dialog.">
         Frequently Visited
+      </message>
+      <message name="IDS_IOS_SD_FOOTER_TITLE" desc="Title for the Footer of the new speed dial dialog that explains adding the preloaded links helps supporting Vivaldi's development.">
+        Vivaldi may earn an affiliate commission if you make a purchase after clicking some of these links. This helps support Vivaldi’s development and keeps the browser independent. Thank you for your support!
       </message>
       <!-- END NEW SPEED DIAL DIALOG -->
     </messages>

@@ -29,9 +29,11 @@
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "base/types/expected.h"
 #include "components/language/core/browser/pref_names.h"
 #include "components/language/core/common/locale_util.h"
 #include "components/prefs/pref_service.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "ui/base/ime/ash/extension_ime_util.h"
 
 namespace ash {
@@ -40,6 +42,7 @@ namespace {
 constexpr int kMaxEmojiResults = 3;
 constexpr int kMaxSymbolResults = 2;
 constexpr int kMaxEmoticonResults = 2;
+
 // These are taken from manifest files in:
 // https://source.chromium.org/chromium/chromium/src/+/2be4329930cac782779c5083389b83e09a8bcb47:chrome/browser/resources/chromeos/input_method/
 constexpr auto kImeToLangCode =
@@ -60,10 +63,10 @@ constexpr auto kImeToLangCode =
          {"xkb:se::swe", "sv"},           {"nacl_mozc_us", "ja"},
          {"nacl_mozc_jp", "ja"}});
 
-base::span<const emoji::EmojiSearchEntry> FirstNOrLessElements(
+base::span<const emoji::EmojiSearchEntry> FirstNOrFewerElements(
     base::span<const emoji::EmojiSearchEntry> container,
     size_t n) {
-  return container.subspan(0, std::min(container.size(), n));
+  return container.first(std::min(container.size(), n));
 }
 
 const base::Value::Dict* LoadEmojiVariantsFromPrefs(PrefService* prefs) {
@@ -126,12 +129,14 @@ std::vector<std::string> GetLanguageCodesFromPrefs(PrefService* prefs) {
 
 }  // namespace
 
-PickerSearchController::PickerSearchController(base::TimeDelta burn_in_period)
+QuickInsertSearchController::QuickInsertSearchController(
+    base::TimeDelta burn_in_period)
     : burn_in_period_(burn_in_period) {}
 
-PickerSearchController::~PickerSearchController() = default;
+QuickInsertSearchController::~QuickInsertSearchController() = default;
 
-void PickerSearchController::LoadEmojiLanguagesFromPrefs(PrefService* prefs) {
+void QuickInsertSearchController::LoadEmojiLanguagesFromPrefs(
+    PrefService* prefs) {
   pref_change_registrar_.Reset();
   if (prefs == nullptr) {
     return;
@@ -141,19 +146,19 @@ void PickerSearchController::LoadEmojiLanguagesFromPrefs(PrefService* prefs) {
   pref_change_registrar_.Init(prefs);
   pref_change_registrar_.Add(
       prefs::kLanguagePreloadEngines,
-      base::BindRepeating(&PickerSearchController::LoadEmojiLanguages,
+      base::BindRepeating(&QuickInsertSearchController::LoadEmojiLanguages,
                           weak_ptr_factory_.GetWeakPtr(),
                           pref_change_registrar_.prefs()));
 }
 
-void PickerSearchController::LoadEmojiLanguages(PrefService* prefs) {
+void QuickInsertSearchController::LoadEmojiLanguages(PrefService* prefs) {
   if (prefs == nullptr) {
     return;
   }
   emoji_search_.LoadEmojiLanguages(GetLanguageCodesFromPrefs(prefs));
 }
 
-void PickerSearchController::StartSearch(
+void QuickInsertSearchController::StartSearch(
     QuickInsertClient* client,
     std::u16string_view query,
     std::optional<QuickInsertCategory> category,
@@ -177,14 +182,14 @@ void PickerSearchController::StartSearch(
       search_case_transforms);
 }
 
-void PickerSearchController::StopSearch() {
+void QuickInsertSearchController::StopSearch() {
   // The search request must be reset first so it can let the aggregator know
   // that it has been interrupted.
   search_request_.reset();
   aggregator_.reset();
 }
 
-void PickerSearchController::StartEmojiSearch(
+void QuickInsertSearchController::StartEmojiSearch(
     PrefService* prefs,
     std::u16string_view query,
     QuickInsertViewDelegate::EmojiSearchResultsCallback callback) {
@@ -204,7 +209,7 @@ void PickerSearchController::StartEmojiSearch(
   const base::Value::Dict* emoji_variants = LoadEmojiVariantsFromPrefs(prefs);
 
   for (const emoji::EmojiSearchEntry& result :
-       FirstNOrLessElements(results.emojis, kMaxEmojiResults)) {
+       FirstNOrFewerElements(results.emojis, kMaxEmojiResults)) {
     std::string emoji_string = result.emoji_string;
     if (emoji_variants != nullptr) {
       const std::string* variant_string =
@@ -218,14 +223,14 @@ void PickerSearchController::StartEmojiSearch(
         base::UTF8ToUTF16(emoji_search_.GetEmojiName(emoji_string, "en"))));
   }
   for (const emoji::EmojiSearchEntry& result :
-       FirstNOrLessElements(results.symbols, kMaxSymbolResults)) {
+       FirstNOrFewerElements(results.symbols, kMaxSymbolResults)) {
     emoji_results.push_back(QuickInsertEmojiResult::Symbol(
         base::UTF8ToUTF16(result.emoji_string),
         base::UTF8ToUTF16(
             emoji_search_.GetEmojiName(result.emoji_string, "en"))));
   }
   for (const emoji::EmojiSearchEntry& result :
-       FirstNOrLessElements(results.emoticons, kMaxEmoticonResults)) {
+       FirstNOrFewerElements(results.emoticons, kMaxEmoticonResults)) {
     emoji_results.push_back(QuickInsertEmojiResult::Emoticon(
         base::UTF8ToUTF16(result.emoji_string),
         base::UTF8ToUTF16(
@@ -235,7 +240,7 @@ void PickerSearchController::StartEmojiSearch(
   std::move(callback).Run(std::move(emoji_results));
 }
 
-std::string PickerSearchController::GetEmojiName(std::string_view emoji) {
+std::string QuickInsertSearchController::GetEmojiName(std::string_view emoji) {
   return emoji_search_.GetEmojiName(emoji, "en");
 }
 

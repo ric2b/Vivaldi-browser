@@ -8,8 +8,10 @@
 #import "components/feature_engagement/public/tracker.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
 #import "ios/chrome/browser/lens/model/lens_browser_agent.h"
+#import "ios/chrome/browser/lens_overlay/coordinator/lens_overlay_availability.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/lens_commands.h"
 #import "ios/chrome/browser/web/model/web_navigation_ntp_delegate.h"
@@ -74,6 +76,14 @@ void WebNavigationBrowserAgent::GoBack() {
     return;
   }
 
+  if (IsLensOverlaySameTabNavigationEnabled()) {
+    CommandDispatcher* dispatcher = browser_->GetCommandDispatcher();
+    if ([HandlerForProtocol(dispatcher, BrowserCoordinatorCommands)
+            navigateBackWithAnimationIfNeeded]) {
+      return;
+    }
+  }
+
   web_navigation_util::GoBack(active_web_state);
 
   // If the previous page was an eligible Lens Web Page, then display the LVF.
@@ -86,20 +96,23 @@ void WebNavigationBrowserAgent::GoBack() {
 
 void WebNavigationBrowserAgent::GoForward() {
   web::WebState* active_web_state = web_state_list_->GetActiveWebState();
-  if (active_web_state)
+  if (active_web_state) {
     web_navigation_util::GoForward(active_web_state);
+  }
 }
 
 void WebNavigationBrowserAgent::StopLoading() {
   web::WebState* active_web_state = web_state_list_->GetActiveWebState();
-  if (active_web_state)
+  if (active_web_state) {
     active_web_state->Stop();
+  }
 }
 
 void WebNavigationBrowserAgent::Reload() {
   web::WebState* active_web_state = web_state_list_->GetActiveWebState();
-  if (!active_web_state)
+  if (!active_web_state) {
     return;
+  }
 
   if (delegate_.NTPActiveForCurrentWebState) {
     [delegate_ reloadNTPForWebState:active_web_state];
@@ -130,8 +143,9 @@ void WebNavigationBrowserAgent::RequestMobileSite() {
 void WebNavigationBrowserAgent::ReloadWithUserAgentType(
     web::UserAgentType userAgentType) {
   web::WebState* web_state = web_state_list_->GetActiveWebState();
-  if (UserAgentType(web_state) == userAgentType)
+  if (UserAgentType(web_state) == userAgentType) {
     return;
+  }
 
   web_state->GetNavigationManager()->ReloadWithUserAgentType(userAgentType);
 }

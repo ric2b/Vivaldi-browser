@@ -254,7 +254,7 @@ class OptimizationGuideTestServer {
     for (int i = 0; i < request.form_data().fields().size(); ++i) {
       const optimization_guide::proto::FormFieldData& field =
           request.form_data().fields(i);
-      auto it = base::ranges::find(
+      auto it = std::ranges::find(
           request.entries(), field.field_label(),
           &optimization_guide::proto::UserAnnotationsEntry::key);
       if (it == request.entries().end()) {
@@ -389,7 +389,7 @@ class AutofillAiBrowserBaseTest : public InteractiveBrowserTest {
                                            Args&&... args) {
     MultiStep result;
     (AddStep(result, std::forward<Args>(args)), ...);
-    AddDescription(result, base::StrCat({name, "( %s )"}));
+    AddDescriptionPrefix(result, name);
     return result;
   }
 
@@ -411,10 +411,13 @@ class AutofillAiBrowserBaseTest : public InteractiveBrowserTest {
 // Windows entering a drag loop that may hang or otherwise impact the test."
 // Source:
 // https://chromium.googlesource.com/chromium/src/+/HEAD/chrome/test/interaction/README.md#known-issues-and-incompatibilities
+// TODO(crbug.com/389629573): For now disabled this test (not only on Windows)
+// while the end to end flow is not fully re-implemented under
+// `kAutofillAiWithDataSchema`.
 #if BUILDFLAG(IS_WIN)
 #define MAYBE_AutofillAiBrowserTest DISABLED_AutofillAiBrowserTest
 #else
-#define MAYBE_AutofillAiBrowserTest AutofillAiBrowserTest
+#define MAYBE_AutofillAiBrowserTest DISABLED_AutofillAiBrowserTest
 #endif
 // Test fixture defining the steps taken in the browser tests. Steps are ordered
 // by first occurrence in the tests below. Uses the Kombucha API, see
@@ -653,12 +656,11 @@ IN_PROC_BROWSER_TEST_F(MAYBE_AutofillAiBrowserTest,
                   ManuallyFillAndSubmitForm(), WaitForSaveBubbleAndAccept());
   base::RunLoop().RunUntilIdle();
   VerifyDataImportedIntoUserAnnotations();
-  RunTestSequence(
-      NavigateToAboutBlank(), NavigateToFormPage(), ClickOnNameField(),
-      WaitForAndAcceptSuggestion(
-          kAutofillPredictionImprovementsTriggerElementId),
-      WaitForAndAcceptSuggestion(kAutofillPredictionImprovementsFillElementId),
-      WaitForFieldsToBeFilledAutomatically());
+  RunTestSequence(NavigateToAboutBlank(), NavigateToFormPage(),
+                  ClickOnNameField(),
+                  WaitForAndAcceptSuggestion(kAutofillAiTriggerElementId),
+                  WaitForAndAcceptSuggestion(kAutofillAiFillElementId),
+                  WaitForFieldsToBeFilledAutomatically());
 }
 
 // Tests that the error suggestion is shown if filling suggestions cannot be
@@ -672,10 +674,9 @@ IN_PROC_BROWSER_TEST_F(MAYBE_AutofillAiBrowserTest,
   VerifyDataImportedIntoUserAnnotations();
   RunTestSequence(NavigateToAboutBlank(), NavigateToFormPage(),
                   ClickOnNameField(),
-                  WaitForAndAcceptSuggestion(
-                      kAutofillPredictionImprovementsTriggerElementId,
-                      ResponseType::kServerError),
-                  WaitForShow(kAutofillPredictionImprovementsErrorElementId));
+                  WaitForAndAcceptSuggestion(kAutofillAiTriggerElementId,
+                                             ResponseType::kServerError),
+                  WaitForShow(kAutofillAiErrorElementId));
 }
 
 }  // namespace

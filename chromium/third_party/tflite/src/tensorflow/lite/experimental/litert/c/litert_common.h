@@ -15,7 +15,7 @@
 #ifndef TENSORFLOW_LITE_EXPERIMENTAL_LITERT_C_LITERT_COMMON_H_
 #define TENSORFLOW_LITE_EXPERIMENTAL_LITERT_C_LITERT_COMMON_H_
 
-#include <stdint.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -23,9 +23,6 @@ extern "C" {
 
 // Declares canonical opaque type.
 #define LITERT_DEFINE_HANDLE(name) typedef struct name##T* name
-// Declares an array of references to opaque type. `name` must be
-// previously declared opaque type.
-#define LITERT_DEFINE_HANDLE_ARRAY(name) typedef name* name##Array
 
 #if __ANDROID_API__ >= 26
 #define LITERT_HAS_AHWB_SUPPORT 1
@@ -43,11 +40,33 @@ extern "C" {
 #define LITERT_HAS_ION_SUPPORT 1
 #define LITERT_HAS_DMABUF_SUPPORT 1
 #define LITERT_HAS_FASTRPC_SUPPORT 1
+// copybara:comment_begin(google-only)
+#elif defined(GOOGLE_UNSUPPORTED_OS_LOONIX)
+#define LITERT_HAS_ION_SUPPORT 0
+#define LITERT_HAS_DMABUF_SUPPORT 1
+#define LITERT_HAS_FASTRPC_SUPPORT 0
+// copybara:comment_end
 #else
 #define LITERT_HAS_ION_SUPPORT 0
 #define LITERT_HAS_DMABUF_SUPPORT 0
 #define LITERT_HAS_FASTRPC_SUPPORT 0
 #endif
+
+#define LITERT_API_VERSION_MAJOR 0
+#define LITERT_API_VERSION_MINOR 1
+#define LITERT_API_VERSION_PATCH 0
+
+typedef struct LiteRtApiVersion {
+  int major;
+  int minor;
+  int patch;
+} LiteRtApiVersion;
+
+// Compares `v1` and `v2`.
+//
+// Returns 0 if they are the same, a negative number if v1 < v2 and a positive
+// number if v1 > v2.
+int LiteRtCompareApiVersion(LiteRtApiVersion v1, LiteRtApiVersion v2);
 
 typedef enum {
   kLiteRtStatusOk = 0,
@@ -60,13 +79,14 @@ typedef enum {
   kLiteRtStatusErrorUnsupported = 5,
   kLiteRtStatusErrorNotFound = 6,
   kLiteRtStatusErrorTimeoutExpired = 7,
+  kLiteRtStatusErrorWrongVersion = 8,
 
   // File and loading related errors.
   kLiteRtStatusErrorFileIO = 500,
   kLiteRtStatusErrorInvalidFlatbuffer = 501,
   kLiteRtStatusErrorDynamicLoading = 502,
   kLiteRtStatusErrorSerialization = 503,
-  kLiteRtStatusErrorCompilationr = 504,
+  kLiteRtStatusErrorCompilation = 504,
 
   // IR related errors.
   kLiteRtStatusErrorIndexOOB = 1000,
@@ -82,25 +102,21 @@ typedef enum {
   kLiteRtStatusErrorInvalidLegalization = 2001,
 } LiteRtStatus;
 
-typedef enum {
-  kLiteRtAnyTypeNone = 0,
-  kLiteRtAnyTypeBool = 1,
-  kLiteRtAnyTypeInt = 2,
-  kLiteRtAnyTypeReal = 3,
-  kLiteRtAnyTypeString = 8,
-  kLiteRtAnyTypeVoidPtr = 9,
-} LiteRtAnyType;
+// Returns a string describing the status value.
+const char* LiteRtGetStatusString(LiteRtStatus status);
 
-typedef struct {
-  LiteRtAnyType type;
-  union {
-    bool bool_value;
-    int64_t int_value;
-    double real_value;
-    const char* str_value;
-    const void* ptr_value;
-  };
-} LiteRtAny;
+typedef enum : int {
+  kLiteRtHwAcceleratorNone = 0,
+  kLiteRtHwAcceleratorCpu = 1 << 0,
+  kLiteRtHwAcceleratorGpu = 1 << 1,
+  kLiteRtHwAcceleratorNpu = 1 << 2,
+} LiteRtHwAccelerators;
+
+// A bit field of `LiteRtHwAccelerators` values.
+typedef int LiteRtHwAcceleratorSet;
+
+// For indexing into LiteRT collections or counting LiteRT things.
+typedef size_t LiteRtParamIndex;
 
 #ifdef __cplusplus
 }

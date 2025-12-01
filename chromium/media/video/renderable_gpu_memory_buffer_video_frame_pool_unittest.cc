@@ -50,58 +50,31 @@ class FakeContext : public RenderableGpuMemoryBufferVideoFramePool::Context {
   ~FakeContext() override = default;
 
   scoped_refptr<gpu::ClientSharedImage> CreateSharedImage(
-      gfx::GpuMemoryBuffer* gpu_memory_buffer,
-      const viz::SharedImageFormat& si_format,
-      const gfx::ColorSpace& color_space,
-      GrSurfaceOrigin surface_origin,
-      SkAlphaType alpha_type,
-      gpu::SharedImageUsageSet usage,
-      gpu::SyncToken& sync_token) override {
-    DoCreateSharedImage(si_format, gpu_memory_buffer->GetSize(), color_space,
-                        surface_origin, alpha_type, usage,
-                        gpu_memory_buffer->CloneHandle());
-    return context_provider_->SharedImageInterface()->CreateSharedImage(
-        {si_format, gpu_memory_buffer->GetSize(), color_space, surface_origin,
-         alpha_type, usage, "RenderableGpuMemoryBufferVideoFramePoolTest"},
-        gpu_memory_buffer->CloneHandle());
-  }
-
-  scoped_refptr<gpu::ClientSharedImage> CreateSharedImage(
       const gfx::Size& size,
       gfx::BufferUsage buffer_usage,
       const viz::SharedImageFormat& si_format,
       const gfx::ColorSpace& color_space,
-      GrSurfaceOrigin surface_origin,
-      SkAlphaType alpha_type,
       gpu::SharedImageUsageSet usage,
       gpu::SyncToken& sync_token) override {
     DoCreateMappableSharedImage(size, buffer_usage, si_format, color_space,
-                                surface_origin, alpha_type, usage, sync_token);
+                                usage, sync_token);
     context_provider_->SharedImageInterface()
         ->UseTestGMBInSharedImageCreationWithBufferUsage();
     return context_provider_->SharedImageInterface()->CreateSharedImage(
-        {si_format, size, color_space, surface_origin, alpha_type, usage,
+        {si_format, size, color_space, usage,
          "RenderableGpuMemoryBufferVideoFramePoolTest"},
         gpu::kNullSurfaceHandle, buffer_usage);
   }
 
-  MOCK_METHOD2(DoCreateGpuMemoryBuffer,
-               void(const gfx::Size& size, gfx::BufferFormat format));
-  MOCK_METHOD7(DoCreateSharedImage,
-               void(viz::SharedImageFormat format,
-                    const gfx::Size& size,
-                    const gfx::ColorSpace& color_space,
-                    GrSurfaceOrigin surface_origin,
-                    SkAlphaType alpha_type,
-                    uint32_t usage,
-                    gfx::GpuMemoryBufferHandle buffer_handle));
-  MOCK_METHOD8(DoCreateMappableSharedImage,
+  const gpu::SharedImageCapabilities& GetCapabilities() override {
+    return context_provider_->SharedImageInterface()->GetCapabilities();
+  }
+
+  MOCK_METHOD6(DoCreateMappableSharedImage,
                void(const gfx::Size& size,
                     gfx::BufferUsage buffer_usage,
                     const viz::SharedImageFormat& si_format,
                     const gfx::ColorSpace& color_space,
-                    GrSurfaceOrigin surface_origin,
-                    SkAlphaType alpha_type,
                     gpu::SharedImageUsageSet usage,
                     gpu::SyncToken& sync_token));
 
@@ -138,7 +111,7 @@ class RenderableGpuMemoryBufferVideoFramePoolTest
         NOTREACHED();
     }
     EXPECT_CALL(*context,
-                DoCreateMappableSharedImage(_, _, si_format, _, _, _, _, _));
+                DoCreateMappableSharedImage(_, _, si_format, _, _, _));
   }
 
   VideoPixelFormat format_;
@@ -166,8 +139,7 @@ TEST_P(RenderableGpuMemoryBufferVideoFramePoolTest, SimpleLifetimes) {
   task_environment.RunUntilIdle();
 
   // Expect the frame to be reused.
-  EXPECT_CALL(*context, DoCreateMappableSharedImage(_, _, _, _, _, _, _, _))
-      .Times(0);
+  EXPECT_CALL(*context, DoCreateMappableSharedImage(_, _, _, _, _, _)).Times(0);
 
   auto video_frame1 = pool->MaybeCreateVideoFrame(size0, color_space0);
 
@@ -348,8 +320,7 @@ TEST_P(RenderableGpuMemoryBufferVideoFramePoolTest, RespectSizeAndColorSpace) {
   task_environment.RunUntilIdle();
 
   // Expect the frame to be reused.
-  EXPECT_CALL(*context, DoCreateMappableSharedImage(_, _, _, _, _, _, _, _))
-      .Times(0);
+  EXPECT_CALL(*context, DoCreateMappableSharedImage(_, _, _, _, _, _)).Times(0);
 
   video_frame0 = pool->MaybeCreateVideoFrame(size0, color_space0);
   video_frame0 = nullptr;
@@ -364,8 +335,7 @@ TEST_P(RenderableGpuMemoryBufferVideoFramePoolTest, RespectSizeAndColorSpace) {
   task_environment.RunUntilIdle();
 
   // Expect that frame to be reused.
-  EXPECT_CALL(*context, DoCreateMappableSharedImage(_, _, _, _, _, _, _, _))
-      .Times(0);
+  EXPECT_CALL(*context, DoCreateMappableSharedImage(_, _, _, _, _, _)).Times(0);
 
   video_frame0 = pool->MaybeCreateVideoFrame(size1, color_space0);
   video_frame0 = nullptr;
@@ -380,8 +350,7 @@ TEST_P(RenderableGpuMemoryBufferVideoFramePoolTest, RespectSizeAndColorSpace) {
   task_environment.RunUntilIdle();
 
   // Expect that frame to be reused.
-  EXPECT_CALL(*context, DoCreateMappableSharedImage(_, _, _, _, _, _, _, _))
-      .Times(0);
+  EXPECT_CALL(*context, DoCreateMappableSharedImage(_, _, _, _, _, _)).Times(0);
 
   video_frame0 = pool->MaybeCreateVideoFrame(size1, color_space1);
   video_frame0 = nullptr;

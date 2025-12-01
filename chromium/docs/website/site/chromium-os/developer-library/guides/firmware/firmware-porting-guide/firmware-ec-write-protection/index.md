@@ -7,7 +7,7 @@ title: Firmware / EC write protection
 ---
 
 On customer-ship devices, read-only [AP
-firmware](/chromium-os/developer-information-for-chrome-os-devices/custom-firmware)
+firmware](/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/custom-firmware)
 and [embedded controller firmware](/chromium-os/ec-development) is
 write-protected. By design, this write protection cannot be removed without
 physical access to the device.
@@ -52,7 +52,7 @@ implemented for asserting (and removing) write protect:
 
 More information about which protection method is used for a particular device,
 and where to locate the switch / screw, is available on the [developer info
-page](/chromium-os/developer-information-for-chrome-os-devices).
+page](/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices).
 
 **Disabling Write Protect for Screw / Switch Protection**
 

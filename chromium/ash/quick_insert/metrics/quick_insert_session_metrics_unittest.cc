@@ -42,26 +42,28 @@ class QuickInsertSessionMetricsTest : public testing::Test {
 TEST_F(QuickInsertSessionMetricsTest, RecordsUmaSessionOutcomeOnce) {
   base::HistogramTester histogram;
   {
-    PickerSessionMetrics metrics;
+    QuickInsertSessionMetrics metrics;
 
-    metrics.SetOutcome(PickerSessionMetrics::SessionOutcome::kInsertedOrCopied);
-    metrics.SetOutcome(PickerSessionMetrics::SessionOutcome::kInsertedOrCopied);
-    metrics.SetOutcome(PickerSessionMetrics::SessionOutcome::kAbandoned);
-    metrics.SetOutcome(PickerSessionMetrics::SessionOutcome::kUnknown);
+    metrics.SetOutcome(
+        QuickInsertSessionMetrics::SessionOutcome::kInsertedOrCopied);
+    metrics.SetOutcome(
+        QuickInsertSessionMetrics::SessionOutcome::kInsertedOrCopied);
+    metrics.SetOutcome(QuickInsertSessionMetrics::SessionOutcome::kAbandoned);
+    metrics.SetOutcome(QuickInsertSessionMetrics::SessionOutcome::kUnknown);
   }
 
   histogram.ExpectUniqueSample(
       "Ash.Picker.Session.Outcome",
-      PickerSessionMetrics::SessionOutcome::kInsertedOrCopied, 1);
+      QuickInsertSessionMetrics::SessionOutcome::kInsertedOrCopied, 1);
 }
 
 TEST_F(QuickInsertSessionMetricsTest, RecordsUmaUnknownOutcomeOnDestruction) {
   base::HistogramTester histogram;
-  { PickerSessionMetrics metrics; }
+  { QuickInsertSessionMetrics metrics; }
 
-  histogram.ExpectUniqueSample("Ash.Picker.Session.Outcome",
-                               PickerSessionMetrics::SessionOutcome::kUnknown,
-                               1);
+  histogram.ExpectUniqueSample(
+      "Ash.Picker.Session.Outcome",
+      QuickInsertSessionMetrics::SessionOutcome::kUnknown, 1);
 }
 
 auto ContainsEvent(const metrics::structured::Event& event) {
@@ -76,7 +78,7 @@ TEST_F(QuickInsertSessionMetricsTest, OnStartSessionMetricsOnPlainTextField) {
   ui::FakeTextInputClient client(ui::TEXT_INPUT_TYPE_TEXT);
   client.SetTextAndSelection(u"abcd", gfx::Range(1, 1));
 
-  PickerSessionMetrics metrics;
+  QuickInsertSessionMetrics metrics;
 
   metrics.OnStartSession(&client);
 
@@ -95,7 +97,7 @@ TEST_F(QuickInsertSessionMetricsTest, OnStartSessionMetricsOnRichTextField) {
       {.type = ui::TEXT_INPUT_TYPE_TEXT, .can_insert_image = true});
   client.SetTextAndSelection(u"abcd", gfx::Range(1, 4));
 
-  PickerSessionMetrics metrics;
+  QuickInsertSessionMetrics metrics;
 
   metrics.OnStartSession(&client);
 
@@ -110,7 +112,7 @@ TEST_F(QuickInsertSessionMetricsTest, OnStartSessionMetricsOnRichTextField) {
 
 TEST_F(QuickInsertSessionMetricsTest,
        OnStartSessionMetricsForNullTextInputClient) {
-  PickerSessionMetrics metrics;
+  QuickInsertSessionMetrics metrics;
 
   metrics.OnStartSession(nullptr);
 
@@ -125,7 +127,7 @@ TEST_F(QuickInsertSessionMetricsTest,
 }
 
 TEST_F(QuickInsertSessionMetricsTest, RecordsDefaultFinishSessionEvent) {
-  { PickerSessionMetrics metrics; }
+  { QuickInsertSessionMetrics metrics; }
 
   cros_events::Picker_FinishSession expected_event;
   expected_event.SetOutcome(cros_events::PickerSessionOutcome::UNKNOWN)
@@ -143,7 +145,7 @@ TEST_F(QuickInsertSessionMetricsTest, RecordsDefaultFinishSessionEvent) {
 
 TEST_F(QuickInsertSessionMetricsTest, RecordsFinishSessionEventForInsert) {
   {
-    PickerSessionMetrics metrics;
+    QuickInsertSessionMetrics metrics;
     metrics.SetSelectedCategory(QuickInsertCategory::kDatesTimes);
     metrics.UpdateSearchQuery(u"abc");
     metrics.UpdateSearchQuery(u"abcdef");
@@ -151,7 +153,8 @@ TEST_F(QuickInsertSessionMetricsTest, RecordsFinishSessionEventForInsert) {
     metrics.SetSelectedResult(
         QuickInsertTextResult(u"primary", QuickInsertTextResult::Source::kDate),
         3);
-    metrics.SetOutcome(PickerSessionMetrics::SessionOutcome::kInsertedOrCopied);
+    metrics.SetOutcome(
+        QuickInsertSessionMetrics::SessionOutcome::kInsertedOrCopied);
   }
 
   cros_events::Picker_FinishSession expected_event;
@@ -172,12 +175,12 @@ TEST_F(QuickInsertSessionMetricsTest, RecordsFinishSessionEventForInsert) {
 TEST_F(QuickInsertSessionMetricsTest,
        RecordsFinishSessionEventForCaseTransform) {
   {
-    PickerSessionMetrics metrics;
+    QuickInsertSessionMetrics metrics;
     metrics.SetSelectedResult(
         QuickInsertCaseTransformResult(
             QuickInsertCaseTransformResult::Type::kUpperCase),
         0);
-    metrics.SetOutcome(PickerSessionMetrics::SessionOutcome::kFormat);
+    metrics.SetOutcome(QuickInsertSessionMetrics::SessionOutcome::kFormat);
   }
 
   cros_events::Picker_FinishSession expected_event;
@@ -197,85 +200,89 @@ TEST_F(QuickInsertSessionMetricsTest,
 TEST_F(QuickInsertSessionMetricsTest, UpdatesCapsLockPrefsWhenNotSelected) {
   TestingPrefServiceSimple prefs;
   prefs.registry()->RegisterIntegerPref(
-      prefs::kPickerCapsLockDislayedCountPrefName, 2);
+      prefs::kQuickInsertCapsLockDisplayedCountPrefName, 2);
   prefs.registry()->RegisterIntegerPref(
-      prefs::kPickerCapsLockSelectedCountPrefName, 1);
+      prefs::kQuickInsertLockSelectedCountPrefName, 1);
 
   {
-    PickerSessionMetrics metrics(&prefs);
+    QuickInsertSessionMetrics metrics(&prefs);
     metrics.SetCapsLockDisplayed(true);
     metrics.SetSelectedResult(
         QuickInsertCaseTransformResult(
             QuickInsertCaseTransformResult::Type::kUpperCase),
         0);
-    metrics.SetOutcome(PickerSessionMetrics::SessionOutcome::kFormat);
+    metrics.SetOutcome(QuickInsertSessionMetrics::SessionOutcome::kFormat);
   }
 
-  EXPECT_EQ(prefs.GetInteger(prefs::kPickerCapsLockDislayedCountPrefName), 3);
-  EXPECT_EQ(prefs.GetInteger(prefs::kPickerCapsLockSelectedCountPrefName), 1);
+  EXPECT_EQ(prefs.GetInteger(prefs::kQuickInsertCapsLockDisplayedCountPrefName),
+            3);
+  EXPECT_EQ(prefs.GetInteger(prefs::kQuickInsertLockSelectedCountPrefName), 1);
 }
 
 TEST_F(QuickInsertSessionMetricsTest, UpdatesCapsLockPrefsWhenSelected) {
   TestingPrefServiceSimple prefs;
   prefs.registry()->RegisterIntegerPref(
-      prefs::kPickerCapsLockDislayedCountPrefName, 2);
+      prefs::kQuickInsertCapsLockDisplayedCountPrefName, 2);
   prefs.registry()->RegisterIntegerPref(
-      prefs::kPickerCapsLockSelectedCountPrefName, 1);
+      prefs::kQuickInsertLockSelectedCountPrefName, 1);
 
   {
-    PickerSessionMetrics metrics(&prefs);
+    QuickInsertSessionMetrics metrics(&prefs);
     metrics.SetCapsLockDisplayed(true);
     metrics.SetSelectedResult(
         QuickInsertCapsLockResult(
             /*enabled=*/true, QuickInsertCapsLockResult::Shortcut::kAltSearch),
         0);
-    metrics.SetOutcome(PickerSessionMetrics::SessionOutcome::kFormat);
+    metrics.SetOutcome(QuickInsertSessionMetrics::SessionOutcome::kFormat);
   }
 
-  EXPECT_EQ(prefs.GetInteger(prefs::kPickerCapsLockDislayedCountPrefName), 3);
-  EXPECT_EQ(prefs.GetInteger(prefs::kPickerCapsLockSelectedCountPrefName), 2);
+  EXPECT_EQ(prefs.GetInteger(prefs::kQuickInsertCapsLockDisplayedCountPrefName),
+            3);
+  EXPECT_EQ(prefs.GetInteger(prefs::kQuickInsertLockSelectedCountPrefName), 2);
 }
 
 TEST_F(QuickInsertSessionMetricsTest,
        DoesNotUpdateCapsLockPrefsWhenNotDisplayed) {
   TestingPrefServiceSimple prefs;
   prefs.registry()->RegisterIntegerPref(
-      prefs::kPickerCapsLockDislayedCountPrefName, 2);
+      prefs::kQuickInsertCapsLockDisplayedCountPrefName, 2);
   prefs.registry()->RegisterIntegerPref(
-      prefs::kPickerCapsLockSelectedCountPrefName, 1);
+      prefs::kQuickInsertLockSelectedCountPrefName, 1);
 
   {
-    PickerSessionMetrics metrics(&prefs);
+    QuickInsertSessionMetrics metrics(&prefs);
     metrics.SetSelectedResult(
         QuickInsertCaseTransformResult(
             QuickInsertCaseTransformResult::Type::kUpperCase),
         0);
-    metrics.SetOutcome(PickerSessionMetrics::SessionOutcome::kFormat);
+    metrics.SetOutcome(QuickInsertSessionMetrics::SessionOutcome::kFormat);
   }
 
-  EXPECT_EQ(prefs.GetInteger(prefs::kPickerCapsLockDislayedCountPrefName), 2);
-  EXPECT_EQ(prefs.GetInteger(prefs::kPickerCapsLockSelectedCountPrefName), 1);
+  EXPECT_EQ(prefs.GetInteger(prefs::kQuickInsertCapsLockDisplayedCountPrefName),
+            2);
+  EXPECT_EQ(prefs.GetInteger(prefs::kQuickInsertLockSelectedCountPrefName), 1);
 }
 
 TEST_F(QuickInsertSessionMetricsTest, HalvesCapsLockPrefs) {
   TestingPrefServiceSimple prefs;
   prefs.registry()->RegisterIntegerPref(
-      prefs::kPickerCapsLockDislayedCountPrefName, 19);
+      prefs::kQuickInsertCapsLockDisplayedCountPrefName, 19);
   prefs.registry()->RegisterIntegerPref(
-      prefs::kPickerCapsLockSelectedCountPrefName, 9);
+      prefs::kQuickInsertLockSelectedCountPrefName, 9);
 
   {
-    PickerSessionMetrics metrics(&prefs);
+    QuickInsertSessionMetrics metrics(&prefs);
     metrics.SetCapsLockDisplayed(true);
     metrics.SetSelectedResult(
         QuickInsertCapsLockResult(
             /*enabled=*/true, QuickInsertCapsLockResult::Shortcut::kAltSearch),
         0);
-    metrics.SetOutcome(PickerSessionMetrics::SessionOutcome::kFormat);
+    metrics.SetOutcome(QuickInsertSessionMetrics::SessionOutcome::kFormat);
   }
 
-  EXPECT_EQ(prefs.GetInteger(prefs::kPickerCapsLockDislayedCountPrefName), 10);
-  EXPECT_EQ(prefs.GetInteger(prefs::kPickerCapsLockSelectedCountPrefName), 5);
+  EXPECT_EQ(prefs.GetInteger(prefs::kQuickInsertCapsLockDisplayedCountPrefName),
+            10);
+  EXPECT_EQ(prefs.GetInteger(prefs::kQuickInsertLockSelectedCountPrefName), 5);
 }
 
 }  // namespace

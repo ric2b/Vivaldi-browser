@@ -22,57 +22,58 @@ platforms. The diagram is best read bottom-up because every Autofill flow starts
 with `AutofillAgent` extracting a form from the DOM.
 
 ```
-┌────────────────────┐
-│PersonalDataManager ├────────┬──────────────────┐
-│1 per BrowserContext│  owns N│            owns N│
-└─▲──────────────────┘      ┌─▼─────────────┐  ┌─▼────────┐
-  │                         │AutofillProfile│  │CreditCard│
-  │weak ref                 └───────────────┘  └──────────┘
-┌─┴───────────────┐
-│FormDataImporter ◄─────────────────────┐
-│1 per WebContents│               events│
-└─▲───────────────┘                     │
-  │                                     │
-  │ ┌────────────────────────┐        ┌─┴────────────────────┐
-  │ │AutofillExternalDelegate◄────────┤BrowserAutofillManager├─┐           ┌───────────────┐
-  │ │1 per RenderFrameHost   │  owns 1│1 per RenderFrameHost │ │ votes     │Autofill server│
-  │ └──────────────────────┬─┘        └─▲──────────────────┬─┘ │           └─────────────▲─┘
-  │                  events│            │            events│   │                     HTTP│
-  │                        │            │                  │ ┌─▼─────────────────────────▼─┐
-  ├────────────────────────┼────────────┼──────────────────┼─►AutofillCrowsourcingdManager │
-  │                        │            │                  │ │1 per WebContents            │
-  │                        │            │                  │ └───────────────────────────▲─┘
-  │                        │            │                  │                             │
-  │                        │            │                  │    ┌──────────────┐         │
-  │                        │            │                  │    │FormStructure │         │
-  │                        │            │                  │    │1 per FormData│         │
-  │                        │            │                  └──┐ └─▲────────────┘         │
-  │owns 1                  │            │events               │   │sets types            │
-┌─┴──────────────────┐     │          ┌─┴───────────────────┐ │   │owns N         queries│
-│ChromeAutofillClient◄─────┼──────────┤AutofillManager      ├─┼───┴──────────────────────┘
-│1 per WebContents   │     │  weak ref│1 per RenderFrameHost│ │
-└─┬──────────────────┘     │          └─▲─────────────────┬─┘ │
-  │owns 1                  │            │           events│   │
-  │                        └────────────┼────────────────►│◄──┘
-  │                                     │                 │
-  │                        ┌────────────┼─────────────────┼────────────┐
-  │                        │owns 1      │events           │            │
-  │                        │            │owns 1           │            │
-┌─▼────────────────────────┴─┐        ┌─┴─────────────────▼─┐        ┌─▼──────────────────┐
-│ContentAutofillDriverFactory├────────►ContentAutofillDriver◄────────►AutofillDriverRouter│
-│1 per WebContents           │owns N  │1 per RenderFrameHost│ events │1 per WebContents   │
-└────────────────────────────┘        └─▲─────────┬─────────┘        └────────────────────┘
-                                        │         │fill form and
-Browser                                 │         │other events
-1 process                               │         │
-────────────────────────────────────────┼─────────┼─────────────────────────────────────────
-Renderer                                │         │
-N processes           events, often with│         │
-                      FormData objects  │         │
-                                      ┌─┴─────────▼─────┐       ┌─────────────────────┐
-                                      │AutofillAgent    ├───────►form_autofill_util.cc│
-                                      │1 per RenderFrame│calls  └─────────────────────┘
-                                      └─────────────────┘
+  ┌────────────────────┐
+┌─►PersonalDataManager │────────┬──────────────────┐
+│ │1 per BrowserContext│  owns N│            owns N│
+│ └────────────────────┘      ┌─▼─────────────┐  ┌─▼────────┐
+│weak ref                     │AutofillProfile│  │CreditCard│
+│                             └───────────────┘  └──────────┘
+│ ┌─────────────────┐
+│ │FormDataImporter ◄─────────────────────┐
+│ │1 per WebContents│               events│
+│ └─▲───────────────┘                     │
+│   │                                     │
+│   │ ┌────────────────────────┐        ┌─┴────────────────────┐
+│   │ │AutofillExternalDelegate◄────────┤BrowserAutofillManager│
+│   │ │1 per RenderFrameHost   │  owns 1│1 per RenderFrameHost │
+│   │ └──────────────────────┬─┘        └─▲───┬──────────────┬─┘
+│   │                        │events      │   │        events│
+│   │ ┌─────────────────┐    │            │   │votes         │
+│   ├─►VotesUploader    ◄────┼────────────┼───┘              │
+│   │ │1 per WebContents│    │            │                  │
+│   │ └─┬───────────────┘    └────────┐   │                  │
+│   │   │posts                        │   │                  │
+│   │ ┌─▼─────────────────────────┐   │   │                  │
+│   ├─►AutofillCrowsourcingManager│   │   │                  │    ┌──────────────┐
+│   │ │1 per WebContents          │   │   │                  │    │FormStructure │
+│   │ └─────────────────────▲─────┘   │   │                  │    │1 per FormData│
+│   │                       │         │   │                  └──┐ └─▲────────────┘
+│   │owns 1                 │         │   │events               │   │sets types
+│ ┌─┴──────────────────┐    │queries  │ ┌─┴───────────────────┐ │   │owns N
+└─┤ChromeAutofillClient│    └─────────┼─┼AutofillManager      ├─┼───┘
+  │1 per WebContents   │              │ │1 per RenderFrameHost│ │
+  └─┬──────────────────┘              │ └─▲─────────────────┬─┘ │
+    │owns 1                           │   │           events│   │
+    │                                 └───┼────────────────►│◄──┘
+    │                                     │                 │
+    │                        ┌────────────┼─────────────────┼────────────┐
+    │                        │owns 1      │events           │            │
+    │                        │            │owns 1           │            │
+  ┌─▼────────────────────────┴─┐        ┌─┴─────────────────▼─┐        ┌─▼──────────────────┐
+  │ContentAutofillDriverFactory├────────►ContentAutofillDriver◄────────►AutofillDriverRouter│
+  │1 per WebContents           │owns N  │1 per RenderFrameHost│ events │1 per WebContents   │
+  └────────────────────────────┘        └─▲─────────┬─────────┘        └────────────────────┘
+                                          │         │fill form and
+  Browser                                 │         │other events
+  1 process                               │         │
+  ────────────────────────────────────────┼─────────┼────────────────────────────────────────
+  Renderer                                │         │
+  N processes           events, often with│         │
+                        FormData objects  │         │
+                                        ┌─┴─────────▼─────┐       ┌─────────────────────┐
+                                        │AutofillAgent    ├───────►form_autofill_util.cc│
+                                        │1 per RenderFrame│calls  └─────────────────────┘
+                                        └─────────────────┘
 ```
 To edit the diagram, copy-paste it to asciiflow.com.
 
@@ -263,7 +264,7 @@ may sacrifice a little bit of correctness in favor of simplicity.
     exceptions for a few field types (email addresses, promo codes, IBANs, CVV
     fields).
   * We perform local heuristics even for smaller forms but only for promo codes
-    and IBANs (see `ParseSingleFieldForms`).
+    and IBANs (see `ParseSingleFields`).
   * Regular expressions for parsing are provided via
     `components/autofill/core/browser/form_parsing/regex_patterns.h` and
     `components/autofill/core/browser/form_parsing/*/*regex_patterns.json`.

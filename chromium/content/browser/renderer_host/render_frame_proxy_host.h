@@ -131,7 +131,7 @@ class CONTENT_EXPORT RenderFrameProxyHost
 
   int GetRoutingID() const { return routing_id_; }
   GlobalRoutingID GetGlobalID() const {
-    return GlobalRoutingID(GetProcess()->GetID(), routing_id_);
+    return GlobalRoutingID(GetProcess()->GetDeprecatedID(), routing_id_);
   }
 
   // Each RenderFrameProxyHost belongs to a SiteInstanceGroup, where it is a
@@ -332,6 +332,8 @@ class CONTENT_EXPORT RenderFrameProxyHost
   // placeholder for a frame in a different SiteInstanceGroup.
   scoped_refptr<SiteInstanceGroup> site_instance_group_;
 
+  // TODO(crbug.com/388998723): Remove the comment about the side effect
+  // of GetProcess() after the full migration to GetOrCreateProcess().
   // The renderer process this RenderFrameProxyHost is associated with. It is
   // equivalent to the result of site_instance_group_->GetProcess(), but that
   // method has the side effect of creating the process if it doesn't exist.

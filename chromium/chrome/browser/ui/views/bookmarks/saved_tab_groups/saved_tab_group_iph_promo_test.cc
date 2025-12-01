@@ -5,8 +5,6 @@
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
-#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_keyed_service.h"
-#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_service_factory.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
 #include "chrome/test/interaction/interactive_browser_test.h"
 #include "chrome/test/user_education/interactive_feature_promo_test.h"
@@ -29,12 +27,10 @@ class SavedTabGroupV2PromoTest : public InteractiveFeaturePromoTest,
     if (GetParam()) {
       feature_list_.InitWithFeatures(
           {{tab_groups::kTabGroupSyncServiceDesktopMigration,
-            tab_groups::kTabGroupsSaveV2, tab_groups::kTabGroupsSaveUIUpdate}},
+            tab_groups::kTabGroupsSaveV2}},
           {});
     } else {
-      feature_list_.InitWithFeatures(
-          {{tab_groups::kTabGroupsSaveV2, tab_groups::kTabGroupsSaveUIUpdate}},
-          {});
+      feature_list_.InitWithFeatures({{tab_groups::kTabGroupsSaveV2}}, {});
     }
   }
 
@@ -58,7 +54,7 @@ class SavedTabGroupV2PromoTest : public InteractiveFeaturePromoTest,
                                                                   group_id);
         }),
         WaitForPromo(feature_engagement::kIPHTabGroupsSaveV2CloseGroupFeature));
-    AddDescription(steps, "SaveAndCloseGroup( %s )");
+    AddDescriptionPrefix(steps, "SaveAndCloseGroup()");
     return steps;
   }
 

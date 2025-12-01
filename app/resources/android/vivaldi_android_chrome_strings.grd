@@ -273,6 +273,9 @@ Touch to Search is a feature that is only available when Google is set as the de
       <message name="IDS_PASSWORD_MANAGER_SETTINGS_TITLE" desc="Title for the settings menu item leading to the Password Manager UI surface. This allows users to e.g. manage their saved passwords, toggle saving and auto-sign-in on/off, etc. [CHAR_LIMIT=32]">
         Password Manager
       </message>
+      <message name="IDS_SEND_TAB_TO_SELF_ANDROID_NO_TARGET_DEVICE_LABEL" desc="Text shown when a user with no available target devices attempts to use send-tab-to-self.">
+        To send this tab to another device, sign in to Vivaldi Sync on both devices. Ensure you enter the encryption password if necessary.
+      </message>
     </messages>
   </release>
 </grit>

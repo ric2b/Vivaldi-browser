@@ -74,7 +74,7 @@ std::string_view SkipComment(std::string_view view, bool skip_type_key = true) {
   size_t index = 0;
   if (view[index] == ';') {
     if (!skip_type_key) {
-      Parser p{view.data()};
+      Parser p = {view.data()};
       if (ParseTypeKeyFromComment(&p).has_value()) {
         return view;
       }
@@ -988,7 +988,7 @@ ParseResult ParseCddl(std::string_view data) {
   if (data[0] == 0) {
     return {nullptr, {}};
   }
-  Parser p{data.data()};
+  Parser p = {data.data()};
 
   SkipStartWhitespace(&p);
   AstNode* root = nullptr;

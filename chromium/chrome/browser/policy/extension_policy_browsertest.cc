@@ -44,10 +44,12 @@
 #include "chrome/browser/profiles/profile_test_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
+#include "chrome/browser/web_applications/proto/web_app_install_state.pb.h"
 #include "chrome/browser/web_applications/test/web_app_test_observers.h"
 #include "chrome/browser/web_applications/test/web_app_test_utils.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/browser/web_applications/web_app_install_manager.h"
+#include "chrome/browser/web_applications/web_app_management_type.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/common/chrome_features.h"
@@ -83,6 +85,7 @@
 #include "extensions/common/file_util.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/manifest_handlers/shared_module_info.h"
+#include "extensions/common/mojom/view_type.mojom.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
@@ -360,28 +363,6 @@ class ExtensionPolicyTest : public ExtensionPolicyTestBase {
 
  private:
   web_app::OsIntegrationManager::ScopedSuppressForTesting os_hooks_suppress_;
-};
-
-// Allows tests to wait for renderer process creation.
-class WindowedProcessCreationObserver
-    : public content::RenderProcessHostCreationObserver {
- public:
-  void Wait() {
-    if (!seen_) {
-      run_loop_.Run();
-    }
-    EXPECT_TRUE(seen_);
-  }
-
-  // content::RenderProcessHostCreationObserver:
-  void OnRenderProcessHostCreated(content::RenderProcessHost* host) override {
-    seen_ = true;
-    run_loop_.Quit();
-  }
-
- private:
-  base::RunLoop run_loop_;
-  bool seen_ = false;
 };
 
 }  // namespace
@@ -875,7 +856,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
 // Verifies that if the cache entry contains inconsistent extension version,
 // the crx installation fails and download of a new crx file is attempted.
 //
-// TODO(crbug.com/40236711): Fix this test. It doesn't alway pass.
+// TODO(crbug.com/40236711): Fix this test. It doesn't always pass.
 IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
                        DISABLED_CrxVersionInconsistencyInCache) {
   base::ScopedAllowBlockingForTesting allow_io;
@@ -1015,7 +996,6 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest, ExtensionInstallForcelist) {
   extensions::InstallStageTracker* install_stage_tracker =
       extensions::InstallStageTracker::Get(browser()->profile());
   install_stage_tracker->AddObserver(&collector_observer);
-
   UpdateProviderPolicy(policies);
   registry_observer.WaitForExtensionWillBeInstalled();
   install_stage_tracker->RemoveObserver(&collector_observer);
@@ -1048,7 +1028,13 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest, ExtensionInstallForcelist) {
   const std::string old_version_number =
       registry->enabled_extensions().GetByID(kGoodCrxId)->version().GetString();
 
-  WindowedProcessCreationObserver new_process_observer;
+  extensions::ExtensionHostTestHelper extension_ready_observer(
+      browser()->profile(), kGoodCrxId);
+
+  extensions::ExtensionHostTestHelper background_loaded_observer(
+      browser()->profile(), kGoodCrxId);
+  background_loaded_observer.RestrictToType(
+      extensions::mojom::ViewType::kExtensionBackgroundPage);
 
   // Updating the force-installed extension.
   extensions::ExtensionUpdater* updater = service->updater();
@@ -1068,29 +1054,10 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest, ExtensionInstallForcelist) {
   EXPECT_EQ(1, new_version.CompareTo(old_version));
 
   // Wait for the new extension process to launch.
-  new_process_observer.Wait();
+  extension_ready_observer.WaitForRenderProcessReady();
 
-  // Wait until any background pages belonging to force-installed extensions
-  // have been loaded.
-  extensions::ProcessManager* manager =
-      extensions::ProcessManager::Get(browser()->profile());
-  extensions::ProcessManager::FrameSet all_frames = manager->GetAllFrames();
-  for (auto iter = all_frames.begin(); iter != all_frames.end();) {
-    content::WebContents* web_contents =
-        content::WebContents::FromRenderFrameHost(*iter);
-    ASSERT_TRUE(web_contents);
-    if (!web_contents->IsLoading()) {
-      ++iter;
-    } else {
-      base::RunLoop().RunUntilIdle();
-
-      // Test activity may have modified the set of extension processes during
-      // message processing, so re-start the iteration to catch added/removed
-      // processes.
-      all_frames = manager->GetAllFrames();
-      iter = all_frames.begin();
-    }
-  }
+  // Wait until the background page for the new extension has properly loaded.
+  ASSERT_TRUE(background_loaded_observer.WaitForHostCompletedFirstLoad());
 
   // Test policy-installed extensions are reloaded when killed.
   {
@@ -2078,8 +2045,10 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest, ExtensionMinimumVersionRequired) {
   EXPECT_TRUE(update_extension_count.IsOne());
 
   EXPECT_TRUE(registry->disabled_extensions().Contains(kGoodCrxId));
-  EXPECT_EQ(extensions::disable_reason::DISABLE_UPDATE_REQUIRED_BY_POLICY,
-            extension_prefs->GetDisableReasons(kGoodCrxId));
+  EXPECT_THAT(
+      extension_prefs->GetDisableReasons(kGoodCrxId),
+      testing::UnorderedElementsAre(
+          extensions::disable_reason::DISABLE_UPDATE_REQUIRED_BY_POLICY));
 
   // Provide a new version (1.0.0.1) which is expected to be auto updated to
   // via the update URL in the manifest of the older version.
@@ -2131,8 +2100,10 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
   // Install the 1.0.0.0 version, it should be installed but disabled.
   EXPECT_TRUE(InstallExtension(kGoodV1CrxName));
   EXPECT_TRUE(registry->disabled_extensions().Contains(kGoodCrxId));
-  EXPECT_EQ(extensions::disable_reason::DISABLE_UPDATE_REQUIRED_BY_POLICY,
-            extension_prefs->GetDisableReasons(kGoodCrxId));
+  EXPECT_THAT(
+      extension_prefs->GetDisableReasons(kGoodCrxId),
+      testing::UnorderedElementsAre(
+          extensions::disable_reason::DISABLE_UPDATE_REQUIRED_BY_POLICY));
   EXPECT_EQ("1.0.0.0",
             registry->GetInstalledExtension(kGoodCrxId)->version().GetString());
 
@@ -2155,8 +2126,10 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
   EXPECT_EQ(kGoodCrxVersion,
             registry->GetInstalledExtension(kGoodCrxId)->version().GetString());
   EXPECT_TRUE(registry->disabled_extensions().Contains(kGoodCrxId));
-  EXPECT_EQ(extensions::disable_reason::DISABLE_UPDATE_REQUIRED_BY_POLICY,
-            extension_prefs->GetDisableReasons(kGoodCrxId));
+  EXPECT_THAT(
+      extension_prefs->GetDisableReasons(kGoodCrxId),
+      testing::UnorderedElementsAre(
+          extensions::disable_reason::DISABLE_UPDATE_REQUIRED_BY_POLICY));
 
   // Remove the minimum version requirement. The extension should be re-enabled.
   {
@@ -2213,8 +2186,10 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(registry->enabled_extensions().Contains(kGoodCrxId));
   EXPECT_TRUE(registry->disabled_extensions().Contains(kGoodCrxId));
-  EXPECT_EQ(extensions::disable_reason::DISABLE_UPDATE_REQUIRED_BY_POLICY,
-            extension_prefs->GetDisableReasons(kGoodCrxId));
+  EXPECT_THAT(
+      extension_prefs->GetDisableReasons(kGoodCrxId),
+      testing::UnorderedElementsAre(
+          extensions::disable_reason::DISABLE_UPDATE_REQUIRED_BY_POLICY));
 }
 
 // Verifies that policy host block/allow settings are applied even when
@@ -2297,8 +2272,9 @@ IN_PROC_BROWSER_TEST_F(WebAppInstallForceListPolicyTest, StartUpInstallation) {
       web_app::WebAppProvider::GetForTest(browser()->profile())
           ->registrar_unsafe();
   web_app::WebAppTestInstallObserver install_observer(browser()->profile());
-  std::optional<webapps::AppId> app_id =
-      registrar.FindAppWithUrlInScope(policy_app_url_);
+  std::optional<webapps::AppId> app_id = registrar.FindBestAppWithUrlInScope(
+      policy_app_url_,
+      web_app::WebAppFilter::InstalledInOperatingSystemForTesting());
   if (!app_id) {
     app_id = install_observer.BeginListeningAndWait();
   }
@@ -2330,8 +2306,9 @@ IN_PROC_BROWSER_TEST_F(
       web_app::WebAppProvider::GetForTest(browser()->profile())
           ->registrar_unsafe();
   web_app::WebAppTestInstallObserver install_observer(browser()->profile());
-  std::optional<webapps::AppId> app_id =
-      registrar.FindAppWithUrlInScope(policy_app_url_);
+  std::optional<webapps::AppId> app_id = registrar.FindBestAppWithUrlInScope(
+      policy_app_url_,
+      web_app::WebAppFilter::InstalledInOperatingSystemForTesting());
   if (!app_id) {
     app_id = install_observer.BeginListeningAndWait();
   }
@@ -2363,8 +2340,9 @@ IN_PROC_BROWSER_TEST_F(WebAppInstallForceListPolicySAATest,
       web_app::WebAppProvider::GetForTest(browser()->profile())
           ->registrar_unsafe();
   web_app::WebAppTestInstallObserver install_observer(browser()->profile());
-  std::optional<webapps::AppId> app_id =
-      registrar.FindAppWithUrlInScope(policy_app_url_);
+  std::optional<webapps::AppId> app_id = registrar.FindBestAppWithUrlInScope(
+      policy_app_url_,
+      web_app::WebAppFilter::InstalledInOperatingSystemForTesting());
   if (!app_id) {
     app_id = install_observer.BeginListeningAndWait();
   }
@@ -2393,8 +2371,9 @@ IN_PROC_BROWSER_TEST_F(WebAppInstallForceListPolicyWithAppFallbackNameSAATest,
       web_app::WebAppProvider::GetForTest(browser()->profile())
           ->registrar_unsafe();
   web_app::WebAppTestInstallObserver install_observer(browser()->profile());
-  std::optional<webapps::AppId> app_id =
-      registrar.FindAppWithUrlInScope(policy_app_url_);
+  std::optional<webapps::AppId> app_id = registrar.FindBestAppWithUrlInScope(
+      policy_app_url_,
+      web_app::WebAppFilter::InstalledInOperatingSystemForTesting());
   if (!app_id) {
     app_id = install_observer.BeginListeningAndWait();
   }
@@ -2428,8 +2407,9 @@ IN_PROC_BROWSER_TEST_F(
           ->registrar_unsafe();
   web_app::WebAppTestInstallWithOsHooksObserver install_observer(
       browser()->profile());
-  std::optional<webapps::AppId> app_id =
-      registrar.FindAppWithUrlInScope(policy_app_url_);
+  std::optional<webapps::AppId> app_id = registrar.FindBestAppWithUrlInScope(
+      policy_app_url_,
+      web_app::WebAppFilter::InstalledInOperatingSystemForTesting());
   if (!app_id) {
     app_id = install_observer.BeginListeningAndWait();
   }

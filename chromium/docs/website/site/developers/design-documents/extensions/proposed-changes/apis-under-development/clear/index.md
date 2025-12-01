@@ -25,7 +25,7 @@ Clearing browsing data is prima facie relevant to extensions that want to offer
 privacy protections for users above and beyond what is reasonable to offer as a
 default. Extensions like Tor and NoScript have both expressed interest.
 Use-cases also exist in the developer community, specifically around clearing
-the browser’s cache (see[ http://crbug.com/54853](http://crbug.com/54853) for
+the browser’s cache (see[ https://crbug.com/54853](https://crbug.com/54853) for
 example, which HttpWatch is interested in).
 Could this API be part of the web platform?
 This specifically relates to data stored by the browser above and beyond the web

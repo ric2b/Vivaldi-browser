@@ -29,12 +29,12 @@ import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.HistogramWatcher;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.components.plus_addresses.PlusAddressesMetricsRecorder;
 import org.chromium.components.signin.base.CoreAccountInfo;
+import org.chromium.components.signin.base.GaiaId;
 import org.chromium.components.signin.identitymanager.IdentityManager;
 import org.chromium.ui.base.TestActivity;
 
@@ -45,8 +45,6 @@ import org.chromium.ui.base.TestActivity;
 @EnableFeatures(ChromeFeatureList.PLUS_ADDRESS_ANDROID_OPEN_GMS_CORE_MANAGEMENT_PAGE)
 public class PlusAddressesHelperTest {
     private static final String PLUS_ADDRESS_MANAGEMENT_URL = "https://manage.plus.addresses.com";
-
-    @Rule public JniMocker mJniMocker = new JniMocker();
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
 
     @Mock private Profile mProfile;
@@ -58,7 +56,7 @@ public class PlusAddressesHelperTest {
 
     @Before
     public void setUp() {
-        mJniMocker.mock(PlusAddressesHelperJni.TEST_HOOKS, mPlusAddressesHelperJni);
+        PlusAddressesHelperJni.setInstanceForTesting(mPlusAddressesHelperJni);
         when(mPlusAddressesHelperJni.getPlusAddressManagementUrl())
                 .thenReturn(PLUS_ADDRESS_MANAGEMENT_URL);
 
@@ -102,7 +100,7 @@ public class PlusAddressesHelperTest {
         var shadowActivity = Shadows.shadowOf(mActivity);
         Intent cctIntent = shadowActivity.getNextStartedActivity();
         assertNotNull(cctIntent);
-        assertEquals(cctIntent.getDataString(), PLUS_ADDRESS_MANAGEMENT_URL);
+        assertEquals(PLUS_ADDRESS_MANAGEMENT_URL, cctIntent.getDataString());
         histogramWatcher.assertExpected();
     }
 
@@ -153,7 +151,8 @@ public class PlusAddressesHelperTest {
                         .build();
         when(mIdentityServicesProvider.getIdentityManager(mProfile)).thenReturn(mIdentityManager);
         CoreAccountInfo accountInfo =
-                CoreAccountInfo.createFromEmailAndGaiaId("test@gmail.com", "testGaiaId");
+                CoreAccountInfo.createFromEmailAndGaiaId(
+                        "test@gmail.com", new GaiaId("testGaiaId"));
         when(mIdentityManager.getPrimaryAccountInfo(anyInt())).thenReturn(accountInfo);
 
         PlusAddressesHelper.openManagePlusAddresses(mActivity, mProfile);

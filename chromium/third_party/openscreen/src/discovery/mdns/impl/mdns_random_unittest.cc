@@ -14,8 +14,8 @@ constexpr int kIterationCount = 100;
 }
 
 TEST(MdnsRandomTest, InitialQueryDelay) {
-  constexpr std::chrono::milliseconds lower_bound{20};
-  constexpr std::chrono::milliseconds upper_bound{120};
+  constexpr std::chrono::milliseconds lower_bound(20);
+  constexpr std::chrono::milliseconds upper_bound(120);
   MdnsRandom mdns_random;
   for (int i = 0; i < kIterationCount; ++i) {
     const Clock::duration delay = mdns_random.GetInitialQueryDelay();
@@ -25,8 +25,8 @@ TEST(MdnsRandomTest, InitialQueryDelay) {
 }
 
 TEST(MdnsRandomTest, RecordTtlVariation) {
-  constexpr double lower_bound = 0.0;
-  constexpr double upper_bound = 0.02;
+  constexpr double lower_bound(0.0);
+  constexpr double upper_bound(0.02);
   MdnsRandom mdns_random;
   for (int i = 0; i < kIterationCount; ++i) {
     const double variation = mdns_random.GetRecordTtlVariation();
@@ -36,8 +36,8 @@ TEST(MdnsRandomTest, RecordTtlVariation) {
 }
 
 TEST(MdnsRandomTest, SharedRecordResponseDelay) {
-  constexpr std::chrono::milliseconds lower_bound{20};
-  constexpr std::chrono::milliseconds upper_bound{120};
+  constexpr std::chrono::milliseconds lower_bound(20);
+  constexpr std::chrono::milliseconds upper_bound(120);
   MdnsRandom mdns_random;
   for (int i = 0; i < kIterationCount; ++i) {
     const Clock::duration delay = mdns_random.GetSharedRecordResponseDelay();
@@ -47,8 +47,8 @@ TEST(MdnsRandomTest, SharedRecordResponseDelay) {
 }
 
 TEST(MdnsRandomTest, TruncatedQueryResponseDelay) {
-  constexpr std::chrono::milliseconds lower_bound{400};
-  constexpr std::chrono::milliseconds upper_bound{500};
+  constexpr std::chrono::milliseconds lower_bound(400);
+  constexpr std::chrono::milliseconds upper_bound(500);
   MdnsRandom mdns_random;
   for (int i = 0; i < kIterationCount; ++i) {
     const Clock::duration delay = mdns_random.GetTruncatedQueryResponseDelay();

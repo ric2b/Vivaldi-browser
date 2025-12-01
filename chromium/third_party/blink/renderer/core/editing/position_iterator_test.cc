@@ -934,7 +934,13 @@ TEST_F(PositionIteratorTest, IncrementFromSelectElementOffset1) {
                   "-S-- SLOT id=\"select-options\" SLOT "
                   "id=\"select-options\"@offsetInAnchor[0]",
                   "-S-- OPTION OPTION@offsetInAnchor[0]",
-                  "-S-E SLOT SLOT@beforeAnchor SLOT@offsetInAnchor[0]",
+                  "-S-E SPAN ::-internal-option-label-container SPAN "
+                  "::-internal-option-label-container@beforeAnchor SPAN "
+                  "::-internal-option-label-container@offsetInAnchor[0]",
+                  "---- OPTION OPTION@offsetInAnchor[1]",
+                  "-S-E SLOT ::-internal-option-slot SLOT "
+                  "::-internal-option-slot@beforeAnchor SLOT "
+                  "::-internal-option-slot@offsetInAnchor[0]",
                   "---E OPTION OPTION@afterChildren",
                   "---E SLOT id=\"select-options\" SLOT "
                   "id=\"select-options\"@afterChildren"));

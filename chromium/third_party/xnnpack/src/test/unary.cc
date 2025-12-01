@@ -28,6 +28,7 @@
 #include "xnnpack/subgraph.h"
 #include "replicable_random_device.h"
 #include "unary-ops.h"
+#include "runtime-flags.h"
 
 struct Param {
   using UnaryT = std::tuple<xnn_unary_operator, xnn_datatype>;
@@ -152,7 +153,7 @@ TEST_P(UnaryTest, matches_operator_api) {
   ASSERT_EQ(xnn_status_success,
             xnn_define_unary(subgraph, unary_operator, &params, input_id,
                              output_id, /*flags=*/0));
-  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, /*flags=*/0, &runtime));
+  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, xnn_test_runtime_flags(), &runtime));
   ASSERT_NE(nullptr, runtime);
   std::unique_ptr<xnn_runtime, decltype(&xnn_delete_runtime)> auto_runtime(runtime, xnn_delete_runtime);
   std::array<xnn_external_value, 2> external = {
@@ -181,11 +182,24 @@ xnn_unary_operator all_unary_ops[] = {
     xnn_unary_square_root,
     xnn_unary_reciprocal_square_root,
     xnn_unary_tanh,
+    xnn_unary_cube_root,
+    xnn_unary_cosine,
+    xnn_unary_sine,
+    xnn_unary_count_leading_zeros,
+    xnn_unary_bitwise_not,
+    xnn_unary_popcount,
+    xnn_unary_sign,
 };
 
-xnn_datatype all_datatypes[] = {
-    xnn_datatype_quint8, xnn_datatype_qint8, xnn_datatype_fp16,
-    xnn_datatype_fp32,   xnn_datatype_int32,
+const xnn_datatype all_datatypes[] = {
+    xnn_datatype_quint8,
+    xnn_datatype_qint8,
+#ifndef XNN_EXCLUDE_F16_TESTS
+    xnn_datatype_fp16,
+#endif
+    xnn_datatype_bf16,
+    xnn_datatype_fp32,
+    xnn_datatype_int32,
 };
 
 INSTANTIATE_TEST_SUITE_P(
@@ -230,7 +244,6 @@ TEST(AbsTest, reshape) {
   struct xnn_node* node = &subgraph->nodes[0];
   ASSERT_EQ(node->type, xnn_node_type_unary_elementwise);
   ASSERT_EQ(node->unary_operator, xnn_unary_abs);
-  ASSERT_EQ(node->compute_type, xnn_compute_type_fp32);
   ASSERT_EQ(node->num_inputs, 1);
   ASSERT_EQ(node->inputs[0], input_id);
   ASSERT_EQ(node->num_outputs, 1);
@@ -238,7 +251,7 @@ TEST(AbsTest, reshape) {
   ASSERT_EQ(node->flags, 0);
 
   xnn_runtime_t runtime = nullptr;
-  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, /*flags=*/0, &runtime));
+  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, xnn_test_runtime_flags(), &runtime));
   ASSERT_NE(nullptr, runtime);
   std::unique_ptr<xnn_runtime, decltype(&xnn_delete_runtime)> auto_runtime(runtime, xnn_delete_runtime);
 

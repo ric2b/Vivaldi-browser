@@ -44,17 +44,19 @@ import type * as IssuesManager from '../../models/issues_manager/issues_manager.
 import * as Logs from '../../models/logs/logs.js';
 import * as TextUtils from '../../models/text_utils/text_utils.js';
 import * as Workspace from '../../models/workspace/workspace.js';
+import * as Buttons from '../../ui/components/buttons/buttons.js';
 import * as CodeHighlighter from '../../ui/components/code_highlighter/code_highlighter.js';
 import * as IconButton from '../../ui/components/icon_button/icon_button.js';
 import * as IssueCounter from '../../ui/components/issue_counter/issue_counter.js';
 import * as RequestLinkIcon from '../../ui/components/request_link_icon/request_link_icon.js';
 import * as DataGrid from '../../ui/legacy/components/data_grid/data_grid.js';
 import * as ObjectUI from '../../ui/legacy/components/object_ui/object_ui.js';
-// eslint-disable-next-line rulesdir/es_modules_import
+// eslint-disable-next-line rulesdir/es-modules-import
 import objectValueStyles from '../../ui/legacy/components/object_ui/objectValue.css.js';
 import * as Components from '../../ui/legacy/components/utils/utils.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
+import * as Security from '../security/security.js';
 
 import {format, updateStyle} from './ConsoleFormat.js';
 import consoleViewStyles from './consoleView.css.js';
@@ -212,6 +214,10 @@ const UIStrings = {
    *@description Message to offer insights for a console message
    */
   explainThisMessageWithAI: 'Understand this message. Powered by AI',
+  /**
+   *@description Tooltip shown when user hovers over the cookie icon to explain that the button will bring the user to the cookie report
+   */
+  SeeIssueInCookieReport: 'Click to open privacy and security panel and show third-party cookie report',
 };
 const str_ = i18n.i18n.registerUIStrings('panels/console/ConsoleViewMessage.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -219,6 +225,24 @@ const elementToMessage = new WeakMap<Element, ConsoleViewMessage>();
 
 export const getMessageForElement = (element: Element): ConsoleViewMessage|undefined => {
   return elementToMessage.get(element);
+};
+
+/**
+ * Combines the error description (essentially the `Error#stack` property value)
+ * with the `issueSummary`.
+ *
+ * @param description the `description` property of the `Error` remote object.
+ * @param issueSummary the optional `issueSummary` of the `exceptionMetaData`.
+ * @returns the enriched description.
+ * @see https://goo.gle/devtools-reduce-network-noise-design
+ */
+export const concatErrorDescriptionAndIssueSummary = (description: string, issueSummary: string): string => {
+  // Insert the issue summary right after the error message.
+  const pos = description.indexOf('\n');
+  const prefix = pos === -1 ? description : description.substring(0, pos);
+  const suffix = pos === -1 ? '' : description.substring(pos);
+  description = `${prefix}. ${issueSummary}${suffix}`;
+  return description;
 };
 
 // This value reflects the 18px min-height of .console-message, plus the
@@ -522,6 +546,23 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
     return elements;
   }
 
+  #appendCookieReportButtonToElem(elem: HTMLElement): void {
+    const button = new Buttons.Button.Button();
+    button.data = {
+      size: Buttons.Button.Size.SMALL,
+      variant: Buttons.Button.Variant.ICON,
+      iconName: 'cookie',
+      jslogContext: 'privacy',
+      title: i18nString(UIStrings.SeeIssueInCookieReport)
+    };
+
+    button.addEventListener('click', () => {
+      void Common.Revealer.reveal(new Security.CookieReportView.CookieReportView());
+    });
+
+    elem.appendChild(button);
+  }
+
   #getLinkifierMetric(): Host.UserMetrics.Action|undefined {
     const request = Logs.NetworkLog.NetworkLog.requestForConsoleMessage(this.message);
     if (request?.resourceType().isStyleSheet()) {
@@ -561,6 +602,16 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
       }
       return null;
     };
+
+    if (this.message.isCookieReportIssue &&
+        Common.Settings.Settings.instance().getHostConfig().devToolsPrivacyUI?.enabled) {
+      const anchorWrapperElement = document.createElement('span');
+      anchorWrapperElement.classList.add('console-message-anchor', 'cookie-report-anchor');
+      this.#appendCookieReportButtonToElem(anchorWrapperElement);
+      UI.UIUtils.createTextChild(anchorWrapperElement, ' ');
+      return anchorWrapperElement;
+    }
+
     const anchorElement = linkify(this.message);
     // Append a space to prevent the anchor text from being glued to the console message when the user selects and copies the console messages.
     if (anchorElement) {
@@ -1309,7 +1360,7 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
       this.elementInternal.classList.add('console-from-api');
     }
     if (this.inSimilarGroup) {
-      this.similarGroupMarker = (this.consoleRowWrapper.createChild('div', 'nesting-level-marker') as HTMLElement);
+      this.similarGroupMarker = this.consoleRowWrapper.createChild('div', 'nesting-level-marker');
       this.similarGroupMarker.classList.toggle('group-closed', this.lastInSimilarGroup);
     }
 
@@ -1528,8 +1579,7 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
     }
 
     if (!this.repeatCountElement) {
-      this.repeatCountElement =
-          (document.createElement('span', {is: 'dt-small-bubble'}) as UI.UIUtils.DevToolsSmallBubble);
+      this.repeatCountElement = document.createElement('dt-small-bubble');
       this.repeatCountElement.classList.add('console-message-repeat-count');
       switch (this.message.level) {
         case Protocol.Log.LogEntryLevel.Warning:
@@ -1704,6 +1754,11 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
       return null;
     }
 
+    const issueSummary = exceptionDetails?.exceptionMetaData?.issueSummary;
+    if (typeof issueSummary === 'string') {
+      string = concatErrorDescriptionAndIssueSummary(string, issueSummary);
+    }
+
     const linkInfos = parseSourcePositionsFromErrorStack(runtimeModel, string);
     if (!linkInfos?.length) {
       return null;
@@ -1717,7 +1772,7 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
 
     for (let i = 0; i < linkInfos.length; ++i) {
       const newline = i < linkInfos.length - 1 ? '\n' : '';
-      const {line, link} = linkInfos[i];
+      const {line, link, isCallFrame} = linkInfos[i];
       // Syntax errors don't have a stack frame that points to the source position
       // where the error occurred. We use the source location from the
       // exceptionDetails and append it to the end of the message instead.
@@ -1732,11 +1787,17 @@ export class ConsoleViewMessage implements ConsoleViewportElement {
         formattedResult.append(newline);
         continue;
       }
-      if (!link) {
+      if (!isCallFrame) {
         formattedResult.appendChild(this.linkifyStringAsFragment(`${line}${newline}`));
         continue;
       }
       const formattedLine = document.createElement('span');
+      if (!link) {
+        formattedLine.appendChild(this.linkifyStringAsFragment(`${line}${newline}`));
+        formattedLine.classList.add('formatted-builtin-stack-frame');
+        formattedResult.appendChild(formattedLine);
+        continue;
+      }
       const suffix = `${link.suffix}${newline}`;
       formattedLine.appendChild(this.linkifyStringAsFragment(link.prefix));
       const scriptLocationLink = this.linkifier.linkifyScriptLocation(
@@ -2187,7 +2248,7 @@ export class ConsoleTableMessageView extends ConsoleViewMessage {
         const dataGridWidget = this.dataGrid.asWidget();
         dataGridWidget.markAsRoot();
         dataGridWidget.show(shadowRoot as unknown as Element);
-        dataGridWidget.registerCSSFiles([consoleViewStyles, objectValueStyles]);
+        dataGridWidget.registerRequiredCSS(consoleViewStyles, objectValueStyles);
         formattedMessage.appendChild(formattedResult);
         this.dataGrid.renderInline();
       }

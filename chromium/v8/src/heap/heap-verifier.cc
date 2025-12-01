@@ -412,7 +412,8 @@ void HeapVerification::VerifyPage(const MemoryChunkMetadata* chunk_metadata) {
   CHECK(!current_chunk_.has_value());
   CHECK(!chunk->IsFlagSet(MemoryChunk::PAGE_NEW_OLD_PROMOTION));
   CHECK(!chunk->IsFlagSet(MemoryChunk::FROM_PAGE));
-  if (V8_SHARED_RO_HEAP_BOOL && chunk->InReadOnlySpace()) {
+  CHECK(!chunk->IsQuarantined());
+  if (chunk->InReadOnlySpace()) {
     CHECK_NULL(chunk_metadata->owner());
   } else {
     CHECK_EQ(chunk_metadata->heap(), heap());
@@ -575,6 +576,14 @@ class SlotVerifyingVisitor : public HeapVisitor<SlotVerifyingVisitor> {
     }
   }
 
+  void VisitProtectedPointer(Tagged<TrustedObject> host,
+                             ProtectedMaybeObjectSlot slot) override {
+    if (ShouldHaveBeenRecorded(host, slot.load())) {
+      CHECK_NOT_NULL(protected_);
+      CHECK_GT(protected_->count(slot.address()), 0);
+    }
+  }
+
   void VisitMapPointer(Tagged<HeapObject> object) override {
     VisitPointers(object, object->map_slot(), object->map_slot() + 1);
   }
@@ -621,7 +630,7 @@ class OldToNewSlotVerifyingVisitor : public SlotVerifyingVisitor {
     Tagged<Object> k = *key;
     if (!HeapLayout::InYoungGeneration(host) &&
         HeapLayout::InYoungGeneration(k)) {
-      Tagged<EphemeronHashTable> table = Cast<EphemeronHashTable>(host);
+      Tagged<EphemeronHashTable> table = i::Cast<EphemeronHashTable>(host);
       auto it = ephemeron_remembered_set_->find(table);
       CHECK(it != ephemeron_remembered_set_->end());
       int slot_index =

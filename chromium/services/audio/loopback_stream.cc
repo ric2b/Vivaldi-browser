@@ -4,12 +4,12 @@
 
 #include "services/audio/loopback_stream.h"
 
+#include <algorithm>
 #include <string>
 
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
 #include "base/not_fatal_until.h"
-#include "base/ranges/algorithm.h"
 #include "base/sync_socket.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/default_tick_clock.h"
@@ -73,7 +73,7 @@ LoopbackStream::LoopbackStream(
           [](const std::string& message) { VLOG(1) << message; }),
       shared_memory_count, params, &foreign_socket);
   if (writer) {
-    base::ReadOnlySharedMemoryRegion shared_memory_region =
+    base::UnsafeSharedMemoryRegion shared_memory_region =
         writer->TakeSharedMemoryRegion();
     mojo::PlatformHandle socket_handle;
     if (shared_memory_region.IsValid()) {
@@ -261,7 +261,7 @@ void LoopbackStream::FlowNetwork::RemoveInput(SnooperNode* node) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(control_sequence_);
 
   base::AutoLock scoped_lock(lock_);
-  const auto it = base::ranges::find(inputs_, node);
+  const auto it = std::ranges::find(inputs_, node);
   CHECK(it != inputs_.end(), base::NotFatalUntil::M130);
   inputs_.erase(it);
 }
@@ -365,8 +365,7 @@ void LoopbackStream::FlowNetwork::GenerateMoreAudio() {
   }
 
   // Insert the result into the AudioDataPipe.
-  writer_->Write(mix_bus_.get(), output_volume, false, delayed_capture_time,
-                 {});
+  writer_->Write(mix_bus_.get(), output_volume, delayed_capture_time, {});
 
   // Determine when to generate more audio again. This is done by advancing the
   // frame count by one interval's worth, then computing the TimeTicks

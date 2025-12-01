@@ -74,13 +74,6 @@ struct CrossThreadCopier<std::optional<mojo_base::BigBuffer>> {
   static Type Copy(Type&& value) { return std::move(value); }
 };
 
-template <>
-struct CrossThreadCopier<SegmentedBuffer> {
-  STATIC_ONLY(CrossThreadCopier);
-  using Type = SegmentedBuffer;
-  static Type Copy(Type&& value) { return std::move(value); }
-};
-
 }  // namespace WTF
 
 namespace blink {
@@ -428,8 +421,6 @@ class FakeURLLoader : public network::mojom::URLLoader {
     set_priority_log_.push_back(PriorityInfo{
         .priority = priority, .intra_priority_value = intra_priority_value});
   }
-  void PauseReadingBodyFromNet() override {}
-  void ResumeReadingBodyFromNet() override {}
 
   bool follow_redirect_called() const { return follow_redirect_called_; }
   const std::vector<PriorityInfo>& set_priority_log() const {
@@ -755,7 +746,7 @@ TEST_F(BackgroundResourceFecherTest, CancelSoonAfterStart) {
                       mojo::PendingRemote<network::mojom::URLLoaderClient>
                           client) {
                     // CreateLoaderAndStart should not be called.
-                    CHECK(false);
+                    NOTREACHED();
                   }));
   std::unique_ptr<BackgroundURLLoader> background_url_loader =
       std::make_unique<BackgroundURLLoader>(

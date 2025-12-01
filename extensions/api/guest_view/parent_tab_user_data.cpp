@@ -43,5 +43,16 @@ bool ParentTabUserData::ShouldSync(content::WebContents* contents) {
   return false;
 }
 
+bool ParentTabUserData::IsWebPanel(content::WebContents* contents) {
+  std::optional<int> parent = GetParentTabId(contents);
+  if (!parent)
+    return false;
+
+  if (*parent == 0)
+    return true;
+
+  return false;
+}
+
 WEB_CONTENTS_USER_DATA_KEY_IMPL(ParentTabUserData);
 }  // namespace vivaldi

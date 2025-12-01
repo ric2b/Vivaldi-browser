@@ -309,6 +309,7 @@ bool SaveRulesList(const base::FilePath& output_path,
 }  // namespace
 
 bool CompileFlatRules(const ParseResult& parse_result,
+                      const RuleSourceSettings& source_settings,
                       const base::FilePath& output_path,
                       std::string& checksum) {
   flatbuffers::FlatBufferBuilder builder;
@@ -340,7 +341,7 @@ bool CompileFlatRules(const ParseResult& parse_result,
   flat::FinishRulesListBuffer(builder, root_offset);
 
   return SaveRulesList(
-      output_path,
-      base::make_span(builder.GetBufferPointer(), builder.GetSize()), checksum);
+      output_path, base::span(builder.GetBufferPointer(), builder.GetSize()),
+      checksum);
 }
 }  // namespace adblock_filter

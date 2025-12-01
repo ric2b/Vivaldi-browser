@@ -27,9 +27,9 @@
 #include "remoting/base/constants.h"
 #include "remoting/base/logging.h"
 #include "remoting/host/clipboard.h"
-#include "remoting/host/input_injector_constants_linux.h"
 #include "remoting/host/input_injector_metadata.h"
 #include "remoting/host/linux/clipboard_wayland.h"
+#include "remoting/host/linux/input_injector_constants_linux.h"
 #include "remoting/host/linux/remote_desktop_portal_injector.h"
 #include "remoting/host/linux/unicode_to_keysym.h"
 #include "remoting/host/linux/wayland_manager.h"
@@ -40,7 +40,7 @@
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "remoting/host/chromeos/point_transformer.h"
 #endif
 
@@ -381,7 +381,7 @@ void InputInjectorWayland::Core::InjectMouseEventHelper(
     // apps which assume MotionNotify implies movement. See crbug.com/138075.
     bool inject_motion = true;
     webrtc::DesktopVector new_mouse_position(event.x(), event.y());
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     // Interim hack to handle display rotation on Chrome OS.
     // TODO(crbug.com/40396937): Remove this when Chrome OS has completely
     // migrated to Ozone.

@@ -45,9 +45,17 @@ BASE_DECLARE_FEATURE(kApiContentSettingsClipboard);
 // Controls the availability of the enterprise.kioskInput API.
 BASE_DECLARE_FEATURE(kApiEnterpriseKioskInput);
 
+// Controls the availability of the runtime.actionData API.
+// TODO(crbug.com/376354347): Remove this when the experiment is finished.
+BASE_DECLARE_FEATURE(kApiRuntimeActionData);
+
 // Controls the availability of adding and removing site access requests with
 // the permissions API.
-BASE_DECLARE_FEATURE(kApiPermissionsSiteAccessRequests);
+BASE_DECLARE_FEATURE(kApiPermissionsHostAccessRequests);
+
+// Controls the availability of executing user scripts programmatically using
+// the userScripts API.
+BASE_DECLARE_FEATURE(kApiUserScriptsExecute);
 
 // Controls the availability of specifying different world IDs in the
 // userScripts API.
@@ -66,19 +74,9 @@ BASE_DECLARE_FEATURE(kApiEnterpriseReportingPrivateReportDataMaskingEvent);
 
 // For historical reasons, this includes some APIs. Please don't add more APIs.
 
-// Whether extension contexts can use SharedArrayBuffers unconditionally (i.e.
-// without requiring cross origin isolation).
-// TODO(crbug.com/40752831): Flip this in M95.
-BASE_DECLARE_FEATURE(kAllowSharedArrayBuffersUnconditionally);
-
 // Enables the UI in the install prompt which lets a user choose to withhold
 // requested host permissions by default.
 BASE_DECLARE_FEATURE(kAllowWithholdingExtensionPermissionsOnInstall);
-
-// If enabled, calls RenderFrame::SetAllowsCrossBrowsingInstanceFrameLookup() in
-// DidCreateScriptContext() instead of DidCommitProvisionalLoad() to avoid
-// creating the script context too early which can be bad for performance.
-BASE_DECLARE_FEATURE(kAvoidEarlyExtensionScriptContextCreation);
 
 // When enabled, then bad_message::ReceivedBadMessage will be called when
 // browser receives an IPC from a content script and the IPC that unexpectedly
@@ -161,8 +159,9 @@ BASE_DECLARE_FEATURE(kForceWebRequestProxyForTest);
 // cmd.exe process as a proxy.
 BASE_DECLARE_FEATURE(kLaunchWindowsNativeHostsDirectly);
 
-// Controls whether extensions can use the new favicon fetching in Manifest V3.
-BASE_DECLARE_FEATURE(kNewExtensionFaviconHandling);
+// Controls whether omnibox extensions can use the new capability to intercept
+// input without needing keyword mode.
+BASE_DECLARE_FEATURE(kExperimentalOmniboxLabs);
 
 // To investigate signal beacon loss in crrev.com/c/2262402.
 BASE_DECLARE_FEATURE(kReportKeepaliveUkm);
@@ -228,6 +227,19 @@ BASE_DECLARE_FEATURE(kDeclarativeNetRequestHeaderSubstitution);
 
 // Show no warning banner when an extension uses CDP's `chrome.debugger`.
 BASE_DECLARE_FEATURE(kSilentDebuggerExtensionAPI);
+
+// Controls whether the core SiteInstance in ProcessManager is removed. This
+// also requires adjusting when some frames are registered with the
+// ProcessManager, since they are no longer created directly with an
+// extension's SiteInstance (and instead go through a host swap before commit).
+// TODO(https://crbug.com/334991035): Remove this feature after we're confident
+// nothing breaks.
+BASE_DECLARE_FEATURE(kRemoveCoreSiteInstance);
+
+// Changes the chrome.userScript API to be enabled by a per-extension toggle
+// rather than the developer mode toggle on chrome://extensions.
+BASE_DECLARE_FEATURE(kUserScriptUserExtensionToggle);
+
 }  // namespace extensions_features
 
 #endif  // EXTENSIONS_COMMON_EXTENSION_FEATURES_H_

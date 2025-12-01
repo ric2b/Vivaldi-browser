@@ -707,7 +707,6 @@ Both methods and attribute/constant getters annotated with this attribute are wi
 ```webidl
 [HighEntropy] attribute Node interestingAttribute;
 [HighEntropy] Node getInterestingNode();
-[HighEntropy] const INTERESTING_CONSTANT = 1;
 ```
 
 Attributes and methods labeled with `[HighEntropy=Direct]` are simple surfaces which can be expressed as a sequence of bytes without any need for additional parsing logic.
@@ -755,7 +754,7 @@ Summary: Measures usage of a specific feature via `UseCounter`.
 
 In order to measure usage of specific features, Chrome submits anonymous statistics through the Histogram recording system for users who opt-in to sharing usage statistics. This extended attribute hooks up a specific feature to this measurement system.
 
-Usage: `[Measure]` can be specified on interfaces, methods, attributes, and constants.
+Usage: `[Measure]` can be specified on interfaces, methods, and attributes.
 
 (_deprecated_) When specified on an interface usage of the constructor will be measured. This behavior could be changed in the future. Specify `[Measure]` on constructor operations instead.
 
@@ -764,7 +763,7 @@ The generated feature name must be added to `WebFeature` (in [blink/public/mojom
 ```webidl
 [Measure] attribute Node interestingAttribute;
 [Measure] Node getInterestingNode();
-[Measure] const INTERESTING_CONSTANT = 1;
+// Note that Measure is no longer supported on constants.
 ```
 
 ### [MeasureAs]
@@ -772,16 +771,19 @@ The generated feature name must be added to `WebFeature` (in [blink/public/mojom
 Summary: Like `[Measure]`, but the feature name is provided as the extended attribute value.
 This is similar to the standard `[DeprecateAs]` extended attribute, but does not display a deprecation warning.
 
-Usage: `[MeasureAs]` can be specified on interfaces, methods, attributes, and constants.
+Usage: `[MeasureAs]` can be specified on interfaces, methods, and attributes.
 
 (_deprecated_) Specifying `[MeasureAs]` on interfaces is deprecated. Specify `[MeasureAs]` on constructor operations instead.
 
 The value must match one of the enumeration values in `WebFeature` (in [blink/public/mojom/use_counter/metrics/web_feature.mojom](https://source.chromium.org/chromium/chromium/src/+/master:third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom)).
 
+For WebDX features, the value must start with `WebDXFeature::` and must match one of the enumeration values in `WebDXFeature` (in [blink/public/mojom/use_counter/metrics/webdx_feature.mojom](https://source.chromium.org/chromium/chromium/src/+/master:third_party/blink/public/mojom/use_counter/metrics/webdx_feature.mojom)).
+
 ```webidl
 [MeasureAs=AttributeWeAreInterestedIn] attribute Node interestingAttribute;
 [MeasureAs=MethodsAreInterestingToo] Node getInterestingNode();
-[MeasureAs=EvenSomeConstantsAreInteresting] const INTERESTING_CONSTANT = 1;
+[MeasureAs="WebDXFeature::kInterestingFeature"] void doInterestingWork();
+// Note that MeasureAs is no longer supported on constants.
 ```
 
 ### [NotEnumerable]
@@ -1316,12 +1318,6 @@ These extended attributes are _discouraged_ - they are not deprecated, but they 
 Summary: The byte length of buffer source types is currently restricted to be under 2 GB (exactly speaking, it must be less than the max size of a direct mapped memory of PartitionAlloc, which is a little less than 2 GB).  This extended attribute removes this limitation.
 
 Consult with the bindings team before you use this extended attribute.
-
-### [IDLTypeImplementedAsV8Promise]
-
-Summary: Indicates that an IDL `Promise` type should be implemented as `v8::Local<v8::Promise>` rather than the default `ScriptPromise<>` type.
-
-This is currently only used for the return types of `AsyncIteratorBase` methods. Consult with the bindings team before you use this extended attribute.
 
 ### [NodeWrapInOwnContext]
 

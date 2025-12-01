@@ -13,7 +13,7 @@ title: WebCrypto
 *   The WebCrypto API was enabled by default starting in **Chrome 37**
             (August 26, 2014)
 *   Access to the WebCrypto API is restricted to [secure
-            origins](http://www.chromium.org/Home/chromium-security/security-faq#TOC-Which-origins-are-secure-)
+            origins](/Home/chromium-security/security-faq#TOC-Which-origins-are-secure-)
             (which is to say https:// pages).
     *   Note: [In the spec](https://github.com/w3c/webcrypto/issues/28),
                 crypto.subtle is supposed to be undefined in insecure contexts,

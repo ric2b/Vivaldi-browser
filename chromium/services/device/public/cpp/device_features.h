@@ -41,11 +41,19 @@ DEVICE_FEATURES_EXPORT BASE_DECLARE_FEATURE(
     kBatteryStatusManagerBroadcastReceiverInBackground);
 #endif  // BUILDFLAG(IS_ANDROID)
 
+#if !BUILDFLAG(IS_ANDROID)
+DEVICE_FEATURES_EXPORT BASE_DECLARE_FEATURE(kSecurityKeyHidInterfacesAreFido);
+#endif  // !BUILDFLAG(IS_ANDROID)
+
 extern const DEVICE_FEATURES_EXPORT
     base::FeatureParam<device::mojom::LocationProviderManagerMode>
         kLocationProviderManagerParam;
 
 DEVICE_FEATURES_EXPORT bool IsOsLevelGeolocationPermissionSupportEnabled();
+
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_LINUX)
+DEVICE_FEATURES_EXPORT BASE_DECLARE_FEATURE(kAutomaticUsbDetach);
+#endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_LINUX)
 
 }  // namespace features
 

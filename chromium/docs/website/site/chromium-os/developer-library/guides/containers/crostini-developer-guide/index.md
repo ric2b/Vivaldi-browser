@@ -384,7 +384,7 @@ See [Chrome Logging on ChromeOS](https://chromium.googlesource.com/chromium/src/
 ### Host Services
 
 Host services typically log to `/var/log/messages`. See also
-[Logging on ChromeOS](logging.md).
+[Logging on ChromeOS](/chromium-os/developer-library/reference/logging/logging).
 
 ### Termina Services
 
@@ -456,5 +456,5 @@ Then run the given command in GDB to load symbols for `$BINARY_PATH`.
 [APT]: https://en.wikipedia.org/wiki/APT_(software)
 [go/termina-rpc]: http://go/termina-rpc
 [Where does the code live?]: #repo-table
-[ChromiumOS Documentation]: https://www.chromium.org/chromium-os/how-tos-and-troubleshooting/kernel-configuration/
+[ChromiumOS Documentation]: /chromium-os/developer-library/guides/kernel/kernel-configuration
 [termina configuration]: https://source.chromium.org/chromiumos/chromiumos/codesearch/+/main:src/overlays/project-termina/profiles/base/make.defaults

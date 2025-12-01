@@ -4,9 +4,10 @@
 
 #include "components/search_engines/enterprise/site_search_policy_handler.h"
 
+#include <algorithm>
+
 #include "base/containers/flat_set.h"
 #include "base/feature_list.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
@@ -18,6 +19,7 @@
 #include "components/prefs/pref_value_map.h"
 #include "components/search_engines/default_search_manager.h"
 #include "components/search_engines/enterprise/enterprise_search_manager.h"
+#include "components/search_engines/enterprise/search_aggregator_policy_handler.h"
 #include "components/search_engines/enterprise/search_engine_fields_validators.h"
 #include "components/search_engines/search_terms_data.h"
 #include "components/search_engines/template_url.h"
@@ -52,8 +54,8 @@ base::Value SiteSearchDictFromPolicyValue(const base::Value::Dict& policy_dict,
 
   dict.Set(DefaultSearchManager::kFeaturedByPolicy, featured);
 
-  dict.Set(DefaultSearchManager::kCreatedByPolicy,
-           static_cast<int>(TemplateURLData::CreatedByPolicy::kSiteSearch));
+  dict.Set(DefaultSearchManager::kPolicyOrigin,
+           static_cast<int>(TemplateURLData::PolicyOrigin::kSiteSearch));
   dict.Set(DefaultSearchManager::kEnforcedByPolicy, false);
   dict.Set(DefaultSearchManager::kIsActive,
            static_cast<int>(TemplateURLData::ActiveStatus::kTrue));
@@ -79,7 +81,7 @@ void WarnIfNonHttpsUrl(const std::string& policy_name,
                        PolicyErrorMap* errors) {
   GURL gurl(url);
   if (!gurl.SchemeIs(url::kHttpsScheme)) {
-    errors->AddError(policy_name, IDS_POLICY_SITE_SEARCH_SETTINGS_URL_NOT_HTTPS,
+    errors->AddError(policy_name, IDS_SEARCH_POLICY_SETTINGS_URL_NOT_HTTPS,
                      url);
   }
 }
@@ -149,7 +151,7 @@ bool SiteSearchPolicyHandler::CheckPolicySettings(const PolicyMap& policies,
     return false;
   }
 
-  int num_featured = base::ranges::count_if(
+  int num_featured = std::ranges::count_if(
       site_search_providers, [](const base::Value& provider) {
         return provider.GetDict().FindBool(kFeatured).value_or(false);
       });
@@ -180,6 +182,9 @@ bool SiteSearchPolicyHandler::CheckPolicySettings(const PolicyMap& policies,
         search_engine_fields_validators::ShortcutStartsWithAtSymbol(
             policy_name(), shortcut, errors) ||
         search_engine_fields_validators::
+            ShortcutEqualsSearchAggregatorProviderKeyword(shortcut, policies,
+                                                          errors) ||
+        search_engine_fields_validators::
             ShortcutEqualsDefaultSearchProviderKeyword(policy_name(), shortcut,
                                                        policies, errors) ||
         ShortcutAlreadySeen(policy_name(), shortcut, shortcuts_already_seen,
@@ -202,7 +207,7 @@ bool SiteSearchPolicyHandler::CheckPolicySettings(const PolicyMap& policies,
   }
 
   errors->AddError(policy_name(),
-                   IDS_POLICY_SITE_SEARCH_SETTINGS_NO_VALID_PROVIDER);
+                   IDS_SEARCH_POLICY_SETTINGS_NO_VALID_PROVIDER);
   return false;
 }
 
@@ -222,16 +227,16 @@ void SiteSearchPolicyHandler::ApplyPolicySettings(const PolicyMap& policies,
 
   base::Value::List providers;
   for (const base::Value& item : policy_value->GetList()) {
-      const base::Value::Dict& policy_dict = item.GetDict();
-      const std::string& shortcut = *policy_dict.FindString(kShortcut);
-      if (ignored_shortcuts_.find(shortcut) == ignored_shortcuts_.end()) {
-        providers.Append(
-            SiteSearchDictFromPolicyValue(policy_dict, /*featured=*/false));
-        if (policy_dict.FindBool(kFeatured).value_or(false)) {
-          providers.Append(SiteSearchDictFromPolicyValue(policy_dict,
-                                                         /*featured=*/true));
-        }
+    const base::Value::Dict& policy_dict = item.GetDict();
+    const std::string& shortcut = *policy_dict.FindString(kShortcut);
+    if (ignored_shortcuts_.find(shortcut) == ignored_shortcuts_.end()) {
+      providers.Append(
+          SiteSearchDictFromPolicyValue(policy_dict, /*featured=*/false));
+      if (policy_dict.FindBool(kFeatured).value_or(false)) {
+        providers.Append(SiteSearchDictFromPolicyValue(policy_dict,
+                                                       /*featured=*/true));
       }
+    }
   }
 
   prefs->SetValue(EnterpriseSearchManager::kSiteSearchSettingsPrefName,

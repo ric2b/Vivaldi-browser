@@ -56,7 +56,7 @@ uint64_t QuicServiceBase::OnCryptoHandshakeComplete(
 
   // `callbacks` is empty for QuicServer, so this only works for QuicClient.
   for (auto& request : callbacks) {
-    request.second->OnConnectSucceed(request.first, instance_id);
+    request.second->OnConnectSucceed(request.first, instance_name, instance_id);
   }
 
   return instance_id;
@@ -226,7 +226,7 @@ void QuicServiceBase::CloseAllConnections() {
     conn.second.data.connection->Close();
     // `callbacks` is empty for QuicServer, so this only works for QuicClient.
     for (auto& item : conn.second.callbacks) {
-      item.second->OnConnectFailed(item.first);
+      item.second->OnConnectFailed(item.first, conn.first);
     }
   }
 

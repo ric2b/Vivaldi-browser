@@ -11,7 +11,7 @@ import("//extensions/buildflags/buildflags.gni")
 import("//testing/test.gni")
 import("//tools/typescript/ts_library.gni")
 
-assert(is_chromeos_ash)
+assert(is_chromeos)
 
 group("build") {
   deps = [ ":copied_files" ]
@@ -62,10 +62,12 @@ ts_modules = [
   "dictation/parse/pumpkin/pumpkin_constants.ts",
   "dictation/parse/speech_parser.ts",
   "facegaze/bubble_controller.ts",
+  "facegaze/constants.ts",
   "facegaze/facegaze.ts",
   "facegaze/web_cam_face_landmarker.ts",
   "facegaze/gesture_detector.ts",
   "facegaze/gesture_handler.ts",
+  "facegaze/gesture_timer.ts",
   "facegaze/metrics_utils.ts",
   "facegaze/mouse_controller.ts",
   "facegaze/scroll_mode_controller.ts",

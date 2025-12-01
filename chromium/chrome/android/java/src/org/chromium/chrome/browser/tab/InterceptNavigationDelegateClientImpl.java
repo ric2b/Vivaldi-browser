@@ -8,9 +8,8 @@ import android.app.Activity;
 
 import androidx.annotation.Nullable;
 
-import org.chromium.chrome.browser.app.ChromeActivity;
+import org.chromium.chrome.browser.tabmodel.TabClosureParams;
 import org.chromium.components.external_intents.ExternalNavigationHandler;
-import org.chromium.components.external_intents.ExternalNavigationHandler.OverrideUrlLoadingResult;
 import org.chromium.components.external_intents.InterceptNavigationDelegateClient;
 import org.chromium.components.external_intents.InterceptNavigationDelegateImpl;
 import org.chromium.components.external_intents.RedirectHandler;
@@ -48,6 +47,7 @@ public class InterceptNavigationDelegateClientImpl implements InterceptNavigatio
                             mInterceptNavigationDelegate.setExternalNavigationHandler(
                                     createExternalNavigationHandler());
                         }
+                        mInterceptNavigationDelegate.onActivityAttachmentChanged(window != null);
                     }
 
                     @Override
@@ -75,12 +75,6 @@ public class InterceptNavigationDelegateClientImpl implements InterceptNavigatio
     }
 
     @Override
-    public long getLastUserInteractionTime() {
-        ChromeActivity associatedActivity = mTab.getActivity();
-        return (associatedActivity == null) ? -1 : associatedActivity.getLastUserInteractionTime();
-    }
-
-    @Override
     public RedirectHandler getOrCreateRedirectHandler() {
         return RedirectHandlerTabHelper.getOrCreateHandlerFor(mTab);
     }
@@ -88,11 +82,6 @@ public class InterceptNavigationDelegateClientImpl implements InterceptNavigatio
     @Override
     public boolean isIncognito() {
         return mTab.isIncognitoBranded();
-    }
-
-    @Override
-    public boolean areIntentLaunchesAllowedInHiddenTabsForNavigation(NavigationHandle handle) {
-        return false;
     }
 
     @Override
@@ -113,15 +102,12 @@ public class InterceptNavigationDelegateClientImpl implements InterceptNavigatio
     @Override
     public void closeTab() {
         if (mTab.isClosing()) return;
-        mTab.getActivity().getTabModelSelector().closeTab(mTab);
+        mTab.getActivity()
+                .getTabModelSelector()
+                .tryCloseTab(
+                        TabClosureParams.closeTab(mTab).allowUndo(false).build(),
+                        /* allowDialog= */ false);
     }
-
-    @Override
-    public void onNavigationStarted(NavigationHandle handle) {}
-
-    @Override
-    public void onDecisionReachedForNavigation(
-            NavigationHandle handle, OverrideUrlLoadingResult overrideUrlLoadingResult) {}
 
     public void initializeWithDelegate(InterceptNavigationDelegateImpl delegate) {
         mInterceptNavigationDelegate = delegate;

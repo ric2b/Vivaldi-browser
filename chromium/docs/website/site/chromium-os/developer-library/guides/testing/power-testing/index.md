@@ -171,11 +171,11 @@ with reasonable certainty - how long that device will last in your daily use.
 
 [1]: https://chromium.googlesource.com/chromiumos/third_party/autotest/+/main/client/site_tests/power_LoadTest/
 [2]: https://chromium.googlesource.com/chromiumos/platform2/+/main/power_manager/tools/backlight_tool.cc#154
-[3]: https://www.chromium.org/chromium-os/developer-library/guides/development/developer-guide/#build-a-disk-image-for-your-board
-[4]: https://www.chromium.org/chromium-os/developer-library/guides/development/developer-guide/#installing-chromiumos-on-your-device
+[3]: /chromium-os/developer-library/guides/development/developer-guide/#build-a-disk-image-for-your-board
+[4]: /chromium-os/developer-library/guides/development/developer-guide/#installing-chromiumos-on-your-device
 [5]: https://chromium.googlesource.com/chromiumos/third_party/autotest/+/HEAD/docs/user-doc.md#running-tests
-[6]: https://www.chromium.org/chromium-os/developer-library/guides/development/developer-guide/#create-a-chroot
-[7]: https://www.chromium.org/chromium-os/developer-library/guides/debugging/debugging-tips/
+[6]: /chromium-os/developer-library/guides/development/developer-guide/#create-a-chroot
+[7]: /chromium-os/developer-library/guides/debugging/debugging-tips/
 [8]: https://developer.chrome.com/extensions
 [9]: https://chromium.googlesource.com/chromiumos/third_party/autotest/+archive/main/client/site_tests/power_LoadTest.tar.gz
 [10]: https://chromium.googlesource.com/chromiumos/platform2/+/main/power_manager/docs/keyboard_backlight.md

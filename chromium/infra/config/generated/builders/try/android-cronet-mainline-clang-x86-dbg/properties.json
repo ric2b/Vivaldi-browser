@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "android-cronet-mainline-clang-x86-dbg",
-              "project": "chromium-m132"
+              "project": "chromium-m134"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-android-archive",
@@ -25,7 +25,7 @@
                   "mb"
                 ],
                 "build_config": "Debug",
-                "config": "android",
+                "config": "x86_builder",
                 "target_bits": 32,
                 "target_platform": "android"
               },
@@ -43,16 +43,11 @@
         {
           "bucket": "ci",
           "builder": "android-cronet-mainline-clang-x86-dbg",
-          "project": "chromium-m132"
+          "project": "chromium-m134"
         }
       ],
       "targets_spec_directory": "src/infra/config/generated/builders/try/android-cronet-mainline-clang-x86-dbg/targets"
     }
-  },
-  "$build/reclient": {
-    "instance": "rbe-chromium-untrusted",
-    "metrics_project": "chromium-reclient-metrics",
-    "scandeps_server": true
   },
   "$build/siso": {
     "configs": [

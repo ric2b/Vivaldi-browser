@@ -41,7 +41,7 @@ export class BidiCdpSession extends CDPSession {
     } else {
       (async () => {
         try {
-          const {result} = await connection.send('cdp.getSession', {
+          const {result} = await connection.send('goog:cdp.getSession', {
             context: frame._id,
           });
           this.#sessionId.resolve(result.session!);
@@ -63,27 +63,27 @@ export class BidiCdpSession extends CDPSession {
   override async send<T extends keyof ProtocolMapping.Commands>(
     method: T,
     params?: ProtocolMapping.Commands[T]['paramsType'][0],
-    options?: CommandOptions
+    options?: CommandOptions,
   ): Promise<ProtocolMapping.Commands[T]['returnType']> {
     if (this.#connection === undefined) {
       throw new UnsupportedOperation(
-        'CDP support is required for this feature. The current browser does not support CDP.'
+        'CDP support is required for this feature. The current browser does not support CDP.',
       );
     }
     if (this.#detached) {
       throw new TargetCloseError(
-        `Protocol error (${method}): Session closed. Most likely the page has been closed.`
+        `Protocol error (${method}): Session closed. Most likely the page has been closed.`,
       );
     }
     const session = await this.#sessionId.valueOrThrow();
     const {result} = await this.#connection.send(
-      'cdp.sendCommand',
+      'goog:cdp.sendCommand',
       {
         method: method,
         params: params,
         session,
       },
-      options?.timeout
+      options?.timeout,
     );
     return result.result;
   }

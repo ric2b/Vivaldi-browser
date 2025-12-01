@@ -93,6 +93,14 @@ source_set("startup") {
   ]
 }
 
+source_set("utils") {
+  sources = [
+    "app_startup_utils.h",
+    "app_startup_utils.mm",
+  ]
+  deps = [ "//base" ]
+}
+
 source_set("unit_tests") {
   testonly = true
   sources = [ "chrome_app_startup_parameters_unittest.mm" ]
@@ -132,11 +140,12 @@ group("chrome_app_startup_parameters_fuzzers_deps") {
     "//base",
     "//base:i18n",
     "//base/test:test_support",
+    "//ios/chrome/app:app_internal",
     "//ios/chrome/app:tests_fake_hook",
     "//ios/chrome/browser/providers:chromium_providers",
+    "//ios/chrome/browser/settings/ui_bundled",
+    "//ios/chrome/browser/sharing/ui_bundled:sharing_internal",
     "//ios/chrome/browser/tabs/model:tabs_internal",
-    "//ios/chrome/browser/ui/settings",
-    "//ios/chrome/browser/ui/sharing:sharing_internal",
   ]
 }
 

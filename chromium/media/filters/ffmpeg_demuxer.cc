@@ -410,7 +410,8 @@ void FFmpegDemuxerStream::EnqueuePacket(ScopedAVPacket packet) {
   // Convert the packet if there is a bitstream filter.
   if (bitstream_converter_ &&
       !bitstream_converter_->ConvertPacket(packet.get())) {
-    DVLOG(1) << "Format conversion failed.";
+    demuxer_->NotifyDemuxerError(DEMUXER_ERROR_BITSTREAM_CONVERSION_FAILED);
+    return;
   }
 #endif
 
@@ -467,8 +468,8 @@ void FFmpegDemuxerStream::EnqueuePacket(ScopedAVPacket packet) {
     // If a packet is returned by FFmpeg's av_parser_parse2() the packet will
     // reference inner memory of FFmpeg.  As such we should transfer the packet
     // into memory we control.
-    buffer =
-        DecoderBuffer::CopyFrom(AVPacketData(*packet).subspan(data_offset));
+    buffer = DecoderBuffer::CopyFrom(
+        AVPacketData(*packet).subspan(base::checked_cast<size_t>(data_offset)));
     if (side_data.size() > 0) {
       buffer->WritableSideData().alpha_data =
           base::HeapArray<uint8_t>::CopiedFrom(side_data);
@@ -1811,7 +1812,11 @@ void FFmpegDemuxer::OnVideoSeekedForTrackChange(
     DemuxerStream* video_stream,
     base::OnceClosure seek_completed_cb,
     int result) {
-  static_cast<FFmpegDemuxerStream*>(video_stream)->FlushBuffers(true);
+  for (const auto& stream : streams_) {
+    if (stream && stream->IsEnabled()) {
+      stream->FlushBuffers(true);
+    }
+  }
   // TODO(crbug.com/40898124): Report seek failures for track changes too.
   std::move(seek_completed_cb).Run();
 }

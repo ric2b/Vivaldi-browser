@@ -7,8 +7,8 @@ import * as Platform from '../../../../core/platform/platform.js';
 import * as TextUtils from '../../../../models/text_utils/text_utils.js';
 import * as UI from '../../legacy.js';
 
-import xmlTreeStyles from './xmlTree.css.legacy.js';
-import xmlViewStyles from './xmlView.css.legacy.js';
+import xmlTreeStyles from './xmlTree.css.js';
+import xmlViewStyles from './xmlView.css.js';
 
 const UIStrings = {
   /**
@@ -63,7 +63,7 @@ export class XMLView extends UI.Widget.Widget implements UI.SearchableView.Searc
         case 'text/xml':
           parsedXML = (new DOMParser()).parseFromString(text, mimeType);
       }
-    } catch (e) {
+    } catch {
       return null;
     }
     if (!parsedXML || parsedXML.body) {

@@ -2,7 +2,7 @@
 breadcrumbs:
 - - /chromium-os
   - ChromiumOS
-- - /chromium-os/developer-information-for-chrome-os-devices
+- - /chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices
   - Developer Information for ChromeOS Devices
 page_name: chromebook-pixel-2015
 title: Chromebook Pixel (2015)
@@ -13,7 +13,7 @@ title: Chromebook Pixel (2015)
 ## Introduction
 
 This page contains information about the [Chromebook Pixel
-(2015)](http://www.google.com/chromebook/pixel) that is interesting and/or
+(2015)](https://www.google.com/chromebook/pixel) that is interesting and/or
 useful to software developers. For general information about getting started
 with developing on ChromiumOS (the open-source version of the software on the
 Chrome Notebook), see the [ChromiumOS Developer
@@ -35,7 +35,7 @@ Guide](/chromium-os/developer-guide).
     *   USB slot can handle Ethernet dongle
 *   Bluetooth 4.0
 *   No [Kensington Security
-            Slot](http://en.wikipedia.org/wiki/Kensington_Security_Slot)
+            Slot](https://en.wikipedia.org/wiki/Kensington_Security_Slot)
 
 ## Developer Mode
 

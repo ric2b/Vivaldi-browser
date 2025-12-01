@@ -279,6 +279,7 @@
 <translation id="5582839680698949063">Glavni meni</translation>
 <translation id="5614553682702429503">Sačuvati lozinku?</translation>
 <translation id="5623842676595125836">Evidencija</translation>
+<translation id="5624959475330585145">Pitaj pre korišćenja nebezbednih veza</translation>
 <translation id="5638309510554459422">Pronađite proširenja i teme u <ph name="BEGIN_LINK" />Chrome veb prodavnici<ph name="END_LINK" /></translation>
 <translation id="5677928146339483299">Blokirano</translation>
 <translation id="5707185214361380026">Neuspešno učitavanje proširenja iz:</translation>
@@ -468,6 +469,7 @@ Datoteka ključa: <ph name="KEY_FILE" />
 <translation id="9218430445555521422">Postavi kao podrazumevano</translation>
 <translation id="93766956588638423">Popravi proširenje</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
+<translation id="961856697154696964">Brisanje podataka pregledanja</translation>
 <translation id="994289308992179865">&amp;Ponavljaj</translation>
 <translation id="998747458861718449">&amp;Ispitaj</translation>
 </translationbundle>

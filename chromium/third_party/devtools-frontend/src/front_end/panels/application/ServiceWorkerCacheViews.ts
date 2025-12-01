@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import '../../ui/legacy/legacy.js';
+
 import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
@@ -35,6 +37,10 @@ const UIStrings = {
    *@description Text in Service Worker Cache Views of the Application panel
    */
   filterByPath: 'Filter by path',
+  /**
+   *@description Text in Service Worker Cache Views of the Application panel that shows if no cache entry is selected for preview
+   */
+  noCacheEntrySelected: 'No cache entry selected',
   /**
    *@description Text in Service Worker Cache Views of the Application panel
    */
@@ -98,6 +104,7 @@ export class ServiceWorkerCacheView extends UI.View.SimpleView {
 
   constructor(model: SDK.ServiceWorkerCacheModel.ServiceWorkerCacheModel, cache: SDK.ServiceWorkerCacheModel.Cache) {
     super(i18nString(UIStrings.cache));
+    this.registerRequiredCSS(serviceWorkerCacheViewsStyles);
 
     this.model = model;
     this.entriesForTest = null;
@@ -106,8 +113,8 @@ export class ServiceWorkerCacheView extends UI.View.SimpleView {
     this.element.classList.add('storage-view');
     this.element.setAttribute('jslog', `${VisualLogging.pane('cache-storage-data')}`);
 
-    const editorToolbar = new UI.Toolbar.Toolbar('data-view-toolbar', this.element);
-    editorToolbar.element.setAttribute('jslog', `${VisualLogging.toolbar()}`);
+    const editorToolbar = this.element.createChild('devtools-toolbar', 'data-view-toolbar');
+    editorToolbar.setAttribute('jslog', `${VisualLogging.toolbar()}`);
     this.element.appendChild(this.metadataView);
     this.splitWidget = new UI.SplitWidget.SplitWidget(false, false);
     this.splitWidget.show(this.element);
@@ -172,7 +179,6 @@ export class ServiceWorkerCacheView extends UI.View.SimpleView {
   override wasShown(): void {
     this.model.addEventListener(
         SDK.ServiceWorkerCacheModel.Events.CACHE_STORAGE_CONTENT_UPDATED, this.cacheContentUpdated, this);
-    this.registerCSSFiles([serviceWorkerCacheViewsStyles]);
     void this.updateData(true);
   }
 
@@ -189,7 +195,8 @@ export class ServiceWorkerCacheView extends UI.View.SimpleView {
       this.preview.detach();
     }
     if (!preview) {
-      preview = new UI.EmptyWidget.EmptyWidget(i18nString(UIStrings.selectACacheEntryAboveToPreview));
+      preview = new UI.EmptyWidget.EmptyWidget(
+          i18nString(UIStrings.noCacheEntrySelected), i18nString(UIStrings.selectACacheEntryAboveToPreview));
     }
     this.preview = preview;
     this.preview.show(this.previewPanel.element);
@@ -285,7 +292,10 @@ export class ServiceWorkerCacheView extends UI.View.SimpleView {
     node.remove();
   }
 
-  update(cache: SDK.ServiceWorkerCacheModel.Cache): void {
+  update(cache: SDK.ServiceWorkerCacheModel.Cache|null = null): void {
+    if (!cache) {
+      return;
+    }
     this.cache = cache;
     this.resetDataGrid();
     void this.updateData(true);

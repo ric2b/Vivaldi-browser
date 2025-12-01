@@ -129,12 +129,12 @@ static void PrepareStep(i::StepAction step_action) {
 namespace v8 {
 namespace internal {
 
-Handle<FixedArray> GetDebuggedFunctions() {
+DirectHandle<FixedArray> GetDebuggedFunctions() {
   i::Isolate* isolate = CcTest::i_isolate();
   DebugInfoCollection* infos = &isolate->debug()->debug_infos_;
 
   int count = static_cast<int>(infos->Size());
-  Handle<FixedArray> debugged_functions =
+  DirectHandle<FixedArray> debugged_functions =
       CcTest::i_isolate()->factory()->NewFixedArray(count);
 
   int i = 0;
@@ -1891,9 +1891,8 @@ TEST(DebuggerStatementBreakpoint) {
     CheckDebuggerUnloaded();
 }
 
-
 // Test that the conditional breakpoints work event if code generation from
-// strings is prohibited in the debugee context.
+// strings is prohibited in the debuggee context.
 TEST(ConditionalBreakpointWithCodeGenerationDisallowed) {
   LocalContext env;
   v8::HandleScope scope(env->GetIsolate());
@@ -4483,7 +4482,7 @@ TEST(BreakLocationIterator) {
       "  debugger;   \n"
       "}             \n"
       "f");
-  Handle<i::Object> function_obj = v8::Utils::OpenHandle(*result);
+  DirectHandle<i::Object> function_obj = v8::Utils::OpenDirectHandle(*result);
   DirectHandle<i::JSFunction> function = Cast<i::JSFunction>(function_obj);
   Handle<i::SharedFunctionInfo> shared(function->shared(), i_isolate);
 
@@ -4775,11 +4774,11 @@ TEST(DebugEvaluateNoSideEffect) {
 
   // Perform side effect check on all built-in functions. The side effect check
   // itself contains additional sanity checks.
-  for (i::Handle<i::JSFunction> fun : all_functions) {
+  for (i::DirectHandle<i::JSFunction> fun : all_functions) {
     bool failed = false;
     isolate->debug()->StartSideEffectCheckMode();
     failed = !isolate->debug()->PerformSideEffectCheck(
-        fun, v8::Utils::OpenHandle(*env->Global()));
+        fun, v8::Utils::OpenDirectHandle(*env->Global()));
     isolate->debug()->StopSideEffectCheckMode();
     if (failed) isolate->clear_exception();
   }
@@ -6153,7 +6152,7 @@ TEST(NoTerminateOnResumeAtSilentUnhandledRejectionCppImpl) {
   {
     // We want to reject in a way that would trigger a breakpoint if it were
     // not silenced (as in TerminateOnResumeAtUnhandledRejectionCppImpl), but
-    // that would also requre that there is at least one JavaScript frame
+    // that would also require that there is at least one JavaScript frame
     // on the stack.
     v8::Local<v8::Function> func =
         v8::Function::New(env.local(), SilentRejectPromiseThroughCpp,

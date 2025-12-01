@@ -51,6 +51,7 @@ class COMPONENT_EXPORT(OS_CRYPT_ASYNC) Encryptor {
     ~Key();
 
     static constexpr size_t kAES256GCMKeySize = 256u / 8u;
+    static constexpr size_t kAES128CBCKeySize = 128u / 8u;
 
     // Mojo uses this public constructor for serialization.
     explicit Key(mojo::DefaultConstruct::Tag);
@@ -84,7 +85,6 @@ class COMPONENT_EXPORT(OS_CRYPT_ASYNC) Encryptor {
     // being serialized to/from mojo.
     std::optional<mojom::Algorithm> algorithm_;
     std::vector<uint8_t> key_;
-    bool is_os_crypt_sync_compatible_ = false;
 #if BUILDFLAG(IS_WIN)
     bool encrypted_ = false;
 #endif
@@ -116,7 +116,7 @@ class COMPONENT_EXPORT(OS_CRYPT_ASYNC) Encryptor {
   // Mojo uses this public constructor for serialization.
   explicit Encryptor(mojo::DefaultConstruct::Tag);
 
-  ~Encryptor();
+  virtual ~Encryptor();
 
   // Moveable, not copyable.
   Encryptor(Encryptor&& other);
@@ -153,19 +153,35 @@ class COMPONENT_EXPORT(OS_CRYPT_ASYNC) Encryptor {
   // Returns true if there is at least one key contained within the encryptor
   // that could be used for encryption, otherwise, it will return the value of
   // OSCrypt::IsEncryptionAvailable.
-  bool IsEncryptionAvailable() const;
+  virtual bool IsEncryptionAvailable() const;
 
   // Returns true if there is at least one key contained within the encryptor
   // that might be able to decrypt data, otherwise it will return the value of
   // OSCrypt::IsEncryptionAvailable. Note that if this function returns true
   // then there is no guarantee that arbitrary data can be decrypted, as the
   // correct key to decrypt the data might not be available.
-  bool IsDecryptionAvailable() const;
+  virtual bool IsDecryptionAvailable() const;
+
+ protected:
+  // Create an encryptor with a set of `keys`. This is used by the Clone()
+  // function and internally by tests. The `provider_for_encryption` specifies
+  // which provider is used for encryption, and must have a corresponding key in
+  // `keys`. The `provider_for_os_crypt_sync_compatible_encryption` is the
+  // filtered version of `provider_for_encryption` that only contains the
+  // encryption provider if it's marked itself as being compatible with OSCrypt
+  // Sync.
+  Encryptor(
+      KeyRing keys,
+      const std::string& provider_for_encryption,
+      const std::string& provider_for_os_crypt_sync_compatible_encryption);
+
+  // Clone is used internally by the factory to vend instances.
+  Encryptor Clone(Option option) const;
 
  private:
-  friend class TestOSCryptAsync;
   friend class EncryptorTestBase;
   friend class OSCryptAsync;
+  friend class TestEncryptor;
   friend struct mojo::StructTraits<os_crypt_async::mojom::EncryptorDataView,
                                    os_crypt_async::Encryptor>;
 
@@ -176,14 +192,6 @@ class COMPONENT_EXPORT(OS_CRYPT_ASYNC) Encryptor {
   // encryption operations will be delegated to OSCrypt.
   Encryptor();
 
-  // Create an encryptor with a set of `keys`. The `provider_for_encryption`
-  // specifies which provider is used for encryption, and must have a
-  // corresponding key in `keys`.
-  Encryptor(KeyRing keys, const std::string& provider_for_encryption);
-
-  // Clone is used internally by the factory to vend instances.
-  Encryptor Clone(Option option) const;
-
   // A KeyRing consists of a set of provider names and Key values. Encrypted
   // data is always tagged with the provider name and this is used to look up
   // the correct key to use for decryption.
@@ -192,6 +200,12 @@ class COMPONENT_EXPORT(OS_CRYPT_ASYNC) Encryptor {
   // The provider with this tag is used when encrypting any new data, the Key to
   // use for the encryption is looked up from the entry in the KeyRing.
   std::string provider_for_encryption_;
+
+  // Provider for OSCrypt Sync compatible encryption. This could be the same as
+  // the `provider_for_encryption_` if all keys are OSCrypt compatible, and/or
+  // if this Encryptor has been cloned from an Encryptor using the
+  // `kEncryptSyncCompat` `Option`.
+  std::string provider_for_os_crypt_sync_compatible_encryption_;
 };
 
 }  // namespace os_crypt_async

@@ -76,10 +76,17 @@ _target_platform = enums.enum(
     FUCHSIA = "fuchsia",
 )
 
+_host_platform = enums.enum(
+    LINUX = "linux",
+    WIN = "win",
+    MAC = "mac",
+)
+
 def _chromium_config(
         *,
         config,
         target_platform,
+        host_platform = None,
         apply_configs = None,
         build_config = None,
         target_arch = None,
@@ -117,6 +124,8 @@ def _chromium_config(
         fail("unknown target_arch: {}".format(target_arch))
     if target_bits != None and target_bits not in (32, 64):
         fail("unknown target_bits: {}".format(target_bits))
+    if host_platform != None and host_platform not in _host_platform.values:
+        fail("unknown host_platform: {}".format(host_platform))
     if target_platform not in _target_platform.values:
         fail("unknown target_platform: {}".format(target_platform))
     if ((target_cros_boards or cros_boards_with_qemu_images) and
@@ -131,6 +140,7 @@ def _chromium_config(
         target_arch = target_arch,
         target_bits = target_bits,
         target_platform = target_platform,
+        host_platform = host_platform,
         target_cros_boards = args.listify(target_cros_boards),
         cros_boards_with_qemu_images = args.listify(cros_boards_with_qemu_images),
     )
@@ -223,6 +233,21 @@ def _bisect_archive(
         archive_subdir = archive_subdir,
     )
 
+# After calling chromium.set_config, chromium_tests.configure_build calls
+# chromium_android.configure_from_properties. configure_from_properties calls
+# chromium.set_config with the same name as used for
+# chromium_android.set_config. This means that in most cases, the value
+# specified for the chromium config will be ignored. The exception to this is if
+# there is no config item for the chromium module with the name specified for
+# android_config. Because configure_from_properties calls chromium.set_config
+# with optional=True, in that case the chromium module will not be modified and
+# the prior config set by configure_from_build will be used. This provides the
+# names being used for the chromium_android config that do not have
+# corresponding chromium module config items to avoid rewriting the field.
+_NONEXISTENT_ANDROID_CHROMIUM_CONFIGS = set([
+    "clang_builder_mb_x64",
+])
+
 def _builder_spec(
         *,
         gclient_config,
@@ -244,7 +269,12 @@ def _builder_spec(
         gclient_config: (gclient_config) The gclient config for the builder.
         chromium_config: (chromium_config) The chromium config for the builder.
         execution_mode: (execution_mode) The execution mode of the builder.
-        android_config: (android_config) The android config for the builder.
+        android_config: (android_config) The android config for the builder. If
+            this is set, the config value in chromium_config will be overridden
+            with the config field of this unless that config does not name a
+            chromium config item. This matches the runtime behavior of the
+            chromium_tests.configure_build and
+            chromium_android.configure_from_properties.
         android_version_file: (str) A path relative to the checkout to a file
             containing the Chrome version information for Android.
         clobber: (bool) Whether to have bot_update perform a clobber of any
@@ -289,6 +319,12 @@ def _builder_spec(
         fail("gclient_config must be provided")
     if not chromium_config:
         fail("chromium_config must be provided")
+
+    # TODO: crbug.com/374819553 - Once chromium_tests code is not using
+    # chromium_android.configure_from_properties, explicitly set the chromium
+    # config to the appropriate values.
+    if android_config and android_config.config not in _NONEXISTENT_ANDROID_CHROMIUM_CONFIGS:
+        chromium_config = structs.evolve(chromium_config, config = android_config.config)
 
     return struct(
         execution_mode = execution_mode,
@@ -406,6 +442,7 @@ builder_config = struct(
     build_config = _build_config,
     target_arch = _target_arch,
     target_platform = _target_platform,
+    host_platform = _host_platform,
 
     # Function for defining android recipe module config
     android_config = _android_config,

@@ -17,6 +17,7 @@ sys.path.insert(0, _ROOT_DIR)
 
 import metadata.fields.known as known_fields
 import metadata.dependency_metadata as dm
+import metadata.fields.custom.mitigated
 
 # Line used to separate dependencies within the same metadata file.
 DEPENDENCY_DIVIDER = re.compile(r"^-{20} DEPENDENCY DIVIDER -{20}$")
@@ -32,10 +33,13 @@ _PATTERN_FIELD_NAME_HEURISTIC = re.compile(r"^({}(?: {})*){}[\b\s]".format(
 _DEFAULT_TO_STRUCTURED_TEXT = False
 
 # Pattern used to check if a line from a metadata file declares a new
-# field.
+# field. This includes all valid vulnerability IDs.
 _PATTERN_KNOWN_FIELD_DECLARATION = re.compile(
-    "^({}){}".format("|".join(known_fields.ALL_FIELD_NAMES), FIELD_DELIMITER),
-    re.IGNORECASE)
+    "^({}){}".format(
+        "|".join(
+            list(known_fields.ALL_FIELD_NAMES) +
+            [metadata.fields.custom.mitigated.PATTERN_VULN_ID.pattern]),
+        FIELD_DELIMITER), re.IGNORECASE)
 
 
 def parse_content(content: str) -> List[dm.DependencyMetadata]:

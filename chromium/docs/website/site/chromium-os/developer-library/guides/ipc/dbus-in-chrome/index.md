@@ -222,7 +222,7 @@ the correct initial state from the daemon.
 [D-Bus Best Practices]: /chromium-os/developer-library/guides/ipc/dbus-best-practices/
 [system_api]: https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/system_api
 [src/DEPS]: https://chromium.googlesource.com/chromium/src/+/HEAD/DEPS
-[mus+ash]: https://www.chromium.org/developers/mus-ash
+[mus+ash]: /developers/mus-ash
 [ash::CrosDBusService::ServiceProviderInterface]: https://source.chromium.org/chromium/chromium/src/+/main:chromeos/ash/components/dbus/services/cros_dbus_service.h
 [ash/dbus]: https://chromium.googlesource.com/chromium/src/+/HEAD/ash/dbus/
 [ash_dbus_services.cc]: https://chromium.googlesource.com/chromium/src/+/HEAD/ash/dbus/ash_dbus_services.cc

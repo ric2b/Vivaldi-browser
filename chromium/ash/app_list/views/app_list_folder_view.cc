@@ -38,7 +38,6 @@
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -384,7 +383,7 @@ class TopIconAnimation : public AppListFolderView::Animation,
   void OnTopIconAnimationsComplete(TopIconAnimationView* view) override {
     // Clean up the transitional view for which the animation completes.
     view->RemoveObserver(this);
-    auto to_delete = base::ranges::find(top_icon_views_, view);
+    auto to_delete = std::ranges::find(top_icon_views_, view);
     DCHECK(to_delete != top_icon_views_.end());
     top_icon_views_.erase(to_delete);
 
@@ -692,7 +691,6 @@ AppListFolderView::AppListFolderView(AppListFolderController* folder_controller,
         ColorProvider::kBackgroundBlurSigma);
     animating_background_->layer()->SetBackdropFilterQuality(
         ColorProvider::kBackgroundBlurQuality);
-    animating_background_->layer()->SetFillsBoundsOpaquely(false);
   }
 
   animating_background_->SetVisible(false);
@@ -820,7 +818,7 @@ void AppListFolderView::ConfigureForFolderItemView(
 void AppListFolderView::ScheduleShowHideAnimation(bool show,
                                                   bool hide_for_reparent) {
   show_hide_metrics_tracker_ =
-      GetWidget()->GetCompositor()->RequestNewThroughputTracker();
+      GetWidget()->GetCompositor()->RequestNewCompositorMetricsTracker();
   show_hide_metrics_tracker_->Start(
       metrics_util::ForSmoothnessV3(base::BindRepeating([](int smoothness) {
         UMA_HISTOGRAM_PERCENTAGE(
@@ -832,8 +830,6 @@ void AppListFolderView::ScheduleShowHideAnimation(bool show,
   shown_ = show;
   UpdateExpandedCollapsedAccessibleState();
   if (show) {
-    // TODO(crbug.com/325137417): Investigate whether this line is necessary. It
-    // probably isn't.
     GetViewAccessibility().SetName(
         folder_item_view_->GetViewAccessibility().GetCachedName(),
         ax::mojom::NameFrom::kAttribute);

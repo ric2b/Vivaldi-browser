@@ -13,8 +13,6 @@
 
 #include "ash/accelerators/rapid_key_sequence_recorder.h"
 #include "ash/accelerators/shortcut_input_handler.h"
-#include "ash/components/arc/arc_features.h"
-#include "ash/components/arc/arc_util.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/keyboard/ui/resources/keyboard_resource_util.h"
@@ -27,6 +25,7 @@
 #include "ash/system/pcie_peripheral/pcie_peripheral_notification_controller.h"
 #include "ash/system/usb_peripheral/usb_peripheral_notification_controller.h"
 #include "ash/webui/camera_app_ui/document_scanner_installer.h"
+#include "ash/wm/coral/coral_controller.h"
 #include "base/check_deref.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
@@ -118,8 +117,8 @@
 #include "chrome/browser/ash/login/startup_utils.h"
 #include "chrome/browser/ash/login/users/avatar/user_image_manager_registry.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
+#include "chrome/browser/ash/magic_boost/magic_boost_controller_ash.h"
 #include "chrome/browser/ash/mahi/web_contents/mahi_web_contents_manager_impl.h"
-#include "chrome/browser/ash/mojo_service_manager/connection_helper.h"
 #include "chrome/browser/ash/net/apn_migrator.h"
 #include "chrome/browser/ash/net/bluetooth_pref_state_observer.h"
 #include "chrome/browser/ash/net/network_health/network_health_manager.h"
@@ -154,7 +153,6 @@
 #include "chrome/browser/ash/profiles/signin_profile_handler.h"
 #include "chrome/browser/ash/quick_pair/quick_pair_browser_delegate_impl.h"
 #include "chrome/browser/ash/report_controller_initializer/report_controller_initializer.h"
-#include "chrome/browser/ash/scheduler_config/scheduler_configuration_manager.h"
 #include "chrome/browser/ash/settings/device_settings_service.h"
 #include "chrome/browser/ash/settings/shutdown_policy_forwarder.h"
 #include "chrome/browser/ash/smb_client/smb_service_factory.h"
@@ -222,6 +220,7 @@
 #include "chromeos/ash/components/login/auth/auth_events_recorder.h"
 #include "chromeos/ash/components/login/login_state/login_state.h"
 #include "chromeos/ash/components/login/session/session_termination_manager.h"
+#include "chromeos/ash/components/mojo_service_manager/connection_helper.h"
 #include "chromeos/ash/components/network/fast_transition_observer.h"
 #include "chromeos/ash/components/network/network_cert_loader.h"
 #include "chromeos/ash/components/network/network_handler.h"
@@ -232,10 +231,15 @@
 #include "chromeos/ash/components/power/dark_resume_controller.h"
 #include "chromeos/ash/components/report/device_metrics/use_case/real_psm_client_manager.h"
 #include "chromeos/ash/components/report/device_metrics/use_case/use_case.h"
+#include "chromeos/ash/components/scheduler_config/scheduler_configuration_manager.h"
+#include "chromeos/ash/components/settings/cros_settings.h"
 #include "chromeos/ash/components/settings/cros_settings_names.h"
+#include "chromeos/ash/components/settings/user_login_permission_tracker.h"
 #include "chromeos/ash/components/system/statistics_provider.h"
 #include "chromeos/ash/components/tpm/tpm_token_loader.h"
 #include "chromeos/ash/components/wifi_p2p/wifi_p2p_controller.h"
+#include "chromeos/ash/experiences/arc/arc_features.h"
+#include "chromeos/ash/experiences/arc/arc_util.h"
 #include "chromeos/ash/services/cros_healthd/private/cpp/data_collector.h"
 #include "chromeos/ash/services/cros_healthd/public/cpp/service_connection.h"
 #include "chromeos/components/sensors/ash/sensor_hal_dispatcher.h"
@@ -907,8 +911,8 @@ void ChromeBrowserMainPartsAsh::PreProfileInit() {
   lock_to_single_user_manager_ =
       std::make_unique<policy::LockToSingleUserManager>();
 
-  shortcut_mapping_pref_service_ =
-      std::make_unique<ShortcutMappingPrefService>();
+  shortcut_mapping_pref_service_ = std::make_unique<ShortcutMappingPrefService>(
+      *g_browser_process->local_state());
 
   // AccessibilityManager and SystemKeyEventListener use InputMethodManager.
   input_method::Initialize();
@@ -1018,6 +1022,10 @@ void ChromeBrowserMainPartsAsh::PreProfileInit() {
     g_browser_process->platform_part()->RegisterKeepAlive();
   }
 
+  user_login_permission_tracker_ =
+      std::make_unique<ash::UserLoginPermissionTracker>(
+          ash::CrosSettings::Get());
+
   // NOTE: Calls ChromeBrowserMainParts::PreProfileInit() which calls
   // ChromeBrowserMainExtraPartsAsh::PreProfileInit() which initializes
   // `Shell`.
@@ -1036,11 +1044,18 @@ void ChromeBrowserMainPartsAsh::PreProfileInit() {
   // it can do cleanup work if needed. Initialized in PreProfileInit because the
   // profile-keyed service AppService can call into it.
   crosapi_manager_ = std::make_unique<crosapi::CrosapiManager>();
-  browser_manager_ = std::make_unique<crosapi::BrowserManager>(
-      g_browser_process->platform_part()->component_manager_ash());
-  browser_manager_->AddObserver(SessionControllerClientImpl::Get());
+  browser_manager_ = std::make_unique<crosapi::BrowserManager>();
+
+  magic_boost_controller_ash_ =
+      std::make_unique<ash::MagicBoostControllerAsh>();
 
   chromeos::machine_learning::ServiceConnection::GetInstance()->Initialize();
+
+  // CoralController depends on machine_learning::ServiceConnection, so needs to
+  // be initialized after it.
+  if (features::IsCoralFeatureEnabled()) {
+    Shell::Get()->coral_controller()->Initialize();
+  }
 
   // Needs to be initialized after crosapi_manager_.
   metrics::structured::ChromeStructuredMetricsDelegate::Get()->Initialize();
@@ -1194,12 +1209,14 @@ void ChromeBrowserMainPartsAsh::PostProfileInit(Profile* profile,
     InitializeNetworkPortalDetector();
 
     // Initialize an observer to update NetworkHandler's pref based services.
-    network_pref_state_observer_ = std::make_unique<NetworkPrefStateObserver>();
+    network_pref_state_observer_ = std::make_unique<NetworkPrefStateObserver>(
+        *g_browser_process->local_state());
 
     // Initialize an observer to update CrosBluetoothConfig's pref based
     // services.
     bluetooth_pref_state_observer_ =
-        std::make_unique<BluetoothPrefStateObserver>();
+        std::make_unique<BluetoothPrefStateObserver>(
+            *g_browser_process->local_state());
 
     if (base::FeatureList::IsEnabled(
             ::features::kHappinessTrackingSystemBluetoothRevamp)) {
@@ -1305,6 +1322,22 @@ void ChromeBrowserMainPartsAsh::PostProfileInit(Profile* profile,
                        shill::kUseLegacyDHCPCDProperty));
 
     ash::ShillManagerClient::Get()->SetProperty(
+        shill::kEnableSingleCACertVerificationPhase1Property,
+        base::Value(base::FeatureList::IsEnabled(
+            features::kSingleCaCertVerificationPhase1)),
+        base::DoNothing(),
+        base::BindOnce(ShillSetPropertyErrorCallback,
+                       shill::kEnableSingleCACertVerificationPhase1Property));
+
+    ash::ShillManagerClient::Get()->SetProperty(
+        shill::kEnableSingleCACertVerificationPhase2Property,
+        base::Value(base::FeatureList::IsEnabled(
+            features::kSingleCaCertVerificationPhase2)),
+        base::DoNothing(),
+        base::BindOnce(ShillSetPropertyErrorCallback,
+                       shill::kEnableSingleCACertVerificationPhase2Property));
+
+    ash::ShillManagerClient::Get()->SetProperty(
         shill::kDisconnectWiFiOnEthernetProperty,
         base::Value(base::FeatureList::IsEnabled(
                         features::kDisconnectWiFiOnEthernetConnected)
@@ -1379,10 +1412,7 @@ void ChromeBrowserMainPartsAsh::PostBrowserStart() {
       accessibility_event_rewriter_delegate_.get());
   // `ShortcutInputHandler` and `ModifierKeyComboRecorder` are dependent on
   // `EventRewriterController`'s initialization.
-  if (ash::features::IsPeripheralCustomizationEnabled() ||
-      ::features::IsShortcutCustomizationEnabled()) {
-    Shell::Get()->shortcut_input_handler()->Initialize();
-  }
+  Shell::Get()->shortcut_input_handler()->Initialize();
   Shell::Get()->modifier_key_combo_recorder()->Initialize();
   Shell::Get()->rapid_key_sequence_recorder()->Initialize();
 
@@ -1401,11 +1431,8 @@ void ChromeBrowserMainPartsAsh::PostBrowserStart() {
 
   smart_charging_manager_ = power::SmartChargingManager::CreateInstance();
 
-  if (base::FeatureList::IsEnabled(
-          ::features::kAdaptiveScreenBrightnessLogging)) {
-    adaptive_screen_brightness_manager_ =
-        power::ml::AdaptiveScreenBrightnessManager::CreateInstance();
-  }
+  adaptive_screen_brightness_manager_ =
+      power::ml::AdaptiveScreenBrightnessManager::CreateInstance();
 
   // MachineLearningDecisionServiceProvider needs to be created after
   // UserActivityController which depends on UserActivityDetector, not
@@ -1514,11 +1541,6 @@ void ChromeBrowserMainPartsAsh::PostMainMessageLoopRun() {
   if (base::FeatureList::IsEnabled(features::kEnableHostnameSetting)) {
     DeviceNameStore::Shutdown();
   }
-
-  // This needs to be called before the
-  // ChromeBrowserMainPartsLinux::PostMainMessageLoopRun, because the
-  // SessionControllerClientImpl is destroyed there.
-  browser_manager_->RemoveObserver(SessionControllerClientImpl::Get());
 
   // This must be shut down before |arc_service_launcher_|.
   if (pre_profile_init_called_) {
@@ -1699,6 +1721,8 @@ void ChromeBrowserMainPartsAsh::PostMainMessageLoopRun() {
   // NOTE: Closes ash and destroys `Shell`.
   ChromeBrowserMainPartsLinux::PostMainMessageLoopRun();
 
+  magic_boost_controller_ash_.reset();
+
   // BrowserManager and CrosapiManager need to outlive the Profile, which
   // is destroyed inside ChromeBrowserMainPartsLinux::PostMainMessageLoopRun().
   browser_manager_.reset();
@@ -1717,6 +1741,8 @@ void ChromeBrowserMainPartsAsh::PostMainMessageLoopRun() {
   arc_service_launcher_.reset();
   // |arc_service_launcher_| uses SchedulerConfigurationManager.
   g_browser_process->platform_part()->ShutdownSchedulerConfigurationManager();
+
+  user_login_permission_tracker_.reset();
 
   if (pre_profile_init_called_) {
     AccessibilityManager::Shutdown();

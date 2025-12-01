@@ -21,8 +21,7 @@ class ShelfLayoutManagerPixelRTLTest
   ShelfLayoutManagerPixelRTLTest() {
     // Disable kHideShelfControlsInTabletMode to disable contextual nudges.
     scoped_feature_list_.InitWithFeatureStates(
-        {{features::kHideShelfControlsInTabletMode, false},
-         {chromeos::features::kJelly, true}});
+        {{features::kHideShelfControlsInTabletMode, false}});
   }
 
   // ShelfLayoutManagerTestBase:
@@ -73,7 +72,7 @@ TEST_P(ShelfLayoutManagerPixelRTLTest, AutohideShelfVisibility) {
 
   EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
       "shelf_show_with_auto_hide",
-      /*revision_number=*/13, shelf->GetWindow(), shelf->hotseat_widget()));
+      /*revision_number=*/14, shelf->GetWindow(), shelf->hotseat_widget()));
 }
 
 }  // namespace ash

@@ -118,12 +118,18 @@ int CSSMathFunctionValue::ComputeInteger(
 
 double CSSMathFunctionValue::ComputeNumber(
     const CSSLengthResolver& length_resolver) const {
-  // |CSSToLengthConversionData| only resolves relative length units, but not
-  // percentages.
-  DCHECK_EQ(kCalcNumber, expression_->Category());
-  DCHECK(!expression_->HasPercentage());
+  if (expression_->Category() == kCalcNumber) {
+    // |CSSToLengthConversionData| only resolves relative length units, but not
+    // percentages.
+    DCHECK(!expression_->HasPercentage());
+  } else {
+    DCHECK_EQ(expression_->Category(), kCalcPercent);
+  }
   double value =
       ClampToPermittedRange(expression_->ComputeNumber(length_resolver));
+  if (expression_->Category() == kCalcPercent) {
+    value /= 100.0;
+  }
   return std::isnan(value) ? 0.0 : value;
 }
 
@@ -139,9 +145,9 @@ double CSSMathFunctionValue::ComputePercentage(
 
 double CSSMathFunctionValue::ComputeValueInCanonicalUnit(
     const CSSLengthResolver& length_resolver) const {
-  // Don't use it for mix of length and percentage, as it would compute 10px +
-  // 10% to 20.
-  DCHECK(!IsCalculatedPercentageWithLength());
+  // Don't use it for mix of length and percentage or similar,
+  // as it would compute 10px + 10% to 20.
+  DCHECK(IsResolvableBeforeLayout());
   std::optional<double> optional_value =
       expression_->ComputeValueInCanonicalUnit(length_resolver);
   DCHECK(optional_value.has_value());
@@ -203,46 +209,6 @@ double CSSMathFunctionValue::ClampToPermittedRange(double value) const {
     case CSSPrimitiveValue::ValueRange::kAll:
       return value;
   }
-}
-
-CSSPrimitiveValue::BoolStatus CSSMathFunctionValue::IsZero() const {
-  if (IsCalculatedPercentageWithLength()) {
-    return BoolStatus::kUnresolvable;
-  }
-  if (expression_->ResolvedUnitType() == UnitType::kUnknown) {
-    return BoolStatus::kUnresolvable;
-  }
-  return expression_->IsZero();
-}
-
-CSSPrimitiveValue::BoolStatus CSSMathFunctionValue::IsOne() const {
-  if (IsCalculatedPercentageWithLength()) {
-    return BoolStatus::kUnresolvable;
-  }
-  if (expression_->ResolvedUnitType() == UnitType::kUnknown) {
-    return BoolStatus::kUnresolvable;
-  }
-  return expression_->IsOne();
-}
-
-CSSPrimitiveValue::BoolStatus CSSMathFunctionValue::IsHundred() const {
-  if (IsCalculatedPercentageWithLength()) {
-    return BoolStatus::kUnresolvable;
-  }
-  if (expression_->ResolvedUnitType() == UnitType::kUnknown) {
-    return BoolStatus::kUnresolvable;
-  }
-  return expression_->IsHundred();
-}
-
-CSSPrimitiveValue::BoolStatus CSSMathFunctionValue::IsNegative() const {
-  if (IsCalculatedPercentageWithLength()) {
-    return BoolStatus::kUnresolvable;
-  }
-  if (expression_->ResolvedUnitType() == UnitType::kUnknown) {
-    return BoolStatus::kUnresolvable;
-  }
-  return expression_->IsNegative();
 }
 
 bool CSSMathFunctionValue::IsPx() const {

@@ -34,7 +34,7 @@ import java.util.List;
 import java.util.function.BooleanSupplier;
 
 // Vivaldi
-import static org.vivaldi.browser.preferences.VivaldiPreferences.PREF_SPEEDDIAL_SORT_ORDER;
+import static org.vivaldi.browser.preferences.VivaldiPreferences.PREF_BOOKMARKS_SORT_ORDER;
 
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
@@ -44,7 +44,6 @@ import org.chromium.ui.modelutil.PropertyModel;
 
 import org.vivaldi.browser.bookmarks.VivaldiBookmarkAddEditFolderActivity;
 import org.vivaldi.browser.bookmarks.VivaldiBookmarkFolderSelectActivity;
-import org.vivaldi.browser.bookmarks.VivaldiBookmarkPanelDelegate;
 import org.vivaldi.browser.panels.PanelUtils;
 // End Vivaldi
 
@@ -302,22 +301,22 @@ class BookmarkToolbarMediator
             BookmarkManagerMediator.SortOrder order = mBookmarkDelegate.getSortOrder();
             if (order == BookmarkManagerMediator.SortOrder.MANUAL) {
                 mModel.set(BookmarkToolbarProperties.CHECKED_SORT_MENU_ID, R.id.sort_manual_id);
-                writeSortOrderPref(BookmarkManagerMediator.SortOrder.MANUAL);
+                writeBookmarkSortOrderPref(BookmarkManagerMediator.SortOrder.MANUAL);
             } else if (order == BookmarkManagerMediator.SortOrder.TITLE) {
                 mModel.set(BookmarkToolbarProperties.CHECKED_SORT_MENU_ID, R.id.sort_by_title_id);
-                writeSortOrderPref( BookmarkManagerMediator.SortOrder.TITLE);
+                writeBookmarkSortOrderPref( BookmarkManagerMediator.SortOrder.TITLE);
             } else if (order == BookmarkManagerMediator.SortOrder.ADDRESS) {
                 mModel.set(BookmarkToolbarProperties.CHECKED_SORT_MENU_ID, R.id.sort_by_address_id);
-                writeSortOrderPref( BookmarkManagerMediator.SortOrder.ADDRESS);
+                writeBookmarkSortOrderPref( BookmarkManagerMediator.SortOrder.ADDRESS);
             } else if (order == BookmarkManagerMediator.SortOrder.NICK) {
                 mModel.set(BookmarkToolbarProperties.CHECKED_SORT_MENU_ID, R.id.sort_by_nickname_id);
-                writeSortOrderPref( BookmarkManagerMediator.SortOrder.NICK);
+                writeBookmarkSortOrderPref( BookmarkManagerMediator.SortOrder.NICK);
             } else if (order == BookmarkManagerMediator.SortOrder.DESCRIPTION) {
                 mModel.set(BookmarkToolbarProperties.CHECKED_SORT_MENU_ID, R.id.sort_by_description_id);
-                writeSortOrderPref( BookmarkManagerMediator.SortOrder.DESCRIPTION);
+                writeBookmarkSortOrderPref( BookmarkManagerMediator.SortOrder.DESCRIPTION);
             } else if (order == BookmarkManagerMediator.SortOrder.DATE) {
                 mModel.set(BookmarkToolbarProperties.CHECKED_SORT_MENU_ID, R.id.sort_by_date_id);
-                writeSortOrderPref( BookmarkManagerMediator.SortOrder.DATE);
+                writeBookmarkSortOrderPref( BookmarkManagerMediator.SortOrder.DATE);
             }
             return true;
         } else if (id == R.id.sort_manual_id) {
@@ -610,14 +609,14 @@ class BookmarkToolbarMediator
         mBookmarkDelegate.openFolder(mBookmarkModel.getBookmarkById(mCurrentFolder).getParentId());
     }
 
-    private static void writeSortOrderPref(BookmarkManagerMediator.SortOrder sorting) {
-        ChromeSharedPreferences.getInstance().writeString(PREF_SPEEDDIAL_SORT_ORDER, sorting.name());
+    private static void writeBookmarkSortOrderPref(BookmarkManagerMediator.SortOrder sorting) {
+        ChromeSharedPreferences.getInstance().writeString(PREF_BOOKMARKS_SORT_ORDER, sorting.name());
     }
 
     public static BookmarkManagerMediator.SortOrder getSortOrder() {
         return BookmarkManagerMediator.SortOrder.valueOf(
                 ChromeSharedPreferences.getInstance().
-                        readString(PREF_SPEEDDIAL_SORT_ORDER,
+                        readString(PREF_BOOKMARKS_SORT_ORDER,
                                 BookmarkManagerMediator.SortOrder.MANUAL.name()));
     }
 }

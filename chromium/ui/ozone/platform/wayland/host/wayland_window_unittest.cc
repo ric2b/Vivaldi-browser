@@ -10,11 +10,11 @@
 #include "ui/ozone/platform/wayland/host/wayland_window.h"
 
 #include <cursor-shape-v1-client-protocol.h>
-#include <cursor-shapes-unstable-v1-client-protocol.h>
 #include <linux/input.h>
 #include <wayland-server-core.h>
 #include <xdg-shell-server-protocol.h>
 
+#include <array>
 #include <cstddef>
 #include <memory>
 #include <utility>
@@ -34,7 +34,6 @@
 #include "base/test/mock_callback.h"
 #include "base/test/scoped_command_line.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
@@ -69,7 +68,6 @@
 #include "ui/ozone/platform/wayland/host/wayland_seat.h"
 #include "ui/ozone/platform/wayland/host/wayland_subsurface.h"
 #include "ui/ozone/platform/wayland/host/wayland_toplevel_window.h"
-#include "ui/ozone/platform/wayland/host/wayland_zcr_cursor_shapes.h"
 #include "ui/ozone/platform/wayland/mojom/wayland_overlay_config.mojom.h"
 #include "ui/ozone/platform/wayland/test/mock_pointer.h"
 #include "ui/ozone/platform/wayland/test/mock_surface.h"
@@ -81,7 +79,6 @@
 #include "ui/ozone/platform/wayland/test/test_region.h"
 #include "ui/ozone/platform/wayland/test/test_touch.h"
 #include "ui/ozone/platform/wayland/test/test_wayland_server_thread.h"
-#include "ui/ozone/platform/wayland/test/test_zaura_toplevel.h"
 #include "ui/ozone/platform/wayland/test/wayland_connection_test_api.h"
 #include "ui/ozone/platform/wayland/test/wayland_test.h"
 #include "ui/ozone/public/ozone_switches.h"
@@ -89,10 +86,7 @@
 #include "ui/platform_window/platform_window_delegate.h"
 #include "ui/platform_window/platform_window_init_properties.h"
 #include "ui/platform_window/wm/wm_move_resize_handler.h"
-
-#if BUILDFLAG(IS_LINUX)
 #include "ui/ozone/platform/wayland/host/wayland_async_cursor.h"
-#endif
 
 using ::testing::_;
 using ::testing::DoAll;
@@ -110,8 +104,6 @@ namespace ui {
 namespace {
 
 constexpr float kDefaultCursorScale = 1.f;
-
-constexpr uint32_t kAugmentedSurfaceNotSupportedVersion = 0;
 
 struct PopupPosition {
   gfx::Rect anchor_rect;
@@ -167,27 +159,13 @@ class MockCursorShape : public WaylandCursorShape {
   MOCK_METHOD(void, SetCursorShape, (uint32_t), (override));
 };
 
-class MockZcrCursorShapes : public WaylandZcrCursorShapes {
- public:
-  MockZcrCursorShapes() : WaylandZcrCursorShapes(nullptr, nullptr) {}
-  MockZcrCursorShapes(const MockZcrCursorShapes&) = delete;
-  MockZcrCursorShapes& operator=(const MockZcrCursorShapes&) = delete;
-  ~MockZcrCursorShapes() override = default;
-
-  MOCK_METHOD(void, SetCursorShape, (int32_t), (override));
-};
-
 using BoundsChange = PlatformWindowDelegate::BoundsChange;
 
 constexpr BoundsChange kDefaultBoundsChange{false};
 
 scoped_refptr<PlatformCursor> AsPlatformCursor(
     scoped_refptr<BitmapCursor> bitmap_cursor) {
-#if BUILDFLAG(IS_LINUX)
   return base::MakeRefCounted<WaylandAsyncCursor>(bitmap_cursor);
-#else
-  return bitmap_cursor;
-#endif
 }
 
 using DispatchEventCallback = base::OnceCallback<void(Event*)>;
@@ -288,19 +266,11 @@ class WaylandWindowTest : public WaylandTest {
   }
 
   MockCursorShape* InstallMockCursorShape() {
-    auto zcr_cursor_shapes = std::make_unique<MockCursorShape>();
-    MockCursorShape* mock_cursor_shapes = zcr_cursor_shapes.get();
+    auto mock_cursor_shapes = std::make_unique<MockCursorShape>();
+    MockCursorShape* mock_cursor_shapes_ptr = mock_cursor_shapes.get();
     WaylandConnectionTestApi test_api(connection_.get());
-    test_api.SetCursorShape(std::move(zcr_cursor_shapes));
-    return mock_cursor_shapes;
-  }
-
-  MockZcrCursorShapes* InstallMockZcrCursorShapes() {
-    auto zcr_cursor_shapes = std::make_unique<MockZcrCursorShapes>();
-    MockZcrCursorShapes* mock_cursor_shapes = zcr_cursor_shapes.get();
-    WaylandConnectionTestApi test_api(connection_.get());
-    test_api.SetZcrCursorShapes(std::move(zcr_cursor_shapes));
-    return mock_cursor_shapes;
+    test_api.SetCursorShape(std::move(mock_cursor_shapes));
+    return mock_cursor_shapes_ptr;
   }
 
   // Verifies and clearis expectations for a toplevel window associated with
@@ -452,9 +422,7 @@ class WaylandWindowTest : public WaylandTest {
                                     /*supports_viewporter=*/true,
                                     /*supports_acquire_fence=*/false,
                                     /*supports_overlays=*/true,
-                                    kAugmentedSurfaceNotSupportedVersion,
-                                    /*supports_single_pixel_buffer=*/true,
-                                    /*server_version=*/{});
+                                    /*supports_single_pixel_buffer=*/true);
 
     const uint32_t buffer_id = ++buffer_id_gen_;
     auto length = buffer_size.width() * buffer_size.height() * 4;
@@ -591,7 +559,6 @@ TEST_P(WaylandWindowTest, ApplyPendingStatesAndCommit) {
   WaylandTestBase::SyncDisplay();
 }
 
-#if BUILDFLAG(IS_LINUX)
 // Checks that when the window gets some of its edges tiled, it notifies the
 // delegate appropriately.
 TEST_P(WaylandWindowTest, HandleTiledEdges) {
@@ -634,7 +601,6 @@ TEST_P(WaylandWindowTest, HandleTiledEdges) {
     VerifyAndClearExpectations();
   }
 }
-#endif
 
 TEST_P(WaylandWindowTest, DisregardUnpassedWindowConfigure) {
   constexpr gfx::Rect kNormalBounds1{500, 300};
@@ -751,8 +717,11 @@ TEST_P(WaylandWindowTest, OnSequencePointClearsPreviousUnackedConfigures) {
   VerifyAndClearExpectations();
 }
 
-// This test is specifically to guard against origin being set to (0, 0)
-// thus lacros can be restored to correct display (crbug.com/1423690)
+// This test used to specifically to guard against origin being set to (0, 0)
+// thus lacros could be restored to correct display (crbug.com/1423690).
+// TODO(crbug.com/374244479) Given lacros has been deprecated, update this test
+// to ignore the origin and only verify the size as origin is not known in
+// Wayland world.
 TEST_P(WaylandWindowTest, RestoredBoundsSetWithCorrectOrigin) {
   constexpr gfx::Rect kNormalBounds{1376, 10, 500, 300};
   constexpr gfx::Rect kMaximizedBounds{1366, 0, 800, 600};
@@ -977,76 +946,7 @@ TEST_P(WaylandWindowTest, MaximizeAndRestoreWithInsets) {
   VerifyAndClearExpectations();
 }
 
-// Tests the event sequence where a minimize request is initiated by the client.
-TEST_P(WaylandWindowTest, ClientInitiatedMinimize) {
-  if (!window_->SupportsConfigureMinimizedState()) {
-    GTEST_SKIP() << "Minimized state is not supported";
-  }
-
-  wl::ScopedWlArray states({});
-
-  // Make sure the window is initialized to normal state from the beginning.
-  EXPECT_EQ(PlatformWindowState::kNormal, window_->GetPlatformWindowState());
-  SendConfigureEvent(surface_id_, {0, 0}, states);
-
-  // Have the client minimize the window which should synchronously update the
-  // window's local state and notify the delegate.
-  PostToServerAndWait([id = surface_id_](wl::TestWaylandServerThread* server) {
-    wl::MockSurface* mock_surface = server->GetObject<wl::MockSurface>(id);
-    ASSERT_TRUE(mock_surface);
-    EXPECT_CALL(*mock_surface->xdg_surface()->xdg_toplevel(), SetMinimized());
-  });
-  EXPECT_CALL(delegate_, OnWindowStateChanged(_, _)).Times(0);
-  window_->Minimize();
-  VerifyAndClearExpectations();
-
-  // Simulate an event from the server sent in response to the above request.
-  // This should not result in another call to delegates as this will have
-  // already been propagated in the above call to WaylandWindow::Minimize().
-  EXPECT_CALL(delegate_,
-              OnWindowStateChanged(_, PlatformWindowState::kMinimized))
-      .Times(1);
-  {
-    WaylandWindow::WindowStates window_states;
-    window_states.is_minimized = true;
-    window_->HandleToplevelConfigureWithOrigin(0, 0, 0, 0, window_states);
-  }
-  window_->HandleSurfaceConfigure(3);
-  EXPECT_EQ(window_->GetPlatformWindowState(), PlatformWindowState::kMinimized);
-}
-
-// Tests the event sequence where a minimize event is initiated by the server
-// and the client's window is in a non-minimized state.
-TEST_P(WaylandWindowTest, ServerInitiatedMinimize) {
-  if (!window_->SupportsConfigureMinimizedState()) {
-    GTEST_SKIP() << "Minimized state is not supported";
-  }
-
-  wl::ScopedWlArray states({});
-
-  // Make sure the window is initialized to normal state from the beginning.
-  EXPECT_EQ(PlatformWindowState::kNormal, window_->GetPlatformWindowState());
-  SendConfigureEvent(surface_id_, {0, 0}, states);
-  EXPECT_EQ(PlatformWindowState::kNormal, window_->GetPlatformWindowState());
-
-  // A subsequent minimize event from the server should notify delegates of the
-  // window state change.
-  EXPECT_CALL(delegate_, OnWindowStateChanged(_, _)).Times(1);
-  {
-    WaylandWindow::WindowStates window_states;
-    window_states.is_minimized = true;
-    window_->HandleToplevelConfigureWithOrigin(0, 0, 0, 0, window_states);
-  }
-  window_->HandleSurfaceConfigure(3);
-  EXPECT_EQ(PlatformWindowState::kMinimized, window_->GetPlatformWindowState());
-}
-
 TEST_P(WaylandWindowTest, Minimize) {
-  if (window_->SupportsConfigureMinimizedState()) {
-    GTEST_SKIP() << "Minimized state is supported, so expected behavior is "
-                 << "different from this scenario";
-  }
-
   wl::ScopedWlArray states({});
 
   // Make sure the window is initialized to normal state from the beginning.
@@ -1111,24 +1011,13 @@ TEST_P(WaylandWindowTest, ServerInitiatedRestoreFromMinimizedState) {
   window_->HandleSurfaceConfigure(3);
   EXPECT_EQ(PlatformWindowState::kMinimized, window_->GetPlatformWindowState());
 
-  if (window_->SupportsConfigureMinimizedState()) {
-    // If the minimized state is supported via the zaura extension, while
-    // minimized a restore event from the server should return the window to the
-    // normal state.
-    EXPECT_CALL(delegate_, OnWindowStateChanged(_, _)).Times(1);
-    window_->HandleToplevelConfigureWithOrigin(0, 0, 0, 0, {});
-    window_->HandleSurfaceConfigure(4);
-    EXPECT_EQ(PlatformWindowState::kNormal, window_->GetPlatformWindowState());
-  } else {
-    // If the minimized state is not supported, the server initiated restore
-    // event with no window activation should not restore the window. It should
-    // instead leave the window in the minimized state.
-    EXPECT_CALL(delegate_, OnWindowStateChanged(_, _)).Times(0);
-    window_->HandleToplevelConfigureWithOrigin(0, 0, 0, 0, {});
-    window_->HandleSurfaceConfigure(4);
-    EXPECT_EQ(PlatformWindowState::kMinimized,
-              window_->GetPlatformWindowState());
-  }
+  // If the minimized state is not supported, the server initiated restore
+  // event with no window activation should not restore the window. It should
+  // instead leave the window in the minimized state.
+  EXPECT_CALL(delegate_, OnWindowStateChanged(_, _)).Times(0);
+  window_->HandleToplevelConfigureWithOrigin(0, 0, 0, 0, {});
+  window_->HandleSurfaceConfigure(4);
+  EXPECT_EQ(PlatformWindowState::kMinimized, window_->GetPlatformWindowState());
 }
 
 TEST_P(WaylandWindowTest, SetFullscreenAndRestore) {
@@ -1659,66 +1548,6 @@ TEST_P(WaylandWindowTest, RestoreBoundsAfterMaximizeAndFullscreen) {
   EXPECT_EQ(restored_bounds, gfx::Rect());
 }
 
-TEST_P(WaylandWindowTest, SetCanMaximize) {
-  if (GetParam().enable_aura_shell != wl::EnableAuraShellProtocol::kEnabled) {
-    GTEST_SKIP();
-  }
-
-  EXPECT_CALL(delegate_, CanMaximize).WillOnce(Return(true));
-  window_->SizeConstraintsChanged();
-  PostToServerAndWait([&](wl::TestWaylandServerThread* server) {
-    auto* surface = server->GetObject<wl::MockSurface>(surface_id_);
-    ASSERT_TRUE(surface);
-
-    wl::TestZAuraToplevel* zaura_toplevel =
-        surface->xdg_surface()->xdg_toplevel()->zaura_toplevel();
-    ASSERT_TRUE(zaura_toplevel);
-    EXPECT_TRUE(zaura_toplevel->can_maximize());
-  });
-
-  EXPECT_CALL(delegate_, CanMaximize).WillOnce(Return(false));
-  window_->SizeConstraintsChanged();
-  PostToServerAndWait([&](wl::TestWaylandServerThread* server) {
-    auto* surface = server->GetObject<wl::MockSurface>(surface_id_);
-    ASSERT_TRUE(surface);
-
-    wl::TestZAuraToplevel* zaura_toplevel =
-        surface->xdg_surface()->xdg_toplevel()->zaura_toplevel();
-    ASSERT_TRUE(zaura_toplevel);
-    EXPECT_FALSE(zaura_toplevel->can_maximize());
-  });
-}
-
-TEST_P(WaylandWindowTest, SetCanFullscreen) {
-  if (GetParam().enable_aura_shell != wl::EnableAuraShellProtocol::kEnabled) {
-    GTEST_SKIP();
-  }
-
-  EXPECT_CALL(delegate_, CanFullscreen).WillOnce(Return(true));
-  window_->SizeConstraintsChanged();
-  PostToServerAndWait([&](wl::TestWaylandServerThread* server) {
-    auto* surface = server->GetObject<wl::MockSurface>(surface_id_);
-    ASSERT_TRUE(surface);
-
-    wl::TestZAuraToplevel* zaura_toplevel =
-        surface->xdg_surface()->xdg_toplevel()->zaura_toplevel();
-    ASSERT_TRUE(zaura_toplevel);
-    EXPECT_TRUE(zaura_toplevel->can_fullscreen());
-  });
-
-  EXPECT_CALL(delegate_, CanFullscreen).WillOnce(Return(false));
-  window_->SizeConstraintsChanged();
-  PostToServerAndWait([&](wl::TestWaylandServerThread* server) {
-    auto* surface = server->GetObject<wl::MockSurface>(surface_id_);
-    ASSERT_TRUE(surface);
-
-    wl::TestZAuraToplevel* zaura_toplevel =
-        surface->xdg_surface()->xdg_toplevel()->zaura_toplevel();
-    ASSERT_TRUE(zaura_toplevel);
-    EXPECT_FALSE(zaura_toplevel->can_fullscreen());
-  });
-}
-
 TEST_P(WaylandWindowTest, SendsBoundsOnRequest) {
   const gfx::Rect initial_bounds = window_->GetBoundsInDIP();
 
@@ -1879,64 +1708,6 @@ TEST_P(WaylandWindowTest, SetCursorDoesNotUseCursorShapeForCustomCursors) {
 
   // Custom cursors require bitmaps, so they do not use server-side cursors.
   EXPECT_CALL(*mock_cursor_shape, SetCursorShape(_)).Times(0);
-  auto custom_cursor = AsPlatformCursor(
-      base::MakeRefCounted<BitmapCursor>(mojom::CursorType::kCustom, SkBitmap(),
-                                         gfx::Point(), kDefaultCursorScale));
-  window_->SetCursor(custom_cursor.get());
-}
-
-TEST_P(WaylandWindowTest, SetCursorUsesZcrCursorShapesForCommonTypes) {
-  SetPointerFocusedWindow(window_.get());
-  MockZcrCursorShapes* mock_cursor_shapes = InstallMockZcrCursorShapes();
-
-  // Verify some commonly-used cursors.
-  EXPECT_CALL(*mock_cursor_shapes,
-              SetCursorShape(ZCR_CURSOR_SHAPES_V1_CURSOR_SHAPE_TYPE_POINTER));
-  auto pointer_cursor = AsPlatformCursor(
-      base::MakeRefCounted<BitmapCursor>(mojom::CursorType::kPointer));
-  window_->SetCursor(pointer_cursor.get());
-  VerifyAndClearExpectations();
-
-  EXPECT_CALL(*mock_cursor_shapes,
-              SetCursorShape(ZCR_CURSOR_SHAPES_V1_CURSOR_SHAPE_TYPE_HAND));
-  auto hand_cursor = AsPlatformCursor(
-      base::MakeRefCounted<BitmapCursor>(mojom::CursorType::kHand));
-  window_->SetCursor(hand_cursor.get());
-  VerifyAndClearExpectations();
-
-  EXPECT_CALL(*mock_cursor_shapes,
-              SetCursorShape(ZCR_CURSOR_SHAPES_V1_CURSOR_SHAPE_TYPE_IBEAM));
-  auto ibeam_cursor = AsPlatformCursor(
-      base::MakeRefCounted<BitmapCursor>(mojom::CursorType::kIBeam));
-  window_->SetCursor(ibeam_cursor.get());
-}
-
-TEST_P(WaylandWindowTest, SetCursorCallsZcrCursorShapesOncePerCursor) {
-  SetPointerFocusedWindow(window_.get());
-  MockZcrCursorShapes* mock_cursor_shapes = InstallMockZcrCursorShapes();
-  auto hand_cursor = AsPlatformCursor(
-      base::MakeRefCounted<BitmapCursor>(mojom::CursorType::kHand));
-  // Setting the same cursor twice on the client only calls the server once.
-  EXPECT_CALL(*mock_cursor_shapes, SetCursorShape(_)).Times(1);
-  window_->SetCursor(hand_cursor.get());
-  window_->SetCursor(hand_cursor.get());
-}
-
-TEST_P(WaylandWindowTest, SetCursorDoesNotUseZcrCursorShapesForNoneCursor) {
-  SetPointerFocusedWindow(window_.get());
-  MockZcrCursorShapes* mock_cursor_shapes = InstallMockZcrCursorShapes();
-  EXPECT_CALL(*mock_cursor_shapes, SetCursorShape(_)).Times(0);
-  auto none_cursor = AsPlatformCursor(
-      base::MakeRefCounted<BitmapCursor>(mojom::CursorType::kNone));
-  window_->SetCursor(none_cursor.get());
-}
-
-TEST_P(WaylandWindowTest, SetCursorDoesNotUseZcrCursorShapesForCustomCursors) {
-  SetPointerFocusedWindow(window_.get());
-  MockZcrCursorShapes* mock_cursor_shapes = InstallMockZcrCursorShapes();
-
-  // Custom cursors require bitmaps, so they do not use server-side cursors.
-  EXPECT_CALL(*mock_cursor_shapes, SetCursorShape(_)).Times(0);
   auto custom_cursor = AsPlatformCursor(
       base::MakeRefCounted<BitmapCursor>(mojom::CursorType::kCustom, SkBitmap(),
                                          gfx::Point(), kDefaultCursorScale));
@@ -2125,43 +1896,6 @@ TEST_P(WaylandWindowTest, ManyConfigureEventsDoesNotCrash) {
     size.Enlarge(1, 1);
   }
   AdvanceFrameToCurrent(window_.get(), delegate_);
-}
-
-TEST_P(WaylandWindowTest,
-       ThrottledConfigureEventsDoNotGetStuckOnHiddenOcclusion) {
-  uint32_t serial = 2u;
-
-  WaylandWindow::WindowStates window_states;
-  window_states.is_maximized = true;
-  gfx::Size size{500, 300};
-
-  // Configure window and expect the state to be applied. Use a hidden
-  // occlusion state.
-  window_->SetPendingOcclusionState(PlatformWindowOcclusionState::kHidden);
-  window_->HandleToplevelConfigureWithOrigin(0, 0, size.width(), size.height(),
-                                             window_states);
-  window_->HandleSurfaceConfigure(serial);
-  EXPECT_EQ(size, window_->applied_state().bounds_dip.size());
-
-  // Send enough configures without any frame occurring to cause throttling.
-  for (int i = 1; i < 10; ++i) {
-    size.Enlarge(1, 1);
-    window_->HandleToplevelConfigureWithOrigin(0, 0, size.width(),
-                                               size.height(), window_states);
-    window_->HandleSurfaceConfigure(++serial);
-  }
-  // Confirm throttling has occurred - we expect `applied_state()` to have
-  // the last bounds that was actually applied, which will not be the current
-  // value of `size` if throttling has occurred.
-  EXPECT_NE(size, window_->applied_state().bounds_dip.size());
-
-  // Send a configure with a visible occlusion state, and confirm that it will
-  // be applied even though we are in a throttled state. This is to ensure
-  // we can't get stuck in a throttled and hidden state with no way to make
-  // frames.
-  window_->SetPendingOcclusionState(PlatformWindowOcclusionState::kVisible);
-  window_->HandleSurfaceConfigure(++serial);
-  EXPECT_EQ(size, window_->applied_state().bounds_dip.size());
 }
 
 // If the server immediately changes the bounds after a window is initialised,
@@ -2798,7 +2532,6 @@ TEST_P(WaylandWindowTest, ToplevelWindowUpdateWindowScale) {
     auto* output2 =
         server->CreateAndInitializeOutput(wl::TestOutputMetrics({1920, 1080}));
     output2->SetScale(2);
-    output2->SetDeviceScaleFactor(2);
   });
   WaitForAllDisplaysReady();
 
@@ -2846,190 +2579,6 @@ TEST_P(WaylandWindowTest, ToplevelWindowUpdateWindowScale) {
   EXPECT_EQ(gfx::Rect(800, 600), window_->GetBoundsInDIP());
 }
 
-// TODO(crbug.com/328783999): Remove the use of runloops in PostToServerAndWait
-TEST_P(WaylandWindowTest, ToplevelWindowOnRotateFocus) {
-  if (!IsAuraShellEnabled()) {
-    GTEST_SKIP();
-  }
-
-  base::MockRepeatingCallback<void(uint32_t, uint32_t)> ack_cb;
-
-  // For asserting server requests emitted by the client.
-  PostToServerAndWait(
-      [&](wl::TestWaylandServerThread* server) {
-        server->GetObject<wl::MockSurface>(surface_id_)
-            ->xdg_surface()
-            ->xdg_toplevel()
-            ->zaura_toplevel()
-            ->set_ack_rotate_focus_callback(ack_cb.Get());
-      },
-      /*no_nested_runloops=*/false);
-  SendConfigureEvent(surface_id_, {10, 10},
-                     InitializeWlArrayWithActivatedState());
-  SetKeyboardFocusedWindow(window_.get());
-
-  using Direction = PlatformWindowDelegate::RotateDirection;
-  int serial = 1;
-
-  // Test successful return cases
-
-  // Forward, restart
-  EXPECT_CALL(delegate_, OnRotateFocus(Direction::kForward, true))
-      .WillOnce(Return(true));
-  PostToServerAndWait(
-      [&](wl::TestWaylandServerThread* server) {
-        EXPECT_CALL(ack_cb,
-                    Run(serial, ZAURA_TOPLEVEL_ROTATE_HANDLED_STATE_HANDLED));
-
-        auto* surface = server->GetObject<wl::MockSurface>(surface_id_);
-        auto* toplevel =
-            surface->xdg_surface()->xdg_toplevel()->zaura_toplevel();
-        zaura_toplevel_send_rotate_focus(
-            toplevel->resource(), serial++,
-            ZAURA_TOPLEVEL_ROTATE_DIRECTION_FORWARD,
-            ZAURA_TOPLEVEL_ROTATE_RESTART_STATE_RESTART);
-      },
-      /*no_nested_runloops=*/false);
-
-  // Backward, no restart
-  EXPECT_CALL(delegate_, OnRotateFocus(Direction::kBackward, false))
-      .WillOnce(Return(true));
-  PostToServerAndWait(
-      [&](wl::TestWaylandServerThread* server) {
-        EXPECT_CALL(ack_cb,
-                    Run(serial, ZAURA_TOPLEVEL_ROTATE_HANDLED_STATE_HANDLED));
-
-        auto* surface = server->GetObject<wl::MockSurface>(surface_id_);
-        auto* toplevel =
-            surface->xdg_surface()->xdg_toplevel()->zaura_toplevel();
-        zaura_toplevel_send_rotate_focus(
-            toplevel->resource(), serial++,
-            ZAURA_TOPLEVEL_ROTATE_DIRECTION_BACKWARD,
-            ZAURA_TOPLEVEL_ROTATE_RESTART_STATE_NO_RESTART);
-      },
-      /*no_nested_runloops=*/false);
-
-  // Test unsuccessful return cases
-
-  // Forward
-  EXPECT_CALL(delegate_, OnRotateFocus(_, _)).WillOnce(Return(false));
-  PostToServerAndWait(
-      [&](wl::TestWaylandServerThread* server) {
-        EXPECT_CALL(
-            ack_cb,
-            Run(serial, ZAURA_TOPLEVEL_ROTATE_HANDLED_STATE_NOT_HANDLED));
-
-        auto* surface = server->GetObject<wl::MockSurface>(surface_id_);
-        auto* toplevel =
-            surface->xdg_surface()->xdg_toplevel()->zaura_toplevel();
-        zaura_toplevel_send_rotate_focus(
-            toplevel->resource(), serial++,
-            ZAURA_TOPLEVEL_ROTATE_DIRECTION_FORWARD,
-            ZAURA_TOPLEVEL_ROTATE_RESTART_STATE_RESTART);
-      },
-      /*no_nested_runloops=*/false);
-
-  // Backward
-  EXPECT_CALL(delegate_, OnRotateFocus(_, _)).WillOnce(Return(false));
-  PostToServerAndWait(
-      [&](wl::TestWaylandServerThread* server) {
-        EXPECT_CALL(
-            ack_cb,
-            Run(serial, ZAURA_TOPLEVEL_ROTATE_HANDLED_STATE_NOT_HANDLED));
-
-        auto* surface = server->GetObject<wl::MockSurface>(surface_id_);
-        auto* toplevel =
-            surface->xdg_surface()->xdg_toplevel()->zaura_toplevel();
-        zaura_toplevel_send_rotate_focus(
-            toplevel->resource(), serial++,
-            ZAURA_TOPLEVEL_ROTATE_DIRECTION_BACKWARD,
-            ZAURA_TOPLEVEL_ROTATE_RESTART_STATE_NO_RESTART);
-      },
-      /*no_nested_runloops=*/false);
-}
-
-// TODO(crbug.com/328783999): Remove the use of runloops in PostToServerAndWait
-TEST_P(WaylandWindowTest, ToplevelWindowOnRotateFocus_NotActiveOrNotFocused) {
-  if (!IsAuraShellEnabled()) {
-    GTEST_SKIP();
-  }
-
-  base::MockRepeatingCallback<void(uint32_t, uint32_t)> ack_cb;
-
-  // For asserting server requests emitted by the client.
-  PostToServerAndWait(
-      [&](wl::TestWaylandServerThread* server) {
-        server->GetObject<wl::MockSurface>(surface_id_)
-            ->xdg_surface()
-            ->xdg_toplevel()
-            ->zaura_toplevel()
-            ->set_ack_rotate_focus_callback(ack_cb.Get());
-      },
-      /*no_nested_runloops=*/false);
-
-  int serial = 1;
-
-  // Not active, should fail
-  SendConfigureEvent(surface_id_, {10, 10}, wl::ScopedWlArray({}));
-  SetKeyboardFocusedWindow(nullptr);
-
-  PostToServerAndWait(
-      [&](wl::TestWaylandServerThread* server) {
-        EXPECT_CALL(
-            ack_cb,
-            Run(serial, ZAURA_TOPLEVEL_ROTATE_HANDLED_STATE_NOT_HANDLED));
-
-        auto* surface = server->GetObject<wl::MockSurface>(surface_id_);
-        auto* toplevel =
-            surface->xdg_surface()->xdg_toplevel()->zaura_toplevel();
-        zaura_toplevel_send_rotate_focus(
-            toplevel->resource(), serial++,
-            ZAURA_TOPLEVEL_ROTATE_DIRECTION_FORWARD,
-            ZAURA_TOPLEVEL_ROTATE_RESTART_STATE_RESTART);
-      },
-      /*no_nested_runloops=*/false);
-
-  // Now activate, but don't grab keyboard focus, should still be rejected.
-  // Not active, should fail
-  SendConfigureEvent(surface_id_, {10, 10},
-                     InitializeWlArrayWithActivatedState());
-
-  PostToServerAndWait(
-      [&](wl::TestWaylandServerThread* server) {
-        EXPECT_CALL(
-            ack_cb,
-            Run(serial, ZAURA_TOPLEVEL_ROTATE_HANDLED_STATE_NOT_HANDLED));
-
-        auto* surface = server->GetObject<wl::MockSurface>(surface_id_);
-        auto* toplevel =
-            surface->xdg_surface()->xdg_toplevel()->zaura_toplevel();
-        zaura_toplevel_send_rotate_focus(
-            toplevel->resource(), serial++,
-            ZAURA_TOPLEVEL_ROTATE_DIRECTION_FORWARD,
-            ZAURA_TOPLEVEL_ROTATE_RESTART_STATE_RESTART);
-      },
-      /*no_nested_runloops=*/false);
-
-  // Now grab keyboard focus, we should have great success now.
-  SetKeyboardFocusedWindow(window_.get());
-
-  EXPECT_CALL(delegate_, OnRotateFocus(_, _)).WillOnce(Return(true));
-  PostToServerAndWait(
-      [&](wl::TestWaylandServerThread* server) {
-        EXPECT_CALL(ack_cb,
-                    Run(serial, ZAURA_TOPLEVEL_ROTATE_HANDLED_STATE_HANDLED));
-
-        auto* surface = server->GetObject<wl::MockSurface>(surface_id_);
-        auto* toplevel =
-            surface->xdg_surface()->xdg_toplevel()->zaura_toplevel();
-        zaura_toplevel_send_rotate_focus(
-            toplevel->resource(), serial++,
-            ZAURA_TOPLEVEL_ROTATE_DIRECTION_FORWARD,
-            ZAURA_TOPLEVEL_ROTATE_RESTART_STATE_RESTART);
-      },
-      /*no_nested_runloops=*/false);
-}
-
 TEST_P(WaylandWindowTest, WaylandPopupSurfaceScale) {
   VerifyAndClearExpectations();
 
@@ -3043,7 +2592,6 @@ TEST_P(WaylandWindowTest, WaylandPopupSurfaceScale) {
     auto* output2 = server->CreateAndInitializeOutput(
         wl::TestOutputMetrics({1920, 0, 1920, 1080}));
     output2->SetScale(2);
-    output2->SetDeviceScaleFactor(2);
   });
   WaitForAllDisplaysReady();
 
@@ -3182,9 +2730,7 @@ TEST_P(WaylandWindowTest, WaylandPopupInitialBufferScale) {
                   server->GetObject<wl::TestOutput>(secondary_output_id);
               // Update scale factors first.
               main_output->SetScale(main_output_scale);
-              main_output->SetDeviceScaleFactor(main_output_scale);
               secondary_output->SetScale(secondary_output_scale);
-              secondary_output->SetDeviceScaleFactor(secondary_output_scale);
 
               main_output->Flush();
               secondary_output->Flush();
@@ -3243,7 +2789,6 @@ TEST_P(WaylandWindowTest, WaylandPopupInitialBufferUsesParentScale) {
     auto* output2 = server->CreateAndInitializeOutput(
         wl::TestOutputMetrics({1921, 0, 1920, 1080}));
     output2->SetScale(2);
-    output2->SetDeviceScaleFactor(2);
   });
   WaitForAllDisplaysReady();
 
@@ -3378,7 +2923,6 @@ TEST_P(WaylandWindowTest, GetPreferredOutput) {
     wl::TestOutput* output2 = server->GetObject<wl::TestOutput>(wl_output2_id);
     // Pretend that the output2 has scale factor equals to 2 now.
     output2->SetScale(2);
-    output2->SetDeviceScaleFactor(2);
     output2->Flush();
   });
 
@@ -3398,7 +2942,6 @@ TEST_P(WaylandWindowTest, GetPreferredOutput) {
     wl::TestOutput* output1 = server->GetObject<wl::TestOutput>(wl_output1_id);
     // Now, the output1 changes its scale factor to 2 as well.
     output1->SetScale(2);
-    output1->SetDeviceScaleFactor(2);
     output1->Flush();
   });
 
@@ -3409,7 +2952,6 @@ TEST_P(WaylandWindowTest, GetPreferredOutput) {
     wl::TestOutput* output1 = server->GetObject<wl::TestOutput>(wl_output1_id);
     // Now, the output1 changes its scale factor back to 1.
     output1->SetScale(1);
-    output1->SetDeviceScaleFactor(1);
     output1->Flush();
   });
 
@@ -3421,7 +2963,6 @@ TEST_P(WaylandWindowTest, GetPreferredOutput) {
     // All outputs have scale factor of 1. window_ prefers the output that
     // it entered first again.
     output2->SetScale(1);
-    output2->SetDeviceScaleFactor(1);
     output2->Flush();
   });
 
@@ -3534,7 +3075,6 @@ TEST_P(WaylandWindowTest, GetChildrenPreferredOutput) {
     wl::TestOutput* output2 = server->GetObject<wl::TestOutput>(wl_output2_id);
     // Now, the output2 changes its scale factor to 2.
     output2->SetScale(2);
-    output2->SetDeviceScaleFactor(2);
     output2->Flush();
   });
 
@@ -3956,9 +3496,7 @@ TEST_P(WaylandWindowTest, ReattachesBackgroundOnShow) {
                                   /*supports_viewporter=*/true,
                                   /*supports_acquire_fence=*/false,
                                   /*supports_overlays=*/true,
-                                  kAugmentedSurfaceNotSupportedVersion,
-                                  /*supports_single_pixel_buffer=*/true,
-                                  /*server_version=*/{});
+                                  /*supports_single_pixel_buffer=*/true);
 
   // Setup wl_buffers.
   constexpr uint32_t buffer_id1 = 1;
@@ -4183,18 +3721,12 @@ TEST_P(WaylandWindowTest, CreatesPopupOnButtonPressSerial) {
       auto* test_popup = GetTestXdgPopupByWindow(server, surface_id);
       ASSERT_TRUE(test_popup);
 
-#if !BUILDFLAG(IS_CHROMEOS_LACROS)
       if (use_explicit_grab) {
         EXPECT_NE(test_popup->grab_serial(), button_release_serial);
         EXPECT_EQ(test_popup->grab_serial(), button_press_serial);
       } else {
         EXPECT_EQ(test_popup->grab_serial(), 0U);
       }
-#else
-      // crbug.com/1320528: Lacros uses explicit grab always.
-      EXPECT_NE(test_popup->grab_serial(), button_release_serial);
-      EXPECT_EQ(test_popup->grab_serial(), button_press_serial);
-#endif  // !BUILDFLAG(IS_CHROMEOS_LACROS)
     });
   }
 }
@@ -4251,15 +3783,12 @@ TEST_P(WaylandWindowTest, CreatesPopupOnTouchDownSerial) {
     PostToServerAndWait([&](wl::TestWaylandServerThread* server) {
       auto* test_popup = GetTestXdgPopupByWindow(server, surface_id);
       ASSERT_TRUE(test_popup);
-      // crbug.com/1320528: Lacros uses explicit grab always.
-#if !BUILDFLAG(IS_CHROMEOS_LACROS)
       // Unless the use-wayland-explicit-grab switch is set, touch events
       // are the exception, i.e: the serial sent before the "up" event
       // (latest) cannot be used, otherwise, some compositors may dismiss
       // popups.
       if (!use_explicit_grab)
         EXPECT_EQ(test_popup->grab_serial(), 0U);
-#endif
     });
 
     popup->Hide();
@@ -4283,7 +3812,6 @@ TEST_P(WaylandWindowTest, CreatesPopupOnTouchDownSerial) {
       auto* test_popup = GetTestXdgPopupByWindow(server, surface_id);
       ASSERT_TRUE(test_popup);
 
-#if !BUILDFLAG(IS_CHROMEOS_LACROS)
       uint32_t expected_serial = touch_down_serial;
       auto env = base::Environment::Create();
       if (base::nix::GetDesktopEnvironment(env.get()) ==
@@ -4296,10 +3824,6 @@ TEST_P(WaylandWindowTest, CreatesPopupOnTouchDownSerial) {
       } else {
         EXPECT_EQ(test_popup->grab_serial(), 0U);
       }
-#else
-      // crbug.com/1320528: Lacros uses explicit grab always.
-      EXPECT_EQ(test_popup->grab_serial(), touch_down_serial);
-#endif  // !BUILDFLAG(IS_CHROMEOS_LACROS)
     });
   }
 }
@@ -4449,39 +3973,6 @@ TEST_P(WaylandWindowTest, InitialBounds) {
   EXPECT_EQ(gfx::Rect(10, 10, 200, 200), toplevel->GetBoundsInDIP());
 }
 
-TEST_P(WaylandWindowTest, PrimarySnappedState) {
-  testing::NiceMock<MockWaylandPlatformWindowDelegate> delegate_2;
-  auto toplevel = CreateWaylandWindowWithParams(
-      PlatformWindowType::kWindow, gfx::Rect(0, 0, 200, 200), &delegate_2);
-  {
-    WaylandWindow::WindowStates window_states;
-    window_states.is_maximized = false;
-    window_states.is_fullscreen = false;
-    window_states.is_activated = true;
-    window_states.is_snapped_primary = true;
-    toplevel->HandleToplevelConfigureWithOrigin(0, 0, 100, 200, window_states);
-  }
-  toplevel->HandleSurfaceConfigure(2);
-  EXPECT_EQ(gfx::Rect(0, 0, 100, 200), toplevel->GetBoundsInDIP());
-}
-
-TEST_P(WaylandWindowTest, SecondarySnappedState) {
-  testing::NiceMock<MockWaylandPlatformWindowDelegate> delegate_2;
-  auto toplevel = CreateWaylandWindowWithParams(
-      PlatformWindowType::kWindow, gfx::Rect(0, 0, 200, 200), &delegate_2);
-  {
-    WaylandWindow::WindowStates window_states;
-    window_states.is_maximized = false;
-    window_states.is_fullscreen = false;
-    window_states.is_activated = true;
-    window_states.is_snapped_secondary = true;
-    toplevel->HandleToplevelConfigureWithOrigin(100, 0, 100, 200,
-                                                window_states);
-  }
-  toplevel->HandleSurfaceConfigure(2);
-  EXPECT_EQ(gfx::Rect(100, 0, 100, 200), toplevel->GetBoundsInDIP());
-}
-
 namespace {
 
 class WaylandSubsurfaceTest : public WaylandWindowTest {
@@ -4516,7 +4007,6 @@ class WaylandSubsurfaceTest : public WaylandWindowTest {
         });
     wayland_subsurface->ConfigureAndShowSurface(
         subsurface_bounds, gfx::RectF(0, 0, 640, 480) /*parent_bounds_px*/,
-        std::nullopt /*clip_rect_px*/, gfx::OVERLAY_TRANSFORM_NONE,
         1.f /*buffer_scale*/, nullptr, nullptr);
     connection_->Flush();
 
@@ -4562,42 +4052,21 @@ class WaylandSubsurfaceTest : public WaylandWindowTest {
 
 }  // namespace
 
-// Tests integer and non integer size/position support with and without surface
-// augmenter.
-TEST_P(WaylandSubsurfaceTest, OneWaylandSubsurfaceInteger) {
-  ASSERT_FALSE(connection_->surface_augmenter());
-
-  constexpr std::array<std::array<gfx::RectF, 2>, 2> test_data = {
+// Tests integer and non integer size/position support. Ozone/Wayland is
+// expected to ceil the bounds.
+TEST_P(WaylandSubsurfaceTest, OneWaylandSubsurfaceBoundsCeil) {
+  constexpr std::array<std::array<gfx::RectF, 2>, 4> test_data = {
       {{gfx::RectF({15.12, 15.912}, {10.351, 10.742}),
         gfx::RectF({16, 16}, {11, 11})},
        {gfx::RectF({7.041, 8.583}, {13.452, 20.231}),
-        gfx::RectF({7.041, 8.583}, {13.452, 20.231})}}};
-
-  for (const auto& item : test_data) {
-    OneWaylandSubsurfaceTestHelper(item[0] /* subsurface_bounds */,
-                                   item[1] /* expected_subsurface_bounds */);
-
-    // Initialize the surface augmenter now.
-    InitializeSurfaceAugmenter();
-    ASSERT_TRUE(connection_->surface_augmenter());
-  };
-}
-
-TEST_P(WaylandSubsurfaceTest, OneWaylandSubsurfaceNonInteger) {
-  ASSERT_FALSE(connection_->surface_augmenter());
-
-  constexpr std::array<std::array<gfx::RectF, 2>, 2> test_data = {
-      {{gfx::RectF({15, 15}, {10, 10}), gfx::RectF({15, 15}, {10, 10})},
+        gfx::RectF({8, 9}, {14, 21})},
+       {gfx::RectF({15, 15}, {10, 10}), gfx::RectF({15, 15}, {10, 10})},
        {gfx::RectF({7, 8}, {16, 18}), gfx::RectF({7, 8}, {16, 18})}}};
 
   for (const auto& item : test_data) {
     OneWaylandSubsurfaceTestHelper(item[0] /* subsurface_bounds */,
                                    item[1] /* expected_subsurface_bounds */);
-
-    // Initialize the surface augmenter now.
-    InitializeSurfaceAugmenter();
-    ASSERT_TRUE(connection_->surface_augmenter());
-  }
+  };
 }
 
 TEST_P(WaylandSubsurfaceTest, NoDuplicateSubsurfaceRequests) {
@@ -4606,9 +4075,9 @@ TEST_P(WaylandSubsurfaceTest, NoDuplicateSubsurfaceRequests) {
   }
   auto subsurfaces = RequestWaylandSubsurface(3);
   for (auto* subsurface : subsurfaces) {
-    subsurface->ConfigureAndShowSurface(
-        gfx::RectF(1.f, 2.f, 10.f, 20.f), gfx::RectF(0.f, 0.f, 800.f, 600.f),
-        std::nullopt, gfx::OVERLAY_TRANSFORM_NONE, 1.f, nullptr, nullptr);
+    subsurface->ConfigureAndShowSurface(gfx::RectF(1.f, 2.f, 10.f, 20.f),
+                                        gfx::RectF(0.f, 0.f, 800.f, 600.f), 1.f,
+                                        nullptr, nullptr);
   }
   connection_->Flush();
 
@@ -4618,10 +4087,11 @@ TEST_P(WaylandSubsurfaceTest, NoDuplicateSubsurfaceRequests) {
        subsurface_id3 = subsurfaces[2]->wayland_surface()->get_surface_id()](
           wl::TestWaylandServerThread* server) {
         // From top to bottom: subsurfaces[2], subsurfaces[1], subsurfaces[0].
-        wl::TestSubSurface* test_subs[3] = {
+        std::array<wl::TestSubSurface*, 3> test_subs = {
             server->GetObject<wl::MockSurface>(subsurface_id1)->sub_surface(),
             server->GetObject<wl::MockSurface>(subsurface_id2)->sub_surface(),
-            server->GetObject<wl::MockSurface>(subsurface_id3)->sub_surface()};
+            server->GetObject<wl::MockSurface>(subsurface_id3)->sub_surface(),
+        };
 
         EXPECT_CALL(*test_subs[0], PlaceAbove(_)).Times(1);
         EXPECT_CALL(*test_subs[0], PlaceBelow(_)).Times(0);
@@ -4635,15 +4105,15 @@ TEST_P(WaylandSubsurfaceTest, NoDuplicateSubsurfaceRequests) {
       });
 
   // Stack subsurfaces[0] to be from bottom to top, and change its position.
-  subsurfaces[0]->ConfigureAndShowSurface(
-      gfx::RectF(0.f, 0.f, 10.f, 20.f), gfx::RectF(0.f, 0.f, 800.f, 600.f),
-      std::nullopt, gfx::OVERLAY_TRANSFORM_NONE, 1.f, subsurfaces[2], nullptr);
-  subsurfaces[1]->ConfigureAndShowSurface(
-      gfx::RectF(1.f, 2.f, 10.f, 20.f), gfx::RectF(0.f, 0.f, 800.f, 600.f),
-      std::nullopt, gfx::OVERLAY_TRANSFORM_NONE, 1.f, nullptr, subsurfaces[2]);
-  subsurfaces[2]->ConfigureAndShowSurface(
-      gfx::RectF(1.f, 2.f, 10.f, 20.f), gfx::RectF(0.f, 0.f, 800.f, 600.f),
-      std::nullopt, gfx::OVERLAY_TRANSFORM_NONE, 1.f, nullptr, subsurfaces[0]);
+  subsurfaces[0]->ConfigureAndShowSurface(gfx::RectF(0.f, 0.f, 10.f, 20.f),
+                                          gfx::RectF(0.f, 0.f, 800.f, 600.f),
+                                          1.f, subsurfaces[2], nullptr);
+  subsurfaces[1]->ConfigureAndShowSurface(gfx::RectF(1.f, 2.f, 10.f, 20.f),
+                                          gfx::RectF(0.f, 0.f, 800.f, 600.f),
+                                          1.f, nullptr, subsurfaces[2]);
+  subsurfaces[2]->ConfigureAndShowSurface(gfx::RectF(1.f, 2.f, 10.f, 20.f),
+                                          gfx::RectF(0.f, 0.f, 800.f, 600.f),
+                                          1.f, nullptr, subsurfaces[0]);
   connection_->Flush();
 
   VerifyAndClearExpectations();
@@ -4658,9 +4128,7 @@ TEST_P(WaylandWindowTest, NoDuplicateViewporterRequests) {
                                   /*supports_viewporter=*/true,
                                   /*supports_acquire_fence=*/false,
                                   /*supports_overlays=*/true,
-                                  kAugmentedSurfaceNotSupportedVersion,
-                                  /*supports_single_pixel_buffer=*/true,
-                                  /*server_version=*/{});
+                                  /*supports_single_pixel_buffer=*/true);
 
   // Setup wl_buffers.
   constexpr uint32_t buffer_id = 1;
@@ -4827,50 +4295,30 @@ TEST_P(WaylandWindowTest, StartWithMinimized) {
   SendConfigureEvent(surface_id_, {0, 0},
                      InitializeWlArrayWithActivatedState());
 
-  if (window_->SupportsConfigureMinimizedState()) {
-    window_->Minimize();
-    EXPECT_CALL(delegate_,
-                OnWindowStateChanged(_, PlatformWindowState::kMinimized))
-        .Times(1);
-    {
-      WaylandWindow::WindowStates window_states;
-      window_states.is_minimized = true;
-      window_->HandleToplevelConfigureWithOrigin(0, 0, 0, 0, window_states);
-    }
-    window_->HandleSurfaceConfigure(3);
-    EXPECT_EQ(window_->GetPlatformWindowState(),
-              PlatformWindowState::kMinimized);
-    EXPECT_EQ(gfx::Rect(), window_->GetBoundsInDIP());
-    VerifyAndClearExpectations();
-  } else {
-    EXPECT_CALL(delegate_, OnWindowStateChanged(_, _)).Times(1);
-    window_->Minimize();
-    VerifyAndClearExpectations();
+  EXPECT_CALL(delegate_, OnWindowStateChanged(_, _)).Times(1);
+  window_->Minimize();
+  VerifyAndClearExpectations();
 
-    // The state of the window has to be already minimized.
-    EXPECT_EQ(window_->GetPlatformWindowState(),
-              PlatformWindowState::kMinimized);
+  // The state of the window has to be already minimized.
+  EXPECT_EQ(window_->GetPlatformWindowState(), PlatformWindowState::kMinimized);
 
-    // We don't receive any state change if that does not differ from the last
-    // state.
-    EXPECT_CALL(delegate_, OnWindowStateChanged(_, _)).Times(0);
-    // It must be still the same minimized state.
-    EXPECT_EQ(window_->GetPlatformWindowState(),
-              PlatformWindowState::kMinimized);
-    EXPECT_EQ(gfx::Rect(800, 600), window_->GetBoundsInDIP());
+  // We don't receive any state change if that does not differ from the last
+  // state.
+  EXPECT_CALL(delegate_, OnWindowStateChanged(_, _)).Times(0);
+  // It must be still the same minimized state.
+  EXPECT_EQ(window_->GetPlatformWindowState(), PlatformWindowState::kMinimized);
+  EXPECT_EQ(gfx::Rect(800, 600), window_->GetBoundsInDIP());
 
-    // The window geometry has to be set to the current bounds of the window for
-    // minimized state.
-    PostToServerAndWait(
-        [id = surface_id_](wl::TestWaylandServerThread* server) {
-          auto* surface = server->GetObject<wl::MockSurface>(id);
-          auto* xdg_surface = surface->xdg_surface();
-          EXPECT_CALL(*xdg_surface, SetWindowGeometry(_)).Times(0);
-        });
-    // Send one additional empty configuration event for minimized state.
-    // (which means the surface is not maximized, fullscreen or activated)
-    SendConfigureEvent(surface_id_, {0, 0}, wl::ScopedWlArray({}));
-  }
+  // The window geometry has to be set to the current bounds of the window for
+  // minimized state.
+  PostToServerAndWait([id = surface_id_](wl::TestWaylandServerThread* server) {
+    auto* surface = server->GetObject<wl::MockSurface>(id);
+    auto* xdg_surface = surface->xdg_surface();
+    EXPECT_CALL(*xdg_surface, SetWindowGeometry(_)).Times(0);
+  });
+  // Send one additional empty configuration event for minimized state.
+  // (which means the surface is not maximized, fullscreen or activated)
+  SendConfigureEvent(surface_id_, {0, 0}, wl::ScopedWlArray({}));
 }
 
 class BlockableWaylandToplevelWindow : public WaylandToplevelWindow {
@@ -5156,176 +4604,6 @@ TEST_P(WaylandWindowTest, ScaleChangeWhenStateRequestThrottoled) {
   VerifyAndClearExpectations();
 }
 
-// Asserts the server receives the correct region when SetShape() is called for
-// toplevel windows.
-TEST_P(WaylandWindowTest, SetShape) {
-  // SetShape() is only supported with zaura_shell.
-  if (GetParam().enable_aura_shell != wl::EnableAuraShellProtocol::kEnabled) {
-    GTEST_SKIP();
-  }
-
-  // Define a custom window shape and generate the corresponding region.
-  const PlatformWindow::ShapeRects shape_rects = {{10, 10, 40, 40},
-                                                  {20, 20, 50, 50}};
-  wl::TestRegion shape_region;
-  for (const auto& rect : shape_rects) {
-    shape_region.op(
-        SkIRect::MakeXYWH(rect.x(), rect.y(), rect.width(), rect.height()),
-        SkRegion::kUnion_Op);
-  }
-
-  // Set the toplevel window shape.
-  window_->SetShape(std::make_unique<PlatformWindow::ShapeRects>(shape_rects),
-                    {});
-
-  // Validate the server has received the appropriate region for the toplevel.
-  PostToServerAndWait([&](wl::TestWaylandServerThread* server) {
-    auto* surface = server->GetObject<wl::MockSurface>(surface_id_);
-    ASSERT_TRUE(surface);
-
-    wl::TestZAuraToplevel* zaura_toplevel =
-        surface->xdg_surface()->xdg_toplevel()->zaura_toplevel();
-    ASSERT_TRUE(zaura_toplevel);
-    EXPECT_EQ(shape_region, zaura_toplevel->shape());
-  });
-
-  // Unset the toplevel window shape.
-  window_->SetShape(nullptr, {});
-
-  // Validate the server has received and unset the window shape.
-  PostToServerAndWait([&](wl::TestWaylandServerThread* server) {
-    auto* surface = server->GetObject<wl::MockSurface>(surface_id_);
-    ASSERT_TRUE(surface);
-
-    wl::TestZAuraToplevel* zaura_toplevel =
-        surface->xdg_surface()->xdg_toplevel()->zaura_toplevel();
-    ASSERT_TRUE(zaura_toplevel);
-    EXPECT_FALSE(zaura_toplevel->shape().has_value());
-  });
-}
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-// Tests that the platform window gets the notification when overview mode
-// changes.
-TEST_P(WaylandWindowTest, OverviewMode) {
-  // Only supported with zaura_shell.
-  if (!IsAuraShellEnabled()) {
-    GTEST_SKIP();
-  }
-
-  EXPECT_CALL(delegate_, OnOverviewModeChanged(Eq(true))).Times(1);
-  PostToServerAndWait([&](wl::TestWaylandServerThread* server) {
-    auto* surface = server->GetObject<wl::MockSurface>(surface_id_);
-    auto* toplevel = surface->xdg_surface()->xdg_toplevel()->zaura_toplevel();
-    zaura_toplevel_send_overview_change(toplevel->resource(),
-                                        ZAURA_TOPLEVEL_IN_OVERVIEW_IN_OVERVIEW);
-  });
-
-  EXPECT_CALL(delegate_, OnOverviewModeChanged(Eq(false))).Times(1);
-  PostToServerAndWait([&](wl::TestWaylandServerThread* server) {
-    auto* surface = server->GetObject<wl::MockSurface>(surface_id_);
-    auto* toplevel = surface->xdg_surface()->xdg_toplevel()->zaura_toplevel();
-    zaura_toplevel_send_overview_change(
-        toplevel->resource(), ZAURA_TOPLEVEL_IN_OVERVIEW_NOT_IN_OVERVIEW);
-  });
-}
-#endif
-
-// Tests setting and unsetting float state on a wayland toplevel window.
-TEST_P(WaylandWindowTest, SetUnsetFloat) {
-  if (!IsAuraShellEnabled()) {
-    GTEST_SKIP();
-  }
-
-  auto post_to_server_and_wait = [&]() {
-    base::RunLoop run_loop;
-    PostToServerAndWait(run_loop.QuitClosure());
-    run_loop.Run();
-  };
-
-  // Sets up a callback to verify server function calls.
-  base::MockRepeatingCallback<void(bool, uint32_t)> set_unset_float_cb;
-  PostToServerAndWait([&](wl::TestWaylandServerThread* server) {
-    server->GetObject<wl::MockSurface>(surface_id_)
-        ->xdg_surface()
-        ->xdg_toplevel()
-        ->zaura_toplevel()
-        ->set_set_unset_float_callback(set_unset_float_cb.Get());
-  });
-
-  window_->AsWaylandToplevelWindow()->SetFloatToLocation(
-      ui::WaylandFloatStartLocation::kBottomRight);
-  EXPECT_CALL(set_unset_float_cb, Run(/*floated=*/true, 0));
-  post_to_server_and_wait();
-
-  window_->AsWaylandToplevelWindow()->SetFloatToLocation(
-      ui::WaylandFloatStartLocation::kBottomLeft);
-  EXPECT_CALL(set_unset_float_cb, Run(/*floated=*/true, 1));
-  post_to_server_and_wait();
-
-  window_->AsWaylandToplevelWindow()->UnSetFloat();
-  EXPECT_CALL(set_unset_float_cb, Run(/*floated=*/false, _));
-  post_to_server_and_wait();
-}
-
-TEST_P(WaylandWindowTest,
-       UnsynchronizedOcclusionStateNotOverridenByConfigureOcclusionState) {
-  if (GetParam().enable_aura_shell != wl::EnableAuraShellProtocol::kEnabled) {
-    GTEST_SKIP();
-  }
-
-  constexpr gfx::Rect kNormalBounds{500, 300};
-  EXPECT_CALL(delegate_, OnBoundsChanged(Eq(kDefaultBoundsChange)));
-  // OnOcclusionStateChanged(kHidden) will be called two times. First from the
-  // unsynchronized occlusion state change, then from the synchronized occlusion
-  // state which, which should have had its pending value overwritten.
-  EXPECT_CALL(delegate_, OnOcclusionStateChanged(
-                             ui::PlatformWindowOcclusionState::kHidden))
-      .Times(2);
-  EXPECT_CALL(delegate_, OnOcclusionStateChanged(
-                             ui::PlatformWindowOcclusionState::kVisible))
-      .Times(0);
-
-  PostToServerAndWait([id = surface_id_, bounds = kNormalBounds](
-                          wl::TestWaylandServerThread* server) {
-    auto* mock_surface = server->GetObject<wl::MockSurface>(id);
-    ASSERT_TRUE(mock_surface);
-    auto* xdg_surface = mock_surface->xdg_surface();
-    EXPECT_CALL(*xdg_surface, SetWindowGeometry(gfx::Rect(bounds.size())))
-        .Times(0);
-    EXPECT_CALL(*xdg_surface, AckConfigure(_)).Times(0);
-    EXPECT_CALL(*mock_surface, SetOpaqueRegion(_)).Times(0);
-    EXPECT_CALL(*mock_surface, SetInputRegion(_)).Times(0);
-  });
-
-  // Set pending occlusion state (as if by configure).
-  window_->SetPendingOcclusionState(ui::PlatformWindowOcclusionState::kVisible);
-
-  // Set the occlusion state (as if by unsynchronized occlusion state setting).
-  // The applied occlusion state should be the unsynchronized one, since it came
-  // later.
-  window_->OcclusionStateChanged(ui::PlatformWindowOcclusionState::kHidden);
-
-  auto state = InitializeWlArrayWithActivatedState();
-  constexpr uint32_t kConfigureSerial = 2u;
-  SendConfigureEvent(surface_id_, kNormalBounds.size(), state,
-                     kConfigureSerial);
-
-  PostToServerAndWait([id = surface_id_, bounds = kNormalBounds](
-                          wl::TestWaylandServerThread* server) {
-    auto* mock_surface = server->GetObject<wl::MockSurface>(id);
-    ASSERT_TRUE(mock_surface);
-    auto* xdg_surface = mock_surface->xdg_surface();
-    EXPECT_CALL(*xdg_surface, SetWindowGeometry(bounds));
-    EXPECT_CALL(*xdg_surface, AckConfigure(kConfigureSerial));
-    EXPECT_CALL(*mock_surface, SetOpaqueRegion(_));
-    EXPECT_CALL(*mock_surface, SetInputRegion(_));
-  });
-
-  AdvanceFrameToCurrent(window_.get(), delegate_);
-  VerifyAndClearExpectations();
-}
-
 // Tests that a re-entrant state update is handled serially by `WaylandWindow`
 // and does not crash.
 TEST_P(WaylandWindowTest, ReentrantApplyStateWorks) {
@@ -5428,49 +4706,6 @@ class MultiDisplayWaylandWindowTest : public WaylandWindowTest {
                                          /*register_screen=*/true};
 };
 
-// Asserts new windows have their bounds set on the display for new windows if
-// init bounds are unspecified.
-TEST_P(MultiDisplayWaylandWindowTest, SetsNewWindowBoundsToCorrectDisplay) {
-  MockWaylandPlatformWindowDelegate delegate;
-
-  // Set the secondary display as the new window target.
-  std::optional<display::ScopedDisplayForNewWindows> scoped_display_new_windows;
-  scoped_display_new_windows.emplace(kSecondaryDisplayId);
-
-  // Init a new window with empty init bounds.
-  auto init_properties = PlatformWindowInitProperties(gfx::Rect(0, 0));
-  auto window = delegate.CreateWaylandWindow(connection_.get(),
-                                             std::move(init_properties));
-  ASSERT_TRUE(window);
-
-  // Assert the window is placed on the display for new windows, if supported.
-  gfx::Rect bounds_dip = window->GetBoundsInDIP();
-  EXPECT_EQ(gfx::Size(1, 1), bounds_dip.size());
-  if (window->IsScreenCoordinatesEnabled()) {
-    EXPECT_TRUE(kSecondaryDisplayBounds.Contains(bounds_dip));
-  } else {
-    EXPECT_EQ(gfx::Rect(0, 0, 1, 1), bounds_dip);
-  }
-
-  // Set the primary display as the new window target.
-  scoped_display_new_windows.emplace(kPrimaryDisplayId);
-  init_properties = PlatformWindowInitProperties(gfx::Rect(0, 0));
-
-  // Init a new window with empty init bounds.
-  window = delegate.CreateWaylandWindow(connection_.get(),
-                                        std::move(init_properties));
-  ASSERT_TRUE(window);
-
-  // Assert the window is placed on the display for new windows, if supported.
-  bounds_dip = window->GetBoundsInDIP();
-  EXPECT_EQ(gfx::Size(1, 1), bounds_dip.size());
-  if (window->IsScreenCoordinatesEnabled()) {
-    EXPECT_TRUE(kPrimaryDisplayBounds.Contains(bounds_dip));
-  } else {
-    EXPECT_EQ(gfx::Rect(0, 0, 1, 1), bounds_dip);
-  }
-}
-
 // Asserts new windows ignore the display for new windows if bounds have been
 // explicitly specified.
 TEST_P(MultiDisplayWaylandWindowTest, NewWindowsRespectInitParamBounds) {
@@ -5502,8 +4737,9 @@ class PerSurfaceScaleWaylandWindowTest : public WaylandWindowTest {
       const PerSurfaceScaleWaylandWindowTest&) = delete;
 
   void SetUp() override {
-    CHECK(
-        !base::Contains(enabled_features_, features::kWaylandPerSurfaceScale));
+    CHECK(!base::Contains(
+        enabled_features_,
+        base::test::FeatureRef(features::kWaylandPerSurfaceScale)));
     enabled_features_.push_back(features::kWaylandPerSurfaceScale);
 
     WaylandWindowTest::SetUp();
@@ -5945,7 +5181,6 @@ TEST_P(PerSurfaceScaleWaylandWindowTest, UiScale_ForceDeviceScaleFactor) {
   EXPECT_EQ(window_->applied_state(), previous_state);
 }
 
-#if !BUILDFLAG(IS_CHROMEOS_LACROS)
 INSTANTIATE_TEST_SUITE_P(XdgVersionStableTest,
                          WaylandWindowTest,
                          Values(wl::ServerConfig{}));
@@ -5956,30 +5191,8 @@ INSTANTIATE_TEST_SUITE_P(XdgVersionStableTest,
                          PerSurfaceScaleWaylandWindowTest,
                          Values(wl::ServerConfig{
                              .supports_viewporter_surface_scaling = true}));
-#else
-INSTANTIATE_TEST_SUITE_P(
-    XdgVersionStableTestWithAuraShell,
-    WaylandWindowTest,
-    Values(wl::ServerConfig{
-        .enable_aura_shell = wl::EnableAuraShellProtocol::kEnabled}));
-INSTANTIATE_TEST_SUITE_P(
-    XdgVersionStableTestWithAuraShell,
-    MultiDisplayWaylandWindowTest,
-    Values(wl::ServerConfig{
-        .enable_aura_shell = wl::EnableAuraShellProtocol::kEnabled}));
-#endif
-
-#if !BUILDFLAG(IS_CHROMEOS_LACROS)
 INSTANTIATE_TEST_SUITE_P(XdgVersionStableTest,
                          WaylandSubsurfaceTest,
                          Values(wl::ServerConfig{}));
-
-#else
-INSTANTIATE_TEST_SUITE_P(
-    XdgVersionStableTestWithAuraShell,
-    WaylandSubsurfaceTest,
-    Values(wl::ServerConfig{
-        .enable_aura_shell = wl::EnableAuraShellProtocol::kEnabled}));
-#endif
 
 }  // namespace ui

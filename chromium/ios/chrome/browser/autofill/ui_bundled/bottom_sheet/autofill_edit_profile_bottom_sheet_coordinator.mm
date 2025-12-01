@@ -6,9 +6,10 @@
 
 #import <Foundation/Foundation.h>
 
+#import "base/debug/dump_without_crashing.h"
 #import "base/strings/sys_string_conversions.h"
-#import "components/autofill/core/browser/autofill_save_update_address_profile_delegate_ios.h"
 #import "components/autofill/core/browser/data_model/autofill_profile.h"
+#import "components/autofill/core/browser/form_import/addresses/autofill_save_update_address_profile_delegate_ios.h"
 #import "components/infobars/core/infobar.h"
 #import "ios/chrome/browser/autofill/model/bottom_sheet/autofill_bottom_sheet_tab_helper.h"
 #import "ios/chrome/browser/autofill/model/personal_data_manager_factory.h"
@@ -310,7 +311,7 @@
 
   InfoBarManagerImpl* manager = InfoBarManagerImpl::FromWebState(_webState);
   CHECK(manager);
-  const auto it = base::ranges::find(
+  const auto it = std::ranges::find(
       manager->infobars(), InfobarType::kInfobarTypeSaveAutofillAddressProfile,
       [](const infobars::InfoBar* infobar) {
         return static_cast<const InfoBarIOS*>(infobar)->infobar_type();

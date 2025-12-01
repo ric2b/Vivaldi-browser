@@ -17,7 +17,8 @@ describeWithMockConnection('StylePropertyHighlighter', () => {
   }> {
     const target = createTarget();
     UI.Context.Context.instance().setFlavor(SDK.DOMModel.DOMNode, sinon.createStubInstance(SDK.DOMModel.DOMNode));
-    const stylesSidebarPane = Elements.StylesSidebarPane.StylesSidebarPane.instance({forceNew: true});
+    const computedStyleModel = new Elements.ComputedStyleModel.ComputedStyleModel();
+    const stylesSidebarPane = new Elements.StylesSidebarPane.StylesSidebarPane(computedStyleModel);
     const matchedStyles = await SDK.CSSMatchedStyles.CSSMatchedStyles.create({
       cssModel: target.model(SDK.CSSModel.CSSModel)!,
       node: stylesSidebarPane.node() as SDK.DOMModel.DOMNode,
@@ -34,6 +35,9 @@ describeWithMockConnection('StylePropertyHighlighter', () => {
       cssPropertyRegistrations: [],
       fontPaletteValuesRule: undefined,
       activePositionFallbackIndex: -1,
+      animationStylesPayload: [],
+      transitionsStylePayload: null,
+      inheritedAnimatedPayload: [],
     });
     return {
       stylesSidebarPane,

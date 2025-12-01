@@ -2,8 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {SettingsCustomizePenButtonsSubpageElement} from 'chrome://os-settings/lazy_load.js';
-import {fakeGraphicsTabletButtonActions, fakeGraphicsTablets, FakeInputDeviceSettingsProvider, getInputDeviceSettingsProvider, GraphicsTablet, Router, routes, setupFakeInputDeviceSettingsProvider} from 'chrome://os-settings/os_settings.js';
+import 'chrome://os-settings/lazy_load.js';
+
+import type {SettingsCustomizePenButtonsSubpageElement} from 'chrome://os-settings/lazy_load.js';
+import type {FakeInputDeviceSettingsProvider, GraphicsTablet} from 'chrome://os-settings/os_settings.js';
+import {fakeGraphicsTabletButtonActions, fakeGraphicsTablets, getInputDeviceSettingsProvider, Router, routes, setupFakeInputDeviceSettingsProvider} from 'chrome://os-settings/os_settings.js';
 import {assertDeepEquals, assertEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
@@ -119,7 +122,7 @@ suite('<settings-customize-pen-buttons-subpage>', () => {
             Router.getInstance().currentRoute, routes.CUSTOMIZE_PEN_BUTTONS);
         assertEquals(
             'Add or locate buttons on your pen',
-            page.shadowRoot!.querySelector<HTMLDivElement>(
+            page.shadowRoot!.querySelector<HTMLElement>(
                                 '.help-title')!.textContent!.trim());
         // Go to the second pen subpage with metadata.
         const url = new URLSearchParams({
@@ -133,7 +136,7 @@ suite('<settings-customize-pen-buttons-subpage>', () => {
             Router.getInstance().currentRoute, routes.CUSTOMIZE_PEN_BUTTONS);
         assertEquals(
             'Locate buttons on your pen',
-            page.shadowRoot!.querySelector<HTMLDivElement>(
+            page.shadowRoot!.querySelector<HTMLElement>(
                                 '.help-title')!.textContent!.trim());
       });
 });

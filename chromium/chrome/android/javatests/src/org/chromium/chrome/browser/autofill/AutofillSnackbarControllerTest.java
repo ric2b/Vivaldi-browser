@@ -4,6 +4,9 @@
 
 package org.chromium.chrome.browser.autofill;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.verify;
 
 import android.widget.Button;
@@ -11,7 +14,6 @@ import android.widget.TextView;
 
 import androidx.test.filters.SmallTest;
 
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -22,7 +24,6 @@ import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
@@ -41,8 +42,6 @@ public class AutofillSnackbarControllerTest {
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
-    @Rule public JniMocker mMocker = new JniMocker();
-
     private static final String SNACKBAR_MESSAGE_TEXT = "message_text";
     private static final String SNACKBAR_ACTION_TEXT = "action_text";
     private static final int SNACKBAR_DURATION = 10000;
@@ -59,7 +58,7 @@ public class AutofillSnackbarControllerTest {
         mSnackbarManager = mActivityTestRule.getActivity().getSnackbarManager();
         mAutofillSnackbarController =
                 new AutofillSnackbarController(NATIVE_AUTOFILL_SNACKBAR_VIEW, mSnackbarManager);
-        mMocker.mock(AutofillSnackbarControllerJni.TEST_HOOKS, mNativeMock);
+        AutofillSnackbarControllerJni.setInstanceForTesting(mNativeMock);
     }
 
     @Test
@@ -68,14 +67,14 @@ public class AutofillSnackbarControllerTest {
         showSnackbar();
 
         Snackbar currentSnackbar = getCurrentSnackbar();
-        Assert.assertEquals(
+        assertEquals(
                 "Incorrect snackbar message text", SNACKBAR_MESSAGE_TEXT, getSnackbarMessageText());
-        Assert.assertEquals(
+        assertEquals(
                 "Incorrect snackbar action text", SNACKBAR_ACTION_TEXT, getSnackbarActionText());
-        Assert.assertEquals(
+        assertEquals(
                 "Incorrect snackbar duration", SNACKBAR_DURATION, currentSnackbar.getDuration());
 
-        Assert.assertTrue(
+        assertTrue(
                 "Incorrect SnackbarController type",
                 currentSnackbar.getController() instanceof AutofillSnackbarController);
     }
@@ -87,7 +86,7 @@ public class AutofillSnackbarControllerTest {
 
         dismissSnackbar();
 
-        Assert.assertNull(getCurrentSnackbar());
+        assertNull(getCurrentSnackbar());
         verify(mNativeMock).onDismissed(NATIVE_AUTOFILL_SNACKBAR_VIEW);
     }
 

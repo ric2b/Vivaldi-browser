@@ -53,7 +53,7 @@ TEST(DnsSdInstanceEndpointTests, ComparisonTests) {
 
 TEST(DnsSdInstanceEndpointTests, Constructors) {
   constexpr NetworkInterfaceIndex kIndex = 0;
-  std::vector<std::string> subtypes{"foo", "bar", "foobar"};
+  std::vector<std::string> subtypes = {"foo", "bar", "foobar"};
   IPEndpoint endpoint1{{192, 168, 12, 21}, 80};
   IPEndpoint endpoint2{{227, 0, 0, 1}, 80};
   DnsSdInstance instance("instance", "_test._tcp", "local", {}, 80, subtypes);

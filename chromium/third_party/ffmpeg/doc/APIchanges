@@ -2,6 +2,51 @@ The last version increases of all libraries were on 2024-03-07
 
 API changes, most recent first:
 
+2024-12-05 - xxxxxxxxxx - lavu 59.49.100 - csp.h
+  Add av_csp_itu_eotf() and av_csp_itu_eotf_inv().
+
+2024-12-05 - xxxxxxxxxx - lavu 59.48.100 - csp.h
+  Add av_csp_trc_func_inv_from_id().
+
+2024-11-25 - xxxxxxxxxx - lsws 8.12.100 - swscale.h
+  Allow using sws_frame_scale() dynamically, without first initializing the
+  SwsContext. Deprecate sws_init_context(). Add sws_frame_setup() instead.
+
+2024-11-25 - xxxxxxxxxx - lsws 8.11.100 - swscale.h
+  Replace #define-based SWS_* flags by enum SwsFlags.
+
+2024-11-25 - xxxxxxxxxx - lsws 8.10.100 - swscale.h
+  Publicly expose struct SwsContext, enum SwsDither, and enum SwsAlphaBlend.
+
+2024-11-16 - xxxxxxxxxx - lavu 59.47.101 - frame.h
+  av_frame_get_buffer() now also aligns the data pointers according to
+  the requested alignment.
+
+2024-11-13 - xxxxxxxxxx - lavu 59.47.100 - channel_layout.h
+  Add AV_CHAN_BINAURAL_LEFT, AV_CHAN_BINAURAL_RIGHT
+  Add AV_CH_BINAURAL_LEFT, AV_CH_BINAURAL_RIGHT
+  Add AV_CH_LAYOUT_BINAURAL, AV_CHANNEL_LAYOUT_BINAURAL
+
+2024-10-26 - xxxxxxxxxx - lavu 59.46.100 - pixfmt.h
+  Add AV_PIX_FMT_XV48.
+
+2024-10-23 - xxxxxxxxxx - lsws 8.9.100 - swscale.h
+  Add sws_is_noop().
+
+2024-10-23 - xxxxxxxxxx - lsws 8.8.100 - swscale.h
+  Add frame property testing API:
+    - sws_test_format()
+    - sws_test_colorspace()
+    - sws_test_primaries()
+    - sws_test_transfer()
+    - sws_test_frame()
+
+2024-10-23 - xxxxxxxxxx - lsws 8.7.100 - swscale.h
+  Add sws_free_context().
+
+2024-10-23 - xxxxxxxxxx - lavu 59.45.100 - pixfmt.h
+  Add AV_PIX_FMT_Y216.
+
 2024-10-15 - xxxxxxxxxx - lavu 59.44.100 - pixfmt.h
   Add AV_PIX_FMT_RGB96 and AV_PIX_FMT_RGBA128.
 

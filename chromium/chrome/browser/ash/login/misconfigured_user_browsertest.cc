@@ -47,7 +47,7 @@ namespace {
 
 constexpr char kMisconfiguredUserPref[] = "incomplete_login_user_account";
 constexpr char kMisconfiguredUserPrefV2[] = "incomplete_login_user_account_v2";
-constexpr char kNewUserGaiaId[] = "1234";
+constexpr GaiaId::Literal kNewUserGaiaId("1234");
 constexpr char kNewUserPassword[] = "password";
 constexpr char kNewUserEmail[] = "new-user@gmail.com";
 

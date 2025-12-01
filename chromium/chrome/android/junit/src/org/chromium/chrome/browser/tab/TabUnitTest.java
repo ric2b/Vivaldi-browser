@@ -18,6 +18,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -32,7 +33,6 @@ import androidx.annotation.Nullable;
 import androidx.test.filters.SmallTest;
 
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
@@ -40,11 +40,12 @@ import org.mockito.MockitoAnnotations;
 import org.robolectric.annotation.Config;
 
 import org.chromium.base.Token;
+import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.app.ChromeActivity;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.ui.native_page.NativePage;
 import org.chromium.components.autofill.AutofillFeatures;
@@ -64,8 +65,6 @@ import java.lang.ref.WeakReference;
 public class TabUnitTest {
     private static final int TAB1_ID = 456;
     private static final int TAB2_ID = 789;
-
-    @Rule public JniMocker mocker = new JniMocker();
 
     @Mock private AutofillProvider mAutofillProvider;
     @Mock private Profile mProfile;
@@ -94,10 +93,11 @@ public class TabUnitTest {
 
         doReturn(mWeakReferenceActivity).when(mWindowAndroid).getActivity();
         doReturn(mWeakReferenceContext).when(mWindowAndroid).getContext();
+        doReturn(new ObservableSupplierImpl<>(false)).when(mWindowAndroid).getOcclusionSupplier();
         doReturn(mActivity).when(mWeakReferenceActivity).get();
         doReturn(mContext).when(mWeakReferenceContext).get();
         doReturn(mContext).when(mContext).getApplicationContext();
-        mocker.mock(UserPrefsJni.TEST_HOOKS, mUserPrefsNatives);
+        UserPrefsJni.setInstanceForTesting(mUserPrefsNatives);
         when(mUserPrefsNatives.get(mProfile)).thenReturn(mPrefs);
 
         mTab =
@@ -240,7 +240,7 @@ public class TabUnitTest {
     @Test
     @SmallTest
     public void testFreezeDetachedNativePage() {
-        mocker.mock(TabImplJni.TEST_HOOKS, mNativeMock);
+        TabImplJni.setInstanceForTesting(mNativeMock);
 
         doReturn(mTabWebContentsDelegateAndroid)
                 .when(mDelegateFactory)
@@ -349,5 +349,26 @@ public class TabUnitTest {
     public void testDefaultInvalidTimestamp() {
         Tab tab = new TabImpl(1, mProfile, TabLaunchType.FROM_LINK);
         assertThat(tab.getTimestampMillis(), equalTo(TabImpl.INVALID_TIMESTAMP));
+    }
+
+    @Test
+    @SmallTest
+    @EnableFeatures({
+        ChromeFeatureList.ANDROID_DISCONNECT_FILE_CHOOSER_ON_TAB_DEACTIVATE_KILL_SWITCH
+    })
+    public void testDisconnectFileChooserOnChangeTabs() {
+        Tab tab =
+                new TabImpl(1, mProfile, TabLaunchType.FROM_LINK) {
+                    @Override
+                    public WebContents getWebContents() {
+                        return mWebContents;
+                    }
+                };
+
+        tab.hide(TabHidingType.ACTIVITY_HIDDEN);
+        verify(mWebContents, never()).disconnectFileSelectListenerIfAny();
+
+        tab.hide(TabHidingType.CHANGED_TABS);
+        verify(mWebContents, times(1)).disconnectFileSelectListenerIfAny();
     }
 }

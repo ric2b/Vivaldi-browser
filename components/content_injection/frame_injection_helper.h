@@ -4,6 +4,7 @@
 #define COMPONENTS_CONTENT_INJECTION_FRAME_INJECTION_HELPER_H_
 
 #include "components/content_injection/mojom/content_injection.mojom.h"
+#include "content/public/browser/child_process_id.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 
 namespace content {
@@ -23,11 +24,11 @@ class FrameInjectionHelper : public mojom::FrameInjectionHelper {
                      GetInjectionsCallback callback) override;
 
  private:
-  FrameInjectionHelper(int process_id, int frame_id);
+  FrameInjectionHelper(content::ChildProcessId process_id, int frame_id);
   FrameInjectionHelper(const FrameInjectionHelper&) = delete;
   FrameInjectionHelper& operator=(const FrameInjectionHelper&) = delete;
 
-  int process_id_;
+  content::ChildProcessId process_id_;
   int frame_id_;
 };
 

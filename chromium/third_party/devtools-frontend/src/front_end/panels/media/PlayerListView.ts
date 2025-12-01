@@ -53,6 +53,7 @@ export class PlayerListView extends UI.Widget.VBox implements TriggerDispatcher 
 
   constructor(mainContainer: MainView) {
     super(true);
+    this.registerRequiredCSS(playerListViewStyles);
 
     this.playerEntryFragments = new Map();
     this.playerEntriesWithHostnameFrameTitle = new Set();
@@ -249,10 +250,5 @@ export class PlayerListView extends UI.Widget.VBox implements TriggerDispatcher 
 
   onMessage(_playerID: string, _message: Protocol.Media.PlayerMessage): void {
     // TODO(tmathmeyer) show a message count number next to the player name.
-  }
-
-  override wasShown(): void {
-    super.wasShown();
-    this.registerCSSFiles([playerListViewStyles]);
   }
 }

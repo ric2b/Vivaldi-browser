@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "ui/gfx/render_text.h"
 
 #include <limits.h>
@@ -17,7 +22,6 @@
 #include "base/i18n/rtl.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
@@ -1548,7 +1552,7 @@ bool RenderText::IsHomogeneous() const {
     return false;
   }
 
-  return base::ranges::none_of(
+  return std::ranges::none_of(
       styles(), [](const auto& style) { return style.breaks().size() > 1; });
 }
 

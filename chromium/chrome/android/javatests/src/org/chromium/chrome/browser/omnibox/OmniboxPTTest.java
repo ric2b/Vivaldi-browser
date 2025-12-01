@@ -4,11 +4,13 @@
 
 package org.chromium.chrome.browser.omnibox;
 
+import android.os.Build;
 import android.util.Pair;
 
 import androidx.test.filters.LargeTest;
 
 import org.junit.AfterClass;
+import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
@@ -18,7 +20,7 @@ import org.chromium.base.test.transit.BatchedPublicTransitRule;
 import org.chromium.base.test.transit.TransitAsserts;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.JniMocker;
+import org.chromium.base.test.util.DisableIf;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
@@ -40,17 +42,19 @@ public class OmniboxPTTest {
     public static ChromeTabbedActivityTestRule sChromeTabbedActivityTestRule =
             new ChromeTabbedActivityTestRule();
 
-    @ClassRule public static JniMocker sJniMocker = new JniMocker();
-
     @Rule
     public BatchedPublicTransitRule<WebPageStation> mBatchedRule =
             new BatchedPublicTransitRule<>(WebPageStation.class, /* expectResetByTest= */ true);
 
-    private static final FakeOmniboxSuggestions sFakeSuggestions =
-            new FakeOmniboxSuggestions(sJniMocker);
+    private static final FakeOmniboxSuggestions sFakeSuggestions = new FakeOmniboxSuggestions();
 
     ChromeTabbedActivityPublicTransitEntryPoints mEntryPoints =
             new ChromeTabbedActivityPublicTransitEntryPoints(sChromeTabbedActivityTestRule);
+
+    @BeforeClass
+    public static void setUpClass() {
+        sFakeSuggestions.initMocks();
+    }
 
     @AfterClass
     public static void tearDownClass() {
@@ -59,6 +63,10 @@ public class OmniboxPTTest {
 
     @LargeTest
     @Test
+    @DisableIf.Build(
+            sdk_is_greater_than = Build.VERSION_CODES.R,
+            sdk_is_less_than = Build.VERSION_CODES.TIRAMISU,
+            message = "Flaky in S, crbug.com/372709072")
     public void testOpenTypeDelete_fromWebPage() {
         WebPageStation blankPage = mEntryPoints.startOnBlankPage(mBatchedRule);
         var omniboxAndKeyboard = blankPage.openOmnibox(sFakeSuggestions);

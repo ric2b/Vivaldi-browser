@@ -20,8 +20,6 @@
 - (void)setCurrentHostURL:(NSString*)host;
 // Tells the consumer the current host's favicon image
 - (void)setCurrentHostFavicon:(UIImage*)image;
-// Global Setting
--  (void)setGlobalPageZoom:(BOOL)enabled;
 
 @end
 

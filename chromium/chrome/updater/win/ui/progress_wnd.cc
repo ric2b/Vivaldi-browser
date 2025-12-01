@@ -2,13 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "chrome/updater/win/ui/progress_wnd.h"
 
+#include <algorithm>
+#include <array>
 #include <memory>
 #include <string>
 
@@ -16,7 +13,6 @@
 #include "base/logging.h"
 #include "base/notreached.h"
 #include "base/process/launch.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions_win.h"
 #include "base/strings/string_util.h"
 #include "base/strings/string_util_win.h"
@@ -37,47 +33,9 @@ namespace updater::ui {
 
 namespace {
 
-// The current UI shows to the user only one completion type, even though
-// there could be multiple applications in a bundle, where each application
-// could have a different completion type. The following array lists the
-// completion codes from low priority to high priority. The completion type
-// with highest priority will be shown to the user.
-constexpr CompletionCodes kCompletionCodesActionPriority[] = {
-    CompletionCodes::COMPLETION_CODE_EXIT_SILENTLY,
-    CompletionCodes::COMPLETION_CODE_EXIT_SILENTLY_ON_LAUNCH_COMMAND,
-    CompletionCodes::COMPLETION_CODE_SUCCESS,
-    CompletionCodes::COMPLETION_CODE_LAUNCH_COMMAND,
-    CompletionCodes::COMPLETION_CODE_RESTART_BROWSER_NOTICE_ONLY,
-    CompletionCodes::COMPLETION_CODE_RESTART_ALL_BROWSERS_NOTICE_ONLY,
-    CompletionCodes::COMPLETION_CODE_RESTART_BROWSER,
-    CompletionCodes::COMPLETION_CODE_RESTART_ALL_BROWSERS,
-    CompletionCodes::COMPLETION_CODE_REBOOT_NOTICE_ONLY,
-    CompletionCodes::COMPLETION_CODE_REBOOT,
-    CompletionCodes::COMPLETION_CODE_ERROR,
-    CompletionCodes::COMPLETION_CODE_INSTALL_FINISHED_BEFORE_CANCEL,
-};
-
-// |kCompletionCodesActionPriority| must have all the values in enumeration
-// CompletionCodes. The enumeration value starts from 1 so the array size
-// should match the last value in the enumeration.
-static_assert(
-    std::size(kCompletionCodesActionPriority) ==
-        static_cast<size_t>(
-            CompletionCodes::COMPLETION_CODE_INSTALL_FINISHED_BEFORE_CANCEL),
-    "completion code is missing");
-
-int GetPriority(CompletionCodes code) {
-  for (size_t i = 0; i < std::size(kCompletionCodesActionPriority); ++i) {
-    if (kCompletionCodesActionPriority[i] == code) {
-      return i;
-    }
-  }
-  NOTREACHED();
-}
-
 // Returns true if all apps are cancelled or if the range is empty.
 bool AreAllAppsCanceled(const std::vector<AppCompletionInfo>& apps_info) {
-  return base::ranges::all_of(apps_info, [](const AppCompletionInfo& app_info) {
+  return std::ranges::all_of(apps_info, [](const AppCompletionInfo& app_info) {
     return app_info.is_canceled;
   });
 }
@@ -483,7 +441,7 @@ CompletionCodes ProgressWnd::GetBundleCompletionCode(
 
   return info.apps_info.empty()
              ? kCompletionCodesActionPriority[0]
-             : base::ranges::max_element(
+             : std::ranges::max_element(
                    info.apps_info,
                    [](const auto& app_info1, const auto& app_info2) {
                      return GetPriority(app_info1.completion_code) <
@@ -622,8 +580,10 @@ void ProgressWnd::OnComplete(const ObserverCompletionInfo& observer_info) {
 }
 
 HRESULT ProgressWnd::ChangeControlState() {
-  for (const auto& ctl : ctls_) {
-    SetControlAttributes(ctl.id, ctl.attr[static_cast<size_t>(cur_state_)]);
+  for (const ControlState& ctl : ctls_) {
+    const size_t i = static_cast<size_t>(cur_state_);
+    CHECK_LE(i, std::size(ctl.attr));
+    SetControlAttributes(ctl.id, ctl.attr[i]);
   }
   return S_OK;
 }

@@ -119,6 +119,10 @@ NSString* avatarPlaceholder = @"person.circle.fill";
   return [self getCurrentAccountState] == LOGGED_IN;
 }
 
+- (BOOL)isSyncActive {
+  return !([self getCurrentSyncStatusState] != SYNC_STATE_STARTED_SUCCESS);
+}
+
 - (NSString*)accountUsername {
   if (![self hasSyncConsent])
     return nil;
@@ -394,6 +398,32 @@ NSString* avatarPlaceholder = @"person.circle.fill";
   if ([self.consumer respondsToSelector:selector]) {
     [self.consumer onVivaldiSyncCycleCompleted];
   }
+}
+
+- (BOOL)shouldShowSyncErrorDialog {
+  VivaldiAccountSimplifiedState accountState = [self getCurrentAccountState];
+  // if user is logged out, we don't show the sync error dialog
+  if (accountState == LOGGED_OUT) {
+    return NO;
+  }
+  // if user is missing credentials, we show the sync error dialog
+  if (accountState == CREDENTIALS_MISSING ||
+      accountState == LOGIN_FAILED ||
+      accountState == NOT_ACTIVATED) {
+    return YES;
+  }
+  // if sync is not enabled, we show the sync error dialog
+  // It will return true if user clicks on any sync button
+  if (!_syncService->IsSyncFeatureActive()) {
+    return YES;
+  }
+  //If encryption password is not entered, we show the sync error dialog
+  // Handles if encryption password is not entered
+  if (!_syncService->IsEngineInitialized()) {
+    return YES;
+  }
+  // default case
+  return NO;
 }
 
 @end

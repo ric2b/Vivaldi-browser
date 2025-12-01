@@ -71,8 +71,6 @@ class TensorStorage<T, DSizes<IndexType, NumIndices_>, Options_> {
       m_data = internal::conditional_aligned_new_auto<T, (Options_ & DontAlign) == 0>(1);
     }
   }
-  EIGEN_DEVICE_FUNC TensorStorage(internal::constructor_without_unaligned_array_assert)
-      : m_data(0), m_dimensions(internal::template repeat<NumIndices_, Index>(0)) {}
   EIGEN_DEVICE_FUNC TensorStorage(Index size, const array<Index, NumIndices_>& dimensions)
       : m_data(internal::conditional_aligned_new_auto<T, (Options_ & DontAlign) == 0>(size)), m_dimensions(dimensions) {
     EIGEN_INTERNAL_TENSOR_STORAGE_CTOR_PLUGIN

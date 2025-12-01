@@ -3,12 +3,16 @@
 #import "ios/ui/site_tracker_prefs/vivaldi_site_tracker_prefs_mediator.h"
 
 #import "base/apple/foundation_util.h"
+#import "base/strings/sys_string_conversions.h"
 #import "components/favicon/ios/web_favicon_driver.h"
+#import "components/search_engines/template_url_service.h"
+#import "components/search_engines/template_url.h"
+#import "ios/chrome/browser/page_info/ui_bundled/page_info_site_security_description.h"
+#import "ios/chrome/browser/page_info/ui_bundled/page_info_site_security_mediator.h"
+#import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
-#import "ios/chrome/browser/ui/page_info/page_info_site_security_description.h"
-#import "ios/chrome/browser/ui/page_info/page_info_site_security_mediator.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/ui/ad_tracker_blocker/cells/vivaldi_atb_setting_item.h"
 #import "ios/ui/ad_tracker_blocker/manager/vivaldi_atb_manager.h"
@@ -25,6 +29,25 @@
 #import "ios/web/public/web_state.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
+
+namespace {
+NSString* vivaldiDomain = @"vivaldi.com";
+
+bool IsDomainOrSubdomain(const std::string& host, const std::string& domain) {
+    if (host == domain) {
+        return true;
+    }
+    // Build ".<domain>" once to avoid repeated string concatenation
+    std::string dotDomain = "." + domain;
+    // If host is strictly longer than dotDomain and ends with dotDomain
+    if (host.size() > dotDomain.size() &&
+        host.compare(host.size() - dotDomain.size(),
+                     dotDomain.size(), dotDomain) == 0) {
+        return true;
+    }
+    return false;
+}
+}
 
 @interface VivaldiSiteTrackerPrefsMediator ()<CRWWebStateObserver,
                                               VivaldiATBConsumer> {
@@ -61,6 +84,7 @@
     [self.consumer setActiveWebStateDomain:self.activePageDomain];
     [self setUpWebStateObserver];
     [self updateSiteSecurityDescription];
+    [self updateAdsExceptionBannerItem];
   }
   return self;
 }
@@ -128,11 +152,7 @@
 - (NSString*)activePageDomain {
   GURL visibleURL = self.activeWebState->GetVisibleURL();
   NSString* visibleURLString = base::SysUTF8ToNSString(visibleURL.spec());
-  NSURL *visibleNSURL = [NSURL URLWithString:visibleURLString];
-  if (visibleNSURL && visibleNSURL.host) {
-    return visibleNSURL.host;
-  }
-  return nil;
+  return [VivaldiGlobalHelpers hostOfURLString:visibleURLString];
 }
 
 - (ATBSettingType)blockingLevelForSite:(NSString*)site {
@@ -153,6 +173,55 @@
   return [self.adblockManager isApplyingExceptionRules];
 }
 
+- (BOOL)adsExceptionsEnabled {
+  if (!self.adblockManager)
+    return NO;
+  if ([self blockingLevelForSite:self.activePageDomain]
+          == ATBSettingNoBlocking) {
+    return NO;
+  }
+  GURL visibleURL = self.activeWebState->GetVisibleURL();
+  // If visited page is a vivaldi.com page then do not show the exception
+  // block.
+  std::string host = visibleURL.host();
+  std::string vivaldi_domain = base::SysNSStringToUTF8(vivaldiDomain);
+  if (IsDomainOrSubdomain(host, vivaldi_domain)) {
+    return NO;
+  }
+  return [self.adblockManager isBlockingExceptionsForURL:visibleURL];
+}
+
+- (NSString*)adsExceptionsMessage {
+  TemplateURLService* templateURLService =
+      ios::TemplateURLServiceFactory::GetForProfile(_browser->GetProfile());
+  if (!templateURLService) {
+    return l10n_util::GetNSString
+        (IDS_IOS_VIVALDI_AD_AND_TRACKER_BLOCKER_AD_EXCEPTIONS_EXPANDED_DESCRIPTION_GENERIC);
+  }
+  GURL visibleURL = self.activeWebState->GetVisibleURL();
+  std::string host = visibleURL.host();
+  TemplateURL* templateURL =
+      templateURLService->GetTemplateURLForHost(visibleURL.host());
+  if (!templateURL) {
+    return l10n_util::GetNSString
+        (IDS_IOS_VIVALDI_AD_AND_TRACKER_BLOCKER_AD_EXCEPTIONS_EXPANDED_DESCRIPTION_GENERIC);
+  }
+  return l10n_util::GetNSStringF(
+      IDS_IOS_VIVALDI_AD_AND_TRACKER_BLOCKER_AD_EXCEPTIONS_EXPANDED_DESCRIPTION,
+          templateURL->short_name());
+}
+
+- (void)updateAdsExceptionBannerItem {
+  if ([self adsExceptionsEnabled] &&
+      [[self adsExceptionsMessage] length] > 0) {
+    [self.consumer setAdsExceptionEnabled:YES
+                                  message:[self adsExceptionsMessage]];
+  } else {
+    [self.consumer setAdsExceptionEnabled:NO
+                                  message:nil];
+  }
+}
+
 - (void)notifyCommonConsumers {
   [self.consumer setGlobalBlockingLevel:[self defaultBlockingLevel]];
   [self.consumer
@@ -161,6 +230,7 @@
   [self.consumer setRulesGroupApplying:[self isRulesApplying]];
   [self.consumer setActiveWebStateFavicon:[self favicon]];
   [self updateSiteSecurityDescription];
+  [self updateAdsExceptionBannerItem];
 }
 
 #pragma mark - Properties
@@ -178,6 +248,7 @@
           [self blockingLevelForSite:self.activePageDomain]];
   [self.consumer setGlobalBlockingLevel:[self defaultBlockingLevel]];
   [self.consumer setRulesGroupApplying:[self isRulesApplying]];
+  [self updateAdsExceptionBannerItem];
 
   // Site info
   [self.consumer

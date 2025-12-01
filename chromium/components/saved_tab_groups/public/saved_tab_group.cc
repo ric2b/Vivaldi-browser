@@ -5,13 +5,13 @@
 #include "components/saved_tab_groups/public/saved_tab_group.h"
 
 #include <algorithm>
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
 
 #include "base/metrics/histogram_functions.h"
 #include "base/not_fatal_until.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/uuid.h"
@@ -20,12 +20,17 @@
 #include "components/sync/protocol/saved_tab_group_specifics.pb.h"
 #include "components/tab_groups/tab_group_color.h"
 #include "components/tab_groups/tab_group_id.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "ui/gfx/image/image.h"
 #include "url/gurl.h"
 
 namespace tab_groups {
 
 namespace {
+
+// The maximum number of the last removed tabs to keep metadata. This is used to
+// prevent keeping all the removed tabs when the group is huge.
+constexpr size_t kMaxLastRemovedTabsMetadata = 100;
 
 bool ShouldPlaceNewTabBeforeExistingTab(const SavedTabGroupTab& new_tab,
                                         const SavedTabGroupTab& existing_tab) {
@@ -80,6 +85,9 @@ SavedTabGroup& SavedTabGroup::operator=(SavedTabGroup&& other) = default;
 
 SavedTabGroup::~SavedTabGroup() = default;
 
+SavedTabGroup::RemovedTabMetadata::RemovedTabMetadata() = default;
+SavedTabGroup::RemovedTabMetadata::~RemovedTabMetadata() = default;
+
 const SavedTabGroupTab* SavedTabGroup::GetTab(
     const base::Uuid& saved_tab_guid) const {
   std::optional<int> index = GetIndexOfTab(saved_tab_guid);
@@ -126,7 +134,7 @@ bool SavedTabGroup::ContainsTab(const LocalTabID& local_tab_id) const {
 
 std::optional<int> SavedTabGroup::GetIndexOfTab(
     const base::Uuid& saved_tab_guid) const {
-  auto it = base::ranges::find_if(
+  auto it = std::ranges::find_if(
       saved_tabs(), [saved_tab_guid](const SavedTabGroupTab& tab) {
         return tab.saved_tab_guid() == saved_tab_guid;
       });
@@ -138,10 +146,10 @@ std::optional<int> SavedTabGroup::GetIndexOfTab(
 
 std::optional<int> SavedTabGroup::GetIndexOfTab(
     const LocalTabID& local_tab_id) const {
-  auto it = base::ranges::find_if(saved_tabs(),
-                                  [local_tab_id](const SavedTabGroupTab& tab) {
-                                    return tab.local_tab_id() == local_tab_id;
-                                  });
+  auto it = std::ranges::find_if(saved_tabs(),
+                                 [local_tab_id](const SavedTabGroupTab& tab) {
+                                   return tab.local_tab_id() == local_tab_id;
+                                 });
   if (it != saved_tabs().end()) {
     return it - saved_tabs().begin();
   }
@@ -214,16 +222,41 @@ SavedTabGroup& SavedTabGroup::SetPinned(bool pinned) {
 }
 
 SavedTabGroup& SavedTabGroup::SetCollaborationId(
-    std::optional<std::string> collaboration_id) {
+    std::optional<CollaborationId> collaboration_id) {
   collaboration_id_ = std::move(collaboration_id);
   SetUpdateTimeWindowsEpochMicros(base::Time::Now());
   return *this;
 }
 
-SavedTabGroup& SavedTabGroup::SetOriginatingSavedTabGroupGuid(
-    std::optional<base::Uuid> originating_saved_tab_group_guid) {
-  originating_saved_tab_group_guid_ =
-      std::move(originating_saved_tab_group_guid);
+SavedTabGroup& SavedTabGroup::SetOriginatingTabGroupGuid(
+    std::optional<base::Uuid> originating_tab_group_guid) {
+  originating_tab_group_guid_ = std::move(originating_tab_group_guid);
+  return *this;
+}
+
+SavedTabGroup& SavedTabGroup::SetIsTransitioningToSaved(
+    bool is_transitioning_to_saved) {
+  DCHECK(is_shared_tab_group() || !is_transitioning_to_saved);
+  is_transitioning_to_saved_ = is_transitioning_to_saved;
+  return *this;
+}
+
+SavedTabGroup& SavedTabGroup::SetUpdatedByAttribution(GaiaId updated_by) {
+  if (shared_attribution_.created_by.empty()) {
+    shared_attribution_.created_by = updated_by;
+  }
+  shared_attribution_.updated_by = std::move(updated_by);
+  return *this;
+}
+
+SavedTabGroup& SavedTabGroup::SetCreatedByAttribution(GaiaId created_by) {
+  CHECK(shared_attribution_.created_by.empty());
+  shared_attribution_.created_by = std::move(created_by);
+  return *this;
+}
+
+SavedTabGroup& SavedTabGroup::SetIsHidden(bool is_hidden) {
+  is_hidden_ = is_hidden;
   return *this;
 }
 
@@ -258,8 +291,27 @@ SavedTabGroup& SavedTabGroup::RemoveTabLocally(
 
 SavedTabGroup& SavedTabGroup::RemoveTabFromSync(
     const base::Uuid& saved_tab_guid,
+    GaiaId removed_by,
     bool ignore_empty_groups_for_testing) {
-  RemoveTabImpl(saved_tab_guid, ignore_empty_groups_for_testing);
+  CHECK(removed_by.empty() || is_shared_tab_group());
+  if (!removed_by.empty()) {
+    last_removed_tabs_metadata_[saved_tab_guid].removed_by =
+        std::move(removed_by);
+    last_removed_tabs_metadata_[saved_tab_guid].removal_time =
+        base::Time::Now();
+
+    // Clean up old removed tabs metadata.
+    if (last_removed_tabs_metadata_.size() > kMaxLastRemovedTabsMetadata) {
+      // Erase only one minimal element because it should be the case in
+      // practice.
+      last_removed_tabs_metadata_.erase(std::ranges::min_element(
+          last_removed_tabs_metadata_, std::ranges::less(),
+          [](const auto& guid_and_metadata) {
+            return guid_and_metadata.second.removal_time;
+          }));
+    }
+  }
+  RemoveTabImpl(saved_tab_guid, /*allow_empty_groups=*/true);
   SetUpdateTimeWindowsEpochMicros(base::Time::Now());
   return *this;
 }
@@ -371,7 +423,7 @@ void SavedTabGroup::MergeRemoteGroupMetadata(
   SetColor(color);
   if (position.has_value()) {
     SetPosition(position.value());
-  } else if (IsTabGroupsSaveUIUpdateEnabled()) {
+  } else {
     SetPinned(false);
   }
 
@@ -387,35 +439,32 @@ bool SavedTabGroup::IsSyncEquivalent(const SavedTabGroup& other) const {
 }
 
 SavedTabGroup SavedTabGroup::CloneAsSharedTabGroup(
-    std::string collaboration_id) const {
-  SavedTabGroup shared_group(title(), color(), /*urls=*/{});
+    CollaborationId collaboration_id) const {
+  SavedTabGroup shared_group = CopyBaseFieldsWithTabs();
+  shared_group.is_transitioning_to_shared_ = true;
   shared_group.SetCollaborationId(std::move(collaboration_id));
-  shared_group.SetOriginatingSavedTabGroupGuid(saved_guid());
-
-  for (size_t i = 0; i < saved_tabs().size(); ++i) {
-    const SavedTabGroupTab& tab = saved_tabs()[i];
-
-    // Use tab's index as a position for shared tabs because shared tab groups
-    // use unique positions for syncing tabs.
-    SavedTabGroupTab shared_tab(tab.url(), tab.title(),
-                                shared_group.saved_guid(), /*position=*/i);
-    shared_tab.SetFavicon(tab.favicon());
-    shared_group.AddTabLocally(std::move(shared_tab));
-  }
+  shared_group.SetOriginatingTabGroupGuid(saved_guid());
   return shared_group;
 }
 
-bool SavedTabGroup::IsPendingSanitization() const {
-  for (const auto& tab : saved_tabs()) {
-    if (tab.is_pending_sanitization()) {
-      return true;
-    }
-  }
-  return false;
+SavedTabGroup SavedTabGroup::CloneAsSavedTabGroup() const {
+  DCHECK(is_shared_tab_group());
+  SavedTabGroup saved_group = CopyBaseFieldsWithTabs();
+  saved_group.SetOriginatingTabGroupGuid(saved_guid());
+  return saved_group;
+}
+
+// static
+size_t SavedTabGroup::GetMaxLastRemovedTabsMetadataForTesting() {
+  return kMaxLastRemovedTabsMetadata;
+}
+
+void SavedTabGroup::MarkTransitionedToShared() {
+  is_transitioning_to_shared_ = false;
 }
 
 void SavedTabGroup::RemoveTabImpl(const base::Uuid& saved_tab_guid,
-                                  bool ignore_empty_groups_for_testing) {
+                                  bool allow_empty_groups) {
   std::optional<size_t> index = GetIndexOfTab(saved_tab_guid);
   CHECK(index.has_value());
   CHECK_GE(index.value(), 0u);
@@ -425,8 +474,23 @@ void SavedTabGroup::RemoveTabImpl(const base::Uuid& saved_tab_guid,
   base::UmaHistogramBoolean(
       "TabGroups.SavedTabGroups.TabRemovedFromGroupWasLastTab",
       saved_tabs_.empty());
-  CHECK(ignore_empty_groups_for_testing || !saved_tabs_.empty(),
-        base::NotFatalUntil::M135);
+  CHECK(allow_empty_groups || !saved_tabs_.empty(), base::NotFatalUntil::M135);
+}
+
+SavedTabGroup SavedTabGroup::CopyBaseFieldsWithTabs() const {
+  SavedTabGroup cloned_group(title(), color(), /*urls=*/{});
+
+  for (size_t i = 0; i < saved_tabs().size(); ++i) {
+    const SavedTabGroupTab& tab = saved_tabs()[i];
+
+    // Use tab's index as position for the copied tab as tabs are
+    // displayed in the same order.
+    SavedTabGroupTab cloned_tab(tab.url(), tab.title(),
+                                cloned_group.saved_guid(), /*position=*/i);
+    cloned_tab.SetFavicon(tab.favicon());
+    cloned_group.AddTabLocally(std::move(cloned_tab));
+  }
+  return cloned_group;
 }
 
 }  // namespace tab_groups

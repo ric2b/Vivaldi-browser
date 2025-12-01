@@ -57,6 +57,8 @@ class StateAndLogs {
   virtual TabStateAndLogs* GetTabHelper(
       content::WebContents* contents) const = 0;
 
+  virtual void CreateTabHelper(content::WebContents* contents) = 0;
+
   virtual void AddObserver(Observer* observer) = 0;
   virtual void RemoveObserver(Observer* observer) = 0;
 };

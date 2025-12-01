@@ -7,15 +7,16 @@
                                   'modulesTabResumptionTitle')}"
     @disable-button-click="${this.onDisableButtonClick_}"
     @dismiss-button-click="${this.onDismissAllButtonClick_}"
-    @info-button-click="${this.onInfoButtonClick_}"
-    @menu-button-click="${this.onMenuButtonClick_}">
+    @info-button-click="${this.onInfoButtonClick_}">
 </ntp-module-header-v2>
 <div id="urlVisits">
   ${this.getVisibleUrlVisits_().map((item, index) => html`
     <a class="url-visit" href="${item.url.url}"
         @click="${this.onUrlVisitClick_}" data-index="${index}">
       <div id="hoverLayer"></div>
-      <page-favicon class="icon" .url="${item.url}" size="24">
+      <page-favicon class="icon" .url="${item.url}" size="24"
+                    .isKnownToSync="${this.useIsKnownToSync_ &&
+                    item.isKnownToSync}">
       </page-favicon>
       <div class="url-visit-info">
         <div class="url-visit-title">${item.title}</div>

@@ -41,7 +41,7 @@ control and over how Chromium handles user data.
 
 Features that communicate with Google made available through the compilation
 of code in Chromium are subject to the
-[Google Privacy Policy](http://www.google.com/policies/privacy/).
+[Google Privacy Policy](https://www.google.com/policies/privacy/).
 Learn more about Google Chrome's privacy features
 [here](https://www.google.com/chrome/#safe) and specifically about the Privacy
 Sandbox effort [here](https://www.google.com/chrome/privacy-on-the-web/).

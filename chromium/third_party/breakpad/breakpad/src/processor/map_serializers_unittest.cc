@@ -31,12 +31,15 @@
 //
 // Author: Siyang Xie (lambxsy@google.com)
 
-#include <cstdint>
 #ifdef HAVE_CONFIG_H
 #include <config.h>  // Must come first
 #endif
 
-#include <climits>
+#include "map_serializers-inl.h"
+
+#include <limits.h>
+#include <stdint.h>
+
 #include <map>
 #include <string>
 #include <utility>
@@ -44,8 +47,6 @@
 #include <sstream>
 
 #include "breakpad_googletest_includes.h"
-#include "map_serializers-inl.h"
-
 #include "processor/address_map-inl.h"
 #include "processor/range_map-inl.h"
 #include "processor/contained_range_map-inl.h"

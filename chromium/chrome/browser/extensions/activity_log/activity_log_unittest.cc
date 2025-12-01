@@ -2,15 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "chrome/browser/extensions/activity_log/activity_log.h"
 
 #include <stddef.h>
 
+#include <array>
 #include <memory>
 
 #include "base/command_line.h"
@@ -47,7 +43,7 @@ namespace {
 
 const char kExtensionId[] = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
-const char* const kUrlApiCalls[] = {
+const auto kUrlApiCalls = std::to_array<const char*>({
     "HTMLButtonElement.formAction", "HTMLEmbedElement.src",
     "HTMLFormElement.action",       "HTMLFrameElement.src",
     "HTMLHtmlElement.manifest",     "HTMLIFrameElement.src",
@@ -58,7 +54,8 @@ const char* const kUrlApiCalls[] = {
     "HTMLModElement.cite",          "HTMLObjectElement.data",
     "HTMLQuoteElement.cite",        "HTMLScriptElement.src",
     "HTMLSourceElement.src",        "HTMLTrackElement.src",
-    "HTMLVideoElement.poster"};
+    "HTMLVideoElement.poster",
+});
 
 }  // namespace
 
@@ -97,8 +94,7 @@ class InterceptingRendererStartupHelper : public RendererStartupHelper,
   void CancelSuspendExtension(const std::string& extension_id) override {}
   void SetDeveloperMode(bool current_developer_mode) override {}
   void SetSessionInfo(version_info::Channel channel,
-                      mojom::FeatureSessionType session,
-                      bool is_lock_screen_context) override {}
+                      mojom::FeatureSessionType session) override {}
   void SetSystemFont(const std::string& font_family,
                      const std::string& font_size) override {}
   void SetWebViewPartitionID(const std::string& partition_id) override {}
@@ -494,8 +490,8 @@ TEST_F(ActivityLogTest, DeleteActivitiesByExtension) {
 
 class ActivityLogTestWithoutSwitch : public ActivityLogTest {
  public:
-  ActivityLogTestWithoutSwitch() {}
-  ~ActivityLogTestWithoutSwitch() override {}
+  ActivityLogTestWithoutSwitch() = default;
+  ~ActivityLogTestWithoutSwitch() override = default;
   bool enable_activity_logging_switch() const override { return false; }
 };
 

@@ -111,16 +111,17 @@ cd ~/trunk/src/platform/ec
 make BOARD=plankton
 ```
 
-### Firmware image will be located under build/plankton/ec.bin
+Firmware image will be located under build/plankton/ec.bin
 
-### If your chroot tree is newly-built, you may encounter an error while "make BOARD=plankton"
-### Try to type this command first:
+If your chroot tree is newly-built, you may encounter an error while
+`make BOARD=plankton`.
+Try to type this command first:
 
-### ```none
+```none
 ~/trunk/src/scripts/setup_board --board=peach_pit --nousepkg
 ```
 
-### and then try "make BOARD=plankton" again.
+and then try "make BOARD=plankton" again.
 
 ### Running Servod
 

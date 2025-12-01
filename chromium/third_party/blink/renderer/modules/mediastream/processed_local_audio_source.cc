@@ -13,6 +13,7 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/to_string.h"
 #include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "build/chromecast_buildflags.h"
@@ -78,22 +79,15 @@ std::string GetAudioProcesingPropertiesLogString(
             return "system";
         }
       };
-  auto bool_to_string = [](bool value) { return value ? "true" : "false"; };
   auto str = base::StringPrintf(
       "aec: %s, "
       "disable_hw_ns: %s, "
-      "goog_audio_mirroring: %s, "
-      "goog_auto_gain_control: %s, "
-      "goog_noise_suppression: %s, "
-      "goog_experimental_noise_suppression: %s, "
-      "goog_highpass_filter: %s, ",
+      "auto_gain_control: %s, "
+      "noise_suppression: %s",
       aec_to_string(properties.echo_cancellation_type),
-      bool_to_string(properties.disable_hw_noise_suppression),
-      bool_to_string(properties.goog_audio_mirroring),
-      bool_to_string(properties.goog_auto_gain_control),
-      bool_to_string(properties.goog_noise_suppression),
-      bool_to_string(properties.goog_experimental_noise_suppression),
-      bool_to_string(properties.goog_highpass_filter));
+      base::ToString(properties.disable_hw_noise_suppression).c_str(),
+      base::ToString(properties.auto_gain_control).c_str(),
+      base::ToString(properties.noise_suppression).c_str());
   return str;
 }
 
@@ -261,7 +255,7 @@ bool ProcessedLocalAudioSource::EnsureSourceIsStarted() {
       // dictate that.
       disable_system_noise_suppression =
           disable_system_noise_suppression ||
-          !audio_processing_properties_.goog_noise_suppression;
+          !audio_processing_properties_.noise_suppression;
     }
 
     if (disable_system_noise_suppression) {
@@ -286,7 +280,7 @@ bool ProcessedLocalAudioSource::EnsureSourceIsStarted() {
     // that.
     disable_system_automatic_gain_control =
         disable_system_automatic_gain_control ||
-        !audio_processing_properties_.goog_auto_gain_control;
+        !audio_processing_properties_.auto_gain_control;
 
     if (disable_system_automatic_gain_control) {
       modified_device.input.set_effects(
@@ -382,14 +376,14 @@ bool ProcessedLocalAudioSource::EnsureSourceIsStarted() {
       AudioProcessingProperties::EchoCancellationType::
           kEchoCancellationSystem) {
     if (!IsIndependentSystemNsAllowed()) {
-      if (audio_processing_properties_.goog_noise_suppression) {
+      if (audio_processing_properties_.noise_suppression) {
         audio_processing_properties_.system_noise_suppression_activated =
             device().input.effects() &
             media::AudioParameters::NOISE_SUPPRESSION;
       }
     }
 
-    if (audio_processing_properties_.goog_auto_gain_control) {
+    if (audio_processing_properties_.auto_gain_control) {
       audio_processing_properties_.system_gain_control_activated =
           device().input.effects() &
           media::AudioParameters::AUTOMATIC_GAIN_CONTROL;
@@ -541,8 +535,7 @@ void ProcessedLocalAudioSource::Capture(
     const media::AudioBus* audio_bus,
     base::TimeTicks audio_capture_time,
     const media::AudioGlitchInfo& glitch_info,
-    double volume,
-    bool key_pressed) {
+    double volume) {
   TRACE_EVENT1("audio", "ProcessedLocalAudioSource::Capture", "capture-time",
                audio_capture_time);
   glitch_info_accumulator_.Add(glitch_info);
@@ -558,8 +551,7 @@ void ProcessedLocalAudioSource::Capture(
     // Passing audio to the audio processor is sufficient, the processor will
     // return it to DeliverProcessedAudio() via the registered callback.
     media_stream_audio_processor_->ProcessCapturedAudio(
-        *audio_bus, audio_capture_time, num_preferred_channels, volume,
-        key_pressed);
+        *audio_bus, audio_capture_time, num_preferred_channels, volume);
     return;
   }
 
@@ -585,7 +577,7 @@ void ProcessedLocalAudioSource::OnCaptureError(
 
 void ProcessedLocalAudioSource::OnCaptureMuted(bool is_muted) {
   SendLogMessageWithSessionId(base::StringPrintf(
-      "OnCaptureMuted({is_muted=%s})", is_muted ? "true" : "false"));
+      "OnCaptureMuted({is_muted=%s})", base::ToString(is_muted).c_str()));
   SetMutedState(is_muted);
 }
 

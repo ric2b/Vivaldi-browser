@@ -11,6 +11,7 @@
 #include "base/time/time.h"
 #include "base/types/expected.h"
 #include "components/optimization_guide/core/model_execution/feature_keys.h"
+#include "components/optimization_guide/core/model_execution/multimodal_message.h"
 #include "components/optimization_guide/core/model_execution/optimization_guide_model_execution_error.h"
 #include "components/optimization_guide/core/model_quality/model_quality_log_entry.h"
 #include "components/optimization_guide/proto/model_execution.pb.h"
@@ -43,6 +44,11 @@ struct StreamingResponse {
 
   // True if streaming has finished.
   bool is_complete = false;
+
+  // The number of tokens in this response's input.
+  size_t input_token_count = 0;
+  // The number of tokens in this response.
+  size_t output_token_count = 0;
 };
 
 struct OptimizationGuideModelStreamingExecutionResult {
@@ -180,6 +186,9 @@ enum class OnDeviceModelEligibilityReason {
   kMaxValue = kNoOnDeviceFeatureUsed,
 };
 
+std::ostream& operator<<(std::ostream& out,
+                         const OnDeviceModelEligibilityReason& val);
+
 // Observer that is notified when the on-device model availability changes for
 // the on-device eligible features.
 class OnDeviceModelAvailabilityObserver : public base::CheckedObserver {
@@ -210,6 +219,12 @@ struct TokenLimits {
   uint32_t max_output_tokens = 0;
 };
 
+// The configuration that specifies the default sampling params.
+struct SamplingParamsConfig {
+  uint32_t default_top_k;
+  float default_temperature;
+};
+
 // Interface for model execution.
 class OptimizationGuideModelExecutor {
  public:
@@ -221,6 +236,15 @@ class OptimizationGuideModelExecutor {
     virtual ~Session() = default;
 
     virtual const TokenLimits& GetTokenLimits() const = 0;
+
+    // Sets the input context for this session, replacing any previous context.
+    // This will generate prompt text from the feature config's
+    // "input_context_substitutions". Data provided here (including images) will
+    // be merged with data provided to an ExecuteModel() call and be available
+    // for use in later prompt templates based on the request. Calling this will
+    // cancel any ongoing executions and invoke their 'callback' methods with
+    // the 'kCancelled' error.
+    virtual void SetInput(MultimodalMessage request) = 0;
 
     // Adds context to this session. This will be saved for future Execute()
     // calls. Calling multiple times will replace previous calls to
@@ -273,13 +297,6 @@ class OptimizationGuideModelExecutor {
     // OnDeviceModelExecutionFeatureConfig.
     virtual const proto::Any& GetOnDeviceFeatureMetadata() const = 0;
   };
-
-  // Whether an on-device session can be created for `feature`. An optional
-  // `on_device_model_eligibility_reason` parameter can be provided for more
-  // detailed reasons for why an on-device session could not be created.
-  virtual bool CanCreateOnDeviceSession(
-      ModelBasedCapabilityKey feature,
-      OnDeviceModelEligibilityReason* on_device_model_eligibility_reason) = 0;
 
   // Starts a session which allows streaming input and output from the model.
   // May return nullptr if model execution is not supported. This session should

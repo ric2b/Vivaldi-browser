@@ -30,13 +30,14 @@
 #include "components/prefs/pref_member.h"
 #include "content/public/browser/storage_partition.h"
 #include "net/net_buildflags.h"
+#include "net/ssl/client_cert_matcher.h"
 #include "services/cert_verifier/public/mojom/cert_verifier_service_factory.mojom-forward.h"
 #include "services/network/public/mojom/cert_verifier_service_updater.mojom.h"
 #include "services/network/public/mojom/cookie_manager.mojom-forward.h"
 #include "services/network/public/mojom/network_context.mojom-forward.h"
 
 #if BUILDFLAG(CHROME_ROOT_STORE_CERT_MANAGEMENT_UI)
-#include "chrome/browser/net/server_certificate_database.h"  // nogncheck
+#include "components/server_certificate_database/server_certificate_database.h"  // nogncheck
 #endif
 
 class PrefRegistrySimple;
@@ -97,7 +98,9 @@ class ProfileNetworkContextService
 
     cert_verifier::mojom::AdditionalCertificatesPtr certificate_policies;
 
+#if !BUILDFLAG(IS_CHROMEOS)
     bool is_include_system_trust_store_managed;
+#endif
 
     std::vector<std::vector<uint8_t>> full_distrusted_certs;
   };
@@ -120,11 +123,6 @@ class ProfileNetworkContextService
       const net::HostPortPair& host,
       const scoped_refptr<net::X509Certificate>& certificate);
 
-  // Flushes a cached client certificate preference if |certificate| matches
-  // the cached certificate.
-  void FlushMatchingCachedClientCert(
-      const scoped_refptr<net::X509Certificate>& certificate);
-
   // Flushes all pending proxy configuration changes.
   void FlushProxyConfigMonitorForTesting();
 
@@ -138,6 +136,13 @@ class ProfileNetworkContextService
 
   // Get platform ClientCertStore. May return nullptr.
   std::unique_ptr<net::ClientCertStore> CreateClientCertStore();
+
+#if BUILDFLAG(IS_CHROMEOS)
+  // Returns a factory callback that may be run to get the issuer sources for
+  // client cert pathbuilding. The factory callback may run its result callback
+  // either synchronously or asynchronously.
+  net::ClientCertIssuerSourceGetter GetClientCertIssuerSourceFactory();
+#endif
 
  private:
   FRIEND_TEST_ALL_PREFIXES(ProfileNetworkContextServiceBrowsertest,
@@ -186,6 +191,14 @@ class ProfileNetworkContextService
   // added certificates.
   void UpdateAdditionalCertificatesWithUserAddedCerts(
       std::vector<net::ServerCertificateDatabase::CertInformation> cert_infos);
+#endif
+#if BUILDFLAG(IS_CHROMEOS)
+  void CreateClientCertIssuerSources(
+      net::ClientCertIssuerSourceGetterCallback callback);
+  void CreateClientCertIssuerSourcesWithDBCerts(
+      net::ClientCertIssuerSourceGetterCallback callback,
+      std::vector<net::ServerCertificateDatabase::CertInformation>
+          db_cert_infos);
 #endif
 
   bool ShouldSplitAuthCacheByNetworkIsolationKey() const;

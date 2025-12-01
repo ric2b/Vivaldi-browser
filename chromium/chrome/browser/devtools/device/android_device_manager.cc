@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "chrome/browser/devtools/device/android_device_manager.h"
 
 #include <stddef.h>
@@ -156,8 +161,7 @@ class HttpRequest {
     SendRequest(path, headers);
   }
 
-  ~HttpRequest() {
-  }
+  ~HttpRequest() = default;
 
   void DoSendRequest(int result) {
     while (result != net::ERR_IO_PENDING) {
@@ -412,17 +416,14 @@ AndroidDeviceManager::DeviceInfo::DeviceInfo()
 
 AndroidDeviceManager::DeviceInfo::DeviceInfo(const DeviceInfo& other) = default;
 
-AndroidDeviceManager::DeviceInfo::~DeviceInfo() {
-}
+AndroidDeviceManager::DeviceInfo::~DeviceInfo() = default;
 
-AndroidDeviceManager::DeviceDescriptor::DeviceDescriptor() {
-}
+AndroidDeviceManager::DeviceDescriptor::DeviceDescriptor() = default;
 
 AndroidDeviceManager::DeviceDescriptor::DeviceDescriptor(
     const DeviceDescriptor& other) = default;
 
-AndroidDeviceManager::DeviceDescriptor::~DeviceDescriptor() {
-}
+AndroidDeviceManager::DeviceDescriptor::~DeviceDescriptor() = default;
 
 void AndroidDeviceManager::DeviceProvider::SendJsonRequest(
     const std::string& serial,
@@ -449,11 +450,9 @@ void AndroidDeviceManager::DeviceProvider::ReleaseDevice(
     const std::string& serial) {
 }
 
-AndroidDeviceManager::DeviceProvider::DeviceProvider() {
-}
+AndroidDeviceManager::DeviceProvider::DeviceProvider() = default;
 
-AndroidDeviceManager::DeviceProvider::~DeviceProvider() {
-}
+AndroidDeviceManager::DeviceProvider::~DeviceProvider() = default;
 
 void AndroidDeviceManager::Device::QueryDeviceInfo(
     DeviceInfoCallback callback) {

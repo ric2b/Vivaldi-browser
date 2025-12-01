@@ -166,7 +166,9 @@ enum {
   DELTA_Q_PERCEPTUAL = 2,     // Modulation to improve video perceptual quality
   DELTA_Q_PERCEPTUAL_AI = 3,  // Perceptual quality opt for all intra mode
   DELTA_Q_USER_RATING_BASED = 4,  // User rating based delta q mode
-  DELTA_Q_HDR = 5,    // QP adjustment based on HDR block pixel average
+  DELTA_Q_HDR = 5,  // QP adjustment based on HDR block pixel average
+  DELTA_Q_VARIANCE_BOOST =
+      6,              // Variance Boost style modulation for all intra mode
   DELTA_Q_MODE_COUNT  // This should always be the last member of the enum
 } UENUM1BYTE(DELTAQ_MODE);
 

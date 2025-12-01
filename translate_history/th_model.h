@@ -26,7 +26,11 @@ namespace translate_history {
 
 class TH_Model : public KeyedService {
  public:
+#if !BUILDFLAG(IS_IOS)
   TH_Model(content::BrowserContext* context, bool session_only);
+#else
+  TH_Model(bool session_only);
+#endif
   ~TH_Model() override;
   TH_Model(const TH_Model&) = delete;
   TH_Model& operator=(const TH_Model&) = delete;
@@ -55,7 +59,9 @@ class TH_Model : public KeyedService {
   std::unique_ptr<TH_LoadDetails> CreateLoadDetails();
 
   std::unique_ptr<NodeList> list_;
+#if !BUILDFLAG(IS_IOS)
   const raw_ptr<content::BrowserContext> context_;
+#endif
   std::unique_ptr<TH_Storage> store_;
   base::ObserverList<TH_ModelObserver> observers_;
   bool loaded_ = false;

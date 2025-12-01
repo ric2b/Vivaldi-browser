@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ash/net/secure_dns_manager.h"
 
+#include <algorithm>
 #include <map>
 #include <string>
 #include <string_view>
@@ -13,14 +14,12 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/logging.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "chrome/browser/ash/net/ash_dns_over_https_config_source.h"
 #include "chrome/browser/ash/net/dns_over_https/templates_uri_resolver_impl.h"
-#include "chrome/browser/browser_process.h"
 #include "chrome/browser/net/secure_dns_config.h"
 #include "chrome/browser/net/secure_dns_util.h"
 #include "chrome/browser/net/stub_resolver_config_reader.h"
@@ -101,11 +100,12 @@ void MigrateDnsOverHttpsPrefs(PrefService* from_local_state,
 namespace ash {
 
 SecureDnsManager::SecureDnsManager(PrefService* local_state,
-                                   PrefService* profile_prefs,
+                                   user_manager::User& user,
                                    bool is_profile_managed)
     : local_state_(local_state),
-      profile_prefs_(profile_prefs),
+      user_(user),
       is_profile_managed_(is_profile_managed) {
+  auto* profile_prefs = user.GetProfilePrefs();
   if (!is_profile_managed) {
     CHECK(profile_prefs) << "Profile prefs cannot be empty for unmanaged users";
     MigrateDnsOverHttpsPrefs(local_state, profile_prefs);
@@ -128,8 +128,7 @@ SecureDnsManager::SecureDnsManager(PrefService* local_state,
   // The DNS-over-HTTPS config source is reset in the destructor of the
   // `SecureDnsManager`. This means the `SecureDnsManager` instance should
   // outlive the `AshDnsOverHttpsConfigSource` instance.
-  g_browser_process->system_network_context_manager()
-      ->GetStubResolverConfigReader()
+  SystemNetworkContextManager::GetStubResolverConfigReader()
       ->SetOverrideDnsOverHttpsConfigSource(
           std::make_unique<AshDnsOverHttpsConfigSource>(this, local_state));
 }
@@ -153,11 +152,12 @@ void SecureDnsManager::SetPrimaryProfilePropertiesForTesting(
 }
 
 void SecureDnsManager::MonitorUserPrefs() {
-  profile_prefs_->SetDefaultPrefValue(
+  auto* profile_prefs = user_->GetProfilePrefs();
+  profile_prefs->SetDefaultPrefValue(
       ::prefs::kDnsOverHttpsMode,
       local_state_->GetDefaultPrefValue(::prefs::kDnsOverHttpsMode)->Clone());
 
-  profile_prefs_registrar_.Init(profile_prefs_);
+  profile_prefs_registrar_.Init(profile_prefs);
   profile_prefs_registrar_.Add(
       ::prefs::kDnsOverHttpsMode,
       base::BindRepeating(&SecureDnsManager::OnPrefChanged,
@@ -194,8 +194,7 @@ SecureDnsManager::~SecureDnsManager() {
     observer.OnSecureDnsManagerShutdown();
   }
 
-  g_browser_process->system_network_context_manager()
-      ->GetStubResolverConfigReader()
+  SystemNetworkContextManager::GetStubResolverConfigReader()
       ->SetOverrideDnsOverHttpsConfigSource(nullptr);
 
   // `local_state_` outlives the SecureDnsManager instance. The value of
@@ -229,9 +228,8 @@ void SecureDnsManager::LoadProviders() {
 
   for (const net::DohProviderEntry* provider : local_providers) {
     std::vector<std::string> ip_addrs;
-    base::ranges::transform(provider->ip_addresses,
-                            std::back_inserter(ip_addrs),
-                            &net::IPAddress::ToString);
+    std::ranges::transform(provider->ip_addresses, std::back_inserter(ip_addrs),
+                           &net::IPAddress::ToString);
     local_doh_providers_[provider->doh_server_config] =
         base::JoinString(ip_addrs, ",");
   }
@@ -305,9 +303,9 @@ void SecureDnsManager::DefaultNetworkChanged(const NetworkState* network) {
 }
 
 void SecureDnsManager::OnPrefChanged() {
-  CHECK(profile_prefs_);
-  UpdateDoHConfig(profile_prefs_->GetString(::prefs::kDnsOverHttpsMode),
-                  profile_prefs_->GetString(::prefs::kDnsOverHttpsTemplates));
+  const auto* profile_prefs = user_->GetProfilePrefs();
+  UpdateDoHConfig(profile_prefs->GetString(::prefs::kDnsOverHttpsMode),
+                  profile_prefs->GetString(::prefs::kDnsOverHttpsTemplates));
 }
 
 void SecureDnsManager::OnLocalStatePrefsChanged() {
@@ -451,7 +449,7 @@ void SecureDnsManager::UpdateChromeDoHConfig(
 }
 
 void SecureDnsManager::UpdateTemplateUri() {
-  doh_templates_uri_resolver_->Update(local_state_);
+  doh_templates_uri_resolver_->Update(*local_state_, user_.get());
 
   std::string new_templates =
       doh_templates_uri_resolver_->GetEffectiveTemplates();

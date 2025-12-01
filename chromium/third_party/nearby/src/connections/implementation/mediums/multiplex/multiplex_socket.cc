@@ -95,17 +95,10 @@ MultiplexSocket::MultiplexSocket(std::shared_ptr<MediumSocket> physical_socket)
 absl::flat_hash_map<std::pair<std::string, Medium>,
                     MultiplexIncomingConnectionCb>&
 MultiplexSocket::GetIncomingConnectionCallbacks() {
-  static std::aligned_storage_t<
-      sizeof(absl::flat_hash_map<std::pair<std::string, Medium>,
-                                 MultiplexIncomingConnectionCb>),
-      alignof(absl::flat_hash_map<std::pair<std::string, Medium>,
-                                  MultiplexIncomingConnectionCb>)>
-      storage;
-  static absl::flat_hash_map<std::pair<std::string, Medium>,
-                             MultiplexIncomingConnectionCb>*
-      incoming_connection_callbacks =
-          new (&storage) absl::flat_hash_map<std::pair<std::string, Medium>,
-                                             MultiplexIncomingConnectionCb>();
+  using MapType = absl::flat_hash_map<std::pair<std::string, Medium>,
+                                      MultiplexIncomingConnectionCb>;
+  alignas(MapType) static char storage[sizeof(MapType)];
+  static MapType* incoming_connection_callbacks = new (&storage) MapType();
 
   return *incoming_connection_callbacks;
 }
@@ -121,23 +114,18 @@ MultiplexSocket* MultiplexSocket::CreateIncomingSocket(
   static MultiplexSocket* multiplex_incoming_socket = nullptr;
   switch (physical_socket->GetMedium()) {
     case Medium::BLUETOOTH:
-      static std::aligned_storage_t<sizeof(MultiplexSocket),
-                                    alignof(MultiplexSocket)>
-          storage_bt;
+      alignas(MultiplexSocket) static char storage_bt[sizeof(MultiplexSocket)];
       multiplex_incoming_socket =
           new (&storage_bt) MultiplexSocket(physical_socket);
       break;
     case Medium::BLE:
-      static std::aligned_storage_t<sizeof(MultiplexSocket),
-                                    alignof(MultiplexSocket)>
-          storage_ble;
+      alignas(MultiplexSocket) static char storage_ble[sizeof(MultiplexSocket)];
       multiplex_incoming_socket =
           new (&storage_ble) MultiplexSocket(physical_socket);
       break;
     case Medium::WIFI_LAN:
-      static std::aligned_storage_t<sizeof(MultiplexSocket),
-                                    alignof(MultiplexSocket)>
-          storage_wlan;
+      alignas(
+          MultiplexSocket) static char storage_wlan[sizeof(MultiplexSocket)];
       multiplex_incoming_socket =
           new (&storage_wlan) MultiplexSocket(physical_socket);
       break;
@@ -148,7 +136,8 @@ MultiplexSocket* MultiplexSocket::CreateIncomingSocket(
       return multiplex_incoming_socket;
   }
   NEARBY_LOGS(INFO) << "CreateIncomingSocket with serviceId=" << service_id
-                    << ", serviceIdHashSalt=" << kFakeSalt;
+                    << ", serviceIdHashSalt=" << kFakeSalt << " for medium="
+                    << Medium_Name(physical_socket->GetMedium());
 
   multiplex_incoming_socket->CreateFirstVirtualSocket(service_id,
                                                       (std::string)kFakeSalt);
@@ -168,23 +157,18 @@ MultiplexSocket* MultiplexSocket::CreateOutgoingSocket(
   static MultiplexSocket* multiplex_outgoing_socket = nullptr;
   switch (physical_socket->GetMedium()) {
     case Medium::BLUETOOTH:
-      static std::aligned_storage_t<sizeof(MultiplexSocket),
-                                    alignof(MultiplexSocket)>
-          storage_bt;
+      alignas(MultiplexSocket) static char storage_bt[sizeof(MultiplexSocket)];
       multiplex_outgoing_socket =
           new (&storage_bt) MultiplexSocket(physical_socket);
       break;
     case Medium::BLE:
-      static std::aligned_storage_t<sizeof(MultiplexSocket),
-                                    alignof(MultiplexSocket)>
-          storage_ble;
+      alignas(MultiplexSocket) static char storage_ble[sizeof(MultiplexSocket)];
       multiplex_outgoing_socket =
           new (&storage_ble) MultiplexSocket(physical_socket);
       break;
     case Medium::WIFI_LAN:
-      static std::aligned_storage_t<sizeof(MultiplexSocket),
-                                    alignof(MultiplexSocket)>
-          storage_wlan;
+      alignas(
+          MultiplexSocket) static char storage_wlan[sizeof(MultiplexSocket)];
       multiplex_outgoing_socket =
           new (&storage_wlan) MultiplexSocket(physical_socket);
       break;
@@ -194,7 +178,9 @@ MultiplexSocket* MultiplexSocket::CreateOutgoingSocket(
       return multiplex_outgoing_socket;
   }
   NEARBY_LOGS(INFO) << "CreateOutgoingSocket with serviceId=" << service_id
-                    << ", serviceIdHashSalt=" << service_id_hash_salt;
+                    << ", serviceIdHashSalt=" << service_id_hash_salt
+                    << " for medium="
+                    << Medium_Name(physical_socket->GetMedium());
 
   multiplex_outgoing_socket->CreateFirstVirtualSocket(service_id,
                                                       service_id_hash_salt);

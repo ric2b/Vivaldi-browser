@@ -27,7 +27,7 @@ pub struct DecodeSample {
 }
 
 impl DecodeSample {
-    pub fn partial_data<'a>(
+    pub(crate) fn partial_data<'a>(
         &'a self,
         io: &'a mut Box<impl decoder::IO + ?Sized>,
         buffer: &'a Option<Vec<u8>>,
@@ -52,7 +52,7 @@ impl DecodeSample {
         }
     }
 
-    pub fn data<'a>(
+    pub(crate) fn data<'a>(
         &'a self,
         io: &'a mut Box<impl decoder::IO + ?Sized>,
         buffer: &'a Option<Vec<u8>>,
@@ -77,18 +77,32 @@ pub struct Grid {
 }
 
 #[derive(Debug, Default)]
+pub struct Overlay {
+    pub canvas_fill_value: [u16; 4],
+    pub width: u32,
+    pub height: u32,
+    pub horizontal_offsets: Vec<i32>,
+    pub vertical_offsets: Vec<i32>,
+}
+
+#[derive(Debug, Default)]
 pub struct TileInfo {
     pub tile_count: u32,
     pub decoded_tile_count: u32,
     pub grid: Grid,
+    pub overlay: Overlay,
 }
 
 impl TileInfo {
-    pub fn is_grid(&self) -> bool {
+    pub(crate) fn is_grid(&self) -> bool {
         self.grid.rows > 0 && self.grid.columns > 0
     }
 
-    pub fn grid_tile_count(&self) -> AvifResult<u32> {
+    pub(crate) fn is_overlay(&self) -> bool {
+        !self.overlay.horizontal_offsets.is_empty() && !self.overlay.vertical_offsets.is_empty()
+    }
+
+    pub(crate) fn grid_tile_count(&self) -> AvifResult<u32> {
         if self.is_grid() {
             checked_mul!(self.grid.rows, self.grid.columns)
         } else {
@@ -96,7 +110,7 @@ impl TileInfo {
         }
     }
 
-    pub fn decoded_row_count(&self, image_height: u32, tile_height: u32) -> u32 {
+    pub(crate) fn decoded_row_count(&self, image_height: u32, tile_height: u32) -> u32 {
         if self.decoded_tile_count == 0 {
             return 0;
         }
@@ -109,7 +123,7 @@ impl TileInfo {
         )
     }
 
-    pub fn is_fully_decoded(&self) -> bool {
+    pub(crate) fn is_fully_decoded(&self) -> bool {
         self.tile_count == self.decoded_tile_count
     }
 }
@@ -126,7 +140,7 @@ pub struct Tile {
 }
 
 impl Tile {
-    pub fn create_from_item(
+    pub(crate) fn create_from_item(
         item: &mut Item,
         allow_progressive: bool,
         image_count_limit: u32,
@@ -259,12 +273,18 @@ impl Tile {
         Ok(tile)
     }
 
-    pub fn create_from_track(
+    pub(crate) fn create_from_track(
         track: &Track,
         mut image_count_limit: u32,
         size_hint: u64,
         category: Category,
     ) -> AvifResult<Tile> {
+        let properties = track
+            .get_properties()
+            .ok_or(AvifError::BmffParseFailed("".into()))?;
+        let codec_config = find_property!(properties, CodecConfiguration)
+            .ok_or(AvifError::BmffParseFailed("".into()))?
+            .clone();
         let mut tile = Tile {
             width: track.width,
             height: track.height,
@@ -273,6 +293,7 @@ impl Tile {
                 category,
                 ..DecodeInput::default()
             },
+            codec_config,
             ..Tile::default()
         };
         let sample_table = &track.sample_table.unwrap_ref();
@@ -341,7 +362,7 @@ impl Tile {
         Ok(tile)
     }
 
-    pub fn max_sample_size(&self) -> usize {
+    pub(crate) fn max_sample_size(&self) -> usize {
         match self.input.samples.iter().max_by_key(|sample| sample.size) {
             Some(sample) => sample.size,
             None => 0,

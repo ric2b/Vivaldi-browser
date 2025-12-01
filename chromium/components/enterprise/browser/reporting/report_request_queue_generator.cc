@@ -8,7 +8,6 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/metrics/histogram_functions.h"
-#include "build/chromeos_buildflags.h"
 #include "components/enterprise/browser/reporting/report_type.h"
 
 namespace enterprise_reporting {
@@ -37,7 +36,7 @@ ReportRequestQueueGenerator::ReportRequestQueueGenerator(
     ReportingDelegateFactory* delegate_factory)
     : maximum_report_size_(kMaximumReportSize),
       profile_report_generator_(delegate_factory) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   // For Chrome OS, policy information needn't be uploaded to DM server.
   profile_report_generator_.set_policies_enabled(false);
 #endif
@@ -95,8 +94,7 @@ void ReportRequestQueueGenerator::GenerateProfileReportWithIndex(
                            .browser_report()
                            .chrome_user_profile_infos(profile_index);
   auto profile_report = profile_report_generator_.MaybeGenerate(
-      base::FilePath::FromUTF8Unsafe(basic_profile.id()), basic_profile.name(),
-      ReportType::kFull);
+      base::FilePath::FromUTF8Unsafe(basic_profile.id()), ReportType::kFull);
 
   // Return if Profile is not loaded and there is no full report.
   if (!profile_report)

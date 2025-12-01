@@ -19,6 +19,8 @@
 #include "base/logging_win.h"
 #endif  // BUILDFLAG(IS_WIN)
 
+#include <algorithm>
+
 #include "base/base_paths.h"
 #include "base/command_line.h"
 #include "base/containers/span.h"
@@ -29,7 +31,6 @@
 #include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/path_service.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/escape.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -37,6 +38,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
+#include "base/threading/platform_thread.h"
+#include "base/time/time.h"
 #include "base/version.h"
 #include "build/build_config.h"
 #include "chrome/updater/constants.h"
@@ -158,7 +161,7 @@ std::optional<tagging::AppArgs> GetAppArgs(const std::string& app_id) {
   }
 
   const std::vector<tagging::AppArgs>& apps_args = tag_args->apps;
-  std::vector<tagging::AppArgs>::const_iterator it = base::ranges::find_if(
+  std::vector<tagging::AppArgs>::const_iterator it = std::ranges::find_if(
       apps_args, [&app_id](const tagging::AppArgs& app_args) {
         return base::EqualsCaseInsensitiveASCII(app_args.app_id, app_id);
       });
@@ -333,9 +336,13 @@ bool DeleteExcept(std::optional<base::FilePath> except) {
       .ForEach([&](const base::FilePath& item) {
         if (item != *except) {
           VLOG(2) << "DeleteExcept deleting: " << item;
-          if (!base::DeletePathRecursively(item)) {
+          for (size_t i = 0; i <= 2; ++i) {
+            if (delete_success = base::DeletePathRecursively(item);
+                delete_success) {
+              break;
+            }
             VPLOG(1) << "DeleteExcept failed to delete: " << item;
-            delete_success = false;
+            base::PlatformThread::Sleep(base::Milliseconds(100));
           }
         }
       });

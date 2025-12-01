@@ -185,7 +185,7 @@ void RtcpReportBlock::SetDelaySinceLastReport(
   // bounds checking is done in terms of Clock::duration, since doing the checks
   // after the duration_cast may allow overflow to occur in the duration_cast
   // math (well, only for unusually large inputs).
-  constexpr Delay kMaxValidReportedDelay{std::numeric_limits<uint32_t>::max()};
+  constexpr Delay kMaxValidReportedDelay(std::numeric_limits<uint32_t>::max());
   constexpr auto kMaxValidLocalClockDelay =
       Clock::to_duration(kMaxValidReportedDelay);
   if (local_clock_delay > kMaxValidLocalClockDelay) {

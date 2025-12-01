@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "base/auto_reset.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
@@ -323,6 +324,21 @@ class ExtensionService : public ExtensionServiceInterface,
   // nothing.
   void DisableExtension(const std::string& extension_id, int disable_reasons);
 
+  // The method above will start accepting a flat_set of DisableReason soon
+  // (see crbug.com/372186532). When that happens, writing unknown reasons to
+  // prefs will be disallowed. This is because casting unknown reasons (integer)
+  // to `DisableReason` enum is undefined behavior. This isn't a problem in the
+  // bitflag representation because there is no casting involved.
+  //
+  // Any code which needs to write unknown reasons should use the
+  // methods below, which operate on raw integers. This is needed for scenarios
+  // like Sync where unknown reasons can be synced from newer versions of the
+  // browser to older versions. Most code should use the above method. We want
+  // to limit the use of the method below, so it is guarded by a passkey.
+  void DisableExtension(ExtensionPrefs::DisableReasonRawManipulationPasskey,
+                        const std::string& extension_id,
+                        const base::flat_set<int>& disable_reasons);
+
   // Same as |DisableExtension|, but assumes that the request to disable
   // |extension_id| originates from |source_extension| when evaluating whether
   // the extension can be disabled. Please see |ExtensionMayModifySettings|
@@ -482,7 +498,7 @@ class ExtensionService : public ExtensionServiceInterface,
 
 #if defined(UNIT_TEST)
   void FinishInstallationForTest(const Extension* extension) {
-    FinishInstallation(extension);
+    extension_registrar_.FinishInstallation(extension);
   }
 
   void UninstallMigratedExtensionsForTest() { UninstallMigratedExtensions(); }
@@ -541,10 +557,19 @@ class ExtensionService : public ExtensionServiceInterface,
   void PostActivateExtension(scoped_refptr<const Extension> extension) override;
   void PostDeactivateExtension(
       scoped_refptr<const Extension> extension) override;
+  void PreUninstallExtension(scoped_refptr<const Extension> extension) override;
+  void PostUninstallExtension(scoped_refptr<const Extension> extension,
+                              base::OnceClosure done_callback) override;
+  void PostNotifyUninstallExtension(
+      scoped_refptr<const Extension> extension) override;
   void LoadExtensionForReload(
       const ExtensionId& extension_id,
       const base::FilePath& path,
       ExtensionRegistrar::LoadErrorBehavior load_error_behavior) override;
+  void ShowExtensionDisabledError(const Extension* extension,
+                                  bool is_remote_install) override;
+  void FinishDelayedInstallationsIfAny() override;
+  bool CanAddExtension(const Extension* extension) override;
   bool CanEnableExtension(const Extension* extension) override;
   bool CanDisableExtension(const Extension* extension) override;
   bool ShouldBlockExtension(const Extension* extension) override;
@@ -586,9 +611,6 @@ class ExtensionService : public ExtensionServiceInterface,
                                 const std::string& install_parameter,
                                 base::Value::Dict ruleset_install_prefs);
 
-  // Common helper to finish installing the given extension.
-  void FinishInstallation(const Extension* extension);
-
   // Disables the extension if the privilege level has increased
   // (e.g., due to an upgrade).
   void CheckPermissionsIncrease(const Extension* extension,
@@ -598,12 +620,9 @@ class ExtensionService : public ExtensionServiceInterface,
   void UpdateActiveExtensionsInCrashReporter();
 
   // Helper to get the disable reasons for an installed (or upgraded) extension.
-  // A return value of disable_reason::DISABLE_NONE indicates that we should
-  // enable this extension initially.
-  int GetDisableReasonsOnInstalled(const Extension* extension);
-
-  // Helper method to determine if an extension can be blocked.
-  bool CanBlockExtension(const Extension* extension) const;
+  // Returning an empty set indicates that we should enable this extension
+  // initially.
+  DisableReasonSet GetDisableReasonsOnInstalled(const Extension* extension);
 
   // Helper to determine if installing an extensions should proceed immediately,
   // or if we should delay the install until further notice, or if the install

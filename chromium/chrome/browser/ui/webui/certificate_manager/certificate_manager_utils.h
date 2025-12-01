@@ -5,12 +5,14 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_CERTIFICATE_MANAGER_CERTIFICATE_MANAGER_UTILS_H_
 #define CHROME_BROWSER_UI_WEBUI_CERTIFICATE_MANAGER_CERTIFICATE_MANAGER_UTILS_H_
 
-#include <openssl/base.h>
-
+#include "base/functional/callback_forward.h"
 #include "base/memory/weak_ptr.h"
-#include "chrome/browser/net/server_certificate_database.pb.h"
+#include "chrome/browser/ui/webui/certificate_viewer/certificate_viewer_webui.h"
 #include "components/prefs/pref_service.h"
+#include "components/server_certificate_database/server_certificate_database.h"
+#include "components/server_certificate_database/server_certificate_database.pb.h"
 #include "content/public/browser/web_contents.h"
+#include "third_party/boringssl/src/include/openssl/base.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
 // Enumeration of certificate management permissions which corresponds to
@@ -45,7 +47,8 @@ void ShowCertificateDialog(
     base::WeakPtr<content::WebContents> web_contents,
     bssl::UniquePtr<CRYPTO_BUFFER> cert,
     chrome_browser_server_certificate_database::CertificateMetadata
-        cert_metadata);
+        cert_metadata,
+    CertMetadataModificationsCallback modifications_callback);
 
 bool IsCACertificateManagementAllowed(const PrefService& prefs);
 

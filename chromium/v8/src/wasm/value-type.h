@@ -13,14 +13,12 @@
 
 #include "src/base/bit-field.h"
 #include "src/codegen/machine-type.h"
+#include "src/codegen/signature.h"
 #include "src/wasm/wasm-constants.h"
 #include "src/wasm/wasm-limits.h"
 
 namespace v8 {
 namespace internal {
-
-template <typename T>
-class Signature;
 
 // Type for holding simd values, defined in simd128.h.
 class Simd128;
@@ -1045,9 +1043,19 @@ class CanonicalValueType : public ValueTypeBase {
     return CanonicalValueType{ValueTypeBase::Primitive(kind)};
   }
 
+  static constexpr CanonicalValueType Ref(HeapType::Representation heap_type) {
+    return CanonicalValueType{ValueTypeBase::Ref(heap_type)};
+  }
+
   static constexpr CanonicalValueType RefNull(
       HeapType::Representation heap_type) {
     return CanonicalValueType{ValueTypeBase::RefNull(heap_type)};
+  }
+
+  static constexpr CanonicalValueType RefMaybeNull(
+      HeapType::Representation heap_type, Nullability nullability) {
+    return CanonicalValueType{
+        ValueTypeBase::RefMaybeNull(heap_type, nullability)};
   }
 
   static constexpr CanonicalValueType FromIndex(ValueKind kind,
@@ -1072,6 +1080,20 @@ class CanonicalValueType : public ValueTypeBase {
   constexpr CanonicalTypeIndex ref_index() const {
     return CanonicalTypeIndex{ValueTypeBase::ref_index()};
   }
+
+  bool IsFunctionType() const {
+    if (!is_object_reference()) return false;
+    wasm::HeapType::Representation rep = heap_representation();
+    if (rep == wasm::HeapType::kFunc) return true;
+    if (rep == wasm::HeapType::kFuncShared) return true;
+    if (rep == wasm::HeapType::kNoFunc) return true;
+    if (rep == wasm::HeapType::kNoFuncShared) return true;
+    if (!has_index()) return false;
+    return IsFunctionType_Slow();
+  }
+
+ private:
+  bool IsFunctionType_Slow() const;
 };
 ASSERT_TRIVIALLY_COPYABLE(CanonicalValueType);
 
@@ -1128,10 +1150,15 @@ constexpr ValueType kWasmNullExternRef =
 constexpr ValueType kWasmNullExnRef = ValueType::RefNull(HeapType::kNoExn);
 constexpr ValueType kWasmNullFuncRef = ValueType::RefNull(HeapType::kNoFunc);
 
+constexpr CanonicalValueType kCanonicalI8 = CanonicalValueType::Primitive(kI8);
+constexpr CanonicalValueType kCanonicalI16 =
+    CanonicalValueType::Primitive(kI16);
 constexpr CanonicalValueType kCanonicalI32 =
     CanonicalValueType::Primitive(kI32);
 constexpr CanonicalValueType kCanonicalI64 =
     CanonicalValueType::Primitive(kI64);
+constexpr CanonicalValueType kCanonicalF16 =
+    CanonicalValueType::Primitive(kF16);
 constexpr CanonicalValueType kCanonicalF32 =
     CanonicalValueType::Primitive(kF32);
 constexpr CanonicalValueType kCanonicalF64 =
@@ -1142,6 +1169,8 @@ constexpr CanonicalValueType kCanonicalExternRef =
     CanonicalValueType::RefNull(HeapType::kExtern);
 constexpr CanonicalValueType kCanonicalAnyRef =
     CanonicalValueType::RefNull(HeapType::kAny);
+constexpr CanonicalValueType kCanonicalFuncRef =
+    CanonicalValueType::RefNull(HeapType::kFunc);
 
 // Constants used by the generic js-to-wasm wrapper.
 constexpr int kWasmValueKindBitsMask = (1u << ValueType::kKindBits) - 1;
@@ -1155,7 +1184,26 @@ constexpr int kWasmHeapTypeBitsMask = (1u << ValueType::kHeapTypeBits) - 1;
   V(kS128, Simd128)
 
 using FunctionSig = Signature<ValueType>;
-using CanonicalSig = Signature<CanonicalValueType>;
+
+class CanonicalSig : public Signature<CanonicalValueType> {
+ public:
+  CanonicalSig(size_t return_count, size_t parameter_count,
+               const CanonicalValueType* reps)
+      : Signature<CanonicalValueType>(return_count, parameter_count, reps) {}
+
+  class Builder : public SignatureBuilder<CanonicalSig, CanonicalValueType> {
+   public:
+    Builder(Zone* zone, size_t return_count, size_t parameter_count)
+        : SignatureBuilder<CanonicalSig, CanonicalValueType>(zone, return_count,
+                                                             parameter_count) {}
+    CanonicalSig* Get() const;
+  };
+
+  uint64_t signature_hash() const { return signature_hash_; }
+
+ private:
+  uint64_t signature_hash_;
+};
 
 // This is the special case where comparing module-specific to canonical
 // signatures is safe: when they only contain numerical types.
@@ -1276,7 +1324,7 @@ class StoreType {
 #undef DEF_ENUM
   };
 
-  // Allow implicit convertion of the enum value to this wrapper.
+  // Allow implicit conversion of the enum value to this wrapper.
   constexpr StoreType(StoreTypeValue val)  // NOLINT(runtime/explicit)
       : val_(val) {}
 

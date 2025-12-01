@@ -47,7 +47,7 @@ void PasswordStoreBackendMigrationDecorator::InitBackend(
       base::BarrierCallback<bool>(
           /*num_callbacks=*/2,
           base::BindOnce([](const std::vector<bool>& results) {
-            return base::ranges::all_of(results, std::identity());
+            return std::ranges::all_of(results, std::identity());
           }).Then(std::move(completion)));
   auto remote_changes_callback = base::BindRepeating(
       &PasswordStoreBackendMigrationDecorator::OnRemoteFormChangesReceived,
@@ -120,12 +120,6 @@ void PasswordStoreBackendMigrationDecorator::GetAutofillableLoginsAsync(
   active_backend()->GetAutofillableLoginsAsync(std::move(callback));
 }
 
-void PasswordStoreBackendMigrationDecorator::GetAllLoginsForAccountAsync(
-    std::string account,
-    LoginsOrErrorReply callback) {
-  NOTREACHED();
-}
-
 void PasswordStoreBackendMigrationDecorator::FillMatchingLoginsAsync(
     LoginsOrErrorReply callback,
     bool include_psl,
@@ -160,23 +154,6 @@ void PasswordStoreBackendMigrationDecorator::RemoveLoginAsync(
   active_backend()->RemoveLoginAsync(location, form, std::move(callback));
   if (UsesSplitStoresAndUPMForLocal(prefs_)) {
     built_in_backend_->RemoveLoginAsync(location, form, base::DoNothing());
-  }
-}
-
-void PasswordStoreBackendMigrationDecorator::RemoveLoginsByURLAndTimeAsync(
-    const base::Location& location,
-    const base::RepeatingCallback<bool(const GURL&)>& url_filter,
-    base::Time delete_begin,
-    base::Time delete_end,
-    base::OnceCallback<void(bool)> sync_completion,
-    PasswordChangesOrErrorReply callback) {
-  active_backend()->RemoveLoginsByURLAndTimeAsync(
-      location, url_filter, delete_begin, delete_end,
-      std::move(sync_completion), std::move(callback));
-  if (UsesSplitStoresAndUPMForLocal(prefs_)) {
-    built_in_backend_->RemoveLoginsByURLAndTimeAsync(
-        location, url_filter, delete_begin, delete_end, base::NullCallback(),
-        base::DoNothing());
   }
 }
 

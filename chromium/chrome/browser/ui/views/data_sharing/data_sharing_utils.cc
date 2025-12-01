@@ -45,7 +45,7 @@ std::optional<GURL> data_sharing::GenerateWebUIUrl(
       // people info.
       url = net::AppendQueryParameter(url, kQueryParamFlow, kFlowManage);
       url = net::AppendQueryParameter(url, kQueryParamGroupId,
-                                      saved_group->collaboration_id().value());
+                                      saved_group->collaboration_id()->value());
     } else {
       // Return share flow url which requires a local group id to later
       // associate with the collaboration_id returned by WebUI.
@@ -53,6 +53,13 @@ std::optional<GURL> data_sharing::GenerateWebUIUrl(
       url = net::AppendQueryParameter(url, kQueryParamTabGroupId,
                                       local_group_id.ToString());
     }
+    std::string title = base::UTF16ToUTF8(saved_group->title());
+    // If group is unnamed use default name e.g. "1 tab" / "3 tabs".
+    if (title.empty()) {
+      title = l10n_util::GetPluralStringFUTF8(IDS_SAVED_TAB_GROUP_TABS_COUNT,
+                                              saved_group->saved_tabs().size());
+    }
+    url = net::AppendQueryParameter(url, kQueryParamTabGroupTitle, title);
   } else {
     // Return join flow url which requires both collaboration_id and
     // access_token for WebUI to fetch people info.
@@ -81,7 +88,10 @@ void data_sharing::AssociateTabGroupWithGroupId(const std::string& tab_group_id,
   std::optional<tab_groups::SavedTabGroup> group =
       service->GetGroup(local_tab_group_id);
   if (group && !group->is_shared_tab_group()) {
-    service->MakeTabGroupShared(local_tab_group_id, group_id);
+    // TODO(crbug.com/382557489): implement the callback.
+    service->MakeTabGroupShared(
+        local_tab_group_id, group_id,
+        tab_groups::TabGroupSyncService::TabGroupSharingCallback());
   }
 }
 
@@ -111,12 +121,8 @@ void data_sharing::ProcessPreviewOutcome(
     if (outcome->shared_tab_group_preview) {
       group_preview->title = outcome->shared_tab_group_preview->title;
       for (const auto& tab : outcome->shared_tab_group_preview->tabs) {
-        // TODO(crbug.com/376744402): favicon should be retrieved from the tab
-        // url. Changed the favicon URL below to a byte array so the data can be
-        // passed.
         group_preview->shared_tabs.push_back(
-            data_sharing::mojom::SharedTab::New(tab.GetDisplayUrl(),
-                                                GURL("chrome://favicon2")));
+            data_sharing::mojom::SharedTab::New(tab.GetDisplayUrl(), tab.url));
       }
     }
     // If group is unnamed use default name e.g. "1 tab" / "3 tabs".

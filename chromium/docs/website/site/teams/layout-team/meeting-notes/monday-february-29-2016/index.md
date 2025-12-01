@@ -28,9 +28,9 @@ reverted to due causing a crash in FrameView.
 - Started working on percentage sizing of children of flex items. A lot
 of user requests and required by the updated spec.
 CSS Grid Layout (svillar, jfernandez, rego, javif)
-\[[crbug.com/79180](http://crbug.com/79180)\]
+\[[crbug.com/79180](https://crbug.com/79180)\]
 - No update since last week -
-CSS Multi-column (mstensho) \[[crbug.com/334335](http://crbug.com/334335)\]
+CSS Multi-column (mstensho) \[[crbug.com/334335](https://crbug.com/334335)\]
 - No update since last week -
 CSS Houdini (ikilpatrick)
 - Last week, landed PaintRenderingContext2d changes. Fun times with a ms
@@ -39,18 +39,18 @@ compiler bug.
 team about ways to integrate it into devtools.
 - This week, talking to compositor worker team about API things.
 Add API for layout (leviw, pilgrim, dgrogan)
-\[[crbug.com/495288](http://crbug.com/495288)\]
+\[[crbug.com/495288](https://crbug.com/495288)\]
 - Have been filling out the new block layout API class hierarchy, should
 be done creating all the necessary classes this week at which point I
 can report back on how much work each one of the will be. (pilgrim)
 - Chased down some remaining gaps in the line layout API but didn't
 finish. (dgrogan)
-LayoutNG \[[crbug.com/591099](http://crbug.com/591099)\]
+LayoutNG \[[crbug.com/591099](https://crbug.com/591099)\]
 - Started working on the scafolding for LayoutNG. (leviw)
-CSS Containment (leviw) \[[crbug.com/312978](http://crbug.com/312978)\]
+CSS Containment (leviw) \[[crbug.com/312978](https://crbug.com/312978)\]
 - No update since last week -
 Intersection Observer (szager, mpb)
-\[[crbug.com/540528](http://crbug.com/540528)\]
+\[[crbug.com/540528](https://crbug.com/540528)\]
 - Working on a few coding issue around intersection observers, keeping
 up with spec changes. (szager)
 - More or less wrapped up on heavy duty part of that, converting some

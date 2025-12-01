@@ -62,7 +62,7 @@ Debugger (numbers correspond to the highlighted part on the above image):
 
 You can find more information on the Graphics Debugger at
 <http://msdn.microsoft.com/en-us/library/hh873207.aspx> and
-<https://www.youtube.com/watch?v=j4SpasLF6Co>
+<https://youtube.com/watch?v=j4SpasLF6Co>
 
 You may find it useful to use the configuration manager within Visual Studio to
 create multiple debug targets. For example, you can set up a second

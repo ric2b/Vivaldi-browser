@@ -106,19 +106,19 @@ For example, the following page from
 Chromium to prefetch "b.com" but not "a.com", "c.com", or "d.com".
 
 &lt;a
-href="[==http://a.com==](http://www.google.com/url?q=http%3A%2F%2Fa.com&sa=D&sntz=1&usg=AFQjCNEYnDzIlRjJbXDcx3Cax_hkvntAFQ)"&gt;
+href="[==http://a.com==](https://www.google.com/url?q=http%3A%2F%2Fa.com&sa=D&sntz=1&usg=AFQjCNEYnDzIlRjJbXDcx3Cax_hkvntAFQ)"&gt;
 A) Default HTTPS: No prefetching &lt;/a&gt;
 &lt;meta http-equiv="x-dns-prefetch-control" content="on"&gt;
 &lt;a
-href="[==http://b.com==](http://www.google.com/url?q=http%3A%2F%2Fb.com&sa=D&sntz=1&usg=AFQjCNFq7tUq50NgFVyTsk2WMeiRf6l6WQ)"&gt;
+href="[==http://b.com==](https://www.google.com/url?q=http%3A%2F%2Fb.com&sa=D&sntz=1&usg=AFQjCNFq7tUq50NgFVyTsk2WMeiRf6l6WQ)"&gt;
 B) Manual opt-in: Prefetch domain resolution. &lt;/a&gt;
 &lt;meta http-equiv="x-dns-prefetch-control" content="off"&gt;
 &lt;a
-href="[==http://c.com==](http://www.google.com/url?q=http%3A%2F%2Fc.com&sa=D&sntz=1&usg=AFQjCNFTPfaTERg_4COAyTmt8OqdKsFsCA)"&gt;
+href="[==http://c.com==](https://www.google.com/url?q=http%3A%2F%2Fc.com&sa=D&sntz=1&usg=AFQjCNFTPfaTERg_4COAyTmt8OqdKsFsCA)"&gt;
 C) Manual opt-out: Don't prefetch domain resolution &lt;/a&gt;
 &lt;meta http-equiv="x-dns-prefetch-control" content="on"&gt;
 &lt;a
-href="[==http://d.com==](http://www.google.com/url?q=http%3A%2F%2Fd.com&sa=D&sntz=1&usg=AFQjCNEJTYzjWlVmnzIooEfteTYJZzXmzA)"&gt;
+href="[==http://d.com==](https://www.google.com/url?q=http%3A%2F%2Fd.com&sa=D&sntz=1&usg=AFQjCNEJTYzjWlVmnzIooEfteTYJZzXmzA)"&gt;
 D) Already opted out: Don't prefetch domain resolution. &lt;/a&gt;
 Child frames also inherit the DNS prefetch control opt-out setting from their
 parent. The DNS prefetch control setting applies only to hyperlinks and not to

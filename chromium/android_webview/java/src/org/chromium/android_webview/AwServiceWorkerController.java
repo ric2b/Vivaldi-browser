@@ -37,7 +37,7 @@ public class AwServiceWorkerController {
         mBrowserContext = browserContext;
         mServiceWorkerSettings = new AwServiceWorkerSettings(applicationContext, mBrowserContext);
         mServiceWorkerBackgroundThreadClient = new ServiceWorkerBackgroundThreadClientImpl();
-        mServiceWorkerIoThreadClient = new ServiceWorkerIoThreadClientImpl();
+        mServiceWorkerIoThreadClient = new ServiceWorkerIoThreadClient();
         mBrowserContext.setServiceWorkerIoThreadClient(mServiceWorkerIoThreadClient);
     }
 
@@ -55,7 +55,7 @@ public class AwServiceWorkerController {
 
     // Helper classes implementations
 
-    private class ServiceWorkerIoThreadClientImpl extends AwContentsIoThreadClient {
+    private class ServiceWorkerIoThreadClient extends AwContentsIoThreadClient {
         // All methods are called on the IO thread.
 
         @Override
@@ -109,15 +109,17 @@ public class AwServiceWorkerController {
     private class ServiceWorkerBackgroundThreadClientImpl extends AwContentsBackgroundThreadClient {
         // All methods are called on the background thread.
         @Override
-        public WebResourceResponseInfo shouldInterceptRequest(
-                AwContentsClient.AwWebResourceRequest request) {
+        public void shouldInterceptRequest(
+                AwContentsClient.AwWebResourceRequest request, WebResponseCallback callback) {
             // TODO: Consider analogy with AwContentsClient, i.e.
             //  - do we need an onloadresource callback?
             //  - do we need to post an error if the response data == null?
             synchronized (mAwServiceWorkerClientLock) {
-                return mServiceWorkerClient != null
-                        ? mServiceWorkerClient.shouldInterceptRequest(request)
-                        : null;
+                WebResourceResponseInfo response = null;
+                if (mServiceWorkerClient != null) {
+                    response = mServiceWorkerClient.shouldInterceptRequest(request);
+                }
+                callback.intercept(response, request);
             }
         }
     }

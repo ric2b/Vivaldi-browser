@@ -70,6 +70,7 @@
 #include "extensions/api/calendar/calendar_api.h"
 #include "extensions/api/contacts/contacts_api.h"
 #include "extensions/api/content_blocking/content_blocking_api.h"
+#include "extensions/api/direct_match/direct_match_api.h"
 #include "extensions/api/events/vivaldi_ui_events.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 #include "extensions/api/history/history_private_api.h"
@@ -190,6 +191,7 @@ void VivaldiBrowserMainExtraParts::
   extensions::HistoryPrivateAPI::GetFactoryInstance();
   extensions::OmniboxPrivateAPI::GetFactoryInstance();
   extensions::TranslateHistoryAPI::GetFactoryInstance();
+  extensions::DirectMatchAPI::GetFactoryInstance();
 
   extensions::VivaldiRootDocumentHandlerFactory::GetInstance();
   vivaldi::WindowRegistryServiceFactory::GetInstance();
@@ -231,7 +233,6 @@ void VivaldiBrowserMainExtraParts::PostProfileInit(Profile* profile,
 
 #if !BUILDFLAG(IS_ANDROID)
   base::CommandLine& cmd_line = *base::CommandLine::ForCurrentProcess();
-  vivaldi::CommandLineAppendSwitchNoDup(cmd_line, switches::kSavePageAsMHTML);
 
   if (cmd_line.HasSwitch(switches::kAppId)) {
     std::string extension_app_id =

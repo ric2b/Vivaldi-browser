@@ -50,6 +50,11 @@ WKWebView* BuildNotesWKWebView(
                                    configuration:configuration];
   web_view.inputViewProvider = input_view_provider;
 
+  // NOTE(tomas@vivaldi): VIB-1113
+  // This is to mitigate a bug in webkit
+  // https://bugs.webkit.org/show_bug.cgi?id=229600
+  [VivaldiNotesWebView allowDisplayingKeyboardWithoutUserAction];
+
   // Set the user agent type.
   web_view.customUserAgent = base::SysUTF8ToNSString(
       web::GetWebClient()->GetUserAgent(UserAgentType::MOBILE));

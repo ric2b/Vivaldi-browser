@@ -9,8 +9,9 @@
 
 #include "chrome/browser/ash/cert_provisioning/cert_provisioning_common.h"
 
+#include <stdint.h>
+
 #include <optional>
-#include <string_view>
 
 #include "base/feature_list.h"
 #include "base/functional/callback_helpers.h"
@@ -55,7 +56,7 @@ namespace {
 
 // GCP number to be used for certificates invalidations. Certificates are
 // considered critical to receive invalidation.
-constexpr std::string_view kCertProvisioningInvalidationProjectNumber =
+constexpr int64_t kCertProvisioningInvalidationProjectNumber =
     invalidation::kCriticalInvalidationsProjectNumber;
 
 std::optional<AccountId> GetAccountId(CertScope scope, Profile* profile) {
@@ -364,7 +365,7 @@ scoped_refptr<net::X509Certificate> CreateSingleCertificateFromBytes(
     size_t length) {
   net::CertificateList cert_list =
       net::X509Certificate::CreateCertificateListFromBytes(
-          base::as_bytes(base::make_span(data, length)),
+          base::as_bytes(base::span(data, length)),
           net::X509Certificate::FORMAT_AUTO);
 
   if (cert_list.size() != 1) {
@@ -416,7 +417,7 @@ bool ShouldOnlyUseInvalidations() {
       kCertProvisioningUseOnlyInvalidationsForTesting);
 }
 
-std::string_view GetCertProvisioningInvalidationProjectNumber(CertScope scope) {
+int64_t GetCertProvisioningInvalidationProjectNumber(CertScope scope) {
   if (IsDirectInvalidationEnabledForScope(scope)) {
     return kCertProvisioningInvalidationProjectNumber;
   }

@@ -6,9 +6,9 @@ from webdriver.bidi.modules.script import ContextTarget
 
 from tests.support.sync import AsyncPoll
 
-from ... import number_interval
 from .. import (
     assert_response_event,
+    get_network_event_timerange,
     HTTP_STATUS_AND_STATUS_TEXT,
     PAGE_DATA_URL_HTML,
     PAGE_DATA_URL_IMAGE,
@@ -17,6 +17,7 @@ from .. import (
     PAGE_EMPTY_SCRIPT,
     PAGE_EMPTY_SVG,
     PAGE_EMPTY_TEXT,
+    PAGE_INITIATOR,
     PAGE_SERVICEWORKER_HTML,
     RESPONSE_STARTED_EVENT,
 )
@@ -169,6 +170,7 @@ async def test_request_bodysize(
 
 @pytest.mark.asyncio
 async def test_request_timing_info(
+    bidi_session,
     url,
     wait_for_event,
     wait_for_future_safe,
@@ -187,7 +189,7 @@ async def test_request_timing_info(
     await wait_for_future_safe(on_response_started)
 
     time_end = await current_time()
-    time_range = number_interval(time_start - 1, time_end + 1)
+    time_range = get_network_event_timerange(time_start, time_end, bidi_session)
 
     assert len(events) == 1
 
@@ -421,7 +423,7 @@ async def test_serviceworker_request(
     await wait_for_future_safe(on_response_started)
 
     time_end = await current_time()
-    time_range = number_interval(time_start - 1, time_end + 1)
+    time_range = get_network_event_timerange(time_start, time_end, bidi_session)
 
     assert len(events) == 1
 
@@ -442,7 +444,13 @@ async def test_serviceworker_request(
 
 @pytest.mark.asyncio
 async def test_url_with_fragment(
-    url, wait_for_event, wait_for_future_safe, fetch, setup_network_test, current_time
+    bidi_session,
+    url,
+    wait_for_event,
+    wait_for_future_safe,
+    fetch,
+    setup_network_test,
+    current_time,
 ):
     fragment_url = url(f"{PAGE_EMPTY_HTML}#foo")
 
@@ -458,7 +466,7 @@ async def test_url_with_fragment(
     await wait_for_future_safe(on_response_started)
 
     time_end = await current_time()
-    time_range = number_interval(time_start - 1, time_end + 1)
+    time_range = get_network_event_timerange(time_start, time_end, bidi_session)
 
     assert len(events) == 1
 
@@ -506,7 +514,7 @@ async def test_navigate_data_url(
     await wait_for_future_safe(on_response_started)
 
     time_end = await current_time()
-    time_range = number_interval(time_start - 1, time_end + 1)
+    time_range = get_network_event_timerange(time_start, time_end, bidi_session)
 
     assert len(events) == 1
 
@@ -540,6 +548,7 @@ async def test_navigate_data_url(
 )
 @pytest.mark.asyncio
 async def test_fetch_data_url(
+    bidi_session,
     wait_for_event,
     wait_for_future_safe,
     fetch,
@@ -559,7 +568,7 @@ async def test_fetch_data_url(
     await wait_for_future_safe(on_response_started)
 
     time_end = await current_time()
-    time_range = number_interval(time_start - 1, time_end + 1)
+    time_range = get_network_event_timerange(time_start, time_end, bidi_session)
 
     assert len(events) == 1
 
@@ -583,3 +592,55 @@ async def test_fetch_data_url(
         redirect_count=0,
     )
     assert events[0]["navigation"] is None
+
+
+@pytest.mark.asyncio
+async def test_destination_initiator(
+    bidi_session,
+    top_context,
+    wait_for_event,
+    wait_for_future_safe,
+    fetch,
+    setup_network_test,
+    url,
+):
+    network_events = await setup_network_test(events=[RESPONSE_STARTED_EVENT])
+    events = network_events[RESPONSE_STARTED_EVENT]
+
+    page_url = url(PAGE_INITIATOR["HTML"])
+
+    result = await bidi_session.browsing_context.navigate(
+        context=top_context["context"], url=page_url, wait="complete"
+    )
+
+    assert len(events) == 6
+
+    def assert_initiator_destination(url, initiator_type, destination):
+        event = next(e for e in events if url in e["request"]["url"])
+        assert_response_event(
+            event,
+            expected_request={
+                "destination": destination,
+                "initiatorType": initiator_type,
+            },
+        )
+
+    assert_initiator_destination(PAGE_INITIATOR["HTML"], None, "")
+    assert_initiator_destination(PAGE_INITIATOR["SCRIPT"], "script", "script")
+    assert_initiator_destination(PAGE_INITIATOR["STYLESHEET"], "link", "style")
+    assert_initiator_destination(PAGE_INITIATOR["IMAGE"], "img", "image")
+    assert_initiator_destination(PAGE_INITIATOR["BACKGROUND"], "css", "image")
+    assert_initiator_destination(PAGE_EMPTY_HTML, "iframe", "iframe")
+
+    # Perform an additional fetch, and check its destination.
+    on_response_started = wait_for_event(RESPONSE_STARTED_EVENT)
+    await fetch(page_url, method="GET")
+    event = await wait_for_future_safe(on_response_started)
+
+    assert_response_event(
+        event,
+        expected_request={
+            "destination": "",
+            "initiatorType": "fetch",
+        },
+    )

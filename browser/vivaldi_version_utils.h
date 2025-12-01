@@ -9,6 +9,11 @@ namespace vivaldi {
 
 namespace version {
 
+// Compare the Vivaldi major version (major + minor revision) to the static
+// version string. This function must be called before pref version update to
+// return a valid result.
+bool HasMajorVersionChanged(PrefService* prefs);
+
 // Compare the version stored in prefs, to the static version string.
 // This function must be called before pref version update to return a valid
 // result.

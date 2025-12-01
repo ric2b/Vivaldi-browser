@@ -3,9 +3,12 @@
 // found in the LICENSE file.
 
 #include "components/autofill/core/browser/autofill_field.h"
+
 #include "base/test/scoped_feature_list.h"
-#include "components/autofill/core/browser/autofill_test_utils.h"
+#include "base/test/with_feature_override.h"
 #include "components/autofill/core/browser/field_types.h"
+#include "components/autofill/core/browser/test_utils/autofill_test_utils.h"
+#include "components/autofill/core/browser/test_utils/field_prediction_test_matchers.h"
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -13,7 +16,9 @@
 namespace autofill {
 namespace {
 
-const char kGuidA[] = "EDC609ED-7EEE-4F27-B00C-423242A9C44A";
+using ::autofill::test::CreateFieldPrediction;
+using ::autofill::test::EqualsPrediction;
+using ::testing::ElementsAre;
 
 class AutofillFieldTest : public testing::Test {
  public:
@@ -34,46 +39,24 @@ TEST_F(AutofillFieldTest, ValueWasIdentifiedAsPotentiallySensitive) {
   EXPECT_TRUE(field.value_identified_as_potentially_sensitive());
 }
 
-TEST_F(AutofillFieldTest, AssumedProfileValueSource) {
-  AutofillField field;
-
-  // Initially there is no value source.
-  EXPECT_FALSE(field.assumed_profile_value_source().has_value());
-
-  // Test that setting the value works.
-  field.set_assumed_profile_value_source(
-      ProfileValueSource{"guid", NAME_FIRST});
-  ASSERT_TRUE(field.assumed_profile_value_source().has_value());
-  ProfileValueSource expected_source = {"guid", NAME_FIRST};
-  EXPECT_EQ(field.assumed_profile_value_source().value(), expected_source);
-
-  // Verify that the state can also be reset.
-  field.set_assumed_profile_value_source(std::nullopt);
-  EXPECT_FALSE(field.assumed_profile_value_source().has_value());
-}
-
-TEST_F(AutofillFieldTest, FieldIsEligableForPredictionImprovementsFlag) {
+TEST_F(AutofillFieldTest, FieldIsEligibleForAutofillAiFlag) {
   AutofillField field;
 
   // Initially the value should not be identified as sensitive.
-  EXPECT_FALSE(
-      field.field_is_eligible_for_prediction_improvements().has_value());
+  EXPECT_FALSE(field.field_is_eligible_for_autofill_ai().has_value());
 
   // Test that setting the value works.
-  field.set_field_is_eligible_for_prediction_improvements(true);
-  ASSERT_TRUE(
-      field.field_is_eligible_for_prediction_improvements().has_value());
-  EXPECT_TRUE(field.field_is_eligible_for_prediction_improvements().value());
+  field.set_field_is_eligible_for_autofill_ai(true);
+  ASSERT_TRUE(field.field_is_eligible_for_autofill_ai().has_value());
+  EXPECT_TRUE(field.field_is_eligible_for_autofill_ai().value());
 
-  field.set_field_is_eligible_for_prediction_improvements(false);
-  ASSERT_TRUE(
-      field.field_is_eligible_for_prediction_improvements().has_value());
-  EXPECT_FALSE(field.field_is_eligible_for_prediction_improvements().value());
+  field.set_field_is_eligible_for_autofill_ai(false);
+  ASSERT_TRUE(field.field_is_eligible_for_autofill_ai().has_value());
+  EXPECT_FALSE(field.field_is_eligible_for_autofill_ai().value());
 
   // Verify that the state can also be reset.
-  field.set_field_is_eligible_for_prediction_improvements(std::nullopt);
-  EXPECT_FALSE(
-      field.field_is_eligible_for_prediction_improvements().has_value());
+  field.set_field_is_eligible_for_autofill_ai(std::nullopt);
+  EXPECT_FALSE(field.field_is_eligible_for_autofill_ai().has_value());
 }
 
 // Tests that if both autocomplete attributes and server agree it's a phone
@@ -85,31 +68,30 @@ TEST_F(AutofillFieldTest, Type_ServerPredictionOfCityAndNumber_OverrideHtml) {
   field.SetHtmlType(HtmlFieldType::kTel, HtmlFieldMode::kNone);
 
   field.set_server_predictions(
-      {::autofill::test::CreateFieldPrediction(PHONE_HOME_CITY_AND_NUMBER)});
+      {CreateFieldPrediction(PHONE_HOME_CITY_AND_NUMBER)});
   EXPECT_EQ(PHONE_HOME_CITY_AND_NUMBER, field.Type().GetStorableType());
 
   // Overrides to another number format.
-  field.set_server_predictions(
-      {::autofill::test::CreateFieldPrediction(PHONE_HOME_NUMBER)});
+  field.set_server_predictions({CreateFieldPrediction(PHONE_HOME_NUMBER)});
   EXPECT_EQ(PHONE_HOME_NUMBER, field.Type().GetStorableType());
 
   // Overrides autocomplete=tel-national too.
   field.SetHtmlType(HtmlFieldType::kTelNational, HtmlFieldMode::kNone);
   field.set_server_predictions(
-      {::autofill::test::CreateFieldPrediction(PHONE_HOME_WHOLE_NUMBER)});
+      {CreateFieldPrediction(PHONE_HOME_WHOLE_NUMBER)});
   EXPECT_EQ(PHONE_HOME_WHOLE_NUMBER, field.Type().GetStorableType());
 
   // If autocomplete=tel-national but server says it's not a phone field,
   // do not override.
   field.SetHtmlType(HtmlFieldType::kTelNational, HtmlFieldMode::kNone);
-  field.set_server_predictions({::autofill::test::CreateFieldPrediction(
-      CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR)});
+  field.set_server_predictions(
+      {CreateFieldPrediction(CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR)});
   EXPECT_EQ(PHONE_HOME_CITY_AND_NUMBER, field.Type().GetStorableType());
 
   // If html type not specified, we still use server prediction.
   field.SetHtmlType(HtmlFieldType::kUnspecified, HtmlFieldMode::kNone);
   field.set_server_predictions(
-      {::autofill::test::CreateFieldPrediction(PHONE_HOME_CITY_AND_NUMBER)});
+      {CreateFieldPrediction(PHONE_HOME_CITY_AND_NUMBER)});
   EXPECT_EQ(PHONE_HOME_CITY_AND_NUMBER, field.Type().GetStorableType());
 }
 
@@ -120,11 +102,11 @@ TEST_F(AutofillFieldTest, EmailOverridesUsernameType) {
       features::kAutofillGivePrecedenceToEmailOverUsername};
   AutofillField field;
 
-  field.set_server_predictions({test::CreateFieldPrediction(USERNAME)});
+  field.set_server_predictions({CreateFieldPrediction(USERNAME)});
   field.set_heuristic_type(GetActiveHeuristicSource(), EMAIL_ADDRESS);
   EXPECT_EQ(field.Type().GetStorableType(), EMAIL_ADDRESS);
 
-  field.set_server_predictions({test::CreateFieldPrediction(SINGLE_USERNAME)});
+  field.set_server_predictions({CreateFieldPrediction(SINGLE_USERNAME)});
   field.set_heuristic_type(GetActiveHeuristicSource(), EMAIL_ADDRESS);
   EXPECT_EQ(field.Type().GetStorableType(), EMAIL_ADDRESS);
 }
@@ -142,14 +124,12 @@ TEST_F(AutofillFieldTest, IsFieldFillable) {
 
   // Only server type is set.
   field.set_heuristic_type(GetActiveHeuristicSource(), UNKNOWN_TYPE);
-  field.set_server_predictions(
-      {::autofill::test::CreateFieldPrediction(NAME_LAST)});
+  field.set_server_predictions({CreateFieldPrediction(NAME_LAST)});
   EXPECT_TRUE(field.IsFieldFillable());
 
   // Both types set.
   field.set_heuristic_type(GetActiveHeuristicSource(), NAME_FIRST);
-  field.set_server_predictions(
-      {::autofill::test::CreateFieldPrediction(NAME_LAST)});
+  field.set_server_predictions({CreateFieldPrediction(NAME_LAST)});
   EXPECT_TRUE(field.IsFieldFillable());
 
   // Field has autocomplete="off" set. Since autofill was able to make a
@@ -158,19 +138,35 @@ TEST_F(AutofillFieldTest, IsFieldFillable) {
   EXPECT_TRUE(field.IsFieldFillable());
 }
 
-TEST_F(AutofillFieldTest, SetAndGetPossibleProfileValueSources) {
+class AutofillFieldWithAutofillAiTest : public base::test::WithFeatureOverride,
+                                        public AutofillFieldTest {
+ public:
+  AutofillFieldWithAutofillAiTest()
+      : base::test::WithFeatureOverride(features::kAutofillAiWithDataSchema) {}
+};
+
+// Tests that server prediction with SOURCE_AUTOFILL_AI are only added if
+// `features::kAutofillAiWithDataSchema` is enabled.
+TEST_P(AutofillFieldWithAutofillAiTest, SetAutofillAiPredictions) {
   AutofillField field;
 
-  PossibleProfileValueSources sources;
-  sources.AddPossibleValueSource(kGuidA, NAME_FIRST);
-  PossibleProfileValueSources copy = sources;
+  const FieldPrediction crowdsourcing_prediction = CreateFieldPrediction(
+      NAME_FIRST, FieldPrediction::SOURCE_AUTOFILL_DEFAULT);
+  const FieldPrediction ai_prediction =
+      CreateFieldPrediction(NAME_FIRST, FieldPrediction::SOURCE_AUTOFILL_AI);
+  field.set_server_predictions({crowdsourcing_prediction, ai_prediction});
 
-  field.set_possible_profile_value_sources(sources);
-
-  EXPECT_THAT(
-      field.possible_profile_value_sources()->GetAllPossibleValueSources(),
-      testing::ElementsAre(ProfileValueSource(kGuidA, NAME_FIRST)));
+  if (IsParamFeatureEnabled()) {
+    EXPECT_THAT(field.server_predictions(),
+                ElementsAre(EqualsPrediction(crowdsourcing_prediction),
+                            EqualsPrediction(ai_prediction)));
+  } else {
+    EXPECT_THAT(field.server_predictions(),
+                ElementsAre(EqualsPrediction(crowdsourcing_prediction)));
+  }
 }
+
+INSTANTIATE_FEATURE_OVERRIDE_TEST_SUITE(AutofillFieldWithAutofillAiTest);
 
 // Parameters for `PrecedenceOverAutocompleteTest`
 struct PrecedenceOverAutocompleteParams {
@@ -192,8 +188,7 @@ TEST_P(PrecedenceOverAutocompleteTest, PrecedenceOverAutocompleteParams) {
   PrecedenceOverAutocompleteParams test_case = GetParam();
   AutofillField field;
   field.SetHtmlType(test_case.html_field_type, HtmlFieldMode::kNone);
-  field.set_server_predictions(
-      {test::CreateFieldPrediction(test_case.server_type)});
+  field.set_server_predictions({CreateFieldPrediction(test_case.server_type)});
   field.set_heuristic_type(GetActiveHeuristicSource(),
                            test_case.heuristic_type);
   EXPECT_EQ(test_case.expected_result, field.ComputedType().GetStorableType());
@@ -243,8 +238,8 @@ TEST_P(AutocompleteUnrecognizedTypeTest, TypePredictions) {
   // Create a field with ac=unrecognized and the specified predicted type.
   const AutocompleteUnrecognizedTypeTestCase& test = GetParam();
   AutofillField field;
-  field.set_server_predictions({test::CreateFieldPrediction(
-      test.predicted_type, test.is_server_overwrite)});
+  field.set_server_predictions(
+      {CreateFieldPrediction(test.predicted_type, test.is_server_overwrite)});
   field.SetHtmlType(HtmlFieldType::kUnrecognized, HtmlFieldMode::kNone);
 
   // Expect that the predicted type wins over ac=unrecognized.
@@ -296,8 +291,7 @@ TEST_P(AutofillLocalHeuristicsOverridesTest,
   AutofillLocalHeuristicsOverridesParams test_case = GetParam();
   AutofillField field;
   field.SetHtmlType(test_case.html_field_type, HtmlFieldMode::kNone);
-  field.set_server_predictions(
-      {test::CreateFieldPrediction(test_case.server_type)});
+  field.set_server_predictions({CreateFieldPrediction(test_case.server_type)});
   field.set_heuristic_type(GetActiveHeuristicSource(),
                            test_case.heuristic_type);
   EXPECT_EQ(test_case.expected_result, field.ComputedType().GetStorableType())
@@ -391,7 +385,57 @@ INSTANTIATE_TEST_SUITE_P(
             .html_field_type = HtmlFieldType::kUnspecified,
             .server_type = ADDRESS_HOME_APT_NUM,
             .heuristic_type = ADDRESS_HOME_HOUSE_NUMBER_AND_APT,
-            .expected_result = ADDRESS_HOME_HOUSE_NUMBER_AND_APT}));
+            .expected_result = ADDRESS_HOME_HOUSE_NUMBER_AND_APT},
+        AutofillLocalHeuristicsOverridesParams{
+            .html_field_type = HtmlFieldType::kUnspecified,
+            .server_type = NAME_FULL,
+            .heuristic_type = ALTERNATIVE_FULL_NAME,
+            .expected_result = ALTERNATIVE_FULL_NAME},
+        AutofillLocalHeuristicsOverridesParams{
+            .html_field_type = HtmlFieldType::kUnspecified,
+            .server_type = NAME_FIRST,
+            .heuristic_type = ALTERNATIVE_GIVEN_NAME,
+            .expected_result = ALTERNATIVE_GIVEN_NAME},
+        AutofillLocalHeuristicsOverridesParams{
+            .html_field_type = HtmlFieldType::kUnspecified,
+            .server_type = NAME_LAST,
+            .heuristic_type = ALTERNATIVE_FAMILY_NAME,
+            .expected_result = ALTERNATIVE_FAMILY_NAME},
+        AutofillLocalHeuristicsOverridesParams{
+            .html_field_type = HtmlFieldType::kUnspecified,
+            .server_type = NAME_LAST_SECOND,
+            .heuristic_type = ALTERNATIVE_FAMILY_NAME,
+            .expected_result = ALTERNATIVE_FAMILY_NAME},
+        AutofillLocalHeuristicsOverridesParams{
+            .html_field_type = HtmlFieldType::kUnspecified,
+            .server_type = NAME_LAST_CORE,
+            .heuristic_type = ALTERNATIVE_FAMILY_NAME,
+            .expected_result = ALTERNATIVE_FAMILY_NAME},
+        AutofillLocalHeuristicsOverridesParams{
+            .html_field_type = HtmlFieldType::kAdditionalName,
+            .server_type = NAME_LAST_PREFIX,
+            .heuristic_type = NAME_LAST_PREFIX,
+            .expected_result = NAME_LAST_PREFIX},
+        AutofillLocalHeuristicsOverridesParams{
+            .html_field_type = HtmlFieldType::kAdditionalNameInitial,
+            .server_type = NAME_LAST_PREFIX,
+            .heuristic_type = NAME_LAST_PREFIX,
+            .expected_result = NAME_LAST_PREFIX},
+        AutofillLocalHeuristicsOverridesParams{
+            .html_field_type = HtmlFieldType::kFamilyName,
+            .server_type = NAME_LAST_CORE,
+            .heuristic_type = NAME_LAST_CORE,
+            .expected_result = NAME_LAST_CORE},
+        AutofillLocalHeuristicsOverridesParams{
+            .html_field_type = HtmlFieldType::kUnspecified,
+            .server_type = NAME_MIDDLE,
+            .heuristic_type = NAME_LAST_PREFIX,
+            .expected_result = NAME_LAST_PREFIX},
+        AutofillLocalHeuristicsOverridesParams{
+            .html_field_type = HtmlFieldType::kUnspecified,
+            .server_type = NAME_LAST,
+            .heuristic_type = NAME_LAST_CORE,
+            .expected_result = NAME_LAST_CORE}));
 
 // Tests that consecutive identical events are not added twice to the event log.
 TEST(AutofillFieldLogEventTypeTest, AppendLogEventIfNotRepeated) {

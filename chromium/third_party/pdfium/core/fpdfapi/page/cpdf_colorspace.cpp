@@ -217,6 +217,7 @@ class CPDF_ICCBasedCS final : public CPDF_BasedCS {
   // CPDF_ColorSpace:
   std::optional<FX_RGB_STRUCT<float>> GetRGB(
       pdfium::span<const float> pBuf) const override;
+  RetainPtr<CPDF_IccProfile> GetIccProfile() const override;
   void TranslateImageLine(pdfium::span<uint8_t> dest_span,
                           pdfium::span<const uint8_t> src_span,
                           int pixels,
@@ -386,12 +387,12 @@ FX_RGB_STRUCT<float> XYZ_to_sRGB_WhitePoint(float X,
   // The following RGB_xyz is based on
   // sRGB value {Rx,Ry}={0.64, 0.33}, {Gx,Gy}={0.30, 0.60}, {Bx,By}={0.15, 0.06}
 
-  constexpr float Rx = 0.64f;
-  constexpr float Ry = 0.33f;
-  constexpr float Gx = 0.30f;
-  constexpr float Gy = 0.60f;
-  constexpr float Bx = 0.15f;
-  constexpr float By = 0.06f;
+  static constexpr float Rx = 0.64f;
+  static constexpr float Ry = 0.33f;
+  static constexpr float Gx = 0.30f;
+  static constexpr float Gy = 0.60f;
+  static constexpr float Bx = 0.15f;
+  static constexpr float By = 0.06f;
   Matrix_3by3 RGB_xyz(Rx, Gx, Bx, Ry, Gy, By, 1 - Rx - Ry, 1 - Gx - Gy,
                       1 - Bx - By);
   Vector_3by1 whitePoint(Xw, Yw, Zw);
@@ -435,7 +436,7 @@ class StockColorSpaces {
     if (family == CPDF_ColorSpace::Family::kPattern) {
       return pattern_;
     }
-    NOTREACHED_NORETURN();
+    NOTREACHED();
   }
 
  private:
@@ -582,7 +583,7 @@ uint32_t CPDF_ColorSpace::ComponentsForFamily(Family family) {
     case Family::kDeviceCMYK:
       return 4;
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 
@@ -600,6 +601,13 @@ std::vector<float> CPDF_ColorSpace::CreateBufAndSetDefaultColor() const {
 
 uint32_t CPDF_ColorSpace::ComponentCount() const {
   return m_nComponents;
+}
+
+// Returns nullptr because only the CPDF_ICCBasedCS subclass supports ICC
+// profiles. CPDF_ICCBasedCS overrides this method to return valid ICC
+// profile data.
+RetainPtr<CPDF_IccProfile> CPDF_ColorSpace::GetIccProfile() const {
+  return nullptr;
 }
 
 void CPDF_ColorSpace::GetDefaultValue(int iComponent,
@@ -954,6 +962,10 @@ std::optional<FX_RGB_STRUCT<float>> CPDF_ICCBasedCS::GetRGB(
   return FX_RGB_STRUCT<float>{};
 }
 
+RetainPtr<CPDF_IccProfile> CPDF_ICCBasedCS::GetIccProfile() const {
+  return profile_;
+}
+
 void CPDF_ICCBasedCS::TranslateImageLine(pdfium::span<uint8_t> dest_span,
                                          pdfium::span<const uint8_t> src_span,
                                          int pixels,
@@ -1072,7 +1084,7 @@ RetainPtr<CPDF_ColorSpace> CPDF_ICCBasedCS::GetStockAlternateProfile(
     return GetStockCS(Family::kDeviceRGB);
   if (nComponents == 4)
     return GetStockCS(Family::kDeviceCMYK);
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 // static

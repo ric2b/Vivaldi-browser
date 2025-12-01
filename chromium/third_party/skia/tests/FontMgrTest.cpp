@@ -117,7 +117,7 @@ DEF_TEST(FontMgr_Iter, reporter) {
             set->getStyle(j, &fs, &sname);
 
             if (FLAGS_verboseFontMgr) {
-                SkDebugf("\t[%d] %s [%3d %d %d]\n", j, sname.c_str(),
+                SkDebugf("\t[%d] %s [%3d %d %d]", j, sname.c_str(),
                          fs.weight(), fs.width(), fs.slant());
             }
 
@@ -129,6 +129,12 @@ DEF_TEST(FontMgr_Iter, reporter) {
             SkString name1;
             face1->getFamilyName(&name1);
             SkFontStyle s1 = face1->fontStyle();
+
+            SkString resource1;
+            face1->getResourceName(&resource1);
+            if (FLAGS_verboseFontMgr) {
+                SkDebugf(" \"%s\" \"%s\"\n", name1.c_str(), resource1.c_str());
+            }
 
             // Note that fs != s1 is fine, though probably rare.
 
@@ -142,13 +148,10 @@ DEF_TEST(FontMgr_Iter, reporter) {
 
             REPORTER_ASSERT(reporter, name1 == name2, "%s == %s", name1.c_str(), name2.c_str());
 
-            // TODO: This should work, but Mac matches the wrong font sometimes.
-            if ((false)) {
-                SkFontStyle s2 = face2->fontStyle();
-                REPORTER_ASSERT(reporter, s1 == s2, "%s [%3d %d %d] != %s [%3d %d %d]",
-                                name1.c_str(), s1.weight(), s1.width(), s1.slant(),
-                                name2.c_str(), s2.weight(), s2.width(), s2.slant());
-            }
+            SkFontStyle s2 = face2->fontStyle();
+            REPORTER_ASSERT(reporter, s1 == s2, "%s [%3d %d %d] != %s [%3d %d %d]",
+                            name1.c_str(), s1.weight(), s1.width(), s1.slant(),
+                            name2.c_str(), s2.weight(), s2.width(), s2.slant());
         }
     }
 }

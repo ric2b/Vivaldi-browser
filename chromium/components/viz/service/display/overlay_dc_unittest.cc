@@ -4,6 +4,7 @@
 
 #include <stddef.h>
 
+#include <functional>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -11,6 +12,7 @@
 #include "base/containers/flat_map.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "cc/paint/filter_operation.h"
@@ -149,7 +151,7 @@ TextureDrawQuad* CreateTextureQuadAt(
                /*needs_blending=*/false, resource_id, /*premultiplied=*/true,
                /*top_left=*/gfx::PointF(0, 0),
                /*bottom_right=*/gfx::PointF(1, 1),
-               /*background=*/SkColors::kBlack, /*flipped=*/false,
+               /*background=*/SkColors::kBlack,
                /*nearest=*/false, /*secure_output=*/false,
                gfx::ProtectedVideoType::kClear);
   return quad;
@@ -188,7 +190,7 @@ TextureDrawQuad* CreateFullscreenCandidateYUVTextureQuad(
                        /*premultiplied=*/true,
                        /*top_left=*/gfx::PointF(0, 0),
                        /*bottom_right=*/gfx::PointF(1, 1),
-                       /*background=*/SkColors::kBlack, /*flipped=*/false,
+                       /*background=*/SkColors::kBlack,
                        /*nearest=*/false, /*secure_output=*/false,
                        gfx::ProtectedVideoType::kClear);
   // Content is video frame type.
@@ -303,9 +305,8 @@ class DCLayerOverlayProcessorTest : public OverlayProcessorTestBase {
     // |DCLayerOverlayProcessor::Process| doesn't guarantee a specific ordering
     // for its overlays so we sort front-to-back so tests can make expectations
     // with the same ordering as the input draw quads.
-    base::ranges::sort(root_render_pass_overlay_data.promoted_overlays,
-                       base::ranges::greater(),
-                       &OverlayCandidate::plane_z_order);
+    std::ranges::sort(root_render_pass_overlay_data.promoted_overlays,
+                      std::ranges::greater(), &OverlayCandidate::plane_z_order);
 
     return std::move(root_render_pass_overlay_data);
   }
@@ -335,7 +336,7 @@ TEST_F(DCLayerOverlayProcessorTest, DisableVideoOverlayIfMovingWorkaround) {
           // Content has valid HDR metadata.
           hdr_metadata.cta_861_3 = gfx::HdrMetadataCta861_3(1000, 400);
           hdr_metadata.smpte_st_2086 = gfx::HdrMetadataSmpteSt2086(
-              SkNamedPrimariesExt::kRec2020, 1000, 0.0001);
+              SkNamedPrimaries::kRec2020, 1000, 0.0001);
 
           // Render Pass has HDR content usage.
           pass->content_color_usage = gfx::ContentColorUsage::kHDR;
@@ -1632,7 +1633,7 @@ TEST_F(DCLayerOverlayProcessorTest, HDR10VideoOverlay) {
   gfx::HDRMetadata valid_hdr_metadata;
   valid_hdr_metadata.cta_861_3 = gfx::HdrMetadataCta861_3(1000, 400);
   valid_hdr_metadata.smpte_st_2086 =
-      gfx::HdrMetadataSmpteSt2086(SkNamedPrimariesExt::kRec2020, 1000, 0.0001);
+      gfx::HdrMetadataSmpteSt2086(SkNamedPrimaries::kRec2020, 1000, 0.0001);
 
   // Device has RGB10A2 overlay support.
   gl::SetDirectCompositionScaledOverlaysSupportedForTesting(true);
@@ -1764,8 +1765,8 @@ TEST_F(DCLayerOverlayProcessorTest, HDR10VideoOverlay) {
 
     // Content has HDR metadata which contains smpte_st_2086.
     gfx::HDRMetadata smpte_st_2086_hdr_metadata;
-    smpte_st_2086_hdr_metadata.smpte_st_2086 = gfx::HdrMetadataSmpteSt2086(
-        SkNamedPrimariesExt::kRec2020, 1000, 0.0001);
+    smpte_st_2086_hdr_metadata.smpte_st_2086 =
+        gfx::HdrMetadataSmpteSt2086(SkNamedPrimaries::kRec2020, 1000, 0.0001);
     // Content is 10bit P010 content with HDR10 colorspace.
     CreateFullscreenCandidateYUVTextureQuad(
         resource_provider_.get(), child_resource_provider_.get(),
@@ -1966,7 +1967,7 @@ TEST_F(OverlayProcessorWinStaticTest, InsertSurfaceContentOverlay) {
   OverlayCandidateList candidates;
   {
     candidates.emplace_back();
-    candidates.back().resource_id = ResourceId(4);
+    candidates.back().resource_id = ResourceId(1);
 
     // Pretend this candidate is a RPDQ that we've pulled overlays from.
     candidates.emplace_back();
@@ -1974,7 +1975,7 @@ TEST_F(OverlayProcessorWinStaticTest, InsertSurfaceContentOverlay) {
     candidates.back().rpdq = &rpdq;
 
     candidates.emplace_back();
-    candidates.back().resource_id = ResourceId(1);
+    candidates.back().resource_id = ResourceId(4);
   }
 
   std::ignore = OverlayProcessorWin::
@@ -2004,7 +2005,7 @@ TEST_F(OverlayProcessorWinStaticTest, InsertSurfaceContentUnderlay) {
   OverlayCandidateList candidates;
   {
     candidates.emplace_back();
-    candidates.back().resource_id = ResourceId(4);
+    candidates.back().resource_id = ResourceId(1);
 
     // Pretend this candidate is a RPDQ that we've pulled overlays from.
     candidates.emplace_back();
@@ -2012,7 +2013,7 @@ TEST_F(OverlayProcessorWinStaticTest, InsertSurfaceContentUnderlay) {
     candidates.back().rpdq = &rpdq;
 
     candidates.emplace_back();
-    candidates.back().resource_id = ResourceId(1);
+    candidates.back().resource_id = ResourceId(4);
   }
 
   std::ignore = OverlayProcessorWin::
@@ -2049,7 +2050,7 @@ TEST_F(OverlayProcessorWinStaticTest,
   OverlayCandidateList candidates;
   {
     candidates.emplace_back();
-    candidates.back().resource_id = ResourceId(5);
+    candidates.back().resource_id = ResourceId(1);
 
     // Pretend this candidate is a RPDQ that we've pulled overlays from.
     candidates.emplace_back();
@@ -2057,7 +2058,7 @@ TEST_F(OverlayProcessorWinStaticTest,
     candidates.back().rpdq = &rpdq;
 
     candidates.emplace_back();
-    candidates.back().resource_id = ResourceId(1);
+    candidates.back().resource_id = ResourceId(5);
   }
 
   std::ignore = OverlayProcessorWin::
@@ -2084,13 +2085,13 @@ TEST_F(OverlayProcessorWinStaticTest,
 
   OverlayCandidateList candidates;
   {
+    candidates.emplace_back();
+    candidates.back().resource_id = ResourceId(1);
+
     // Pretend this candidate is a RPDQ that we've pulled overlays from.
     candidates.emplace_back();
     candidates.back().resource_id = ResourceId(2);
     candidates.back().rpdq = &rpdq;
-
-    candidates.emplace_back();
-    candidates.back().resource_id = ResourceId(1);
   }
 
   std::ignore = OverlayProcessorWin::
@@ -2133,10 +2134,7 @@ TEST_F(OverlayProcessorWinStaticTest,
   OverlayCandidateList candidates;
   {
     candidates.emplace_back();
-    candidates.back().resource_id = ResourceId(8);
-
-    candidates.emplace_back();
-    candidates.back().resource_id = ResourceId(7);
+    candidates.back().resource_id = ResourceId(1);
 
     // Pretend this candidate is a RPDQ that we've pulled overlays from.
     candidates.emplace_back();
@@ -2144,7 +2142,10 @@ TEST_F(OverlayProcessorWinStaticTest,
     candidates.back().rpdq = &rpdq;
 
     candidates.emplace_back();
-    candidates.back().resource_id = ResourceId(1);
+    candidates.back().resource_id = ResourceId(7);
+
+    candidates.emplace_back();
+    candidates.back().resource_id = ResourceId(8);
   }
 
   std::ignore = OverlayProcessorWin::
@@ -2186,18 +2187,18 @@ TEST_F(OverlayProcessorWinStaticTest,
 
   OverlayCandidateList candidates;
   {
+    // Pretend this candidate is a RPDQ that we've pulled overlays from.
     candidates.emplace_back();
-    candidates.back().resource_id = ResourceId(5);
+    candidates.back().resource_id = ResourceId(1);
+    candidates.back().rpdq = &rpdq1;
 
     // Pretend this candidate is a RPDQ that we've pulled overlays from.
     candidates.emplace_back();
     candidates.back().resource_id = ResourceId(3);
     candidates.back().rpdq = &rpdq2;
 
-    // Pretend this candidate is a RPDQ that we've pulled overlays from.
     candidates.emplace_back();
-    candidates.back().resource_id = ResourceId(1);
-    candidates.back().rpdq = &rpdq1;
+    candidates.back().resource_id = ResourceId(5);
   }
 
   std::ignore = OverlayProcessorWin::
@@ -2229,20 +2230,20 @@ TEST_F(OverlayProcessorWinStaticTest,
   OverlayCandidateList candidates;
   {
     candidates.emplace_back();
-    candidates.back().resource_id = ResourceId(6);
-
-    // Pretend this candidate is a RPDQ that we've pulled overlays from.
-    candidates.emplace_back();
-    candidates.back().resource_id = ResourceId(4);
-    candidates.back().rpdq = &rpdq;
+    candidates.back().resource_id = ResourceId(1);
 
     // Pretend this candidate is a RPDQ that we've pulled overlays from.
     candidates.emplace_back();
     candidates.back().resource_id = ResourceId(2);
     candidates.back().rpdq = &rpdq;
 
+    // Pretend this candidate is a RPDQ that we've pulled overlays from.
     candidates.emplace_back();
-    candidates.back().resource_id = ResourceId(1);
+    candidates.back().resource_id = ResourceId(4);
+    candidates.back().rpdq = &rpdq;
+
+    candidates.emplace_back();
+    candidates.back().resource_id = ResourceId(6);
   }
 
   std::ignore = OverlayProcessorWin::
@@ -2374,8 +2375,8 @@ class OverlayProcessorWinSurfacePlaneTest
         pass_list_->back()->damage_rect.Intersect(*damage_rect_);
 
         const AggregatedRenderPassId max_pass_id =
-            base::ranges::max_element(*pass_list_, base::ranges::less(),
-                                      &AggregatedRenderPass::id)
+            std::ranges::max_element(*pass_list_, std::ranges::less(),
+                                     &AggregatedRenderPass::id)
                 ->get()
                 ->id;
         const AggregatedRenderPassId unused_pass_id(max_pass_id.value() + 1);
@@ -2419,7 +2420,7 @@ class OverlayProcessorWinSurfacePlaneTest
 
       ~ScopedSimulateUnmergedWebContentsSurface() {
         auto it =
-            base::ranges::find_if(*candidates_, [](const auto& candidate) {
+            std::ranges::find_if(*candidates_, [](const auto& candidate) {
               return candidate.rpdq &&
                      candidate.rpdq->render_pass_id == kDefaultRootPassId;
             });
@@ -2460,8 +2461,8 @@ class OverlayProcessorWinSurfacePlaneTest
 
     // Sort candidates front-to-back so tests can assume they appear in the same
     // order as the input draw quads.
-    base::ranges::sort(*candidates, base::ranges::greater(),
-                       &OverlayCandidate::plane_z_order);
+    std::ranges::sort(*candidates, std::ranges::greater(),
+                      &OverlayCandidate::plane_z_order);
   }
 
  private:
@@ -2878,7 +2879,7 @@ TEST_F(OverlayProcessorWinDelegatedCompositingTest,
   auto* video_quad = CreateFullscreenCandidateYUVTextureQuad(
       resource_provider_.get(), child_resource_provider_.get(),
       child_provider_.get(), pass->shared_quad_state_list.back(), pass.get());
-  ResourceId video_resource_id = video_quad->resource_id();
+  ResourceId video_resource_id = video_quad->resource_id;
 
   {
     // A RPDQ with a backdrop filter occluding another quad will cause delegated
@@ -3137,7 +3138,7 @@ TEST_F(OverlayProcessorWinPartiallyDelegatedCompositingTest,
         child_provider_.get(), child_pass->CreateAndAppendSharedQuadState(),
         child_pass.get(), gfx::Rect(0, 0, 50, 50),
         /*is_overlay_candidate=*/true);
-    child_pass_texture_id = texture_quad->resource_id();
+    child_pass_texture_id = texture_quad->resource_id;
     pass_list.push_back(std::move(child_pass));
   }
 
@@ -3183,7 +3184,7 @@ TEST_F(OverlayProcessorWinPartiallyDelegatedCompositingTest,
         child_provider_.get(), child_pass->CreateAndAppendSharedQuadState(),
         child_pass.get(), gfx::Rect(0, 0, 50, 50),
         /*is_overlay_candidate=*/true);
-    child_pass_texture_id = texture_quad->resource_id();
+    child_pass_texture_id = texture_quad->resource_id;
     pass_list.push_back(std::move(child_pass));
   }
 
@@ -3224,7 +3225,7 @@ TEST_F(OverlayProcessorWinPartiallyDelegatedCompositingTest,
         child_provider_.get(), child_pass->CreateAndAppendSharedQuadState(),
         child_pass.get(), gfx::Rect(0, 0, 50, 50),
         /*is_overlay_candidate=*/true);
-    child_pass_video_id = texture_quad->resource_id();
+    child_pass_video_id = texture_quad->resource_id;
     pass_list.push_back(std::move(child_pass));
   }
 
@@ -3241,14 +3242,14 @@ TEST_F(OverlayProcessorWinPartiallyDelegatedCompositingTest,
         other_child_pass->CreateAndAppendSharedQuadState(),
         other_child_pass.get(), gfx::Rect(10, 0, 50, 50),
         /*is_overlay_candidate=*/true);
-    other_child_pass_video_id = texture_quad->resource_id();
+    other_child_pass_video_id = texture_quad->resource_id;
     auto* texture_quad_2 = CreateTextureQuadAt(
         resource_provider_.get(), child_resource_provider_.get(),
         child_provider_.get(),
         other_child_pass->CreateAndAppendSharedQuadState(),
         other_child_pass.get(), gfx::Rect(0, 0, 50, 50),
         /*is_overlay_candidate=*/true);
-    other_child_pass_video_2_id = texture_quad_2->resource_id();
+    other_child_pass_video_2_id = texture_quad_2->resource_id;
     pass_list.push_back(std::move(other_child_pass));
   }
 
@@ -3348,7 +3349,7 @@ TEST_F(OverlayProcessorWinPartiallyDelegatedCompositingTest,
         child_provider_.get(), child_pass->CreateAndAppendSharedQuadState(),
         child_pass.get(), gfx::Rect(0, 0, 50, 50),
         /*is_overlay_candidate=*/true);
-    child_pass_texture_id = texture_quad->resource_id();
+    child_pass_texture_id = texture_quad->resource_id;
     pass_list.push_back(std::move(child_pass));
   }
 
@@ -3396,7 +3397,7 @@ TEST_F(OverlayProcessorWinPartiallyDelegatedCompositingTest,
         child_provider_.get(), child_pass->CreateAndAppendSharedQuadState(),
         child_pass.get(), gfx::Rect(0, 0, 50, 50),
         /*is_overlay_candidate=*/true);
-    child_pass_texture_id = texture_quad->resource_id();
+    child_pass_texture_id = texture_quad->resource_id;
     pass_list.push_back(std::move(child_pass));
   }
 
@@ -3449,7 +3450,7 @@ TEST_F(OverlayProcessorWinPartiallyDelegatedCompositingTest,
         resource_provider_.get(), child_resource_provider_.get(),
         child_provider_.get(), sqs, child_pass.get(), gfx::Rect(0, 0, 50, 50),
         /*is_overlay_candidate=*/true);
-    child_pass_texture_id = texture_quad->resource_id();
+    child_pass_texture_id = texture_quad->resource_id;
     pass_list.push_back(std::move(child_pass));
   }
 
@@ -3499,7 +3500,7 @@ TEST_F(OverlayProcessorWinPartiallyDelegatedCompositingTest,
         resource_provider_.get(), child_resource_provider_.get(),
         child_provider_.get(), sqs, child_pass.get(), gfx::Rect(0, 0, 50, 50),
         /*is_overlay_candidate=*/true);
-    child_pass_texture_id = texture_quad->resource_id();
+    child_pass_texture_id = texture_quad->resource_id;
     pass_list.push_back(std::move(child_pass));
   }
 
@@ -3560,7 +3561,7 @@ TEST_F(OverlayProcessorWinPartiallyDelegatedCompositingTest,
                                   child_pass->CreateAndAppendSharedQuadState(),
                                   child_pass.get(), texture_quad_rect,
                                   /*is_overlay_candidate=*/false);
-    ResourceId child_pass_texture_id = texture_quad->resource_id();
+    ResourceId child_pass_texture_id = texture_quad->resource_id;
     pass_list.push_back(std::move(child_pass));
 
     auto pass = CreateRenderPass();
@@ -3660,7 +3661,7 @@ TEST_F(OverlayProcessorWinPartiallyDelegatedCompositingTest,
                   left_child_pass->CreateAndAppendSharedQuadState(),
                   left_child_pass.get(), left_texture_quad_rect,
                   /*is_overlay_candidate=*/false);
-    ResourceId left_child_pass_texture_id = left_texture_quad->resource_id();
+    ResourceId left_child_pass_texture_id = left_texture_quad->resource_id;
     pass_list.push_back(std::move(left_child_pass));
 
     auto right_child_pass = CreateRenderPass(right_child_pass_id);
@@ -3680,7 +3681,7 @@ TEST_F(OverlayProcessorWinPartiallyDelegatedCompositingTest,
                   right_child_pass->CreateAndAppendSharedQuadState(),
                   right_child_pass.get(), right_texture_quad_rect,
                   /*is_overlay_candidate=*/false);
-    ResourceId right_child_pass_texture_id = right_texture_quad->resource_id();
+    ResourceId right_child_pass_texture_id = right_texture_quad->resource_id;
     pass_list.push_back(std::move(right_child_pass));
 
     CreateRenderPassDrawQuadAt(pass.get(),

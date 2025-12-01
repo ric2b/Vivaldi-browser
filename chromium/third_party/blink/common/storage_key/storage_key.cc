@@ -4,14 +4,13 @@
 
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 
+#include <algorithm>
 #include <memory>
 #include <ostream>
 #include <string>
 #include <string_view>
-#include <tuple>
 
 #include "base/feature_list.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/types/optional_util.h"
@@ -104,7 +103,7 @@ std::optional<StorageKey> StorageKey::Deserialize(std::string_view in) {
 
   // More than three encoded attributes (delimited by carets) indicates a
   // malformed input.
-  if (base::ranges::count(in, '^') > 3) {
+  if (std::ranges::count(in, '^') > 3) {
     return std::nullopt;
   }
 
@@ -762,7 +761,7 @@ std::string StorageKey::GetMemoryDumpString(size_t max_length) const {
         ancestor_full_string.substr(0, max_length - memory_dump_str.length()));
   }
 
-  base::ranges::replace_if(
+  std::ranges::replace_if(
       memory_dump_str.begin(), memory_dump_str.end(),
       [](char c) {
         return !absl::ascii_isalnum(static_cast<unsigned char>(c));
@@ -850,24 +849,6 @@ bool StorageKey::ExactMatchForTesting(const StorageKey& other) const {
              other.ancestor_chain_bit_if_third_party_enabled_ &&
          this->top_level_site_if_third_party_enabled_ ==
              other.top_level_site_if_third_party_enabled_;
-}
-
-bool operator==(const StorageKey& lhs, const StorageKey& rhs) {
-  return std::tie(lhs.origin_, lhs.top_level_site_, lhs.nonce_,
-                  lhs.ancestor_chain_bit_) ==
-         std::tie(rhs.origin_, rhs.top_level_site_, rhs.nonce_,
-                  rhs.ancestor_chain_bit_);
-}
-
-bool operator!=(const StorageKey& lhs, const StorageKey& rhs) {
-  return !(lhs == rhs);
-}
-
-bool operator<(const StorageKey& lhs, const StorageKey& rhs) {
-  return std::tie(lhs.origin_, lhs.top_level_site_, lhs.nonce_,
-                  lhs.ancestor_chain_bit_) <
-         std::tie(rhs.origin_, rhs.top_level_site_, rhs.nonce_,
-                  rhs.ancestor_chain_bit_);
 }
 
 std::ostream& operator<<(std::ostream& ostream, const StorageKey& sk) {

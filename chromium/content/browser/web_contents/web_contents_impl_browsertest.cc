@@ -4,6 +4,7 @@
 
 #include "content/browser/web_contents/web_contents_impl.h"
 
+#include <algorithm>
 #include <array>
 #include <optional>
 #include <tuple>
@@ -21,7 +22,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/pattern.h"
 #include "base/strings/stringprintf.h"
@@ -712,7 +712,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
       page_url, /*referrer=*/GURL(), "GET",
       network::mojom::RequestDestination::kDocument,
       /*served_file_name=*/FILE_PATH_LITERAL(""), "text/html", "127.0.0.1",
-      /*was_cached=*/false, /*first_network_request=*/false, before, after));
+      /*was_cached=*/true, /*first_network_request=*/false, before, after));
   ASSERT_EQ(1U, observer.memory_cached_loaded_urls().size());
   EXPECT_EQ(resource_url, observer.memory_cached_loaded_urls()[0]);
   observer.Reset();
@@ -731,7 +731,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
       page_url, /*referrer=*/GURL(), "GET",
       network::mojom::RequestDestination::kDocument,
       /*served_file_name=*/FILE_PATH_LITERAL(""), "text/html", "127.0.0.1",
-      /*was_cached=*/false, /*first_network_request=*/true, before, after));
+      /*was_cached=*/true, /*first_network_request=*/true, before, after));
   SCOPE_TRACED(observer.CheckResourceLoaded(
       resource_url, /*referrer=*/page_url, "GET",
       network::mojom::RequestDestination::kScript,
@@ -971,7 +971,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, LoadProgress) {
 
   const std::vector<double>& progresses = delegate->progresses;
   // All updates should be in order ...
-  if (base::ranges::adjacent_find(progresses, std::greater<>()) !=
+  if (std::ranges::adjacent_find(progresses, std::greater<>()) !=
       progresses.end()) {
     ADD_FAILURE() << "Progress values should be in order: "
                   << ::testing::PrintToString(progresses);
@@ -992,7 +992,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, LoadProgressWithFrames) {
 
   const std::vector<double>& progresses = delegate->progresses;
   // All updates should be in order ...
-  if (base::ranges::adjacent_find(progresses, std::greater<>()) !=
+  if (std::ranges::adjacent_find(progresses, std::greater<>()) !=
       progresses.end()) {
     ADD_FAILURE() << "Progress values should be in order: "
                   << ::testing::PrintToString(progresses);
@@ -1663,7 +1663,6 @@ class TestWCDelegateForDialogsAndFullscreen : public JavaScriptDialogManager,
     web_contents_->SetDelegate(this);
   }
   ~TestWCDelegateForDialogsAndFullscreen() override {
-    web_contents_->SetJavaScriptDialogManagerForTesting(nullptr);
     web_contents_->SetDelegate(old_delegate_);
   }
 
@@ -2057,7 +2056,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   EXPECT_TRUE(web_contents->GetController().IsInitialBlankNavigation());
   RenderProcessHost* process =
       web_contents->GetPrimaryMainFrame()->GetProcess();
-  int renderer_id = process->GetID();
+  int renderer_id = process->GetDeprecatedID();
   ASSERT_TRUE(process);
   EXPECT_TRUE(process->IsInitializedAndNotDead());
 
@@ -2073,8 +2072,9 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
 
   // Check that pre-warmed process is used.
   EXPECT_EQ(process, web_contents->GetPrimaryMainFrame()->GetProcess());
-  EXPECT_EQ(renderer_id,
-            web_contents->GetPrimaryMainFrame()->GetProcess()->GetID());
+  EXPECT_EQ(
+      renderer_id,
+      web_contents->GetPrimaryMainFrame()->GetProcess()->GetDeprecatedID());
   EXPECT_EQ(1, web_contents->GetController().GetEntryCount());
   NavigationEntry* entry =
       web_contents->GetController().GetLastCommittedEntry();
@@ -2111,7 +2111,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
     EXPECT_TRUE(web_contents->GetController().IsInitialBlankNavigation());
     RenderProcessHost* process =
         web_contents->GetPrimaryMainFrame()->GetProcess();
-    int renderer_id = process->GetID();
+    int renderer_id = process->GetDeprecatedID();
     ASSERT_TRUE(process);
     EXPECT_FALSE(process->IsInitializedAndNotDead());
     EXPECT_EQ(base::kNullProcessHandle, process->GetProcess().Handle());
@@ -2132,8 +2132,9 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
 
     // Check that the RenderProcessHost and its ID didn't change.
     EXPECT_EQ(process, web_contents->GetPrimaryMainFrame()->GetProcess());
-    EXPECT_EQ(renderer_id,
-              web_contents->GetPrimaryMainFrame()->GetProcess()->GetID());
+    EXPECT_EQ(
+        renderer_id,
+        web_contents->GetPrimaryMainFrame()->GetProcess()->GetDeprecatedID());
 
     // Verify that the navigation succeeded.
     EXPECT_EQ(1, web_contents->GetController().GetEntryCount());
@@ -2165,7 +2166,8 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   ASSERT_TRUE(web_contents->GetPrimaryMainFrame());
   EXPECT_TRUE(web_contents->GetPrimaryMainFrame()->IsRenderFrameLive());
   EXPECT_TRUE(web_contents->GetController().IsInitialBlankNavigation());
-  int renderer_id = web_contents->GetPrimaryMainFrame()->GetProcess()->GetID();
+  int renderer_id =
+      web_contents->GetPrimaryMainFrame()->GetProcess()->GetDeprecatedID();
 
   TestNavigationObserver same_tab_observer(web_contents.get(), 1);
   NavigationController::LoadURLParams params(web_ui_url);
@@ -2178,8 +2180,9 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   // initial RenderFrameHost is allowed to be reused for WebUI, even if it has a
   // live RenderFrame, as long as its SiteInstance is unassigned and its process
   // is unused.
-  EXPECT_EQ(renderer_id,
-            web_contents->GetPrimaryMainFrame()->GetProcess()->GetID());
+  EXPECT_EQ(
+      renderer_id,
+      web_contents->GetPrimaryMainFrame()->GetProcess()->GetDeprecatedID());
   EXPECT_EQ(1, web_contents->GetController().GetEntryCount());
   NavigationEntry* entry =
       web_contents->GetController().GetLastCommittedEntry();
@@ -3184,6 +3187,44 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   ASSERT_TRUE(console_observer.Wait());
   EXPECT_EQ(url, shell()->web_contents()->GetLastCommittedURL());
   EXPECT_EQ(1u, Shell::windows().size());
+}
+
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
+                       DisconnectFileChooserListener) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  shell()->set_hold_file_chooser();
+
+  GURL url = embedded_test_server()->GetURL("/click-noreferrer-links.html");
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+
+  WebContentsImpl* wc = static_cast<WebContentsImpl*>(shell()->web_contents());
+  auto [chooser, remote] =
+      FileChooserImpl::CreateForTesting(wc->GetPrimaryMainFrame());
+  base::WeakPtr<FileChooserImpl> chooser_weak_ptr = chooser->GetWeakPtr();
+
+  // Request file chooser.
+  base::RunLoop run_loop;
+  base::OnceClosure quit_closure = run_loop.QuitClosure();
+  blink::mojom::FileChooserResultPtr result_received;
+  remote->OpenFileChooser(blink::mojom::FileChooserParams::New(),
+                          base::BindLambdaForTesting(
+                              [&](blink::mojom::FileChooserResultPtr result) {
+                                result_received = std::move(result);
+                                std::move(quit_closure).Run();
+                              }));
+  remote.FlushForTesting();
+  EXPECT_EQ(shell()->run_file_chooser_count(), 1u);
+
+  // Disconnect listener.
+  wc->DisconnectFileSelectListenerIfAny();
+
+  // Send result from listener, which now should be ignored.
+  shell()->held_file_chooser_listener()->FileSelected(
+      {}, base::FilePath(), blink::mojom::FileChooserParams::Mode::kOpen);
+  run_loop.Run();
+
+  // Check that request was cancelled, ie returned null result.
+  EXPECT_FALSE(result_received);
 }
 
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
@@ -4443,7 +4484,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url(embedded_test_server()->GetURL("/hello.html"));
 
-  if (AreDefaultSiteInstancesEnabled()) {
+  if (!AreAllSitesIsolatedForTesting()) {
     // Isolate "b.com" so we are guaranteed to get a different process
     // for navigations to this origin. Doing this ensures that a
     // speculative RenderFrameHost is used.

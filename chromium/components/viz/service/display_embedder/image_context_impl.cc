@@ -8,6 +8,8 @@
 
 #include "base/check.h"
 #include "base/check_op.h"
+#include "base/metrics/histogram_functions.h"
+#include "base/trace_event/trace_event.h"
 #include "components/viz/common/resources/shared_image_format_utils.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
@@ -16,6 +18,7 @@
 #include "gpu/command_buffer/service/skia_utils.h"
 #include "gpu/command_buffer/service/texture_manager.h"
 #include "skia/buildflags.h"
+#include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColorSpace.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
@@ -28,34 +31,49 @@
 
 namespace {
 
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class CreateFallbackImageResult {
+  kSuccess = 0,
+  kFailedPrefersExternalSampler = 1,
+  kFailedYcbcrMismatch = 2,
+  kFailedExternalTexture = 3,
+  kFailedInvalidTextureInfo = 4,
+  kFailedCreateTexture = 5,
+  kMaxValue = kFailedCreateTexture
+};
+
+const char* CreateFallbackImageResultToString(
+    CreateFallbackImageResult result) {
+  switch (result) {
+    case CreateFallbackImageResult::kSuccess:
+      return "Success";
+    case CreateFallbackImageResult::kFailedPrefersExternalSampler:
+      return "FailedPrefersExternalSampler";
+    case CreateFallbackImageResult::kFailedYcbcrMismatch:
+      return "FailedYcbcrMismatch";
+    case CreateFallbackImageResult::kFailedExternalTexture:
+      return "FailedExternalTexture";
+    case CreateFallbackImageResult::kFailedInvalidTextureInfo:
+      return "FailedInvalidTextureInfo";
+    case CreateFallbackImageResult::kFailedCreateTexture:
+      return "FailedCreateTexture";
+  }
+}
+
 #if BUILDFLAG(IS_ANDROID) && BUILDFLAG(SKIA_USE_DAWN)
-bool DawnYCbCrVkDescriptorsAreEqual(wgpu::YCbCrVkDescriptor left,
-                                    wgpu::YCbCrVkDescriptor right) {
+bool DawnYCbCrVkDescriptorsAreCompatible(const wgpu::YCbCrVkDescriptor& left,
+                                         const wgpu::YCbCrVkDescriptor& right) {
   // NOTE: We deliberately do not compare the swizzle components as those
   // components are not plumbed through the Chrome-level information and thus
   // could cause spurious equality failures. By the Vulkan spec, those
   // components should not be set for external formats, but some drivers do not
   // adhere to the spec here.
-  // TODO(crbug.com/346282342): Plumb that information through the Chrome level
-  // and do equality checks for the swizzle componetns. Once that is complete,
-  // add an equality operator to this struct in Dawn and remove this method
-  // entirely.
+  // Mismatch of model, range and chroma fields happens often enough to be
+  // problematic if we skip drawing the video for those frames. While the video
+  // may not draw 100% correctly it will still be better than not drawing it at
+  // all.
   if (left.vkFormat != right.vkFormat) {
-    return false;
-  }
-  if (left.vkYCbCrModel != right.vkYCbCrModel) {
-    return false;
-  }
-  if (left.vkYCbCrRange != right.vkYCbCrRange) {
-    return false;
-  }
-  if (left.vkXChromaOffset != right.vkXChromaOffset) {
-    return false;
-  }
-  if (left.vkYChromaOffset != right.vkYChromaOffset) {
-    return false;
-  }
-  if (left.vkChromaFilter != right.vkChromaFilter) {
     return false;
   }
   if (left.forceExplicitReconstruction != right.forceExplicitReconstruction) {
@@ -101,7 +119,9 @@ SkColor4f GetFallbackColorForPlane(viz::SharedImageFormat format,
 namespace viz {
 
 ImageContextImpl::ImageContextImpl(
-    const gpu::MailboxHolder& mailbox_holder,
+    const gpu::Mailbox& mailbox,
+    const gpu::SyncToken& sync_token,
+    uint32_t texture_target,
     const gfx::Size& size,
     SharedImageFormat format,
     bool maybe_concurrent_reads,
@@ -109,7 +129,13 @@ ImageContextImpl::ImageContextImpl(
     sk_sp<SkColorSpace> color_space,
     bool is_for_render_pass,
     bool raw_draw_if_possible)
-    : ImageContext(mailbox_holder, size, format, ycbcr_info, color_space),
+    : ImageContext(mailbox,
+                   sync_token,
+                   texture_target,
+                   size,
+                   format,
+                   ycbcr_info,
+                   color_space),
       maybe_concurrent_reads_(maybe_concurrent_reads),
       is_for_render_pass_(is_for_render_pass),
       raw_draw_if_possible_(raw_draw_if_possible) {}
@@ -170,10 +196,18 @@ void ImageContextImpl::DeleteFallbackTextures() {
 void ImageContextImpl::CreateFallbackImage(
     gpu::SharedContextState* context_state) {
   const int num_planes = format().NumberOfPlanes();
+  TRACE_EVENT_BEGIN("viz", "ImageContextImpl::CreateFallbackImage");
+
+  CreateFallbackImageResult result = CreateFallbackImageResult::kSuccess;
+  absl::Cleanup record_results = [&result] {
+    base::UmaHistogramEnumeration("Viz.CreateFallbackImageResult", result);
+    TRACE_EVENT_END("viz", "result", CreateFallbackImageResultToString(result));
+  };
 
   if (format().PrefersExternalSampler()) {
     // Skia can't allocate a fallback texture since the original texture was
     // externally allocated.
+    result = CreateFallbackImageResult::kFailedPrefersExternalSampler;
     return;
   }
 
@@ -181,17 +215,19 @@ void ImageContextImpl::CreateFallbackImage(
     // It is not possible to allocate a fallback texture if the failure was due
     // to a mismatch in YCBCr info between the promise image and the
     // fulfillment texture.
+    result = CreateFallbackImageResult::kFailedYcbcrMismatch;
     return;
   }
 
   if (context_state->graphite_context()) {
     const auto& tex_infos = texture_infos();
     if (tex_infos.size() != static_cast<size_t>(num_planes) ||
-        base::ranges::any_of(tex_infos, [](const auto& tex_info) {
+        std::ranges::any_of(tex_infos, [](const auto& tex_info) {
           return !tex_info.isValid();
         })) {
       DLOG(ERROR) << "Invalid Graphite texture infos for format: "
                   << format().ToString();
+      result = CreateFallbackImageResult::kFailedInvalidTextureInfo;
       return;
     }
 
@@ -202,6 +238,7 @@ void ImageContextImpl::CreateFallbackImage(
     if (success && dawn_info.fFormat == wgpu::TextureFormat::External) {
       // Skia can't allocate a fallback texture since the original texture was
       // externally allocated.
+      result = CreateFallbackImageResult::kFailedExternalTexture;
       return;
     }
 #endif
@@ -215,8 +252,7 @@ void ImageContextImpl::CreateFallbackImage(
           context_state->gpu_main_graphite_recorder()->createBackendTexture(
               sk_size, tex_info));
 
-      SkColorType color_type =
-          ToClosestSkColorType(/*gpu_compositing=*/true, format(), plane_index);
+      SkColorType color_type = ToClosestSkColorType(format(), plane_index);
 
       auto sk_surface = SkSurfaces::WrapBackendTexture(
           context_state->gpu_main_graphite_recorder(),
@@ -225,6 +261,7 @@ void ImageContextImpl::CreateFallbackImage(
       if (!sk_surface) {
         DLOG(ERROR) << "Failed to create fallback graphite backend texture";
         DeleteFallbackTextures();
+        result = CreateFallbackImageResult::kFailedCreateTexture;
         return;
       }
       sk_surface->getCanvas()->clear(
@@ -239,6 +276,7 @@ void ImageContextImpl::CreateFallbackImage(
   // and leave it null.
   const auto& formats = backend_formats();
   if (formats.empty() || formats[0].textureType() == GrTextureType::kExternal) {
+    result = CreateFallbackImageResult::kFailedExternalTexture;
     return;
   }
 
@@ -257,6 +295,7 @@ void ImageContextImpl::CreateFallbackImage(
     if (!fallback_texture.isValid()) {
       DeleteFallbackTextures();
       DLOG(ERROR) << "Could not create backend texture.";
+      result = CreateFallbackImageResult::kFailedCreateTexture;
       return;
     }
     auto promise_texture = GrPromiseImageTexture::Make(fallback_texture);
@@ -288,10 +327,9 @@ bool ImageContextImpl::BeginRasterAccess(
     return true;
   }
 
-  auto raster =
-      raw_draw_if_possible_
-          ? representation_factory->ProduceRaster(mailbox_holder().mailbox)
-          : nullptr;
+  auto raster = raw_draw_if_possible_
+                    ? representation_factory->ProduceRaster(mailbox())
+                    : nullptr;
   if (!raster)
     return false;
 
@@ -335,8 +373,8 @@ bool ImageContextImpl::BeginAccessIfNecessaryInternal(
   }
 
   if (!representation_) {
-    auto representation = representation_factory->ProduceSkia(
-        mailbox_holder().mailbox, context_state);
+    auto representation =
+        representation_factory->ProduceSkia(mailbox(), context_state);
     if (!representation) {
       DLOG(ERROR) << "Failed to fulfill the promise texture - SharedImage "
                      "mailbox not found in SharedImageManager.";
@@ -393,8 +431,8 @@ bool ImageContextImpl::BeginAccessIfNecessaryInternal(
     wgpu::YCbCrVkDescriptor fulfillment_texture_ycbcr_desc =
         fulfillment_texture_info.fYcbcrVkDescriptor;
 
-    if (!DawnYCbCrVkDescriptorsAreEqual(promise_texture_ycbcr_desc,
-                                        fulfillment_texture_ycbcr_desc)) {
+    if (!DawnYCbCrVkDescriptorsAreCompatible(promise_texture_ycbcr_desc,
+                                             fulfillment_texture_ycbcr_desc)) {
       graphite_ycbcr_info_mismatch_ = true;
       representation_scoped_read_access_.reset();
       return false;

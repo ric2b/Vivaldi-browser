@@ -9,7 +9,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/user_metrics.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/commerce/shopping_service_factory.h"
 #include "chrome/browser/favicon/favicon_utils.h"
@@ -60,7 +59,7 @@
 #include "ui/views/bubble/bubble_dialog_model_host.h"
 #include "ui/views/controls/styled_label.h"
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ui/views/promos/bubble_signin_promo_view.h"
 #endif
 
@@ -217,9 +216,10 @@ class BookmarkBubbleView::BookmarkBubbleDelegate
         BookmarkModelFactory::GetForBrowserContext(browser_->profile());
     const bookmarks::BookmarkNode* node =
         model->GetMostRecentlyAddedUserNodeForURL(url_);
-    if (node)
+    if (node) {
       model->Remove(node, bookmarks::metrics::BookmarkEditSource::kUser,
                     FROM_HERE);
+    }
 
     return true;
   }
@@ -229,8 +229,9 @@ class BookmarkBubbleView::BookmarkBubbleDelegate
   }
 
   void OnWindowClosing() {
-    if (should_apply_edits_)
+    if (should_apply_edits_) {
       ApplyEdits();
+    }
     bookmark_bubble_ = nullptr;
 
     if (close_callback_) {
@@ -286,8 +287,9 @@ class BookmarkBubbleView::BookmarkBubbleDelegate
         BookmarkModelFactory::GetForBrowserContext(browser_->profile());
     const bookmarks::BookmarkNode* node =
         model->GetMostRecentlyAddedUserNodeForURL(url_);
-    if (!node)
+    if (!node) {
       return;
+    }
     const std::u16string new_title =
         dialog_model()->GetTextfieldByUniqueId(kBookmarkNameFieldId)->text();
     if (new_title != node->GetTitle()) {
@@ -334,11 +336,12 @@ void BookmarkBubbleView::ShowBubble(
     Browser* browser,
     const GURL& url,
     bool already_bookmarked) {
-  if (bookmark_bubble_)
+  if (bookmark_bubble_) {
     return;
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+  }
+#if !BUILDFLAG(IS_CHROMEOS)
   BubbleSignInPromoDelegate* const delegate_ptr = delegate.get();
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
   Profile* profile = browser->profile();
   bookmarks::BookmarkModel* bookmark_model =
       BookmarkModelFactory::GetForBrowserContext(profile);
@@ -446,22 +449,22 @@ void BookmarkBubbleView::ShowBubble(
       dialog_model_builder.Build(), anchor_view,
       views::BubbleBorder::TOP_RIGHT);
   bookmark_bubble_ = bubble.get();
-  if (highlighted_button)
+  if (highlighted_button) {
     bubble->SetHighlightedButton(highlighted_button);
+  }
 
   if (ShouldShowShoppingCollectionFootnote(profile, bookmark_model,
                                            bookmark_node)) {
     bubble->SetFootnoteView(
         std::make_unique<commerce::ShoppingCollectionIphView>());
   } else if (signin::ShouldShowSyncPromo(*profile)) {
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
     // TODO(pbos): Consider adding model support for footnotes so that this does
     // not need to be tied to views.
     // TODO(pbos): Consider updating ::SetFootnoteView so that it can resize the
     // widget to account for it.
     bubble->SetFootnoteView(std::make_unique<BubbleSignInPromoView>(
-        profile, delegate_ptr,
-        signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_BUBBLE,
+        profile, delegate_ptr, signin_metrics::AccessPoint::kBookmarkBubble,
         IDS_BOOKMARK_DICE_PROMO_SYNC_MESSAGE, ui::ButtonStyle::kDefault));
 #endif
   }
@@ -475,8 +478,9 @@ void BookmarkBubbleView::ShowBubble(
 
 // static
 void BookmarkBubbleView::Hide() {
-  if (bookmark_bubble_)
+  if (bookmark_bubble_) {
     bookmark_bubble_->GetWidget()->Close();
+  }
 }
 
 // static

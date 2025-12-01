@@ -2,7 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import type {Args, Event, Phase, SyntheticBased} from './TraceEvents.js';
+import type {
+  Args, ConsoleTimeStamp, Event, PerformanceMark, PerformanceMeasureBegin, Phase, SyntheticBased} from
+  './TraceEvents.js';
 
 export type ExtensionEntryType = 'track-entry'|'marker';
 
@@ -57,14 +59,15 @@ export interface ExtensionMarkerPayload extends ExtensionDataPayloadBase {
 /**
  * Synthetic events created for extension tracks.
  */
-export interface SyntheticExtensionTrackEntry extends SyntheticBased<Phase.COMPLETE> {
+export interface SyntheticExtensionTrackEntry extends
+    SyntheticBased<Phase.COMPLETE, PerformanceMeasureBegin|PerformanceMark|ConsoleTimeStamp> {
   args: Args&ExtensionTrackEntryPayload;
 }
 
 /**
  * Synthetic events created for extension marks.
  */
-export interface SyntheticExtensionMarker extends SyntheticBased<Phase.COMPLETE> {
+export interface SyntheticExtensionMarker extends SyntheticBased<Phase.COMPLETE, PerformanceMark> {
   args: Args&ExtensionMarkerPayload;
 }
 

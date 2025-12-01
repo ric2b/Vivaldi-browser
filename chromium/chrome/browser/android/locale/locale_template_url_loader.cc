@@ -11,11 +11,15 @@
 #include "base/debug/dump_without_crashing.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
-#include "components/search_engines/prepopulated_engines.h"
 #include "components/search_engines/template_url_data.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/search_engines/util.h"
+#ifdef VIVALDI_BUILD
+#include "components/search_engines/prepopulated_engines.h"
+#else
+#include "third_party/search_engines_data/resources/definitions/prepopulated_engines.h"
+#endif  // VIVALDI_BUILD
 
 // Must come after all headers that specialize FromJniType() / ToJniType().
 #include "chrome/browser/locale/jni_headers/LocaleTemplateUrlLoader_jni.h"
@@ -30,13 +34,11 @@ using base::android::ScopedJavaLocalRef;
 using base::android::AttachCurrentThread;
 using base::android::ConvertJavaStringToUTF8;
 
-static jlong JNI_LocaleTemplateUrlLoader_Init(
-    JNIEnv* env,
-    const JavaParamRef<jstring>& jlocale,
-    Profile* profile) {
+static jlong JNI_LocaleTemplateUrlLoader_Init(JNIEnv* env,
+                                              std::string& locale,
+                                              Profile* profile) {
   return reinterpret_cast<intptr_t>(new LocaleTemplateUrlLoader(
-      ConvertJavaStringToUTF8(env, jlocale),
-      TemplateURLServiceFactory::GetForProfile(profile), profile));
+      locale, TemplateURLServiceFactory::GetForProfile(profile), profile));
 }
 
 LocaleTemplateUrlLoader::LocaleTemplateUrlLoader(const std::string& locale,
@@ -205,4 +207,4 @@ int LocaleTemplateUrlLoader::GetDesignatedSearchEngineForChina() {
       ->id;
 }
 
-LocaleTemplateUrlLoader::~LocaleTemplateUrlLoader() {}
+LocaleTemplateUrlLoader::~LocaleTemplateUrlLoader() = default;

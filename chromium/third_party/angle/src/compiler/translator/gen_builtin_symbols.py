@@ -42,9 +42,13 @@ template_immutablestring_cpp = """// GENERATED FILE - DO NOT EDIT.
 
 #include "compiler/translator/ImmutableString.h"
 
-std::ostream &operator<<(std::ostream &os, const sh::ImmutableString &str)
+namespace sh {{
+
+std::ostream &operator<<(std::ostream &os, const ImmutableString &str)
 {{
     return os.write(str.data(), str.length());
+}}
+
 }}
 
 #if defined(_MSC_VER)
@@ -554,7 +558,6 @@ template_rule = """Rule::Get<{version}, {shaders}, {extension}>({symbol_or_var})
 basic_types_enumeration = [
     'Void',
     'Float',
-    'Double',
     'Int',
     'UInt',
     'Bool',
@@ -599,8 +602,6 @@ basic_types_enumeration = [
     'Image3D',
     'Image2DArray',
     'ImageCube',
-    'Image1D',
-    'Image1DArray',
     'Image2DMS',
     'Image2DMSArray',
     'ImageCubeArray',
@@ -610,8 +611,6 @@ basic_types_enumeration = [
     'IImage3D',
     'IImage2DArray',
     'IImageCube',
-    'IImage1D',
-    'IImage1DArray',
     'IImage2DMS',
     'IImage2DMSArray',
     'IImageCubeArray',
@@ -621,8 +620,6 @@ basic_types_enumeration = [
     'UImage3D',
     'UImage2DArray',
     'UImageCube',
-    'UImage1D',
-    'UImage1DArray',
     'UImage2DMS',
     'UImage2DMSArray',
     'UImageCubeArray',
@@ -634,9 +631,6 @@ basic_types_enumeration = [
     'SubpassInput',
     'ISubpassInput',
     'USubpassInput',
-    'SubpassInputMS',
-    'ISubpassInputMS',
-    'USubpassInputMS',
 ]
 
 id_counter = 0
@@ -1059,7 +1053,6 @@ class TType:
             'float': 'Float',
             'int': 'Int',
             'uint': 'UInt',
-            'double': 'Double',
             'bool': 'Bool',
             'void': 'Void',
             'atomic_uint': 'AtomicCounter',
@@ -1071,14 +1064,7 @@ class TType:
 
         type_obj = {}
 
-        basic_type_prefix_map = {
-            '': 'Float',
-            'i': 'Int',
-            'u': 'UInt',
-            'd': 'Double',
-            'b': 'Bool',
-            'v': 'Void'
-        }
+        basic_type_prefix_map = {'': 'Float', 'i': 'Int', 'u': 'UInt', 'b': 'Bool', 'v': 'Void'}
 
         vec_re = re.compile(r'^([iudb]?)vec([234]?)((\[[234]\])?)$')
         vec_match = vec_re.match(glsl_header_type)
@@ -1453,9 +1439,8 @@ def gen_function_variants(function_props):
     if 'image_params' in gen_type:
         variants = [['gimage2D', 'ivec2'], ['gimage3D', 'ivec3'], ['gimageCube', 'ivec3'],
                     ['gimageBuffer', 'int'], ['gimage2DArray', 'ivec3'],
-                    ['gimageCubeArray', 'ivec3'], ['gimage1D', 'int'], ['gimage1DArray', 'ivec2'],
-                    ['gimageRect', 'ivec2'], ['gimage2DMS', 'ivec2', 'int'],
-                    ['gimage2DMSArray', 'ivec3', 'int']]
+                    ['gimageCubeArray', 'ivec3'], ['gimageRect', 'ivec2'],
+                    ['gimage2DMS', 'ivec2', 'int'], ['gimage2DMSArray', 'ivec3', 'int']]
         for variant in variants:
             image_variant_parameters = []
             for param in parameters:

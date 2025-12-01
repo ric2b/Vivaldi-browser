@@ -13,6 +13,14 @@ BASE_FEATURE(kAutofillDynamicallyLoadsFieldsForAddressInput,
              "AutofillDynamicallyLoadsFieldsForAddressInput",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// LINT.IfChange(autofill_fix_post_filling_payment_sheet)
+// Enables fixing the issue where the payment sheet spams after dismissing a
+// modal dialog that was triggered from the KA (e.g. filling a suggestion).
+BASE_FEATURE(kAutofillFixPaymentSheetSpam,
+             "AutofillFixPostFillingPaymentSheet",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+// LINT.ThenChange(/components/autofill/ios/form_util/resources/autofill_form_features.ts:autofill_fix_post_filling_payment_sheet)
+
 // LINT.IfChange(autofill_isolated_content_world)
 // Controls whether to use the isolated content world instead of the page
 // content world for the Autofill JS feature scripts.
@@ -28,6 +36,13 @@ BASE_FEATURE(kAutofillIsolatedWorldForJavascriptIos,
 // fields becoming unresponsive).
 BASE_FEATURE(kAutofillPaymentsSheetV2Ios,
              "AutofillPaymentsSheetV2Ios",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables the 3rd version of the payments suggestion bottom sheet that can
+// directly pick the Autofill suggestions provider instead of intermediating via
+// the FormSuggestionController.
+BASE_FEATURE(kAutofillPaymentsSheetV3Ios,
+             "AutofillPaymentsSheetV3Ios",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Makes the autofill and password infobars sticky on iOS. The sticky infobar

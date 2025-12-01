@@ -5,13 +5,16 @@
  */
 
 .add-conditions-button {
-  margin-bottom: var(--sys-size-5);
+  margin: var(--sys-size-5) 0;
   border: none;
 }
 
 .conditions-list {
-  margin-top: var(--sys-size-3);
   flex: auto;
+
+  &:has(.list-item) {
+    margin-top: var(--sys-size-3);
+  }
 }
 
 .conditions-list-item {
@@ -106,7 +109,7 @@
 
 .settings-card-container-wrapper {
   scrollbar-gutter: stable;
-  padding-bottom: var(--sys-size-8);
+  padding: var(--sys-size-8) 0;
   overflow: auto;
   position: absolute;
   inset: var(--sys-size-8) 0 0;
@@ -117,4 +120,36 @@
   flex-direction: column;
   align-items: center;
   gap: var(--sys-size-9);
+}
+
+.cpu-preset-section {
+  padding: 14px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.cpu-preset-result.not-calibrated {
+  font-style: italic;
+}
+
+.cpu-preset-calibrate {
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cpu-preset-calibrate .button-container {
+  display: flex;
+  gap: 10px;
+}
+
+.cpu-preset-calibrate .text-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.text-with-icon {
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }

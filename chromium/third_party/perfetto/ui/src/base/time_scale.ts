@@ -26,7 +26,7 @@ export class TimeScale {
     this.pxBounds = pxBounds;
     this.timeSpan = timespan;
     const delta = pxBounds.right - pxBounds.left;
-    if (timespan.duration <= 0 || delta <= 0) {
+    if (delta <= 0) {
       this.timePerPx = 1;
     } else {
       this.timePerPx = timespan.duration / delta;
@@ -58,5 +58,18 @@ export class TimeScale {
 
   pxToDuration(pxDelta: number): number {
     return pxDelta * this.timePerPx;
+  }
+
+  pxSpanToHpTimeSpan(span: HorizontalBounds): HighPrecisionTimeSpan {
+    const start = this.pxToHpTime(span.left);
+    const duration = this.pxToDuration(span.right - span.left);
+    return new HighPrecisionTimeSpan(start, duration);
+  }
+
+  hpTimeSpanToPxSpan(span: HighPrecisionTimeSpan): HorizontalBounds {
+    return {
+      left: this.hpTimeToPx(span.start),
+      right: this.hpTimeToPx(span.end),
+    };
   }
 }

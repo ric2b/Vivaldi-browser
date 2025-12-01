@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 import * as Common from '../../core/common/common.js';
+import * as Platform from '../../core/platform/platform.js';
 import * as Root from '../../core/root/root.js';
 import * as Trace from '../../models/trace/trace.js';
 import type * as PerfUI from '../../ui/legacy/components/perf_ui/perf_ui.js';
@@ -11,7 +12,6 @@ import * as ThemeSupport from '../../ui/legacy/theme_support/theme_support.js';
 import {AnimationsTrackAppender} from './AnimationsTrackAppender.js';
 import {getEventLevel, getFormattedTime, type LastTimestampByLevel} from './AppenderUtils.js';
 import * as TimelineComponents from './components/components.js';
-import {ExtensionDataGatherer} from './ExtensionDataGatherer.js';
 import {ExtensionTrackAppender} from './ExtensionTrackAppender.js';
 import {GPUTrackAppender} from './GPUTrackAppender.js';
 import {InteractionsTrackAppender} from './InteractionsTrackAppender.js';
@@ -22,15 +22,17 @@ import {
   EntryType,
   InstantEventVisibleDurationMs,
 } from './TimelineFlameChartDataProvider.js';
+import {TimelinePanel} from './TimelinePanel.js';
 import {TimingsTrackAppender} from './TimingsTrackAppender.js';
 import * as TimelineUtils from './utils/utils.js';
 
-export type HighlightedEntryInfo = {
-  title: string,
-  formattedTime: string,
-  warningElements?: HTMLSpanElement[],
-  additionalElement?: HTMLElement,
-};
+export interface PopoverInfo {
+  title: string;
+  formattedTime: string;
+  url: string|null;
+  warningElements: HTMLSpanElement[];
+  additionalElements: HTMLElement[];
+}
 
 let showPostMessageEvents: boolean|undefined;
 function isShowPostMessageEventsEnabled(): boolean {
@@ -124,9 +126,9 @@ export interface TrackAppender {
    */
   titleForEvent?(event: Trace.Types.Events.Event): string;
   /**
-   * Returns the info shown when an event in the timeline is hovered.
+   * Updates the standard popover (AKA tooltip) some appender specific details.
    */
-  highlightedEntryInfo?(event: Trace.Types.Events.Event): Partial<HighlightedEntryInfo>;
+  setPopoverInfo?(event: Trace.Types.Events.Event, info: PopoverInfo): void;
   /**
    * Returns the a callback function to draw an event to overrides the normal rectangle draw operation.
    */
@@ -278,7 +280,10 @@ export class CompatibilityTracksAppender {
   }
 
   #addExtensionAppenders(): void {
-    const tracks = ExtensionDataGatherer.instance().getExtensionData().extensionTrackData;
+    if (!TimelinePanel.extensionDataVisibilitySetting().get()) {
+      return;
+    }
+    const tracks = this.#parsedTrace.ExtensionTraceData.extensionTrackData;
     for (const trackData of tracks) {
       this.#allTrackAppenders.push(new ExtensionTrackAppender(this, trackData));
     }
@@ -300,12 +305,12 @@ export class CompatibilityTracksAppender {
         }
         case Trace.Handlers.Threads.ThreadType.WORKER:
           return 3;
+        case Trace.Handlers.Threads.ThreadType.AUCTION_WORKLET:
+          return 3;
         case Trace.Handlers.Threads.ThreadType.RASTERIZER:
           return 4;
         case Trace.Handlers.Threads.ThreadType.THREAD_POOL:
           return 5;
-        case Trace.Handlers.Threads.ThreadType.AUCTION_WORKLET:
-          return 6;
         case Trace.Handlers.Threads.ThreadType.OTHER:
           return 7;
         default:
@@ -313,16 +318,14 @@ export class CompatibilityTracksAppender {
       }
     };
     const threads = Trace.Handlers.Threads.threadsInTrace(this.#parsedTrace);
-    const processedAuctionWorkletsIds = new Set<Trace.Types.Events.ProcessID>();
     const showAllEvents = Root.Runtime.experiments.isEnabled('timeline-show-all-events');
 
-    for (const {pid, tid, name, type} of threads) {
+    for (const {pid, tid, name, type, entries, tree} of threads) {
       if (this.#parsedTrace.Meta.traceIsGeneric) {
-        // If the trace is generic, we just push all of the threads with no
-        // effort to differentiate them, hence overriding the thread type to be
-        // OTHER for all threads.
-        this.#threadAppenders.push(
-            new ThreadAppender(this, this.#parsedTrace, pid, tid, name, Trace.Handlers.Threads.ThreadType.OTHER));
+        // If the trace is generic, we just push all of the threads with no effort to differentiate them, hence
+        // overriding the thread type to be OTHER for all threads.
+        this.#threadAppenders.push(new ThreadAppender(
+            this, this.#parsedTrace, pid, tid, name, Trace.Handlers.Threads.ThreadType.OTHER, entries, tree));
         continue;
       }
       // These threads have no useful information. Omit them
@@ -330,28 +333,22 @@ export class CompatibilityTracksAppender {
         continue;
       }
 
-      const maybeWorklet = this.#parsedTrace.AuctionWorklets.worklets.get(pid);
-      if (processedAuctionWorkletsIds.has(pid)) {
-        // Keep track of this process to ensure we only add the following
-        // tracks once per process and not once per thread.
-        continue;
-      }
-      if (maybeWorklet) {
-        processedAuctionWorkletsIds.add(pid);
-        // Each AuctionWorklet event represents two threads:
+      const matchingWorklet = this.#parsedTrace.AuctionWorklets.worklets.get(pid);
+      if (matchingWorklet) {
+        // Each AuctionWorklet has two key threads:
         // 1. the Utility Thread
-        // 2. the V8 Helper Thread
-        // Note that the names passed here are not used visually. TODO: remove this name?
-        this.#threadAppenders.push(new ThreadAppender(
-            this, this.#parsedTrace, pid, maybeWorklet.args.data.utilityThread.tid, 'auction-worket-utility',
-            Trace.Handlers.Threads.ThreadType.AUCTION_WORKLET));
-        this.#threadAppenders.push(new ThreadAppender(
-            this, this.#parsedTrace, pid, maybeWorklet.args.data.v8HelperThread.tid, 'auction-worklet-v8helper',
-            Trace.Handlers.Threads.ThreadType.AUCTION_WORKLET));
+        // 2. the V8 Helper Thread - either a bidder or seller. see buildNameForAuctionWorklet()
+        // There are other threads in a worklet process, but we don't render them.
+        const tids = [matchingWorklet.args.data.utilityThread.tid, matchingWorklet.args.data.v8HelperThread.tid];
+        if (tids.includes(tid)) {
+          this.#threadAppenders.push(new ThreadAppender(
+              this, this.#parsedTrace, pid, tid, '', Trace.Handlers.Threads.ThreadType.AUCTION_WORKLET, entries, tree));
+        }
         continue;
       }
 
-      this.#threadAppenders.push(new ThreadAppender(this, this.#parsedTrace, pid, tid, name, type));
+      // The Common case… Add the main thread, or iframe, or thread pool, etc.
+      this.#threadAppenders.push(new ThreadAppender(this, this.#parsedTrace, pid, tid, name, type, entries, tree));
     }
     // Sort first by track order, then break ties by placing busier tracks first.
     this.#threadAppenders.sort(
@@ -528,9 +525,9 @@ export class CompatibilityTracksAppender {
     this.#entryData.push(event);
     this.#legacyEntryTypeByLevel[level] = EntryType.TRACK_APPENDER;
     this.#flameChartData.entryLevels[index] = level;
-    this.#flameChartData.entryStartTimes[index] = Trace.Helpers.Timing.microSecondsToMilliseconds(event.ts);
-    const dur = event.dur || Trace.Helpers.Timing.millisecondsToMicroseconds(InstantEventVisibleDurationMs);
-    this.#flameChartData.entryTotalTimes[index] = Trace.Helpers.Timing.microSecondsToMilliseconds(dur);
+    this.#flameChartData.entryStartTimes[index] = Trace.Helpers.Timing.microToMilli(event.ts);
+    const dur = event.dur || Trace.Helpers.Timing.milliToMicro(InstantEventVisibleDurationMs);
+    this.#flameChartData.entryTotalTimes[index] = Trace.Helpers.Timing.microToMilli(dur);
     return index;
   }
 
@@ -632,11 +629,14 @@ export class CompatibilityTracksAppender {
       throw new Error('Track not found for level');
     }
 
-    // Historically all tracks would have a titleForEvent() method.
-    // However, we are working on migrating all event title logic into one place (components/EntryName)
-    // TODO(crbug.com/365047728):
-    // Once this migration is complete, no tracks will have a custom
-    // titleForEvent method and we can remove titleForEvent entirely.
+    // Historically all tracks would have a titleForEvent() method. However a
+    // lot of these were duplicated so we worked on removing them in favour of
+    // the EntryName.nameForEntry method called below (see crbug.com/365047728).
+    // However, sometimes an appender needs to customise the titles slightly;
+    // for example the LayoutShiftsTrackAppender does not show any titles as we
+    // use diamonds to represent layout shifts.
+    // So whilst we expect most appenders to not define this method, we do
+    // allow appenders to override it.
     if (track.titleForEvent) {
       return track.titleForEvent(event);
     }
@@ -645,47 +645,42 @@ export class CompatibilityTracksAppender {
   /**
    * Returns the info shown when an event in the timeline is hovered.
    */
-  highlightedEntryInfo(event: Trace.Types.Events.Event, level: number): HighlightedEntryInfo {
+  popoverInfo(event: Trace.Types.Events.Event, level: number): PopoverInfo {
     const track = this.#trackForLevel.get(level);
     if (!track) {
       throw new Error('Track not found for level');
     }
 
-    // Add any warnings information to the tooltip. Done here to avoid duplicating this call in every appender.
-    // By doing this here, we ensure that any warnings that are
-    // added to the WarningsHandler are automatically used and added
-    // to the tooltip.
-    const warningElements: HTMLSpanElement[] =
-        TimelineComponents.DetailsView.buildWarningElementsForEvent(event, this.#parsedTrace);
-
-    let title = this.titleForEvent(event, level);
-    let formattedTime = getFormattedTime(event.dur);
-    let additionalElement;
-
-    // If the track defines a custom highlight, call it and use its values.
-    if (track.highlightedEntryInfo) {
-      const {
-        title: customTitle,
-        formattedTime: customFormattedTime,
-        warningElements: extraWarningElements,
-        additionalElement: element,
-      } = track.highlightedEntryInfo(event);
-      if (customTitle) {
-        title = customTitle;
-      }
-      if (customFormattedTime) {
-        formattedTime = customFormattedTime;
-      }
-      if (extraWarningElements) {
-        warningElements.push(...extraWarningElements);
-      }
-      additionalElement = element;
-    }
-    return {
-      title,
-      formattedTime,
-      warningElements,
-      additionalElement,
+    // Defaults here, though tracks may chose to redefine title/formattedTime
+    const info: PopoverInfo = {
+      title: this.titleForEvent(event, level),
+      formattedTime: getFormattedTime(event.dur),
+      warningElements: TimelineComponents.DetailsView.buildWarningElementsForEvent(event, this.#parsedTrace),
+      additionalElements: [],
+      url: null,
     };
+
+    // If the track defines its own popoverInfo(), it'll update values within
+    if (track.setPopoverInfo) {
+      track.setPopoverInfo(event, info);
+    }
+
+    // If there's a url associated, add into additionalElements
+    const url = URL.parse(
+        info.url ?? TimelineUtils.SourceMapsResolver.SourceMapsResolver.resolvedURLForEntry(this.#parsedTrace, event) ??
+        '');
+    if (url) {
+      const MAX_PATH_LENGTH = 45;
+      const MAX_ORIGIN_LENGTH = 30;
+      const path = Platform.StringUtilities.trimMiddle(url.href.replace(url.origin, ''), MAX_PATH_LENGTH);
+      const origin =
+          Platform.StringUtilities.trimEndWithMaxLength(url.origin.replace('https://', ''), MAX_ORIGIN_LENGTH);
+      const urlElems = document.createElement('div');
+      urlElems.createChild('span', 'popoverinfo-url-path').textContent = path;
+      urlElems.createChild('span', 'popoverinfo-url-origin').textContent = `(${origin})`;
+      info.additionalElements.push(urlElems);
+    }
+
+    return info;
   }
 }

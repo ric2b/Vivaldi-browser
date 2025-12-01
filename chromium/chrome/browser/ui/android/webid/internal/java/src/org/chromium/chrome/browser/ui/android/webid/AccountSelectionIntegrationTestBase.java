@@ -50,20 +50,24 @@ public class AccountSelectionIntegrationTestBase {
                     "ana@one.test",
                     "Ana Doe",
                     "Ana",
+                    /* secondaryDescription= */ null,
                     TEST_PROFILE_PIC,
                     null,
                     /* isSignIn= */ true,
-                    /* isBrowserTrustedSignIn= */ true);
+                    /* isBrowserTrustedSignIn= */ true,
+                    /* isFilteredOut= */ false);
     protected static final Account NEW_BOB =
             new Account(
                     "Bob",
                     "",
                     "Bob",
                     "",
+                    /* secondaryDescription= */ null,
                     TEST_PROFILE_PIC,
                     null,
                     /* isSignIn= */ false,
-                    /* isBrowserTrustedSignIn= */ false);
+                    /* isBrowserTrustedSignIn= */ false,
+                    /* isFilteredOut= */ false);
 
     protected static final IdentityProviderMetadata IDP_METADATA =
             new IdentityProviderMetadata(
@@ -72,7 +76,7 @@ public class AccountSelectionIntegrationTestBase {
                     /* brandIconUrl= */ EXAMPLE_ETLD_PLUS_ONE,
                     /* configUrl= */ null,
                     /* loginUrl= */ null,
-                    /* supportsAddAccount= */ false);
+                    /* showUseDifferentAccountButton= */ false);
     protected static final IdentityProviderMetadata IDP_METADATA_WITH_ADD_ACCOUNT =
             new IdentityProviderMetadata(
                     /* brandTextColor= */ Color.WHITE,
@@ -80,7 +84,7 @@ public class AccountSelectionIntegrationTestBase {
                     /* brandIconUrl= */ EXAMPLE_ETLD_PLUS_ONE,
                     /* configUrl= */ null,
                     /* loginUrl= */ null,
-                    /* supportsAddAccount= */ true);
+                    /* showUseDifferentAccountButton= */ true);
 
     protected static final @IdentityRequestDialogDisclosureField int[] DEFAULT_DISCLOSURE_FIELDS =
             new int[] {

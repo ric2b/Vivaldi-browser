@@ -23,9 +23,9 @@ CSS Flexbox (cbiesinger)
 - Almost all of the scrolling regressions (again!) still one case
 remaining that needs more investigation.
 CSS Grid Layout (svillar, jfernandez, rego, javif)
-\[[crbug.com/79180](http://crbug.com/79180)\]
+\[[crbug.com/79180](https://crbug.com/79180)\]
 - eae/svillar trying to figure out what would be required to ship CSS Grid.
-CSS Multi-column (mstensho) \[[crbug.com/334335](http://crbug.com/334335)\]
+CSS Multi-column (mstensho) \[[crbug.com/334335](https://crbug.com/334335)\]
 - The past weeks I've been working on the break-{after,before,inside}
 properties. Mostly some preparatory patches so far, while I've kept
 the beefy parts to myself for now.
@@ -37,21 +37,21 @@ CSS Houdini
 (ikilpatrick)
 - Next up is generating new CSS images for the paint API. (ikilpatrick)
 Add API for layout (leviw, pilgrim, dgrogan)
-\[[crbug.com/495288](http://crbug.com/495288)\]
+\[[crbug.com/495288](https://crbug.com/495288)\]
 - Working on getting all of the LayoutView references over to the new
 block layout API, will be one of the largest leaf nodes ion the new
 layout API. (pilgrim)
 - Will try to add precoomit hook to enforce the line layout API.
 (dgrogan)
-LayoutNG \[[crbug.com/591099](http://crbug.com/591099)\]
+LayoutNG \[[crbug.com/591099](https://crbug.com/591099)\]
 - LayoutNG hackathon last week. It happened and was glorious. We got of
 to a better start than expected, got very simple layout working day
 one. I think we're convinced that it's a tenable design, deciding on
 next steps. (leviw, ikilpatrick, dgrogan)
-CSS Containment (leviw) \[[crbug.com/312978](http://crbug.com/312978)\]
+CSS Containment (leviw) \[[crbug.com/312978](https://crbug.com/312978)\]
 - No update since last week -
 Intersection Observer (szager, mpb)
-\[[crbug.com/540528](http://crbug.com/540528)\]
+\[[crbug.com/540528](https://crbug.com/540528)\]
 - Assortment of patches for intersection observer, including all release
 blockers that I'm trying tom land this week before vacation. Gated on
 reviewers. (szager)

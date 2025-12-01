@@ -79,6 +79,13 @@
 #endif
 
 //------------------------------------------------------------------------------
+// MemorySanitizer support.
+
+#if LIBGAV1_MSAN
+#include <sanitizer/msan_interface.h>
+#endif  // LIBGAV1_MSAN
+
+//------------------------------------------------------------------------------
 // Function attributes.
 // GCC: https://gcc.gnu.org/onlinedocs/gcc/Function-Attributes.html
 // Clang: https://clang.llvm.org/docs/AttributeReference.html

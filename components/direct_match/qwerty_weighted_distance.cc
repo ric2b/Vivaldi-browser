@@ -2,6 +2,8 @@
 
 #include "qwerty_weighted_distance.h"
 
+#include <string>
+
 namespace {
   const std::unordered_map<char, std::vector<char>> neighbors_ = {
     {'q', {'w', 'a'}},

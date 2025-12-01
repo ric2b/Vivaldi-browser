@@ -28,6 +28,7 @@
 #include "dawn/native/ComputePassEncoder.h"
 
 #include "dawn/common/Range.h"
+#include "dawn/native/Adapter.h"
 #include "dawn/native/BindGroup.h"
 #include "dawn/native/BindGroupLayout.h"
 #include "dawn/native/Buffer.h"
@@ -173,14 +174,13 @@ ObjectType ComputePassEncoder::GetType() const {
 }
 
 void ComputePassEncoder::APIEnd() {
-    mCommandBufferState.End();
-
     if (mEnded && IsValidationEnabled()) {
         GetDevice()->HandleError(DAWN_VALIDATION_ERROR("%s was already ended.", this));
         return;
     }
 
     mEnded = true;
+    mCommandBufferState.End();
 
     if (mEncodingContext->TryEncode(
             this,
@@ -213,25 +213,34 @@ void ComputePassEncoder::APIDispatchWorkgroups(uint32_t workgroupCountX,
 
                 DAWN_TRY(mCommandBufferState.ValidateCanDispatch());
 
-                uint32_t workgroupsPerDimension =
+                uint32_t maxComputeWorkgroupsPerDimension =
                     GetDevice()->GetLimits().v1.maxComputeWorkgroupsPerDimension;
 
-                DAWN_INVALID_IF(workgroupCountX > workgroupsPerDimension,
-                                "Dispatch workgroup count X (%u) exceeds max compute "
-                                "workgroups per dimension (%u).",
-                                workgroupCountX, workgroupsPerDimension);
+                DAWN_INVALID_IF(
+                    workgroupCountX > maxComputeWorkgroupsPerDimension,
+                    "Dispatch workgroup count X (%u) exceeds max compute "
+                    "workgroups per dimension (%u).%s",
+                    workgroupCountX, maxComputeWorkgroupsPerDimension,
+                    DAWN_INCREASE_LIMIT_MESSAGE(GetDevice()->GetAdapter(),
+                                                maxComputeWorkgroupsPerDimension, workgroupCountX));
 
-                DAWN_INVALID_IF(workgroupCountY > workgroupsPerDimension,
-                                "Dispatch workgroup count Y (%u) exceeds max compute "
-                                "workgroups per dimension (%u).",
-                                workgroupCountY, workgroupsPerDimension);
+                DAWN_INVALID_IF(
+                    workgroupCountY > maxComputeWorkgroupsPerDimension,
+                    "Dispatch workgroup count Y (%u) exceeds max compute "
+                    "workgroups per dimension (%u).%s",
+                    workgroupCountY, maxComputeWorkgroupsPerDimension,
+                    DAWN_INCREASE_LIMIT_MESSAGE(GetDevice()->GetAdapter(),
+                                                maxComputeWorkgroupsPerDimension, workgroupCountY));
 
-                DAWN_INVALID_IF(workgroupCountZ > workgroupsPerDimension,
-                                "Dispatch workgroup count Z (%u) exceeds max compute "
-                                "workgroups per dimension (%u).",
-                                workgroupCountZ, workgroupsPerDimension);
+                DAWN_INVALID_IF(
+                    workgroupCountZ > maxComputeWorkgroupsPerDimension,
+                    "Dispatch workgroup count Z (%u) exceeds max compute "
+                    "workgroups per dimension (%u).%s",
+                    workgroupCountZ, maxComputeWorkgroupsPerDimension,
+                    DAWN_INCREASE_LIMIT_MESSAGE(GetDevice()->GetAdapter(),
+                                                maxComputeWorkgroupsPerDimension, workgroupCountZ));
 
-                if (GetDevice()->IsCompatibilityMode()) {
+                if (!GetDevice()->HasFlexibleTextureViews()) {
                     DAWN_TRY(mCommandBufferState.ValidateNoDifferentTextureViewsOnSameTexture());
                 }
             }
@@ -365,7 +374,7 @@ void ComputePassEncoder::APIDispatchWorkgroupsIndirect(BufferBase* indirectBuffe
                     "size (%u).",
                     indirectOffset, kDispatchIndirectSize, indirectBuffer->GetSize());
 
-                if (GetDevice()->IsCompatibilityMode()) {
+                if (!GetDevice()->HasFlexibleTextureViews()) {
                     DAWN_TRY(mCommandBufferState.ValidateNoDifferentTextureViewsOnSameTexture());
                 }
             }

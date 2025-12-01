@@ -13,8 +13,8 @@
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "components/search_engines/prepopulated_engines.h"
 #include "components/search_engines/template_url_id.h"
+#include "third_party/search_engines_data/original/search_engines.h"
 #include "url/gurl.h"
 
 #include "components/sync/base/unique_position.h"
@@ -23,14 +23,14 @@
 // users to do SSA-style usage of TemplateURL: construct a TemplateURLData with
 // whatever fields are desired, then create an immutable TemplateURL from it.
 struct TemplateURLData {
-  enum class CreatedByPolicy {
+  enum class PolicyOrigin {
     kNoPolicy = 0,
     kDefaultSearchProvider = 1,
     kSiteSearch = 2,
     kSearchAggregator = 3,
   };
 
-  using RegulatoryExtension = TemplateURLPrepopulateData::RegulatoryExtension;
+  using RegulatoryExtension = TemplateURLPrepopulateDataOriginal::RegulatoryExtension;
 
   TemplateURLData();
   TemplateURLData(const TemplateURLData& other);
@@ -55,8 +55,6 @@ struct TemplateURLData {
                   std::string_view search_url_post_params,
                   std::string_view suggest_url_post_params,
                   std::string_view image_url_post_params,
-                  std::string_view side_search_param,
-                  std::string_view side_image_search_param,
                   std::string_view image_translate_source_language_param_key,
                   std::string_view image_translate_target_language_param_key,
                   std::vector<std::string> search_intent_params,
@@ -86,6 +84,9 @@ struct TemplateURLData {
   void SetURL(const std::string& url);
   const std::string& url() const { return url_; }
 
+  // Generate the deterministic hash of data within this TemplateURL.
+  std::vector<uint8_t> GenerateHash() const;
+
   // Recomputes |sync_guid| using the same logic as in the constructor. This
   // means a random GUID is generated, except for built-in search engines,
   // which generate GUIDs deterministically based on |prepopulate_id| or
@@ -95,6 +96,15 @@ struct TemplateURLData {
   // Estimates dynamic memory usage.
   // See base/trace_event/memory_usage_estimator.h for more info.
   size_t EstimateMemoryUsage() const;
+
+  // Returns whether this search engine was created by an Enterprise policy.
+  bool CreatedByPolicy() const;
+  // Returns whether this search engine was created by the Default Search
+  // Provider Enterprise policy.
+  bool CreatedByDefaultSearchProviderPolicy() const;
+  // Returns whether this search engine was created by an Enterprise policy that
+  // doesn't define the Default Search Provider.
+  bool CreatedByNonDefaultSearchProviderPolicy() const;
 
   // Optional additional raw URLs.
   std::string suggestions_url;
@@ -114,14 +124,6 @@ struct TemplateURLData {
   std::string search_url_post_params;
   std::string suggestions_url_post_params;
   std::string image_url_post_params;
-
-  // The parameter appended to the engine's search URL when constructing the URL
-  // for the side search side panel.
-  std::string side_search_param;
-
-  // The parameter appended to the engine's image URL when constructing the
-  // URL for the image search entry in the side panel.
-  std::string side_image_search_param;
 
   // The key of the parameter identifying the source language for an image
   // translation.
@@ -179,7 +181,7 @@ struct TemplateURLData {
 
   // True if this TemplateURL was automatically created by the administrator via
   // group policy.
-  CreatedByPolicy created_by_policy;
+  PolicyOrigin policy_origin;
 
   // True if this TemplateURL is forced to be the default search engine via
   // policy. This prevents the user from setting another search engine as
@@ -243,6 +245,9 @@ struct TemplateURLData {
   // This TemplateURL is part of the built-in "starter pack" if
   // starter_pack_id > 0.
   int starter_pack_id{0};
+
+  // friend bool operator==(const TemplateURLData&,
+  //                       const TemplateURLData&) = default;
 
  private:
   // Private so we can enforce using the setters and thus enforce that these

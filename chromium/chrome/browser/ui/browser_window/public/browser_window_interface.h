@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "base/callback_list.h"
-#include "build/chromeos_buildflags.h"
 #include "content/public/browser/page_navigator.h"
 #include "ui/base/window_open_disposition.h"
 
@@ -167,7 +166,7 @@ class BrowserWindowInterface : public content::PageNavigator {
     // AppBrowserController) but looks like a popup (e.g. it never has a tab
     // strip).
     TYPE_APP_POPUP,
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     // Browser for ARC++ Chrome custom tabs.
     // It's an enhanced version of TYPE_POPUP, and is used to show the Chrome
     // Custom Tab toolbar for ARC++ apps. It has UI customizations like using
@@ -199,6 +198,17 @@ class BrowserWindowInterface : public content::PageNavigator {
   // migrating a large chunk of code to BrowserWindowInterface, to allow
   // incremental migration.
   virtual Browser* GetBrowserForMigrationOnly() = 0;
+
+  // Changes the blocked state of |web_contents|. WebContentses are considered
+  // blocked while displaying a web contents modal dialog. During that time
+  // renderer host will ignore any UI interaction within WebContents outside of
+  // the currently displaying dialog.
+  // Note that this is a duplicate of the same method in
+  // WebContentsModalDialogManagerDelegate. This is because there are two ways
+  // to open tab-modal dialogs, either via TabDialogManager or via
+  // //components/web_modal. See crbug.com/377820808.
+  virtual void SetWebContentsBlocked(content::WebContents* web_contents,
+                                     bool blocked) = 0;
 };
 
 #endif  // CHROME_BROWSER_UI_BROWSER_WINDOW_PUBLIC_BROWSER_WINDOW_INTERFACE_H_

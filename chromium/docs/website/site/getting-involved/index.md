@@ -33,4 +33,4 @@ Here are some ways you can get involved with Chromium:
   * Optionally apply for a Chromium account by emailing
     [accounts@chromium.org](mailto:accounts@chromium.org) (Note: you
     must already be approved as a committer) (if you're a Googler, click
-    [here](https://goto.google.com/chromium-account) instead)
+    [here](http://go/chromium-account) instead)

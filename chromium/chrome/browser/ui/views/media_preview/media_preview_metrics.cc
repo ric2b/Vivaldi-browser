@@ -201,4 +201,13 @@ void RecordOriginTrialAllowed(UiLocation location, bool allowed) {
       allowed);
 }
 
+void RecordVideoCaptureError(const Context& context,
+                             media::VideoCaptureError received_error) {
+  CHECK_EQ(context.preview_type, PreviewType::kCamera);
+  std::string metric_name =
+      StrCat({kUiPrefix, kPreview, GetUiLocationString(context.ui_location),
+              ".VideoCaptureError"});
+  base::UmaHistogramEnumeration(metric_name, received_error);
+}
+
 }  // namespace media_preview_metrics

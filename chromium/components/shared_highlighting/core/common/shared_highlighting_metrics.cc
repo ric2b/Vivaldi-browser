@@ -21,7 +21,7 @@ TextFragmentLinkOpenSource GetLinkSource(const GURL& referrer) {
   return TextFragmentLinkOpenSource::kUnknown;
   /*
   bool from_search_engine =
-      referrer.is_valid() && SearchEngineUtils::GetEngineType(referrer) > 0;
+      referrer.is_valid() && search_engine_utils::GetEngineType(referrer) > 0;
   return from_search_engine ? TextFragmentLinkOpenSource::kSearchEngine
                             : TextFragmentLinkOpenSource::kUnknown;
   */
@@ -79,8 +79,7 @@ void LogTextFragmentLinkOpenSource(const GURL& referrer) {
 
 void LogTextFragmentMatchRate(int matches, int text_fragments) {
   if (text_fragments == 0) {
-    NOTREACHED_IN_MIGRATION();
-    return;
+    NOTREACHED();
   }
 
   const int match_rate_percent =

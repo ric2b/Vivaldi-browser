@@ -21,6 +21,7 @@
 #include "chrome/credential_provider/gaiacp/gcp_utils.h"
 #include "chrome/credential_provider/gaiacp/reg_utils.h"
 #include "chrome/credential_provider/test/gcp_fakes.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace credential_provider {
@@ -29,7 +30,7 @@ namespace testing {
 
 class TaskManagerTest : public ::testing::Test {
  public:
-  TaskManagerTest() {}
+  TaskManagerTest() = default;
 
   void RunTasks() {
     fake_task_manager_.RunTasks(task_environment_.GetMainThreadTaskRunner());
@@ -83,7 +84,7 @@ int FakeTask::num_fails_ = 0;
 
 FakeTask::FakeTask(base::TimeDelta period) : period_(period) {}
 
-FakeTask::~FakeTask() {}
+FakeTask::~FakeTask() = default;
 
 extension::Config FakeTask::GetConfig() {
   extension::Config config;
@@ -176,9 +177,10 @@ TEST_F(TaskManagerTest, TaskExecuted) {
 
   // Create a fake user associated to a gaia id.
   CComBSTR sid1;
-  ASSERT_EQ(S_OK, fake_os_user_manager()->CreateTestOSUser(
-                      L"foo@gmail.com", L"password", L"Full Name", L"comment",
-                      L"test-gaia-id", std::wstring(), L"domain", &sid1));
+  ASSERT_EQ(S_OK,
+            fake_os_user_manager()->CreateTestOSUser(
+                L"foo@gmail.com", L"password", L"Full Name", L"comment",
+                GaiaId("test-gaia-id"), std::wstring(), L"domain", &sid1));
 
   std::wstring device_resource_id1 = L"foo_resource_id";
   ASSERT_EQ(S_OK, SetUserProperty(OLE2W(sid1), L"device_resource_id",
@@ -215,9 +217,10 @@ TEST_F(TaskManagerTest, TaskExecuted) {
 
   // Create another user associated to a gaia id.
   CComBSTR sid2;
-  ASSERT_EQ(S_OK, fake_os_user_manager()->CreateTestOSUser(
-                      L"bar@gmail.com", L"password", L"Full Name", L"comment",
-                      L"test-gaia-id2", std::wstring(), L"domain", &sid2));
+  ASSERT_EQ(S_OK,
+            fake_os_user_manager()->CreateTestOSUser(
+                L"bar@gmail.com", L"password", L"Full Name", L"comment",
+                GaiaId("test-gaia-id2"), std::wstring(), L"domain", &sid2));
   std::wstring device_resource_id2 = L"foo_resource_id";
   ASSERT_EQ(S_OK, SetUserProperty(OLE2W(sid2), L"device_resource_id",
                                   device_resource_id2));
@@ -277,9 +280,10 @@ TEST_F(TaskManagerTest, BackOff) {
 
   // Create a fake user associated to a gaia id.
   CComBSTR sid1;
-  ASSERT_EQ(S_OK, fake_os_user_manager()->CreateTestOSUser(
-                      L"foo@gmail.com", L"password", L"Full Name", L"comment",
-                      L"test-gaia-id", std::wstring(), L"domain", &sid1));
+  ASSERT_EQ(S_OK,
+            fake_os_user_manager()->CreateTestOSUser(
+                L"foo@gmail.com", L"password", L"Full Name", L"comment",
+                GaiaId("test-gaia-id"), std::wstring(), L"domain", &sid1));
 
   std::wstring device_resource_id1 = L"foo_resource_id";
   ASSERT_EQ(S_OK, SetUserProperty(OLE2W(sid1), L"device_resource_id",

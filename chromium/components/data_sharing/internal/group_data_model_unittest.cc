@@ -15,11 +15,13 @@
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
 #include "components/data_sharing/internal/collaboration_group_sync_bridge.h"
+#include "components/data_sharing/public/features.h"
 #include "components/data_sharing/public/group_data.h"
 #include "components/data_sharing/test_support/fake_data_sharing_sdk_delegate.h"
 #include "components/sync/model/entity_change.h"
 #include "components/sync/test/data_type_store_test_util.h"
 #include "components/sync/test/mock_data_type_local_change_processor.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -28,9 +30,29 @@ namespace data_sharing {
 namespace {
 
 using base::test::RunClosure;
+using testing::_;
 using testing::ElementsAre;
 using testing::Eq;
+using testing::IsEmpty;
 using testing::Optional;
+
+bool OptionalGroupMetadataDataMatches(std::optional<GroupData> a,
+                                      std::optional<GroupData> b) {
+  if (!a.has_value() && !b.has_value()) {
+    return true;
+  }
+  if (a.has_value() != b.has_value()) {
+    return false;
+  }
+  // Both have values, compare the GroupData.
+  return a->group_token.group_id == b->group_token.group_id &&
+         a->group_token.access_token == b->group_token.access_token &&
+         a->display_name == b->display_name;
+}
+
+MATCHER_P(OptionalGroupMetadataDataEq, expected_group_data, "") {
+  return OptionalGroupMetadataDataMatches(expected_group_data, arg);
+}
 
 // TODO(crbug.com/301390275): move helpers to work with CollaborationGroup
 // entities to test utils files, they are used across multiple files.
@@ -68,7 +90,8 @@ std::unique_ptr<syncer::EntityChange> EntityChangeUpdateFromSpecifics(
 
 std::unique_ptr<syncer::EntityChange> EntityChangeDeleteFromSpecifics(
     const sync_pb::CollaborationGroupSpecifics& specifics) {
-  return syncer::EntityChange::CreateDelete(specifics.collaboration_id());
+  return syncer::EntityChange::CreateDelete(specifics.collaboration_id(),
+                                            syncer::EntityData());
 }
 
 MATCHER(NotNullTime, "") {
@@ -88,6 +111,12 @@ MATCHER_P(HasMemberWithGaiaId, expected_gaia_id, "") {
   return false;
 }
 
+MATCHER_P3(GroupEventIs, group_id, event_type, affected_member_gaia_id, "") {
+  return arg.group_id == group_id && arg.event_type == event_type &&
+         arg.affected_member_gaia_id == affected_member_gaia_id &&
+         !arg.event_time.is_null();
+}
+
 class MockModelObserver : public GroupDataModel::Observer {
  public:
   MockModelObserver() = default;
@@ -104,16 +133,19 @@ class MockModelObserver : public GroupDataModel::Observer {
               (override));
   MOCK_METHOD(void,
               OnGroupDeleted,
-              (const GroupId& group_id, const base::Time& event_time),
+              (const GroupId& group_id,
+               const std::optional<GroupData>& group_data,
+               const base::Time& event_time),
               (override));
   MOCK_METHOD(void,
               OnMemberAdded,
-              (const GroupId&, const std::string&, const base::Time&),
+              (const GroupId&, const GaiaId&, const base::Time&),
               (override));
   MOCK_METHOD(void,
               OnMemberRemoved,
-              (const GroupId&, const std::string&, const base::Time&),
+              (const GroupId&, const GaiaId&, const base::Time&),
               (override));
+  MOCK_METHOD(void, OnSyncBridgeUpdateTypeChanged, (SyncBridgeUpdateType));
 };
 
 class GroupDataModelTest : public testing::Test {
@@ -159,6 +191,12 @@ class GroupDataModelTest : public testing::Test {
 
   testing::NiceMock<MockModelObserver>& model_observer() { return observer_; }
 
+  FakeDataSharingSDKDelegate& sdk_delegate() { return sdk_delegate_; }
+
+  CollaborationGroupSyncBridge& collaboration_group_bridge() {
+    return *collaboration_group_bridge_;
+  }
+
   void WaitForModelLoaded() {
     if (model_->IsModelLoaded()) {
       return;
@@ -190,7 +228,7 @@ class GroupDataModelTest : public testing::Test {
   }
 
   void MimicMemberAddedServerSide(const GroupId& group_id,
-                                  const std::string& member_gaia_id) {
+                                  const GaiaId& member_gaia_id) {
     sdk_delegate_.AddMember(group_id, member_gaia_id);
 
     syncer::EntityChangeList entity_changes;
@@ -202,7 +240,7 @@ class GroupDataModelTest : public testing::Test {
   }
 
   void MimicMemberRemovedServerSide(const GroupId& group_id,
-                                    const std::string& member_gaia_id) {
+                                    const GaiaId& member_gaia_id) {
     sdk_delegate_.RemoveMember(group_id, member_gaia_id);
 
     syncer::EntityChangeList entity_changes;
@@ -231,6 +269,24 @@ class GroupDataModelTest : public testing::Test {
         std::move(entity_changes));
   }
 
+  void WaitForGroupDeleted(const GroupId& group_id) {
+    // Unlike additions/updates deletions might be handled synchronously, so we
+    // need to check whether the group was already deleted.
+    std::optional<GroupData> group_data = model().GetGroup(group_id);
+    if (!group_data.has_value()) {
+      return;
+    }
+    ASSERT_TRUE(group_data.has_value());
+
+    base::RunLoop run_loop;
+    EXPECT_CALL(
+        observer_,
+        OnGroupDeleted(group_id, OptionalGroupMetadataDataEq(group_data),
+                       NotNullTime()))
+        .WillOnce(RunClosure(run_loop.QuitClosure()));
+    run_loop.Run();
+  }
+
   void ShutdownModel() {
     base::RunLoop run_loop;
     model_->GetGroupDataStoreForTesting().SetShutdownCallbackForTesting(
@@ -249,8 +305,13 @@ class GroupDataModelTest : public testing::Test {
     model_->AddObserver(&observer_);
   }
 
+  void FastForwardBy(const base::TimeDelta& time_delta) {
+    task_environment_.FastForwardBy(time_delta);
+  }
+
  private:
-  base::test::TaskEnvironment task_environment_;
+  base::test::TaskEnvironment task_environment_{
+      base::test::TaskEnvironment::TimeSource::MOCK_TIME};
 
   base::ScopedTempDir data_sharing_dir_;
 
@@ -306,12 +367,41 @@ TEST_F(GroupDataModelTest, ShouldUpdateGroup) {
   const GroupId group_id = MimicGroupAddedServerSide("group");
   WaitForGroupAdded(group_id);
 
-  const std::string member_gaia_id = "gaia_id";
+  const GaiaId member_gaia_id("gaia_id");
   MimicMemberAddedServerSide(group_id, member_gaia_id);
   WaitForGroupUpdated(group_id);
 
   EXPECT_THAT(model().GetGroup(group_id),
               Optional(HasMemberWithGaiaId(member_gaia_id)));
+}
+
+TEST_F(GroupDataModelTest, ShouldHandlePartialReadGroupsFailure) {
+  WaitForModelLoaded();
+
+  // Both groups are in CollaborationGroupSyncBridge, but only one is in
+  // DataSharingSDKDelegate.
+  const std::string display_name = "group";
+  const GroupId group_id1 = sdk_delegate().AddGroupAndReturnId(display_name);
+  const GroupId group_id2 = GroupId("non_existent_group_id");
+
+  syncer::EntityChangeList entity_changes;
+  entity_changes.push_back(EntityChangeAddFromSpecifics(
+      MakeSpecifics(group_id1, /*changed_at_millis_since_unix_epoch=*/1000)));
+  entity_changes.push_back(EntityChangeAddFromSpecifics(
+      MakeSpecifics(group_id2, /*changed_at_millis_since_unix_epoch=*/1000)));
+  collaboration_group_bridge().ApplyIncrementalSyncChanges(
+      collaboration_group_bridge().CreateMetadataChangeList(),
+      std::move(entity_changes));
+
+  // First group should be successfully read.
+  base::RunLoop run_loop;
+  EXPECT_CALL(model_observer(), OnGroupAdded(group_id1, NotNullTime()))
+      .WillOnce(RunClosure(run_loop.QuitClosure()));
+  run_loop.Run();
+
+  EXPECT_THAT(model().GetGroup(group_id1),
+              Optional(HasDisplayName(display_name)));
+  EXPECT_FALSE(model().GetGroup(group_id2).has_value());
 }
 
 TEST_F(GroupDataModelTest, ShouldNotifyAboutGroupChanges) {
@@ -321,7 +411,7 @@ TEST_F(GroupDataModelTest, ShouldNotifyAboutGroupChanges) {
   WaitForGroupAdded(group_id);
 
   // Test that OnMemberAdded() is called when a member is added.
-  std::string member_gaia_id = "gaia_id1";
+  const GaiaId member_gaia_id("gaia_id");
   EXPECT_CALL(model_observer(),
               OnMemberAdded(group_id, member_gaia_id, NotNullTime()));
   MimicMemberAddedServerSide(group_id, member_gaia_id);
@@ -335,17 +425,27 @@ TEST_F(GroupDataModelTest, ShouldNotifyAboutGroupChanges) {
   WaitForGroupUpdated(group_id);
 }
 
+TEST_F(GroupDataModelTest, ShouldNotifyOnSyncBridgeUpdateTypeChanged) {
+  EXPECT_CALL(model_observer(), OnSyncBridgeUpdateTypeChanged(
+                                    Eq(SyncBridgeUpdateType::kDisableSync)))
+      .Times(1);
+  model().OnSyncBridgeUpdateTypeChanged(SyncBridgeUpdateType::kDisableSync);
+}
+
 TEST_F(GroupDataModelTest, ShouldDeleteGroup) {
   WaitForModelLoaded();
 
   const GroupId group_id = MimicGroupAddedServerSide("group");
   WaitForGroupAdded(group_id);
-  ASSERT_TRUE(model().GetGroup(group_id).has_value());
+  std::optional<GroupData> group_data = model().GetGroup(group_id);
+  ASSERT_TRUE(group_data.has_value());
 
   // Unlike additions/updates deletions are handled synchronously, once
   // CollaborationGroupSyncBridge received the update - no need to wait for
   // observer call with RunLoop.
-  EXPECT_CALL(model_observer(), OnGroupDeleted(group_id, NotNullTime()));
+  EXPECT_CALL(model_observer(),
+              OnGroupDeleted(group_id, OptionalGroupMetadataDataEq(group_data),
+                             NotNullTime()));
   MimicGroupDeletedServerSide(group_id);
 
   EXPECT_FALSE(model().GetGroup(group_id).has_value());
@@ -398,7 +498,7 @@ TEST_F(GroupDataModelTest, ShouldHandleUpdatesAfterRestart) {
   // CollaborationGroupSyncBridge is still running and will persist changes, but
   // model is shut down so it can't process them.
   ShutdownModel();
-  const std::string member_gaia_id = "gaia_id";
+  const GaiaId member_gaia_id("gaia_id");
   MimicMemberAddedServerSide(group_id, member_gaia_id);
 
   RestartModel();
@@ -436,7 +536,7 @@ TEST_F(GroupDataModelTest, ShouldGetPossiblyRemovedGroupMember) {
   const GroupId group_id = MimicGroupAddedServerSide("group");
   WaitForGroupAdded(group_id);
 
-  const std::string member_gaia_id = "gaia_id";
+  const GaiaId member_gaia_id("gaia_id");
   MimicMemberAddedServerSide(group_id, member_gaia_id);
   WaitForGroupUpdated(group_id);
 
@@ -453,10 +553,10 @@ TEST_F(GroupDataModelTest, ShouldGetPossiblyRemovedGroupMember) {
                    .has_value());
 
   // Member never existed, nullopt should be returned.
-  EXPECT_FALSE(
-      model()
-          .GetPossiblyRemovedGroupMember(group_id, "non-existing-member")
-          .has_value());
+  EXPECT_FALSE(model()
+                   .GetPossiblyRemovedGroupMember(group_id,
+                                                  GaiaId("non-existing-member"))
+                   .has_value());
   // TODO(crbug.com/373628741): add coverage for the scenario when member was
   // removed from the group once it is properly supported (i.e. removed members
   // data is temporarily stored).
@@ -499,6 +599,107 @@ TEST_F(GroupDataModelTest, ShouldRecordDBInitSuccess) {
   WaitForModelLoaded();
   histogram_tester.ExpectUniqueSample("DataSharing.GroupDBInitSuccess", true,
                                       1);
+}
+
+TEST_F(GroupDataModelTest, ShouldRecordGroupEvents) {
+  WaitForModelLoaded();
+
+  // Verify that group addition is recorded.
+  const GroupId group_id = MimicGroupAddedServerSide("group1");
+  WaitForGroupAdded(group_id);
+
+  EXPECT_THAT(model().GetGroupEventsSinceStartup(),
+              ElementsAre(GroupEventIs(
+                  group_id, GroupEvent::EventType::kGroupAdded, std::nullopt)));
+
+  // Verify that member addition is recorded.
+  const GaiaId member_gaia_id("gaia_id");
+  MimicMemberAddedServerSide(group_id, member_gaia_id);
+  WaitForGroupUpdated(group_id);
+
+  EXPECT_THAT(
+      model().GetGroupEventsSinceStartup(),
+      ElementsAre(GroupEventIs(group_id, GroupEvent::EventType::kGroupAdded,
+                               std::nullopt),
+                  GroupEventIs(group_id, GroupEvent::EventType::kMemberAdded,
+                               member_gaia_id)));
+
+  // Verify that member removal is recorded.
+  MimicMemberRemovedServerSide(group_id, member_gaia_id);
+  WaitForGroupUpdated(group_id);
+
+  EXPECT_THAT(
+      model().GetGroupEventsSinceStartup(),
+      ElementsAre(GroupEventIs(group_id, GroupEvent::EventType::kGroupAdded,
+                               std::nullopt),
+                  GroupEventIs(group_id, GroupEvent::EventType::kMemberAdded,
+                               member_gaia_id),
+                  GroupEventIs(group_id, GroupEvent::EventType::kMemberRemoved,
+                               member_gaia_id)));
+
+  // Verify that group removal is recorded.
+  MimicGroupDeletedServerSide(group_id);
+  WaitForGroupDeleted(group_id);
+
+  EXPECT_THAT(
+      model().GetGroupEventsSinceStartup(),
+      ElementsAre(GroupEventIs(group_id, GroupEvent::EventType::kGroupAdded,
+                               std::nullopt),
+                  GroupEventIs(group_id, GroupEvent::EventType::kMemberAdded,
+                               member_gaia_id),
+                  GroupEventIs(group_id, GroupEvent::EventType::kMemberRemoved,
+                               member_gaia_id),
+                  GroupEventIs(group_id, GroupEvent::EventType::kGroupRemoved,
+                               std::nullopt)));
+}
+
+TEST_F(GroupDataModelTest, ShouldDoPeriodicPolling) {
+  WaitForModelLoaded();
+
+  const GroupId group_id = MimicGroupAddedServerSide("group1");
+  WaitForGroupAdded(group_id);
+
+  const GaiaId member_gaia_id("gaia_id");
+  MimicMemberAddedServerSide(group_id, member_gaia_id);
+  WaitForGroupUpdated(group_id);
+
+  {
+    std::optional<GroupData> group_data = model().GetGroup(group_id);
+    ASSERT_TRUE(group_data.has_value());
+    ASSERT_THAT(*group_data, HasMemberWithGaiaId(member_gaia_id));
+  }
+
+  // Mimic that member was removed from the group without updating
+  // CollaborationGroup (thus model doesn't know about it).
+  sdk_delegate().RemoveMember(group_id, member_gaia_id);
+  FastForwardBy(base::Hours(1));
+  {
+    // One hour is not long enough to trigger periodic polling, so the group
+    // member should still be present.
+    std::optional<GroupData> group_data = model().GetGroup(group_id);
+    ASSERT_TRUE(group_data.has_value());
+    ASSERT_THAT(*group_data, HasMemberWithGaiaId(member_gaia_id));
+  }
+  // There will be extra OnGroupUpdated() call after periodic polling, so to
+  // avoid unexpected call errors, verify and clear expectations.
+  testing::Mock::VerifyAndClearExpectations(&model_observer());
+
+  base::RunLoop run_loop;
+  EXPECT_CALL(model_observer(),
+              OnMemberRemoved(group_id, member_gaia_id, NotNullTime()))
+      .WillOnce(RunClosure(run_loop.QuitClosure()));
+  // Periodic polling is attempted once per hour and only effective for groups
+  // that were updated more that kDataSharingGroupDataPeriodicPollingInterval
+  // ago, so advance time by the sum of both.
+  FastForwardBy(features::kDataSharingGroupDataPeriodicPollingInterval.Get() +
+                base::Hours(1));
+  run_loop.Run();
+  {
+    // Now model should be aware of the member removal.
+    std::optional<GroupData> group_data = model().GetGroup(group_id);
+    ASSERT_TRUE(group_data.has_value());
+    EXPECT_TRUE(group_data->members.empty());
+  }
 }
 
 }  // namespace

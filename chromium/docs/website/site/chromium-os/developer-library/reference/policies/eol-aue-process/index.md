@@ -99,4 +99,4 @@ Follow the same guidance in the
 
 
 [GoldenEye]: http://go/goldeneye
-[public device page]: https://dev.chromium.org/chromium-os/developer-information-for-chrome-os-devices
+[public device page]: /chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices

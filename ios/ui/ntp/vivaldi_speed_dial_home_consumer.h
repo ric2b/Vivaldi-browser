@@ -7,24 +7,30 @@
 
 using bookmarks::BookmarkNode;
 
+@class VivaldiNTPTopToolbarItem;
+@class VivaldiSpeedDialItem;
+
 // SpeedDialHomeConsumer provides methods that allow mediators to update the UI.
 @protocol SpeedDialHomeConsumer
 
 /// Notifies the subscriber that bookmark model is loaded.
 - (void)bookmarkModelLoaded;
 
-/// Notifies the subscriber to refresh the laid out contents.
-- (void)refreshContents;
+/// Notifies consumer when top sites are ready.
+- (void)topSitesModelDidLoad;
 
 /// Notifies the subscriber to refresh the changed node.
 - (void)refreshNode:(const bookmarks::BookmarkNode*)bookmarkNode;
 
 /// Notifies the subscriber to refresh the top menu items.
-- (void)refreshMenuItems:(NSArray*)items SDFolders:(NSArray*)SDFolders;
+- (void)refreshMenuItems:(NSArray<VivaldiNTPTopToolbarItem*>*)items;
+
+/// Notifies consumer to select the item with provided index.
+- (void)selectToolbarItemWithIndex:(NSInteger)index;
 
 /// Notifies the subscriber to refresh the children of the speed dial folders.
-- (void)refreshChildItems:(NSArray*)items
-        topSitesAvailable:(BOOL)topSitesAvailable;
+- (void)refreshChildItems:(NSArray<VivaldiSpeedDialItem*>*)items
+                   parent:(VivaldiNTPTopToolbarItem*)parent;
 
 /// Notifies the subscriber to show/hide the frequently visited pages.
 - (void)setFrequentlyVisitedPagesEnabled:(BOOL)enabled;

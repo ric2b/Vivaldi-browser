@@ -21,7 +21,7 @@ Our end-goal architecture consists of:
 
     Force compositing mode in the Renderer (accelerated compositing on all
     pages, see our [hardware acceleration overview doc for
-    details](http://www.chromium.org/developers/design-documents/gpu-accelerated-compositing-in-chrome))
+    details](/developers/design-documents/gpu-accelerated-compositing-in-chrome))
 
     A browser compositor (which is typically Aura, although we might do
     something slightly different on Mac \[called “Purlieus” below as a
@@ -35,7 +35,7 @@ Our end-goal architecture consists of:
     doc](/developers/design-documents/compositor-thread-architecture))
 
     Impl-side painting in the Renderer and Browser ([design
-    doc](http://www.chromium.org/developers/design-documents/impl-side-painting))
+    doc](/developers/design-documents/impl-side-painting))
 
     BrowserInputController and our zero-input-latency scheduler ([design
     doc](https://docs.google.com/a/chromium.org/document/d/1LUFA8MDpJcDHE0_L2EHvrcwqOMJhzl5dqb0AlBSqHOY/edit))

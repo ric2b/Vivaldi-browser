@@ -15,8 +15,8 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "quiche/http2/adapter/header_validator.h"
+#include "quiche/http2/core/http2_constants.h"
 #include "quiche/http2/core/spdy_protocol.h"
-#include "quiche/http2/http2_constants.h"
 #include "quiche/quic/core/http/http_constants.h"
 #include "quiche/quic/core/http/http_decoder.h"
 #include "quiche/quic/core/http/http_frames.h"
@@ -26,6 +26,7 @@
 #include "quiche/quic/core/qpack/qpack_decoder.h"
 #include "quiche/quic/core/qpack/qpack_encoder.h"
 #include "quiche/quic/core/quic_error_codes.h"
+#include "quiche/quic/core/quic_stream.h"
 #include "quiche/quic/core/quic_stream_priority.h"
 #include "quiche/quic/core/quic_types.h"
 #include "quiche/quic/core/quic_utils.h"
@@ -822,9 +823,6 @@ void QuicSpdyStream::OnDataAvailable() {
   if (!VersionUsesHttp3(transport_version())) {
     // Sequencer must be blocked until headers are consumed.
     QUICHE_DCHECK(FinishedReadingHeaders());
-  }
-
-  if (!VersionUsesHttp3(transport_version())) {
     HandleBodyAvailable();
     return;
   }
@@ -880,6 +878,17 @@ void QuicSpdyStream::OnDataAvailable() {
     }
   }
 
+  if (GetQuicReloadableFlag(quic_fin_before_completed_http_headers)) {
+    if (sequencer()->IsClosed() && !headers_decompressed_) {
+      QUIC_RELOADABLE_FLAG_COUNT_N(quic_fin_before_completed_http_headers, 1,
+                                   2);
+      OnUnrecoverableError(
+          QUIC_HTTP_INVALID_FRAME_SEQUENCE_ON_SPDY_STREAM,
+          "Received FIN before finishing receiving HTTP headers.");
+      return;
+    }
+    QUIC_RELOADABLE_FLAG_COUNT_N(quic_fin_before_completed_http_headers, 2, 2);
+  }
   // Do not call HandleBodyAvailable() until headers are consumed.
   if (!FinishedReadingHeaders()) {
     return;
@@ -1028,6 +1037,7 @@ bool QuicSpdyStream::OnDataFrameEnd() {
   return true;
 }
 
+// TODO(danzh): Remove this override once the flag is deprecated.
 bool QuicSpdyStream::OnStreamFrameAcked(QuicStreamOffset offset,
                                         QuicByteCount data_length,
                                         bool fin_acked,
@@ -1038,15 +1048,36 @@ bool QuicSpdyStream::OnStreamFrameAcked(QuicStreamOffset offset,
       offset, data_length, fin_acked, ack_delay_time, receive_timestamp,
       newly_acked_length);
 
-  const QuicByteCount newly_acked_header_length =
-      GetNumFrameHeadersInInterval(offset, data_length);
-  QUICHE_DCHECK_LE(newly_acked_header_length, *newly_acked_length);
-  unacked_frame_headers_offsets_.Difference(offset, offset + data_length);
-  if (ack_listener_ != nullptr && new_data_acked) {
-    ack_listener_->OnPacketAcked(
-        *newly_acked_length - newly_acked_header_length, ack_delay_time);
+  if (!notify_ack_listener_earlier()) {
+    const QuicByteCount newly_acked_header_length =
+        GetNumFrameHeadersInInterval(offset, data_length);
+    QUICHE_DCHECK_LE(newly_acked_header_length, *newly_acked_length);
+    unacked_frame_headers_offsets_.Difference(offset, offset + data_length);
+    if (ack_listener_ != nullptr && new_data_acked) {
+      ack_listener_->OnPacketAcked(
+          *newly_acked_length - newly_acked_header_length, ack_delay_time);
+    }
+  } else {
+    QUIC_RELOADABLE_FLAG_COUNT_N(quic_notify_ack_listener_earlier, 2, 3);
   }
   return new_data_acked;
+}
+
+void QuicSpdyStream::OnNewDataAcked(QuicStreamOffset offset,
+                                    QuicByteCount data_length,
+                                    QuicByteCount newly_acked_length,
+                                    QuicTime receive_timestamp,
+                                    QuicTime::Delta ack_delay_time) {
+  QuicStream::OnNewDataAcked(offset, data_length, newly_acked_length,
+                             receive_timestamp, ack_delay_time);
+  const QuicByteCount newly_acked_header_length =
+      GetNumFrameHeadersInInterval(offset, data_length);
+  QUICHE_DCHECK_LE(newly_acked_header_length, newly_acked_length);
+  unacked_frame_headers_offsets_.Difference(offset, offset + data_length);
+  if (ack_listener_ != nullptr) {
+    ack_listener_->OnPacketAcked(newly_acked_length - newly_acked_header_length,
+                                 ack_delay_time);
+  }
 }
 
 void QuicSpdyStream::OnStreamFrameRetransmitted(QuicStreamOffset offset,
@@ -1777,7 +1808,6 @@ bool QuicSpdyStream::ValidateReceivedHeaders(
     QUIC_DLOG(ERROR) << invalid_request_details_;
     return false;
   }
-  bool is_response = false;
   for (const std::pair<std::string, std::string>& pair : header_list) {
     const std::string& name = pair.first;
     if (!IsValidHeaderName(name)) {
@@ -1786,18 +1816,8 @@ bool QuicSpdyStream::ValidateReceivedHeaders(
       QUIC_DLOG(ERROR) << invalid_request_details_;
       return false;
     }
-    if (name == ":status") {
-      is_response = !pair.second.empty();
-    }
     if (name == "host") {
-      if (GetQuicReloadableFlag(quic_allow_host_in_request2)) {
-        QUICHE_RELOADABLE_FLAG_COUNT_N(quic_allow_host_in_request2, 1, 3);
-        continue;
-      }
-      if (is_response) {
-        // Host header is allowed in response.
-        continue;
-      }
+      continue;
     }
     if (http2::GetInvalidHttp2HeaderSet().contains(name)) {
       invalid_request_details_ = absl::StrCat(name, " header is not allowed");

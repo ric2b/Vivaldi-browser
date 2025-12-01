@@ -90,7 +90,7 @@ function storePageLoadMetricAgainstNavigationId(
   }
 
   if (Types.Events.isFirstContentfulPaint(event)) {
-    const fcpTime = Types.Timing.MicroSeconds(event.ts - navigation.ts);
+    const fcpTime = Types.Timing.Micro(event.ts - navigation.ts);
     const classification = scoreClassificationForFirstContentfulPaint(fcpTime);
     const metricScore = {event, metricName: MetricName.FCP, classification, navigation, timing: fcpTime};
     storeMetricScore(frameId, navigationId, metricScore);
@@ -98,7 +98,7 @@ function storePageLoadMetricAgainstNavigationId(
   }
 
   if (Types.Events.isFirstPaint(event)) {
-    const paintTime = Types.Timing.MicroSeconds(event.ts - navigation.ts);
+    const paintTime = Types.Timing.Micro(event.ts - navigation.ts);
     const classification = ScoreClassification.UNCLASSIFIED;
     const metricScore = {event, metricName: MetricName.FP, classification, navigation, timing: paintTime};
     storeMetricScore(frameId, navigationId, metricScore);
@@ -106,7 +106,7 @@ function storePageLoadMetricAgainstNavigationId(
   }
 
   if (Types.Events.isMarkDOMContent(event)) {
-    const dclTime = Types.Timing.MicroSeconds(event.ts - navigation.ts);
+    const dclTime = Types.Timing.Micro(event.ts - navigation.ts);
     const metricScore = {
       event,
       metricName: MetricName.DCL,
@@ -119,7 +119,7 @@ function storePageLoadMetricAgainstNavigationId(
   }
 
   if (Types.Events.isInteractiveTime(event)) {
-    const ttiValue = Types.Timing.MicroSeconds(event.ts - navigation.ts);
+    const ttiValue = Types.Timing.Micro(event.ts - navigation.ts);
     const tti = {
       event,
       metricName: MetricName.TTI,
@@ -129,8 +129,7 @@ function storePageLoadMetricAgainstNavigationId(
     };
     storeMetricScore(frameId, navigationId, tti);
 
-    const tbtValue =
-        Helpers.Timing.millisecondsToMicroseconds(Types.Timing.MilliSeconds(event.args.args.total_blocking_time_ms));
+    const tbtValue = Helpers.Timing.milliToMicro(Types.Timing.Milli(event.args.args.total_blocking_time_ms));
     const tbt = {
       event,
       metricName: MetricName.TBT,
@@ -143,7 +142,7 @@ function storePageLoadMetricAgainstNavigationId(
   }
 
   if (Types.Events.isMarkLoad(event)) {
-    const loadTime = Types.Timing.MicroSeconds(event.ts - navigation.ts);
+    const loadTime = Types.Timing.Micro(event.ts - navigation.ts);
     const metricScore = {
       event,
       metricName: MetricName.L,
@@ -160,7 +159,7 @@ function storePageLoadMetricAgainstNavigationId(
     if (!candidateIndex) {
       throw new Error('Largest Contenful Paint unexpectedly had no candidateIndex.');
     }
-    const lcpTime = Types.Timing.MicroSeconds(event.ts - navigation.ts);
+    const lcpTime = Types.Timing.Micro(event.ts - navigation.ts);
     const lcp = {
       event,
       metricName: MetricName.LCP,
@@ -263,10 +262,10 @@ function getNavigationForPageLoadEvent(event: Types.Events.PageLoadEvent): Types
  * Classifications sourced from
  * https://web.dev/fcp/
  */
-export function scoreClassificationForFirstContentfulPaint(fcpScoreInMicroseconds: Types.Timing.MicroSeconds):
+export function scoreClassificationForFirstContentfulPaint(fcpScoreInMicroseconds: Types.Timing.Micro):
     ScoreClassification {
-  const FCP_GOOD_TIMING = Helpers.Timing.secondsToMicroseconds(Types.Timing.Seconds(1.8));
-  const FCP_MEDIUM_TIMING = Helpers.Timing.secondsToMicroseconds(Types.Timing.Seconds(3.0));
+  const FCP_GOOD_TIMING = Helpers.Timing.secondsToMicro(Types.Timing.Seconds(1.8));
+  const FCP_MEDIUM_TIMING = Helpers.Timing.secondsToMicro(Types.Timing.Seconds(3.0));
   let scoreClassification = ScoreClassification.BAD;
   if (fcpScoreInMicroseconds <= FCP_MEDIUM_TIMING) {
     scoreClassification = ScoreClassification.OK;
@@ -282,10 +281,10 @@ export function scoreClassificationForFirstContentfulPaint(fcpScoreInMicrosecond
  * https://web.dev/interactive/#how-lighthouse-determines-your-tti-score
  */
 
-export function scoreClassificationForTimeToInteractive(ttiTimeInMicroseconds: Types.Timing.MicroSeconds):
+export function scoreClassificationForTimeToInteractive(ttiTimeInMicroseconds: Types.Timing.Micro):
     ScoreClassification {
-  const TTI_GOOD_TIMING = Helpers.Timing.secondsToMicroseconds(Types.Timing.Seconds(3.8));
-  const TTI_MEDIUM_TIMING = Helpers.Timing.secondsToMicroseconds(Types.Timing.Seconds(7.3));
+  const TTI_GOOD_TIMING = Helpers.Timing.secondsToMicro(Types.Timing.Seconds(3.8));
+  const TTI_MEDIUM_TIMING = Helpers.Timing.secondsToMicro(Types.Timing.Seconds(7.3));
   let scoreClassification = ScoreClassification.BAD;
   if (ttiTimeInMicroseconds <= TTI_MEDIUM_TIMING) {
     scoreClassification = ScoreClassification.OK;
@@ -301,10 +300,10 @@ export function scoreClassificationForTimeToInteractive(ttiTimeInMicroseconds: T
  * https://web.dev/lcp/#what-is-lcp
  */
 
-export function scoreClassificationForLargestContentfulPaint(lcpTimeInMicroseconds: Types.Timing.MicroSeconds):
+export function scoreClassificationForLargestContentfulPaint(lcpTimeInMicroseconds: Types.Timing.Micro):
     ScoreClassification {
-  const LCP_GOOD_TIMING = Helpers.Timing.secondsToMicroseconds(Types.Timing.Seconds(2.5));
-  const LCP_MEDIUM_TIMING = Helpers.Timing.secondsToMicroseconds(Types.Timing.Seconds(4));
+  const LCP_GOOD_TIMING = Helpers.Timing.secondsToMicro(Types.Timing.Seconds(2.5));
+  const LCP_MEDIUM_TIMING = Helpers.Timing.secondsToMicro(Types.Timing.Seconds(4));
   let scoreClassification = ScoreClassification.BAD;
   if (lcpTimeInMicroseconds <= LCP_MEDIUM_TIMING) {
     scoreClassification = ScoreClassification.OK;
@@ -318,7 +317,7 @@ export function scoreClassificationForLargestContentfulPaint(lcpTimeInMicrosecon
 /**
  * DCL does not have a classification.
  */
-export function scoreClassificationForDOMContentLoaded(_dclTimeInMicroseconds: Types.Timing.MicroSeconds):
+export function scoreClassificationForDOMContentLoaded(_dclTimeInMicroseconds: Types.Timing.Micro):
     ScoreClassification {
   return ScoreClassification.UNCLASSIFIED;
 }
@@ -328,10 +327,10 @@ export function scoreClassificationForDOMContentLoaded(_dclTimeInMicroseconds: T
  * https://web.dev/lighthouse-total-blocking-#time/
  */
 
-export function scoreClassificationForTotalBlockingTime(tbtTimeInMicroseconds: Types.Timing.MicroSeconds):
+export function scoreClassificationForTotalBlockingTime(tbtTimeInMicroseconds: Types.Timing.Micro):
     ScoreClassification {
-  const TBT_GOOD_TIMING = Helpers.Timing.millisecondsToMicroseconds(Types.Timing.MilliSeconds(200));
-  const TBT_MEDIUM_TIMING = Helpers.Timing.millisecondsToMicroseconds(Types.Timing.MilliSeconds(600));
+  const TBT_GOOD_TIMING = Helpers.Timing.milliToMicro(Types.Timing.Milli(200));
+  const TBT_MEDIUM_TIMING = Helpers.Timing.milliToMicro(Types.Timing.Milli(600));
   let scoreClassification = ScoreClassification.BAD;
   if (tbtTimeInMicroseconds <= TBT_MEDIUM_TIMING) {
     scoreClassification = ScoreClassification.OK;
@@ -384,20 +383,20 @@ export async function finalize(): Promise<void> {
       markerEvents.filter(event => getFrameIdForPageLoadEvent(event) === mainFrame).sort((a, b) => a.ts - b.ts);
 }
 
-export type PageLoadMetricsData = {
+export interface PageLoadMetricsData {
   /**
    * This represents the metric scores for all navigations, for all frames in a trace.
    * Given a frame id, the map points to another map from navigation id to metric scores.
    * The metric scores include the event related to the metric as well as the data regarding
    * the score itself.
    */
-  metricScoresByFrameId: Map<string, Map<string, Map<MetricName, MetricScore>>>,
+  metricScoresByFrameId: Map<string, Map<string, Map<MetricName, MetricScore>>>;
   /**
    * Page load events with no associated duration that happened in the
    * main frame.
    */
-  allMarkerEvents: Types.Events.PageLoadEvent[],
-};
+  allMarkerEvents: Types.Events.PageLoadEvent[];
+}
 
 export function data(): PageLoadMetricsData {
   return {
@@ -434,6 +433,8 @@ export const enum MetricName {
   TBT = 'TBT',
   // Cumulative Layout Shift
   CLS = 'CLS',
+  // Navigation
+  NAV = 'Nav',
   // Note: INP is handled in UserInteractionsHandler
 }
 
@@ -444,5 +445,5 @@ export interface MetricScore {
   // The last navigation that occured before this metric score.
   navigation?: Types.Events.NavigationStart;
   estimated?: boolean;
-  timing: Types.Timing.MicroSeconds;
+  timing: Types.Timing.Micro;
 }

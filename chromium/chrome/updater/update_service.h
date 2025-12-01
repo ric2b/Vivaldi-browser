@@ -85,15 +85,27 @@ class UpdateService : public base::RefCountedThreadSafe<UpdateService> {
     // Failed to run app installer.
     kInstallFailed = 10,
 
+    // The server received the request and rejected the requester as
+    // unauthorized to make it.
+    kPermissionDenied = 11,
+
+    // The remote transmitted a value unknown to this version of the app.
+    kUnknown = 12,
+
     // The service has been stopped, because the system is shutting down, or
     // any other reason.
-    kServiceStopped = 11,
+    kServiceStopped = 13,
 
     // The request could not be serviced, either because no user has accepted
     // the terms of service, or OEM mode is in effect.
-    kEulaRequiredOrOemMode = 12,
+    kEulaRequiredOrOemMode = 14,
+
+    // The service failed to fetch policies.
+    kFetchPoliciesFailed = 15,
 
     // Update EnumTraits<UpdateService::Result> when adding new values.
+    // Also update the `UpdateService::Result` `enum` in `updater_service.mojom`
+    // when adding new values.
   };
 
   // Run time errors are organized in specific categories to indicate the
@@ -242,6 +254,7 @@ class UpdateService : public base::RefCountedThreadSafe<UpdateService> {
       const std::string& app_id,
       Priority priority,
       PolicySameVersionUpdate policy_same_version_update,
+      const std::string& language,
       base::RepeatingCallback<void(const UpdateState&)> state_update,
       base::OnceCallback<void(Result)> callback) = 0;
 
@@ -252,6 +265,7 @@ class UpdateService : public base::RefCountedThreadSafe<UpdateService> {
   //   `install_data_index`: Index of the server install data.
   //   `priority`: Priority for processing this update.
   //   `policy_same_version_update`: Whether a same-version update is allowed.
+  //   `language`: The UI language for the update.
   //   `state_update`: The callback will be invoked every time the update
   //     changes state when the engine starts. It will be called on the
   //     sequence used by the update service, so this callback must not block.
@@ -269,6 +283,7 @@ class UpdateService : public base::RefCountedThreadSafe<UpdateService> {
       const std::string& install_data_index,
       Priority priority,
       PolicySameVersionUpdate policy_same_version_update,
+      const std::string& language,
       base::RepeatingCallback<void(const UpdateState&)> state_update,
       base::OnceCallback<void(Result)> callback) = 0;
 
@@ -287,6 +302,7 @@ class UpdateService : public base::RefCountedThreadSafe<UpdateService> {
   //   `install_data_index`: Index of the server install data. Effective only
   //     when `client_install_data` is not set.
   //   `priority`: Priority for processing this update.
+  //   `language`: The UI language for the install.
   //   `state_update`: The callback will be invoked every time the update
   //     changes state when the engine starts. It will be called on the
   //     sequence used by the update service, so this callback must not block.
@@ -304,6 +320,7 @@ class UpdateService : public base::RefCountedThreadSafe<UpdateService> {
       const std::string& client_install_data,
       const std::string& install_data_index,
       Priority priority,
+      const std::string& language,
       base::RepeatingCallback<void(const UpdateState&)> state_update,
       base::OnceCallback<void(Result)> callback) = 0;
 
@@ -324,6 +341,7 @@ class UpdateService : public base::RefCountedThreadSafe<UpdateService> {
   //   `install_data`: Server install data extracted from the offline manifest.
   //   `install_settings`: An optional serialized dictionary to customize the
   //       installation.
+  //   `language`: The UI language for the install.
   //   `state_update` arg:
   //     UpdateState: the new state of this install request.
   //
@@ -335,6 +353,7 @@ class UpdateService : public base::RefCountedThreadSafe<UpdateService> {
       const std::string& install_args,
       const std::string& install_data,
       const std::string& install_settings,
+      const std::string& language,
       base::RepeatingCallback<void(const UpdateState&)> state_update,
       base::OnceCallback<void(Result)> callback) = 0;
 
@@ -349,7 +368,7 @@ template <>
 struct EnumTraits<UpdateService::Result> {
   using Result = UpdateService::Result;
   static constexpr Result first_elem = Result::kSuccess;
-  static constexpr Result last_elem = Result::kEulaRequiredOrOemMode;
+  static constexpr Result last_elem = Result::kFetchPoliciesFailed;
 };
 
 template <>

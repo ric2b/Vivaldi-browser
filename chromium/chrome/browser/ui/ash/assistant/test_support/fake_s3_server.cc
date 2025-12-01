@@ -11,6 +11,7 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/notreached.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
 #include "base/strings/string_number_conversions.h"
@@ -121,10 +122,11 @@ class PortSelector {
     for (int offset = 0; offset + 1 < kMaxAttempts; offset += 2) {
       port_ = kStartPort + offset;
       lock_file_ = base::File(GetLockFilePath(), GetFileFlags());
-      if (lock_file_.IsValid())
+      if (lock_file_.IsValid()) {
         return;
+      }
     }
-    CHECK(false) << "Failed to find an available port.";
+    NOTREACHED() << "Failed to find an available port.";
   }
 
   base::FilePath GetLockFilePath() const {

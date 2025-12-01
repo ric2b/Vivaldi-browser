@@ -26,6 +26,8 @@ import org.jni_zero.NativeMethods;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils.ThreadChecker;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 
 import java.lang.reflect.Method;
 import java.util.Optional;
@@ -34,6 +36,7 @@ import java.util.Optional;
 import org.chromium.build.BuildConfig;
 
 @JNINamespace("media")
+@NullMarked
 class AudioManagerAndroid {
     private static final String TAG = "media";
 
@@ -86,8 +89,8 @@ class AudioManagerAndroid {
     private final ThreadChecker mThreadChecker = new ThreadChecker();
 
     private final ContentResolver mContentResolver;
-    private ContentObserver mSettingsObserver;
-    private HandlerThread mSettingsObserverThread;
+    private @Nullable ContentObserver mSettingsObserver;
+    private @Nullable HandlerThread mSettingsObserverThread;
 
     private AudioDeviceSelector mAudioDeviceSelector;
 
@@ -258,14 +261,13 @@ class AudioManagerAndroid {
     }
 
     /**
-     * @return the current list of available audio devices.
-     * Note that this call does not trigger any update of the list of devices,
-     * it only copies the current state in to the output array.
-     * Required permissions: android.Manifest.permission.MODIFY_AUDIO_SETTINGS
-     * and android.Manifest.permission.RECORD_AUDIO.
+     * @return the current list of available audio devices. Note that this call does not trigger any
+     *     update of the list of devices, it only copies the current state in to the output array.
+     *     Required permissions: android.Manifest.permission.MODIFY_AUDIO_SETTINGS and
+     *     android.Manifest.permission.RECORD_AUDIO.
      */
     @CalledByNative
-    private AudioDeviceName[] getAudioInputDeviceNames() {
+    private AudioDeviceName @Nullable [] getAudioInputDeviceNames() {
         if (DEBUG) logd("getAudioInputDeviceNames");
         if (!mIsInitialized) return null;
 
@@ -366,10 +368,11 @@ class AudioManagerAndroid {
 
     // Used for reflection of hidden method getOutputLatency.  Will be `null` before reflection, and
     // a (possibly empty) Optional after.
-    private static Optional<Method> sGetOutputLatency;
+    @SuppressWarnings("NullableOptional")
+    private static @Nullable Optional<Method> sGetOutputLatency;
 
     // Reflect |methodName(int)|, and return it.
-    private static final Method reflectMethod(String methodName) {
+    private static final @Nullable Method reflectMethod(String methodName) {
         try {
             return AudioManager.class.getMethod(methodName, int.class);
         } catch (NoSuchMethodException e) {
@@ -417,11 +420,6 @@ class AudioManagerAndroid {
         mAudioManager.setMicrophoneMute(on);
     }
 
-    /** Gets  the current microphone mute state. */
-    private boolean isMicrophoneMute() {
-        return mAudioManager.isMicrophoneMute();
-    }
-
     /** Checks if the process has as specified permission or not. */
     private boolean hasPermission(String permission) {
         return ContextUtils.getApplicationContext().checkSelfPermission(permission)
@@ -464,11 +462,6 @@ class AudioManagerAndroid {
         Log.d(TAG, msg);
     }
 
-    /** Trivial helper method for error logging */
-    private static void loge(String msg) {
-        Log.e(TAG, msg);
-    }
-
     /** Start thread which observes volume changes on the voice stream. */
     private void startObservingVolumeChanges() {
         if (DEBUG) logd("startObservingVolumeChanges");
@@ -506,6 +499,7 @@ class AudioManagerAndroid {
         if (DEBUG) logd("stopObservingVolumeChanges");
         if (mSettingsObserverThread == null) return;
 
+        assert mSettingsObserver != null;
         mContentResolver.unregisterContentObserver(mSettingsObserver);
         mSettingsObserver = null;
 

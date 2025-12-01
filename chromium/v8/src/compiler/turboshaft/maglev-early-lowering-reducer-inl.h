@@ -70,7 +70,7 @@ class MaglevEarlyLoweringReducer : public Next {
   }
 
   V<InternalizedString> CheckedInternalizedString(
-      V<Object> object, OpIndex frame_state, bool check_smi,
+      V<Object> object, V<FrameState> frame_state, bool check_smi,
       const FeedbackSource& feedback) {
     if (check_smi) {
       __ DeoptimizeIf(__ IsSmi(object), frame_state, DeoptimizeReason::kSmi,
@@ -171,12 +171,25 @@ class MaglevEarlyLoweringReducer : public Next {
     V<Object> data = __ LoadScriptContextSideData(script_context, index);
     V<Object> property = __ LoadScriptContextPropertyFromSideData(data);
     ScopedVar<HeapNumber> result(this, heap_number);
+    Label<> done(this);
+    if (v8_flags.script_context_mutable_heap_int32) {
+      IF (__ TaggedEqual(
+              property,
+              __ SmiConstant(ContextSidePropertyCell::MutableInt32()))) {
+        result = __ AllocateHeapNumberWithValue(
+            __ ChangeInt32ToFloat64(__ LoadHeapInt32Value(heap_number)),
+            isolate_->factory());
+        GOTO(done);
+      }
+    }
     IF (__ TaggedEqual(
             property,
-            __ SmiConstant(ContextSidePropertyCell::kMutableHeapNumber))) {
+            __ SmiConstant(ContextSidePropertyCell::MutableHeapNumber()))) {
       result = __ AllocateHeapNumberWithValue(
           __ LoadHeapNumberValue(heap_number), isolate_->factory());
     }
+    GOTO(done);
+    BIND(done);
     return result;
   }
 
@@ -194,16 +207,40 @@ class MaglevEarlyLoweringReducer : public Next {
     // Check for const case.
     __ DeoptimizeIf(
         __ TaggedEqual(property,
-                       __ SmiConstant(ContextSidePropertyCell::kConst)),
+                       __ SmiConstant(ContextSidePropertyCell::Const())),
         frame_state, DeoptimizeReason::kWrongValue, feedback);
     if (v8_flags.script_context_mutable_heap_number) {
-      // Check for smi case
-      IF (__ TaggedEqual(property,
-                         __ SmiConstant(ContextSidePropertyCell::kSmi))) {
+      // Check for smi case.
+      IF (__ TaggedEqual(
+              property, __ SmiConstant(ContextSidePropertyCell::SmiMarker()))) {
         __ DeoptimizeIfNot(__ IsSmi(new_value), frame_state,
                            DeoptimizeReason::kWrongValue, feedback);
       } ELSE {
-        // Check mutable heap number case.
+        if (v8_flags.script_context_mutable_heap_int32) {
+          // Check for mutable heap int32 case.
+          IF (__ TaggedEqual(
+                  property,
+                  __ SmiConstant(ContextSidePropertyCell::MutableInt32()))) {
+            ScopedVar<Word32> number_value(this);
+            IF (__ IsSmi(new_value)) {
+              number_value = __ UntagSmi(V<Smi>::Cast(new_value));
+            } ELSE {
+              V<i::Map> map = __ LoadMapField(new_value);
+              __ DeoptimizeIfNot(
+                  __ TaggedEqual(map,
+                                 __ HeapConstant(factory_->heap_number_map())),
+                  frame_state, DeoptimizeReason::kWrongValue, feedback);
+              number_value = __ ChangeFloat64ToInt32OrDeopt(
+                  __ LoadHeapNumberValue(V<HeapNumber>::Cast(new_value)),
+                  frame_state, CheckForMinusZeroMode::kCheckForMinusZero,
+                  feedback);
+            }
+            __ StoreField(old_value, AccessBuilder::ForHeapInt32Value(),
+                          number_value);
+            GOTO(done);
+          }
+        }
+        // It must be a mutable heap number case.
         ScopedVar<Float64> number_value(this);
         IF (__ IsSmi(new_value)) {
           number_value =
@@ -263,57 +300,27 @@ class MaglevEarlyLoweringReducer : public Next {
     return length_tagged;
   }
 
-  void TransitionElementsKindOrCheckMap(
-      V<Object> object, V<FrameState> frame_state, bool check_heap_object,
+  V<Map> TransitionMultipleElementsKind(
+      V<Object> object, V<Map> map,
       const ZoneVector<compiler::MapRef>& transition_sources,
-      const MapRef transition_target, const FeedbackSource& feedback) {
-    Label<> end(this);
-    Label<> if_smi(this);
-
-    TransitionElementsKind(object, transition_sources, transition_target,
-                           check_heap_object, if_smi, end);
-
-    __ DeoptimizeIfNot(
-        __ TaggedEqual(__ LoadMapField(object),
-                       __ HeapConstant(transition_target.object())),
-        frame_state, DeoptimizeReason::kWrongMap, feedback);
-    GOTO(end);
-
-    if (check_heap_object && if_smi.has_incoming_jump()) {
-      BIND(if_smi);
-      __ Deoptimize(frame_state, DeoptimizeReason::kSmi, feedback);
-    } else {
-      DCHECK(!if_smi.has_incoming_jump());
-    }
-
-    BIND(end);
-  }
-
-  void TransitionMultipleElementsKind(
-      V<Object> object, const ZoneVector<compiler::MapRef>& transition_sources,
       const MapRef transition_target) {
-    Label<> end(this);
+    Label<Map> end(this);
 
-    TransitionElementsKind(object, transition_sources, transition_target,
-                           /* check_heap_object */ true, end, end);
-
-    GOTO(end);
-    BIND(end);
+    TransitionElementsKind(object, map, transition_sources, transition_target,
+                           end);
+    GOTO(end, map);
+    BIND(end, result);
+    return result;
   }
 
   void TransitionElementsKind(
-      V<Object> object, const ZoneVector<compiler::MapRef>& transition_sources,
-      const MapRef transition_target, bool check_heap_object, Label<>& if_smi,
-      Label<>& end) {
-    if (check_heap_object) {
-      GOTO_IF(__ ObjectIsSmi(object), if_smi);
-    }
-
+      V<Object> object, V<Map> map,
+      const ZoneVector<compiler::MapRef>& transition_sources,
+      const MapRef transition_target, Label<Map>& end) {
     // Turboshaft's TransitionElementsKind operation loads the map everytime, so
     // we don't call it to have a single map load (in practice,
     // LateLoadElimination should probably eliminate the subsequent map loads,
     // but let's not risk it).
-    V<Map> map = __ LoadMapField(object);
     V<Map> target_map = __ HeapConstant(transition_target.object());
 
     for (const compiler::MapRef transition_source : transition_sources) {
@@ -327,7 +334,7 @@ class MaglevEarlyLoweringReducer : public Next {
               isolate_, __ NoContextConstant(), V<HeapObject>::Cast(object),
               target_map);
         }
-        GOTO(end);
+        GOTO(end, target_map);
       }
     }
   }
@@ -410,12 +417,12 @@ class MaglevEarlyLoweringReducer : public Next {
         __ template LoadField<Word32>(map, AccessBuilder::ForMapBitField3());
     IF (UNLIKELY(__ Word32BitwiseAnd(bitfield3,
                                      Map::Bits3::IsDeprecatedBit::kMask))) {
-      V<Object> result = __ CallRuntime_TryMigrateInstance(
+      V<Object> object_or_smi = __ CallRuntime_TryMigrateInstance(
           isolate_, __ NoContextConstant(), object);
-      __ DeoptimizeIf(__ ObjectIsSmi(result), frame_state,
+      __ DeoptimizeIf(__ ObjectIsSmi(object_or_smi), frame_state,
                       DeoptimizeReason::kInstanceMigrationFailed, feedback);
       // Reload the map since TryMigrateInstance might have changed it.
-      result = __ LoadMapField(V<HeapObject>::Cast(result));
+      result = __ LoadMapField(V<HeapObject>::Cast(object_or_smi));
     }
 
     return result;

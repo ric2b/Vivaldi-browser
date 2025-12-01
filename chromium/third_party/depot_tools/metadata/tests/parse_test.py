@@ -77,7 +77,7 @@ class ParseTest(unittest.TestCase):
                  "     https://www.example.com/parser"),
                 ("Version", "1.0.12"),
                 ("Date", "2020-12-03"),
-                ("License", "Apache, 2.0 and MIT"),
+                ('License', 'Apache-2.0, MIT'),
                 ("License File", "LICENSE"),
                 ("Security Critical", "yes"),
                 ("Shipped", "yes"),
@@ -96,7 +96,7 @@ class ParseTest(unittest.TestCase):
             all_metadata[1].get_entries(),
             [
                 ("Name",
-                 "Test-B README for Chromium metadata (4 errors, 1 warning)"),
+                 "Test-B README for Chromium metadata (3 errors, 1 warning)"),
                 ("SHORT NAME", "metadata-test-invalid"),
                 ("URL", "file://home/drive/chromium/src/metadata"),
                 ("Version", "0"),
@@ -108,7 +108,7 @@ class ParseTest(unittest.TestCase):
                 ("Local Modifications", "None."),
             ],
         )
-        self.assertEqual((24, 35),
+        self.assertEqual((24, 46),
                          all_metadata[1].get_first_and_last_line_number())
 
         # Check repeated fields persist in the metadata's entries.
@@ -116,18 +116,34 @@ class ParseTest(unittest.TestCase):
             all_metadata[2].get_entries(),
             [
                 ("Name",
-                 "Test-C README for Chromium metadata (5 errors, 1 warning)"),
+                 "Test-C README for Chromium metadata (4 errors, 1 warning)"),
                 ("URL", "https://www.example.com/first"),
                 ("URL", "https://www.example.com/second"),
                 ("Version", "N/A"),
                 ("Date", "2020-12-03"),
                 ("License", "Custom license"),
                 ("Security Critical", "yes"),
-                ("Description", "Test metadata with multiple entries for one "
-                 "field, and\nmissing a mandatory field."),
+                ("Description", """Test metadata with multiple entries for one field, and
+missing a mandatory field.
+These are the expected errors (here for reference only):
+
+1. Required field 'License Android Compatible' is missing.
+
+2. Required field 'License File' is missing.
+
+3. Required field 'Shipped' is missing.
+
+4. Repeated fields: URL (2)
+
+warnings:
+1. License has a license not in the allowlist.
+(see https://source.chromium.org/chromium/chromiu
+m/tools/depot_tools/+/main:metadata/fields/custom/license_al
+lowlist.py). Licenses not allowlisted: 'Custom license'."""),
+
             ],
         )
-        self.assertEqual((40, 50),
+        self.assertEqual((51, 76),
                          all_metadata[2].get_first_and_last_line_number())
 
     def test_parse_multiple_local_modifications(self):
@@ -207,6 +223,29 @@ class ParseTest(unittest.TestCase):
         }
         self.assertEqual(dm.get_field_line_numbers(metadata.fields.known.NAME),
                          [1])
+
+    def test_parse_mitigated(self):
+        """Check parsing works for mitigated CVE entries."""
+        filepath = os.path.join(_THIS_DIR, "data",
+                                "README.chromium.test.mitigated")
+        content = gclient_utils.FileRead(filepath)
+        all_metadata = metadata.parse.parse_content(content)
+
+        self.assertEqual(len(all_metadata), 1)
+
+        # Check that the CVEs are properly parsed.
+        self.assertDictEqual(
+            all_metadata[0].mitigations,
+            {
+                "CVE-2011-4061":
+                "This copy of DependencyA only includes rainbows\nthat spill beautifully over multiple lines and are handled\n ~~ Perfectly ~~\nEven: this line with colons that mentions CVE-2000-2000: an unrelated cve.",
+                "CVE-2024-7255":
+                "This copy of DependencyA only includes unicorns",
+                "CVE-2024-7256":
+                "This also doesn't apply because of good reasons"
+            },
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

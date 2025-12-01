@@ -22,39 +22,39 @@ namespace {
 
 /// Constraint properties.
 // Audio constraints. See properties below.
-static constexpr char kAudio[] = "audio";
+constexpr char kAudio[] = "audio";
 // Video constraints. See properties below.
-static constexpr char kVideo[] = "video";
+constexpr char kVideo[] = "video";
 
 // An optional field representing the minimum bits per second. If not specified
 // by the receiver, the sender will use kDefaultAudioMinBitRate and
 // kDefaultVideoMinBitRate, which represent the true operational minimum.
-static constexpr char kMinBitRate[] = "minBitRate";
+constexpr char kMinBitRate[] = "minBitRate";
 
 // Maximum encoded bits per second. This is the lower of (1) the max capability
 // of the decoder, or (2) the max data transfer rate.
-static constexpr char kMaxBitRate[] = "maxBitRate";
+constexpr char kMaxBitRate[] = "maxBitRate";
 // Maximum supported end-to-end latency, in milliseconds. Proportional to the
 // size of the data buffers in the receiver.
-static constexpr char kMaxDelay[] = "maxDelay";
+constexpr char kMaxDelay[] = "maxDelay";
 
 /// Video constraint properties.
 // Maximum pixel rate (width * height * framerate). Is often less than
 // multiplying the fields in maxDimensions. This field is used to set the
 // maximum processing rate.
-static constexpr char kMaxPixelsPerSecond[] = "maxPixelsPerSecond";
+constexpr char kMaxPixelsPerSecond[] = "maxPixelsPerSecond";
 // Minimum dimensions. If omitted, the sender will assume a reasonable minimum
 // with the same aspect ratio as maxDimensions, as close to 320*180 as possible.
 // Should reflect the true operational minimum.
-static constexpr char kMinResolution[] = "minResolution";
+constexpr char kMinResolution[] = "minResolution";
 // Maximum dimensions, not necessarily ideal dimensions.
-static constexpr char kMaxDimensions[] = "maxDimensions";
+constexpr char kMaxDimensions[] = "maxDimensions";
 
 /// Audio constraint properties.
 // Maximum supported sampling frequency (not necessarily ideal).
-static constexpr char kMaxSampleRate[] = "maxSampleRate";
+constexpr char kMaxSampleRate[] = "maxSampleRate";
 // Maximum number of audio channels (1 is mono, 2 is stereo, etc.).
-static constexpr char kMaxChannels[] = "maxChannels";
+constexpr char kMaxChannels[] = "maxChannels";
 
 /// Display description properties
 // If this optional field is included in the ANSWER message, the receiver is
@@ -62,52 +62,52 @@ static constexpr char kMaxChannels[] = "maxChannels";
 // configuration. These may exceed, be the same, or be less than the values in
 // constraints. If undefined, we assume the display is not fixed (e.g. a Google
 // Hangouts UI panel).
-static constexpr char kDimensions[] = "dimensions";
+constexpr char kDimensions[] = "dimensions";
 // An optional field. When missing and dimensions are specified, the sender
 // will assume square pixels and the dimensions imply the aspect ratio of the
 // fixed display. WHen present and dimensions are also specified, implies the
 // pixels are not square.
-static constexpr char kAspectRatio[] = "aspectRatio";
+constexpr char kAspectRatio[] = "aspectRatio";
 // The delimeter used for the aspect ratio format ("A:B").
-static constexpr char kAspectRatioDelimiter = ':';
+constexpr char kAspectRatioDelimiter = ':';
 // Sets the aspect ratio constraints. Value must be either "sender" or
 // "receiver", see kScalingSender and kScalingReceiver below.
-static constexpr char kScaling[] = "scaling";
+constexpr char kScaling[] = "scaling";
 // scaling = "sender" means that the sender must provide video frames of a fixed
 // aspect ratio. In this case, the dimensions object must be passed or an error
 // case will occur.
-static constexpr char kScalingSender[] = "sender";
+constexpr char kScalingSender[] = "sender";
 // scaling = "receiver" means that the sender may send arbitrarily sized frames,
 // and the receiver will handle scaling and letterboxing as necessary.
-static constexpr char kScalingReceiver[] = "receiver";
+constexpr char kScalingReceiver[] = "receiver";
 
 /// Answer properties.
 // A number specifying the UDP port used for all streams in this session.
 // Must have a value between kUdpPortMin and kUdpPortMax.
-static constexpr char kUdpPort[] = "udpPort";
-static constexpr int kUdpPortMin = 1;
-static constexpr int kUdpPortMax = 65535;
+constexpr char kUdpPort[] = "udpPort";
+constexpr int kUdpPortMin = 1;
+constexpr int kUdpPortMax = 65535;
 // Numbers specifying the indexes chosen from the offer message.
-static constexpr char kSendIndexes[] = "sendIndexes";
+constexpr char kSendIndexes[] = "sendIndexes";
 // uint32_t values specifying the RTP SSRC values used to send the RTCP feedback
 // of the stream indicated in kSendIndexes.
-static constexpr char kSsrcs[] = "ssrcs";
+constexpr char kSsrcs[] = "ssrcs";
 // Provides detailed maximum and minimum capabilities of the receiver for
 // processing the selected streams. The sender may alter video resolution and
 // frame rate throughout the session, and the constraints here determine how
 // much data volume is allowed.
-static constexpr char kConstraints[] = "constraints";
+constexpr char kConstraints[] = "constraints";
 // Provides details about the display on the receiver.
-static constexpr char kDisplay[] = "display";
+constexpr char kDisplay[] = "display";
 // std::optional array of numbers specifying the indexes of streams that will
 // send event logs through RTCP.
-static constexpr char kReceiverRtcpEventLog[] = "receiverRtcpEventLog";
+constexpr char kReceiverRtcpEventLog[] = "receiverRtcpEventLog";
 // OPtional array of numbers specifying the indexes of streams that will use
 // DSCP values specified in the OFFER message for RTCP packets.
-static constexpr char kReceiverRtcpDscp[] = "receiverRtcpDscp";
+constexpr char kReceiverRtcpDscp[] = "receiverRtcpDscp";
 // If this optional field is present the receiver supports the specific
 // RTP extensions (such as adaptive playout delay).
-static constexpr char kRtpExtensions[] = "rtpExtensions";
+constexpr char kRtpExtensions[] = "rtpExtensions";
 
 EnumNameTable<AspectRatioConstraint, 2> kAspectRatioConstraintNames{
     {{kScalingReceiver, AspectRatioConstraint::kVariable},

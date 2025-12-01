@@ -20,7 +20,7 @@ The documentation for Chrome extensions and apps is served at
 Engine.
 
 See
-<https://cs.>[chromium.org/chrome/common/extensions/docs/README](http://chromium.org/chrome/common/extensions/docs/README)
+<https://cs.>[chromium.org/chrome/common/extensions/docs/README](/chrome/common/extensions/docs/README)
 to learn how the extension/app docs are generated.
 
 ## Contributing documentation

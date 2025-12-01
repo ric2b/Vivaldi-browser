@@ -20,7 +20,7 @@ already, lots of opportunity for further analysis and more data.
 
 LayoutAnalyzer improvements.
 
-Scrolling (skobes) \[[crbug.com/417782](http://crbug.com/417782)\]
+Scrolling (skobes) \[[crbug.com/417782](https://crbug.com/417782)\]
 
 - Reviewed bokan's RootFrameViewport change, and investigated a
 
@@ -32,7 +32,7 @@ background painting issue with root layer scrolling + slimming paint
 
 Looking at failing layout tests related to fractional scroll offsets.
 
-Line Boxes (szager) \[[crbug.com/321237](http://crbug.com/321237)\]
+Line Boxes (szager) \[[crbug.com/321237](https://crbug.com/321237)\]
 
 - Continued work on line layout LayoutUnit conversions. Have a patch
 
@@ -48,7 +48,7 @@ profiling data, but I've hit a wall with that approach. Will discuss
 
 next steps and come up with a plan this week.
 
-Flexbox (cbiesinger) \[[crbug.com/426898](http://crbug.com/426898)\]
+Flexbox (cbiesinger) \[[crbug.com/426898](https://crbug.com/426898)\]
 
 - More flexbox updates.
 
@@ -57,7 +57,7 @@ Flexbox (cbiesinger) \[[crbug.com/426898](http://crbug.com/426898)\]
 this week.
 
 List marker refactoring (dsinclair)
-\[[crbug.com/370461](http://crbug.com/370461)\]
+\[[crbug.com/370461](https://crbug.com/370461)\]
 
 - Working on performance of list marker code. New version is slower
 
@@ -94,7 +94,7 @@ componentized style resolver work again. There is some question
 about whether the SVG bug is worth fixing.
 
 Region-based multi-column support (mstensho)
-\[[crbug.com/334335](http://crbug.com/334335)\]
+\[[crbug.com/334335](https://crbug.com/334335)\]
 
 - Found a new crash. Maybe something changed on trunk. Will fix then
 

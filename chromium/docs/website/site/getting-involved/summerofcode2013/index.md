@@ -31,7 +31,7 @@ Possible mentors: Ojan Vafai
 Chromium has a dashboard for flaky tests. If many tests fail in one run,
 appengine times out during results upload. This should be fixed.
 
-<http://crbug.com/224008>
+<https://crbug.com/224008>
 
 **De-flake Instant Extended browser tests, write unit tests**
 

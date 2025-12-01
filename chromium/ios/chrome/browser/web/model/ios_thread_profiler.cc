@@ -15,6 +15,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/message_loop/work_id_provider.h"
 #include "base/process/process.h"
+#include "base/profiler/core_unwinders.h"
 #include "base/profiler/profiler_buildflags.h"
 #include "base/profiler/sample_metadata.h"
 #include "base/profiler/sampling_profiler_thread_token.h"
@@ -59,7 +60,7 @@ bool IsCurrentProcessBackgrounded() {
 }
 
 base::StackSamplingProfiler::UnwindersFactory CreateCoreUnwindersFactory() {
-  return base::StackSamplingProfiler::UnwindersFactory();
+  return base::CreateCoreUnwindersFactory();
 }
 
 const base::RepeatingClosure GetApplyPerSampleMetadataCallback(
@@ -98,8 +99,9 @@ class IOSThreadProfiler::WorkIdRecorder : public metrics::WorkIdRecorder {
 };
 
 IOSThreadProfiler::~IOSThreadProfiler() {
-  if (g_main_thread_instance == this)
+  if (g_main_thread_instance == this) {
     g_main_thread_instance = nullptr;
+  }
 }
 
 // static
@@ -108,8 +110,9 @@ IOSThreadProfiler::CreateAndStartOnMainThread() {
   DCHECK(!g_main_thread_instance);
   auto instance = base::WrapUnique(
       new IOSThreadProfiler(sampling_profiler::ProfilerThreadType::kMain));
-  if (!g_main_thread_instance)
+  if (!g_main_thread_instance) {
     g_main_thread_instance = instance.get();
+  }
   return instance;
 }
 
@@ -212,8 +215,9 @@ IOSThreadProfiler::IOSThreadProfiler(
               sampling_params.sampling_interval,
           kFractionOfExecutionTimeToSample, startup_profiling_completion_time);
 
-  if (owning_thread_task_runner_)
+  if (owning_thread_task_runner_) {
     ScheduleNextPeriodicCollection();
+  }
 }
 
 // static

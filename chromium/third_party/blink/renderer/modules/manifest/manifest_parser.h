@@ -377,24 +377,11 @@ class MODULES_EXPORT ManifestParser {
   std::optional<mojom::blink::ManifestShareTargetPtr> ParseShareTarget(
       const JSONObject* object);
 
-  // Parses the 'url_handlers' field of a Manifest, as defined in:
-  // https://github.com/WICG/pwa-url-handler/blob/main/explainer.md
-  // Returns the parsed list of UrlHandlers. The returned UrlHandlers are empty
-  // if the field didn't exist, parsing failed, the input list was empty, or if
-  // the blink feature flag is disabled.
-  // This feature is experimental and is only enabled by the blink feature flag:
-  // blink::features::kWebAppEnableUrlHandlers.
-  Vector<mojom::blink::ManifestUrlHandlerPtr> ParseUrlHandlers(
-      const JSONObject* object);
-
-  // Parses a single URL handler entry in 'url_handlers', as defined in:
-  // https://github.com/WICG/pwa-url-handler/blob/main/explainer.md
-  // Returns |std::nullopt| if the UrlHandler was invalid, or a UrlHandler if
-  // parsing succeeded.
-  // This feature is experimental and is only enabled by the blink feature flag:
-  // blink::features::kWebAppEnableUrlHandlers.
-  std::optional<mojom::blink::ManifestUrlHandlerPtr> ParseUrlHandler(
-      const JSONObject* object);
+  // Keep in sync with ScopeExtensionTypeMap. E.g. kOrigin -> "origin"
+  enum class ScopeExtensionType {
+    kOrigin = 0,
+  };
+  static constexpr const char* ScopeExtensionTypeMap[1] = {"origin"};
 
   // Parses the 'scope_extensions' field of a Manifest, as defined in:
   // https://github.com/WICG/manifest-incubations/blob/gh-pages/scope_extensions-explainer.md

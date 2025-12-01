@@ -26,13 +26,14 @@
 
 #include "third_party/blink/renderer/core/page/context_menu_controller.h"
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
+#include "base/containers/to_vector.h"
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/ranges/algorithm.h"
 #include "components/shared_highlighting/core/common/shared_highlighting_features.h"
 #include "third_party/blink/public/common/context_menu_data/context_menu_data.h"
 #include "third_party/blink/public/common/context_menu_data/edit_flags.h"
@@ -111,7 +112,7 @@ void SetAutofillData(Node* node, ContextMenuData& data) {
   if (auto* form_control = DynamicTo<HTMLFormControlElement>(node)) {
     data.form_control_type = form_control->FormControlType();
     data.field_renderer_id = form_control->GetDomNodeId();
-    if (auto* form = form_control->Form()) {
+    if (auto* form = form_control->GetOwningFormForAutofill()) {
       data.form_renderer_id = form->GetDomNodeId();
     } else {
       data.form_renderer_id = 0;
@@ -179,6 +180,12 @@ void ContextMenuController::Trace(Visitor* visitor) const {
 }
 
 void ContextMenuController::ClearContextMenu() {
+  if (auto* selected_web_frame =
+          WebLocalFrameImpl::FromFrame(hit_test_result_.InnerNodeFrame())) {
+    selected_web_frame->SendAttributionSrc(/*impression=*/std::nullopt,
+                                           /*did_navigate=*/false);
+  }
+
   if (menu_provider_)
     menu_provider_->ContextMenuCleared();
   menu_provider_ = nullptr;
@@ -337,12 +344,18 @@ void ContextMenuController::CustomContextMenuAction(uint32_t action) {
   CustomContextMenuItemSelected(action);
 }
 
-void ContextMenuController::ContextMenuClosed(const KURL& link_followed) {
-  if (link_followed.IsValid()) {
-    WebLocalFrameImpl* selected_web_frame =
-        WebLocalFrameImpl::FromFrame(hit_test_result_.InnerNodeFrame());
-    if (selected_web_frame)
+void ContextMenuController::ContextMenuClosed(
+    const KURL& link_followed,
+    const std::optional<Impression>& impression) {
+  if (auto* selected_web_frame =
+          WebLocalFrameImpl::FromFrame(hit_test_result_.InnerNodeFrame())) {
+    if (link_followed.IsValid()) {
       selected_web_frame->SendPings(link_followed);
+    }
+    if (impression.has_value()) {
+      selected_web_frame->SendAttributionSrc(impression,
+                                             link_followed.IsValid());
+    }
   }
   ClearContextMenu();
 }
@@ -629,9 +642,7 @@ bool ContextMenuController::ShowContextMenu(LocalFrame* frame,
           GURL(HitTestResult::AbsoluteImageURL(potential_image_node));
       data.media_type = mojom::blink::ContextMenuDataMediaType::kImage;
       data.media_flags |= ContextMenuData::kMediaCanPrint;
-      data.has_image_contents =
-          HitTestResult::GetImage(potential_image_node) &&
-          !HitTestResult::GetImage(potential_image_node)->IsNull();
+      data.has_image_contents = HitTestResult::GetImage(potential_image_node);
     }
   }
   // If it's not a link, an image, a media element, or an image/media link,
@@ -695,38 +706,27 @@ bool ContextMenuController::ShowContextMenu(LocalFrame* frame,
         spell_checker.SelectMisspellingAsync();
     const String& misspelled_word = misspelled_word_and_description.first;
     if (misspelled_word.length()) {
-      auto to_u16string = [](const String& s) -> std::u16string {
-        return s.empty() ? std::u16string()
-                         : WTF::VisitCharacters(s, [](auto chars) {
-                             return std::u16string(chars.begin(), chars.end());
-                           });
-      };
-      data.misspelled_word = to_u16string(misspelled_word);
+      data.misspelled_word = WebString(misspelled_word).Utf16();
       const String& description = misspelled_word_and_description.second;
       if (description.length()) {
-        // Suggestions were cached for the misspelled word (won't be true for
-        // Hunspell, or Windows platform spellcheck if the
-        // kWinRetrieveSuggestionsOnlyOnDemand feature flag is set).
+        // Suggestions were cached for the misspelled word (not true for
+        // Hunspell or Windows platform spellcheck).
         Vector<String> suggestions;
         description.Split('\n', suggestions);
-        WebVector<std::u16string> web_suggestions(suggestions.size());
-        base::ranges::transform(suggestions, web_suggestions.begin(),
-                                to_u16string);
-        data.dictionary_suggestions = web_suggestions.ReleaseVector();
+        data.dictionary_suggestions = base::ToVector(
+            suggestions, [](const String& s) { return WebString(s).Utf16(); });
       } else if (spell_checker.GetTextCheckerClient()) {
         // No suggestions cached for the misspelled word. Retrieve suggestions
         // for it (Windows platform spellchecker will do this later from
         // SpellingMenuObserver::InitMenu on the browser process side to avoid a
         // blocking IPC here).
         size_t misspelled_offset, misspelled_length;
-        WebVector<WebString> web_suggestions;
+        std::vector<WebString> suggestions;
         spell_checker.GetTextCheckerClient()->CheckSpelling(
             WebString::FromUTF16(data.misspelled_word), misspelled_offset,
-            misspelled_length, &web_suggestions);
-        WebVector<std::u16string> suggestions(web_suggestions.size());
-        base::ranges::transform(web_suggestions, suggestions.begin(),
-                                &WebString::Utf16);
-        data.dictionary_suggestions = suggestions.ReleaseVector();
+            misspelled_length, &suggestions);
+        data.dictionary_suggestions =
+            base::ToVector(suggestions, &WebString::Utf16);
       }
     }
 #if !BUILDFLAG(IS_ANDROID) && defined(VIVALDI_BUILD)
@@ -781,7 +781,7 @@ bool ContextMenuController::ShowContextMenu(LocalFrame* frame,
 
   if (menu_provider_) {
     // Filter out custom menu elements and add them into the data.
-    data.custom_items = menu_provider_->PopulateContextMenu().ReleaseVector();
+    data.custom_items = menu_provider_->PopulateContextMenu();
   }
 
   // TODO(crbug.com/369219144): Should this be DynamicTo<HTMLAnchorElementBase>?
@@ -800,24 +800,13 @@ bool ContextMenuController::ShowContextMenu(LocalFrame* frame,
       data.referrer_policy = network::mojom::ReferrerPolicy::kNever;
 
     data.link_text = anchor->innerText().Utf8();
+  }
 
-    if (const AtomicString& attribution_src_value =
-            anchor->FastGetAttribute(html_names::kAttributionsrcAttr);
-        !attribution_src_value.IsNull()) {
-      // TODO(crbug.com/1381123): Support background attributionsrc requests
-      // if attribute value is non-empty.
-
-      // An impression should be attached to the navigation regardless of
-      // whether a background request would have been allowed or attempted.
-      if (!data.impression) {
-        if (AttributionSrcLoader* attribution_src_loader =
-                selected_frame->GetAttributionSrcLoader();
-            attribution_src_loader->CanRegister(result.AbsoluteLinkURL(),
-                                                /*element=*/anchor,
-                                                /*request_id=*/std::nullopt)) {
-          data.impression = blink::Impression();
-        }
-      }
+  if (auto* anchor = DynamicTo<HTMLAnchorElementBase>(result.URLElement())) {
+    if (AttributionSrcLoader* attribution_src_loader =
+            selected_frame->GetAttributionSrcLoader()) {
+      data.impression = attribution_src_loader->PrepareContextMenuNavigation(
+          result.AbsoluteLinkURL(), anchor);
     }
   }
 #if !BUILDFLAG(IS_ANDROID) && defined(VIVALDI_BUILD)

@@ -29,6 +29,7 @@
 #include "content/public/test/embedded_worker_instance_test_harness.h"
 #include "content/public/test/web_contents_tester.h"
 #include "extensions/buildflags/buildflags.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "services/device/public/cpp/test/fake_hid_manager.h"
 #include "services/device/public/cpp/test/hid_test_util.h"
 #include "services/device/public/cpp/test/test_report_descriptors.h"
@@ -215,7 +216,7 @@ class ChromeHidTestHelper {
         std::move(fake_user_manager));
 
     auto account_id =
-        AccountId::FromUserEmailGaiaId(kTestUserEmail, kTestUserGaiaId);
+        AccountId::FromUserEmailGaiaId(kTestUserEmail, GaiaId(kTestUserGaiaId));
     const user_manager::User* user = fake_user_manager_ptr->AddUser(account_id);
 
     fake_user_manager_ptr->LoginUser(account_id);
@@ -647,7 +648,7 @@ class ChromeHidTestHelper {
     if (web_contents) {
       // The `WebContents` should not indicate we are connected to a device.
       EXPECT_FALSE(web_contents->IsCapabilityActive(
-          content::WebContents::CapabilityType::kHID));
+          content::WebContentsCapabilityType::kHID));
     }
 
     // Open a connection to `device`.
@@ -670,7 +671,7 @@ class ChromeHidTestHelper {
     if (web_contents) {
       // Now the `WebContents` should indicate we are connected to a device.
       EXPECT_TRUE(web_contents->IsCapabilityActive(
-          content::WebContents::CapabilityType::kHID));
+          content::WebContentsCapabilityType::kHID));
     }
 
     // Close `connection` and check that the `WebContents` no longer indicates
@@ -691,7 +692,7 @@ class ChromeHidTestHelper {
 
     if (web_contents) {
       EXPECT_FALSE(web_contents->IsCapabilityActive(
-          content::WebContents::CapabilityType::kHID));
+          content::WebContentsCapabilityType::kHID));
     }
   }
 
@@ -719,7 +720,7 @@ class ChromeHidTestHelper {
     if (web_contents) {
       // The `WebContents` should not indicate we are connected to a device.
       EXPECT_FALSE(web_contents->IsCapabilityActive(
-          content::WebContents::CapabilityType::kHID));
+          content::WebContentsCapabilityType::kHID));
     }
 
     // Open a connection to `device`.
@@ -742,7 +743,7 @@ class ChromeHidTestHelper {
     if (web_contents) {
       // Now the `WebContents` should indicate we are connected to a device.
       EXPECT_TRUE(web_contents->IsCapabilityActive(
-          content::WebContents::CapabilityType::kHID));
+          content::WebContentsCapabilityType::kHID));
     }
 
     // Remove `device` and check that the `WebContents` no longer indicates we
@@ -763,7 +764,7 @@ class ChromeHidTestHelper {
 
     if (web_contents) {
       EXPECT_FALSE(web_contents->IsCapabilityActive(
-          content::WebContents::CapabilityType::kHID));
+          content::WebContentsCapabilityType::kHID));
     }
   }
 
@@ -790,7 +791,7 @@ class ChromeHidTestHelper {
     if (web_contents) {
       // The `WebContents` should not indicate we are connected to a device.
       EXPECT_FALSE(web_contents->IsCapabilityActive(
-          content::WebContents::CapabilityType::kHID));
+          content::WebContentsCapabilityType::kHID));
     }
 
     // Open a connection to `device`.
@@ -810,7 +811,7 @@ class ChromeHidTestHelper {
     if (web_contents) {
       // Now the `WebContents` should indicate we are connected to a device.
       EXPECT_TRUE(web_contents->IsCapabilityActive(
-          content::WebContents::CapabilityType::kHID));
+          content::WebContentsCapabilityType::kHID));
     }
   }
 #endif
@@ -956,7 +957,7 @@ class ChromeHidDelegateRenderFrameTestBase
 
     // The `WebContents` should not indicate we are connected to a device.
     EXPECT_FALSE(web_contents->IsCapabilityActive(
-        content::WebContents::CapabilityType::kHID));
+        content::WebContentsCapabilityType::kHID));
 
     // Open a connection to `device`.
     FakeHidConnectionClient connection_client;
@@ -974,7 +975,7 @@ class ChromeHidDelegateRenderFrameTestBase
 
     // Now the `WebContents` should indicate we are connected to a device.
     EXPECT_TRUE(web_contents->IsCapabilityActive(
-        content::WebContents::CapabilityType::kHID));
+        content::WebContentsCapabilityType::kHID));
 
     // Perform a cross-document navigation. The `WebContents` should no longer
     // indicate we are connected.
@@ -982,7 +983,7 @@ class ChromeHidDelegateRenderFrameTestBase
     base::RunLoop().RunUntilIdle();
 
     EXPECT_FALSE(web_contents->IsCapabilityActive(
-        content::WebContents::CapabilityType::kHID));
+        content::WebContentsCapabilityType::kHID));
   }
 
  private:

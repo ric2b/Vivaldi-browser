@@ -77,7 +77,7 @@ describe('The Memory Panel', function() {
     await takeHeapSnapshot();
     await waitForNonEmptyHeapSnapshotData();
     const heapSnapShots = await $$('.heap-snapshot-sidebar-tree-item');
-    assert.strictEqual(heapSnapShots.length, 2);
+    assert.lengthOf(heapSnapShots, 2);
   });
 
   it('Shows a DOM node and its JS wrapper as a single node', async () => {
@@ -454,8 +454,10 @@ describe('The Memory Panel', function() {
     // The Set object is small, regardless of the contained content.
     assert.isTrue(sizes.sizesForSet.shallowSize <= 100);
     // The Set retains its backing storage.
+    // Note: 16 bytes is added to retainedSize to account for rounding present in the UI layer.
     assert.isTrue(
-        sizes.sizesForSet.retainedSize >= sizes.sizesForSet.shallowSize + sizes.sizesForBackingStorage.retainedSize);
+        sizes.sizesForSet.retainedSize + 16 >=
+        sizes.sizesForSet.shallowSize + sizes.sizesForBackingStorage.retainedSize);
     // The backing storage contains 100 items, which occupy at least one pointer per item.
     assert.isTrue(sizes.sizesForBackingStorage.shallowSize >= 400);
     // The backing storage retains 100 strings, which occupy at least 16 bytes each.

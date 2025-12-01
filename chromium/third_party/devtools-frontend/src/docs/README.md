@@ -49,6 +49,11 @@ below.**
 *   [DevTools support checklist for JavaScript features](./checklist/javascript.md)
 *   [DevTools support checklist for WebAssembly features](./checklist/webassembly.md)
 
+### Policies
+
+*   [Chromium DevTools Slow-Close Policy](./policy/slow-close.md)
+*   [DevTools Page Zoom Accessibility Policy](./policy/gar-page-zoom-policy.md)
+
 ### Useful Commands
 
 `git cl format --js`

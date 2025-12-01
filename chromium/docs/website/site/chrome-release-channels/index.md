@@ -19,20 +19,20 @@ All channels may be run in parallel -- they install into distinct directories
 and use dedicated User Data directories.
 
 *   [Stable channel for
-            Windows](http://www.google.com/chrome?platform=win)
+            Windows](https://www.google.com/chrome?platform=win)
 *   [Beta channel for
-            Windows](http://www.google.com/chrome?platform=win)
+            Windows](https://www.google.com/chrome?platform=win)
 *   [Dev channel for
-            Windows](http://www.google.com/chrome/eula.html?extra=devchannel&platform=win)
+            Windows](https://www.google.com/chrome/eula.html?extra=devchannel&platform=win)
 *   [Canary build for
             Windows](http://tools.google.com/dlpage/chromesxs?platform=win)
 
 #### Mac
 
-*   [Stable channel for Mac](http://google.com/chrome?platform=mac)
-*   [Beta channel for Mac](http://google.com/chrome?platform=mac)
+*   [Stable channel for Mac](https://google.com/chrome?platform=mac)
+*   [Beta channel for Mac](https://google.com/chrome?platform=mac)
 *   [Dev channel for
-            Mac](http://www.google.com/chrome/intl/en/eula_dev.html?dl=mac)
+            Mac](https://www.google.com/chrome/intl/en/eula_dev.html?dl=mac)
 *   [Canary build for
             Mac](http://tools.google.com/dlpage/chromesxs?platform=mac) (Note,
             this will run in parallel to any other Chrome channel you have
@@ -40,34 +40,34 @@ and use dedicated User Data directories.
 
 #### Linux
 
-[Stable channel](http://www.google.com/chrome?platform=linux)
+[Stable channel](https://www.google.com/chrome?platform=linux)
 **32-bit Ubuntu/Debian**
 
 *   [Beta channel for 32-bit
-            Debian/Ubuntu](http://www.google.com/chrome/intl/en/eula_beta.html?dl=beta_i386_deb)
+            Debian/Ubuntu](https://www.google.com/chrome/intl/en/eula_beta.html?dl=beta_i386_deb)
 *   [Dev channel for 32-bit
-            Debian/Ubuntu](http://www.google.com/chrome/intl/en/eula_dev.html?dl=unstable_i386_deb)
+            Debian/Ubuntu](https://www.google.com/chrome/intl/en/eula_dev.html?dl=unstable_i386_deb)
 
 **32-bit Fedora/OpenSUSE**
 
 *   [Beta channel for 32-bit
-            Fedora/OpenSUSE](http://www.google.com/chrome/intl/en/eula_beta.html?dl=beta_i386_rpm)
+            Fedora/OpenSUSE](https://www.google.com/chrome/intl/en/eula_beta.html?dl=beta_i386_rpm)
 *   [Dev channel for 32-bit
-            Fedora/OpenSUSE](http://www.google.com/chrome/intl/en/eula_dev.html?dl=unstable_i386_rpm)
+            Fedora/OpenSUSE](https://www.google.com/chrome/intl/en/eula_dev.html?dl=unstable_i386_rpm)
 
 **64-bit Ubuntu/Debian**
 
 *   [Beta channel for 64-bit
-            Debian/Ubuntu](http://www.google.com/chrome/intl/en/eula_beta.html?dl=beta_amd64_deb)
+            Debian/Ubuntu](https://www.google.com/chrome/intl/en/eula_beta.html?dl=beta_amd64_deb)
 *   [Dev channel for 64-bit
-            Debian/Ubuntu](http://www.google.com/chrome/intl/en/eula_dev.html?dl=unstable_amd64_deb)
+            Debian/Ubuntu](https://www.google.com/chrome/intl/en/eula_dev.html?dl=unstable_amd64_deb)
 
 **64-bit Fedora/Red Hat/OpenSUSE**
 
 *   [Beta channel for 64-bit
-            Fedora/OpenSUSE](http://www.google.com/chrome/intl/en/eula_beta.html?dl=beta_amd64_rpm)
+            Fedora/OpenSUSE](https://www.google.com/chrome/intl/en/eula_beta.html?dl=beta_amd64_rpm)
 *   [Dev channel for 64-bit
-            Fedora/OpenSUSE](http://www.google.com/chrome/intl/en/eula_dev.html?dl=unstable_amd64_dev)
+            Fedora/OpenSUSE](https://www.google.com/chrome/intl/en/eula_dev.html?dl=unstable_amd64_dev)
 
 ### How do I choose which channel to use?
 
@@ -173,7 +173,7 @@ Before reporting bugs, consult the following pages:
             before reporting problems in Mac or Linux Dev channel builds
 
 If after reading the above, you think you have a real bug, file it at
-<http://crbug.com/new>
+<https://crbug.com/new>
 
 ### Going back to a more stable channel
 
@@ -182,7 +182,7 @@ If after reading the above, you think you have a real bug, file it at
             won't get automatic updates on that channel until it reaches a
             version later than what you're already running.
 *   You can uninstall Google Chrome and re-install from
-            <http://www.google.com/chrome> to go back to an earlier version.
+            <https://www.google.com/chrome> to go back to an earlier version.
 *   If you re-install an older version, you might find that your profile
             is not compatible (because the data formats changed in the newer
             version you had been running). You'll have to delete your profile

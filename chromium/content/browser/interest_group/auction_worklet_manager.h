@@ -137,6 +137,7 @@ class CONTENT_EXPORT AuctionWorkletManager {
                const std::optional<GURL>& wasm_url,
                const std::optional<GURL>& signals_url,
                bool needs_cors_for_additional_bid,
+               std::optional<bool> send_creative_scanning_metadata,
                std::optional<uint16_t> experiment_group_id,
                const std::string& trusted_bidding_signals_slot_size_param,
                const std::optional<url::Origin>& trusted_signals_coordinator);
@@ -157,6 +158,8 @@ class CONTENT_EXPORT AuctionWorkletManager {
     // `needs_cors_for_additional_bid` is set for buyer reporting for additional
     // bids; those need to perform a CORS check others don't.
     bool needs_cors_for_additional_bid;
+
+    std::optional<bool> send_creative_scanning_metadata;
 
     std::optional<uint16_t> experiment_group_id;
     std::string trusted_bidding_signals_slot_size_param;
@@ -201,6 +204,16 @@ class CONTENT_EXPORT AuctionWorkletManager {
     auction_worklet::mojom::BidderWorklet* GetBidderWorklet();
     auction_worklet::mojom::SellerWorklet* GetSellerWorklet();
 
+    // Whether the trusted scoring signals URL is allowed. May only be called
+    // when this is a seller worklet with a KVv2 trusted scoring signals URL,
+    // and KVv2 signals and the KVv2 cache are enabled.
+    bool TrustedScoringSignalsUrlAllowed() const;
+
+    // Returns KVv2 trusted scoring signals public key if one is in used.
+    // Must only be called after the worklet available callback has been called.
+    const auction_worklet::mojom::TrustedSignalsPublicKey*
+    GetTrustedSignalsPublicKey() const;
+
     const SubresourceUrlAuthorizations&
     GetSubresourceUrlAuthorizationsForTesting();
 
@@ -213,23 +226,28 @@ class CONTENT_EXPORT AuctionWorkletManager {
     friend class WorkletOwner;
 
     // These are only created by AuctionWorkletManager.
-    explicit WorkletHandle(std::string devtools_auction_id,
-                           scoped_refptr<WorkletOwner> worklet_owner,
-                           base::OnceClosure worklet_available_callback,
-                           FatalErrorCallback fatal_error_callback);
+    WorkletHandle(std::string devtools_auction_id,
+                  scoped_refptr<WorkletOwner> worklet_owner,
+                  base::OnceClosure process_assigned_callback,
+                  base::OnceClosure worklet_available_callback,
+                  FatalErrorCallback fatal_error_callback);
 
-    // Both these methods are invoked by WorkletOwner, and call the
-    // corresponding callback.
+    // These methods are invoked by WorkletOwner and call the corresponding
+    // callback. OnProcessAssigned() must be invoked before either of the others
+    // if there's a callback for it.
+    void OnProcessAssigned();
     void OnWorkletAvailable();
     void OnFatalError(FatalErrorType type,
                       const std::vector<std::string>& errors);
 
-    // Returns true if `worklet_owner_` has created a worklet yet.
-    bool worklet_created() const;
+    bool has_process_assignment_callback() const {
+      return !process_assigned_callback_.is_null();
+    }
 
     scoped_refptr<WorkletOwner> worklet_owner_;
     std::string devtools_auction_id_;
 
+    base::OnceClosure process_assigned_callback_;
     base::OnceClosure worklet_available_callback_;
     FatalErrorCallback fatal_error_callback_;
 
@@ -267,6 +285,18 @@ class CONTENT_EXPORT AuctionWorkletManager {
   // The AuctionWorkletManager will handle requesting a process, hooking up
   // DevTools, and merging requests with the same parameters so they can share a
   // single worklet.
+  //
+  // `process_assigned_callback`, if provided, will be invoked once a process
+  // has been assigned. It's only a parameter when requesting seller worklets.
+  // In the case of a cross-origin seller signals URL,
+  // `worklet_available_callback` will only be invoked once it's known if
+  // cross-origin signals are allowed, so having an additional callback allows
+  // earlier notifications so that component auctions can start loading the
+  // top-level seller worklet earlier. It will always be invoked before the
+  // `worklet_available_callback`. During the callback, like all other
+  // callbacks, it's safe to call back into the AuctionWorkletManager to request
+  // a worklet, or to destroy an existing one. `process_assigned_callback` will
+  // always be invoked before either of the other two callbacks.
   //
   // Will invoke `worklet_available_callback` when the service pointer can
   // be retrieved from `handle`. Multiple instances of the callback can be
@@ -307,6 +337,8 @@ class CONTENT_EXPORT AuctionWorkletManager {
       const std::optional<GURL>& trusted_scoring_signals_url,
       std::optional<uint16_t> experiment_group_id,
       const std::optional<url::Origin>& trusted_scoring_signals_coordinator,
+      std::optional<bool> send_creative_scanning_metadata,
+      base::OnceClosure process_assigned_callback,
       base::OnceClosure worklet_available_callback,
       FatalErrorCallback fatal_error_callback,
       std::unique_ptr<WorkletHandle>& out_worklet_handle,
@@ -320,11 +352,13 @@ class CONTENT_EXPORT AuctionWorkletManager {
   // specifies the number of threads to allocate to the bidder.
   void RequestWorkletByKey(WorkletKey worklet_info,
                            std::string devtools_auction_id,
+                           base::OnceClosure process_assigned_callback,
                            base::OnceClosure worklet_available_callback,
                            FatalErrorCallback fatal_error_callback,
                            std::unique_ptr<WorkletHandle>& out_worklet_handle,
                            size_t number_of_bidder_threads,
-                           AuctionMetricsRecorder* auction_metrics_recorder);
+                           AuctionMetricsRecorder* auction_metrics_recorder,
+                           std::optional<uint64_t> trace_id);
 
   // Start an anticipatory process for an origin if we have not yet
   // done so and are able.

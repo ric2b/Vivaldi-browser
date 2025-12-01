@@ -22,7 +22,7 @@ const char kNoGnCheck_Help[] =
   GN's header checker helps validate that the includes match the build
   dependency graph. Sometimes an include might be conditional or otherwise
   problematic, but you want to specifically allow it. In this case, it can be
-  whitelisted.
+  allowlisted.
 
   Include lines containing the substring "nogncheck" will be excluded from
   header checking. The most common case is a conditional include:

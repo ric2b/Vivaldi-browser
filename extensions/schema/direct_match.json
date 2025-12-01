@@ -1,0 +1,157 @@
+// Copyright (c) 2024 Vivaldi Technologies AS. All rights reserved
+// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+[
+  {
+    "namespace": "directMatch",
+    "description": "Use the <code>vivaldi.directMatch</code> API to call direct match service functions.</a>.",
+    "compiler_options": {
+      "implemented_in": "extensions/api/direct_match/direct_match_api.h"
+    },
+    "types": [
+      {
+        "id": "Item",
+        "type": "object",
+        "description": "A Direct match item",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "image_url": {
+            "type": "string"
+          },
+          "image_path": {
+            "type": "string"
+          },
+          "category": {
+            "type": "number"
+          },
+          "display_location_address_bar": {
+            "type": "boolean"
+          },
+          "display_location_sd_dialog": {
+            "type": "boolean"
+          },
+          "redirect_url": {
+            "type": "string"
+          },
+          "allowed_to_be_default_match": {
+            "type": "boolean"
+          }
+        }
+      },
+      {
+        "id": "Items",
+        "type": "array",
+        "description": "A Direct match items array",
+        "items": {
+          "$ref": "Item"
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "get",
+        "type": "function",
+        "description": "Get DirectMatch item that best matches the query",
+        "parameters": [
+          {
+            "name": "query",
+            "type": "string",
+            "description": "The query to search"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "item",
+              "$ref": "Item",
+              "optional": true
+            }
+          ]
+        }
+      },
+      {
+        "name": "hide",
+        "type": "function",
+        "description": "Hides direct match so it will not show up in omnibox.",
+        "parameters": [
+          {
+            "name": "url",
+            "type": "string",
+            "description": "The url of a direct match provider to hide."
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean"
+            }
+          ]
+        }
+      },
+      {
+        "name": "getPopularSites",
+        "type": "function",
+        "description": "Fetch popular sites from DM units sorted asc by `position` where sd_dialog=true",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "items",
+              "$ref": "Items",
+              "optional": false
+            }
+          ]
+        }
+      },
+      {
+        "name": "getForCategory",
+        "type": "function",
+        "description": "Returns direct match items for provided `category_id` sorted asc by `position` and filtered by `display_locations`",
+        "parameters": [
+          {
+            "name": "categoryId",
+            "type": "number"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "items",
+              "$ref": "Items",
+              "optional": false
+            }
+          ]
+        }
+      },
+      {
+        "name": "resetHidden",
+        "type": "function",
+        "description": "Reset all previously hidden direct match providers.",
+        "parameters": []
+      }
+    ],
+    "events": [
+      {
+        "name": "onPopularSitesReady",
+        "type": "function",
+        "description": "Fires when data has become available in backend.",
+        "parameters": []
+      }
+    ]
+  }
+]

@@ -55,7 +55,7 @@ MaybeError PhysicalDeviceBase::Initialize() {
     EnableFeature(Feature::DawnNative);
     EnableFeature(Feature::DawnInternalUsages);
     EnableFeature(Feature::ImplicitDeviceSynchronization);
-    EnableFeature(Feature::FormatCapabilities);
+    EnableFeature(Feature::DawnFormatCapabilities);
     InitializeSupportedFeaturesImpl();
 
     DAWN_TRY_CONTEXT(
@@ -125,9 +125,9 @@ bool PhysicalDeviceBase::IsFeatureSupportedWithToggles(wgpu::FeatureName feature
 
 void PhysicalDeviceBase::GetDefaultLimitsForSupportedFeatureLevel(Limits* limits) const {
     // If the physical device does not support core then the defaults are compat defaults.
-    GetDefaultLimits(limits, SupportsFeatureLevel(FeatureLevel::Core)
-                                 ? FeatureLevel::Core
-                                 : FeatureLevel::Compatibility);
+    GetDefaultLimits(limits, SupportsFeatureLevel(wgpu::FeatureLevel::Core, nullptr)
+                                 ? wgpu::FeatureLevel::Core
+                                 : wgpu::FeatureLevel::Compatibility);
 }
 
 FeaturesSet PhysicalDeviceBase::GetSupportedFeatures(const TogglesState& toggles) const {
@@ -207,6 +207,6 @@ MaybeError PhysicalDeviceBase::ResetInternalDeviceForTestingImpl() {
 
 void PhysicalDeviceBase::PopulateBackendFormatCapabilities(
     wgpu::TextureFormat format,
-    UnpackedPtr<FormatCapabilities>& capabilities) const {}
+    UnpackedPtr<DawnFormatCapabilities>& capabilities) const {}
 
 }  // namespace dawn::native

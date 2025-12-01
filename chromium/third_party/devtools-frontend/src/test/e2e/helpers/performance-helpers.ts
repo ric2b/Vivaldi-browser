@@ -43,6 +43,13 @@ const CSS_SELECTOR_STATS_TITLE = 'Enable CSS selector stats (slow)';
 const TIMELINE_SETTINGS_PANE = '.timeline-settings-pane';
 
 export async function navigateToPerformanceTab(testName?: string) {
+  const {frontend} = getBrowserAndPages();
+  await frontend.evaluate(() => {
+    // Prevent the Performance panel shortcuts dialog, that is automatically shown the first
+    // time the performance panel is opened, from opening in tests.
+    localStorage.setItem('hide-shortcuts-dialog-for-test', 'true');
+  });
+
   if (testName) {
     await goToResource(`performance/${testName}.html`);
   }
@@ -77,7 +84,7 @@ export async function openCaptureSettings(sectionClassName: string) {
 }
 
 export async function searchForComponent(frontend: puppeteer.Page, searchEntry: string) {
-  await waitFor('.timeline-details-chip-body');
+  await waitFor('devtools-performance-timeline-summary');
   await summonSearchBox();
   await waitFor('.search-bar');
   await frontend.keyboard.type(searchEntry);
@@ -218,7 +225,7 @@ export async function reloadAndRecord() {
   // Make sure the timeline details panel appears. It's a sure way to assert
   // that a recording is actually displayed as some of the other elements in
   // the timeline remain in the DOM even after the recording has been cleared.
-  await waitFor('.timeline-details-chip-body');
+  await waitFor('devtools-performance-timeline-summary');
   await expectVeEvents(
       [veClick('Toolbar > Action: timeline.record-reload'), veImpressionForStatusDialog()], 'Panel: timeline');
 }
@@ -229,7 +236,7 @@ export async function stopRecording() {
   // Make sure the timeline details panel appears. It's a sure way to assert
   // that a recording is actually displayed as some of the other elements in
   // the timeline remain in the DOM even after the recording has been cleared.
-  await waitFor('.timeline-details-chip-body');
+  await waitFor('devtools-performance-timeline-summary');
   await expectVeEvents(
       [
         veClick('Toolbar > Toggle: timeline.toggle-recording'),
@@ -239,20 +246,29 @@ export async function stopRecording() {
 }
 
 export async function getTotalTimeFromSummary(): Promise<number> {
+  const minCategories = 2;
+  const categoryValues = await waitForMany('.category-value', minCategories);
+
+  const totalVal = categoryValues[categoryValues.length - 1];
+  const totalText = await totalVal.evaluate(node => node.textContent as string);
+  return parseInt(totalText, 10);
+}
+
+export async function getTotalTimeFromPie(): Promise<number> {
   const pieChartTotal = await waitFor('.pie-chart-total');
   const totalText = await pieChartTotal.evaluate(node => node.textContent as string);
   return parseInt(totalText, 10);
 }
 
 export async function getRenderingTimeFromSummary(): Promise<[number, string]> {
-  const pieChartSizes = await waitForMany('.pie-chart-size', 6);
-  const pieChartNames = await waitForMany('.pie-chart-name', 6);
+  const categoryValues = await waitForMany('.category-value', 6);
+  const categoryNames = await waitForMany('.category-name', 6);
 
   // update the index if the rendering time is showing in a different row
-  const chartName = await pieChartNames[2].evaluate(node => node.textContent as string);
-  const chartSize = await pieChartSizes[2].evaluate(node => node.textContent as string);
+  const categoryName = await categoryNames[1].evaluate(node => node.textContent as string);
+  const categoryValue = await categoryValues[1].evaluate(node => node.textContent as string);
 
-  return [parseInt(chartSize, 10), chartName];
+  return [parseInt(categoryValue, 10), categoryName];
 }
 
 export async function retrieveSelectedAndExpandedActivityItems(frontend: puppeteer.Page) {
@@ -273,13 +289,13 @@ export async function navigateToSelectorStatsTab() {
         veImpression(
             'Pane', 'selector-stats',
             [
-              veImpression('TableHeader', 'elapsed(us)'),
-              veImpression('TableHeader', 'match_attempts'),
-              veImpression('TableHeader', 'match_count'),
-              veImpression('TableHeader', 'reject_percentage'),
+              veImpression('TableHeader', 'elapsed-us'),
+              veImpression('TableHeader', 'match-attempts'),
+              veImpression('TableHeader', 'match-count'),
+              veImpression('TableHeader', 'reject-percentage'),
               veImpression('TableHeader', 'selector'),
-              veImpression('TableHeader', 'style_sheet_id'),
-              veImpression('TableRow', undefined, [veImpression('TableCell')]),
+              veImpression('TableHeader', 'style-sheet-id'),
+              veImpression('TableRow', undefined, [veImpression('TableCell', 'elapsed-us')]),
             ]),
       ],
       'Panel: timeline > Section: timeline.flame-chart-view');
@@ -343,7 +359,7 @@ export async function disableCSSSelectorStats() {
       [veChange('Panel: timeline > Pane: timeline-settings-pane > Toggle: timeline-capture-selector-stats')]);
 }
 
-export function veImpressionForPerformancePanel(options?: {timelineLegacyLandingPage?: boolean}) {
+export function veImpressionForPerformancePanel() {
   return veImpression('Panel', 'timeline', [
     veImpression(
         'Toolbar', undefined,
@@ -360,14 +376,11 @@ export function veImpressionForPerformancePanel(options?: {timelineLegacyLanding
         ]),
     veImpression('Action', 'timeline.toggle-recording'),
     veImpression('Action', 'timeline.record-reload'),
-    ...(options?.timelineLegacyLandingPage ?
-            [veImpression('Link', 'learn-more')] :
-            [veImpression('DropDown', 'cpu-throttling'), veImpression('DropDown', 'network-conditions')]),
+    veImpression('DropDown', 'cpu-throttling'),
+    veImpression('DropDown', 'network-conditions'),
   ]);
 }
 
 function veImpressionForStatusDialog() {
-  return veImpression(
-      'Dialog', 'timeline-status',
-      [veImpression('Action', 'timeline.download-after-error'), veImpression('Action', 'timeline.stop-recording')]);
+  return veImpression('Dialog', 'timeline-status');
 }

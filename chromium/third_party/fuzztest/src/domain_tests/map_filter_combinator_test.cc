@@ -35,6 +35,7 @@ namespace {
 using ::testing::Contains;
 using ::testing::Each;
 using ::testing::Eq;
+using ::testing::HasSubstr;
 using ::testing::IsEmpty;
 using ::testing::UnorderedElementsAre;
 
@@ -261,7 +262,7 @@ TEST(FlatMap, MutationAcceptsChangingDomains) {
     // We demand that our output domain has size `len` above. This will check
     // fail in ContainerOfImpl if we try to generate a string of the wrong
     // length.
-    domain.Mutate(mutated, bitgen, false);
+    domain.Mutate(mutated, bitgen, {}, false);
   }
   EXPECT_EQ(domain.GetValue(mutated).size(), std::get<1>(mutated));
 }
@@ -277,7 +278,7 @@ TEST(FlatMap, MutationAcceptsShrinkingOutputDomains) {
   }
   auto mutated = value->corpus_value;
   while (!domain.GetValue(mutated).empty()) {
-    domain.Mutate(mutated, bitgen, true);
+    domain.Mutate(mutated, bitgen, {}, true);
   }
   EXPECT_THAT(domain.GetValue(mutated), IsEmpty());
 }
@@ -298,7 +299,7 @@ TEST(FlatMap, MutationDoesNotAlterInputDomains) {
   auto mutated = value->corpus_value;
   const size_t original_size = value->user_value.size();
   while (!all_zeros(domain.GetValue(mutated))) {
-    domain.Mutate(mutated, bitgen, true);
+    domain.Mutate(mutated, bitgen, {}, true);
     EXPECT_THAT(domain.GetValue(mutated).size(), Eq(original_size));
   }
   EXPECT_THAT(domain.GetValue(mutated), Each(Eq(0)));
@@ -341,7 +342,7 @@ TEST(Filter, CanFilterMutateCalls) {
   Value value(domain, bitgen);
   Set<int> seen;
   while (seen.size() < 5) {
-    value.Mutate(domain, bitgen, false);
+    value.Mutate(domain, bitgen, {}, false);
     seen.insert(value.user_value);
   }
   EXPECT_THAT(seen, UnorderedElementsAre(2, 4, 6, 8, 10));
@@ -387,6 +388,24 @@ TEST(Filter, ValidationRejectsInvalidValue) {
               IsInvalid("Value does not match Filter() predicate."));
   EXPECT_THAT(domain_b.ValidateCorpusValue(value_a.corpus_value),
               IsInvalid("Value does not match Filter() predicate."));
+
+  Domain<int> wrapped_domain_a = Filter([](int i) { return true; }, domain_a);
+  Domain<int> wrapped_domain_b = Filter([](int i) { return true; }, domain_b);
+
+  Value wrapped_value_a(wrapped_domain_a, bitgen);
+  Value wrapped_value_b(wrapped_domain_b, bitgen);
+
+  ASSERT_OK(wrapped_domain_a.ValidateCorpusValue(wrapped_value_a.corpus_value));
+  ASSERT_OK(wrapped_domain_b.ValidateCorpusValue(wrapped_value_b.corpus_value));
+
+  EXPECT_THAT(
+      wrapped_domain_a.ValidateCorpusValue(wrapped_value_b.corpus_value),
+      IsInvalid(
+          HasSubstr("Invalid corpus value for the inner domain in Filter()")));
+  EXPECT_THAT(
+      wrapped_domain_b.ValidateCorpusValue(wrapped_value_a.corpus_value),
+      IsInvalid(
+          HasSubstr("Invalid corpus value for the inner domain in Filter()")));
 }
 
 }  // namespace

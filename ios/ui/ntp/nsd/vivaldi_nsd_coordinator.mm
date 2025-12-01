@@ -113,6 +113,11 @@ using bookmarks::BookmarkNode;
   __weak __typeof(self) weakSelf = self;
 
   [self.viewProvider
+      observeManualURLInputTextEvent:^(NSString *inputText) {
+    [weakSelf handleManualURLInputTextChange:inputText];
+  }];
+
+  [self.viewProvider
       observeKeyboardReturnTapEvent:^ {
     [weakSelf handleDoneButtonTap];
   }];
@@ -219,6 +224,19 @@ using bookmarks::BookmarkNode;
 
   [_navigationController pushViewController:controller
                                    animated:YES];
+}
+
+- (void)handleManualURLInputTextChange:(NSString*)inputText {
+  UIBarButtonSystemItem buttonType =
+      [inputText length] > 0 ? UIBarButtonSystemItemSave :
+          UIBarButtonSystemItemDone;
+  UIBarButtonItem *doneItem =
+      [[UIBarButtonItem alloc]
+          initWithBarButtonSystemItem:buttonType
+                               target:self
+                               action:@selector(handleDoneButtonTap)];
+  _navigationController.topViewController
+        .navigationItem.rightBarButtonItem = doneItem;
 }
 
 - (void)stopFolderChooserCordinator {

@@ -6,11 +6,11 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <utility>
 
 #include "base/functional/bind.h"
 #include "base/not_fatal_until.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -270,7 +270,7 @@ bool UsbChooserController::DisplayDevice(
     return false;
   }
 
-  if (base::ranges::any_of(
+  if (std::ranges::any_of(
           options_->exclusion_filters, [&device_info](const auto& filter) {
             return device::UsbDeviceFilterMatches(*filter, device_info);
           })) {
@@ -282,7 +282,7 @@ bool UsbChooserController::DisplayDevice(
     is_usb_unrestricted =
         requesting_frame_ &&
         requesting_frame_->IsFeatureEnabled(
-            blink::mojom::PermissionsPolicyFeature::kUsbUnrestricted) &&
+            network::mojom::PermissionsPolicyFeature::kUsbUnrestricted) &&
         content::HasIsolatedContextCapability(requesting_frame_);
   }
   // Isolated context with permission to access the policy-controlled feature

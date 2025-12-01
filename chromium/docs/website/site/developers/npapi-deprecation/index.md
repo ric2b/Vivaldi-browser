@@ -121,7 +121,7 @@ to be universally allowed and the list will be removed in January 2015.
 
 Enterprise administrators will be able to allow specific NPAPI plug-ins by
 adding them to the
-[EnabledPlugins](http://www.chromium.org/administrators/policy-list-3#EnabledPlugins)
+[EnabledPlugins](/administrators/policy-list-3#EnabledPlugins)
 policy list, to avoid their users seeing the UI mentioned above. Setting this
 policy also re-enables NPAPI plugins. This, however, will not be relevant once
 support for NPAPI is completely removed from Chrome in September 2015. Hence we
@@ -154,13 +154,13 @@ A common use case for NPAPI plug-ins on the modern web is embedded video and/or
 audio. A range of modern web technologies exist to facilitate media streaming.
 The basic building blocks are WebRTC and media elements:
 
-    HTML5 Media Elements. The [HTML5 Specification](http://www.w3.org/TR/html5/)
+    HTML5 Media Elements. The [HTML5 Specification](https://www.w3.org/TR/html5/)
     provides a rich media platform through the
-    [&lt;audio&gt;](http://www.w3.org/TR/html5/embedded-content-0.html#the-audio-element)
+    [&lt;audio&gt;](https://www.w3.org/TR/html5/embedded-content-0.html#the-audio-element)
     and
-    [&lt;video&gt;](http://www.w3.org/TR/html5/embedded-content-0.html#the-video-element)
+    [&lt;video&gt;](https://www.w3.org/TR/html5/embedded-content-0.html#the-video-element)
     elements. More complicated use cases can be achieved using the
-    [&lt;canvas&gt;](http://www.w3.org/TR/html5/embedded-content-0.html#the-canvas-element)
+    [&lt;canvas&gt;](https://www.w3.org/TR/html5/embedded-content-0.html#the-canvas-element)
     element (for example check out the [Video FX Chrome
     Experiment](http://www.chromeexperiments.com/detail/videofx/)).
 
@@ -168,7 +168,7 @@ The basic building blocks are WebRTC and media elements:
     designed for real time communication between peers and the technology can
     also be used for applications like live streaming media and data. Google’s
     [Chromecast
-    device](http://www.google.com/intl/en/chrome/devices/chromecast/) uses
+    device](https://www.google.com/intl/en/chrome/devices/chromecast/) uses
     WebRTC to stream HD video between a browser and TV.
 
 Several features on top of these building blocks support more advanced use
@@ -236,8 +236,8 @@ demos of various WebGL use cases.
 ## Security
 
 Some services have relied on NPAPI-based security techniques. We recommend
-switching to [TLS](http://en.wikipedia.org/wiki/Transport_Layer_Security) or,
-soon, [Web Crypto](http://www.w3.org/TR/WebCryptoAPI/#use-cases).
+switching to [TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security) or,
+soon, [Web Crypto](https://www.w3.org/TR/WebCryptoAPI/#use-cases).
 
 ## Hardware access
 

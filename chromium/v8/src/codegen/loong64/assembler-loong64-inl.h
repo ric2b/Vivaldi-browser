@@ -79,8 +79,9 @@ int Assembler::deserialization_special_target_size(
 }
 
 void Assembler::deserialization_set_target_internal_reference_at(
-    Address pc, Address target, RelocInfo::Mode mode) {
-  WriteUnalignedValue<Address>(pc, target);
+    Address pc, Address target, WritableJitAllocation& jit_allocation,
+    RelocInfo::Mode mode) {
+  jit_allocation.WriteUnalignedValue<Address>(pc, target);
 }
 
 Handle<HeapObject> Assembler::compressed_embedded_object_handle_at(
@@ -121,7 +122,7 @@ Tagged<HeapObject> RelocInfo::target_object(PtrComprCageBase cage_base) {
   }
 }
 
-Handle<HeapObject> RelocInfo::target_object_handle(Assembler* origin) {
+DirectHandle<HeapObject> RelocInfo::target_object_handle(Assembler* origin) {
   if (IsCodeTarget(rmode_)) {
     return origin->code_target_object_handle_at(pc_, constant_pool_);
   } else if (IsFullEmbeddedObject(rmode_)) {
@@ -167,16 +168,16 @@ void WritableRelocInfo::set_target_external_reference(
                                    &jit_allocation_, icache_flush_mode);
 }
 
-Address RelocInfo::wasm_indirect_call_target() const {
-  DCHECK(rmode_ == WASM_INDIRECT_CALL_TARGET);
-  return Assembler::target_address_at(pc_, constant_pool_);
+WasmCodePointer RelocInfo::wasm_code_pointer_table_entry() const {
+  DCHECK(rmode_ == WASM_CODE_POINTER_TABLE_ENTRY);
+  return WasmCodePointer{Assembler::uint32_constant_at(pc_, constant_pool_)};
 }
 
-void WritableRelocInfo::set_wasm_indirect_call_target(
-    Address target, ICacheFlushMode icache_flush_mode) {
-  DCHECK(rmode_ == RelocInfo::WASM_INDIRECT_CALL_TARGET);
-  Assembler::set_target_address_at(pc_, constant_pool_, target,
-                                   &jit_allocation_, icache_flush_mode);
+void WritableRelocInfo::set_wasm_code_pointer_table_entry(
+    WasmCodePointer target, ICacheFlushMode icache_flush_mode) {
+  DCHECK(rmode_ == WASM_CODE_POINTER_TABLE_ENTRY);
+  Assembler::set_uint32_constant_at(pc_, constant_pool_, target.value(),
+                                    &jit_allocation_, icache_flush_mode);
 }
 
 Address RelocInfo::target_internal_reference() {
@@ -190,6 +191,11 @@ Address RelocInfo::target_internal_reference() {
 Address RelocInfo::target_internal_reference_address() {
   DCHECK(rmode_ == INTERNAL_REFERENCE);
   return pc_;
+}
+
+JSDispatchHandle RelocInfo::js_dispatch_handle() {
+  DCHECK(rmode_ == JS_DISPATCH_HANDLE);
+  return JSDispatchHandle(Assembler::uint32_constant_at(pc_, constant_pool_));
 }
 
 Handle<Code> Assembler::relative_code_target_object_handle_at(

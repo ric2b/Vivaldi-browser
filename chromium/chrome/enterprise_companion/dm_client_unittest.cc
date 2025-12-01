@@ -51,6 +51,7 @@ constexpr int kPublicKey1Version = 100;
 constexpr int kTimestamp1 = 42;
 constexpr int kTimestamp2 = 84;
 
+using ::testing::_;
 using ::testing::ElementsAre;
 
 // Wraps a real DM storage instance allowing behavior to be augmented by tests.
@@ -134,11 +135,11 @@ class TestDMStorage final : public device_management_storage::DMStorage {
   }
 
  private:
+  ~TestDMStorage() override = default;
+
   scoped_refptr<device_management_storage::DMStorage> storage_;
   bool can_persist_policies_ = true;
   bool will_persist_policies_ = true;
-
-  ~TestDMStorage() override = default;
 };
 
 class MockCloudPolicyClient : public policy::MockCloudPolicyClient {
@@ -157,8 +158,6 @@ class MockCloudPolicyClient : public policy::MockCloudPolicyClient {
 class TestTokenService
     : public device_management_storage::TokenServiceInterface {
  public:
-  ~TestTokenService() override = default;
-
   // Overrides for TokenServiceInterface.
   std::string GetDeviceID() const override { return kFakeDeviceId; }
 
@@ -192,8 +191,6 @@ class TestTokenService
 
 class TestEventLogger : public EnterpriseCompanionEventLogger {
  public:
-  TestEventLogger() = default;
-
   const std::vector<EnterpriseCompanionStatus>& registration_events() {
     return registration_events_;
   }
@@ -219,16 +216,16 @@ class TestEventLogger : public EnterpriseCompanionEventLogger {
   void Flush(base::OnceClosure callback) override { std::move(callback).Run(); }
 
  private:
+  ~TestEventLogger() override = default;
+
   std::vector<EnterpriseCompanionStatus> registration_events_;
   std::vector<EnterpriseCompanionStatus> policy_fetch_events_;
-
-  ~TestEventLogger() override = default;
 };
 
 }  // namespace
 
 class DMClientTest : public ::testing::Test {
- public:
+ protected:
   void SetUp() override {
     ASSERT_TRUE(storage_dir_.CreateUniqueTempDir());
 
@@ -247,7 +244,6 @@ class DMClientTest : public ::testing::Test {
         dm_storage_, mock_policy_fetch_response_validator_.Get());
   }
 
- protected:
   base::test::TaskEnvironment environment_;
   base::ScopedTempDir storage_dir_;
   policy::MockJobCreationHandler mock_job_creation_handler_;
@@ -530,6 +526,16 @@ TEST_F(DMClientTest, FetchPoliciesFailsIfFetchResultInvalid) {
   EnsureRegistered();
 
   EXPECT_CALL(*mock_cloud_policy_client_, FetchPolicy).Times(1);
+  EXPECT_CALL(*mock_cloud_policy_client_,
+              UploadPolicyValidationReport(_, _, _, _, _, _))
+      .WillOnce([&](policy::CloudPolicyValidatorBase::Status,
+                    const std::vector<policy::ValueValidationIssue>&,
+                    policy::ValidationAction, const std::string&,
+                    const std::string&,
+                    policy::CloudPolicyClient::ResultCallback callback) {
+        std::move(callback).Run(policy::CloudPolicyClient::Result(
+            policy::DeviceManagementStatus::DM_STATUS_SUCCESS));
+      });
   SetMockPolicyFetchResponseValidatorResult(
       policy::CloudPolicyValidatorBase::VALIDATION_POLICY_PARSE_ERROR);
 

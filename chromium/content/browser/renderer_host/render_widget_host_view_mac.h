@@ -140,6 +140,7 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   void OnOldViewDidNavigatePreCommit() override;
   void OnNewViewDidNavigatePostCommit() override;
   void DidEnterBackForwardCache() override;
+  void ActivatedOrEvictedFromBackForwardCache() override;
   void SetIsLoading(bool is_loading) override;
   void RenderProcessGone() override;
   void ShowWithVisibility(PageVisibilityState page_visibility) final;
@@ -566,6 +567,13 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   void SetTooltipText(const std::u16string& tooltip_text);
 
   void UpdateWindowsNow();
+
+  // For HiDPI capture mode, adjust the device scale factor to render the
+  // contents at a higher pixel density when scale_override_for_capture_ > 1.0.
+  // The first boolean returns true if any of the ScreenInfo elements in
+  // `screen_infos_` was changed. The second boolean returns true if the current
+  // ScreenInfo element was changed.
+  std::pair<bool, bool> MaybeUpdateScreenInfosForHiDPI();
 
   // Interface through which the NSView is to be manipulated. This points either
   // to |in_process_ns_view_bridge_| or to |remote_ns_view_|.

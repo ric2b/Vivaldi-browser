@@ -223,7 +223,10 @@ public class NotificationIntentInterceptor {
                         || actionType
                                 == NotificationUmaTracker.ActionType.COMMIT_UNSUBSCRIBE_IMPLICIT
                         || actionType
-                                == NotificationUmaTracker.ActionType.COMMIT_UNSUBSCRIBE_EXPLICIT;
+                                == NotificationUmaTracker.ActionType.COMMIT_UNSUBSCRIBE_EXPLICIT
+                        || actionType
+                                == NotificationUmaTracker.ActionType.SHOW_ORIGINAL_NOTIFICATION
+                        || actionType == NotificationUmaTracker.ActionType.ALWAYS_ALLOW;
 
         Context applicationContext = ContextUtils.getApplicationContext();
         Intent intent = null;
@@ -346,5 +349,10 @@ public class NotificationIntentInterceptor {
         hashcode = hashcode * 31 + metadata.id;
         hashcode = hashcode * 31 + requestCode;
         return hashcode;
+    }
+
+    /** Allows tests to read pending intent with the private extra name. */
+    public static PendingIntent getPendingIntentForTesting(Intent trampolineIntent) {
+        return trampolineIntent.getParcelableExtra(EXTRA_PENDING_INTENT);
     }
 }

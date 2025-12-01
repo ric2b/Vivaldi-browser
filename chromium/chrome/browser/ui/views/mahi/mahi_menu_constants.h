@@ -31,13 +31,16 @@ enum class MahiMenuButton {
   kCondensedMenuButton = 3,
   kSettingsButton = 4,
   kElucidationButton = 5,
-  kMaxValue = kElucidationButton,
+  kSummaryOfSelectionButton = 6,
+  kMaxValue = kSummaryOfSelectionButton,
 };
 
 inline constexpr char kMahiContextMenuButtonClickHistogram[] =
     "ChromeOS.Mahi.ContextMenuView.ButtonClicked";
 inline constexpr char kMahiContextMenuDistillableHistogram[] =
     "ChromeOS.Mahi.ContextMenuView.Distillable";
+inline constexpr char kMahiContextMenuElucidationState[] =
+    "ChromeOS.Mahi.ContextMenuView.ElucidationState";
 
 }  // namespace chromeos::mahi
 

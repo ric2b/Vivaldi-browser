@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/signin/model/signin_util.h"
 
+#import "base/containers/to_vector.h"
 #import "base/no_destructor.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/values.h"
@@ -13,6 +14,8 @@
 #import "components/signin/public/identity_manager/tribool.h"
 #import "google_apis/gaia/core_account_id.h"
 #import "google_apis/gaia/gaia_auth_util.h"
+#import "google_apis/gaia/gaia_id.h"
+#import "ios/chrome/app/tests_hook.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/public/features/system_flags.h"
@@ -20,6 +23,7 @@
 #import "ios/chrome/browser/signin/model/system_identity.h"
 #import "ios/chrome/browser/signin/model/system_identity_manager.h"
 #import "ios/public/provider/chrome/browser/signin/signin_error_api.h"
+#import "ios/public/provider/chrome/browser/signin/signin_identity_api.h"
 
 namespace {
 
@@ -48,7 +52,10 @@ AccountInfo DictToAccountInfo(const base::Value::Dict& dict) {
   if (account_id_str) {
     account.account_id = CoreAccountId::FromString(*account_id_str);
   }
-  CopyStringFromDict(account.gaia, dict, kAccountInfoKeyGaia);
+  const std::string* gaia_id_str = dict.FindString(kAccountInfoKeyGaia);
+  if (gaia_id_str) {
+    account.gaia = GaiaId(*gaia_id_str);
+  }
   CopyStringFromDict(account.email, dict, kAccountInfoKeyEmail);
   CopyStringFromDict(account.full_name, dict, kAccountInfoKeyFullName);
   CopyStringFromDict(account.given_name, dict, kAccountInfoKeyGivenName);
@@ -92,7 +99,7 @@ CGSize GetSizeForIdentityAvatarSize(IdentityAvatarSize avatar_size) {
 }
 
 signin::Tribool IsFirstSessionAfterDeviceRestore() {
-  if (experimental_flags::SimulatePostDeviceRestore()) {
+  if (SimulatePostDeviceRestore()) {
     return signin::Tribool::kTrue;
   }
   static signin::Tribool is_first_session_after_device_restore =
@@ -110,7 +117,7 @@ void StorePreRestoreIdentity(PrefService* profile_pref,
                              bool history_sync_enabled) {
   ScopedDictPrefUpdate update(profile_pref, prefs::kIosPreRestoreAccountInfo);
   update->Set(kAccountInfoKeyAccountId, account.account_id.ToString());
-  update->Set(kAccountInfoKeyGaia, account.gaia);
+  update->Set(kAccountInfoKeyGaia, account.gaia.ToString());
   update->Set(kAccountInfoKeyEmail, account.email);
   update->Set(kAccountInfoKeyFullName, account.full_name);
   update->Set(kAccountInfoKeyGivenName, account.given_name);
@@ -141,21 +148,25 @@ bool GetPreRestoreHistorySyncEnabled(PrefService* profile_pref) {
   return history_sync_enabled.value_or(false);
 }
 
-const std::vector<std::string>& GetAccountCapabilityNamesForPrefetch() {
+base::span<const std::string_view> GetAccountCapabilityNamesForPrefetch() {
   return AccountCapabilities::GetSupportedAccountCapabilityNames();
 }
 
 void RunSystemCapabilitiesPrefetch(NSArray<id<SystemIdentity>>* identities) {
-  const std::vector<std::string>& supported_capabilities =
-      GetAccountCapabilityNamesForPrefetch();
-  std::set<std::string> supported_capabilities_set(
-      supported_capabilities.begin(), supported_capabilities.end());
-
   for (id<SystemIdentity> identity : identities) {
     GetApplicationContext()->GetSystemIdentityManager()->FetchCapabilities(
-        identity, supported_capabilities_set,
+        identity,
+        base::ToVector(GetAccountCapabilityNamesForPrefetch(),
+                       [](std::string_view sv) { return std::string(sv); }),
         base::BindOnce(^(std::map<std::string, SystemIdentityCapabilityResult>){
             // Ignore the result.
         }));
   }
+}
+
+bool SimulatePostDeviceRestore() {
+  // We simulate post device restore if required either by experimental settings
+  // or test flag.
+  return tests_hook::SimulatePostDeviceRestore() ||
+         experimental_flags::SimulatePostDeviceRestore();
 }

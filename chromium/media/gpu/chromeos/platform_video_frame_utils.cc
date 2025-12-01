@@ -392,10 +392,12 @@ scoped_refptr<VideoFrame> CreateVideoFrameFromGpuMemoryBufferHandle(
   // We only support importing non-DISJOINT multi-planar GbmBuffer right now.
   // TODO(crbug.com/40201271): Add DISJOINT support.
   frame->metadata().is_webgpu_compatible = supports_zero_copy_webgpu_import;
+  frame->metadata().tracking_token = base::UnguessableToken::Create();
 
   return frame;
 }
 
+// TODO(crbug.com/381896729): Mark CreatePlatformVideoFrame as test only.
 scoped_refptr<VideoFrame> CreatePlatformVideoFrame(
     VideoPixelFormat pixel_format,
     const gfx::Size& coded_size,
@@ -428,6 +430,8 @@ scoped_refptr<VideoFrame> CreatePlatformVideoFrame(
       *layout, visible_rect, natural_size, std::move(dmabuf_fds), timestamp);
   if (!frame)
     return nullptr;
+
+  frame->metadata().tracking_token = base::UnguessableToken::Create();
 
   return frame;
 }
@@ -531,16 +535,6 @@ scoped_refptr<gfx::NativePixmapDmaBuf> CreateNativePixmapDmaBuf(
 
   DCHECK(native_pixmap->AreDmaBufFdsValid());
   return native_pixmap;
-}
-
-gfx::GenericSharedMemoryId GetSharedMemoryId(const VideoFrame& frame) {
-  if (auto* gmb = frame.GetGpuMemoryBuffer()) {
-    return gmb->GetId();
-  }
-  if (frame.HasDmaBufs()) {
-    return gfx::GenericSharedMemoryId(frame.GetDmabufFd(0));
-  }
-  NOTREACHED() << "The frame is not backed by shared memory";
 }
 
 bool CanImportGpuMemoryBufferHandle(

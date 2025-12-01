@@ -19,6 +19,7 @@
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/html/html_script_element.h"
+#include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/testing/dummy_page_holder.h"
 #include "third_party/blink/renderer/core/testing/null_execution_context.h"
 #include "third_party/blink/renderer/platform/crypto.h"
@@ -143,10 +144,6 @@ TEST_F(ContentSecurityPolicyTest, ParseInsecureRequestPolicy) {
   }
 }
 
-MATCHER_P(HasSubstr, s, "") {
-  return arg.Contains(s);
-}
-
 TEST_F(ContentSecurityPolicyTest, AddPolicies) {
   csp->AddPolicies(ParseContentSecurityPolicies(
       "script-src 'none'", ContentSecurityPolicyType::kReport,
@@ -170,7 +167,8 @@ TEST_F(ContentSecurityPolicyTest, AddPolicies) {
       ContentSecurityPolicy::CheckHeaderType::kCheckReportOnly));
   EXPECT_THAT(
       test_delegate->console_messages(),
-      Contains(HasSubstr("Refused to load the script 'http://example.com/'")));
+      Contains(HasConsole("Refused to load the script 'http://example.com/'",
+                          ConsoleMessage::Level::kInfo)));
 
   test_delegate->console_messages().clear();
   EXPECT_TRUE(csp2->AllowImageFromSource(
@@ -185,9 +183,10 @@ TEST_F(ContentSecurityPolicyTest, AddPolicies) {
       ResourceRequest::RedirectStatus::kNoRedirect,
       ReportingDisposition::kReport,
       ContentSecurityPolicy::CheckHeaderType::kCheckReportOnly));
-  EXPECT_THAT(test_delegate->console_messages(),
-              Contains(HasSubstr(
-                  "Refused to load the image 'http://not-example.com/'")));
+  EXPECT_THAT(
+      test_delegate->console_messages(),
+      Contains(HasConsole("Refused to load the image 'http://not-example.com/'",
+                          ConsoleMessage::Level::kInfo)));
 }
 
 TEST_F(ContentSecurityPolicyTest, IsActiveForConnectionsWithConnectSrc) {
@@ -1064,7 +1063,7 @@ TEST_F(ContentSecurityPolicyTest, TrustedTypeEnforce) {
   csp->AddPolicies(ParseContentSecurityPolicies(
       "trusted-types one\ntwo\rthree", ContentSecurityPolicyType::kEnforce,
       ContentSecurityPolicySource::kHTTP, *secure_origin));
-  EXPECT_FALSE(csp->IsRequireTrustedTypes());
+  EXPECT_FALSE(csp->TrustedTypesRequired());
   EXPECT_TRUE(csp->AllowTrustedTypeAssignmentFailure("blabla"));
 }
 
@@ -1073,7 +1072,7 @@ TEST_F(ContentSecurityPolicyTest, TrustedTypeReport) {
   csp->AddPolicies(ParseContentSecurityPolicies(
       "trusted-types one\ntwo\rthree", ContentSecurityPolicyType::kReport,
       ContentSecurityPolicySource::kHTTP, *secure_origin));
-  EXPECT_FALSE(csp->IsRequireTrustedTypes());
+  EXPECT_FALSE(csp->TrustedTypesRequired());
   EXPECT_TRUE(csp->AllowTrustedTypeAssignmentFailure("blabla"));
 }
 
@@ -1085,7 +1084,7 @@ TEST_F(ContentSecurityPolicyTest, TrustedTypeReportAndEnforce) {
   csp->AddPolicies(ParseContentSecurityPolicies(
       "trusted-types two", ContentSecurityPolicyType::kEnforce,
       ContentSecurityPolicySource::kHTTP, *secure_origin));
-  EXPECT_FALSE(csp->IsRequireTrustedTypes());
+  EXPECT_FALSE(csp->TrustedTypesRequired());
   EXPECT_TRUE(csp->AllowTrustedTypeAssignmentFailure("blabla"));
 }
 
@@ -1097,7 +1096,7 @@ TEST_F(ContentSecurityPolicyTest, TrustedTypeReportAndNonTTEnforce) {
   csp->AddPolicies(ParseContentSecurityPolicies(
       "script-src none", ContentSecurityPolicyType::kEnforce,
       ContentSecurityPolicySource::kHTTP, *secure_origin));
-  EXPECT_FALSE(csp->IsRequireTrustedTypes());
+  EXPECT_FALSE(csp->TrustedTypesRequired());
   EXPECT_TRUE(csp->AllowTrustedTypeAssignmentFailure("blabla"));
 }
 
@@ -1107,12 +1106,12 @@ TEST_F(ContentSecurityPolicyTest, RequireTrustedTypeForEnforce) {
   csp->AddPolicies(ParseContentSecurityPolicies(
       "require-trusted-types-for ''", ContentSecurityPolicyType::kEnforce,
       ContentSecurityPolicySource::kHTTP, *secure_origin));
-  EXPECT_FALSE(csp->IsRequireTrustedTypes());
+  EXPECT_FALSE(csp->TrustedTypesRequired());
 
   csp->AddPolicies(ParseContentSecurityPolicies(
       "require-trusted-types-for 'script'", ContentSecurityPolicyType::kEnforce,
       ContentSecurityPolicySource::kHTTP, *secure_origin));
-  EXPECT_TRUE(csp->IsRequireTrustedTypes());
+  EXPECT_TRUE(csp->TrustedTypesRequired());
 }
 
 TEST_F(ContentSecurityPolicyTest, RequireTrustedTypeForReport) {
@@ -1121,7 +1120,7 @@ TEST_F(ContentSecurityPolicyTest, RequireTrustedTypeForReport) {
   csp->AddPolicies(ParseContentSecurityPolicies(
       "require-trusted-types-for 'script'", ContentSecurityPolicyType::kReport,
       ContentSecurityPolicySource::kHTTP, *secure_origin));
-  EXPECT_TRUE(csp->IsRequireTrustedTypes());
+  EXPECT_TRUE(csp->TrustedTypesRequired());
 }
 
 TEST_F(ContentSecurityPolicyTest, DefaultPolicy) {
@@ -1362,6 +1361,46 @@ TEST_F(ContentSecurityPolicyTest, IsStrictPolicyEnforced) {
       strict_base, ContentSecurityPolicyType::kEnforce,
       ContentSecurityPolicySource::kHTTP, *secure_origin));
   EXPECT_TRUE(csp->IsStrictPolicyEnforced());
+}
+
+TEST_F(ContentSecurityPolicyTest, UnsafeHashesMetric) {
+  struct TestCase {
+    const char* header;
+    bool expected_unsafe_hashes;
+  } cases[] = {
+      {"object-src 'none'", false},
+      {"script-src 'none'", false},
+      {"script-src 'nonce-abc'", false},
+      {"script-src 'sha256-abc'", false},
+      {"script-src 'nonce-abc' 'strict-dynamic'", false},
+      {"script-src 'sha256-abc' 'strict-dynamic'", false},
+      {"script-src 'sha256-abc' https://example.com/", false},
+      {"script-src 'sha256-abc' https://example.com/ 'strict-dynamic'", false},
+      {"script-src 'unsafe-hashes' 'sha256-abc'", true},
+      {"default-src 'unsafe-hashes' 'sha256-abc'", true},
+      // Consider recording the use counter for style-src and formaction
+      // directives too:
+      {"style-src 'unsafe-hashes' 'sha256-abc'", false},
+      {"form-action 'unsafe-hashes' 'sha256-abc'", false},
+      // unsafe-hashes doesn't apply to any other directive:
+      {"object-src 'unsafe-hashes' 'sha256-abc'", false},
+  };
+
+  for (const auto& test : cases) {
+    SCOPED_TRACE(testing::Message()
+                 << "[Enforce] Header: `" << test.header << "`");
+    csp = MakeGarbageCollected<ContentSecurityPolicy>();
+    csp->AddPolicies(ParseContentSecurityPolicies(
+        test.header, ContentSecurityPolicyType::kEnforce,
+        ContentSecurityPolicySource::kHTTP, *secure_origin));
+    auto dummy = std::make_unique<DummyPageHolder>();
+    csp->BindToDelegate(
+        dummy->GetFrame().DomWindow()->GetContentSecurityPolicyDelegate());
+
+    EXPECT_EQ(
+        test.expected_unsafe_hashes,
+        dummy->GetDocument().IsUseCounted(WebFeature::kCSPWithUnsafeHashes));
+  }
 }
 
 TEST_F(ContentSecurityPolicyTest, ReasonableRestrictionMetrics) {

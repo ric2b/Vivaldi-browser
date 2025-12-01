@@ -46,8 +46,9 @@ bool MenuRunnerImplCocoa::IsRunning() const {
 
 void MenuRunnerImplCocoa::Release() {
   if (IsRunning()) {
-    if (delete_after_run_)
+    if (delete_after_run_) {
       return;  // We already canceled.
+    }
 
     delete_after_run_ = true;
 
@@ -68,6 +69,7 @@ void MenuRunnerImplCocoa::RunMenuAt(
     MenuButtonController* button_controller,
     const gfx::Rect& bounds,
     MenuAnchorPosition anchor,
+    ui::mojom::MenuSourceType source_type,
     int32_t run_types,
     gfx::NativeView native_view_for_gestures,
     std::optional<gfx::RoundedCornersF> corners,
@@ -79,8 +81,7 @@ void MenuRunnerImplCocoa::RunMenuAt(
   menu_delegate_ = [[MenuControllerCocoaDelegateImpl alloc]
       initWithParams:MenuControllerParamsForWidget(parent)];
   menu_controller_ = [[MenuControllerCocoa alloc] initWithModel:menu_model_
-                                                       delegate:menu_delegate_
-                                         useWithPopUpButtonCell:NO];
+                                                       delegate:menu_delegate_];
 
   closing_event_time_ = base::TimeTicks();
   running_ = true;
@@ -104,8 +105,9 @@ void MenuRunnerImplCocoa::RunMenuAt(
 
   // Don't invoke the callback if Release() was called, since that usually means
   // the owning instance is being destroyed.
-  if (!on_menu_closed_callback_.is_null())
+  if (!on_menu_closed_callback_.is_null()) {
     on_menu_closed_callback_.Run();
+  }
 }
 
 void MenuRunnerImplCocoa::Cancel() {

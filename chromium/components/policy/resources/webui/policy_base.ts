@@ -68,15 +68,32 @@ export class Page {
       if (!shouldShowPromo) {
         return;
       }
-      const promotionSection = document.createElement('promotion-banner-section-container') as HTMLElement;
-      policyElement.insertBefore(promotionSection, getRequiredElement('status-section'));
+      const promotionSection =
+          document.createElement('promotion-banner-section-container') as
+          HTMLElement;
+
+      // Insert the promotion section before the policy element.
+      const policyParent = getRequiredElement('policy-ui-container');
+      policyParent.insertBefore(promotionSection, policyElement);
 
       const promotionDismissButton =
-      promotionSection.shadowRoot!.getElementById('promotion-dismiss-button');
+          promotionSection.shadowRoot!.getElementById(
+              'promotion-dismiss-button');
 
-      promotionDismissButton?.addEventListener('click' ,() => {
+      promotionDismissButton?.addEventListener('click', () => {
         chrome.send('setBannerDismissed');
         promotionSection.remove();
+      });
+
+      const promotionRedirectButton =
+          promotionSection.shadowRoot!.getElementById(
+              'promotion-redirect-button');
+      promotionRedirectButton?.addEventListener('click', () => {
+        chrome.send('recordBannerRedirected');
+        window.open(
+            'https://admin.google.com/ac/chrome/guides/?ref=browser&utm_source=chrome_policy_cec',
+            '_blank',
+        );
       });
     });
 
@@ -218,8 +235,10 @@ export class Page {
 
     // <if expr="not is_chromeos">
     this.updateReportButton(
-      !!policyValues['chrome']?.policies['CloudReportingEnabled']?.value ||
-      !!policyValues['chrome']?.policies['CloudProfileReportingEnabled']?.value,
+        !!policyValues['chrome']?.policies['CloudReportingEnabled']?.value ||
+            !!policyValues['chrome']
+                  ?.policies['CloudProfileReportingEnabled']
+                  ?.value,
     );
     // </if>
     this.reloadPoliciesDone();

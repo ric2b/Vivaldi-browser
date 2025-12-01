@@ -22,7 +22,6 @@ cc_library(
         "observer_list.h",
     ],
     visibility = [
-        "//fastpair:__subpackages__",
         "//internal/account:__subpackages__",
         "//internal/platform:__pkg__",
         "//internal/test:__pkg__",
@@ -44,7 +43,6 @@ cc_library(
         "bluetooth_address.h",
     ],
     visibility = [
-        "//fastpair:__subpackages__",
         "//internal:__subpackages__",
         "//sharing:__subpackages__",
     ],
@@ -61,6 +59,7 @@ cc_library(
     srcs = ["files.cc"],
     hdrs = ["files.h"],
     visibility = ["//visibility:public"],
+    deps = ["//internal/platform:logging"],
 )
 
 cc_test(

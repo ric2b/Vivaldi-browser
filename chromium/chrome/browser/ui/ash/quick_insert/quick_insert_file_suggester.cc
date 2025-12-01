@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/barrier_callback.h"
+#include "base/containers/to_vector.h"
 #include "base/time/time.h"
 #include "chrome/browser/ash/app_list/search/files/file_title.h"
 #include "chrome/browser/ash/drive/drive_integration_service.h"
@@ -24,8 +25,8 @@
 
 namespace {
 
-using LocalFile = PickerFileSuggester::LocalFile;
-using DriveFile = PickerFileSuggester::DriveFile;
+using LocalFile = QuickInsertFileSuggester::LocalFile;
+using DriveFile = QuickInsertFileSuggester::DriveFile;
 namespace fmp = extensions::api::file_manager_private;
 
 constexpr base::TimeDelta kMaxDriveFileRecencyDelta = base::Days(30);
@@ -107,63 +108,61 @@ std::vector<DriveFile> FilterDriveFiles(
 
 }  // namespace
 
-PickerFileSuggester::DriveFile::DriveFile(std::optional<std::string> id,
-                                          std::u16string title,
-                                          base::FilePath local_path,
-                                          GURL url)
+QuickInsertFileSuggester::DriveFile::DriveFile(std::optional<std::string> id,
+                                               std::u16string title,
+                                               base::FilePath local_path,
+                                               GURL url)
     : id(std::move(id)),
       title(std::move(title)),
       local_path(std::move(local_path)),
       url(std::move(url)) {}
 
-PickerFileSuggester::DriveFile::~DriveFile() = default;
+QuickInsertFileSuggester::DriveFile::~DriveFile() = default;
 
-PickerFileSuggester::DriveFile::DriveFile(const DriveFile&) = default;
-PickerFileSuggester::DriveFile::DriveFile(DriveFile&&) = default;
-PickerFileSuggester::DriveFile& PickerFileSuggester::DriveFile::operator=(
-    const DriveFile&) = default;
-PickerFileSuggester::DriveFile& PickerFileSuggester::DriveFile::operator=(
-    DriveFile&&) = default;
+QuickInsertFileSuggester::DriveFile::DriveFile(const DriveFile&) = default;
+QuickInsertFileSuggester::DriveFile::DriveFile(DriveFile&&) = default;
+QuickInsertFileSuggester::DriveFile&
+QuickInsertFileSuggester::DriveFile::operator=(const DriveFile&) = default;
+QuickInsertFileSuggester::DriveFile&
+QuickInsertFileSuggester::DriveFile::operator=(DriveFile&&) = default;
 
-PickerFileSuggester::PickerFileSuggester(Profile* profile)
+QuickInsertFileSuggester::QuickInsertFileSuggester(Profile* profile)
     : profile_(profile) {}
 
-PickerFileSuggester::~PickerFileSuggester() = default;
+QuickInsertFileSuggester::~QuickInsertFileSuggester() = default;
 
-void PickerFileSuggester::GetRecentLocalImages(
+void QuickInsertFileSuggester::GetRecentLocalImages(
     size_t max_files,
     base::TimeDelta now_delta,
     RecentLocalImagesCallback callback) {
   GetRecentFiles(
       profile_, ash::RecentSource::FileType::kImage,
       fmp::VolumeType::kDownloads, max_files, now_delta,
-      base::BindOnce(&PickerFileSuggester::OnGetRecentLocalImages,
+      base::BindOnce(&QuickInsertFileSuggester::OnGetRecentLocalImages,
                      weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
-void PickerFileSuggester::GetRecentDriveFiles(
+void QuickInsertFileSuggester::GetRecentDriveFiles(
     size_t max_files,
     RecentDriveFilesCallback callback) {
   GetRecentFiles(
       profile_, ash::RecentSource::FileType::kAll, fmp::VolumeType::kDrive,
       max_files, kMaxDriveFileRecencyDelta,
-      base::BindOnce(&PickerFileSuggester::OnGetRecentDriveFiles,
+      base::BindOnce(&QuickInsertFileSuggester::OnGetRecentDriveFiles,
                      weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
-void PickerFileSuggester::OnGetRecentLocalImages(
+void QuickInsertFileSuggester::OnGetRecentLocalImages(
     RecentLocalImagesCallback callback,
     const std::vector<ash::RecentFile>& recent_files) {
-  std::vector<LocalFile> files;
-  files.reserve(recent_files.size());
-  for (const ash::RecentFile& recent_file : recent_files) {
-    const base::FilePath& path = recent_file.url().path();
-    files.push_back({.title = app_list::GetFileTitle(path), .path = path});
-  }
-  std::move(callback).Run(std::move(files));
+  std::move(callback).Run(
+      base::ToVector(recent_files, [](const ash::RecentFile& recent_file) {
+        const base::FilePath& path = recent_file.url().path();
+        return LocalFile{.title = app_list::GetFileTitle(path), .path = path};
+      }));
 }
 
-void PickerFileSuggester::OnGetRecentDriveFiles(
+void QuickInsertFileSuggester::OnGetRecentDriveFiles(
     RecentDriveFilesCallback callback,
     const std::vector<ash::RecentFile>& recent_files) {
   drive::DriveIntegrationService* drive_integration =

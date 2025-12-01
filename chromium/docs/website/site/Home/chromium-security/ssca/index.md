@@ -104,6 +104,5 @@ to mount Spectre and Meltdown attacks. Accordingly, they will remain disabled in
 Chrome until Site Isolation is on by default, at which point they will be
 re-enabled with sufficiently reduced precision to mitigate GLitch attacks.
 
-Also see [more
-details](http://www.chromium.org/chromium-os/glitch-vulnerability-status) about
+Also see [more details](/chromium-os/glitch-vulnerability-status) about
 GLitch and Chrome OS.

@@ -26,7 +26,6 @@
 #include "base/types/pass_key.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "components/ip_protection/common/ip_protection_core.h"
 #include "mojo/public/cpp/base/big_buffer.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -132,6 +131,7 @@ class SessionCleanupCookieStore;
 class SharedDictionaryManager;
 class WebSocketFactory;
 class WebTransport;
+class DeviceBoundSessionManager;
 
 struct ResourceRequest;
 
@@ -194,7 +194,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
 
   net::URLRequestContext* url_request_context() { return url_request_context_; }
 
-  NetworkService* network_service() { return network_service_; }
+  NetworkService* network_service() const { return network_service_; }
 
   mojom::NetworkContextClient* client() {
     return client_.is_bound() ? client_.get() : nullptr;
@@ -257,6 +257,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
       const url::Origin& origin,
       const net::IsolationInfo& isolation_info,
       const net::CookieSettingOverrides& cookie_setting_overrides,
+      const net::CookieSettingOverrides& devtools_cookie_setting_overrides,
       mojo::PendingRemote<mojom::CookieAccessObserver> observer) override;
   void GetTrustTokenQueryAnswerer(
       mojo::PendingReceiver<mojom::TrustTokenQueryAnswerer> receiver,
@@ -416,6 +417,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
                bool include_subdomains,
                AddHSTSCallback callback) override;
   void IsHSTSActiveForHost(const std::string& host,
+                           bool is_top_level_nav,
                            IsHSTSActiveForHostCallback callback) override;
   void GetHSTSState(const std::string& domain,
                     GetHSTSStateCallback callback) override;
@@ -501,7 +503,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
       const GURL& url,
       const net::NetworkAnonymizationKey& network_anonymization_key,
       LookupServerBasicAuthCredentialsCallback callback) override;
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   void LookupProxyAuthCredentials(
       const net::ProxyServer& proxy_server,
       const std::string& auth_scheme,
@@ -557,6 +559,10 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
 
   void GetBoundNetworkForTesting(
       GetBoundNetworkForTestingCallback callback) override;
+
+  void GetDeviceBoundSessionManager(
+      mojo::PendingReceiver<network::mojom::DeviceBoundSessionManager>
+          device_bound_session_manager) override;
 
   // Destroys |request| when a proxy lookup completes.
   void OnProxyLookupComplete(ProxyLookupRequest* proxy_lookup_request);
@@ -745,6 +751,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
       const url::Origin& origin,
       const net::IsolationInfo& isolation_info,
       const net::CookieSettingOverrides& cookie_setting_overrides,
+      const net::CookieSettingOverrides& devtools_cookie_setting_overrides,
       mojo::PendingRemote<mojom::CookieAccessObserver> cookie_observer,
       net::FirstPartySetMetadata first_party_set_metadata);
 
@@ -759,10 +766,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
 
   void OnVerifyCertForSignedExchangeComplete(uint64_t cert_verify_id,
                                              int result);
-
-#if BUILDFLAG(IS_CHROMEOS)
-  void TrustAnchorUsed();
-#endif
 
 #if BUILDFLAG(IS_CT_SUPPORTED)
   // Checks the Certificate Transparency policy compliance for a given
@@ -1041,6 +1044,9 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
 
   // The URLLoaderFactory to use for prefetches. Created on first use.
   mojo::Remote<mojom::URLLoaderFactory> prefetch_url_loader_factory_remote_;
+
+  // Manager for device bound sessions.
+  std::unique_ptr<DeviceBoundSessionManager> device_bound_session_manager_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

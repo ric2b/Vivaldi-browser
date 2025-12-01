@@ -20,32 +20,16 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
-#include "third_party/skia/include/encode/SkPngEncoder.h"
-#include "ui/gfx/image/buffer_w_stream.h"
+#include "skia/ext/codec_utils.h"
 #include "ui/gfx/image/image_skia_rep_default.h"
 #include "ui/wm/core/window_util.h"
 
 namespace {
-// Web UI image helper copied from //chrome/browser/ui/webui/util/image_util.cc
-// due to dependency constraint.
-std::string MakeDataURIForImage(base::span<const uint8_t> image_data,
-                                std::string_view mime_subtype) {
-  std::string result = "data:image/";
-  result.append(mime_subtype.begin(), mime_subtype.end());
-  result += ";base64,";
-  result += base::Base64Encode(image_data);
-  return result;
-}
 
 std::string EncodePNGAndMakeDataURI(gfx::ImageSkia image, float scale_factor) {
   const SkBitmap& bitmap = image.GetRepresentation(scale_factor).GetBitmap();
-  gfx::BufferWStream stream;
-  const bool encoding_succeeded =
-      SkPngEncoder::Encode(&stream, bitmap.pixmap(), {});
-  DCHECK(encoding_succeeded);
-  return MakeDataURIForImage(base::as_byte_span(stream.TakeBuffer()), "png");
+  return skia::EncodePngAsDataUri(bitmap.pixmap());
 }
-// End of image lib
 
 }  // namespace
 
@@ -135,15 +119,14 @@ void TabInfoCollector::SortWindowList(
     std::vector<std::vector<ash::TabInfo>>& windows_list) {
   for (std::vector<ash::TabInfo>& window : windows_list) {
     // Sort tab on non-ascending order of last access time.
-    base::ranges::sort(window,
-                       [](const ash::TabInfo& a, const ash::TabInfo& b) {
-                         return a.last_access_timetick > b.last_access_timetick;
-                       });
+    std::ranges::sort(window, [](const ash::TabInfo& a, const ash::TabInfo& b) {
+      return a.last_access_timetick > b.last_access_timetick;
+    });
   }
 
   // Sort window on non-ascending order of last access time.
-  base::ranges::sort(windows_list, [](const std::vector<ash::TabInfo>& a,
-                                      const std::vector<ash::TabInfo>& b) {
+  std::ranges::sort(windows_list, [](const std::vector<ash::TabInfo>& a,
+                                     const std::vector<ash::TabInfo>& b) {
     return a[0].last_access_timetick > b[0].last_access_timetick;
   });
 }

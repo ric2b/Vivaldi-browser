@@ -84,7 +84,7 @@ Arguably this should likely be a better error message instead of an assert and
 once the presubmit that stops a non existing license to be referred to exists,
 this code should never have to trigger.
 
-See <http://crbug.com/318364>
+See <https://crbug.com/318364>
 
 ### Assert DO NOT USE OUTPUT!!!
 

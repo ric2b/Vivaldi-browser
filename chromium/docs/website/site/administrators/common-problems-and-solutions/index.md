@@ -56,7 +56,7 @@ When I attempt to push a new MSI, the install fails with an error that says: **"
 
 > Find out more information here:
 
-> <http://www.google.com/support/a/bin/answer.py?answer=1385049&topic=1064263>
+> <https://www.google.com/support/a/bin/answer.py?answer=1385049&topic=1064263>
 
 **Can I store my users' Chrome profiles on a Roaming Profile? Or sync it to a
 network drive?**
@@ -67,16 +67,16 @@ network drive?**
 > roaming profile or network drive across multiple machines that have different
 > versions of Chrome. We strongly encourage admins & users to consider using
 > [Google Chrome
-> Sync](http://www.google.com/support/chrome/bin/answer.py?hl=en&answer=165139&from=165140&rd=1),
+> Sync](https://www.google.com/support/chrome/bin/answer.py?hl=en&answer=165139&from=165140&rd=1),
 > which persists user settings across machines, instead of using roaming
 > profiles for the time being.
 
 > That said, there are policies for controlling the location of the user profile
 > and the cache:
 
-> <http://www.chromium.org/administrators/policy-list-3#UserDataDir>
+> <https://www.chromium.org/administrators/policy-list-3#UserDataDir>
 
-> <http://www.chromium.org/administrators/policy-list-3#DiskCacheDir>
+> <https://www.chromium.org/administrators/policy-list-3#DiskCacheDir>
 
 **I'm trying to install the MSI over an existing MSI install, but I keep getting
 the error "more recent version exists".**
@@ -88,7 +88,7 @@ the error "more recent version exists".**
 
 > Verify that you are attempting to install a later version of the MSI by
 > downloading the latest version
-> [here](http://www.google.com/chrome/eula.html?msi=true).
+> [here](https://www.google.com/chrome/eula.html?msi=true).
 
 > To see what the latest stable version of Chrome is for Windows, click
 > [here](http://omahaproxy.appspot.com/win).
@@ -100,7 +100,7 @@ the error "more recent version exists".**
 > later version than the MSI.
 
 > You can download the latest stable MSI
-> [here](http://www.google.com/chrome/eula.html?msi=true), and use this MSI for
+> [here](https://www.google.com/chrome/eula.html?msi=true), and use this MSI for
 > the repair instead.
 
 **When applying the MSI over a previous install, I get the error "There is a
@@ -220,9 +220,9 @@ on the Chrome Web Store), but it's not being force-installed.**
 > Instead of using "%s" in the search URL to denote the search keywords, you
 > must use "{searchTerms}" instead. Using Google's search URL as an example:
 
-> Wrong: http://www.google.com/?q=%s
+> Wrong: https://www.google.com/?q=%s
 
-> Right: http://www.google.com/?q={searchTerms}
+> Right: https://www.google.com/?q={searchTerms}
 
 **Chrome does not read policy from the Windows registry.**
 

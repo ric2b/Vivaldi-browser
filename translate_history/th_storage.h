@@ -26,7 +26,11 @@ namespace translate_history {
 
 class TH_Storage : public base::ImportantFileWriter::DataSerializer {
  public:
+#if !BUILDFLAG(IS_IOS)
   TH_Storage(content::BrowserContext* context, TH_Model* model);
+#else
+  TH_Storage(TH_Model* model);
+#endif
   ~TH_Storage() override;
   TH_Storage(const TH_Storage&) = delete;
   TH_Storage& operator=(const TH_Storage&) = delete;

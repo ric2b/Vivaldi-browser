@@ -4,10 +4,11 @@
 #define IOS_UI_NOTES_MARKDOWN_MARKDOWN_KEYBOARD_VIEW_H_
 
 #import <UIKit/UIKit.h>
+#import <WebKit/WebKit.h>
 
 @protocol MarkdownCommandDelegate;
 
-@interface MarkdownKeyboardView : UIView
+@interface MarkdownKeyboardView : UIView <WKScriptMessageHandler>
 
 - (instancetype)initWithFrame:(CGRect)frame
               commandDelegate:(id<MarkdownCommandDelegate>)commandDelegate

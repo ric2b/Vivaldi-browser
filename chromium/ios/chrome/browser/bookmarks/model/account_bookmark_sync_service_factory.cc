@@ -4,24 +4,23 @@
 
 #include "ios/chrome/browser/bookmarks/model/account_bookmark_sync_service_factory.h"
 
-#include "base/no_destructor.h"
 #include "components/bookmarks/common/bookmark_features.h"
-#include "components/keyed_service/ios/browser_state_dependency_manager.h"
 #include "components/sync/model/wipe_model_upon_sync_disabled_behavior.h"
 #include "components/sync_bookmarks/bookmark_sync_service.h"
-#include "ios/chrome/browser/bookmarks/model/bookmark_undo_service_factory.h"
-#include "ios/chrome/browser/shared/model/browser_state/browser_state_otr_helper.h"
 #include "ios/chrome/browser/shared/model/profile/profile_ios.h"
 
+// Vivaldi
 #include "ios/sync/file_store_factory.h"
+// End Vivaldi
 
 namespace ios {
 
 // static
 sync_bookmarks::BookmarkSyncService*
 AccountBookmarkSyncServiceFactory::GetForProfile(ProfileIOS* profile) {
-  return static_cast<sync_bookmarks::BookmarkSyncService*>(
-      GetInstance()->GetServiceForBrowserState(profile, true));
+  return GetInstance()
+      ->GetServiceForProfileAs<sync_bookmarks::BookmarkSyncService>(
+          profile, /*create=*/true);
 }
 
 // static
@@ -31,13 +30,17 @@ AccountBookmarkSyncServiceFactory::GetInstance() {
   return instance.get();
 }
 
+#if defined(VIVALDI_BUILD)
 AccountBookmarkSyncServiceFactory::AccountBookmarkSyncServiceFactory()
-    : BrowserStateKeyedServiceFactory(
-          "AccountBookmarkSyncService",
-          BrowserStateDependencyManager::GetInstance()) {
-  DependsOn(BookmarkUndoServiceFactory::GetInstance());
+    : ProfileKeyedServiceFactoryIOS("AccountBookmarkSyncService",
+                                    ProfileSelection::kRedirectedInIncognito) {
   DependsOn(SyncedFileStoreFactory::GetInstance());
 }
+#else
+AccountBookmarkSyncServiceFactory::AccountBookmarkSyncServiceFactory()
+    : ProfileKeyedServiceFactoryIOS("AccountBookmarkSyncService",
+                                    ProfileSelection::kRedirectedInIncognito) {}
+#endif // End Vivaldi
 
 AccountBookmarkSyncServiceFactory::~AccountBookmarkSyncServiceFactory() =
     default;
@@ -45,19 +48,16 @@ AccountBookmarkSyncServiceFactory::~AccountBookmarkSyncServiceFactory() =
 std::unique_ptr<KeyedService>
 AccountBookmarkSyncServiceFactory::BuildServiceInstanceFor(
     web::BrowserState* context) const {
-  ProfileIOS* profile = ProfileIOS::FromBrowserState(context);
   std::unique_ptr<sync_bookmarks::BookmarkSyncService> bookmark_sync_service(
       new sync_bookmarks::BookmarkSyncService(
-          BookmarkUndoServiceFactory::GetForProfileIfExists(profile),
           syncer::WipeModelUponSyncDisabledBehavior::kAlways));
+#if defined(VIVALDI_BUILD)
+  ProfileIOS* profile = ProfileIOS::FromBrowserState(context);
   bookmark_sync_service->SetVivaldiSyncedFileStore(
       SyncedFileStoreFactory::GetForProfile(profile));
-  return bookmark_sync_service;
-}
+#endif // End Vivaldi
 
-web::BrowserState* AccountBookmarkSyncServiceFactory::GetBrowserStateToUse(
-    web::BrowserState* context) const {
-  return GetBrowserStateRedirectedInIncognito(context);
+  return bookmark_sync_service;
 }
 
 }  // namespace ios

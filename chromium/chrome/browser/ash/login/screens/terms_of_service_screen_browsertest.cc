@@ -45,6 +45,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/known_user.h"
 #include "content/public/test/browser_test.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -60,7 +61,7 @@ using ::net::test_server::HttpResponse;
 const char kAccountId[] = "dla@example.com";
 const char kDisplayName[] = "display name";
 const char kManagedUser[] = "user@example.com";
-const char kManagedGaiaID[] = "33333";
+const GaiaId::Literal kManagedGaiaID("33333");
 const char kTosText[] = "By using this test you agree to fix future bugs";
 
 std::optional<std::string> ReadFileToOptionalString(

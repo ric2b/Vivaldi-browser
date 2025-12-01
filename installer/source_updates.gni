@@ -117,6 +117,7 @@ if (is_linux && !is_component_build) {
   }
   update_target("//chrome/installer/linux:common_packaging_files") {
     sources -= [
+      "common/appdata.xml.template",
       "common/wrapper",
     ]
     sources += [

@@ -73,11 +73,13 @@
 #include "browser/vivaldi_browser_finder.h"
 #include "browser/vivaldi_webcontents_util.h"
 #include "components/guest_view/browser/guest_view_base.h"
+#include "extensions/api/events/vivaldi_ui_events.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 #include "extensions/api/guest_view/parent_tab_user_data.h"
 #include "extensions/api/guest_view/vivaldi_web_view_constants.h"
 #include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/helper/vivaldi_init_helpers.h"
+#include "extensions/tools/vivaldi_tools.h"
 #include "prefs/vivaldi_gen_prefs.h"
 #include "ui/content/vivaldi_tab_check.h"
 #include "ui/devtools/devtools_connector.h"
@@ -783,8 +785,8 @@ content::KeyboardEventProcessingResult WebViewGuest::PreHandleKeyboardEvent(
   // We need override this at an early stage since |KeyboardEventManager| will
   // block the delegate(WebViewGuest::HandleKeyboardEvent) if the page does
   // event.preventDefault
-  bool handled = false;
   if (event.windows_key_code == ui::VKEY_ESCAPE) {
+    bool handled = false;
     // Go out of fullscreen or mouse-lock and pass the event as
     // handled if any of these modes are ended.
     Browser* browser = chrome::FindBrowserWithTab(web_contents());
@@ -806,9 +808,51 @@ content::KeyboardEventProcessingResult WebViewGuest::PreHandleKeyboardEvent(
         handled = true;
       }
     }
+    if (handled)
+      return content::KeyboardEventProcessingResult::HANDLED;
   }
-  if (handled)
-    return content::KeyboardEventProcessingResult::HANDLED;
+
+  // Check if our shortcut has browser priority, i.e. should be handled by
+  // the browser and not by the website.
+  std::string shortcut_text = ::vivaldi::ShortcutTextFromEvent(event);
+  std::transform(shortcut_text.begin(), shortcut_text.end(),
+                 shortcut_text.begin(),
+                 [](unsigned char c) { return std::tolower(c); });
+
+
+  Browser* browser = chrome::FindBrowserWithTab(web_contents());
+  if (browser && browser->is_vivaldi()) {
+    PrefService* prefs = browser->profile()->GetPrefs();
+
+   const PrefService::Preference* browser_priority_keys =
+        prefs->FindPreference(
+            vivaldiprefs::kKeyboardShortcutsBrowserPriorityList);
+    const base::Value::List& browser_priority_list =
+        browser_priority_keys->GetValue()->GetList();
+    for (auto entry = browser_priority_list.begin();
+         entry != browser_priority_list.end(); ++entry) {
+      if (entry->GetString() == shortcut_text) {
+        extensions::VivaldiUIEvents::SendKeyboardShortcutEvent(
+            browser->session_id().id(), browser->profile(), event, false, true);
+        return content::KeyboardEventProcessingResult::HANDLED;
+      }
+    }
+
+    std::string current_website_url = web_contents()->GetURL().host();
+    const PrefService::Preference* webpage_exceptions =
+        prefs->FindPreference(vivaldiprefs::kWebpagesExceptionsKeystroke);
+
+    const base::Value::List& webpage_exception_list =
+        webpage_exceptions->GetValue()->GetList();
+    for (auto entry = webpage_exception_list.begin();
+         entry != webpage_exception_list.end(); ++entry) {
+      if (entry->GetString() == current_website_url) {
+        extensions::VivaldiUIEvents::SendKeyboardShortcutEvent(
+            browser->session_id().id(), browser->profile(), event, false, true);
+        return content::KeyboardEventProcessingResult::HANDLED;
+      }
+    }
+  }
   return content::KeyboardEventProcessingResult::NOT_HANDLED;
 }
 
@@ -850,11 +894,8 @@ void WebViewGuest::VivaldiCreateWebContents(
         zoom::ZoomController::FromWebContents(tabstrip_contents)
             ->RemoveObserver(web_view_guest);
 
-        web_view_guest->GetJavaScriptDialogManager(tabstrip_contents)
-            ->CancelDialogs(tabstrip_contents, false);
-        // To avoid chromium patches. No other reason.
         static_cast<content::WebContentsImpl*>(tabstrip_contents)
-            ->SetJavaScriptDialogManager(nullptr);
+          ->CancelActiveAndPendingDialogs();
 
         web_view_guest->WebContentsDestroyed();
       }
@@ -1147,7 +1188,7 @@ void WebViewGuest::VivaldiCreateWebContents(
   //
   // TODO(dcheng): Is granting commit origin really the right thing to do here?
   content::ChildProcessSecurityPolicy::GetInstance()->GrantCommitOrigin(
-      new_contents->GetPrimaryMainFrame()->GetProcess()->GetID(),
+      new_contents->GetPrimaryMainFrame()->GetProcess()->GetID().value(),
       url::Origin::Create(GetOwnerSiteURL()));
 
   AttachWebContentsObservers(new_contents.get());

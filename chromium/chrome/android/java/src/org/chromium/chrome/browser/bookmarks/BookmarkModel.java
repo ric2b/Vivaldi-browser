@@ -73,8 +73,8 @@ public class BookmarkModel extends BookmarkBridge {
         return BookmarkBridge.getForProfile(profile);
     }
 
-    BookmarkModel(long nativeBookmarkBridge) {
-        super(nativeBookmarkBridge);
+    BookmarkModel(long nativeBookmarkBridge, Profile profile) {
+        super(nativeBookmarkBridge, profile);
     }
 
     /**
@@ -264,10 +264,31 @@ public class BookmarkModel extends BookmarkBridge {
         }
     }
 
-    /*
-     Vivaldi
-     */
+    /* Vivaldi */
     public BookmarkId getDefaultFolder() {
         return getDesktopFolderId();
+    }
+
+
+    /* Vivaldi */
+    public boolean isBookmarkedInFolder(BookmarkId folderId, String url) {
+        BookmarkItem item = getBookmarkById(folderId);
+        if (item != null) {
+            return folderId != null && isURLAddedToFolderLocal(folderId, url);
+        }
+        return false;
+    }
+
+    /* Vivaldi */
+    public boolean isURLAddedToFolderLocal(BookmarkId folderId, String url) {
+        List<BookmarkId> ids = getChildIds(folderId);
+        for (BookmarkId id : ids) {
+            BookmarkItem item = getBookmarkById(id);
+            if (item != null && item.getUrl() != null &&
+                    item.getUrl().getSpec().equals(url)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

@@ -309,23 +309,6 @@ class ChromeScrollJankMetrics(TestSuite):
             'experimental_reliable_chrome_tasks_delaying_input_processing_test.out'
         ))
 
-  def test_chrome_scroll_inputs_per_frame(self):
-    return DiffTestBlueprint(
-        trace=DataPath('scrolling_with_blocked_nonblocked_frames.pftrace'),
-        query="""
-        SELECT RUN_METRIC('chrome/chrome_scroll_inputs_per_frame.sql');
-
-        SELECT
-          count_for_frame,
-          ts
-        FROM chrome_scroll_inputs_per_frame
-        WHERE ts = 60934316798158;
-        """,
-        out=Csv("""
-        "count_for_frame","ts"
-        4,60934316798158
-        """))
-
   def test_chrome_thread_slice_repeated(self):
     return DiffTestBlueprint(
         trace=Path('../../parser/track_event/track_event_counters.textproto'),
@@ -492,7 +475,7 @@ class ChromeScrollJankMetrics(TestSuite):
         INCLUDE PERFETTO MODULE chrome.scroll_jank.scroll_jank_v3;
 
         SELECT
-          HAS_DESCENDANT_SLICE_WITH_NAME(
+          _HAS_DESCENDANT_SLICE_WITH_NAME(
             (SELECT id from slice where dur = 60156000),
             'SwapEndToPresentationCompositorFrame') AS has_descendant;
         """,
@@ -510,7 +493,7 @@ class ChromeScrollJankMetrics(TestSuite):
         INCLUDE PERFETTO MODULE chrome.scroll_jank.scroll_jank_v3;
 
         SELECT
-          HAS_DESCENDANT_SLICE_WITH_NAME(
+          _HAS_DESCENDANT_SLICE_WITH_NAME(
             (SELECT id from slice where dur = 77247000),
             'SwapEndToPresentationCompositorFrame') AS has_descendant;
         """,

@@ -17,9 +17,9 @@ CSS Flexbox (cbiesinger)
 - Ramping back up on scrolling, trying to help cbiesinger with flexbox
 overflow:auto heartache. Lots of fun. (szager)
 CSS Grid Layout (svillar, jfernandez, rego, javif)
-\[[crbug.com/79180](http://crbug.com/79180)\]
+\[[crbug.com/79180](https://crbug.com/79180)\]
 - Reviewing CSS Grid specification. (cbiesinger)
-CSS Multi-column (mstensho) \[[crbug.com/334335](http://crbug.com/334335)\]
+CSS Multi-column (mstensho) \[[crbug.com/334335](https://crbug.com/334335)\]
 - Continuing to focus on multi-col and fragmentation.
 - Orphans and widows, need to clean up this code, to support
 break-before & break-after.
@@ -28,7 +28,7 @@ CSS Houdini
 - Begun work on spec stuff, cleaning up paint, worklets. Starting to
 work more on CSS Layout API. (ikilpatrick)
 Add API for layout (leviw, pilgrim, dgrogan)
-\[[crbug.com/495288](http://crbug.com/495288)\]
+\[[crbug.com/495288](https://crbug.com/495288)\]
 - Migrated most references of Document::layoutView() to Document::
 layoutViewItem() in preparation for removing Document::layoutView()
 and routing everything through the block layout API. (pilgrim)
@@ -37,12 +37,12 @@ item. (pilgrim)
 - Start the LineLayoutAPI document with leviw. pilgrim, dgrogan to
 clustering all the API methods into groups, figuring out we want
 to rationalize these roots. (dgrogan)
-LayoutNG \[[crbug.com/591099](http://crbug.com/591099)\]
+LayoutNG \[[crbug.com/591099](https://crbug.com/591099)\]
 - No updates since last week -
-CSS Containment (leviw) \[[crbug.com/312978](http://crbug.com/312978)\]
+CSS Containment (leviw) \[[crbug.com/312978](https://crbug.com/312978)\]
 - Sent out Intent to Ship. (eae)
 Intersection Observer (szager, mpb)
-\[[crbug.com/540528](http://crbug.com/540528)\]
+\[[crbug.com/540528](https://crbug.com/540528)\]
 - Wrapped up most Intersection Observer work, merged a patch into
 M51. (szager)
 Tables (dgrogan)

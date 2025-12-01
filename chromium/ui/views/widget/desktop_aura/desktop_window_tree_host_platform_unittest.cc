@@ -4,6 +4,7 @@
 
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h"
 
+#include <array>
 #include <memory>
 #include <utility>
 
@@ -67,12 +68,14 @@ class TestWidgetObserver : public WidgetObserver {
   void WaitForChange(Change change, bool old_value) {
     switch (change) {
       case Change::kVisibility:
-        if (old_value == visible_)
+        if (old_value == visible_) {
           Wait();
+        }
         break;
       case Change::kDestroying:
-        if (old_value == on_widget_destroying_)
+        if (old_value == on_widget_destroying_) {
           Wait();
+        }
         break;
       default:
         NOTREACHED() << "unknown value";
@@ -104,8 +107,9 @@ class TestWidgetObserver : public WidgetObserver {
   }
 
   void StopWaiting() {
-    if (!run_loop_)
+    if (!run_loop_) {
       return;
+    }
     ASSERT_TRUE(run_loop_->running());
     run_loop_->Quit();
   }
@@ -209,8 +213,9 @@ TEST_F(DesktopWindowTreeHostPlatformTest, UpdateWindowShapeFromWindowMask) {
   auto* host_platform = DesktopWindowTreeHostPlatform::GetHostForWidget(
       widget->GetNativeWindow()->GetHost()->GetAcceleratedWidget());
   ASSERT_TRUE(host_platform);
-  if (!host_platform->platform_window()->ShouldUpdateWindowShape())
+  if (!host_platform->platform_window()->ShouldUpdateWindowShape()) {
     return;
+  }
 
   auto* content_window =
       DesktopWindowTreeHostPlatform::GetContentWindowForWidget(
@@ -418,7 +423,7 @@ class TestWidgetDelegate : public WidgetDelegate {
   ~TestWidgetDelegate() override = default;
 
   void GetAccessiblePanes(std::vector<View*>* panes) override {
-    base::ranges::copy(accessible_panes_, std::back_inserter(*panes));
+    std::ranges::copy(accessible_panes_, std::back_inserter(*panes));
   }
 
   void AddAccessiblePane(View* pane) { accessible_panes_.push_back(pane); }
@@ -438,7 +443,7 @@ TEST_F(DesktopWindowTreeHostPlatformTest, OnRotateFocus) {
   auto widget = std::make_unique<Widget>();
   widget->Init(std::move(widget_params));
 
-  View* views[2];
+  std::array<View*, 2> views;
   for (auto*& view : views) {
     auto child_view = std::make_unique<View>();
     child_view->SetFocusBehavior(View::FocusBehavior::ALWAYS);

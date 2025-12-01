@@ -68,7 +68,8 @@ static const char* const CHAR16_TYPE_STRING = "char16";
 static const char* const FLOAT16_RAW_BITS_TYPE_STRING = "float16_raw_bits";
 static const char* const FLOAT32_TYPE_STRING = "float32";
 static const char* const FLOAT64_TYPE_STRING = "float64";
-static const char* const FLOAT64_OR_HOLE_TYPE_STRING = "float64_or_hole";
+static const char* const FLOAT64_OR_UNDEFINED_OR_HOLE_TYPE_STRING =
+    "float64_or_undefined_or_hole";
 static const char* const CONST_INT31_TYPE_STRING = "constexpr int31";
 static const char* const CONST_INT32_TYPE_STRING = "constexpr int32";
 static const char* const CONST_FLOAT64_TYPE_STRING = "constexpr float64";
@@ -135,6 +136,10 @@ static const char* const ANNOTATION_CUSTOM_WEAK_MARKING = "@customWeakMarking";
 // Do not generate an interface descriptor for this builtin.
 static const char* const ANNOTATION_CUSTOM_INTERFACE_DESCRIPTOR =
     "@customInterfaceDescriptor";
+// Automatically generates a call to IncrementUseCounter at the start of a
+// builtin.
+static const char* const ANNOTATION_INCREMENT_USE_COUNTER =
+    "@incrementUseCounter";
 
 inline bool IsConstexprName(const std::string& name) {
   return name.substr(0, std::strlen(CONSTEXPR_TYPE_PREFIX)) ==

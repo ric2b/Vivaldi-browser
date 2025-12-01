@@ -23,7 +23,7 @@
 #include "media/base/timestamp_constants.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_transformation.h"
-#include "media/renderers/video_frame_yuv_converter.h"
+#include "media/renderers/video_frame_shared_image_cache.h"
 
 namespace gfx {
 class RectF;
@@ -31,7 +31,6 @@ class RectF;
 
 namespace gpu {
 struct Capabilities;
-class ClientSharedImage;
 
 namespace gles2 {
 class GLES2Interface;
@@ -207,7 +206,8 @@ class MEDIA_EXPORT PaintCanvasVideoRenderer {
   [[nodiscard]] gpu::SyncToken CopyVideoFrameToSharedImage(
       viz::RasterContextProvider* raster_context_provider,
       scoped_refptr<VideoFrame> video_frame,
-      const gpu::MailboxHolder& destination,
+      const gpu::Mailbox& dest_mailbox,
+      const gpu::SyncToken& dest_sync_token,
       bool use_visible_rect);
 
   // Check whether video frame can be uploaded through
@@ -252,11 +252,6 @@ class MEDIA_EXPORT PaintCanvasVideoRenderer {
     // This is only set if the VideoFrame was texture-backed.
     gfx::Size coded_size;
 
-    // The visible subrect of |coded_size| that represents the logical contents
-    // of the frame after cropping.
-    // This is only set if the VideoFrame was texture-backed.
-    gfx::Rect visible_rect;
-
     // Used to allow recycling of the previous shared image. This requires that
     // no external users have access to this resource via SkImage. Returns true
     // if the existing resource can be recycled.
@@ -268,10 +263,6 @@ class MEDIA_EXPORT PaintCanvasVideoRenderer {
   bool UpdateLastImage(scoped_refptr<VideoFrame> video_frame,
                        viz::RasterContextProvider* raster_context_provider);
 
-  bool PrepareVideoFrame(scoped_refptr<VideoFrame> video_frame,
-                         viz::RasterContextProvider* raster_context_provider,
-                         const gpu::MailboxHolder& dest_holder);
-
   std::optional<Cache> cache_;
 
   // If |cache_| is not used for a while, it's deleted to save memory.
@@ -280,7 +271,7 @@ class MEDIA_EXPORT PaintCanvasVideoRenderer {
   cc::PaintImage::Id renderer_stable_id_;
 
   // Used for DCHECKs to ensure method calls executed in the correct thread.
-  base::SequenceChecker sequence_checker_;
+  SEQUENCE_CHECKER(sequence_checker_);
 
   struct YUVTextureCache {
     YUVTextureCache();
@@ -290,19 +281,12 @@ class MEDIA_EXPORT PaintCanvasVideoRenderer {
     // The ContextProvider that holds the texture.
     scoped_refptr<viz::RasterContextProvider> raster_context_provider;
 
-    // The size of the texture.
-    gfx::Size size;
+    // The RGB shared image cache backing the texture.
+    std::unique_ptr<VideoFrameSharedImageCache> rgb_shared_image_cache;
 
-    // The shared image backing the texture.
-    scoped_refptr<gpu::ClientSharedImage> shared_image;
-
-    // Used to perform YUV->RGB conversion on video frames. Internally caches
-    // shared images that are created to upload CPU video frame data to the GPU.
-    VideoFrameYUVConverter yuv_converter;
-
-    // A SyncToken after last usage, used for reusing or destroying texture and
-    // shared image.
-    gpu::SyncToken sync_token;
+    // Cache of YUV shared images that are created to upload CPU video frame
+    // data to the GPU.
+    std::unique_ptr<VideoFrameSharedImageCache> yuv_shared_image_cache;
   };
   YUVTextureCache yuv_cache_;
 };

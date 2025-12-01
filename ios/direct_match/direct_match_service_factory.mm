@@ -3,10 +3,8 @@
 #import "ios/direct_match/direct_match_service_factory.h"
 
 #import "components/direct_match/direct_match_service.h"
-#import "components/keyed_service/ios/browser_state_dependency_manager.h"
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
-#import "ios/chrome/browser/shared/model/browser_state/browser_state_otr_helper.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "services/network/public/cpp/shared_url_loader_factory.h"
 
@@ -15,8 +13,8 @@ namespace direct_match {
 // static
 DirectMatchService* DirectMatchServiceFactory::GetForProfile(
   ProfileIOS* profile) {
-  return static_cast<DirectMatchService*>(
-      GetInstance()->GetServiceForBrowserState(profile, true));
+  return GetInstance()->GetServiceForProfileAs<DirectMatchService>(
+      profile, /*create=*/true);
 }
 
 // static
@@ -28,8 +26,8 @@ DirectMatchService* DirectMatchServiceFactory::GetForProfileIfExists(
   if (!GetInstance()->IsServiceCreated(profile)) {
     return nullptr;
   }
-  return static_cast<DirectMatchService*>(
-      GetInstance()->GetServiceForBrowserState(profile, false));
+  return GetInstance()->GetServiceForProfileAs<DirectMatchService>(
+      profile, /*create=*/false);
 }
 
 // static
@@ -39,26 +37,19 @@ DirectMatchServiceFactory* DirectMatchServiceFactory::GetInstance() {
 }
 
 DirectMatchServiceFactory::DirectMatchServiceFactory()
-  : BrowserStateKeyedServiceFactory(
-        "DirectMatchService", BrowserStateDependencyManager::GetInstance()) {}
+    : ProfileKeyedServiceFactoryIOS("DirectMatchService",
+                                    ProfileSelection::kRedirectedInIncognito,
+                                    TestingCreation::kNoServiceForTests) {}
 
 DirectMatchServiceFactory::~DirectMatchServiceFactory() {}
 
-web::BrowserState* DirectMatchServiceFactory::GetBrowserStateToUse(
-    web::BrowserState* browser_state) const {
-  return GetBrowserStateRedirectedInIncognito(browser_state);
-}
-
 std::unique_ptr<KeyedService> DirectMatchServiceFactory::BuildServiceInstanceFor(
   web::BrowserState* browser_state) const {
+  ProfileIOS* profile = ProfileIOS::FromBrowserState(browser_state);
   auto direct_match_service = std::make_unique<DirectMatchService>();
   auto URLLoaderFactory = GetApplicationContext()->GetSharedURLLoaderFactory();
-  direct_match_service->Load(URLLoaderFactory);
+  direct_match_service->Load(URLLoaderFactory, profile->GetPrefs());
   return direct_match_service;
-}
-
-bool DirectMatchServiceFactory::ServiceIsNULLWhileTesting() const {
-  return false;
 }
 
 }  // namespace direct_match

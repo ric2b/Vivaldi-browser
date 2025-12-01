@@ -51,4 +51,4 @@ All listed devices have fixes in Dev, Canary, Beta and Stable builds.
 *   Dell Chromebook 11
 
 For code names, see our [main device
-page](/chromium-os/developer-information-for-chrome-os-devices).
+page](/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices).

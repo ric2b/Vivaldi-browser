@@ -34,7 +34,6 @@ import org.robolectric.annotation.Config;
 
 import org.chromium.base.Callback;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.autofill.editors.AddressEditorCoordinator;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
@@ -55,7 +54,6 @@ public class SaveUpdateAddressProfilePromptTest {
     private static final long NATIVE_SAVE_UPDATE_ADDRESS_PROFILE_PROMPT_CONTROLLER = 100L;
     private static final boolean NO_MIGRATION = false;
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
-    @Rule public JniMocker mJniMocker = new JniMocker();
 
     @Mock private SaveUpdateAddressProfilePromptController.Natives mPromptControllerJni;
     @Mock private AutofillProfileBridge.Natives mAutofillProfileBridgeJni;
@@ -86,9 +84,8 @@ public class SaveUpdateAddressProfilePromptTest {
         mPromptController =
                 SaveUpdateAddressProfilePromptController.create(
                         NATIVE_SAVE_UPDATE_ADDRESS_PROFILE_PROMPT_CONTROLLER);
-        mJniMocker.mock(
-                SaveUpdateAddressProfilePromptControllerJni.TEST_HOOKS, mPromptControllerJni);
-        mJniMocker.mock(AutofillProfileBridgeJni.TEST_HOOKS, mAutofillProfileBridgeJni);
+        SaveUpdateAddressProfilePromptControllerJni.setInstanceForTesting(mPromptControllerJni);
+        AutofillProfileBridgeJni.setInstanceForTesting(mAutofillProfileBridgeJni);
     }
 
     private void createAndShowPrompt(boolean isUpdate) {
@@ -242,14 +239,14 @@ public class SaveUpdateAddressProfilePromptTest {
         View dialog = mPrompt.getDialogViewForTesting();
 
         mPrompt.setUpdateDetails("subtitle", "", "new details");
-        assertEquals(dialog.findViewById(R.id.header_new).getVisibility(), View.GONE);
-        assertEquals(dialog.findViewById(R.id.header_old).getVisibility(), View.GONE);
-        assertEquals(dialog.findViewById(R.id.no_header_space).getVisibility(), View.VISIBLE);
+        assertEquals(View.GONE, dialog.findViewById(R.id.header_new).getVisibility());
+        assertEquals(View.GONE, dialog.findViewById(R.id.header_old).getVisibility());
+        assertEquals(View.VISIBLE, dialog.findViewById(R.id.no_header_space).getVisibility());
 
         mPrompt.setUpdateDetails("subtitle", "old details", "new details");
-        assertEquals(dialog.findViewById(R.id.header_new).getVisibility(), View.VISIBLE);
-        assertEquals(dialog.findViewById(R.id.header_old).getVisibility(), View.VISIBLE);
-        assertEquals(dialog.findViewById(R.id.no_header_space).getVisibility(), View.GONE);
+        assertEquals(View.VISIBLE, dialog.findViewById(R.id.header_new).getVisibility());
+        assertEquals(View.VISIBLE, dialog.findViewById(R.id.header_old).getVisibility());
+        assertEquals(View.GONE, dialog.findViewById(R.id.no_header_space).getVisibility());
     }
 
     @Test

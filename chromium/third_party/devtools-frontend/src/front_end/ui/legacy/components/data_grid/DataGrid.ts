@@ -24,7 +24,7 @@
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable rulesdir/check_license_header */
+/* eslint-disable rulesdir/check-license-header */
 
 import * as Common from '../../../../core/common/common.js';
 import * as i18n from '../../../../core/i18n/i18n.js';
@@ -105,6 +105,15 @@ const UIStrings = {
    *@description Accessible text indicating an empty row is created.
    */
   emptyRowCreated: 'An empty table row has been created. You may double click or use context menu to edit.',
+  /**
+   *@description Text for screen reader to announce when focusing on a sortable column in data grid.
+   *@example {ascending} PH1
+   */
+  enterToSort: 'Column sort state: {PH1}. Press enter to apply sorting filter',
+  /**
+   *@description Label for sortable column headers.
+   */
+  sortableColumn: 'Sortable column. Press enter to apply sorting filter',
 };
 const str_ = i18n.i18n.registerUIStrings('ui/legacy/components/data_grid/DataGrid.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -213,13 +222,13 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
 
     this.dataTableColumnGroup = this.dataTable.createChild('colgroup');
 
-    this.dataTableHeadInternal = this.dataTable.createChild('thead') as HTMLTableSectionElement;
+    this.dataTableHeadInternal = this.dataTable.createChild('thead');
     this.headerRow = this.dataTableHeadInternal.createChild('tr');
 
     this.dataTableBody = this.dataTable.createChild('tbody');
-    this.topFillerRow = (this.dataTableBody.createChild('tr', 'data-grid-filler-row revealed') as HTMLElement);
+    this.topFillerRow = this.dataTableBody.createChild('tr', 'data-grid-filler-row revealed');
     UI.ARIAUtils.setHidden(this.topFillerRow, true);
-    this.bottomFillerRow = (this.dataTableBody.createChild('tr', 'data-grid-filler-row revealed') as HTMLElement);
+    this.bottomFillerRow = this.dataTableBody.createChild('tr', 'data-grid-filler-row revealed');
     UI.ARIAUtils.setHidden(this.bottomFillerRow, true);
 
     this.setVerticalPadding(0, 0, true);
@@ -227,7 +236,8 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
 
     this.editing = false;
     this.selectedNode = null;
-    this.expandNodesWhenArrowing = false;
+    /** Currently by default this is true to expand nodes when arrowing with keyboard. */
+    this.expandNodesWhenArrowing = true;
     this.setRootNode(new DataGridNode<T>());
 
     this.setHasSelection(false);
@@ -367,6 +377,10 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
     }
   }
 
+  protected getNumberOfRows(): number {
+    return this.rootNodeInternal ? this.enumerateChildren(this.rootNodeInternal, [], 1).length : 0;
+  }
+
   updateGridAccessibleNameOnFocus(): void {
     // When a grid gets focus
     // 1) If an item is selected - Read the content of the row
@@ -384,8 +398,8 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
       if (!this.rootNodeInternal) {
         return;
       }
-      const children = this.enumerateChildren(this.rootNodeInternal, [], 1);
-      const items = i18nString(UIStrings.rowsS, {PH1: children.length});
+      const numberOfRows = this.getNumberOfRows();
+      const items = i18nString(UIStrings.rowsS, {PH1: numberOfRows});
       accessibleText = i18nString(UIStrings.sSUseTheUpAndDownArrowKeysTo, {PH1: this.displayName, PH2: items});
     }
     UI.ARIAUtils.alert(accessibleText);
@@ -417,6 +431,8 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
                 .track({click: column.sortable, resize: true})
                 .context(Platform.StringUtilities.toKebabCase(columnId))}`);
     cell.className = columnId + '-column';
+    cell.setAttribute('tabindex', '0');
+    cell.setAttribute('role', 'columnheader');
     nodeToColumnIdMap.set(cell, columnId);
     this.dataTableHeaders[columnId] = cell;
 
@@ -435,10 +451,19 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
 
     if (column.sortable) {
       cell.addEventListener('click', this.clickInHeaderCell.bind(this), false);
+      /**
+       * For a11y reasons to allow for keyboard navigation through the table headers
+       * we additionally have a keydown event listener.
+       */
+      cell.addEventListener('keydown', this.keydownHeaderCell.bind(this), false);
       cell.classList.add('sortable');
       const icon = document.createElement('span');
       icon.className = 'sort-order-icon';
       cell.createChild('div', 'sort-order-icon-container').appendChild(icon);
+
+      if (column.title) {
+        UI.ARIAUtils.setLabel(cell, i18nString(UIStrings.sortableColumn));
+      }
     }
   }
 
@@ -478,12 +503,12 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
     for (let i = 0; i < this.visibleColumnsArray.length; ++i) {
       const column = this.visibleColumnsArray[i];
       const columnId = column.id;
-      const dataColumn = (this.dataTableColumnGroup.createChild('col') as HTMLElement);
+      const dataColumn = this.dataTableColumnGroup.createChild('col');
       if (column.width) {
         dataColumn.style.width = column.width;
       }
       this.headerRow.appendChild(this.dataTableHeaders[columnId]);
-      const topFillerRowCell = (this.topFillerRow.createChild('th', 'top-filler-td') as HTMLTableCellElement);
+      const topFillerRowCell = this.topFillerRow.createChild('th', 'top-filler-td');
       topFillerRowCell.textContent = column.title || null;
       topFillerRowCell.scope = 'col';
       const bottomFillerRowChild = this.bottomFillerRow.createChild('td', 'bottom-filler-td');
@@ -493,7 +518,7 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
     const headerCorner = this.headerRow.createChild('th', 'corner');
     UI.ARIAUtils.setHidden(headerCorner, true);
 
-    const topFillerRowCornerCell = (this.topFillerRow.createChild('th', 'corner') as HTMLTableCellElement);
+    const topFillerRowCornerCell = this.topFillerRow.createChild('th', 'corner');
     topFillerRowCornerCell.classList.add('top-filler-td');
     topFillerRowCornerCell.scope = 'col';
 
@@ -1163,6 +1188,10 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
         }
       }
     } else if (event.key === 'ArrowRight') {
+      /** We do not want to expand if this setting is disabled. */
+      if (!this.expandNodesWhenArrowing) {
+        return;
+      }
       if (!this.selectedNode.revealed) {
         this.selectedNode.reveal();
         handled = true;
@@ -1270,6 +1299,18 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
     this.sortByColumnHeaderCell((cell as HTMLElement));
   }
 
+  private keydownHeaderCell(event: KeyboardEvent): void {
+    if (event.key === 'Enter' || event.key === ' ') {
+      this.clickInHeaderCell(event);
+    }
+  }
+
+  /**
+   * Sorts by column header cell.
+   * Additionally applies the aria-sort label to a column's th.
+   * Guidance on values of attribute taken from
+   * https://www.w3.org/TR/wai-aria-practices/examples/grid/dataGrids.html.
+   */
   private sortByColumnHeaderCell(cell: Element): void {
     if (!nodeToColumnIdMap.has(cell) || !cell.classList.contains('sortable')) {
       return;
@@ -1282,10 +1323,14 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
 
     if (this.sortColumnCell) {
       this.sortColumnCell.classList.remove(Order.Ascending, Order.Descending);
+      this.sortColumnCell.removeAttribute('aria-sort');
     }
     this.sortColumnCell = cell;
 
     cell.classList.add(sortOrder);
+    const ariaLabel = this.isSortOrderAscending() ? 'ascending' : 'descending';
+    cell.setAttribute('aria-sort', ariaLabel);
+    UI.ARIAUtils.alert(i18nString(UIStrings.enterToSort, {PH1: ariaLabel || ''}));
 
     this.dispatchEventToListeners(Events.SORTING_CHANGED);
   }
@@ -1602,13 +1647,13 @@ export const enum Events {
   PADDING_CHANGED = 'PaddingChanged',
 }
 
-export type EventTypes<T> = {
-  [Events.SELECTED_NODE]: DataGridNode<T>,
-  [Events.DESELECTED_NODE]: void,
-  [Events.OPENED_NODE]: DataGridNode<T>,
-  [Events.SORTING_CHANGED]: void,
-  [Events.PADDING_CHANGED]: void,
-};
+export interface EventTypes<T> {
+  [Events.SELECTED_NODE]: DataGridNode<T>;
+  [Events.DESELECTED_NODE]: void;
+  [Events.OPENED_NODE]: DataGridNode<T>;
+  [Events.SORTING_CHANGED]: void;
+  [Events.PADDING_CHANGED]: void;
+}
 
 export enum Order {
   /* eslint-disable @typescript-eslint/naming-convention -- Used by web_tests. */
@@ -1636,9 +1681,9 @@ export const enum ResizeMethod {
   LAST = 'last',
 }
 
-export type DataGridData = {
-  [key: string]: any,
-};
+export interface DataGridData {
+  [key: string]: any;
+}
 
 export class DataGridNode<T> {
   elementInternal: HTMLElement|null;
@@ -1646,7 +1691,6 @@ export class DataGridNode<T> {
   private selectedInternal: boolean;
   private dirty: boolean;
   private inactive: boolean;
-  key!: string;
   private depthInternal!: number|undefined;
   revealedInternal!: boolean|undefined;
   protected attachedInternal: boolean;
@@ -1703,7 +1747,7 @@ export class DataGridNode<T> {
     return this.elementInternal as Element;
   }
 
-  protected createElement(): Element {
+  protected createElement(): HTMLElement {
     this.elementInternal = document.createElement('tr');
     this.elementInternal.setAttribute(
         'jslog', `${VisualLogging.tableRow().track({keydown: 'ArrowUp|ArrowDown|ArrowLeft|ArrowRight|Enter|Space'})}`);
@@ -1736,7 +1780,7 @@ export class DataGridNode<T> {
     return this.elementInternal;
   }
 
-  existingElement(): Element|null {
+  existingElement(): HTMLElement|null {
     return this.elementInternal || null;
   }
 
@@ -2003,7 +2047,7 @@ export class DataGridNode<T> {
     this.cellAccessibleTextMap.set(columnId, name);
     // Mark all direct children of cell as hidden so cell name is properly announced
     for (let i = 0; i < cell.children.length; i++) {
-      UI.ARIAUtils.markAsHidden(cell.children[i]);
+      UI.ARIAUtils.setHidden(cell.children[i], true);
     }
     UI.ARIAUtils.setLabel(cell, name);
   }
@@ -2451,18 +2495,21 @@ export class DataGridWidget<T> extends UI.Widget.VBox {
     this.dataGrid = dataGrid;
     this.element.appendChild(dataGrid.element);
     this.setDefaultFocusedElement(dataGrid.element);
+    this.registerRequiredCSS(dataGridStyles);
   }
 
   override wasShown(): void {
-    this.registerCSSFiles([dataGridStyles]);
+    super.wasShown();
     this.dataGrid.wasShown();
   }
 
   override willHide(): void {
     this.dataGrid.willHide();
+    super.willHide();
   }
 
   override onResize(): void {
+    super.onResize();
     this.dataGrid.onResize();
   }
 
@@ -2471,61 +2518,65 @@ export class DataGridWidget<T> extends UI.Widget.VBox {
   }
 }
 
-export interface DataGridWidgetOptions<T> {
-  implParams: Parameters;
-  dataGridImpl?: DataGridImpl<T>;
-  markAsRoot?: boolean;
-  nodes: DataGridNode<T>[];
-}
+export type DataGridWidgetOptions<T> = Parameters&{
+  markAsRoot?: boolean,
+  striped?: boolean, nodes: DataGridNode<T>[],
+  rowContextMenuCallback?: ((arg0: UI.ContextMenu.ContextMenu, arg1: DataGridNode<T>) => void),
+};
 
 export class DataGridWidgetElement<T> extends UI.Widget.WidgetElement<DataGridWidget<T>> {
   #options: DataGridWidgetOptions<T>;
+  widget?: DataGridWidget<T>;
 
   constructor() {
     super();
     // default values for options
     this.#options = {
-      implParams: {
-        displayName: 'dataGrid',
-        columns: [],
-      },
+      displayName: 'dataGrid',
+      columns: [],
       nodes: [],
     };
   }
 
   set options(options: DataGridWidgetOptions<T>) {
     this.#options = options;
+    this.#updateGrid();
   }
 
   override createWidget(): DataGridWidget<T> {
-    const {
-      implParams,
-      markAsRoot,
-      nodes,
-    } = this.#options;
-
-    if (!this.#options.dataGridImpl) {
-      this.#options.dataGridImpl = new DataGridImpl<T>(implParams);
-    }
-
-    this.#options.dataGridImpl.rootNode().removeChildren();
-    for (const node of nodes) {
-      this.#options.dataGridImpl.rootNode().appendChild(node);
-    }
+    const dataGridImpl = new DataGridImpl<T>(this.#options);
 
     // Translate existing DataGridImpl ("ObjectWrapper") events to DOM CustomEvents so clients can
     // use lit templates to bind listeners.
-    this.#options.dataGridImpl.addEventListener(Events.SELECTED_NODE, this.#selectedNode.bind(this));
-    this.#options.dataGridImpl.addEventListener(Events.DESELECTED_NODE, this.#deselectedNode.bind(this));
-    this.#options.dataGridImpl.addEventListener(Events.OPENED_NODE, this.#openedNode.bind(this));
-    this.#options.dataGridImpl.addEventListener(Events.SORTING_CHANGED, this.#sortingChanged.bind(this));
-    this.#options.dataGridImpl.addEventListener(Events.PADDING_CHANGED, this.#paddingChanged.bind(this));
-    const widget = this.#options.dataGridImpl.asWidget(this);
+    dataGridImpl.addEventListener(Events.SELECTED_NODE, this.#selectedNode.bind(this));
+    dataGridImpl.addEventListener(Events.DESELECTED_NODE, this.#deselectedNode.bind(this));
+    dataGridImpl.addEventListener(Events.OPENED_NODE, this.#openedNode.bind(this));
+    dataGridImpl.addEventListener(Events.SORTING_CHANGED, this.#sortingChanged.bind(this));
+    dataGridImpl.addEventListener(Events.PADDING_CHANGED, this.#paddingChanged.bind(this));
+    this.widget = dataGridImpl.asWidget(this);
 
-    if (markAsRoot) {
-      widget.markAsRoot();
+    if (this.#options.markAsRoot) {
+      this.widget.markAsRoot();
     }
-    return widget;
+
+    this.#updateGrid();
+
+    return this.widget;
+  }
+
+  #updateGrid(): void {
+    if (this.widget) {
+      this.widget.dataGrid.rootNode().removeChildren();
+      for (const node of this.#options.nodes) {
+        this.widget.dataGrid.rootNode().appendChild(node);
+      }
+
+      if (this.#options.striped) {
+        this.widget.dataGrid.setStriped(true);
+      }
+
+      this.widget.dataGrid.setRowContextMenuCallback(this.#options.rowContextMenuCallback ?? null);
+    }
   }
 
   #selectedNode(event: Common.EventTarget.EventTargetEvent<DataGridNode<T>>): void {

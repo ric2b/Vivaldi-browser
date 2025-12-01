@@ -14,13 +14,17 @@
 <translation id="2433507940547922241">Utseende</translation>
 <translation id="2501278716633472235">Gå tillbaka</translation>
 <translation id="2633278372998075009">Privata flikar</translation>
+<translation id="265156376773362237">Standardförinläsning</translation>
 <translation id="272026394418727548">Vivaldis hemsida</translation>
+<translation id="2871733351037274014">Läs in sidor i förväg</translation>
 <translation id="2951071800649516099">Lägg till sidor till din läslista för senare</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> bokmärke}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> bokmärken}}</translation>
 <translation id="3076631378407175873">Upphovsrättskyddat <ph name="YEAR" /> Vivaldi Technologies As. Med ensamrätt.</translation>
+<translation id="3232293466644486101">Radera webbinformation …</translation>
 <translation id="3234355010754616171">Ny privat flik</translation>
+<translation id="3237087289225714896">Standardförinläsning:</translation>
 <translation id="3377025655491224618">Privat flik</translation>
 <translation id="3504699618187058974">Stapla flikar</translation>
 <translation id="3518985090088779359">Godkänn och fortsätt</translation>
@@ -28,6 +32,7 @@
 <translation id="3602290021589620013">Förhandsgranskning</translation>
 <translation id="3700829948786686853">Välkommen till Vivaldi</translation>
 <translation id="3719826155360621982">Hemsida</translation>
+<translation id="3738139272394829648">Tryck för att söka</translation>
 <translation id="385051799172605136">Tillbaka</translation>
 <translation id="399014816462153200">Läs artiklar:</translation>
 <translation id="4121750346708795461">Genom att använda det här programmet godkänner du Vivaldis <ph name="BEGIN_LINK1" />användarvillkor<ph name="END_LINK1" /> och <ph name="BEGIN_LINK2" />sekretesspolicy<ph name="END_LINK2" />.</translation>
@@ -36,6 +41,7 @@
 <translation id="4195643157523330669">Öppna i ny flik</translation>
 <translation id="4225895483398857530">Genväg till verktygsfältet</translation>
 <translation id="4243710787042215766">Öppna i privat flik</translation>
+<translation id="4291407919474070700"><ph name="BEGIN_LINK" />Aktivera skärmlås i Android-inställningar<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Lösenordshanterare</translation>
 <translation id="451872707440238414">Sök bland dina bokmärken</translation>
 <translation id="4526803704855831732">Privata flikar</translation>
@@ -57,24 +63,34 @@ Gör ett långt tryck för att justera din sökterm. För att förfina sökninge
 <translation id="572328651809341494">Senaste flikar</translation>
 <translation id="6150320133806434356">Bokmärke sparat</translation>
 <translation id="6336451774241870485">Ny privat flik</translation>
+<translation id="6337323516034698937">För att skicka den här fliken till en annan enhet, logga in på Vivaldi Sync på båda enheterna. Se till att du anger krypteringslösenordet om det behövs.</translation>
 <translation id="6404511346730675251">Redigera bokmärke</translation>
 <translation id="6585139692466700358">Erbjud översättning av sidor på andra språk med Vivaldis översättningstjänst</translation>
+<translation id="6588043302623806746">Använd säker DNS</translation>
 <translation id="6593061639179217415">Datoranpassad webbsida</translation>
 <translation id="6610147964972079463">Stäng privata flikar</translation>
 <translation id="7029995644714925509">När en webbplats ber om att privat förinläsa länkar på sin sida, krypterar Vivaldi och förladdar sidor via Googles servrar utan cookies. Detta döljer din identitet från den förnedladdade webbplatsen.</translation>
 <translation id="706339621163631076">Webbläsarens sekretesspolicy</translation>
 <translation id="732145680195464316">Bokmärke sparat i <ph name="PRODUCT_NAME" /></translation>
+<translation id="7324354302972299151">Skicka en Do Not Track-begäran</translation>
+<translation id="7359002509206457351">Åtkomst till betalningsmetoder</translation>
+<translation id="7419565702166471774">Använd alltid en säker anslutning</translation>
 <translation id="7427132068601343474">Om Vivaldi</translation>
+<translation id="7456774706094330779">Utökad förinläsning</translation>
 <translation id="7465104139234185284">Stäng alla privata flikar</translation>
 <translation id="7481312909269577407">Framåt</translation>
 <translation id="7968014550143838305">Lades till läslistan</translation>
 <translation id="804786196054284061">Användarvillkor</translation>
+<translation id="8062594758852531064">Utökad förinläsning:</translation>
 <translation id="8127542551745560481">Redigera startsida</translation>
+<translation id="8348430946834215779">Använd HTTPS när det är möjligt och bli varnad innan du laddar webbplatser som inte stöder det</translation>
 <translation id="8560602726703398413">Hitta din läslista i Bokmärken</translation>
 <translation id="85991616550051997">Gå till hemsida</translation>
 <translation id="8820817407110198400">Bokmärken</translation>
 <translation id="9042893549633094279">Integritet och säkerhet</translation>
 <translation id="9063523880881406963">Inaktivera webbplats förfrågan</translation>
 <translation id="9080642952018487277">Gå in i privat läge</translation>
+<translation id="930124987204876019">Radera historik, cookies, webbplatsdata, cacheminne …</translation>
+<translation id="961856697154696964">Radera webbinformation</translation>
 <translation id="96681097142096641">Visa förenklad sida?</translation>
 </translationbundle>

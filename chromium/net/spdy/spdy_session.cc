@@ -9,6 +9,7 @@
 
 #include "net/spdy/spdy_session.h"
 
+#include <algorithm>
 #include <limits>
 #include <map>
 #include <string>
@@ -24,7 +25,6 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -243,7 +243,7 @@ base::Value::Dict NetLogSpdyInitializedParams(NetLogSource source) {
   if (source.IsValid()) {
     source.AddToEventParameters(dict);
   }
-  dict.Set("protocol", NextProtoToString(kProtoHTTP2));
+  dict.Set("protocol", NextProtoToString(NextProto::kProtoHTTP2));
   return dict;
 }
 
@@ -751,16 +751,15 @@ bool SpdySession::CanPool(TransportSecurityState* transport_security_state,
   if (!ssl_info.cert->VerifyNameMatch(new_hostname))
     return false;
 
-  // Port is left at 0 as it is never used.
   if (transport_security_state->CheckPublicKeyPins(
-          HostPortPair(new_hostname, 0), ssl_info.is_issued_by_known_root,
+          new_hostname, ssl_info.is_issued_by_known_root,
           ssl_info.public_key_hashes) ==
       TransportSecurityState::PKPStatus::VIOLATED) {
     return false;
   }
 
   switch (transport_security_state->CheckCTRequirements(
-      HostPortPair(new_hostname, 0), ssl_info.is_issued_by_known_root,
+      new_hostname, ssl_info.is_issued_by_known_root,
       ssl_info.public_key_hashes, ssl_info.cert.get(),
       ssl_info.ct_policy_compliance)) {
     case TransportSecurityState::CT_REQUIREMENTS_NOT_MET:
@@ -1659,7 +1658,7 @@ bool SpdySession::CancelStreamRequest(
   PendingStreamRequestQueue* queue = &pending_create_stream_queues_[priority];
   // Remove |request| from |queue| while preserving the order of the
   // other elements.
-  PendingStreamRequestQueue::iterator it = base::ranges::find(
+  PendingStreamRequestQueue::iterator it = std::ranges::find(
       *queue, request.get(), &base::WeakPtr<SpdyStreamRequest>::get);
   // The request may already be removed if there's a
   // CompleteStreamRequest() in flight.
@@ -1667,8 +1666,8 @@ bool SpdySession::CancelStreamRequest(
     it = queue->erase(it);
     // |request| should be in the queue at most once, and if it is
     // present, should not be pending completion.
-    DCHECK(base::ranges::find(it, queue->end(), request.get(),
-                              &base::WeakPtr<SpdyStreamRequest>::get) ==
+    DCHECK(std::ranges::find(it, queue->end(), request.get(),
+                             &base::WeakPtr<SpdyStreamRequest>::get) ==
            queue->end());
     return true;
   }

@@ -744,6 +744,7 @@ static inline int get_mvpred_compound_sad(
     return vfp->msdf(src_buf, src_stride, ref_address, ref_stride, second_pred,
                      mask, mask_stride, invert_mask);
   } else if (second_pred) {
+    assert(vfp->sdaf != NULL);
     return vfp->sdaf(src_buf, src_stride, ref_address, ref_stride, second_pred);
   } else {
     return ms_params->sdf(src_buf, src_stride, ref_address, ref_stride);
@@ -3341,7 +3342,6 @@ int av1_return_max_sub_pixel_mv(MACROBLOCKD *xd, const AV1_COMMON *const cm,
   (void)cm;
   (void)start_mv;
   (void)start_mv_stats;
-  (void)sse1;
   (void)distortion;
   (void)last_mv_search_list;
 
@@ -3356,6 +3356,7 @@ int av1_return_max_sub_pixel_mv(MACROBLOCKD *xd, const AV1_COMMON *const cm,
   // In the sub-pel motion search, if hp is not used, then the last bit of mv
   // has to be 0.
   lower_mv_precision(bestmv, allow_hp, 0);
+  *sse1 = besterr;
   return besterr;
 }
 
@@ -3370,7 +3371,6 @@ int av1_return_min_sub_pixel_mv(MACROBLOCKD *xd, const AV1_COMMON *const cm,
   (void)cm;
   (void)start_mv;
   (void)start_mv_stats;
-  (void)sse1;
   (void)distortion;
   (void)last_mv_search_list;
 
@@ -3384,6 +3384,7 @@ int av1_return_min_sub_pixel_mv(MACROBLOCKD *xd, const AV1_COMMON *const cm,
   // In the sub-pel motion search, if hp is not used, then the last bit of mv
   // has to be 0.
   lower_mv_precision(bestmv, allow_hp, 0);
+  *sse1 = besterr;
   return besterr;
 }
 

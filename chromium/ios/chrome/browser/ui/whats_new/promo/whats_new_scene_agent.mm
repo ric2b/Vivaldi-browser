@@ -53,7 +53,7 @@ using vivaldi::IsVivaldiRunning;
 
       // Special case for What's New M132 for Price Insights. Only register a
       // promo is Price Insights is enabled.
-      if (!IsPriceInsightsEnabled()) {
+      if (!IsPriceInsightsRegionEnabled()) {
         self.promosManager->DeregisterPromo(promos_manager::Promo::WhatsNew);
         return;
       }

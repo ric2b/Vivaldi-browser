@@ -11,7 +11,7 @@ title: Monday, October 19, 2015
 ---
 
 Updates since last meeting (on Monday, October 12th):
-Scrolling (skobes, szager) \[[crbug.com/417782](http://crbug.com/417782)\]
+Scrolling (skobes, szager) \[[crbug.com/417782](https://crbug.com/417782)\]
 - Fixed a regression from coordinated scrollbars. (skobes)
 - Made progress on getting RTL working with root layer
 scrolling (but still broken for various reasons). (skobes)
@@ -25,7 +25,7 @@ turned on, long slog. Making progress. (szager)
 - Got the RTL issue (where the initial position of the scrollbar
 was incorrect for RTL frames) all about figured out, on to the
 next one. (szager)
-CSS Flexbox (cbiesinger) \[[crbug.com/426898](http://crbug.com/426898)\]
+CSS Flexbox (cbiesinger) \[[crbug.com/426898](https://crbug.com/426898)\]
 - Spent some time last week going through flexbox bugs, doing
 bug triage and fixing issues.
 - Discovered a couple of new fun bugs involving negative margins
@@ -33,9 +33,9 @@ where the resulting flexbox could end up getting a negative size.
 Turns out the spec isn't clear on the correct behavior, working with
 tab and fantasi on getting it clarified.
 CSS Grid Layout (svillar, jfernandez, rego)
-\[[crbug.com/79180](http://crbug.com/79180)\]
+\[[crbug.com/79180](https://crbug.com/79180)\]
 - No updates since last week.
-CSS Multi-column (mstensho) \[[crbug.com/334335](http://crbug.com/334335)\]
+CSS Multi-column (mstensho) \[[crbug.com/334335](https://crbug.com/334335)\]
 - Working on the usual suspects; nested multicol, get it good enough for
 printing, and so on.
 - Also working on fixing a blocker regression pertaining to printing an
@@ -50,7 +50,7 @@ about a separate js exec context for all custom houdin stuff.
 - Preparing for TPAC, will be there for the entire event. Will gladly
 bring up issues or concerns on behalf of others.
 Add API for layout (leviw, pilgrim, ojan)
-\[[crbug.com/495288](http://crbug.com/495288)\]
+\[[crbug.com/495288](https://crbug.com/495288)\]
 - Still working on the line layout api, going thgough layout svg,
 converting calls to go through the API. (pilgrim)
 - Got a couple of smaller patches in last week, working on a

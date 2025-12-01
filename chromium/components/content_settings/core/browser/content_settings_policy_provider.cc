@@ -89,6 +89,10 @@ constexpr PrefsForManagedContentSettingsMapEntry
          ContentSettingsType::FILE_SYSTEM_WRITE_GUARD, CONTENT_SETTING_BLOCK},
         {prefs::kManagedLegacyCookieAccessAllowedForDomains,
          ContentSettingsType::LEGACY_COOKIE_ACCESS, CONTENT_SETTING_ALLOW},
+        {prefs::kManagedDefaultLegacyCookieScope,
+         ContentSettingsType::LEGACY_COOKIE_SCOPE, CONTENT_SETTING_ALLOW},
+        {prefs::kManagedLegacyCookieScopeForDomains,
+         ContentSettingsType::LEGACY_COOKIE_SCOPE, CONTENT_SETTING_ALLOW},
         {prefs::kManagedSerialAskForUrls, ContentSettingsType::SERIAL_GUARD,
          CONTENT_SETTING_ASK},
         {prefs::kManagedSerialBlockedForUrls, ContentSettingsType::SERIAL_GUARD,
@@ -136,6 +140,16 @@ constexpr PrefsForManagedContentSettingsMapEntry
         {prefs::kManagedDirectSocketsPrivateNetworkAccessBlockedForUrls,
          ContentSettingsType::DIRECT_SOCKETS_PRIVATE_NETWORK_ACCESS,
          CONTENT_SETTING_BLOCK},
+#if BUILDFLAG(IS_CHROMEOS)
+        {prefs::kManagedSmartCardConnectAllowedForUrls,
+         ContentSettingsType::SMART_CARD_GUARD, CONTENT_SETTING_ALLOW},
+        {prefs::kManagedSmartCardConnectBlockedForUrls,
+         ContentSettingsType::SMART_CARD_GUARD, CONTENT_SETTING_BLOCK},
+#endif
+        {prefs::kManagedControlledFrameAllowedForUrls,
+         ContentSettingsType::CONTROLLED_FRAME, CONTENT_SETTING_ALLOW},
+        {prefs::kManagedControlledFrameBlockedForUrls,
+         ContentSettingsType::CONTROLLED_FRAME, CONTENT_SETTING_BLOCK},
 };
 
 constexpr const char* kManagedPrefs[] = {
@@ -188,6 +202,12 @@ constexpr const char* kManagedPrefs[] = {
     prefs::kManagedDirectSocketsBlockedForUrls,
     prefs::kManagedDirectSocketsPrivateNetworkAccessAllowedForUrls,
     prefs::kManagedDirectSocketsPrivateNetworkAccessBlockedForUrls,
+#if BUILDFLAG(IS_CHROMEOS)
+    prefs::kManagedSmartCardConnectAllowedForUrls,
+    prefs::kManagedSmartCardConnectBlockedForUrls,
+#endif
+    prefs::kManagedControlledFrameAllowedForUrls,
+    prefs::kManagedControlledFrameBlockedForUrls,
 };
 
 // The following preferences are only used to indicate if a default content
@@ -223,6 +243,7 @@ constexpr const char* kManagedDefaultPrefs[] = {
     prefs::kManagedDefaultWebPrintingSetting,
     prefs::kManagedDefaultDirectSocketsSetting,
     prefs::kManagedDefaultDirectSocketsPrivateNetworkAccessSetting,
+    prefs::kManagedDefaultControlledFrameSetting,
 };
 
 void ReportCookiesAllowedForUrlsUsage(
@@ -336,6 +357,8 @@ const PolicyProvider::PrefsForManagedDefaultMapEntry
          prefs::kManagedDefaultDirectSocketsSetting},
         {ContentSettingsType::DIRECT_SOCKETS_PRIVATE_NETWORK_ACCESS,
          prefs::kManagedDefaultDirectSocketsPrivateNetworkAccessSetting},
+        {ContentSettingsType::CONTROLLED_FRAME,
+         prefs::kManagedDefaultControlledFrameSetting},
 };
 
 // static
@@ -410,17 +433,14 @@ void PolicyProvider::GetContentSettingsFromPreferences() {
     DCHECK(!pref->HasExtensionSetting());
 
     if (!pref->GetValue()->is_list()) {
-      NOTREACHED_IN_MIGRATION()
-          << "Could not read patterns from " << entry.pref_name;
-      return;
+      NOTREACHED() << "Could not read patterns from " << entry.pref_name;
     }
 
     const base::Value::List& pattern_str_list = pref->GetValue()->GetList();
     for (size_t i = 0; i < pattern_str_list.size(); ++i) {
       if (!pattern_str_list[i].is_string()) {
-        NOTREACHED_IN_MIGRATION() << "Could not read content settings pattern #"
-                                  << i << " from " << entry.pref_name;
-        continue;
+        NOTREACHED() << "Could not read content settings pattern #" << i
+                     << " from " << entry.pref_name;
       }
 
       const std::string& original_pattern_str = pattern_str_list[i].GetString();
@@ -434,6 +454,17 @@ void PolicyProvider::GetContentSettingsFromPreferences() {
                 << original_pattern_str;
         continue;
       }
+
+#if BUILDFLAG(IS_CHROMEOS)
+      if (entry.content_type == ContentSettingsType::SMART_CARD_GUARD &&
+          entry.setting == CONTENT_SETTING_ALLOW &&
+          !pattern_pair.first.MatchesSingleOrigin()) {
+        VLOG(1) << "Smart card reader access cannot be allowed by wildcard, "
+                   "skipping pattern "
+                << original_pattern_str;
+        continue;
+      }
+#endif
 
       DCHECK_NE(entry.content_type,
                 ContentSettingsType::AUTO_SELECT_CERTIFICATE);
@@ -474,8 +505,7 @@ void PolicyProvider::GetAutoSelectCertificateSettingsFromPreferences() {
   DCHECK(!pref->HasExtensionSetting());
 
   if (!pref->GetValue()->is_list()) {
-    NOTREACHED_IN_MIGRATION();
-    return;
+    NOTREACHED();
   }
 
   // Parse the list of pattern filter strings. A pattern filter string has
@@ -498,21 +528,20 @@ void PolicyProvider::GetAutoSelectCertificateSettingsFromPreferences() {
   std::unordered_map<std::string, base::Value::Dict> filters_map;
   for (const auto& pattern_filter_str : pref->GetValue()->GetList()) {
     if (!pattern_filter_str.is_string()) {
-      NOTREACHED_IN_MIGRATION();
-      continue;
+      NOTREACHED();
     }
 
-    std::optional<base::Value> pattern_filter = base::JSONReader::Read(
-        pattern_filter_str.GetString(), base::JSON_ALLOW_TRAILING_COMMAS);
-    if (!pattern_filter || !pattern_filter->is_dict()) {
+    std::optional<base::Value::Dict> pattern_filter =
+        base::JSONReader::ReadDict(pattern_filter_str.GetString(),
+                                   base::JSON_ALLOW_TRAILING_COMMAS);
+    if (!pattern_filter) {
       VLOG(1) << "Ignoring invalid certificate auto select setting. Reason:"
               << " Invalid JSON object: " << pattern_filter_str.GetString();
       continue;
     }
 
-    const base::Value::Dict& pattern_filter_dict = pattern_filter->GetDict();
-    const std::string* pattern = pattern_filter_dict.FindString("pattern");
-    const base::Value* filter = pattern_filter_dict.Find("filter");
+    const std::string* pattern = pattern_filter->FindString("pattern");
+    const base::Value* filter = pattern_filter->Find("filter");
     if (!pattern || !filter) {
       VLOG(1) << "Ignoring invalid certificate auto select setting. Reason:"
               << " Missing pattern or filter.";

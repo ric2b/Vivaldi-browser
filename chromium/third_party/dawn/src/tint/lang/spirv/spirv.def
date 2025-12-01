@@ -318,6 +318,51 @@ implicit(N: num, T: scalar) fn select(vec<N, bool>, vec<N, T>, vec<N, T>) -> vec
 implicit(T: f32_f16, N: num, M: num) fn vector_times_matrix(vec<N, T>, mat<M, N, T>) -> vec<M, T>
 implicit(T: f32_f16, N: num) fn vector_times_scalar(vec<N, T>, T) -> vec<N, T>
 
+implicit(T: f32_f16) fn normalize(T) -> T
+implicit(N: num, T: f32_f16) fn normalize(vec<N, T>) -> vec<N, T>
+
+implicit(T: f32_f16) fn inverse(mat2x2<T>) -> mat2x2<T>
+implicit(T: f32_f16) fn inverse(mat3x3<T>) -> mat3x3<T>
+implicit(T: f32_f16) fn inverse(mat4x4<T>) -> mat4x4<T>
+
+implicit(T: iu32) fn sign<R: iu32>(T) -> R
+implicit(T: iu32, N: num) fn sign<R: iu32>(vec<N, T>) -> vec<N, R>
+
+implicit(T: iu32) fn abs<R: iu32>(T) -> R
+implicit(T: iu32, N: num) fn abs<R: iu32>(vec<N, T>) -> vec<N, R>
+
+implicit(T: iu32, U: iu32) fn smax<R: iu32>(T, U) -> R
+implicit(T: iu32, U: iu32, N: num) fn smax<R: iu32>(vec<N, T>, vec<N, U>) -> vec<N, R>
+implicit(T: iu32, U: iu32) fn smin<R: iu32>(T, U) -> R
+implicit(T: iu32, U: iu32, N: num) fn smin<R: iu32>(vec<N, T>, vec<N, U>) -> vec<N, R>
+implicit(T: iu32, U: iu32, V: iu32) fn sclamp<R: iu32>(T, U, V) -> R
+implicit(T: iu32, U: iu32, V: iu32, N: num) fn sclamp<R: iu32>(vec<N, T>, vec<N, U>,  vec<N, V>) -> vec<N, R>
+
+implicit(T: iu32, U: iu32) fn umax<R: iu32>(T, U) -> R
+implicit(T: iu32, U: iu32, N: num) fn umax<R: iu32>(vec<N, T>, vec<N, U>) -> vec<N, R>
+implicit(T: iu32, U: iu32) fn umin<R: iu32>(T, U) -> R
+implicit(T: iu32, U: iu32, N: num) fn umin<R: iu32>(vec<N, T>, vec<N, U>) -> vec<N, R>
+implicit(T: iu32, U: iu32, V: iu32) fn uclamp<R: iu32>(T, U, V) -> R
+implicit(T: iu32, U: iu32, V: iu32, N: num) fn uclamp<R: iu32>(vec<N, T>, vec<N, U>,  vec<N, V>) -> vec<N, R>
+
+implicit(T: iu32) fn findILsb<R: iu32>(T) -> R
+implicit(T: iu32, N: num) fn findILsb<R: iu32>(vec<N, T>) -> vec<N, R>
+implicit(T: iu32) fn findSMsb<R: iu32>(T) -> R
+implicit(T: iu32, N: num) fn findSMsb<R: iu32>(vec<N, T>) -> vec<N, R>
+implicit(T: iu32) fn findUMsb<R: iu32>(T) -> R
+implicit(T: iu32, N: num) fn findUMsb<R: iu32>(vec<N, T>) -> vec<N, R>
+
+implicit(T: f32_f16) fn refract(T, T, T) -> T
+implicit(T: f32_f16, N: num) fn refract(vec<N, T>, vec<N, T>, T) -> vec<N, T>
+implicit(T: f32_f16) fn reflect(T, T) -> T
+implicit(T: f32_f16, N: num) fn reflect(vec<N, T>, vec<N, T>) -> vec<N, T>
+
+implicit(T: f32_f16) fn faceForward(T, T, T) -> T
+implicit(T: f32_f16, N: num) fn faceForward(vec<N, T>, vec<N, T>, vec<N, T>) -> vec<N, T>
+
+implicit(T: f32_f16, U: iu32) fn ldexp(T, U) -> T
+implicit(N: num, T: f32_f16, U: iu32) fn ldexp(vec<N, T>, vec<N, U>) -> vec<N, T>
+
 ////////////////////////////////////////////////////////////////////////////////
 // SPV_KHR_integer_dot_product instructions
 ////////////////////////////////////////////////////////////////////////////////

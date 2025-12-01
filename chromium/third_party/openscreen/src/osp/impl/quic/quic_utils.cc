@@ -17,7 +17,7 @@ quic::QuicIpAddress ToQuicIpAddress(const IPAddress& address) {
     address.CopyToV4(address_8);
     const uint32_t address_32 = (address_8[3] << 24) + (address_8[2] << 16) +
                                 (address_8[1] << 8) + (address_8[0]);
-    const in_addr result{address_32};
+    const in_addr result = {address_32};
     static_assert(sizeof(result) == IPAddress::kV4Size,
                   "Address size mismatch");
     return quic::QuicIpAddress(result);

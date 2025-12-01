@@ -127,17 +127,16 @@ class CookieManager {
   void SetCookie(JNIEnv* env,
                  const base::android::JavaParamRef<jobject>& obj,
                  const base::android::JavaParamRef<jstring>& url,
-                 const base::android::JavaParamRef<jstring>& value,
+                 std::string& value,
                  const base::android::JavaParamRef<jobject>& java_callback);
   void SetCookieSync(JNIEnv* env,
                      const base::android::JavaParamRef<jobject>& obj,
                      const base::android::JavaParamRef<jstring>& url,
-                     const base::android::JavaParamRef<jstring>& value);
+                     std::string& value);
 
-  base::android::ScopedJavaLocalRef<jstring> GetCookie(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj,
-      const base::android::JavaParamRef<jstring>& url);
+  std::string GetCookie(JNIEnv* env,
+                        const base::android::JavaParamRef<jobject>& obj,
+                        const base::android::JavaParamRef<jstring>& url);
 
   base::android::ScopedJavaLocalRef<jobjectArray> GetCookieInfo(
       JNIEnv* env,
@@ -258,6 +257,10 @@ class CookieManager {
   // cookies are cleared before the browser starts we need a way flag the
   // need to clear them later.
   void ClearClientHintsCachedPerOriginMapIfNeeded();
+
+  // We want to detect if there are any apps requesting cookies that may not
+  // get all the cookies for a particular URL back due to CHIPS being enabled.
+  void RecordExcludedPartitionedCookies(const GURL& host);
 
   // Returns the AwBrowserContext associated with the same profile as this
   // CookieManager. For the default profile, the AwBrowserContext is not

@@ -26,7 +26,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/enterprise/browser_management/management_service_factory.h"
 #include "chrome/browser/first_run/first_run.h"
-#include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/metrics/chrome_metrics_services_manager_client.h"
 #include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/browser/prefs/chrome_pref_service_factory.h"
@@ -94,12 +93,6 @@ GetSwitchDependentFeatureOverrides(const base::CommandLine& command_line) {
       // Overrides for --enable-download-warning-improvements.
       {switches::kEnableDownloadWarningImprovements,
        std::cref(safe_browsing::kDownloadTailoredWarnings),
-       base::FeatureList::OVERRIDE_ENABLE_FEATURE},
-      {switches::kEnableDownloadWarningImprovements,
-       std::cref(safe_browsing::kDeepScanningPromptRemoval),
-       base::FeatureList::OVERRIDE_ENABLE_FEATURE},
-      {switches::kEnableDownloadWarningImprovements,
-       std::cref(safe_browsing::kDangerousDownloadInterstitial),
        base::FeatureList::OVERRIDE_ENABLE_FEATURE},
 
       // Override for --privacy-sandbox-ads-apis.

@@ -6,26 +6,20 @@
 #include <memory>
 
 #include "osp/impl/dns_sd_watcher_client.h"
-#include "osp/impl/service_listener_impl.h"
 #include "osp/public/service_listener.h"
 #include "osp/public/service_listener_factory.h"
+#include "platform/api/task_runner.h"
 
-namespace openscreen {
-
-class TaskRunner;
-
-namespace osp {
+namespace openscreen::osp {
 
 // static
 std::unique_ptr<ServiceListener> ServiceListenerFactory::Create(
     const ServiceListener::Config& config,
     TaskRunner& task_runner) {
   auto dns_sd_client = std::make_unique<DnsSdWatcherClient>(task_runner);
-  auto listener_impl =
-      std::make_unique<ServiceListenerImpl>(std::move(dns_sd_client));
-  listener_impl->SetConfig(config);
-  return listener_impl;
+  auto listener = std::make_unique<ServiceListener>(std::move(dns_sd_client));
+  listener->SetConfig(config);
+  return listener;
 }
 
-}  // namespace osp
-}  // namespace openscreen
+}  // namespace openscreen::osp

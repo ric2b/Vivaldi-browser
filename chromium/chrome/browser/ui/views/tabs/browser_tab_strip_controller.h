@@ -24,6 +24,7 @@
 class Browser;
 class BrowserNonClientFrameView;
 class Tab;
+class TabGroup;
 
 namespace content {
 class WebContents;
@@ -65,12 +66,16 @@ class BrowserTabStripController : public TabStripController,
   // TabStripController implementation:
   const ui::ListSelectionModel& GetSelectionModel() const override;
   int GetCount() const override;
+  bool CanShowModalUI() const override;
+  std::unique_ptr<ScopedTabStripModalUI> ShowModalUI() override;
   bool IsValidIndex(int model_index) const override;
   bool IsActiveTab(int model_index) const override;
   std::optional<int> GetActiveIndex() const override;
   bool IsTabSelected(int model_index) const override;
   bool IsTabPinned(int model_index) const override;
   void SelectTab(int model_index, const ui::Event& event) override;
+  void RecordMetricsOnTabSelectionChange(
+      std::optional<tab_groups::TabGroupId> group) override;
   void ExtendSelectionTo(int model_index) override;
   void ToggleSelected(int model_index) override;
   void AddSelectionFromAnchorTo(int model_index) override;
@@ -84,8 +89,9 @@ class BrowserTabStripController : public TabStripController,
   void RemoveTabFromGroup(int model_index) override;
   void MoveTab(int start_index, int final_index) override;
   void MoveGroup(const tab_groups::TabGroupId& group, int final_index) override;
+  using TabStripController::ToggleTabGroupCollapsedState;
   void ToggleTabGroupCollapsedState(
-      const tab_groups::TabGroupId group,
+      tab_groups::TabGroupId group,
       ToggleTabGroupCollapsedStateOrigin origin) override;
   void ShowContextMenuForTab(Tab* tab,
                              const gfx::Point& p,
@@ -103,6 +109,7 @@ class BrowserTabStripController : public TabStripController,
       const tab_groups::TabGroupId& group_id) const override;
   tab_groups::TabGroupColorId GetGroupColorId(
       const tab_groups::TabGroupId& group_id) const override;
+  TabGroup* GetTabGroup(const tab_groups::TabGroupId& group_id) const override;
   bool IsGroupCollapsed(const tab_groups::TabGroupId& group) const override;
 
   void SetVisualDataForGroup(

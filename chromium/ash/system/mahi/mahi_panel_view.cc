@@ -93,6 +93,9 @@ constexpr int kAskQuestionContainerCornerRadius = 8;
 constexpr int kInputRowContainerBetweenChildSpacing = 8;
 constexpr gfx::Insets kInputTextfieldPadding = gfx::Insets::TLBR(0, 0, 0, 8);
 
+constexpr int kDragHandleIconSize = 12;
+constexpr gfx::Insets kDragHandleIconPadding = gfx::Insets::VH(6, 6);
+
 // The below constants for the feedback buttons and cutout dimensions refer to
 // the following spec, where an order is designated for the first, second, and
 // third curves of the cutout in the content section's bottom-right corner:
@@ -103,8 +106,6 @@ constexpr gfx::Insets kInfoSparkIconPadding = gfx::Insets::VH(0, 2);
 // There's an 8px extra spacing between the scroll view and the input textfield
 // (on top of the default 8px spacing for the whole panel).
 constexpr int kScrollViewAndAskQuestionSpacing = 8;
-
-constexpr int kFooterSpacing = 1;
 
 constexpr base::TimeDelta kPanelShowAnimationDelay = base::Milliseconds(50);
 constexpr base::TimeDelta kPanelShowAnimationDuration = base::Milliseconds(300);
@@ -528,6 +529,23 @@ MahiPanelView::MahiPanelView(MahiUiController* ui_controller)
       views::HighlightBorder::Type::kHighlightBorderOnShadow,
       /*insets_type=*/views::HighlightBorder::InsetsType::kHalfInsets));
 
+  // If resizing is enabled, display the drag handle icon at the bottom right
+  // corner of the panel.
+  if (base::FeatureList::IsEnabled(chromeos::features::kMahiPanelResizable)) {
+    AddChildView(
+        views::Builder<views::BoxLayoutView>()
+            .SetMainAxisAlignment(views::LayoutAlignment::kEnd)
+            .SetCrossAxisAlignment(views::LayoutAlignment::kEnd)
+            .AddChild(views::Builder<views::ImageView>()
+                          .SetID(mahi_constants::ViewId::kDragHandleIcon)
+                          .SetImage(ui::ImageModel::FromVectorIcon(
+                              kDragHandleIcon, cros_tokens::kCrosSysSecondary,
+                              kDragHandleIconSize))
+                          .SetBorder(
+                              views::CreateEmptyBorder(kDragHandleIconPadding)))
+            .Build());
+  }
+
   // The `main_container` is used to anchor the contents to the middle of the
   // panel when its size is animating. The anchoring to middle effect is
   // achieved by setting a transform on the `main_container`s layer and
@@ -714,48 +732,29 @@ MahiPanelView::MahiPanelView(MahiUiController* ui_controller)
   question_textfield_->RemoveHoverEffect();
   InstallTextfieldFocusRing(question_textfield_, send_button_);
 
-  std::unique_ptr<views::View> footer_view;
+  std::vector<size_t> offsets;
+  const std::u16string link_text =
+      l10n_util::GetStringUTF16(IDS_ASH_MAHI_LEARN_MORE_LINK_LABEL_TEXT);
+  std::u16string footer_text;
   if (mahi_utils::ShouldShowFeedbackButton()) {
-    footer_view =
-        views::Builder<views::BoxLayoutView>()
-            .SetOrientation(views::BoxLayout::Orientation::kHorizontal)
-            .SetMainAxisAlignment(views::BoxLayout::MainAxisAlignment::kCenter)
-            .SetBetweenChildSpacing(kFooterSpacing)
-            .AddChildren(views::Builder<views::Label>()
-                             .SetID(mahi_constants::ViewId::kFooterLabel)
-                             .SetText(l10n_util::GetStringUTF16(
-                                 IDS_ASH_MAHI_PANEL_DISCLAIMER)),
-                         views::Builder<views::Link>()
-                             .SetText(l10n_util::GetStringUTF16(
-                                 IDS_ASH_MAHI_LEARN_MORE_LINK_LABEL_TEXT))
-                             .SetAccessibleName(l10n_util::GetStringUTF16(
-                                 IDS_ASH_MAHI_LEARN_MORE_LINK_ACCESSIBLE_NAME))
-                             .SetCallback(base::BindRepeating(
-                                 &MahiPanelView::OnLearnMoreLinkClicked,
-                                 weak_ptr_factory_.GetWeakPtr()))
-                             .SetID(mahi_constants::ViewId::kLearnMoreLink))
-            .Build();
+    footer_text = l10n_util::GetStringFUTF16(IDS_ASH_MAHI_PANEL_DISCLAIMER,
+                                             {link_text}, &offsets);
   } else {
-    // Use `views::StyledLabel` here instead so that the learn more link can be
-    // displayed in the same row as the multilined footer text.
-    std::vector<size_t> offsets;
-    const std::u16string link_text =
-        l10n_util::GetStringUTF16(IDS_ASH_MAHI_LEARN_MORE_LINK_LABEL_TEXT);
-    const std::u16string footer_text = l10n_util::GetStringFUTF16(
+    footer_text = l10n_util::GetStringFUTF16(
         IDS_ASH_MAHI_PANEL_DISCLAIMER_FEEDBACK_DISABLED, {link_text}, &offsets);
-    footer_view =
-        views::Builder<views::StyledLabel>()
-            .SetID(mahi_constants::ViewId::kFooterLabel)
-            .SetText(footer_text)
-            .AddStyleRange(
-                gfx::Range(offsets.at(0), offsets.at(0) + link_text.length()),
-                GetLinkTextStyle(
-                    base::BindRepeating(&MahiPanelView::OnLearnMoreLinkClicked,
-                                        weak_ptr_factory_.GetWeakPtr())))
-            .SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_CENTER)
-            .SetAutoColorReadabilityEnabled(false)
-            .Build();
   }
+  std::unique_ptr<views::View> footer_view =
+      views::Builder<views::StyledLabel>()
+          .SetID(mahi_constants::ViewId::kFooterLabel)
+          .SetText(footer_text)
+          .AddStyleRange(
+              gfx::Range(offsets.at(0), offsets.at(0) + link_text.length()),
+              GetLinkTextStyle(
+                  base::BindRepeating(&MahiPanelView::OnLearnMoreLinkClicked,
+                                      weak_ptr_factory_.GetWeakPtr())))
+          .SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_CENTER)
+          .SetAutoColorReadabilityEnabled(false)
+          .Build();
 
   main_container_->AddChildView(std::move(footer_view));
 
@@ -819,6 +818,7 @@ std::unique_ptr<views::View> MahiPanelView::CreateHeaderRow() {
           // The Panel's title label
           views::Builder<views::Label>()
               .SetText(l10n_util::GetStringUTF16(IDS_ASH_MAHI_PANEL_TITLE))
+              .SetAccessibleRole(ax::mojom::Role::kHeading)
               .SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT)
               .SetFontList(TypographyProvider::Get()->ResolveTypographyToken(
                   TypographyToken::kCrosButton1))
@@ -885,8 +885,7 @@ void MahiPanelView::OnUpdated(const MahiUiUpdate& update) {
       send_button_->SetEnabled(true);
       return;
     case MahiUiUpdateType::kContentsRefreshInitiated: {
-      content_source_button_->RefreshContentSourceInfo(
-          /*elucidation_in_use=*/false);
+      content_source_button_->RefreshContentSourceInfo();
 
       // Reset feedback buttons when new content is requested.
       thumbs_up_button_->SetToggled(false);
@@ -894,8 +893,7 @@ void MahiPanelView::OnUpdated(const MahiUiUpdate& update) {
       return;
     }
     case MahiUiUpdateType::kElucidationRequested: {
-      content_source_button_->RefreshContentSourceInfo(
-          /*elucidation_in_use=*/true);
+      content_source_button_->RefreshContentSourceInfo();
       return;
     }
     case MahiUiUpdateType::kErrorReceived:

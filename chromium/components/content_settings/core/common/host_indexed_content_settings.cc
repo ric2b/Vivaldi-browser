@@ -66,7 +66,7 @@ const RuleEntry* FindContentSetting(const GURL& primary_url,
                                     const Rules& settings,
                                     const base::Clock* clock,
                                     bool return_expired_settings_) {
-  const auto it = base::ranges::find_if(settings, [&](const auto& entry) {
+  const auto it = std::ranges::find_if(settings, [&](const auto& entry) {
     return entry.first.primary_pattern.Matches(primary_url) &&
            entry.first.secondary_pattern.Matches(secondary_url) &&
            (return_expired_settings_ ||
@@ -184,7 +184,7 @@ HostIndexedContentSettings::Iterator::operator++() {
         // We have reached the end.
         break;
       case Stage::kInvalid:
-        NOTREACHED_IN_MIGRATION();
+        NOTREACHED();
     }
   }
   return *this;
@@ -214,7 +214,7 @@ void HostIndexedContentSettings::Iterator::SetStage(Stage stage) {
         break;
       }
       // Fall through to the next index structure if the requested one is empty.
-      ABSL_FALLTHROUGH_INTENDED;
+      [[fallthrough]];
     case Stage::kSecondaryHost:
       if (!index_->secondary_host_indexed_.empty()) {
         stage_ = Stage::kSecondaryHost;
@@ -222,7 +222,7 @@ void HostIndexedContentSettings::Iterator::SetStage(Stage stage) {
         break;
       }
       // Fall through to the next index structure if the requested one is empty.
-      ABSL_FALLTHROUGH_INTENDED;
+      [[fallthrough]];
     case Stage::kWildcard:
       stage_ = Stage::kWildcard;
       next_map_iterator_ = {};
@@ -231,7 +231,7 @@ void HostIndexedContentSettings::Iterator::SetStage(Stage stage) {
       current_end_ = index_->wildcard_settings_.end();
       break;
     case Stage::kInvalid:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
 }
 

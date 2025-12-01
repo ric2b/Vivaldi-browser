@@ -13,5 +13,10 @@ found in the LICENSE file.
     <item type="id" name="omnibox_suggestions_dropdown" />
     <item type="id" name="omnibox_actions_carousel" />
     <item type="id" name="base_suggestion_view_metadata_key" />
+
+    <!-- Used by OmniboxSuggestionsEmbedderImpl to calculate placement of suggestions list -->
+    <item type="id" name="control_container" />
+    <item type="id" name="coordinator" />
+
     <item type="id" name="search_engine_suggestion_stub" /> <!-- Vivaldi -->
 </resources>

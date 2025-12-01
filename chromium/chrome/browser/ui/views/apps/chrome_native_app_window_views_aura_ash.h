@@ -32,7 +32,7 @@ enum class TabletState;
 namespace gfx {
 class ImageSkia;
 class RoundedCornersF;
-}
+}  // namespace gfx
 
 namespace ui {
 class MenuModel;
@@ -121,6 +121,7 @@ class ChromeNativeAppWindowViewsAuraAsh
   bool IsExclusiveAccessBubbleDisplayed() const override;
   void OnExclusiveAccessUserInput() override;
   content::WebContents* GetWebContentsForExclusiveAccess() override;
+  bool CanUserEnterFullscreen() const override;
   bool CanUserExitFullscreen() const override;
 
   // ExclusiveAccessBubbleViewsContext:

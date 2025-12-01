@@ -278,11 +278,6 @@ class ContextMtl : public ContextImpl, public mtl::Context
                      const char *file,
                      const char *function,
                      unsigned int line) override;
-    void handleError(NSError *error,
-                     const char *message,
-                     const char *file,
-                     const char *function,
-                     unsigned int line) override;
 
     using ContextImpl::handleError;
 
@@ -532,6 +527,8 @@ class ContextMtl : public ContextImpl, public mtl::Context
                                          bool *pipelineDescChanged);
 
     angle::Result startOcclusionQueryInRenderPass(QueryMtl *query, bool clearOldValue);
+
+    angle::Result checkCommandBufferError();
 
     // Dirty bits.
     enum DirtyBitType : size_t

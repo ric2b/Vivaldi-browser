@@ -6,6 +6,9 @@
 
 #import "base/memory/raw_ptr.h"
 #import "base/test/scoped_feature_list.h"
+#import "components/commerce/core/commerce_feature_list.h"
+#import "components/commerce/core/feature_utils.h"
+#import "components/commerce/core/mock_account_checker.h"
 #import "components/commerce/core/mock_shopping_service.h"
 #import "components/variations/service/variations_service.h"
 #import "components/variations/service/variations_service_client.h"
@@ -37,22 +40,10 @@ class ParcelTrackingUtilTest : public PlatformTest {
     profile_ = std::move(builder).Build();
     auth_service_ = AuthenticationServiceFactory::GetForProfile(profile_.get());
     shopping_service_ = std::make_unique<commerce::MockShoppingService>();
-    shopping_service_->SetIsParcelTrackingEligible(true);
+    account_checker_ = std::make_unique<commerce::MockAccountChecker>();
+    shopping_service_->SetAccountChecker(account_checker_.get());
+    account_checker_->SetSignedIn(false);
     fake_identity_ = [FakeSystemIdentity fakeIdentity1];
-  }
-
-  void SignIn() {
-    FakeSystemIdentityManager* system_identity_manager =
-        FakeSystemIdentityManager::FromSystemIdentityManager(
-            GetApplicationContext()->GetSystemIdentityManager());
-    system_identity_manager->AddIdentity(fake_identity_);
-    auth_service_->SignIn(fake_identity_,
-                          signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
-  }
-
-  void SignOut() {
-    auth_service_->SignOut(signin_metrics::ProfileSignout::kTest,
-                           /*force_clear_browsing_data=*/false, nil);
   }
 
   void SetPromptDisplayedStatus(bool displayed) {
@@ -63,6 +54,7 @@ class ParcelTrackingUtilTest : public PlatformTest {
  protected:
   web::WebTaskEnvironment task_environment_;
   std::unique_ptr<commerce::MockShoppingService> shopping_service_;
+  std::unique_ptr<commerce::MockAccountChecker> account_checker_;
   IOSChromeScopedTestingLocalState scoped_testing_local_state_;
   std::unique_ptr<TestProfileIOS> profile_;
   raw_ptr<AuthenticationService> auth_service_ = nullptr;
@@ -72,7 +64,11 @@ class ParcelTrackingUtilTest : public PlatformTest {
 // Tests that IsUserEligibleParcelTrackingOptInPrompt returns true when the user
 // is eligible.
 TEST_F(ParcelTrackingUtilTest, UserIsEligibleForPrompt) {
-  SignIn();
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures({commerce::kParcelTracking},
+                                       {kIOSDisableParcelTracking});
+  account_checker_->SetSignedIn(true);
+  ASSERT_TRUE(commerce::IsParcelTrackingEligible(account_checker_.get()));
   SetPromptDisplayedStatus(false);
   IOSChromeScopedTestingVariationsService scoped_variations_service;
   scoped_variations_service.Get()->OverrideStoredPermanentCountry("us");
@@ -83,9 +79,12 @@ TEST_F(ParcelTrackingUtilTest, UserIsEligibleForPrompt) {
 // Tests that IsUserEligibleParcelTrackingOptInPrompt returns false when the
 // user is not signed in.
 TEST_F(ParcelTrackingUtilTest, NotSignedIn) {
-  SignOut();
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures({commerce::kParcelTracking},
+                                       {kIOSDisableParcelTracking});
+  account_checker_->SetSignedIn(false);
+  ASSERT_FALSE(commerce::IsParcelTrackingEligible(account_checker_.get()));
   SetPromptDisplayedStatus(false);
-  shopping_service_->SetIsParcelTrackingEligible(false);
   IOSChromeScopedTestingVariationsService scoped_variations_service;
   scoped_variations_service.Get()->OverrideStoredPermanentCountry("us");
   EXPECT_FALSE(IsUserEligibleParcelTrackingOptInPrompt(
@@ -93,11 +92,15 @@ TEST_F(ParcelTrackingUtilTest, NotSignedIn) {
 }
 
 // Tests that IsUserEligibleParcelTrackingOptInPrompt returns false when the
-// feature is disabled.
+// feature is disabled (i.e. kIOSDisableParcelTracking is enabled). This is now
+// the default behavior.
 TEST_F(ParcelTrackingUtilTest, FeatureDisabled) {
-  base::test::ScopedFeatureList scoped_feature_list(kIOSDisableParcelTracking);
-  SignIn();
+  base::test::ScopedFeatureList scoped_feature_list(commerce::kParcelTracking);
+  account_checker_->SetSignedIn(true);
+  ASSERT_TRUE(commerce::IsParcelTrackingEligible(account_checker_.get()));
   SetPromptDisplayedStatus(false);
+  IOSChromeScopedTestingVariationsService scoped_variations_service;
+  scoped_variations_service.Get()->OverrideStoredPermanentCountry("us");
   EXPECT_FALSE(IsUserEligibleParcelTrackingOptInPrompt(
       profile_->GetPrefs(), shopping_service_.get()));
 }
@@ -105,7 +108,11 @@ TEST_F(ParcelTrackingUtilTest, FeatureDisabled) {
 // Tests that IsUserEligibleParcelTrackingOptInPrompt returns false when the
 // user has seen the prompt.
 TEST_F(ParcelTrackingUtilTest, UserHasSeenPrompt) {
-  SignIn();
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures({commerce::kParcelTracking},
+                                       {kIOSDisableParcelTracking});
+  account_checker_->SetSignedIn(true);
+  ASSERT_TRUE(commerce::IsParcelTrackingEligible(account_checker_.get()));
   SetPromptDisplayedStatus(true);
   IOSChromeScopedTestingVariationsService scoped_variations_service;
   scoped_variations_service.Get()->OverrideStoredPermanentCountry("us");
@@ -116,8 +123,12 @@ TEST_F(ParcelTrackingUtilTest, UserHasSeenPrompt) {
 // Tests that IsUserEligibleParcelTrackingOptInPrompt returns false when the
 // permanent country is not set to US.
 TEST_F(ParcelTrackingUtilTest, CountryNotUS) {
-  SignIn();
-  SetPromptDisplayedStatus(true);
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures({commerce::kParcelTracking},
+                                       {kIOSDisableParcelTracking});
+  account_checker_->SetSignedIn(true);
+  ASSERT_TRUE(commerce::IsParcelTrackingEligible(account_checker_.get()));
+  SetPromptDisplayedStatus(false);
   EXPECT_FALSE(IsUserEligibleParcelTrackingOptInPrompt(
       profile_->GetPrefs(), shopping_service_.get()));
 }

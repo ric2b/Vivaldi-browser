@@ -367,6 +367,22 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   return NO;
 }
 
+- (BOOL)isBlockingExceptionsForURL:(GURL)url {
+  if (_ruleService && _ruleService->IsLoaded()) {
+    if (!url.is_valid()) {
+      return NO;
+    }
+    BOOL trackingException =
+        _ruleService->IsPartnerListAllowedDocument(RuleGroup::kTrackingRules,
+                                                   url);
+    BOOL blockingException =
+        _ruleService->IsPartnerListAllowedDocument(RuleGroup::kAdBlockingRules,
+                                                   url);
+    return trackingException || blockingException;
+  }
+  return NO;
+}
+
 #pragma mark - SETTERS
 - (void)setExceptionFromBlockingType:(ATBSettingType)blockingType {
   switch (blockingType) {
@@ -544,7 +560,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 
   VivaldiATBManagerHelper* managerHelper
       = [[VivaldiATBManagerHelper alloc] init];
-  ruleSourceItem.title = [managerHelper titleForSourceForKey:sourceURL];
+  NSString* unsafeTitle = @"";
   ruleSourceItem.is_from_url = knownSource.core.is_from_url();
   ruleSourceItem.source_url = sourceURL;
 
@@ -570,13 +586,18 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
     ruleSourceItem.is_fetching = ruleSource->is_fetching;
     ruleSourceItem.is_loaded = YES;
 
-    std::string unsafeTitle = ruleSource->unsafe_adblock_metadata.title;
-    if (!unsafeTitle.empty()) {
-      ruleSourceItem.title = base::SysUTF8ToNSString(unsafeTitle);
-    }
+    unsafeTitle = base::SysUTF8ToNSString(
+                               ruleSource->unsafe_adblock_metadata.title);
+
   } else {
     ruleSourceItem.is_fetching = NO;
   }
+
+  ruleSourceItem.title = [managerHelper
+      titleForSourceForKey:base::SysUTF8ToNSString(
+                               knownSource.preset_id.AsLowercaseString())
+                 sourceURL:sourceURL
+               unsafeTitle:unsafeTitle];
 
   return ruleSourceItem;
 }

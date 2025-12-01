@@ -1,3 +1,17 @@
+const fs = require('fs');
+
+/**
+ * Get the list of known LOB extensions.
+ */
+function getLobExtensions() {
+  const lines = fs.readFileSync('site/.gitignore', 'utf-8').split(/\r?\n/);
+  const start = lines.indexOf('# start_lob_ignore') + 1;
+  const end = lines.indexOf('# end_lob_ignore') - 1;
+  return lines.slice(start, end)
+    .filter((x) => x.length && !x.startsWith('#'))
+    .map((x) => x.slice(1));
+}
+
 module.exports = config => {
   config.addWatchTarget('./site/_stylesheets/');
 
@@ -14,6 +28,9 @@ module.exports = config => {
   // we use for page names, id's, etc. "Hello world" turns into 'hello-world".
   const uslug = require('uslug');
 
+  // `highlight.js` is a Node package that does syntax highlighting.
+  const hljs = require('highlight.js');
+
   // `markdown-it-attrs` is a markdown-it plugin that lets us customize the
   // `id` and `class` attributes of an element in the generated output;
   // we use this mostly for customizing the links in header tags.
@@ -21,11 +38,51 @@ module.exports = config => {
   // `markdown-it-toc-done-right` is a markdown-it plugin that adds support
   // for the `[TOC]` mechanism for generating the table of contents in a page.
   let mdlib = md({
+    highlight: (str, lang) => {
+      if (lang) {
+        if (hljs.getLanguage(lang)) {
+          try {
+            return hljs.highlight(str, {language: lang}).value;
+          } catch (_) {}
+        }
+      } else {
+        // highlight.js supports a ton of languages, but we only ever use a
+        // much smaller subset.  Restrict auto-detection to the ones we use
+        // to avoid detecting incorrectly.  If someone wants to override,
+        // they can specify the language explicitly in the markdown.
+        const result = hljs.highlightAuto(str, [
+          // keep-sorted start
+          'bash',
+          'c',
+          'cpp',
+          'css',
+          'gn',
+          'go',
+          'html',
+          'ini',
+          'javascript',
+          'json',
+          'md',
+          'protobuf',
+          'python',
+          'rust',
+          'shell',
+          'typescript',
+          'xml',
+          // keep-sorted end
+        ]);
+        return result.value;
+      }
+
+      // Return an empty string to get default code blocks.
+      return '';
+    },
     html: true,
   }).use(require('markdown-it-attrs'), {
     leftDelimiter: '{:',
     rightDelimiter: '}',
     allowedAttributes: ['id', 'class'],
+  }).use(require('markdown-it-footnote'), {
   }).use(anchor, {
     slugify: s => uslug(s),
     level: 2,
@@ -61,48 +118,14 @@ module.exports = config => {
 
   // Copy binary assets over to the dist/ directory.
 
-  // This list must be kept in sync with the lists in //.eleventy.js and
-  // //scripts/upload_lobs.py.
-  // TODO(crbug.com/1457683): Figure out how to share these lists to eliminate
-  // the duplication and need to keep them in sync.
-  let lob_extensions = [
-    '.ai',
-    '.bin',
-    '.bmp',
-    '.brd',
-    '.bz2',
-    '.crx',
-    '.config',
-    '.dia',
-    '.gif',
-    '.graffle',
-    '.ico',
-    '.jpg',
-    'jpg', // Some files are missing the '.' :(.,
-    '.jpeg',
-    '.mp4',
-    '.msi',
-    '.pdf',
-    'pdf',  // Some files are missing the '.' :(.
-    '.png',
-    'png',  // Some files are missing the '.' :(.
-    '.PNG',
-    '.swf',
-    '.svg',
-    '.tar.gz',
-    '.tiff',
-    '_trace',
-    '.webp',
-    '.xcf',
-    '.xlsx',
-    '.zip',
-  ];
+  const lob_extensions = getLobExtensions();
 
   // This should basically pick up everything that isn't a .md file
   // or a .sha1.
   // TODO(crbug.com/1457688): Figure out how to actually enforce this and get
   // rid of the "basically". There has to be a better approach. :).
   let extensions = lob_extensions.concat([
+    // keep-sorted start
     '.cpp',
     '.css',
     '.csv',
@@ -112,10 +135,11 @@ module.exports = config => {
     '.html',
     '.js',
     '.json',
-    'patch',
+    '.patch',
     '.py',
     '.txt',
-    '.xml'
+    '.xml',
+    // keep-sorted end
   ]);
 
   for (let ext of extensions) {
@@ -126,7 +150,6 @@ module.exports = config => {
   // tag must be run through this filter so that the hash of its contents
   // will be in the list of approved scripts in the CSP HTTP header.
   const crypto = require('crypto');
-  const fs = require('fs');
 
   let script_hashes = new Set();
   function cspHash(raw) {
@@ -180,7 +203,9 @@ module.exports = config => {
        '_scripts/@docsearch',
      'node_modules/@docsearch/css/dist':
        '_stylesheets/@docsearch',
-  })
+     'node_modules/highlight.js/styles/github*.min.css':
+       '_stylesheets/highlight.js/',
+  });
 
   return {
     dir: {

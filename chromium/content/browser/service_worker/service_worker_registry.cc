@@ -24,6 +24,7 @@
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_info.h"
+#include "content/browser/service_worker/service_worker_loader_helpers.h"
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/browser/service_worker/service_worker_version.h"
 #include "content/common/service_worker/service_worker_router_evaluator.h"
@@ -41,13 +42,6 @@
 namespace content {
 
 namespace {
-
-// When this is enabled, the browser will schedule
-// ServiceWorkerStorageControl's response in a kHighest priority
-// queue during startup. After startup, it has a normal priority.
-BASE_FEATURE(kServiceWorkerStorageControlResponseQueue,
-             "ServiceWorkerStorageControlResponseQueue",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 blink::ServiceWorkerStatusCode DatabaseStatusToStatusCode(
     storage::mojom::ServiceWorkerDatabaseStatus status) {
@@ -376,6 +370,20 @@ void ServiceWorkerRegistry::FindRegistrationForClientUrl(
         /*callback=*/base::DoNothing(),
         storage::mojom::ServiceWorkerDatabaseStatus::kErrorNotFound, nullptr,
         std::vector(scopes->begin(), scopes->end()));
+    return;
+  }
+  if (service_worker_loader_helpers::IsEligibleForSyntheticResponse(
+          client_url)) {
+    // If `client_url` is eligible for SyntheticResponse, create a fake
+    // ServiceWorker registration so that the navigation is handled by
+    // ServiceWorker main resource loader.
+    CreateInvokerAndStartRemoteCall(
+        &storage::mojom::ServiceWorkerStorageControl::
+            GetFakeRegistrationForClientUrl,
+        base::BindOnce(&ServiceWorkerRegistry::DidFindRegistrationForClientUrl,
+                       weak_factory_.GetWeakPtr(), client_url, key,
+                       trace_event_id, base::DoNothing()),
+        client_url, key);
     return;
   }
   CreateInvokerAndStartRemoteCall(
@@ -1078,7 +1086,7 @@ ServiceWorkerRegistry::GetOrCreateRegistration(
           base::MakeRefCounted<PolicyContainerHost>(
               PolicyContainerPolicies(*data.policy_container_policies)));
     }
-    if (data.router_rules && version->IsStaticRouterEnabled()) {
+    if (data.router_rules) {
       auto error = version->SetupRouterEvaluator(*data.router_rules);
       DCHECK_EQ(error, ServiceWorkerRouterEvaluatorErrorEnums::kNoError)
           << "Failed to setup RouterEvaluator from the provided "
@@ -1837,11 +1845,8 @@ ServiceWorkerRegistry::GetRemoteStorageControl() {
   if (!remote_storage_control_.is_bound()) {
     context_->wrapper()->BindStorageControl(
         remote_storage_control_.BindNewPipeAndPassReceiver(
-            base::FeatureList::IsEnabled(
-                kServiceWorkerStorageControlResponseQueue)
-                ? GetUIThreadTaskRunner(
-                      {BrowserTaskType::kServiceWorkerStorageControlResponse})
-                : base::SequencedTaskRunner::GetCurrentDefault()));
+            GetUIThreadTaskRunner(
+                {BrowserTaskType::kServiceWorkerStorageControlResponse})));
     DCHECK(remote_storage_control_.is_bound());
     remote_storage_control_.set_disconnect_handler(
         base::BindOnce(&ServiceWorkerRegistry::OnRemoteStorageDisconnected,

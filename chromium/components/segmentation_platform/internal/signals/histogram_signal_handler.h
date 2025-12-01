@@ -36,7 +36,7 @@ class HistogramSignalHandler {
     // Called when a histogram signal tracked by segmentation platform is
     // updated and written to database.
     virtual void OnHistogramSignalUpdated(const std::string& histogram_name,
-                                          base::HistogramBase::Sample) = 0;
+                                          base::HistogramBase::Sample32) = 0;
     ~Observer() override = default;
 
    protected:
@@ -67,10 +67,10 @@ class HistogramSignalHandler {
   void OnHistogramSample(proto::SignalType signal_type,
                          const char* histogram_name,
                          uint64_t name_hash,
-                         base::HistogramBase::Sample sample);
+                         base::HistogramBase::Sample32 sample);
 
   void OnSampleWritten(const std::string& histogram_name,
-                       base::HistogramBase::Sample sample,
+                       base::HistogramBase::Sample32 sample,
                        bool success);
 
   const std::string profile_id_;

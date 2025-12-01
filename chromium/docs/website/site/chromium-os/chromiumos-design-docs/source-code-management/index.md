@@ -61,7 +61,7 @@ so on. Examples:
 [gentoo](http://packages.gentoo.org/package/sys-power/acpid).
 
 **Distributed Version Control System (DVCS).** Without a
-[DVCS](http://en.wikipedia.org/wiki/Distributed_revision_control), distributed
+[DVCS](https://en.wikipedia.org/wiki/Distributed_revision_control), distributed
 development (working with upstream) is difficult. With a DVCS, cloning, merging,
 and pulling in upstream changes are common operations. For a traditional VCS,
 cloning an upstream repository involves initially using rsync to copy the

@@ -48,14 +48,13 @@ export class OriginTreeElement extends SecurityPanelSidebarTreeElement {
     return this.#originInternal;
   }
 
-  override onselect(): boolean {
+  override showElement(): void {
     this.listItemElement.dispatchEvent(new ShowOriginEvent(this.#originInternal));
-    return true;
   }
 }
 
 declare global {
   interface HTMLElementEventMap {
-    'showorigin': ShowOriginEvent;
+    showorigin: ShowOriginEvent;
   }
 }

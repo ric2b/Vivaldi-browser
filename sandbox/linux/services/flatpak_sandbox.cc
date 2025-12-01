@@ -61,7 +61,7 @@ struct PortalProperties : dbus::PropertySet {
 
 void WriteStringAsByteArray(dbus::MessageWriter* writer,
                             const std::string& str) {
-  writer->AppendArrayOfBytes(base::make_span(
+  writer->AppendArrayOfBytes(base::span(
       reinterpret_cast<const uint8_t*>(str.c_str()), str.size() + 1));
 }
 

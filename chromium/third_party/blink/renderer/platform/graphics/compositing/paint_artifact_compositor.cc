@@ -9,12 +9,12 @@
 
 #include "third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.h"
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
 #include "base/debug/dump_without_crashing.h"
 #include "base/logging.h"
-#include "base/ranges/algorithm.h"
 #include "cc/base/features.h"
 #include "cc/layers/solid_color_scrollbar_layer.h"
 #include "cc/paint/display_item_list.h"
@@ -278,14 +278,10 @@ void PaintArtifactCompositor::UpdatePaintedScrollTranslationsBeforeLayerization(
     if (it == painted_scroll_translations_.end()) {
       painted_scroll_translations_.insert(
           &scroll_translation,
-          ScrollTranslationInfo{.scrolling_contents_cull_rect =
-                                    hit_test_data->scrolling_contents_cull_rect,
-                                .is_composited = is_composited});
+          ScrollTranslationInfo{.is_composited = is_composited});
     } else {
       // The node was added in the second half of this function before.
       // Update the is_composited field now.
-      it->value.scrolling_contents_cull_rect =
-          hit_test_data->scrolling_contents_cull_rect;
       if (is_composited) {
         it->value.is_composited = true;
         it->value.force_main_thread_repaint = false;
@@ -869,8 +865,8 @@ SynthesizedClip& PaintArtifactCompositor::CreateOrReuseSynthesizedClipLayer(
     bool needs_layer,
     CompositorElementId& mask_isolation_id,
     CompositorElementId& mask_effect_id) {
-  auto entry = base::ranges::find_if(
-      synthesized_clip_cache_, [&clip](const auto& entry) {
+  auto entry =
+      std::ranges::find_if(synthesized_clip_cache_, [&clip](const auto& entry) {
         return entry.key == &clip && !entry.in_use;
       });
   if (entry == synthesized_clip_cache_.end()) {
@@ -945,10 +941,10 @@ void PaintArtifactCompositor::UpdateCompositorViewportProperties(
     CHECK(NeedsCompositedScrolling(*properties.outer_scroll_translation));
     painted_scroll_translations_.insert(
         properties.inner_scroll_translation,
-        ScrollTranslationInfo{InfiniteIntRect(), true});
+        ScrollTranslationInfo{.is_composited = true});
     painted_scroll_translations_.insert(
         properties.outer_scroll_translation,
-        ScrollTranslationInfo{InfiniteIntRect(), true});
+        ScrollTranslationInfo{.is_composited = true});
   }
 
   layer_tree_host->RegisterViewportPropertyIds(ids);
@@ -1012,9 +1008,8 @@ void PaintArtifactCompositor::Update(
   for (auto& node : scroll_translation_nodes) {
     property_tree_manager.EnsureCompositorScrollNode(*node);
   }
-  for (auto& [node, info] : painted_scroll_translations_) {
-    property_tree_manager.EnsureCompositorScrollAndTransformNode(
-        *node, info.scrolling_contents_cull_rect);
+  for (auto& [node, _] : painted_scroll_translations_) {
+    property_tree_manager.EnsureCompositorScrollAndTransformNode(*node);
   }
 
   cc::LayerSelection layer_selection;
@@ -1048,7 +1043,7 @@ void PaintArtifactCompositor::Update(
 
     int scroll_id =
         property_tree_manager.EnsureCompositorScrollAndTransformNode(
-            ScrollTranslationStateForLayer(pending_layer), InfiniteIntRect());
+            ScrollTranslationStateForLayer(pending_layer));
 
     layer_list_builder.Add(&layer);
 
@@ -1523,15 +1518,6 @@ void PaintArtifactCompositor::ShowDebugData() {
                    .Utf8();
 }
 #endif
-
-void PaintArtifactCompositor::ForAllContentLayersForTesting(
-    base::FunctionRef<void(ContentLayerClientImpl*)> func) const {
-  for (auto& pending_layer : pending_layers_) {
-    if (auto* client = pending_layer.GetContentLayerClient()) {
-      func(client);
-    }
-  }
-}
 
 ContentLayerClientImpl* PaintArtifactCompositor::ContentLayerClientForTesting(
     wtf_size_t i) const {

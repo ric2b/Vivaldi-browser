@@ -15,7 +15,9 @@
 #ifndef THIRD_PARTY_CENTIPEDE_SEED_CORPUS_MAKER_LIB_H_
 #define THIRD_PARTY_CENTIPEDE_SEED_CORPUS_MAKER_LIB_H_
 
+#include <cstdint>
 #include <iostream>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <variant>
@@ -31,11 +33,16 @@ namespace centipede {
 // Native struct used by the seed corpus library for seed corpus source.
 //
 // TODO(b/362576261): Currently this is mirroring the `proto::SeedCorpusSource`
-// proto. But in the future it may change with the core seeding API.
+// proto. But in the future it may change with the core seeding API - any
+// difference is commented below.
 struct SeedCorpusSource {
   std::string dir_glob;
   uint32_t num_recent_dirs;
   std::string shard_rel_glob;
+  // If non-empty, will be used to glob the individual input files (with one
+  // input in each file) in the source dirs. Any files matching `shard_rel_glob`
+  // will be skipped.
+  std::string individual_input_rel_glob;
   std::variant<float, uint32_t> sampled_fraction_or_count;
 };
 

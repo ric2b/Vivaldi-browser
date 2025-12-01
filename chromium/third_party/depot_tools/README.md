@@ -32,7 +32,7 @@ run `./update_depot_tools_toggle.py --disable`.
 To update package manually, run `update_depot_tools.bat` on Windows,
 or `./update_depot_tools` on Linux or Mac.
 
-On Windows only, running `gclient` will install `git` and `python`.
+On Windows only, running `gclient` will install `python`.
 
 
 ## Contributing

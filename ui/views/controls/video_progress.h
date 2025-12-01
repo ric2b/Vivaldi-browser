@@ -35,7 +35,7 @@ class VIEWS_EXPORT VideoProgress : public views::View {
   // View overrides
   bool OnMousePressed(const ui::MouseEvent& event) override;
   views::View* GetTooltipHandlerForPoint(const gfx::Point& point) override;
-  std::u16string GetTooltipText(const gfx::Point& p) const override;
+  std::u16string GetRenderedTooltipText(const gfx::Point& p) const override;
   ui::Cursor GetCursor(const ui::MouseEvent& event) override;
 
 

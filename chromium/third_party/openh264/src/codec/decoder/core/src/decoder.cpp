@@ -797,14 +797,13 @@ int32_t WelsDecodeBs (PWelsDecoderContext pCtx, const uint8_t* kpBsBuf, const in
           bNalStartBytes = true;
         } else if (pSrcNal[2 + iSrcIdx] == 0x03) {
           if ((3 + iSrcConsumed < iSrcLength) && pSrcNal[3 + iSrcIdx] > 0x03) {
-            pCtx->iErrorCode |= dsBitstreamError;
-            return pCtx->iErrorCode;
+            /* Just skip */
           } else {
             ST16 (pDstNal + iDstIdx, 0);
             iDstIdx      += 2;
-            iSrcIdx      += 3;
-            iSrcConsumed += 3;
           }
+          iSrcIdx      += 3;
+          iSrcConsumed += 3;
         } else { // 0x01
           bNalStartBytes = false;
 
@@ -845,6 +844,10 @@ int32_t WelsDecodeBs (PWelsDecoderContext pCtx, const uint8_t* kpBsBuf, const in
 #endif
             }
             return pCtx->iErrorCode;
+          }
+
+          if (pCtx->iErrorCode != ERR_NONE && !(pCtx->iErrorCode & dsDataErrorConcealed)) {
+              return pCtx->iErrorCode;
           }
 
           pDstNal += (iDstIdx + 4); //init, increase 4 reserved zero bytes, used to store the next NAL

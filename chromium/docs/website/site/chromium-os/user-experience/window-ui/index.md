@@ -21,7 +21,7 @@ navigation styles.
 
 ## Classic navigation
 
-![Classic navigation screenshot](/chromium-os/user-experience/window-ui/navpng)
+![Classic navigation screenshot](./nav.png)
 
 The most basic navigation style is that of a single maximized Chromium window.
 This is the equivalent of the Chromium browser windowing UI in maximized mode.
@@ -39,7 +39,7 @@ This is the equivalent of the Chromium browser windowing UI in maximized mode.
 
 ## Compact navigation
 
-![Compact navigation screenshot](/chromium-os/user-experience/window-ui/compact_navpng)
+![Compact navigation screenshot](./compact_nav.png)
 
 If we take the address bar out of the tab, it can be used as both a launcher
 and switcher; the user doesn't have to worry about replacing their active tab.
@@ -64,7 +64,7 @@ clicking on the tab.
 
 ## Sidetab navigation
 
-![Sidetab navigation screenshot](/chromium-os/user-experience/window-ui/side_navpng)
+![Sidetab navigation screenshot](./side_nav.png)
 
 
 By moving the tab-strip to the side, we gain a huge amount of real estate
@@ -88,7 +88,7 @@ used both for navigation as well as search.
 
 ## Touchscreen navigation
 
-![Touchscreen navigation screenshot](/chromium-os/user-experience/window-ui/TouchUI.png)
+![Touchscreen navigation screenshot](./TouchUI.png)
 
 For touch screens, we provide much larger tab and toolbar targets than on
 standard chrome. This UI takes up more screen space, but is ideal for portrait
@@ -98,8 +98,7 @@ edge depending on the device.
 
 ### Strengths
 
-*   Large, square targets for navigation.
-            [example](/chromium-os/user-experience/window-ui/TouchNav.png)
+*   Large, square targets for navigation. [example](./TouchNav.png)
 *   Supports quick navigation between a few common apps
 
 ### Weaknesses

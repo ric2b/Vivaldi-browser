@@ -380,10 +380,10 @@ cc_library(
     hdrs = ["minimize_crash.h"],
     deps = [
         ":centipede_callbacks",
-        ":early_exit",
         ":environment",
         ":mutation_input",
         ":runner_result",
+        ":stop",
         ":thread_pool",
         ":util",
         ":workdir",
@@ -619,7 +619,7 @@ cc_library(
     hdrs = ["command.h"],
     visibility = EXTENDED_API_VISIBILITY,
     deps = [
-        ":early_exit",
+        ":stop",
         ":util",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/log",
@@ -680,6 +680,7 @@ cc_library(
         "@com_google_absl//absl/base:nullability",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/time",
         "@com_google_fuzztest//common:blob_file",
@@ -711,9 +712,9 @@ cc_library(
 )
 
 cc_library(
-    name = "early_exit",
-    srcs = ["early_exit.cc"],
-    hdrs = ["early_exit.h"],
+    name = "stop",
+    srcs = ["stop.cc"],
+    hdrs = ["stop.h"],
     linkopts = select({
         "@platforms//os:macos": [],
         "//conditions:default": [
@@ -721,6 +722,7 @@ cc_library(
         ],
     }),
     visibility = PUBLIC_API_VISIBILITY,
+    deps = ["@com_google_absl//absl/time"],
 )
 
 cc_library(
@@ -761,7 +763,6 @@ cc_library(
         ":corpus",
         ":corpus_io",
         ":coverage",
-        ":early_exit",
         ":environment",
         ":feature",
         ":feature_set",
@@ -771,6 +772,7 @@ cc_library(
         ":rusage_profiler",
         ":rusage_stats",
         ":stats",
+        ":stop",
         ":symbol_table",
         ":util",
         ":workdir",
@@ -810,7 +812,6 @@ cc_library(
         ":command",
         ":coverage",
         ":distill",
-        ":early_exit",
         ":environment",
         ":minimize_crash",
         ":pc_info",
@@ -818,18 +819,22 @@ cc_library(
         ":runner_result",
         ":seed_corpus_maker_lib",
         ":stats",
+        ":stop",
         ":thread_pool",
         ":util",
         ":workdir",
         "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/cleanup",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/time",
         "@com_google_absl//absl/types:span",
+        "@com_google_fuzztest//common:bazel",
         "@com_google_fuzztest//common:blob_file",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:hash",
@@ -856,6 +861,7 @@ cc_library(
     deps = [
         ":feature",
         ":knobs",
+        "@com_google_absl//absl/base:no_destructor",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:check",
@@ -865,6 +871,7 @@ cc_library(
         "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//common:remote_file",
         "@com_google_fuzztest//common:status_macros",
+        "@com_google_fuzztest//fuzztest:configuration",
     ],
 )
 
@@ -910,8 +917,11 @@ cc_library(
         ":environment",
         ":mutation_input",
         ":runner_result",
+        ":stop",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:logging",
     ],
@@ -929,15 +939,15 @@ cc_library(
         "@com_google_absl//absl/random",
         "@com_google_absl//absl/types:span",
         "@com_google_fuzztest//common:defs",
-        "@com_google_fuzztest//fuzztest:coverage",
         "@com_google_fuzztest//fuzztest:domain_core",
+        "@com_google_fuzztest//fuzztest:table_of_recent_compares",
     ],
 )
 
 cc_library(
     name = "weak_sancov_stubs",
     srcs = ["weak_sancov_stubs.cc"],
-    visibility = PUBLIC_API_VISIBILITY,
+    visibility = ["//visibility:public"],
     alwayslink = 1,
 )
 
@@ -1034,7 +1044,10 @@ RUNNER_LINKOPTS = [
     "-ldl",  # for dlsym
     "-lpthread",  # for pthread_once
 ] + select({
-    "@platforms//os:macos": [],
+    "@platforms//os:macos": [
+        # For compatible behavior on weak symbols.
+        "-Wl,-undefined,dynamic_lookup",
+    ],
     "//conditions:default": [
         "-lrt",  # for shm_open
     ],
@@ -1115,6 +1128,7 @@ cc_library(
         ":thread_pool",
         ":util",
         ":workdir",
+        "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/random",
@@ -1228,6 +1242,9 @@ cc_test(
     srcs = ["environment_test.cc"],
     deps = [
         ":environment",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/time",
+        "@com_google_fuzztest//fuzztest:configuration",
         "@com_google_googletest//:gtest_main",
     ],
 )
@@ -1607,7 +1624,7 @@ cc_test(
     data = [":command_test_helper"],
     deps = [
         ":command",
-        ":early_exit",
+        ":stop",
         ":util",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/strings",
@@ -1679,8 +1696,11 @@ cc_test(
         ":feature",
         ":seed_corpus_maker_lib",
         ":workdir",
+        "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings",
+        "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:logging",
+        "@com_google_fuzztest//common:remote_file",
         "@com_google_fuzztest//common:test_util",
         "@com_google_googletest//:gtest_main",
     ],

@@ -5,6 +5,9 @@
 package org.chromium.chrome.browser.tasks.tab_management;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -34,13 +37,12 @@ import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.Callback;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.base.test.util.UserActionTester;
+import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.sync.SyncServiceFactory;
-import org.chromium.chrome.browser.tab.MockTab;
-import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
+import org.chromium.chrome.browser.tasks.tab_management.ActionConfirmationManager.MaybeBlockingResult;
 import org.chromium.components.browser_ui.widget.ActionConfirmationResult;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.signin.base.CoreAccountInfo;
@@ -54,10 +56,10 @@ import org.chromium.ui.base.TestActivity;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogProperties;
+import org.chromium.ui.modaldialog.ModalDialogProperties.ButtonType;
 import org.chromium.ui.modaldialog.ModalDialogProperties.Controller;
 import org.chromium.ui.modelutil.PropertyModel;
 
-import java.util.Arrays;
 import java.util.Collections;
 
 /** Unit tests for {@link ActionConfirmationManager}. */
@@ -66,12 +68,7 @@ public class ActionConfirmationManagerUnitTest {
     private static final String TEST_EMAIL = "test@gmail.com";
     private static final String GROUP_TITLE = "Group1";
 
-    private static final int TAB1_ID = 1;
-    private static final int TAB2_ID = 2;
-    private static final int TAB3_ID = 3;
-
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
-    @Rule public JniMocker mJniMocker = new JniMocker();
 
     @Rule
     public ActivityScenarioRule<TestActivity> mActivityScenarioRule =
@@ -79,9 +76,9 @@ public class ActionConfirmationManagerUnitTest {
 
     @Mock private Profile mProfile;
     @Mock private Activity mActivity;
-    @Mock private TabGroupModelFilter mTabGroupModelFilter;
     @Mock private ModalDialogManager mModalDialogManager;
     @Mock private Callback<Integer> mOnResult;
+    @Mock private Callback<MaybeBlockingResult> mOnMaybeBlockingResult;
     @Mock private SyncService mSyncService;
     @Mock private PrefService mPrefService;
     @Mock private UserPrefs.Natives mUserPrefsJni;
@@ -90,6 +87,7 @@ public class ActionConfirmationManagerUnitTest {
     @Mock private CoreAccountInfo mCoreAccountInfo;
 
     @Captor private ArgumentCaptor<PropertyModel> mPropertyModelArgumentCaptor;
+    @Captor private ArgumentCaptor<MaybeBlockingResult> mMaybeBlockingResultCaptor;
 
     private UserActionTester mActionTester;
 
@@ -97,14 +95,7 @@ public class ActionConfirmationManagerUnitTest {
     public void setUp() {
         mActionTester = new UserActionTester();
 
-        mJniMocker.mock(UserPrefsJni.TEST_HOOKS, mUserPrefsJni);
-
-        MockTab tab1 = new MockTab(TAB1_ID, mProfile);
-        when(mTabGroupModelFilter.getRelatedTabList(TAB1_ID)).thenReturn(Arrays.asList(tab1));
-        MockTab tab2 = new MockTab(TAB2_ID, mProfile);
-        MockTab tab3 = new MockTab(TAB3_ID, mProfile);
-        tab3.setRootId(TAB2_ID);
-        when(mTabGroupModelFilter.getRelatedTabList(TAB2_ID)).thenReturn(Arrays.asList(tab2, tab3));
+        UserPrefsJni.setInstanceForTesting(mUserPrefsJni);
 
         SyncServiceFactory.setInstanceForTesting(mSyncService);
         when(mUserPrefsJni.get(mProfile)).thenReturn(mPrefService);
@@ -130,80 +121,57 @@ public class ActionConfirmationManagerUnitTest {
     @Test
     public void testProcessDeleteGroupAttempt_Positive() {
         ActionConfirmationManager actionConfirmationManager =
-                new ActionConfirmationManager(
-                        mProfile, mActivity, mTabGroupModelFilter, mModalDialogManager);
+                new ActionConfirmationManager(mProfile, mActivity, mModalDialogManager);
         actionConfirmationManager.processDeleteGroupAttempt(mOnResult);
         verify(mModalDialogManager).showDialog(mPropertyModelArgumentCaptor.capture(), anyInt());
         Controller controller =
                 mPropertyModelArgumentCaptor.getValue().get(ModalDialogProperties.CONTROLLER);
-        controller.onDismiss(
-                mPropertyModelArgumentCaptor.getValue(),
-                DialogDismissalCause.POSITIVE_BUTTON_CLICKED);
+        controller.onClick(mPropertyModelArgumentCaptor.getValue(), ButtonType.POSITIVE);
         verify(mOnResult).onResult(ActionConfirmationResult.CONFIRMATION_POSITIVE);
     }
 
     @Test
     public void testProcessUngroupAttempt_Positive() {
         ActionConfirmationManager actionConfirmationManager =
-                new ActionConfirmationManager(
-                        mProfile, mActivity, mTabGroupModelFilter, mModalDialogManager);
+                new ActionConfirmationManager(mProfile, mActivity, mModalDialogManager);
         actionConfirmationManager.processUngroupAttempt(mOnResult);
         verify(mModalDialogManager).showDialog(mPropertyModelArgumentCaptor.capture(), anyInt());
         Controller controller =
                 mPropertyModelArgumentCaptor.getValue().get(ModalDialogProperties.CONTROLLER);
-        controller.onDismiss(
-                mPropertyModelArgumentCaptor.getValue(),
-                DialogDismissalCause.POSITIVE_BUTTON_CLICKED);
+        controller.onClick(mPropertyModelArgumentCaptor.getValue(), ButtonType.POSITIVE);
         verify(mOnResult).onResult(ActionConfirmationResult.CONFIRMATION_POSITIVE);
     }
 
     @Test
     public void testProcessUngroupTabAttempt_Positive() {
         ActionConfirmationManager actionConfirmationManager =
-                new ActionConfirmationManager(
-                        mProfile, mActivity, mTabGroupModelFilter, mModalDialogManager);
-        actionConfirmationManager.processUngroupTabAttempt(Arrays.asList(TAB1_ID), mOnResult);
+                new ActionConfirmationManager(mProfile, mActivity, mModalDialogManager);
+        actionConfirmationManager.processUngroupTabAttempt(mOnResult);
         verify(mModalDialogManager).showDialog(mPropertyModelArgumentCaptor.capture(), anyInt());
         Controller controller =
                 mPropertyModelArgumentCaptor.getValue().get(ModalDialogProperties.CONTROLLER);
-        controller.onDismiss(
-                mPropertyModelArgumentCaptor.getValue(),
-                DialogDismissalCause.POSITIVE_BUTTON_CLICKED);
+        controller.onClick(mPropertyModelArgumentCaptor.getValue(), ButtonType.POSITIVE);
         verify(mOnResult).onResult(ActionConfirmationResult.CONFIRMATION_POSITIVE);
     }
 
     @Test
     public void testProcessUngroupTabAttempt_Negative() {
         ActionConfirmationManager actionConfirmationManager =
-                new ActionConfirmationManager(
-                        mProfile, mActivity, mTabGroupModelFilter, mModalDialogManager);
-        actionConfirmationManager.processUngroupTabAttempt(Arrays.asList(TAB1_ID), mOnResult);
+                new ActionConfirmationManager(mProfile, mActivity, mModalDialogManager);
+        actionConfirmationManager.processUngroupTabAttempt(mOnResult);
         verify(mModalDialogManager).showDialog(mPropertyModelArgumentCaptor.capture(), anyInt());
         Controller controller =
                 mPropertyModelArgumentCaptor.getValue().get(ModalDialogProperties.CONTROLLER);
-        controller.onDismiss(
-                mPropertyModelArgumentCaptor.getValue(),
-                DialogDismissalCause.NEGATIVE_BUTTON_CLICKED);
+        controller.onClick(mPropertyModelArgumentCaptor.getValue(), ButtonType.NEGATIVE);
         verify(mOnResult).onResult(ActionConfirmationResult.CONFIRMATION_NEGATIVE);
-    }
-
-    @Test
-    public void testProcessUngroupTabAttempt_PartialGroup() {
-        ActionConfirmationManager actionConfirmationManager =
-                new ActionConfirmationManager(
-                        mProfile, mActivity, mTabGroupModelFilter, mModalDialogManager);
-        actionConfirmationManager.processUngroupTabAttempt(Arrays.asList(TAB2_ID), mOnResult);
-        verify(mModalDialogManager, never()).showDialog(any(), anyInt());
-        verify(mOnResult).onResult(ActionConfirmationResult.IMMEDIATE_CONTINUE);
     }
 
     @Test
     public void testProcessUngroupTabAttempt_PrefSet() {
         when(mPrefService.getBoolean(anyString())).thenReturn(true);
         ActionConfirmationManager actionConfirmationManager =
-                new ActionConfirmationManager(
-                        mProfile, mActivity, mTabGroupModelFilter, mModalDialogManager);
-        actionConfirmationManager.processUngroupTabAttempt(Arrays.asList(TAB1_ID), mOnResult);
+                new ActionConfirmationManager(mProfile, mActivity, mModalDialogManager);
+        actionConfirmationManager.processUngroupTabAttempt(mOnResult);
         verify(mModalDialogManager, never()).showDialog(any(), anyInt());
         verify(mOnResult).onResult(ActionConfirmationResult.IMMEDIATE_CONTINUE);
     }
@@ -211,9 +179,8 @@ public class ActionConfirmationManagerUnitTest {
     @Test
     public void testProcessUngroupTabAttempt_CheckBoxOnPositive() {
         ActionConfirmationManager actionConfirmationManager =
-                new ActionConfirmationManager(
-                        mProfile, mActivity, mTabGroupModelFilter, mModalDialogManager);
-        actionConfirmationManager.processUngroupTabAttempt(Arrays.asList(TAB1_ID), mOnResult);
+                new ActionConfirmationManager(mProfile, mActivity, mModalDialogManager);
+        actionConfirmationManager.processUngroupTabAttempt(mOnResult);
         verify(mModalDialogManager).showDialog(mPropertyModelArgumentCaptor.capture(), anyInt());
         View customView =
                 mPropertyModelArgumentCaptor.getValue().get(ModalDialogProperties.CUSTOM_VIEW);
@@ -221,9 +188,7 @@ public class ActionConfirmationManagerUnitTest {
         stopShowingCheckBox.setChecked(true);
         Controller controller =
                 mPropertyModelArgumentCaptor.getValue().get(ModalDialogProperties.CONTROLLER);
-        controller.onDismiss(
-                mPropertyModelArgumentCaptor.getValue(),
-                DialogDismissalCause.POSITIVE_BUTTON_CLICKED);
+        controller.onClick(mPropertyModelArgumentCaptor.getValue(), ButtonType.POSITIVE);
 
         verify(mOnResult).onResult(ActionConfirmationResult.CONFIRMATION_POSITIVE);
         verify(mPrefService).setBoolean(any(), eq(true));
@@ -232,9 +197,8 @@ public class ActionConfirmationManagerUnitTest {
     @Test
     public void testProcessUngroupTabAttempt_CheckBoxOnNegative() {
         ActionConfirmationManager actionConfirmationManager =
-                new ActionConfirmationManager(
-                        mProfile, mActivity, mTabGroupModelFilter, mModalDialogManager);
-        actionConfirmationManager.processUngroupTabAttempt(Arrays.asList(TAB1_ID), mOnResult);
+                new ActionConfirmationManager(mProfile, mActivity, mModalDialogManager);
+        actionConfirmationManager.processUngroupTabAttempt(mOnResult);
         verify(mModalDialogManager).showDialog(mPropertyModelArgumentCaptor.capture(), anyInt());
         View customView =
                 mPropertyModelArgumentCaptor.getValue().get(ModalDialogProperties.CUSTOM_VIEW);
@@ -242,9 +206,7 @@ public class ActionConfirmationManagerUnitTest {
         stopShowingCheckBox.setChecked(true);
         Controller controller =
                 mPropertyModelArgumentCaptor.getValue().get(ModalDialogProperties.CONTROLLER);
-        controller.onDismiss(
-                mPropertyModelArgumentCaptor.getValue(),
-                DialogDismissalCause.NEGATIVE_BUTTON_CLICKED);
+        controller.onClick(mPropertyModelArgumentCaptor.getValue(), ButtonType.NEGATIVE);
 
         verify(mOnResult).onResult(ActionConfirmationResult.CONFIRMATION_NEGATIVE);
         verify(mPrefService).setBoolean(any(), eq(true));
@@ -255,9 +217,8 @@ public class ActionConfirmationManagerUnitTest {
         when(mIdentityServicesProvider.getIdentityManager(mProfile)).thenReturn(mIdentityManager);
 
         ActionConfirmationManager actionConfirmationManager =
-                new ActionConfirmationManager(
-                        mProfile, mActivity, mTabGroupModelFilter, mModalDialogManager);
-        actionConfirmationManager.processUngroupTabAttempt(Arrays.asList(TAB1_ID), mOnResult);
+                new ActionConfirmationManager(mProfile, mActivity, mModalDialogManager);
+        actionConfirmationManager.processUngroupTabAttempt(mOnResult);
         verify(mModalDialogManager).showDialog(mPropertyModelArgumentCaptor.capture(), anyInt());
 
         View customView =
@@ -273,9 +234,8 @@ public class ActionConfirmationManagerUnitTest {
         when(mIdentityManager.getPrimaryAccountInfo(ConsentLevel.SIGNIN)).thenReturn(null);
 
         ActionConfirmationManager actionConfirmationManager =
-                new ActionConfirmationManager(
-                        mProfile, mActivity, mTabGroupModelFilter, mModalDialogManager);
-        actionConfirmationManager.processUngroupTabAttempt(Arrays.asList(TAB1_ID), mOnResult);
+                new ActionConfirmationManager(mProfile, mActivity, mModalDialogManager);
+        actionConfirmationManager.processUngroupTabAttempt(mOnResult);
         verify(mModalDialogManager).showDialog(mPropertyModelArgumentCaptor.capture(), anyInt());
 
         View customView =
@@ -292,9 +252,8 @@ public class ActionConfirmationManagerUnitTest {
         when(mSyncService.getActiveDataTypes()).thenReturn(Collections.emptySet());
 
         ActionConfirmationManager actionConfirmationManager =
-                new ActionConfirmationManager(
-                        mProfile, mActivity, mTabGroupModelFilter, mModalDialogManager);
-        actionConfirmationManager.processUngroupTabAttempt(Arrays.asList(TAB1_ID), mOnResult);
+                new ActionConfirmationManager(mProfile, mActivity, mModalDialogManager);
+        actionConfirmationManager.processUngroupTabAttempt(mOnResult);
         verify(mModalDialogManager).showDialog(mPropertyModelArgumentCaptor.capture(), anyInt());
 
         View customView =
@@ -312,9 +271,8 @@ public class ActionConfirmationManagerUnitTest {
                 .thenReturn(Collections.singleton(DataType.SAVED_TAB_GROUP));
 
         ActionConfirmationManager actionConfirmationManager =
-                new ActionConfirmationManager(
-                        mProfile, mActivity, mTabGroupModelFilter, mModalDialogManager);
-        actionConfirmationManager.processUngroupTabAttempt(Arrays.asList(TAB1_ID), mOnResult);
+                new ActionConfirmationManager(mProfile, mActivity, mModalDialogManager);
+        actionConfirmationManager.processUngroupTabAttempt(mOnResult);
         verify(mModalDialogManager).showDialog(mPropertyModelArgumentCaptor.capture(), anyInt());
 
         View customView =
@@ -328,101 +286,77 @@ public class ActionConfirmationManagerUnitTest {
     @Test
     public void testProcessCloseTabAttempt_Positive() {
         ActionConfirmationManager actionConfirmationManager =
-                new ActionConfirmationManager(
-                        mProfile, mActivity, mTabGroupModelFilter, mModalDialogManager);
+                new ActionConfirmationManager(mProfile, mActivity, mModalDialogManager);
         actionConfirmationManager.processCloseTabAttempt(mOnResult);
         verify(mModalDialogManager).showDialog(mPropertyModelArgumentCaptor.capture(), anyInt());
         Controller controller =
                 mPropertyModelArgumentCaptor.getValue().get(ModalDialogProperties.CONTROLLER);
-        controller.onDismiss(
-                mPropertyModelArgumentCaptor.getValue(),
-                DialogDismissalCause.POSITIVE_BUTTON_CLICKED);
+        controller.onClick(mPropertyModelArgumentCaptor.getValue(), ButtonType.POSITIVE);
         verify(mOnResult).onResult(ActionConfirmationResult.CONFIRMATION_POSITIVE);
-    }
-
-    @Test
-    public void testProcessCloseTabAttempt_PositiveFullGroup() {
-        ActionConfirmationManager actionConfirmationManager =
-                new ActionConfirmationManager(
-                        mProfile, mActivity, mTabGroupModelFilter, mModalDialogManager);
-        actionConfirmationManager.processCloseTabAttempt(Arrays.asList(TAB1_ID), mOnResult);
-        verify(mModalDialogManager).showDialog(mPropertyModelArgumentCaptor.capture(), anyInt());
-        Controller controller =
-                mPropertyModelArgumentCaptor.getValue().get(ModalDialogProperties.CONTROLLER);
-        controller.onDismiss(
-                mPropertyModelArgumentCaptor.getValue(),
-                DialogDismissalCause.POSITIVE_BUTTON_CLICKED);
-        verify(mOnResult).onResult(ActionConfirmationResult.CONFIRMATION_POSITIVE);
-    }
-
-    @Test
-    public void testProcessCloseTabAttempt_PartialGroup() {
-        ActionConfirmationManager actionConfirmationManager =
-                new ActionConfirmationManager(
-                        mProfile, mActivity, mTabGroupModelFilter, mModalDialogManager);
-        actionConfirmationManager.processCloseTabAttempt(Arrays.asList(TAB2_ID), mOnResult);
-        verify(mModalDialogManager, never()).showDialog(any(), anyInt());
-        verify(mOnResult).onResult(ActionConfirmationResult.IMMEDIATE_CONTINUE);
     }
 
     @Test
     public void testProcessDeleteSharedGroupAttempt() {
         ActionConfirmationManager actionConfirmationManager =
-                new ActionConfirmationManager(
-                        mProfile, mActivity, mTabGroupModelFilter, mModalDialogManager);
-        actionConfirmationManager.processDeleteSharedGroupAttempt(GROUP_TITLE, mOnResult);
+                new ActionConfirmationManager(mProfile, mActivity, mModalDialogManager);
+        actionConfirmationManager.processDeleteSharedGroupAttempt(
+                GROUP_TITLE, mOnMaybeBlockingResult);
         verify(mModalDialogManager).showDialog(mPropertyModelArgumentCaptor.capture(), anyInt());
         Controller controller =
                 mPropertyModelArgumentCaptor.getValue().get(ModalDialogProperties.CONTROLLER);
-        controller.onDismiss(
-                mPropertyModelArgumentCaptor.getValue(),
-                DialogDismissalCause.POSITIVE_BUTTON_CLICKED);
-        verify(mOnResult).onResult(ActionConfirmationResult.CONFIRMATION_POSITIVE);
+        controller.onClick(mPropertyModelArgumentCaptor.getValue(), ButtonType.POSITIVE);
+        verify(mOnMaybeBlockingResult).onResult(mMaybeBlockingResultCaptor.capture());
+        MaybeBlockingResult maybeBlockingResult = mMaybeBlockingResultCaptor.getValue();
+        assertEquals(ActionConfirmationResult.CONFIRMATION_POSITIVE, maybeBlockingResult.result);
+        assertNotNull(maybeBlockingResult.finishBlocking);
     }
 
     @Test
     public void testProcessDeleteSharedGroupAttempt_Negative() {
         ActionConfirmationManager actionConfirmationManager =
-                new ActionConfirmationManager(
-                        mProfile, mActivity, mTabGroupModelFilter, mModalDialogManager);
-        actionConfirmationManager.processDeleteSharedGroupAttempt(GROUP_TITLE, mOnResult);
+                new ActionConfirmationManager(mProfile, mActivity, mModalDialogManager);
+        actionConfirmationManager.processDeleteSharedGroupAttempt(
+                GROUP_TITLE, mOnMaybeBlockingResult);
         verify(mModalDialogManager).showDialog(mPropertyModelArgumentCaptor.capture(), anyInt());
         Controller controller =
                 mPropertyModelArgumentCaptor.getValue().get(ModalDialogProperties.CONTROLLER);
-        controller.onDismiss(
-                mPropertyModelArgumentCaptor.getValue(),
-                DialogDismissalCause.NEGATIVE_BUTTON_CLICKED);
-        verify(mOnResult).onResult(ActionConfirmationResult.CONFIRMATION_NEGATIVE);
+        controller.onClick(mPropertyModelArgumentCaptor.getValue(), ButtonType.NEGATIVE);
+        verify(mOnMaybeBlockingResult).onResult(mMaybeBlockingResultCaptor.capture());
+        MaybeBlockingResult maybeBlockingResult = mMaybeBlockingResultCaptor.getValue();
+        assertEquals(ActionConfirmationResult.CONFIRMATION_NEGATIVE, maybeBlockingResult.result);
+        assertNull(maybeBlockingResult.finishBlocking);
     }
 
     @Test
     public void testProcessLeaveGroupAttempt() {
         ActionConfirmationManager actionConfirmationManager =
-                new ActionConfirmationManager(
-                        mProfile, mActivity, mTabGroupModelFilter, mModalDialogManager);
-        actionConfirmationManager.processLeaveGroupAttempt(GROUP_TITLE, mOnResult);
+                new ActionConfirmationManager(mProfile, mActivity, mModalDialogManager);
+        actionConfirmationManager.processLeaveGroupAttempt(GROUP_TITLE, mOnMaybeBlockingResult);
         verify(mModalDialogManager).showDialog(mPropertyModelArgumentCaptor.capture(), anyInt());
         Controller controller =
                 mPropertyModelArgumentCaptor.getValue().get(ModalDialogProperties.CONTROLLER);
-        controller.onDismiss(
-                mPropertyModelArgumentCaptor.getValue(),
-                DialogDismissalCause.POSITIVE_BUTTON_CLICKED);
-        verify(mOnResult).onResult(ActionConfirmationResult.CONFIRMATION_POSITIVE);
+        controller.onClick(mPropertyModelArgumentCaptor.getValue(), ButtonType.POSITIVE);
+        verify(mOnMaybeBlockingResult).onResult(mMaybeBlockingResultCaptor.capture());
+        MaybeBlockingResult maybeBlockingResult = mMaybeBlockingResultCaptor.getValue();
+        assertEquals(ActionConfirmationResult.CONFIRMATION_POSITIVE, maybeBlockingResult.result);
+        assertNotNull(maybeBlockingResult.finishBlocking);
     }
 
     @Test
     public void testProcessCollaborationOwnerRemoveLastTabPositive() {
         ActionConfirmationManager actionConfirmationManager =
-                new ActionConfirmationManager(
-                        mProfile, mActivity, mTabGroupModelFilter, mModalDialogManager);
-        actionConfirmationManager.processCollaborationOwnerRemoveLastTab(GROUP_TITLE, mOnResult);
+                new ActionConfirmationManager(mProfile, mActivity, mModalDialogManager);
+        actionConfirmationManager.processCollaborationOwnerRemoveLastTab(
+                GROUP_TITLE, mOnMaybeBlockingResult);
         verify(mModalDialogManager).showDialog(mPropertyModelArgumentCaptor.capture(), anyInt());
         Controller controller =
                 mPropertyModelArgumentCaptor.getValue().get(ModalDialogProperties.CONTROLLER);
-        controller.onDismiss(
-                mPropertyModelArgumentCaptor.getValue(),
-                DialogDismissalCause.POSITIVE_BUTTON_CLICKED);
-        verify(mOnResult).onResult(ActionConfirmationResult.CONFIRMATION_POSITIVE);
+        controller.onClick(mPropertyModelArgumentCaptor.getValue(), ButtonType.POSITIVE);
+        verify(mOnMaybeBlockingResult).onResult(mMaybeBlockingResultCaptor.capture());
+        MaybeBlockingResult maybeBlockingResult = mMaybeBlockingResultCaptor.getValue();
+        assertEquals(ActionConfirmationResult.CONFIRMATION_POSITIVE, maybeBlockingResult.result);
+        assertNull(maybeBlockingResult.finishBlocking);
+
         String action = "TabGroupConfirmation.CollaborationOwnerRemoveLastTab.KeepGroupButton";
         assertTrue(mActionTester.getActions().contains(action));
     }
@@ -430,16 +364,18 @@ public class ActionConfirmationManagerUnitTest {
     @Test
     public void testProcessCollaborationOwnerRemoveLastTab_Negative() {
         ActionConfirmationManager actionConfirmationManager =
-                new ActionConfirmationManager(
-                        mProfile, mActivity, mTabGroupModelFilter, mModalDialogManager);
-        actionConfirmationManager.processCollaborationOwnerRemoveLastTab(GROUP_TITLE, mOnResult);
+                new ActionConfirmationManager(mProfile, mActivity, mModalDialogManager);
+        actionConfirmationManager.processCollaborationOwnerRemoveLastTab(
+                GROUP_TITLE, mOnMaybeBlockingResult);
         verify(mModalDialogManager).showDialog(mPropertyModelArgumentCaptor.capture(), anyInt());
         Controller controller =
                 mPropertyModelArgumentCaptor.getValue().get(ModalDialogProperties.CONTROLLER);
-        controller.onDismiss(
-                mPropertyModelArgumentCaptor.getValue(),
-                DialogDismissalCause.NEGATIVE_BUTTON_CLICKED);
-        verify(mOnResult).onResult(ActionConfirmationResult.CONFIRMATION_NEGATIVE);
+        controller.onClick(mPropertyModelArgumentCaptor.getValue(), ButtonType.NEGATIVE);
+        verify(mOnMaybeBlockingResult).onResult(mMaybeBlockingResultCaptor.capture());
+        MaybeBlockingResult maybeBlockingResult = mMaybeBlockingResultCaptor.getValue();
+        assertEquals(ActionConfirmationResult.CONFIRMATION_NEGATIVE, maybeBlockingResult.result);
+        assertNotNull(maybeBlockingResult.finishBlocking);
+
         String action = "TabGroupConfirmation.CollaborationOwnerRemoveLastTab.RemoveGroup";
         assertTrue(mActionTester.getActions().contains(action));
     }
@@ -447,16 +383,46 @@ public class ActionConfirmationManagerUnitTest {
     @Test
     public void testProcessCollaborationMemberRemoveLastTab_NoClick() {
         ActionConfirmationManager actionConfirmationManager =
-                new ActionConfirmationManager(
-                        mProfile, mActivity, mTabGroupModelFilter, mModalDialogManager);
-        actionConfirmationManager.processCollaborationMemberRemoveLastTab(GROUP_TITLE, mOnResult);
+                new ActionConfirmationManager(mProfile, mActivity, mModalDialogManager);
+        actionConfirmationManager.processCollaborationMemberRemoveLastTab(
+                GROUP_TITLE, mOnMaybeBlockingResult);
         verify(mModalDialogManager).showDialog(mPropertyModelArgumentCaptor.capture(), anyInt());
         Controller controller =
                 mPropertyModelArgumentCaptor.getValue().get(ModalDialogProperties.CONTROLLER);
         controller.onDismiss(
                 mPropertyModelArgumentCaptor.getValue(), DialogDismissalCause.TOUCH_OUTSIDE);
-        verify(mOnResult).onResult(ActionConfirmationResult.CONFIRMATION_POSITIVE);
+        verify(mOnMaybeBlockingResult).onResult(mMaybeBlockingResultCaptor.capture());
+        MaybeBlockingResult maybeBlockingResult = mMaybeBlockingResultCaptor.getValue();
+        assertEquals(ActionConfirmationResult.CONFIRMATION_POSITIVE, maybeBlockingResult.result);
+        assertNull(maybeBlockingResult.finishBlocking);
+
         String action = "TabGroupConfirmation.CollaborationMemberRemoveLastTab.KeepGroupImplicit";
         assertTrue(mActionTester.getActions().contains(action));
+    }
+
+    @Test
+    public void testWillSkipChecks() {
+        ActionConfirmationManager actionConfirmationManager =
+                new ActionConfirmationManager(mProfile, mActivity, mModalDialogManager);
+
+        assertFalse(actionConfirmationManager.willSkipCloseTabAttempt());
+        when(mPrefService.getBoolean(Pref.STOP_SHOWING_TAB_GROUP_CONFIRMATION_ON_TAB_CLOSE))
+                .thenReturn(true);
+        assertTrue(actionConfirmationManager.willSkipCloseTabAttempt());
+
+        assertFalse(actionConfirmationManager.willSkipDeleteGroupAttempt());
+        when(mPrefService.getBoolean(Pref.STOP_SHOWING_TAB_GROUP_CONFIRMATION_ON_CLOSE))
+                .thenReturn(true);
+        assertTrue(actionConfirmationManager.willSkipDeleteGroupAttempt());
+
+        assertFalse(actionConfirmationManager.willSkipUngroupTabAttempt());
+        when(mPrefService.getBoolean(Pref.STOP_SHOWING_TAB_GROUP_CONFIRMATION_ON_TAB_REMOVE))
+                .thenReturn(true);
+        assertTrue(actionConfirmationManager.willSkipUngroupTabAttempt());
+
+        assertFalse(actionConfirmationManager.willSkipUngroupAttempt());
+        when(mPrefService.getBoolean(Pref.STOP_SHOWING_TAB_GROUP_CONFIRMATION_ON_UNGROUP))
+                .thenReturn(true);
+        assertTrue(actionConfirmationManager.willSkipUngroupAttempt());
     }
 }

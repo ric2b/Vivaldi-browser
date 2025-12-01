@@ -53,8 +53,10 @@ class WebViewPermissionHelperDelegate {
       const url::Origin& security_origin,
       blink::mojom::MediaStreamType type);
 
-  virtual void RequestPointerLockPermission(bool user_gesture,
-                                            bool last_unlocked_by_target) {}
+  virtual void RequestPointerLockPermission(
+      bool user_gesture,
+      bool last_unlocked_by_target,
+      base::OnceCallback<void(bool)> callback) {}
 
   // Requests Geolocation Permission from the embedder.
   virtual void RequestGeolocationPermission(
@@ -89,6 +91,11 @@ class WebViewPermissionHelperDelegate {
                                        int request_id,
                                        const GURL& url,
                                        bool blocked_by_policy) {}
+
+  // Whether media requests approved by the webview embedder are forwarded as
+  // the embedder. When false, media requests retain the embedded origin.
+  virtual bool ForwardEmbeddedMediaPermissionChecksAsEmbedder(
+      const url::Origin& embedder_origin);
 
   WebViewPermissionHelper* web_view_permission_helper() const {
     return web_view_permission_helper_;

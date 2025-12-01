@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<grit latest_public_release="0" current_release="1" output_all_resource_defines="false">
+<grit latest_public_release="0" current_release="1">
   <outputs>
     <output filename="grit/locale_settings.h" type="rc_header">
       <emit emit_type='prepend'></emit>
@@ -181,7 +181,7 @@
         81
       </message>
 
-      <if expr="chromeos_ash">
+      <if expr="is_chromeos">
         <message name="IDS_FACTORY_RESET_HELP_URL" translateable="false">
           https://support.google.com/chromebook/answer/183084?hl=[GRITLANGCODE]
         </message>

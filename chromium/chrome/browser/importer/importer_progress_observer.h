@@ -31,7 +31,7 @@ class ImporterProgressObserver {
   virtual void ImportItemFailed(ImportItem item, const std::string& error) {}
 
  protected:
-  virtual ~ImporterProgressObserver() {}
+  virtual ~ImporterProgressObserver() = default;
 };
 
 }  // namespace importer

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "media/cast/openscreen/remoting_proto_utils.h"
 
 #include <memory>
@@ -84,7 +89,7 @@ TEST_F(ProtoUtilsTest, PassValidDecoderBuffer) {
   ASSERT_TRUE(output_buffer->is_key_frame());
   ASSERT_EQ(output_buffer->timestamp(), pts);
   EXPECT_EQ(base::span(*output_buffer), base::span(buffer));
-  ASSERT_TRUE(output_buffer->has_side_data());
+  ASSERT_TRUE(output_buffer->side_data());
   EXPECT_EQ(output_buffer->side_data()->alpha_data.as_span(),
             base::span(side_buffer));
 }

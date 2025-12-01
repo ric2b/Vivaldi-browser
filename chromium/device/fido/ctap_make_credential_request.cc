@@ -9,11 +9,11 @@
 
 #include "device/fido/ctap_make_credential_request.h"
 
+#include <algorithm>
 #include <limits>
 #include <utility>
 
 #include "base/numerics/safe_conversions.h"
-#include "base/ranges/algorithm.h"
 #include "components/cbor/values.h"
 #include "device/fido/device_response_converter.h"
 #include "device/fido/fido_constants.h"
@@ -24,7 +24,7 @@ namespace device {
 namespace {
 bool IsMakeCredentialOptionMapFormatCorrect(
     const cbor::Value::MapValue& option_map) {
-  return base::ranges::all_of(
+  return std::ranges::all_of(
       option_map, [](const auto& param) {
         return param.first.is_string() &&
                (param.first.GetString() == kResidentKeyMapKey ||
@@ -35,7 +35,7 @@ bool IsMakeCredentialOptionMapFormatCorrect(
 
 bool AreMakeCredentialRequestMapKeysCorrect(
     const cbor::Value::MapValue& request_map) {
-  return base::ranges::all_of(
+  return std::ranges::all_of(
       request_map, [](const auto& param) {
         return (param.first.is_integer() && 1u <= param.first.GetInteger() &&
                 param.first.GetInteger() <= 10u);
@@ -58,9 +58,9 @@ std::optional<CtapMakeCredentialRequest> CtapMakeCredentialRequest::Parse(
           kClientDataHashLength) {
     return std::nullopt;
   }
-  base::span<const uint8_t, kClientDataHashLength> client_data_hash(
-      client_data_hash_it->second.GetBytestring().data(),
-      kClientDataHashLength);
+  auto client_data_hash =
+      base::span(client_data_hash_it->second.GetBytestring())
+          .first<kClientDataHashLength>();
 
   const auto rp_entity_it = request_map.find(cbor::Value(2));
   if (rp_entity_it == request_map.end() || !rp_entity_it->second.is_map())

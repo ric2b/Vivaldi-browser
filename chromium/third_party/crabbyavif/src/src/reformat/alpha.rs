@@ -42,7 +42,7 @@ fn unpremultiply_u16(pixel: u16, alpha: u16, max_channel_f: f32) -> u16 {
 }
 
 impl rgb::Image {
-    pub fn premultiply_alpha(&mut self) -> AvifResult<()> {
+    pub(crate) fn premultiply_alpha(&mut self) -> AvifResult<()> {
         if self.pixels().is_null() || self.row_bytes == 0 {
             return Err(AvifError::ReformatFailed);
         }
@@ -116,7 +116,7 @@ impl rgb::Image {
         Ok(())
     }
 
-    pub fn unpremultiply_alpha(&mut self) -> AvifResult<()> {
+    pub(crate) fn unpremultiply_alpha(&mut self) -> AvifResult<()> {
         if self.pixels().is_null() || self.row_bytes == 0 {
             return Err(AvifError::ReformatFailed);
         }
@@ -190,7 +190,7 @@ impl rgb::Image {
         Ok(())
     }
 
-    pub fn set_opaque(&mut self) -> AvifResult<()> {
+    pub(crate) fn set_opaque(&mut self) -> AvifResult<()> {
         if !self.has_alpha() {
             return Ok(());
         }
@@ -225,7 +225,7 @@ impl rgb::Image {
         clamp_u16(alpha, 0, dst_max_channel)
     }
 
-    pub fn import_alpha_from(&mut self, image: &image::Image) -> AvifResult<()> {
+    pub(crate) fn import_alpha_from(&mut self, image: &image::Image) -> AvifResult<()> {
         if !self.has_alpha()
             || !image.has_alpha()
             || self.width != image.width
@@ -301,7 +301,7 @@ impl rgb::Image {
 }
 
 impl image::Image {
-    pub fn alpha_to_full_range(&mut self) -> AvifResult<()> {
+    pub(crate) fn alpha_to_full_range(&mut self) -> AvifResult<()> {
         if self.planes[3].is_none() {
             return Ok(());
         }
@@ -317,7 +317,7 @@ impl image::Image {
                     None,
                     None,
                     None,
-                    self.planes[3].unwrap_ref().clone_pointer(),
+                    Some(self.planes[3].unwrap_ref().try_clone()?),
                 ],
                 row_bytes: [0, 0, 0, self.row_bytes[3]],
                 ..image::Image::default()

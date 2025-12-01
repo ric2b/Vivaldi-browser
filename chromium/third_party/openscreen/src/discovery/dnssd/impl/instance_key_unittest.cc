@@ -6,7 +6,6 @@
 
 #include <unordered_map>
 
-#include "absl/hash/hash.h"
 #include "discovery/dnssd/impl/service_key.h"
 #include "discovery/dnssd/testing/fake_dns_record_factory.h"
 #include "gtest/gtest.h"
@@ -58,33 +57,6 @@ TEST(DnsSdInstanceKeyTest, TestIsInstanceOf) {
   EXPECT_NE(svc, ptr);
   ptr = ServiceKey("_service2._udp", "domain");
   EXPECT_EQ(svc, ptr);
-}
-
-TEST(DnsSdInstanceKeyTest, InstanceKeyInMap) {
-  InstanceKey key{"instance", "_service._udp", "domain"};
-  InstanceKey key2{"instance", "_service._udp", "domain"};
-  InstanceKey key3{"instance2", "_service._udp", "domain"};
-  InstanceKey key4{"instance", "_service2._udp", "domain"};
-  InstanceKey key5{"instance", "_service2._udp", "domain2"};
-  std::unordered_map<InstanceKey, int32_t, absl::Hash<InstanceKey>> map;
-  map[key] = 1;
-  map[key2] = 2;
-  EXPECT_EQ(map[key], 2);
-
-  map[key3] = 3;
-  EXPECT_EQ(map[key], 2);
-  EXPECT_EQ(map[key3], 3);
-
-  map[key4] = 4;
-  EXPECT_EQ(map[key], 2);
-  EXPECT_EQ(map[key3], 3);
-  EXPECT_EQ(map[key4], 4);
-
-  map[key5] = 5;
-  EXPECT_EQ(map[key], 2);
-  EXPECT_EQ(map[key3], 3);
-  EXPECT_EQ(map[key4], 4);
-  EXPECT_EQ(map[key5], 5);
 }
 
 TEST(DnsSdInstanceKeyTest, CreateFromRecordTest) {

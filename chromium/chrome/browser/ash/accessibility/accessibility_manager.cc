@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <algorithm>
 #include <string_view>
 #include <utility>
 
@@ -36,7 +37,6 @@
 #include "base/memory/singleton.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/path_service.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -1595,7 +1595,7 @@ void AccessibilityManager::UpdateBrailleImeState() {
       pref_service->GetString(::prefs::kLanguagePreloadEngines);
   std::vector<std::string_view> preload_engines = base::SplitStringPiece(
       preload_engines_str, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
-  std::vector<std::string_view>::iterator it = base::ranges::find(
+  std::vector<std::string_view>::iterator it = std::ranges::find(
       preload_engines, extension_ime_util::kBrailleImeEngineId);
   bool is_enabled = (it != preload_engines.end());
   bool should_be_enabled =
@@ -1952,24 +1952,47 @@ void AccessibilityManager::UpdateChromeOSAccessibilityHistograms() {
         "Accessibility.CrosCursorColor",
         prefs->GetBoolean(prefs::kAccessibilityCursorColorEnabled));
 
-      bool color_correction_enabled = IsColorCorrectionEnabled();
-      base::UmaHistogramBoolean("Accessibility.CrosColorCorrection",
-                                color_correction_enabled);
-      if (color_correction_enabled) {
-        base::UmaHistogramEnumeration(
-            "Accessibility.CrosColorCorrection.FilterType",
-            static_cast<ColorVisionCorrectionType>(prefs->GetInteger(
-                prefs::kAccessibilityColorVisionCorrectionType)));
-        base::UmaHistogramPercentage(
-            "Accessibility.CrosColorCorrection.FilterAmount",
-            prefs->GetInteger(
-                prefs::kAccessibilityColorVisionCorrectionAmount));
+    bool color_correction_enabled = IsColorCorrectionEnabled();
+    base::UmaHistogramBoolean("Accessibility.CrosColorCorrection",
+                              color_correction_enabled);
+    if (color_correction_enabled) {
+      base::UmaHistogramEnumeration(
+          "Accessibility.CrosColorCorrection.FilterType",
+          static_cast<ColorVisionCorrectionType>(prefs->GetInteger(
+              prefs::kAccessibilityColorVisionCorrectionType)));
+      base::UmaHistogramPercentage(
+          "Accessibility.CrosColorCorrection.FilterAmount",
+          prefs->GetInteger(prefs::kAccessibilityColorVisionCorrectionAmount));
     }
 
     if (::features::IsAccessibilityFlashScreenFeatureEnabled()) {
       base::UmaHistogramBoolean(
           "Accessibility.CrosFlashNotifications",
           prefs->GetBoolean(prefs::kAccessibilityFlashNotificationsEnabled));
+    }
+
+    if (::features::IsAccessibilityBounceKeysEnabled()) {
+      bool bounce_keys_enabled =
+          prefs->GetBoolean(prefs::kAccessibilityBounceKeysEnabled);
+      base::UmaHistogramBoolean("Accessibility.CrosBounceKeys",
+                                bounce_keys_enabled);
+      if (bounce_keys_enabled) {
+        base::UmaHistogramSparse(
+            "Accessibility.CrosBounceKeysDelay",
+            prefs->GetInteger(prefs::kAccessibilityBounceKeysDelayMs));
+      }
+    }
+
+    if (::features::IsAccessibilitySlowKeysEnabled()) {
+      bool slow_keys_enabled =
+          prefs->GetBoolean(prefs::kAccessibilitySlowKeysEnabled);
+      base::UmaHistogramBoolean("Accessibility.CrosSlowKeys",
+                                slow_keys_enabled);
+      if (slow_keys_enabled) {
+        base::UmaHistogramSparse(
+            "Accessibility.CrosSlowKeysDelay",
+            prefs->GetInteger(prefs::kAccessibilitySlowKeysDelayMs));
+      }
     }
   }
   base::UmaHistogramBoolean("Accessibility.CrosCaretHighlight",
@@ -2281,7 +2304,8 @@ void AccessibilityManager::LoadEnhancedNetworkTts() {
 
   const bool enable_v3_manifest =
       base::CommandLine::ForCurrentProcess()->HasSwitch(
-          ::switches::kEnableExperimentalAccessibilityManifestV3);
+          ::switches::kEnableExperimentalAccessibilityManifestV3) ||
+      ::features::IsAccessibilityManifestV3EnabledForEnhancedNetworkTts();
   const base::FilePath::CharType* manifest_filename =
       enable_v3_manifest ? extension_misc::kEnhancedNetworkTtsManifestV3Filename
                          : extension_misc::kEnhancedNetworkTtsManifestFilename;

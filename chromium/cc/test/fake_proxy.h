@@ -10,7 +10,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/types/optional_ref.h"
-#include "cc/input/browser_controls_offset_tags_info.h"
+#include "cc/input/browser_controls_offset_tag_modifications.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/paint_holding_reason.h"
 #include "cc/trees/proxy.h"
@@ -31,7 +31,7 @@ class FakeProxy : public Proxy {
   void ReleaseLayerTreeFrameSink() override {}
   void SetShouldWarmUp() override {}
   void SetVisible(bool visible) override {}
-  void SetNeedsAnimate() override {}
+  void SetNeedsAnimate(bool urgent) override {}
   void SetNeedsUpdateLayers() override {}
   void SetNeedsCommit() override {}
   void SetNeedsRedraw(const gfx::Rect& damage_rect) override {}
@@ -47,7 +47,7 @@ class FakeProxy : public Proxy {
   bool CommitRequested() const override;
   void Start() override {}
   void Stop() override {}
-  void QueueImageDecode(int request_id, const PaintImage& image) override;
+  void QueueImageDecode(int request_id, const DrawImage& image) override;
   void SetMutator(std::unique_ptr<LayerTreeMutator> mutator) override;
   void SetPaintWorkletLayerPainter(
       std::unique_ptr<PaintWorkletLayerPainter> painter) override;
@@ -56,8 +56,8 @@ class FakeProxy : public Proxy {
       BrowserControlsState constraints,
       BrowserControlsState current,
       bool animate,
-      base::optional_ref<const BrowserControlsOffsetTagsInfo> offset_tags_info)
-      override {}
+      base::optional_ref<const BrowserControlsOffsetTagModifications>
+          offset_tag_modifications) override {}
   void RequestBeginMainFrameNotExpected(bool new_state) override {}
   void SetSourceURL(ukm::SourceId source_id, const GURL& url) override {}
   void SetUkmSmoothnessDestination(

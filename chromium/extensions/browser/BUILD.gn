@@ -250,6 +250,7 @@ source_set("browser_sources") {
     "crx_file_info.cc",
     "crx_file_info.h",
     "deferred_start_render_host.h",
+    "disable_reason.cc",
     "disable_reason.h",
     "embedder_user_script_loader.cc",
     "embedder_user_script_loader.h",
@@ -257,7 +258,6 @@ source_set("browser_sources") {
     "error_map.h",
     "event_listener_map.cc",
     "event_listener_map.h",
-    "event_page_tracker.h",
     "event_router.cc",
     "event_router.h",
     "event_router_factory.cc",
@@ -316,6 +316,7 @@ source_set("browser_sources") {
     "extension_navigation_throttle.h",
     "extension_navigation_ui_data.cc",
     "extension_navigation_ui_data.h",
+    "extension_pref_names.h",
     "extension_pref_store.cc",
     "extension_pref_store.h",
     "extension_pref_value_map.cc",
@@ -366,6 +367,8 @@ source_set("browser_sources") {
     "file_reader.h",
     "granted_file_entry.cc",
     "granted_file_entry.h",
+    "host_access_request_helper.cc",
+    "host_access_request_helper.h",
     "image_loader.cc",
     "image_loader.h",
     "image_loader_factory.cc",
@@ -463,8 +466,6 @@ source_set("browser_sources") {
     "service_worker/worker_id_set.h",
     "service_worker_manager.cc",
     "service_worker_manager.h",
-    "site_access_requests_helper.cc",
-    "site_access_requests_helper.h",
     "state_store.cc",
     "state_store.h",
     "state_store_test_observer.cc",
@@ -517,6 +518,7 @@ source_set("browser_sources") {
     "//components/crx_file:crx_creator",
     "//components/guest_view/buildflags",
     "//components/input",
+    "//components/javascript_dialogs",
     "//components/keyed_service/content",
     "//components/keyed_service/content:content",
     "//components/keyed_service/core",
@@ -577,6 +579,13 @@ source_set("browser_sources") {
     "//ui/menus",
     "//url",
   ]
+
+  if (is_chromeos) {
+    deps += [
+      "//chrome/browser/ash/crosapi:browser_util",
+      "//chromeos/constants",
+    ]
+  }
 
   public_deps = [
     "//base",
@@ -658,6 +667,7 @@ source_set("browser_sources") {
 
     deps += [
       "//components/guest_view/browser",
+      "//components/page_load_metrics/browser",
       "//extensions/browser/guest_view/web_view/web_ui",
     ]
   }
@@ -712,6 +722,10 @@ source_set("browser_sources") {
     ]
 
     deps += [ "//services/device/public/cpp/hid" ]
+
+    if (is_chromeos) {
+      deps += [ "//chromeos/dbus/permission_broker" ]
+    }
   }
 
   if (is_mac) {
@@ -720,18 +734,7 @@ source_set("browser_sources") {
   }
 
   if (is_chromeos) {
-    sources += [
-      "api/clipboard/clipboard_api.cc",
-      "api/clipboard/clipboard_api.h",
-    ]
-    deps += [
-      "//chrome/browser/ash/crosapi:browser_util",
-      "//chromeos/ash/components/login/login_state",
-      "//chromeos/constants",
-      "//chromeos/dbus/permission_broker",
-      "//components/prefs:prefs",
-      "//ui/base/clipboard",
-    ]
+    deps += [ "//chromeos/constants" ]
   }
 
   if (enable_pdf) {
@@ -830,6 +833,7 @@ source_set("unit_tests") {
     "api/declarative_net_request/prefs_helper_unittest.cc",
     "api/declarative_net_request/ruleset_matcher_unittest.cc",
     "api/idle/idle_api_unittest.cc",
+    "api/power/power_api_unittest.cc",
     "api/storage/session_storage_manager_unittest.cc",
     "api/storage/settings_quota_unittest.cc",
     "api/storage/storage_api_unittest.cc",
@@ -922,6 +926,7 @@ source_set("unit_tests") {
     "//extensions:extensions_browser_resources",
     "//extensions:test_support",
     "//extensions/browser/api/storage:settings_namespace",
+    "//extensions/browser/api/virtual_keyboard_private:virtual_keyboard_delegate",
     "//extensions/browser/updater:updater",
     "//extensions/buildflags",
     "//extensions/common",
@@ -958,7 +963,6 @@ source_set("unit_tests") {
       "api/file_handlers/directory_util_unittest.cc",
       "api/file_handlers/mime_util_unittest.cc",
       "api/mime_handler_private/mime_handler_private_unittest.cc",
-      "api/power/power_api_unittest.cc",
       "api/runtime/restart_after_delay_api_unittest.cc",
       "api/socket/mojo_data_pump_unittest.cc",
       "api/sockets_tcp/sockets_tcp_api_unittest.cc",
@@ -988,9 +992,6 @@ source_set("unit_tests") {
       "api/feedback_private/feedback_private_api_unittest_base_chromeos.cc",
       "api/feedback_private/feedback_private_api_unittest_base_chromeos.h",
       "api/feedback_private/log_source_access_manager_chromeos_unittest.cc",
-      "api/lock_screen_data/data_item_unittest.cc",
-      "api/lock_screen_data/lock_screen_item_storage_unittest.cc",
-      "api/lock_screen_data/lock_screen_value_store_migrator_impl_unittest.cc",
       "api/media_perception_private/conversion_utils_unittest.cc",
       "api/media_perception_private/media_perception_api_manager_unittest.cc",
       "api/networking_private/networking_private_chromeos_unittest.cc",
@@ -1012,18 +1013,18 @@ source_set("unit_tests") {
       "//chromeos/ash/components/dbus/upstart",
       "//chromeos/ash/components/login/login_state",
       "//chromeos/ash/components/network:test_support",
-      "//chromeos/ash/components/standalone_browser",
-      "//chromeos/ash/components/standalone_browser:test_support",
       "//chromeos/constants",
       "//chromeos/crosapi/mojom",
       "//chromeos/dbus/permission_broker",
       "//chromeos/dbus/power",
       "//components/account_id",
       "//components/feedback",
-      "//components/prefs:prefs",
+      "//components/prefs",
+      "//components/prefs:test_support",
       "//components/user_manager",
       "//components/user_manager:test_support",
       "//extensions/shell:app_shell_lib",
+      "//google_apis",
     ]
   }
 
@@ -1084,6 +1085,7 @@ if (enable_extensions) {
       "//device/bluetooth:mocks",
       "//extensions:test_support",
       "//extensions/browser:test_support",
+      "//extensions/browser/api/virtual_keyboard_private:virtual_keyboard_delegate",
       "//extensions/common",
       "//extensions/common/api",
       "//extensions/shell:app_shell_lib",

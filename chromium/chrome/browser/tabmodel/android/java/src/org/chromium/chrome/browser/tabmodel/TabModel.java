@@ -31,17 +31,6 @@ public interface TabModel extends TabList {
     TabRemover getTabRemover();
 
     /**
-     * Closes tabs based on the provided parameters. Refer to {@link TabClosureParams} for different
-     * ways to close tabs.
-     *
-     * @param tabClosureParams The parameters to follow when closing tabs.
-     * @return Whether the tab closure succeeded (only possibly false for single tab closure).
-     * @deprecated Use {@link TabRemover#closeTabs(TabClosureParams, boolean)} instead.
-     */
-    @Deprecated
-    boolean closeTabs(TabClosureParams tabClosureParams);
-
-    /**
      * Returns which tab would be selected if the specified tab {@code id} were closed.
      *
      * @param id The ID of tab which would be closed.
@@ -148,16 +137,6 @@ public interface TabModel extends TabList {
      * @param creationState How the tab was created.
      */
     void addTab(Tab tab, int index, @TabLaunchType int type, @TabCreationState int creationState);
-
-    /**
-     * Removes the given tab from the model without destroying it. The tab should be inserted into
-     * another model to avoid leaking as after this the link to the old Activity will be broken.
-     *
-     * @param tab The tab to remove.
-     * @deprecated Use {@link TabRemover#removeTab(Tab, boolean)} instead.
-     */
-    @Deprecated
-    void removeTab(Tab tab);
 
     /**
      * Subscribes a {@link TabModelObserver} to be notified about changes to this model.

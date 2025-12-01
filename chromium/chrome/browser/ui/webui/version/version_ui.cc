@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "chrome/browser/ui/webui/version/version_ui.h"
 
 #include <memory>
@@ -21,11 +16,9 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process_impl.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/version/version_handler.h"
-#include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/branded_strings.h"
@@ -38,21 +31,21 @@
 #include "components/strings/grit/components_strings.h"
 #include "components/variations/service/variations_service.h"
 #include "components/version_info/version_info.h"
-#include "components/version_ui/version_handler_helper.h"
-#include "components/version_ui/version_ui_constants.h"
+#include "components/webui/version/version_handler_helper.h"
+#include "components/webui/version/version_ui_constants.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/common/user_agent.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
+#include "ui/webui/webui_util.h"
 #include "v8/include/v8-version-string.h"
 
 #include "app/vivaldi_version_info.h"
 
 #if BUILDFLAG(IS_ANDROID)
 #include "base/android/build_info.h"
-#include "build/android_buildflags.h"  // nogncheck
 #include "chrome/browser/ui/android/android_about_app_info.h"
 #else
 #include "chrome/browser/ui/webui/theme_source.h"
@@ -105,27 +98,18 @@ void CreateAndAddVersionUIDataSource(Profile* profile) {
       {version_ui::kPlatform, IDS_PLATFORM_LABEL},
       {version_ui::kCustomizationId, IDS_VERSION_UI_CUSTOMIZATION_ID},
       {version_ui::kFirmwareVersion, IDS_VERSION_UI_FIRMWARE_VERSION},
-      {version_ui::kOsVersionHeaderText1, IDS_VERSION_UI_OS_TEXT1_LABEL},
-      {version_ui::kOsVersionHeaderText2, IDS_VERSION_UI_OS_TEXT2_LABEL},
-#endif  // BUILDFLAG(IS_CHROMEOS)
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#else
       {version_ui::kOSName, IDS_VERSION_UI_OS},
-#endif  // !BUILDFLAG(IS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 #if BUILDFLAG(IS_ANDROID)
       {version_ui::kGmsName, IDS_VERSION_UI_GMS},
 #endif  // BUILDFLAG(IS_ANDROID)
   };
   html_source->AddLocalizedStrings(kStrings);
 
-#if BUILDFLAG(IS_CHROMEOS)
-  auto os_link = l10n_util::GetStringUTF16(IDS_VERSION_UI_OS_LINK);
-  html_source->AddString(version_ui::kOsVersionHeaderLink, os_link);
-#endif  // BUILDFLAG(IS_CHROMEOS)
-
   VersionUI::AddVersionDetailStrings(html_source);
 
-  html_source->AddResourcePaths(
-      base::make_span(kVersionUiResources, kVersionUiResourcesSize));
+  html_source->AddResourcePaths(kVersionUiResources);
   html_source->UseStringsJs();
 
 #if BUILDFLAG(IS_ANDROID)
@@ -173,7 +157,7 @@ VersionUI::VersionUI(content::WebUI* web_ui)
   CreateAndAddVersionUIDataSource(profile);
 }
 
-VersionUI::~VersionUI() {}
+VersionUI::~VersionUI() = default;
 
 // static
 int VersionUI::VersionProcessorVariation() {
@@ -256,7 +240,7 @@ void VersionUI::AddVersionDetailStrings(content::WebUIDataSource* html_source) {
 
 #if BUILDFLAG(IS_MAC)
   html_source->AddString(version_ui::kOSType, base::mac::GetOSDisplayName());
-#elif !BUILDFLAG(IS_CHROMEOS_ASH)
+#elif !BUILDFLAG(IS_CHROMEOS)
   html_source->AddString(version_ui::kOSType,
                          std::string(version_info::GetOSType()));
 #endif  // BUILDFLAG(IS_MAC)
@@ -279,13 +263,6 @@ void VersionUI::AddVersionDetailStrings(content::WebUIDataSource* html_source) {
   html_source->AddString(
       version_ui::kVersionCode,
       base::android::BuildInfo::GetInstance()->package_version_code());
-  html_source->AddString(version_ui::kIsDesktopAndroid,
-#if BUILDFLAG(IS_DESKTOP_ANDROID)
-                         "true"
-#else
-                         "false"
-#endif
-  );
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_WIN)
@@ -297,8 +274,9 @@ void VersionUI::AddVersionDetailStrings(content::WebUIDataSource* html_source) {
   std::string command_line;
   typedef std::vector<std::string> ArgvList;
   const ArgvList& argv = base::CommandLine::ForCurrentProcess()->argv();
-  for (auto iter = argv.begin(); iter != argv.end(); iter++)
-    command_line += " " + *iter;
+  for (const auto& iter : argv) {
+    command_line += " " + iter;
+  }
   // TODO(viettrungluu): |command_line| could really have any encoding, whereas
   // below we assumes it's UTF-8.
   html_source->AddString(version_ui::kCommandLine, command_line);

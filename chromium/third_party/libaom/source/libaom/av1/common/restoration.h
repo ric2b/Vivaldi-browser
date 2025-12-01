@@ -87,8 +87,8 @@ extern "C" {
   (RESTORATION_UNITPELS_HORZ_MAX * RESTORATION_UNITPELS_VERT_MAX)
 
 // Two 32-bit buffers needed for the restored versions from two filters
-// TODO(debargha, rupert): Refactor to not need the large tilesize to be stored
-// on the decoder side.
+// TODO(debargha, rupert): Refactor to not need the large tile size to be
+// stored on the decoder side.
 #define SGRPROJ_TMPBUF_SIZE (RESTORATION_UNITPELS_MAX * 2 * sizeof(int32_t))
 
 #define SGRPROJ_EXTBUF_SIZE (0)

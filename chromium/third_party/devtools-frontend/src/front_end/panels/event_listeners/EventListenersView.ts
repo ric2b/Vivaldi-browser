@@ -8,7 +8,7 @@ import * as SDK from '../../core/sdk/sdk.js';
 import type * as Protocol from '../../generated/protocol.js';
 import * as Buttons from '../../ui/components/buttons/buttons.js';
 import * as ObjectUI from '../../ui/legacy/components/object_ui/object_ui.js';
-/* eslint-disable rulesdir/es_modules_import */
+/* eslint-disable rulesdir/es-modules-import */
 import objectValueStyles from '../../ui/legacy/components/object_ui/objectValue.css.js';
 import * as Components from '../../ui/legacy/components/utils/utils.js';
 import * as UI from '../../ui/legacy/legacy.js';
@@ -61,6 +61,7 @@ export class EventListenersView extends UI.Widget.VBox {
     this.treeOutline.element.classList.add('monospace');
     this.treeOutline.setShowSelectionOnKeyboardFocus(true);
     this.treeOutline.setFocusable(true);
+    this.treeOutline.registerRequiredCSS(eventListenersViewStyles, objectValueStyles);
     this.element.appendChild(this.treeOutline.element);
     this.emptyHolder = document.createElement('div');
     this.emptyHolder.classList.add('gray-info-message');
@@ -231,10 +232,6 @@ export class EventListenersView extends UI.Widget.VBox {
 
   private eventListenersArrivedForTest(): void {
   }
-  override wasShown(): void {
-    super.wasShown();
-    this.treeOutline.registerCSSFiles([eventListenersViewStyles, objectValueStyles]);
-  }
 }
 
 export class EventListenersTreeElement extends UI.TreeOutline.TreeElement {
@@ -304,7 +301,7 @@ export class ObjectEventListenerBar extends UI.TreeOutline.TreeElement {
       const deleteButton = new Buttons.Button.Button();
       deleteButton.data = {
         variant: Buttons.Button.Variant.ICON,
-        size: Buttons.Button.Size.SMALL,
+        size: Buttons.Button.Size.MICRO,
         iconName: 'bin',
         jslogContext: 'delete-event-listener',
       };

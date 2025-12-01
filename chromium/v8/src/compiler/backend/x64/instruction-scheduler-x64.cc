@@ -82,7 +82,8 @@ int InstructionScheduler::GetTargetInstructionFlags(
     case kSSEFloat32Min:
     case kSSEFloat64Min:
     case kSSEFloat64ToFloat32:
-    case kSSEFloat64ToFloat16:
+    case kSSEFloat64ToFloat16RawBits:
+    case kSSEFloat16RawBitsToFloat64:
     case kSSEFloat32ToInt32:
     case kSSEFloat32ToUint32:
     case kSSEFloat64ToInt32:
@@ -497,7 +498,8 @@ int InstructionScheduler::GetInstructionLatency(const Instruction* instr) {
     case kSSEFloat64ToInt64:
     case kSSEFloat32ToUint64:
     case kSSEFloat64ToUint64:
-    case kSSEFloat64ToFloat16:
+    case kSSEFloat64ToFloat16RawBits:
+    case kSSEFloat16RawBitsToFloat64:
       return 10;
     case kSSEFloat64Mod:
       return 50;

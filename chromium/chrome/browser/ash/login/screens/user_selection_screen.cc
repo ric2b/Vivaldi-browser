@@ -10,7 +10,6 @@
 #include <optional>
 #include <utility>
 
-#include "ash/components/arc/arc_util.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/login/login_utils.h"
@@ -55,6 +54,7 @@
 #include "chromeos/ash/components/proximity_auth/screenlock_bridge.h"
 #include "chromeos/ash/components/settings/cros_settings.h"
 #include "chromeos/ash/components/settings/cros_settings_names.h"
+#include "chromeos/ash/experiences/arc/arc_util.h"
 #include "chromeos/dbus/tpm_manager/tpm_manager.pb.h"
 #include "chromeos/dbus/tpm_manager/tpm_manager_client.h"
 #include "components/account_id/account_id.h"
@@ -189,7 +189,8 @@ std::tuple<bool, user_manager::MultiUserSignInPolicy> GetMultiUserSignInPolicy(
     const user_manager::User* user) {
   const std::string& user_id = user->GetAccountId().GetUserEmail();
   user_manager::MultiUserSignInPolicyController* controller =
-      user_manager::UserManager::Get()->GetMultiUserSignInPolicyController();
+      g_browser_process->platform_part()
+          ->multi_user_sign_in_policy_controller();
   return {
       controller->IsUserAllowedInSession(user_id),
       controller->GetCachedValue(user_id),

@@ -58,8 +58,8 @@ simply, `"go"`.
 
 *   The host compiler is included in the chromiumos-sdk (`cros_sdk`) and
             is installed automatically when a chroot is created.
-*   A few useful utilities like `"gofmt"`, `"godoc"`, `"golint"`, and
-            `"goguru"` are also in the SDK and installed in the chroot.
+*   A few useful utilities like `"gofmt"`, `"godoc"`, `"goguru"`, and
+            `"staticcheck"` are also in the SDK and installed in the chroot.
     *   `"repo upload"` is configured to warn when trying to upload a
                 change containing any Go files not formatted with `gofmt`.
 
@@ -85,7 +85,7 @@ Write an ebuild to fetch and install third party packages to
             [dev-go/errors](https://chromium.googlesource.com/chromiumos/overlays/chromiumos-overlay/+/HEAD/dev-go/errors)
 
     ```none
-    # Copyright 2018 The ChromiumOS Authors.
+    # Copyright 2018 The ChromiumOS Authors
     # Distributed under the terms of the GNU General Public License v2.
     
     EAPI="6"
@@ -117,7 +117,7 @@ Write an ebuild to fetch and install third party packages to
             [dev-go/glog](https://chromium.googlesource.com/chromiumos/overlays/chromiumos-overlay/+/HEAD/dev-go/glog/glog-0.0.1.ebuild)
 
     ```none
-    # Copyright 2018 The ChromiumOS Authors.
+    # Copyright 2018 The ChromiumOS Authors
     # Distributed under the terms of the GNU General Public License v2.
 
     EAPI="6"
@@ -149,7 +149,7 @@ Write an ebuild to fetch and install third party packages to
             [dev-go/go-sys](https://chromium.googlesource.com/chromiumos/overlays/chromiumos-overlay/+/HEAD/dev-go/go-sys/go-sys-0.0.1.ebuild)
 
     ```none
-    # Copyright 2018 The ChromiumOS Authors.
+    # Copyright 2018 The ChromiumOS Authors
     # Distributed under the terms of the GNU General Public License v2.
 
     EAPI="6"
@@ -229,7 +229,7 @@ other projects, its ebuild only needs to fetch and install the package files to
             [dev-go/seccomp](https://chromium.googlesource.com/chromiumos/overlays/chromiumos-overlay/+/HEAD/dev-go/seccomp/seccomp-9999.ebuild)
 
     ```none
-    # Copyright 2018 The ChromiumOS Authors.
+    # Copyright 2018 The ChromiumOS Authors
     # Distributed under the terms of the GNU General Public License v2.
 
     EAPI="6"
@@ -244,7 +244,7 @@ other projects, its ebuild only needs to fetch and install the package files to
     inherit cros-workon cros-go
 
     DESCRIPTION="Go support for Chromium OS Seccomp-BPF policy files"
-    HOMEPAGE="https://chromium.org/chromium-os/developer-guide/chromium-os-sandboxing"
+    HOMEPAGE="https://www.chromium.org/chromium-os/developer-guide/chromium-os-sandboxing"
 
     LICENSE="BSD-Google"
     SLOT="0"
@@ -277,7 +277,7 @@ For a typical Go project that needs to build and install executables:
             [dev-go/golint](https://chromium.googlesource.com/chromiumos/overlays/chromiumos-overlay/+/HEAD/dev-go/golint/golint-0.0.1.ebuild)
 
     ```none
-    # Copyright 2018 The ChromiumOS Authors.
+    # Copyright 2018 The ChromiumOS Authors
     # Distributed under the terms of the GNU General Public License v2.
 
     EAPI="6"
@@ -319,7 +319,7 @@ for other projects to import.
             [dev-go/go-tools](https://chromium.googlesource.com/chromiumos/overlays/chromiumos-overlay/+/HEAD/dev-go/go-tools/go-tools-0.0.1.ebuild)
 
     ```none
-    # Copyright 2018 The ChromiumOS Authors.
+    # Copyright 2018 The ChromiumOS Authors
     # Distributed under the terms of the GNU General Public License v2.
 
     EAPI="6"

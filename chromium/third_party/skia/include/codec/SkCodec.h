@@ -412,6 +412,9 @@ public:
      *  If a scanline decode is in progress, scanline mode will end, requiring the client to call
      *  startScanlineDecode() in order to return to decoding scanlines.
      *
+     *  For certain codecs, reading into a smaller bitmap than the original dimensions may not
+     *  produce correct results (e.g. animated webp).
+     *
      *  @return Result kSuccess, or another value explaining the type of failure.
      */
     Result getPixels(const SkImageInfo& info, void* pixels, size_t rowBytes, const Options*);
@@ -812,6 +815,7 @@ protected:
     }
 
     virtual bool onGetGainmapCodec(SkGainmapInfo*, std::unique_ptr<SkCodec>*) { return false; }
+    virtual bool onGetGainmapInfo(SkGainmapInfo*) { return false; }
 
     // TODO(issues.skia.org/363544350): This API only works for JPEG images. Remove this API once
     // it is no longer used.
@@ -1053,8 +1057,9 @@ private:
     friend class PNGCodecGM;    // for fillIncompleteImage
     friend class SkSampledCodec;
     friend class SkIcoCodec;
-    friend class SkAndroidCodec; // for fEncodedInfo
-    friend class SkPDFBitmap; // for fEncodedInfo
+    friend class SkPngCodec;     // for onGetGainmapCodec
+    friend class SkAndroidCodec;  // for handleFrameIndex
+    friend class SkCodecPriv;     // for fEncodedInfo
 };
 
 namespace SkCodecs {

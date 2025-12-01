@@ -18,6 +18,15 @@ typedef int64_t SearchListID;
 
 typedef std::vector<SearchListID> SearchListIDs;
 
+class MailSearchCB {
+ public:
+  MailSearchCB() = default;
+
+  bool success;
+  std::string message;
+  SearchListIDs search_list_ids;
+};
+
 // Holds all information associated with message.
 class MessageRow {
  public:
@@ -36,14 +45,11 @@ class MessageRow {
 
 typedef std::vector<MessageRow> MessageRows;
 
-// Used for add message body and delete message result
-class MessageResult {
+// Status callback object
+class StatusCB {
  public:
-  MessageResult() = default;
-  MessageResult(const MessageResult&) = default;
-  MessageResult& operator=(const MessageResult&) = default;
-
-  bool success;
+  StatusCB() = default;
+  bool result;
   std::string message;
 };
 

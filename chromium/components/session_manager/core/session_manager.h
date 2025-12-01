@@ -9,23 +9,27 @@
 #include <vector>
 
 #include "base/observer_list.h"
+#include "base/scoped_observation.h"
 #include "components/session_manager/session_manager_export.h"
 #include "components/session_manager/session_manager_types.h"
+#include "components/user_manager/user_manager.h"
 
 class AccountId;
 
 namespace session_manager {
 
+class Session;
 class SessionManagerObserver;
 
-class SESSION_EXPORT SessionManager {
+class SESSION_EXPORT SessionManager
+    : public user_manager::UserManager::Observer {
  public:
   SessionManager();
 
   SessionManager(const SessionManager&) = delete;
   SessionManager& operator=(const SessionManager&) = delete;
 
-  virtual ~SessionManager();
+  ~SessionManager() override;
 
   // Returns current SessionManager instance and NULL if it hasn't been
   // initialized yet.
@@ -48,6 +52,13 @@ class SESSION_EXPORT SessionManager {
 
   // Returns true if user session start up tasks are completed.
   bool IsUserSessionStartUpTaskCompleted() const;
+
+  // Currently, UserManager is created after SessionManager.
+  // However, UserManager is destroyed after SessionManager in the production.
+  // Tests need to follow the same lifetime management.
+  // TODO(b:332481586): Move this to the constructor by fixing initialization
+  // order.
+  virtual void OnUserManagerCreated(user_manager::UserManager* user_manager);
 
   // Called when browser session is started i.e. after
   // browser_creator.LaunchBrowser(...) was called after user sign in.
@@ -77,13 +88,17 @@ class SESSION_EXPORT SessionManager {
   void NotifyUnlockAttempt(const bool success, const UnlockType unlock_type);
 
   SessionState session_state() const { return session_state_; }
-  const std::vector<Session>& sessions() const { return sessions_; }
+  const std::vector<std::unique_ptr<Session>>& sessions() const {
+    return sessions_;
+  }
 
   bool login_or_lock_screen_shown_for_test() const {
     return login_or_lock_screen_shown_for_test_;
   }
 
  protected:
+  user_manager::UserManager* user_manager() { return user_manager_.get(); }
+
   // Notifies UserManager about a user signs in when creating a user session.
   virtual void NotifyUserLoggedIn(const AccountId& user_account_id,
                                   const std::string& user_id_hash,
@@ -106,6 +121,11 @@ class SESSION_EXPORT SessionManager {
   // g_browser_process->platform_part().
   static SessionManager* instance;
 
+  raw_ptr<user_manager::UserManager> user_manager_ = nullptr;
+  base::ScopedObservation<user_manager::UserManager,
+                          user_manager::UserManager::Observer>
+      user_manager_observation_{this};
+
   SessionState session_state_ = SessionState::UNKNOWN;
 
   // True if SessionStarted() has been called.
@@ -120,13 +140,13 @@ class SESSION_EXPORT SessionManager {
   bool login_or_lock_screen_shown_for_test_ = false;
 
   // Id of the primary session, i.e. the first user session.
-  static const SessionId kPrimarySessionId = 1;
+  static constexpr SessionId kPrimarySessionId = 1;
 
   // ID assigned to the next session.
   SessionId next_id_ = kPrimarySessionId;
 
   // Keeps track of user sessions.
-  std::vector<Session> sessions_;
+  std::vector<std::unique_ptr<Session>> sessions_;
 
   base::ObserverList<SessionManagerObserver> observers_;
 };

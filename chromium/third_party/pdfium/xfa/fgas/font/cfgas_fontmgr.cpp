@@ -163,15 +163,19 @@ const FX_FONTDESCRIPTOR* MatchDefaultFont(
 
 uint32_t GetGdiFontStyles(const LOGFONTW& lf) {
   uint32_t dwStyles = 0;
-  if ((lf.lfPitchAndFamily & 0x03) == FIXED_PITCH)
-    dwStyles |= FXFONT_FIXED_PITCH;
+  if ((lf.lfPitchAndFamily & 0x03) == FIXED_PITCH) {
+    dwStyles |= pdfium::kFontStyleFixedPitch;
+  }
   uint8_t nFamilies = lf.lfPitchAndFamily & 0xF0;
-  if (nFamilies == FF_ROMAN)
-    dwStyles |= FXFONT_SERIF;
-  if (nFamilies == FF_SCRIPT)
-    dwStyles |= FXFONT_SCRIPT;
-  if (lf.lfCharSet == SYMBOL_CHARSET)
-    dwStyles |= FXFONT_SYMBOLIC;
+  if (nFamilies == FF_ROMAN) {
+    dwStyles |= pdfium::kFontStyleSerif;
+  }
+  if (nFamilies == FF_SCRIPT) {
+    dwStyles |= pdfium::kFontStyleScript;
+  }
+  if (lf.lfCharSet == SYMBOL_CHARSET) {
+    dwStyles |= pdfium::kFontStyleSymbolic;
+  }
   return dwStyles;
 }
 
@@ -445,6 +449,11 @@ std::vector<WideString> GetNames(pdfium::span<const uint8_t> name_table) {
       continue;
     }
 
+    // Avoid out of bounds crashes if the length and/or offset are wrong.
+    if (static_cast<size_t>(nNameLength) + nNameOffset >= str.size()) {
+      continue;
+    }
+
     WideString wsFamily;
     for (uint16_t j = 0; j < nNameLength; ++j) {
       wchar_t wcTemp = str[nNameOffset + j];
@@ -458,26 +467,26 @@ std::vector<WideString> GetNames(pdfium::span<const uint8_t> name_table) {
 uint32_t GetFlags(const RetainPtr<CFX_Face>& face) {
   uint32_t flags = 0;
   if (face->IsBold()) {
-    flags |= FXFONT_FORCE_BOLD;
+    flags |= pdfium::kFontStyleForceBold;
   }
   if (face->IsItalic()) {
-    flags |= FXFONT_ITALIC;
+    flags |= pdfium::kFontStyleItalic;
   }
   if (face->IsFixedWidth()) {
-    flags |= FXFONT_FIXED_PITCH;
+    flags |= pdfium::kFontStyleFixedPitch;
   }
 
   std::optional<std::array<uint32_t, 2>> code_page_range =
       face->GetOs2CodePageRange();
   if (code_page_range.has_value() && (code_page_range.value()[0] & (1 << 31))) {
-    flags |= FXFONT_SYMBOLIC;
+    flags |= pdfium::kFontStyleSymbolic;
   }
 
   std::optional<std::array<uint8_t, 2>> panose = face->GetOs2Panose();
   if (panose.has_value() && panose.value()[0] == 2) {
     uint8_t serif = panose.value()[1];
     if ((serif > 1 && serif < 10) || serif > 13) {
-      flags |= FXFONT_SERIF;
+      flags |= pdfium::kFontStyleSerif;
     }
   }
   return flags;
@@ -546,22 +555,20 @@ RetainPtr<CFX_Face> LoadFace(
 
 bool VerifyUnicodeForFontDescriptor(CFGAS_FontDescriptor* pDesc,
                                     wchar_t wcUnicode) {
-  RetainPtr<IFX_SeekableReadStream> pFileRead =
-      CreateFontStream(pDesc->m_wsFaceName.ToUTF8());
-  if (!pFileRead)
-    return false;
-
-  RetainPtr<CFX_Face> pFace = LoadFace(pFileRead, pDesc->m_nFaceIndex);
-  if (!pFace)
-    return false;
-
-  bool select_charmap_result =
-      pFace->SelectCharMap(fxge::FontEncoding::kUnicode);
-  int ret_index = pFace->GetCharIndex(wcUnicode);
-
-  pFace->ClearExternalStream();
-
-  return select_charmap_result && ret_index;
+  if (!pDesc->m_pFace) {
+    RetainPtr<IFX_SeekableReadStream> pFileRead =
+        CreateFontStream(pDesc->m_wsFaceName.ToUTF8());
+    if (!pFileRead) {
+      return false;
+    }
+    pDesc->m_pFace = LoadFace(pFileRead, pDesc->m_nFaceIndex);
+    if (!pDesc->m_pFace) {
+      return false;
+    }
+    pDesc->m_pFace->ClearExternalStream();
+  }
+  return pDesc->m_pFace->SelectCharMap(fxge::FontEncoding::kUnicode) &&
+         pDesc->m_pFace->GetCharIndex(wcUnicode);
 }
 
 bool IsPartName(const WideString& name1, const WideString& name2) {

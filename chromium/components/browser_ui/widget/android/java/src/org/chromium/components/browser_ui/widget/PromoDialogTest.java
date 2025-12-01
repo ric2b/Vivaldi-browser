@@ -120,11 +120,7 @@ public class PromoDialogTest {
 
     @BeforeClass
     public static void setupSuite() {
-        activityTestRule.launchActivity(null);
-        ThreadUtils.runOnUiThreadBlocking(
-                () -> {
-                    sActivity = activityTestRule.getActivity();
-                });
+        sActivity = activityTestRule.launchActivity(null);
     }
 
     @Test
@@ -205,7 +201,7 @@ public class PromoDialogTest {
         wrapper = new PromoDialogWrapper(sActivity, dialogParams);
         promoDialogLayout = wrapper.dialogLayout;
         subheader = promoDialogLayout.findViewById(R.id.subheader);
-        Assert.assertEquals(subheader.getText(), subheaderCharSequenceTestValue);
+        Assert.assertEquals(subheaderCharSequenceTestValue, subheader.getText());
 
         // Without setting subHeaderIsLink the sub-header should have the default movement method.
         Assert.assertFalse(subheader.getMovementMethod() instanceof LinkMovementMethod);

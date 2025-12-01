@@ -9,6 +9,7 @@
 
 #include "gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h"
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -17,8 +18,8 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_split.h"
+#include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/service/command_buffer_service.h"
 #include "gpu/command_buffer/service/decoder_client.h"
@@ -1064,6 +1065,17 @@ gpu::ContextResult GLES2DecoderPassthroughImpl::Initialize(
   if (feature_info_->IsWebGLContext())
     api()->glDisableFn(GL_TEXTURE_RECTANGLE_ANGLE);
 #endif
+
+  // TEMPORARY: Set primitive restart to enabled by default for WebGL2. Clear
+  // errors afterwards so that when this state is initialized and validated in
+  // ANGLE, it will not generate errors during command buffer initialization.
+  if (feature_info_->context_type() == CONTEXT_TYPE_WEBGL2) {
+    // If WebGL 2, the PRIMITIVE_RESTART_FIXED_INDEX should be always enabled.
+    // See the section <Primitive Restart is Always Enabled> in WebGL 2 spec:
+    // https://www.khronos.org/registry/webgl/specs/latest/2.0/#4.1.4
+    api()->glEnableFn(GL_PRIMITIVE_RESTART_FIXED_INDEX);
+    CheckErrorCallbackState();
+  }
 
   // Register this object as a GPU switching observer.
   if (feature_info_->IsWebGLContext()) {
@@ -2160,6 +2172,11 @@ bool GLES2DecoderPassthroughImpl::IsIgnoredCap(GLenum cap) const {
     case GL_DEBUG_OUTPUT:
       return true;
 
+    case GL_PRIMITIVE_RESTART_FIXED_INDEX:
+      // Disable setting primitive restart at the command decoder level until
+      // it's blocked in ANGLE for WebGL contexts.
+      return feature_info_->IsWebGLContext();
+
     default:
       return false;
   }
@@ -2210,7 +2227,7 @@ bool GLES2DecoderPassthroughImpl::IsEmulatedQueryTarget(GLenum target) const {
 }
 
 bool GLES2DecoderPassthroughImpl::OnlyHasPendingProgramCompletionQueries() {
-  return base::ranges::all_of(pending_queries_, [](const auto& query) {
+  return std::ranges::all_of(pending_queries_, [](const auto& query) {
     return query.target == GL_PROGRAM_COMPLETION_QUERY_CHROMIUM;
   });
 }
@@ -2400,8 +2417,8 @@ error::Error GLES2DecoderPassthroughImpl::ProcessQueries(bool did_finish) {
 }
 
 void GLES2DecoderPassthroughImpl::RemovePendingQuery(GLuint service_id) {
-  auto pending_iter = base::ranges::find(pending_queries_, service_id,
-                                         &PendingQuery::service_id);
+  auto pending_iter = std::ranges::find(pending_queries_, service_id,
+                                        &PendingQuery::service_id);
   if (pending_iter != pending_queries_.end()) {
     QuerySync* sync = pending_iter->sync;
     sync->result = 0;
@@ -2736,32 +2753,6 @@ bool GLES2DecoderPassthroughImpl::IsEmulatedFramebufferBound(
   }
 
   return false;
-}
-
-void GLES2DecoderPassthroughImpl::CheckSwapBuffersAsyncResult(
-    const char* function_name,
-    uint64_t swap_id,
-    gfx::SwapCompletionResult result) {
-  TRACE_EVENT_NESTABLE_ASYNC_END0(
-      "gpu", "AsyncSwapBuffers",
-      TRACE_ID_WITH_SCOPE("AsyncSwapBuffers", swap_id));
-  CheckSwapBuffersResult(result.swap_result, function_name);
-}
-
-error::Error GLES2DecoderPassthroughImpl::CheckSwapBuffersResult(
-    gfx::SwapResult result,
-    const char* function_name) {
-  if (result == gfx::SwapResult::SWAP_FAILED) {
-    // If SwapBuffers failed, we may not have a current context any more.
-    LOG(ERROR) << "Context lost because " << function_name << " failed.";
-    if (!context_->IsCurrent(surface_.get()) || !CheckResetStatus()) {
-      MarkContextLost(error::kUnknown);
-      group_->LoseContexts(error::kUnknown);
-      return error::kLostContext;
-    }
-  }
-
-  return error::kNoError;
 }
 
 // static

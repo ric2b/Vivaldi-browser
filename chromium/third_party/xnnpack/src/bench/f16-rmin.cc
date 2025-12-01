@@ -43,7 +43,7 @@ static void f16_rmin(
     init_params(&params);
   }
 
-  xnn_float16 output = std::nanf("");
+  xnn_float16 output;
   for (auto _ : state) {
     rmin(elements * sizeof(xnn_float16), input.data(), &output, &params);
   }
@@ -183,5 +183,5 @@ BENCHMARK_CAPTURE(f16_rmin, scalar_u4_acc4,
   ->UseRealTime();
 
 #ifndef XNNPACK_BENCHMARK_NO_MAIN
-BENCHMARK_MAIN();
+XNN_BENCHMARK_MAIN();
 #endif

@@ -20,6 +20,7 @@
 #include "components/account_id/account_id.h"
 #include "components/user_manager/fake_user_manager.h"
 #include "components/user_manager/scoped_user_manager.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "ui/events/keycodes/keyboard_code_conversion.h"
 #include "ui/views/test/views_test_utils.h"
 #include "ui/views/view.h"
@@ -31,6 +32,7 @@ namespace ash {
 namespace {
 
 const char kTestAccount[] = "user@test.com";
+const GaiaId::Literal kFakeGaia("fake_gaia");
 const std::u16string title = u"title";
 const std::u16string description = u"description";
 
@@ -50,9 +52,13 @@ class ActiveSessionAuthViewUnitTest : public AshTestBase {
     widget_->SetFullscreen(true);
     widget_->Show();
 
-    AccountId account_id = AccountId::FromUserEmail(kTestAccount);
-    auto fake_user_manager = std::make_unique<user_manager::FakeUserManager>();
-    fake_user_manager->AddUser(account_id);
+    auto fake_user_manager =
+        std::make_unique<user_manager::FakeUserManager>(local_state());
+
+    AccountId account_id =
+        AccountId::FromUserEmailGaiaId(kTestAccount, kFakeGaia);
+    fake_user_manager->AddGaiaUser(account_id,
+                                   user_manager::UserType::kRegular);
     scoped_user_manager_ = std::make_unique<user_manager::ScopedUserManager>(
         std::move(fake_user_manager));
 

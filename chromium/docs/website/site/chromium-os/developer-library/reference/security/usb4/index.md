@@ -160,7 +160,7 @@ in this context are as follows:
 
 [USB Guard]: https://usbguard.github.io/
 [USB Bouncer]: https://chromium.googlesource.com/chromiumos/platform2/+/main/usb_bouncer/README.md
-[short-term, physically present attacker]: /security/chromeos_security_whitepaper.md#how-our-principles-inform-the-threat-model
+[short-term, physically present attacker]: /chromium-os/developer-library/reference/security/security-whitepaper#how-our-principles-inform-the-threat-model
 [Thunderspy]: https://thunderspy.io/
 [Connecting your Chromebook to Thunderbolt & USB4 accessories]: https://support.google.com/chromebook/answer/10483408
 [pciguard]: https://chromium.googlesource.com/chromiumos/platform2/+/main/pciguard/README.md

@@ -20,10 +20,15 @@ module.exports = {
     meta: {
         type: "suggestion",
 
+        defaultOptions: [{
+            enforceForClassFields: true,
+            exceptMethods: []
+        }],
+
         docs: {
             description: "Enforce that class methods utilize `this`",
             recommended: false,
-            url: "https://eslint.org/docs/rules/class-methods-use-this"
+            url: "https://eslint.org/docs/latest/rules/class-methods-use-this"
         },
 
         schema: [{
@@ -36,8 +41,7 @@ module.exports = {
                     }
                 },
                 enforceForClassFields: {
-                    type: "boolean",
-                    default: true
+                    type: "boolean"
                 }
             },
             additionalProperties: false
@@ -48,9 +52,9 @@ module.exports = {
         }
     },
     create(context) {
-        const config = Object.assign({}, context.options[0]);
-        const enforceForClassFields = config.enforceForClassFields !== false;
-        const exceptMethods = new Set(config.exceptMethods || []);
+        const [options] = context.options;
+        const { enforceForClassFields } = options;
+        const exceptMethods = new Set(options.exceptMethods);
 
         const stack = [];
 
@@ -133,7 +137,7 @@ module.exports = {
             if (isIncludedInstanceMethod(node.parent) && !methodUsesThis) {
                 context.report({
                     node,
-                    loc: astUtils.getFunctionHeadLoc(node, context.getSourceCode()),
+                    loc: astUtils.getFunctionHeadLoc(node, context.sourceCode),
                     messageId: "missingThis",
                     data: {
                         name: astUtils.getFunctionNameWithKind(node)

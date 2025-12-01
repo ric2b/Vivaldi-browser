@@ -207,6 +207,12 @@ OpResolver::OpResolver(const mojom::CreateContextOptions& options) {
              ::tflite::ops::builtin::Register_RESIZE_NEAREST_NEIGHBOR(),
              /* min_version = */ 1,
              /* max_version = */ 3);
+  AddBuiltin(::tflite::BuiltinOperator_REVERSE_V2,
+             ::tflite::ops::builtin::Register_REVERSE_V2(),
+             /* min_version = */ 1,
+             /* max_version = */ 3);
+  AddBuiltin(::tflite::BuiltinOperator_ROUND,
+             ::tflite::ops::builtin::Register_ROUND());
   AddBuiltin(::tflite::BuiltinOperator_SCATTER_ND,
              ::tflite::ops::builtin::Register_SCATTER_ND());
   AddBuiltin(::tflite::BuiltinOperator_SELECT_V2,
@@ -229,6 +235,8 @@ OpResolver::OpResolver(const mojom::CreateContextOptions& options) {
              ::tflite::ops::builtin::Register_SPLIT_V(),
              /* min_version = */ 1,
              /* max_version = */ 2);
+  AddBuiltin(::tflite::BuiltinOperator_SQUARE,
+             ::tflite::ops::builtin::Register_SQUARE());
   AddBuiltin(::tflite::BuiltinOperator_SQUEEZE,
              ::tflite::ops::builtin::Register_SQUEEZE(),
              /* min_version = */ 1,

@@ -3,17 +3,7 @@
 // found in the LICENSE file.
 
 import {describeWithEnvironment} from '../../../testing/EnvironmentHelpers.js';
-import {getFirstOrError, getInsightOrError} from '../../../testing/InsightHelpers.js';
-import {TraceLoader} from '../../../testing/TraceLoader.js';
-
-export async function processTrace(testContext: Mocha.Suite|Mocha.Context|null, traceFile: string) {
-  const {parsedTrace, insights} = await TraceLoader.traceEngine(testContext, traceFile);
-  if (!insights) {
-    throw new Error('No insights');
-  }
-
-  return {data: parsedTrace, insights};
-}
+import {getFirstOrError, getInsightOrError, processTrace} from '../../../testing/InsightHelpers.js';
 
 describeWithEnvironment('LCPDiscovery', function() {
   it('calculates image lcp attributes', async () => {
@@ -22,9 +12,9 @@ describeWithEnvironment('LCPDiscovery', function() {
     const insight = getInsightOrError('LCPDiscovery', insights, firstNav);
     const {shouldIncreasePriorityHint, shouldPreloadImage, shouldRemoveLazyLoading} = insight;
 
-    assert.strictEqual(shouldRemoveLazyLoading, false);
-    assert.strictEqual(shouldPreloadImage, false);
-    assert.strictEqual(shouldIncreasePriorityHint, true);
+    assert.isFalse(shouldRemoveLazyLoading);
+    assert.isFalse(shouldPreloadImage);
+    assert.isTrue(shouldIncreasePriorityHint);
   });
 
   it('calculates the LCP optimal time as the document request download start time', async () => {

@@ -256,10 +256,39 @@ void OpenFileFromODFS(
               return;
             }
             auto* proxy = apps::AppServiceProxyFactory::GetForProfile(profile);
-            proxy->LaunchAppWithUrl(ash::kMicrosoft365AppId,
-                                    /*event_flags=*/ui::EF_NONE, url,
-                                    apps::LaunchSource::kFromFileManager,
-                                    /*window_info=*/nullptr);
+            if (!proxy->AppRegistryCache().IsAppInstalled(
+                    ash::kMicrosoft365AppId)) {
+              LOG(ERROR) << "MS365 with app ID " << ash::kMicrosoft365AppId
+                         << " is not installed";
+              ShowUnableToOpenNotification(profile);
+              std::move(callback).Run(
+                  OfficeOneDriveOpenErrors::kMS365NotInstalled);
+              return;
+            }
+            proxy->LaunchAppWithUrl(
+                ash::kMicrosoft365AppId,
+                /*event_flags=*/ui::EF_NONE, url,
+                apps::LaunchSource::kFromFileManager,
+                /*window_info=*/nullptr,
+                base::BindOnce(
+                    [](Profile* profile,
+                       base::OnceCallback<void(OfficeOneDriveOpenErrors)>
+                           callback,
+                       apps::LaunchResult&& launch_result) {
+                      OfficeOneDriveOpenErrors open;
+                      switch (launch_result.state) {
+                        case apps::LaunchResult::State::kSuccess:
+                          open = OfficeOneDriveOpenErrors::kSuccess;
+                          break;
+                        default:
+                          LOG(ERROR) << "Failed to launch URL";
+                          ShowUnableToOpenNotification(profile);
+                          open = OfficeOneDriveOpenErrors::kFailedToLaunch;
+                          break;
+                      }
+                      std::move(callback).Run(open);
+                    },
+                    profile, std::move(callback)));
             if (base::FeatureList::IsEnabled(
                     ::features::kHappinessTrackingOffice)) {
               ash::cloud_upload::HatsOfficeTrigger::Get()
@@ -267,7 +296,6 @@ void OpenFileFromODFS(
                       ash::kMicrosoft365AppId,
                       ash::cloud_upload::HatsOfficeLaunchingApp::kMS365);
             }
-            std::move(callback).Run(OfficeOneDriveOpenErrors::kSuccess);
           },
           profile, file_system, std::move(callback)));
 }
@@ -294,8 +322,8 @@ void OpenODFSUrl(Profile* profile,
 bool HasFileWithExtensionFromSet(
     const std::vector<storage::FileSystemURL>& file_urls,
     const std::set<std::string>& extensions) {
-  return base::ranges::any_of(file_urls, [&extensions](const auto& file_url) {
-    return base::ranges::any_of(extensions, [&file_url](const auto& extension) {
+  return std::ranges::any_of(file_urls, [&extensions](const auto& file_url) {
+    return std::ranges::any_of(extensions, [&file_url](const auto& extension) {
       return file_url.path().MatchesExtension(extension);
     });
   });
@@ -321,7 +349,7 @@ bool HasPowerPointFile(const std::vector<storage::FileSystemURL>& file_urls) {
 bool HaveExplicitFileHandlers(
     Profile* profile,
     const std::vector<storage::FileSystemURL>& file_urls) {
-  return base::ranges::all_of(file_urls, [profile](const auto& url) {
+  return std::ranges::all_of(file_urls, [profile](const auto& url) {
     return fm_tasks::HasExplicitDefaultFileHandler(profile,
                                                    url.path().FinalExtension());
   });
@@ -331,7 +359,7 @@ bool HaveExplicitFileHandlers(
 // pre-existing preference for these file types.
 bool HaveExplicitFileHandlers(Profile* profile,
                               const std::set<std::string>& extensions) {
-  return base::ranges::all_of(extensions, [profile](const auto& extension) {
+  return std::ranges::all_of(extensions, [profile](const auto& extension) {
     return fm_tasks::HasExplicitDefaultFileHandler(profile, extension);
   });
 }
@@ -588,21 +616,21 @@ bool CloudOpenTask::OpenOrMoveFiles() {
     return true;
   }
 
-    // The files need to be moved.
-    auto operation =
-        GetUploadType(profile_, file_urls_.front()) == UploadType::kCopy
-            ? OfficeFilesTransferRequired::kCopy
-            : OfficeFilesTransferRequired::kMove;
-    // Set as WARNING as INFO is not allowed.
-    LOG(WARNING) << (operation == OfficeFilesTransferRequired::kCopy ? "Copy"
-                                                                     : "Mov")
-                 << "ing a " << ext << " file to "
-                 << (cloud_provider_ == CloudProvider::kGoogleDrive
-                         ? "Google Drive"
-                         : "OneDrive");
-    transfer_required_ = operation;
-    cloud_open_metrics_->LogTransferRequired(operation);
-    return ConfirmMoveOrStartUpload();
+  // The files need to be moved.
+  auto operation =
+      GetUploadType(profile_, file_urls_.front()) == UploadType::kCopy
+          ? OfficeFilesTransferRequired::kCopy
+          : OfficeFilesTransferRequired::kMove;
+  // Set as WARNING as INFO is not allowed.
+  LOG(WARNING) << (operation == OfficeFilesTransferRequired::kCopy ? "Copy"
+                                                                   : "Mov")
+               << "ing a " << ext << " file to "
+               << (cloud_provider_ == CloudProvider::kGoogleDrive
+                       ? "Google Drive"
+                       : "OneDrive");
+  transfer_required_ = operation;
+  cloud_open_metrics_->LogTransferRequired(operation);
+  return ConfirmMoveOrStartUpload();
 }
 
 void CloudOpenTask::OpenAlreadyHostedDriveUrls() {

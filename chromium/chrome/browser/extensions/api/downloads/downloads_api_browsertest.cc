@@ -3,8 +3,8 @@
 // found in the LICENSE file.
 
 #ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
 #endif
 
 #include "chrome/browser/extensions/api/downloads/downloads_api.h"
@@ -13,11 +13,13 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <array>
 #include <memory>
 #include <optional>
 #include <string_view>
 
 #include "base/containers/circular_deque.h"
+#include "base/containers/span.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
@@ -508,9 +510,9 @@ class DownloadExtensionTest : public ExtensionApiTest {
   // array. |count| is the number of elements in |history_info|. On success,
   // |items| will contain |count| DownloadItems in the order that they were
   // specified in |history_info|. Returns true on success and false otherwise.
-  bool CreateHistoryDownloads(const HistoryDownloadInfo* history_info,
-                              size_t count,
-                              DownloadManager::DownloadVector* items) {
+  bool CreateHistoryDownloads(
+      base::span<const HistoryDownloadInfo> history_info,
+      DownloadManager::DownloadVector* items) {
     DownloadIdComparator download_id_comparator;
     base::Time current = base::Time::Now();
     items->clear();
@@ -518,7 +520,7 @@ class DownloadExtensionTest : public ExtensionApiTest {
     CHECK(items->empty());
     std::vector<GURL> url_chain;
     url_chain.push_back(GURL());
-    for (size_t i = 0; i < count; ++i) {
+    for (size_t i = 0; i < history_info.size(); ++i) {
       DownloadItem* item = GetOnRecordManager()->CreateDownloadItem(
           base::Uuid::GenerateRandomV4().AsLowercaseString(),
           download::DownloadItem::kInvalidId + 1 + i,
@@ -537,9 +539,9 @@ class DownloadExtensionTest : public ExtensionApiTest {
           std::string(),          // hash
           history_info[i].state,  // state
           history_info[i].danger_type,
-          (history_info[i].state != download::DownloadItem::CANCELLED
-               ? download::DOWNLOAD_INTERRUPT_REASON_NONE
-               : download::DOWNLOAD_INTERRUPT_REASON_USER_CANCELED),
+          history_info[i].state != download::DownloadItem::CANCELLED
+              ? download::DOWNLOAD_INTERRUPT_REASON_NONE
+              : download::DOWNLOAD_INTERRUPT_REASON_USER_CANCELED,
           false,    // opened
           current,  // last_access_time
           false, std::vector<DownloadItem::ReceivedSlice>());
@@ -722,7 +724,7 @@ class DownloadExtensionTest : public ExtensionApiTest {
       function->set_extension(extension);
       function->SetRenderFrameHost(tab->GetPrimaryMainFrame());
       function->set_source_process_id(
-          tab->GetPrimaryMainFrame()->GetProcess()->GetID());
+          tab->GetPrimaryMainFrame()->GetProcess()->GetDeprecatedID());
     }
   }
 
@@ -788,7 +790,7 @@ class MockIconExtractorImpl : public DownloadFileIconExtractor {
         expected_icon_size_(icon_size),
         response_(response) {
   }
-  ~MockIconExtractorImpl() override {}
+  ~MockIconExtractorImpl() override = default;
 
   bool ExtractIconURLForPath(const base::FilePath& path,
                              float scale,
@@ -940,7 +942,7 @@ class JustInProgressDownloadObserver
   JustInProgressDownloadObserver& operator=(
       const JustInProgressDownloadObserver&) = delete;
 
-  ~JustInProgressDownloadObserver() override {}
+  ~JustInProgressDownloadObserver() override = default;
 
  private:
   bool IsDownloadInFinalState(DownloadItem* item) override {
@@ -1116,8 +1118,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
       {FILE_PATH_LITERAL("file.txt"), DownloadItem::COMPLETE,
        download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS}};
   DownloadManager::DownloadVector all_downloads;
-  ASSERT_TRUE(CreateHistoryDownloads(kHistoryInfo, std::size(kHistoryInfo),
-                                     &all_downloads));
+  ASSERT_TRUE(CreateHistoryDownloads(kHistoryInfo, &all_downloads));
   DownloadItem* download_item = all_downloads[0];
   ASSERT_TRUE(download_item);
   EXPECT_FALSE(download_item->GetFileExternallyRemoved());
@@ -1254,8 +1255,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
       {FILE_PATH_LITERAL("fake.txt"), DownloadItem::COMPLETE,
        download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS}};
   DownloadManager::DownloadVector all_downloads;
-  ASSERT_TRUE(CreateHistoryDownloads(kHistoryInfo, std::size(kHistoryInfo),
-                                     &all_downloads));
+  ASSERT_TRUE(CreateHistoryDownloads(kHistoryInfo, &all_downloads));
 
   base::FilePath real_path = all_downloads[0]->GetTargetFilePath();
   base::FilePath fake_path = all_downloads[1]->GetTargetFilePath();
@@ -1350,8 +1350,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
       {FILE_PATH_LITERAL("baz"), DownloadItem::COMPLETE,
        download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS}};
   DownloadManager::DownloadVector all_downloads;
-  ASSERT_TRUE(CreateHistoryDownloads(kHistoryInfo, std::size(kHistoryInfo),
-                                     &all_downloads));
+  ASSERT_TRUE(CreateHistoryDownloads(kHistoryInfo, &all_downloads));
 
   std::optional<base::Value> result = RunFunctionAndReturnResult(
       base::MakeRefCounted<DownloadsSearchFunction>(),
@@ -1411,8 +1410,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
       {FILE_PATH_LITERAL("baz"), DownloadItem::COMPLETE,
        download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS}};
   DownloadManager::DownloadVector items;
-  ASSERT_TRUE(
-      CreateHistoryDownloads(kHistoryInfo, std::size(kHistoryInfo), &items));
+  ASSERT_TRUE(CreateHistoryDownloads(kHistoryInfo, &items));
 
   std::optional<base::Value> result = RunFunctionAndReturnResult(
       base::MakeRefCounted<DownloadsSearchFunction>(),
@@ -1442,8 +1440,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
       {FILE_PATH_LITERAL("baz"), DownloadItem::COMPLETE,
        download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS}};
   DownloadManager::DownloadVector items;
-  ASSERT_TRUE(
-      CreateHistoryDownloads(kHistoryInfo, std::size(kHistoryInfo), &items));
+  ASSERT_TRUE(CreateHistoryDownloads(kHistoryInfo, &items));
 
   std::optional<base::Value> result = RunFunctionAndReturnResult(
       base::MakeRefCounted<DownloadsSearchFunction>(), "[{\"orderBy\": []}]");
@@ -1476,8 +1473,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
       {FILE_PATH_LITERAL("baz"), DownloadItem::COMPLETE,
        download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS}};
   DownloadManager::DownloadVector items;
-  ASSERT_TRUE(
-      CreateHistoryDownloads(kHistoryInfo, std::size(kHistoryInfo), &items));
+  ASSERT_TRUE(CreateHistoryDownloads(kHistoryInfo, &items));
 
   std::optional<base::Value> result = RunFunctionAndReturnResult(
       base::MakeRefCounted<DownloadsSearchFunction>(),
@@ -1549,8 +1545,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
        download::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT},
   };
   DownloadManager::DownloadVector items;
-  ASSERT_TRUE(
-      CreateHistoryDownloads(kHistoryInfo, std::size(kHistoryInfo), &items));
+  ASSERT_TRUE(CreateHistoryDownloads(kHistoryInfo, &items));
 
   std::optional<base::Value> result = RunFunctionAndReturnResult(
       base::MakeRefCounted<DownloadsSearchFunction>(),
@@ -1921,7 +1916,7 @@ class CustomResponse : public net::test_server::HttpResponse {
   CustomResponse(const CustomResponse&) = delete;
   CustomResponse& operator=(const CustomResponse&) = delete;
 
-  ~CustomResponse() override {}
+  ~CustomResponse() override = default;
 
   void SendResponse(
       base::WeakPtr<net::test_server::HttpResponseDelegate> delegate) override {
@@ -2036,7 +2031,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
   ASSERT_TRUE(StartEmbeddedTestServer());
   GoOnTheRecord();
 
-  static const char* const kUnsafeHeaders[] = {
+  static const auto kUnsafeHeaders = std::to_array<const char*>({
       "Accept-chArsEt",
       "accept-eNcoding",
       "coNNection",
@@ -2064,7 +2059,7 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
       "Access-Control-Request-Headers",
       "Access-Control-Request-Method",
       "Access-Control-Request-Private-Network",
-  };
+  });
 
   for (size_t index = 0; index < std::size(kUnsafeHeaders); ++index) {
     std::string download_url = embedded_test_server()->GetURL("/slow?0").spec();
@@ -4707,12 +4702,12 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionBubbleEnabledTest,
 
 class DownloadsApiTest : public ExtensionApiTest {
  public:
-  DownloadsApiTest() {}
+  DownloadsApiTest() = default;
 
   DownloadsApiTest(const DownloadsApiTest&) = delete;
   DownloadsApiTest& operator=(const DownloadsApiTest&) = delete;
 
-  ~DownloadsApiTest() override {}
+  ~DownloadsApiTest() override = default;
 };
 
 

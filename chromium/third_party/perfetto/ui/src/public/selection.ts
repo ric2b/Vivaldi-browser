@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import {time, duration, TimeSpan} from '../base/time';
+import {Dataset, DatasetSchema} from '../trace_processor/dataset';
 import {Engine} from '../trace_processor/engine';
 import {ColumnDef, Sorting, ThreadStateExtra} from './aggregation';
 import {TrackDescriptor} from './track';
@@ -62,24 +63,54 @@ export interface SelectionManager {
   selectArea(args: Area, opts?: SelectionOpts): void;
 
   scrollToCurrentSelection(): void;
-  registerAreaSelectionAggreagtor(aggr: AreaSelectionAggregator): void;
-
-  /**
-   * Register a new SQL selection resolver.
-   *
-   * A resolver consists of a SQL table name and a callback. When someone
-   * expresses an interest in selecting a slice on a matching table, the
-   * callback is called which can return a selection object or undefined.
-   */
-  registerSqlSelectionResolver(resolver: SqlSelectionResolver): void;
+  registerAreaSelectionAggregator(aggr: AreaSelectionAggregator): void;
 }
 
+/**
+ * Aggregator tabs are displayed in descending order of specificity, determined
+ * by the following precedence hierarchy:
+ * 1. Aggregators explicitly defining a `trackKind` string take priority over
+ *    those that do not.
+ * 2. Otherwise, aggregators with schemas containing a greater number of keys
+ *    (higher specificity) are prioritized over those with fewer keys.
+ * 3. In cases of identical specificity, tabs are ranked based on their
+ *    registration order.
+ */
 export interface AreaSelectionAggregator {
   readonly id: string;
-  createAggregateView(engine: Engine, area: AreaSelection): Promise<boolean>;
+
+  /**
+   * If defined, the dataset passed to `createAggregateView` will only contain
+   * tracks with a matching `kind` tag.
+   */
+  readonly trackKind?: string;
+
+  /**
+   * If defined, the dataset passed to `createAggregateView` will only contain
+   * tracks that export datasets that implement this schema.
+   */
+  readonly schema?: DatasetSchema;
+
+  /**
+   * Creates a view for the aggregated data corresponding to the selected area.
+   *
+   * The dataset provided will be filtered based on the `trackKind` and `schema`
+   * if these properties are defined.
+   *
+   * @param engine - The query engine used to execute queries.
+   * @param area - The currently selected area to aggregate.
+   * @param dataset - The dataset representing a union of the data in the
+   * selected tracks.
+   */
+  createAggregateView(
+    engine: Engine,
+    area: AreaSelection,
+    dataset?: Dataset,
+  ): Promise<boolean>;
   getExtra(
     engine: Engine,
     area: AreaSelection,
+    dataset?: Dataset,
   ): Promise<ThreadStateExtra | void>;
   getTabName(): string;
   getDefaultSorting(): Sorting;
@@ -114,19 +145,18 @@ export interface TrackSelection {
 export interface TrackEventDetails {
   // ts and dur are required by the core, and must be provided.
   readonly ts: time;
-  // Note: dur can be -1 for instant events.
-  readonly dur: duration;
+
+  // Note: dur can be 0 for instant events or -1 for DNF slices. Will be
+  // undefined if this selection has no duration, i.e. profile / counter
+  // samples.
+  readonly dur?: duration;
 
   // Optional additional information.
   // TODO(stevegolton): Find an elegant way of moving this information out of
   // the core.
   readonly wakeupTs?: time;
   readonly wakerCpu?: number;
-  readonly upid?: number;
   readonly utid?: number;
-  readonly tableName?: string;
-  readonly profileType?: ProfileType;
-  readonly interactionType?: string;
 }
 
 export interface Area {
@@ -153,28 +183,6 @@ export interface NoteSelection {
 
 export interface EmptySelection {
   readonly kind: 'empty';
-}
-
-export enum ProfileType {
-  HEAP_PROFILE = 'heap_profile',
-  MIXED_HEAP_PROFILE = 'heap_profile:com.android.art,libc.malloc',
-  NATIVE_HEAP_PROFILE = 'heap_profile:libc.malloc',
-  JAVA_HEAP_SAMPLES = 'heap_profile:com.android.art',
-  JAVA_HEAP_GRAPH = 'graph',
-  PERF_SAMPLE = 'perf',
-}
-
-export function profileType(s: string): ProfileType {
-  if (s === 'heap_profile:libc.malloc,com.android.art') {
-    s = 'heap_profile:com.android.art,libc.malloc';
-  }
-  if (Object.values(ProfileType).includes(s as ProfileType)) {
-    return s as ProfileType;
-  }
-  if (s.startsWith('heap_profile')) {
-    return ProfileType.HEAP_PROFILE;
-  }
-  throw new Error('Unknown type ${s}');
 }
 
 export interface SqlSelectionResolver {

@@ -18,12 +18,15 @@
 /// speed dial folders.
 - (void)computeSpeedDialChildItems:(VivaldiSpeedDialItem*)item;
 
-/// Computes the sorted child items based on mode and notifies the consumer.
-- (void)computeSortedItems:(NSMutableArray*)items
-                    byMode:(SpeedDialSortingMode)mode;
-
-/// Remove most visited item from top site
+/// Remove most visited item from top site.
 - (void)removeMostVisited:(VivaldiSpeedDialItem*)item;
+
+/// Move the selected item within same folder.
+- (void)moveSpeedDialItem:(VivaldiSpeedDialItem*)item
+                 position:(NSInteger)position;
+
+/// Delete the selected item from model.
+- (void)deleteSpeedDialItem:(VivaldiSpeedDialItem*)item;
 
 @end
 

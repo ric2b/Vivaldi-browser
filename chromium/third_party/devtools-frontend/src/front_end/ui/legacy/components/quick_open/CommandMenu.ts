@@ -7,6 +7,7 @@ import * as Host from '../../../../core/host/host.js';
 import * as i18n from '../../../../core/i18n/i18n.js';
 import * as Platform from '../../../../core/platform/platform.js';
 import * as Diff from '../../../../third_party/diff/diff.js';
+import * as IconButton from '../../../components/icon_button/icon_button.js';
 import * as UI from '../../legacy.js';
 
 import {FilteredListWidget, Provider, registerProvider} from './FilteredListWidget.js';
@@ -29,6 +30,10 @@ const UIStrings = {
    * @description Text for command suggestion of run a command
    */
   command: 'Command',
+  /**
+   * @description Text for help title of run command menu
+   */
+  runCommand: 'Run command',
   /**
    * @description Hint text to indicate that a selected command is deprecated
    */
@@ -115,7 +120,6 @@ export class CommandMenu {
         }
       },
       availableHandler,
-      userActionCode: undefined,
       deprecationWarning: setting.deprecation?.warning,
     });
 
@@ -202,7 +206,6 @@ export class CommandMenu {
         title: view.commandPrompt(),
         tags: view.tags() || '',
         category,
-        userActionCode: undefined,
         id: view.viewId(),
       };
       this.commandsInternal.push(CommandMenu.createRevealViewCommand(options));
@@ -274,9 +277,7 @@ export class CommandMenuProvider extends Provider {
       if (!category) {
         continue;
       }
-
-      const options: ActionCommandOptions = {action, userActionCode: undefined};
-      this.commands.push(CommandMenu.createActionCommand(options));
+      this.commands.push(CommandMenu.createActionCommand({action}));
     }
 
     for (const command of allCommands) {
@@ -327,6 +328,8 @@ export class CommandMenuProvider extends Provider {
     const command = this.commands[itemIndex];
 
     titleElement.removeChildren();
+    const icon = IconButton.Icon.create(categoryIcons[command.category]);
+    titleElement.parentElement?.parentElement?.insertBefore(icon, titleElement.parentElement);
     UI.UIUtils.createTextChild(titleElement, command.title);
     FilteredListWidget.highlightRanges(titleElement, query, true);
 
@@ -334,19 +337,16 @@ export class CommandMenuProvider extends Provider {
 
     const deprecationWarning = command.deprecationWarning;
     if (deprecationWarning) {
-      const deprecatedTagElement = (titleElement.parentElement?.createChild('span', 'deprecated-tag') as HTMLElement);
+      const deprecatedTagElement = titleElement.parentElement?.createChild('span', 'deprecated-tag');
       if (deprecatedTagElement) {
         deprecatedTagElement.textContent = i18nString(UIStrings.deprecated);
         deprecatedTagElement.title = deprecationWarning;
       }
     }
-    const tagElement = (titleElement.parentElement?.parentElement?.createChild('span', 'tag') as HTMLElement);
+    const tagElement = titleElement.parentElement?.parentElement?.createChild('span', 'tag');
     if (!tagElement) {
       return;
     }
-    const index = Platform.StringUtilities.hashCode(command.category) % MaterialPaletteColors.length;
-    tagElement.style.backgroundColor = MaterialPaletteColors[index];
-    tagElement.style.color = '#fff';
     tagElement.textContent = command.category;
   }
 
@@ -367,25 +367,28 @@ export class CommandMenuProvider extends Provider {
   }
 }
 
-export const MaterialPaletteColors = [
-  '#F44336',
-  '#E91E63',
-  '#9C27B0',
-  '#673AB7',
-  '#3F51B5',
-  '#03A9F4',
-  '#00BCD4',
-  '#009688',
-  '#4CAF50',
-  '#8BC34A',
-  '#CDDC39',
-  '#FFC107',
-  '#FF9800',
-  '#FF5722',
-  '#795548',
-  '#9E9E9E',
-  '#607D8B',
-];
+const categoryIcons: {[key: string]: string} = {
+  Appearance: 'palette',
+  Console: 'terminal',
+  Debugger: 'bug',
+  Drawer: 'keyboard-full',
+  Elements: 'code',
+  Global: 'global',
+  Grid: 'grid-on',
+  Help: 'help',
+  Mobile: 'devices',
+  Navigation: 'refresh',
+  Network: 'arrow-up-down',
+  Panel: 'frame',
+  Performance: 'performance',
+  Persistence: 'override',
+  Recorder: 'record-start',
+  Rendering: 'tonality',
+  Resources: 'bin',
+  Screenshot: 'photo-camera',
+  Settings: 'gear',
+  Sources: 'label',
+};
 
 export class Command {
   readonly category: Common.UIString.LocalizedString;
@@ -434,8 +437,8 @@ export class ShowActionDelegate implements UI.ActionRegistration.ActionDelegate 
 registerProvider({
   prefix: '>',
   iconName: 'chevron-right',
-  iconWidth: '20px',
   provider: () => Promise.resolve(new CommandMenuProvider()),
+  helpTitle: () => i18nString(UIStrings.runCommand),
   titlePrefix: () => i18nString(UIStrings.run),
   titleSuggestion: () => i18nString(UIStrings.command),
 });

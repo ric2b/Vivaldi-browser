@@ -147,7 +147,6 @@ namespace internal {
   V(UnaryOp_WithFeedback)                            \
   V(Void)                                            \
   V(WasmDummy)                                       \
-  V(WasmDummyWithJSLinkage)                          \
   V(WasmFloat32ToNumber)                             \
   V(WasmFloat64ToTagged)                             \
   V(WasmJSToWasmWrapper)                             \
@@ -837,17 +836,6 @@ class WasmDummyDescriptor
   DECLARE_DESCRIPTOR(WasmDummyDescriptor)
 };
 
-// TODO(wasm): Consider filling in details / defining real descriptors for all
-// builtins still using this placeholder descriptor.
-class WasmDummyWithJSLinkageDescriptor
-    : public StaticCallInterfaceDescriptor<WasmDummyWithJSLinkageDescriptor> {
- public:
-  SANDBOX_EXPOSED_DESCRIPTOR(kJSEntrypointTag)
-  DEFINE_PARAMETERS()
-  DEFINE_PARAMETER_TYPES()
-  DECLARE_DESCRIPTOR(WasmDummyWithJSLinkageDescriptor)
-};
-
 class WasmHandleStackOverflowDescriptor
     : public StaticCallInterfaceDescriptor<WasmHandleStackOverflowDescriptor> {
  public:
@@ -888,7 +876,7 @@ class NewHeapNumberDescriptor
 // code that can be installed on a JSFunction. Target, new.target, argc,
 // context and potentially the dispatch entry are passed in registers while
 // receiver and the rest of the JS arguments are passed on the stack.
-#ifdef V8_ENABLE_LEAPTIERING
+#ifdef V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE
 class JSTrampolineDescriptor
     : public StaticJSCallInterfaceDescriptor<JSTrampolineDescriptor> {
  public:
@@ -2246,11 +2234,14 @@ class OnStackReplacementDescriptor
     : public StaticCallInterfaceDescriptor<OnStackReplacementDescriptor> {
  public:
   INTERNAL_DESCRIPTOR()
-  DEFINE_PARAMETERS(kMaybeTargetCode)
-  DEFINE_PARAMETER_TYPES(MachineType::AnyTagged())  // kMaybeTargetCode
+  DEFINE_PARAMETERS(kMaybeTargetCode, kExpectedParameterCount)
+  DEFINE_PARAMETER_TYPES(
+      MachineType::AnyTagged(),     // kMaybeTargetCode
+      MachineType::TaggedSigned())  // kExpectedParameterCount
   DECLARE_DESCRIPTOR(OnStackReplacementDescriptor)
 
   static constexpr inline Register MaybeTargetCodeRegister();
+  static constexpr inline Register ExpectedParameterCountRegister();
 
   static constexpr inline auto registers();
 };

@@ -48,7 +48,7 @@ release it is.
 
 **[Source Quicklinks](https://chrome.google.com/extensions/detail/ncjnjlfeffaclcioiphpaofhkebnmknj)**
 Adds a page action to quickly jump between [Code
-Search](http://www.google.com/codesearch?vert=chromium), Trac, ViewVC, and
+Search](https://www.google.com/codesearch?vert=chromium), Trac, ViewVC, and
 Gitweb.
 
 **[Hide chromium code search banner](https://chrome.google.com/webstore/detail/hide-chromium-code-search/podmafjjpjkcjldlhcigjmelmdpignni)**
@@ -64,7 +64,7 @@ via [github](https://github.com/kristijanburnik/codesearch-theme).
 **[Colorize raw diffs on codereview.chromium.org](http://code.google.com/p/codereview-color-diffs/)**
 Adds git diff-style colors to "raw patch sets" on the code review site.
 
-**[Googler-specific extensions](http://goto.google.com/kjnqp)**
+**[Googler-specific extensions](http://go/kjnqp)**
 Note: must be on google network to load this link.
 
 [**Reload build.chromium.org at a given

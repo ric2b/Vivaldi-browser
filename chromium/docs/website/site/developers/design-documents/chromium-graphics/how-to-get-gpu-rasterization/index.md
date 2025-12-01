@@ -51,7 +51,7 @@ settings and a device allow-list.
     *   In development (as of August 2015)
     *   We will eventually enable GPU rasterization on all platforms and
                 devices where we use the GPU for compositing. You can track
-                progress towards this goal [here](http://crbug.com/419521).
+                progress towards this goal [here](https://crbug.com/419521).
 
 To use the experimental hardware rasterizer on all pages, regardless of device
 and content: --force-gpu-rasterization or
@@ -79,7 +79,7 @@ icons), GPU rasterization may get disabled for that page load.
                     within the Args.
     *   off (viewport) - viewport trigger not available
 3.  Take a [frame viewer recording using about
-            tracing](http://www.chromium.org/developers/how-tos/trace-event-profiling-tool/frame-viewer).
+            tracing](/developers/how-tos/trace-event-profiling-tool/frame-viewer).
             Click a frame. It will tell you if GPU raster is on.
 
 ## GPU Rasterization Before/After

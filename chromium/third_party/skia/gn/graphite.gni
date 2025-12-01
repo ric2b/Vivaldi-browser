@@ -16,6 +16,8 @@ skia_graphite_public = [
   "$_include/GraphiteTypes.h",
   "$_include/Image.h",
   "$_include/ImageProvider.h",
+  "$_include/LogPriority.h",
+  "$_include/PrecompileContext.h",
   "$_include/Recorder.h",
   "$_include/Recording.h",
   "$_include/Surface.h",
@@ -40,6 +42,8 @@ skia_graphite_sources = [
   "$_src/Caps.h",
   "$_src/ClientMappedBufferManager.cpp",
   "$_src/ClientMappedBufferManager.h",
+  "$_src/ClipAtlasManager.cpp",
+  "$_src/ClipAtlasManager.h",
   "$_src/ClipStack_graphite.cpp",
   "$_src/ClipStack_graphite.h",
   "$_src/CommandBuffer.cpp",
@@ -101,6 +105,8 @@ skia_graphite_sources = [
   "$_src/PathAtlas.cpp",
   "$_src/PathAtlas.h",
   "$_src/PipelineData.h",
+  "$_src/PrecompileContext.cpp",
+  "$_src/PrecompileContextPriv.h",
   "$_src/ProxyCache.cpp",
   "$_src/ProxyCache.h",
   "$_src/QueueManager.cpp",
@@ -164,13 +170,13 @@ skia_graphite_sources = [
   "$_src/compute/DispatchGroup.h",
   "$_src/geom/AnalyticBlurMask.cpp",
   "$_src/geom/AnalyticBlurMask.h",
-  "$_src/geom/AnalyticClip.h",
   "$_src/geom/BoundsManager.h",
   "$_src/geom/CoverageMaskShape.h",
   "$_src/geom/EdgeAAQuad.h",
   "$_src/geom/Geometry.h",
   "$_src/geom/IntersectionTree.cpp",
   "$_src/geom/IntersectionTree.h",
+  "$_src/geom/NonMSAAClip.h",
   "$_src/geom/Rect.h",
   "$_src/geom/Shape.cpp",
   "$_src/geom/Shape.h",
@@ -278,6 +284,7 @@ skia_graphite_dawn_sources = [
 skia_graphite_mtl_public = [
   "$_include/mtl/MtlBackendContext.h",
   "$_include/mtl/MtlGraphiteTypes.h",
+  "$_include/mtl/MtlGraphiteTypesUtils.h",
   "$_include/mtl/MtlGraphiteUtils.h",
 ]
 
@@ -378,9 +385,9 @@ skia_graphite_precompile_public = [
 ]
 
 skia_graphite_precompile_sources = [
+  "$_src/AndroidSpecificPrecompile.h",
   "$_src/PrecompileInternal.h",
   "$_src/PublicPrecompile.cpp",
-  "$_src/PublicPrecompile.h",
   "$_src/precompile/PaintOption.cpp",
   "$_src/precompile/PaintOption.h",
   "$_src/precompile/PaintOptions.cpp",
@@ -399,4 +406,6 @@ skia_graphite_precompile_sources = [
   "$_src/precompile/PrecompileShader.cpp",
   "$_src/precompile/PrecompileShaderPriv.h",
   "$_src/precompile/PrecompileShadersPriv.h",
+  "$_src/precompile/SerializationUtils.cpp",
+  "$_src/precompile/SerializationUtils.h",
 ]

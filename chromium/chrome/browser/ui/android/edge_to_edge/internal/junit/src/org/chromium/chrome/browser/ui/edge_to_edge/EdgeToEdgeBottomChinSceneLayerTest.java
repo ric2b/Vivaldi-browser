@@ -21,14 +21,14 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 import org.robolectric.annotation.Config;
 
+import org.chromium.base.Token;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.util.JniMocker;
+import org.chromium.cc.input.OffsetTag;
 
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
 public class EdgeToEdgeBottomChinSceneLayerTest {
     @Rule public MockitoRule mMockitoJUnit = MockitoJUnit.rule();
-    @Rule public JniMocker mJniMocker = new JniMocker();
     @Mock private Runnable mRequestRenderRunnable;
     @Mock private EdgeToEdgeBottomChinSceneLayerJni mSceneLayerJni;
     private EdgeToEdgeBottomChinSceneLayer mSceneLayer;
@@ -36,7 +36,7 @@ public class EdgeToEdgeBottomChinSceneLayerTest {
     @Before
     public void setUp() {
         doReturn(123L).when(mSceneLayerJni).init(any());
-        mJniMocker.mock(EdgeToEdgeBottomChinSceneLayerJni.TEST_HOOKS, mSceneLayerJni);
+        EdgeToEdgeBottomChinSceneLayerJni.setInstanceForTesting(mSceneLayerJni);
         mSceneLayer = new EdgeToEdgeBottomChinSceneLayer(mRequestRenderRunnable);
     }
 
@@ -62,6 +62,8 @@ public class EdgeToEdgeBottomChinSceneLayerTest {
         mSceneLayer.setHeight(30);
         mSceneLayer.setColor(Color.RED);
         mSceneLayer.setDividerColor(Color.BLACK);
+        OffsetTag offsetTag = new OffsetTag(new Token(0, 0));
+        mSceneLayer.setOffsetTag(offsetTag);
 
         RectF viewport = new RectF(0, 0, 100, 400);
         mSceneLayer.getUpdatedSceneOverlayTree(viewport, viewport, null, 0);
@@ -72,6 +74,8 @@ public class EdgeToEdgeBottomChinSceneLayerTest {
                         30,
                         Color.RED,
                         Color.BLACK,
-                        viewport.height() + 12);
+                        viewport.height() + 12,
+                        false,
+                        offsetTag);
     }
 }

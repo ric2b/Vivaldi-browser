@@ -23,7 +23,7 @@ It lacks many of the functions of OpenGL. glmark2 supports both regular OpenGL
 and OpenGL ES.
 Read more about it:
 <http://www.khronos.org/opengles>
-<http://en.wikipedia.org/wiki/OpenGL_ES>
+<https://en.wikipedia.org/wiki/OpenGL_ES>
 
 ## How to build and run glmark2 on your Linux machine
 

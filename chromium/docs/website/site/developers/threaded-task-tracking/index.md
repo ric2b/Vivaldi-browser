@@ -589,7 +589,7 @@ supports max, this link will be removed from the UI.
 **How is this implemented?**
 
 If you're a Google employee, check out [this
-techtalk](https://goto.google.com/chrome-profiler-internals-techtalk-video).
+techtalk](http://go/chrome-profiler-internals-techtalk-video).
 Otherwise [check out the
 code](https://cs.chromium.org/search/?q=tracked_objects).
 

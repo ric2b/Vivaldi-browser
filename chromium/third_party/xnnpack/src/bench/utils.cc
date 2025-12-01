@@ -3,32 +3,44 @@
 // This source code is licensed under the BSD-style license found in the
 // LICENSE file in the root directory of this source tree.
 
+#include "utils.h"
+
+#include <algorithm>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <iostream>
 #include <mutex>
 
-#include "xnnpack/common.h"
-
 #ifdef __linux__
-  #include <sched.h>
+#include <sched.h>
 #endif
 #if defined(__ANDROID__) || defined(_WIN32) || defined(__CYGWIN__)
-  #include <malloc.h>
+#include <malloc.h>
 #endif
 #if defined(__SSE__) || defined(__x86_64__)
-  #include <xmmintrin.h>
+#include <xmmintrin.h>
 #endif
 
 #if XNN_ENABLE_CPUINFO
-  #include <cpuinfo.h>
+#include <cpuinfo.h>
 #endif  // XNN_ENABLE_CPUINFO
 
-#include "xnnpack.h"
-#include "xnnpack/allocator.h"
+#include "xnnpack/common.h"
 #include "xnnpack/hardware-config.h"
+#include <benchmark/benchmark.h>
+#include "pthreadpool.h"
 
-#include "utils.h"
+// Common flags for all benchmarks.
+int FLAGS_num_threads = 1;
+int FLAGS_batch_size = 1;
+uint32_t FLAGS_xnn_runtime_flags = 0;
+uint32_t FLAGS_benchmark_min_iters = 1;
+
+namespace benchmark {
+namespace utils {
+namespace {
 
 static void* wipe_buffer = nullptr;
 static size_t wipe_buffer_size = 0;
@@ -40,14 +52,15 @@ static void InitWipeBuffer() {
   wipe_buffer_size = 128 * 1024 * 1024;
   #if XNN_ENABLE_CPUINFO
     if (cpuinfo_initialize()) {
-      wipe_buffer_size = benchmark::utils::GetMaxCacheSize();
+      wipe_buffer_size = GetMaxCacheSize();
     }
   #endif  // XNN_ENABLE_CPUINFO
 
 #if defined(_WIN32)
   wipe_buffer = _aligned_malloc(wipe_buffer_size, 128);
 #elif defined(__ANDROID__) || defined(__CYGWIN__)
-  // memalign is obsolete, but it is the only option on Android until API level 17.
+  // memalign is obsolete, but it is the only option on Android until API
+  // level 17.
   wipe_buffer = memalign(128, wipe_buffer_size);
 #else
   (void) posix_memalign((void**) &wipe_buffer, 128, wipe_buffer_size);
@@ -57,14 +70,82 @@ static void InitWipeBuffer() {
   }
 }
 
-namespace benchmark {
-namespace utils {
+// Pthreadpool-compatible function to wipe the cache in each thread.
+void PthreadpoolClearL2Cache(void* context, size_t id) {
+#if XNN_ENABLE_CPUINFO
+  static const size_t wipe_buffer_size = []() {
+    const auto* l2_cache = cpuinfo_get_l2_cache(0);
+    return l2_cache == nullptr ? 0 : l2_cache->size;
+  }();
+  static const char* wipe_buffer = wipe_buffer_size ? [&]() -> char* {
+    char* const buff = (char*)malloc(wipe_buffer_size);
+    memset(buff, 0xA5, wipe_buffer_size);
+    return buff;
+  }()
+      : nullptr;
+  if (wipe_buffer_size) {
+    PrefetchToL1(wipe_buffer, wipe_buffer_size);
+  } else {
+    WipeCache();
+  }
+#else
+  WipeCache();
+#endif  // XNN_ENABLE_CPUINFO
+}
+
+};  // namespace
+
+int ProcessArgs(int& argc, char**& argv) {
+  for (int i = 1; i < argc;) {
+    if (strncmp(argv[i], "--num_threads=", 14) == 0) {
+      FLAGS_num_threads = atoi(argv[i] + 14);
+      if (FLAGS_num_threads <= 0) {
+        std::cerr << "Invalid --num_threads: " << FLAGS_num_threads << "\n";
+        return 1;
+      }
+      std::copy(argv + i + 1, argv + argc, argv + i);
+      argc -= 1;
+    } else if (strncmp(argv[i], "--batch_size=", 13) == 0) {
+      FLAGS_batch_size = atoi(argv[i] + 13);
+      if (FLAGS_batch_size <= 0) {
+        std::cerr << "Invalid --batch_size: " << FLAGS_batch_size << "\n";
+        return 1;
+      }
+      std::copy(argv + i + 1, argv + argc, argv + i);
+      argc -= 1;
+    } else if (strncmp(argv[i], "--xnn_runtime_flags=", 20) == 0) {
+      const char* v = argv[i] + 20;
+      if (strlen(v) > 2 && strncmp(v, "0x", 2) == 0) {
+        FLAGS_xnn_runtime_flags = strtoul(v + 2, nullptr, 16);
+      } else {
+        FLAGS_xnn_runtime_flags = strtoul(v, nullptr, 10);
+      }
+      std::copy(argv + i + 1, argv + argc, argv + i);
+      argc -= 1;
+    } else if (strncmp(argv[i], "--benchmark_min_iters=", 22) == 0) {
+      FLAGS_benchmark_min_iters = atoi(argv[i] + 22);
+      if (FLAGS_benchmark_min_iters <= 0) {
+        std::cerr << "Invalid --benchmark_min_iters: " << FLAGS_benchmark_min_iters << "\n";
+        return 1;
+      }
+      std::copy(argv + i + 1, argv + argc, argv + i);
+      argc -= 1;
+    } else {
+      ++i;
+    }
+  }
+  // InitGoogle(...);
+  return 0;
+}
 
 uint32_t PrefetchToL1(const void* ptr, size_t size) {
   uint32_t step = 16;
   #if XNN_ENABLE_CPUINFO
     if (cpuinfo_initialize()) {
-      step = cpuinfo_get_l1d_cache(0)->line_size;
+      const struct cpuinfo_cache* cpuinfo_cache_info = cpuinfo_get_l1d_cache(0);
+      if (cpuinfo_cache_info) {
+        step = cpuinfo_cache_info->line_size;
+      }
     }
   #endif  // XNN_ENABLE_CPUINFO
 
@@ -77,6 +158,14 @@ uint32_t PrefetchToL1(const void* ptr, size_t size) {
     size -= step;
   }
   return sum;
+}
+
+void WipePthreadpoolL2Caches(benchmark::State& state,
+                             pthreadpool_t threadpool) {
+  state.PauseTiming();
+  pthreadpool_parallelize_1d(threadpool, PthreadpoolClearL2Cache, nullptr,
+                             pthreadpool_get_threads_count(threadpool), 0);
+  state.ResumeTiming();
 }
 
 uint32_t WipeCache() {
@@ -115,7 +204,7 @@ void DisableDenormals() {
 #endif
 }
 
-// Return clockrate in Hz
+// Return clock rate in Hz.
 uint64_t GetCurrentCpuFrequency() {
 #ifdef __linux__
   int freq = 0;
@@ -573,6 +662,5 @@ bool CheckArchFlags(benchmark::State& state, uint64_t arch_flags) {
   }
 #endif  // XNN_ARCH_WASMRELAXEDSIMD
 
-
-}  // namespace utils
-}  // namespace benchmark
+  }  // namespace utils
+  }  // namespace benchmark

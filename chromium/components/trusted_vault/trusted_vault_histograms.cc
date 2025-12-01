@@ -81,11 +81,8 @@ SecurityDomainIdOrInvalidForUma GetSecurityDomainIdOrInvalidForUma(
 void RecordTrustedVaultHintDegradedRecoverabilityChangedReason(
     TrustedVaultHintDegradedRecoverabilityChangedReasonForUMA
         hint_degraded_recoverability_changed_reason) {
-  // TODO(crbug.com/40897451): eventually histograms under
-  // components/trusted_vault should start using their own prefix instead of
-  // "Sync." and migrated to the dedicated histograms.xml file.
   base::UmaHistogramEnumeration(
-      "Sync.TrustedVaultHintDegradedRecoverabilityChangedReason2",
+      "TrustedVault.TrustedVaultHintDegradedRecoverabilityChangedReason",
       hint_degraded_recoverability_changed_reason);
 }
 
@@ -164,13 +161,17 @@ void RecordRecoveryKeyStoreURLFetchResponse(
 }
 
 void RecordTrustedVaultDownloadKeysStatus(
-    TrustedVaultDownloadKeysStatusForUMA status,
-    bool also_log_with_v1_suffix) {
-  base::UmaHistogramEnumeration("Sync.TrustedVaultDownloadKeysStatus", status);
-  if (also_log_with_v1_suffix) {
-    base::UmaHistogramEnumeration("Sync.TrustedVaultDownloadKeysStatusV1",
-                                  status);
-  }
+    SecurityDomainId security_domain_id,
+    TrustedVaultDownloadKeysStatusForUMA status) {
+  base::UmaHistogramEnumeration(
+      "TrustedVault.DownloadKeysStatus." +
+          GetSecurityDomainNameForUma(security_domain_id),
+      status);
+}
+
+void RecordTrustedVaultDownloadKeysStatus(
+    TrustedVaultDownloadKeysStatusForUMA status) {
+  RecordTrustedVaultDownloadKeysStatus(SecurityDomainId::kChromeSync, status);
 }
 
 void RecordTrustedVaultFileReadStatus(SecurityDomainId security_domain_id,

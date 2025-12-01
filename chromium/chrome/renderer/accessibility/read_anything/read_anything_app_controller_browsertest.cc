@@ -750,8 +750,7 @@ TEST_F(ReadAnythingAppControllerTest, OnLanguagePrefChange) {
   ASSERT_FALSE(base::Contains(EnabledLanguages(), disabled_lang));
 }
 
-TEST_F(ReadAnythingAppControllerTest,
-       GetStoredVoice_NoAutoSwitching_ReturnsLatestVoice) {
+TEST_F(ReadAnythingAppControllerTest, GetStoredVoice_ReturnsLatestVoice) {
   std::string current_lang = "it-IT";
   std::string current_voice = "Italian voice 3";
   std::string previous_voice = "Dutch voice 1";
@@ -764,9 +763,8 @@ TEST_F(ReadAnythingAppControllerTest,
   ASSERT_EQ(GetStoredVoice(), current_voice);
 }
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
 TEST_F(ReadAnythingAppControllerTest,
-       GetStoredVoice_NoAutoSwitching_ReturnsLatestVoiceRegardlessOfLang) {
+       GetStoredVoice_ReturnsPreferredVoiceForLang) {
   std::string current_lang = "it-IT";
   std::string other_lang = "de-DE";
   std::string current_voice = "Italian voice 3";
@@ -777,9 +775,12 @@ TEST_F(ReadAnythingAppControllerTest,
   OnVoiceChange(current_voice, other_lang);
 
   EXPECT_CALL(page_handler_, OnVoiceChange).Times(2);
-  ASSERT_EQ(GetStoredVoice(), current_voice);
+
+  // Even though the current language is Italian, the preferred voice for
+  // Italian was selected as the Dutch voice, so this is the voice that should
+  // be used.
+  ASSERT_EQ(GetStoredVoice(), previous_voice);
 }
-#endif  // !IS_CHROMEOS_ASH
 
 TEST_F(ReadAnythingAppControllerTest, GetStoredVoice_NoVoices_ReturnsEmpty) {
   scoped_feature_list_.InitWithFeatures({features::kReadAnythingReadAloud}, {});
@@ -4458,7 +4459,6 @@ TEST_F(
     GetHighlightForCurrentSegmentIndex_PhrasesEnabled_NoModel_SentenceSpansMultipleNodes_ReturnsCorrectNodes) {
   scoped_feature_list_.InitWithFeatures(
       {features::kReadAnythingReadAloud,
-       features::kReadAnythingReadAloudAutomaticWordHighlighting,
        features::kReadAnythingReadAloudPhraseHighlighting},
       {});
 
@@ -4537,7 +4537,6 @@ TEST_F(
     GetHighlightForCurrentSegmentIndex_PhrasesEnabled_ValidModel_SentenceSpansMultipleNodes_ReturnsCorrectNodes) {
   scoped_feature_list_.InitWithFeatures(
       {features::kReadAnythingReadAloud,
-       features::kReadAnythingReadAloudAutomaticWordHighlighting,
        features::kReadAnythingReadAloudPhraseHighlighting},
       {});
 
@@ -4563,6 +4562,9 @@ TEST_F(
 
   InitializeWithAndProcessNodes({static_text1, static_text2, static_text3});
   PreprocessTextForSpeech();
+
+  // Wait till all async calculations complete.
+  task_environment_.RunUntilIdle();
 
   std::vector<ui::AXNodeID> node_ids = GetCurrentText();
   EXPECT_EQ((int)node_ids.size(), 3);
@@ -4725,15 +4727,40 @@ TEST_F(ReadAnythingAppControllerScreen2xDataCollectionModeTest,
   update.nodes = {root, node};
   update.root_id = root.id;
 
-  // When the load complete event is received, and the tree is stable for 10s,
-  // the controller calls distiller_->Distill().
-  EXPECT_CALL(*distiller_, Distill).Times(1);
-  EXPECT_CALL(page_handler_, OnScreenshotRequested).Times(1);
+  // When the tree is stable for 10s, the controller still waits for 30s after
+  // page load completion.
+  EXPECT_CALL(*distiller_, Distill).Times(0);
+  EXPECT_CALL(page_handler_, OnScreenshotRequested).Times(0);
   SetScreenAIServiceReady();
   ui::AXEvent load_complete(0, ax::mojom::Event::kLoadComplete);
   OnActiveAXTreeIDChanged(tree_id_);
   AccessibilityEventReceived({update}, {load_complete});
   task_environment_.FastForwardBy(base::Seconds(11));
+  Mock::VerifyAndClearExpectations(distiller_);
+}
+
+TEST_F(ReadAnythingAppControllerScreen2xDataCollectionModeTest,
+       DistillsAfterDelayWhenTreeIsNotStable) {
+  ui::AXTreeUpdate update;
+  SetUpdateTreeID(&update);
+  ui::AXNodeData root;
+  root.id = 1;
+  ui::AXNodeData node;
+  node.id = 2;
+  root.child_ids = {node.id};
+  update.nodes = {root, node};
+  update.root_id = root.id;
+
+  // If the tree changes in the 30s after page load completion, distillation is
+  // delayed for another 10s.
+  EXPECT_CALL(*distiller_, Distill).Times(0);
+  EXPECT_CALL(page_handler_, OnScreenshotRequested).Times(0);
+  SetScreenAIServiceReady();
+  OnActiveAXTreeIDChanged(tree_id_);
+  task_environment_.FastForwardBy(base::Seconds(29));
+  ui::AXEvent load_complete(0, ax::mojom::Event::kLoadComplete);
+  AccessibilityEventReceived({update}, {load_complete});
+  task_environment_.FastForwardBy(base::Seconds(9));
   Mock::VerifyAndClearExpectations(distiller_);
 }
 

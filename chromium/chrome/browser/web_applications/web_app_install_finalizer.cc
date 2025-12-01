@@ -40,6 +40,7 @@
 #include "chrome/browser/web_applications/os_integration/web_app_shortcuts_menu.h"
 #include "chrome/browser/web_applications/policy/web_app_policy_manager.h"
 #include "chrome/browser/web_applications/proto/web_app_install_state.pb.h"
+#include "chrome/browser/web_applications/scope_extension_info.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_command_manager.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
@@ -49,6 +50,7 @@
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/browser/web_applications/web_app_install_manager.h"
 #include "chrome/browser/web_applications/web_app_install_utils.h"
+#include "chrome/browser/web_applications/web_app_management_type.h"
 #include "chrome/browser/web_applications/web_app_origin_association_manager.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
@@ -68,7 +70,7 @@
 #include "url/origin.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/ash/system_web_apps/types/system_web_app_data.h"
+#include "chromeos/ash/experiences/system_web_apps/types/system_web_app_data.h"
 #endif
 
 namespace web_app {
@@ -99,6 +101,7 @@ bool ShouldInstallOverwriteUserDisplayMode(
     case InstallSource::WEBAPK_RESTORE:
     case InstallSource::OOBE_APP_RECOMMENDATIONS:
     case InstallSource::WEB_INSTALL:
+    case InstallSource::CHROMEOS_HELP_APP:
       return true;
     case InstallSource::DEVTOOLS:
     case InstallSource::MANAGEMENT_API:
@@ -308,6 +311,12 @@ void WebAppInstallFinalizer::OnOriginAssociationValidated(
     web_app->SetManifestId(web_app_info.manifest_id());
   }
 
+  for (auto& scope_extension : validated_scope_extensions) {
+    // This is done to prune any queries or fragments from the scope URL which
+    // may have been skipped by WebAppOriginAssociationManager validation.
+    scope_extension = ScopeExtensionInfo::CreateForScope(
+        scope_extension.scope, scope_extension.has_origin_wildcard);
+  }
   web_app->SetValidatedScopeExtensions(validated_scope_extensions);
 
   const base::Time now_time = base::Time::Now();
@@ -418,28 +427,6 @@ void WebAppInstallFinalizer::OnOriginAssociationValidated(
     CommitToSyncBridge(std::move(web_app), std::move(commit_callback),
                        /*success=*/true);
   }
-}
-
-bool WebAppInstallFinalizer::CanReparentTab(const webapps::AppId& app_id,
-                                            bool shortcut_created) const {
-  // Reparent the web contents into its own window only if that is the
-  // app's launch type.
-  DCHECK(provider_);
-  if (provider_->registrar_unsafe().GetAppUserDisplayMode(app_id) ==
-      mojom::UserDisplayMode::kBrowser) {
-    return false;
-  }
-
-  return provider_->ui_manager().CanReparentAppTabToWindow(app_id,
-                                                           shortcut_created);
-}
-
-void WebAppInstallFinalizer::ReparentTab(const webapps::AppId& app_id,
-                                         bool shortcut_created,
-                                         content::WebContents* web_contents) {
-  DCHECK(web_contents);
-  provider_->ui_manager().ReparentAppTabToWindow(web_contents, app_id,
-                                                 shortcut_created);
 }
 
 void WebAppInstallFinalizer::FinalizeUpdate(
@@ -665,8 +652,8 @@ void WebAppInstallFinalizer::OnInstallHooksFinished(
     webapps::AppId app_id) {
   // Only notify that os hooks were added if the installation was a 'full'
   // installation.
-  if (provider_->registrar_unsafe().IsInstallState(
-          app_id, {proto::InstallState::INSTALLED_WITH_OS_INTEGRATION})) {
+  if (provider_->registrar_unsafe().GetInstallState(app_id) ==
+      proto::InstallState::INSTALLED_WITH_OS_INTEGRATION) {
     callback = std::move(callback).Then(base::BindOnce(
         &WebAppInstallFinalizer::NotifyWebAppInstalledWithOsHooks,
         weak_ptr_factory_.GetWeakPtr(), app_id));
@@ -700,8 +687,8 @@ void WebAppInstallFinalizer::OnDatabaseCommitCompletedForUpdate(
   // If the app being updated was installed by default and not also manually
   // installed by the user or an enterprise policy, disable os integration.
   should_skip_os_integration_on_manifest_update =
-      provider_->registrar_unsafe().IsInstallState(
-          app_id, {proto::InstallState::INSTALLED_WITHOUT_OS_INTEGRATION});
+      provider_->registrar_unsafe().GetInstallState(app_id) ==
+      proto::InstallState::INSTALLED_WITHOUT_OS_INTEGRATION;
 #endif  // !BUILDFLAG(IS_CHROMEOS)
 
   if (should_skip_os_integration_on_manifest_update) {

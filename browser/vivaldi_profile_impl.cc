@@ -138,6 +138,11 @@ void PerformUpdates(Profile* profile) {
   if (profile->IsIncognitoProfile() || profile->IsGuestSession()) {
     return;
   }
+  if (pref_service->GetString(vivaldiprefs::kStartupFirstSeenVersion).empty()) {
+    pref_service->SetString(vivaldiprefs::kStartupFirstSeenVersion,
+                            ::vivaldi::GetVivaldiVersionString());
+  }
+
   if (last_seen_version.IsValid() && last_seen_version != version) {
     // Force translation on if we upgrade from 3.8 to 3.9 or 4.x
     if (last_seen_version.components()[0] == 3 &&

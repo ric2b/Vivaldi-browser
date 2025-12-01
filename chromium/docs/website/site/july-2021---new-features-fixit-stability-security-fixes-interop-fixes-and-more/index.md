@@ -138,7 +138,7 @@ title: July 2021 - New features, fixit, stability/security fixes, interop fixes 
 
 <td><td>mustaq@ fixed a 9-year-old <a href="https://crbug.com/143780">exit instruction bug</a> between fullscreen and repeated lock-unlock requests, by untangling exit instruction confusion between browser-vs-content fullscreen exit instructions to keep the “nested fullscreening” case clear to users.</td></td>
 
-<td><td>Also fixed a <a href="http://crbug.com/1213769">crash</a> with repeated locks around a removed element.</td></td>
+<td><td>Also fixed a <a href="https://crbug.com/1213769">crash</a> with repeated locks around a removed element.</td></td>
 
 <td></tr></td>
 <td></table></td>

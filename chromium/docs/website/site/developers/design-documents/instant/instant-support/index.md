@@ -20,8 +20,8 @@ developers working on the feature.
 
 An *Instant URL* is a URL that matches the instant_url template of the default
 search engine. So, given the default Chrome installation,
-"http://www.google.com/webhp" and "http://www.google.com/webhp?foo=bar#q=quux"
-are considered Instant URLs, whereas "http://www.google.com/accounts" is not.
+"https://www.google.com/webhp" and "https://www.google.com/webhp?foo=bar#q=quux"
+are considered Instant URLs, whereas "https://www.google.com/accounts" is not.
 Instant Extended allows Instant URLs to match more template fields of the
 default search engine, with restrictions. So, in the extended mode,
 "https://www.google.com/?espv=1" and
@@ -88,15 +88,15 @@ above. This happens in the Instant implementation of
 
 **Why don't we just check to see if the final page loaded in the Instant renderer?**
 First, even if the page is an Instant URL, it might not actually support
-Instant. For example, "http://www.google.com/webhp" might be a recognized
+Instant. For example, "https://www.google.com/webhp" might be a recognized
 Instant URL (so it gets assigned to the Instant renderer), but when it loads,
 the page may disable Instant due to server side experiments or other failures.
 Second, the page may go through one or more redirects that cause a
 *cross-process navigation* (see the OpenURLFromTab section below). If one of
 these redirects is renderer-initiated (e.g.: using `location.href = "..."` or a
 `<meta http-equiv=refresh>` tag), we'll still get a DidFinishLoad(). Say
-"http://www.google.com/webhp" (the Instant URL we initially load) uses a JS
-redirect to "http://www.google.com/accounts" (a non-Instant URL), which, after
+"https://www.google.com/webhp" (the Instant URL we initially load) uses a JS
+redirect to "https://www.google.com/accounts" (a non-Instant URL), which, after
 verifying your login cookies, redirects you back to the "/webhp" URL, again
 through a JS redirect. At some point, we'll get a DidFinishLoad() for the
 "/accounts" URL. If we check the renderer at that time, we will wrongly conclude
@@ -182,7 +182,7 @@ redirect) won't happen.
 **Wait, the above algorithm doesn't check whether `url` is a non-Instant URL, which is the reasoning given for distinguishing Case 2 above. Why not?**
 Actually, we want to commit the overlay on any user action, even if the
 navigation is to an Instant URL. This is because the user could've clicked on a
-link to say "http://www.google.com/webhp". The user expects the click to result
+link to say "https://www.google.com/webhp". The user expects the click to result
 in a committed tab, with the full webpage in it. It would be weird if it was
 still an overlay. The overlay isn't expected to randomly navigate on its own, so
 we'll assume that any call to OpenURLFromTab() is due to a user action (thus,
@@ -233,7 +233,7 @@ OpenURLFromTab() issues arise here. Note that we reset the InstantTab when the
 user switches tabs. We don't store the result of the Instant support
 determination anywhere permanently in the tab's WebContents.
 This generally works well, except for the following case: If the tab is a
-server-provided NTP ("http://www.google.com/webhp"), it's possible that we just
+server-provided NTP ("https://www.google.com/webhp"), it's possible that we just
 created the WebContents and had to immediately commit it, so the page hasn't
 fully loaded yet. Since the common case is to open a browser with the NTP, we
 don't want to fall back to the local NTP just because we haven't finished

@@ -18,6 +18,7 @@
 #include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_safe_types.h"
 #include "core/fxcrt/span.h"
+#include "core/fxcrt/zip.h"
 #include "core/fxge/cfx_color.h"
 #include "core/fxge/cfx_defaultrenderdevice.h"
 #include "core/fxge/cfx_fillrenderoptions.h"
@@ -1102,8 +1103,8 @@ bool CFX_RenderDevice::DrawNormalText(pdfium::span<const TextCharPos> pCharPos,
   const bool is_printer = GetDeviceType() == DeviceType::kPrinter;
   bool try_native_text = true;
 #else
-  constexpr bool is_printer = false;
-  constexpr bool try_native_text = true;
+  static constexpr bool is_printer = false;
+  static constexpr bool try_native_text = true;
 #endif
 
 #if BUILDFLAG(IS_WIN)
@@ -1141,15 +1142,12 @@ bool CFX_RenderDevice::DrawNormalText(pdfium::span<const TextCharPos> pCharPos,
     }
   }
   std::vector<TextGlyphPos> glyphs(pCharPos.size());
-  for (size_t i = 0; i < glyphs.size(); ++i) {
-    TextGlyphPos& glyph = glyphs[i];
-    const TextCharPos& charpos = pCharPos[i];
-
+  for (auto [charpos, glyph] :
+       fxcrt::Zip(pCharPos, pdfium::make_span(glyphs))) {
     glyph.m_fDeviceOrigin = text2Device.Transform(charpos.m_Origin);
-    if (anti_alias < FT_RENDER_MODE_LCD)
-      glyph.m_Origin.x = FXSYS_roundf(glyph.m_fDeviceOrigin.x);
-    else
-      glyph.m_Origin.x = static_cast<int>(floor(glyph.m_fDeviceOrigin.x));
+    glyph.m_Origin.x = anti_alias < FT_RENDER_MODE_LCD
+                           ? FXSYS_roundf(glyph.m_fDeviceOrigin.x)
+                           : static_cast<int>(floor(glyph.m_fDeviceOrigin.x));
     glyph.m_Origin.y = FXSYS_roundf(glyph.m_fDeviceOrigin.y);
 
     CFX_Matrix matrix = charpos.GetEffectiveMatrix(char2device);
@@ -1360,9 +1358,9 @@ void CFX_RenderDevice::DrawShadow(const CFX_Matrix& mtUser2Device,
                                   int32_t nTransparency,
                                   int32_t nStartGray,
                                   int32_t nEndGray) {
-  constexpr float kBorder = 0.5f;
-  constexpr float kSegmentWidth = 1.0f;
-  constexpr float kLineWidth = 1.5f;
+  static constexpr float kBorder = 0.5f;
+  static constexpr float kSegmentWidth = 1.0f;
+  static constexpr float kLineWidth = 1.5f;
 
   float fStepGray = (nEndGray - nStartGray) / rect.Height();
   CFX_PointF start(rect.left, 0);

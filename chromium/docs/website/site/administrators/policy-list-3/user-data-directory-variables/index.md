@@ -19,7 +19,7 @@ C:\Users\CurrentUser\AppData\Chrome\Profile.
 **Chrome profiles are _not_ backwards compatible, so storing the user profile
 on a network drive and using it with different versions of Chrome can cause
 crashes and data loss.** Please see
-<http://www.chromium.org/administrators/common-problems-and-solutions> for more
+<https://www.chromium.org/administrators/common-problems-and-solutions> for more
 details.
 
 ### Some hints about setting paths in policies

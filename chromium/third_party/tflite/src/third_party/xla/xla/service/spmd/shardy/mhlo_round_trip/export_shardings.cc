@@ -21,11 +21,11 @@ limitations under the License.
 #include <functional>
 #include <iterator>
 #include <memory>
-#include <optional>
 #include <utility>
 #include <vector>
 
 #include "absl/algorithm/container.h"
+#include "absl/log/check.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/MapVector.h"
@@ -33,6 +33,7 @@ limitations under the License.
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/LogicalResult.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/AffineMap.h"
 #include "mlir/IR/Attributes.h"
@@ -56,6 +57,7 @@ limitations under the License.
 #include "shardy/dialect/sdy/ir/constants.h"
 #include "shardy/dialect/sdy/ir/dialect.h"
 #include "shardy/dialect/sdy/ir/utils.h"
+#include "stablehlo/dialect/StablehloOps.h"
 #include "xla/array.h"
 #include "xla/hlo/ir/hlo_sharding.h"
 #include "xla/hlo/translate/mhlo_to_hlo/type_to_shape.h"
@@ -63,6 +65,7 @@ limitations under the License.
 #include "xla/service/spmd/shardy/constants.h"
 #include "xla/shape.h"
 #include "xla/shape_util.h"
+#include "xla/xla_data.pb.h"
 
 namespace xla {
 namespace sdy {
@@ -70,6 +73,7 @@ namespace sdy {
 namespace {
 
 using ::mlir::ArrayRef;
+using ::mlir::DictionaryAttr;
 using ::mlir::LogicalResult;
 using ::mlir::ModuleOp;
 using ::mlir::OpBuilder;
@@ -84,6 +88,8 @@ using ::mlir::success;
 using ::mlir::SymbolTable;
 using ::mlir::func::FuncOp;
 
+using ::mlir::stablehlo::CustomCallOp;
+
 using ::mlir::sdy::AxisRefAttr;
 using ::mlir::sdy::DimensionShardingAttr;
 using ::mlir::sdy::kShardingAttr;
@@ -93,7 +99,6 @@ using ::mlir::sdy::MeshOp;
 using ::mlir::sdy::SdyDialect;
 using ::mlir::sdy::SubAxisInfoAttr;
 using ::mlir::sdy::TensorShardingAttr;
-using ::mlir::sdy::TensorShardingPerValueAttr;
 
 // Return all axes or sub-axes in the `mesh`, such that sub-axes are derived
 // from `dimShardings` and sorted by their order in the mesh. For example, given
@@ -196,6 +201,7 @@ class ExportMhloShardingsPass
 
   void runOnOperation() final {
     ModuleOp moduleOp = getOperation();
+
     mlir::SymbolTableCollection symbolTableCollection;
     SymbolTable& symbolTable = symbolTableCollection.getSymbolTable(moduleOp);
 
@@ -207,6 +213,29 @@ class ExportMhloShardingsPass
       }
     }
 
+    moduleOp.walk([&](CustomCallOp customCall) {
+      // StableHLO doesn't have an equivalent of `erf` and `topk` ops.
+      // If they have a sharding annotation, we need to move it into
+      // `mhlo.attributes`, which StableHLO->MHLO conversion would lift back up.
+      StringRef callTargetName = customCall.getCallTargetName();
+      if (callTargetName != "mhlo.erf" && callTargetName != "mhlo.topk") {
+        return;
+      }
+      // TODO(bartchr): refactor `addFrontendAttribute` to take a key for the
+      // dictionary attribute. Then can re-use the logic instead of duplicating
+      // it here for `kMhloAttributesAttr`.
+      if (auto sdySharding =
+              customCall->getAttrOfType<StringAttr>(kXlaShardingAttr)) {
+        customCall->removeAttr(kXlaShardingAttr);
+        SmallVector<mlir::NamedAttribute> newAttributes(
+            customCall->getAttrOfType<DictionaryAttr>(kMhloAttributesAttr)
+                .getValue());
+        newAttributes.push_back(
+            builder.getNamedAttr(kXlaShardingAttr, sdySharding));
+        customCall->setAttr(kMhloAttributesAttr,
+                            builder.getDictionaryAttr(newAttributes));
+      }
+    });
     // Remove all mesh symbols
     for (MeshOp meshOp :
          llvm::make_early_inc_range(moduleOp.getOps<MeshOp>())) {
@@ -323,8 +352,11 @@ StringAttr convertToHloShardingAttr(
     std::function<MeshAttr(TensorShardingAttr)> getMeshAttr,
     std::function<StringAttr(const HloSharding&)> getStringAttr,
     ArrayRef<StringAttr> manualAxes) {
-  assert(shardings.size() == op->getNumResults());
-  if (op->getNumResults() == 1) {
+  // TODO(bartchr): pass through a symbol table to `getMesh(...)` below.
+  bool isNoResultMaximal = op->getNumResults() == 0 && shardings.size() == 1 &&
+                           shardings.front().getMesh(op).isMaximal();
+  CHECK(shardings.size() == op->getNumResults() || isNoResultMaximal);
+  if (op->getNumResults() == 1 || isNoResultMaximal) {
     return getStringAttr(
         convertToHloSharding(shardings.front(), getMeshAttr, manualAxes));
   }

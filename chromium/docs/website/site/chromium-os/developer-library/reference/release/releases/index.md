@@ -25,8 +25,7 @@ for more details.
 
 ## Channels
 
-CrOS, [like Chrome](https://www.chromium.org/getting-involved/dev-channel/),
-operates 5 channels:
+CrOS, [like Chrome](/getting-involved/dev-channel/), operates 5 channels:
 
 *   Stable: Most users should be on this.  Only the most stable is here!
 *   Beta: A good balance between stability & new features for users.
@@ -65,7 +64,7 @@ channel per se.
 
 ChromeOS uses a `[Milestone.]<TIP_BUILD>.<BRANCH_BUILD>.<BRANCH_BRANCH_BUILD>`
 style.  The meaning of these are documented in the
-[Version Numbers page](https://www.chromium.org/developers/version-numbers/#chromium-os).
+[Version Numbers page](/developers/version-numbers/#chromium-os).
 
 ## Stepping Stones
 
@@ -141,4 +140,5 @@ we still have to keep the migration code around for everyone.
 
 ## End of Life (EOL) / Auto Update Expiration Devices
 
-This is covered in detail in a [dedicated document](./eol_aue_process.md).
+This is covered in detail in a
+[dedicated document](/chromium-os/developer-library/reference/policies/eol-aue-process).

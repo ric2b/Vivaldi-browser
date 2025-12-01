@@ -4,9 +4,9 @@
 
 #include "chrome/browser/ui/views/sad_tab_view.h"
 
+#include <algorithm>
 #include <string>
 
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -601,20 +601,22 @@ SadTabView::SadTabView(content::WebContents* web_contents, SadTabKind kind)
     // If the `owner_` ContentsWebView has a rounded background, the sad tab
     // should also have matching rounded corners as well.
     SetBackgroundRadii(
-        static_cast<ContentsWebView*>(owner_)->background_radii());
+        static_cast<ContentsWebView*>(owner_)->GetBackgroundRadii());
   }
 
   // Make the accessibility role of this view an alert dialog, and
   // put focus on the action button. This causes screen readers to
   // immediately announce the text of this view.
   GetViewAccessibility().SetRole(ax::mojom::Role::kDialog);
-  if (action_button_->GetWidget() && action_button_->GetWidget()->IsActive())
+  if (action_button_->GetWidget() && action_button_->GetWidget()->IsActive()) {
     action_button_->RequestFocus();
+  }
 }
 
 SadTabView::~SadTabView() {
-  if (owner_)
+  if (owner_) {
     owner_->SetCrashedOverlayView(nullptr);
+  }
 }
 
 void SadTabView::ReinstallInWebView() {
@@ -654,12 +656,14 @@ void SadTabView::RemovedFromWidget() {
 void SadTabView::AttachToWebView() {
   Browser* browser = chrome::FindBrowserWithTab(web_contents());
   // This can be null during prefetch.
-  if (!browser)
+  if (!browser) {
     return;
+  }
 
   // In unit tests, browser->window() might not be a real BrowserView.
-  if (!browser->window()->GetNativeWindow())
+  if (!browser->window()->GetNativeWindow()) {
     return;
+  }
 
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
   DCHECK(browser_view);

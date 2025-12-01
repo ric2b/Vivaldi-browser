@@ -39,12 +39,12 @@
 #include "components/autofill/content/browser/test_autofill_client_injector.h"
 #include "components/autofill/content/browser/test_autofill_manager_injector.h"
 #include "components/autofill/content/browser/test_content_autofill_client.h"
-#include "components/autofill/core/browser/autofill_test_utils.h"
-#include "components/autofill/core/browser/filling_product.h"
-#include "components/autofill/core/browser/test_autofill_manager_waiter.h"
-#include "components/autofill/core/browser/test_browser_autofill_manager.h"
-#include "components/autofill/core/browser/ui/suggestion.h"
-#include "components/autofill/core/browser/ui/suggestion_type.h"
+#include "components/autofill/core/browser/filling/filling_product.h"
+#include "components/autofill/core/browser/foundations/test_autofill_manager_waiter.h"
+#include "components/autofill/core/browser/foundations/test_browser_autofill_manager.h"
+#include "components/autofill/core/browser/suggestions/suggestion.h"
+#include "components/autofill/core/browser/suggestions/suggestion_type.h"
+#include "components/autofill/core/browser/test_utils/autofill_test_utils.h"
 #include "components/autofill/core/common/aliases.h"
 #include "components/autofill/core/common/autofill_test_utils.h"
 #include "components/autofill/core/common/form_data.h"
@@ -56,7 +56,6 @@
 #include "components/compose/core/browser/compose_metrics.h"
 #include "components/compose/core/browser/config.h"
 #include "components/optimization_guide/core/mock_optimization_guide_model_executor.h"
-#include "components/optimization_guide/core/model_quality/feature_type_map.h"
 #include "components/optimization_guide/core/model_quality/model_quality_log_entry.h"
 #include "components/optimization_guide/core/model_quality/test_model_quality_logs_uploader_service.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
@@ -165,7 +164,7 @@ class ChromeComposeClientTest : public BrowserWithTestWindowTest {
     scoped_feature_list_.InitWithFeatures(
         {compose::features::kEnableCompose,
          optimization_guide::features::kOptimizationGuideModelExecution},
-        {});
+        {optimization_guide::features::kAiSettingsPageRefresh});
     // Needed for feature params to reset.
     compose::ResetConfigForTesting();
     ukm_recorder_ = std::make_unique<ukm::TestAutoSetUkmRecorder>();
@@ -181,6 +180,8 @@ class ChromeComposeClientTest : public BrowserWithTestWindowTest {
 
     client_ = ChromeComposeClient::FromWebContents(web_contents());
     client_->SetModelExecutorForTest(&model_executor_);
+    client_->SetModelQualityLogsUploaderServiceForTest(
+        GetOptimizationGuide().GetModelQualityLogsUploaderService());
     client_->SetInnerTextProviderForTest(&model_inner_text_);
     client_->SetSkipShowDialogForTest(true);
     client_->SetSessionIdForTest(base::Token(kSessionIdHigh, kSessionIdLow));
@@ -242,8 +243,6 @@ class ChromeComposeClientTest : public BrowserWithTestWindowTest {
               metadata->SetAnyMetadataForTesting(compose_hint_metadata);
               return optimization_guide::OptimizationGuideDecision::kTrue;
             });
-
-    test_timer_ = std::make_unique<base::ScopedMockElapsedTimersForTest>();
   }
 
   void TearDown() override {
@@ -465,6 +464,7 @@ class ChromeComposeClientTest : public BrowserWithTestWindowTest {
   MockHatsService* mock_hats_service() { return mock_hats_service_; }
 
  private:
+  base::ScopedMockElapsedTimersForTest test_timer_;
   raw_ptr<ChromeComposeClient> client_;
   testing::NiceMock<optimization_guide::MockOptimizationGuideModelExecutor>
       model_executor_;
@@ -488,7 +488,6 @@ class ChromeComposeClientTest : public BrowserWithTestWindowTest {
       client_page_handler_;
   mojo::Remote<compose::mojom::ComposeSessionUntrustedPageHandler>
       page_handler_;
-  std::unique_ptr<base::ScopedMockElapsedTimersForTest> test_timer_;
   ComposeEnabling::ScopedOverride scoped_compose_enabled_;
   raw_ptr<MockHatsService> mock_hats_service_;
 };
@@ -887,7 +886,7 @@ TEST_F(ChromeComposeClientTest, TestProactiveNudgeEngagementIsRecorded) {
   selected_field_data.set_origin(
       web_contents()->GetPrimaryMainFrame()->GetLastCommittedOrigin());
   const autofill::AutofillSuggestionTriggerSource trigger_source =
-      autofill::AutofillSuggestionTriggerSource::kTextFieldDidChange;
+      autofill::AutofillSuggestionTriggerSource::kTextFieldValueChanged;
 
   ASSERT_FALSE(client().ShouldTriggerPopup(form_data, selected_field_data,
                                            trigger_source));
@@ -920,7 +919,7 @@ TEST_F(ChromeComposeClientTest, TestProactiveNudgeEngagementIsRecorded) {
   NavigateAndCommitActiveTab(GURL("about:blank"));
   EXPECT_EQ(training_labels.Get().output_metric,
             std::make_pair("Compose.ProactiveNudge.DerivedEngagement",
-                           static_cast<base::HistogramBase::Sample>(
+                           static_cast<base::HistogramBase::Sample32>(
                                compose::ProactiveNudgeDerivedEngagement::
                                    kAcceptedComposeSuggestion)));
 }
@@ -960,7 +959,7 @@ TEST_F(ChromeComposeClientTest,
   // The initial trigger request comes from a text field change.
   EXPECT_FALSE(client().ShouldTriggerPopup(
       form_data, selected_field_data,
-      autofill::AutofillSuggestionTriggerSource::kTextFieldDidChange));
+      autofill::AutofillSuggestionTriggerSource::kTextFieldValueChanged));
 
   task_environment()->FastForwardBy(config.proactive_nudge_focus_delay);
 
@@ -1025,7 +1024,7 @@ TEST_F(ChromeComposeClientTest, TestShouldTriggerProactiveNudgeDisabledUKM) {
   selected_field_data.set_origin(
       web_contents()->GetPrimaryMainFrame()->GetLastCommittedOrigin());
   const autofill::AutofillSuggestionTriggerSource trigger_source =
-      autofill::AutofillSuggestionTriggerSource::kTextFieldDidChange;
+      autofill::AutofillSuggestionTriggerSource::kTextFieldValueChanged;
 
   // By default the proactive nudge is disabled.
   EXPECT_FALSE(client().ShouldTriggerPopup(form_data, selected_field_data,
@@ -1076,7 +1075,7 @@ TEST_F(ChromeComposeClientTest, TestShouldTriggerProactiveNudgeEnabled) {
   selected_field_data.set_origin(
       web_contents()->GetPrimaryMainFrame()->GetLastCommittedOrigin());
   const autofill::AutofillSuggestionTriggerSource trigger_source =
-      autofill::AutofillSuggestionTriggerSource::kTextFieldDidChange;
+      autofill::AutofillSuggestionTriggerSource::kTextFieldValueChanged;
 
   EXPECT_FALSE(client().ShouldTriggerPopup(form_data, selected_field_data,
                                            trigger_source));
@@ -1126,7 +1125,7 @@ TEST_F(ChromeComposeClientTest,
 
   autofill::FormFieldData& selected_field_data = test_api(form_data).field(0);
   const autofill::AutofillSuggestionTriggerSource trigger_source =
-      autofill::AutofillSuggestionTriggerSource::kTextFieldDidChange;
+      autofill::AutofillSuggestionTriggerSource::kTextFieldValueChanged;
 
   // Will fail because field origin does not match page origin.
   EXPECT_FALSE(client().ShouldTriggerPopup(form_data, selected_field_data,
@@ -1155,7 +1154,7 @@ TEST_F(ChromeComposeClientTest, TestProactiveNudgeMSBBDisabled) {
   selected_field_data.set_origin(
       web_contents()->GetPrimaryMainFrame()->GetLastCommittedOrigin());
   const autofill::AutofillSuggestionTriggerSource trigger_source =
-      autofill::AutofillSuggestionTriggerSource::kTextFieldDidChange;
+      autofill::AutofillSuggestionTriggerSource::kTextFieldValueChanged;
 
   // Will fail because MSBB is not set
   EXPECT_FALSE(client().ShouldTriggerPopup(form_data, selected_field_data,
@@ -1175,7 +1174,7 @@ TEST_F(ChromeComposeClientTest, TestComposeShouldTriggerSavedStateNudgeUKM) {
   const autofill::FormFieldData& selected_field_data =
       test_api(form_data).field(0);
   const autofill::AutofillSuggestionTriggerSource trigger_source =
-      autofill::AutofillSuggestionTriggerSource::kTextFieldDidChange;
+      autofill::AutofillSuggestionTriggerSource::kTextFieldValueChanged;
 
   // Start a Compose session on selected field.
   ShowDialogAndBindMojoWithFieldData(selected_field_data);
@@ -2387,6 +2386,8 @@ TEST_F(ChromeComposeClientTest, BugReportOpensCorrectURL) {
             new_tab_webcontents->GetController().GetPendingEntry()->GetURL());
 }
 
+// TODO(crbug.com/362225975): Remove after AiSettingsPageRefresh and
+// ComposeProactiveNudge are launched.
 TEST_F(ChromeComposeClientTest, LearnMoreLinkOpensCorrectURL) {
   GURL learn_more_url("https://support.google.com/chrome?p=help_me_write");
 
@@ -2660,7 +2661,7 @@ TEST_F(ChromeComposeClientTest, ExpiredSessionBlocksSavedStateNudgeTest) {
   const autofill::FormFieldData& selected_field_data =
       test_api(form_data).field(0);
   const autofill::AutofillSuggestionTriggerSource trigger_source =
-      autofill::AutofillSuggestionTriggerSource::kTextFieldDidChange;
+      autofill::AutofillSuggestionTriggerSource::kTextFieldValueChanged;
 
   // Start a Compose session on selected field.
   ShowDialogAndBindMojoWithFieldData(selected_field_data);
@@ -3082,7 +3083,7 @@ TEST_F(ChromeComposeClientTest,
   autofill::FormFieldData& selected_field_data = test_api(form_data).field(0);
   selected_field_data.set_origin(test_origin);
   const autofill::AutofillSuggestionTriggerSource trigger_source =
-      autofill::AutofillSuggestionTriggerSource::kTextFieldDidChange;
+      autofill::AutofillSuggestionTriggerSource::kTextFieldValueChanged;
 
   EXPECT_FALSE(client().ShouldTriggerPopup(form_data, selected_field_data,
                                            trigger_source));
@@ -3143,7 +3144,7 @@ TEST_F(ChromeComposeClientTest,
   autofill::FormFieldData& selected_field_data = test_api(form_data).field(0);
   selected_field_data.set_origin(test_origin);
   const autofill::AutofillSuggestionTriggerSource trigger_source =
-      autofill::AutofillSuggestionTriggerSource::kTextFieldDidChange;
+      autofill::AutofillSuggestionTriggerSource::kTextFieldValueChanged;
 
   EXPECT_FALSE(client().ShouldTriggerPopup(form_data, selected_field_data,
                                            trigger_source));
@@ -3206,7 +3207,7 @@ TEST_F(ChromeComposeClientTest, DisableComposeBlocksProactiveNudgeTest) {
   field_data.set_origin(
       web_contents()->GetPrimaryMainFrame()->GetLastCommittedOrigin());
   const autofill::AutofillSuggestionTriggerSource trigger_source =
-      autofill::AutofillSuggestionTriggerSource::kTextFieldDidChange;
+      autofill::AutofillSuggestionTriggerSource::kTextFieldValueChanged;
 
   EXPECT_FALSE(
       client().ShouldTriggerPopup(form_data, field_data, trigger_source));
@@ -3267,7 +3268,7 @@ TEST_F(ChromeComposeClientTest, DisableComposeBlocksSelectionNudgeTest) {
   field_data.set_origin(
       web_contents()->GetPrimaryMainFrame()->GetLastCommittedOrigin());
   const autofill::AutofillSuggestionTriggerSource trigger_source =
-      autofill::AutofillSuggestionTriggerSource::kTextFieldDidChange;
+      autofill::AutofillSuggestionTriggerSource::kTextFieldValueChanged;
 
   EXPECT_FALSE(
       client().ShouldTriggerPopup(form_data, field_data, trigger_source));
@@ -3333,20 +3334,22 @@ TEST_F(ChromeComposeClientTest, TextFieldChangeThresholdHidesProactiveNudge) {
   std::u16string text_value = u"a";
   unsigned int max = config.nudge_field_change_event_max;
   for (size_t i = 1; i < max; i++) {
-    client().field_change_observer_.OnAfterTextFieldDidChange(
+    client().field_change_observer_.OnAfterTextFieldValueChanged(
         *autofill_manager(), form_data.global_id(),
         form_data.fields()[0].global_id(), text_value);
-    EXPECT_EQ(i,
-              client().field_change_observer_.text_field_change_event_count_);
+    EXPECT_EQ(
+        i,
+        client().field_change_observer_.text_field_value_change_event_count_);
     text_value = text_value + u"a";
   }
 
   // Reaching the event threshold resets the event count and hides the Autofill
   // popup.
-  client().field_change_observer_.OnAfterTextFieldDidChange(
+  client().field_change_observer_.OnAfterTextFieldValueChanged(
       *autofill_manager(), form_data.global_id(),
       form_data.fields()[0].global_id(), text_value);
-  EXPECT_EQ(0U, client().field_change_observer_.text_field_change_event_count_);
+  EXPECT_EQ(
+      0U, client().field_change_observer_.text_field_value_change_event_count_);
   EXPECT_FALSE(autofill_client()->IsShowingAutofillPopup());
 }
 
@@ -4757,7 +4760,7 @@ TEST_F(ComposePopupAutofillDriverTest, TestSelectionNudgeNoProactiveNudge) {
   // only the selection nudge enabled.
   ASSERT_FALSE(client().ShouldTriggerPopup(
       form_data, field_data,
-      autofill::AutofillSuggestionTriggerSource::kTextFieldDidChange));
+      autofill::AutofillSuggestionTriggerSource::kTextFieldValueChanged));
   // No timer should be running since the proactive nudge is disabled.
   ASSERT_FALSE(client().IsPopupTimerRunning());
 
@@ -4804,7 +4807,7 @@ TEST_F(ComposePopupAutofillDriverTest, TestSelectionNudgeEnabled) {
   // The first call to ShouldTriggerPopup starts the nudge tracker timers.
   ASSERT_FALSE(client().ShouldTriggerPopup(
       form_data, field_data,
-      autofill::AutofillSuggestionTriggerSource::kTextFieldDidChange));
+      autofill::AutofillSuggestionTriggerSource::kTextFieldValueChanged));
 
   task_environment()->FastForwardBy(base::Microseconds(7));
   ASSERT_TRUE(client().IsPopupTimerRunning());
@@ -4876,7 +4879,7 @@ TEST_F(ComposePopupAutofillDriverTest, TestSelectionTooShort) {
   // The first call to ShouldTriggerPopup starts the nudge tracker timers.
   ASSERT_FALSE(client().ShouldTriggerPopup(
       form_data, field_data,
-      autofill::AutofillSuggestionTriggerSource::kTextFieldDidChange));
+      autofill::AutofillSuggestionTriggerSource::kTextFieldValueChanged));
 
   task_environment()->FastForwardBy(base::Microseconds(7));
   ASSERT_TRUE(client().IsPopupTimerRunning());
@@ -4980,7 +4983,7 @@ TEST_F(ComposePopupAutofillDriverTest, TestSelectionNudgeLostFocus) {
   // The first call to ShouldTriggerPopup starts the nudge tracker timers.
   ASSERT_FALSE(client().ShouldTriggerPopup(
       form_data, field_data0,
-      autofill::AutofillSuggestionTriggerSource::kTextFieldDidChange));
+      autofill::AutofillSuggestionTriggerSource::kTextFieldValueChanged));
 
   task_environment()->FastForwardBy(base::Microseconds(7));
   ASSERT_TRUE(client().IsPopupTimerRunning());
@@ -5005,7 +5008,7 @@ TEST_F(ComposePopupAutofillDriverTest, TestSelectionNudgeLostFocus) {
   // Trigger the popup on field 1 losing focus on field 0.
   ASSERT_FALSE(client().ShouldTriggerPopup(
       form_data, field_data1,
-      autofill::AutofillSuggestionTriggerSource::kTextFieldDidChange));
+      autofill::AutofillSuggestionTriggerSource::kTextFieldValueChanged));
   task_environment()->FastForwardBy(base::Microseconds(7));
   ASSERT_TRUE(client().IsPopupTimerRunning());
 
@@ -5083,7 +5086,7 @@ TEST_F(ComposePopupAutofillDriverTest,
   // The first call to ShouldTriggerPopup starts the nudge tracker timers.
   ASSERT_FALSE(client().ShouldTriggerPopup(
       form_data, field_data,
-      autofill::AutofillSuggestionTriggerSource::kTextFieldDidChange));
+      autofill::AutofillSuggestionTriggerSource::kTextFieldValueChanged));
 
   task_environment()->FastForwardBy(base::Microseconds(7));
   ASSERT_TRUE(client().IsPopupTimerRunning());
@@ -5138,7 +5141,7 @@ TEST_F(ComposePopupAutofillDriverTest, TestCaretMovementExtendsNudgeDelay) {
   // The first call to ShouldTriggerPopup starts the nudge tracker timers.
   ASSERT_FALSE(client().ShouldTriggerPopup(
       form_data, field_data,
-      autofill::AutofillSuggestionTriggerSource::kTextFieldDidChange));
+      autofill::AutofillSuggestionTriggerSource::kTextFieldValueChanged));
 
   task_environment()->FastForwardBy(base::Microseconds(7));
   ASSERT_TRUE(client().IsPopupTimerRunning());
@@ -5188,7 +5191,7 @@ TEST_F(ComposePopupAutofillDriverTest, TestSelectionNudgeNoDelay) {
   // The first call to ShouldTriggerPopup starts the nudge tracker timers.
   ASSERT_FALSE(client().ShouldTriggerPopup(
       form_data, field_data,
-      autofill::AutofillSuggestionTriggerSource::kTextFieldDidChange));
+      autofill::AutofillSuggestionTriggerSource::kTextFieldValueChanged));
 
   task_environment()->FastForwardBy(base::Microseconds(7));
   ASSERT_TRUE(client().IsPopupTimerRunning());
@@ -5238,7 +5241,7 @@ TEST_F(ComposePopupAutofillDriverTest, TestSelectionNudgeDisabled) {
   // The first call to ShouldTriggerPopup starts the nudge tracker timers.
   ASSERT_FALSE(client().ShouldTriggerPopup(
       form_data, field_data,
-      autofill::AutofillSuggestionTriggerSource::kTextFieldDidChange));
+      autofill::AutofillSuggestionTriggerSource::kTextFieldValueChanged));
 
   task_environment()->FastForwardBy(base::Microseconds(7));
   ASSERT_TRUE(client().IsPopupTimerRunning());
@@ -5300,7 +5303,7 @@ TEST_F(ComposePopupAutofillDriverTest, TestSelectionNudgeOncePerFocus) {
   // with only the selection nudge enabled.
   ASSERT_FALSE(client().ShouldTriggerPopup(
       form_data, field_data0,
-      autofill::AutofillSuggestionTriggerSource::kTextFieldDidChange));
+      autofill::AutofillSuggestionTriggerSource::kTextFieldValueChanged));
   // No timer should be running since the proactive nudge is disabled.
   ASSERT_FALSE(client().IsPopupTimerRunning());
 
@@ -5353,7 +5356,7 @@ TEST_F(ComposePopupAutofillDriverTest, TestSelectionNudgeOncePerFocus) {
   // Trigger the popup on field 1 losing focus on field 0.
   ASSERT_FALSE(client().ShouldTriggerPopup(
       form_data, field_data1,
-      autofill::AutofillSuggestionTriggerSource::kTextFieldDidChange));
+      autofill::AutofillSuggestionTriggerSource::kTextFieldValueChanged));
   task_environment()->FastForwardBy(base::Microseconds(3));
   ASSERT_FALSE(client().IsPopupTimerRunning());
 
@@ -5416,7 +5419,7 @@ TEST_F(ComposePopupAutofillDriverTest,
   // The first call to ShouldTriggerPopup starts the nudge tracker timers.
   ASSERT_FALSE(client().ShouldTriggerPopup(
       form_data, field_data,
-      autofill::AutofillSuggestionTriggerSource::kTextFieldDidChange));
+      autofill::AutofillSuggestionTriggerSource::kTextFieldValueChanged));
 
   task_environment()->FastForwardBy(base::Microseconds(3));
   ASSERT_TRUE(client().IsPopupTimerRunning());
@@ -5429,11 +5432,11 @@ TEST_F(ComposePopupAutofillDriverTest,
   ASSERT_TRUE(client().IsPopupTimerRunning());
 
   // Simulate engough text change events to trigger the text change nudge.
-  // A text change consists of both |AfterTextFieldDidChange| and
+  // A text change consists of both |AfterTextFieldValueChanged| and
   // |AfterCaretMovedInFormField| (since typing also moves the caret).
   for (int i = 0; i < config.proactive_nudge_text_change_count; ++i) {
     field_data.set_value(u"new text value");
-    autofill_driver->GetAutofillManager().OnTextFieldDidChange(
+    autofill_driver->GetAutofillManager().OnTextFieldValueChanged(
         form_data, field_data.global_id(), /*timestamp=*/{});
     field_data.set_selected_text(u"");
     autofill_driver->GetAutofillManager().OnCaretMovedInFormField(
@@ -5471,7 +5474,7 @@ TEST_F(ComposePopupAutofillDriverTest, TestFocusNudgeExtendedToSelectionNudge) {
   // The first call to ShouldTriggerPopup starts the nudge tracker timers.
   ASSERT_FALSE(client().ShouldTriggerPopup(
       form_data, field_data,
-      autofill::AutofillSuggestionTriggerSource::kTextFieldDidChange));
+      autofill::AutofillSuggestionTriggerSource::kTextFieldValueChanged));
 
   task_environment()->FastForwardBy(base::Microseconds(3));
   ASSERT_TRUE(client().IsPopupTimerRunning());
@@ -5519,7 +5522,7 @@ TEST_F(ComposePopupAutofillDriverTest, TestFocusNudgeCanceledBySelectionNudge) {
   // The first call to ShouldTriggerPopup starts the nudge tracker timers.
   ASSERT_FALSE(client().ShouldTriggerPopup(
       form_data, field_data,
-      autofill::AutofillSuggestionTriggerSource::kTextFieldDidChange));
+      autofill::AutofillSuggestionTriggerSource::kTextFieldValueChanged));
 
   task_environment()->FastForwardBy(base::Microseconds(3));
   ASSERT_TRUE(client().IsPopupTimerRunning());
@@ -5579,7 +5582,7 @@ TEST_F(ComposePopupAutofillDriverTest,
   // focus nudge is disabled.
   ASSERT_FALSE(client().ShouldTriggerPopup(
       form_data, field_data,
-      autofill::AutofillSuggestionTriggerSource::kTextFieldDidChange));
+      autofill::AutofillSuggestionTriggerSource::kTextFieldValueChanged));
 
   task_environment()->FastForwardBy(base::Microseconds(3));
   ASSERT_FALSE(client().IsPopupTimerRunning());
@@ -5594,11 +5597,11 @@ TEST_F(ComposePopupAutofillDriverTest,
   ASSERT_FALSE(client().IsPopupTimerRunning());
 
   // Simulate engough text change events to trigger the text change nudge.
-  // A text change consists of both |AfterTextFieldDidChange| and
+  // A text change consists of both |AfterTextFieldValueChanged| and
   // |AfterCaretMovedInFormField| (since typing also moves the caret).
   for (int i = 0; i < config.proactive_nudge_text_change_count; ++i) {
     field_data.set_value(u"new text value");
-    autofill_driver->GetAutofillManager().OnTextFieldDidChange(
+    autofill_driver->GetAutofillManager().OnTextFieldValueChanged(
         form_data, field_data.global_id(), /*timestamp=*/{});
     field_data.set_selected_text(u"");
     autofill_driver->GetAutofillManager().OnCaretMovedInFormField(
@@ -5636,7 +5639,7 @@ TEST_F(ComposePopupAutofillDriverTest, TestCloseSessionResetsNudgeTracker) {
   // The first call to ShouldTriggerPopup starts the nudge tracker timers.
   ASSERT_FALSE(client().ShouldTriggerPopup(
       form_data, field_data,
-      autofill::AutofillSuggestionTriggerSource::kTextFieldDidChange));
+      autofill::AutofillSuggestionTriggerSource::kTextFieldValueChanged));
 
   task_environment()->FastForwardBy(base::Microseconds(8));
 
@@ -5683,7 +5686,7 @@ TEST_F(ComposePopupAutofillDriverTest, TestSelectionNudgeEntryPointMetrics) {
   // The first call to ShouldTriggerPopup starts the nudge tracker timers.
   ASSERT_FALSE(client().ShouldTriggerPopup(
       form_data, field_data,
-      autofill::AutofillSuggestionTriggerSource::kTextFieldDidChange));
+      autofill::AutofillSuggestionTriggerSource::kTextFieldValueChanged));
 
   task_environment()->FastForwardBy(base::Microseconds(7));
   ASSERT_TRUE(client().IsPopupTimerRunning());
@@ -5736,7 +5739,7 @@ TEST_F(ComposePopupAutofillDriverTest, TestProactiveNudgeEntryPointMetrics) {
   // The first call to ShouldTriggerPopup starts the nudge tracker timers.
   ASSERT_FALSE(client().ShouldTriggerPopup(
       form_data, field_data,
-      autofill::AutofillSuggestionTriggerSource::kTextFieldDidChange));
+      autofill::AutofillSuggestionTriggerSource::kTextFieldValueChanged));
 
   task_environment()->FastForwardBy(base::Microseconds(7));
   ASSERT_TRUE(client().IsPopupTimerRunning());

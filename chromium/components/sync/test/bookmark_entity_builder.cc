@@ -9,6 +9,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/notreached.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/uuid.h"
 #include "components/bookmarks/browser/bookmark_node.h"
@@ -56,6 +57,14 @@ BookmarkEntityBuilder::BookmarkEntityBuilder(
       uuid_(uuid),
       originator_cache_guid_(originator_cache_guid),
       originator_client_item_id_(uuid.AsLowercaseString()) {}
+
+BookmarkEntityBuilder::BookmarkEntityBuilder(
+    const std::u16string& title,
+    const base::Uuid& uuid,
+    const std::string& originator_cache_guid)
+    : BookmarkEntityBuilder(base::UTF16ToUTF8(title),
+                            uuid,
+                            originator_cache_guid) {}
 
 BookmarkEntityBuilder::BookmarkEntityBuilder(
     const BookmarkEntityBuilder& other) = default;
@@ -199,7 +208,7 @@ std::unique_ptr<LoopbackServerEntity> BookmarkEntityBuilder::Build(
 void BookmarkEntityBuilder::FillWithFaviconIfNeeded(
     sync_pb::BookmarkSpecifics* bookmark_specifics) {
   DCHECK(bookmark_specifics);
-  // Both |favicon_| and |icon_url_| must be provided or empty simultaneously.
+  // Both `favicon_` and `icon_url_` must be provided or empty simultaneously.
   DCHECK(favicon_.IsEmpty() == icon_url_.is_empty());
   if (favicon_.IsEmpty()) {
     return;

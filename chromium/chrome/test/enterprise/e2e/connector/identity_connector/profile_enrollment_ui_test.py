@@ -63,25 +63,26 @@ def main(argv):
     time.sleep(30)  # Wait for the profile creation dialogue to show up
 
     window.child_window(
-        title="Continue", control_type="Button").click()  # Confirm the dialogue
+        title="Continue", auto_id="proceed-button",
+        control_type="Button").click()  # Confirm the dialogue
     time.sleep(10)  # Wait for the completion of work profile enrollment
-    window.child_window(title="Confirm", control_type="Button").click()
+    window.child_window(
+        title="Continue", auto_id="proceed-button",
+        control_type="Button").click()
     time.sleep(5)
 
     # Obtain the workprofile's UI window
     workprofile = app.top_window()
 
+    workprofile.child_window(
+        title="Verify it's you", control_type="Button").click()
     # Check user identity status in the profile menu
     if "demo" in FLAGS.account:
-      workprofile.child_window(
-          title="Demo Test (Work)", control_type="Button").click()
       if workprofile.child_window(
           title=FLAGS.account, control_type="Text").exists():
         logging.info("Icebreaker work profile created")
 
     if "enterprise" in FLAGS.account:
-      workprofile.child_window(
-          title="Enterprise Test (Work)", control_type="Button").click()
       if workprofile.child_window(
           title=FLAGS.account, control_type="Text").exists():
         logging.info("Dasherless work profile created")

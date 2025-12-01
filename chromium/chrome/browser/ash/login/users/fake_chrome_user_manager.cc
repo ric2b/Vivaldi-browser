@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 
+#include <algorithm>
 #include <memory>
 #include <set>
 #include <utility>
@@ -12,7 +13,6 @@
 #include "ash/constants/ash_switches.h"
 #include "base/command_line.h"
 #include "base/functional/callback.h"
-#include "base/ranges/algorithm.h"
 #include "base/system/sys_info.h"
 #include "chrome/browser/ash/login/users/chrome_user_manager_util.h"
 #include "chrome/browser/ash/login/users/default_user_image/default_user_images.h"
@@ -20,6 +20,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chromeos/ash/components/login/login_state/login_state.h"
 #include "chromeos/ash/components/settings/cros_settings.h"
+#include "chromeos/ash/components/settings/user_login_permission_tracker.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/fake_user_manager.h"
 #include "components/user_manager/fake_user_manager_delegate.h"
@@ -81,7 +82,8 @@ FakeChromeUserManager::AddUserWithAffiliationAndTypeAndProfile(
     Profile* profile) {
   user_manager::User* user =
       user_manager::User::CreateRegularUser(account_id, user_type);
-  user->SetAffiliated(is_affiliated);
+  // Use `is_affiliated` value for managed, too, for now.
+  user->SetUserPolicyStatus(/*is_managed=*/is_affiliated, is_affiliated);
   user->set_username_hash(
       user_manager::FakeUserManager::GetFakeUsernameHash(account_id));
   user->SetStubImage(
@@ -255,26 +257,31 @@ void FakeChromeUserManager::UserLoggedIn(const AccountId& account_id,
                                          bool is_child) {
   // Please keep the implementation in sync with FakeUserManager::UserLoggedIn.
   // We're in process to merge.
-  for (user_manager::User* user : users_) {
+  for (auto& user : user_storage_) {
     if (user->GetAccountId() == account_id) {
       user->set_is_logged_in(true);
       user->set_username_hash(username_hash);
-      logged_in_users_.push_back(user);
+      logged_in_users_.push_back(user.get());
       if (!primary_user_) {
-        primary_user_ = user;
+        primary_user_ = user.get();
       }
       if (active_user_) {
-        NotifyUserAddedToSession(user);
+        NotifyUserAddedToSession(user.get());
       } else {
-        active_user_ = user;
+        active_user_ = user.get();
       }
       break;
     }
   }
 
   if (!active_user_ && IsEphemeralAccountId(account_id)) {
-    RegularUserLoggedInAsEphemeral(account_id,
-                                   user_manager::UserType::kRegular);
+    // TODO(crbug.com/278643115): Temporarily duplicate the logic
+    // of ephemeral user creation. This class should be migrated into
+    // FakeUserManager.
+    active_user_ =
+        AddEphemeralUser(account_id, user_manager::UserType::kRegular);
+    SetIsCurrentUserNew(true);
+    is_current_user_ephemeral_regular_user_ = true;
   }
 
   NotifyOnLogin();
@@ -459,7 +466,7 @@ bool FakeChromeUserManager::IsGuestSessionAllowed() const {
 bool FakeChromeUserManager::IsGaiaUserAllowed(
     const user_manager::User& user) const {
   DCHECK(user.HasGaiaAccount());
-  return CrosSettings::Get()->IsUserAllowlisted(
+  return UserLoginPermissionTracker::Get()->IsUserAllowlisted(
       user.GetAccountId().GetUserEmail(), nullptr, user.GetType());
 }
 
@@ -492,20 +499,6 @@ void FakeChromeUserManager::SimulateUserProfileLoad(
 bool FakeChromeUserManager::IsDeviceLocalAccountMarkedForRemoval(
     const AccountId& account_id) const {
   return false;
-}
-
-void FakeChromeUserManager::SetUserAffiliated(const AccountId& account_id,
-                                              bool is_affiliated) {}
-
-void FakeChromeUserManager::SetUserAffiliationForTesting(
-    const AccountId& account_id,
-    bool is_affiliated) {
-  auto* user = FindUserAndModify(account_id);
-  if (!user) {
-    return;
-  }
-  user->SetAffiliated(is_affiliated);
-  NotifyUserAffiliationUpdated(*user);
 }
 
 user_manager::User* FakeChromeUserManager::GetActiveUserInternal() const {

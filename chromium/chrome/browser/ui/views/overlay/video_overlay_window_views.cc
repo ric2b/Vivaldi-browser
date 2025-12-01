@@ -12,6 +12,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/strcat.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
@@ -35,11 +36,13 @@
 #include "chrome/browser/ui/views/overlay/toggle_microphone_button.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/ui/base/chromeos_ui_constants.h"
+#include "components/global_media_controls/public/format_duration.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/picture_in_picture_window_controller.h"
 #include "content/public/browser/web_contents.h"
 #include "media/base/media_switches.h"
 #include "media/base/video_util.h"
+#include "services/media_session/public/cpp/media_image_manager.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -49,7 +52,12 @@
 #include "ui/compositor/layer.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
+#include "ui/gfx/canvas.h"
+#include "ui/gfx/favicon_size.h"
 #include "ui/gfx/geometry/resize_utils.h"
+#include "ui/gfx/geometry/skia_conversions.h"
+#include "ui/views/controls/image_view.h"
+#include "ui/views/controls/label.h"
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/views/window/non_client_view.h"
 
@@ -108,7 +116,42 @@ constexpr int kControlMargin = 16;
 // Minimum padding between the overlay view, if shown, and the window.
 constexpr gfx::Size kOverlayViewPadding(64, 46);
 
-constexpr gfx::Size kPreviousNextButtonSize(28, 28);
+// Size for action buttons in the 2024 UI.
+constexpr gfx::Size kActionButtonSize(28, 28);
+
+// The amount of time the seek buttons next to the play button seek.
+constexpr base::TimeDelta kSeekTime = base::Seconds(10);
+
+// The size of the view containing the favicon.
+constexpr gfx::Size kFaviconSize(24, 24);
+
+// The size of the favicon image itself.
+constexpr gfx::Size kFaviconIconSize(16, 16);
+
+gfx::Size ScaleImageSizeToFitView(const gfx::Size& image_size,
+                                  const gfx::Size& view_size) {
+  const float scale =
+      std::max(view_size.width() / static_cast<float>(image_size.width()),
+               view_size.height() / static_cast<float>(image_size.height()));
+  return gfx::ScaleToFlooredSize(image_size, scale);
+}
+
+// Converts the given bitmap to the correct color type.
+gfx::ImageSkia GetCorrectColorTypeImage(const SkBitmap& bitmap) {
+  if (bitmap.info().colorType() == kN32_SkColorType) {
+    return gfx::ImageSkia::CreateFrom1xBitmap(bitmap);
+  }
+  SkImageInfo color_type_info = bitmap.info().makeColorType(kN32_SkColorType);
+  SkBitmap color_type_copy;
+  if (!color_type_copy.tryAllocPixels(color_type_info)) {
+    return gfx::ImageSkia();
+  }
+  if (!bitmap.readPixels(color_type_info, color_type_copy.getPixels(),
+                         color_type_copy.rowBytes(), 0, 0)) {
+    return gfx::ImageSkia();
+  }
+  return gfx::ImageSkia::CreateFrom1xBitmap(color_type_copy);
+}
 
 // Returns the quadrant the VideoOverlayWindowViews is primarily in on the
 // current work area.
@@ -137,6 +180,11 @@ T* AddChildView(std::vector<std::unique_ptr<views::View>>* views,
                 std::unique_ptr<T> child) {
   views->push_back(std::move(child));
   return static_cast<T*>(views->back().get());
+}
+
+bool Use2024UI() {
+  return base::FeatureList::IsEnabled(
+      media::kVideoPictureInPictureControlsUpdate2024);
 }
 
 class WindowBackgroundView : public views::View {
@@ -168,8 +216,9 @@ class ControlsBackgroundView : public views::View {
 
   void OnThemeChanged() override {
     views::View::OnThemeChanged();
-    const SkColor color =
-        GetColorProvider()->GetColor(kColorPipWindowControlsBackground);
+    const SkColor color = GetColorProvider()->GetColor(
+        Use2024UI() ? kColorPipWindowScrimFull
+                    : kColorPipWindowControlsBackground);
     layer()->SetColor(SkColorSetA(color, SK_AlphaOPAQUE));
     layer()->SetOpacity(static_cast<float>(SkColorGetA(color)) /
                         SK_AlphaOPAQUE);
@@ -179,10 +228,31 @@ class ControlsBackgroundView : public views::View {
 BEGIN_METADATA(ControlsBackgroundView)
 END_METADATA
 
-bool Use2024UI() {
-  return base::FeatureList::IsEnabled(
-      media::kVideoPictureInPictureControlsUpdate2024);
-}
+class GradientBackground : public views::Background {
+ public:
+  GradientBackground(SkColor4f top_color, SkColor4f bottom_color)
+      : top_color_(top_color), bottom_color_(bottom_color) {}
+  GradientBackground(const GradientBackground&) = delete;
+  GradientBackground& operator=(const GradientBackground&) = delete;
+  ~GradientBackground() override = default;
+
+  void Paint(gfx::Canvas* canvas, views::View* view) const override {
+    gfx::Rect draw_bounds = view->GetContentsBounds();
+    const SkColor4f colors[2] = {top_color_, bottom_color_};
+    const SkPoint points[2] = {
+        gfx::PointToSkPoint(draw_bounds.top_center()),
+        gfx::PointToSkPoint(draw_bounds.bottom_center())};
+    cc::PaintFlags flags;
+    flags.setAntiAlias(true);
+    flags.setStyle(cc::PaintFlags::kFill_Style);
+    flags.setShader(cc::PaintShader::MakeLinearGradient(points, colors, nullptr,
+                                                        2, SkTileMode::kClamp));
+    canvas->DrawRect(draw_bounds, flags);
+  }
+
+  const SkColor4f top_color_;
+  const SkColor4f bottom_color_;
+};
 
 }  // namespace
 
@@ -206,8 +276,9 @@ class OverlayWindowFrameView : public views::NonClientFrameView {
   }
   int NonClientHitTest(const gfx::Point& point) override {
     // Outside of the window bounds, do nothing.
-    if (!bounds().Contains(point))
+    if (!bounds().Contains(point)) {
       return HTNOWHERE;
+    }
 
     constexpr int kResizeAreaCornerSize = 16;
     int window_component = GetHTComponentForFrame(
@@ -225,8 +296,9 @@ class OverlayWindowFrameView : public views::NonClientFrameView {
     // If the resize handle is clicked on, we want to force the hit test to
     // force a resize drag.
     if (window->AreControlsVisible() &&
-        window->GetResizeHandleControlsBounds().Contains(point))
+        window->GetResizeHandleControlsBounds().Contains(point)) {
       return window->GetResizeHTComponent();
+    }
 #endif
 
     // Allows for dragging and resizing the window.
@@ -436,8 +508,9 @@ gfx::Rect VideoOverlayWindowViews::CalculateAndUpdateWindowBounds() {
 #endif
 
   gfx::Size window_size = bounds.size();
-  if (!has_been_shown_)
+  if (!has_been_shown_) {
     window_size = gfx::Size(work_area.width() / 5, work_area.height() / 5);
+  }
 
   // Even though we define the minimum and maximum sizes for our views::Widget,
   // it's possible for the current size to be outside of those bounds
@@ -649,8 +722,9 @@ void VideoOverlayWindowViews::OnMouseEvent(ui::MouseEvent* event) {
           !GetWindowBackgroundView()->bounds().Contains(event->location()) &&
           progress_view_drag_state_ ==
               global_media_controls::DragState::kDragEnded;
-      if (should_update_control_visibility)
+      if (should_update_control_visibility) {
         UpdateControlsVisibility(false);
+      }
       break;
     }
 
@@ -700,6 +774,10 @@ void VideoOverlayWindowViews::ForceControlsVisibleForTesting(bool visible) {
   UpdateControlsVisibility(visible);
 }
 
+void VideoOverlayWindowViews::StopForcingControlsVisibleForTesting() {
+  force_controls_visible_.reset();
+}
+
 bool VideoOverlayWindowViews::AreControlsVisible() const {
   return GetControlsContainerView()->GetVisible();
 }
@@ -707,6 +785,13 @@ bool VideoOverlayWindowViews::AreControlsVisible() const {
 void VideoOverlayWindowViews::UpdateControlsVisibility(bool is_visible) {
   if (is_moving_) {
     queued_controls_visibility_status_ = is_visible;
+    return;
+  }
+
+  // We should not change visibility while the progress bar is being dragged, as
+  // this gets us stuck in the `kDragStarted` state.
+  if (progress_view_drag_state_ ==
+      global_media_controls::DragState::kDragStarted) {
     return;
   }
 
@@ -779,8 +864,9 @@ gfx::Rect VideoOverlayWindowViews::GetWorkAreaForWindow() const {
 void VideoOverlayWindowViews::UpdateMaxSize(const gfx::Rect& work_area) {
   // An empty |work_area| is not valid, but it is sometimes reported as a
   // transient value.
-  if (work_area.IsEmpty())
+  if (work_area.IsEmpty()) {
     return;
+  }
 
   auto new_max_size =
       gfx::Size(work_area.width() * 0.8, work_area.height() * 0.8);
@@ -793,13 +879,15 @@ void VideoOverlayWindowViews::UpdateMaxSize(const gfx::Rect& work_area) {
   // size actually changes. Running it unconditionally means also running it
   // when DPI <-> pixel computations introduce off-by-1 errors, which leads to
   // incorrect window sizing/positioning.
-  if (new_max_size == max_size_)
+  if (new_max_size == max_size_) {
     return;
+  }
 
   max_size_ = new_max_size;
 
-  if (!native_widget())
+  if (!native_widget()) {
     return;
+  }
 
   // native_widget() is required for OnSizeConstraintsChanged.
   OnSizeConstraintsChanged();
@@ -825,13 +913,16 @@ bool VideoOverlayWindowViews::ControlsHitTestContainsPoint(
     return overlay_view_->WantsEvent(point_in_screen);
   }
 
-  if (!AreControlsVisible())
+  if (!AreControlsVisible()) {
     return false;
+  }
   if (GetBackToTabControlsBounds().Contains(point) ||
       GetSkipAdControlsBounds().Contains(point) ||
       GetCloseControlsBounds().Contains(point) ||
       GetMinimizeControlsBounds().Contains(point) ||
       GetPlayPauseControlsBounds().Contains(point) ||
+      GetReplay10SecondsButtonBounds().Contains(point) ||
+      GetForward10SecondsButtonBounds().Contains(point) ||
       GetNextTrackControlsBounds().Contains(point) ||
       GetPreviousTrackControlsBounds().Contains(point) ||
       GetToggleMicrophoneButtonBounds().Contains(point) ||
@@ -883,9 +974,15 @@ void VideoOverlayWindowViews::SetUpViews() {
 
   // These controls may be different (or even nonexistent) depending on whether
   // the 2024 updated UI is enabled.
+  std::unique_ptr<views::View> controls_top_scrim_view;
+  std::unique_ptr<views::View> controls_bottom_scrim_view;
+  std::unique_ptr<views::ImageView> favicon_view;
+  std::unique_ptr<views::Label> origin;
   std::unique_ptr<OverlayWindowMinimizeButton> minimize_button;
   std::unique_ptr<OverlayWindowBackToTabButton> back_to_tab_button;
   std::unique_ptr<BackToTabLabelButton> back_to_tab_label_button;
+  std::unique_ptr<SimpleOverlayWindowImageButton> replay_10_seconds_button;
+  std::unique_ptr<SimpleOverlayWindowImageButton> forward_10_seconds_button;
   std::unique_ptr<SimpleOverlayWindowImageButton> previous_track_controls_view;
   std::unique_ptr<SimpleOverlayWindowImageButton> next_track_controls_view;
   std::unique_ptr<SimpleOverlayWindowImageButton> previous_slide_controls_view;
@@ -895,10 +992,33 @@ void VideoOverlayWindowViews::SetUpViews() {
   std::unique_ptr<ToggleCameraButton> toggle_camera_button;
   std::unique_ptr<HangUpButton> hang_up_button;
   std::unique_ptr<global_media_controls::MediaProgressView> progress_view;
+  std::unique_ptr<views::Label> timestamp;
 
   if (Use2024UI()) {
     play_pause_controls_view->SetSize(
         {kPlaybackButtonSize, kPlaybackButtonSize});
+    controls_top_scrim_view = std::make_unique<views::View>();
+    controls_top_scrim_view->SetBackground(std::make_unique<GradientBackground>(
+        SkColor4f::FromColor(
+            GetColorProvider()->GetColor(kColorPipWindowScrimTopGradientStart)),
+        SkColor4f::FromColor(
+            GetColorProvider()->GetColor(kColorPipWindowScrimTopGradientEnd))));
+    controls_bottom_scrim_view = std::make_unique<views::View>();
+    controls_bottom_scrim_view->SetBackground(
+        std::make_unique<GradientBackground>(
+            SkColor4f::FromColor(GetColorProvider()->GetColor(
+                kColorPipWindowScrimBottomGradientStart)),
+            SkColor4f::FromColor(GetColorProvider()->GetColor(
+                kColorPipWindowScrimBottomGradientEnd))));
+    favicon_view = std::make_unique<views::ImageView>();
+    favicon_view->SetSize(kFaviconSize);
+    origin = std::make_unique<views::Label>(std::u16string(),
+                                            views::style::CONTEXT_LABEL,
+                                            views::style::STYLE_BODY_4);
+    origin->SetEnabledColorId(ui::kColorSysOnSurface);
+    origin->SetBackgroundColor(SK_ColorTRANSPARENT);
+    origin->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    origin->SetElideBehavior(gfx::ELIDE_HEAD);
     minimize_button = std::make_unique<
         OverlayWindowMinimizeButton>(base::BindRepeating(
         [](VideoOverlayWindowViews* overlay) {
@@ -916,6 +1036,25 @@ void VideoOverlayWindowViews::SetUpViews() {
                           kCloseWindowAndFocusOpener);
             },
             base::Unretained(this)));
+    replay_10_seconds_button = std::make_unique<SimpleOverlayWindowImageButton>(
+        base::BindRepeating(
+            [](VideoOverlayWindowViews* overlay) {
+              overlay->Replay10Seconds();
+            },
+            base::Unretained(this)),
+        vector_icons::kReplay10Icon,
+        l10n_util::GetStringUTF16(IDS_PICTURE_IN_PICTURE_REPLAY_10_TEXT));
+    replay_10_seconds_button->SetSize(kActionButtonSize);
+    forward_10_seconds_button =
+        std::make_unique<SimpleOverlayWindowImageButton>(
+            base::BindRepeating(
+                [](VideoOverlayWindowViews* overlay) {
+                  overlay->Forward10Seconds();
+                },
+                base::Unretained(this)),
+            vector_icons::kForward10Icon,
+            l10n_util::GetStringUTF16(IDS_PICTURE_IN_PICTURE_FORWARD_10_TEXT));
+    forward_10_seconds_button->SetSize(kActionButtonSize);
     previous_track_controls_view =
         std::make_unique<SimpleOverlayWindowImageButton>(
             base::BindRepeating(
@@ -927,10 +1066,10 @@ void VideoOverlayWindowViews::SetUpViews() {
                   }
                 },
                 base::Unretained(this)),
-            vector_icons::kMediaPreviousTrackIcon,
+            vector_icons::kSkipPreviousIcon,
             l10n_util::GetStringUTF16(
                 IDS_PICTURE_IN_PICTURE_PREVIOUS_TRACK_CONTROL_ACCESSIBLE_TEXT));
-    previous_track_controls_view->SetSize(kPreviousNextButtonSize);
+    previous_track_controls_view->SetSize(kActionButtonSize);
     next_track_controls_view = std::make_unique<SimpleOverlayWindowImageButton>(
         base::BindRepeating(
             [](VideoOverlayWindowViews* overlay) {
@@ -941,10 +1080,10 @@ void VideoOverlayWindowViews::SetUpViews() {
               }
             },
             base::Unretained(this)),
-        vector_icons::kMediaNextTrackIcon,
+        vector_icons::kSkipNextIcon,
         l10n_util::GetStringUTF16(
             IDS_PICTURE_IN_PICTURE_NEXT_TRACK_CONTROL_ACCESSIBLE_TEXT));
-    next_track_controls_view->SetSize(kPreviousNextButtonSize);
+    next_track_controls_view->SetSize(kActionButtonSize);
     // `base::Unretained()` is okay here since we own the progress view.
     progress_view = std::make_unique<global_media_controls::MediaProgressView>(
         /*use_squiggly_line=*/false,
@@ -969,6 +1108,12 @@ void VideoOverlayWindowViews::SetUpViews() {
         base::BindRepeating(
             &VideoOverlayWindowViews::OnProgressViewUpdateCurrentTime,
             base::Unretained(this)));
+    timestamp = std::make_unique<views::Label>(std::u16string(),
+                                               views::style::CONTEXT_LABEL,
+                                               views::style::STYLE_BODY_4);
+    timestamp->SetEnabledColorId(ui::kColorSysOnSurfaceSubtle);
+    timestamp->SetBackgroundColor(SK_ColorTRANSPARENT);
+    timestamp->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   } else {
     back_to_tab_label_button =
         std::make_unique<BackToTabLabelButton>(base::BindRepeating(
@@ -1071,19 +1216,38 @@ void VideoOverlayWindowViews::SetUpViews() {
   close_controls_view->layer()->SetFillsBoundsOpaquely(false);
   close_controls_view->layer()->SetName("CloseControlsView");
 
-  // views::View that closes the window without pausing. ----------------------
   if (Use2024UI()) {
+    // The scrim for the top controls. ----------------------------------------
+    controls_top_scrim_view->SetPaintToLayer(ui::LAYER_TEXTURED);
+    controls_top_scrim_view->layer()->SetFillsBoundsOpaquely(false);
+    controls_top_scrim_view->layer()->SetName("ControlsTopScrimView");
+
+    // The scrim for the bottom controls. -------------------------------------
+    controls_bottom_scrim_view->SetPaintToLayer(ui::LAYER_TEXTURED);
+    controls_bottom_scrim_view->layer()->SetFillsBoundsOpaquely(false);
+    controls_bottom_scrim_view->layer()->SetName("ControlsBottomScrimView");
+
+    // views::View that displays the website's favicon. -----------------------
+    favicon_view->SetPaintToLayer(ui::LAYER_TEXTURED);
+    favicon_view->layer()->SetFillsBoundsOpaquely(false);
+    favicon_view->layer()->SetName("FaviconView");
+
+    // Displays the source title (website's origin or extension/PWA name). ----
+    origin->SetPaintToLayer(ui::LAYER_TEXTURED);
+    origin->layer()->SetFillsBoundsOpaquely(false);
+    origin->layer()->SetName("Origin");
+
+    // views::View that closes the window without pausing. --------------------
     minimize_button->SetPaintToLayer(ui::LAYER_TEXTURED);
     minimize_button->layer()->SetFillsBoundsOpaquely(false);
     minimize_button->layer()->SetName("OverlayWindowMinimizeButton");
-  }
 
-  // views::View that closes the window and focuses initiator tab. ------------
-  if (Use2024UI()) {
+    // views::View that closes the window and focuses initiator tab. ----------
     back_to_tab_button->SetPaintToLayer(ui::LAYER_TEXTURED);
     back_to_tab_button->layer()->SetFillsBoundsOpaquely(false);
     back_to_tab_button->layer()->SetName("BackToTabControlsView");
   } else {
+    // views::View that closes the window and focuses initiator tab. ----------
     CHECK(back_to_tab_label_button);
     back_to_tab_label_button->SetPaintToLayer(ui::LAYER_TEXTURED);
     back_to_tab_label_button->layer()->SetFillsBoundsOpaquely(false);
@@ -1108,9 +1272,21 @@ void VideoOverlayWindowViews::SetUpViews() {
   next_track_controls_view->layer()->SetName("NextTrackControlsView");
 
   if (Use2024UI()) {
+    replay_10_seconds_button->SetPaintToLayer(ui::LAYER_TEXTURED);
+    replay_10_seconds_button->layer()->SetFillsBoundsOpaquely(false);
+    replay_10_seconds_button->layer()->SetName("Replay10SecondsButton");
+
+    forward_10_seconds_button->SetPaintToLayer(ui::LAYER_TEXTURED);
+    forward_10_seconds_button->layer()->SetFillsBoundsOpaquely(false);
+    forward_10_seconds_button->layer()->SetName("Forward10SecondsButton");
+
     progress_view->SetPaintToLayer(ui::LAYER_TEXTURED);
     progress_view->layer()->SetFillsBoundsOpaquely(false);
     progress_view->layer()->SetName("ProgressView");
+
+    timestamp->SetPaintToLayer(ui::LAYER_TEXTURED);
+    timestamp->layer()->SetFillsBoundsOpaquely(false);
+    timestamp->layer()->SetName("Timestamp");
   } else {
     // views::View that holds the skip-ad label button.
     // -------------------------
@@ -1153,10 +1329,22 @@ void VideoOverlayWindowViews::SetUpViews() {
   video_view_ = AddChildView(&view_holder_, std::move(video_view));
   controls_scrim_view_ =
       controls_container_view->AddChildView(std::move(controls_scrim_view));
+  if (Use2024UI()) {
+    controls_top_scrim_view_ = controls_container_view->AddChildView(
+        std::move(controls_top_scrim_view));
+    controls_bottom_scrim_view_ = controls_container_view->AddChildView(
+        std::move(controls_bottom_scrim_view));
+  }
 
   close_controls_view_ =
       controls_container_view->AddChildView(std::move(close_controls_view));
   if (Use2024UI()) {
+    // Initialize the favicon view with the default icon.
+    favicon_view_ =
+        controls_container_view->AddChildView(std::move(favicon_view));
+    UpdateFavicon(gfx::ImageSkia());
+
+    origin_ = controls_container_view->AddChildView(std::move(origin));
     minimize_button_ =
         controls_container_view->AddChildView(std::move(minimize_button));
     back_to_tab_button_ =
@@ -1176,8 +1364,15 @@ void VideoOverlayWindowViews::SetUpViews() {
       std::move(play_pause_controls_view));
 
   if (Use2024UI()) {
+    replay_10_seconds_button_ = controls_container_view->AddChildView(
+        std::move(replay_10_seconds_button));
+    forward_10_seconds_button_ = controls_container_view->AddChildView(
+        std::move(forward_10_seconds_button));
+
     progress_view_ =
         controls_container_view->AddChildView(std::move(progress_view));
+
+    timestamp_ = controls_container_view->AddChildView(std::move(timestamp));
   }
 
   next_track_controls_view_ = controls_container_view->AddChildView(
@@ -1213,8 +1408,9 @@ void VideoOverlayWindowViews::OnRootViewReady() {
   GetRootView()->layer()->SetMasksToBounds(true);
 
   views::View* const contents_view = GetContentsView();
-  for (std::unique_ptr<views::View>& child : view_holder_)
+  for (std::unique_ptr<views::View>& child : view_holder_) {
     contents_view->AddChildView(std::move(child));
+  }
   view_holder_.clear();
 
 #if defined(VIVALDI_BUILD)
@@ -1229,13 +1425,15 @@ void VideoOverlayWindowViews::UpdateLayerBoundsWithLetterboxing(
     gfx::Size window_size) {
   // This is the case when the window is initially created or the video surface
   // id has not been embedded.
-  if (!native_widget() || GetBounds().IsEmpty() || GetNaturalSize().IsEmpty())
+  if (!native_widget() || GetBounds().IsEmpty() || GetNaturalSize().IsEmpty()) {
     return;
+  }
 
   gfx::Rect letterbox_region = media::ComputeLetterboxRegion(
       gfx::Rect(gfx::Point(0, 0), window_size), GetNaturalSize());
-  if (letterbox_region.IsEmpty())
+  if (letterbox_region.IsEmpty()) {
     return;
+  }
 
   // To avoid black stripes in the window when integer window dimensions don't
   // correspond to the video aspect ratio exactly (e.g. 854x480 for 16:9
@@ -1245,14 +1443,16 @@ void VideoOverlayWindowViews::UpdateLayerBoundsWithLetterboxing(
   if (aspect_ratio > 1 && window_size.height() == letterbox_region.height()) {
     const int height_from_width =
         base::ClampRound(window_size.width() / aspect_ratio);
-    if (height_from_width == window_size.height())
+    if (height_from_width == window_size.height()) {
       letterbox_region.set_width(window_size.width());
+    }
   } else if (aspect_ratio <= 1 &&
              window_size.width() == letterbox_region.width()) {
     const int width_from_height =
         base::ClampRound(window_size.height() * aspect_ratio);
-    if (width_from_height == window_size.width())
+    if (width_from_height == window_size.width()) {
       letterbox_region.set_height(window_size.height());
+    }
   }
 
   const gfx::Rect video_bounds(
@@ -1267,8 +1467,9 @@ void VideoOverlayWindowViews::UpdateLayerBoundsWithLetterboxing(
   window_background_view_->SetBoundsRect(
       gfx::Rect(gfx::Point(0, 0), GetBounds().size()));
   video_view_->SetBoundsRect(video_bounds);
-  if (video_view_->layer()->has_external_content())
+  if (video_view_->layer()->has_external_content()) {
     video_view_->layer()->SetSurfaceSize(video_bounds.size());
+  }
 
   if (IsOverlayViewShown()) {
     overlay_view_->SetBoundsRect(gfx::Rect(GetBounds().size()));
@@ -1298,10 +1499,22 @@ void VideoOverlayWindowViews::OnUpdateControlsBounds() {
   if (Use2024UI()) {
     constexpr int kTopControlsHeight = 34;
     constexpr int kBottomControlsHeight = 64;
+    constexpr int kTopScrimHeight = 160;
+    constexpr int kBottomScrimHeight = 160;
+    constexpr int kFaviconLeftMargin = 8;
+    constexpr int kFaviconTopMargin = 5;
+    constexpr int kFaviconRightMargin = 4;
+    constexpr int kOriginTopMargin = 5;
+    constexpr int kOriginHeight = 24;
+    constexpr int kOriginRightMargin = 80;
     constexpr int kProgressBarHeight = 26;
+    constexpr int kPlayPauseButtonMargin = 16;
     constexpr int kControlHorizontalMargin = 8;
     constexpr int kBottomControlsHorizontalMargin = 8;
     constexpr int kBottomControlsVerticalMargin = 4;
+    constexpr int kTimestampHorizontalMargin = 16;
+    constexpr int kTimestampVerticalMargin = 10;
+    constexpr int kTimestampHeight = 16;
 
     gfx::Rect bounds = GetBounds();
     bounds.set_origin({0, 0});
@@ -1321,13 +1534,46 @@ void VideoOverlayWindowViews::OnUpdateControlsBounds() {
     gfx::Rect middle_controls_bounds = gfx::BoundingRect(
         top_controls_bounds.bottom_left(), bottom_controls_bounds.top_right());
 
+    controls_top_scrim_view_->SetBoundsRect(
+        {top_controls_bounds.x(), top_controls_bounds.y(),
+         top_controls_bounds.width(), kTopScrimHeight});
+    controls_bottom_scrim_view_->SetBoundsRect(
+        {bottom_controls_bounds.x(),
+         bottom_controls_bounds.y() + bottom_controls_bounds.height() -
+             kBottomScrimHeight,
+         bottom_controls_bounds.width(), kBottomScrimHeight});
+
+    gfx::Rect favicon_view_bounds({top_controls_bounds.x() + kFaviconLeftMargin,
+                                   top_controls_bounds.y() + kFaviconTopMargin},
+                                  kFaviconSize);
+    favicon_view_->SetPosition(favicon_view_bounds.origin());
+
+    gfx::Point origin_position(
+        favicon_view_bounds.right() + kFaviconRightMargin, kOriginTopMargin);
+    origin_->SetPosition(origin_position);
+    origin_->SetSize(
+        {top_controls_bounds.width() - origin_position.x() - kOriginRightMargin,
+         kOriginHeight});
+
     minimize_button_->SetPosition(GetBounds().size(), quadrant);
     back_to_tab_button_->SetPosition(GetBounds().size(), quadrant);
 
     // The play/pause buttons is at the center of the middle controls area.
-    play_pause_controls_view_->SetPosition(
-        {middle_controls_bounds.CenterPoint().x() - kPlaybackButtonSize / 2,
-         middle_controls_bounds.CenterPoint().y() - kPlaybackButtonSize / 2});
+    gfx::Point play_pause_controls_position(
+        middle_controls_bounds.CenterPoint().x() - kPlaybackButtonSize / 2,
+        middle_controls_bounds.CenterPoint().y() - kPlaybackButtonSize / 2);
+    play_pause_controls_view_->SetPosition(play_pause_controls_position);
+
+    replay_10_seconds_button_->SetPosition(
+        {play_pause_controls_position.x() - kPlayPauseButtonMargin -
+             kActionButtonSize.width(),
+         middle_controls_bounds.CenterPoint().y() -
+             kActionButtonSize.height() / 2});
+    forward_10_seconds_button_->SetPosition(
+        {play_pause_controls_position.x() + kPlaybackButtonSize +
+             kPlayPauseButtonMargin,
+         middle_controls_bounds.CenterPoint().y() -
+             kActionButtonSize.height() / 2});
 
     // The previous and next track buttons are placed on the top left/right
     // edges of the bottom controls area.
@@ -1338,7 +1584,7 @@ void VideoOverlayWindowViews::OnUpdateControlsBounds() {
     next_track_controls_view_->SetPosition(
         {bottom_controls_bounds.x() + bottom_controls_bounds.width() -
              (kBottomControlsHorizontalMargin + kControlHorizontalMargin +
-              kPreviousNextButtonSize.width()),
+              kActionButtonSize.width()),
          bottom_controls_bounds.y() + kBottomControlsVerticalMargin});
 
     // The progress bars should take up all the space that is left after the
@@ -1347,7 +1593,7 @@ void VideoOverlayWindowViews::OnUpdateControlsBounds() {
     // position of the progress view.
     constexpr int kPreviousNextTrackWidthPlusHorizontalMargins =
         kBottomControlsHorizontalMargin + (2 * kControlHorizontalMargin) +
-        kPreviousNextButtonSize.width();
+        kActionButtonSize.width();
     progress_view_->SetPosition(
         {bottom_controls_bounds.x() +
              kPreviousNextTrackWidthPlusHorizontalMargins,
@@ -1356,12 +1602,23 @@ void VideoOverlayWindowViews::OnUpdateControlsBounds() {
         {bounds.width() - (2 * kPreviousNextTrackWidthPlusHorizontalMargins),
          kProgressBarHeight});
 
-    // The play/pause button should not be visible while dragging the progress
-    // bar.
-    play_pause_controls_view_->SetVisible(
-        show_play_pause_button_ &&
-        progress_view_drag_state_ !=
-            global_media_controls::DragState::kDragStarted);
+    timestamp_->SetPosition(
+        {bottom_controls_bounds.x() + kTimestampHorizontalMargin,
+         bottom_controls_bounds.y() + bottom_controls_bounds.height() -
+             kTimestampVerticalMargin - kTimestampHeight});
+    timestamp_->SetSize(
+        {bottom_controls_bounds.width() - (2 * kTimestampHorizontalMargin),
+         kTimestampHeight});
+
+    // The play/pause button and replay/forward 10 seconds buttons should not be
+    // visible while dragging the progress bar.
+    const bool is_dragging_progress_bar =
+        progress_view_drag_state_ ==
+        global_media_controls::DragState::kDragStarted;
+    play_pause_controls_view_->SetVisible(show_play_pause_button_ &&
+                                          !is_dragging_progress_bar);
+    replay_10_seconds_button_->SetVisible(!is_dragging_progress_bar);
+    forward_10_seconds_button_->SetVisible(!is_dragging_progress_bar);
 
     // The previous and next track buttons are always visible, but disabled if
     // there is no action handler for them.
@@ -1385,26 +1642,34 @@ void VideoOverlayWindowViews::OnUpdateControlsBounds() {
   // #7 Toggle camera
   // #8 Hang up
   std::vector<views::ImageButton*> visible_controls_views;
-  if (show_previous_track_button_)
+  if (show_previous_track_button_) {
     visible_controls_views.push_back(previous_track_controls_view_);
-  if (show_previous_slide_button_)
+  }
+  if (show_previous_slide_button_) {
     visible_controls_views.push_back(previous_slide_controls_view_);
+  }
   if (show_play_pause_button_) {
     visible_controls_views.push_back(play_pause_controls_view_);
   }
-  if (show_next_track_button_)
+  if (show_next_track_button_) {
     visible_controls_views.push_back(next_track_controls_view_);
-  if (show_next_slide_button_)
+  }
+  if (show_next_slide_button_) {
     visible_controls_views.push_back(next_slide_controls_view_);
-  if (show_toggle_microphone_button_)
+  }
+  if (show_toggle_microphone_button_) {
     visible_controls_views.push_back(toggle_microphone_button_);
-  if (show_toggle_camera_button_)
+  }
+  if (show_toggle_camera_button_) {
     visible_controls_views.push_back(toggle_camera_button_);
-  if (show_hang_up_button_)
+  }
+  if (show_hang_up_button_) {
     visible_controls_views.push_back(hang_up_button_);
+  }
 
-  if (visible_controls_views.size() > 4)
+  if (visible_controls_views.size() > 4) {
     visible_controls_views.resize(4);
+  }
 
   int mid_window_x = GetBounds().size().width() / 2;
   int primary_control_y = GetBounds().size().height() -
@@ -1607,16 +1872,18 @@ void VideoOverlayWindowViews::SetPlaybackState(PlaybackState playback_state) {
 }
 
 void VideoOverlayWindowViews::SetPlayPauseButtonVisibility(bool is_visible) {
-  if (show_play_pause_button_ == is_visible)
+  if (show_play_pause_button_ == is_visible) {
     return;
+  }
 
   show_play_pause_button_ = is_visible;
   UpdateControlsBounds();
 }
 
 void VideoOverlayWindowViews::SetSkipAdButtonVisibility(bool is_visible) {
-  if (show_skip_ad_button_ == is_visible)
+  if (show_skip_ad_button_ == is_visible) {
     return;
+  }
 
   show_skip_ad_button_ = is_visible;
   UpdateControlsBounds();
@@ -1624,24 +1891,27 @@ void VideoOverlayWindowViews::SetSkipAdButtonVisibility(bool is_visible) {
 
 void VideoOverlayWindowViews::SetPreviousSlideButtonVisibility(
     bool is_visible) {
-  if (show_previous_slide_button_ == is_visible)
+  if (show_previous_slide_button_ == is_visible) {
     return;
+  }
 
   show_previous_slide_button_ = is_visible;
   UpdateControlsBounds();
 }
 
 void VideoOverlayWindowViews::SetNextSlideButtonVisibility(bool is_visible) {
-  if (show_next_slide_button_ == is_visible)
+  if (show_next_slide_button_ == is_visible) {
     return;
+  }
 
   show_next_slide_button_ = is_visible;
   UpdateControlsBounds();
 }
 
 void VideoOverlayWindowViews::SetNextTrackButtonVisibility(bool is_visible) {
-  if (show_next_track_button_ == is_visible)
+  if (show_next_track_button_ == is_visible) {
     return;
+  }
 
   show_next_track_button_ = is_visible;
   UpdateControlsBounds();
@@ -1649,8 +1919,9 @@ void VideoOverlayWindowViews::SetNextTrackButtonVisibility(bool is_visible) {
 
 void VideoOverlayWindowViews::SetPreviousTrackButtonVisibility(
     bool is_visible) {
-  if (show_previous_track_button_ == is_visible)
+  if (show_previous_track_button_ == is_visible) {
     return;
+  }
 
   show_previous_track_button_ = is_visible;
   UpdateControlsBounds();
@@ -1672,24 +1943,27 @@ void VideoOverlayWindowViews::SetCameraState(bool turned_on) {
 
 void VideoOverlayWindowViews::SetToggleMicrophoneButtonVisibility(
     bool is_visible) {
-  if (show_toggle_microphone_button_ == is_visible)
+  if (show_toggle_microphone_button_ == is_visible) {
     return;
+  }
 
   show_toggle_microphone_button_ = is_visible;
   UpdateControlsBounds();
 }
 
 void VideoOverlayWindowViews::SetToggleCameraButtonVisibility(bool is_visible) {
-  if (show_toggle_camera_button_ == is_visible)
+  if (show_toggle_camera_button_ == is_visible) {
     return;
+  }
 
   show_toggle_camera_button_ = is_visible;
   UpdateControlsBounds();
 }
 
 void VideoOverlayWindowViews::SetHangUpButtonVisibility(bool is_visible) {
-  if (show_hang_up_button_ == is_visible)
+  if (show_hang_up_button_ == is_visible) {
     return;
+  }
 
   show_hang_up_button_ = is_visible;
   UpdateControlsBounds();
@@ -1702,6 +1976,35 @@ void VideoOverlayWindowViews::SetMediaPosition(
   }
   position_ = position;
   progress_view_->UpdateProgress(position);
+  UpdateTimestampLabel(position_.GetPosition(), position_.duration());
+}
+
+void VideoOverlayWindowViews::SetSourceTitle(
+    const std::u16string& source_title) {
+  if (Use2024UI()) {
+    origin_->SetText(source_title);
+  }
+}
+
+void VideoOverlayWindowViews::SetFaviconImages(
+    const std::vector<media_session::MediaImage>& images) {
+  if (!Use2024UI()) {
+    return;
+  }
+
+  media_session::MediaImageManager manager(gfx::kFaviconSize,
+                                           gfx::kFaviconSize);
+  std::optional<media_session::MediaImage> image = manager.SelectImage(images);
+
+  if (!image) {
+    UpdateFavicon(gfx::ImageSkia());
+    return;
+  }
+
+  controller_->GetMediaImage(
+      *image, gfx::kFaviconSize, gfx::kFaviconSize,
+      base::BindOnce(&VideoOverlayWindowViews::OnFaviconReceived,
+                     weak_factory_.GetWeakPtr()));
 }
 
 void VideoOverlayWindowViews::SetSurfaceId(const viz::SurfaceId& surface_id) {
@@ -1748,8 +2051,9 @@ void VideoOverlayWindowViews::OnNativeWidgetRemovingFromCompositor() {
 }
 
 void VideoOverlayWindowViews::OnGestureEvent(ui::GestureEvent* event) {
-  if (OnGestureEventHandledOrIgnored(event))
+  if (OnGestureEventHandledOrIgnored(event)) {
     return;
+  }
 
 #if defined(VIVALDI_BUILD)
   HandleVivaldiGestureEvent(event);
@@ -1827,6 +2131,20 @@ gfx::Rect VideoOverlayWindowViews::GetPlayPauseControlsBounds() {
   return play_pause_controls_view_->GetMirroredBounds();
 }
 
+gfx::Rect VideoOverlayWindowViews::GetReplay10SecondsButtonBounds() {
+  if (!Use2024UI()) {
+    return gfx::Rect();
+  }
+  return replay_10_seconds_button_->GetMirroredBounds();
+}
+
+gfx::Rect VideoOverlayWindowViews::GetForward10SecondsButtonBounds() {
+  if (!Use2024UI()) {
+    return gfx::Rect();
+  }
+  return forward_10_seconds_button_->GetMirroredBounds();
+}
+
 gfx::Rect VideoOverlayWindowViews::GetNextTrackControlsBounds() {
   return next_track_controls_view_->GetMirroredBounds();
 }
@@ -1897,6 +2215,16 @@ void VideoOverlayWindowViews::TogglePlayPause() {
   play_pause_controls_view_->SetPlaybackState(is_active ? kPlaying : kPaused);
 }
 
+void VideoOverlayWindowViews::Replay10Seconds() {
+  controller_->SeekTo(
+      std::max(base::Seconds(0), position_.GetPosition() - kSeekTime));
+}
+
+void VideoOverlayWindowViews::Forward10Seconds() {
+  controller_->SeekTo(
+      std::min(position_.GetPosition() + kSeekTime, position_.duration()));
+}
+
 void VideoOverlayWindowViews::CloseAndPauseIfAvailable() {
   // Only pause the video if play/pause is available.
   const bool should_pause_video = !!show_play_pause_button_;
@@ -1909,6 +2237,16 @@ void VideoOverlayWindowViews::CloseAndPauseIfAvailable() {
 PlaybackImageButton*
 VideoOverlayWindowViews::play_pause_controls_view_for_testing() const {
   return play_pause_controls_view_;
+}
+
+SimpleOverlayWindowImageButton*
+VideoOverlayWindowViews::replay_10_seconds_button_for_testing() const {
+  return replay_10_seconds_button_;
+}
+
+SimpleOverlayWindowImageButton*
+VideoOverlayWindowViews::forward_10_seconds_button_for_testing() const {
+  return forward_10_seconds_button_;
 }
 
 SimpleOverlayWindowImageButton*
@@ -1955,6 +2293,18 @@ VideoOverlayWindowViews::progress_view_for_testing() const {
   return progress_view_;
 }
 
+views::Label* VideoOverlayWindowViews::timestamp_for_testing() const {
+  return timestamp_;
+}
+
+views::ImageView* VideoOverlayWindowViews::favicon_view_for_testing() const {
+  return favicon_view_;
+}
+
+views::Label* VideoOverlayWindowViews::origin_for_testing() const {
+  return origin_;
+}
+
 CloseImageButton* VideoOverlayWindowViews::close_button_for_testing() const {
   return close_controls_view_;
 }
@@ -1989,8 +2339,9 @@ ui::Layer* VideoOverlayWindowViews::video_layer_for_testing() const {
 }
 
 const viz::FrameSinkId* VideoOverlayWindowViews::GetCurrentFrameSinkId() const {
-  if (auto* surface = video_view_->layer()->GetSurfaceId())
+  if (auto* surface = video_view_->layer()->GetSurfaceId()) {
     return &surface->frame_sink_id();
+  }
 
   return nullptr;
 }
@@ -2043,5 +2394,28 @@ void VideoOverlayWindowViews::SeekForProgressBarInteraction(
 
 void VideoOverlayWindowViews::OnProgressViewUpdateCurrentTime(
     base::TimeDelta current_time) {
-  // TODO(crbug.com/360357715): Update current time view once it exists.
+  UpdateTimestampLabel(current_time, position_.duration());
+}
+
+void VideoOverlayWindowViews::UpdateTimestampLabel(base::TimeDelta current_time,
+                                                   base::TimeDelta duration) {
+  timestamp_->SetText(base::StrCat(
+      {global_media_controls::GetFormattedDuration(current_time), u" / ",
+       global_media_controls::GetFormattedDuration(duration)}));
+}
+
+void VideoOverlayWindowViews::OnFaviconReceived(const SkBitmap& image) {
+  UpdateFavicon(GetCorrectColorTypeImage(image));
+}
+
+void VideoOverlayWindowViews::UpdateFavicon(const gfx::ImageSkia& favicon) {
+  if (favicon.isNull()) {
+    favicon_view_->SetImage(ui::ImageModel::FromVectorIcon(
+        vector_icons::kGlobeIcon, ui::kColorSysOnSurface,
+        kFaviconIconSize.width()));
+  } else {
+    favicon_view_->SetImageSize(
+        ScaleImageSizeToFitView(favicon.size(), kFaviconIconSize));
+    favicon_view_->SetImage(ui::ImageModel::FromImageSkia(favicon));
+  }
 }

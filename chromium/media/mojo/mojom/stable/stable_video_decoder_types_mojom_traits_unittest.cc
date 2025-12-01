@@ -55,7 +55,7 @@ TEST(StableVideoDecoderTypesMojomTraitsTest, ValidNonEOSDecoderBuffer) {
             base::strict_cast<size_t>(mojom_decoder_buffer->data_size));
   EXPECT_EQ(deserialized_decoder_buffer->is_key_frame(),
             mojom_decoder_buffer->is_key_frame);
-  EXPECT_FALSE(deserialized_decoder_buffer->has_side_data());
+  EXPECT_FALSE(deserialized_decoder_buffer->side_data());
 }
 
 TEST(StableVideoDecoderTypesMojomTraitsTest, InfiniteDecoderBufferDuration) {
@@ -111,7 +111,7 @@ TEST(StableVideoDecoderTypesMojomTraitsTest, RawSideDataToValidSpatialLayers) {
   ASSERT_TRUE(deserialized_decoder_buffer);
 
   ASSERT_FALSE(deserialized_decoder_buffer->end_of_stream());
-  ASSERT_TRUE(deserialized_decoder_buffer->has_side_data());
+  ASSERT_TRUE(deserialized_decoder_buffer->side_data());
   EXPECT_EQ(deserialized_decoder_buffer->side_data()->spatial_layers,
             std::vector<uint32_t>(kValidSpatialLayers,
                                   kValidSpatialLayers + kLayersSize));
@@ -610,7 +610,6 @@ TEST(StableVideoDecoderTypesMojomTraitsTest, EmptyVideoFrameMetadata) {
   EXPECT_FALSE(
       deserialized_video_frame_metadata.hw_va_protected_session_id.has_value());
 #endif
-  EXPECT_TRUE(deserialized_video_frame_metadata.texture_origin_is_top_left);
   EXPECT_FALSE(deserialized_video_frame_metadata
                    .maximum_composition_delay_in_frames.has_value());
 }
@@ -679,7 +678,6 @@ TEST(StableVideoDecoderTypesMojomTraitsTest, ValidVideoFrameMetadata) {
   EXPECT_FALSE(
       deserialized_video_frame_metadata.hw_va_protected_session_id.has_value());
 #endif
-  EXPECT_TRUE(deserialized_video_frame_metadata.texture_origin_is_top_left);
   EXPECT_FALSE(deserialized_video_frame_metadata
                    .maximum_composition_delay_in_frames.has_value());
 }
@@ -1074,7 +1072,7 @@ TEST(StableVideoDecoderTypesMojomTraitsTest,
   gfx::GpuMemoryBufferHandle gmb_handle;
   gmb_handle.id = gfx::GpuMemoryBufferId(10);
   gmb_handle.type = gfx::SHARED_MEMORY_BUFFER;
-  gmb_handle.region = base::UnsafeSharedMemoryRegion::Create(100);
+  gmb_handle.set_region(base::UnsafeSharedMemoryRegion::Create(100));
   gmb_handle.offset = 2;
   gmb_handle.stride = 10;
 

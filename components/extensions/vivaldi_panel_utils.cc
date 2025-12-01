@@ -11,7 +11,7 @@ namespace vivaldi {
 
 std::optional<std::string> GetVivPanelId(const content::WebContents* contents) {
   if (!contents) {
-    return std::optional<std::string>();
+    return std::nullopt;
   }
   return ::vivaldi::ParseVivPanelId(contents->GetVivExtData());
 }

@@ -15,7 +15,7 @@ that Chrome OS runs internally to validate builds on real hardware.
     *   Note you can run them all on one machine or multiple in order to
                 scale and spread load.
 *   A Chromiumos checkout
-    *   <http://www.chromium.org/test lab setup (i.e. Autotest Server
+    *   <https://www.chromium.org/test lab setup (i.e. Autotest Server
                 and Devserver)chromium-os/quick-start-guide>
 *   A Chrome OS Device.
 
@@ -35,7 +35,7 @@ collect the results.
 Please follow to install and configure the tools:
 
 <https://sites.google.com/a/ch
-romium.org/dev/chromium-os/testing/autotest-developer-faq/setup-autotest-server>
+romium.org/dev/chromium-os/developer-library/guides/testing/autotest-developer-faq/setup-autotest-server>
 
 After this is complete you should have an Autotest Frontend (AFE) running on
 your server, please go to <http://localhost> to verify.
@@ -44,7 +44,7 @@ your server, please go to <http://localhost> to verify.
 
 Now that you have set up the Autotest Server, you need to import your tests, add
 test hosts and launch the scheduler. Please refer to
-<https://www.chromium.org/chromium-os/testing/autotest-developer-faq/autotest-server-usage>
+<https://www.chromium.org/chromium-os/developer-library/guides/testing/autotest-developer-faq/autotest-server-usage>
 for more information.
 
 **Note: At this point you can run tests through the Web Interface. However you
@@ -105,4 +105,4 @@ Now that everything is configured please refer to the Test Suite Documentation
 on how to the "lab" you just set up. You will likely want to pay attention to
 the sections involving test_that and run_suite.py
 
-<https://www.chromium.org/chromium-os/testing/test-suites>
+<https://www.chromium.org/chromium-os/developer-library/guides/testing/test-suites>

@@ -4,8 +4,6 @@
 
 package org.chromium.components.payments;
 
-import android.content.Context;
-import android.content.DialogInterface.OnClickListener;
 import android.content.Intent;
 import android.graphics.drawable.Drawable;
 import android.os.Handler;
@@ -13,7 +11,6 @@ import android.text.TextUtils;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
-import androidx.appcompat.app.AlertDialog;
 
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
@@ -49,6 +46,7 @@ public class AndroidPaymentApp extends PaymentApp
         implements IsReadyToPayServiceHelper.ResultHandler {
     private final Handler mHandler;
     private final Launcher mLauncher;
+    private final DialogController mDialogController;
     private final Set<String> mMethodNames;
     private final boolean mIsIncognito;
     private final String mPackageName;
@@ -57,6 +55,7 @@ public class AndroidPaymentApp extends PaymentApp
     @Nullable private final String mPaymentDetailsUpdateServiceName;
     private final SupportedDelegations mSupportedDelegations;
     private final boolean mShowReadyToPayDebugInfo;
+    private final boolean mRemoveDeprecatedFields;
 
     private IsReadyToPayCallback mIsReadyToPayCallback;
     private InstrumentDetailsCallback mInstrumentDetailsCallback;
@@ -69,31 +68,11 @@ public class AndroidPaymentApp extends PaymentApp
     // Set inside launchPaymentApp and used to validate the received response.
     @Nullable private WebPaymentIntentHelperType.PaymentOptions mPaymentOptions;
 
-    /**
-     * The interface for launching Android payment apps and for showing a warning about leaving
-     * incognito mode when launching an Android payment app.
-     */
+    /** The interface for launching Android payment apps. */
     public interface Launcher {
         /**
-         * Show an informational dialog about the contents of the given IS_READY_TO_PAY intent.
-         *
-         * @param readyToPayDebugInfo The informational message to display in a dialog for debugging
-         *     purposes.
-         */
-        void showReadyToPayDebugInfo(String readyToPayDebugInfo);
-
-        /**
-         * Show a warning about leaving incognito mode with a prompt to continue into the payment
-         * app.
-         *
-         * @param denyCallback The callback invoked when the user denies or dismisses the prompt.
-         * @param approveCallback The callback invoked when the user approves the prompt.
-         */
-        default void showLeavingIncognitoWarning(
-                Callback<String> denyCallback, Runnable approveCallback) {}
-
-        /**
          * Launch the payment app via an intent.
+         *
          * @param intent The intent that includes the payment app identification and parameters.
          * @param errorCallback The callback invoked when invoking the payment app fails.
          * @param intentCallback The callback invoked when the payment app responds to the intent.
@@ -119,55 +98,18 @@ public class AndroidPaymentApp extends PaymentApp
      */
     public static class LauncherImpl implements Launcher, WindowAndroid.IntentCallback {
         private final WebContents mWebContents;
+        @Nullable private final Integer mErrorId;
         private Callback<IntentResult> mIntentCallback;
 
         /**
          * @param webContents The web contents whose WindowAndroid should be used for invoking
-         * Android payment apps and receiving the result.
+         *     Android payment apps and receiving the result.
+         * @param errorId The resource identifier of the error string to be shown if activity is
+         *     paused before intent results, or null if no message is required.
          */
-        public LauncherImpl(WebContents webContents) {
+        public LauncherImpl(WebContents webContents, @Nullable Integer errorId) {
             mWebContents = webContents;
-        }
-
-        @Nullable
-        private Context getActivityContext() {
-            WindowAndroid window = mWebContents.getTopLevelNativeWindow();
-            return window == null ? null : window.getActivity().get();
-        }
-
-        @Override
-        public void showReadyToPayDebugInfo(String readyToPayDebugInfo) {
-            Context context = getActivityContext();
-            if (context == null) {
-                return;
-            }
-            new AlertDialog.Builder(context, R.style.ThemeOverlay_BrowserUI_AlertDialog)
-                    .setMessage(readyToPayDebugInfo)
-                    .show();
-        }
-
-        // Launcher implementation.
-        @Override
-        public void showLeavingIncognitoWarning(
-                Callback<String> denyCallback, Runnable approveCallback) {
-            Context context = getActivityContext();
-            if (context == null) {
-                denyCallback.onResult(ErrorStrings.ACTIVITY_NOT_FOUND);
-                return;
-            }
-            new AlertDialog.Builder(context, R.style.ThemeOverlay_BrowserUI_AlertDialog)
-                    .setTitle(R.string.external_app_leave_incognito_warning_title)
-                    .setMessage(R.string.external_payment_app_leave_incognito_warning)
-                    .setPositiveButton(
-                            R.string.ok, (OnClickListener) (dialog, which) -> approveCallback.run())
-                    .setNegativeButton(
-                            R.string.cancel,
-                            (OnClickListener)
-                                    (dialog, which) ->
-                                            denyCallback.onResult(ErrorStrings.USER_CANCELLED))
-                    .setOnCancelListener(
-                            dialog -> denyCallback.onResult(ErrorStrings.USER_CANCELLED))
-                    .show();
+            mErrorId = errorId;
         }
 
         // Launcher implementation.
@@ -191,8 +133,7 @@ public class AndroidPaymentApp extends PaymentApp
 
             mIntentCallback = intentCallback;
             try {
-                if (!window.showIntent(
-                        intent, /* callback= */ this, R.string.payments_android_app_error)) {
+                if (!window.showIntent(intent, /* callback= */ this, mErrorId)) {
                     errorCallback.onResult(ErrorStrings.PAYMENT_APP_LAUNCH_FAIL);
                 }
             } catch (SecurityException e) {
@@ -217,8 +158,8 @@ public class AndroidPaymentApp extends PaymentApp
      * Builds the point of interaction with a locally installed 3rd party native Android payment
      * app.
      *
-     * @param launcher Helps querying and launching the Android payment app. Overridden in unit
-     *     tests.
+     * @param launcher Helps launching the Android payment app. Overridden in unit tests.
+     * @param dialogController Helps showing informational or warning dialogs.
      * @param packageName The name of the package of the payment app.
      * @param activity The name of the payment activity in the payment app.
      * @param isReadyToPayService The name of the service that can answer "is ready to pay" query,
@@ -233,9 +174,11 @@ public class AndroidPaymentApp extends PaymentApp
      * @param supportedDelegations Delegations which this app can support.
      * @param showReadyToPayDebugInfo Whether IS_READY_TO_PAY intent should be displayed in a debug
      *     dialog.
+     * @param removeDeprecatedFields Whether intents should omit deprecated fields.
      */
     public AndroidPaymentApp(
             Launcher launcher,
+            DialogController dialogController,
             String packageName,
             String activity,
             @Nullable String isReadyToPayService,
@@ -245,11 +188,13 @@ public class AndroidPaymentApp extends PaymentApp
             boolean isIncognito,
             @Nullable String appToHide,
             SupportedDelegations supportedDelegations,
-            boolean showReadyToPayDebugInfo) {
+            boolean showReadyToPayDebugInfo,
+            boolean removeDeprecatedFields) {
         super(packageName, label, null, icon);
         ThreadUtils.assertOnUiThread();
         mHandler = new Handler();
         mLauncher = launcher;
+        mDialogController = dialogController;
 
         mPackageName = packageName;
         mPayActivityName = activity;
@@ -265,6 +210,7 @@ public class AndroidPaymentApp extends PaymentApp
         mApplicationIdentifierToHide = appToHide;
         mSupportedDelegations = supportedDelegations;
         mShowReadyToPayDebugInfo = showReadyToPayDebugInfo;
+        mRemoveDeprecatedFields = removeDeprecatedFields;
         mIsPreferred = false;
     }
 
@@ -338,7 +284,7 @@ public class AndroidPaymentApp extends PaymentApp
         assert !mIsIncognito;
 
         if (mShowReadyToPayDebugInfo) {
-            mLauncher.showReadyToPayDebugInfo(
+            mDialogController.showReadyToPayDebugInfo(
                     buildReadyToPayDebugInfoString(
                             mIsReadyToPayServiceName,
                             mPackageName,
@@ -358,7 +304,8 @@ public class AndroidPaymentApp extends PaymentApp
                                 methodDataMap),
                         // TODO(crbug.com/40212375): Re-enable clearing of identity for
                         // IS_READY_TO_PAY
-                        /* clearIdFields= */ false);
+                        /* clearIdFields= */ false,
+                        mRemoveDeprecatedFields);
         if (mBypassIsReadyToPayServiceInTest) {
             respondToIsReadyToPayQuery(true);
             return;
@@ -431,7 +378,8 @@ public class AndroidPaymentApp extends PaymentApp
             return;
         }
 
-        mLauncher.showLeavingIncognitoWarning(this::notifyErrorInvokingPaymentApp, launchRunnable);
+        mDialogController.showLeavingIncognitoWarning(
+                this::notifyErrorInvokingPaymentApp, launchRunnable);
     }
 
     @Override
@@ -513,7 +461,8 @@ public class AndroidPaymentApp extends PaymentApp
                                 modifiers),
                         mPaymentOptions,
                         WebPaymentIntentHelperTypeConverter.fromMojoShippingOptionList(
-                                shippingOptions));
+                                shippingOptions),
+                        mRemoveDeprecatedFields);
 
         mLauncher.launchPaymentApp(
                 payIntent, this::notifyErrorInvokingPaymentApp, this::onIntentCompleted);

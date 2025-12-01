@@ -17,6 +17,7 @@ source_set("page_info") {
   } else {
     sources += [
       "about_this_site_side_panel.h",
+      "merchant_trust_side_panel.h",
       "page_info_dialog.h",
       "page_info_infobar_delegate.h",
     ]
@@ -50,6 +51,7 @@ source_set("impl") {
     deps += [
       "//chrome/browser/extensions",
       "//chrome/browser/hid",
+      "//chrome/browser/smart_card:smart_card",
       "//chrome/browser/ui/tabs:tab_strip",
       "//chrome/browser/web_applications",
     ]
@@ -62,7 +64,6 @@ source_set("impl") {
   deps += [
     ":page_info",
     "//base",
-    "//build:chromeos_buildflags",
     "//chrome/app:branded_strings",
     "//chrome/browser:browser_process",
     "//chrome/browser/content_settings",

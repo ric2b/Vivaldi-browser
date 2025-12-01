@@ -36,7 +36,8 @@
 #ifndef PROCESSOR_MODULE_SERIALIZER_H__
 #define PROCESSOR_MODULE_SERIALIZER_H__
 
-#include <cstdint>
+#include <stdint.h>
+
 #include <map>
 #include <string>
 

@@ -113,7 +113,7 @@ Types:
     *   checked (optional Boolean) (default: false)
     *   children (optional Array of MenuItem)
 *   KeyboardEvent (Object) - See
-            <http://www.w3.org/TR/DOM-Level-3-Events/#events-KeyboardEvent>
+            <https://www.w3.org/TR/DOM-Level-3-Events/#events-KeyboardEvent>
     *   type (String) - One of 'keyup' or 'keydown'.
     *   key (String) - Value of the key being pressed
     *   altKey (optional Boolean) - Whether or not the ALT key is

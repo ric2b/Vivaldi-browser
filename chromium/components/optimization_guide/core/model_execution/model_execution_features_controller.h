@@ -119,9 +119,6 @@ class ModelExecutionFeaturesController
     kInvalidModelExecutionCapability,
   };
 
-  // Called when the main setting toggle pref is changed.
-  void OnMainToggleSettingStatePrefChanged();
-
   // Called when the feature-specific toggle pref is changed.
   void OnFeatureSettingPrefChanged(UserVisibleFeatureKey feature);
 
@@ -142,7 +139,8 @@ class ModelExecutionFeaturesController
   // Returns the current validity result for user is eligible to be shown
   // settings for `feature`.
   UserValidityResult GetCurrentUserValidityResult(
-      UserVisibleFeatureKey feature) const;
+      UserVisibleFeatureKey feature,
+      bool skip_enterprise_check) const;
 
   // Returns a validity result for accounts requiring signin: kValid when signin
   // checks pass, or invalid result indicating the reason if checks fail.

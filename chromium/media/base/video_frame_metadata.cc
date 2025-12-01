@@ -58,7 +58,6 @@ void VideoFrameMetadata::MergeMetadataFrom(
 #endif
   MERGE_OPTIONAL_FIELD(tracking_token, metadata_source);
   MERGE_VALUE_FIELD(power_efficient, metadata_source);
-  MERGE_VALUE_FIELD(texture_origin_is_top_left, metadata_source);
   MERGE_OPTIONAL_FIELD(device_scale_factor, metadata_source);
   MERGE_OPTIONAL_FIELD(page_scale_factor, metadata_source);
   MERGE_OPTIONAL_FIELD(root_scroll_offset_x, metadata_source);
@@ -72,6 +71,7 @@ void VideoFrameMetadata::MergeMetadataFrom(
   MERGE_OPTIONAL_FIELD(wallclock_frame_duration, metadata_source);
   MERGE_OPTIONAL_FIELD(maximum_composition_delay_in_frames, metadata_source);
   MERGE_OPTIONAL_FIELD(frame_sequence, metadata_source);
+  MERGE_OPTIONAL_FIELD(source_id, metadata_source);
   MERGE_OPTIONAL_FIELD(background_blur, metadata_source);
 
 #undef MERGE_VALUE_FIELD
@@ -80,7 +80,6 @@ void VideoFrameMetadata::MergeMetadataFrom(
 
 void VideoFrameMetadata::ClearTextureFrameMetadata() {
   is_webgpu_compatible = false;
-  texture_origin_is_top_left = true;
   read_lock_fences_enabled = false;
 }
 

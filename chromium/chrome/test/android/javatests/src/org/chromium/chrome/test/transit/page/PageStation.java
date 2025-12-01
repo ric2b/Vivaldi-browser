@@ -27,6 +27,7 @@ import org.chromium.base.test.transit.ViewSpec;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
@@ -132,7 +133,7 @@ public class PageStation extends Station<ChromeTabbedActivity> {
                 mNumTabsBeingSelected = 0;
             }
             if (mTabAlreadySelected == null && mNumTabsBeingSelected == 0) {
-                mTabAlreadySelected = previousStation.getLoadedTab();
+                mTabAlreadySelected = previousStation.mPageLoadedSupplier.get();
             }
             // Cannot copy over facilities because we have no way to clone them. It's also not
             // obvious that we should...
@@ -175,11 +176,14 @@ public class PageStation extends Station<ChromeTabbedActivity> {
         mIsEntryPoint = builder.mIsEntryPoint;
 
         // isOpeningTab is required
-        assert builder.mNumTabsBeingOpened != null;
+        assert builder.mNumTabsBeingOpened != null
+                : "PageStation.Builder needs withIsOpeningTabs() or initFrom()";
         mNumTabsBeingOpened = builder.mNumTabsBeingOpened;
 
         // mNumTabsBeingSelected is required
-        assert builder.mNumTabsBeingSelected != null;
+        assert builder.mNumTabsBeingSelected != null
+                : "PageStation.Builder needs withIsSelectingTabs(), withTabAlreadySelected() or"
+                        + " initFrom()";
         mNumTabsBeingSelected = builder.mNumTabsBeingSelected;
 
         // Pages must have an already selected tab, or be selecting a tab.
@@ -362,14 +366,12 @@ public class PageStation extends Station<ChromeTabbedActivity> {
                         .withIsOpeningTabs(0)
                         .withIsSelectingTabs(1)
                         .build(),
+                Transition.runTriggerOnUiThreadOption(),
                 () ->
-                        ThreadUtils.runOnUiThreadBlocking(
-                                () -> {
-                                    TabModelUtils.selectTabById(
-                                            getActivity().getTabModelSelector(),
-                                            tabToSelect.getId(),
-                                            TabSelectionType.FROM_USER);
-                                }));
+                        TabModelUtils.selectTabById(
+                                getActivity().getTabModelSelector(),
+                                tabToSelect.getId(),
+                                TabSelectionType.FROM_USER));
     }
 
     /** Opens the tab switcher by pressing the toolbar tab switcher button. */
@@ -396,20 +398,52 @@ public class PageStation extends Station<ChromeTabbedActivity> {
         }
 
         T destination = builder.build();
-        Runnable r =
+        Transition.Trigger trigger =
                 () -> {
                     @PageTransition
                     int transitionType = PageTransition.TYPED | PageTransition.FROM_ADDRESS_BAR;
-                    getActivity().getActivityTab().loadUrl(new LoadUrlParams(url, transitionType));
+                    getLoadedTab().loadUrl(new LoadUrlParams(url, transitionType));
                 };
-        // TODO(b/341978208): Wait for a page loaded callback.
         Transition.TransitionOptions options =
-                Transition.newOptions().withTimeout(10000).withPossiblyAlreadyFulfilled().build();
-        return travelToSync(destination, options, () -> ThreadUtils.runOnUiThread(r));
+                Transition.newOptions()
+                        .withCondition(new PageLoadCallbackCondition(getLoadedTab()))
+                        .withTimeout(10000)
+                        .withPossiblyAlreadyFulfilled()
+                        .withRunTriggerOnUiThread()
+                        .build();
+        return travelToSync(destination, options, trigger);
+    }
+
+    /** Loads a |url| leading to a web page in the same tab and waits to transition. */
+    public WebPageStation loadWebPageProgrammatically(String url) {
+        return loadPageProgrammatically(url, WebPageStation.newBuilder());
     }
 
     public WebPageStation loadAboutBlank() {
-        return loadPageProgrammatically("about:blank", WebPageStation.newBuilder());
+        return loadWebPageProgrammatically("about:blank");
+    }
+
+    /** Loads a |url| in another tab as if a link was clicked and waits to transition. */
+    public <T extends PageStation> T openFakeLink(String url, Builder<T> builder) {
+        return travelToSync(
+                builder.withIsOpeningTabs(1)
+                        .withIsSelectingTabs(1)
+                        .withIncognito(mIncognito)
+                        .withExpectedUrlSubstring(url)
+                        .build(),
+                Transition.runTriggerOnUiThreadOption(),
+                () ->
+                        getActivity()
+                                .getTabCreator(mIncognito)
+                                .launchUrl(url, TabLaunchType.FROM_LINK));
+    }
+
+    /**
+     * Loads a |url| in another tab leading to a webpage as if a link was clicked and waits to
+     * transition.
+     */
+    public WebPageStation openFakeLinkToWebPage(String url) {
+        return openFakeLink(url, WebPageStation.newBuilder());
     }
 
     public Tab getLoadedTab() {

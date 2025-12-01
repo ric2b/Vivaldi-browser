@@ -4,11 +4,13 @@
 
 #import "ios/chrome/browser/profile/model/keyed_service_factories.h"
 
+#import "components/optimization_guide/machine_learning_tflite_buildflags.h"
 #import "ios/chrome/browser/affiliations/model/ios_chrome_affiliation_service_factory.h"
 #import "ios/chrome/browser/autocomplete/model/autocomplete_classifier_factory.h"
 #import "ios/chrome/browser/autocomplete/model/autocomplete_provider_client_impl.h"
 #import "ios/chrome/browser/autocomplete/model/autocomplete_scoring_model_service_factory.h"
 #import "ios/chrome/browser/autocomplete/model/in_memory_url_index_factory.h"
+#import "ios/chrome/browser/autocomplete/model/on_device_tail_model_service_factory.h"
 #import "ios/chrome/browser/autocomplete/model/provider_state_service_factory.h"
 #import "ios/chrome/browser/autocomplete/model/remote_suggestions_service_factory.h"
 #import "ios/chrome/browser/autocomplete/model/shortcuts_backend_factory.h"
@@ -31,7 +33,6 @@
 #import "ios/chrome/browser/commerce/model/shopping_service_factory.h"
 #import "ios/chrome/browser/consent_auditor/model/consent_auditor_factory.h"
 #import "ios/chrome/browser/content_notification/model/content_notification_service_factory.h"
-#import "ios/chrome/browser/content_settings/model/cookie_settings_factory.h"
 #import "ios/chrome/browser/content_settings/model/host_content_settings_map_factory.h"
 #import "ios/chrome/browser/contextual_panel/model/contextual_panel_model_service_factory.h"
 #import "ios/chrome/browser/contextual_panel/sample/model/sample_panel_model_factory.h"
@@ -90,7 +91,7 @@
 #import "ios/chrome/browser/plus_addresses/model/plus_address_service_factory.h"
 #import "ios/chrome/browser/plus_addresses/model/plus_address_setting_service_factory.h"
 #import "ios/chrome/browser/policy/model/cloud/user_policy_signin_service_factory.h"
-#import "ios/chrome/browser/policy_url_blocking/model/policy_url_blocking_service.h"
+#import "ios/chrome/browser/policy_url_blocking/model/policy_url_blocking_service_factory.h"
 #import "ios/chrome/browser/power_bookmarks/model/power_bookmark_service_factory.h"
 #import "ios/chrome/browser/prerender/model/prerender_service_factory.h"
 #import "ios/chrome/browser/price_insights/model/price_insights_model_factory.h"
@@ -103,6 +104,7 @@
 #import "ios/chrome/browser/safe_browsing/model/ohttp_key_service_factory.h"
 #import "ios/chrome/browser/safe_browsing/model/real_time_url_lookup_service_factory.h"
 #import "ios/chrome/browser/safe_browsing/model/safe_browsing_client_factory.h"
+#import "ios/chrome/browser/safe_browsing/model/safe_browsing_helper_factory.h"
 #import "ios/chrome/browser/safe_browsing/model/safe_browsing_metrics_collector_factory.h"
 #import "ios/chrome/browser/safe_browsing/model/tailored_security/tailored_security_service_factory.h"
 #import "ios/chrome/browser/safe_browsing/model/verdict_cache_manager_factory.h"
@@ -158,6 +160,10 @@
 #import "ios/chrome/browser/webauthn/model/ios_passkey_model_factory.h"
 #import "ios/chrome/browser/webdata_services/model/web_data_service_factory.h"
 
+#if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
+#import "ios/chrome/browser/passwords/model/ios_password_field_classification_model_handler_factory.h"
+#endif
+
 #if BUILDFLAG(IOS_CREDENTIAL_PROVIDER_ENABLED)
 #import "ios/chrome/browser/credential_provider/model/credential_provider_service_factory.h"
 #endif
@@ -167,9 +173,12 @@
 #endif
 
 // Vivaldi
+#import "components/search_engines/search_engines_managers_factory.h"
 #import "ios/ad_blocker/adblock_rule_service_factory.h"
 #import "ios/direct_match/direct_match_service_factory.h"
 #import "ios/notes/notes_factory.h"
+#import "ios/translate/vivaldi_ios_th_service_factory.h"
+#import "prefs/vivaldi_prefs_definitions.h"
 // End Vivaldi
 
 // This method gets the instance of each ServiceFactory. We do this so that
@@ -204,7 +213,6 @@ void EnsureProfileKeyedServiceFactoriesBuilt() {
   ios::AutocompleteScoringModelServiceFactory::GetInstance();
   ios::BookmarkModelFactory::GetInstance();
   ios::BookmarkUndoServiceFactory::GetInstance();
-  ios::CookieSettingsFactory::GetInstance();
   ios::FaviconServiceFactory::GetInstance();
   ios::HistoryServiceFactory::GetInstance();
   ios::HostContentSettingsMapFactory::GetInstance();
@@ -286,6 +294,7 @@ void EnsureProfileKeyedServiceFactoriesBuilt() {
   MailtoHandlerServiceFactory::GetInstance();
   ManagedBookmarkServiceFactory::GetInstance();
   OhttpKeyServiceFactory::GetInstance();
+  OnDeviceTailModelServiceFactory::GetInstance();
   OptimizationGuideServiceFactory::GetInstance();
   PageContentAnnotationsServiceFactory::GetInstance();
   PageImageServiceFactory::GetInstance();
@@ -303,6 +312,7 @@ void EnsureProfileKeyedServiceFactoriesBuilt() {
   RealTimeUrlLookupServiceFactory::GetInstance();
   RemoteSuggestionsServiceFactory::GetInstance();
   SafeBrowsingClientFactory::GetInstance();
+  SafeBrowsingHelperFactory::GetInstance();
   SafeBrowsingMetricsCollectorFactory::GetInstance();
   SamplePanelModelFactory::GetInstance();
   SendTabToSelfSyncServiceFactory::GetInstance();
@@ -333,6 +343,10 @@ void EnsureProfileKeyedServiceFactoriesBuilt() {
   WebSessionStateCacheFactory::GetInstance();
   // Keep the above list alphabetized! Don't just add new entries at the end.
 
+#if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
+  IOSPasswordFieldClassificationModelHandlerFactory::GetInstance();
+#endif
+
 #if BUILDFLAG(IOS_CREDENTIAL_PROVIDER_ENABLED)
   CredentialProviderServiceFactory::GetInstance();
 #endif
@@ -348,5 +362,8 @@ void EnsureProfileKeyedServiceFactoriesBuilt() {
   adblock_filter::RuleServiceFactory::GetInstance();
   direct_match::DirectMatchServiceFactory::GetInstance();
   vivaldi::NotesModelFactory::GetInstance();
+  translate_history::VivaldiIOSTHServiceFactory::GetInstance();
+  SearchEnginesManagersFactory::GetInstance();
+  vivaldi::VivaldiPrefsDefinitions::GetInstance();
   // End Vivaldi
 }

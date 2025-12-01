@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -21,7 +22,6 @@
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "base/ranges/algorithm.h"
 #include "base/sequence_checker.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
@@ -165,7 +165,7 @@ void UpdateCheckerImpl::CheckForUpdatesHelper(
   CHECK(!context->components.empty());
   const bool is_foreground =
       context->components.cbegin()->second->is_foreground();
-  CHECK(base::ranges::all_of(
+  CHECK(std::ranges::all_of(
       context->components,
       [is_foreground](IdToComponentPtrMap::const_reference& elem) {
         return is_foreground == elem.second->is_foreground();
@@ -199,7 +199,8 @@ void UpdateCheckerImpl::CheckForUpdatesHelper(
 
     apps.push_back(MakeProtocolApp(
         app_id, crx_component->version, crx_component->ap, crx_component->brand,
-        config_->GetLang(), metadata->GetInstallDate(app_id), install_source,
+        metadata->GetInstallId(app_id), config_->GetLang(),
+        metadata->GetInstallDate(app_id), install_source,
         crx_component->install_location, crx_component->fingerprint,
         crx_component->installer_attributes, metadata->GetCohort(app_id),
         metadata->GetCohortHint(app_id), metadata->GetCohortName(app_id),

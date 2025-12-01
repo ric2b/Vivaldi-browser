@@ -114,16 +114,9 @@ void CookieSettings::SetCookieSetting(const GURL& primary_url,
 bool CookieSettings::IsAllowedByTpcdMetadataGrant(const GURL& url,
                                                   const GURL& first_party_url,
                                                   SettingInfo* out_info) const {
-  if (!ShouldConsider3pcdMetadataGrantsSettings(
-          first_party_url, net::CookieSettingOverrides())) {
-    return false;
-  }
   if (!tpcd_metadata_manager_) {
     return false;
   }
-
-  SCOPED_UMA_HISTOGRAM_TIMER_MICROS(
-      "ContentSettings.IsAllowedByTpcdMetadataGrant.Duration");
 
   return tpcd_metadata_manager_->IsAllowed(url, first_party_url, out_info);
 }
@@ -206,8 +199,8 @@ bool CookieSettings::IsStoragePartitioningBypassEnabled(
   if (base::FeatureList::IsEnabled(
           privacy_sandbox::kTrackingProtectionContentSettingFor3pcb) &&
       tracking_protection_settings_ &&
-      tracking_protection_settings_->GetTrackingProtectionSetting(
-          first_party_url) == CONTENT_SETTING_ALLOW) {
+      tracking_protection_settings_->HasTrackingProtectionException(
+          first_party_url)) {
     return true;
   }
   return false;
@@ -342,6 +335,9 @@ bool CookieSettings::ShouldAlwaysAllowCookies(
       first_party_url.SchemeIs(extension_scheme_)) {
     return true;
   }
+#else
+  // Suppress -Wunused-private-field warning.
+  (void)extension_scheme_;
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
   return false;
@@ -542,6 +538,11 @@ bool CookieSettings::HasFedCmSharingPermission(
 
   return entry && content_settings::ValueToContentSetting(
                       entry->second.value) == CONTENT_SETTING_ALLOW;
+}
+
+ContentSettingsForOneType CookieSettings::GetTpcdMetadataGrants() const {
+  return tpcd_metadata_manager_ ? tpcd_metadata_manager_->GetGrants()
+                                : ContentSettingsForOneType();
 }
 
 }  // namespace content_settings

@@ -15,6 +15,7 @@
 #include "ash/constants/ash_switches.h"
 #include "ash/display/extended_mouse_warp_controller.h"
 #include "ash/display/mouse_cursor_event_filter.h"
+#include "ash/display/screen_ash.h"
 #include "ash/display/screen_orientation_controller_test_api.h"
 #include "ash/display/unified_mouse_warp_controller.h"
 #include "ash/display/window_tree_host_manager.h"
@@ -130,6 +131,11 @@ AshTestBase::AshTestBase(
 }
 
 AshTestBase::~AshTestBase() {
+  // Ensure the next test starts with a null display::Screen.  This must be done
+  // here instead of in TearDown() since some tests test access to the Screen
+  // after the shell shuts down (which they use TearDown() to trigger).
+  ScreenAsh::DeleteScreenForShutdown();
+
   CHECK(setup_called_)
       << "You have overridden SetUp but never called AshTestBase::SetUp";
   CHECK(teardown_called_)
@@ -148,26 +154,26 @@ void AshTestBase::SetUp(std::unique_ptr<TestShellDelegate> delegate) {
 
   setup_called_ = true;
 
-  AshTestHelper::InitParams params;
-  params.start_session = start_session_;
-  params.create_global_cras_audio_handler = create_global_cras_audio_handler_;
-  params.create_quick_pair_mediator = create_quick_pair_mediator_;
-  params.delegate = std::move(delegate);
-  params.local_state = local_state();
+  init_params_.delegate = std::move(delegate);
+  init_params_.local_state = local_state();
+  // AshTestBase destroys the Screen instance at the destructor,
+  // because some of the tests verifies the screen instance
+  // after the ash::Shell destroyed in AshTestHelper::TearDown().
+  init_params_.destroy_screen = false;
 
   // Prepare for a pixel test if having pixel init params.
   std::optional<pixel_test::InitParams> pixel_test_init_params =
       CreatePixelTestInitParams();
   if (pixel_test_init_params) {
     PrepareForPixelDiffTest();
-    params.pixel_test_init_params = std::move(pixel_test_init_params);
+    init_params_.pixel_test_init_params = std::move(pixel_test_init_params);
   }
 
   test_context_factories_ =
       std::make_unique<ui::TestContextFactories>(/*enable_pixel_output=*/false);
   ash_test_helper_ = std::make_unique<AshTestHelper>(
       test_context_factories_->GetContextFactory());
-  ash_test_helper_->SetUp(std::move(params));
+  ash_test_helper_->SetUp(std::move(init_params_));
 
   // Creates a dummy `SensorDisabledNotificationDelegate` to avoid a crash due
   // to it missing in tests.
@@ -195,6 +201,8 @@ void AshTestBase::TearDown() {
   base::RunLoop().RunUntilIdle();
 
   ash_test_helper_->TearDown();
+  OnHelperWillBeDestroyed();
+  ash_test_helper_.reset();
 
   event_generator_.reset();
   // Some tests set an internal display id,
@@ -427,24 +435,27 @@ AmbientAshTestHelper* AshTestBase::GetAmbientAshTestHelper() {
   return ash_test_helper_->ambient_ash_test_helper();
 }
 
-void AshTestBase::CreateUserSessions(int n) {
-  GetSessionControllerClient()->CreatePredefinedUserSessions(n);
-}
-
-void AshTestBase::SimulateUserLogin(const std::string& user_email,
-                                    user_manager::UserType user_type) {
-  SimulateUserLogin(AccountId::FromUserEmail(user_email), user_type);
+AccountId AshTestBase::SimulateUserLogin(const std::string& user_email,
+                                         user_manager::UserType user_type) {
+  auto account_id = AccountId::FromUserEmail(user_email);
+  SimulateUserLogin(account_id, user_type);
+  return account_id;
 }
 
 void AshTestBase::SimulateUserLogin(const AccountId& account_id,
-                                    user_manager::UserType user_type) {
-  ash_test_helper_->SimulateUserLogin(account_id, user_type);
+                                    user_manager::UserType user_type,
+                                    std::unique_ptr<PrefService> pref_service) {
+  ash_test_helper_->SimulateUserLogin(
+      account_id, user_type, /*is_new_profiel=*/false, std::move(pref_service));
 }
 
-void AshTestBase::SimulateNewUserFirstLogin(const std::string& user_email) {
-  ash_test_helper_->SimulateUserLogin(AccountId::FromUserEmail(user_email),
+AccountId AshTestBase::SimulateNewUserFirstLogin(
+    const std::string& user_email) {
+  auto account_id = AccountId::FromUserEmail(user_email);
+  ash_test_helper_->SimulateUserLogin(account_id,
                                       user_manager::UserType::kRegular,
                                       /*is_new_profile=*/true);
+  return account_id;
 }
 
 void AshTestBase::SimulateGuestLogin() {
@@ -458,6 +469,14 @@ void AshTestBase::SimulateKioskMode(user_manager::UserType user_type) {
 
   GetSessionControllerClient()->SetIsRunningInAppMode(true);
   SimulateUserLogin(AccountId::FromUserEmail(kKioskUserEmail), user_type);
+}
+
+void AshTestBase::SwitchActiveUser(const AccountId& account_id) {
+  Shell::Get()->session_controller()->SwitchActiveUser(account_id);
+}
+
+bool AshTestBase::IsInSessionState(session_manager::SessionState state) const {
+  return Shell::Get()->session_controller()->GetSessionState() == state;
 }
 
 void AshTestBase::SetAccessibilityPanelHeight(int panel_height) {
@@ -488,7 +507,6 @@ void AshTestBase::SetUserAddingScreenRunning(bool user_adding_screen_running) {
 void AshTestBase::BlockUserSession(UserSessionBlockReason block_reason) {
   switch (block_reason) {
     case BLOCKED_BY_LOCK_SCREEN:
-      CreateUserSessions(1);
       GetSessionControllerClient()->LockScreen();
       break;
     case BLOCKED_BY_LOGIN_SCREEN:
@@ -503,7 +521,6 @@ void AshTestBase::BlockUserSession(UserSessionBlockReason block_reason) {
 }
 
 void AshTestBase::UnblockUserSession() {
-  CreateUserSessions(1);
   GetSessionControllerClient()->UnlockScreen();
 }
 

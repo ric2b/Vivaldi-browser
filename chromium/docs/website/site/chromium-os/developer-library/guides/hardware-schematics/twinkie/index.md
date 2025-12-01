@@ -50,7 +50,7 @@ For the impatient, here is a very cut-down version of the detailed instructions.
 ```
 
 ```none
-If anything here gives you trouble, refer to the [official documentation](http://www.chromium.org/chromium-os/developer-guide) instead.
+If anything here gives you trouble, refer to the [official documentation](/chromium-os/developer-guide) instead.
 ```
 
 ```none
@@ -152,8 +152,8 @@ sudo dfu-util -a 0 -s 0x08000000 -D twinkie_v1.11.19-9e81762f2.bin
 ```
 
 [<img alt="Programming Twinkie with OTG and A-to-A cables"
-src="/chromium-os/twinkie/twinkie_programming.jpg" height=161
-width=320>](/chromium-os/twinkie/twinkie_programming.jpg)
+src="twinkie_programming.jpg" height=161
+width=320>](./twinkie_programming.jpg)
 
 if you have entered the DFU mode by using the dfu console command, you need to
 use the following command to exit it :
@@ -284,16 +284,16 @@ Add the **USB PD** decoder from the Decoders menu, then edit the instantiated
 decoder to select the appropriate CC line.
 
 [<img alt="image"
-src="/chromium-os/twinkie/pulseview_3packets.png">](/chromium-os/twinkie/pulseview_3packets.png)
+src="pulseview_3packets.png">](./pulseview_3packets.png)
 
 [<img alt="image"
-src="/chromium-os/twinkie/pulseview_zoom_packet.png">](/chromium-os/twinkie/pulseview_zoom_packet.png)
+src="pulseview_zoom_packet.png">](./pulseview_zoom_packet.png)
 
 [<img alt="image"
-src="/chromium-os/twinkie/pulseview_VBUS_V.png">](/chromium-os/twinkie/pulseview_VBUS_V.png)
+src="pulseview_VBUS_V.png">](./pulseview_VBUS_V.png)
 
 [<img alt="image"
-src="/chromium-os/twinkie/pulseview_VBUS_V_A.png">](/chromium-os/twinkie/pulseview_VBUS_V_A.png)
+src="pulseview_VBUS_V_A.png">](./pulseview_VBUS_V_A.png)
 
 ### Experimental VBUS analog traces
 

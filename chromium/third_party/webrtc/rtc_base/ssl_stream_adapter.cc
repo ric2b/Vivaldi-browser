@@ -15,10 +15,10 @@
 #include <memory>
 #include <string>
 #include <utility>
-#include <vector>
 
 #include "absl/functional/any_invocable.h"
 #include "absl/strings/string_view.h"
+#include "api/array_view.h"
 #include "rtc_base/openssl_stream_adapter.h"
 #include "rtc_base/ssl_identity.h"
 #include "rtc_base/stream.h"
@@ -82,9 +82,10 @@ bool IsGcmCryptoSuite(int crypto_suite) {
 
 std::unique_ptr<SSLStreamAdapter> SSLStreamAdapter::Create(
     std::unique_ptr<StreamInterface> stream,
-    absl::AnyInvocable<void(SSLHandshakeError)> handshake_error) {
-  return std::make_unique<OpenSSLStreamAdapter>(std::move(stream),
-                                                std::move(handshake_error));
+    absl::AnyInvocable<void(SSLHandshakeError)> handshake_error,
+    const webrtc::FieldTrialsView* field_trials) {
+  return std::make_unique<OpenSSLStreamAdapter>(
+      std::move(stream), std::move(handshake_error), field_trials);
 }
 
 bool SSLStreamAdapter::IsBoringSsl() {
@@ -98,12 +99,30 @@ bool SSLStreamAdapter::IsAcceptableCipher(absl::string_view cipher,
   return OpenSSLStreamAdapter::IsAcceptableCipher(cipher, key_type);
 }
 
+// Default shim for backward compat.
+bool SSLStreamAdapter::SetPeerCertificateDigest(
+    absl::string_view digest_alg,
+    const unsigned char* digest_val,
+    size_t digest_len,
+    SSLPeerCertificateDigestError* error) {
+  unsigned char* nonconst_val = const_cast<unsigned char*>(digest_val);
+  SSLPeerCertificateDigestError ret = SetPeerCertificateDigest(
+      digest_alg, rtc::ArrayView<uint8_t>(nonconst_val, digest_len));
+  if (error)
+    *error = ret;
+  return ret == SSLPeerCertificateDigestError::NONE;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // Test only settings
 ///////////////////////////////////////////////////////////////////////////////
 
 void SSLStreamAdapter::EnableTimeCallbackForTesting() {
   OpenSSLStreamAdapter::EnableTimeCallbackForTesting();
+}
+
+SSLProtocolVersion SSLStreamAdapter::GetMaxSupportedDTLSProtocolVersion() {
+  return OpenSSLStreamAdapter::GetMaxSupportedDTLSProtocolVersion();
 }
 
 ///////////////////////////////////////////////////////////////////////////////

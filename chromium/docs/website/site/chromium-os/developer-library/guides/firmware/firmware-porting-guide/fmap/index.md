@@ -11,7 +11,7 @@ reference implementation is available at [flashmap git
 repo](https://chromium.googlesource.com/chromiumos/third_party/flashmap).
 
 Below is the FMAP defined for [Pixel 2 /
-Samus](/chromium-os/developer-information-for-chrome-os-devices/chromebook-pixel-2015),
+Samus](/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/chromebook-pixel-2015),
 retrieved by running *dump_fmap image.bin*:
 
 fmap_signature __FMAP__

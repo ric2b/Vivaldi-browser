@@ -22,26 +22,24 @@ import {
   drawTrackHoverTooltip,
 } from '../../base/canvas_utils';
 import {cropText} from '../../base/string_utils';
-import {Color} from '../../public/color';
-import {colorForThread} from '../../public/lib/colorizer';
-import {TrackData} from '../../common/track_data';
-import {TimelineFetcher} from '../../common/track_helper';
-import {checkerboardExcept} from '../../frontend/checkerboard';
+import {Color} from '../../base/color';
+import {colorForThread} from '../../components/colorizer';
+import {TrackData} from '../../components/tracks/track_data';
+import {TimelineFetcher} from '../../components/tracks/track_helper';
+import {checkerboardExcept} from '../../components/checkerboard';
 import {Point2D} from '../../base/geom';
 import {Track} from '../../public/track';
 import {LONG, NUM} from '../../trace_processor/query_result';
 import {uuidv4Sql} from '../../base/uuid';
 import {TrackMouseEvent, TrackRenderContext} from '../../public/track';
 import {TrackEventDetails} from '../../public/selection';
-import {asSchedSqlId} from '../../trace_processor/sql_utils/core_types';
-import {
-  getSched,
-  getSchedWakeupInfo,
-} from '../../trace_processor/sql_utils/sched';
+import {asSchedSqlId} from '../../components/sql_utils/core_types';
+import {getSched, getSchedWakeupInfo} from '../../components/sql_utils/sched';
 import {SchedSliceDetailsPanel} from './sched_details_tab';
 import {Trace} from '../../public/trace';
 import {exists} from '../../base/utils';
 import {ThreadMap} from '../dev.perfetto.Thread/threads';
+import {SourceDataset} from '../../trace_processor/dataset';
 
 export interface Data extends TrackData {
   // Slices are stored in a columnar fashion. All fields have the same length.
@@ -67,6 +65,8 @@ export class CpuSliceTrack implements Track {
 
   private lastRowId = -1;
   private trackUuid = uuidv4Sql();
+
+  readonly rootTableName = 'sched_slice';
 
   constructor(
     private readonly trace: Trace,
@@ -94,6 +94,26 @@ export class CpuSliceTrack implements Track {
       where cpu = ${this.cpu} and utid != 0
     `);
     this.lastRowId = it.firstRow({lastRowId: NUM}).lastRowId;
+  }
+
+  getDataset() {
+    return new SourceDataset({
+      // TODO(stevegolton): Once we allow datasets to have more than one filter,
+      // move this where clause to a dataset filter and change this src to
+      // 'sched'.
+      src: 'select id, ts, dur, cpu, utid from sched where utid != 0',
+      schema: {
+        id: NUM,
+        ts: LONG,
+        dur: LONG,
+        cpu: NUM,
+        utid: NUM,
+      },
+      filter: {
+        col: 'cpu',
+        eq: this.cpu,
+      },
+    });
   }
 
   async onUpdate({

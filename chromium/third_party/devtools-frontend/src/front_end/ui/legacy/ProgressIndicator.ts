@@ -30,7 +30,7 @@
 
 import type * as Common from '../../core/common/common.js';
 
-import progressIndicatorStyles from './progressIndicator.css.legacy.js';
+import progressIndicatorStyles from './progressIndicator.css.js';
 import {createShadowRootWithCoreStyles} from './UIUtils.js';
 
 export class ProgressIndicator implements Common.Progress.Progress {
@@ -39,23 +39,25 @@ export class ProgressIndicator implements Common.Progress.Progress {
   private readonly contentElement: Element;
   private labelElement: Element;
   private progressElement: HTMLProgressElement;
-  private readonly stopButton: Element;
+  private readonly stopButton?: Element;
   private isCanceledInternal: boolean;
   private worked: number;
   private isDone?: boolean;
 
-  constructor() {
+  constructor(options = {showStopButton: true}) {
     this.element = document.createElement('div');
     this.element.classList.add('progress-indicator');
-    this.shadowRoot =
-        createShadowRootWithCoreStyles(this.element, {cssFile: progressIndicatorStyles, delegatesFocus: undefined});
+    this.shadowRoot = createShadowRootWithCoreStyles(this.element, {cssFile: progressIndicatorStyles});
     this.contentElement = this.shadowRoot.createChild('div', 'progress-indicator-shadow-container');
 
     this.labelElement = this.contentElement.createChild('div', 'title');
-    this.progressElement = (this.contentElement.createChild('progress') as HTMLProgressElement);
+    this.progressElement = this.contentElement.createChild('progress');
     this.progressElement.value = 0;
-    this.stopButton = this.contentElement.createChild('button', 'progress-indicator-shadow-stop-button');
-    this.stopButton.addEventListener('click', this.cancel.bind(this));
+
+    if (options.showStopButton) {
+      this.stopButton = this.contentElement.createChild('button', 'progress-indicator-shadow-stop-button');
+      this.stopButton.addEventListener('click', this.cancel.bind(this));
+    }
 
     this.isCanceledInternal = false;
     this.worked = 0;

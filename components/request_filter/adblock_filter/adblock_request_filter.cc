@@ -113,10 +113,6 @@ bool IsRequestWanted(GURL url) {
 bool IsOriginWanted(content::BrowserContext* browser_context,
                     RuleGroup group,
                     url::Origin origin) {
-  // Allow all requests made by extensions.
-  if (origin.scheme() == "chrome-extension")
-    return false;
-
   auto* service = RuleServiceFactory::GetForBrowserContext(browser_context);
   return !service->GetRuleManager()->IsExemptOfFiltering(group, origin);
 }
@@ -211,16 +207,10 @@ bool AdBlockRequestFilter::OnBeforeRequest(
                               rules_index_manager_->group()),
           frame, url_for_activations, origin_for_activations);
 
-  if (state_and_logs_ && is_frame) {
-    state_and_logs_->LogTabActivations(rules_index_manager_->group(), frame,
+  if (state_and_logs_ && is_main_frame) {
+    // This will also arm ad attribution.
+    state_and_logs_->ReportTabActivations(rules_index_manager_->group(), frame,
                                        activations);
-  }
-
-  if (state_and_logs_ && is_main_frame &&
-      rules_index_manager_->group() == RuleGroup::kAdBlockingRules &&
-      activations[flat::ActivationType_ATTRIBUTE_ADS].GetDecision().value_or(
-          flat::Decision_MODIFY) == flat::Decision_PASS) {
-    state_and_logs_->ArmAdAttribution(frame);
   }
 
   std::optional<flat::Decision> document_decision =
@@ -315,6 +305,11 @@ bool AdBlockRequestFilter::OnBeforeRequest(
                               GURL(resource.value()));
       return true;
     }
+  }
+
+  if (is_main_frame && !allow_blocking_documents_) {
+    std::move(callback).Run(RequestFilter::kAllow, false, GURL());
+    return true;
   }
 
   if (is_frame && state_and_logs_) {

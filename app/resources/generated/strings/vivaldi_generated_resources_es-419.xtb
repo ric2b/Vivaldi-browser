@@ -170,6 +170,7 @@
 <translation id="3838085852053358637">No se pudo cargar la extensión</translation>
 <translation id="383891835335927981">No se configuró el zoom para ningún sitio</translation>
 <translation id="385051799172605136">Atrás</translation>
+<translation id="3861977424605124250">Mostrar al inicio</translation>
 <translation id="3867944738977021751">Campos del certificado</translation>
 <translation id="3905761538810670789">Reparar aplicación</translation>
 <translation id="3908501907586732282">Habilitar extensión</translation>
@@ -278,6 +279,7 @@
 <translation id="5582839680698949063">Menú principal</translation>
 <translation id="5614553682702429503">¿Quieres guardar la contraseña?</translation>
 <translation id="5623842676595125836">Log</translation>
+<translation id="5624959475330585145">Preguntar antes de usar conexiones no seguras</translation>
 <translation id="5638309510554459422">Encuentra extensiones y temas en <ph name="BEGIN_LINK" />Chrome Web Store<ph name="END_LINK" /></translation>
 <translation id="5677928146339483299">Bloqueado</translation>
 <translation id="5707185214361380026">No se ha podido cargar la extensión desde:</translation>
@@ -467,6 +469,7 @@ Mantén el archivo de clave en un lugar seguro. Debes crear las nuevas versiones
 <translation id="9218430445555521422">Establecer como predeterminado</translation>
 <translation id="93766956588638423">Reparar extensión</translation>
 <translation id="961012016278832836">Legado de Microsoft Edge</translation>
+<translation id="961856697154696964">Borrar datos de navegación</translation>
 <translation id="994289308992179865">&amp;Bucle</translation>
 <translation id="998747458861718449">Inspeccionar</translation>
 </translationbundle>

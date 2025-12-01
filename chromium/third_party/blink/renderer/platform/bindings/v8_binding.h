@@ -29,6 +29,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_BINDINGS_V8_BINDING_H_
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_BINDINGS_V8_BINDING_H_
 
@@ -53,8 +58,6 @@
 #include "v8/include/v8-value.h"
 
 namespace blink {
-
-class ExceptionState;
 
 // This file contains bindings helper functions that do not have dependencies
 // to core/ or bindings/core. For core-specific helper functions, see
@@ -309,8 +312,7 @@ struct V8PropertyDescriptorBag {
 PLATFORM_EXPORT void V8ObjectToPropertyDescriptor(
     v8::Isolate* isolate,
     v8::Local<v8::Value> descriptor_object,
-    V8PropertyDescriptorBag& descriptor_bag,
-    ExceptionState& exception_state);
+    V8PropertyDescriptorBag& descriptor_bag);
 
 }  // namespace bindings
 

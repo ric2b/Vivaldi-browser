@@ -25,40 +25,35 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 import org.robolectric.Robolectric;
 
-import org.chromium.base.Callback;
+import org.chromium.base.Token;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.collaboration.CollaborationServiceFactory;
 import org.chromium.chrome.browser.data_sharing.DataSharingTabManager;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
+import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncServiceFactory;
 import org.chromium.chrome.browser.tabmodel.TabCreator;
 import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
+import org.chromium.chrome.browser.tabmodel.TabRemover;
+import org.chromium.chrome.browser.tabmodel.TabUngrouper;
 import org.chromium.chrome.browser.tasks.tab_management.ActionConfirmationManager;
 import org.chromium.chrome.browser.tasks.tab_management.ColorPickerCoordinator;
 import org.chromium.chrome.browser.tasks.tab_management.TabGroupOverflowMenuCoordinator.OnItemClickedCallback;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabModel;
-import org.chromium.components.browser_ui.widget.ActionConfirmationResult;
-import org.chromium.components.data_sharing.DataSharingService;
-import org.chromium.components.data_sharing.DataSharingService.GroupDataOrFailureOutcome;
-import org.chromium.components.data_sharing.GroupData;
-import org.chromium.components.data_sharing.GroupMember;
-import org.chromium.components.data_sharing.PeopleGroupActionFailure;
+import org.chromium.components.collaboration.CollaborationService;
+import org.chromium.components.collaboration.ServiceStatus;
 import org.chromium.components.data_sharing.member_role.MemberRole;
-import org.chromium.components.signin.base.CoreAccountInfo;
-import org.chromium.components.signin.identitymanager.ConsentLevel;
-import org.chromium.components.signin.identitymanager.IdentityManager;
 import org.chromium.components.tab_group_sync.TabGroupSyncService;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.base.TestActivity;
@@ -74,11 +69,11 @@ import java.util.List;
 
 /** Unit tests for {@link TabGroupContextMenuCoordinator}. */
 @RunWith(BaseRobolectricTestRunner.class)
-@EnableFeatures({ChromeFeatureList.TAB_STRIP_GROUP_CONTEXT_MENU})
+@EnableFeatures({ChromeFeatureList.DATA_SHARING})
 public class TabGroupContextMenuCoordinatorUnitTest {
-    private static final String GAIA_ID = "Z";
-    private static final String EMAIL = "fake@gmail.com";
-    private static final String COLLABORATION_ID = "A";
+    private static final int TAB_ID = 1;
+    private static final int ROOT_ID = TAB_ID;
+    private static final Token TAB_GROUP_ID = new Token(3L, 4L);
 
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
 
@@ -86,67 +81,65 @@ public class TabGroupContextMenuCoordinatorUnitTest {
     public ActivityScenarioRule<TestActivity> mActivityScenarioRule =
             new ActivityScenarioRule<>(TestActivity.class);
 
-    private Activity mActivity;
     private TabGroupContextMenuCoordinator mTabGroupContextMenuCoordinator;
     private OnItemClickedCallback mOnItemClickedCallback;
-    private int mTabId;
     private MockTabModel mTabModel;
+    @Mock private TabRemover mTabRemover;
+    @Mock private TabUngrouper mTabUngrouper;
     @Mock private View mMenuView;
     @Mock private TabGroupModelFilter mTabGroupModelFilter;
     @Mock private Profile mProfile;
     @Mock private ActionConfirmationManager mActionConfirmationManager;
     @Mock private ModalDialogManager mModalDialogManager;
     @Mock private TabCreator mTabCreator;
-    @Captor private ArgumentCaptor<Callback<Integer>> mActionConfirmationResultCaptor;
     @Mock private WindowAndroid mWindowAndroid;
     @Mock private KeyboardVisibilityDelegate mKeyboardVisibilityDelegate;
     @Mock private TabGroupSyncService mTabGroupSyncService;
+    @Mock private CollaborationService mCollaborationService;
+    @Mock private ServiceStatus mServiceStatus;
     @Mock private DataSharingTabManager mDataSharingTabManager;
     @Mock private WeakReference<Activity> mWeakReferenceActivity;
-    @Mock private DataSharingService mDataSharingService;
-    @Mock private IdentityManager mIdentityManager;
-    @Mock private GroupDataOrFailureOutcome mGroupDataOrFailureOutcome;
-    @Mock private Callback<Boolean> mCallback;
 
     @Before
     public void setUp() {
-        mActivity = Robolectric.buildActivity(Activity.class).setup().get();
-        LayoutInflater inflater = LayoutInflater.from(mActivity);
+        TabGroupSyncServiceFactory.setForTesting(mTabGroupSyncService);
+        CollaborationServiceFactory.setForTesting(mCollaborationService);
+        when(mCollaborationService.getServiceStatus()).thenReturn(mServiceStatus);
+        when(mServiceStatus.isAllowedToJoin()).thenReturn(true);
+
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        LayoutInflater inflater = LayoutInflater.from(activity);
         mMenuView = inflater.inflate(R.layout.tab_strip_group_menu_layout, null);
         when(mWindowAndroid.getKeyboardDelegate()).thenReturn(mKeyboardVisibilityDelegate);
         when(mWindowAndroid.getActivity()).thenReturn(mWeakReferenceActivity);
-        when(mWeakReferenceActivity.get()).thenReturn(mActivity);
+        when(mWeakReferenceActivity.get()).thenReturn(activity);
         mTabModel = spy(new MockTabModel(mProfile, null));
         when(mTabModel.isIncognito()).thenReturn(false);
+        mTabModel.setTabRemoverForTesting(mTabRemover);
+        mTabModel.setTabCreatorForTesting(mTabCreator);
+        when(mTabGroupModelFilter.getTabModel()).thenReturn(mTabModel);
         when(mProfile.isOffTheRecord()).thenReturn(true);
-        mTabId = 1;
         mOnItemClickedCallback =
                 TabGroupContextMenuCoordinator.getMenuItemClickedCallback(
-                        mActivity,
+                        activity,
                         mTabGroupModelFilter,
                         mActionConfirmationManager,
                         mModalDialogManager,
-                        mTabCreator,
-                        mDataSharingTabManager,
-                        mCallback,
-                        /* isTabGroupSyncEnabled= */ true);
+                        mDataSharingTabManager);
         mTabGroupContextMenuCoordinator =
                 TabGroupContextMenuCoordinator.createContextMenuCoordinator(
                         mTabModel,
                         mTabGroupModelFilter,
                         mActionConfirmationManager,
                         mModalDialogManager,
-                        mTabCreator,
                         mWindowAndroid,
-                        mDataSharingTabManager,
-                        mCallback);
+                        mDataSharingTabManager);
 
         // Set groupRootId to bypass showMenu() call.
-        mTabGroupContextMenuCoordinator.setGroupRootIdForTesting(mTabId);
+        mTabGroupContextMenuCoordinator.setGroupRootIdForTesting(ROOT_ID);
     }
 
     @Test
-    @EnableFeatures(ChromeFeatureList.DATA_SHARING)
     @Feature("Tab Strip Group Context Menu")
     public void testListMenuItems() {
         // Build custom view first to setup menu view.
@@ -241,7 +234,6 @@ public class TabGroupContextMenuCoordinatorUnitTest {
     }
 
     @Test
-    @EnableFeatures(ChromeFeatureList.DATA_SHARING)
     @Feature("Tab Strip Group Context Menu")
     public void testCollaborationMenuItems_Owner() {
         ModelList modelList = new ModelList();
@@ -255,22 +247,17 @@ public class TabGroupContextMenuCoordinatorUnitTest {
                 /* hasCollaborationData= */ true);
 
         // Build collaboration view.
-        GroupDataOrFailureOutcome outcome = setUpSharedGroup(MemberRole.OWNER);
-        mTabGroupContextMenuCoordinator.buildCollaborationMenuItems(
-                modelList, mIdentityManager, outcome);
+        mTabGroupContextMenuCoordinator.buildCollaborationMenuItems(modelList, MemberRole.OWNER);
 
         // Assert: verify number of items in the model list.
-        assertEquals("Number of items in the list menu is incorrect", 8, modelList.size());
+        assertEquals("Number of items in the list menu is incorrect", 7, modelList.size());
 
-        // Assert: verify normal menu items.
-        verifyNormalListItems(modelList, 5);
-
-        // Assert: verify collaboration menu items.
+        // Assert: verify collaboration menu items; shared group should not have the option to
+        // ungroup.
         verifyCollaborationListItems(modelList, MemberRole.OWNER);
     }
 
     @Test
-    @EnableFeatures(ChromeFeatureList.DATA_SHARING)
     @Feature("Tab Strip Group Context Menu")
     public void testCollaborationMenuItems_Member() {
         ModelList modelList = new ModelList();
@@ -284,17 +271,13 @@ public class TabGroupContextMenuCoordinatorUnitTest {
                 /* hasCollaborationData= */ true);
 
         // Build collaboration view.
-        GroupDataOrFailureOutcome outcome = setUpSharedGroup(MemberRole.MEMBER);
-        mTabGroupContextMenuCoordinator.buildCollaborationMenuItems(
-                modelList, mIdentityManager, outcome);
+        mTabGroupContextMenuCoordinator.buildCollaborationMenuItems(modelList, MemberRole.MEMBER);
 
         // Assert: verify number of items in the model list.
-        assertEquals("Number of items in the list menu is incorrect", 8, modelList.size());
+        assertEquals("Number of items in the list menu is incorrect", 7, modelList.size());
 
-        // Assert: verify normal menu items.
-        verifyNormalListItems(modelList, 5);
-
-        // Assert: verify collaboration menu items.
+        // Assert: verify collaboration menu items; shared group should not have the option to
+        // ungroup.
         verifyCollaborationListItems(modelList, MemberRole.MEMBER);
     }
 
@@ -305,13 +288,8 @@ public class TabGroupContextMenuCoordinatorUnitTest {
         setUpTabGroupModelFilter();
 
         // Verify tab group is ungrouped.
-        mOnItemClickedCallback.onClick(R.id.ungroup_tab, mTabId, /* collaborationId= */ null);
-        verify(mActionConfirmationManager)
-                .processUngroupAttempt(mActionConfirmationResultCaptor.capture());
-        mActionConfirmationResultCaptor
-                .getValue()
-                .onResult(ActionConfirmationResult.CONFIRMATION_POSITIVE);
-        verify(mTabGroupModelFilter).moveTabOutOfGroupInDirection(mTabId, /* trailing= */ true);
+        mOnItemClickedCallback.onClick(R.id.ungroup_tab, TAB_GROUP_ID, /* collaborationId= */ null);
+        verify(mTabUngrouper).ungroupTabs(TAB_ID, /* trailing= */ true, /* allowDialog= */ true);
     }
 
     @Test
@@ -321,14 +299,17 @@ public class TabGroupContextMenuCoordinatorUnitTest {
         List<Tab> tabsInGroup = setUpTabGroupModelFilter();
 
         // Verify tab group closed.
-        mOnItemClickedCallback.onClick(R.id.close_tab_group, mTabId, /* collaborationId= */ null);
-        verify(mTabGroupModelFilter)
+        mOnItemClickedCallback.onClick(
+                R.id.close_tab_group, TAB_GROUP_ID, /* collaborationId= */ null);
+        verify(mTabRemover)
                 .closeTabs(
                         argThat(
                                 params ->
                                         params.tabs.get(0) == tabsInGroup.get(0)
                                                 && params.allowUndo
-                                                && params.hideTabGroups));
+                                                && params.hideTabGroups),
+                        eq(true),
+                        any());
     }
 
     @Test
@@ -338,19 +319,17 @@ public class TabGroupContextMenuCoordinatorUnitTest {
         List<Tab> tabsInGroup = setUpTabGroupModelFilter();
 
         // Verify tab group deleted.
-        mOnItemClickedCallback.onClick(R.id.delete_tab_group, mTabId, /* collaborationId= */ null);
-        verify(mActionConfirmationManager)
-                .processDeleteGroupAttempt(mActionConfirmationResultCaptor.capture());
-        mActionConfirmationResultCaptor
-                .getValue()
-                .onResult(ActionConfirmationResult.CONFIRMATION_POSITIVE);
-        verify(mTabGroupModelFilter)
+        mOnItemClickedCallback.onClick(
+                R.id.delete_tab_group, TAB_GROUP_ID, /* collaborationId= */ null);
+        verify(mTabRemover)
                 .closeTabs(
                         argThat(
                                 params ->
                                         params.tabs.get(0) == tabsInGroup.get(0)
-                                                && !params.allowUndo
-                                                && !params.hideTabGroups));
+                                                && params.allowUndo
+                                                && !params.hideTabGroups),
+                        eq(true),
+                        any());
     }
 
     @Test
@@ -361,7 +340,7 @@ public class TabGroupContextMenuCoordinatorUnitTest {
 
         // Verify new tab opened in group.
         mOnItemClickedCallback.onClick(
-                R.id.open_new_tab_in_group, mTabId, /* collaborationId= */ null);
+                R.id.open_new_tab_in_group, TAB_GROUP_ID, /* collaborationId= */ null);
         verify(mTabCreator)
                 .createNewTab(any(), eq(TabLaunchType.FROM_TAB_GROUP_UI), eq(tabsInGroup.get(0)));
     }
@@ -386,7 +365,7 @@ public class TabGroupContextMenuCoordinatorUnitTest {
         keyboardVisibilityListener.keyboardVisibilityChanged(false);
 
         // Verify the group title is updated.
-        verify(mTabGroupModelFilter).setTabGroupTitle(mTabId, newTitle);
+        verify(mTabGroupModelFilter).setTabGroupTitle(TAB_ID, newTitle);
 
         // Remove the custom title set by the user by clearing the edit box.
         newTitle = "";
@@ -394,19 +373,22 @@ public class TabGroupContextMenuCoordinatorUnitTest {
         keyboardVisibilityListener.keyboardVisibilityChanged(false);
 
         // Verify the previous title is deleted and is default to "N tabs"
-        verify(mTabGroupModelFilter).deleteTabGroupTitle(mTabId);
+        verify(mTabGroupModelFilter).deleteTabGroupTitle(TAB_ID);
         assertEquals("1 tab", groupTitleEditText.getText().toString());
     }
 
     private List<Tab> setUpTabGroupModelFilter() {
-        mTabModel.addTab(mTabId);
-        Tab tab = mTabModel.getTabById(mTabId);
+        Tab tab = mTabModel.addTab(TAB_ID);
+        tab.setRootId(ROOT_ID);
+        tab.setTabGroupId(TAB_GROUP_ID);
         when(mTabGroupModelFilter.getTabModel()).thenReturn(mTabModel);
+        when(mTabGroupModelFilter.getTabUngrouper()).thenReturn(mTabUngrouper);
         when(mTabGroupModelFilter.isTabInTabGroup(tab)).thenReturn(true);
-        when(mTabGroupModelFilter.getRelatedTabCountForRootId(eq(mTabId))).thenReturn(1);
+        when(mTabGroupModelFilter.getGroupLastShownTabId(TAB_GROUP_ID)).thenReturn(TAB_ID);
+        when(mTabGroupModelFilter.getRelatedTabCountForRootId(eq(TAB_ID))).thenReturn(1);
         List<Tab> tabsInGroup = Arrays.asList(tab);
-        when(mTabGroupModelFilter.getRelatedTabListForRootId(eq(mTabId))).thenReturn(tabsInGroup);
-        when(mTabGroupModelFilter.getRelatedTabList(eq(mTabId))).thenReturn(tabsInGroup);
+        when(mTabGroupModelFilter.getRelatedTabListForRootId(eq(TAB_ID))).thenReturn(tabsInGroup);
+        when(mTabGroupModelFilter.getRelatedTabList(eq(TAB_ID))).thenReturn(tabsInGroup);
         return tabsInGroup;
     }
 
@@ -417,54 +399,36 @@ public class TabGroupContextMenuCoordinatorUnitTest {
                 modelList.get(1).model.get(ListMenuItemProperties.MENU_ITEM_ID));
         assertEquals(
                 R.id.ungroup_tab, modelList.get(2).model.get(ListMenuItemProperties.MENU_ITEM_ID));
-
         assertEquals(
                 R.id.close_tab_group,
                 modelList.get(closeGroupPosition).model.get(ListMenuItemProperties.MENU_ITEM_ID));
     }
 
     private void verifyCollaborationListItems(ModelList modelList, @MemberRole int memberRole) {
+        assertEquals(ListMenuItemType.DIVIDER, modelList.get(0).type);
+        assertEquals(
+                R.id.open_new_tab_in_group,
+                modelList.get(1).model.get(ListMenuItemProperties.MENU_ITEM_ID));
         assertEquals(
                 R.id.manage_sharing,
-                modelList.get(3).model.get(ListMenuItemProperties.MENU_ITEM_ID));
+                modelList.get(2).model.get(ListMenuItemProperties.MENU_ITEM_ID));
         assertEquals(
                 R.id.recent_activity,
+                modelList.get(3).model.get(ListMenuItemProperties.MENU_ITEM_ID));
+        assertEquals(
+                R.id.close_tab_group,
                 modelList.get(4).model.get(ListMenuItemProperties.MENU_ITEM_ID));
-        assertEquals(ListMenuItemType.DIVIDER, modelList.get(6).type);
+        assertEquals(ListMenuItemType.DIVIDER, modelList.get(5).type);
 
         // Verify delete group or leave group depending on the member role.
         if (memberRole == MemberRole.OWNER) {
             assertEquals(
                     R.id.delete_shared_group,
-                    modelList.get(7).model.get(ListMenuItemProperties.MENU_ITEM_ID));
+                    modelList.get(6).model.get(ListMenuItemProperties.MENU_ITEM_ID));
         } else if (memberRole == MemberRole.MEMBER) {
             assertEquals(
                     R.id.leave_group,
-                    modelList.get(7).model.get(ListMenuItemProperties.MENU_ITEM_ID));
+                    modelList.get(6).model.get(ListMenuItemProperties.MENU_ITEM_ID));
         }
-    }
-
-    private GroupDataOrFailureOutcome setUpSharedGroup(@MemberRole int memberRole) {
-        GroupMember groupMember =
-                new GroupMember(
-                        GAIA_ID,
-                        /* displayName= */ null,
-                        EMAIL,
-                        memberRole,
-                        /* avatarUrl= */ null,
-                        /* givenName= */ null);
-        GroupMember[] groupMemberArray = new GroupMember[] {groupMember};
-        GroupData groupData =
-                new GroupData(
-                        COLLABORATION_ID,
-                        /* displayName= */ null,
-                        groupMemberArray,
-                        /* groupToken= */ null);
-        GroupDataOrFailureOutcome outcome =
-                new GroupDataOrFailureOutcome(groupData, PeopleGroupActionFailure.UNKNOWN);
-        CoreAccountInfo coreAccountInfo = CoreAccountInfo.createFromEmailAndGaiaId(EMAIL, GAIA_ID);
-        when(mIdentityManager.getPrimaryAccountInfo(ConsentLevel.SIGNIN))
-                .thenReturn(coreAccountInfo);
-        return outcome;
     }
 }

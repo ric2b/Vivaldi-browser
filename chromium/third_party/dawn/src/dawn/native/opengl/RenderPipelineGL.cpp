@@ -27,6 +27,7 @@
 
 #include "dawn/native/opengl/RenderPipelineGL.h"
 
+#include "dawn/common/BitSetIterator.h"
 #include "dawn/native/opengl/DeviceGL.h"
 #include "dawn/native/opengl/Forward.h"
 #include "dawn/native/opengl/PersistentPipelineStateGL.h"
@@ -216,8 +217,14 @@ RenderPipeline::RenderPipeline(Device* device,
       mGlPrimitiveTopology(GLPrimitiveTopology(GetPrimitiveTopology())) {}
 
 MaybeError RenderPipeline::InitializeImpl() {
+    VertexAttributeMask bgraSwizzleAttributes = {};
+    for (VertexAttributeLocation i : IterateBitSet(GetAttributeLocationsUsed())) {
+        bgraSwizzleAttributes.set(i, GetAttribute(i).format == wgpu::VertexFormat::Unorm8x4BGRA);
+    }
+
     DAWN_TRY(InitializeBase(ToBackend(GetDevice())->GetGL(), ToBackend(GetLayout()), GetAllStages(),
-                            UsesVertexIndex(), UsesInstanceIndex(), UsesFragDepth()));
+                            UsesVertexIndex(), UsesInstanceIndex(), UsesFragDepth(),
+                            bgraSwizzleAttributes));
     CreateVAOForVertexState();
     return {};
 }
@@ -266,7 +273,6 @@ void RenderPipeline::CreateVAOForVertexState() {
                 case wgpu::VertexStepMode::Instance:
                     gl.VertexAttribDivisor(glAttrib, 1);
                     break;
-                case wgpu::VertexStepMode::VertexBufferNotUsed:
                 case wgpu::VertexStepMode::Undefined:
                     DAWN_UNREACHABLE();
             }

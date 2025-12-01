@@ -149,18 +149,16 @@ signin_metrics::ProfileSignout kAlwaysAllowedSignoutSources[] = {
 std::string_view NameOfGroupedAccessPointHistogram(
     signin_metrics::AccessPoint access_point) {
   switch (access_point) {
-    case signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN:
+    case signin_metrics::AccessPoint::kWebSignin:
       return ".PreUnoWebSignin";
-    case signin_metrics::AccessPoint::
-        ACCESS_POINT_CHROME_SIGNIN_INTERCEPT_BUBBLE:
+    case signin_metrics::AccessPoint::kChromeSigninInterceptBubble:
       return ".UnoSigninBubble";
-    case signin_metrics::AccessPoint::ACCESS_POINT_USER_MANAGER:
-    case signin_metrics::AccessPoint::ACCESS_POINT_FOR_YOU_FRE:
-    case signin_metrics::AccessPoint::
-        ACCESS_POINT_SIGNIN_INTERCEPT_FIRST_RUN_EXPERIENCE:
-    case signin_metrics::AccessPoint::ACCESS_POINT_START_PAGE:
+    case signin_metrics::AccessPoint::kUserManager:
+    case signin_metrics::AccessPoint::kForYouFre:
+    case signin_metrics::AccessPoint::kSigninInterceptFirstRunExperience:
+    case signin_metrics::AccessPoint::kStartPage:
       return ".ProfileCreation";
-    case signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN:
+    case signin_metrics::AccessPoint::kAvatarBubbleSignIn:
       return ".ProfileMenu";
     default:
       return ".Other";
@@ -477,16 +475,9 @@ SigninClient::SignoutDecision ChromeSigninClient::GetSignoutDecision(
 #if !BUILDFLAG(IS_ANDROID)
   // Check if managed user.
   if (enterprise_util::UserAcceptedAccountManagement(profile_)) {
-    if (base::FeatureList::IsEnabled(kDisallowManagedProfileSignout)) {
-      // Allow revoke sync but disallow signout regardless of consent level of
-      // the primary account.
-      return SigninClient::SignoutDecision::CLEAR_PRIMARY_ACCOUNT_DISALLOWED;
-    }
-    // Syncing users are not allowed to revoke sync or signout. Signed in non-
-    // syncing users don't have any signout restrictions related to management.
-    if (has_sync_account) {
-      return SigninClient::SignoutDecision::REVOKE_SYNC_DISALLOWED;
-    }
+    // Allow revoke sync but disallow signout regardless of consent level of
+    // the primary account.
+    return SigninClient::SignoutDecision::CLEAR_PRIMARY_ACCOUNT_DISALLOWED;
   }
 #endif
   return SigninClient::SignoutDecision::ALLOW;
@@ -616,8 +607,7 @@ void ChromeSigninClient::RecordOpenTabCount(
   }
 #endif  // !BUILDFLAG(IS_ANDROID)
 
-  signin_metrics::RecordOpenTabCountOnSignin(access_point, consent_level,
-                                             tabs_count);
+  signin_metrics::RecordOpenTabCountOnSignin(consent_level, tabs_count);
 }
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 

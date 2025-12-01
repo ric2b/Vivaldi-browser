@@ -5,7 +5,6 @@
 #include "third_party/blink/renderer/core/animation/css/css_animation_data.h"
 
 #include "third_party/blink/renderer/core/animation/timing.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
 namespace blink {
 
@@ -19,15 +18,13 @@ CSSAnimationData::CSSAnimationData() : CSSTimingData(InitialDuration()) {
   range_start_list_.push_back(InitialRangeStart());
   range_end_list_.push_back(InitialRangeEnd());
   composition_list_.push_back(InitialComposition());
+  trigger_type_list_.push_back(InitialTriggerType());
 }
 
 CSSAnimationData::CSSAnimationData(const CSSAnimationData& other) = default;
 
 std::optional<double> CSSAnimationData::InitialDuration() {
-  if (RuntimeEnabledFeatures::ScrollTimelineEnabled()) {
-    return std::nullopt;
-  }
-  return 0;
+  return std::nullopt;
 }
 
 const AtomicString& CSSAnimationData::InitialName() {
@@ -36,6 +33,11 @@ const AtomicString& CSSAnimationData::InitialName() {
 }
 
 const StyleTimeline& CSSAnimationData::InitialTimeline() {
+  DEFINE_STATIC_LOCAL(const StyleTimeline, timeline, (CSSValueID::kAuto));
+  return timeline;
+}
+
+const StyleTimeline& CSSAnimationData::InitialTriggerTimeline() {
   DEFINE_STATIC_LOCAL(const StyleTimeline, timeline, (CSSValueID::kAuto));
   return timeline;
 }

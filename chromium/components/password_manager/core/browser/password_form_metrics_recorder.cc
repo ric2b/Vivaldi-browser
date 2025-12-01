@@ -20,6 +20,7 @@
 #include "base/time/default_clock.h"
 #include "components/affiliations/core/browser/affiliation_utils.h"
 #include "components/autofill/core/common/form_data.h"
+#include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/password_generation_util.h"
 #include "components/password_manager/core/browser/form_fetcher.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
@@ -71,6 +72,7 @@ PasswordFormMetricsRecorder::BubbleDismissalReason GetBubbleDismissalReason(
     case metrics_util::AUTO_SIGNIN_TOAST_CLICKED_OBSOLETE:
     case metrics_util::CLICKED_BRAND_NAME_OBSOLETE:
     case metrics_util::NUM_UI_RESPONSES:
+    case metrics_util::CLICKED_ABOUT_PASSWORD_CHANGE:
       NOTREACHED();
   }
   return BubbleDismissalReason::kUnknown;
@@ -132,7 +134,9 @@ UsernamePasswordsState CalculateUsernamePasswordsState(
     bool manually_filled = field.properties_mask() &
                            FieldPropertiesFlags::kAutofilledOnUserTrigger;
     bool automatically_filled =
-        field.properties_mask() & FieldPropertiesFlags::kAutofilledOnPageLoad;
+        (field.properties_mask() &
+         (FieldPropertiesFlags::kAutofilledOnPageLoad |
+          FieldPropertiesFlags::kAutofilledChangePasswordFormOnPageLoad));
     result.manual_fallback_used |=
         field.properties_mask() &
         FieldPropertiesFlags::kAutofilledPasswordFormFilledViaManualFallback;
@@ -234,7 +238,7 @@ PasswordFormMetricsRecorder::FillingSource ComputeFillingSource(
 const FormFieldData* FindFieldByRendererId(const FormData& form,
                                            autofill::FieldRendererId field_id) {
   auto field =
-      base::ranges::find(form.fields(), field_id, &FormFieldData::renderer_id);
+      std::ranges::find(form.fields(), field_id, &FormFieldData::renderer_id);
   return field == form.fields().end() ? nullptr : &*field;
 }
 
@@ -245,7 +249,7 @@ CalculateCorrectnessForLoginFields(
     const std::u16string& field_value) {
   // If the submitted field contains one of the previously saved
   // values, the classification was most likely correct.
-  if (base::ranges::find(saved_values, field_value) != saved_values.end()) {
+  if (std::ranges::find(saved_values, field_value) != saved_values.end()) {
     return PasswordFormMetricsRecorder::ClassificationCorrectness::kCorrect;
   }
 
@@ -253,7 +257,7 @@ CalculateCorrectnessForLoginFields(
   // values, the classification was wrong.
   for (const auto& field : submitted_form.fields()) {
     if (!field.value().empty() &&
-        (base::ranges::find(saved_values, field.value()) !=
+        (std::ranges::find(saved_values, field.value()) !=
          saved_values.end())) {
       return PasswordFormMetricsRecorder::ClassificationCorrectness::kWrong;
     }
@@ -650,7 +654,7 @@ void PasswordFormMetricsRecorder::RecordFirstWaitForUsernameReason(
 
 void PasswordFormMetricsRecorder::RecordMatchedFormType(
     const PasswordForm& form) {
-  if (std::exchange(recorded_preferred_matched_password_type, true)) {
+  if (std::exchange(recorded_preferred_matched_password_type_, true)) {
     return;
   }
 
@@ -682,11 +686,29 @@ void PasswordFormMetricsRecorder::RecordPotentialPreferredMatch(
   if (!form_type) {
     return;
   }
-  if (std::exchange(recorded_potential_preferred_matched_password_type, true)) {
+  if (std::exchange(recorded_potential_preferred_matched_password_type_,
+                    true)) {
     return;
   }
   UMA_HISTOGRAM_ENUMERATION("PasswordManager.PotentialBestMatchFormType",
                             form_type.value());
+}
+
+void PasswordFormMetricsRecorder::RecordFillSuggestionHasGroupedMatch(
+    base::span<const PasswordForm> best_matches) {
+  // Do not record the UMA if there is nothing to fill.
+  if (best_matches.empty()) {
+    return;
+  }
+  if (std::exchange(recorded_fill_suggestion_has_grouped_match_, true)) {
+    return;
+  }
+  base::UmaHistogramBoolean(
+      "PasswordManager.FillSuggestionsHasGroupedMatch",
+      std::ranges::find_if(best_matches, [](const PasswordForm& match) {
+        return password_manager_util::GetMatchType(match) ==
+               password_manager_util::GetLoginMatchType::kGrouped;
+      }) != best_matches.end());
 }
 
 void PasswordFormMetricsRecorder::CalculateFillingAssistanceMetric(
@@ -907,9 +929,9 @@ void PasswordFormMetricsRecorder::CalculateClassificationCorrectnessMetric(
   if (new_pwd_field && !new_pwd_field->value().empty()) {
     ClassificationCorrectness new_pwd_correctness =
         ClassificationCorrectness::kUnknown;
-    if ((base::ranges::find(saved_passwords, new_pwd_field->value()) !=
+    if ((std::ranges::find(saved_passwords, new_pwd_field->value()) !=
          saved_passwords.end()) ||
-        (base::ranges::find(saved_usernames, new_pwd_field->value()) !=
+        (std::ranges::find(saved_usernames, new_pwd_field->value()) !=
          saved_usernames.end())) {
       // If a previously saved value was submitted, it's not a new password.
       new_pwd_correctness = ClassificationCorrectness::kWrong;
@@ -952,11 +974,12 @@ void PasswordFormMetricsRecorder::CalculateJsOnlyInput(
   bool had_focus = false;
   bool had_user_input_or_autofill_on_password = false;
   for (const auto& field : submitted_form.fields()) {
-    if (field.HadFocus()) {
+    if (field.properties_mask() & autofill::kHadFocus) {
       had_focus = true;
     }
     if (field.IsPasswordInputElement() &&
-        (field.DidUserType() || field.WasPasswordAutofilled())) {
+        (field.properties_mask() &
+         (autofill::kUserTyped | autofill::kAutofilled))) {
       had_user_input_or_autofill_on_password = true;
     }
   }
@@ -977,10 +1000,11 @@ void PasswordFormMetricsRecorder::CalculateAutomationRate(
     }
 
     // The field was never filled or typed in, ignore it.
-    if (!field.DidUserType() && !field.WasPasswordAutofilled()) {
+    if (!(field.properties_mask() &
+          (autofill::kUserTyped | autofill::kAutofilled))) {
       continue;
     }
-    if (field.WasPasswordAutofilled()) {
+    if (field.properties_mask() & autofill::kAutofilled) {
       total_length_autofilled_fields += field.value().size();
     }
     total_length += field.value().size();
@@ -1084,7 +1108,6 @@ void PasswordFormMetricsRecorder::RecordPasswordBubbleShown(
     case metrics_util::AUTOMATIC_ADD_USERNAME_BUBBLE:
     case metrics_util::MANUAL_ADD_USERNAME_BUBBLE:
     case metrics_util::AUTOMATIC_RELAUNCH_CHROME_BUBBLE:
-    case metrics_util::AUTOMATIC_DEFAULT_STORE_CHANGED_BUBBLE:
     case metrics_util::AUTOMATIC_PASSKEY_SAVED_CONFIRMATION:
     case metrics_util::AUTOMATIC_PASSKEY_DELETED_CONFIRMATION:
     case metrics_util::MANUAL_PASSKEY_DELETED_CONFIRMATION:
@@ -1092,10 +1115,13 @@ void PasswordFormMetricsRecorder::RecordPasswordBubbleShown(
     case metrics_util::MANUAL_PASSKEY_UPDATED_CONFIRMATION:
     case metrics_util::AUTOMATIC_PASSKEY_NOT_ACCEPTED_BUBBLE:
     case metrics_util::MANUAL_PASSKEY_NOT_ACCEPTED_BUBBLE:
+    case metrics_util::AUTOMATIC_PASSKEY_UPGRADE_BUBBLE:
+    case metrics_util::MANUAL_PASSKEY_UPGRADE_BUBBLE:
+    case metrics_util::PASSWORD_CHANGE_BUBBLE:
       // Do nothing.
       return;
 
-    // Obsolte display dispositions:
+    // Obsolete display dispositions:
     case metrics_util::MANUAL_BLOCKLISTED_OBSOLETE:
     case metrics_util::AUTOMATIC_CREDENTIAL_REQUEST_OBSOLETE:
     case metrics_util::NUM_DISPLAY_DISPOSITIONS:

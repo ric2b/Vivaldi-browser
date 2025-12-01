@@ -10,9 +10,9 @@ import android.content.Context;
 import android.content.res.AssetFileDescriptor;
 import android.os.ParcelFileDescriptor;
 
+import androidx.javascriptengine.DataInputException;
 import androidx.javascriptengine.EvaluationFailedException;
 import androidx.javascriptengine.EvaluationResultSizeLimitExceededException;
-import androidx.javascriptengine.DataInputException;
 import androidx.javascriptengine.IsolateStartupParameters;
 import androidx.javascriptengine.IsolateTerminatedException;
 import androidx.javascriptengine.JavaScriptConsoleCallback;
@@ -32,6 +32,7 @@ import org.junit.runner.RunWith;
 import org.chromium.android_webview.test.AwJUnit4ClassRunner;
 import org.chromium.android_webview.test.OnlyRunIn;
 import org.chromium.base.ContextUtils;
+import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.DisabledTest;
 
 import java.io.File;
@@ -48,6 +49,7 @@ import java.util.concurrent.atomic.AtomicReference;
 /** Instrumentation test for JavaScriptSandbox. */
 @RunWith(AwJUnit4ClassRunner.class)
 @OnlyRunIn(SINGLE_PROCESS)
+@Batch(Batch.PER_CLASS)
 public class JsSandboxServiceTest {
     // This value is somewhat arbitrary. It might need bumping if V8 snapshots become significantly
     // larger in future. However, we don't want it too large as that will make the tests slower and
@@ -310,13 +312,14 @@ public class JsSandboxServiceTest {
         final String provideString = "Hello World";
         final byte[] bytes = provideString.getBytes(StandardCharsets.US_ASCII);
         final String code =
-                ""
-                        + "function ab2str(buf) {"
-                        + " return String.fromCharCode.apply(null, new Uint8Array(buf));"
-                        + "}"
-                        + "android.consumeNamedDataAsArrayBuffer(\"id-1\").then((value) => {"
-                        + " return ab2str(value);"
-                        + "});";
+                """
+                function ab2str(buf) {
+                  return String.fromCharCode.apply(null, new Uint8Array(buf));
+                }
+                android.consumeNamedDataAsArrayBuffer("id-1").then((value) => {
+                  return ab2str(value);
+                });
+                """;
         Context context = ContextUtils.getApplicationContext();
         ListenableFuture<JavaScriptSandbox> jsSandboxFuture =
                 JavaScriptSandbox.createConnectedInstanceForTestingAsync(context);
@@ -617,13 +620,14 @@ public class JsSandboxServiceTest {
         // The bytes of a minimal WebAssembly module, courtesy of v8/test/cctest/test-api-wasm.cc
         final byte[] bytes = {0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00};
         final String code =
-                ""
-                        + "android.consumeNamedDataAsArrayBuffer(\"id-1\").then((wasm) => {"
-                        + " return WebAssembly.compile(wasm).then((module) => {"
-                        + "  new WebAssembly.Instance(module);"
-                        + "  return \"success\";"
-                        + " });"
-                        + "});";
+                """
+                android.consumeNamedDataAsArrayBuffer("id-1").then((wasm) => {
+                  return WebAssembly.compile(wasm).then((module) => {
+                    new WebAssembly.Instance(module);
+                    return "success";
+                  });
+                });
+                """;
         Context context = ContextUtils.getApplicationContext();
         ListenableFuture<JavaScriptSandbox> jsSandboxFuture =
                 JavaScriptSandbox.createConnectedInstanceForTestingAsync(context);
@@ -700,13 +704,21 @@ public class JsSandboxServiceTest {
         // The bytes of a minimal WebAssembly module, courtesy of v8/test/cctest/test-api-wasm.cc
         final byte[] bytes = {0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00};
         final String code =
-                "android.consumeNamedDataAsArrayBuffer(\"id-1\").then((value) => { return"
-                    + " android.consumeNamedDataAsArrayBuffer(\"id-2\").then((value) => {  return"
-                    + " android.consumeNamedDataAsArrayBuffer(\"id-3\").then((value) => {   return"
-                    + " android.consumeNamedDataAsArrayBuffer(\"id-4\").then((value) => {    return"
-                    + " android.consumeNamedDataAsArrayBuffer(\"id-5\").then((value) => {    "
-                    + " return \"success\";     }, (error) => {     return error.message;    });  "
-                    + " });  }); });});";
+                """
+                android.consumeNamedDataAsArrayBuffer("id-1").then((value) => {
+                  return android.consumeNamedDataAsArrayBuffer("id-2").then((value) => {
+                    return android.consumeNamedDataAsArrayBuffer("id-3").then((value) => {
+                      return android.consumeNamedDataAsArrayBuffer("id-4").then((value) => {
+                        return android.consumeNamedDataAsArrayBuffer("id-5").then((value) => {
+                          return "success";
+                        }, (error) => {
+                          return error.message;
+                        });
+                      });
+                    });
+                  });
+                });
+            """;
         Context context = ContextUtils.getApplicationContext();
         ListenableFuture<JavaScriptSandbox> jsSandboxFuture =
                 JavaScriptSandbox.createConnectedInstanceForTestingAsync(context);
@@ -734,10 +746,11 @@ public class JsSandboxServiceTest {
     @MediumTest
     public void testPromiseEvaluationThrow() throws Throwable {
         final String code =
-                ""
-                        + "android.consumeNamedDataAsArrayBuffer(\"id-1\").catch((error) => {"
-                        + " throw new WebAssembly.LinkError('RandomLinkError');"
-                        + "});";
+                """
+                android.consumeNamedDataAsArrayBuffer("id-1").catch((error) => {
+                  throw new WebAssembly.LinkError('RandomLinkError');
+                });
+                """;
         final String contains = "RandomLinkError";
         Context context = ContextUtils.getApplicationContext();
 
@@ -909,21 +922,23 @@ public class JsSandboxServiceTest {
             try (JavaScriptIsolate jsIsolate = jsSandbox.createIsolate()) {
                 // Set up a promise that we can resolve
                 final String goodPromiseCode =
-                        ""
-                                + "let ext_resolve;"
-                                + "new Promise((resolve, reject) => {"
-                                + " ext_resolve = resolve;"
-                                + "})";
+                        """
+                        let ext_resolve;
+                        new Promise((resolve, reject) => {
+                          ext_resolve = resolve;
+                        })
+                        """;
                 ListenableFuture<String> goodPromiseFuture =
                         jsIsolate.evaluateJavaScriptAsync(goodPromiseCode);
 
                 // Set up a promise that we can reject
                 final String badPromiseCode =
-                        ""
-                                + "let ext_reject;"
-                                + "new Promise((resolve, reject) => {"
-                                + " ext_reject = reject;"
-                                + "})";
+                        """
+                        let ext_reject;
+                        new Promise((resolve, reject) => {
+                          ext_reject = reject;
+                        })
+                        """;
                 ListenableFuture<String> badPromiseFuture =
                         jsIsolate.evaluateJavaScriptAsync(badPromiseCode);
 
@@ -936,10 +951,11 @@ public class JsSandboxServiceTest {
                 // Trigger the resolve and rejection from another evaluation to ensure the promises
                 // are truly asynchronous.
                 final String triggerCode =
-                        ""
-                                + "ext_resolve('I should succeed!');"
-                                + "ext_reject(new Error('I should fail!'));"
-                                + "'DONE'";
+                        """
+                        ext_resolve('I should succeed!');
+                        ext_reject(new Error('I should fail!'));
+                        'DONE'
+                        """;
                 ListenableFuture<String> triggerFuture =
                         jsIsolate.evaluateJavaScriptAsync(triggerCode);
                 String triggerResult = triggerFuture.get(5, TimeUnit.SECONDS);
@@ -1259,13 +1275,24 @@ public class JsSandboxServiceTest {
         // Test that attempting to consume an oversized named data into a new array buffer fails
         // with a RangeError, and a subsequent smaller request succeeds.
         final String code =
-                "function ab2str(buf) { return String.fromCharCode.apply(null, new"
-                    + " Uint8Array(buf));}async function test() { try {  await"
-                    + " android.consumeNamedDataAsArrayBuffer('large');  throw new"
-                    + " Error('consumption of large named data should not have succeeded'); } catch"
-                    + " (e) {  if (!(e instanceof RangeError)) {   throw e;  } } const buffer ="
-                    + " await android.consumeNamedDataAsArrayBuffer('small'); return await"
-                    + " ab2str(buffer);}test()";
+                """
+                function ab2str(buf) {
+                  return String.fromCharCode.apply(null, new Uint8Array(buf));
+                }
+                async function test() {
+                  try {
+                    await android.consumeNamedDataAsArrayBuffer('large');
+                    throw new Error('consumption of large named data should not have succeeded');
+                  } catch (e) {
+                    if (!(e instanceof RangeError)) {
+                      throw e;
+                    }
+                  }
+                  const buffer = await android.consumeNamedDataAsArrayBuffer('small');
+                  return await ab2str(buffer);
+                }
+                test();
+                """;
         Context context = ContextUtils.getApplicationContext();
         ListenableFuture<JavaScriptSandbox> jsSandboxFuture =
                 JavaScriptSandbox.createConnectedInstanceForTestingAsync(context);

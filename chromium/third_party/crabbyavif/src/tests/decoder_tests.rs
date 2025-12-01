@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crabby_avif::decoder::track::RepetitionCount;
+use crabby_avif::decoder::CompressionFormat;
 use crabby_avif::decoder::ImageContentType;
 use crabby_avif::image::*;
 use crabby_avif::reformat::rgb;
@@ -62,6 +63,7 @@ fn animated_image() {
     let mut decoder = get_decoder("colors-animated-8bpc.avif");
     let res = decoder.parse();
     assert!(res.is_ok());
+    assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
     let image = decoder.image().expect("image was none");
     assert!(!image.alpha_present);
     assert!(image.image_sequence_track_present);
@@ -85,6 +87,7 @@ fn animated_image_with_source_set_to_primary_item() {
     decoder.settings.source = decoder::Source::PrimaryItem;
     let res = decoder.parse();
     assert!(res.is_ok());
+    assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
     let image = decoder.image().expect("image was none");
     assert!(!image.alpha_present);
     // This will be reported as true irrespective of the preferred source.
@@ -109,6 +112,7 @@ fn animated_image_with_alpha_and_metadata() {
     let mut decoder = get_decoder("colors-animated-8bpc-alpha-exif-xmp.avif");
     let res = decoder.parse();
     assert!(res.is_ok());
+    assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
     let image = decoder.image().expect("image was none");
     assert!(image.alpha_present);
     assert!(image.image_sequence_track_present);
@@ -130,6 +134,7 @@ fn keyframes() {
     let mut decoder = get_decoder("colors-animated-12bpc-keyframes-0-2-3.avif");
     let res = decoder.parse();
     assert!(res.is_ok());
+    assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
     let image = decoder.image().expect("image was none");
     assert!(image.image_sequence_track_present);
     assert_eq!(decoder.image_count(), 5);
@@ -162,6 +167,7 @@ fn color_grid_alpha_no_grid() {
     let mut decoder = get_decoder("color_grid_alpha_nogrid.avif");
     let res = decoder.parse();
     assert!(res.is_ok());
+    assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
     let image = decoder.image().expect("image was none");
     assert!(image.alpha_present);
     assert!(!image.image_sequence_track_present);
@@ -191,6 +197,7 @@ fn progressive(filename: &str, layer_count: u32, width: u32, height: u32) {
     decoder.settings.allow_progressive = false;
     let res = decoder.parse();
     assert!(res.is_ok());
+    assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
     let image = decoder.image().expect("image was none");
     assert!(matches!(
         image.progressive_state,
@@ -200,6 +207,7 @@ fn progressive(filename: &str, layer_count: u32, width: u32, height: u32) {
     decoder.settings.allow_progressive = true;
     let res = decoder.parse();
     assert!(res.is_ok());
+    assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
     let image = decoder.image().expect("image was none");
     assert!(matches!(
         image.progressive_state,
@@ -230,6 +238,7 @@ fn decoder_parse_icc_exif_xmp() {
     decoder.settings.ignore_exif = true;
     let res = decoder.parse();
     assert!(res.is_ok());
+    assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
     let image = decoder.image().expect("image was none");
 
     assert_eq!(image.icc.len(), 596);
@@ -245,6 +254,7 @@ fn decoder_parse_icc_exif_xmp() {
     decoder.settings.ignore_exif = false;
     let res = decoder.parse();
     assert!(res.is_ok());
+    assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
     let image = decoder.image().expect("image was none");
 
     assert_eq!(image.exif.len(), 1126);
@@ -267,6 +277,7 @@ fn color_grid_gainmap_different_grid() {
     decoder.settings.image_content_to_decode = ImageContentType::All;
     let res = decoder.parse();
     assert!(res.is_ok());
+    assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
     let image = decoder.image().expect("image was none");
     // Color+alpha: 4x3 grid of 128x200 tiles.
     assert_eq!(image.width, 128 * 4);
@@ -294,6 +305,7 @@ fn color_grid_alpha_grid_gainmap_nogrid() {
     decoder.settings.image_content_to_decode = ImageContentType::All;
     let res = decoder.parse();
     assert!(res.is_ok());
+    assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
     let image = decoder.image().expect("image was none");
     // Color+alpha: 4x3 grid of 128x200 tiles.
     assert_eq!(image.width, 128 * 4);
@@ -321,6 +333,7 @@ fn color_nogrid_alpha_nogrid_gainmap_grid() {
     decoder.settings.image_content_to_decode = ImageContentType::All;
     let res = decoder.parse();
     assert!(res.is_ok());
+    assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
     let image = decoder.image().expect("image was none");
     // Color+alpha: single image of size 128x200.
     assert_eq!(image.width, 128);
@@ -348,6 +361,7 @@ fn gainmap_oriented() {
     decoder.settings.image_content_to_decode = ImageContentType::All;
     let res = decoder.parse();
     assert!(res.is_ok());
+    assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
     let image = decoder.image().expect("image was none");
     assert_eq!(image.irot_angle, Some(1));
     assert_eq!(image.imir_axis, Some(0));
@@ -367,6 +381,7 @@ fn decode_unsupported_version(filename: &str) {
     let mut decoder = get_decoder(filename);
     let res = decoder.parse();
     assert!(res.is_ok());
+    assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
     // Gain map marked as not present because the metadata is not supported.
     assert!(!decoder.gainmap_present());
     assert_eq!(decoder.gainmap().image.width, 0);
@@ -377,6 +392,7 @@ fn decode_unsupported_version(filename: &str) {
     decoder.settings.image_content_to_decode = ImageContentType::All;
     let res = decoder.parse();
     assert!(res.is_ok());
+    assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
     // Gainmap not found: its metadata is not supported.
     assert!(!decoder.gainmap_present());
     assert_eq!(decoder.gainmap().image.width, 0);
@@ -390,6 +406,7 @@ fn decode_unsupported_writer_version_with_extra_bytes() {
     let mut decoder = get_decoder("unsupported_gainmap_writer_version_with_extra_bytes.avif");
     let res = decoder.parse();
     assert!(res.is_ok());
+    assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
     // Decodes successfully: there are extra bytes at the end of the gain map
     // metadata but that's expected as the writer_version field is higher
     // that supported.
@@ -415,6 +432,7 @@ fn decode_ignore_gain_map_but_read_metadata() {
 
     let res = decoder.parse();
     assert!(res.is_ok());
+    assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
     decoder.image().expect("image was none");
     // Gain map not decoded.
     assert!(decoder.gainmap_present());
@@ -434,6 +452,7 @@ fn decode_ignore_color_and_alpha() {
 
     let res = decoder.parse();
     assert!(res.is_ok());
+    assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
 
     let image = decoder.image().expect("image was none");
     // Main image metadata is available.
@@ -468,6 +487,7 @@ fn decode_ignore_all(filename: &str) {
 
     let res = decoder.parse();
     assert!(res.is_ok());
+    assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
     let image = decoder.image().expect("image was none");
     // Main image metadata is available.
     assert!(image.width > 0);
@@ -493,6 +513,7 @@ fn clli(filename: &str, max_cll: u16, max_pall: u16) {
     let mut decoder = get_decoder(&filename_with_prefix);
     let res = decoder.parse();
     assert!(res.is_ok());
+    assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
     let image = decoder.image().expect("image was none");
     if max_cll == 0 && max_pall == 0 {
         assert!(image.clli.is_none());
@@ -515,6 +536,7 @@ fn raw_io() {
             .expect("Failed to set IO")
     };
     assert!(decoder.parse().is_ok());
+    assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
     assert_eq!(decoder.image_count(), 5);
     if !HAS_DECODER {
         return;
@@ -569,6 +591,7 @@ fn custom_io() {
     });
     decoder.set_io(io);
     assert!(decoder.parse().is_ok());
+    assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
     assert_eq!(decoder.image_count(), 5);
     if !HAS_DECODER {
         return;
@@ -730,6 +753,7 @@ fn nth_image() {
     let mut decoder = get_decoder("colors-animated-8bpc.avif");
     let res = decoder.parse();
     assert!(res.is_ok());
+    assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
     assert_eq!(decoder.image_count(), 5);
     if !HAS_DECODER {
         return;
@@ -748,6 +772,7 @@ fn color_and_alpha_dimensions_do_not_match() {
     // Parsing should succeed.
     let res = decoder.parse();
     assert!(res.is_ok());
+    assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
     let image = decoder.image().expect("image was none");
     assert_eq!(image.width, 10);
     assert_eq!(image.height, 10);
@@ -764,6 +789,7 @@ fn rgb_conversion_alpha_premultiply() -> AvifResult<()> {
     let mut decoder = get_decoder("alpha.avif");
     let res = decoder.parse();
     assert!(res.is_ok());
+    assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
     if !HAS_DECODER {
         return Ok(());
     }
@@ -781,6 +807,7 @@ fn rgb_conversion_alpha_premultiply() -> AvifResult<()> {
 fn white_1x1() -> AvifResult<()> {
     let mut decoder = get_decoder("white_1x1.avif");
     assert_eq!(decoder.parse(), Ok(()));
+    assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
     if !HAS_DECODER {
         return Ok(());
     }
@@ -812,6 +839,7 @@ fn white_1x1_mdat_size0() -> AvifResult<()> {
     let mut decoder = decoder::Decoder::default();
     decoder.set_io_vec(file_bytes);
     assert_eq!(decoder.parse(), Ok(()));
+    assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
     Ok(())
 }
 
@@ -831,6 +859,7 @@ fn white_1x1_meta_size0() -> AvifResult<()> {
     // item extents to be read from the MediaDataBox if the construction_method is 0.
     // Maybe another section or specification enforces that.
     assert_eq!(decoder.parse(), Ok(()));
+    assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
     if !HAS_DECODER {
         return Ok(());
     }
@@ -911,6 +940,7 @@ fn heic_parsing() {
         let image = decoder.image().expect("image was none");
         assert_eq!(image.width, 320);
         assert_eq!(image.height, 240);
+        assert_eq!(decoder.compression_format(), CompressionFormat::Heic);
         if cfg!(feature = "android_mediacodec") {
             // Decoding is available only via android_mediacodec.
             assert!(!matches!(
@@ -920,5 +950,182 @@ fn heic_parsing() {
         }
     } else {
         assert!(res.is_err());
+    }
+}
+
+#[test]
+fn clap_irot_imir_non_essential() {
+    let mut decoder = get_decoder("clap_irot_imir_non_essential.avif");
+    let res = decoder.parse();
+    assert!(res.is_err());
+}
+
+#[derive(Clone)]
+struct ExpectedOverlayImageInfo<'a> {
+    filename: &'a str,
+    width: u32,
+    height: u32,
+    expected_pixels: &'a [(usize, u32, [u8; 4])], // (x, y, [rgba]).
+}
+
+const RED: [u8; 4] = [255, 0, 0, 255];
+const GREEN: [u8; 4] = [0, 255, 0, 255];
+const BLUE: [u8; 4] = [0, 0, 255, 255];
+const BLACK: [u8; 4] = [0, 0, 0, 255];
+const YELLOW: [u8; 4] = [255, 255, 0, 255];
+
+const EXPECTED_OVERLAY_IMAGE_INFOS: [ExpectedOverlayImageInfo; 4] = [
+    ExpectedOverlayImageInfo {
+        // Three 80x60 sub-images with the following offsets:
+        // horizontal_offsets: [0, 40, 80]
+        // vertical_offsets: [0, 40, 80]
+        filename: "overlay_exact_bounds.avif",
+        width: 160,
+        height: 140,
+        expected_pixels: &[
+            // Top left should be red.
+            (0, 0, RED),
+            (10, 10, RED),
+            (20, 20, RED),
+            // Green should be overlaid on top of the red block starting at (40, 40).
+            (40, 40, GREEN),
+            (50, 50, GREEN),
+            (60, 60, GREEN),
+            // Blue should be overlaid on top of the green block starting at (80, 80).
+            (80, 80, BLUE),
+            (90, 90, BLUE),
+            (100, 100, BLUE),
+            // Top right should be background color.
+            (159, 0, BLACK),
+            // Bottom left should be background color.
+            (0, 139, BLACK),
+        ],
+    },
+    ExpectedOverlayImageInfo {
+        // Three 80x60 sub-images with the following offsets:
+        // horizontal_offsets: [20, 60, 100]
+        // vertical_offsets: [20, 60, 100]
+        filename: "overlay_with_border.avif",
+        width: 200,
+        height: 180,
+        expected_pixels: &[
+            // Top left should be background color.
+            (0, 0, BLACK),
+            // Red should be overlaid starting at (20, 20).
+            (20, 20, RED),
+            (30, 30, RED),
+            (40, 40, RED),
+            // Green should be overlaid on top of the red block starting at (60, 60).
+            (60, 60, GREEN),
+            (70, 70, GREEN),
+            (80, 80, GREEN),
+            // Blue should be overlaid on top of the green block starting at (100, 100).
+            (100, 100, BLUE),
+            (110, 110, BLUE),
+            (120, 120, BLUE),
+            // Top right should be background color.
+            (199, 0, BLACK),
+            // Bottom left should be background color.
+            (0, 179, BLACK),
+            // Bottom right should be background color.
+            (199, 179, BLACK),
+        ],
+    },
+    ExpectedOverlayImageInfo {
+        // Two 80x60 sub-images with the following offsets:
+        // horizontal_offsets: [-40, 120]
+        // vertical_offsets: [-40, 100]
+        filename: "overlay_outside_bounds.avif",
+        width: 160,
+        height: 140,
+        expected_pixels: &[
+            // Red overlay is 40x20 in the top left.
+            (0, 0, RED),
+            (15, 15, RED),
+            (39, 19, RED),
+            (40, 20, BLACK),
+            // Blue overlay is 40x40 in the bottom right.
+            (119, 99, BLACK),
+            (120, 100, BLUE),
+            (140, 120, BLUE),
+            (159, 139, BLUE),
+            // Center of the image should be background color.
+            (80, 70, BLACK),
+            // Top right should be background color.
+            (159, 0, BLACK),
+            // Bottom left should be background color.
+            (0, 139, BLACK),
+        ],
+    },
+    ExpectedOverlayImageInfo {
+        // Three 80x60 sub-images with the following offsets:
+        // horizontal_offsets: [0, 40, 80]
+        // vertical_offsets: [0, 40, 80]
+        // canvas background color: yellow.
+        filename: "overlay_yellow_bg.avif",
+        width: 160,
+        height: 140,
+        expected_pixels: &[
+            // Top left should be red.
+            (0, 0, RED),
+            (10, 10, RED),
+            (20, 20, RED),
+            // Green should be overlaid on top of the red block starting at (40, 40).
+            (40, 40, GREEN),
+            (50, 50, GREEN),
+            (60, 60, GREEN),
+            // Blue should be overlaid on top of the green block starting at (80, 80).
+            (80, 80, BLUE),
+            (90, 90, BLUE),
+            (100, 100, BLUE),
+            // Top right should be background color.
+            (159, 0, YELLOW),
+            // Bottom left should be background color.
+            (0, 139, YELLOW),
+        ],
+    },
+];
+
+macro_rules! pixel_eq {
+    ($a:expr, $b:expr) => {
+        assert!((i32::from($a) - i32::from($b)).abs() <= 3);
+    };
+}
+
+#[test_case::test_matrix(0usize..4)]
+fn overlay(index: usize) {
+    let info = &EXPECTED_OVERLAY_IMAGE_INFOS[index];
+    let mut decoder = get_decoder(info.filename);
+    decoder.settings.strictness = decoder::Strictness::None;
+    let res = decoder.parse();
+    assert!(res.is_ok());
+    assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
+    let image = decoder.image().expect("image was none");
+    assert_eq!(image.width, info.width);
+    assert_eq!(image.height, info.height);
+    if !HAS_DECODER {
+        return;
+    }
+    let res = decoder.next_image();
+    assert!(res.is_ok());
+    let image = decoder.image().expect("image was none");
+    assert_eq!(image.width, info.width);
+    assert_eq!(image.height, info.height);
+    let mut rgb = rgb::Image::create_from_yuv(image);
+    rgb.format = rgb::Format::Rgba;
+    assert!(rgb.allocate().is_ok());
+    assert!(rgb.convert_from_yuv(image).is_ok());
+    for expected_pixel in info.expected_pixels {
+        let column = expected_pixel.0;
+        let row = expected_pixel.1;
+        let pixels = rgb.row(row).expect("row was none");
+        let r = pixels[column * 4];
+        let g = pixels[(column * 4) + 1];
+        let b = pixels[(column * 4) + 2];
+        let a = pixels[(column * 4) + 3];
+        pixel_eq!(r, expected_pixel.2[0]);
+        pixel_eq!(g, expected_pixel.2[1]);
+        pixel_eq!(b, expected_pixel.2[2]);
+        pixel_eq!(a, expected_pixel.2[3]);
     }
 }

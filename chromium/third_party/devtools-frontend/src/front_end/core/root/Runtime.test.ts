@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import type * as Platform from '../platform/platform.js';
+
 import * as Root from './root.js';
 
 describe('Runtime', () => {
@@ -32,14 +34,31 @@ describe('Runtime', () => {
         assert.isNull(Root.Runtime.getRemoteBase(`${bundled}?remoteBase=${remoteOrigin}`));
       });
     });
+
+    describe('isNodeEntry', () => {
+      it('returns true for node_app', () => {
+        assert.isTrue(Root.Runtime.isNodeEntry('/bundled/node_app.html'));
+        assert.isTrue(Root.Runtime.isNodeEntry('/node_app'));
+      });
+
+      it('returns true for js_app', () => {
+        assert.isTrue(Root.Runtime.isNodeEntry('/bundled/js_app.html'));
+        assert.isTrue(Root.Runtime.isNodeEntry('/js_app'));
+      });
+
+      it('returns false for other entries', () => {
+        assert.isFalse(Root.Runtime.isNodeEntry('/bundled/inspector.html'));
+        assert.isFalse(Root.Runtime.isNodeEntry('/inspector'));
+      });
+    });
   });
 
   it('allConfigurableExperiments returns all registered experiments', () => {
-    Root.Runtime.experiments.register('example', 'example');
-    Root.Runtime.experiments.register('configurable', 'configurable');
+    Root.Runtime.experiments.register('example', 'example' as Platform.UIString.LocalizedString);
+    Root.Runtime.experiments.register('configurable', 'configurable' as Platform.UIString.LocalizedString);
 
     const experiments = Root.Runtime.experiments.allConfigurableExperiments();
 
-    assert.deepStrictEqual(experiments.map(experiment => experiment.name), ['example', 'configurable']);
+    assert.deepEqual(experiments.map(experiment => experiment.name), ['example', 'configurable']);
   });
 });

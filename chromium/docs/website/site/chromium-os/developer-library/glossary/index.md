@@ -183,7 +183,7 @@ title: Glossary
 
 *   __buildbot__: A column in the build waterfall, or the slave (machine)
     connected to that column, or the
-    [build waterfall infrastructure](https://dev.chromium.org/developers/testing/chromium-build-infrastructure/tour-of-the-chromium-buildbot)
+    [build waterfall infrastructure](/developers/testing/chromium-build-infrastructure/tour-of-the-chromium-buildbot)
     as a whole.
 *   __clobber__: To delete your build output directory.
 *   __component build__: A shared library / DLL build, not a static library
@@ -319,8 +319,10 @@ title: Glossary
 
 ## Toolchain (compiler/debugger/linker/etc...)
 
-*   __ASan, LSan, MSan, TSan__: [AddressSanitizer](https://www.chromium.org/developers/testing/addresssanitizer), [LeakSanitizer](https://www.chromium.org/developers/testing/leaksanitizer),
-    [MemorySanitizer](https://www.chromium.org/developers/testing/memorysanitizer), and [ThreadSanitizer](https://www.chromium.org/developers/testing/threadsanitizer-tsan-v2) bug detection tools used in
+*   __ASan, LSan, MSan, TSan__: [AddressSanitizer](/developers/testing/addresssanitizer),
+    [LeakSanitizer](/developers/testing/leaksanitizer),
+    [MemorySanitizer](/developers/testing/memorysanitizer), and
+    [ThreadSanitizer](/developers/testing/threadsanitizer-tsan-v2) bug detection tools used in
     Chromium testing. ASan detects addressability issues (buffer overflow, use
     after free etc), LSan detects memory leaks, MSan detects use of
     uninitialized memory and TSan detects data races.
@@ -338,7 +340,7 @@ title: Glossary
 ## ChromiumOS
 
 *   __board__: The name of the system you're building ChromiumOS for; see the
-    [official ChromeOS device list](https://www.chromium.org/chromium-os/developer-information-for-chrome-os-devices)
+    [official ChromeOS device list](/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices)
     for examples.
 *   __build_target__: The new, preferred term for board.
 *   __model__: Model generally refers to a ChromeOS device that is unique in
@@ -353,10 +355,10 @@ title: Glossary
     deployed on a device for development and testing), signed build images
     (which support secure verified boot), and Final Shipping Images (FSI, which
     are deployed to a device during manufacturing).
-*   __manifest__: Refers to ChromeOS's [Repo](https://www.chromium.org/chromium-os/developer-library/reference/tools/repo-tool/)
+*   __manifest__: Refers to ChromeOS's [Repo](/chromium-os/developer-library/reference/tools/repo-tool/)
     manifest. A Repo manifest is an XML file or set of XML files that describes
     the Git repositories and refs that make up a ChromeOS image. See
-    [Local & Remote Source Tree Layouts](https://www.chromium.org/chromium-os/developer-library/reference/development/source-layout/).
+    [Local & Remote Source Tree Layouts](/chromium-os/developer-library/reference/development/source-layout/).
 *   __buildspec__: A manifest where every git repository is pinned to a specific
     git revision, used to represent a specific build (version) of ChromeOS.
 *   __snapshot__: A manifest where every git repository is pinned to a specific
@@ -374,7 +376,7 @@ title: Glossary
 *   __powerwash__: Wiping of the stateful partition (system & all users) to
     get a device back into a pristine state. The TPM is not cleared, and Lockbox
     is kept intact (thus it is not the same as a factory reset). See the
-    [Powerwash design doc](https://www.chromium.org/chromium-os/chromiumos-design-docs/powerwash).
+    [Powerwash design doc](/chromium-os/chromiumos-design-docs/powerwash).
 
 
 ## ChromiumOS Build

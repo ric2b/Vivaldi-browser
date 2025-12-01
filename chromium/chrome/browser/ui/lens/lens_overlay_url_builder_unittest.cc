@@ -114,6 +114,30 @@ TEST_F(LensOverlayUrlBuilderTest, AppendTranslateParamsToMap) {
   EXPECT_THAT(stickiness_signals, base::test::EqualsProto(expected_proto));
 }
 
+TEST_F(LensOverlayUrlBuilderTest, AppendStickinessSignalForFormula) {
+  std::string query = "(x + 2) / 4 = 4";
+  std::string formula = "\\frac{x + 2}{4} = 4";
+  std::map<std::string, std::string> params;
+
+  lens::AppendStickinessSignalForFormula(params, formula);
+
+  lens::StickinessSignals expected_proto;
+  expected_proto.set_id_namespace(lens::StickinessSignals::EDUCATION_INPUT);
+  expected_proto.mutable_education_input_extension()
+      ->mutable_math_solver_query()
+      ->set_math_input_equation(formula);
+
+  std::string compressed_proto;
+  ASSERT_TRUE(base::Base64UrlDecode(
+      params["stick"], base::Base64UrlDecodePolicy::DISALLOW_PADDING,
+      &compressed_proto));
+  std::string serialized_proto;
+  ASSERT_TRUE(compression::GzipUncompress(compressed_proto, &serialized_proto));
+  lens::StickinessSignals stickiness_signals;
+  ASSERT_TRUE(stickiness_signals.ParseFromString(serialized_proto));
+  EXPECT_THAT(stickiness_signals, base::test::EqualsProto(expected_proto));
+}
+
 TEST_F(LensOverlayUrlBuilderTest, BuildTextOnlySearchURL) {
   std::string text_query = "Apples";
   std::map<std::string, std::string> additional_params;
@@ -682,6 +706,23 @@ TEST_F(LensOverlayUrlBuilderTest, RemoveIgnoredSearchURLParameters) {
             GURL(expected_url));
 }
 
+TEST_F(LensOverlayUrlBuilderTest, RemoveSidePanelURLParameters) {
+  std::string text_query = "Apples";
+  std::string viewport_width = "400";
+  std::string viewport_height = "500";
+  std::string initial_url = base::StringPrintf(
+      "%s?q=%s&gsc=2&hl=%s&biw=%s&bih=%s&sec_act=1&sxsrf=token",
+      kResultsSearchBaseUrl, text_query.c_str(), kLanguage,
+      viewport_width.c_str(), viewport_height.c_str());
+  std::string expected_url =
+      base::StringPrintf("%s?q=%s&hl=%s&biw=%s&bih=%s&sec_act=1&sxsrf=token",
+                         kResultsSearchBaseUrl, text_query.c_str(), kLanguage,
+                         viewport_width.c_str(), viewport_height.c_str());
+
+  EXPECT_EQ(lens::RemoveSidePanelURLParameters(GURL(initial_url)),
+            GURL(expected_url));
+}
+
 TEST_F(LensOverlayUrlBuilderTest, GetSearchResultsUrlFromRedirectUrl) {
   std::string text_query = "Apples";
   std::string viewport_width = "400";
@@ -757,6 +798,20 @@ TEST_F(LensOverlayUrlBuilderTest, BuildTranslateLanguagesURL) {
   net::GetValueForKeyInQuery(translate_url_english_uk, kClientIdQueryParameter,
                              &client_param_value);
   EXPECT_EQ(client_param_value, "lens-overlay");
+}
+
+TEST_F(LensOverlayUrlBuilderTest, ShouldOpenSearchURLInNewTab) {
+  const GURL base_results_url = GURL(kResultsSearchBaseUrl);
+  const GURL results_url_shopping_mode =
+      GURL(std::string(kResultsSearchBaseUrl) + "?udm=28");
+  const GURL results_url_unimodal =
+      GURL(std::string(kResultsSearchBaseUrl) + "?udm=26");
+  const GURL results_url_multimodal =
+      GURL(std::string(kResultsSearchBaseUrl) + "?udm=24");
+  EXPECT_FALSE(lens::ShouldOpenSearchURLInNewTab(base_results_url));
+  EXPECT_FALSE(lens::ShouldOpenSearchURLInNewTab(results_url_unimodal));
+  EXPECT_FALSE(lens::ShouldOpenSearchURLInNewTab(results_url_multimodal));
+  EXPECT_TRUE(lens::ShouldOpenSearchURLInNewTab(results_url_shopping_mode));
 }
 
 }  // namespace lens

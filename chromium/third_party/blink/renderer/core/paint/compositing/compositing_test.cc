@@ -1008,6 +1008,17 @@ TEST_P(ScrollingContentsCullRectTest, Basics) {
     <div id="wide-non-composited-scroller" class="scroller">
       <div style="width: 10000px; height: 200px">Content</div>
     </div>
+    <div style="width: 100px; height: 100px; overflow: hidden">
+      <div id="composited-under-clip" class="scroller"
+           style="will-change: scroll-position">
+        <div style="width: 10000px; height: 100px"></div>
+      </div>
+    </div>
+    <div style="width: 100px; height: 100px; overflow: hidden">
+      <div id="non-composited-under-clip" class="scroller">
+        <div style="width: 10000px; height: 100px"></div>
+      </div>
+    </div>
   )HTML");
 
   UpdateAllLifecyclePhases();
@@ -1017,16 +1028,22 @@ TEST_P(ScrollingContentsCullRectTest, Basics) {
   EXPECT_TRUE(CcLayerByDOMElementId("long-composited-scroller"));
   EXPECT_FALSE(CcLayerByDOMElementId("narrow-non-composited-scroller"));
   EXPECT_FALSE(CcLayerByDOMElementId("wide-non-composited-scroller"));
+  EXPECT_TRUE(CcLayerByDOMElementId("composited-under-clip"));
+  EXPECT_FALSE(CcLayerByDOMElementId("non-composited-under-clip"));
 
   CheckCullRect("short-composited-scroller", std::nullopt);
   CheckCullRect("long-composited-scroller", gfx::Rect(20, 20, 200, 4200));
   CheckCullRect("narrow-non-composited-scroller", std::nullopt);
   CheckCullRect("wide-non-composited-scroller", gfx::Rect(20, 20, 4200, 200));
+  CheckCullRect("composited-under-clip", std::nullopt);
+  CheckCullRect("non-composited-under-clip", std::nullopt);
 
   GetElementById("short-composited-scroller")->scrollTo(5000, 5000);
   GetElementById("long-composited-scroller")->scrollTo(5000, 5000);
   GetElementById("narrow-non-composited-scroller")->scrollTo(5000, 5000);
   GetElementById("wide-non-composited-scroller")->scrollTo(5000, 5000);
+  GetElementById("composited-under-clip")->scrollTo(5000, 5000);
+  GetElementById("non-composited-under-clip")->scrollTo(5000, 5000);
 
   UpdateAllLifecyclePhasesExceptPaint();
   if (RuntimeEnabledFeatures::RasterInducingScrollEnabled()) {
@@ -1047,11 +1064,15 @@ TEST_P(ScrollingContentsCullRectTest, Basics) {
   EXPECT_TRUE(CcLayerByDOMElementId("long-composited-scroller"));
   EXPECT_FALSE(CcLayerByDOMElementId("narrow-non-composited-scroller"));
   EXPECT_FALSE(CcLayerByDOMElementId("wide-non-composited-scroller"));
+  EXPECT_TRUE(CcLayerByDOMElementId("composited-under-clip"));
+  EXPECT_FALSE(CcLayerByDOMElementId("non-composited-under-clip"));
 
   CheckCullRect("short-composited-scroller", std::nullopt);
   CheckCullRect("long-composited-scroller", gfx::Rect(20, 1020, 200, 8200));
   CheckCullRect("narrow-non-composited-scroller", std::nullopt);
   CheckCullRect("wide-non-composited-scroller", gfx::Rect(1020, 20, 8200, 200));
+  CheckCullRect("composited-under-clip", std::nullopt);
+  CheckCullRect("non-composited-under-clip", std::nullopt);
 }
 
 TEST_P(ScrollingContentsCullRectTest, RepaintOnlyScroll) {
@@ -1783,6 +1804,87 @@ TEST_P(CompositingSimTest, AffectedByOuterViewportBoundsDelta) {
 
     DCHECK(transform_node);
     EXPECT_FALSE(transform_node->moved_by_outer_viewport_bounds_delta_y);
+  }
+}
+
+// This test ensures that adding and removing "env(safe--area-insert-bottom)"
+// values to the 'bottom' CSS property, correctly invalidates and updates
+// transform node properties.
+TEST_P(CompositingSimTest, IsBottomRelativeToSafeAreaInsetUpdates) {
+  InitializeWithHTML(R"HTML(
+      <!DOCTYPE html>
+      <style>
+        body { height: 2000px; }
+        #fixed {
+          width: 100px;
+          height: 100px;
+          position: fixed;
+          left: 0;
+          background-color: red;
+        }
+      </style>
+      <div id='fixed'></div>
+  )HTML");
+  // env(safe-area-inset-bottom) should be 0px so that computed 'bottom'
+  // property does not itself invalidate layout, and mask other issues.
+  // The 'IsBottomRelativeToSafeAreaInset' property should by itself
+  // trigger layout invalidation and transform node update.
+  WebView().GetPage()->SetMaxSafeAreaInsets(
+      WebView().MainFrameImpl()->GetFrame(), gfx::Insets().set_bottom(0));
+
+  auto* fixed_element = GetElementById("fixed");
+  auto* fixed_element_layer = CcLayerByDOMElementId("fixed");
+
+  // A bottom fixed position DIV not using env(safe-area-inset-bottom)
+  // should be moved by viewport bounds, but not by safe area bottom in cc.
+  {
+    fixed_element->setAttribute(html_names::kStyleAttr,
+                                AtomicString("bottom: 10px"));
+    Compositor().BeginFrame();
+
+    auto transform_tree_index = fixed_element_layer->transform_tree_index();
+    const auto* transform_node =
+        GetPropertyTrees()->transform_tree().Node(transform_tree_index);
+
+    DCHECK(transform_node);
+    EXPECT_TRUE(transform_node->moved_by_outer_viewport_bounds_delta_y);
+    EXPECT_FALSE(transform_node->moved_by_safe_area_bottom);
+  }
+
+  // A bottom fixed position DIV using calc(env(safe-area-inset-bottom) +
+  // length) should be moved by viewport bounds, and by safe area bottom in cc.
+  {
+    fixed_element->setAttribute(
+        html_names::kStyleAttr,
+        AtomicString("bottom: calc(env(safe-area-inset-bottom) + 10px)"));
+    Compositor().BeginFrame();
+
+    auto transform_tree_index = fixed_element_layer->transform_tree_index();
+    const auto* transform_node =
+        GetPropertyTrees()->transform_tree().Node(transform_tree_index);
+
+    DCHECK(transform_node);
+    EXPECT_TRUE(transform_node->moved_by_outer_viewport_bounds_delta_y);
+    EXPECT_TRUE(transform_node->moved_by_safe_area_bottom);
+  }
+
+  // A bottom fixed position DIV using calc(env(safe-area-inset-bottom) *
+  // number) should be moved by viewport bounds, but not by safe area bottom in
+  // cc.
+  {
+    fixed_element->setAttribute(
+        html_names::kStyleAttr,
+        AtomicString("bottom: calc(env(safe-area-inset-bottom) * 1 + 10px)"));
+
+    Compositor().BeginFrame();
+
+    auto transform_tree_index = fixed_element_layer->transform_tree_index();
+    const auto* transform_node =
+        GetPropertyTrees()->transform_tree().Node(transform_tree_index);
+
+    DCHECK(transform_node);
+    EXPECT_TRUE(transform_node->moved_by_outer_viewport_bounds_delta_y);
+    EXPECT_FALSE(transform_node->moved_by_safe_area_bottom);
   }
 }
 

@@ -8,6 +8,7 @@
 #include <ostream>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
 
 #include "base/check.h"
@@ -50,6 +51,7 @@
 #include "chrome/browser/web_applications/web_app_install_utils.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
+#include "chrome/browser/web_applications/web_app_screenshot_fetcher.h"
 #include "chrome/browser/web_applications/web_app_tab_helper.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/security_interstitials/content/security_interstitial_tab_helper.h"
@@ -87,6 +89,7 @@ namespace web_app {
 namespace {
 
 void AutoAcceptDialogCallback(
+    base::WeakPtr<WebAppScreenshotFetcher>,
     content::WebContents* initiator_web_contents,
     std::unique_ptr<WebAppInstallInfo> web_app_info,
     WebAppInstallationAcceptanceCallback acceptance_callback) {
@@ -385,8 +388,9 @@ void NavigateViaLinkClickToURLAndWait(Browser* browser,
     observer.WaitForNavigationFinished();
   }
 
-  if (!proceed_through_interstitial)
+  if (!proceed_through_interstitial) {
     return;
+  }
 
   {
     // Need a second TestNavigationObserver; the above one is spent.
@@ -431,11 +435,13 @@ AppMenuCommandState GetAppMenuCommandState(int command_id, Browser* browser) {
 
 Browser* FindWebAppBrowser(Profile* profile, const webapps::AppId& app_id) {
   for (Browser* browser : *BrowserList::GetInstance()) {
-    if (browser->profile() != profile)
+    if (browser->profile() != profile) {
       continue;
+    }
 
-    if (AppBrowserController::IsForWebApp(browser, app_id))
+    if (AppBrowserController::IsForWebApp(browser, app_id)) {
       return browser;
+    }
   }
 
   return nullptr;
@@ -452,8 +458,9 @@ bool IsBrowserOpen(const Browser* test_browser) {
     if (browser->IsAttemptingToCloseBrowser() || browser->IsBrowserClosing()) {
       continue;
     }
-    if (browser == test_browser)
+    if (browser == test_browser) {
       return true;
+    }
   }
   return false;
 }
@@ -489,20 +496,23 @@ Browser* BrowserWaiter::AwaitAdded(const base::Location& location) {
 }
 
 Browser* BrowserWaiter::AwaitRemoved(const base::Location& location) {
-  if (!removed_browser_)
+  if (!removed_browser_) {
     removed_run_loop_.Run(location);
+  }
   return removed_browser_;
 }
 
 void BrowserWaiter::OnBrowserAdded(Browser* browser) {
-  if (filter_ && browser != filter_)
+  if (filter_ && browser != filter_) {
     return;
+  }
   added_browser_ = browser;
   added_run_loop_.Quit();
 }
 void BrowserWaiter::OnBrowserRemoved(Browser* browser) {
-  if (filter_ && browser != filter_)
+  if (filter_ && browser != filter_) {
     return;
+  }
   removed_browser_ = browser;
   removed_run_loop_.Quit();
 }
@@ -577,28 +587,42 @@ void SimulateClickOnElement(content::WebContents* contents,
   content::SimulateMouseClickAt(contents, modifiers, button, element_center);
 }
 
-void CompletePageLoadForAllWebContents() {
-  auto get_first_loading_web_contents = []() -> content::WebContents* {
+void RunForAllTabs(
+    base::RepeatingCallback<void(content::WebContents&)> action) {
+  std::unordered_set<content::WebContents*> processed_tabs;
+  auto get_next_unprocessed_tab = [&processed_tabs]() -> content::WebContents* {
     for (Browser* browser : *BrowserList::GetInstance()) {
+      if (browser->is_delete_scheduled()) {
+        continue;
+      }
       for (int i = 0; i < browser->tab_strip_model()->GetTabCount(); i++) {
         content::WebContents* web_contents =
             browser->tab_strip_model()->GetWebContentsAt(i);
-        if (!web_contents->IsDocumentOnLoadCompletedInPrimaryMainFrame()) {
-          return web_contents;
+        if (web_contents->IsBeingDestroyed()) {
+          continue;
         }
+        if (processed_tabs.contains(web_contents)) {
+          continue;
+        }
+        processed_tabs.insert(web_contents);
+        return web_contents;
       }
     }
     return nullptr;
   };
 
-  // In some circumstances, this loop could hang forever (if pages never
-  // complete loading, or if they cause reloads, etc). However, these
-  // tests only use static test pages that don't do that, so this should
-  // be safe.
-  while (content::WebContents* loading_web_contents =
-             get_first_loading_web_contents()) {
-    WebContentsLoadOrDestroyedWaiter(loading_web_contents).Wait();
+  while (content::WebContents* current_web_contents =
+             get_next_unprocessed_tab()) {
+    action.Run(*current_web_contents);
   }
+}
+
+void CompletePageLoadForAllWebContents() {
+  RunForAllTabs(base::BindRepeating([](content::WebContents& web_contents) {
+    if (!web_contents.IsDocumentOnLoadCompletedInPrimaryMainFrame()) {
+      WebContentsLoadOrDestroyedWaiter(&web_contents).Wait();
+    }
+  }));
 }
 
 }  // namespace test

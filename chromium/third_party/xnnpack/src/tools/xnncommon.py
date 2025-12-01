@@ -22,13 +22,14 @@ def _remove_duplicate_newlines(text):
     last_newline = is_newline
   return "\n".join(filtered_lines)
 
-_XNNPACK_SRC = "src"
+_XNNPACK_SRC = ""
 
 _ARCH_TO_MACRO_MAP = {
   "aarch32": "XNN_ARCH_ARM",
   "aarch64": "XNN_ARCH_ARM64",
   "x86-32": "XNN_ARCH_X86",
   "x86-64": "XNN_ARCH_X86_64",
+  "amd64": "XNN_ARCH_X86_64",
   "hexagon": "XNN_ARCH_HEXAGON",
   "riscv": "XNN_ARCH_RISCV",
   "wasm": "XNN_ARCH_WASM",

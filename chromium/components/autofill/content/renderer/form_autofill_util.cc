@@ -32,11 +32,11 @@
 #include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "components/autofill/content/renderer/synchronous_form_cache.h"
 #include "components/autofill/content/renderer/timing.h"
 #include "components/autofill/core/common/autocomplete_parsing_util.h"
 #include "components/autofill/core/common/autofill_constants.h"
@@ -51,7 +51,6 @@
 #include "content/public/renderer/render_frame.h"
 #include "third_party/blink/public/platform/url_conversion.h"
 #include "third_party/blink/public/platform/web_string.h"
-#include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/web_autofill_state.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_element.h"
@@ -82,7 +81,6 @@ using blink::WebNode;
 using blink::WebOptionElement;
 using blink::WebSelectElement;
 using blink::WebString;
-using blink::WebVector;
 
 namespace autofill::form_util {
 
@@ -447,8 +445,7 @@ std::u16string FindChildTextWithIgnoreList(
 
 struct InferredLabel {
   // Returns an `InferredLabel` if `label` contains at least one character that
-  // is neither whitespace nor "*:-–()" (or "*:" if
-  // kAutofillConsiderPhoneNumberSeparatorsValidLabels is enabled).
+  // is neither whitespace nor "+*:-–()".
   static std::optional<InferredLabel> BuildIfValid(
       std::u16string label,
       FormFieldData::LabelSource source);
@@ -543,7 +540,7 @@ bool AttributeHasButtonFeature(const WebString& attribute) {
   if (attribute.IsNull())
     return false;
   std::string value = attribute.Utf8();
-  base::ranges::transform(value, value.begin(), ::tolower);
+  std::ranges::transform(value, value.begin(), ::tolower);
   for (const char* const button_feature : kButtonFeatures) {
     if (value.find(button_feature, 0) != std::string::npos)
       return true;
@@ -1042,7 +1039,7 @@ std::optional<InferredLabel> InferLabelFromDefaultSelectText(
   }
   CHECK(IsSelectElement(element));
   std::vector<WebElement> options =
-      element.To<WebSelectElement>().GetListItems().ReleaseVector();
+      element.To<WebSelectElement>().GetListItems();
   // `options` can contain other elements like <optgroup>.
   std::erase_if(options, [](const WebElement& e) {
     return !e.DynamicTo<WebOptionElement>();
@@ -1079,8 +1076,11 @@ std::optional<InferredLabel> InferLabelForElement(
   if (auto r = InferLabelFromPrevious(element)) {
     return r;
   }
-  if (auto r = InferLabelFromPlaceholder(element)) {
-    return r;
+  if (!base::FeatureList::IsEnabled(
+          features::kAutofillBetterLocalHeuristicPlaceholderSupport)) {
+    if (auto r = InferLabelFromPlaceholder(element)) {
+      return r;
+    }
   }
   if (auto r = InferLabelFromOverlayingSuccessor(element)) {
     return r;
@@ -1399,15 +1399,15 @@ FormFieldData* SearchForFormControlByName(
     return nullptr;
 
   auto get_field_name = [](const auto& p) { return p.first->name(); };
-  auto it = base::ranges::find(fields, field_name, get_field_name);
+  auto it = std::ranges::find(fields, field_name, get_field_name);
   auto end = fields.end();
   if (it == end ||
-      base::ranges::find(it + 1, end, field_name, get_field_name) != end) {
+      std::ranges::find(it + 1, end, field_name, get_field_name) != end) {
     auto ShadowHostHasTargetName = [&](const auto& p) {
       return base::Contains(p.second.shadow_host_name_attributes, field_name) ||
              base::Contains(p.second.shadow_host_id_attributes, field_name);
     };
-    it = base::ranges::find_if(fields, ShadowHostHasTargetName);
+    it = std::ranges::find_if(fields, ShadowHostHasTargetName);
     if (it != end) {
       label_source =
           base::Contains(it->second.shadow_host_name_attributes, field_name)
@@ -1763,7 +1763,7 @@ uint64_t GetMaxLength(const WebFormControlElement& element) {
 // For more details, see the documentation of `SelectOption`.
 std::vector<SelectOption> GetSelectOptions(
     const WebSelectElement& select_element) {
-  WebVector<WebElement> option_elements = select_element.GetListItems();
+  std::vector<WebElement> option_elements = select_element.GetListItems();
 
   // Constrain the maximum list length to prevent a malicious site from DOS'ing
   // the browser, without entirely breaking autocomplete for some extreme
@@ -1809,7 +1809,7 @@ std::vector<SelectOption> GetDataListOptions(const WebInputElement& element) {
   auto to_string = [](WebString s) {
     return s.Utf16().substr(0, kMaxStringLength);
   };
-  WebVector<WebOptionElement> option_elements =
+  std::vector<WebOptionElement> option_elements =
       element.FilteredDataListOptions();
   std::vector<SelectOption> options;
   options.reserve(std::min(option_elements.size(), kMaxListSize));
@@ -1847,11 +1847,9 @@ std::vector<WebFormControlElement> GetOwnedFormControls(
     const WebFormElement& form_element) {
   std::vector<WebFormControlElement> form_controls;
   if (form_element) {
-    form_controls =
-        form_element.GetFormControlElements().ReleaseVector();  // nocheck
+    form_controls = form_element.GetFormControlElements();  // nocheck
   } else {
-    form_controls =
-        document.UnassociatedFormControls().ReleaseVector();  // nocheck
+    form_controls = document.UnassociatedFormControls();  // nocheck
     // A form control element may be unassociated inside its Shadow DOM, but
     // owned (in the Autofill sense) by a <form> containing the shadow host.
     std::erase_if(form_controls, [](const WebFormControlElement& e) {
@@ -1983,7 +1981,9 @@ void WebFormControlElementToFormField(
   if (auto input_element = element.DynamicTo<WebInputElement>()) {
     SetCheckStatus(field, IsCheckableElement(input_element),
                    input_element.IsChecked());
-    if (extract_options.contains(ExtractOption::kDatalist)) {
+    if (extract_options.contains(ExtractOption::kDatalist) ||
+        base::FeatureList::IsEnabled(
+            features::kAutofillOptimizeFormExtraction)) {
       field->set_datalist_options(GetDataListOptions(input_element));
     }
   } else if (IsTextAreaElement(element)) {
@@ -1993,7 +1993,8 @@ void WebFormControlElementToFormField(
     DCHECK(IsSelectElement(element));
     field->set_options(GetSelectOptions(element.To<WebSelectElement>()));
   }
-  if (extract_options.contains(ExtractOption::kBounds)) {
+  if (extract_options.contains(ExtractOption::kBounds) ||
+      base::FeatureList::IsEnabled(features::kAutofillOptimizeFormExtraction)) {
     if (auto* local_frame = element.GetDocument().GetFrame()) {
       if (auto* render_frame =
               content::RenderFrame::FromWebFrame(local_frame)) {
@@ -2042,8 +2043,26 @@ std::optional<FormData> ExtractFormDataWithFieldsAndFrames(
 
   std::vector<WebFormControlElement> control_elements =
       GetOwnedAutofillableFormControls(document, form_element);
+  if (base::FeatureList::IsEnabled(features::kAutofillOptimizeFormExtraction) &&
+      control_elements.size() > kMaxExtractableFields) {
+    return std::nullopt;
+  }
   std::vector<WebElement> iframe_elements =
       GetIframeElements(document, form_element);
+
+  if (base::FeatureList::IsEnabled(features::kAutofillOptimizeFormExtraction)) {
+    std::erase_if(iframe_elements, [](const WebElement& iframe_element) {
+      WebFrame* iframe = WebFrame::FromFrameOwnerElement(iframe_element);
+      return !iframe ||
+             (!iframe->IsWebLocalFrame() && !iframe->IsWebRemoteFrame());
+    });
+    if (iframe_elements.size() > kMaxExtractableChildFrames) {
+      iframe_elements.clear();
+    }
+    if (control_elements.empty() && iframe_elements.empty()) {
+      return std::nullopt;
+    }
+  }
 
   // Extracts fields from `control_elements` into `fields` and sets
   // `child_frames[i].predecessor` to the field index of the last field that
@@ -2113,25 +2132,31 @@ std::optional<FormData> ExtractFormDataWithFieldsAndFrames(
     } else if (iframe && iframe->IsWebRemoteFrame()) {
       child_frames[i].token = RemoteFrameToken(
           iframe->ToWebRemoteFrame()->GetRemoteFrameToken().value());
+    } else if (base::FeatureList::IsEnabled(
+                   features::kAutofillOptimizeFormExtraction)) {
+      NOTREACHED();
     }
   }
-  std::erase_if(child_frames, [](const auto& child_frame) {
-    return absl::visit([](const auto& token) { return token.is_empty(); },
-                       child_frame.token);
-  });
-  if (child_frames.size() > kMaxExtractableChildFrames) {
-    child_frames.clear();
-  }
-  const bool success = (!fields.empty() || !child_frames.empty()) &&
-                       fields.size() < kMaxExtractableFields;
-  if (!success) {
-    return std::nullopt;
+  if (!base::FeatureList::IsEnabled(
+          features::kAutofillOptimizeFormExtraction)) {
+    std::erase_if(child_frames, [](const auto& child_frame) {
+      return absl::visit([](const auto& token) { return token.is_empty(); },
+                         child_frame.token);
+    });
+    if (child_frames.size() > kMaxExtractableChildFrames) {
+      child_frames.clear();
+    }
+    const bool success = (!fields.empty() || !child_frames.empty()) &&
+                         fields.size() <= kMaxExtractableFields;
+    if (!success) {
+      return std::nullopt;
+    }
   }
 
-  base::UmaHistogramCounts100(!form_element
-                                  ? "Autofill.ExtractFormUnowned.FieldCount"
-                                  : "Autofill.ExtractFormOwned.FieldCount",
-                              fields.size());
+  base::UmaHistogramCounts1000(!form_element
+                                   ? "Autofill.ExtractFormUnowned.FieldCount2"
+                                   : "Autofill.ExtractFormOwned.FieldCount2",
+                               fields.size());
   FormData form;
   if (!form_element) {
     DCHECK(form.renderer_id().is_null());
@@ -2173,10 +2198,7 @@ std::optional<InferredLabel> InferredLabel::BuildIfValid(std::u16string label,
                                                          LabelSource source) {
   // List of characters a label can't be entirely made of (this list can grow).
   const std::u16string_view invalid_chars =
-      base::FeatureList::IsEnabled(
-          features::kAutofillConsiderPhoneNumberSeparatorsValidLabels)
-          ? u"*:"
-          : u"*:-\u2013()";  // U+2013 is the En Dash "–".
+      u"+*:-\u2013()";  // U+2013 is the En Dash "–".
   auto is_valid_label_character = [&invalid_chars](char16_t c) {
     return !base::Contains(invalid_chars, c) &&
            !base::Contains(std::u16string_view(base::kWhitespaceUTF16), c);
@@ -2354,36 +2376,13 @@ std::vector<WebFormControlElement> GetOwnedAutofillableFormControls(
   return elements;
 }
 
-WebFormElement GetOwningForm(const WebFormControlElement& form_control) {
-  CHECK(form_control);
-  // The owning form is the furthest ancestor form element, if there is one.
-  WebFormElement owner;
-  // Look for ancestors of the associated form of `form_control` inside the
-  // same tree.
-  for (WebNode same_dom_ancestor = form_control.Form();  // nocheck
-       same_dom_ancestor; same_dom_ancestor = same_dom_ancestor.ParentNode()) {
-    if (auto form = same_dom_ancestor.DynamicTo<WebFormElement>()) {
-      owner = form;
-    }
-  }
-
-  // If `form_control` is inside Shadow DOM, also consider ancestors of
-  // `form_control`.
-  for (WebNode ancestor = form_control.OwnerShadowHost(); ancestor;
-       ancestor = ancestor.ParentOrShadowHostNode()) {
-    if (auto form = ancestor.DynamicTo<WebFormElement>()) {
-      owner = form;
-    }
-  }
-  return owner;
-}
-
 std::optional<std::pair<FormData, raw_ref<const FormFieldData>>>
 FindFormAndFieldForFormControlElement(
     const WebFormControlElement& element,
     const FieldDataManager& field_data_manager,
     const CallTimerState& timer_state,
-    DenseSet<ExtractOption> extract_options) {
+    DenseSet<ExtractOption> extract_options,
+    const SynchronousFormCache& form_cache) {
   DCHECK(element);
 
   if (!element.IsConnected() || !IsAutofillableElement(element)) {
@@ -2391,8 +2390,8 @@ FindFormAndFieldForFormControlElement(
   }
 
   WebDocument document = element.GetDocument();
-  WebFormElement owning_form = GetOwningForm(element);
-  std::optional<FormData> form = ExtractFormData(
+  WebFormElement owning_form = element.GetOwningFormForAutofill();
+  std::optional<FormData> form = form_cache.GetOrExtractForm(
       document, owning_form, field_data_manager, timer_state, extract_options);
   const bool extract_form_data_succeeded = form.has_value();
 
@@ -2407,18 +2406,21 @@ FindFormAndFieldForFormControlElement(
     form->set_fields({std::move(field)});
   }
 
-  if (auto it = base::ranges::find(form->fields(), GetFieldRendererId(element),
-                                   &FormFieldData::renderer_id);
+  if (auto it = std::ranges::find(form->fields(), GetFieldRendererId(element),
+                                  &FormFieldData::renderer_id);
       it != form->fields().end()) {
     return std::make_optional(std::make_pair(std::move(*form), raw_ref(*it)));
   }
 
   // This is not reachable if the following holds:
-  // `base::Contains(GetOwnedFormControls(GetOwningForm(element)), element)`.
-  // This does not hold if `element` is an unowned element in a shadow DOM and
-  // kAutofillIncludeShadowDomInUnassociatedListedElements is disabled. Then
-  // `GetOwningForm(element)` returns the unowned form, but
-  // `GetOwnedFormControls()` does not include the field.
+  // ```
+  // base::Contains(GetOwnedFormControls(element.GetOwningFormForAutofill()),
+  //                element)
+  // ```
+  // This does not hold if `element` is an unowned element in a
+  // shadow DOM and kAutofillIncludeShadowDomInUnassociatedListedElements is
+  // disabled. Then `element.GetOwningFormForAutofill()` returns the unowned
+  // form, but `GetOwnedFormControls()` does not include the field.
   // See crbug.com/347059988 for more details.
   GURL url;
   if (WebDocument doc = element.GetDocument()) {
@@ -2480,7 +2482,7 @@ FindFormAndFieldForFormControlElement(
   SCOPED_CRASH_KEYS_FOR_FORM(owng, owning_form);
 #undef FORM_CRASH_KEYS
   // clang-format on
-  NOTREACHED(base::NotFatalUntil::M134);
+  NOTREACHED(base::NotFatalUntil::M137);
   return std::nullopt;
 }
 
@@ -2760,12 +2762,12 @@ void TraverseDomForFourDigitCombinations(
   std::vector<WebFormControlElement> form_control_elements;
 
   for (const WebFormElement& form : document.GetTopLevelForms()) {
-    base::ranges::move(GetOwnedFormControls(document, form),
-                       std::back_inserter(form_control_elements));
+    std::ranges::move(GetOwnedFormControls(document, form),
+                      std::back_inserter(form_control_elements));
   }
 
-  base::ranges::move(GetOwnedFormControls(document, WebFormElement()),
-                     std::back_inserter(form_control_elements));
+  std::ranges::move(GetOwnedFormControls(document, WebFormElement()),
+                    std::back_inserter(form_control_elements));
 
   auto extract_four_digit_combinations = [&](WebNode node) {
     if (!node.IsTextNode()) {
@@ -2840,8 +2842,99 @@ void TraverseDomForFourDigitCombinations(
     }
   }
 
-  std::move(potential_matches)
-      .Run(std::vector<std::string>(matches.begin(), matches.end()));
+  std::move(potential_matches).Run(std::move(matches).extract());
+}
+
+std::string ExtractFinalCheckoutAmountFromDom(
+    const blink::WebDocument& document,
+    std::string_view price_regex,
+    std::string_view label_regex,
+    size_t number_of_ancestor_levels_to_search) {
+  std::vector<WebNode> price_nodes =
+      document.FindAllTextNodesMatchingRegex(WebString::FromUTF8(price_regex));
+
+  if (price_nodes.empty()) {
+    return "";
+  }
+
+  std::vector<WebNode> label_nodes =
+      document.FindAllTextNodesMatchingRegex(WebString::FromUTF8(label_regex));
+
+  if (label_nodes.empty()) {
+    return "";
+  }
+
+  // Used later to check efficiently if a given ancestor contains a label node
+  // in its subtree.
+  std::set<WebNode> all_ancestors_of_label_nodes;
+  for (WebNode& label_node : label_nodes) {
+    WebNode parent = label_node.ParentNode();
+    while (parent && all_ancestors_of_label_nodes.insert(parent).second) {
+      parent = parent.ParentNode();
+    }
+  }
+
+  // Used later to efficiently check if a given ancestor contains more than 1
+  // price node under it.
+  std::map<WebNode, size_t> count_of_price_nodes_under_ancestors;
+
+  // Pairs of price nodes to their current ancestor to be checked. These pairs
+  // will be used during the search, and the second value in each pair will
+  // be updated to its parent if the search on the current ancestor does not
+  // return a final-checkout-amount.
+  std::vector<std::pair<WebNode, WebNode>> price_to_current_ancestor;
+  price_to_current_ancestor.reserve(price_nodes.size());
+
+  // Build both `count_of_price_nodes_under_ancestors` and
+  // `price_to_current_ancestor`.
+  for (WebNode& price_node : price_nodes) {
+    WebNode parent = price_node.ParentNode();
+
+    // Set the initial parent as the parent to be searched.
+    price_to_current_ancestor.emplace_back(price_node, parent);
+    while (parent) {
+      ++count_of_price_nodes_under_ancestors[parent];
+
+      parent = parent.ParentNode();
+    }
+  }
+
+  // Now that `price_to_current_ancestor` is fully built, start
+  // doing the checks on ancestors to find label nodes.
+  for (size_t current_ancestor_level = 0;
+       current_ancestor_level < number_of_ancestor_levels_to_search;
+       ++current_ancestor_level) {
+    for (auto& [price_node, current_ancestor] : price_to_current_ancestor) {
+      if (!current_ancestor) {
+        // Stop searching ancestors of this price node since there are no more
+        // ancestors to check. This can occur if the current price node is very
+        // close to the root of the DOM. The mechanism for the stoppage is the
+        // `current_ancestor` for this `price_node` does not get updated, so on
+        // every future level this `price_node` will just continue instead of
+        // checking a new level's ancestor.
+        continue;
+      }
+
+      if (count_of_price_nodes_under_ancestors[current_ancestor] > 1) {
+        // Stop searching ancestors of this checkout amount node since more than
+        // 1 price node was found under this node, `current_ancestor`.
+        current_ancestor.Reset();
+        continue;
+      }
+
+      if (all_ancestors_of_label_nodes.contains(current_ancestor)) {
+        // An ancestor was found that contains a label node in its
+        // subtree, and has only one price node under it. Thus this price node
+        // is the final-checkout-amount node. Return its value.
+        return price_node.NodeValue().Utf8();
+      }
+
+      current_ancestor = current_ancestor.ParentNode();
+    }
+  }
+
+  // Notify the caller that no final-checkout-amount was found.
+  return "";
 }
 
 void MaybeUpdateUserInput(FormFieldData& field,

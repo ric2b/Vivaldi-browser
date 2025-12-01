@@ -440,11 +440,6 @@ class ParsedSearchEngines::PrepopulatedEngineStorage {
                                         : nullptr,
          .image_url_post_params =
              image_url_post_params_ ? image_url_post_params_->c_str() : nullptr,
-         .side_search_param =
-             side_search_param_ ? side_search_param_->c_str() : nullptr,
-         .side_image_search_param = side_image_search_param_
-                                        ? side_image_search_param_->c_str()
-                                        : nullptr,
          .image_translate_source_language_param_key =
              image_translate_source_language_param_key_
                  ? image_translate_source_language_param_key_->c_str()

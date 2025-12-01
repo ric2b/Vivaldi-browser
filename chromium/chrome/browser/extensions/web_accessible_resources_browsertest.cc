@@ -6,11 +6,10 @@
 #include "base/strings/stringprintf.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
-#include "chrome/browser/extensions/extension_browsertest.h"
+#include "build/build_config.h"
+#include "chrome/browser/extensions/extension_platform_browsertest.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/browser.h"
-#include "chrome/test/base/ui_test_utils.h"
 #include "components/version_info/channel.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
@@ -18,11 +17,18 @@
 #include "content/public/test/test_navigation_observer.h"
 #include "extensions/browser/background_script_executor.h"
 #include "extensions/common/constants.h"
+#include "extensions/common/extension.h"
 #include "extensions/common/extension_features.h"
+#include "extensions/common/features/feature_channel.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "extensions/test/test_extension_dir.h"
 #include "net/dns/mock_host_resolver.h"
 #include "testing/gmock/include/gmock/gmock.h"
+
+#if !BUILDFLAG(IS_ANDROID)
+#include "chrome/browser/ui/browser.h"
+#include "chrome/test/base/ui_test_utils.h"
+#endif
 
 namespace extensions {
 namespace {
@@ -73,7 +79,7 @@ static constexpr char kFetchResourceScriptTemplate[] = R"(
 )";
 
 // Exercise web accessible resources with experimental extension features.
-class WebAccessibleResourcesBrowserTest : public ExtensionBrowserTest {
+class WebAccessibleResourcesBrowserTest : public ExtensionPlatformBrowserTest {
  public:
   explicit WebAccessibleResourcesBrowserTest(bool enable_feature = true) {
     feature_list_.InitWithFeatureState(
@@ -81,7 +87,7 @@ class WebAccessibleResourcesBrowserTest : public ExtensionBrowserTest {
   }
 
   void SetUpOnMainThread() override {
-    ExtensionBrowserTest::SetUpOnMainThread();
+    ExtensionPlatformBrowserTest::SetUpOnMainThread();
     host_resolver()->AddRule("*", "127.0.0.1");
     EXPECT_TRUE(embedded_test_server()->Start());
   }
@@ -89,14 +95,6 @@ class WebAccessibleResourcesBrowserTest : public ExtensionBrowserTest {
  private:
   base::test::ScopedFeatureList feature_list_;
   ScopedCurrentChannel current_channel_{version_info::Channel::CANARY};
-};
-
-// Exercise web accessible resources without experimental extension features.
-class WebAccessibleResourcesNonGuidBrowserTest
-    : public WebAccessibleResourcesBrowserTest {
- public:
-  WebAccessibleResourcesNonGuidBrowserTest()
-      : WebAccessibleResourcesBrowserTest(false) {}
 };
 
 // If `use_dynamic_url` is set to true in manifest.json, then the associated web
@@ -114,8 +112,8 @@ IN_PROC_BROWSER_TEST_F(WebAccessibleResourcesBrowserTest,
   // Navigate to a test page and get the web contents.
   base::FilePath test_page;
   GURL gurl = embedded_test_server()->GetURL("example.com", "/simple.html");
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), gurl));
-  auto* web_contents = browser()->tab_strip_model()->GetActiveWebContents();
+  auto* web_contents = GetActiveWebContents();
+  ASSERT_TRUE(content::NavigateToURL(web_contents, gurl));
 
   std::string script =
       base::StringPrintf(kFetchResourceScriptTemplate,
@@ -146,9 +144,8 @@ IN_PROC_BROWSER_TEST_F(WebAccessibleResourcesBrowserTest,
     // Navigate the main frame with a browser initiated navigation to a blank
     // web page. This should succeed.
     const GURL gurl = embedded_test_server()->GetURL("/iframe_blank.html");
-    EXPECT_TRUE(ui_test_utils::NavigateToURL(browser(), gurl));
-    content::WebContents* web_contents =
-        browser()->tab_strip_model()->GetActiveWebContents();
+    content::WebContents* web_contents = GetActiveWebContents();
+    EXPECT_TRUE(content::NavigateToURL(web_contents, gurl));
     content::RenderFrameHost* main_frame = web_contents->GetPrimaryMainFrame();
     content::RenderFrameHost* iframe = content::ChildFrameAt(main_frame, 0);
     EXPECT_TRUE(iframe);
@@ -265,13 +262,12 @@ IN_PROC_BROWSER_TEST_F(
       {untrusted_site, static_inaccessible_url, invalid_extension_url, nullptr},
   };
 
-  content::WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
+  content::WebContents* web_contents = GetActiveWebContents();
   for (const auto& test_case : test_cases) {
     SCOPED_TRACE(testing::Message() << "Site URL: " << test_case.site_url
                                     << "Target URL: " << test_case.target_url
                                     << "Final URL: " << test_case.final_url);
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), test_case.site_url));
+    ASSERT_TRUE(content::NavigateToURL(web_contents, test_case.site_url));
     EXPECT_EQ(test_case.site_url, web_contents->GetLastCommittedURL());
 
     ASSERT_TRUE(content::ExecJs(
@@ -300,9 +296,12 @@ INSTANTIATE_TEST_SUITE_P(All,
                          ParameterizedWebAccessibleResourcesBrowserTest,
                          testing::Bool());
 
+#if !BUILDFLAG(IS_ANDROID)
 // DNR, WAR, and use_dynamic_url with the extension feature. DNR does not
 // currently succeed when redirecting to a resource using use_dynamic_url with
 // query parameters.
+// TODO(crbug.com/383366125): Port to desktop Android once chrome.runtime is
+// fully ported. Right now the ExtensionTestMessageListener times out.
 IN_PROC_BROWSER_TEST_P(ParameterizedWebAccessibleResourcesBrowserTest,
                        DeclarativeNetRequest) {
   ExtensionTestMessageListener listener("ready");
@@ -352,6 +351,15 @@ IN_PROC_BROWSER_TEST_P(ParameterizedWebAccessibleResourcesBrowserTest,
     EXPECT_TRUE(navigation_observer.last_navigation_succeeded());
   }
 }
+#endif  // !BUILDFLAG(IS_ANDROID)
+
+// Exercise web accessible resources without experimental extension features.
+class WebAccessibleResourcesNonGuidBrowserTest
+    : public WebAccessibleResourcesBrowserTest {
+ public:
+  WebAccessibleResourcesNonGuidBrowserTest()
+      : WebAccessibleResourcesBrowserTest(false) {}
+};
 
 // If `use_dynamic_url` is set to true in manifest.json, then the associated web
 // accessible resource(s) can only be loaded using the dynamic url if using the
@@ -369,8 +377,8 @@ IN_PROC_BROWSER_TEST_F(WebAccessibleResourcesNonGuidBrowserTest,
   // Navigate to a test page and get the web contents.
   base::FilePath test_page;
   GURL gurl = embedded_test_server()->GetURL("example.com", "/simple.html");
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), gurl));
-  auto* web_contents = browser()->tab_strip_model()->GetActiveWebContents();
+  auto* web_contents = GetActiveWebContents();
+  ASSERT_TRUE(content::NavigateToURL(web_contents, gurl));
 
   std::string script =
       base::StringPrintf(kFetchResourceScriptTemplate,
@@ -397,11 +405,10 @@ IN_PROC_BROWSER_TEST_P(ParameterizedWebAccessibleResourcesBrowserTest,
   ASSERT_TRUE(listener.WaitUntilSatisfied());
 
   // Navigate to a non extension page.
-  content::WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
+  content::WebContents* web_contents = GetActiveWebContents();
   GURL gurl = embedded_test_server()->GetURL("example.com", "/empty.html");
   content::TestNavigationObserver navigation_observer(web_contents);
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), gurl));
+  ASSERT_TRUE(content::NavigateToURL(web_contents, gurl));
   ASSERT_TRUE(navigation_observer.last_navigation_succeeded());
   EXPECT_EQ(gurl, web_contents->GetLastCommittedURL());
   EXPECT_EQ(net::Error::OK, navigation_observer.last_net_error_code());
@@ -419,12 +426,11 @@ IN_PROC_BROWSER_TEST_P(ParameterizedWebAccessibleResourcesBrowserTest,
   ASSERT_TRUE(listener.WaitUntilSatisfied());
 
   // Navigate to a non extension page.
-  content::WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
+  content::WebContents* web_contents = GetActiveWebContents();
   GURL gurl = embedded_test_server()->GetURL(
       "example.com", "/extensions/api_test/webrequest/script/index.html");
   content::TestNavigationObserver navigation_observer(web_contents);
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), gurl));
+  ASSERT_TRUE(content::NavigateToURL(web_contents, gurl));
   ASSERT_TRUE(navigation_observer.last_navigation_succeeded());
   EXPECT_EQ(gurl, web_contents->GetLastCommittedURL());
   EXPECT_EQ(net::Error::OK, navigation_observer.last_net_error_code());
@@ -439,12 +445,11 @@ IN_PROC_BROWSER_TEST_P(ParameterizedWebAccessibleResourcesBrowserTest,
   ASSERT_TRUE(extension);
 
   // Navigate to a non extension page.
-  content::WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
+  content::WebContents* web_contents = GetActiveWebContents();
   GURL gurl =
       embedded_test_server()->GetURL("example.com", "/simple_with_script.html");
   content::TestNavigationObserver navigation_observer(web_contents);
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), gurl));
+  ASSERT_TRUE(content::NavigateToURL(web_contents, gurl));
   ASSERT_TRUE(navigation_observer.last_navigation_succeeded());
   EXPECT_EQ(gurl, web_contents->GetLastCommittedURL());
   EXPECT_EQ(net::Error::OK, navigation_observer.last_net_error_code());
@@ -452,6 +457,9 @@ IN_PROC_BROWSER_TEST_P(ParameterizedWebAccessibleResourcesBrowserTest,
   EXPECT_EQ("dnr redirect success", result.ExtractString());
 }
 
+#if !BUILDFLAG(IS_ANDROID)
+// TODO(crbug.com/390687767): Port to desktop Android. Currently the redirect
+// doesn't happen.
 class WebAccessibleResourcesBrowserRedirectTest
     : public WebAccessibleResourcesBrowserTest {
  protected:
@@ -490,36 +498,41 @@ class WebAccessibleResourcesBrowserRedirectTest
     server_redirect(net::OK, "web_accessible_resource.html", true);
     server_redirect(net::OK, "resource.html", false);
   }
+
+  void TestBrowserRedirectMV2() {
+    TestBrowserRedirect(
+        R"({
+          "name": "Test browser redirect",
+          "version": "0.1",
+          "manifest_version": 2,
+          "web_accessible_resources": ["web_accessible_resource.html"]
+        })",
+        "Extensions.WAR.XOriginWebAccessible.MV2");
+  }
+
+  void TestBrowserRedirectMV3() {
+    TestBrowserRedirect(
+        R"({
+          "name": "Redirect Test",
+          "version": "0.1",
+          "manifest_version": 3,
+          "web_accessible_resources": [
+            {
+              "resources": ["web_accessible_resource.html"],
+              "matches": ["http://example.com/*"]
+            }
+          ]
+        })",
+        "Extensions.WAR.XOriginWebAccessible.MV3");
+  }
 };
 
 // Test server redirect to a web accessible or extension resource.
-IN_PROC_BROWSER_TEST_F(WebAccessibleResourcesBrowserRedirectTest, MV2) {
-  TestBrowserRedirect(
-      R"({
-      "name": "Test browser redirect",
-      "version": "0.1",
-      "manifest_version": 2,
-      "web_accessible_resources": ["web_accessible_resource.html"]
-    })",
-      "Extensions.WAR.XOriginWebAccessible.MV2");
+IN_PROC_BROWSER_TEST_F(WebAccessibleResourcesBrowserRedirectTest, Manifests) {
+  TestBrowserRedirectMV2();
+  TestBrowserRedirectMV3();
 }
-
-// Test server redirect to a web accessible or extension resource.
-IN_PROC_BROWSER_TEST_F(WebAccessibleResourcesBrowserRedirectTest, MV3) {
-  TestBrowserRedirect(
-      R"({
-      "name": "Redirect Test",
-      "version": "0.1",
-      "manifest_version": 3,
-      "web_accessible_resources": [
-        {
-          "resources": ["web_accessible_resource.html"],
-          "matches": ["http://example.com/*"]
-        }
-      ]
-    })",
-      "Extensions.WAR.XOriginWebAccessible.MV3");
-}
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 }  // namespace
 }  // namespace extensions

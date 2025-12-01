@@ -32,10 +32,6 @@
 #include "ui/views/layout/delegating_layout_manager.h"
 #include "ui/views/view.h"
 
-#if BUILDFLAG(IS_WIN)
-#include <windows.h>
-#endif
-
 namespace gfx {
 class FontList;
 }  // namespace gfx
@@ -141,9 +137,12 @@ class VIEWS_EXPORT MenuItemView : public View, public LayoutDelegate {
   void UpdateCheckBoxVisibility();
 
   // Overridden from View:
-  std::u16string GetTooltipText(const gfx::Point& p) const override;
+  std::u16string GetRenderedTooltipText(const gfx::Point& p) const override;
   bool HandleAccessibleAction(const ui::AXActionData& action_data) override;
   FocusBehavior GetFocusBehavior() const override;
+
+  // To update the custom tooltip, call this method with the new text.
+  void UpdateTooltipText(std::optional<std::u16string> new_text = std::nullopt);
 
   // Returns if a given |anchor| is a bubble or not.
   static bool IsBubble(MenuAnchorPosition anchor);
@@ -216,6 +215,7 @@ class VIEWS_EXPORT MenuItemView : public View, public LayoutDelegate {
                                const ui::ImageModel& icon = ui::ImageModel());
 
   MenuItemView* AppendTitle(const std::u16string& label);
+  MenuItemView* AddTitleAt(const std::u16string& label, size_t index);
 
   // Append a submenu to this menu.
   // The returned pointer is owned by this menu.
@@ -402,6 +402,10 @@ class VIEWS_EXPORT MenuItemView : public View, public LayoutDelegate {
   // background. This makes the menu item's background fit its container's
   // border radius, if they are both the same value.
   void SetCornerRadius(int radius);
+
+  // Sets or removes the expanded/collapsed state of the menu item if it's a
+  // submenu.
+  void UpdateAccessibleExpandedCollapsedState();
 
   // Shows an alert on this menu item. An alerted menu item is rendered
   // differently to draw attention to it. This must be called before the menu is
@@ -665,7 +669,7 @@ class VIEWS_EXPORT MenuItemView : public View, public LayoutDelegate {
   raw_ptr<ImageView> icon_view_ = nullptr;
 
   // The tooltip to show on hover for this menu item.
-  std::u16string tooltip_;
+  std::u16string custom_tooltip_;
 
   // Cached dimensions. This is cached as text sizing calculations are quite
   // costly.

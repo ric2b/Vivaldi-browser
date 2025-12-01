@@ -17,9 +17,9 @@
 #include "chrome/browser/ui/views/payments/payment_request_dialog_view.h"
 #include "chrome/browser/ui/views/payments/test_chrome_payment_request_delegate.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "components/autofill/core/browser/data_manager/personal_data_manager_observer.h"
 #include "components/autofill/core/browser/field_types.h"
-#include "components/autofill/core/browser/personal_data_manager_observer.h"
-#include "components/autofill/core/browser/test_event_waiter.h"
+#include "components/autofill/core/browser/test_utils/test_event_waiter.h"
 #include "components/payments/content/payment_request.h"
 #include "components/payments/core/const_csp_checker.h"
 #include "components/sync/test/test_sync_service.h"
@@ -31,8 +31,10 @@
 #include "third_party/blink/public/mojom/payments/payment_request.mojom-forward.h"
 
 namespace autofill {
+class AddressDataManager;
 class AutofillProfile;
 class CreditCard;
+class PaymentsDataManager;
 }  // namespace autofill
 
 namespace content {
@@ -182,6 +184,8 @@ class PaymentRequestBrowserTestBase
   const std::vector<PaymentRequest*> GetPaymentRequests();
 
   autofill::PersonalDataManager* GetDataManager();
+  autofill::AddressDataManager* address_data_manager();
+  autofill::PaymentsDataManager* payments_data_manager();
   // Adds the various models to the database, waiting until the personal data
   // manager notifies that they are added.
   // NOTE: If no use_count is specified on the models and multiple items are
@@ -189,7 +193,6 @@ class PaymentRequestBrowserTestBase
   // are added close to each other.
   void AddAutofillProfile(const autofill::AutofillProfile& profile);
   void AddCreditCard(const autofill::CreditCard& card);
-  void WaitForOnPersonalDataChanged();
 
   void CreatePaymentRequestForTest(
       mojo::PendingReceiver<payments::mojom::PaymentRequest> receiver,

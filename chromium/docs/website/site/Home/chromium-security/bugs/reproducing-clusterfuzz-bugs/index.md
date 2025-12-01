@@ -89,6 +89,4 @@ reproduction script. It attempts to mimic the environment on the ClusterFuzz
 bots as closely as possible, and will attempt to run the test multiple times in
 case it's flaky.
 
-See
-[goto.google.com/clusterfuzz-repro](http://goto.google.com/clusterfuzz-repro)
-for setup details.
+See [go/clusterfuzz-repro](http://go/clusterfuzz-repro) for setup details.

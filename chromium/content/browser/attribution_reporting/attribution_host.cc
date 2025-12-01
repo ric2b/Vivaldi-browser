@@ -43,7 +43,9 @@
 #include "content/public/common/content_features.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "net/url_request/url_request.h"
-#include "services/network/public/cpp/features.h"
+#include "services/metrics/public/cpp/metrics_utils.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/navigation/impression.h"
 #include "url/gurl.h"
@@ -117,11 +119,8 @@ AttributionHost::AttributionHost(WebContents* web_contents)
       attribution_reporting::features::kConversionMeasurement));
 
 #if BUILDFLAG(IS_ANDROID)
-  if (base::FeatureList::IsEnabled(
-          network::features::kAttributionReportingCrossAppWeb)) {
-    input_event_tracker_android_ =
-        std::make_unique<AttributionInputEventTrackerAndroid>(web_contents);
-  }
+  input_event_tracker_android_ =
+      std::make_unique<AttributionInputEventTrackerAndroid>(web_contents);
 #endif
 }
 
@@ -215,6 +214,15 @@ void AttributionHost::DidRedirectNavigation(
 }
 
 void AttributionHost::DidFinishNavigation(NavigationHandle* navigation_handle) {
+  auto* attribution_manager =
+      AttributionManager::FromWebContents(web_contents());
+
+  base::Time now = base::Time::Now();
+
+  if (attribution_manager && navigation_handle->GetNetErrorCode() == net::OK) {
+    attribution_manager->UpdateLastNavigationTime(now);
+  }
+
   if (navigation_handle->IsInPrimaryMainFrame() &&
       !navigation_handle->IsSameDocument()) {
     if (primary_main_frame_data_.has_value()) {
@@ -223,7 +231,7 @@ void AttributionHost::DidFinishNavigation(NavigationHandle* navigation_handle) {
     }
 
     // Sets current time to detect further client redirects.
-    last_navigation_time_ = base::Time::Now();
+    last_navigation_time_ = now;
 
     if (navigation_handle->HasCommitted()) {
       primary_main_frame_data_ = PrimaryMainFrameData();
@@ -237,8 +245,6 @@ void AttributionHost::DidFinishNavigation(NavigationHandle* navigation_handle) {
 
   NotifyNavigationRegistrationData(navigation_handle);
 
-  auto* attribution_manager =
-      AttributionManager::FromWebContents(web_contents());
   CHECK(attribution_manager);
   attribution_manager->GetDataHostManager()
       ->NotifyNavigationRegistrationCompleted(
@@ -422,18 +428,27 @@ void AttributionHost::MaybeLogClientBounce(
   base::TimeDelta time_since_last_navigation =
       base::Time::Now() - *last_navigation_time_;
 
+  int64_t num_data_hosts_registered_bucket =
+      ukm::GetExponentialBucketMinForCounts1000(num_data_hosts_registered);
+
+  ukm::builders::Conversions_ClientBounce ukm_builder(
+      web_contents()->GetPrimaryMainFrame()->GetPageUkmSourceId());
+
   if (!primary_main_frame_data_->has_user_activation) {
     if (time_since_last_navigation < base::Seconds(1)) {
       ClientBounceHistogram(kUserActivationStr, k1sStr,
                             num_data_hosts_registered);
+      ukm_builder.SetUserActivation_1s(num_data_hosts_registered_bucket);
     }
     if (time_since_last_navigation < base::Seconds(5)) {
       ClientBounceHistogram(kUserActivationStr, k5sStr,
                             num_data_hosts_registered);
+      ukm_builder.SetUserActivation_5s(num_data_hosts_registered_bucket);
     }
     if (time_since_last_navigation < base::Seconds(10)) {
       ClientBounceHistogram(kUserActivationStr, k10sStr,
                             num_data_hosts_registered);
+      ukm_builder.SetUserActivation_10s(num_data_hosts_registered_bucket);
     }
   }
 
@@ -441,16 +456,21 @@ void AttributionHost::MaybeLogClientBounce(
     if (time_since_last_navigation < base::Seconds(1)) {
       ClientBounceHistogram(kUserInteractionStr, k1sStr,
                             num_data_hosts_registered);
+      ukm_builder.SetUserInteraction_1s(num_data_hosts_registered_bucket);
     }
     if (time_since_last_navigation < base::Seconds(5)) {
       ClientBounceHistogram(kUserInteractionStr, k5sStr,
                             num_data_hosts_registered);
+      ukm_builder.SetUserInteraction_5s(num_data_hosts_registered_bucket);
     }
     if (time_since_last_navigation < base::Seconds(10)) {
       ClientBounceHistogram(kUserInteractionStr, k10sStr,
                             num_data_hosts_registered);
+      ukm_builder.SetUserInteraction_10s(num_data_hosts_registered_bucket);
     }
   }
+
+  ukm_builder.Record(ukm::UkmRecorder::Get());
 }
 
 // static

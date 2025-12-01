@@ -353,8 +353,7 @@ describe('LoggingDriver', () => {
     await expectCalled(throttle).then(([logging]) => logging());
 
     assert.isTrue(recordClick.calledOnce);
-    assert.deepStrictEqual(
-        recordClick.firstCall.firstArg, {veid: getVeId(select.selectedOptions[0]), doubleClick: false});
+    assert.deepEqual(recordClick.firstCall.firstArg, {veid: getVeId(select.selectedOptions[0]), doubleClick: false});
   });
 
   it('logs keydown', async () => {
@@ -554,6 +553,33 @@ describe('LoggingDriver', () => {
     assert.strictEqual(event.context, 1936227034);
   });
 
+  it('logs state with change of a label`s control', async () => {
+    const recordChange = sinon.stub(
+        Host.InspectorFrontendHost.InspectorFrontendHostInstance,
+        'recordChange',
+    );
+
+    const label = document.createElement('label');
+    label.setAttribute('jslog', 'TreeItem; track: change');
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.checked = true;
+    input.style.display = 'none';
+    label.appendChild(input);
+    renderElementIntoDOM(label);
+    await VisualLoggingTesting.LoggingDriver.startLogging();
+    let logging = expectCall(recordChange);
+    input.dispatchEvent(new Event('change'));
+    let [event] = await logging;
+    assert.strictEqual(event.context, 1530936795);
+
+    input.checked = false;
+    logging = expectCall(recordChange);
+    input.dispatchEvent(new Event('change'));
+    [event] = await logging;
+    assert.strictEqual(event.context, 1936227034);
+  });
+
   it('logs hover', async () => {
     addLoggableElements();
     await VisualLoggingTesting.LoggingDriver.startLogging({hoverLogThrottler: throttler});
@@ -604,7 +630,7 @@ describe('LoggingDriver', () => {
     element.dispatchEvent(new MouseEvent('mouseover'));
     await expectCalled(throttle).then(([work]) => work());
     assert.isTrue(recordHover.called);
-    assert.deepStrictEqual(recordHover.firstCall.firstArg, {veid: getVeId(element)});
+    assert.deepEqual(recordHover.firstCall.firstArg, {veid: getVeId(element)});
   });
 
   it('logs drag', async () => {
@@ -713,7 +739,7 @@ describe('LoggingDriver', () => {
     logging();
     await expectCalled(recordResize);
     assert.isTrue(recordResize.calledOnce);
-    assert.deepStrictEqual(recordResize.firstCall.firstArg, {veid: getVeId(element), width: 0, height: 0});
+    assert.deepEqual(recordResize.firstCall.firstArg, {veid: getVeId(element), width: 0, height: 0});
 
     recordResize.resetHistory();
 
@@ -723,7 +749,7 @@ describe('LoggingDriver', () => {
 
     await expectCall(recordResize);
     assert.isTrue(recordResize.calledOnce);
-    assert.deepStrictEqual(recordResize.firstCall.firstArg, {veid: getVeId(element), width: 300, height: 300});
+    assert.deepEqual(recordResize.firstCall.firstArg, {veid: getVeId(element), width: 300, height: 300});
   });
 
   it('throttles resize per element', async () => {
@@ -776,7 +802,7 @@ describe('LoggingDriver', () => {
     await work();
     await expectCalled(recordResize);
     assert.isTrue(recordResize.calledOnce);
-    assert.deepStrictEqual(recordResize.firstCall.firstArg, {veid: getVeId(element), width: 400, height: 300});
+    assert.deepEqual(recordResize.firstCall.firstArg, {veid: getVeId(element), width: 400, height: 300});
   });
 
   it('does not log resize intial impressions due to visibility change', async () => {
@@ -860,7 +886,7 @@ describe('LoggingDriver', () => {
 
     await logging();
     assert.isTrue(recordResize.calledOnce);
-    assert.deepStrictEqual(recordResize.firstCall.firstArg, {veid: getVeId(element), width: 0, height: 0});
+    assert.deepEqual(recordResize.firstCall.firstArg, {veid: getVeId(element), width: 0, height: 0});
   });
 
   it('logs click, then resize, then impressions', async () => {
@@ -977,7 +1003,6 @@ describe('LoggingDriver', () => {
     assert.sameDeepMembers(recordImpression.lastCall.firstArg.impressions, [
       {id: getVeId(loggable2), type: 1, context: 345, parent: getVeId(parent), width: 0, height: 0},
     ]);
-
   });
 
   it('logs root non-DOM impressions', async () => {

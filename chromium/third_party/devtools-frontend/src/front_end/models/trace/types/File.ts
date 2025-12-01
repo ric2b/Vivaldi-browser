@@ -1,18 +1,21 @@
 // Copyright 2023 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-import type * as Protocol from '../../../generated/protocol.js';
 
-import type {TraceWindowMicroSeconds} from './Timing.js';
+import type * as SDK from '../../../core/sdk/sdk.js';
+import type * as Protocol from '../../../generated/protocol.js';
+import type * as CrUXManager from '../../../models/crux-manager/crux-manager.js';
+
+import type {TraceWindowMicro} from './Timing.js';
 import type {Event, LegacyTimelineFrame, ProcessID, SampleIndex, ThreadID} from './TraceEvents.js';
 
-export type TraceFile = {
-  traceEvents: readonly Event[],
-  metadata: MetaData,
-};
+export interface TraceFile {
+  traceEvents: readonly Event[];
+  metadata: MetaData;
+}
 
 export interface Breadcrumb {
-  window: TraceWindowMicroSeconds;
+  window: TraceWindowMicro;
   child: Breadcrumb|null;
 }
 
@@ -66,7 +69,7 @@ export interface EntryLabelAnnotation {
 export interface TimeRangeAnnotation {
   type: 'TIME_RANGE';
   label: string;
-  bounds: TraceWindowMicroSeconds;
+  bounds: TraceWindowMicro;
 }
 
 export interface EntriesLinkAnnotation {
@@ -88,7 +91,7 @@ export interface EntryLabelAnnotationSerialized {
  * Represents an object that is saved in the file when a user creates a time range with a label in the timeline.
  */
 export interface TimeRangeAnnotationSerialized {
-  bounds: TraceWindowMicroSeconds;
+  bounds: TraceWindowMicro;
   label: string;
 }
 
@@ -132,28 +135,28 @@ export type LegacyTimelineFrameKey = `${EventKeyType.LEGACY_TIMELINE_FRAME}-${nu
 export type SerializableKey = RawEventKey|ProfileCallKey|SyntheticEventKey|LegacyTimelineFrameKey;
 
 // Serializable keys values objects contain data that maps the keys to original Trace Events
-export type RawEventKeyValues = {
-  type: EventKeyType.RAW_EVENT,
-  rawIndex: number,
-};
+export interface RawEventKeyValues {
+  type: EventKeyType.RAW_EVENT;
+  rawIndex: number;
+}
 
-export type SyntheticEventKeyValues = {
-  type: EventKeyType.SYNTHETIC_EVENT,
-  rawIndex: number,
-};
+export interface SyntheticEventKeyValues {
+  type: EventKeyType.SYNTHETIC_EVENT;
+  rawIndex: number;
+}
 
-export type ProfileCallKeyValues = {
-  type: EventKeyType.PROFILE_CALL,
-  processID: ProcessID,
-  threadID: ThreadID,
-  sampleIndex: SampleIndex,
-  protocol: Protocol.integer,
-};
+export interface ProfileCallKeyValues {
+  type: EventKeyType.PROFILE_CALL;
+  processID: ProcessID;
+  threadID: ThreadID;
+  sampleIndex: SampleIndex;
+  protocol: Protocol.integer;
+}
 
-export type LegacyTimelineFrameKeyValues = {
-  type: EventKeyType.LEGACY_TIMELINE_FRAME,
-  rawIndex: number,
-};
+export interface LegacyTimelineFrameKeyValues {
+  type: EventKeyType.LEGACY_TIMELINE_FRAME;
+  rawIndex: number;
+}
 
 export type SerializableKeyValues =
     RawEventKeyValues|ProfileCallKeyValues|SyntheticEventKeyValues|LegacyTimelineFrameKeyValues;
@@ -177,12 +180,18 @@ export interface Modifications {
 export interface MetaData {
   source?: 'DevTools';
   startTime?: string;
+  emulatedDeviceTitle?: string;
+  // Only set if network throttling is active.
   networkThrottling?: string;
+  // Only set if network throttling is active.
+  networkThrottlingConditions?: Omit<SDK.NetworkManager.Conditions, 'title'>;
+  // Only set if CPU throttling is active.
   cpuThrottling?: number;
   hardwareConcurrency?: number;
   dataOrigin?: DataOrigin;
-  modifications?: Modifications;
   enhancedTraceVersion?: number;
+  modifications?: Modifications;
+  cruxFieldData?: CrUXManager.PageResult[];
 }
 
 export type Contents = TraceFile|Event[];

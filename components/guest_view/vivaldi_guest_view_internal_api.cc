@@ -52,12 +52,19 @@ bool GuestViewInternalCreateGuestFunction::GetExternalWebContents(
   GuestViewBase* guest = GuestViewBase::FromWebContents(contents);
 
   if (guest) {
-    // If there is a guest with the WebContents already then
-    // use this if it is not yet attached. This is done through the
-    // WebContentsImpl::CreateNewWindow code-path. Ie. clicking a link in a
-    // webpage with target set. The guest has been created with
-    // GuestViewManager::CreateGuestWithWebContentsParams.
-    if (!guest->attached()) {
+    // note (ondrej@vivaldi) VB-113067: Simplified explanation: if there are >1
+    // webviews with the same tab_id in the DOM, none of the guests are
+    // initially attached, obviously.
+    //
+    // Calling the callback in response doesn't immediately attach the guest.
+    // Instead, the guest_instance_id is sent back to the renderer, which then
+    // calls "attach" again. Meanwhile, if a second guest is needed, this code
+    // is called a second time, and we end up calling the same callback twice,
+    // which causes the well-known crash.
+    //
+    // Instead of checking whether the guest is attached (which it is not), we
+    // need to check whether the callback has already been used.
+    if (!guest->creation_confirmed()) {
       std::move(callback).Run(guest);
       return true;
     }

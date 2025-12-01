@@ -15,7 +15,6 @@
 
 #include "base/check_op.h"
 #include "base/containers/contains.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ash/arc/input_overlay/actions/action.h"
 #include "chrome/browser/ash/arc/input_overlay/touch_id_manager.h"
@@ -139,7 +138,7 @@ class ActionMove::ActionMoveKeyView : public ActionView {
     if (labels_.size() != kActionMoveKeysSize) {
       return;
     }
-    auto it = base::ranges::find(labels_, action_label);
+    auto it = std::ranges::find(labels_, action_label);
     DCHECK(it != labels_.end());
     if (it == labels_.end()) {
       return;
@@ -394,15 +393,12 @@ std::unique_ptr<ActionView> ActionMove::CreateView(
 }
 
 void ActionMove::UnbindInput(const InputElement& input_element) {
-  if (!pending_input_) {
-    pending_input_ = std::make_unique<InputElement>(*current_input_);
-  }
   if (IsKeyboardBound(input_element)) {
     // It might be partially overlapped and only remove the keys overlapped.
     for (auto code : input_element.keys()) {
-      for (size_t i = 0; i < pending_input_->keys().size(); i++) {
-        if (code == pending_input_->keys()[i]) {
-          pending_input_->SetKey(i, ui::DomCode::NONE);
+      for (size_t i = 0; i < current_input_->keys().size(); i++) {
+        if (code == current_input_->keys()[i]) {
+          current_input_->SetKey(i, ui::DomCode::NONE);
         }
       }
     }
@@ -421,7 +417,7 @@ bool ActionMove::RewriteKeyEvent(const ui::KeyEvent* key_event,
                                  const gfx::Transform* rotation_transform,
                                  std::list<ui::TouchEvent>& rewritten_events) {
   auto keys = current_input_->keys();
-  auto it = base::ranges::find(keys, key_event->code());
+  auto it = std::ranges::find(keys, key_event->code());
   if (it == keys.end()) {
     return false;
   }

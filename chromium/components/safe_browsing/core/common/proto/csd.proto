@@ -132,6 +132,20 @@ message ChromeUserPopulation {
   reserved 19;
 }
 
+// Identifies a web app (e.g. a WebAPK) on the basis of its origin and id, as
+// defined in https://www.w3.org/TR/appmanifest/#id-member.
+message SafeBrowsingWebAppKey {
+  // Serialized origin without the scheme portion. In most cases, this is just
+  // the host part. May include a colon character followed by a port number, if
+  // the port number is non-default.
+  optional string start_url_origin = 1;
+  // Manifest id or (if there is no id) the path and query portions of
+  // start_url, without leading slash character, e.g. will be empty string if
+  // the path is "/". This should not include URL fragments, but should include
+  // query params.
+  optional string id_or_start_path = 2;
+}
+
 message ImageFeatureEmbedding {
   // Tracking embedding-model's version from iteration to iteration
   optional int32 embedding_model_version = 1;
@@ -153,6 +167,20 @@ message LlamaForcedTriggerInfo {
   repeated LlamaTriggerRuleInfo llama_trigger_rule_infos = 1;
   // True if requested by any of the trigger rules.
   optional bool intelligent_scan = 2;
+}
+
+message IntelligentScanInfo {
+  optional string brand = 1;
+  optional string intent = 2;
+
+  // Reason why the brand and intent are empty.
+  enum NoInfoReason {
+    NO_INFO_REASON_UNSPECIFIED = 0;
+    // Client cannot infer the brand and intent because there is no text on the
+    // page.
+    EMPTY_TEXT = 1;
+  }
+  optional NoInfoReason no_info_reason = 3;
 }
 
 message ClientPhishingRequest {
@@ -284,7 +312,17 @@ message ClientPhishingRequest {
   // if client_side_detection_type = FORCE_REQUEST.
   optional LlamaForcedTriggerInfo llama_forced_trigger_info = 31;
 
-  // next available tag number: 32.
+  // Represents the on-device model LLM response.
+  optional IntelligentScanInfo intelligent_scan_info = 32;
+
+  // next available tag number: 33.
+}
+
+// Verdict based on IntelligentScanInfo included in ClientPhishingRequest
+enum IntelligentScanVerdict {
+  INTELLIGENT_SCAN_VERDICT_UNSPECIFIED = 0;
+  INTELLIGENT_SCAN_VERDICT_SAFE = 1;
+  SCAM_EXPERIMENT_VERDICT_1 = 2;
 }
 
 message ClientPhishingResponse {
@@ -302,6 +340,8 @@ message ClientPhishingResponse {
   // Marked OBSOLETE because the URL is sent for all users, so the server
   // can do allowlist matching.
   repeated string OBSOLETE_allowlist_expression = 2;
+
+  optional IntelligentScanVerdict intelligent_scan_verdict = 3;
 }
 
 // Enum used to keep stats about why the pre-classification check failed.
@@ -327,7 +367,8 @@ enum PreClassificationCheckResult {
   NO_CLASSIFY_CHROME_UI_PAGE = 16;
   OBSOLETE_NO_CLASSIFY_NOT_ALLOWED_BY_POLICY = 17;
   NO_CLASSIFY_MATCH_HC_ALLOWLIST = 18;
-  NO_CLASSIFY_MAX = 19;  // Always add before this, and update this value.
+  NO_CLASSIFY_ALLOWLIST_METRIC = 19;
+  NO_CLASSIFY_MAX = 20;  // Always add before this, and update this value.
 }
 
 // This value must be kept in sync with those in
@@ -345,6 +386,36 @@ enum PhishingDetectorResult {
   DOM_EXTRACTION_FAILED = 8;
   TERM_EXTRACTION_FAILED = 9;
   VISUAL_EXTRACTION_FAILED = 10;
+}
+
+// The referring app info that launches Chrome. Only used on Android.
+// This information may be spoofed so do not rely solely on its correctness
+// for anti-abuse purposes. For more details, see:
+// go/phishguard-referring-app-android.
+message ReferringAppInfo {
+  // The source of the referring_app_name.
+  enum ReferringAppSource {
+    REFERRING_APP_SOURCE_UNSPECIFIED = 0;
+    // The referring app is known to Chrome. If the referring app info is from
+    // this source, the referring_app_name is a hardcoded string that is
+    // predefined in Chrome.
+    KNOWN_APP_ID = 1;
+    // The referring app is unknown to Chrome. The referring app name is
+    // obtained from
+    // https://developer.android.com/reference/android/provider/Browser?hl=en#EXTRA_APPLICATION_ID.
+    // If the referring app info is from this source, the referring_app_name
+    // is volatile and can be changed by the referring app.
+    UNKNOWN_APP_ID = 2;
+    // The referring app info is obtained from
+    // https://developer.android.com/reference/android/app/Activity#getReferrer().
+    // If the referring app info is from this source, the referring_app_name
+    // is volatile and can be changed by the referring app.
+    ACTIVITY_REFERRER = 3;
+  }
+
+  optional ReferringAppSource referring_app_source = 1;
+
+  optional string referring_app_name = 2;
 }
 
 // The message is used for client request to determine whether the provided URL
@@ -407,7 +478,7 @@ message LoginReputationClientRequest {
   repeated Frame frames = 3;
 
   // The message contains fields needed for a password reuse event.
-  // Next tag: 4
+  // Next tag: 7
   message PasswordReuseEvent {
     // Domains from the Chrome password manager DB that are associated with
     // the same password as the one triggering this event. The field is filled
@@ -418,22 +489,8 @@ message LoginReputationClientRequest {
     // The frame that the password reuse is detected.
     optional int32 frame_id = 2;
 
-    // Deprecated field.
-    reserved 3;
-
-    // TODO(crbug.com/41431428): Remove once ReusedPasswordAccountType is
-    // implemented. Sync account type.
-    enum SyncAccountType {
-      // Not a sign-in user.
-      NOT_SIGNED_IN = 0;
-
-      // User signed in with @gmail.com, or @googlemail.com account.
-      GMAIL = 1;
-
-      // User signed in with a G Suite account.
-      GSUITE = 2;
-    }
-    optional SyncAccountType sync_account_type = 4;
+    // Deprecated fields.
+    reserved 3, 4;
 
     // TODO(crbug.com/41431428): Remove once ReusedPasswordAccountType is
     // implemented. Type of password being reused.
@@ -539,40 +596,11 @@ message LoginReputationClientRequest {
     optional bool hide_on_interaction = 4;
     // True if OmniboxUIExperimentElideToRegistrableDomain is enabled.
     optional bool elide_to_registrable_domain = 5;
-    // True if this is the control group. This sent by the finch config.
-    optional bool simplified_url_display_enabled = 6;
+
+    // Deprecated: simplified_url_display_enabled.
+    reserved 6;
   };
   optional UrlDisplayExperiment url_display_experiment = 14;
-
-  // The referring app info that launches Chrome. Only used on Android.
-  // This information may be spoofed so do not rely solely on its correctness
-  // for anti-abuse purposes. For more details, see:
-  // go/phishguard-referring-app-android.
-  message ReferringAppInfo {
-    // The source of the referring_app_name.
-    enum ReferringAppSource {
-      REFERRING_APP_SOURCE_UNSPECIFIED = 0;
-      // The referring app is known to Chrome. If the referring app info is from
-      // this source, the referring_app_name is a hardcoded string that is
-      // predefined in Chrome.
-      KNOWN_APP_ID = 1;
-      // The referring app is unknown to Chrome. The referring app name is
-      // obtained from
-      // https://developer.android.com/reference/android/provider/Browser?hl=en#EXTRA_APPLICATION_ID.
-      // If the referring app info is from this source, the referring_app_name
-      // is volatile and can be changed by the referring app.
-      UNKNOWN_APP_ID = 2;
-      // The referring app info is obtained from
-      // https://developer.android.com/reference/android/app/Activity#getReferrer().
-      // If the referring app info is from this source, the referring_app_name
-      // is volatile and can be changed by the referring app.
-      ACTIVITY_REFERRER = 3;
-    }
-
-    optional ReferringAppSource referring_app_source = 1;
-
-    optional string referring_app_name = 2;
-  }
 
   optional ReferringAppInfo referring_app_info = 15;
 
@@ -1041,6 +1069,10 @@ message ClientDownloadRequest {
 
   // The token from previous requests related to this download, if any exists.
   optional bytes previous_token = 91;
+
+  // Fields 92-94 are reserved for server-side use and are never sent by the
+  // client.
+  reserved 92 to 94;
 }
 
 message ReferrerChainOptions {
@@ -1191,6 +1223,8 @@ enum ClientSideDetectionType {
   POINTER_LOCK_REQUESTED = 5;
   // Vibration API request triggered.
   VIBRATION_API = 6;
+  // Fullscreen API request triggered.
+  FULLSCREEN_API = 7;
 }
 
 message ClientDownloadResponse {

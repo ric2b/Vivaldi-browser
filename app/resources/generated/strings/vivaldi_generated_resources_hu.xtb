@@ -279,6 +279,7 @@
 <translation id="5582839680698949063">Főmenü</translation>
 <translation id="5614553682702429503">Szeretnéd elmenteni a jelszót?</translation>
 <translation id="5623842676595125836">Napló</translation>
+<translation id="5624959475330585145">Kérdezzen rá a nem biztonságos kapcsolatok használata előtt</translation>
 <translation id="5638309510554459422">Bővítményeket és témákat a <ph name="BEGIN_LINK" />Chrome Webáruházban<ph name="END_LINK" /> kereshetsz</translation>
 <translation id="5677928146339483299">Letiltva</translation>
 <translation id="5707185214361380026">Sikertelen bővítmény betöltés:</translation>
@@ -468,6 +469,7 @@ A kulcsfájlt tartsd biztonságos helyen. Szükséged lesz rá ahhoz, hogy új v
 <translation id="9218430445555521422">Beállítás alapértelmezettként</translation>
 <translation id="93766956588638423">Bővítmény javítása</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
+<translation id="961856697154696964">Böngészési adatok törlése</translation>
 <translation id="994289308992179865">&amp;Ismétlés</translation>
 <translation id="998747458861718449">&amp;Vizsgálat</translation>
 </translationbundle>

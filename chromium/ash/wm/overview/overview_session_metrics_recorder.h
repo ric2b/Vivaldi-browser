@@ -7,18 +7,12 @@
 
 #include "ash/wm/overview/overview_metrics.h"
 #include "ash/wm/overview/overview_observer.h"
-#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
-
-namespace ui {
-class PresentationTimeRecorder;
-}  // namespace ui
 
 namespace ash {
 
 class OverviewController;
-class OverviewGrid;
 class OverviewSession;
 
 // Records metrics and trace events for an individual overview mode session.
@@ -50,15 +44,8 @@ class OverviewSessionMetricsRecorder : public OverviewObserver {
   void OnOverviewModeEndingAnimationComplete(bool canceled) override;
 
   bool IsDeskBarOpen() const;
-  bool IsRenderingDeskBarWithMiniViews() const;
-  bool IsTrueForAnyOverviewGrid(
-      const base::RepeatingCallback<bool(const OverviewGrid& grid)>& predicate)
-      const;
 
   const OverviewStartAction start_action_;
-
-  std::unique_ptr<ui::PresentationTimeRecorder>
-      enter_presentation_time_recorder_;
 
   raw_ptr<OverviewSession> session_ = nullptr;
 

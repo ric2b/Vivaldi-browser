@@ -112,6 +112,7 @@ export class RequestCookiesView extends UI.Widget.Widget {
 
   constructor(request: SDK.NetworkRequest.NetworkRequest) {
     super();
+    this.registerRequiredCSS(requestCookiesViewStyles);
 
     this.element.classList.add('request-cookies-view');
     this.element.setAttribute('jslog', `${VisualLogging.pane('cookies').track({resize: true})}`);
@@ -120,7 +121,7 @@ export class RequestCookiesView extends UI.Widget.Widget {
     this.showFilteredOutCookiesSetting = Common.Settings.Settings.instance().createSetting(
         'show-filtered-out-request-cookies', /* defaultValue */ false);
 
-    this.emptyWidget = new UI.EmptyWidget.EmptyWidget(i18nString(UIStrings.thisRequestHasNoCookies));
+    this.emptyWidget = new UI.EmptyWidget.EmptyWidget(i18nString(UIStrings.thisRequestHasNoCookies), '');
     this.emptyWidget.show(this.element);
 
     this.requestCookiesTitle = this.element.createChild('div');
@@ -128,10 +129,8 @@ export class RequestCookiesView extends UI.Widget.Widget {
     titleText.textContent = i18nString(UIStrings.requestCookies);
     UI.Tooltip.Tooltip.install(titleText, i18nString(UIStrings.cookiesThatWereSentToTheServerIn));
 
-    const requestCookiesCheckbox =
-        (UI.SettingsUI.createSettingCheckbox(
-             i18nString(UIStrings.showFilteredOutRequestCookies), this.showFilteredOutCookiesSetting, true) as
-         UI.UIUtils.CheckboxLabel);
+    const requestCookiesCheckbox = UI.SettingsUI.createSettingCheckbox(
+        i18nString(UIStrings.showFilteredOutRequestCookies), this.showFilteredOutCookiesSetting);
     requestCookiesCheckbox.checkboxElement.addEventListener('change', () => {
       this.refreshRequestCookiesView();
     });
@@ -335,7 +334,6 @@ export class RequestCookiesView extends UI.Widget.Widget {
 
   override wasShown(): void {
     super.wasShown();
-    this.registerCSSFiles([requestCookiesViewStyles]);
     this.request.addEventListener(
         SDK.NetworkRequest.Events.REQUEST_HEADERS_CHANGED, this.refreshRequestCookiesView, this);
     this.request.addEventListener(

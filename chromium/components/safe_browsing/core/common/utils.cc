@@ -4,10 +4,11 @@
 
 #include "components/safe_browsing/core/common/utils.h"
 
+#include <algorithm>
+
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
@@ -137,7 +138,7 @@ bool CanGetReputationOfUrl(const GURL& url) {
   const std::string hostname = url.host();
   // There is no reason to send URLs with very short or single-label hosts.
   // The Safe Browsing server does not check them.
-  if (hostname.size() < 4 || base::ranges::count(hostname, '.') < 1) {
+  if (hostname.size() < 4 || std::ranges::count(hostname, '.') < 1) {
     return false;
   }
 
@@ -153,13 +154,10 @@ bool CanGetReputationOfUrl(const GURL& url) {
 
 void LogAuthenticatedCookieResets(network::ResourceRequest& resource_request,
                                   SafeBrowsingAuthenticatedEndpoint endpoint) {
-  // TODO(crbug.com/382303498): Re-enable this on iOS.
-#if !BUILDFLAG(IS_IOS)
   resource_request.trusted_params = network::ResourceRequest::TrustedParams();
   mojo::MakeSelfOwnedReceiver(std::make_unique<CookieWriteLogger>(endpoint),
                               resource_request.trusted_params->cookie_observer
                                   .InitWithNewPipeAndPassReceiver());
-#endif
 }
 
 void SetAccessTokenAndClearCookieInResourceRequest(

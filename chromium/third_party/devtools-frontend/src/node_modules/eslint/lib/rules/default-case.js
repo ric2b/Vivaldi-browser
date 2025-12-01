@@ -15,10 +15,12 @@ module.exports = {
     meta: {
         type: "suggestion",
 
+        defaultOptions: [{}],
+
         docs: {
             description: "Require `default` cases in `switch` statements",
             recommended: false,
-            url: "https://eslint.org/docs/rules/default-case"
+            url: "https://eslint.org/docs/latest/rules/default-case"
         },
 
         schema: [{
@@ -37,12 +39,12 @@ module.exports = {
     },
 
     create(context) {
-        const options = context.options[0] || {};
+        const [options] = context.options;
         const commentPattern = options.commentPattern
             ? new RegExp(options.commentPattern, "u")
             : DEFAULT_COMMENT_PATTERN;
 
-        const sourceCode = context.getSourceCode();
+        const sourceCode = context.sourceCode;
 
         //--------------------------------------------------------------------------
         // Helpers
@@ -54,7 +56,7 @@ module.exports = {
          * @returns {any} Last element
          */
         function last(collection) {
-            return collection[collection.length - 1];
+            return collection.at(-1);
         }
 
         //--------------------------------------------------------------------------

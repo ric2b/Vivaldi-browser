@@ -59,13 +59,16 @@ class ProcessNodeImpl
     : public PublicNodeImpl<ProcessNodeImpl, ProcessNode>,
       public TypedNodeBase<ProcessNodeImpl, ProcessNode, ProcessNodeObserver>,
       public mojom::ProcessCoordinationUnit,
-      public SupportsNodeInlineData<ProcessPriorityAggregatorData,
-                                    FrozenData,
-                                    PerformanceScenarioMemoryData,
-                                    resource_attribution::CPUMeasurementData,
-                                    LoadingScenarioCounts,
-                                    // Keep this last to avoid merge conflicts.
-                                    NodeAttachedDataStorage> {
+      public mojom::ChildProcessCoordinationUnit,
+      public SupportsNodeInlineData<
+          ProcessPriorityAggregatorData,
+          FrozenData,
+          PerformanceScenarioMemoryData,
+          resource_attribution::CPUMeasurementData,
+          resource_attribution::SharedCPUTimeResultData,
+          LoadingScenarioCounts,
+          // Keep this last to avoid merge conflicts.
+          NodeAttachedDataStorage> {
  public:
   using PassKey = base::PassKey<ProcessNodeImpl>;
 
@@ -87,7 +90,10 @@ class ProcessNodeImpl
 
   ~ProcessNodeImpl() override;
 
-  void Bind(mojo::PendingReceiver<mojom::ProcessCoordinationUnit> receiver);
+  void BindRenderProcessCoordinationUnit(
+      mojo::PendingReceiver<mojom::ProcessCoordinationUnit> receiver);
+  void BindChildProcessCoordinationUnit(
+      mojo::PendingReceiver<mojom::ChildProcessCoordinationUnit> receiver);
 
   // mojom::ProcessCoordinationUnit implementation:
   void SetMainThreadTaskLoadIsLow(bool main_thread_task_load_is_low) override;
@@ -105,9 +111,11 @@ class ProcessNodeImpl
   void OnRemoteIframeDetached(
       const blink::LocalFrameToken& parent_frame_token,
       const blink::RemoteFrameToken& remote_frame_token) override;
-  void RequestSharedPerformanceScenarioRegions(
+
+  // mojom::ChildProcessCoordinationUnit implementation:
+  void InitializeChildProcessCoordination(
       uint64_t process_track_id,
-      RequestSharedPerformanceScenarioRegionsCallback callback) override;
+      InitializeChildProcessCoordinationCallback callback) override;
 
   // Partial ProcessNode implementation:
   content::ProcessType GetProcessType() const override;
@@ -202,11 +210,16 @@ class ProcessNodeImpl
   void OnAllFramesInProcessFrozen();
 
   // NodeBase:
-  void OnJoiningGraph() override;
-  void OnBeforeLeavingGraph() override;
-  void RemoveNodeAttachedData() override;
+  void OnInitializingProperties() override;
+  void OnUninitializingEdges() override;
+  void CleanUpNodeState() override;
 
-  mojo::Receiver<mojom::ProcessCoordinationUnit> receiver_
+  // Receiver for renderer-only messages.
+  mojo::Receiver<mojom::ProcessCoordinationUnit> render_process_receiver_
+      GUARDED_BY_CONTEXT(sequence_checker_){this};
+
+  // Receiver for messages from all child processes.
+  mojo::Receiver<mojom::ChildProcessCoordinationUnit> child_process_receiver_
       GUARDED_BY_CONTEXT(sequence_checker_){this};
 
   uint64_t private_footprint_kb_ GUARDED_BY_CONTEXT(sequence_checker_) = 0u;

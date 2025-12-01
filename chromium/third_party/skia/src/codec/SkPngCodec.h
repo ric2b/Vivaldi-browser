@@ -14,9 +14,11 @@
 
 #include "include/codec/SkCodec.h"
 #include "include/core/SkRefCnt.h"
+#include "include/private/SkGainmapInfo.h"
 #include "src/codec/SkPngCodecBase.h"
 
 class SkPngChunkReader;
+class SkPngCompositeChunkReader;
 class SkStream;
 struct SkEncodedInfo;
 struct SkImageInfo;
@@ -32,6 +34,10 @@ public:
 
     // FIXME (scroggo): Temporarily needed by AutoCleanPng.
     void setIdatLength(size_t len) { fIdatLength = len; }
+
+    bool onGetGainmapCodec(SkGainmapInfo*, std::unique_ptr<SkCodec>*) override;
+
+    bool onGetGainmapInfo(SkGainmapInfo*) override;
 
     ~SkPngCodec() override;
 
@@ -51,9 +57,11 @@ protected:
 
     SkPngCodec(SkEncodedInfo&&,
                std::unique_ptr<SkStream>,
-               SkPngChunkReader*,
+               sk_sp<SkPngCompositeChunkReader>,
                void* png_ptr,
-               void* info_ptr);
+               void* info_ptr,
+               std::unique_ptr<SkStream>,
+               std::optional<SkGainmapInfo>);
 
     Result onGetPixels(const SkImageInfo&, void*, size_t, const Options&, int*)
             override;
@@ -74,9 +82,9 @@ protected:
             const SkCodec::Options&) override;
     Result onIncrementalDecode(int*) override;
 
-    sk_sp<SkPngChunkReader>     fPngChunkReader;
-    voidp                       fPng_ptr;
-    voidp                       fInfo_ptr;
+    sk_sp<SkPngCompositeChunkReader>     fPngChunkReader;
+    voidp                                fPng_ptr;
+    voidp                                fInfo_ptr;
 
 private:
     // SkPngCodecBase overrides:
@@ -95,5 +103,7 @@ private:
 
     size_t                         fIdatLength;
     bool                           fDecodedIdat;
+    std::unique_ptr<SkStream> fGainmapStream;
+    std::optional<SkGainmapInfo> fGainmapInfo;
 };
 #endif  // SkPngCodec_DEFINED

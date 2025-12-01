@@ -17,7 +17,7 @@ CrOS tooling can rely upon, and provide some language examples.
 
 The `/etc/lsb-release` has a number of fields that look useful.
 However, before you try to use any of the fields in CrOS code, please consult
-the [ChromiumOS Configuration](./os_config.md#LSB) document.
+the [ChromiumOS Configuration](../os-config#etclsb-release) document.
 
 For example, you must not use `CHROMEOS_RELEASE_BOARD` from this file.
 That config document explains in more detail.

@@ -35,7 +35,7 @@ them. See the [Mac Clang page](/developers/clang-mac) for more details.
 Tracking rects are tricky to get right. Apple realized that, and in Mac OS X
 10.5 introduced the NSTrackingArea object. Unfortunately, that is *also*
 difficult to get right, and has historically led to [nasty
-crashes](http://crbug.com/48709).
+crashes](https://crbug.com/48709).
 
 The use of `-[NSView addTrackingRect:owner:userData:assumeInside:]` is
 **prohibited**.
@@ -87,7 +87,7 @@ for details.
 ### Zero-sized windows
 
 The Mac's windowserver has issues with zero-sized windows, [spewing tons of junk
-to the console](http://crbug.com/78973), yet it's not immediately obvious when
+to the console](https://crbug.com/78973), yet it's not immediately obvious when
 you resize them that it's a problem.
 
 Ensure that you do not resize windows to be empty, either implicitly or

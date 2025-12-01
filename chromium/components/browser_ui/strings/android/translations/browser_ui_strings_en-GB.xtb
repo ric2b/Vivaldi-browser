@@ -24,7 +24,10 @@
 <translation id="1371239764779356792">Allow a site to save data on your device</translation>
 <translation id="1383876407941801731">Search</translation>
 <translation id="1384959399684842514">Download paused</translation>
+<translation id="1396327438254055134">Allow site to use V8 optimiser.</translation>
+<translation id="1409338233051621926">Tap Apps, then tap Default apps</translation>
 <translation id="1415402041810619267">URL truncated</translation>
+<translation id="1415855080660575082">Let Chrome share your recent tabs with your device to see them in your device's app list and search results. You can turn this on or off in Chrome settings.</translation>
 <translation id="1448064542941920355">Decrease zoom</translation>
 <translation id="146867109637325312">{COUNT,plural, =1{<ph name="SITE_COUNT" /> site}other{<ph name="SITE_COUNT" /> sites}}</translation>
 <translation id="1500473259453106018">Hide price drops on tabs card</translation>
@@ -44,6 +47,7 @@
 <translation id="1779089405699405702">Image decoder</translation>
 <translation id="1785415724048343560">Recommended for best experience</translation>
 <translation id="1799920918471566157">Chrome tips</translation>
+<translation id="1816835383954230954">When on, Chrome runs faster and features that use JavaScript should work as designed. When off, this reduces performance but makes V8 more resistant to attacks.</translation>
 <translation id="1818308510395330587">To let <ph name="APP_NAME" /> use AR, also turn on camera in <ph name="BEGIN_LINK" />Android settings<ph name="END_LINK" />.</translation>
 <translation id="1887786770086287077">Location access is off for this device. Turn it on in <ph name="BEGIN_LINK" />Android Settings<ph name="END_LINK" />.</translation>
 <translation id="1915307458270490472">Hang up</translation>
@@ -78,6 +82,7 @@
 <translation id="228293613124499805">Most sites that you visit probably save data to your device, often to improve your experience by saving your preferences or information that you share with the site. We recommend keeping this setting on.</translation>
 <translation id="2289270750774289114">Ask when a site wants to discover nearby Bluetooth devices (recommended)</translation>
 <translation id="2315043854645842844">Client side certificate selection is not supported by the operating system.</translation>
+<translation id="2356926036049612643">V8 optimiser</translation>
 <translation id="2359808026110333948">Continue</translation>
 <translation id="2379925928934107488">Apply Dark theme to sites when Chrome uses Dark theme, when possible</translation>
 <translation id="2390272837142897736">Increase zoom</translation>
@@ -88,6 +93,7 @@
 <translation id="2438120137003069591">You temporarily allowed this site to use third-party cookies, which means less browsing protection but site features are more likely to work as expected. <ph name="BEGIN_LINK" />Send feedback<ph name="END_LINK" /></translation>
 <translation id="244264527810019436">Features on some sites may not work in Incognito mode</translation>
 <translation id="2442870161001914531">Always request desktop site</translation>
+<translation id="2445311670906052406">Chrome now shares your recent tabs with your device. You'll see them in your device's app list and search results. You can turn this off at any time in Chrome settings.</translation>
 <translation id="2469312991797799607">This action will clear all data and cookies for <ph name="ORIGIN" /> and all sites under it</translation>
 <translation id="2482878487686419369">Notifications</translation>
 <translation id="2485422356828889247">Uninstall</translation>
@@ -99,9 +105,11 @@
 <translation id="257931822824936280">Expanded – click to collapse.</translation>
 <translation id="2586657967955657006">Clipboard</translation>
 <translation id="2588271083332682494">Tidy up with tab groups</translation>
+<translation id="2594832159966169099">Manage V8 security</translation>
 <translation id="2597457036804169544">Don’t apply Dark theme to sites</translation>
 <translation id="2606760465469169465">Auto-verify</translation>
 <translation id="2621115761605608342">Allow JavaScript for a specific site.</translation>
+<translation id="2626708220538466178">Default browser bottom sheet closed</translation>
 <translation id="2653659639078652383">Submit</translation>
 <translation id="2677748264148917807">Leave</translation>
 <translation id="2682367912565197520">Delete saved zoom level</translation>
@@ -112,6 +120,7 @@
 <translation id="2750481671343847896">Sites can show sign-in prompts from identity services.</translation>
 <translation id="2787357173144933081">Jump-start omnibox</translation>
 <translation id="2790501146643349491">When on, recently closed sites can finish sending and receiving data. When off, recently closed sites can't finish sending or receiving data.</translation>
+<translation id="2814830417943086299">Chrome now shows your recent tabs in your device's app list and search results. You can turn this off at any time in Chrome settings.</translation>
 <translation id="2822354292072154809">Are you sure that you want to reset all site permissions for <ph name="CHOSEN_OBJECT_NAME" />?</translation>
 <translation id="2850913818900871965">Request mobile view</translation>
 <translation id="2870560284913253234">Site</translation>
@@ -136,6 +145,7 @@
 <translation id="3143754809889689516">Play from the beginning</translation>
 <translation id="3162899666601560689">Sites can use cookies to improve your browsing experience, for example to keep you signed in or to remember items in your shopping basket</translation>
 <translation id="3165022941318558018">Allow a site to use third-party cookies</translation>
+<translation id="3167868116600277716">Discover feed</translation>
 <translation id="3198916472715691905"><ph name="STORAGE_AMOUNT" /> stored data</translation>
 <translation id="321187648315454507">To let <ph name="APP_NAME" /> send you notifications, also turn on notifications in <ph name="BEGIN_LINK" />Android settings<ph name="END_LINK" />.</translation>
 <translation id="3227137524299004712">Microphone</translation>
@@ -157,6 +167,7 @@
 <translation id="3448554387819310837">When on, sites can ask to use your camera. When off, sites can't use your camera.</translation>
 <translation id="3521663503435878242">Sites under <ph name="DOMAIN" /></translation>
 <translation id="3523447078673133727">Don't allow sites to track your hands</translation>
+<translation id="3532312529397438268">Sites cannot use V8 optimiser</translation>
 <translation id="3536227077203206203">Allowed this time</translation>
 <translation id="3538390592868664640">Block sites from creating a 3D map of your surroundings or tracking camera position</translation>
 <translation id="3544058026430919413">A company can define a group of sites that can use cookies to share your activity in the group. This is off in Incognito.</translation>
@@ -167,6 +178,7 @@
 <translation id="3600792891314830896">Mute sites that play sound</translation>
 <translation id="3602290021589620013">Preview</translation>
 <translation id="3628308229821498208">Suggested searches</translation>
+<translation id="3658847490588580244">Default browser bottom sheet</translation>
 <translation id="3669841141196828854">{COUNT,plural, =1{<ph name="RWS_MEMBERS_COUNT" /> site in <ph name="RWS_OWNER" />’s group of sites that can see your activity in the group}other{<ph name="RWS_MEMBERS_COUNT" /> sites in <ph name="RWS_OWNER" />’s group of sites that can see your activity in the group}}</translation>
 <translation id="3697164069658504920">When on, sites can ask to use USB devices. When off, sites can't use USB devices.</translation>
 <translation id="3707034683772193706">A site that you visit can save a small amount of info with Chrome, mainly to validate that you're not a bot</translation>
@@ -232,12 +244,14 @@
 <translation id="4644713492825682049">Delete and reset</translation>
 <translation id="4645575059429386691">Managed by your parent</translation>
 <translation id="4670064810192446073">Virtual reality</translation>
+<translation id="4672315773691449562">Tap Browser app, then tap Chrome</translation>
 <translation id="4676059169848868271">To let <ph name="APP_NAME" /> use hand tracking, also turn on hand tracking in <ph name="BEGIN_LINK" />system settings<ph name="END_LINK" />.</translation>
 <translation id="4751476147751820511">Motion or light sensors</translation>
 <translation id="4755971844837804407">When on, sites can show any ad to you. When off, sites can't show intrusive or misleading ads.</translation>
 <translation id="4779083564647765204">Zoom</translation>
 <translation id="4807122856660838973">Turn on Safe Browsing</translation>
 <translation id="4811450222531576619">Learn about its source and topic</translation>
+<translation id="481168145262973879">Sites can use V8 optimiser</translation>
 <translation id="4816495437032298535">Saved zoom for sites</translation>
 <translation id="4836046166855586901">Ask when a site wants to know when you're actively using this device</translation>
 <translation id="483914009762354899">Include all sites under this domain</translation>
@@ -258,6 +272,7 @@
 <translation id="5048841907079026162">Manage your browsing data</translation>
 <translation id="5050380848339752099">This site is about to share information with an app outside of Incognito mode.</translation>
 <translation id="5063480226653192405">Usage</translation>
+<translation id="5068293087784369013">Customise your new tab page</translation>
 <translation id="5091013926750941408">Mobile site</translation>
 <translation id="509133520954049755">Request desktop view</translation>
 <translation id="5091663350197390230">When on, sites can use JavaScript. When off, sites can't use JavaScript.</translation>
@@ -315,6 +330,7 @@
 <translation id="5844448279347999754">When on, sites can ask to see text and images saved to your clipboard. When off, sites can't see text or images saved to your clipboard.</translation>
 <translation id="5853982612236235577">When on, sites can ask to send notifications. When off, sites can't send notifications.</translation>
 <translation id="5860033963881614850">Off</translation>
+<translation id="5860491529813859533">Turn on</translation>
 <translation id="5876056640971328065">Pause video</translation>
 <translation id="5877248419911025165">Collapse all requests</translation>
 <translation id="5884085660368669834">Site preference</translation>
@@ -324,6 +340,7 @@
 <translation id="5922967540311291836">Block third-party cookies:</translation>
 <translation id="5923512600150154850">This will clear <ph name="DATASIZE" /> of data and cookies stored by sites.</translation>
 <translation id="5939518447894949180">Reset</translation>
+<translation id="5948139900367969951">Quickly get to what matters to you</translation>
 <translation id="5964247741333118902">Embedded content</translation>
 <translation id="5968921426641056619">Enter web address</translation>
 <translation id="5975083100439434680">Zoom out</translation>
@@ -335,10 +352,8 @@
 <translation id="6071501408666570960">You may be signed out of this site</translation>
 <translation id="6085954183010297841">Delete file editing grant? <ph name="FILE" /></translation>
 <translation id="6120483543004435978">When on, sites can ask to know when you're actively using your device. When off, sites can't know when you're actively using your device.</translation>
-<translation id="6140839633433422817">Are you sure that you want to reset permissions and delete cookies and site data?</translation>
 <translation id="6165508094623778733">Learn more</translation>
 <translation id="6171020522141473435">When on, sites can ask to use Bluetooth devices. When off, sites can't use Bluetooth devices.</translation>
-<translation id="6177111841848151710">Blocked for current search engine</translation>
 <translation id="6177128806592000436">Your connection to this site is not secure</translation>
 <translation id="6181444274883918285">Add site exception</translation>
 <translation id="6192792657125177640">Exceptions</translation>
@@ -392,6 +407,7 @@
 <translation id="6818926723028410516">Select items</translation>
 <translation id="6838525730752203626">Use Chrome by default</translation>
 <translation id="6840760312327750441">To group tabs, touch and hold a tab. Then, drag it onto another tab.</translation>
+<translation id="6851981911629679515">Turn on additional protection in Chrome’s JavaScript and WebAssembly engine</translation>
 <translation id="6864395892908308021">This device can't read NFC</translation>
 <translation id="6870169401250095575">Hide safety check card</translation>
 <translation id="6900883974539674431">Create tab groups that automatically save and update across all your devices</translation>
@@ -402,8 +418,8 @@
 <translation id="6980861169612950611">Delete site data? <ph name="SITE_NAME" /></translation>
 <translation id="6981982820502123353">Accessibility</translation>
 <translation id="6992289844737586249">Ask first before allowing sites to use your microphone (recommended)</translation>
+<translation id="6999131147875565462">Chrome runs faster and features that use JavaScript should work as designed</translation>
 <translation id="7000754031042624318">Turned off in Android settings</translation>
-<translation id="7016516562562142042">Allowed for current search engine</translation>
 <translation id="702275896380648118">This site determines things that you like and then suggests ads to other sites. This site also gets your ad topics from Chrome to show you more relevant ads.</translation>
 <translation id="7053983685419859001">Block</translation>
 <translation id="7066151586745993502">{NUM_SELECTED,plural, =1{1 selected}other{# selected}}</translation>
@@ -422,7 +438,6 @@
 <translation id="7250468141469952378"><ph name="ITEM_COUNT" /> selected</translation>
 <translation id="7260727271532453612"><ph name="PERMISSION_1" /> and <ph name="PERMISSION_2" /> allowed</translation>
 <translation id="7276071417425470385">When on, sites can ask to use virtual reality devices. When off, sites can't use virtual reality devices.</translation>
-<translation id="7302486331832100261">You usually block notifications. To allow, tap Details.</translation>
 <translation id="7366415735885268578">Add a site</translation>
 <translation id="7368695150573390554">Any offline data will be deleted</translation>
 <translation id="7383715096023715447">Settings for <ph name="DOMAIN" /></translation>
@@ -431,6 +446,7 @@
 <translation id="7423098979219808738">Ask first</translation>
 <translation id="7423538860840206698">Blocked from reading clipboard</translation>
 <translation id="7425915948813553151">Dark theme for sites</translation>
+<translation id="7488573225650545859">Hide View tabs in your app list</translation>
 <translation id="7521387064766892559">JavaScript</translation>
 <translation id="7547989957535180761">When on, sites can show sign-in prompts. When off, sites can't show sign-in prompts.</translation>
 <translation id="7553211568594248088">Exit hub search</translation>
@@ -469,6 +485,8 @@
 <translation id="8077120325605624147">Any site that you visit can show any ad to you</translation>
 <translation id="8087000398470557479">This content is from <ph name="DOMAIN_NAME" />, delivered by Google.</translation>
 <translation id="8088603949666785339">More options in the <ph name="BANNER_TITLE" /></translation>
+<translation id="8090579562279016251">Reduces performance but makes V8 more resistant to attacks</translation>
+<translation id="8112925981674547014">View tabs in your app list</translation>
 <translation id="8113501330600751161">{DAYS,plural, =1{Chrome will limit cookies again tomorrow}other{# days until Chrome limits cookies again}}</translation>
 <translation id="8116925261070264013">Muted</translation>
 <translation id="8117244575099414087">When on, sites can use your device's sensors. When off, sites can't use sensors.</translation>
@@ -509,6 +527,7 @@
 <translation id="857943718398505171">Allowed (recommended)</translation>
 <translation id="8609465669617005112">Move up</translation>
 <translation id="8617611086246832542">When on, the desktop view of websites is shown. When off, the mobile view of websites is shown.</translation>
+<translation id="8670078035093027626">Default browser bottom sheet opened at full height</translation>
 <translation id="8676316391139423634">When on, sites can ask to track your hands. When off, sites can't track your hands.</translation>
 <translation id="8676374126336081632">Clear input</translation>
 <translation id="8681886425883659911">Ads are blocked on sites known to show intrusive or misleading ads</translation>
@@ -523,6 +542,7 @@
 <translation id="8751914237388039244">Select an image</translation>
 <translation id="8800034312320686233">Site not working?</translation>
 <translation id="8801436777607969138">Block JavaScript for a specific site.</translation>
+<translation id="8801657293260363985">V8 is Chrome’s JavaScript and WebAssembly engine used to improve site performance</translation>
 <translation id="8803526663383843427">When on</translation>
 <translation id="8805385115381080995">Browsing is faster because a site is less likely to ask you to verify that you're a real person</translation>
 <translation id="8816026460808729765">Block sites from accessing sensors</translation>
@@ -537,7 +557,6 @@
 <translation id="8928445016601307354">Block sites from seeing and changing information on NFC devices</translation>
 <translation id="8944485226638699751">Limited</translation>
 <translation id="8959122750345127698">Navigation is unreachable: <ph name="URL" /></translation>
-<translation id="8986362086234534611">Forget</translation>
 <translation id="8990043154272859344">You'll be signed out of all sites</translation>
 <translation id="8993853206419610596">Expand all requests</translation>
 <translation id="9002538116239926534">When on, sites can save data on your device. When off, sites can't save data on your device.</translation>
@@ -549,9 +568,10 @@
 <translation id="9109747640384633967">{PERMISSIONS_SUMMARY_MIXED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" />, and <ph name="NUM_MORE" /> more}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" />, and <ph name="NUM_MORE" /> more}}</translation>
 <translation id="913657688200966289">Turn on permissions for <ph name="APP_NAME" /> in <ph name="BEGIN_LINK" />Android settings<ph name="END_LINK" />.</translation>
 <translation id="9138217887606523162">Current zoom is <ph name="ZOOM_LEVEL" /> %%</translation>
+<translation id="9156722768168878035">Let Chrome show your recent tabs in your device's app list and search results. You can turn this off at any time in Chrome settings.</translation>
 <translation id="9162462602695099906">This page is dangerous</translation>
-<translation id="930525582205581608">Forget this site?</translation>
 <translation id="947156494302904893">Sites that you visit can verify that you're a real person and not a bot</translation>
 <translation id="959682366969460160">Get organised</translation>
 <translation id="967624055006145463">Data stored</translation>
+<translation id="969975166333045662">Block site from using V8 optimiser.</translation>
 </translationbundle>

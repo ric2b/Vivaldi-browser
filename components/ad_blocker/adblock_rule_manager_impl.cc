@@ -207,6 +207,10 @@ const std::set<std::string>& RuleManagerImpl::GetExceptions(
 
 bool RuleManagerImpl::IsExemptOfFiltering(RuleGroup group,
                                           url::Origin origin) const {
+  // Allow all requests made by extensions.
+  if (origin.scheme() == "chrome-extension")
+    return true;
+
   bool default_exempt =
       active_exceptions_lists_[static_cast<size_t>(group)] == kProcessList;
   if (origin.opaque())

@@ -15,7 +15,11 @@ import {XMLView} from './XMLView.js';
 
 const UIStrings = {
   /**
-   *@description Text in Preview Factory of the Sources panel
+   *@description Text in Preview Factory of the Sources panel if the data to preview can't be shown due to an error
+   */
+  failedToLoadData: 'Failed to load data',
+  /**
+   *@description Text in Preview Factory of the Sources panel if there's no data to preview
    */
   nothingToPreview: 'Nothing to preview',
 };
@@ -38,14 +42,14 @@ export class PreviewFactory {
 
     const contentData = await provider.requestContentData();
     if (TextUtils.ContentData.ContentData.isError(contentData)) {
-      return new UI.EmptyWidget.EmptyWidget(contentData.error);
+      return new UI.EmptyWidget.EmptyWidget(i18nString(UIStrings.failedToLoadData), contentData.error);
     }
     if (!contentData.isTextContent) {
       return null;
     }
 
     if (!contentData.text) {
-      return new UI.EmptyWidget.EmptyWidget(i18nString(UIStrings.nothingToPreview));
+      return new UI.EmptyWidget.EmptyWidget(i18nString(UIStrings.nothingToPreview), '');
     }
 
     const parsedXML = XMLView.parseXML(contentData.text, contentData.mimeType);

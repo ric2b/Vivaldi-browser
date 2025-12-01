@@ -5,6 +5,7 @@
 <translation id="1110994991967754504">Selectați permisiunea pentru <ph name="PERMISSION_NAME" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> a închis conexiunea în mod neașteptat.</translation>
 <translation id="1161325031994447685">Reconectarea la Wi-Fi</translation>
+<translation id="1175364870820465910">Ti&amp;părește...</translation>
 <translation id="1375198122581997741">Despre versiune</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> nu a trimis date.</translation>
 <translation id="1559528461873125649">Nu există un astfel de fișier sau director</translation>
@@ -18,11 +19,13 @@
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Verificarea proxy-ul și firewall-ul<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Emis către: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Acest site web nu poate oferi o conexiune securizată</translation>
+<translation id="2178904466768126352">Atacatorii de pe site-ul pe care ați încercat să-l accesați pot să instaleze software dăunător care fură sau șterge informații cum ar fi parolele, fotografiile, mesajele sau numerele de carduri de credit.</translation>
 <translation id="2292556288342944218">Accesul la internet este blocat</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> necesită un nume de utilizator și o parolă.</translation>
 <translation id="2355395290879513365">Este posibil ca atacatorii să poată vedea imaginile la care vă uitați pe acest site web și să vă păcălească prin modificarea lor.</translation>
 <translation id="2356070529366658676">Întreabă</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Rulare diagnostice de rețea<ph name="END_LINK" /></translation>
+<translation id="2539524384386349900">Detectează</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> a trimis un răspuns nevalid.</translation>
 <translation id="2634124572758952069">Nu s-a putut găsi adresa IP pentru serverul <ph name="HOST_NAME" />.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
@@ -51,6 +54,7 @@
 <translation id="3566021033012934673">Conexiunea nu este privată</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" />, <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Ascunde detaliile</translation>
+<translation id="3614001939154393113">Atacatorii pot încerca să vă fure informațiile de pe <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (de exemplu, parole, mesaje sau date despre cardurile de credit). <ph name="BEGIN_LEARN_MORE_LINK" />Aflați mai multe despre acest avertisment<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="3630155396527302611">Dacă este deja inclus ca program căruia i se permite să acceseze rețeaua, încercați
       să îl eliminați din listă și să îl adăugați din nou.</translation>
 <translation id="3658742229777143148">Versiune</translation>
@@ -65,6 +69,7 @@
 <translation id="4165986682804962316">Setări pentru site-ul web</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Verificarea configurării firewall-ului și antivirusului<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Încercați să rulați diagnosticele de rețea<ph name="END_LINK" />.</translation>
+<translation id="4241830393007970744">Atacatorii de pe site-ul pe care ați încercat să-l accesați vă pot înșela să instalați software sau să dezvăluiți informații cum ar fi parole, numere de telefon sau numere de carduri de credit.</translation>
 <translation id="4250431568374086873">Conexiunea la acest site web nu este complet securizată</translation>
 <translation id="4265872034478892965">Autorizat de administrator</translation>
 <translation id="4312866146174492540">Blochează (implicit)</translation>

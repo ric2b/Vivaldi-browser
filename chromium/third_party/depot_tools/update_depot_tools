@@ -53,8 +53,6 @@ if [ $MINGW = 0 ]; then
   esac
 fi
 
-CANONICAL_GIT_URL="https://chromium.googlesource.com/chromium/tools/depot_tools.git"
-
 GIT="git"
 if [ -e "$base_dir/git.bat" -a $MINGW = 0 ]; then
   GIT="cmd.exe //c \"$base_dir\\git.bat\""
@@ -78,21 +76,6 @@ function test_git {
 
 function update_git_repo {
   remote_url=$(eval "$GIT" config --get remote.origin.url)
-  if [ -n "$remote_url" -a "$remote_url" != "$CANONICAL_GIT_URL" ]; then
-    echo "Your copy of depot_tools is configured to fetch from an obsolete URL:"
-    echo
-    echo "  $remote_url"
-    echo
-    read -t 60 -p "OK to update it to $CANONICAL_GIT_URL ? [Y/n] " -n 1
-    STATUS=$?
-    echo
-    if [[ $STATUS -ne 0 ]]; then
-      echo "Timeout; not updating remote URL."
-    elif [ -z "$REPLY" -o "$REPLY" = "Y" -o "$REPLY" = "y" ]; then
-      eval "$GIT" config remote.origin.url "$CANONICAL_GIT_URL"
-      echo "Remote URL updated."
-    fi
-  fi
 
   local GIT_CMD_TXT STATUS
   GIT_CMD_TXT=$(git fetch -q origin main 2>&1)

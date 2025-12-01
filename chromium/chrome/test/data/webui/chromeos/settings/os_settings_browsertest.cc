@@ -18,13 +18,11 @@
 #include "chromeos/ash/components/dbus/userdataauth/userdataauth_client.h"
 #include "chromeos/ash/components/login/auth/public/cryptohome_key_constants.h"
 #include "chromeos/ash/components/login/auth/public/key.h"
-#include "chromeos/ash/components/standalone_browser/standalone_browser_features.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "components/user_manager/user_names.h"
 #include "content/public/test/browser_test.h"
 #include "ui/accessibility/accessibility_features.h"
 #include "ui/base/ui_base_features.h"
-#include "ui/native_theme/native_theme_features.h"
 
 namespace ash::settings {
 
@@ -110,17 +108,23 @@ class OSSettingsMochaTestReducedAnimationsEnabled : public OSSettingsMochaTest {
       ::features::kAccessibilityReducedAnimations};
 };
 
-class OSSettingsMochaTestOverlayScrollbarEnabled : public OSSettingsMochaTest {
- private:
-  base::test::ScopedFeatureList scoped_feature_list_{
-      ::features::kOverlayScrollbarsOSSetting};
-};
-
 class OSSettingsMochaTestMagnifierFollowsChromeVoxEnabled
     : public OSSettingsMochaTest {
  private:
   base::test::ScopedFeatureList scoped_feature_list_{
       ::features::kAccessibilityMagnifierFollowsChromeVox};
+};
+
+class OSSettingsMochaTestFilterKeysEnabled : public OSSettingsMochaTest {
+ protected:
+  OSSettingsMochaTestFilterKeysEnabled() {
+    scoped_feature_list_.InitWithFeatures({::features::kAccessibilityBounceKeys,
+                                           ::features::kAccessibilitySlowKeys},
+                                          {});
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 class OSSettingsMochaTestMouseKeysEnabled : public OSSettingsMochaTest {
@@ -255,11 +259,7 @@ class OSSettingsDeviceTestAltAndSplitAndBacklightEnabled
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-class OSSettingsNearbyShareTestSharingEnabled : public OSSettingsMochaTest {
- private:
-  base::test::ScopedFeatureList scoped_feature_list_{
-      ::features::kNearbySharing};
-};
+using OSSettingsNearbyShareTestSharingEnabled = OSSettingsMochaTest;
 
 class OSSettingsOsA11yTestMainNodeAnnotationsEnabled
     : public OSSettingsMochaTest {
@@ -272,37 +272,18 @@ class OSSettingsFilesTestCrosComponentsAndJellyEnabled
     : public OSSettingsMochaTest {
  protected:
   OSSettingsFilesTestCrosComponentsAndJellyEnabled() {
-    scoped_feature_list_.InitWithFeatures(
-        /*enabled=*/
-        {
-            chromeos::features::kCrosComponents,
-            chromeos::features::kJelly,
-        },
-        /*disabled=*/{});
+    scoped_feature_list_.InitAndEnableFeature(
+        chromeos::features::kCrosComponents);
   }
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-class OSSettingsPrivacyTestPrivacyHubV0AndPermissionsEnabled
-    : public OSSettingsMochaTest {
- private:
-  base::test::ScopedFeatureList scoped_feature_list_{
-      ash::features::kCrosPrivacyHubAppPermissions};
-};
-
 class OSSettingsPrivacyTestPrivacyHubAndV0Enabled : public OSSettingsMochaTest {
  private:
   base::test::ScopedFeatureList scoped_feature_list_{
       ash::features::kCrosPrivacyHub};
-};
-
-class OSSettingsPrivacyTestDeprecateDnsDialogEnabled
-    : public OSSettingsMochaTest {
- private:
-  base::test::ScopedFeatureList scoped_feature_list_{
-      ash::features::kOsSettingsDeprecateDnsDialog};
 };
 
 using OSSettingsPrivacyPageTestPrivacyHubSubpage = OSSettingsMochaTest;
@@ -458,10 +439,6 @@ IN_PROC_BROWSER_TEST_F(OSSettingsCrostiniTest,
 
 IN_PROC_BROWSER_TEST_F(OSSettingsCrostiniTest, CrostiniPageCrostiniSubpage) {
   RunSettingsTest("crostini_page/crostini_subpage_test.js");
-}
-
-IN_PROC_BROWSER_TEST_F(OSSettingsMochaTest, DateTimePage) {
-  RunSettingsTest("date_time_page/date_time_page_test.js");
 }
 
 IN_PROC_BROWSER_TEST_F(OSSettingsMochaTest, DateTimePageTimezoneSelector) {
@@ -951,6 +928,11 @@ IN_PROC_BROWSER_TEST_F(OSSettingsMochaTestMouseKeysEnabled,
   RunSettingsTest("os_a11y_page/cursor_and_touchpad_page_test.js");
 }
 
+IN_PROC_BROWSER_TEST_F(OSSettingsMochaTestMouseKeysEnabled,
+                       OsA11yPageMouseKeysSubpage) {
+  RunSettingsTest("os_a11y_page/mouse_keys_subpage_test.js");
+}
+
 IN_PROC_BROWSER_TEST_F(OSSettingsMochaTestFaceGazeEnabled,
                        OsA11yPageFaceGazeSubpage) {
   RunSettingsTest("os_a11y_page/facegaze_subpage_test.js");
@@ -986,14 +968,14 @@ IN_PROC_BROWSER_TEST_F(OSSettingsMochaTestReducedAnimationsEnabled,
   RunSettingsTest("os_a11y_page/display_and_magnification_subpage_test.js");
 }
 
-IN_PROC_BROWSER_TEST_F(OSSettingsMochaTestOverlayScrollbarEnabled,
+IN_PROC_BROWSER_TEST_F(OSSettingsMochaTestMagnifierFollowsChromeVoxEnabled,
                        OsA11yPageDisplayAndMagnificationSubpage) {
   RunSettingsTest("os_a11y_page/display_and_magnification_subpage_test.js");
 }
 
-IN_PROC_BROWSER_TEST_F(OSSettingsMochaTestMagnifierFollowsChromeVoxEnabled,
-                       OsA11yPageDisplayAndMagnificationSubpage) {
-  RunSettingsTest("os_a11y_page/display_and_magnification_subpage_test.js");
+IN_PROC_BROWSER_TEST_F(OSSettingsMochaTestFilterKeysEnabled,
+                       OsA11yPageFilterKeys) {
+  RunSettingsTest("os_a11y_page/filter_keys_test.js");
 }
 
 IN_PROC_BROWSER_TEST_F(OSSettingsMochaTest,
@@ -1290,10 +1272,6 @@ IN_PROC_BROWSER_TEST_F(OSSettingsMochaTest,
   RunSettingsTest("os_bluetooth_page/os_paired_bluetooth_list_item_test.js");
 }
 
-IN_PROC_BROWSER_TEST_F(OSSettingsMochaTest, OsFilesPage) {
-  RunSettingsTest("os_files_page/os_files_page_test.js");
-}
-
 IN_PROC_BROWSER_TEST_F(OSSettingsMochaTest, OsFilesPageGoogleDrivePage) {
   RunSettingsTest("os_files_page/google_drive_page_test.js");
 }
@@ -1388,10 +1366,6 @@ IN_PROC_BROWSER_TEST_F(OSSettingsMochaTest,
   RunSettingsTest("os_people_page/personalization_options_test.js");
 }
 
-IN_PROC_BROWSER_TEST_F(OSSettingsMochaTest, OsPrintingPage) {
-  RunSettingsTest("os_printing_page/os_printing_page_test.js");
-}
-
 IN_PROC_BROWSER_TEST_F(OSSettingsMochaTest, OsPrintingPageCupsPrintServer) {
   RunSettingsTest("os_printing_page/cups_print_server_test.js");
 }
@@ -1430,12 +1404,12 @@ IN_PROC_BROWSER_TEST_F(OSSettingsMochaTest,
   RunSettingsTest("os_privacy_page/privacy_hub_app_permission_row_test.js");
 }
 
-IN_PROC_BROWSER_TEST_F(OSSettingsPrivacyTestPrivacyHubV0AndPermissionsEnabled,
+IN_PROC_BROWSER_TEST_F(OSSettingsMochaTest,
                        OsPrivacyPagePrivacyHubCameraSubpage) {
   RunSettingsTest("os_privacy_page/privacy_hub_camera_subpage_test.js");
 }
 
-IN_PROC_BROWSER_TEST_F(OSSettingsPrivacyTestPrivacyHubV0AndPermissionsEnabled,
+IN_PROC_BROWSER_TEST_F(OSSettingsMochaTest,
                        OsPrivacyPagePrivacyHubMicrophoneSubpage) {
   RunSettingsTest("os_privacy_page/privacy_hub_microphone_subpage_test.js");
 }
@@ -1474,23 +1448,8 @@ IN_PROC_BROWSER_TEST_F(OSSettingsMochaTest, OsPrivacyPageSecureDns) {
                   "runMochaSuite('SettingsSecureDns')");
 }
 
-IN_PROC_BROWSER_TEST_F(OSSettingsPrivacyTestDeprecateDnsDialogEnabled,
-                       OsPrivacyPageDeprecateDnsDialog) {
-  RunSettingsTest("os_privacy_page/secure_dns_test.js",
-                  "runMochaSuite('SecureDnsDialog')");
-}
-
-IN_PROC_BROWSER_TEST_F(OSSettingsMochaTest, OsPrivacyPageSecureDnsDialog) {
-  RunSettingsTest("os_privacy_page/secure_dns_test.js",
-                  "runMochaSuite('SecureDnsDialog')");
-}
-
 IN_PROC_BROWSER_TEST_F(OSSettingsMochaTest, OsPrivacyPageSmartPrivacySubpage) {
   RunSettingsTest("os_privacy_page/smart_privacy_subpage_test.js");
-}
-
-IN_PROC_BROWSER_TEST_F(OSSettingsMochaTest, OsResetPage) {
-  RunSettingsTest("os_reset_page/os_reset_page_test.js");
 }
 
 IN_PROC_BROWSER_TEST_F(OSSettingsResetTestSanitizeEnabled,
@@ -1501,10 +1460,6 @@ IN_PROC_BROWSER_TEST_F(OSSettingsResetTestSanitizeEnabled,
 IN_PROC_BROWSER_TEST_F(OSSettingsResetTestSanitizeDisabled,
                        OsResetPageResetSettingsCardWithoutSanitize) {
   RunSettingsTest("os_reset_page/reset_settings_card_test.js");
-}
-
-IN_PROC_BROWSER_TEST_F(OSSettingsMochaTest, OsSearchPage) {
-  RunSettingsTest("os_search_page/os_search_page_test.js");
 }
 
 IN_PROC_BROWSER_TEST_F(OSSettingsMochaTest,
@@ -1528,8 +1483,8 @@ IN_PROC_BROWSER_TEST_F(OSSettingsMochaTest, OsSettingsMainManagedFootnote) {
   RunSettingsTest("os_settings_main/managed_footnote_test.js");
 }
 
-IN_PROC_BROWSER_TEST_F(OSSettingsMochaTest, OsSettingsMenuRevamp) {
-  RunSettingsTest("os_settings_menu/os_settings_menu_revamp_test.js");
+IN_PROC_BROWSER_TEST_F(OSSettingsMochaTest, OsSettingsMenu) {
+  RunSettingsTest("os_settings_menu/os_settings_menu_test.js");
 }
 
 IN_PROC_BROWSER_TEST_F(OSSettingsMochaTest, OsSettingsMenuItem) {
@@ -1572,9 +1527,8 @@ IN_PROC_BROWSER_TEST_F(OSSettingsMochaTest, OsSettingsUiPageAvailability) {
   RunSettingsTest("os_settings_ui/os_settings_ui_page_availability_test.js");
 }
 
-IN_PROC_BROWSER_TEST_F(OSSettingsMochaTest, OsSettingsUiPageVisibilityRevamp) {
-  RunSettingsTest(
-      "os_settings_ui/os_settings_ui_page_visibility_revamp_test.js");
+IN_PROC_BROWSER_TEST_F(OSSettingsMochaTest, OsSettingsUiPageVisibility) {
+  RunSettingsTest("os_settings_ui/os_settings_ui_page_visibility_test.js");
 }
 
 IN_PROC_BROWSER_TEST_F(OSSettingsMochaTest, OsSettingsUiPrefSync) {
@@ -1587,10 +1541,6 @@ IN_PROC_BROWSER_TEST_F(OSSettingsMochaTest, OsSettingsUiToolbar) {
 
 IN_PROC_BROWSER_TEST_F(OSSettingsMochaTest, OsSettingsUiUserActionRecorder) {
   RunSettingsTest("os_settings_ui/user_action_recorder_test.js");
-}
-
-IN_PROC_BROWSER_TEST_F(OSSettingsMochaTest, ParentalControlsPage) {
-  RunSettingsTest("parental_controls_page/parental_controls_page_test.js");
 }
 
 IN_PROC_BROWSER_TEST_F(OSSettingsMochaTest, ParentalControlsSettingsCard) {

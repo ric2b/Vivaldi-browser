@@ -15,9 +15,15 @@
 #include <cstdint>
 #include <cstring>
 #include <exception>
+#include <memory>
+#include <string>
+#include <utility>
 
+#include "internal/flags/nearby_flags.h"
 #include "internal/platform/byte_array.h"
 #include "internal/platform/exception.h"
+#include "internal/platform/flags/nearby_platform_feature_flags.h"
+#include "internal/platform/implementation/windows/nearby_client_socket.h"
 #include "internal/platform/implementation/windows/wifi_hotspot.h"
 #include "internal/platform/input_stream.h"
 #include "internal/platform/logging.h"
@@ -26,10 +32,67 @@
 namespace nearby {
 namespace windows {
 namespace {
-// Recorded the maximum bytes received in one read is 65586 in the test, but add
-// a little more for const kMaxByteRecieved for safty reason.
-constexpr int kMaxByteRecieved = 66000;
+
+int recv_sync(SOCKET s, char* buf, int len, int flags) {
+  int result;
+  struct fd_set read_fds;
+
+  result = recv(s, buf, len, flags);
+  if (result >= 0) {
+    return result;
+  }
+
+  while (WSAGetLastError() == WSAEWOULDBLOCK) {
+    FD_ZERO(&read_fds);
+    FD_SET(s, &read_fds);
+    if ((select(/*nfds=*/0, /*readfds=*/&read_fds, /*writefds=*/nullptr,
+                /*exceptfds=*/nullptr, /*timeout=*/nullptr) > 0) &&
+        FD_ISSET(s, &read_fds)) {
+      result = recv(s, buf, len, flags);
+      if (result >= 0) {
+        return result;
+      }
+    }
+  }
+
+  return -1;
+}
+
+int send_sync(SOCKET s, const char* buf, int len, int flags) {
+  int result;
+  struct fd_set write_fds;
+
+  result = send(s, buf, len, flags);
+  if (result >= 0) {
+    return result;
+  }
+
+  while (WSAGetLastError() == WSAEWOULDBLOCK) {
+    FD_ZERO(&write_fds);
+    FD_SET(s, &write_fds);
+    if ((select(/*nfds=*/0, /*readfds=*/nullptr, /*writefds=*/&write_fds,
+                /*exceptfds=*/nullptr, /*timeout=*/nullptr) > 0) &&
+        FD_ISSET(s, &write_fds)) {
+      result = send(s, buf, len, flags);
+      if (result >= 0) {
+        return result;
+      }
+    }
+  }
+
+  return -1;
+}
+
 }  // namespace
+
+WifiHotspotSocket::WifiHotspotSocket() {
+  enable_blocking_socket_ = NearbyFlags::GetInstance().GetBoolFlag(
+      nearby::platform::config_package_nearby::nearby_platform_feature::
+          kEnableBlockingSocket);
+  client_socket_ = std::make_unique<NearbyClientSocket>();
+  input_stream_ = SocketInputStream(client_socket_.get());
+  output_stream_ = SocketOutputStream(client_socket_.get());
+}
 
 WifiHotspotSocket::WifiHotspotSocket(StreamSocket socket) {
   stream_soket_ = socket;
@@ -43,46 +106,55 @@ WifiHotspotSocket::WifiHotspotSocket(SOCKET socket) {
   output_stream_ = SocketOutputStream(socket);
 }
 
-WifiHotspotSocket::~WifiHotspotSocket() {
-  try {
-    if (stream_soket_ != nullptr || stream_soket_winsock_ != INVALID_SOCKET) {
-      Close();
-    }
-  } catch (std::exception exception) {
-    LOG(ERROR) << __func__ << ": Exception: " << exception.what();
-  } catch (const winrt::hresult_error& error) {
-    LOG(ERROR) << __func__ << ": WinRT exception: " << error.code() << ": "
-               << winrt::to_string(error.message());
-  } catch (...) {
-    LOG(ERROR) << __func__ << ": Unknown exeption.";
-  }
+WifiHotspotSocket::WifiHotspotSocket(
+    std::unique_ptr<NearbyClientSocket> socket) {
+  enable_blocking_socket_ = NearbyFlags::GetInstance().GetBoolFlag(
+      nearby::platform::config_package_nearby::nearby_platform_feature::
+          kEnableBlockingSocket);
+  client_socket_ = std::move(socket);
+  input_stream_ = SocketInputStream(client_socket_.get());
+  output_stream_ = SocketOutputStream(client_socket_.get());
 }
+
+WifiHotspotSocket::~WifiHotspotSocket() { Close(); }
 
 InputStream& WifiHotspotSocket::GetInputStream() { return input_stream_; }
 
 OutputStream& WifiHotspotSocket::GetOutputStream() { return output_stream_; }
 
 Exception WifiHotspotSocket::Close() {
-  try {
-    if (stream_soket_ != nullptr) {
-      stream_soket_.Close();
+  if (enable_blocking_socket_) {
+    if (client_socket_ != nullptr) {
+      return client_socket_->Close();
     }
-    if (stream_soket_winsock_ != INVALID_SOCKET) {
-      closesocket(stream_soket_winsock_);
-      stream_soket_winsock_ = INVALID_SOCKET;
-    }
+
     return {Exception::kSuccess};
-  } catch (std::exception exception) {
-    LOG(ERROR) << __func__ << ": Exception: " << exception.what();
-    return {Exception::kIo};
-  } catch (const winrt::hresult_error& error) {
-    LOG(ERROR) << __func__ << ": WinRT exception: " << error.code() << ": "
-               << winrt::to_string(error.message());
-    return {Exception::kIo};
-  } catch (...) {
-    LOG(ERROR) << __func__ << ": Unknown exeption.";
-    return {Exception::kIo};
+  } else {
+    try {
+      if (stream_soket_ != nullptr) {
+        stream_soket_.Close();
+      }
+      if (stream_soket_winsock_ != INVALID_SOCKET) {
+        closesocket(stream_soket_winsock_);
+        stream_soket_winsock_ = INVALID_SOCKET;
+      }
+      return {Exception::kSuccess};
+    } catch (std::exception exception) {
+      LOG(ERROR) << __func__ << ": Exception: " << exception.what();
+      return {Exception::kIo};
+    } catch (const winrt::hresult_error& error) {
+      LOG(ERROR) << __func__ << ": WinRT exception: " << error.code() << ": "
+                 << winrt::to_string(error.message());
+      return {Exception::kIo};
+    } catch (...) {
+      LOG(ERROR) << __func__ << ": Unknown exception.";
+      return {Exception::kIo};
+    }
   }
+}
+
+bool WifiHotspotSocket::Connect(const std::string& ip_address, int port) {
+  return client_socket_->Connect(ip_address, port);
 }
 
 WifiHotspotSocket::SocketInputStream::SocketInputStream(
@@ -96,137 +168,160 @@ WifiHotspotSocket::SocketInputStream::SocketInputStream(SOCKET socket) {
   socket_type_ = SocketType::kWin32Socket;
 }
 
+WifiHotspotSocket::SocketInputStream::SocketInputStream(
+    NearbyClientSocket* client_socket) {
+  enable_blocking_socket_ = NearbyFlags::GetInstance().GetBoolFlag(
+      nearby::platform::config_package_nearby::nearby_platform_feature::
+          kEnableBlockingSocket);
+  client_socket_ = client_socket;
+}
+
 ExceptionOr<ByteArray> WifiHotspotSocket::SocketInputStream::Read(
     std::int64_t size) {
-  try {
-    if (socket_type_ == SocketType::kWinRTSocket) {
-      Buffer buffer = Buffer(size);
-
-      auto ibuffer =
-          input_stream_.ReadAsync(buffer, size, InputStreamOptions::None).get();
-
-      if (ibuffer.Length() != size) {
-        LOG(WARNING) << "Only got part of data of needed.";
-      }
-
-      ByteArray data((char*)ibuffer.data(), ibuffer.Length());
-      return ExceptionOr<ByteArray>(data);
-    }
-    // When socket_type_ == SocketType::kWin32Socket
-    char recv_buf[kMaxByteRecieved];
-    int result;
-    struct fd_set readfds;
-
-    result = recv(socket_, recv_buf, size, 0);
-    if (result > 0) {
-      ByteArray data(recv_buf, result);
-      return ExceptionOr<ByteArray>(data);
-    }
-    if (result == 0) {
-      LOG(INFO) << "Connection closed.";
+  if (enable_blocking_socket_) {
+    if (client_socket_ == nullptr) {
+      LOG(ERROR) << "Failed to read data due to no client socket.";
       return {Exception::kIo};
     }
-    // When WSAEWOULDBLOCK happens, it means the packet for receive is not
-    // ready at the moment. The API select() will block till the packet is
-    // ready for recieving.
-    if (WSAEWOULDBLOCK == WSAGetLastError()) {
-      FD_ZERO(&readfds);
-      FD_SET(socket_, &readfds);
-      if ((select(/*nfds ignored*/ 0, &readfds, nullptr, nullptr, nullptr) >
-           0) &&
-          FD_ISSET(socket_, &readfds)) {
-        result = recv(socket_, recv_buf, size, 0);
-        if (result > 0) {
-          ByteArray data(recv_buf, result);
-          return ExceptionOr<ByteArray>(data);
+
+    return client_socket_->Read(size);
+  } else {
+    try {
+      if (socket_type_ == SocketType::kWinRTSocket) {
+        Buffer buffer = Buffer(size);
+
+        auto ibuffer =
+            input_stream_.ReadAsync(buffer, size, InputStreamOptions::None)
+                .get();
+
+        if (ibuffer.Length() != size) {
+          LOG(WARNING) << "Only got part of data of needed.";
+        }
+
+        ByteArray data((char*)ibuffer.data(), ibuffer.Length());
+        return ExceptionOr<ByteArray>(data);
+      }
+
+      int result;
+      int count = 0;
+
+      // When socket_type_ == SocketType::kWin32Socket
+      if (size > read_buffer_.size()) {
+        read_buffer_.resize(size);
+      }
+
+      while (count < size) {
+        result =
+            recv_sync(socket_, read_buffer_.data() + count, size - count, 0);
+        if (result == 0) {
+          LOG(WARNING) << "Connection closed.";
+          return {Exception::kIo};
+        } else if (result < 0) {
+          LOG(ERROR) << "recv failed with error: " << WSAGetLastError();
+          return {Exception::kIo};
+        } else {
+          count += result;
         }
       }
+
+      ByteArray data(read_buffer_.data(), size);
+      return ExceptionOr<ByteArray>(data);
+    } catch (std::exception exception) {
+      LOG(ERROR) << __func__ << ": Exception: " << exception.what();
+      return {Exception::kIo};
+    } catch (const winrt::hresult_error& error) {
+      LOG(ERROR) << __func__ << ": WinRT exception: " << error.code() << ": "
+                 << winrt::to_string(error.message());
+      return {Exception::kIo};
+    } catch (...) {
+      LOG(ERROR) << __func__ << ": Unknown exception.";
+      return {Exception::kIo};
     }
-    return {Exception::kIo};
-  } catch (std::exception exception) {
-    LOG(ERROR) << __func__ << ": Exception: " << exception.what();
-    return {Exception::kIo};
-  } catch (const winrt::hresult_error& error) {
-    LOG(ERROR) << __func__ << ": WinRT exception: " << error.code() << ": "
-               << winrt::to_string(error.message());
-    return {Exception::kIo};
-  } catch (...) {
-    LOG(ERROR) << __func__ << ": Unknown exeption.";
-    return {Exception::kIo};
   }
 }
 
 ExceptionOr<size_t> WifiHotspotSocket::SocketInputStream::Skip(size_t offset) {
-  try {
-    if (socket_type_ == SocketType::kWinRTSocket) {
-      Buffer buffer = Buffer(offset);
-
-      auto ibuffer =
-          input_stream_.ReadAsync(buffer, offset, InputStreamOptions::None)
-              .get();
-      return ExceptionOr<size_t>((size_t)ibuffer.Length());
+  if (enable_blocking_socket_) {
+    if (client_socket_ == nullptr) {
+      return {Exception::kIo};
     }
-    // When socket_type_ == SocketType::kWin32Socket
-    char recv_buf[kMaxByteRecieved];
-    int result;
-    struct fd_set readfds;
 
-    result = recv(socket_, recv_buf, offset, 0);
-    if (result > 0) {
-      return ExceptionOr<size_t>((size_t)result);
-    }
-    if (result == 0) {
-      LOG(INFO) << "Connection closed.";
-    } else {
-      // When WSAEWOULDBLOCK happens, it means the packet for receive is not
-      // ready at the moment. The API select() will block till the packet is
-      // ready for recieving.
-      if (WSAEWOULDBLOCK == WSAGetLastError()) {
-        FD_ZERO(&readfds);
-        FD_SET(socket_, &readfds);
-        if ((select(/*nfds ignored*/ 0, &readfds, nullptr, nullptr, nullptr) >
-             0) &&
-            FD_ISSET(socket_, &readfds)) {
-          result = recv(socket_, recv_buf, offset, 0);
-          if (result > 0) {
-            return ExceptionOr<size_t>((size_t)result);
-          }
+    return client_socket_->Skip(offset);
+  } else {
+    try {
+      if (socket_type_ == SocketType::kWinRTSocket) {
+        Buffer buffer = Buffer(offset);
+
+        auto ibuffer =
+            input_stream_.ReadAsync(buffer, offset, InputStreamOptions::None)
+                .get();
+        return ExceptionOr<size_t>((size_t)ibuffer.Length());
+      }
+      // When socket_type_ == SocketType::kWin32Socket
+      int result;
+      int count = 0;
+
+      // When socket_type_ == SocketType::kWin32Socket
+      if (offset > read_buffer_.size()) {
+        read_buffer_.resize(offset);
+      }
+
+      while (count < offset) {
+        result =
+            recv_sync(socket_, read_buffer_.data() + count, offset - count, 0);
+        if (result == 0) {
+          LOG(WARNING) << "Connection closed.";
+          return {Exception::kIo};
+        } else if (result < 0) {
+          LOG(ERROR) << "recv failed with error: " << WSAGetLastError();
+          return {Exception::kIo};
+        } else {
+          count += result;
         }
       }
+
+      return ExceptionOr<size_t>(offset);
+    } catch (std::exception exception) {
+      LOG(ERROR) << __func__ << ": Exception: " << exception.what();
+      return {Exception::kIo};
+    } catch (const winrt::hresult_error& error) {
+      LOG(ERROR) << __func__ << ": WinRT exception: " << error.code() << ": "
+                 << winrt::to_string(error.message());
+      return {Exception::kIo};
+    } catch (...) {
+      LOG(ERROR) << __func__ << ": Unknown exception.";
+      return {Exception::kIo};
     }
-    return {Exception::kIo};
-  } catch (std::exception exception) {
-    LOG(ERROR) << __func__ << ": Exception: " << exception.what();
-    return {Exception::kIo};
-  } catch (const winrt::hresult_error& error) {
-    LOG(ERROR) << __func__ << ": WinRT exception: " << error.code() << ": "
-               << winrt::to_string(error.message());
-    return {Exception::kIo};
-  } catch (...) {
-    LOG(ERROR) << __func__ << ": Unknown exeption.";
-    return {Exception::kIo};
   }
 }
 
 Exception WifiHotspotSocket::SocketInputStream::Close() {
-  try {
-    if (socket_type_ == SocketType::kWinRTSocket) {
-      input_stream_.Close();
-    } else {
-      // When socket_type_ == SocketType::kWin32Socket
-      shutdown(socket_, SD_RECEIVE);
+  if (enable_blocking_socket_) {
+    if (client_socket_ == nullptr) {
+      return {Exception::kIo};
     }
-    return {Exception::kSuccess};
-  } catch (std::exception exception) {
-    LOG(ERROR) << __func__ << ": Exception: " << exception.what();
-    return {Exception::kIo};
-  } catch (const winrt::hresult_error& error) {
-    LOG(ERROR) << __func__ << ": WinRT exception: " << error.code() << ": "
-               << winrt::to_string(error.message());
-    return {Exception::kIo};
-  } catch (...) {
-    LOG(ERROR) << __func__ << ": Unknown exeption.";
-    return {Exception::kIo};
+
+    return client_socket_->Close();
+  } else {
+    try {
+      if (socket_type_ == SocketType::kWinRTSocket) {
+        input_stream_.Close();
+      } else {
+        // When socket_type_ == SocketType::kWin32Socket
+        shutdown(socket_, SD_RECEIVE);
+      }
+      return {Exception::kSuccess};
+    } catch (std::exception exception) {
+      LOG(ERROR) << __func__ << ": Exception: " << exception.what();
+      return {Exception::kIo};
+    } catch (const winrt::hresult_error& error) {
+      LOG(ERROR) << __func__ << ": WinRT exception: " << error.code() << ": "
+                 << winrt::to_string(error.message());
+      return {Exception::kIo};
+    } catch (...) {
+      LOG(ERROR) << __func__ << ": Unknown exception.";
+      return {Exception::kIo};
+    }
   }
 }
 
@@ -242,79 +337,120 @@ WifiHotspotSocket::SocketOutputStream::SocketOutputStream(SOCKET socket) {
   socket_type_ = SocketType::kWin32Socket;
 }
 
+WifiHotspotSocket::SocketOutputStream::SocketOutputStream(
+    NearbyClientSocket* client_socket) {
+  enable_blocking_socket_ = NearbyFlags::GetInstance().GetBoolFlag(
+      nearby::platform::config_package_nearby::nearby_platform_feature::
+          kEnableBlockingSocket);
+  client_socket_ = client_socket;
+}
+
 Exception WifiHotspotSocket::SocketOutputStream::Write(const ByteArray& data) {
-  try {
-    if (socket_type_ == SocketType::kWinRTSocket) {
-      Buffer buffer = Buffer(data.size());
-      std::memcpy(buffer.data(), data.data(), data.size());
-      buffer.Length(data.size());
+  if (enable_blocking_socket_) {
+    if (client_socket_ == nullptr) {
+      return {Exception::kIo};
+    }
 
-      output_stream_.WriteAsync(buffer).get();
+    return client_socket_->Write(data);
+  } else {
+    try {
+      if (socket_type_ == SocketType::kWinRTSocket) {
+        Buffer buffer = Buffer(data.size());
+        std::memcpy(buffer.data(), data.data(), data.size());
+        buffer.Length(data.size());
+
+        output_stream_.WriteAsync(buffer).get();
+        return {Exception::kSuccess};
+      }
+
+      int result;
+      int count = 0;
+
+      while (count < data.size()) {
+        result =
+            send_sync(socket_, data.data() + count, data.size() - count, 0);
+        if (result == 0) {
+          LOG(WARNING) << "Connection closed.";
+          return {Exception::kIo};
+        } else if (result < 0) {
+          LOG(ERROR) << "Failed to send data with error: " << WSAGetLastError();
+          return {Exception::kIo};
+        } else {
+          count += result;
+        }
+      }
+
       return {Exception::kSuccess};
     }
-    // When socket_type_ == SocketType::kWin32Socket
-    char sendbuf[kMaxByteRecieved];
-    int result;
 
-    std::memcpy(sendbuf, data.data(), data.size());
-    result = send(socket_, sendbuf, data.size(), 0);
-    if (result > 0) {
-      return {Exception::kSuccess};
+    catch (std::exception exception) {
+      LOG(ERROR) << __func__ << ": Exception: " << exception.what();
+      return {Exception::kIo};
+    } catch (const winrt::hresult_error& error) {
+      LOG(ERROR) << __func__ << ": WinRT exception: " << error.code() << ": "
+                 << winrt::to_string(error.message());
+      return {Exception::kIo};
+    } catch (...) {
+      LOG(ERROR) << __func__ << ": Unknown exception.";
+      return {Exception::kIo};
     }
-    LOG(INFO) << "recv failed: " << WSAGetLastError();
-
-    return {Exception::kIo};
-  } catch (std::exception exception) {
-    LOG(ERROR) << __func__ << ": Exception: " << exception.what();
-    return {Exception::kIo};
-  } catch (const winrt::hresult_error& error) {
-    LOG(ERROR) << __func__ << ": WinRT exception: " << error.code() << ": "
-               << winrt::to_string(error.message());
-    return {Exception::kIo};
-  } catch (...) {
-    LOG(ERROR) << __func__ << ": Unknown exeption.";
-    return {Exception::kIo};
   }
 }
 
 Exception WifiHotspotSocket::SocketOutputStream::Flush() {
-  try {
-    if (socket_type_ == SocketType::kWinRTSocket) {
-      output_stream_.FlushAsync().get();
+  if (enable_blocking_socket_) {
+    if (client_socket_ == nullptr) {
+      return {Exception::kIo};
     }
-    return {Exception::kSuccess};
-  } catch (std::exception exception) {
-    LOG(ERROR) << __func__ << ": Exception: " << exception.what();
-    return {Exception::kIo};
-  } catch (const winrt::hresult_error& error) {
-    LOG(ERROR) << __func__ << ": WinRT exception: " << error.code() << ": "
-               << winrt::to_string(error.message());
-    return {Exception::kIo};
-  } catch (...) {
-    LOG(ERROR) << __func__ << ": Unknown exeption.";
-    return {Exception::kIo};
+
+    return client_socket_->Flush();
+  } else {
+    try {
+      if (socket_type_ == SocketType::kWinRTSocket) {
+        output_stream_.FlushAsync().get();
+      }
+      return {Exception::kSuccess};
+    } catch (std::exception exception) {
+      LOG(ERROR) << __func__ << ": Exception: " << exception.what();
+      return {Exception::kIo};
+    } catch (const winrt::hresult_error& error) {
+      LOG(ERROR) << __func__ << ": WinRT exception: " << error.code() << ": "
+                 << winrt::to_string(error.message());
+      return {Exception::kIo};
+    } catch (...) {
+      LOG(ERROR) << __func__ << ": Unknown exception.";
+      return {Exception::kIo};
+    }
   }
 }
 
 Exception WifiHotspotSocket::SocketOutputStream::Close() {
-  try {
-    if (socket_type_ == SocketType::kWinRTSocket) {
-      output_stream_.Close();
-    } else {
-      // When socket_type_ == SocketType::kWin32Socket
-      shutdown(socket_, SD_SEND);
+  if (enable_blocking_socket_) {
+    if (client_socket_ == nullptr) {
+      return {Exception::kIo};
     }
-    return {Exception::kSuccess};
-  } catch (std::exception exception) {
-    LOG(ERROR) << __func__ << ": Exception: " << exception.what();
-    return {Exception::kIo};
-  } catch (const winrt::hresult_error& error) {
-    LOG(ERROR) << __func__ << ": WinRT exception: " << error.code() << ": "
-               << winrt::to_string(error.message());
-    return {Exception::kIo};
-  } catch (...) {
-    LOG(ERROR) << __func__ << ": Unknown exeption.";
-    return {Exception::kIo};
+
+    return client_socket_->Close();
+  } else {
+    try {
+      if (socket_type_ == SocketType::kWinRTSocket) {
+        output_stream_.Close();
+      } else {
+        // When socket_type_ == SocketType::kWin32Socket
+        shutdown(socket_, SD_SEND);
+      }
+      return {Exception::kSuccess};
+    } catch (std::exception exception) {
+      LOG(ERROR) << __func__ << ": Exception: " << exception.what();
+      return {Exception::kIo};
+    } catch (const winrt::hresult_error& error) {
+      LOG(ERROR) << __func__ << ": WinRT exception: " << error.code() << ": "
+                 << winrt::to_string(error.message());
+      return {Exception::kIo};
+    } catch (...) {
+      LOG(ERROR) << __func__ << ": Unknown exception.";
+      return {Exception::kIo};
+    }
   }
 }
 

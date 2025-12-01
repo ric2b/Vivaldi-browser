@@ -15,6 +15,7 @@
 #include "src/compiler/turboshaft/index.h"
 #include "src/compiler/turboshaft/operations.h"
 #include "src/compiler/turboshaft/wasm-assembler-helpers.h"
+#include "src/heap/factory-inl.h"
 #include "src/objects/instance-type-inl.h"
 #include "src/wasm/compilation-environment-inl.h"
 #include "src/wasm/decoder.h"
@@ -81,7 +82,7 @@ class WasmInJSInliningReducer : public Next {
                LoadOp::Kind::RawAligned(), MemoryRepresentation::Int32(),
                compiler::kNoWriteBarrier);
 
-      V<Any> result =
+      result =
           Next::ReduceCall(callee, frame_state, arguments, descriptor, effects);
 
       __ Store(thread_in_wasm_flag_address, __ Word32Constant(0),
@@ -1160,6 +1161,13 @@ V<Any> WasmInJSInliningReducer<Next>::TryInlineWasmCall(
     TRACE("- not inlining: asm.js-in-JS inlining is not supported");
     return OpIndex::Invalid();
   }
+
+  if (func_idx < module->num_imported_functions) {
+    TRACE("- not inlining: call to an imported function");
+    return OpIndex::Invalid();
+  }
+  DCHECK_LT(func_idx - module->num_imported_functions,
+            module->num_declared_functions);
 
   // TODO(42204563): Support shared-everything proposal (at some point, or
   // possibly never).

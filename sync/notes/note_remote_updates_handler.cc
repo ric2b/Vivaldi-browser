@@ -4,6 +4,7 @@
 
 #include "sync/notes/note_remote_updates_handler.h"
 
+#include <algorithm>
 #include <memory>
 #include <set>
 #include <string>
@@ -14,7 +15,6 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/ranges/algorithm.h"
 #include "base/trace_event/trace_event.h"
 #include "base/uuid.h"
 #include "components/notes/note_node.h"
@@ -81,7 +81,7 @@ size_t ComputeChildNodeIndex(const vivaldi::NoteNode* parent,
   const syncer::UniquePosition position =
       syncer::UniquePosition::FromProto(unique_position);
 
-  auto iter = base::ranges::partition_point(
+  auto iter = std::ranges::partition_point(
       parent->children(), [note_tracker, &position](
                               const std::unique_ptr<vivaldi::NoteNode>& child) {
         // Return true for all |parent|'s children whose position is less than

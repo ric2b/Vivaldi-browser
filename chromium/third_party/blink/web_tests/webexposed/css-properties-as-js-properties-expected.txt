@@ -24,6 +24,15 @@ animationRangeEnd
 animationRangeStart
 animationTimeline
 animationTimingFunction
+animationTrigger
+animationTriggerExitRange
+animationTriggerExitRangeEnd
+animationTriggerExitRangeStart
+animationTriggerRange
+animationTriggerRangeEnd
+animationTriggerRangeStart
+animationTriggerTimeline
+animationTriggerType
 appRegion
 appearance
 ascentOverride
@@ -244,6 +253,9 @@ insetInline
 insetInlineEnd
 insetInlineStart
 interactivity
+interestTargetDelay
+interestTargetHideDelay
+interestTargetShowDelay
 interpolateSize
 isolation
 item
@@ -287,6 +299,10 @@ maskPosition
 maskRepeat
 maskSize
 maskType
+masonryAutoTracks
+masonryDirection
+masonryFill
+masonryFlow
 masonrySlack
 masonryTemplateTracks
 masonryTrack
@@ -363,8 +379,6 @@ placeContent
 placeItems
 placeSelf
 pointerEvents
-popoverHideDelay
-popoverShowDelay
 position
 positionAnchor
 positionArea
@@ -379,6 +393,7 @@ range
 readingFlow
 removeProperty
 resize
+result
 right
 rotate
 rowGap
@@ -388,6 +403,7 @@ rx
 ry
 scale
 scrollBehavior
+scrollInitialTarget
 scrollMargin
 scrollMarginBlock
 scrollMarginBlockEnd
@@ -417,7 +433,6 @@ scrollSnapType
 scrollStart
 scrollStartBlock
 scrollStartInline
-scrollStartTarget
 scrollStartX
 scrollStartY
 scrollTimeline

@@ -7,7 +7,7 @@ Jonas Klink (klink@google.com)
 
 Accessibility Product Manager / Software Engineer
 
-http://google.com/Accessibility
+https://google.com/Accessibility
 
 ---
 
@@ -35,7 +35,7 @@ Web Apps: Gmail, Apps, Blogger, Maps, Transit, …
 
 Slide: Why? Users!
 
-http://google.com/Accessibility
+https://google.com/Accessibility
 
 ---
 
@@ -155,5 +155,5 @@ Q & A
 
 klink@google.com
 
-http://google.com/Accessibility
+https://google.com/Accessibility
 

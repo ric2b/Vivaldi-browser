@@ -34,6 +34,7 @@
 #import "ios/chrome/browser/follow/model/follow_menu_updater.h"
 #import "ios/chrome/browser/follow/model/follow_tab_helper.h"
 #import "ios/chrome/browser/follow/model/follow_util.h"
+#import "ios/chrome/browser/lens/ui_bundled/lens_entrypoint.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_presenter.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_presenter_observer_bridge.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_request.h"
@@ -41,6 +42,9 @@
 #import "ios/chrome/browser/overlays/model/public/web_content_area/http_auth_overlay.h"
 #import "ios/chrome/browser/policy/model/browser_policy_connector_ios.h"
 #import "ios/chrome/browser/policy/model/policy_util.h"
+#import "ios/chrome/browser/reading_list/ui_bundled/reading_list_menu_notification_delegate.h"
+#import "ios/chrome/browser/reading_list/ui_bundled/reading_list_menu_notifier.h"
+#import "ios/chrome/browser/reading_list/ui_bundled/reading_list_utils.h"
 #import "ios/chrome/browser/search_engines/model/search_engines_util.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
@@ -56,15 +60,11 @@
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/translate/model/chrome_ios_translate_client.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_tile_constants.h"
-#import "ios/chrome/browser/ui/lens/lens_entrypoint.h"
 #import "ios/chrome/browser/ui/popup_menu/cells/popup_menu_text_item.h"
 #import "ios/chrome/browser/ui/popup_menu/cells/popup_menu_tools_item.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
 #import "ios/chrome/browser/ui/popup_menu/public/cells/popup_menu_item.h"
 #import "ios/chrome/browser/ui/popup_menu/public/popup_menu_consumer.h"
-#import "ios/chrome/browser/ui/reading_list/reading_list_menu_notification_delegate.h"
-#import "ios/chrome/browser/ui/reading_list/reading_list_menu_notifier.h"
-#import "ios/chrome/browser/ui/reading_list/reading_list_utils.h"
 #import "ios/chrome/browser/url_loading/model/image_search_param_generator.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_params.h"
@@ -414,8 +414,9 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
 #pragma mark - PrefObserverDelegate
 
 - (void)onPreferenceChanged:(const std::string&)preferenceName {
-  if (preferenceName == bookmarks::prefs::kEditBookmarksEnabled)
+  if (preferenceName == bookmarks::prefs::kEditBookmarksEnabled) {
     [self updateBookmarkItem];
+  }
 }
 
 #pragma mark - Properties
@@ -487,8 +488,9 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
 - (void)setEngagementTracker:(feature_engagement::Tracker*)engagementTracker {
   _engagementTracker = engagementTracker;
 
-  if (!self.popupMenu || !engagementTracker)
+  if (!self.popupMenu || !engagementTracker) {
     return;
+  }
 
   if (self.readingListItem &&
       self.engagementTracker->ShouldTriggerHelpUI(
@@ -531,28 +533,39 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
       }
     }
     NSMutableArray* specificItems = [NSMutableArray array];
-    if (self.reloadStopItem)
+    if (self.reloadStopItem) {
       [specificItems addObject:self.reloadStopItem];
-    if (self.readLaterItem)
+    }
+    if (self.readLaterItem) {
       [specificItems addObject:self.readLaterItem];
-    if (self.bookmarkItem)
+    }
+    if (self.bookmarkItem) {
       [specificItems addObject:self.bookmarkItem];
-    if (self.translateItem)
+    }
+    if (self.translateItem) {
       [specificItems addObject:self.translateItem];
-    if (self.findInPageItem)
+    }
+    if (self.findInPageItem) {
       [specificItems addObject:self.findInPageItem];
-    if (self.textZoomItem)
+    }
+    if (self.textZoomItem) {
       [specificItems addObject:self.textZoomItem];
-    if (self.siteInformationItem)
+    }
+    if (self.siteInformationItem) {
       [specificItems addObject:self.siteInformationItem];
-    if (self.requestDesktopSiteItem)
+    }
+    if (self.requestDesktopSiteItem) {
       [specificItems addObject:self.requestDesktopSiteItem];
-    if (self.requestMobileSiteItem)
+    }
+    if (self.requestMobileSiteItem) {
       [specificItems addObject:self.requestMobileSiteItem];
-    if (self.readingListItem)
+    }
+    if (self.readingListItem) {
       [specificItems addObject:self.readingListItem];
-    if (self.priceNotificationsItem)
+    }
+    if (self.priceNotificationsItem) {
       [specificItems addObject:self.priceNotificationsItem];
+    }
     self.specificItems = specificItems;
       // Vivaldi noteItem
       if (self.noteItem)
@@ -563,8 +576,9 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
 }
 
 - (void)setWebContentAreaShowingOverlay:(BOOL)webContentAreaShowingOverlay {
-  if (_webContentAreaShowingOverlay == webContentAreaShowingOverlay)
+  if (_webContentAreaShowingOverlay == webContentAreaShowingOverlay) {
     return;
+  }
   _webContentAreaShowingOverlay = webContentAreaShowingOverlay;
   [self updatePopupMenu];
 }
@@ -582,8 +596,9 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
 
 - (void)readPageLater {
   web::WebState* webState = self.webState;
-  if (!webState)
+  if (!webState) {
     return;
+  }
 
   reading_list::AddToReadingListUsingCanonicalUrl(self.readingListBrowserAgent,
                                                   webState);
@@ -648,8 +663,9 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
             (language::IOSLanguageDetectionTabHelper*)tabHelper
                  didDetermineLanguage:
                      (const translate::LanguageDetectionDetails&)details {
-  if (!self.translateItem)
+  if (!self.translateItem) {
     return;
+  }
   // Update the translate item state once language details have been determined.
   self.translateItem.enabled = [self isTranslateEnabled];
   [self.popupMenu itemsHaveChanged:@[ self.translateItem ]];
@@ -658,8 +674,9 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
 #pragma mark - ReadingListMenuNotificationDelegate Implementation
 
 - (void)unreadCountChanged:(NSInteger)unreadCount {
-  if (!self.readingListItem)
+  if (!self.readingListItem) {
     return;
+  }
 
   self.readingListItem.badgeNumber = unreadCount;
   [self.popupMenu itemsHaveChanged:@[ self.readingListItem ]];
@@ -732,8 +749,9 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
 
 // Updates `self.bookmarkItem` to match the bookmarked status of the page.
 - (void)updateBookmarkItem {
-  if (!self.bookmarkItem)
+  if (!self.bookmarkItem) {
     return;
+  }
 
   self.bookmarkItem.enabled =
       [self isCurrentURLWebURL] && [self isEditBookmarksEnabled];
@@ -778,8 +796,9 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
 
 // Whether the current web page has available site info.
 - (BOOL)currentWebPageSupportsSiteInfo {
-  if (!self.webState)
+  if (!self.webState) {
     return NO;
+  }
   web::NavigationItem* navItem =
       self.webState->GetNavigationManager()->GetVisibleItem();
   if (!navItem) {
@@ -805,21 +824,24 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
 
 // Whether the current page is a web page.
 - (BOOL)isCurrentURLWebURL {
-  if (!self.webState)
+  if (!self.webState) {
     return NO;
+  }
   const GURL& URL = self.webState->GetLastCommittedURL();
   return URL.is_valid() && !web::GetWebClient()->IsAppSpecificURL(URL);
 }
 
 // Whether the translate menu item should be enabled.
 - (BOOL)isTranslateEnabled {
-  if (!self.webState)
+  if (!self.webState) {
     return NO;
+  }
 
   auto* translate_client =
       ChromeIOSTranslateClient::FromWebState(self.webState);
-  if (!translate_client)
+  if (!translate_client) {
     return NO;
+  }
 
   translate::TranslateManager* translate_manager =
       translate_client->GetTranslateManager();
@@ -830,13 +852,15 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
 // Determines whether or not translate is available on the page and logs the
 // result. This method should only be called once per popup menu shown.
 - (void)logTranslateAvailability {
-  if (!self.webState)
+  if (!self.webState) {
     return;
+  }
 
   auto* translate_client =
       ChromeIOSTranslateClient::FromWebState(self.webState);
-  if (!translate_client)
+  if (!translate_client) {
     return;
+  }
 
   translate::TranslateManager* translate_manager =
       translate_client->GetTranslateManager();
@@ -846,8 +870,9 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
 
 // Whether find in page is enabled.
 - (BOOL)isFindInPageEnabled {
-  if (!self.webState)
+  if (!self.webState) {
     return NO;
+  }
   auto* helper = GetConcreteFindTabHelperFromWebState(self.webState);
   return (helper && helper->CurrentPageSupportsFindInPage() &&
           !helper->IsFindUIActive());
@@ -869,8 +894,9 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
 
 // Whether the page is currently loading.
 - (BOOL)isPageLoading {
-  if (!self.webState)
+  if (!self.webState) {
     return NO;
+  }
   return self.webState->IsLoading();
 }
 
@@ -931,8 +957,9 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
 }
 
 - (NSArray<TableViewItem*>*)itemsForNewWindow {
-  if (!base::ios::IsMultipleScenesSupported())
+  if (!base::ios::IsMultipleScenesSupported()) {
     return @[];
+  }
 
   // Create the menu item -- hardcoded string and no accessibility ID.
   PopupMenuToolsItem* openNewWindowItem = CreateTableViewItem(
@@ -1143,12 +1170,14 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
 
 // Returns the UserAgentType currently in use.
 - (web::UserAgentType)userAgentType {
-  if (!self.webState)
+  if (!self.webState) {
     return web::UserAgentType::NONE;
+  }
   web::NavigationItem* visibleItem =
       self.webState->GetNavigationManager()->GetVisibleItem();
-  if (!visibleItem)
+  if (!visibleItem) {
     return web::UserAgentType::NONE;
+  }
 
   return visibleItem->GetUserAgentType();
 }
@@ -1157,23 +1186,23 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
 
 // Returns YES if user is allowed to edit any bookmarks.
 - (BOOL)isEditBookmarksEnabled {
-    return self.prefService->GetBoolean(
-        bookmarks::prefs::kEditBookmarksEnabled);
+  return self.prefService->GetBoolean(bookmarks::prefs::kEditBookmarksEnabled);
 }
 
 // Returns YES if incognito NTP title and image should be used for back/forward
 // item associated with `URL`.
 - (BOOL)shouldUseIncognitoNTPResourcesForURL:(const GURL&)URL {
-    return URL.DeprecatedGetOriginAsURL() == kChromeUINewTabURL &&
-           self.isIncognito;
+  return URL.DeprecatedGetOriginAsURL() == kChromeUINewTabURL &&
+         self.isIncognito;
 }
 
 // Searches the copied image. If `usingLens` is set, then the search will be
 // performed with Lens.
 - (void)searchCopiedImage:(std::optional<gfx::Image>)optionalImage
                 usingLens:(BOOL)usingLens {
-  if (!optionalImage)
+  if (!optionalImage) {
     return;
+  }
 
   UIImage* image = optionalImage->ToUIImage();
   if (usingLens) {

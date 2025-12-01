@@ -12,6 +12,7 @@
 
 #include "base/containers/span.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/metrics/user_action_tester.h"
 #include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
@@ -20,6 +21,7 @@
 #include "chrome/browser/keyboard_accessory/test_utils/android/mock_affiliated_plus_profiles_provider.h"
 #include "chrome/browser/keyboard_accessory/test_utils/android/mock_manual_filling_controller.h"
 #include "chrome/browser/plus_addresses/plus_address_service_factory.h"
+#include "chrome/browser/ui/android/plus_addresses/all_plus_addresses_bottom_sheet_controller.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
@@ -27,9 +29,9 @@
 #include "components/autofill/content/browser/test_autofill_driver_injector.h"
 #include "components/autofill/content/browser/test_content_autofill_client.h"
 #include "components/autofill/content/browser/test_content_autofill_driver.h"
-#include "components/autofill/core/browser/address_data_manager.h"
-#include "components/autofill/core/browser/autofill_test_utils.h"
-#include "components/autofill/core/browser/test_personal_data_manager.h"
+#include "components/autofill/core/browser/data_manager/addresses/address_data_manager.h"
+#include "components/autofill/core/browser/data_manager/test_personal_data_manager.h"
+#include "components/autofill/core/browser/test_utils/autofill_test_utils.h"
 #include "components/autofill/core/common/autofill_test_utils.h"
 #include "components/plus_addresses/fake_plus_address_service.h"
 #include "components/plus_addresses/features.h"
@@ -105,12 +107,16 @@ class MockAutofillClient : public TestContentAutofillClient {
   using autofill::TestContentAutofillClient::TestContentAutofillClient;
   MOCK_METHOD(void,
               OfferPlusAddressCreation,
-              (const url::Origin&, PlusAddressCallback),
+              (const url::Origin&, bool, PlusAddressCallback),
               (override));
   MOCK_METHOD(url::Origin,
               GetLastCommittedPrimaryMainFrameOrigin,
               (),
               (const, override));
+  MOCK_METHOD(void,
+              TriggerPlusAddressUserPerceptionSurvey,
+              (plus_addresses::hats::SurveyType),
+              (override));
 };
 
 class MockAutofillDriver : public TestContentAutofillDriver {
@@ -156,7 +162,7 @@ class AddressAccessoryControllerTest : public ChromeRenderViewHostTestHarness {
   }
 
  protected:
-  AddressAccessoryController* controller() {
+  AddressAccessoryControllerImpl* controller() {
     return AddressAccessoryControllerImpl::FromWebContents(web_contents());
   }
 
@@ -401,7 +407,7 @@ TEST_F(AddressAccessoryControllerTest,
   EXPECT_CALL(filling_source_observer_,
               Run(controller(), IsFillingSourceAvailable(true)));
   EXPECT_CALL(provider, GetAffiliatedPlusProfiles)
-      .WillRepeatedly(Return(base::make_span(profiles)));
+      .WillRepeatedly(Return(base::span(profiles)));
   controller()->RefreshSuggestions();
 
   // Plus address creation can't be supported while plus address filling is
@@ -432,7 +438,7 @@ TEST_F(AddressAccessoryControllerTest, AppendsPlusAddressesSection) {
   EXPECT_CALL(filling_source_observer_,
               Run(controller(), IsFillingSourceAvailable(true)));
   EXPECT_CALL(provider, GetAffiliatedPlusProfiles)
-      .WillRepeatedly(Return(base::make_span(profiles)));
+      .WillRepeatedly(Return(base::span(profiles)));
   controller()->RefreshSuggestions();
 
   EXPECT_EQ(controller()->GetSheetData(),
@@ -459,7 +465,7 @@ TEST_F(AddressAccessoryControllerTest,
   EXPECT_CALL(filling_source_observer_,
               Run(controller(), IsFillingSourceAvailable(true)));
   EXPECT_CALL(provider, GetAffiliatedPlusProfiles)
-      .WillRepeatedly(Return(base::make_span(profiles)));
+      .WillRepeatedly(Return(base::span(profiles)));
   controller()->RefreshSuggestions();
 
   EXPECT_EQ(
@@ -498,22 +504,75 @@ TEST_F(AddressAccessoryControllerTest,
 }
 
 TEST_F(AddressAccessoryControllerTest, TriggersPlusAddressCreationBottomSheet) {
+  base::UserActionTester user_action_tester;
   FieldGlobalId field_id = test::MakeFieldGlobalId();
   EXPECT_CALL(mock_manual_filling_controller_, GetLastFocusedFieldId)
       .WillOnce(Return(field_id));
   EXPECT_CALL(mock_manual_filling_controller_, Hide);
   const std::string plus_address = "example@gmail.com";
-  EXPECT_CALL(autofill_client(), OfferPlusAddressCreation)
-      .WillOnce(
-          [&plus_address](const url::Origin&, PlusAddressCallback callback) {
-            std::move(callback).Run(plus_address);
-          });
+  EXPECT_CALL(autofill_client(),
+              OfferPlusAddressCreation(_, /*is_manual_fallback=*/true, _))
+      .WillOnce([&plus_address](const url::Origin&, bool,
+                                PlusAddressCallback callback) {
+        std::move(callback).Run(plus_address);
+      });
   EXPECT_CALL(main_frame_autofill_driver(),
               ApplyFieldAction(mojom::FieldActionType::kReplaceAll,
                                mojom::ActionPersistence::kFill, field_id,
                                base::UTF8ToUTF16(plus_address)));
   controller()->OnOptionSelected(
       AccessoryAction::CREATE_PLUS_ADDRESS_FROM_ADDRESS_SHEET);
+  EXPECT_EQ(
+      user_action_tester.GetActionCount(
+          "PlusAddresses.CreateSuggestionOnAddressManualFallbackSelected"),
+      1);
+}
+
+TEST_F(AddressAccessoryControllerTest, TriggersManagePlusAddress) {
+  base::UserActionTester user_action_tester;
+  controller()->OnOptionSelected(
+      AccessoryAction::MANAGE_PLUS_ADDRESS_FROM_ADDRESS_SHEET);
+  EXPECT_EQ(user_action_tester.GetActionCount(
+                "PlusAddresses.ManageOptionOnAddressManualFallbackSelected"),
+            1);
+}
+
+TEST_F(AddressAccessoryControllerTest, TriggersSelectPlusAddressMenu) {
+  FieldGlobalId field_id = test::MakeFieldGlobalId();
+  EXPECT_CALL(mock_manual_filling_controller_, GetLastFocusedFieldId)
+      .WillOnce(Return(field_id));
+  EXPECT_CALL(mock_manual_filling_controller_, Hide);
+
+  base::UserActionTester user_action_tester;
+  controller()->OnOptionSelected(
+      AccessoryAction::SELECT_PLUS_ADDRESS_FROM_ADDRESS_SHEET);
+  EXPECT_EQ(user_action_tester.GetActionCount(
+                "PlusAddresses."
+                "SelectPlusAddressOptionOnAddressManualFallbackSelected"),
+            1);
+}
+
+TEST_F(AddressAccessoryControllerTest, SelectPlusAddressItemFromMenu) {
+  FieldGlobalId field_id = test::MakeFieldGlobalId();
+  EXPECT_CALL(mock_manual_filling_controller_, GetLastFocusedFieldId)
+      .WillOnce(Return(field_id));
+  EXPECT_CALL(mock_manual_filling_controller_, Hide);
+
+  plus_addresses::PlusProfile plus_profile =
+      plus_addresses::test::CreatePlusProfile();
+  plus_address_service().add_plus_profile(plus_profile);
+  plus_address_service().set_is_plus_address_filling_enabled(true);
+
+  base::UserActionTester user_action_tester;
+  controller()->OnOptionSelected(
+      AccessoryAction::SELECT_PLUS_ADDRESS_FROM_ADDRESS_SHEET);
+  controller()
+      ->GetAllPlusAddressesControllerForTesting()
+      ->OnPlusAddressSelected(plus_profile.plus_address.value());
+  EXPECT_EQ(user_action_tester.GetActionCount(
+                "PlusAddresses."
+                "StandaloneFillSuggestionOnAddressManualFallbackAccepted"),
+            1);
 }
 
 TEST_F(AddressAccessoryControllerTest, FillsPlusAddressSuggestion) {
@@ -524,6 +583,9 @@ TEST_F(AddressAccessoryControllerTest, FillsPlusAddressSuggestion) {
               ApplyFieldAction(mojom::FieldActionType::kReplaceAll,
                                mojom::ActionPersistence::kFill, field_id,
                                plus_address));
+  EXPECT_CALL(autofill_client(), TriggerPlusAddressUserPerceptionSurvey(
+                                     plus_addresses::hats::SurveyType::
+                                         kFilledPlusAddressViaManualFallack));
   controller()->OnFillingTriggered(
       field_id, AccessorySheetField::Builder()
                     .SetSuggestionType(AccessorySuggestionType::kPlusAddress)

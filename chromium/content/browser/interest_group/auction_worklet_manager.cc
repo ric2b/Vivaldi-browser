@@ -6,6 +6,8 @@
 
 #include <stdint.h>
 
+#include <cstdint>
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -27,6 +29,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/not_fatal_until.h"
 #include "base/strings/strcat.h"
+#include "base/trace_event/trace_event.h"
 #include "content/browser/interest_group/auction_metrics_recorder.h"
 #include "content/browser/interest_group/auction_process_manager.h"
 #include "content/browser/interest_group/auction_shared_storage_host.h"
@@ -54,12 +57,6 @@ namespace content {
 
 namespace {
 
-// If on, worklet assignment/failure callbacks will be executed in chunks rather
-// than all at once.
-BASE_FEATURE(kFledgeSplitUpWorkletAssignment,
-             "FledgeSplitUpWorkletAssignment",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // We use sequence numbers with handles to make sure they are assigned in FIFO
 // order.
 using HandleKey = std::pair<uint64_t, AuctionWorkletManager::WorkletHandle*>;
@@ -68,16 +65,16 @@ auction_worklet::mojom::AuctionWorkletPermissionsPolicyStatePtr
 GetAuctionWorkletPermissionsPolicyState(RenderFrameHostImpl* auction_runner_rfh,
                                         const GURL& worklet_script_url) {
   const blink::PermissionsPolicy* permissions_policy =
-      auction_runner_rfh->permissions_policy();
+      auction_runner_rfh->GetPermissionsPolicy();
 
   url::Origin worklet_origin = url::Origin::Create(worklet_script_url);
 
   return auction_worklet::mojom::AuctionWorkletPermissionsPolicyState::New(
       permissions_policy->IsFeatureEnabledForOrigin(
-          blink::mojom::PermissionsPolicyFeature::kPrivateAggregation,
+          network::mojom::PermissionsPolicyFeature::kPrivateAggregation,
           worklet_origin),
       permissions_policy->IsFeatureEnabledForOrigin(
-          blink::mojom::PermissionsPolicyFeature::kSharedStorage,
+          network::mojom::PermissionsPolicyFeature::kSharedStorage,
           worklet_origin));
 }
 
@@ -90,7 +87,8 @@ FrameTreeNodeId AuctionWorkletManager::GetFrameTreeNodeID() {
 }
 
 class AuctionWorkletManager::WorkletOwner
-    : public base::RefCounted<AuctionWorkletManager::WorkletOwner> {
+    : public base::RefCounted<AuctionWorkletManager::WorkletOwner>,
+      public auction_worklet::mojom::LoadSellerWorkletClient {
  public:
   // Attempts to immediately create a worklet. If that fails, the WorkletOwner
   // will immediately start waiting for a process to be available, and once one
@@ -110,21 +108,17 @@ class AuctionWorkletManager::WorkletOwner
 
   auction_worklet::mojom::BidderWorklet* bidder_worklet() {
     DCHECK(bidder_worklet_);
+    DCHECK(can_hand_out_worklet_);
     return bidder_worklet_.get();
   }
 
   auction_worklet::mojom::SellerWorklet* seller_worklet() {
     DCHECK(seller_worklet_);
+    DCHECK(can_hand_out_worklet_);
     return seller_worklet_.get();
   }
 
   const WorkletKey& worklet_info() const { return worklet_info_; }
-
-  // Whether or not a worklet has been created. Once a worklet has been created,
-  // always returns true, even after disconnect or error.
-  bool worklet_created() const {
-    return bidder_worklet_.is_bound() || seller_worklet_.is_bound();
-  }
 
   SubresourceUrlAuthorizations* subresource_url_authorizations() {
     if (!url_loader_factory_proxy_) {
@@ -142,16 +136,33 @@ class AuctionWorkletManager::WorkletOwner
   void NotifyAuctionMetricsRecorderWhenReady(
       AuctionMetricsRecorder* auction_metrics_recorder);
 
+  // Returns whether signals are allowed to be requested from the trusted
+  // scoring signals URL associated with the worklet. May only be called when
+  // this is a seller worklet with a KVv2 trusted scoring signals URL, and KVv2
+  // signals and the KVv2 cache are enabled, and after the SellerWorkletLoaded()
+  // method has been invoked.
+  bool TrustedScoringSignalsUrlAllowed() const;
+
+  // Returns KVv2 trusted scoring signals public key if one is in used.
+  // Must only be called after the worklet available callback has been called.
+  const auction_worklet::mojom::TrustedSignalsPublicKey*
+  GetTrustedSignalsPublicKey() const;
+
+  // If a process hasn't been assigned for this worklet, add a trace event to
+  // trace the process assignment.
+  void MaybeStartTracingProcessLaunch(uint64_t trace_id);
+
  private:
   friend class base::RefCounted<WorkletOwner>;
 
-  ~WorkletOwner();
+  ~WorkletOwner() override;
 
+  // Determines if any notifications need to be sent, and if so, posts a tasks
+  // to send them. If there's already a pending or task to run notifications, or
+  // a notification task is running on the stack, does nothing.
   void MaybeQueueNotifications();
 
   void DispatchSomeNotifications();
-  void DispatchSomeSuccessNotifications();
-  void DispatchSomeFailureNotifications();
 
   // Called if the worklet becomes unusable. This happens on destruction (once
   // all refs have been released) or when the Mojo pipe is closed. Removes
@@ -192,6 +203,9 @@ class AuctionWorkletManager::WorkletOwner
   void OnWorkletDisconnected(uint32_t /* custom_reason */,
                              const std::string& description);
 
+  // auction_worklet::mojom::LoadSellerWorkletClient implementation:
+  void SellerWorkletLoaded(bool trusted_signals_url_allowed) override;
+
   static std::vector<std::string> GetDevtoolsAuctionIds(
       base::WeakPtr<WorkletOwner> self);
 
@@ -204,7 +218,11 @@ class AuctionWorkletManager::WorkletOwner
 
   const WorkletKey worklet_info_;
 
+  std::vector<uint64_t> trace_ids_;
+
   AuctionProcessManager::ProcessHandle process_handle_;
+
+  std::set<HandleKey> handles_waiting_for_process_assignment_;
 
   // These are handles that have not yet been notified of having a process,
   // either because the process isn't available yet or because we haven't
@@ -223,8 +241,9 @@ class AuctionWorkletManager::WorkletOwner
   // a raw pointer to it.
   std::vector<std::unique_ptr<DebuggableAuctionWorklet>> worklet_debugs_;
 
-  // If true, we will split callback notifications into small batches.
-  bool split_up_notifications_;
+  // True if any notifications are pending - that is, there's either a
+  // notification task posted, or one is currently running (at which point,
+  // WorkletOwner methods may be recursively invoked).
   bool notifications_pending_ = false;
   std::optional<FatalErrorType> notify_error_type_;
   std::vector<std::string> notify_errors_;
@@ -256,6 +275,18 @@ class AuctionWorkletManager::WorkletOwner
   // `auction_metrics_recorders_to_notify_`, defined above.
   bool is_worklet_ready_ = false;
 
+  // Set to true once the worklet pipe has been created and, if necessary, the
+  // LoadSellerWorkletClient callback has been invoked, informating `this` of
+  // whether trusted signals may be requested using the provided URL.
+  bool can_hand_out_worklet_ = false;
+
+  // Whether the trusted signals URL is allowed to receive data about the
+  // auction.
+  std::optional<bool> trusted_signals_url_allowed_;
+
+  mojo::Receiver<auction_worklet::mojom::LoadSellerWorkletClient>
+      load_seller_worklet_client_receiver_{this};
+
   base::WeakPtrFactory<WorkletOwner> weak_ptr_factory_{this};
 };
 
@@ -264,9 +295,7 @@ AuctionWorkletManager::WorkletOwner::WorkletOwner(
     WorkletKey worklet_info,
     size_t number_of_bidder_threads)
     : worklet_manager_(worklet_manager),
-      worklet_info_(std::move(worklet_info)),
-      split_up_notifications_(
-          base::FeatureList::IsEnabled(kFledgeSplitUpWorkletAssignment)) {
+      worklet_info_(std::move(worklet_info)) {
   // If `trusted_signals_coordinator` in `worklet_info_` has a value and
   // `kFledgeTrustedSignalsKVv2Support` is enabled, call
   // `GetBiddingAndAuctionServerKey` to fetch `trusted_signals_kvv2_public_key_`
@@ -279,10 +308,8 @@ AuctionWorkletManager::WorkletOwner::WorkletOwner(
 
     // When `kFledgeUseKVv2SignalsCache` is enabled, the TrustedSignalsCache
     // manages KVv2 fetches in the browser process, so don't need get a key to
-    // pass to the worklet process. It's currently only supported for bidder
-    // signals, though, so still need the key for seller signals.
-    if (!base::FeatureList::IsEnabled(features::kFledgeUseKVv2SignalsCache) ||
-        worklet_info_.type != WorkletType::kBidder) {
+    // pass to the worklet process.
+    if (!base::FeatureList::IsEnabled(features::kFledgeUseKVv2SignalsCache)) {
       waiting_on_trusted_signals_kvv2_public_key_ = true;
       worklet_manager->delegate()->GetBiddingAndAuctionServerKey(
           std::move(worklet_info_.trusted_signals_coordinator),
@@ -305,11 +332,13 @@ AuctionWorkletManager::WorkletOwner::WorkletOwner(
 }
 
 void AuctionWorkletManager::WorkletOwner::RegisterHandle(HandleKey handle) {
-  handles_waiting_for_process_.insert(handle);
-  ++registered_devtools_auction_ids_[handle.second->devtools_auction_id_];
-  if (worklet_created()) {
-    MaybeQueueNotifications();
+  if (handle.second->has_process_assignment_callback()) {
+    handles_waiting_for_process_assignment_.emplace(handle);
   }
+  handles_waiting_for_process_.emplace(handle);
+  ++registered_devtools_auction_ids_[handle.second->devtools_auction_id_];
+
+  MaybeQueueNotifications();
 }
 
 void AuctionWorkletManager::WorkletOwner::UnregisterHandle(HandleKey handle) {
@@ -322,6 +351,9 @@ void AuctionWorkletManager::WorkletOwner::UnregisterHandle(HandleKey handle) {
     registered_devtools_auction_ids_.erase(it);
   }
 
+  if (handle.second->has_process_assignment_callback()) {
+    handles_waiting_for_process_assignment_.erase(handle);
+  }
   if (!handles_waiting_for_process_.erase(handle)) {
     // The handle should only be in one of the sets, so only need to search
     // `handles_with_process_` if it wasn't in `handles_waiting_for_process_`.
@@ -348,6 +380,27 @@ void AuctionWorkletManager::WorkletOwner::NotifyAuctionMetricsRecorderWhenReady(
   }
 }
 
+bool AuctionWorkletManager::WorkletOwner::TrustedScoringSignalsUrlAllowed()
+    const {
+  CHECK(trusted_signals_url_allowed_.has_value());
+  return *trusted_signals_url_allowed_;
+}
+
+const auction_worklet::mojom::TrustedSignalsPublicKey*
+AuctionWorkletManager::WorkletOwner::GetTrustedSignalsPublicKey() const {
+  DCHECK(process_assigned_);
+  DCHECK(!waiting_on_trusted_signals_kvv2_public_key_);
+  return trusted_signals_kvv2_public_key_.get();
+}
+
+void AuctionWorkletManager::WorkletOwner::MaybeStartTracingProcessLaunch(
+    uint64_t trace_id) {
+  if (!is_worklet_ready_) {
+    trace_ids_.push_back(trace_id);
+    TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("fledge", "assign_process_id", trace_id);
+  }
+}
+
 AuctionWorkletManager::WorkletOwner::~WorkletOwner() {
   DCHECK(handles_waiting_for_process_.empty());
   DCHECK(handles_with_process_.empty());
@@ -355,16 +408,34 @@ AuctionWorkletManager::WorkletOwner::~WorkletOwner() {
 }
 
 void AuctionWorkletManager::WorkletOwner::MaybeQueueNotifications() {
+  // If notifications are already pending, nothing to do.
   if (notifications_pending_) {
     return;
   }
-  notifications_pending_ = true;
 
-  // This uses a weak pointer and not a ref-count holding one to avoid extending
-  // lifetime of `this` beyond the handles.
-  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE, base::BindOnce(&WorkletOwner::DispatchSomeNotifications,
-                                weak_ptr_factory_.GetWeakPtr()));
+  // Check if any notifications need to be sent. Note that this logic mirrors
+  // the code in DispatchSomeNotifications().
+  //
+  // The `is_bound()` check isn't present in DispatchSomeNotifications(), since
+  // it assumes a process has already been assigned. Once bound, the pipe is
+  // never unbound, even on error, so no need to worry about the error case.
+  // However, if that changes, `notify_error_type_` would indicate a process
+  // crash and all handles waiting for an assignment notification are also
+  // necessarily in `handles_waiting_for_process_` as well, so this would still
+  // work.
+  if ((!handles_waiting_for_process_assignment_.empty() &&
+       seller_worklet_.is_bound()) ||
+      (notify_error_type_ && (!handles_with_process_.empty() ||
+                              !handles_waiting_for_process_.empty())) ||
+      (can_hand_out_worklet_ && !handles_waiting_for_process_.empty())) {
+    notifications_pending_ = true;
+
+    // This uses a weak pointer and not a ref-count holding one to avoid
+    // extending lifetime of `this` beyond the handles.
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&WorkletOwner::DispatchSomeNotifications,
+                                  weak_ptr_factory_.GetWeakPtr()));
+  }
 }
 
 void AuctionWorkletManager::WorkletOwner::DispatchSomeNotifications() {
@@ -372,71 +443,65 @@ void AuctionWorkletManager::WorkletOwner::DispatchSomeNotifications() {
   // drop all the handles.
   scoped_refptr<WorkletOwner> guard(this);
 
+  size_t max_notifications = kBatchSize;
+
+  // Note that this logic needs to be kept in sync with the code in
+  // MaybeQueueNotifications() to figure out if any notifications need to be
+  // queued.
+  for (; max_notifications > 0; --max_notifications) {
+    // If there are any handles waiting to be notified of process assignment,
+    // notify them first, regardless of whether there's a pending error or not.
+    if (!handles_waiting_for_process_assignment_.empty()) {
+      auto node = handles_waiting_for_process_assignment_.extract(
+          handles_waiting_for_process_assignment_.begin());
+      node.value().second->OnProcessAssigned();
+      continue;
+    }
+
+    if (notify_error_type_.has_value()) {
+      // In case of an error, we notify both of `handles_with_process_` and
+      // `handles_waiting_for_process_`.  It's OK to remove things from these
+      // sets here since we won't do anything else with them anyway, and it
+      // protects us from re-entrancy weirdness.
+      if (!handles_with_process_.empty()) {
+        auto node =
+            handles_with_process_.extract(handles_with_process_.begin());
+        node.value()->OnFatalError(*notify_error_type_, notify_errors_);
+        continue;
+      }
+      if (!handles_waiting_for_process_.empty()) {
+        auto node = handles_waiting_for_process_.extract(
+            handles_waiting_for_process_.begin());
+        node.value().second->OnFatalError(*notify_error_type_, notify_errors_);
+        continue;
+      }
+    } else if (can_hand_out_worklet_) {
+      // In case of success, we only notify `handles_waiting_for_process_`, and
+      // also add them to `handles_with_process_`; if the next time we run
+      // DispatchSomeNotifications() we're in failure state we want them to get
+      // the failure notification.
+      if (!handles_waiting_for_process_.empty()) {
+        auto node = handles_waiting_for_process_.extract(
+            handles_waiting_for_process_.begin());
+        // Must do the insert before the callback in case the callback deletes
+        // the handle.
+        handles_with_process_.insert(node.value().second);
+        node.value().second->OnWorkletAvailable();
+        continue;
+      }
+    }
+
+    // Nothing else to send a notification to.
+    break;
+  }
+
+  // Done with notifications. Do this last so recursive
+  // MaybeQueueNotifications() calls don't needlessly queue a new notification
+  // that the above loop would take care of, anyways.
   notifications_pending_ = false;
 
-  // Failure/success is checked here and not at queuing time since things may
-  // change by the time this method is invoked.
-  if (notify_error_type_.has_value()) {
-    DispatchSomeFailureNotifications();
-  } else {
-    DispatchSomeSuccessNotifications();
-  }
-}
-
-void AuctionWorkletManager::WorkletOwner::DispatchSomeFailureNotifications() {
-  // In case of an error, we notify both of `handles_with_process_` and
-  // `handles_waiting_for_process_`.  It's OK to remove things from these
-  // sets here since we won't do anything else with them anyway, and it
-  // protects us from re-entrancy weirdness.
-  size_t num_notified = 0;
-  size_t to_notify =
-      handles_with_process_.size() + handles_waiting_for_process_.size();
-  if (split_up_notifications_) {
-    to_notify = std::min(to_notify, kBatchSize);
-  }
-
-  while (num_notified < to_notify && !handles_with_process_.empty()) {
-    auto node = handles_with_process_.extract(handles_with_process_.begin());
-    node.value()->OnFatalError(*notify_error_type_, notify_errors_);
-    ++num_notified;
-  }
-  while (num_notified < to_notify && !handles_waiting_for_process_.empty()) {
-    auto node = handles_waiting_for_process_.extract(
-        handles_waiting_for_process_.begin());
-    node.value().second->OnFatalError(*notify_error_type_, notify_errors_);
-    ++num_notified;
-  }
-
-  if (!handles_with_process_.empty() || !handles_waiting_for_process_.empty()) {
-    MaybeQueueNotifications();
-  }
-}
-
-void AuctionWorkletManager::WorkletOwner::DispatchSomeSuccessNotifications() {
-  // In case of success, we only notify `handles_waiting_for_process_`, and
-  // also add them to `handles_with_process_`; if the next time we run
-  // DispatchSomeNotifications() we're in failure state we want them to get
-  // the failure notification.
-  size_t num_notified = 0;
-  size_t to_notify = handles_waiting_for_process_.size();
-  if (split_up_notifications_) {
-    to_notify = std::min(to_notify, kBatchSize);
-  }
-  // This loops needs to check `handles_waiting_for_process_.empty()` for the
-  // case where items are removed in response to callbacks.
-  while (num_notified < to_notify && !handles_waiting_for_process_.empty()) {
-    auto node = handles_waiting_for_process_.extract(
-        handles_waiting_for_process_.begin());
-    // Must do the insert before the callback in case the callback deletes
-    // the handle.
-    handles_with_process_.insert(node.value().second);
-    node.value().second->OnWorkletAvailable();
-    ++num_notified;
-  }
-
-  if (!handles_waiting_for_process_.empty()) {
-    MaybeQueueNotifications();
-  }
+  // Queue more notifications, if needed.
+  MaybeQueueNotifications();
 }
 
 void AuctionWorkletManager::WorkletOwner::WorkletNoLongerUsable() {
@@ -510,7 +575,8 @@ void AuctionWorkletManager::WorkletOwner::LoadWorkletIfReady(
       worklet_manager_->top_window_origin(), worklet_manager_->frame_origin(),
       // NOTE: `rfh` can be null in tests.
       /*renderer_process_id=*/
-      rfh ? std::optional<int>(rfh->GetProcess()->GetID()) : std::nullopt,
+      rfh ? std::optional<int>(rfh->GetProcess()->GetDeprecatedID())
+          : std::nullopt,
       /*is_for_seller_=*/worklet_info_.type == WorkletType::kSeller,
       delegate->GetClientSecurityState(), worklet_info_.script_url,
       worklet_info_.wasm_url, worklet_info_.signals_url,
@@ -604,6 +670,28 @@ void AuctionWorkletManager::WorkletOwner::LoadWorkletIfReady(
                 url::Origin::Create(worklet_info_.script_url)));
       }
 
+      // If this is a seller worklet using KVv2, and the cache (and KVv2) are
+      // enabled, need to figure out if the scoring signals are allowed to be
+      // fetched from the signals URL.
+      mojo::PendingRemote<auction_worklet::mojom::LoadSellerWorkletClient>
+          load_seller_worklet_client_remote;
+      if (worklet_info_.signals_url &&
+          worklet_info_.trusted_signals_coordinator &&
+          base::FeatureList::IsEnabled(
+              blink::features::kFledgeTrustedSignalsKVv2Support) &&
+          base::FeatureList::IsEnabled(features::kFledgeUseKVv2SignalsCache)) {
+        if (url::Origin::Create(worklet_info_.script_url)
+                .IsSameOriginWith(*worklet_info_.signals_url)) {
+          // If the script and signals URLs are same-origin, they may always be
+          // fetched.
+          trusted_signals_url_allowed_ = true;
+        } else {
+          // Otherwise, have to wait for the seller worklet load notification to
+          // learn if it's ok to fetch them.
+          load_seller_worklet_client_remote =
+              load_seller_worklet_client_receiver_.BindNewPipeAndPassRemote();
+        }
+      }
       process_handle_.GetService()->LoadSellerWorklet(
           std::move(worklet_receiver), std::move(shared_storage_hosts),
           worklet_debugs_[0]->should_pause_on_start(),
@@ -613,13 +701,24 @@ void AuctionWorkletManager::WorkletOwner::LoadWorkletIfReady(
           GetAuctionWorkletPermissionsPolicyState(delegate->GetFrame(),
                                                   worklet_info_.script_url),
           worklet_info_.experiment_group_id,
-          std::move(trusted_signals_kvv2_public_key_));
+          worklet_info_.send_creative_scanning_metadata,
+          std::move(trusted_signals_kvv2_public_key_),
+          std::move(load_seller_worklet_client_remote));
       seller_worklet_.set_disconnect_with_reason_handler(base::BindOnce(
           &WorkletOwner::OnWorkletDisconnected, base::Unretained(this)));
       break;
     }
   }
 
+  // If not waiting to be notified of the seller load completing, the worklet is
+  // ready for use.
+  if (!load_seller_worklet_client_receiver_.is_bound()) {
+    can_hand_out_worklet_ = true;
+  }
+
+  // There may be notifications to send (though there also be not be, in the
+  // case of a seller worklet with cross-origin signals and no process
+  // assignment callback).
   MaybeQueueNotifications();
 }
 
@@ -632,6 +731,11 @@ void AuctionWorkletManager::WorkletOwner::OnThreadReady(
   if (is_worklet_ready_) {
     return;
   }
+  for (uint64_t trace_id : trace_ids_) {
+    TRACE_EVENT_NESTABLE_ASYNC_END0("fledge", "assign_process_id", trace_id);
+  }
+  trace_ids_.clear();
+
   for (AuctionMetricsRecorder* auction_metrics_recorder :
        auction_metrics_recorders_to_notify_) {
     auction_metrics_recorder->OnWorkletReady();
@@ -659,6 +763,19 @@ void AuctionWorkletManager::WorkletOwner::OnWorkletDisconnected(
         base::StrCat({worklet_info_.script_url.spec(), " crashed."}));
   }
 
+  // If waiting for a load script success notification, stop waiting for it, to
+  // avoid potentially getting a delayed notification.
+  load_seller_worklet_client_receiver_.reset();
+
+  MaybeQueueNotifications();
+}
+
+void AuctionWorkletManager::WorkletOwner::SellerWorkletLoaded(
+    bool trusted_signals_url_allowed) {
+  trusted_signals_url_allowed_ = trusted_signals_url_allowed;
+  load_seller_worklet_client_receiver_.reset();
+  // Worklet may now be handed out.
+  can_hand_out_worklet_ = true;
   MaybeQueueNotifications();
 }
 
@@ -679,6 +796,7 @@ AuctionWorkletManager::WorkletKey::WorkletKey(
     const std::optional<GURL>& wasm_url,
     const std::optional<GURL>& signals_url,
     bool needs_cors_for_additional_bid,
+    std::optional<bool> send_creative_scanning_metadata,
     std::optional<uint16_t> experiment_group_id,
     const std::string& trusted_bidding_signals_slot_size_param,
     const std::optional<url::Origin>& trusted_signals_coordinator)
@@ -687,6 +805,7 @@ AuctionWorkletManager::WorkletKey::WorkletKey(
       wasm_url(wasm_url),
       signals_url(signals_url),
       needs_cors_for_additional_bid(needs_cors_for_additional_bid),
+      send_creative_scanning_metadata(send_creative_scanning_metadata),
       experiment_group_id(experiment_group_id),
       trusted_bidding_signals_slot_size_param(
           trusted_bidding_signals_slot_size_param),
@@ -721,6 +840,10 @@ size_t AuctionWorkletManager::WorkletKey::GetHash() const {
       hash, trusted_signals_coordinator
                 ? FastHash(trusted_signals_coordinator->GetURL().spec())
                 : 0xf3a287b1);
+  hash = CombineHash(
+      hash, send_creative_scanning_metadata.has_value()
+                ? (*send_creative_scanning_metadata ? 0x4b9dff24u : 0x2af93982u)
+                : 0x5f0d73ebu);
   return hash;
 }
 
@@ -729,12 +852,14 @@ bool AuctionWorkletManager::WorkletKey::WorkletKey::operator<(
   return std::tie(type, script_url, wasm_url, signals_url,
                   needs_cors_for_additional_bid, experiment_group_id,
                   trusted_bidding_signals_slot_size_param,
-                  trusted_signals_coordinator) <
+                  trusted_signals_coordinator,
+                  send_creative_scanning_metadata) <
          std::tie(other.type, other.script_url, other.wasm_url,
                   other.signals_url, other.needs_cors_for_additional_bid,
                   other.experiment_group_id,
                   other.trusted_bidding_signals_slot_size_param,
-                  other.trusted_signals_coordinator);
+                  other.trusted_signals_coordinator,
+                  other.send_creative_scanning_metadata);
 }
 
 AuctionWorkletManager::WorkletHandle::~WorkletHandle() {
@@ -766,6 +891,16 @@ AuctionWorkletManager::WorkletHandle::GetSellerWorklet() {
   return worklet_owner_->seller_worklet();
 }
 
+bool AuctionWorkletManager::WorkletHandle::TrustedScoringSignalsUrlAllowed()
+    const {
+  return worklet_owner_->TrustedScoringSignalsUrlAllowed();
+}
+
+const auction_worklet::mojom::TrustedSignalsPublicKey*
+AuctionWorkletManager::WorkletHandle::GetTrustedSignalsPublicKey() const {
+  return worklet_owner_->GetTrustedSignalsPublicKey();
+}
+
 const SubresourceUrlAuthorizations& AuctionWorkletManager::WorkletHandle::
     GetSubresourceUrlAuthorizationsForTesting() {
   DCHECK(authorized_subresources_);
@@ -781,10 +916,12 @@ AuctionWorkletManager::WorkletHandle::GetDevtoolsAuctionIdsForTesting() {
 AuctionWorkletManager::WorkletHandle::WorkletHandle(
     std::string devtools_auction_id,
     scoped_refptr<WorkletOwner> worklet_owner,
+    base::OnceClosure process_assigned_callback,
     base::OnceClosure worklet_available_callback,
     FatalErrorCallback fatal_error_callback)
     : worklet_owner_(std::move(worklet_owner)),
       devtools_auction_id_(std::move(devtools_auction_id)),
+      process_assigned_callback_(std::move(process_assigned_callback)),
       worklet_available_callback_(std::move(worklet_available_callback)),
       fatal_error_callback_(std::move(fatal_error_callback)),
       seq_num_(worklet_owner_->GetNextSeqNum()) {
@@ -794,7 +931,15 @@ AuctionWorkletManager::WorkletHandle::WorkletHandle(
   worklet_owner_->RegisterHandle(HandleKey(seq_num_, this));
 }
 
+void AuctionWorkletManager::WorkletHandle::OnProcessAssigned() {
+  DCHECK(process_assigned_callback_);
+  std::move(process_assigned_callback_).Run();
+}
+
 void AuctionWorkletManager::WorkletHandle::OnWorkletAvailable() {
+  // Should have already invoked the process assignment callback, if there ever
+  // was one.
+  DCHECK(!process_assigned_callback_);
   DCHECK(worklet_available_callback_);
   std::move(worklet_available_callback_).Run();
 }
@@ -802,6 +947,9 @@ void AuctionWorkletManager::WorkletHandle::OnWorkletAvailable() {
 void AuctionWorkletManager::WorkletHandle::OnFatalError(
     FatalErrorType type,
     const std::vector<std::string>& errors) {
+  // Should have already invoked the process assignment callback, if there ever
+  // was one.
+  DCHECK(!process_assigned_callback_);
   DCHECK(fatal_error_callback_);
   std::move(fatal_error_callback_).Run(type, errors);
 }
@@ -843,10 +991,6 @@ void AuctionWorkletManager::WorkletHandle::AuthorizeSubresourceUrls(
       this, std::move(authorized_subresource_urls));
 }
 
-bool AuctionWorkletManager::WorkletHandle::worklet_created() const {
-  return worklet_owner_->worklet_created();
-}
-
 AuctionWorkletManager::AuctionWorkletManager(
     AuctionProcessManager* auction_process_manager,
     url::Origin top_window_origin,
@@ -861,8 +1005,7 @@ AuctionWorkletManager::AuctionWorkletManager(
   if (base::FeatureList::IsEnabled(blink::features::kSharedStorageAPI)) {
     auction_shared_storage_host_ = std::make_unique<AuctionSharedStorageHost>(
         static_cast<StoragePartitionImpl*>(
-            delegate_->GetFrame()->GetProcess()->GetStoragePartition())
-            ->GetSharedStorageManager());
+            delegate_->GetFrame()->GetProcess()->GetStoragePartition()));
   }
 }
 
@@ -881,6 +1024,7 @@ AuctionWorkletManager::WorkletKey AuctionWorkletManager::BidderWorkletKey(
                     /*script_url=*/bidding_logic_url, wasm_url,
                     /*signals_url=*/trusted_bidding_signals_url,
                     needs_cors_for_additional_bid,
+                    /*send_creative_scanning_metadata=*/std::nullopt,
                     trusted_bidding_signals_url.has_value()
                         ? experiment_group_id
                         : std::nullopt,
@@ -910,9 +1054,12 @@ void AuctionWorkletManager::RequestBidderWorklet(
                        needs_cors_for_additional_bid, experiment_group_id,
                        trusted_bidding_signals_slot_size_param,
                        trusted_bidding_signals_coordinator),
-      std::move(devtools_auction_id), std::move(worklet_available_callback),
-      std::move(fatal_error_callback), out_worklet_handle,
-      /*number_of_bidder_threads=*/1, auction_metrics_recorder);
+      std::move(devtools_auction_id),
+      /*process_assigned_callback=*/base::OnceClosure(),
+      std::move(worklet_available_callback), std::move(fatal_error_callback),
+      out_worklet_handle,
+      /*number_of_bidder_threads=*/1, auction_metrics_recorder,
+      /*trace_id=*/std::nullopt);
 }
 
 void AuctionWorkletManager::RequestSellerWorklet(
@@ -921,6 +1068,8 @@ void AuctionWorkletManager::RequestSellerWorklet(
     const std::optional<GURL>& trusted_scoring_signals_url,
     std::optional<uint16_t> experiment_group_id,
     const std::optional<url::Origin>& trusted_scoring_signals_coordinator,
+    std::optional<bool> send_creative_scanning_metadata,
+    base::OnceClosure process_assigned_callback,
     base::OnceClosure worklet_available_callback,
     FatalErrorCallback fatal_error_callback,
     std::unique_ptr<WorkletHandle>& out_worklet_handle,
@@ -930,24 +1079,32 @@ void AuctionWorkletManager::RequestSellerWorklet(
                           /*wasm_url=*/std::nullopt,
                           /*signals_url=*/trusted_scoring_signals_url,
                           /*needs_cors_for_additional_bid=*/false,
-                          experiment_group_id,
+                          send_creative_scanning_metadata, experiment_group_id,
                           /*trusted_bidding_signals_slot_size_param=*/"",
                           trusted_scoring_signals_coordinator);
   RequestWorkletByKey(std::move(worklet_info), std::move(devtools_auction_id),
+                      std::move(process_assigned_callback),
                       std::move(worklet_available_callback),
                       std::move(fatal_error_callback), out_worklet_handle,
-                      /*number_of_bidder_threads=*/0, auction_metrics_recorder);
+                      /*number_of_bidder_threads=*/0, auction_metrics_recorder,
+                      /*trace_id=*/std::nullopt);
 }
 
 void AuctionWorkletManager::RequestWorkletByKey(
     WorkletKey worklet_info,
     std::string devtools_auction_id,
+    base::OnceClosure process_assigned_callback,
     base::OnceClosure worklet_available_callback,
     FatalErrorCallback fatal_error_callback,
     std::unique_ptr<WorkletHandle>& out_worklet_handle,
     size_t number_of_bidder_threads,
-    AuctionMetricsRecorder* auction_metrics_recorder) {
+    AuctionMetricsRecorder* auction_metrics_recorder,
+    std::optional<uint64_t> trace_id) {
   DCHECK(!out_worklet_handle);
+  // `process_assigned` is only supported for seller worklets.
+  DCHECK(!process_assigned_callback ||
+         worklet_info.type == WorkletType::kSeller);
+
   auto worklet_it = worklets_.find(worklet_info);
   scoped_refptr<WorkletOwner> worklet;
   if (worklet_it != worklets_.end()) {
@@ -959,12 +1116,18 @@ void AuctionWorkletManager::RequestWorkletByKey(
                                                  number_of_bidder_threads);
     worklets_.emplace(std::pair(std::move(worklet_info), worklet.get()));
   }
+
+  if (trace_id) {
+    worklet->MaybeStartTracingProcessLaunch(*trace_id);
+  }
+
   if (auction_metrics_recorder) {
     auction_metrics_recorder->OnWorkletRequested();
     worklet->NotifyAuctionMetricsRecorderWhenReady(auction_metrics_recorder);
   }
   out_worklet_handle.reset(new WorkletHandle(
       std::move(devtools_auction_id), std::move(worklet),
+      std::move(process_assigned_callback),
       std::move(worklet_available_callback), std::move(fatal_error_callback)));
 }
 
@@ -989,11 +1152,11 @@ AuctionWorkletManager::MaybeBindAuctionSharedStorageHost(
   mojo::PendingRemote<auction_worklet::mojom::AuctionSharedStorageHost> remote;
 
   const blink::PermissionsPolicy* permissions_policy =
-      auction_runner_rfh->permissions_policy();
+      auction_runner_rfh->GetPermissionsPolicy();
 
   if (auction_shared_storage_host_ &&
       permissions_policy->IsFeatureEnabledForOrigin(
-          blink::mojom::PermissionsPolicyFeature::kSharedStorage,
+          network::mojom::PermissionsPolicyFeature::kSharedStorage,
           worklet_origin)) {
     auction_shared_storage_host_->BindNewReceiver(
         auction_runner_rfh, worklet_origin,

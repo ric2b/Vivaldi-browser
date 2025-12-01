@@ -29,6 +29,7 @@ export class BezierEditor extends Common.ObjectWrapper.eventMixin<EventTypes, ty
 
   constructor(model: AnimationTimingModel) {
     super(true);
+    this.registerRequiredCSS(bezierEditorStyles);
 
     this.model = model;
     this.contentElement.tabIndex = 0;
@@ -97,7 +98,6 @@ export class BezierEditor extends Common.ObjectWrapper.eventMixin<EventTypes, ty
   }
 
   override wasShown(): void {
-    this.registerCSSFiles([bezierEditorStyles]);
     this.unselectPresets();
     // Check if bezier matches a preset
     for (const category of this.presetCategories) {
@@ -231,9 +231,9 @@ export const enum Events {
   BEZIER_CHANGED = 'BezierChanged',
 }
 
-export type EventTypes = {
-  [Events.BEZIER_CHANGED]: string,
-};
+export interface EventTypes {
+  [Events.BEZIER_CHANGED]: string;
+}
 
 export const Presets = [
   [

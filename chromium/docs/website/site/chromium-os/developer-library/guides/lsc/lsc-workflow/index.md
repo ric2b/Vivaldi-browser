@@ -7,7 +7,7 @@ title: ChromeOS LSC Workflow
 ---
 
 This document describes the workflow for getting a large-scale change approved
-([ChromeOS LSC](large_scale_changes.md)).
+([ChromeOS LSC](/chromium-os/developer-library/guides/lsc/large-scale-changes)).
 
 [TOC]
 
@@ -24,7 +24,7 @@ with your google.com account. Share comment access to google.com, in this case.
 
 ## 2 Request a domain review
 
-Find [a domain reviewer](large_scale_changes.md#FAQ-for-Domain-Reviewers) – someone
+Find [a domain reviewer](/chromium-os/developer-library/guides/lsc/large-scale-changes#FAQ-for-Domain-Reviewers) – someone
 who is knowledgeable in the area you are changing. Request a domain review for
 the LSC document you created in step 1 creating a document comment thread and
 assigning it to this person. The comment thread should include the instructions
@@ -34,7 +34,7 @@ LSC, they should add an "LGTM", their name, and the date to top of the doc).
 ## 3 Wait for approval by chromeos-lsc-review@
 
 Once the domain review is complete, you should email the doc to
-[chromeos-lsc-review@chromium.org](chromeos-lsc-review),
+chromeos-lsc-review@chromium.org,
 who will review your LSC request. You should expect an initial response within
 two business days. How long it takes until the request is approved depends on
 how complex the change is and how much needs to be discussed; for simple

@@ -65,12 +65,12 @@ FuzzTestExternalEngineAdaptor::FuzzTestExternalEngineAdaptor(
     const FuzzTest& test, std::unique_ptr<Driver> fixture_driver)
     : test_(test), fixture_driver_staging_(std::move(fixture_driver)) {}
 
-void FuzzTestExternalEngineAdaptor::RunInUnitTestMode(
+bool FuzzTestExternalEngineAdaptor::RunInUnitTestMode(
     const Configuration& configuration) {
-  GetFuzzerImpl().RunInUnitTestMode(configuration);
+  return GetFuzzerImpl().RunInUnitTestMode(configuration);
 }
 
-int FuzzTestExternalEngineAdaptor::RunInFuzzingMode(
+bool FuzzTestExternalEngineAdaptor::RunInFuzzingMode(
     int* argc, char*** argv, const Configuration& configuration) {
   FUZZTEST_INTERNAL_CHECK(&LLVMFuzzerRunDriver,
                           "LibFuzzer Driver API not defined.");
@@ -101,7 +101,7 @@ int FuzzTestExternalEngineAdaptor::RunInFuzzingMode(
                           "Invalid fixture driver!");
   impl.fixture_driver_->TearDownFuzzTest();
 
-  return 0;
+  return true;
 }
 
 // External engine callbacks.
@@ -136,12 +136,15 @@ std::string FuzzTestExternalEngineAdaptor::MutateData(absl::string_view data,
                                                       unsigned int seed) {
   auto& impl = GetFuzzerImpl();
   typename FuzzerImpl::PRNG prng(seed);
-  const auto input = [&]() -> decltype(impl.TryParse(data)) {
-    if (!IsEnginePlaceholderInput(data)) {
-      return impl.TryParse(data);
-    }
-    return impl.params_domain_.Init(prng);
-  }();
+  std::optional<GenericDomainCorpusType> input = std::nullopt;
+  if (!IsEnginePlaceholderInput(data)) {
+    auto parse_result = impl.TryParse(data);
+    if (parse_result.ok()) input = *std::move(parse_result);
+  }
+  if (!input) input = impl.params_domain_.Init(prng);
+  FUZZTEST_INTERNAL_CHECK(
+      input.has_value(),
+      "Both parsing and initiating the mutation input has failed.");
   constexpr int kNumAttempts = 10;
   std::string result;
   for (int i = 0; i < kNumAttempts; ++i) {

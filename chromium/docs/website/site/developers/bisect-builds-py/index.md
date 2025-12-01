@@ -85,7 +85,7 @@ and FAILURE_REV with the range start and end):
 release build(-r) and official build(-o) available for Googlers.
 Googlers should use official build(-o) whenever possible to bisect to a
 single commit. Please refer to
-[go/chrome-bisect](https://goto.google.com/chrome-bisect) for more information.
+[go/chrome-bisect](http://go/chrome-bisect) for more information.
 
 **Getting an initial revision range**
 

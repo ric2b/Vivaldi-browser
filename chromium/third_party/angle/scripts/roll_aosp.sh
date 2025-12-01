@@ -42,7 +42,6 @@ function generate_Android_bp_file() {
             "symbol_level = 0"
             "angle_standalone = false"
             "angle_build_all = false"
-            "angle_expose_non_conformant_extensions_and_versions = true"
 
             # Build for 64-bit CPUs
             "target_cpu = \"$abi\""
@@ -181,6 +180,7 @@ delete_after_codegen_paths=(
    "third_party/jdk/current"  # subdirs only to keep third_party/jdk/BUILD.gn (not pulled by gclient as it comes from ANGLE repo)
    "third_party/jdk/extras"
    "third_party/llvm-build"
+   "third_party/rust"
    "third_party/rust-toolchain"
    "third_party/zlib"  # Replaced by Android's zlib
 

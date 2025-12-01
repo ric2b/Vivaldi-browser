@@ -10,6 +10,7 @@ import {
   getBrowserAndPages,
   getResourcesPath,
   goTo,
+  goToHtml,
   goToResource,
   goToResourceWithCustomHost,
   waitFor,
@@ -19,6 +20,13 @@ import {
 } from '../../shared/helper.js';
 import {getCurrentConsoleMessages} from '../helpers/console-helpers.js';
 import {reloadDevTools, tabExistsInDrawer} from '../helpers/cross-tool-helper.js';
+import {
+  getCategoryRow,
+  navigateToMemoryTab,
+  setClassFilter,
+  takeHeapSnapshot,
+  waitForNonEmptyHeapSnapshotData,
+} from '../helpers/memory-helpers.js';
 
 const READY_LOCAL_METRIC_SELECTOR = '#local-value .metric-value:not(.waiting)';
 const READY_FIELD_METRIC_SELECTOR = '#field-value .metric-value:not(.waiting)';
@@ -59,7 +67,7 @@ async function setCruxRawResponse(path: string) {
 
 describe('The Performance panel landing page', () => {
   beforeEach(async () => {
-    await reloadDevTools({selectedPanel: {name: 'timeline'}, enableExperiments: ['timeline-observations']});
+    await reloadDevTools({selectedPanel: {name: 'timeline'}});
   });
 
   it('displays live metrics', async () => {
@@ -289,11 +297,11 @@ describe('The Performance panel landing page', () => {
 
     {
       const [lcpHistogram, clsHistogram, inpHistogram] = await waitForMany(HISTOGRAM_SELECTOR, 3);
-      assert.deepStrictEqual(
+      assert.deepEqual(
           await lcpHistogram.$$eval('.histogram-percent', els => els.map(el => el.textContent)), ['-', '-', '-']);
-      assert.deepStrictEqual(
+      assert.deepEqual(
           await clsHistogram.$$eval('.histogram-percent', els => els.map(el => el.textContent)), ['-', '-', '-']);
-      assert.deepStrictEqual(
+      assert.deepEqual(
           await inpHistogram.$$eval('.histogram-percent', els => els.map(el => el.textContent)), ['-', '-', '-']);
     }
 
@@ -308,11 +316,11 @@ describe('The Performance panel landing page', () => {
 
     {
       const [lcpHistogram, clsHistogram, inpHistogram] = await waitForMany(HISTOGRAM_SELECTOR, 3);
-      assert.deepStrictEqual(
+      assert.deepEqual(
           await lcpHistogram.$$eval('.histogram-percent', els => els.map(el => el.textContent)), ['96%', '3%', '1%']);
-      assert.deepStrictEqual(
+      assert.deepEqual(
           await clsHistogram.$$eval('.histogram-percent', els => els.map(el => el.textContent)), ['100%', '0%', '0%']);
-      assert.deepStrictEqual(
+      assert.deepEqual(
           await inpHistogram.$$eval('.histogram-percent', els => els.map(el => el.textContent)), ['98%', '2%', '1%']);
     }
 
@@ -322,11 +330,11 @@ describe('The Performance panel landing page', () => {
 
     {
       const [lcpHistogram, clsHistogram, inpHistogram] = await waitForMany(HISTOGRAM_SELECTOR, 3);
-      assert.deepStrictEqual(
+      assert.deepEqual(
           await lcpHistogram.$$eval('.histogram-percent', els => els.map(el => el.textContent)), ['-', '-', '-']);
-      assert.deepStrictEqual(
+      assert.deepEqual(
           await clsHistogram.$$eval('.histogram-percent', els => els.map(el => el.textContent)), ['-', '-', '-']);
-      assert.deepStrictEqual(
+      assert.deepEqual(
           await inpHistogram.$$eval('.histogram-percent', els => els.map(el => el.textContent)), ['-', '-', '-']);
     }
   });
@@ -402,7 +410,7 @@ describe('The Performance panel landing page', () => {
         const interactions = await waitForMany(INTERACTION_SELECTOR, 7);
         const interactionTypes = await Promise.all(
             interactions.map(el => el.$eval('.interaction-type', el => (el as HTMLElement).innerText)));
-        assert.deepStrictEqual(interactionTypes, [
+        assert.deepEqual(interactionTypes, [
           'pointer',
           'pointer INP',
           'pointer',
@@ -442,12 +450,59 @@ describe('The Performance panel landing page', () => {
 
       await tabExistsInDrawer('#tab-console-view');
       const messages = await getCurrentConsoleMessages();
-      assert.deepStrictEqual(messages, [
+      assert.deepEqual(messages, [
         '[DevTools] Long animation frames for 504ms pointer interaction',
         'Scripts:',
         'Array(3)',
         'Intersecting long animation frame events: [{…}]',
       ]);
+    } finally {
+      await targetSession.detach();
+    }
+  });
+
+  it('does not retain interaction nodes in memory', async () => {
+    const {target, frontend} = await getBrowserAndPages();
+
+    await target.bringToFront();
+
+    const targetSession = await target.createCDPSession();
+    try {
+      await goToHtml('<button>Click me!</button>');
+
+      const button = await target.waitForSelector('button');
+      await button!.click();
+
+      // This ensures that the interaction has time to make it's way through web-vitals.js and
+      // be detected by the live metrics model in DevTools.
+      //
+      // If any unnecessary JS references to the node get created they will be created in this time period.
+      await target.evaluate(() => new Promise(requestAnimationFrame));
+      await target.evaluate(() => new Promise(requestAnimationFrame));
+      await frontend.bringToFront();
+      await waitFor(INTERACTION_SELECTOR);
+      await target.bringToFront();
+
+      // Attempt to remove the node from memory
+      await button!.evaluate(async el => {
+        el.remove();
+        await new Promise(requestAnimationFrame);
+      });
+      await button!.dispose();
+
+      // Ensure the node is not preserved in a detached state
+      const {detachedNodes} = await targetSession.send('DOM.getDetachedDomNodes');
+      assert.lengthOf(detachedNodes, 0);
+
+      await frontend.bringToFront();
+
+      // For redundancy, ensure the button node is removed from the memory heap
+      await navigateToMemoryTab();
+      await takeHeapSnapshot();
+      await waitForNonEmptyHeapSnapshotData();
+      await setClassFilter('Detached <button>');
+      const row = await getCategoryRow('Detached <button>', false);
+      assert.isNull(row);
     } finally {
       await targetSession.detach();
     }

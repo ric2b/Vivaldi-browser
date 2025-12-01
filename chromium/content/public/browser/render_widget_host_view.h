@@ -92,7 +92,7 @@ class CONTENT_EXPORT RenderWidgetHostView {
   // properly transformed; however, coordinates received from an out-of-process
   // iframe renderer process require transformation.
   virtual gfx::PointF TransformPointToRootCoordSpaceF(
-      const gfx::PointF& point) = 0;
+      const gfx::PointF& point) const = 0;
 
   // A int point variant of the above. Use float version to transform,
   // then rounded back to int point.
@@ -197,6 +197,7 @@ class CONTENT_EXPORT RenderWidgetHostView {
   // than the view size if a portion of the view is obstructed (e.g. by a
   // virtual keyboard).
   virtual gfx::Size GetVisibleViewportSize() = 0;
+  virtual gfx::Size GetVisibleViewportSizeDevicePx() = 0;
 
   // Set insets for the visible region of the root window. Used to compute the
   // visible viewport.

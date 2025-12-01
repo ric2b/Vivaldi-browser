@@ -36,7 +36,7 @@ import org.chromium.mojo_base.mojom.String16;
 class DirectWritingServiceCallback
         extends android.widget.directwriting.IDirectWritingServiceCallback.Stub {
     static final String BUNDLE_KEY_SHOW_KEYBOARD = "showKeyboard";
-    private static final String TAG = "DWCallbackImpl";
+    private static final String TAG = "DwCallbackImpl";
 
     // The following GESTURE_ and ACTION_ constants are defined as per the bundle data sent by the
     // Direct Writing service when any gesture is recognized.
@@ -361,6 +361,7 @@ class DirectWritingServiceCallback
 
     @BinderThread
     @Override
+    @SuppressWarnings("WrongThread") // View.getContext() should be called on UI thread.
     public void onAppPrivateCommand(String action, Bundle bundle) {
         if (bundle == null || mStylusWritingImeCallback == null) return;
         View currentView = mStylusWritingImeCallback.getContainerView();

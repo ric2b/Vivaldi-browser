@@ -3,22 +3,26 @@
 // found in the LICENSE file.
 
 #include "components/commerce/core/mock_account_checker.h"
+
+#include "components/commerce/core/pref_names.h"
+#include "components/optimization_guide/core/feature_registry/feature_registration.h"
 #include "components/prefs/pref_service.h"
+#include "components/prefs/testing_pref_service.h"
 
 namespace commerce {
 
 MockAccountChecker::MockAccountChecker()
-    : AccountChecker("", "", nullptr, nullptr, nullptr, nullptr, nullptr) {
+    : AccountChecker("", "", nullptr, nullptr, nullptr, nullptr) {
   // Default to an account checker with the fewest restrictions.
   SetSignedIn(true);
-  SetSyncingBookmarks(true);
+  SetAllSyncTypesEnabled(true);
   SetAnonymizedUrlDataCollectionEnabled(true);
   SetIsSubjectToParentalControls(false);
   SetCanUseModelExecutionFeatures(true);
-  SetCountry("us");
-  SetLocale("en-us");
-  ON_CALL(*this, IsDefaultSearchEngineGoogle)
-      .WillByDefault(testing::Return(true));
+  // Default pref service can be overwritten by SetPrefs below.
+  default_pref_service_ = std::make_unique<TestingPrefServiceSimple>();
+  RegisterCommercePrefs(default_pref_service_->registry());
+  SetPrefs(default_pref_service_.get());
 }
 
 MockAccountChecker::~MockAccountChecker() = default;
@@ -27,8 +31,8 @@ void MockAccountChecker::SetSignedIn(bool signed_in) {
   ON_CALL(*this, IsSignedIn).WillByDefault(testing::Return(signed_in));
 }
 
-void MockAccountChecker::SetSyncingBookmarks(bool syncing) {
-  ON_CALL(*this, IsSyncingBookmarks).WillByDefault(testing::Return(syncing));
+void MockAccountChecker::SetAllSyncTypesEnabled(bool enabled) {
+  ON_CALL(*this, IsSyncTypeEnabled).WillByDefault(testing::Return(enabled));
 }
 
 void MockAccountChecker::SetAnonymizedUrlDataCollectionEnabled(bool enabled) {
@@ -58,6 +62,14 @@ void MockAccountChecker::SetLocale(std::string locale) {
 
 void MockAccountChecker::SetPrefs(PrefService* prefs) {
   ON_CALL(*this, GetPrefs).WillByDefault(testing::Return(prefs));
+}
+
+void MockAccountChecker::RegisterCommercePrefs(PrefRegistrySimple* registry) {
+  RegisterPrefs(registry);
+
+  registry->RegisterIntegerPref(
+      optimization_guide::prefs::kProductSpecificationsEnterprisePolicyAllowed,
+      0);
 }
 
 }  // namespace commerce

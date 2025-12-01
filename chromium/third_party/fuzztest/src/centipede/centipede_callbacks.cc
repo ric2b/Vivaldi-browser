@@ -21,6 +21,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>  // NOLINT
+#include <utility>
 #include <vector>
 
 #include "absl/log/check.h"
@@ -45,6 +46,34 @@
 #include "./common/logging.h"
 
 namespace centipede {
+namespace {
+
+// When running a test binary in a subprocess, we don't want these environment
+// variables to be inherited and affect the execution of the tests.
+//
+// See list of environment variables here:
+// https://bazel.build/reference/test-encyclopedia#initial-conditions
+//
+// TODO(fniksic): Add end-to-end tests that make sure we don't observe the
+// effects of these variables in the test binary.
+std::vector<std::string> EnvironmentVariablesToUnset() {
+  return {"TEST_DIAGNOSTICS_OUTPUT_DIR",              //
+          "TEST_INFRASTRUCTURE_FAILURE_FILE",         //
+          "TEST_LOGSPLITTER_OUTPUT_FILE",             //
+          "TEST_PREMATURE_EXIT_FILE",                 //
+          "TEST_RANDOM_SEED",                         //
+          "TEST_RUN_NUMBER",                          //
+          "TEST_SHARD_INDEX",                         //
+          "TEST_SHARD_STATUS_FILE",                   //
+          "TEST_TOTAL_SHARDS",                        //
+          "TEST_UNDECLARED_OUTPUTS_ANNOTATIONS_DIR",  //
+          "TEST_UNDECLARED_OUTPUTS_DIR",              //
+          "TEST_WARNINGS_OUTPUT_FILE",                //
+          "GTEST_OUTPUT",                             //
+          "XML_OUTPUT_FILE"};
+}
+
+}  // namespace
 
 void CentipedeCallbacks::PopulateBinaryInfo(BinaryInfo &binary_info) {
   binary_info.InitializeFromSanCovBinary(
@@ -87,6 +116,7 @@ std::string CentipedeCallbacks::ConstructRunnerFlags(
       absl::StrCat("timeout_per_batch=", env_.timeout_per_batch),
       absl::StrCat("address_space_limit_mb=", env_.address_space_limit_mb),
       absl::StrCat("rss_limit_mb=", env_.rss_limit_mb),
+      absl::StrCat("stack_limit_kb=", env_.stack_limit_kb),
       absl::StrCat("crossover_level=", env_.crossover_level),
   };
   if (!disable_coverage) {
@@ -136,13 +166,15 @@ Command &CentipedeCallbacks::GetOrCreateCommandForBinary(
       env_.timeout_per_batch == 0
           ? absl::InfiniteDuration()
           : absl::Seconds(env_.timeout_per_batch) + absl::Seconds(5);
-  Command &cmd = commands_.emplace_back(Command(
-      /*path=*/binary, /*args=*/{},
-      /*env=*/env,
-      /*out=*/execute_log_path_,
-      /*err=*/execute_log_path_,
-      /*timeout=*/amortized_timeout,
-      /*temp_file_path=*/temp_input_file_path_));
+  Command::Options cmd_options;
+  cmd_options.env_add = std::move(env);
+  cmd_options.env_remove = EnvironmentVariablesToUnset();
+  cmd_options.stdout_file = execute_log_path_;
+  cmd_options.stderr_file = execute_log_path_;
+  cmd_options.timeout = amortized_timeout;
+  cmd_options.temp_file_path = temp_input_file_path_;
+  Command &cmd =
+      commands_.emplace_back(Command{binary, std::move(cmd_options)});
   if (env_.fork_server) cmd.StartForkServer(temp_dir_, Hash(binary));
 
   return cmd;
@@ -200,14 +232,7 @@ int CentipedeCallbacks::ExecuteCentipedeSancovBinaryWithShmem(
               << env_.shmem_size_mb;
   }
 
-  if (env_.print_runner_log) {
-    std::string log_text;
-    ReadFromLocalFile(execute_log_path_, log_text);
-    for (const auto &log_line :
-         absl::StrSplit(absl::StripAsciiWhitespace(log_text), '\n')) {
-      LOG(INFO).NoPrefix() << "LOG: " << log_line;
-    }
-  }
+  if (env_.print_runner_log) PrintExecutionLog();
 
   if (retval != EXIT_SUCCESS) {
     ReadFromLocalFile(execute_log_path_, batch_result.log());
@@ -230,15 +255,26 @@ bool CentipedeCallbacks::GetSeedsViaExternalBinary(
   CHECK(std::filesystem::create_directories(output_dir, error));
   CHECK(!error);
 
-  Command cmd{binary,
-              {},
-              {absl::StrCat("CENTIPEDE_RUNNER_FLAGS=:dump_seed_inputs:arg1=",
-                            output_dir.string(), ":")},
-              /*out=*/execute_log_path_,
-              /*err=*/execute_log_path_,
-              /*timeout=*/absl::InfiniteDuration(),
-              /*temp_file_path=*/temp_input_file_path_};
+  std::string centipede_runner_flags = absl::StrCat(
+      "CENTIPEDE_RUNNER_FLAGS=:dump_seed_inputs:arg1=", output_dir.string(),
+      ":");
+  if (!env_.runner_dl_path_suffix.empty()) {
+    absl::StrAppend(&centipede_runner_flags,
+                    "dl_path_suffix=", env_.runner_dl_path_suffix, ":");
+  }
+  Command::Options cmd_options;
+  cmd_options.env_add = {std::move(centipede_runner_flags)};
+  cmd_options.env_remove = EnvironmentVariablesToUnset();
+  cmd_options.stdout_file = execute_log_path_;
+  cmd_options.stderr_file = execute_log_path_;
+  cmd_options.temp_file_path = temp_input_file_path_;
+  Command cmd{binary, std::move(cmd_options)};
   const int retval = cmd.Execute();
+
+  if (env_.print_runner_log) {
+    LOG(INFO) << "Getting seeds via external binary returns " << retval;
+    PrintExecutionLog();
+  }
 
   std::vector<std::string> seed_input_filenames;
   for (const auto &dir_ent : std::filesystem::directory_iterator(output_dir)) {
@@ -266,14 +302,20 @@ bool CentipedeCallbacks::GetSerializedTargetConfigViaExternalBinary(
     std::string_view binary, std::string &serialized_config) {
   const auto config_file_path =
       std::filesystem::path{temp_dir_} / "configuration";
-  Command cmd{binary,
-              {},
-              {absl::StrCat("CENTIPEDE_RUNNER_FLAGS=:dump_configuration:arg1=",
-                            config_file_path.string(), ":")},
-              /*out=*/execute_log_path_,
-              /*err=*/execute_log_path_,
-              /*timeout=*/absl::InfiniteDuration(),
-              /*temp_file_path=*/temp_input_file_path_};
+  std::string centipede_runner_flags =
+      absl::StrCat("CENTIPEDE_RUNNER_FLAGS=:dump_configuration:arg1=",
+                   config_file_path.string(), ":");
+  if (!env_.runner_dl_path_suffix.empty()) {
+    absl::StrAppend(&centipede_runner_flags,
+                    "dl_path_suffix=", env_.runner_dl_path_suffix, ":");
+  }
+  Command::Options cmd_options;
+  cmd_options.env_add = {std::move(centipede_runner_flags)};
+  cmd_options.env_remove = EnvironmentVariablesToUnset();
+  cmd_options.stdout_file = execute_log_path_;
+  cmd_options.stderr_file = execute_log_path_;
+  cmd_options.temp_file_path = temp_input_file_path_;
+  Command cmd{binary, std::move(cmd_options)};
   const bool is_success = cmd.Execute() == 0;
 
   if (is_success) {
@@ -282,6 +324,9 @@ bool CentipedeCallbacks::GetSerializedTargetConfigViaExternalBinary(
     } else {
       serialized_config = "";
     }
+  }
+  if (env_.print_runner_log || !is_success) {
+    PrintExecutionLog();
   }
   std::error_code error;
   std::filesystem::remove(config_file_path, error);
@@ -311,6 +356,13 @@ bool CentipedeCallbacks::MutateViaExternalBinary(
   int retval = cmd.Execute();
   inputs_blobseq_.ReleaseSharedMemory();  // Inputs are already consumed.
 
+  if (retval != EXIT_SUCCESS) {
+    LOG(WARNING) << "Custom mutator failed with exit code " << retval;
+  }
+  if (env_.print_runner_log || retval != EXIT_SUCCESS) {
+    PrintExecutionLog();
+  }
+
   // Read all mutants.
   for (size_t i = 0; i < mutants.size(); ++i) {
     auto blob = outputs_blobseq_.Read();
@@ -321,6 +373,7 @@ bool CentipedeCallbacks::MutateViaExternalBinary(
     mutants[i].assign(blob.data, blob.data + blob.size);
   }
   outputs_blobseq_.ReleaseSharedMemory();  // Outputs are already consumed.
+
   VLOG(1) << __FUNCTION__ << " took " << (absl::Now() - start_time);
   return retval == 0;
 }
@@ -361,6 +414,20 @@ size_t CentipedeCallbacks::LoadDictionary(std::string_view dictionary_path) {
   LOG(INFO) << "Loaded " << unpacked_dictionary.size()
             << " dictionary entries from " << dictionary_path;
   return unpacked_dictionary.size();
+}
+
+void CentipedeCallbacks::PrintExecutionLog() const {
+  if (!std::filesystem::exists(execute_log_path_)) {
+    LOG(WARNING) << "Log file for the last executed binary does not exist: "
+                 << execute_log_path_;
+    return;
+  }
+  std::string log_text;
+  ReadFromLocalFile(execute_log_path_, log_text);
+  for (const auto &log_line :
+       absl::StrSplit(absl::StripAsciiWhitespace(log_text), '\n')) {
+    LOG(INFO).NoPrefix() << "LOG: " << log_line;
+  }
 }
 
 }  // namespace centipede

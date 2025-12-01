@@ -16,7 +16,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/ranges/algorithm.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/views/layout/layout_types.h"
 #include "ui/views/view.h"
@@ -71,26 +70,30 @@ class LayoutElement {
 // Invokes ResetSize on all the layout elements.
 template <class T>
 void ResetSizes(std::vector<T>& elements) {
-  for (auto& element : elements)
+  for (auto& element : elements) {
     element.ResetSize();
+  }
 }
 
 // Distributes delta among the resizable elements. Each resizable element is
 // given (resize() / total_resize * delta) DIP of extra space.
 template <class T>
 void DistributeDelta(int delta, std::vector<T>& elements) {
-  if (delta == 0)
+  if (delta == 0) {
     return;
+  }
 
   float total_resize = 0;
   int resize_count = 0;
   for (auto& element : elements) {
     total_resize += element.resize();
-    if (element.resize() > 0)
+    if (element.resize() > 0) {
       ++resize_count;
+    }
   }
-  if (total_resize == 0)
+  if (total_resize == 0) {
     return;
+  }
   int remaining_delta = delta;
   for (auto& element : elements) {
     if (element.resize() > 0) {
@@ -120,8 +123,9 @@ int TotalSize(size_t start, size_t length, const std::vector<T>& elements) {
 // Advances `index` past any padding elements.
 template <class T>
 void SkipPadding(size_t& index, const std::vector<T>& elements) {
-  while (index < elements.size() && elements[index].is_padding())
+  while (index < elements.size() && elements[index].is_padding()) {
     ++index;
+  }
 }
 
 void CalculateLocationAndSize(int pref_size,
@@ -179,8 +183,9 @@ class TableLayout::Column : public LayoutElement {
   ~Column() override = default;
 
   void AdjustSize(int size) override {
-    if (size_type_ == ColumnSize::kUsePreferred)
+    if (size_type_ == ColumnSize::kUsePreferred) {
       LayoutElement::AdjustSize(size);
+    }
   }
 
   void ResetSize() override {
@@ -190,14 +195,16 @@ class TableLayout::Column : public LayoutElement {
   // Determines the max size of all linked columns, and sets each column to that
   // size.
   void UnifyLinkedColumnSizes(const std::optional<int>& size_limit) {
-    if (linked_columns_.empty() || linked_columns_.front() != this)
+    if (linked_columns_.empty() || linked_columns_.front() != this) {
       return;
+    }
 
     // Accumulate the size first.
     int size = 0;
     for (views::TableLayout::Column* column : linked_columns_) {
-      if (!size_limit || column->size() <= *size_limit)
+      if (!size_limit || column->size() <= *size_limit) {
         size = std::max(size, column->size());
+      }
     }
 
     // Then apply it.
@@ -335,8 +342,9 @@ TableLayout& TableLayout::AddPaddingColumn(float horizontal_resize, int width) {
 }
 
 TableLayout& TableLayout::AddRows(size_t n, float vertical_resize, int height) {
-  for (size_t i = 0; i < n; ++i)
+  for (size_t i = 0; i < n; ++i) {
     rows_.emplace_back(vertical_resize, height, false);
+  }
   return *this;
 }
 
@@ -347,13 +355,13 @@ TableLayout& TableLayout::AddPaddingRow(float vertical_resize, int height) {
 
 TableLayout& TableLayout::LinkColumnSizes(std::vector<size_t> columns) {
   if (columns.size() > 1) {
-    base::ranges::sort(columns);
+    std::ranges::sort(columns);
     DCHECK_LT(columns.back(), columns_.size())
         << "Cannot link an unspecified column";
 
     std::vector<raw_ptr<Column, VectorExperimental>> linked_columns;
-    base::ranges::transform(columns, std::back_inserter(linked_columns),
-                            [&](size_t index) { return &columns_[index]; });
+    std::ranges::transform(columns, std::back_inserter(linked_columns),
+                           [&](size_t index) { return &columns_[index]; });
 
     for (views::TableLayout::Column* column : linked_columns) {
       column->set_linked_columns(linked_columns);
@@ -408,8 +416,8 @@ ProposedLayout TableLayout::CalculateProposedLayout(
                                &height);
     }
 
-    auto it = base::ranges::find(layout.child_layouts, view,
-                                 &ChildLayout::child_view);
+    auto it =
+        std::ranges::find(layout.child_layouts, view, &ChildLayout::child_view);
     DCHECK(it != layout.child_layouts.cend());
     it->bounds = gfx::Rect(x, y, width, height);
     it->available_size = SizeBounds(width, height);
@@ -434,19 +442,23 @@ void TableLayout::SetViewStates() const {
       SkipPadding(row, rows_);
       SkipPadding(col, columns_);
       for (auto it = row_spans.begin(); it != row_spans.end();) {
-        if (col < (*it)->start_col)
+        if (col < (*it)->start_col) {
           break;
+        }
         const size_t last_row_of_span = (*it)->start_row + (*it)->row_span - 1;
-        if (row <= last_row_of_span)
+        if (row <= last_row_of_span) {
           col = std::max(col, (*it)->start_col + (*it)->col_span);
-        if (row >= last_row_of_span)
+        }
+        if (row >= last_row_of_span) {
           it = row_spans.erase(it);
-        else
+        } else {
           ++it;
+        }
         SkipPadding(col, columns_);
       }
-      if (col < columns_.size())
+      if (col < columns_.size()) {
         break;
+      }
       col = 0;
     }
     CHECK_LT(row, rows_.size())
@@ -471,22 +483,22 @@ void TableLayout::SetViewStates() const {
     // Add `view_state` to the relevant vectors.
     ViewState* ptr;
     {
-      auto it = base::ranges::lower_bound(view_states_by_row_span_,
-                                          view_state->row_span, std::less<>(),
-                                          &ViewState::row_span);
+      auto it = std::ranges::lower_bound(view_states_by_row_span_,
+                                         view_state->row_span, std::less<>(),
+                                         &ViewState::row_span);
       ptr = view_states_by_row_span_.insert(it, std::move(view_state))->get();
     }
     {
       auto it =
-          base::ranges::lower_bound(view_states_by_col_span_, ptr->col_span,
-                                    std::less<>(), &ViewState::col_span);
+          std::ranges::lower_bound(view_states_by_col_span_, ptr->col_span,
+                                   std::less<>(), &ViewState::col_span);
       view_states_by_col_span_.insert(it, ptr);
     }
     if (ptr->row_span > 1) {
       DCHECK_LE(row + ptr->row_span, rows_.size())
           << "row_span extends past trailing edge";
-      auto it = base::ranges::lower_bound(row_spans, ptr->start_col,
-                                          std::less<>(), &ViewState::start_col);
+      auto it = std::ranges::lower_bound(row_spans, ptr->start_col,
+                                         std::less<>(), &ViewState::start_col);
       row_spans.insert(it, ptr);
     }
 
@@ -500,8 +512,9 @@ gfx::Size TableLayout::SizeRowsAndColumns(const SizeBounds& bounds) const {
   SetViewStates();
 
   gfx::Size pref;
-  if (rows_.empty())
+  if (rows_.empty()) {
     return pref;
+  }
 
   // Calculate the preferred width of each of the columns. Some views'
   // preferred heights are derived from their width, as such we need to
@@ -520,8 +533,9 @@ gfx::Size TableLayout::SizeRowsAndColumns(const SizeBounds& bounds) const {
   ResetSizes(rows_);
 
   for (auto& view_state : view_states_by_row_span_) {
-    if (view_state->v_align == LayoutAlignment::kBaseline)
+    if (view_state->v_align == LayoutAlignment::kBaseline) {
       view_state->baseline = view_state->view->GetBaseline();
+    }
 
     // If the view is given a different width than its preferred width, requery
     // for the preferred height. This is necessary as the preferred height may
@@ -531,8 +545,9 @@ gfx::Size TableLayout::SizeRowsAndColumns(const SizeBounds& bounds) const {
     int x = 0;  // Not used in this stage.
     CalculateLocationAndSize(view_state->width, view_state->h_align, &x,
                              &actual_width);
-    if (actual_width != view_state->width)
+    if (actual_width != view_state->width) {
       view_state->height = view_state->view->GetHeightForWidth(actual_width);
+    }
 
     view_state->remaining_height = view_state->height;
   }
@@ -593,7 +608,7 @@ void TableLayout::DistributeRemainingHeight(ViewState& view_state) const {
   const base::span<Row> rows_to_resize =
       base::span(rows_).subspan(view_state.start_row, view_state.row_span);
   const auto resizable_rows = static_cast<size_t>(
-      base::ranges::count_if(rows_to_resize, &Row::resizable));
+      std::ranges::count_if(rows_to_resize, &Row::resizable));
   size_t remaining_rows =
       resizable_rows ? resizable_rows : rows_to_resize.size();
   for (Row& row : rows_to_resize) {
@@ -622,8 +637,9 @@ void TableLayout::DistributeRemainingHeight(ViewState& view_state) const {
 }
 
 void TableLayout::UnifyLinkedColumnSizes() const {
-  for (auto& column : columns_)
+  for (auto& column : columns_) {
     column.UnifyLinkedColumnSizes(linked_column_size_limit_);
+  }
 }
 
 void TableLayout::DistributeRemainingWidth(ViewState& view_state) const {
@@ -632,8 +648,9 @@ void TableLayout::DistributeRemainingWidth(ViewState& view_state) const {
   // kUsePreferred, or not resizable. This results in slightly different
   // handling for distributing unaccounted size.
   int width = view_state.remaining_width;
-  if (width <= 0)
+  if (width <= 0) {
     return;
+  }
 
   // Determine which columns are resizable, and which have a size type of
   // kUsePreferred.
@@ -674,8 +691,9 @@ void TableLayout::DistributeRemainingWidth(ViewState& view_state) const {
       if (columns_[i].size_type() == ColumnSize::kUsePreferred) {
         width -= column_delta;
         // If there is slop, we're on the last row; give it all the slop.
-        if (width < column_delta)
+        if (width < column_delta) {
           column_delta += width;
+        }
         columns_[i].set_size(columns_[i].size() + column_delta);
       }
     }
@@ -700,10 +718,12 @@ void TableLayout::CalculateSize(
       // This relies on MINIMUM being calculated immediately after PREFERRED,
       // which the rest of this code relies on as well.
       size = view_state->view->GetMinimumSize();
-      if (size.width() > view_state->width)
+      if (size.width() > view_state->width) {
         size.set_width(view_state->width);
-      if (size.height() > view_state->height)
+      }
+      if (size.height() > view_state->height) {
         size.set_height(view_state->height);
+      }
     } else {
       size = view_state->view->GetPreferredSize({/* Unbounded */});
       view_state->pref_size = size;
@@ -776,8 +796,9 @@ void TableLayout::ResizeUsingMin(int total_delta) const {
   total_delta = std::abs(total_delta);
 
   std::vector<int> preferred_column_sizes(columns_.size());
-  for (size_t i = 0; i < columns_.size(); ++i)
+  for (size_t i = 0; i < columns_.size(); ++i) {
     preferred_column_sizes[i] = columns_[i].size();
+  }
 
   // Recalculate the sizes using the min.  We don't want to touch the proposed
   // widths and heights, so copy the ViewStates to a temporary location so
@@ -804,13 +825,15 @@ void TableLayout::ResizeUsingMin(int total_delta) const {
     DCHECK_GE(available, 0);
     // Set the size back to preferred. We'll reset the size if necessary later.
     column.set_size(preferred_column_sizes[i]);
-    if (!column.resizable() || available == 0)
+    if (!column.resizable() || available == 0) {
       continue;
+    }
     resize_data.push_back({&column, available, 0});
     total_resize += column.resize();
   }
-  if (resize_data.empty())
+  if (resize_data.empty()) {
     return;
+  }
 
   // Loop through the columns updating the amount available and the amount to
   // resize. This may take multiple iterations if the column min is hit.
@@ -827,8 +850,9 @@ void TableLayout::ResizeUsingMin(int total_delta) const {
           base::ClampFloor(total_delta * data.column->resize() / total_resize));
       // Make sure at least one column is resized (rounding errors may prevent
       // that).
-      if (i == 1 && delta == 0 && next_iteration_delta == total_delta)
+      if (i == 1 && delta == 0 && next_iteration_delta == total_delta) {
         delta = 1;
+      }
       next_iteration_delta -= delta;
       data.delta += delta;
       data.available -= delta;
@@ -843,8 +867,9 @@ void TableLayout::ResizeUsingMin(int total_delta) const {
     total_resize = next_iteration_total_resize;
   }
 
-  for (const ColumnMinResizeData& data : resize_data)
+  for (const ColumnMinResizeData& data : resize_data) {
     data.column->set_size(data.column->size() - data.delta);
+  }
 }
 
 bool TableLayout::CanUseMinimum(const ViewState& view_state) const {

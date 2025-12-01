@@ -70,16 +70,16 @@ class SurfaceFlingerLayers(TestSuite):
         trace=Path('surfaceflinger_layers.textproto'),
         query="""
         SELECT
-          id, snapshot_id, type
+          id, snapshot_id
         FROM
           surfaceflinger_layer;
         """,
         out=Csv("""
-        "id","snapshot_id","type"
-        0,0,"surfaceflinger_layer"
-        1,0,"surfaceflinger_layer"
-        2,1,"surfaceflinger_layer"
-        3,1,"surfaceflinger_layer"
+        "id","snapshot_id"
+        0,0
+        1,0
+        2,1
+        3,1
         """))
 
   def test_tables_have_raw_protos(self):
@@ -87,10 +87,10 @@ class SurfaceFlingerLayers(TestSuite):
         trace=Path('surfaceflinger_layers.textproto'),
         query="""
         SELECT COUNT(*) FROM surfaceflinger_layers_snapshot
-        WHERE base64_proto IS NOT NULL AND base64_proto_id IS NOT NULL
+        WHERE base64_proto_id IS NOT NULL
         UNION ALL
         SELECT COUNT(*) FROM surfaceflinger_layer
-        WHERE base64_proto IS NOT NULL AND base64_proto_id IS NOT NULL
+        WHERE base64_proto_id IS NOT NULL
         """,
         out=Csv("""
         "COUNT(*)"

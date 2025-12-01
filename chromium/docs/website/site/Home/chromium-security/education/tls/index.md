@@ -36,7 +36,7 @@ TLS guarantees identification, confidentiality, and integrity between a client
 In other words, TLS ensures that a [Man-in-the-Middle
 (MitM)](/Home/chromium-security/education/tls) can't snoop or tamper with an
 Internet connection between a user and website. A [man-in-the-middle
-(MiTM)](http://en.wikipedia.org/wiki/Man-in-the-middle_attack) is a term used to
+(MiTM)](https://en.wikipedia.org/wiki/Man-in-the-middle_attack) is a term used to
 describe a third party that can passively monitor and/or actively tamper with a
 connection between two unknowing parties. A MiTM attacker relays messages
 between two parties, making them believe that they are talking directly to each
@@ -258,7 +258,7 @@ confidentiality is needed, but in fact they apply when any (or, most often, all
 
 More people are connected to the web than ever before and from more places and
 more devices (laptops, phones, tablets, and [other
-things](http://en.wikipedia.org/wiki/Internet_of_Things)). Very often, this
+things](https://en.wikipedia.org/wiki/Internet_of_Things)). Very often, this
 access is over untrusted or hostile networks. Data delivered over a clear text
 protocol, like HTTP, is insecure, untrustworthy, and trivially intercepted.
 Neither the user / user-agent nor the web server / application can trust that
@@ -310,7 +310,7 @@ visible to passive eavesdroppers. For example, the IP addresses of client and
 server are shown in the clear on the network, and the hostname(s) of the sites
 you are visiting are transmitted in the clear in DNS requests, in the [Server
 Name Indication portion of a TLS
-handshake](http://en.wikipedia.org/wiki/Server_Name_Indication), and in the
+handshake](https://en.wikipedia.org/wiki/Server_Name_Indication), and in the
 server's certificate(s).
 Also, since TLS is a transport protocol, attacks at other layers of the network
 stack remain. In particular, IP-level threats (e.g. spoofing, SYD floods, DDoS
@@ -345,5 +345,5 @@ these resources over HTTPS, you may have to serve them from elsewhere or enable
 HTTPS on that server.
 
 You may also want to consider the
-[upgrade-insecure-requests](http://www.w3.org/TR/upgrade-insecure-requests/) CSP
+[upgrade-insecure-requests](https://www.w3.org/TR/upgrade-insecure-requests/) CSP
 directive.

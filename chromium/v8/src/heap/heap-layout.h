@@ -10,6 +10,7 @@
 
 #include "src/base/macros.h"
 #include "src/common/globals.h"
+#include "src/objects/objects.h"
 #include "src/objects/tagged.h"
 
 namespace v8::internal {
@@ -53,6 +54,13 @@ class HeapLayout final : public AllStatic {
   // instance. This is equivalent to !InReadOnlySpace except during
   // serialization.
   static V8_INLINE bool IsOwnedByAnyHeap(Tagged<HeapObject> object);
+
+  // Returns whether the map word of `object` is a self forwarding address.
+  // This represents pinned objects and live large objects in Scavenger.
+  static bool IsSelfForwarded(Tagged<HeapObject> object);
+  static bool IsSelfForwarded(Tagged<HeapObject> object,
+                              PtrComprCageBase cage_base);
+  static bool IsSelfForwarded(Tagged<HeapObject> object, MapWord map_word);
 
  private:
   V8_EXPORT static bool InYoungGenerationForStickyMarkbits(

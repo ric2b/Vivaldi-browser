@@ -4,15 +4,14 @@
 
 #include "components/permissions/permission_manager.h"
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
-#include "base/ranges/algorithm.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/permissions/features.h"
@@ -42,8 +41,8 @@ void PermissionStatusVectorCallbackWrapper(
     base::OnceCallback<void(const std::vector<PermissionStatus>&)> callback,
     const std::vector<ContentSetting>& content_settings) {
   std::vector<PermissionStatus> permission_statuses;
-  base::ranges::transform(content_settings, back_inserter(permission_statuses),
-                          PermissionUtil::ContentSettingToPermissionStatus);
+  std::ranges::transform(content_settings, back_inserter(permission_statuses),
+                         PermissionUtil::ContentSettingToPermissionStatus);
   std::move(callback).Run(permission_statuses);
 }
 
@@ -70,7 +69,7 @@ class PermissionManager::PendingRequest {
       content::RenderFrameHost* render_frame_host,
       const std::vector<ContentSettingsType>& permissions,
       base::OnceCallback<void(const std::vector<ContentSetting>&)> callback)
-      : render_process_id_(render_frame_host->GetProcess()->GetID()),
+      : render_process_id_(render_frame_host->GetProcess()->GetDeprecatedID()),
         render_frame_id_(render_frame_host->GetRoutingID()),
         callback_(std::move(callback)),
         permissions_(permissions),
@@ -227,9 +226,9 @@ void PermissionManager::RequestPermissionsInternal(
     base::OnceCallback<void(const std::vector<PermissionStatus>&)>
         permission_status_callback) {
   std::vector<ContentSettingsType> permissions;
-  base::ranges::transform(request_description.permissions,
-                          back_inserter(permissions),
-                          PermissionUtil::PermissionTypeToContentSettingsType);
+  std::ranges::transform(request_description.permissions,
+                         back_inserter(permissions),
+                         PermissionUtil::PermissionTypeToContentSettingsType);
 
   base::OnceCallback<void(const std::vector<ContentSetting>&)> callback =
       base::BindOnce(&PermissionStatusVectorCallbackWrapper,
@@ -613,13 +612,15 @@ content::PermissionResult PermissionManager::GetPermissionStatusInternal(
   content::PermissionResult result = context->GetPermissionStatus(
       render_frame_host, canonical_requesting_origin.DeprecatedGetOriginAsURL(),
       embedding_origin.DeprecatedGetOriginAsURL());
+  content::WebContents* const web_contents =
+      content::WebContents::FromRenderFrameHost(render_frame_host);
   if (should_include_device_status || context->AlwaysIncludeDeviceStatus()) {
     result = context->UpdatePermissionStatusWithDeviceStatus(
-        result, requesting_origin, embedding_origin);
+        web_contents, result, requesting_origin, embedding_origin);
   } else {
     // Give the context an opportunity to still check the device status and
     // maybe notify observers.
-    context->MaybeUpdatePermissionStatusWithDeviceStatus();
+    context->MaybeUpdateCachedHasDevicePermission(web_contents);
   }
   DCHECK(result.status == PermissionStatus::GRANTED ||
          result.status == PermissionStatus::ASK ||

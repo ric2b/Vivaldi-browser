@@ -154,7 +154,7 @@ class HeapObjectData : public ObjectData {
  private:
   std::optional<bool> TryGetBooleanValueImpl(JSHeapBroker* broker) const;
 
-  ObjectData* const map_;
+  ObjectData* map_;
 };
 
 class PropertyCellData : public HeapObjectData {
@@ -558,6 +558,7 @@ class MapData : public HeapObjectData {
 
   InstanceType instance_type() const { return instance_type_; }
   int instance_size() const { return instance_size_; }
+  uint32_t bit_field2() const { return bit_field2_; }
   uint32_t bit_field3() const { return bit_field3_; }
   int in_object_properties() const {
     CHECK(InstanceTypeChecker::IsJSObject(instance_type()));
@@ -575,6 +576,7 @@ class MapData : public HeapObjectData {
 
   InstanceType instance_type_;
   int instance_size_;
+  uint32_t bit_field2_;
   uint32_t bit_field3_;
   int unused_property_fields_;
   bool is_abandoned_prototype_map_;
@@ -771,9 +773,14 @@ bool JSFunctionRef::IsConsistentWithHeapState(JSHeapBroker* broker) const {
 HeapObjectData::HeapObjectData(JSHeapBroker* broker, ObjectData** storage,
                                IndirectHandle<HeapObject> object,
                                ObjectDataKind kind)
-    : ObjectData(broker, storage, object, kind),
-      map_(broker->GetOrCreateData(
-          object->map(broker->cage_base(), kAcquireLoad), kAssumeMemoryFence)) {
+    : ObjectData(broker, storage, object, kind), map_(nullptr) {
+  // At this point, this object may already be in the RefsMap. GetOrCreateData
+  // will lookup objects in there. If (e.g. due to in-sandbox corruption) the
+  // object graph is such that we end up retrieving ourselves from the RefsMap
+  // in the recursive GetOrCreateData call, then we'll see uninitialized data
+  // for the map_ field. To avoid this, initialize it to nullptr first.
+  map_ = broker->GetOrCreateData(object->map(broker->cage_base(), kAcquireLoad),
+                                 kAssumeMemoryFence);
   CHECK_IMPLIES(broker->mode() == JSHeapBroker::kSerialized,
                 kind == kBackgroundSerializedHeapObject);
 }
@@ -879,6 +886,8 @@ MapData::MapData(JSHeapBroker* broker, ObjectData** storage,
   // on {instance_type} being serialized.
   instance_type_ = object->instance_type();
   instance_size_ = object->instance_size();
+
+  bit_field2_ = object->bit_field2();
 
   // Both bit_field3 (and below bit_field) are special fields: Even though most
   // of the individual bits inside of the bitfield could be read / written
@@ -1353,7 +1362,7 @@ NameRef MapRef::GetPropertyKey(JSHeapBroker* broker,
 
 bool MapRef::IsFixedCowArrayMap(JSHeapBroker* broker) const {
   Handle<Map> fixed_cow_array_map =
-      ReadOnlyRoots(broker->isolate()).fixed_cow_array_map_handle();
+      broker->isolate()->factory()->fixed_cow_array_map();
   return equals(MakeRef(broker, fixed_cow_array_map));
 }
 
@@ -1600,7 +1609,7 @@ FixedArrayRef JSBoundFunctionRef::bound_arguments(JSHeapBroker* broker) const {
 // Immutable after initialization.
 HEAP_ACCESSOR_C(JSDataView, size_t, byte_length)
 
-HEAP_ACCESSOR_B(Map, bit_field2, elements_kind, Map::Bits2::ElementsKindBits)
+BIMODAL_ACCESSOR_B(Map, bit_field2, elements_kind, Map::Bits2::ElementsKindBits)
 HEAP_ACCESSOR_B(Map, bit_field3, is_dictionary_map,
                 Map::Bits3::IsDictionaryMapBit)
 HEAP_ACCESSOR_B(Map, bit_field3, is_deprecated, Map::Bits3::IsDeprecatedBit)
@@ -1704,9 +1713,11 @@ HolderLookupResult FunctionTemplateInfoRef::LookupHolderOfExpectedType(
 
 HEAP_ACCESSOR_C(ScopeInfo, int, ContextLength)
 HEAP_ACCESSOR_C(ScopeInfo, bool, HasContextExtensionSlot)
+HEAP_ACCESSOR_C(ScopeInfo, bool, SomeContextHasExtension)
 HEAP_ACCESSOR_C(ScopeInfo, bool, HasOuterScopeInfo)
 HEAP_ACCESSOR_C(ScopeInfo, bool, HasContext)
 HEAP_ACCESSOR_C(ScopeInfo, bool, ClassScopeHasPrivateBrand)
+HEAP_ACCESSOR_C(ScopeInfo, bool, SloppyEvalCanExtendVars)
 HEAP_ACCESSOR_C(ScopeInfo, ScopeType, scope_type)
 
 ScopeInfoRef ScopeInfoRef::OuterScopeInfo(JSHeapBroker* broker) const {
@@ -1737,7 +1748,7 @@ bool SharedFunctionInfoRef::HasBreakInfo(JSHeapBroker* broker) const {
     return object()->HasBreakInfo(broker->isolate());
   } else {
     LocalIsolate* local_isolate = broker->local_isolate();
-    SharedMutexGuardIfOffThread<LocalIsolate, base::kShared> mutex_guard(
+    MutexGuardIfOffThread<LocalIsolate> mutex_guard(
         local_isolate->shared_function_info_access(), local_isolate);
     return object()->HasBreakInfo(local_isolate->GetMainThreadIsolateUnsafe());
   }
@@ -1802,6 +1813,18 @@ size_t JSTypedArrayRef::length() const {
   CHECK(!is_on_heap());
   // Immutable after initialization.
   return object()->length();
+}
+
+size_t JSTypedArrayRef::byte_length() const {
+  CHECK(!is_on_heap());
+  // Immutable after initialization (since this is not used for RAB/GSAB).
+  return object()->byte_length();
+}
+
+ElementsKind JSTypedArrayRef::elements_kind(JSHeapBroker* broker) const {
+  CHECK(!is_on_heap());
+  // Immutable after initialization.
+  return map(broker).elements_kind();
 }
 
 HeapObjectRef JSTypedArrayRef::buffer(JSHeapBroker* broker) const {
@@ -2281,6 +2304,10 @@ OptionalSharedFunctionInfoRef FeedbackCellRef::shared_function_info(
   return vector->shared_function_info(broker);
 }
 
+#ifdef V8_ENABLE_LEAPTIERING
+HEAP_ACCESSOR_C(FeedbackCell, JSDispatchHandle, dispatch_handle)
+#endif
+
 SharedFunctionInfoRef FeedbackVectorRef::shared_function_info(
     JSHeapBroker* broker) const {
   // Immutable after initialization.
@@ -2372,6 +2399,9 @@ JSFUNCTION_BIMODAL_ACCESSOR_WITH_DEP(FeedbackCell, raw_feedback_cell,
 
 BIMODAL_ACCESSOR(JSFunction, Context, context)
 BIMODAL_ACCESSOR(JSFunction, SharedFunctionInfo, shared)
+#ifdef V8_ENABLE_LEAPTIERING
+HEAP_ACCESSOR_C(JSFunction, JSDispatchHandle, dispatch_handle)
+#endif
 
 #undef JSFUNCTION_BIMODAL_ACCESSOR_WITH_DEP
 #undef JSFUNCTION_BIMODAL_ACCESSOR_WITH_DEP_C

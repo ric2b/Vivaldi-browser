@@ -64,7 +64,6 @@ import org.chromium.base.CallbackUtils;
 import org.chromium.base.UserDataHost;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.ChromeWindow;
 import org.chromium.chrome.browser.app.ChromeActivity;
@@ -96,6 +95,7 @@ import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
 import org.chromium.components.embedder_support.view.ContentView;
 import org.chromium.content_public.browser.Visibility;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.content_public.browser.test.mock.MockWebContents;
 import org.chromium.ui.InsetObserver;
 import org.chromium.ui.base.ApplicationViewportInsetSupplier;
 import org.chromium.ui.display.DisplayAndroid;
@@ -115,7 +115,6 @@ public class ManualFillingControllerTest {
     private static final int sAccessoryHeightDp = 48;
 
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
-    @Rule public JniMocker mJniMocker = new JniMocker();
 
     @Captor ArgumentCaptor<FullscreenManager.Observer> mFullscreenObserverCaptor;
 
@@ -340,10 +339,10 @@ public class ManualFillingControllerTest {
                 .thenReturn(RuntimeEnvironment.application.getPackageManager());
         when(mMockActivity.findViewById(android.R.id.content)).thenReturn(mMockContentView);
         when(mMockContentView.getRootView()).thenReturn(mock(View.class));
-        mLastMockWebContents = mock(WebContents.class);
+        mLastMockWebContents = mock(MockWebContents.class);
         when(mMockActivity.getCurrentWebContents()).then(i -> mLastMockWebContents);
 
-        mJniMocker.mock(ProfileJni.TEST_HOOKS, mProfileJniMock);
+        ProfileJni.setInstanceForTesting(mProfileJniMock);
         when(mProfileJniMock.fromWebContents(any())).thenReturn(mMockProfile);
 
         when(mMockWindow.getInsetObserver()).thenReturn(mInsetObserver);
@@ -931,14 +930,14 @@ public class ManualFillingControllerTest {
         // minimumVisibleHeightDp, test that the visible area is correctly deduced to be 200 - 100 <
         // minimumVisibleHeightDp so the sheet should be restricted in height.
         assertEquals(
-                (int) mController.getBottomInsetSupplier().get(), accessorySheetHeightDp * density);
+                accessorySheetHeightDp * density, (int) mController.getBottomInsetSupplier().get());
         simulateLayoutSizeChange(
                 density,
                 initialHeightDp,
                 initialWidthDp,
                 /* keyboardShown= */ false,
                 VirtualKeyboardMode.RESIZES_VISUAL);
-        assertEquals(mLastMockWebContents.getHeight(), initialWidthDp);
+        assertEquals(initialWidthDp, mLastMockWebContents.getHeight());
 
         // 200 - 128 = 72
         int expectedSheetHeightDp = initialWidthDp - minimumVisibleHeightDp;
@@ -992,14 +991,14 @@ public class ManualFillingControllerTest {
         // sheet will cause a resize to the web contents.  WebContents.getHeight <
         // minimumVisibleHeightDp so the sheet should be restricted in height.
         assertEquals(
-                (int) mController.getBottomInsetSupplier().get(), accessorySheetHeightDp * density);
+                accessorySheetHeightDp * density, (int) mController.getBottomInsetSupplier().get());
         simulateLayoutSizeChange(
                 density,
                 initialHeightDp,
                 initialWidthDp,
                 /* keyboardShown= */ false,
                 VirtualKeyboardMode.RESIZES_CONTENT);
-        assertEquals(mLastMockWebContents.getHeight(), initialWidthDp - accessorySheetHeightDp);
+        assertEquals(initialWidthDp - accessorySheetHeightDp, mLastMockWebContents.getHeight());
 
         // 200 - 128 = 72
         int expectedSheetHeightDp = initialWidthDp - minimumVisibleHeightDp;
@@ -1450,7 +1449,7 @@ public class ManualFillingControllerTest {
         Tab tab = mock(Tab.class);
         when(tab.getId()).thenReturn(id);
         when(tab.getUserDataHost()).thenReturn(mUserDataHost);
-        mLastMockWebContents = mock(WebContents.class);
+        mLastMockWebContents = mock(MockWebContents.class);
         when(tab.getWebContents()).thenReturn(mLastMockWebContents);
         mCache.getStateFor(tab)
                 .getWebContentsObserverForTesting()

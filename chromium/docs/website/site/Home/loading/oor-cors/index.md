@@ -87,14 +87,14 @@ services or responses from Google services.
 **BUG: Redirects from allowlisted content scripts blocked by CORB+CORS in Chrome
 79**
 
-See [crbug.com/](http://crbug.com/)[1034408](http://crbug.com/1034408). There is
+See [crbug.com/](https://crbug.com/)[1034408](https://crbug.com/1034408). There is
 a temporary breakage in the original CORS implementation at Chrome 79. This will
 be fixed by enabling OOR-CORS or updating to Chrome 80.
 
 **CSS -webkit-mask starts using CORS-enabled requests from Chrome 79**
 
-See [crbug.com/](http://crbug.com/)[786507](http://crbug.com/786507) and
-[crbug.com/](http://crbug.com/)[1034942](http://crbug.com/1034942). This will
+See [crbug.com/](https://crbug.com/)[786507](https://crbug.com/786507) and
+[crbug.com/](https://crbug.com/)[1034942](https://crbug.com/1034942). This will
 result in observing CORS related errors if the same URL is also requested by
 other no-cors requests and the server does not care for HTTP caches. [CORS
 protocol and HTTP
@@ -104,7 +104,7 @@ the fetch spec will help you to understand the problem.
 **Origin header from Extensions' background page is changed from Chrome 80 (may
 be postponed for breaking many?)**
 
-See [crbug.com/](http://crbug.com/)[1036458](http://crbug.com/1036458). When
+See [crbug.com/](https://crbug.com/)[1036458](https://crbug.com/1036458). When
 Chrome sends a request from Extensions' background page and Origin header is
 needed, chrome-extensions://&lt;extensions id&gt; has been set. But from Chrome
 80, the origin of the target URL will be used.
@@ -239,4 +239,4 @@ monitor legacy Blink implementation.
 (rel)](https://ci.chromium.org/p/chromium/builders/ci/Android%20WebView%20P%20Blink-CORS%20FYI%20%28rel%29)
 - wpt may fail and should be be compared with [Android WebView P FYI
 (rel)](https://ci.chromium.org/p/chromium/builders/ci/Android%20WebView%20P%20FYI%20%28rel%29)
-tracked by [crbug.com/1011098](http://crbug.com/1011098)
+tracked by [crbug.com/1011098](https://crbug.com/1011098)

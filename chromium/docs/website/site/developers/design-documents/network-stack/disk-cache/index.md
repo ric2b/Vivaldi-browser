@@ -60,7 +60,7 @@ The Backend provides methods to enumerate the resources stored on the cache
 a given resource are handled with the Entry interface.
 
 An entry is identified by its key, which is just the name of the resource (for
-example http://www.google.com/favicon.ico ). Once an entry is created, the data
+example https://www.google.com/favicon.ico ). Once an entry is created, the data
 for that particular resource is stored in separate chunks or data streams: one
 for the HTTP headers and another one for the actual resource data, so the index
 for the required stream is an argument to the Entry::ReadData and

@@ -10,6 +10,7 @@ var $Element = require('safeMethods').SafeMethods.$Element;
 var GuestView = require('guestView').GuestView;
 var GuestViewContainer = require('guestViewContainer').GuestViewContainer;
 var GuestViewInternalNatives = requireNative('guest_view_internal');
+var tagLogMessage = require('guestViewConstants').tagLogMessage;
 var WebViewConstants = require('webViewConstants').WebViewConstants;
 var WebViewAttributes = require('webViewAttributes').WebViewAttributes;
 var WebViewEvents = require('webViewEvents').WebViewEvents;
@@ -250,7 +251,8 @@ WebViewImpl.prototype.attachWindow = function(opt_guestInstanceId) {
 // Shared implementation of executeScript() and insertCSS().
 WebViewImpl.prototype.executeCode = function(func, args) {
   if (!this.guest.getId()) {
-    window.console.error(WebViewConstants.ERROR_MSG_CANNOT_INJECT_SCRIPT);
+    window.console.error(tagLogMessage(
+        this.getLogTag(), WebViewConstants.ERROR_MSG_CANNOT_INJECT_SCRIPT));
     return false;
   }
 
@@ -313,6 +315,10 @@ WebViewImpl.prototype.makeElementFullscreen = function() {
   GuestViewInternalNatives.RunWithGesture($Function.bind(function() {
     $Element.webkitRequestFullScreen(this.element);
   }, this));
+};
+
+WebViewImpl.prototype.getLogTag = function() {
+  return 'webview';
 };
 
 // vivaldi extensions

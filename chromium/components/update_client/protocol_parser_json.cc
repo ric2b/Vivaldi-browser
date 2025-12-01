@@ -4,13 +4,13 @@
 
 #include "components/update_client/protocol_parser_json.h"
 
+#include <algorithm>
 #include <optional>
 #include <string>
 #include <utility>
 
 #include "base/check.h"
 #include "base/json/json_reader.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
@@ -45,18 +45,6 @@ bool ParseManifest(const base::Value& manifest_node_val,
     *error =
         base::StrCat({"Invalid version: '", result->manifest.version, "'."});
     return false;
-  }
-
-  // Get the optional minimum browser version.
-  const std::string* browser_min_version =
-      manifest_node.FindString("prodversionmin");
-  if (browser_min_version) {
-    result->manifest.browser_min_version = *browser_min_version;
-    if (!base::Version(result->manifest.browser_min_version).IsValid()) {
-      *error = base::StrCat({"Invalid prodversionmin: '",
-                             result->manifest.browser_min_version, "'."});
-      return false;
-    }
   }
 
   result->manifest.run = GetValueString(manifest_node, "run");
@@ -303,7 +291,7 @@ bool ParseApp(const base::Value& app_node_val,
   CHECK(result->status.empty() || result->status == "ok");
 
   if (const base::Value::List* data_node = app_node.FindList("data")) {
-    base::ranges::for_each(*data_node, [&result](const base::Value& data) {
+    std::ranges::for_each(*data_node, [&result](const base::Value& data) {
       ParseData(data, result);
     });
   }
@@ -335,18 +323,14 @@ bool ProtocolParserJSON::DoParse(const std::string& response_json,
     ParseError("Missing secure JSON prefix.");
     return false;
   }
-  const auto doc = base::JSONReader::Read(base::MakeStringPiece(
+  const auto doc = base::JSONReader::ReadDict(base::MakeStringPiece(
       response_json.begin() + std::char_traits<char>::length(kJSONPrefix),
       response_json.end()));
   if (!doc) {
     ParseError("JSON read error.");
     return false;
   }
-  if (!doc->is_dict()) {
-    ParseError("JSON document is not a dictionary.");
-    return false;
-  }
-  const base::Value::Dict* response_node = doc->GetDict().FindDict("response");
+  const base::Value::Dict* response_node = doc->FindDict("response");
   if (!response_node) {
     ParseError("Missing 'response' element or 'response' is not a dictionary.");
     return false;
@@ -367,31 +351,12 @@ bool ProtocolParserJSON::DoParse(const std::string& response_json,
     const std::optional<int> elapsed_seconds =
         daystart_node->FindInt("elapsed_seconds");
     if (elapsed_seconds) {
-      results->daystart_elapsed_seconds = elapsed_seconds.value();
+      results->daystart_elapsed_seconds = *elapsed_seconds;
     }
     const std::optional<int> elapsed_days =
         daystart_node->FindInt("elapsed_days");
     if (elapsed_days) {
-      results->daystart_elapsed_days = elapsed_days.value();
-    }
-  }
-
-  const base::Value::Dict* systemrequirements_node =
-      response_node->FindDict("systemrequirements");
-  if (systemrequirements_node) {
-    const std::string* platform =
-        systemrequirements_node->FindString("platform");
-    if (platform) {
-      results->system_requirements.platform = *platform;
-    }
-    const std::string* arch = systemrequirements_node->FindString("arch");
-    if (arch) {
-      results->system_requirements.arch = *arch;
-    }
-    const std::string* min_os_version =
-        systemrequirements_node->FindString("min_os_version");
-    if (min_os_version) {
-      results->system_requirements.min_os_version = *min_os_version;
+      results->daystart_elapsed_days = *elapsed_days;
     }
   }
 

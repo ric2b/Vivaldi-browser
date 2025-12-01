@@ -97,7 +97,7 @@ service being advertised.
 ### The callback *parameter* should specify a function that looks like this:
 
 ### function(BluetoothSocket result) {...};result *(
-[BluetoothSocket](experimental.bluetooth.html#type-BluetoothSocket) )*A
+[BluetoothSocket](#bluetoothsocket) )*A
 bluetooth socket identifier that can be used to communicate with the connected
 device.
 
@@ -111,7 +111,7 @@ function callback)
 ### #### Parameters
 
 ### device *(
-[BluetoothDevice](experimental.bluetooth.html#type-BluetoothDevice) )*The target
+[BluetoothDevice](#bluetoothdevice) )*The target
 device of the connection.
 
 ### uuid *( string )*The target service of the connection.
@@ -123,7 +123,7 @@ device of the connection.
 ### The callback *parameter* should specify a function that looks like this:
 
 ### function(BluetoothSocket result) {...};result *(
-[BluetoothSocket](experimental.bluetooth.html#type-BluetoothSocket) )*A
+[BluetoothSocket](#bluetoothsocket) )*A
 bluetooth socket identifier that can be used to communicate with the connected
 device.
 
@@ -137,7 +137,7 @@ callback)
 ### #### Parameters
 
 ### socket *(
-[BluetoothSocket](experimental.bluetooth.html#type-BluetoothSocket) )*The
+[BluetoothSocket](#bluetoothsocket) )*The
 bluetooth socket to read from.
 
 ### callback *( optional function )*Called with a boolean value to indicate
@@ -186,7 +186,7 @@ function callback)
 ### The callback *parameter* should specify a function that looks like this:
 
 ### function(array of BluetoothDevice results) {...};results *( array of
-[BluetoothDevice](experimental.bluetooth.html#type-BluetoothDevice) )*An array
+[BluetoothDevice](#bluetoothdevice) )*An array
 of BluetoothDevice objects, all of which provide the specified service.
 
 ### #### getOutOfBandPairingData
@@ -251,7 +251,7 @@ callback)
 ### #### Parameters
 
 ### socket *(
-[BluetoothSocket](experimental.bluetooth.html#type-BluetoothSocket) )*The
+[BluetoothSocket](#bluetoothsocket) )*The
 bluetooth socket to read from.
 
 ### callback *( function )*Called when data is available.
@@ -300,7 +300,7 @@ data, function callback)
 ### #### Parameters
 
 ### socket *(
-[BluetoothSocket](experimental.bluetooth.html#type-BluetoothSocket) )*The
+[BluetoothSocket](#bluetoothsocket) )*The
 bluetooth socket to read from.
 
 ### data *( ArrayBuffer )*The data to be written.

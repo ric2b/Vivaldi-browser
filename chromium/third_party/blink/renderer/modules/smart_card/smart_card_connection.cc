@@ -337,8 +337,7 @@ ScriptPromise<DOMArrayBuffer> SmartCardConnection::transmit(
   SetOperationInProgress(resolver);
 
   Vector<uint8_t> send_vector;
-  send_vector.Append(send_buffer.Bytes(),
-                     static_cast<wtf_size_t>(send_buffer.ByteLength()));
+  send_vector.AppendSpan(send_buffer.ByteSpan());
 
   connection_->Transmit(
       protocol, send_vector,
@@ -688,9 +687,9 @@ void SmartCardConnection::OnBeginTransactionDone(
   }
 
   auto promise = transaction_result.FromJust();
-  promise.React(script_state,
-                MakeGarbageCollected<TransactionFulfilledFunction>(this),
-                MakeGarbageCollected<TransactionRejectedFunction>(this));
+  promise.Then(script_state,
+               MakeGarbageCollected<TransactionFulfilledFunction>(this),
+               MakeGarbageCollected<TransactionRejectedFunction>(this));
 }
 
 void SmartCardConnection::OnEndTransactionDone(

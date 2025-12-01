@@ -3,10 +3,13 @@
 // found in the LICENSE file.
 
 import * as ComponentHelpers from '../../components/helpers/helpers.js';
-import * as LitHtml from '../../lit-html/lit-html.js';
-import panelIntroductionStepsStyles from './panelIntroductionSteps.css.js';
+import {html, render} from '../../lit/lit.js';
 
-const {html} = LitHtml;
+import panelIntroductionStepsStylesRaw from './panelIntroductionSteps.css.js';
+
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const panelIntroductionStepsStyles = new CSSStyleSheet();
+panelIntroductionStepsStyles.replaceSync(panelIntroductionStepsStylesRaw.cssContent);
 
 export class PanelIntroductionSteps extends HTMLElement {
   readonly #shadow = this.attachShadow({mode: 'open'});
@@ -23,7 +26,7 @@ export class PanelIntroductionSteps extends HTMLElement {
     }
 
     // clang-format off
-    LitHtml.render(html`
+    render(html`
       <h1><slot name="title">slot: title</slot></h1>
 
       <ol class="intro-steps">

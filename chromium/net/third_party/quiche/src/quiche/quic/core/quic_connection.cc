@@ -33,6 +33,8 @@
 #include "quiche/quic/core/crypto/crypto_utils.h"
 #include "quiche/quic/core/crypto/quic_decrypter.h"
 #include "quiche/quic/core/crypto/quic_encrypter.h"
+#include "quiche/quic/core/frames/quic_ack_frequency_frame.h"
+#include "quiche/quic/core/frames/quic_immediate_ack_frame.h"
 #include "quiche/quic/core/frames/quic_reset_stream_at_frame.h"
 #include "quiche/quic/core/quic_bandwidth.h"
 #include "quiche/quic/core/quic_config.h"
@@ -442,7 +444,21 @@ void QuicConnection::SetFromConfig(const QuicConfig& config) {
     active_migration_disabled_ = true;
   }
 
+  // Note that SetFromConfig() can be called twice: once at initialization and
+  // once after handshake completion. This can cause ECN to be set again after
+  // failing validation during the handshake. It is legal per RFC9000 to
+  // periodically try to validate ECN after failure, and post-handshakes is as
+  // good a time as any.
   sent_packet_manager_.SetFromConfig(config);
+  // TODO(martinduke): set_ecn_codepoint() itself calls EnableECT1() and
+  // EnableECT0(). Once set_ecn_codepoint() has proven to be safe, this can
+  // just call set_ecn_codepoint(ECT0) and (ECT1) without any conditional.
+  if (sent_packet_manager_.EnableECT1()) {
+    set_ecn_codepoint(ECN_ECT1);
+  } else if (sent_packet_manager_.EnableECT0()) {
+    set_ecn_codepoint(ECN_ECT0);
+  }
+
   if (perspective_ == Perspective::IS_SERVER &&
       config.HasClientSentConnectionOption(kAFF2, perspective_)) {
     send_ack_frequency_on_handshake_completion_ = true;
@@ -579,6 +595,16 @@ void QuicConnection::SetFromConfig(const QuicConfig& config) {
     multi_port_stats_ = std::make_unique<MultiPortStats>();
     if (config.HasClientRequestedIndependentOption(kMPQM, perspective_)) {
       multi_port_migration_enabled_ = true;
+    }
+  }
+
+  if (config.HasMinAckDelayDraft10ToSend()) {
+    if (config.GetMinAckDelayDraft10ToSendMs() <=
+        config.GetMaxAckDelayToSendMs()) {  // MinAckDelay is valid.
+      set_can_receive_ack_frequency_immediate_ack(true);
+    } else {
+      QUIC_BUG(quic_bug_min_ack_delay_too_high)
+          << "MinAckDelay higher than MaxAckDelay";
     }
   }
 
@@ -1306,8 +1332,17 @@ bool QuicConnection::OnPacketHeader(const QuicPacketHeader& header) {
     default_path_.validated = true;
     stats_.address_validated_via_token = true;
   }
-  QUICHE_DCHECK(connected_);
-  return true;
+
+  if (!GetQuicReloadableFlag(quic_on_packet_header_return_connected)) {
+    QUICHE_DCHECK(connected_);
+    return true;
+  }
+
+  // TODO(b/389384603): Remove this when deprecating the flag.
+  if (!connected_) {
+    QUIC_CODE_COUNT(quic_connection_closed_on_packet_header);
+  }
+  return connected_;
 }
 
 bool QuicConnection::OnStreamFrame(const QuicStreamFrame& frame) {
@@ -2083,6 +2118,35 @@ bool QuicConnection::OnAckFrequencyFrame(const QuicAckFrequencyFrame& frame) {
         << "Get AckFrequencyFrame in packet number space "
         << packet_number_space;
   }
+  MaybeUpdateAckTimeout();
+  return true;
+}
+
+bool QuicConnection::OnImmediateAckFrame(const QuicImmediateAckFrame& frame) {
+  QUIC_BUG_IF(quic_bug_immediate_ack_frame_connection_closed, !connected_)
+      << "Processing IMMEDIATE_ACK frame when connection "
+         "is closed. Received packet info: "
+      << last_received_packet_info_;
+  if (debug_visitor_ != nullptr) {
+    debug_visitor_->OnImmediateAckFrame(frame);
+  }
+  if (!UpdatePacketContent(IMMEDIATE_ACK_FRAME)) {
+    return false;
+  }
+  if (!can_receive_ack_frequency_immediate_ack_) {
+    QUIC_LOG_EVERY_N_SEC(ERROR, 120) << "Got unexpected ImmediateAck Frame.";
+    return false;
+  }
+  QUIC_RELOADABLE_FLAG_COUNT_N(quic_receive_ack_frequency, 1, 2);
+  if (last_received_packet_info_.decrypted_level == ENCRYPTION_FORWARD_SECURE) {
+    uber_received_packet_manager_.OnImmediateAckFrame();
+  } else {
+    QUIC_LOG_EVERY_N_SEC(ERROR, 120)
+        << "Got ImmediateAckFrame at EncryptionLevel "
+        << EncryptionLevelToString(last_received_packet_info_.decrypted_level);
+    return false;
+  }
+  should_last_packet_instigate_acks_ = false;
   MaybeUpdateAckTimeout();
   return true;
 }
@@ -3966,19 +4030,14 @@ void QuicConnection::OnPathMtuIncreased(QuicPacketLength packet_size) {
 }
 
 void QuicConnection::OnInFlightEcnPacketAcked() {
-  QUIC_BUG_IF(quic_bug_518619343_01, !GetQuicRestartFlag(quic_support_ect1))
-      << "Unexpected call to OnInFlightEcnPacketAcked()";
   // Only packets on the default path are in-flight.
   if (!default_path_.ecn_marked_packet_acked) {
     QUIC_DVLOG(1) << ENDPOINT << "First ECT packet acked on active path.";
-    QUIC_RESTART_FLAG_COUNT_N(quic_support_ect1, 2, 9);
     default_path_.ecn_marked_packet_acked = true;
   }
 }
 
 void QuicConnection::OnInvalidEcnFeedback() {
-  QUIC_BUG_IF(quic_bug_518619343_02, !GetQuicRestartFlag(quic_support_ect1))
-      << "Unexpected call to OnInvalidEcnFeedback().";
   if (disable_ecn_codepoint_validation_) {
     // In some tests, senders may send ECN marks in patterns that are not
     // in accordance with the spec, and should not fail validation as a result.
@@ -4568,10 +4627,7 @@ void QuicConnection::CloseConnection(
     return;
   }
 
-  if (GetQuicReloadableFlag(quic_avoid_nested_close_connection)) {
-    QUIC_RELOADABLE_FLAG_COUNT(quic_avoid_nested_close_connection);
-    in_close_connection_ = true;
-  }
+  in_close_connection_ = true;
   absl::Cleanup cleanup = [this]() { in_close_connection_ = false; };
 
   if (ietf_error != NO_IETF_QUIC_ERROR) {
@@ -7467,10 +7523,6 @@ void QuicConnection::set_outgoing_flow_label(uint32_t flow_label) {
 }
 
 bool QuicConnection::set_ecn_codepoint(QuicEcnCodepoint ecn_codepoint) {
-  if (!GetQuicRestartFlag(quic_support_ect1)) {
-    return false;
-  }
-  QUIC_RESTART_FLAG_COUNT_N(quic_support_ect1, 3, 9);
   if (disable_ecn_codepoint_validation_ || ecn_codepoint == ECN_NOT_ECT) {
     packet_writer_params_.ecn_codepoint = ecn_codepoint;
     return true;

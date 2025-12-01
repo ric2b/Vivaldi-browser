@@ -9,6 +9,7 @@ update_template_instance("//ios/chrome/app:chrome") {
     "//vivaldi/ios/ui/notes:notes",
     "//vivaldi/vivapp:ios_vivaldi_resources",
     "//vivaldi/ios/ui/feedback_prompt:vivaldi_feedback_prompt",
+    "//vivaldi/ios/ui/se_change_prompt:search_engine_change_prompt",
   ]
 }
 
@@ -18,7 +19,7 @@ update_template_instance("//ios/chrome/app:info_plist") {
   ]
 }
 
-update_target("//ios/chrome/browser/ui/toolbar:toolbar_ui") {
+update_target("//ios/chrome/browser/toolbar/ui_bundled:ui") {
   deps += [
     "//vivaldi/ios/ui/toolbar:vivaldi_toolbar",
     "//vivaldi/ios/ui/settings/appearance:vivaldi_appearance_settings"
@@ -31,7 +32,7 @@ update_target("//ios/chrome/browser/ui/popup_menu/overflow_menu:overflow_menu") 
   ]
 }
 
-update_target("//ios/chrome/browser/ui/tab_switcher/tab_grid:tab_grid_ui_constants") {
+update_target("//ios/chrome/browser/tab_switcher/ui_bundled/tab_grid:tab_grid_ui_constants") {
   deps += [
     "//vivaldi/ios/ui/tab_switcher/tab_grid/resources",
   ]
@@ -86,7 +87,7 @@ update_target("//ios/chrome/browser/location_bar/ui_bundled:ui_bundled") {
   ]
 }
 
-update_target("//ios/chrome/browser/ui/settings:settings") {
+update_target("//ios/chrome/browser/settings/ui_bundled:ui_bundled") {
   deps += [
     "//vivaldi/ios/ui/settings/addressbar:vivaldi_addressbar_settings",
     "//vivaldi/ios/ui/settings/appearance:vivaldi_appearance_settings",
@@ -99,6 +100,7 @@ update_target("//ios/chrome/browser/ui/settings:settings") {
     "//vivaldi/ios/ui/settings/search_engine:vivaldi_search_engine_settings",
     "//vivaldi/ios/ui/settings/start_page:start_page_settings",
     "//vivaldi/ios/ui/settings/sync:vivaldi_sync_settings",
+    "//vivaldi/ios/ui/settings/sync/error_dialog:vivaldi_sync_error_dialog",
     "//vivaldi/ios/ui/settings/tabs:vivaldi_tab_settings",
   ]
 }
@@ -110,7 +112,7 @@ update_target("//ios/chrome/common/ui/colors:colors") {
 }
 
 
-update_target("//ios/chrome/browser/shared/model/browser_state:browser_state") {
+update_target("//ios/chrome/browser/shared/model/browser:browser") {
   deps += [
     "//vivaldi/browser:default_bookmarks",
     "//vivaldi/ios/ad_blocker:ad_blocker",
@@ -152,7 +154,7 @@ update_target("//ios/chrome/app/resources:settings_resources") {
   public_deps -= [ ":settings_resources_experimental_plist" ]
 }
 
-update_target("//ios/chrome/browser/ui/reading_list:reading_list_ui") {
+update_target("//ios/chrome/browser/reading_list/ui_bundled:ui") {
   deps += [
     "//vivaldi/ios/panel/resources:assets",
   ]
@@ -164,13 +166,13 @@ update_target("//ios/chrome/browser/autofill/ui_bundled/manual_fill:manual_fill_
   ]
 }
 
-update_target("//ios/chrome/browser/ui/tab_switcher/tab_grid/grid:grid_ui") {
+update_target("//ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/grid:grid_ui") {
     deps += [
     "//vivaldi/ios/chrome/browser/ui/tab_switcher/tab_grid/inactive_tabs/resources:assets",
   ]
 }
 
-update_target("//ios/chrome/browser/ui/browser_container:browser_container") {
+update_target("//ios/chrome/browser/browser_container/ui_bundled:ui") {
   deps += [
     "//vivaldi/ios/ui/copy_to_note",
   ]

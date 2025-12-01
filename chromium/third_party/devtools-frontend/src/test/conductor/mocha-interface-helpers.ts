@@ -62,19 +62,28 @@ async function takeScreenshots(): Promise<{target?: string, frontend?: string}> 
 }
 
 async function createScreenshotError(error: Error): Promise<Error> {
-  console.error('Taking screenshots for the error', error);
+  console.error('Taking screenshots for the error:', error);
   if (!TestConfig.debug) {
-    const screenshotTimeout = 5_000;
-    const {target, frontend} = await Promise.race([
-      takeScreenshots(),
-      new Promise(resolve => {
-        setTimeout(resolve, screenshotTimeout);
-      }).then(() => {
-        console.error(`Could not take screenshots within ${screenshotTimeout}ms.`);
-        return {target: undefined, frontend: undefined};
-      }),
-    ]);
-    return ScreenshotError.fromBase64Images(error, target, frontend);
+    try {
+      const screenshotTimeout = 5_000;
+      let timer: NodeJS.Timeout;
+      const {target, frontend} = await Promise.race([
+        takeScreenshots().then(result => {
+          clearTimeout(timer);
+          return result;
+        }),
+        new Promise(resolve => {
+          timer = setTimeout(resolve, screenshotTimeout);
+        }).then(() => {
+          console.error(`Could not take screenshots within ${screenshotTimeout}ms.`);
+          return {target: undefined, frontend: undefined};
+        }),
+      ]);
+      return ScreenshotError.fromBase64Images(error, target, frontend);
+    } catch (e) {
+      console.error('Unexpected error saving screenshots', e);
+      return e;
+    }
   }
   return error;
 }
@@ -92,10 +101,9 @@ export function makeInstrumentedTestFunction(fn: Mocha.AsyncFunc, label: string)
     AsyncScope.abortSignal = abortController.signal;
     // Promisify the function in case it is sync.
     const promise = (async () => fn.call(this))();
-    const timeout = this.timeout();
+    const actualTimeout = this.timeout();
     // Disable test timeout.
     this.timeout(0);
-    const actualTimeout = timeout;
     const t = actualTimeout !== 0 ? setTimeout(async () => {
       abortController.abort();
       const stacks = [];
@@ -126,6 +134,7 @@ export function makeInstrumentedTestFunction(fn: Mocha.AsyncFunc, label: string)
             })
         .finally(() => {
           clearTimeout(t);
+          this.timeout(actualTimeout);
         });
     return testPromise;
   };

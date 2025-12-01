@@ -995,33 +995,6 @@ TEST_F(DeskSyncBridgeTest, EnsureAshBrowserWindowsSavedProperly) {
               SavedDeskBrowserBuilder()
                   .SetUrls({GURL(base::StringPrintf(kTestUrlFormat, 1)),
                             GURL(base::StringPrintf(kTestUrlFormat, 2))})
-                  .SetIsLacros(false)
-                  .SetGenericBuilder(SavedDeskGenericAppBuilder().SetWindowId(
-                      kBrowserWindowId))
-                  .Build())
-          .Build();
-
-  EXPECT_THAT(
-      desk_template_conversion::ToSyncProto(desk_template.get(), app_cache()),
-      EqualsSpecifics(CreateBrowserTemplateExpectedValue(
-          kDefaultTemplateIndex, desk_template->created_time())));
-}
-
-TEST_F(DeskSyncBridgeTest, EnsureLacrosBrowserWindowsCanBeSavedProperly) {
-  CreateBridge();
-
-  // Uses a different method to instantiate the template that doesn't rely
-  // on the assumption that the template is instantiated from a proto, but
-  // rather is captured and saved for the first time.
-  std::unique_ptr<DeskTemplate> desk_template =
-      SavedDeskBuilder()
-          .SetUuid(base::StringPrintf(kUuidFormat, kDefaultTemplateIndex))
-          .SetName(base::StringPrintf(kNameFormat, kDefaultTemplateIndex))
-          .AddAppWindow(
-              SavedDeskBrowserBuilder()
-                  .SetUrls({GURL(base::StringPrintf(kTestUrlFormat, 1)),
-                            GURL(base::StringPrintf(kTestUrlFormat, 2))})
-                  .SetIsLacros(true)
                   .SetGenericBuilder(SavedDeskGenericAppBuilder().SetWindowId(
                       kBrowserWindowId))
                   .Build())
@@ -1043,30 +1016,6 @@ TEST_F(DeskSyncBridgeTest, EnsurePwaInAshChromeCanBeSavedProperly) {
           .AddAppWindow(
               SavedDeskBrowserBuilder()
                   .SetUrls({GURL(base::StringPrintf(kTestUrlFormat, 1))})
-                  .SetIsLacros(false)
-                  .SetIsApp(true)
-                  .SetGenericBuilder(
-                      SavedDeskGenericAppBuilder().SetWindowId(kPwaWindowId))
-                  .Build())
-          .Build();
-
-  EXPECT_THAT(
-      desk_template_conversion::ToSyncProto(desk_template.get(), app_cache()),
-      EqualsSpecifics(CreatePwaTemplateExpectedValue(
-          kDefaultTemplateIndex, desk_template->created_time())));
-}
-
-TEST_F(DeskSyncBridgeTest, EnsurePwaInLacrosChromeCanBeSavedProperly) {
-  CreateBridge();
-
-  std::unique_ptr<DeskTemplate> desk_template =
-      SavedDeskBuilder()
-          .SetUuid(base::StringPrintf(kUuidFormat, kDefaultTemplateIndex))
-          .SetName(base::StringPrintf(kNameFormat, kDefaultTemplateIndex))
-          .AddAppWindow(
-              SavedDeskBrowserBuilder()
-                  .SetUrls({GURL(base::StringPrintf(kTestUrlFormat, 1))})
-                  .SetIsLacros(true)
                   .SetIsApp(true)
                   .SetGenericBuilder(
                       SavedDeskGenericAppBuilder().SetWindowId(kPwaWindowId))
@@ -1097,26 +1046,6 @@ TEST_F(DeskSyncBridgeTest, EnsureChromeAppCanBeSavedProperly) {
       EqualsSpecifics(CreateChromeAppTemplateExpectedValue(
           kDefaultTemplateIndex, desk_template->created_time(),
           kChromeAppWindowId, desk_test_util::kTestChromeAppId)));
-}
-
-TEST_F(DeskSyncBridgeTest, EnsureLacrosChromeAppCanBeSavedProperly) {
-  CreateBridge();
-
-  std::unique_ptr<DeskTemplate> desk_template =
-      SavedDeskBuilder()
-          .SetUuid(base::StringPrintf(kUuidFormat, kDefaultTemplateIndex))
-          .SetName(base::StringPrintf(kNameFormat, kDefaultTemplateIndex))
-          .AddAppWindow(SavedDeskGenericAppBuilder()
-                            .SetAppId(desk_test_util::kTestLacrosChromeAppId)
-                            .SetWindowId(kChromeAppWindowId)
-                            .Build())
-          .Build();
-
-  EXPECT_THAT(
-      desk_template_conversion::ToSyncProto(desk_template.get(), app_cache()),
-      EqualsSpecifics(CreateChromeAppTemplateExpectedValue(
-          kDefaultTemplateIndex, desk_template->created_time(),
-          kChromeAppWindowId, desk_test_util::kTestLacrosChromeAppId)));
 }
 
 TEST_F(DeskSyncBridgeTest, EnsureUnsupportedAppCanBeIgnored) {
@@ -1231,11 +1160,11 @@ TEST_F(DeskSyncBridgeTest, GetAllEntriesIncludesPolicyEntries) {
   EXPECT_EQ(result.entries.size(), 4ul);
 
   // Two of these templates should be from policy.
-  EXPECT_EQ(base::ranges::count_if(result.entries,
-                                   [](const ash::DeskTemplate* entry) {
-                                     return entry->source() ==
-                                            ash::DeskTemplateSource::kPolicy;
-                                   }),
+  EXPECT_EQ(std::ranges::count_if(result.entries,
+                                  [](const ash::DeskTemplate* entry) {
+                                    return entry->source() ==
+                                           ash::DeskTemplateSource::kPolicy;
+                                  }),
             2l);
 
   bridge()->SetPolicyDeskTemplates("");
@@ -1682,7 +1611,8 @@ TEST_F(DeskSyncBridgeTest, ApplyIncrementalSyncChangesWithOneDeletion) {
 
   // Now delete template 1.
   EntityChangeList delete_changes;
-  delete_changes.push_back(EntityChange::CreateDelete(template1.uuid()));
+  delete_changes.push_back(
+      EntityChange::CreateDelete(template1.uuid(), syncer::EntityData()));
 
   EXPECT_CALL(*mock_observer(), EntriesRemovedRemotely(SizeIs(1)));
   bridge()->ApplyIncrementalSyncChanges(bridge()->CreateMetadataChangeList(),
@@ -1708,7 +1638,8 @@ TEST_F(DeskSyncBridgeTest, ApplyIncrementalSyncChangesDeleteNonexistent) {
   EXPECT_CALL(*processor(), Delete).Times(0);
 
   EntityChangeList entity_change_list;
-  entity_change_list.push_back(EntityChange::CreateDelete("no-such-uuid"));
+  entity_change_list.push_back(
+      EntityChange::CreateDelete("no-such-uuid", syncer::EntityData()));
   auto error = bridge()->ApplyIncrementalSyncChanges(
       std::move(metadata_changes), std::move(entity_change_list));
   EXPECT_FALSE(error);

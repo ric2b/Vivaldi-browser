@@ -19,8 +19,9 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/variations/active_field_trials.h"
-#include "components/version_ui/version_handler_helper.h"
-#include "components/version_ui/version_ui_constants.h"
+#include "components/variations/net/variations_command_line.h"
+#include "components/webui/version/version_handler_helper.h"
+#include "components/webui/version/version_ui_constants.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
@@ -39,23 +40,25 @@ void GetFilePaths(const base::FilePath& profile_path,
 
   base::FilePath executable_path = base::MakeAbsoluteFilePath(
       base::CommandLine::ForCurrentProcess()->GetProgram());
-  if (!executable_path.empty())
+  if (!executable_path.empty()) {
     *exec_path_out = executable_path.LossyDisplayName();
-  else
+  } else {
     *exec_path_out = l10n_util::GetStringUTF16(IDS_VERSION_UI_PATH_NOTFOUND);
+  }
 
   base::FilePath profile_path_copy(base::MakeAbsoluteFilePath(profile_path));
-  if (!profile_path.empty() && !profile_path_copy.empty())
+  if (!profile_path.empty() && !profile_path_copy.empty()) {
     *profile_path_out = profile_path.LossyDisplayName();
-  else
+  } else {
     *profile_path_out = l10n_util::GetStringUTF16(IDS_VERSION_UI_PATH_NOTFOUND);
+  }
 }
 
 }  // namespace
 
-VersionHandler::VersionHandler() {}
+VersionHandler::VersionHandler() = default;
 
-VersionHandler::~VersionHandler() {}
+VersionHandler::~VersionHandler() = default;
 
 void VersionHandler::OnJavascriptDisallowed() {
   weak_ptr_factory_.InvalidateWeakPtrs();
@@ -99,8 +102,13 @@ void VersionHandler::HandleRequestVariationInfo(const base::Value::List& args) {
     response.Set(version_ui::kKeyVariationsCmd,
                  version_ui::GetVariationsCommandLine());
   } else {
-    response.Set(version_ui::kKeyVariationsCmd,
-                 base::Base64Encode(version_ui::GetVariationsCommandLine()));
+    std::string content;
+    bool success =
+        variations::VariationsCommandLine::GetForCurrentProcess().WriteToString(
+            &content);
+    if (success) {
+      response.Set(version_ui::kKeyVariationsCmd, base::Base64Encode(content));
+    }
   }
   ResolveJavascriptCallback(base::Value(callback_id), response);
 }

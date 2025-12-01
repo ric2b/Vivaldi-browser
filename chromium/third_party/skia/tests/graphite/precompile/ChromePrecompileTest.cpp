@@ -10,6 +10,7 @@
 #if defined(SK_GRAPHITE)
 
 #include "include/gpu/graphite/Context.h"
+#include "include/gpu/graphite/PrecompileContext.h"
 #include "include/gpu/graphite/precompile/PaintOptions.h"
 #include "include/gpu/graphite/precompile/Precompile.h"
 #include "include/gpu/graphite/precompile/PrecompileColorFilter.h"
@@ -17,6 +18,7 @@
 #include "src/gpu/graphite/ContextPriv.h"
 #include "src/gpu/graphite/ContextUtils.h"
 #include "src/gpu/graphite/GraphicsPipelineDesc.h"
+#include "src/gpu/graphite/PrecompileContextPriv.h"
 #include "src/gpu/graphite/RenderPassDesc.h"
 #include "src/gpu/graphite/RendererProvider.h"
 #include "tools/graphite/UniqueKeyUtils.h"
@@ -102,7 +104,7 @@ RenderPassProperties bgra_4_depth_stencil() {
 // the expected string is in the generated set.
 // Additionally, verify that overgeneration is within expected tolerances.
 // If you add an additional RenderStep you may need to increase the tolerance values.
-void run_test(Context* context,
+void run_test(PrecompileContext* precompileContext,
               skiatest::Reporter* reporter,
               const char* expectedString, size_t caseID,
               const PaintOptions& paintOptions,
@@ -110,24 +112,24 @@ void run_test(Context* context,
               const RenderPassProperties& renderPassSettings,
               unsigned int allowedOvergeneration) {
 
-    context->priv().globalCache()->resetGraphicsPipelines();
+    precompileContext->priv().globalCache()->resetGraphicsPipelines();
 
-    Precompile(context, paintOptions, drawType, { &renderPassSettings, 1 });
+    Precompile(precompileContext, paintOptions, drawType, { &renderPassSettings, 1 });
 
     std::vector<std::string> generated;
 
     {
-        const RendererProvider* rendererProvider = context->priv().rendererProvider();
-        const ShaderCodeDictionary* dict = context->priv().shaderCodeDictionary();
+        const RendererProvider* rendererProvider = precompileContext->priv().rendererProvider();
+        const ShaderCodeDictionary* dict = precompileContext->priv().shaderCodeDictionary();
 
         std::vector<skgpu::UniqueKey> generatedKeys;
 
-        UniqueKeyUtils::FetchUniqueKeys(context->priv().globalCache(), &generatedKeys);
+        UniqueKeyUtils::FetchUniqueKeys(precompileContext, &generatedKeys);
 
         for (const skgpu::UniqueKey& key : generatedKeys) {
             GraphicsPipelineDesc pipelineDesc;
             RenderPassDesc renderPassDesc;
-            UniqueKeyUtils::ExtractKeyDescs(context, key, &pipelineDesc, &renderPassDesc);
+            UniqueKeyUtils::ExtractKeyDescs(precompileContext, key, &pipelineDesc, &renderPassDesc);
 
             const RenderStep* renderStep = rendererProvider->lookup(pipelineDesc.renderStepID());
             generated.push_back(GetPipelineLabel(dict, renderPassDesc, renderStep,
@@ -181,7 +183,8 @@ bool is_dawn_metal_context_type(skgpu::ContextType type) {
 DEF_GRAPHITE_TEST_FOR_CONTEXTS(ChromePrecompileTest, is_dawn_metal_context_type,
                                reporter, context, /* testContext */, CtsEnforcement::kNever) {
 
-    const Caps* caps = context->priv().caps();
+    std::unique_ptr<PrecompileContext> precompileContext = context->makePrecompileContext();
+    const skgpu::graphite::Caps* caps = precompileContext->priv().caps();
 
     TextureInfo textureInfo = caps->getDefaultSampledTextureInfo(kBGRA_8888_SkColorType,
                                                                  skgpu::Mipmapped::kNo,
@@ -211,16 +214,16 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(ChromePrecompileTest, is_dawn_metal_context_type,
     const char* kCases[] = {
         // Wikipedia 2018 - these are reordered from the spreadsheet
         /*  0 */ "RP(color: Dawn(f=23,s=4), resolve: Dawn(f=23,s=1), ds: Dawn(f=41,s=4), samples: 4, swizzle: rgba) + "
-                 "TessellateWedgesRenderStep[winding] + "
+                 "TessellateWedgesRenderStep[Winding] + "
                  "(empty)",
         /*  1 */ "RP(color: Dawn(f=23,s=4), resolve: Dawn(f=23,s=1), ds: Dawn(f=41,s=4), samples: 4, swizzle: rgba) + "
-                 "TessellateWedgesRenderStep[evenodd] + "
+                 "TessellateWedgesRenderStep[EvenOdd] + "
                  "(empty)",
         /*  2 */ "RP(color: Dawn(f=23,s=4), resolve: Dawn(f=23,s=1), ds: Dawn(f=41,s=4), samples: 4, swizzle: rgba) + "
-                 "CoverBoundsRenderStep[non-aa-fill] + "
+                 "CoverBoundsRenderStep[NonAAFill] + "
                  "SolidColor SrcOver",
         /*  3 */ "RP(color: Dawn(f=23,s=4), resolve: Dawn(f=23,s=1), ds: Dawn(f=41,s=4), samples: 4, swizzle: rgba) + "
-                 "CoverBoundsRenderStep[non-aa-fill] + "
+                 "CoverBoundsRenderStep[NonAAFill] + "
                  "SolidColor Src",
         /*  4 */ "RP(color: Dawn(f=23,s=4), resolve: Dawn(f=23,s=1), ds: Dawn(f=41,s=4), samples: 4, swizzle: rgba) + "
                  "PerEdgeAAQuadRenderStep + "
@@ -229,34 +232,34 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(ChromePrecompileTest, is_dawn_metal_context_type,
                  "PerEdgeAAQuadRenderStep + "
                  "LocalMatrix [ Compose [ HardwareImage(0) ColorSpaceTransform ] ] SrcOver",
         /*  6 */ "RP(color: Dawn(f=23,s=4), resolve: Dawn(f=23,s=1), ds: Dawn(f=41,s=4), samples: 4, swizzle: rgba) + "
-                 "CoverBoundsRenderStep[non-aa-fill] + "
+                 "CoverBoundsRenderStep[NonAAFill] + "
                  "LocalMatrix [ Compose [ HardwareImage(0) ColorSpaceTransform ] ] SrcOver",
         /*  7 */ "RP(color: Dawn(f=23,s=4), resolve: Dawn(f=23,s=1), ds: Dawn(f=41,s=4), samples: 4, swizzle: rgba) + "
                  "AnalyticRRectRenderStep + "
                  "Compose [ LocalMatrix [ Compose [ LinearGradient4 ColorSpaceTransform ] ] Dither ] SrcOver",
         /*  8 */ "RP(color: Dawn(f=23,s=4), resolve: Dawn(f=23,s=1), ds: Dawn(f=41,s=4), samples: 4, swizzle: rgba) + "
-                 "CoverBoundsRenderStep[non-aa-fill] + "
+                 "CoverBoundsRenderStep[NonAAFill] + "
                  "Compose [ LocalMatrix [ Compose [ LinearGradient4 ColorSpaceTransform ] ] Dither ] SrcOver",
         /*  9 */ "RP(color: Dawn(f=23,s=4), resolve: Dawn(f=23,s=1), ds: Dawn(f=41,s=4), samples: 4, swizzle: rgba) + "
-                 "BitmapTextRenderStep[mask] + "
+                 "BitmapTextRenderStep[Mask] + "
                  "LocalMatrix [ Compose [ LinearGradient4 ColorSpaceTransform ] ] SrcOver",
         /* 10 */ "RP(color: Dawn(f=23,s=4), resolve: Dawn(f=23,s=1), ds: Dawn(f=41,s=4), samples: 4, swizzle: rgba) + "
-                 "BitmapTextRenderStep[mask] + "
+                 "BitmapTextRenderStep[Mask] + "
                  "SolidColor SrcOver",
         /* 11 */ "RP(color: Dawn(f=23,s=1), resolve: {}, ds: Dawn(f=39,s=1), samples: 1, swizzle: rgba) + "
                  "AnalyticRRectRenderStep + "
                  "SolidColor SrcOver",
         /* 12 */ "RP(color: Dawn(f=23,s=1), resolve: {}, ds: Dawn(f=39,s=1), samples: 1, swizzle: rgba) + "
-                 "CoverBoundsRenderStep[non-aa-fill] + "
+                 "CoverBoundsRenderStep[NonAAFill] + "
                  "SolidColor SrcOver",
         /* 13 */ "RP(color: Dawn(f=23,s=1), resolve: {}, ds: Dawn(f=39,s=1), samples: 1, swizzle: rgba) + "
                  "PerEdgeAAQuadRenderStep + "
                  "LocalMatrix [ Compose [ HardwareImage(0) ColorSpaceTransform ] ] Src",
         /* 14 */ "RP(color: Dawn(f=23,s=1), resolve: {}, ds: Dawn(f=39,s=1), samples: 1, swizzle: rgba) + "
-                 "CoverBoundsRenderStep[non-aa-fill] + "
+                 "CoverBoundsRenderStep[NonAAFill] + "
                  "LocalMatrix [ Compose [ HardwareImage(0) ColorSpaceTransform ] ] SrcOver",
         /* 15 */ "RP(color: Dawn(f=23,s=4), resolve: Dawn(f=23,s=1), ds: Dawn(f=39,s=4), samples: 4, swizzle: rgba) + "
-                 "TessellateWedgesRenderStep[convex] + "
+                 "TessellateWedgesRenderStep[Convex] + "
                  "SolidColor SrcOver",
         /* 16 */ "RP(color: Dawn(f=23,s=4), resolve: Dawn(f=23,s=1), ds: Dawn(f=39,s=4), samples: 4, swizzle: rgba) + "
                  "TessellateStrokesRenderStep + "
@@ -265,10 +268,10 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(ChromePrecompileTest, is_dawn_metal_context_type,
                  "AnalyticBlurRenderStep + "
                  "Compose [ SolidColor Blend [ SolidColor Passthrough BlendModeBlender ] ] SrcOver",
         /* 18 */ "RP(color: Dawn(f=23,s=1), resolve: {}, ds: Dawn(f=39,s=1), samples: 1, swizzle: rgba) + "
-                 "CoverBoundsRenderStep[non-aa-fill] + "
+                 "CoverBoundsRenderStep[NonAAFill] + "
                  "SolidColor Src",
         /* 19 */ "RP(color: Dawn(f=23,s=1), resolve: {}, ds: Dawn(f=39,s=1), samples: 1, swizzle: rgba) + "
-                 "CoverBoundsRenderStep[non-aa-fill] + "
+                 "CoverBoundsRenderStep[NonAAFill] + "
                  "Compose [ LocalMatrix [ Compose [ LinearGradient4 ColorSpaceTransform ] ] Dither ] SrcOver",
     };
 
@@ -304,20 +307,22 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(ChromePrecompileTest, is_dawn_metal_context_type,
                 paintOptions = image_srcover();
                 drawTypeFlags = DrawTypeFlags::kSimpleShape;
                 renderPassSettings = bgra_4_depth_stencil();
-                allowedOvergeneration = 30;
+                allowedOvergeneration = 90;
                 break;
             case 7: // 7 & 8 are combined pair
             case 8:
                 paintOptions = lineargrad_srcover_dithered();
                 drawTypeFlags = DrawTypeFlags::kSimpleShape;
                 renderPassSettings = bgra_4_depth_stencil();
-                allowedOvergeneration = 15; // 3x from gradient, 12x from RenderSteps
+                allowedOvergeneration = 45; // 3x from gradient, 12x from RenderSteps,
+                                            // all x3 color space options
                 break;
             case 9:
                 paintOptions = lineargrad_srcover();
                 drawTypeFlags = DrawTypeFlags::kBitmapText_Mask;
                 renderPassSettings = bgra_4_depth_stencil();
-                allowedOvergeneration = 3; // from the 3 internal gradient alternatives
+                allowedOvergeneration = 9; // from the 3 internal gradient alternatives,
+                                           // x3 color space options
                 break;
             case 10:
                 paintOptions = solid_srcover();
@@ -337,14 +342,14 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(ChromePrecompileTest, is_dawn_metal_context_type,
                 drawTypeFlags = DrawTypeFlags::kSimpleShape;
                 renderPassSettings = bgra_1_depth();
                 // This is a lot for a kSrc image draw:
-                allowedOvergeneration = 30; // 3x of this are the paint combos,
+                allowedOvergeneration = 90; // 9x of this are the paint combos,
                                             // the rest are the RenderSteps!!
                 break;
             case 14:
                 paintOptions = image_srcover();
                 drawTypeFlags = DrawTypeFlags::kSimpleShape;
                 renderPassSettings = bgra_1_depth();
-                allowedOvergeneration = 30; // !!!! - a lot for just a non-aa image rect draw
+                allowedOvergeneration = 90; // !!!! - a lot for just a non-aa image rect draw
                 break;
             case 15:
             case 16:
@@ -372,7 +377,7 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(ChromePrecompileTest, is_dawn_metal_context_type,
                 paintOptions = lineargrad_srcover_dithered();
                 drawTypeFlags = DrawTypeFlags::kSimpleShape;
                 renderPassSettings = bgra_1_depth();
-                allowedOvergeneration = 15; // 3x from gradient, rest from RenderSteps
+                allowedOvergeneration = 45; // 9x from gradient, rest from RenderSteps
                 break;
             default:
                 continue;
@@ -382,7 +387,7 @@ DEF_GRAPHITE_TEST_FOR_CONTEXTS(ChromePrecompileTest, is_dawn_metal_context_type,
             allowedOvergeneration *= 2; // due to ExpandResolveTextureLoadOp
         }
 
-        run_test(context, reporter,
+        run_test(precompileContext.get(), reporter,
                  kCases[i], i,
                  paintOptions, drawTypeFlags, renderPassSettings, allowedOvergeneration);
     }

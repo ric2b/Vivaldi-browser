@@ -30,15 +30,16 @@ import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProp
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.IS_INCOGNITO;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.IS_KEYBOARD_VISIBLE;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.IS_MAIN_CONTENT_VISIBLE;
-import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.IS_SHARE_SHEET_VISIBLE;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.IS_TITLE_TEXT_FOCUSED;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.MENU_CLICK_LISTENER;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.PRIMARY_COLOR;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.SCRIMVIEW_CLICK_RUNNABLE;
+import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.SEND_FEEDBACK_RUNNABLE;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.SHARE_BUTTON_CLICK_LISTENER;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.SHARE_BUTTON_STRING_RES;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.SHARE_IMAGE_TILES_CLICK_LISTENER;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.SHOW_IMAGE_TILES;
+import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.SHOW_SEND_FEEDBACK;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.SHOW_SHARE_BUTTON;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.TAB_GROUP_COLOR_ID;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.TINT;
@@ -254,12 +255,6 @@ class TabGridDialogViewBinder {
         } else if (COLOR_ICON_CLICK_LISTENER == propertyKey) {
             viewHolder.toolbarView.setColorIconOnClickListener(
                     model.get(COLOR_ICON_CLICK_LISTENER));
-        } else if (IS_SHARE_SHEET_VISIBLE == propertyKey) {
-            if (!model.get(IS_SHARE_SHEET_VISIBLE) && model.get(IS_DIALOG_VISIBLE)) {
-                // Fit the scrim to the TabGridDialog again after the bottom sheet visibility
-                // changes.
-                viewHolder.dialogView.refreshScrim();
-            }
         } else if (ANIMATION_BACKGROUND_COLOR == propertyKey) {
             // Only set in LIST mode not GRID mode. Will always be set in LIST mode. Mode is not
             // mutable without restarting the app.
@@ -278,6 +273,10 @@ class TabGridDialogViewBinder {
                                 ? View.CONTENT_SENSITIVITY_SENSITIVE
                                 : View.CONTENT_SENSITIVITY_NOT_SENSITIVE);
             }
+        } else if (SHOW_SEND_FEEDBACK == propertyKey) {
+            viewHolder.dialogView.setSendFeedbackVisible(model.get(SHOW_SEND_FEEDBACK));
+        } else if (SEND_FEEDBACK_RUNNABLE == propertyKey) {
+            viewHolder.dialogView.setSendFeedbackRunnable(model.get(SEND_FEEDBACK_RUNNABLE));
         }
     }
 

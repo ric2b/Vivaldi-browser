@@ -8,7 +8,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.removeMatchingFlags = exports.getFeatures = exports.ChromeLauncher = void 0;
+exports.ChromeLauncher = void 0;
+exports.getFeatures = getFeatures;
+exports.removeMatchingFlags = removeMatchingFlags;
 const promises_1 = require("fs/promises");
 const os_1 = __importDefault(require("os"));
 const path_1 = __importDefault(require("path"));
@@ -86,7 +88,9 @@ class ChromeLauncher extends BrowserLauncher_js_1.BrowserLauncher {
         let chromeExecutable = executablePath;
         if (!chromeExecutable) {
             (0, assert_js_1.assert)(channel || !this.puppeteer._isPuppeteerCore, `An \`executablePath\` or \`channel\` must be specified for \`puppeteer-core\``);
-            chromeExecutable = this.executablePath(channel, options.headless ?? true);
+            chromeExecutable = channel
+                ? this.executablePath(channel)
+                : this.resolveExecutablePath(options.headless ?? true);
         }
         return {
             executablePath: chromeExecutable,
@@ -155,7 +159,7 @@ class ChromeLauncher extends BrowserLauncher_js_1.BrowserLauncher {
             '--disable-breakpad',
             '--disable-client-side-phishing-detection',
             '--disable-component-extensions-with-background-pages',
-            '--disable-component-update',
+            '--disable-crash-reporter', // No crash reporting in CfT.
             '--disable-default-apps',
             '--disable-dev-shm-usage',
             '--disable-extensions',
@@ -169,8 +173,8 @@ class ChromeLauncher extends BrowserLauncher_js_1.BrowserLauncher {
             '--disable-sync',
             '--enable-automation',
             '--export-tagged-pdf',
-            '--generate-pdf-document-outline',
             '--force-color-profile=srgb',
+            '--generate-pdf-document-outline',
             '--metrics-recording-only',
             '--no-first-run',
             '--password-store=basic',
@@ -198,7 +202,7 @@ class ChromeLauncher extends BrowserLauncher_js_1.BrowserLauncher {
         chromeArguments.push(...args);
         return chromeArguments;
     }
-    executablePath(channel, headless) {
+    executablePath(channel, validatePath = true) {
         if (channel) {
             return (0, browsers_1.computeSystemExecutablePath)({
                 browser: browsers_1.Browser.CHROME,
@@ -206,7 +210,7 @@ class ChromeLauncher extends BrowserLauncher_js_1.BrowserLauncher {
             });
         }
         else {
-            return this.resolveExecutablePath(headless);
+            return this.resolveExecutablePath(undefined, validatePath);
         }
     }
 }
@@ -247,7 +251,6 @@ function getFeatures(flag, options = []) {
         return s;
     });
 }
-exports.getFeatures = getFeatures;
 /**
  * Removes all elements in-place from the given string array
  * that match the given command-line flag.
@@ -267,5 +270,4 @@ function removeMatchingFlags(array, flag) {
     }
     return array;
 }
-exports.removeMatchingFlags = removeMatchingFlags;
 //# sourceMappingURL=ChromeLauncher.js.map

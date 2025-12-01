@@ -74,6 +74,23 @@ message ContentMetaData {
 
   // Password for an encrypted archive.
   optional bytes decryption_key = 12;
+
+  // Contains copied text source details for text paste event.
+  message CopiedTextSource {
+    // Holds URL from where data was copied.
+    optional string url = 1;
+
+    enum CopiedTextSourceType {
+      UNSPECIFIED = 0;
+      INCOGNITO = 1;
+      CLIPBOARD = 2;
+      OTHER_PROFILE = 3;
+      SAME_PROFILE = 4;
+    }
+    // Holds Chrome context of copied data.
+    optional CopiedTextSourceType context = 2;
+  }
+  optional CopiedTextSource copied_text_source = 13;
 }
 
 message ClientMetadata {
@@ -199,6 +216,9 @@ message ContentAnalysisRequest {
   // than 50MB or encrypted, because it expects a block or allow verdict from
   // WebProtect right away, and cannot upload full content.
   optional bool require_metadata_verdict = 21;
+
+  // Local IP addresses of the device.
+  repeated string local_ips = 22;
 
   // Reserved to make sure there is no overlap with DeepScanningClientRequest.
   reserved 3, 4, 6 to 8;

@@ -7,7 +7,11 @@
 #pragma allow_unsafe_buffers
 #endif
 
+#include "ui/accessibility/platform/ax_platform_node_auralinux.h"
+
 #include <atk/atk.h>
+
+#include <array>
 #include <utility>
 #include <vector>
 
@@ -16,7 +20,6 @@
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/platform/atk_util_auralinux.h"
 #include "ui/accessibility/platform/ax_platform_for_test.h"
-#include "ui/accessibility/platform/ax_platform_node_auralinux.h"
 #include "ui/accessibility/platform/ax_platform_node_unittest.h"
 #include "ui/accessibility/platform/test_ax_node_wrapper.h"
 
@@ -1126,7 +1129,7 @@ TEST_F(AXPlatformNodeAuraLinuxTest, TestAtkActionAriaAction) {
   action_name = atk_action_get_name(ATK_ACTION(root_obj), 3);
   action_localized_name =
       atk_action_get_localized_name(ATK_ACTION(root_obj), 3);
-  EXPECT_STREQ("custom#open-button", action_name);
+  EXPECT_STREQ("custom_open-button", action_name);
   EXPECT_STREQ("open", action_localized_name);
   EXPECT_TRUE(atk_action_do_action(ATK_ACTION(root_obj), 3));
   EXPECT_EQ(GetRoot()->GetChildAtIndex(1),
@@ -1696,8 +1699,8 @@ TEST_F(AXPlatformNodeAuraLinuxTest, TestAtkTextWithNonBMPCharacters) {
 #endif
   }
 
-  static GetTextSegmentTest tests[] = {{0, "\xF0\x9F\x83\x8f ", 0, 2},
-                                       {6, "decently ", 4, 13}};
+  static auto tests = std::to_array<GetTextSegmentTest>(
+      {{0, "\xF0\x9F\x83\x8f ", 0, 2}, {6, "decently ", 4, 13}});
 
   for (const auto& test : tests) {
     int start_offset = -1, end_offset = -1;
@@ -2887,6 +2890,30 @@ TEST_F(AXPlatformNodeAuraLinuxTest, TestDialogActiveWhenChildFocused) {
       ->NotifyAccessibilityEvent(ax::mojom::Event::kFocus);
   EXPECT_TRUE(saw_active_state_change);
   EXPECT_FALSE(AtkObjectHasState(dialog_obj, ATK_STATE_ACTIVE));
+}
+
+TEST_F(AXPlatformNodeAuraLinuxTest, AccessibleURL) {
+  const std::string& test_url = "https://example.com";
+
+  AXNodeData root;
+  root.id = 1;
+  root.role = ax::mojom::Role::kWindow;
+  root.AddStringAttribute(ax::mojom::StringAttribute::kUrl, test_url);
+  root.child_ids.push_back(2);
+
+  AXNodeData child;
+  child.id = 2;
+  child.role = ax::mojom::Role::kGenericContainer;
+  Init(root, child);
+
+  AXPlatformNodeAuraLinux* root_obj = GetPlatformNode(GetRoot());
+  ASSERT_TRUE(root_obj);
+  EXPECT_EQ(root_obj->GetRootURL(), test_url);
+
+  AXPlatformNodeAuraLinux* child_obj =
+      GetPlatformNode(GetRoot()->children()[0]);
+  ASSERT_TRUE(child_obj);
+  EXPECT_EQ(child_obj->GetRootURL(), test_url);
 }
 
 }  // namespace ui

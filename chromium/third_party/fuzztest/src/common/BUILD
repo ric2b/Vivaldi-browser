@@ -36,6 +36,18 @@ exports_files(
 ### Libraries
 
 cc_library(
+    name = "bazel",
+    srcs = ["bazel.cc"],
+    hdrs = ["bazel.h"],
+    deps = [
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/time",
+    ],
+)
+
+cc_library(
     name = "blob_file",
     srcs = ["blob_file.cc"],
     hdrs = ["blob_file.h"],
@@ -228,6 +240,8 @@ cc_library(
         ":remote_file",
         ":test_util",
         "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/time",
         "@com_google_googletest//:gtest",
     ],
     alwayslink = True,

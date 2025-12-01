@@ -219,8 +219,7 @@ int WebSocketBasicStream::WriteFrames(
     DCHECK_NE(ERR_INVALID_ARGUMENT, result)
         << "WriteWebSocketFrameHeader() says that " << dest.size()
         << " is not enough to write the header in. This should not happen.";
-    CHECK_GE(result, 0) << "Potentially security-critical check failed";
-    dest = dest.subspan(result);
+    dest = dest.subspan(base::checked_cast<size_t>(result));
 
     CHECK_LE(frame->header.payload_length,
              base::checked_cast<uint64_t>(dest.size()));
@@ -405,6 +404,11 @@ int WebSocketBasicStream::ConvertChunksToFrames(
     auto frame_result = chunk_assembler_.HandleChunk(std::move(chunk));
 
     if (!frame_result.has_value()) {
+      net::Error error = frame_result.error();
+      if (error == ERR_IO_PENDING) {
+        // We just need more data.
+        continue;
+      }
       return frame_result.error();
     }
 

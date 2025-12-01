@@ -4,7 +4,7 @@
 import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
-import type * as Platform from '../../core/platform/platform.js';
+import * as Platform from '../../core/platform/platform.js';
 import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
@@ -24,12 +24,12 @@ import {expectCalled} from '../../testing/ExpectStubCall.js';
 import {stubFileManager} from '../../testing/FileManagerHelpers.js';
 import {describeWithMockConnection, dispatchEvent} from '../../testing/MockConnection.js';
 import {activate} from '../../testing/ResourceTreeHelpers.js';
-import * as Coordinator from '../../ui/components/render_coordinator/render_coordinator.js';
+import * as RenderCoordinator from '../../ui/components/render_coordinator/render_coordinator.js';
 import * as UI from '../../ui/legacy/legacy.js';
 
 import * as Network from './network.js';
 
-const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
+const {urlString} = Platform.DevToolsPath;
 
 describeWithMockConnection('NetworkLogView', () => {
   let target: SDK.Target.Target;
@@ -108,7 +108,7 @@ describeWithMockConnection('NetworkLogView', () => {
   }
 
   it('generates a valid curl command when some headers don\'t have values', async () => {
-    const request = createNetworkRequest('http://localhost' as Platform.DevToolsPath.UrlString, {
+    const request = createNetworkRequest(urlString`http://localhost`, {
       requestHeaders: [
         {name: 'header-with-value', value: 'some value'},
         {name: 'no-value-header', value: ''},
@@ -124,7 +124,7 @@ describeWithMockConnection('NetworkLogView', () => {
   // are only added on HTTP/2 and HTTP/3, have a preceeding colon like `:authority` but it still tests
   // the stripping function.
   it('generates a valid curl command while stripping internal headers', async () => {
-    const request = createNetworkRequest('http://localhost' as Platform.DevToolsPath.UrlString, {
+    const request = createNetworkRequest(urlString`http://localhost`, {
       requestHeaders: [
         {name: 'authority', value: 'www.example.com'},
       ],
@@ -135,44 +135,44 @@ describeWithMockConnection('NetworkLogView', () => {
   });
 
   it('generates a valid curl command when header values contain double quotes', async () => {
-    const request = createNetworkRequest('http://localhost' as Platform.DevToolsPath.UrlString, {
+    const request = createNetworkRequest(urlString`http://localhost`, {
       requestHeaders: [{name: 'cookie', value: 'eva="Sg4="'}],
     });
     assert.strictEqual(
         await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'unix'),
-        'curl \'http://localhost\' -H \'cookie: eva=\"Sg4=\"\'',
+        'curl \'http://localhost\' -b \'eva=\"Sg4=\"\'',
     );
     assert.strictEqual(
         await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'win'),
-        'curl ^"http://localhost^" -H ^"cookie: eva=^\\^"Sg4=^\\^"^"',
+        'curl ^"http://localhost^" -b ^"eva=^\\^"Sg4=^\\^"^"',
     );
   });
 
   it('generates a valid curl command when header values contain percentages', async () => {
-    const request = createNetworkRequest('http://localhost' as Platform.DevToolsPath.UrlString, {
+    const request = createNetworkRequest(urlString`http://localhost`, {
       requestHeaders: [{name: 'cookie', value: 'eva=%22Sg4%3D%22'}],
     });
     assert.strictEqual(
         await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'unix'),
-        'curl \'http://localhost\' -H \'cookie: eva=%22Sg4%3D%22\'',
+        'curl \'http://localhost\' -b \'eva=%22Sg4%3D%22\'',
     );
     assert.strictEqual(
         await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'win'),
-        'curl ^"http://localhost^" -H ^"cookie: eva=^%^22Sg4^%^3D^%^22^"',
+        'curl ^"http://localhost^" -b ^"eva=^%^22Sg4^%^3D^%^22^"',
     );
   });
 
   it('generates a valid curl command when header values contain newline and ampersand', async () => {
-    const request = createNetworkRequest('http://localhost' as Platform.DevToolsPath.UrlString, {
+    const request = createNetworkRequest(urlString`http://localhost`, {
       requestHeaders: [{name: 'cookie', value: 'query=evil\n\n & cmd /c calc.exe \n\n'}],
     });
     assert.strictEqual(
         await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'unix'),
-        'curl \'http://localhost\' -H $\'cookie: query=evil\\n\\n & cmd /c calc.exe \\n\\n\'',
+        'curl \'http://localhost\' -b $\'query=evil\\n\\n & cmd /c calc.exe \\n\\n\'',
     );
     assert.strictEqual(
         await Network.NetworkLogView.NetworkLogView.generateCurlCommand(request, 'win'),
-        'curl ^\"http://localhost^\" -H ^\"cookie: query=evil^\n\n^\n\n ^& cmd /c calc.exe ^\n\n^\n\n^\"',
+        'curl ^\"http://localhost^\" -b ^\"query=evil^\n\n^\n\n ^& cmd /c calc.exe ^\n\n^\n\n^\"',
     );
   });
 
@@ -214,7 +214,7 @@ describeWithMockConnection('NetworkLogView', () => {
       SDK.TargetManager.TargetManager.instance().setScopeTarget(inScope ? target : null);
       const harWriterWrite = sinon.stub(HAR.Writer.Writer, 'write').resolves();
       const URL_HOST = 'example.com';
-      target.setInspectedURL(`http://${URL_HOST}/foo` as Platform.DevToolsPath.UrlString);
+      target.setInspectedURL(urlString`${`http://${URL_HOST}/foo`}`);
       const fileManager = stubFileManager();
 
       const FINISHED_REQUEST_1 = createNetworkRequest('http://example.com/', {finished: true});
@@ -240,8 +240,8 @@ describeWithMockConnection('NetworkLogView', () => {
     });
 
     it('can import and filter from HAR', async () => {
-      const URL_1 = 'http://example.com/' as Platform.DevToolsPath.UrlString;
-      const URL_2 = 'http://example.com/favicon.ico' as Platform.DevToolsPath.UrlString;
+      const URL_1 = urlString`http://example.com/`;
+      const URL_2 = urlString`http://example.com/favicon.ico`;
       function makeHarEntry(url: Platform.DevToolsPath.UrlString) {
         return {
           request: {method: 'GET', url, headersSize: -1, bodySize: 0},
@@ -263,7 +263,7 @@ describeWithMockConnection('NetworkLogView', () => {
       const blob = new Blob([JSON.stringify(har)], {type: 'text/plain'});
       const file = new File([blob], 'log.har');
       await networkLogView.onLoadFromFile(file);
-      await coordinator.done({waitForWork: true});
+      await RenderCoordinator.done({waitForWork: true});
 
       const rootNode = networkLogView.columns().dataGrid().rootNode();
       assert.deepEqual(
@@ -275,7 +275,7 @@ describeWithMockConnection('NetworkLogView', () => {
     });
 
     it('shows summary toolbar with content', () => {
-      target.setInspectedURL('http://example.com/' as Platform.DevToolsPath.UrlString);
+      target.setInspectedURL(urlString`http://example.com/`);
       const request = createNetworkRequest('http://example.com/', {finished: true});
       request.endTime = 0.669414;
       request.setIssueTime(0.435136, 0.435136);
@@ -291,7 +291,7 @@ describeWithMockConnection('NetworkLogView', () => {
       networkLogView.show(document.body);
 
       const toolbar = networkLogView.summaryToolbar();
-      const textElements = toolbar.element.shadowRoot?.querySelectorAll('.toolbar-text');
+      const textElements = toolbar.querySelectorAll('.toolbar-text');
       assert.exists(textElements);
       const textContents = [...textElements].map(item => item.textContent);
       if (inScope) {
@@ -304,7 +304,7 @@ describeWithMockConnection('NetworkLogView', () => {
           'Load: 251\u00a0ms',
         ]);
       } else {
-        assert.strictEqual(textElements.length, 0);
+        assert.lengthOf(textElements, 0);
       }
     });
   };
@@ -323,14 +323,14 @@ describeWithMockConnection('NetworkLogView', () => {
     networkLogView = createNetworkLogView();
     networkLogView.markAsRoot();
     networkLogView.show(document.body);
-    await coordinator.done();
+    await RenderCoordinator.done();
 
     const rootNode = networkLogView.columns().dataGrid().rootNode();
     assert.deepEqual(
         rootNode.children.map(n => (n as Network.NetworkDataGridNode.NetworkNode).request()), [request1, request2]);
 
     SDK.TargetManager.TargetManager.instance().setScopeTarget(anotherTarget);
-    await coordinator.done();
+    await RenderCoordinator.done();
     assert.deepEqual(
         rootNode.children.map(n => (n as Network.NetworkDataGridNode.NetworkNode).request()),
         preserveLog ? [request1, request2, request3] : [request3]);
@@ -351,14 +351,14 @@ describeWithMockConnection('NetworkLogView', () => {
     networkLogView = createNetworkLogView();
     networkLogView.markAsRoot();
     networkLogView.show(document.body);
-    await coordinator.done();
+    await RenderCoordinator.done();
 
     const rootNode = networkLogView.columns().dataGrid().rootNode();
     assert.deepEqual(
         rootNode.children.map(n => (n as Network.NetworkDataGridNode.NetworkNode).request()), [request1, request2]);
 
     activate(target);
-    await coordinator.done();
+    await RenderCoordinator.done();
     assert.deepEqual(
         rootNode.children.map(n => (n as Network.NetworkDataGridNode.NetworkNode).request()),
         [request1, request2, request3]);
@@ -374,12 +374,11 @@ describeWithMockConnection('NetworkLogView', () => {
 
     assert.deepEqual(
         rootNode.children.map(n => (n as Network.NetworkDataGridNode.NetworkNode).request()?.url()),
-        ['chrome-extension://url1' as Platform.DevToolsPath.UrlString, 'url2' as Platform.DevToolsPath.UrlString]);
+        [urlString`chrome-extension://url1`, urlString`url2`]);
 
     clickCheckbox(hideExtCheckbox);
     assert.deepEqual(
-        rootNode.children.map(n => (n as Network.NetworkDataGridNode.NetworkNode).request()?.url()),
-        ['url2' as Platform.DevToolsPath.UrlString]);
+        rootNode.children.map(n => (n as Network.NetworkDataGridNode.NetworkNode).request()?.url()), [urlString`url2`]);
   });
 
   it('can hide Chrome extension requests from dropdown', async () => {
@@ -392,7 +391,7 @@ describeWithMockConnection('NetworkLogView', () => {
 
     assert.deepEqual(
         rootNode.children.map(n => (n as Network.NetworkDataGridNode.NetworkNode).request()?.url()),
-        ['chrome-extension://url1' as Platform.DevToolsPath.UrlString, 'url2' as Platform.DevToolsPath.UrlString]);
+        [urlString`chrome-extension://url1`, urlString`url2`]);
 
     const dropdown = await openMoreTypesDropdown(filterBar, networkLogView);
     if (!dropdown) {
@@ -406,8 +405,7 @@ describeWithMockConnection('NetworkLogView', () => {
     assert.isTrue(hideExtensionURL.hasAttribute('checked'));
 
     assert.deepEqual(
-        rootNode.children.map(n => (n as Network.NetworkDataGridNode.NetworkNode).request()?.url()),
-        ['url2' as Platform.DevToolsPath.UrlString]);
+        rootNode.children.map(n => (n as Network.NetworkDataGridNode.NetworkNode).request()?.url()), [urlString`url2`]);
 
     dropdown.discard();
   });
@@ -447,7 +445,7 @@ describeWithMockConnection('NetworkLogView', () => {
     const blockedCookiesCheckbox = getCheckbox(filterBar, 'Show only requests with blocked response cookies');
     clickCheckbox(blockedCookiesCheckbox);
     assert.deepEqual(rootNode.children.map(n => (n as Network.NetworkDataGridNode.NetworkNode).request()?.url()), [
-      'url1' as Platform.DevToolsPath.UrlString,
+      urlString`url1`,
     ]);
   });
 
@@ -467,7 +465,7 @@ describeWithMockConnection('NetworkLogView', () => {
 
     assert.deepEqual(
         rootNode.children.map(n => (n as Network.NetworkDataGridNode.NetworkNode).request()?.url()),
-        ['url1' as Platform.DevToolsPath.UrlString, 'url2' as Platform.DevToolsPath.UrlString]);
+        [urlString`url1`, urlString`url2`]);
 
     const dropdown = await openMoreTypesDropdown(filterBar, networkLogView);
     if (!dropdown) {
@@ -481,7 +479,7 @@ describeWithMockConnection('NetworkLogView', () => {
     assert.isTrue(blockedResponseCookies.hasAttribute('checked'));
 
     assert.deepEqual(rootNode.children.map(n => (n as Network.NetworkDataGridNode.NetworkNode).request()?.url()), [
-      'url1' as Platform.DevToolsPath.UrlString,
+      urlString`url1`,
     ]);
 
     dropdown.discard();
@@ -539,10 +537,10 @@ describeWithMockConnection('NetworkLogView', () => {
     networkLogView.show(document.body);
 
     const rootNode = networkLogView.columns().dataGrid().rootNode();
-    assert.strictEqual(rootNode.children.length, 1);
+    assert.lengthOf(rootNode.children, 1);
 
     networkLog.dispatchEventToListeners(Logs.NetworkLog.Events.RequestRemoved, {request});
-    assert.strictEqual(rootNode.children.length, 0);
+    assert.lengthOf(rootNode.children, 0);
   });
 
   it('correctly shows/hides "Copy all as HAR (with sensitive data)" menu item', async () => {
@@ -598,10 +596,10 @@ describeWithMockConnection('NetworkLogView', () => {
   });
 
   function createOverrideRequests() {
-    const urlNotOverridden = 'url-not-overridden' as Platform.DevToolsPath.UrlString;
-    const urlHeaderOverridden = 'url-header-overridden' as Platform.DevToolsPath.UrlString;
-    const urlContentOverridden = 'url-content-overridden' as Platform.DevToolsPath.UrlString;
-    const urlHeaderAndContentOverridden = 'url-header-und-content-overridden' as Platform.DevToolsPath.UrlString;
+    const urlNotOverridden = urlString`url-not-overridden`;
+    const urlHeaderOverridden = urlString`url-header-overridden`;
+    const urlContentOverridden = urlString`url-content-overridden`;
+    const urlHeaderAndContentOverridden = urlString`url-header-und-content-overridden`;
 
     createNetworkRequest(urlNotOverridden, {target});
     const r2 = createNetworkRequest(urlHeaderOverridden, {target});
@@ -912,7 +910,7 @@ function clickCheckbox(checkbox: HTMLInputElement) {
 
 function getCheckbox(filterBar: UI.FilterBar.FilterBar, title: string) {
   const checkbox =
-      filterBar.element.querySelector(`[title="${title}"] span`)?.shadowRoot?.querySelector('input') || null;
+      filterBar.element.querySelector(`[title="${title}"] dt-checkbox`)?.shadowRoot?.querySelector('input') || null;
   assert.instanceOf(checkbox, HTMLInputElement);
   return checkbox;
 }

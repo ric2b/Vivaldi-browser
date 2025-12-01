@@ -24,7 +24,6 @@ import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowLog;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.price_tracking.PriceDropNotifier.NotificationData;
 import org.chromium.chrome.browser.price_tracking.proto.Notifications.Action;
 import org.chromium.chrome.browser.price_tracking.proto.Notifications.ChromeMessage;
@@ -34,8 +33,8 @@ import org.chromium.chrome.browser.price_tracking.proto.Notifications.ExpandedVi
 import org.chromium.chrome.browser.price_tracking.proto.Notifications.PriceDropNotificationPayload;
 import org.chromium.components.commerce.PriceTracking.ProductPrice;
 import org.chromium.components.optimization_guide.proto.CommonTypesProto.Any;
-import org.chromium.components.payments.CurrencyFormatter;
-import org.chromium.components.payments.CurrencyFormatterJni;
+import org.chromium.components.payments.ui.CurrencyFormatter;
+import org.chromium.components.payments.ui.CurrencyFormatterJni;
 
 /** Unit test for {@link PriceDropNotifier}. */
 @RunWith(BaseRobolectricTestRunner.class)
@@ -58,7 +57,6 @@ public class PriceTrackingNotificationBridgeUnitTest {
     private PriceTrackingNotificationBridge mPriceTrackingNotificationBridge;
 
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
-    @Rule public JniMocker mJniMocker = new JniMocker();
 
     @Mock PriceDropNotifier mNotifier;
     @Mock PriceDropNotificationManager mPriceDropNotificationManager;
@@ -70,7 +68,7 @@ public class PriceTrackingNotificationBridgeUnitTest {
         ShadowLog.stream = System.out;
         CurrencyFormatter.Natives currencyFormatterJniMock =
                 Mockito.mock(CurrencyFormatter.Natives.class);
-        mJniMocker.mock(CurrencyFormatterJni.TEST_HOOKS, currencyFormatterJniMock);
+        CurrencyFormatterJni.setInstanceForTesting(currencyFormatterJniMock);
         Mockito.doReturn("$1.00")
                 .when(currencyFormatterJniMock)
                 .format(

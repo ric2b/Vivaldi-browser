@@ -12,7 +12,6 @@
 #include "util/crypto/certificate_utils.h"
 #include "util/osp_logging.h"
 
-
 namespace openscreen::cast {
 
 using proto::CastMessage;

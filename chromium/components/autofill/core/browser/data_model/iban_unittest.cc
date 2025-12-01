@@ -7,8 +7,8 @@
 #include <string>
 
 #include "base/uuid.h"
-#include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/data_model/payments_metadata.h"
+#include "components/autofill/core/browser/test_utils/autofill_test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace autofill {
@@ -63,13 +63,14 @@ TEST(IbanTest, ConstructServerIban) {
 
 TEST(IbanTest, GetMetadata) {
   Iban local_iban = test::GetLocalIban();
-  local_iban.set_use_count(2);
-  local_iban.set_use_date(base::Time::FromSecondsSinceUnixEpoch(25));
+  local_iban.usage_history().set_use_count(2);
+  local_iban.usage_history().set_use_date(
+      base::Time::FromSecondsSinceUnixEpoch(25));
   PaymentsMetadata local_metadata = local_iban.GetMetadata();
 
   EXPECT_EQ(local_iban.guid(), local_metadata.id);
-  EXPECT_EQ(local_iban.use_count(), local_metadata.use_count);
-  EXPECT_EQ(local_iban.use_date(), local_metadata.use_date);
+  EXPECT_EQ(local_iban.usage_history().use_count(), local_metadata.use_count);
+  EXPECT_EQ(local_iban.usage_history().use_date(), local_metadata.use_date);
 }
 
 // Verify that we set nickname with the processed string. We replace all tabs
@@ -187,10 +188,8 @@ TEST(IbanTest, SetRawData) {
   Iban iban;
 
   // Verify RawInfo can be correctly set and read.
-  iban.SetRawInfoWithVerificationStatus(IBAN_VALUE,
-                                        u"DE91 1000 0000 0123 4567 89",
-                                        VerificationStatus::kUserVerified);
-  EXPECT_EQ(u"DE91100000000123456789", iban.GetRawInfo(IBAN_VALUE));
+  iban.set_value(u"DE91 1000 0000 0123 4567 89");
+  EXPECT_EQ(u"DE91100000000123456789", iban.value());
 }
 
 TEST(IbanTest, GetUserFacingValue_LocalIban) {

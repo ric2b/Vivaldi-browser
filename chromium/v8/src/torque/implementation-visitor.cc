@@ -666,25 +666,32 @@ void ImplementationVisitor::Visit(Builtin* builtin) {
         csa_ccfile() << "  TNode<Object> " << generated_name
                      << " = UncheckedParameter<Object>("
                      << "Descriptor::kJSNewTarget);\n";
-        csa_ccfile() << "USE(" << generated_name << ");\n";
+        csa_ccfile() << "  USE(" << generated_name << ");\n";
         expected_types = {TypeOracle::GetJSAnyType()};
       } else if (param_name == "target") {
         csa_ccfile() << "  TNode<JSFunction> " << generated_name
                      << " = UncheckedParameter<JSFunction>("
                      << "Descriptor::kJSTarget);\n";
-        csa_ccfile() << "USE(" << generated_name << ");\n";
+        csa_ccfile() << "  USE(" << generated_name << ");\n";
         expected_types = {TypeOracle::GetJSFunctionType()};
       } else if (param_name == "dispatchHandle") {
-        if (V8_ENABLE_LEAPTIERING_BOOL) {
+        if (V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE_BOOL) {
           csa_ccfile() << "  TNode<JSDispatchHandleT> " << generated_name
                        << " = "
                           "UncheckedParameter<JSDispatchHandleT>(Descriptor::"
                           "kJSDispatchHandle);\n";
+        } else if (V8_ENABLE_LEAPTIERING_BOOL) {
+          csa_ccfile() << "  TNode<JSDispatchHandleT> " << generated_name
+                       << " = "
+                          "ReinterpretCast<JSDispatchHandleT>("
+                          "LoadJSFunctionDispatchHandle("
+                          "UncheckedParameter<JSFunction>("
+                       << "Descriptor::kJSTarget)));\n";
         } else {
           csa_ccfile() << "  TNode<JSDispatchHandleT> " << generated_name
                        << " = InvalidDispatchHandleConstant();\n";
         }
-        csa_ccfile() << "USE(" << generated_name << ");\n";
+        csa_ccfile() << "  USE(" << generated_name << ");\n";
         expected_types = {TypeOracle::GetDispatchHandleType()};
       } else {
         Error(
@@ -735,6 +742,18 @@ void ImplementationVisitor::Visit(Builtin* builtin) {
       csa_ccfile() << "  USE(" << var << ");\n";
     }
   }
+
+  if (builtin->use_counter_name()) {
+    DCHECK(!signature.parameter_types.types.empty());
+    DCHECK(signature.parameter_types.types[0] ==
+               TypeOracle::GetNativeContextType() ||
+           signature.parameter_types.types[0] == TypeOracle::GetContextType());
+    csa_ccfile() << "  CodeStubAssembler(state_).CallRuntime("
+                 << "Runtime::kIncrementUseCounter, parameter0, "
+                 << "CodeStubAssembler(state_).SmiConstant("
+                 << *builtin->use_counter_name() << "));\n";
+  }
+
   assembler_ = CfgAssembler(parameter_types);
   const Type* body_result = Visit(*builtin->body());
   if (body_result != TypeOracle::GetNeverType()) {
@@ -1481,7 +1500,7 @@ LocationReference ImplementationVisitor::GenerateFieldReference(
 }
 
 // This is used to generate field references during initialization, where we can
-// re-use the offsets used for computing the allocation size.
+// reuse the offsets used for computing the allocation size.
 LocationReference ImplementationVisitor::GenerateFieldReferenceForInit(
     VisitResult object, const Field& field,
     const LayoutForInitialization& layout) {
@@ -2534,9 +2553,14 @@ VisitResult ImplementationVisitor::GenerateFetchFromLocation(
     return GenerateCopy(reference.variable());
   } else if (reference.IsHeapReference()) {
     const Type* referenced_type = *reference.ReferencedType();
-    if (referenced_type == TypeOracle::GetFloat64OrHoleType()) {
+    if (referenced_type == TypeOracle::GetFloat64OrUndefinedOrHoleType()) {
       return GenerateCall(QualifiedName({TORQUE_INTERNAL_NAMESPACE_STRING},
-                                        "LoadFloat64OrHole"),
+#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+                                        "LoadFloat64OrUndefinedOrHole"
+#else
+                                        "LoadFloat64OrHole"
+#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+                                        ),
                           Arguments{{reference.heap_reference()}, {}});
     } else if (auto struct_type = referenced_type->StructSupertype()) {
       StackRange result_range = assembler().TopRange(0);
@@ -2598,10 +2622,15 @@ void ImplementationVisitor::GenerateAssignToLocation(
     if (reference.IsConst()) {
       Error("cannot assign to const value of type ", *referenced_type).Throw();
     }
-    if (referenced_type == TypeOracle::GetFloat64OrHoleType()) {
+    if (referenced_type == TypeOracle::GetFloat64OrUndefinedOrHoleType()) {
       GenerateCall(
           QualifiedName({TORQUE_INTERNAL_NAMESPACE_STRING},
-                        "StoreFloat64OrHole"),
+#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+                        "StoreFloat64OrUndefinedOrHole"
+#else
+                        "StoreFloat64OrHole"
+#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+                        ),
           Arguments{{reference.heap_reference(), assignment_value}, {}});
     } else if (auto struct_type = referenced_type->StructSupertype()) {
       if (!assignment_value.type()->IsSubtypeOf(referenced_type)) {
@@ -4464,10 +4493,11 @@ void GenerateBoundsDCheck(std::ostream& os, const std::string& index,
 }
 
 bool CanGenerateFieldAccessors(const Type* field_type) {
-  // float64_or_hole should be treated like float64. For now, we don't need it.
+  // float64_or_undefined_or_hole should be treated like float64. For now, we
+  // don't need it.
   // TODO(v8:10391) Generate accessors for external pointers.
   return field_type != TypeOracle::GetVoidType() &&
-         field_type != TypeOracle::GetFloat64OrHoleType() &&
+         field_type != TypeOracle::GetFloat64OrUndefinedOrHoleType() &&
          !field_type->IsSubtypeOf(TypeOracle::GetExternalPointerType()) &&
          !field_type->IsSubtypeOf(TypeOracle::GetTrustedPointerType()) &&
          !field_type->IsSubtypeOf(TypeOracle::GetProtectedPointerType());
@@ -4756,8 +4786,12 @@ void CppClassGenerator::EmitStoreFieldStatement(
     const std::string value_to_write = is_smi ? "Smi::FromInt(value)" : "value";
 
     if (!is_smi) {
-      stream << "  SLOW_DCHECK("
-             << GenerateRuntimeTypeCheck(field_type, "value") << ");\n";
+      // Don't DCHECK types if the roots aren't initialized, so that we don't
+      // incorrectly fail these checks during initial heap setup.
+      stream << "  "
+                "SLOW_DCHECK(!IsolateGroup::current()->shared_read_only_heap()-"
+                ">roots_init_complete() || ("
+             << GenerateRuntimeTypeCheck(field_type, "value") << "));\n";
     }
     stream << "  " << write_macro << "(*this, " << offset << ", "
            << value_to_write << ");\n";
@@ -4946,7 +4980,7 @@ void ImplementationVisitor::GenerateClassDefinitions(
       std::ostream& header =
           GlobalContext::GeneratedPerFile(type->GetPosition().source)
               .class_definition_headerfile;
-      if (type != TypeOracle::GetFloat64OrHoleType()) {
+      if (type != TypeOracle::GetFloat64OrUndefinedOrHoleType()) {
         GenerateStructLayoutDescription(header, type);
       }
     }
@@ -5264,7 +5298,7 @@ void GenerateClassFieldVerifier(const std::string& class_name,
     return;
   // Protected pointer fields cannot be read or verified from torque yet.
   if (field_type->IsSubtypeOf(TypeOracle::GetProtectedPointerType())) return;
-  if (field_type == TypeOracle::GetFloat64OrHoleType()) return;
+  if (field_type == TypeOracle::GetFloat64OrUndefinedOrHoleType()) return;
   // Do not verify if the field may be uninitialized.
   if (TypeOracle::GetUninitializedType()->IsSubtypeOf(field_type)) return;
 

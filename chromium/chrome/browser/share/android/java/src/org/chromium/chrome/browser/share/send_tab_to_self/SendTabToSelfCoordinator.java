@@ -28,6 +28,9 @@ import org.chromium.ui.base.WindowAndroid;
 import java.util.List;
 import java.util.Optional;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /** Coordinator for displaying the send tab to self feature. */
 public class SendTabToSelfCoordinator {
     /**
@@ -209,6 +212,13 @@ public class SendTabToSelfCoordinator {
                         true);
                 return;
             case EntryPointDisplayReason.OFFER_SIGN_IN:
+                // Vivaldi
+                // NOTE(jarle@vivaldi.com) Use the same bottom sheet as for the 'no target' reason.
+                if (BuildConfig.IS_VIVALDI) {
+                    mController.requestShowContent(
+                            new NoTargetDeviceBottomSheetContent(mContext, mProfile), true);
+                    return;
+                }
                 {
                     AccountPickerBottomSheetStrings strings =
                             new AccountPickerBottomSheetStrings.Builder(
@@ -230,7 +240,7 @@ public class SendTabToSelfCoordinator {
                             AccountPickerLaunchMode.DEFAULT,
                             /* isWebSignin= */ false,
                             SigninAccessPoint.SEND_TAB_TO_SELF_PROMO,
-                            /* selectedCoreAccountId= */ null);
+                            /* selectedAccountId= */ null);
                     return;
                 }
         }

@@ -68,4 +68,4 @@ title: Ash Color Chooser
 
 **# References**
 
-**Input type=color spec: <http://www.w3.org/TR/html-markup/input.color.html>**
+**Input type=color spec: <https://www.w3.org/TR/html-markup/input.color.html>**

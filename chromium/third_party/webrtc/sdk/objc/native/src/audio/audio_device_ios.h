@@ -33,6 +33,11 @@ class FineAudioBuffer;
 
 namespace ios_adm {
 
+// A callback handler for audio device rendering errors.
+// Note: Called on a realtime thread.
+// Note: Only applies to input rendering errors, not output.
+typedef void (^AudioDeviceIOSRenderErrorHandler)(OSStatus error);
+
 // Implements full duplex 16-bit mono PCM audio support for iOS using a
 // Voice-Processing (VP) I/O audio unit in Core Audio. The VP I/O audio unit
 // supports audio echo cancellation. It also adds automatic gain control,
@@ -52,7 +57,8 @@ class AudioDeviceIOS : public AudioDeviceGeneric,
  public:
   explicit AudioDeviceIOS(
       bool bypass_voice_processing,
-      AudioDeviceModule::MutedSpeechEventHandler muted_speech_event_handler);
+      AudioDeviceModule::MutedSpeechEventHandler muted_speech_event_handler,
+      AudioDeviceIOSRenderErrorHandler render_error_handler);
   ~AudioDeviceIOS() override;
 
   void AttachAudioBuffer(AudioDeviceBuffer* audioBuffer) override;
@@ -166,6 +172,8 @@ class AudioDeviceIOS : public AudioDeviceGeneric,
 
   bool IsInterrupted();
 
+  std::optional<AudioDeviceModule::Stats> GetStats() const;
+
  private:
   // Called by the relevant AudioSessionObserver methods on `thread_`.
   void HandleInterruptionBegin();
@@ -173,7 +181,7 @@ class AudioDeviceIOS : public AudioDeviceGeneric,
   void HandleValidRouteChange();
   void HandleCanPlayOrRecordChange(bool can_play_or_record);
   void HandleSampleRateChange();
-  void HandlePlayoutGlitchDetected();
+  void HandlePlayoutGlitchDetected(uint64_t glitch_duration_ms);
   void HandleOutputVolumeChange();
 
   // Uses current `playout_parameters_` and `record_parameters_` to inform the
@@ -217,6 +225,13 @@ class AudioDeviceIOS : public AudioDeviceGeneric,
 
   // Handle a user speaking during muted event
   AudioDeviceModule::MutedSpeechEventHandler muted_speech_event_handler_;
+
+  // Handle microphone rendering errors.
+  AudioDeviceIOSRenderErrorHandler render_error_handler_;
+
+  // Copying microphone data (rendering to a buffer) may keep failing. This
+  // field makes sure subsequent errors are not reported.
+  bool disregard_next_render_error_;
 
   // Native I/O audio thread checker.
   SequenceChecker io_thread_checker_;
@@ -291,7 +306,8 @@ class AudioDeviceIOS : public AudioDeviceGeneric,
   bool has_configured_session_ RTC_GUARDED_BY(thread_);
 
   // Counts number of detected audio glitches on the playout side.
-  int64_t num_detected_playout_glitches_ RTC_GUARDED_BY(thread_);
+  std::atomic<uint64_t> num_detected_playout_glitches_;
+  std::atomic<uint64_t> total_playout_glitches_duration_ms_;
   int64_t last_playout_time_ RTC_GUARDED_BY(io_thread_checker_);
 
   // Counts number of playout callbacks per call.
@@ -307,6 +323,12 @@ class AudioDeviceIOS : public AudioDeviceGeneric,
   rtc::scoped_refptr<PendingTaskSafetyFlag> safety_ =
       PendingTaskSafetyFlag::Create();
 
+  // Playout stats.
+  std::atomic<uint64_t> total_playout_samples_count_;
+  std::atomic<uint64_t> total_playout_samples_duration_ms_;
+  std::atomic<uint64_t> total_playout_delay_ms_;
+  std::atomic<double> hw_output_latency_;
+  int last_hw_output_latency_update_sample_count_;
   // Ratio between mach tick units and nanosecond. Used to change mach tick
   // units to nanoseconds.
   double machTickUnitsToNanoseconds_;

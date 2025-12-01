@@ -25,7 +25,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/metrics/histogram_functions_internal_overloads.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
@@ -343,8 +342,10 @@ std::unique_ptr<URLRequestJob> URLRequestHttpJob::Create(URLRequest* request) {
   SSLUpgradeDecision upgrade_decision = SSLUpgradeDecision::kNoUpgrade;
   if (TransportSecurityState* hsts =
           request->context()->transport_security_state()) {
-    upgrade_decision =
-        hsts->GetSSLUpgradeDecision(url.host(), request->net_log());
+    upgrade_decision = hsts->GetSSLUpgradeDecision(
+        url.host(),
+        /*is_top_level_nav=*/request->isolation_info().IsMainFrameRequest(),
+        request->net_log());
   }
 
   // Check for reasons not to return a URLRequestHttpJob. These don't apply to
@@ -823,7 +824,7 @@ void URLRequestHttpJob::SetCookieHeaderAndStart(
     maybe_included_cookies.clear();
     for (auto& cookie : excluded_cookies) {
       cookie.access_result.status.AddExclusionReason(
-          CookieInclusionStatus::EXCLUDE_USER_PREFERENCES);
+          CookieInclusionStatus::ExclusionReason::EXCLUDE_USER_PREFERENCES);
     }
   } else {
     // Consult the delegate to ensure that they have the correct exclusion
@@ -1080,12 +1081,13 @@ void URLRequestHttpJob::SaveCookiesAndNotifyHeadersComplete(int result) {
       // in this case.
       if (returned_status.IsInclude()) {
         returned_status.AddExclusionReason(
-            net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES);
+            net::CookieInclusionStatus::ExclusionReason::
+                EXCLUDE_USER_PREFERENCES);
       }
     }
     if (clear_site_data_prevents_cookies_from_being_stored) {
       returned_status.AddExclusionReason(
-          CookieInclusionStatus::EXCLUDE_FAILURE_TO_STORE);
+          CookieInclusionStatus::ExclusionReason::EXCLUDE_FAILURE_TO_STORE);
     }
     if (!returned_status.IsInclude()) {
       OnSetCookieResult(options, cookie_to_return, std::move(cookie_string),
@@ -1117,7 +1119,8 @@ void URLRequestHttpJob::OnSetCookieResult(const CookieOptions& options,
         NetLogEventType::COOKIE_INCLUSION_STATUS,
         [&](NetLogCaptureMode capture_mode) {
           return CookieInclusionStatusNetLogParams(
-              "store", cookie ? cookie.value().Name() : "",
+              cookie && cookie->IsExpired(base::Time::Now()) ? "expire" : "store",
+              cookie ? cookie.value().Name() : "",
               cookie ? cookie.value().Domain() : "",
               cookie ? cookie.value().Path() : "",
               cookie ? cookie.value().PartitionKey() : std::nullopt,
@@ -1153,7 +1156,7 @@ void URLRequestHttpJob::ProcessDeviceBoundSessionsHeader() {
   for (auto& param : params) {
     service->RegisterBoundSession(
         request_->device_bound_session_access_callback(), std::move(param),
-        request_->isolation_info());
+        request_->isolation_info(), request_->net_log(), request_->initiator());
   }
 
   std::vector<device_bound_sessions::SessionChallengeParam> challenge_params =
@@ -1340,8 +1343,6 @@ void URLRequestHttpJob::RestartTransaction() {
   override_response_headers_ = nullptr;  // See https://crbug.com/801237.
   receive_headers_end_ = base::TimeTicks();
 
-  ResetTimer();
-
   // Update the cookies, since the cookie store may have been updated from the
   // headers in the 401/407. Since cookies were already appended to
   // extra_headers, we need to strip them out before adding them again.
@@ -1369,6 +1370,7 @@ void URLRequestHttpJob::RestartTransactionForRefresh() {
 void URLRequestHttpJob::RestartTransactionWithAuth(
     const AuthCredentials& credentials) {
   auth_credentials_ = credentials;
+  ResetTimer();
   RestartTransaction();
 }
 

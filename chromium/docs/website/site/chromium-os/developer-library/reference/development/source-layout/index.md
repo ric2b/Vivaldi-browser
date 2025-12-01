@@ -673,7 +673,7 @@ See the previous questions in this FAQ for more details.
 [chromite]: https://chromium.googlesource.com/chromiumos/chromite/
 [Chromium GoB]: https://chromium.googlesource.com/
 [chromiumos-overlay]: https://chromium.googlesource.com/chromiumos/overlays/chromiumos-overlay/
-[chroot]: filesystem_layout.md#SDK
+[chroot]: http://go/cros-fs#SDK
 [Cq-Depend]: /chromium-os/developer-library/guides/development/contributing/#CQ-DEPEND
 [Contact]: /chromium-os/developer-library/guides/who-do-i-notify/contact/
 [contrib]: https://chromium.googlesource.com/chromiumos/platform/dev-util/+/HEAD/contrib/
@@ -687,7 +687,7 @@ See the previous questions in this FAQ for more details.
 [Infra>Git>Admin rotation]: https://bugs.chromium.org/p/chromium/issues/entry?template=Infra-Git
 [Internal Chrome GoB]: #gob-chrome
 [internal full.xml]: https://chrome-internal.googlesource.com/chromeos/manifest-internal/+/HEAD/full.xml
-[filesystem layout]: filesystem_layout.md
+[filesystem layout]: http://go/cros-fs
 [full.xml]: https://chromium.googlesource.com/chromiumos/manifest/+/HEAD/full.xml
 [Gerrit project config]: https://gerrit-review.googlesource.com/Documentation/config-project-config.html
 [Gerrit refs/for]: https://gerrit-review.googlesource.com/Documentation/concept-refs-for-namespace.html

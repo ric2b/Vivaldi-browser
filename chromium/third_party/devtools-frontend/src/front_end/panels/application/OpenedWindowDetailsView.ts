@@ -147,6 +147,7 @@ export class OpenedWindowDetailsView extends UI.ThrottledWidget.ThrottledWidget 
 
   constructor(targetInfo: Protocol.Target.TargetInfo, isWindowClosed: boolean) {
     super();
+    this.registerRequiredCSS(openedWindowDetailsViewStyles);
     this.targetInfo = targetInfo;
     this.isWindowClosed = isWindowClosed;
 
@@ -155,6 +156,7 @@ export class OpenedWindowDetailsView extends UI.ThrottledWidget.ThrottledWidget 
     this.reportView = new UI.ReportView.ReportView(this.buildTitle());
 
     this.reportView.show(this.contentElement);
+    this.reportView.registerRequiredCSS(openedWindowDetailsViewStyles);
     this.reportView.element.classList.add('frame-details-report-container');
 
     this.documentSection = this.reportView.appendSection(i18nString(UIStrings.document));
@@ -203,11 +205,6 @@ export class OpenedWindowDetailsView extends UI.ThrottledWidget.ThrottledWidget 
   setTargetInfo(targetInfo: Protocol.Target.TargetInfo): void {
     this.targetInfo = targetInfo;
   }
-  override wasShown(): void {
-    super.wasShown();
-    this.reportView.registerCSSFiles([openedWindowDetailsViewStyles]);
-    this.registerCSSFiles([openedWindowDetailsViewStyles]);
-  }
 }
 
 export class WorkerDetailsView extends UI.ThrottledWidget.ThrottledWidget {
@@ -219,6 +216,7 @@ export class WorkerDetailsView extends UI.ThrottledWidget.ThrottledWidget {
 
   constructor(targetInfo: Protocol.Target.TargetInfo) {
     super();
+    this.registerRequiredCSS(openedWindowDetailsViewStyles);
     this.targetInfo = targetInfo;
 
     this.contentElement.classList.add('frame-details-container');
@@ -227,6 +225,7 @@ export class WorkerDetailsView extends UI.ThrottledWidget.ThrottledWidget {
         new UI.ReportView.ReportView(this.targetInfo.title || this.targetInfo.url || i18nString(UIStrings.worker));
 
     this.reportView.show(this.contentElement);
+    this.reportView.registerRequiredCSS(openedWindowDetailsViewStyles);
     this.reportView.element.classList.add('frame-details-report-container');
 
     this.documentSection = this.reportView.appendSection(i18nString(UIStrings.document));
@@ -297,10 +296,5 @@ export class WorkerDetailsView extends UI.ThrottledWidget.ThrottledWidget {
 
   override async doUpdate(): Promise<void> {
     await this.updateCoopCoepStatus();
-  }
-  override wasShown(): void {
-    super.wasShown();
-    this.reportView.registerCSSFiles([openedWindowDetailsViewStyles]);
-    this.registerCSSFiles([openedWindowDetailsViewStyles]);
   }
 }

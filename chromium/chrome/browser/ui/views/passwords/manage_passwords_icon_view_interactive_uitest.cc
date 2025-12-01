@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/passwords/manage_passwords_test.h"
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller_mock.h"
@@ -50,7 +49,7 @@ class ManagePasswordsIconViewTest : public ManagePasswordsTest {
   }
 
   std::u16string GetTooltipText() {
-    return GetView()->GetTooltipText(gfx::Point());
+    return GetView()->GetRenderedTooltipText(gfx::Point());
   }
 };
 
@@ -101,6 +100,12 @@ IN_PROC_BROWSER_TEST_F(ManagePasswordsIconViewTest, CloseOnClick) {
   GetView()->OnMousePressed(mouse_down);
   // Wait for the command execution to close the bubble.
   content::RunAllPendingInMessageLoop();
+}
+
+IN_PROC_BROWSER_TEST_F(ManagePasswordsIconViewTest, PasswordChangeState) {
+  SetupPasswordChange();
+  EXPECT_EQ(password_manager::ui::PASSWORD_CHANGE_STATE, ViewState());
+  EXPECT_FALSE(GetView()->GetVisible());
 }
 
 IN_PROC_BROWSER_TEST_F(ManagePasswordsIconViewTestToolbarPinningOnly,

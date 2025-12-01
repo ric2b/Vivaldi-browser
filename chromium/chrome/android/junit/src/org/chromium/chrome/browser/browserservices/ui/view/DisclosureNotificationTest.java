@@ -30,13 +30,17 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.browser.browserservices.ui.TrustedWebActivityModel;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
+import org.chromium.components.browser_ui.notifications.BaseNotificationManagerProxyFactory;
+import org.chromium.components.browser_ui.notifications.NotificationFeatureMap;
 import org.chromium.components.browser_ui.notifications.NotificationManagerProxy;
 import org.chromium.components.browser_ui.notifications.NotificationWrapper;
 
 /** Tests for {@link DisclosureNotification}. */
 @RunWith(BaseRobolectricTestRunner.class)
+@EnableFeatures({NotificationFeatureMap.CACHE_NOTIIFICATIONS_ENABLED})
 @Config(manifest = Config.NONE)
 public class DisclosureNotificationTest {
     private static final String SCOPE = "https://www.example.com";
@@ -58,10 +62,11 @@ public class DisclosureNotificationTest {
         mModel.set(PACKAGE_NAME, PACKAGE);
         mModel.set(DISCLOSURE_FIRST_TIME, true);
 
+        BaseNotificationManagerProxyFactory.setInstanceForTesting(mNotificationManager);
+
         Context context = RuntimeEnvironment.application;
         mNotification =
-                new DisclosureNotification(
-                        context.getResources(), mNotificationManager, mModel, mLifecycleDispatcher);
+                new DisclosureNotification(context.getResources(), mModel, mLifecycleDispatcher);
     }
 
     @Test

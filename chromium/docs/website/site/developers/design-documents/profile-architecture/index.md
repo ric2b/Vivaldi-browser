@@ -45,7 +45,7 @@ teardown issues, we use a `DependencyManager` and a two-phase shutdown model.
 *   **We must allow features to be compiled in and out.** This is important for
     any multi-platform project, but it's especially important for iOS, where we
     use WebKit instead of Blink. [Layered
-    components](https://www.chromium.org/developers/design-documents/layered-components-design/#layered-components)
+    components](/developers/design-documents/layered-components-design/#layered-components)
     offer guidelines for writing code that works on iOS and desktop at the same
     time. This design also makes it easy for third-party vendors (e.g. Opera,
     Edge, Brave...) to add/remove features as they see fit.
@@ -106,10 +106,10 @@ class FooServiceFactory : public ProfileKeyedServiceFactory {
 
  private:
   FooServiceFactory();
-  virtual ~FooServiceFactory();
+  ~FooServiceFactory() override;
 
   // BrowserContextKeyedServiceFactory:
-  virtual BrowserContextKeyedService* BuildServiceInstanceFor(
+  std::unique_ptr<KeyedService> BuildServiceInstanceForBrowserContext(
       content::BrowserContext* context) const override;
 };
 ```

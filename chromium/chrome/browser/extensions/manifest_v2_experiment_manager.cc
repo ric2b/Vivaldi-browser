@@ -4,6 +4,7 @@
 
 #include "chrome/browser/extensions/manifest_v2_experiment_manager.h"
 
+#include "base/auto_reset.h"
 #include "base/functional/callback_forward.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/one_shot_event.h"
@@ -105,7 +106,7 @@ class ManifestV2ExperimentManagerFactory : public ProfileKeyedServiceFactory {
 
  private:
   // BrowserContextKeyedServiceFactory:
-  KeyedService* BuildServiceInstanceFor(
+  std::unique_ptr<KeyedService> BuildServiceInstanceForBrowserContext(
       content::BrowserContext* context) const override;
   bool ServiceIsCreatedWithBrowserContext() const override;
 };
@@ -131,9 +132,10 @@ ManifestV2ExperimentManagerFactory::GetForBrowserContext(
       GetServiceForBrowserContext(browser_context, /*create=*/true));
 }
 
-KeyedService* ManifestV2ExperimentManagerFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+ManifestV2ExperimentManagerFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
-  return new ManifestV2ExperimentManager(context);
+  return std::make_unique<ManifestV2ExperimentManager>(context);
 }
 
 bool ManifestV2ExperimentManagerFactory::ServiceIsCreatedWithBrowserContext()
@@ -387,8 +389,10 @@ bool ManifestV2ExperimentManager::DidUserAcknowledgeNotice(
 
 void ManifestV2ExperimentManager::MarkNoticeAsAcknowledged(
     const ExtensionId& extension_id) {
-  // There is no notice for kNone stage, thus it cannot be acknowledged.
-  if (experiment_stage_ == MV2ExperimentStage::kNone) {
+  // There is no notice for kNone stage, thus it cannot be acknowledged. The
+  // notice cannot be acknowledged in kUnsupported stage.
+  if (experiment_stage_ == MV2ExperimentStage::kNone ||
+      experiment_stage_ == MV2ExperimentStage::kUnsupported) {
     return;
   }
 

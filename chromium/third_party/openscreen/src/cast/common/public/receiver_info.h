@@ -16,16 +16,16 @@
 namespace openscreen::cast {
 
 // Constants to identify a CastV2 instance with DNS-SD.
-constexpr char kCastV2ServiceId[] = "_googlecast._tcp";
-constexpr char kCastV2DomainId[] = "local";
+inline constexpr char kCastV2ServiceId[] = "_googlecast._tcp";
+inline constexpr char kCastV2DomainId[] = "local";
 
 // Constants to be used as keys when storing data inside of a DNS-SD TXT record.
-constexpr char kUniqueIdKey[] = "id";
-constexpr char kVersionKey[] = "ve";
-constexpr char kCapabilitiesKey[] = "ca";
-constexpr char kStatusKey[] = "st";
-constexpr char kFriendlyNameKey[] = "fn";
-constexpr char kModelNameKey[] = "md";
+inline constexpr char kUniqueIdKey[] = "id";
+inline constexpr char kVersionKey[] = "ve";
+inline constexpr char kCapabilitiesKey[] = "ca";
+inline constexpr char kStatusKey[] = "st";
+inline constexpr char kFriendlyNameKey[] = "fn";
+inline constexpr char kModelNameKey[] = "md";
 
 // This represents the ‘st’ flag in the CastV2 TXT record.
 enum ReceiverStatus {
@@ -41,16 +41,16 @@ enum ReceiverStatus {
   kJoin = kBusy
 };
 
-constexpr uint8_t kCurrentCastVersion = 2;
+inline constexpr uint8_t kCurrentCastVersion = 2;
 
 // Bits in the ‘ca’ bitfield, per the CastV2 spec.
-constexpr uint64_t kHasVideoOutput = 1 << 0;
-constexpr uint64_t kHasVideoInput = 1 << 1;
-constexpr uint64_t kHasAudioOutput = 1 << 2;
-constexpr uint64_t kHasAudioIntput = 1 << 3;
-constexpr uint64_t kIsDevModeEnabled = 1 << 4;
+inline constexpr uint64_t kHasVideoOutput = 1 << 0;
+inline constexpr uint64_t kHasVideoInput = 1 << 1;
+inline constexpr uint64_t kHasAudioOutput = 1 << 2;
+inline constexpr uint64_t kHasAudioIntput = 1 << 3;
+inline constexpr uint64_t kIsDevModeEnabled = 1 << 4;
 
-constexpr uint64_t kNoCapabilities = 0;
+inline constexpr uint64_t kNoCapabilities = 0;
 
 // This is the top-level receiver info class for CastV2. It describes a specific
 // service instance.

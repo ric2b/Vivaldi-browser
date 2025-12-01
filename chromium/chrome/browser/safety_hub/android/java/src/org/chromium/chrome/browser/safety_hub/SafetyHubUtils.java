@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.safety_hub;
 
 import android.content.Context;
+import android.graphics.drawable.Drawable;
 
 import androidx.annotation.Nullable;
 
@@ -15,8 +16,9 @@ import org.chromium.chrome.browser.password_manager.PasswordManagerHelper;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.safe_browsing.SafeBrowsingBridge;
 import org.chromium.chrome.browser.safe_browsing.SafeBrowsingState;
-import org.chromium.chrome.browser.safety_hub.SafetyHubModuleProperties.ModuleState;
+import org.chromium.chrome.browser.safety_hub.SafetyHubModuleMediator.ModuleState;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
+import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.identitymanager.IdentityManager;
@@ -103,5 +105,10 @@ class SafetyHubUtils {
         return (safeBrowsingState == SafeBrowsingState.NO_SAFE_BROWSING)
                 ? ModuleState.WARNING
                 : ModuleState.SAFE;
+    }
+
+    static Drawable getManagedIcon(Context context) {
+        return SettingsUtils.getTintedIcon(
+                context, R.drawable.ic_business, R.color.default_icon_color_secondary_tint_list);
     }
 }

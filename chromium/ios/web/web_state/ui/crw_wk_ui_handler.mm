@@ -15,11 +15,11 @@
 #import "ios/web/public/permissions/permissions.h"
 #import "ios/web/public/ui/context_menu_params.h"
 #import "ios/web/public/web_client.h"
+#import "ios/web/util/wk_security_origin_util.h"
 #import "ios/web/web_state/ui/crw_media_capture_permission_request.h"
 #import "ios/web/web_state/ui/crw_wk_ui_handler_delegate.h"
 #import "ios/web/web_state/user_interaction_state.h"
 #import "ios/web/web_state/web_state_impl.h"
-#import "ios/web/web_view/wk_security_origin_util.h"
 #import "ios/web/webui/mojo_facade.h"
 #import "net/base/apple/url_conversions.h"
 #import "url/gurl.h"
@@ -100,8 +100,9 @@ void RecordHistogramForPermissionRequestForWKMediaCaptureType(
 }
 
 - (web::MojoFacade*)mojoFacade {
-  if (!_mojoFacade)
+  if (!_mojoFacade) {
     _mojoFacade = std::make_unique<web::MojoFacade>(self.webStateImpl);
+  }
   return _mojoFacade.get();
 }
 
@@ -171,8 +172,9 @@ void RecordHistogramForPermissionRequestForWKMediaCaptureType(
 
   web::WebState* childWebState = self.webStateImpl->CreateNewWebState(
       requestURL, openerURL, initiatedByUser);
-  if (!childWebState)
+  if (!childWebState) {
     return nil;
+  }
 
   // WKWebView requires WKUIDelegate to return a child view created with
   // exactly the same `configuration` object (exception is raised if config is

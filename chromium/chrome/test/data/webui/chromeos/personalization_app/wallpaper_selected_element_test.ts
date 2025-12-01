@@ -6,15 +6,16 @@
 
 import 'chrome://personalization/strings.m.js';
 
-import {CurrentAttribution, CurrentWallpaper, DailyRefreshType, GooglePhotosPhoto, GooglePhotosSharedAlbumDialogElement, Paths, WallpaperLayout, WallpaperSelectedElement, WallpaperType} from 'chrome://personalization/js/personalization_app.js';
+import type {CurrentAttribution, CurrentWallpaper, GooglePhotosPhoto} from 'chrome://personalization/js/personalization_app.js';
+import {DailyRefreshType, GooglePhotosSharedAlbumDialogElement, Paths, WallpaperLayout, WallpaperSelectedElement, WallpaperType} from 'chrome://personalization/js/personalization_app.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {stringToMojoString16} from 'chrome://resources/js/mojo_type_util.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertNotEquals, assertNull, assertStringContains, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {flushTasks, waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 
 import {baseSetup, createSvgDataUrl, initElement} from './personalization_app_test_utils.js';
-import {TestPersonalizationStore} from './test_personalization_store.js';
-import {TestWallpaperProvider} from './test_wallpaper_interface_provider.js';
+import type {TestPersonalizationStore} from './test_personalization_store.js';
+import type {TestWallpaperProvider} from './test_wallpaper_interface_provider.js';
 
 const descriptionOptionsId = 'descriptionOptions';
 const descriptionDialogId = 'descriptionDialog';
@@ -274,10 +275,10 @@ suite('WallpaperSelectedElementTest', function() {
     wallpaperSelectedElement = initElement(WallpaperSelectedElement);
     await waitAfterNextRender(wallpaperSelectedElement);
 
-    const img = wallpaperSelectedElement.shadowRoot!.querySelector('img') as
-        HTMLImageElement;
+    const img = wallpaperSelectedElement.shadowRoot!.querySelector('img');
+    assertTrue(!!img);
     assertStringContains(
-        img!.src,
+        img.src,
         `chrome://personalization/wallpaper.jpg?key=${
             wallpaperProvider.currentWallpaper.key}`);
 
@@ -497,17 +498,18 @@ suite('WallpaperSelectedElementTest', function() {
 
     // Verify layout options are *not* shown when not on Google Photos path.
     const selector = '#wallpaperOptions';
-    const shadowRoot = wallpaperSelectedElement.shadowRoot;
-    assertEquals(shadowRoot?.querySelector(selector), null);
+    const shadowRoot = wallpaperSelectedElement.shadowRoot!;
+    assertEquals(shadowRoot.querySelector(selector), null);
 
     // Set Google Photos path and verify layout options *are* shown.
     wallpaperSelectedElement.path = Paths.GOOGLE_PHOTOS_COLLECTION;
     await waitAfterNextRender(wallpaperSelectedElement);
-    assertNotEquals(shadowRoot?.querySelector(selector), null);
+    assertNotEquals(shadowRoot.querySelector(selector), null);
 
     // Verify that clicking layout |button| results in mojo API call.
-    const button = shadowRoot?.querySelector('#center') as HTMLElement | null;
-    button?.click();
+    const button = shadowRoot.querySelector<HTMLElement>('#center');
+    assertTrue(!!button);
+    button.click();
     assertDeepEquals(
         await wallpaperProvider.whenCalled('setCurrentWallpaperLayout'),
         WallpaperLayout.kCenter);

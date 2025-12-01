@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "chrome/browser/ui/webui/side_panel/history_clusters/history_clusters_side_panel_ui.h"
 
 #include <string>
@@ -23,7 +18,6 @@
 #include "chrome/browser/ui/webui/cr_components/history_embeddings/history_embeddings_handler.h"
 #include "chrome/browser/ui/webui/favicon_source.h"
 #include "chrome/browser/ui/webui/history_clusters/history_clusters_handler.h"
-#include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/generated_resources.h"
@@ -41,6 +35,7 @@
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "ui/webui/color_change_listener/color_change_handler.h"
+#include "ui/webui/webui_util.h"
 
 HistoryClustersSidePanelUIConfig::HistoryClustersSidePanelUIConfig()
     : DefaultTopChromeWebUIConfig(
@@ -82,16 +77,13 @@ HistoryClustersSidePanelUI::HistoryClustersSidePanelUI(content::WebUI* web_ui)
   source->AddBoolean(
       "enableHistoryEmbeddings",
       history_embeddings::IsHistoryEmbeddingsEnabledForProfile(profile) &&
-          history_embeddings::kEnableSidePanel.Get());
+          history_embeddings::GetFeatureParameters().enable_side_panel);
   history_embeddings::PopulateSourceForWebUI(source, profile);
 
   webui::SetupWebUIDataSource(
-      source,
-      base::make_span(kSidePanelHistoryClustersResources,
-                      kSidePanelHistoryClustersResourcesSize),
+      source, kSidePanelHistoryClustersResources,
       IDR_SIDE_PANEL_HISTORY_CLUSTERS_HISTORY_CLUSTERS_HTML);
-  source->AddResourcePaths(base::make_span(kSidePanelSharedResources,
-                                           kSidePanelSharedResourcesSize));
+  source->AddResourcePaths(kSidePanelSharedResources);
 }
 
 HistoryClustersSidePanelUI::~HistoryClustersSidePanelUI() = default;

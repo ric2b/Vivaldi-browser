@@ -647,6 +647,12 @@ void CodeGenerator::AssembleCodeStartRegisterCheck() {
   __ pop(eax);  // Restore eax.
 }
 
+#ifdef V8_ENABLE_LEAPTIERING
+void CodeGenerator::AssembleDispatchHandleRegisterCheck() {
+  CHECK(!V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE_BOOL);
+}
+#endif  // V8_ENABLE_LEAPTIERING
+
 // Check if the code object is marked for deoptimization. If it is, then it
 // jumps to the CompileLazyDeoptimizedCode builtin. In order to do this we need
 // to:
@@ -654,18 +660,27 @@ void CodeGenerator::AssembleCodeStartRegisterCheck() {
 //       the flags in the referenced {Code} object;
 //    2. test kMarkedForDeoptimizationBit in those flags; and
 //    3. if it is not zero then it jumps to the builtin.
+//
+// Note: With leaptiering we simply assert the code is not deoptimized.
 void CodeGenerator::BailoutIfDeoptimized() {
   int offset = InstructionStream::kCodeOffset - InstructionStream::kHeaderSize;
-  __ push(eax);  // Push eax so we can use it as a scratch register.
-  __ mov(eax, Operand(kJavaScriptCallCodeStartRegister, offset));
-  __ test(FieldOperand(eax, Code::kFlagsOffset),
-          Immediate(1 << Code::kMarkedForDeoptimizationBit));
-  __ pop(eax);  // Restore eax.
-
+  if (v8_flags.debug_code || !V8_ENABLE_LEAPTIERING_BOOL) {
+    __ push(eax);  // Push eax so we can use it as a scratch register.
+    __ mov(eax, Operand(kJavaScriptCallCodeStartRegister, offset));
+    __ test(FieldOperand(eax, Code::kFlagsOffset),
+            Immediate(1 << Code::kMarkedForDeoptimizationBit));
+    __ pop(eax);  // Restore eax.
+  }
+#ifdef V8_ENABLE_LEAPTIERING
+  if (v8_flags.debug_code) {
+    __ Assert(zero, AbortReason::kInvalidDeoptimizedCode);
+  }
+#else
   Label skip;
   __ j(zero, &skip, Label::kNear);
   __ TailCallBuiltin(Builtin::kCompileLazyDeoptimizedCode);
   __ bind(&skip);
+#endif
 }
 
 // Assembles an instruction after register allocation, producing machine code.
@@ -704,8 +719,12 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       break;
     }
 #if V8_ENABLE_WEBASSEMBLY
-    case kArchCallWasmFunction: {
-      if (HasImmediateInput(instr, 0)) {
+    case kArchCallWasmFunction:
+    case kArchCallWasmFunctionIndirect: {
+      if (arch_opcode == kArchCallWasmFunction) {
+        // This should always use immediate inputs since we don't have a
+        // constant pool on this arch.
+        DCHECK(HasImmediateInput(instr, 0));
         Constant constant = i.ToConstant(instr->InputAt(0));
         Address wasm_code = static_cast<Address>(constant.ToInt32());
         if (DetermineStubCallMode() == StubCallMode::kCallWasmRuntimeStub) {
@@ -714,19 +733,23 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
           __ call(wasm_code, constant.rmode());
         }
       } else {
-        __ call(i.InputRegister(0));
+        DCHECK(!HasImmediateInput(instr, 0));
+        __ CallWasmCodePointer(i.InputRegister(0));
       }
       RecordCallPosition(instr);
       frame_access_state()->ClearSPDelta();
       break;
     }
-    case kArchTailCallWasm: {
-      if (HasImmediateInput(instr, 0)) {
+    case kArchTailCallWasm:
+    case kArchTailCallWasmIndirect: {
+      if (arch_opcode == kArchTailCallWasm) {
+        DCHECK(HasImmediateInput(instr, 0));
         Constant constant = i.ToConstant(instr->InputAt(0));
         Address wasm_code = static_cast<Address>(constant.ToInt32());
         __ jmp(wasm_code, constant.rmode());
       } else {
-        __ jmp(i.InputRegister(0));
+        DCHECK(!HasImmediateInput(instr, 0));
+        __ CallWasmCodePointer(i.InputRegister(0), CallJumpMode::kTailCall);
       }
       frame_access_state()->ClearSPDelta();
       frame_access_state()->SetFrameAccessToDefault();
@@ -4033,7 +4056,7 @@ void CodeGenerator::AssembleConstructFrame() {
     } else {
       __ StubPrologue(info()->GetOutputStackFrameType());
 #if V8_ENABLE_WEBASSEMBLY
-      if (call_descriptor->IsWasmFunctionCall() ||
+      if (call_descriptor->IsAnyWasmFunctionCall() ||
           call_descriptor->IsWasmImportWrapper() ||
           call_descriptor->IsWasmCapiFunction()) {
         // For import wrappers and C-API functions, this stack slot is only used
@@ -4099,6 +4122,11 @@ void CodeGenerator::AssembleConstructFrame() {
         for (Register reg : base::Reversed(regs_to_save)) {
           __ push(reg);
         }
+        __ sub(esp,
+               Immediate(arraysize(wasm::kFpParamRegisters) * kSimd128Size));
+        for (size_t i = 0; i < arraysize(wasm::kFpParamRegisters); i++) {
+          __ Movdqu(Operand(esp, kSimd128Size * i), wasm::kFpParamRegisters[i]);
+        }
         __ mov(WasmHandleStackOverflowDescriptor::GapRegister(),
                Immediate(required_slots * kSystemPointerSize));
         __ mov(WasmHandleStackOverflowDescriptor::FrameBaseRegister(), ebp);
@@ -4107,6 +4135,11 @@ void CodeGenerator::AssembleConstructFrame() {
                    call_descriptor->ParameterSlotCount() * kSystemPointerSize +
                    CommonFrameConstants::kFixedFrameSizeAboveFp)));
         __ CallBuiltin(Builtin::kWasmHandleStackOverflow);
+        for (size_t i = 0; i < arraysize(wasm::kFpParamRegisters); i++) {
+          __ Movdqu(wasm::kFpParamRegisters[i], Operand(esp, kSimd128Size * i));
+        }
+        __ add(esp,
+               Immediate(arraysize(wasm::kFpParamRegisters) * kSimd128Size));
         for (Register reg : regs_to_save) {
           __ pop(reg);
         }
@@ -4180,16 +4213,18 @@ void CodeGenerator::AssembleReturn(InstructionOperand* additional_pop_count) {
   }
 
 #if V8_ENABLE_WEBASSEMBLY
-  if (call_descriptor->IsWasmFunctionCall() &&
+  if (call_descriptor->IsAnyWasmFunctionCall() &&
       v8_flags.experimental_wasm_growable_stacks) {
-    Register tmp = ecx;
-    __ mov(tmp, MemOperand(ebp, TypedFrameConstants::kFrameTypeOffset));
-    __ cmp(tmp,
+    __ cmp(MemOperand(ebp, TypedFrameConstants::kFrameTypeOffset),
            Immediate(StackFrame::TypeToMarker(StackFrame::WASM_SEGMENT_START)));
     Label done;
     __ j(not_equal, &done);
     for (Register reg : base::Reversed(wasm::kGpReturnRegisters)) {
       __ push(reg);
+    }
+    __ sub(esp, Immediate(arraysize(wasm::kFpReturnRegisters) * kSimd128Size));
+    for (size_t i = 0; i < arraysize(wasm::kFpReturnRegisters); i++) {
+      __ Movdqu(Operand(esp, kSimd128Size * i), wasm::kFpReturnRegisters[i]);
     }
     __ PrepareCallCFunction(1, kReturnRegister0);
     __ Move(Operand(esp, 0 * kSystemPointerSize),
@@ -4198,6 +4233,10 @@ void CodeGenerator::AssembleReturn(InstructionOperand* additional_pop_count) {
     // Restore old ebp. We don't need to restore old esp explicitly, because
     // it will be restored from ebp in LeaveFrame before return.
     __ mov(ebp, kReturnRegister0);
+    for (size_t i = 0; i < arraysize(wasm::kFpReturnRegisters); i++) {
+      __ Movdqu(wasm::kFpReturnRegisters[i], Operand(esp, kSimd128Size * i));
+    }
+    __ add(esp, Immediate(arraysize(wasm::kFpReturnRegisters) * kSimd128Size));
     for (Register reg : wasm::kGpReturnRegisters) {
       __ pop(reg);
     }

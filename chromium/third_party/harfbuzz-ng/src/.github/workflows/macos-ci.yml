@@ -15,15 +15,16 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@44c2b7a8a4ea60a981eaca3cf939b5f4305c123b # v4.1.5
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
     - name: Setup Ccache
-      uses: hendrikmuhs/ccache-action@c92f40bee50034e84c763e33b317c77adaa81c92 # v1.2.13
+      uses: hendrikmuhs/ccache-action@53911442209d5c18de8a31615e0923161e435875 # v1.2.16
       with:
         key: ${{ github.job }}-${{ runner.os }}-${{ runner.arch }}
     - name: Install Dependencies
       run: |
         export HOMEBREW_NO_AUTO_UPDATE=1
         export HOMEBREW_NO_INSTALL_CLEANUP=1
+        brew rm -f pkg-config@0.29.2
         brew install \
           cairo \
           freetype \
@@ -33,11 +34,11 @@ jobs:
           icu4c \
           meson \
           ninja \
-          pkg-config
+          pkgconf
     - name: Setup Python
-      uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
+      uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
       with:
-        python-version: '3.x'
+        python-version: '3.12'
     - name: Install Python Dependencies
       run: pip3 install -r .ci/requirements.txt --require-hashes
     - name: Setup Meson
@@ -61,6 +62,7 @@ jobs:
     - name: Generate Coverage
       run: ninja -Cbuild coverage-xml
     - name: Upload Coverage
-      uses: codecov/codecov-action@5ecb98a3c6b747ed38dc09f787459979aebb39be # v4.3.1
+      uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
       with:
+        token: ${{ secrets.CODECOV_TOKEN }}
         file: build/meson-logs/coverage.xml

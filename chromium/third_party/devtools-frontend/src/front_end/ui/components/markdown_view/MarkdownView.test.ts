@@ -5,35 +5,35 @@
 import {renderElementIntoDOM} from '../../../testing/DOMHelpers.js';
 import {describeWithEnvironment} from '../../../testing/EnvironmentHelpers.js';
 import * as Marked from '../../../third_party/marked/marked.js';
-import * as LitHtml from '../../lit-html/lit-html.js';
+import * as Lit from '../../lit/lit.js';
 
 import * as MarkdownView from './markdown_view.js';
 
-const {html} = LitHtml;
+const {html} = Lit;
 
-type TestToken = {
-  type: string,
-  tokens?: Marked.Marked.Token[],
-  text?: string,
-  href?: string,
-  items?: Object[],
-  depth?: number,
-};
+interface TestToken {
+  type: string;
+  tokens?: Marked.Marked.Token[];
+  text?: string;
+  href?: string;
+  items?: Object[];
+  depth?: number;
+}
 
 function getFakeToken(token: TestToken): Marked.Marked.Token {
   return token as unknown as Marked.Marked.Token;
 }
 
-function renderTemplateResult(templateResult: LitHtml.TemplateResult): HTMLElement {
+function renderTemplateResult(templateResult: Lit.TemplateResult): HTMLElement {
   const container = document.createElement('container');
-  LitHtml.render(templateResult, container);  // eslint-disable-line rulesdir/lit_html_host_this
+  Lit.render(templateResult, container);
   return container;
 }
 
 describeWithEnvironment('MarkdownView', () => {
   describe('tokenizer', () => {
     it('tokenizers links in single quotes', () => {
-      assert.deepStrictEqual(Marked.Marked.lexer('\'https://example.com\''), [
+      assert.deepEqual(Marked.Marked.lexer('\'https://example.com\''), [
         {
           raw: '\'https://example.com\'',
           text: '\'https://example.com\'',
@@ -93,15 +93,15 @@ describeWithEnvironment('MarkdownView', () => {
 
       const code = container.querySelector('code');
       assert.exists(code);
-      assert.deepStrictEqual(code.textContent, 'const foo = 42;');
+      assert.deepEqual(code.textContent, 'const foo = 42;');
     });
 
     it('renders childless text tokens as-is', () => {
       const container =
           renderTemplateResult(renderer.renderToken(getFakeToken({type: 'text', text: 'Simple text token'})));
 
-      assert.deepStrictEqual(container.childTextNodes().length, 1);
-      assert.deepStrictEqual(container.childTextNodes()[0].textContent, 'Simple text token');
+      assert.lengthOf(container.childTextNodes(), 1);
+      assert.deepEqual(container.childTextNodes()[0].textContent, 'Simple text token');
     });
 
     it('renders nested text tokens correctly', () => {
@@ -117,7 +117,7 @@ describeWithEnvironment('MarkdownView', () => {
       assert.notInclude(container.textContent, 'This text should not be rendered. Only the subtokens!');
       assert.include(container.textContent, 'Nested raw text');
       assert.exists(container.querySelector('code'));
-      assert.deepStrictEqual(container.querySelector('code')?.textContent, 'and a nested codespan to boot');
+      assert.deepEqual(container.querySelector('code')?.textContent, 'and a nested codespan to boot');
     });
 
     it('throws an error for invalid or unsupported token types', () => {
@@ -176,7 +176,7 @@ describeWithEnvironment('MarkdownView', () => {
       assert.isTrue(renderResult.includes('<em'));
     });
     it('sets custom classes on the token types', () => {
-      renderer.setCustomClasses({em: 'custom-class'});
+      renderer.addCustomClasses({em: 'custom-class'});
 
       const renderResult = renderer.renderToken(getFakeToken({type: 'em', text: 'em text'}));
       const container = renderTemplateResult(renderResult);
@@ -211,9 +211,11 @@ describeWithEnvironment('MarkdownView', () => {
           renderer.renderToken({type: 'image', text: 'learn more', href: 'https://example.com'} as Marked.Marked.Token);
       assert((result.values[0] as HTMLElement).tagName === 'X-LINK');
     });
-    it('renders headers as a strong element', () => {
-      const result = renderer.renderToken({type: 'heading', text: 'learn more'} as Marked.Marked.Token);
-      assert(result.strings.join('').includes('<strong>'));
+    it('renders headings as headings with the `insight` class', () => {
+      const renderResult = renderer.renderToken(getFakeToken({type: 'heading', text: 'a heading text', depth: 3}));
+      const container = renderTemplateResult(renderResult);
+      assert.isTrue(
+          container.querySelector('h3')?.classList.contains('insight'), 'Expected `insight`-class to be applied');
     });
     it('renders unsupported tokens', () => {
       const result = renderer.renderToken({type: 'html', raw: '<!DOCTYPE html>'} as Marked.Marked.Token);
@@ -298,12 +300,12 @@ ${paragraphText}
       assert.isNotNull(component.shadowRoot);
 
       const paragraphs = Array.from(component.shadowRoot.querySelectorAll('p'));
-      assert.strictEqual(paragraphs.length, 1);
+      assert.lengthOf(paragraphs, 1);
       assert.strictEqual(paragraphs[0].innerText, paragraphText);
 
       const listItems = Array.from(component.shadowRoot.querySelectorAll('li'));
-      assert.strictEqual(listItems.length, 2);
-      assert.deepStrictEqual(listItems.map(item => item.textContent), listItemTexts);
+      assert.lengthOf(listItems, 2);
+      assert.deepEqual(listItems.map(item => item.textContent), listItemTexts);
     });
 
     it('renders a codeblock', () => {
@@ -318,7 +320,7 @@ console.log('test')
     it('renders using a custom renderer', () => {
       const codeBlock =
           renderString('`console.log()`', 'code', new class extends MarkdownView.MarkdownView.MarkdownLitRenderer {
-            override templateForToken(token: Marked.Marked.Token): LitHtml.TemplateResult|null {
+            override templateForToken(token: Marked.Marked.Token): Lit.TemplateResult|null {
               if (token.type === 'codespan') {
                 return html`<code>overriden</code>`;
               }

@@ -16,22 +16,22 @@ Sergio is a long term contributor working primarily on CSS Grid Layout.
 
 Updates since last meeting (on Monday, June 8th):
 
-Scrolling (skobes, szager) \[[crbug.com/417782](http://crbug.com/417782)\]
+Scrolling (skobes, szager) \[[crbug.com/417782](https://crbug.com/417782)\]
 
 - Fixed hit testing by making the LayoutView absolute-positioned.
 
 (skobes) \[crbug.com/495856\]
 
 - working on HitTestRequest::IgnoreClipping
-\[[crbug.com/499053](http://crbug.com/499053)\]
+\[[crbug.com/499053](https://crbug.com/499053)\]
 
 and the zoomed-out viewport issue.
 
-CSS Flexbox (cbiesinger) \[[crbug.com/426898](http://crbug.com/426898)\]
+CSS Flexbox (cbiesinger) \[[crbug.com/426898](https://crbug.com/426898)\]
 
 - Continuing to update to match spec, progress according to plan.
 
-CSS Grid Layout (svillar) \[[crbug.com/79180](http://crbug.com/79180)\]
+CSS Grid Layout (svillar) \[[crbug.com/79180](https://crbug.com/79180)\]
 
 - Fixed a regression caused by the recent migration from parenthesis
 
@@ -44,13 +44,13 @@ to brackets.
 further work.
 
 Region-based multi-column support (mstensho)
-\[[crbug.com/334335](http://crbug.com/334335)\]
+\[[crbug.com/334335](https://crbug.com/334335)\]
 
 - Fixing multicol fuzzers. Looks like the fuzzer storm has finally
 
 calmed down this week.
 
-Isolate core/fetch (japhet) \[[crbug.com/458222](http://crbug.com/458222)\]
+Isolate core/fetch (japhet) \[[crbug.com/458222](https://crbug.com/458222)\]
 
 - Improved API between core/fetch and the rest of core.
 

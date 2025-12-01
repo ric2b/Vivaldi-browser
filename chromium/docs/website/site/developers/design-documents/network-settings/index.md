@@ -82,16 +82,16 @@ semi-colon-separated list of hosts. This flag must be used (or rather, only has
 an effect) in tandem with --proxy-server.
 
 Note that trailing-domain matching doesn't require "." separators so
-"\*[google.com](http://google.com/)" will match
+"\*[google.com](https://google.com/)" will match
 "[igoogle.com](http://igoogle.com/)" for example.
 
 For example,
 
 --proxy-server="foopy:8080"
---proxy-bypass-list="\*.[google.com](http://google.com/);\*[foo.com](http://foo.com/);[127.0.0.1:8080](http://127.0.0.1:8080/)"
+--proxy-bypass-list="\*.[google.com](https://google.com/);\*[foo.com](http://foo.com/);[127.0.0.1:8080](http://127.0.0.1:8080/)"
 
 will use the proxy server "foopy" on port 8080 for all hosts except those
-pointing to \*.[google.com](http://google.com/), those pointing to
+pointing to \*.[google.com](https://google.com/), those pointing to
 \*[foo.com](http://foo.com/) and those pointing to localhost on port 8080.
 
 [igoogle.com](http://igoogle.com/) requests would still be proxied.

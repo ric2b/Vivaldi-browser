@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 import * as Common from '../../core/common/common.js';
-import type * as Platform from '../../core/platform/platform.js';
+import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import type * as Protocol from '../../generated/protocol.js';
 import {getCleanTextContentFromElements} from '../../testing/DOMHelpers.js';
@@ -12,6 +12,8 @@ import {describeWithMockConnection} from '../../testing/MockConnection.js';
 import * as UI from '../../ui/legacy/legacy.js';
 
 import * as Application from './application.js';
+
+const {urlString} = Platform.DevToolsPath;
 
 describeWithMockConnection('AppManifestView', () => {
   const FIXTURES_96X96_URL = `${new URL('./fixtures/96x96.png', import.meta.url)}`;
@@ -28,7 +30,7 @@ describeWithMockConnection('AppManifestView', () => {
     const tabTarget = createTarget({type: SDK.Target.Type.TAB});
     createTarget({parentTarget: tabTarget, subtype: 'prerender'});
     target = createTarget({parentTarget: tabTarget});
-    emptyView = new UI.EmptyWidget.EmptyWidget('');
+    emptyView = new UI.EmptyWidget.EmptyWidget('', '');
     reportView = new UI.ReportView.ReportView('');
     throttler = new Common.Throttler.Throttler(0);
   });
@@ -41,7 +43,7 @@ describeWithMockConnection('AppManifestView', () => {
     const resourceTreeModel = target.model(SDK.ResourceTreeModel.ResourceTreeModel);
     assert.exists(resourceTreeModel);
 
-    const URL = 'http://example.com' as Platform.DevToolsPath.UrlString;
+    const URL = urlString`http://example.com`;
     const fetchAppManifest = sinon.stub(resourceTreeModel, 'fetchAppManifest');
     fetchAppManifest.onCall(0).resolves({url: URL, data: null, errors: []});
     fetchAppManifest.onCall(1).resolves({url: URL, data: '{}', errors: []});
@@ -78,7 +80,7 @@ describeWithMockConnection('AppManifestView', () => {
     const resourceTreeModel = target.model(SDK.ResourceTreeModel.ResourceTreeModel);
     assert.exists(resourceTreeModel);
 
-    const URL = 'https://www.example.com' as Platform.DevToolsPath.UrlString;
+    const URL = urlString`https://www.example.com`;
     const fetchAppManifest = sinon.stub(resourceTreeModel, 'fetchAppManifest');
     fetchAppManifest.resolves({url: URL, data: '{"display_override": ["window-controls-overlay"]}', errors: []});
 
@@ -108,21 +110,21 @@ describeWithMockConnection('AppManifestView', () => {
       height: 512,
       formatted: '512×512px',
     } as Application.AppManifestView.ParsedSize];
-    assert.deepStrictEqual(parsed, expected);
+    assert.deepEqual(parsed, expected);
   });
 
   it('can handle missing ‘sizes’-field', async () => {
     view = new Application.AppManifestView.AppManifestView(emptyView, reportView, throttler);
     const parsed = view.parseSizes(
         undefined as unknown as string, 'Icon' as Platform.UIString.LocalizedString, 'https://web.dev/image.html', []);
-    assert.deepStrictEqual(parsed, []);
+    assert.deepEqual(parsed, []);
   });
 
   async function renderWithWarnings(manifest: string): Promise<string[]> {
     const resourceTreeModel = target.model(SDK.ResourceTreeModel.ResourceTreeModel);
     assert.exists(resourceTreeModel);
 
-    const URL = window.location.origin as Platform.DevToolsPath.UrlString;
+    const URL = urlString`${window.location.origin}`;
     const fetchAppManifest = sinon.stub(resourceTreeModel, 'fetchAppManifest');
     fetchAppManifest.resolves({url: URL, data: manifest, errors: []});
 
@@ -181,7 +183,7 @@ describeWithMockConnection('AppManifestView', () => {
       'Richer PWA Install UI won’t be available on mobile. Please add at least one screenshot for which form_factor is not set or set to a value other than wide.',
       'Most operating systems require square icons. Please include at least one square icon in the array.',
     ];
-    assert.deepStrictEqual(actual, expected);
+    assert.deepEqual(actual, expected);
   });
 
   it('displays warnings for too many mobile screenshots', async () => {
@@ -224,7 +226,7 @@ describeWithMockConnection('AppManifestView', () => {
       'No more than 5 screenshots will be displayed on mobile. The rest will be ignored.',
       'Most operating systems require square icons. Please include at least one square icon in the array.',
     ];
-    assert.deepStrictEqual(actual, expected);
+    assert.deepEqual(actual, expected);
   });
 
   it('displays warnings for too many desktop screenshots and wrong aspect ratio', async () => {
@@ -292,7 +294,7 @@ describeWithMockConnection('AppManifestView', () => {
       'No more than 8 screenshots will be displayed on desktop. The rest will be ignored.',
       'Most operating systems require square icons. Please include at least one square icon in the array.',
     ];
-    assert.deepStrictEqual(actual, expected);
+    assert.deepEqual(actual, expected);
   });
 
   it('displays "form-factor", "platform" and "label" properties for screenshots', async () => {
@@ -312,10 +314,10 @@ describeWithMockConnection('AppManifestView', () => {
     const screenshotSection =
         reportView.element.shadowRoot?.querySelectorAll<HTMLDivElement>('.report-section')[7] || null;
     assert.instanceOf(screenshotSection, HTMLDivElement);
-    assert.deepStrictEqual(
+    assert.deepEqual(
         getCleanTextContentFromElements(screenshotSection, '.report-field-name').slice(0, 3),
         ['Form factor', 'Label', 'Platform']);
-    assert.deepStrictEqual(
+    assert.deepEqual(
         getCleanTextContentFromElements(screenshotSection, '.report-field-value').slice(0, 3),
         ['wide', 'Dummy Screenshot', 'windows']);
   });

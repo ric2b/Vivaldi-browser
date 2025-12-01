@@ -19,6 +19,7 @@
 #include "chrome/browser/ui/intent_picker_tab_helper.h"
 #include "chrome/browser/ui/web_applications/web_app_dialog_utils.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
+#include "chrome/browser/web_applications/proto/web_app_install_state.pb.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_install_manager.h"
 #include "chrome/browser/web_applications/web_app_install_manager_observer.h"
@@ -106,7 +107,6 @@ InstallableParams
 AppBannerManagerDesktop::ParamsToPerformInstallableWebAppCheck() {
   InstallableParams params;
   params.valid_primary_icon = true;
-  params.fetch_screenshots = true;
   params.installable_criteria = InstallableCriteria::kValidManifestWithIcons;
   return params;
 }
@@ -223,14 +223,13 @@ void AppBannerManagerDesktop::OnWebAppInstalledWithOsHooks(
   if (!validated_url()) {
     return;
   }
-  std::optional<webapps::AppId> app_id =
-      registrar().FindAppWithUrlInScope(validated_url().value());
-  if (app_id.has_value() && *app_id == installed_app_id &&
-      registrar().GetAppUserDisplayMode(*app_id) ==
-          web_app::mojom::UserDisplayMode::kStandalone) {
-    OnInstall(registrar().GetEffectiveDisplayModeFromManifest(*app_id),
-              /*set_current_web_app_not_installable=*/true);
+  std::optional<webapps::AppId> app_id = registrar().FindBestAppWithUrlInScope(
+      validated_url().value(), web_app::WebAppFilter::OpensInDedicatedWindow());
+  if (installed_app_id != app_id) {
+    return;
   }
+  OnInstall(registrar().GetEffectiveDisplayModeFromManifest(*app_id),
+            /*set_current_web_app_not_installable=*/true);
 }
 
 void AppBannerManagerDesktop::OnWebAppWillBeUninstalled(

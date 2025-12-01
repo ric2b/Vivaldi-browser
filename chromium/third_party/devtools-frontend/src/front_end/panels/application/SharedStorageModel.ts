@@ -4,8 +4,8 @@
 
 import * as Common from '../../core/common/common.js';
 import * as SDK from '../../core/sdk/sdk.js';
-import * as Protocol from '../../generated/protocol.js';
 import type * as ProtocolProxyApi from '../../generated/protocol-proxy-api.js';
+import * as Protocol from '../../generated/protocol.js';
 
 export class SharedStorageForOrigin extends Common.ObjectWrapper.ObjectWrapper<SharedStorageForOrigin.EventTypes> {
   readonly #model: SharedStorageModel;
@@ -61,9 +61,9 @@ export namespace SharedStorageForOrigin {
     params: Protocol.Storage.SharedStorageAccessParams;
   }
 
-  export type EventTypes = {
-    [Events.SHARED_STORAGE_CHANGED]: SharedStorageChangedEvent,
-  };
+  export interface EventTypes {
+    [Events.SHARED_STORAGE_CHANGED]: SharedStorageChangedEvent;
+  }
 }
 
 export class SharedStorageModel extends SDK.SDKModel.SDKModel<EventTypes> implements
@@ -250,8 +250,8 @@ export const enum Events {
   SHARED_STORAGE_REMOVED = 'SharedStorageRemoved',
 }
 
-export type EventTypes = {
-  [Events.SHARED_STORAGE_ACCESS]: Protocol.Storage.SharedStorageAccessedEvent,
-  [Events.SHARED_STORAGE_ADDED]: SharedStorageForOrigin,
-  [Events.SHARED_STORAGE_REMOVED]: SharedStorageForOrigin,
-};
+export interface EventTypes {
+  [Events.SHARED_STORAGE_ACCESS]: Protocol.Storage.SharedStorageAccessedEvent;
+  [Events.SHARED_STORAGE_ADDED]: SharedStorageForOrigin;
+  [Events.SHARED_STORAGE_REMOVED]: SharedStorageForOrigin;
+}

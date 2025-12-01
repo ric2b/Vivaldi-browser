@@ -42,6 +42,18 @@ EIGEN_STRONG_INLINE EIGEN_DEVICE_FUNC Packet pfrexp_generic_get_biased_exponent(
 template <typename Packet>
 EIGEN_STRONG_INLINE EIGEN_DEVICE_FUNC Packet pldexp_generic(const Packet& a, const Packet& exponent);
 
+// Explicitly multiplies
+//    a * (2^e)
+// clamping e to the range
+// [NumTraits<Scalar>::min_exponent()-2, NumTraits<Scalar>::max_exponent()]
+//
+// This is approx 7x faster than pldexp_impl, but will prematurely over/underflow
+// if 2^e doesn't fit into a normal floating-point Scalar.
+//
+// Assumes IEEE floating point format
+template <typename Packet>
+EIGEN_STRONG_INLINE EIGEN_DEVICE_FUNC Packet pldexp_fast(const Packet& a, const Packet& exponent);
+
 /** \internal \returns log(x) for single precision float */
 template <typename Packet>
 EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet plog_float(const Packet _x);
@@ -60,15 +72,19 @@ EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet plog2_double(const Pa
 
 /** \internal \returns log(1 + x) */
 template <typename Packet>
-Packet generic_plog1p(const Packet& x);
+EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet generic_log1p(const Packet& x);
 
 /** \internal \returns exp(x)-1 */
 template <typename Packet>
-Packet generic_expm1(const Packet& x);
+EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet generic_expm1(const Packet& x);
 
 /** \internal \returns atan(x) */
 template <typename Packet>
-EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet generic_patan(const Packet& x);
+EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet generic_atan(const Packet& x);
+
+/** \internal \returns exp2(x) */
+template <typename Packet>
+EIGEN_DEFINE_FUNCTION_ALLOWING_MULTIPLE_DEFINITIONS Packet generic_exp2(const Packet& x);
 
 /** \internal \returns exp(x) for single precision float */
 template <typename Packet>
@@ -159,44 +175,41 @@ EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Packet generic_round(const Packet& a);
     return p##METHOD##_##SCALAR(_x);                                                              \
   }
 
+// Macros for instantiating these generic functions for different backends.
+#define EIGEN_GENERIC_PACKET_FUNCTION(METHOD, PACKET)                                             \
+  template <>                                                                                     \
+  EIGEN_STRONG_INLINE EIGEN_DEVICE_FUNC EIGEN_UNUSED PACKET p##METHOD<PACKET>(const PACKET& _x) { \
+    return generic_##METHOD(_x);                                                                  \
+  }
+
 #define EIGEN_FLOAT_PACKET_FUNCTION(METHOD, PACKET) EIGEN_PACKET_FUNCTION(METHOD, float, PACKET)
 #define EIGEN_DOUBLE_PACKET_FUNCTION(METHOD, PACKET) EIGEN_PACKET_FUNCTION(METHOD, double, PACKET)
 
-#define EIGEN_INSTANTIATE_GENERIC_MATH_FUNCS_FLOAT(PACKET)                                     \
-  EIGEN_FLOAT_PACKET_FUNCTION(sin, PACKET)                                                     \
-  EIGEN_FLOAT_PACKET_FUNCTION(cos, PACKET)                                                     \
-  EIGEN_FLOAT_PACKET_FUNCTION(asin, PACKET)                                                    \
-  EIGEN_FLOAT_PACKET_FUNCTION(acos, PACKET)                                                    \
-  EIGEN_FLOAT_PACKET_FUNCTION(tanh, PACKET)                                                    \
-  EIGEN_FLOAT_PACKET_FUNCTION(atanh, PACKET)                                                   \
-  EIGEN_FLOAT_PACKET_FUNCTION(log, PACKET)                                                     \
-  EIGEN_FLOAT_PACKET_FUNCTION(log2, PACKET)                                                    \
-  EIGEN_FLOAT_PACKET_FUNCTION(exp, PACKET)                                                     \
-  template <>                                                                                  \
-  EIGEN_STRONG_INLINE EIGEN_DEVICE_FUNC EIGEN_UNUSED PACKET pexpm1<PACKET>(const PACKET& _x) { \
-    return generic_expm1(_x);                                                                  \
-  }                                                                                            \
-  template <>                                                                                  \
-  EIGEN_STRONG_INLINE EIGEN_DEVICE_FUNC EIGEN_UNUSED PACKET plog1p<PACKET>(const PACKET& _x) { \
-    return generic_plog1p(_x);                                                                 \
-  }                                                                                            \
-  template <>                                                                                  \
-  EIGEN_STRONG_INLINE EIGEN_DEVICE_FUNC EIGEN_UNUSED PACKET patan<PACKET>(const PACKET& _x) {  \
-    return generic_patan(_x);                                                                  \
-  }
+#define EIGEN_INSTANTIATE_GENERIC_MATH_FUNCS_FLOAT(PACKET) \
+  EIGEN_FLOAT_PACKET_FUNCTION(sin, PACKET)                 \
+  EIGEN_FLOAT_PACKET_FUNCTION(cos, PACKET)                 \
+  EIGEN_FLOAT_PACKET_FUNCTION(asin, PACKET)                \
+  EIGEN_FLOAT_PACKET_FUNCTION(acos, PACKET)                \
+  EIGEN_FLOAT_PACKET_FUNCTION(tanh, PACKET)                \
+  EIGEN_FLOAT_PACKET_FUNCTION(atanh, PACKET)               \
+  EIGEN_FLOAT_PACKET_FUNCTION(log, PACKET)                 \
+  EIGEN_FLOAT_PACKET_FUNCTION(log2, PACKET)                \
+  EIGEN_FLOAT_PACKET_FUNCTION(exp, PACKET)                 \
+  EIGEN_GENERIC_PACKET_FUNCTION(expm1, PACKET)             \
+  EIGEN_GENERIC_PACKET_FUNCTION(exp2, PACKET)              \
+  EIGEN_GENERIC_PACKET_FUNCTION(log1p, PACKET)             \
+  EIGEN_GENERIC_PACKET_FUNCTION(atan, PACKET)
 
-#define EIGEN_INSTANTIATE_GENERIC_MATH_FUNCS_DOUBLE(PACKET)                                   \
-  EIGEN_DOUBLE_PACKET_FUNCTION(atanh, PACKET)                                                 \
-  EIGEN_DOUBLE_PACKET_FUNCTION(log, PACKET)                                                   \
-  EIGEN_DOUBLE_PACKET_FUNCTION(sin, PACKET)                                                   \
-  EIGEN_DOUBLE_PACKET_FUNCTION(cos, PACKET)                                                   \
-  EIGEN_DOUBLE_PACKET_FUNCTION(log2, PACKET)                                                  \
-  EIGEN_DOUBLE_PACKET_FUNCTION(exp, PACKET)                                                   \
-  EIGEN_DOUBLE_PACKET_FUNCTION(tanh, PACKET)                                                  \
-  template <>                                                                                 \
-  EIGEN_STRONG_INLINE EIGEN_DEVICE_FUNC EIGEN_UNUSED PACKET patan<PACKET>(const PACKET& _x) { \
-    return generic_patan(_x);                                                                 \
-  }
+#define EIGEN_INSTANTIATE_GENERIC_MATH_FUNCS_DOUBLE(PACKET) \
+  EIGEN_DOUBLE_PACKET_FUNCTION(atanh, PACKET)               \
+  EIGEN_DOUBLE_PACKET_FUNCTION(log, PACKET)                 \
+  EIGEN_DOUBLE_PACKET_FUNCTION(sin, PACKET)                 \
+  EIGEN_DOUBLE_PACKET_FUNCTION(cos, PACKET)                 \
+  EIGEN_DOUBLE_PACKET_FUNCTION(log2, PACKET)                \
+  EIGEN_DOUBLE_PACKET_FUNCTION(exp, PACKET)                 \
+  EIGEN_DOUBLE_PACKET_FUNCTION(tanh, PACKET)                \
+  EIGEN_GENERIC_PACKET_FUNCTION(atan, PACKET)               \
+  EIGEN_GENERIC_PACKET_FUNCTION(exp2, PACKET)
 
 }  // end namespace internal
 }  // end namespace Eigen

@@ -88,7 +88,10 @@ class FramebufferVk : public FramebufferImpl
     angle::Result getSamplePosition(const gl::Context *context,
                                     size_t index,
                                     GLfloat *xy) const override;
-    RenderTargetVk *getDepthStencilRenderTarget() const;
+    RenderTargetVk *getDepthStencilRenderTarget() const
+    {
+        return mRenderTargetCache.getDepthStencil();
+    }
 
     // Internal helper function for readPixels operations.
     angle::Result readPixelsImpl(ContextVk *contextVk,
@@ -99,7 +102,13 @@ class FramebufferVk : public FramebufferImpl
                                  void *pixels);
 
     gl::Extents getReadImageExtents() const;
-    gl::Rectangle getNonRotatedCompleteRenderArea() const;
+    // Return the framebuffer's non-rotated render area.  This is a gl::Rectangle that is based on
+    // the dimensions of the framebuffer, IS NOT rotated, and IS NOT y-flipped
+    gl::Rectangle getNonRotatedCompleteRenderArea() const
+    {
+        const gl::Box &dimensions = mState.getDimensions();
+        return gl::Rectangle(0, 0, dimensions.width, dimensions.height);
+    }
     gl::Rectangle getRotatedCompleteRenderArea(ContextVk *contextVk) const;
     gl::Rectangle getRotatedScissoredRenderArea(ContextVk *contextVk) const;
     // Returns render area with deferred clears in consideration. When deferred clear is used
@@ -123,7 +132,10 @@ class FramebufferVk : public FramebufferImpl
     angle::Result getFramebuffer(ContextVk *contextVk, vk::RenderPassFramebuffer *framebufferOut);
 
     bool hasDeferredClears() const { return !mDeferredClears.empty(); }
-    angle::Result flushDeferredClears(ContextVk *contextVk);
+    bool hasDeferredDepthClear() const { return mDeferredClears.testDepth(); }
+    bool hasDeferredStencilClear() const { return mDeferredClears.testStencil(); }
+    angle::Result flushDepthStencilDeferredClear(ContextVk *contextVk,
+                                                 VkImageAspectFlagBits aspect);
 
     void switchToColorFramebufferFetchMode(ContextVk *contextVk, bool hasColorFramebufferFetch);
 
@@ -176,7 +188,7 @@ class FramebufferVk : public FramebufferImpl
     // sparse to be placed in |RenderPassFramebuffer|, but the calling function will have to pack
     // them to match the render buffers before creating a framebuffer.
     angle::Result getAttachmentsAndRenderTargets(
-        vk::Context *context,
+        vk::ErrorContext *context,
         vk::FramebufferAttachmentsVector<VkImageView> *unpackedAttachments,
         vk::FramebufferAttachmentsVector<RenderTargetInfo> *packedRenderTargetsInfoOut);
 
@@ -240,6 +252,7 @@ class FramebufferVk : public FramebufferImpl
     void restageDeferredClears(ContextVk *contextVk);
     void restageDeferredClearsForReadFramebuffer(ContextVk *contextVk);
     void restageDeferredClearsImpl(ContextVk *contextVk);
+    angle::Result flushDeferredClears(ContextVk *contextVk);
     void clearWithCommand(ContextVk *contextVk,
                           const gl::Rectangle &scissoredRenderArea,
                           ClearWithCommand behavior,

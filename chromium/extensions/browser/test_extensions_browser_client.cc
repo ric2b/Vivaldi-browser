@@ -126,6 +126,11 @@ bool TestExtensionsBrowserClient::AreExtensionsDisabledForContext(
 }
 
 #if BUILDFLAG(IS_CHROMEOS)
+bool TestExtensionsBrowserClient::IsActiveContext(
+    content::BrowserContext* browser_context) const {
+  return true;
+}
+
 std::string TestExtensionsBrowserClient::GetUserIdHashFromContext(
     content::BrowserContext* context) {
   if (context != main_context_ || !ash::LoginState::IsInitialized()) {
@@ -303,11 +308,6 @@ TestExtensionsBrowserClient::CreateUpdateClient(
   return update_client_factory_.is_null()
              ? nullptr
              : base::WrapRefCounted(update_client_factory_.Run());
-}
-
-bool TestExtensionsBrowserClient::IsLockScreenContext(
-    content::BrowserContext* context) {
-  return lock_screen_context_ && context == lock_screen_context_;
 }
 
 std::string TestExtensionsBrowserClient::GetApplicationLocale() {

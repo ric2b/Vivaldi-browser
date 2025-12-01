@@ -13,12 +13,12 @@ public:
 private:
 
   // A map of terms and the nodes containing those terms in their nickname
-  Index nickname_index_;
+  TitledUrlIndex::Index nickname_index_;
 
   // For each node, calls `MatchNicknameNodeWithQuery()` and returns the
   // aggregated `TitledUrlMatch`s.
   std::vector<TitledUrlMatch> MatchNicknameNodesWithQuery(
-      const TitledUrlNodes& nodes,
+      const TitledUrlIndex::NodeVector& nodes,
       const query_parser::QueryNodeVector& query_nodes,
       const std::vector<std::u16string>& query_terms,
       size_t max_count);
@@ -35,5 +35,5 @@ private:
                               const TitledUrlNode* node);
 
 
-  TitledUrlNodeSet RetrieveNicknameNodesMatchingAnyTerms(
+  TitledUrlIndex::FlatNodeSet RetrieveNicknameNodesMatchingAnyTerms(
       const std::vector<std::u16string>& terms) const;

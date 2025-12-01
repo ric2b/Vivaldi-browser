@@ -405,7 +405,7 @@ multiple receivers introduces additional variance and additional considerations
 for how feedback utilization signals are generated and used.
 
 Research and work on this issue is being tracked
-[here](http://crbug.com/516190).
+[here](https://crbug.com/516190).
 
 Compositor self-throttling
 
@@ -421,7 +421,7 @@ the point where the rendering frame rate would raise again and match that of the
 source content.
 
 Research and work on this issue is being tracked
-[here](http://crbug.com/517714).
+[here](https://crbug.com/517714).
 
 # Status
 

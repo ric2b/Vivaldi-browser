@@ -37,7 +37,7 @@ class UrlUtils {
       urlb.hash = '';
 
       return urla.href === urlb.href;
-    } catch (e) {
+    } catch {
       return false;
     }
   }
@@ -70,11 +70,11 @@ interface RTTEstimateOptions {
   useHeadersEndEstimates?: boolean;
 }
 
-type RequestInfo = {
-  request: Lantern.NetworkRequest,
-  timing: Lantern.ResourceTiming,
-  connectionReused?: boolean,
-};
+interface RequestInfo {
+  request: Lantern.NetworkRequest;
+  timing: Lantern.ResourceTiming;
+  connectionReused?: boolean;
+}
 
 const INITIAL_CWD = 14 * 1024;
 
@@ -408,7 +408,6 @@ class NetworkAnalyzer {
     for (const [origin, originRequests] of groupedByOrigin.entries()) {
       const originEstimates: number[] = [];
 
-      // eslint-disable-next-line no-inner-declarations
       function collectEstimates(estimator: (e: RequestInfo) => number[] | number | undefined, multiplier = 1): void {
         for (const request of originRequests) {
           const timing = request.timing;
@@ -598,7 +597,7 @@ class NetworkAnalyzer {
   static findLastDocumentForUrl<T extends Lantern.NetworkRequest>(records: Array<T>, resourceUrl: string): T|undefined {
     // equalWithExcludedFragments is expensive, so check that the resourceUrl starts with the request url first
     const matchingRequests = records.filter(
-        request => request.resourceType === 'Document' &&
+        request => request.resourceType === 'Document' && !request.failed &&
             // Note: `request.url` should never have a fragment, else this optimization gives wrong results.
             resourceUrl.startsWith(request.url) && UrlUtils.equalWithExcludedFragments(request.url, resourceUrl),
     );

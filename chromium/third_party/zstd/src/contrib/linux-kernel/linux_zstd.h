@@ -465,7 +465,7 @@ void zstd_register_sequence_producer(
  *
  * See zstd_lib.h.
  */
-typedef ZSTD_frameHeader zstd_frame_header;
+typedef ZSTD_FrameHeader zstd_frame_header;
 
 /**
  * zstd_get_frame_header() - extracts parameters from a zstd or skippable frame

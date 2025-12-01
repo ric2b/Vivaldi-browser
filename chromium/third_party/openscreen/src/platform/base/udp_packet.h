@@ -42,7 +42,7 @@ class UdpPacket : public std::vector<uint8_t> {
     destination_ = std::move(endpoint);
   }
 
-  static const size_type kUdpMaxPacketSize;
+  static constexpr size_type kUdpMaxPacketSize = 1 << 16;
 
  private:
   IPEndpoint source_ = {};

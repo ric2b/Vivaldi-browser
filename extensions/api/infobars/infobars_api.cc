@@ -10,8 +10,28 @@
 #include "extensions/tools/vivaldi_tools.h"
 #include "ui/vivaldi_ui_utils.h"
 #include "vivaldi/extensions/schema/infobars.h"
+#include "components/infobars/content/content_infobar_manager.h"
+#include "chrome/browser/ui/page_info/page_info_infobar_delegate.h"
 
 namespace extensions {
+
+ExtensionFunction::ResponseAction InfobarsShowInfobarFunction::Run() {
+  using vivaldi::infobars::ShowInfobar::Params;
+
+  std::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  int tab_id = params->tab_id;
+
+  std::string error;
+  content::WebContents* contents =
+      ::vivaldi::ui_tools::GetWebContentsFromTabStrip(tab_id, browser_context(),
+                                                      &error);
+	infobars::ContentInfoBarManager* infobar_manager =
+            infobars::ContentInfoBarManager::FromWebContents(contents);
+        PageInfoInfoBarDelegate::CreateForVivaldi(infobar_manager);
+  return RespondNow(NoArguments());
+}
 
 ExtensionFunction::ResponseAction InfobarsSendButtonActionFunction::Run() {
   using vivaldi::infobars::SendButtonAction::Params;

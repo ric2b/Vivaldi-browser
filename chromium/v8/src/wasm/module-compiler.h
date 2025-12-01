@@ -56,7 +56,7 @@ std::shared_ptr<NativeModule> CompileToNativeModule(
     Isolate* isolate, WasmEnabledFeatures enabled_features,
     WasmDetectedFeatures detected_features, CompileTimeImports compile_imports,
     ErrorThrower* thrower, std::shared_ptr<const WasmModule> module,
-    ModuleWireBytes wire_bytes, int compilation_id,
+    base::OwnedVector<const uint8_t> wire_bytes, int compilation_id,
     v8::metrics::Recorder::ContextId context_id, ProfileInformation* pgo_info);
 
 V8_EXPORT_PRIVATE WasmError ValidateAndSetBuiltinImports(
@@ -133,7 +133,7 @@ class AsyncCompileJob {
 
   Isolate* isolate() const { return isolate_; }
 
-  Handle<NativeContext> context() const { return native_context_; }
+  DirectHandle<NativeContext> context() const { return native_context_; }
   v8::metrics::Recorder::ContextId context_id() const { return context_id_; }
 
  private:

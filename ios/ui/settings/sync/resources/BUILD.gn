@@ -62,5 +62,10 @@ bundle_data_xcassets("sync_settings_assets") {
     # sync_tabs
     "SyncSettingsAssets.xcassets/sync_tabs.imageset/Contents.json",
     "SyncSettingsAssets.xcassets/sync_tabs.imageset/sync_tabs.pdf",
+
+    # sync_error
+    "SyncSettingsAssets.xcassets/sync_error.imageset/Contents.json",
+    "SyncSettingsAssets.xcassets/sync_error.imageset/sync_error.pdf",
+    "SyncSettingsAssets.xcassets/sync_error.imageset/sync_error_dark.pdf"
   ]
 }

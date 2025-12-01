@@ -59,12 +59,14 @@ constexpr APIPermissionInfo::InitInfo permissions_to_register[] = {
     {APIPermissionID::kWindowPrivate, "windowPrivate"},
     {APIPermissionID::kZoom, "zoom"},
     {APIPermissionID::kOmniboxPrivate, "omniboxPrivate"},
+    {APIPermissionID::kDirectMatch, "directMatch"},
+    {APIPermissionID::kProtonVPN, "protonvpn"},
 };
 
 }  // namespace
 
 base::span<const APIPermissionInfo::InitInfo> GetPermissionInfos() {
-  return base::make_span(permissions_to_register);
+  return base::span(permissions_to_register);
 }
 
 }  // namespace vivaldi_api_permissions

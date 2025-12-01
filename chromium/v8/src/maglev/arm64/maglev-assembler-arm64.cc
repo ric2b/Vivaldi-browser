@@ -91,14 +91,14 @@ void MaglevAssembler::OSRPrologue(Graph* graph) {
   static_assert(StandardFrameConstants::kFixedSlotCount % 2 == 1);
   if (source_frame_size % 2 == 0) source_frame_size++;
 
-  if (v8_flags.maglev_assert_stack_size && v8_flags.debug_code) {
+  if (V8_ENABLE_SANDBOX_BOOL || v8_flags.debug_code) {
     TemporaryRegisterScope temps(this);
     Register scratch = temps.AcquireScratch();
     Add(scratch, sp,
         source_frame_size * kSystemPointerSize +
             StandardFrameConstants::kFixedFrameSizeFromFp);
     Cmp(scratch, fp);
-    Assert(eq, AbortReason::kOsrUnexpectedStackSize);
+    SbxCheck(eq, AbortReason::kOsrUnexpectedStackSize);
   }
 
   uint32_t target_frame_size =
@@ -145,6 +145,7 @@ void MaglevAssembler::Prologue(Graph* graph) {
     BindCallTarget(code_gen_state()->entry_label());
   }
 
+#ifndef V8_ENABLE_LEAPTIERING
   // Tiering support.
   if (v8_flags.turbofan) {
     using D = MaglevOptimizeCodeOrTailCallOptimizedCodeSlotDescriptor;
@@ -164,6 +165,7 @@ void MaglevAssembler::Prologue(Graph* graph) {
     TailCallBuiltin(Builtin::kMaglevOptimizeCodeOrTailCallOptimizedCodeSlot,
                     needs_processing);
   }
+#endif  // !V8_ENABLE_LEAPTIERING
 
   EnterFrame(StackFrame::MAGLEV);
 

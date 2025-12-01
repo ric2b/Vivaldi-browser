@@ -376,6 +376,22 @@ struct functor_traits<scalar_exp_op<Scalar>> {
   };
 };
 
+template <typename Scalar>
+struct scalar_exp2_op {
+  EIGEN_DEVICE_FUNC inline const Scalar operator()(const Scalar& a) const { return internal::pexp2(a); }
+  template <typename Packet>
+  EIGEN_DEVICE_FUNC inline Packet packetOp(const Packet& a) const {
+    return internal::pexp2(a);
+  }
+};
+template <typename Scalar>
+struct functor_traits<scalar_exp2_op<Scalar>> {
+  enum {
+    PacketAccess = packet_traits<Scalar>::HasExp,
+    Cost = functor_traits<scalar_exp_op<Scalar>>::Cost  // TODO measure cost of exp2
+  };
+};
+
 /** \internal
  *
  * \brief Template functor to compute the exponential of a scalar - 1.
@@ -1276,7 +1292,7 @@ struct scalar_logistic_op<float> {
     p = pmadd(r2, p, p_low);
 
     // 4. Undo subtractive range reduction exp(m*ln(2) + r) = 2^m * exp(r).
-    Packet e = pldexp_fast_impl<Packet>::run(p, m);
+    Packet e = pldexp_fast(p, m);
 
     // 5. Undo multiplicative range reduction by using exp(r) = exp(r/2)^2.
     e = pmul(e, e);

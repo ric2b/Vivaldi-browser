@@ -404,7 +404,7 @@ These are our security principles:
 [sandboxing guide]: /chromium-os/developer-library/guides/development/sandboxing/
 [crbug.com]: https://crbug.com
 [chromeos-security@google.com]: mailto:chromeos-security@google.com
-[office hours]: https://goto.google.com/cros-security-office-hours
+[office hours]: http://go/cros-security-office-hours
 [chromiumdash]: https://chromiumdash.appspot.com/schedule
 [fuzzing documentation]: /chromium-os/developer-library/guides/testing/fuzzing/
 [BaseMessageLoop]: https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/libbrillo/brillo/message_loops/base_message_loop.h

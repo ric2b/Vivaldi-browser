@@ -47,7 +47,7 @@ title: April 2021 - New features, Testing, Stability fixes, Interop fixes, Metri
 
 <td><td><img alt="image" src="https://lh5.googleusercontent.com/uMKCYFltvvzDFGgiOR0YM4RJAxCcXs2v1-CB6NjDKik24WSMmQ4l7QENYqmVBrwJXK_iYU-twKbkwe3qdmxuN4EhiUlAe-VzEbf3XzIQzcjdQAr2dF9fcDasCv9NrbXsOkwxvFDgd_G3PkzWVhUZFLJZpKkocEsCzFemLRAPJXyMr6c4" height=156.15577889447238 width=160.92156862745097><img alt="image" src="https://lh4.googleusercontent.com/mApGNxMJzTxfJyspM3dC2hDD5PxZPI0IbHlJXiUBojIatvcvUKruCfZ1dUaHo9oClrZybovSobha5abys1xu7JcVsoLuqVEnryeXE8O97ERzAPzQj5q_c3hfyxODc3alzEnHI9fSq6QtvcViSgCPrt1au2FDar9Yqf6hjyU7G3S6khE-" height=102 width=158></td></td>
 
-<td><td>The second problem is missing repaint in a few cases, which is tracked in this <a href="http://crbug.com/1184832">bug</a>. During this sprint we have fixed most of them.</td></td>
+<td><td>The second problem is missing repaint in a few cases, which is tracked in this <a href="https://crbug.com/1184832">bug</a>. During this sprint we have fixed most of them.</td></td>
 
     <td><td>The first case is missing repaint when the background is transparent
     during the animation. It is fixed in this <a

@@ -10,9 +10,20 @@
 
 #include "base/files/file_path.h"
 #include "base/time/time.h"
+#include "base/uuid.h"
 #include "url/gurl.h"
 
 namespace adblock_filter {
+
+enum class PresetKind {
+  kAds = 0,
+  kTracking,
+  kPartners,
+  kOther,
+  kAnnoyances,
+  kCookieNotices,
+  kRegional,
+};
 
 struct AdBlockMetadata {
   AdBlockMetadata();
@@ -101,7 +112,8 @@ struct KnownRuleSource {
 
   RuleSourceCore core;
   bool removable = true;
-  std::string preset_id = "";
+  base::Uuid preset_id;
+  std::optional<PresetKind> preset_kind;
 };
 
 using KnownRuleSources = std::map<uint32_t, KnownRuleSource>;

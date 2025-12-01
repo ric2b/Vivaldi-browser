@@ -6,12 +6,18 @@
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/notes/markdown/markdown_toolbar_view.h"
 
+namespace {
+
+const CGFloat kShowToolbarThreshold = 200;
+
+} // namespace
+
 @interface MarkdownKeyboardViewProvider () <MarkdownToolbarViewDelegate> {
 }
 
 @property(nonatomic, strong) UIView* keyboard;
 @property(nonatomic, strong) MarkdownToolbarView* toolbar;
-@property(nonatomic, assign) BOOL keyboardIsVisible;
+@property(nonatomic, assign) BOOL showMarkdownToolbar;
 
 @end
 
@@ -19,7 +25,7 @@
 
 @synthesize keyboard = _keyboard;
 @synthesize toolbar = _toolbar;
-@synthesize keyboardIsVisible = _keyboardIsVisible;
+@synthesize showMarkdownToolbar = _showMarkdownToolbar;
 @synthesize showMarkdownKeyboard = _showMarkdownKeyboard;
 
 - (instancetype)initWithInputView:(UIView*)keyboard
@@ -30,7 +36,7 @@
     _keyboard = keyboard;
     _toolbar = toolbar;
     self.toolbar.markdownDelegate = self;
-    _keyboardIsVisible = NO;
+    _showMarkdownToolbar = NO;
     _showMarkdownKeyboard = NO;
 
     [[NSNotificationCenter defaultCenter]
@@ -77,7 +83,7 @@
 }
 
 - (UIView*)inputAccessoryView {
-  if ([VivaldiGlobalHelpers isDeviceTablet]) {
+  if ([VivaldiGlobalHelpers isDeviceTablet] || !self.showMarkdownToolbar) {
     return nil;
   }
   return self.toolbar;
@@ -102,6 +108,11 @@
       [[notification userInfo] valueForKey:UIKeyboardFrameEndUserInfoKey];
   CGRect frameEndRect = [FrameEnd CGRectValue];
 
+  if (frameEndRect.size.height < kShowToolbarThreshold) {
+    self.showMarkdownToolbar = NO;
+    return;
+  }
+
   if (frameEndRect.size.height > 0 &&
       self.keyboard.frame.size.height !=
           frameEndRect.size.height - self.toolbar.frame.size.height) {
@@ -110,16 +121,16 @@
                    frameEndRect.size.height - self.toolbar.frame.size.height);
   }
 
-  if (self.keyboardIsVisible)
+  if (self.showMarkdownToolbar)
     return;
-  self.keyboardIsVisible = YES;
+  self.showMarkdownToolbar = YES;
   [GetFirstResponder() reloadInputViews];
 }
 
 - (void)keyboardWillHide:(NSNotification*)notification {
-  if (!self.keyboardIsVisible)
+  if (!self.showMarkdownToolbar)
     return;
-  self.keyboardIsVisible = NO;
+  self.showMarkdownToolbar = NO;
   [GetFirstResponder() reloadInputViews];
 }
 

@@ -5,7 +5,10 @@
 #import "ios/chrome/browser/signin/model/device_accounts_provider_impl.h"
 
 #import "base/memory/raw_ptr.h"
+#import "base/scoped_observation.h"
 #import "base/strings/sys_string_conversions.h"
+#import "components/signin/public/identity_manager/ios/device_accounts_provider.h"
+#import "google_apis/gaia/gaia_id.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
@@ -15,13 +18,26 @@
 #import "ios/chrome/browser/signin/model/fake_system_identity_manager.h"
 #import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
 #import "ios/web/public/test/web_task_environment.h"
+#import "testing/gmock/include/gmock/gmock.h"
 #import "testing/platform_test.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
 #import "third_party/ocmock/gtest_support.h"
 
+using testing::Eq;
+using testing::Field;
+
 namespace {
+class MockObserver : public DeviceAccountsProvider::Observer {
+ public:
+  MOCK_METHOD(void, OnAccountsOnDeviceChanged, (), (override));
+  MOCK_METHOD(void,
+              OnAccountOnDeviceUpdated,
+              (const DeviceAccountsProvider::AccountInfo& device_account),
+              (override));
+};
+
 const char* const kClientID = "ClientID";
-}
+}  // namespace
 
 class DeviceAccountsProviderImplTest : public PlatformTest {
  public:
@@ -68,7 +84,7 @@ TEST_F(DeviceAccountsProviderImplTest, TestFetchWithUnknownIdentity) {
         run_loop->Quit();
       },
       &run_loop);
-  provider->GetAccessToken("UnknownGaiaID", kClientID, scopes,
+  provider->GetAccessToken(GaiaId("UnknownGaiaID"), kClientID, scopes,
                            std::move(callback));
   run_loop.Run();
 }
@@ -87,7 +103,36 @@ TEST_F(DeviceAccountsProviderImplTest, TestFetchWithFakeIdentity) {
         run_loop->Quit();
       },
       &run_loop);
-  std::string gaia_id = base::SysNSStringToUTF8(fake_identity.gaiaID);
+  GaiaId gaia_id(fake_identity.gaiaID);
   provider->GetAccessToken(gaia_id, kClientID, scopes, std::move(callback));
   run_loop.Run();
+}
+
+// Tests the observer is invoked.
+TEST_F(DeviceAccountsProviderImplTest, TestOnAccountsOnDeviceChanged) {
+  DeviceAccountsProviderImpl* provider = GetDeviceAccountsProviderImpl();
+  MockObserver observer;
+  base::ScopedObservation<DeviceAccountsProvider, MockObserver>
+      scoped_observation{&observer};
+  scoped_observation.Observe(provider);
+
+  EXPECT_CALL(observer, OnAccountsOnDeviceChanged());
+  fake_system_identity_manager_->FireSystemIdentityReloaded();
+}
+
+// Tests the observer is invoked.
+TEST_F(DeviceAccountsProviderImplTest, TestOnAccountOnDeviceUpdated) {
+  const FakeSystemIdentity* fake_identity = [FakeSystemIdentity fakeIdentity1];
+  fake_system_identity_manager_->AddIdentity(fake_identity);
+
+  DeviceAccountsProviderImpl* provider = GetDeviceAccountsProviderImpl();
+  MockObserver observer;
+  base::ScopedObservation<DeviceAccountsProvider, MockObserver>
+      scoped_observation{&observer};
+  scoped_observation.Observe(provider);
+
+  EXPECT_CALL(observer, OnAccountOnDeviceUpdated(
+                            Field(&DeviceAccountsProvider::AccountInfo::gaia,
+                                  Eq(GaiaId(fake_identity.gaiaID)))));
+  fake_system_identity_manager_->FireIdentityUpdatedNotification(fake_identity);
 }

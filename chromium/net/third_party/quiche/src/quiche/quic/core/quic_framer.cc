@@ -32,11 +32,11 @@
 #include "quiche/quic/core/crypto/crypto_protocol.h"
 #include "quiche/quic/core/crypto/crypto_utils.h"
 #include "quiche/quic/core/crypto/null_decrypter.h"
-#include "quiche/quic/core/crypto/null_encrypter.h"
 #include "quiche/quic/core/crypto/quic_decrypter.h"
 #include "quiche/quic/core/crypto/quic_encrypter.h"
 #include "quiche/quic/core/crypto/quic_random.h"
 #include "quiche/quic/core/frames/quic_ack_frequency_frame.h"
+#include "quiche/quic/core/frames/quic_immediate_ack_frame.h"
 #include "quiche/quic/core/frames/quic_reset_stream_at_frame.h"
 #include "quiche/quic/core/quic_connection_id.h"
 #include "quiche/quic/core/quic_constants.h"
@@ -56,7 +56,6 @@
 #include "quiche/quic/platform/api/quic_flags.h"
 #include "quiche/quic/platform/api/quic_ip_address_family.h"
 #include "quiche/quic/platform/api/quic_logging.h"
-#include "quiche/quic/platform/api/quic_stack_trace.h"
 #include "quiche/common/quiche_text_utils.h"
 #include "quiche/common/wire_serialization.h"
 
@@ -316,8 +315,8 @@ bool IsValidFullPacketNumber(uint64_t full_packet_number,
 }
 
 bool AppendIetfConnectionIds(bool version_flag, bool use_length_prefix,
-                             QuicConnectionId destination_connection_id,
-                             QuicConnectionId source_connection_id,
+                             const QuicConnectionId& destination_connection_id,
+                             const QuicConnectionId& source_connection_id,
                              QuicDataWriter* writer) {
   if (!version_flag) {
     return writer->WriteConnectionId(destination_connection_id);
@@ -693,6 +692,9 @@ size_t QuicFramer::GetRetransmittableControlFrameSize(
       return kQuicFrameTypeSize;
     case ACK_FREQUENCY_FRAME:
       return GetAckFrequencyFrameSize(*frame.ack_frequency_frame);
+    case IMMEDIATE_ACK_FRAME:
+      // IMMEDIATE_ACK has no payload.
+      return QuicDataWriter::GetVarInt62Len(IETF_IMMEDIATE_ACK);
     case RESET_STREAM_AT_FRAME:
       return GetResetStreamAtFrameSize(*frame.reset_stream_at_frame);
     case STREAM_FRAME:
@@ -1208,6 +1210,9 @@ size_t QuicFramer::AppendIetfFrames(const QuicFrames& frames,
               << "AppendAckFrequencyFrame failed: " << detailed_error();
           return 0;
         }
+        break;
+      case IMMEDIATE_ACK_FRAME:
+        // IMMEDIATE_ACK has no payload.
         break;
       case RESET_STREAM_AT_FRAME:
         QUIC_BUG_IF(reset_stream_at_appended_while_disabled,
@@ -3143,6 +3148,18 @@ bool QuicFramer::ProcessIetfFrameData(QuicDataReader* reader,
           }
           break;
         }
+        case IETF_IMMEDIATE_ACK: {
+          // IMMEDIATE_ACK has no payload.
+          QuicImmediateAckFrame frame;
+          QUIC_DVLOG(2) << ENDPOINT << "Processing IETF immediate ack frame "
+                        << frame;
+          if (!visitor_->OnImmediateAckFrame(frame)) {
+            QUIC_DVLOG(1) << "Visitor asked to stop further processing.";
+            // Returning true since there was no parsing error.
+            return true;
+          }
+          break;
+        }
         case IETF_RESET_STREAM_AT: {
           if (!process_reset_stream_at_) {
             set_detailed_error("RESET_STREAM_AT not enabled.");
@@ -4992,6 +5009,9 @@ bool QuicFramer::AppendIetfFrameType(const QuicFrame& frame,
     case ACK_FREQUENCY_FRAME:
       type_byte = IETF_ACK_FREQUENCY;
       break;
+    case IMMEDIATE_ACK_FRAME:
+      type_byte = IETF_IMMEDIATE_ACK;
+      break;
     case RESET_STREAM_AT_FRAME:
       type_byte = IETF_RESET_STREAM_AT;
       break;
@@ -5209,6 +5229,7 @@ bool QuicFramer::AppendCryptoFrame(const QuicCryptoFrame& frame,
     QUICHE_DCHECK_EQ(nullptr, frame.data_buffer);
     if (!data_producer_->WriteCryptoData(frame.level, frame.offset,
                                          frame.data_length, writer)) {
+      set_detailed_error("Writing frame data from producer failed.");
       return false;
     }
   }
@@ -6492,12 +6513,6 @@ QuicErrorCode QuicFramer::TryDecryptInitialPacketDispatcher(
   QUICHE_DCHECK(packet_number != nullptr);
   packet_number->reset();
 
-  // TODO(wub): Remove the version check once RFCv2 is supported by
-  // ParsePublicHeaderDispatcherShortHeaderLengthUnknown.
-  if (version != ParsedQuicVersion::RFCv1() &&
-      version != ParsedQuicVersion::Draft29()) {
-    return QUIC_NO_ERROR;
-  }
   if (packet.length() == 0 || format != IETF_QUIC_LONG_HEADER_PACKET ||
       !VersionHasIetfQuicFrames(version.transport_version) ||
       long_packet_type != INITIAL) {

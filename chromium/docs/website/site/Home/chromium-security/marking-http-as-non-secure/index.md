@@ -171,8 +171,8 @@ origins:
     Non-secure (broken HTTPS, HTTP).
 
 For more precise definitions of secure and non-secure, see [Requirements for
-Powerful Features](http://www.w3.org/TR/powerful-features/) and [Mixed
-Content](http://www.w3.org/TR/mixed-content/).
+Powerful Features](https://www.w3.org/TR/powerful-features/) and [Mixed
+Content](https://www.w3.org/TR/mixed-content/).
 
 We know that active tampering and surveillance attacks, as well as passive
 surveillance attacks, are not theoretical but are in fact commonplace on the
@@ -320,7 +320,7 @@ them have a good answer. Here is a brief selection.
     *   Hopefully, free/simple certificate setup will be able to help
                 people who had previously considered it inconvenient. Also note
                 that [localhost is considered
-                secure](http://www.chromium.org/Home/chromium-security/prefer-secure-origins-for-powerful-new-features),
+                secure](/Home/chromium-security/prefer-secure-origins-for-powerful-new-features),
                 even without HTTPS.
     *   As mentioned above, plain HTTP will continue to work.
 

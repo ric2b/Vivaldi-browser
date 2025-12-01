@@ -312,7 +312,7 @@ TIP: Read more about Lacros tast test porting at go/lacros-tast-porting.
 -   **"Verified" has to have +1 before the CL can be submitted** \
     You're allowed to set Verified +1 if you've verified the change. Reviewers
     generally treat Verified +1 as a signal that the change is ready for review.
-    ![Verified submit requirement](/chrome/chromeos/system_services_team/dev_instructions/g3doc/images/verified_submit_requirement.png){style="display:block;margin:auto;width:800px"}
+    ![Verified submit requirement](./verified_submit_requirement.png){style="display:block;margin:auto;width:800px"}
 
 ## Links
 

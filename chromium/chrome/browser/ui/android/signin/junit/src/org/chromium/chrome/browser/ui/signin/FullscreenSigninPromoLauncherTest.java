@@ -29,7 +29,6 @@ import org.mockito.junit.MockitoRule;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -57,8 +56,6 @@ import java.util.Set;
 public class FullscreenSigninPromoLauncherTest {
     private static final int CURRENT_MAJOR_VERSION = 42;
     @Rule public final MockitoRule mMockitoRule = MockitoJUnit.rule();
-
-    @Rule public final JniMocker mocker = new JniMocker();
 
     private final FakeAccountManagerFacade mFakeAccountManagerFacade =
             spy(new FakeAccountManagerFacade());
@@ -89,7 +86,7 @@ public class FullscreenSigninPromoLauncherTest {
 
     @Before
     public void setUp() {
-        mocker.mock(UserPrefsJni.TEST_HOOKS, mUserPrefsNativeMock);
+        UserPrefsJni.setInstanceForTesting(mUserPrefsNativeMock);
         IdentityServicesProvider.setInstanceForTests(mock(IdentityServicesProvider.class));
         when(IdentityServicesProvider.get().getIdentityManager(mProfile))
                 .thenReturn(mIdentityManagerMock);
@@ -250,10 +247,10 @@ public class FullscreenSigninPromoLauncherTest {
 
     @Test
     public void whenHasNewAccountShouldReturnTrue() {
-        mAccountManagerTestRule.addAccount(AccountManagerTestRule.AADC_ADULT_ACCOUNT);
+        mAccountManagerTestRule.addAccount(TestAccounts.AADC_ADULT_ACCOUNT);
         when(mIdentityManagerMock.findExtendedAccountInfoByEmailAddress(
-                        AccountManagerTestRule.AADC_ADULT_ACCOUNT.getEmail()))
-                .thenReturn(AccountManagerTestRule.AADC_ADULT_ACCOUNT);
+                        TestAccounts.AADC_ADULT_ACCOUNT.getEmail()))
+                .thenReturn(TestAccounts.AADC_ADULT_ACCOUNT);
         mAccountManagerTestRule.addAccount(TestAccounts.ACCOUNT2);
         mPrefManager.setSigninPromoLastShownVersion(40);
         mPrefManager.setSigninPromoLastAccountEmails(Set.of(TestAccounts.ACCOUNT1.getEmail()));
@@ -273,10 +270,10 @@ public class FullscreenSigninPromoLauncherTest {
     @Test
     public void whenHasNewAccountOnAutoShouldReturnFalse() {
         mAutomotiveContextWrapperTestRule.setIsAutomotive(true);
-        mAccountManagerTestRule.addAccount(AccountManagerTestRule.AADC_ADULT_ACCOUNT);
+        mAccountManagerTestRule.addAccount(TestAccounts.AADC_ADULT_ACCOUNT);
         when(mIdentityManagerMock.findExtendedAccountInfoByEmailAddress(
-                        AccountManagerTestRule.AADC_ADULT_ACCOUNT.getEmail()))
-                .thenReturn(AccountManagerTestRule.AADC_ADULT_ACCOUNT);
+                        TestAccounts.AADC_ADULT_ACCOUNT.getEmail()))
+                .thenReturn(TestAccounts.AADC_ADULT_ACCOUNT);
         mAccountManagerTestRule.addAccount(TestAccounts.ACCOUNT2);
         mPrefManager.setSigninPromoLastShownVersion(40);
         mPrefManager.setSigninPromoLastAccountEmails(Set.of(TestAccounts.ACCOUNT1.getEmail()));

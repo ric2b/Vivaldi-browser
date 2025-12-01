@@ -54,8 +54,8 @@
 #include "src/tint/lang/wgsl/program/program_builder.h"
 #include "src/tint/lang/wgsl/sem/struct.h"
 #include "src/tint/utils/containers/scope_stack.h"
-#include "src/tint/utils/generator/text_generator.h"
 #include "src/tint/utils/text/string_stream.h"
+#include "src/tint/utils/text_generator.h"
 
 namespace tint::sem {
 class BuiltinFn;
@@ -92,7 +92,8 @@ class ASTPrinter : public tint::TextGenerator {
   public:
     /// Constructor
     /// @param program the program to generate
-    explicit ASTPrinter(const Program& program);
+    /// @param options emission options
+    explicit ASTPrinter(const Program& program, const Options& options = {});
     ~ASTPrinter() override;
 
     /// @returns true on successful generation; false otherwise
@@ -373,6 +374,11 @@ class ASTPrinter : public tint::TextGenerator {
                               const ast::CallExpression* expr,
                               const sem::BuiltinFn* builtin);
 
+    /// If robustness is required, emits code to prevent the MSL compiler
+    /// from believing the loop is infinite.
+    /// Otherwise does nothing.
+    void IsolateUBIfNeeded();
+
     /// Lazily generates the TINT_ISOLATE_UB macro, and returns a call to
     /// the macro, passing in a unique identifier. The call tricks the MSL
     /// compiler into thinking it might execute a `break`, but otherwise
@@ -430,6 +436,7 @@ class ASTPrinter : public tint::TextGenerator {
     }
 
     ProgramBuilder builder_;
+    Options options_;
 
     TextBuffer helpers_;  // Helper functions emitted at the top of the output
 

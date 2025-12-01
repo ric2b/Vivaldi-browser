@@ -19,6 +19,7 @@
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/mojo/mojo_binding_context.h"
 #include "ui/gfx/gpu_fence.h"
+#include "ui/gfx/gpu_memory_buffer.h"
 
 namespace blink {
 
@@ -133,11 +134,10 @@ void XRFrameTransport::FrameSubmitMissingWebGPU(
     auto context_provider_weak_ptr =
         dawn_control_client->GetContextProviderWeakPtr();
     if (context_provider_weak_ptr) {
-      WebGraphicsContext3DProvider* context_provider =
+      WebGraphicsContext3DProvider& context_provider =
           context_provider_weak_ptr->ContextProvider();
 
-      gpu::webgpu::WebGPUInterface* webgpu =
-          context_provider->WebGPUInterface();
+      gpu::webgpu::WebGPUInterface* webgpu = context_provider.WebGPUInterface();
       TRACE_EVENT0("gpu", "GenSyncTokenCHROMIUM");
       webgpu->GenSyncTokenCHROMIUM(sync_token.GetData());
     }
@@ -189,7 +189,8 @@ bool XRFrameTransport::FrameSubmit(
     // passed over IPC.
     vr_presentation_provider->SubmitFrameWithTextureHandle(
         vr_frame_id,
-        mojo::PlatformHandle(std::move(gpu_memory_buffer_handle.dxgi_handle)),
+        mojo::PlatformHandle(
+            gpu_memory_buffer_handle.dxgi_handle().TakeBufferHandle()),
         sync_token);
 #else
     NOTIMPLEMENTED();
@@ -276,11 +277,10 @@ bool XRFrameTransport::FrameSubmitWebGPU(
         return false;
       }
 
-      WebGraphicsContext3DProvider* context_provider =
+      WebGraphicsContext3DProvider& context_provider =
           context_provider_weak_ptr->ContextProvider();
 
-      gpu::webgpu::WebGPUInterface* webgpu =
-          context_provider->WebGPUInterface();
+      gpu::webgpu::WebGPUInterface* webgpu = context_provider.WebGPUInterface();
       TRACE_EVENT0("gpu", "GenSyncTokenCHROMIUM");
       webgpu->GenSyncTokenCHROMIUM(sync_token.GetData());
     }

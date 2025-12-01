@@ -7,6 +7,7 @@
 
 #include <iosfwd>
 #include <string_view>
+#include <string>
 
 enum EscapingMode {
   // No escaping.

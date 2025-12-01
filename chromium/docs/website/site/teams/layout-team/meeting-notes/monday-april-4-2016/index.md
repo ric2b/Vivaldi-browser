@@ -23,25 +23,25 @@ that I'll keep working on this week. Currently breaks one of our
 tests.
 - Might be helpful to have scroll behavior better defined in spec.
 CSS Grid Layout (svillar, jfernandez, rego, javif)
-\[[crbug.com/79180](http://crbug.com/79180)\]
+\[[crbug.com/79180](https://crbug.com/79180)\]
 - No updates since last week -
-CSS Multi-column (mstensho) \[[crbug.com/334335](http://crbug.com/334335)\]
+CSS Multi-column (mstensho) \[[crbug.com/334335](https://crbug.com/334335)\]
 - No updates since last week -
 CSS Houdini
 - No updates since last week -
 Add API for layout (leviw, pilgrim, dgrogan)
-\[[crbug.com/495288](http://crbug.com/495288)\]
+\[[crbug.com/495288](https://crbug.com/495288)\]
 - Bunch of progress on layout view item, working on getting rid of
 anything that touches LocalFrame and LayoutObject. Moving to new
 shiny LayoutItem. (pilgrim)
 - Have about ten files left, some pending review. (pilgrim)
-LayoutNG \[[crbug.com/591099](http://crbug.com/591099)\]
+LayoutNG \[[crbug.com/591099](https://crbug.com/591099)\]
 - Sent out hackathon report for initial review. (leviw)
 - Started working on design doc. (eae)
-CSS Containment (leviw) \[[crbug.com/312978](http://crbug.com/312978)\]
+CSS Containment (leviw) \[[crbug.com/312978](https://crbug.com/312978)\]
 - No updates since last week -
 Intersection Observer (szager, mpb)
-\[[crbug.com/540528](http://crbug.com/540528)\]
+\[[crbug.com/540528](https://crbug.com/540528)\]
 - Getting back into Intersection observer, dotting the i's and crossing
 the t's before branch point on Friday, Have one significant patch to
 land, today, hopefully. (szager)

@@ -8,41 +8,42 @@
 
 #include "base/check_is_test.h"
 #include "base/functional/bind.h"
+#include "base/test/bind.h"
 #include "base/test/test_future.h"
 #include "base/types/expected.h"
 #include "build/build_config.h"
 #include "chrome/browser/apps/link_capturing/link_capturing_features.h"
+#include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
+#include "chrome/browser/web_applications/web_app_tab_helper.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/common/content_features.h"
 #include "content/public/test/browser_test_utils.h"
+#include "testing/gtest/include/gtest/gtest.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/apps/intent_helper/preferred_apps_test_util.h"
 #endif
 
 namespace apps::test {
+namespace {
 
-std::string ToString(LinkCapturingFeatureVersion version) {
-  switch (version) {
-    case LinkCapturingFeatureVersion::kV1DefaultOff:
-      return "V1DefaultOff";
-    case LinkCapturingFeatureVersion::kV2DefaultOff:
-      return "V2DefaultOff";
-#if !BUILDFLAG(IS_CHROMEOS)
-    case LinkCapturingFeatureVersion::kV1DefaultOn:
-      return "V1DefaultOn";
-    case LinkCapturingFeatureVersion::kV2DefaultOn:
-      return "V2DefaultOn";
-#endif
+std::optional<std::string> WaitForNextMessage(
+    content::DOMMessageQueue& message_queue) {
+  std::string message;
+  EXPECT_TRUE(message_queue.WaitForMessage(&message));
+  if (message.empty()) {
+    return std::nullopt;
   }
+  std::string unquoted_message;
+  EXPECT_TRUE(base::RemoveChars(message, "\"", &unquoted_message)) << message;
+  return unquoted_message;
 }
 
 std::vector<base::test::FeatureRefAndParams> GetFeaturesToEnableLinkCapturingUX(
     std::optional<bool> override_captures_by_default,
     bool use_v2) {
-  CHECK_IS_TEST();
 #if BUILDFLAG(IS_CHROMEOS)
   CHECK(!override_captures_by_default || !override_captures_by_default.value());
   // TODO(crbug.com/376922620): Create a feature flag to turn off the v1
@@ -74,8 +75,29 @@ std::vector<base::test::FeatureRefAndParams> GetFeaturesToEnableLinkCapturingUX(
 #endif  // BUILDFLAG(IS_CHROMEOS)
 }
 
+}  // namespace
+
+std::string ToString(LinkCapturingFeatureVersion version) {
+  switch (version) {
+    case LinkCapturingFeatureVersion::kV1DefaultOff:
+      return "V1DefaultOff";
+    case LinkCapturingFeatureVersion::kV2DefaultOff:
+      return "V2DefaultOff";
+#if !BUILDFLAG(IS_CHROMEOS)
+    case LinkCapturingFeatureVersion::kV2DefaultOn:
+      return "V2DefaultOn";
+#endif
+  }
+}
+
+std::string LinkCapturingVersionToString(
+    const testing::TestParamInfo<LinkCapturingFeatureVersion>& version) {
+  return ToString(version.param);
+}
+
 std::vector<base::test::FeatureRefAndParams> GetFeaturesToEnableLinkCapturingUX(
     LinkCapturingFeatureVersion version) {
+  CHECK_IS_TEST();
   switch (version) {
     case LinkCapturingFeatureVersion::kV1DefaultOff:
       return GetFeaturesToEnableLinkCapturingUX(
@@ -84,9 +106,6 @@ std::vector<base::test::FeatureRefAndParams> GetFeaturesToEnableLinkCapturingUX(
       return GetFeaturesToEnableLinkCapturingUX(
           /*override_captures_by_default=*/false, /*use_v2=*/true);
 #if !BUILDFLAG(IS_CHROMEOS)
-    case LinkCapturingFeatureVersion::kV1DefaultOn:
-      return GetFeaturesToEnableLinkCapturingUX(
-          /*override_captures_by_default=*/true, /*use_v2=*/false);
     case LinkCapturingFeatureVersion::kV2DefaultOn:
       return GetFeaturesToEnableLinkCapturingUX(
           /*override_captures_by_default=*/true, /*use_v2=*/true);
@@ -172,6 +191,83 @@ void NavigationCommittedForUrlObserver::DidFinishNavigation(
     web_contents_ = handle->GetWebContents();
   }
   ConditionMet();
+}
+
+void FlushLaunchQueuesForAllBrowserTabs() {
+  web_app::test::RunForAllTabs(
+      base::BindRepeating([](content::WebContents& web_contents) {
+        web_app::WebAppTabHelper* helper =
+            web_app::WebAppTabHelper::FromWebContents(&web_contents);
+        if (!helper) {
+          return;
+        }
+        helper->FlushLaunchQueueForTesting();
+      }));
+}
+
+base::expected<void, std::vector<std::string>>
+ResolveWebContentsWaitingForLaunchQueueFlush() {
+  std::vector<std::string> errors;
+  web_app::test::RunForAllTabs(
+      base::BindLambdaForTesting([&](content::WebContents& web_contents) {
+        content::EvalJsResult has_function = content::EvalJs(
+            &web_contents, "typeof resolveLaunchParamsFlush !== 'undefined'");
+        if (!has_function.error.empty() || !has_function.ExtractBool()) {
+          // Sometimes the web contents is destroyed while evaluating this
+          // javascript. That is fine.
+          DLOG_IF(INFO, !has_function.error.empty())
+              << "Got error: " << has_function.error;
+          return;
+        }
+        content::EvalJsResult result =
+            content::EvalJs(&web_contents, "resolveLaunchParamsFlush()");
+        if (!result.error.empty()) {
+          errors.push_back(result.error);
+        }
+      }));
+  if (!errors.empty()) {
+    return base::unexpected(std::move(errors));
+  }
+  return base::ok();
+}
+
+testing::AssertionResult WaitForNavigationFinishedMessage(
+    content::DOMMessageQueue& message_queue) {
+  // Wait for all pages to complete loading to prevent the BrowserList or tab
+  // model from changing later while flushing.
+  web_app::test::CompletePageLoadForAllWebContents();
+
+  std::optional<std::string> message;
+  while ((message = WaitForNextMessage(message_queue))) {
+    if (!message.has_value()) {
+      return testing::AssertionFailure() << "Message never received.";
+    }
+    DLOG(INFO) << "Got message: " << *message;
+    if (base::StartsWith(*message, "FinishedNavigating")) {
+      break;
+    }
+    if (!base::StartsWith(*message, "PleaseFlushLaunchQueue")) {
+      return testing::AssertionFailure()
+             << "Unrecognized message: " << *message;
+    }
+    // Since DOMMessageQueue doesn't helpfully tell us where the message came
+    // from, we have to flush ALL queues, and resolve any promises waiting on
+    // it.
+    FlushLaunchQueuesForAllBrowserTabs();
+
+    // Because some redirection and other cases can close web contents, tab
+    // closures can happen during `FlushLaunchQueueForTesting`. So call the
+    // resolution of the flush in a separate method.
+    auto success = ResolveWebContentsWaitingForLaunchQueueFlush();
+    if (success != base::ok()) {
+      return testing::AssertionFailure()
+             << "Errors: " << base::JoinString(success.error(), ",");
+    }
+  }
+  if (!message.has_value()) {
+    return testing::AssertionFailure() << "Message never received.";
+  }
+  return testing::AssertionSuccess();
 }
 
 }  // namespace apps::test

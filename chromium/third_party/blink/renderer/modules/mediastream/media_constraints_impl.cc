@@ -28,6 +28,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "third_party/blink/renderer/modules/mediastream/media_constraints_impl.h"
 
 #include "build/build_config.h"
@@ -98,13 +103,6 @@ const char kMediaStreamRenderToAssociatedSink[] =
 // RenderToAssociatedSink will be going away some time.
 const char kEchoCancellation[] = "echoCancellation";
 const char kDisableLocalEcho[] = "disableLocalEcho";
-const char kGoogAutoGainControl[] = "googAutoGainControl";
-const char kGoogNoiseSuppression[] = "googNoiseSuppression";
-const char kGoogExperimentalNoiseSuppression[] = "googNoiseSuppression2";
-const char kGoogHighpassFilter[] = "googHighpassFilter";
-const char kGoogAudioMirroring[] = "googAudioMirroring";
-// Audio constraints.
-const char kDAEchoCancellation[] = "googDAEchoCancellation";
 // Google-specific constraint keys for a local video source (getUserMedia).
 const char kNoiseReduction[] = "googNoiseReduction";
 
@@ -212,19 +210,6 @@ static void ParseOldStyleNames(
       // Should give TypeError when it's not parseable.
       // https://crbug.com/576582
       result.render_to_associated_sink.SetExact(ToBoolean(constraint.value_));
-    } else if (constraint.name_ == kGoogAutoGainControl) {
-      result.goog_auto_gain_control.SetExact(ToBoolean(constraint.value_));
-    } else if (constraint.name_ == kGoogNoiseSuppression) {
-      result.goog_noise_suppression.SetExact(ToBoolean(constraint.value_));
-    } else if (constraint.name_ == kGoogExperimentalNoiseSuppression) {
-      result.goog_experimental_noise_suppression.SetExact(
-          ToBoolean(constraint.value_));
-    } else if (constraint.name_ == kGoogHighpassFilter) {
-      result.goog_highpass_filter.SetExact(ToBoolean(constraint.value_));
-    } else if (constraint.name_ == kGoogAudioMirroring) {
-      result.goog_audio_mirroring.SetExact(ToBoolean(constraint.value_));
-    } else if (constraint.name_ == kDAEchoCancellation) {
-      result.goog_da_echo_cancellation.SetExact(ToBoolean(constraint.value_));
     } else if (constraint.name_ == kNoiseReduction) {
       result.goog_noise_reduction.SetExact(ToBoolean(constraint.value_));
     }
@@ -548,12 +533,12 @@ bool ValidateAndCopyConstraintSet(
 
   if (constraints_in->hasAutoGainControl()) {
     CopyBooleanConstraint(constraints_in->autoGainControl(), naked_treatment,
-                          constraint_buffer.goog_auto_gain_control);
+                          constraint_buffer.auto_gain_control);
   }
 
   if (constraints_in->hasNoiseSuppression()) {
     CopyBooleanConstraint(constraints_in->noiseSuppression(), naked_treatment,
-                          constraint_buffer.goog_noise_suppression);
+                          constraint_buffer.noise_suppression);
   }
 
   if (constraints_in->hasVoiceIsolation()) {
@@ -864,13 +849,13 @@ void ConvertConstraintSet(const MediaTrackConstraintSetPlatform& input,
     output->setEchoCancellation(
         ConvertBoolean(input.echo_cancellation, naked_treatment));
   }
-  if (!input.goog_auto_gain_control.IsUnconstrained()) {
+  if (!input.auto_gain_control.IsUnconstrained()) {
     output->setAutoGainControl(
-        ConvertBoolean(input.goog_auto_gain_control, naked_treatment));
+        ConvertBoolean(input.auto_gain_control, naked_treatment));
   }
-  if (!input.goog_noise_suppression.IsUnconstrained()) {
+  if (!input.noise_suppression.IsUnconstrained()) {
     output->setNoiseSuppression(
-        ConvertBoolean(input.goog_noise_suppression, naked_treatment));
+        ConvertBoolean(input.noise_suppression, naked_treatment));
   }
   if (!input.voice_isolation.IsUnconstrained()) {
     output->setVoiceIsolation(

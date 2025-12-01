@@ -266,9 +266,9 @@ Notes:
 
 <td>www.foo.com/index.html</td>
 
-<td>http://www.google.com/</td>
+<td>https://www.google.com/</td>
 
-<td>http://www.google.com</td>
+<td>https://www.google.com</td>
 
 <td>Invalid</td>
 

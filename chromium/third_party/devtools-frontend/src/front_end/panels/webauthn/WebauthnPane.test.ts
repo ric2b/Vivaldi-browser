@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 import * as SDK from '../../core/sdk/sdk.js';
-import type * as Protocol from '../../generated/protocol.js';
+import * as Protocol from '../../generated/protocol.js';
 import {createTarget} from '../../testing/EnvironmentHelpers.js';
 import {
   describeWithMockConnection,
@@ -131,7 +131,7 @@ describeWithMockConnection('WebAuthn pane', () => {
         assert.fail('Expected dataGrid to be truthy');
         return;
       }
-      assert.strictEqual(dataGrid.rootNode().children.length, 1);
+      assert.lengthOf(dataGrid.rootNode().children, 1);
       let emptyNode = dataGrid.rootNode().children[0];
       assert.isOk(emptyNode);
       assert.deepEqual(emptyNode.data, {});
@@ -151,7 +151,7 @@ describeWithMockConnection('WebAuthn pane', () => {
       });
 
       // Verify the credential appeared and the empty row was removed.
-      assert.strictEqual(dataGrid.rootNode().children.length, 1);
+      assert.lengthOf(dataGrid.rootNode().children, 1);
       const credentialNode = dataGrid.rootNode().children[0];
       assert.isOk(credentialNode);
       assert.strictEqual(credentialNode.data, credential);
@@ -159,7 +159,7 @@ describeWithMockConnection('WebAuthn pane', () => {
       // Remove the credential.
       const removeCredential = sinon.stub(model, 'removeCredential').resolves();
       dataGrid.element.querySelectorAll('devtools-button')[1].click();
-      assert.strictEqual(dataGrid.rootNode().children.length, 1);
+      assert.lengthOf(dataGrid.rootNode().children, 1);
       emptyNode = dataGrid.rootNode().children[0];
       assert.isOk(emptyNode);
       assert.deepEqual(emptyNode.data, {});
@@ -202,7 +202,7 @@ describeWithMockConnection('WebAuthn pane', () => {
         assert.fail('Expected dataGrid to be truthy');
         return;
       }
-      assert.strictEqual(dataGrid.rootNode().children.length, 1);
+      assert.lengthOf(dataGrid.rootNode().children, 1);
       const credentialNode = dataGrid.rootNode().children[0];
       assert.isOk(credentialNode);
       assert.strictEqual(credentialNode.data, credential);
@@ -222,7 +222,7 @@ describeWithMockConnection('WebAuthn pane', () => {
       });
 
       // Verify the credential was updated.
-      assert.strictEqual(dataGrid.rootNode().children.length, 1);
+      assert.lengthOf(dataGrid.rootNode().children, 1);
       assert.strictEqual(credentialNode.data, updatedCredential1);
 
       // The credential can also be updated through the CREDENTIAL_UPDATED
@@ -241,7 +241,7 @@ describeWithMockConnection('WebAuthn pane', () => {
       });
 
       // Verify the credential was updated.
-      assert.strictEqual(dataGrid.rootNode().children.length, 1);
+      assert.lengthOf(dataGrid.rootNode().children, 1);
       assert.strictEqual(credentialNode.data, updatedCredential2);
 
       // Updating a different credential should not affect the existing one.
@@ -259,7 +259,7 @@ describeWithMockConnection('WebAuthn pane', () => {
       });
 
       // Verify the credential was unchanged.
-      assert.strictEqual(dataGrid.rootNode().children.length, 1);
+      assert.lengthOf(dataGrid.rootNode().children, 1);
       assert.strictEqual(credentialNode.data, updatedCredential2);
     });
 
@@ -295,7 +295,7 @@ describeWithMockConnection('WebAuthn pane', () => {
         assert.fail('Expected dataGrid to be truthy');
         return;
       }
-      assert.strictEqual(dataGrid.rootNode().children.length, 1);
+      assert.lengthOf(dataGrid.rootNode().children, 1);
       const credentialNode = dataGrid.rootNode().children[0];
       assert.isOk(credentialNode);
       assert.strictEqual(credentialNode.data, credential);
@@ -305,14 +305,58 @@ describeWithMockConnection('WebAuthn pane', () => {
         authenticatorId,
         credentialId: 'another credential',
       });
-      assert.strictEqual(dataGrid.rootNode().children.length, 1);
+      assert.lengthOf(dataGrid.rootNode().children, 1);
 
       // Delete the credential. It should be removed from the list.
       model.dispatchEventToListeners(SDK.WebAuthnModel.Events.CREDENTIAL_DELETED, {
         authenticatorId,
         credentialId: credential.credentialId,
       });
-      assert.strictEqual(dataGrid.rootNode().children.length, 0);
+      assert.lengthOf(dataGrid.rootNode().children, 0);
+    });
+
+    it('disables "internal" if an internal authenticator exists', async () => {
+      const authenticatorId = 'authenticator-1' as Protocol.WebAuthn.AuthenticatorId;
+      let panel = new Webauthn.WebauthnPane.WebauthnPaneImpl();
+      let transport = panel.transportSelect;
+      if (!transport) {
+        assert.fail('Transport select is not present');
+      }
+      let internalTransportIndex = -1;
+      for (let i = 0; i < transport.options.length; ++i) {
+        if (transport.options[i].value === Protocol.WebAuthn.AuthenticatorTransport.Internal) {
+          internalTransportIndex = i;
+          break;
+        }
+      }
+      assert.notEqual(internalTransportIndex, -1);
+      assert.isFalse(transport.options[internalTransportIndex].disabled);
+
+      // Add an internal authenticator.
+      transport.selectedIndex = internalTransportIndex;
+      const addAuthenticator = sinon.stub(model, 'addAuthenticator').resolves(authenticatorId);
+      panel.addAuthenticatorButton?.click();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      assert.strictEqual(addAuthenticator.called, inScope);
+      if (!inScope) {
+        return;
+      }
+
+      // The "internal" option should have been disabled, and another option selected.
+      assert.notEqual(transport.selectedIndex, internalTransportIndex);
+      assert.isTrue(transport.options[internalTransportIndex].disabled);
+
+      // Restoring the authenticator when loading the panel again should also cause "internal" to be disabled.
+      panel = new Webauthn.WebauthnPane.WebauthnPaneImpl();
+      transport = panel.transportSelect;
+      if (!transport) {
+        assert.fail('Transport select is not present');
+      }
+      assert.isTrue(transport.options[internalTransportIndex].disabled);
+
+      // Removing the internal authenticator should re-enable the option.
+      panel.removeAuthenticator(authenticatorId);
+      assert.isFalse(transport.options[internalTransportIndex].disabled);
     });
   };
 

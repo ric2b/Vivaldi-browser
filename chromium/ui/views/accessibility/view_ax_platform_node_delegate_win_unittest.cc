@@ -54,11 +54,13 @@ namespace {
 // Whether |left| represents the same COM object as |right|.
 template <typename T, typename U>
 bool IsSameObject(T* left, U* right) {
-  if (!left && !right)
+  if (!left && !right) {
     return true;
+  }
 
-  if (!left || !right)
+  if (!left || !right) {
     return false;
+  }
 
   ComPtr<IUnknown> left_unknown;
   left->QueryInterface(IID_PPV_ARGS(&left_unknown));
@@ -338,8 +340,7 @@ TEST_F(ViewAXPlatformNodeDelegateWinTest, DISABLED_RetrieveAllAlerts) {
   {
     // SAFETY: get_relationTargetsOfType() is a COM interface which guarantees
     // that exactly n_targets pointers are available starting at targets.
-    UNSAFE_BUFFERS(base::span<IUnknown*> targets_span(
-                       targets, base::checked_cast<size_t>(n_targets));)
+    auto targets_span = UNSAFE_BUFFERS(base::span(targets, 2u));
     ASSERT_TRUE(IsSameObject(infobar_accessible.Get(), targets_span[0]));
     ASSERT_TRUE(IsSameObject(infobar2_accessible.Get(), targets_span[1]));
   }
@@ -662,8 +663,9 @@ class ViewAXPlatformNodeDelegateWinTableTest
   }
 
   void TearDown() override {
-    if (!widget_->IsClosed())
+    if (!widget_->IsClosed()) {
       widget_->Close();
+    }
     ViewAXPlatformNodeDelegateWinTest::TearDown();
   }
 

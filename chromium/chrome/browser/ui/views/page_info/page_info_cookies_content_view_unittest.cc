@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/views/page_info/page_info_cookies_content_view.h"
 
 #include <memory>
+#include <string_view>
 
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/ui/layout_constants.h"
@@ -25,23 +26,21 @@
 #include "ui/views/test/widget_test.h"
 #include "ui/views/vector_icons.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "components/user_manager/scoped_user_manager.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 namespace {
 
 using Status = ::content_settings::TrackingProtectionBlockingStatus;
 using FeatureType = ::content_settings::TrackingProtectionFeatureType;
 
-std::u16string GetManageButtonSubtitle(views::View* content_view) {
+std::u16string_view GetManageButtonSubtitle(views::View* content_view) {
   auto* manage_button = content_view->GetViewByID(
       PageInfoViewFactory::VIEW_ID_PAGE_INFO_LINK_OR_BUTTON_COOKIE_DIALOG);
   EXPECT_TRUE(manage_button);
-  auto* managed_button_subtitle =
-      static_cast<RichHoverButton*>(manage_button)->GetSubTitleViewForTesting();
-  return managed_button_subtitle->GetText();
+  return static_cast<RichHoverButton*>(manage_button)->GetSubtitleText();
 }
 
 const char* GetVectorIconName(views::ImageView* image_view) {
@@ -98,16 +97,13 @@ class PageInfoCookiesContentViewBaseTestClass : public TestWithBrowserView {
     TestWithBrowserView::TearDown();
   }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  void LogIn(const std::string& email) override {
-    const AccountId account_id = AccountId::FromUserEmail(email);
-    user_manager()->AddUserWithAffiliation(account_id, /*is_affiliated=*/true);
-    ash_test_helper()->test_session_controller_client()->AddUserSession(email);
-    user_manager()->UserLoggedIn(
-        account_id,
-        user_manager::FakeUserManager::GetFakeUsernameHash(account_id),
-        /*browser_restart=*/false,
-        /*is_child=*/false);
+#if BUILDFLAG(IS_CHROMEOS)
+  void LogIn(std::string_view email, const GaiaId& gaia_id) override {
+    BrowserWithTestWindowTest::LogIn(email, gaia_id);
+    user_manager()->SetUserPolicyStatus(
+        AccountId::FromUserEmailGaiaId(email, gaia_id),
+        /*is_managed=*/true,
+        /*is_affiliated=*/true);
   }
 #endif
 

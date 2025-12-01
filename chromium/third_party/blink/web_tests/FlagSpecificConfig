@@ -29,10 +29,6 @@
     "args": ["--enable-features=BlinkHeapConcurrentMarking"]
   },
   {
-    "name": "enable-percent-based-scrolling",
-    "args": ["--enable-features=PercentBasedScrolling"]
-  },
-  {
     "name": "force-renderer-accessibility",
     "args": ["--force-renderer-accessibility"]
   },
@@ -202,6 +198,15 @@
     ],
     "comments": [
       "Used to test Chrome with Skia Graphite."
+    ]
+  },
+  {
+    "name": "disable-skia-graphite",
+    "args": [
+      "--disable-skia-graphite"
+    ],
+    "comments": [
+      "Used to test Chrome with Skia Ganesh."
     ]
   }
 ]

@@ -562,7 +562,7 @@ list](http://lists.w3.org/Archives/Public/public-web-intents/).**
 **To show you Web Intents in action we have build a series of demos. These demos show you how client applications can invoke intents and how service applications can be opened and receive data.**
 **To run these examples you currently need Chrome M19 and an internet connection to visit the live client apps.**
 The code for all of these examples can be found on our [Github project
-page](http://github.com/PaulKinlan/webintents) including:
+page](https://github.com/PaulKinlan/webintents) including:
 [Extensions](https://github.com/PaulKinlan/WebIntents/tree/master/tools/chrome/extensions),
 [Hosted
 Apps](https://github.com/PaulKinlan/WebIntents/tree/master/tools/chrome/apps/hosted)

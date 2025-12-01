@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "chrome/browser/ui/views/accelerator_table.h"
 
 #include <stddef.h>
@@ -15,12 +10,11 @@
 #include "base/containers/flat_set.h"
 #include "base/containers/span.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/event_constants.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "ash/accelerators/accelerator_table.h"
 #include "ash/public/cpp/accelerators.h"
 #endif
@@ -32,8 +26,9 @@ namespace {
 struct Cmp {
   bool operator()(const AcceleratorMapping& lhs,
                   const AcceleratorMapping& rhs) const {
-    if (lhs.keycode != rhs.keycode)
+    if (lhs.keycode != rhs.keycode) {
       return lhs.keycode < rhs.keycode;
+    }
     return lhs.modifiers < rhs.modifiers;
     // Do not check |command_id|.
   }
@@ -86,20 +81,17 @@ TEST(AcceleratorTableTest, OpenFeedbackWithSearchBasedAccelerator) {
 #endif  // BUILDFLAG(IS_CHROMEOS) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 TEST(AcceleratorTableTest, CheckDuplicatedAcceleratorsAsh) {
   base::flat_set<AcceleratorMapping, Cmp> accelerators(GetAcceleratorList());
-  for (size_t i = 0; i < ash::kAcceleratorDataLength; ++i) {
-    const ash::AcceleratorData& ash_entry = ash::kAcceleratorData[i];
-    if (!ash_entry.trigger_on_press)
+  for (const ash::AcceleratorData& ash_entry : ash::kAcceleratorData) {
+    if (!ash_entry.trigger_on_press) {
       continue;  // kAcceleratorMap does not have any release accelerators.
+    }
     // A few shortcuts are defined in the browser as well as in ash so that web
     // contents can consume them. http://crbug.com/309915, 370019, 412435,
     // 321568.
-    if (base::Contains(base::span<const ash::AcceleratorAction>(
-                           ash::kActionsInterceptableByBrowser,
-                           ash::kActionsInterceptableByBrowserLength),
-                       ash_entry.action)) {
+    if (base::Contains(ash::kActionsInterceptableByBrowser, ash_entry.action)) {
       continue;
     }
 
@@ -107,10 +99,7 @@ TEST(AcceleratorTableTest, CheckDuplicatedAcceleratorsAsh) {
     // list to ensure BrowserView can retrieve browser command id from the
     // accelerator without needing to know ash.
     // See http://crbug.com/737307 for details.
-    if (base::Contains(base::span<const ash::AcceleratorAction>(
-                           ash::kActionsDuplicatedWithBrowser,
-                           ash::kActionsDuplicatedWithBrowserLength),
-                       ash_entry.action)) {
+    if (base::Contains(ash::kActionsDuplicatedWithBrowser, ash_entry.action)) {
       AcceleratorMapping entry;
       entry.keycode = ash_entry.keycode;
       entry.modifiers = ash_entry.modifiers;
@@ -187,8 +176,6 @@ class GetAcceleratorListTest : public ::testing::Test {
   }
 };
 
-
-
 // Verify that the shortcuts for DevTools are enabled.
 TEST_F(GetAcceleratorListTest, DevToolsAreEnabled) {
   // Verify there is a mapping that is associated to IDC_DEV_TOOLS_TOGGLE.
@@ -199,6 +186,6 @@ TEST_F(GetAcceleratorListTest, DevToolsAreEnabled) {
   EXPECT_NE(iter, list.end());
 }
 
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 }  // namespace chrome

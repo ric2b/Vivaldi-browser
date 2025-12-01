@@ -46,6 +46,7 @@ hb_base_sources = files(
   'hb-dispatch.hh',
   'hb-draw.cc',
   'hb-draw.hh',
+  'hb-geometry.hh',
   'hb-paint.cc',
   'hb-paint.hh',
   'hb-paint-extents.cc',
@@ -173,6 +174,9 @@ hb_base_sources = files(
   'OT/Layout/GSUB/SubstLookup.hh',
   'OT/Layout/GSUB/SubstLookupSubTable.hh',
   'OT/name/name.hh',
+  'OT/Var/VARC/coord-setter.hh',
+  'OT/Var/VARC/VARC.cc',
+  'OT/Var/VARC/VARC.hh',
   'hb-ot-layout-gsubgpos.hh',
   'hb-ot-layout-jstf-table.hh',
   'hb-ot-layout.cc',
@@ -233,6 +237,7 @@ hb_base_sources = files(
   'hb-ot-var-gvar-table.hh',
   'hb-ot-var-hvar-table.hh',
   'hb-ot-var-mvar-table.hh',
+  'hb-ot-var-varc-table.hh',
   'hb-ot-var.cc',
   'hb-ot-vorg-table.hh',
   'hb-pool.hh',
@@ -341,7 +346,7 @@ hb_wasm_headers = files()
 
 # System-dependent sources and headers
 
-hb_coretext_sources = files('hb-coretext.cc')
+hb_coretext_sources = files('hb-coretext-shape.cc', 'hb-coretext-font.cc')
 hb_coretext_headers = files('hb-coretext.h')
 
 hb_directwrite_sources = files('hb-directwrite.cc')
@@ -378,7 +383,7 @@ hb_subset_sources = files(
   'hb-subset-plan.cc',
   'hb-subset-plan.hh',
   'hb-subset-plan-member-list.hh',
-  'hb-subset-repacker.cc',
+  'hb-subset-serialize.cc',
   'graph/gsubgpos-context.cc',
   'graph/gsubgpos-context.hh',
   'graph/gsubgpos-graph.hh',
@@ -393,7 +398,7 @@ hb_subset_sources = files(
 
 hb_subset_headers = files(
   'hb-subset.h',
-  'hb-subset-repacker.h'
+  'hb-subset-serialize.h'
 )
 
 hb_gobject_sources = files(
@@ -445,7 +450,13 @@ hb_headers = hb_base_headers
 
 harfbuzz_deps = [thread_dep, m_dep] + harfbuzz_extra_deps
 
-libharfbuzz_link_language = 'c'
+if get_option('with_libstdcxx')
+  chosen_linker = 'cpp'
+else
+  # Use a C linker, not C++; Don't link to libstdc++
+  chosen_linker = 'c'
+endif
+libharfbuzz_link_language = chosen_linker
 
 if conf.get('HAVE_FREETYPE', 0) == 1
   hb_sources += hb_ft_sources
@@ -546,8 +557,8 @@ hb_supported_features_h = configure_file(input: 'hb-features.h.in',
                                configuration: hb_supported_features,
                                install: false)
 
-# Base and default-included sources and headers
 
+# Base and default-included sources and headers
 gen_def = find_program('gen-def.py')
 gen_def_cmd = [gen_def, '@OUTPUT@', '@INPUT@']
 if get_option('experimental_api')
@@ -616,7 +627,7 @@ libharfbuzz_subset = library('harfbuzz-subset', hb_subset_sources,
   version: version,
   install: true,
   darwin_versions: darwin_versions,
-  link_language: 'c',
+  link_language: chosen_linker,
 )
 
 custom_target('harfbuzz-subset.cc',
@@ -656,7 +667,7 @@ if conf.get('HAVE_CAIRO', 0) == 1
     version: version,
     install: true,
     darwin_versions: darwin_versions,
-    link_language: 'c',
+    link_language: chosen_linker,
   )
 
   install_headers(hb_cairo_headers, subdir: meson.project_name())
@@ -775,7 +786,7 @@ if have_icu and not have_icu_builtin
     install: true,
     darwin_versions: darwin_versions,
     # ICU links to stdc++ anyway so the default linker is good
-    # link_language: 'c',
+    # link_language: chosen_linker,
   )
 
   libharfbuzz_icu_dep = declare_dependency(
@@ -864,6 +875,7 @@ endmacro()
 cmake_config.set('PACKAGE_CMAKE_INSTALL_INCLUDEDIR', '${PACKAGE_PREFIX_DIR}/@0@'.format(cmake_install_includedir))
 cmake_config.set('PACKAGE_CMAKE_INSTALL_LIBDIR', '${PACKAGE_PREFIX_DIR}/@0@'.format(cmake_install_libdir))
 cmake_config.set('PACKAGE_INCLUDE_INSTALL_DIR', '${PACKAGE_PREFIX_DIR}/@0@/@1@'.format(cmake_install_includedir, meson.project_name()))
+cmake_config.set('HARFBUZZ_VERSION', meson.project_version())
 cmake_config.set('HB_HAVE_GOBJECT', have_gobject ? 'YES' : 'NO')
 cmake_config.set('HB_LIBRARY_TYPE', get_option('default_library') == 'static' ? 'STATIC' : 'SHARED')
 
@@ -942,7 +954,7 @@ if have_gobject
     version: version,
     install: true,
     darwin_versions: darwin_versions,
-    link_language: 'c',
+    link_language: chosen_linker,
   )
 
   gir = find_program('g-ir-scanner', required: get_option('introspection'))
@@ -1020,7 +1032,7 @@ if get_option('tests').enabled()
 
   if cpp.get_argument_syntax() != 'msvc' and not meson.is_cross_build() # ensure the local tools are usable
     dist_check_script += ['check-static-inits', 'check-symbols']
-    if get_option('wasm').disabled()
+    if get_option('wasm').disabled() and not get_option('with_libstdcxx')
       dist_check_script += ['check-libstdc++']
     endif
   endif

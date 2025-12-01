@@ -11,14 +11,14 @@ update_target("//ios/chrome/browser/browser_view/ui_bundled:ui_bundled") {
   ]
 }
 
-update_target("//ios/chrome/browser/ui/tab_switcher/tab_grid:tab_grid_ui_constants") {
+update_target("//ios/chrome/browser/tab_switcher/ui_bundled/tab_grid:tab_grid_ui_constants") {
   sources += [
     "//vivaldi/ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_constants.h",
     "//vivaldi/ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_constants.mm",
   ]
 }
 
-update_target("//ios/chrome/browser/ui/tab_switcher/tab_grid:tab_grid_ui") {
+update_target("//ios/chrome/browser/tab_switcher/ui_bundled/tab_grid:tab_grid_ui") {
   sources += [
     "//vivaldi/ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_page_control_constants.h",
     "//vivaldi/ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_page_control_constants.mm",
@@ -79,7 +79,7 @@ update_target("//ios/chrome/browser/shared/ui/table_view/cells:cells") {
   ]
 }
 
-update_target("//ios/chrome/browser/shared/model/browser_state:browser_state") {
+update_target("//ios/chrome/browser/shared/model/browser:browser") {
   sources += [
     "//vivaldi/ios/ad_blocker/adblock_rule_service_factory.h",
     "//vivaldi/ios/ad_blocker/adblock_rule_service_factory.mm",
@@ -88,14 +88,14 @@ update_target("//ios/chrome/browser/shared/model/browser_state:browser_state") {
     ]
 }
 
-update_target("//ios/chrome/browser/ui/sharing/activity_services/data:data") {
+update_target("//ios/chrome/browser/sharing/ui_bundled/activity_services/data:data") {
   sources += [
     "//vivaldi/ios/ui/activity_services/share_text_data.h",
     "//vivaldi/ios/ui/activity_services/share_text_data.mm",
   ]
 }
 
-update_target("//ios/chrome/browser/ui/settings:settings") {
+update_target("//ios/chrome/browser/settings/ui_bundled:ui_bundled") {
   sources += [
     "//vivaldi/ios/ui/settings/vivaldi_settings_constants.h",
     "//vivaldi/ios/ui/settings/vivaldi_settings_constants.mm",
@@ -158,7 +158,7 @@ update_template_instance("//ios/chrome/open_extension/resources:resources") {
   ]
 }
 
-update_target("//ios/chrome/browser/ui/toolbar:toolbar") {
+update_target("//ios/chrome/browser/toolbar/ui_bundled:ui") {
   sources += [
     "//vivaldi/ios/chrome/browser/ui/toolbar/vivaldi_adaptive_toolbar_viewcontroller_delegate.h"
   ]
@@ -170,14 +170,14 @@ update_template_instance("//ios/chrome/common/ui/colors/resources:resources") {
   ]
 }
 
-update_template_instance("//ios/chrome/browser/ui/toolbar/buttons/resources:resources") {
+update_template_instance("//ios/chrome/browser/toolbar/ui_bundled/buttons/resources:resources") {
   sources -= [
     "Assets.xcassets/tab_toolbar_button_color_highlighted.colorset/Contents.json",
     "Assets.xcassets/tab_toolbar_button_color_highlighted_incognito.colorset/Contents.json",
   ]
 }
 
-update_template_instance("//ios/chrome/browser/ui/tab_switcher/tab_grid/grid/resources:resources") {
+update_template_instance("//ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/grid/resources:resources") {
   sources -= [
     "Assets.xcassets/tab_grid_incognito_tabs_empty.imageset/Contents.json",
     "Assets.xcassets/tab_grid_incognito_tabs_empty.imageset/tab_grid_incognito_tabs_empty.pdf",
@@ -207,7 +207,7 @@ update_target("//ios/chrome/browser/default_promo/ui_bundled/resources:animation
   ]
 }
 
-update_target("//ios/chrome/browser/ui/send_tab_to_self:send_tab_to_self_ui") {
+update_target("//ios/chrome/browser/send_tab_to_self/ui_bundled:ui") {
   sources += [
     "//vivaldi/ios/chrome/browser/ui/send_tab_to_self/send_tab_to_self_image_detail_text_cell.h",
     "//vivaldi/ios/chrome/browser/ui/send_tab_to_self/send_tab_to_self_image_detail_text_cell.mm",

@@ -18,6 +18,7 @@
 #include "chromeos/crosapi/mojom/one_drive_integration_service.mojom.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "content/public/test/browser_task_environment.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -27,7 +28,7 @@ namespace crosapi {
 namespace {
 
 constexpr char kProfileName[] = "user@gmail.com";
-constexpr char kGaiaId[] = "1234567890";
+constexpr GaiaId::Literal kGaiaId("1234567890");
 
 const base::FilePath kOneDrivePath(file_manager::util::kFuseBoxMediaPath);
 

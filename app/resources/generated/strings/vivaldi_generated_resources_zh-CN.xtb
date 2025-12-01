@@ -279,6 +279,7 @@
 <translation id="5582839680698949063">主菜单</translation>
 <translation id="5614553682702429503">要保存密码吗？</translation>
 <translation id="5623842676595125836">日志</translation>
+<translation id="5624959475330585145">在使用不安全的连接前询问</translation>
 <translation id="5638309510554459422">在 <ph name="BEGIN_LINK" />Chrome 应用商店<ph name="END_LINK" />中查找扩展程序和主题背景</translation>
 <translation id="5677928146339483299">已阻止</translation>
 <translation id="5707185214361380026">加载失败的扩展程序来自：</translation>
@@ -468,6 +469,7 @@
 <translation id="9218430445555521422">设为默认浏览器</translation>
 <translation id="93766956588638423">修复扩展程序</translation>
 <translation id="961012016278832836">旧版 Microsoft Edge</translation>
+<translation id="961856697154696964">删除浏览数据</translation>
 <translation id="994289308992179865">循环(&amp;L)</translation>
 <translation id="998747458861718449">检查(&amp;N)</translation>
 </translationbundle>

@@ -16,8 +16,8 @@
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/omnibox_commands.h"
-#import "ios/chrome/browser/ui/sharing/sharing_coordinator.h"
-#import "ios/chrome/browser/ui/sharing/sharing_params.h"
+#import "ios/chrome/browser/sharing/ui_bundled/sharing_coordinator.h"
+#import "ios/chrome/browser/sharing/ui_bundled/sharing_params.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_params.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_util.h"
@@ -152,13 +152,12 @@ NSUInteger toolbarVisibleThreshold = 2;
 @property(nonatomic, strong) VivaldiNSDCoordinator* nsdCoordinator;
 // Coordinator in charge of handling sharing use cases.
 @property(nonatomic, strong) SharingCoordinator* sharingCoordinator;
-
-// Array to hold the speed dial menu items to render the toolbar options
-@property (strong, nonatomic) NSMutableArray *speedDialMenuItems;
-// Array to hold the speed dial folder items to get child of each toolbar option
-@property (strong, nonatomic) NSMutableArray *speedDialFolderItems;
-// Array to hold the speed dial folders children
-@property (strong, nonatomic) NSMutableArray *speedDialChildItems;
+// Array to hold the speed dial menu items to render the toolbar options and
+// pages with SD.
+@property(nonatomic, strong)
+    NSMutableArray<VivaldiNTPTopToolbarItem*>* toolbarItems;
+// Index of the selected toolbar item
+@property(nonatomic, assign) NSInteger selectedToolbarItemIndex;
 // Array to hold the sort button context menu options
 @property (strong, nonatomic) NSMutableArray *speedDialSortActions;
 // Array to hold ascendeing decending buttons for sort context menu options
@@ -173,8 +172,6 @@ NSUInteger toolbarVisibleThreshold = 2;
 // Bool to keep track if top sites result is ready. The results can be empty,
 // this only checks if we got a response from backend for the query.
 @property(nonatomic,assign) BOOL isTopSitesResultsAvailable;
-// Bool to keep track if new speed dial dialog is presented.
-@property(nonatomic,assign) BOOL isNewSpeedDialDialogPresenting;
 // Height constraint of the top menu container
 @property (assign, nonatomic) NSLayoutConstraint* menuContainerHeight;
 // Collection view top constraint when top toolbar is present
@@ -183,6 +180,10 @@ NSUInteger toolbarVisibleThreshold = 2;
 @property (assign, nonatomic) CGFloat navgationBarHeight;
 
 // Sort button context menu options
+// Bool to keep track if sorting menu action should be visible for
+// the current page.
+@property(nonatomic,assign) BOOL shouldShowSortingAction;
+
 @property(nonatomic, strong) UIAction* manualSortAction;
 @property(nonatomic, strong) UIAction* titleSortAction;
 @property(nonatomic, strong) UIAction* addressSortAction;
@@ -513,7 +514,7 @@ NSUInteger toolbarVisibleThreshold = 2;
     // Adjust the top padding for collection view since it should be shifted
     // a bit bottom when collection view is not hidded but toolbar is not
     // visible either.
-    if (self.speedDialMenuItems.count <= toolbarVisibleThreshold) {
+    if (self.toolbarItems.count <= toolbarVisibleThreshold) {
       self.cvTopConstraint.constant = self.navgationBarHeight;
     } else {
       self.cvTopConstraint.constant = 0;
@@ -860,7 +861,7 @@ NSUInteger toolbarVisibleThreshold = 2;
       [[NSMutableArray alloc]
           initWithArray:@[newGroupAction, customizePageAction]];
 
-  if ([self showSpeedDials] && ![self isTopSitesOrAddGroup]) {
+  if ([self showSpeedDials] && [self shouldShowSortingAction]) {
     [childItems addObject:sortingMenu];
   }
 
@@ -874,83 +875,9 @@ NSUInteger toolbarVisibleThreshold = 2;
 
 /// Set current selected index of the menu to the pref
 - (void)setSelectedMenuItemIndex:(NSInteger)index {
-  [VivaldiStartPagePrefsHelper setStartPageLastVisitedGroupIndex:index];
+  self.selectedToolbarItemIndex = index;
+  [self updateSortingActionVisibilityForPage:index];
   [self resetMoreButtonContextMenuOptions];
-}
-
-/// Returns the currently selected index of the menu from the preferences.
-- (NSInteger)selectedMenuItemIndex {
-
-  // If new speed dial dialog is presented we stay to last visited folder
-  // when BookmarksModel changes which allows users to see what they added
-  // immediately after closing the dialog.
-  if (self.isNewSpeedDialDialogPresenting) {
-    return [self indexForLastVisitedGroup];
-  }
-
-  // Retrieve the user's preference for the start page opening item.
-  VivaldiStartPageStartItemType openWith =
-      [VivaldiStartPagePrefsHelper getReopenStartPageWithItem];
-
-  NSInteger index = 0; // Default index
-
-  switch (openWith) {
-    // Case when the user prefers to open with the first group or
-    // default preference.
-    case VivaldiStartPageStartItemTypeFirstGroup:
-    default: {
-      // If "Frequently Visited" is not shown, select the first
-      // menu item (index 0).
-      if (!self.showFrequentlyVisited) {
-        index = 0;
-      } else {
-        // If there are items in "Speed Dial" folders,
-        // select the second menu item (index 1); otherwise, select the first.
-        index = self.speedDialFolderItems.count > 0 ? 1 : 0;
-      }
-      break;
-    }
-
-    // Case when the user prefers to open with "Top Sites".
-    case VivaldiStartPageStartItemTypeTopSites:
-      // Always select the first menu item (index 0).
-      index = 0;
-      break;
-
-    // Case when the user prefers to open with the last visited group.
-    case VivaldiStartPageStartItemTypeLastVisited: {
-      index = [self indexForLastVisitedGroup];
-      break;
-    }
-  }
-
-  // Safety Check: Ensure that the index is within
-  // the bounds of speedDialMenuItems.
-  if (self.speedDialMenuItems.count == 0) {
-    // No menu items are available;
-    // return NSNotFound to indicate no valid selection.
-    return NSNotFound;
-  } else if (index >= (NSInteger)self.speedDialMenuItems.count) {
-    // Adjust the index to the last valid index if it's out of bounds.
-    index = self.speedDialMenuItems.count - 1;
-  }
-
-  return index;
-}
-
-/// Returns the selected item index for last visiter group
-- (NSUInteger)indexForLastVisitedGroup {
-  // Retrieve the index of the last visited group from preferences.
-  NSInteger cachedIndex =
-      [VivaldiStartPagePrefsHelper getStartPageLastVisitedGroupIndex];
-  // If the cached index is valid, use it; otherwise,
-  // select the first menu item (index 0).
-  if (cachedIndex >= 0 && cachedIndex <
-      (NSInteger)self.speedDialMenuItems.count) {
-    return cachedIndex;
-  } else {
-    return 0;
-  }
 }
 
 /// Gets the sorting mode from prefs and update the selection state on the context menu.
@@ -1044,33 +971,24 @@ NSUInteger toolbarVisibleThreshold = 2;
 
 /// Refresh the context menu and ping the mediator to prepare and send modified
 /// items based on sorting mode and order.
-- (void)computeSpeedDialItems {
+- (void)triggerSortForItems {
   // Refresh the context menu options after the selection.
   [self resetMoreButtonContextMenuOptions];
-
-  if (self.currentSortingMode == SpeedDialSortingManual) {
-    // For manual mode ping the mediator to compute and return the child items
-    // as it is without any sorting algo applied by us.
-    [self.delegate computeSpeedDialChildItems:nil];
-  } else {
-    // Ping the mediator to sort items and notify the consumers.
-    [self.delegate computeSortedItems:self.speedDialChildItems
-                               byMode:self.currentSortingMode];
-  }
+  [self.delegate computeSpeedDialChildItems:nil];
 }
 
 - (void)refreshSortingMode:(SpeedDialSortingMode)mode {
   if (self.currentSortingMode == mode)
     return;
   [self setCurrentSortingMode:mode];
-  [self computeSpeedDialItems];
+  [self triggerSortForItems];
 }
 
 - (void)refreshSortOrder:(SpeedDialSortingOrder)order {
   if (self.currentSortingOrder == order)
     return;
   [self setSortingOrder:order];
-  [self computeSpeedDialItems];
+  [self triggerSortForItems];
 }
 
 /// Returns current sorting mode
@@ -1140,8 +1058,7 @@ NSUInteger toolbarVisibleThreshold = 2;
 - (BOOL)shouldHideToolbar {
   BOOL speedDialsHidden = ![self showSpeedDials];
   BOOL topSitesHidden = ![self showFrequentlyVisited];
-  BOOL belowThreshold =
-      (self.speedDialMenuItems.count <= toolbarVisibleThreshold);
+  BOOL belowThreshold = (self.toolbarItems.count <= toolbarVisibleThreshold);
 
   BOOL shouldHideToolbar;
   if (IsTopSitesEnabled()) {
@@ -1177,7 +1094,6 @@ NSUInteger toolbarVisibleThreshold = 2;
       _nsdCoordinator.allowsNewFolders = YES;
       _nsdCoordinator.delegate = self;
       [newSpeedDialCoordinator start];
-      self.isNewSpeedDialDialogPresenting = YES;
     } else {
       VivaldiBookmarksEditorCoordinator* bookmarksEditorCoordinator =
           [[VivaldiBookmarksEditorCoordinator alloc]
@@ -1269,13 +1185,13 @@ NSUInteger toolbarVisibleThreshold = 2;
 
   if (showSpeedDials || (IsTopSitesEnabled() && showFrequentlyVisited)) {
     [self setSelectedMenuItemIndex:0];
-    [self scrollToItemWithIndex:self.selectedMenuItemIndex animated:NO];
+    [self scrollToItemWithIndex:self.selectedToolbarItemIndex animated:NO];
     __weak __typeof(self) weakSelf = self;
     dispatch_async(dispatch_get_main_queue(), ^{
       __strong __typeof(weakSelf) strongSelf = weakSelf;
       if (strongSelf) {
         [strongSelf.topToolbarView
-            selectItemWithIndex:strongSelf.selectedMenuItemIndex];
+         selectItemWithIndex:strongSelf.selectedToolbarItemIndex];
       }
     });
   }
@@ -1318,34 +1234,23 @@ NSUInteger toolbarVisibleThreshold = 2;
   UrlLoadingBrowserAgent::FromBrowser(self.browser)->Load(params);
 }
 
-/// Returns whether current visible page is top sites
-/// or Add Group page; and not speed dials.
-- (BOOL)isTopSitesOrAddGroup {
-  BOOL showFrequentlyVisited =
-      IsTopSitesEnabled() && [self showFrequentlyVisited];
-  BOOL noSpeedDialItems = self.speedDialFolderItems.count <= 0;
-  BOOL isLastMenuItem =
-      self.selectedMenuItemIndex == (long(self.speedDialMenuItems.count) - 1);
-  BOOL isLastFolderItem =
-      self.selectedMenuItemIndex == long(self.speedDialFolderItems.count);
+- (VivaldiSpeedDialItem*)nodeForToolbarItem:(VivaldiNTPTopToolbarItem*)item {
+  if (!self.bookmarks || [item.uuid length] <= 0)
+    return nil;
+  std::string uuidString =
+  base::SysNSStringToUTF8([item.uuid lowercaseString]);
+  base::Uuid uuid = base::Uuid::ParseLowercase(uuidString);
 
-  if (showFrequentlyVisited && self.selectedMenuItemIndex == 0) {
-    return YES;
-  }
-
-  if ((!showFrequentlyVisited && noSpeedDialItems) ||
-      (showFrequentlyVisited && isLastMenuItem) ||
-      (!showFrequentlyVisited && isLastFolderItem)) {
-    return YES;
-  }
-
-  return NO;
+  const bookmarks::BookmarkNode* node =
+  self.bookmarks->GetNodeByUuid(uuid,
+      bookmarks::BookmarkModel::NodeTypeForUuidLookup::kLocalOrSyncableNodes);
+  return [[VivaldiSpeedDialItem alloc] initWithBookmark:node];
 }
 
 #pragma mark - COLLECTIONVIEW DATA SOURCE
 - (NSInteger)collectionView:(UICollectionView *)collectionView
      numberOfItemsInSection:(NSInteger)section{
-  return self.speedDialMenuItems.count;
+  return self.toolbarItems.count;
 }
 
 - (UICollectionViewCell*)collectionView:(UICollectionView *)collectionView
@@ -1361,16 +1266,9 @@ NSUInteger toolbarVisibleThreshold = 2;
               scenario:kMenuScenarioHistogramBookmarkEntry];
   [cell configureActionFactory:actionFactory];
 
-  BOOL showFrequentlyVisited =
-      IsTopSitesEnabled() && [self showFrequentlyVisited];
-  BOOL noSpeedDialItems = self.speedDialFolderItems.count <= 0;
-  BOOL isLastMenuItem = index == (long(self.speedDialMenuItems.count) - 1);
-  BOOL isLastFolderItem = index == long(self.speedDialFolderItems.count);
-
-  // Check if we need to configure an empty cell
-  if ((!showFrequentlyVisited && noSpeedDialItems) ||
-      (showFrequentlyVisited && isLastMenuItem) ||
-      (!showFrequentlyVisited && isLastFolderItem)) {
+  VivaldiNTPTopToolbarItem* toolbarItem =
+      [self.toolbarItems objectAtIndex:index];
+  if (toolbarItem.pageType == VivaldiSpeedDialPageTypeAddGroup) {
     [cell configureWith:@[]
                  parent:_bookmarkBarItem
           faviconLoader:self.faviconLoader
@@ -1384,42 +1282,26 @@ NSUInteger toolbarVisibleThreshold = 2;
       verticalSizeClass:self.view.traitCollection.verticalSizeClass];
   } else {
     [cell setCurrentPage:index];
-    NSArray *childItems;
 
-    // Check if the current index is for the frequently visited items
-    if (showFrequentlyVisited && index == 0) {
-      childItems = [self.speedDialChildItems objectAtIndex:index];
-      [cell configureWith:childItems
-                   parent:_bookmarkBarItem
-            faviconLoader:self.faviconLoader
-       directMatchService:_directMatchService
-              layoutStyle:VivaldiStartPageLayoutStyleSmall
-             layoutColumn:[self currentLayoutColumn]
-             showAddGroup:NO
-        frequentlyVisited:YES
-        topSitesAvailable:self.isTopSitesResultsAvailable
-         topToolbarHidden:[self shouldHideToolbar]
-        verticalSizeClass:self.view.traitCollection.verticalSizeClass];
+    VivaldiSpeedDialItem* parent = nil;
+    if (toolbarItem.pageType == VivaldiSpeedDialPageTypeTopSites) {
+      parent = _bookmarkBarItem;
     } else {
-      // When frequently visited pages enabled subtract 1 from index to
-      // get correct object from SDFolders array since SDFolders do not
-      // contain the item for top sites.
-      NSInteger adjustedIndex = showFrequentlyVisited ? (index - 1) : index;
-      VivaldiSpeedDialItem *parent =
-          [self.speedDialFolderItems objectAtIndex:adjustedIndex];
-      childItems = [self.speedDialChildItems objectAtIndex:index];
-      [cell configureWith:childItems
-                   parent:parent
-            faviconLoader:self.faviconLoader
-       directMatchService:_directMatchService
-              layoutStyle:[self currentLayoutStyle]
-             layoutColumn:[self currentLayoutColumn]
-             showAddGroup:NO
-        frequentlyVisited:NO
-        topSitesAvailable:NO
-         topToolbarHidden:[self shouldHideToolbar]
-        verticalSizeClass:self.view.traitCollection.verticalSizeClass];
+      parent = [self nodeForToolbarItem:
+                    [self.toolbarItems objectAtIndex:index]];
     }
+
+    [cell configureWith:toolbarItem.children
+                 parent:parent
+          faviconLoader:self.faviconLoader
+     directMatchService:_directMatchService
+            layoutStyle:[self currentLayoutStyle]
+           layoutColumn:[self currentLayoutColumn]
+           showAddGroup:NO
+      frequentlyVisited:toolbarItem.pageType == VivaldiSpeedDialPageTypeTopSites
+      topSitesAvailable:self.isTopSitesResultsAvailable
+       topToolbarHidden:[self shouldHideToolbar]
+      verticalSizeClass:self.view.traitCollection.verticalSizeClass];
   }
 
   return cell;
@@ -1428,8 +1310,8 @@ NSUInteger toolbarVisibleThreshold = 2;
 - (CGPoint)collectionView:(UICollectionView *)collectionView
 targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
   NSIndexPath *currentVisibleIndexPath =
-    [NSIndexPath indexPathForRow:self.selectedMenuItemIndex
-                       inSection:0];
+      [NSIndexPath indexPathForRow:self.selectedToolbarItemIndex
+                         inSection:0];
   UICollectionViewLayoutAttributes* attributes =
     [collectionView layoutAttributesForItemAtIndexPath:currentVisibleIndexPath];
   CGPoint newOriginForOldIndex = attributes.frame.origin;
@@ -1485,13 +1367,15 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
     [self.collectionView indexPathForItemAtPoint:center];
 
   if (currentIndexPath &&
-      currentIndexPath.row < long(self.speedDialMenuItems.count)) {
+      currentIndexPath.row < long(self.toolbarItems.count)) {
     [self.topToolbarView selectItemWithIndex:currentIndexPath.row];
     [self setSelectedMenuItemIndex:currentIndexPath.row];
+    [VivaldiStartPagePrefsHelper
+        setStartPageLastVisitedGroupIndex:currentIndexPath.row];
   }
 
   if (currentIndexPath &&
-      currentIndexPath.row == long(self.speedDialMenuItems.count)) {
+      currentIndexPath.row == long(self.toolbarItems.count)) {
     [self.topToolbarView removeToolbarSelection];
   }
 }
@@ -1508,8 +1392,8 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
   [self updateBookmarkBarNodeIfNeeded];
 }
 
-- (void)refreshContents {
-  [self.delegate computeSpeedDialFolders];
+- (void)topSitesModelDidLoad {
+  self.isTopSitesResultsAvailable = YES;
 }
 
 - (void)refreshNode:(const bookmarks::BookmarkNode*)bookmarkNode {
@@ -1522,82 +1406,95 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
     // Reload the top toolbar incase any changes happens on the top toolbar
     // items.
     if (GetSpeeddial(bookmarkNode)) {
-      [self refreshContents];
+      [self.delegate computeSpeedDialFolders];
     }
   }
 }
 
-- (void)refreshMenuItems:(NSArray*)items
-               SDFolders:(NSArray*)SDFolders {
-
+- (void)refreshMenuItems:(NSArray<VivaldiNTPTopToolbarItem*>*)items {
   if (items.count <= 0) {
-    [self.speedDialMenuItems removeAllObjects];
-    [self.speedDialFolderItems removeAllObjects];
+    self.toolbarItems = nil;
     [self.topToolbarView removeAllItems];
     return;
   }
 
-  self.speedDialMenuItems = [[NSMutableArray alloc] initWithArray:items];
-  self.speedDialFolderItems = [[NSMutableArray alloc] initWithArray:SDFolders];
+  self.toolbarItems = [items copy];
+  [self.topToolbarView updateToolbarWithItems:items
+                                selectedIndex:self.selectedToolbarItemIndex];
 
-  // If there's no top sites, and only one SD folder available,
-  // or selected index is same as number of (top menu items - 1) scroll to
-  // first item.
-  // Second case can happen if user selected the last item and then removes
-  // that item from either toolbar or delete the folder from panels.
-  if (IsTopSitesEnabled()) {
-    if (![self showFrequentlyVisited] &&
-        (SDFolders.count == 1 ||
-         self.selectedMenuItemIndex == NSInteger(items.count - 1))) {
-      [self setSelectedMenuItemIndex:0];
-    }
-  } else {
-    if (SDFolders.count == 1 ||
-        self.selectedMenuItemIndex == NSInteger(items.count - 1)) {
-      [self setSelectedMenuItemIndex:0];
-    }
-  }
-
-  if ([self showSpeedDials] ||
-      (IsTopSitesEnabled() && [self showFrequentlyVisited])) {
-    [self.topToolbarView
-         updateToolbarWithItems:items
-              selectedIndex:self.selectedMenuItemIndex];
-  }
+  [self setSelectedMenuItemIndex:self.selectedToolbarItemIndex];
   [self setUpMoreButtonProperties];
+  [self resetMoreButtonContextMenuOptions];
+
+  [self.collectionView performBatchUpdates:^{
+    [self.collectionView.collectionViewLayout invalidateLayout];
+    [self.collectionView reloadSections:[NSIndexSet indexSetWithIndex:0]];
+  } completion:^(BOOL finished) {
+    [self scrollToItemWithIndex:self.selectedToolbarItemIndex animated:NO];
+    [self scrollViewDidScroll:self.collectionView];
+  }];
 }
 
-- (void)refreshChildItems:(NSArray*)items
-        topSitesAvailable:(BOOL)topSitesAvailable {
-  self.isTopSitesResultsAvailable = topSitesAvailable;
-  self.speedDialChildItems = [[NSMutableArray alloc] initWithArray:items];
+- (void)selectToolbarItemWithIndex:(NSInteger)index {
+  [self selectToolbarItemWithIndex:index animated:NO];
+}
 
-  if (self.selectedMenuItemIndex == 0) {
-    [self reloadLayout];
-    [self scrollToItemWithIndex:self.selectedMenuItemIndex animated:NO];
-    [self scrollViewDidScroll:self.collectionView];
+- (void)selectToolbarItemWithIndex:(NSInteger)index animated:(BOOL)animated {
+  [self setSelectedMenuItemIndex:index];
+  [self scrollToItemWithIndex:self.selectedToolbarItemIndex animated:animated];
+  __weak __typeof(self) weakSelf = self;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    __strong __typeof(weakSelf) strongSelf = weakSelf;
+    if (strongSelf) {
+      [strongSelf.topToolbarView
+          selectItemWithIndex:strongSelf.selectedToolbarItemIndex];
+    }
+  });
+}
+
+- (void)refreshChildItems:(NSArray<VivaldiSpeedDialItem*>*)items
+                   parent:(VivaldiNTPTopToolbarItem*)parent {
+
+  if (!parent) {
+    return;
+  }
+
+  NSUInteger indexToUpdate = NSNotFound;
+
+  if (parent.pageType == VivaldiSpeedDialPageTypeTopSites) {
+    // Find the toolbar item with matching page type
+    for (NSUInteger i = 0; i < self.toolbarItems.count; i++) {
+      VivaldiNTPTopToolbarItem *item = self.toolbarItems[i];
+      if (item.pageType == VivaldiSpeedDialPageTypeTopSites) {
+        indexToUpdate = i;
+        item.children = items;
+        break;
+      }
+    }
   } else {
-    // There is a visual split second glitch when user is on a menu index
-    // other than 0, and collection view is told to scroll to that index after
-    // reload. To avoid that lets hide the collection view until the section is
-    // reloaded, and then fade in back to give a better experience.
-    self.collectionView.alpha = 0.0;
-    [self.collectionView performBatchUpdates:^{
-      [self.collectionView.collectionViewLayout invalidateLayout];
-      [self.collectionView reloadSections:[NSIndexSet indexSetWithIndex:0]];
-    } completion:^(BOOL finished) {
-      [self scrollToItemWithIndex:self.selectedMenuItemIndex animated:NO];
-      [self scrollViewDidScroll:self.collectionView];
-      [UIView animateWithDuration:0.3 animations:^{
-        self.collectionView.alpha = 1.0;
-      }];
-    }];
+    // Find the toolbar item with matching UUID
+    for (NSUInteger i = 0; i < self.toolbarItems.count; i++) {
+      VivaldiNTPTopToolbarItem *item = self.toolbarItems[i];
+      if ([item.uuid isEqualToString:parent.uuid]) {
+        indexToUpdate = i;
+        item.children = items;
+        break;
+      }
+    }
+  }
+
+  // If we found a matching item, reload just that cell
+  if (indexToUpdate != NSNotFound) {
+    NSIndexPath *indexPath =
+        [NSIndexPath indexPathForItem:indexToUpdate inSection:0];
+    [self.collectionView reloadItemsAtIndexPaths:@[indexPath]];
   }
 }
 
 - (void)setFrequentlyVisitedPagesEnabled:(BOOL)enabled {
   [self setTopToolbarAndPagesHiddenWithShowFrequentlyVisited:enabled
           showSpeedDials:[self showSpeedDials]];
+  [self resetMoreButtonContextMenuOptions];
 }
 
 - (void)setSpeedDialsEnabled:(BOOL)enabled {
@@ -1611,20 +1508,38 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
       !enabled && !ShouldShowCustomizeStartPageButton();
 }
 
+- (void)updateSortingActionVisibilityForPage:(NSInteger)index {
+  if (self.toolbarItems.count > 0 && index < long(self.toolbarItems.count)) {
+    VivaldiNTPTopToolbarItem* selectedItem =
+        [self.toolbarItems objectAtIndex:index];
+    self.shouldShowSortingAction =
+        selectedItem &&
+            selectedItem.pageType == VivaldiSpeedDialPageTypeSpeedDial;
+  } else {
+    self.shouldShowSortingAction = NO;
+  }
+}
+
 - (void)reloadLayout {
-  [self.collectionView.collectionViewLayout invalidateLayout];
-  [self.collectionView reloadData];
+  __weak __typeof(self) weakSelf = self;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [weakSelf.collectionView.collectionViewLayout invalidateLayout];
+    [weakSelf.collectionView reloadData];
+    [weakSelf scrollToItemWithIndex:self.selectedToolbarItemIndex animated:NO];
+  });
 }
 
 #pragma mark - VivaldiNTPTopToolbarViewConsumer
-- (void)didSelectItemWithIndex:(NSInteger)index {
+- (void)didSelectItemWithIndex:(NSInteger)index
+       supportsSortingChildren:(BOOL)supportsSortingChildren {
   self.scrollFromMenuTap = YES;
-  [self setSelectedMenuItemIndex:index];
-  [self scrollToItemWithIndex:index animated:YES];
+  self.shouldShowSortingAction = supportsSortingChildren;
+  [self selectToolbarItemWithIndex:index animated:YES];
+  [VivaldiStartPagePrefsHelper setStartPageLastVisitedGroupIndex:index];
 }
 
 - (void)didTriggerRenameToolbarItem:(VivaldiNTPTopToolbarItem*)toolbarItem {
-  VivaldiSpeedDialItem* itemToRename = [self findObjectById:toolbarItem.id];
+  VivaldiSpeedDialItem* itemToRename = [self nodeForToolbarItem:toolbarItem];
   if (!itemToRename)
     return;
 
@@ -1642,7 +1557,7 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
 - (void)didTriggerRemoveToolbarItem:(VivaldiNTPTopToolbarItem*)toolbarItem {
   // This action doesn't remove the group from database, rather just removes
   // from the toolbar, which means set the folder as not a speed dial.
-  VivaldiSpeedDialItem* itemToRemove = [self findObjectById:toolbarItem.id];
+  VivaldiSpeedDialItem* itemToRemove = [self nodeForToolbarItem:toolbarItem];
   if (!itemToRemove)
     return;
   if (self.bookmarks && itemToRemove.bookmarkNode) {
@@ -1651,22 +1566,12 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
   }
 }
 
-- (VivaldiSpeedDialItem*)findObjectById:(NSNumber*)targetId {
-  for (VivaldiSpeedDialItem *item in self.speedDialFolderItems) {
-    if (item.idValue == targetId) {
-      return item;
-    }
-  }
-  return nil;
-}
-
 #pragma mark - VivaldiNSDCoordinatorDelegate
 - (void)newSpeedDialCoordinatorDidDismiss {
   if (self.nsdCoordinator) {
     self.nsdCoordinator.delegate = nil;
     [self.nsdCoordinator stop];
     self.nsdCoordinator = nil;
-    self.isNewSpeedDialDialogPresenting = NO;
   }
 }
 
@@ -1778,10 +1683,8 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
   if (!item.parent) {
     return;
   }
-
-  self.bookmarks->Move(item.bookmarkNode,
-                       item.parent,
-                       position);
+  [self.delegate moveSpeedDialItem:item
+                          position:position];
 }
 
 - (void)didSelectDeleteItem:(VivaldiSpeedDialItem*)item
@@ -1790,15 +1693,8 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
   if (item.isFrequentlyVisited) {
     [self.delegate removeMostVisited:item];
   } else {
-    if (self.bookmarks->loaded() && item.bookmarkNode) {
-      std::vector<const bookmarks::BookmarkNode*> nodes;
-      nodes.push_back(item.bookmarkNode);
-      const BookmarkNode* trashFolder = _bookmarks->trash_node();
-      bookmark_utils_ios::MoveBookmarks(nodes,
-                                        self.bookmarks,
-                                        trashFolder);
-      [_vivaldiThumbnailService removeThumbnailForSDItem:item];
-    }
+    [self.delegate deleteSpeedDialItem:item];
+    [_vivaldiThumbnailService removeThumbnailForSDItem:item];
   }
 }
 
@@ -1816,7 +1712,7 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
   // When there's no speed dial items, bookmark bar node is passed as the parent
   // Otherwise, pass the parent node of the selected item.
   VivaldiSpeedDialItem* parentItem =
-      self.speedDialMenuItems.count == 0 ? _bookmarkBarItem : parent;
+      self.toolbarItems.count == 0 ? _bookmarkBarItem : parent;
   VivaldiBookmarksEditorEntryPoint entryPoint = isFolder ?
       VivaldiBookmarksEditorEntryPointFolder :
       VivaldiBookmarksEditorEntryPointSpeedDial;

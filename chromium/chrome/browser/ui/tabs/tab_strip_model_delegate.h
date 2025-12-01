@@ -47,12 +47,9 @@ class TabGroupId;
 ///////////////////////////////////////////////////////////////////////////////
 class TabStripModelDelegate {
  public:
-  enum {
-    TAB_MOVE_ACTION = 1,
-    TAB_TEAROFF_ACTION = 2
-  };
+  enum { TAB_MOVE_ACTION = 1, TAB_TEAROFF_ACTION = 2 };
 
-  virtual ~TabStripModelDelegate() {}
+  virtual ~TabStripModelDelegate() = default;
 
   // Adds a tab to the model and loads |url| in the tab. If |url| is an empty
   // URL, then the new tab-page is loaded instead. An |index| value of -1
@@ -187,16 +184,16 @@ class TabStripModelDelegate {
   virtual BrowserWindowInterface* GetBrowserWindowInterface() = 0;
 
   // When performing actions to groups, some features may need to show
-  // interstitials before allowing deletion. |groups| is a list of all of the
-  // groups that would be Closed by the |close_callback| which may be called by
+  // interstitials before allowing deletion. `groups` is a list of all of the
+  // groups that would be Closed by the `close_callback` which may be called by
   // the implementation. This should be called with a non empty `group_ids`.
   // callback will either be executed by the delegate or asynchronously handled.
-  // A bulk operation suggests that the group should be closed rather
-  // than destroyed.
+  // When true `delete_groups` also deletes any saved groups that are closing.
+  // When false, groups will close normally but continue to be saved.
   virtual void OnGroupsDestruction(
       const std::vector<tab_groups::TabGroupId>& group_ids,
       base::OnceCallback<void()> close_callback,
-      bool is_bulk_operation) = 0;
+      bool delete_groups) = 0;
 
   virtual void OnRemovingAllTabsFromGroups(
       const std::vector<tab_groups::TabGroupId>& group_ids,

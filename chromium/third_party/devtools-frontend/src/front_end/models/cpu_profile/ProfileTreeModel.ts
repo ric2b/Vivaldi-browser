@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import type * as Protocol from '../../generated/protocol.js';
 import type * as Platform from '../../core/platform/platform.js';
+import type * as Protocol from '../../generated/protocol.js';
 
 export class ProfileNode {
   callFrame: Protocol.Runtime.CallFrame;
@@ -66,8 +66,6 @@ export class ProfileTreeModel {
 
   private assignDepthsAndParents(): void {
     const root = this.root;
-    // TODO(crbug.com/1354548): start depth from 0 once profiler
-    // panel dependencies are gone.
     root.depth = -1;
     root.parent = null;
     this.maxDepth = 0;

@@ -15,7 +15,7 @@ title: Preconnect
 ## **Overview**
 
 The networking stack implements the blink interface for the [W3C Resource Hints
-preconnect specification](http://www.w3.org/TR/resource-hints/#preconnect) to
+preconnect specification](https://www.w3.org/TR/resource-hints/#preconnect) to
 allow site developers to request connections to servers in anticipation of
 future requests. The predominant use cases are:
 

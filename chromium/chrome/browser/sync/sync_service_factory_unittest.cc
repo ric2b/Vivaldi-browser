@@ -178,6 +178,7 @@ class SyncServiceFactoryTest : public testing::Test {
     datatypes.Put(syncer::AUTOFILL_WALLET_DATA);
     datatypes.Put(syncer::AUTOFILL_WALLET_METADATA);
     datatypes.Put(syncer::AUTOFILL_WALLET_OFFER);
+    datatypes.Put(syncer::AUTOFILL_WALLET_USAGE);
     datatypes.Put(syncer::BOOKMARKS);
     if (base::FeatureList::IsEnabled(commerce::kProductSpecifications)) {
       datatypes.Put(syncer::PRODUCT_COMPARISON);
@@ -207,12 +208,9 @@ class SyncServiceFactoryTest : public testing::Test {
     }
 #endif  // BUILDFLAG(IS_ANDROID)
 
-    // syncer::PLUS_ADDRESS is excluded because GoogleGroupsManagerFactory is
-    // null for testing and hence no controller gets instantiated for the type.
-
-    if (base::FeatureList::IsEnabled(syncer::kSyncPlusAddressSetting)) {
-      datatypes.Put(syncer::PLUS_ADDRESS_SETTING);
-    }
+    // syncer::PLUS_ADDRESS and syncer::PLUS_ADDRESS_SETTING are excluded
+    // because GoogleGroupsManagerFactory is null for testing and hence no
+    // controller gets instantiated for the type.
 
     return datatypes;
   }

@@ -13,7 +13,6 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
-import static org.mockito.ArgumentMatchers.anyFloat;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -62,7 +61,6 @@ import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.base.supplier.SyncOneshotSupplierImpl;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.base.test.util.UserActionTester;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.layouts.Layout.ViewportMode;
@@ -108,7 +106,6 @@ public class HubLayoutUnitTest {
     private static final long FAKE_TIME = 0L;
 
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
-    @Rule public JniMocker mJniMocker = new JniMocker();
 
     @Rule
     public ActivityScenarioRule<TestActivity> mActivityScenarioRule =
@@ -154,9 +151,9 @@ public class HubLayoutUnitTest {
 
     @Before
     public void setUp() {
-        mJniMocker.mock(SceneLayerJni.TEST_HOOKS, mSceneLayerJni);
-        mJniMocker.mock(StaticTabSceneLayerJni.TEST_HOOKS, mStaticTabSceneLayerJni);
-        mJniMocker.mock(SolidColorSceneLayerJni.TEST_HOOKS, mSolidColorSceneLayerJni);
+        SceneLayerJni.setInstanceForTesting(mSceneLayerJni);
+        StaticTabSceneLayerJni.setInstanceForTesting(mStaticTabSceneLayerJni);
+        SolidColorSceneLayerJni.setInstanceForTesting(mSolidColorSceneLayerJni);
 
         mActionTester = new UserActionTester();
         ShadowLooper.runUiThreadTasks();
@@ -257,14 +254,10 @@ public class HubLayoutUnitTest {
         doAnswer(
                         invocation -> {
                             var args = invocation.getArguments();
-                            return new LayoutTab(
-                                    (Integer) args[0],
-                                    (Boolean) args[1],
-                                    ((Float) args[2]).intValue(),
-                                    ((Float) args[3]).intValue());
+                            return new LayoutTab((Integer) args[0], (Boolean) args[1], -1, -1);
                         })
                 .when(mUpdateHost)
-                .createLayoutTab(anyInt(), anyBoolean(), anyFloat(), anyFloat());
+                .createLayoutTab(anyInt(), anyBoolean());
         when(mTab.getId()).thenReturn(TAB_ID);
         when(mTab.isNativePage()).thenReturn(false);
         when(mTabModelSelector.getCurrentTab()).thenReturn(mTab);

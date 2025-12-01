@@ -11,7 +11,7 @@
 
 // Vivaldi
 #import "ios/web/public/web_state.h"
-#import "ios/chrome/browser/ui/toolbar/public/toolbar_type.h"
+#import "ios/chrome/browser/toolbar/ui_bundled/public/toolbar_type.h"
 // End Vivaldi
 
 @protocol TabStripPresentation;

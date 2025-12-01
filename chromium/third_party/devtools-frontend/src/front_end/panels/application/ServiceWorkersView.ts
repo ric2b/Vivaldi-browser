@@ -201,6 +201,7 @@ export class ServiceWorkersView extends UI.Widget.VBox implements
 
   constructor() {
     super(true);
+    this.registerRequiredCSS(serviceWorkersViewStyles);
 
     // TODO(crbug.com/1156978): Replace UI.ReportView.ReportView with ReportView.ts web component.
     this.currentWorkersView = new UI.ReportView.ReportView(i18n.i18n.lockedString('Service workers'));
@@ -471,12 +472,6 @@ export class ServiceWorkersView extends UI.Widget.VBox implements
 
   private updateListVisibility(): void {
     this.contentElement.classList.toggle('service-worker-list-empty', this.sections.size === 0);
-  }
-  override wasShown(): void {
-    super.wasShown();
-    this.registerCSSFiles([
-      serviceWorkersViewStyles,
-    ]);
   }
 }
 
@@ -900,7 +895,6 @@ export class Section {
            * inside so we are registering the files here. */
         serviceWorkerUpdateCycleViewStyles,
       ],
-      delegatesFocus: undefined,
     });
     const contentElement = document.createElement('div');
     shadowRoot.appendChild(contentElement);

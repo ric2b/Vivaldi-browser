@@ -12,6 +12,7 @@
 #import "ios/chrome/browser/text_zoom/ui_bundled/text_zoom_consumer.h"
 #import "ios/chrome/browser/web/model/font_size/font_size_tab_helper.h"
 #import "ios/public/provider/chrome/browser/text_zoom/text_zoom_api.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/settings/pagezoom/vivaldi_pagezoom_settings_prefs.h"
 #import "ios/web/public/browser_state.h"
 #import "ios/web/public/favicon/favicon_status.h"
@@ -101,10 +102,10 @@
 
 - (void)zoomIn {
   if (_activeWebState) {
-    FontSizeTabHelper* FontSizeTabHelper =
+    FontSizeTabHelper* fontSizeTabHelper =
       FontSizeTabHelper::FromWebState(_activeWebState);
-    if (FontSizeTabHelper) {
-      FontSizeTabHelper->UserZoom(ZOOM_IN);
+    if (fontSizeTabHelper) {
+      fontSizeTabHelper->UserZoom(ZOOM_IN);
     }
   }
   [self updateConsumerState];
@@ -136,74 +137,6 @@
   [self updateConsumerState];
 }
 
-- (void)updateGlobalZoomSwitch:(UISwitch*)sender {
-  if (_prefService) {
-    [VivaldiPageZoomSettingPrefs
-      setGlobalPageZoomEnabledWithPrefService:sender.isOn
-                               inPrefServices:_prefService];
-      if (sender.isOn) {
-        int zoomLevel = [VivaldiPageZoomSettingPrefs
-                          getPageZoomLevelWithPrefService:_prefService];
-        for (int i = 0; i < _webStateList->count(); i++) {
-          web::WebState* webState = _webStateList->GetWebStateAt(i);
-          if (webState) {
-            ios::provider::SetTextZoomForWebState(webState, zoomLevel);
-          }
-        }
-      } else {
-        for (int i = 0; i < _webStateList->count(); i++) {
-          web::WebState* webState = _webStateList->GetWebStateAt(i);
-          if (webState) {
-            FontSizeTabHelper* fontSizeTabHelper =
-              FontSizeTabHelper::FromWebState(webState);
-            if (fontSizeTabHelper) {
-              fontSizeTabHelper->
-                SetPageZoomSize(fontSizeTabHelper->GetFontZoomSize());
-            }
-          }
-        }
-      }
-    [self updateConsumerState];
-  }
-}
-
-- (void)updateConsumerState {
-  if (_activeWebState) {
-    FontSizeTabHelper* fontSizeTabHelper =
-      FontSizeTabHelper::FromWebState(_activeWebState);
-    if (fontSizeTabHelper && _prefService) {
-      // Use injected prefService property
-      BOOL enabled = [VivaldiPageZoomSettingPrefs
-                       getGlobalPageZoomEnabledWithPrefService:_prefService];
-      if (enabled) {
-        double level = [VivaldiPageZoomSettingPrefs
-                         getPageZoomLevelWithPrefService:_prefService];
-        [_consumer setZoomInEnabled:NO];
-        [_consumer setZoomOutEnabled:NO];
-        [_consumer setResetZoomEnabled:NO];
-        [_consumer setGlobalPageZoom:YES];
-        [_consumer setCurrentZoomLevel:level];
-      } else {
-        [_consumer setGlobalPageZoom:NO];
-        [_consumer setZoomInEnabled:fontSizeTabHelper->CanUserZoomIn()];
-        [_consumer setZoomOutEnabled:fontSizeTabHelper->CanUserZoomOut()];
-        [_consumer setResetZoomEnabled:fontSizeTabHelper->CanUserResetZoom()];
-        [_consumer setCurrentZoomLevel:fontSizeTabHelper->GetFontZoomSize()];
-      }
-    }
-    GURL url = _activeWebState->GetLastCommittedURL();
-    [_consumer setCurrentHostURL:base::SysUTF8ToNSString(url.host().c_str())];
-    const web::FaviconStatus& favicon_status =
-      _activeWebState->GetFaviconStatus();
-    if (_activeWebState->GetFaviconStatus().valid) {
-      gfx::Image gfxImage = favicon_status.image;
-      if (!gfxImage.IsEmpty()) {
-        [_consumer setCurrentHostFavicon: gfxImage.ToUIImage()];
-      }
-    }
-  }
-}
-
 #pragma mark - CRWWebStateObserver
 
 - (void)webStateDestroyed:(web::WebState*)webState {
@@ -227,6 +160,38 @@
   if (webState) {
     _activeWebState = webState;
     _activeWebState->AddObserver(_activeWebStateObserver.get());
+  }
+}
+
+- (void) updateConsumerState {
+  if (!_activeWebState || !_prefService) {
+    return;
+  }
+  FontSizeTabHelper* activeFontSizeTabHelper =
+    FontSizeTabHelper::FromWebState(_activeWebState);
+  if (!activeFontSizeTabHelper) {
+    return;
+  }
+
+  // Up UI States for zoom label plus, miuns and reset buttons
+  int level = activeFontSizeTabHelper->GetFontZoomSize();
+  [_consumer setCurrentZoomLevel:level];
+  [_consumer setZoomInEnabled:activeFontSizeTabHelper->CanUserZoomIn()];
+  [_consumer setZoomOutEnabled:activeFontSizeTabHelper->CanUserZoomOut()];
+  [_consumer setResetZoomEnabled:activeFontSizeTabHelper->CanUserResetZoom()];
+
+  // Updating favicon and URL
+  GURL url = _activeWebState->GetLastCommittedURL();
+  NSString* stringUrl = base::SysUTF8ToNSString(url.host().c_str());
+  [_consumer setCurrentHostURL:
+    [VivaldiGlobalHelpers hostOfURLString: stringUrl]];
+  const web::FaviconStatus& favicon_status =
+    _activeWebState->GetFaviconStatus();
+  if (_activeWebState->GetFaviconStatus().valid) {
+    gfx::Image gfxImage = favicon_status.image;
+    if (!gfxImage.IsEmpty()) {
+      [_consumer setCurrentHostFavicon: gfxImage.ToUIImage()];
+    }
   }
 }
 

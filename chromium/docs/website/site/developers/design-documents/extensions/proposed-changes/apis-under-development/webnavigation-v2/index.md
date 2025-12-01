@@ -48,8 +48,8 @@ Use cases
 
 Do you know anyone else, internal or external, that is also interested in this
 API?
-*There were bug reports filed about this: <http://crbug.com/116643>
-<http://crbug.com/117043>*
+*There were bug reports filed about this: <https://crbug.com/116643>
+<https://crbug.com/117043>*
 
 Could this API be part of the web platform?
 *No, it's just an extension of an existing API*

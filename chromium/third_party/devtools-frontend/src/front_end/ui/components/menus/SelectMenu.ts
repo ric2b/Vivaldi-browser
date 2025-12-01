@@ -4,8 +4,8 @@
 
 import * as Platform from '../../../core/platform/platform.js';
 import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
-import * as Coordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
-import * as LitHtml from '../../../ui/lit-html/lit-html.js';
+import * as RenderCoordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
+import * as Lit from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 import * as Dialogs from '../dialogs/dialogs.js';
 
@@ -14,12 +14,18 @@ import {
   type MenuItemSelectedEvent,
   type MenuItemValue,
 } from './Menu.js';
-import selectMenuStyles from './selectMenu.css.js';
-import selectMenuButtonStyles from './selectMenuButton.css.js';
+import selectMenuStylesRaw from './selectMenu.css.js';
+import selectMenuButtonStylesRaw from './selectMenuButton.css.js';
 
-const {html} = LitHtml;
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const selectMenuStyles = new CSSStyleSheet();
+selectMenuStyles.replaceSync(selectMenuStylesRaw.cssContent);
 
-const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const selectMenuButtonStyles = new CSSStyleSheet();
+selectMenuButtonStyles.replaceSync(selectMenuButtonStylesRaw.cssContent);
+
+const {html} = Lit;
 
 export interface SelectMenuData {
   /**
@@ -36,15 +42,14 @@ export interface SelectMenuData {
   horizontalAlignment: Dialogs.Dialog.DialogHorizontalAlignment;
   /**
    * The title of the menu button. Can be either a string or a function
-   * that returns a LitHTML template.
+   * that returns a Lit template.
    * If not set, the title of the button will default to the selected
    * item's text.
    */
   buttonTitle: string|TitleCallback;
   /**
    * Determines if an arrow, pointing to the opposite side of
-   * the dialog, is shown at the end of the button. If
-   * showconnector is set to true the arrow is always shown.
+   * the dialog, is shown at the end of the button.
    * Defaults to false.
    */
   showArrow: boolean;
@@ -56,12 +61,6 @@ export interface SelectMenuData {
    * Defaults to false.
    */
   sideButton: boolean;
-  /**
-   * Determines if a connector from the dialog to the button
-   * is shown.
-   * Defaults to false.
-   */
-  showConnector: boolean;
   /**
    * Whether the menu button is disabled.
    * Defaults to false.
@@ -82,7 +81,7 @@ export interface SelectMenuData {
    */
   jslogContext: string;
 }
-type TitleCallback = () => LitHtml.TemplateResult;
+type TitleCallback = () => Lit.TemplateResult;
 
 const deployMenuArrow = new URL('../../../Images/triangle-down.svg', import.meta.url).toString();
 
@@ -96,7 +95,6 @@ export class SelectMenu extends HTMLElement {
     position: Dialogs.Dialog.DialogVerticalPosition.BOTTOM,
     horizontalAlignment: Dialogs.Dialog.DialogHorizontalAlignment.AUTO,
     showArrow: false,
-    showConnector: false,
     sideButton: false,
     showDivider: false,
     disabled: false,
@@ -128,18 +126,6 @@ export class SelectMenu extends HTMLElement {
 
   set horizontalAlignment(horizontalAlignment: Dialogs.Dialog.DialogHorizontalAlignment) {
     this.#props.horizontalAlignment = horizontalAlignment;
-    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#renderBound);
-  }
-
-  get showConnector(): boolean {
-    return this.#props.showConnector;
-  }
-
-  set showConnector(showConnector: boolean) {
-    if (!this.#props.showArrow) {
-      this.#props.showArrow = showConnector;
-    }
-    this.#props.showConnector = showConnector;
     void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#renderBound);
   }
 
@@ -225,21 +211,11 @@ export class SelectMenu extends HTMLElement {
     this.dispatchEvent(new SelectMenuSideButtonClickEvent());
   }
 
-  #maybeGetArrowXPosition(): number {
-    if (this.showConnector) {
-      // This block is not wrapped in a `coordinator.read` because this function's
-      // only invocation is already wrapped in one (in Dialog.showDialog).
-      const arrowBounds = this.#getButton().getBoundingClientRect();
-      return (arrowBounds.left + arrowBounds.right) / 2;
-    }
-    return NaN;
-  }
-
-  #getButtonText(): LitHtml.TemplateResult|string {
+  #getButtonText(): Lit.TemplateResult|string {
     return this.buttonTitle instanceof Function ? this.buttonTitle() : this.buttonTitle;
   }
 
-  #renderButton(): LitHtml.TemplateResult {
+  #renderButton(): Lit.TemplateResult {
     const buttonLabel = this.#getButtonText();
     if (!this.sideButton) {
       // clang-format off
@@ -278,7 +254,7 @@ export class SelectMenu extends HTMLElement {
     if (evt) {
       evt.stopImmediatePropagation();
     }
-    void coordinator.write(() => {
+    void RenderCoordinator.write(() => {
       this.removeAttribute('has-open-dialog');
     });
     this.#open = false;
@@ -293,18 +269,17 @@ export class SelectMenu extends HTMLElement {
     if (!ComponentHelpers.ScheduledRender.isScheduledRender(this)) {
       throw new Error('SelectMenu render was not scheduled');
     }
-    LitHtml.render(
+    Lit.render(
         html`
       <devtools-menu
         @menucloserequest=${this.#onMenuClose}
         @menuitemselected=${this.#onItemSelected}
         .position=${this.position}
         .origin=${this}
-        .showConnector=${this.showConnector}
         .showDivider=${this.showDivider}
         .showSelectedItem=${this.showSelectedItem}
         .open=${this.#open}
-        .getConnectorCustomXPosition=${this.showConnector ? this.#maybeGetArrowXPosition.bind(this) : null}
+        .getConnectorCustomXPosition=${null}
       >
       <slot>
       </slot>
@@ -331,7 +306,7 @@ export class SelectMenuButton extends HTMLElement {
   connectedCallback(): void {
     this.#shadow.adoptedStyleSheets = [selectMenuButtonStyles];
     this.style.setProperty('--deploy-menu-arrow', `url(${deployMenuArrow})`);
-    void coordinator.write(() => {
+    void RenderCoordinator.write(() => {
       switch (this.arrowDirection) {
         case Dialogs.Dialog.DialogVerticalPosition.AUTO:
         case Dialogs.Dialog.DialogVerticalPosition.TOP: {
@@ -383,7 +358,7 @@ export class SelectMenuButton extends HTMLElement {
   }
 
   set open(open: boolean) {
-    void coordinator.write(() => {
+    void RenderCoordinator.write(() => {
       this.#getShowButton()?.setAttribute('aria-expanded', String(open));
     });
   }
@@ -435,18 +410,18 @@ export class SelectMenuButton extends HTMLElement {
     if (!ComponentHelpers.ScheduledRender.isScheduledRender(this)) {
       throw new Error('SelectMenuItem render was not scheduled');
     }
-    const arrow = this.#props.showArrow ? html`<span id="arrow"></span>` : LitHtml.nothing;
+    const arrow = this.#props.showArrow ? html`<span id="arrow"></span>` : Lit.nothing;
     const classMap = {'single-arrow': this.#props.singleArrow};
     // clang-format off
       const buttonTitle = html`
       <span id="button-label-wrapper">
-        <span id="label" ?witharrow=${this.showArrow} class=${LitHtml.Directives.classMap(classMap)}><slot></slot></span>
+        <span id="label" ?witharrow=${this.showArrow} class=${Lit.Directives.classMap(classMap)}><slot></slot></span>
         ${arrow}
       </span>
       `;
 
     // clang-format off
-    LitHtml.render(html`
+    Lit.render(html`
       <button aria-haspopup="true" aria-expanded="false" class="show" @keydown=${this.#handleButtonKeyDown} @click=${this.#handleClick} ?disabled=${this.disabled} jslog=${VisualLogging.dropDown(this.jslogContext)}>${buttonTitle}</button>
     `, this.#shadow, { host: this });
     // clang-format on

@@ -305,8 +305,8 @@ void RecordWidgetUsage(base::span<const HistogramNameCountPair> histograms) {
 }
 }  // namespace metrics_mediator
 
-using metrics_mediator::kAppEnteredBackgroundDateKey;
 using metrics_mediator::kAppDidFinishLaunchingConsecutiveCallsKey;
+using metrics_mediator::kAppEnteredBackgroundDateKey;
 
 @interface MetricsMediator ()
 // Starts or stops metrics recording.
@@ -376,8 +376,9 @@ BOOL _credentialExtensionWasUsed = NO;
 }
 
 + (void)logStartupDuration:(id<StartupInformation>)startupInformation {
-  if (![startupInformation isColdStart])
+  if (![startupInformation isColdStart]) {
     return;
+  }
 
   [MetricKitSubscriber endExtendedLaunchTask];
   base::TimeTicks now = base::TimeTicks::Now();
@@ -633,8 +634,9 @@ BOOL _credentialExtensionWasUsed = NO;
 
 - (void)updateMetricsStateBasedOnPrefsUserTriggered:(BOOL)isUserTriggered {
   BOOL optIn = [self areMetricsEnabled];
-  if (isUserTriggered)
+  if (isUserTriggered) {
     [self updateMetricsPrefsOnPermissionChange:optIn];
+  }
   [self setMetricsEnabled:optIn];
   crash_helper::SetEnabled(optIn);
   [self setAppGroupMetricsEnabled:optIn];
@@ -676,16 +678,19 @@ BOOL _credentialExtensionWasUsed = NO;
   metrics::MetricsService* metrics =
       GetApplicationContext()->GetMetricsService();
   DCHECK(metrics);
-  if (!metrics)
+  if (!metrics) {
     return;
+  }
   if (enabled) {
-    if (!metrics->recording_active())
+    if (!metrics->recording_active()) {
       metrics->Start();
+    }
 
     metrics->EnableReporting();
   } else {
-    if (metrics->recording_active())
+    if (metrics->recording_active()) {
       metrics->Stop();
+    }
   }
 }
 
@@ -730,14 +735,16 @@ BOOL _credentialExtensionWasUsed = NO;
   metrics::MetricsService* metrics =
       GetApplicationContext()->GetMetricsService();
   DCHECK(metrics);
-  if (!metrics)
+  if (!metrics) {
     return;
+  }
   if (enabled) {
     // When a user opts in to the metrics reporting service, the previously
     // collected data should be cleared to ensure that nothing is reported
     // before a user opts in and all reported data is accurate.
-    if (!metrics->recording_active())
+    if (!metrics->recording_active()) {
       metrics->ClearSavedStabilityMetrics();
+    }
   } else {
     // Clear the client id pref when opting out.
     // Note: Clearing client id will not affect the running state (e.g. field

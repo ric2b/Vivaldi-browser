@@ -8,12 +8,17 @@
 #import "base/metrics/field_trial_params.h"
 #import "components/prefs/pref_service.h"
 #import "components/variations/service/variations_service.h"
+#import "ios/chrome/browser/authentication/ui_bundled/cells/signin_promo_view_constants.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
-#import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_constants.h"
 
 #pragma mark - Constants
+
+const char kDeprecateFeedHeaderParameterFeedLabel[] = "feed-label";
+const char kDeprecateFeedHeaderParameterTopPadding[] = "top-padding";
+const char kDeprecateFeedHeaderParameterEnlargeLogoAndFakebox[] =
+    "enlarge-logo-n-fakebox";
 
 #pragma mark - Feature declarations
 
@@ -99,4 +104,20 @@ bool IsSignedOutViewDemotionEnabled() {
 
 bool IsiPadFeedGhostCardsEnabled() {
   return base::FeatureList::IsEnabled(kEnableiPadFeedGhostCards);
+}
+
+bool ShouldAddDiscoverLabel() {
+  return base::GetFieldTrialParamByFeatureAsBool(
+      kDeprecateFeedHeader, kDeprecateFeedHeaderParameterFeedLabel, false);
+}
+
+bool ShouldAddTopPaddingToNTP() {
+  return base::GetFieldTrialParamByFeatureAsBool(
+      kDeprecateFeedHeader, kDeprecateFeedHeaderParameterTopPadding, false);
+}
+
+bool ShouldEnlargeLogoAndFakebox() {
+  return base::GetFieldTrialParamByFeatureAsBool(
+      kDeprecateFeedHeader, kDeprecateFeedHeaderParameterEnlargeLogoAndFakebox,
+      false);
 }

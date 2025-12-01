@@ -3,7 +3,7 @@
 # found in the LICENSE file.
 
 from recipe_engine.post_process import (DropExpectation, StatusSuccess,
-                                        SummaryMarkdown)
+                                        SummaryMarkdownRE)
 
 PYTHON_VERSION_COMPATIBILITY = 'PY3'
 
@@ -69,9 +69,8 @@ def GenTests(api):
       ),
       api.expect_exception('DepsDiffException'),
       api.post_process(
-          SummaryMarkdown,
-          "Uncaught Exception: DepsDiffException('Unexpected result: autoroll "
-          "diff found 0 files changed')"),
+          SummaryMarkdownRE,
+          "Unexpected result: autoroll diff found 0 files changed"),
       api.post_process(DropExpectation),
       status="INFRA_FAILURE")
 
@@ -85,9 +84,8 @@ def GenTests(api):
       ),
       api.expect_exception('DepsDiffException'),
       api.post_process(
-          SummaryMarkdown,
-          "Uncaught Exception: DepsDiffException('Couldn't checkout previous "
-          "ref: fatal: bad object abcdef1234567890')"),
+          SummaryMarkdownRE,
+          "Couldn't checkout previous ref: fatal: bad object abcdef1234567890"),
       api.post_process(DropExpectation),
       status="INFRA_FAILURE")
 

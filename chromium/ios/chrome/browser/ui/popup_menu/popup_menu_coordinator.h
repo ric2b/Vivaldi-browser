@@ -10,7 +10,7 @@
 #import "ios/chrome/browser/shared/coordinator/chrome_coordinator/chrome_coordinator.h"
 
 // Vivaldi
-#import "ios/chrome/browser/ui/toolbar/public/toolbar_type.h"
+#import "ios/chrome/browser/toolbar/ui_bundled/public/toolbar_type.h"
 // End Vivaldi
 
 @protocol PopupMenuUIUpdating;

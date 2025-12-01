@@ -94,7 +94,9 @@ void RecordGamepadsForIdentifiabilityStudy(
           .AddValue(gp->connected())
           .AddToken(IdentifiabilityBenignStringToken(gp->id()))
           .AddToken(IdentifiabilityBenignStringToken(gp->mapping().AsString()))
-          .AddValue(gp->timestamp());
+          .AddValue(base::Time::FromMillisecondsSinceUnixEpoch(gp->timestamp())
+                        .ToDeltaSinceWindowsEpoch()
+                        .InMicroseconds());
       if (auto* vb = gp->vibrationActuator()) {
         builder.AddToken(
             IdentifiabilityBenignStringToken(vb->type().AsString()));
@@ -130,7 +132,7 @@ HeapVector<Member<Gamepad>> NavigatorGamepad::getGamepads(
   ExecutionContext* context = navigator_gamepad->GetExecutionContext();
 
   if (!context || !context->IsFeatureEnabled(
-                      mojom::blink::PermissionsPolicyFeature::kGamepad)) {
+                      network::mojom::PermissionsPolicyFeature::kGamepad)) {
     exception_state.ThrowSecurityError(kFeaturePolicyBlocked);
     return HeapVector<Member<Gamepad>>();
   }

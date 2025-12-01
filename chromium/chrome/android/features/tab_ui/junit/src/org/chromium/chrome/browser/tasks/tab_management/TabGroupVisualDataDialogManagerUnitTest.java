@@ -25,13 +25,13 @@ import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.robolectric.Robolectric;
 import org.robolectric.annotation.Config;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Features.EnableFeatures;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -62,7 +62,7 @@ public class TabGroupVisualDataDialogManagerUnitTest {
     private static final String TAB_GROUP_CREATION_DIALOG_SYNC_TEXT_FEATURE =
             FeatureConstants.TAB_GROUP_CREATION_DIALOG_SYNC_TEXT_FEATURE;
 
-    @Rule public JniMocker mJniMocker = new JniMocker();
+    @Rule public final MockitoRule mMockitoRule = MockitoJUnit.rule();
 
     @Mock TabGroupSyncFeatures.Natives mTabGroupSyncFeaturesJniMock;
     @Mock private Tracker mTracker;
@@ -79,7 +79,6 @@ public class TabGroupVisualDataDialogManagerUnitTest {
 
     @Before
     public void setUp() {
-        MockitoAnnotations.initMocks(this);
         TrackerFactory.setTrackerForTests(mTracker);
 
         mActivity = Robolectric.buildActivity(Activity.class).setup().get();
@@ -89,7 +88,7 @@ public class TabGroupVisualDataDialogManagerUnitTest {
                         mModalDialogManager,
                         TabGroupVisualDataDialogManager.DialogType.TAB_GROUP_CREATION,
                         R.string.tab_group_creation_dialog_title);
-        mJniMocker.mock(TabGroupSyncFeaturesJni.TEST_HOOKS, mTabGroupSyncFeaturesJniMock);
+        TabGroupSyncFeaturesJni.setInstanceForTesting(mTabGroupSyncFeaturesJniMock);
         SyncServiceFactory.setInstanceForTesting(mSyncService);
 
         doReturn(mTabModel).when(mTabGroupModelFilter).getTabModel();

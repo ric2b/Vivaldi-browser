@@ -112,7 +112,7 @@
 <translation id="2889064240420137087">Iepenje keppeling mei...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> koe net komunisearje mei dizze printer. Kontrolearje of de printer oansluten is en besykje nochris.</translation>
 <translation id="2916745397441987255">Tafoegingen sykje</translation>
-<translation id="2931157624143513983">Oanpasse oan print gebiet</translation>
+<translation id="2931157624143513983">Print gebiet</translation>
 <translation id="2932085390869194046">Wachtwurd foarstelle...</translation>
 <translation id="2932883381142163287">Misbrûk rapportearje</translation>
 <translation id="2941112035454246133">Leech</translation>
@@ -279,6 +279,7 @@
 <translation id="5582839680698949063">Haadmenu</translation>
 <translation id="5614553682702429503">Wachtwurd bewarje?</translation>
 <translation id="5623842676595125836">Loch</translation>
+<translation id="5624959475330585145">Freegje foardat net feilige ferbiningen brûkt wurde</translation>
 <translation id="5638309510554459422">Tafoegingen en tema's sykje yn de <ph name="BEGIN_LINK" />Chrome Web Store<ph name="END_LINK" /></translation>
 <translation id="5677928146339483299">Tsjinkeard</translation>
 <translation id="5707185214361380026">Flater by it laden fan tafoeging fan:</translation>
@@ -468,6 +469,7 @@ Bewarje jo kaai triem op in feilich plak. Jo ha it nedich om nije ferzjen fan jo
 <translation id="9218430445555521422">As standert ynstelle</translation>
 <translation id="93766956588638423">Tafoeging reparearje</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
+<translation id="961856697154696964">Sneup gegevens wiskje</translation>
 <translation id="994289308992179865">&amp;Werhelje</translation>
 <translation id="998747458861718449">Y&amp;nspektearje</translation>
 </translationbundle>

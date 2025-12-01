@@ -10,7 +10,6 @@
 
 #include "base/containers/contains.h"
 #include "base/logging.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
@@ -417,7 +416,7 @@ NoteModelMerger::RemoteTreeNode NoteModelMerger::RemoteTreeNode::BuildTree(
   }
 
   // Sort the children according to their unique position.
-  base::ranges::sort(node.children_, UniquePositionLessThan);
+  std::ranges::sort(node.children_, UniquePositionLessThan);
 
   return node;
 }

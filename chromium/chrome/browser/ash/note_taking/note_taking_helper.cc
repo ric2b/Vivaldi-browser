@@ -2,32 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "chrome/browser/ash/note_taking/note_taking_helper.h"
 
 #include <stddef.h>
 
 #include <atomic>
+#include <iterator>
 #include <map>
 #include <ostream>
 #include <utility>
 
 #include "apps/launcher.h"
-#include "ash/components/arc/metrics/arc_metrics_constants.h"
-#include "ash/components/arc/metrics/arc_metrics_service.h"
-#include "ash/components/arc/mojom/file_system.mojom-forward.h"
-#include "ash/components/arc/mojom/file_system.mojom.h"
-#include "ash/components/arc/mojom/intent_common.mojom-forward.h"
-#include "ash/components/arc/mojom/intent_common.mojom-shared.h"
-#include "ash/components/arc/mojom/intent_common.mojom.h"
-#include "ash/components/arc/mojom/intent_helper.mojom.h"
-#include "ash/components/arc/session/arc_bridge_service.h"
-#include "ash/components/arc/session/arc_service_manager.h"
-#include "ash/components/arc/session/connection_holder.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/constants/web_app_id_constants.h"
 #include "ash/public/cpp/stylus_utils.h"
@@ -53,7 +38,18 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/pref_names.h"
-#include "components/arc/intent_helper/arc_intent_helper_bridge.h"
+#include "chromeos/ash/experiences/arc/intent_helper/arc_intent_helper_bridge.h"
+#include "chromeos/ash/experiences/arc/metrics/arc_metrics_constants.h"
+#include "chromeos/ash/experiences/arc/metrics/arc_metrics_service.h"
+#include "chromeos/ash/experiences/arc/mojom/file_system.mojom-forward.h"
+#include "chromeos/ash/experiences/arc/mojom/file_system.mojom.h"
+#include "chromeos/ash/experiences/arc/mojom/intent_common.mojom-forward.h"
+#include "chromeos/ash/experiences/arc/mojom/intent_common.mojom-shared.h"
+#include "chromeos/ash/experiences/arc/mojom/intent_common.mojom.h"
+#include "chromeos/ash/experiences/arc/mojom/intent_helper.mojom.h"
+#include "chromeos/ash/experiences/arc/session/arc_bridge_service.h"
+#include "chromeos/ash/experiences/arc/session/arc_service_manager.h"
+#include "chromeos/ash/experiences/arc/session/connection_holder.h"
 #include "components/prefs/pref_service.h"
 #include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
@@ -93,9 +89,7 @@ const char* const kDefaultAllowedAppIds[] = {
     NoteTakingHelper::kNoteTakingWebAppIdTest,
 };
 
-// Types of App Service apps that support note taking. Note that Note Taking
-// Chrome Apps are not supported in Lacros, so kStandaloneBrowserChromeApp is
-// not included.
+// Types of App Service apps that support note taking.
 // TODO (crbug.com/1336120): Add Android here.
 const apps::AppType kNoteTakingAppTypes[] = {apps::AppType::kWeb,
                                              apps::AppType::kChromeApp};
@@ -439,9 +433,9 @@ NoteTakingHelper::NoteTakingHelper()
     force_allowed_app_ids_ = base::SplitString(
         switch_value, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
   }
-  force_allowed_app_ids_.insert(
-      force_allowed_app_ids_.end(), kDefaultAllowedAppIds,
-      kDefaultAllowedAppIds + std::size(kDefaultAllowedAppIds));
+  force_allowed_app_ids_.insert(force_allowed_app_ids_.end(),
+                                std::begin(kDefaultAllowedAppIds),
+                                std::end(kDefaultAllowedAppIds));
 
   // Track profiles so we can observe their app registries.
   profile_manager_observation_.Observe(g_browser_process->profile_manager());

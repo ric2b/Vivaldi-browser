@@ -9,13 +9,13 @@
 
 #include "mojo/core/ipcz_driver/mojo_message.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <utility>
 
 #include "base/containers/span.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/ranges/algorithm.h"
 #include "mojo/core/ipcz_api.h"
 #include "mojo/core/ipcz_driver/data_pipe.h"
 #include "mojo/core/scoped_ipcz_handle.h"
@@ -87,7 +87,7 @@ MojoMessage::MojoMessage(std::vector<uint8_t> data,
     : handles_(std::move(handles)) {
   data_storage_.reset(static_cast<uint8_t*>(operator new(data.size())));
   data_storage_size_ = data.size();
-  base::ranges::copy(data, data_storage_.get());
+  std::ranges::copy(data, data_storage_.get());
 }
 
 MojoMessage::~MojoMessage() {
@@ -167,7 +167,7 @@ MojoResult MojoMessage::ReserveCapacity(uint32_t payload_buffer_size,
   data_storage_size_ = std::max(payload_buffer_size, uint32_t{kMinBufferSize});
   DataPtr new_storage(static_cast<uint8_t*>(operator new(data_storage_size_)));
   data_storage_ = std::move(new_storage);
-  data_ = base::make_span(data_storage_.get(), 0u);
+  data_ = base::span(data_storage_.get(), 0u);
 
   if (buffer_size) {
     *buffer_size = base::checked_cast<uint32_t>(data_storage_size_);
@@ -195,14 +195,14 @@ MojoResult MojoMessage::AppendData(uint32_t additional_num_bytes,
         std::max(data_size * kGrowthFactor, required_storage_size);
     DataPtr new_storage(
         static_cast<uint8_t*>(operator new(data_storage_size_)));
-    base::ranges::copy(base::make_span(data_storage_.get(), copy_size),
-                       new_storage.get());
+    std::ranges::copy(base::span(data_storage_.get(), copy_size),
+                      new_storage.get());
     data_storage_ = std::move(new_storage);
   }
-  data_ = base::make_span(data_storage_.get(), new_data_size);
+  data_ = base::span(data_storage_.get(), new_data_size);
 
   handles_.reserve(handles_.size() + num_handles);
-  for (MojoHandle handle : base::make_span(handles, num_handles)) {
+  for (MojoHandle handle : base::span(handles, num_handles)) {
     handles_.push_back(handle);
   }
   if (buffer) {
@@ -247,7 +247,7 @@ IpczResult MojoMessage::GetData(void** buffer,
     return MOJO_RESULT_RESOURCE_EXHAUSTED;
   }
 
-  base::ranges::copy(handles_, handles);
+  std::ranges::copy(handles_, handles);
   handles_.clear();
   handles_consumed_ = true;
   return MOJO_RESULT_OK;

@@ -106,7 +106,7 @@ UserDirectoryIntegrityManager::GetMisconfiguredUserAccountIdLegacy() {
 
   UserList users = UserManager::Get()->GetUsers();
   auto misconfigured_user_it =
-      base::ranges::find_if(users, [&misconfigured_user_email](User* user) {
+      std::ranges::find_if(users, [&misconfigured_user_email](User* user) {
         return user->GetAccountId().GetUserEmail() ==
                misconfigured_user_email.value();
       });
@@ -130,8 +130,7 @@ UserDirectoryIntegrityManager::GetMisconfiguredUserAccountIdLegacy() {
   // Since we only record `incomplete_login_user_account` pref in
   // `auth_session_authenticator` for regular and kiosk users, it should be
   // impossible to reach here after checking for both types of users above.
-  NOTREACHED_IN_MIGRATION();
-  return std::nullopt;
+  NOTREACHED();
 }
 
 std::optional<std::string>

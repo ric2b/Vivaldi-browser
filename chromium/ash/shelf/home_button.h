@@ -101,10 +101,10 @@ class ASH_EXPORT HomeButton : public ShelfControlButton,
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override;
   void Layout(PassKey) override;
+  void AddedToWidget() override;
 
   // views::Button:
   void OnGestureEvent(ui::GestureEvent* event) override;
-  std::u16string GetTooltipText(const gfx::Point& p) const override;
 
   // ShelfButtonDelegate:
   void OnShelfButtonAboutToRequestFocusFromTabTraversal(ShelfButton* button,
@@ -163,6 +163,8 @@ class ASH_EXPORT HomeButton : public ShelfControlButton,
   views::ImageButton* quick_app_button_for_test() const {
     return quick_app_button_;
   }
+
+  void UpdateTooltipText();
 
  protected:
   // views::Button:

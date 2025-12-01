@@ -52,12 +52,14 @@ enum class Capability : uint8_t {
     kAllowModuleScopeLets,
     /// Allow overrides
     kAllowOverrides,
-    /// Allows pointers inside structures.
-    kAllowPointersInStructures,
+    /// Allows pointers and handle addressspace variables inside structures.
+    kAllowPointersAndHandlesInStructures,
     /// Allows ref types
     kAllowRefTypes,
     /// Allows access instructions to create pointers to vector elements.
     kAllowVectorElementPointer,
+    /// Allows private address space variables in function scopes.
+    kAllowPrivateVarsInFunctions,
 };
 
 /// Capabilities is a set of Capability

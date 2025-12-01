@@ -6,6 +6,7 @@
 #define V8_BUILTINS_BUILTINS_DEFINITIONS_H_
 
 #include "builtins-generated/bytecodes-builtins-list.h"
+#include "src/common/globals.h"
 
 // include generated header
 #include "torque-generated/builtin-definitions.h"
@@ -67,6 +68,40 @@ namespace internal {
   /* size unmodified to avoid unexpected performance implications. */       \
   /* It should be removed. */                                               \
   CPP(DummyBuiltin, kDontAdaptArgumentsSentinel)
+
+#ifdef V8_ENABLE_LEAPTIERING
+
+/* Tiering related builtins
+ *
+ * These builtins are used for tiering. Some special conventions apply. They,
+ * - can be passed to the JSDispatchTable::SetTieringRequest to be executed
+ *   instead of the actual JSFunction's code.
+ * - need to uninstall themselves using JSDispatchTable::ResetTieringRequest.
+ * - need to tail call the actual JSFunction's code.
+ *
+ * Also, there are lifecycle considerations since the tiering requests are
+ * mutually exclusive.
+ *
+ * For RCS the optimizing builtins should include the work `Optimize` in their
+ * name (see tools/callstats_groups.py).
+ *
+ * */
+#define BUILTIN_LIST_BASE_TIERING(TFC)             \
+  TFC(FunctionLogNextExecution, JSTrampoline)      \
+  TFC(StartMaglevOptimizeJob, JSTrampoline)        \
+  TFC(StartTurbofanOptimizeJob, JSTrampoline)      \
+  TFC(OptimizeMaglevEager, JSTrampoline)           \
+  TFC(OptimizeTurbofanEager, JSTrampoline)         \
+  TFC(MarkReoptimizeLazyDeoptimized, JSTrampoline) \
+  TFC(MarkLazyDeoptimized, JSTrampoline)
+
+#else
+
+#define BUILTIN_LIST_BASE_TIERING(TFC)                       \
+  /* TODO(saelo): should this use a different descriptor? */ \
+  TFC(CompileLazyDeoptimizedCode, JSTrampoline)
+
+#endif
 
 #define BUILTIN_LIST_BASE_TIER1(CPP, TSJ, TFJ, TSC, TFC, TFS, TFH, ASM)        \
   /* GC write barriers */                                                      \
@@ -229,12 +264,9 @@ namespace internal {
   ASM(BaselineOutOfLinePrologueDeopt, Void)                                    \
   ASM(BaselineOnStackReplacement, OnStackReplacement)                          \
   ASM(BaselineLeaveFrame, BaselineLeaveFrame)                                  \
-  ASM(BaselineOrInterpreterEnterAtBytecode, Void)                              \
-  ASM(BaselineOrInterpreterEnterAtNextBytecode, Void)                          \
   ASM(InterpreterOnStackReplacement_ToBaseline, Void)                          \
                                                                                \
   /* Maglev Compiler */                                                        \
-  ASM(MaglevOnStackReplacement, OnStackReplacement)                            \
   ASM(MaglevFunctionEntryStackCheck_WithoutNewTarget, Void)                    \
   ASM(MaglevFunctionEntryStackCheck_WithNewTarget, Void)                       \
   ASM(MaglevOptimizeCodeOrTailCallOptimizedCodeSlot,                           \
@@ -242,10 +274,10 @@ namespace internal {
                                                                                \
   /* Code life-cycle */                                                        \
   TFC(CompileLazy, JSTrampoline)                                               \
-  /* TODO(saelo): should this use a different descriptor? */                   \
-  TFC(CompileLazyDeoptimizedCode, JSTrampoline)                                \
   TFC(InstantiateAsmJs, JSTrampoline)                                          \
   ASM(NotifyDeoptimized, Void)                                                 \
+                                                                               \
+  BUILTIN_LIST_BASE_TIERING(TFC)                                               \
                                                                                \
   /* Trampolines called when returning from a deoptimization that expects   */ \
   /* to continue in a JavaScript builtin to finish the functionality of a   */ \
@@ -653,6 +685,7 @@ namespace internal {
   CPP(ErrorConstructor, kDontAdaptArgumentsSentinel)                           \
   CPP(ErrorCaptureStackTrace, kDontAdaptArgumentsSentinel)                     \
   CPP(ErrorPrototypeToString, JSParameterCount(0))                             \
+  CPP(ErrorIsError, JSParameterCount(1))                                       \
                                                                                \
   /* Function */                                                               \
   CPP(FunctionConstructor, kDontAdaptArgumentsSentinel)                        \
@@ -953,8 +986,6 @@ namespace internal {
   /* RegExp helpers */                                                         \
   TFS(RegExpExecAtom, NeedsContext::kYes, kRegExp, kString, kLastIndex,        \
       kMatchInfo)                                                              \
-  TFS(RegExpExecInternal, NeedsContext::kYes, kRegExp, kString, kLastIndex,    \
-      kMatchInfo)                                                              \
   ASM(RegExpInterpreterTrampoline, RegExpTrampoline)                           \
   ASM(RegExpExperimentalTrampoline, RegExpTrampoline)                          \
                                                                                \
@@ -1066,6 +1097,10 @@ namespace internal {
   TFJ(TypedArrayPrototypeToStringTag, kJSArgcReceiverSlots, kReceiver)         \
   /* ES6 %TypedArray%.prototype.map */                                         \
   TFJ(TypedArrayPrototypeMap, kDontAdaptArgumentsSentinel)                     \
+  /* proposal-arraybuffer-base64 #sec-uint8array.frombase64 */                 \
+  CPP(Uint8ArrayFromBase64, kDontAdaptArgumentsSentinel)                       \
+  /* proposal-arraybuffer-base64 #sec-uint8array.prototype.tobase64 */         \
+  CPP(Uint8ArrayToBase64, kDontAdaptArgumentsSentinel)                         \
                                                                                \
   /* Wasm */                                                                   \
   IF_WASM_DRUMBRAKE(ASM, WasmInterpreterEntry, WasmDummy)                      \
@@ -1073,105 +1108,211 @@ namespace internal {
   IF_WASM_DRUMBRAKE(ASM, WasmInterpreterCWasmEntry, WasmDummy)                 \
   IF_WASM_DRUMBRAKE(ASM, GenericWasmToJSInterpreterWrapper, WasmDummy)         \
                                                                                \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I32LoadMem8S, WasmDummy)            \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I32LoadMem8U, WasmDummy)            \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I32LoadMem16S, WasmDummy)           \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I32LoadMem16U, WasmDummy)           \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I64LoadMem8S, WasmDummy)            \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I64LoadMem8U, WasmDummy)            \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I64LoadMem16S, WasmDummy)           \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I64LoadMem16U, WasmDummy)           \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I64LoadMem32S, WasmDummy)           \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I64LoadMem32U, WasmDummy)           \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I32LoadMem, WasmDummy)              \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I64LoadMem, WasmDummy)              \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_F32LoadMem, WasmDummy)              \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_F64LoadMem, WasmDummy)              \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I32LoadMem8S, WasmDummy)            \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I32LoadMem8U, WasmDummy)            \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I32LoadMem16S, WasmDummy)           \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I32LoadMem16U, WasmDummy)           \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64LoadMem8S, WasmDummy)            \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64LoadMem8U, WasmDummy)            \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64LoadMem16S, WasmDummy)           \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64LoadMem16U, WasmDummy)           \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64LoadMem32S, WasmDummy)           \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64LoadMem32U, WasmDummy)           \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I32LoadMem, WasmDummy)              \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64LoadMem, WasmDummy)              \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_F32LoadMem, WasmDummy)              \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_F64LoadMem, WasmDummy)              \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I32LoadMem8S, WasmDummy)            \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I32LoadMem8U, WasmDummy)            \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I32LoadMem16S, WasmDummy)           \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I32LoadMem16U, WasmDummy)           \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I64LoadMem8S, WasmDummy)            \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I64LoadMem8U, WasmDummy)            \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I64LoadMem16S, WasmDummy)           \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I64LoadMem16U, WasmDummy)           \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I64LoadMem32S, WasmDummy)           \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I64LoadMem32U, WasmDummy)           \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I32LoadMem, WasmDummy)              \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I64LoadMem, WasmDummy)              \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_F32LoadMem, WasmDummy)              \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_F64LoadMem, WasmDummy)              \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadMem8S, WasmDummy)            \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadMem8U, WasmDummy)            \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadMem16S, WasmDummy)           \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadMem16U, WasmDummy)           \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem8S, WasmDummy)            \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem8U, WasmDummy)            \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem16S, WasmDummy)           \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem16U, WasmDummy)           \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem32S, WasmDummy)           \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem32U, WasmDummy)           \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadMem, WasmDummy)              \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem, WasmDummy)              \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_F32LoadMem, WasmDummy)              \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_F64LoadMem, WasmDummy)              \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I32LoadMem8S_s, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I32LoadMem8U_s, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I32LoadMem16S_s, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I32LoadMem16U_s, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I64LoadMem8S_s, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I64LoadMem8U_s, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I64LoadMem16S_s, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I64LoadMem16U_s, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I64LoadMem32S_s, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I64LoadMem32U_s, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I32LoadMem_s, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I64LoadMem_s, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_F32LoadMem_s, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_F64LoadMem_s, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I32LoadMem8S_s, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I32LoadMem8U_s, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I32LoadMem16S_s, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I32LoadMem16U_s, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64LoadMem8S_s, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64LoadMem8U_s, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64LoadMem16S_s, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64LoadMem16U_s, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64LoadMem32S_s, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64LoadMem32U_s, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I32LoadMem_s, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64LoadMem_s, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_F32LoadMem_s, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_F64LoadMem_s, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I32LoadMem8S_s, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I32LoadMem8U_s, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I32LoadMem16S_s, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I32LoadMem16U_s, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I64LoadMem8S_s, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I64LoadMem8U_s, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I64LoadMem16S_s, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I64LoadMem16U_s, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I64LoadMem32S_s, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I64LoadMem32U_s, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I32LoadMem_s, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I64LoadMem_s, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_F32LoadMem_s, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_F64LoadMem_s, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadMem8S_s, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadMem8U_s, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadMem16S_s, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadMem16U_s, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem8S_s, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem8U_s, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem16S_s, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem16U_s, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem32S_s, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem32U_s, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadMem_s, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem_s, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_F32LoadMem_s, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_F64LoadMem_s, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadMem8S_LocalSet_s, WasmDummy) \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadMem8U_LocalSet_s, WasmDummy) \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadMem16S_LocalSet_s,           \
+                                  WasmDummy)                                   \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadMem16U_LocalSet_s,           \
+                                  WasmDummy)                                   \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem8S_LocalSet_s, WasmDummy) \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem8U_LocalSet_s, WasmDummy) \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem16S_LocalSet_s,           \
+                                  WasmDummy)                                   \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem16U_LocalSet_s,           \
+                                  WasmDummy)                                   \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem32S_LocalSet_s,           \
+                                  WasmDummy)                                   \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem32U_LocalSet_s,           \
+                                  WasmDummy)                                   \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadMem_LocalSet_s, WasmDummy)   \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem_LocalSet_s, WasmDummy)   \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_F32LoadMem_LocalSet_s, WasmDummy)   \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_F64LoadMem_LocalSet_s, WasmDummy)   \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I32StoreMem8_s, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I32StoreMem16_s, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64StoreMem8_s, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64StoreMem16_s, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64StoreMem32_s, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I32StoreMem_s, WasmDummy)           \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64StoreMem_s, WasmDummy)           \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_F32StoreMem_s, WasmDummy)           \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_F64StoreMem_s, WasmDummy)           \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32StoreMem8_s, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32StoreMem16_s, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64StoreMem8_s, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64StoreMem16_s, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64StoreMem32_s, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32StoreMem_s, WasmDummy)           \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64StoreMem_s, WasmDummy)           \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_F32StoreMem_s, WasmDummy)           \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_F64StoreMem_s, WasmDummy)           \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I32LoadStoreMem_s, WasmDummy)       \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64LoadStoreMem_s, WasmDummy)       \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_F32LoadStoreMem_s, WasmDummy)       \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_F64LoadStoreMem_s, WasmDummy)       \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadStoreMem_s, WasmDummy)       \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadStoreMem_s, WasmDummy)       \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_F32LoadStoreMem_s, WasmDummy)       \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_F64LoadStoreMem_s, WasmDummy)       \
                                                                                \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadMem8S_LocalSet, WasmDummy)   \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadMem8U_LocalSet, WasmDummy)   \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadMem16S_LocalSet, WasmDummy)  \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadMem16U_LocalSet, WasmDummy)  \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem8S_LocalSet, WasmDummy)   \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem8U_LocalSet, WasmDummy)   \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem16S_LocalSet, WasmDummy)  \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem16U_LocalSet, WasmDummy)  \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem32S_LocalSet, WasmDummy)  \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem32U_LocalSet, WasmDummy)  \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadMem_LocalSet, WasmDummy)     \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem_LocalSet, WasmDummy)     \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_F32LoadMem_LocalSet, WasmDummy)     \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_F64LoadMem_LocalSet, WasmDummy)     \
-                                                                               \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I32StoreMem8, WasmDummy)            \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I32StoreMem16, WasmDummy)           \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64StoreMem8, WasmDummy)            \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64StoreMem16, WasmDummy)           \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64StoreMem32, WasmDummy)           \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I32StoreMem, WasmDummy)             \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64StoreMem, WasmDummy)             \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_F32StoreMem, WasmDummy)             \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_F64StoreMem, WasmDummy)             \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32StoreMem8, WasmDummy)            \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32StoreMem16, WasmDummy)           \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64StoreMem8, WasmDummy)            \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64StoreMem16, WasmDummy)           \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64StoreMem32, WasmDummy)           \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32StoreMem, WasmDummy)             \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64StoreMem, WasmDummy)             \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_F32StoreMem, WasmDummy)             \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_F64StoreMem, WasmDummy)             \
-                                                                               \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I32LoadStoreMem, WasmDummy)         \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64LoadStoreMem, WasmDummy)         \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_F32LoadStoreMem, WasmDummy)         \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_F64LoadStoreMem, WasmDummy)         \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadStoreMem, WasmDummy)         \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadStoreMem, WasmDummy)         \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_F32LoadStoreMem, WasmDummy)         \
-  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_F64LoadStoreMem, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I32LoadMem8S_l, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I32LoadMem8U_l, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I32LoadMem16S_l, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I32LoadMem16U_l, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I64LoadMem8S_l, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I64LoadMem8U_l, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I64LoadMem16S_l, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I64LoadMem16U_l, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I64LoadMem32S_l, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I64LoadMem32U_l, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I32LoadMem_l, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_I64LoadMem_l, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_F32LoadMem_l, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2r_F64LoadMem_l, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I32LoadMem8S_l, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I32LoadMem8U_l, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I32LoadMem16S_l, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I32LoadMem16U_l, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64LoadMem8S_l, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64LoadMem8U_l, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64LoadMem16S_l, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64LoadMem16U_l, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64LoadMem32S_l, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64LoadMem32U_l, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I32LoadMem_l, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64LoadMem_l, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_F32LoadMem_l, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_F64LoadMem_l, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I32LoadMem8S_l, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I32LoadMem8U_l, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I32LoadMem16S_l, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I32LoadMem16U_l, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I64LoadMem8S_l, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I64LoadMem8U_l, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I64LoadMem16S_l, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I64LoadMem16U_l, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I64LoadMem32S_l, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I64LoadMem32U_l, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I32LoadMem_l, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_I64LoadMem_l, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_F32LoadMem_l, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2r_F64LoadMem_l, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadMem8S_l, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadMem8U_l, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadMem16S_l, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadMem16U_l, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem8S_l, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem8U_l, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem16S_l, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem16U_l, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem32S_l, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem32U_l, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadMem_l, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem_l, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_F32LoadMem_l, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_F64LoadMem_l, WasmDummy)            \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadMem8S_LocalSet_l, WasmDummy) \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadMem8U_LocalSet_l, WasmDummy) \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadMem16S_LocalSet_l,           \
+                                  WasmDummy)                                   \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadMem16U_LocalSet_l,           \
+                                  WasmDummy)                                   \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem8S_LocalSet_l, WasmDummy) \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem8U_LocalSet_l, WasmDummy) \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem16S_LocalSet_l,           \
+                                  WasmDummy)                                   \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem16U_LocalSet_l,           \
+                                  WasmDummy)                                   \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem32S_LocalSet_l,           \
+                                  WasmDummy)                                   \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem32U_LocalSet_l,           \
+                                  WasmDummy)                                   \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadMem_LocalSet_l, WasmDummy)   \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadMem_LocalSet_l, WasmDummy)   \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_F32LoadMem_LocalSet_l, WasmDummy)   \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_F64LoadMem_LocalSet_l, WasmDummy)   \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I32StoreMem8_l, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I32StoreMem16_l, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64StoreMem8_l, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64StoreMem16_l, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64StoreMem32_l, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I32StoreMem_l, WasmDummy)           \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64StoreMem_l, WasmDummy)           \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_F32StoreMem_l, WasmDummy)           \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_F64StoreMem_l, WasmDummy)           \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32StoreMem8_l, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32StoreMem16_l, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64StoreMem8_l, WasmDummy)          \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64StoreMem16_l, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64StoreMem32_l, WasmDummy)         \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32StoreMem_l, WasmDummy)           \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64StoreMem_l, WasmDummy)           \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_F32StoreMem_l, WasmDummy)           \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_F64StoreMem_l, WasmDummy)           \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I32LoadStoreMem_l, WasmDummy)       \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_I64LoadStoreMem_l, WasmDummy)       \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_F32LoadStoreMem_l, WasmDummy)       \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, r2s_F64LoadStoreMem_l, WasmDummy)       \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I32LoadStoreMem_l, WasmDummy)       \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_I64LoadStoreMem_l, WasmDummy)       \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_F32LoadStoreMem_l, WasmDummy)       \
+  IF_WASM_DRUMBRAKE_INSTR_HANDLER(ASM, s2s_F64LoadStoreMem_l, WasmDummy)       \
                                                                                \
   IF_WASM(ASM, JSToWasmWrapperAsm, WasmJSToWasmWrapper)                        \
   IF_WASM(ASM, WasmReturnPromiseOnSuspendAsm, WasmJSToWasmWrapper)             \
@@ -1180,8 +1321,8 @@ namespace internal {
   IF_WASM(TFC, WasmToJsWrapperCSA, WasmToJSWrapper)                            \
   IF_WASM(TFC, WasmToJsWrapperInvalidSig, WasmToJSWrapper)                     \
   IF_WASM(ASM, WasmSuspend, WasmSuspend)                                       \
-  IF_WASM(ASM, WasmResume, WasmDummyWithJSLinkage)                             \
-  IF_WASM(ASM, WasmReject, WasmDummyWithJSLinkage)                             \
+  IF_WASM(ASM, WasmResume, JSTrampoline)                                       \
+  IF_WASM(ASM, WasmReject, JSTrampoline)                                       \
   IF_WASM(ASM, WasmTrapHandlerLandingPad, WasmDummy)                           \
   IF_WASM(ASM, WasmCompileLazy, WasmDummy)                                     \
   IF_WASM(ASM, WasmLiftoffFrameSetup, WasmDummy)                               \
@@ -1436,7 +1577,7 @@ namespace internal {
   CPP(TemporalPlainTimePrototypeMillisecond, JSParameterCount(0))              \
   /* Temporal #sec-get-temporal.plaintime.prototype.microsecond */             \
   CPP(TemporalPlainTimePrototypeMicrosecond, JSParameterCount(0))              \
-  /* Temporal #sec-get-temporal.plaintime.prototype.nanoseond */               \
+  /* Temporal #sec-get-temporal.plaintime.prototype.nanosecond */              \
   CPP(TemporalPlainTimePrototypeNanosecond, JSParameterCount(0))               \
   /* Temporal #sec-temporal.plaintime.prototype.add */                         \
   CPP(TemporalPlainTimePrototypeAdd, kDontAdaptArgumentsSentinel)              \
@@ -2225,7 +2366,9 @@ namespace internal {
   V(PromiseFulfillReactionJob)                       \
   V(PromiseRejectReactionJob)                        \
   V(PromiseRace)                                     \
-  V(ResolvePromise)
+  V(PromiseTry)                                      \
+  V(ResolvePromise)                                  \
+  V(AsyncDisposeFromSyncDispose)
 
 #define IGNORE_BUILTIN(...)
 

@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_rendering_context_2d_state.h"
 
+#include <algorithm>
 #include <optional>
 
 #include "base/check.h"
@@ -11,7 +12,6 @@
 #include "base/compiler_specific.h"
 #include "base/dcheck_is_on.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "cc/paint/draw_looper.h"
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/path_effect.h"
@@ -289,8 +289,8 @@ void CanvasRenderingContext2DState::SetLineDash(const Vector<double>& dash) {
   if (dash.size() % 2)
     line_dash_.AppendVector(dash);
   // clamp the double values to float
-  base::ranges::transform(line_dash_, line_dash_.begin(),
-                          [](double d) { return ClampTo<float>(d); });
+  std::ranges::transform(line_dash_, line_dash_.begin(),
+                         [](double d) { return ClampTo<float>(d); });
 
   line_dash_dirty_ = true;
 }
@@ -311,7 +311,7 @@ ALWAYS_INLINE void CanvasRenderingContext2DState::UpdateLineDash() const {
     stroke_flags_.setPathEffect(nullptr);
   } else {
     Vector<float> line_dash(line_dash_.size());
-    base::ranges::copy(line_dash_, line_dash.begin());
+    std::ranges::copy(line_dash_, line_dash.begin());
     stroke_flags_.setPathEffect(cc::PathEffect::MakeDash(
         line_dash.data(), line_dash.size(), line_dash_offset_));
   }
@@ -353,7 +353,8 @@ void CanvasRenderingContext2DState::SetFont(
   FontDescription font_description = passed_font_description;
   font_description.SetSubpixelAscentDescent(true);
 
-  CSSToLengthConversionData conversion_data = CSSToLengthConversionData();
+  CSSToLengthConversionData conversion_data =
+      CSSToLengthConversionData(/*element=*/nullptr);
   Font font = Font();
   auto const font_size = CSSToLengthConversionData::FontSizes(
       font_description.ComputedSize(), font_description.ComputedSize(), &font,
@@ -869,7 +870,8 @@ void CanvasRenderingContext2DState::SetLetterSpacing(
   parsed_letter_spacing_ = builder.ToString();
   // Convert letter spacing to pixel length and set it in font_description.
   FontDescription font_description(GetFontDescription());
-  CSSToLengthConversionData conversion_data = CSSToLengthConversionData();
+  CSSToLengthConversionData conversion_data =
+      CSSToLengthConversionData(/*element=*/nullptr);
   auto const font_size = CSSToLengthConversionData::FontSizes(
       font_description.ComputedSize(), font_description.ComputedSize(), &font_,
       1.0f /*Deliberately ignore zoom on the canvas element*/);
@@ -904,7 +906,8 @@ void CanvasRenderingContext2DState::SetWordSpacing(const String& word_spacing) {
   parsed_word_spacing_ = builder.ToString();
   // Convert letter spacing to pixel length and set it in font_description.
   FontDescription font_description(GetFontDescription());
-  CSSToLengthConversionData conversion_data = CSSToLengthConversionData();
+  CSSToLengthConversionData conversion_data =
+      CSSToLengthConversionData(/*element=*/nullptr);
   auto const font_size = CSSToLengthConversionData::FontSizes(
       font_description.ComputedSize(), font_description.ComputedSize(), &font_,
       1.0f /*Deliberately ignore zoom on the canvas element*/);

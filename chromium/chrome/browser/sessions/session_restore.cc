@@ -28,7 +28,6 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/observer_list.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/task/single_thread_task_runner.h"
@@ -53,7 +52,6 @@
 #include "chrome/browser/sessions/session_service_log.h"
 #include "chrome/browser/sessions/session_service_lookup.h"
 #include "chrome/browser/sessions/session_service_utils.h"
-#include "chrome/browser/sessions/sessions_features.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -553,7 +551,7 @@ class SessionRestoreImpl : public BrowserListObserver {
 
     // Copy windows into windows_ so that we can combine both app and browser
     // windows together before doing a one-pass restore.
-    base::ranges::move(windows, std::back_inserter(windows_));
+    std::ranges::move(windows, std::back_inserter(windows_));
     SessionRestore::OnGotSession(profile(), for_apps, windows.size());
     windows.clear();
 
@@ -652,20 +650,19 @@ class SessionRestoreImpl : public BrowserListObserver {
       return;
     }
 
-    windows->erase(
-        base::ranges::remove_if(
-            *windows,
-            [provider](const std::unique_ptr<sessions::SessionWindow>& window)
-                -> bool {
-              // Windows that are auto-started and prevented from closing are
-              // exempted from session restore.
-              webapps::AppId app_id =
-                  web_app::GetAppIdFromApplicationName(window->app_name);
-              // Checking for close prevention does not require an `AppLock`
-              // and therefore `registrar_unsafe()` is safe to use.
-              return provider->registrar_unsafe().IsPreventCloseEnabled(app_id);
-            }),
-        windows->end());
+    auto to_remove = std::ranges::remove_if(
+        *windows,
+        [provider](
+            const std::unique_ptr<sessions::SessionWindow>& window) -> bool {
+          // Windows that are auto-started and prevented from closing are
+          // exempted from session restore.
+          webapps::AppId app_id =
+              web_app::GetAppIdFromApplicationName(window->app_name);
+          // Checking for close prevention does not require an `AppLock`
+          // and therefore `registrar_unsafe()` is safe to use.
+          return provider->registrar_unsafe().IsPreventCloseEnabled(app_id);
+        });
+    windows->erase(to_remove.begin(), to_remove.end());
 #endif  // BUIDLFLAG(IS_CHROMEOS)
   }
 
@@ -684,11 +681,9 @@ class SessionRestoreImpl : public BrowserListObserver {
     PruneWindows(windows);
 
     if (windows->empty()) {
-      // Restore was unsuccessful. The DOM storage system can also delete its
-      // data, since no session restore will happen at a later point in time.
-      profile_->GetDefaultStoragePartition()
-          ->GetDOMStorageContext()
-          ->StartScavengingUnusedSessionStorage();
+      // Restore was unsuccessful. The cookie/storage systems can also delete
+      // their data, since no session restore will happen at a later point.
+      profile_->GetDefaultStoragePartition()->DeleteStaleSessionData();
       return FinishedTabCreation(false, false, restored_tabs);
     }
 
@@ -871,21 +866,9 @@ class SessionRestoreImpl : public BrowserListObserver {
       last_normal_browser = finished_browser;
     }
 
-    // sessionStorages needed for the session restore have now been recreated
-    // by RestoreTab. Now it's safe for the DOM storage system to start
-    // deleting leftover data.
-    profile_->GetDefaultStoragePartition()
-        ->GetDOMStorageContext()
-        ->StartScavengingUnusedSessionStorage();
-
-    // Cookies needed for session restore have been loaded and their last
-    // accessed time has been updated. Now it's safe for the CookieManager to
-    // delete stale session cookies not used in the past 7 days.
-    // See crbug.com/40285083 for more info.
-    if (base::FeatureList::IsEnabled(kDeleteStaleSessionCookiesOnStartup)) {
-      profile_->GetDefaultStoragePartition()
-          ->DeleteStaleSessionOnlyCookiesAfterDelay();
-    }
+    // Session cookies/storage needed for the session restore have now been
+    // recreated by RestoreTab so it's safe to start deleting leftover data.
+    profile_->GetDefaultStoragePartition()->DeleteStaleSessionData();
 
     return last_normal_browser ? last_normal_browser : last_app_browser;
   }

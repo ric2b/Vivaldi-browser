@@ -331,8 +331,8 @@ export abstract class ElementHandle<
   /**
    * @internal
    */
-  override dispose(): Promise<void> {
-    return this.handle.dispose();
+  override async dispose(): Promise<void> {
+    await Promise.all([this.handle.dispose(), this.isolatedHandle?.dispose()]);
   }
 
   /**
@@ -1561,6 +1561,12 @@ export abstract class ElementHandle<
    * ```
    */
   abstract autofill(data: AutofillData): Promise<void>;
+
+  /**
+   * When connected using Chrome DevTools Protocol, it returns a
+   * DOM.BackendNodeId for the element.
+   */
+  abstract backendNodeId(): Promise<number>;
 }
 
 /**

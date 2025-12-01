@@ -70,6 +70,8 @@ namespace v8::internal::compiler::turboshaft {
   V(Int64AddCheckOverflow)      \
   V(Int32SubCheckOverflow)      \
   V(Int64SubCheckOverflow)      \
+  V(Int32MulCheckOverflow)      \
+  V(Int64MulCheckOverflow)      \
   V(Word32Equal)                \
   V(Word64Equal)                \
   V(Word32NotEqual)             \
@@ -91,9 +93,13 @@ namespace v8::internal::compiler::turboshaft {
   V(Uint64GreaterThanOrEqual)   \
   V(Uint64GreaterThan)          \
   V(Float64Add)                 \
+  V(Float32Add)                 \
   V(Float64Sub)                 \
+  V(Float32Sub)                 \
   V(Float64Mul)                 \
+  V(Float32Mul)                 \
   V(Float64Div)                 \
+  V(Float32Div)                 \
   V(Float64Equal)               \
   V(Float64LessThan)            \
   V(Float64LessThanOrEqual)     \
@@ -518,7 +524,8 @@ class TurboshaftInstructionSelectorTest : public TestWithNativeContextAndZone {
       return ToConstant(operand).ToInt64();
     }
 
-    Handle<HeapObject> ToHeapObject(const InstructionOperand* operand) const {
+    DirectHandle<HeapObject> ToHeapObject(
+        const InstructionOperand* operand) const {
       return ToConstant(operand).ToHeapObject();
     }
 

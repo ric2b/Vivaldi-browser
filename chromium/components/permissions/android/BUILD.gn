@@ -108,6 +108,16 @@ java_cpp_enum("permission_uma_util_enums_javagen") {
   sources = [ "../permission_uma_util.h" ]
 }
 
+android_library("embedded_permission_prompt_enums_java") {
+  srcjar_deps = [ ":embedded_permission_prompt_enums_javagen" ]
+  deps = [ "//third_party/androidx:androidx_annotation_annotation_java" ]
+}
+
+java_cpp_enum("embedded_permission_prompt_enums_javagen") {
+  visibility = [ ":*" ]
+  sources = [ "../embedded_permission_prompt_flow_model.h" ]
+}
+
 android_library("java") {
   srcjar_deps = [ ":jni_headers" ]
   sources = [
@@ -118,12 +128,15 @@ android_library("java") {
     "java/src/org/chromium/components/permissions/BluetoothScanningPromptAndroidDelegate.java",
     "java/src/org/chromium/components/permissions/DeviceItemAdapter.java",
     "java/src/org/chromium/components/permissions/DeviceItemRow.java",
+    "java/src/org/chromium/components/permissions/EmbeddedPermissionDialogMediator.java",
     "java/src/org/chromium/components/permissions/ItemChooserDialog.java",
     "java/src/org/chromium/components/permissions/PermissionDialogController.java",
+    "java/src/org/chromium/components/permissions/PermissionDialogCoordinator.java",
     "java/src/org/chromium/components/permissions/PermissionDialogCustomViewBinder.java",
     "java/src/org/chromium/components/permissions/PermissionDialogCustomViewModelFactory.java",
     "java/src/org/chromium/components/permissions/PermissionDialogCustomViewProperties.java",
     "java/src/org/chromium/components/permissions/PermissionDialogDelegate.java",
+    "java/src/org/chromium/components/permissions/PermissionDialogMediator.java",
     "java/src/org/chromium/components/permissions/PermissionDialogModelFactory.java",
     "java/src/org/chromium/components/permissions/PermissionOneTimeDialogCustomViewBinder.java",
     "java/src/org/chromium/components/permissions/nfc/NfcSystemLevelPrompt.java",
@@ -132,6 +145,7 @@ android_library("java") {
   deps = [
     ":content_settings_enums_java",
     ":core_java",
+    ":embedded_permission_prompt_enums_java",
     ":java_resources",
     "//base:base_java",
     "//build/android:build_java",
@@ -139,6 +153,7 @@ android_library("java") {
     "//components/browser_ui/util/android:java",
     "//components/browser_ui/widget/android:java",
     "//components/content_settings/android:content_settings_enums_java",
+    "//components/location/android:location_java",
     "//components/omnibox/browser:scheme_classifier_java",
     "//content/public/android:content_java",
     "//third_party/androidx:androidx_annotation_annotation_java",

@@ -258,6 +258,7 @@ void SharingService::RegisterDeviceInTesting(
 void SharingService::UnregisterDevice() {
   sharing_device_registration_->UnregisterDevice(base::BindOnce(
       &SharingService::OnDeviceUnregistered, weak_ptr_factory_.GetWeakPtr()));
+  message_sender_->ClearPendingMessages();
 }
 
 void SharingService::OnDeviceRegistered(
@@ -303,7 +304,7 @@ void SharingService::OnDeviceRegistered(
       break;
     case SharingDeviceRegistrationResult::kDeviceNotRegistered:
       // Register device cannot return kDeviceNotRegistered.
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
 }
 

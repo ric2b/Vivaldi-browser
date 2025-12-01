@@ -365,6 +365,7 @@ if (!build_with_chromium) {
         "../api/neteq:neteq_api",
         "../api/rtc_event_log:rtc_event_log",
         "../api/transport:bandwidth_usage",
+        "../api/transport:ecn_marking",
         "../api/transport:field_trial_based_config",
         "../api/transport:goog_cc",
         "../api/transport:network_control",
@@ -613,7 +614,6 @@ if (rtc_include_tests) {
 
       data = tools_unittests_resources
       if (is_android) {
-        deps += [ "//testing/android/native_test:native_test_support" ]
         shard_timeout = 900
       }
       if (is_ios) {

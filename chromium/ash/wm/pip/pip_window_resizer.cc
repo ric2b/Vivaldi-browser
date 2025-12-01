@@ -17,6 +17,7 @@
 #include "ash/wm/toplevel_window_event_handler.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
+#include "base/check.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "ui/aura/client/aura_constants.h"
@@ -239,9 +240,12 @@ gfx::Rect PipWindowResizer::CalculateBoundsForPinch(
   gfx::Size size =
       gfx::ScaleToRoundedSize(initial_bounds.size(), accumulated_scale_);
 
-  gfx::Size max_size = GetTarget()->delegate()->GetMaximumSize();
+  std::optional<gfx::Size> max_size = GetTarget()->delegate()->GetMaximumSize();
+  CHECK(!(max_size.has_value() && max_size->IsZero()));
   gfx::Size min_size = GetTarget()->delegate()->GetMinimumSize();
-  size.SetToMin(max_size);
+  if (max_size.has_value()) {
+    size.SetToMin(*max_size);
+  }
   size.SetToMax(min_size);
 
   gfx::SizeF* aspect_ratio_size =

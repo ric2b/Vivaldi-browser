@@ -34,6 +34,7 @@ import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.components.externalauth.ExternalAuthUtils;
+import org.chromium.components.signin.base.GaiaId;
 import org.chromium.components.signin.metrics.FetchAccountCapabilitiesFromSystemLibraryResult;
 
 import java.io.IOException;
@@ -107,7 +108,7 @@ public class SystemAccountManagerDelegate implements AccountManagerDelegate {
     }
 
     @Override
-    public AccessTokenData getAuthToken(Account account, String authTokenScope)
+    public AccessTokenData getAccessToken(Account account, String authTokenScope)
             throws AuthException {
         ThreadUtils.assertOnBackgroundThread();
         assert AccountUtils.GOOGLE_ACCOUNT_TYPE.equals(account.type);
@@ -128,7 +129,7 @@ public class SystemAccountManagerDelegate implements AccountManagerDelegate {
     }
 
     @Override
-    public void invalidateAuthToken(String authToken) throws AuthException {
+    public void invalidateAccessToken(String authToken) throws AuthException {
         try {
             GoogleAuthUtil.clearToken(ContextUtils.getApplicationContext(), authToken);
         } catch (GoogleAuthException ex) {
@@ -159,7 +160,7 @@ public class SystemAccountManagerDelegate implements AccountManagerDelegate {
         RecordHistogram.recordEnumeratedHistogram(
                 "Signin.AccountCapabilities.GetFromSystemLibraryResult",
                 FetchAccountCapabilitiesFromSystemLibraryResult.API_NOT_AVAILABLE,
-                FetchAccountCapabilitiesFromSystemLibraryResult.MAX_VALUE + 1);
+                FetchAccountCapabilitiesFromSystemLibraryResult.MAX_VALUE);
         return CapabilityResponse.EXCEPTION;
     }
 
@@ -220,9 +221,11 @@ public class SystemAccountManagerDelegate implements AccountManagerDelegate {
 
     @Nullable
     @Override
-    public String getAccountGaiaId(String accountEmail) {
+    public GaiaId getAccountGaiaId(String accountEmail) {
         try {
-            return GoogleAuthUtil.getAccountId(ContextUtils.getApplicationContext(), accountEmail);
+            return new GaiaId(
+                    GoogleAuthUtil.getAccountId(
+                            ContextUtils.getApplicationContext(), accountEmail));
         } catch (IOException | GoogleAuthException ex) {
             Log.e(TAG, "SystemAccountManagerDelegate.getAccountGaiaId", ex);
             return null;

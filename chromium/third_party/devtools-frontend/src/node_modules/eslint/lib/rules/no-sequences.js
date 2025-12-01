@@ -15,9 +15,6 @@ const astUtils = require("./utils/ast-utils");
 // Helpers
 //------------------------------------------------------------------------------
 
-const DEFAULT_OPTIONS = {
-    allowInParentheses: true
-};
 
 //------------------------------------------------------------------------------
 // Rule Definition
@@ -31,17 +28,21 @@ module.exports = {
         docs: {
             description: "Disallow comma operators",
             recommended: false,
-            url: "https://eslint.org/docs/rules/no-sequences"
+            url: "https://eslint.org/docs/latest/rules/no-sequences"
         },
 
         schema: [{
+            type: "object",
             properties: {
                 allowInParentheses: {
-                    type: "boolean",
-                    default: true
+                    type: "boolean"
                 }
             },
             additionalProperties: false
+        }],
+
+        defaultOptions: [{
+            allowInParentheses: true
         }],
 
         messages: {
@@ -50,8 +51,8 @@ module.exports = {
     },
 
     create(context) {
-        const options = Object.assign({}, DEFAULT_OPTIONS, context.options[0]);
-        const sourceCode = context.getSourceCode();
+        const [{ allowInParentheses }] = context.options;
+        const sourceCode = context.sourceCode;
 
         /**
          * Parts of the grammar that are required to have parens.
@@ -116,7 +117,7 @@ module.exports = {
                 }
 
                 // Wrapping a sequence in extra parens indicates intent
-                if (options.allowInParentheses) {
+                if (allowInParentheses) {
                     if (requiresExtraParens(node)) {
                         if (isParenthesisedTwice(node)) {
                             return;

@@ -9,7 +9,6 @@
 #include <memory>
 #include <vector>
 
-#include "cc/raster/raster_buffer.h"
 #include "cc/raster/raster_source.h"
 #include "cc/raster/task_graph_runner.h"
 #include "cc/raster/tile_task.h"
@@ -23,6 +22,8 @@ class WaitableEvent;
 
 namespace cc {
 
+class RasterBuffer;
+
 class CC_EXPORT RasterBufferProvider {
  public:
   RasterBufferProvider();
@@ -34,9 +35,6 @@ class CC_EXPORT RasterBufferProvider {
   // that will cover the resulting |memory|. The |canvas_playback_rect| can be a
   // smaller contained rect inside the |canvas_bitmap_rect| if the |memory| is
   // already partially complete, and only the subrect needs to be played back.
-  // Set |gpu_compositing| to true if the compositor is using gpu, as we respect
-  // the format more accurately, vs in software compositing where the format is
-  // a placeholder for the skia native format.
   static void PlaybackToMemory(
       void* memory,
       viz::SharedImageFormat format,
@@ -47,7 +45,6 @@ class CC_EXPORT RasterBufferProvider {
       const gfx::Rect& canvas_playback_rect,
       const gfx::AxisTransform2d& transform,
       const gfx::ColorSpace& target_color_space,
-      bool gpu_compositing,
       const RasterSource::PlaybackSettings& playback_settings);
 
   // Acquire raster buffer.

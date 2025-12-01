@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <algorithm>
 #include <array>
 #include <memory>
 #include <optional>
@@ -15,7 +16,6 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_forward.h"
 #include "base/functional/callback_helpers.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/test/bind.h"
@@ -72,6 +72,7 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "dbus/object_path.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_constants.h"
@@ -167,7 +168,7 @@ class LockscreenWebUiTest : public MixinBasedInProcessBrowserTest {
         FakeGaiaMixin::kEnterpriseUser1, kTestAuthSIDCookie1,
         kTestAuthLSIDCookie1);
     fake_gaia_mixin()->SetupFakeGaiaForLogin(FakeGaiaMixin::kEnterpriseUser1,
-                                             "", kTestRefreshToken);
+                                             GaiaId(), kTestRefreshToken);
 
     // Set up fake networks.
     network_state_test_helper_ = std::make_unique<NetworkStateTestHelper>(
@@ -1238,7 +1239,7 @@ class SAMLCookieTransferTest : public SamlUnlockTest {
     run_loop.Run();
     EXPECT_GT(cookie_list_.size(), 0u);
 
-    const auto saml_cookie_iterator = base::ranges::find(
+    const auto saml_cookie_iterator = std::ranges::find(
         cookie_list_, cookie_name,
         [](const net::CanonicalCookie& cookie) { return cookie.Name(); });
     EXPECT_NE(saml_cookie_iterator, cookie_list_.end());

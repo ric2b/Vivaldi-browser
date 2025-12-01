@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "third_party/blink/renderer/core/mojo/mojo_handle.h"
 
 #include "base/numerics/safe_math.h"
@@ -81,7 +86,7 @@ MojoResult MojoHandle::writeMessage(
 
   base::span<const uint8_t> bytes = ByteSpanForBufferSource(*buffer);
 
-  auto message = mojo::Message(bytes, base::make_span(scoped_handles));
+  auto message = mojo::Message(bytes, base::span(scoped_handles));
   DCHECK(!message.IsNull());
   return mojo::WriteMessageNew(mojo::MessagePipeHandle(handle_.get().value()),
                                message.TakeMojoMessage(),

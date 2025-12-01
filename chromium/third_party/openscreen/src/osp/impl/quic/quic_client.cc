@@ -58,7 +58,7 @@ bool QuicClient::Connect(std::string_view instance_name,
                          ConnectRequest& request,
                          ConnectRequestCallback* request_callback) {
   if (state_ != State::kRunning) {
-    request_callback->OnConnectFailed(0);
+    request_callback->OnConnectFailed(0, instance_name);
     OSP_LOG_ERROR << "QuicClient connect failed: QuicClient is not running.";
     return false;
   }
@@ -70,7 +70,8 @@ bool QuicClient::Connect(std::string_view instance_name,
   if (instance_entry != instance_map_.end()) {
     uint64_t request_id = next_request_id_++;
     request = ConnectRequest(this, request_id);
-    request_callback->OnConnectSucceed(request_id, instance_entry->second);
+    request_callback->OnConnectSucceed(request_id, instance_entry->first,
+                                       instance_entry->second);
     return true;
   } else {
     auto pending_connection = pending_connections_.find(instance_name);
@@ -111,7 +112,6 @@ void QuicClient::OnAllReceiversRemoved() {
 }
 
 void QuicClient::OnError(const Error&) {}
-void QuicClient::OnMetrics(ServiceListener::Metrics) {}
 
 bool QuicClient::StartConnectionRequest(
     std::string_view instance_name,
@@ -119,7 +119,7 @@ bool QuicClient::StartConnectionRequest(
     ConnectRequestCallback* request_callback) {
   auto instance_entry = instance_infos_.find(instance_name);
   if (instance_entry == instance_infos_.end()) {
-    request_callback->OnConnectFailed(0);
+    request_callback->OnConnectFailed(0, instance_name);
     OSP_LOG_ERROR << "QuicClient connect failed: can't find information for "
                   << instance_name;
     return false;
@@ -135,7 +135,7 @@ bool QuicClient::StartConnectionRequest(
       static_cast<QuicConnectionFactoryClient*>(connection_factory_.get())
           ->Connect(connection_endpoints_[0], endpoint, connect_data, this);
   if (!connection) {
-    request_callback->OnConnectFailed(0);
+    request_callback->OnConnectFailed(0, instance_name);
     OSP_LOG_ERROR << "Factory connect failed: " << connection.error();
     return false;
   }

@@ -667,7 +667,7 @@ void CachedStorageArea::EnsureLoaded() {
   // always above what we see in practice, since histograms can't change.
   UMA_HISTOGRAM_CUSTOM_COUNTS(
       "LocalStorage.MojoSizeInKB",
-      base::saturated_cast<base::Histogram::Sample>(local_storage_size_kb), 1,
+      base::saturated_cast<base::Histogram::Sample32>(local_storage_size_kb), 1,
       6 * 1024, 50);
   if (local_storage_size_kb < 100) {
     UMA_HISTOGRAM_TIMES("LocalStorage.MojoTimeToPrimeForUnder100KB",
@@ -764,7 +764,7 @@ String CachedStorageArea::Uint8VectorToString(const Vector<uint8_t>& input,
           break;
         }
         case StorageFormat::Latin1:
-          result = String(base::span(input).subspan(1));
+          result = String(base::span(input).subspan<1>());
           break;
         default:
           corrupt = true;
@@ -789,7 +789,9 @@ Vector<uint8_t> CachedStorageArea::StringToUint8Vector(
   switch (format_option) {
     case FormatOption::kSessionStorageForceUTF16: {
       Vector<uint8_t> result(input.length() * sizeof(UChar));
-      input.CopyTo(reinterpret_cast<UChar*>(result.data()), 0, input.length());
+      input.CopyTo(
+          base::span(reinterpret_cast<UChar*>(result.data()), input.length()),
+          0);
       return result;
     }
     case FormatOption::kSessionStorageForceUTF8: {
@@ -808,25 +810,20 @@ Vector<uint8_t> CachedStorageArea::StringToUint8Vector(
         if (length > std::numeric_limits<unsigned>::max() / 3)
           return Vector<uint8_t>();
         Vector<uint8_t> buffer_vector(length * 3);
-        uint8_t* buffer = buffer_vector.data();
-        const LChar* characters = input.Characters8();
 
         WTF::unicode::ConversionResult result =
-            WTF::unicode::ConvertLatin1ToUTF8(
-                &characters, characters + length,
-                reinterpret_cast<char**>(&buffer),
-                reinterpret_cast<char*>(buffer + buffer_vector.size()));
+            WTF::unicode::ConvertLatin1ToUTF8(input.Span8(),
+                                              base::span(buffer_vector));
         // (length * 3) should be sufficient for any conversion
-        DCHECK_NE(result, WTF::unicode::kTargetExhausted);
-        buffer_vector.Shrink(
-            static_cast<wtf_size_t>(buffer - buffer_vector.data()));
+        DCHECK_NE(result.status, WTF::unicode::kTargetExhausted);
+        buffer_vector.Shrink(static_cast<wtf_size_t>(result.converted.size()));
         return buffer_vector;
       }
 
       // TODO(dmurph): Figure out how to avoid a copy here.
       // TODO(dmurph): Handle invalid UTF16 better. https://crbug.com/873280.
-      StringUTF8Adaptor utf8(
-          input, WTF::kStrictUTF8ConversionReplacingUnpairedSurrogatesWithFFFD);
+      StringUTF8Adaptor utf8(input,
+                             WTF::Utf8ConversionMode::kStrictReplacingErrors);
       Vector<uint8_t> result(utf8.size());
       std::memcpy(result.data(), utf8.data(), utf8.size());
       return result;

@@ -24,6 +24,8 @@ import java.lang.annotation.RetentionPolicy;
     PaneId.BOOKMARKS,
     PaneId.TAB_GROUPS,
     PaneId.CROSS_DEVICE,
+    PaneId.HISTORY,
+
     PaneId.SYNC_TABS, // Vivaldi
     PaneId.TRASH_TABS, // Vivaldi
     PaneId.COUNT
@@ -35,10 +37,11 @@ public @interface PaneId {
     int BOOKMARKS = 2;
     int TAB_GROUPS = 3;
     int CROSS_DEVICE = 4;
+    int HISTORY = 5;
 
-    int SYNC_TABS = 5; // Vivaldi
-    int TRASH_TABS = 6; // Vivaldi
+    int SYNC_TABS = 6; // Vivaldi
+    int TRASH_TABS = 7; // Vivaldi
     /** Must be last. */
-    int COUNT =7;
+    int COUNT =8;
 }
 // LINT.ThenChange(/tools/metrics/histograms/metadata/android/enums.xml:HubPaneId)

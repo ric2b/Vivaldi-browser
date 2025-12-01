@@ -9,8 +9,8 @@ import * as LoggingEvents from './LoggingEvents.js';
 import * as NonDomState from './NonDomState.js';
 
 export type Loggable = LoggableModule.Loggable;
-export {setVeDebugLoggingEnabled, DebugLoggingFormat} from './Debugging.js';
-export {startLogging, stopLogging, addDocument} from './LoggingDriver.js';
+export {DebugLoggingFormat, setVeDebuggingEnabled, setVeDebugLoggingEnabled} from './Debugging.js';
+export {addDocument, startLogging, stopLogging} from './LoggingDriver.js';
 export {logImpressions} from './LoggingEvents.js';
 export const logClick = (loggable: Loggable, event: Event, options: {doubleClick?: boolean} = {}): void =>
     LoggingEvents.logClick(LoggingDriver.clickLogThrottler)(loggable, event, options);
@@ -26,6 +26,17 @@ export function registerLoggable(loggable: Loggable, config: string, parent: Log
   }
   NonDomState.registerLoggable(loggable, LoggingConfig.parseJsLog(config), parent || undefined);
   void LoggingDriver.scheduleProcessing();
+}
+
+export async function isUnderInspection(origin?: string): Promise<boolean> {
+  if (!origin) {
+    return false;
+  }
+  const context = await LoggingEvents.contextAsNumber(origin);
+  if (!context) {
+    return false;
+  }
+  return [431010711, -1313957874, -1093325535].includes(context);
 }
 
 /**

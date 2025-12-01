@@ -26,7 +26,7 @@ powf() and loading fonts. Almost 3% of total layout time is spent in
 powf() translating color spaces for fonts.
 - Started to look into FontCache on android which doesn't seem as
 effective as on other platforms.
-Scrolling (skobes) \[[crbug.com/417782](http://crbug.com/417782)\]
+Scrolling (skobes) \[[crbug.com/417782](https://crbug.com/417782)\]
 - Smooth scrolling now works the same for overflow divs as for frames.
 win_blink flakiness (dsinclair)
 - Worked to reduce win_blink flakiness by triaging flakiness and
@@ -34,7 +34,7 @@ timeouts.
 - Flakiness went from 40% -&gt; 10% (!), it is now one of the faster bots.
 - Much of remaining flakiness due to font antialiasing/subpixel
 rendering differences.
-Rename Rendering -&gt; Layout \[[crbug.com/450612](http://crbug.com/450612)\]
+Rename Rendering -&gt; Layout \[[crbug.com/450612](https://crbug.com/450612)\]
 (dsinclair, bsittler,
 eae, hartmanng)
 - All non-prefixed files renamed. 188 prefixes files remaining.
@@ -47,7 +47,7 @@ Text (kojii, eae)
 - Make RenderCombinedText less obstructive to the line breaker and
 paint code. Mostly [donecrbug.com/433176](http://donecrbug.com/433176),
 selection paint issue
-[crbug.com/438852](http://crbug.com/438852) and a bit more cleanup still
+[crbug.com/438852](https://crbug.com/438852) and a bit more cleanup still
 remains. (kojii)
 - Complex path perf issue that had been stalled due to the slow legal
 permission is finally clear now, hope to re-start with Dominik this

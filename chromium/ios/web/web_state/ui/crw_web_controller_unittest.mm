@@ -63,9 +63,9 @@
 #import "third_party/ocmock/ocmock_extensions.h"
 #import "url/scheme_host_port.h"
 
-using base::test::ios::WaitUntilConditionOrTimeout;
-using base::test::ios::kWaitForPageLoadTimeout;
 using base::test::ios::kWaitForJSCompletionTimeout;
+using base::test::ios::kWaitForPageLoadTimeout;
+using base::test::ios::WaitUntilConditionOrTimeout;
 
 // Subclass of WKWebView to check that the observers are removed when the web
 // state is destroyed.
@@ -586,6 +586,17 @@ class CRWWebControllerResponseTest : public CRWWebControllerTest {
         request.HTTPMethod = @"POST";
       }
       OCMStub([mock_download originalRequest]).andReturn(request);
+
+#if defined(__IPHONE_18_2) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_18_2
+      if (@available(iOS 18.2, *)) {
+        CRWFakeWKFrameInfo* frame_info = [[CRWFakeWKFrameInfo alloc] init];
+        frame_info.mainFrame = YES;
+        frame_info.request = request;
+        frame_info.webView = mock_web_view_;
+        OCMStub([mock_download originatingFrame]).andReturn(frame_info);
+      }
+#endif
+
       OCMStub([mock_download cancel:[OCMArg any]])
           .andDo(^(NSInvocation* invocation) {
             // Using __unsafe_unretained is required to extract the parameter
@@ -874,9 +885,7 @@ TEST_F(CRWWebControllerTest, CurrentUrl) {
 // decisionHandler's callback result.
 class CRWWebControllerPolicyDeciderTest : public CRWWebControllerTest {
  protected:
-  void SetUp() override {
-    CRWWebControllerTest::SetUp();
-  }
+  void SetUp() override { CRWWebControllerTest::SetUp(); }
   // Calls webView:decidePolicyForNavigationAction:preferences:decisionHandler:
   // callback and waits for decision handler call. Returns false if decision
   // handler policy parameter didn't match `expected_policy` or if the call

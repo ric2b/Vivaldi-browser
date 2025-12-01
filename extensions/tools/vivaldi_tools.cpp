@@ -21,10 +21,10 @@
 #include "extensions/browser/extension_function.h"
 #include "extensions/browser/extension_function_dispatcher.h"
 #include "extensions/common/command.h"
-#include "extensions/common/manifest_constants.h"
 #include "prefs/vivaldi_pref_names.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/accelerators/command_constants.h"
 #include "ui/events/blink/blink_event_util.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/vivaldi_browser_window.h"
@@ -67,8 +67,6 @@ ui::KeyboardCode GetFunctionKey(std::string token) {
 // found in the LICENSE file.
 ui::Accelerator ParseShortcut(const std::string& accelerator,
                               bool should_parse_media_keys) {
-  namespace values = extensions::manifest_values;
-
   std::vector<std::string> tokens = base::SplitString(
       accelerator, "+", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   if (tokens.size() == 0) {
@@ -78,38 +76,38 @@ ui::Accelerator ParseShortcut(const std::string& accelerator,
   int modifiers = ui::EF_NONE;
   ui::KeyboardCode key = ui::VKEY_UNKNOWN;
   for (size_t i = 0; i < tokens.size(); i++) {
-    if (tokens[i] == values::kKeyCtrl) {
+    if (tokens[i] == ui::kKeyCtrl) {
       modifiers |= ui::EF_CONTROL_DOWN;
-    } else if (tokens[i] == values::kKeyAlt) {
+    } else if (tokens[i] == ui::kKeyAlt) {
       modifiers |= ui::EF_ALT_DOWN;
-    } else if (tokens[i] == values::kKeyShift) {
+    } else if (tokens[i] == ui::kKeyShift) {
       modifiers |= ui::EF_SHIFT_DOWN;
-    } else if (tokens[i] == values::kKeyCommand) {
+    } else if (tokens[i] == ui::kKeyCommand) {
       modifiers |= ui::EF_COMMAND_DOWN;
     } else if (key == ui::VKEY_UNKNOWN) {
-      if (tokens[i] == values::kKeyUp) {
+      if (tokens[i] == ui::kKeyUp) {
         key = ui::VKEY_UP;
-      } else if (tokens[i] == values::kKeyDown) {
+      } else if (tokens[i] == ui::kKeyDown) {
         key = ui::VKEY_DOWN;
-      } else if (tokens[i] == values::kKeyLeft) {
+      } else if (tokens[i] == ui::kKeyLeft) {
         key = ui::VKEY_LEFT;
-      } else if (tokens[i] == values::kKeyRight) {
+      } else if (tokens[i] == ui::kKeyRight) {
         key = ui::VKEY_RIGHT;
-      } else if (tokens[i] == values::kKeyIns) {
+      } else if (tokens[i] == ui::kKeyIns) {
         key = ui::VKEY_INSERT;
-      } else if (tokens[i] == values::kKeyDel) {
+      } else if (tokens[i] == ui::kKeyDel) {
         key = ui::VKEY_DELETE;
-      } else if (tokens[i] == values::kKeyHome) {
+      } else if (tokens[i] == ui::kKeyHome) {
         key = ui::VKEY_HOME;
-      } else if (tokens[i] == values::kKeyEnd) {
+      } else if (tokens[i] == ui::kKeyEnd) {
         key = ui::VKEY_END;
-      } else if (tokens[i] == values::kKeyPgUp) {
+      } else if (tokens[i] == ui::kKeyPgUp) {
         key = ui::VKEY_PRIOR;
-      } else if (tokens[i] == values::kKeyPgDwn) {
+      } else if (tokens[i] == ui::kKeyPgDwn) {
         key = ui::VKEY_NEXT;
-      } else if (tokens[i] == values::kKeySpace) {
+      } else if (tokens[i] == ui::kKeySpace) {
         key = ui::VKEY_SPACE;
-      } else if (tokens[i] == values::kKeyTab) {
+      } else if (tokens[i] == ui::kKeyTab) {
         key = ui::VKEY_TAB;
       } else if (tokens[i] == kVivaldiKeyPeriod) {
         key = ui::VKEY_OEM_PERIOD;
@@ -136,16 +134,16 @@ ui::Accelerator ParseShortcut(const std::string& accelerator,
       } else if (tokens[i].size() == 0) {
         // Nasty workaround. The parser does not handle "++"
         key = ui::VKEY_ADD;
-      } else if (tokens[i] == values::kKeyMediaNextTrack &&
+      } else if (tokens[i] == ui::kKeyMediaNextTrack &&
                  should_parse_media_keys) {
         key = ui::VKEY_MEDIA_NEXT_TRACK;
-      } else if (tokens[i] == values::kKeyMediaPlayPause &&
+      } else if (tokens[i] == ui::kKeyMediaPlayPause &&
                  should_parse_media_keys) {
         key = ui::VKEY_MEDIA_PLAY_PAUSE;
-      } else if (tokens[i] == values::kKeyMediaPrevTrack &&
+      } else if (tokens[i] == ui::kKeyMediaPrevTrack &&
                  should_parse_media_keys) {
         key = ui::VKEY_MEDIA_PREV_TRACK;
-      } else if (tokens[i] == values::kKeyMediaStop &&
+      } else if (tokens[i] == ui::kKeyMediaStop &&
                  should_parse_media_keys) {
         key = ui::VKEY_MEDIA_STOP;
       } else if (tokens[i].size() == 1 && tokens[i][0] >= 'A' &&

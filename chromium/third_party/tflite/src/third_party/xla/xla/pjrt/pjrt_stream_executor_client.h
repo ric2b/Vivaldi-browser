@@ -61,6 +61,7 @@ limitations under the License.
 #include "xla/service/computation_placer.h"
 #include "xla/service/executable.h"
 #include "xla/service/gpu/gpu_executable_run_options.h"
+#include "xla/service/hlo.pb.h"
 #include "xla/service/hlo_cost_analysis.h"
 #include "xla/service/maybe_owning_device_memory.h"
 #include "xla/service/shaped_buffer.h"
@@ -68,10 +69,11 @@ limitations under the License.
 #include "xla/shape_tree.h"
 #include "xla/stream_executor/stream.h"
 #include "xla/tsl/framework/allocator.h"
+#include "xla/tsl/platform/threadpool.h"
 #include "xla/util.h"
+#include "xla/xla.pb.h"
 #include "xla/xla_data.pb.h"
 #include "tsl/platform/casts.h"
-#include "tsl/platform/threadpool.h"
 
 namespace xla {
 
@@ -190,7 +192,8 @@ class PjRtStreamExecutorDevice : public PjRtDevice {
 
   absl::Status TransferFromOutfeed(MutableBorrowingLiteral literal) override;
 
-  void AttachMemorySpace(PjRtMemorySpace* memory_space);
+  void AttachMemorySpace(PjRtMemorySpace* memory_space,
+                         bool is_default = false);
 
   absl::Span<PjRtMemorySpace* const> memory_spaces() const override;
 
@@ -217,6 +220,7 @@ class PjRtStreamExecutorDevice : public PjRtDevice {
   PjRtClient* client_ = nullptr;
   absl::InlinedVector<PjRtMemorySpace*, 1> memory_spaces_;
   absl::flat_hash_map<int, PjRtMemorySpace*> memory_spaces_by_id_;
+  PjRtMemorySpace* default_memory_space_ = nullptr;
 };
 
 class PjRtStreamExecutorMemorySpace : public PjRtMemorySpace {
@@ -255,7 +259,9 @@ class PjRtStreamExecutorClient : public PjRtClient {
   explicit PjRtStreamExecutorClient(
       std::string platform_name, LocalClient* client,
       std::vector<std::unique_ptr<PjRtStreamExecutorDevice>> devices,
-      int process_index, std::unique_ptr<se::DeviceMemoryAllocator> allocator,
+      int process_index,
+      std::vector<std::unique_ptr<PjRtMemorySpace>> memory_spaces,
+      std::unique_ptr<se::DeviceMemoryAllocator> allocator,
       std::unique_ptr<tsl::Allocator> host_memory_allocator,
       bool should_stage_host_to_device_transfers,
       std::unique_ptr<gpu::GpuExecutableRunOptions> gpu_run_options);
@@ -334,6 +340,8 @@ class PjRtStreamExecutorClient : public PjRtClient {
   absl::StatusOr<std::unique_ptr<PjRtBuffer>> CreateUninitializedBuffer(
       const Shape& shape, PjRtDevice* device,
       std::shared_ptr<BufferSequencingEvent> definition_event);
+  absl::StatusOr<std::unique_ptr<PjRtBuffer>> CreateUninitializedBuffer(
+      const Shape& shape, PjRtMemorySpace* memory_space) override;
 
   absl::StatusOr<std::unique_ptr<PjRtBuffer>> CreateErrorBuffer(
       absl::Status error, const Shape& shape, PjRtMemorySpace* memory) override;
@@ -388,16 +396,9 @@ class PjRtStreamExecutorClient : public PjRtClient {
       PjRtDevice* device, PjRtCrossHostRecvNotifier notifier) override;
 
   absl::StatusOr<std::unique_ptr<PjRtBuffer>> CreateViewOfDeviceBuffer(
-      void* device_ptr, const Shape& shape, PjRtDevice* device,
+      void* device_ptr, const Shape& shape, PjRtMemorySpace* memory_space,
       std::function<void()> on_delete_callback,
       std::optional<std::intptr_t> stream) override;
-
-  absl::StatusOr<ChannelHandle> CreateChannelHandle() override {
-    return client()->CreateChannelHandle();
-  }
-  absl::StatusOr<ChannelHandle> CreateDeviceToHostChannelHandle() override {
-    return client()->CreateDeviceToHostChannelHandle();
-  }
 
   // TODO(zhangqiaorjc): Experimental. Will be removed.
   absl::Status Defragment() override {
@@ -1012,6 +1013,13 @@ class PjRtStreamExecutorLoadedExecutable : public PjRtLoadedExecutable {
     return fingerprint_;
   };
 
+  void SetInputHloSnapshotBits(HloModuleProto hlo_module,
+                               DebugOptions debug_options) {
+    input_hlo_snapshot_bits_ =
+        std::make_optional<InputHloSnapshotBits>(InputHloSnapshotBits{
+            HloModuleProto(std::move(hlo_module)), std::move(debug_options)});
+  }
+
  protected:
   bool parameter_is_tupled_arguments() const {
     return parameter_is_tupled_arguments_;
@@ -1061,6 +1069,8 @@ class PjRtStreamExecutorLoadedExecutable : public PjRtLoadedExecutable {
       int partition, const RunId& run_id, const ExecuteOptions& options,
       bool fill_future, PjRtDevice* device = nullptr) const;
 
+  absl::Status VerifyCompatibleDevices() const;
+
   // Create shared pointers so we can free them after the execution: with
   // asynchronous execution, the process being executed can outlive the
   // executable itself.
@@ -1091,6 +1101,14 @@ class PjRtStreamExecutorLoadedExecutable : public PjRtLoadedExecutable {
   // unique_ptrs to play well with the Python bindings (see xla.cc).
   std::vector<PjRtDevice*> addressable_devices_;
   std::string fingerprint_;
+
+  struct InputHloSnapshotBits {
+    HloModuleProto hlo_module;
+    DebugOptions debug_options;
+  };
+
+  // The unoptimized (unsharded) HloModule. Primarily used for debugging.
+  std::optional<InputHloSnapshotBits> input_hlo_snapshot_bits_;
 };
 
 }  // namespace xla

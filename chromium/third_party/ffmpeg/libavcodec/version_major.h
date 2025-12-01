@@ -50,4 +50,11 @@
 #define FF_API_QUALITY_FACTOR      (LIBAVCODEC_VERSION_MAJOR < 62)
 #define FF_API_V408_CODECID        (LIBAVCODEC_VERSION_MAJOR < 62)
 
+// reminder to remove the OMX encoder on next major bump
+#define FF_CODEC_OMX               (LIBAVCODEC_VERSION_MAJOR < 62)
+// reminder to remove Sonic Lossy/Lossless encoders on next major bump
+#define FF_CODEC_SONIC_ENC         (LIBAVCODEC_VERSION_MAJOR < 62)
+// reminder to remove Sonic decoder on next-next major bump
+#define FF_CODEC_SONIC_DEC         (LIBAVCODEC_VERSION_MAJOR < 63)
+
 #endif /* AVCODEC_VERSION_MAJOR_H */

@@ -63,7 +63,10 @@ class PrefetchCacheTest : public ::testing::Test {
     feature_list_.InitAndEnableFeatureWithParameters(
         features::kNetworkContextPrefetch,
         {{"max_loaders", base::NumberToString(kMaxSize)}});
-    erase_grace_time_ = features::kNetworkContextPrefetchEraseGraceTime.Get();
+    erase_grace_time_ = base::GetFieldTrialParamByFeatureAsTimeDelta(
+        features::kNetworkContextPrefetch,
+        /*name=*/"erase_grace_time",
+        /*default_value=*/base::Seconds(1));
   }
 
   PrefetchCache& cache() { return cache_; }
@@ -101,8 +104,8 @@ TEST_F(PrefetchCacheTest, EmplaceNoNIK) {
 
 TEST_F(PrefetchCacheTest, EmplaceTransientNIK) {
   // This will log a warning when debug logging is enabled but it is harmless.
-  EXPECT_FALSE(cache().Emplace(
-      MakeResourceRequest(TestURL(), net::IsolationInfo::CreateTransient())));
+  EXPECT_FALSE(cache().Emplace(MakeResourceRequest(
+      TestURL(), net::IsolationInfo::CreateTransient(/*nonce=*/std::nullopt))));
 }
 
 TEST_F(PrefetchCacheTest, EmplaceFileURL) {

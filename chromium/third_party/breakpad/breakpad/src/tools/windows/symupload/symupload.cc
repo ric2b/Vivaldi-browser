@@ -47,18 +47,18 @@
 #endif
 
 #include <windows.h>
+
 #include <dbghelp.h>
+#include <stdio.h>
 #include <wininet.h>
 
-#include <cstdio>
 #include <map>
 #include <string>
 #include <vector>
 
-#include "common/windows/string_utils-inl.h"
-
 #include "common/windows/http_upload.h"
 #include "common/windows/pdb_source_line_writer.h"
+#include "common/windows/string_utils-inl.h"
 #include "common/windows/sym_upload_v2_protocol.h"
 #include "common/windows/symbol_collector_client.h"
 

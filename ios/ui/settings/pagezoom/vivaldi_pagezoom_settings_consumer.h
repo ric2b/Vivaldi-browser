@@ -9,7 +9,8 @@
 // preference state change.
 @protocol VivaldiPageZoomSettingsConsumer
 - (void)setPreferenceForPageZoomLevel:(NSInteger)level;
-- (void)setPreferenceForGlobalPageZoomEnabled:(BOOL)enabled;
+- (void)setPreferenceForDomainSettings:
+    (NSDictionary<NSString *, NSNumber *> *) dict;
 @end
 
 #endif  // IOS_UI_SETTINGS_PAGEZOOM_VIVALDI_PAGEZOOM_SETTINGS_CONSUMER_H_

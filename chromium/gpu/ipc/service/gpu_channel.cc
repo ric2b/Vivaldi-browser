@@ -46,6 +46,7 @@
 #include "gpu/command_buffer/service/memory_tracking.h"
 #include "gpu/command_buffer/service/scheduler.h"
 #include "gpu/command_buffer/service/service_utils.h"
+#include "gpu/command_buffer/service/sync_point_manager.h"
 #include "gpu/command_buffer/service/task_graph.h"
 #include "gpu/config/gpu_finch_features.h"
 #include "gpu/ipc/common/command_buffer_id.h"
@@ -338,16 +339,6 @@ void GpuChannelMessageFilter::Destroy() {
     return;
 
   image_decode_accelerator_stub_->Shutdown();
-
-  // Ensure all sync points from this channel are released.
-  for (const auto& entry : route_sequences_) {
-    gpu_channel_->sync_point_manager()->EnsureFenceSyncReleased(
-        SyncToken(CommandBufferNamespace::GPU_IO,
-                  CommandBufferIdFromChannelAndRoute(gpu_channel_->client_id(),
-                                                     entry.first),
-                  UINT64_MAX),
-        ReleaseCause::kForceRelease);
-  }
 
   gpu_channel_ = nullptr;
 }
@@ -1123,15 +1114,6 @@ void GpuChannel::CreateCommandBuffer(
     mojom::GpuChannel::CreateCommandBufferCallback callback) {
   ScopedCreateCommandBufferResponder responder(std::move(callback));
   TRACE_EVENT1("gpu", "GpuChannel::CreateCommandBuffer", "route_id", route_id);
-
-#if BUILDFLAG(IS_ANDROID)
-  if (init_params->surface_handle != kNullSurfaceHandle && !is_gpu_host_) {
-    LOG(ERROR)
-        << "ContextResult::kFatalFailure: "
-           "attempt to create a view context on a non-privileged channel";
-    return;
-  }
-#endif
 
   if (gpu_channel_manager_->delegate()->IsExiting()) {
     LOG(ERROR) << "ContextResult::kTransientFailure: trying to create command "

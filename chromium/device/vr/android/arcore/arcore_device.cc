@@ -87,8 +87,7 @@ ArCoreDevice::ArCoreDevice(
 
   // Only support WebGPU sessions if the appropriate feature flag is enabled
   // and shared buffers will be used.
-  if (base::FeatureList::IsEnabled(features::kWebXrIncubations) &&
-      ArImageTransport::UseSharedBuffer()) {
+  if (base::FeatureList::IsEnabled(features::kWebXrWebGpuBinding)) {
     device_features.emplace_back(mojom::XRSessionFeature::WEBGPU);
   }
 
@@ -396,6 +395,10 @@ void ArCoreDevice::OnCreateSessionCallback(
   session->enviroment_blend_mode =
       device::mojom::XREnvironmentBlendMode::kAlphaBlend;
   session->interaction_mode = device::mojom::XRInteractionMode::kScreenSpace;
+
+  // Regardless of if DOMOverlay was requested or not, ARCore would always like
+  // the page to enter fullscreen.
+  session->wants_fullscreen = true;
 
   std::move(deferred_callback).Run(std::move(session_result));
 }

@@ -2,7 +2,9 @@
 
 #include "components/search_engines/search_engines_prompt_manager.h"
 
+#include "base/time/time.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "components/search_engines/search_engine_type.h"
 #include "components/search_engines/search_engine_utils.h"
 #include "components/search_engines/search_engines_managers_factory.h"
 #include "components/search_engines/template_url.h"
@@ -20,12 +22,7 @@
 
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
-namespace {
-// Copy from components/ad_blocker/adblock_known_sources_handler_impl.cc
-// Remove when the IDs for known sources are exposed in the API.
-const char kPartnersList[] =
-    "https://downloads.vivaldi.com/lists/vivaldi/partners-current.txt";
-}  // namespace
+inline constexpr int kVivaldiSearchEnginePromptQuarantineInDays = 30;
 
 SearchEnginesPromptManager::SearchEnginesPromptManager(
     std::unique_ptr<ParsedSearchEnginesPrompt> prompt)
@@ -37,8 +34,20 @@ SearchEnginesPromptManager::~SearchEnginesPromptManager() = default;
 
 void SearchEnginesPromptManager::MarkCurrentPromptAsSeen(
     PrefService* prefs) const {
-  prefs->SetInteger(vivaldiprefs::kStartupLastSeenSearchEnginePromptVersion,
-                    GetCurrentVersion());
+  if (!IsQuarantined(prefs)) {
+    prefs->SetInteger(vivaldiprefs::kStartupLastSeenSearchEnginePromptVersion,
+                      GetCurrentVersion());
+    prefs->SetDouble(vivaldiprefs::kStartupLastSeenSearchEnginePromptTime,
+                     base::Time::Now().InSecondsFSinceUnixEpoch());
+  }
+}
+
+void SearchEnginesPromptManager::IgnoreCurrentPromptVersion(
+    PrefService* prefs) const {
+  if (!IsQuarantined(prefs)) {
+    prefs->SetInteger(vivaldiprefs::kStartupLastSeenSearchEnginePromptVersion,
+                      GetCurrentVersion());
+  }
 }
 
 TemplateURL* SearchEnginesPromptManager::GetDefaultSearchEngineToPrompt(
@@ -54,9 +63,9 @@ TemplateURL* SearchEnginesPromptManager::GetDefaultSearchEngineToPrompt(
   current_search = template_url_service->GetDefaultSearchProvider(
       TemplateURLService::kDefaultSearchMain);
 
-  std::unique_ptr<TemplateURLData> default_search =
-      TemplateURLPrepopulateData::GetPrepopulatedFallbackSearch(
-          prefs, nullptr, TemplateURLPrepopulateData::SearchType::kMain);
+  const TemplateURL default_search =
+      TemplateURL(*TemplateURLPrepopulateData::GetPrepopulatedFallbackSearch(
+          prefs, nullptr, TemplateURLPrepopulateData::SearchType::kMain));
 
   auto shouldPrompt = [&]() {
     // Do not prompt when:
@@ -67,11 +76,15 @@ TemplateURL* SearchEnginesPromptManager::GetDefaultSearchEngineToPrompt(
       return false;
     }
 
-    const uint32_t partner_list_id =
-        adblock_filter::RuleSourceCore::FromUrl(GURL(kPartnersList))->id();
+    // * should not show dialog while quarantined
+    if (IsQuarantined(prefs)) {
+      return false;
+    }
+
     // * 'Allow Ads from our partners' adblocking source is disabled
-    if (!rules_service->GetKnownSourcesHandler()->IsSourceEnabled(
-            adblock_filter::RuleGroup::kAdBlockingRules, partner_list_id)) {
+    if (!rules_service->GetKnownSourcesHandler()->IsPresetEnabled((
+            base::Uuid::ParseLowercase(
+                adblock_filter::KnownRuleSourcesHandler::kPartnersListUuid)))) {
       return false;
     }
 
@@ -90,11 +103,17 @@ TemplateURL* SearchEnginesPromptManager::GetDefaultSearchEngineToPrompt(
                 template_url_service->search_terms_data()))) {
       return false;
     }
-    // * should prompt for default search engine for locale
+
     const SearchEngineType default_search_type =
-        SearchEngineUtils::GetEngineType(GURL(default_search->url()));
-    if (ShouldPromptForTypeOrURL(default_search_type,
-                                 GURL(default_search->url()))) {
+        default_search.GetEngineType(template_url_service->search_terms_data());
+    const GURL default_search_url = default_search.GenerateSearchURL(
+        template_url_service->search_terms_data());
+    // * default search engine for locale is in exclude list
+    if (IsInExcludeList(default_search_type, default_search_url)) {
+      return false;
+    }
+    // * should prompt for default search engine for locale
+    if (ShouldPromptForTypeOrURL(default_search_type, default_search_url)) {
       return false;
     }
 
@@ -119,20 +138,33 @@ TemplateURL* SearchEnginesPromptManager::GetDefaultSearchEngineToPrompt(
   // valid TemplateURL managed by TemplateURLService, we must find a correct
   // TemplateURL by looking for the same prepopulate ID.
   return shouldPrompt()
-             ? getTemplateURLByPrepopulateId(default_search->prepopulate_id)
+             ? getTemplateURLByPrepopulateId(default_search.prepopulate_id())
              : nullptr;
 }
 
 bool SearchEnginesPromptManager::ShouldPromptForTypeOrURL(
     const SearchEngineType& type,
     const GURL& url) const {
-  if (type == SearchEngineType::SEARCH_ENGINE_OTHER) {
+  if (type == SearchEngineType::SEARCH_ENGINE_OTHER ||
+      type == SearchEngineType::SEARCH_ENGINE_UNKNOWN) {
     const auto urls = prompt_->prompt_if_domain();
     return std::any_of(urls.begin(), urls.end(),
                        [&url](const auto& it) { return url.DomainIs(it); });
   }
   const auto prompt_if_type = prompt_->prompt_if_type();
   return prompt_if_type.find(type) != prompt_if_type.end();
+}
+
+bool SearchEnginesPromptManager::IsInExcludeList(const SearchEngineType& type,
+                                                 const GURL& url) const {
+  if (type == SearchEngineType::SEARCH_ENGINE_OTHER ||
+      type == SearchEngineType::SEARCH_ENGINE_UNKNOWN) {
+    const auto exclude_urls = prompt_->exclude_if_domain();
+    return std::any_of(exclude_urls.begin(), exclude_urls.end(),
+                       [&url](const auto& it) { return url.DomainIs(it); });
+  }
+  const auto exclude_if_type = prompt_->exclude_if_type();
+  return exclude_if_type.find(type) != exclude_if_type.end();
 }
 
 int SearchEnginesPromptManager::GetCurrentVersion() const {
@@ -149,4 +181,14 @@ bool SearchEnginesPromptManager::IsValid() const {
           ->GetSearchEnginesManager()
           ->GetCurrentDataVersion();
   return GetSearchEnginesDataVersionRequired() <= search_engines_version;
+}
+
+bool SearchEnginesPromptManager::IsQuarantined(PrefService* prefs) const {
+  const base::Time last_seen_prompt = base::Time::FromSecondsSinceUnixEpoch(
+      prefs->GetDouble(vivaldiprefs::kStartupLastSeenSearchEnginePromptTime));
+  const base::Time now = base::Time::Now();
+  const int days_since_last_seen_prompt =
+      (now - last_seen_prompt).InDaysFloored();
+  return days_since_last_seen_prompt <
+         kVivaldiSearchEnginePromptQuarantineInDays;
 }

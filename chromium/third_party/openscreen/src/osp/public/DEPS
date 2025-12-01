@@ -1,0 +1,9 @@
+# -*- Mode: Python; -*-
+
+include_rules = [
+  # Allowed to use boringssl module.
+  '+openssl/bn.h',
+  '+openssl/ecdh.h',
+  '+openssl/evp.h',
+  '+openssl/sha.h',
+]

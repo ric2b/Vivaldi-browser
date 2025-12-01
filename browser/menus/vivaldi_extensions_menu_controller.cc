@@ -112,7 +112,8 @@ void ExtensionsMenuController::AppendCurrentExtensionItems(
                                            web_view_guest->owner_web_contents()
                                                ->GetPrimaryMainFrame()
                                                ->GetProcess()
-                                               ->GetID(),
+                                               ->GetID()
+                                               .value(),
                                            web_view_guest->owner_web_contents()
                                                ->GetPrimaryMainFrame()
                                                ->GetRoutingID(),

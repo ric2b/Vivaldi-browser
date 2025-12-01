@@ -83,14 +83,16 @@ class CORE_EXPORT ScopedStyleResolver final
     return active_style_sheets_;
   }
 
+  // See InspectorGhostRules.
+  void QuietlySwapActiveStyleSheets(ActiveStyleSheetVector& other);
+
   void AppendActiveStyleSheets(unsigned index, const ActiveStyleSheetVector&);
   void CollectMatchingElementScopeRules(ElementRuleCollector&,
                                         PartNames* part_names);
   void CollectMatchingShadowHostRules(ElementRuleCollector&);
   void CollectMatchingSlottedRules(ElementRuleCollector&);
   void CollectMatchingPartPseudoRules(ElementRuleCollector&,
-                                      PartNames* part_names,
-                                      bool for_shadow_pseudo);
+                                      PartNames* part_names);
   void MatchPageRules(PageRuleCollector&);
   void CollectFeaturesTo(RuleFeatureSet&,
                          HeapHashSet<Member<const StyleSheetContents>>&
@@ -133,6 +135,7 @@ class CORE_EXPORT ScopedStyleResolver final
 
   ActiveStyleSheetVector active_style_sheets_;
   MediaQueryResultFlags media_query_result_flags_;
+  HeapVector<RuleSetGroup> rule_set_groups_;
 
   using KeyframesRuleMap =
       HeapHashMap<AtomicString, Member<StyleRuleKeyframes>>;

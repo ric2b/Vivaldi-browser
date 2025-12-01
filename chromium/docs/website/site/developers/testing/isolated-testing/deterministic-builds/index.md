@@ -15,7 +15,7 @@ title: Deterministic builds
 ## Summary
 
 Make Chromium's build process to deterministic. Tracking issue:
-[crbug.com/314403](http://crbug.com/314403)
+[crbug.com/314403](https://crbug.com/314403)
 
 **Handling failures on the deterministic bots**
 
@@ -63,7 +63,7 @@ needed by a given unit test at runtime. It enables 3 benefits:
 *   Multi-OS testing of the same binaries. For example, build once, test
             on XP, Vista, Win7, Win8, Win10.
 
-Tracking issue: [crbug.com/98637](http://crbug.com/98637)
+Tracking issue: [crbug.com/98637](https://crbug.com/98637)
 
 *Swarming* is the task distributor that leverage Test isolation to run tests
 simultaneously to reduce latency in getting test results.
@@ -122,7 +122,7 @@ Builder:
 
 ### macOS
 
-Tracking issue: [crbug.com/330262](http://crbug.com/330262)
+Tracking issue: [crbug.com/330262](https://crbug.com/330262)
 
 Builder:
 <https://ci.chromium.org/p/chromium/builders/luci.chromium.ci/Mac%20deterministic>
@@ -131,7 +131,7 @@ Builder:
 
 ### Linux
 
-Tracking issue: [crbug.com/330263](http://crbug.com/330263)
+Tracking issue: [crbug.com/330263](https://crbug.com/330263)
 
 Builder:
 
@@ -143,7 +143,7 @@ Builder:
 
 ### Android
 
-Tracking issue: [crbug.com/383340](http://crbug.com/383340)
+Tracking issue: [crbug.com/383340](https://crbug.com/383340)
 
 Builder:
 
@@ -155,7 +155,7 @@ Builder:
 
 ### iOS
 
-Tracking issue: [crbug.com/383364](http://crbug.com/383364)
+Tracking issue: [crbug.com/383364](https://crbug.com/383364)
 
 Builder:
 <http://build.chromium.org/p/chromium.swarm/waterfall?builder=IOS%20deterministic%20build>

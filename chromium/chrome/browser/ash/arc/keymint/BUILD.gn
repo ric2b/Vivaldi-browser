@@ -4,7 +4,7 @@
 
 import("//build/config/chromeos/ui_mode.gni")
 
-assert(is_chromeos_ash)
+assert(is_chromeos)
 
 static_library("keymint") {
   sources = [
@@ -15,13 +15,30 @@ static_library("keymint") {
   ]
 
   deps = [
-    "//ash/components/arc",
     "//base",
     "//chrome/services/keymint/public/mojom",
     "//chromeos/ash/components/dbus/arc",
+    "//chromeos/ash/experiences/arc",
     "//components/keyed_service/core",
     "//mojo/core/embedder",
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/platform",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [ "arc_keymint_bridge_unittest.cc" ]
+
+  deps = [
+    ":keymint",
+    "//base",
+    "//base/test:test_support",
+    "//chrome/test:test_support",
+    "//chromeos/ash/experiences/arc",
+    "//chromeos/ash/experiences/arc:arc_test_support",
+    "//content/test:test_support",
+    "//testing/gtest",
   ]
 }

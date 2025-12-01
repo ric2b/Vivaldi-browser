@@ -4,6 +4,7 @@
 
 #include "chrome/browser/webauthn/authenticator_request_dialog_model.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -28,7 +29,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
 #include "base/strings/string_util.h"
@@ -409,7 +409,7 @@ class FakeEnclaveController : public AuthenticatorRequestDialogModel::Observer {
         model_->SetStep(Step::kGPMEnterPin);
       }
     } else {
-      model_->SetStep(Step::kSelectSingleAccount);
+      model_->SetStep(Step::kSelectAccount);
     }
   }
 
@@ -541,8 +541,7 @@ TEST_F(AuthenticatorRequestDialogControllerTest, Mechanisms) {
 #else
       Step::kCableV2QRCode;
 #endif
-  [[maybe_unused]] const auto use_pk = Step::kPreSelectSingleAccount;
-  [[maybe_unused]] const auto use_pk_multi = Step::kPreSelectAccount;
+  [[maybe_unused]] const auto use_pk = Step::kPreSelectAccount;
   const auto qr = Step::kCableV2QRCode;
   const auto pconf = Step::kPhoneConfirmationSheet;
   const auto hero = Step::kSelectPriorityMechanism;
@@ -888,11 +887,11 @@ TEST_F(AuthenticatorRequestDialogControllerTest, Mechanisms) {
       // immediately.
       {L,
        ga,
-       {cable},
+       {cable, internal},
        {only_hybrid_or_internal, enclave_cred, uv_pref},
        {},
        {c(enclave_cred1), add},
-       kIsMac ? enclave_touchid : use_pk},
+       kIsMac ? enclave_touchid : hero},
      #endif
       // But, again, not for uv=discouraged.
       {L,
@@ -901,7 +900,7 @@ TEST_F(AuthenticatorRequestDialogControllerTest, Mechanisms) {
        {only_hybrid_or_internal, enclave_cred},
        {},
        {c(enclave_cred1), add},
-       use_pk},
+       hero},
       // When the enclave needs to sign-in again, that should appear as a
       // mechanism and the MSS should be shown.
       {L,
@@ -2215,64 +2214,6 @@ TEST_F(AuthenticatorRequestDialogControllerTest, ConditionalUIPhonePasskey) {
   EXPECT_EQ(phone_name, kNewSyncedPhoneName);
 }
 
-// Tests that if GPM passkeys change during a conditional UI request, the
-// request is restarted.
-TEST_F(AuthenticatorRequestDialogControllerTest,
-       ConditionalUIPhonePasskeyUpdated) {
-  auto model =
-      base::MakeRefCounted<AuthenticatorRequestDialogModel>(main_rfh());
-  auto controller = std::make_unique<AuthenticatorRequestDialogController>(
-      model.get(), main_rfh());
-  TransportAvailabilityInfo transport_info;
-  transport_info.attestation_conveyance_preference =
-      device::AttestationConveyancePreference::kNone;
-  controller->set_ui_presentation(UIPresentation::kAutofill);
-  controller->StartFlow(std::move(transport_info));
-  ASSERT_EQ(model->step(), Step::kPasskeyAutofill);
-  testing::NiceMock<MockDialogModelObserver> mock_observer;
-  model->observers.AddObserver(&mock_observer);
-
-  // Notifying that passkeys changed during a conditional request should restart
-  // it.
-  EXPECT_CALL(mock_observer, OnStartOver());
-  static_cast<webauthn::PasskeyModel::Observer*>(controller.get())
-      ->OnPasskeysChanged({});
-  testing::Mock::VerifyAndClearExpectations(&mock_observer);
-
-  // Notifying that passkeys changed during any other step should be ignored.
-  controller->SetCurrentStepForTesting(Step::kUsbInsertAndActivate);
-  static_cast<webauthn::PasskeyModel::Observer*>(controller.get())
-      ->OnPasskeysChanged({});
-  EXPECT_CALL(mock_observer, OnStartOver()).Times(0);
-  model->observers.RemoveObserver(&mock_observer);
-}
-
-// Tests that if the transport availability is updated during a conditional UI
-// request, the list of passkeys is updated.
-TEST_F(AuthenticatorRequestDialogControllerTest,
-       ConditionalUITransportAvailabilityUpdated) {
-  NavigateAndCommit(GURL("rp.com"));
-  ChromeWebAuthnCredentialsDelegate* delegate =
-      ChromeWebAuthnCredentialsDelegateFactory::GetFactory(web_contents())
-          ->GetDelegateForFrame(web_contents()->GetPrimaryMainFrame());
-  ASSERT_TRUE(delegate);
-
-  auto model =
-      base::MakeRefCounted<AuthenticatorRequestDialogModel>(main_rfh());
-  auto controller = std::make_unique<AuthenticatorRequestDialogController>(
-      model.get(), main_rfh());
-  TransportAvailabilityInfo transports_info;
-  transports_info.request_type = device::FidoRequestType::kGetAssertion;
-  transports_info.recognized_credentials = {};
-  controller->set_ui_presentation(UIPresentation::kAutofill);
-  controller->StartFlow(transports_info);
-  EXPECT_TRUE(delegate->GetPasskeys()->empty());
-
-  transports_info.recognized_credentials = {kCred1};
-  controller->OnTransportAvailabilityChanged(transports_info);
-  EXPECT_FALSE(delegate->GetPasskeys()->empty());
-}
-
 // Tests that if the stored preference for the most recently used phone is not
 // valid base64, the value is ignored.
 TEST_F(AuthenticatorRequestDialogControllerTest, InvalidPriorityPhonePref) {
@@ -2423,7 +2364,7 @@ TEST_F(AuthenticatorRequestDialogControllerTest, PreSelect) {
     if (has_empty_allow_list) {
       EXPECT_EQ(model->step(), Step::kSelectPriorityMechanism);
     } else {
-      EXPECT_EQ(model->step(), Step::kPreSelectSingleAccount);
+      EXPECT_EQ(model->step(), Step::kPreSelectAccount);
     }
     task_environment()->RunUntilIdle();
 
@@ -2574,7 +2515,7 @@ TEST_F(AuthenticatorRequestDialogControllerTest, BluetoothPermissionPrompt) {
           AuthenticatorTransport::kUsbHumanInterfaceDevice};
       controller.StartFlow(std::move(transports_info));
 
-      base::ranges::find_if(
+      std::ranges::find_if(
           model->mechanisms,
           [click_specific_phone](const auto& m) -> bool {
             if (click_specific_phone) {
@@ -2712,6 +2653,95 @@ TEST_F(AuthenticatorRequestDialogControllerTest, DeduplicateAccounts) {
 
     EXPECT_EQ(*test.type_of_priority_mechanism,
               model->mechanisms[*model->priority_mechanism_index].type);
+  }
+}
+
+// Tests the text on the hybrid button label.
+// Regression test for crbug.com/328698086.
+TEST_F(AuthenticatorRequestDialogControllerTest, HybridButtonLabel) {
+#if BUILDFLAG(IS_WIN)
+  device::FakeWinWebAuthnApi fake_win_webauthn_api;
+  device::WinWebAuthnApi::ScopedOverride win_webauthn_api_override(
+      &fake_win_webauthn_api);
+#endif
+  constexpr int kDifferentPhoneOrSk =
+      IDS_WEBAUTHN_PASSKEY_DIFFERENT_PHONE_TABLET_OR_SECURITY_KEY_LABEL;
+  constexpr int kPhoneOrSk =
+      IDS_WEBAUTHN_PASSKEY_PHONE_TABLET_OR_SECURITY_KEY_LABEL;
+  constexpr int kDifferentPhone =
+      IDS_WEBAUTHN_PASSKEY_DIFFERENT_PHONE_OR_TABLET_LABEL;
+  constexpr int kPhone = IDS_WEBAUTHN_PASSKEY_PHONE_OR_TABLET_LABEL;
+  const auto usb = AuthenticatorTransport::kUsbHumanInterfaceDevice;
+  const auto hybrid = AuthenticatorTransport::kHybrid;
+  enum CanDoUSB : bool {
+    kNoUSB = false,
+    kUSB = true,
+  };
+  enum ListedPhones : bool {
+    kNoListedPhones = false,
+    kListedPhones = true,
+  };
+  struct TestCase {
+    ListedPhones listed_phones;
+    CanDoUSB chrome_can_do_usb;
+    BleStatus ble_status;
+    std::optional<AuthenticatorTransport> transport_hint;
+    int expected;
+  } kTestCases[] = {
+      {kNoListedPhones, kUSB, BleStatus::kOn, std::nullopt, kPhoneOrSk},
+      {kNoListedPhones, kUSB, BleStatus::kOn, usb, kPhone},
+      {kNoListedPhones, kUSB, BleStatus::kOn, hybrid, kPhone},
+      {kNoListedPhones, kUSB, BleStatus::kOff, std::nullopt, kPhone},
+      {kNoListedPhones, kNoUSB, BleStatus::kOn, std::nullopt, kPhone},
+      {kListedPhones, kUSB, BleStatus::kOn, std::nullopt, kDifferentPhoneOrSk},
+      {kListedPhones, kUSB, BleStatus::kOn, usb, kDifferentPhone},
+      {kListedPhones, kUSB, BleStatus::kOn, hybrid, kDifferentPhone},
+      {kListedPhones, kUSB, BleStatus::kOff, std::nullopt, kDifferentPhone},
+      {kListedPhones, kNoUSB, BleStatus::kOn, std::nullopt, kDifferentPhone},
+  };
+  for (const auto& test_case : kTestCases) {
+    SCOPED_TRACE(test_case.transport_hint
+                     ? static_cast<int>(*test_case.transport_hint)
+                     : -1);
+    SCOPED_TRACE(static_cast<int>(test_case.ble_status));
+    SCOPED_TRACE(static_cast<int>(test_case.chrome_can_do_usb));
+    SCOPED_TRACE(static_cast<int>(test_case.listed_phones));
+    auto model =
+        base::MakeRefCounted<AuthenticatorRequestDialogModel>(main_rfh());
+    AuthenticatorRequestDialogController controller(model.get(), main_rfh());
+    TransportAvailabilityInfo transports_info;
+    transports_info.request_type = device::FidoRequestType::kMakeCredential;
+    transports_info.attestation_conveyance_preference =
+        device::AttestationConveyancePreference::kNone;
+    std::vector<std::unique_ptr<device::cablev2::Pairing>> pairings;
+    if (test_case.listed_phones) {
+      pairings.emplace_back(GetPairingFromQR());
+    }
+    controller.set_cable_transport_info(
+        /*extension_is_v2=*/std::nullopt, std::move(pairings),
+        base::DoNothing(), std::nullopt);
+    if (test_case.chrome_can_do_usb) {
+      transports_info.available_transports = {
+          device::FidoTransportProtocol::kHybrid,
+          device::FidoTransportProtocol::kUsbHumanInterfaceDevice};
+    } else {
+      transports_info.available_transports = {
+          device::FidoTransportProtocol::kHybrid};
+    }
+    transports_info.ble_status = test_case.ble_status;
+    content::AuthenticatorRequestClientDelegate::Hints hints;
+    hints.transport = test_case.transport_hint;
+    controller.SetHints(std::move(hints));
+
+    controller.StartFlow(std::move(transports_info));
+    auto hybrid_button_it =
+        std::ranges::find_if(model->mechanisms, [](const auto& m) {
+          return absl::holds_alternative<
+              AuthenticatorRequestDialogModel::Mechanism::AddPhone>(m.type);
+        });
+    ASSERT_NE(hybrid_button_it, model->mechanisms.end());
+    EXPECT_EQ(hybrid_button_it->name,
+              l10n_util::GetStringUTF16(test_case.expected));
   }
 }
 
@@ -2956,7 +2986,7 @@ TEST_F(AuthenticatorRequestDialogControllerTest, MechanismsFromUserAccounts) {
   EXPECT_EQ(mech1.name, base::UTF8ToUTF16(*kUser1.name));
   EXPECT_EQ(mech1.short_name, base::UTF8ToUTF16(*kUser1.name));
   EXPECT_EQ(mech1.description,
-            l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_USE_GENERIC_DEVICE));
+            l10n_util::GetStringUTF16(IDS_WEBAUTHN_SOURCE_USB_SECURITY_KEY));
   EXPECT_EQ(mech1.icon, vector_icons::kPasskeyIcon);
   mech1.callback.Run();
   device::DiscoverableCredentialMetadata result =
@@ -2976,7 +3006,8 @@ TEST_F(AuthenticatorRequestDialogControllerTest, MechanismsFromUserAccounts) {
       model->mechanisms[1];
   EXPECT_EQ(mech2.name, base::UTF8ToUTF16(*kUser2.name));
   EXPECT_EQ(mech2.short_name, base::UTF8ToUTF16(*kUser2.name));
-  EXPECT_EQ(mech2.description, u"Use device sign-in");
+  EXPECT_EQ(mech2.description,
+            l10n_util::GetStringUTF16(IDS_WEBAUTHN_SOURCE_USB_SECURITY_KEY));
   EXPECT_EQ(mech2.icon, vector_icons::kPasskeyIcon);
   mech2.callback.Run();
   result = account_preselected_callback.WaitForResult();
@@ -3119,7 +3150,7 @@ TEST_F(AuthenticatorRequestDialogControllerTest,
 
     controller.StartFlow(std::move(transports_info));
     auto win_button_it =
-        base::ranges::find_if(model->mechanisms, [](const auto& m) {
+        std::ranges::find_if(model->mechanisms, [](const auto& m) {
           return absl::holds_alternative<
               AuthenticatorRequestDialogModel::Mechanism::WindowsAPI>(m.type);
         });
@@ -3186,7 +3217,7 @@ TEST_F(AuthenticatorRequestDialogControllerTest,
 
     controller.StartFlow(std::move(transports_info));
     auto win_button_it =
-        base::ranges::find_if(model->mechanisms, [](const auto& m) {
+        std::ranges::find_if(model->mechanisms, [](const auto& m) {
           return absl::holds_alternative<
               AuthenticatorRequestDialogModel::Mechanism::WindowsAPI>(m.type);
         });

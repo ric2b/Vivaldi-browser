@@ -68,7 +68,15 @@ public enum AddressField {
   /** The input field used to enter a value for {@link AddressData#getRecipient()}. */
   RECIPIENT('N'),
   /** The input field used to enter a value for {@link AddressData#getOrganization()}. */
-  ORGANIZATION('O');
+  ORGANIZATION('O'),
+
+  /** The input field used to enter a value for {@link AddressData.Landmark}. */
+  LANDMARK_ADDRESS_DESCRIPTOR('T'),
+  /** The input field used to enter a value for {@link AddressData.Landmark#getPrefix()}. */
+  LANDMARK_AFFIX('F'),
+  /** The input field used to enter a value for {@link AddressData.Landmark#getName()}. */
+  LANDMARK_NAME('L'),
+  ;
 
   /** Classification of the visual width of address input fields. */
   public enum WidthType {

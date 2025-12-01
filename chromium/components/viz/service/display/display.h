@@ -48,7 +48,6 @@ namespace gpu {
 class ScopedAllowScheduleGpuTask;
 struct SwapBuffersCompleteParams;
 class SharedImageManager;
-class SyncPointManager;
 class Scheduler;
 }
 
@@ -59,7 +58,6 @@ class DisplayResourceProvider;
 class FrameIntervalDecider;
 class OutputSurface;
 class RendererSettings;
-class SharedBitmapManager;
 class SkiaOutputSurface;
 class SoftwareRenderer;
 class OcclusionCuller;
@@ -89,9 +87,7 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   // TODO(penghuang): Remove skia_output_surface when all DirectRenderer
   // subclasses are replaced by SkiaRenderer.
   Display(
-      SharedBitmapManager* bitmap_manager,
       gpu::SharedImageManager* shared_image_manager,
-      gpu::SyncPointManager* sync_point_manager,
       gpu::Scheduler* gpu_scheduler,
       const RendererSettings& settings,
       const DebugRendererSettings* debug_settings,
@@ -292,9 +288,7 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   // ContextLostObserver implementation.
   void OnContextLost() override;
 
-  const raw_ptr<SharedBitmapManager> bitmap_manager_;
   const raw_ptr<gpu::SharedImageManager> shared_image_manager_;
-  const raw_ptr<gpu::SyncPointManager> sync_point_manager_;
   const raw_ptr<gpu::Scheduler> gpu_scheduler_;
   const RendererSettings settings_;
 

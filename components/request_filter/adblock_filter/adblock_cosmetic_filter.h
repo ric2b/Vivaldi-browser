@@ -6,6 +6,7 @@
 #include "base/memory/weak_ptr.h"
 #include "components/ad_blocker/adblock_types.h"
 #include "components/request_filter/adblock_filter/mojom/adblock_cosmetic_filter.mojom.h"
+#include "content/public/browser/child_process_id.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 
 namespace content {
@@ -29,11 +30,11 @@ class CosmeticFilter : public mojom::CosmeticFilter {
                          ShouldAllowWebRTCCallback callback) override;
 
  private:
-  CosmeticFilter(int process_id, int frame_id);
+  CosmeticFilter(content::ChildProcessId process_id, int frame_id);
   CosmeticFilter(const CosmeticFilter&) = delete;
   CosmeticFilter& operator=(const CosmeticFilter&) = delete;
 
-  int process_id_;
+  content::ChildProcessId process_id_;
   int frame_id_;
   std::array<base::WeakPtr<RulesIndexManager>, kRuleGroupCount> index_managers_;
 };

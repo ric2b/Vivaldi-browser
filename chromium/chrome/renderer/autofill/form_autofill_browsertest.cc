@@ -9,6 +9,7 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <optional>
 #include <string>
 #include <utility>
@@ -16,7 +17,6 @@
 
 #include "base/feature_list.h"
 #include "base/format_macros.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -42,7 +42,6 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/platform/web_string.h"
-#include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/web_autofill_state.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_element.h"
@@ -68,7 +67,6 @@ using blink::WebInputElement;
 using blink::WebLocalFrame;
 using blink::WebSelectElement;
 using blink::WebString;
-using blink::WebVector;
 using testing::_;
 using testing::ElementsAre;
 using testing::Field;
@@ -304,8 +302,13 @@ void ApplyFieldsAction(
                                *base::MakeRefCounted<FieldDataManager>());
 }
 
-constexpr CallTimerState kCallTimerStateDummy = {
+static constexpr CallTimerState kExtractFormDataCallTimerStateDummy = {
     .call_site = CallTimerState::CallSite::kUpdateFormCache,
+    .last_autofill_agent_reset = {},
+    .last_dom_content_loaded = {},
+};
+static constexpr CallTimerState kUpdateFormCacheCallTimerStateDummy = {
+    .call_site = CallTimerState::CallSite::kExtractForms,
     .last_autofill_agent_reset = {},
     .last_dom_content_loaded = {},
 };
@@ -313,7 +316,8 @@ constexpr CallTimerState kCallTimerStateDummy = {
 FormData FindForm(const blink::WebFormControlElement& element) {
   if (auto p = FindFormAndFieldForFormControlElement(
           element, *base::MakeRefCounted<FieldDataManager>(),
-          kCallTimerStateDummy, {})) {
+          kExtractFormDataCallTimerStateDummy, /*extract_options=*/{},
+          /*form_cache=*/{})) {
     return p->first;
   }
   return FormData();
@@ -370,9 +374,9 @@ class FormAutofillTest : public test::AutofillRendererTest {
   std::optional<FormData> ExtractFormData(
       WebFormElement form,
       DenseSet<ExtractOption> extract_options = {}) {
-    return form_util::ExtractFormData(GetDocument(), form,
-                                      *base::MakeRefCounted<FieldDataManager>(),
-                                      kCallTimerStateDummy, extract_options);
+    return form_util::ExtractFormData(
+        GetDocument(), form, *base::MakeRefCounted<FieldDataManager>(),
+        kExtractFormDataCallTimerStateDummy, extract_options);
   }
 
   std::optional<std::pair<FormData, raw_ref<const FormFieldData>>>
@@ -381,12 +385,14 @@ class FormAutofillTest : public test::AutofillRendererTest {
       DenseSet<ExtractOption> extract_options = {}) {
     return form_util::FindFormAndFieldForFormControlElement(
         control, *base::MakeRefCounted<FieldDataManager>(),
-        kCallTimerStateDummy, extract_options);
+        kExtractFormDataCallTimerStateDummy, extract_options,
+        /*form_cache=*/{});
   }
 
   FormCache::UpdateFormCacheResult UpdateFormCache() {
     return form_cache_->UpdateFormCache(
-        *base::MakeRefCounted<FieldDataManager>());
+        *base::MakeRefCounted<FieldDataManager>(),
+        kUpdateFormCacheCallTimerStateDummy);
   }
 
   void ExpectLabels(const char* html,
@@ -2400,7 +2406,7 @@ TEST_F(FormAutofillTest, WebFormElementToFormData) {
   WebLocalFrame* frame = GetMainFrame();
   ASSERT_NE(nullptr, frame);
 
-  WebVector<WebFormElement> forms = frame->GetDocument().GetTopLevelForms();
+  std::vector<WebFormElement> forms = frame->GetDocument().GetTopLevelForms();
   ASSERT_EQ(1U, forms.size());
 
   WebInputElement input_element = GetInputElementById("firstname");
@@ -2464,7 +2470,7 @@ TEST_F(FormAutofillTest, WebFormElementToFormData) {
   EXPECT_FORM_FIELD_DATA_EQUALS(expected, fields[5]);
 
   // Check renderer_id.
-  WebVector<WebFormControlElement> form_control_elements =
+  std::vector<WebFormControlElement> form_control_elements =
       forms[0].GetFormControlElements();
   for (size_t i = 0; i < fields.size(); ++i)
     EXPECT_EQ(GetFieldRendererId(form_control_elements[i]),
@@ -2505,7 +2511,7 @@ TEST_F(FormAutofillTest, WebFormElementToFormData_TooManyFields) {
   WebLocalFrame* frame = GetMainFrame();
   ASSERT_NE(nullptr, frame);
 
-  WebVector<WebFormElement> forms = frame->GetDocument().GetTopLevelForms();
+  std::vector<WebFormElement> forms = frame->GetDocument().GetTopLevelForms();
   ASSERT_EQ(1U, forms.size());
   ASSERT_FALSE(forms.front().GetFormControlElements().empty());
 
@@ -2870,7 +2876,7 @@ TEST_F(FormAutofillTest, WebFormElementToFormData_Autocomplete) {
              <input type=submit name='reply-send' value=Send>
            </form>)");
 
-    WebVector<WebFormElement> web_forms = GetDocument().GetTopLevelForms();
+    std::vector<WebFormElement> web_forms = GetDocument().GetTopLevelForms();
     ASSERT_EQ(1U, web_forms.size());
     WebFormElement web_form = web_forms[0];
 
@@ -3908,21 +3914,13 @@ TEST_F(FormAutofillTest, LabelsInferredWithImageTags) {
 
   id_attributes.push_back(u"");
   name_attributes.push_back(u"dayphone2");
-  labels.push_back(
-      base::FeatureList::IsEnabled(
-          features::kAutofillConsiderPhoneNumberSeparatorsValidLabels)
-          ? u"-"
-          : u"");
+  labels.push_back(u"");
   names.push_back(name_attributes.back());
   values.emplace_back();
 
   id_attributes.push_back(u"");
   name_attributes.push_back(u"dayphone3");
-  labels.push_back(
-      base::FeatureList::IsEnabled(
-          features::kAutofillConsiderPhoneNumberSeparatorsValidLabels)
-          ? u"-"
-          : u"");
+  labels.push_back(u"");
   names.push_back(name_attributes.back());
   values.emplace_back();
 
@@ -4183,7 +4181,7 @@ TEST_F(FormAutofillTest, ThreePartPhone) {
   WebLocalFrame* frame = GetMainFrame();
   ASSERT_NE(nullptr, frame);
 
-  WebVector<WebFormElement> forms = frame->GetDocument().GetTopLevelForms();
+  std::vector<WebFormElement> forms = frame->GetDocument().GetTopLevelForms();
   ASSERT_EQ(1U, forms.size());
 
   FormData form = *ExtractFormData(forms[0]);
@@ -4202,20 +4200,12 @@ TEST_F(FormAutofillTest, ThreePartPhone) {
   expected.set_name(expected.name_attribute());
   EXPECT_FORM_FIELD_DATA_EQUALS(expected, fields[0]);
 
-  expected.set_label(
-      base::FeatureList::IsEnabled(
-          features::kAutofillConsiderPhoneNumberSeparatorsValidLabels)
-          ? u"-"
-          : u"");
+  expected.set_label(u"");
   expected.set_name_attribute(u"dayphone2");
   expected.set_name(expected.name_attribute());
   EXPECT_FORM_FIELD_DATA_EQUALS(expected, fields[1]);
 
-  expected.set_label(
-      base::FeatureList::IsEnabled(
-          features::kAutofillConsiderPhoneNumberSeparatorsValidLabels)
-          ? u"-"
-          : u"");
+  expected.set_label(u"");
   expected.set_name_attribute(u"dayphone3");
   expected.set_name(expected.name_attribute());
   EXPECT_FORM_FIELD_DATA_EQUALS(expected, fields[2]);
@@ -4244,7 +4234,7 @@ TEST_F(FormAutofillTest, MaxLengthFields) {
   WebLocalFrame* frame = GetMainFrame();
   ASSERT_NE(nullptr, frame);
 
-  WebVector<WebFormElement> forms = frame->GetDocument().GetTopLevelForms();
+  std::vector<WebFormElement> forms = frame->GetDocument().GetTopLevelForms();
   ASSERT_EQ(1U, forms.size());
 
   FormData form = *ExtractFormData(forms[0]);
@@ -4264,21 +4254,13 @@ TEST_F(FormAutofillTest, MaxLengthFields) {
   EXPECT_FORM_FIELD_DATA_EQUALS(expected, fields[0]);
 
   expected.set_name_attribute(u"dayphone2");
-  expected.set_label(
-      base::FeatureList::IsEnabled(
-          features::kAutofillConsiderPhoneNumberSeparatorsValidLabels)
-          ? u"-"
-          : u"");
+  expected.set_label(u"");
   expected.set_name(expected.name_attribute());
   expected.set_max_length(3);
   EXPECT_FORM_FIELD_DATA_EQUALS(expected, fields[1]);
 
   expected.set_name_attribute(u"dayphone3");
-  expected.set_label(
-      base::FeatureList::IsEnabled(
-          features::kAutofillConsiderPhoneNumberSeparatorsValidLabels)
-          ? u"-"
-          : u"");
+  expected.set_label(u"");
   expected.set_name(expected.name_attribute());
   expected.set_max_length(4);
   EXPECT_FORM_FIELD_DATA_EQUALS(expected, fields[2]);
@@ -4443,7 +4425,7 @@ TEST_F(FormAutofillTest, UndoAutofill) {
               HasAutofillValue("autofill_select_option_2",
                                WebAutofillState::kAutofilled));
 
-  WebVector<WebFormElement> forms =
+  std::vector<WebFormElement> forms =
       GetMainFrame()->GetDocument().GetTopLevelForms();
   EXPECT_EQ(1U, forms.size());
 
@@ -4630,7 +4612,7 @@ TEST_F(FormAutofillTest, SelectOneAsText) {
       frame->GetDocument().GetElementById("country").To<WebSelectElement>();
   select_element.SetValue(WebString::FromUTF8("AL"));
 
-  WebVector<WebFormElement> forms = frame->GetDocument().GetTopLevelForms();
+  std::vector<WebFormElement> forms = frame->GetDocument().GetTopLevelForms();
   ASSERT_EQ(1U, forms.size());
 
   FormData form = *ExtractFormData(forms[0]);

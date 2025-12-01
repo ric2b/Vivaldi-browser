@@ -105,6 +105,9 @@ void MailClientBackend::InitImpl(
   // MailClient database.
   db_.reset(new MailClientDatabase());
 
+  db_->set_error_callback(base::BindRepeating(
+      &MailClientBackend::DatabaseErrorCallback, base::Unretained(this)));
+
   sql::InitStatus status = db_->Init(mail_client_db_name);
   switch (status) {
     case sql::INIT_OK:
@@ -178,27 +181,34 @@ bool MailClientBackend::DeleteMessages(SearchListIDs ids) {
   return success;
 }
 
-MessageResult MailClientBackend::UpdateMessage(
-    mail_client::MessageRow message) {
-  MessageResult result;
+StatusCB MailClientBackend::UpdateMessage(mail_client::MessageRow message) {
+  StatusCB status;
   if (!db_) {
-    result.success = false;
-    result.message = "Database error";
-    return result;
+    status.result = false;
+    status.message = "Database error";
+    return status;
   }
 
-  result.success = db_->UpdateMessage(message);
-  if (!result.success) {
-    result.message = "Error adding message body";
+  status.result = db_->UpdateMessage(message);
+  if (!status.result) {
+    status.message = "Error adding message body";
   }
-  return result;
+  return status;
 }
 
-SearchListIDs MailClientBackend::EmailSearch(std::u16string searchValue) {
+MailSearchCB MailClientBackend::EmailSearch(std::u16string searchValue) {
   SearchListIDs rows;
-  db_->SearchMessages(searchValue, &rows);
+  MailSearchCB cb;
+  bool res = db_->SearchMessages(searchValue, &rows);
 
-  return rows;
+  if (!res) {
+    cb.message = diagnostics_string_;
+  }
+
+  cb.success = res;
+  cb.search_list_ids = rows;
+
+  return cb;
 }
 
 bool MailClientBackend::MatchMessage(SearchListID search_list_id,
@@ -238,6 +248,15 @@ bool MailClientBackend::DeleteMailSearchDB() {
     }
   }
   return false;
+}
+
+StatusCB MailClientBackend::CheckDBHealth() {
+  StatusCB status;
+  status.result = db_->CheckDBHealth();
+  if (!status.result)
+    status.message = diagnostics_string_;
+
+  return status;
 }
 
 bool MailClientBackend::MigrateSearchDB() {
@@ -285,6 +304,11 @@ bool MailClientBackend::MigrateSearchDB() {
   }
   NotifyMigrationProgress(0, 0, "Migration finished");
   return true;
+}
+
+void MailClientBackend::DatabaseErrorCallback(int error, sql::Statement* stmt) {
+  diagnostics_string_ = db_->GetDiagnosticInfo(error, stmt, &diagnostics_);
+  LOG(ERROR) << "MailSearchDB error: " << diagnostics_string_;
 }
 
 }  // namespace mail_client

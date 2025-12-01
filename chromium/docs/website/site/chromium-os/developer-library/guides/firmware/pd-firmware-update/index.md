@@ -182,7 +182,7 @@ chip. This information can be used to ensure that the PD firmware update is
 successful.
 
 
-[verified boot]: https://www.chromium.org/chromium-os/chromiumos-design-docs/verified-boot
+[verified boot]: /chromium-os/chromiumos-design-docs/verified-boot
 [depthcharge]: https://link.springer.com/chapter/10.1007/978-1-4842-0070-4_5#Sec13
 [Upload the new PD firmware blob to Google Cloud Platform Storage]: #upload
 [Add/uprev ebuild to build the new PD firmware as a package]: #uprev

@@ -68,6 +68,8 @@ class WebState;
                          parent:(const vivaldi::NoteNode*)parentNode
                       isEditing:(BOOL)isEditing;
 
+- (BOOL)isEditorPresented;
+
 @end
 
 #endif  // IOS_UI_NOTES_NOTE_INTERACTION_CONTROLLER_H_

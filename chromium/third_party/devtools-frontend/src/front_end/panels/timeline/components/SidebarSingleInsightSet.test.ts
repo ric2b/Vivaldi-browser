@@ -3,48 +3,34 @@
 // found in the LICENSE file.
 
 import * as Root from '../../../core/root/root.js';
+import * as Trace from '../../../models/trace/trace.js';
 import {getCleanTextContentFromElements, renderElementIntoDOM} from '../../../testing/DOMHelpers.js';
 import {describeWithEnvironment} from '../../../testing/EnvironmentHelpers.js';
 import {TraceLoader} from '../../../testing/TraceLoader.js';
-import * as Coordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
+import * as RenderCoordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
 
 import * as Components from './components.js';
-import * as InsightComponents from './insights/insights.js';
+import type * as InsightComponents from './insights/insights.js';
 
-const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
+type BaseInsightComponent =
+    InsightComponents.BaseInsightComponent.BaseInsightComponent<Trace.Insights.Types.InsightModel<{}>>;
 
 function getUserVisibleInsights(component: Components.SidebarSingleInsightSet.SidebarSingleInsightSet):
-    InsightComponents.SidebarInsight.SidebarInsight[] {
+    BaseInsightComponent[] {
   assert.isOk(component.shadowRoot);
-  const insightWrappers = [...component.shadowRoot.querySelectorAll<HTMLDivElement>('[data-single-insight-wrapper]')];
+  return [...component.shadowRoot.querySelectorAll<BaseInsightComponent>('[data-insight-name]')];
+}
 
-  // We have to jump through some hoops here => each insight is rendered in its
-  // own component, but within it they all use the
-  // devtools-performance-sidebar-insight component to render the header +
-  // body.
-  // So we first have to find the specific insight component (e.g.
-  // devtools-performance-render-blocking), then look inside its shadow dom for
-  // the devtools-performance-sidebar-insight component.
-  // If you are here debugging something, I highly recommend loading up
-  // DevTools and inspecting the DOM in the Insights sidebar. It will be much
-  // easier!
-  const userVisibleInsightComponents =
-      insightWrappers
-          .map(div => {
-            const component = div.querySelector('[data-insight-name]');
-            assert.instanceOf(component, HTMLElement);
-            const insightComponent =
-                component.shadowRoot?.querySelector<InsightComponents.SidebarInsight.SidebarInsight>(
-                    'devtools-performance-sidebar-insight');
-            return insightComponent ?? null;
-          })
-          .filter(x => x !== null);
-  return userVisibleInsightComponents;
+function getPassedInsights(component: Components.SidebarSingleInsightSet.SidebarSingleInsightSet):
+    BaseInsightComponent[] {
+  assert.isOk(component.shadowRoot);
+  return [...component.shadowRoot.querySelectorAll<BaseInsightComponent>(
+      '.passed-insights-section [data-insight-name]')];
 }
 
 describeWithEnvironment('SidebarSingleInsightSet', () => {
   it('renders a list of insights', async function() {
-    const {parsedTrace, insights} = await TraceLoader.traceEngine(this, 'web-dev-with-commit.json.gz');
+    const {insights, metadata, parsedTrace} = await TraceLoader.traceEngine(this, 'web-dev-with-commit.json.gz');
 
     assert.isOk(insights);
     // only one navigation in this trace.
@@ -56,13 +42,14 @@ describeWithEnvironment('SidebarSingleInsightSet', () => {
     const component = new Components.SidebarSingleInsightSet.SidebarSingleInsightSet();
     renderElementIntoDOM(component);
     component.data = {
-      parsedTrace,
       insights,
       insightSetKey: navigationId,
-      activeCategory: InsightComponents.Types.Category.ALL,
+      activeCategory: Trace.Insights.Types.InsightCategory.ALL,
       activeInsight: null,
+      parsedTrace,
+      traceMetadata: metadata,
     };
-    await coordinator.done();
+    await RenderCoordinator.done();
 
     const userVisibleTitles = getUserVisibleInsights(component).flatMap(component => {
       return getCleanTextContentFromElements(component.shadowRoot!, '.insight-title');
@@ -73,37 +60,81 @@ describeWithEnvironment('SidebarSingleInsightSet', () => {
       'Render blocking requests',
       'Document request latency',
       'Third parties',
+      'INP by phase',
+      'Layout shift culprits',
+      'Improve image delivery',
+      'Optimize viewport for mobile',
+      'Optimize DOM size',
+      'CSS Selector costs',
+      'Forced reflow',
+    ]);
+
+    const passedInsightTitles = getPassedInsights(component).flatMap(component => {
+      return getCleanTextContentFromElements(component.shadowRoot!, '.insight-title');
+    });
+    assert.deepEqual(passedInsightTitles, [
+      'INP by phase',
+      'Layout shift culprits',
+      'Improve image delivery',
+      'Optimize viewport for mobile',
+      'Optimize DOM size',
+      'CSS Selector costs',
+      'Forced reflow',
     ]);
   });
 
   it('does not render experimental insights by default', async function() {
-    const {parsedTrace, insights} = await TraceLoader.traceEngine(this, 'font-display.json.gz');
+    const {parsedTrace, metadata, insights} = await TraceLoader.traceEngine(this, 'font-display.json.gz');
     const component = new Components.SidebarSingleInsightSet.SidebarSingleInsightSet();
     renderElementIntoDOM(component);
     const firstNavigation = parsedTrace.Meta.mainFrameNavigations.at(0)?.args.data?.navigationId;
     assert.isOk(firstNavigation);
     component.data = {
-      parsedTrace,
       insights,
       insightSetKey: firstNavigation,
-      activeCategory: InsightComponents.Types.Category.ALL,
+      activeCategory: Trace.Insights.Types.InsightCategory.ALL,
       activeInsight: null,
+      parsedTrace,
+      traceMetadata: metadata,
     };
-    await coordinator.done();
+    await RenderCoordinator.done();
     const userVisibleTitles = getUserVisibleInsights(component).flatMap(component => {
       return getCleanTextContentFromElements(component.shadowRoot!, '.insight-title');
     });
     // Does not include "font display", which is experimental.
     assert.deepEqual(userVisibleTitles, [
       'LCP by phase',
-      'LCP request discovery',
       'Layout shift culprits',
+      'Improve image delivery',
       'Third parties',
+      'INP by phase',
+      'LCP request discovery',
+      'Render blocking requests',
+      'Document request latency',
+      'Optimize viewport for mobile',
+      'Optimize DOM size',
+      'CSS Selector costs',
+      'Forced reflow',
+    ]);
+
+    const passedInsightTitles = getPassedInsights(component).flatMap(component => {
+      return getCleanTextContentFromElements(component.shadowRoot!, '.insight-title');
+    });
+    // Does not include "font display", which is experimental.
+    assert.deepEqual(passedInsightTitles, [
+      'INP by phase',
+      'LCP request discovery',
+      'Render blocking requests',
+      'Document request latency',
+      'Optimize viewport for mobile',
+      'Optimize DOM size',
+      'CSS Selector costs',
+      'Forced reflow',
     ]);
   });
 
   it('renders experimental insights if the experiment is turned on', async function() {
-    const {parsedTrace, insights} = await TraceLoader.traceEngine(this, 'font-display.json.gz');
+    const {parsedTrace, metadata, insights} = await TraceLoader.traceEngine(this, 'font-display.json.gz');
     const component = new Components.SidebarSingleInsightSet.SidebarSingleInsightSet();
     Root.Runtime.experiments.enableForTest(
         Root.Runtime.ExperimentName.TIMELINE_EXPERIMENTAL_INSIGHTS,
@@ -112,28 +143,53 @@ describeWithEnvironment('SidebarSingleInsightSet', () => {
     const firstNavigation = parsedTrace.Meta.mainFrameNavigations.at(0)?.args.data?.navigationId;
     assert.isOk(firstNavigation);
     component.data = {
-      parsedTrace,
       insights,
       insightSetKey: firstNavigation,
-      activeCategory: InsightComponents.Types.Category.ALL,
+      activeCategory: Trace.Insights.Types.InsightCategory.ALL,
       activeInsight: null,
+      parsedTrace,
+      traceMetadata: metadata,
     };
-    await coordinator.done();
+    await RenderCoordinator.done();
     const userVisibleTitles = getUserVisibleInsights(component).flatMap(component => {
       return getCleanTextContentFromElements(component.shadowRoot!, '.insight-title');
     });
-    // Does not include "font display", which is experimental.
+    // Includes "font display", which is experimental.
     assert.deepEqual(userVisibleTitles, [
       'LCP by phase',
-      'LCP request discovery',
       'Layout shift culprits',
+      'Improve image delivery',
       'Font display',
       'Third parties',
+      'INP by phase',
+      'LCP request discovery',
+      'Render blocking requests',
+      'Document request latency',
+      'Optimize viewport for mobile',
+      'Optimize DOM size',
+      'CSS Selector costs',
+      'Long critical network tree',
+      'Forced reflow',
+    ]);
+
+    const passedInsightTitles = getPassedInsights(component).flatMap(component => {
+      return getCleanTextContentFromElements(component.shadowRoot!, '.insight-title');
+    });
+    assert.deepEqual(passedInsightTitles, [
+      'INP by phase',
+      'LCP request discovery',
+      'Render blocking requests',
+      'Document request latency',
+      'Optimize viewport for mobile',
+      'Optimize DOM size',
+      'CSS Selector costs',
+      'Long critical network tree',
+      'Forced reflow',
     ]);
   });
 
   it('will render the active insight fully', async function() {
-    const {parsedTrace, insights} = await TraceLoader.traceEngine(this, 'web-dev-with-commit.json.gz');
+    const {insights, metadata, parsedTrace} = await TraceLoader.traceEngine(this, 'web-dev-with-commit.json.gz');
 
     assert.isOk(insights);
     // only one navigation in this trace.
@@ -150,22 +206,22 @@ describeWithEnvironment('SidebarSingleInsightSet', () => {
     const component = new Components.SidebarSingleInsightSet.SidebarSingleInsightSet();
     renderElementIntoDOM(component);
     component.data = {
-      parsedTrace,
       insights,
       insightSetKey: navigationId,
-      activeCategory: InsightComponents.Types.Category.ALL,
+      activeCategory: Trace.Insights.Types.InsightCategory.ALL,
       activeInsight: {
         model,
         insightSetKey: navigationId,
-        overlays: [],
       },
+      parsedTrace,
+      traceMetadata: metadata,
     };
-    await coordinator.done();
+    await RenderCoordinator.done();
 
     const expandedInsight = getUserVisibleInsights(component).find(insight => {
-      return 'insightExpanded' in insight.dataset;
+      return insight.selected;
     });
     assert.isOk(expandedInsight);
-    assert.strictEqual(expandedInsight.dataset.insightTitle, 'LCP by phase');
+    assert.strictEqual(expandedInsight.model?.title, 'LCP by phase');
   });
 });

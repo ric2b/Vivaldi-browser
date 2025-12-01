@@ -48,7 +48,6 @@ template <class T>
 using NumericRangeSet = blink::media_constraints::NumericRangeSet<T>;
 
 namespace {
-
 using BoolSet = blink::media_constraints::DiscreteSet<bool>;
 using DoubleRangeSet = blink::media_constraints::NumericRangeSet<double>;
 using EchoCancellationTypeSet =
@@ -456,7 +455,7 @@ class EchoCancellationContainer {
         ToEchoCancellationTypes(ec_allowed_values_));
 
     // Finally, if this container is empty, fail due to contradiction of the
-    // resulting allowed values for goog_ec, ec, and/or ec_type.
+    // resulting allowed values for ec and/or ec_type.
     return IsEmpty() ? constraint_set.echo_cancellation.GetName() : nullptr;
   }
 
@@ -480,13 +479,10 @@ class EchoCancellationContainer {
     bool default_audio_processing_value =
         GetDefaultValueForAudioProperties(echo_cancellation_constraint);
 
-    properties->goog_auto_gain_control &= default_audio_processing_value;
+    properties->auto_gain_control &= default_audio_processing_value;
 
-    properties->goog_noise_suppression &= default_audio_processing_value;
+    properties->noise_suppression &= default_audio_processing_value;
     properties->voice_isolation = VoiceIsolationType::kVoiceIsolationDefault;
-    properties->goog_experimental_noise_suppression &=
-        default_audio_processing_value;
-    properties->goog_highpass_filter &= default_audio_processing_value;
   }
 
   bool GetDefaultValueForAudioProperties(
@@ -631,17 +627,16 @@ class AutoGainControlContainer {
 
   const char* ApplyConstraintSet(const ConstraintSet& constraint_set) {
     BoolSet agc_set = blink::media_constraints::BoolSetFromConstraint(
-        constraint_set.goog_auto_gain_control);
-    // Apply autoGainControl/googAutoGainControl constraint.
+        constraint_set.auto_gain_control);
+    // Apply autoGainControl constraint.
     allowed_values_ = allowed_values_.Intersection(agc_set);
-    return IsEmpty() ? constraint_set.goog_auto_gain_control.GetName()
-                     : nullptr;
+    return IsEmpty() ? constraint_set.auto_gain_control.GetName() : nullptr;
   }
 
   std::tuple<double, bool> SelectSettingsAndScore(
       const ConstraintSet& constraint_set,
       bool default_setting) const {
-    BooleanConstraint agc_constraint = constraint_set.goog_auto_gain_control;
+    BooleanConstraint agc_constraint = constraint_set.auto_gain_control;
 
     if (agc_constraint.HasIdeal()) {
       bool agc_ideal = agc_constraint.Ideal();
@@ -743,13 +738,10 @@ class ProcessingBasedContainer {
         ProcessingType::kApmProcessed,
         {EchoCancellationType::kEchoCancellationAec3,
          EchoCancellationType::kEchoCancellationDisabled},
-        BoolSet(), /* auto_gain_control_set */
-        BoolSet(), /* goog_audio_mirroring_set */
-        BoolSet(), /* goog_noise_suppression_set */
-        BoolSet(), /* goog_experimental_noise_suppression_set */
-        BoolSet(), /* goog_highpass_filter_set */
-        BoolSet(), /* voice_isolation_set */
-        IntRangeSet::FromValue(GetSampleSize()),    /* sample_size_range */
+        BoolSet(),                               /* auto_gain_control_set */
+        BoolSet(),                               /* noise_suppression_set */
+        BoolSet(),                               /* voice_isolation_set */
+        IntRangeSet::FromValue(GetSampleSize()), /* sample_size_range */
         GetApmSupportedChannels(device_parameters), /* channels_set */
         IntRangeSet::FromValue(
             media::WebRtcAudioProcessingSampleRateHz()), /* sample_rate_range */
@@ -759,9 +751,8 @@ class ProcessingBasedContainer {
 
   // Creates an instance of ProcessingBasedContainer for the processed source
   // type. The source type allows (a) either system echo cancellation, if
-  // allowed by the |parameters.effects()|, or none, (b) enabled or disabled
-  // audio mirroring, while (c) all other processing properties settings cannot
-  // be enabled.
+  // allowed by the |parameters.effects()|, or none, while (b) all other
+  // processing properties settings cannot be enabled.
   static ProcessingBasedContainer CreateNoApmProcessedContainer(
       const SourceInfo& source_info,
       bool is_device_capture,
@@ -770,12 +761,9 @@ class ProcessingBasedContainer {
     return ProcessingBasedContainer(
         ProcessingType::kNoApmProcessed,
         {EchoCancellationType::kEchoCancellationDisabled},
-        BoolSet({false}), /* auto_gain_control_set */
-        BoolSet(),        /* goog_audio_mirroring_set */
-        BoolSet({false}), /* goog_noise_suppression_set */
-        BoolSet({false}), /* goog_experimental_noise_suppression_set */
-        BoolSet({false}), /* goog_highpass_filter_set */
-        BoolSet(),        /* voice_isolation_set */
+        BoolSet({false}),                        /* auto_gain_control_set */
+        BoolSet({false}),                        /* noise_suppression_set */
+        BoolSet(),                               /* voice_isolation_set */
         IntRangeSet::FromValue(GetSampleSize()), /* sample_size_range */
         {device_parameters.channels()},          /* channels_set */
         IntRangeSet::FromValue(
@@ -796,12 +784,9 @@ class ProcessingBasedContainer {
     return ProcessingBasedContainer(
         ProcessingType::kUnprocessed,
         {EchoCancellationType::kEchoCancellationDisabled},
-        BoolSet({false}), /* auto_gain_control_set */
-        BoolSet({false}), /* goog_audio_mirroring_set */
-        BoolSet({false}), /* goog_noise_suppression_set */
-        BoolSet({false}), /* goog_experimental_noise_suppression_set */
-        BoolSet({false}), /* goog_highpass_filter_set */
-        BoolSet({false}), /* voice_isolation_set */
+        BoolSet({false}),                        /* auto_gain_control_set */
+        BoolSet({false}),                        /* noise_suppression_set */
+        BoolSet({false}),                        /* voice_isolation_set */
         IntRangeSet::FromValue(GetSampleSize()), /* sample_size_range */
         {device_parameters.channels()},          /* channels_set */
         IntRangeSet::FromValue(
@@ -849,13 +834,12 @@ class ProcessingBasedContainer {
     if (failed_constraint_name)
       return failed_constraint_name;
 
-    for (auto& info : kBooleanPropertyContainerInfoMap) {
-      failed_constraint_name =
-          boolean_containers_[info.index].ApplyConstraintSet(
-              constraint_set.*(info.constraint_member));
-      if (failed_constraint_name)
-        return failed_constraint_name;
+    failed_constraint_name = noise_suppression_container_.ApplyConstraintSet(
+        constraint_set.noise_suppression);
+    if (failed_constraint_name) {
+      return failed_constraint_name;
     }
+
     return failed_constraint_name;
   }
 
@@ -920,9 +904,9 @@ class ProcessingBasedContainer {
     echo_cancellation_container_.UpdateDefaultValues(
         constraint_set.echo_cancellation, &properties);
 
-    std::tie(sub_score, properties.goog_auto_gain_control) =
+    std::tie(sub_score, properties.auto_gain_control) =
         auto_gain_control_container_.SelectSettingsAndScore(
-            constraint_set, properties.goog_auto_gain_control);
+            constraint_set, properties.auto_gain_control);
     score += sub_score;
 
     std::tie(sub_score, properties.voice_isolation) =
@@ -930,14 +914,10 @@ class ProcessingBasedContainer {
             constraint_set, properties.voice_isolation);
     score += sub_score;
 
-    for (size_t i = 0; i < kNumBooleanContainerIds; ++i) {
-      auto& info = kBooleanPropertyContainerInfoMap[i];
-      std::tie(sub_score, properties.*(info.property_member)) =
-          boolean_containers_[info.index].SelectSettingsAndScore(
-              constraint_set.*(info.constraint_member),
-              properties.*(info.property_member));
-      score += sub_score;
-    }
+    std::tie(sub_score, properties.noise_suppression) =
+        noise_suppression_container_.SelectSettingsAndScore(
+            constraint_set.noise_suppression, properties.noise_suppression);
+    score += sub_score;
 
     score.set_processing_priority(
         GetProcessingPriority(constraint_set.echo_cancellation));
@@ -948,14 +928,9 @@ class ProcessingBasedContainer {
   // The ProcessingBasedContainer is considered empty if at least one of the
   // containers owned by it is empty.
   bool IsEmpty() const {
-    DCHECK(!boolean_containers_.empty());
-
-    for (auto& container : boolean_containers_) {
-      if (container.IsEmpty())
-        return true;
-    }
     return echo_cancellation_container_.IsEmpty() ||
            auto_gain_control_container_.IsEmpty() ||
+           noise_suppression_container_.IsEmpty() ||
            sample_size_container_.IsEmpty() || channels_container_.IsEmpty() ||
            sample_rate_container_.IsEmpty() || latency_container_.IsEmpty();
   }
@@ -963,36 +938,6 @@ class ProcessingBasedContainer {
   ProcessingType processing_type() const { return processing_type_; }
 
  private:
-  enum BooleanContainerId {
-    kGoogAudioMirroring,
-    kGoogNoiseSuppression,
-    kGoogExperimentalNoiseSuppression,
-    kGoogHighpassFilter,
-    kNumBooleanContainerIds
-  };
-
-  // This struct groups related fields or entries from
-  // AudioProcessingProperties,
-  // ProcessingBasedContainer::boolean_containers_, and
-  // MediaTrackConstraintSetPlatform.
-  struct BooleanPropertyContainerInfo {
-    BooleanContainerId index;
-    BooleanConstraint ConstraintSet::*constraint_member;
-    bool AudioProcessingProperties::*property_member;
-  };
-
-  static constexpr BooleanPropertyContainerInfo
-      kBooleanPropertyContainerInfoMap[] = {
-          {kGoogAudioMirroring, &ConstraintSet::goog_audio_mirroring,
-           &AudioProcessingProperties::goog_audio_mirroring},
-          {kGoogNoiseSuppression, &ConstraintSet::goog_noise_suppression,
-           &AudioProcessingProperties::goog_noise_suppression},
-          {kGoogExperimentalNoiseSuppression,
-           &ConstraintSet::goog_experimental_noise_suppression,
-           &AudioProcessingProperties::goog_experimental_noise_suppression},
-          {kGoogHighpassFilter, &ConstraintSet::goog_highpass_filter,
-           &AudioProcessingProperties::goog_highpass_filter}};
-
   // Private constructor intended to instantiate different variants of this
   // class based on the initial values provided. The appropriate way to
   // instantiate this class is via the three factory methods provided.
@@ -1002,10 +947,7 @@ class ProcessingBasedContainer {
   ProcessingBasedContainer(ProcessingType processing_type,
                            Vector<EchoCancellationType> echo_cancellation_types,
                            BoolSet auto_gain_control_set,
-                           BoolSet goog_audio_mirroring_set,
-                           BoolSet goog_noise_suppression_set,
-                           BoolSet goog_experimental_noise_suppression_set,
-                           BoolSet goog_highpass_filter_set,
+                           BoolSet noise_suppression_set,
                            BoolSet voice_isolation_set,
                            IntRangeSet sample_size_range,
                            Vector<int> channels_set,
@@ -1036,14 +978,7 @@ class ProcessingBasedContainer {
 
     voice_isolation_container_ = VoiceIsolationContainer(voice_isolation_set);
 
-    boolean_containers_[kGoogAudioMirroring] =
-        BooleanContainer(goog_audio_mirroring_set);
-    boolean_containers_[kGoogNoiseSuppression] =
-        BooleanContainer(goog_noise_suppression_set);
-    boolean_containers_[kGoogExperimentalNoiseSuppression] =
-        BooleanContainer(goog_experimental_noise_suppression_set);
-    boolean_containers_[kGoogHighpassFilter] =
-        BooleanContainer(goog_highpass_filter_set);
+    noise_suppression_container_ = BooleanContainer(noise_suppression_set);
 
     // Allow the full set of supported values when the device is not open or
     // when the candidate settings would open the device using an unprocessed
@@ -1059,13 +994,10 @@ class ProcessingBasedContainer {
     // for this is that opening multiple instances of the APM is costly.
     // TODO(crbug.com/1147928): Consider removing this restriction.
     auto_gain_control_container_ = AutoGainControlContainer(
-        BoolSet({source_info.properties().goog_auto_gain_control}));
+        BoolSet({source_info.properties().auto_gain_control}));
 
-    for (size_t i = 0; i < kNumBooleanContainerIds; ++i) {
-      auto& info = kBooleanPropertyContainerInfoMap[i];
-      boolean_containers_[info.index] = BooleanContainer(
-          BoolSet({source_info.properties().*(info.property_member)}));
-    }
+    noise_suppression_container_ =
+        BooleanContainer(BoolSet({source_info.properties().noise_suppression}));
 
     DCHECK(source_info.channels());
     channels_container_ = IntegerDiscreteContainer({*source_info.channels()});
@@ -1120,18 +1052,15 @@ class ProcessingBasedContainer {
   }
 
   ProcessingType processing_type_;
-  std::array<BooleanContainer, kNumBooleanContainerIds> boolean_containers_;
   EchoCancellationContainer echo_cancellation_container_;
   AutoGainControlContainer auto_gain_control_container_;
+  BooleanContainer noise_suppression_container_;
   VoiceIsolationContainer voice_isolation_container_;
   IntegerRangeContainer sample_size_container_;
   IntegerDiscreteContainer channels_container_;
   IntegerRangeContainer sample_rate_container_;
   DoubleRangeContainer latency_container_;
 };
-
-constexpr ProcessingBasedContainer::BooleanPropertyContainerInfo
-    ProcessingBasedContainer::kBooleanPropertyContainerInfoMap[];
 
 // Container for the constrainable properties of a single audio device.
 class DeviceContainer {

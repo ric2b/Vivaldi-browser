@@ -28,14 +28,16 @@
 
 #include "third_party/blink/renderer/modules/accessibility/ax_object_cache_impl.h"
 
+#include <algorithm>
 #include <iterator>
 #include <numeric>
 
 #include "base/auto_reset.h"
+#include "base/check.h"
 #include "base/containers/contains.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/ranges/algorithm.h"
+#include "base/notreached.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
@@ -49,7 +51,6 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/document_lifecycle.h"
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
-#include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/node_traversal.h"
 #include "third_party/blink/renderer/core/dom/slot_assignment_engine.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
@@ -121,6 +122,7 @@
 #include "third_party/blink/renderer/platform/graphics/dom_node_id.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
+#include "ui/accessibility/accessibility_features.h"
 #include "ui/accessibility/ax_common.h"
 #include "ui/accessibility/ax_enums.mojom-blink.h"
 #include "ui/accessibility/ax_event.h"
@@ -129,7 +131,7 @@
 #include "ui/accessibility/ax_role_properties.h"
 #include "ui/accessibility/mojom/ax_location_and_scroll_updates.mojom-blink.h"
 #include "ui/accessibility/mojom/ax_relative_bounds.mojom-blink.h"
-#if DCHECK_IS_ON()
+#if AX_FAIL_FAST_BUILD()
 #include "third_party/blink/renderer/modules/accessibility/ax_debug_utils.h"
 #endif
 
@@ -150,31 +152,6 @@ namespace blink {
 using mojom::blink::FormControlType;
 
 namespace {
-
-Node* RetargetInput(Node* node) {
-  // Any click/focus that occurs on a <button> inside of a custom <select>
-  // should be treated as if it occurred on the <select>. The custom button is
-  // not actually present in the accessibility tree, but the select is present
-  // as a Role::kMenuList object.
-  if (IsA<HTMLButtonElement>(node)) {
-    // Fallback button case.
-    Node* possible_select = node->OwnerShadowHost();
-    if (!possible_select) {
-      // Custom button case.
-      possible_select = NodeTraversal::Parent(*node);
-    }
-    if (auto* select = DynamicTo<HTMLSelectElement>(possible_select)) {
-      if (select->IsAppearanceBaseButton() && node == select->SlottedButton()) {
-        return select;
-      }
-    }
-  }
-  return node;
-}
-
-Element* RetargetInput(Element* element) {
-  return DynamicTo<Element>(RetargetInput(static_cast<Node*>(element)));
-}
 
 bool IsInitialEmptyDocument(const Document& document) {
   // Do not fire for initial empty top document. This helps avoid thrashing the
@@ -556,14 +533,6 @@ bool IsSubtreePrunedForAccessibility(const Element* node) {
   if (IsA<HTMLTitleElement>(node))
     return true;
 
-  // ::scroll-marker pseudo elements are attached to the
-  // ::scroll-marker-group's layout object, so don't create them
-  // here, instead they will be created as part of the
-  // AXNodeObject::AddPseudoElementChildrenFromLayoutTree.
-  if (node->IsScrollMarkerPseudoElement()) {
-    return true;
-  }
-
   return false;
 }
 
@@ -801,6 +770,7 @@ static std::string TreeUpdateReasonAsDebugString(
     DEBUG_STRING_CASE(kEditableTextContentChanged);
     DEBUG_STRING_CASE(kFocusableChanged);
     DEBUG_STRING_CASE(kIdChanged);
+    DEBUG_STRING_CASE(kMaybeDisallowImplicitSelection);
     DEBUG_STRING_CASE(kNodeIsAttached);
     DEBUG_STRING_CASE(kNodeGainedFocus);
     DEBUG_STRING_CASE(kNodeLostFocus);
@@ -954,10 +924,6 @@ Node* AXObjectCacheImpl::FocusedNode() const {
   Node* focused_node = document_->FocusedElement();
   if (!focused_node)
     focused_node = document_;
-
-  // The custom select's button is not included in the a11y hierarchy. Treat
-  // focus on the button as if it's on the <select>.
-  focused_node = RetargetInput(focused_node);
 
   // A popup is showing: return the focus within instead of the focus in the
   // main document. Do not do this for HTML <select>, which has special
@@ -1223,7 +1189,8 @@ bool AXObjectCacheImpl::IsRelevantSlotElement(const HTMLSlotElement& slot) {
   DCHECK(AXObject::CanSafelyUseFlatTreeTraversalNow(slot.GetDocument()));
   DCHECK(slot.SupportsAssignment());
 
-  if (slot.IsInUserAgentShadowRoot() &&
+  if (!RuntimeEnabledFeatures::CustomizableSelectEnabled() &&
+      slot.IsInUserAgentShadowRoot() &&
       IsA<HTMLSelectElement>(slot.OwnerShadowHost())) {
     return slot.GetIdAttribute() == shadow_element_names::kSelectOptions;
   }
@@ -1255,6 +1222,17 @@ bool AXObjectCacheImpl::IsRelevantPseudoElement(const Node& node) {
   // ::first-letter subtrees. The text of ::first-letter is already available in
   // the child text node of the element that the CSS ::first letter applied to.
   if (To<PseudoElement>(node).CanGenerateContent()) {
+    // By common convention it's the <select> itself that is
+    // clickable/accessible, not the ::picker-icon, which becomes redundant in
+    // the a11y tree.
+    if (node.IsPickerIconPseudoElement()) {
+      return false;
+    }
+    // ::scroll-marker gains a kTab role, so it's relevant regardless of the
+    // type of content it contains since it has a layout object (checked above).
+    if (node.IsScrollMarkerPseudoElement()) {
+      return true;
+    }
     // Ignore non-inline whitespace content, which is used by many pages as
     // a "Micro Clearfix Hack" to clear floats without extra HTML tags. See
     // http://nicolasgallagher.com/micro-clearfix-hack/
@@ -1467,8 +1445,9 @@ AXObject* AXObjectCacheImpl::CreateAndInit(Node* node,
   // Give the AXObject its ID and initialize.
   AssociateAXID(new_obj, axid);
   new_obj->Init(parent);
+  MaybeDisallowImplicitSelectionWithCleanLayout(new_obj);
 
-#if DCHECK_IS_ON()
+#if AX_FAIL_FAST_BUILD()
   Element* element = DynamicTo<Element>(node);
   if (element && !element->IsPseudoElement()) {
     // Ensure that the relation cache is properly initialized with information
@@ -1598,7 +1577,7 @@ void AXObjectCacheImpl::Remove(AXID ax_id, bool notify_parent) {
   if (!obj)
     return;
 
-#if DCHECK_IS_ON()
+#if AX_FAIL_FAST_BUILD()
   if (obj->CachedIsIncludedInTree()) {
     --included_node_count_;
   }
@@ -2164,6 +2143,17 @@ void AXObjectCacheImpl::StyleChanged(const LayoutObject* layout_object,
   MarkAXObjectDirty(ax_object);
 }
 
+void AXObjectCacheImpl::ClearBlockFlowCachedData(
+    const LayoutBlockFlow* block_flow) {
+  if (!::features::IsAccessibilityBlockFlowIteratorEnabled()) {
+    return;
+  }
+  auto it = block_flow_data_cache_.find(block_flow);
+  if (it != block_flow_data_cache_.end()) {
+    block_flow_data_cache_.erase(it);
+  }
+}
+
 void AXObjectCacheImpl::CSSAnchorChanged(const LayoutObject* positioned_obj) {
   if (Node* node = positioned_obj->GetNode()) {
     DeferTreeUpdate(TreeUpdateReason::kCSSAnchorChanged, node);
@@ -2326,6 +2316,10 @@ void AXObjectCacheImpl::DiscardBadAriaHiddenBecauseOfFocus(AXObject& obj) {
             "https://w3c.github.io/aria/#aria-hidden.\n"
             "Element with focus: %s\nAncestor with aria-hidden: ",
             focused_element.TagQName().ToString().Ascii().c_str()));
+#if AX_FAIL_FAST_BUILD()
+    LOG(ERROR) << "Parent chain for focused node's AXObject:\n"
+               << ParentChainToStringHelper(&obj);
+#endif
   }
 
   Node* bad_aria_hidden_ancestor_node = bad_aria_hidden_ancestor->GetNode();
@@ -2348,6 +2342,7 @@ void AXObjectCacheImpl::DiscardBadAriaHiddenBecauseOfFocus(AXObject& obj) {
   if (bad_aria_hidden_ancestor) {
     CHECK(!bad_aria_hidden_ancestor->IsAriaHiddenRoot());
     CHECK(!bad_aria_hidden_ancestor->IsAriaHidden());
+    MarkAXSubtreeDirtyWithCleanLayout(bad_aria_hidden_ancestor);
   }
   if (AXObject* new_focused_obj = Get(&focused_element)) {
     CHECK(!new_focused_obj->IsAriaHidden());
@@ -2437,7 +2432,7 @@ void AXObjectCacheImpl::NodeIsConnected(Node* node) {
   if (Element* element = DynamicTo<Element>(node)) {
     if (relation_cache_) {
       // Register relation ids so that reverse relations can be computed.
-      relation_cache_->CacheRelationIds(*element);
+      relation_cache_->CacheRelations(*element);
       ScheduleAXUpdate();
     }
     if (AXObject::HasARIAOwns(element)) {
@@ -2623,7 +2618,7 @@ void AXObjectCacheImpl::NodeIsAttachedWithCleanLayout(Node* node) {
   CHECK(obj);
   CHECK(obj->ParentObject());
 
-  if (element && element->HasID()) {
+  if (element) {
     MaybeNewRelationTarget(*node, obj);
   }
 
@@ -2888,7 +2883,7 @@ void AXObjectCacheImpl::CheckStyleIsComplete(Document& document) const {
 void AXObjectCacheImpl::CheckTreeIsFinalized() {
   CHECK(!Root()->NeedsToUpdateCachedValues());
 
-#if DCHECK_IS_ON()
+#if AX_FAIL_FAST_BUILD()
 
   // Skip check if document load is not complete.
   if (!GetDocument().IsLoadCompleted()) {
@@ -2906,13 +2901,7 @@ void AXObjectCacheImpl::CheckTreeIsFinalized() {
 
   // The following checks can make tests flaky if the tree being checked
   // is quite large. Therefore cap the number of objects we check.
-  constexpr int kMaxObjectsToCheckAfterTreeUpdate = 5000;
-  if (objects_.size() > kMaxObjectsToCheckAfterTreeUpdate) {
-    DLOG(INFO)
-        << "AXObjectCacheImpl::CheckTreeIsFinalized: Only checking first "
-        << kMaxObjectsToCheckAfterTreeUpdate
-        << " items in objects_ (size: " << objects_.size() << ")";
-  }
+  constexpr int kMaxObjectsToCheckAfterTreeUpdate = 1000;
 
   // First loop checks that tree structure is consistent.
   int count = 0;
@@ -2922,20 +2911,20 @@ void AXObjectCacheImpl::CheckTreeIsFinalized() {
     }
 
     const AXObject* object = entry.value;
-    DCHECK(!object->IsDetached());
-    DCHECK(object->GetDocument());
-    DCHECK(object->GetDocument()->GetFrame())
+    CHECK(!object->IsDetached());
+    CHECK(object->GetDocument());
+    CHECK(object->GetDocument()->GetFrame())
         << "An object in a closed document should have been removed:"
         << "\n* Object: " << object;
-    DCHECK(!object->IsMissingParent())
+    CHECK(!object->IsMissingParent())
         << "No object should be missing its parent: " << "\n* Object: "
         << object << "\n* Computed parent: " << object->ComputeParent();
     // Check whether cached values need an update before using any getters that
     // will update them.
-    DCHECK(!object->NeedsToUpdateCachedValues())
+    CHECK(!object->NeedsToUpdateCachedValues())
         << "No cached values should require an update: " << "\n* Object: "
         << object;
-    DCHECK(!object->ChildrenNeedToUpdateCachedValues())
+    CHECK(!object->ChildrenNeedToUpdateCachedValues())
         << "Cached values for children should not require an update: "
         << "\n* Object: " << object;
     if (object->IsIncludedInTree()) {
@@ -2951,10 +2940,9 @@ void AXObjectCacheImpl::CheckTreeIsFinalized() {
         CHECK(included_parent);
         const HeapVector<Member<AXObject>>& siblings =
             included_parent->CachedChildrenIncludingIgnored();
-        DCHECK(siblings.Contains(object))
+        CHECK(siblings.Contains(object))
             << "Object was not included in its parent: " << "\n* Object: "
-            << object
-            << "\n* Included parent: " << included_parent;
+            << object << "\n* Included parent: " << included_parent;
       }
     }
     count++;
@@ -2979,7 +2967,7 @@ void AXObjectCacheImpl::CheckTreeIsFinalized() {
       if (!included_parent) {
         included_parent = Root();
       }
-      DCHECK(!ancestor->HasDirtyDescendants())
+      CHECK(!ancestor->HasDirtyDescendants())
           << "No subtrees should be flagged as needing updates at this point:"
           << "\n* Object: " << ancestor
           << "\n* Included parent: " << included_parent->GetAXTreeForThis();
@@ -2988,14 +2976,14 @@ void AXObjectCacheImpl::CheckTreeIsFinalized() {
     if (!included_parent) {
       included_parent = Root();
     }
-    DCHECK(!object->NeedsToUpdateChildren())
+    CHECK(!object->NeedsToUpdateChildren())
         << "No children in the tree should require an update at this point: "
         << "\n* Object: " << object
         << "\n* Included parent: " << included_parent;
 
     count++;
   }
-#endif
+#endif  // AX_FAIL_FAST_BUILD()
 }
 
 int AXObjectCacheImpl::GetDeferredEventsDelay() const {
@@ -3415,25 +3403,21 @@ bool AXObjectCacheImpl::SerializeUpdatesAndEvents() {
   return success;
 }
 
-void AXObjectCacheImpl::ResetActiveBlockFlowContainer() {
-  active_block_flow_container_ = nullptr;
-  active_block_flow_data_ = nullptr;
-}
-
 const AXBlockFlowData* AXObjectCacheImpl::GetBlockFlowData(
     const AXObject* object) {
-  // TODO: Assumption that we are only really working on one paragraph at a
-  // time turned out to be incorrect. Ideally, we can come up with a strategy
-  // to make this work in order to avoid memory bloat.
   LayoutBlockFlow* block_flow =
       object->GetLayoutObject()->FragmentItemsContainer();
-
-  if (block_flow != active_block_flow_container_) {
-    active_block_flow_container_ = block_flow;
-    active_block_flow_data_ = MakeGarbageCollected<AXBlockFlowData>(block_flow);
+  if (!block_flow) {
+    return nullptr;
   }
-
-  return active_block_flow_data_;
+  auto it = block_flow_data_cache_.find(block_flow);
+  if (it != block_flow_data_cache_.end()) {
+    return it->value;
+  }
+  auto result = block_flow_data_cache_.insert(
+      block_flow, MakeGarbageCollected<AXBlockFlowData>(block_flow));
+  CHECK(result.is_new_entry);
+  return result.stored_value->value;
 }
 
 bool AXObjectCacheImpl::IsParsingMainDocument() const {
@@ -3634,7 +3618,7 @@ void AXObjectCacheImpl::FireTreeUpdatedEventForAXID(
     return;
   }
 
-  DUMP_WILL_BE_CHECK(!ax_object->IsMissingParent())
+  CHECK(!ax_object->IsMissingParent(), base::NotFatalUntil::M140)
       << tree_update->ToString() << " on " << ax_object;
 
   // Update cached attributes for all changed nodes before serialization,
@@ -3650,7 +3634,8 @@ void AXObjectCacheImpl::FireTreeUpdatedEventForAXID(
   base::AutoReset<ax::mojom::blink::Action> event_from_action_resetter(
       &active_event_from_action_, tree_update->event_from_action);
   ScopedBlinkAXEventIntent defered_event_intents(
-      tree_update->event_intents.AsVector(), ax_object->GetDocument());
+      WTF::ToVector(tree_update->event_intents.Values()),
+      ax_object->GetDocument());
 
   // Kept here for convenient debugging:
   // LOG(ERROR) << tree_update->ToString() << " on " << ax_object;
@@ -3707,7 +3692,7 @@ void AXObjectCacheImpl::FireTreeUpdatedEventForNode(
     return;
   }
 
-  DUMP_WILL_BE_CHECK(!ax_object->IsMissingParent())
+  CHECK(!ax_object->IsMissingParent(), base::NotFatalUntil::M140)
       << tree_update->ToString() << " on " << ax_object;
 
   base::AutoReset<ax::mojom::blink::EventFrom> event_from_resetter(
@@ -3715,7 +3700,7 @@ void AXObjectCacheImpl::FireTreeUpdatedEventForNode(
   base::AutoReset<ax::mojom::blink::Action> event_from_action_resetter(
       &active_event_from_action_, tree_update->event_from_action);
   ScopedBlinkAXEventIntent defered_event_intents(
-      tree_update->event_intents.AsVector(), &node->GetDocument());
+      WTF::ToVector(tree_update->event_intents.Values()), &node->GetDocument());
 
   // Kept here for convenient debugging:
   // LOG(ERROR) << tree_update->ToString() << " on " << ax_object;
@@ -3741,6 +3726,9 @@ void AXObjectCacheImpl::FireTreeUpdatedEventForNode(
       break;
     case TreeUpdateReason::kDidShowMenuListPopup:
       HandleUpdateMenuListPopupWithCleanLayout(node, /*did_show*/ true);
+      break;
+    case TreeUpdateReason::kMaybeDisallowImplicitSelection:
+      MaybeDisallowImplicitSelectionWithCleanLayout(ax_object);
       break;
     case TreeUpdateReason::kEditableTextContentChanged:
       HandleEditableTextContentChangedWithCleanLayout(node);
@@ -3947,7 +3935,7 @@ void AXObjectCacheImpl::ImageLoaded(const LayoutObject* layout_object) {
 }
 
 void AXObjectCacheImpl::HandleClicked(Node* node) {
-  if (AXObject* obj = Get(RetargetInput(node))) {
+  if (AXObject* obj = Get(node)) {
     PostNotification(obj, ax::mojom::Event::kClicked);
   }
 }
@@ -4022,6 +4010,74 @@ void AXObjectCacheImpl::HandleAriaPressedChangedWithCleanLayout(Node* node) {
     PostNotification(node, ax::mojom::blink::Event::kCheckedStateChanged);
 }
 
+void AXObjectCacheImpl::MaybeDisallowImplicitSelectionWithCleanLayout(
+    AXObject* subwidget) {
+  bool do_notify = false;
+  switch (subwidget->RoleValue()) {
+    case ax::mojom::blink::Role::kTab:
+      if (subwidget->HasAriaAttribute(html_names::kAriaExpandedAttr) ||
+          subwidget->HasAriaAttribute(html_names::kAriaSelectedAttr)) {
+        do_notify = true;
+      }
+      break;
+    case ax::mojom::blink::Role::kListBoxOption:
+    case ax::mojom::blink::Role::kMenuListOption:
+    case ax::mojom::blink::Role::kTreeItem:
+      if (subwidget->HasAriaAttribute(html_names::kAriaSelectedAttr) ||
+          subwidget->HasAriaAttribute(html_names::kAriaCheckedAttr)) {
+        do_notify = true;
+      }
+      break;
+    default:
+      return;
+  }
+  if (!do_notify) {
+    return;
+  }
+
+  if (AXObject* container = subwidget->ContainerWidget()) {
+    if (container->IsMultiSelectable()) {
+      // Multi-selectable containers do not allow implicit selection, so
+      // we can skip the remaining checks.
+      return;
+    }
+    if (containers_disallowing_implicit_selection_
+            .insert(container->AXObjectID())
+            .is_new_entry) {
+      if (subwidget->RoleValue() == ax::mojom::blink::Role::kTab) {
+        // Tabs are a special case, because tab selection can be implicit via
+        // focus of an element inside the tab panel it controls. For these, mark
+        // all of the child tabs within the containing tablist dirty.
+        for (const auto& child : container->CachedChildrenIncludingIgnored()) {
+          AddDirtyObjectToSerializationQueue(child);
+        }
+        return;
+      }
+      // The active descendant or focus may lose its implicit selected state.
+      Node* focus = FocusedNode();
+      if (focus == container->GetNode()) {
+        if (const Element* activedescendant =
+                AXObject::ElementFromAttributeOrInternals(
+                    container->GetElement(),
+                    html_names::kAriaActivedescendantAttr)) {
+          if (const AXObject* ax_activedescendant = Get(activedescendant)) {
+            AddDirtyObjectToSerializationQueue(ax_activedescendant);
+          }
+        }
+      }
+      if (const AXObject* ax_focus = Get(focus)) {
+        AddDirtyObjectToSerializationQueue(ax_focus);
+      }
+    }
+  }
+}
+
+bool AXObjectCacheImpl::IsImplicitSelectionAllowed(const AXObject* container) {
+  DCHECK(container);
+  return !containers_disallowing_implicit_selection_.Contains(
+      container->AXObjectID());
+}
+
 // In single selection containers, selection follows focus, so a selection
 // changed event must be fired. This ensures the AT is notified that the
 // selected state has changed, so that it does not read "unselected" as
@@ -4091,7 +4147,7 @@ void AXObjectCacheImpl::MaybeNewRelationTarget(Node& node, AXObject* obj) {
   CHECK(relation_cache_);
   relation_cache_->UpdateRelatedTree(&node, obj);
   if (Element* element = DynamicTo<Element>(node)) {
-    relation_cache_->UpdateRelatedTreeForIdChange(*element);
+    relation_cache_->UpdateRelatedTreeAfterChange(*element);
   }
 }
 
@@ -4244,12 +4300,27 @@ void AXObjectCacheImpl::HandleAttributeChanged(const QualifiedName& attr_name,
       TextChanged(element);
     } else if (attr_name == html_names::kAriaCheckedAttr) {
       PostNotification(element, ax::mojom::blink::Event::kCheckedStateChanged);
+      DeferTreeUpdate(TreeUpdateReason::kMaybeDisallowImplicitSelection,
+                      element);
     } else if (attr_name == html_names::kAriaPressedAttr) {
       DeferTreeUpdate(TreeUpdateReason::kAriaPressedChanged, element);
     } else if (attr_name == html_names::kAriaSelectedAttr) {
       DeferTreeUpdate(TreeUpdateReason::kAriaSelectedChanged, element);
+      DeferTreeUpdate(TreeUpdateReason::kMaybeDisallowImplicitSelection,
+                      element);
+    } else if (attr_name == html_names::kAriaMultiselectableAttr) {
+      if (element == FocusedNode()) {
+        // Even though active descendant didn't necessarily change, we want
+        // to mark it dirty, because it could lose an implicit selected state.
+        DeferTreeUpdate(TreeUpdateReason::kActiveDescendantChanged, element);
+      } else {
+        MarkElementDirty(FocusedNode());
+      }
+      MarkElementDirty(element);
     } else if (attr_name == html_names::kAriaExpandedAttr) {
       DeferTreeUpdate(TreeUpdateReason::kAriaExpandedChanged, element);
+      DeferTreeUpdate(TreeUpdateReason::kMaybeDisallowImplicitSelection,
+                      element);
     } else if (attr_name == html_names::kAriaHiddenAttr) {
       // Removing the subtree will also notify its parent that children changed,
       // causing the subtree to recursively be rebuilt with correct cached
@@ -4574,6 +4645,10 @@ void AXObjectCacheImpl::AriaOwnsChangedWithCleanLayout(Node* node) {
   CHECK(relation_cache_);
   if (AXObject* obj = Get(node)) {
     relation_cache_->UpdateAriaOwnsWithCleanLayout(obj);
+    // Make sure that the owner's children are updated even in the case where
+    // aria-owns is empty, or the object is not a valid owner. This protects
+    // from ending up with parent containing invalid children.
+    ChildrenChangedWithCleanLayout(obj);
   }
 }
 
@@ -4770,6 +4845,7 @@ bool AXObjectCacheImpl::IsImmediateProcessingRequired(
     case TreeUpdateReason::kDelayEventFromPostNotification:
     case TreeUpdateReason::kFocusableChanged:
     case TreeUpdateReason::kIdChanged:
+    case TreeUpdateReason::kMaybeDisallowImplicitSelection:
     case TreeUpdateReason::kNodeIsAttached:
     case TreeUpdateReason::kPostNotificationFromHandleLoadStart:
     case TreeUpdateReason::kPostNotificationFromHandleScrolledToAnchor:
@@ -4898,7 +4974,7 @@ void AXObjectCacheImpl::PostPlatformNotification(
   event.event_from_action = event_from_action;
   event.event_intents.resize(event_intents.size());
   // We need to filter out the counts from every intent.
-  base::ranges::transform(
+  std::ranges::transform(
       event_intents, event.event_intents.begin(),
       [](const auto& intent) { return intent.key.intent(); });
   for (auto agent : agents_)
@@ -5047,8 +5123,7 @@ void AXObjectCacheImpl::MarkDocumentDirtyWithCleanLayout() {
   // Don't keep previous parent-child relationships.
   // This loop operates on a copy of values in the objects_ map, because some
   // entries may be removed from objects_ while iterating.
-  HeapVector<Member<AXObject>> objects;
-  CopyValuesToVector(objects_, objects);
+  HeapVector<Member<AXObject>> objects(objects_.Values());
   for (auto& object : objects) {
     if (!object->IsDetached()) {
       object->SetNeedsToUpdateChildren();
@@ -5187,9 +5262,6 @@ void AXObjectCacheImpl::HandleFocusedUIElementChanged(
   Page* page = new_focused_element->GetDocument().GetPage();
   if (!page)
     return;
-
-  new_focused_element = RetargetInput(new_focused_element);
-  old_focused_element = RetargetInput(old_focused_element);
 
   if (old_focused_element) {
     DeferTreeUpdate(TreeUpdateReason::kNodeLostFocus, old_focused_element);
@@ -5610,7 +5682,7 @@ void AXObjectCacheImpl::GetUpdatesAndEventsForSerialization(
     //          << ObjectFromAXID(event.id);
   }
 
-#if DCHECK_IS_ON()
+#if AX_FAIL_FAST_BUILD()
   // Always compute this state.
   UpdatePluginIncludedNodeCount();
 
@@ -5623,10 +5695,10 @@ void AXObjectCacheImpl::GetUpdatesAndEventsForSerialization(
   }
   updates.back().tree_checks->node_count =
       GetIncludedNodeCount() + GetPluginIncludedNodeCount();
-#endif  // DCHECK_IS_ON()
+#endif  // AX_FAIL_FAST_BUILD()
 }
 
-#if DCHECK_IS_ON()
+#if AX_FAIL_FAST_BUILD()
 void AXObjectCacheImpl::UpdateIncludedNodeCount(const AXObject* obj) {
   if (obj->IsIncludedInTree()) {
     ++included_node_count_;
@@ -5668,7 +5740,7 @@ bool AXObjectCacheImpl::IsInternalUICheckerOn(const AXObject& obj) const {
   // used for complex form controls built into the browser.
   return obj.GetNode() && obj.GetNode()->IsInUserAgentShadowRoot();
 }
-#endif  // DCHECK_IS_ON()
+#endif  // AX_FAIL_FAST_BUILD()
 
 void AXObjectCacheImpl::GetImagesToAnnotate(
     ui::AXTreeUpdate& update,
@@ -6056,6 +6128,7 @@ void AXObjectCacheImpl::Trace(Visitor* visitor) const {
   visitor->Trace(next_on_line_map_);
   visitor->Trace(processed_blocks_);
   visitor->Trace(previous_on_line_map_);
+  visitor->Trace(block_flow_data_cache_);
 
   visitor->Trace(tree_update_callback_queue_main_);
   visitor->Trace(tree_update_callback_queue_popup_);
@@ -6065,9 +6138,6 @@ void AXObjectCacheImpl::Trace(Visitor* visitor) const {
   visitor->Trace(node_to_parse_before_more_tree_updates_);
   visitor->Trace(weak_factory_for_serialization_pipeline_);
   visitor->Trace(weak_factory_for_loc_updates_pipeline_);
-
-  visitor->Trace(active_block_flow_data_);
-  visitor->Trace(active_block_flow_container_);
 
   AXObjectCache::Trace(visitor);
 }
@@ -6144,8 +6214,7 @@ void AXObjectCacheImpl::AddPluginTreeToUpdate(ui::AXTreeUpdate* update) {
       plugin_serializer_->SerializeChanges(root, &plugin_update);
 
       update->nodes.reserve(update->nodes.size() + plugin_update.nodes.size());
-      base::ranges::move(plugin_update.nodes,
-                         std::back_inserter(update->nodes));
+      std::ranges::move(plugin_update.nodes, std::back_inserter(update->nodes));
 
       if (plugin_tree_source_->GetTreeData(&update->tree_data)) {
         update->has_tree_data = true;
@@ -6243,13 +6312,45 @@ void AXObjectCacheImpl::ComputeNodesOnLine(const LayoutObject* layout_object) {
 
     // Moves to first LayoutObject that a11y cares about.
     line_cursor.MoveToNextInlineLeaf();
+
+    // Maximum number of attempts to try to find a next object on the line. Used
+    // to
+    // detect unlikely (but theoretically possible), loops.
+    constexpr int kMaxInlineCursorNextObjectCalls = 250000;
+    int runs = 0;
     while (line_cursor) {
+      runs++;
+
+      if (runs >= kMaxInlineCursorNextObjectCalls) [[unlikely]] {
+        // TODO(crbug.com/378761505): Move DUMP_WILL_BE_NOTREACHED() to CHECK().
+        DUMP_WILL_BE_NOTREACHED()
+            << "Did not find an end to the processing of next / previous on "
+               "line candidates for "
+            << layout_object << "(" << Get(layout_object) << ") after " << runs
+            << " runs.";
+        break;
+      }
       auto* line_object = line_cursor.CurrentMutableLayoutObject();
       line_cursor.MoveToNextInlineLeafOnLine();
 
-      if (line_object) {
+      if (!line_object) [[unlikely]] {
+        break;
+      }
         auto* next_line_object =
             line_cursor ? line_cursor.CurrentMutableLayoutObject() : nullptr;
+
+        if (line_object == next_line_object) [[unlikely]] {
+          // TODO(crbug.com/378761505): Move DUMP_WILL_BE_NOTREACHED() to
+          // CHECK().
+          DUMP_WILL_BE_NOTREACHED()
+              << "InlineCursor says it moved to the next inline leaf object "
+                 "for a different LayyoutObject, but returned value is the "
+                 "same as previous inline leaf."
+              << "same object was: " << line_object << "(" << Get(line_object)
+              << ") while processing " << layout_object << " after " << runs
+              << " runs.";
+          break;
+        }
         if (next_line_object) {
           next_on_line_map_.insert(line_object, next_line_object);
           previous_on_line_map_.insert(next_line_object, line_object);
@@ -6263,7 +6364,6 @@ void AXObjectCacheImpl::ComputeNodesOnLine(const LayoutObject* layout_object) {
           // previous line.
           ConnectToTrailingWhitespaceOnLine(*line_object, *block_flow);
         }
-      }
     }
     cursor.MoveToNextLine();
   } while (cursor);

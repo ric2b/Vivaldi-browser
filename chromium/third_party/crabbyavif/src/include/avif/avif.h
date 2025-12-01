@@ -76,6 +76,11 @@ constexpr static const uint32_t AVIF_COLOR_PRIMARIES_DCI_P3 = 12;
 
 constexpr static const uint32_t AVIF_TRANSFER_CHARACTERISTICS_SMPTE2084 = 16;
 
+enum AndroidMediaCodecOutputColorFormat : int32_t {
+    ANDROID_MEDIA_CODEC_OUTPUT_COLOR_FORMAT_YUV420_FLEXIBLE = 2135033992,
+    ANDROID_MEDIA_CODEC_OUTPUT_COLOR_FORMAT_P010 = 54,
+};
+
 enum avifChromaDownsampling {
     AVIF_CHROMA_DOWNSAMPLING_AUTOMATIC,
     AVIF_CHROMA_DOWNSAMPLING_FASTEST,
@@ -113,6 +118,11 @@ enum avifColorPrimaries : uint16_t {
     AVIF_COLOR_PRIMARIES_SMPTE431 = 11,
     AVIF_COLOR_PRIMARIES_SMPTE432 = 12,
     AVIF_COLOR_PRIMARIES_EBU3213 = 22,
+};
+
+enum CompressionFormat {
+    COMPRESSION_FORMAT_AVIF = 0,
+    COMPRESSION_FORMAT_HEIC = 1,
 };
 
 enum avifRGBFormat {
@@ -424,6 +434,8 @@ struct avifDecoder {
     avifDecoderData *data;
     avifImageContentTypeFlags imageContentToDecode;
     avifBool imageSequenceTrackPresent;
+    AndroidMediaCodecOutputColorFormat androidMediaCodecOutputColorFormat;
+    CompressionFormat compressionFormat;
     Box<Decoder> rust_decoder;
     avifImage image_object;
     avifGainMap gainmap_object;
@@ -560,6 +572,10 @@ avifImage *crabby_avifImageCreate(uint32_t width,
                                   uint32_t height,
                                   uint32_t depth,
                                   avifPixelFormat yuvFormat);
+
+avifResult crabby_avifImageCopy(avifImage *dstImage,
+                                const avifImage *srcImage,
+                                avifPlanesFlags planes);
 
 avifResult crabby_avifImageAllocatePlanes(avifImage *image, avifPlanesFlags planes);
 

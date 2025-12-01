@@ -267,8 +267,8 @@ or even months later as a weird error in a seemingly unrelated location.
 This is why we only support the methods listed above.
 
 [contributing]: /chromium-os/developer-library/guides/development/contributing/#Getting-Code_Review
-[drover]: https://dev.chromium.org/developers/how-tos/drover
+[drover]: /developers/how-tos/drover
 [developer-guide]: /chromium-os/developer-library/guides/development/developer-guide/
-[experimental-branches]: https://dev.chromium.org/developers/experimental-branches
+[experimental-branches]: /developers/experimental-branches
 [merge request]: https://chromium.googlesource.com/chromium/src/+/HEAD/docs/process/merge_request.md
 [ToT]: /glossary

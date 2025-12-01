@@ -8,6 +8,7 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "content/public/browser/context_menu_params.h"
 #include "content/public/browser/web_contents.h"
@@ -177,7 +178,17 @@ std::string BookmarkContextMenuShowFunction::Open(
   const bookmarks::BookmarkNode* node =
       bookmarks::GetBookmarkNodeByID(model, node_id);
   if (!node) {
-    return "Node with id " + id + "does not exist";
+    return "Node with id " + id + " does not exist";
+  }
+
+  // These tests were added for ch134 as BookmarkParentFolder::FromFolderNode
+  // used in CreateVivaldiBookmarkMenu will fail if node is not a folder or
+  // is root.
+  if (model->is_root_node(node)) {
+    return "Node with id " + id + " is root";
+  }
+  if (node->type() != bookmarks::BookmarkNode::FOLDER) {
+    return "Node with id " + id + " is not a folder";
   }
 
   ::vivaldi::VivaldiBookmarkMenu* menu = ::vivaldi::CreateVivaldiBookmarkMenu(

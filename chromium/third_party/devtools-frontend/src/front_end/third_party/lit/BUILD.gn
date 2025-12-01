@@ -22,6 +22,9 @@ devtools_pre_built("lit") {
     "lib/lit.d.ts",
     "lib/lit.js",
     "lib/lit.js.map",
+    "lib/static-html.d.ts",
+    "lib/static-html.js",
+    "lib/static-html.js.map",
     "lit-tsconfig.json",
   ]
 }
@@ -33,7 +36,7 @@ devtools_entrypoint("bundle") {
 
   visibility = [
     # Only visible to the indirect form of Lit that is used by components.
-    "../../ui/lit-html/*",
+    "../../ui/lit/*",
   ]
 
   visibility += devtools_third_party_visibility

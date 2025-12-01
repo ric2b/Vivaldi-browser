@@ -10,6 +10,8 @@ import org.jni_zero.CalledByNative;
 import org.jni_zero.JNINamespace;
 import org.jni_zero.NativeMethods;
 
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.url.GURL;
 
 import java.util.HashMap;
@@ -19,6 +21,7 @@ import java.util.Map.Entry;
  * Java version of InputContext, can be passed directly to native to execute segmentation models.
  */
 @JNINamespace("segmentation_platform")
+@NullMarked
 public class InputContext {
     private final HashMap<String, ProcessedValue> mMetadata = new HashMap<>();
 
@@ -137,6 +140,7 @@ public class InputContext {
                     break;
                 case ProcessedValueType.STRING:
                     stringKeys[stringIndex] = metadataKey;
+                    assert metadataValue.stringValue != null;
                     stringValues[stringIndex] = metadataValue.stringValue;
                     stringIndex++;
                     break;
@@ -152,6 +156,7 @@ public class InputContext {
                     break;
                 case ProcessedValueType.URL:
                     urlKeys[urlIndex] = metadataKey;
+                    assert metadataValue.urlValue != null;
                     urlValues[urlIndex] = metadataValue.urlValue;
                     urlIndex++;
                     break;
@@ -181,7 +186,17 @@ public class InputContext {
                         urlValues);
     }
 
-    public ProcessedValue getEntryForTesting(String key) {
+    /** Merge all inputs from another InputContext object. */
+    public void mergeFrom(InputContext other) {
+        if (other == null) return;
+
+        for (Entry<String, ProcessedValue> entry : other.mMetadata.entrySet()) {
+            assert !mMetadata.containsKey(entry.getKey());
+            mMetadata.put(entry.getKey(), entry.getValue());
+        }
+    }
+
+    public @Nullable ProcessedValue getEntryForTesting(String key) {
         return mMetadata.get(key);
     }
 

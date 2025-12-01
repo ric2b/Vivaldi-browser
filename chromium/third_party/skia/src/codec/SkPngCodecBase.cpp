@@ -77,8 +77,10 @@ bool SkPngCodecBase::isCompatibleColorProfileAndType(const SkEncodedInfo::ICCPro
     return true;
 }
 
-SkPngCodecBase::SkPngCodecBase(SkEncodedInfo&& encodedInfo, std::unique_ptr<SkStream> stream)
-        : SkCodec(std::move(encodedInfo), ToPixelFormat(encodedInfo), std::move(stream)) {}
+SkPngCodecBase::SkPngCodecBase(SkEncodedInfo&& encodedInfo,
+                               std::unique_ptr<SkStream> stream,
+                               SkEncodedOrigin origin)
+        : SkCodec(std::move(encodedInfo), ToPixelFormat(encodedInfo), std::move(stream), origin) {}
 
 SkEncodedImageFormat SkPngCodecBase::onGetEncodedFormat() const {
     return SkEncodedImageFormat::kPNG;
@@ -238,7 +240,7 @@ SkCodec::Result SkPngCodecBase::initializeSwizzler(const SkImageInfo& dstInfo,
         }
         fSwizzler = SkSwizzler::MakeSimple(srcBPP, swizzlerInfo, swizzlerOptions, frameRectPtr);
     } else {
-        const SkPMColor* colors = get_color_ptr(fColorTable.get());
+        const SkPMColor* colors = SkCodecPriv::GetColorPtr(fColorTable.get());
         fSwizzler = SkSwizzler::Make(
                 this->getEncodedInfo(), colors, swizzlerInfo, swizzlerOptions, frameRectPtr);
     }
@@ -283,6 +285,13 @@ void SkPngCodecBase::applyXformRow(void* dstRow, const uint8_t* srcRow) {
 
 // Note: SkColorPalette claims to store SkPMColors, which is not necessarily the case here.
 bool SkPngCodecBase::createColorTable(const SkImageInfo& dstInfo) {
+    if (fDstInfoOfPreviousColorTableCreation.has_value() &&
+        *fDstInfoOfPreviousColorTableCreation == dstInfo) {
+        return !!fColorTable;
+    }
+    fColorTable.reset();
+    fDstInfoOfPreviousColorTableCreation = dstInfo;
+
     std::optional<SkSpan<const PaletteColorEntry>> maybePlteChunk = this->onTryGetPlteChunk();
     if (!maybePlteChunk.has_value()) {
         return false;
@@ -303,12 +312,15 @@ bool SkPngCodecBase::createColorTable(const SkImageInfo& dstInfo) {
         numColorsWithAlpha = maybeTrnsChunk->size();
     }
 
+    bool shouldApplyColorXformToColorTable = this->colorXform() && !this->xformOnDecode();
     if (alphas) {
-        bool premultiply = needs_premul(dstInfo.alphaType(), this->getEncodedInfo().alpha());
+        bool premultiply = !shouldApplyColorXformToColorTable &&
+                           needs_premul(dstInfo.alphaType(), this->getEncodedInfo().alpha());
 
         // Choose which function to use to create the color table. If the final destination's
         // colortype is unpremultiplied, the color table will store unpremultiplied colors.
-        PackColorProc proc = choose_pack_color_proc(premultiply, tableColorType);
+        SkCodecPriv::PackColorProc proc =
+                SkCodecPriv::ChoosePackColorProc(premultiply, tableColorType);
 
         for (size_t i = 0; i < numColorsWithAlpha; i++) {
             // We don't have a function in SkOpts that combines a set of alphas with a set
@@ -327,7 +339,7 @@ bool SkPngCodecBase::createColorTable(const SkImageInfo& dstInfo) {
         static_assert(offsetof(PaletteColorEntry, green) == 1);
         static_assert(offsetof(PaletteColorEntry, blue) == 2);
 
-        if (is_rgba(tableColorType)) {
+        if (SkCodecPriv::IsRGBA(tableColorType)) {
             SkOpts::RGB_to_RGB1(colorTable + numColorsWithAlpha,
                                 (const uint8_t*)palette,
                                 numColors - numColorsWithAlpha);
@@ -338,7 +350,7 @@ bool SkPngCodecBase::createColorTable(const SkImageInfo& dstInfo) {
         }
     }
 
-    if (this->colorXform() && !this->xformOnDecode()) {
+    if (shouldApplyColorXformToColorTable) {
         this->applyColorXform(colorTable, colorTable, numColors);
     }
 

@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/341324165): Fix and remove.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "base/apple/mach_port_rendezvous.h"
 
 #include <mach/mig.h>
@@ -17,6 +12,7 @@
 #include "base/apple/foundation_util.h"
 #include "base/apple/mach_logging.h"
 #include "base/bits.h"
+#include "base/compiler_specific.h"
 #include "base/containers/buffer_iterator.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
@@ -73,7 +69,7 @@ constexpr size_t kMaxInfoPlistDataSize = 18 * 1024;
 #endif
 
 // This limit is arbitrary and can be safely increased in the future.
-constexpr size_t kMaximumRendezvousPorts = 5;
+constexpr size_t kMaximumRendezvousPorts = 6;
 
 enum MachRendezvousMsgId : mach_msg_id_t {
   kMachRendezvousMsgIdRequest = 'mrzv',
@@ -249,7 +245,8 @@ std::unique_ptr<uint8_t[]> MachPortRendezvousServerBase::CreateReplyMessage(
   const size_t buffer_size =
       CalculateResponseSize(port_count, additional_data.size());
   auto buffer = std::make_unique<uint8_t[]>(buffer_size);
-  BufferIterator<uint8_t> iterator(buffer.get(), buffer_size);
+  auto iterator =
+      UNSAFE_TODO(BufferIterator<uint8_t>(buffer.get(), buffer_size));
 
   auto* message = iterator.MutableObject<mach_msg_base_t>();
   message->header.msgh_bits =
@@ -512,7 +509,8 @@ bool MachPortRendezvousClient::SendRequest(
                             additional_response_data_size) +
       sizeof(mach_msg_audit_trailer_t);
   auto buffer = std::make_unique<uint8_t[]>(buffer_size);
-  BufferIterator<uint8_t> iterator(buffer.get(), buffer_size);
+  auto iterator =
+      UNSAFE_TODO(BufferIterator<uint8_t>(buffer.get(), buffer_size));
 
   // Perform a send and receive mach_msg.
   auto* message = iterator.MutableObject<mach_msg_base_t>();

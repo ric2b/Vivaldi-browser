@@ -12,7 +12,9 @@ import org.jni_zero.JNINamespace;
 import org.jni_zero.NativeMethods;
 
 import org.chromium.base.Callback;
+import org.chromium.base.CancelableRunnable;
 import org.chromium.base.ContextUtils;
+import org.chromium.base.RequiredCallback;
 import org.chromium.base.ResettersForTesting;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.PostTask;
@@ -50,8 +52,8 @@ import java.lang.annotation.RetentionPolicy;
 @JNINamespace("external_intents")
 public class InterceptNavigationDelegateImpl extends InterceptNavigationDelegate {
     /**
-     * Histogram for the source of a main frame intent launch.
-     * This enum is used in UMA, do not reorder values.
+     * Histogram for the source of a main frame intent launch. This enum is used in UMA, do not
+     * reorder values.
      */
     @IntDef({
         MainFrameIntentLaunch.NOT_FROM_EXTERNAL_APP_TO_INTENT_SCHEME,
@@ -84,8 +86,8 @@ public class InterceptNavigationDelegateImpl extends InterceptNavigationDelegate
     }
 
     /**
-     * Histogram for the scheme of an overridden navigation.
-     * This enum is used in UMA, do not reorder values.
+     * Histogram for the scheme of an overridden navigation. This enum is used in UMA, do not
+     * reorder values.
      */
     @IntDef({
         InterceptScheme.NOT_INTERCEPTED,
@@ -113,8 +115,10 @@ public class InterceptNavigationDelegateImpl extends InterceptNavigationDelegate
     private static final String MAIN_FRAME_INTENT_LAUNCH_NAME =
             "Android.Intent.MainFrameIntentLaunch";
 
+    private static final long DEFER_NAVIGATION_TIMEOUT_MILLIS = 5000;
+
     private InterceptNavigationDelegateClient mClient;
-    private Callback<Pair<GURL, OverrideUrlLoadingResult>> mResultCallbackForTesting;
+    private static Callback<Pair<GURL, OverrideUrlLoadingResult>> sResultCallbackForTesting;
     private WebContents mWebContents;
     private ExternalNavigationHandler mExternalNavHandler;
     private WebContentsObserver mWebContentsObserver;
@@ -124,10 +128,16 @@ public class InterceptNavigationDelegateImpl extends InterceptNavigationDelegate
 
     private boolean mShouldClearRedirectHistoryForTabClobbering;
 
+    private CancelableRunnable mPendingShouldIgnore;
+    private RequiredCallback<Boolean> mShouldIgnoreResultCallback;
+    private boolean mHasAttachedToActivity;
+    private boolean mTimedOutWaitingForActivity;
+
     /** Default constructor of {@link InterceptNavigationDelegateImpl}. */
     public InterceptNavigationDelegateImpl(InterceptNavigationDelegateClient client) {
         mClient = client;
         associateWithWebContents(mClient.getWebContents());
+        mHasAttachedToActivity = mClient.getActivity() != null;
     }
 
     // Invoked by the client when a navigation has finished in the context in which this object is
@@ -141,10 +151,27 @@ public class InterceptNavigationDelegateImpl extends InterceptNavigationDelegate
         mExternalNavHandler = handler;
     }
 
+    public void onActivityAttachmentChanged(boolean attached) {
+        // Defensively cancel any pending checks if we change Activities during a check.
+        if (mHasAttachedToActivity) {
+            cancelPendingShouldIgnoreCheck();
+            return;
+        }
+        // Wait until first attached.
+        if (!attached) return;
+        mHasAttachedToActivity = true;
+        mTimedOutWaitingForActivity = false;
+        requestFinishPendingShouldIgnoreCheck();
+    }
+
     public void associateWithWebContents(WebContents webContents) {
         if (mWebContents == webContents) return;
+
+        // Before we attach to another WebContents, cancel any checks that were in progress.
+        cancelPendingShouldIgnoreCheck();
+
         if (mWebContents != null) {
-            mWebContents.removeObserver(mWebContentsObserver);
+            mWebContentsObserver.observe(null);
             mWebContentsObserver = null;
         }
         mWebContents = webContents;
@@ -173,18 +200,51 @@ public class InterceptNavigationDelegateImpl extends InterceptNavigationDelegate
     }
 
     @Override
-    public boolean shouldIgnoreNavigation(
+    public void shouldIgnoreNavigation(
             NavigationHandle navigationHandle,
             GURL escapedUrl,
             boolean hiddenCrossFrame,
-            boolean isSandboxedFrame) {
+            boolean isSandboxedFrame,
+            boolean shouldRunAsync,
+            RequiredCallback<Boolean> resultCallback) {
         // We should never get here for non-main-frame navigations.
         if (!navigationHandle.isInPrimaryMainFrame()) throw new RuntimeException();
 
-        mClient.onNavigationStarted(navigationHandle);
-
         RedirectHandler redirectHandler = mClient.getOrCreateRedirectHandler();
+        redirectHandler.updateNewUrlLoading(
+                navigationHandle.pageTransition(),
+                navigationHandle.isRedirect(),
+                navigationHandle.hasUserGesture(),
+                getLastCommittedEntryIndex(),
+                isInitialNavigation(),
+                navigationHandle.isRendererInitiated());
 
+        // Initial navigation never leaves Chrome anyways and we don't want to block background
+        // navigation on waiting for a tab (or CCT pre-warming wouldn't work). Subsequent
+        // navigations and redirects can leave Chrome so they'll have to wait to be attached to an
+        // Activity.
+        if (!mHasAttachedToActivity && isInitialNavigation() && !navigationHandle.isRedirect()) {
+            resultCallback.onResult(false);
+            return;
+        }
+
+        // If not attached to an Activity, we cannot check synchronously and need to defer.
+        if (!mHasAttachedToActivity) {
+            // Only wait to attach to an Activity for external app launches. Any other background
+            // launches don't need to wait for an Activity to attach and can just block external
+            // navigations (like Custom Tab prerenders).
+            //
+            // Also, if the previous navigation timed out waiting for Activity to attach, don't keep
+            // waiting.
+            if (!mClient.wasTabLaunchedFromExternalApp() || mTimedOutWaitingForActivity) {
+                resultCallback.onResult(false);
+                return;
+            }
+            shouldRunAsync = true;
+            startTimeoutForDeferredNavigation();
+        }
+
+        mShouldIgnoreResultCallback = resultCallback;
         OverrideUrlLoadingResult result =
                 shouldOverrideUrlLoading(
                         redirectHandler,
@@ -197,32 +257,68 @@ public class InterceptNavigationDelegateImpl extends InterceptNavigationDelegate
                         navigationHandle.isInPrimaryMainFrame(),
                         navigationHandle.getInitiatorOrigin(),
                         navigationHandle.isExternalProtocol(),
-                        mClient.areIntentLaunchesAllowedInHiddenTabsForNavigation(navigationHandle),
                         this::onDidAsyncActionInMainFrame,
                         hiddenCrossFrame,
                         isSandboxedFrame,
-                        navigationHandle.getNavigationId());
+                        navigationHandle.getNavigationId(),
+                        shouldRunAsync);
+        if (!shouldRunAsync) {
+            onMainFrameShouldIgnoreNavigationResult(
+                    result, escapedUrl, navigationHandle.isExternalProtocol());
+        }
+    }
 
-        mClient.onDecisionReachedForNavigation(navigationHandle, result);
-
+    private void onMainFrameShouldIgnoreNavigationResult(
+            OverrideUrlLoadingResult result, GURL url, boolean isExternalProtocol) {
+        mPendingShouldIgnore = null;
+        boolean shouldIgnore;
         switch (result.getResultType()) {
             case OverrideUrlLoadingResultType.OVERRIDE_WITH_EXTERNAL_INTENT:
-                onDidFinishMainFrameIntentLaunch(true, escapedUrl);
-                return true;
+                onDidFinishMainFrameIntentLaunch(true, url);
+                shouldIgnore = true;
+                break;
             case OverrideUrlLoadingResultType.OVERRIDE_WITH_NAVIGATE_TAB:
                 clobberMainFrame(result.getTargetUrl(), result.getExternalNavigationParams());
-                return true;
+                shouldIgnore = true;
+                break;
             case OverrideUrlLoadingResultType.OVERRIDE_WITH_ASYNC_ACTION:
             case OverrideUrlLoadingResultType.OVERRIDE_CLOSING_AFTER_AUTH:
-                return true;
+                shouldIgnore = true;
+                break;
             case OverrideUrlLoadingResultType.NO_OVERRIDE:
             default:
-                if (navigationHandle.isExternalProtocol()) {
-                    logBlockedNavigationToDevToolsConsole(escapedUrl);
-                    return true;
+                if (isExternalProtocol) {
+                    logBlockedNavigationToDevToolsConsole(url);
+                    shouldIgnore = true;
+                    break;
                 }
-                return false;
+                shouldIgnore = false;
+                break;
         }
+        runResultCallback(shouldIgnore);
+    }
+
+    @Override
+    public void requestFinishPendingShouldIgnoreCheck() {
+        if (mPendingShouldIgnore == null) return;
+        CancelableRunnable runnable = mPendingShouldIgnore;
+        runnable.run();
+        if (mPendingShouldIgnore != null) startTimeoutForDeferredNavigation();
+        // Cancel, ensuring any pending posted tasks do not execute by converting this runnable
+        // to a no-op.
+        runnable.cancel();
+    }
+
+    private void cancelPendingShouldIgnoreCheck() {
+        if (mPendingShouldIgnore == null) return;
+        mPendingShouldIgnore.cancel();
+        mPendingShouldIgnore = null;
+        runResultCallback(false);
+    }
+
+    private void runResultCallback(boolean shouldIgnore) {
+        mShouldIgnoreResultCallback.onResult(shouldIgnore);
+        mShouldIgnoreResultCallback = null;
     }
 
     @Override
@@ -243,24 +339,34 @@ public class InterceptNavigationDelegateImpl extends InterceptNavigationDelegate
         // better to error on the side of caution and require direct user gestures for iframes.
         RedirectHandler redirectHandler = RedirectHandler.create();
 
+        boolean isRedirect = false;
+        boolean isRendererInitiated = true;
+        redirectHandler.updateNewUrlLoading(
+                transition,
+                isRedirect,
+                hasUserGesture,
+                getLastCommittedEntryIndex(),
+                isInitialNavigation(),
+                isRendererInitiated);
+
         OverrideUrlLoadingResult result =
                 shouldOverrideUrlLoading(
                         redirectHandler,
                         escapedUrl,
                         transition,
-                        /* isRedirect= */ false,
+                        isRedirect,
                         hasUserGesture,
-                        /* isRendererInitiated= */ true,
+                        isRendererInitiated,
                         GURL.emptyGURL()
                         /* referrerUrl= */ ,
                         /* isInPrimaryMainFrame= */ false,
                         initiatorOrigin,
                         /* isExternalProtocol= */ true,
-                        /* areIntentLaunchesAllowedInHiddenTabsForNavigation= */ false,
                         this::onDidAsyncActionInSubFrame,
                         /* hiddenCrossFrame= */ false,
                         /* isSandboxedMainFrame= */ false,
-                        /* navigationId */ -1);
+                        /* navigationId= */ -1,
+                        /* shouldRunAsync= */ false);
 
         switch (result.getResultType()) {
             case OverrideUrlLoadingResultType.OVERRIDE_WITH_EXTERNAL_INTENT:
@@ -289,20 +395,12 @@ public class InterceptNavigationDelegateImpl extends InterceptNavigationDelegate
             boolean isInPrimaryMainFrame,
             Origin initiatorOrigin,
             boolean isExternalProtocol,
-            boolean areIntentLaunchesAllowedInHiddenTabsForNavigation,
             Callback<AsyncActionTakenParams> asyncActionTakenCallback,
             boolean hiddenCrossFrame,
             boolean isSandboxedMainFrame,
-            long navigationId) {
-        boolean initialNavigation = isInitialNavigation();
-        redirectHandler.updateNewUrlLoading(
-                pageTransition,
-                isRedirect,
-                hasUserGesture,
-                mClient.getLastUserInteractionTime(),
-                getLastCommittedEntryIndex(),
-                initialNavigation,
-                isRendererInitiated);
+            long navigationId,
+            boolean shouldRunAsync) {
+        assert mPendingShouldIgnore == null;
 
         // http://crbug.com/448977: If this is on the initial navigation chain we set the parameter
         // to open any outgoing intents that come back to Chrome in a new tab as the existing one
@@ -321,22 +419,67 @@ public class InterceptNavigationDelegateImpl extends InterceptNavigationDelegate
                         .setRedirectHandler(redirectHandler)
                         .setOpenInNewTab(onInitialNavigationChain)
                         .setIsBackgroundTabNavigation(!isWebContentsVisible)
-                        .setIntentLaunchesAllowedInBackgroundTabs(
-                                areIntentLaunchesAllowedInHiddenTabsForNavigation)
                         .setIsMainFrame(isInPrimaryMainFrame)
                         .setHasUserGesture(hasUserGesture)
                         .setIsRendererInitiated(isRendererInitiated)
                         .setInitiatorOrigin(initiatorOrigin)
                         .setAsyncActionTakenCallback(asyncActionTakenCallback)
-                        .setIsInitialNavigationInFrame(initialNavigation)
+                        .setIsInitialNavigationInFrame(isInitialNavigation())
                         .setIsHiddenCrossFrameNavigation(hiddenCrossFrame)
                         .setIsSandboxedMainFrame(isSandboxedMainFrame)
                         .setNavigationId(navigationId)
                         .build();
+        if (!shouldRunAsync) return doShouldOverrideUrlLoading(params, isExternalProtocol);
+        Runnable shouldIgnoreCheck =
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        // Navigation may have been externally canceled, or something caused
+                        // the Navigation Chain to be reset, so we should avoid leaving Chrome.
+                        if (mWebContents.isDestroyed()
+                                || !params.getRedirectHandler().isOnNavigation()) {
+                            cancelPendingShouldIgnoreCheck();
+                            return;
+                        }
 
+                        // This may be a pre-warmed tab being navigated during startup, wait for
+                        // the tab to be associated with an Activity before continuing.
+                        if (!mHasAttachedToActivity) {
+                            // No need to re-post this, it will be run when we attach to an
+                            // Activity.
+                            mPendingShouldIgnore = new CancelableRunnable(this);
+                            return;
+                        }
+                        onMainFrameShouldIgnoreNavigationResult(
+                                doShouldOverrideUrlLoading(params, isExternalProtocol),
+                                params.getUrl(),
+                                isExternalProtocol);
+                    }
+                };
+        mPendingShouldIgnore = new CancelableRunnable(shouldIgnoreCheck);
+        PostTask.postTask(TaskTraits.UI_DEFAULT, mPendingShouldIgnore);
+        return null;
+    }
+
+    private void startTimeoutForDeferredNavigation() {
+        if (mPendingShouldIgnore == null) return;
+        final CancelableRunnable pendingShouldIgnore = mPendingShouldIgnore;
+        PostTask.postDelayedTask(
+                TaskTraits.UI_DEFAULT,
+                () -> {
+                    // Don't accidentally cancel subsequent navigations.
+                    if (pendingShouldIgnore != mPendingShouldIgnore) return;
+                    mTimedOutWaitingForActivity = true;
+                    cancelPendingShouldIgnoreCheck();
+                },
+                DEFER_NAVIGATION_TIMEOUT_MILLIS);
+    }
+
+    private OverrideUrlLoadingResult doShouldOverrideUrlLoading(
+            ExternalNavigationParams params, boolean isExternalProtocol) {
         OverrideUrlLoadingResult result = mExternalNavHandler.shouldOverrideUrlLoading(params);
-        if (mResultCallbackForTesting != null) {
-            mResultCallbackForTesting.onResult(Pair.create(escapedUrl, result));
+        if (sResultCallbackForTesting != null) {
+            sResultCallbackForTesting.onResult(Pair.create(params.getUrl(), result));
         }
 
         String protocolType = isExternalProtocol ? "ExternalProtocol" : "InternalProtocol";
@@ -348,11 +491,11 @@ public class InterceptNavigationDelegateImpl extends InterceptNavigationDelegate
         int scheme = InterceptScheme.UNKNOWN_SCHEME;
         if (result.getResultType() == OverrideUrlLoadingResultType.NO_OVERRIDE) {
             scheme = InterceptScheme.NOT_INTERCEPTED;
-        } else if (UrlUtilities.isAcceptedScheme(escapedUrl)) {
+        } else if (UrlUtilities.isAcceptedScheme(params.getUrl())) {
             scheme = InterceptScheme.ACCEPTED_SCHEME;
-        } else if (UrlUtilities.hasIntentScheme(escapedUrl)) {
+        } else if (UrlUtilities.hasIntentScheme(params.getUrl())) {
             scheme = InterceptScheme.INTENT_SCHEME;
-        } else if (MDOC_SCHEME.equals(escapedUrl.getScheme())) {
+        } else if (MDOC_SCHEME.equals(params.getUrl().getScheme())) {
             scheme = InterceptScheme.MDOC_SCHEME;
             ContentWebFeatureUsageUtils.logWebFeatureForCurrentPage(
                     mClient.getWebContents(), WebFeature.IDENTITY_DIGITAL_CREDENTIALS_DEEP_LINK);
@@ -363,7 +506,7 @@ public class InterceptNavigationDelegateImpl extends InterceptNavigationDelegate
                     "Android.TabNavigationInterceptResult.ForMdoc",
                     result.getResultType(),
                     OverrideUrlLoadingResultType.NUM_ENTRIES);
-        } else if (escapedUrl.getScheme().endsWith(OPENID4VP_SCHEME_SUFFIX)) {
+        } else if (params.getUrl().getScheme().endsWith(OPENID4VP_SCHEME_SUFFIX)) {
             scheme = InterceptScheme.OPENID4VP_SCHEME;
             ContentWebFeatureUsageUtils.logWebFeatureForCurrentPage(
                     mClient.getWebContents(), WebFeature.IDENTITY_DIGITAL_CREDENTIALS_DEEP_LINK);
@@ -387,13 +530,7 @@ public class InterceptNavigationDelegateImpl extends InterceptNavigationDelegate
         @PageTransition int transition = PageTransition.LINK;
         mClient.getOrCreateRedirectHandler()
                 .updateNewUrlLoading(
-                        transition,
-                        false,
-                        true,
-                        mClient.getLastUserInteractionTime(),
-                        getLastCommittedEntryIndex(),
-                        false,
-                        true);
+                        transition, false, true, getLastCommittedEntryIndex(), false, true);
     }
 
     /**
@@ -538,13 +675,23 @@ public class InterceptNavigationDelegateImpl extends InterceptNavigationDelegate
                         .getLastCommittedEntryIndexBeforeStartingNavigation();
         if (getLastCommittedEntryIndex() <= lastCommittedEntryIndexBeforeNavigation) return;
 
-        // http://crbug/426679 : we want to go back to the last committed entry index which
-        // was saved before this navigation, and remove the empty entries from the
-        // navigation history.
-        mClearAllForwardHistoryRequired = true;
-        mClient.getWebContents()
-                .getNavigationController()
-                .goToNavigationIndex(lastCommittedEntryIndexBeforeNavigation);
+        // Like clobbering below, changing navigation index could cancel the current navigation and
+        // delete the NavigationThrottle calling this code, leading to UAFs. Do the navigation
+        // asynchronously to avoid that.
+        PostTask.postTask(
+                TaskTraits.UI_DEFAULT,
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        // http://crbug.com/426679 : we want to go back to the last committed entry
+                        // index which was saved before this navigation, and remove the empty
+                        // entries from the navigation history.
+                        mClearAllForwardHistoryRequired = true;
+                        mClient.getWebContents()
+                                .getNavigationController()
+                                .goToNavigationIndex(lastCommittedEntryIndexBeforeNavigation);
+                    }
+                });
     }
 
     private void clobberMainFrame(GURL targetUrl, ExternalNavigationParams params) {
@@ -594,10 +741,10 @@ public class InterceptNavigationDelegateImpl extends InterceptNavigationDelegate
                         ContextUtils.getApplicationContext().getString(resId, url.getSpec()));
     }
 
-    public void setResultCallbackForTesting(
+    public static void setResultCallbackForTesting(
             Callback<Pair<GURL, OverrideUrlLoadingResult>> callback) {
-        mResultCallbackForTesting = callback;
-        ResettersForTesting.register(() -> mResultCallbackForTesting = null);
+        sResultCallbackForTesting = callback;
+        ResettersForTesting.register(() -> sResultCallbackForTesting = null);
     }
 
     @NativeMethods

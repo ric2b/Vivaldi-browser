@@ -1,0 +1,40 @@
+// Copyright (c) 2024 Vivaldi Technologies AS. All rights reserved
+
+[
+  {
+    "namespace": "protonvpn",
+    "description": "Namespace for vivaldi extensions to the chrome object.",
+    "compiler_options": {
+        "implemented_in": "extensions/api/protonvpn/protonvpn_api.h"
+    },
+    "types": [
+      {
+        "id": "Status",
+        "type": "object",
+        "description": "An object containg status info for protonvpn.",
+        "properties": {
+          "isLoggedIn": {
+            "description": "The user is logged into vivaldi account.",
+            "type": "boolean"
+          }
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "getStatus",
+        "type": "function",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "status",
+              "$ref": "Status"
+            }
+          ]
+        }
+      }
+    ]
+  }
+]

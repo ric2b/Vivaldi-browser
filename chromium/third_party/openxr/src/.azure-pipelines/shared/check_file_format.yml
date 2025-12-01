@@ -5,8 +5,7 @@ jobs:
     displayName: "Check file formatting"
     pool:
       vmImage: "ubuntu-latest"
-    # 20230614
-    container: khronosgroup/docker-images:openxr-sdk@sha256:fbc5fe29a0787cccc8f66bd9bd03c9dbddf591c7d1aea673108c38c908b280f5
+    container: khronosgroup/docker-images:openxr-sdk.20240924@sha256:5e6a6f5d72dc4a20d5c33f12550fdd9b6a1206e94d6cf1382e0697a5726c424c
 
     steps:
       - script: ./file_format.sh

@@ -10,27 +10,29 @@ import {CrDrawerElement} from 'chrome://resources/ash/common/cr_elements/cr_draw
 import {CrIconButtonElement} from 'chrome://resources/ash/common/cr_elements/cr_icon_button/cr_icon_button.js';
 import {VKey} from 'chrome://resources/ash/common/shortcut_input_ui/accelerator_keys.mojom-webui.js';
 import {FakeShortcutInputProvider} from 'chrome://resources/ash/common/shortcut_input_ui/fake_shortcut_input_provider.js';
-import {KeyEvent} from 'chrome://resources/ash/common/shortcut_input_ui/input_device_settings.mojom-webui.js';
+import type {KeyEvent} from 'chrome://resources/ash/common/shortcut_input_ui/input_device_settings.mojom-webui.js';
 import {Modifier as ModifierEnum} from 'chrome://resources/ash/common/shortcut_input_ui/shortcut_utils.js';
 import {strictQuery} from 'chrome://resources/ash/common/typescript_utils/strict_query.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {stringToMojoString16} from 'chrome://resources/js/mojo_type_util.js';
-import {IronIconElement} from 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
+import type {IronIconElement} from 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {AcceleratorEditViewElement} from 'chrome://shortcut-customization/js/accelerator_edit_view.js';
+import type {AcceleratorEditViewElement} from 'chrome://shortcut-customization/js/accelerator_edit_view.js';
 import {AcceleratorLookupManager} from 'chrome://shortcut-customization/js/accelerator_lookup_manager.js';
-import {AcceleratorRowElement} from 'chrome://shortcut-customization/js/accelerator_row.js';
-import {AcceleratorSubsectionElement} from 'chrome://shortcut-customization/js/accelerator_subsection.js';
+import type {AcceleratorRowElement} from 'chrome://shortcut-customization/js/accelerator_row.js';
+import type {AcceleratorSubsectionElement} from 'chrome://shortcut-customization/js/accelerator_subsection.js';
 import {fakeAcceleratorConfig, fakeDefaultAccelerators, fakeLayoutInfo, fakeSearchResults} from 'chrome://shortcut-customization/js/fake_data.js';
 import {FakeShortcutProvider} from 'chrome://shortcut-customization/js/fake_shortcut_provider.js';
 import {setShortcutProviderForTesting, setUseFakeProviderForTesting} from 'chrome://shortcut-customization/js/mojo_interface_provider.js';
 import {FakeShortcutSearchHandler} from 'chrome://shortcut-customization/js/search/fake_shortcut_search_handler.js';
 import {setShortcutSearchHandlerForTesting} from 'chrome://shortcut-customization/js/search/shortcut_search_handler.js';
-import {ShortcutCustomizationAppElement} from 'chrome://shortcut-customization/js/shortcut_customization_app.js';
+import type {ShortcutCustomizationAppElement} from 'chrome://shortcut-customization/js/shortcut_customization_app.js';
 import {setShortcutInputProviderForTesting} from 'chrome://shortcut-customization/js/shortcut_input_mojo_interface_provider.js';
-import {AcceleratorCategory, AcceleratorConfigResult, AcceleratorSource, AcceleratorState, AcceleratorSubcategory, AcceleratorType, LayoutInfo, LayoutStyle, MetaKey, Modifier, MojoAcceleratorConfig, MojoLayoutInfo, TextAcceleratorPartType} from 'chrome://shortcut-customization/js/shortcut_types.js';
+import type {LayoutInfo, MojoAcceleratorConfig, MojoLayoutInfo} from 'chrome://shortcut-customization/js/shortcut_types.js';
+import {AcceleratorCategory, AcceleratorConfigResult, AcceleratorSource, AcceleratorState, AcceleratorSubcategory, AcceleratorType, LayoutStyle, MetaKey, Modifier, TextAcceleratorPartType} from 'chrome://shortcut-customization/js/shortcut_types.js';
 import {getSubcategoryNameStringId} from 'chrome://shortcut-customization/js/shortcut_utils.js';
-import {AcceleratorResultData, EditDialogCompletedActions, Subactions, UserAction} from 'chrome://shortcut-customization/mojom-webui/shortcut_customization.mojom-webui.js';
+import type {AcceleratorResultData} from 'chrome://shortcut-customization/mojom-webui/shortcut_customization.mojom-webui.js';
+import {EditDialogCompletedActions, Subactions, UserAction} from 'chrome://shortcut-customization/mojom-webui/shortcut_customization.mojom-webui.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {flushTasks, waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 import {eventToPromise, isVisible} from 'chrome://webui-test/test_util.js';
@@ -82,7 +84,7 @@ suite('shortcutCustomizationAppTest', function() {
     provider.setFakeIsCustomizationAllowedByPolicy(true);
     // The meta key is displayed as the launcher key in this test.
     provider.setFakeMetaKeyToDisplay(MetaKey.kLauncher);
-
+    provider.setHasCustomAccelerators(true);
     setShortcutProviderForTesting(provider);
     setShortcutInputProviderForTesting(shortcutInputProvider);
 
@@ -145,8 +147,8 @@ suite('shortcutCustomizationAppTest', function() {
 
     const subSections = getSubsections(AcceleratorCategory.kWindowsAndDesks);
     const accelerators =
-        subSections[subsectionIndex]!.shadowRoot!.querySelectorAll(
-            'accelerator-row') as NodeListOf<AcceleratorRowElement>;
+        subSections[subsectionIndex]!.shadowRoot!
+            .querySelectorAll<AcceleratorRowElement>('accelerator-row');
 
     // Click on the first accelerator's edit icon, expect the edit dialog to
     // open.
@@ -184,15 +186,15 @@ suite('shortcutCustomizationAppTest', function() {
     assertEquals(1, dialogAccels!.length);
 
     // Click on add button.
-    (editDialog!.shadowRoot!.querySelector('#addAcceleratorButton') as
-     CrButtonElement)
-        .click();
+    editDialog!.shadowRoot!
+        .querySelector<CrButtonElement>('#addAcceleratorButton')!.click();
 
     await flushTasks();
 
     const editElement =
-        editDialog!.shadowRoot!.querySelector('#pendingAccelerator') as
-        AcceleratorEditViewElement;
+        editDialog!.shadowRoot!.querySelector<AcceleratorEditViewElement>(
+            '#pendingAccelerator');
+    assertTrue(!!editElement);
     // Assert no error has occurred prior to pressing a shortcut.
     assertFalse(editElement.hasError);
 
@@ -277,7 +279,7 @@ suite('shortcutCustomizationAppTest', function() {
             .querySelector('navigation-selector');
     const navMenuItems =
         navSelector!.shadowRoot!.querySelector('#navigationSelectorMenu')!
-            .querySelectorAll('.navigation-item') as NodeListOf<HTMLDivElement>;
+            .querySelectorAll<HTMLElement>('.navigation-item');
     navMenuItems[1]!.click();
 
     await flushTasks();
@@ -299,8 +301,8 @@ suite('shortcutCustomizationAppTest', function() {
     // Assert lock icon displayed next to every subcategories under Browser
     // category.
     for (const subsection of actualSubsections) {
-      const lockIcon = subsection!.shadowRoot!.querySelector(
-                           '.lock-icon-container') as IronIconElement;
+      const lockIcon = subsection!.shadowRoot!.querySelector<IronIconElement>(
+          '.lock-icon-container');
       assertTrue(isVisible(lockIcon));
     }
     // Assert only 1 accelerator is within this subsection.
@@ -395,8 +397,8 @@ suite('shortcutCustomizationAppTest', function() {
             'accelerator-edit-view')[0] as AcceleratorEditViewElement;
 
     // Click on edit button.
-    (editView!.shadowRoot!.querySelector('#editButton') as CrButtonElement)
-        .click();
+    editView!.shadowRoot!.querySelector<CrButtonElement>(
+                             '#editButton')!.click();
 
     await flushTasks();
 
@@ -465,9 +467,8 @@ suite('shortcutCustomizationAppTest', function() {
     assertEquals(1, dialogAccels!.length);
 
     // Click on add button.
-    (editDialog!.shadowRoot!.querySelector('#addAcceleratorButton') as
-     CrButtonElement)
-        .click();
+    editDialog!.shadowRoot!
+        .querySelector<CrButtonElement>('#addAcceleratorButton')!.click();
 
     await flushTasks();
 
@@ -475,8 +476,9 @@ suite('shortcutCustomizationAppTest', function() {
         UserAction.kStartAddAccelerator, provider.getLatestRecordedAction());
 
     const editElement =
-        editDialog!.shadowRoot!.querySelector('#pendingAccelerator') as
-        AcceleratorEditViewElement;
+        editDialog!.shadowRoot!.querySelector<AcceleratorEditViewElement>(
+            '#pendingAccelerator');
+    assertTrue(!!editElement);
 
     // Assert no error has occurred prior to pressing a shortcut.
     assertFalse(editElement.hasError);
@@ -586,17 +588,16 @@ suite('shortcutCustomizationAppTest', function() {
     assertEquals(undefined, provider.getLastRecordedSubactions());
 
     // Click on add button.
-    (editDialog!.shadowRoot!.querySelector('#addAcceleratorButton') as
-     CrButtonElement)
-        .click();
+    editDialog!.shadowRoot!
+        .querySelector<CrButtonElement>('#addAcceleratorButton')!.click();
 
     await flushTasks();
 
     const editElement =
-        editDialog!.shadowRoot!.querySelector('#pendingAccelerator') as
-        AcceleratorEditViewElement;
-    (editElement!.shadowRoot!.getElementById('cancelButton') as CrButtonElement)
-        .click();
+        editDialog!.shadowRoot!.querySelector<AcceleratorEditViewElement>(
+            '#pendingAccelerator');
+    editElement!.shadowRoot!.querySelector<CrButtonElement>(
+                                '#cancelButton')!.click();
 
     assertTrue(provider.getLastRecordedIsAdd());
     assertEquals(
@@ -617,9 +618,8 @@ suite('shortcutCustomizationAppTest', function() {
     assertEquals(undefined, provider.getLastRecordedSubactions());
 
     // Click on add button.
-    (editDialog!.shadowRoot!.querySelector('#addAcceleratorButton') as
-     CrButtonElement)
-        .click();
+    editDialog!.shadowRoot!
+        .querySelector<CrButtonElement>('#addAcceleratorButton')!.click();
 
     await flushTasks();
 
@@ -630,8 +630,8 @@ suite('shortcutCustomizationAppTest', function() {
     provider.setFakeAddAcceleratorResult(fakeResult);
 
     const editElement =
-        editDialog!.shadowRoot!.querySelector('#pendingAccelerator') as
-        AcceleratorEditViewElement;
+        editDialog!.shadowRoot!.querySelector<AcceleratorEditViewElement>(
+            '#pendingAccelerator');
 
     const keyEvent: KeyEvent = {
       vkey: VKey.kSpace,
@@ -665,9 +665,8 @@ suite('shortcutCustomizationAppTest', function() {
     assertEquals(undefined, provider.getLastRecordedSubactions());
 
     // Click on add button.
-    (editDialog!.shadowRoot!.querySelector('#addAcceleratorButton') as
-     CrButtonElement)
-        .click();
+    editDialog!.shadowRoot!
+        .querySelector<CrButtonElement>('#addAcceleratorButton')!.click();
 
     await flushTasks();
 
@@ -707,9 +706,8 @@ suite('shortcutCustomizationAppTest', function() {
     assertEquals(undefined, provider.getLastRecordedSubactions());
 
     // Click on add button.
-    (editDialog!.shadowRoot!.querySelector('#addAcceleratorButton') as
-     CrButtonElement)
-        .click();
+    editDialog!.shadowRoot!
+        .querySelector<CrButtonElement>('#addAcceleratorButton')!.click();
 
     await flushTasks();
 
@@ -756,9 +754,8 @@ suite('shortcutCustomizationAppTest', function() {
     assertTrue(!!editDialog);
 
     // Click on add button.
-    (editDialog!.shadowRoot!.querySelector('#addAcceleratorButton') as
-     CrButtonElement)
-        .click();
+    editDialog!.shadowRoot!
+        .querySelector<CrButtonElement>('#addAcceleratorButton')!.click();
     await flushTasks();
 
     // Set the fake mojo return call.
@@ -821,9 +818,8 @@ suite('shortcutCustomizationAppTest', function() {
     assertTrue(!!editDialog);
 
     // Click on add button.
-    (editDialog!.shadowRoot!.querySelector('#addAcceleratorButton') as
-     CrButtonElement)
-        .click();
+    editDialog!.shadowRoot!
+        .querySelector<CrButtonElement>('#addAcceleratorButton')!.click();
     await flushTasks();
 
     // Set the fake mojo return call, and make the result to be
@@ -954,7 +950,8 @@ suite('shortcutCustomizationAppTest', function() {
     // Click on remove button.
     const editView = dialogAccels[0] as AcceleratorEditViewElement;
     const deleteButton =
-        editView!.shadowRoot!.querySelector('#deleteButton') as CrButtonElement;
+        editView!.shadowRoot!.querySelector<CrButtonElement>('#deleteButton');
+    assertTrue(!!deleteButton);
     deleteButton.click();
 
     await flushTasks();
@@ -974,7 +971,7 @@ suite('shortcutCustomizationAppTest', function() {
     const restoreButton =
         getPage()
             .shadowRoot!.querySelector('shortcuts-bottom-nav-content')!
-            .shadowRoot!.querySelector('#restoreAllButton') as CrButtonElement;
+            .shadowRoot!.querySelector<CrButtonElement>('#restoreAllButton');
     await flushTasks();
     assertTrue(isVisible(restoreButton));
   });
@@ -987,7 +984,7 @@ suite('shortcutCustomizationAppTest', function() {
     const restoreButton =
         getPage()
             .shadowRoot!.querySelector('shortcuts-bottom-nav-content')!
-            .shadowRoot!.querySelector('#restoreAllButton') as CrButtonElement;
+            .shadowRoot!.querySelector<CrButtonElement>('#restoreAllButton');
     await flushTasks();
     assertFalse(isVisible(restoreButton));
   });
@@ -1322,10 +1319,10 @@ suite('shortcutCustomizationAppTest', function() {
     await flushTasks();
     const actualLink =
         getPage()
-            .shadowRoot!.querySelector(
-                            'shortcuts-bottom-nav-content')!.shadowRoot!
-            .querySelector('#keyboardSettingsLinkContainer')!.querySelector(
-                '#keyboardSettingsLink') as HTMLLinkElement;
+            .shadowRoot!.querySelector('shortcuts-bottom-nav-content')!
+            .shadowRoot!.querySelector('#keyboardSettingsLinkContainer')!
+            .querySelector<HTMLLinkElement>('#keyboardSettingsLink');
+    assertTrue(!!actualLink);
     assertEquals('chrome://os-settings/keyboard-overlay', actualLink.href);
   });
 
@@ -1337,10 +1334,10 @@ suite('shortcutCustomizationAppTest', function() {
     await flushTasks();
     const actualLink =
         getPage()
-            .shadowRoot!.querySelector(
-                            'shortcuts-bottom-nav-content')!.shadowRoot!
-            .querySelector('#keyboardSettingsLinkContainer')!.querySelector(
-                '#keyboardSettingsLink') as HTMLLinkElement;
+            .shadowRoot!.querySelector('shortcuts-bottom-nav-content')!
+            .shadowRoot!.querySelector('#keyboardSettingsLinkContainer')!
+            .querySelector<HTMLLinkElement>('#keyboardSettingsLink');
+    assertTrue(!!actualLink);
     assertEquals('chrome://os-settings/per-device-keyboard', actualLink.href);
   });
 
@@ -1348,8 +1345,8 @@ suite('shortcutCustomizationAppTest', function() {
     provider.setFakeIsCustomizationAllowedByPolicy(false);
     page = initShortcutCustomizationAppElement();
     await flushTasks();
-    const policyIndicator = getPage().shadowRoot!.querySelector(
-                                '#policyIndicator') as HTMLDivElement;
+    const policyIndicator =
+        getPage().shadowRoot!.querySelector<HTMLElement>('#policyIndicator');
     assertTrue(!!policyIndicator);
   });
 
@@ -1357,8 +1354,8 @@ suite('shortcutCustomizationAppTest', function() {
     provider.setFakeIsCustomizationAllowedByPolicy(true);
     page = initShortcutCustomizationAppElement();
     await flushTasks();
-    const policyIndicator = getPage().shadowRoot!.querySelector(
-                                '#policyIndicator') as HTMLDivElement;
+    const policyIndicator =
+        getPage().shadowRoot!.querySelector<HTMLElement>('#policyIndicator');
     assertFalse(!!policyIndicator);
   });
 });

@@ -74,10 +74,9 @@ PageEndReason EndReasonForPageTransition(ui::PageTransition transition) {
   if (ui::PageTransitionIsNewNavigation(transition)) {
     return END_NEW_NAVIGATION;
   }
-  NOTREACHED_IN_MIGRATION()
+  NOTREACHED()
       << "EndReasonForPageTransition received unexpected ui::PageTransition: "
       << transition;
-  return END_OTHER;
 }
 
 bool IsNavigationUserInitiated(content::NavigationHandle* handle) {
@@ -519,12 +518,11 @@ void PageLoadTracker::Commit(content::NavigationHandle* navigation_handle) {
     // navigation.
     parent_tracker_->DidFinishSubFrameNavigation(navigation_handle);
   } else if (navigation_handle->IsPrerenderedPageActivation()) {
-    NOTREACHED_IN_MIGRATION();
     // We don't deliver OnCommit() for activation. Prerendered pages will see
     // DidActivatePrerenderedPage() instead.
     // Event records below are also not needed as we did them for the initial
     // navigation on starting prerendering.
-    return;
+    NOTREACHED();
   }
 
   did_commit_ = true;
@@ -1136,7 +1134,7 @@ void PageLoadTracker::SetUpSharedMemoryForSmoothness(
 void PageLoadTracker::UpdateResourceDataUse(
     content::RenderFrameHost* rfh,
     const std::vector<mojom::ResourceDataUpdatePtr>& resources) {
-  resource_tracker_.UpdateResourceDataUse(rfh->GetProcess()->GetID(),
+  resource_tracker_.UpdateResourceDataUse(rfh->GetProcess()->GetDeprecatedID(),
                                           resources);
   for (const auto& observer : observers_) {
     observer->OnResourceDataUseObserved(rfh, resources);
@@ -1363,6 +1361,10 @@ bool PageLoadTracker::IsOriginVisit() const {
 
 bool PageLoadTracker::IsTerminalVisit() const {
   return is_terminal_visit_;
+}
+
+bool PageLoadTracker::ShouldObserveScheme(std::string_view scheme) const {
+  return embedder_interface_->ShouldObserveScheme(scheme);
 }
 
 int64_t PageLoadTracker::GetNavigationId() const {

@@ -10,6 +10,24 @@
       'amd_radeon_rx_5500_xt',
     ],
   },
+  'CHANNEL_BETA': {
+    'identifier': 'Beta Channel',
+    'args': [
+      '--channel=beta',
+    ],
+  },
+  'CHANNEL_DEV': {
+    'identifier': 'Dev Channel',
+    'args': [
+      '--channel=dev',
+    ],
+  },
+  'CHANNEL_STABLE': {
+    'identifier': 'Stable Channel',
+    'args': [
+      '--channel=stable',
+    ],
+  },
   'CROS_GPU_BRYA_RELEASE_LKGM': {
     'identifier': 'GPU_BRYA_RELEASE_LKGM',
     'skylab': {
@@ -41,31 +59,10 @@
       'use_lkgm': True,
     },
   },
-  'CROS_PUBLIC_LKGM': {
-    'identifier': 'PUBLIC_LKGM',
-    'skylab': {
-      'use_lkgm': True,
-      'bucket': 'chromiumos-image-archive',
-      'public_builder': 'cros_test_platform_public',
-      'public_builder_bucket': 'testplatform-public',
-    },
-  },
   'CROS_RELEASE_LKGM': {
     'identifier': 'RELEASE_LKGM',
     'skylab': {
       'use_lkgm': True,
-    },
-  },
-  'CROS_VOLTEER_PUBLIC_RELEASE_ASH_LKGM': {
-    'identifier': 'VOLTEER_PUBLIC_RELEASE_LKGM',
-    'skylab': {
-      'cros_board': 'volteer',
-      'cros_model': 'voxel',
-      'use_lkgm': True,
-      'bucket': 'chromiumos-image-archive',
-      'dut_pool': 'chromium',
-      'public_builder': 'cros_test_platform_public',
-      'public_builder_bucket': 'testplatform-public',
     },
   },
   'INTEL_UHD_630_OR_770': {

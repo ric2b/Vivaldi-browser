@@ -41,12 +41,6 @@
 // When heterogeneous lookup is disabled, only the explicit `key_type` overloads
 // exist.
 //
-// find() also supports passing the hash explicitly:
-//
-//   iterator find(const key_type& key, size_t hash);
-//   template <class U>
-//   iterator find(const U& key, size_t hash);
-//
 // In addition the pointer to element and iterator stability guarantees are
 // weaker: all iterators and pointers are invalidated after a new element is
 // inserted.
@@ -209,6 +203,7 @@
 #include "absl/base/port.h"
 #include "absl/base/prefetch.h"
 #include "absl/container/internal/common.h"  // IWYU pragma: export // for node_handle
+#include "absl/container/internal/common_policy_traits.h"
 #include "absl/container/internal/compressed_tuple.h"
 #include "absl/container/internal/container_memory.h"
 #include "absl/container/internal/hash_function_defaults.h"
@@ -1231,6 +1226,9 @@ class RawHashSetLayout {
   // Given the capacity of a table, computes the total size of the backing
   // array.
   size_t alloc_size(size_t slot_size) const {
+    ABSL_SWISSTABLE_ASSERT(
+        slot_size <=
+        ((std::numeric_limits<size_t>::max)() - slot_offset_) / capacity_);
     return slot_offset_ + capacity_ * slot_size;
   }
 
@@ -1548,6 +1546,15 @@ void ConvertDeletedToEmptyAndFullToDeleted(ctrl_t* ctrl, size_t capacity);
 inline size_t NormalizeCapacity(size_t n) {
   return n ? ~size_t{} >> countl_zero(n) : 1;
 }
+
+template <size_t kSlotSize>
+size_t MaxValidCapacity() {
+  return NormalizeCapacity((std::numeric_limits<size_t>::max)() / 4 /
+                           kSlotSize);
+}
+
+// Use a non-inlined function to avoid code bloat.
+[[noreturn]] void HashTableSizeOverflow();
 
 // General notes on capacity/growth methods below:
 // - We use 7/8th as maximum load factor. For 16-wide groups, that gives an
@@ -2007,25 +2014,7 @@ class HashSetResizeHelper {
   // `GrowSizeIntoSingleGroup*` in case `IsGrowingIntoSingleGroupApplicable`.
   // Falls back to `find_first_non_full` in case of big groups.
   static FindInfo FindFirstNonFullAfterResize(const CommonFields& c,
-                                              size_t old_capacity,
-                                              size_t hash) {
-    if (!IsGrowingIntoSingleGroupApplicable(old_capacity, c.capacity())) {
-      return find_first_non_full(c, hash);
-    }
-    // Find a location for the new element non-deterministically.
-    // Note that any position is correct.
-    // It will located at `half_old_capacity` or one of the other
-    // empty slots with approximately 50% probability each.
-    size_t offset = probe(c, hash).offset();
-
-    // Note that we intentionally use unsigned int underflow.
-    if (offset - (old_capacity + 1) >= old_capacity) {
-      // Offset fall on kSentinel or into the mostly occupied first half.
-      offset = old_capacity / 2;
-    }
-    ABSL_SWISSTABLE_ASSERT(IsEmpty(c.control()[offset]));
-    return FindInfo{offset, 0};
-  }
+                                              size_t old_capacity, size_t hash);
 
   HeapOrSoo& old_heap_or_soo() { return old_heap_or_soo_; }
   void* old_soo_data() { return old_heap_or_soo_.get_soo_data(); }
@@ -2148,16 +2137,14 @@ class HashSetResizeHelper {
     using slot_type = typename PolicyTraits::slot_type;
     ABSL_SWISSTABLE_ASSERT(is_single_group(c.capacity()));
 
-    auto* new_slots = static_cast<slot_type*>(c.slot_array());
+    auto* new_slots = static_cast<slot_type*>(c.slot_array()) + 1;
     auto* old_slots_ptr = static_cast<slot_type*>(old_slots());
+    auto* old_ctrl_ptr = old_ctrl();
 
-    size_t shuffle_bit = old_capacity_ / 2 + 1;
-    for (size_t i = 0; i < old_capacity_; ++i) {
-      if (IsFull(old_ctrl()[i])) {
-        size_t new_i = i ^ shuffle_bit;
-        SanitizerUnpoisonMemoryRegion(new_slots + new_i, sizeof(slot_type));
-        PolicyTraits::transfer(&alloc_ref, new_slots + new_i,
-                               old_slots_ptr + i);
+    for (size_t i = 0; i < old_capacity_; ++i, ++new_slots) {
+      if (IsFull(old_ctrl_ptr[i])) {
+        SanitizerUnpoisonMemoryRegion(new_slots, sizeof(slot_type));
+        PolicyTraits::transfer(&alloc_ref, new_slots, old_slots_ptr + i);
       }
     }
     PoisonSingleGroupEmptySlots(c, sizeof(slot_type));
@@ -2199,27 +2186,25 @@ class HashSetResizeHelper {
   // 1. new_ctrl is allocated for new_capacity,
   //    but not initialized.
   // 2. new_capacity is a single group.
+  // 3. old_capacity > 0.
   //
   // All elements are transferred into the first `old_capacity + 1` positions
-  // of the new_ctrl. Elements are rotated by `old_capacity_ / 2 + 1` positions
-  // in order to change an order and keep it non deterministic.
-  // Although rotation itself deterministic, position of the new added element
-  // will be based on `H1` and is not deterministic.
+  // of the new_ctrl. Elements are shifted by 1 in order to keep a space at the
+  // beginning for the new element.
+  // Position of the new added element will be based on `H1` and is not
+  // deterministic.
   //
   // Examples:
   // S = kSentinel, E = kEmpty
-  //
-  // old_ctrl = SEEEEEEEE...
-  // new_ctrl = ESEEEEEEE...
   //
   // old_ctrl = 0SEEEEEEE...
   // new_ctrl = E0ESE0EEE...
   //
   // old_ctrl = 012S012EEEEEEEEE...
-  // new_ctrl = 2E01EEES2E01EEE...
+  // new_ctrl = E012EEESE012EEE...
   //
   // old_ctrl = 0123456S0123456EEEEEEEEEEE...
-  // new_ctrl = 456E0123EEEEEES456E0123EEE...
+  // new_ctrl = E0123456EEEEEESE0123456EEE...
   void GrowIntoSingleGroupShuffleControlBytes(ctrl_t* new_ctrl,
                                               size_t new_capacity) const;
 
@@ -2458,23 +2443,14 @@ class raw_hash_set {
   static_assert(std::is_lvalue_reference<reference>::value,
                 "Policy::element() must return a reference");
 
-  template <typename T>
-  struct SameAsElementReference
-      : std::is_same<typename std::remove_cv<
-                         typename std::remove_reference<reference>::type>::type,
-                     typename std::remove_cv<
-                         typename std::remove_reference<T>::type>::type> {};
-
   // An enabler for insert(T&&): T must be convertible to init_type or be the
   // same as [cv] value_type [ref].
-  // Note: we separate SameAsElementReference into its own type to avoid using
-  // reference unless we need to. MSVC doesn't seem to like it in some
-  // cases.
   template <class T>
-  using RequiresInsertable = typename std::enable_if<
-      absl::disjunction<std::is_convertible<T, init_type>,
-                        SameAsElementReference<T>>::value,
-      int>::type;
+  using Insertable = absl::disjunction<
+      std::is_same<absl::remove_cvref_t<reference>, absl::remove_cvref_t<T>>,
+      std::is_convertible<T, init_type>>;
+  template <class T>
+  using IsNotBitField = std::is_pointer<T*>;
 
   // RequiresNotInit is a workaround for gcc prior to 7.1.
   // See https://godbolt.org/g/Y4xsUh.
@@ -2484,6 +2460,17 @@ class raw_hash_set {
 
   template <class... Ts>
   using IsDecomposable = IsDecomposable<void, PolicyTraits, Hash, Eq, Ts...>;
+
+  template <class T>
+  using IsDecomposableAndInsertable =
+      IsDecomposable<std::enable_if_t<Insertable<T>::value, T>>;
+
+  // Evaluates to true if an assignment from the given type would require the
+  // source object to remain alive for the life of the element.
+  template <class U>
+  using IsLifetimeBoundAssignmentFrom = std::conditional_t<
+      policy_trait_element_is_owner<Policy>::value, std::false_type,
+      type_traits_internal::IsLifetimeBoundAssignment<init_type, U>>;
 
  public:
   static_assert(std::is_same<pointer, value_type*>::value,
@@ -2670,6 +2657,10 @@ class raw_hash_set {
       : settings_(CommonFields::CreateDefault<SooEnabled()>(), hash, eq,
                   alloc) {
     if (bucket_count > DefaultCapacity()) {
+      if (ABSL_PREDICT_FALSE(bucket_count >
+                             MaxValidCapacity<sizeof(slot_type)>())) {
+        HashTableSizeOverflow();
+      }
       resize(NormalizeCapacity(bucket_count));
     }
   }
@@ -2728,7 +2719,8 @@ class raw_hash_set {
   //   absl::flat_hash_set<int> a, b{a};
   //
   // RequiresNotInit<T> is a workaround for gcc prior to 7.1.
-  template <class T, RequiresNotInit<T> = 0, RequiresInsertable<T> = 0>
+  template <class T, RequiresNotInit<T> = 0,
+            std::enable_if_t<Insertable<T>::value, int> = 0>
   raw_hash_set(std::initializer_list<T> init, size_t bucket_count = 0,
                const hasher& hash = hasher(), const key_equal& eq = key_equal(),
                const allocator_type& alloc = allocator_type())
@@ -2739,7 +2731,8 @@ class raw_hash_set {
                const allocator_type& alloc = allocator_type())
       : raw_hash_set(init.begin(), init.end(), bucket_count, hash, eq, alloc) {}
 
-  template <class T, RequiresNotInit<T> = 0, RequiresInsertable<T> = 0>
+  template <class T, RequiresNotInit<T> = 0,
+            std::enable_if_t<Insertable<T>::value, int> = 0>
   raw_hash_set(std::initializer_list<T> init, size_t bucket_count,
                const hasher& hash, const allocator_type& alloc)
       : raw_hash_set(init, bucket_count, hash, key_equal(), alloc) {}
@@ -2748,7 +2741,8 @@ class raw_hash_set {
                const hasher& hash, const allocator_type& alloc)
       : raw_hash_set(init, bucket_count, hash, key_equal(), alloc) {}
 
-  template <class T, RequiresNotInit<T> = 0, RequiresInsertable<T> = 0>
+  template <class T, RequiresNotInit<T> = 0,
+            std::enable_if_t<Insertable<T>::value, int> = 0>
   raw_hash_set(std::initializer_list<T> init, size_t bucket_count,
                const allocator_type& alloc)
       : raw_hash_set(init, bucket_count, hasher(), key_equal(), alloc) {}
@@ -2757,7 +2751,8 @@ class raw_hash_set {
                const allocator_type& alloc)
       : raw_hash_set(init, bucket_count, hasher(), key_equal(), alloc) {}
 
-  template <class T, RequiresNotInit<T> = 0, RequiresInsertable<T> = 0>
+  template <class T, RequiresNotInit<T> = 0,
+            std::enable_if_t<Insertable<T>::value, int> = 0>
   raw_hash_set(std::initializer_list<T> init, const allocator_type& alloc)
       : raw_hash_set(init, 0, hasher(), key_equal(), alloc) {}
 
@@ -2938,7 +2933,9 @@ class raw_hash_set {
     ABSL_ASSUME(cap >= kDefaultCapacity);
     return cap;
   }
-  size_t max_size() const { return (std::numeric_limits<size_t>::max)(); }
+  size_t max_size() const {
+    return CapacityToGrowth(MaxValidCapacity<sizeof(slot_type)>());
+  }
 
   ABSL_ATTRIBUTE_REINITIALIZES void clear() {
     if (SwisstableGenerationsEnabled() &&
@@ -2973,12 +2970,23 @@ class raw_hash_set {
   //
   //   flat_hash_map<std::string, int> m;
   //   m.insert(std::make_pair("abc", 42));
-  // TODO(cheshire): A type alias T2 is introduced as a workaround for the nvcc
-  // bug.
-  template <class T, RequiresInsertable<T> = 0, class T2 = T,
-            typename std::enable_if<IsDecomposable<T2>::value, int>::type = 0,
-            T* = nullptr>
+  template <class T,
+            std::enable_if_t<IsDecomposableAndInsertable<T>::value &&
+                                 IsNotBitField<T>::value &&
+                                 !IsLifetimeBoundAssignmentFrom<T>::value,
+                             int> = 0>
   std::pair<iterator, bool> insert(T&& value) ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return emplace(std::forward<T>(value));
+  }
+
+  template <class T,
+            std::enable_if_t<IsDecomposableAndInsertable<T>::value &&
+                                 IsNotBitField<T>::value &&
+                                 IsLifetimeBoundAssignmentFrom<T>::value,
+                             int> = 0>
+  std::pair<iterator, bool> insert(
+      T&& value ABSL_INTERNAL_ATTRIBUTE_CAPTURED_BY(this))
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
     return emplace(std::forward<T>(value));
   }
 
@@ -2993,10 +3001,20 @@ class raw_hash_set {
   //   const char* p = "hello";
   //   s.insert(p);
   //
-  template <
-      class T, RequiresInsertable<const T&> = 0,
-      typename std::enable_if<IsDecomposable<const T&>::value, int>::type = 0>
+  template <class T, std::enable_if_t<
+                         IsDecomposableAndInsertable<const T&>::value &&
+                             !IsLifetimeBoundAssignmentFrom<const T&>::value,
+                         int> = 0>
   std::pair<iterator, bool> insert(const T& value)
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return emplace(value);
+  }
+  template <class T,
+            std::enable_if_t<IsDecomposableAndInsertable<const T&>::value &&
+                                 IsLifetimeBoundAssignmentFrom<const T&>::value,
+                             int> = 0>
+  std::pair<iterator, bool> insert(
+      const T& value ABSL_INTERNAL_ATTRIBUTE_CAPTURED_BY(this))
       ABSL_ATTRIBUTE_LIFETIME_BOUND {
     return emplace(value);
   }
@@ -3007,22 +3025,43 @@ class raw_hash_set {
   //   flat_hash_map<std::string, int> s;
   //   s.insert({"abc", 42});
   std::pair<iterator, bool> insert(init_type&& value)
-      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+      ABSL_ATTRIBUTE_LIFETIME_BOUND
+#if __cplusplus >= 202002L
+    requires(!IsLifetimeBoundAssignmentFrom<init_type>::value)
+#endif
+  {
     return emplace(std::move(value));
   }
+#if __cplusplus >= 202002L
+  std::pair<iterator, bool> insert(
+      init_type&& value ABSL_INTERNAL_ATTRIBUTE_CAPTURED_BY(this))
+      ABSL_ATTRIBUTE_LIFETIME_BOUND
+    requires(IsLifetimeBoundAssignmentFrom<init_type>::value)
+  {
+    return emplace(std::move(value));
+  }
+#endif
 
-  // TODO(cheshire): A type alias T2 is introduced as a workaround for the nvcc
-  // bug.
-  template <class T, RequiresInsertable<T> = 0, class T2 = T,
-            typename std::enable_if<IsDecomposable<T2>::value, int>::type = 0,
-            T* = nullptr>
+  template <class T,
+            std::enable_if_t<IsDecomposableAndInsertable<T>::value &&
+                                 IsNotBitField<T>::value &&
+                                 !IsLifetimeBoundAssignmentFrom<T>::value,
+                             int> = 0>
   iterator insert(const_iterator, T&& value) ABSL_ATTRIBUTE_LIFETIME_BOUND {
     return insert(std::forward<T>(value)).first;
   }
+  template <class T,
+            std::enable_if_t<IsDecomposableAndInsertable<T>::value &&
+                                 IsNotBitField<T>::value &&
+                                 IsLifetimeBoundAssignmentFrom<T>::value,
+                             int> = 0>
+  iterator insert(const_iterator, T&& value ABSL_INTERNAL_ATTRIBUTE_CAPTURED_BY(
+                                      this)) ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return insert(std::forward<T>(value)).first;
+  }
 
-  template <
-      class T, RequiresInsertable<const T&> = 0,
-      typename std::enable_if<IsDecomposable<const T&>::value, int>::type = 0>
+  template <class T, std::enable_if_t<
+                         IsDecomposableAndInsertable<const T&>::value, int> = 0>
   iterator insert(const_iterator,
                   const T& value) ABSL_ATTRIBUTE_LIFETIME_BOUND {
     return insert(value).first;
@@ -3038,7 +3077,8 @@ class raw_hash_set {
     for (; first != last; ++first) emplace(*first);
   }
 
-  template <class T, RequiresNotInit<T> = 0, RequiresInsertable<const T&> = 0>
+  template <class T, RequiresNotInit<T> = 0,
+            std::enable_if_t<Insertable<const T&>::value, int> = 0>
   void insert(std::initializer_list<T> ilist) {
     insert(ilist.begin(), ilist.end());
   }
@@ -3077,8 +3117,8 @@ class raw_hash_set {
   //   flat_hash_map<std::string, std::string> m = {{"abc", "def"}};
   //   // Creates no std::string copies and makes no heap allocations.
   //   m.emplace("abc", "xyz");
-  template <class... Args, typename std::enable_if<
-                               IsDecomposable<Args...>::value, int>::type = 0>
+  template <class... Args,
+            std::enable_if_t<IsDecomposable<Args...>::value, int> = 0>
   std::pair<iterator, bool> emplace(Args&&... args)
       ABSL_ATTRIBUTE_LIFETIME_BOUND {
     return PolicyTraits::apply(EmplaceDecomposable{*this},
@@ -3088,8 +3128,8 @@ class raw_hash_set {
   // This overload kicks in if we cannot deduce the key from args. It constructs
   // value_type unconditionally and then either moves it into the table or
   // destroys.
-  template <class... Args, typename std::enable_if<
-                               !IsDecomposable<Args...>::value, int>::type = 0>
+  template <class... Args,
+            std::enable_if_t<!IsDecomposable<Args...>::value, int> = 0>
   std::pair<iterator, bool> emplace(Args&&... args)
       ABSL_ATTRIBUTE_LIFETIME_BOUND {
     alignas(slot_type) unsigned char raw[sizeof(slot_type)];
@@ -3181,19 +3221,10 @@ class raw_hash_set {
     return 1;
   }
 
-  // Erases the element pointed to by `it`.  Unlike `std::unordered_set::erase`,
-  // this method returns void to reduce algorithmic complexity to O(1).  The
-  // iterator is invalidated, so any increment should be done before calling
-  // erase.  In order to erase while iterating across a map, use the following
-  // idiom (which also works for some standard containers):
-  //
-  // for (auto it = m.begin(), end = m.end(); it != end;) {
-  //   // `erase()` will invalidate `it`, so advance `it` first.
-  //   auto copy_it = it++;
-  //   if (<pred>) {
-  //     m.erase(copy_it);
-  //   }
-  // }
+  // Erases the element pointed to by `it`. Unlike `std::unordered_set::erase`,
+  // this method returns void to reduce algorithmic complexity to O(1). The
+  // iterator is invalidated so any increment should be done before calling
+  // erase (e.g. `erase(it++)`).
   void erase(const_iterator cit) { erase(cit.inner_); }
 
   // This overload is necessary because otherwise erase<K>(const K&) would be
@@ -3281,9 +3312,8 @@ class raw_hash_set {
     return node;
   }
 
-  template <
-      class K = key_type,
-      typename std::enable_if<!std::is_same<K, iterator>::value, int>::type = 0>
+  template <class K = key_type,
+            std::enable_if_t<!std::is_same<K, iterator>::value, int> = 0>
   node_type extract(const key_arg<K>& key) {
     auto it = find(key);
     return it == end() ? node_type() : extract(const_iterator{it});
@@ -3339,6 +3369,9 @@ class raw_hash_set {
     auto m = NormalizeCapacity(n | GrowthToLowerboundCapacity(size()));
     // n == 0 unconditionally rehashes as per the standard.
     if (n == 0 || m > cap) {
+      if (ABSL_PREDICT_FALSE(m > MaxValidCapacity<sizeof(slot_type)>())) {
+        HashTableSizeOverflow();
+      }
       resize(m);
 
       // This is after resize, to ensure that we have completed the allocation
@@ -3351,6 +3384,9 @@ class raw_hash_set {
     const size_t max_size_before_growth =
         is_soo() ? SooCapacity() : size() + growth_left();
     if (n > max_size_before_growth) {
+      if (ABSL_PREDICT_FALSE(n > max_size())) {
+        HashTableSizeOverflow();
+      }
       size_t m = GrowthToLowerboundCapacity(n);
       resize(NormalizeCapacity(m));
 
@@ -3394,20 +3430,14 @@ class raw_hash_set {
 #endif  // ABSL_HAVE_PREFETCH
   }
 
-  // The API of find() has two extensions.
-  //
-  // 1. The hash can be passed by the user. It must be equal to the hash of the
-  // key.
-  //
-  // 2. The type of the key argument doesn't have to be key_type. This is so
-  // called heterogeneous key support.
   template <class K = key_type>
+  ABSL_DEPRECATE_AND_INLINE()
   iterator find(const key_arg<K>& key,
-                size_t hash) ABSL_ATTRIBUTE_LIFETIME_BOUND {
-    AssertOnFind(key);
-    if (is_soo()) return find_soo(key);
-    return find_non_soo(key, hash);
+                size_t) ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return find(key);
   }
+  // The API of find() has one extension: the type of the key argument doesn't
+  // have to be key_type. This is so called heterogeneous key support.
   template <class K = key_type>
   iterator find(const key_arg<K>& key) ABSL_ATTRIBUTE_LIFETIME_BOUND {
     AssertOnFind(key);
@@ -3417,9 +3447,10 @@ class raw_hash_set {
   }
 
   template <class K = key_type>
+  ABSL_DEPRECATE_AND_INLINE()
   const_iterator find(const key_arg<K>& key,
-                      size_t hash) const ABSL_ATTRIBUTE_LIFETIME_BOUND {
-    return const_cast<raw_hash_set*>(this)->find(key, hash);
+                      size_t) const ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return find(key);
   }
   template <class K = key_type>
   const_iterator find(const key_arg<K>& key) const
@@ -4155,7 +4186,7 @@ class raw_hash_set {
         (std::is_same<SlotAlloc, std::allocator<slot_type>>::value
              ? &DeallocateStandard<alignof(slot_type)>
              : &raw_hash_set::dealloc_fn),
-        &raw_hash_set::resize_impl,
+        &raw_hash_set::resize_impl
     };
     return value;
   }

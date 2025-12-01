@@ -22,8 +22,11 @@ class Browser;
 // The consumer of the page zoom settings mediator.
 @property(nonatomic, weak) id<VivaldiPageZoomSettingsConsumer> consumer;
 @property(nonatomic, assign) Browser* browser;
+
 // Disconnects the page zoom settings observation.
 - (void)disconnect;
+// Resets the users domain zoom preferences.
+- (void)resetUsersDomainZoomPref;
 
 @end
 

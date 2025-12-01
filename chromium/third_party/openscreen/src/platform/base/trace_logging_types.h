@@ -18,11 +18,11 @@ using TraceId = uint64_t;
 
 // kEmptyTraceId is the Trace ID when tracing at a global level, not inside any
 // tracing block - ie this will be the parent ID for a top level tracing block.
-constexpr TraceId kEmptyTraceId = 0x0;
+inline constexpr TraceId kEmptyTraceId = 0x0;
 
 // kUnsetTraceId is the Trace ID passed in to the tracing library when no user-
 // specified value is desired.
-constexpr TraceId kUnsetTraceId = std::numeric_limits<TraceId>::max();
+inline constexpr TraceId kUnsetTraceId = std::numeric_limits<TraceId>::max();
 
 // A class to represent the current TraceId Hierarchy and for the user to
 // pass around as needed.

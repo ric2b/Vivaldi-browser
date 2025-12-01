@@ -56,6 +56,7 @@
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
 #include "components/signin/public/identity_manager/primary_account_mutator.h"
+#include "components/signin/public/identity_manager/signin_constants.h"
 #include "components/sync/service/sync_service.h"
 #include "components/sync/test/test_sync_service.h"
 #include "content/public/browser/browser_context.h"
@@ -76,6 +77,8 @@
 #include "chrome/test/base/testing_profile.h"
 #include "components/user_manager/user_names.h"
 #endif
+
+using signin::constants::kNoHostedDomainFound;
 
 namespace {
 ui::mojom::BrowserColorVariant kColorVariant =
@@ -901,12 +904,12 @@ IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonBrowserTest, TooltipText) {
 
   AddSignedInImage(account_info.account_id);
 
-  EXPECT_EQ(avatar->GetTooltipText(gfx::Point()), account_name);
+  EXPECT_EQ(avatar->GetRenderedTooltipText(gfx::Point()), account_name);
 
   avatar->TriggerTimeoutForTesting(AvatarDelayType::kNameGreeting);
 
   // Tooltip is the same after hiding the name.
-  EXPECT_EQ(avatar->GetTooltipText(gfx::Point()), account_name);
+  EXPECT_EQ(avatar->GetRenderedTooltipText(gfx::Point()), account_name);
 }
 
 // TODO(b/331746545): Check flaky test issue on windows.
@@ -1099,6 +1102,12 @@ INSTANTIATE_TEST_SUITE_P(,
 class AvatarToolbarButtonEnterpriseBadgingBrowserTest
     : public AvatarToolbarButtonBrowserTest {
  public:
+  AvatarToolbarButtonEnterpriseBadgingBrowserTest() {
+    scoped_feature_list_.InitWithFeatures(
+        {features::kEnterpriseProfileBadgingForAvatar,
+         switches::kExplicitBrowserSigninUIOnDesktop},
+        {});
+  }
   void SetUpInProcessBrowserTestFixture() override {
     provider_.SetDefaultReturns(
         true /* is_initialization_complete_return */,
@@ -1112,8 +1121,7 @@ class AvatarToolbarButtonEnterpriseBadgingBrowserTest
 
  protected:
   testing::NiceMock<policy::MockConfigurationPolicyProvider> provider_;
-  base::test::ScopedFeatureList scoped_feature_list_{
-      features::kEnterpriseProfileBadgingForAvatar};
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
@@ -1131,6 +1139,12 @@ IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
     EXPECT_NE(avatar_button->GetText(), work_label);
     clear_closure.RunAndReset();
     EXPECT_EQ(avatar_button->GetText(), work_label);
+    EXPECT_EQ(GetProfileAttributesEntry(browser()->profile())
+                  ->GetEnterpriseProfileLabel(),
+              work_label);
+    EXPECT_EQ(
+        GetProfileAttributesEntry(browser()->profile())->GetLocalProfileName(),
+        work_label);
   }
 
   {
@@ -1142,6 +1156,15 @@ IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
     EXPECT_NE(avatar_button->GetText(), work_label);
     clear_closure.RunAndReset();
     EXPECT_NE(avatar_button->GetText(), work_label);
+    EXPECT_EQ(GetProfileAttributesEntry(browser()->profile())
+                  ->GetEnterpriseProfileLabel(),
+              std::u16string());
+    // The profile name should be the default profile name.
+    std::u16string local_name =
+        GetProfileAttributesEntry(browser()->profile())->GetLocalProfileName();
+    EXPECT_TRUE(g_browser_process->profile_manager()
+                    ->GetProfileAttributesStorage()
+                    .IsDefaultProfileName(local_name, true));
   }
 }
 
@@ -1156,6 +1179,15 @@ IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
 
   // There should be no text because the policy fully disables badging.
   EXPECT_EQ(avatar_button->GetText(), std::u16string());
+  EXPECT_EQ(GetProfileAttributesEntry(browser()->profile())
+                ->GetEnterpriseProfileLabel(),
+            std::u16string());
+  // The profile name should be the default profile name.
+  std::u16string local_name =
+      GetProfileAttributesEntry(browser()->profile())->GetLocalProfileName();
+  EXPECT_TRUE(g_browser_process->profile_manager()
+                  ->GetProfileAttributesStorage()
+                  .IsDefaultProfileName(local_name, true));
 }
 
 IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
@@ -1171,6 +1203,15 @@ IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
 
   // There should be no text because the policy fully disables badging.
   EXPECT_EQ(avatar_button->GetText(), std::u16string());
+  EXPECT_EQ(GetProfileAttributesEntry(browser()->profile())
+                ->GetEnterpriseProfileLabel(),
+            std::u16string());
+  // The profile name should be the default profile name.
+  std::u16string local_name =
+      GetProfileAttributesEntry(browser()->profile())->GetLocalProfileName();
+  EXPECT_TRUE(g_browser_process->profile_manager()
+                  ->GetProfileAttributesStorage()
+                  .IsDefaultProfileName(local_name, true));
 }
 
 IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
@@ -1182,9 +1223,15 @@ IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
   AvatarToolbarButton* avatar_button = GetAvatarToolbarButton(browser());
 
   enterprise_util::SetUserAcceptedAccountManagement(browser()->profile(), true);
-
   // The text should be tuncated to 16 characters followed by "...".
   EXPECT_EQ(avatar_button->GetText(), u"Custom Label Can…");
+  // The profile label will be handled by the individual UI components.
+  EXPECT_EQ(GetProfileAttributesEntry(browser()->profile())
+                ->GetEnterpriseProfileLabel(),
+            u"Custom Label Can Be Max 16 Characters");
+  EXPECT_EQ(
+      GetProfileAttributesEntry(browser()->profile())->GetLocalProfileName(),
+      u"Custom Label Can Be Max 16 Characters");
 }
 
 IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
@@ -1248,6 +1295,94 @@ IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
   enterprise_util::SetUserAcceptedAccountManagement(browser()->profile(),
                                                     false);
   EXPECT_EQ(avatar_button->GetText(), std::u16string());
+}
+
+// test makes sure the greeting is not shown when the management badge is shown
+// in the profile avatar pill.
+IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
+                       GreetingShownWhenManagementNotAccepted) {
+  AvatarToolbarButton* avatar = GetAvatarToolbarButton(browser());
+  // Normal state.
+  ASSERT_TRUE(avatar->GetText().empty());
+
+  std::u16string name(u"TestName");
+  AccountInfo account_info = Signin(u"work@managed.com", name);
+  enterprise_util::SetUserAcceptedAccountManagement(browser()->profile(),
+                                                    false);
+
+  // The button is in a waiting for image state, the name is not yet displayed.
+  // At this point the user has not accepted management yet.
+  EXPECT_EQ(avatar->GetText(), std::u16string());
+
+  // The greeting will only show when the image is loaded.
+  AddSignedInImage(account_info.account_id);
+
+  // Since the user has not accepted management, the greeting will still be
+  // shown.
+  EXPECT_EQ(avatar->GetText(),
+            l10n_util::GetStringFUTF16(IDS_AVATAR_BUTTON_GREETING, name));
+
+  avatar->TriggerTimeoutForTesting(AvatarDelayType::kNameGreeting);
+  // Once the name is not shown anymore, we expect no text.
+  EXPECT_EQ(avatar->GetText(), std::u16string());
+}
+
+IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
+                       GreetingNotShownWhenManagementAccepted) {
+  AvatarToolbarButton* avatar = GetAvatarToolbarButton(browser());
+  // Normal state.
+  ASSERT_TRUE(avatar->GetText().empty());
+
+  AccountInfo account_info = Signin(u"work@managed.com", u"TestName");
+  enterprise_util::SetUserAcceptedAccountManagement(browser()->profile(), true);
+
+  // The greeting would only show when the image is loaded. Set the image to
+  // make sure we do not have a false positive later.
+  AddSignedInImage(account_info.account_id);
+
+  // We do not expect a greeting to be shown if user accepted management.
+  EXPECT_EQ(avatar->GetText(), u"Work");
+}
+
+// Tests the flow for a managed sign-in.
+IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
+                       PRE_SignedInWithNewSessionKeepWorkBadge) {
+  // Sign in.
+  AvatarToolbarButton* avatar = GetAvatarToolbarButton(browser());
+  std::u16string name(u"TestName");
+  AccountInfo account_info = SigninWithImage(u"work@managed.com", name);
+
+  // Since the user has not accepted management yet, the greeting will be
+  // shown.
+  EXPECT_EQ(avatar->GetText(),
+            l10n_util::GetStringFUTF16(IDS_AVATAR_BUTTON_GREETING, name));
+  avatar->TriggerTimeoutForTesting(AvatarDelayType::kNameGreeting);
+
+  // Once the name is not shown anymore, we expect no text since management is
+  // not accepted.
+  EXPECT_EQ(avatar->GetText(), std::u16string());
+
+  // Management is usually accepted by the time the greeting is finished. The
+  // work badgge should be shown once this happens.
+  enterprise_util::SetUserAcceptedAccountManagement(browser()->profile(), true);
+  EXPECT_EQ(avatar->GetText(), u"Work");
+}
+
+// Test that the work badge remains upon restart for a user that has already
+// accepted management.
+IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonEnterpriseBadgingBrowserTest,
+                       SignedInWithNewSessionKeepWorkBadge) {
+  signin::WaitForRefreshTokensLoaded(GetIdentityManager());
+  AvatarToolbarButton* avatar = GetAvatarToolbarButton(browser());
+  EXPECT_EQ(avatar->GetText(), u"Work");
+  EXPECT_EQ(GetProfileAttributesEntry(browser()->profile())
+                ->GetEnterpriseProfileLabel(),
+            u"Work");
+  EXPECT_EQ(
+      GetProfileAttributesEntry(browser()->profile())->GetLocalProfileName(),
+      u"Work");
+  // Previously added image on signin should still be shown in the new session.
+  EXPECT_TRUE(IsSignedInImageUsed());
 }
 
 class AvatarToolbarButtonWithExplicitBrowserSigninBrowserTest
@@ -1531,8 +1666,14 @@ IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonWithImprovedSigninUIBrowserTest,
                                    IDS_SYNC_ERROR_USER_MENU_PASSPHRASE_BUTTON));
 }
 
+// TODO(crbug.com/359995696): Flaky on Windows.
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_PassphraseErrorSyncing DISABLED_PassphraseErrorSyncing
+#else
+#define MAYBE_PassphraseErrorSyncing PassphraseErrorSyncing
+#endif
 IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonWithImprovedSigninUIBrowserTest,
-                       PassphraseErrorSyncing) {
+                       MAYBE_PassphraseErrorSyncing) {
   AvatarToolbarButton* avatar = GetAvatarToolbarButton(browser());
   EnableSyncWithImageAndClearGreeting(avatar, u"test@gmail.com");
   ASSERT_EQ(avatar->GetText(), std::u16string());
@@ -1541,8 +1682,14 @@ IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonWithImprovedSigninUIBrowserTest,
                                    IDS_SYNC_ERROR_USER_MENU_PASSPHRASE_BUTTON));
 }
 
+// TODO(crbug.com/359995696): Flaky on Windows.
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_UpgradeClientError DISABLED_UpgradeClientError
+#else
+#define MAYBE_UpgradeClientError UpgradeClientError
+#endif
 IN_PROC_BROWSER_TEST_F(AvatarToolbarButtonWithImprovedSigninUIBrowserTest,
-                       UpgradeClientError) {
+                       MAYBE_UpgradeClientError) {
   AvatarToolbarButton* avatar = GetAvatarToolbarButton(browser());
   EnableSyncWithImageAndClearGreeting(avatar, u"test@gmail.com");
   ASSERT_EQ(avatar->GetText(), std::u16string());

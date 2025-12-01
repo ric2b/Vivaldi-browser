@@ -649,6 +649,12 @@ static int decode_ps(VVCParamSets *ps, const CodedBitstreamH266Context *h266, vo
     if (ret < 0)
         return ret;
 
+    if (rsps->sps_log2_ctu_size_minus5 > 2) {
+        // CTU > 128 are reserved in vvc spec v3
+        av_log(log_ctx, AV_LOG_ERROR, "CTU size > 128. \n");
+        return AVERROR_PATCHWELCOME;
+    }
+
     ret = decode_pps(ps, rpps);
     if (ret < 0)
         return ret;
@@ -736,7 +742,7 @@ static int lmcs_derive_lut(VVCLMCS *lmcs, const H266RawAPS *rlmcs, const H266Raw
         return AVERROR_INVALIDDATA;
 
     lmcs->min_bin_idx = rlmcs->lmcs_min_bin_idx;
-    lmcs->max_bin_idx = LMCS_MAX_BIN_SIZE - 1 - rlmcs->lmcs_min_bin_idx;
+    lmcs->max_bin_idx = LMCS_MAX_BIN_SIZE - 1 - rlmcs->lmcs_delta_max_bin_idx;
 
     memset(cw, 0, sizeof(cw));
     for (int i = lmcs->min_bin_idx; i <= lmcs->max_bin_idx; i++)
@@ -1043,13 +1049,21 @@ static void alf_derive(VVCALF *alf, const H266RawAPS *aps)
     alf_cc(alf, aps);
 }
 
+static void alf_free(FFRefStructOpaque unused, void *obj)
+{
+    VVCALF *alf = obj;
+
+    ff_refstruct_unref(&alf->r);
+}
+
 static int aps_decode_alf(const VVCALF **alf, const H266RawAPS *aps)
 {
-    VVCALF *a = ff_refstruct_allocz(sizeof(*a));
+    VVCALF *a = ff_refstruct_alloc_ext(sizeof(*a), 0, NULL, alf_free);
     if (!a)
         return AVERROR(ENOMEM);
 
     alf_derive(a, aps);
+    ff_refstruct_replace(&a->r, aps);
     ff_refstruct_replace(alf, a);
     ff_refstruct_unref(&a);
 

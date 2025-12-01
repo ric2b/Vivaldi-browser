@@ -185,17 +185,17 @@ const MAX_POSSIBLE_BREAKPOINT_LINE = 2500;
 const MAX_CODE_SIZE_FOR_VALUE_DECORATIONS = 10000;
 const MAX_PROPERTIES_IN_SCOPE_FOR_VALUE_DECORATIONS = 500;
 
-type BreakpointDescription = {
-  position: number,
-  breakpoint: Breakpoints.BreakpointManager.Breakpoint,
-};
+interface BreakpointDescription {
+  position: number;
+  breakpoint: Breakpoints.BreakpointManager.Breakpoint;
+}
 
-type BreakpointEditRequest = {
-  line: CodeMirror.Line,
-  breakpoint: Breakpoints.BreakpointManager.Breakpoint|null,
-  location: {lineNumber: number, columnNumber: number}|null,
-  isLogpoint?: boolean,
-};
+interface BreakpointEditRequest {
+  line: CodeMirror.Line;
+  breakpoint: Breakpoints.BreakpointManager.Breakpoint|null;
+  location: {lineNumber: number, columnNumber: number}|null;
+  isLogpoint?: boolean;
+}
 
 const debuggerPluginForUISourceCode = new Map<Workspace.UISourceCode.UISourceCode, DebuggerPlugin>();
 
@@ -444,7 +444,7 @@ export class DebuggerPlugin extends Plugin {
             jslogContext: 'configure',
           },
         ],
-        undefined, undefined, 'script-on-ignore-list');
+        undefined, 'script-on-ignore-list');
     this.ignoreListInfobar = infobar;
     infobar.setCloseCallback(() => this.removeInfobar(this.ignoreListInfobar));
 
@@ -1839,10 +1839,10 @@ async function computeNonBreakableLines(
 
 // Breakpoint markers
 
-type BreakpointDecoration = {
-  content: CodeMirror.DecorationSet,
-  gutter: CodeMirror.RangeSet<CodeMirror.GutterMarker>,
-};
+interface BreakpointDecoration {
+  content: CodeMirror.DecorationSet;
+  gutter: CodeMirror.RangeSet<CodeMirror.GutterMarker>;
+}
 
 const setBreakpointDeco = CodeMirror.StateEffect.define<BreakpointDecoration>();
 const muteBreakpoints = CodeMirror.StateEffect.define<null>();
@@ -2027,7 +2027,7 @@ class ValueDecoration extends CodeMirror.WidgetType {
       } else {
         UI.UIUtils.createTextChild(widget, ', ');
       }
-      const nameValuePair = (widget.createChild('span') as HTMLElement);
+      const nameValuePair = widget.createChild('span');
       UI.UIUtils.createTextChild(nameValuePair, name + ' = ');
       const propertyCount = value.preview ? value.preview.properties.length : 0;
       const entryCount = value.preview && value.preview.entries ? value.preview.entries.length : 0;
@@ -2325,6 +2325,10 @@ const evalExpression = defineStatefulDecoration();
 // Styling for plugin-local elements
 
 const theme = CodeMirror.EditorView.baseTheme({
+  '.cm-line::selection': {
+    backgroundColor: 'transparent',
+    color: 'currentColor',
+  },
   '.cm-gutters .cm-gutter.cm-lineNumbers .cm-gutterElement': {
     '&:hover, &.cm-breakpoint': {
       borderStyle: 'solid',

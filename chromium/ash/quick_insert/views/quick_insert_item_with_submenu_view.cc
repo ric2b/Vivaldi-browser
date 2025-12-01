@@ -15,6 +15,7 @@
 #include "ash/quick_insert/views/quick_insert_submenu_controller.h"
 #include "ash/style/style_util.h"
 #include "ash/style/typography.h"
+#include "base/containers/to_vector.h"
 #include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
@@ -46,9 +47,9 @@ constexpr auto kBorderInsets = gfx::Insets::TLBR(8, 16, 8, 16);
 
 }  // namespace
 
-PickerItemWithSubmenuView::PickerItemWithSubmenuView()
+QuickInsertItemWithSubmenuView::QuickInsertItemWithSubmenuView()
     : QuickInsertItemView(base::DoNothing(), FocusIndicatorStyle::kFocusBar) {
-  SetCallback(base::BindRepeating(&PickerItemWithSubmenuView::ShowSubmenu,
+  SetCallback(base::BindRepeating(&QuickInsertItemWithSubmenuView::ShowSubmenu,
                                   weak_ptr_factory_.GetWeakPtr()));
 
   // This view only contains one child for the moment, but treat this as a
@@ -57,7 +58,7 @@ PickerItemWithSubmenuView::PickerItemWithSubmenuView()
       ->SetOrientation(views::LayoutOrientation::kVertical);
 
   // TODO: b/347616202 - Align the leading icon to the top of the item.
-  views::Builder<PickerItemWithSubmenuView>(this)
+  views::Builder<QuickInsertItemWithSubmenuView>(this)
       .SetBorder(views::CreateEmptyBorder(kBorderInsets))
       .AddChild(
           // This is used to group child views that should not receive events.
@@ -96,57 +97,60 @@ PickerItemWithSubmenuView::PickerItemWithSubmenuView()
   GetViewAccessibility().SetHasPopup(ax::mojom::HasPopup::kMenu);
 }
 
-PickerItemWithSubmenuView::~PickerItemWithSubmenuView() = default;
+QuickInsertItemWithSubmenuView::~QuickInsertItemWithSubmenuView() = default;
 
-void PickerItemWithSubmenuView::SetLeadingIcon(const ui::ImageModel& icon) {
+void QuickInsertItemWithSubmenuView::SetLeadingIcon(
+    const ui::ImageModel& icon) {
   leading_icon_view_->SetImage(icon);
 }
 
-void PickerItemWithSubmenuView::SetText(const std::u16string& primary_text) {
+void QuickInsertItemWithSubmenuView::SetText(
+    const std::u16string& primary_text) {
   label_->SetText(primary_text);
   SetAccessibleName(primary_text);
 }
 
-void PickerItemWithSubmenuView::AddEntry(QuickInsertSearchResult result,
-                                         SelectItemCallback callback) {
+void QuickInsertItemWithSubmenuView::AddEntry(QuickInsertSearchResult result,
+                                              SelectItemCallback callback) {
   entries_.emplace_back(std::move(result), std::move(callback));
 }
 
-bool PickerItemWithSubmenuView::IsEmpty() const {
+bool QuickInsertItemWithSubmenuView::IsEmpty() const {
   return entries_.empty();
 }
 
-void PickerItemWithSubmenuView::ShowSubmenu() {
+void QuickInsertItemWithSubmenuView::ShowSubmenu() {
   if (GetSubmenuController() == nullptr) {
     return;
   }
 
-  std::vector<std::unique_ptr<QuickInsertListItemView>> items;
-  items.reserve(entries_.size());
-  for (const auto& [result, callback] : entries_) {
-    // There are no image item results in submenus, so can pass 0 for
-    // `available_width`.
-    auto item = QuickInsertSectionView::CreateItemFromResult(
-        result, /*preview_controller=*/nullptr, /*asset_fetcher=*/nullptr,
-        /*available_width=*/0,
-        QuickInsertSectionView::LocalFileResultStyle::kList, callback);
-    auto list_item = base::WrapUnique(
-        views::AsViewClass<QuickInsertListItemView>(item.release()));
-    CHECK(list_item);
-    items.push_back(std::move(list_item));
-  }
-  GetSubmenuController()->Show(this, std::move(items));
+  GetSubmenuController()->Show(
+      this, base::ToVector(entries_, [](const auto& entry) {
+        const auto& [result, callback] = entry;
+        // There are no image item results in submenus, so can pass 0 for
+        // `available_width`.
+        auto item = QuickInsertSectionView::CreateItemFromResult(
+            result, /*preview_controller=*/nullptr, /*asset_fetcher=*/nullptr,
+            /*available_width=*/0,
+            QuickInsertSectionView::LocalFileResultStyle::kList, callback);
+        auto list_item = base::WrapUnique(
+            views::AsViewClass<QuickInsertListItemView>(item.release()));
+        CHECK(list_item);
+        return list_item;
+      }));
 }
 
-void PickerItemWithSubmenuView::OnMouseEntered(const ui::MouseEvent& event) {
+void QuickInsertItemWithSubmenuView::OnMouseEntered(
+    const ui::MouseEvent& event) {
   ShowSubmenu();
 }
 
-const std::u16string& PickerItemWithSubmenuView::GetTextForTesting() const {
+const std::u16string& QuickInsertItemWithSubmenuView::GetTextForTesting()
+    const {
   return label_->GetText();
 }
 
-BEGIN_METADATA(PickerItemWithSubmenuView)
+BEGIN_METADATA(QuickInsertItemWithSubmenuView)
 END_METADATA
 
 }  // namespace ash

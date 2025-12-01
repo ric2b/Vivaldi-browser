@@ -258,9 +258,14 @@
 5733316|Libre Tecnologias
 57333170|Libre Tecnologias
 57333171|Libre Tecnologias
+573332|Movil Exito
 5733320|Tigo
 5733321|Tigo
 5733330|GoMobile
+5733332|EZTALK Mobile
+5733333|EZTALK Mobile
+5733334|EZTALK Mobile
+5733335|EZTALK Mobile
 5733340|Comunicaciones Dime
 5733341|Comunicaciones Dime
 5733342|Comunicaciones Dime
@@ -276,6 +281,9 @@
 5733362|Suma Movil
 5733363|Suma Movil
 5733364|Suma Movil
+5733365|Suma Movil
+5733366|Suma Movil
+5733367|Suma Movil
 573502|Avantel
 573503|Avantel
 573504|Avantel
@@ -284,4 +292,4 @@
 573507|Avantel
 573508|Avantel
 57351|Avantel
-579|Movistar
+5791|Movistar

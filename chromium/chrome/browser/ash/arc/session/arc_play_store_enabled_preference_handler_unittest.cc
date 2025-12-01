@@ -7,10 +7,6 @@
 #include <memory>
 #include <string>
 
-#include "ash/components/arc/arc_prefs.h"
-#include "ash/components/arc/session/arc_session_runner.h"
-#include "ash/components/arc/test/arc_util_test_support.h"
-#include "ash/components/arc/test/fake_arc_session.h"
 #include "base/command_line.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/bind.h"
@@ -31,6 +27,10 @@
 #include "chromeos/ash/components/dbus/concierge/concierge_client.h"
 #include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
 #include "chromeos/ash/components/dbus/upstart/upstart_client.h"
+#include "chromeos/ash/experiences/arc/arc_prefs.h"
+#include "chromeos/ash/experiences/arc/session/arc_session_runner.h"
+#include "chromeos/ash/experiences/arc/test/arc_util_test_support.h"
+#include "chromeos/ash/experiences/arc/test/fake_arc_session.h"
 #include "components/consent_auditor/fake_consent_auditor.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/signin/public/base/consent_level.h"
@@ -39,6 +39,7 @@
 #include "components/user_manager/known_user.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "content/public/test/browser_task_environment.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -51,7 +52,7 @@ namespace arc {
 namespace {
 
 constexpr char kTestEmail[] = "user@gmail.com";
-constexpr char kTestGaiaId[] = "1234567890";
+constexpr GaiaId::Literal kTestGaiaId("1234567890");
 
 class ArcPlayStoreEnabledPreferenceHandlerTest : public testing::Test {
  public:
@@ -210,10 +211,9 @@ TEST_F(ArcPlayStoreEnabledPreferenceHandlerTest, PrefChangeRevokesConsent) {
 
   ArcPlayTermsOfServiceConsent play_consent;
   play_consent.set_status(UserConsentTypes::NOT_GIVEN);
-  play_consent.set_confirmation_grd_id(
-      IDS_SETTINGS_ANDROID_APPS_DISABLE_DIALOG_REMOVE);
+  play_consent.set_confirmation_grd_id(IDS_SETTINGS_ANDROID_APPS_REMOVE_BUTTON);
   play_consent.add_description_grd_ids(
-      IDS_SETTINGS_ANDROID_APPS_DISABLE_DIALOG_MESSAGE);
+      IDS_OS_SETTINGS_ANDROID_APPS_DISABLE_DIALOG_MESSAGE);
   play_consent.set_consent_flow(
       UserConsentTypes::ArcPlayTermsOfServiceConsent::SETTING_CHANGE);
   EXPECT_CALL(*auditor, RecordArcPlayConsent(

@@ -30,6 +30,8 @@
 #include "components/plus_addresses/settings/plus_address_setting_service.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
+#include "components/sync/base/data_type.h"
+#include "components/sync/test/fake_data_type_controller_delegate.h"
 #include "content/public/test/browser_test.h"
 #include "extensions/browser/api/networking_private/networking_private_delegate_factory.h"
 #include "net/dns/mock_host_resolver.h"
@@ -107,7 +109,12 @@ void RegisterTestingFactories(content::BrowserContext* context) {
   PlusAddressSettingServiceFactory::GetInstance()->SetTestingFactory(
       context, base::BindRepeating([](content::BrowserContext* context)
                                        -> std::unique_ptr<KeyedService> {
-        return std::make_unique<MockPlusAddressSettingService>();
+        auto mock_service = std::make_unique<MockPlusAddressSettingService>();
+        ON_CALL(*mock_service, GetSyncControllerDelegate).WillByDefault([] {
+          return std::make_unique<syncer::FakeDataTypeControllerDelegate>(
+              syncer::PLUS_ADDRESS_SETTING);
+        });
+        return mock_service;
       }));
 }
 
@@ -118,28 +125,17 @@ class ScopedPlusAddressFeatureList {
         features::kPlusAddressesEnabled, plus_addresses_enabled_params_);
   }
 
-  void Reinit(const std::string& server_url, bool enable_onboarding = false) {
+  void Reinit(const std::string& server_url) {
     CHECK(!server_url.empty());
     features_.Reset();
-      // Don't enable the 'sync-with-server' param so that the dialog is the
-      // only way to trigger requests to the server.
+    // Don't enable the 'sync-with-server' param so that the dialog is the
+    // only way to trigger requests to the server.
     base::FieldTrialParams plus_addresses_enabled_params_with_server =
         plus_addresses_enabled_params_;
     plus_addresses_enabled_params_with_server["server-url"] = server_url;
-    std::vector<base::test::FeatureRefAndParams> enabled_features = {
-        {features::kPlusAddressesEnabled,
-         plus_addresses_enabled_params_with_server}};
-    std::vector<base::test::FeatureRef> disabled_features;
-
-    if (enable_onboarding) {
-      enabled_features.push_back(
-          {features::kPlusAddressUserOnboardingEnabled, {}});
-    } else {
-      disabled_features.push_back(features::kPlusAddressUserOnboardingEnabled);
-    }
-
-    features_.InitWithFeaturesAndParameters(enabled_features,
-                                            disabled_features);
+    features_.InitAndEnableFeatureWithParameters(
+        features::kPlusAddressesEnabled,
+        plus_addresses_enabled_params_with_server);
   }
 
  private:
@@ -223,6 +219,12 @@ class PlusAddressCreationDialogInteractiveTest : public InteractiveBrowserTest {
   }
 
  protected:
+  MockPlusAddressSettingService& setting_service() {
+    return static_cast<MockPlusAddressSettingService&>(
+        *PlusAddressSettingServiceFactory::GetForBrowserContext(
+            browser()->profile()));
+  }
+
   std::string PlusAddressResponseContent(bool confirmed,
                                          std::string plus_address) {
     return plus_addresses::test::MakeCreationResponse(PlusProfile(
@@ -237,7 +239,8 @@ class PlusAddressCreationDialogInteractiveTest : public InteractiveBrowserTest {
       PlusAddressCreationController* controller =
           PlusAddressCreationController::GetOrCreate(
               browser()->tab_strip_model()->GetActiveWebContents());
-      controller->OfferCreation(facet, future_.GetCallback());
+      controller->OfferCreation(facet, /*is_manual_fallback=*/false,
+                                future_.GetCallback());
       ASSERT_FALSE(future_.IsReady());
     });
   }
@@ -322,6 +325,7 @@ IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogInteractiveTest,
       base::Unretained(this)));
   // RegisterRequestHandler must be called before server starts.
   embedded_test_server()->StartAcceptingConnections();
+  ON_CALL(setting_service(), GetHasAcceptedNotice).WillByDefault(Return(true));
 
   RunTestSequence(
       ShowModal(),
@@ -371,6 +375,7 @@ IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogInteractiveTest,
       base::Unretained(this)));
   // RegisterRequestHandler must be called before server starts.
   embedded_test_server()->StartAcceptingConnections();
+  ON_CALL(setting_service(), GetHasAcceptedNotice).WillByDefault(Return(true));
 
   RunTestSequence(
       ShowModal(),
@@ -428,6 +433,7 @@ IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogInteractiveTest,
       // embedded_test_server is shutdown as part of `TearDownOnMainThread`.
       base::Unretained(this)));
   embedded_test_server()->StartAcceptingConnections();
+  ON_CALL(setting_service(), GetHasAcceptedNotice).WillByDefault(Return(true));
 
   RunTestSequence(
       ShowModal(),
@@ -458,6 +464,7 @@ IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogInteractiveTest,
       // embedded_test_server is shutdown as part of `TearDownOnMainThread`.
       base::Unretained(this)));
   embedded_test_server()->StartAcceptingConnections();
+  ON_CALL(setting_service(), GetHasAcceptedNotice).WillByDefault(Return(true));
 
   RunTestSequence(
       // First, show the UI normally.
@@ -484,6 +491,7 @@ IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogInteractiveTest, DoubleInit) {
       // embedded_test_server is shutdown as part of `TearDownOnMainThread`.
       base::Unretained(this)));
   embedded_test_server()->StartAcceptingConnections();
+  ON_CALL(setting_service(), GetHasAcceptedNotice).WillByDefault(Return(true));
 
   base::test::TestFuture<const std::string&> double_init_future;
   RunTestSequence(
@@ -498,7 +506,8 @@ IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogInteractiveTest, DoubleInit) {
             PlusAddressCreationController* controller =
                 PlusAddressCreationController::GetOrCreate(
                     browser()->tab_strip_model()->GetActiveWebContents());
-            controller->OfferCreation(facet, double_init_future.GetCallback());
+            controller->OfferCreation(facet, /*is_manual_fallback=*/false,
+                                      double_init_future.GetCallback());
           }),
           WaitForViewProperty(
               PlusAddressCreationView::kPlusAddressConfirmButtonElementId,
@@ -518,30 +527,9 @@ IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogInteractiveTest, DoubleInit) {
       CheckUserAction("PlusAddresses.OfferedPlusAddressAccepted", 1));
 }
 
-// A test fixture that has the feature to show the onboarding notice turned on.
-class PlusAddressCreationDialogWithNoticeTest
-    : public PlusAddressCreationDialogInteractiveTest {
- public:
-  void SetUp() override {
-    ASSERT_TRUE(embedded_test_server()->InitializeAndListen());
-    // Reinit `feature_list_` here since the test server URL isn't ready at the
-    // time we must first initialize the ScopedFeatureList.
-    feature_list_.Reinit(embedded_test_server()->base_url().spec(),
-                         /*enable_onboarding=*/true);
-    InteractiveBrowserTest::SetUp();
-  }
-
- protected:
-  MockPlusAddressSettingService& setting_service() {
-    return static_cast<MockPlusAddressSettingService&>(
-        *PlusAddressSettingServiceFactory::GetForBrowserContext(
-            browser()->profile()));
-  }
-};
-
 // Tests showing and cancelling the creation dialog for a user that has not yet
 // accepted the notice.
-IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogWithNoticeTest,
+IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogInteractiveTest,
                        ShowNoticeAndCancel) {
   embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
       &PlusAddressCreationDialogInteractiveTest::HandleRequestWithSuccess,
@@ -589,7 +577,7 @@ IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogWithNoticeTest,
 }
 
 // Tests that the notice is not shown if it has already been accepted.
-IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogWithNoticeTest,
+IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogInteractiveTest,
                        NoticePreviouslyAccepted) {
   embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
       &PlusAddressCreationDialogInteractiveTest::HandleRequestWithSuccess,
@@ -630,7 +618,7 @@ IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogWithNoticeTest,
 
 // Tests showing and accepting the creation dialog for a user that has not yet
 // accepted the notice.
-IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogWithNoticeTest,
+IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogInteractiveTest,
                        ShowNoticeAndAccept) {
   embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
       &PlusAddressCreationDialogInteractiveTest::HandleRequestWithSuccess,
@@ -668,7 +656,7 @@ IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogWithNoticeTest,
 
 // Tests that clicking the "learn more" link on the notice screen opens a new
 // tab with the correct URL.
-IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogWithNoticeTest,
+IN_PROC_BROWSER_TEST_F(PlusAddressCreationDialogInteractiveTest,
                        ClickLearnMoreLink) {
   embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
       &PlusAddressCreationDialogInteractiveTest::HandleRequestWithSuccess,
@@ -746,6 +734,7 @@ IN_PROC_BROWSER_TEST_P(PlusAddressCreationDialogUiVariationsTest,
       base::Unretained(this)));
   // RegisterRequestHandler must be called before server starts.
   embedded_test_server()->StartAcceptingConnections();
+  ON_CALL(setting_service(), GetHasAcceptedNotice).WillByDefault(Return(true));
 
   RunTestSequence(
       ShowModal(),
@@ -782,8 +771,7 @@ class PlusAddressCreationDialogUiVariationsOnboardingTest
     ASSERT_TRUE(embedded_test_server()->InitializeAndListen());
     // Reinit `feature_list_` here since the test server URL isn't ready at the
     // time we must first initialize the ScopedFeatureList.
-    feature_list_.Reinit(embedded_test_server()->base_url().spec(),
-                         /*enable_onboarding=*/true);
+    feature_list_.Reinit(embedded_test_server()->base_url().spec());
     InteractiveBrowserTest::SetUp();
   }
 };

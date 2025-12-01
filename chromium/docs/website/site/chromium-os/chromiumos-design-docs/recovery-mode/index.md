@@ -30,7 +30,7 @@ For background and other relevant information, see the following documents:
             Mode](/chromium-os/chromiumos-design-docs/developer-mode): how
             developer mode works, including the developer switch.
 *   [File
-            System/Autoupdate](http://www.chromium.org/chromium-os/chromiumos-design-docs/filesystem-autoupdate):
+            System/Autoupdate](/chromium-os/chromiumos-design-docs/filesystem-autoupdate):
             how normal updates work.
 *   [Firmware Verified
             Boot](/chromium-os/chromiumos-design-docs/verified-boot): how kernel

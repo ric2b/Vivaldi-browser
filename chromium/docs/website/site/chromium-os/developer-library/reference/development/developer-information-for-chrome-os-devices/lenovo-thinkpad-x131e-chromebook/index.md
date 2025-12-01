@@ -2,7 +2,7 @@
 breadcrumbs:
 - - /chromium-os
   - ChromiumOS
-- - /chromium-os/developer-information-for-chrome-os-devices
+- - /chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices
   - Developer Information for ChromeOS Devices
 page_name: lenovo-thinkpad-x131e-chromebook
 title: Lenovo Thinkpad X131e Chromebook
@@ -13,7 +13,7 @@ title: Lenovo Thinkpad X131e Chromebook
 ## Introduction
 
 This page contains information about the [Lenovo Thinkpad X131e
-Chromebook](http://www.google.com/intl/en/chrome/education/devices/lenovo-x131e-chromebook.html)
+Chromebook](https://www.google.com/intl/en/chrome/education/devices/lenovo-x131e-chromebook.html)
 that is interesting and/or useful to software developers. For general
 information about getting started with developing on ChromiumOS (the
 open-source version of the software on the Chrome Notebook), see the [Chromium
@@ -108,10 +108,10 @@ in the `firmware-stout-2817.B` branches.
 brick your system and make it unrecoverable. DO NOT ATTEMPT if you are not
 familiar with this process.**
 
-**[Stop.](http://www.youtube.com/watch?feature=fvwp&NR=1&v=Fj3WBfRZ5Nc&t=0m31s)
-[Don't.](http://www.youtube.com/watch?feature=fvwp&NR=1&v=Fj3WBfRZ5Nc&t=0m31s)
+**[Stop.](https://youtube.com/watch?feature=fvwp&NR=1&v=Fj3WBfRZ5Nc&t=0m31s)
+[Don't.](https://youtube.com/watch?feature=fvwp&NR=1&v=Fj3WBfRZ5Nc&t=0m31s)
 [Come
-back.](http://www.youtube.com/watch?feature=fvwp&NR=1&v=Fj3WBfRZ5Nc&t=0m31s)**
+back.](https://youtube.com/watch?feature=fvwp&NR=1&v=Fj3WBfRZ5Nc&t=0m31s)**
 
 Really. Opening the case will allow you to modify the read-only firmware that
 makes recovery possible. If someone from "teh internets" says "You need to
@@ -126,17 +126,17 @@ and all paperwork your received first. If you just want to see what the inside
 looks like, gaze upon this (click for a high res version):
 
 [<img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/lenovo-thinkpad-x131e-chromebook/stout-inside-top.jpg"
-width=320>](/chromium-os/developer-information-for-chrome-os-devices/lenovo-thinkpad-x131e-chromebook/stout-inside-top.jpg)
+src="stout-inside-top.jpg"
+width=320>](./stout-inside-top.jpg)
 [<img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/lenovo-thinkpad-x131e-chromebook/stout-inside-bottom.jpg"
-width=320>](/chromium-os/developer-information-for-chrome-os-devices/lenovo-thinkpad-x131e-chromebook/stout-inside-bottom.jpg)
+src="stout-inside-bottom.jpg"
+width=320>](./stout-inside-bottom.jpg)
 [<img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/lenovo-thinkpad-x131e-chromebook/stout-bare-top.jpg"
-width=320>](/chromium-os/developer-information-for-chrome-os-devices/lenovo-thinkpad-x131e-chromebook/stout-bare-top.jpg)
+src="stout-bare-top.jpg"
+width=320>](./stout-bare-top.jpg)
 [<img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/lenovo-thinkpad-x131e-chromebook/stout-bare-bottom.jpg"
-width=320>](/chromium-os/developer-information-for-chrome-os-devices/lenovo-thinkpad-x131e-chromebook/stout-bare-bottom.jpg)
+src="stout-bare-bottom.jpg"
+width=320>](./stout-bare-bottom.jpg)
 
 ### Servo Header
 

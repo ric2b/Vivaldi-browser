@@ -36,8 +36,7 @@
 #include "sharing/nearby_connections_types.h"
 #include "sharing/proto/enums.pb.h"
 
-namespace nearby {
-namespace sharing {
+namespace nearby::sharing {
 
 using DataUsage = ::nearby::sharing::proto::DataUsage;
 
@@ -46,8 +45,8 @@ FakeNearbyConnectionsManager::FakeNearbyConnectionsManager() = default;
 FakeNearbyConnectionsManager::~FakeNearbyConnectionsManager() = default;
 
 void FakeNearbyConnectionsManager::Shutdown() {
-  NL_DCHECK(!IsAdvertising());
-  NL_DCHECK(!IsDiscovering());
+  DCHECK(!IsAdvertising());
+  DCHECK(!IsDiscovering());
   is_shutdown_ = true;
 }
 
@@ -55,7 +54,7 @@ void FakeNearbyConnectionsManager::StartAdvertising(
     std::vector<uint8_t> endpoint_info, IncomingConnectionListener* listener,
     PowerLevel power_level, DataUsage data_usage, bool use_stable_endpoint_id,
     ConnectionsCallback callback) {
-  NL_DCHECK(!IsAdvertising());
+  DCHECK(!IsAdvertising());
   is_shutdown_ = false;
   {
     absl::MutexLock lock(&listener_mutex_);
@@ -74,8 +73,8 @@ void FakeNearbyConnectionsManager::StartAdvertising(
 
 void FakeNearbyConnectionsManager::StopAdvertising(
     ConnectionsCallback callback) {
-  NL_DCHECK(IsAdvertising());
-  NL_DCHECK(!is_shutdown());
+  DCHECK(IsAdvertising());
+  DCHECK(!is_shutdown());
   {
     absl::MutexLock lock(&listener_mutex_);
     advertising_listener_ = nullptr;
@@ -101,8 +100,8 @@ void FakeNearbyConnectionsManager::StartDiscovery(
 }
 
 void FakeNearbyConnectionsManager::StopDiscovery() {
-  NL_DCHECK(IsDiscovering());
-  NL_DCHECK(!is_shutdown());
+  DCHECK(IsDiscovering());
+  DCHECK(!is_shutdown());
   absl::MutexLock lock(&listener_mutex_);
   discovery_listener_ = nullptr;
 }
@@ -112,36 +111,47 @@ void FakeNearbyConnectionsManager::Connect(
     std::optional<std::vector<uint8_t>> bluetooth_mac_address,
     DataUsage data_usage, TransportType transport_type,
     NearbyConnectionCallback callback) {
-  NL_DCHECK(!is_shutdown());
+  DCHECK(!is_shutdown());
   connected_data_usage_ = data_usage;
   transport_type_ = transport_type;
+  {
+    absl::MutexLock lock(&endpoints_mutex_);
+    connection_endpoint_infos_.emplace(endpoint_id, std::move(endpoint_info));
+  }
+  std::move(callback)(endpoint_id, connection_, Status::kUnknown);
+}
+
+void FakeNearbyConnectionsManager::AcceptConnection(
+    std::vector<uint8_t> endpoint_info, absl::string_view endpoint_id,
+    NearbyConnection* connection) {
+  absl::MutexLock lock(&endpoints_mutex_);
   connection_endpoint_infos_.emplace(endpoint_id, std::move(endpoint_info));
-  std::move(callback)(connection_, Status::kUnknown);
 }
 
 void FakeNearbyConnectionsManager::Disconnect(absl::string_view endpoint_id) {
-  NL_DCHECK(!is_shutdown());
+  DCHECK(!is_shutdown());
+  absl::MutexLock lock(&endpoints_mutex_);
   connection_endpoint_infos_.erase(std::string(endpoint_id));
 }
 
 void FakeNearbyConnectionsManager::Send(
     absl::string_view endpoint_id, std::unique_ptr<Payload> payload,
     std::weak_ptr<PayloadStatusListener> listener) {
-  NL_DCHECK(!is_shutdown());
+  DCHECK(!is_shutdown());
   if (send_payload_callback_)
     send_payload_callback_(std::move(payload), listener);
 }
 
 void FakeNearbyConnectionsManager::RegisterPayloadStatusListener(
     int64_t payload_id, std::weak_ptr<PayloadStatusListener> listener) {
-  NL_DCHECK(!is_shutdown());
+  DCHECK(!is_shutdown());
 
   payload_status_listeners_[payload_id] = listener;
 }
 
 const Payload* FakeNearbyConnectionsManager::GetIncomingPayload(
     int64_t payload_id) const {
-  NL_DCHECK(!is_shutdown());
+  DCHECK(!is_shutdown());
   absl::MutexLock lock(&incoming_payloads_mutex_);
   auto it = incoming_payloads_.find(payload_id);
   if (it == incoming_payloads_.end()) return nullptr;
@@ -150,7 +160,7 @@ const Payload* FakeNearbyConnectionsManager::GetIncomingPayload(
 }
 
 void FakeNearbyConnectionsManager::Cancel(int64_t payload_id) {
-  NL_DCHECK(!is_shutdown());
+  DCHECK(!is_shutdown());
   std::weak_ptr<PayloadStatusListener> listener =
       GetRegisteredPayloadStatusListener(payload_id);
   if (auto weak_listener = listener.lock()) {
@@ -159,8 +169,7 @@ void FakeNearbyConnectionsManager::Cancel(int64_t payload_id) {
     status_update->status = PayloadStatus::kCanceled;
     status_update->total_bytes = 0;
     status_update->bytes_transferred = 0;
-    weak_listener->OnStatusUpdate(std::move(status_update),
-                                  /*upgraded_medium=*/std::nullopt);
+    weak_listener->OnStatusUpdate(std::move(status_update));
     payload_status_listeners_.erase(payload_id);
   }
 
@@ -176,7 +185,7 @@ void FakeNearbyConnectionsManager::ClearIncomingPayloads() {
 std::optional<std::vector<uint8_t>>
 FakeNearbyConnectionsManager::GetRawAuthenticationToken(
     absl::string_view endpoint_id) {
-  NL_DCHECK(!is_shutdown());
+  DCHECK(!is_shutdown());
 
   auto iter = endpoint_auth_tokens_.find(std::string(endpoint_id));
   if (iter != endpoint_auth_tokens_.end()) return iter->second;
@@ -325,5 +334,4 @@ void FakeNearbyConnectionsManager::AddUnknownFilePathsToDeleteForTesting(
 
 std::string FakeNearbyConnectionsManager::Dump() const { return ""; }
 
-}  // namespace sharing
-}  // namespace nearby
+}  // namespace nearby::sharing

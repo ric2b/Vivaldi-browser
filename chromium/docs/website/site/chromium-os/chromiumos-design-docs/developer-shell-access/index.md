@@ -163,5 +163,5 @@ script which is checked by pam.
 
 ## References
 
-*   http://crbug.com/182572
-*   http://crbug.com/217710
+*   https://crbug.com/182572
+*   https://crbug.com/217710

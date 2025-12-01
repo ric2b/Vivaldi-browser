@@ -195,6 +195,9 @@ class BasePcpHandler : public PcpHandler,
     // If success, the mediums on which we are now advertising/discovering, for
     // analytics.
     std::vector<location::nearby::proto::connections::Medium> mediums;
+    std::vector<location::nearby::analytics::proto::ConnectionsLog::
+                    OperationResultWithMedium>
+        operation_result_with_mediums;
   };
 
   // Represents an endpoint that we've discovered. Typically, the implementation
@@ -274,6 +277,9 @@ class BasePcpHandler : public PcpHandler,
     location::nearby::proto::connections::Medium medium =
         location::nearby::proto::connections::Medium::UNKNOWN_MEDIUM;
     Status status = {Status::kError};
+    location::nearby::proto::connections::OperationResultCode
+        operation_result_code = location::nearby::proto::connections::
+            OperationResultCode::DETAIL_UNKNOWN;
     std::unique_ptr<EndpointChannel> endpoint_channel;
   };
 
@@ -412,6 +418,16 @@ class BasePcpHandler : public PcpHandler,
 
   void StripOutWifiHotspotMedium(ConnectionInfo& connection_info);
 
+  std::unique_ptr<location::nearby::analytics::proto::ConnectionsLog::
+                      OperationResultWithMedium>
+  GetOperationResultWithMediumByResultCode(
+      ClientProxy* client, location::nearby::proto::connections::Medium medium,
+      int update_index,
+      location::nearby::proto::connections::OperationResultCode
+          operation_result_code,
+      location::nearby::proto::connections::ConnectionMode connection_mode =
+          location::nearby::proto::connections::ConnectionMode::LEGACY);
+
   // Test only.
   int GetEndpointLostByMediumAlarmsCount() RUN_ON_PCP_HANDLER_THREAD() {
     return endpoint_lost_by_medium_alarms_.size();
@@ -520,7 +536,7 @@ class BasePcpHandler : public PcpHandler,
       std::string_view endpoint_id,
       std::unique_ptr<::securegcm::UKey2Handshake> ukey2,
       std::string_view auth_token, const ByteArray& raw_auth_token,
-      BasePcpHandler::PendingConnectionInfo& connection_info);
+      BasePcpHandler::PendingConnectionInfo& pending_connection_info);
 
   static Exception WriteConnectionRequestFrame(
       NearbyDevice::Type device_type, absl::string_view device_proto_bytes,
@@ -544,7 +560,7 @@ class BasePcpHandler : public PcpHandler,
   // not) have called ClientProxy::OnConnectionInitiated. Therefore, we'll
   // call both preInit and preResult failures.
   void ProcessTieBreakLoss(ClientProxy* client, const std::string& endpoint_id,
-                           PendingConnectionInfo* info);
+                           PendingConnectionInfo* pending_connection_info);
 
   // Returns true if the bluetooth endpoint based on remote bluetooth mac
   // address is created and appended into discovered_endpoints_ with key
@@ -567,7 +583,10 @@ class BasePcpHandler : public PcpHandler,
   void ProcessPreConnectionInitiationFailure(
       ClientProxy* client, Medium medium, const std::string& endpoint_id,
       EndpointChannel* channel, bool is_incoming, absl::Time start_time,
-      Status status, Future<Status>* result);
+      Status status,
+      location::nearby::proto::connections::OperationResultCode
+          operation_result_code,
+      Future<Status>* result);
   void ProcessPreConnectionResultFailure(ClientProxy* client,
                                          const std::string& endpoint_id,
                                          bool should_call_disconnect_endpoint,
@@ -593,15 +612,16 @@ class BasePcpHandler : public PcpHandler,
   // array.
   std::string GetHashedConnectionToken(const ByteArray& token_bytes);
 
-  static void LogConnectionAttemptFailure(ClientProxy* client, Medium medium,
-                                          const std::string& endpoint_id,
-                                          bool is_incoming,
-                                          absl::Time start_time,
-                                          EndpointChannel* endpoint_channel);
+  static void LogConnectionAttemptFailure(
+      ClientProxy* client, Medium medium, const std::string& endpoint_id,
+      bool is_incoming, absl::Time start_time,
+      EndpointChannel* endpoint_channel,
+      location::nearby::proto::connections::OperationResultCode
+          operation_result_code);
 
   static void LogConnectionAttemptSuccess(
       const std::string& endpoint_id,
-      const PendingConnectionInfo& connection_info);
+      const PendingConnectionInfo& pending_connection_info);
 
   // Returns true if the client cancels the operation in progress through the
   // endpoint id. This is done by CancellationFlag.
@@ -642,7 +662,7 @@ class BasePcpHandler : public PcpHandler,
   // Returns the intersection of supported mediums based on the mediums reported
   // by the remote client and the local client's advertising options.
   BooleanMediumSelector ComputeIntersectionOfSupportedMediums(
-      const PendingConnectionInfo& connection_info);
+      const PendingConnectionInfo& pending_connection_info);
 
   void OptionsAllowed(const BooleanMediumSelector& allowed,
                       std::ostringstream& result) const;

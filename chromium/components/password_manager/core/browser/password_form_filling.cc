@@ -17,6 +17,7 @@
 #include "components/autofill/core/common/unique_ids.h"
 #include "components/password_manager/core/browser/browser_save_password_progress_logger.h"
 #include "components/password_manager/core/browser/features/password_features.h"
+#include "components/password_manager/core/browser/password_change_service_interface.h"
 #include "components/password_manager/core/browser/password_feature_manager.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_form_metrics_recorder.h"
@@ -70,14 +71,20 @@ void Autofill(PasswordManagerClient* client,
   std::unique_ptr<BrowserSavePasswordProgressLogger> logger;
   if (password_manager_util::IsLoggingActive(client)) {
     logger = std::make_unique<BrowserSavePasswordProgressLogger>(
-        client->GetLogManager());
+        client->GetCurrentLogManager());
     logger->LogMessage(Logger::STRING_PASSWORDMANAGER_AUTOFILL);
   }
+
+  // TODO(crbug.com/394297841): Check password change availability per website.
+  // Finch experiment should not be started without fixing it.
+  bool notify_browser_of_successful_filling =
+      client->GetPasswordChangeService() &&
+      client->GetPasswordChangeService()->IsPasswordChangeAvailable();
 
   PasswordFormFillData fill_data = CreatePasswordFormFillData(
       form_for_autofill, best_matches, std::move(preferred_match),
       client->GetLastCommittedOrigin(), wait_for_username,
-      suggestion_banned_fields);
+      suggestion_banned_fields, notify_browser_of_successful_filling);
   if (logger) {
     logger->LogBoolean(Logger::STRING_WAIT_FOR_USERNAME, wait_for_username);
   }
@@ -135,13 +142,7 @@ LikelyFormFilling SendFillInformationToRenderer(
   }
 
   if (best_matches.empty() && !webauthn_suggestions_available) {
-    bool should_show_popup_without_passwords =
-        client->IsSavingAndFillingEnabled(observed_form.url) &&
-        (client->GetPasswordFeatureManager()->ShouldShowAccountStorageOptIn() ||
-         client->GetPasswordFeatureManager()->ShouldShowAccountStorageReSignin(
-             client->GetLastCommittedURL()));
-
-    driver->InformNoSavedCredentials(should_show_popup_without_passwords);
+    driver->InformNoSavedCredentials();
     metrics_recorder->RecordFillEvent(
         PasswordFormMetricsRecorder::kManagerFillEventNoCredential);
     return LikelyFormFilling::kNoFilling;
@@ -214,6 +215,8 @@ LikelyFormFilling SendFillInformationToRenderer(
   } else if (observed_form.accepts_webauthn_credentials) {
     wait_for_username_reason =
         WaitForUsernameReason::kAcceptsWebAuthnCredentials;
+  } else if (observed_form.IsSingleUsername()) {
+    wait_for_username_reason = WaitForUsernameReason::kSingleUsernameForm;
   }
 
   // Record no "FirstWaitForUsernameReason" metrics for a form that is not meant
@@ -259,12 +262,15 @@ PasswordFormFillData CreatePasswordFormFillData(
     std::optional<PasswordForm> preferred_match,
     const Origin& main_frame_origin,
     bool wait_for_username,
-    base::span<autofill::FieldRendererId> suggestion_banned_fields) {
+    base::span<const autofill::FieldRendererId> suggestion_banned_fields,
+    bool notify_browser_of_successful_filling) {
   PasswordFormFillData result;
 
   result.form_renderer_id = form_on_page.form_data.renderer_id();
   result.url = form_on_page.url;
   result.wait_for_username = wait_for_username;
+  result.notify_browser_of_successful_filling =
+      notify_browser_of_successful_filling;
 
   if (!form_on_page.only_for_fallback &&
       (form_on_page.HasPasswordElement() || form_on_page.IsSingleUsername())) {
@@ -290,6 +296,8 @@ PasswordFormFillData CreatePasswordFormFillData(
 
     result.preferred_login.uses_account_store =
         preferred_match->IsUsingAccountStore();
+    result.preferred_login.is_grouped_affiliation =
+        (GetMatchType(preferred_match.value()) == GetLoginMatchType::kGrouped);
 
     if (GetMatchType(preferred_match.value()) != GetLoginMatchType::kExact ||
         !IsSameOrigin(main_frame_origin, form_on_page.url)) {
@@ -310,6 +318,8 @@ PasswordFormFillData CreatePasswordFormFillData(
     value.username_value = match.username_value;
     value.password_value = match.password_value;
     value.uses_account_store = match.IsUsingAccountStore();
+    value.is_grouped_affiliation =
+        (GetMatchType(match) == GetLoginMatchType::kGrouped);
 
     if (GetMatchType(match) != GetLoginMatchType::kExact) {
       value.realm = GetPreferredRealm(match);

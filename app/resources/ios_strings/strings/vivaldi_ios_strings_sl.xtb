@@ -2,25 +2,47 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="sl">
 <translation id="1063263220330818888">Zasebno iskanje</translation>
+<translation id="1097355661841455597">Radi bi slišali vaše misli.</translation>
 <translation id="1137850887415122856">Če želite zakleniti zasebne zavihke, nastavite Touch ID, Face ID ali geslo.</translation>
 <translation id="1310184829257917508">Vprašaj za zasebno odpiranje povezav iz drugih aplikacij</translation>
+<translation id="1561609750546413721">Vivaldi Prevajalec</translation>
 <translation id="207677936531967364">Stran z novim zasebnim zavihkom</translation>
+<translation id="2353953000228441783">Privzeti pogled spletnega mesta</translation>
+<translation id="2394192052244849643">Prilepi in poišči</translation>
 <translation id="2418705169960294134">Nov zasebni zavihek</translation>
+<translation id="2783161812871838616">Zahtevaj spletno mesto za namizni računalnik</translation>
 <translation id="2899836479226240291">Povezave v programu Vivaldi lahko samodejno odprete tako, da ga nastavite kot privzeto aplikacijo brskalnika.</translation>
+<translation id="3365529507898144230">Shrani v Fotografije</translation>
+<translation id="3434473769478814796">Prilepi in pojdi</translation>
 <translation id="3463990832590571933">Odpri v novem zasebnem zavihku</translation>
 <translation id="3473652525653758699">Novo zasebno okno</translation>
 <translation id="3501504415290398157">Za odklepanje zasebnih zavihkov uporabite <ph name="BIOMETRIC_AUTHENITCATION_TYPE" />.</translation>
 <translation id="3692650606013198282">Odpri zasebno</translation>
 <translation id="3981599532037327317">Odpri ${url} zasebno</translation>
 <translation id="398477389655464998">Kopiraj povezavo do poudarka</translation>
+<translation id="4026745073321351206">🙄 Ste opazili težavo?</translation>
+<translation id="4304713468139749426">Upravitelj gesel</translation>
+<translation id="473775607612524610">Posodobi</translation>
 <translation id="4755216899422789286">Odpri URL-je v Vivaldiju</translation>
+<translation id="4802185666270672526">Skrij zahtevo za namizno spletno mesto</translation>
+<translation id="5217245356412073535">Privzeti pogled spletnega mesta lahko spremenite v namizje v Nastavitve &gt; Nastavitve vsebine</translation>
+<translation id="5271549068863921519">Shrani geslo</translation>
+<translation id="5317780077021120954">Shrani</translation>
 <translation id="5431239785743546285">Strani, ki ste jih prebrali</translation>
+<translation id="5614553682702429503">Shranim geslo?</translation>
+<translation id="570209299585559496">Privzeti pogled spletnega mesta lahko spremenite v namizje v nastavitvah in nato v nastavitvah vsebine</translation>
+<translation id="5962477178930921574">Prilepi in poišči</translation>
 <translation id="6233792867654386826">Odpre vnesene URL-je v Vivaldiju.</translation>
+<translation id="6680416467695217368">Prilagodi meni</translation>
 <translation id="6827597288286078054">Zasebno iskanje</translation>
+<translation id="6851516051005285358">Zahtevaj spletno mesto za namizni računalnik</translation>
 <translation id="7307970171564921489">Odklenite zasebne zavihke z <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
 <translation id="7347289093190902150">Želite odpreti zasebno?</translation>
 <translation id="7549299604720382000">Nov zasebni zavihek</translation>
+<translation id="755255281989213264">Prilagodite meni</translation>
 <translation id="7920949005883349320">Zasebnost in varnost</translation>
-<translation id="8031932676440435547">Shrani v fotografije</translation>
+<translation id="7961015016161918242">Nikoli</translation>
 <translation id="8326104954595890674">Nov zasebni zavihek</translation>
+<translation id="8756969031206844760">Posodobim geslo?</translation>
+<translation id="9094033019050270033">Posodobi geslo</translation>
 </translationbundle>

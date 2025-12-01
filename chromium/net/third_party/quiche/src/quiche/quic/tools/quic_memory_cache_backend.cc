@@ -14,6 +14,7 @@
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "absl/synchronization/mutex.h"
 #include "quiche/quic/core/http/spdy_utils.h"
 #include "quiche/quic/platform/api/quic_bug_tracker.h"
 #include "quiche/quic/platform/api/quic_logging.h"
@@ -39,7 +40,7 @@ void QuicMemoryCacheBackend::ResourceFile::Read() {
                      << file_name_;
     return;
   }
-  file_contents_ = *maybe_file_contents;
+  file_contents_ = *std::move(maybe_file_contents);
 
   // First read the headers.
   for (size_t start = 0; start < file_contents_.length();) {
@@ -53,12 +54,11 @@ void QuicMemoryCacheBackend::ResourceFile::Read() {
     if (file_contents_[pos - 1] == '\r') {
       len -= 1;
     }
-    absl::string_view line(file_contents_.data() + start, len);
+    auto line = absl::string_view(file_contents_).substr(start, len);
     start = pos + 1;
     // Headers end with an empty line.
     if (line.empty()) {
-      body_ = absl::string_view(file_contents_.data() + start,
-                                file_contents_.size() - start);
+      body_ = absl::string_view(file_contents_).substr(start);
       break;
     }
     // Extract the status from the HTTP first line.
@@ -130,14 +130,13 @@ void QuicMemoryCacheBackend::ResourceFile::HandleXOriginalUrl() {
 
 const QuicBackendResponse* QuicMemoryCacheBackend::GetResponse(
     absl::string_view host, absl::string_view path) const {
-  quiche::QuicheWriterMutexLock lock(&response_mutex_);
+  absl::WriterMutexLock lock(&response_mutex_);
 
   auto it = responses_.find(GetKey(host, path));
   if (it == responses_.end()) {
     uint64_t ignored = 0;
     if (generate_bytes_response_) {
-      if (absl::SimpleAtoi(absl::string_view(path.data() + 1, path.size() - 1),
-                           &ignored)) {
+      if (absl::SimpleAtoi(path.substr(1), &ignored)) {
         // The actual parsed length is ignored here and will be recomputed
         // by the caller.
         return generate_bytes_response_.get();
@@ -166,7 +165,7 @@ void QuicMemoryCacheBackend::AddSimpleResponse(absl::string_view host,
 }
 
 void QuicMemoryCacheBackend::AddDefaultResponse(QuicBackendResponse* response) {
-  quiche::QuicheWriterMutexLock lock(&response_mutex_);
+  absl::WriterMutexLock lock(&response_mutex_);
   default_response_.reset(response);
 }
 
@@ -193,7 +192,7 @@ void QuicMemoryCacheBackend::AddResponse(absl::string_view host,
 bool QuicMemoryCacheBackend::SetResponseDelay(absl::string_view host,
                                               absl::string_view path,
                                               QuicTime::Delta delay) {
-  quiche::QuicheWriterMutexLock lock(&response_mutex_);
+  absl::WriterMutexLock lock(&response_mutex_);
   auto it = responses_.find(GetKey(host, path));
   if (it == responses_.end()) return false;
 
@@ -271,7 +270,7 @@ bool QuicMemoryCacheBackend::InitializeBackend(
 }
 
 void QuicMemoryCacheBackend::GenerateDynamicResponses() {
-  quiche::QuicheWriterMutexLock lock(&response_mutex_);
+  absl::WriterMutexLock lock(&response_mutex_);
   // Add a generate bytes response.
   quiche::HttpHeaderBlock response_headers;
   response_headers[":status"] = "200";
@@ -362,7 +361,7 @@ QuicMemoryCacheBackend::ProcessWebTransportRequest(
 
 QuicMemoryCacheBackend::~QuicMemoryCacheBackend() {
   {
-    quiche::QuicheWriterMutexLock lock(&response_mutex_);
+    absl::WriterMutexLock lock(&response_mutex_);
     responses_.clear();
   }
 }
@@ -372,7 +371,7 @@ void QuicMemoryCacheBackend::AddResponseImpl(
     SpecialResponseType response_type, HttpHeaderBlock response_headers,
     absl::string_view response_body, HttpHeaderBlock response_trailers,
     const std::vector<quiche::HttpHeaderBlock>& early_hints) {
-  quiche::QuicheWriterMutexLock lock(&response_mutex_);
+  absl::WriterMutexLock lock(&response_mutex_);
 
   QUICHE_DCHECK(!host.empty())
       << "Host must be populated, e.g. \"www.google.com\"";

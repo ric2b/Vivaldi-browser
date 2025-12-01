@@ -72,11 +72,19 @@ ScriptPromise<IDLString> AISummarizer::summarize(
     return promise;
   }
 
+  String trimmed_input = input.StripWhiteSpace();
+  if (trimmed_input.empty()) {
+    resolver->Resolve(trimmed_input);
+    return promise;
+  }
+
   auto pending_remote = CreateModelExecutionResponder(
       script_state, signal, resolver, task_runner_,
       AIMetrics::AISessionType::kSummarizer,
-      /*complete_callback=*/base::DoNothing());
-  summarizer_remote_->Summarize(input, options->getContextOr(WTF::String("")),
+      /*complete_callback=*/base::DoNothing(),
+      /*overflow_callback=*/base::DoNothing());
+  summarizer_remote_->Summarize(trimmed_input,
+                                options->getContextOr(g_empty_string),
                                 std::move(pending_remote));
   return promise;
 }
@@ -107,18 +115,24 @@ ReadableStream* AISummarizer::summarizeStreaming(
   }
 
   AbortSignal* signal = options->getSignalOr(nullptr);
-  if (signal && signal->aborted()) {
-    // TODO(crbug.com/374879796): figure out how to handling aborted signal for
-    // the streaming API.
-    ThrowAbortedException(exception_state);
+  if (HandleAbortSignal(signal, script_state, exception_state)) {
     return nullptr;
   }
+
+  String trimmed_input = input.StripWhiteSpace();
+  if (trimmed_input.empty()) {
+    return CreateEmptyReadableStream(script_state,
+                                     AIMetrics::AISessionType::kSummarizer);
+  }
+
   auto [readable_stream, pending_remote] =
       CreateModelExecutionStreamingResponder(
           script_state, signal, task_runner_,
           AIMetrics::AISessionType::kSummarizer,
-          /*complete_callback=*/base::DoNothing());
-  summarizer_remote_->Summarize(input, options->getContextOr(WTF::String("")),
+          /*complete_callback=*/base::DoNothing(),
+          /*overflow_callback=*/base::DoNothing());
+  summarizer_remote_->Summarize(trimmed_input,
+                                options->getContextOr(g_empty_string),
                                 std::move(pending_remote));
   return readable_stream;
 }

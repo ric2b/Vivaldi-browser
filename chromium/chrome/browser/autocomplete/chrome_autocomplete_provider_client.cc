@@ -8,7 +8,6 @@
 
 #include <algorithm>
 
-#include "base/feature_list.h"
 #include "base/functional/callback_helpers.h"
 #include "base/strings/cstring_view.h"
 #include "base/strings/utf_string_conversions.h"
@@ -16,6 +15,7 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
+#include "chrome/browser/autocomplete/document_suggestions_service_factory.h"
 #include "chrome/browser/autocomplete/in_memory_url_index_factory.h"
 #include "chrome/browser/autocomplete/provider_state_service_factory.h"
 #include "chrome/browser/autocomplete/remote_suggestions_service_factory.h"
@@ -77,10 +77,6 @@
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "url/origin.h"
 
-// Vivaldi
-#include "components/direct_match/direct_match_service.h"
-#include "components/direct_match/direct_match_service_factory.h"
-
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/app_list/search/essential_search/essential_search_manager.h"
 #include "chrome/browser/browser_process.h"
@@ -89,6 +85,8 @@
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/autocomplete/keyword_extensions_delegate_impl.h"
+#include "chrome/browser/autocomplete/unscoped_extension_provider_delegate_impl.h"
+#include "extensions/common/extension_features.h"
 #endif
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -111,6 +109,10 @@
 
 // Vivaldi
 #include "app/vivaldi_apptools.h"
+#include "browser/ui/webui_url_constants.h"
+#include "browser/vivaldi_internal_urls_constants.cc"
+#include "components/direct_match/direct_match_service.h"
+#include "components/direct_match/direct_match_service_factory.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 namespace {
@@ -144,14 +146,8 @@ ChromeAutocompleteProviderClient::ChromeAutocompleteProviderClient(
     : profile_(profile),
       scheme_classifier_(profile),
       url_consent_helper_(
-          base::FeatureList::IsEnabled(
-              omnibox::kPrefBasedDataCollectionConsentHelper)
-              ? unified_consent::UrlKeyedDataCollectionConsentHelper::
-                    NewAnonymizedDataCollectionConsentHelper(
-                        profile_->GetPrefs())
-              : unified_consent::UrlKeyedDataCollectionConsentHelper::
-                    NewPersonalizedDataCollectionConsentHelper(
-                        SyncServiceFactory::GetForProfile(profile_))),
+          unified_consent::UrlKeyedDataCollectionConsentHelper::
+              NewAnonymizedDataCollectionConsentHelper(profile_->GetPrefs())),
       tab_matcher_(GetTemplateURLService(), profile_),
       storage_partition_(nullptr),
       omnibox_triggered_feature_service_(
@@ -216,13 +212,6 @@ bookmarks::BookmarkModel* ChromeAutocompleteProviderClient::GetBookmarkModel() {
   return BookmarkModelFactory::GetForBrowserContext(profile_);
 }
 
-// Vivaldi
-direct_match::DirectMatchService*
-ChromeAutocompleteProviderClient::GetDirectMatchService() {
-  return direct_match::DirectMatchServiceFactory::GetForBrowserContext(
-      profile_);
-}
-
 history::URLDatabase* ChromeAutocompleteProviderClient::GetInMemoryDatabase() {
   history::HistoryService* history_service = GetHistoryService();
 
@@ -242,6 +231,12 @@ TemplateURLService* ChromeAutocompleteProviderClient::GetTemplateURLService() {
 const TemplateURLService*
 ChromeAutocompleteProviderClient::GetTemplateURLService() const {
   return TemplateURLServiceFactory::GetForProfile(profile_);
+}
+
+DocumentSuggestionsService*
+ChromeAutocompleteProviderClient::GetDocumentSuggestionsService() const {
+  return DocumentSuggestionsServiceFactory::GetForProfile(
+      profile_, /*create_if_necessary=*/true);
 }
 
 RemoteSuggestionsService*
@@ -288,6 +283,19 @@ ChromeAutocompleteProviderClient::GetKeywordExtensionsDelegate(
 #endif
 }
 
+std::unique_ptr<UnscopedExtensionProviderDelegate>
+ChromeAutocompleteProviderClient::GetUnscopedExtensionProviderDelegate(
+    UnscopedExtensionProvider* provider) {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  CHECK(base::FeatureList::IsEnabled(
+      extensions_features::kExperimentalOmniboxLabs));
+  return std::make_unique<UnscopedExtensionProviderDelegateImpl>(profile_,
+                                                                 provider);
+#else
+  return nullptr;
+#endif
+}
+
 std::string ChromeAutocompleteProviderClient::GetAcceptLanguages() const {
   return profile_->GetPrefs()->GetString(language::prefs::kAcceptLanguages);
 }
@@ -302,6 +310,9 @@ std::vector<std::u16string> ChromeAutocompleteProviderClient::GetBuiltinURLs() {
   std::vector<std::u16string> builtins;
   const base::span<const base::cstring_view> url_hosts =
       chrome::ChromeURLHosts();
+  const base::span<const base::cstring_view> vivaldi_url_hosts =
+      vivaldi::VivaldiURLHosts();
+
 #if BUILDFLAG(IS_ANDROID)
   builtins.reserve(url_hosts.size());
 #else
@@ -311,6 +322,13 @@ std::vector<std::u16string> ChromeAutocompleteProviderClient::GetBuiltinURLs() {
   for (base::cstring_view chrome_builtin_host : url_hosts) {
     builtins.push_back(base::ASCIIToUTF16(chrome_builtin_host));
   }
+
+#if defined(VIVALDI_BUILD)
+  for (base::cstring_view vivaldi_builtin_host : vivaldi_url_hosts) {
+    builtins.push_back(base::ASCIIToUTF16(vivaldi_builtin_host));
+  }
+#endif
+
   std::ranges::sort(builtins);
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -327,12 +345,21 @@ std::vector<std::u16string> ChromeAutocompleteProviderClient::GetBuiltinURLs() {
 std::vector<std::u16string>
 ChromeAutocompleteProviderClient::GetBuiltinsToProvideAsUserTypes() {
   std::vector<std::u16string> builtins_to_provide;
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+  builtins_to_provide.push_back(vivaldi::kVivaldiUISettingsURL16);
+  builtins_to_provide.push_back(vivaldi::kVivaldiUIHelpURL16);
+#endif
+  builtins_to_provide.push_back(vivaldi::kVivaldiUIVersionURL16);
+#if !defined(VIVALDI_BUILD)
   builtins_to_provide.push_back(chrome::kChromeUIChromeURLsURL16);
   builtins_to_provide.push_back(chrome::kChromeUIFlagsURL16);
-#if !BUILDFLAG(IS_ANDROID)
+#endif
+#if !BUILDFLAG(IS_ANDROID) && !defined(VIVALDI_BUILD)
   builtins_to_provide.push_back(chrome::kChromeUISettingsURL16);
 #endif
+#if !defined(VIVALDI_BUILD)
   builtins_to_provide.push_back(chrome::kChromeUIVersionURL16);
+#endif
   return builtins_to_provide;
 }
 
@@ -396,15 +423,9 @@ bool ChromeAutocompleteProviderClient::SearchSuggestEnabled() const {
                ->ShouldDisableSearchSuggest());
 #else
 
-#if defined(VIVALDI_BUILD)
-  if (vivaldi::IsVivaldiRunning()) {
-    const PrefService* prefs = profile_->GetPrefs();
-    return prefs->GetBoolean(
-        vivaldiprefs::kAddressBarInlineSearchSuggestEnabled);
-  }
-#endif
-
-  return profile_->GetPrefs()->GetBoolean(prefs::kSearchSuggestEnabled);
+  return from_search_field_ ?
+    profile_->GetPrefs()->GetBoolean(vivaldiprefs::kAddressBarSearchSuggestEnabled) :
+    profile_->GetPrefs()->GetBoolean(prefs::kSearchSuggestEnabled);
 #endif
 }
 
@@ -412,8 +433,7 @@ bool ChromeAutocompleteProviderClient::AllowDeletingBrowserHistory() const {
   return profile_->GetPrefs()->GetBoolean(prefs::kAllowDeletingBrowserHistory);
 }
 
-bool ChromeAutocompleteProviderClient::IsPersonalizedUrlDataCollectionActive()
-    const {
+bool ChromeAutocompleteProviderClient::IsUrlDataCollectionActive() const {
   return url_consent_helper_->IsEnabled();
 }
 
@@ -527,12 +547,10 @@ bool ChromeAutocompleteProviderClient::StrippedURLsAreEqual(
   const TemplateURLService* template_url_service = GetTemplateURLService();
   return AutocompleteMatch::GURLToStrippedGURL(
              url1, *input, template_url_service, std::u16string(),
-             /*keep_search_intent_params=*/false,
-             /*normalize_search_terms=*/false) ==
+             /*keep_search_intent_params=*/false) ==
          AutocompleteMatch::GURLToStrippedGURL(
              url2, *input, template_url_service, std::u16string(),
-             /*keep_search_intent_params=*/false,
-             /*normalize_search_terms=*/false);
+             /*keep_search_intent_params=*/false);
 }
 
 void ChromeAutocompleteProviderClient::OpenSharingHub() {
@@ -603,3 +621,19 @@ void ChromeAutocompleteProviderClient::PromptPageTranslation() {
   }
 #endif  // !BUILDFLAG(IS_ANDROID)
 }
+
+// Vivaldi
+direct_match::DirectMatchService*
+ChromeAutocompleteProviderClient::GetDirectMatchService() {
+  return direct_match::DirectMatchServiceFactory::GetForBrowserContext(
+      profile_);
+}
+
+void ChromeAutocompleteProviderClient::SetFromSearchField(bool from_search_field) {
+  from_search_field_ = from_search_field;
+}
+
+bool ChromeAutocompleteProviderClient::GetFromSearchField() {
+  return from_search_field_;
+}
+// End Vivaldi

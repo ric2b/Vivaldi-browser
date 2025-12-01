@@ -9,6 +9,7 @@
 
 #include "ash/public/cpp/login_screen_test_api.h"
 #include "ash/public/cpp/reauth_reason.h"
+#include "ash/shell.h"
 #include "base/auto_reset.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -49,14 +50,16 @@
 #include "components/user_manager/user_manager.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_launcher.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
+#include "ui/events/test/event_generator.h"
 
 namespace ash {
 
 namespace {
 
 constexpr char kUserEmail[] = "test-user@gmail.com";
-constexpr char kGaiaID[] = "111111";
+constexpr GaiaId::Literal kGaiaID("111111");
 constexpr char kTokenHandle[] = "test_token_handle";
 constexpr char kTestingFileName[] = "testing-file.txt";
 
@@ -192,9 +195,9 @@ IN_PROC_BROWSER_TEST_F(PasswordChangeTest, SubmitOnEnterKeyPressed) {
   // Fill out and submit the old password, using "ENTER" key.
   test::PasswordChangedTypeOldPassword(
       test_user_info_.auth_config.online_password);
-  ASSERT_TRUE(ui_test_utils::SendKeyPressToWindowSync(
-      nullptr, ui::VKEY_RETURN, false /* control */, false /* shift */,
-      false /* alt */, false /* command */));
+
+  ui::test::EventGenerator generator(ash::Shell::GetPrimaryRootWindow());
+  generator.PressKey(ui::VKEY_RETURN, 0);
 
   test::CreatePasswordUpdateNoticePageWaiter()->Wait();
   test::PasswordUpdateNoticeExpectDone();

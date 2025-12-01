@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "cc/test/skia_common.h"
 
 #include <stddef.h>
@@ -258,7 +263,7 @@ scoped_refptr<SkottieWrapper> CreateSkottie(const gfx::Size& size,
 }
 
 scoped_refptr<SkottieWrapper> CreateSkottieFromString(std::string_view json) {
-  base::span<const uint8_t> json_span = base::as_bytes(base::make_span(json));
+  base::span<const uint8_t> json_span = base::as_byte_span(json);
   return SkottieWrapper::UnsafeCreateSerializable(
       std::vector<uint8_t>(json_span.begin(), json_span.end()));
 }

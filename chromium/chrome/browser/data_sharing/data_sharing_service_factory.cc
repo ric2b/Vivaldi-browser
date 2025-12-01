@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/functional/callback.h"
 #include "base/no_destructor.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
@@ -57,7 +58,8 @@ DataSharingServiceFactory::DataSharingServiceFactory()
 
 DataSharingServiceFactory::~DataSharingServiceFactory() = default;
 
-KeyedService* DataSharingServiceFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+DataSharingServiceFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
   bool isFeatureEnabled = base::FeatureList::IsEnabled(
                               data_sharing::features::kDataSharingFeature) ||
@@ -65,7 +67,7 @@ KeyedService* DataSharingServiceFactory::BuildServiceInstanceFor(
                               data_sharing::features::kDataSharingJoinOnly);
 
   if (!isFeatureEnabled || context->IsOffTheRecord()) {
-    return new EmptyDataSharingService();
+    return std::make_unique<EmptyDataSharingService>();
   }
 
   Profile* profile = Profile::FromBrowserContext(context);
@@ -74,14 +76,16 @@ KeyedService* DataSharingServiceFactory::BuildServiceInstanceFor(
 
 #if BUILDFLAG(IS_ANDROID)
   ui_delegate = std::make_unique<DataSharingUIDelegateAndroid>(profile);
-  sdk_delegate = DataSharingSDKDelegate::CreateDelegate(
-      DataSharingServiceFactoryBridge::CreateJavaSDKDelegate(profile));
+  // Profile will be alive by the time callback runs.
+  auto callback = base::BindOnce(
+      &DataSharingServiceFactoryBridge::CreateJavaSDKDelegate, profile);
+  sdk_delegate = DataSharingSDKDelegate::CreateDelegate(std::move(callback));
 #else
   ui_delegate = std::make_unique<DataSharingUIDelegateDesktop>(profile);
   sdk_delegate = std::make_unique<DataSharingSDKDelegateDesktop>(context);
 #endif  // BUILDFLAG(IS_ANDROID)
 
-  return new DataSharingServiceImpl(
+  return std::make_unique<DataSharingServiceImpl>(
       profile->GetPath(),
       profile->GetDefaultStoragePartition()
           ->GetURLLoaderFactoryForBrowserProcess(),

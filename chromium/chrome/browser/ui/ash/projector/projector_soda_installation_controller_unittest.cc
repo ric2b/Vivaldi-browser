@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "projector_soda_installation_controller.h"
+
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/public/cpp/locale_update_controller.h"
@@ -75,7 +76,7 @@ class ProjectorSodaInstallationControllerTest : public ChromeAshTestBase {
     scoped_feature_list_.InitWithFeatures(
         {features::kOnDeviceSpeechRecognition},
         {features::kInternalServerSideSpeechRecognition,
-         features::kForceEnableServerSideSpeechRecognitionForDev});
+         features::kForceEnableServerSideSpeechRecognition});
   }
   ProjectorSodaInstallationControllerTest(
       const ProjectorSodaInstallationControllerTest&) = delete;
@@ -87,7 +88,9 @@ class ProjectorSodaInstallationControllerTest : public ChromeAshTestBase {
   void SetUp() override {
     ChromeAshTestBase::SetUp();
 
-    ASSERT_TRUE(testing_profile_manager_.SetUp());
+    testing_profile_manager_ = std::make_unique<TestingProfileManager>(
+        TestingBrowserProcess::GetGlobal());
+    ASSERT_TRUE(testing_profile_manager_->SetUp());
     testing_profile_ = ProfileManager::GetPrimaryUserProfile();
 
     soda_installer_ = std::make_unique<MockSodaInstaller>();
@@ -125,6 +128,14 @@ class ProjectorSodaInstallationControllerTest : public ChromeAshTestBase {
     soda_installer_.reset();
 
     ChromeAshTestBase::TearDown();
+    // ProfileManager is destroyed in OnHelperWillBeDestroyed()
+    // invoked in ChromeAshTestBase::TearDown().
+    EXPECT_FALSE(testing_profile_manager_.get());
+  }
+
+  void OnHelperWillBeDestroyed() override {
+    ChromeAshTestBase::OnHelperWillBeDestroyed();
+    testing_profile_manager_.reset();
   }
 
   MockAppClient& app_client() { return *mock_app_client_; }
@@ -144,8 +155,7 @@ class ProjectorSodaInstallationControllerTest : public ChromeAshTestBase {
  private:
   raw_ptr<Profile, DanglingUntriaged> testing_profile_ = nullptr;
 
-  TestingProfileManager testing_profile_manager_{
-      TestingBrowserProcess::GetGlobal()};
+  std::unique_ptr<TestingProfileManager> testing_profile_manager_;
 
   std::unique_ptr<MockSodaInstaller> soda_installer_;
   std::unique_ptr<MockProjectorClient> mock_client_;

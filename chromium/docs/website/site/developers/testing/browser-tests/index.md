@@ -197,7 +197,7 @@ xvfb-run -s "-screen 0 1024x768x24" ./out/Default/browser_tests
 
 For more info, we have an entire separate page to explain how to run
 [browser_tests on specific
-platforms](http://www.chromium.org/developers/testing/running-tests#TOC-Running-basic-tests).
+platforms](/developers/testing/running-tests#TOC-Running-basic-tests).
 
 ## Networking
 

@@ -5,7 +5,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.isTargetClosedError = exports.Connection = void 0;
+exports.Connection = void 0;
+exports.isTargetClosedError = isTargetClosedError;
 const CDPSession_js_1 = require("../api/CDPSession.js");
 const CallbackRegistry_js_1 = require("../common/CallbackRegistry.js");
 const Debug_js_1 = require("../common/Debug.js");
@@ -26,9 +27,12 @@ class Connection extends EventEmitter_js_1.EventEmitter {
     #sessions = new Map();
     #closed = false;
     #manuallyAttached = new Set();
-    #callbacks = new CallbackRegistry_js_1.CallbackRegistry();
-    constructor(url, transport, delay = 0, timeout) {
+    #callbacks;
+    #rawErrors = false;
+    constructor(url, transport, delay = 0, timeout, rawErrors = false) {
         super();
+        this.#rawErrors = rawErrors;
+        this.#callbacks = new CallbackRegistry_js_1.CallbackRegistry();
         this.#url = url;
         this.#delay = delay;
         this.#timeout = timeout ?? 180_000;
@@ -116,7 +120,7 @@ class Connection extends EventEmitter_js_1.EventEmitter {
         const object = JSON.parse(message);
         if (object.method === 'Target.attachedToTarget') {
             const sessionId = object.params.sessionId;
-            const session = new CDPSession_js_2.CdpCDPSession(this, object.params.targetInfo.type, sessionId, object.sessionId);
+            const session = new CDPSession_js_2.CdpCDPSession(this, object.params.targetInfo.type, sessionId, object.sessionId, this.#rawErrors);
             this.#sessions.set(sessionId, session);
             this.emit(CDPSession_js_1.CDPSessionEvent.SessionAttached, session);
             const parentSession = this.#sessions.get(object.sessionId);
@@ -144,7 +148,12 @@ class Connection extends EventEmitter_js_1.EventEmitter {
         }
         else if (object.id) {
             if (object.error) {
-                this.#callbacks.reject(object.id, (0, ErrorLike_js_1.createProtocolErrorMessage)(object), object.error.message);
+                if (this.#rawErrors) {
+                    this.#callbacks.rejectRaw(object.id, object.error);
+                }
+                else {
+                    this.#callbacks.reject(object.id, (0, ErrorLike_js_1.createProtocolErrorMessage)(object), object.error.message);
+                }
             }
             else {
                 this.#callbacks.resolve(object.id, object.result);
@@ -222,5 +231,4 @@ exports.Connection = Connection;
 function isTargetClosedError(error) {
     return error instanceof Errors_js_1.TargetCloseError;
 }
-exports.isTargetClosedError = isTargetClosedError;
 //# sourceMappingURL=Connection.js.map

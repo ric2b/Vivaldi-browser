@@ -155,7 +155,7 @@ void NumberDictionary::set_requires_slow_elements() {
 
 template <typename Derived, typename Shape>
 void Dictionary<Derived, Shape>::ClearEntry(InternalIndex entry) {
-  Tagged<Object> the_hole = this->GetReadOnlyRoots().the_hole_value();
+  Tagged<Object> the_hole = GetReadOnlyRoots().the_hole_value();
   PropertyDetails details = PropertyDetails::Empty();
   Cast<Derived>(this)->SetEntry(entry, the_hole, the_hole, details);
 }
@@ -205,8 +205,8 @@ Tagged<Object> GlobalDictionaryShape::Unwrap(Tagged<Object> object) {
   return Cast<PropertyCell>(object)->name();
 }
 
-Handle<Map> GlobalDictionary::GetMap(ReadOnlyRoots roots) {
-  return roots.global_dictionary_map_handle();
+DirectHandle<Map> GlobalDictionary::GetMap(RootsTable& roots) {
+  return roots.global_dictionary_map();
 }
 
 Tagged<Name> NameDictionary::NameAt(InternalIndex entry) {
@@ -219,8 +219,8 @@ Tagged<Name> NameDictionary::NameAt(PtrComprCageBase cage_base,
   return Cast<Name>(KeyAt(cage_base, entry));
 }
 
-Handle<Map> NameDictionary::GetMap(ReadOnlyRoots roots) {
-  return roots.name_dictionary_map_handle();
+DirectHandle<Map> NameDictionary::GetMap(RootsTable& roots) {
+  return roots.name_dictionary_map();
 }
 
 uint32_t NameDictionary::flags() const {
@@ -273,7 +273,7 @@ void GlobalDictionary::SetEntry(InternalIndex entry, Tagged<Object> key,
 }
 
 void GlobalDictionary::ClearEntry(InternalIndex entry) {
-  Tagged<Hole> the_hole = this->GetReadOnlyRoots().the_hole_value();
+  Tagged<Hole> the_hole = GetReadOnlyRoots().the_hole_value();
   set(EntryToIndex(entry) + kEntryKeyIndex, the_hole);
 }
 
@@ -298,23 +298,23 @@ uint32_t NumberDictionaryBaseShape::HashForObject(ReadOnlyRoots roots,
 }
 
 template <AllocationType allocation>
-Handle<Object> NumberDictionaryBaseShape::AsHandle(Isolate* isolate,
-                                                   uint32_t key) {
+DirectHandle<Object> NumberDictionaryBaseShape::AsHandle(Isolate* isolate,
+                                                         uint32_t key) {
   return isolate->factory()->NewNumberFromUint<allocation>(key);
 }
 
 template <AllocationType allocation>
-Handle<Object> NumberDictionaryBaseShape::AsHandle(LocalIsolate* isolate,
-                                                   uint32_t key) {
+DirectHandle<Object> NumberDictionaryBaseShape::AsHandle(LocalIsolate* isolate,
+                                                         uint32_t key) {
   return isolate->factory()->NewNumberFromUint<allocation>(key);
 }
 
-Handle<Map> NumberDictionary::GetMap(ReadOnlyRoots roots) {
-  return roots.number_dictionary_map_handle();
+DirectHandle<Map> NumberDictionary::GetMap(RootsTable& roots) {
+  return roots.number_dictionary_map();
 }
 
-Handle<Map> SimpleNumberDictionary::GetMap(ReadOnlyRoots roots) {
-  return roots.simple_number_dictionary_map_handle();
+DirectHandle<Map> SimpleNumberDictionary::GetMap(RootsTable& roots) {
+  return roots.simple_number_dictionary_map();
 }
 
 bool BaseNameDictionaryShape::IsMatch(DirectHandle<Name> key,
@@ -349,15 +349,15 @@ uint32_t GlobalDictionaryShape::HashForObject(ReadOnlyRoots roots,
 }
 
 template <AllocationType allocation>
-Handle<Object> BaseNameDictionaryShape::AsHandle(Isolate* isolate,
-                                                 Handle<Name> key) {
+DirectHandle<Object> BaseNameDictionaryShape::AsHandle(Isolate* isolate,
+                                                       DirectHandle<Name> key) {
   DCHECK(IsUniqueName(*key));
   return key;
 }
 
 template <AllocationType allocation>
-Handle<Object> BaseNameDictionaryShape::AsHandle(LocalIsolate* isolate,
-                                                 Handle<Name> key) {
+DirectHandle<Object> BaseNameDictionaryShape::AsHandle(LocalIsolate* isolate,
+                                                       DirectHandle<Name> key) {
   DCHECK(IsUniqueName(*key));
   return key;
 }

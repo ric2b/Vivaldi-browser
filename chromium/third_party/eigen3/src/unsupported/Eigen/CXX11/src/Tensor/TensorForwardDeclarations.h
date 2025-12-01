@@ -111,6 +111,8 @@ template <typename StartIndices, typename Sizes, typename XprType>
 class TensorSlicingOp;
 template <typename ReverseDimensions, typename XprType>
 class TensorReverseOp;
+template <typename Rolls, typename XprType>
+class TensorRollOp;
 template <typename PaddingDimensions, typename XprType>
 class TensorPaddingOp;
 template <typename Shuffle, typename XprType>

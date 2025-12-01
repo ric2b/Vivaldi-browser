@@ -377,11 +377,8 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
   // Set the max safe-area-inset* from the browser and update the CSS
   // environment variables for the main frame. If the setter is not a main
   // frame, applies the same safe-area-inset* to the given |setter|'s document
-  // as well.
+  // as well. The input |insets| is unscaled and in the size of dips.
   void SetMaxSafeAreaInsets(LocalFrame* setter, gfx::Insets insets);
-  const gfx::Insets& GetMaxSafeAreaInsets() const {
-    return max_safe_area_insets_;
-  }
 
   void SetDefaultPageScaleLimits(float min_scale, float max_scale);
   void SetUserAgentPageScaleConstraints(
@@ -431,12 +428,20 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
     should_warm_up_compositor_on_prerender_ =
         should_warm_up_compositor_on_prerender;
   }
+  void SetShouldPreparePaintTreeOnPrerender(
+      bool should_prepare_paint_tree_on_prerender) {
+    should_prepare_paint_tree_on_prerender_ =
+        should_prepare_paint_tree_on_prerender;
+  }
   bool IsPrerendering() const { return is_prerendering_; }
   const String& PrerenderMetricSuffix() const {
     return prerender_metric_suffix_;
   }
-  bool ShouldWarmUpCompositorOnPrerender() {
+  bool ShouldWarmUpCompositorOnPrerender() const {
     return should_warm_up_compositor_on_prerender_;
+  }
+  bool ShouldPreparePaintTreeOnPrerender() const {
+    return should_prepare_paint_tree_on_prerender_;
   }
 
   void SetTextAutosizerPageInfo(
@@ -669,8 +674,10 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
   int subframe_count_;
 
   // |max_safe_area_insets_| is coming from the display cutout client.
-  gfx::Insets max_safe_area_insets_;
-  gfx::Insets applied_safe_area_insets_;
+  // |scaled_max_safe_area_insets_| has been scaled to the size of physical
+  // pixles.
+  gfx::InsetsF scaled_max_safe_area_insets_;
+  gfx::InsetsF applied_safe_area_insets_;
 
   // The light, dark and forced_colors mode ColorProviders corresponding to the
   // top-level web container this Page is associated with.
@@ -725,6 +732,8 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
   // feature for prerender case) are enabled. Please see crbug.com/41496019 for
   // more details.
   bool should_warm_up_compositor_on_prerender_ = false;
+  // If true, prepares the paint tree if the page is under prerendering.
+  bool should_prepare_paint_tree_on_prerender_ = false;
 
   // Whether the the Page's main document is a Fenced Frame document. This is
   // only set for the MPArch implementation and is true when the corresponding

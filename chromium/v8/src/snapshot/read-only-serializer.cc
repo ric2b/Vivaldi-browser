@@ -4,6 +4,7 @@
 
 #include "src/snapshot/read-only-serializer.h"
 
+#include "src/common/globals.h"
 #include "src/heap/heap-inl.h"
 #include "src/heap/read-only-heap.h"
 #include "src/heap/visit-object.h"
@@ -78,8 +79,11 @@ class ObjectPreProcessor final {
   }
   void PreProcessCode(Tagged<Code> o) {
     o->ClearInstructionStartForSerialization(isolate_);
-    DCHECK(!o->has_source_position_table_or_bytecode_offset_table());
-    DCHECK(!o->has_deoptimization_data_or_interpreter_data());
+    CHECK(!o->has_source_position_table_or_bytecode_offset_table());
+    CHECK(!o->has_deoptimization_data_or_interpreter_data());
+#ifdef V8_ENABLE_LEAPTIERING
+    CHECK_EQ(o->js_dispatch_handle(), kNullJSDispatchHandle);
+#endif
   }
 
   Isolate* const isolate_;
@@ -208,7 +212,7 @@ class EncodeRelocationsVisitor final : public ObjectVisitor {
     ExternalPointerSlot slot_in_segment{
         reinterpret_cast<Address>(segment_->contents.get() +
                                   SegmentOffsetOf(slot)),
-        slot.tag()};
+        slot.exact_tag()};
     // Constructing no_gc here is not the intended use pattern (instead we
     // should pass it along the entire callchain); but there's little point of
     // doing that here - all of the code in this file relies on GC being

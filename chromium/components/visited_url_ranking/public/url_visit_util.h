@@ -20,8 +20,6 @@ class URLDeduplicationHelper;
 
 namespace visited_url_ranking {
 
-// TODO(crbug.com/330580421): Remove/replace the category blocklist array
-// specified in `modules_util.h` with the one below.
 inline constexpr auto kBlocklistedCategories =
     base::MakeFixedFlatSet<std::string_view>(
         {"/g/11b76fyj2r", "/m/09lkz", "/m/012mj", "/m/01rbb", "/m/02px0wr",
@@ -55,7 +53,9 @@ scoped_refptr<segmentation_platform::InputContext> AsInputContext(
 
 // Returns tab data if it exists for a `URLVisitAggregate`.
 const URLVisitAggregate::TabData* GetTabDataIfExists(
-    const URLVisitAggregate& url_visit_aggregate);
+    const URLVisitAggregate& url_visit_aggregate,
+    const std::vector<Fetcher>& fetchers = std::vector<Fetcher>{
+        Fetcher::kTabModel, Fetcher::kSession});
 
 // Returns a tab if it exists for a `URLVisitAggregate`.
 const URLVisitAggregate::Tab* GetTabIfExists(

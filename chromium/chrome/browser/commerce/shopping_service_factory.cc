@@ -13,7 +13,6 @@
 #include "chrome/browser/persisted_state_db/session_proto_db_factory.h"
 #include "chrome/browser/power_bookmarks/power_bookmark_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/sync/sync_service_factory.h"
@@ -31,6 +30,7 @@
 #if !BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "components/commerce/core/proto/cart_db_content.pb.h"  // nogncheck
 #include "components/commerce/core/proto/discounts_db_content.pb.h"  // nogncheck
 #endif
 
@@ -85,7 +85,6 @@ ShoppingServiceFactory::ShoppingServiceFactory()
   DependsOn(SyncServiceFactory::GetInstance());
   DependsOn(commerce::ProductSpecificationsServiceFactory::GetInstance());
   DependsOn(TabRestoreServiceFactory::GetInstance());
-  DependsOn(TemplateURLServiceFactory::GetInstance());
 }
 
 std::unique_ptr<KeyedService>
@@ -109,8 +108,10 @@ ShoppingServiceFactory::BuildServiceInstanceForBrowserContext(
 #if !BUILDFLAG(IS_ANDROID)
       SessionProtoDBFactory<discounts_db::DiscountsContentProto>::GetInstance()
           ->GetForProfile(context),
+      SessionProtoDBFactory<cart_db::ChromeCartContentProto>::GetInstance()
+          ->GetForProfile(context),
 #else
-      nullptr,
+      nullptr, nullptr,
 #endif
       SessionProtoDBFactory<
           parcel_tracking_db::ParcelTrackingContent>::GetInstance()
@@ -118,8 +119,7 @@ ShoppingServiceFactory::BuildServiceInstanceForBrowserContext(
       HistoryServiceFactory::GetForProfile(profile,
                                            ServiceAccessType::EXPLICIT_ACCESS),
       std::make_unique<commerce::WebExtractorImpl>(),
-      TabRestoreServiceFactory::GetForProfile(profile),
-      TemplateURLServiceFactory::GetForProfile(profile));
+      TabRestoreServiceFactory::GetForProfile(profile));
 }
 
 bool ShoppingServiceFactory::ServiceIsCreatedWithBrowserContext() const {

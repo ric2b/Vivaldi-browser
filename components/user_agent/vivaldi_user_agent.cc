@@ -34,8 +34,9 @@ constexpr auto kVivaldiAllowedDomains =
 #include "components/user_agent/vivaldi_user_agent_allow_list.inc"
     });
 
-constexpr auto kVivaldiEdgeDomains =
-    base::MakeFixedFlatSet<std::string_view>({"bing.com"});
+// VB-113889: Disabled Edge overrides for the time being
+//constexpr auto kVivaldiEdgeDomains =
+//    base::MakeFixedFlatSet<std::string_view>({"bing.com"});
 
 const char kEdgeSuffix[] = " Edg/" EDGE_FULL_VERSION;
 const char kEdgeSuffixReduced[] = " Edg/" CHROME_PRODUCT_VERSION_REDUCED;
@@ -138,7 +139,7 @@ bool IsBingHost(std::string_view host) {
   if (HasUserAgentSwitch())
     return false;
 
-  return MatchHost(host, kVivaldiEdgeDomains);
+  return false; // MatchHost(host, kVivaldiEdgeDomains);
 }
 
 void UpdateAgentString(bool reduced, std::string& user_agent) {
@@ -169,9 +170,11 @@ std::vector<std::string> GetVivaldiAllowlist() {
 
 std::vector<std::string> GetVivaldiEdgeList() {
   std::vector<std::string> edge_domain_list;
+  /*
   for (std::string_view domain : kVivaldiEdgeDomains) {
     edge_domain_list.emplace_back(std::string(domain));
   }
+  */
 
   return edge_domain_list;
 }

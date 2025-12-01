@@ -17,6 +17,7 @@
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_function.h"
+#include "extensions/schema/omnibox_private.h"
 
 namespace extensions {
 
@@ -41,6 +42,8 @@ class OmniboxEventRouter : public OmniboxServiceObserver {
 
   base::ScopedObservation<OmniboxService, OmniboxServiceObserver>
       omnibox_service_observer_;
+
+  TemplateURLService* template_url_service_;
 };
 
 class OmniboxPrivateAPI : public BrowserContextKeyedAPI,
@@ -64,6 +67,7 @@ class OmniboxPrivateAPI : public BrowserContextKeyedAPI,
 
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "OmniboxPrivateAPI"; }
+  static const bool kServiceHasOwnInstanceInIncognito = true;
 
   // Created lazily upon OnListenerAdded.
   std::unique_ptr<OmniboxEventRouter> omnibox_event_router_;
@@ -77,6 +81,8 @@ class OmniboxPrivateStartOmniboxFunction : public ExtensionFunction {
  private:
   ~OmniboxPrivateStartOmniboxFunction() override {}
   ExtensionFunction::ResponseAction Run() override;
+  metrics::OmniboxEventProto::PageClassification GetPageClassification(
+                 vivaldi::omnibox_private::PageClassification name);
 };
 
 }  // namespace extensions

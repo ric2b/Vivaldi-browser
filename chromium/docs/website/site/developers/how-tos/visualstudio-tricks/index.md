@@ -94,4 +94,4 @@ Tools &gt; Options. On the Text Editor/All languages/Tabs page, set
 ### Debugging visualization, macros, more
 
 See
-<http://www.chromium.org/developers/how-tos/how-to-set-up-visual-studio-debugger-visualizers>.
+<https://www.chromium.org/developers/how-tos/how-to-set-up-visual-studio-debugger-visualizers>.

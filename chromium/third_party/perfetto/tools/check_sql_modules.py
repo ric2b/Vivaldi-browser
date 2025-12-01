@@ -17,7 +17,7 @@
 # '_' is documented with proper schema.
 
 import argparse
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 import os
 import sys
 import re
@@ -89,6 +89,8 @@ def main():
   all_errors = 0
   for path, sql, parsed in modules:
     errors = []
+
+    # Check for banned statements.
     lines = [l.strip() for l in sql.split('\n')]
     for line in lines:
       if line.startswith('--'):
@@ -98,7 +100,7 @@ def main():
       if 'insert into' in line.casefold():
         errors.append("INSERT INTO table is not allowed in standard library.")
 
-    # Validate includes
+    # Validate includes.
     package = parsed.package_name
     for include in parsed.includes:
       package = package.lower()
@@ -106,7 +108,10 @@ def main():
 
       if (include_package == "common"):
         errors.append(
-            "Common module has been deprecated in the standard library.")
+            "Common module has been deprecated in the standard library. "
+            "Please check `slices.with_context` for a replacement for "
+            "`common.slices` and `time.conversion` for replacement for "
+            "`common.timestamps`")
 
       if (package != "viz" and include_package == "viz"):
         errors.append("No modules can depend on 'viz' outside 'viz' package.")
@@ -128,9 +133,8 @@ def main():
     ]
 
     if errors:
-      sys.stderr.write(
-          f"\nFound {len(errors)} errors in file '{path.split(ROOT_DIR)[1]}':\n- "
-      )
+      sys.stderr.write(f"\nFound {len(errors)} errors in file "
+                       f"'{os.path.normpath(path)}':\n- ")
       sys.stderr.write("\n- ".join(errors))
       sys.stderr.write("\n\n")
 

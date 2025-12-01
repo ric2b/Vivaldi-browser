@@ -76,15 +76,15 @@ let BidiBrowser = (() => {
         ];
         static subscribeCdpEvents = [
             // Coverage
-            'cdp.Debugger.scriptParsed',
-            'cdp.CSS.styleSheetAdded',
-            'cdp.Runtime.executionContextsCleared',
+            'goog:cdp.Debugger.scriptParsed',
+            'goog:cdp.CSS.styleSheetAdded',
+            'goog:cdp.Runtime.executionContextsCleared',
             // Tracing
-            'cdp.Tracing.tracingComplete',
+            'goog:cdp.Tracing.tracingComplete',
             // TODO: subscribe to all CDP events in the future.
-            'cdp.Network.requestWillBeSent',
-            'cdp.Debugger.scriptParsed',
-            'cdp.Page.screencastFrame',
+            'goog:cdp.Network.requestWillBeSent',
+            'goog:cdp.Debugger.scriptParsed',
+            'goog:cdp.Page.screencastFrame',
         ];
         static async create(opts) {
             const session = await Session_js_1.Session.from(opts.connection, {
@@ -97,6 +97,10 @@ let BidiBrowser = (() => {
                         default: "ignore" /* Bidi.Session.UserPromptHandlerType.Ignore */,
                     },
                     webSocketUrl: true,
+                    // Puppeteer with WebDriver BiDi does not support prerendering
+                    // yet because WebDriver BiDi behavior is not specified. See
+                    // https://github.com/w3c/webdriver-bidi/issues/321.
+                    'goog:prerenderingDisabled': true,
                 },
             });
             await session.subscribe(session.capabilities.browserName.toLocaleLowerCase().includes('firefox')

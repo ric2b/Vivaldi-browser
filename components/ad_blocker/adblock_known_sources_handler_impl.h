@@ -9,6 +9,7 @@
 
 #include "base/functional/callback.h"
 #include "base/observer_list.h"
+#include "base/uuid.h"
 #include "components/ad_blocker/adblock_known_sources_handler.h"
 #include "components/ad_blocker/adblock_types.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -25,7 +26,7 @@ class KnownRuleSourcesHandlerImpl : public KnownRuleSourcesHandler {
       const std::string& locale,
       const std::array<std::vector<KnownRuleSource>, kRuleGroupCount>&
           known_sources,
-      std::array<std::set<std::string>, kRuleGroupCount> deleted_presets,
+      std::array<std::set<base::Uuid>, kRuleGroupCount> deleted_presets,
       base::RepeatingClosure schedule_save);
   ~KnownRuleSourcesHandlerImpl() override;
   KnownRuleSourcesHandlerImpl(const KnownRuleSourcesHandlerImpl&) = delete;
@@ -33,8 +34,7 @@ class KnownRuleSourcesHandlerImpl : public KnownRuleSourcesHandler {
       delete;
 
   const KnownRuleSources& GetSources(RuleGroup group) const override;
-  const std::set<std::string>& GetDeletedPresets(
-      RuleGroup group) const override;
+  const std::set<base::Uuid>& GetDeletedPresets(RuleGroup group) const override;
 
   bool AddSource(RuleGroup group, RuleSourceCore source_core) override;
   std::optional<KnownRuleSource> GetSource(RuleGroup group,
@@ -44,6 +44,11 @@ class KnownRuleSourcesHandlerImpl : public KnownRuleSourcesHandler {
   bool EnableSource(RuleGroup group, uint32_t source_id) override;
   void DisableSource(RuleGroup group, uint32_t source_id) override;
   bool IsSourceEnabled(RuleGroup group, uint32_t source_id) override;
+
+  bool IsPresetEnabled(base::Uuid preset_id) override;
+
+  std::optional<base::Uuid> GetPresetIdForSourceId(RuleGroup group,
+                                                   uint32_t source_id) override;
 
   bool SetSourceSettings(RuleGroup group,
                          uint32_t source_id,
@@ -67,7 +72,10 @@ class KnownRuleSourcesHandlerImpl : public KnownRuleSourcesHandler {
   const raw_ptr<RuleService> rule_service_;
 
   std::array<KnownRuleSources, kRuleGroupCount> known_sources_;
-  std::array<std::set<std::string>, kRuleGroupCount> deleted_presets_;
+  std::array<std::set<base::Uuid>, kRuleGroupCount> deleted_presets_;
+
+  std::array<std::map<uint32_t, base::Uuid>, kRuleGroupCount>
+      source_id_to_preset_maps_;
 
   base::ObserverList<Observer> observers_;
 

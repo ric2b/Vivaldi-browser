@@ -4,13 +4,15 @@
 
 import '../../legacy/legacy.js'; // Required for <x-link>.
 
-import * as LitHtml from '../../lit-html/lit-html.js';
+import {html, render} from '../../lit/lit.js';
 import * as VisualLogging from '../../visual_logging/visual_logging.js';
 
-import markdownLinkStyles from './markdownLink.css.js';
+import markdownLinkStylesRaw from './markdownLink.css.js';
 import {getMarkdownLink} from './MarkdownLinksMap.js';
 
-const {html} = LitHtml;
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const markdownLinkStyles = new CSSStyleSheet();
+markdownLinkStyles.replaceSync(markdownLinkStylesRaw.cssContent);
 
 export interface MarkdownLinkData {
   key: string;
@@ -44,7 +46,7 @@ export class MarkdownLink extends HTMLElement {
     // clang-format off
     const output = html`<x-link class="devtools-link" href=${this.#linkUrl} jslog=${VisualLogging.link().track({click: true})}
     >${this.#linkText}</x-link>`;
-    LitHtml.render(output, this.#shadow, {host: this});
+    render(output, this.#shadow, {host: this});
     // clang-format on
   }
 }

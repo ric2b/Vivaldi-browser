@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-#include "absl/hash/hash.h"
+#include "absl/types/variant.h"
 #include "util/hashing.h"
 #include "util/osp_logging.h"
 #include "util/string_util.h"

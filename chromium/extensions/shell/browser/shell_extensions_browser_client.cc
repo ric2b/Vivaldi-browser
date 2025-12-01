@@ -116,6 +116,11 @@ bool ShellExtensionsBrowserClient::AreExtensionsDisabledForContext(
 }
 
 #if BUILDFLAG(IS_CHROMEOS)
+bool ShellExtensionsBrowserClient::IsActiveContext(
+    content::BrowserContext* browser_context) const {
+  return true;
+}
+
 std::string ShellExtensionsBrowserClient::GetUserIdHashFromContext(
     content::BrowserContext* context) {
   if (!ash::LoginState::IsInitialized())
@@ -313,11 +318,6 @@ KioskDelegate* ShellExtensionsBrowserClient::GetKioskDelegate() {
   if (!kiosk_delegate_)
     kiosk_delegate_ = std::make_unique<ShellKioskDelegate>();
   return kiosk_delegate_.get();
-}
-
-bool ShellExtensionsBrowserClient::IsLockScreenContext(
-    content::BrowserContext* context) {
-  return false;
 }
 
 std::string ShellExtensionsBrowserClient::GetApplicationLocale() {

@@ -12,7 +12,6 @@
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/typography.h"
 #include "base/strings/strcat.h"
-#include "build/branding_buildflags.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -23,10 +22,6 @@
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/view_class_properties.h"
-
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-#include "chromeos/ash/resources/internal/icons/vector_icons.h"
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
 namespace ash {
 namespace {
@@ -44,7 +39,7 @@ std::unique_ptr<views::Label> CreateShortcutTextLabel(
 
 }  // namespace
 
-PickerShortcutHintView::PickerShortcutHintView(
+QuickInsertShortcutHintView::QuickInsertShortcutHintView(
     QuickInsertCapsLockResult::Shortcut shortcut) {
   SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kHorizontal));
@@ -75,33 +70,31 @@ PickerShortcutHintView::PickerShortcutHintView(
            l10n_util::GetStringUTF16(IDS_ASH_SHORTCUT_MODIFIER_SEARCH)});
       break;
     }
-    case QuickInsertCapsLockResult::Shortcut::kFnRightAlt: {
+    case QuickInsertCapsLockResult::Shortcut::kFnQuickInsert: {
       // TODO: b/331285414 - Shortcut hint strings and icon should be moved into
       // open source.
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
       auto* fn_label = AddChildView(
           CreateShortcutTextLabel(l10n_util::GetStringUTF16(IDS_ASH_FN_KEY)));
       auto* plus_label = AddChildView(CreateShortcutTextLabel(u" + "));
       AddChildView(
           std::make_unique<views::ImageView>(ui::ImageModel::FromVectorIcon(
-              kRightAltInternalIcon, cros_tokens::kCrosSysOnSurfaceVariant,
+              kQuickInsertIcon, cros_tokens::kCrosSysOnSurfaceVariant,
               kShortcutIconSize)));
       shortcut_text_ = base::StrCat(
           {fn_label->GetText(), plus_label->GetText(),
            l10n_util::GetStringUTF16(IDS_KEYBOARD_QUICK_INSERT_LABEL)});
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
       break;
     }
   }
 }
 
-PickerShortcutHintView::~PickerShortcutHintView() = default;
+QuickInsertShortcutHintView::~QuickInsertShortcutHintView() = default;
 
-const std::u16string& PickerShortcutHintView::GetShortcutText() const {
+const std::u16string& QuickInsertShortcutHintView::GetShortcutText() const {
   return shortcut_text_;
 }
 
-BEGIN_METADATA(PickerShortcutHintView)
+BEGIN_METADATA(QuickInsertShortcutHintView)
 END_METADATA
 
 }  // namespace ash

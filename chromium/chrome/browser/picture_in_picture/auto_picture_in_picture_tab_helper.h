@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_PICTURE_IN_PICTURE_AUTO_PICTURE_IN_PICTURE_TAB_HELPER_H_
 
 #include "base/memory/weak_ptr.h"
+#include "base/time/clock.h"
 #include "base/time/time.h"
 #include "chrome/browser/picture_in_picture/auto_picture_in_picture_safe_browsing_checker_client.h"
 #include "chrome/browser/picture_in_picture/auto_pip_setting_helper.h"
@@ -24,6 +25,7 @@ class PermissionDecisionAutoBlockerBase;
 class AutoPictureInPictureTabStripObserverHelper;
 class AutoPipSettingOverlayView;
 class HostContentSettingsMap;
+class MediaEngagementService;
 
 // The AutoPictureInPictureTabHelper is a TabHelper attached to each WebContents
 // that facilitates automatically opening and closing picture-in-picture windows
@@ -142,35 +144,43 @@ class AutoPictureInPictureTabHelper
   // any auto-pip window we have open, though there might also not be one.
   void OnTabBecameActive();
 
+  void set_clock_for_testing(const base::TickClock* testing_clock) {
+    clock_ = testing_clock;
+  }
+
  private:
   explicit AutoPictureInPictureTabHelper(content::WebContents* web_contents);
   friend class content::WebContentsUserData<AutoPictureInPictureTabHelper>;
   FRIEND_TEST_ALL_PREFIXES(AutoPictureInPictureTabHelperBrowserTest,
                            CannotAutopipViaHttp);
+  FRIEND_TEST_ALL_PREFIXES(AutoPictureInPictureTabHelperBrowserTest,
+                           PromptResultNotRecorded);
+  FRIEND_TEST_ALL_PREFIXES(AutoPictureInPictureWithVideoPlaybackBrowserTest,
+                           DoesNotDocumentAutopip_VideoInRemoteIFrame);
 
   void MaybeEnterAutoPictureInPicture();
 
-  // If needed, schedules the asynchronous tasks that get the video visibility
-  // and/or URL safety. When async tasks complete there may be a call to
+  // If needed, schedules the asynchronous task to get the URL safety. When
+  // async tasks complete there may be a call to
   // `MaybeEnterAutoPictureInPicture`. This method can safely be called multiple
   // times.
   void MaybeScheduleAsyncTasks();
 
-  // Stops any pending get video visibility and/or URL safety tasks. Also reset
-  // relevant member variables: `has_sufficiently_visible_video_` and
-  // `has_safe_url_`.
+  // Stops any pending URL safety task. Also reset relevant member variables:
+  //   * Sets `has_safe_url_` to false.
+  //   * Resets `safe_browsing_checker_client_`.
+  //   * Invalidates async tasks weak ptr factory.
   void StopAndResetAsyncTasks();
 
   void MaybeExitAutoPictureInPicture();
 
   void MaybeStartOrStopObservingTabStrip();
 
-  bool IsEligibleForAutoPictureInPicture();
+  bool IsEligibleForAutoPictureInPicture(bool should_record_blocking_metrics);
 
   // Returns true if the tab:
   //   * Has audio focus
   //   * Is playing unmuted playback
-  //   * MediaSession reports that there exists a sufficiently visible video
   //   * Has a safe URL as reported by
   //   `AutoPictureInPictureSafeBrowsingCheckerClient`
   bool MeetsVideoPlaybackConditions() const;
@@ -182,21 +192,16 @@ class AutoPictureInPictureTabHelper
   // recently.
   bool WasRecentlyAudible() const;
 
+  // Returns true if the tab has high media engagement or content setting is set
+  // to `CONTENT_SETTING_ALLOW`, false otherwise.
+  //
+  // Among other cases, this method will also return false if the media session
+  // routed frame either does not exist or is not in the primary main frame.
+  bool MeetsMediaEngagementConditions() const;
+
   // Returns the current state of the 'Auto Picture-in-Picture' content
   // setting for the current website of the observed WebContents.
   ContentSetting GetCurrentContentSetting() const;
-
-  // Asks MediaSession to `GetVisibility`, if there exists a media session and
-  // we are not currently in picture in picture.
-  void ScheduleAsyncVisibilityCheck();
-
-  // Gets the video visibility, and enters picture in picture if MediaSession
-  // reports that there exists a sufficiently visible video.
-  //
-  // For a video to be considered sufficiently visible, it must meet the video
-  // visibility threshold defined by `HTMLVideoElement` (kVisibilityThreshold)
-  // and tracked by the `MediaVideoVisibilityTracker`.
-  void OnVideoVisibilityResult(bool has_sufficiently_visible_video);
 
   // Called when the result of checking URL safety is known.
   // `MaybeEnterAutoPictureInPicture` will be called if the URL is safe.
@@ -208,6 +213,34 @@ class AutoPictureInPictureTabHelper
 
   // Creates the `auto_pip_setting_helper_` if it does not already exist.
   void EnsureAutoPipSettingHelper();
+
+  // Returns the primary main routed frame for the MediaSession, if it exists.
+  // Otherwise, an empty optional is returned.
+  //
+  // This method retrieves the routed frame associated with the WebContents's
+  // MediaSession. If a routed frame is found and it resides within the primary
+  // main frame, an optional containing a pointer to the RenderFrameHost is
+  // returned. Otherwise, an empty optional is returned.
+  std::optional<content::RenderFrameHost*> GetPrimaryMainRoutedFrame() const;
+
+  // Returns the histogram name corresponding to the reason for entering auto
+  // picture in picture. Use caution when modifying this method since the
+  // returned value is used for logging.
+  //
+  // Note that a media element can meet both, the "video conferencing" and
+  // "media playback" conditions. If both conditions are met, this method will
+  // return the "video conferencing" histogram. On the other hand, if no
+  // conditions are met, an empty string will be returned.
+  std::string GetHistogramNameForReason() const;
+
+  // Records the total time spent on a picture in picture window, regardless of
+  // the Picture-in-Picture window type (document vs video) and the reason for
+  // closing the window (UI interaction, returning back to opener tab, etc.).
+  //
+  // The resulting histogram is configured to allow analyzing closures that take
+  // place within a short period of time, to account for user reaction time
+  // (~273 ms).
+  void MaybeRecordPictureInPictureChanged(bool is_picture_in_picture);
 
   // HostContentSettingsMap is tied to the Profile which outlives the
   // WebContents (which we're tied to), so this is safe.
@@ -265,10 +298,6 @@ class AutoPictureInPictureTabHelper
   // `AutoPictureInPictureSafeBrowsingCheckerClient`.
   bool has_safe_url_ = false;
 
-  // True if the media session associated with the observed WebContents has a
-  // sufficiently visible video.
-  bool has_sufficiently_visible_video_ = false;
-
   // Connections with the media session service to listen for audio focus
   // updates and control media sessions.
   mojo::Receiver<media_session::mojom::AudioFocusObserver>
@@ -284,15 +313,23 @@ class AutoPictureInPictureTabHelper
   std::unique_ptr<AutoPictureInPictureSafeBrowsingCheckerClient>
       safe_browsing_checker_client_;
 
-  // WeakPtrFactory used only for requesting video visibility. This weak ptr
-  // factory is invalidated before sending any new visibility requests to the
-  // `MediaSession`, and at the beginning of `MaybeExitAutoPictureInPicture`
-  // calls.
-  base::WeakPtrFactory<AutoPictureInPictureTabHelper>
-      get_visibility_weak_factory_{this};
+  // The `MediaEngagementService` is used by `this` to determine whether or not
+  // the web contents origin has high media engagement.
+  //
+  // This is safe since the `MediaEngagementService` is tied to the Profile
+  // which outlives the WebContents (which `this` is tied to).
+  raw_ptr<MediaEngagementService> media_engagement_service_ = nullptr;
 
-  // WeakPtrFactory used for requesting video visibility and URL safety. This
-  // weak ptr factory is invalidated during calls to `StopAndResetAsyncTasks`.
+  // Set to the current time when `this` calls the MediaSession
+  // `EnterAutoPictureInPicture` method.
+  std::optional<base::TimeTicks> current_enter_pip_time_ = std::nullopt;
+
+  // Clock used for metric related to the total time spent with a
+  // picture-in-picture window open.
+  raw_ptr<const base::TickClock> clock_;
+
+  // WeakPtrFactory used only for requesting URL safety. This weak ptr factory
+  // is invalidated during calls to `StopAndResetAsyncTasks`.
   base::WeakPtrFactory<AutoPictureInPictureTabHelper> async_tasks_weak_factory_{
       this};
 

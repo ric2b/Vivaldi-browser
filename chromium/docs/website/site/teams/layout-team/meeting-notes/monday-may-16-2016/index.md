@@ -15,7 +15,7 @@ Scrolling
 - Wrapping up overflow: auto work. Split up into three separate patches,
 first one landed last week and fixes scrollbars in general in the
 presence of "interesting" flex direction, writing mode and text
-direction combinations. \[[crrev.com/392981](http://crrev.com/392981)\] (szager)
+direction combinations. \[[crrev.com/392981](https://crrev.com/392981)\] (szager)
 - The second patch (wip) overhauls how the flex algorithm handles
 overflow: auto scrollbars. It basically makes it much clearer and
 reduces unnecessary work that flex algorithm has to do to handle the
@@ -29,7 +29,7 @@ but I think it'll be nice and improve things. Some fun interactions
 between layout and paint clipping. (szager)
 - Added a new ref test that tests all combinations and it'll keep us
 honest going forward. Looking into up-streaming it. (szager)
-Scroll Anchoring \[[crbug.com/558575](http://crbug.com/558575)\]
+Scroll Anchoring \[[crbug.com/558575](https://crbug.com/558575)\]
 - Fixed a scroll anchoring subpixel positioning bug, was very annoying
 as text kept flickering during load when anchored. (skobes)
 - Have a solution for interaction between scroll event handlers and
@@ -39,14 +39,14 @@ CSS Flexbox
 - Flexbox specification discussions at the CSS Working group face-to-
 face last week, made progress on intrinsic width calculations among
 other things. (ikilpatrick)
-CSS Grid Layout \[[crbug.com/79180](http://crbug.com/79180)\]
+CSS Grid Layout \[[crbug.com/79180](https://crbug.com/79180)\]
 - Floated grid containers in Blink (rego)
 - Fix computed style with distribution offsets (rego)
 - Place positioned items with vertical writing modes (rego)
 - Grid layout reviews (svillar)
 - Position resolution with auto-repeat tracks (svillar)
 - Auto-repeat tracks computation (svillar)
-CSS Multi-column (mstensho) \[[crbug.com/334335](http://crbug.com/334335)\]
+CSS Multi-column (mstensho) \[[crbug.com/334335](https://crbug.com/334335)\]
 - Multicol / fragmentation is in a known good state. (mstensho)
 CSS Houdini
 - Last week was the Houdini face-to-face meeting. We didn't talk much
@@ -59,18 +59,18 @@ proposal in time for TPAC. (ikilpatrick)
 - Plan to work on the worklets spec this week, mainly on the security
 APIs. (ikilpatrick)
 - Start design doc for off-main-thread worklets. (ikilpatrick, flackr)
-Add API for layout \[[crbug.com/495288](http://crbug.com/495288)\]
+Add API for layout \[[crbug.com/495288](https://crbug.com/495288)\]
 - Finishing up report on line layout API. (dgrogan)
 - Continued LayoutView/FrameView conversion. (pilgrim)
-LayoutNG \[[crbug.com/591099](http://crbug.com/591099)\]
+LayoutNG \[[crbug.com/591099](https://crbug.com/591099)\]
 - Started working on design doc. Will share draft with team in a few
 weeks. (eae)
-CSS Containment \[[crbug.com/312978](http://crbug.com/312978)\]
+CSS Containment \[[crbug.com/312978](https://crbug.com/312978)\]
 - One remaining issue arund interaction between contain: paint and will-
 change: transform. Will try to track down the root cause this week in
 preparation for shipping by default. (eae)
 Intersection Observer (szager, mpb)
-\[[crbug.com/540528](http://crbug.com/540528)\]
+\[[crbug.com/540528](https://crbug.com/540528)\]
 - Shipping in M51.
 Resize Observer (atotic)
 - Spent a day in SF selling Resize Observer to Mozilla, IE/Edge, and

@@ -14,13 +14,17 @@
 <translation id="2433507940547922241">Tampilan</translation>
 <translation id="2501278716633472235">Kembali</translation>
 <translation id="2633278372998075009">Tab pribadi</translation>
+<translation id="265156376773362237">Pramuat standar</translation>
 <translation id="272026394418727548">Halaman beranda Vivaldi</translation>
+<translation id="2871733351037274014">Pramuat halaman</translation>
 <translation id="2951071800649516099">Tambahkan halaman ke daftar bacaan untuk dibaca nanti</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> penanda}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> lain}}</translation>
 <translation id="3076631378407175873">Hak cipta <ph name="YEAR" /> Vivaldi Technologies AS. Hak cipta dilindungi undang-undang.</translation>
+<translation id="3232293466644486101">Hapus data penjelajahan…</translation>
 <translation id="3234355010754616171">Tab pribadi baru</translation>
+<translation id="3237087289225714896">Pramuat standar:</translation>
 <translation id="3377025655491224618">Tab Pribadi</translation>
 <translation id="3504699618187058974">Tab susun</translation>
 <translation id="3518985090088779359">Terima &amp; lanjutkan</translation>
@@ -28,6 +32,7 @@
 <translation id="3602290021589620013">Pratinjau</translation>
 <translation id="3700829948786686853">Selamat datang di Vivaldi</translation>
 <translation id="3719826155360621982">Beranda</translation>
+<translation id="3738139272394829648">Sentuh untuk Telusuri</translation>
 <translation id="385051799172605136">Kembali</translation>
 <translation id="399014816462153200">Baca Artikel:</translation>
 <translation id="4121750346708795461">Dengan menggunakan aplikasi ini, Anda menyetujui <ph name="BEGIN_LINK1" />Perjanjian Lisensi Pengguna Akhir<ph name="END_LINK1" /> dan <ph name="BEGIN_LINK2" />Kebijakan Privasi<ph name="END_LINK2" /> Vivaldi.</translation>
@@ -36,6 +41,7 @@
 <translation id="4195643157523330669">Buka di tab baru</translation>
 <translation id="4225895483398857530">Pintasan bilah tab</translation>
 <translation id="4243710787042215766">Buka di tab pribadi</translation>
+<translation id="4291407919474070700"><ph name="BEGIN_LINK" />Aktifkan kunci layar di pengaturan Android<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Pengelola Sandi</translation>
 <translation id="451872707440238414">Telusuri penanda Anda</translation>
 <translation id="4526803704855831732">Tab Pribadi</translation>
@@ -57,24 +63,34 @@ Untuk menyesuaikan term telusuran Anda, pencet lama untuk memilih. Untuk menyari
 <translation id="572328651809341494">Tab terakhir</translation>
 <translation id="6150320133806434356">Penanda telah disimpan</translation>
 <translation id="6336451774241870485">Tab pribadi baru</translation>
+<translation id="6337323516034698937">Untuk mengirim tab ini ke perangkat lain, masuk ke Sinkronisasi Vivaldi di kedua perangkat. Pastikan Anda memasukkan sandi enkripsi jika perlu.</translation>
 <translation id="6404511346730675251">Edit penanda</translation>
 <translation id="6585139692466700358">Tawarkan untuk menerjemahkan bahasa ke bahasa lain dengan layanan terjemahan Vivaldi</translation>
+<translation id="6588043302623806746">Gunakan DNS aman</translation>
 <translation id="6593061639179217415">Situs desktop</translation>
 <translation id="6610147964972079463">Tutup tab pribadi</translation>
 <translation id="7029995644714925509">Ketika situs meminta secara pribadi untuk pramuat tautan di halaman mereka, Vivaldi mengenkripsi dan memuat halaman lewat server Google tanpa kuki. Cara ini menyembunyikan identitas Anda dari situs yang dipramuat.</translation>
 <translation id="706339621163631076">Kebijakan Privasi Peramban</translation>
 <translation id="732145680195464316">Penanda disimpan di <ph name="PRODUCT_NAME" /></translation>
+<translation id="7324354302972299151">Kirim permintaan “Do Not Track”</translation>
+<translation id="7359002509206457351">Akses metode pembayaran</translation>
+<translation id="7419565702166471774">Selalu gunakan koneksi aman</translation>
 <translation id="7427132068601343474">Tentang Vivaldi</translation>
+<translation id="7456774706094330779">Pramuat yang diperpanjang</translation>
 <translation id="7465104139234185284">Tutup semua tab pribadi</translation>
 <translation id="7481312909269577407">Maju</translation>
 <translation id="7968014550143838305">Ditambahkan ke daftar bacaan</translation>
 <translation id="804786196054284061">Perjanjian Lisensi Pengguna Akhir</translation>
+<translation id="8062594758852531064">Pramuat yang diperpanjang:</translation>
 <translation id="8127542551745560481">Edit halaman beranda</translation>
+<translation id="8348430946834215779">Gunakan HTTPS jika memungkinkan dan dapatkan peringatan sebelum memuat situs yang tidak mendukungnya</translation>
 <translation id="8560602726703398413">Temukan daftar bacaan Anda di Penanda</translation>
 <translation id="85991616550051997">Ke beranda</translation>
 <translation id="8820817407110198400">Penanda</translation>
 <translation id="9042893549633094279">Privasi dan keamanan</translation>
 <translation id="9063523880881406963">Nonaktifkan Minta situs desktop</translation>
 <translation id="9080642952018487277">Masuk mode pribadi</translation>
+<translation id="930124987204876019">Hapus riwayat, kuki, data situs, singgahan…</translation>
+<translation id="961856697154696964">Hapus data penjelajahan</translation>
 <translation id="96681097142096641">Lihat halaman yang disederhanakan?</translation>
 </translationbundle>

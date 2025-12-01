@@ -21,12 +21,13 @@
 #include <filesystem>  // NOLINT
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "gtest/gtest.h"
 #include "absl/log/log.h"
 #include "absl/strings/substitute.h"
 #include "absl/time/time.h"
-#include "./centipede/early_exit.h"
+#include "./centipede/stop.h"
 #include "./centipede/util.h"
 #include "./common/test_util.h"
 
@@ -34,49 +35,80 @@ namespace centipede {
 namespace {
 
 TEST(CommandTest, ToString) {
-  EXPECT_EQ(Command("x").ToString(), "x");
-  EXPECT_EQ(Command("path", {"arg1", "arg2"}).ToString(),
-            "path \\\narg1 \\\narg2");
-  EXPECT_EQ(Command("x", {}, {"K1=V1", "K2=V2"}).ToString(),
-            "K1=V1 \\\nK2=V2 \\\nx");
-  EXPECT_EQ(Command("x", {}, {}, "out").ToString(), "x \\\n> out");
-  EXPECT_EQ(Command("x", {}, {}, "", "err").ToString(), "x \\\n2> err");
-  EXPECT_EQ(Command("x", {}, {}, "out", "err").ToString(),
-            "x \\\n> out \\\n2> err");
-  EXPECT_EQ(Command("x", {}, {}, "out", "out").ToString(),
-            "x \\\n> out \\\n2>&1");
+  EXPECT_EQ(Command{"x"}.ToString(), "env \\\nx");
+  {
+    Command::Options cmd_options;
+    cmd_options.args = {"arg1", "arg2"};
+    EXPECT_EQ((Command{"path", std::move(cmd_options)}.ToString()),
+              "env \\\npath \\\narg1 \\\narg2");
+  }
+  {
+    Command::Options cmd_options;
+    cmd_options.env_add = {"K1=V1", "K2=V2"};
+    cmd_options.env_remove = {"K3"};
+    EXPECT_EQ((Command{"x", std::move(cmd_options)}.ToString()),
+              "env \\\n-u K3 \\\nK1=V1 \\\nK2=V2 \\\nx");
+  }
+  {
+    Command::Options cmd_options;
+    cmd_options.stdout_file = "out";
+    EXPECT_EQ((Command{"x", std::move(cmd_options)}.ToString()),
+              "env \\\nx \\\n> out");
+  }
+  {
+    Command::Options cmd_options;
+    cmd_options.stderr_file = "err";
+    EXPECT_EQ((Command{"x", std::move(cmd_options)}.ToString()),
+              "env \\\nx \\\n2> err");
+  }
+  {
+    Command::Options cmd_options;
+    cmd_options.stdout_file = "out";
+    cmd_options.stderr_file = "err";
+    EXPECT_EQ((Command{"x", std::move(cmd_options)}.ToString()),
+              "env \\\nx \\\n> out \\\n2> err");
+  }
+  {
+    Command::Options cmd_options;
+    cmd_options.stdout_file = "out";
+    cmd_options.stderr_file = "out";
+    EXPECT_EQ((Command{"x", std::move(cmd_options)}.ToString()),
+              "env \\\nx \\\n> out \\\n2>&1");
+  }
 }
 
 TEST(CommandTest, Execute) {
   // Check for default exit code.
-  Command echo("echo");
+  Command echo{"echo"};
   EXPECT_EQ(echo.Execute(), 0);
-  EXPECT_FALSE(EarlyExitRequested());
+  EXPECT_FALSE(ShouldStop());
 
   // Check for exit code 7.
-  Command exit7("bash -c 'exit 7'");
+  Command exit7{"bash -c 'exit 7'"};
   EXPECT_EQ(exit7.Execute(), 7);
-  EXPECT_FALSE(EarlyExitRequested());
+  EXPECT_FALSE(ShouldStop());
 }
 
 TEST(CommandDeathTest, Execute) {
   GTEST_FLAG_SET(death_test_style, "threadsafe");
   // Test for interrupt handling.
   const auto self_sigint_lambda = []() {
-    Command self_sigint("bash -c 'kill -SIGINT $$'");
+    Command self_sigint{"bash -c 'kill -SIGINT $$'"};
     self_sigint.Execute();
-    if (EarlyExitRequested()) {
-      LOG(INFO) << "Early exit requested";
+    if (ShouldStop()) {
+      LOG(INFO) << "Early stop requested";
       exit(ExitCode());
     }
   };
-  EXPECT_DEATH(self_sigint_lambda(), "Early exit requested");
+  EXPECT_DEATH(self_sigint_lambda(), "Early stop requested");
 }
 
 TEST(CommandTest, InputFileWildCard) {
-  std::string_view command_line = "foo bar @@ baz";
-  Command cmd(command_line, {}, {}, "", "", absl::Seconds(2), "TEMP_FILE");
-  EXPECT_EQ(cmd.ToString(), "foo bar TEMP_FILE baz");
+  Command::Options cmd_options;
+  cmd_options.timeout = absl::Seconds(2);
+  cmd_options.temp_file_path = "TEMP_FILE";
+  Command cmd{"foo bar @@ baz", std::move(cmd_options)};
+  EXPECT_EQ(cmd.ToString(), "env \\\nfoo bar TEMP_FILE baz");
 }
 
 TEST(CommandTest, ForkServer) {
@@ -89,7 +121,11 @@ TEST(CommandTest, ForkServer) {
   {
     const std::string input = "success";
     const std::string log = std::filesystem::path{test_tmpdir} / input;
-    Command cmd(helper, {input}, {}, log, log);
+    Command::Options cmd_options;
+    cmd_options.args = {input};
+    cmd_options.stdout_file = log;
+    cmd_options.stderr_file = log;
+    Command cmd{helper, std::move(cmd_options)};
     EXPECT_TRUE(cmd.StartForkServer(test_tmpdir, "ForkServer"));
     EXPECT_EQ(cmd.Execute(), EXIT_SUCCESS);
     std::string log_contents;
@@ -100,7 +136,11 @@ TEST(CommandTest, ForkServer) {
   {
     const std::string input = "fail";
     const std::string log = std::filesystem::path{test_tmpdir} / input;
-    Command cmd(helper, {input}, {}, log, log);
+    Command::Options cmd_options;
+    cmd_options.args = {input};
+    cmd_options.stdout_file = log;
+    cmd_options.stderr_file = log;
+    Command cmd{helper, std::move(cmd_options)};
     EXPECT_TRUE(cmd.StartForkServer(test_tmpdir, "ForkServer"));
     EXPECT_EQ(cmd.Execute(), EXIT_FAILURE);
     std::string log_contents;
@@ -111,7 +151,11 @@ TEST(CommandTest, ForkServer) {
   {
     const std::string input = "ret42";
     const std::string log = std::filesystem::path{test_tmpdir} / input;
-    Command cmd(helper, {input}, {}, log, log);
+    Command::Options cmd_options;
+    cmd_options.args = {input};
+    cmd_options.stdout_file = log;
+    cmd_options.stderr_file = log;
+    Command cmd{helper, std::move(cmd_options)};
     EXPECT_TRUE(cmd.StartForkServer(test_tmpdir, "ForkServer"));
     EXPECT_EQ(cmd.Execute(), 42);
     std::string log_contents;
@@ -122,7 +166,11 @@ TEST(CommandTest, ForkServer) {
   {
     const std::string input = "abort";
     const std::string log = std::filesystem::path{test_tmpdir} / input;
-    Command cmd(helper, {input}, {}, log, log);
+    Command::Options cmd_options;
+    cmd_options.args = {input};
+    cmd_options.stdout_file = log;
+    cmd_options.stderr_file = log;
+    Command cmd{helper, std::move(cmd_options)};
     EXPECT_TRUE(cmd.StartForkServer(test_tmpdir, "ForkServer"));
     // WTERMSIG() needs an lvalue on some platforms.
     const int ret = cmd.Execute();
@@ -135,8 +183,12 @@ TEST(CommandTest, ForkServer) {
   {
     const std::string input = "hang";
     const std::string log = std::filesystem::path{test_tmpdir} / input;
-    constexpr auto kTimeout = absl::Seconds(2);
-    Command cmd(helper, {input}, {}, log, log, kTimeout);
+    Command::Options cmd_options;
+    cmd_options.args = {input};
+    cmd_options.stdout_file = log;
+    cmd_options.stderr_file = log;
+    cmd_options.timeout = absl::Seconds(2);
+    Command cmd{helper, std::move(cmd_options)};
     ASSERT_TRUE(cmd.StartForkServer(test_tmpdir, "ForkServer"));
     EXPECT_EQ(cmd.Execute(), EXIT_FAILURE);
     std::string log_contents;

@@ -145,7 +145,7 @@ that doesn't require building yourself:
 adb shell am start \
   -a android.intent.action.VIEW \
   -n org.chromium.content_shell_apk/.ContentShellActivity \
-  --es activeUrl "http://chromium.org" \
+  --es activeUrl "https://www.chromium.org" \
   --esa commandLineArgs --show-paint-rects,--show-property-changed-rects
 ```
 

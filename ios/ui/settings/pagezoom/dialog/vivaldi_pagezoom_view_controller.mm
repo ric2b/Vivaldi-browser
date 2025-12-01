@@ -3,6 +3,7 @@
 #import "ios/ui/settings/pagezoom/dialog/vivaldi_pagezoom_view_controller.h"
 
 #import "base/strings/sys_string_conversions.h"
+#import "ios/ui/ntp/vivaldi_ntp_constants.h"
 #import "ios/ui/settings/pagezoom/dialog/uiwindow_pagezoom.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
@@ -20,10 +21,7 @@ const CGFloat kIconSize = 20.0;
 const CGFloat kTopPadding = 20.0;
 const CGFloat kIconTitleSpacing = 10.0;
 const CGFloat kHorizontalPadding = 20.0;
-const CGFloat kVerticalSpacing = 2.0;
 const CGFloat kButtonSpacing = 20.0;
-const CGFloat kSwitchTopSpacing = 30.0;
-const CGFloat kSwitchLabelSpacing = 10.0;
 const CGFloat kMaxDialogWidth = 400.0;
 const CGSize kShadowOffset = {0, 1};
 
@@ -40,10 +38,8 @@ NSString *fallbackIcon = @"vivaldi_ntp_fallback_favicon";
 @property (nonatomic, strong) UIButton *minusButton;
 @property (nonatomic, strong) UIButton *plusButton;
 @property (nonatomic, strong) UIButton *doneButton;
-@property (nonatomic, strong) UISwitch *globalSwitch;
-@property (nonatomic, strong) UILabel *globalSettingTitleLabel;
-@property (nonatomic, strong) UILabel *globalSettingSubtitleLabel;
 @property (nonatomic, strong) UIView *contentView;
+@property (nonatomic, strong) UIView *dividerView;
 @end
 
 @implementation VivaldiPageZoomViewController
@@ -51,8 +47,11 @@ NSString *fallbackIcon = @"vivaldi_ntp_fallback_favicon";
 - (void)viewDidLoad {
   [super viewDidLoad];
 
+  // updating Status bar
+  [self setNeedsStatusBarAppearanceUpdate];
+
   // Set background color and configure view appearance
-  self.view.backgroundColor = [UIColor systemBackgroundColor];
+  self.view.backgroundColor = [UIColor colorNamed:vNTPBackgroundColor];
   self.view.userInteractionEnabled = YES;
 
   // Configure rounded corners only at bottom
@@ -71,7 +70,7 @@ NSString *fallbackIcon = @"vivaldi_ntp_fallback_favicon";
 
   // Add a content view inside main view to handle the corner masking
   self.contentView = [[UIView alloc] init];
-  self.contentView.backgroundColor = [UIColor systemBackgroundColor];
+  self.contentView.backgroundColor = [UIColor colorNamed:vNTPBackgroundColor];
   self.contentView.layer.cornerRadius = kCornerRadius;
   self.contentView.layer.maskedCorners =
     kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner;
@@ -96,6 +95,10 @@ NSString *fallbackIcon = @"vivaldi_ntp_fallback_favicon";
 
   [self setupUI];
   [self.zoomHandler refreshState];
+}
+
+- (BOOL)prefersStatusBarHidden {
+  return NO;
 }
 
 // Add support for orientation changes
@@ -140,7 +143,7 @@ NSString *fallbackIcon = @"vivaldi_ntp_fallback_favicon";
   self.resetButton = [UIButton buttonWithType:UIButtonTypeSystem];
   [self.resetButton setTitle:resetTitle forState:UIControlStateNormal];
   self.resetButton.titleLabel.font =
-    [UIFont preferredFontForTextStyle:UIFontTextStyleCallout];
+    [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
   self.resetButton.titleLabel.adjustsFontForContentSizeCategory = YES;
   self.resetButton.translatesAutoresizingMaskIntoConstraints = NO;
   [self.resetButton addTarget:self.zoomHandler
@@ -150,7 +153,7 @@ NSString *fallbackIcon = @"vivaldi_ntp_fallback_favicon";
 
   // Zoom Label
   self.zoomLabel = [[UILabel alloc] init];
-  self.zoomLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleTitle2];
+  self.zoomLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
   self.zoomLabel.textColor = [UIColor labelColor];
   self.zoomLabel.textAlignment = NSTextAlignmentCenter;
   self.zoomLabel.translatesAutoresizingMaskIntoConstraints = NO;
@@ -160,7 +163,7 @@ NSString *fallbackIcon = @"vivaldi_ntp_fallback_favicon";
   self.minusButton = [UIButton buttonWithType:UIButtonTypeSystem];
   [self.minusButton setTitle:@"−" forState:UIControlStateNormal];
   self.minusButton.titleLabel.font =
-    [UIFont preferredFontForTextStyle:UIFontTextStyleTitle1];
+    [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
   self.minusButton.titleLabel.adjustsFontForContentSizeCategory = YES;
   self.minusButton.translatesAutoresizingMaskIntoConstraints = NO;
   [self.minusButton addTarget:self.zoomHandler
@@ -172,7 +175,7 @@ NSString *fallbackIcon = @"vivaldi_ntp_fallback_favicon";
   self.plusButton = [UIButton buttonWithType:UIButtonTypeSystem];
   [self.plusButton setTitle:@"+" forState:UIControlStateNormal];
   self.plusButton.titleLabel.font =
-    [UIFont preferredFontForTextStyle:UIFontTextStyleTitle1];
+    [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
   self.plusButton.titleLabel.adjustsFontForContentSizeCategory = YES;
   self.plusButton.translatesAutoresizingMaskIntoConstraints = NO;
   [self.plusButton addTarget:self.zoomHandler
@@ -185,44 +188,13 @@ NSString *fallbackIcon = @"vivaldi_ntp_fallback_favicon";
   self.doneButton = [UIButton buttonWithType:UIButtonTypeSystem];
   [self.doneButton setTitle:doneTitle forState:UIControlStateNormal];
   self.doneButton.titleLabel.font =
-    [UIFont preferredFontForTextStyle:UIFontTextStyleCallout];
+    [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
   self.doneButton.titleLabel.adjustsFontForContentSizeCategory = YES;
   self.doneButton.translatesAutoresizingMaskIntoConstraints = NO;
   [self.doneButton addTarget:self
                       action:@selector(doneTapped)
             forControlEvents:UIControlEventTouchUpInside];
   [self.contentView addSubview:self.doneButton];
-
-  // Global Setting Title
-  NSString *globalSettingTitle = GetNSString(IDS_IOS_PAGEZOOM_SETTING_GLOBAL_TITLE);
-  self.globalSettingTitleLabel = [[UILabel alloc] init];
-  self.globalSettingTitleLabel.text = globalSettingTitle;
-  self.globalSettingTitleLabel.font =
-    [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
-  self.globalSettingTitleLabel.textColor = [UIColor labelColor];
-  self.globalSettingTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-  [self.contentView addSubview:self.globalSettingTitleLabel];
-
-  // Global Setting Subtitle
-  NSString *globalSettingSubtitle =
-    GetNSString(IDS_IOS_PAGEZOOM_SETTING_GLOBAL_SUBTITLE);
-  self.globalSettingSubtitleLabel = [[UILabel alloc] init];
-  self.globalSettingSubtitleLabel.text = globalSettingSubtitle;
-  self.globalSettingSubtitleLabel.font =
-    [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
-  self.globalSettingSubtitleLabel.textColor = [UIColor secondaryLabelColor];
-  self.globalSettingSubtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-  self.globalSettingSubtitleLabel.numberOfLines = 0;
-  self.globalSettingSubtitleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
-  [self.contentView addSubview:self.globalSettingSubtitleLabel];
-
-  // Global Switch
-  self.globalSwitch = [[UISwitch alloc] init];
-  self.globalSwitch.translatesAutoresizingMaskIntoConstraints = NO;
-  [self.globalSwitch addTarget:self.zoomHandler
-                        action:@selector(updateGlobalZoomSwitch:)
-              forControlEvents:UIControlEventValueChanged];
-  [self.contentView addSubview:self.globalSwitch];
 
   // Layout Constraints
   [self setupConstraints];
@@ -288,35 +260,6 @@ NSString *fallbackIcon = @"vivaldi_ntp_fallback_favicon";
         self.contentView.safeAreaLayoutGuide.trailingAnchor
       constant:-kHorizontalPadding]
   ]];
-
-  // Global Switch and Labels
-  [NSLayoutConstraint activateConstraints:@[
-    [self.globalSwitch.topAnchor
-      constraintEqualToAnchor:self.zoomLabel.bottomAnchor
-                     constant:kSwitchTopSpacing],
-    [self.globalSwitch.leadingAnchor
-      constraintEqualToAnchor:self.contentView.safeAreaLayoutGuide.leadingAnchor
-                     constant:kHorizontalPadding],
-
-    [self.globalSettingTitleLabel.leadingAnchor
-      constraintEqualToAnchor:self.globalSwitch.trailingAnchor
-                     constant:kSwitchLabelSpacing],
-    [self.globalSettingTitleLabel.topAnchor
-      constraintEqualToAnchor:self.globalSwitch.topAnchor
-                     constant:-kSwitchLabelSpacing],
-    [self.globalSettingTitleLabel.trailingAnchor
-      constraintEqualToAnchor:self.contentView.trailingAnchor
-                     constant:-kHorizontalPadding],
-
-    [self.globalSettingSubtitleLabel.topAnchor
-      constraintEqualToAnchor:self.globalSettingTitleLabel.bottomAnchor
-                     constant:kVerticalSpacing],
-    [self.globalSettingSubtitleLabel.leadingAnchor
-      constraintEqualToAnchor:self.globalSettingTitleLabel.leadingAnchor],
-    [self.globalSettingSubtitleLabel.trailingAnchor
-      constraintEqualToAnchor:self.contentView.trailingAnchor
-                     constant:-kHorizontalPadding]
-  ]];
 }
 
 #pragma mark - Actions
@@ -376,10 +319,6 @@ NSString *fallbackIcon = @"vivaldi_ntp_fallback_favicon";
 
 - (void)setCurrentHostFavicon:(UIImage*)image {
   self.iconImageView.image = image;
-}
-
--  (void)setGlobalPageZoom:(BOOL)enabled {
-  self.globalSwitch.on = enabled;
 }
 
 // Add support for trait collection changes

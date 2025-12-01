@@ -22,6 +22,7 @@ import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.back_press.BackPressManager;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
+import org.chromium.chrome.browser.compositor.CompositorViewHolder;
 import org.chromium.chrome.browser.data_sharing.DataSharingTabManager;
 import org.chromium.chrome.browser.hub.HubManager;
 import org.chromium.chrome.browser.hub.Pane;
@@ -42,7 +43,7 @@ import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.user_education.UserEducationHelper;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateManager;
-import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
+import org.chromium.components.browser_ui.widget.scrim.ScrimManager;
 import org.chromium.components.tab_group_sync.TabGroupUiActionHandler;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 
@@ -55,7 +56,7 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
             @NonNull Activity activity,
             @NonNull ViewGroup parentView,
             @NonNull BrowserControlsStateProvider browserControlsStateProvider,
-            @NonNull ScrimCoordinator scrimCoordinator,
+            @NonNull ScrimManager scrimManager,
             @NonNull ObservableSupplier<Boolean> omniboxFocusStateSupplier,
             @NonNull BottomSheetController bottomSheetController,
             @NonNull DataSharingTabManager dataSharingTabManager,
@@ -69,7 +70,7 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
                 activity,
                 parentView,
                 browserControlsStateProvider,
-                scrimCoordinator,
+                scrimManager,
                 omniboxFocusStateSupplier,
                 bottomSheetController,
                 dataSharingTabManager,
@@ -91,7 +92,7 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
             @NonNull TabCreatorManager tabCreatorManager,
             @NonNull BrowserControlsStateProvider browserControlsStateProvider,
             @NonNull MultiWindowModeStateDispatcher multiWindowModeStateDispatcher,
-            @NonNull ScrimCoordinator rootUiScrimCoordinator,
+            @NonNull ScrimManager scrimManager,
             @NonNull SnackbarManager snackbarManager,
             @NonNull ModalDialogManager modalDialogManager,
             @NonNull BottomSheetController bottomSheetController,
@@ -102,7 +103,9 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
             @NonNull DoubleConsumer onToolbarAlphaChange,
             @NonNull BackPressManager backPressManager,
             @NonNull ObservableSupplier<EdgeToEdgeController> edgeToEdgeSupplier,
-            @Nullable DesktopWindowStateManager desktopWindowStateManager) {
+            @Nullable DesktopWindowStateManager desktopWindowStateManager,
+            @NonNull ObservableSupplier<Boolean> tabModelNotificationDotSupplier,
+            @NonNull ObservableSupplier<CompositorViewHolder> compositorViewHolderSupplier) {
         // TODO(crbug.com/40946413): Consider making this an activity scoped singleton and possibly
         // hosting it in CTA/HubProvider.
         TabSwitcherPaneCoordinatorFactory factory =
@@ -115,13 +118,14 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
                         tabCreatorManager,
                         browserControlsStateProvider,
                         multiWindowModeStateDispatcher,
-                        rootUiScrimCoordinator,
+                        scrimManager,
                         snackbarManager,
                         modalDialogManager,
                         bottomSheetController,
                         dataSharingTabManager,
                         backPressManager,
-                        desktopWindowStateManager);
+                        desktopWindowStateManager,
+                        edgeToEdgeSupplier);
         OneshotSupplierImpl<Profile> profileSupplier = new OneshotSupplierImpl<>();
         Handler handler = new Handler();
         profileProviderSupplier.onAvailable(
@@ -139,14 +143,14 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
             pane =
                     new IncognitoTabSwitcherPane(
                             activity,
-                            profileProviderSupplier,
                             factory,
                             incongitorTabGroupModelFilterSupplier,
                             newTabButtonOnClickListener,
                             incognitoReauthControllerSupplier,
                             onToolbarAlphaChange,
                             userEducationHelper,
-                            edgeToEdgeSupplier);
+                            edgeToEdgeSupplier,
+                            compositorViewHolderSupplier);
         } else {
             Supplier<TabGroupModelFilter> tabGroupModelFilterSupplier =
                     () ->
@@ -161,10 +165,12 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
                             factory,
                             tabGroupModelFilterSupplier,
                             newTabButtonOnClickListener,
-                            new TabSwitcherPaneDrawableCoordinator(activity, tabModelSelector),
+                            new TabSwitcherPaneDrawableCoordinator(
+                                    activity, tabModelSelector, tabModelNotificationDotSupplier),
                             onToolbarAlphaChange,
                             userEducationHelper,
-                            edgeToEdgeSupplier);
+                            edgeToEdgeSupplier,
+                            compositorViewHolderSupplier);
         }
         return Pair.create(pane, pane);
     }

@@ -1,23 +1,21 @@
 // Copyright (c) 2022 Vivaldi Technologies AS. All rights reserved
 
-#include "ios/notes/notes_factory.h"
+#import "ios/notes/notes_factory.h"
 
-#include "base/no_destructor.h"
-#include "components/keyed_service/ios/browser_state_dependency_manager.h"
-#include "components/notes/note_node.h"
-#include "components/notes/notes_model.h"
-#include "ios/chrome/browser/shared/model/browser_state/browser_state_otr_helper.h"
-#include "ios/chrome/browser/shared/model/profile/profile_ios.h"
-#include "ios/sync/file_store_factory.h"
-#include "ios/sync/note_sync_service_factory.h"
-#include "sync/notes/note_sync_service.h"
+#import "base/no_destructor.h"
+#import "components/notes/note_node.h"
+#import "components/notes/notes_model.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
+#import "ios/sync/file_store_factory.h"
+#import "ios/sync/note_sync_service_factory.h"
+#import "sync/notes/note_sync_service.h"
 
 namespace vivaldi {
 
 NotesModelFactory::NotesModelFactory()
-    : BrowserStateKeyedServiceFactory(
-          "Notes_Model",
-          BrowserStateDependencyManager::GetInstance()) {
+    : ProfileKeyedServiceFactoryIOS("Notes_Model",
+                                    ProfileSelection::kRedirectedInIncognito,
+                                    TestingCreation::kNoServiceForTests) {
   DependsOn(NoteSyncServiceFactory::GetInstance());
   DependsOn(SyncedFileStoreFactory::GetInstance());
 }
@@ -26,14 +24,20 @@ NotesModelFactory::~NotesModelFactory() {}
 
 // static
 NotesModel* NotesModelFactory::GetForProfile(ProfileIOS* profile) {
-  return static_cast<NotesModel*>(
-      GetInstance()->GetServiceForBrowserState(profile, true));
+  return GetInstance()->GetServiceForProfileAs<NotesModel>(
+      profile, /*create=*/true);
 }
 
 // static
 NotesModel* NotesModelFactory::GetForProfileIfExists(ProfileIOS* profile) {
-  return static_cast<NotesModel*>(
-      GetInstance()->GetServiceForBrowserState(profile, false));
+  // Since this is called as part of destroying the browser state, we need this
+  // extra test to avoid running into code that tests whether the browser state
+  // is still valid.
+  if (!GetInstance()->IsServiceCreated(profile)) {
+    return nullptr;
+  }
+  return GetInstance()->GetServiceForProfileAs<NotesModel>(
+      profile, /*create=*/false);
 }
 
 // static
@@ -54,14 +58,5 @@ std::unique_ptr<KeyedService> NotesModelFactory::BuildServiceInstanceFor(
 
 void NotesModelFactory::RegisterBrowserStatePrefs(
     user_prefs::PrefRegistrySyncable* registry) {}
-
-web::BrowserState* NotesModelFactory::GetBrowserStateToUse(
-    web::BrowserState* context) const {
-  return GetBrowserStateRedirectedInIncognito(context);
-}
-
-bool NotesModelFactory::ServiceIsNULLWhileTesting() const {
-  return true;
-}
 
 }  // namespace vivaldi

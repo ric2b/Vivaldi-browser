@@ -9,6 +9,7 @@
 
 #include "ash/webui/recorder_app_ui/recorder_app_ui.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <utility>
 #include <vector>
@@ -23,7 +24,6 @@
 #include "ash/webui/recorder_app_ui/resources/grit/recorder_app_resources_map.h"
 #include "ash/webui/recorder_app_ui/url_constants.h"
 #include "base/feature_list.h"
-#include "base/ranges/algorithm.h"
 #include "chromeos/ash/components/audio/cras_audio_handler.h"
 #include "chromeos/ash/components/mojo_service_manager/connection.h"
 #include "chromeos/services/machine_learning/public/cpp/service_connection.h"
@@ -48,6 +48,15 @@
 namespace ash {
 
 namespace {
+
+// New ChromeOS feedback dialog (crbug.com/40941303) passes description template
+// as query parameters in GURL with character limit 2097152 (defined in
+// url.mojom.kMaxURLChars).
+//
+// Calculates characters as 1000-char (around 200-word) template with maximum
+// model input & output (12k tokens in total) we likely want to include in the
+// description.
+const uint32_t kFeedbackDescriptionTemplateMaxChars = 49000;  // 1000 + 4 * 12k
 
 std::string_view SodaInstallerErrorCodeToString(
     speech::SodaInstaller::ErrorCode error) {
@@ -98,9 +107,9 @@ void TranslateAudioDeviceId(
 }
 
 int GetResourceIdFromStringName(const std::string& name) {
-  auto iter = base::ranges::find(
-      kLocalizedStrings, name,
-      [](const webui::LocalizedString& s) { return s.name; });
+  auto iter =
+      std::ranges::find(kLocalizedStrings, name,
+                        [](const webui::LocalizedString& s) { return s.name; });
   CHECK(iter != std::end(kLocalizedStrings));
   return iter->id;
 }
@@ -133,8 +142,7 @@ RecorderAppUI::RecorderAppUI(content::WebUI* web_ui,
   content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
       web_ui->GetWebContents()->GetBrowserContext(), kChromeUIRecorderAppHost);
 
-  source->AddResourcePaths(
-      base::make_span(kRecorderAppResources, kRecorderAppResourcesSize));
+  source->AddResourcePaths(kRecorderAppResources);
 
   source->AddResourcePath("", IDR_RECORDER_APP_INDEX_HTML);
 
@@ -152,24 +160,29 @@ RecorderAppUI::RecorderAppUI(content::WebUI* web_ui,
     speech::SodaInstaller::GetInstance()->AddObserver(this);
     if (base::FeatureList::IsEnabled(
             ash::features::kConchExpandTranscriptionLanguage)) {
-      auto language_list =
-          speech::SodaInstaller::GetInstance()->GetAvailableLanguages();
+      auto language_list = speech::SodaInstaller::GetInstance()
+                               ->GetLiveCaptionEnabledLanguages();
       for (auto language : language_list) {
-        available_languages_.insert(speech::GetLanguageCode(language));
+        auto language_code = speech::GetLanguageCode(language);
+        if (language_code != speech::LanguageCode::kNone) {
+          transcription_supported_languages_.insert(language_code);
+        }
       }
     } else {
-      available_languages_.insert(kDefaultLanguageCode);
-    }
-
-    gen_ai_supported_languages_.insert(kDefaultLanguageCode);
-    if (base::FeatureList::IsEnabled(ash::features::kConchLargeModel)) {
-      gen_ai_supported_languages_.insert(speech::LanguageCode::kJaJp);
+      transcription_supported_languages_.insert(kDefaultLanguageCode);
     }
 
     if (base::FeatureList::IsEnabled(
             speech::kFeatureManagementCrosSodaConchLanguages)) {
       // Currently only en-US is supported.
       speaker_label_supported_languages_.insert(kDefaultLanguageCode);
+    }
+  }
+
+  if (CanUseGenerativeAi()) {
+    gen_ai_supported_languages_.insert(kDefaultLanguageCode);
+    if (base::FeatureList::IsEnabled(ash::features::kConchLargeModel)) {
+      gen_ai_supported_languages_.insert(speech::LanguageCode::kJaJp);
     }
   }
 
@@ -297,19 +310,23 @@ void RecorderAppUI::GetModelInfo(on_device_model::mojom::FormatFeature feature,
         feature == on_device_model::mojom::FormatFeature::kAudioTitle);
   recorder_app::mojom::ModelInfoPtr model_info =
       recorder_app::mojom::ModelInfo::New();
-  model_info->input_token_limit = kInputTokenLimit;
-  if (feature == on_device_model::mojom::FormatFeature::kAudioSummary) {
-    if (base::FeatureList::IsEnabled(ash::features::kConchLargeModel)) {
+
+  if (base::FeatureList::IsEnabled(ash::features::kConchLargeModel)) {
+    model_info->input_token_limit = kInputTokenXsModelLimit;
+
+    if (feature == on_device_model::mojom::FormatFeature::kAudioSummary) {
       model_info->model_id =
           base::Uuid::ParseCaseInsensitive(kSummaryXsModelUuid);
     } else {
       model_info->model_id =
-          base::Uuid::ParseCaseInsensitive(kSummaryXxsModelUuid);
+          base::Uuid::ParseCaseInsensitive(kTitleSuggestionXsModelUuid);
     }
   } else {
-    if (base::FeatureList::IsEnabled(ash::features::kConchLargeModel)) {
+    model_info->input_token_limit = kInputTokenXxsModelLimit;
+
+    if (feature == on_device_model::mojom::FormatFeature::kAudioSummary) {
       model_info->model_id =
-          base::Uuid::ParseCaseInsensitive(kTitleSuggestionXsModelUuid);
+          base::Uuid::ParseCaseInsensitive(kSummaryXxsModelUuid);
     } else {
       model_info->model_id =
           base::Uuid::ParseCaseInsensitive(kTitleSuggestionXxsModelUuid);
@@ -482,22 +499,23 @@ bool RecorderAppUI::IsSodaAvailable(const speech::LanguageCode& language_code) {
   if (!speech::IsOnDeviceSpeechRecognitionSupported()) {
     return false;
   }
-  return available_languages_.contains(language_code);
+  return transcription_supported_languages_.contains(language_code);
 }
 
 void RecorderAppUI::GetAvailableLangPacks(
     GetAvailableLangPacksCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   std::vector<recorder_app::mojom::LangPackInfoPtr> lang_packs;
-  for (auto language_code : available_languages_) {
+  for (auto config : speech::kLanguageComponentConfigs) {
     recorder_app::mojom::LangPackInfoPtr lang_pack =
         recorder_app::mojom::LangPackInfo::New();
-    lang_pack->language_code = speech::GetLanguageName(language_code);
-    lang_pack->display_name = delegate_->GetLanguageDisplayName(language_code);
+    lang_pack->language_code = config.language_name;
+    lang_pack->display_name =
+        delegate_->GetLanguageDisplayName(config.language_code);
     lang_pack->is_gen_ai_supported =
-        gen_ai_supported_languages_.contains(language_code);
+        gen_ai_supported_languages_.contains(config.language_code);
     lang_pack->is_speaker_label_supported =
-        speaker_label_supported_languages_.contains(language_code);
+        speaker_label_supported_languages_.contains(config.language_code);
     lang_packs.push_back(std::move(lang_pack));
   }
   std::move(callback).Run(std::move(lang_packs));
@@ -659,9 +677,10 @@ void RecorderAppUI::LoadSpeechRecognizer(
   config->library_dlc_path = soda_library_path.value();
   config->enable_formatting =
       chromeos::machine_learning::mojom::OptionalBool::kTrue;
-  // This forces to use the large model.
+  // Large recognizer will be used because all CPU models starting from v5058
+  // are large size only. (See go/soda-application-domain)
   config->recognition_mode =
-      chromeos::machine_learning::mojom::SodaRecognitionMode::kIme;
+      chromeos::machine_learning::mojom::SodaRecognitionMode::kCaption;
   config->speaker_diarization_mode = chromeos::machine_learning::mojom::
       SpeakerDiarizationMode::kSpeakerLabelDetection;
   config->max_speaker_count = 7;
@@ -686,6 +705,12 @@ void RecorderAppUI::LoadSpeechRecognizer(
 void RecorderAppUI::OpenAiFeedbackDialog(
     const std::string& description_template) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (description_template.length() > kFeedbackDescriptionTemplateMaxChars) {
+    LOG(ERROR)
+        << "Refusing to open feedback dialog as description template exceeds "
+        << kFeedbackDescriptionTemplateMaxChars << " characters";
+    return;
+  }
   delegate_->OpenAiFeedbackDialog(description_template);
 }
 

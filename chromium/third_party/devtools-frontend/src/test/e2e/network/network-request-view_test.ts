@@ -15,6 +15,7 @@ import {
   getResourcesPath,
   getTextContent,
   pasteText,
+  readClipboard,
   step,
   typeText,
   waitFor,
@@ -22,7 +23,6 @@ import {
   waitForElementWithTextContent,
   waitForFunction,
 } from '../../shared/helper.js';
-
 import {CONSOLE_TAB_SELECTOR, focusConsolePrompt} from '../helpers/console-helpers.js';
 import {triggerLocalFindDialog} from '../helpers/memory-helpers.js';
 import {
@@ -38,6 +38,8 @@ const SIMPLE_PAGE_URL = `requests.html?num=${SIMPLE_PAGE_REQUEST_NUMBER}`;
 
 const configureAndCheckHeaderOverrides = async () => {
   const infoBar = await waitForAria('Select a folder to store override files in.');
+  // Allow time for infobar to animate in before clicking the button
+  await new Promise<void>(resolve => setTimeout(resolve, 550));
   await click('.infobar-main-row .infobar-button', {
     root: infoBar,
   });
@@ -50,7 +52,7 @@ const configureAndCheckHeaderOverrides = async () => {
   let responseHeaderSection = await waitFor('[aria-label="Response Headers"]', networkView);
 
   let row = await waitFor('.row', responseHeaderSection);
-  assert.deepStrictEqual(await getTextFromHeadersRow(row), ['cache-control:', 'max-age=3600']);
+  assert.deepEqual(await getTextFromHeadersRow(row), ['cache-control:', 'max-age=3600']);
 
   await waitForFunction(async () => {
     await click('.header-name', {root: row});
@@ -63,7 +65,7 @@ const configureAndCheckHeaderOverrides = async () => {
 
   const headersView = await waitFor('devtools-sources-headers-view');
   const headersViewRow = await waitFor('.row.padded', headersView);
-  assert.deepStrictEqual(await getTextFromHeadersRow(headersViewRow), ['cache-control', 'Foo']);
+  assert.deepEqual(await getTextFromHeadersRow(headersViewRow), ['cache-control', 'Foo']);
 
   await navigateToNetworkTab('hello.html');
   await selectRequestByName('hello.html');
@@ -74,7 +76,7 @@ const configureAndCheckHeaderOverrides = async () => {
 
   responseHeaderSection = await waitFor('[aria-label="Response Headers"]');
   row = await waitFor('.row.header-overridden', responseHeaderSection);
-  assert.deepStrictEqual(await getTextFromHeadersRow(row), ['cache-control:', 'Foo']);
+  assert.deepEqual(await getTextFromHeadersRow(row), ['cache-control:', 'Foo']);
 };
 
 describe('The Network Request view', () => {
@@ -487,6 +489,20 @@ describe('The Network Request view', () => {
     ].flat();
 
     assertOutlineMatches(expectedPayloadContent, payloadOutlineText);
+
+    // Context menu to copy single parsed entry.
+    const parsedEntry = await waitForElementWithTextContent('alpha');
+    await parsedEntry.click({button: 'right'});
+    await (await waitForElementWithTextContent('Copy value')).click();
+    assert.strictEqual(await readClipboard(), 'alpha');
+
+    // Context menu to copy the raw payload.
+    const viewSource = await waitForElementWithTextContent('view source');
+    await viewSource.click();
+    const source = await waitForElementWithTextContent('id=42&param=a%20b');
+    await source.click({button: 'right'});
+    await (await waitForElementWithTextContent('Copy')).click();
+    assert.strictEqual(await readClipboard(), 'id=42&param=a%20b');
   });
 
   it('shows raw headers', async () => {

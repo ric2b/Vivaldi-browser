@@ -26,9 +26,11 @@ LazyLoadServiceFactory::LazyLoadServiceFactory()
 
 LazyLoadServiceFactory::~LazyLoadServiceFactory() {}
 
-KeyedService* LazyLoadServiceFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+LazyLoadServiceFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
-  return new LazyLoadService(Profile::FromBrowserContext(context));
+  return std::make_unique<LazyLoadService>(
+      Profile::FromBrowserContext(context));
 }
 
 }  // namespace vivaldi

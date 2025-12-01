@@ -15,18 +15,18 @@ import org.chromium.base.CallbackController;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.chrome.browser.compositor.CompositorViewHolder;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.hub.DelegateButtonData;
 import org.chromium.chrome.browser.hub.FullButtonData;
 import org.chromium.chrome.browser.hub.HubColorScheme;
-import org.chromium.chrome.browser.hub.HubFieldTrial;
 import org.chromium.chrome.browser.hub.Pane;
 import org.chromium.chrome.browser.hub.PaneHubController;
 import org.chromium.chrome.browser.hub.PaneId;
 import org.chromium.chrome.browser.hub.ResourceButtonData;
 import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthController;
 import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthManager.IncognitoReauthCallback;
-import org.chromium.chrome.browser.profiles.ProfileProvider;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.IncognitoTabModel;
 import org.chromium.chrome.browser.tabmodel.IncognitoTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
@@ -54,6 +54,7 @@ public class IncognitoTabSwitcherPane extends TabSwitcherPaneBase {
                 @Override
                 public void didBecomeEmpty() {
                     if (BuildConfig.IS_VIVALDI) return;
+
                     mReferenceButtonDataSupplier.set(null);
                     if (isFocused()) {
                         @Nullable PaneHubController controller = getPaneHubController();
@@ -106,7 +107,6 @@ public class IncognitoTabSwitcherPane extends TabSwitcherPaneBase {
 
     /**
      * @param context The activity context.
-     * @param profileProviderSupplier The profile provider supplier.
      * @param factory The factory used to construct {@link TabSwitcherPaneCoordinator}s.
      * @param incognitoTabGroupModelFilterSupplier The incognito tab model filter.
      * @param newTabButtonClickListener The {@link OnClickListener} for the new tab button.
@@ -114,25 +114,26 @@ public class IncognitoTabSwitcherPane extends TabSwitcherPaneBase {
      * @param onToolbarAlphaChange Observer to notify when alpha changes during animations.
      * @param userEducationHelper Used for showing IPHs.
      * @param edgeToEdgeSupplier Supplier to the {@link EdgeToEdgeController} instance.
+     * @param compositorViewHolderSupplier Supplier to the {@link CompositorViewHolder} instance.
      */
     IncognitoTabSwitcherPane(
             @NonNull Context context,
-            @NonNull OneshotSupplier<ProfileProvider> profileProviderSupplier,
             @NonNull TabSwitcherPaneCoordinatorFactory factory,
             @NonNull Supplier<TabGroupModelFilter> incognitoTabGroupModelFilterSupplier,
             @NonNull OnClickListener newTabButtonClickListener,
             @Nullable OneshotSupplier<IncognitoReauthController> incognitoReauthControllerSupplier,
             @NonNull DoubleConsumer onToolbarAlphaChange,
             @NonNull UserEducationHelper userEducationHelper,
-            @NonNull ObservableSupplier<EdgeToEdgeController> edgeToEdgeSupplier) {
+            @NonNull ObservableSupplier<EdgeToEdgeController> edgeToEdgeSupplier,
+            @NonNull ObservableSupplier<CompositorViewHolder> compositorViewHolderSupplier) {
         super(
                 context,
-                profileProviderSupplier,
                 factory,
                 /* isIncognito= */ true,
                 onToolbarAlphaChange,
                 userEducationHelper,
-                edgeToEdgeSupplier);
+                edgeToEdgeSupplier,
+                compositorViewHolderSupplier);
 
         mIncognitoTabGroupModelFilterSupplier = incognitoTabGroupModelFilterSupplier;
 
@@ -154,7 +155,6 @@ public class IncognitoTabSwitcherPane extends TabSwitcherPaneBase {
                 new DelegateButtonData(
                         newTabButtonData,
                         () -> {
-                            notifyNewTabButtonClick();
                             newTabButtonClickListener.onClick(null);
                         });
         mDisabledNewTabButtonData = new DelegateButtonData(newTabButtonData, null);
@@ -219,8 +219,8 @@ public class IncognitoTabSwitcherPane extends TabSwitcherPaneBase {
     }
 
     @Override
-    public int getCurrentTabId() {
-        return TabModelUtils.getCurrentTabId(
+    public @Nullable Tab getCurrentTab() {
+        return TabModelUtils.getCurrentTab(
                 mIncognitoTabGroupModelFilterSupplier.get().getTabModel());
     }
 
@@ -268,7 +268,9 @@ public class IncognitoTabSwitcherPane extends TabSwitcherPaneBase {
                     && ChromeFeatureList.isEnabled(
                             SensitiveContentFeatures.SENSITIVE_CONTENT_WHILE_SWITCHING_TABS)) {
                 TabUiUtils.updateViewContentSensitivityForTabs(
-                        filter.getTabModel(), coordinator::setTabSwitcherContentSensitivity);
+                        filter.getTabModel(),
+                        coordinator::setTabSwitcherContentSensitivity,
+                        "SensitiveContent.TabSwitching.IncognitoTabSwitcherPane.Sensitivity");
             }
             coordinator.resetWithTabList(tabList);
             finishWaitForTabStateInitializedTimer();
@@ -317,12 +319,7 @@ public class IncognitoTabSwitcherPane extends TabSwitcherPaneBase {
     }
 
     private void setNewTabButtonEnabledState(boolean enabled) {
-        if (enabled) {
-            mNewTabButtonDataSupplier.set(mEnabledNewTabButtonData);
-        } else {
-            // The FAB may overlap the reauth buttons. So just remove it by nulling instead.
-            mNewTabButtonDataSupplier.set(
-                    HubFieldTrial.usesFloatActionButton() ? null : mDisabledNewTabButtonData);
-        }
+        mNewTabButtonDataSupplier.set(
+                enabled ? mEnabledNewTabButtonData : mDisabledNewTabButtonData);
     }
 }

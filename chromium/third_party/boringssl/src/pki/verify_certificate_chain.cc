@@ -1,6 +1,16 @@
 // Copyright 2015 The Chromium Authors
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "verify_certificate_chain.h"
 
@@ -1088,7 +1098,7 @@ void PathVerifier::BasicCertificateProcessing(
   // The key purpose is checked not just for the end-entity certificate, but
   // also interpreted as a constraint when it appears in intermediates. This
   // goes beyond what RFC 5280 describes, but is the de-facto standard. See
-  // https://wiki.mozilla.org/CA:CertificatePolicyV2.1#Frequently_Asked_Questions
+  // https://wiki.mozilla.org/CA/CertificatePolicyV2.1#Frequently_Asked_Questions
   VerifyExtendedKeyUsage(cert, required_key_purpose, errors, is_target_cert,
                          is_target_cert_issuer);
 }

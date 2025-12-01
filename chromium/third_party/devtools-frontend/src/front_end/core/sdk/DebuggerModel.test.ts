@@ -13,10 +13,11 @@ import {
 } from '../../testing/MockConnection.js';
 import {MockProtocolBackend} from '../../testing/MockScopeChain.js';
 import * as Common from '../common/common.js';
-import type * as Platform from '../platform/platform.js';
+import * as Platform from '../platform/platform.js';
 
 import * as SDK from './sdk.js';
 
+const {urlString} = Platform.DevToolsPath;
 const SCRIPT_ID_ONE = '1' as Protocol.Runtime.ScriptId;
 const SCRIPT_ID_TWO = '2' as Protocol.Runtime.ScriptId;
 
@@ -148,7 +149,7 @@ describeWithMockConnection('DebuggerModel', () => {
       });
       assert.strictEqual(debuggerModel?.createRawLocationByURL(url, 0)?.scriptId, SCRIPT_ID_ONE);
       assert.strictEqual(debuggerModel?.createRawLocationByURL(url, 20, 1)?.scriptId, SCRIPT_ID_TWO);
-      assert.strictEqual(debuggerModel?.createRawLocationByURL(url, 5, 5), null);
+      assert.isNull(debuggerModel?.createRawLocationByURL(url, 5, 5));
     });
   });
 
@@ -179,7 +180,7 @@ describeWithMockConnection('DebuggerModel', () => {
       const target = createTarget();
       target.markAsNodeJSForTest();
       const model = new SDK.DebuggerModel.DebuggerModel(target);
-      const {breakpointId} = await model.setBreakpointByURL('fs.js' as Platform.DevToolsPath.UrlString, 1);
+      const {breakpointId} = await model.setBreakpointByURL(urlString`fs.js`, 1);
       assert.strictEqual(breakpointId, breakpointId1);
     });
   });
@@ -229,7 +230,7 @@ describeWithMockConnection('DebuggerModel', () => {
     it('Scope.typeName covers every enum value', async () => {
       const target = createTarget();
       const debuggerModel = target.model(SDK.DebuggerModel.DebuggerModel) as SDK.DebuggerModel.DebuggerModel;
-      const scriptUrl = 'https://script-host/script.js' as Platform.DevToolsPath.UrlString;
+      const scriptUrl = urlString`https://script-host/script.js`;
       const script = new SDK.Script.Script(
           debuggerModel, SCRIPT_ID_ONE, scriptUrl, 0, 0, 0, 0, 0, '', false, false, undefined, false, 0, null, null,
           null, null, null, null);
@@ -327,7 +328,7 @@ describe('DebuggerModel', () => {
       }
 
       assert.lengthOf(consoleMessages, 1);
-      assert.deepStrictEqual(consoleMessages[0].text, expectedWarning);
+      assert.deepEqual(consoleMessages[0].text, expectedWarning);
     }
 
     it('prioritizes external DWARF over all types', () => {

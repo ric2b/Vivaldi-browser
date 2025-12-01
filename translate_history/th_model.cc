@@ -1,19 +1,38 @@
 // Copyright (c) 2021 Vivaldi Technologies AS. All rights reserved
 #include "translate_history/th_model.h"
 
-#include "content/public/browser/browser_context.h"
 #include "translate_history/th_model_loader.h"
 #include "translate_history/th_model_observer.h"
 #include "translate_history/th_storage.h"
 
+#if !BUILDFLAG(IS_IOS)
+#include "content/public/browser/browser_context.h"
+#else
+#include "base/files/file_util.h"
+#include "base/memory/ptr_util.h"
+#include "base/path_service.h"
+#include "ios/chrome/browser/shared/model/paths/paths.h"
+#endif
+
+#include "base/logging.h"
+
 namespace translate_history {
 
+#if !BUILDFLAG(IS_IOS)
 TH_Model::TH_Model(content::BrowserContext* context, bool session_only)
     : context_(context), session_only_(session_only) {
   if (session_only_) {
     Load();  // Sets up an empty list and saves it.
   }
 }
+#else
+TH_Model::TH_Model(bool session_only)
+    : session_only_(session_only) {
+  if (session_only_) {
+    Load();  // Sets up an empty list and saves it.
+  }
+}
+#endif
 
 TH_Model::~TH_Model() {
   for (auto& observer : observers_)
@@ -29,7 +48,11 @@ std::unique_ptr<TH_LoadDetails> TH_Model::CreateLoadDetails() {
 }
 
 void TH_Model::Load() {
+#if !BUILDFLAG(IS_IOS)
   store_.reset(new TH_Storage(context_, this));
+#else
+  store_.reset(new TH_Storage(this));
+#endif
   if (session_only_) {
     // Make an empty list and save it so that file content is wiped out.
     list_.reset(new NodeList);
@@ -37,9 +60,17 @@ void TH_Model::Load() {
     store_->SaveNow();
   } else {
     // ModelLoader schedules the load on a backend task runner.
+#if !BUILDFLAG(IS_IOS)
     TH_ModelLoader::Create(
         context_->GetPath(), CreateLoadDetails(),
         base::BindOnce(&TH_Model::LoadFinished, AsWeakPtr()));
+#else
+    base::FilePath base_dir;
+    if (base::PathService::Get(ios::DIR_USER_DATA, &base_dir)) {
+      TH_ModelLoader::Create(base_dir, CreateLoadDetails(),
+          base::BindOnce(&TH_Model::LoadFinished, AsWeakPtr()));
+    }
+#endif
   }
 }
 

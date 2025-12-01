@@ -18,7 +18,6 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/ash/mahi/web_contents/test_support/fake_mahi_web_contents_manager.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -275,8 +274,7 @@ IN_PROC_BROWSER_TEST_F(MahiWebContentsManagerBrowserTest, GetPageContents) {
             fake_mahi_web_contents_manager_->focused_web_content_state().title);
 }
 
-IN_PROC_BROWSER_TEST_F(MahiWebContentsManagerBrowserTest,
-                       DISABLED_GetPDFContents) {
+IN_PROC_BROWSER_TEST_F(MahiWebContentsManagerBrowserTest, GetPDFContents) {
   // Initially, the focused state and the requested state should be different.
   base::UnguessableToken focused_page_id =
       fake_mahi_web_contents_manager_->focused_web_content_state().page_id;

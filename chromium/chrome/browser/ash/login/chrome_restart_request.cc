@@ -35,8 +35,6 @@
 #include "chromeos/ash/components/cryptohome/cryptohome_parameters.h"
 #include "chromeos/ash/components/dbus/dbus_thread_manager.h"
 #include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
-#include "chromeos/ash/components/standalone_browser/channel_util.h"
-#include "chromeos/ash/components/standalone_browser/standalone_browser_features.h"
 #include "chromeos/dbus/constants/dbus_switches.h"
 #include "components/account_id/account_id.h"
 #include "components/policy/core/common/policy_switches.h"
@@ -53,6 +51,7 @@
 #include "media/base/media_switches.h"
 #include "media/capture/capture_switches.h"
 #include "media/media_buildflags.h"
+#include "mojo/core/embedder/features.h"
 #include "sandbox/policy/switches.h"
 #include "third_party/blink/public/common/switches.h"
 #include "third_party/cros_system_api/switches/chrome_switches.h"
@@ -137,7 +136,6 @@ void DeriveCommandLine(const GURL& start_url,
       ::switches::kRemoteDebuggingPort,
       ::switches::kRendererStartupDialog,
       ::switches::kSchedulerBoostUrgent,
-      ::switches::kSchedulerConfigurationDefault,
       ::switches::kTouchDevices,
       ::switches::kTouchEventFeatureDetection,
       ::switches::kTopChromeTouchUi,
@@ -170,6 +168,7 @@ void DeriveCommandLine(const GURL& start_url,
       switches::kAshTouchHud,
       switches::kAuraLegacyPowerButton,
       switches::kEnableDimShelf,
+      switches::kSchedulerConfigurationDefault,
       switches::kSupportsClamshellAutoRotation,
       switches::kShowTaps,
       blink::switches::kBlinkSettings,
@@ -223,10 +222,6 @@ void DeriveCommandLine(const GURL& start_url,
       switches::kForceTabletPowerButton,
       switches::kFormFactor,
       switches::kHasChromeOSKeyboard,
-      switches::kLacrosChromeAdditionalArgs,
-      switches::kLacrosChromeAdditionalEnv,
-      switches::kLacrosChromePath,
-      ash::standalone_browser::kLacrosStabilitySwitch,
       switches::kLoginProfile,
       switches::kNaturalScrollDefault,
       switches::kOobeForceTabletFirstRun,
@@ -254,12 +249,13 @@ void DeriveFeatures(base::CommandLine* out_command_line) {
   auto kForwardFeatures = {
       &features::kAutoNightLight,
       &ash::features::kSeamlessRefreshRateSwitching,
-      &ash::standalone_browser::features::kLacrosOnly,
       &::features::kPluginVm,
+      &display::features::kCtmColorManagement,
       &display::features::kOledScaleFactorEnabled,
 #if BUILDFLAG(ENABLE_PLATFORM_HEVC)
       &media::kPlatformHEVCDecoderSupport,
 #endif
+      &mojo::core::kMojoIpcz,
   };
   std::vector<std::string> enabled_features;
   std::vector<std::string> disabled_features;
@@ -325,7 +321,7 @@ ChromeRestartRequest::ChromeRestartRequest(const std::vector<std::string>& argv,
                                            RestartChromeReason reason)
     : argv_(argv), reason_(reason) {}
 
-ChromeRestartRequest::~ChromeRestartRequest() {}
+ChromeRestartRequest::~ChromeRestartRequest() = default;
 
 void ChromeRestartRequest::Start() {
   VLOG(1) << "Requesting a restart with command line: "

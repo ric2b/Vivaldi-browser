@@ -55,13 +55,14 @@ content::BrowserContext* IndexServiceFactory::GetBrowserContextToUse(
   return GetBrowserContextRedirectedInIncognito(context);
 }
 
-KeyedService* IndexServiceFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+IndexServiceFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
   std::unique_ptr<Index_Model> service(
       new Index_Model(context));
   // We do not load the model data here. That happens from the api when the
   // first request arrives.
-  return service.release();
+  return service;
 }
 
 bool IndexServiceFactory::ServiceIsNULLWhileTesting() const {

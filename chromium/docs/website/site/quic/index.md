@@ -64,7 +64,7 @@ from no such limitations.
             doc](https://docs.google.com/document/d/1g5nIXAIkN_Y-7XJW5K45IblHd_L2f5LTaDUDwvZ5L6g/edit?usp=sharing)
 *   [Getting started with the QUIC toy client and
             server](/quic/playing-with-quic)
-*   [QUIC tech talk](https://www.youtube.com/watch?v=hQZ-0mXFmk8)
+*   [QUIC tech talk](https://youtube.com/watch?v=hQZ-0mXFmk8)
 *   [QUIC
             Discovery](https://docs.google.com/document/d/1i4m7DbrWGgXafHxwl8SwIusY2ELUe8WX258xt2LFxPM/edit?usp=sharing)
 *   [QUIC FEC v1

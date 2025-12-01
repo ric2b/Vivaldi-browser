@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <climits>
 #include <iterator>
 #include <ranges>
@@ -13,7 +14,6 @@
 #include <vector>
 
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -44,7 +44,18 @@
 
 namespace {
 
-constexpr bool kIsDesktop = !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS);
+// Max number of featured enterprise suggestions to show when the user types '@'
+// or '@...'. 4 is a good limit because:
+// - When the user types '@', the existing 4 starter packs, 1 trivial search,
+//   and 4 enterprise suggestions will all fit in the total limit of 9
+//   suggestions. This may change if more starter packs are launched.
+// - When the user types '@...', the at-most-1 matching starter pack (no
+//   starter packs share the same 1st character), 1 trivial search, at least 2
+//   non-trivial searches, and 4 enterprise suggestions will fit in the total
+//   limit of 8 suggestions.
+// This constant can be replaced with a function if we want to show a different
+// # of enterprise suggestions in these 2 cases.
+constexpr int kMaxEnterpriseSuggestions = 4;
 
 std::string GetIphDismissedPrefNameFor(IphType iph_type) {
   switch (iph_type) {
@@ -129,8 +140,8 @@ void FeaturedSearchProvider::Start(const AutocompleteInput& input,
 
   AutocompleteInput keyword_input = input;
   const TemplateURL* keyword_turl =
-      KeywordProvider::GetSubstitutingTemplateURLForInput(template_url_service_,
-                                                          &keyword_input);
+      AutocompleteInput::GetSubstitutingTemplateURLForInput(
+          template_url_service_, &keyword_input);
   bool is_history_scope =
       keyword_turl &&
       keyword_turl->starter_pack_id() == TemplateURLStarterPackData::kHistory;
@@ -156,7 +167,7 @@ void FeaturedSearchProvider::Start(const AutocompleteInput& input,
     AddHistoryEmbeddingsScopePromoIphMatch();
   }
 
-  if (input.focus_type() != metrics::OmniboxFocusType::INTERACTION_DEFAULT ||
+  if (input.IsZeroSuggest() ||
       (input.type() == metrics::OmniboxInputType::EMPTY)) {
     return;
   }
@@ -184,27 +195,25 @@ FeaturedSearchProvider::~FeaturedSearchProvider() = default;
 
 void FeaturedSearchProvider::AddFeaturedKeywordMatches(
     const AutocompleteInput& input) {
-  // When the user's input begins with '@', we want to prioritize providing
-  // suggestions for all active starter pack search engines.
-  bool starts_with_starter_pack_symbol = base::StartsWith(
-      input.text(), u"@", base::CompareCase::INSENSITIVE_ASCII);
-
-  if (starts_with_starter_pack_symbol) {
-    TemplateURLService::TemplateURLVector matches;
-    template_url_service_->AddMatchingKeywords(input.text(), false, &matches);
-    for (TemplateURL* match : matches) {
-      if (match->starter_pack_id() > 0 &&
-          match->is_active() == TemplateURLData::ActiveStatus::kTrue) {
+  size_t enterprise_count = 0;
+  if (input.GetFeaturedKeywordMode() !=
+      AutocompleteInput::FeaturedKeywordMode::kFalse) {
+    TemplateURLService::TemplateURLVector turls;
+    template_url_service_->AddMatchingKeywords(input.text(), &turls);
+    for (TemplateURL* turl : turls) {
+      if (turl->starter_pack_id() > 0 &&
+          turl->is_active() == TemplateURLData::ActiveStatus::kTrue) {
         // Don't add the expanded set of starter pack engines unless the feature
         // is enabled.
         if (!OmniboxFieldTrial::IsStarterPackExpansionEnabled() &&
-            match->starter_pack_id() > TemplateURLStarterPackData::kTabs) {
+            turl->starter_pack_id() > TemplateURLStarterPackData::kTabs) {
           continue;
         }
-
-        AddStarterPackMatch(*match, input);
-      } else if (match->featured_by_policy()) {
-        AddFeaturedEnterpriseSearchMatch(*match, input);
+        AddStarterPackMatch(*turl, input);
+      } else if (turl->featured_by_policy() &&
+                 enterprise_count < kMaxEnterpriseSuggestions) {
+        AddFeaturedEnterpriseSearchMatch(*turl, input);
+        enterprise_count++;
       }
     }
   }
@@ -236,8 +245,7 @@ void FeaturedSearchProvider::AddStarterPackMatch(
       match.fill_into_edit.substr(input.text().length());
   match.destination_url = GURL(destination_url);
   match.transition = ui::PAGE_TRANSITION_GENERATED;
-  if (kIsDesktop &&
-      input.current_page_classification() !=
+  if (input.current_page_classification() !=
           metrics::OmniboxEventProto::NTP_REALBOX &&
       template_url.keyword().starts_with(u'@')) {
     // The Gemini provider doesn't follow the "Search X" pattern and should
@@ -249,7 +257,7 @@ void FeaturedSearchProvider::AddStarterPackMatch(
     if (OmniboxFieldTrial::IsStarterPackExpansionEnabled() &&
         template_url.starter_pack_id() == TemplateURLStarterPackData::kGemini) {
       match.description = l10n_util::GetStringFUTF16(
-          IDS_OMNIBOX_INSTANT_KEYWORD_CHAT_TEXT, template_url.keyword(),
+          IDS_OMNIBOX_INSTANT_KEYWORD_ASK_TEXT, template_url.keyword(),
           template_url.short_name());
       match.relevance = kGeminiRelevance;
     } else {
@@ -351,8 +359,8 @@ void FeaturedSearchProvider::RegisterDisplayedMatches(
 void FeaturedSearchProvider::AddFeaturedEnterpriseSearchMatch(
     const TemplateURL& template_url,
     const AutocompleteInput& input) {
-  if (!kIsDesktop || input.current_page_classification() ==
-                         metrics::OmniboxEventProto::NTP_REALBOX) {
+  if (input.current_page_classification() ==
+      metrics::OmniboxEventProto::NTP_REALBOX) {
     return;
   }
 
@@ -410,7 +418,7 @@ bool FeaturedSearchProvider::ShouldShowEnterpriseFeaturedSearchIPHMatch(
       template_url_service_->GetFeaturedEnterpriseSearchEngines();
   return input.IsZeroSuggest() && !featured_engines.empty() &&
          ShouldShowIPH(IphType::kFeaturedEnterpriseSearch) &&
-         base::ranges::all_of(featured_engines, [](auto turl) {
+         std::ranges::all_of(featured_engines, [](auto turl) {
            return turl->usage_count() == 0;
          });
 }
@@ -438,12 +446,12 @@ bool FeaturedSearchProvider::ShouldShowIPH(IphType iph_type) const {
 
 void FeaturedSearchProvider::AddFeaturedEnterpriseSearchIPHMatch() {
   std::vector<std::string> sites;
-  base::ranges::transform(
+  std::ranges::transform(
       template_url_service_->GetFeaturedEnterpriseSearchEngines(),
       std::back_inserter(sites), [](auto turl) {
         return url_formatter::StripWWW(GURL(turl->url()).host());
       });
-  base::ranges::sort(sites);
+  std::ranges::sort(sites);
   AddIPHMatch(IphType::kFeaturedEnterpriseSearch,
               l10n_util::GetStringFUTF16(
                   IDS_OMNIBOX_FEATURED_ENTERPRISE_SITE_SEARCH_IPH,
@@ -463,7 +471,7 @@ bool FeaturedSearchProvider::ShouldShowHistoryEmbeddingsSettingsPromoIphMatch()
   // - The user has not deleted the IPH suggestion.
   return client_->IsHistoryEmbeddingsSettingVisible() &&
          !client_->IsHistoryEmbeddingsEnabled() &&
-         history_embeddings::kOmniboxScoped.Get() &&
+         history_embeddings::GetFeatureParameters().omnibox_scoped &&
          ShouldShowIPH(IphType::kHistoryEmbeddingsSettingsPromo);
 }
 
@@ -473,10 +481,10 @@ void FeaturedSearchProvider::AddHistoryEmbeddingsSettingsPromoIphMatch() {
                         u" ";
   std::u16string link_text = l10n_util::GetStringUTF16(
       IDS_OMNIBOX_HISTORY_EMBEDDINGS_SETTINGS_PROMO_IPH_LINK_TEXT);
-  GURL link_url = GURL(base::FeatureList::IsEnabled(
-                           optimization_guide::features::kAiSettingsPageRefresh)
-                           ? "chrome://settings/ai/historySearch"
-                           : "chrome://settings/historySearch");
+  GURL link_url =
+      GURL(optimization_guide::features::IsAiSettingsPageRefreshEnabled()
+               ? "chrome://settings/ai/historySearch"
+               : "chrome://settings/historySearch");
   AddIPHMatch(IphType::kHistoryEmbeddingsSettingsPromo, text, u"", link_text,
               link_url, true);
 }
@@ -487,7 +495,7 @@ bool FeaturedSearchProvider::ShouldShowHistoryEmbeddingsDisclaimerIphMatch()
   // by `ShouldShowIPH()` (i.e. shown count or dismissal) because this is a
   // disclaimer.
   return client_->IsHistoryEmbeddingsEnabled() &&
-         history_embeddings::kOmniboxScoped.Get();
+         history_embeddings::GetFeatureParameters().omnibox_scoped;
 }
 
 void FeaturedSearchProvider::AddHistoryEmbeddingsDisclaimerIphMatch() {
@@ -496,10 +504,10 @@ void FeaturedSearchProvider::AddHistoryEmbeddingsDisclaimerIphMatch() {
       u" ";
   std::u16string link_text = l10n_util::GetStringUTF16(
       IDS_OMNIBOX_HISTORY_EMBEDDINGS_DISCLAIMER_IPH_LINK_TEXT);
-  GURL link_url = GURL(base::FeatureList::IsEnabled(
-                           optimization_guide::features::kAiSettingsPageRefresh)
-                           ? "chrome://settings/ai/historySearch"
-                           : "chrome://settings/historySearch");
+  GURL link_url =
+      GURL(optimization_guide::features::IsAiSettingsPageRefreshEnabled()
+               ? "chrome://settings/ai/historySearch"
+               : "chrome://settings/historySearch");
   AddIPHMatch(IphType::kHistoryEmbeddingsDisclaimer, text, u"", link_text,
               link_url, false);
 }
@@ -512,7 +520,7 @@ bool FeaturedSearchProvider::ShouldShowHistoryScopePromoIphMatch(
   // directly related to embeddings so it's ok to show to users who can't opt-in
   // to embeddings.
   return input.IsZeroSuggest() && !client_->IsHistoryEmbeddingsEnabled() &&
-         history_embeddings::kOmniboxScoped.Get() &&
+         history_embeddings::GetFeatureParameters().omnibox_scoped &&
          !client_->IsOffTheRecord() &&
          ShouldShowIPH(IphType::kHistoryScopePromo);
 }
@@ -528,7 +536,7 @@ bool FeaturedSearchProvider::ShouldShowHistoryEmbeddingsScopePromoIphMatch(
   // Shown in the zero state when history embeddings is enabled (& opted-in) for
   // the omnibox.
   return input.IsZeroSuggest() && client_->IsHistoryEmbeddingsEnabled() &&
-         history_embeddings::kOmniboxScoped.Get() &&
+         history_embeddings::GetFeatureParameters().omnibox_scoped &&
          ShouldShowIPH(IphType::kHistoryEmbeddingsScopePromo);
 }
 

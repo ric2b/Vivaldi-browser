@@ -59,7 +59,7 @@ namespace {
 constexpr Ssrc kSenderSsrc = 1;
 constexpr Ssrc kReceiverSsrc = 2;
 constexpr int kRtpTimebase = 48000;
-constexpr milliseconds kTargetPlayoutDelay{400};
+constexpr milliseconds kTargetPlayoutDelay(400);
 constexpr auto kAesKey =
     std::array<uint8_t, 16>{{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
                              0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f}};
@@ -85,12 +85,12 @@ struct EncodedFrameWithBuffer : public EncodedFrame {
 
 // SenderPacketRouter configuration for these tests.
 constexpr int kNumPacketsPerBurst = 20;
-constexpr milliseconds kBurstInterval{10};
+constexpr milliseconds kBurstInterval(10);
 
 // An arbitrary value, subtracted from "now," to specify the reference_time on
 // frames that are about to be enqueued. This simulates that capture+encode
 // happened in the past, before Sender::EnqueueFrame() is called.
-constexpr milliseconds kCaptureDelay{11};
+constexpr milliseconds kCaptureDelay(11);
 
 // In some tests, the computed time values could be off a little bit due to
 // imprecision in certain wire-format timestamp types. The following macro
@@ -449,7 +449,7 @@ class SenderTest : public testing::Test {
 // latency, no loss), and does so without having to transmit the same packet
 // twice.
 TEST_F(SenderTest, SendsFramesEfficiently) {
-  constexpr milliseconds kOneWayNetworkDelay{1};
+  constexpr milliseconds kOneWayNetworkDelay(1);
   SetSenderToReceiverNetworkDelay(kOneWayNetworkDelay);
   SetReceiverToSenderNetworkDelay(kOneWayNetworkDelay);
 
@@ -502,7 +502,7 @@ TEST_F(SenderTest, SendsFramesEfficiently) {
 // it is cancelling frames. See https://crbug.com/1433584 for an example crash
 // where the checkpoint frame ID is invalid.
 TEST_F(SenderTest, WaitsUntilEndOfReportToUpdateObservers) {
-  constexpr milliseconds kOneWayNetworkDelay{1};
+  constexpr milliseconds kOneWayNetworkDelay(1);
   SetSenderToReceiverNetworkDelay(kOneWayNetworkDelay);
   SetReceiverToSenderNetworkDelay(kOneWayNetworkDelay);
 
@@ -604,9 +604,9 @@ TEST_F(SenderTest, RespondsToNetworkLatencyChanges) {
                       sender()->GetMaxInFlightMediaDuration(), kEpsilon);
 
   // No network is perfect. Simulate different one-way network delays.
-  constexpr milliseconds kOutboundDelay{2};
-  constexpr milliseconds kInboundDelay{4};
-  constexpr milliseconds kRoundTripDelay = kOutboundDelay + kInboundDelay;
+  constexpr milliseconds kOutboundDelay(2);
+  constexpr milliseconds kInboundDelay(4);
+  constexpr milliseconds kRoundTripDelay(kOutboundDelay + kInboundDelay);
   SetSenderToReceiverNetworkDelay(kOutboundDelay);
   SetReceiverToSenderNetworkDelay(kInboundDelay);
 
@@ -633,7 +633,7 @@ TEST_F(SenderTest, RespondsToNetworkLatencyChanges) {
   // Simulate the passage of time in the Receiver doing "other tasks" before
   // replying back to the Sender. This delay is included in the Receiver Report
   // so that the Sender can isolate the delays caused by the network.
-  constexpr milliseconds kReceiverProcessingDelay{2};
+  constexpr milliseconds kReceiverProcessingDelay(2);
   SimulateExecution(kReceiverProcessingDelay);
   // Create the Receiver Report "reply," and simulate it being sent across the
   // network, back to the Sender.
@@ -650,9 +650,9 @@ TEST_F(SenderTest, RespondsToNetworkLatencyChanges) {
                       sender()->GetMaxInFlightMediaDuration(), kEpsilon);
 
   // Increase the outbound delay, which will increase the total round-trip time.
-  constexpr milliseconds kIncreasedOutboundDelay{6};
-  constexpr milliseconds kIncreasedRoundTripDelay =
-      kIncreasedOutboundDelay + kInboundDelay;
+  constexpr milliseconds kIncreasedOutboundDelay(6);
+  constexpr milliseconds kIncreasedRoundTripDelay(kIncreasedOutboundDelay +
+                                                  kInboundDelay);
   SetSenderToReceiverNetworkDelay(kIncreasedOutboundDelay);
 
   // With increased network delay, run several more network round-trips. Expect
@@ -684,7 +684,7 @@ TEST_F(SenderTest, RejectsEnqueuingBeforeProtocolDesignLimit) {
   // For this test, use 1000 FPS. This makes the frames all one millisecond
   // apart to avoid triggering the media-duration rejection logic.
   constexpr int kFramesPerSecond = 1000;
-  constexpr milliseconds kSmallFrameDuration{1};
+  constexpr milliseconds kSmallFrameDuration(1);
 
   // Send the absolute design-limit maximum number of frames.
   int frame_count = 0;
@@ -749,7 +749,7 @@ TEST_F(SenderTest, RejectsEnqueuingIfTooLongMediaDurationIsInFlight) {
   // For this test, use 20 FPS. This makes all frames 50 ms apart, which should
   // make it easy to trigger the media-duration rejection logic.
   constexpr int kFramesPerSecond = 20;
-  constexpr milliseconds kLargeFrameDuration{50};
+  constexpr milliseconds kLargeFrameDuration(50);
 
   // Enqueue frames until one is rejected because the in-flight duration would
   // be too high.
@@ -1061,7 +1061,7 @@ TEST_F(SenderTest, ResendsIndividuallyNackedPackets) {
 
   // Use a 1ms network delay in each direction to make the sequence of events
   // clearer in this test.
-  constexpr milliseconds kOneWayNetworkDelay{1};
+  constexpr milliseconds kOneWayNetworkDelay(1);
   SetSenderToReceiverNetworkDelay(kOneWayNetworkDelay);
   SetReceiverToSenderNetworkDelay(kOneWayNetworkDelay);
 
@@ -1142,7 +1142,7 @@ TEST_F(SenderTest, ResendsMissingFrames) {
 
   // Use a 1ms network delay in each direction to make the sequence of events
   // clearer in this test.
-  constexpr milliseconds kOneWayNetworkDelay{1};
+  constexpr milliseconds kOneWayNetworkDelay(1);
   SetSenderToReceiverNetworkDelay(kOneWayNetworkDelay);
   SetReceiverToSenderNetworkDelay(kOneWayNetworkDelay);
 

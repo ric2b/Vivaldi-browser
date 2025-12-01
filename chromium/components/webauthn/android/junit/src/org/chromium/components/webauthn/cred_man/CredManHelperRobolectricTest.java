@@ -33,7 +33,6 @@ import androidx.test.filters.SmallTest;
 
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
@@ -45,19 +44,18 @@ import org.robolectric.shadow.api.Shadow;
 
 import org.chromium.base.Callback;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.blink.mojom.AuthenticatorStatus;
 import org.chromium.blink.mojom.PublicKeyCredentialCreationOptions;
 import org.chromium.blink.mojom.PublicKeyCredentialDescriptor;
 import org.chromium.blink.mojom.PublicKeyCredentialRequestOptions;
 import org.chromium.blink.mojom.ResidentKeyRequirement;
+import org.chromium.components.payments.test_support.ShadowWebContentsStatics;
 import org.chromium.components.webauthn.AuthenticationContextProvider;
 import org.chromium.components.webauthn.Barrier;
 import org.chromium.components.webauthn.Fido2ApiTestHelper;
 import org.chromium.components.webauthn.GetAssertionOutcome;
 import org.chromium.components.webauthn.MakeCredentialOutcome;
-import org.chromium.components.webauthn.ShadowWebContentStatics;
 import org.chromium.components.webauthn.WebauthnBrowserBridge;
 import org.chromium.components.webauthn.WebauthnModeProvider;
 import org.chromium.components.webauthn.cred_man.CredManMetricsHelper.CredManCreateRequestEnum;
@@ -83,7 +81,7 @@ import org.chromium.content_public.browser.WebContents;
             ShadowGetCredentialRequest.ShadowBuilder.class,
             ShadowGetCredentialResponse.class,
             ShadowPrepareGetCredentialResponse.class,
-            ShadowWebContentStatics.class
+            ShadowWebContentsStatics.class
         })
 @MinAndroidSdkLevel(Build.VERSION_CODES.P)
 public class CredManHelperRobolectricTest {
@@ -117,8 +115,6 @@ public class CredManHelperRobolectricTest {
                 }
             };
 
-    @Rule public JniMocker mMocker = new JniMocker();
-
     @Before
     public void setUp() throws Exception {
         MockitoAnnotations.openMocks(this);
@@ -128,8 +124,8 @@ public class CredManHelperRobolectricTest {
         mRequestOptions = Fido2ApiTestHelper.createDefaultGetAssertionOptions();
         mRequestOptions.allowCredentials = new PublicKeyCredentialDescriptor[0];
 
-        Fido2ApiTestHelper.mockFido2CredentialRequestJni(mMocker);
-        Fido2ApiTestHelper.mockClientDataJson(mMocker, "{}");
+        Fido2ApiTestHelper.mockFido2CredentialRequestJni();
+        Fido2ApiTestHelper.mockClientDataJson("{}");
 
         mCallback = Fido2ApiTestHelper.getAuthenticatorCallback();
 
@@ -579,7 +575,7 @@ public class CredManHelperRobolectricTest {
         mCredManHelper.startPrefetchRequest(
                 mRequestOptions,
                 mOriginString,
-                /* clientDatJson= */ null,
+                /* clientDataJson= */ null,
                 mClientDataHash,
                 mCallback::onSignResponse,
                 mErrorCallback,

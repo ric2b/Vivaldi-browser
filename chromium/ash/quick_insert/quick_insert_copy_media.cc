@@ -16,6 +16,7 @@
 #include "ash/public/cpp/system/toast_manager.h"
 #include "ash/quick_insert/quick_insert_rich_media.h"
 #include "base/check_deref.h"
+#include "base/containers/to_vector.h"
 #include "base/functional/overloaded.h"
 #include "base/strings/escape.h"
 #include "base/strings/strcat.h"
@@ -33,7 +34,7 @@ namespace ash {
 namespace {
 
 constexpr char kQuickInsertCopyToClipboardToastId[] =
-    "picker_copy_to_clipboard";
+    "quick_insert_copy_to_clipboard";
 
 struct HtmlAttr {
  private:
@@ -52,20 +53,19 @@ struct HtmlAttr {
 };
 
 std::string ImageHtmlAttrsToStr(std::vector<HtmlAttr> attrs) {
-  std::vector<std::string> attrs_as_strings;
-  attrs_as_strings.reserve(attrs.size());
-  base::ranges::transform(
-      std::move(attrs), std::back_inserter(attrs_as_strings),
-      [](HtmlAttr attr) {
-        return base::StringPrintf(R"(%s="%s")", *attr.name, attr.value.c_str());
-      });
-
   return base::StringPrintf(
       R"(<img %s/>)",
-      base::JoinString(std::move(attrs_as_strings), " ").c_str());
+      base::JoinString(base::ToVector(attrs,
+                                      [](const HtmlAttr& attr) {
+                                        return base::StringPrintf(
+                                            R"(%s="%s")", *attr.name,
+                                            attr.value.c_str());
+                                      }),
+                       " ")
+          .c_str());
 }
 
-std::string BuildImageHtml(const PickerImageMedia& image) {
+std::string BuildImageHtml(const QuickInsertImageMedia& image) {
   std::vector<HtmlAttr> attrs;
   // GURL::specs are always canonicalised and escaped, so this cannot result in
   // an XSS.
@@ -90,18 +90,18 @@ std::string BuildImageHtml(const PickerImageMedia& image) {
 }  // namespace
 
 std::unique_ptr<ui::ClipboardData> ClipboardDataFromMedia(
-    const PickerRichMedia& media,
-    const PickerClipboardDataOptions& options) {
+    const QuickInsertRichMedia& media,
+    const QuickInsertClipboardDataOptions& options) {
   auto data = std::make_unique<ui::ClipboardData>();
   std::visit(
       base::Overloaded{
-          [&data](const PickerTextMedia& media) {
+          [&data](const QuickInsertTextMedia& media) {
             data->set_text(base::UTF16ToUTF8(media.text));
           },
-          [&data](const PickerImageMedia& media) {
+          [&data](const QuickInsertImageMedia& media) {
             data->set_markup_data(BuildImageHtml(media));
           },
-          [&data, &options](const PickerLinkMedia& media) {
+          [&data, &options](const QuickInsertLinkMedia& media) {
             std::string escaped_spec = base::EscapeForHTML(media.url.spec());
             std::string escaped_title = base::EscapeForHTML(media.title);
             data->set_text(media.url.spec());
@@ -114,7 +114,7 @@ std::unique_ptr<ui::ClipboardData> ClipboardDataFromMedia(
                                 escaped_spec, "\">", escaped_spec, "</a>"}));
             }
           },
-          [&data](const PickerLocalFileMedia& media) {
+          [&data](const QuickInsertLocalFileMedia& media) {
             data->set_filenames(
                 {ui::FileInfo(media.path, /*display_name=*/{})});
           },
@@ -123,10 +123,11 @@ std::unique_ptr<ui::ClipboardData> ClipboardDataFromMedia(
   return data;
 }
 
-void CopyMediaToClipboard(const PickerRichMedia& media) {
+void CopyMediaToClipboard(const QuickInsertRichMedia& media) {
   CHECK_DEREF(ui::ClipboardNonBacked::GetForCurrentThread())
       .WriteClipboardData(ClipboardDataFromMedia(
-          media, PickerClipboardDataOptions{.links_should_use_title = false}));
+          media,
+          QuickInsertClipboardDataOptions{.links_should_use_title = false}));
 
   // Show a toast to inform the user about the copy.
   // TODO: b/322928125 - Use dedicated toast catalog name.

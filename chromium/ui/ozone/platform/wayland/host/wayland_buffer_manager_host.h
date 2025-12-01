@@ -15,7 +15,6 @@
 #include "base/functional/callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
-#include "base/version.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -70,14 +69,11 @@ class WaylandBufferManagerHost : public ozone::mojom::WaylandBufferManagerHost {
   // Returns supported buffer formats either from zwp_linux_dmabuf or wl_drm.
   wl::BufferFormatsWithModifiersMap GetSupportedBufferFormats() const;
 
-  base::Version GetServerVersion() const;
   bool SupportsDmabuf() const;
   bool SupportsAcquireFence() const;
   bool SupportsViewporter() const;
   bool SupportsOverlays() const;
-  bool SupportsNonBackedSolidColorBuffers() const;
   bool SupportsSinglePixelBuffer() const;
-  uint32_t GetSurfaceAugmentorVersion() const;
 
   // ozone::mojom::WaylandBufferManagerHost overrides:
   //
@@ -105,13 +101,6 @@ class WaylandBufferManagerHost : public ozone::mojom::WaylandBufferManagerHost {
                             uint64_t length,
                             const gfx::Size& size,
                             uint32_t buffer_id) override;
-  // Called by the GPU and asks to create a solid color wl_buffer. Check
-  // comments in the
-  // ui/ozone/platform/wayland/mojom/wayland_buffer_manager.mojom. The
-  // availability of this depends on existence of surface-augmenter protocol.
-  void CreateSolidColorBuffer(const gfx::Size& size,
-                              const SkColor4f& color,
-                              uint32_t buffer_id) override;
   // Called by the GPU and asks to create a single pixel wl_buffer. Check
   // comments in the
   // ui/ozone/platform/wayland/mojom/wayland_buffer_manager.mojom. The

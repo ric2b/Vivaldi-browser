@@ -28,9 +28,9 @@ week.
 a fix by kojii that caused a revert (layout scheduling at a stage
 where one should not happen).
 CSS Grid Layout (svillar, jfernandez, rego, javif)
-\[[crbug.com/79180](http://crbug.com/79180)\]
+\[[crbug.com/79180](https://crbug.com/79180)\]
 - No update since last week -
-CSS Multi-column (mstensho) \[[crbug.com/334335](http://crbug.com/334335)\]
+CSS Multi-column (mstensho) \[[crbug.com/334335](https://crbug.com/334335)\]
 - No update since last week -
 CSS Houdini (ikilpatrick)
 - Kast week in Waterloo with compositor worker folks, had fun getting
@@ -40,7 +40,7 @@ trunk sometime later this month.
 - About to commit a small change for main frame worklets API.
 - Want to get paint rendering context 2d check-in this week.
 Add API for layout (leviw, pilgrim, dgrogan)
-\[[crbug.com/495288](http://crbug.com/495288)\]
+\[[crbug.com/495288](https://crbug.com/495288)\]
 - Continued making progress on the box layout api, have sense of size of
 problem. Basically every element will have to have a layout item
 instead. About ~40% of them have their own element specific things
@@ -55,12 +55,12 @@ complicated APIs that will take more time. (pilgrim)
 Layout API. Only size invalid calls left, hopeful then we can change
 the constructors and add include guards this week then call the Line
 Layout API done. (dgrogan)
-LayoutNG \[[crbug.com/591099](http://crbug.com/591099)\]
+LayoutNG \[[crbug.com/591099](https://crbug.com/591099)\]
 - No update since last week -
-CSS Containment (leviw) \[[crbug.com/312978](http://crbug.com/312978)\]
+CSS Containment (leviw) \[[crbug.com/312978](https://crbug.com/312978)\]
 - Landed Layout Containment! <https://codereview.chromium.org/1530303003>
 Intersection Observer (szager, mpb)
-\[[crbug.com/540528](http://crbug.com/540528)\]
+\[[crbug.com/540528](https://crbug.com/540528)\]
 - Landed a couple of intersection observer changes last week, have a few
 more coming but no longer a full-time endeavor. (szager)
 - Focus on bugs this week. (szager)

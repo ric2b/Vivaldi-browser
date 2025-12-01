@@ -17,9 +17,9 @@
 #import "net/test/embedded_test_server/http_response.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
-using base::test::ios::WaitUntilConditionOrTimeout;
 using base::test::ios::kWaitForDownloadTimeout;
 using base::test::ios::kWaitForUIElementTimeout;
+using base::test::ios::WaitUntilConditionOrTimeout;
 
 namespace {
 
@@ -89,7 +89,7 @@ std::unique_ptr<net::test_server::HttpResponse> GetResponse(
 
   // Verify QLPreviewControllerView is presented.
   [ChromeEarlGrey waitForSufficientlyVisibleElementWithMatcher:
-                      grey_kindOfClassName(@"QLPreviewControllerView")];
+                      grey_accessibilityID(@"QLPreviewControllerView")];
 }
 
 - (void)testDownloadUnauthorized {
@@ -99,7 +99,7 @@ std::unique_ptr<net::test_server::HttpResponse> GetResponse(
 
   // Verify QLPreviewControllerView is not presented.
   [[EarlGrey
-      selectElementWithMatcher:grey_kindOfClassName(@"QLPreviewControllerView")]
+      selectElementWithMatcher:grey_accessibilityID(@"QLPreviewControllerView")]
       assertWithMatcher:grey_nil()];
 }
 
@@ -110,7 +110,7 @@ std::unique_ptr<net::test_server::HttpResponse> GetResponse(
 
   // Verify QLPreviewControllerView is not presented.
   [[EarlGrey
-      selectElementWithMatcher:grey_kindOfClassName(@"QLPreviewControllerView")]
+      selectElementWithMatcher:grey_accessibilityID(@"QLPreviewControllerView")]
       assertWithMatcher:grey_nil()];
 }
 
@@ -121,7 +121,7 @@ std::unique_ptr<net::test_server::HttpResponse> GetResponse(
 
   // Verify QLPreviewControllerView is not presented.
   [[EarlGrey
-      selectElementWithMatcher:grey_kindOfClassName(@"QLPreviewControllerView")]
+      selectElementWithMatcher:grey_accessibilityID(@"QLPreviewControllerView")]
       assertWithMatcher:grey_nil()];
 }
 

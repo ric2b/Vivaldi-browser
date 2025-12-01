@@ -6,19 +6,19 @@ struct In {
   float4 pos;
 };
 
+void g(int a, float b) {
+}
+
 struct tint_symbol_1 {
   int4 fbf [[color(3)]];
 };
-
-void g(int a, float b) {
-}
 
 void f_inner(In in) {
   g(in.fbf[3], in.pos[0]);
 }
 
 fragment void f(float4 pos [[position]], tint_symbol_1 tint_symbol [[stage_in]]) {
-  In const tint_symbol_2 = {.fbf=tint_symbol.fbf, .pos=pos};
+  In const tint_symbol_2 = In{.fbf=tint_symbol.fbf, .pos=pos};
   f_inner(tint_symbol_2);
   return;
 }

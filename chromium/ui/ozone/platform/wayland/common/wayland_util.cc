@@ -14,13 +14,16 @@
 
 #include "base/files/file_util.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "build/buildflag.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "third_party/skia/include/core/SkRegion.h"
 #include "ui/base/hit_test.h"
 #include "ui/events/base_event_utils.h"
+#include "ui/events/event.h"
 #include "ui/gfx/geometry/skia_conversions.h"
-#include "ui/gfx/geometry/transform.h"
 #include "ui/ozone/platform/wayland/host/wayland_connection.h"
 #include "ui/ozone/platform/wayland/host/wayland_shm_buffer.h"
 #include "ui/ozone/platform/wayland/host/wayland_surface.h"
@@ -324,33 +327,11 @@ void SkColorToWlArray(const SkColor4f& color, wl_array& array) {
   }
 }
 
-void TransformToWlArray(
-    const absl::variant<gfx::OverlayTransform, gfx::Transform>& transform,
-    wl_array& array) {
-  if (absl::holds_alternative<gfx::OverlayTransform>(transform)) {
-    return;
-  }
-
-  gfx::Transform t = absl::get<gfx::Transform>(transform);
-  constexpr std::array<std::array<int, 2>, 6> rcs = {
-      {{0, 0}, {1, 0}, {0, 1}, {1, 1}, {0, 3}, {1, 3}}};
-
-  for (const auto& rc : rcs) {
-    float* ptr = static_cast<float*>(wl_array_add(&array, sizeof(float)));
-    DCHECK(ptr);
-    *ptr = static_cast<float>(t.rc(rc[0], rc[1]));
-  }
-}
-
 base::TimeTicks EventMillisecondsToTimeTicks(uint32_t milliseconds) {
-#if BUILDFLAG(IS_LINUX)
   // TODO(crbug.com/40287874): `milliseconds` comes from Weston that
   // uses timestamp from libinput, which is different from TimeTicks.
   // Use EventTimeForNow(), for now.
   return ui::EventTimeForNow();
-#else
-  return base::TimeTicks() + base::Milliseconds(milliseconds);
-#endif
 }
 
 float ClampScale(float scale) {
@@ -385,7 +366,6 @@ bool MaybeHandlePlatformEventForDrag(const ui::PlatformEvent& event,
 }
 
 void RecordConnectionMetrics(wl_display* display) {
-#if BUILDFLAG(IS_LINUX)
   CHECK(display);
 
   // These values are logged to metrics so must not be changed.
@@ -470,7 +450,6 @@ void RecordConnectionMetrics(wl_display* display) {
   };
 
   base::UmaHistogramEnumeration("Linux.Wayland.Compositor", get_compositor());
-#endif
 }
 
 }  // namespace wl

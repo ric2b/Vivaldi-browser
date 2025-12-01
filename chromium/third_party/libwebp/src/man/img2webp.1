@@ -1,5 +1,5 @@
 .\"                                      Hey, EMACS: -*- nroff -*-
-.TH IMG2WEBP 1 "March 17, 2023"
+.TH IMG2WEBP 1 "November 26, 2024"
 .SH NAME
 img2webp \- create animated WebP file from a sequence of input images.
 .SH SYNOPSIS
@@ -53,8 +53,8 @@ value is around 60. Note that lossy with \fB\-q 100\fP can at times yield
 better results.
 .TP
 .B \-sharp_yuv
-Use more accurate and sharper RGB->YUV conversion if needed. Note that this
-process is slower than the default 'fast' RGB->YUV conversion.
+Use more accurate and sharper RGB->YUV conversion. Note that this process is
+slower than the default 'fast' RGB->YUV conversion.
 .TP
 .BI \-loop " int
 Specifies the number of times the animation should loop. Using '0'
@@ -88,17 +88,26 @@ Specify the compression factor between 0 and 100. The default is 75.
 Specify the compression method to use. This parameter controls the
 trade off between encoding speed and the compressed file size and quality.
 Possible values range from 0 to 6. Default value is 4.
+When higher values are used, the encoder will spend more time inspecting
+additional encoding possibilities and decide on the quality gain.
+Lower value can result in faster processing time at the expense of
+larger file size and lower compression quality.
+.TP
+.B \-exact, \-noexact
+Preserve or alter RGB values in transparent area. The default is
+\fB-noexact\fP, to help compressibility. Note \fB\-noexact\fP may cause
+artifacts in frames compressed with \fB\-lossy\fP.
+
+.SH EXIT STATUS
+If there were no problems during execution, \fBimg2webp\fP exits with the value
+of the C constant \fBEXIT_SUCCESS\fP. This is usually zero.
+.PP
+If an error occurs, \fBimg2webp\fP exits with the value of the C constant
+\fBEXIT_FAILURE\fP. This is usually one.
 
 .SH EXAMPLE
 img2webp -loop 2 in0.png -lossy in1.jpg -d 80 in2.tiff -o out.webp
 .br
-
-.SH BUGS
-Please report all bugs to the issue tracker:
-https://bugs.chromium.org/p/webp
-.br
-Patches welcome! See this page to get started:
-https://www.webmproject.org/code/contribute/submitting\-patches/
 
 .SH AUTHORS
 \fBimg2webp\fP is a part of libwebp and was written by the WebP team.
@@ -108,6 +117,13 @@ https://chromium.googlesource.com/webm/libwebp
 .PP
 This manual page was written by Pascal Massimino <pascal.massimino@gmail.com>,
 for the Debian project (and may be used by others).
+
+.SH REPORTING BUGS
+Please report all bugs to the issue tracker:
+https://issues.webmproject.org
+.br
+Patches welcome! See this page to get started:
+https://www.webmproject.org/code/contribute/submitting\-patches/
 
 .SH SEE ALSO
 .BR webpmux (1),

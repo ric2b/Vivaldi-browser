@@ -4,18 +4,28 @@
 
 import * as Platform from '../../../core/platform/platform.js';
 import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
-import * as Coordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
-import * as LitHtml from '../../../ui/lit-html/lit-html.js';
+import * as RenderCoordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
+import * as Lit from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 import * as Dialogs from '../dialogs/dialogs.js';
 
-import menuStyles from './menu.css.js';
-import menuGroupStyles from './menuGroup.css.js';
-import menuItemStyles from './menuItem.css.js';
+import menuStylesRaw from './menu.css.js';
+import menuGroupStylesRaw from './menuGroup.css.js';
+import menuItemStylesRaw from './menuItem.css.js';
 
-const {html} = LitHtml;
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const menuStyles = new CSSStyleSheet();
+menuStyles.replaceSync(menuStylesRaw.cssContent);
 
-const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const menuGroupStyles = new CSSStyleSheet();
+menuGroupStyles.replaceSync(menuGroupStylesRaw.cssContent);
+
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const menuItemStyles = new CSSStyleSheet();
+menuItemStyles.replaceSync(menuItemStylesRaw.cssContent);
+
+const {html} = Lit;
 
 export interface MenuData {
   /**
@@ -32,12 +42,6 @@ export interface MenuData {
    * Position or point the dialog is shown relative to.
    */
   origin: Dialogs.Dialog.DialogOrigin;
-  /**
-   * Determines if a connector from the dialog to it's origin
-   * is shown.
-   * Defaults to false.
-   */
-  showConnector: boolean;
   /**
    * Determines if dividing lines between the menu's options
    * are shown.
@@ -74,7 +78,6 @@ export class Menu extends HTMLElement {
     origin: null,
     open: false,
     position: Dialogs.Dialog.DialogVerticalPosition.AUTO,
-    showConnector: false,
     showDivider: false,
     showSelectedItem: true,
     horizontalAlignment: Dialogs.Dialog.DialogHorizontalAlignment.AUTO,
@@ -110,15 +113,6 @@ export class Menu extends HTMLElement {
 
   set position(position: Dialogs.Dialog.DialogVerticalPosition) {
     this.#props.position = position;
-    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#renderBound);
-  }
-
-  get showConnector(): boolean {
-    return this.#props.showConnector;
-  }
-
-  set showConnector(showConnector: boolean) {
-    this.#props.showConnector = showConnector;
     void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#renderBound);
   }
 
@@ -160,7 +154,7 @@ export class Menu extends HTMLElement {
 
   connectedCallback(): void {
     this.#shadow.adoptedStyleSheets = [menuStyles];
-    void coordinator.write(() => {
+    void RenderCoordinator.write(() => {
       this.style.setProperty('--selected-item-check', `url(${selectedItemCheckmark})`);
       this.style.setProperty('--menu-checkmark-width', this.#props.showSelectedItem ? '26px' : '0px');
       this.style.setProperty('--menu-checkmark-height', this.#props.showSelectedItem ? '12px' : '0px');
@@ -177,7 +171,7 @@ export class Menu extends HTMLElement {
   }
 
   async #dialogDeployed(): Promise<void> {
-    await coordinator.write(() => {
+    await RenderCoordinator.write(() => {
       this.setAttribute('has-open-dialog', 'has-open-dialog');
       // Focus the container so tha twe can capture key events.
       const container = this.#shadow.querySelector('#container');
@@ -220,6 +214,9 @@ export class Menu extends HTMLElement {
     const item = evt.composedPath().find(element => element instanceof MenuItem);
     // Compare against MenuItem again to narrow the item's type.
     if (!(item instanceof MenuItem)) {
+      return;
+    }
+    if (item.disabled) {
       return;
     }
     this.#updateSelectedValue(item);
@@ -386,12 +383,11 @@ export class Menu extends HTMLElement {
       throw new Error('Menu render was not scheduled');
     }
     // clang-format off
-    LitHtml.render(html`
+    Lit.render(html`
       <devtools-dialog
         @clickoutsidedialog=${this.#closeDialog}
         @forceddialogclose=${this.#closeDialog}
         .position=${this.position}
-        .showConnector=${this.showConnector}
         .origin=${this.origin}
         .dialogShownCallback=${this.#dialogDeployed.bind(this)}
         .horizontalAlignment=${this.horizontalAlignment}
@@ -426,6 +422,10 @@ interface MenuItemData {
    * Whether the item is selected.
    */
   selected: boolean;
+  /**
+   * Whether the item is disabled.
+   */
+  disabled: boolean;
 }
 
 export class MenuItem extends HTMLElement {
@@ -440,6 +440,7 @@ export class MenuItem extends HTMLElement {
     value: '',
     preventMenuCloseOnSelection: false,
     selected: false,
+    disabled: false,
   };
 
   get preventMenuCloseOnSelection(): boolean {
@@ -469,16 +470,26 @@ export class MenuItem extends HTMLElement {
     void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#renderBound);
   }
 
+  get disabled(): boolean {
+    return this.#props.disabled;
+  }
+
+  set disabled(disabled: boolean) {
+    this.#props.disabled = disabled;
+    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#renderBound);
+  }
+
   async #render(): Promise<void> {
     if (!ComponentHelpers.ScheduledRender.isScheduledRender(this)) {
       throw new Error('MenuItem render was not scheduled');
     }
     // clang-format off
 
-    LitHtml.render(html`
-      <span class=${LitHtml.Directives.classMap({
+    Lit.render(html`
+      <span class=${Lit.Directives.classMap({
         'menu-item': true,
         'is-selected-item': this.selected,
+        'is-disabled-item': this.disabled,
         'prevents-close': this.preventMenuCloseOnSelection,
       })}
       >
@@ -518,7 +529,7 @@ export class MenuGroup extends HTMLElement {
       throw new Error('MenuGroup render was not scheduled');
     }
     // clang-format off
-    LitHtml.render(html`
+    Lit.render(html`
       <span class="menu-group">
         <span class="menu-group-label">${this.name}</span>
         <slot></slot>

@@ -62,12 +62,10 @@ void MockShoppingService::SetupPermissiveMock() {
   SetIsSubscribedCallbackValue(true);
   SetGetAllSubscriptionsCallbackValue(std::vector<CommerceSubscription>());
   SetIsShoppingListEligible(true);
-  SetIsMerchantViewerEnabled(true);
   SetGetAllPriceTrackedBookmarksCallbackValue(
       std::vector<const bookmarks::BookmarkNode*>());
   SetGetAllShoppingBookmarksValue(
       std::vector<const bookmarks::BookmarkNode*>());
-  SetIsPriceInsightsEligible(true);
   SetResponseForGetPriceInsightsInfoForUrl(std::nullopt);
   SetGetAllParcelStatusesCallbackValue(std::vector<ParcelTrackingStatus>());
 }
@@ -215,11 +213,6 @@ void MockShoppingService::SetIsReady(bool ready) {
           });
 }
 
-void MockShoppingService::SetIsMerchantViewerEnabled(bool is_enabled) {
-  ON_CALL(*this, IsMerchantViewerEnabled)
-      .WillByDefault(testing::Return(is_enabled));
-}
-
 void MockShoppingService::SetGetAllPriceTrackedBookmarksCallbackValue(
     std::vector<const bookmarks::BookmarkNode*> bookmarks) {
   ON_CALL(*this, GetAllPriceTrackedBookmarks)
@@ -238,17 +231,6 @@ void MockShoppingService::SetGetAllShoppingBookmarksValue(
       .WillByDefault(testing::Return(bookmarks));
 }
 
-void MockShoppingService::SetIsPriceInsightsEligible(bool is_eligible) {
-  ON_CALL(*this, IsPriceInsightsEligible)
-      .WillByDefault(testing::Return(is_eligible));
-}
-
-void MockShoppingService::SetIsDiscountEligibleToShowOnNavigation(
-    bool is_eligible) {
-  ON_CALL(*this, IsDiscountEligibleToShowOnNavigation)
-      .WillByDefault(testing::Return(is_eligible));
-}
-
 void MockShoppingService::SetResponseForGetDiscountInfoForUrl(
     const std::vector<DiscountInfo>& infos) {
   ON_CALL(*this, GetDiscountInfoForUrl)
@@ -256,11 +238,6 @@ void MockShoppingService::SetResponseForGetDiscountInfoForUrl(
         base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
             FROM_HERE, base::BindOnce(std::move(callback), url, infos));
       });
-}
-
-void MockShoppingService::SetIsParcelTrackingEligible(bool is_eligible) {
-  ON_CALL(*this, IsParcelTrackingEligible)
-      .WillByDefault(testing::Return(is_eligible));
 }
 
 void MockShoppingService::SetGetAllParcelStatusesCallbackValue(

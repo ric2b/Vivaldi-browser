@@ -2,16 +2,22 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="no">
 <translation id="1063263220330818888">Privat søk</translation>
+<translation id="1097355661841455597">Vi vil gjerne høre dine tanker.</translation>
 <translation id="1137850887415122856">For å låse dine privatfaner, sett opp Touch ID, Face ID eller en kode.</translation>
 <translation id="1310184829257917508">Spør om å åpne lenker fra andre apper i privatmodus</translation>
 <translation id="207677936531967364">Ny privatfaneside</translation>
+<translation id="2418705169960294134">Ny privatfane</translation>
 <translation id="2899836479226240291">Du kan åpne lenker med Vivaldi automatisk ved å sette den som standard nettleser.</translation>
+<translation id="3365529507898144230">Lagre i Bilder</translation>
+<translation id="3463990832590571933">Åpne i ny privatfane</translation>
 <translation id="3473652525653758699">Nytt privatvindu</translation>
 <translation id="3501504415290398157">Bruk <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> for å låse opp dine privatfaner.</translation>
 <translation id="3692650606013198282">Åpne i privatmodus</translation>
 <translation id="3981599532037327317">Åpne ${url} i privatmodus</translation>
 <translation id="398477389655464998">Kopier lenke til markering</translation>
+<translation id="4026745073321351206">🙄 Oppdaget et problem?</translation>
 <translation id="4755216899422789286">Åpne nettadresser i Vivaldi</translation>
+<translation id="5431239785743546285">Sider du har lest</translation>
 <translation id="6233792867654386826">Åpner angitte nettadresser i Vivaldi.</translation>
 <translation id="6827597288286078054">Privat søk</translation>
 <translation id="7307970171564921489">Lås opp privatfaner med <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>

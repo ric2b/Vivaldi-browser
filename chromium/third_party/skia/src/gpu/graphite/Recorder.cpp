@@ -26,6 +26,7 @@
 #include "src/gpu/graphite/AtlasProvider.h"
 #include "src/gpu/graphite/BufferManager.h"
 #include "src/gpu/graphite/Caps.h"
+#include "src/gpu/graphite/ClipAtlasManager.h"
 #include "src/gpu/graphite/CommandBuffer.h"
 #include "src/gpu/graphite/ContextPriv.h"
 #include "src/gpu/graphite/Device.h"
@@ -117,8 +118,7 @@ Recorder::Recorder(sk_sp<SharedContext> sharedContext,
         fOwnedResourceProvider = fSharedContext->makeResourceProvider(
                 this->singleOwner(),
                 fUniqueID,
-                options.fGpuBudgetInBytes,
-                /* avoidBufferAlloc= */ false);
+                options.fGpuBudgetInBytes);
         fResourceProvider = fOwnedResourceProvider.get();
     }
     fUploadBufferManager = std::make_unique<UploadBufferManager>(fResourceProvider,
@@ -219,12 +219,16 @@ std::unique_ptr<Recording> Recorder::snap() {
         fAtlasProvider->invalidateAtlases();
     }
 
+    // Process the return queue at least once to keep it from growing too large, as otherwise
+    // it's only processed during an explicit cleanup or a cache miss.
+    fResourceProvider->forceProcessReturnedResources();
+
     // Remaining cleanup that must always happen regardless of success or failure
     fRuntimeEffectDict->reset();
     fProxyReadCounts = std::make_unique<ProxyReadCountMap>();
     fTextureDataCache = std::make_unique<TextureDataCache>();
     if (!this->priv().caps()->requireOrderedRecordings()) {
-        fAtlasProvider->textAtlasManager()->evictAtlases();
+        fAtlasProvider->invalidateAtlases();
     }
 
     return recording;
@@ -232,19 +236,14 @@ std::unique_ptr<Recording> Recorder::snap() {
 
 SkCanvas* Recorder::makeDeferredCanvas(const SkImageInfo& imageInfo,
                                        const TextureInfo& textureInfo) {
-    // Mipmaps can't reasonably be kept valid on a deferred surface with no actual texture.
-    if (textureInfo.mipmapped() == Mipmapped::kYes) {
-        SKGPU_LOG_W("Requested a deferred canvas with mipmapping; this is not supported");
-        return nullptr;
-    }
-
     if (fTargetProxyCanvas) {
         // Require snapping before requesting another canvas.
         SKGPU_LOG_W("Requested a new deferred canvas before snapping the previous one");
         return nullptr;
     }
 
-    fTargetProxyData = std::make_unique<Recording::LazyProxyData>(textureInfo);
+    fTargetProxyData = std::make_unique<Recording::LazyProxyData>(
+            this->priv().caps(), imageInfo.dimensions(), textureInfo);
     // Use kLoad for the initial load op since the purpose of a deferred canvas is to draw on top
     // of an existing, late-bound texture.
     fTargetProxyDevice = Device::Make(this,
@@ -488,6 +487,11 @@ size_t Recorder::currentPurgeableBytes() const {
 size_t Recorder::maxBudgetedBytes() const {
     ASSERT_SINGLE_OWNER
     return fResourceProvider->getResourceCacheLimit();
+}
+
+void Recorder::setMaxBudgetedBytes(size_t bytes) {
+    ASSERT_SINGLE_OWNER
+    return fResourceProvider->setResourceCacheLimit(bytes);
 }
 
 void Recorder::dumpMemoryStatistics(SkTraceMemoryDump* traceMemoryDump) const {

@@ -267,5 +267,5 @@ For EC firmware,
 [Cr50 console]: https://chromium.googlesource.com/chromiumos/platform/ec/+/cr50_stab/docs/case_closed_debugging_cr50.md#consoles
 [Servo]: https://chromium.googlesource.com/chromiumos/third_party/hdctools/+/HEAD/README.md
 [suzyQ]: https://chromium.googlesource.com/chromiumos/third_party/hdctools/+/HEAD/docs/ccd.md#suzyq-suzyqable
-[Verified Boot]: https://www.chromium.org/chromium-os/chromiumos-design-docs/verified-boot
-[guide for firmware unlock on 2023+ devices]:  ../../../guides/device/ro-firmware-unlock/index.md
+[Verified Boot]: /chromium-os/chromiumos-design-docs/verified-boot
+[guide for firmware unlock on 2023+ devices]: /chromium-os/developer-library/guides/device/ro-firmware-unlock

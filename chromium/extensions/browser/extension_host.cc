@@ -15,6 +15,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/timer/elapsed_timer.h"
 #include "components/input/native_web_keyboard_event.h"
+#include "components/javascript_dialogs/app_modal_dialog_manager.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_frame_host.h"
@@ -130,18 +131,27 @@ void EmitDispatchTimeMetrics(const EventDispatchSource& dispatch_source,
 
 ExtensionHost::ExtensionHost(const Extension* extension,
                              SiteInstance* site_instance,
+                             content::BrowserContext* browser_context,
                              const GURL& url,
                              mojom::ViewType host_type)
     : delegate_(ExtensionsBrowserClient::Get()->CreateExtensionHostDelegate()),
       extension_(extension),
       extension_id_(extension->id()),
-      browser_context_(site_instance->GetBrowserContext()),
+      browser_context_(browser_context),
       initial_url_(url),
       extension_host_type_(host_type) {
   DCHECK(host_type == mojom::ViewType::kExtensionBackgroundPage ||
          host_type == mojom::ViewType::kOffscreenDocument ||
          host_type == mojom::ViewType::kExtensionPopup ||
          host_type == mojom::ViewType::kExtensionSidePanel);
+  // NOTE: `site_instance` may be null if the kRemoveRootSiteInstance feature
+  // is active. `WebContents::CreateParams` handles a null SiteInstance the
+  // same as if no SiteInstance argument were passed.
+  if (site_instance) {
+    // If a SiteInstance is passed, it must match the `browser_context`
+    // associated with the ExtensionHost.
+    CHECK_EQ(browser_context_, site_instance->GetBrowserContext());
+  }
   host_contents_ = WebContents::Create(
       WebContents::CreateParams(browser_context_, site_instance));
   host_contents_->SetOwnerLocationForDebug(FROM_HERE);
@@ -517,7 +527,7 @@ void ExtensionHost::OnEventAck(int event_id,
 
 content::JavaScriptDialogManager* ExtensionHost::GetJavaScriptDialogManager(
     WebContents* source) {
-  return delegate_->GetJavaScriptDialogManager();
+  return javascript_dialogs::AppModalDialogManager::GetInstance();
 }
 
 content::WebContents* ExtensionHost::AddNewContents(

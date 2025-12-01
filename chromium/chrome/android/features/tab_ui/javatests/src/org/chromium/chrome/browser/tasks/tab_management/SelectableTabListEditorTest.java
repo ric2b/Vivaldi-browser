@@ -22,7 +22,6 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.isNotNull;
 import static org.mockito.Mockito.times;
@@ -30,7 +29,6 @@ import static org.mockito.Mockito.verify;
 
 import static org.chromium.base.test.util.Restriction.RESTRICTION_TYPE_LOW_END_DEVICE;
 import static org.chromium.base.test.util.Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE;
-import static org.chromium.ui.test.util.MockitoHelper.doCallback;
 
 import android.content.Intent;
 import android.graphics.Rect;
@@ -56,7 +54,8 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.Callback;
 import org.chromium.base.GarbageCollectionTestUtils;
@@ -105,10 +104,10 @@ import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.components.browser_ui.desktop_windowing.AppHeaderState;
 import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgePadAdjuster;
-import org.chromium.components.browser_ui.widget.ActionConfirmationResult;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.modaldialog.ModalDialogManager;
+import org.chromium.ui.test.util.DeviceRestriction;
 
 import java.io.IOException;
 import java.lang.ref.WeakReference;
@@ -138,17 +137,18 @@ public class SelectableTabListEditorTest {
     public BlankCTATabInitialStateRule mBlankCTATabInitialStateRule =
             new BlankCTATabInitialStateRule(sActivityTestRule, false);
 
+    @Rule public final MockitoRule mMockitoRule = MockitoJUnit.rule();
+
     @Rule
     public ChromeRenderTestRule mRenderTestRule =
             ChromeRenderTestRule.Builder.withPublicCorpus()
                     .setBugComponent(ChromeRenderTestRule.Component.UI_BROWSER_MOBILE_TAB_SWITCHER)
-                    .setRevision(9)
-                    .setDescription("Favicon update.")
+                    .setRevision(10)
+                    .setDescription("Color icon update.")
                     .build();
 
     @Mock private Callback<RecyclerViewPosition> mSetRecyclerViewPosition;
     @Mock private ModalDialogManager mModalDialogManager;
-    @Mock private ActionConfirmationManager mActionConfirmationManager;
     @Mock private EdgeToEdgeController mEdgeToEdgeController;
 
     private TabListEditorTestingRobot mRobot = new TabListEditorTestingRobot();
@@ -167,7 +167,6 @@ public class SelectableTabListEditorTest {
 
     @Before
     public void setUp() throws Exception {
-        MockitoAnnotations.initMocks(this);
         ChromeTabbedActivity cta = sActivityTestRule.getActivity();
         // Eagerly inflate the tab switcher.
 
@@ -232,17 +231,6 @@ public class SelectableTabListEditorTest {
                     mRef = new WeakReference<>(mTabListEditorLayout);
                     mBookmarkModel = cta.getBookmarkModelForTesting();
                 });
-
-        // The inner most callback may check pref service in C++, needs to be on the UI thread.
-        Callback<Callback<Integer>> immediateContinue =
-                (Callback<Integer> callback) ->
-                        ThreadUtils.runOnUiThreadBlocking(
-                                () ->
-                                        callback.onResult(
-                                                ActionConfirmationResult.IMMEDIATE_CONTINUE));
-        doCallback(1, immediateContinue)
-                .when(mActionConfirmationManager)
-                .processCloseTabAttempt(any(), any());
     }
 
     @After
@@ -325,7 +313,6 @@ public class SelectableTabListEditorTest {
                     true);
             sActivityTestRule.loadUrl(url);
         }
-        if (urls.size() == 1) return;
 
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
@@ -365,8 +352,7 @@ public class SelectableTabListEditorTest {
                                     sActivityTestRule.getActivity(),
                                     ShowMode.MENU_ONLY,
                                     ButtonType.TEXT,
-                                    IconPosition.START,
-                                    mActionConfirmationManager));
+                                    IconPosition.START));
                     showSelectionEditor(tabs, actions);
                 });
 
@@ -552,7 +538,8 @@ public class SelectableTabListEditorTest {
     public void testUndoToolbarGroup() {
         ChromeTabbedActivity cta = sActivityTestRule.getActivity();
         prepareBlankTab(2, false);
-        List<Tab> tabs = getTabsInCurrentTabModel();
+        prepareBlankTabGroup(2, false);
+        List<Tab> tabs = getTabsInCurrentTabGroupModelFilter();
         TabUiTestHelper.enterTabSwitcher(cta);
 
         ThreadUtils.runOnUiThreadBlocking(
@@ -572,14 +559,14 @@ public class SelectableTabListEditorTest {
 
         mRobot.actionRobot
                 .clickItemAtAdapterPosition(0)
-                .clickItemAtAdapterPosition(1)
+                .clickItemAtAdapterPosition(2)
                 .clickToolbarActionView(R.id.tab_list_editor_group_menu_item);
 
         mRobot.resultRobot.verifyTabListEditorIsHidden();
-        TabUiTestHelper.verifyTabSwitcherCardCount(cta, 1);
+        TabUiTestHelper.verifyTabSwitcherCardCount(cta, 2);
 
         CriteriaHelper.pollInstrumentationThread(TabUiTestHelper::verifyUndoBarShowingAndClickUndo);
-        TabUiTestHelper.verifyTabSwitcherCardCount(cta, 2);
+        TabUiTestHelper.verifyTabSwitcherCardCount(cta, 3);
     }
 
     @Test
@@ -597,8 +584,7 @@ public class SelectableTabListEditorTest {
                                     sActivityTestRule.getActivity(),
                                     ShowMode.IF_ROOM,
                                     ButtonType.TEXT,
-                                    IconPosition.START,
-                                    mActionConfirmationManager));
+                                    IconPosition.START));
                     actions.add(
                             TabListEditorGroupAction.createAction(
                                     sActivityTestRule.getActivity(),
@@ -653,8 +639,7 @@ public class SelectableTabListEditorTest {
                                     sActivityTestRule.getActivity(),
                                     ShowMode.IF_ROOM,
                                     ButtonType.TEXT,
-                                    IconPosition.START,
-                                    mActionConfirmationManager));
+                                    IconPosition.START));
                     showSelectionEditor(tabs, actions);
                 });
 
@@ -686,8 +671,7 @@ public class SelectableTabListEditorTest {
                                     sActivityTestRule.getActivity(),
                                     ShowMode.IF_ROOM,
                                     ButtonType.TEXT,
-                                    IconPosition.START,
-                                    mActionConfirmationManager));
+                                    IconPosition.START));
 
                     showSelectionEditor(tabs, actions);
                 });
@@ -858,8 +842,7 @@ public class SelectableTabListEditorTest {
                                     sActivityTestRule.getActivity(),
                                     ShowMode.MENU_ONLY,
                                     ButtonType.TEXT,
-                                    IconPosition.START,
-                                    mActionConfirmationManager));
+                                    IconPosition.START));
 
                     showSelectionEditor(tabs, actions);
                 });
@@ -1111,6 +1094,7 @@ public class SelectableTabListEditorTest {
     @Test
     @MediumTest
     @DisableIf.Build(sdk_is_greater_than = VERSION_CODES.R, message = "crbug.com/1511804")
+    @Restriction({DeviceRestriction.RESTRICTION_TYPE_NON_AUTO})
     public void testToolbarMenuItem_BookmarkActionSingleTab() {
         prepareBlankTab(1, false);
 
@@ -1159,6 +1143,7 @@ public class SelectableTabListEditorTest {
 
     @Test
     @MediumTest
+    @Restriction({DeviceRestriction.RESTRICTION_TYPE_NON_AUTO}) // crbug.com/391655333
     public void testToolbarMenuItem_BookmarkActionGroupsOnly() {
         prepareBlankTabGroup(2, false);
         List<Tab> tabs = getTabsInCurrentTabGroupModelFilter();
@@ -1207,6 +1192,7 @@ public class SelectableTabListEditorTest {
 
     @Test
     @MediumTest
+    @Restriction({DeviceRestriction.RESTRICTION_TYPE_NON_AUTO})
     public void testToolbarMenuItem_BookmarkActionTabsWithGroups() {
         final String httpsCanonicalUrl =
                 sActivityTestRule.getTestServer().getURL(PAGE_WITH_HTTPS_CANONICAL_URL);
@@ -1657,8 +1643,7 @@ public class SelectableTabListEditorTest {
                                     sActivityTestRule.getActivity(),
                                     ShowMode.MENU_ONLY,
                                     ButtonType.TEXT,
-                                    IconPosition.START,
-                                    mActionConfirmationManager));
+                                    IconPosition.START));
 
                     showSelectionEditor(tabs, actions);
                 });
@@ -1692,8 +1677,7 @@ public class SelectableTabListEditorTest {
                                     sActivityTestRule.getActivity(),
                                     ShowMode.IF_ROOM,
                                     ButtonType.TEXT,
-                                    IconPosition.START,
-                                    mActionConfirmationManager));
+                                    IconPosition.START));
                     actions.add(
                             TabListEditorGroupAction.createAction(
                                     sActivityTestRule.getActivity(),

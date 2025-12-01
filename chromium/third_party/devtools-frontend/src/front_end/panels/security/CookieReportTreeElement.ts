@@ -6,13 +6,16 @@ import * as IconButton from '../../ui/components/icon_button/icon_button.js';
 import {SecurityPanelSidebarTreeElement} from './SecurityPanelSidebarTreeElement.js';
 
 export class CookieReportTreeElement extends SecurityPanelSidebarTreeElement {
-  constructor(title: string) {
-    super(title);
+  constructor(title: string, jslogContext: string|number) {
+    super(title, false, jslogContext);
     this.setLeadingIcons([IconButton.Icon.create('cookie', 'cookie-icon')]);
   }
 
-  override onselect(): boolean {
+  override get elemId(): string {
+    return 'report';
+  }
+
+  override showElement(): void {
     this.listItemElement.dispatchEvent(new CustomEvent('showCookieReport', {bubbles: true, composed: true}));
-    return true;
   }
 }

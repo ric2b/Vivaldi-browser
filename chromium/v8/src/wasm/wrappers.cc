@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <bit>
 #include <optional>
 
 #include "src/base/small-vector.h"
@@ -10,6 +11,7 @@
 #include "src/compiler/linkage.h"
 #include "src/compiler/turboshaft/index.h"
 #include "src/compiler/turboshaft/wasm-assembler-helpers.h"
+#include "src/execution/isolate-data.h"
 #include "src/objects/object-list-macros.h"
 #include "src/wasm/turboshaft-graph-interface.h"
 #include "src/wasm/wasm-engine.h"
@@ -336,12 +338,14 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
   }
 
   void BuildCallWasmFromWrapper(Zone* zone, const CanonicalSig* sig,
-                                V<WasmCodePtr> callee,
+                                V<Word32> callee,
                                 V<HeapObject> implicit_first_arg,
-                                base::SmallVector<OpIndex, 16> args,
-                                base::SmallVector<OpIndex, 1>& returns) {
+                                const base::Vector<OpIndex> args,
+                                base::Vector<OpIndex> returns) {
     const TSCallDescriptor* descriptor = TSCallDescriptor::Create(
-        compiler::GetWasmCallDescriptor(__ graph_zone(), sig),
+        compiler::GetWasmCallDescriptor(
+            __ graph_zone(), sig,
+            compiler::WasmCallKind::kWasmIndirectFunction),
         compiler::CanThrow::kYes, compiler::LazyDeoptOnThrow::kNo,
         __ graph_zone());
 
@@ -360,9 +364,8 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
   }
 
   OpIndex BuildCallAndReturn(V<Context> js_context, V<HeapObject> function_data,
-                             base::SmallVector<OpIndex, 16> args,
-                             bool do_conversion, bool set_in_wasm_flag,
-                             uint64_t expected_sig_hash) {
+                             base::Vector<OpIndex> args, bool do_conversion,
+                             bool set_in_wasm_flag) {
     const int rets_count = static_cast<int>(sig_->return_count());
     base::SmallVector<OpIndex, 1> rets(rets_count);
 
@@ -378,10 +381,9 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
           V<WasmInternalFunction>::Cast(__ LoadProtectedPointerField(
               function_data, LoadOp::Kind::TaggedBase().Immutable(),
               WasmExportedFunctionData::kProtectedInternalOffset));
-      auto [target, implicit_arg] =
-          BuildFunctionTargetAndImplicitArg(internal, expected_sig_hash);
+      auto [target, implicit_arg] = BuildFunctionTargetAndImplicitArg(internal);
       BuildCallWasmFromWrapper(__ phase_zone(), sig_, target, implicit_arg,
-                               args, rets);
+                               args, base::VectorOf(rets));
     }
 
     V<Object> jsval;
@@ -429,11 +431,6 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
         __ Load(js_closure, LoadOp::Kind::TaggedBase(),
                 MemoryRepresentation::TaggedPointer(),
                 JSFunction::kSharedFunctionInfoOffset);
-#ifdef V8_ENABLE_SANDBOX
-    uint64_t signature_hash = SignatureHasher::Hash(sig_);
-#else
-    uint64_t signature_hash = 0;
-#endif
     V<WasmFunctionData> function_data =
         V<WasmFunctionData>::Cast(__ LoadTrustedPointerField(
             shared, LoadOp::Kind::TaggedBase(),
@@ -483,8 +480,9 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
         OpIndex wasm_param = FromJSFast(params[i + 1], sig_->GetParam(i));
         args[i + 1] = wasm_param;
       }
-      jsval = BuildCallAndReturn(js_context, function_data, args, do_conversion,
-                                 set_in_wasm_flag, signature_hash);
+      jsval =
+          BuildCallAndReturn(js_context, function_data, base::VectorOf(args),
+                             do_conversion, set_in_wasm_flag);
       GOTO(done, jsval);
       __ Bind(slow_path);
     }
@@ -509,8 +507,8 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
       }
     }
 
-    jsval = BuildCallAndReturn(js_context, function_data, args, do_conversion,
-                               set_in_wasm_flag, signature_hash);
+    jsval = BuildCallAndReturn(js_context, function_data, base::VectorOf(args),
+                               do_conversion, set_in_wasm_flag);
     // If both the default and a fast transformation paths are present,
     // get the return value based on the path used.
     if (include_fast_path) {
@@ -551,9 +549,10 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
     int pushed_count = std::max(expected_arity, wasm_count);
     // 5 extra arguments: receiver, new target, arg count, dispatch handle and
     // context.
-    bool has_dispatch_handle = kind == ImportCallKind::kUseCallBuiltin
-                                   ? false
-                                   : V8_ENABLE_LEAPTIERING_BOOL;
+    bool has_dispatch_handle =
+        kind == ImportCallKind::kUseCallBuiltin
+            ? false
+            : V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE_BOOL;
     base::SmallVector<OpIndex, 16> args(pushed_count + 4 +
                                         (has_dispatch_handle ? 1 : 0));
     // Position of the first wasm argument in the JS arguments.
@@ -567,7 +566,7 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
     V<JSFunction> callable_node = __ Load(ref, LoadOp::Kind::TaggedBase(),
                                           MemoryRepresentation::TaggedPointer(),
                                           WasmImportData::kCallableOffset);
-    OpIndex old_sp = BuildSwitchToTheCentralStackIfNeeded();
+    auto [old_sp, old_limit] = BuildSwitchToTheCentralStackIfNeeded();
     BuildModifyThreadInWasmFlag(__ phase_zone(), false);
     OpIndex call = OpIndex::Invalid();
     switch (kind) {
@@ -591,8 +590,8 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
         args[pos++] = undefined_node;  // new target
         args[pos++] =
             __ Word32Constant(JSParameterCount(wasm_count));  // argument count
-#ifdef V8_ENABLE_LEAPTIERING
-        args[pos++] = __ Word32Constant(kPlaceholderDispatchHandle);
+#ifdef V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE
+        args[pos++] = __ Word32Constant(kPlaceholderDispatchHandle.value());
 #endif
         args[pos++] = LoadContextFromJSFunction(callable_node);
         call = __ Call(callable_node, OpIndex::Invalid(), base::VectorOf(args),
@@ -641,7 +640,7 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
     DCHECK(call.valid());
 
     if (suspend == kSuspend) {
-      call = BuildSuspend(call, ref, &old_sp);
+      call = BuildSuspend(call, ref, &old_sp, old_limit);
     }
 
     // Convert the return value(s) back.
@@ -661,7 +660,7 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
       }
     }
     BuildModifyThreadInWasmFlag(__ phase_zone(), true);
-    BuildSwitchBackFromCentralStack(old_sp);
+    BuildSwitchBackFromCentralStack(old_sp, old_limit);
     if (sig_->return_count() <= 1) {
       __ Return(val);
     } else {
@@ -745,13 +744,13 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
       const TSCallDescriptor* ts_call_descriptor = TSCallDescriptor::Create(
           call_descriptor, compiler::CanThrow::kYes,
           compiler::LazyDeoptOnThrow::kNo, __ graph_zone());
-      OpIndex call_target =
+      OpIndex rethrow_call_target =
           GetTargetForBuiltinCall(Builtin::kWasmRethrowExplicitContext);
       V<Context> context =
           __ Load(incoming_params[0], LoadOp::Kind::TaggedBase(),
                   MemoryRepresentation::TaggedPointer(),
                   WasmImportData::kNativeContextOffset);
-      __ Call(call_target, {return_value, context}, ts_call_descriptor);
+      __ Call(rethrow_call_target, {return_value, context}, ts_call_descriptor);
       __ Unreachable();
     }
 
@@ -1132,51 +1131,104 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
                    JSFunction::kContextOffset);
   }
 
-  OpIndex BuildSwitchToTheCentralStack() {
-    MachineType reps[] = {MachineType::Pointer(), MachineType::Pointer(),
-                          MachineType::Pointer()};
-    MachineSignature sig(1, 2, reps);
+  void BuildSetNewStackLimit(V<WordPtr> old_limit, V<WordPtr> new_limit) {
+    // Set the new interrupt limit and real limit. Use a compare-and-swap for
+    // the interrupt limit to avoid overwriting a pending interrupt.
+    __ AtomicCompareExchange(
+        __ IsolateField(IsolateFieldId::kJsLimitAddress), __ UintPtrConstant(0),
+        old_limit, new_limit, RegisterRepresentation::WordPtr(),
+        MemoryRepresentation::UintPtr(), compiler::MemoryAccessKind::kNormal);
+    __ Store(__ LoadRootRegister(), new_limit, StoreOp::Kind::RawAligned(),
+             MemoryRepresentation::UintPtr(), compiler::kNoWriteBarrier,
+             IsolateData::real_jslimit_offset());
+  }
 
-    OpIndex central_stack_sp = CallC(
-        &sig, ExternalReference::wasm_switch_to_the_central_stack_for_js(),
-        {__ ExternalConstant(ExternalReference::isolate_address()),
-         __ FramePointer()});
+  V<WordPtr> BuildSwitchToTheCentralStack(V<WordPtr> old_limit) {
+    // Set the is_on_central_stack flag.
+    OpIndex isolate_root = __ LoadRootRegister();
+    __ Store(isolate_root, __ Word32Constant(1), LoadOp::Kind::RawAligned(),
+             MemoryRepresentation::Uint8(), compiler::kNoWriteBarrier,
+             IsolateData::is_on_central_stack_flag_offset());
+
+    // Save the old fp and the target sp in the StackMemory's stack switch info.
+    // We are not on the main stack, so the ActiveContinuation root must exist
+    // and be of type WasmContinuationObject.
+    V<WasmContinuationObject> active_continuation =
+        V<WasmContinuationObject>::Cast(LOAD_ROOT(ActiveContinuation));
+    V<WordPtr> stack_data = __ LoadExternalPointerFromObject(
+        active_continuation, WasmContinuationObject::kStackOffset,
+        kWasmStackMemoryTag);
+    __ Store(stack_data, __ FramePointer(), StoreOp::Kind::RawAligned(),
+             MemoryRepresentation::UintPtr(), compiler::kNoWriteBarrier,
+             StackMemory::stack_switch_source_fp_offset());
+    V<WordPtr> central_stack_sp = __ Load(
+        isolate_root, LoadOp::Kind::RawAligned(),
+        MemoryRepresentation::UintPtr(), Isolate::central_stack_sp_offset());
+    __ Store(stack_data, central_stack_sp, StoreOp::Kind::RawAligned(),
+             MemoryRepresentation::UintPtr(), compiler::kNoWriteBarrier,
+             StackMemory::stack_switch_target_sp_offset());
+
+    // Switch the stack limit and the stack pointer.
+    V<WordPtr> central_stack_limit = __ Load(
+        isolate_root, LoadOp::Kind::RawAligned(),
+        MemoryRepresentation::UintPtr(), Isolate::central_stack_limit_offset());
+    BuildSetNewStackLimit(old_limit, central_stack_limit);
     OpIndex old_sp = __ LoadStackPointer();
-    // Temporarily disallow sp-relative offsets.
     __ SetStackPointer(central_stack_sp);
     return old_sp;
   }
 
-  OpIndex BuildSwitchToTheCentralStackIfNeeded() {
-    OpIndex isolate_root = __ LoadRootRegister();
-    OpIndex is_on_central_stack_flag = __ Load(
+  // Returns the old (secondary stack's) sp and stack limit.
+  std::pair<V<WordPtr>, V<WordPtr>> BuildSwitchToTheCentralStackIfNeeded() {
+    V<WordPtr> isolate_root = __ LoadRootRegister();
+    V<Word32> is_on_central_stack_flag = __ Load(
         isolate_root, LoadOp::Kind::RawAligned(), MemoryRepresentation::Uint8(),
         IsolateData::is_on_central_stack_flag_offset());
     ScopedVar<WordPtr> old_sp_var(this, __ IntPtrConstant(0));
-    // The stack switch performs a C call which causes some spills that would
-    // not be needed otherwise. Add a branch hint such that we don't spill if we
-    // are already on the central stack.
-    // TODO(thibaudm): Look into ways to optimize the switching case as well.
-    // Can we avoid the C call? Can we avoid spilling callee-saved registers?
+    ScopedVar<WordPtr> old_limit_var(this, __ IntPtrConstant(0));
     IF_NOT (LIKELY(is_on_central_stack_flag)) {
-      OpIndex old_sp = BuildSwitchToTheCentralStack();
+      V<WordPtr> old_limit = __ Load(isolate_root, LoadOp::Kind::RawAligned(),
+                                     MemoryRepresentation::UintPtr(),
+                                     IsolateData::real_jslimit_offset());
+      V<WordPtr> old_sp = BuildSwitchToTheCentralStack(old_limit);
       old_sp_var = old_sp;
+      old_limit_var = old_limit;
     }
-    return old_sp_var;
+    return {old_sp_var, old_limit_var};
   }
 
-  void BuildSwitchBackFromCentralStack(OpIndex old_sp) {
-    MachineType reps[] = {MachineType::Pointer(), MachineType::Pointer()};
-    MachineSignature sig(0, 1, reps);
+  void BuildSwitchBackFromCentralStack(V<WordPtr> old_sp,
+                                       V<WordPtr> old_limit) {
     IF_NOT (LIKELY(__ WordPtrEqual(old_sp, __ IntPtrConstant(0)))) {
-      CallC(&sig,
-            ExternalReference::wasm_switch_from_the_central_stack_for_js(),
-            {__ ExternalConstant(ExternalReference::isolate_address())});
+      // Reset is_on_central_stack flag.
+      V<WordPtr> isolate_root = __ LoadRootRegister();
+      __ Store(isolate_root, __ Word32Constant(0), StoreOp::Kind::RawAligned(),
+               MemoryRepresentation::Uint8(), compiler::kNoWriteBarrier,
+               IsolateData::is_on_central_stack_flag_offset());
+
+      // Clear stack switch info.
+      // We are not on the main stack, so the ActiveContinuation root must exist
+      // and be of type WasmContinuationObject.
+      auto active_continuation =
+          V<WasmContinuationObject>::Cast(LOAD_ROOT(ActiveContinuation));
+      V<WordPtr> stack_data = __ LoadExternalPointerFromObject(
+          active_continuation, WasmContinuationObject::kStackOffset,
+          kWasmStackMemoryTag);
+      __ Store(stack_data, __ UintPtrConstant(0), StoreOp::Kind::RawAligned(),
+               MemoryRepresentation::UintPtr(), compiler::kNoWriteBarrier,
+               StackMemory::stack_switch_source_fp_offset());
+
+      // Restore the old stack limit and stack pointer.
+      V<WordPtr> real_jslimit = __ Load(
+          isolate_root, LoadOp::Kind::RawAligned(),
+          MemoryRepresentation::UintPtr(), IsolateData::real_jslimit_offset());
+      BuildSetNewStackLimit(real_jslimit, old_limit);
       __ SetStackPointer(old_sp);
     }
   }
 
-  OpIndex BuildSuspend(OpIndex value, V<Object> import_data, OpIndex* old_sp) {
+  V<Object> BuildSuspend(V<Object> value, V<Object> import_data,
+                         V<WordPtr>* old_sp, V<WordPtr> old_limit) {
     // If value is a promise, suspend to the js-to-wasm prompt, and resume later
     // with the promise's resolved value.
     ScopedVar<Object> result(this, value);
@@ -1189,7 +1241,9 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
                     MemoryRepresentation::TaggedPointer(),
                     WasmImportData::kNativeContextOffset);
         IF (__ TaggedEqual(suspender, LOAD_ROOT(UndefinedValue))) {
-          CallRuntime(__ phase_zone(), Runtime::kThrowBadSuspenderError, {},
+          V<Smi> error = __ SmiConstant(Smi::FromInt(
+              static_cast<int32_t>(MessageTemplate::kWasmSuspendError)));
+          CallRuntime(__ phase_zone(), Runtime::kThrowWasmSuspendError, {error},
                       native_context);
           __ Unreachable();
         }
@@ -1198,8 +1252,10 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
               __ LoadTaggedField(suspender, WasmSuspenderObject::kResumeOffset),
               LOAD_ROOT(UndefinedValue));
           IF (for_stress_testing) {
-            CallRuntime(__ phase_zone(), Runtime::kThrowBadSuspenderError, {},
-                        native_context);
+            V<Smi> error = __ SmiConstant(Smi::FromInt(
+                static_cast<int32_t>(MessageTemplate::kWasmSuspendJSFrames)));
+            CallRuntime(__ phase_zone(), Runtime::kThrowWasmSuspendError,
+                        {error}, native_context);
             __ Unreachable();
           }
         }
@@ -1209,15 +1265,9 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
         // trap.
         OpIndex has_js_frames = __ WordPtrEqual(__ IntPtrConstant(0), *old_sp);
         IF (has_js_frames) {
-          // {ThrowWasmError} expects to be called from wasm code, so set the
-          // thread-in-wasm flag now.
-          // Usually we set this flag later so that it stays off while we
-          // convert the return values. This is a special case, it is safe to
-          // set it now because the error will unwind this frame.
-          BuildModifyThreadInWasmFlag(__ phase_zone(), true);
           V<Smi> error = __ SmiConstant(Smi::FromInt(
-              static_cast<int32_t>(MessageTemplate::kWasmTrapSuspendJSFrames)));
-          CallRuntime(__ phase_zone(), Runtime::kThrowWasmError, {error},
+              static_cast<int32_t>(MessageTemplate::kWasmSuspendJSFrames)));
+          CallRuntime(__ phase_zone(), Runtime::kThrowWasmSuspendError, {error},
                       native_context);
           __ Unreachable();
         }
@@ -1241,10 +1291,10 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
         OpIndex suspend = GetTargetForBuiltinCall(Builtin::kWasmSuspend);
         auto* suspend_call_descriptor =
             GetBuiltinCallDescriptor(Builtin::kWasmSuspend, __ graph_zone());
-        BuildSwitchBackFromCentralStack(*old_sp);
-        OpIndex resolved =
-            __ Call(suspend, {suspender}, suspend_call_descriptor);
-        old_sp_var = BuildSwitchToTheCentralStack();
+        BuildSwitchBackFromCentralStack(*old_sp, old_limit);
+        V<Object> resolved =
+            __ Call<Object>(suspend, {suspender}, suspend_call_descriptor);
+        old_sp_var = BuildSwitchToTheCentralStack(old_limit);
         result = resolved;
       }
     }
@@ -1281,13 +1331,21 @@ class WasmWrapperTSGraphBuilder : public WasmGraphBuilderBase {
 
   V<WordPtr> BuildLoadCallTargetFromExportedFunctionData(
       V<WasmFunctionData> function_data) {
+    // TODO(sroettger): this code should do a signature check, but it's only
+    // used for CAPI.
     V<WasmInternalFunction> internal =
         V<WasmInternalFunction>::Cast(__ LoadProtectedPointerField(
             function_data, LoadOp::Kind::TaggedBase().Immutable(),
             WasmFunctionData::kProtectedInternalOffset));
-    return __ Load(internal, LoadOp::Kind::TaggedBase(),
-                   MemoryRepresentation::UintPtr(),
-                   WasmInternalFunction::kCallTargetOffset);
+    V<Word32> code_pointer = __ Load(
+        internal, LoadOp::Kind::TaggedBase(), MemoryRepresentation::Uint32(),
+        WasmInternalFunction::kRawCallTargetOffset);
+    constexpr size_t entry_size_log2 =
+        std::bit_width(sizeof(WasmCodePointerTableEntry)) - 1;
+    return __ Load(
+        __ ExternalConstant(ExternalReference::wasm_code_pointer_table()),
+        __ ChangeUint32ToUintPtr(code_pointer), LoadOp::Kind::RawAligned(),
+        MemoryRepresentation::UintPtr(), 0, entry_size_log2);
   }
 
   const OpIndex SafeLoad(OpIndex base, int offset, CanonicalValueType type) {

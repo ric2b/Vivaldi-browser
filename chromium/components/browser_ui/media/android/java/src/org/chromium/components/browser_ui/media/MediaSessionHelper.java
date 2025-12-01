@@ -317,7 +317,7 @@ public class MediaSessionHelper implements MediaImageCallback {
 
         mWebContents = webContents;
 
-        if (mWebContentsObserver != null) mWebContentsObserver.destroy();
+        if (mWebContentsObserver != null) mWebContentsObserver.observe(null);
 
         mMediaImageManager.setWebContents(mWebContents);
 
@@ -456,7 +456,7 @@ public class MediaSessionHelper implements MediaImageCallback {
     public void destroy() {
         cleanupMediaSessionObserver();
         hideNotificationImmediately();
-        if (mWebContentsObserver != null) mWebContentsObserver.destroy();
+        if (mWebContentsObserver != null) mWebContentsObserver.observe(null);
         mWebContentsObserver = null;
         if (mLargeIconBridge != null) mLargeIconBridge.destroy();
         mLargeIconBridge = null;

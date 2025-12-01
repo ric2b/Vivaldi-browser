@@ -5,4 +5,5 @@
 
 * [Home][home]
 * [Sitemap](/.)
-* **Please visit https://www.chromium.org/ to see this page rendered properly.**
+* **Please visit https://www.chromium.org/ or bookmark and use the code follows to see this page rendered properly.**
+`javascript:l=window.location;l.href='https://www.chromium.org/'+/\/site\/(.*)index.md$/.exec(l.href)[1]`

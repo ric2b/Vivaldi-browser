@@ -7,6 +7,7 @@
 
 #import <Foundation/Foundation.h>
 #import <UserNotifications/UserNotifications.h>
+
 #import <optional>
 
 #import "components/prefs/pref_change_registrar.h"
@@ -147,6 +148,9 @@ class TipsNotificationClient : public PushNotificationClient {
 
   // Classifies the user and sets the `user_type`, if possible.
   void ClassifyUser();
+
+  // Returns whether any identities/accounts exist on the device.
+  bool HasIdentitiesOnDevice(ProfileIOS* profile) const;
 
   // Stores whether Tips notifications are permitted.
   bool permitted_ = false;

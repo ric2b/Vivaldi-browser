@@ -53,7 +53,13 @@ struct ServiceStatus {
   // Whether the current user is allowed to both join and create a new
   // collaboration.
   bool IsAllowedToCreate();
+
+  // Whether the current user is logged in and sync enabled. This will fail if
+  // the current user's account is paused.
+  bool IsAuthenticationValid() const;
 };
+
+bool operator==(const ServiceStatus& lhs, const ServiceStatus& rhs);
 
 }  // namespace collaboration
 

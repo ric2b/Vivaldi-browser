@@ -4,6 +4,7 @@
 
 #include "components/privacy_sandbox/privacy_sandbox_settings_impl.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <vector>
 
@@ -13,7 +14,6 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/observer_list.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -518,9 +518,7 @@ void PrivacySandboxSettingsImpl::SetFledgeJoiningAllowed(
   // case where the eTLD+1 was not even a host, as GURL will have canonicalised
   // it to empty.
   if (effective_top_frame_etld_plus1.length() == 0) {
-    NOTREACHED_IN_MIGRATION()
-        << "Cannot control FLEDGE joining for empty eTLD+1";
-    return;
+    NOTREACHED() << "Cannot control FLEDGE joining for empty eTLD+1";
   }
 
   if (allowed) {
@@ -570,11 +568,10 @@ bool PrivacySandboxSettingsImpl::IsFledgeJoiningAllowed(
       pref_service_, prefs::kPrivacySandboxFledgeJoinBlocked);
   auto& pref_data = scoped_pref_update.Get();
   for (auto entry : pref_data) {
-    if (base::ranges::any_of(FledgeBlockToContentSettingsPatterns(entry.first),
-                             [&](const auto& pattern) {
-                               return pattern.Matches(
-                                   top_frame_origin.GetURL());
-                             })) {
+    if (std::ranges::any_of(FledgeBlockToContentSettingsPatterns(entry.first),
+                            [&](const auto& pattern) {
+                              return pattern.Matches(top_frame_origin.GetURL());
+                            })) {
       return false;
     }
   }

@@ -28,7 +28,6 @@ GIN_EXPORT extern const base::FeatureParam<int>
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8BaselineBatchCompilation);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8CodeMemoryWriteProtection);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8ConcurrentSparkplugHighPriorityThreads);
-GIN_EXPORT BASE_DECLARE_FEATURE(kV8CppGCEnableLargerCage);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8DelayMemoryReducer);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8ConcurrentMarkingHighPriorityThreads);
 GIN_EXPORT BASE_DECLARE_FEATURE(kV8DecommitPooledPages);
@@ -96,7 +95,6 @@ GIN_EXPORT BASE_DECLARE_FEATURE(kJavaScriptRegExpDuplicateNamedGroups);
 GIN_EXPORT BASE_DECLARE_FEATURE(kJavaScriptPromiseTry);
 GIN_EXPORT BASE_DECLARE_FEATURE(kWebAssemblyDeopt);
 GIN_EXPORT BASE_DECLARE_FEATURE(kWebAssemblyInliningCallIndirect);
-GIN_EXPORT BASE_DECLARE_FEATURE(kWebAssemblyLiftoffCodeFlushing);
 GIN_EXPORT BASE_DECLARE_FEATURE(kWebAssemblyMultipleMemories);
 GIN_EXPORT BASE_DECLARE_FEATURE(kWebAssemblyTurboshaft);
 GIN_EXPORT BASE_DECLARE_FEATURE(kWebAssemblyTurboshaftInstructionSelection);

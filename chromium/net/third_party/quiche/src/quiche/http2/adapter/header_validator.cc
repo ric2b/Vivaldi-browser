@@ -9,7 +9,7 @@
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "quiche/http2/adapter/header_validator_base.h"
-#include "quiche/http2/http2_constants.h"
+#include "quiche/http2/core/http2_constants.h"
 #include "quiche/common/platform/api/quiche_logging.h"
 
 namespace http2 {
@@ -148,8 +148,12 @@ HeaderValidator::HeaderStatus HeaderValidator::ValidateSingleHeader(
       } else if (value.empty()) {
         pseudo_header_state_[STATE_PATH_IS_EMPTY] = true;
         return HEADER_FIELD_INVALID;
-      } else if (validate_path_ &&
-                 !IsValidPath(value, allow_fragment_in_path_)) {
+      } else if (validate_path_) {
+        if (!IsValidPath(value, allow_fragment_in_path_)) {
+          return HEADER_FIELD_INVALID;
+        }
+      } else if (value.find_first_of(" \t") != absl::string_view::npos) {
+        // Tab and space are not valid path characters.
         return HEADER_FIELD_INVALID;
       }
       if (value[0] == '/') {

@@ -7,7 +7,7 @@
 #include "base/i18n/number_formatting.h"
 #include "base/i18n/rtl.h"
 #include "cc/paint/paint_flags.h"
-#include "components/global_media_controls/media_view_utils.h"
+#include "components/global_media_controls/public/format_duration.h"
 #include "components/strings/grit/components_strings.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
 #include "third_party/skia/include/core/SkPath.h"
@@ -277,6 +277,10 @@ void MediaProgressView::OnFocus() {
 void MediaProgressView::OnBlur() {
   views::View::OnBlur();
   SchedulePaint();
+}
+
+ui::Cursor MediaProgressView::GetCursor(const ui::MouseEvent& event) {
+  return ui::mojom::CursorType::kHand;
 }
 
 bool MediaProgressView::OnMousePressed(const ui::MouseEvent& event) {

@@ -12,6 +12,7 @@
 
 #include "base/files/file_path.h"
 #include "base/observer_list_types.h"
+#include "base/uuid.h"
 #include "components/ad_blocker/adblock_types.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "url/origin.h"
@@ -66,11 +67,15 @@ class RuleService : public KeyedService {
 
 #if BUILDFLAG(IS_IOS)
   virtual void SetIncognitoBrowserState(web::BrowserState* browser_state) = 0;
+
+  // Reports whether the provided URL matches a document allow rule on our
+  // partner list. This is only a rough match and may report incorrect result.
+  virtual bool IsPartnerListAllowedDocument(RuleGroup group, GURL url) = 0;
 #else
   virtual bool HasDocumentActivationForRuleSource(
       adblock_filter::RuleGroup group,
       content::WebContents* web_contents,
-      uint32_t rule_source_id) = 0;
+      base::Uuid preset_id) = 0;
 #endif
 
   // Gets the checksum of the index used for fast-finding of the rules.

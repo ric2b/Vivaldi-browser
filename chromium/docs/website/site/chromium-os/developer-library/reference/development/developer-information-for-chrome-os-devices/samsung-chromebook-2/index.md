@@ -2,7 +2,7 @@
 breadcrumbs:
 - - /chromium-os
   - ChromiumOS
-- - /chromium-os/developer-information-for-chrome-os-devices
+- - /chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices
   - Developer Information for ChromeOS Devices
 page_name: samsung-chromebook-2
 title: Samsung Chromebook 2
@@ -17,7 +17,7 @@ This page contains information about the [Samsung Chromebook
 interesting and/or useful to software developers. For general information about
 getting started with developing on ChromiumOS (the open-source version of the
 software on the Chrome Notebook), see the [ChromiumOS Developer
-Guide](http://www.chromium.org/chromium-os/developer-guide).
+Guide](/chromium-os/developer-guide).
 
 ## Specifications
 
@@ -43,7 +43,7 @@ Guide](http://www.chromium.org/chromium-os/developer-guide).
     *   HDMI Port
     *   1 x USB 2.0 (still uses XHCI)
     *   1 x USB 3.0
-    *   [Micro SD slot](http://en.wikipedia.org/wiki/Secure_Digital)
+    *   [Micro SD slot](https://en.wikipedia.org/wiki/Secure_Digital)
                 (SDXC compatible, has hardware but not software for UHS support)
     *   Headphone/mic combo jack
     *   Camera & mic
@@ -151,10 +151,10 @@ work:
 brick your system and make it unrecoverable. DO NOT ATTEMPT if you are not
 familiar with this process.**
 
-**[Stop.](http://www.youtube.com/watch?feature=fvwp&NR=1&v=Fj3WBfRZ5Nc&t=0m31s)
-[Don't.](http://www.youtube.com/watch?feature=fvwp&NR=1&v=Fj3WBfRZ5Nc&t=0m31s)
+**[Stop.](https://youtube.com/watch?feature=fvwp&NR=1&v=Fj3WBfRZ5Nc&t=0m31s)
+[Don't.](https://youtube.com/watch?feature=fvwp&NR=1&v=Fj3WBfRZ5Nc&t=0m31s)
 [Come
-back.](http://www.youtube.com/watch?feature=fvwp&NR=1&v=Fj3WBfRZ5Nc&t=0m31s)**
+back.](https://youtube.com/watch?feature=fvwp&NR=1&v=Fj3WBfRZ5Nc&t=0m31s)**
 
 Really. Opening the case will allow you to modify the read-only firmware that
 makes recovery possible. If someone from "teh internets" says "You need to

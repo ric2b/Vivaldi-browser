@@ -203,7 +203,7 @@ Check cross-process GL texture lifetime.
 
 Aside from that, nothing obviously architecturally wrong.
 
-Q. Are window server hangs like http://crbug.com/140175 definitely Apple bugs,
+Q. Are window server hangs like https://crbug.com/140175 definitely Apple bugs,
 or is it expected that applications might be able to provoke this behavior?
 
 A. Window server hangs are Apple bugs. Please file them. The more Radars the

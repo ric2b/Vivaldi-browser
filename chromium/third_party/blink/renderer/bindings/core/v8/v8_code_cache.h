@@ -46,6 +46,7 @@ class CORE_EXPORT V8CodeCache final {
     kProduceCodeCache,
   };
 
+  static uint32_t TagForBundledCodeCache();
   static uint32_t TagForCodeCache(const CachedMetadataHandler*);
   static uint32_t TagForTimeStamp(const CachedMetadataHandler*);
   static uint32_t TagForCompileHints(const CachedMetadataHandler*);
@@ -179,6 +180,14 @@ class CORE_EXPORT V8CodeCache final {
                             bool might_generate_crowdsourced_compile_hints,
                             bool can_use_crowdsourced_compile_hints);
 };
+
+inline base::span<const uint8_t> ToSpan(
+    const v8::ScriptCompiler::CachedData& data) {
+  // SAFETY: v8::ScriptCompiler::CachedData ensures its `data` and `length`
+  // are safe.
+  return UNSAFE_BUFFERS(
+      base::span(data.data, static_cast<size_t>(data.length)));
+}
 
 }  // namespace blink
 

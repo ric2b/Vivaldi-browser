@@ -9,6 +9,7 @@ import './new_column_selector.js';
 import './product_selector.js';
 import './table.js';
 import './horizontal_carousel.js';
+import './comparison_table_list.js';
 import 'chrome://resources/cr_elements/cr_hidden_style.css.js';
 import 'chrome://resources/cr_elements/cr_feedback_buttons/cr_feedback_buttons.js';
 import 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
@@ -18,7 +19,7 @@ import {ColorChangeUpdater} from 'chrome://resources/cr_components/color_change_
 import type {PageCallbackRouter} from 'chrome://resources/cr_components/commerce/product_specifications.mojom-webui.ts';
 import type {ProductSpecificationsBrowserProxy} from 'chrome://resources/cr_components/commerce/product_specifications_browser_proxy.js';
 import {ProductSpecificationsBrowserProxyImpl} from 'chrome://resources/cr_components/commerce/product_specifications_browser_proxy.js';
-import type {ProductSpecificationsSet} from 'chrome://resources/cr_components/commerce/shared.mojom-webui.js';
+import type {ProductInfo, ProductSpecificationsSet} from 'chrome://resources/cr_components/commerce/shared.mojom-webui.js';
 import {UserFeedback} from 'chrome://resources/cr_components/commerce/shopping_service.mojom-webui.js';
 import type {ProductSpecificationsFeatureState} from 'chrome://resources/cr_components/commerce/shopping_service.mojom-webui.js';
 import type {ShoppingServiceBrowserProxy} from 'chrome://resources/cr_components/commerce/shopping_service_browser_proxy.js';
@@ -30,20 +31,24 @@ import {assert} from 'chrome://resources/js/assert.js';
 import {EventTracker} from 'chrome://resources/js/event_tracker.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {OpenWindowProxyImpl} from 'chrome://resources/js/open_window_proxy.js';
+import {CrLitElement} from 'chrome://resources/lit/v3_0/lit.rollup.js';
+import type {PropertyValues} from 'chrome://resources/lit/v3_0/lit.rollup.js';
 import type {Uuid} from 'chrome://resources/mojo/mojo/public/mojom/base/uuid.mojom-webui.js';
-import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {getTemplate} from './app.html.js';
+import {getCss} from './app.css.js';
+import {getHtml} from './app.html.js';
 import type {BuyingOptions} from './buying_options_section.js';
+import type {ComparisonTableListElement} from './comparison_table_list.js';
+import type {ComparisonTableListItemClickEvent, ComparisonTableListItemRenameEvent} from './comparison_table_list_item.js';
 import type {ProductDescription} from './description_section.js';
 import type {HeaderElement} from './header.js';
 import type {NewColumnSelectorElement} from './new_column_selector.js';
 import {SectionType} from './product_selection_menu.js';
 import type {ProductSelectorElement} from './product_selector.js';
 import {Router} from './router.js';
-import type {ProductInfo, ProductSpecifications, ProductSpecificationsProduct} from './shopping_service.mojom-webui.js';
+import type {ProductSpecifications, ProductSpecificationsProduct} from './shopping_service.mojom-webui.js';
 import type {TableElement} from './table.js';
-import type {UrlListEntry} from './utils.js';
+import {isValidLowercaseUuid, type UrlListEntry} from './utils.js';
 import {WindowProxy} from './window_proxy.js';
 
 interface AggregatedProductData {
@@ -70,6 +75,8 @@ export interface TableColumn {
 
 export interface ProductSpecificationsElement {
   $: {
+    comparisonTableList: ComparisonTableListElement,
+    contentContainer: HTMLElement,
     empty: HTMLElement,
     error: HTMLElement,
     errorToast: CrToastElement,
@@ -104,8 +111,12 @@ export enum CompareTableColumnAction {
 export enum CompareTableLoadStatus {
   SUCCESS = 0,
   FAILURE = 1,
+  FAILURE_EMPTY_TABLE_BACKEND = 2,
+  FAILURE_EMPTY_TABLE_NON_PRODUCTS = 2,
+  FAILURE_USER_NOT_ELIGIBLE = 3,
+  FAILURE_OFFLINE = 4,
   // Must be last:
-  MAX_VALUE = 2,
+  MAX_VALUE = 5,
 }
 
 export const COLUMN_MODIFICATION_HISTOGRAM_NAME: string =
@@ -114,12 +125,13 @@ export const COLUMN_MODIFICATION_HISTOGRAM_NAME: string =
 export const TABLE_LOAD_HISTOGRAM_NAME: string =
     'Commerce.Compare.Table.LoadStatus';
 
-enum AppState {
+export enum AppState {
   ERROR = 0,
   TABLE_EMPTY = 1,
   SYNC_SCREEN = 2,
   TABLE_POPULATED = 3,
   LOADING = 4,
+  NO_CONTENT = 5,
 }
 
 function getProductDetails(
@@ -207,52 +219,58 @@ export const LOADING_START_EVENT_TYPE: string = 'loading-animation-start';
 export const LOADING_END_EVENT_TYPE: string = 'loading-animation-end';
 
 const LOADING_ANIMATION_SLIDE_PX = 16;
-const LOADING_ANIMATION_SLIDE_DURATION_MS = 200;
 
-export class ProductSpecificationsElement extends PolymerElement {
+export class ProductSpecificationsElement extends CrLitElement {
   static get is() {
     return 'product-specifications-app';
   }
 
-  static get template() {
-    return getTemplate();
+  static override get styles() {
+    return getCss();
   }
 
-  static get properties() {
+  static override get properties() {
     return {
-      appState_: {
-        type: Object,
-        computed: 'computeAppState_(productSpecificationsFeatureState_.*,' +
-            ' loadingState_.loading, showEmptyState_)',
-      },
-      loadingState_: Object,
-      setName_: String,
+      appState_: {type: Object},
+      id_: {type: Object},
+      sets_: {type: Array},
+      loadingState_: {type: Object},
+      productSpecificationsFeatureState_: {type: Object},
+      setName_: {type: String},
+      showComparisonTableList_: {type: Boolean},
+      showEmptyState_: {type: Boolean},
       showTableDataUnavailableContainer_: {
         type: Boolean,
-        computed: 'computeShowTableDataUnavailableContainer_(appState_)',
-        reflectToAttribute: true,
+        reflect: true,
       },
-      tableColumns_: Object,
+      tableColumns_: {type: Object},
     };
   }
 
-  private appState_: AppState = AppState.LOADING;
-  private loadingState_: LoadingState = {loading: false, urlCount: 0};
-  private setName_: string|null = null;
-  private showTableDataUnavailableContainer_: boolean;
-  private tableColumns_: TableColumn[] = [];
+  protected appState_: AppState = AppState.NO_CONTENT;
+  protected id_: Uuid|null = null;
+  protected loadingState_: LoadingState = {loading: false, urlCount: 0};
+  protected productSpecificationsFeatureState_:
+      ProductSpecificationsFeatureState;
+  protected setName_: string|null = null;
+  protected sets_: ProductSpecificationsSet[] = [];
+  protected showComparisonTableList_: boolean = false;
+  private showEmptyState_: boolean;
+  protected showTableDataUnavailableContainer_: boolean;
+  protected tableColumns_: TableColumn[] = [];
 
   private callbackRouter_: PageCallbackRouter;
   private eventTracker_: EventTracker = new EventTracker();
-  private id_: Uuid|null = null;
+  private isWindowFocused_: boolean = true;
   private listenerIds_: number[] = [];
+  private loadingAnimationSlideDurationMs_: number = 200;
+  private contentContainerIsHidden_: boolean = false;
   private minLoadingAnimationMs_: number = 500;
-  private productSpecificationsFeatureState_: ProductSpecificationsFeatureState;
+  private pendingSetUpdate_: (() => void)|null = null;
   private productSpecificationsProxy_: ProductSpecificationsBrowserProxy =
       ProductSpecificationsBrowserProxyImpl.getInstance();
   private shoppingApi_: ShoppingServiceBrowserProxy =
       ShoppingServiceBrowserProxyImpl.getInstance();
-  private showEmptyState_: boolean;
 
   constructor() {
     super();
@@ -260,10 +278,41 @@ export class ProductSpecificationsElement extends PolymerElement {
     ColorChangeUpdater.forDocument().start();
   }
 
+  override willUpdate(changedProperties: PropertyValues<this>) {
+    super.willUpdate(changedProperties);
+
+    const changedPrivateProperties =
+        changedProperties as Map<PropertyKey, unknown>;
+
+    if (changedPrivateProperties.has('productSpecificationsFeatureState_') ||
+        changedPrivateProperties.has('loadingState_') ||
+        changedPrivateProperties.has('showEmptyState_')) {
+      this.appState_ = this.computeAppState_();
+    }
+
+    if (changedPrivateProperties.has('appState_') ||
+        changedPrivateProperties.has('id_') ||
+        changedPrivateProperties.has('sets_') ||
+        changedPrivateProperties.has('showEmptyState_')) {
+      this.showComparisonTableList_ = this.computeShowComparisonTableList_();
+    }
+
+    if (changedPrivateProperties.has('appState_')) {
+      this.showTableDataUnavailableContainer_ =
+          this.computeShowTableDataUnavailableContainer_();
+    }
+  }
+
+  override render() {
+    return getHtml.bind(this)();
+  }
+
   override async connectedCallback() {
     super.connectedCallback();
 
     this.listenerIds_.push(
+        this.callbackRouter_.onProductSpecificationsSetAdded.addListener(
+            (set: ProductSpecificationsSet) => this.onSetAdded_(set)),
         this.callbackRouter_.onProductSpecificationsSetRemoved.addListener(
             (uuid: Uuid) => this.onSetRemoved_(uuid)),
         this.callbackRouter_.onProductSpecificationsSetUpdated.addListener(
@@ -272,18 +321,42 @@ export class ProductSpecificationsElement extends PolymerElement {
     // TODO: b/358131415 - use listeners to update. Temporary workaround uses
     // window focus to update the feature state, to check signin.
     window.addEventListener('focus', async () => {
+      this.isWindowFocused_ = true;
+
       const previousState = this.productSpecificationsFeatureState_;
       const {state} =
           await this.shoppingApi_.getProductSpecificationsFeatureState();
       if (!state || areStatesEqual(previousState, state)) {
+        if (this.pendingSetUpdate_) {
+          this.pendingSetUpdate_();
+          this.pendingSetUpdate_ = null;
+        }
         return;
       }
+
+      // If there is a set update, the new set will be fetched when the table
+      // is reloaded.
+      this.pendingSetUpdate_ = null;
 
       // States have changed, so we need to reload the table.
       // Update the featureState after loadTable_(), so that the loading
       // state will animate first.
       await this.loadTable_(state);
       this.productSpecificationsFeatureState_ = state;
+    });
+
+    window.addEventListener('blur', () => {
+      this.isWindowFocused_ = false;
+    });
+
+    // If the browser 'back' button is clicked and the previous history entry
+    // was the empty state, then reload the page to show the empty state. This
+    // allows the user to return to the empty state after clicking on a
+    // comparison table list item or creating a new set via adding a URL.
+    window.addEventListener('popstate', () => {
+      if (window.location.hash === '') {
+        window.location.replace(window.location.origin);
+      }
     });
 
     this.eventTracker_.add(
@@ -319,8 +392,13 @@ export class ProductSpecificationsElement extends PolymerElement {
     this.eventTracker_.removeAll();
   }
 
-  disableMinLoadingAnimationMsForTesting() {
-    this.minLoadingAnimationMs_ = 0;
+  resetLoadingAnimationMsForTesting(loadingAnimationMs: number = 0) {
+    this.minLoadingAnimationMs_ = loadingAnimationMs;
+    this.loadingAnimationSlideDurationMs_ = 0;
+  }
+
+  focusWindowForTesting() {
+    this.isWindowFocused_ = true;
   }
 
   private async loadTable_(state: ProductSpecificationsFeatureState) {
@@ -333,29 +411,15 @@ export class ProductSpecificationsElement extends PolymerElement {
     const router = Router.getInstance();
     const params = new URLSearchParams(router.getCurrentQuery());
     const idParam = params.get('id');
-    if (idParam) {
-      this.id_ = {value: idParam};
-      const {set} = await this.shoppingApi_.getProductSpecificationsSetByUuid(
-          {value: idParam});
-      if (set) {
-        const {disclosureShown} =
-            await this.productSpecificationsProxy_.maybeShowDisclosure(
-                /* urls= */[], /* name= */ '', idParam);
-        if (disclosureShown) {
-          this.showEmptyState_ = true;
-          this.id_ = null;
-          return;
-        }
-        document.title = set.name;
-        this.setName_ = set.name;
-        this.populateTable_(set.urls.map(url => (url.url)));
+    if (idParam && isValidLowercaseUuid(idParam)) {
+      if (await this.loadSet_({value: idParam})) {
         return;
       }
     }
 
     const urlsParam = params.get('urls');
     if (!urlsParam) {
-      this.showEmptyState_ = true;
+      this.updateEmptyState_(true);
       return;
     }
 
@@ -378,6 +442,10 @@ export class ProductSpecificationsElement extends PolymerElement {
       if (!(this.productSpecificationsFeatureState_.canLoadFullPageUi &&
             this.productSpecificationsFeatureState_.canFetchData &&
             this.productSpecificationsFeatureState_.isAllowedForEnterprise)) {
+        chrome.metricsPrivate.recordEnumerationValue(
+            TABLE_LOAD_HISTOGRAM_NAME,
+            CompareTableLoadStatus.FAILURE_USER_NOT_ELIGIBLE,
+            CompareTableLoadStatus.MAX_VALUE);
         return AppState.ERROR;
       }
       if (this.loadingState_.loading) {
@@ -388,27 +456,15 @@ export class ProductSpecificationsElement extends PolymerElement {
       }
       return AppState.TABLE_POPULATED;
     }
-    return AppState.ERROR;
-  }
 
-  private isAppStateError_() {
-    return this.appState_ === AppState.ERROR;
-  }
+    if (this.isOffline_) {
+      chrome.metricsPrivate.recordEnumerationValue(
+          TABLE_LOAD_HISTOGRAM_NAME, CompareTableLoadStatus.FAILURE_OFFLINE,
+          CompareTableLoadStatus.MAX_VALUE);
+      return AppState.ERROR;
+    }
 
-  private isAppStateTableEmpty_() {
-    return this.appState_ === AppState.TABLE_EMPTY;
-  }
-
-  private isAppStateSyncScreen_() {
-    return this.appState_ === AppState.SYNC_SCREEN;
-  }
-
-  private isAppStateTablePopulated_() {
-    return this.appState_ === AppState.TABLE_POPULATED;
-  }
-
-  private isAppStateLoading_() {
-    return this.appState_ === AppState.LOADING;
+    return AppState.NO_CONTENT;
   }
 
   private computeShowTableDataUnavailableContainer_() {
@@ -417,12 +473,27 @@ export class ProductSpecificationsElement extends PolymerElement {
         this.appState_ === AppState.SYNC_SCREEN;
   }
 
-  private canShowFeedbackButtons_() {
+  private computeShowComparisonTableList_() {
+    if (!loadTimeData.getBoolean('comparisonTableListEnabled')) {
+      return false;
+    }
+
+    return this.showEmptyState_ && this.id_ === null && this.sets_.length > 0 &&
+        this.appState_ === AppState.TABLE_EMPTY;
+  }
+
+  protected canShowFooter_(
+      showTableDataUnavailableContainer: boolean, appState: AppState) {
+    return !(
+        showTableDataUnavailableContainer || appState === AppState.NO_CONTENT);
+  }
+
+  protected canShowFeedbackButtons_() {
     return Boolean(
         this.productSpecificationsFeatureState_?.isQualityLoggingAllowed);
   }
 
-  private showSyncSetupFlow_() {
+  protected showSyncSetupFlow_() {
     assert(this.productSpecificationsFeatureState_);
     assert(!this.productSpecificationsFeatureState_.isSyncingTabCompare);
 
@@ -436,7 +507,7 @@ export class ProductSpecificationsElement extends PolymerElement {
     this.productSpecificationsProxy_.showSyncSetupFlow();
   }
 
-  private showOfflineToast_() {
+  protected showOfflineToast_() {
     this.$.offlineToast.show();
   }
 
@@ -446,14 +517,15 @@ export class ProductSpecificationsElement extends PolymerElement {
     // Transition directly to the empty state if there are no URLs.
     if (urls.length === 0) {
       this.tableColumns_ = [];
-      this.showEmptyState_ = true;
+      this.updateEmptyState_(true);
+      await this.showContentContainer_();
       return;
     }
 
     await this.enterLoadingState_(urls.length);
 
     const start = Date.now();
-    this.showEmptyState_ = false;
+    this.updateEmptyState_(false);
 
     const tableColumns: TableColumn[] = [];
     if (urls.length) {
@@ -487,9 +559,19 @@ export class ProductSpecificationsElement extends PolymerElement {
       // the URLs in the comparison will still be displayed as columns.
       if (productSpecs.productDimensionMap.size === 0 && urls.length > 1) {
         this.$.errorToast.show();
-        chrome.metricsPrivate.recordEnumerationValue(
-            TABLE_LOAD_HISTOGRAM_NAME, CompareTableLoadStatus.FAILURE,
-            CompareTableLoadStatus.MAX_VALUE);
+        // If there's no product info for any of the URLs, the table is a
+        // collection of non-products.
+        if (urls.some((url) => !!aggregatedDataByUrl.get(url))) {
+          chrome.metricsPrivate.recordEnumerationValue(
+              TABLE_LOAD_HISTOGRAM_NAME,
+              CompareTableLoadStatus.FAILURE_EMPTY_TABLE_NON_PRODUCTS,
+              CompareTableLoadStatus.MAX_VALUE);
+        } else {
+          chrome.metricsPrivate.recordEnumerationValue(
+              TABLE_LOAD_HISTOGRAM_NAME,
+              CompareTableLoadStatus.FAILURE_EMPTY_TABLE_BACKEND,
+              CompareTableLoadStatus.MAX_VALUE);
+        }
       } else {
         chrome.metricsPrivate.recordEnumerationValue(
             TABLE_LOAD_HISTOGRAM_NAME, CompareTableLoadStatus.SUCCESS,
@@ -506,7 +588,7 @@ export class ProductSpecificationsElement extends PolymerElement {
     }
 
     this.tableColumns_ = tableColumns;
-    this.showEmptyState_ = this.tableColumns_.length === 0;
+    this.updateEmptyState_(this.tableColumns_.length === 0);
     this.exitLoadingState_();
   }
 
@@ -551,18 +633,51 @@ export class ProductSpecificationsElement extends PolymerElement {
     return aggregatedDatas;
   }
 
-  private deleteSet_() {
+  private async loadSet_(uuid: Uuid): Promise<boolean> {
+    const {set} =
+        await this.shoppingApi_.getProductSpecificationsSetByUuid(uuid);
+    if (set) {
+      const {disclosureShown} =
+          await this.productSpecificationsProxy_.maybeShowDisclosure(
+              /* urls= */[], /* name= */ '', uuid.value);
+      if (disclosureShown) {
+        this.updateEmptyState_(true);
+        this.id_ = null;
+        return false;
+      }
+
+      // Hide the content container if transitioning from the empty state. We
+      // will only show the loading state later if the set has at least one URL.
+      // The comparison table list will be hidden once the table ID is set, so
+      // we hide the content container first.
+      if (this.appState_ === AppState.TABLE_EMPTY) {
+        await this.hideContentContainer_();
+      }
+
+      this.id_ = set.uuid;
+      document.title = set.name;
+      this.setName_ = set.name;
+      this.populateTable_(set.urls.map(url => (url.url)));
+      return true;
+    }
+
+    this.updateEmptyState_(true);
+    this.id_ = null;
+    return false;
+  }
+
+  private deleteSet_(uuid: Uuid|null = this.id_) {
     if (this.isOffline_) {
       this.showOfflineToast_();
       return;
     }
 
-    if (this.id_) {
-      this.shoppingApi_.deleteProductSpecificationsSet(this.id_);
+    if (uuid) {
+      this.shoppingApi_.deleteProductSpecificationsSet(uuid);
     }
   }
 
-  private updateSetName_(e: CustomEvent<{name: string}>) {
+  protected updateSetName_(e: CustomEvent<{name: string}>) {
     if (this.isOffline_) {
       this.showOfflineToast_();
       return;
@@ -574,12 +689,17 @@ export class ProductSpecificationsElement extends PolymerElement {
     }
   }
 
-  private seeAllSets_() {
+  protected seeAllSets_() {
+    if (loadTimeData.getBoolean('comparisonTableListEnabled')) {
+      this.productSpecificationsProxy_.showComparePage(true);
+      return;
+    }
+
     OpenWindowProxyImpl.getInstance().openUrl(
         loadTimeData.getString('productSpecificationsManagementUrl'));
   }
 
-  private async onUrlAdd_(
+  protected async onUrlAdd_(
       e: CustomEvent<{url: string, urlSection: SectionType}>) {
     if (this.isOffline_) {
       this.showOfflineToast_();
@@ -618,7 +738,7 @@ export class ProductSpecificationsElement extends PolymerElement {
     }
   }
 
-  private onUrlChange_(
+  protected onUrlChange_(
       e: CustomEvent<{url: string, urlSection: SectionType, index: number}>) {
     if (this.isOffline_) {
       this.showOfflineToast_();
@@ -643,7 +763,7 @@ export class ProductSpecificationsElement extends PolymerElement {
     this.modifyUrls_(urls);
   }
 
-  private onUrlOrderUpdate_() {
+  protected onUrlOrderUpdate_() {
     if (this.isOffline_) {
       this.showOfflineToast_();
       return;
@@ -658,7 +778,7 @@ export class ProductSpecificationsElement extends PolymerElement {
     this.modifyUrls_(urls);
   }
 
-  private onUrlRemove_(e: CustomEvent<{index: number}>) {
+  protected onUrlRemove_(e: CustomEvent<{index: number}>) {
     if (this.isOffline_) {
       this.showOfflineToast_();
       return;
@@ -694,21 +814,42 @@ export class ProductSpecificationsElement extends PolymerElement {
         this.setName_, urls.map(url => ({url})));
     if (createdSet) {
       this.id_ = createdSet.uuid;
-      window.history.replaceState(undefined, '', `?id=${this.id_.value}`);
+      document.title = this.setName_;
+      window.history.pushState(undefined, '', `?id=${this.id_.value}`);
     }
     this.populateTable_(urls);
   }
 
-  private getTableUrls_(): string[] {
+  protected getTableUrls_(): string[] {
     return this.tableColumns_.map(
         (column: TableColumn) => column.selectedItem.url);
   }
 
-  private isTableFull_(columnCount: number): boolean {
-    return columnCount >= loadTimeData.getInteger('maxTableSize');
+  protected isTableFull_(): boolean {
+    return this.tableColumns_.length >= loadTimeData.getInteger('maxTableSize');
   }
 
-  private onSetUpdated_(set: ProductSpecificationsSet) {
+  private async onSetUpdated_(set: ProductSpecificationsSet) {
+    // If the page does not have focus, schedule the update for later in case a
+    // newer update is received before the tab is focused. This prevents all
+    // updates from triggering at the same time, which may cause a flicker.
+    if (!this.isWindowFocused_) {
+      this.pendingSetUpdate_ = this.updateSet_.bind(this, set);
+      return;
+    }
+
+    this.updateSet_(set);
+  }
+
+  private async updateSet_(set: ProductSpecificationsSet) {
+    if (this.showEmptyState_) {
+      const tableIndex =
+          this.sets_.findIndex(table => table.uuid.value === set.uuid.value);
+      if (tableIndex !== -1) {
+        this.sets_ = this.sets_.toSpliced(tableIndex, 1, set);
+      }
+    }
+
     if (set.uuid.value !== this.id_?.value) {
       return;
     }
@@ -735,6 +876,12 @@ export class ProductSpecificationsElement extends PolymerElement {
     }
 
     if (urlSetChanged) {
+      this.closeAllProductSelectionMenus_();
+
+      // Hide the content container as we might transition directly to the
+      // empty state if there are no URLs left.
+      await this.hideContentContainer_();
+
       this.populateTable_(set.urls.map(url => url.url));
     } else if (orderChanged) {
       const newCols: TableColumn[] = [];
@@ -754,9 +901,13 @@ export class ProductSpecificationsElement extends PolymerElement {
     if (id.value === this.id_?.value) {
       window.location.replace(window.location.origin);
     }
+
+    if (this.showEmptyState_) {
+      this.sets_ = this.sets_.filter(table => table.uuid.value !== id.value);
+    }
   }
 
-  private onFeedbackSelectedOptionChanged_(
+  protected onFeedbackSelectedOptionChanged_(
       e: CustomEvent<{value: CrFeedbackOption}>) {
     switch (e.detail.value) {
       case CrFeedbackOption.UNSPECIFIED:
@@ -774,13 +925,25 @@ export class ProductSpecificationsElement extends PolymerElement {
     }
   }
 
-  private getDisclaimerText_(): string {
+  private async onSetAdded_(set: ProductSpecificationsSet) {
+    if (this.showEmptyState_) {
+      this.sets_ = [set].concat(this.sets_);
+    }
+  }
+
+  protected getDisclaimerText_(): string {
     return loadTimeData.getStringF(
         'experimentalFeatureDisclaimer', loadTimeData.getString('userEmail'));
   }
 
-  private async fadeAndSlideOutSummaryContainer_() {
-    await this.$.summaryContainer
+  // Hide the content container with an animation if not already hidden.
+  private async hideContentContainer_() {
+    if (this.contentContainerIsHidden_) {
+      return;
+    }
+
+    this.contentContainerIsHidden_ = true;
+    await this.$.contentContainer
         .animate(
             [
               {opacity: 1, transform: 'translateY(0px)'},
@@ -790,15 +953,20 @@ export class ProductSpecificationsElement extends PolymerElement {
               },
             ],
             {
-              duration: LOADING_ANIMATION_SLIDE_DURATION_MS,
+              duration: this.loadingAnimationSlideDurationMs_,
               easing: 'ease-out',
               fill: 'forwards',
             })
         .finished;
   }
 
-  private async fadeAndSlideInSummaryContainer_() {
-    await this.$.summaryContainer
+  // Show the content container with an animation if not already shown.
+  private async showContentContainer_() {
+    if (!this.contentContainerIsHidden_) {
+      return;
+    }
+
+    await this.$.contentContainer
         .animate(
             [
               {
@@ -808,46 +976,83 @@ export class ProductSpecificationsElement extends PolymerElement {
               {opacity: 1, transform: 'translateY(0px)'},
             ],
             {
-              duration: LOADING_ANIMATION_SLIDE_DURATION_MS,
+              duration: this.loadingAnimationSlideDurationMs_,
               easing: 'ease-out',
               fill: 'forwards',
             })
         .finished;
+    this.contentContainerIsHidden_ = false;
   }
 
   // Resolves upon updating the loading state.
   private async enterLoadingState_(urlCount: number): Promise<void> {
-    if ([AppState.ERROR, AppState.SYNC_SCREEN, AppState.LOADING].includes(
-            this.appState_)) {
+    if ([
+          AppState.ERROR,
+          AppState.SYNC_SCREEN,
+          AppState.LOADING,
+          AppState.NO_CONTENT,
+        ].includes(this.appState_)) {
       this.loadingState_ = {loading: true, urlCount};
       this.dispatchLoadingStartEvent_();
       return Promise.resolve();
     }
 
     return new Promise<void>(async resolve => {
-      await this.fadeAndSlideOutSummaryContainer_();
+      await this.hideContentContainer_();
       this.loadingState_ = {loading: true, urlCount};
       resolve();
-      await this.fadeAndSlideInSummaryContainer_();
+      await this.showContentContainer_();
       this.dispatchLoadingStartEvent_();
     });
   }
 
   private async exitLoadingState_() {
-    await this.fadeAndSlideOutSummaryContainer_();
+    await this.hideContentContainer_();
     this.loadingState_ = {loading: false, urlCount: 0};
-    await this.fadeAndSlideInSummaryContainer_();
+    await this.showContentContainer_();
     this.dispatchLoadingEndEvent_();
   }
 
   private dispatchLoadingStartEvent_() {
-    this.dispatchEvent(new CustomEvent(
-        LOADING_START_EVENT_TYPE, {bubbles: true, composed: true}));
+    this.fire(LOADING_START_EVENT_TYPE);
   }
 
   private dispatchLoadingEndEvent_() {
-    this.dispatchEvent(new CustomEvent(
-        LOADING_END_EVENT_TYPE, {bubbles: true, composed: true}));
+    this.fire(LOADING_END_EVENT_TYPE);
+  }
+
+  private async updateEmptyState_(shouldShow: boolean) {
+    this.showEmptyState_ = shouldShow;
+    this.requestUpdate();
+
+    // If we show the empty state and there are no comparison tables, try to
+    // fetch them.
+    if (loadTimeData.getBoolean('comparisonTableListEnabled') &&
+        this.showEmptyState_ && this.sets_.length === 0) {
+      const {sets} = await this.shoppingApi_.getAllProductSpecificationsSets();
+      this.sets_ = sets;
+    }
+  }
+
+  protected onComparisonTableListItemClick_(
+      event: ComparisonTableListItemClickEvent) {
+    window.history.pushState(undefined, '', `?id=${event.detail.uuid.value}`);
+    this.loadSet_(event.detail.uuid);
+  }
+
+  protected onComparisonTableListItemRename_(
+      event: ComparisonTableListItemRenameEvent) {
+    this.shoppingApi_.setNameForProductSpecificationsSet(
+        event.detail.uuid, event.detail.name);
+  }
+
+  protected onHeaderMenuDeleteClick_() {
+    this.deleteSet_();
+  }
+
+  private closeAllProductSelectionMenus_() {
+    this.$.summaryTable.closeAllProductSelectionMenus();
+    this.$.newColumnSelector.closeMenu();
   }
 }
 

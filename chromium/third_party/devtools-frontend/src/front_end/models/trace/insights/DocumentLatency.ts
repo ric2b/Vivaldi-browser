@@ -6,7 +6,13 @@ import * as i18n from '../../../core/i18n/i18n.js';
 import * as Helpers from '../helpers/helpers.js';
 import * as Types from '../types/types.js';
 
-import type {InsightModel, InsightSetContext, RequiredData} from './types.js';
+import {
+  InsightCategory,
+  type InsightModel,
+  type InsightSetContext,
+  InsightWarning,
+  type RequiredData
+} from './types.js';
 
 const UIStrings = {
   /**
@@ -33,9 +39,9 @@ const IGNORE_THRESHOLD_IN_BYTES = 1400;
 
 export type DocumentLatencyInsightModel = InsightModel<{
   data?: {
-    serverResponseTime: Types.Timing.MilliSeconds,
+    serverResponseTime: Types.Timing.Milli,
     serverResponseTooSlow: boolean,
-    redirectDuration: Types.Timing.MilliSeconds,
+    redirectDuration: Types.Timing.Milli,
     uncompressedResponseBytes: number,
     documentRequest?: Types.Events.SyntheticNetworkRequest,
   },
@@ -45,14 +51,14 @@ export function deps(): ['Meta', 'NetworkRequests'] {
   return ['Meta', 'NetworkRequests'];
 }
 
-function getServerResponseTime(request: Types.Events.SyntheticNetworkRequest): Types.Timing.MilliSeconds|null {
+function getServerResponseTime(request: Types.Events.SyntheticNetworkRequest): Types.Timing.Milli|null {
   const timing = request.args.data.timing;
   if (!timing) {
     return null;
   }
 
-  const ms = Helpers.Timing.microSecondsToMilliseconds(request.args.data.syntheticData.waiting);
-  return Math.round(ms) as Types.Timing.MilliSeconds;
+  const ms = Helpers.Timing.microToMilli(request.args.data.syntheticData.waiting);
+  return Math.round(ms) as Types.Timing.Milli;
 }
 
 function getCompressionSavings(request: Types.Events.SyntheticNetworkRequest): number {
@@ -119,8 +125,21 @@ function getCompressionSavings(request: Types.Events.SyntheticNetworkRequest): n
   return estimatedSavings < IGNORE_THRESHOLD_IN_BYTES ? 0 : estimatedSavings;
 }
 
-function finalize(partialModel: Omit<DocumentLatencyInsightModel, 'title'|'description'>): DocumentLatencyInsightModel {
-  return {title: i18nString(UIStrings.title), description: i18nString(UIStrings.description), ...partialModel};
+function finalize(partialModel: Omit<DocumentLatencyInsightModel, 'title'|'description'|'category'|'shouldShow'>):
+    DocumentLatencyInsightModel {
+  let hasFailure = false;
+  if (partialModel.data) {
+    hasFailure = partialModel.data.redirectDuration > 0 || partialModel.data.serverResponseTooSlow ||
+        partialModel.data.uncompressedResponseBytes > 0;
+  }
+
+  return {
+    title: i18nString(UIStrings.title),
+    description: i18nString(UIStrings.description),
+    category: InsightCategory.ALL,
+    shouldShow: hasFailure,
+    ...partialModel,
+  };
 }
 
 export function generateInsight(
@@ -132,7 +151,7 @@ export function generateInsight(
   const documentRequest =
       parsedTrace.NetworkRequests.byTime.find(req => req.args.data.requestId === context.navigationId);
   if (!documentRequest) {
-    throw new Error('missing document request');
+    return finalize({warnings: [InsightWarning.NO_DOCUMENT_REQUEST]});
   }
 
   const serverResponseTime = getServerResponseTime(documentRequest);
@@ -151,8 +170,8 @@ export function generateInsight(
   overallSavingsMs += redirectDuration;
 
   const metricSavings = {
-    FCP: overallSavingsMs as Types.Timing.MilliSeconds,
-    LCP: overallSavingsMs as Types.Timing.MilliSeconds,
+    FCP: overallSavingsMs as Types.Timing.Milli,
+    LCP: overallSavingsMs as Types.Timing.Milli,
   };
 
   return finalize({
@@ -160,7 +179,7 @@ export function generateInsight(
     data: {
       serverResponseTime,
       serverResponseTooSlow,
-      redirectDuration: Types.Timing.MilliSeconds(redirectDuration),
+      redirectDuration: Types.Timing.Milli(redirectDuration),
       uncompressedResponseBytes: getCompressionSavings(documentRequest),
       documentRequest,
     },

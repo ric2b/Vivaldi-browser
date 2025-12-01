@@ -29,6 +29,7 @@
 #include "components/commerce/core/product_specifications/product_specifications_cache.h"
 #include "components/commerce/core/product_specifications/product_specifications_service.h"
 #include "components/commerce/core/product_specifications/product_specifications_set.h"
+#include "components/commerce/core/proto/cart_db_content.pb.h"
 #include "components/commerce/core/proto/commerce_subscription_db_content.pb.h"
 #include "components/commerce/core/proto/discounts_db_content.pb.h"
 #include "components/commerce/core/proto/parcel_tracking_db_content.pb.h"
@@ -44,7 +45,6 @@
 
 class GURL;
 class PrefService;
-class TemplateURLService;
 
 template <typename T>
 class SessionProtoStorage;
@@ -220,12 +220,12 @@ class ShoppingService : public KeyedService,
       ProductSpecificationsService* product_specifications_service,
       SessionProtoStorage<discounts_db::DiscountsContentProto>*
           discounts_proto_db,
+      SessionProtoStorage<cart_db::ChromeCartContentProto>* cart_proto_db,
       SessionProtoStorage<parcel_tracking_db::ParcelTrackingContent>*
           parcel_tracking_proto_db,
       history::HistoryService* history_service,
       std::unique_ptr<commerce::WebExtractor> web_extractor,
-      sessions::TabRestoreService* tab_restore_service,
-      TemplateURLService* template_url_service);
+      sessions::TabRestoreService* tab_restore_service);
   ~ShoppingService() override;
 
   ShoppingService(const ShoppingService&) = delete;
@@ -363,37 +363,6 @@ class ShoppingService : public KeyedService,
   // be passed to the callback.
   virtual void WaitForReady(
       base::OnceCallback<void(ShoppingService*)> callback);
-
-  // This is a feature check for the "merchant viewer", which will return true
-  // if the user has the feature flag enabled or (if applicable) is in an
-  // enabled country and locale.
-  virtual bool IsMerchantViewerEnabled();
-
-  // This is a feature check for the "price tracking", which will return true
-  // if the user has the feature flag enabled or (if applicable) is in an
-  // enabled country and locale.
-  virtual bool IsCommercePriceTrackingEnabled();
-
-  // This is a feature check for the "price insights", which will return true
-  // if the user has the feature flag enabled, has MSBB enabled, and (if
-  // applicable) is in an eligible country and locale. The value returned by
-  // this method can change at runtime, so it should not be used when deciding
-  // whether to create critical, feature-related infrastructure.
-  virtual bool IsPriceInsightsEligible();
-
-  // This is a feature check for "show discounts on navigation", which will
-  // return true if the user has the feature flag enabled, is signed-in and
-  // synced, has MSBB enabled, and (if applicable) is in an eligible country and
-  // locale. The value returned by this method can change at runtime, so it
-  // should not be used when deciding whether to create critical,
-  // feature-related infrastructure.
-  virtual bool IsDiscountEligibleToShowOnNavigation();
-
-  // Check if parcel tracking is eligible for use. This not only checks the
-  // feature flag, but also checks user's sign in state, country code, etc. The
-  // value returned here can change during runtime so it should not be used
-  // when deciding to build infrastructure.
-  virtual bool IsParcelTrackingEligible();
 
   // Returns a list of URLs corresponding to active WebWrappers the shopping
   // service is keeping track of. This does not map to open tabs across all
@@ -589,13 +558,6 @@ class ShoppingService : public KeyedService,
   // Get the data stored in the cache or nullptr if none exists.
   const ProductInfo* GetFromProductInfoCache(const GURL& url);
 
-  // Whether APIs like |GetPriceInsightsInfoForURL| are enabled and allowed to
-  // be used.
-  bool IsPriceInsightsInfoApiEnabled();
-
-  // Whether APIs like |IsShoppingPage| are enabled and allowed to be used.
-  bool IsShoppingPageTypesApiEnabled();
-
   void HandleOptGuidePriceInsightsInfoResponse(
       const GURL& url,
       PriceInsightsInfoCallback callback,
@@ -613,10 +575,6 @@ class ShoppingService : public KeyedService,
       IsShoppingPageCallback callback,
       optimization_guide::OptimizationGuideDecision decision,
       const optimization_guide::OptimizationMetadata& metadata);
-
-  // Whether APIs like |GetDiscountInfoForUrls| are enabled and allowed to be
-  // used.
-  bool IsDiscountInfoApiEnabled();
 
   void GetDiscountInfoFromOptGuide(const GURL& url,
                                    DiscountInfoCallback callback);

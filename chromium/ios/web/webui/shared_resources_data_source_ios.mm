@@ -17,8 +17,8 @@
 #import "net/base/mime_util.h"
 #import "ui/base/webui/resource_path.h"
 #import "ui/base/webui/web_ui_util.h"
-#import "ui/resources/grit/webui_resources.h"
-#import "ui/resources/grit/webui_resources_map.h"
+#import "ui/webui/resources/grit/webui_resources.h"
+#import "ui/webui/resources/grit/webui_resources_map.h"
 
 namespace web {
 
@@ -37,12 +37,14 @@ const webui::ResourcePath* PathToResource(const std::string& path) {
     }
   }
   for (size_t i = 0; i < kMojoBindingsResourcesSize; ++i) {
-    if (path == kMojoBindingsResources[i].path)
+    if (path == kMojoBindingsResources[i].path) {
       return &kMojoBindingsResources[i];
+    }
   }
   for (size_t i = 0; i < kIosWebResourcesSize; ++i) {
-    if (path == kIosWebResources[i].path)
+    if (path == kIosWebResources[i].path) {
       return &kIosWebResources[i];
+    }
   }
 
   return nullptr;

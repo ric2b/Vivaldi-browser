@@ -8,19 +8,11 @@
 
 #include <vector>
 
-#include "base/feature_list.h"
-#include "base/i18n/rtl.h"
-#include "base/metrics/field_trial_params.h"
-#include "cc/resources/scoped_ui_resource.h"
-#include "cc/slim/filter.h"
 #include "cc/slim/layer.h"
 #include "cc/slim/nine_patch_layer.h"
-#include "cc/slim/solid_color_layer.h"
-#include "chrome/browser/android/compositor/decoration_title.h"
+#include "chrome/browser/android/compositor/decoration_tab_title.h"
 #include "chrome/browser/android/compositor/layer_title_cache.h"
-#include "chrome/browser/flags/android/chrome_feature_list.h"
 #include "ui/android/resources/nine_patch_resource.h"
-#include "ui/android/resources/resource_manager.h"
 #include "ui/base/l10n/l10n_util_android.h"
 
 
@@ -70,12 +62,6 @@ void TabHandleLayer::SetProperties(
   }
 
   y += top_margin;
-  float original_x = x;
-  float original_y = y;
-  if (foreground_) {
-    x = 0;
-    y = 0;
-  }
 
   bool is_rtl = l10n_util::IsLayoutRtl();
 
@@ -104,14 +90,13 @@ void TabHandleLayer::SetProperties(
 
   layer_->SetPosition(gfx::PointF(x, y));
 
-  DecorationTitle* title_layer = nullptr;
+  DecorationTabTitle* title_layer = nullptr;
   // Only pull if tab id is valid.
   if (layer_title_cache_ && id != -1) {
     title_layer = layer_title_cache_->GetTitleLayer(id);
   }
 
   if (title_layer) {
-    title_layer->setOpacity(1.0f);
     unsigned expected_children = 4;
     title_layer_ = title_layer->layer();
     if (tab_->children().size() < expected_children) {
@@ -142,14 +127,6 @@ void TabHandleLayer::SetProperties(
   tab_outline_->SetBounds(tab_bounds);
   tab_outline_->SetBorder(
       tab_handle_outline_resource->Border(tab_outline_->bounds()));
-
-  if (foreground_) {
-    decoration_tab_->SetPosition(gfx::PointF(original_x, original_y));
-    tab_outline_->SetPosition(gfx::PointF(original_x, original_y));
-  } else {
-    decoration_tab_->SetPosition(gfx::PointF(0, 0));
-    tab_outline_->SetPosition(gfx::PointF(0, 0));
-  }
 
   // Display the tab outline only for the currently selected tab in group when
   // TabGroupIndicator is enabled.
@@ -192,11 +169,7 @@ void TabHandleLayer::SetProperties(
     start_divider_->SetBounds(divider_resource->size());
     int divider_x =
         is_rtl ? width - divider_width - divider_offset_x : divider_offset_x;
-    if (foreground_) {
-      divider_x += original_x;
-    }
     start_divider_->SetPosition(gfx::PointF(divider_x, divider_y));
-    start_divider_->SetOpacity(1.0f);
   }
 
   if (!is_end_divider_visible) {
@@ -207,11 +180,7 @@ void TabHandleLayer::SetProperties(
     end_divider_->SetBounds(divider_resource->size());
     int divider_x =
         is_rtl ? divider_offset_x : width - divider_width - divider_offset_x;
-    if (foreground_) {
-      divider_x += original_x;
-    }
     end_divider_->SetPosition(gfx::PointF(divider_x, divider_y));
-    end_divider_->SetOpacity(1.0f);
   }
 
   if (title_layer) {
@@ -236,10 +205,6 @@ void TabHandleLayer::SetProperties(
 
     title_layer->setBounds(
         gfx::Size(width - padding_right - padding_left - close_width, height));
-    if (foreground_) {
-      title_x += original_x;
-      title_y += original_y;
-    }
     title_layer->layer()->SetPosition(gfx::PointF(title_x, title_y));
     if (is_loading) {
       title_layer->SetIsLoading(true);
@@ -275,10 +240,6 @@ void TabHandleLayer::SetProperties(
 
     int close_x = is_rtl ? padding_left - close_button_padding
                          : width - padding_right - close_width;
-    if (foreground_) {
-      close_x += original_x;
-      close_y += original_y;
-    }
 
     // Note(david@vivaldi.com): Add an offset here as in Vivaldi the close
     // button is shifted.
@@ -304,6 +265,10 @@ void TabHandleLayer::SetProperties(
   }
 }
 
+bool TabHandleLayer::foreground() {
+  return foreground_;
+}
+
 scoped_refptr<cc::slim::Layer> TabHandleLayer::layer() {
   return layer_;
 }
@@ -318,7 +283,6 @@ TabHandleLayer::TabHandleLayer(LayerTitleCache* layer_title_cache)
       end_divider_(cc::slim::UIResourceLayer::Create()),
       decoration_tab_(cc::slim::NinePatchLayer::Create()),
       tab_outline_(cc::slim::NinePatchLayer::Create()),
-      brightness_(1.0f),
       foreground_(false) {
   decoration_tab_->SetIsDrawable(true);
 
@@ -327,6 +291,9 @@ TabHandleLayer::TabHandleLayer(LayerTitleCache* layer_title_cache)
   tab_->AddChild(close_button_hover_highlight_);
   close_button_hover_highlight_->AddChild(close_button_);
 
+  decoration_tab_->SetPosition(gfx::PointF(0, 0));
+  tab_outline_->SetPosition(gfx::PointF(0, 0));
+
   // The divider is added as a separate child so its opacity can be controlled
   // separately from the other tab items.
   layer_->AddChild(tab_);
@@ -334,7 +301,6 @@ TabHandleLayer::TabHandleLayer(LayerTitleCache* layer_title_cache)
   layer_->AddChild(end_divider_);
 }
 
-TabHandleLayer::~TabHandleLayer() {
-}
+TabHandleLayer::~TabHandleLayer() = default;
 
 }  // namespace android

@@ -41,6 +41,7 @@
 #define avifIOCreateMemoryReader crabby_avifIOCreateMemoryReader
 #define avifIODestroy crabby_avifIODestroy
 #define avifImageAllocatePlanes crabby_avifImageAllocatePlanes
+#define avifImageCopy crabby_avifImageCopy
 #define avifImageCreate crabby_avifImageCreate
 #define avifImageCreateEmpty crabby_avifImageCreateEmpty
 #define avifImageDestroy crabby_avifImageDestroy

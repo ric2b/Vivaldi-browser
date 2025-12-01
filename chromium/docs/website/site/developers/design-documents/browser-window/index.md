@@ -25,7 +25,7 @@ On Windows Vista, we only use the glass mode when desktop compositing is
 enabled; in Classic or Vista Basic modes we use the XP Luna mode. Because the
 user is able to toggle the compositing on and off by changing Windows themes, we
 need to be able to dynamically change frame mode. For more information about how
-this is done in views, see the [views::Widget](goog_1235887298838)[
+this is done in views, see the [views::Widget
 documentation](/developers/design-documents/views-windowing). The browser window
 provides two NonClientFrameView subclasses - GlassBrowserFrameView and
 OpaqueBrowserFrameView which are swapped in the BrowserFrame's NonClientView

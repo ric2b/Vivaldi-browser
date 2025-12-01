@@ -166,14 +166,14 @@ class SearchEnginesGetSwitchPromptDataFunction : public ExtensionFunction {
   ExtensionFunction::ResponseAction Run() override;
 };
 
-class SearchEnginesMarkSwitchPromptAsSeenFunction : public ExtensionFunction {
+class SearchEnginesAcknowledgeSwitchPromptFunction : public ExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("searchEngines.markSwitchPromptAsSeen",
-                             SEARCH_ENGINES_MARK_SWITCH_PROMPT_AS_SEEN)
-  SearchEnginesMarkSwitchPromptAsSeenFunction() = default;
+  DECLARE_EXTENSION_FUNCTION("searchEngines.acknowledgeSwitchPrompt",
+                             SEARCH_ENGINES_ACKNOWLEDGE_SWITCH_PROMPT)
+  SearchEnginesAcknowledgeSwitchPromptFunction() = default;
 
  private:
-  ~SearchEnginesMarkSwitchPromptAsSeenFunction() override = default;
+  ~SearchEnginesAcknowledgeSwitchPromptFunction() override = default;
   ExtensionFunction::ResponseAction Run() override;
 };
 }  // namespace extensions

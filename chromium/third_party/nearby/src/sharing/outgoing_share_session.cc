@@ -20,6 +20,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <queue>
 #include <string>
 #include <utility>
 #include <vector>
@@ -138,11 +139,10 @@ void OutgoingShareSession::InitiateSendAttachments(
   set_session_id(analytics_recorder().GenerateNextId());
 
   // Log analytics event of sending start.
-  analytics_recorder().NewSendStart(
-      session_id(),
-      /*transfer_position=*/1,
-      /*concurrent_connections=*/1,
-      share_target());
+  analytics_recorder().NewSendStart(session_id(),
+                                    /*transfer_position=*/1,
+                                    /*concurrent_connections=*/1,
+                                    share_target());
 }
 
 bool OutgoingShareSession::ProcessKeyVerificationResult(
@@ -152,6 +152,7 @@ bool OutgoingShareSession::ProcessKeyVerificationResult(
 }
 
 void OutgoingShareSession::OnConnectionDisconnected() {
+  disconnection_timeout_ = nullptr;
   if (pending_complete_metadata_.has_value()) {
     UpdateTransferMetadata(*pending_complete_metadata_);
     pending_complete_metadata_.reset();
@@ -258,6 +259,7 @@ bool OutgoingShareSession::FillIntroductionFrame(
     file_metadata->set_type(file.type());
     file_metadata->set_mime_type(std::string(file.mime_type()));
     file_metadata->set_size(file.size());
+    file_metadata->set_parent_folder(std::string(file.parent_folder()));
   }
 
   // Write introduction of text payloads.
@@ -323,11 +325,10 @@ bool OutgoingShareSession::AcceptTransfer(
 }
 
 void OutgoingShareSession::SendPayloads(
-    bool enable_transfer_cancellation_optimization,
     std::function<
         void(std::optional<nearby::sharing::service::proto::V1Frame> frame)>
         frame_read_callback,
-    std::function<void(int64_t, TransferMetadata)> update_callback) {
+    std::function<void()> payload_transder_update_callback) {
   if (!IsConnected()) {
     LOG(WARNING) << "SendPayloads invoked for unconnected share target";
     return;
@@ -340,38 +341,8 @@ void OutgoingShareSession::SendPayloads(
                                                /*transfer_position=*/1,
                                                /*concurrent_connections=*/1);
   VLOG(1) << "The connection was accepted. Payloads are now being sent.";
-  if (enable_transfer_cancellation_optimization) {
-    InitSendPayload(std::move(update_callback));
-    SendNextPayload();
-  } else {
-    SendAllPayloads(std::move(update_callback));
-  }
-}
-
-void OutgoingShareSession::SendAllPayloads(
-    std::function<void(int64_t, TransferMetadata)> update_callback) {
-  set_payload_tracker(std::make_unique<PayloadTracker>(
-      &clock(), share_target().id, attachment_container(),
-      attachment_payload_map(), std::move(update_callback)));
-  for (auto& payload : ExtractTextPayloads()) {
-    connections_manager().Send(
-        endpoint_id(), std::make_unique<Payload>(payload), payload_tracker());
-  }
-  for (auto& payload : ExtractFilePayloads()) {
-    connections_manager().Send(
-        endpoint_id(), std::make_unique<Payload>(payload), payload_tracker());
-  }
-  for (auto& payload : ExtractWifiCredentialsPayloads()) {
-    connections_manager().Send(
-        endpoint_id(), std::make_unique<Payload>(payload), payload_tracker());
-  }
-}
-
-void OutgoingShareSession::InitSendPayload(
-    std::function<void(int64_t, TransferMetadata)> update_callback) {
-  set_payload_tracker(std::make_unique<PayloadTracker>(
-      &clock(), share_target().id, attachment_container(),
-      attachment_payload_map(), std::move(update_callback)));
+  InitializePayloadTracker(std::move(payload_transder_update_callback));
+  SendNextPayload();
 }
 
 void OutgoingShareSession::SendNextPayload() {
@@ -452,8 +423,7 @@ OutgoingShareSession::HandleConnectionResponse(
       return std::nullopt;
     }
     case ConnectionResponseFrame::REJECT:
-      VLOG(1)
-          << "The connection was rejected. The connection has been closed.";
+      VLOG(1) << "The connection was rejected. The connection has been closed.";
       return TransferMetadata::Status::kRejected;
     case ConnectionResponseFrame::NOT_ENOUGH_SPACE:
       VLOG(1) << "The connection was rejected because the remote device does "
@@ -474,18 +444,6 @@ OutgoingShareSession::HandleConnectionResponse(
       break;
   }
   return TransferMetadata::Status::kFailed;
-}
-
-std::vector<Payload> OutgoingShareSession::ExtractTextPayloads() {
-  return std::move(text_payloads_);
-}
-
-std::vector<Payload> OutgoingShareSession::ExtractFilePayloads() {
-  return std::move(file_payloads_);
-}
-
-std::vector<Payload> OutgoingShareSession::ExtractWifiCredentialsPayloads() {
-  return std::move(wifi_credentials_payloads_);
 }
 
 std::optional<Payload> OutgoingShareSession::ExtractNextPayload() {
@@ -510,7 +468,7 @@ std::optional<Payload> OutgoingShareSession::ExtractNextPayload() {
   return std::nullopt;
 }
 
-void OutgoingShareSession::DelayCompleteMetadata(
+void OutgoingShareSession::DelayComplete(
     const TransferMetadata& complete_metadata) {
   LOG(INFO)
       << "Delay complete notification until receiver disconnects for target "
@@ -521,12 +479,14 @@ void OutgoingShareSession::DelayCompleteMetadata(
       TransferMetadataBuilder::Clone(complete_metadata);
   builder.set_status(TransferMetadata::Status::kInProgress);
   UpdateTransferMetadata(builder.build());
-}
-
-void OutgoingShareSession::DisconnectionTimeout() {
-  VLOG(1) << "Disconnection delay timeed out for target " << share_target().id;
-  pending_complete_metadata_.reset();
-  Disconnect();
+  disconnection_timeout_ = std::make_unique<ThreadTimer>(
+      service_thread(), "disconnection_timeout_alarm",
+      kOutgoingDisconnectionDelay, [this]() {
+        VLOG(1) << "Disconnection delay timed out for target "
+                << share_target().id;
+        pending_complete_metadata_.reset();
+        Disconnect();
+      });
 }
 
 void OutgoingShareSession::UpdateSessionForDedup(
@@ -547,7 +507,9 @@ void OutgoingShareSession::Connect(
     std::vector<uint8_t> endpoint_info,
     std::optional<std::vector<uint8_t>> bluetooth_mac_address,
     DataUsage data_usage, bool disable_wifi_hotspot,
-    std::function<void(NearbyConnection* connection, Status status)> callback) {
+    std::function<void(absl::string_view endpoint_id,
+                       NearbyConnection* connection, Status status)>
+        callback) {
   connection_start_time_ = clock().Now();
   connections_manager().Connect(
       std::move(endpoint_info), endpoint_id(), std::move(bluetooth_mac_address),
@@ -609,6 +571,23 @@ TransportType OutgoingShareSession::GetTransportType(
 
   LOG(INFO) << "Transport type is kAny";
   return TransportType::kAny;
+}
+
+std::optional<TransferMetadata>
+OutgoingShareSession::ProcessPayloadTransferUpdates() {
+  std::queue<std::unique_ptr<PayloadTransferUpdate>> updates =
+      payload_updates_queue()->ReadAll();
+  VLOG(1) << "Received " << updates.size() << " PayloadTransferUpdates.";
+  if (updates.empty()) {
+    return std::nullopt;
+  }
+
+  std::optional<TransferMetadata> metadata;
+  for (; !updates.empty(); updates.pop()) {
+    metadata =
+        get_payload_tracker()->ProcessPayloadUpdate(std::move(updates.front()));
+  }
+  return metadata;
 }
 
 }  // namespace nearby::sharing

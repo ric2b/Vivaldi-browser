@@ -118,7 +118,12 @@ class NodeLinkMemory : public RefCounted<NodeLinkMemory> {
       return {};
     }
 
-    return AdoptFragmentRef<T>(GetFragment(descriptor));
+    const Fragment fragment = GetFragment(descriptor);
+    if (fragment.is_null()) {
+      return {};
+    }
+
+    return AdoptFragmentRef<T>(fragment);
   }
 
   // Adds a new buffer to the underlying BufferPool to use as additional
@@ -163,6 +168,11 @@ class NodeLinkMemory : public RefCounted<NodeLinkMemory> {
   // immediately.
   void WaitForBufferAsync(BufferId id,
                           BufferPool::WaitForBufferCallback callback);
+
+  // Called when the corresponding NodeLink has had its transport disconnected.
+  // This should clean up any resources that might have been retained pending
+  // future transport activity.
+  void NotifyLinkDisconnected();
 
  private:
   struct PrimaryBuffer;

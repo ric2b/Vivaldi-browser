@@ -513,6 +513,27 @@ posting form data. To mitigate abuse of these capabiliies, such as beaconing
 upon document open, we require interaction with the document (a "user gesture")
 before allowing their use.
 
+<a name="TOC-Are-non_committed-URLs-entered-by-the-user-considered-URL-spoofs-"></a>
+### Are non-committed URLs entered by the user considered URL spoofs?
+
+No. When a user enters a URL into the address bar (whether by typing,
+copy/pasting, drag and drop, or otherwise), Chrome intentionally displays
+it instead of the last committed URL of the currently active page, until
+both the navigation begins and the new page commits. During this time, the
+currently active page can change its appearance to mimic the new URL while
+its own URL is not shown. However, the active page does not have control
+over which URL the user entered into the address bar, limiting the
+effectiveness of a spoof attempt. The new
+[lock-replacement icon](https://blog.chromium.org/2023/05/an-update-on-lock-icon.html)
+is also not present in this state, and in many cases (i.e., once the new
+navigation has started), the loading indicators are present.
+
+The confusion between the non-committed URL and the active page's
+appearance is a consequence of the address bar needing to serve two roles:
+showing both where you are and where you are going.
+
+See also https://crbug.com/378932942 for context.
+
 <a name="TOC-What-about-URL-spoofs-using-Internationalized-Domain-Names-IDN-"></a>
 ### What about URL spoofs using Internationalized Domain Names (IDN)?
 
@@ -665,6 +686,15 @@ ordinary bugs and be fixed by them. However, they can be considered only if
 there is a demonstrable way to show a memory corruption. e.g. with a POC causing
 crash with ASAN **without the flags above**.
 
+<a name="TOC-hard-coded-lists"></a>
+### My domain is on the [Public Suffix List / HSTS preload list / etc.] upstream but this is not yet reflected in Chrome! Is this a security bug?
+
+Chrome does not make any guarantees about how soon additions to or removals from
+external lists like the [HSTS preload list](https://hstspreload.org) or the
+[Public Suffix List (PSL)](https://publicsuffix.org/) will be incorporated into Chrome.
+If you believe Chrome's copies of these lists are notably out-of-date, we are
+happy to field bug reports but we do not consider this to be a vulnerability.
+
 ## Certificates & Connection Indicators
 
 <a name="TOC-Where-are-the-security-indicators-located-in-the-browser-window-"></a>
@@ -776,7 +806,7 @@ connection will fail as it should.
 <a name="TOC-When-is-key-pinning-enabled-"></a>
 ### When is key pinning enabled?
 
-Key pinning is enabled for Chrome-branded, non-mobile builds when the local
+Key pinning is enabled for Chrome-branded non-iOS builds when the local
 clock is within ten weeks of the embedded build timestamp. Key pinning is a
 useful security measure but it tightly couples client and server configurations
 and completely breaks when those configurations are out of sync. In order to
@@ -786,11 +816,10 @@ reasonable timeframe.
 
 Each of the conditions listed above helps ensure those properties:
 Chrome-branded builds are those that Google provides and they all have an
-auto-update mechanism that can be used in an emergency. However, auto-update on
-mobile devices is significantly less effective thus they are excluded. Even in
-cases where auto-update is generally effective, there are still non-trivial
-populations of stragglers for various reasons. The ten-week timeout prevents
-those stragglers from causing problems for regular, non-emergency changes and
+auto-update mechanism that can be used in an emergency. Even in cases where
+auto-update is generally effective, there are still non-trivial populations
+of stragglers for various reasons. The ten-week timeout prevents those
+stragglers from causing problems for regular, non-emergency changes and
 allows stuck users to still, for example, conduct searches and access Chrome's
 homepage to hopefully get unstuck.
 
@@ -1145,3 +1174,18 @@ backported. This can happen for several reasons, for example: because they
 depend upon architectural changes (e.g. breaking API changes); because the
 security improvement is a significant new feature; or because the security
 improvement is the removal of a broken feature.
+
+<a name="TOC-How-can-I-appeal-a-Safe-Browsing-warning-"></a>
+### How can I appeal a Safe Browsing warning?
+To request a review of warnings relating to your own website, use the
+[Security Issues report](https://support.google.com/webmasters/answer/9044101)
+page in your Google Search Console. If the warning applies to another site, you
+may be able to use
+[https://safebrowsing.google.com/safebrowsing/report_error/](https://safebrowsing.google.com/safebrowsing/report_error/),
+though you are likely better off contacting the site owner.
+
+If your concern relates to malware warnings, you may find the warning in your
+Security Issues report and request a review from there. There is no separate
+appeal form or process at this time. Please follow these
+[guidelines](https://developers.google.com/search/docs/monitor-debug/security/malware#guidelines)
+to avoid having your binary show warnings from Safe Browsing.

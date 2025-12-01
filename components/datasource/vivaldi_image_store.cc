@@ -190,9 +190,9 @@ class VivaldiImageStoreFactory : public BrowserContextKeyedServiceFactory {
     return GetBrowserContextRedirectedInIncognito(browser_context);
   }
 
-  KeyedService* BuildServiceInstanceFor(
+  std::unique_ptr<KeyedService> BuildServiceInstanceForBrowserContext(
       content::BrowserContext* browser_context) const override {
-    return new VivaldiImageStoreHolder(browser_context);
+    return std::make_unique<VivaldiImageStoreHolder>(browser_context);
   }
 };
 

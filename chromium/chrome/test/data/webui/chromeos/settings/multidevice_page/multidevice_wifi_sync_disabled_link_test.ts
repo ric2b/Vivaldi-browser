@@ -4,7 +4,7 @@
 
 import 'chrome://os-settings/lazy_load.js';
 
-import {SettingsMultideviceWifiSyncDisabledLinkElement} from 'chrome://os-settings/lazy_load.js';
+import type {SettingsMultideviceWifiSyncDisabledLinkElement} from 'chrome://os-settings/lazy_load.js';
 import {Router, routes} from 'chrome://os-settings/os_settings.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {assertEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
@@ -50,6 +50,6 @@ suite('<settings-multidevice-wifi-sync-disabled-link>', () => {
     chromeSyncLink.click();
     flush();
 
-    assertEquals(Router.getInstance().currentRoute, routes.OS_SYNC);
+    assertEquals(Router.getInstance().currentRoute, routes.OS_SYNC_CONTROLS);
   });
 });

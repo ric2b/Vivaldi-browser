@@ -7,6 +7,7 @@
 #pragma allow_unsafe_buffers
 #endif
 
+#include <algorithm>
 #include <array>
 #include <string>
 
@@ -54,6 +55,7 @@
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_grid.h"
+#include "ash/wm/overview/overview_grid_test_api.h"
 #include "ash/wm/overview/overview_item.h"
 #include "ash/wm/overview/overview_item_view.h"
 #include "ash/wm/overview/overview_session.h"
@@ -66,7 +68,6 @@
 #include "base/check.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
@@ -207,23 +208,17 @@ class SavedDeskTest : public OverviewTestBase,
 
   SavedDeskSaveDeskButton* GetSaveDeskAsTemplateButtonForRoot(
       aura::Window* root_window) {
-    auto* overview_grid = GetOverviewGridForRoot(root_window);
-    CHECK(overview_grid);
-    return overview_grid->GetSaveDeskAsTemplateButton();
+    return OverviewGridTestApi(root_window).GetSaveDeskAsTemplateButton();
   }
 
   SavedDeskSaveDeskButton* GetSaveDeskForLaterButtonForRoot(
       aura::Window* root_window) {
-    auto* overview_grid = GetOverviewGridForRoot(root_window);
-    CHECK(overview_grid);
-    return overview_grid->GetSaveDeskForLaterButton();
+    return OverviewGridTestApi(root_window).GetSaveDeskForLaterButton();
   }
 
   SavedDeskSaveDeskButtonContainer* GetSaveDeskButtonContainerForRoot(
       aura::Window* root_window) {
-    auto* overview_grid = GetOverviewGridForRoot(root_window);
-    CHECK(overview_grid);
-    return overview_grid->GetSaveDeskButtonContainer();
+    return OverviewGridTestApi(root_window).GetSaveDeskButtonContainer();
   }
 
   SavedDeskRegularIconView* GetSavedDeskRegularIconView(
@@ -367,7 +362,7 @@ class SavedDeskTest : public OverviewTestBase,
           root, DeskActionContextMenu::kSaveAsTemplate));
     } else {
       ASSERT_TRUE(
-          GetOverviewGridForRoot(root)->IsSaveDeskAsTemplateButtonVisible());
+          OverviewGridTestApi(root).IsSaveDeskAsTemplateButtonVisible());
       LeftClickOn(GetSaveDeskAsTemplateButtonForRoot(root));
     }
 
@@ -393,8 +388,7 @@ class SavedDeskTest : public OverviewTestBase,
       LeftClickOn(GetActiveDeskActionContextMenuItem(
           root, DeskActionContextMenu::kSaveForLater));
     } else {
-      ASSERT_TRUE(
-          GetOverviewGridForRoot(root)->IsSaveDeskForLaterButtonVisible());
+      ASSERT_TRUE(OverviewGridTestApi(root).IsSaveDeskForLaterButtonVisible());
       LeftClickOn(GetSaveDeskForLaterButtonForRoot(root));
     }
 
@@ -442,7 +436,6 @@ class SavedDeskTest : public OverviewTestBase,
   void SetUp() override {
     scoped_feature_list_.InitWithFeatures(
         {features::kDesksTemplates,
-         features::kDeskBarWindowOcclusionOptimization,
          chromeos::features::kOverviewSessionInitOptimizations},
         {});
     OverviewTestBase::SetUp();
@@ -860,7 +853,7 @@ TEST_F(SavedDeskTest, SavedDeskGridItems) {
     auto verify_saved_desk_grid_item = [&grid_items](const base::Uuid& uuid,
                                                      const std::string& name) {
       auto iter =
-          base::ranges::find(grid_items, uuid, [](const SavedDeskItemView* v) {
+          std::ranges::find(grid_items, uuid, [](const SavedDeskItemView* v) {
             return SavedDeskItemViewTestApi(v).uuid();
           });
       ASSERT_NE(grid_items.end(), iter);
@@ -1157,8 +1150,8 @@ TEST_F(SavedDeskTest, SaveDeskAsTemplateButtonShowsSavedDeskGrid) {
     SavedDeskSaveDeskButton* save_desk_as_template_button =
         GetSaveDeskAsTemplateButtonForRoot(Shell::GetPrimaryRootWindow());
     ASSERT_TRUE(save_desk_as_template_button);
-    EXPECT_TRUE(GetOverviewGridForRoot(Shell::GetPrimaryRootWindow())
-                    ->IsSaveDeskAsTemplateButtonVisible());
+    EXPECT_TRUE(OverviewGridTestApi(Shell::GetPrimaryRootWindow())
+                    .IsSaveDeskAsTemplateButtonVisible());
     LeftClickOn(save_desk_as_template_button);
   }
 
@@ -1388,17 +1381,12 @@ TEST_F(SavedDeskTest, IconsOrder) {
   }
 }
 
-// Tests that both regular and lacros browsers have an icon for each unique tab.
+// Tests that browser has an icon for each unique tab.
 TEST_F(SavedDeskTest, NumIconsForBrowser) {
-  // Create fake restore data with one chrome and one lacros browser. Each
-  // browser has two unique tabs.
+  // Create fake restore data.
   const std::string kAppId1 = app_constants::kChromeAppId;
   constexpr int kWindowId1 = 1;
   const std::vector<GURL> kTabs1{GURL("http://a.com"), GURL("http://b.com")};
-
-  const std::string kAppId2 = app_constants::kLacrosAppId;
-  constexpr int kWindowId2 = 2;
-  const std::vector<GURL> kTabs2{GURL("http://c.com"), GURL("http://d.com")};
 
   auto restore_data = std::make_unique<app_restore::RestoreData>();
 
@@ -1409,18 +1397,10 @@ TEST_F(SavedDeskTest, NumIconsForBrowser) {
   app_launch_info_1->browser_extra_info.urls = kTabs1;
   restore_data->AddAppLaunchInfo(std::move(app_launch_info_1));
 
-  // Add app launch info for the lacros browser instance.
-  auto app_launch_info_2 =
-      std::make_unique<app_restore::AppLaunchInfo>(kAppId2, kWindowId2);
-  app_launch_info_2->browser_extra_info.active_tab_index = 1;
-  app_launch_info_2->browser_extra_info.urls = kTabs2;
-  restore_data->AddAppLaunchInfo(std::move(app_launch_info_2));
-
   // A non empty activation index is assumed by the icon placing logic.
   app_restore::WindowInfo window_info;
   window_info.activation_index = 0;
   restore_data->ModifyWindowInfo(kAppId1, kWindowId1, window_info);
-  restore_data->ModifyWindowInfo(kAppId2, kWindowId2, window_info);
 
   AddEntry(base::Uuid::GenerateRandomV4(), "template", base::Time::Now(),
            DeskTemplateSource::kUser, DeskTemplateType::kTemplate,
@@ -1428,13 +1408,13 @@ TEST_F(SavedDeskTest, NumIconsForBrowser) {
 
   OpenOverviewAndShowSavedDeskGrid();
 
-  // Test that there is a total of 4 icons, one for each tab on each browser.
+  // Test that there is a total of 3 icons, one for each tab on each browser.
   // There is also the overflow icon, which is created but hidden.
   SavedDeskItemView* item_view = GetItemViewFromSavedDeskGrid(
       /*grid_item_index=*/0);
   const std::vector<SavedDeskIconView*>& icon_views =
       SavedDeskItemViewTestApi(item_view).GetIconViews();
-  EXPECT_EQ(5u, icon_views.size());
+  EXPECT_EQ(3u, icon_views.size());
 }
 
 // Tests that icons are ordered such that active tabs and windows are ordered
@@ -1934,16 +1914,14 @@ TEST_F(SavedDeskTest, ClamshellToTabletModeOld) {
   ASSERT_TRUE(library_button);
   EXPECT_TRUE(library_button->GetVisible());
   EXPECT_EQ(DeskIconButton::State::kZero, library_button->state());
-  EXPECT_TRUE(
-      GetOverviewGridForRoot(root)->IsSaveDeskAsTemplateButtonVisible());
+  EXPECT_TRUE(OverviewGridTestApi(root).IsSaveDeskAsTemplateButtonVisible());
 
   // Tests that after transitioning, we remain in overview mode and all the
   // buttons are invisible.
   EnterTabletMode();
   ASSERT_TRUE(GetOverviewSession());
   EXPECT_FALSE(library_button->GetVisible());
-  EXPECT_FALSE(
-      GetOverviewGridForRoot(root)->IsSaveDeskAsTemplateButtonVisible());
+  EXPECT_FALSE(OverviewGridTestApi(root).IsSaveDeskAsTemplateButtonVisible());
 }
 
 // Tests that the library button and save desk options in the desk context menu
@@ -2192,8 +2170,7 @@ TEST_F(SavedDeskTest, UnsupportedAppsDialog) {
   } else {
     // Open overview and click on the save template button. The unsupported apps
     // dialog should show up.
-    ASSERT_TRUE(
-        GetOverviewGridForRoot(root)->IsSaveDeskAsTemplateButtonVisible());
+    ASSERT_TRUE(OverviewGridTestApi(root).IsSaveDeskAsTemplateButtonVisible());
     LeftClickOn(save_desk_as_template_button);
   }
   EXPECT_TRUE(Shell::IsSystemModalWindowOpen());
@@ -2270,8 +2247,9 @@ TEST_F(SavedDeskTest, AllUnsupportedAppsDisablesSaveDeskButtons) {
     return;
   }
 
-  EXPECT_EQ(0, GetOverviewGridList()[0]->num_incognito_windows());
-  EXPECT_EQ(2, GetOverviewGridList()[0]->num_unsupported_windows());
+  OverviewGridTestApi test_api(GetOverviewGridList()[0].get());
+  EXPECT_EQ(0, test_api.num_incognito_windows());
+  EXPECT_EQ(2, test_api.num_unsupported_windows());
   EXPECT_EQ(views::Button::STATE_DISABLED,
             GetSaveDeskAsTemplateButtonForRoot(root)->GetState());
   EXPECT_EQ(views::Button::STATE_DISABLED,
@@ -2285,22 +2263,28 @@ TEST_F(SavedDeskTest, AddRemoveUnsupportedWindows) {
 
   ToggleOverview();
   EXPECT_TRUE(InOverviewSession());
-
-  EXPECT_EQ(0, GetOverviewGridList()[0]->num_incognito_windows());
-  EXPECT_EQ(2, GetOverviewGridList()[0]->num_unsupported_windows());
+  {
+    OverviewGridTestApi test_api(GetOverviewGridList()[0].get());
+    EXPECT_EQ(0, test_api.num_incognito_windows());
+    EXPECT_EQ(2, test_api.num_unsupported_windows());
+  }
 
   window1.reset();
 
-  // Expect `num_unsupported_windows_` to be 0.
-  EXPECT_EQ(0, GetOverviewGridList()[0]->num_incognito_windows());
-  EXPECT_EQ(1, GetOverviewGridList()[0]->num_unsupported_windows());
+  // Expect `num_unsupported_windows_` to be 1.
+  {
+    OverviewGridTestApi test_api(GetOverviewGridList()[0].get());
+    EXPECT_EQ(0, test_api.num_incognito_windows());
+    EXPECT_EQ(1, test_api.num_unsupported_windows());
+  }
 
   window2.reset();
 
   // Re-open overview because all the windows closing caused it to close too.
   ToggleOverview();
-  EXPECT_EQ(0, GetOverviewGridList()[0]->num_incognito_windows());
-  EXPECT_EQ(0, GetOverviewGridList()[0]->num_unsupported_windows());
+  OverviewGridTestApi test_api(GetOverviewGridList()[0].get());
+  EXPECT_EQ(0, test_api.num_incognito_windows());
+  EXPECT_EQ(0, test_api.num_unsupported_windows());
 }
 
 // Tests the mouse and touch hover behavior on the saved desk item view.
@@ -3240,8 +3224,7 @@ TEST_F(SavedDeskTest, UnsupportedAppDialogRecordsMetric) {
     // unsupported apps dialog should show up.
     SavedDeskSaveDeskButton* save_template_button =
         GetSaveDeskAsTemplateButtonForRoot(root);
-    ASSERT_TRUE(
-        GetOverviewGridForRoot(root)->IsSaveDeskAsTemplateButtonVisible());
+    ASSERT_TRUE(OverviewGridTestApi(root).IsSaveDeskAsTemplateButtonVisible());
     LeftClickOn(save_template_button);
   }
   EXPECT_TRUE(Shell::IsSystemModalWindowOpen());
@@ -3640,7 +3623,7 @@ TEST_F(SavedDeskTest, TimeStrFormat) {
       GetItemViewsFromDeskLibrary(GetOverviewGridList().front().get());
   for (size_t i = 0; i < 3; i++) {
     auto iter =
-        base::ranges::find(grid_items, uuid[i], [](const SavedDeskItemView* v) {
+        std::ranges::find(grid_items, uuid[i], [](const SavedDeskItemView* v) {
           return SavedDeskItemViewTestApi(v).uuid();
         });
     ASSERT_NE(grid_items.end(), iter);
@@ -3696,8 +3679,9 @@ TEST_F(SavedDeskTest, ButtonsEnabledForUnsupportedWindowAndSplitView) {
   ASSERT_TRUE(GetOverviewSession());
   ASSERT_TRUE(GetOverviewController()->InOverviewSession());
 
-  EXPECT_EQ(0, GetOverviewGridList()[0]->num_incognito_windows());
-  EXPECT_EQ(1, GetOverviewGridList()[0]->num_unsupported_windows());
+  OverviewGridTestApi test_api(GetOverviewGridList()[0].get());
+  EXPECT_EQ(0, test_api.num_incognito_windows());
+  EXPECT_EQ(1, test_api.num_unsupported_windows());
 
   auto* snappable_overview_item = GetOverviewItemForWindow(app_window.get());
 
@@ -3947,8 +3931,7 @@ TEST_F(SavedDeskTest, NoDuplicateDisplayedName) {
     SavedDeskSaveDeskButton* save_desk_as_template_button =
         GetSaveDeskAsTemplateButtonForRoot(root);
     ASSERT_TRUE(save_desk_as_template_button);
-    EXPECT_TRUE(
-        GetOverviewGridForRoot(root)->IsSaveDeskAsTemplateButtonVisible());
+    EXPECT_TRUE(OverviewGridTestApi(root).IsSaveDeskAsTemplateButtonVisible());
     LeftClickOn(save_desk_as_template_button);
   }
 
@@ -3973,8 +3956,7 @@ TEST_F(SavedDeskTest, NoDuplicateDisplayedName) {
     SavedDeskSaveDeskButton* save_desk_as_template_button =
         GetSaveDeskAsTemplateButtonForRoot(root);
     ASSERT_TRUE(save_desk_as_template_button);
-    EXPECT_TRUE(
-        GetOverviewGridForRoot(root)->IsSaveDeskAsTemplateButtonVisible());
+    EXPECT_TRUE(OverviewGridTestApi(root).IsSaveDeskAsTemplateButtonVisible());
     LeftClickOn(save_desk_as_template_button);
   }
 
@@ -4105,8 +4087,7 @@ TEST_F(SavedDeskTest, NoSortBeforeNameConfirmed) {
     SavedDeskSaveDeskButton* save_desk_as_template_button =
         GetSaveDeskAsTemplateButtonForRoot(root);
     ASSERT_TRUE(save_desk_as_template_button);
-    EXPECT_TRUE(
-        GetOverviewGridForRoot(root)->IsSaveDeskAsTemplateButtonVisible());
+    EXPECT_TRUE(OverviewGridTestApi(root).IsSaveDeskAsTemplateButtonVisible());
     LeftClickOn(save_desk_as_template_button);
   }
 
@@ -4571,7 +4552,8 @@ TEST_F(DeskSaveAndRecallTest, SaveDeskForLaterWithSingleDesk) {
 
 // Tests that all desk window is not closed nor saved by clicking save desk for
 // later button.
-TEST_F(DeskSaveAndRecallTest, SaveDeskForLaterWithAllDeskWindow) {
+// TODO(crbug.com/388283264): Re-enable this test once the bug is fixed.
+TEST_F(DeskSaveAndRecallTest, DISABLED_SaveDeskForLaterWithAllDeskWindow) {
   DesksController* desks_controller = DesksController::Get();
   desks_controller->NewDesk(DesksCreationRemovalSource::kKeyboard);
 
@@ -4610,6 +4592,7 @@ TEST_F(DeskSaveAndRecallTest, SaveDeskForLaterWithAllDeskWindow) {
   auto* all_desk_window_overview_item =
       GetOverviewItemForWindow(tracker.windows().front());
   EXPECT_FALSE(all_desk_window_overview_item->item_widget()->IsVisible());
+  EXPECT_FALSE(all_desk_window_overview_item->GetWindow()->IsVisible());
 }
 
 // Tests that when saving a desk with only all desk window, it can show the

@@ -44,10 +44,10 @@
 #include "google_breakpad/processor/minidump.h"
 
 #include <assert.h>
-#include <cstdint>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 #include <time.h>
 
@@ -62,8 +62,6 @@
 #include <limits>
 #include <utility>
 
-#include "processor/range_map-inl.h"
-
 #include "common/macros.h"
 #include "common/scoped_ptr.h"
 #include "common/stdio_wrapper.h"
@@ -72,6 +70,7 @@
 #include "processor/basic_code_modules.h"
 #include "processor/convert_old_arm64_context.h"
 #include "processor/logging.h"
+#include "processor/range_map-inl.h"
 
 namespace google_breakpad {
 

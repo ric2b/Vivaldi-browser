@@ -766,10 +766,6 @@
       "id": 193,
       "merge_method": "none"
     },
-    "vivaldi.quick_commands.show_bookmarks": {
-      "id": 194,
-      "merge_method": "none"
-    },
     "vivaldi.quick_commands.show_reading_list": {
       "id": 195,
       "merge_method": "none"
@@ -1268,6 +1264,14 @@
     },
     "vivaldi.startup.last_seen_search_engine_prompt_version": {
       "id": 323,
+      "merge_method": "none"
+    },
+    "vivaldi.biscuit.rainbow_progress": {
+      "id": 324,
+      "merge_method": "none"
+    },
+    "vivaldi.privacy.ad_blocker.enable_document_blocking": {
+      "id": 325,
       "merge_method": "none"
     }
   },
@@ -3807,6 +3811,15 @@
           "default": true
         },
         "show_bookmarks": {
+          "description": "[DEPRECATED 2025/02] Replaced by bookmarks",
+          "type": "boolean",
+          "default": true
+        },
+        "bookmarks": {
+          "type": "boolean",
+          "default": true
+        },
+        "bookmarks_boosted": {
           "type": "boolean",
           "default": true
         },
@@ -3875,6 +3888,10 @@
             "SYNCED_TABS",
             "INTERNAL_URLS"
           ]
+        },
+        "show_typed_history_button": {
+          "type": "boolean",
+          "default": false
         }
       },
       "position": {
@@ -3892,13 +3909,19 @@
           "default": true
         },
         "direct_match_enabled": {
+          "description": "Used both in AddressField and SearchField.",
           "type": "boolean",
           "default": true
         },
         "direct_match_boosted": {
-          "description": "If false, the direct match scoring is lowered by 450",
+          "description": "Used both in AddressField and SearchField. If false, the direct match scoring is lowered by 450",
           "type": "boolean",
           "default": true
+        },
+        "always_show_dropdown_badge": {
+          "description": "If enabled, dropdown items will always show their category's badge",
+          "type": "boolean",
+          "default": false
         },
         "display": {
           "description": "Search field visibility; 'disabled' option (2) is no longer in use",
@@ -3955,6 +3978,11 @@
         "allow_extension_override": {
           "type": "boolean",
           "default": false
+        },
+        "hidden_direct_match_providers": {
+          "description": "IDs of direct match providers that the user has chosen to hide",
+          "type": "list",
+          "default": []
         }
       },
       "inline_search": {
@@ -4149,6 +4177,20 @@
         "default": true
       }
     },
+    "features": {
+      "mail": {
+        "type": "boolean",
+        "default": false
+      },
+      "calendar": {
+        "type": "boolean",
+        "default": false
+      },
+      "feeds": {
+        "type": "boolean",
+        "default": false
+      }
+    },
     "reading_list": {
       "panel": {
         "sorting": {
@@ -4212,6 +4254,11 @@
         "description": "Replace Vivaldia Game button in the StartPage by the Promote button.",
         "type": "boolean",
         "default": true
+      },
+      "rainbow_progress": {
+        "description": "Replace the page load progress indicator with a rainbow indicator.",
+        "type": "boolean",
+        "default": false
       }
     },
     "calendar": {
@@ -4706,6 +4753,35 @@
           "description": "Pressing space when a page is scrolled to the bottom will trigger fast-forward",
           "type": "boolean",
           "default": true
+        },
+        "browser_priority_list": {
+          "description": "List of shortcuts that get browser priority (suppressed on the website)",
+          "type": "list",
+          "default": [
+            "ctrl+t",
+            "ctrl+w",
+            "ctrl+n",
+            "ctrl+shift+t",
+            "ctrl+shift+n",
+            "ctrl+shift+w"
+          ],
+          "default_mac": [
+            "meta+t",
+            "meta+w",
+            "meta+n",
+            "shift+meta+t",
+            "shift+meta+n",
+            "shift+meta+w"
+          ],
+          "default_linux": [
+            "ctrl+t",
+            "ctrl+w",
+            "ctrl+q",
+            "ctrl+n",
+            "ctrl+shift+t",
+            "ctrl+shift+n",
+            "ctrl+shift+w"
+          ]
         }
       },
       "tab_to_all": {
@@ -4949,7 +5025,7 @@
         }
       },
       "is_turned_off": {
-        "description": "Is mail client turned on or off?",
+        "description": "[DEPRECATED 2025-02] Replaced by features.mail, features.calendar and features.feeds",
         "type": "boolean",
         "default": true
       },
@@ -5173,6 +5249,11 @@
           "icons_only": 1
         },
         "default": "text_menu"
+      },
+      "vpn_notice_dismissed": {
+        "description": "Timestamp when the mail over VPN notice was dismissed VB-114647",
+        "type": "integer",
+        "default": 0
       }
     },
     "menu": {
@@ -5797,6 +5878,13 @@
       }
     },
     "privacy": {
+      "ad_blocker": {
+        "enable_document_blocking": {
+          "description": "Enable blocking of full pages or frames",
+          "type": "boolean",
+          "default" : false
+        }
+      },
       "break_mode": {
         "introduction_show": {
           "description": "Shows Break Mode introduction",
@@ -6235,6 +6323,11 @@
         },
         "default": "none"
       },
+      "first_seen_version": {
+        "description": "The first version number seen on the first startup.",
+        "type": "string",
+        "default": ""
+      },
       "last_seen_version": {
         "description": "Most recent version number seen on startup",
         "type": "string",
@@ -6300,6 +6393,16 @@
         "description": "Last version of the search engine prompt shown - from search_engine_prompt.json, or 0 if it was never shown.",
         "type": "integer",
         "default": 0
+      },
+      "last_seen_search_engine_prompt_time": {
+        "description": "Timestamp when the search engine prompt was last shown.",
+        "type": "double",
+        "default": 0.0
+      },
+      "share_vivaldi_last_seen_version": {
+        "description": "Most recent browser version number seen when interacted with share Vivaldi button.",
+        "type": "string",
+        "default": ""
       }
     },
     "status_bar": {
@@ -6319,7 +6422,7 @@
           "off": 0,
           "overlay": 1
         },
-        "default": "off"
+        "default": "overlay"
       }
     },
     "sync": {
@@ -6366,7 +6469,7 @@
       "active_min_size": {
         "description": "Enforced minimum size of active tab",
         "type": "integer",
-        "default": 30
+        "default": 60
       },
       "align_next": {
         "description": "Align close buttons with closed tab by freezing tab size for duration of hover",
@@ -7372,8 +7475,10 @@
           "Reload",
           "AddressField",
           "Spacer",
-          "UpdateButton",
           "Extensions",
+          "VPNButton",
+          "UpdateButton",
+          "ShareVivaldi",
           "AccountButton"
         ]
       },
@@ -7381,29 +7486,29 @@
         "type": "list",
         "default": [
           "PanelBookmarks",
-          "PanelReadingList",
           "PanelDownloads",
           "PanelHistory",
           "PanelNotes",
           "PanelTranslate",
           "PanelWindow",
-          "PanelSession",
+          "PanelReadingList",
+          "Divider",
           "PanelMail",
+          "PanelContacts",
           "PanelCalendar",
           "PanelTasks",
           "PanelFeeds",
-          "PanelContacts",
           "WEBPANEL_949d4873-deed-4168-b306-92d1848687a5",
           "WEBPANEL_ckmam0bsw00002y5xoafpww5i",
           "WEBPANEL_ckn7fhhqx0000hc2roo8jshm4",
           "PanelWeb",
-          "FlexibleSpacer",
-          "Settings"
+          "FlexibleSpacer"
         ]
       },
       "status": {
         "type": "list",
         "default": [
+          "Settings",
           "BreakMode",
           "SyncStatus",
           "MailStatus",
@@ -7411,7 +7516,6 @@
           "StatusInfo",
           "VersionInfo",
           "CaptureImages",
-          "ImagesToggle",
           "TilingToggle",
           "PageActions",
           "Zoom",
@@ -7566,6 +7670,11 @@
           "default": "$timestamp $host $shortid"
         }
       },
+      "exceptions_keystroke": {
+        "description": "Sites allowed to override keystrokes",
+        "default": [],
+        "type": "list"
+      },
       "focus_trap": {
         "type": "boolean",
         "default": false,
@@ -7579,7 +7688,7 @@
           "default_linux": false
         },
         "show_bubble": {
-          "description": "Show an info bubble telling the user to use Esc to exit full screen.",
+          "description": "[DEPRECATED 2025/02] Show an info bubble telling the user to use Esc to exit full screen.",
           "type": "boolean",
           "default": true
         }
@@ -7655,6 +7764,11 @@
         "description": "Allowing the injection of boss-select into all frames. Turning this off will disable the ability to select text inside link elements.",
         "type": "boolean",
         "default": true
+      },
+      "find_shortcut_is_a_toggle": {
+        "description": "The find shortcut (ctrl+f) can also close the find toolbar.",
+        "type": "boolean",
+        "default": false
       }
     },
     "welcome": {
@@ -7831,32 +7945,43 @@
         "default": [
           {
             "id": "1",
-            "type": "date",
-            "size": "regular",
-            "background": "semi-transparent"
+            "type": "weather",
+            "background": "solid",
+            "locationId": 0,
+            "precipitationUnit": "mm",
+            "size": "double_height",
+            "temperatureUnit": "celsius",
+            "view": "WEEK",
+            "windspeedUnit": "ms"
           },
           {
             "id": "2",
-            "type": "sticky-note",
-            "size": "regular",
-            "background": "semi-transparent"
+            "type": "shortcuts",
+            "background": "semi-transparent",
+            "folderId": "DEFAULT",
+            "showThumbnail": false,
+            "showTitle": false,
+            "size": "regular"
           },
           {
             "id": "3",
-            "type": "shortcuts",
-            "size": "regular",
-            "background": "semi-transparent",
-            "folderId": "",
-            "showTitle": false,
-            "showThumbnail": false
+            "type": "webpage",
+            "background": "solid",
+            "shareTheme": false,
+            "size": "double_height",
+            "url": "https://www.wiktionary.org/"
           },
           {
             "id": "4",
-            "type": "webpage",
-            "size": "double_height",
-            "background": "solid",
-            "shareTheme": false,
-            "url": "https://www.wiktionary.org/"
+            "type": "sticky-note",
+            "background": "semi-transparent",
+            "size": "regular"
+          },
+          {
+            "id": "5",
+            "type": "tip",
+            "background": "semi-transparent",
+            "size": "regular"
           }
         ]
       },
@@ -7864,7 +7989,7 @@
         "description": "Store all note content from sticky-note widget.",
         "type": "list",
         "default": [{
-          "widgetId": "2",
+          "widgetId": "4",
           "content": ""
         }]
       },
@@ -8261,6 +8386,10 @@
     }
   },
   "chromium_local": {
+    "kCertRevocationCheckingEnabled": {
+      "path": "ssl.rev_checking.enabled",
+      "type": "boolean"
+    },
     "kConfirmToQuitEnabled": {
       "path": "browser.confirm_to_quit",
       "type": "boolean"

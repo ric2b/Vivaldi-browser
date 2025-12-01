@@ -32,6 +32,7 @@ export class AddDebugInfoURLDialog extends UI.Widget.HBox {
       label: Platform.UIString.LocalizedString, jslogContext: string,
       callback: (arg0: Platform.DevToolsPath.UrlString) => void) {
     super(/* useShadowDom */ true);
+    this.registerRequiredCSS(dialogStyles);
 
     this.contentElement.createChild('label').textContent = label;
 
@@ -83,9 +84,5 @@ export class AddDebugInfoURLDialog extends UI.Widget.HBox {
       event.consume(true);
       this.apply();
     }
-  }
-  override wasShown(): void {
-    super.wasShown();
-    this.registerCSSFiles([dialogStyles]);
   }
 }

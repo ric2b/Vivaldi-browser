@@ -24,7 +24,7 @@ inline void MarkingBitmap::SetBitsInCell<AccessMode::NON_ATOMIC>(
 template <>
 inline void MarkingBitmap::SetBitsInCell<AccessMode::ATOMIC>(
     uint32_t cell_index, MarkBit::CellType mask) {
-  base::AsAtomicWord::SetBits(cells() + cell_index, mask, mask);
+  base::AsAtomicWord::Relaxed_SetBits(cells() + cell_index, mask, mask);
 }
 
 template <>
@@ -36,8 +36,8 @@ inline void MarkingBitmap::ClearBitsInCell<AccessMode::NON_ATOMIC>(
 template <>
 inline void MarkingBitmap::ClearBitsInCell<AccessMode::ATOMIC>(
     uint32_t cell_index, MarkBit::CellType mask) {
-  base::AsAtomicWord::SetBits(cells() + cell_index,
-                              static_cast<MarkBit::CellType>(0u), mask);
+  base::AsAtomicWord::Relaxed_SetBits(cells() + cell_index,
+                                      static_cast<MarkBit::CellType>(0u), mask);
 }
 
 template <>
@@ -150,14 +150,21 @@ inline void MarkingBitmap::ClearRange(MarkBitIndex start_index,
 MarkingBitmap* MarkingBitmap::FromAddress(Address address) {
   Address metadata_address =
       MutablePageMetadata::FromAddress(address)->MetadataAddress();
-  return Cast(metadata_address + MemoryChunkLayout::kMarkingBitmapOffset);
+  return Cast(metadata_address + MutablePageMetadata::MarkingBitmapOffset());
 }
 
 // static
 MarkBit MarkingBitmap::MarkBitFromAddress(Address address) {
+  return MarkBitFromAddress(FromAddress(address), address);
+}
+
+// static
+MarkBit MarkingBitmap::MarkBitFromAddress(MarkingBitmap* bitmap,
+                                          Address address) {
+  DCHECK_EQ(bitmap, FromAddress(address));
   const auto index = AddressToIndex(address);
   const auto mask = IndexInCellMask(index);
-  MarkBit::CellType* cell = FromAddress(address)->cells() + IndexToCell(index);
+  MarkBit::CellType* cell = bitmap->cells() + IndexToCell(index);
   return MarkBit(cell, mask);
 }
 

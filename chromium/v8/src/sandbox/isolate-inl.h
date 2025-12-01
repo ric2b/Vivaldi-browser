@@ -27,25 +27,15 @@ IsolateForSandbox::IsolateForSandbox(IsolateT* isolate)
 
 #ifdef V8_ENABLE_SANDBOX
 ExternalPointerTable& IsolateForSandbox::GetExternalPointerTableFor(
-    ExternalPointerTag tag) {
+    ExternalPointerTagRange tag_range) {
   IsolateForPointerCompression isolate(isolate_);
-  return isolate.GetExternalPointerTableFor(tag);
+  return isolate.GetExternalPointerTableFor(tag_range);
 }
 
 ExternalPointerTable::Space* IsolateForSandbox::GetExternalPointerTableSpaceFor(
-    ExternalPointerTag tag, Address host) {
+    ExternalPointerTagRange tag_range, Address host) {
   IsolateForPointerCompression isolate(isolate_);
-  return isolate.GetExternalPointerTableSpaceFor(tag, host);
-}
-
-ExternalBufferTable& IsolateForSandbox::GetExternalBufferTableFor(
-    ExternalBufferTag tag) {
-  UNIMPLEMENTED();
-}
-
-ExternalBufferTable::Space* IsolateForSandbox::GetExternalBufferTableSpaceFor(
-    ExternalBufferTag tag, Address host) {
-  UNIMPLEMENTED();
+  return isolate.GetExternalPointerTableSpaceFor(tag_range, host);
 }
 
 CodePointerTable::Space* IsolateForSandbox::GetCodePointerTableSpaceFor(
@@ -75,15 +65,19 @@ inline ExternalPointerTag IsolateForSandbox::GetExternalPointerTableTagFor(
   return isolate_->external_pointer_table().GetTag(handle);
 }
 
-#endif  // V8_ENABLE_SANDBOX
-
-#ifdef V8_ENABLE_LEAPTIERING
-JSDispatchTable::Space* IsolateForSandbox::GetJSDispatchTableSpaceFor(
-    Address owning_slot) {
-  DCHECK(!ReadOnlyHeap::Contains(owning_slot));
-  return isolate_->heap()->js_dispatch_table_space();
+TrustedPointerPublishingScope*
+IsolateForSandbox::GetTrustedPointerPublishingScope() {
+  return isolate_->trusted_pointer_publishing_scope();
 }
-#endif  // V8_ENABLE_LEAPTIERING
+
+void IsolateForSandbox::SetTrustedPointerPublishingScope(
+    TrustedPointerPublishingScope* scope) {
+  DCHECK((isolate_->trusted_pointer_publishing_scope() == nullptr) !=
+         (scope == nullptr));
+  isolate_->set_trusted_pointer_publishing_scope(scope);
+}
+
+#endif  // V8_ENABLE_SANDBOX
 
 template <typename IsolateT>
 IsolateForPointerCompression::IsolateForPointerCompression(IsolateT* isolate)
@@ -98,26 +92,24 @@ IsolateForPointerCompression::IsolateForPointerCompression(IsolateT* isolate)
 #ifdef V8_COMPRESS_POINTERS
 
 ExternalPointerTable& IsolateForPointerCompression::GetExternalPointerTableFor(
-    ExternalPointerTag tag) {
-  DCHECK_NE(tag, kExternalPointerNullTag);
-  return IsSharedExternalPointerType(tag)
+    ExternalPointerTagRange tag_range) {
+  DCHECK(!tag_range.IsEmpty());
+  return IsSharedExternalPointerType(tag_range)
              ? isolate_->shared_external_pointer_table()
              : isolate_->external_pointer_table();
 }
 
 ExternalPointerTable::Space*
 IsolateForPointerCompression::GetExternalPointerTableSpaceFor(
-    ExternalPointerTag tag, Address host) {
-  DCHECK_NE(tag, kExternalPointerNullTag);
-  DCHECK_IMPLIES(tag != kArrayBufferExtensionTag && tag != kWaiterQueueNodeTag,
-                 V8_ENABLE_SANDBOX_BOOL);
+    ExternalPointerTagRange tag_range, Address host) {
+  DCHECK(!tag_range.IsEmpty());
 
-  if (V8_UNLIKELY(IsSharedExternalPointerType(tag))) {
+  if (V8_UNLIKELY(IsSharedExternalPointerType(tag_range))) {
     DCHECK(!ReadOnlyHeap::Contains(host));
     return isolate_->shared_external_pointer_space();
   }
 
-  if (V8_UNLIKELY(IsMaybeReadOnlyExternalPointerType(tag) &&
+  if (V8_UNLIKELY(IsMaybeReadOnlyExternalPointerType(tag_range) &&
                   ReadOnlyHeap::Contains(host))) {
     return isolate_->heap()->read_only_external_pointer_space();
   }

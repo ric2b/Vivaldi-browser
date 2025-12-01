@@ -13,9 +13,10 @@
 
 namespace openscreen::discovery {
 
-const IPAddress kFakeARecordAddress = IPAddress(192, 168, 0, 0);
-const IPAddress kFakeAAAARecordAddress = IPAddress(1, 2, 3, 4, 5, 6, 7, 8);
-constexpr uint16_t kFakeSrvRecordPort = 80;
+inline constexpr IPAddress kFakeARecordAddress = IPAddress(192, 168, 0, 0);
+inline constexpr IPAddress kFakeAAAARecordAddress =
+    IPAddress(1, 2, 3, 4, 5, 6, 7, 8);
+inline constexpr uint16_t kFakeSrvRecordPort = 80;
 
 TxtRecordRdata MakeTxtRecord(std::initializer_list<std::string_view> strings);
 std::vector<TxtRecordRdata::Entry> MakeTxtEntries(

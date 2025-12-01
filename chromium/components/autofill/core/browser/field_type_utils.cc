@@ -21,6 +21,8 @@ const FieldTypeSet& GetDatabaseStoredTypesOfAutofillProfile() {
       NAME_LAST_FIRST,
       NAME_LAST_CONJUNCTION,
       NAME_LAST_SECOND,
+      NAME_LAST_PREFIX,
+      NAME_LAST_CORE,
       NAME_LAST,
       NAME_FULL,
       ADDRESS_HOME_STREET_ADDRESS,
@@ -58,8 +60,8 @@ const FieldTypeSet& GetDatabaseStoredTypesOfAutofillProfile() {
 
 size_t NumberOfPossibleFieldTypesInGroup(const AutofillField& field,
                                          FieldTypeGroup group) {
-  return base::ranges::count(field.possible_types(), group,
-                             GroupTypeOfFieldType);
+  return std::ranges::count(field.possible_types(), group,
+                            GroupTypeOfFieldType);
 }
 
 bool FieldHasMeaningfulPossibleFieldTypes(const AutofillField& field) {
@@ -96,7 +98,7 @@ bool IsAddressType(FieldType type) {
     case FieldTypeGroup::kTransaction:
     case FieldTypeGroup::kIban:
     case FieldTypeGroup::kStandaloneCvcField:
-    case FieldTypeGroup::kPredictionImprovements:
+    case FieldTypeGroup::kAutofillAi:
       return false;
   }
   NOTREACHED();

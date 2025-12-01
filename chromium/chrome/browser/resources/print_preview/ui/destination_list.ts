@@ -5,12 +5,7 @@
 import 'chrome://resources/cr_elements/cr_hidden_style.css.js';
 import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
 import 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
-// <if expr="not is_chromeos">
 import './destination_list_item.js';
-// </if>
-// <if expr="is_chromeos">
-import './destination_list_item_cros.js';
-// </if>
 import './print_preview_vars.css.js';
 import '/strings.m.js';
 import './throbber.css.js';

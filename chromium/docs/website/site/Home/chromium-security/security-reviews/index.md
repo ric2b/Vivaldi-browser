@@ -24,7 +24,7 @@ for maximal review speed, please cross-link the reviews so each reviewer can con
 each other (which will also ensure you get consistent and cohesive answers.)
 
 - For changes to web APIs, you'll likely want the
-[Blink intents process](https://www.chromium.org/blink/launching-features/) (Note, as of
+[Blink intents process](/blink/launching-features/) (Note, as of
 August 2024, there are plans to better synchronize this with the Chrome Browser review
 in the coming months!)
 - For changes to Chrome application features, or any other
@@ -36,7 +36,7 @@ process. But this process will be kicked off from the same process as above! (*)
 ## How does the Chrome security review process work?
 
 The whole process is detailed here:
-[go/chrome-security-reviews-process](https://go/chrome-security-reviews-process)
+[go/chrome-security-reviews-process](http://go/chrome-security-reviews-process)
 (Google-internal, sorry).
 
 #### Informal pre-review consultation (optional):

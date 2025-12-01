@@ -106,7 +106,7 @@ export class GoogleCalendarModuleElement extends
       composed: true,
       detail: {
         message: this.i18n('modulesGoogleCalendarDismissToastMessage'),
-        restoreCallback: this.handler_.restoreModule,
+        restoreCallback: () => this.handler_.restoreModule(),
       },
     }));
   }
@@ -117,10 +117,6 @@ export class GoogleCalendarModuleElement extends
 
   protected onInfoDialogClose_() {
     this.showInfoDialog_ = false;
-  }
-
-  protected onMenuButtonClick_(e: Event) {
-    this.$.moduleHeaderElementV2.showAt(e);
   }
 }
 

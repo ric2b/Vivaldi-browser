@@ -30,11 +30,11 @@ collapse support.
 - Struggle with upstreaming tests to w3c continues, synced up with
 fantasi and have a plan to move forward.
 CSS Grid Layout (svillar, jfernandez, rego, javif)
-\[[crbug.com/79180](http://crbug.com/79180)\]
+\[[crbug.com/79180](https://crbug.com/79180)\]
 - No update since last week -
-CSS Multi-column (mstensho) \[[crbug.com/334335](http://crbug.com/334335)\]
+CSS Multi-column (mstensho) \[[crbug.com/334335](https://crbug.com/334335)\]
 - Multi column properties unprefixed! Congrats!
-\[[crrev.com/376249](http://crrev.com/376249)\]
+\[[crrev.com/376249](https://crrev.com/376249)\]
 - Added partial support for modern breaking properties. Work on these
 continues.
 CSS Houdini (ikilpatrick)
@@ -43,7 +43,7 @@ LGTM already. Should be ready to land today.
 - Started adding dev-tool support to worklets, plan to have it hooked up
 and working at the end of this week.
 Add API for layout (leviw, pilgrim, dgrogan)
-\[[crbug.com/495288](http://crbug.com/495288)\]
+\[[crbug.com/495288](https://crbug.com/495288)\]
 - Working on removing the default operator for the Line Layout API.
 Covering gaps in the API where we are relying on implicit conversion.
 (pilgrim)
@@ -52,10 +52,10 @@ hierarchy, still up in the air. (pilgrim)
 - Hope to finish up Line Layout API and add include guard by the end of
 the week. A bit hairier than expected but cautiously optimistic.
 (dgrogan)
-CSS Containment (leviw) \[[crbug.com/312978](http://crbug.com/312978)\]
+CSS Containment (leviw) \[[crbug.com/312978](https://crbug.com/312978)\]
 - No update since last week.
 Intersection Observer (szager, mpb)
-\[[crbug.com/540528](http://crbug.com/540528)\]
+\[[crbug.com/540528](https://crbug.com/540528)\]
 - Spent most of last week doing spec work for IntersectionObserver.
 \[szager\]
 - This week, I have a few code changes to make so our Intersection

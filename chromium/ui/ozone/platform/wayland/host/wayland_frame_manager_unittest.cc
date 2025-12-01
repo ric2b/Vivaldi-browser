@@ -9,6 +9,7 @@
 #include "base/files/file_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/ozone/platform/wayland/gpu/wayland_buffer_manager_gpu.h"
+#include "ui/ozone/platform/wayland/host/wayland_buffer_manager_host.h"
 #include "ui/ozone/platform/wayland/host/wayland_connection.h"
 #include "ui/ozone/platform/wayland/test/mock_surface.h"
 #include "ui/ozone/platform/wayland/test/scoped_wl_array.h"
@@ -30,8 +31,6 @@ base::ScopedFD MakeFD() {
                                 base::File::FLAG_CREATE_ALWAYS);
   return base::ScopedFD(file.TakePlatformFile());
 }
-
-constexpr uint32_t kAugmentedSurfaceNotSupportedVersion = 0;
 
 constexpr int kWidth = 800;
 constexpr int kHeight = 600;
@@ -59,9 +58,7 @@ class WaylandFrameManagerTest : public WaylandTestSimple {
                                     /*supports_viewporter=*/true,
                                     /*supports_acquire_fence=*/false,
                                     /*supports_overlays=*/true,
-                                    kAugmentedSurfaceNotSupportedVersion,
-                                    /*supports_single_pixel_buffer=*/true,
-                                    /*server_version=*/{});
+                                    /*supports_single_pixel_buffer=*/true);
     buffer_manager_gpu_->CreateShmBasedBuffer(MakeFD(), kLength, kBufferSize,
                                               kBufferId);
     base::RunLoop().RunUntilIdle();
@@ -88,9 +85,7 @@ class WaylandFrameManagerTest : public WaylandTestSimple {
                                     /*supports_viewporter=*/true,
                                     /*supports_acquire_fence=*/false,
                                     /*supports_overlays=*/true,
-                                    kAugmentedSurfaceNotSupportedVersion,
-                                    /*supports_single_pixel_buffer=*/true,
-                                    /*server_version=*/{});
+                                    /*supports_single_pixel_buffer=*/true);
     buffer_manager_gpu_->CreateShmBasedBuffer(MakeFD(), kLength, kBufferSize,
                                               kBufferId);
     base::RunLoop().RunUntilIdle();
@@ -212,9 +207,7 @@ TEST_F(WaylandFrameManagerTest,
                                   /*supports_viewporter=*/true,
                                   /*supports_acquire_fence=*/false,
                                   /*supports_overlays=*/true,
-                                  kAugmentedSurfaceNotSupportedVersion,
-                                  /*supports_single_pixel_buffer=*/true,
-                                  /*server_version=*/{});
+                                  /*supports_single_pixel_buffer=*/true);
   buffer_manager_gpu_->CreateShmBasedBuffer(MakeFD(), kLength, kBufferSize,
                                             kBufferId);
   base::RunLoop().RunUntilIdle();
@@ -346,9 +339,7 @@ TEST_F(WaylandFrameManagerTest,
                                   /*supports_viewporter=*/true,
                                   /*supports_acquire_fence=*/false,
                                   /*supports_overlays=*/true,
-                                  kAugmentedSurfaceNotSupportedVersion,
-                                  /*supports_single_pixel_buffer=*/true,
-                                  /*server_version=*/{});
+                                  /*supports_single_pixel_buffer=*/true);
   buffer_manager_gpu_->CreateShmBasedBuffer(MakeFD(), kLength, kBufferSize,
                                             kBufferId);
   base::RunLoop().RunUntilIdle();

@@ -6,7 +6,6 @@
 
 #include <algorithm>
 
-#include "base/ranges/algorithm.h"
 #include "components/autofill/core/common/autofill_clock.h"
 
 namespace autofill {
@@ -25,22 +24,6 @@ AutofillOfferData AutofillOfferData::GPayCardLinkedOffer(
   return AutofillOfferData(offer_id, expiry, merchant_origins,
                            offer_details_url, display_strings,
                            eligible_instrument_id, offer_reward_amount);
-}
-
-// static
-// TODO(b/351080010): DEPRECATED, remove this function.
-AutofillOfferData AutofillOfferData::FreeListingCouponOffer(
-    int64_t offer_id,
-    base::Time expiry,
-    const std::vector<GURL>& merchant_origins,
-    const GURL& offer_details_url,
-    const DisplayStrings& display_strings,
-    const std::string& promo_code,
-    bool is_merchant_wide,
-    std::optional<std::string> terms_and_conditions) {
-  return AutofillOfferData(OfferType::FREE_LISTING_COUPON_OFFER, offer_id,
-                           expiry, merchant_origins, offer_details_url,
-                           display_strings, promo_code);
 }
 
 // static
@@ -150,7 +133,7 @@ bool AutofillOfferData::IsGPayPromoCodeOffer() const {
 
 bool AutofillOfferData::IsActiveAndEligibleForOrigin(const GURL& origin) const {
   return expiry_ > AutofillClock::Now() &&
-         base::ranges::count(merchant_origins_, origin) > 0;
+         std::ranges::count(merchant_origins_, origin) > 0;
 }
 
 AutofillOfferData::AutofillOfferData(

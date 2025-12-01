@@ -11,6 +11,7 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/check.h"
 #include "base/functional/callback.h"
@@ -19,7 +20,6 @@
 #include "third_party/blink/public/mojom/frame/user_activation_notification_type.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
-#include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/web_script_execution_callback.h"
 #include "third_party/blink/renderer/bindings/core/v8/sanitize_script_errors.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_evaluation_result.h"
@@ -118,7 +118,7 @@ PromiseAggregator::PromiseAggregator(ScriptState* script_state,
     // wait for the promise (or then-able) to settle, or will immediately finish
     // with the value. Thus, it's safe to just do this for every value.
     ToResolvedPromise<IDLAny>(script_state, values[i])
-        .React(
+        .Then(
             script_state,
             MakeGarbageCollected<OnSettled>(this, i, /*was_fulfilled=*/true),
             MakeGarbageCollected<OnSettled>(this, i, /*was_fulfilled=*/false));

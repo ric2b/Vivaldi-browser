@@ -25,8 +25,10 @@ _TRANSITION_PRESCRIPT = (
     "validation is enforced.\nThird party metadata issue:")
 
 
-def validate_content(content: str, source_file_dir: str,
-                     repo_root_dir: str) -> List[vr.ValidationResult]:
+def validate_content(content: str,
+                     source_file_dir: str,
+                     repo_root_dir: str,
+                     is_open_source_project: bool = False) -> List[vr.ValidationResult]:
     """Validate the content as a metadata file.
 
     Args:
@@ -37,6 +39,7 @@ def validate_content(content: str, source_file_dir: str,
                          construct file paths to license files.
         repo_root_dir: the repository's root directory; this is needed
                        to construct file paths to license files.
+        is_open_source_project: whether the project is open source.
 
     Returns: the validation results for the given content, sorted based
              severity then message.
@@ -49,7 +52,10 @@ def validate_content(content: str, source_file_dir: str,
 
     for dependency in dependencies:
         dependency_results = dependency.validate(
-            source_file_dir=source_file_dir, repo_root_dir=repo_root_dir)
+            source_file_dir=source_file_dir,
+            repo_root_dir=repo_root_dir,
+            is_open_source_project=is_open_source_project,
+        )
         results.extend(dependency_results)
     return sorted(results)
 
@@ -68,6 +74,7 @@ def validate_file(
     filepath: str,
     repo_root_dir: str,
     reader: Callable[[str], Union[str, bytes]] = None,
+    is_open_source_project: bool = False,
 ) -> List[vr.ValidationResult]:
     """Validate the item located at the given filepath is a valid
     dependency metadata file.
@@ -79,6 +86,8 @@ def validate_file(
                        to construct file paths to license files.
         reader (optional): callable function/method to read the content
                            of the file.
+        is_open_source_project: whether to allow reciprocal licenses.
+                            This should only be True for open source projects.
 
     Returns: the validation results for the given filepath and its
              contents, if it exists.
@@ -104,15 +113,17 @@ def validate_file(
         source_file_dir = os.path.dirname(filepath)
         return validate_content(content=content,
                                 source_file_dir=source_file_dir,
-                                repo_root_dir=repo_root_dir)
+                                repo_root_dir=repo_root_dir,
+                                is_open_source_project=is_open_source_project)
 
 
 def check_file(
     filepath: str,
     repo_root_dir: str,
     reader: Callable[[str], Union[str, bytes]] = None,
+    is_open_source_project: bool = False,
 ) -> Tuple[List[str], List[str]]:
-    """Run metadata validation on the given filepath, and return all 
+    """Run metadata validation on the given filepath, and return all
     validation errors and validation warnings.
 
     Args:
@@ -122,6 +133,8 @@ def check_file(
                        to construct file paths to license files.
         reader (optional): callable function/method to read the content
                            of the file.
+        is_open_source_project: whether to allow reciprocal licenses.
+                            This should only be True for open source projects.
 
     Returns:
         error_messages: the fatal validation issues present in the file;
@@ -131,7 +144,8 @@ def check_file(
     """
     results = validate_file(filepath=filepath,
                             repo_root_dir=repo_root_dir,
-                            reader=reader)
+                            reader=reader,
+                            is_open_source_project=is_open_source_project)
 
     error_messages = []
     warning_messages = []

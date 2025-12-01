@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "components/favicon_base/favicon_url_parser.h"
 
 #include <string_view>
@@ -12,6 +17,8 @@
 #include "net/base/url_util.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/gfx/favicon_size.h"
+
+#include "app/vivaldi_apptools.h"
 
 namespace chrome {
 
@@ -59,6 +66,14 @@ bool ParseFaviconPathWithLegacyFormat(const std::string& path,
       return false;
 
     size_t scale_delimiter = path.find("@", parsed_index);
+    if (vivaldi::IsVivaldiRunning() && scale_delimiter != std::string::npos) {
+      // The scale delimiter is supposed to be part of the size&scale section
+      // (chrome://favicon/size&scaleFactor/iconUrl/url). If the delimiter
+      // matches something outside the section, then ignore it.
+      if (scale_delimiter > slash) {
+        scale_delimiter = std::string::npos;
+      }
+    }
     std::string size_str;
     std::string scale_str;
     if (scale_delimiter == std::string::npos) {
@@ -167,8 +182,7 @@ bool ParseFaviconPath(const std::string& path,
     case FaviconUrlFormat::kFavicon2:
       return ParseFaviconPathWithFavicon2Format(path, parsed);
   }
-  NOTREACHED_IN_MIGRATION();
-  return false;
+  NOTREACHED();
 }
 
 }  // namespace chrome

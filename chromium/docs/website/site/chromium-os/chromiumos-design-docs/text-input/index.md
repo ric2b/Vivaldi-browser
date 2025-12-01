@@ -116,9 +116,9 @@ We will support the following languages by any of the ways listed above.
 ### Basic architecture
 
 For languages that can be supported by Simple Keyboard or Switchable Keyboard,
-we'll use [XKB](http://en.wikipedia.org/wiki/X_keyboard_extension) (X Keyboard
+we'll use [XKB](https://en.wikipedia.org/wiki/X_keyboard_extension) (X Keyboard
 Extension). For languages in other categories, we'll use
-[IBus](http://en.wikipedia.org/wiki/Intelligent_Input_Bus) (Intelligent Input
+[IBus](https://en.wikipedia.org/wiki/Intelligent_Input_Bus) (Intelligent Input
 Bus). The following diagram illustrates the basic architecture of text input
 support for Chromium OS.
 
@@ -165,7 +165,7 @@ We'll use the following open source conversion engines.
 </tr>
 </table>
 New: For Japanese, we plan to port [Google Japanese
-Input](http://www.google.com/intl/ja/ime/) to Chromium OS.
+Input](https://www.google.com/intl/ja/ime/) to Chromium OS.
 
 ### User experience
 
@@ -234,7 +234,7 @@ user data.
 
 An indirect input layer like IBus can be a security weak point, as it can be
 exploited as a key logger. We plan to use
-[GRSecurity](http://en.wikipedia.org/wiki/Grsecurity) to restrict resource
+[GRSecurity](https://en.wikipedia.org/wiki/Grsecurity) to restrict resource
 access from IBus and conversion engines. We also plan to review the security of
 IBus.
 

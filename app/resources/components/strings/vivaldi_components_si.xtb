@@ -21,6 +21,7 @@
           <ph name="PROXIES_TITLE" />
           ඔබගේ වින්‍යාසය "ප්‍රතියුක්තයක් නැත" හෝ "සෘජුව" ලෙස සකසා ඇත්දැයි බල්නන.</translation>
 <translation id="5248344925342018662">ඔබ ආරක්ෂිත විවාල්ඩි පිටුවක් බලමින් සිටියි</translation>
+<translation id="6690242244468452299">ඔබ බිඳ වැටීම් වාර්තාකරණය සක්‍රීය කළහොත්, මෙම පිටුව ඔබගේ මෑත කාලීන බිඳ වැටීම් පිළිබඳ තොරතුරු පෙන්වයි.</translation>
 <translation id="7023871570427738255">Vivaldi මෙනුව &gt;
           <ph name="SETTINGS_TITLE" />
           &gt;
@@ -28,6 +29,7 @@
           වෙත ගොස් "<ph name="NO_PREFETCH_DESCRIPTION" />තේරීම ඉවත් කරන්න ."
           මෙය ගැටළුව විසඳා නොගන්නේ නම්, වැඩිදියුණු කළ කාර්ය සාධනය සඳහා මෙම විකල්පය
           නැවත තෝරා ගැනීමට අපි නිර්දේශ කරමු.</translation>
+<translation id="7496505986576158197">විවාල්ඩි <ph name="BEGIN_LINK_CHROMIUM" />ක්‍රෝමියම්<ph name="END_LINK_CHROMIUM" /> විවෘත කේත ව්‍යාපෘතිය සහ අනෙකුත් <ph name="BEGIN_LINK_OSS" />විවෘත කේත මෘදුකාංග<ph name="END_LINK_OSS" />මගින් කළ හැකි විය.</translation>
 <translation id="8187289872471304532">යෙදුම් &gt; පද්ධති මනාප &gt; ජාලය &gt; උසස් &gt; ප්‍රොක්සි
           වෙත ගොස් තෝරාගෙන ඇති ඕනෑම ප්‍රොක්සියක් තෝරා නොගන්න.</translation>
 </translationbundle>

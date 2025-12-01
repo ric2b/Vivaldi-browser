@@ -26,7 +26,7 @@ class LazyLoadServiceFactory : public BrowserContextKeyedServiceFactory {
   LazyLoadServiceFactory& operator=(const LazyLoadServiceFactory&) = delete;
 
   // BrowserContextKeyedBaseFactory methods:
-  KeyedService* BuildServiceInstanceFor(
+  std::unique_ptr<KeyedService> BuildServiceInstanceForBrowserContext(
       content::BrowserContext* context) const override;
 };
 

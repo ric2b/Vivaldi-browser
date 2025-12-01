@@ -27,9 +27,9 @@ problematic scenario is as follows:
 4. Client `O` submits a change to the same proto, which results in discarding
    field’s `F` data from client `N`.
 
-[DataSpecifics]: https://www.chromium.org/developers/design-documents/sync/model-api/#specifics
+[DataSpecifics]: /developers/design-documents/sync/model-api/#specifics
 [PasswordSpecifics]: https://cs.chromium.org/chromium/src/components/sync/protocol/password_specifics.proto
-[SyncModelAPI]: https://www.chromium.org/developers/design-documents/sync/model-api
+[SyncModelAPI]: /developers/design-documents/sync/model-api
 
 ### Solution
 

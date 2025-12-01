@@ -1442,8 +1442,8 @@ HIGHBD_SMOOTH_H_NXM_WIDE(64, 64)
 // -----------------------------------------------------------------------------
 // Z1
 
-static int16_t iota1_s16[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8 };
-static int16_t iota2_s16[] = { 0, 2, 4, 6, 8, 10, 12, 14 };
+static const int16_t iota1_s16[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8 };
+static const int16_t iota2_s16[] = { 0, 2, 4, 6, 8, 10, 12, 14 };
 
 static AOM_FORCE_INLINE uint16x4_t highbd_dr_z1_apply_shift_x4(uint16x4_t a0,
                                                                uint16x4_t a1,

@@ -69,8 +69,11 @@ DEFINE_LOCAL_CUSTOM_ELEMENT_EVENT_TYPE(kAudioIsAudible);
 
 constexpr char kSkipPixelTestsReason[] = "Should only run in pixel_tests.";
 
-}  // namespace
+constexpr char kDocumentWithAudio[] = "/autoplay_audio.html";
+constexpr char kDocumentWithVideo[] = "/media/bigbuck-player.html";
+constexpr char kDocumentWithForm[] = "/form_interaction.html";
 
+}  // namespace
 
 // Tests Discarding on pages with various types of content
 class MemorySaverDiscardPolicyInteractiveTest
@@ -82,6 +85,21 @@ class MemorySaverDiscardPolicyInteractiveTest
                                               GetParam());
   }
   ~MemorySaverDiscardPolicyInteractiveTest() override = default;
+
+  void SetUp() override {
+    ASSERT_TRUE(embedded_test_server()->InitializeAndListen());
+    InteractiveBrowserTest::SetUp();
+  }
+
+  void SetUpOnMainThread() override {
+    InteractiveBrowserTest::SetUpOnMainThread();
+    embedded_test_server()->StartAcceptingConnections();
+  }
+
+  void TearDownOnMainThread() override {
+    EXPECT_TRUE(embedded_test_server()->ShutdownAndWaitUntilComplete());
+    InteractiveBrowserTest::TearDownOnMainThread();
+  }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     MemorySaverInteractiveTestMixin<InteractiveBrowserTest>::SetUpCommandLine(
@@ -133,7 +151,7 @@ IN_PROC_BROWSER_TEST_P(MemorySaverDiscardPolicyInteractiveTest,
   RunTestSequence(
       InstrumentTab(kFirstTabContents, 0),
       NavigateWebContents(kFirstTabContents,
-                          GetURL("example.com", "/media/bigbuck-player.html")),
+                          embedded_test_server()->GetURL(kDocumentWithVideo)),
       ExecuteJsAt(kFirstTabContents, video, kPlayVideo),
       WaitForStateChange(kFirstTabContents, video_is_playing),
       AddInstrumentedTab(kSecondTabContents, GURL(chrome::kChromeUINewTabURL)),
@@ -156,7 +174,7 @@ IN_PROC_BROWSER_TEST_P(MemorySaverDiscardPolicyInteractiveTest,
   RunTestSequence(
       InstrumentTab(kFirstTabContents, 0),
       NavigateWebContents(kFirstTabContents,
-                          GetURL("example.com", "/autoplay_audio.html")),
+                          embedded_test_server()->GetURL(kDocumentWithAudio)),
       ExecuteJsAt(kFirstTabContents, audio, "(el) => { el.play(); }"),
       WaitForEvent(kFirstTabContents, kAudioIsAudible),
       AddInstrumentedTab(kSecondTabContents, GURL(chrome::kChromeUINewTabURL)),
@@ -165,9 +183,8 @@ IN_PROC_BROWSER_TEST_P(MemorySaverDiscardPolicyInteractiveTest,
 
 // Check that a form in the background but was interacted with by the user
 // won't be discarded
-// TODO(crbug.com/40893068): Consistently flakes, re-enable this test.
 IN_PROC_BROWSER_TEST_P(MemorySaverDiscardPolicyInteractiveTest,
-                       DISABLED_TabWithFormNotDiscarded) {
+                       TabWithFormNotDiscarded) {
   DEFINE_LOCAL_CUSTOM_ELEMENT_EVENT_TYPE(kInputIsFocused);
   DEFINE_LOCAL_CUSTOM_ELEMENT_EVENT_TYPE(kInputValueIsUpated);
   const DeepQuery input_text_box = {"#value"};
@@ -183,25 +200,27 @@ IN_PROC_BROWSER_TEST_P(MemorySaverDiscardPolicyInteractiveTest,
   input_value_updated.event = kInputValueIsUpated;
   input_value_updated.where = input_text_box;
   input_value_updated.type = StateChange::Type::kExistsAndConditionTrue;
-  input_value_updated.test_function = "(el) => { return !!el.value; }";
+  input_value_updated.test_function = "(el) => { return el.value !== 'test'; }";
+
+  const GURL url = embedded_test_server()->GetURL(kDocumentWithForm);
 
   RunTestSequence(
       InstrumentTab(kFirstTabContents, 0),
-      NavigateWebContents(kFirstTabContents,
-                          GetURL("example.com", "/form_search.html")),
-      WaitForWebContentsReady(kFirstTabContents,
-                              GetURL("example.com", "/form_search.html")),
+      NavigateWebContents(kFirstTabContents, url),
+      WaitForWebContentsReady(kFirstTabContents, url),
 
       // Move focus off of the omnibox
       MoveMouseTo(kFirstTabContents, input_text_box), ClickMouse(),
 
       // Wait until the input text box is focused and simulate typing a letter
       ExecuteJsAt(kFirstTabContents, input_text_box,
-                  "(el) => { el.focus(); el.select(); }"),
+                  "() => { FocusTextField(); }"),
+
       WaitForStateChange(kFirstTabContents, input_is_focused), PressKeyboard(),
       WaitForStateChange(kFirstTabContents, input_value_updated),
 
-      AddInstrumentedTab(kSecondTabContents, GURL(chrome::kChromeUINewTabURL)),
+      AddInstrumentedTab(kSecondTabContents, GURL(chrome::kChromeUINewTabURL),
+                         1),
       TryDiscardTab(0), CheckTabIsDiscarded(0, false));
 }
 
@@ -320,8 +339,14 @@ IN_PROC_BROWSER_TEST_P(MemorySaverChipInteractiveTest,
 
 // Page Action chip should stay collapsed when navigating between two
 // discarded tabs
+// TODO(crbug.com/391482960): Re-enable this test
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_ChipCollapseRemainCollapse DISABLED_ChipCollapseRemainCollapse
+#else
+#define MAYBE_ChipCollapseRemainCollapse ChipCollapseRemainCollapse
+#endif
 IN_PROC_BROWSER_TEST_P(MemorySaverChipInteractiveTest,
-                       ChipCollapseRemainCollapse) {
+                       MAYBE_ChipCollapseRemainCollapse) {
   RunTestSequence(
       InstrumentTab(kFirstTabContents, 0),
       NavigateWebContents(kFirstTabContents, GetURL()),

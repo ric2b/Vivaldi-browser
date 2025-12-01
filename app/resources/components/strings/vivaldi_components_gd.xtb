@@ -3,5 +3,36 @@
 <translationbundle lang="gd">
 <translation id="3830627370375585318">Leig le Vivaldi inntrigeadh a dhèanamh dhan lìonra ann an
           roghainnean na cachaileith-theine no a’ phrògraim an aghaidh bhìorasan agad..</translation>
+<translation id="4200102020577305737">Tadhail air
+          clàr-taice Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Roghainnean LAN
+          is thoir a’ chromag air falbh o “Cleachd frithealaiche progsaidh dhan LAN agad”.</translation>
+<translation id="4932161901409251843">Tadhail air
+          clàr-taice Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          is dèan cinnteach gun deach “gun phrogsaidh” no “calg-dhìreach” a thaghadh san rèiteachadh agad.</translation>
 <translation id="5248344925342018662">Tha thu a’ coimhead air duilleag thèarainte Vivaldi</translation>
+<translation id="6690242244468452299">Tha an duilleag seo a’ sealltainn fiosrachadh mu thuislidhean a bh’ agad o chionn goirid ma chuir thu na h-aithisgean tuislidh an comas.</translation>
+<translation id="7023871570427738255">Tadhail air
+          clàr-taice Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          is thoir a’ chromag air falbh o dì-thagh “<ph name="NO_PREFETCH_DESCRIPTION" />”.
+          Mur an cuir sin ceart an duilgheadas, mholamaid dhut an roghainn seo a thaghadh
+          as ùr airson dèanadas nas fheàrr.</translation>
+<translation id="7496505986576158197">Cha ghabhadh Vivaldi a dhèanamh as aonais pròiseact <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> agus <ph name="BEGIN_LINK_OSS" />bathar-bog le còd fosgailte eile<ph name="END_LINK_OSS" />.</translation>
+<translation id="8187289872471304532">Tadhail air
+          “Aplacaidean” &gt; “Roghainnean an t-siostaim” &gt; “An lìonra” &gt; “Adhartach” &gt; “Progsaidhean”
+          is thoir a’ chromag air falbh o phrogsaidh sam bith a chaidh a thaghadh roimhe.</translation>
 </translationbundle>

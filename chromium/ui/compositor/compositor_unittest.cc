@@ -22,6 +22,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/ui_base_features.h"
+#include "ui/compositor/compositor_metrics_tracker.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_delegate.h"
 #include "ui/compositor/test/draw_waiter_for_test.h"
@@ -285,13 +286,13 @@ TEST_F(CompositorTestWithMockedTime,
 TEST_F(CompositorTestWithMessageLoop, MoveThroughputTracker) {
   // Move a not started instance.
   {
-    auto tracker = compositor()->RequestNewThroughputTracker();
+    auto tracker = compositor()->RequestNewCompositorMetricsTracker();
     auto moved_tracker = std::move(tracker);
   }
 
   // Move a started instance.
   {
-    auto tracker = compositor()->RequestNewThroughputTracker();
+    auto tracker = compositor()->RequestNewCompositorMetricsTracker();
     tracker.Start(base::BindLambdaForTesting(
         [&](const cc::FrameSequenceMetrics::CustomReportData& data) {
           // This should not be called since the tracking is auto canceled.
@@ -302,7 +303,7 @@ TEST_F(CompositorTestWithMessageLoop, MoveThroughputTracker) {
 
   // Move a started instance and stop.
   {
-    auto tracker = compositor()->RequestNewThroughputTracker();
+    auto tracker = compositor()->RequestNewCompositorMetricsTracker();
     tracker.Start(base::BindLambdaForTesting(
         [&](const cc::FrameSequenceMetrics::CustomReportData& data) {
           // May be called since Stop() is called.
@@ -313,7 +314,7 @@ TEST_F(CompositorTestWithMessageLoop, MoveThroughputTracker) {
 
   // Move a started instance and cancel.
   {
-    auto tracker = compositor()->RequestNewThroughputTracker();
+    auto tracker = compositor()->RequestNewCompositorMetricsTracker();
     tracker.Start(base::BindLambdaForTesting(
         [&](const cc::FrameSequenceMetrics::CustomReportData& data) {
           // This should not be called since Cancel() is called.
@@ -325,7 +326,7 @@ TEST_F(CompositorTestWithMessageLoop, MoveThroughputTracker) {
 
   // Move a stopped instance.
   {
-    auto tracker = compositor()->RequestNewThroughputTracker();
+    auto tracker = compositor()->RequestNewCompositorMetricsTracker();
     tracker.Start(base::BindLambdaForTesting(
         [&](const cc::FrameSequenceMetrics::CustomReportData& data) {
           // May be called since Stop() is called.
@@ -336,7 +337,7 @@ TEST_F(CompositorTestWithMessageLoop, MoveThroughputTracker) {
 
   // Move a canceled instance.
   {
-    auto tracker = compositor()->RequestNewThroughputTracker();
+    auto tracker = compositor()->RequestNewCompositorMetricsTracker();
     tracker.Start(base::BindLambdaForTesting(
         [&](const cc::FrameSequenceMetrics::CustomReportData& data) {
           // This should not be called since Cancel() is called.
@@ -348,8 +349,8 @@ TEST_F(CompositorTestWithMessageLoop, MoveThroughputTracker) {
 }
 
 #if BUILDFLAG(IS_CHROMEOS)
-// ui::ThroughputTracker is only supported on ChromeOS
-TEST_F(CompositorTestWithMessageLoop, ThroughputTracker) {
+// ui::CompositorMetricsTracker is only supported on ChromeOS
+TEST_F(CompositorTestWithMessageLoop, CompositorMetricsTracker) {
   auto root_layer = std::make_unique<Layer>(ui::LAYER_SOLID_COLOR);
   viz::ParentLocalSurfaceIdAllocator allocator;
   allocator.GenerateId();
@@ -359,7 +360,8 @@ TEST_F(CompositorTestWithMessageLoop, ThroughputTracker) {
                                 allocator.GetCurrentLocalSurfaceId());
   ASSERT_TRUE(compositor()->IsVisible());
 
-  ThroughputTracker tracker = compositor()->RequestNewThroughputTracker();
+  CompositorMetricsTracker tracker =
+      compositor()->RequestNewCompositorMetricsTracker();
 
   base::RunLoop run_loop;
   tracker.Start(base::BindLambdaForTesting(
@@ -389,7 +391,7 @@ TEST_F(CompositorTestWithMessageLoop, ThroughputTracker) {
 }
 
 TEST_F(CompositorTestWithMessageLoop, ThroughputTrackerOutliveCompositor) {
-  auto tracker = compositor()->RequestNewThroughputTracker();
+  auto tracker = compositor()->RequestNewCompositorMetricsTracker();
   tracker.Start(base::BindLambdaForTesting(
       [&](const cc::FrameSequenceMetrics::CustomReportData& data) {
         ADD_FAILURE() << "No report should happen";
@@ -411,7 +413,8 @@ TEST_F(CompositorTestWithMessageLoop, ThroughputTrackerCallbackStateChange) {
                                 allocator.GetCurrentLocalSurfaceId());
   ASSERT_TRUE(compositor()->IsVisible());
 
-  ThroughputTracker tracker = compositor()->RequestNewThroughputTracker();
+  CompositorMetricsTracker tracker =
+      compositor()->RequestNewCompositorMetricsTracker();
 
   base::RunLoop run_loop;
   tracker.Start(base::BindLambdaForTesting(
@@ -420,8 +423,8 @@ TEST_F(CompositorTestWithMessageLoop, ThroughputTrackerCallbackStateChange) {
         tracker.Cancel();
 
         // Starting another tracker should not DCHECK or crash.
-        ThroughputTracker another_tracker =
-            compositor()->RequestNewThroughputTracker();
+        CompositorMetricsTracker another_tracker =
+            compositor()->RequestNewCompositorMetricsTracker();
         another_tracker.Start(base::DoNothing());
 
         run_loop.Quit();
@@ -456,7 +459,8 @@ TEST_F(CompositorTestWithMessageLoop, ThroughputTrackerInvoluntaryReport) {
                                 allocator.GetCurrentLocalSurfaceId());
   ASSERT_TRUE(compositor()->IsVisible());
 
-  ThroughputTracker tracker = compositor()->RequestNewThroughputTracker();
+  CompositorMetricsTracker tracker =
+      compositor()->RequestNewCompositorMetricsTracker();
 
   tracker.Start(base::BindLambdaForTesting(
       [&](const cc::FrameSequenceMetrics::CustomReportData& data) {
@@ -585,6 +589,49 @@ TEST_F(CompositorTestWithMessageLoop, CompositorVisibilityChanges) {
   ::testing::Mock::VerifyAndClearExpectations(&observer);
 
   compositor()->RemoveObserver(&observer);
+}
+
+class CompositorPropertyTreeDelegateTest
+    : public CompositorTestWithMessageLoop {
+ public:
+  class Observer : public CompositorPropertyTreeDelegate::Observer {
+   public:
+    bool called_ = false;
+
+    void OnUpdateCalled(cc::LayerTreeHost* host) override { called_ = true; }
+  };
+
+  void SetUp() override {
+    feature_list_.InitAndEnableFeature(features::kUiCompositorUsesLayerLists);
+    observer_ = std::make_unique<Observer>();
+    CompositorTestWithMessageLoop::SetUp();
+    compositor()->property_tree_delegate()->SetObserverForTesting(observer());
+  }
+
+  Observer* observer() { return observer_.get(); }
+
+ private:
+  std::unique_ptr<Observer> observer_;
+  base::test::ScopedFeatureList feature_list_;
+};
+
+TEST_F(CompositorPropertyTreeDelegateTest, Draw) {
+  raw_ptr<CompositorPropertyTreeDelegate> delegate =
+      compositor()->property_tree_delegate();
+
+  auto root_layer = std::make_unique<Layer>(ui::LAYER_SOLID_COLOR);
+  viz::ParentLocalSurfaceIdAllocator allocator;
+  allocator.GenerateId();
+  root_layer->SetBounds(gfx::Rect(10, 10));
+  compositor()->SetRootLayer(root_layer.get());
+  compositor()->SetScaleAndSize(1.0f, gfx::Size(10, 10),
+                                allocator.GetCurrentLocalSurfaceId());
+  EXPECT_TRUE(compositor()->IsVisible());
+  compositor()->ScheduleDraw();
+
+  EXPECT_NE(delegate, nullptr);
+  DrawWaiterForTest::WaitForCompositingEnded(compositor());
+  EXPECT_TRUE(observer()->called_);
 }
 
 }  // namespace ui

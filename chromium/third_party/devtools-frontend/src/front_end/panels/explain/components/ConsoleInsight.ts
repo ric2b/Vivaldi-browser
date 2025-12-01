@@ -8,18 +8,27 @@ import * as Common from '../../../core/common/common.js';
 import * as Host from '../../../core/host/host.js';
 import * as i18n from '../../../core/i18n/i18n.js';
 import type * as Platform from '../../../core/platform/platform.js';
+import * as Root from '../../../core/root/root.js';
 import * as Marked from '../../../third_party/marked/marked.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
 import type * as IconButton from '../../../ui/components/icon_button/icon_button.js';
 import * as Input from '../../../ui/components/input/input.js';
 import * as MarkdownView from '../../../ui/components/markdown_view/markdown_view.js';
 import * as UI from '../../../ui/legacy/legacy.js';
-import * as LitHtml from '../../../ui/lit-html/lit-html.js';
+import * as Lit from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 import {type PromptBuilder, type Source, SourceType} from '../PromptBuilder.js';
 
-import styles from './consoleInsight.css.js';
-import listStyles from './consoleInsightSourcesList.css.js';
+import stylesRaw from './consoleInsight.css.js';
+import listStylesRaw from './consoleInsightSourcesList.css.js';
+
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const styles = new CSSStyleSheet();
+styles.replaceSync(stylesRaw.cssContent);
+
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const listStyles = new CSSStyleSheet();
+listStyles.replaceSync(listStylesRaw.cssContent);
 
 // Note: privacy and legal notices are not localized so far.
 const UIStrings = {
@@ -131,11 +140,23 @@ const UIStrings = {
    * @description Text for a link to Chrome DevTools Settings.
    */
   settingsLink: '`Console insights` in Settings',
+  /**
+   * @description The title of the list of references/recitations that were used to generate the insight.
+   */
+  references: 'Sources and related content',
+  /**
+   * @description Sub-heading for a list of links to URLs which are related to the AI-generated response.
+   */
+  relatedContent: 'Related content',
+  /**
+   * @description Error message shown when the request to get an AI response times out.
+   */
+  timedOut: 'Generating a response took too long. Please try again.',
 };
 const str_ = i18n.i18n.registerUIStrings('panels/explain/components/ConsoleInsight.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
-const {render, html, Directives} = LitHtml;
+const {render, html, Directives} = Lit;
 
 export class CloseEvent extends Event {
   static readonly eventName = 'close';
@@ -190,6 +211,9 @@ type StateData = {
   sources: Source[],
   isPageReloadRecommended: boolean,
   completed: boolean,
+  directCitationUrls: string[],
+  highlightIndex?: number,
+  timedOut?: boolean,
 }&Host.AidaClient.AidaResponse|{
   type: State.ERROR,
   error: string,
@@ -207,6 +231,26 @@ type StateData = {
   type: State.OFFLINE,
 };
 
+const markedExtension = {
+  name: 'citation',
+  level: 'inline',
+  start(src: string) {
+    return src.match(/\[\^/)?.index;
+  },
+  tokenizer(src: string) {
+    const match = src.match(/^\[\^(\d+)\]/);
+    if (match) {
+      return {
+        type: 'citation',
+        raw: match[0],
+        linkText: Number(match[1]),
+      };
+    }
+    return false;
+  },
+  renderer: () => '',
+};
+
 export class ConsoleInsight extends HTMLElement {
   static async create(promptBuilder: PublicPromptBuilder, aidaClient: PublicAidaClient): Promise<ConsoleInsight> {
     const aidaAvailability = await Host.AidaClient.AidaClient.checkAccessPreconditions();
@@ -217,10 +261,12 @@ export class ConsoleInsight extends HTMLElement {
 
   #promptBuilder: PublicPromptBuilder;
   #aidaClient: PublicAidaClient;
-  #renderer = new MarkdownView.MarkdownView.MarkdownInsightRenderer();
+  #renderer: MarkdownView.MarkdownView.MarkdownInsightRenderer;
 
   // Main state.
   #state: StateData;
+  #referenceDetailsRef = Lit.Directives.createRef<HTMLDetailsElement>();
+  #areReferenceDetailsOpen = false;
 
   // Rating sub-form state.
   #selectedRating?: boolean;
@@ -228,6 +274,7 @@ export class ConsoleInsight extends HTMLElement {
   #consoleInsightsEnabledSetting: Common.Settings.Setting<boolean>|undefined;
   #aidaAvailability: Host.AidaClient.AidaAccessPreconditions;
   #boundOnAidaAvailabilityChange: () => Promise<void>;
+  #marked: Marked.Marked.Marked;
 
   constructor(
       promptBuilder: PublicPromptBuilder, aidaClient: PublicAidaClient,
@@ -237,6 +284,8 @@ export class ConsoleInsight extends HTMLElement {
     this.#aidaClient = aidaClient;
     this.#aidaAvailability = aidaAvailability;
     this.#consoleInsightsEnabledSetting = this.#getConsoleInsightsEnabledSetting();
+    this.#renderer = new MarkdownView.MarkdownView.MarkdownInsightRenderer(this.#citationClickHandler.bind(this));
+    this.#marked = new Marked.Marked.Marked({extensions: [markedExtension]});
 
     this.#state = this.#getStateFromAidaAvailability();
     this.#boundOnAidaAvailabilityChange = this.#onAidaAvailabilityChange.bind(this);
@@ -256,6 +305,27 @@ export class ConsoleInsight extends HTMLElement {
       e.stopPropagation();
     });
     this.focus();
+  }
+
+  #citationClickHandler(index: number): void {
+    if (this.#state.type !== State.INSIGHT || !this.#referenceDetailsRef.value) {
+      return;
+    }
+    this.#state.highlightIndex = index;
+    const areDetailsAlreadyExpanded = this.#referenceDetailsRef.value.open;
+    this.#areReferenceDetailsOpen = true;
+    this.#render();
+
+    const highlightedElement = this.#shadow.querySelector('li .highlighted');
+    if (highlightedElement) {
+      if (areDetailsAlreadyExpanded) {
+        highlightedElement.scrollIntoView({behavior: 'auto'});
+      } else {  // Wait for the details element to open before scrolling.
+        this.#referenceDetailsRef.value.addEventListener('transitionend', () => {
+          highlightedElement.scrollIntoView({behavior: 'auto'});
+        }, {once: true});
+      }
+    }
   }
 
   #getStateFromAidaAvailability(): StateData {
@@ -457,10 +527,41 @@ export class ConsoleInsight extends HTMLElement {
     await this.#generateInsight();
   }
 
+  #insertCitations(explanation: string, metadata: Host.AidaClient.AidaResponseMetadata):
+      {explanationWithCitations: string, directCitationUrls: string[]} {
+    const directCitationUrls: string[] = [];
+    if (!this.#isSearchRagResponse(metadata) || !metadata.attributionMetadata) {
+      return {explanationWithCitations: explanation, directCitationUrls};
+    }
+
+    const {attributionMetadata} = metadata;
+    const sortedCitations =
+        attributionMetadata.citations
+            .filter(citation => citation.sourceType === Host.AidaClient.CitationSourceType.WORLD_FACTS)
+            .sort((a, b) => (b.endIndex || 0) - (a.endIndex || 0));
+    let explanationWithCitations = explanation;
+    for (const [index, citation] of sortedCitations.entries()) {
+      // Matches optional punctuation mark followed by whitespace.
+      // Ensures citation is placed at the end of a word.
+      const myRegex = /[.,:;!?]*\s/g;
+      myRegex.lastIndex = citation.endIndex || 0;
+      const result = myRegex.exec(explanationWithCitations);
+      if (result && citation.uri) {
+        explanationWithCitations = explanationWithCitations.slice(0, result.index) +
+            `[^${sortedCitations.length - index}]` + explanationWithCitations.slice(result.index);
+        directCitationUrls.push(citation.uri);
+      }
+    }
+
+    directCitationUrls.reverse();
+    return {explanationWithCitations, directCitationUrls};
+  }
+
   async #generateInsight(): Promise<void> {
     try {
       for await (const {sources, isPageReloadRecommended, explanation, metadata, completed} of this.#getInsight()) {
-        const tokens = this.#validateMarkdown(explanation);
+        const {explanationWithCitations, directCitationUrls} = this.#insertCitations(explanation, metadata);
+        const tokens = this.#validateMarkdown(explanationWithCitations);
         const valid = tokens !== false;
         this.#transitionTo({
           type: State.INSIGHT,
@@ -471,15 +572,21 @@ export class ConsoleInsight extends HTMLElement {
           metadata,
           isPageReloadRecommended,
           completed,
+          directCitationUrls,
         });
       }
       Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightGenerated);
     } catch (err) {
       Host.userMetrics.actionTaken(Host.UserMetrics.Action.InsightErrored);
-      this.#transitionTo({
-        type: State.ERROR,
-        error: err.message,
-      });
+      if (err.message === 'doAidaConversation timed out' && this.#state.type === State.INSIGHT) {
+        this.#state.timedOut = true;
+        this.#transitionTo({...this.#state, completed: true, timedOut: true});
+      } else {
+        this.#transitionTo({
+          type: State.ERROR,
+          error: err.message,
+        });
+      }
     }
   }
 
@@ -488,7 +595,7 @@ export class ConsoleInsight extends HTMLElement {
    */
   #validateMarkdown(text: string): Marked.Marked.TokensList|false {
     try {
-      const tokens = Marked.Marked.lexer(text);
+      const tokens = this.#marked.lexer(text);
       for (const token of tokens) {
         this.#renderer.renderToken(token);
       }
@@ -538,7 +645,7 @@ export class ConsoleInsight extends HTMLElement {
     }, {once: true});
   }
 
-  #renderSearchButton(): LitHtml.TemplateResult {
+  #renderSearchButton(): Lit.TemplateResult {
     // clang-format off
     return html`<devtools-button
       @click=${this.#onSearch}
@@ -555,7 +662,7 @@ export class ConsoleInsight extends HTMLElement {
     // clang-format on
   }
 
-  #renderLearnMoreAboutInsights(): LitHtml.TemplateResult {
+  #renderLearnMoreAboutInsights(): Lit.TemplateResult {
     // clang-format off
     return html`<x-link href=${LEARNMORE_URL} class="link" jslog=${VisualLogging.link('learn-more').track({click: true})}>
       ${i18nString(UIStrings.learnMore)}
@@ -563,8 +670,99 @@ export class ConsoleInsight extends HTMLElement {
     // clang-format on
   }
 
-  #renderMain(): LitHtml.TemplateResult {
+  #maybeRenderSources(): Lit.LitTemplate {
+    if (this.#state.type !== State.INSIGHT || !this.#state.directCitationUrls.length) {
+      return Lit.nothing;
+    }
+
+    const highlightIndex = this.#state.highlightIndex || -1;
+    // clang-format off
+    return html`
+      <ol class="sources-list">
+        ${this.#state.directCitationUrls.map((url, index) => {
+          const linkClasses = Lit.Directives.classMap({
+            link: true,
+            highlighted: highlightIndex - 1 === index,
+          });
+          return html`
+            <li>
+              <x-link
+                href=${url}
+                class=${linkClasses}
+                jslog=${VisualLogging.link('references.console-insights').track({click: true})}
+              >
+                ${url}
+              </x-link>
+            </li>
+          `;
+        })}
+      </ol>
+    `;
+    // clang-format on
+  }
+
+  #maybeRenderRelatedContent(): Lit.LitTemplate {
+    if (this.#state.type !== State.INSIGHT || !this.#state.metadata.factualityMetadata?.facts.length) {
+      return Lit.nothing;
+    }
+    const directCitationUrls = this.#state.directCitationUrls;
+    const relatedUrls = this.#state.metadata.factualityMetadata.facts
+                            .filter(fact => fact.sourceUri && !directCitationUrls.includes(fact.sourceUri))
+                            .map(fact => fact.sourceUri as string);
+    const trainingDataUrls =
+        this.#state.metadata.attributionMetadata?.citations
+            .filter(
+                citation => citation.sourceType === Host.AidaClient.CitationSourceType.TRAINING_DATA &&
+                    (citation.uri || citation.repository))
+            .map(citation => citation.uri || `https://www.github.com/${citation.repository}`) ||
+        [];
+    const dedupedTrainingDataUrls =
+        [...new Set(trainingDataUrls.filter(url => !relatedUrls.includes(url) && !directCitationUrls.includes(url)))];
+    relatedUrls.push(...dedupedTrainingDataUrls);
+
+    if (relatedUrls.length === 0) {
+      return Lit.nothing;
+    }
+    // clang-format off
+    return html`
+      ${this.#state.directCitationUrls.length ? html`<h3>${i18nString(UIStrings.relatedContent)}</h3>` : Lit.nothing}
+      <ul class="references-list">
+        ${relatedUrls.map(relatedUrl => html`
+          <li>
+            <x-link
+              href=${relatedUrl}
+              class="link"
+              jslog=${VisualLogging.link('references.console-insights').track({click: true})}
+            >
+              ${relatedUrl}
+            </x-link>
+          </li>
+        `)}
+      </ul>
+    `;
+    // clang-format on
+  }
+
+  #isSearchRagResponse(metadata: Host.AidaClient.AidaResponseMetadata): boolean {
+    return Boolean(metadata.factualityMetadata?.facts.length);
+  }
+
+  #onToggleReferenceDetails(): void {
+    if (this.#referenceDetailsRef.value) {
+      this.#areReferenceDetailsOpen = this.#referenceDetailsRef.value.open;
+      if (!this.#areReferenceDetailsOpen && this.#state.type === State.INSIGHT &&
+          this.#state.highlightIndex !== undefined) {
+        this.#state.highlightIndex = undefined;
+        this.#render();
+      }
+    }
+  }
+
+  #renderMain(): Lit.TemplateResult {
     const jslog = `${VisualLogging.section(this.#state.type).track({resize: true})}`;
+    const noLogging = Common.Settings.Settings.instance().getHostConfig().aidaAvailability?.enterprisePolicyValue ===
+        Root.Runtime.GenAiEnterprisePolicyValue.ALLOW_WITHOUT_LOGGING;
+
     // clang-format off
     switch (this.#state.type) {
       case State.LOADING:
@@ -587,7 +785,15 @@ export class ConsoleInsight extends HTMLElement {
               .data=${{tokens: this.#state.tokens, renderer: this.#renderer, animationEnabled: true} as MarkdownView.MarkdownView.MarkdownViewData}>
             </devtools-markdown-view>`: this.#state.explanation
           }
-          <details style="--list-height: ${(this.#state.sources.length + (this.#state.isPageReloadRecommended ? 1 : 0)) * 20}px;" jslog=${VisualLogging.expand('sources').track({click: true})}>
+          ${this.#state.timedOut ? html`<p class="error-message">${i18nString(UIStrings.timedOut)}</p>` : Lit.nothing}
+          ${this.#isSearchRagResponse(this.#state.metadata) ? html`
+            <details class="references" ${Lit.Directives.ref(this.#referenceDetailsRef)} @toggle=${this.#onToggleReferenceDetails} jslog=${VisualLogging.expand('references').track({click: true})}>
+              <summary>${i18nString(UIStrings.references)}</summary>
+              ${this.#maybeRenderSources()}
+              ${this.#maybeRenderRelatedContent()}
+            </details>
+          ` : Lit.nothing}
+          <details jslog=${VisualLogging.expand('sources').track({click: true})}>
             <summary>${i18nString(UIStrings.inputData)}</summary>
             <devtools-console-insight-sources-list .sources=${this.#state.sources} .isPageReloadRecommended=${this.#state.isPageReloadRecommended}>
             </devtools-console-insight-sources-list>
@@ -614,7 +820,11 @@ export class ConsoleInsight extends HTMLElement {
                 } as IconButton.Icon.IconData}>
                 </devtools-icon>
               </div>
-              <div>The console message, associated stack trace, related source code, and the associated network headers are sent to Google to generate explanations. This data may be seen by human reviewers to improve this feature. Avoid sharing sensitive or personal information.</div>
+              <div>The console message, associated stack trace, related source code, and the associated network headers are sent to Google to generate explanations.
+                ${noLogging
+                  ? 'The content you submit and that is generated by this feature will not be used to improve Google’s AI models.'
+                  : 'This data may be seen by human reviewers to improve this feature. Avoid sharing sensitive or personal information.'}
+              </div>
               <div>
                 <devtools-icon .data=${{
                   iconName: 'policy',
@@ -695,10 +905,16 @@ export class ConsoleInsight extends HTMLElement {
     // clang-format on
   }
 
-  #renderDisclaimer(): LitHtml.LitTemplate {
+  #renderDisclaimer(): Lit.LitTemplate {
+    const noLogging = Common.Settings.Settings.instance().getHostConfig().aidaAvailability?.enterprisePolicyValue ===
+        Root.Runtime.GenAiEnterprisePolicyValue.ALLOW_WITHOUT_LOGGING;
+
     // clang-format off
     return html`<span>
-      AI tools may generate inaccurate info that doesn't represent Google's views. Data sent to Google may be seen by human reviewers to improve this feature.
+      AI tools may generate inaccurate info that doesn't represent Google's views.
+      ${noLogging
+        ? 'The content you submit and that is generated by this feature will not be used to improve Google’s AI models.'
+        : 'Data sent to Google may be seen by human reviewers to improve this feature.'}
       <button class="link" role="link" @click=${() => UI.ViewManager.ViewManager.instance().showView('chrome-ai')}
         jslog=${VisualLogging.action('open-ai-settings').track({click: true})}
       >Open settings</button>
@@ -708,7 +924,7 @@ export class ConsoleInsight extends HTMLElement {
     // clang-format on
   }
 
-  #renderFooter(): LitHtml.LitTemplate {
+  #renderFooter(): Lit.LitTemplate {
     const showThumbsUpDownButtons =
         !(Common.Settings.Settings.instance().getHostConfig().aidaAvailability?.disallowLogging ?? true);
     const disclaimer = this.#renderDisclaimer();
@@ -716,7 +932,7 @@ export class ConsoleInsight extends HTMLElement {
     switch (this.#state.type) {
       case State.LOADING:
       case State.SETTING_IS_NOT_TRUE:
-        return LitHtml.nothing;
+        return Lit.nothing;
       case State.ERROR:
       case State.OFFLINE:
         return html`<footer jslog=${VisualLogging.section('footer')}>
@@ -788,10 +1004,14 @@ export class ConsoleInsight extends HTMLElement {
               data-rating=${'true'}
               .data=${
                 {
-                  variant: Buttons.Button.Variant.ICON,
+                  variant: Buttons.Button.Variant.ICON_TOGGLE,
                   size: Buttons.Button.Size.SMALL,
                   iconName: 'thumb-up',
-                  active: this.#selectedRating !== undefined && this.#selectedRating,
+                  toggledIconName: 'thumb-up',
+                  toggleOnClick: false,
+                  toggleType: Buttons.Button.ToggleType.PRIMARY,
+                  disabled: this.#selectedRating !== undefined,
+                  toggled: this.#selectedRating === true,
                   title: i18nString(UIStrings.goodResponse),
                   jslogContext: 'thumbs-up',
                 } as Buttons.Button.ButtonData
@@ -802,17 +1022,21 @@ export class ConsoleInsight extends HTMLElement {
               data-rating=${'false'}
               .data=${
                 {
-                  variant: Buttons.Button.Variant.ICON,
+                  variant: Buttons.Button.Variant.ICON_TOGGLE,
                   size: Buttons.Button.Size.SMALL,
                   iconName: 'thumb-down',
-                  active: this.#selectedRating !== undefined && !this.#selectedRating,
+                  toggledIconName: 'thumb-down',
+                  toggleOnClick: false,
+                  toggleType: Buttons.Button.ToggleType.PRIMARY,
+                  disabled: this.#selectedRating !== undefined,
+                  toggled: this.#selectedRating === false,
                   title: i18nString(UIStrings.badResponse),
                   jslogContext: 'thumbs-down',
                 } as Buttons.Button.ButtonData
               }
               @click=${this.#onRating}
             ></devtools-button>
-          ` : LitHtml.nothing}
+          ` : Lit.nothing}
           <devtools-button
             .data=${
               {
@@ -852,18 +1076,18 @@ export class ConsoleInsight extends HTMLElement {
     }
   }
 
-  #renderSpinner(): LitHtml.LitTemplate {
+  #renderSpinner(): Lit.LitTemplate {
     // clang-format off
     if (this.#state.type === State.INSIGHT && !this.#state.completed) {
       return html`<devtools-spinner></devtools-spinner>`;
     }
-    return LitHtml.nothing;
+    return Lit.nothing;
     // clang-format on
   }
 
-  #renderHeader(): LitHtml.LitTemplate {
+  #renderHeader(): Lit.LitTemplate {
     if (this.#state.type === State.SETTING_IS_NOT_TRUE) {
-      return LitHtml.nothing;
+      return Lit.nothing;
     }
     const hasIcon = this.#state.type === State.CONSENT_REMINDER;
     // clang-format off
@@ -878,7 +1102,7 @@ export class ConsoleInsight extends HTMLElement {
             } as IconButton.Icon.IconData}>
             </devtools-icon>
           </div>`
-        : LitHtml.nothing}
+        : Lit.nothing}
         <div class="filler">
           <h2 tabindex="-1">
             ${this.#getHeader()}
@@ -918,6 +1142,10 @@ export class ConsoleInsight extends HTMLElement {
       host: this,
     });
     // clang-format on
+
+    if (this.#referenceDetailsRef.value) {
+      this.#referenceDetailsRef.value.open = this.#areReferenceDetailsOpen;
+    }
   }
 }
 
@@ -943,7 +1171,7 @@ class ConsoleInsightSourcesList extends HTMLElement {
         })}
         ${this.#isPageReloadRecommended ? html`<li class="source-disclaimer">
           <devtools-icon name="warning"></devtools-icon>
-          ${i18nString(UIStrings.reloadRecommendation)}</li>` : LitHtml.nothing}
+          ${i18nString(UIStrings.reloadRecommendation)}</li>` : Lit.nothing}
       </ul>
     `, this.#shadow, {
       host: this,

@@ -39,15 +39,17 @@
 45227|telenor
 45228|telenor
 45229|telenor
-45231|tdc
-45232|tdc
-45233|tdc
-45234|tdc
-45235|tdc
-45236|tdc
+45231|Nuuday
+45232|Nuuday
+45233|Nuuday
+45234|Nuuday
+45235|Nuuday
+4523541|telenor
+4523561|telenor
+45236|Nuuday
 45237|tdc
-45238|tdc
-45239|tdc
+45238|Nuuday
+45239|Nuuday
 452395|telia
 45241|tdc
 45242|tdc
@@ -137,6 +139,12 @@
 45341|telenor
 45342|telenor
 453434|telenor
+45344|telenor
+45345|telenor
+45346|telenor
+45347|telenor
+45348|telenor
+45349|telenor
 45351|telenor
 45352|telenor
 45353|telenor
@@ -252,7 +260,7 @@
 45458|telenor
 45459|telenor
 45461|telenor
-45462|telenor
+454626|Lancelot Telecom
 45463|telenor
 45464|telenor
 45465|telenor
@@ -374,6 +382,8 @@
 454977|tdc
 4549780|tdc
 4549789|tdc
+45498|telenor
+45499|telenor
 45501|telenor
 45502|telenor
 45503|telenor

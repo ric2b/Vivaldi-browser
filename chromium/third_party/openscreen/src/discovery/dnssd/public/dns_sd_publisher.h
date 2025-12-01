@@ -18,7 +18,6 @@ class DnsSdPublisher {
  public:
   class Client {
    public:
-
     // Callback called when an endpoint is successfully claimed and published
     // via the Register() method. These values are expected to only differ in
     // the DnsSdInstance::instance_id() field, or to be equal. This callback is

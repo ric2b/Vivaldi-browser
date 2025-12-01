@@ -5,9 +5,9 @@
 #import "base/functional/bind.h"
 #import "base/path_service.h"
 #import "base/test/ios/wait_util.h"
+#import "ios/chrome/browser/download/ui_bundled/download_manager_constants.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
-#import "ios/chrome/browser/download/ui_bundled/download_manager_constants.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_actions.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
@@ -285,8 +285,9 @@ GetContentDispositionPDFResponse(const net::test_server::HttpRequest& request) {
 - (void)testVisibleFileNameAndOpenInDownloads {
   // Apple is hiding UIActivityViewController's contents from the host app on
   // iPad.
-  if ([ChromeEarlGrey isIPadIdiom])
+  if ([ChromeEarlGrey isIPadIdiom]) {
     EARL_GREY_TEST_SKIPPED(@"Test skipped on iPad.");
+  }
 
   [ChromeEarlGrey loadURL:self.testServer->GetURL("/")];
   [ChromeEarlGrey waitForWebStateContainingText:"Download"];
@@ -423,7 +424,7 @@ GetContentDispositionPDFResponse(const net::test_server::HttpRequest& request) {
 
 @end
 
-// Tests for critical user journeys for Download Manager, without Save to Drive.
+// Tests for critical user journeys for Download Manager, with Save to Drive.
 @interface DownloadManagerTestCase : ChromeTestCase
 @end
 
@@ -440,111 +441,6 @@ GetContentDispositionPDFResponse(const net::test_server::HttpRequest& request) {
 
 - (AppLaunchConfiguration)appConfigurationForTestCase {
   AppLaunchConfiguration configuration;
-  configuration.features_disabled.push_back(kIOSSaveToDrive);
-  configuration.features_disabled.push_back(kDownloadedPDFOpening);
-  return configuration;
-}
-
-// Tests successful download up to the point where "Open in..." button is
-// presented. EarlGrey does not allow testing "Open in..." dialog, because it
-// is run in a separate process.
-- (void)testSuccessfulDownload {
-  [_helper testSuccessfulDownload];
-}
-
-// Tests successful download up to the point where "Open in..." button is
-// presented. EarlGrey does not allow testing "Open in..." dialog, because it
-// is run in a separate process. Performs download in Incognito.
-#if !TARGET_IPHONE_SIMULATOR
-// TODO(crbug.com/40678419): Test consistently failing on device.
-#define MAYBE_testSuccessfulDownloadInIncognito \
-  DISABLED_testSuccessfulDownloadInIncognito
-#else
-#define MAYBE_testSuccessfulDownloadInIncognito \
-  testSuccessfulDownloadInIncognito
-#endif
-- (void)MAYBE_testSuccessfulDownloadInIncognito {
-  [_helper testSuccessfulDownloadInIncognito];
-}
-
-// Tests cancelling download UI.
-- (void)testCancellingDownload {
-  [_helper testCancellingDownload];
-}
-
-// Tests successful download up to the point where "Open in..." button is
-// presented. EarlGrey does not allow testing "Open in..." dialog, because it
-// is run in a separate process. After tapping Download this test opens a
-// separate tabs and loads the URL there. Then closes the tab and waits for
-// the download completion.
-- (void)testDownloadWhileBrowsing {
-  [_helper testDownloadWhileBrowsing];
-}
-
-// Tests "Open in New Tab" on download link.
-- (void)testDownloadInNewTab {
-  [_helper testDownloadInNewTab];
-}
-
-// Tests accessibility on Download Manager UI when download is not started.
-- (void)testAccessibilityOnNotStartedDownloadToolbar {
-  [_helper testAccessibilityOnNotStartedDownloadToolbar];
-}
-
-// Tests accessibility on Download Manager UI when download is complete.
-- (void)testAccessibilityOnCompletedDownloadToolbar {
-  [_helper testAccessibilityOnCompletedDownloadToolbar];
-}
-
-// Tests that filename label and "Open in Downloads" button are showing.
-- (void)testVisibleFileNameAndOpenInDownloads {
-  [_helper testVisibleFileNameAndOpenInDownloads];
-}
-
-// Tests that "Open in..." works if the download ended while waiting in a
-// different tab which also contains a download task.
-- (void)testSwitchTabsAndOpenInDownloads {
-  [_helper testSwitchTabsAndOpenInDownloads];
-}
-
-// Tests successful blob download. This also checks that a file can be
-// downloaded and saved locally while an anchor tag has the download attribute.
-- (void)testSuccessfulBlobDownload {
-  [_helper testSuccessfulBlobDownload];
-}
-
-// Tests that a pdf can be downloaded. This also checks that a file can be
-// downloaded and saved locally while an anchor tag has the download attribute.
-- (void)testSuccessfulPDFDownload {
-  [_helper testSuccessfulPDFDownload:NO];
-}
-
-// Tests that a file is downloaded successfully even if it is renderable by the
-// browser.
-- (void)testSuccessfulDownloadWithContentDisposition {
-  [_helper testSuccessfulDownloadWithContentDisposition:NO];
-}
-
-@end
-
-// Tests for critical user journeys for Download Manager, with Save to Drive.
-@interface DownloadManagerWithDriveTestCase : ChromeTestCase
-@end
-
-@implementation DownloadManagerWithDriveTestCase {
-  DownloadManagerTestCaseHelper* _helper;
-}
-
-- (void)setUp {
-  [super setUp];
-  _helper = [[DownloadManagerTestCaseHelper alloc] init];
-  _helper.testServer = self.testServer;
-  [_helper setUp];
-}
-
-- (AppLaunchConfiguration)appConfigurationForTestCase {
-  AppLaunchConfiguration configuration;
-  configuration.features_enabled.push_back(kIOSSaveToDrive);
   configuration.features_enabled.push_back(kDownloadedPDFOpening);
   return configuration;
 }

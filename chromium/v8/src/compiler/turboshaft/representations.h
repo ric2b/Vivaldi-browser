@@ -8,7 +8,7 @@
 #include <cstdint>
 
 #include "include/v8-internal.h"
-#include "src/base/functional.h"
+#include "src/base/hashing.h"
 #include "src/base/logging.h"
 #include "src/codegen/machine-type.h"
 #include "src/compiler/turboshaft/utils.h"
@@ -343,12 +343,6 @@ class RegisterRepresentation : public MaybeRegisterRepresentation {
     }
     return *this;
   }
-
-  static constexpr RegisterRepresentation WasmCodePointer() {
-    return V8_ENABLE_WASM_CODE_POINTER_TABLE_BOOL
-               ? RegisterRepresentation::Word32()
-               : RegisterRepresentation::WordPtr();
-  }
 };
 
 V8_INLINE constexpr bool operator==(MaybeRegisterRepresentation a,
@@ -616,13 +610,6 @@ class MemoryRepresentation {
   }
   static constexpr MemoryRepresentation IndirectPointer() {
     return MemoryRepresentation(Enum::kIndirectPointer);
-  }
-  static constexpr MemoryRepresentation WasmCodePointer() {
-    if constexpr (V8_ENABLE_WASM_CODE_POINTER_TABLE_BOOL) {
-      return Uint32();
-    } else {
-      return UintPtr();
-    }
   }
   static constexpr MemoryRepresentation SandboxedPointer() {
     return MemoryRepresentation(Enum::kSandboxedPointer);

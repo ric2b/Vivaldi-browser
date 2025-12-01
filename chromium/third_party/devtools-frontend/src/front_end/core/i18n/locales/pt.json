@@ -104,6 +104,9 @@
   "core/common/Revealer.ts | networkPanel": {
     "message": "Painel de rede"
   },
+  "core/common/Revealer.ts | securityPanel": {
+    "message": "Painel de segurança"
+  },
   "core/common/Revealer.ts | sourcesPanel": {
     "message": "Painel Origens"
   },
@@ -151,6 +154,9 @@
   },
   "core/common/SettingRegistration.ts | persistence": {
     "message": "Persistência"
+  },
+  "core/common/SettingRegistration.ts | privacy": {
+    "message": "Privacidade"
   },
   "core/common/SettingRegistration.ts | rendering": {
     "message": "Renderização"
@@ -206,6 +212,21 @@
   "core/sdk/CPUProfilerModel.ts | profileD": {
     "message": "Perfil {PH1}"
   },
+  "core/sdk/CPUThrottlingManager.ts | calibratedLowTierMobile": {
+    "message": "Dispositivo móvel de nível menor"
+  },
+  "core/sdk/CPUThrottlingManager.ts | calibratedMidTierMobile": {
+    "message": "Dispositivo móvel de nível médio"
+  },
+  "core/sdk/CPUThrottlingManager.ts | calibrationErrorDeviceTooWeak": {
+    "message": "O dispositivo não tem potência suficiente"
+  },
+  "core/sdk/CPUThrottlingManager.ts | dSlowdown": {
+    "message": "Desacelerar {PH1}×"
+  },
+  "core/sdk/CPUThrottlingManager.ts | noThrottling": {
+    "message": "Sem limitação"
+  },
   "core/sdk/CSSStyleSheetHeader.ts | couldNotFindTheOriginalStyle": {
     "message": "Não foi possível encontrar a folha de estilo original."
   },
@@ -217,6 +238,9 @@
   },
   "core/sdk/CompilerSourceMappingContentProvider.ts | couldNotLoadContentForSS": {
     "message": "Não foi possível carregar o conteúdo de {PH1} ({PH2})"
+  },
+  "core/sdk/Connections.ts | websocketDisconnected": {
+    "message": "WebSocket desconectado"
   },
   "core/sdk/ConsoleModel.ts | bfcacheNavigation": {
     "message": "A navegação para {PH1} foi restaurada do cache de avanço e retorno. Consulte https://web.dev/bfcache/ (link em inglês)."
@@ -436,6 +460,12 @@
   },
   "core/sdk/PageResourceLoader.ts | loadCanceledDueToReloadOf": {
     "message": "Carregamento cancelado devido à atualização da página inspecionada"
+  },
+  "core/sdk/RehydratingConnection.ts | errorLoadingLog": {
+    "message": "Erro ao carregar o registro"
+  },
+  "core/sdk/RehydratingConnection.ts | noHostWindow": {
+    "message": "Não foi possível encontrar a janela do host"
   },
   "core/sdk/RehydratingConnection.ts | noSourceText": {
     "message": "Nenhum texto de origem disponível"
@@ -1121,6 +1151,9 @@
   "entrypoints/node_app/NodeConnectionsPanel.ts | specifyNetworkEndpointAnd": {
     "message": "Especifique o endpoint de rede para que o DevTools faça a conexão automaticamente. Leia {PH1} para saber mais."
   },
+  "entrypoints/node_app/NodeMain.ts | NodejsTitleS": {
+    "message": "DevTools - Node.js: {PH1}"
+  },
   "entrypoints/node_app/NodeMain.ts | main": {
     "message": "Principal"
   },
@@ -1147,9 +1180,6 @@
   },
   "generated/Deprecation.ts | AuthorizationCoveredByWildcard": {
     "message": "A autorização não será coberta pelo caractere curinga (*) no gerenciamento do CORS de Access-Control-Allow-Headers."
-  },
-  "generated/Deprecation.ts | CSSCustomStateDeprecatedSyntax": {
-    "message": "O uso de :--customstatename foi descontinuado. Use a sintaxe :state(customstatename)."
   },
   "generated/Deprecation.ts | CSSSelectorInternalMediaControlsOverlayCastButton": {
     "message": "Use o atributo disableRemotePlayback para desativar a integração padrão do Google Cast em vez de usar o seletor -internal-media-controls-overlay-cast-button."
@@ -1301,11 +1331,11 @@
   "generated/Deprecation.ts | UnloadHandler": {
     "message": "Os listeners de eventos de descarregamento foram descontinuados e serão removidos."
   },
-  "generated/Deprecation.ts | V8GPUAdapter_RequestAdapterInfo_Method": {
-    "message": "O método requestAdapterInfo() do GPUAdapter foi descontinuado. Use o atributo info do GPUAdapter."
-  },
   "generated/Deprecation.ts | V8SharedArrayBufferConstructedInExtensionWithoutIsolation": {
     "message": "As extensões precisam ativar o isolamento entre origens para continuar usando o recurso SharedArrayBuffer. Consulte https://developer.chrome.com/docs/extensions/mv3/cross-origin-isolation/ (link em inglês)."
+  },
+  "generated/Deprecation.ts | WebGPULimitMaxInterStageShaderComponents": {
+    "message": "O maxInterStageShaderComponents de limite da WebGPU foi descontinuado. Use maxInterStageShaderVariables."
   },
   "generated/Deprecation.ts | WebSQL": {
     "message": "O SQL da Web foi descontinuado. Use o SQLite WebAssembly ou o banco de dados indexado"
@@ -1369,6 +1399,9 @@
   },
   "models/bindings/ResourceScriptMapping.ts | liveEditFailed": {
     "message": "Falha no LiveEdit: {PH1}"
+  },
+  "models/crux-manager/CrUXManager.ts | fieldOverrideWarning": {
+    "message": "Os dados do campo estão configurados para um URL diferente da página atual."
   },
   "models/emulation/DeviceModeModel.ts | devicePixelRatioMustBeANumberOr": {
     "message": "A proporção de pixels do dispositivo precisa ser um número ou ficar em branco."
@@ -1547,6 +1580,9 @@
   "models/issues_manager/SharedDictionaryIssue.ts | compressionDictionaryTransport": {
     "message": "Transporte do dicionário por compactação"
   },
+  "models/live-metrics/LiveMetrics.ts | lcpEmulationWarning": {
+    "message": "Simular um novo dispositivo depois que a página for carregada pode afetar a LCP. Atualize a página após simular um novo dispositivo para ver dados de LCP precisos."
+  },
   "models/logs/NetworkLog.ts | anonymous": {
     "message": "<anônimo>"
   },
@@ -1694,6 +1730,12 @@
   "models/trace/insights/CLSCulprits.ts | title": {
     "message": "Causas da troca de layout"
   },
+  "models/trace/insights/DOMSize.ts | description": {
+    "message": "Um DOM grande pode aumentar a duração dos cálculos de estilo e reflows de layout, o que afeta a capacidade de resposta da página. Um DOM grande também aumenta o uso da memória. [Aprenda a evitar que o tamanho do DOM seja grande demais](https://developer.chrome.com/docs/lighthouse/performance/dom-size/)."
+  },
+  "models/trace/insights/DOMSize.ts | title": {
+    "message": "Otimizar o tamanho do DOM"
+  },
   "models/trace/insights/DocumentLatency.ts | description": {
     "message": "A primeira solicitação de rede é a mais importante.  Reduza a latência dela evitando redirecionamentos, garantindo uma resposta rápida do servidor e ativando a compactação de texto."
   },
@@ -1705,6 +1747,30 @@
   },
   "models/trace/insights/FontDisplay.ts | title": {
     "message": "Exibição de fontes"
+  },
+  "models/trace/insights/ForcedReflow.ts | description": {
+    "message": "Muitas APIs, que geralmente leem a geometria do layout, forçam o mecanismo de renderização a pausar a execução do script para calcular o estilo e o layout. Saiba mais sobre o [reflow forçado](https://developers.google.com/web/fundamentals/performance/rendering/avoid-large-complex-layouts-and-layout-thrashing#avoid-forced-synchronous-layouts) e as mitigações dele."
+  },
+  "models/trace/insights/ForcedReflow.ts | title": {
+    "message": "Reflow forçado"
+  },
+  "models/trace/insights/ImageDelivery.ts | description": {
+    "message": "Reduzir o tempo de download das imagens pode melhorar o tempo de carregamento percebido da página e a LCP. [Saiba mais sobre como otimizar o tamanho da imagem](https://developer.chrome.com/docs/lighthouse/performance/uses-optimized-images/)"
+  },
+  "models/trace/insights/ImageDelivery.ts | title": {
+    "message": "Melhorar a entrega de imagens"
+  },
+  "models/trace/insights/ImageDelivery.ts | useCompression": {
+    "message": "Aumentar o fator de compactação da imagem pode aprimorar o tamanho de download dela. (Estimativa: {PH1})"
+  },
+  "models/trace/insights/ImageDelivery.ts | useModernFormat": {
+    "message": "Usar um formato de imagem moderno (WebP, AVIF) ou aumentar a compactação da imagem pode aprimorar o tamanho do download da imagem. (Estimativa: {PH1})"
+  },
+  "models/trace/insights/ImageDelivery.ts | useResponsiveSize": {
+    "message": "Este arquivo de imagem é maior do que precisa ser ({PH2}) para as dimensões exibidas ({PH3}). Use imagens responsivas para reduzir o tamanho do download da imagem. (Estimativa: {PH1})"
+  },
+  "models/trace/insights/ImageDelivery.ts | useVideoFormat": {
+    "message": "Usar formatos de vídeo em vez de GIFs pode aprimorar o tamanho de download de conteúdo animado. (Estimativa: {PH1})"
   },
   "models/trace/insights/InteractionToNextPaint.ts | description": {
     "message": "Comece a investigação pela fase mais longa. [Os atrasos podem ser minimizados](https://web.dev/articles/optimize-inp#optimize_interactions). Para reduzir a duração do processamento, [otimize os custos da linha de execução principal](https://web.dev/articles/optimize-long-tasks), geralmente JS."
@@ -1723,6 +1789,12 @@
   },
   "models/trace/insights/LCPPhases.ts | title": {
     "message": "LCP por fase"
+  },
+  "models/trace/insights/LongCriticalNetworkTree.ts | description": {
+    "message": "[Evite encadear solicitações críticas](https://developer.chrome.com/docs/lighthouse/performance/critical-request-chains) reduzindo o tamanho das cadeias, o tamanho do download de recursos ou adiando o download de recursos desnecessários para melhorar o carregamento da página."
+  },
+  "models/trace/insights/LongCriticalNetworkTree.ts | title": {
+    "message": "Árvore de rede crítica longa"
   },
   "models/trace/insights/RenderBlocking.ts | description": {
     "message": "As solicitações estão bloqueando a renderização inicial da página, o que pode atrasar a LCP. Essas solicitações de rede podem ser [deferidas ou colocadas inline](https://web.dev/learn/performance/understanding-the-critical-path#render-blocking_resources/) para que fiquem fora do caminho crítico."
@@ -1743,10 +1815,10 @@
     "message": "Terceiros"
   },
   "models/trace/insights/Viewport.ts | description": {
-    "message": "A janela de visualização da página não é otimizada para dispositivos móveis. Por isso, as interações por toque podem [atrasar até 300ms](https://developer.chrome.com/blog/300ms-tap-delay-gone-away/)."
+    "message": "As interações por toque podem [atrasar em até 300 ms](https://developer.chrome.com/blog/300ms-tap-delay-gone-away/) se a janela de visualização não for otimizada para dispositivos móveis."
   },
   "models/trace/insights/Viewport.ts | title": {
-    "message": "Janela de visualização não otimizada para dispositivos móveis"
+    "message": "Otimizar janela de visualização para dispositivos móveis"
   },
   "models/workspace/UISourceCode.ts | index": {
     "message": "(índice)"
@@ -2171,6 +2243,87 @@
   "panels/accessibility/accessibility-meta.ts | shoAccessibility": {
     "message": "Mostrar Acessibilidade"
   },
+  "panels/ai_assistance/AiAssistancePanel.ts | chatDeleted": {
+    "message": "Chat excluído"
+  },
+  "panels/ai_assistance/AiAssistancePanel.ts | clearChatHistory": {
+    "message": "Limpar chats locais"
+  },
+  "panels/ai_assistance/AiAssistancePanel.ts | deleteChat": {
+    "message": "Excluir chat local"
+  },
+  "panels/ai_assistance/AiAssistancePanel.ts | help": {
+    "message": "Ajuda"
+  },
+  "panels/ai_assistance/AiAssistancePanel.ts | history": {
+    "message": "Histórico"
+  },
+  "panels/ai_assistance/AiAssistancePanel.ts | newChat": {
+    "message": "Nova conversa"
+  },
+  "panels/ai_assistance/AiAssistancePanel.ts | newChatCreated": {
+    "message": "Nova conversa criada"
+  },
+  "panels/ai_assistance/AiAssistancePanel.ts | noPastConversations": {
+    "message": "Nenhuma conversa anterior"
+  },
+  "panels/ai_assistance/AiAssistancePanel.ts | sendFeedback": {
+    "message": "Enviar feedback"
+  },
+  "panels/ai_assistance/AiAssistancePanel.ts | settings": {
+    "message": "Configurações"
+  },
+  "panels/ai_assistance/ai_assistance-meta.ts | aiAssistance": {
+    "message": "Assistência de IA"
+  },
+  "panels/ai_assistance/ai_assistance-meta.ts | askAi": {
+    "message": "Perguntar à IA"
+  },
+  "panels/ai_assistance/ai_assistance-meta.ts | enableAiAssistance": {
+    "message": "Ativar a assistência de IA"
+  },
+  "panels/ai_assistance/ai_assistance-meta.ts | geoRestricted": {
+    "message": "O recurso está indisponível na sua região."
+  },
+  "panels/ai_assistance/ai_assistance-meta.ts | policyRestricted": {
+    "message": "Essas configurações são gerenciadas pelo administrador."
+  },
+  "panels/ai_assistance/ai_assistance-meta.ts | showAiAssistance": {
+    "message": "Mostrar assistência de IA"
+  },
+  "panels/ai_assistance/ai_assistance-meta.ts | wrongLocale": {
+    "message": "Para usar esse recurso, defina o inglês como o idioma de sua preferência nas configurações do DevTools."
+  },
+  "panels/ai_assistance/components/ChatView.ts | followTheSteps": {
+    "message": "Siga as etapas acima para fazer uma pergunta"
+  },
+  "panels/ai_assistance/components/ChatView.ts | inputDisclaimerForEmptyState": {
+    "message": "Esse é um recurso de IA experimental, e o resultado nem sempre é o esperado."
+  },
+  "panels/ai_assistance/components/ChatView.ts | learnAbout": {
+    "message": "Saiba mais sobre a IA no DevTools"
+  },
+  "panels/ai_assistance/components/ChatView.ts | notLoggedIn": {
+    "message": "Esse recurso só estará disponível se você tiver feito login no Chrome com sua Conta do Google"
+  },
+  "panels/ai_assistance/components/ChatView.ts | offline": {
+    "message": "Confira sua conexão de Internet e tente de novo"
+  },
+  "panels/ai_assistance/components/ChatView.ts | settingsLink": {
+    "message": "Assistência de IA nas Configurações"
+  },
+  "panels/ai_assistance/components/ChatView.ts | turnOnForStyles": {
+    "message": "Ative a {PH1} para entender melhor os estilos CSS"
+  },
+  "panels/ai_assistance/components/ChatView.ts | turnOnForStylesAndRequests": {
+    "message": "Ative a {PH1} para receber ajuda com estilos e solicitações de rede"
+  },
+  "panels/ai_assistance/components/ChatView.ts | turnOnForStylesRequestsAndFiles": {
+    "message": "Ative a {PH1} para receber ajuda com estilos, solicitações de rede e arquivos"
+  },
+  "panels/ai_assistance/components/ChatView.ts | turnOnForStylesRequestsPerformanceAndFiles": {
+    "message": "Ative a {PH1} para receber ajuda com estilos, solicitações de rede, desempenho e arquivos"
+  },
   "panels/animation/AnimationTimeline.ts | animationPreviewS": {
     "message": "Visualização da animação {PH1}"
   },
@@ -2507,11 +2660,14 @@
   "panels/application/ApplicationPanelSidebar.ts | cookies": {
     "message": "Cookies"
   },
+  "panels/application/ApplicationPanelSidebar.ts | cookiesDescription": {
+    "message": "Nesta página, você pode ver, adicionar, editar e excluir cookies."
+  },
   "panels/application/ApplicationPanelSidebar.ts | cookiesUsedByFramesFromS": {
     "message": "Cookies usados por frames de {PH1}"
   },
   "panels/application/ApplicationPanelSidebar.ts | documentNotAvailable": {
-    "message": "Documento não disponível"
+    "message": "Nenhum documento detectado"
   },
   "panels/application/ApplicationPanelSidebar.ts | extensionLocalStorage": {
     "message": "Local"
@@ -2525,6 +2681,9 @@
   "panels/application/ApplicationPanelSidebar.ts | extensionStorage": {
     "message": "Armazenamento de extensões"
   },
+  "panels/application/ApplicationPanelSidebar.ts | extensionStorageDescription": {
+    "message": "Nesta página, você pode ver, adicionar, editar e excluir pares de chave-valor de armazenamento de extensões."
+  },
   "panels/application/ApplicationPanelSidebar.ts | extensionSyncStorage": {
     "message": "Sincronização"
   },
@@ -2533,6 +2692,9 @@
   },
   "panels/application/ApplicationPanelSidebar.ts | indexeddb": {
     "message": "IndexedDB"
+  },
+  "panels/application/ApplicationPanelSidebar.ts | indexeddbDescription": {
+    "message": "Nesta página, é possível visualizar e excluir pares de chave-valor e bancos de dados do indexedDB."
   },
   "panels/application/ApplicationPanelSidebar.ts | keyPathS": {
     "message": "Caminho da chave: {PH1}"
@@ -2543,11 +2705,32 @@
   "panels/application/ApplicationPanelSidebar.ts | localStorage": {
     "message": "Armazenamento local"
   },
+  "panels/application/ApplicationPanelSidebar.ts | localStorageDescription": {
+    "message": "Nesta página, você pode ver, adicionar, editar e excluir pares de chave-valor de armazenamento local."
+  },
   "panels/application/ApplicationPanelSidebar.ts | manifest": {
     "message": "Manifesto"
   },
+  "panels/application/ApplicationPanelSidebar.ts | manifestDescription": {
+    "message": "Um manifesto define como o app aparece nas telas iniciais do smartphone e como ele é mostrado ao ser aberto."
+  },
+  "panels/application/ApplicationPanelSidebar.ts | noCookies": {
+    "message": "Nenhum cookie definido"
+  },
+  "panels/application/ApplicationPanelSidebar.ts | noExtensionStorage": {
+    "message": "Nenhum armazenamento de extensão detectado"
+  },
+  "panels/application/ApplicationPanelSidebar.ts | noIndexeddb": {
+    "message": "Nenhum indexedDB detectado"
+  },
+  "panels/application/ApplicationPanelSidebar.ts | noLocalStorage": {
+    "message": "Nenhum armazenamento local detectado"
+  },
   "panels/application/ApplicationPanelSidebar.ts | noManifestDetected": {
     "message": "Nenhum manifesto detectado"
+  },
+  "panels/application/ApplicationPanelSidebar.ts | noSessionStorage": {
+    "message": "Nenhum armazenamento de sessão detectado"
   },
   "panels/application/ApplicationPanelSidebar.ts | onInvokeAlert": {
     "message": "Página rolada até {PH1}"
@@ -2558,11 +2741,20 @@
   "panels/application/ApplicationPanelSidebar.ts | openedWindows": {
     "message": "Janelas abertas"
   },
+  "panels/application/ApplicationPanelSidebar.ts | openedWindowsDescription": {
+    "message": "Nesta página, é possível ver as janelas abertas por window.open()."
+  },
   "panels/application/ApplicationPanelSidebar.ts | refreshIndexeddb": {
     "message": "Atualizar IndexedDB"
   },
+  "panels/application/ApplicationPanelSidebar.ts | resourceDescription": {
+    "message": "Nesta página, é possível ver os recursos do frame."
+  },
   "panels/application/ApplicationPanelSidebar.ts | sessionStorage": {
     "message": "Armazenamento da sessão"
+  },
+  "panels/application/ApplicationPanelSidebar.ts | sessionStorageDescription": {
+    "message": "Nesta página, você pode ver, adicionar, editar e excluir pares de chave-valor de armazenamento de sessão."
   },
   "panels/application/ApplicationPanelSidebar.ts | storage": {
     "message": "Armazenamento"
@@ -2588,6 +2780,9 @@
   "panels/application/ApplicationPanelSidebar.ts | worker": {
     "message": "worker"
   },
+  "panels/application/ApplicationPanelSidebar.ts | workerDescription": {
+    "message": "Nesta página, é possível ver os workers dedicados criados pelo quadro principal."
+  },
   "panels/application/BackForwardCacheTreeElement.ts | backForwardCache": {
     "message": "Cache de avanço e retorno"
   },
@@ -2603,9 +2798,6 @@
   "panels/application/BackgroundServiceView.ts | clear": {
     "message": "Limpar"
   },
-  "panels/application/BackgroundServiceView.ts | clickTheRecordButtonSOrHitSTo": {
-    "message": "Clique no botão Gravar {PH1} ou pressione {PH2} para iniciar a gravação."
-  },
   "panels/application/BackgroundServiceView.ts | devtoolsWillRecordAllSActivity": {
     "message": "DevTools registrará toda a atividade de {PH1} por até três dias, mesmo quando fechado."
   },
@@ -2617,9 +2809,6 @@
   },
   "panels/application/BackgroundServiceView.ts | instanceId": {
     "message": "ID da instância"
-  },
-  "panels/application/BackgroundServiceView.ts | learnMore": {
-    "message": "Saiba mais"
   },
   "panels/application/BackgroundServiceView.ts | noMetadataForThisEvent": {
     "message": "Nenhum metadado para este evento"
@@ -2681,6 +2870,9 @@
   "panels/application/CookieItemsView.ts | cookies": {
     "message": "Cookies"
   },
+  "panels/application/CookieItemsView.ts | noCookieSelected": {
+    "message": "Nenhum cookie foi selecionado"
+  },
   "panels/application/CookieItemsView.ts | numberOfCookiesShownInTableS": {
     "message": "Número de cookies mostrados na tabela: {PH1}"
   },
@@ -2696,9 +2888,6 @@
   "panels/application/CookieItemsView.ts | showUrlDecoded": {
     "message": "Mostrar decodificados por URL"
   },
-  "panels/application/DOMStorageItemsView.ts | domStorage": {
-    "message": "Armazenamento DOM"
-  },
   "panels/application/DOMStorageItemsView.ts | domStorageItemDeleted": {
     "message": "O item de armazenamento foi excluído."
   },
@@ -2708,29 +2897,11 @@
   "panels/application/DOMStorageItemsView.ts | domStorageItemsCleared": {
     "message": "Itens de armazenamento DOM apagados"
   },
-  "panels/application/DOMStorageItemsView.ts | key": {
-    "message": "Chave"
-  },
-  "panels/application/DOMStorageItemsView.ts | value": {
-    "message": "Valor"
-  },
-  "panels/application/ExtensionStorageItemsView.ts | extensionStorage": {
-    "message": "Armazenamento de extensões"
-  },
-  "panels/application/ExtensionStorageItemsView.ts | extensionStorageItemDeleted": {
-    "message": "O item de armazenamento foi excluído."
-  },
   "panels/application/ExtensionStorageItemsView.ts | extensionStorageItems": {
     "message": "Itens de armazenamento de extensões"
   },
   "panels/application/ExtensionStorageItemsView.ts | extensionStorageItemsCleared": {
     "message": "Itens de armazenamento de extensões apagados"
-  },
-  "panels/application/ExtensionStorageItemsView.ts | key": {
-    "message": "Chave"
-  },
-  "panels/application/ExtensionStorageItemsView.ts | value": {
-    "message": "Valor"
   },
   "panels/application/IndexedDBViews.ts | clearObjectStore": {
     "message": "Limpar armazenamento de objetos"
@@ -2770,9 +2941,6 @@
   },
   "panels/application/IndexedDBViews.ts | objectStores": {
     "message": "Armazenamentos de objetos"
-  },
-  "panels/application/IndexedDBViews.ts | pleaseConfirmDeleteOfSDatabase": {
-    "message": "Confirme a exclusão do banco de dados {PH1}."
   },
   "panels/application/IndexedDBViews.ts | primaryKey": {
     "message": "Chave primária"
@@ -2882,8 +3050,14 @@
   "panels/application/ServiceWorkerCacheTreeElement.ts | cacheStorage": {
     "message": "Armazenamento em cache"
   },
+  "panels/application/ServiceWorkerCacheTreeElement.ts | cacheStorageDescription": {
+    "message": "Nesta página, você pode consultar e excluir dados de cache."
+  },
   "panels/application/ServiceWorkerCacheTreeElement.ts | delete": {
     "message": "Excluir"
+  },
+  "panels/application/ServiceWorkerCacheTreeElement.ts | noCacheStorage": {
+    "message": "Nenhum armazenamento em cache detectado"
   },
   "panels/application/ServiceWorkerCacheTreeElement.ts | refreshCaches": {
     "message": "Atualizar caches"
@@ -2905,6 +3079,9 @@
   },
   "panels/application/ServiceWorkerCacheViews.ts | name": {
     "message": "Nome"
+  },
+  "panels/application/ServiceWorkerCacheViews.ts | noCacheEntrySelected": {
+    "message": "Nenhuma entrada de cache selecionada"
   },
   "panels/application/ServiceWorkerCacheViews.ts | preview": {
     "message": "Visualização"
@@ -3050,12 +3227,6 @@
   "panels/application/SharedStorageEventsView.ts | clickToDisplayBody": {
     "message": "Clique em qualquer evento de armazenamento compartilhado para acessar os parâmetros dele."
   },
-  "panels/application/SharedStorageItemsView.ts | key": {
-    "message": "Chave"
-  },
-  "panels/application/SharedStorageItemsView.ts | selectAValueToPreview": {
-    "message": "Selecionar um valor para visualização"
-  },
   "panels/application/SharedStorageItemsView.ts | sharedStorage": {
     "message": "Armazenamento compartilhado"
   },
@@ -3071,23 +3242,20 @@
   "panels/application/SharedStorageItemsView.ts | sharedStorageItemEdited": {
     "message": "O item de armazenamento foi editado."
   },
-  "panels/application/SharedStorageItemsView.ts | sharedStorageItems": {
-    "message": "Itens de armazenamento compartilhado"
-  },
   "panels/application/SharedStorageItemsView.ts | sharedStorageItemsCleared": {
     "message": "Os itens de armazenamento compartilhado foram apagados"
-  },
-  "panels/application/SharedStorageItemsView.ts | sharedStorageNumberEntries": {
-    "message": "Número de entradas mostradas na tabela: {PH1}"
-  },
-  "panels/application/SharedStorageItemsView.ts | value": {
-    "message": "Valor"
   },
   "panels/application/SharedStorageListTreeElement.ts | sharedStorage": {
     "message": "Armazenamento compartilhado"
   },
+  "panels/application/StorageBucketsTreeElement.ts | noStorageBuckets": {
+    "message": "Nenhum bucket de armazenamento foi detectado"
+  },
   "panels/application/StorageBucketsTreeElement.ts | storageBuckets": {
     "message": "Buckets de armazenamento"
+  },
+  "panels/application/StorageBucketsTreeElement.ts | storageBucketsDescription": {
+    "message": "Nesta página, você pode ver e excluir buckets de armazenamento e as storageAPIs associadas."
   },
   "panels/application/StorageItemsView.ts | clearAll": {
     "message": "Remover tudo"
@@ -3953,9 +4121,6 @@
   "panels/application/components/SharedStorageAccessGrid.ts | eventType": {
     "message": "Tipo de acesso"
   },
-  "panels/application/components/SharedStorageAccessGrid.ts | mainFrameId": {
-    "message": "ID do frame principal"
-  },
   "panels/application/components/SharedStorageAccessGrid.ts | noEvents": {
     "message": "Nenhum evento de armazenamento compartilhado registrado."
   },
@@ -4073,9 +4238,6 @@
   "panels/application/components/TrustTokensView.ts | issuer": {
     "message": "Emissor"
   },
-  "panels/application/components/TrustTokensView.ts | noTrustTokensStored": {
-    "message": "Nenhum token de estado particular está armazenado no momento."
-  },
   "panels/application/components/TrustTokensView.ts | storedTokenCount": {
     "message": "Contagem de tokens armazenados"
   },
@@ -4148,6 +4310,9 @@
   "panels/application/preloading/components/MismatchedPreloadingGrid.ts | url": {
     "message": "URL"
   },
+  "panels/application/preloading/components/PreloadingDetailsReportView.ts | automaticallyFellBackToPrefetch": {
+    "message": "(substituiu automaticamente pela pré-busca)"
+  },
   "panels/application/preloading/components/PreloadingDetailsReportView.ts | buttonClickToInspect": {
     "message": "Clique para inspecionar a página pré-renderizada"
   },
@@ -4159,6 +4324,9 @@
   },
   "panels/application/preloading/components/PreloadingDetailsReportView.ts | detailedStatusFailure": {
     "message": "Falha no carregamento especulativo."
+  },
+  "panels/application/preloading/components/PreloadingDetailsReportView.ts | detailedStatusFallbackToPrefetch": {
+    "message": "Falha no carregamento especulativo, mas o substituto para a pré-busca foi bem-sucedido."
   },
   "panels/application/preloading/components/PreloadingDetailsReportView.ts | detailedStatusNotTriggered": {
     "message": "A tentativa de carregamento especulativo ainda não foi acionada."
@@ -4243,6 +4411,9 @@
   },
   "panels/application/preloading/components/PreloadingGrid.ts | action": {
     "message": "Ação"
+  },
+  "panels/application/preloading/components/PreloadingGrid.ts | prefetchFallbackReady": {
+    "message": "Substituto de pré-busca pronto"
   },
   "panels/application/preloading/components/PreloadingGrid.ts | ruleSet": {
     "message": "Conjunto de regras"
@@ -4745,11 +4916,14 @@
   "panels/browser_debugger/DOMBreakpointsSidebarPane.ts | checked": {
     "message": "marcado"
   },
+  "panels/browser_debugger/DOMBreakpointsSidebarPane.ts | domBreakpointsDescription": {
+    "message": "Os pontos de interrupção do DOM fazem uma pausa no código que muda um nó do DOM ou os filhos dele."
+  },
   "panels/browser_debugger/DOMBreakpointsSidebarPane.ts | domBreakpointsList": {
     "message": "Lista de pontos de interrupção DOM"
   },
   "panels/browser_debugger/DOMBreakpointsSidebarPane.ts | noBreakpoints": {
-    "message": "Sem pontos de interrupção"
+    "message": "Nenhum ponto de interrupção DOM foi definido"
   },
   "panels/browser_debugger/DOMBreakpointsSidebarPane.ts | nodeRemoved": {
     "message": "Nó removido"
@@ -4865,14 +5039,20 @@
   "panels/changes/ChangesSidebar.ts | sFromSourceMap": {
     "message": "{PH1} (do mapa da origem)"
   },
-  "panels/changes/ChangesView.ts | binaryData": {
-    "message": "Dados binários"
+  "panels/changes/ChangesView.ts | binaryDataDescription": {
+    "message": "A guia \"Mudanças\" não mostra mudanças de dados binários"
+  },
+  "panels/changes/ChangesView.ts | changesViewDescription": {
+    "message": "Nesta página, você pode acompanhar as mudanças de código feitas no DevTools."
   },
   "panels/changes/ChangesView.ts | copy": {
     "message": "Copiar"
   },
   "panels/changes/ChangesView.ts | noChanges": {
-    "message": "Sem mudanças"
+    "message": "Ainda não há mudanças"
+  },
+  "panels/changes/ChangesView.ts | noTextualDiff": {
+    "message": "Nenhuma diferença textual disponível"
   },
   "panels/changes/ChangesView.ts | sDeletions": {
     "message": "{n,plural, =1{# exclusão (-)}one{# exclusão (-)}other{# exclusões (-)}}"
@@ -4972,6 +5152,9 @@
   },
   "panels/console/ConsoleView.ts | consoleSidebarShown": {
     "message": "A barra lateral do console está visível"
+  },
+  "panels/console/ConsoleView.ts | copyConsole": {
+    "message": "Copiar console"
   },
   "panels/console/ConsoleView.ts | copyVisibleStyledSelection": {
     "message": "Copiar seleção de estilo visível"
@@ -5086,6 +5269,9 @@
   },
   "panels/console/ConsoleViewMessage.ts | Mxx": {
     "message": " M<XX>"
+  },
+  "panels/console/ConsoleViewMessage.ts | SeeIssueInCookieReport": {
+    "message": "Clique para abrir o painel de privacidade e segurança e mostrar o relatório de cookies de terceiros"
   },
   "panels/console/ConsoleViewMessage.ts | assertionFailed": {
     "message": "Falha na declaração: "
@@ -5621,6 +5807,12 @@
   "panels/developer_resources/DeveloperResourcesView.ts | loadHttpsDeveloperResources": {
     "message": "Carregar recursos de desenvolvedor do HTTP(S) pelo site que você inspeciona, não pelo DevTools"
   },
+  "panels/developer_resources/DeveloperResourcesView.ts | noResourceMatches": {
+    "message": "Nenhum recurso correspondente"
+  },
+  "panels/developer_resources/DeveloperResourcesView.ts | numberOfResourceMatch": {
+    "message": "{n,plural, =1{# recurso correspondente}one{# recurso correspondente}other{# recursos correspondentes}}"
+  },
   "panels/developer_resources/DeveloperResourcesView.ts | resources": {
     "message": "{n,plural, =1{# recurso}one{# recurso}other{# recursos}}"
   },
@@ -5713,6 +5905,9 @@
   },
   "panels/elements/ElementStatePaneWidget.ts | toggleElementState": {
     "message": "Alternar estados do elemento"
+  },
+  "panels/elements/ElementsPanel.ts | adornerSettings": {
+    "message": "Configurações do ícone"
   },
   "panels/elements/ElementsPanel.ts | computed": {
     "message": "Computado"
@@ -5875,9 +6070,6 @@
   },
   "panels/elements/ElementsTreeElement.ts | valueIsTooLargeToEdit": {
     "message": "<o valor é muito grande para ser editado>"
-  },
-  "panels/elements/ElementsTreeOutline.ts | adornerSettings": {
-    "message": "Configurações do ícone…"
   },
   "panels/elements/ElementsTreeOutline.ts | pageDom": {
     "message": "DOM da página"
@@ -6109,12 +6301,6 @@
   },
   "panels/elements/components/AccessibilityTreeNode.ts | ignored": {
     "message": "Ignorado"
-  },
-  "panels/elements/components/AdornerSettingsPane.ts | closeButton": {
-    "message": "Fechar"
-  },
-  "panels/elements/components/AdornerSettingsPane.ts | settingsTitle": {
-    "message": "Mostrar selos"
   },
   "panels/elements/components/AnchorFunctionLinkSwatch.ts | jumpToAnchorNode": {
     "message": "Ir para o nó de âncora"
@@ -6503,8 +6689,14 @@
   "panels/explain/components/ConsoleInsight.ts | opensInNewTab": {
     "message": "(abre em uma nova guia)"
   },
+  "panels/explain/components/ConsoleInsight.ts | references": {
+    "message": "Origens e conteúdo relacionado"
+  },
   "panels/explain/components/ConsoleInsight.ts | relatedCode": {
     "message": "Código relacionado"
+  },
+  "panels/explain/components/ConsoleInsight.ts | relatedContent": {
+    "message": "Conteúdo relacionado"
   },
   "panels/explain/components/ConsoleInsight.ts | reloadRecommendation": {
     "message": "Atualize a página para capturar os dados de solicitação de rede relacionados para esta mensagem e criar um insight melhor."
@@ -6527,6 +6719,9 @@
   "panels/explain/components/ConsoleInsight.ts | stackTrace": {
     "message": "Stack trace"
   },
+  "panels/explain/components/ConsoleInsight.ts | timedOut": {
+    "message": "A geração de uma resposta demorou muito. Tente de novo."
+  },
   "panels/explain/components/ConsoleInsight.ts | turnOnInSettings": {
     "message": "Ative os {PH1} para receber assistência de IA para entender e resolver avisos e erros do console."
   },
@@ -6543,94 +6738,13 @@
     "message": "Entenda o aviso"
   },
   "panels/explain/explain-meta.ts | geoRestricted": {
-    "message": "O recurso não está disponível na sua região"
+    "message": "O recurso está indisponível na sua região."
   },
   "panels/explain/explain-meta.ts | policyRestricted": {
-    "message": "Esta configuração é gerenciada pelo administrador"
+    "message": "Essas configurações são gerenciadas pelo administrador."
   },
   "panels/explain/explain-meta.ts | wrongLocale": {
-    "message": "Para usar esse recurso, defina sua preferência de idioma como inglês nas configurações do DevTools"
-  },
-  "panels/freestyler/FreestylerPanel.ts | chatDeleted": {
-    "message": "Chat excluído"
-  },
-  "panels/freestyler/FreestylerPanel.ts | clearChatHistory": {
-    "message": "Limpar histórico de bate-papo"
-  },
-  "panels/freestyler/FreestylerPanel.ts | deleteChat": {
-    "message": "Excluir conversa"
-  },
-  "panels/freestyler/FreestylerPanel.ts | help": {
-    "message": "Ajuda"
-  },
-  "panels/freestyler/FreestylerPanel.ts | history": {
-    "message": "Histórico"
-  },
-  "panels/freestyler/FreestylerPanel.ts | newChat": {
-    "message": "Nova conversa"
-  },
-  "panels/freestyler/FreestylerPanel.ts | newChatCreated": {
-    "message": "Nova conversa criada"
-  },
-  "panels/freestyler/FreestylerPanel.ts | noPastConversations": {
-    "message": "Nenhuma conversa anterior"
-  },
-  "panels/freestyler/FreestylerPanel.ts | sendFeedback": {
-    "message": "Enviar feedback"
-  },
-  "panels/freestyler/FreestylerPanel.ts | settings": {
-    "message": "Configurações"
-  },
-  "panels/freestyler/components/FreestylerChatUi.ts | followTheSteps": {
-    "message": "Siga as etapas acima para fazer uma pergunta"
-  },
-  "panels/freestyler/components/FreestylerChatUi.ts | inputDisclaimerForEmptyState": {
-    "message": "Esse é um recurso de IA experimental, e o resultado nem sempre é o esperado."
-  },
-  "panels/freestyler/components/FreestylerChatUi.ts | learnAbout": {
-    "message": "Saiba mais sobre a IA no DevTools"
-  },
-  "panels/freestyler/components/FreestylerChatUi.ts | notLoggedIn": {
-    "message": "Esse recurso só estará disponível se você tiver feito login no Chrome com sua Conta do Google"
-  },
-  "panels/freestyler/components/FreestylerChatUi.ts | offline": {
-    "message": "Confira sua conexão de Internet e tente de novo"
-  },
-  "panels/freestyler/components/FreestylerChatUi.ts | settingsLink": {
-    "message": "Assistência de IA nas Configurações"
-  },
-  "panels/freestyler/components/FreestylerChatUi.ts | turnOnForStyles": {
-    "message": "Ative a {PH1} para entender melhor os estilos CSS"
-  },
-  "panels/freestyler/components/FreestylerChatUi.ts | turnOnForStylesAndRequests": {
-    "message": "Ative a {PH1} para receber ajuda com estilos e solicitações de rede"
-  },
-  "panels/freestyler/components/FreestylerChatUi.ts | turnOnForStylesRequestsAndFiles": {
-    "message": "Ative a {PH1} para receber ajuda com estilos, solicitações de rede e arquivos"
-  },
-  "panels/freestyler/components/FreestylerChatUi.ts | turnOnForStylesRequestsPerformanceAndFiles": {
-    "message": "Ative a {PH1} para receber ajuda com estilos, solicitações de rede, desempenho e arquivos"
-  },
-  "panels/freestyler/freestyler-meta.ts | aiAssistance": {
-    "message": "Assistência de IA"
-  },
-  "panels/freestyler/freestyler-meta.ts | askAi": {
-    "message": "Perguntar à IA"
-  },
-  "panels/freestyler/freestyler-meta.ts | enableAiAssistance": {
-    "message": "Ativar a assistência de IA"
-  },
-  "panels/freestyler/freestyler-meta.ts | geoRestricted": {
-    "message": "O recurso não está disponível na sua região"
-  },
-  "panels/freestyler/freestyler-meta.ts | policyRestricted": {
-    "message": "Esta configuração é gerenciada pelo administrador"
-  },
-  "panels/freestyler/freestyler-meta.ts | showAiAssistance": {
-    "message": "Mostrar assistência de IA"
-  },
-  "panels/freestyler/freestyler-meta.ts | wrongLocale": {
-    "message": "Para usar esse recurso, defina sua preferência de idioma como inglês nas configurações do DevTools"
+    "message": "Para usar esse recurso, defina o inglês como o idioma de sua preferência nas configurações do DevTools."
   },
   "panels/issues/AffectedBlockedByResponseView.ts | blockedResource": {
     "message": "Recurso bloqueado"
@@ -7051,6 +7165,9 @@
   },
   "panels/layer_viewer/LayerDetailsView.ts | nearestLayerShiftingStickyBox": {
     "message": "Caixa fixa alterando camada mais próxima"
+  },
+  "panels/layer_viewer/LayerDetailsView.ts | noLayerSelected": {
+    "message": "Nenhuma camada selecionada"
   },
   "panels/layer_viewer/LayerDetailsView.ts | nonFastScrollable": {
     "message": "Sem rolagem rápida"
@@ -7727,6 +7844,9 @@
   "panels/media/media-meta.ts | video": {
     "message": "vídeo"
   },
+  "panels/mobile_throttling/CalibrationController.ts | runningCalibration": {
+    "message": "Calibragem da CPU em andamento. Não saia desta guia nem feche o DevTools."
+  },
   "panels/mobile_throttling/MobileThrottlingSelector.ts | advanced": {
     "message": "Avançado"
   },
@@ -7763,14 +7883,14 @@
   "panels/mobile_throttling/ThrottlingManager.ts | addS": {
     "message": "Adicionar {PH1}"
   },
+  "panels/mobile_throttling/ThrottlingManager.ts | calibrate": {
+    "message": "Calibrar…"
+  },
   "panels/mobile_throttling/ThrottlingManager.ts | cpuThrottling": {
     "message": "Limitação de CPU"
   },
   "panels/mobile_throttling/ThrottlingManager.ts | cpuThrottlingIsEnabled": {
     "message": "A limitação de CPU está ativada"
-  },
-  "panels/mobile_throttling/ThrottlingManager.ts | dSlowdown": {
-    "message": "Desacelerar {PH1}×"
   },
   "panels/mobile_throttling/ThrottlingManager.ts | excessConcurrency": {
     "message": "Exceder o valor padrão pode prejudicar a performance do sistema."
@@ -7784,11 +7904,14 @@
   "panels/mobile_throttling/ThrottlingManager.ts | hardwareConcurrencySettingLabel": {
     "message": "Substituir o valor informado por navigator.hardwareConcurrency"
   },
-  "panels/mobile_throttling/ThrottlingManager.ts | noThrottling": {
-    "message": "Sem limitação"
-  },
   "panels/mobile_throttling/ThrottlingManager.ts | offline": {
     "message": "Off-line"
+  },
+  "panels/mobile_throttling/ThrottlingManager.ts | recalibrate": {
+    "message": "Recalibrar…"
+  },
+  "panels/mobile_throttling/ThrottlingManager.ts | recommendedThrottling": {
+    "message": "{PH1} – recomendado"
   },
   "panels/mobile_throttling/ThrottlingManager.ts | resetConcurrency": {
     "message": "Redefinir para o valor padrão"
@@ -7808,8 +7931,11 @@
   "panels/mobile_throttling/ThrottlingPresets.ts | fastGXCpuSlowdown": {
     "message": "Conexão 3G rápida e lentidão da CPU 4x"
   },
-  "panels/mobile_throttling/ThrottlingPresets.ts | lowendMobile": {
-    "message": "Dispositivo móvel simples"
+  "panels/mobile_throttling/ThrottlingPresets.ts | fastGXCpuSlowdownCalibrated": {
+    "message": "Conexão 3G rápida e lentidão da CPU {PH1}x"
+  },
+  "panels/mobile_throttling/ThrottlingPresets.ts | lowTierMobile": {
+    "message": "Dispositivo móvel de nível menor"
   },
   "panels/mobile_throttling/ThrottlingPresets.ts | midtierMobile": {
     "message": "Dispositivo móvel de nível médio"
@@ -7818,13 +7944,49 @@
     "message": "Sem conectividade com a Internet"
   },
   "panels/mobile_throttling/ThrottlingPresets.ts | noThrottling": {
-    "message": "Sem limitação"
+    "message": "Sem limitação de CPU e rede"
   },
   "panels/mobile_throttling/ThrottlingPresets.ts | slowGXCpuSlowdown": {
     "message": "Conexão 3G lenta e lentidão da CPU 6x"
   },
+  "panels/mobile_throttling/ThrottlingPresets.ts | slowGXCpuSlowdownCalibrated": {
+    "message": "Conexão 3G lenta e lentidão da CPU {PH1}x"
+  },
   "panels/mobile_throttling/ThrottlingSettingsTab.ts | addCustomProfile": {
     "message": "Adicionar perfil"
+  },
+  "panels/mobile_throttling/ThrottlingSettingsTab.ts | calibrate": {
+    "message": "Calibrar"
+  },
+  "panels/mobile_throttling/ThrottlingSettingsTab.ts | calibrationCTA": {
+    "message": "Para usar as predefinições de limite da CPU, execute o processo de calibração para determinar a taxa ideal de limite para seu dispositivo."
+  },
+  "panels/mobile_throttling/ThrottlingSettingsTab.ts | calibrationConfirmationPrompt": {
+    "message": "A calibração leva cerca de 5 segundos e faz você sair temporariamente da página atual. Quer continuar?"
+  },
+  "panels/mobile_throttling/ThrottlingSettingsTab.ts | calibrationWarningHighCPU": {
+    "message": "O uso da CPU é muito alto"
+  },
+  "panels/mobile_throttling/ThrottlingSettingsTab.ts | calibrationWarningLowBattery": {
+    "message": "A bateria do dispositivo está baixa (<20%), e os resultados podem ser afetados pela limitação da CPU"
+  },
+  "panels/mobile_throttling/ThrottlingSettingsTab.ts | calibrationWarningRunningOnBattery": {
+    "message": "O dispositivo está funcionando com a bateria, conecte o carregador para melhores resultados"
+  },
+  "panels/mobile_throttling/ThrottlingSettingsTab.ts | cancel": {
+    "message": "Cancelar"
+  },
+  "panels/mobile_throttling/ThrottlingSettingsTab.ts | continue": {
+    "message": "Continuar"
+  },
+  "panels/mobile_throttling/ThrottlingSettingsTab.ts | cpuCalibrationDescription": {
+    "message": "Essas predefinições limitam a CPU para aproximar o desempenho de dispositivos móveis de baixo ou médio custo."
+  },
+  "panels/mobile_throttling/ThrottlingSettingsTab.ts | cpuThrottlingPresets": {
+    "message": "Predefinições de limitação de CPU"
+  },
+  "panels/mobile_throttling/ThrottlingSettingsTab.ts | dSlowdown": {
+    "message": "Desacelerar {PH1}×"
   },
   "panels/mobile_throttling/ThrottlingSettingsTab.ts | dms": {
     "message": "{PH1} ms"
@@ -7843,6 +8005,9 @@
   },
   "panels/mobile_throttling/ThrottlingSettingsTab.ts | latencyMustBeAnIntegerBetweenSms": {
     "message": "A latência precisa ser um número inteiro entre {PH1} ms e {PH2} ms"
+  },
+  "panels/mobile_throttling/ThrottlingSettingsTab.ts | needsCalibration": {
+    "message": "Precisa de calibração"
   },
   "panels/mobile_throttling/ThrottlingSettingsTab.ts | networkThrottlingProfiles": {
     "message": "Perfis de limitação de rede"
@@ -7882,6 +8047,9 @@
   },
   "panels/mobile_throttling/ThrottlingSettingsTab.ts | profileNameCharactersLengthMust": {
     "message": "O nome do perfil precisa ter de 1 a {PH1} caracteres"
+  },
+  "panels/mobile_throttling/ThrottlingSettingsTab.ts | recalibrate": {
+    "message": "Recalibrar"
   },
   "panels/mobile_throttling/ThrottlingSettingsTab.ts | sMustBeANumberBetweenSkbsToSkbs": {
     "message": "{PH1} precisa ser um número entre {PH2} kbit/s e {PH3} kbit/s"
@@ -8588,6 +8756,9 @@
   "panels/network/NetworkPanel.ts | doNotClearLogOnPageReload": {
     "message": "Não limpar o registro de atualização / navegação na página"
   },
+  "panels/network/NetworkPanel.ts | exportHar": {
+    "message": "Exportar HAR (limpo ou com dados sensíveis)"
+  },
   "panels/network/NetworkPanel.ts | exportHarSanitized": {
     "message": "Exportar arquivo HAR (limpo)…"
   },
@@ -8696,14 +8867,17 @@
   "panels/network/RequestCookiesView.ts | thisRequestHasNoCookies": {
     "message": "Essa solicitação não tem cookies."
   },
+  "panels/network/RequestInitiatorView.ts | noInitiator": {
+    "message": "Não há dados de iniciador"
+  },
   "panels/network/RequestInitiatorView.ts | requestCallStack": {
     "message": "Solicitar pilha de chamadas"
   },
   "panels/network/RequestInitiatorView.ts | requestInitiatorChain": {
     "message": "Solicitar cadeia do iniciador"
   },
-  "panels/network/RequestInitiatorView.ts | thisRequestHasNoInitiatorData": {
-    "message": "Essa solicitação não tem dados de iniciador."
+  "panels/network/RequestPayloadView.ts | copyPayload": {
+    "message": "Copiar"
   },
   "panels/network/RequestPayloadView.ts | copyValue": {
     "message": "Copiar valor"
@@ -8759,8 +8933,11 @@
   "panels/network/RequestResponseView.ts | failedToLoadResponseData": {
     "message": "Falha ao carregar dados de resposta"
   },
+  "panels/network/RequestResponseView.ts | noPreview": {
+    "message": "Nada para visualizar"
+  },
   "panels/network/RequestResponseView.ts | thisRequestHasNoResponseData": {
-    "message": "Essa solicitação não tem dados de resposta disponíveis."
+    "message": "Essa solicitação não tem dados de resposta disponíveis"
   },
   "panels/network/RequestTimingView.ts | cacheStorageCacheNameS": {
     "message": "Nome do cache de armazenamento: {PH1}"
@@ -8938,6 +9115,9 @@
   },
   "panels/network/ResourceWebSocketFrameView.ts | na": {
     "message": "N/A"
+  },
+  "panels/network/ResourceWebSocketFrameView.ts | noMessageSelected": {
+    "message": "Nenhuma mensagem selecionada"
   },
   "panels/network/ResourceWebSocketFrameView.ts | pingMessage": {
     "message": "Mensagem ping"
@@ -9148,6 +9328,9 @@
   },
   "panels/network/components/RequestTrustTokensView.ts | parameters": {
     "message": "Parâmetros"
+  },
+  "panels/network/components/RequestTrustTokensView.ts | perSiteLimit": {
+    "message": "O limite de emissor por site foi atingido."
   },
   "panels/network/components/RequestTrustTokensView.ts | refreshPolicy": {
     "message": "Política de atualização"
@@ -9405,7 +9588,7 @@
     "message": "Tamanho próprio"
   },
   "panels/profiler/HeapProfileView.ts | selfSizeBytes": {
-    "message": "Tamanho próprio (bytes)"
+    "message": "Tamanho próprio"
   },
   "panels/profiler/HeapProfileView.ts | skb": {
     "message": "{PH1} KB"
@@ -9423,7 +9606,7 @@
     "message": "Tamanho total"
   },
   "panels/profiler/HeapProfileView.ts | totalSizeBytes": {
-    "message": "Tamanho total (bytes)"
+    "message": "Tamanho total"
   },
   "panels/profiler/HeapProfileView.ts | url": {
     "message": "URL"
@@ -9649,6 +9832,12 @@
   },
   "panels/profiler/HeapSnapshotView.ts | objectsRetainedByDetachedDomNodes": {
     "message": "Objetos retidos por nós DOM removidos"
+  },
+  "panels/profiler/HeapSnapshotView.ts | otherJSObjects": {
+    "message": "Outros objetos de JS"
+  },
+  "panels/profiler/HeapSnapshotView.ts | otherNonJSObjects": {
+    "message": "Outros objetos que não são JS (como HTML e CSS)"
   },
   "panels/profiler/HeapSnapshotView.ts | percentagePlaceholder": {
     "message": "{PH1}%"
@@ -9923,9 +10112,6 @@
   "panels/profiler/ProfilesPanel.ts | cantLoadProfileWhileAnother": {
     "message": "Não é possível carregar um perfil enquanto outro está sendo gravado."
   },
-  "panels/profiler/ProfilesPanel.ts | profileLoadingFailedS": {
-    "message": "O carregamento do perfil falhou: {PH1}."
-  },
   "panels/profiler/ProfilesPanel.ts | profiles": {
     "message": "Perfis"
   },
@@ -9967,6 +10153,27 @@
   },
   "panels/profiler/profiler-meta.ts | stopRecordingHeapAllocations": {
     "message": "Parar gravação de alocações de heap"
+  },
+  "panels/protocol_monitor/JSONEditor.ts | addCustomProperty": {
+    "message": "Adicionar propriedade personalizada"
+  },
+  "panels/protocol_monitor/JSONEditor.ts | addParameter": {
+    "message": "Adicionar um parâmetro"
+  },
+  "panels/protocol_monitor/JSONEditor.ts | copyCommand": {
+    "message": "Copiar comando"
+  },
+  "panels/protocol_monitor/JSONEditor.ts | deleteParameter": {
+    "message": "Excluir parâmetro"
+  },
+  "panels/protocol_monitor/JSONEditor.ts | resetDefaultValue": {
+    "message": "Redefinir para o valor padrão"
+  },
+  "panels/protocol_monitor/JSONEditor.ts | sendCommandCmdEnter": {
+    "message": "Enviar comando: ⌘+Enter"
+  },
+  "panels/protocol_monitor/JSONEditor.ts | sendCommandCtrlEnter": {
+    "message": "Enviar comando: Ctrl + Enter"
   },
   "panels/protocol_monitor/ProtocolMonitor.ts | CDPCommandEditorHidden": {
     "message": "O editor de comando do CDP foi ocultado"
@@ -10013,6 +10220,9 @@
   "panels/protocol_monitor/ProtocolMonitor.ts | save": {
     "message": "Salvar"
   },
+  "panels/protocol_monitor/ProtocolMonitor.ts | selectAMessageToView": {
+    "message": "Selecione uma mensagem para ver os detalhes dela"
+  },
   "panels/protocol_monitor/ProtocolMonitor.ts | selectTarget": {
     "message": "Selecione um destino"
   },
@@ -10037,27 +10247,6 @@
   "panels/protocol_monitor/ProtocolMonitor.ts | type": {
     "message": "Tipo"
   },
-  "panels/protocol_monitor/components/JSONEditor.ts | addCustomProperty": {
-    "message": "Adicionar propriedade personalizada"
-  },
-  "panels/protocol_monitor/components/JSONEditor.ts | addParameter": {
-    "message": "Adicionar um parâmetro"
-  },
-  "panels/protocol_monitor/components/JSONEditor.ts | deleteParameter": {
-    "message": "Excluir parâmetro"
-  },
-  "panels/protocol_monitor/components/JSONEditor.ts | resetDefaultValue": {
-    "message": "Redefinir para o valor padrão"
-  },
-  "panels/protocol_monitor/components/Toolbar.ts | copyCommand": {
-    "message": "Copiar comando"
-  },
-  "panels/protocol_monitor/components/Toolbar.ts | sendCommandCmdEnter": {
-    "message": "Enviar comando: ⌘+Enter"
-  },
-  "panels/protocol_monitor/components/Toolbar.ts | sendCommandCtrlEnter": {
-    "message": "Enviar comando: Ctrl + Enter"
-  },
   "panels/protocol_monitor/protocol_monitor-meta.ts | protocolMonitor": {
     "message": "Monitor de protocolo"
   },
@@ -10071,7 +10260,7 @@
     "message": "Copiar gravação ou etapa selecionada"
   },
   "panels/recorder/RecorderController.ts | createRecording": {
-    "message": "Criar uma gravação"
+    "message": "Criar gravação"
   },
   "panels/recorder/RecorderController.ts | deleteRecording": {
     "message": "Excluir gravação"
@@ -10088,14 +10277,23 @@
   "panels/recorder/RecorderController.ts | getExtensions": {
     "message": "Instalar extensões…"
   },
+  "panels/recorder/RecorderController.ts | header": {
+    "message": "Ainda não há gravações"
+  },
   "panels/recorder/RecorderController.ts | importRecording": {
     "message": "Importar gravação"
+  },
+  "panels/recorder/RecorderController.ts | learnMore": {
+    "message": "Saiba mais"
   },
   "panels/recorder/RecorderController.ts | noRecordings": {
     "message": "Não há gravações"
   },
   "panels/recorder/RecorderController.ts | numberOfRecordings": {
     "message": "gravações"
+  },
+  "panels/recorder/RecorderController.ts | recordingDescription": {
+    "message": "Use as gravações para criar testes automatizados de ponta a ponta ou rastros de desempenho."
   },
   "panels/recorder/RecorderController.ts | replayRecording": {
     "message": "Tocar gravação novamente"
@@ -10279,24 +10477,6 @@
   },
   "panels/recorder/components/ReplaySection.ts | speedGroup": {
     "message": "Velocidade"
-  },
-  "panels/recorder/components/StartView.ts | createRecording": {
-    "message": "Criar uma gravação"
-  },
-  "panels/recorder/components/StartView.ts | header": {
-    "message": "Medir o desempenho em toda a jornada do usuário"
-  },
-  "panels/recorder/components/StartView.ts | quickStart": {
-    "message": "Início rápido: conheça o novo painel do Gravador no DevTools"
-  },
-  "panels/recorder/components/StartView.ts | step1": {
-    "message": "Grave uma jornada do usuário comum no seu site ou app"
-  },
-  "panels/recorder/components/StartView.ts | step2": {
-    "message": "Toque a gravação mais uma vez para confirmar se o fluxo está funcionando."
-  },
-  "panels/recorder/components/StartView.ts | step3": {
-    "message": "Gere um rastro de desempenho detalhado ou exporte um script da biblioteca Puppeteer para teste"
   },
   "panels/recorder/components/StepEditor.ts | addAttribute": {
     "message": "Adicionar {attributeName}"
@@ -10520,23 +10700,185 @@
   "panels/search/SearchView.ts | searching": {
     "message": "Pesquisando…"
   },
+  "panels/security/CookieControlsView.ts | cardDisclaimer": {
+    "message": "Apenas quando o DevTools estiver aberto"
+  },
+  "panels/security/CookieControlsView.ts | cardTitle": {
+    "message": "Limitar cookies de terceiros temporariamente"
+  },
+  "panels/security/CookieControlsView.ts | enableFlag": {
+    "message": "Para usar esta opção, defina {PH1} como padrão"
+  },
+  "panels/security/CookieControlsView.ts | enrollGracePeriod": {
+    "message": "Para usar essa opção, registre este site ou sites incorporados a ele no {PH1}"
+  },
+  "panels/security/CookieControlsView.ts | enterpriseDisclaimer": {
+    "message": "Sua organização gerencia o acesso a cookies de terceiros neste site"
+  },
+  "panels/security/CookieControlsView.ts | enterpriseTooltip": {
+    "message": "Essa configuração é gerenciada pela sua organização"
+  },
+  "panels/security/CookieControlsView.ts | exceptions": {
+    "message": "Exceções"
+  },
+  "panels/security/CookieControlsView.ts | exceptionsExplanation": {
+    "message": "Cenários que concedem acesso a cookies de terceiros"
+  },
+  "panels/security/CookieControlsView.ts | gracePeriod": {
+    "message": "período de carência"
+  },
+  "panels/security/CookieControlsView.ts | gracePeriodExplanation": {
+    "message": "Se este site ou um incorporado a ele estiver registrado no {PH1}, o site poderá acessar cookies de terceiros"
+  },
+  "panels/security/CookieControlsView.ts | gracePeriodTitle": {
+    "message": "Período de carência de cookies de terceiros"
+  },
+  "panels/security/CookieControlsView.ts | heuristicExplanation": {
+    "message": "Em {PH1}, como pop-ups ou redirecionamentos, um site incorporado neste pode acessar cookies de terceiros"
+  },
+  "panels/security/CookieControlsView.ts | heuristicTitle": {
+    "message": "Exceção baseada em heurística"
+  },
+  "panels/security/CookieControlsView.ts | scenarios": {
+    "message": "cenários predefinidos"
+  },
+  "panels/security/CookieControlsView.ts | siteReloadMessage": {
+    "message": "Para aplicar os controles atualizados, atualize a página"
+  },
+  "panels/security/CookieControlsView.ts | tpcdHeuristicsGrants": {
+    "message": "#tpcd-heuristics-grants"
+  },
+  "panels/security/CookieControlsView.ts | tpcdMetadataGrants": {
+    "message": "#tpcd-metadata-grants"
+  },
+  "panels/security/CookieControlsView.ts | viewDetails": {
+    "message": "Mostrar detalhes"
+  },
+  "panels/security/CookieControlsView.ts | viewExplanation": {
+    "message": "Teste o desempenho desse site se os cookies de terceiros forem limitados no Chrome"
+  },
+  "panels/security/CookieControlsView.ts | viewTitle": {
+    "message": "Controles"
+  },
+  "panels/security/CookieReportView.ts | adCookieTypeString": {
+    "message": "Publicidade"
+  },
   "panels/security/CookieReportView.ts | allowed": {
     "message": "Permitidos"
   },
   "panels/security/CookieReportView.ts | allowedByException": {
     "message": "Permitido por uma exceção"
   },
+  "panels/security/CookieReportView.ts | analyticsCookieTypeString": {
+    "message": "Análise"
+  },
   "panels/security/CookieReportView.ts | blocked": {
     "message": "Bloqueado"
   },
   "panels/security/CookieReportView.ts | body": {
-    "message": "Os usuários podem restringir cookies de terceiros, dependendo das configurações deles. Se um usuário escolher restringir cookies, este site pode não funcionar para ele."
+    "message": "Este site pode não funcionar se os cookies de terceiros e outros cookies estiverem limitados no Chrome."
+  },
+  "panels/security/CookieReportView.ts | cdnCookieTypeString": {
+    "message": "CDN"
+  },
+  "panels/security/CookieReportView.ts | consentProviderCookieTypeString": {
+    "message": "Provedor de consentimento"
+  },
+  "panels/security/CookieReportView.ts | contentCookieTypeString": {
+    "message": "Conteúdo"
+  },
+  "panels/security/CookieReportView.ts | customerSuccessCookieTypeString": {
+    "message": "Sucesso do cliente"
+  },
+  "panels/security/CookieReportView.ts | domain": {
+    "message": "Domínio"
+  },
+  "panels/security/CookieReportView.ts | emptyReport": {
+    "message": "Não sobrou nem uma migalha"
+  },
+  "panels/security/CookieReportView.ts | emptyReportExplanation": {
+    "message": "Nenhum problema com cookies de terceiros foi encontrado"
+  },
+  "panels/security/CookieReportView.ts | gitHubResource": {
+    "message": "Analisar {PH1} de um site de terceiros"
+  },
+  "panels/security/CookieReportView.ts | gitHubResourceInsightTypeString": {
+    "message": "GitHub"
+  },
+  "panels/security/CookieReportView.ts | gracePeriod": {
+    "message": "Revise {PH1}. A exceção do período de carência está ativa."
+  },
+  "panels/security/CookieReportView.ts | gracePeriodInsightTypeString": {
+    "message": "Período de carência"
+  },
+  "panels/security/CookieReportView.ts | guidance": {
+    "message": "orientação"
+  },
+  "panels/security/CookieReportView.ts | heuristics": {
+    "message": "Uma ação será necessária mais tarde. Uma exceção baseada em heurísticas está ativa."
+  },
+  "panels/security/CookieReportView.ts | heuristicsInisightTypeString": {
+    "message": "Heurística"
+  },
+  "panels/security/CookieReportView.ts | hostingCookieTypeString": {
+    "message": "Hosting"
   },
   "panels/security/CookieReportView.ts | learnMoreLink": {
     "message": "Saiba mais sobre como os cookies de terceiros são usados"
   },
+  "panels/security/CookieReportView.ts | marketingCookieTypeString": {
+    "message": "Marketing"
+  },
+  "panels/security/CookieReportView.ts | name": {
+    "message": "Nome"
+  },
+  "panels/security/CookieReportView.ts | other": {
+    "message": "Entre em contato com o site de terceiros para mais informações"
+  },
+  "panels/security/CookieReportView.ts | otherCookieTypeString": {
+    "message": "Outro"
+  },
+  "panels/security/CookieReportView.ts | otherInsightTypeString": {
+    "message": "Outro"
+  },
+  "panels/security/CookieReportView.ts | platform": {
+    "message": "Plataforma"
+  },
+  "panels/security/CookieReportView.ts | recommendation": {
+    "message": "Recomendação"
+  },
+  "panels/security/CookieReportView.ts | report": {
+    "message": "Relatório de cookies de terceiros"
+  },
+  "panels/security/CookieReportView.ts | reportedIssues": {
+    "message": "problemas informados"
+  },
+  "panels/security/CookieReportView.ts | showRequestsWithThisCookie": {
+    "message": "Mostrar solicitações com esse cookie"
+  },
+  "panels/security/CookieReportView.ts | socialCookieTypeString": {
+    "message": "Social"
+  },
+  "panels/security/CookieReportView.ts | status": {
+    "message": "Status"
+  },
+  "panels/security/CookieReportView.ts | tagManagerCookieTypeString": {
+    "message": "Gerenciador de tags"
+  },
   "panels/security/CookieReportView.ts | title": {
     "message": "Cookies de terceiros"
+  },
+  "panels/security/CookieReportView.ts | type": {
+    "message": "Tipo"
+  },
+  "panels/security/CookieReportView.ts | unknown": {
+    "message": "Desconhecida"
+  },
+  "panels/security/CookieReportView.ts | utilityCookieTypeString": {
+    "message": "Utilitário"
+  },
+  "panels/security/CookieReportView.ts | videoCookieTypeString": {
+    "message": "Vídeo"
   },
   "panels/security/SecurityModel.ts | cipherWithMAC": {
     "message": "{PH1} com {PH2}"
@@ -10841,14 +11183,11 @@
   "panels/security/SecurityPanelSidebar.ts | cookieReport": {
     "message": "Cookies de terceiros"
   },
+  "panels/security/SecurityPanelSidebar.ts | flagControls": {
+    "message": "Controles"
+  },
   "panels/security/SecurityPanelSidebar.ts | mainOrigin": {
     "message": "Origem principal"
-  },
-  "panels/security/SecurityPanelSidebar.ts | mainOriginNonsecure": {
-    "message": "Origem principal (não segura)"
-  },
-  "panels/security/SecurityPanelSidebar.ts | mainOriginSecure": {
-    "message": "Origem principal (segura)"
   },
   "panels/security/SecurityPanelSidebar.ts | nonsecureOrigins": {
     "message": "Origens não seguras"
@@ -10871,17 +11210,17 @@
   "panels/security/SecurityPanelSidebar.ts | unknownCanceled": {
     "message": "Desconhecido / cancelado"
   },
+  "panels/security/security-meta.ts | PrivacyAndSecurity": {
+    "message": "Privacidade e segurança"
+  },
   "panels/security/security-meta.ts | security": {
     "message": "Segurança"
   },
-  "panels/security/security-meta.ts | securityAndPrivacy": {
-    "message": "Segurança e privacidade"
+  "panels/security/security-meta.ts | showPrivacyAndSecurity": {
+    "message": "Mostrar painel de privacidade e segurança"
   },
   "panels/security/security-meta.ts | showSecurity": {
     "message": "Mostrar Segurança"
-  },
-  "panels/security/security-meta.ts | showSecurityAndPrivacy": {
-    "message": "Mostrar segurança e privacidade"
   },
   "panels/sensors/LocationsSettingsTab.ts | addLocation": {
     "message": "Adicionar local"
@@ -11117,17 +11456,23 @@
   "panels/sensors/sensors-meta.ts | userIdleScreenUnlocked": {
     "message": "Usuário inativo, tela desbloqueada"
   },
-  "panels/settings/AISettingsTab.ts | adminSettings": {
-    "message": "Dependendo do gerenciamento da sua Conta do Google e/ou da sua região, o Google pode se abster da coleta de dados. Os recursos disponíveis para usuários gerenciados podem variar de acordo com as configurações da organização."
-  },
   "panels/settings/AISettingsTab.ts | ageRestricted": {
-    "message": "Esse recurso só está disponível para usuários com 18 anos ou mais"
+    "message": "Esse recurso só está disponível para usuários com 18 anos ou mais."
   },
   "panels/settings/AISettingsTab.ts | boostYourProductivity": {
     "message": "Aumente sua produtividade com a IA"
   },
   "panels/settings/AISettingsTab.ts | consoleInsightsSendsData": {
     "message": "A mensagem do console, o stack trace associado, o código-fonte relacionado e os cabeçalhos de rede respectivos são enviados ao Google para gerar explicações. Esses dados podem ser acessados por revisores humanos para melhorar o recurso."
+  },
+  "panels/settings/AISettingsTab.ts | consoleInsightsSendsDataNoLogging": {
+    "message": "A mensagem do console, o stack trace associado, o código-fonte relacionado e os cabeçalhos de rede respectivos são enviados ao Google para gerar explicações. Essas informações não serão usadas para melhorar os modelos de IA do Google."
+  },
+  "panels/settings/AISettingsTab.ts | dataCollection": {
+    "message": "Dependendo da sua região, o Google pode se abster da coleta de dados"
+  },
+  "panels/settings/AISettingsTab.ts | dataCollectionNoLogging": {
+    "message": "Dependendo do gerenciamento da sua Conta do Google e/ou da sua região, o Google pode se abster da coleta de dados"
   },
   "panels/settings/AISettingsTab.ts | enableAiAssistance": {
     "message": "Ativar a assistência de IA"
@@ -11136,7 +11481,7 @@
     "message": "Ativar os Console insights"
   },
   "panels/settings/AISettingsTab.ts | experimentalFeatures": {
-    "message": "Esses recursos são experimentais. Eles usam IA generativa e podem fornecer informações incorretas ou ofensivas que não representam as opiniões do Google."
+    "message": "Esses recursos usam IA generativa e podem fornecer informações incorretas ou ofensivas que não representam as opiniões do Google"
   },
   "panels/settings/AISettingsTab.ts | explainConsole": {
     "message": "Receber explicações sobre avisos e erros do console"
@@ -11155,6 +11500,9 @@
   },
   "panels/settings/AISettingsTab.ts | freestylerSendsData": {
     "message": "Todos os dados que a página inspecionada pode acessar por APIs da Web, solicitações de rede, arquivos e rastros de desempenho são enviados ao Google para gerar explicações. Esses dados podem ser acessados por revisores humanos para melhorar o recurso. Não use em páginas com informações pessoais ou sensíveis."
+  },
+  "panels/settings/AISettingsTab.ts | freestylerSendsDataNoLogging": {
+    "message": "Todos os dados que a página inspecionada pode acessar por APIs da Web, solicitações de rede, arquivos e rastros de desempenho são enviados ao Google para gerar explicações. Essas informações não serão usadas para melhorar os modelos de IA do Google."
   },
   "panels/settings/AISettingsTab.ts | helpUnderstandConsole": {
     "message": "Ajuda a entender e corrigir avisos e erros do console"
@@ -11189,11 +11537,11 @@
   "panels/settings/AISettingsTab.ts | receiveSuggestions": {
     "message": "Receba sugestões e exemplos de código para resolver esses problemas"
   },
-  "panels/settings/AISettingsTab.ts | retainData": {
-    "message": "Os dados de uso serão retidos por até 18 meses e armazenados de modo que o Google não possa identificar quem os enviou."
-  },
   "panels/settings/AISettingsTab.ts | sendsDataToGoogle": {
     "message": "Esses recursos enviam dados relevantes ao Google. O Google coleta esses dados e feedbacks para melhorar produtos e serviços com a ajuda de revisores humanos. Evite compartilhar informações pessoais ou sensíveis."
+  },
+  "panels/settings/AISettingsTab.ts | sendsDataToGoogleNoLogging": {
+    "message": "Seu conteúdo não será usado por revisores humanos para melhorar a IA. Sua organização pode mudar essas configurações a qualquer momento."
   },
   "panels/settings/AISettingsTab.ts | showLess": {
     "message": "Mostrar menos"
@@ -11217,7 +11565,7 @@
     "message": "Adicionar uma regra de expressão regular para o URL do script"
   },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | addPattern": {
-    "message": "Adicionar regra de regex…"
+    "message": "Adicionar regra da regex"
   },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | automaticallyIgnoreListKnownThirdPartyScripts": {
     "message": "Scripts de terceiros conhecidos dos mapas de origem"
@@ -11247,7 +11595,7 @@
     "message": "Quando ativado, o depurador pula os scripts da lista de ignorados e as exceções que afetam apenas eles. O painel Performance oculta os itens do Flame Chart correspondentes."
   },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | ignoreScriptsWhoseNamesMatchS": {
-    "message": "Ignorar scripts com nomes correspondentes a {PH1}"
+    "message": "Ignorar scripts com nomes correspondentes a \"{PH1}\""
   },
   "panels/settings/FrameworkIgnoreListSettingsTab.ts | learnMore": {
     "message": "Saiba mais"
@@ -11331,7 +11679,7 @@
     "message": "Saiba mais"
   },
   "panels/settings/SettingsScreen.ts | noResults": {
-    "message": "Aviso: nenhum experimento corresponde ao filtro"
+    "message": "Nenhum experimento corresponde ao filtro"
   },
   "panels/settings/SettingsScreen.ts | oneOrMoreSettingsHaveChanged": {
     "message": "Uma ou mais configurações foram mudadas. É necessário atualizar para que isso entre em vigor."
@@ -11370,7 +11718,7 @@
     "message": "Para ativar essa configuração, ative a Sincronização do Chrome."
   },
   "panels/settings/emulation/DevicesSettingsTab.ts | addCustomDevice": {
-    "message": "Adicionar dispositivo personalizado…"
+    "message": "Adicionar dispositivo personalizado"
   },
   "panels/settings/emulation/DevicesSettingsTab.ts | customDevices": {
     "message": "Dispositivos personalizados"
@@ -11548,6 +11896,9 @@
   },
   "panels/snippets/SnippetsQuickOpen.ts | run": {
     "message": "Executar"
+  },
+  "panels/snippets/SnippetsQuickOpen.ts | runSnippet": {
+    "message": "Executar snippet"
   },
   "panels/snippets/SnippetsQuickOpen.ts | snippet": {
     "message": "Snippet"
@@ -11847,28 +12198,28 @@
     "message": "{PH1} (lista de ignorados)"
   },
   "panels/sources/GoToLineQuickOpen.ts | currentLineSTypeALineNumber": {
-    "message": "Linha atual: {PH1}. Insira um número de linha entre 1 e {PH2} para navegar até ele."
+    "message": "Insira um número de linha entre 1 e {PH1} para navegar até essa linha"
   },
   "panels/sources/GoToLineQuickOpen.ts | currentPositionXsTypeAnOffset": {
-    "message": "Posição atual: 0x{PH1}. Insira um deslocamento entre 0x{PH2} e 0x{PH3} para navegar até ele."
+    "message": "Insira um deslocamento entre 0x{PH1} e 0x{PH2} para navegar até ele"
   },
   "panels/sources/GoToLineQuickOpen.ts | goToLineS": {
-    "message": "Ir para a linha {PH1}."
+    "message": "Ir para a linha {PH1}"
   },
   "panels/sources/GoToLineQuickOpen.ts | goToLineSAndColumnS": {
     "message": "Ir para a linha {PH1}, coluna {PH2}."
   },
   "panels/sources/GoToLineQuickOpen.ts | goToOffsetXs": {
-    "message": "Ir para deslocamento de 0x{PH1}."
+    "message": "Ir para o deslocamento de 0x{PH1}"
   },
   "panels/sources/GoToLineQuickOpen.ts | noFileSelected": {
-    "message": "Nenhum arquivo selecionado."
+    "message": "Nenhum arquivo selecionado"
   },
   "panels/sources/GoToLineQuickOpen.ts | noResultsFound": {
     "message": "Nenhum resultado encontrado"
   },
   "panels/sources/GoToLineQuickOpen.ts | typeANumberToGoToThatLine": {
-    "message": "Digite um número para ir até essa linha."
+    "message": "Digite um número para ir até essa linha"
   },
   "panels/sources/InplaceFormatterEditorAction.ts | format": {
     "message": "Formatar"
@@ -11878,15 +12229,6 @@
   },
   "panels/sources/NavigatorView.ts | actionCannotBeUndone": {
     "message": "Não é possível desfazer essa ação."
-  },
-  "panels/sources/NavigatorView.ts | areYouSureYouWantToDeleteFolder": {
-    "message": "Você quer mesmo excluir esta pasta e o conteúdo dela?"
-  },
-  "panels/sources/NavigatorView.ts | areYouSureYouWantToDeleteThis": {
-    "message": "Tem certeza de que quer excluir esse arquivo?"
-  },
-  "panels/sources/NavigatorView.ts | areYouSureYouWantToExcludeThis": {
-    "message": "Tem certeza de que quer excluir essa pasta?"
   },
   "panels/sources/NavigatorView.ts | areYouSureYouWantToRemoveThis": {
     "message": "Remover {PH1} do Workspace?"
@@ -12000,19 +12342,28 @@
     "message": "Visualizar scripts de conteúdo veiculados por extensões"
   },
   "panels/sources/SourcesNavigator.ts | explainLocalOverrides": {
-    "message": "Substituir as solicitações de rede e o conteúdo da Web localmente para simular recursos remotos"
+    "message": "Substituir as solicitações de rede e o conteúdo da Web localmente para simular recursos remotos."
   },
   "panels/sources/SourcesNavigator.ts | explainSnippets": {
-    "message": "Salve o código JavaScript que você executa com frequência para executá-lo novamente a qualquer momento"
+    "message": "Salve o código JavaScript que você executa com frequência em um snippet para executar novamente quando quiser."
   },
   "panels/sources/SourcesNavigator.ts | explainWorkspace": {
-    "message": "Configure o espaço de trabalho para sincronizar edições diretamente com as fontes que você desenvolver"
-  },
-  "panels/sources/SourcesNavigator.ts | learnMore": {
-    "message": "Saiba mais"
+    "message": "Configure os espaços de trabalho para sincronizar edições diretamente com as fontes que você desenvolver."
   },
   "panels/sources/SourcesNavigator.ts | newSnippet": {
     "message": "Novo snippet"
+  },
+  "panels/sources/SourcesNavigator.ts | noContentScripts": {
+    "message": "Nenhum script de conteúdo foi detectado"
+  },
+  "panels/sources/SourcesNavigator.ts | noLocalOverrides": {
+    "message": "Nenhuma substituição local foi configurada"
+  },
+  "panels/sources/SourcesNavigator.ts | noSnippets": {
+    "message": "Nenhum snippet salvo"
+  },
+  "panels/sources/SourcesNavigator.ts | noWorkspace": {
+    "message": "Nenhum espaço de trabalho configurado"
   },
   "panels/sources/SourcesNavigator.ts | remove": {
     "message": "Remover"
@@ -12386,6 +12737,9 @@
   "panels/sources/sources-meta.ts | goToLine": {
     "message": "Ir para a linha"
   },
+  "panels/sources/sources-meta.ts | goToSymbol": {
+    "message": "Ir para o símbolo"
+  },
   "panels/sources/sources-meta.ts | incrementCssUnitBy": {
     "message": "Aumentar a unidade CSS em {PH1}"
   },
@@ -12412,6 +12766,9 @@
   },
   "panels/sources/sources-meta.ts | open": {
     "message": "Abrir"
+  },
+  "panels/sources/sources-meta.ts | openFile": {
+    "message": "Abrir arquivo"
   },
   "panels/sources/sources-meta.ts | pauseScriptExecution": {
     "message": "Pausar execução do script"
@@ -12599,9 +12956,6 @@
   "panels/timeline/CountersGraph.ts | ss": {
     "message": "[{PH1} – {PH2}]"
   },
-  "panels/timeline/EventsTimelineTreeView.ts | Dms": {
-    "message": "{PH1}ms"
-  },
   "panels/timeline/EventsTimelineTreeView.ts | all": {
     "message": "Tudo"
   },
@@ -12647,6 +13001,18 @@
   "panels/timeline/ServerTimingsTrackAppender.ts | serverTimingTrack": {
     "message": "Esta faixa contém o tempo dos cabeçalhos de resposta da rede da API Server-Timing. Os respectivos horários de início são apenas estimativas e podem não ser precisos."
   },
+  "panels/timeline/ThirdPartyTreeView.ts | firstOrThirdPartyName": {
+    "message": "Próprias e de terceiros"
+  },
+  "panels/timeline/ThirdPartyTreeView.ts | selfTime": {
+    "message": "Tempo próprio"
+  },
+  "panels/timeline/ThirdPartyTreeView.ts | transferSize": {
+    "message": "Tamanho da transferência"
+  },
+  "panels/timeline/ThirdPartyTreeView.ts | unattributed": {
+    "message": "[não atribuído]"
+  },
   "panels/timeline/ThreadAppender.ts | bidderWorklet": {
     "message": "Objeto de bidder"
   },
@@ -12666,7 +13032,7 @@
     "message": "Principal: {PH1}"
   },
   "panels/timeline/ThreadAppender.ts | onIgnoreList": {
-    "message": "Na lista de ignorados"
+    "message": "Na lista de ignorados ({rule})"
   },
   "panels/timeline/ThreadAppender.ts | raster": {
     "message": "Varredura"
@@ -12724,9 +13090,6 @@
   },
   "panels/timeline/TimelineDetailsView.ts | paintProfiler": {
     "message": "Paint Profiler"
-  },
-  "panels/timeline/TimelineDetailsView.ts | rangeSS": {
-    "message": "Intervalo:  {PH1} – {PH2}"
   },
   "panels/timeline/TimelineDetailsView.ts | selectorStats": {
     "message": "Estatísticas do seletor"
@@ -12788,32 +13151,20 @@
   "panels/timeline/TimelineHistoryManager.ts | currentSessionSS": {
     "message": "Sessão atual: {PH1}. {PH2}"
   },
+  "panels/timeline/TimelineHistoryManager.ts | dSlowdown": {
+    "message": "Desacelerar {PH1}×"
+  },
   "panels/timeline/TimelineHistoryManager.ts | landingPageTitle": {
     "message": "Métricas em tempo real"
   },
-  "panels/timeline/TimelineHistoryManager.ts | noRecordings": {
-    "message": "(não há gravações)"
+  "panels/timeline/TimelineHistoryManager.ts | nodeLandingPageTitle": {
+    "message": "Nova gravação"
   },
   "panels/timeline/TimelineHistoryManager.ts | sD": {
     "message": "{PH1} nº{PH2}"
   },
   "panels/timeline/TimelineHistoryManager.ts | selectTimelineSession": {
     "message": "Selecionar a sessão do cronograma"
-  },
-  "panels/timeline/TimelineLandingPage.ts | afterRecordingSelectAnAreaOf": {
-    "message": "Após gravar, selecione uma área de interesse na visão geral arrastando com o mouse. Depois, aplique o zoom e movimente a linha do tempo com a roda do mouse ou com as teclas {PH1}. {PH2}"
-  },
-  "panels/timeline/TimelineLandingPage.ts | clickTheRecordButtonSOrHitSTo": {
-    "message": "Clique no botão Gravar {PH1} ou pressione {PH2} para iniciar uma nova gravação."
-  },
-  "panels/timeline/TimelineLandingPage.ts | clickTheReloadButtonSOrHitSTo": {
-    "message": "Clique no botão de atualização {PH1} ou em {PH2} para gravar o carregamento da página."
-  },
-  "panels/timeline/TimelineLandingPage.ts | learnmore": {
-    "message": "Saiba mais"
-  },
-  "panels/timeline/TimelineLandingPage.ts | wasd": {
-    "message": "WASD"
   },
   "panels/timeline/TimelineLoader.ts | malformedTimelineDataS": {
     "message": "Dados da linha do tempo corrompidos: {PH1}"
@@ -12863,6 +13214,9 @@
   "panels/timeline/TimelinePanel.ts | description": {
     "message": "Descrição"
   },
+  "panels/timeline/TimelinePanel.ts | dimThirdParties": {
+    "message": "Ocultar terceiros"
+  },
   "panels/timeline/TimelinePanel.ts | disableJavascriptSamples": {
     "message": "Desativar exemplos JavaScript"
   },
@@ -12870,7 +13224,7 @@
     "message": "Desativa a amostragem do JavaScript e reduz a sobrecarga ao ser executado em dispositivos móveis"
   },
   "panels/timeline/TimelinePanel.ts | downloadAfterError": {
-    "message": "Fazer o download de eventos de rastreamento brutos"
+    "message": "Baixar o trace"
   },
   "panels/timeline/TimelinePanel.ts | dropTimelineFileOrUrlHere": {
     "message": "Solte o arquivo da linha do tempo ou o URL aqui"
@@ -12923,9 +13277,6 @@
   "panels/timeline/TimelinePanel.ts | networkConditions": {
     "message": "Condições de rede"
   },
-  "panels/timeline/TimelinePanel.ts | performanceExtension": {
-    "message": "Dados de extensão"
-  },
   "panels/timeline/TimelinePanel.ts | processed": {
     "message": "Processado"
   },
@@ -12956,6 +13307,9 @@
   "panels/timeline/TimelinePanel.ts | selectionCleared": {
     "message": "Seleção removida"
   },
+  "panels/timeline/TimelinePanel.ts | showCustomtracks": {
+    "message": "Mostrar faixas personalizadas"
+  },
   "panels/timeline/TimelinePanel.ts | showDataAddedByExtensions": {
     "message": "Mostrar dados adicionados por extensões do painel \"Desempenho\""
   },
@@ -12971,9 +13325,6 @@
   "panels/timeline/TimelinePanel.ts | sidebarShown": {
     "message": "A barra lateral de desempenho está visível"
   },
-  "panels/timeline/TimelinePanel.ts | ssec": {
-    "message": "{PH1}s"
-  },
   "panels/timeline/TimelinePanel.ts | status": {
     "message": "Status"
   },
@@ -12983,8 +13334,23 @@
   "panels/timeline/TimelinePanel.ts | stoppingTimeline": {
     "message": "Parando a linha do tempo…"
   },
+  "panels/timeline/TimelinePanel.ts | thirdPartiesByThirdPartyWeb": {
+    "message": "Terceiros classificados por páginas da Web de terceiros"
+  },
   "panels/timeline/TimelinePanel.ts | time": {
     "message": "Hora"
+  },
+  "panels/timeline/TimelinePanel.ts | timelineFastZoomInOut": {
+    "message": "Aumentar/diminuir zoom rapidamente"
+  },
+  "panels/timeline/TimelinePanel.ts | timelinePanLeftRight": {
+    "message": "Mover para a esquerda/direita"
+  },
+  "panels/timeline/TimelinePanel.ts | timelineScrollUpDown": {
+    "message": "Mover para cima/baixo"
+  },
+  "panels/timeline/TimelinePanel.ts | timelineZoomInOut": {
+    "message": "Aumentar/diminuir zoom"
   },
   "panels/timeline/TimelineSelectorStatsView.ts | copyTable": {
     "message": "Copiar tabela"
@@ -13031,11 +13397,17 @@
   "panels/timeline/TimelineTreeView.ts | activity": {
     "message": "Atividade"
   },
+  "panels/timeline/TimelineTreeView.ts | bottomUp": {
+    "message": "De baixo para cima"
+  },
   "panels/timeline/TimelineTreeView.ts | chromeExtensionsOverhead": {
     "message": "[sobrecarga de extensões do Chrome]"
   },
-  "panels/timeline/TimelineTreeView.ts | fms": {
-    "message": "{PH1}ms"
+  "panels/timeline/TimelineTreeView.ts | extension": {
+    "message": "Extensão"
+  },
+  "panels/timeline/TimelineTreeView.ts | firstParty": {
+    "message": "Própria"
   },
   "panels/timeline/TimelineTreeView.ts | groupBy": {
     "message": "Agrupar por"
@@ -13114,6 +13486,9 @@
   },
   "panels/timeline/TimelineTreeView.ts | vRuntime": {
     "message": "[Tempo de execução V8]"
+  },
+  "panels/timeline/TimelineTreeView.ts | viewBottomUp": {
+    "message": "Ver de baixo para cima"
   },
   "panels/timeline/TimelineUIUtils.ts | UnknownNode": {
     "message": "[ nó desconhecido ]"
@@ -13214,18 +13589,6 @@
   "panels/timeline/TimelineUIUtils.ts | consumedCacheSize": {
     "message": "Tamanho do cache consumido"
   },
-  "panels/timeline/TimelineUIUtils.ts | cumulativeLayoutShifts": {
-    "message": "Mudanças de layout cumulativas"
-  },
-  "panels/timeline/TimelineUIUtils.ts | cumulativeScore": {
-    "message": "Pontuação cumulativa"
-  },
-  "panels/timeline/TimelineUIUtils.ts | currentClusterId": {
-    "message": "ID do cluster atual"
-  },
-  "panels/timeline/TimelineUIUtils.ts | currentClusterScore": {
-    "message": "Pontuação do cluster atual"
-  },
   "panels/timeline/TimelineUIUtils.ts | delay": {
     "message": "Atraso"
   },
@@ -13250,11 +13613,11 @@
   "panels/timeline/TimelineUIUtils.ts | emptyPlaceholder": {
     "message": "{PH1}"
   },
+  "panels/timeline/TimelineUIUtils.ts | entity": {
+    "message": "Terceiros"
+  },
   "panels/timeline/TimelineUIUtils.ts | entryIsHidden": {
     "message": "(entrada oculta)"
-  },
-  "panels/timeline/TimelineUIUtils.ts | evolvedClsLink": {
-    "message": "foi aprimorada"
   },
   "panels/timeline/TimelineUIUtils.ts | failedToLoadScriptFromCache": {
     "message": "falha ao carregar o script do cache"
@@ -13270,9 +13633,6 @@
   },
   "panels/timeline/TimelineUIUtils.ts | function": {
     "message": "Função"
-  },
-  "panels/timeline/TimelineUIUtils.ts | hadRecentInput": {
-    "message": "Teve uma entrada recente"
   },
   "panels/timeline/TimelineUIUtils.ts | idleCallbackRequested": {
     "message": "Callback inativo solicitado"
@@ -13325,15 +13685,6 @@
   "panels/timeline/TimelineUIUtils.ts | module": {
     "message": "Módulo"
   },
-  "panels/timeline/TimelineUIUtils.ts | movedFrom": {
-    "message": "Movido de"
-  },
-  "panels/timeline/TimelineUIUtils.ts | movedTo": {
-    "message": "Movidos para"
-  },
-  "panels/timeline/TimelineUIUtils.ts | no": {
-    "message": "Não"
-  },
   "panels/timeline/TimelineUIUtils.ts | nodesThatNeedLayout": {
     "message": "Nós que precisam de layout"
   },
@@ -13385,9 +13736,6 @@
   "panels/timeline/TimelineUIUtils.ts | sAtSParentheses": {
     "message": "{PH1} (a {PH2})"
   },
-  "panels/timeline/TimelineUIUtils.ts | sCLSInformation": {
-    "message": "A {PH1} pode resultar em uma experiência do usuário ruim. Recentemente, ela {PH2}."
-  },
   "panels/timeline/TimelineUIUtils.ts | sChildren": {
     "message": "{PH1} (filhos)"
   },
@@ -13418,9 +13766,6 @@
   "panels/timeline/TimelineUIUtils.ts | sSs": {
     "message": "{PH1} [{PH2}…{PH3}]"
   },
-  "panels/timeline/TimelineUIUtils.ts | score": {
-    "message": "Pontuação"
-  },
   "panels/timeline/TimelineUIUtils.ts | script": {
     "message": "Script"
   },
@@ -13433,9 +13778,6 @@
   "panels/timeline/TimelineUIUtils.ts | selectorStatsTitle": {
     "message": "Estatísticas do seletor"
   },
-  "panels/timeline/TimelineUIUtils.ts | selfTime": {
-    "message": "Tempo próprio"
-  },
   "panels/timeline/TimelineUIUtils.ts | size": {
     "message": "Tamanho"
   },
@@ -13447,6 +13789,9 @@
   },
   "panels/timeline/TimelineUIUtils.ts | stylesheetUrl": {
     "message": "URL da folha de estilo"
+  },
+  "panels/timeline/TimelineUIUtils.ts | thirdPartyTable": {
+    "message": "Tabela própria e de terceiros"
   },
   "panels/timeline/TimelineUIUtils.ts | timeSpentInRendering": {
     "message": "Tempo gasto na renderização"
@@ -13463,9 +13808,6 @@
   "panels/timeline/TimelineUIUtils.ts | timestamp": {
     "message": "Carimbo de data/hora"
   },
-  "panels/timeline/TimelineUIUtils.ts | totalTime": {
-    "message": "Tempo total"
-  },
   "panels/timeline/TimelineUIUtils.ts | traceEvent": {
     "message": "Evento de rastreamento"
   },
@@ -13477,9 +13819,6 @@
   },
   "panels/timeline/TimelineUIUtils.ts | warning": {
     "message": "Aviso"
-  },
-  "panels/timeline/TimelineUIUtils.ts | yes": {
-    "message": "Sim"
   },
   "panels/timeline/TimingsTrackAppender.ts | timings": {
     "message": "Tempo"
@@ -13535,17 +13874,26 @@
   "panels/timeline/components/BreadcrumbsUI.ts | removeChildBreadcrumbs": {
     "message": "Remover navegações estruturais filhas"
   },
+  "panels/timeline/components/CPUThrottlingSelector.ts | calibrate": {
+    "message": "Calibrar…"
+  },
   "panels/timeline/components/CPUThrottlingSelector.ts | cpu": {
     "message": "CPU: {PH1}"
   },
   "panels/timeline/components/CPUThrottlingSelector.ts | cpuThrottling": {
     "message": "Limitação de CPU: {PH1}"
   },
-  "panels/timeline/components/CPUThrottlingSelector.ts | dSlowdown": {
-    "message": "Desacelerar {PH1}×"
+  "panels/timeline/components/CPUThrottlingSelector.ts | labelCalibratedPresets": {
+    "message": "Predefinições calibradas"
   },
-  "panels/timeline/components/CPUThrottlingSelector.ts | noThrottling": {
-    "message": "Sem limitação"
+  "panels/timeline/components/CPUThrottlingSelector.ts | recalibrate": {
+    "message": "Recalibrar…"
+  },
+  "panels/timeline/components/CPUThrottlingSelector.ts | recommendedThrottling": {
+    "message": "{PH1} – recomendado"
+  },
+  "panels/timeline/components/CPUThrottlingSelector.ts | recommendedThrottlingReason": {
+    "message": "Considere mudar a configuração para simular ambientes de usuários reais"
   },
   "panels/timeline/components/DetailsView.ts | forcedReflow": {
     "message": "Reflow forçado"
@@ -13577,14 +13925,8 @@
   "panels/timeline/components/DetailsView.ts | websocketProtocol": {
     "message": "Protocolo do WebSocket"
   },
-  "panels/timeline/components/FieldSettingsDialog.ts | add": {
-    "message": "Adicionar"
-  },
   "panels/timeline/components/FieldSettingsDialog.ts | advanced": {
     "message": "Avançado"
-  },
-  "panels/timeline/components/FieldSettingsDialog.ts | alreadyMapped": {
-    "message": "\"{PH1}\" já está mapeado para uma origem de produção."
   },
   "panels/timeline/components/FieldSettingsDialog.ts | cancel": {
     "message": "Cancelar"
@@ -13594,15 +13936,6 @@
   },
   "panels/timeline/components/FieldSettingsDialog.ts | configureFieldData": {
     "message": "Configurar a busca de dados de campo"
-  },
-  "panels/timeline/components/FieldSettingsDialog.ts | delete": {
-    "message": "Excluir"
-  },
-  "panels/timeline/components/FieldSettingsDialog.ts | developmentOrigin": {
-    "message": "Origem de desenvolvimento"
-  },
-  "panels/timeline/components/FieldSettingsDialog.ts | developmentOriginValue": {
-    "message": "Origem de desenvolvimento: {PH1}"
   },
   "panels/timeline/components/FieldSettingsDialog.ts | doesNotHaveSufficientData": {
     "message": "O Chrome UX Report não tem dados de velocidade real suficientes para esta página."
@@ -13631,12 +13964,6 @@
   "panels/timeline/components/FieldSettingsDialog.ts | privacyDisclosure": {
     "message": "Declaração de privacidade"
   },
-  "panels/timeline/components/FieldSettingsDialog.ts | productionOrigin": {
-    "message": "Origem de produção"
-  },
-  "panels/timeline/components/FieldSettingsDialog.ts | productionOriginValue": {
-    "message": "Origem de produção: {PH1}"
-  },
   "panels/timeline/components/FieldSettingsDialog.ts | setUp": {
     "message": "Configurar"
   },
@@ -13645,6 +13972,39 @@
   },
   "panels/timeline/components/FieldSettingsDialog.ts | whenPerformanceIsShown": {
     "message": "Quando o DevTools estiver aberto, os URLs visitados serão enviados ao Google para consultar os dados de campo. Essas solicitações não estão vinculadas à sua Conta do Google."
+  },
+  "panels/timeline/components/IgnoreListSetting.ts | addNewRegex": {
+    "message": "Adicionar uma regra de expressão regular para o URL do script"
+  },
+  "panels/timeline/components/IgnoreListSetting.ts | ignoreList": {
+    "message": "Lista de ignorados"
+  },
+  "panels/timeline/components/IgnoreListSetting.ts | ignoreListDescription": {
+    "message": "Adicione regras de expressão regular para remover os scripts correspondentes do Flame Chart."
+  },
+  "panels/timeline/components/IgnoreListSetting.ts | ignoreScriptsWhoseNamesMatchNewRegex": {
+    "message": "Ignorar scripts cujos nomes correspondem à nova regex"
+  },
+  "panels/timeline/components/IgnoreListSetting.ts | ignoreScriptsWhoseNamesMatchS": {
+    "message": "Ignorar scripts com nomes correspondentes a \"{regex}\""
+  },
+  "panels/timeline/components/IgnoreListSetting.ts | patternAlreadyExists": {
+    "message": "A regra já existe"
+  },
+  "panels/timeline/components/IgnoreListSetting.ts | patternAlreadyExistsWillBeEnables": {
+    "message": "Essa regra já existe, mas está desativada. A regra será reativada se você salvar esse valor"
+  },
+  "panels/timeline/components/IgnoreListSetting.ts | patternCannotBeEmpty": {
+    "message": "A regra não pode ficar em branco"
+  },
+  "panels/timeline/components/IgnoreListSetting.ts | patternMustBeAValidRegular": {
+    "message": "A regra precisa ser uma expressão regular válida"
+  },
+  "panels/timeline/components/IgnoreListSetting.ts | removeRegex": {
+    "message": "Remover a regex: \"{regex}\""
+  },
+  "panels/timeline/components/IgnoreListSetting.ts | showIgnoreListSettingDialog": {
+    "message": "Mostrar caixa de diálogo de configuração da lista de ignorados"
   },
   "panels/timeline/components/InteractionBreakdown.ts | inputDelay": {
     "message": "Latência na entrada"
@@ -13784,6 +14144,12 @@
   "panels/timeline/components/LiveMetricsView.ts | nextSteps": {
     "message": "Próximas etapas"
   },
+  "panels/timeline/components/LiveMetricsView.ts | nodeClickToRecord": {
+    "message": "Gravar uma linha do tempo de desempenho do processo do nó conectado."
+  },
+  "panels/timeline/components/LiveMetricsView.ts | nodePerformanceTimeline": {
+    "message": "Desempenho do nó"
+  },
   "panels/timeline/components/LiveMetricsView.ts | notEnoughData": {
     "message": "Não há dados suficientes"
   },
@@ -13808,9 +14174,6 @@
   "panels/timeline/components/LiveMetricsView.ts | processingDuration": {
     "message": "Duração do processamento"
   },
-  "panels/timeline/components/LiveMetricsView.ts | realUserEnvironments": {
-    "message": "Ambientes reais de usuários"
-  },
   "panels/timeline/components/LiveMetricsView.ts | resourceLoadDelay": {
     "message": "Atraso no carregamento de recursos"
   },
@@ -13832,9 +14195,6 @@
   "panels/timeline/components/LiveMetricsView.ts | showInpInteraction": {
     "message": "Acesse a interação do INP."
   },
-  "panels/timeline/components/LiveMetricsView.ts | simulateDifferentDevices": {
-    "message": "simular diferentes dispositivos"
-  },
   "panels/timeline/components/LiveMetricsView.ts | tablet": {
     "message": "Tablet"
   },
@@ -13854,7 +14214,7 @@
     "message": "URL: {PH1}"
   },
   "panels/timeline/components/LiveMetricsView.ts | useDeviceToolbar": {
-    "message": "Use a barra de ferramentas do dispositivo para {PH1}."
+    "message": "Use a [barra de ferramentas do dispositivo](https://developer.chrome.com/docs/devtools/device-mode) e configure a limitação para simular ambientes de usuários reais e identificar outros problemas de desempenho."
   },
   "panels/timeline/components/LiveMetricsView.ts | worstCluster": {
     "message": "Pior cluster"
@@ -14018,6 +14378,9 @@
   "panels/timeline/components/NetworkRequestDetails.ts | encodedData": {
     "message": "Dados codificados"
   },
+  "panels/timeline/components/NetworkRequestDetails.ts | entity": {
+    "message": "Terceiros"
+  },
   "panels/timeline/components/NetworkRequestDetails.ts | fromCache": {
     "message": "Do cache"
   },
@@ -14035,9 +14398,6 @@
   },
   "panels/timeline/components/NetworkRequestDetails.ts | no": {
     "message": "Não"
-  },
-  "panels/timeline/components/NetworkRequestDetails.ts | preview": {
-    "message": "Visualização"
   },
   "panels/timeline/components/NetworkRequestDetails.ts | priority": {
     "message": "Prioridade"
@@ -14090,8 +14450,32 @@
   "panels/timeline/components/NetworkThrottlingSelector.ts | presets": {
     "message": "Predefinições"
   },
+  "panels/timeline/components/NetworkThrottlingSelector.ts | recommendedThrottling": {
+    "message": "{PH1} – recomendado"
+  },
+  "panels/timeline/components/NetworkThrottlingSelector.ts | recommendedThrottlingReason": {
+    "message": "Considere mudar a configuração para simular ambientes de usuários reais"
+  },
+  "panels/timeline/components/OriginMap.ts | alreadyMapped": {
+    "message": "\"{PH1}\" já está mapeado para uma origem de produção."
+  },
+  "panels/timeline/components/OriginMap.ts | developmentOrigin": {
+    "message": "Origem de desenvolvimento"
+  },
+  "panels/timeline/components/OriginMap.ts | invalidOrigin": {
+    "message": "\"{PH1}\" não é uma origem ou um URL válido."
+  },
+  "panels/timeline/components/OriginMap.ts | pageHasNoData": {
+    "message": "O Chrome UX Report não tem dados de usuários reais suficientes para esta página."
+  },
+  "panels/timeline/components/OriginMap.ts | productionOrigin": {
+    "message": "Origem de produção"
+  },
   "panels/timeline/components/RelatedInsightChips.ts | insightKeyword": {
     "message": "Insight"
+  },
+  "panels/timeline/components/RelatedInsightChips.ts | insightWithName": {
+    "message": "Insight: {PH1}"
   },
   "panels/timeline/components/SidebarAnnotationsTab.ts | annotationGetStarted": {
     "message": "Faça anotações em um rastro para você e outras pessoas"
@@ -14138,8 +14522,38 @@
   "panels/timeline/components/SidebarInsightsTab.ts | feedbackTooltip": {
     "message": "Os Insights são um recurso experimental. Seu feedback nos ajuda a melhorar."
   },
+  "panels/timeline/components/SidebarSingleInsightSet.ts | dismissTitle": {
+    "message": "Dispensar"
+  },
+  "panels/timeline/components/SidebarSingleInsightSet.ts | fieldMismatchNotice": {
+    "message": "Há muitos motivos pelos quais as métricas locais e de campo [podem não corresponder](https://web.dev/articles/lab-and-field-data-differences). Ajuste as [configurações de limitação e a emulação de dispositivo](https://developer.chrome.com/docs/devtools/device-mode) para analisar rastros mais semelhantes ao ambiente do usuário médio."
+  },
+  "panels/timeline/components/SidebarSingleInsightSet.ts | fieldMismatchTitle": {
+    "message": "As métricas locais e de campo não correspondem"
+  },
+  "panels/timeline/components/SidebarSingleInsightSet.ts | fieldScoreLabel": {
+    "message": "Campo ({PH1})"
+  },
   "panels/timeline/components/SidebarSingleInsightSet.ts | metricScore": {
     "message": "{PH1}: pontuação {PH2} {PH3}"
+  },
+  "panels/timeline/components/SidebarSingleInsightSet.ts | metricScoreUnavailable": {
+    "message": "{PH1}: indisponível"
+  },
+  "panels/timeline/components/SidebarSingleInsightSet.ts | originOption": {
+    "message": "Origem"
+  },
+  "panels/timeline/components/SidebarSingleInsightSet.ts | passedInsights": {
+    "message": "Insights aprovados ({PH1})"
+  },
+  "panels/timeline/components/SidebarSingleInsightSet.ts | urlOption": {
+    "message": "URL"
+  },
+  "panels/timeline/components/TimelineSummary.ts | rangeSS": {
+    "message": "Intervalo:  {PH1} – {PH2}"
+  },
+  "panels/timeline/components/TimelineSummary.ts | total": {
+    "message": "Total"
   },
   "panels/timeline/components/Utils.ts | fms": {
     "message": "{PH1}[ms]()"
@@ -14147,149 +14561,26 @@
   "panels/timeline/components/Utils.ts | fs": {
     "message": "{PH1}[s]()"
   },
-  "panels/timeline/components/insights/CLSCulprits.ts | animation": {
-    "message": "Animação"
+  "panels/timeline/components/insights/BaseInsightComponent.ts | estimatedSavings": {
+    "message": "Economia estimada: {PH1}"
   },
-  "panels/timeline/components/insights/CLSCulprits.ts | fontRequest": {
-    "message": "Solicitação de fonte"
+  "panels/timeline/components/insights/BaseInsightComponent.ts | estimatedSavingsTimingAndBytes": {
+    "message": "Economia estimada: {PH1} e {PH2}"
   },
-  "panels/timeline/components/insights/CLSCulprits.ts | injectedIframe": {
-    "message": "iframe injetado"
+  "panels/timeline/components/insights/BaseInsightComponent.ts | viewDetails": {
+    "message": "Mais detalhes sobre a {PH1}"
   },
-  "panels/timeline/components/insights/CLSCulprits.ts | layoutShiftCluster": {
-    "message": "Cluster de troca de layout em {PH1}"
+  "panels/timeline/overlays/OverlaysImpl.ts | fieldMetricMarkerField": {
+    "message": "{PH1} - Campo ({PH2})"
   },
-  "panels/timeline/components/insights/CLSCulprits.ts | topCulprits": {
-    "message": "Principais causas da troca de layout"
+  "panels/timeline/overlays/OverlaysImpl.ts | fieldMetricMarkerLocal": {
+    "message": "{PH1} - Local"
   },
-  "panels/timeline/components/insights/CLSCulprits.ts | unsizedImages": {
-    "message": "Imagens sem tamanho definido"
+  "panels/timeline/overlays/OverlaysImpl.ts | originOption": {
+    "message": "Origem"
   },
-  "panels/timeline/components/insights/CLSCulprits.ts | worstCluster": {
-    "message": "Pior cluster"
-  },
-  "panels/timeline/components/insights/CLSCulprits.ts | worstLayoutShiftCluster": {
-    "message": "Pior cluster de troca de layout"
-  },
-  "panels/timeline/components/insights/DocumentLatency.ts | failedAriaLabel": {
-    "message": "Falha na verificação de insights: {PH1}"
-  },
-  "panels/timeline/components/insights/DocumentLatency.ts | failedRedirects": {
-    "message": "Tinha redirecionamentos"
-  },
-  "panels/timeline/components/insights/DocumentLatency.ts | failedServerResponseTime": {
-    "message": "O servidor demorou para responder"
-  },
-  "panels/timeline/components/insights/DocumentLatency.ts | failedTextCompression": {
-    "message": "Nenhuma compactação aplicada"
-  },
-  "panels/timeline/components/insights/DocumentLatency.ts | passingRedirects": {
-    "message": "Sem redirecionamentos"
-  },
-  "panels/timeline/components/insights/DocumentLatency.ts | passingServerResponseTime": {
-    "message": "O servidor respondeu rapidamente"
-  },
-  "panels/timeline/components/insights/DocumentLatency.ts | passingTextCompression": {
-    "message": "Compactação de texto aplicada"
-  },
-  "panels/timeline/components/insights/DocumentLatency.ts | redirectsLabel": {
-    "message": "Redirecionamentos"
-  },
-  "panels/timeline/components/insights/DocumentLatency.ts | serverResponseTimeLabel": {
-    "message": "Tempo de resposta do servidor"
-  },
-  "panels/timeline/components/insights/DocumentLatency.ts | successAriaLabel": {
-    "message": "Verificação de insights aprovada: {PH1}"
-  },
-  "panels/timeline/components/insights/DocumentLatency.ts | uncompressedDownload": {
-    "message": "Download sem compactação"
-  },
-  "panels/timeline/components/insights/FontDisplay.ts | fontColumn": {
-    "message": "Fonte"
-  },
-  "panels/timeline/components/insights/FontDisplay.ts | wastedTimeColumn": {
-    "message": "Tempo perdido"
-  },
-  "panels/timeline/components/insights/InteractionToNextPaint.ts | duration": {
-    "message": "Duração"
-  },
-  "panels/timeline/components/insights/InteractionToNextPaint.ts | inputDelay": {
-    "message": "Latência na entrada"
-  },
-  "panels/timeline/components/insights/InteractionToNextPaint.ts | phase": {
-    "message": "Fase"
-  },
-  "panels/timeline/components/insights/InteractionToNextPaint.ts | presentationDelay": {
-    "message": "Atraso na apresentação"
-  },
-  "panels/timeline/components/insights/InteractionToNextPaint.ts | processingDuration": {
-    "message": "Duração do processamento"
-  },
-  "panels/timeline/components/insights/LCPDiscovery.ts | failedAriaLabel": {
-    "message": "Falha na verificação de insights: {PH1}"
-  },
-  "panels/timeline/components/insights/LCPDiscovery.ts | fetchPriorityApplied": {
-    "message": "Propriedade fetchpriority=high aplicada"
-  },
-  "panels/timeline/components/insights/LCPDiscovery.ts | lazyLoadNotApplied": {
-    "message": "o carregamento lento não foi aplicado"
-  },
-  "panels/timeline/components/insights/LCPDiscovery.ts | lcpLoadDelay": {
-    "message": "A imagem da LCP carregou {PH1} depois do ponto de partida mais antigo."
-  },
-  "panels/timeline/components/insights/LCPDiscovery.ts | requestDiscoverable": {
-    "message": "A solicitação é detectável no documento inicial"
-  },
-  "panels/timeline/components/insights/LCPDiscovery.ts | successAriaLabel": {
-    "message": "Verificação de insights aprovada: {PH1}"
-  },
-  "panels/timeline/components/insights/LCPPhases.ts | elementRenderDelay": {
-    "message": "Atraso na renderização do elemento"
-  },
-  "panels/timeline/components/insights/LCPPhases.ts | percentLCP": {
-    "message": "% de LCP"
-  },
-  "panels/timeline/components/insights/LCPPhases.ts | phase": {
-    "message": "Fase"
-  },
-  "panels/timeline/components/insights/LCPPhases.ts | resourceLoadDelay": {
-    "message": "Atraso no carregamento de recursos"
-  },
-  "panels/timeline/components/insights/LCPPhases.ts | resourceLoadDuration": {
-    "message": "Duração do carregamento de recursos"
-  },
-  "panels/timeline/components/insights/LCPPhases.ts | timeToFirstByte": {
-    "message": "Time to First Byte"
-  },
-  "panels/timeline/components/insights/RenderBlocking.ts | duration": {
-    "message": "Duração"
-  },
-  "panels/timeline/components/insights/RenderBlocking.ts | renderBlockingRequest": {
-    "message": "Solicitação"
-  },
-  "panels/timeline/components/insights/SlowCSSSelector.ts | elapsed": {
-    "message": "Tempo decorrido"
-  },
-  "panels/timeline/components/insights/SlowCSSSelector.ts | matchAttempts": {
-    "message": "Tentativas de correspondência"
-  },
-  "panels/timeline/components/insights/SlowCSSSelector.ts | matchCount": {
-    "message": "Número de correspondências"
-  },
-  "panels/timeline/components/insights/SlowCSSSelector.ts | topSelectors": {
-    "message": "Principais seletores"
-  },
-  "panels/timeline/components/insights/SlowCSSSelector.ts | total": {
-    "message": "Total"
-  },
-  "panels/timeline/components/insights/ThirdParties.ts | columnBlockingTime": {
-    "message": "Tempo de bloqueio"
-  },
-  "panels/timeline/components/insights/ThirdParties.ts | columnThirdParty": {
-    "message": "Terceiros"
-  },
-  "panels/timeline/components/insights/ThirdParties.ts | columnTransferSize": {
-    "message": "Tamanho da transferência"
+  "panels/timeline/overlays/OverlaysImpl.ts | urlOption": {
+    "message": "URL"
   },
   "panels/timeline/overlays/components/EntriesLinkOverlay.ts | diagram": {
     "message": "Links entre entradas"
@@ -14351,6 +14642,9 @@
   "panels/timeline/utils/EntryName.ts | frame": {
     "message": "Frame"
   },
+  "panels/timeline/utils/EntryName.ts | layoutShift": {
+    "message": "Troca de layout"
+  },
   "panels/timeline/utils/EntryName.ts | wsConnectionClosed": {
     "message": "WebSocket fechado"
   },
@@ -14410,6 +14704,9 @@
   },
   "panels/timeline/utils/EntryStyles.ts | computeIntersections": {
     "message": "Calcular intersecções"
+  },
+  "panels/timeline/utils/EntryStyles.ts | consoleTaskRun": {
+    "message": "Executar tarefa do console"
   },
   "panels/timeline/utils/EntryStyles.ts | consoleTime": {
     "message": "Tempo do console"
@@ -14523,7 +14820,7 @@
     "message": "Frame do JS"
   },
   "panels/timeline/utils/EntryStyles.ts | largestContentfulPaint": {
-    "message": "Maior exibição de conteúdo"
+    "message": "Largest Contentful Paint"
   },
   "panels/timeline/utils/EntryStyles.ts | layerize": {
     "message": "Criação de camadas"
@@ -14711,6 +15008,18 @@
   "panels/timeline/utils/EntryStyles.ts | xhrReadyStateChange": {
     "message": "Mudar a readyState da XHR"
   },
+  "panels/timeline/utils/IgnoreList.ts | skip3rdPartyScripts": {
+    "message": "Marcado com ignoreList no mapa de origem"
+  },
+  "panels/timeline/utils/IgnoreList.ts | skipAnonymousScripts": {
+    "message": "Script anônimo"
+  },
+  "panels/timeline/utils/IgnoreList.ts | skipContentScripts": {
+    "message": "Script de conteúdo"
+  },
+  "panels/timeline/utils/IgnoreList.ts | unknown": {
+    "message": "Desconhecida"
+  },
   "panels/utils/utils.ts | requestContentHeadersOverridden": {
     "message": "O conteúdo da solicitação e os cabeçalhos foram substituídos"
   },
@@ -14861,11 +15170,8 @@
   "panels/webauthn/webauthn-meta.ts | webauthn": {
     "message": "WebAuthn"
   },
-  "panels/whats_new/ReleaseNoteView.ts | close": {
-    "message": "Fechar"
-  },
-  "panels/whats_new/ReleaseNoteView.ts | learnMore": {
-    "message": "Saiba mais"
+  "panels/whats_new/ReleaseNoteView.ts | seeFeatures": {
+    "message": "Veja todos os novos recursos"
   },
   "panels/whats_new/whats_new-meta.ts | bug": {
     "message": "bug"
@@ -14888,40 +15194,7 @@
   "panels/whats_new/whats_new-meta.ts | whatsNew": {
     "message": "Novidades"
   },
-  "ui/components/data_grid/DataGrid.ts | enterToSort": {
-    "message": "Estado de classificação da coluna: {PH1}. Pressione \"Enter\" para aplicar o filtro de classificação"
-  },
-  "ui/components/data_grid/DataGrid.ts | headerOptions": {
-    "message": "Opções de cabeçalho"
-  },
-  "ui/components/data_grid/DataGrid.ts | resetColumns": {
-    "message": "Redefinir colunas"
-  },
-  "ui/components/data_grid/DataGrid.ts | sortAsc": {
-    "message": "crescente"
-  },
-  "ui/components/data_grid/DataGrid.ts | sortBy": {
-    "message": "Ordenar por"
-  },
-  "ui/components/data_grid/DataGrid.ts | sortDesc": {
-    "message": "decrescente"
-  },
-  "ui/components/data_grid/DataGrid.ts | sortNone": {
-    "message": "nenhum"
-  },
-  "ui/components/data_grid/DataGridController.ts | sortInAscendingOrder": {
-    "message": "Classificação de {PH1} por ordem crescente"
-  },
-  "ui/components/data_grid/DataGridController.ts | sortInDescendingOrder": {
-    "message": "Classificação de {PH1} por ordem decrescente"
-  },
-  "ui/components/data_grid/DataGridController.ts | sortingCanceled": {
-    "message": "Classificação de {PH1} cancelada"
-  },
-  "ui/components/dialogs/IconDialog.ts | close": {
-    "message": "Fechar"
-  },
-  "ui/components/dialogs/ShortcutDialog.ts | close": {
+  "ui/components/dialogs/Dialog.ts | close": {
     "message": "Fechar"
   },
   "ui/components/dialogs/ShortcutDialog.ts | dialogTitle": {
@@ -15161,6 +15434,9 @@
   "ui/legacy/InspectorView.ts | panels": {
     "message": "Painéis"
   },
+  "ui/legacy/InspectorView.ts | reloadDebuggedTab": {
+    "message": "Atualizar"
+  },
   "ui/legacy/InspectorView.ts | reloadDevtools": {
     "message": "Recarregar DevTools"
   },
@@ -15301,6 +15577,12 @@
   },
   "ui/legacy/TabbedPane.ts | moreTabs": {
     "message": "Mais guias"
+  },
+  "ui/legacy/TabbedPane.ts | moveTabLeft": {
+    "message": "Mover para a esquerda"
+  },
+  "ui/legacy/TabbedPane.ts | moveTabRight": {
+    "message": "Mover para a direita"
   },
   "ui/legacy/TabbedPane.ts | previewFeature": {
     "message": "Recurso de pré-lançamento"
@@ -15527,6 +15809,9 @@
   "ui/legacy/components/data_grid/DataGrid.ts | emptyRowCreated": {
     "message": "Uma linha vazia foi criada na tabela. Clique duas vezes ou use o menu de contexto para editá-la."
   },
+  "ui/legacy/components/data_grid/DataGrid.ts | enterToSort": {
+    "message": "Estado de classificação da coluna: {PH1}. Pressione \"Enter\" para aplicar o filtro de classificação"
+  },
   "ui/legacy/components/data_grid/DataGrid.ts | expanded": {
     "message": "expandido"
   },
@@ -15554,11 +15839,8 @@
   "ui/legacy/components/data_grid/DataGrid.ts | sortByString": {
     "message": "Ordenar por"
   },
-  "ui/legacy/components/data_grid/DataGridWithPreview.ts | numberEntries": {
-    "message": "Número de entradas mostradas na tabela: {PH1}"
-  },
-  "ui/legacy/components/data_grid/DataGridWithPreview.ts | selectAValueToPreview": {
-    "message": "Selecionar um valor para visualização"
+  "ui/legacy/components/data_grid/DataGrid.ts | sortableColumn": {
+    "message": "Coluna ordenável. Pressione \"Enter\" para aplicar o filtro de classificação"
   },
   "ui/legacy/components/data_grid/ShowMoreDataGridNode.ts | showAllD": {
     "message": "Mostrar todos os {PH1}"
@@ -15741,7 +16023,7 @@
     "message": "Excluir anotações"
   },
   "ui/legacy/components/perf_ui/FlameChart.ts | enterTrackConfigurationMode": {
-    "message": "Configurar rastreamentos…"
+    "message": "Configurar rastreamentos"
   },
   "ui/legacy/components/perf_ui/FlameChart.ts | eventSelectedFromGroup": {
     "message": "Um evento {PH1} foi selecionado na {PH2}. Pressione Enter para focar neste evento."
@@ -15797,11 +16079,14 @@
   "ui/legacy/components/perf_ui/PieChart.ts | total": {
     "message": "Total"
   },
+  "ui/legacy/components/perf_ui/perf_ui-meta.ts | classic": {
+    "message": "Clássico"
+  },
   "ui/legacy/components/perf_ui/perf_ui-meta.ts | collectGarbage": {
     "message": "Coletar lixo"
   },
-  "ui/legacy/components/perf_ui/perf_ui-meta.ts | flamechartMouseWheelAction": {
-    "message": "Ação da roda do mouse no Flame Chart:"
+  "ui/legacy/components/perf_ui/perf_ui-meta.ts | flamechartSelectedNavigation": {
+    "message": "Navegação no Flame Chart:"
   },
   "ui/legacy/components/perf_ui/perf_ui-meta.ts | hideLiveMemoryAllocation": {
     "message": "Ocultar anotações de alocação de memória ativas"
@@ -15809,14 +16094,11 @@
   "ui/legacy/components/perf_ui/perf_ui-meta.ts | liveMemoryAllocationAnnotations": {
     "message": "Anotações de alocação de memória ativa"
   },
-  "ui/legacy/components/perf_ui/perf_ui-meta.ts | scroll": {
-    "message": "Rolar"
+  "ui/legacy/components/perf_ui/perf_ui-meta.ts | modern": {
+    "message": "Moderna"
   },
   "ui/legacy/components/perf_ui/perf_ui-meta.ts | showLiveMemoryAllocation": {
     "message": "Mostrar anotações de alocação de memória ativa"
-  },
-  "ui/legacy/components/perf_ui/perf_ui-meta.ts | zoom": {
-    "message": "Aumentar zoom"
   },
   "ui/legacy/components/quick_open/CommandMenu.ts | command": {
     "message": "Comando"
@@ -15832,6 +16114,9 @@
   },
   "ui/legacy/components/quick_open/CommandMenu.ts | run": {
     "message": "Executar"
+  },
+  "ui/legacy/components/quick_open/CommandMenu.ts | runCommand": {
+    "message": "Executar comando"
   },
   "ui/legacy/components/quick_open/FilteredListWidget.ts | noResultsFound": {
     "message": "Nenhum resultado encontrado"
@@ -15889,6 +16174,9 @@
   },
   "ui/legacy/components/source_frame/JSONView.ts | find": {
     "message": "Localizar"
+  },
+  "ui/legacy/components/source_frame/PreviewFactory.ts | failedToLoadData": {
+    "message": "Falha ao carregar os dados"
   },
   "ui/legacy/components/source_frame/PreviewFactory.ts | nothingToPreview": {
     "message": "Nada para visualizar"
@@ -16027,8 +16315,5 @@
   },
   "ui/legacy/components/utils/Linkifier.ts | unknown": {
     "message": "(desconhecido)"
-  },
-  "ui/legacy/components/utils/TargetDetachedDialog.ts | websocketDisconnected": {
-    "message": "WebSocket desconectado"
   }
 }

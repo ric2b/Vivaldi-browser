@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#import <algorithm>
 #import <memory>
 #import <string>
 #import <vector>
@@ -9,14 +10,13 @@
 #import "base/apple/foundation_util.h"
 #import "base/functional/callback.h"
 #import "base/notreached.h"
-#import "base/ranges/algorithm.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/values.h"
-#import "components/autofill/core/browser/browser_autofill_manager.h"
 #import "components/autofill/core/browser/form_structure.h"
+#import "components/autofill/core/browser/foundations/browser_autofill_manager.h"
 #import "components/autofill/core/browser/payments/legal_message_line.h"
 #import "components/autofill/core/browser/payments/payments_autofill_client.h"
-#import "components/autofill/core/browser/ui/suggestion_type.h"
+#import "components/autofill/core/browser/suggestions/suggestion_type.h"
 #import "components/autofill/ios/browser/autofill_agent.h"
 #import "components/autofill/ios/browser/autofill_driver_ios.h"
 #import "components/autofill/ios/browser/autofill_driver_ios_factory.h"
@@ -32,6 +32,7 @@
 #import "ios/web/public/js_messaging/web_frames_manager.h"
 #import "ios/web/public/web_state.h"
 #import "ios/web_view/internal/app/application_context.h"
+#import "ios/web_view/internal/autofill/cwv_autofill_controller+testing.h"
 #import "ios/web_view/internal/autofill/cwv_autofill_controller_internal.h"
 #import "ios/web_view/internal/autofill/cwv_autofill_form_internal.h"
 #import "ios/web_view/internal/autofill/cwv_autofill_profile_internal.h"
@@ -44,10 +45,12 @@
 #import "ios/web_view/internal/autofill/web_view_autofill_log_router_factory.h"
 #import "ios/web_view/internal/autofill/web_view_personal_data_manager_factory.h"
 #import "ios/web_view/internal/autofill/web_view_strike_database_factory.h"
+#import "ios/web_view/internal/cwv_web_view_internal.h"
 #import "ios/web_view/internal/passwords/cwv_password_internal.h"
 #import "ios/web_view/internal/signin/web_view_identity_manager_factory.h"
 #import "ios/web_view/internal/web_view_browser_state.h"
 #import "ios/web_view/public/cwv_autofill_controller_delegate.h"
+#import "ios/web_view/public/cwv_web_view.h"
 #import "net/base/apple/url_conversions.h"
 
 using autofill::FieldRendererId;
@@ -94,18 +97,35 @@ using UserDecision = autofill::AutofillClient::AddressPromptUserDecision;
 
 @synthesize delegate = _delegate;
 
+- (instancetype)initWithWebState:(web::WebState*)webState
+                   autofillAgent:(AutofillAgent*)autofillAgent
+                 passwordManager:
+                     (std::unique_ptr<password_manager::PasswordManager>)
+                         passwordManager
+           passwordManagerClient:
+               (std::unique_ptr<ios_web_view::WebViewPasswordManagerClient>)
+                   passwordManagerClient
+              passwordController:(SharedPasswordController*)passwordController {
+  self = [self initWithWebState:webState
+          autofillClientForTest:nullptr
+                  autofillAgent:autofillAgent
+                passwordManager:std::move(passwordManager)
+          passwordManagerClient:std::move(passwordManagerClient)
+             passwordController:passwordController];
+  return self;
+}
+
 - (instancetype)
          initWithWebState:(web::WebState*)webState
-           autofillClient:(std::unique_ptr<autofill::WebViewAutofillClientIOS>)
-                              autofillClient
+    autofillClientForTest:(std::unique_ptr<autofill::WebViewAutofillClientIOS>)
+                              autofillClientForTest
             autofillAgent:(AutofillAgent*)autofillAgent
           passwordManager:(std::unique_ptr<password_manager::PasswordManager>)
                               passwordManager
     passwordManagerClient:
         (std::unique_ptr<ios_web_view::WebViewPasswordManagerClient>)
             passwordManagerClient
-       passwordController:(SharedPasswordController*)passwordController
-        applicationLocale:(const std::string&)applicationLocale {
+       passwordController:(SharedPasswordController*)passwordController {
   self = [super init];
   if (self) {
     DCHECK(webState);
@@ -120,11 +140,18 @@ using UserDecision = autofill::AutofillClient::AddressPromptUserDecision;
     _formActivityObserverBridge =
         std::make_unique<autofill::FormActivityObserverBridge>(webState, self);
 
-    _autofillClient = std::move(autofillClient);
-    _autofillClient->set_bridge(self);
-
-    autofill::AutofillDriverIOSFactory::CreateForWebState(
-        _webState, _autofillClient.get(), self, applicationLocale);
+    auto from_web_state_impl =
+        [](web::WebState* web_state) -> autofill::AutofillClientIOS* {
+      if (CWVWebView* web_view = [CWVWebView webViewForWebState:web_state]) {
+        CWVAutofillController* controller = web_view.autofillController;
+        return [controller autofillClient];
+      }
+      return nullptr;
+    };
+    _autofillClient = autofillClientForTest
+                          ? std::move(autofillClientForTest)
+                          : autofill::WebViewAutofillClientIOS::Create(
+                                from_web_state_impl, _webState, self);
 
     _passwordManagerClient = std::move(passwordManagerClient);
     _passwordManagerClient->set_bridge(self);
@@ -145,6 +172,10 @@ using UserDecision = autofill::AutofillClient::AddressPromptUserDecision;
 }
 
 #pragma mark - Public Methods
+
+- (autofill::WebViewAutofillClientIOS*)autofillClient {
+  return _autofillClient.get();
+}
 
 - (void)clearFormWithName:(NSString*)formName
           fieldIdentifier:(NSString*)fieldIdentifier
@@ -191,7 +222,8 @@ using UserDecision = autofill::AutofillClient::AddressPromptUserDecision;
              fieldType:fieldType
                   type:_lastFormActivityType
             typedValue:_lastFormActivityTypedValue
-               frameID:frameID];
+               frameID:frameID
+          onlyPassword:NO];
   // It is necessary to call |checkIfSuggestionsAvailableForForm| before
   // |retrieveSuggestionsForForm| because the former actually queries the db,
   // while the latter merely returns them.
@@ -277,8 +309,9 @@ using UserDecision = autofill::AutofillClient::AddressPromptUserDecision;
   web::WebFrame* frame =
       framesManager->GetFrameWithId(_lastFormActivityWebFrameID);
 
-  if (!frame)
+  if (!frame) {
     return;
+  }
 
   autofill::SuggestionControllerJavaScriptFeature::GetInstance()
       ->SelectPreviousElementInFrame(frame);
@@ -291,8 +324,9 @@ using UserDecision = autofill::AutofillClient::AddressPromptUserDecision;
   web::WebFrame* frame =
       framesManager->GetFrameWithId(_lastFormActivityWebFrameID);
 
-  if (!frame)
+  if (!frame) {
     return;
+  }
 
   autofill::SuggestionControllerJavaScriptFeature::GetInstance()
       ->SelectNextElementInFrame(frame);
@@ -319,7 +353,7 @@ using UserDecision = autofill::AutofillClient::AddressPromptUserDecision;
                delegate {
   // We only want Autofill suggestions.
   std::vector<autofill::Suggestion> filtered_suggestions;
-  base::ranges::copy_if(
+  std::ranges::copy_if(
       suggestions, std::back_inserter(filtered_suggestions),
       [](const autofill::Suggestion& suggestion) {
         return suggestion.type == autofill::SuggestionType::kAddressEntry ||
@@ -372,8 +406,8 @@ using UserDecision = autofill::AutofillClient::AddressPromptUserDecision;
             (const autofill::CardUnmaskPromptOptions&)cardUnmaskPromptOptions
                        delegate:(base::WeakPtr<autofill::CardUnmaskDelegate>)
                                     delegate {
-  if ([_delegate respondsToSelector:@selector
-                 (autofillController:verifyCreditCardWithVerifier:)]) {
+  if ([_delegate respondsToSelector:@selector(autofillController:
+                                        verifyCreditCardWithVerifier:)]) {
     ios_web_view::WebViewBrowserState* browserState =
         ios_web_view::WebViewBrowserState::FromBrowserState(
             _webState->GetBrowserState());

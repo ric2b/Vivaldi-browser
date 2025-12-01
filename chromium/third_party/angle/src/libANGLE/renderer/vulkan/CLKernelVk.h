@@ -13,6 +13,7 @@
 #include "libANGLE/renderer/vulkan/vk_helpers.h"
 #include "libANGLE/renderer/vulkan/vk_utils.h"
 
+#include "libANGLE/CLMemory.h"
 #include "libANGLE/renderer/CLKernelImpl.h"
 #include "vulkan/vulkan_core.h"
 
@@ -93,15 +94,20 @@ class CLKernelVk : public CLKernelImpl
     CLProgramVk *getProgram() { return mProgram; }
     const std::string &getKernelName() { return mName; }
     const CLKernelArguments &getArgs() { return mArgs; }
-    vk::AtomicBindingPointer<vk::PipelineLayout> &getPipelineLayout() { return mPipelineLayout; }
+    angle::Result initPipelineLayout()
+    {
+        PipelineLayoutCache *pipelineLayoutCache = mContext->getPipelineLayoutCache();
+        return pipelineLayoutCache->getPipelineLayout(mContext, mPipelineLayoutDesc,
+                                                      mDescriptorSetLayouts, &mPipelineLayout);
+    }
+    const vk::PipelineLayout &getPipelineLayout() const { return *mPipelineLayout; }
     vk::DescriptorSetLayoutPointerArray &getDescriptorSetLayouts() { return mDescriptorSetLayouts; }
     cl::Kernel &getFrontendObject() { return const_cast<cl::Kernel &>(mKernel); }
 
     angle::Result getOrCreateComputePipeline(vk::PipelineCacheAccess *pipelineCache,
                                              const cl::NDRange &ndrange,
                                              const cl::Device &device,
-                                             vk::PipelineHelper **pipelineOut,
-                                             cl::WorkgroupCount *workgroupCountOut);
+                                             vk::PipelineHelper **pipelineOut);
 
     const vk::DescriptorSetLayoutDesc &getDescriptorSetLayoutDesc(DescriptorSetIndex index) const
     {
@@ -129,6 +135,8 @@ class CLKernelVk : public CLKernelImpl
 
     std::vector<uint8_t> &getPodArgumentsData() { return mPodArgumentsData; }
 
+    cl::MemoryPtr getPodBuffer() { return mPODUniformBuffer; }
+
     bool usesPrintf() const;
 
     angle::Result allocateDescriptorSet(
@@ -137,7 +145,10 @@ class CLKernelVk : public CLKernelImpl
         vk::OutsideRenderPassCommandBufferHelper *computePassCommands);
 
   private:
-    static constexpr std::array<size_t, 3> kEmptyWorkgroupSize = {0, 0, 0};
+    static constexpr std::array<uint32_t, 3> kEmptyWorkgroupSize = {0, 0, 0};
+
+    // Initialize the descriptor pools for this kernel resources
+    angle::Result initializeDescriptorPools();
 
     CLProgramVk *mProgram;
     CLContextVk *mContext;
@@ -147,17 +158,24 @@ class CLKernelVk : public CLKernelImpl
 
     // Copy of the pod data
     std::vector<uint8_t> mPodArgumentsData;
+    size_t mPodBufferSize;
 
     vk::ShaderProgramHelper mShaderProgramHelper;
-    vk::ComputePipelineCache mComputePipelineCache;
+    ComputePipelineCache mComputePipelineCache;
     KernelSpecConstants mSpecConstants;
-    vk::AtomicBindingPointer<vk::PipelineLayout> mPipelineLayout;
+
+    // Pipeline and DescriptorSetLayout Shared pointers
+    vk::PipelineLayoutPtr mPipelineLayout;
     vk::DescriptorSetLayoutPointerArray mDescriptorSetLayouts{};
 
+    // DescriptorSet and DescriptorPool shared pointers for this kernel resources
     vk::DescriptorSetArray<vk::DescriptorSetPointer> mDescriptorSets;
+    vk::DescriptorSetArray<vk::DynamicDescriptorPoolPointer> mDynamicDescriptorPools;
 
     vk::DescriptorSetArray<vk::DescriptorSetLayoutDesc> mDescriptorSetLayoutDescs;
     vk::PipelineLayoutDesc mPipelineLayoutDesc;
+
+    cl::MemoryPtr mPODUniformBuffer;
 };
 
 }  // namespace rx

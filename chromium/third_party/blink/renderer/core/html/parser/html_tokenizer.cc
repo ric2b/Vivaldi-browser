@@ -25,12 +25,9 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "third_party/blink/renderer/core/html/parser/html_tokenizer.h"
+
+#include <array>
 
 #include "third_party/blink/renderer/core/html/parser/html_entity_parser.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
@@ -117,7 +114,7 @@ static constexpr uint16_t CreateScanFlags(UChar cc) {
 #define kAttributePartMarker "{{}}"
 
 // Table of precomputed scan flags for the first 128 ASCII characters.
-static constexpr const uint16_t character_scan_flags_[128] = {
+static constexpr std::array<uint16_t, 128> character_scan_flags_ = {
     INT_0_TO_127_LIST(CreateScanFlags)};
 
 static inline UChar ToLowerCase(UChar cc) {
@@ -142,7 +139,7 @@ static inline bool VectorEqualsString(const LCharLiteralBuffer<32>& vector,
   if (!string.length())
     return true;
 
-  return Equal(string.Impl(), vector.data(), vector.size());
+  return Equal(string.Impl(), vector);
 }
 
 #define HTML_BEGIN_STATE(stateName) BEGIN_STATE(HTMLTokenizer, stateName)
@@ -1860,14 +1857,13 @@ String HTMLTokenizer::BufferedCharacters() const {
   characters.ReserveCapacity(NumberOfBufferedCharacters());
   characters.Append('<');
   characters.Append('/');
-  characters.Append(temporary_buffer_.data(), temporary_buffer_.size());
+  characters.Append(temporary_buffer_);
   return characters.ToString();
 }
 
 void HTMLTokenizer::UpdateStateFor(const HTMLToken& token) {
   if (!token.GetName().IsEmpty()) {
-    UpdateStateFor(
-        lookupHTMLTag(token.GetName().data(), token.GetName().size()));
+    UpdateStateFor(LookupHtmlTag(token.GetName()));
   }
 }
 
@@ -1912,11 +1908,8 @@ inline void HTMLTokenizer::AddToPossibleEndTag(LChar cc) {
 }
 
 inline bool HTMLTokenizer::IsAppropriateEndTag() {
-  if (buffered_end_tag_name_.size() != appropriate_end_tag_name_.size())
-    return false;
-
-  return Equal(buffered_end_tag_name_.data(), appropriate_end_tag_name_.data(),
-               buffered_end_tag_name_.size());
+  return base::span(buffered_end_tag_name_) ==
+         base::span(appropriate_end_tag_name_);
 }
 
 inline void HTMLTokenizer::ParseError() {

@@ -150,17 +150,17 @@ void FillPageInPagedSpace(PageMetadata* page,
 }  // namespace
 
 void HeapInternalsBase::SimulateFullSpace(
-    v8::internal::NewSpace* space,
+    v8::internal::NewSpace* new_space,
     std::vector<Handle<FixedArray>>* out_handles) {
-  Heap* heap = space->heap();
+  Heap* heap = new_space->heap();
   IsolateSafepointScope safepoint_scope(heap);
   heap->FreeLinearAllocationAreas();
   // If you see this check failing, disable the flag at the start of your test:
   // v8_flags.stress_concurrent_allocation = false;
   // Background thread allocating concurrently interferes with this function.
   CHECK(!v8_flags.stress_concurrent_allocation);
-  space->heap()->EnsureSweepingCompleted(
-      Heap::SweepingForcedFinalizationMode::kV8Only);
+  new_space->heap()->EnsureSweepingCompleted(
+      Heap::SweepingForcedFinalizationMode::kUnifiedHeap);
   if (v8_flags.minor_ms) {
     auto* space = heap->paged_new_space()->paged_space();
     space->AllocatePageUpToCapacityForTesting();
@@ -184,10 +184,8 @@ void HeapInternalsBase::SimulateFullSpace(v8::internal::PagedSpace* space) {
   // v8_flags.stress_concurrent_allocation = false;
   // Background thread allocating concurrently interferes with this function.
   CHECK(!v8_flags.stress_concurrent_allocation);
-  if (heap->sweeping_in_progress()) {
-    heap->EnsureSweepingCompleted(
-        Heap::SweepingForcedFinalizationMode::kV8Only);
-  }
+  heap->EnsureSweepingCompleted(
+      Heap::SweepingForcedFinalizationMode::kUnifiedHeap);
   space->ResetFreeList();
 }
 

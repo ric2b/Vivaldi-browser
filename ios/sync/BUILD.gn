@@ -13,11 +13,11 @@ source_set("sync_notes") {
   deps = [
     "//components/keyed_service/core",
     "//components/keyed_service/ios",
-    "//ios/chrome/browser/shared/model/browser_state",
+    "//ios/chrome/browser/shared/model/browser",
+    "//third_party/boringssl",
     "//vivaldi/components/notes:browser",
     "//vivaldi/ios/sync:file_sync",
     "//vivaldi/sync/notes:sync_notes",
-    "//third_party/boringssl",
   ]
 }
 
@@ -33,9 +33,9 @@ source_set("invalidations") {
 
   deps = [
     "//base",
-    "//ios/chrome/browser/shared/model/browser_state",
-    "//vivaldi/sync:invalidations",
+    "//ios/chrome/browser/shared/model/browser",
     "//third_party/boringssl",
+    "//vivaldi/sync:invalidations",
   ]
 }
 
@@ -52,8 +52,8 @@ source_set("file_sync") {
   deps = [
     "//components/keyed_service/core",
     "//components/keyed_service/ios",
-    "//ios/chrome/browser/shared/model/browser_state",
-    "//vivaldi/sync/file_sync",
+    "//ios/chrome/browser/shared/model/browser",
     "//third_party/boringssl",
+    "//vivaldi/sync/file_sync",
   ]
 }

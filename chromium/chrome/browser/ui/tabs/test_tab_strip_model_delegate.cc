@@ -47,8 +47,7 @@ bool TestTabStripModelDelegate::IsTabStripEditable() {
   return true;
 }
 
-void TestTabStripModelDelegate::DuplicateContentsAt(int index) {
-}
+void TestTabStripModelDelegate::DuplicateContentsAt(int index) {}
 
 void TestTabStripModelDelegate::MoveToExistingWindow(
     const std::vector<int>& indices,
@@ -131,7 +130,7 @@ BrowserWindowInterface* TestTabStripModelDelegate::GetBrowserWindowInterface() {
 void TestTabStripModelDelegate::OnGroupsDestruction(
     const std::vector<tab_groups::TabGroupId>& group_ids,
     base::OnceCallback<void()> callback,
-    bool is_bulk_operation) {
+    bool delete_groups) {
   std::move(callback).Run();
 }
 

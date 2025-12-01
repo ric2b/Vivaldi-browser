@@ -327,6 +327,7 @@ struct gemv_dense_selector<OnTheRight, ColMajor, true> {
 
       if (!evalToDest) {
 #ifdef EIGEN_DENSE_STORAGE_CTOR_PLUGIN
+        constexpr int Size = Dest::SizeAtCompileTime;
         Index size = dest.size();
         EIGEN_DENSE_STORAGE_CTOR_PLUGIN
 #endif
@@ -391,6 +392,7 @@ struct gemv_dense_selector<OnTheRight, RowMajor, true> {
 
     if (!DirectlyUseRhs) {
 #ifdef EIGEN_DENSE_STORAGE_CTOR_PLUGIN
+      constexpr int Size = ActualRhsTypeCleaned::SizeAtCompileTime;
       Index size = actualRhs.size();
       EIGEN_DENSE_STORAGE_CTOR_PLUGIN
 #endif

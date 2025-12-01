@@ -457,8 +457,7 @@ TEST_F(HlslWriter_BuiltinPolyfillTest, SignVec) {
 %foo = @fragment func():void {
   $B1: {
     %2:vec3<i32> = hlsl.sign vec3<i32>(1i, 2i, 3i)
-    %3:vec3<i32> = convert %2
-    %a:vec3<i32> = let %3
+    %a:vec3<i32> = let %2
     ret
   }
 }
@@ -495,8 +494,9 @@ TEST_F(HlslWriter_BuiltinPolyfillTest, TextureNumLevels) {
     %4:ptr<function, u32, read_write> = access %3, 0u
     %5:ptr<function, u32, read_write> = access %3, 1u
     %6:void = %t.GetDimensions 0u, %4, %5
-    %7:u32 = swizzle %3, y
-    ret %7
+    %7:vec2<u32> = load %3
+    %8:u32 = swizzle %7, y
+    ret %8
   }
 }
 )";
@@ -534,8 +534,9 @@ TEST_F(HlslWriter_BuiltinPolyfillTest, TextureNumLayers) {
     %5:ptr<function, u32, read_write> = access %3, 1u
     %6:ptr<function, u32, read_write> = access %3, 2u
     %7:void = %t.GetDimensions %4, %5, %6
-    %8:u32 = swizzle %3, z
-    ret %8
+    %8:vec3<u32> = load %3
+    %9:u32 = swizzle %8, z
+    ret %9
   }
 }
 )";
@@ -574,8 +575,9 @@ TEST_F(HlslWriter_BuiltinPolyfillTest, TextureNumSamples) {
     %5:ptr<function, u32, read_write> = access %3, 1u
     %6:ptr<function, u32, read_write> = access %3, 2u
     %7:void = %t.GetDimensions %4, %5, %6
-    %8:u32 = swizzle %3, z
-    ret %8
+    %8:vec3<u32> = load %3
+    %9:u32 = swizzle %8, z
+    ret %9
   }
 }
 )";
@@ -687,14 +689,13 @@ TEST_F(HlslWriter_BuiltinPolyfillTest, TextureDimensions_1d_WithU32Lod) {
     auto* expect = R"(
 %foo = func(%t:texture_1d<f32>):u32 {
   $B1: {
-    %3:u32 = convert 3u
-    %4:ptr<function, vec2<u32>, read_write> = var
-    %5:ptr<function, u32, read_write> = access %4, 0u
-    %6:ptr<function, u32, read_write> = access %4, 1u
-    %7:void = %t.GetDimensions %3, %5, %6
-    %8:vec2<u32> = load %4
-    %9:u32 = swizzle %8, x
-    ret %9
+    %3:ptr<function, vec2<u32>, read_write> = var
+    %4:ptr<function, u32, read_write> = access %3, 0u
+    %5:ptr<function, u32, read_write> = access %3, 1u
+    %6:void = %t.GetDimensions 3u, %4, %5
+    %7:vec2<u32> = load %3
+    %8:u32 = swizzle %7, x
+    ret %8
   }
 }
 )";
@@ -851,12 +852,10 @@ TEST_F(HlslWriter_BuiltinPolyfillTest, TextureLoad_1DF32) {
     auto* expect = R"(
 %foo = func(%t:texture_1d<f32>):vec4<f32> {
   $B1: {
-    %3:i32 = convert 0i
-    %4:i32 = convert 0u
-    %5:vec2<i32> = construct %3, %4
-    %6:vec4<f32> = %t.Load %5
-    %7:vec4<f32> = convert %6
-    ret %7
+    %3:i32 = convert 0u
+    %4:vec2<i32> = construct 0i, %3
+    %5:vec4<f32> = %t.Load %4
+    ret %5
   }
 }
 )";
@@ -891,12 +890,9 @@ TEST_F(HlslWriter_BuiltinPolyfillTest, TextureLoad_2DLevelI32) {
     auto* expect = R"(
 %foo = func(%t:texture_2d<i32>):vec4<i32> {
   $B1: {
-    %3:vec2<i32> = convert vec2<i32>(0i)
-    %4:i32 = convert 0i
-    %5:vec3<i32> = construct %3, %4
-    %6:vec4<i32> = %t.Load %5
-    %7:vec4<i32> = convert %6
-    ret %7
+    %3:vec3<i32> = construct vec2<i32>(0i), 0i
+    %4:vec4<i32> = %t.Load %3
+    ret %4
   }
 }
 )";
@@ -931,12 +927,10 @@ TEST_F(HlslWriter_BuiltinPolyfillTest, TextureLoad_3DLevelU32) {
     auto* expect = R"(
 %foo = func(%t:texture_3d<f32>):vec4<f32> {
   $B1: {
-    %3:vec3<i32> = convert vec3<i32>(0i)
-    %4:i32 = convert 0u
-    %5:vec4<i32> = construct %3, %4
-    %6:vec4<f32> = %t.Load %5
-    %7:vec4<f32> = convert %6
-    ret %7
+    %3:i32 = convert 0u
+    %4:vec4<i32> = construct vec3<i32>(0i), %3
+    %5:vec4<f32> = %t.Load %4
+    ret %5
   }
 }
 )";
@@ -971,11 +965,9 @@ TEST_F(HlslWriter_BuiltinPolyfillTest, TextureLoad_Multisampled2DI32) {
     auto* expect = R"(
 %foo = func(%t:texture_multisampled_2d<i32>):vec4<i32> {
   $B1: {
-    %3:vec2<i32> = convert vec2<i32>(0i)
-    %4:i32 = convert 0u
-    %5:vec4<i32> = %t.Load %3, %4
-    %6:vec4<i32> = convert %5
-    ret %6
+    %3:i32 = convert 0u
+    %4:vec4<i32> = %t.Load vec2<i32>(0i), %3
+    ret %4
   }
 }
 )";
@@ -1010,12 +1002,11 @@ TEST_F(HlslWriter_BuiltinPolyfillTest, TextureLoad_Depth2DLevelF32) {
     auto* expect = R"(
 %foo = func(%t:texture_depth_2d):f32 {
   $B1: {
-    %3:vec2<i32> = convert vec2<i32>(0i)
-    %4:i32 = convert 0u
-    %5:vec3<i32> = construct %3, %4
-    %6:vec4<f32> = %t.Load %5
-    %7:f32 = swizzle %6, x
-    ret %7
+    %3:i32 = convert 0u
+    %4:vec3<i32> = construct vec2<i32>(0i), %3
+    %5:vec4<f32> = %t.Load %4
+    %6:f32 = swizzle %5, x
+    ret %6
   }
 }
 )";
@@ -1051,13 +1042,12 @@ TEST_F(HlslWriter_BuiltinPolyfillTest, TextureLoad_Depth2DArrayLevelF32) {
     auto* expect = R"(
 %foo = func(%t:texture_depth_2d_array):f32 {
   $B1: {
-    %3:vec2<i32> = convert vec2<i32>(0i)
+    %3:i32 = convert 0u
     %4:i32 = convert 0u
-    %5:i32 = convert 0u
-    %6:vec4<i32> = construct %3, %4, %5
-    %7:vec4<f32> = %t.Load %6
-    %8:f32 = swizzle %7, x
-    ret %8
+    %5:vec4<i32> = construct vec2<i32>(0i), %3, %4
+    %6:vec4<f32> = %t.Load %5
+    %7:f32 = swizzle %6, x
+    ret %7
   }
 }
 )";
@@ -1092,11 +1082,10 @@ TEST_F(HlslWriter_BuiltinPolyfillTest, TextureLoad_DepthMultisampledF32) {
     auto* expect = R"(
 %foo = func(%t:texture_depth_multisampled_2d):f32 {
   $B1: {
-    %3:vec2<i32> = convert vec2<i32>(0i)
-    %4:i32 = convert 0u
-    %5:vec4<f32> = %t.Load %3, %4
-    %6:f32 = swizzle %5, x
-    ret %6
+    %3:i32 = convert 0u
+    %4:vec4<f32> = %t.Load vec2<i32>(0i), %3
+    %5:f32 = swizzle %4, x
+    ret %5
   }
 }
 )";
@@ -4912,9 +4901,8 @@ $B1: {  # root
     %4:vec2<f32> = construct 1.0f, 2.0f
     %5:texture_2d<f32> = load %1
     %6:sampler = load %2
-    %7:f32 = convert 3.0f
-    %8:vec4<f32> = %5.SampleLevel %6, %4, %7
-    %x:vec4<f32> = let %8
+    %7:vec4<f32> = %5.SampleLevel %6, %4, 3.0f
+    %x:vec4<f32> = let %7
     ret
   }
 }
@@ -4978,9 +4966,8 @@ $B1: {  # root
     %4:vec2<f32> = construct 1.0f, 2.0f
     %5:texture_2d<f32> = load %1
     %6:sampler = load %2
-    %7:f32 = convert 3.0f
-    %8:vec4<f32> = %5.SampleLevel %6, %4, %7, vec2<i32>(4i, 5i)
-    %x:vec4<f32> = let %8
+    %7:vec4<f32> = %5.SampleLevel %6, %4, 3.0f, vec2<i32>(4i, 5i)
+    %x:vec4<f32> = let %7
     ret
   }
 }
@@ -5046,9 +5033,8 @@ $B1: {  # root
     %6:sampler = load %2
     %7:f32 = convert 4u
     %8:vec3<f32> = construct %4, %7
-    %9:f32 = convert 3.0f
-    %10:vec4<f32> = %5.SampleLevel %6, %8, %9
-    %x:vec4<f32> = let %10
+    %9:vec4<f32> = %5.SampleLevel %6, %8, 3.0f
+    %x:vec4<f32> = let %9
     ret
   }
 }
@@ -5115,9 +5101,8 @@ $B1: {  # root
     %6:sampler = load %2
     %7:f32 = convert 4u
     %8:vec3<f32> = construct %4, %7
-    %9:f32 = convert 3.0f
-    %10:vec4<f32> = %5.SampleLevel %6, %8, %9, vec2<i32>(4i, 5i)
-    %x:vec4<f32> = let %10
+    %9:vec4<f32> = %5.SampleLevel %6, %8, 3.0f, vec2<i32>(4i, 5i)
+    %x:vec4<f32> = let %9
     ret
   }
 }
@@ -5179,9 +5164,8 @@ $B1: {  # root
     %4:vec3<f32> = construct 1.0f, 2.0f, 3.0f
     %5:texture_3d<f32> = load %1
     %6:sampler = load %2
-    %7:f32 = convert 3.0f
-    %8:vec4<f32> = %5.SampleLevel %6, %4, %7
-    %x:vec4<f32> = let %8
+    %7:vec4<f32> = %5.SampleLevel %6, %4, 3.0f
+    %x:vec4<f32> = let %7
     ret
   }
 }
@@ -5245,9 +5229,8 @@ $B1: {  # root
     %4:vec3<f32> = construct 1.0f, 2.0f, 3.0f
     %5:texture_3d<f32> = load %1
     %6:sampler = load %2
-    %7:f32 = convert 3.0f
-    %8:vec4<f32> = %5.SampleLevel %6, %4, %7, vec3<i32>(4i, 5i, 6i)
-    %x:vec4<f32> = let %8
+    %7:vec4<f32> = %5.SampleLevel %6, %4, 3.0f, vec3<i32>(4i, 5i, 6i)
+    %x:vec4<f32> = let %7
     ret
   }
 }
@@ -5309,9 +5292,8 @@ $B1: {  # root
     %4:vec3<f32> = construct 1.0f, 2.0f, 3.0f
     %5:texture_cube<f32> = load %1
     %6:sampler = load %2
-    %7:f32 = convert 3.0f
-    %8:vec4<f32> = %5.SampleLevel %6, %4, %7
-    %x:vec4<f32> = let %8
+    %7:vec4<f32> = %5.SampleLevel %6, %4, 3.0f
+    %x:vec4<f32> = let %7
     ret
   }
 }
@@ -5377,9 +5359,8 @@ $B1: {  # root
     %6:sampler = load %2
     %7:f32 = convert 4u
     %8:vec4<f32> = construct %4, %7
-    %9:f32 = convert 3.0f
-    %10:vec4<f32> = %5.SampleLevel %6, %8, %9
-    %x:vec4<f32> = let %10
+    %9:vec4<f32> = %5.SampleLevel %6, %8, 3.0f
+    %x:vec4<f32> = let %9
     ret
   }
 }
@@ -5775,7 +5756,6 @@ using HlslBuiltinPolyfillWorkgroupAtomic = core::ir::transform::TransformTestWit
 TEST_P(HlslBuiltinPolyfillWorkgroupAtomic, Access) {
     auto param = GetParam();
     auto* var = b.Var("v", workgroup, ty.atomic<i32>(), core::Access::kReadWrite);
-    var->SetBindingPoint(0, 0);
     b.ir.root_block->Append(var);
 
     auto* func = b.Function("foo", ty.void_(), core::ir::Function::PipelineStage::kFragment);
@@ -5786,7 +5766,7 @@ TEST_P(HlslBuiltinPolyfillWorkgroupAtomic, Access) {
 
     std::string src = R"(
 $B1: {  # root
-  %v:ptr<workgroup, atomic<i32>, read_write> = var @binding_point(0, 0)
+  %v:ptr<workgroup, atomic<i32>, read_write> = var
 }
 
 %foo = @fragment func():void {
@@ -5802,7 +5782,7 @@ $B1: {  # root
 
     std::string expect = R"(
 $B1: {  # root
-  %v:ptr<workgroup, atomic<i32>, read_write> = var @binding_point(0, 0)
+  %v:ptr<workgroup, atomic<i32>, read_write> = var
 }
 
 %foo = @fragment func():void {
@@ -5840,7 +5820,6 @@ TEST_F(HlslWriter_BuiltinPolyfillTest, BuiltinWorkgroupAtomicStore) {
                                                 });
 
     auto* var = b.Var("v", workgroup, sb, core::Access::kReadWrite);
-    var->SetBindingPoint(0, 0);
     b.ir.root_block->Append(var);
 
     auto* func = b.Function("foo", ty.void_(), core::ir::Function::PipelineStage::kFragment);
@@ -5858,7 +5837,7 @@ SB = struct @align(16) {
 }
 
 $B1: {  # root
-  %v:ptr<workgroup, SB, read_write> = var @binding_point(0, 0)
+  %v:ptr<workgroup, SB, read_write> = var
 }
 
 %foo = @fragment func():void {
@@ -5879,7 +5858,7 @@ SB = struct @align(16) {
 }
 
 $B1: {  # root
-  %v:ptr<workgroup, SB, read_write> = var @binding_point(0, 0)
+  %v:ptr<workgroup, SB, read_write> = var
 }
 
 %foo = @fragment func():void {
@@ -5903,7 +5882,6 @@ TEST_F(HlslWriter_BuiltinPolyfillTest, BuiltinWorkgroupAtomicLoad) {
                                                 });
 
     auto* var = b.Var("v", workgroup, sb, core::Access::kReadWrite);
-    var->SetBindingPoint(0, 0);
     b.ir.root_block->Append(var);
 
     auto* func = b.Function("foo", ty.void_(), core::ir::Function::PipelineStage::kFragment);
@@ -5921,7 +5899,7 @@ SB = struct @align(16) {
 }
 
 $B1: {  # root
-  %v:ptr<workgroup, SB, read_write> = var @binding_point(0, 0)
+  %v:ptr<workgroup, SB, read_write> = var
 }
 
 %foo = @fragment func():void {
@@ -5943,7 +5921,7 @@ SB = struct @align(16) {
 }
 
 $B1: {  # root
-  %v:ptr<workgroup, SB, read_write> = var @binding_point(0, 0)
+  %v:ptr<workgroup, SB, read_write> = var
 }
 
 %foo = @fragment func():void {
@@ -5969,7 +5947,6 @@ TEST_F(HlslWriter_BuiltinPolyfillTest, BuiltinWorkgroupAtomicSub) {
                                                 });
 
     auto* var = b.Var("v", workgroup, sb, core::Access::kReadWrite);
-    var->SetBindingPoint(0, 0);
     b.ir.root_block->Append(var);
 
     auto* func = b.Function("foo", ty.void_(), core::ir::Function::PipelineStage::kFragment);
@@ -5989,7 +5966,7 @@ SB = struct @align(16) {
 }
 
 $B1: {  # root
-  %v:ptr<workgroup, SB, read_write> = var @binding_point(0, 0)
+  %v:ptr<workgroup, SB, read_write> = var
 }
 
 %foo = @fragment func():void {
@@ -6014,7 +5991,7 @@ SB = struct @align(16) {
 }
 
 $B1: {  # root
-  %v:ptr<workgroup, SB, read_write> = var @binding_point(0, 0)
+  %v:ptr<workgroup, SB, read_write> = var
 }
 
 %foo = @fragment func():void {
@@ -6047,7 +6024,6 @@ TEST_F(HlslWriter_BuiltinPolyfillTest, BuiltinWorkgroupAtomicCompareExchangeWeak
                                                 });
 
     auto* var = b.Var("v", workgroup, sb, core::Access::kReadWrite);
-    var->SetBindingPoint(0, 0);
     b.ir.root_block->Append(var);
 
     auto* func = b.Function("foo", ty.void_(), core::ir::Function::PipelineStage::kFragment);
@@ -6072,7 +6048,7 @@ __atomic_compare_exchange_result_i32 = struct @align(4) {
 }
 
 $B1: {  # root
-  %v:ptr<workgroup, SB, read_write> = var @binding_point(0, 0)
+  %v:ptr<workgroup, SB, read_write> = var
 }
 
 %foo = @fragment func():void {
@@ -6099,7 +6075,7 @@ __atomic_compare_exchange_result_i32 = struct @align(4) {
 }
 
 $B1: {  # root
-  %v:ptr<workgroup, SB, read_write> = var @binding_point(0, 0)
+  %v:ptr<workgroup, SB, read_write> = var
 }
 
 %foo = @fragment func():void {
@@ -6593,7 +6569,7 @@ TEST_F(HlslWriter_BuiltinPolyfillTest, Pack4xI8) {
     %u:ptr<function, vec4<i32>, read_write> = var, vec4<i32>(2i)
     %3:vec4<i32> = load %u
     %4:hlsl.int8_t4_packed = hlsl.pack_s8 %3
-    %5:u32 = convert %4
+    %5:u32 = hlsl.convert %4
     %a:u32 = let %5
     ret
   }
@@ -6630,7 +6606,7 @@ TEST_F(HlslWriter_BuiltinPolyfillTest, Unpack4xI8) {
   $B1: {
     %u:ptr<function, u32, read_write> = var, 2u
     %3:u32 = load %u
-    %4:hlsl.int8_t4_packed = convert %3
+    %4:hlsl.int8_t4_packed = hlsl.convert<hlsl.int8_t4_packed> %3
     %5:vec4<i32> = hlsl.unpack_s8s32 %4
     %a:vec4<i32> = let %5
     ret
@@ -6669,7 +6645,7 @@ TEST_F(HlslWriter_BuiltinPolyfillTest, Pack4xU8) {
     %u:ptr<function, vec4<u32>, read_write> = var, vec4<u32>(2u)
     %3:vec4<u32> = load %u
     %4:hlsl.uint8_t4_packed = hlsl.pack_u8 %3
-    %5:u32 = convert %4
+    %5:u32 = hlsl.convert %4
     %a:u32 = let %5
     ret
   }
@@ -6706,7 +6682,7 @@ TEST_F(HlslWriter_BuiltinPolyfillTest, Unpack4xU8) {
   $B1: {
     %u:ptr<function, u32, read_write> = var, 2u
     %3:u32 = load %u
-    %4:hlsl.uint8_t4_packed = convert %3
+    %4:hlsl.uint8_t4_packed = hlsl.convert<hlsl.uint8_t4_packed> %3
     %5:vec4<u32> = hlsl.unpack_u8u32 %4
     %a:vec4<u32> = let %5
     ret
@@ -6820,7 +6796,7 @@ TEST_F(HlslWriter_BuiltinPolyfillTest, Pack4xI8Clamp) {
     %u:ptr<function, vec4<i32>, read_write> = var, vec4<i32>(2i)
     %3:vec4<i32> = load %u
     %4:hlsl.int8_t4_packed = hlsl.pack_clamp_s8 %3
-    %5:u32 = convert %4
+    %5:u32 = hlsl.convert %4
     %a:u32 = let %5
     ret
   }

@@ -12,6 +12,7 @@
 #include "base/no_destructor.h"
 #include "base/strings/strcat.h"
 #include "base/time/time.h"
+#include "base/version_info/version_info.h"
 #include "components/prefs/pref_registry.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/scoped_user_pref_update.h"
@@ -28,6 +29,10 @@ constexpr char kPrivacySandboxNoticeDataPath[] = "privacy_sandbox.notices";
 // Unsynced pref that indicates the schema version this profile is using in
 // regards to the data model.
 constexpr char kPrivacySandboxSchemaVersion[] = "schema_version";
+
+// Unsynced pref that indicates the chrome version this profile was initially
+// shown the notice at. For migrated notices, this pref is empty.
+constexpr char kPrivacySandboxChromeVersion[] = "chrome_version";
 
 // Unsynced pref that indicates the action taken relating to the notice.
 constexpr char kPrivacySandboxNoticeActionTaken[] = "notice_action_taken";
@@ -90,6 +95,13 @@ void SetSchemaVersion(PrefService* pref_service, std::string_view notice) {
       kPrivacySandboxNoticeSchemaVersion);
 }
 
+void SetChromeVersion(PrefService* pref_service, std::string_view notice) {
+  ScopedDictPrefUpdate update(pref_service, kPrivacySandboxNoticeDataPath);
+  update.Get().SetByDottedPath(
+      CreatePrefPath(notice, kPrivacySandboxChromeVersion),
+      version_info::GetVersionNumber());
+}
+
 void CheckNoticeNameEligibility(std::string_view notice_name) {
   CHECK(privacy_sandbox::kPrivacySandboxNoticeNames.contains(notice_name))
       << "Notice name " << notice_name
@@ -133,6 +145,7 @@ void PrivacySandboxNoticeStorage::RecordHistogramsOnStartup(
   } else {  // Notice has been shown, action handling below.
     switch (notice_data->notice_action_taken) {
       case NoticeActionTaken::kNotSet:
+      case NoticeActionTaken::kLearnMore:
         startup_state = NoticeStartupState::kPromptWaiting;
         break;
       case NoticeActionTaken::kOptIn:
@@ -153,7 +166,6 @@ void PrivacySandboxNoticeStorage::RecordHistogramsOnStartup(
       case NoticeActionTaken::kAck:
       case NoticeActionTaken::kClosed:
       case NoticeActionTaken::kSettings:
-      case NoticeActionTaken::kLearnMore:
         startup_state = NoticeStartupState::kFlowCompleted;
         break;
     }
@@ -181,6 +193,13 @@ PrivacySandboxNoticeStorage::ReadNoticeData(PrefService* pref_service,
       CreatePrefPath(notice, kPrivacySandboxSchemaVersion));
   if (schema_version.has_value()) {
     notice_data->schema_version = *schema_version;
+  }
+
+  // Chrome version.
+  const std::string* chrome_version = pref_data.FindStringByDottedPath(
+      CreatePrefPath(notice, kPrivacySandboxChromeVersion));
+  if (chrome_version) {
+    notice_data->chrome_version = *chrome_version;
   }
 
   // Notice action taken time.
@@ -256,6 +275,17 @@ void PrivacySandboxNoticeStorage::SetNoticeActionTaken(
     return;
   }
 
+  // Emitting histograms.
+  base::UmaHistogramEnumeration(
+      base::StrCat({"PrivacySandbox.Notice.NoticeAction.", notice}),
+      notice_action_taken);
+
+  // Don't store LearnMore action in prefs since this doesn't affect the prompt
+  // flow.
+  if (notice_action_taken == NoticeActionTaken::kLearnMore) {
+    return;
+  }
+
   update.Get().SetByDottedPath(
       CreatePrefPath(notice, kPrivacySandboxNoticeActionTaken),
       static_cast<int>(notice_action_taken));
@@ -266,11 +296,6 @@ void PrivacySandboxNoticeStorage::SetNoticeActionTaken(
       base::StrCat(
           {"PrivacySandbox.Notice.NoticeActionTakenBehavior.", notice}),
       NoticeActionBehavior::kSuccess);
-
-  // Emitting histograms.
-  base::UmaHistogramEnumeration(
-      base::StrCat({"PrivacySandbox.Notice.NoticeAction.", notice}),
-      notice_action_taken);
 
   std::string notice_action_str = GetNoticeActionString(notice_action_taken);
   // First shown to interacted duration.
@@ -308,17 +333,28 @@ void PrivacySandboxNoticeStorage::SetNoticeShown(PrefService* pref_service,
     update.Get().SetByDottedPath(
         CreatePrefPath(notice, kPrivacySandboxNoticeFirstShown),
         base::TimeToValue(notice_shown_time));
-    SetSchemaVersion(pref_service, notice);
     base::UmaHistogramBoolean(
         base::StrCat({"PrivacySandbox.Notice.NoticeShown.", notice}), true);
+    base::UmaHistogramBoolean(
+        base::StrCat(
+            {"PrivacySandbox.Notice.NoticeShownForFirstTime.", notice}),
+        true);
+  } else {
+    base::UmaHistogramBoolean(
+        base::StrCat(
+            {"PrivacySandbox.Notice.NoticeShownForFirstTime.", notice}),
+        false);
   }
 
+  SetSchemaVersion(pref_service, notice);
+  SetChromeVersion(pref_service, notice);
   // Always set notice last shown.
   update.Get().SetByDottedPath(
       CreatePrefPath(notice, kPrivacySandboxNoticeLastShown),
       base::TimeToValue(notice_shown_time));
 }
 
+// TODO(chrstne): Create new histograms for migration.
 void PrivacySandboxNoticeStorage::MigratePrivacySandboxNoticeData(
     PrefService* pref_service,
     const PrivacySandboxNoticeData& input,

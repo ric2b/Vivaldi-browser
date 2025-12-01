@@ -52,7 +52,7 @@ skia_cc_library(
     features = ["layering_check"],
     local_defines = ["SK_DISABLE_LEGACY_INIT_DECODERS"],
     visibility = [
-        "//experimental/rust_png:__pkg__",
+        "//experimental/rust_png:__subpackages__",
         "//src/encode:__pkg__",
         "//src/ports:__pkg__",
     ],
@@ -267,17 +267,45 @@ skia_cc_library(
 )
 
 skia_filegroup(
-    name = "buffet_png_srcs",
-    srcs = [
-        "SkPngCodec.cpp",
-        "SkPngCodec.h",
-        "SkPngCodecBase.cpp",
-        "SkPngCodecBase.h",
+    name = "png_codec_base_srcs",
+    srcs = ["SkPngCodecBase.cpp"],
+)
+
+skia_filegroup(
+    name = "png_codec_base_hdrs",
+    srcs = ["SkPngCodecBase.h"],
+)
+
+skia_cc_library(
+    name = "png_codec_base",
+    srcs = [":png_codec_base_srcs"],
+    hdrs = [
+        ":png_codec_base_hdrs",
+        "//include/codec:any_codec_hdrs",
+    ],
+    features = ["layering_check"],
+    visibility = ["//experimental/rust_png/decoder:__pkg__"],
+    deps = [
+        ":any_decoder",
+        "//modules/skcms",
+        "//src/base",
+        "//src/core",
+        "//src/core:core_priv",
     ],
 )
 
 skia_filegroup(
-    name = "common_png_srcs",
+    name = "buffet_libpng_srcs",
+    srcs = [
+        "SkPngCodec.cpp",
+        "SkPngCodec.h",
+        "SkPngCompositeChunkReader.cpp",
+        "SkPngCompositeChunkReader.h",
+    ],
+)
+
+skia_filegroup(
+    name = "common_libpng_srcs",
     srcs = [
         "SkPngPriv.h",
     ],
@@ -287,19 +315,22 @@ skia_filegroup(
 skia_cc_library(
     name = "png_decode",
     srcs = [
-        ":buffet_png_srcs",
-        ":common_png_srcs",
+        ":buffet_libpng_srcs",
+        ":common_libpng_srcs",
     ],
     hdrs = [
-        "SkPngCodecBase.h",
         "//include/codec:any_codec_hdrs",
         "//include/codec:png_public_hdrs",
     ],
-    defines = ["SK_CODEC_DECODES_PNG"],
+    defines = [
+        "SK_CODEC_DECODES_PNG",
+        "SK_CODEC_DECODES_PNG_WITH_LIBPNG",
+    ],
     features = ["layering_check"],
     visibility = ["//:__subpackages__"],
     deps = [
         ":any_decoder",
+        ":png_codec_base",
         "//modules/skcms",
         "//src/base",
         "//src/core",

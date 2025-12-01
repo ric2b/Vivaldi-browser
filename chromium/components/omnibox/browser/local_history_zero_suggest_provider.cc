@@ -128,6 +128,12 @@ void LocalHistoryZeroSuggestProvider::DeleteMatch(
   if (!history_service)
     return;
 
+  if (vivaldi::IsVivaldiRunning()){
+    // Note(prio@vivaldi.com):
+    // Delete the URL directly from history service rather than depending on
+    // specific search engine.
+    history_service->DeleteURLs({match.destination_url});
+  } else {
   TemplateURLService* template_url_service = client_->GetTemplateURLService();
   if (!template_url_service ||
       !template_url_service->GetDefaultSearchProvider()) {
@@ -164,6 +170,7 @@ void LocalHistoryZeroSuggestProvider::DeleteMatch(
                      weak_ptr_factory_.GetWeakPtr(), match.contents,
                      base::TimeTicks::Now()),
       &history_task_tracker_);
+  } // End Vivaldi
 
   // Immediately update the list of matches to reflect the match was deleted.
   std::erase_if(matches_, [&](const auto& item) {

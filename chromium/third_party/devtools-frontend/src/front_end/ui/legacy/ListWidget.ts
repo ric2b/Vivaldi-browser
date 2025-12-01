@@ -2,14 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import './Toolbar.js';
+
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
 import * as Buttons from '../../ui/components/buttons/buttons.js';
+import {html, render} from '../lit/lit.js';
 import * as VisualLogging from '../visual_logging/visual_logging.js';
 
 import * as ARIAUtils from './ARIAUtils.js';
-import listWidgetStyles from './listWidget.css.legacy.js';
-import {Toolbar, ToolbarButton} from './Toolbar.js';
+import listWidgetStyles from './listWidget.css.js';
 import {Tooltip} from './Tooltip.js';
 import {createInput, createTextButton, ElementFocusRestorer} from './UIUtils.js';
 import {VBox} from './Widget.js';
@@ -172,19 +174,27 @@ export class ListWidget<T> extends VBox {
     const controls = document.createElement('div');
     controls.classList.add('controls-container');
     controls.classList.add('fill');
-    controls.createChild('div', 'controls-gradient');
 
-    const buttons = controls.createChild('div', 'controls-buttons');
-
-    const toolbar = new Toolbar('', buttons);
-
-    const editButton = new ToolbarButton(i18nString(UIStrings.editString), 'edit', undefined, 'edit-item');
-    editButton.addEventListener(ToolbarButton.Events.CLICK, onEditClicked.bind(this));
-    toolbar.appendToolbarItem(editButton);
-
-    const removeButton = new ToolbarButton(i18nString(UIStrings.removeString), 'bin', undefined, 'remove-item');
-    removeButton.addEventListener(ToolbarButton.Events.CLICK, onRemoveClicked.bind(this));
-    toolbar.appendToolbarItem(removeButton);
+    // clang-format off
+    render(html`
+      <div class="controls-gradient"></div>
+      <div class="controls-buttons">
+        <devtools-toolbar>
+          <devtools-button class=toolbar-button
+                           .iconName=${'edit'}
+                           .jslogContext=${'edit-item'}
+                           .title=${i18nString(UIStrings.editString)}
+                           .variant=${Buttons.Button.Variant.ICON}
+                           @click=${onEditClicked}></devtools-button>
+          <devtools-button class=toolbar-button
+                           .iconName=${'bin'}
+                           .jslogContext=${'remove-item'}
+                           .title=${i18nString(UIStrings.removeString)}
+                           .variant=${Buttons.Button.Variant.ICON}
+                           @click=${onRemoveClicked}></devtools-button>
+        </devtools-toolbar>
+      </div>`, controls, {host: this});
+    // clang-format on
 
     return controls;
 
@@ -199,8 +209,10 @@ export class ListWidget<T> extends VBox {
       this.element.focus();
       this.delegate.removeItemRequested(this.items[index], index);
       ARIAUtils.alert(i18nString(UIStrings.removedItem));
-      // focus on the next item in the list, or the last item if we're removing the last item
-      (this.elements[Math.min(index, this.elements.length - 1)] as HTMLElement).focus();
+      if (this.elements.length >= 1) {
+        // focus on the next item in the list, or the last item if we're removing the last item
+        (this.elements[Math.min(index, this.elements.length - 1)] as HTMLElement).focus();
+      }
     }
   }
 
@@ -385,9 +397,8 @@ export class Editor<T> {
       title?: string): HTMLSelectElement {
     const select = document.createElement('select');
     select.setAttribute('jslog', `${VisualLogging.dropDown().track({change: true}).context(name)}`);
-    select.classList.add('chrome-select');
     for (let index = 0; index < options.length; ++index) {
-      const option = (select.createChild('option') as HTMLOptionElement);
+      const option = select.createChild('option');
       option.value = options[index];
       option.textContent = options[index];
       option.setAttribute(

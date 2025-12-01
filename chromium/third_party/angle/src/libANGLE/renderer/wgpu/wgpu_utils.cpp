@@ -105,7 +105,7 @@ gl::DrawBufferMask ClearValuesArray::getColorMask() const
     return gl::DrawBufferMask(mEnabled.bits() & kUnpackedColorBuffersMask);
 }
 
-void GenerateCaps(const wgpu::Device &device,
+void GenerateCaps(const wgpu::Limits &limitsWgpu,
                   gl::Caps *glCaps,
                   gl::TextureCapsMap *glTextureCapsMap,
                   gl::Extensions *glExtensions,
@@ -117,18 +117,12 @@ void GenerateCaps(const wgpu::Device &device,
     // WebGPU does not support separate front/back stencil masks.
     glLimitations->noSeparateStencilRefsAndMasks = true;
 
-    wgpu::Limits limitsWgpu;
-    {
-        wgpu::SupportedLimits supportedLimits;
-        device.GetLimits(&supportedLimits);
-        limitsWgpu = supportedLimits.limits;
-    }
-
     // OpenGL ES extensions
     glExtensions->debugMarkerEXT              = true;
     glExtensions->textureUsageANGLE           = true;
     glExtensions->translatedShaderSourceANGLE = true;
     glExtensions->vertexArrayObjectOES        = true;
+    glExtensions->elementIndexUintOES         = true;
 
     glExtensions->textureStorageEXT = true;
     glExtensions->rgb8Rgba8OES      = true;
@@ -424,8 +418,7 @@ wgpu::PrimitiveTopology GetPrimitiveTopology(gl::PrimitiveMode mode)
         case gl::PrimitiveMode::Lines:
             return wgpu::PrimitiveTopology::LineList;
         case gl::PrimitiveMode::LineLoop:
-            UNIMPLEMENTED();
-            return wgpu::PrimitiveTopology::LineList;  // Emulated
+            return wgpu::PrimitiveTopology::LineStrip;  // Emulated
         case gl::PrimitiveMode::LineStrip:
             return wgpu::PrimitiveTopology::LineStrip;
         case gl::PrimitiveMode::Triangles:
@@ -530,8 +523,13 @@ wgpu::TextureDimension getWgpuTextureDimension(gl::TextureType glTextureType)
     return dimension;
 }
 
-wgpu::CompareFunction getCompareFunc(const GLenum glCompareFunc)
+wgpu::CompareFunction GetCompareFunc(const GLenum glCompareFunc, bool testEnabled)
 {
+    if (!testEnabled)
+    {
+        return wgpu::CompareFunction::Always;
+    }
+
     switch (glCompareFunc)
     {
         case GL_NEVER:

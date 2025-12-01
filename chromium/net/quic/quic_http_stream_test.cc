@@ -117,14 +117,11 @@ const uint16_t kDefaultServerPort = 443;
 
 struct TestParams {
   quic::ParsedQuicVersion version;
-  bool priority_header_enabled;
 };
 
 // Used by ::testing::PrintToStringParamName().
 std::string PrintToString(const TestParams& p) {
-  return base::StrCat({ParsedQuicVersionToString(p.version), "_",
-                       p.priority_header_enabled ? "PriorityHeaderEnabled"
-                                                 : "PriorityHeaderDisabled"});
+  return ParsedQuicVersionToString(p.version);
 }
 
 std::vector<TestParams> GetTestParams() {
@@ -132,8 +129,7 @@ std::vector<TestParams> GetTestParams() {
   quic::ParsedQuicVersionVector all_supported_versions =
       AllSupportedQuicVersions();
   for (const auto& version : all_supported_versions) {
-    params.push_back(TestParams{version, true});
-    params.push_back(TestParams{version, false});
+    params.push_back(TestParams{version});
   }
   return params;
 }
@@ -306,11 +302,6 @@ class QuicHttpStreamTest : public ::testing::TestWithParam<TestParams>,
                       /*client_priority_uses_incremental=*/false,
                       /*use_priority_header=*/false),
         printer_(version_) {
-    if (GetParam().priority_header_enabled) {
-      feature_list_.InitAndEnableFeature(net::features::kPriorityHeader);
-    } else {
-      feature_list_.InitAndDisableFeature(net::features::kPriorityHeader);
-    }
     FLAGS_quic_enable_http3_grease_randomness = false;
     quic::QuicEnableVersion(version_);
     IPAddress ip(192, 0, 2, 33);
@@ -361,8 +352,7 @@ class QuicHttpStreamTest : public ::testing::TestWithParam<TestParams>,
     }
 
     socket_data_ = std::make_unique<StaticSocketDataProvider>(
-        base::span<MockRead>(),
-        base::make_span(mock_writes_.get(), writes_.size()));
+        base::span<MockRead>(), base::span(mock_writes_.get(), writes_.size()));
     socket_data_->set_printer(&printer_);
 
     auto socket = std::make_unique<MockUDPClientSocket>(socket_data_.get(),
@@ -617,6 +607,7 @@ class QuicHttpStreamTest : public ::testing::TestWithParam<TestParams>,
   void ExpectLoadTimingValid(const LoadTimingInfo& load_timing_info,
                              bool session_reused) {
     EXPECT_EQ(session_reused, load_timing_info.socket_reused);
+    EXPECT_TRUE(load_timing_info.socket_log_id != 0);
     if (session_reused) {
       ExpectConnectTimingHasNoTimes(load_timing_info.connect_timing);
     } else {
@@ -686,7 +677,6 @@ class QuicHttpStreamTest : public ::testing::TestWithParam<TestParams>,
   std::vector<PacketToWrite> writes_;
   quic::test::MockConnectionIdGenerator connection_id_generator_;
   quic::test::NoopQpackStreamSenderDelegate noop_qpack_stream_sender_delegate_;
-  base::test::ScopedFeatureList feature_list_;
 };
 
 INSTANTIATE_TEST_SUITE_P(VersionIncludeStreamDependencySequence,
@@ -1179,7 +1169,7 @@ TEST_P(QuicHttpStreamTest, GetAlternativeService) {
 
   AlternativeService alternative_service;
   EXPECT_TRUE(stream_->GetAlternativeService(&alternative_service));
-  EXPECT_EQ(AlternativeService(kProtoQUIC, "www.example.org", 443),
+  EXPECT_EQ(AlternativeService(NextProto::kProtoQUIC, "www.example.org", 443),
             alternative_service);
 
   session_->connection()->CloseConnection(
@@ -1187,7 +1177,7 @@ TEST_P(QuicHttpStreamTest, GetAlternativeService) {
 
   AlternativeService alternative_service2;
   EXPECT_TRUE(stream_->GetAlternativeService(&alternative_service2));
-  EXPECT_EQ(AlternativeService(kProtoQUIC, "www.example.org", 443),
+  EXPECT_EQ(AlternativeService(NextProto::kProtoQUIC, "www.example.org", 443),
             alternative_service2);
 }
 
@@ -2156,6 +2146,26 @@ TEST_P(QuicHttpStreamTest, GetAcceptChViaAlps) {
       "Net.QuicSession.AcceptChFrameReceivedViaAlps", 1);
   histogram_tester.ExpectBucketCount("Net.QuicSession.AcceptChForOrigin", 1, 1);
   histogram_tester.ExpectTotalCount("Net.QuicSession.AcceptChForOrigin", 1);
+}
+
+TEST_P(QuicHttpStreamTest, GetQuicConnectionDetails) {
+  Initialize();
+  auto migration_info = ConnectionMigrationInformation(
+      ConnectionMigrationInformation::NetworkEventCount(
+          /*default_network_change=*/0, /*network_disconnected=*/0,
+          /*network_connected=*/0, /*path_degrading=*/0));
+
+  auto quic_connection_details = stream_->GetQuicConnectionDetails();
+  EXPECT_TRUE(quic_connection_details.has_value());
+  EXPECT_EQ(quic_connection_details->connection_migration_info, migration_info);
+
+  session_->OnNetworkConnected(kDefaultNetworkForTests);
+  migration_info.event_count.network_connected_num++;
+
+  // Check if the information is updated
+  quic_connection_details = stream_->GetQuicConnectionDetails();
+  EXPECT_TRUE(quic_connection_details.has_value());
+  EXPECT_EQ(quic_connection_details->connection_migration_info, migration_info);
 }
 
 }  // namespace net::test

@@ -50,17 +50,17 @@ enable_profiling = true
 symbol_level = 1
 ```
 
-And then run the usual [build command](developing.md#building-chrome):
+And then run the usual [build command](/chromium-os/developer-library/getting-started/build-chromium):
 
 ```shell
 $ autoninja -C out_${SDK_BOARD}/Release chrome
 ```
 
 Note: You can set `symbol_level=2` for more detailed debugging and
-`dcheck_always_on=true` to test [DCHECKs](developing.md#turn-onoff-dchecks).
+`dcheck_always_on=true` to test [DCHECKs](/chromium-os/developer-library/reference/cpp/cpp-invariant-checks).
 
 Note: Here is more information on
-[gn configurations](https://www.chromium.org/developers/gn-build-configuration)
+[gn configurations](/developers/gn-build-configuration)
 and symbolized builds.
 
 ### Deploying Chrome with symbols
@@ -261,7 +261,7 @@ Note: generating a stack trace does noticeably impact performance of Chrome, so
 don’t be shocked to see some mild stuttering when they are generated.
 
 See
-[How to get a stack trace at runtime for debugging purposes](https://www.chromium.org/chromium-os/developer-library/guides/debugging/stack-traces)
+[How to get a stack trace at runtime for debugging purposes](/chromium-os/developer-library/guides/debugging/stack-traces)
 for more troubleshooting.
 
 ## Debugging JS BrowserTest failures
@@ -272,7 +272,7 @@ yourself getting stuck with debugging, you can use Chrome DevTools.
 First, on your workstation or corp laptop, add `-L 9222:localhost:9222` to the
 "SSH Arguments" field on the configuration page of the Secure Shell App.
 
-![](images/debugging_ssh.png){style="display:block;margin:auto;width:800px"}
+![](./debugging_ssh.png){style="display:block;margin:auto;width:800px"}
 <div align="center">
   Figure 1:
 [Add `-L 9222:localhost:9222` to your SSH configuration.](https://screenshot.googleplex.com/BWVDUgHgQckD2so.png)
@@ -297,7 +297,7 @@ Once you run the above command, go to your browser and navigate to
 **chrome://inspect/**. Find the test process in the **Devices > Remote Target**
 section, and click the "inspect" link.
 
-![](images/debugging_chrome_inspect.png){style="display:block;margin:auto;width:800px"}
+![](./debugging_chrome_inspect.png){style="display:block;margin:auto;width:800px"}
 <div align="center">
   Figure 2:
 [Open chrome://inspect and click the "inspect" link for your test process.](https://screenshot.googleplex.com/6zSXiMEuA375Kgq.png)
@@ -306,7 +306,7 @@ section, and click the "inspect" link.
 This should open a new DevTools window. To run the test, go to the console tab
 in the DevTools window and run "go()."
 
-![](images/debugging_devtools.png){style="display:block;margin:auto;width:800px"}
+![](./debugging_devtools.png){style="display:block;margin:auto;width:800px"}
 <div align="center">
   Figure 3:
 [In the DevTools window, type and run the command "go()" in the Console tab.](https://screenshot.googleplex.com/8rSsYTVXsZ9vXGe.png)
@@ -486,7 +486,7 @@ to remove this filtering on your own builds.
 You can view logs for the cross-device features (Instant Tethering, Smart Lock,
 or Android Messages integration) at chrome://proximity-auth.
 
-You can view logs for Nearby Share and other features that use the Nearby
+You can view logs for Quick Share and other features that use the Nearby
 Connections library by visiting chrome://nearby-internals. Reach out to the
 Cross-device team for more information.
 
@@ -585,5 +585,6 @@ Your hash will be different, and you can find the hash by going to
 $ cp /tmp/debug-logs_20230120-094809.tgz /home/user/278487735245a0c7255572b1704abfeb4b446408/MyFiles/Downloads/debug-logs.tgz
 ```
 
-Step 4: From your files app, nearby share the tarball to your corp computer to
-analyze. See [Bluetooth 101](cros_101.md) for insight on analyzing Bluetooth.
+Step 4: From your files app, Quick Share the tarball to your corp computer to
+analyze. See [Bluetooth 101](http://go/chromeos-software-bt-101) for insight on
+analyzing Bluetooth.

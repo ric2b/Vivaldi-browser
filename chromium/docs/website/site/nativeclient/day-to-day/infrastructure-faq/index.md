@@ -143,7 +143,7 @@ try bot, you can add various flags to gcl try:
 
 Be sure to install all the service packs listed for chromium:
 
-http://www.chromium.org/developers/how-tos/build-instructions-windows
+https://www.chromium.org/developers/how-tos/build-instructions-windows
 
 ### **The toolchain in native_client appears to be out of date. How do I safely update it?**
 

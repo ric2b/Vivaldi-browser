@@ -259,8 +259,8 @@ ExtensionFunction::ResponseAction WebViewPrivateSendRequestFunction::Run() {
                                     false);
 
   if (params->use_post) {
-    url_params.post_data = network::ResourceRequestBody::CreateFromBytes(
-        params->post_data.c_str(), params->post_data.length());
+    url_params.post_data = network::ResourceRequestBody::CreateFromCopyOfBytes(
+        base::as_byte_span(params->post_data));
   }
   url_params.extra_headers = params->extra_headers;
 

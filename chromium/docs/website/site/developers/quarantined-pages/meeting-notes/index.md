@@ -53,7 +53,7 @@ February 9, 2009
 *   Darin, Pam and Brett are doing the merge this week.
 
     *   Daily merge calendar:
-                <http://www.google.com/calendar/hosted/google.com/embed?src=google.com_h1kjbmjo6p29ta0rluu8eh5qjo%40group.calendar.google.com&ctz=America/Los_Angeles>
+                <https://www.google.com/calendar/hosted/google.com/embed?src=google.com_h1kjbmjo6p29ta0rluu8eh5qjo%40group.calendar.google.com&ctz=America/Los_Angeles>
 
 *   Continuing to unfork. About 64 files forked, and starting to
             upstream V8 bindings, which account for a large number.
@@ -68,4 +68,4 @@ February 9, 2009
 *   Erik is making progress on loading extensions once they've been
             installed.
 *   Matt is working on the new extension process model:
-            <http://www.chromium.org/developers/design-documents/extensions/process-model>
+            <https://www.chromium.org/developers/design-documents/extensions/process-model>

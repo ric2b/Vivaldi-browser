@@ -2,13 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import * as PuppeteerReplay from '../../../third_party/puppeteer-replay/puppeteer-replay.js';
+
 import {
-  type Step,
-  type SetViewportStep,
   type EmulateNetworkConditionsStep,
+  type SetViewportStep,
+  type Step,
   StepType,
 } from './Schema.js';
-import * as PuppeteerReplay from '../../../third_party/puppeteer-replay/puppeteer-replay.js';
 
 export function createViewportStep(viewport: {
   clientWidth: number,
@@ -31,7 +32,12 @@ export function createEmulateNetworkConditionsStep(conditions: {
   upload: number,
   latency: number,
 }): EmulateNetworkConditionsStep {
-  return {type: StepType.EmulateNetworkConditions, ...conditions};
+  return {
+    type: StepType.EmulateNetworkConditions,
+    download: conditions.download,
+    upload: conditions.upload,
+    latency: conditions.latency,
+  };
 }
 
 export function areSelectorsEqual(stepA: Step, stepB: Step): boolean {

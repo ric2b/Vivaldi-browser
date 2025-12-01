@@ -8,7 +8,6 @@ import * as path from 'path';
 
 import {formatAsPatch, resultAssertionsDiff, ResultsDBReporter} from '../../test/conductor/karma-resultsdb-reporter.js';
 import {CHECKOUT_ROOT, GEN_DIR, SOURCE_ROOT} from '../../test/conductor/paths.js';
-// eslint-disable-next-line  rulesdir/es_modules_import
 import * as ResultsDb from '../../test/conductor/resultsdb.js';
 import {loadTests, TestConfig} from '../../test/conductor/test_config.js';
 
@@ -75,7 +74,7 @@ module.exports = function(config: any) {
   const targetDir = path.relative(SOURCE_ROOT, GEN_DIR);
   const options = {
     basePath: CHECKOUT_ROOT,
-    autoWatchBatchDelay: 3000,
+    autoWatchBatchDelay: 1000,
 
     files: [
       // Global hooks in test_setup must go first
@@ -85,8 +84,8 @@ module.exports = function(config: any) {
       ...tests.map(pattern => ({pattern: `${pattern}.map`, served: true, included: false, watched: true})),
       {pattern: path.join(GEN_DIR, 'front_end/Images/*.{svg,png}'), served: true, included: false},
       {pattern: path.join(GEN_DIR, 'front_end/core/i18n/locales/*.json'), served: true, included: false},
-      {pattern: path.join(GEN_DIR, 'front_end/ui/legacy/themeColors.css'), served: true, included: true},
-      {pattern: path.join(GEN_DIR, 'front_end/ui/legacy/tokens.css'), served: true, included: true},
+      {pattern: path.join(GEN_DIR, 'front_end/design_system_tokens.css'), served: true, included: true},
+      {pattern: path.join(GEN_DIR, 'front_end/application_tokens.css'), served: true, included: true},
       {pattern: path.join(GEN_DIR, 'front_end/**/*.css'), served: true, included: false},
       {pattern: path.join(GEN_DIR, 'front_end/**/*.js'), served: true, included: false},
       {pattern: path.join(GEN_DIR, 'front_end/**/*.js.map'), served: true, included: false, watched: true},

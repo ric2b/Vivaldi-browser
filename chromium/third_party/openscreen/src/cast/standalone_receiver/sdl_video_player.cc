@@ -56,13 +56,17 @@ bool SDLVideoPlayer::RenderWhileIdle(
 
   if (state() == kError) {
     // Paint "red splash" to indicate an error state.
-    constexpr struct { int r = 128, g = 0, b = 0, a = 255; } kRedSplashColor;
+    constexpr struct {
+      int r = 128, g = 0, b = 0, a = 255;
+    } kRedSplashColor;
     SDL_SetRenderDrawColor(&renderer_, kRedSplashColor.r, kRedSplashColor.g,
                            kRedSplashColor.b, kRedSplashColor.a);
     SDL_RenderClear(&renderer_);
   } else if (state() == kWaitingForFirstFrame || !frame) {
     // Paint "blue splash" to indicate the "waiting for first frame" state.
-    constexpr struct { int r = 0, g = 0, b = 128, a = 255; } kBlueSplashColor;
+    constexpr struct {
+      int r = 0, g = 0, b = 128, a = 255;
+    } kBlueSplashColor;
     SDL_SetRenderDrawColor(&renderer_, kBlueSplashColor.r, kBlueSplashColor.g,
                            kBlueSplashColor.b, kBlueSplashColor.a);
     SDL_RenderClear(&renderer_);

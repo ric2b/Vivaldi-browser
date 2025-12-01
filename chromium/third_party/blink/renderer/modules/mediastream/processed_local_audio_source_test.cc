@@ -233,7 +233,6 @@ TEST_P(ProcessedLocalAudioSourceTest, VerifyAudioFlowWithoutAudioProcessing) {
   // Feed audio data into the ProcessedLocalAudioSource and expect it to reach
   // the sink.
   int delay_ms = 65;
-  bool key_pressed = true;
   double volume = 0.9;
   const base::TimeTicks capture_time =
       base::TimeTicks::Now() + base::Milliseconds(delay_ms);
@@ -244,7 +243,7 @@ TEST_P(ProcessedLocalAudioSourceTest, VerifyAudioFlowWithoutAudioProcessing) {
   audio_bus->Zero();
   EXPECT_CALL(*sink, OnDataCallback()).Times(AtLeast(1));
   capture_source_callback()->Capture(audio_bus.get(), capture_time, glitch_info,
-                                     volume, key_pressed);
+                                     volume);
 
   // Expect glitches to have been propagated.
   MediaStreamTrackPlatform::AudioFrameStats audio_stats;
@@ -301,14 +300,14 @@ class ProcessedLocalAudioSourceIgnoreUiGainsTest
   void SetUpAudioProcessingProperties(AudioProcessingProperties* properties) {
     switch (std::get<1>(GetParam())) {
       case AGC_DISABLED:
-        properties->goog_auto_gain_control = false;
+        properties->auto_gain_control = false;
         break;
       case BROWSER_AGC:
-        properties->goog_auto_gain_control = true;
+        properties->auto_gain_control = true;
         properties->system_gain_control_activated = false;
         break;
       case SYSTEM_AGC:
-        properties->goog_auto_gain_control = true;
+        properties->auto_gain_control = true;
         properties->system_gain_control_activated = true;
         break;
     }

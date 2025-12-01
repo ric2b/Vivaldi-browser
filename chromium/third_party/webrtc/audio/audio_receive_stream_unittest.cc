@@ -10,17 +10,28 @@
 
 #include "audio/audio_receive_stream.h"
 
+#include <cstddef>
+#include <cstdint>
 #include <map>
-#include <string>
+#include <memory>
 #include <utility>
 #include <vector>
 
+#include "api/audio_codecs/audio_format.h"
+#include "api/crypto/frame_decryptor_interface.h"
 #include "api/environment/environment_factory.h"
+#include "api/make_ref_counted.h"
+#include "api/rtp_headers.h"
+#include "api/scoped_refptr.h"
 #include "api/test/mock_audio_mixer.h"
 #include "api/test/mock_frame_decryptor.h"
+#include "audio/channel_receive.h"
 #include "audio/conversion.h"
 #include "audio/mock_voe_channel_proxy.h"
+#include "call/audio_receive_stream.h"
+#include "call/audio_state.h"
 #include "call/rtp_stream_receiver_controller.h"
+#include "modules/audio_coding/include/audio_coding_module_typedefs.h"
 #include "modules/audio_device/include/mock_audio_device.h"
 #include "modules/audio_processing/include/mock_audio_processing.h"
 #include "modules/pacing/packet_router.h"
@@ -127,7 +138,6 @@ struct ConfigHelper {
         .Times(1);
     EXPECT_CALL(*channel_receive_, ResetReceiverCongestionControlObjects())
         .Times(1);
-    EXPECT_CALL(*channel_receive_, SetAssociatedSendChannel(nullptr)).Times(1);
     EXPECT_CALL(*channel_receive_, SetReceiveCodecs(_))
         .WillRepeatedly(Invoke([](const std::map<int, SdpAudioFormat>& codecs) {
           EXPECT_THAT(codecs, ::testing::IsEmpty());
@@ -190,7 +200,7 @@ struct ConfigHelper {
   MockTransport rtcp_send_transport_;
 };
 
-const std::vector<uint8_t> CreateRtcpSenderReport() {
+std::vector<uint8_t> CreateRtcpSenderReport() {
   std::vector<uint8_t> packet;
   const size_t kRtcpSrLength = 28;  // In bytes.
   packet.resize(kRtcpSrLength);
@@ -250,13 +260,11 @@ TEST(AudioReceiveStreamTest, GetStats) {
     EXPECT_EQ(kCallStats.payload_bytes_received, stats.payload_bytes_received);
     EXPECT_EQ(kCallStats.header_and_padding_bytes_received,
               stats.header_and_padding_bytes_received);
-    EXPECT_EQ(static_cast<uint32_t>(kCallStats.packetsReceived),
+    EXPECT_EQ(static_cast<uint32_t>(kCallStats.packets_received),
               stats.packets_received);
-    EXPECT_EQ(kCallStats.cumulativeLost, stats.packets_lost);
+    EXPECT_EQ(kCallStats.packets_lost, stats.packets_lost);
     EXPECT_EQ(kReceiveCodec.second.name, stats.codec_name);
-    EXPECT_EQ(
-        kCallStats.jitterSamples / (kReceiveCodec.second.clockrate_hz / 1000),
-        stats.jitter_ms);
+    EXPECT_EQ(kCallStats.jitter_ms, stats.jitter_ms);
     EXPECT_EQ(kNetworkStats.currentBufferSize, stats.jitter_buffer_ms);
     EXPECT_EQ(kNetworkStats.preferredBufferSize,
               stats.jitter_buffer_preferred_ms);
@@ -320,7 +328,7 @@ TEST(AudioReceiveStreamTest, GetStats) {
     EXPECT_EQ(kAudioDecodeStats.decoded_plc_cng, stats.decoding_plc_cng);
     EXPECT_EQ(kAudioDecodeStats.decoded_muted_output,
               stats.decoding_muted_output);
-    EXPECT_EQ(kCallStats.capture_start_ntp_time_ms_,
+    EXPECT_EQ(kCallStats.capture_start_ntp_time_ms,
               stats.capture_start_ntp_time_ms);
     EXPECT_EQ(kPlayoutNtpTimestampMs, stats.estimated_playout_ntp_timestamp_ms);
     recv_stream->UnregisterFromTransport();

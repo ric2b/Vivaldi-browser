@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "absl/algorithm/container.h"
+#include "absl/status/status.h"
 #include "absl/strings/escaping.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
@@ -16,6 +17,7 @@
 #include "absl/types/span.h"
 #include "quiche/quic/platform/api/quic_bug_tracker.h"
 #include "quiche/common/platform/api/quiche_bug_tracker.h"
+#include "quiche/web_transport/web_transport.h"
 
 namespace moqt {
 
@@ -125,8 +127,6 @@ std::string MoqtDataStreamTypeToString(MoqtDataStreamType type) {
   switch (type) {
     case MoqtDataStreamType::kObjectDatagram:
       return "OBJECT_PREFER_DATAGRAM";
-    case MoqtDataStreamType::kStreamHeaderTrack:
-      return "STREAM_HEADER_TRACK";
     case MoqtDataStreamType::kStreamHeaderSubgroup:
       return "STREAM_HEADER_SUBGROUP";
     case MoqtDataStreamType::kStreamHeaderFetch:
@@ -142,8 +142,6 @@ std::string MoqtForwardingPreferenceToString(
   switch (preference) {
     case MoqtForwardingPreference::kDatagram:
       return "DATAGRAM";
-    case MoqtForwardingPreference::kTrack:
-      return "TRACK";
     case MoqtForwardingPreference::kSubgroup:
       return "SUBGROUP";
   }
@@ -156,12 +154,12 @@ MoqtForwardingPreference GetForwardingPreference(MoqtDataStreamType type) {
   switch (type) {
     case MoqtDataStreamType::kObjectDatagram:
       return MoqtForwardingPreference::kDatagram;
-    case MoqtDataStreamType::kStreamHeaderTrack:
-      return MoqtForwardingPreference::kTrack;
     case MoqtDataStreamType::kStreamHeaderSubgroup:
       return MoqtForwardingPreference::kSubgroup;
     case MoqtDataStreamType::kStreamHeaderFetch:
-      return MoqtForwardingPreference::kTrack;  // This is a placeholder.
+      QUIC_BUG(quic_bug_forwarding_preference_for_fetch)
+          << "Forwarding preference for fetch is not supported";
+      break;
     default:
       break;
   }
@@ -175,8 +173,6 @@ MoqtDataStreamType GetMessageTypeForForwardingPreference(
   switch (preference) {
     case MoqtForwardingPreference::kDatagram:
       return MoqtDataStreamType::kObjectDatagram;
-    case MoqtForwardingPreference::kTrack:
-      return MoqtDataStreamType::kStreamHeaderTrack;
     case MoqtForwardingPreference::kSubgroup:
       return MoqtDataStreamType::kStreamHeaderSubgroup;
   }
@@ -204,6 +200,22 @@ bool FullTrackName::operator<(const FullTrackName& other) const {
   return absl::c_lexicographical_compare(tuple_, other.tuple_);
 }
 FullTrackName::FullTrackName(absl::Span<const absl::string_view> elements)
-    : tuple_(elements.begin(), elements.end()) {}
+    : tuple_(elements.begin(), elements.end()) {
+  QUICHE_BUG_IF(Moqt_namespace_too_large_03,
+                std::size(elements) > (kMaxNamespaceElements + 1))
+      << "Constructing a namespace that is too large.";
+}
+
+absl::Status MoqtStreamErrorToStatus(webtransport::StreamErrorCode error_code,
+                                     absl::string_view reason_phrase) {
+  switch (error_code) {
+    case kResetCodeSubscriptionGone:
+      return absl::NotFoundError(reason_phrase);
+    case kResetCodeTimedOut:
+      return absl::DeadlineExceededError(reason_phrase);
+    default:
+      return absl::UnknownError(reason_phrase);
+  }
+}
 
 }  // namespace moqt

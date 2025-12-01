@@ -13,9 +13,9 @@
 #import "base/functional/callback.h"
 #import "base/memory/raw_ptr.h"
 #import "base/time/time.h"
-#import "components/autofill/core/browser/browser_autofill_manager.h"
-#import "components/autofill/core/browser/password_form_classification.h"
-#import "components/autofill/core/browser/test_autofill_manager_waiter.h"
+#import "components/autofill/core/browser/foundations/browser_autofill_manager.h"
+#import "components/autofill/core/browser/foundations/test_autofill_manager_waiter.h"
+#import "components/autofill/core/browser/integrators/password_form_classification.h"
 #import "components/autofill/core/common/autofill_features.h"
 #import "components/autofill/core/common/autofill_test_utils.h"
 #import "components/autofill/core/common/form_data.h"
@@ -23,8 +23,10 @@
 #import "components/autofill/ios/browser/autofill_agent.h"
 #import "components/autofill/ios/browser/autofill_driver_ios.h"
 #import "components/autofill/ios/browser/autofill_driver_ios_factory.h"
+#import "components/autofill/ios/browser/test_autofill_client_ios.h"
 #import "components/autofill/ios/browser/test_autofill_manager_injector.h"
 #import "components/infobars/core/infobar_manager.h"
+#import "ios/chrome/browser/autofill/model/autofill_agent_delegate.h"
 #import "ios/chrome/browser/infobars/model/infobar_manager_impl.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
@@ -51,7 +53,7 @@ namespace {
 class TestAutofillManager : public BrowserAutofillManager {
  public:
   explicit TestAutofillManager(AutofillDriverIOS* driver)
-      : BrowserAutofillManager(driver, "en-US") {}
+      : BrowserAutofillManager(driver) {}
 
   TestAutofillManagerWaiter& waiter() { return waiter_; }
 
@@ -86,6 +88,8 @@ class ChromeAutofillClientIOSTest : public PlatformTest {
     PlatformTest::SetUp();
 
     mock_snackbar_handler_ = OCMStrictProtocolMock(@protocol(SnackbarCommands));
+    autofill_agent_delegate_ = [[AutofillAgentDelegate alloc]
+        initWithCommandHandler:mock_snackbar_handler_];
 
     CommandDispatcher* dispatcher = browser_->GetCommandDispatcher();
     [dispatcher startDispatchingToTarget:mock_snackbar_handler_
@@ -95,13 +99,12 @@ class ChromeAutofillClientIOSTest : public PlatformTest {
         [[AutofillAgent alloc] initWithPrefService:profile_->GetPrefs()
                                           webState:web_state_.get()];
 
-    autofill_agent.snackbarHandler = mock_snackbar_handler_;
+    autofill_agent.delegate = autofill_agent_delegate_;
     InfoBarManagerImpl::CreateForWebState(web_state_.get());
-    autofill_client_ = std::make_unique<ChromeAutofillClientIOS>(
-        profile_.get(), web_state_.get(),
-        InfoBarManagerImpl::FromWebState(web_state_.get()), autofill_agent);
-    autofill::AutofillDriverIOSFactory::CreateForWebState(
-        web_state_.get(), autofill_client_.get(), autofill_agent, "en");
+    autofill_client_ =
+        std::make_unique<WithFakedFromWebState<ChromeAutofillClientIOS>>(
+            profile_.get(), web_state_.get(),
+            InfoBarManagerImpl::FromWebState(web_state_.get()), autofill_agent);
     autofill_manager_injector_ =
         std::make_unique<TestAutofillManagerInjector<TestAutofillManager>>(
             web_state_.get());
@@ -129,6 +132,7 @@ class ChromeAutofillClientIOSTest : public PlatformTest {
 
   web::WebState* web_state() { return web_state_.get(); }
 
+  id autofill_agent_delegate_;
   id mock_snackbar_handler_;
 
  private:

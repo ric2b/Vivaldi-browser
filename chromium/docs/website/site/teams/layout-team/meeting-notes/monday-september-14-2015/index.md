@@ -12,7 +12,7 @@ title: Monday, September 14, 2015
 
 Updates since last meeting (on Monday, August 31st):
 
-Scrolling (skobes, szager) \[[crbug.com/417782](http://crbug.com/417782)\]
+Scrolling (skobes, szager) \[[crbug.com/417782](https://crbug.com/417782)\]
 
 - Landed flexbox change for overflow auto, it's causing a regression
 
@@ -44,7 +44,7 @@ just the main frame and only for certain platforms. Would be nice to
 
 use this more broadly. (skobes)
 
-CSS Flexbox (cbiesinger) \[[crbug.com/426898](http://crbug.com/426898)\]
+CSS Flexbox (cbiesinger) \[[crbug.com/426898](https://crbug.com/426898)\]
 
 - Need to re-think approach to deprecating sizing keywords due to leaks
 
@@ -56,12 +56,12 @@ in CSS parser which resulted in the patch to be reverted.
 
 table fixup (i.e. not do it) which will save us some work. (ojan)
 
-CSS Grid Layout (svillar) \[[crbug.com/79180](http://crbug.com/79180)\]
+CSS Grid Layout (svillar) \[[crbug.com/79180](https://crbug.com/79180)\]
 
 - No update since last week.
 
 Region-based multi-column support (mstensho)
-\[[crbug.com/334335](http://crbug.com/334335)\]
+\[[crbug.com/334335](https://crbug.com/334335)\]
 
 - Fixed handling for unbreakable blocks at top of a column/page.
 
@@ -74,7 +74,7 @@ for multicol.
 multicol and height is set to auto.
 
 Add API for layout (leviw, pilgrim, ojan)
-\[[crbug.com/495288](http://crbug.com/495288)\]
+\[[crbug.com/495288](https://crbug.com/495288)\]
 
 - Still working on line layout api, down to some asserts and debug only
 

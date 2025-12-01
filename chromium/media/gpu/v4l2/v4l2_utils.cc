@@ -2,27 +2,26 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "media/gpu/v4l2/v4l2_utils.h"
 
 #include <fcntl.h>
 #include <sys/ioctl.h>
 
+#include <algorithm>
 #include <iomanip>
 #include <iostream>
 #include <map>
 #include <sstream>
 
-// build_config.h must come before BUILDFLAG()
-#include "build/build_config.h"
-#if BUILDFLAG(IS_CHROMEOS)
-#include <linux/media/av1-ctrls.h>
-#endif
-
 #include "base/containers/contains.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/posix/eintr_wrapper.h"
-#include "base/ranges/algorithm.h"
 #include "build/build_config.h"
 #include "media/base/media_switches.h"
 #include "media/base/video_codecs.h"
@@ -331,7 +330,6 @@ static const std::map<v4l2_enum_type, v4l2_enum_type>
         {V4L2_PIX_FMT_H264, V4L2_CID_MPEG_VIDEO_H264_PROFILE},
         {V4L2_PIX_FMT_H264_SLICE, V4L2_CID_MPEG_VIDEO_H264_PROFILE},
 #if BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
-        {V4L2_PIX_FMT_HEVC, V4L2_CID_MPEG_VIDEO_HEVC_PROFILE},
         {V4L2_PIX_FMT_HEVC_SLICE, V4L2_CID_MPEG_VIDEO_HEVC_PROFILE},
 #endif  // BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
         {V4L2_PIX_FMT_VP8, V4L2_CID_MPEG_VIDEO_VP8_PROFILE},
@@ -456,8 +454,7 @@ std::vector<VideoCodecProfile> EnumerateSupportedProfilesForV4L2Codec(
 
   v4l2_queryctrl query_ctrl = {.id = static_cast<__u32>(profile_cid)};
   if (ioctl_cb.Run(VIDIOC_QUERYCTRL, &query_ctrl) != kIoctlOk) {
-    // This happens for example for VP8 on Hana MTK8173, or for HEVC on Trogdor
-    // QC SC7180) at the time of writing.
+    // This happens for example for VP8 on Hana MTK8173 at the time of writing.
     DVLOGF(4) << "Driver doesn't support enumerating "
               << FourccToString(codec_as_pix_fmt)
               << " profiles, using default ones.";
@@ -489,8 +486,9 @@ std::vector<VideoCodecProfile> EnumerateSupportedProfilesForV4L2Codec(
 
   // Erase duplicated profiles. This is needed because H264PROFILE_BASELINE maps
   // to both V4L2_MPEG_VIDEO_H264_PROFILE__BASELINE/CONSTRAINED_BASELINE
-  base::ranges::sort(profiles);
-  profiles.erase(base::ranges::unique(profiles), profiles.end());
+  std::ranges::sort(profiles);
+  auto to_remove = std::ranges::unique(profiles);
+  profiles.erase(to_remove.begin(), to_remove.end());
   return profiles;
 }
 
@@ -647,9 +645,6 @@ bool IsV4L2DecoderStateful() {
   // V4L2 stateful formats (don't end up with _SLICE or _FRAME) supported.
   constexpr std::array<uint32_t, 4> kSupportedStatefulInputCodecs = {
       V4L2_PIX_FMT_H264,
-#if BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
-      V4L2_PIX_FMT_HEVC,
-#endif  // BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
       V4L2_PIX_FMT_VP8,
       V4L2_PIX_FMT_VP9,
   };

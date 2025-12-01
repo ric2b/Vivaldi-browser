@@ -10,7 +10,7 @@
 #import "ios/chrome/browser/shared/ui/elements/custom_highlight_button.h"
 
 // Vivaldi
-#import "ios/chrome/browser/ui/sharing/sharing_positioner.h"
+#import "ios/chrome/browser/sharing/ui_bundled/sharing_positioner.h"
 #import "ios/ui/ad_tracker_blocker/vivaldi_atb_setting_type.h"
 // End Vivaldi
 

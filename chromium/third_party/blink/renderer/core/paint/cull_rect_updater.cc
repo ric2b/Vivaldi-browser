@@ -4,7 +4,6 @@
 
 #include "third_party/blink/renderer/core/paint/cull_rect_updater.h"
 
-#include "base/auto_reset.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -198,13 +197,6 @@ void CullRectUpdater::Update() {
   SCOPED_BLINK_UMA_HISTOGRAM_TIMER_HIGHRES("Blink.CullRect.UpdateTime");
 
   UpdateInternal(CullRect::Infinite());
-
-#if DCHECK_IS_ON()
-  if (VLOG_IS_ON(2)) {
-    VLOG(2) << "PaintLayer tree after cull rect update:";
-    ShowLayerTree(&starting_layer_);
-  }
-#endif
 }
 
 void CullRectUpdater::UpdateForTesting(const CullRect& input_cull_rect) {
@@ -257,6 +249,13 @@ void CullRectUpdater::UpdateInternal(const CullRect& input_cull_rect) {
 
   if (!g_original_cull_rects)
     starting_layer_.ClearNeedsCullRectUpdate();
+
+#if DCHECK_IS_ON()
+  if (VLOG_IS_ON(2)) {
+    VLOG(2) << "PaintLayer tree after cull rect update:";
+    ShowLayerTree(&starting_layer_);
+  }
+#endif
 }
 
 // See UpdateForDescendants for how |force_update_self| is propagated.
@@ -574,7 +573,20 @@ void CullRectUpdater::PaintPropertiesChanged(
   }
 
   if (object.HasLayer()) {
-    To<LayoutBoxModelObject>(object).Layer()->SetNeedsCullRectUpdate();
+    PaintLayer* layer = To<LayoutBoxModelObject>(object).Layer();
+    layer->SetNeedsCullRectUpdate();
+
+    // For change of scroll properties (e.g. contents rect), SetNeedsRepaint to
+    // force proactive update of cull rect because the ChangedEnough logic
+    // doesn't apply. In most cases, other code paths also SetNeedsRepaint
+    // on such changes, but not for the case where a containing-block-order
+    // descendant causing the change is not a paint-order descendant of the
+    // scroller.
+    if (properties_changed.scroll_changed >=
+        PaintPropertyChangeType::kChangedOnlySimpleValues) {
+      layer->SetNeedsRepaint();
+    }
+
     // Fixed-position cull rects depend on view clip. See
     // ComputeFragmentCullRect().
     if (const auto* layout_view = DynamicTo<LayoutView>(object)) {

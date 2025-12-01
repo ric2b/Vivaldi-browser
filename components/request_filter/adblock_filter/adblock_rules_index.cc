@@ -744,6 +744,7 @@ RulesIndex::ActivationResults RulesIndex::GetActivationsForFrame(
                                 : frame->GetLastCommittedOrigin())) {
     activations[flat::ActivationType_DOCUMENT].type =
         ActivationResult::ALWAYS_PASS;
+    activations[flat::ActivationType_DOCUMENT].rule_and_source = std::nullopt;
   }
 
   // Apply relevant activation from parent frames.

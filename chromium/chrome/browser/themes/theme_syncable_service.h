@@ -28,14 +28,19 @@ namespace sync_pb {
 class ThemeSpecifics;
 }
 
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+//
+// LINT.IfChange(ThemePrefInMigration)
 enum class ThemePrefInMigration {
   kBrowserColorScheme,
   kUserColor,
   kBrowserColorVariant,
   kGrayscaleThemeEnabled,
   kNtpCustomBackgroundDict,
-  kLastEntry = kNtpCustomBackgroundDict
+  kMaxValue = kNtpCustomBackgroundDict
 };
+// LINT.ThenChange(//tools/metrics/histograms/metadata/sync/enums.xml:ThemePrefInMigration)
 
 std::string_view GetThemePrefNameInMigration(ThemePrefInMigration theme_pref);
 void MigrateSyncingThemePrefsToNonSyncingIfNeeded(PrefService* prefs);
@@ -99,6 +104,9 @@ class ThemeSyncableService final : public syncer::SyncableService,
       const base::Location& from_here,
       const syncer::SyncChangeList& change_list) override;
   base::WeakPtr<SyncableService> AsWeakPtr() override;
+
+  // Returns a ThemeSpecifics based on the currently applied theme.
+  sync_pb::ThemeSpecifics GetThemeSpecificsFromCurrentThemeForTesting() const;
 
   // Client tag and title of the single theme sync_pb::SyncEntity of an account.
   static const char kSyncEntityClientTag[];

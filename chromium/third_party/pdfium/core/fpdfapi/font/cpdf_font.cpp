@@ -149,7 +149,7 @@ bool CPDF_Font::HasFontWidths() const {
 }
 
 void CPDF_Font::LoadFontDescriptor(const CPDF_Dictionary* pFontDesc) {
-  m_Flags = pFontDesc->GetIntegerFor("Flags", FXFONT_NONSYMBOLIC);
+  m_Flags = pFontDesc->GetIntegerFor("Flags", pdfium::kFontStyleNonSymbolic);
   int ItalicAngle = 0;
   bool bExistItalicAngle = false;
   if (pFontDesc->KeyExist("ItalicAngle")) {
@@ -157,7 +157,7 @@ void CPDF_Font::LoadFontDescriptor(const CPDF_Dictionary* pFontDesc) {
     bExistItalicAngle = true;
   }
   if (ItalicAngle < 0) {
-    m_Flags |= FXFONT_ITALIC;
+    m_Flags |= pdfium::kFontStyleItalic;
     m_ItalicAngle = ItalicAngle;
   }
   bool bExistStemV = false;
@@ -372,12 +372,12 @@ const char* CPDF_Font::GetAdobeCharName(
 uint32_t CPDF_Font::FallbackFontFromCharcode(uint32_t charcode) {
   if (m_FontFallbacks.empty()) {
     m_FontFallbacks.push_back(std::make_unique<CFX_Font>());
-    FX_SAFE_INT32 safeWeight = m_StemV;
-    safeWeight *= 5;
-    m_FontFallbacks[0]->LoadSubst("Arial", IsTrueTypeFont(), m_Flags,
-                                  safeWeight.ValueOrDefault(FXFONT_FW_NORMAL),
-                                  m_ItalicAngle, FX_CodePage::kDefANSI,
-                                  IsVertWriting());
+    FX_SAFE_INT32 safe_weight = m_StemV;
+    safe_weight *= 5;
+    m_FontFallbacks[0]->LoadSubst(
+        "Arial", IsTrueTypeFont(), m_Flags,
+        safe_weight.ValueOrDefault(pdfium::kFontWeightNormal), m_ItalicAngle,
+        FX_CodePage::kDefANSI, IsVertWriting());
   }
   return 0;
 }
@@ -415,11 +415,15 @@ bool CPDF_Font::UseTTCharmap(const RetainPtr<CFX_Face>& face,
   return false;
 }
 
-int CPDF_Font::GetFontWeight() const {
-  FX_SAFE_INT32 safeStemV(m_StemV);
-  if (m_StemV < 140)
-    safeStemV *= 5;
-  else
-    safeStemV = safeStemV * 4 + 140;
-  return safeStemV.ValueOrDefault(FXFONT_FW_NORMAL);
+std::optional<int> CPDF_Font::GetFontWeight() const {
+  FX_SAFE_INT32 safe_stem_v(m_StemV);
+  if (m_StemV < 140) {
+    safe_stem_v *= 5;
+  } else {
+    safe_stem_v = safe_stem_v * 4 + 140;
+  }
+  if (!safe_stem_v.IsValid()) {
+    return std::nullopt;
+  }
+  return safe_stem_v.ValueOrDie();
 }

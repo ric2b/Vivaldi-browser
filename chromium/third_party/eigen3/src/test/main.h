@@ -18,6 +18,7 @@
 #include <sstream>
 #include <vector>
 #include <typeinfo>
+#include <type_traits>
 #include <functional>
 #ifdef EIGEN_USE_SYCL
 #include <CL/sycl.hpp>
@@ -142,14 +143,20 @@ struct imag {};
 static long int nb_temporaries;
 static long int nb_temporaries_on_assert = -1;
 
-inline void on_temporary_creation(long int size) {
+#ifdef TEST_IGNORE_STACK_ALLOCATED_TEMPORARY
+inline void on_temporary_creation(long int size, int SizeAtCompileTime) {
+  // ignore stack-allocated temporaries
+  if (SizeAtCompileTime != -1) return;
+#else
+inline void on_temporary_creation(long int size, int) {
+#endif
   // here's a great place to set a breakpoint when debugging failures in this test!
   if (size != 0) nb_temporaries++;
   if (nb_temporaries_on_assert > 0) assert(nb_temporaries < nb_temporaries_on_assert);
 }
 
 #define EIGEN_DENSE_STORAGE_CTOR_PLUGIN \
-  { on_temporary_creation(size); }
+  { on_temporary_creation(size, Size); }
 
 #define VERIFY_EVALUATION_COUNT(XPR, N)                            \
   {                                                                \
@@ -333,7 +340,7 @@ static std::vector<std::string> eigen_assert_list;
 
 #endif  // EIGEN_NO_ASSERTION_CHECKING
 
-#ifndef EIGEN_TESTING_CONSTEXPR
+#if !defined(EIGEN_TESTING_CONSTEXPR) && !defined(EIGEN_TESTING_PLAINOBJECT_CTOR)
 #define EIGEN_INTERNAL_DEBUGGING
 #endif
 #include <Eigen/QR>  // required for createRandomPIMatrixOfRank and generateRandomMatrixSvs

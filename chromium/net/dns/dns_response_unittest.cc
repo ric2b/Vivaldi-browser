@@ -9,6 +9,8 @@
 
 #include "net/dns/dns_response.h"
 
+#include <stdint.h>
+
 #include <algorithm>
 #include <memory>
 #include <optional>
@@ -731,7 +733,7 @@ TEST(DnsResponseTest, InitParseWithoutQuery) {
 
   DnsResourceRecord record;
   DnsRecordParser parser = resp.Parser();
-  for (unsigned i = 0; i < kT0RecordCount; i ++) {
+  for (uint32_t i = 0; i < kT0RecordCount; i++) {
     EXPECT_FALSE(parser.AtEnd());
     EXPECT_TRUE(parser.ReadRecord(&record));
   }
@@ -1328,8 +1330,9 @@ TEST(DnsResponseWriteTest, SingleARecordAnswerWithQuestion) {
   ASSERT_TRUE(dns_name.has_value());
 
   OptRecordRdata opt_rdata;
-  opt_rdata.AddOpt(
-      OptRecordRdata::UnknownOpt::CreateForTesting(255, "\xde\xad\xbe\xef"));
+  const auto data = std::to_array<uint8_t>({0xde, 0xad, 0xbe, 0xef});
+
+  opt_rdata.AddOpt(OptRecordRdata::UnknownOpt::CreateForTesting(255, data));
 
   std::optional<DnsQuery> query;
   query.emplace(0x1234 /* id */, dns_name.value(), dns_protocol::kTypeA,

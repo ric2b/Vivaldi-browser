@@ -43,8 +43,10 @@ BUILDER_EXCLUDE_SET = set([
 
 # Test suites will not be autosharded on all builders that run the test suite.
 # Example: 'browser_tests' -> turns of browser_tests on linux-rel and win-rel
-# 'chrome_all_tast_tests': crbug.com/1516971
-TEST_SUITE_EXCLUDE_SET = set(['chrome_all_tast_tests'])
+TEST_SUITE_EXCLUDE_SET = set([
+    # 'chrome_all_tast_tests': crbug.com/1516971
+    'chrome_all_tast_tests',
+])
 
 # Test suite and try builder dicts that should not be autosharded any further.
 # Maps try builder to set of test suite
@@ -311,11 +313,11 @@ def main(args):
                       help=('The percentile of suite durations to use to '
                             'calculate the current suite runtime.'))
   parser.add_argument('--min-sample-size',
-                      default=2000,
+                      default=1500,
                       type=int,
                       help=('The minimum number of times a suite must run '
                             'longer than the desired runtime, in order to be'
-                            ' resharded. 2000 is an appropriate default for '
+                            ' resharded. 1500 is an appropriate default for '
                             'a 14 day window. For something smaller like a '
                             'couple of days, the sample size should be much '
                             'smaller.'))

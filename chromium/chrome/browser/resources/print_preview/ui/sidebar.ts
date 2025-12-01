@@ -21,16 +21,10 @@ import './more_settings.js';
 import './other_options_settings.js';
 import './pages_per_sheet_settings.js';
 import './pages_settings.js';
-// <if expr="is_chromeos">
-import './pin_settings.js';
-// </if>
 import './print_preview_vars.css.js';
 import './scaling_settings.js';
 import '/strings.m.js';
-// <if expr="not is_chromeos">
 import './link_container.js';
-
-// </if>
 
 import {CrContainerShadowMixin} from 'chrome://resources/cr_elements/cr_container_shadow_mixin.js';
 import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';

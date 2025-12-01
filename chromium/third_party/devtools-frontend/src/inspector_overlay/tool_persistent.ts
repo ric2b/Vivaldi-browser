@@ -29,26 +29,20 @@
 //  THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import {Overlay, type ResetData} from './common.js';
-
 import {DragResizeHandler, ResizerType, type Delegate} from './drag_resize_handler.js';
-
 import {drawContainerQueryHighlight, type ContainerQueryHighlight} from './highlight_container_query.js';
-
 import {drawLayoutFlexContainerHighlight, type FlexContainerHighlight} from './highlight_flex_common.js';
-
 import {drawLayoutGridHighlight, type GridHighlight} from './highlight_grid_common.js';
-
 import {drawIsolatedElementHighlight, type IsolatedElementHighlight} from './highlight_isolated_element.js';
-
 import {drawScrollSnapHighlight, type ScrollSnapHighlight} from './highlight_scroll_snap.js';
 
-export type PersistentToolMessage = {
-  highlightType: string,
-  highlightIndex: number,
-  newWidth: string,
-  newHeight: string,
-  resizerType: ResizerType,
-};
+export interface PersistentToolMessage {
+  highlightType: string;
+  highlightIndex: number;
+  newWidth: string;
+  newHeight: string;
+  resizerType: ResizerType;
+}
 
 interface DraggableMetadata {
   type: ResizerType;

@@ -6,7 +6,7 @@
 var __addDisposableResource = (this && this.__addDisposableResource) || function (env, value, async) {
     if (value !== null && value !== void 0) {
         if (typeof value !== "object" && typeof value !== "function") throw new TypeError("Object expected.");
-        var dispose;
+        var dispose, inner;
         if (async) {
             if (!Symbol.asyncDispose) throw new TypeError("Symbol.asyncDispose is not defined.");
             dispose = value[Symbol.asyncDispose];
@@ -14,8 +14,10 @@ var __addDisposableResource = (this && this.__addDisposableResource) || function
         if (dispose === void 0) {
             if (!Symbol.dispose) throw new TypeError("Symbol.dispose is not defined.");
             dispose = value[Symbol.dispose];
+            if (async) inner = dispose;
         }
         if (typeof dispose !== "function") throw new TypeError("Object not disposable.");
+        if (inner) dispose = function() { try { inner.call(this); } catch (e) { return Promise.reject(e); } };
         env.stack.push({ value: value, dispose: dispose, async: async });
     }
     else if (async) {
@@ -29,17 +31,22 @@ var __disposeResources = (this && this.__disposeResources) || (function (Suppres
             env.error = env.hasError ? new SuppressedError(e, env.error, "An error was suppressed during disposal.") : e;
             env.hasError = true;
         }
+        var r, s = 0;
         function next() {
-            while (env.stack.length) {
-                var rec = env.stack.pop();
+            while (r = env.stack.pop()) {
                 try {
-                    var result = rec.dispose && rec.dispose.call(rec.value);
-                    if (rec.async) return Promise.resolve(result).then(next, function(e) { fail(e); return next(); });
+                    if (!r.async && s === 1) return s = 0, env.stack.push(r), Promise.resolve().then(next);
+                    if (r.dispose) {
+                        var result = r.dispose.call(r.value);
+                        if (r.async) return s |= 2, Promise.resolve(result).then(next, function(e) { fail(e); return next(); });
+                    }
+                    else s |= 1;
                 }
                 catch (e) {
                     fail(e);
                 }
             }
+            if (s === 1) return env.hasError ? Promise.reject(env.error) : Promise.resolve();
             if (env.hasError) throw env.error;
         }
         return next();
@@ -51,6 +58,7 @@ var __disposeResources = (this && this.__disposeResources) || (function (Suppres
 import { WEB_PERMISSION_TO_PROTOCOL_PERMISSION, } from '../api/Browser.js';
 import { BrowserContext } from '../api/BrowserContext.js';
 import { assert } from '../util/assert.js';
+import { convertCookiesPartitionKeyFromPuppeteerToCdp } from './Page.js';
 /**
  * @internal
  */
@@ -125,6 +133,40 @@ export class CdpBrowserContext extends BrowserContext {
     async close() {
         assert(this.#id, 'Default BrowserContext cannot be closed!');
         await this.#browser._disposeContext(this.#id);
+    }
+    async cookies() {
+        const { cookies } = await this.#connection.send('Storage.getCookies', {
+            browserContextId: this.#id,
+        });
+        return cookies.map(cookie => {
+            return {
+                ...cookie,
+                partitionKey: cookie.partitionKey
+                    ? {
+                        sourceOrigin: cookie.partitionKey.topLevelSite,
+                        hasCrossSiteAncestor: cookie.partitionKey.hasCrossSiteAncestor,
+                    }
+                    : undefined,
+            };
+        });
+    }
+    async setCookie(...cookies) {
+        return await this.#connection.send('Storage.setCookies', {
+            browserContextId: this.#id,
+            cookies: cookies.map(cookie => {
+                return {
+                    ...cookie,
+                    partitionKey: convertCookiesPartitionKeyFromPuppeteerToCdp(cookie.partitionKey),
+                };
+            }),
+        });
+    }
+    async setDownloadBehavior(downloadBehavior) {
+        await this.#connection.send('Browser.setDownloadBehavior', {
+            behavior: downloadBehavior.policy,
+            downloadPath: downloadBehavior.downloadPath,
+            browserContextId: this.#id,
+        });
     }
 }
 //# sourceMappingURL=BrowserContext.js.map

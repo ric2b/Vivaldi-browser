@@ -11,11 +11,13 @@
 #include <string>
 #include <vector>
 
+#include "base/containers/flat_map.h"
 #include "base/functional/callback_forward.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "components/signin/internal/identity_manager/oauth_multilogin_token_request.h"
+#include "components/signin/public/base/signin_buildflags.h"
 #include "google_apis/gaia/core_account_id.h"
 #include "google_apis/gaia/gaia_auth_fetcher.h"
 #include "google_apis/gaia/google_service_auth_error.h"
@@ -31,25 +33,24 @@ class OAuthMultiloginTokenResponse;
 // It is safe to delete this object from within the callbacks.
 class OAuthMultiloginTokenFetcher {
  public:
-  struct AccountIdTokenPair {
-    CoreAccountId account_id;
-    std::string token;
-
-    AccountIdTokenPair(const CoreAccountId& account_id,
-                       const std::string& token)
-        : account_id(account_id), token(token) {}
-
-    friend bool operator==(const AccountIdTokenPair&,
-                           const AccountIdTokenPair&) = default;
-  };
-  using SuccessCallback =
-      base::OnceCallback<void(const std::vector<AccountIdTokenPair>&)>;
+  using SuccessCallback = base::OnceCallback<void(
+      base::flat_map<CoreAccountId, OAuthMultiloginTokenResponse>)>;
   using FailureCallback =
       base::OnceCallback<void(const GoogleServiceAuthError&)>;
 
+  struct AccountParams {
+    CoreAccountId account_id;
+#if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
+    std::string token_binding_challenge;
+#endif  // BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
+  };
+
   OAuthMultiloginTokenFetcher(SigninClient* signin_client,
                               ProfileOAuth2TokenService* token_service,
-                              const std::vector<CoreAccountId>& account_ids,
+                              std::vector<AccountParams> account_params,
+#if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
+                              std::string ephemeral_public_key,
+#endif  // BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
                               SuccessCallback success_callback,
                               FailureCallback failure_callback);
 
@@ -63,7 +64,7 @@ class OAuthMultiloginTokenFetcher {
                               OAuthMultiloginTokenRequest::Result result);
 
  private:
-  void StartFetchingToken(const CoreAccountId& account_id);
+  void StartFetchingToken(const AccountParams& account);
 
   void TokenRequestSucceeded(const CoreAccountId& account_id,
                              OAuthMultiloginTokenResponse response);
@@ -72,13 +73,16 @@ class OAuthMultiloginTokenFetcher {
 
   raw_ptr<SigninClient> signin_client_;
   raw_ptr<ProfileOAuth2TokenService> token_service_;
-  const std::vector<CoreAccountId> account_ids_;
+  const std::vector<AccountParams> account_params_;
+#if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
+  const std::string ephemeral_public_key_;
+#endif  // BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
 
   SuccessCallback success_callback_;
   FailureCallback failure_callback_;
 
   std::vector<std::unique_ptr<OAuthMultiloginTokenRequest>> token_requests_;
-  std::map<CoreAccountId, std::string> access_tokens_;
+  base::flat_map<CoreAccountId, OAuthMultiloginTokenResponse> token_responses_;
   std::set<CoreAccountId> retried_requests_;  // Requests are retried once.
 
   base::WeakPtrFactory<OAuthMultiloginTokenFetcher> weak_ptr_factory_{this};

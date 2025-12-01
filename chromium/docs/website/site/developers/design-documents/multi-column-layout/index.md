@@ -8,7 +8,7 @@ page_name: multi-column-layout
 title: Multi-column layout
 ---
 
-Spec: <http://www.w3.org/TR/css3-multicol/>
+Spec: <https://www.w3.org/TR/css3-multicol/>
 
 Editor's draft: <http://dev.w3.org/csswg/css-multicol/>
 

@@ -19,7 +19,7 @@ import {
 import {
   type CompatibilityTracksAppender,
   entryIsVisibleInTimeline,
-  type HighlightedEntryInfo,
+  type PopoverInfo,
   type TrackAppender,
   type TrackAppenderName,
   VisualLoggingTrackName,
@@ -29,10 +29,11 @@ import * as Utils from './utils/utils.js';
 
 const UIStrings = {
   /**
-   *@description Text shown for an entry in the flame chart that is ignored because it matches
+   * @description Text shown for an entry in the flame chart that is ignored because it matches
    * a predefined ignore list.
+   * @example {/analytics\.js$} rule
    */
-  onIgnoreList: 'On ignore list',
+  onIgnoreList: 'On ignore list ({rule})',
   /**
    * @description Refers to the "Main frame", meaning the top level frame. See https://www.w3.org/TR/html401/present/frames.html
    * @example{example.com} PH1
@@ -145,7 +146,7 @@ export class ThreadAppender implements TrackAppender {
   #compatibilityBuilder: CompatibilityTracksAppender;
   #parsedTrace: Trace.Handlers.Types.ParsedTrace;
 
-  #entries: Trace.Types.Events.Event[] = [];
+  #entries: readonly Trace.Types.Events.Event[] = [];
   #tree: Trace.Helpers.TreeHelpers.TraceEntryTree;
   #processId: Trace.Types.Events.ProcessID;
   #threadId: Trace.Types.Events.ThreadID;
@@ -160,7 +161,8 @@ export class ThreadAppender implements TrackAppender {
   constructor(
       compatibilityBuilder: CompatibilityTracksAppender, parsedTrace: Trace.Handlers.Types.ParsedTrace,
       processId: Trace.Types.Events.ProcessID, threadId: Trace.Types.Events.ThreadID, threadName: string|null,
-      type: Trace.Handlers.Threads.ThreadType) {
+      type: Trace.Handlers.Threads.ThreadType, entries: readonly Trace.Types.Events.Event[],
+      tree: Trace.Helpers.TreeHelpers.TraceEntryTree) {
     this.#compatibilityBuilder = compatibilityBuilder;
     // TODO(crbug.com/1456706):
     // The values for this color generator have been taken from the old
@@ -176,14 +178,6 @@ export class ThreadAppender implements TrackAppender {
     this.#processId = processId;
     this.#threadId = threadId;
 
-    // When loading a CPU profile, only CPU data will be available, thus
-    // we get the data from the SamplesHandler.
-    const entries = type === Trace.Handlers.Threads.ThreadType.CPU_PROFILE ?
-        this.#parsedTrace.Samples?.profilesInProcess.get(processId)?.get(threadId)?.profileCalls :
-        this.#parsedTrace.Renderer?.processes.get(processId)?.threads?.get(threadId)?.entries;
-    const tree = type === Trace.Handlers.Threads.ThreadType.CPU_PROFILE ?
-        this.#parsedTrace.Samples?.profilesInProcess.get(processId)?.get(threadId)?.profileTree :
-        this.#parsedTrace.Renderer?.processes.get(processId)?.threads?.get(threadId)?.tree;
     if (!entries || !tree) {
       throw new Error(`Could not find data for thread with id ${threadId} in process with id ${processId}`);
     }
@@ -369,7 +363,7 @@ export class ThreadAppender implements TrackAppender {
     return this.#url;
   }
 
-  getEntries(): Trace.Types.Events.Event[] {
+  getEntries(): readonly Trace.Types.Events.Event[] {
     return this.#entries;
   }
 
@@ -571,26 +565,22 @@ export class ThreadAppender implements TrackAppender {
    */
   titleForEvent(entry: Trace.Types.Events.Event): string {
     if (Utils.IgnoreList.isIgnoreListedEntry(entry)) {
-      return i18nString(UIStrings.onIgnoreList);
+      const rule = Utils.IgnoreList.getIgnoredReasonString(entry);
+      return i18nString(UIStrings.onIgnoreList, {rule});
     }
     return Utils.EntryName.nameForEntry(entry, this.#parsedTrace);
   }
 
-  /**
-   * Returns the info shown when an event added by this appender
-   * is hovered in the timeline.
-   */
-  highlightedEntryInfo(event: Trace.Types.Events.Event): HighlightedEntryInfo {
-    let title = this.titleForEvent(event);
+  setPopoverInfo(event: Trace.Types.Events.Event, info: PopoverInfo): void {
     if (Trace.Types.Events.isParseHTML(event)) {
       const startLine = event.args['beginData']['startLine'];
       const endLine = event.args['endData'] && event.args['endData']['endLine'];
       const eventURL = event.args['beginData']['url'] as Platform.DevToolsPath.UrlString;
       const url = Bindings.ResourceUtils.displayNameForURL(eventURL);
       const range = (endLine !== -1 || endLine === startLine) ? `${startLine}...${endLine}` : startLine;
-      title += ` - ${url} [${range}]`;
+      info.title += ` - ${url} [${range}]`;
     }
     const selfTime = this.#parsedTrace.Renderer.entryToNode.get(event)?.selfTime;
-    return {title, formattedTime: getFormattedTime(event.dur, selfTime)};
+    info.formattedTime = getFormattedTime(event.dur, selfTime);
   }
 }

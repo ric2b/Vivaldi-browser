@@ -5,6 +5,7 @@
 #include "chrome/browser/ai/ai_summarizer.h"
 
 #include "base/strings/stringprintf.h"
+#include "chrome/browser/ai/ai_context_bound_object.h"
 #include "chrome/browser/ai/ai_utils.h"
 #include "components/optimization_guide/core/optimization_guide_util.h"
 #include "components/optimization_guide/proto/features/summarize.pb.h"
@@ -52,13 +53,18 @@ optimization_guide::proto::SummarizerOutputLength ToProtoOutputLength(
 }  // namespace
 
 AISummarizer::AISummarizer(
+    AIContextBoundObjectSet& context_bound_object_set,
     std::unique_ptr<optimization_guide::OptimizationGuideModelExecutor::Session>
         summarize_session,
     blink::mojom::AISummarizerCreateOptionsPtr options,
     mojo::PendingReceiver<blink::mojom::AISummarizer> receiver)
-    : summarize_session_(std::move(summarize_session)),
+    : AIContextBoundObject(context_bound_object_set),
+      summarize_session_(std::move(summarize_session)),
       receiver_(this, std::move(receiver)),
-      options_(std::move(options)) {}
+      options_(std::move(options)) {
+  receiver_.set_disconnect_handler(base::BindOnce(
+      &AIContextBoundObject::RemoveFromSet, base::Unretained(this)));
+}
 
 AISummarizer::~AISummarizer() {
   for (auto& responder : responder_set_) {
@@ -67,12 +73,7 @@ AISummarizer::~AISummarizer() {
   }
 }
 
-void AISummarizer::SetDeletionCallback(base::OnceClosure deletion_callback) {
-  receiver_.set_disconnect_handler(std::move(deletion_callback));
-}
-
 void AISummarizer::ModelExecutionCallback(
-    const std::string& input,
     mojo::RemoteSetElementId responder_id,
     optimization_guide::OptimizationGuideModelStreamingExecutionResult result) {
   blink::mojom::ModelStreamingResponder* responder =
@@ -90,7 +91,9 @@ void AISummarizer::ModelExecutionCallback(
   auto response = optimization_guide::ParsedAnyMetadata<
       optimization_guide::proto::StringValue>(result.response->response);
   if (response->has_value()) {
-    responder->OnStreaming(response->value());
+    responder->OnStreaming(
+        response->value(),
+        blink::mojom::ModelStreamingResponderAction::kReplace);
   }
   if (result.response->is_complete) {
     responder->OnCompletion(/*context_info=*/nullptr);
@@ -134,5 +137,5 @@ void AISummarizer::Summarize(
   summarize_session_->ExecuteModel(
       request,
       base::BindRepeating(&AISummarizer::ModelExecutionCallback,
-                          weak_ptr_factory_.GetWeakPtr(), input, responder_id));
+                          weak_ptr_factory_.GetWeakPtr(), responder_id));
 }

@@ -417,6 +417,7 @@ message UpdateDeviceInfoState {
     // Detected feature level.
     RMAD_FEATURE_LEVEL_0 = 2;
     RMAD_FEATURE_LEVEL_1 = 3;
+    RMAD_FEATURE_LEVEL_2 = 4;
   }
 
   // User provided serial number of device.

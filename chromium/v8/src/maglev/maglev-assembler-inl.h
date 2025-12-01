@@ -73,6 +73,9 @@ template <>
 struct CopyForDeferredHelper<Register>
     : public CopyForDeferredByValue<Register> {};
 template <>
+struct CopyForDeferredHelper<std::optional<Register>>
+    : public CopyForDeferredByValue<std::optional<Register>> {};
+template <>
 struct CopyForDeferredHelper<DoubleRegister>
     : public CopyForDeferredByValue<DoubleRegister> {};
 // Bytecode offsets are copied by value.
@@ -350,6 +353,16 @@ inline void MaglevAssembler::CompareInt32AndBranch(Register r1, Register r2,
                         if_false == next_block);
 }
 
+inline void MaglevAssembler::CompareIntPtrAndBranch(Register r1, int32_t value,
+                                                    Condition cond,
+                                                    BasicBlock* if_true,
+                                                    BasicBlock* if_false,
+                                                    BasicBlock* next_block) {
+  CompareIntPtrAndBranch(r1, value, cond, if_true->label(), Label::kFar,
+                         if_true == next_block, if_false->label(), Label::kFar,
+                         if_false == next_block);
+}
+
 inline void MaglevAssembler::Branch(Condition condition, BasicBlock* if_true,
                                     BasicBlock* if_false,
                                     BasicBlock* next_block) {
@@ -412,6 +425,12 @@ inline void MaglevAssembler::LoadHeapNumberOrOddballValue(DoubleRegister result,
   static_assert(offsetof(HeapNumber, value_) ==
                 offsetof(Oddball, to_number_raw_));
   LoadHeapNumberValue(result, object);
+}
+
+inline void MaglevAssembler::StoreHeapNumberValue(DoubleRegister value,
+                                                  Register heap_number) {
+  StoreFloat64(FieldMemOperand(heap_number, offsetof(HeapNumber, value_)),
+               value);
 }
 
 namespace detail {
@@ -787,7 +806,9 @@ inline void MaglevAssembler::SmiTagInt32AndJumpIfSuccess(
 
 inline void MaglevAssembler::UncheckedSmiTagInt32(Register dst, Register src) {
   SmiTagInt32AndSetFlags(dst, src);
-  Assert(kNoOverflow, AbortReason::kInputDoesNotFitSmi);
+  if (!SmiValuesAre32Bits()) {
+    Assert(kNoOverflow, AbortReason::kInputDoesNotFitSmi);
+  }
 }
 
 inline void MaglevAssembler::UncheckedSmiTagInt32(Register reg) {
@@ -800,12 +821,32 @@ inline void MaglevAssembler::SmiTagUint32AndJumpIfFail(
   CompareInt32AndJumpIf(src, Smi::kMaxValue, kUnsignedGreaterThan, fail,
                         distance);
   SmiTagInt32AndSetFlags(dst, src);
-  Assert(kNoOverflow, AbortReason::kInputDoesNotFitSmi);
+  if (!SmiValuesAre32Bits()) {
+    Assert(kNoOverflow, AbortReason::kInputDoesNotFitSmi);
+  }
 }
 
 inline void MaglevAssembler::SmiTagUint32AndJumpIfFail(
     Register reg, Label* fail, Label::Distance distance) {
   SmiTagUint32AndJumpIfFail(reg, reg, fail, distance);
+}
+
+inline void MaglevAssembler::SmiTagIntPtrAndJumpIfFail(
+    Register dst, Register src, Label* fail, Label::Distance distance) {
+  CheckIntPtrIsSmi(src, fail, distance);
+  // If the IntPtr is in the Smi range, we can treat it as Int32.
+  SmiTagInt32AndSetFlags(dst, src);
+  if (!SmiValuesAre32Bits()) {
+    Assert(kNoOverflow, AbortReason::kInputDoesNotFitSmi);
+  }
+}
+
+inline void MaglevAssembler::SmiTagIntPtrAndJumpIfSuccess(
+    Register dst, Register src, Label* success, Label::Distance distance) {
+  Label done;
+  SmiTagIntPtrAndJumpIfFail(dst, src, &done);
+  Jump(success, distance);
+  bind(&done);
 }
 
 inline void MaglevAssembler::SmiTagUint32AndJumpIfSuccess(
@@ -828,11 +869,22 @@ inline void MaglevAssembler::UncheckedSmiTagUint32(Register dst, Register src) {
                           AbortReason::kInputDoesNotFitSmi);
   }
   SmiTagInt32AndSetFlags(dst, src);
-  Assert(kNoOverflow, AbortReason::kInputDoesNotFitSmi);
+  if (!SmiValuesAre32Bits()) {
+    Assert(kNoOverflow, AbortReason::kInputDoesNotFitSmi);
+  }
 }
 
 inline void MaglevAssembler::UncheckedSmiTagUint32(Register reg) {
   UncheckedSmiTagUint32(reg, reg);
+}
+
+inline void MaglevAssembler::CheckIntPtrIsSmi(Register obj, Label* fail,
+                                              Label::Distance distance) {
+  // TODO(388844115): Optimize this per platform.
+  int32_t kSmiMaxValueInt32 = static_cast<int32_t>(Smi::kMaxValue);
+  int32_t kSmiMinValueInt32 = static_cast<int32_t>(Smi::kMinValue);
+  CompareIntPtrAndJumpIf(obj, kSmiMaxValueInt32, kGreaterThan, fail, distance);
+  CompareIntPtrAndJumpIf(obj, kSmiMinValueInt32, kLessThan, fail, distance);
 }
 
 inline void MaglevAssembler::SmiAddConstant(Register reg, int value,

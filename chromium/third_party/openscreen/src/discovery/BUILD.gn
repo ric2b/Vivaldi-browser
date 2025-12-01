@@ -126,22 +126,12 @@ openscreen_source_set("testing") {
   visibility += [ ":unittests" ]
   public = [
     "common/testing/mock_reporting_client.h",
-    "mdns/testing/hash_test_util.h",
     "mdns/testing/mdns_test_util.h",
   ]
   sources = [
     "dnssd/testing/fake_dns_record_factory.cc",
     "mdns/testing/mdns_test_util.cc",
   ]
-
-  defines = []
-  if (build_with_chromium) {
-    sources += [ "mdns/testing/hash_test_util_nop.h" ]
-  } else {
-    defines += [ "HASH_TEST_UTIL_USE_ABSL" ]
-    sources += [ "mdns/testing/hash_test_util_abseil.h" ]
-  }
-
   deps = [
     ":mdns",
     ":public",

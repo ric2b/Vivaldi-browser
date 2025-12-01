@@ -150,8 +150,8 @@ class Span {
   }
 
  private:
-  T* data_{nullptr};
-  size_t count_{0};
+  T* data_ = nullptr;
+  size_t count_ = 0;
 };
 
 }  // namespace openscreen

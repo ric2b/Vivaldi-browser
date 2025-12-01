@@ -127,7 +127,12 @@ constexpr CGFloat kDefaultToolbarHeight = 44;
 
 - (UIBarButtonItem*)createToolbarButtonItem:(NSString*)name
                                      action:(SEL)selector {
-  UIImage* icon = [[UIImage systemImageNamed:name]
+  UIImage* image = [UIImage systemImageNamed:name];
+  if (!image) {
+    image = [UIImage imageNamed:name];
+  }
+  DCHECK(image);
+  UIImage* icon = [image
       imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
 
   UIBarButtonItem* button =
@@ -177,7 +182,7 @@ constexpr CGFloat kDefaultToolbarHeight = 44;
 - (UIBarButtonItem*)textFormatButton {
   if (!_textFormatButton) {
     _textFormatButton =
-        [self createToolbarButtonItem:@"bold.italic.underline"
+        [self createToolbarButtonItem:@"markdown_bis_button"
                                action:@selector(openMarkdownInputView:)];
   }
   return _textFormatButton;

@@ -21,7 +21,7 @@ namespace {
 
 // Default timeout to receive a reply message in response to a request message
 // sent by us.
-constexpr std::chrono::milliseconds kReplyTimeout{4000};
+constexpr std::chrono::milliseconds kReplyTimeout(4000);
 
 // Special character indicating message was sent to all receivers or senders.
 constexpr char kAnyDestination[] = "*";

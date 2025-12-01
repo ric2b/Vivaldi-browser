@@ -56,14 +56,13 @@ import {RecorderExtensionEndpoint} from './RecorderExtensionEndpoint.js';
 import {RecorderPluginManager} from './RecorderPluginManager.js';
 
 const extensionOrigins: WeakMap<MessagePort, Platform.DevToolsPath.UrlString> = new WeakMap();
+const kPermittedSchemes = ['http:', 'https:', 'file:', 'data:', 'chrome-extension:', 'about:'];
 
 declare global {
   interface Window {
     DevToolsAPI?: {getInspectedTabId?(): string|undefined, getOriginsForbiddenForExtensions?(): string[]};
   }
 }
-
-const kAllowedOrigins = [].map(url => (new URL(url)).origin);
 
 let extensionServerInstance: ExtensionServer|null;
 
@@ -130,7 +129,7 @@ class RegisteredExtension {
       let parsedURL;
       try {
         parsedURL = new URL(inspectedURL);
-      } catch (exception) {
+      } catch {
         return false;
       }
       return parsedURL.protocol !== 'file:';
@@ -314,8 +313,12 @@ export class ExtensionServer extends Common.ObjectWrapper.ObjectWrapper<EventTyp
     const symbol_types_array =
         (Array.isArray(symbol_types) && symbol_types.every(e => typeof e === 'string') ? symbol_types : []);
     const extensionOrigin = this.getExtensionOrigin(_shared_port);
-    const endpoint =
-        new LanguageExtensionEndpoint(extensionOrigin, pluginName, {language, symbol_types: symbol_types_array}, port);
+    const registration = this.registeredExtensions.get(extensionOrigin);
+    if (!registration) {
+      throw new Error('Received a message from an unregistered extension');
+    }
+    const endpoint = new LanguageExtensionEndpoint(
+        registration.allowFileAccess, extensionOrigin, pluginName, {language, symbol_types: symbol_types_array}, port);
     pluginManager.addPlugin(endpoint);
     return this.status.OK();
   }
@@ -1403,22 +1406,11 @@ export class ExtensionServer extends Common.ObjectWrapper.ObjectWrapper<EventTyp
     // TODO(caseq): make sure tests supply valid URLs or we specifically handle invalid ones.
     try {
       parsedURL = new URL(url);
-    } catch (exception) {
+    } catch {
       return false;
     }
-    if (kAllowedOrigins.includes(parsedURL.origin)) {
-      return true;
-    }
-    if (parsedURL.protocol === 'chrome:' || parsedURL.protocol === 'devtools:' ||
-        parsedURL.protocol === 'chrome-untrusted:' || parsedURL.protocol === 'chrome-error:' ||
-        parsedURL.protocol === 'chrome-search:') {
-      return false;
-    }
-    if (parsedURL.protocol.startsWith('http') && parsedURL.hostname.match(/^chrome\.google\.com\.?$/) &&
-        parsedURL.pathname.startsWith('/webstore')) {
-      return false;
-    }
-    if (parsedURL.protocol.startsWith('http') && parsedURL.hostname.match(/^chromewebstore\.google\.com\.?$/)) {
+
+    if (!kPermittedSchemes.includes(parsedURL.protocol)) {
       return false;
     }
 
@@ -1428,7 +1420,32 @@ export class ExtensionServer extends Common.ObjectWrapper.ObjectWrapper<EventTyp
       return false;
     }
 
+    if (this.#isUrlFromChromeWebStore(parsedURL)) {
+      return false;
+    }
+
     return true;
+  }
+
+  /**
+   * Tests whether a given URL is from the Chrome web store to prevent the extension server from
+   * being injected. This is treated as separate from the `getOriginsForbiddenForExtensions` API because
+   * DevTools might not be being run from a native origin and we still want to lock down this specific
+   * origin from DevTools extensions.
+   *
+   * @param parsedURL The URL to check
+   * @returns `true` if the URL corresponds to the Chrome web store; otherwise `false`
+   */
+  static #isUrlFromChromeWebStore(parsedURL: URL): boolean {
+    if (parsedURL.protocol.startsWith('http') && parsedURL.hostname.match(/^chrome\.google\.com\.?$/) &&
+        parsedURL.pathname.startsWith('/webstore')) {
+      return true;
+    }
+    if (parsedURL.protocol.startsWith('http') && parsedURL.hostname.match(/^chromewebstore\.google\.com\.?$/)) {
+      return true;
+    }
+
+    return false;
   }
 
   private disableExtensions(): void {
@@ -1444,9 +1461,9 @@ export const enum Events {
   SidebarPaneAdded = 'SidebarPaneAdded',
 }
 
-export type EventTypes = {
-  [Events.SidebarPaneAdded]: ExtensionSidebarPane,
-};
+export interface EventTypes {
+  [Events.SidebarPaneAdded]: ExtensionSidebarPane;
+}
 
 class ExtensionServerPanelView extends UI.View.SimpleView {
   private readonly name: string;

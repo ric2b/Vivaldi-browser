@@ -18,6 +18,7 @@ package com.google.i18n.addressinput.common;
 
 import static com.google.i18n.addressinput.common.Util.checkNotNull;
 
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -25,6 +26,7 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.jspecify.nullness.Nullable;
 
 /**
  * An immutable data structure for international postal addresses, built using the nested
@@ -110,6 +112,15 @@ public final class AddressData {
   // part.
   private final List<String> addressLines;
 
+  // The landmark address descriptor.
+  private final String landmarkAddressDescriptor;
+
+  // The landmark affix.
+  private final String landmarkAffix;
+
+  // The landmark name.
+  private final String landmarkName;
+
   // Top-level administrative subdivision of this country.
   private final String administrativeArea;
 
@@ -148,6 +159,9 @@ public final class AddressData {
     this.sortingCode = builder.fields.get(AddressField.SORTING_CODE);
     this.organization = builder.fields.get(AddressField.ORGANIZATION);
     this.recipient = builder.fields.get(AddressField.RECIPIENT);
+    this.landmarkAddressDescriptor = builder.fields.get(AddressField.LANDMARK_ADDRESS_DESCRIPTOR);
+    this.landmarkAffix = builder.fields.get(AddressField.LANDMARK_AFFIX);
+    this.landmarkName = builder.fields.get(AddressField.LANDMARK_NAME);
     this.addressLines = Collections.unmodifiableList(
         normalizeAddressLines(new ArrayList<String>(builder.addressLines)));
     this.languageCode = builder.language;
@@ -197,14 +211,28 @@ public final class AddressData {
     for (String line : addressLines) {
       output.append(line + "; ");
     }
-    output.append("ADMIN_AREA=" + administrativeArea + "; "
-        + "LOCALITY=" + locality + "; "
-        + "DEPENDENT_LOCALITY=" + dependentLocality + "; "
-        + "POSTAL_CODE=" + postalCode + "; "
-        + "SORTING_CODE=" + sortingCode + "; "
-        + "ORGANIZATION=" + organization + "; "
-        + "RECIPIENT=" + recipient
-        + ")");
+    output
+        .append("ADMIN_AREA=")
+        .append(administrativeArea)
+        .append("; " + "LOCALITY=")
+        .append(locality)
+        .append("; " + "DEPENDENT_LOCALITY=")
+        .append(dependentLocality)
+        .append("; " + "POSTAL_CODE=")
+        .append(postalCode)
+        .append("; " + "SORTING_CODE=")
+        .append(sortingCode)
+        .append("; " + "ORGANIZATION=")
+        .append(organization)
+        .append("; " + "RECIPIENT=")
+        .append(recipient)
+        .append("; " + "LANDMARK_ADDRESS_DESCRIPTOR=")
+        .append(landmarkAddressDescriptor)
+        .append("; " + "LANDMARK_AFFIX=")
+        .append(landmarkAffix)
+        .append("; " + "LANDMARK_NAME=")
+        .append(landmarkName)
+        .append(")");
     return output.toString();
   }
 
@@ -247,7 +275,16 @@ public final class AddressData {
             : recipient.equals(addressData.getRecipient()))
         && (languageCode == null
             ? addressData.getLanguageCode() == null
-            : languageCode.equals(addressData.getLanguageCode()));
+            : languageCode.equals(addressData.getLanguageCode()))
+        && (landmarkAddressDescriptor == null
+            ? addressData.getLandmarkAddressDescriptor() == null
+            : landmarkAddressDescriptor.equals(addressData.getLandmarkAddressDescriptor()))
+        && (landmarkAffix == null
+            ? addressData.getLandmarkAffix() == null
+            : landmarkAffix.equals(addressData.getLandmarkAffix()))
+        && (landmarkName == null
+            ? addressData.getLandmarkName() == null
+            : landmarkName.equals(addressData.getLandmarkName()));
   }
 
   @Override
@@ -265,7 +302,10 @@ public final class AddressData {
           sortingCode,
           organization,
           recipient,
-          languageCode
+          languageCode,
+          landmarkAddressDescriptor,
+          landmarkAffix,
+          landmarkName
         };
 
     for (String field : fields) {
@@ -338,7 +378,7 @@ public final class AddressData {
 
   // Helper for returning the Nth address line. This is split out here so that it's easily to
   // change the maximum number of address lines we support.
-  private String getAddressLine(int lineNumber) {
+  private @Nullable String getAddressLine(int lineNumber) {
     // If not the last available line, OR if we're the last line but there are no extra lines...
     if (lineNumber < ADDRESS_LINE_COUNT || lineNumber >= addressLines.size()) {
       return (lineNumber <= addressLines.size()) ? addressLines.get(lineNumber - 1) : null;
@@ -436,6 +476,21 @@ public final class AddressData {
     return recipient;
   }
 
+  /** Returns the landmark address descriptor. */
+  public String getLandmarkAddressDescriptor() {
+    return landmarkAddressDescriptor;
+  }
+
+  /** Returns the landmark affix. */
+  public String getLandmarkAffix() {
+    return landmarkAffix;
+  }
+
+  /** Returns the landmark name. */
+  public String getLandmarkName() {
+    return landmarkName;
+  }
+
   /**
    * Returns a value for those address fields which map to a single string value.
    * <p>
@@ -472,6 +527,12 @@ public final class AddressData {
         return organization;
       case RECIPIENT:
         return recipient;
+      case LANDMARK_ADDRESS_DESCRIPTOR:
+        return landmarkAddressDescriptor;
+      case LANDMARK_AFFIX:
+        return landmarkAffix;
+      case LANDMARK_NAME:
+        return landmarkName;
       default:
         throw new IllegalArgumentException("multi-value fields not supported: " + field);
     }
@@ -711,6 +772,37 @@ public final class AddressData {
      */
     public Builder setRecipient(String recipient) {
       return set(AddressField.RECIPIENT, recipient);
+    }
+
+    /**
+     * Sets or clears the landmark address descriptor of the address; see {@link
+     * AddressData.Landmark#getPrefix()} and {@link AddressData.Landmark#getName()}.
+     *
+     * @param landmarkAddressDescriptor the landmark address descriptor, or null to clear an
+     *     existing value.
+     */
+    @CanIgnoreReturnValue
+    public Builder setLandmarkAddressDescriptor(String landmarkAddressDescriptor) {
+      return set(AddressField.LANDMARK_ADDRESS_DESCRIPTOR, landmarkAddressDescriptor);
+    }
+
+    /**
+     * Sets or clears the landmark affix of the address; see {@link
+     * AddressData.Landmark#getPrefix()}.
+     *
+     * @param landmarkAffix the landmark affix, or null to clear an existing value.
+     */
+    public Builder setLandmarkAffix(String landmarkAffix) {
+      return set(AddressField.LANDMARK_AFFIX, landmarkAffix);
+    }
+
+    /**
+     * Sets or clears the landmark name of the address; see {@link AddressData.Landmark#getName()}.
+     *
+     * @param landmarkName the landmark name, or null to clear an existing value.
+     */
+    public Builder setLandmarkName(String landmarkName) {
+      return set(AddressField.LANDMARK_NAME, landmarkName);
     }
 
     /**

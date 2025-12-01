@@ -5,8 +5,8 @@
 package org.chromium.chrome.browser.tasks.tab_management;
 
 import android.app.Activity;
-import android.content.Context;
 import android.content.res.Resources;
+import android.graphics.Color;
 import android.os.Build;
 import android.view.LayoutInflater;
 import android.view.ViewGroup;
@@ -37,13 +37,12 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab_ui.TabContentManager;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
-import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.theme.ThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.bottom.BottomControlsCoordinator;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
-import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
+import org.chromium.components.browser_ui.widget.scrim.ScrimManager;
 import org.chromium.components.collaboration.CollaborationService;
 import org.chromium.components.collaboration.ServiceStatus;
 import org.chromium.components.data_sharing.DataSharingService;
@@ -69,12 +68,11 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
             new ObservableSupplierImpl<>();
 
     private final Activity mActivity;
-    private final Context mContext;
     private final BrowserControlsStateProvider mBrowserControlsStateProvider;
     private final PropertyModel mModel;
     private final TabGroupUiToolbarView mToolbarView;
     private final ViewGroup mTabListContainerView;
-    private final ScrimCoordinator mScrimCoordinator;
+    private final ScrimManager mScrimManager;
     private final ObservableSupplier<Boolean> mOmniboxFocusStateSupplier;
     private final BottomSheetController mBottomSheetController;
     private final DataSharingTabManager mDataSharingTabManager;
@@ -86,6 +84,8 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
     private final ModalDialogManager mModalDialogManager;
     private final ObservableSupplierImpl<Token> mCurrentTabGroupId = new ObservableSupplierImpl<>();
     private final ThemeColorProvider mThemeColorProvider;
+    private final ObservableSupplierImpl<Integer> mBackgroundColorSupplier =
+            new ObservableSupplierImpl<>(Color.TRANSPARENT);
 
     private PropertyModelChangeProcessor mModelChangeProcessor;
     private TabGridDialogCoordinator mTabGridDialogCoordinator;
@@ -100,7 +100,7 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
             @NonNull Activity activity,
             @NonNull ViewGroup parentView,
             @NonNull BrowserControlsStateProvider browserControlsStateProvider,
-            @NonNull ScrimCoordinator scrimCoordinator,
+            @NonNull ScrimManager scrimManager,
             @NonNull ObservableSupplier<Boolean> omniboxFocusStateSupplier,
             @NonNull BottomSheetController bottomSheetController,
             @NonNull DataSharingTabManager dataSharingTabManager,
@@ -112,9 +112,8 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
             @NonNull ThemeColorProvider themeColorProvider) {
         try (TraceEvent e = TraceEvent.scoped("TabGroupUiCoordinator.constructor")) {
             mActivity = activity;
-            mContext = parentView.getContext();
             mBrowserControlsStateProvider = browserControlsStateProvider;
-            mScrimCoordinator = scrimCoordinator;
+            mScrimManager = scrimManager;
             mOmniboxFocusStateSupplier = omniboxFocusStateSupplier;
             mModel = new PropertyModel(TabGroupUiProperties.ALL_KEYS);
 
@@ -125,7 +124,7 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
                             : R.layout.bottom_tab_strip_toolbar;
             mToolbarView =
                     (TabGroupUiToolbarView)
-                            LayoutInflater.from(mContext).inflate(layoutId, parentView, false);
+                            LayoutInflater.from(activity).inflate(layoutId, parentView, false);
             mTabListContainerView = mToolbarView.getViewContainer();
             mBottomSheetController = bottomSheetController;
             mDataSharingTabManager = dataSharingTabManager;
@@ -143,10 +142,7 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
 
     private ActionConfirmationManager createActionConfirmationManager() {
         Profile profile = mTabModelSelector.getModel(false).getProfile();
-        TabGroupModelFilter regularFilter =
-                mTabModelSelector.getTabGroupModelFilterProvider().getTabGroupModelFilter(false);
-        return new ActionConfirmationManager(
-                profile, mActivity, regularFilter, mModalDialogManager);
+        return new ActionConfirmationManager(profile, mActivity, mModalDialogManager);
     }
 
     private TabGridDialogMediator.DialogController initTabGridDialogCoordinator() {
@@ -165,13 +161,11 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
                         mDataSharingTabManager,
                         currentTabGroupModelFilterSupplier,
                         mTabContentManager,
-                        mTabCreatorManager,
                         mActivity.findViewById(R.id.coordinator),
                         null,
                         null,
                         null,
-                        mScrimCoordinator,
-                        mTabStripCoordinator.getTabGroupTitleEditor(),
+                        mScrimManager,
                         mActionConfirmationSupplier.get(),
                         mModalDialogManager,
                         /* desktopWindowStateManager= */ null);
@@ -192,13 +186,14 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
             mTabStripCoordinator =
                     new TabListCoordinator(
                             TabListCoordinator.TabListMode.STRIP,
-                            mContext,
+                            mActivity,
                             mBrowserControlsStateProvider,
                             mModalDialogManager,
                             currentTabGroupModelFilterSupplier,
                             /* thumbnailProvider= */ null,
                             /* actionOnRelatedTabs= */ false,
                             mActionConfirmationSupplier.get(),
+                            mDataSharingTabManager,
                             /* gridCardOnClickListenerProvider= */ null,
                             /* dialogHandler= */ null,
                             TabProperties.TabActionState.UNSET,
@@ -213,6 +208,7 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
                             /* emptyHeadingStringResId= */ Resources.ID_NULL,
                             /* emptySubheadingStringResId= */ Resources.ID_NULL,
                             /* onTabGroupCreation= */ null,
+                            mBackgroundColorSupplier,
                             /* allowDragAndDrop= */ false);
             mTabStripCoordinator.initWithNative(mTabModelSelector.getModel(false).getProfile());
 
@@ -225,7 +221,7 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
 
             // TODO(crbug.com/40631286): find a way to enable interactions between grid tab switcher
             //  and the dialog here.
-            if (mScrimCoordinator != null) {
+            if (mScrimManager != null) {
                 mTabGridDialogControllerSupplier =
                         LazyOneshotSupplier.fromSupplier(this::initTabGridDialogCoordinator);
             } else {
@@ -241,7 +237,7 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
                         new SharedImageTilesCoordinator(
                                 activity,
                                 SharedImageTilesType.DEFAULT,
-                                SharedImageTilesColor.DYNAMIC,
+                                new SharedImageTilesColor(SharedImageTilesColor.Style.DYNAMIC),
                                 dataSharingService);
                 FrameLayout container =
                         mToolbarView.findViewById(R.id.toolbar_image_tiles_container);
@@ -263,7 +259,8 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
                             mTabGridDialogControllerSupplier,
                             mOmniboxFocusStateSupplier,
                             sharedImageTilesCoordinator,
-                            mThemeColorProvider);
+                            mThemeColorProvider,
+                            mBackgroundColorSupplier);
 
             Profile profile = mTabModelSelector.getModel(false).getProfile();
             CollaborationService collaborationService =
@@ -316,7 +313,9 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
                     && ChromeFeatureList.isEnabled(
                             SensitiveContentFeatures.SENSITIVE_CONTENT_WHILE_SWITCHING_TABS)) {
                 TabUiUtils.updateViewContentSensitivityForTabs(
-                        tabs, mTabGridDialogControllerSupplier.get()::setGridContentSensitivity);
+                        tabs,
+                        mTabGridDialogControllerSupplier.get()::setGridContentSensitivity,
+                        "SensitiveContent.TabSwitching.BottomTabStripGroupUI.Sensitivity");
             }
             mTabGridDialogControllerSupplier.get().resetWithListOfTabs(tabs);
         }

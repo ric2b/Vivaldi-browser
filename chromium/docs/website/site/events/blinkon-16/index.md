@@ -72,7 +72,7 @@ All main stage talks (e.g., keynote presentation, lightning talks, opening and c
 
 ## **Sessions**
 
-All breakout talks will be conducted virtually over [Hopin](hopin.com) using Sessions. To join a breakout talk, head to the Sessions tab in Hopin and find the Session you'd like to join. Once you open a specific Session, you will have two modes: watching and participating.
+All breakout talks will be conducted virtually over [Hopin](https://hopin.com) using Sessions. To join a breakout talk, head to the Sessions tab in Hopin and find the Session you'd like to join. Once you open a specific Session, you will have two modes: watching and participating.
 
 
 ### Watching

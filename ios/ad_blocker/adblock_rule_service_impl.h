@@ -57,6 +57,7 @@ class RuleServiceImpl : public RuleService, public RuleManager::Observer {
   KnownRuleSourcesHandler* GetKnownSourcesHandler() override;
   StateAndLogs* GetStateAndLogs() override;
   void SetIncognitoBrowserState(web::BrowserState* browser_state) override;
+  bool IsPartnerListAllowedDocument(RuleGroup group, GURL url) override;
 
   // Implementing KeyedService
   void Shutdown() override;

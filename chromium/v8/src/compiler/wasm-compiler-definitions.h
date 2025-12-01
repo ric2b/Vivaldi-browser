@@ -11,7 +11,7 @@
 
 #include <ostream>
 
-#include "src/base/functional.h"
+#include "src/base/hashing.h"
 #include "src/base/vector.h"
 #include "src/codegen/linkage-location.h"
 #include "src/codegen/register.h"
@@ -87,7 +87,12 @@ base::Vector<const char> GetDebugName(Zone* zone,
                                       const wasm::WasmModule* module,
                                       const wasm::WireBytesStorage* wire_bytes,
                                       int index);
-enum WasmCallKind { kWasmFunction, kWasmImportWrapper, kWasmCapiFunction };
+enum WasmCallKind {
+  kWasmFunction,
+  kWasmIndirectFunction,
+  kWasmImportWrapper,
+  kWasmCapiFunction
+};
 
 template <typename T>
 CallDescriptor* GetWasmCallDescriptor(Zone* zone, const Signature<T>* signature,

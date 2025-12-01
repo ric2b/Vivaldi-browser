@@ -14,31 +14,31 @@ The currently oncall sheriffs can be viewed in the top-left corner of the [Chrom
 
 ### What is a sheriff?
 
-A sheriff's responsibility is to keep the Chromium main and branches green (tests are passing on all platforms) and open (changes can land). If a failure occurs, sheriffs will communicate, track down the cause of the breakage and the people responsible as possible. Chrome sheriffs are staffed by Chrome committers. For information on managing Chrome Sheriff rotations and How-Tos, see [Chrome Sheriffing](http://goto.google.com/chrome-sheriffing).
+A sheriff's responsibility is to keep the Chromium main and branches green (tests are passing on all platforms) and open (changes can land). If a failure occurs, sheriffs will communicate, track down the cause of the breakage and the people responsible as possible. Chrome sheriffs are staffed by Chrome committers. For information on managing Chrome Sheriff rotations and How-Tos, see [Chrome Sheriffing](http://go/chrome-sheriffing).
 
-**First time sheriff?** Learn more about our Sheriffing Philosophy, please read [How to be a Sheriff](https://goto.google.com/chrome-sheriffing-how-to).
+**First time sheriff?** Learn more about our Sheriffing Philosophy, please read [How to be a Sheriff](http://go/chrome-sheriffing-how-to).
 
 ### Available Sheriff Rotations
 
 *   [Chromium Trunk
-            Sheriffs](https://goto.google.com/chrome-trunk-sheriffing)
+            Sheriffs](http://go/chrome-trunk-sheriffing)
 *   [Chrome Branch
-            Sheriffs](https://goto.google.com/chrome-branch-sheriffing)
+            Sheriffs](http://go/chrome-branch-sheriffing)
 *   [Chrome on Android Build
-            Sheriffs](https://goto.google.com/chrome-android-sheriffing)
+            Sheriffs](http://go/chrome-android-sheriffing)
 *   [Chrome on iOS
-            Sheriffs](http://goto.google.com/chrome-ios-sheriffing)
-*   [GPU Pixel Wranglers](http://goto.google.com/gpu-pixel-wrangler)
+            Sheriffs](http://go/chrome-ios-sheriffing)
+*   [GPU Pixel Wranglers](http://go/gpu-pixel-wrangler)
 *   [Performance Regression
-            Sheriffs](http://goto.google.com/chrome-perf-regression-sheriffing)
+            Sheriffs](http://go/chrome-perf-regression-sheriffing)
 *   [Perfbot Health
-            Sheriffs](http://goto.google.com/perf-bot-health-sheriffs)
+            Sheriffs](http://go/perf-bot-health-sheriffs)
 *   [Security
-            Sheriffs](http://goto.google.com/chrome-security-sheriff-doc)
+            Sheriffs](http://go/chrome-security-sheriff-doc)
 
 ### **Chrome OS Sheriffs**
 
-*   ## [Chrome OS Sheriffs](http://goto.google.com/cros-sheriffing)
+*   ## [Chrome OS Sheriffs](http://go/cros-sheriffing)
 
 ### Joining a sheriff rotation
 
@@ -49,4 +49,4 @@ The Chrome team runs a variety of sheriff rotations, and the process for joining
 
 Some rotations might be timezone specific (Branch rotation is only monitored by PT sheriffs) while others (i.e. trunk sheriff rotation) are spread across multiple timezones across the world. You should be joining a rotation with an existing shifts during your local timezone.
 
-Once you join a sheriff rotation, get started by reading [How to be a Sheriff](https://goto.google.com/chrome-sheriffing-how-to).
+Once you join a sheriff rotation, get started by reading [How to be a Sheriff](http://go/chrome-sheriffing-how-to).

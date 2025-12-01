@@ -6,18 +6,19 @@ page_name: same-site
 title: SameSite Updates
 ---
 
+[TOC]
+
 *   **Confused?** [Start
             here](https://web.dev/samesite-cookies-explained/).
 *   **Developers:** Check out our [testing and debugging
             tips](/updates/same-site/test-debug).
 *   **Adding \`SameSite=None; Secure\` to your cookies?** Check the list
-            of [incompatible
-            clients](https://chromium.org/updates/same-site/incompatible-clients)
+            of [incompatible clients](/updates/same-site/incompatible-clients)
             here.
 *   **Check the list of [Frequently Asked Questions
             (FAQ)](/updates/same-site/faq)** for common scenarios and use cases.
 
-**Launch Timeline**
+## Launch Timeline
 
 Last updated Mar 18, 2021.
 
@@ -137,32 +138,7 @@ This does not apply to Chrome browser on Android, which will begin to enforce
 the new SameSite rules at the same time as the desktop versions of Chrome. The
 new SameSite behavior will not affect Chrome on iOS.
 
-**All updates:**
-
-*   [Mar 18,
-            2021](https://chromium.org/updates/same-site?pli=1#20210318)
-*   [Jan 8, 2021](https://chromium.org/updates/same-site?pli=1#20210108)
-*   [Aug 11,
-            2020](https://chromium.org/updates/same-site?pli=1#20200811)
-*   [July 28,
-            2020](https://chromium.org/updates/same-site?pli=1#20200728)
-*   [July 14,
-            2020](https://chromium.org/updates/same-site?pli=1#20200714)
-*   [May 28,
-            2020](https://chromium.org/updates/same-site?pli=1#20200528)
-*   [April 3,
-            2020](https://chromium.org/updates/same-site?pli=1#20200403)
-*   [Feb 10,
-            2020](https://chromium.org/updates/same-site?pli=1#20200210)
-*   [Nov 21,
-            2019](https://chromium.org/updates/same-site?pli=1#20191121)
-*   [Nov 1, 2019](https://chromium.org/updates/same-site?pli=1#20191101)
-*   [Oct 2, 2019](https://chromium.org/updates/same-site?pli=1#20191002)
-*   [Sept 30, 2019](#20190930)
-*   [Sept 26,
-            2019](https://chromium.org/updates/same-site?pli=1#20190926)
-
-**Mar 18, 2021**
+## Mar 18, 2021
 
 The flags #same-site-by-default-cookies and
 #cookies-without-same-site-must-be-secure have been removed from chrome://flags
@@ -171,7 +147,7 @@ command-line flag
 --disable-features=SameSiteByDefaultCookies,CookiesWithoutSameSiteMustBeSecure
 will be removed.
 
-**Jan 8, 2021**
+## Jan 8, 2021
 
 The modern SameSite behavior ([SameSite=Lax by default, SameSite=None requires
 Secure](https://web.dev/samesite-cookies-explained/), and [Schemeful
@@ -183,21 +159,21 @@ modern SameSite behavior by toggling the flag
 webview-enable-modern-cookie-same-site in the [developer
 UI](https://chromium.googlesource.com/chromium/src/+/HEAD/android_webview/docs/developer-ui.md#Flag-UI).
 
-**Aug 11, 2020**
+## Aug 11, 2020
 
 The target rollout population has been increased to 100% of users on Chrome
 Stable versions 80 and above, and the actual proportion of users with the new
 behavior enabled is now ramping up to 100% gradually. Users will receive the new
 behavior when they restart Chrome.
 
-**July 28, 2020**
+## Jul 28, 2020
 
 The rollout population has been increased to target a fraction of the overall
 Chrome 80+ stable population. We are monitoring metrics and ecosystem feedback
 on our [tracking
 bug](https://bugs.chromium.org/p/chromium/issues/detail?id=1052195).
 
-**July 14, 2020**
+## Jul 14, 2020
 
 SameSite cookie enforcement has resumed, with a gradual rollout starting today
 (July 14) and ramping up over the next several weeks as we continue to monitor
@@ -206,7 +182,7 @@ are prepared for the SameSite labeling policy. The SameSite features are being
 enabled for Chrome Stable channel users on versions 80 and 81 (who should update
 Chrome!), 83, as well as the newly released 84.
 
-**May 28, 2020**
+## May 28, 2020
 
 We are planning to resume our SameSite cookie enforcement coinciding with the
 stable release of Chrome 84 on July 14, with enforcement enabled for Chrome 80+.
@@ -216,7 +192,7 @@ as the newly released Chrome 84 will gradually begin to receive the
 SameSite-by-default behavior.) Read more on our [Chromium blog
 post](https://blog.chromium.org/2020/05/resuming-samesite-cookie-changes-in-july.html).
 
-**April 3, 2020**
+## Apr 3, 2020
 
 [We’ve decided to temporarily roll back the enforcement of SameSite cookie
 labeling on Chrome 80
@@ -224,7 +200,7 @@ Stable](https://blog.chromium.org/2020/04/temporarily-rolling-back-samesite.html
 and kSameSiteByDefaultCookies is once again set to
 base::FEATURE_DISABLED_BY_DEFAULT in Chromium master.
 
-**Feb 10, 2020**
+## Feb 10, 2020
 
 The Chrome
 [policies](/administrators/policy-list-3/cookie-legacy-samesite-policies)
@@ -235,7 +211,7 @@ months after the release of Chrome 80 stable~~ (**Edit - May 29, 2020**: until
 at least July 14, 2021). We will be monitoring feedback about these policies and
 will provide updates on their lifetime as appropriate.
 
-**Nov 21, 2019**
+## Nov 21, 2019
 
 Starting in Canary version **80.0.3975.0**, the Lax+POST temporary mitigation
 can be disabled for testing purposes using the new flag
@@ -251,7 +227,7 @@ when the user has cookies for other domains on the same site as a resource
 fetched in a cross-site context. We apologize for the confusion. This will be
 fixed in Chrome 80.
 
-**Nov 1, 2019**
+## Nov 1, 2019
 
 Clearing up some misconceptions and providing additional information about "Lax
 + POST" (which is mentioned briefly on the [chromestatus.com
@@ -288,7 +264,7 @@ page](https://www.chromestatus.com/feature/5088147346030592)):
             involved in these flows will require \`SameSite=None\` and
             \`Secure\` even if under 2 minutes old.
 
-**Oct 2, 2019**
+## Oct 2, 2019
 
 In response to feedback from users and enterprise customers, we are deferring
 the experimental Beta launch of the "SameSite=Lax by Default" and "SameSite=None
@@ -312,7 +288,7 @@ will follow in future enterprise release notes before the Chrome 79 release.
 These features will still become the default behavior on Stable starting in
 Chrome 80.
 
-**Sept 30, 2019**
+## Sep 30, 2019
 
 **Note (Jan 30, 2020): Check out our more detailed [tips for testing and
 debugging](/updates/same-site/test-debug).**
@@ -369,7 +345,7 @@ out and test changes. You have two options:
 These policies will be made available starting in ~~Chrome 80~~. Chrome 79.
 **(See Oct 2, 2019 update.)**
 
-**Sept 26, 2019**
+## Sep 26, 2019
 
 Starting in Chrome 80, cookies that do not specify a SameSite attribute will be
 treated as if they were SameSite=Lax with the additional behavior that they will

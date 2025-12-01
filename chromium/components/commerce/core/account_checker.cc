@@ -13,7 +13,6 @@
 #include "components/endpoint_fetcher/endpoint_fetcher.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
-#include "components/search/search.h"
 #include "components/signin/public/identity_manager/account_capabilities.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
@@ -44,15 +43,13 @@ AccountChecker::AccountChecker(
     PrefService* pref_service,
     signin::IdentityManager* identity_manager,
     syncer::SyncService* sync_service,
-    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-    TemplateURLService* template_url_service)
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory)
     : country_(country),
       locale_(locale),
       pref_service_(pref_service),
       identity_manager_(identity_manager),
       sync_service_(sync_service),
       url_loader_factory_(url_loader_factory),
-      template_url_service_(template_url_service),
       weak_ptr_factory_(this) {
   // TODO(crbug.com/40239641): Avoid pushing the fetched pref value to the
   // server again.
@@ -82,23 +79,6 @@ bool AccountChecker::IsSignedIn() {
          identity_manager_->HasPrimaryAccount(signin::ConsentLevel::kSync);
 }
 
-bool AccountChecker::IsSyncingBookmarks() {
-  if (base::FeatureList::IsEnabled(
-          syncer::kReplaceSyncPromosWithSignInPromos)) {
-    return sync_service_ && syncer::GetUploadToGoogleState(
-                                sync_service_, syncer::DataType::BOOKMARKS) ==
-                                syncer::UploadState::ACTIVE;
-  }
-  // The feature is not enabled, fallback to old behavior.
-  // TODO(crbug.com/40067058): Delete IsSyncFeatureActive() usage once
-  // kReplaceSyncPromosWithSignInPromos is launched on all platforms. See
-  // ConsentLevel::kSync documentation for details.
-  return sync_service_ && sync_service_->IsSyncFeatureActive() &&
-         syncer::GetUploadToGoogleState(sync_service_,
-                                        syncer::DataType::BOOKMARKS) !=
-             syncer::UploadState::NOT_ACTIVE;
-}
-
 bool AccountChecker::IsSyncTypeEnabled(syncer::UserSelectableType type) {
   return sync_service_ && sync_service_->GetUserSettings() &&
          sync_service_->GetUserSettings()->GetSelectedTypes().Has(type);
@@ -124,11 +104,6 @@ bool AccountChecker::IsSubjectToParentalControls() {
 
   return capabilities.is_subject_to_parental_controls() ==
          signin::Tribool::kTrue;
-}
-
-bool AccountChecker::IsDefaultSearchEngineGoogle() {
-  return template_url_service_ &&
-         search::DefaultSearchProviderIsGoogle(template_url_service_);
 }
 
 bool AccountChecker::CanUseModelExecutionFeatures() {

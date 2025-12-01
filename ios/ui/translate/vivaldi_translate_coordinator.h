@@ -57,6 +57,8 @@ class Browser;
 /// and not meaningfully visible on half sheet.
 - (BOOL)shouldOpenFullSheet;
 
+- (BOOL)isEditorPresented;
+
 @end
 
 #endif  // IOS_UI_TRANSLATE_VIVALDI_TRANSLATE_COORDINATOR_H_

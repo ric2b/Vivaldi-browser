@@ -749,6 +749,8 @@
 #define glTexStorage1DEXT t_glTexStorage1DEXT
 #define glTexStorage2DEXT t_glTexStorage2DEXT
 #define glTexStorage3DEXT t_glTexStorage3DEXT
+#define glTexStorageAttribs2DEXT t_glTexStorageAttribs2DEXT
+#define glTexStorageAttribs3DEXT t_glTexStorageAttribs3DEXT
 #define glBlendBarrierKHR t_glBlendBarrierKHR
 #define glDebugMessageCallbackKHR t_glDebugMessageCallbackKHR
 #define glDebugMessageControlKHR t_glDebugMessageControlKHR
@@ -829,6 +831,7 @@
 #define glTextureFoveationParametersQCOM t_glTextureFoveationParametersQCOM
 #define glEndTilingQCOM t_glEndTilingQCOM
 #define glStartTilingQCOM t_glStartTilingQCOM
+#define glBlendEquationOES t_glBlendEquationOES
 #define glDrawTexfOES t_glDrawTexfOES
 #define glDrawTexfvOES t_glDrawTexfvOES
 #define glDrawTexiOES t_glDrawTexiOES
@@ -1697,6 +1700,8 @@ ANGLE_TRACE_LOADER_EXPORT extern PFNGLTEXBUFFERRANGEEXTPROC t_glTexBufferRangeEX
 ANGLE_TRACE_LOADER_EXPORT extern PFNGLTEXSTORAGE1DEXTPROC t_glTexStorage1DEXT;
 ANGLE_TRACE_LOADER_EXPORT extern PFNGLTEXSTORAGE2DEXTPROC t_glTexStorage2DEXT;
 ANGLE_TRACE_LOADER_EXPORT extern PFNGLTEXSTORAGE3DEXTPROC t_glTexStorage3DEXT;
+ANGLE_TRACE_LOADER_EXPORT extern PFNGLTEXSTORAGEATTRIBS2DEXTPROC t_glTexStorageAttribs2DEXT;
+ANGLE_TRACE_LOADER_EXPORT extern PFNGLTEXSTORAGEATTRIBS3DEXTPROC t_glTexStorageAttribs3DEXT;
 ANGLE_TRACE_LOADER_EXPORT extern PFNGLBLENDBARRIERKHRPROC t_glBlendBarrierKHR;
 ANGLE_TRACE_LOADER_EXPORT extern PFNGLDEBUGMESSAGECALLBACKKHRPROC t_glDebugMessageCallbackKHR;
 ANGLE_TRACE_LOADER_EXPORT extern PFNGLDEBUGMESSAGECONTROLKHRPROC t_glDebugMessageControlKHR;
@@ -1786,6 +1791,7 @@ ANGLE_TRACE_LOADER_EXPORT extern PFNGLTEXTUREFOVEATIONPARAMETERSQCOMPROC
     t_glTextureFoveationParametersQCOM;
 ANGLE_TRACE_LOADER_EXPORT extern PFNGLENDTILINGQCOMPROC t_glEndTilingQCOM;
 ANGLE_TRACE_LOADER_EXPORT extern PFNGLSTARTTILINGQCOMPROC t_glStartTilingQCOM;
+ANGLE_TRACE_LOADER_EXPORT extern PFNGLBLENDEQUATIONOESPROC t_glBlendEquationOES;
 ANGLE_TRACE_LOADER_EXPORT extern PFNGLDRAWTEXFOESPROC t_glDrawTexfOES;
 ANGLE_TRACE_LOADER_EXPORT extern PFNGLDRAWTEXFVOESPROC t_glDrawTexfvOES;
 ANGLE_TRACE_LOADER_EXPORT extern PFNGLDRAWTEXIOESPROC t_glDrawTexiOES;

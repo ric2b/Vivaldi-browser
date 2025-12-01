@@ -109,12 +109,7 @@ class CORE_EXPORT HTMLAnchorElementBase : public HTMLElement,
 
   void SendPings(const KURL& destination_url) const;
 
-  // Element overrides:
-  void SetHovered(bool hovered) override;
-
   Element* interestTargetElement() override;
-
-  AtomicString interestAction() const override;
 
   void Trace(Visitor*) const override;
 
@@ -131,7 +126,7 @@ class CORE_EXPORT HTMLAnchorElementBase : public HTMLElement,
   bool ShouldHaveFocusAppearance() const final;
   FocusableState IsFocusableState(
       UpdateBehavior update_behavior) const override;
-  bool IsKeyboardFocusable(UpdateBehavior update_behavior) const override;
+  bool IsKeyboardFocusableSlow(UpdateBehavior update_behavior) const override;
   void DefaultEventHandler(Event&) final;
   bool HasActivationBehavior() const override;
   void SetActive(bool active) final;

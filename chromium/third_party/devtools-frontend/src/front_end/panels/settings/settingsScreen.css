@@ -10,8 +10,7 @@
 }
 
 .settings-content {
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden auto;
   margin: 8px 8px 8px 0;
   padding: 0 4px;
   flex: auto;
@@ -45,6 +44,7 @@ label {
   align-items: center;
   display: grid;
   row-gap: var(--sys-size-3);
+  margin: var(--sys-size-4) 0;
 }
 
 div:has(.settings-select) + div:has(.settings-select) {
@@ -73,29 +73,46 @@ div:has(.settings-select) + div:has(.settings-select) {
 
 .settings-card-container-wrapper {
   scrollbar-gutter: stable;
-  padding-bottom: var(--sys-size-8);
+  padding: var(--sys-size-8) 0;
   overflow: auto;
   position: absolute;
   inset: var(--sys-size-8) 0 0;
+  container-type: inline-size; /* stylelint-disable-line property-no-unknown */
+  container-name: settings-content; /* stylelint-disable-line property-no-unknown */
 }
 
-.settings-card-container {
+.settings-card-container,
+.settings-multicolumn-card-container {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--sys-size-9);
-}
-
-.settings-multicolumn-card-container {
-  column-width: var(--sys-size-32);
-  column-gap: var(--sys-size-11);
-
-  > * + * {
-    margin-top: var(--sys-size-8);
-  }
 
   > devtools-button {
+    min-width: var(--sys-size-31);
+    max-width: var(--sys-size-35);
+    width: calc(100% - var(--sys-size-5));
     margin-left: var(--sys-size-5);
+  }
+}
+
+/* In multi-column mode, we adopt single-column styles unless
+   enough space is available to actually show two columns (at 850px) */
+/* stylelint-disable-next-line at-rule-no-unknown */
+@container settings-content (min-width: 850px) {
+  .settings-multicolumn-card-container {
+    display: block;
+    column-width: var(--sys-size-32);
+    column-gap: var(--sys-size-11);
+    margin: 0 var(--sys-size-9);
+
+    > * + * {
+      margin-top: var(--sys-size-8);
+    }
+
+    > devtools-button {
+      align-self: start;
+    }
   }
 }
 
@@ -127,7 +144,8 @@ devtools-button.link-icon {
 }
 
 .experiment-label {
-  margin-right: 2px;
+  margin: var(--sys-size-3) var(--sys-size-2) var(--sys-size-3) 0;
+  white-space: normal;
 }
 
 .settings-experiment-unstable {
@@ -144,6 +162,16 @@ devtools-button.link-icon {
   /* '!important' in order to overwrite the slotted widget's 'overflow-auto' class.
   This prevents the focus-ring of selectable elements from being cut off. */
   overflow: visible !important; /* stylelint-disable-line declaration-no-important */
+}
+
+.experiments-warning-subsection {
+  display: flex;
+  align-items: center;
+
+  > devtools-icon {
+    color: var(--sys-color-orange-bright);
+    margin-right: var(--sys-size-4);
+  }
 }
 
 @media (forced-colors: active) {

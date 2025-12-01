@@ -17,7 +17,6 @@ import static org.chromium.chrome.browser.notifications.NotificationConstants.NO
 import android.content.res.Resources;
 
 import androidx.annotation.Nullable;
-import androidx.core.app.NotificationCompat;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.chrome.R;
@@ -28,15 +27,13 @@ import org.chromium.chrome.browser.lifecycle.StartStopWithNativeObserver;
 import org.chromium.chrome.browser.notifications.NotificationUmaTracker;
 import org.chromium.chrome.browser.notifications.NotificationWrapperBuilderFactory;
 import org.chromium.chrome.browser.notifications.channels.ChromeChannelDefinitions;
-import org.chromium.components.browser_ui.notifications.NotificationManagerProxy;
+import org.chromium.components.browser_ui.notifications.NotificationManagerProxyImpl;
 import org.chromium.components.browser_ui.notifications.NotificationMetadata;
 import org.chromium.components.browser_ui.notifications.NotificationWrapper;
 import org.chromium.components.browser_ui.notifications.PendingIntentProvider;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyObservable;
-
-import javax.inject.Inject;
 
 /**
  * Displays a notification when the user is on the verified domain. The first such notification (per
@@ -46,17 +43,13 @@ public class DisclosureNotification
         implements PropertyObservable.PropertyObserver<PropertyKey>, StartStopWithNativeObserver {
     private final Resources mResources;
     private final TrustedWebActivityModel mModel;
-    private final NotificationManagerProxy mNotificationManager;
     private String mCurrentScope;
 
-    @Inject
-    DisclosureNotification(
+    public DisclosureNotification(
             Resources resources,
-            NotificationManagerProxy notificationManager,
             TrustedWebActivityModel model,
             ActivityLifecycleDispatcher lifecycleDispatcher) {
         mResources = resources;
-        mNotificationManager = notificationManager;
         mModel = model;
 
         mModel.addObserver(this);
@@ -70,7 +63,7 @@ public class DisclosureNotification
 
         NotificationWrapper notification =
                 createNotification(firstTime, mCurrentScope, packageName);
-        mNotificationManager.notify(notification);
+        NotificationManagerProxyImpl.getInstance().notify(notification);
         NotificationUmaTracker.getInstance()
                 .onNotificationShown(
                         firstTime
@@ -84,25 +77,24 @@ public class DisclosureNotification
     }
 
     private void dismiss() {
-        mNotificationManager.cancel(mCurrentScope, NOTIFICATION_ID_TWA_DISCLOSURE_INITIAL);
-        mNotificationManager.cancel(mCurrentScope, NOTIFICATION_ID_TWA_DISCLOSURE_SUBSEQUENT);
+        NotificationManagerProxyImpl.getInstance()
+                .cancel(mCurrentScope, NOTIFICATION_ID_TWA_DISCLOSURE_INITIAL);
+        NotificationManagerProxyImpl.getInstance()
+                .cancel(mCurrentScope, NOTIFICATION_ID_TWA_DISCLOSURE_SUBSEQUENT);
         mCurrentScope = null;
     }
 
     private NotificationWrapper createNotification(
             boolean firstTime, String scope, String packageName) {
         int umaType;
-        int preOPriority;
         int notificationId;
         String channelId;
         if (firstTime) {
             umaType = NotificationUmaTracker.SystemNotificationType.TWA_DISCLOSURE_INITIAL;
-            preOPriority = NotificationCompat.PRIORITY_MAX;
             channelId = ChromeChannelDefinitions.ChannelId.WEBAPPS;
             notificationId = NOTIFICATION_ID_TWA_DISCLOSURE_INITIAL;
         } else {
             umaType = NotificationUmaTracker.SystemNotificationType.TWA_DISCLOSURE_SUBSEQUENT;
-            preOPriority = NotificationCompat.PRIORITY_MIN;
             channelId = ChromeChannelDefinitions.ChannelId.WEBAPPS_QUIET;
             notificationId = NOTIFICATION_ID_TWA_DISCLOSURE_SUBSEQUENT;
         }
@@ -139,7 +131,6 @@ public class DisclosureNotification
                 .setSound(null)
                 .setBigTextStyle(text)
                 .setOngoing(!firstTime)
-                .setPriorityBeforeO(preOPriority)
                 .buildNotificationWrapper();
     }
 

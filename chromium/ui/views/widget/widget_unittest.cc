@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <set>
@@ -14,7 +15,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
 #include "base/test/gtest_util.h"
@@ -2951,10 +2951,11 @@ namespace {
 
 class ContentsView : public View {
   METADATA_HEADER(ContentsView, View)
-  void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
-    node_data->SetNameExplicitlyEmpty();
-    // Focusable Views need a valid role.
-    node_data->role = ax::mojom::Role::kDialog;
+ public:
+  ContentsView() {
+    GetViewAccessibility().SetRole(ax::mojom::Role::kDialog);
+    GetViewAccessibility().SetName(
+        std::string(), ax::mojom::NameFrom::kAttributeExplicitlyEmpty);
   }
 };
 
@@ -3541,7 +3542,7 @@ class PaintAsActiveCallbackCounter {
 };
 
 TEST_F(WidgetTest, LockParentPaintAsActive) {
-  if (!PlatformStyle::kInactiveWidgetControlsAppearDisabled) {
+  if constexpr (!PlatformStyle::kInactiveWidgetControlsAppearDisabled) {
     return;
   }
 
@@ -4821,7 +4822,7 @@ TEST_F(WidgetTest, GetAllChildWidgets) {
   std::set<raw_ptr<Widget, SetExperimental>> child_widgets;
   Widget::GetAllChildWidgets(toplevel->GetNativeView(), &child_widgets);
 
-  EXPECT_TRUE(base::ranges::equal(expected, child_widgets));
+  EXPECT_TRUE(std::ranges::equal(expected, child_widgets));
 
   // Check GetAllOwnedWidgets(). On Aura, this includes "transient" children.
   // Otherwise (on all platforms), it should be the same as GetAllChildWidgets()
@@ -4831,7 +4832,7 @@ TEST_F(WidgetTest, GetAllChildWidgets) {
   std::set<raw_ptr<Widget, SetExperimental>> owned_widgets;
   Widget::GetAllOwnedWidgets(toplevel->GetNativeView(), &owned_widgets);
 
-  EXPECT_TRUE(base::ranges::equal(expected, owned_widgets));
+  EXPECT_TRUE(std::ranges::equal(expected, owned_widgets));
 }
 
 // Used by DestroyChildWidgetsInOrder. On destruction adds the supplied name to
@@ -5732,6 +5733,21 @@ TEST_F(WidgetTest, NonClientViewAccessibilityProperties) {
   EXPECT_EQ(node_data.role, ax::mojom::Role::kClient);
 }
 
+TEST_F(WidgetTest, UpdateAccessibleURLForRootView) {
+  std::unique_ptr<Widget> widget = CreateTestWidget(
+      Widget::InitParams::CLIENT_OWNS_WIDGET, Widget::InitParams::TYPE_WINDOW);
+  widget->Show();
+
+  const GURL test_url("https://example.com");
+  widget->UpdateAccessibleURLForRootView(test_url);
+
+  ui::AXNodeData node_data;
+  widget->GetRootView()->GetViewAccessibility().GetAccessibleNodeData(
+      &node_data);
+  EXPECT_EQ(node_data.GetStringAttribute(ax::mojom::StringAttribute::kUrl),
+            test_url);
+}
+
 class WidgetChildObserver : public WidgetObserver {
  public:
   explicit WidgetChildObserver(Widget* widget) { observation_.Observe(widget); }
@@ -6279,5 +6295,61 @@ TEST_F(ScreenshotWidgetTest, CallsNativeWidget) {
 }
 
 #endif  // BUILDFLAG(ENABLE_DESKTOP_AURA) || BUILDFLAG(IS_MAC)
+
+namespace {
+
+class WidgetModalVisibilityObserver : public WidgetObserver {
+ public:
+  MOCK_METHOD(void,
+              OnWidgetWindowModalVisibilityChanged,
+              (Widget*, bool),
+              (override));
+};
+
+}  // namespace
+
+TEST_F(WidgetTest, ChildWidgetNotifiesModalVisibilityChanged) {
+  std::unique_ptr<Widget> widget = base::WrapUnique(
+      CreateTopLevelPlatformWidget(Widget::InitParams::CLIENT_OWNS_WIDGET));
+  testing::NiceMock<WidgetModalVisibilityObserver> observer;
+  base::ScopedObservation<Widget, WidgetObserver> observation(&observer);
+  observation.Observe(widget.get());
+  widget->Show();
+
+  auto child_widget_delegate = std::make_unique<WidgetDelegate>();
+  auto child_widget = std::make_unique<Widget>();
+  child_widget_delegate->SetModalType(ui::mojom::ModalType::kWindow);
+  Widget::InitParams params = CreateParams(
+      Widget::InitParams::CLIENT_OWNS_WIDGET, Widget::InitParams::TYPE_WINDOW);
+  params.delegate = child_widget_delegate.get();
+  params.parent = widget->GetNativeView();
+  child_widget->Init(std::move(params));
+
+  // Sequence: show -> hide -> show -> destroy.
+  testing::InSequence seq;
+  EXPECT_CALL(observer,
+              OnWidgetWindowModalVisibilityChanged(widget.get(), true));
+  EXPECT_CALL(observer,
+              OnWidgetWindowModalVisibilityChanged(widget.get(), false));
+  EXPECT_CALL(observer,
+              OnWidgetWindowModalVisibilityChanged(widget.get(), true));
+  EXPECT_CALL(observer,
+              OnWidgetWindowModalVisibilityChanged(widget.get(), false));
+
+  WidgetVisibleWaiter waiter(child_widget.get());
+  child_widget->Show();
+  waiter.Wait();
+  child_widget->Hide();
+  waiter.WaitUntilInvisible();
+  child_widget->Show();
+  waiter.Wait();
+  // Destroy the child widget, the parent should be notified about child modal
+  // visibility change.
+  child_widget.reset();
+  // No need to wait for visibility change because the widget is already
+  // destroyed.
+
+  widget->RemoveObserver(&observer);
+}
 
 }  // namespace views::test

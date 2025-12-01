@@ -89,6 +89,8 @@ declare global {
         ADDRESS_HOME_HOUSE_NUMBER,
         ADDRESS_HOME_SUBPREMISE,
         ADDRESS_HOME_OTHER_SUBUNIT,
+        NAME_LAST_PREFIX,
+        NAME_LAST_CORE,
         NAME_LAST_FIRST,
         NAME_LAST_CONJUNCTION,
         NAME_LAST_SECOND,
@@ -196,12 +198,6 @@ declare global {
         metadata?: AutofillMetadata;
       }
 
-      export interface ValidatePhoneParams {
-        phoneNumbers: string[];
-        indexOfNewNumber: number;
-        countryCode: string;
-      }
-
       export interface UserAnnotationsEntry {
         entryId: number;
         key: string;
@@ -210,6 +206,7 @@ declare global {
 
       export function getAccountInfo(): Promise<AccountInfo|undefined>;
       export function saveAddress(address: AddressEntry): void;
+      export function removeAddress(guid: string): void;
       export function getCountryList(forAccountAddressProfile: boolean):
           Promise<CountryEntry[]>;
       export function getAddressComponents(
@@ -217,9 +214,7 @@ declare global {
       export function getAddressList(): Promise<AddressEntry[]>;
       export function saveCreditCard(card: CreditCardEntry): void;
       export function saveIban(iban: IbanEntry): void;
-      export function removeEntry(guid: string): void;
-      export function validatePhoneNumbers(
-          params: ValidatePhoneParams): Promise<string[]>;
+      export function removePaymentsEntity(guid: string): void;
       export function getCreditCardList(): Promise<CreditCardEntry[]>;
       export function getIbanList(): Promise<IbanEntry[]>;
       export function isValidIban(ibanValue: string): Promise<boolean>;

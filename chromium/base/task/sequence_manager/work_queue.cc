@@ -7,16 +7,16 @@
 #include <optional>
 
 #include "base/debug/alias.h"
+#include "base/task/common/task_annotator.h"
 #include "base/task/sequence_manager/fence.h"
 #include "base/task/sequence_manager/sequence_manager_impl.h"
 #include "base/task/sequence_manager/task_order.h"
 #include "base/task/sequence_manager/work_queue_sets.h"
 #include "build/build_config.h"
+#include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
 #include "third_party/abseil-cpp/absl/container/inlined_vector.h"
 
-namespace base {
-namespace sequence_manager {
-namespace internal {
+namespace base::sequence_manager::internal {
 
 WorkQueue::WorkQueue(TaskQueueImpl* task_queue,
                      const char* name,
@@ -25,8 +25,9 @@ WorkQueue::WorkQueue(TaskQueueImpl* task_queue,
 
 Value::List WorkQueue::AsValue(TimeTicks now) const {
   Value::List state;
-  for (const Task& task : tasks_)
+  for (const Task& task : tasks_) {
     state.Append(TaskQueueImpl::TaskAsValue(task, now));
+  }
   return state;
 }
 
@@ -36,20 +37,23 @@ WorkQueue::~WorkQueue() {
 }
 
 const Task* WorkQueue::GetFrontTask() const {
-  if (tasks_.empty())
+  if (tasks_.empty()) {
     return nullptr;
+  }
   return &tasks_.front();
 }
 
 const Task* WorkQueue::GetBackTask() const {
-  if (tasks_.empty())
+  if (tasks_.empty()) {
     return nullptr;
+  }
   return &tasks_.back();
 }
 
 bool WorkQueue::BlockedByFence() const {
-  if (!fence_)
+  if (!fence_) {
     return false;
+  }
 
   // If the queue is empty then any future tasks will have a higher enqueue
   // order and will be blocked. The queue is also blocked if the head is past
@@ -58,8 +62,9 @@ bool WorkQueue::BlockedByFence() const {
 }
 
 std::optional<TaskOrder> WorkQueue::GetFrontTaskOrder() const {
-  if (tasks_.empty() || BlockedByFence())
+  if (tasks_.empty() || BlockedByFence()) {
     return std::nullopt;
+  }
   // Quick sanity check.
   DCHECK(tasks_.front().task_order() <= tasks_.back().task_order())
       << task_queue_->GetName() << " : " << work_queue_sets_->GetName() << " : "
@@ -84,12 +89,14 @@ void WorkQueue::Push(Task task) {
   // Amortized O(1).
   tasks_.push_back(std::move(task));
 
-  if (!was_empty)
+  if (!was_empty) {
     return;
+  }
 
   // If we hit the fence, pretend to WorkQueueSets that we're empty.
-  if (work_queue_sets_ && !BlockedByFence())
+  if (work_queue_sets_ && !BlockedByFence()) {
     work_queue_sets_->OnTaskPushedToEmptyQueue(this);
+  }
 }
 
 WorkQueue::TaskPusher::TaskPusher(WorkQueue* work_queue)
@@ -160,12 +167,14 @@ void WorkQueue::PushNonNestableTaskToFront(Task task) {
   // Amortized O(1).
   tasks_.push_front(std::move(task));
 
-  if (!work_queue_sets_)
+  if (!work_queue_sets_) {
     return;
+  }
 
   // Pretend  to WorkQueueSets that nothing has changed if we're blocked.
-  if (BlockedByFence())
+  if (BlockedByFence()) {
     return;
+  }
 
   // Pushing task to front may unblock the fence.
   if (was_empty || was_blocked) {
@@ -179,12 +188,14 @@ void WorkQueue::TakeImmediateIncomingQueueTasks() {
   DCHECK(tasks_.empty());
 
   task_queue_->TakeImmediateIncomingQueueTasks(&tasks_);
-  if (tasks_.empty())
+  if (tasks_.empty()) {
     return;
+  }
 
   // If we hit the fence, pretend to WorkQueueSets that we're empty.
-  if (work_queue_sets_ && !BlockedByFence())
+  if (work_queue_sets_ && !BlockedByFence()) {
     work_queue_sets_->OnTaskPushedToEmptyQueue(this);
+  }
 }
 
 Task WorkQueue::TakeTaskFromWorkQueue() {
@@ -201,9 +212,6 @@ Task WorkQueue::TakeTaskFromWorkQueue() {
       // right thing.
       task_queue_->TakeImmediateIncomingQueueTasks(&tasks_);
     }
-    // Since the queue is empty, now is a good time to consider reducing it's
-    // capacity if we're wasting memory.
-    tasks_.MaybeShrinkQueue();
   }
 
   DCHECK(work_queue_sets_);
@@ -232,8 +240,20 @@ bool WorkQueue::RemoveAllCanceledTasksFromFront() {
 
   while (!tasks_.empty()) {
     const auto& pending_task = tasks_.front();
-    if (pending_task.task && !pending_task.IsCanceled())
+#if DCHECK_IS_ON()
+    // Checking if a task is cancelled can trip DCHECK/CHECK failures out of the
+    // control of the SequenceManager code, so provide a task trace for easier
+    // diagnosis. See crbug.com/374409662 for context.
+    absl::Cleanup resetter = [original_task =
+                                  TaskAnnotator::CurrentTaskForThread()] {
+      TaskAnnotator::SetCurrentTaskForThread({}, original_task);
+    };
+    TaskAnnotator::SetCurrentTaskForThread(base::PassKey<WorkQueue>(),
+                                           &pending_task);
+#endif
+    if (pending_task.task && !pending_task.IsCanceled()) {
       break;
+    }
     tasks_to_delete.push_back(std::move(tasks_.front()));
     tasks_.pop_front();
   }
@@ -245,14 +265,12 @@ bool WorkQueue::RemoveAllCanceledTasksFromFront() {
         // right thing.
         task_queue_->TakeImmediateIncomingQueueTasks(&tasks_);
       }
-      // Since the queue is empty, now is a good time to consider reducing it's
-      // capacity if we're wasting memory.
-      tasks_.MaybeShrinkQueue();
     }
     // If we have a valid |heap_handle_| (i.e. we're not blocked by a fence or
     // disabled) then |work_queue_sets_| needs to be told.
-    if (heap_handle_.IsValid())
+    if (heap_handle_.IsValid()) {
       work_queue_sets_->OnQueuesFrontTaskChanged(this);
+    }
     task_queue_->TraceQueueSize();
   }
   return !tasks_to_delete.empty();
@@ -282,8 +300,9 @@ void WorkQueue::InsertFenceSilently(Fence fence) {
 
 bool WorkQueue::InsertFence(Fence fence) {
   bool was_blocked_by_fence = InsertFenceImpl(fence);
-  if (!work_queue_sets_)
+  if (!work_queue_sets_) {
     return false;
+  }
 
   // Moving the fence forward may unblock some tasks.
   if (!tasks_.empty() && was_blocked_by_fence && !BlockedByFence()) {
@@ -291,8 +310,9 @@ bool WorkQueue::InsertFence(Fence fence) {
     return true;
   }
   // Fence insertion may have blocked all tasks in this work queue.
-  if (BlockedByFence())
+  if (BlockedByFence()) {
     work_queue_sets_->OnQueueBlocked(this);
+  }
   return false;
 }
 
@@ -306,26 +326,22 @@ bool WorkQueue::RemoveFence() {
   return false;
 }
 
-void WorkQueue::MaybeShrinkQueue() {
-  tasks_.MaybeShrinkQueue();
-}
-
 void WorkQueue::PopTaskForTesting() {
-  if (tasks_.empty())
+  if (tasks_.empty()) {
     return;
+  }
   tasks_.pop_front();
 }
 
 void WorkQueue::CollectTasksOlderThan(TaskOrder reference,
                                       std::vector<const Task*>* result) const {
   for (const Task& task : tasks_) {
-    if (task.task_order() >= reference)
+    if (task.task_order() >= reference) {
       break;
+    }
 
     result->push_back(&task);
   }
 }
 
-}  // namespace internal
-}  // namespace sequence_manager
-}  // namespace base
+}  // namespace base::sequence_manager::internal

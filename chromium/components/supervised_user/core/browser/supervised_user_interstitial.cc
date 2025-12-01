@@ -64,7 +64,9 @@ SupervisedUserInterstitial::SupervisedUserInterstitial(
       *supervised_user_service.GetURLFilter(), reason);
 }
 
-SupervisedUserInterstitial::~SupervisedUserInterstitial() = default;
+SupervisedUserInterstitial::~SupervisedUserInterstitial() {
+  web_content_handler_->MaybeCloseLocalApproval();
+}
 
 // static
 std::string SupervisedUserInterstitial::GetHTMLContents(
@@ -124,7 +126,8 @@ void SupervisedUserInterstitial::RequestUrlAccessLocal(
       << "Supervised user name for local web approval request should not be "
          "empty";
   web_content_handler_->RequestLocalApproval(
-      url_, supervised_user_name_, *url_formatter_.get(), std::move(callback));
+      url_, supervised_user_name_, *url_formatter_.get(),
+      filtering_behavior_reason_, std::move(callback));
 }
 
 void SupervisedUserInterstitial::OutputRequestPermissionSourceMetric() {

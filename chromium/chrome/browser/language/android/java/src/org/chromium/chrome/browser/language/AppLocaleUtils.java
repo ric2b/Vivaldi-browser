@@ -12,12 +12,13 @@ import android.preference.PreferenceManager;
 import android.text.TextUtils;
 
 import androidx.annotation.ChecksSdkIntAtLeast;
-import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 
+import org.chromium.base.BundleUtils;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.LocaleUtils;
-import org.chromium.build.BuildConfig;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.ui.base.ResourceBundle;
@@ -30,11 +31,12 @@ import java.util.Locale;
  * Provides utility functions to assist with overriding the application language. This class manages
  * the AppLanguagePref.
  */
+@NullMarked
 public class AppLocaleUtils {
     private AppLocaleUtils() {}
 
     // Value of AppLocale preference when the system language is used.
-    public static final String APP_LOCALE_USE_SYSTEM_LANGUAGE = null;
+    public static final @Nullable String APP_LOCALE_USE_SYSTEM_LANGUAGE = null;
 
     /**
      * Return true if languageName is the same as the current application override
@@ -65,7 +67,7 @@ public class AppLocaleUtils {
      *
      * @return String BCP-47 language tag (e.g. en-US).
      */
-    public static String getAppLanguagePref() {
+    public static @Nullable String getAppLanguagePref() {
         if (shouldUseSystemManagedLocale()) {
             return getSystemManagedAppLanguage();
         }
@@ -83,7 +85,7 @@ public class AppLocaleUtils {
      * @return String BCP-47 language tag (e.g. en-US).
      */
     @SuppressWarnings("DefaultSharedPreferencesCheck")
-    static String getAppLanguagePrefStartUp(Context base) {
+    static @Nullable String getAppLanguagePrefStartUp(Context base) {
         return PreferenceManager.getDefaultSharedPreferences(base)
                 .getString(
                         ChromePreferenceKeys.APPLICATION_OVERRIDE_LANGUAGE,
@@ -163,7 +165,7 @@ public class AppLocaleUtils {
         // If this is not a bundle build or the default system language is being used the language
         // split should not be installed. Instead indicate that the listener completed successfully
         // since the language resources will already be present.
-        if (!BuildConfig.IS_BUNDLE || isFollowSystemLanguage(languageName)) {
+        if (!BundleUtils.isBundle() || isFollowSystemLanguage(languageName)) {
             wrappedListener.onComplete(true);
         } else {
             LanguageSplitInstaller.getInstance().installLanguage(languageName, wrappedListener);
@@ -260,7 +262,7 @@ public class AppLocaleUtils {
     }
 
     private static boolean isAvailableUiLanguage(
-            String potentialUiLanguage, Comparator<String> comparator) {
+            String potentialUiLanguage, @Nullable Comparator<String> comparator) {
         // The default system language is always an available UI language.
         if (isFollowSystemLanguage(potentialUiLanguage)) return true;
         return Arrays.binarySearch(

@@ -3,100 +3,50 @@
 // found in the LICENSE file.
 
 import * as ThirdPartyWeb from '../../../third_party/third-party-web/third-party-web.js';
-import type * as Handlers from '../handlers/handlers.js';
+import * as Handlers from '../handlers/handlers.js';
 import * as Helpers from '../helpers/helpers.js';
 import * as Types from '../types/types.js';
-
-import * as URLForEntry from './URLForEntry.js';
 
 export type Entity = typeof ThirdPartyWeb.ThirdPartyWeb.entities[number];
 
 export interface Summary {
   transferSize: number;
-  mainThreadTime: Types.Timing.MicroSeconds;
+  mainThreadTime: Types.Timing.Micro;
 }
 
-export interface SummaryMaps {
+export interface ThirdPartySummary {
   byEntity: Map<Entity, Summary>;
-  byRequest: Map<Types.Events.SyntheticNetworkRequest, Summary>;
-  requestsByEntity: Map<Entity, Types.Events.SyntheticNetworkRequest[]>;
+  byEvent: Map<Types.Events.Event, Summary>;
+  eventsByEntity: Map<Entity, Types.Events.Event[]>;
+  madeUpEntityCache: Map<string, Entity>;
 }
 
-/**
- * Returns the origin portion of a Chrome extension URL.
- */
-function getChromeExtensionOrigin(url: URL): string {
-  return url.protocol + '//' + url.host;
+function getOrMakeSummary(thirdPartySummary: ThirdPartySummary, event: Types.Events.Event, url: string): Summary|null {
+  const entity = ThirdPartyWeb.ThirdPartyWeb.getEntity(url) ??
+      Handlers.Helpers.makeUpEntity(thirdPartySummary.madeUpEntityCache, url);
+  if (!entity) {
+    return null;
+  }
+
+  const events = thirdPartySummary.eventsByEntity.get(entity) ?? [];
+  events.push(event);
+  thirdPartySummary.eventsByEntity.set(entity, events);
+
+  let summary = thirdPartySummary.byEntity.get(entity);
+  if (summary) {
+    thirdPartySummary.byEvent.set(event, summary);
+    return summary;
+  }
+
+  summary = {transferSize: 0, mainThreadTime: Types.Timing.Micro(0)};
+  thirdPartySummary.byEntity.set(entity, summary);
+  thirdPartySummary.byEvent.set(event, summary);
+  return summary;
 }
 
-function makeUpChromeExtensionEntity(entityCache: Map<string, Entity>, url: string, extensionName?: string): Entity {
-  const parsedUrl = new URL(url);
-  const origin = getChromeExtensionOrigin(parsedUrl);
-  const host = new URL(origin).host;
-  const name = extensionName || host;
-
-  const cachedEntity = entityCache.get(origin);
-  if (cachedEntity) {
-    return cachedEntity;
-  }
-
-  const chromeExtensionEntity = {
-    name,
-    company: name,
-    category: 'Chrome Extension',
-    homepage: 'https://chromewebstore.google.com/detail/' + host,
-    categories: [],
-    domains: [],
-    averageExecutionTime: 0,
-    totalExecutionTime: 0,
-    totalOccurrences: 0,
-  };
-
-  entityCache.set(origin, chromeExtensionEntity);
-  return chromeExtensionEntity;
-}
-
-export function makeUpEntity(entityCache: Map<string, Entity>, url: string): Entity|undefined {
-  if (url.startsWith('chrome-extension:')) {
-    return makeUpChromeExtensionEntity(entityCache, url);
-  }
-
-  // Make up an entity only for valid http/https URLs.
-  if (!url.startsWith('http')) {
-    return;
-  }
-
-  // NOTE: Lighthouse uses a tld database to determine the root domain, but here
-  // we are using third party web's database. Doesn't really work for the case of classifying
-  // domains 3pweb doesn't know about, so it will just give us a guess.
-  const rootDomain = ThirdPartyWeb.ThirdPartyWeb.getRootDomain(url);
-  if (!rootDomain) {
-    return;
-  }
-
-  if (entityCache.has(rootDomain)) {
-    return entityCache.get(rootDomain);
-  }
-
-  const unrecognizedEntity = {
-    name: rootDomain,
-    company: rootDomain,
-    category: '',
-    categories: [],
-    domains: [rootDomain],
-    averageExecutionTime: 0,
-    totalExecutionTime: 0,
-    totalOccurrences: 0,
-    isUnrecognized: true,
-  };
-  entityCache.set(rootDomain, unrecognizedEntity);
-  return unrecognizedEntity;
-}
-
-function getSelfTimeByUrl(
-    parsedTrace: Handlers.Types.ParsedTrace, bounds: Types.Timing.TraceWindowMicroSeconds): Map<string, number> {
-  const selfTimeByUrl = new Map<string, number>();
-
+function collectMainThreadActivity(
+    thirdPartySummary: ThirdPartySummary, parsedTrace: Handlers.Types.ParsedTrace,
+    bounds: Types.Timing.TraceWindowMicro): void {
   for (const process of parsedTrace.Renderer.processes.values()) {
     if (!process.isOnMainFrame) {
       continue;
@@ -118,90 +68,116 @@ function getSelfTimeByUrl(
             continue;
           }
 
-          const url = URLForEntry.getNonResolved(parsedTrace as Handlers.Types.ParsedTrace, event);
+          const url = Handlers.Helpers.getNonResolvedURL(event, parsedTrace as Handlers.Types.ParsedTrace);
           if (!url) {
             continue;
           }
 
-          selfTimeByUrl.set(url, node.selfTime + (selfTimeByUrl.get(url) ?? 0));
+          const summary = getOrMakeSummary(thirdPartySummary, event, url);
+          if (summary) {
+            summary.mainThreadTime = (summary.mainThreadTime + node.selfTime) as Types.Timing.Micro;
+          }
         }
       }
     }
   }
-
-  return selfTimeByUrl;
 }
 
-export function getEntitiesByRequest(requests: Types.Events.SyntheticNetworkRequest[]):
-    {entityByRequest: Map<Types.Events.SyntheticNetworkRequest, Entity>, madeUpEntityCache: Map<string, Entity>} {
-  const entityByRequest = new Map<Types.Events.SyntheticNetworkRequest, Entity>();
-  const madeUpEntityCache = new Map<string, Entity>();
+function collectNetworkActivity(
+    thirdPartySummary: ThirdPartySummary, requests: Types.Events.SyntheticNetworkRequest[]): void {
   for (const request of requests) {
     const url = request.args.data.url;
-    const entity = ThirdPartyWeb.ThirdPartyWeb.getEntity(url) ?? makeUpEntity(madeUpEntityCache, url);
-    if (entity) {
-      entityByRequest.set(request, entity);
+    const summary = getOrMakeSummary(thirdPartySummary, request, url);
+    if (summary) {
+      summary.transferSize += request.args.data.encodedDataLength;
     }
   }
-  return {entityByRequest, madeUpEntityCache};
 }
 
-function getSummaryMap(
-    requests: Types.Events.SyntheticNetworkRequest[],
-    entityByRequest: Map<Types.Events.SyntheticNetworkRequest, Entity>,
-    selfTimeByUrl: Map<string, number>): SummaryMaps {
-  const byRequest = new Map<Types.Events.SyntheticNetworkRequest, Summary>();
-  const byEntity = new Map<Entity, Summary>();
-  const defaultSummary: Summary = {transferSize: 0, mainThreadTime: Types.Timing.MicroSeconds(0)};
+/**
+ * @param networkRequests Won't be filtered by trace bounds, so callers should ensure it is filtered.
+ */
+export function summarizeThirdParties(
+    parsedTrace: Handlers.Types.ParsedTrace, traceBounds: Types.Timing.TraceWindowMicro,
+    networkRequests: Types.Events.SyntheticNetworkRequest[]): ThirdPartySummary {
+  const thirdPartySummary: ThirdPartySummary = {
+    byEntity: new Map(),
+    byEvent: new Map(),
+    eventsByEntity: new Map(),
+    madeUpEntityCache: new Map(),
+  };
 
-  for (const request of requests) {
-    const urlSummary = byRequest.get(request) || {...defaultSummary};
-    urlSummary.transferSize += request.args.data.encodedDataLength;
-    urlSummary.mainThreadTime =
-        Types.Timing.MicroSeconds(urlSummary.mainThreadTime + (selfTimeByUrl.get(request.args.data.url) ?? 0));
-    byRequest.set(request, urlSummary);
+  collectMainThreadActivity(thirdPartySummary, parsedTrace, traceBounds);
+  collectNetworkActivity(thirdPartySummary, networkRequests);
+
+  return thirdPartySummary;
+}
+
+function getSummaryMapWithMapping(
+    events: Types.Events.Event[], entityByEvent: Map<Types.Events.Event, Handlers.Helpers.Entity>,
+    eventsByEntity: Map<Handlers.Helpers.Entity, Types.Events.Event[]>): ThirdPartySummary {
+  const byEvent = new Map<Types.Events.Event, Summary>();
+  const byEntity = new Map<Handlers.Helpers.Entity, Summary>();
+  const defaultSummary: Summary = {transferSize: 0, mainThreadTime: Types.Timing.Micro(0)};
+
+  for (const event of events) {
+    const urlSummary = byEvent.get(event) || {...defaultSummary};
+    if (Types.Events.isSyntheticNetworkRequest(event)) {
+      urlSummary.transferSize += event.args.data.encodedDataLength;
+    }
+    byEvent.set(event, urlSummary);
   }
 
   // Map each request's stat to a particular entity.
-  const requestsByEntity = new Map<Entity, Types.Events.SyntheticNetworkRequest[]>();
-  for (const [request, requestSummary] of byRequest.entries()) {
-    const entity = entityByRequest.get(request);
+  for (const [request, requestSummary] of byEvent.entries()) {
+    const entity = entityByEvent.get(request);
     if (!entity) {
-      byRequest.delete(request);
+      byEvent.delete(request);
       continue;
     }
 
     const entitySummary = byEntity.get(entity) || {...defaultSummary};
     entitySummary.transferSize += requestSummary.transferSize;
-    entitySummary.mainThreadTime =
-        Types.Timing.MicroSeconds(entitySummary.mainThreadTime + requestSummary.mainThreadTime);
     byEntity.set(entity, entitySummary);
-
-    const entityRequests = requestsByEntity.get(entity) || [];
-    entityRequests.push(request);
-    requestsByEntity.set(entity, entityRequests);
   }
 
-  return {byEntity, byRequest, requestsByEntity};
+  return {byEntity, byEvent, eventsByEntity, madeUpEntityCache: new Map()};
 }
 
-export function getSummariesAndEntitiesForTraceBounds(
-    parsedTrace: Handlers.Types.ParsedTrace, traceBounds: Types.Timing.TraceWindowMicroSeconds,
-    networkRequests: Types.Events.SyntheticNetworkRequest[]): {
-  summaries: SummaryMaps,
-  entityByRequest: Map<Types.Events.SyntheticNetworkRequest, Entity>,
-  madeUpEntityCache: Map<string, Entity>,
+// TODO(crbug.com/352244718): Remove or refactor to use summarizeThirdParties/collectMainThreadActivity/etc.
+/**
+ * Note: unlike summarizeThirdParties, this does not calculate mainThreadTime. The reason is that it is not
+ * needed for its one use case, and when dragging the trace bounds it takes a long time to calculate.
+ * If it is ever needed, we need to make getSelfTimeByUrl (see deleted code/blame) much faster (cache + bucket?).
+ */
+export function getSummariesAndEntitiesWithMapping(
+    parsedTrace: Handlers.Types.ParsedTrace, traceBounds: Types.Timing.TraceWindowMicro,
+    entityMapping: Handlers.Helpers.EntityMappings): {
+  summaries: ThirdPartySummary,
+  entityByEvent: Map<Types.Events.Event, Handlers.Helpers.Entity>,
 } {
-  // Ensure we only handle requests that are within the given traceBounds.
-  const reqs = networkRequests.filter(event => {
+  const entityByEvent = new Map(entityMapping.entityByEvent);
+  const eventsByEntity = new Map(entityMapping.eventsByEntity);
+
+  // Consider events only in bounds.
+  const entityByEventArr = Array.from(entityByEvent.entries());
+  const filteredEntries = entityByEventArr.filter(([event]) => {
     return Helpers.Timing.eventIsInBounds(event, traceBounds);
   });
+  const entityByEventFiltered = new Map(filteredEntries);
 
-  const {entityByRequest, madeUpEntityCache} = getEntitiesByRequest(reqs);
+  // Consider events only in bounds.
+  const eventsByEntityArr = Array.from(eventsByEntity.entries());
+  const filtered = eventsByEntityArr.filter(([, events]) => {
+    events.map(event => {
+      return Helpers.Timing.eventIsInBounds(event, traceBounds);
+    });
+    return events.length > 0;
+  });
+  const eventsByEntityFiltered = new Map(filtered);
 
-  const selfTimeByUrl = getSelfTimeByUrl(parsedTrace, traceBounds);
-  // TODO(crbug.com/352244718): re-work to still collect main thread activity if no request is present
-  const summaries = getSummaryMap(reqs, entityByRequest, selfTimeByUrl);
+  const allEvents = Array.from(entityByEvent.keys());
+  const summaries = getSummaryMapWithMapping(allEvents, entityByEventFiltered, eventsByEntityFiltered);
 
-  return {summaries, entityByRequest, madeUpEntityCache};
+  return {summaries, entityByEvent: entityByEventFiltered};
 }

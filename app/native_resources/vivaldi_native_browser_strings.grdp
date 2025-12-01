@@ -237,6 +237,14 @@
     Secure my profile
   </message>
 
+  <message name="IDS_VIVALDI_RELOAD_FOR_ENCRYPTED_CONTENT" desc="User needs to reload the tab to make encrypted content to work.">
+    Please reload this tab to fix media playback issues.
+  </message>
+
+  <message name="IDS_VIVALDI_RELOAD" desc="Reload button text.">
+    Reload
+  </message>
+
   <part file="vivaldi_bookmark_strings.grdp" />
   <part file="vivaldi_context_menu_strings.grdp" />
   <part file="vivaldi_importer_strings.grdp" />

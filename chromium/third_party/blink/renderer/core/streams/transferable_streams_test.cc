@@ -57,8 +57,7 @@ class TestUnderlyingSource final : public UnderlyingSourceBase {
                              ToResolvedUndefinedPromise(script_state)) {}
   ~TestUnderlyingSource() override = default;
 
-  ScriptPromise<IDLUndefined> Start(ScriptState* script_state,
-                                    ExceptionState&) override {
+  ScriptPromise<IDLUndefined> Start(ScriptState* script_state) override {
     started_ = true;
     if (type_ == SourceType::kPush) {
       for (int element : sequence_) {
@@ -114,7 +113,7 @@ class TestUnderlyingSource final : public UnderlyingSourceBase {
   const Vector<int> sequence_;
   wtf_size_t index_ = 0;
 
-  const ScriptPromise<IDLUndefined> start_promise_;
+  const MemberScriptPromise<IDLUndefined> start_promise_;
   bool started_ = false;
   bool cancelled_ = false;
   ScriptValue cancel_reason_;
@@ -211,9 +210,9 @@ TEST(TransferableStreamsTest, SmokeTest) {
 
   bool got_response = false;
   reader->read(script_state, ASSERT_NO_EXCEPTION)
-      .React(script_state,
-             MakeGarbageCollected<ExpectNullResponse>(&got_response),
-             MakeGarbageCollected<ExpectNotReached>());
+      .Then(script_state,
+            MakeGarbageCollected<ExpectNullResponse>(&got_response),
+            MakeGarbageCollected<ExpectNotReached>());
 
   // Need to run the event loop to pass messages through the MessagePort.
   test::RunPendingTasks();

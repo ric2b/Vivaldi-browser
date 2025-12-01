@@ -24,6 +24,7 @@
 #include "include/private/base/SkAssert.h"
 #include "include/private/base/SkDebug.h"
 #include "include/private/base/SkSpan_impl.h"
+#include "modules/jsonreader/SkJSONReader.h"
 #include "modules/skottie/include/Skottie.h"
 #include "modules/skottie/src/Adapter.h"
 #include "modules/skottie/src/SkottieJson.h"
@@ -35,7 +36,6 @@
 #include "modules/sksg/include/SkSGColorFilter.h"
 #include "modules/sksg/include/SkSGNode.h"
 #include "modules/sksg/include/SkSGRenderNode.h"
-#include "src/utils/SkJSON.h"
 
 #include <cstdint>
 #include <cstring>
@@ -169,6 +169,10 @@ protected:
                 container->bind(abuilder, (*jprop)["v"], std::get<1>(fUniforms.back()).get());
             } else if (type == kSkSLProp_image) {
                 const skjson::ObjectValue* jimageRef = (*jprop)["v"];
+                if (!jimageRef) {
+                    continue;
+                }
+
                 const AnimationBuilder::ScopedAssetRef footageAsset(&abuilder, *jimageRef);
                 const auto* asset_info = abuilder.loadFootageAsset(*footageAsset);
                 if (asset_info && asset_info->fAsset) {

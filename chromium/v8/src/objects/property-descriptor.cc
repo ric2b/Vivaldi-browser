@@ -21,8 +21,8 @@ namespace {
 // Helper function for ToPropertyDescriptor. Comments describe steps for
 // "enumerable", other properties are handled the same way.
 // Returns false if an exception was thrown.
-bool GetPropertyIfPresent(Isolate* isolate, Handle<JSReceiver> receiver,
-                          Handle<String> name, Handle<JSAny>* value) {
+bool GetPropertyIfPresent(Isolate* isolate, DirectHandle<JSReceiver> receiver,
+                          DirectHandle<String> name, Handle<JSAny>* value) {
   LookupIterator it(isolate, receiver, name, receiver);
   // 4. Let hasEnumerable be HasProperty(Obj, "enumerable").
   Maybe<bool> has_property = JSReceiver::HasProperty(&it);
@@ -41,7 +41,8 @@ bool GetPropertyIfPresent(Isolate* isolate, Handle<JSReceiver> receiver,
 // objects: nothing on the prototype chain, just own fast data properties.
 // Must not have observable side effects, because the slow path will restart
 // the entire conversion!
-bool ToPropertyDescriptorFastPath(Isolate* isolate, Handle<JSReceiver> obj,
+bool ToPropertyDescriptorFastPath(Isolate* isolate,
+                                  DirectHandle<JSReceiver> obj,
                                   PropertyDescriptor* desc) {
   {
     DisallowGarbageCollection no_gc;
@@ -70,7 +71,7 @@ bool ToPropertyDescriptorFastPath(Isolate* isolate, Handle<JSReceiver> obj,
   ReadOnlyRoots roots(isolate);
   for (InternalIndex i : map->IterateOwnDescriptors()) {
     PropertyDetails details = descs->GetDetails(i);
-    Handle<Object> value;
+    DirectHandle<Object> value;
     if (details.location() == PropertyLocation::kField) {
       if (details.kind() == PropertyKind::kData) {
         value = JSObject::FastPropertyAt(isolate, Cast<JSObject>(obj),
@@ -85,7 +86,7 @@ bool ToPropertyDescriptorFastPath(Isolate* isolate, Handle<JSReceiver> obj,
     } else {
       DCHECK_EQ(PropertyLocation::kDescriptor, details.location());
       if (details.kind() == PropertyKind::kData) {
-        value = handle(descs->GetStrongValue(i), isolate);
+        value = direct_handle(descs->GetStrongValue(i), isolate);
       } else {
         DCHECK_EQ(PropertyKind::kAccessor, details.kind());
         // Bail out to slow path.
@@ -119,8 +120,8 @@ bool ToPropertyDescriptorFastPath(Isolate* isolate, Handle<JSReceiver> obj,
   return true;
 }
 
-void CreateDataProperty(Isolate* isolate, Handle<JSObject> object,
-                        Handle<String> name, Handle<Object> value) {
+void CreateDataProperty(Isolate* isolate, DirectHandle<JSObject> object,
+                        Handle<String> name, DirectHandle<Object> value) {
   Maybe<bool> result = JSObject::CreateDataProperty(
       isolate, object, PropertyKey(isolate, Cast<Name>(name)), value);
   CHECK(result.IsJust() && result.FromJust());
@@ -129,13 +130,13 @@ void CreateDataProperty(Isolate* isolate, Handle<JSObject> object,
 }  // namespace
 
 // ES6 6.2.4.4 "FromPropertyDescriptor"
-Handle<JSObject> PropertyDescriptor::ToObject(Isolate* isolate) {
+DirectHandle<JSObject> PropertyDescriptor::ToObject(Isolate* isolate) {
   DCHECK(!(PropertyDescriptor::IsAccessorDescriptor(this) &&
            PropertyDescriptor::IsDataDescriptor(this)));
   Factory* factory = isolate->factory();
   if (IsRegularAccessorProperty()) {
     // Fast case for regular accessor properties.
-    Handle<JSObject> result = factory->NewJSObjectFromMap(
+    DirectHandle<JSObject> result = factory->NewJSObjectFromMap(
         isolate->accessor_property_descriptor_map());
     result->InObjectPropertyAtPut(JSAccessorPropertyDescriptor::kGetIndex,
                                   *get());
@@ -151,7 +152,7 @@ Handle<JSObject> PropertyDescriptor::ToObject(Isolate* isolate) {
   }
   if (IsRegularDataProperty()) {
     // Fast case for regular data properties.
-    Handle<JSObject> result =
+    DirectHandle<JSObject> result =
         factory->NewJSObjectFromMap(isolate->data_property_descriptor_map());
     result->InObjectPropertyAtPut(JSDataPropertyDescriptor::kValueIndex,
                                   *value());
@@ -163,7 +164,8 @@ Handle<JSObject> PropertyDescriptor::ToObject(Isolate* isolate) {
                                   isolate->heap()->ToBoolean(configurable()));
     return result;
   }
-  Handle<JSObject> result = factory->NewJSObject(isolate->object_function());
+  DirectHandle<JSObject> result =
+      factory->NewJSObject(isolate->object_function());
   if (has_value()) {
     CreateDataProperty(isolate, result, factory->value_string(), value());
   }
@@ -204,7 +206,7 @@ bool PropertyDescriptor::ToPropertyDescriptor(Isolate* isolate,
   // 3. Let desc be a new Property Descriptor that initially has no fields.
   DCHECK(desc->is_empty());
 
-  Handle<JSReceiver> receiver = Cast<JSReceiver>(obj);
+  DirectHandle<JSReceiver> receiver = Cast<JSReceiver>(obj);
   if (ToPropertyDescriptorFastPath(isolate, receiver, desc)) {
     return true;
   }
@@ -350,9 +352,9 @@ void PropertyDescriptor::CompletePropertyDescriptor(Isolate* isolate,
   // 8. Return Desc.
 }
 
-Handle<PropertyDescriptorObject> PropertyDescriptor::ToPropertyDescriptorObject(
-    Isolate* isolate) {
-  Handle<PropertyDescriptorObject> obj =
+DirectHandle<PropertyDescriptorObject>
+PropertyDescriptor::ToPropertyDescriptorObject(Isolate* isolate) {
+  DirectHandle<PropertyDescriptorObject> obj =
       isolate->factory()->NewPropertyDescriptorObject();
 
   int flags =

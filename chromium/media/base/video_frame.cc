@@ -2,19 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "media/base/video_frame.h"
 
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <climits>
+#include <cstddef>
+#include <memory>
 #include <numeric>
 #include <string_view>
 #include <utility>
@@ -23,10 +21,12 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/logging.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/process/memory.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
+#include "base/types/pass_key.h"
 #include "build/build_config.h"
 #include "components/viz/common/resources/shared_image_format_utils.h"
 #include "media/base/color_plane_layout.h"
@@ -38,7 +38,11 @@
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/gpu_memory_buffer.h"
+
 #if BUILDFLAG(IS_APPLE)
+#include <CoreVideo/CVPixelBuffer.h>
+
+#include "base/apple/scoped_cftyperef.h"
 #include "ui/gfx/mac/io_surface.h"
 #endif
 
@@ -107,10 +111,7 @@ bool VideoFrame::IsStorageTypeMappable(VideoFrame::StorageType storage_type) {
       // level, DmaBufs are not mappable from userspace.
       storage_type != VideoFrame::STORAGE_DMABUFS &&
 #endif
-      // GpuMemoryBuffer is not mappable at VideoFrame level. In most places
-      // GpuMemoryBuffer is opaque to the CPU, and for places that really need
-      // to access the data on CPU they can get the buffer with
-      // GetGpuMemoryBuffer() and call gfx::GpuMemoryBuffer::Map().
+      // GpuMemoryBuffer is not mappable at VideoFrame level.
       (storage_type == VideoFrame::STORAGE_UNOWNED_MEMORY ||
        storage_type == VideoFrame::STORAGE_OWNED_MEMORY ||
        storage_type == VideoFrame::STORAGE_SHMEM);
@@ -312,9 +313,9 @@ scoped_refptr<VideoFrame> VideoFrame::WrapTrackingToken(
     DLOG(ERROR) << "Invalid layout.";
     return nullptr;
   }
-  scoped_refptr<VideoFrame> frame =
-      new VideoFrame(*layout, StorageType::STORAGE_OPAQUE, visible_rect,
-                     natural_size, timestamp);
+  auto frame = base::MakeRefCounted<VideoFrame>(
+      base::PassKey<VideoFrame>(), *layout, StorageType::STORAGE_OPAQUE,
+      visible_rect, natural_size, timestamp);
   frame->metadata().tracking_token = tracking_token;
   return frame;
 }
@@ -364,8 +365,9 @@ scoped_refptr<VideoFrame> VideoFrame::CreateFrameForNativeTexturesInternal(
     return nullptr;
   }
 
-  scoped_refptr<VideoFrame> frame =
-      new VideoFrame(*layout, storage, visible_rect, natural_size, timestamp);
+  auto frame = base::MakeRefCounted<VideoFrame>(base::PassKey<VideoFrame>(),
+                                                *layout, storage, visible_rect,
+                                                natural_size, timestamp);
 
   return frame;
 }
@@ -408,10 +410,14 @@ VideoFrame::CreateFrameForGpuMemoryBufferOrMappableSIInternal(
 
   const size_t num_planes = NumberOfPlanesForLinearBufferFormat(buffer_format);
   std::vector<ColorPlaneLayout> planes(num_planes);
-  for (size_t i = 0; i < num_planes; ++i) {
-    planes[i].stride = gpu_memory_buffer
-                           ? gpu_memory_buffer->stride(i)
-                           : shared_image->GetStrideForVideoFrame(i);
+  for (size_t plane = 0; plane < num_planes; ++plane) {
+    planes[plane].stride = gpu_memory_buffer
+                               ? gpu_memory_buffer->stride(plane)
+                               : shared_image->GetStrideForVideoFrame(plane);
+    gfx::Size plane_size = PlaneSizeInSamples(*format, plane, coded_size);
+    planes[plane].size =
+        (plane_size.height() - 1) * planes[plane].stride +
+        plane_size.width() * VideoFrame::BytesPerElement(*format, plane);
   }
   uint64_t modifier = gfx::NativePixmapHandle::kNoModifier;
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
@@ -452,8 +458,9 @@ VideoFrame::CreateFrameForGpuMemoryBufferOrMappableSIInternal(
     return nullptr;
   }
 
-  scoped_refptr<VideoFrame> frame =
-      new VideoFrame(*layout, storage, visible_rect, natural_size, timestamp);
+  auto frame = base::MakeRefCounted<VideoFrame>(base::PassKey<VideoFrame>(),
+                                                *layout, storage, visible_rect,
+                                                natural_size, timestamp);
   if (!frame) {
     DLOG(ERROR) << __func__ << " Couldn't create VideoFrame instance";
     return nullptr;
@@ -548,6 +555,22 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalData(
 }
 
 // static
+scoped_refptr<VideoFrame> VideoFrame::WrapExternalData(
+    VideoPixelFormat format,
+    const gfx::Size& coded_size,
+    const gfx::Rect& visible_rect,
+    const gfx::Size& natural_size,
+    base::span<const uint8_t> data,
+    base::TimeDelta timestamp) {
+  auto layout = GetDefaultLayout(format, coded_size);
+  if (!layout) {
+    return nullptr;
+  }
+  return WrapExternalDataWithLayout(*layout, visible_rect, natural_size, data,
+                                    timestamp);
+}
+
+// static
 scoped_refptr<VideoFrame> VideoFrame::WrapExternalDataWithLayout(
     const VideoFrameLayout& layout,
     const gfx::Rect& visible_rect,
@@ -555,11 +578,25 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalDataWithLayout(
     const uint8_t* data,
     size_t data_size,
     base::TimeDelta timestamp) {
+  // TODO(crbug.com/338570700): Remove this function and migrate to the
+  // version accepting a span.
+  auto data_span = UNSAFE_TODO(base::span(data, data_size));
+  return WrapExternalDataWithLayout(layout, visible_rect, natural_size,
+                                    data_span, timestamp);
+}
+
+// static
+scoped_refptr<VideoFrame> VideoFrame::WrapExternalDataWithLayout(
+    const VideoFrameLayout& layout,
+    const gfx::Rect& visible_rect,
+    const gfx::Size& natural_size,
+    base::span<const uint8_t> data,
+    base::TimeDelta timestamp) {
   StorageType storage_type = STORAGE_UNOWNED_MEMORY;
 
   if (!IsValidConfig(layout.format(), storage_type, layout.coded_size(),
                      visible_rect, natural_size) ||
-      !layout.FitsInContiguousBufferOfSize(data_size)) {
+      !layout.FitsInContiguousBufferOfSize(data.size())) {
     DLOG(ERROR) << "Invalid config: "
                 << ConfigToString(layout.format(), storage_type,
                                   layout.coded_size(), visible_rect,
@@ -567,11 +604,13 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalDataWithLayout(
     return nullptr;
   }
 
-  scoped_refptr<VideoFrame> frame = new VideoFrame(
-      layout, storage_type, visible_rect, natural_size, timestamp);
+  auto frame = base::MakeRefCounted<VideoFrame>(
+      base::PassKey<VideoFrame>(), layout, storage_type, visible_rect,
+      natural_size, timestamp);
 
   for (size_t i = 0; i < layout.planes().size(); ++i) {
-    frame->data_[i] = data + layout.planes()[i].offset;
+    auto& plane = layout.planes()[i];
+    frame->data_[i] = data.subspan(plane.offset, plane.size);
   }
 
   return frame;
@@ -583,9 +622,9 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalYuvData(
     const gfx::Size& coded_size,
     const gfx::Rect& visible_rect,
     const gfx::Size& natural_size,
-    int32_t y_stride,
-    int32_t u_stride,
-    int32_t v_stride,
+    size_t y_stride,
+    size_t u_stride,
+    size_t v_stride,
     const uint8_t* y_data,
     const uint8_t* u_data,
     const uint8_t* v_data,
@@ -610,6 +649,28 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalYuvDataWithLayout(
     const uint8_t* u_data,
     const uint8_t* v_data,
     base::TimeDelta timestamp) {
+  const VideoPixelFormat format = layout.format();
+  std::array<const uint8_t*, 3> data = {y_data, u_data, v_data};
+  std::array<base::span<const uint8_t>, 3> spans;
+  for (size_t plane = 0; plane < NumPlanes(format); ++plane) {
+    // TODO(crbug.com/338570700): Remove this function and migrate to the
+    // version accepting a span.
+    spans[plane] = UNSAFE_TODO(
+        base::span<const uint8_t>(data[plane], layout.planes()[plane].size));
+  }
+  return WrapExternalYuvDataWithLayout(layout, visible_rect, natural_size,
+                                       spans[0], spans[1], spans[2], timestamp);
+}
+
+// static
+scoped_refptr<VideoFrame> VideoFrame::WrapExternalYuvDataWithLayout(
+    const VideoFrameLayout& layout,
+    const gfx::Rect& visible_rect,
+    const gfx::Size& natural_size,
+    base::span<const uint8_t> y_data,
+    base::span<const uint8_t> u_data,
+    base::span<const uint8_t> v_data,
+    base::TimeDelta timestamp) {
   const StorageType storage = STORAGE_UNOWNED_MEMORY;
   const VideoPixelFormat format = layout.format();
   if (!IsValidConfig(format, storage, layout.coded_size(), visible_rect,
@@ -619,17 +680,18 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalYuvDataWithLayout(
                                   visible_rect, natural_size);
     return nullptr;
   }
-  if (!IsYuvPlanar(format)) {
+  if (!IsYuvPlanar(format) || NumPlanes(format) > 3) {
     DLOG(ERROR) << __func__ << " Format is not YUV. " << format;
     return nullptr;
   }
 
-  DCHECK_LE(NumPlanes(format), 3u);
-  scoped_refptr<VideoFrame> frame(
-      new VideoFrame(layout, storage, visible_rect, natural_size, timestamp));
-  frame->data_[Plane::kY] = y_data;
-  frame->data_[Plane::kU] = u_data;
-  frame->data_[Plane::kV] = v_data;
+  auto frame = base::MakeRefCounted<VideoFrame>(base::PassKey<VideoFrame>(),
+                                                layout, storage, visible_rect,
+                                                natural_size, timestamp);
+  std::array<base::span<const uint8_t>, 3> data = {y_data, u_data, v_data};
+  for (size_t plane = 0; plane < NumPlanes(format); ++plane) {
+    frame->data_[plane] = data[plane];
+  }
   return frame;
 }
 
@@ -639,10 +701,10 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalYuvaData(
     const gfx::Size& coded_size,
     const gfx::Rect& visible_rect,
     const gfx::Size& natural_size,
-    int32_t y_stride,
-    int32_t u_stride,
-    int32_t v_stride,
-    int32_t a_stride,
+    size_t y_stride,
+    size_t u_stride,
+    size_t v_stride,
+    size_t a_stride,
     const uint8_t* y_data,
     const uint8_t* u_data,
     const uint8_t* v_data,
@@ -669,12 +731,15 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalYuvaData(
     return nullptr;
   }
 
-  scoped_refptr<VideoFrame> frame(
-      new VideoFrame(*layout, storage, visible_rect, natural_size, timestamp));
-  frame->data_[Plane::kY] = y_data;
-  frame->data_[Plane::kU] = u_data;
-  frame->data_[Plane::kV] = v_data;
-  frame->data_[Plane::kA] = a_data;
+  auto frame = base::MakeRefCounted<VideoFrame>(base::PassKey<VideoFrame>(),
+                                                *layout, storage, visible_rect,
+                                                natural_size, timestamp);
+  std::array<const uint8_t*, 4> data = {y_data, u_data, v_data, a_data};
+  for (size_t plane = 0; plane < NumPlanes(format); ++plane) {
+    // TODO(crbug.com/338570700): y_data, u_data, v_data should be spans
+    frame->data_[plane] =
+        UNSAFE_TODO(base::span(data[plane], layout->planes()[plane].size));
+  }
   return frame;
 }
 
@@ -684,8 +749,50 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalYuvData(
     const gfx::Size& coded_size,
     const gfx::Rect& visible_rect,
     const gfx::Size& natural_size,
-    int32_t y_stride,
-    int32_t uv_stride,
+    size_t y_stride,
+    size_t u_stride,
+    size_t v_stride,
+    base::span<const uint8_t> y_data,
+    base::span<const uint8_t> u_data,
+    base::span<const uint8_t> v_data,
+    base::TimeDelta timestamp) {
+  const StorageType storage = STORAGE_UNOWNED_MEMORY;
+  if (!IsValidConfig(format, storage, coded_size, visible_rect, natural_size)) {
+    DLOG(ERROR) << __func__ << " Invalid config."
+                << ConfigToString(format, storage, coded_size, visible_rect,
+                                  natural_size);
+    return nullptr;
+  }
+  if (!IsYuvPlanar(format)) {
+    DLOG(ERROR) << __func__ << " Format is not YUV. " << format;
+    return nullptr;
+  }
+
+  auto layout = VideoFrameLayout::CreateWithStrides(
+      format, coded_size, {y_stride, u_stride, v_stride});
+  if (!layout) {
+    DLOG(ERROR) << "Invalid layout.";
+    return nullptr;
+  }
+
+  auto frame = base::MakeRefCounted<VideoFrame>(base::PassKey<VideoFrame>(),
+                                                *layout, storage, visible_rect,
+                                                natural_size, timestamp);
+  std::array<base::span<const uint8_t>, 3> data = {y_data, u_data, v_data};
+  for (size_t plane = 0; plane < NumPlanes(format); ++plane) {
+    frame->data_[plane] = data[plane];
+  }
+  return frame;
+}
+
+// static
+scoped_refptr<VideoFrame> VideoFrame::WrapExternalYuvData(
+    VideoPixelFormat format,
+    const gfx::Size& coded_size,
+    const gfx::Rect& visible_rect,
+    const gfx::Size& natural_size,
+    size_t y_stride,
+    size_t uv_stride,
     const uint8_t* y_data,
     const uint8_t* uv_data,
     base::TimeDelta timestamp) {
@@ -709,11 +816,62 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalYuvData(
     return nullptr;
   }
 
-  scoped_refptr<VideoFrame> frame(
-      new VideoFrame(*layout, storage, visible_rect, natural_size, timestamp));
-  frame->data_[Plane::kY] = y_data;
-  frame->data_[Plane::kUV] = uv_data;
+  auto frame = base::MakeRefCounted<VideoFrame>(base::PassKey<VideoFrame>(),
+                                                *layout, storage, visible_rect,
+                                                natural_size, timestamp);
+  std::array<const uint8_t*, 2> data = {y_data, uv_data};
+  for (size_t plane = 0; plane < NumPlanes(format); ++plane) {
+    // TODO(crbug.com/338570700): y_data, uv_data should be spans
+    frame->data_[plane] =
+        UNSAFE_TODO(base::span(data[plane], layout->planes()[plane].size));
+  }
+  return frame;
+}
 
+// static
+scoped_refptr<VideoFrame> VideoFrame::WrapExternalYuvaData(
+    VideoPixelFormat format,
+    const gfx::Size& coded_size,
+    const gfx::Rect& visible_rect,
+    const gfx::Size& natural_size,
+    size_t y_stride,
+    size_t u_stride,
+    size_t v_stride,
+    size_t a_stride,
+    base::span<const uint8_t> y_data,
+    base::span<const uint8_t> u_data,
+    base::span<const uint8_t> v_data,
+    base::span<const uint8_t> a_data,
+    base::TimeDelta timestamp) {
+  const StorageType storage = STORAGE_UNOWNED_MEMORY;
+  if (!IsValidConfig(format, storage, coded_size, visible_rect, natural_size)) {
+    DLOG(ERROR) << __func__ << " Invalid config."
+                << ConfigToString(format, storage, coded_size, visible_rect,
+                                  natural_size);
+    return nullptr;
+  }
+
+  if (NumPlanes(format) != 4) {
+    DLOG(ERROR) << "Expecting Y, U, V and A planes to be present for the video"
+                << " format.";
+    return nullptr;
+  }
+
+  auto layout = VideoFrameLayout::CreateWithStrides(
+      format, coded_size, {y_stride, u_stride, v_stride, a_stride});
+  if (!layout) {
+    DLOG(ERROR) << "Invalid layout";
+    return nullptr;
+  }
+
+  auto frame = base::MakeRefCounted<VideoFrame>(base::PassKey<VideoFrame>(),
+                                                *layout, storage, visible_rect,
+                                                natural_size, timestamp);
+  std::array<base::span<const uint8_t>, 4> data = {y_data, u_data, v_data,
+                                                   a_data};
+  for (size_t plane = 0; plane < NumPlanes(format); ++plane) {
+    frame->data_[plane] = data[plane];
+  }
   return frame;
 }
 
@@ -779,8 +937,9 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalDmabufs(
     return nullptr;
   }
 
-  scoped_refptr<VideoFrame> frame =
-      new VideoFrame(layout, storage, visible_rect, natural_size, timestamp);
+  auto frame = base::MakeRefCounted<VideoFrame>(base::PassKey<VideoFrame>(),
+                                                layout, storage, visible_rect,
+                                                natural_size, timestamp);
   if (!frame) {
     DLOG(ERROR) << __func__ << " Couldn't create VideoFrame instance.";
     return nullptr;
@@ -822,7 +981,7 @@ scoped_refptr<VideoFrame> VideoFrame::WrapUnacceleratedIOSurface(
   const size_t num_planes = IOSurfaceGetPlaneCount(io_surface.get());
   const gfx::Size size(IOSurfaceGetWidth(io_surface.get()),
                        IOSurfaceGetHeight(io_surface.get()));
-  std::vector<int32_t> strides;
+  std::vector<size_t> strides;
   for (size_t i = 0; i < num_planes; ++i)
     strides.push_back(IOSurfaceGetBytesPerRowOfPlane(io_surface.get(), i));
   std::optional<VideoFrameLayout> layout =
@@ -851,63 +1010,21 @@ scoped_refptr<VideoFrame> VideoFrame::WrapUnacceleratedIOSurface(
         IOSurfaceUnlock(io_surface.get(), kIOSurfaceLockReadOnly, nullptr);
       };
 
-  scoped_refptr<VideoFrame> frame =
-      new VideoFrame(*layout, storage_type, visible_rect, size, timestamp);
+  auto frame = base::MakeRefCounted<VideoFrame>(base::PassKey<VideoFrame>(),
+                                                *layout, storage_type,
+                                                visible_rect, size, timestamp);
   for (size_t i = 0; i < num_planes; ++i) {
-    frame->data_[i] = reinterpret_cast<uint8_t*>(
+    uint8_t* plane_data = reinterpret_cast<uint8_t*>(
         IOSurfaceGetBaseAddressOfPlane(io_surface.get(), i));
+    size_t rows = IOSurfaceGetHeightOfPlane(io_surface.get(), i);
+    size_t plane_size = rows * strides[i];
+    // SAFETY: IOSurface has data allocated for each plane,
+    // the size of the plane is IOSurfaceGetHeightOfPlane() *
+    // IOSurfaceGetBytesPerRowOfPlane().
+    frame->data_[i] = UNSAFE_BUFFERS(base::span(plane_data, plane_size));
   }
   frame->AddDestructionObserver(
       base::BindOnce(unlock_lambda, std::move(io_surface)));
-  return frame;
-}
-
-// static
-scoped_refptr<VideoFrame> VideoFrame::WrapCVPixelBuffer(
-    CVPixelBufferRef cv_pixel_buffer,
-    base::TimeDelta timestamp) {
-  DCHECK(cv_pixel_buffer);
-  DCHECK(CFGetTypeID(cv_pixel_buffer) == CVPixelBufferGetTypeID());
-
-  const OSType cv_format = CVPixelBufferGetPixelFormatType(cv_pixel_buffer);
-  VideoPixelFormat format;
-  // There are very few compatible CV pixel formats, so just check each.
-  if (cv_format == kCVPixelFormatType_420YpCbCr8Planar) {
-    format = PIXEL_FORMAT_I420;
-  } else if (cv_format == kCVPixelFormatType_444YpCbCr8) {
-    format = PIXEL_FORMAT_I444;
-  } else if (cv_format == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange) {
-    format = PIXEL_FORMAT_NV12;
-  } else if (cv_format ==
-             kCVPixelFormatType_420YpCbCr8VideoRange_8A_TriPlanar) {
-    format = PIXEL_FORMAT_NV12A;
-  } else {
-    DLOG(ERROR) << "CVPixelBuffer format not supported: " << cv_format;
-    return nullptr;
-  }
-
-  const gfx::Size coded_size(CVImageBufferGetEncodedSize(cv_pixel_buffer));
-  const gfx::Rect visible_rect(CVImageBufferGetCleanRect(cv_pixel_buffer));
-  const gfx::Size natural_size(CVImageBufferGetDisplaySize(cv_pixel_buffer));
-  const StorageType storage = STORAGE_UNOWNED_MEMORY;
-
-  if (!IsValidConfig(format, storage, coded_size, visible_rect, natural_size)) {
-    DLOG(ERROR) << __func__ << " Invalid config."
-                << ConfigToString(format, storage, coded_size, visible_rect,
-                                  natural_size);
-    return nullptr;
-  }
-
-  auto layout = VideoFrameLayout::Create(format, coded_size);
-  if (!layout) {
-    DLOG(ERROR) << "Invalid layout.";
-    return nullptr;
-  }
-
-  scoped_refptr<VideoFrame> frame(
-      new VideoFrame(*layout, storage, visible_rect, natural_size, timestamp));
-
-  frame->cv_pixel_buffer_.reset(cv_pixel_buffer, base::scoped_policy::RETAIN);
   return frame;
 }
 #endif
@@ -956,9 +1073,9 @@ scoped_refptr<VideoFrame> VideoFrame::WrapVideoFrame(
     return nullptr;
   }
 
-  scoped_refptr<VideoFrame> wrapping_frame(
-      new VideoFrame(new_layout.value(), frame->storage_type(), visible_rect,
-                     natural_size, frame->timestamp()));
+  auto wrapping_frame = base::MakeRefCounted<VideoFrame>(
+      base::PassKey<VideoFrame>(), new_layout.value(), frame->storage_type(),
+      visible_rect, natural_size, frame->timestamp());
 
   // Copy all metadata to the wrapped frame->
   wrapping_frame->metadata().MergeMetadataFrom(frame->metadata());
@@ -998,9 +1115,9 @@ scoped_refptr<VideoFrame> VideoFrame::CreateEOSFrame() {
     DLOG(ERROR) << "Invalid layout.";
     return nullptr;
   }
-  scoped_refptr<VideoFrame> frame =
-      new VideoFrame(*layout, STORAGE_UNKNOWN, gfx::Rect(), gfx::Size(),
-                     kNoTimestamp, FrameControlType::kEos);
+  auto frame = base::MakeRefCounted<VideoFrame>(
+      base::PassKey<VideoFrame>(), *layout, STORAGE_UNKNOWN, gfx::Rect(),
+      gfx::Size(), kNoTimestamp, FrameControlType::kEos);
   frame->metadata().end_of_stream = true;
   return frame;
 }
@@ -1141,19 +1258,19 @@ int VideoFrame::BytesPerElement(VideoPixelFormat format, size_t plane) {
     case PIXEL_FORMAT_NV16:
     case PIXEL_FORMAT_NV21:
     case PIXEL_FORMAT_NV24: {
-      static const int bytes_per_element[] = {1, 2};
+      constexpr auto bytes_per_element = std::to_array({1, 2});
       DCHECK_LT(plane, std::size(bytes_per_element));
       return bytes_per_element[plane];
     }
     case PIXEL_FORMAT_NV12A: {
-      static const int bytes_per_element[] = {1, 2, 1};
+      constexpr auto bytes_per_element = std::to_array({1, 2, 1});
       DCHECK_LT(plane, std::size(bytes_per_element));
       return bytes_per_element[plane];
     }
     case PIXEL_FORMAT_P010LE:
     case PIXEL_FORMAT_P210LE:
     case PIXEL_FORMAT_P410LE: {
-      static const int bytes_per_element[] = {1, 2};
+      constexpr auto bytes_per_element = std::to_array({1, 2});
       DCHECK_LT(plane, std::size(bytes_per_element));
       return bytes_per_element[plane] * 2;
     }
@@ -1174,9 +1291,9 @@ int VideoFrame::BytesPerElement(VideoPixelFormat format, size_t plane) {
 }
 
 // static
-std::vector<int32_t> VideoFrame::ComputeStrides(VideoPixelFormat format,
-                                                const gfx::Size& coded_size) {
-  std::vector<int32_t> strides;
+std::vector<size_t> VideoFrame::ComputeStrides(VideoPixelFormat format,
+                                               const gfx::Size& coded_size) {
+  std::vector<size_t> strides;
   const size_t num_planes = NumPlanes(format);
   if (num_planes == 1) {
     strides.push_back(RowBytes(0, format, coded_size.width()));
@@ -1212,9 +1329,9 @@ void VideoFrame::HashFrameForTesting(base::MD5Context* context,
   for (size_t plane = 0; plane < NumPlanes(frame.format()); ++plane) {
     for (int row = 0; row < frame.rows(plane); ++row) {
       base::MD5Update(context,
-                      base::span<const uint8_t>(
-                          frame.data(plane) + frame.stride(plane) * row,
-                          static_cast<size_t>(frame.row_bytes(plane))));
+                      frame.data_[plane].subspan(
+                          base::checked_cast<size_t>(frame.stride(plane) * row),
+                          base::checked_cast<size_t>(frame.row_bytes(plane))));
     }
   }
 }
@@ -1273,12 +1390,10 @@ bool VideoFrame::HasNativeGpuMemoryBuffer() const {
 }
 
 gfx::GpuMemoryBuffer* VideoFrame::GetGpuMemoryBufferForTesting() const {
-  return GetGpuMemoryBuffer();
-}
-
-gfx::GpuMemoryBuffer* VideoFrame::GetGpuMemoryBuffer() const {
-  return wrapped_frame_ ? wrapped_frame_->GetGpuMemoryBuffer()
-                        : gpu_memory_buffer_.get();
+  if (wrapped_frame_) {
+    return wrapped_frame_->GetGpuMemoryBufferForTesting();  // IN-TEST
+  }
+  return gpu_memory_buffer_.get();
 }
 
 std::unique_ptr<VideoFrame::ScopedMapping> VideoFrame::MapGMBOrSharedImage()
@@ -1416,11 +1531,12 @@ int VideoFrame::columns(size_t plane) const {
 }
 
 template <typename T>
-T VideoFrame::GetVisibleDataInternal(T data, size_t plane) const {
+base::span<T> VideoFrame::GetVisibleDataInternal(base::span<T> data,
+                                                 size_t plane) const {
   DCHECK(IsValidPlane(format(), plane));
   DCHECK(IsMappable());
-  if (!data) [[unlikely]] {
-    return nullptr;
+  if (data.empty()) [[unlikely]] {
+    return {};
   }
 
   // Calculate an offset that is properly aligned for all planes.
@@ -1430,24 +1546,45 @@ T VideoFrame::GetVisibleDataInternal(T data, size_t plane) const {
                           base::bits::AlignDownDeprecatedDoNotUse(
                               visible_rect_.y(), alignment.height()));
 
+  const int visible_plane_rows = Rows(plane, format(), visible_rect_.height());
+  const int plane_stride = stride(plane);
   const gfx::Size subsample = SampleSize(format(), plane);
   DCHECK(offset.x() % subsample.width() == 0);
   DCHECK(offset.y() % subsample.height() == 0);
-  return data +
-         stride(plane) * (offset.y() / subsample.height()) +  // Row offset.
-         BytesPerElement(format(), plane) *                   // Column offset.
-             (offset.x() / subsample.width());
+  const auto visible_plane_offset = base::checked_cast<size_t>(
+      // Row offset.
+      plane_stride * (offset.y() / subsample.height()) +
+      // Column offset.
+      BytesPerElement(format(), plane) * (offset.x() / subsample.width()));
+  // In the last row, bytes between visible width and the full stride are not
+  // the part of the visible plane.
+  size_t visible_plane_size = plane_stride * (visible_plane_rows - 1) +
+                              RowBytes(plane, format(), visible_rect_.width());
+  return data.subspan(visible_plane_offset, visible_plane_size);
 }
 
-const uint8_t* VideoFrame::visible_data(size_t plane) const {
-  return GetVisibleDataInternal(data(plane), plane);
+base::span<const uint8_t> VideoFrame::GetVisiblePlaneData(size_t plane) const {
+  return GetVisibleDataInternal(data_[plane], plane);
 }
 
-uint8_t* VideoFrame::GetWritableVisibleData(size_t plane) {
+base::span<uint8_t> VideoFrame::GetWritableVisiblePlaneData(size_t plane) {
   // TODO(crbug.com/40265179): Also CHECK that the storage type isn't
   // STORAGE_UNOWNED_MEMORY once non-compliant usages are fixed.
   CHECK_NE(storage_type_, STORAGE_SHMEM);
-  return GetVisibleDataInternal(writable_data(plane), plane);
+  auto const_span = data_[plane];
+  // SAFETY: We take data() and size() from another span, which supposedly
+  // refers to a valid range in memory.
+  auto non_const_span = UNSAFE_BUFFERS(
+      base::span(const_cast<uint8_t*>(const_span.data()), const_span.size()));
+  return GetVisibleDataInternal(non_const_span, plane);
+}
+
+const uint8_t* VideoFrame::visible_data(size_t plane) const {
+  return GetVisiblePlaneData(plane).data();
+}
+
+uint8_t* VideoFrame::GetWritableVisibleData(size_t plane) {
+  return GetWritableVisiblePlaneData(plane).data();
 }
 
 gpu::SyncToken VideoFrame::acquire_sync_token() const {
@@ -1480,12 +1617,6 @@ int VideoFrame::GetDmabufFd(size_t i) const {
 
   DCHECK_EQ(storage_type_, STORAGE_DMABUFS);
   return dmabuf_fds_[i].get();
-}
-#endif
-
-#if BUILDFLAG(IS_APPLE)
-CVPixelBufferRef VideoFrame::CvPixelBuffer() const {
-  return cv_pixel_buffer_.get();
 }
 #endif
 
@@ -1566,7 +1697,8 @@ size_t VideoFrame::BitDepth() const {
   return media::BitDepth(format());
 }
 
-VideoFrame::VideoFrame(const VideoFrameLayout& layout,
+VideoFrame::VideoFrame(base::PassKey<VideoFrame>,
+                       const VideoFrameLayout& layout,
                        StorageType storage_type,
                        const gfx::Rect& visible_rect,
                        const gfx::Size& natural_size,
@@ -1578,12 +1710,11 @@ VideoFrame::VideoFrame(const VideoFrameLayout& layout,
       natural_size_(natural_size),
       timestamp_(timestamp),
       unique_id_(GetNextID()) {
-  DCHECK(IsValidConfigInternal(format(), frame_control_type, coded_size(),
-                               visible_rect_, natural_size_));
+  CHECK(IsValidConfigInternal(format(), frame_control_type, coded_size(),
+                              visible_rect_, natural_size_));
   DCHECK(visible_rect_ == visible_rect)
       << "visible_rect " << visible_rect.ToString() << " exceeds coded_size "
       << coded_size().ToString();
-  memset(&data_, 0, sizeof(data_));
 }
 
 VideoFrame::~VideoFrame() {
@@ -1760,8 +1891,9 @@ scoped_refptr<VideoFrame> VideoFrame::CreateFrameWithLayout(
     return nullptr;
   }
 
-  scoped_refptr<VideoFrame> frame(new VideoFrame(
-      std::move(layout), storage, visible_rect, natural_size, timestamp));
+  auto frame = base::MakeRefCounted<VideoFrame>(
+      base::PassKey<VideoFrame>(), std::move(layout), storage, visible_rect,
+      natural_size, timestamp);
   return frame->AllocateMemory(zero_initialize_memory) ? frame : nullptr;
 }
 
@@ -1802,14 +1934,16 @@ bool VideoFrame::AllocateMemory(bool zero_initialize_memory) {
     }
   }
   private_data_.reset(data);
-
-  data = base::bits::AlignUp(data, layout_.buffer_addr_align());
-  DCHECK_LE(data + buffer_size, private_data_.get() + allocation_size);
+  // SAFETY: We've just allocated a region of `allocation_size` at `data`.
+  auto allocated_region = UNSAFE_BUFFERS(base::span(data, allocation_size));
+  const auto alignment_offset = base::checked_cast<size_t>(
+      base::bits::AlignUp(data, layout_.buffer_addr_align()) - data);
+  allocated_region = allocated_region.subspan(alignment_offset, buffer_size);
 
   // Note that if layout.buffer_sizes is specified, color planes' layout is
   // the same as buffers'. See CalculatePlaneSize() for detail.
   for (size_t plane = 0, offset = 0; plane < NumPlanes(format()); ++plane) {
-    data_[plane] = data + offset;
+    data_[plane] = allocated_region.subspan(offset, plane_size[plane]);
     offset += plane_size[plane];
   }
 
@@ -1825,26 +1959,14 @@ bool VideoFrame::IsValidSharedMemoryFrame() const {
 // static
 std::vector<size_t> VideoFrame::CalculatePlaneSize(
     const VideoFrameLayout& layout) {
-  // We have two cases for plane size mapping:
-  // 1) If plane size is specified: use planes' size.
-  // 2) VideoFrameLayout::size is unassigned: use legacy calculation formula.
-
   const auto format = layout.format();
   const size_t num_planes = NumPlanes(format);
   const auto& planes = layout.planes();
   std::vector<size_t> plane_size(num_planes);
-  bool plane_size_assigned = true;
   DCHECK_EQ(planes.size(), num_planes);
-  for (size_t i = 0; i < num_planes; ++i) {
-    plane_size[i] = planes[i].size;
-    plane_size_assigned &= plane_size[i] != 0;
-  }
 
-  if (plane_size_assigned)
-    return plane_size;
-
-  // Reset plane size.
-  std::fill(plane_size.begin(), plane_size.end(), 0u);
+  // Calculate minimum required plane sizes using layout info and
+  // extra wisdom accumulated in centuries.
   for (size_t plane = 0; plane < num_planes; ++plane) {
     // These values were chosen to mirror ffmpeg's get_video_buffer().
     // TODO(dalecurtis): This should be configurable; eventually ffmpeg wants
@@ -1852,7 +1974,7 @@ std::vector<size_t> VideoFrame::CalculatePlaneSize(
     const size_t height =
         base::bits::AlignUp(Rows(plane, format, layout.coded_size().height()),
                             kFrameAddressAlignment);
-    const size_t width = std::abs(layout.planes()[plane].stride);
+    const size_t width = layout.planes()[plane].stride;
     plane_size[plane] = width * height;
   }
 
@@ -1863,9 +1985,15 @@ std::vector<size_t> VideoFrame::CalculatePlaneSize(
     // put_h264_chroma_mc4_ssse3().
     DCHECK(IsValidPlane(format, Plane::kU));
     DCHECK(Plane::kU < num_planes);
-    plane_size.back() +=
-        std::abs(layout.planes()[Plane::kU].stride) + kFrameSizePadding;
+    plane_size.back() += layout.planes()[Plane::kU].stride + kFrameSizePadding;
   }
+
+  // If a plane size from layout is larger than what was calculated above,
+  // respect the plane size from layout.
+  for (size_t i = 0; i < num_planes; ++i) {
+    plane_size[i] = std::max(planes[i].size, plane_size[i]);
+  }
+
   return plane_size;
 }
 

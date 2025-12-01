@@ -42,6 +42,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_web_ui.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "mojo/public/cpp/base/big_buffer.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -64,7 +65,7 @@ using ash::personalization_app::GetAccountId;
 
 constexpr char kFakeTestEmail[] = "fakeemail@personalization";
 constexpr char kFakeTestName[] = "Fake Name";
-constexpr char kTestGaiaId[] = "1234567890";
+constexpr GaiaId::Literal kTestGaiaId("1234567890");
 
 mojo_base::BigBuffer FakeEncodedPngBuffer() {
   return mojo_base::BigBuffer(std::to_array<uint8_t>({0, 1}));

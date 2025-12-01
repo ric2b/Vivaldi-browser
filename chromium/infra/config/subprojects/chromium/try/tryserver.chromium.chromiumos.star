@@ -24,6 +24,9 @@ try_.defaults.set(
     orchestrator_siso_remote_jobs = siso.remote_jobs.HIGH_JOBS_FOR_CQ,
     service_account = try_.DEFAULT_SERVICE_ACCOUNT,
     siso_enabled = True,
+    # crbug.com/391160876: fast deps with CrOS toolchain may cause
+    # incorrect results.
+    siso_experiments = ["no-fast-deps"],
     siso_project = siso.project.DEFAULT_UNTRUSTED,
     siso_remote_jobs = siso.remote_jobs.LOW_JOBS_FOR_CQ,
     siso_remote_linking = True,
@@ -299,6 +302,9 @@ try_.builder(
     mirrors = [
         "ci/chromeos-jacuzzi-rel",
     ],
+    builder_config_settings = builder_config.try_settings(
+        retry_failed_shards = False,
+    ),
     gn_args = "ci/chromeos-jacuzzi-rel",
     contact_team_email = "chromeos-chrome-build@google.com",
     execution_timeout = 8 * time.hour,
@@ -311,6 +317,9 @@ try_.builder(
     mirrors = [
         "ci/chromeos-octopus-rel",
     ],
+    builder_config_settings = builder_config.try_settings(
+        retry_failed_shards = False,
+    ),
     gn_args = "ci/chromeos-octopus-rel",
     contact_team_email = "chromeos-chrome-build@google.com",
     execution_timeout = 8 * time.hour,

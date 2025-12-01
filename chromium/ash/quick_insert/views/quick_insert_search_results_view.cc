@@ -72,6 +72,8 @@ std::u16string GetAccessibleNameForSeeMoreButton(
     case QuickInsertSectionType::kClipboard:
     case QuickInsertSectionType::kExamples:
     case QuickInsertSectionType::kContentEditor:
+    case QuickInsertSectionType::kFeaturedGifs:
+    case QuickInsertSectionType::kSearchedGifs:
       return u"";
   }
 }
@@ -91,9 +93,9 @@ QuickInsertSectionView::LocalFileResultStyle ConvertLocalFileResultStyle(
 QuickInsertSearchResultsView::QuickInsertSearchResultsView(
     QuickInsertSearchResultsViewDelegate* delegate,
     int quick_insert_view_width,
-    PickerAssetFetcher* asset_fetcher,
-    PickerSubmenuController* submenu_controller,
-    PickerPreviewBubbleController* preview_controller)
+    QuickInsertAssetFetcher* asset_fetcher,
+    QuickInsertSubmenuController* submenu_controller,
+    QuickInsertPreviewBubbleController* preview_controller)
     : delegate_(delegate), preview_controller_(preview_controller) {
   SetLayoutManager(std::make_unique<views::BoxLayout>())
       ->SetOrientation(views::LayoutOrientation::kVertical);
@@ -102,8 +104,9 @@ QuickInsertSearchResultsView::QuickInsertSearchResultsView(
   GetViewAccessibility().SetRole(ax::mojom::Role::kStatus);
   GetViewAccessibility().SetContainerLiveStatus("polite");
 
-  section_list_view_ = AddChildView(std::make_unique<PickerSectionListView>(
-      quick_insert_view_width, asset_fetcher, submenu_controller));
+  section_list_view_ =
+      AddChildView(std::make_unique<QuickInsertSectionListView>(
+          quick_insert_view_width, asset_fetcher, submenu_controller));
   no_results_view_ = AddChildView(
       views::Builder<views::BoxLayoutView>()
           .SetVisible(false)
@@ -126,8 +129,10 @@ QuickInsertSearchResultsView::QuickInsertSearchResultsView(
                   .SetHorizontalAlignment(gfx::ALIGN_CENTER))
           .Build());
 
-  skeleton_loader_view_ = AddChildView(
-      views::Builder<PickerSkeletonLoaderView>().SetVisible(false).Build());
+  skeleton_loader_view_ =
+      AddChildView(views::Builder<QuickInsertSkeletonLoaderView>()
+                       .SetVisible(false)
+                       .Build());
 
   throbber_container_ = AddChildView(
       views::Builder<views::BoxLayoutView>()
@@ -166,8 +171,8 @@ views::View* QuickInsertSearchResultsView::GetItemAbove(views::View* item) {
     // navigate between items.
     return section_list_view_->GetItemAbove(item);
   }
-  views::View* prev_item = GetNextPickerPseudoFocusableView(
-      item, PickerPseudoFocusDirection::kBackward, /*should_loop=*/false);
+  views::View* prev_item = GetNextQuickInsertPseudoFocusableView(
+      item, QuickInsertPseudoFocusDirection::kBackward, /*should_loop=*/false);
   return Contains(prev_item) ? prev_item : nullptr;
 }
 
@@ -180,8 +185,8 @@ views::View* QuickInsertSearchResultsView::GetItemBelow(views::View* item) {
     // navigate between items.
     return section_list_view_->GetItemBelow(item);
   }
-  views::View* next_item = GetNextPickerPseudoFocusableView(
-      item, PickerPseudoFocusDirection::kForward, /*should_loop=*/false);
+  views::View* next_item = GetNextQuickInsertPseudoFocusableView(
+      item, QuickInsertPseudoFocusDirection::kForward, /*should_loop=*/false);
   return Contains(next_item) ? next_item : nullptr;
 }
 
@@ -290,7 +295,7 @@ void QuickInsertSearchResultsView::AddResultToSection(
           views::AsViewClass<QuickInsertListItemView>(view)) {
     list_item_view->SetBadgeAction(delegate_->GetActionForResult(result));
   } else if (auto* image_item_view =
-                 views::AsViewClass<PickerImageItemView>(view)) {
+                 views::AsViewClass<QuickInsertImageItemView>(view)) {
     image_item_view->SetAction(delegate_->GetActionForResult(result));
   }
 }
@@ -306,7 +311,7 @@ int QuickInsertSearchResultsView::GetIndex(
   if (top_results_.empty()) {
     return -1;
   }
-  auto it = base::ranges::find(top_results_, inserted_result);
+  auto it = std::ranges::find(top_results_, inserted_result);
   if (it == top_results_.end()) {
     return kMaxIndexForMetrics;
   }

@@ -28,7 +28,8 @@
           "clipboard",
           "calculator",
           "internal-message",
-          "other"
+          "other",
+          "recent-typed-history"
         ],
         "description": "The category in which the item belong."
       },
@@ -60,7 +61,25 @@
           "HistoryEmbeddings",
           "BookmarkNickname",
           "DirectMatch",
+          "RecentTypedHistory",
           "Unknown"
+        ]
+      },
+      {
+        "id": "OmniboxFocusType",
+        "type": "string",
+        "enum": [
+          "INTERACTION_DEFAULT",
+          "INTERACTION_FOCUS"
+        ]
+      },
+      {
+        "id": "PageClassification",
+        "type": "string",
+        "enum": [
+          "NTP",
+          "BLANK",
+          "OTHER"
         ]
       },
       {
@@ -119,7 +138,15 @@
           "type": {
             "type": "string",
             "description": "The type of provider."
-          }
+          },
+        "faviconUrl": {
+          "type": "string",
+          "description": "The url of the favicon."
+        },
+        "faviconType": {
+          "type": "string",
+          "description": "How to load the favicon. This is used by Favicon component."
+        }
         }
       }
     ],
@@ -130,9 +157,38 @@
         "description": "",
         "parameters": [
           {
-            "name": "query",
-            "type": "string",
-            "description": "A piece of text entered in Omnibox"
+            "name": "parameters",
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string",
+                "description": "A piece of text entered in Omnibox"
+              },
+              "preventInlineAutocomplete": {
+                "type": "boolean",
+                "description": "Prevent inline autocomplete"
+              },
+              "clearStateBeforeSearching": {
+                "type": "boolean",
+                "description": "Don't reuse previous results from slow providers while waiting for their new results."
+              },
+              "fromSearchField": {
+                "type": "boolean",
+                "description": "If true, the query originated from search field. Limiting the number of providers run"
+              },
+              "searchEngineGUID": {
+                "type": "string",
+                "description": "Contains the GUID of the search engine. If no search engine was specified, string will be empty"
+              },
+              "focusType": {
+                "$ref": "OmniboxFocusType",
+                "description": "Specify the UI interaction that started autocomplete. ZeroSuggestion is only activated on specific focus"
+              },
+              "pageClassification": {
+                "$ref": "PageClassification",
+                "description": "The type of page the user was on when they used the omnibox. Or the type of page for which suggestions were prefetched from the server"
+              }
+            }
           }
         ]
       }
@@ -151,13 +207,13 @@
                 "type": "array",
                 "items": { "$ref": "OmniboxItem" }
               },
-              "cursorPosition": {
-                "description": "Curser postition.",
-                "type": "integer"
-              },
               "inputText": {
                 "description": "User-provided text to be completed.",
                 "type": "string"
+              },
+              "done": {
+                "description": "No more events for query will follow.",
+                "type": "boolean"
               }
             }
           }

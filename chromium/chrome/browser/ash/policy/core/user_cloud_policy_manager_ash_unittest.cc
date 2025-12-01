@@ -61,6 +61,7 @@
 #include "content/public/test/browser_task_environment.h"
 #include "google_apis/gaia/gaia_auth_consumer.h"
 #include "google_apis/gaia/gaia_constants.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/http/http_response_headers.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -98,10 +99,10 @@ void SendJobOKNowForBinding(FakeDeviceManagementService* service,
 using PolicyEnforcement = UserCloudPolicyManagerAsh::PolicyEnforcement;
 
 constexpr char kEmail[] = "user@example.com";
-constexpr char kTestGaiaId[] = "12345";
+constexpr GaiaId::Literal kTestGaiaId("12345");
 
 constexpr char kEmail2[] = "user2@example.com";
-constexpr char kTestGaiaId2[] = "123456";
+constexpr GaiaId::Literal kTestGaiaId2("123456");
 
 constexpr char kOAuth2AccessTokenData[] = R"(
     {

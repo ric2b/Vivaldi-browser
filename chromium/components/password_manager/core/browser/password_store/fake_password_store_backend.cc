@@ -4,6 +4,7 @@
 
 #include "components/password_manager/core/browser/password_store/fake_password_store_backend.h"
 
+#include <algorithm>
 #include <iterator>
 #include <optional>
 #include <utility>
@@ -12,7 +13,6 @@
 #include "base/functional/callback.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/task/sequenced_task_runner.h"
 #include "components/password_manager/core/browser/affiliation/affiliated_match_helper.h"
 #include "components/password_manager/core/browser/password_form.h"
@@ -132,13 +132,6 @@ void FakePasswordStoreBackend::GetAutofillableLoginsAsync(
       std::move(callback));
 }
 
-void FakePasswordStoreBackend::GetAllLoginsForAccountAsync(
-    std::string account,
-    LoginsOrErrorReply callback) {
-  CHECK(!account.empty());
-  GetAllLoginsAsync(std::move(callback));
-}
-
 void FakePasswordStoreBackend::FillMatchingLoginsAsync(
     LoginsOrErrorReply callback,
     bool include_psl,
@@ -186,24 +179,6 @@ void FakePasswordStoreBackend::RemoveLoginAsync(
       base::BindOnce(&FakePasswordStoreBackend::RemoveLoginInternal,
                      base::Unretained(this), form),
       std::move(callback));
-}
-
-void FakePasswordStoreBackend::RemoveLoginsByURLAndTimeAsync(
-    const base::Location& location,
-    const base::RepeatingCallback<bool(const GURL&)>& url_filter,
-    base::Time delete_begin,
-    base::Time delete_end,
-    base::OnceCallback<void(bool)> sync_completion,
-    PasswordChangesOrErrorReply callback) {
-  auto cb = sync_completion ? std::move(callback).Then(base::BindOnce(
-                                  std::move(sync_completion), true))
-                            : std::move(callback);
-  GetTaskRunner()->PostTaskAndReplyWithResult(
-      FROM_HERE,
-      base::BindOnce(
-          &FakePasswordStoreBackend::RemoveLoginsByURLAndTimeInternal,
-          base::Unretained(this), url_filter, delete_begin, delete_end),
-      std::move(cb));
 }
 
 void FakePasswordStoreBackend::RemoveLoginsCreatedBetweenAsync(
@@ -326,7 +301,7 @@ PasswordStoreChangeList FakePasswordStoreBackend::AddLoginInternal(
     const PasswordForm& form) {
   PasswordStoreChangeList changes;
   auto& passwords_for_signon_realm = stored_passwords_[form.signon_realm];
-  auto iter = base::ranges::find_if(
+  auto iter = std::ranges::find_if(
       passwords_for_signon_realm, [&form](const auto& password) {
         return ArePasswordFormUniqueKeysEqual(form, password);
       });
@@ -412,28 +387,17 @@ PasswordStoreChangeList FakePasswordStoreBackend::RemoveLoginInternal(
 }
 
 PasswordStoreChangeList
-FakePasswordStoreBackend::RemoveLoginsByURLAndTimeInternal(
-    const base::RepeatingCallback<bool(const GURL&)>& url_filter,
+FakePasswordStoreBackend::RemoveLoginsCreatedBetweenInternal(
     base::Time delete_begin,
     base::Time delete_end) {
   std::vector<PasswordForm> all_logins = GetAllLoginsInternal();
   PasswordStoreChangeList list;
   for (const auto& form : all_logins) {
-    if (url_filter.Run(form.url) && delete_begin <= form.date_created &&
-        form.date_created < delete_end) {
-      base::ranges::move(RemoveLoginInternal(form), std::back_inserter(list));
+    if (delete_begin <= form.date_created && form.date_created < delete_end) {
+      std::ranges::move(RemoveLoginInternal(form), std::back_inserter(list));
     }
   }
   return list;
-}
-
-PasswordStoreChangeList
-FakePasswordStoreBackend::RemoveLoginsCreatedBetweenInternal(
-    base::Time delete_begin,
-    base::Time delete_end) {
-  return RemoveLoginsByURLAndTimeInternal(
-      base::BindRepeating([](const GURL&) { return true; }), delete_begin,
-      delete_end);
 }
 
 }  // namespace password_manager

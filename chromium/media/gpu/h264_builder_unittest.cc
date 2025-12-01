@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "media/gpu/h264_builder.h"
 
 #include "base/logging.h"
@@ -56,7 +61,8 @@ TEST_F(H264BuilderTest, H264BuildParseIdentity) {
   BuildPackedH264PPS(bitstream_builder, sps, pps);
 
   H264Parser parser;
-  parser.SetStream(bitstream_builder.data(), bitstream_builder.BytesInBuffer());
+  parser.SetStream(bitstream_builder.data().data(),
+                   bitstream_builder.BytesInBuffer());
   H264NALU nalu;
   EXPECT_EQ(parser.AdvanceToNextNALU(&nalu), H264Parser::Result::kOk);
   EXPECT_EQ(nalu.nal_unit_type, H264NALU::kSPS);

@@ -11,6 +11,7 @@
 #import "base/functional/bind.h"
 #import "base/functional/callback_helpers.h"
 #import "base/memory/ptr_util.h"
+#import "base/notreached.h"
 #import "base/strings/utf_string_conversions.h"
 #import "base/values.h"
 #import "build/branding_buildflags.h"
@@ -44,8 +45,7 @@ web::WebUIIOSDataSource* CreateFlagsUIHTMLSource() {
 
   source->UseStringsJs();
   FlagsUI::AddFlagsIOSStrings(source);
-  source->AddResourcePaths(
-      base::make_span(kFlagsUiResources, kFlagsUiResourcesSize));
+  source->AddResourcePaths(kFlagsUiResources);
   source->SetDefaultResource(IDR_FLAGS_UI_FLAGS_HTML);
   source->UseStringsJs();
   source->EnableReplaceI18nInJS();
@@ -150,13 +150,15 @@ void FlagsDOMHandler::HandleEnableExperimentalFeatureMessage(
     const base::Value::List& args) {
   DCHECK(flags_storage_);
   DCHECK_EQ(2u, args.size());
-  if (args.size() != 2)
+  if (args.size() != 2) {
     return;
+  }
 
   const std::string* entry_internal_name = args[0].GetIfString();
   const std::string* enable_str = args[1].GetIfString();
-  if (!entry_internal_name || !enable_str)
+  if (!entry_internal_name || !enable_str) {
     return;
+  }
 
   SetFeatureEntryEnabled(flags_storage_.get(), *entry_internal_name,
                          *enable_str == "true");
@@ -165,7 +167,7 @@ void FlagsDOMHandler::HandleEnableExperimentalFeatureMessage(
 
 void FlagsDOMHandler::HandleRestartBrowser(const base::Value::List& args) {
 #if BUILDFLAG(CHROMIUM_BRANDING)
-  CHECK(false);
+  NOTREACHED();
 #endif  // BUILDFLAG(CHROMIUM_BRANDING)
 }
 

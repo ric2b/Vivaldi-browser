@@ -137,9 +137,9 @@ Failure to do so may result in your committership being revoked (also see below
 for other reasons that you might get your committership revoked).
 
 Being a committer is something that a person is, not something an email
-address or account is. This means that you can be a committer under multiple
-email addresses, and you can change your address, without needing each
-address to be re-nominated. To do so, send an email to accounts@chromium.org.
+address or account is. However, for security purposes, committers are granted
+committer privileges under a single email address. Committers can change
+their address by sending an email to accounts@chromium.org.
 
 If you have questions about this process, you can ask on community@chromium.org
 and people there will be happy to help you.
@@ -173,15 +173,21 @@ primary email addresses to be public. Be aware, however, that if you're being
 paid to contribute to Chromium your employer may wish you to use a specific
 email address to reflect that.
 
-You can get a @chromium.org email address by getting an existing contributor to
-ask for one for you; normally it's a good idea to do this as part of being
-nominated to be a committer. Include in your request what account name you'd
-like and what secondary email we can use to associate it with (and what company
-you are affiliated with, if you wish to make that clear; we track this
-affiliating internally but it isn't publicly visible). People tend to match
-usernames (for example, someone who usually uses email@example.com would ask for
-email@chromium.org) to minimize confusion, but you are not required to do so and
-some people do not.
+You must be an active contributor to Chromium or ChromiumOS in order to get a
+@chromium.org email address (i.e., be one of the other things listed on this
+page: either be a committer, or have tryjob or bug-editing access, or the
+ChromiumOS equivalents). You can get one by asking another existing
+contributor to ask for one for you; normally it's a good idea to do this as
+part of being nominated to be a committer. Include in your request what account
+name you'd like and what secondary email we can use to associate it with (and
+what company you are affiliated with, if you wish to make that clear; we track
+this affiliating internally but it isn't publicly visible). People tend to
+match usernames (for example, someone who usually uses email@example.com would
+ask for email@chromium.org) to minimize confusion, but you are not required to
+do so and some people do not.
+
+\[Note that we reserve the right to give people chromium.org addresses for other
+reasons as well.\]
 
 ### Try job access
 
@@ -249,9 +255,9 @@ If you have questions about your committer status, overall, please contact
 accounts@chromium.org.
 
 \[Props: Much of this was inspired by/copied from the committer policies of
-[WebKit](http://www.google.com/url?q=http%3A%2F%2Fwebkit.org%2Fcoding%2Fcommit-review-policy.html&sa=D&sntz=1&usg=AFrqEze4W4Lvbhue4Bywqgbv-N5J66kQgA)
+[WebKit](https://www.google.com/url?q=http%3A%2F%2Fwebkit.org%2Fcoding%2Fcommit-review-policy.html&sa=D&sntz=1&usg=AFrqEze4W4Lvbhue4Bywqgbv-N5J66kQgA)
 and
-[Mozilla](http://www.google.com/url?q=http%3A%2F%2Fwww.mozilla.org%2Fhacking%2Fcommitter%2F&sa=D&sntz=1&usg=AFrqEzecK7iiXqV30jKibNmmMtzHwtYRTg).\]
+[Mozilla](https://www.google.com/url?q=http%3A%2F%2Fwww.mozilla.org%2Fhacking%2Fcommitter%2F&sa=D&sntz=1&usg=AFrqEzecK7iiXqV30jKibNmmMtzHwtYRTg).\]
 
 ## Chromium OS Commit Access (Code-Review +2)
 

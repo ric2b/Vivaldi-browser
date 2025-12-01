@@ -28,7 +28,7 @@ SecurityInterstitialControllerClient::SecurityInterstitialControllerClient(
     const GURL& default_safe_page,
     std::unique_ptr<SettingsPageHelper> settings_page_helper)
     : ControllerClient(std::move(metrics_helper)),
-      web_contents_(web_contents),
+      web_contents_(web_contents->GetWeakPtr()),
       prefs_(prefs),
       app_locale_(app_locale),
       default_safe_page_(default_safe_page),
@@ -41,7 +41,7 @@ void SecurityInterstitialControllerClient::GoBack() {
   // TODO(crbug.com/40688528): This method is left so class can be non abstract
   // since it is still instantiated in tests. This can be cleaned up by having
   // tests use a subclass.
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 bool SecurityInterstitialControllerClient::CanGoBack() {
@@ -72,7 +72,7 @@ void SecurityInterstitialControllerClient::Proceed() {
   // TODO(crbug.com/40688528): This method is left so class can be non abstract
   // since it is still instantiated in tests. This can be cleaned up by having
   // tests use a subclass.
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 void SecurityInterstitialControllerClient::Reload() {
@@ -97,10 +97,10 @@ void SecurityInterstitialControllerClient::OpenUrlInNewForegroundTab(
 
 void SecurityInterstitialControllerClient::OpenEnhancedProtectionSettings() {
 #if BUILDFLAG(IS_ANDROID)
-  settings_page_helper_->OpenEnhancedProtectionSettings(web_contents_);
+  settings_page_helper_->OpenEnhancedProtectionSettings(&*web_contents_);
 #else
   settings_page_helper_->OpenEnhancedProtectionSettingsWithIph(
-      web_contents_,
+      &*web_contents_,
       safe_browsing::SafeBrowsingSettingReferralMethod::kSecurityInterstitial);
 #endif
 }
@@ -121,12 +121,11 @@ SecurityInterstitialControllerClient::GetExtendedReportingPrefName() const {
 }
 
 bool SecurityInterstitialControllerClient::CanLaunchDateAndTimeSettings() {
-  NOTREACHED_IN_MIGRATION();
-  return false;
+  NOTREACHED();
 }
 
 void SecurityInterstitialControllerClient::LaunchDateAndTimeSettings() {
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 bool SecurityInterstitialControllerClient::CanGoBackBeforeNavigation() {

@@ -19,6 +19,8 @@ vivaldi_pending_locales = [
 
 vivaldi_pending_mobile_locales = []
 vivaldi_pending_ios_locales = []
+# Locales that Vivaldi other platform may support but not iOS.
+vivaldi_pending_ios_unsupported_locales = []
 if (!is_android) {
   vivaldi_pending_mobile_locales += [
     "az",
@@ -34,22 +36,44 @@ if (!is_android) {
     "sr-Latn",
   ]
   if (is_ios) {
+
+    # Chromium supports these languages but has in extended_locales, we adjusted
+    # extended_locales to include these languages hence subtracted from here.
+    vivaldi_pending_mobile_locales -= [
+      "be",
+      "is",
+      "ka",
+      "pa",
+      "sr-Latn",
+    ]
+
     vivaldi_pending_ios_locales += [
-      "af",
       "am",
-      "bn",
-      "et",
       "fil",
       "gu",
       "kn",
       "lv",
       "ml",
       "mr",
-      "sl",
       "sw",
       "ta",
       "te",
       "ur",
+    ]
+
+    vivaldi_pending_ios_unsupported_locales = [
+      "ca@valencia",
+      "de-CH",
+      "eo",
+      "es-PE",
+      "fy",
+      "gd",
+      "io",
+      "ja-KS",
+      "jbo",
+      "kmr",
+      "nn",
+      "sc",
     ]
   }
 }

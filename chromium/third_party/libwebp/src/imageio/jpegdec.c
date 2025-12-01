@@ -206,8 +206,18 @@ struct my_error_mgr {
 
 static void my_error_exit(j_common_ptr dinfo) {
   struct my_error_mgr* myerr = (struct my_error_mgr*)dinfo->err;
+  // The following code is disabled in fuzzing mode because:
+  // - the logs can be flooded due to invalid JPEG files
+  // - msg_code is wrongfully seen as uninitialized by msan when the libjpeg
+  //   dependency is not built with sanitizers enabled
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+  const int msg_code = myerr->pub.msg_code;
   fprintf(stderr, "libjpeg error: ");
   dinfo->err->output_message(dinfo);
+  if (msg_code == JERR_INPUT_EOF || msg_code == JERR_FILE_READ) {
+    fprintf(stderr, "`jpegtran -copy all` MAY be able to process this file.\n");
+  }
+#endif
   longjmp(myerr->setjmp_buffer, 1);
 }
 

@@ -4,10 +4,10 @@
 
 #include "components/data_sharing/internal/collaboration_group_sync_bridge.h"
 
+#include <algorithm>
 #include <memory>
 #include <set>
 
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
 #include "base/test/mock_callback.h"
@@ -35,6 +35,7 @@ using testing::Eq;
 using testing::InvokeWithoutArgs;
 using testing::IsEmpty;
 using testing::IsNull;
+using testing::Sequence;
 using testing::SizeIs;
 using testing::UnorderedElementsAre;
 
@@ -70,7 +71,8 @@ std::unique_ptr<syncer::EntityChange> EntityChangeUpdateFromSpecifics(
 
 std::unique_ptr<syncer::EntityChange> EntityChangeDeleteFromSpecifics(
     const sync_pb::CollaborationGroupSpecifics& specifics) {
-  return syncer::EntityChange::CreateDelete(specifics.collaboration_id());
+  return syncer::EntityChange::CreateDelete(specifics.collaboration_id(),
+                                            syncer::EntityData());
 }
 
 std::vector<sync_pb::CollaborationGroupSpecifics> ExtractSpecificsFromDataBatch(
@@ -95,6 +97,7 @@ class MockObserver : public CollaborationGroupSyncBridge::Observer {
                const std::vector<GroupId>&),
               (override));
   MOCK_METHOD(void, OnCollaborationGroupSyncDataLoaded, (), (override));
+  MOCK_METHOD(void, OnSyncBridgeUpdateTypeChanged, (SyncBridgeUpdateType));
 };
 
 class CollaborationGroupSyncBridgeTest : public testing::Test {
@@ -191,6 +194,14 @@ TEST_F(CollaborationGroupSyncBridgeTest, ShouldMergeFullSyncData) {
   syncer::EntityChangeList entity_changes;
   entity_changes.push_back(EntityChangeAddFromSpecifics(specifics1));
   entity_changes.push_back(EntityChangeAddFromSpecifics(specifics2));
+
+  Sequence s;
+  EXPECT_CALL(observer(), OnSyncBridgeUpdateTypeChanged(
+                              Eq(SyncBridgeUpdateType::kInitialMerge)))
+      .InSequence(s);
+  EXPECT_CALL(observer(), OnSyncBridgeUpdateTypeChanged(
+                              Eq(SyncBridgeUpdateType::kDefaultState)))
+      .InSequence(s);
 
   // Mimics initial sync with two entities described above.
   bridge().MergeFullSyncData(bridge().CreateMetadataChangeList(),
@@ -322,6 +333,9 @@ TEST_F(CollaborationGroupSyncBridgeTest, ShouldStoreAndLoadData) {
 TEST_F(CollaborationGroupSyncBridgeTest, ShouldApplyDisableSyncChanges) {
   CreateBridgeAndWaitForReadyToSync();
 
+  const GroupId id1("id1");
+  const GroupId id2("id2");
+
   // Mimics initial sync with some entities and metadata.
   std::unique_ptr<syncer::MetadataChangeList> metadata_changes =
       bridge().CreateMetadataChangeList();
@@ -332,13 +346,27 @@ TEST_F(CollaborationGroupSyncBridgeTest, ShouldApplyDisableSyncChanges) {
 
   syncer::EntityChangeList intitial_entity_changes;
   intitial_entity_changes.push_back(
-      EntityChangeAddFromSpecifics(MakeSpecifics(GroupId("id1"))));
+      EntityChangeAddFromSpecifics(MakeSpecifics(id1)));
   intitial_entity_changes.push_back(
-      EntityChangeAddFromSpecifics(MakeSpecifics(GroupId("id2"))));
+      EntityChangeAddFromSpecifics(MakeSpecifics(id2)));
 
   // Mimics initial sync with some entities and metadata.
   bridge().MergeFullSyncData(std::move(metadata_changes),
                              std::move(intitial_entity_changes));
+
+  testing::Mock::VerifyAndClearExpectations(&observer());
+  EXPECT_CALL(
+      observer(),
+      OnGroupsUpdated(/*added_group_ids*/ IsEmpty(),
+                      /*updated_group_ids*/ IsEmpty(),
+                      /*deleted_group_ids*/ UnorderedElementsAre(id1, id2)));
+  Sequence s;
+  EXPECT_CALL(observer(), OnSyncBridgeUpdateTypeChanged(
+                              Eq(SyncBridgeUpdateType::kDisableSync)))
+      .InSequence(s);
+  EXPECT_CALL(observer(), OnSyncBridgeUpdateTypeChanged(
+                              Eq(SyncBridgeUpdateType::kDefaultState)))
+      .InSequence(s);
 
   // Should clear all data and metadata, `delete_metadata_change_list` is not
   // relevant for this implementation, so nullptr is okay.

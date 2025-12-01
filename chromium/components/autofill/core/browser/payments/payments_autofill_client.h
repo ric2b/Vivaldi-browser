@@ -11,11 +11,11 @@
 
 #include "base/functional/callback_forward.h"
 #include "build/build_config.h"
-#include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
+#include "components/autofill/core/browser/foundations/autofill_client.h"
 #include "components/autofill/core/browser/payments/legal_message_line.h"
 #include "components/autofill/core/browser/payments/risk_data_loader.h"
-#include "components/autofill/core/browser/ui/suggestion.h"
+#include "components/autofill/core/browser/suggestions/suggestion.h"
 
 #if !BUILDFLAG(IS_IOS)
 namespace webauthn {
@@ -45,6 +45,7 @@ class MerchantPromoCodeManager;
 class MigratableCreditCard;
 struct OfferNotificationOptions;
 class OtpUnmaskDelegate;
+class PaymentsDataManager;
 enum class OtpUnmaskResult;
 class TouchToFillDelegate;
 struct VirtualCardEnrollmentFields;
@@ -54,6 +55,7 @@ enum class WebauthnDialogCallbackType;
 
 namespace payments {
 
+class BnplManager;
 class MandatoryReauthManager;
 class PaymentsNetworkInterface;
 class PaymentsWindowManager;
@@ -171,6 +173,11 @@ class PaymentsAutofillClient : public RiskDataLoader {
       return *this;
     }
 
+    SaveCreditCardOptions& with_num_strikes(const int strikes) {
+      num_strikes = strikes;
+      return *this;
+    }
+
     SaveCreditCardOptions& with_card_save_type(CardSaveType b) {
       card_save_type = b;
       return *this;
@@ -182,6 +189,7 @@ class PaymentsAutofillClient : public RiskDataLoader {
     bool has_multiple_legal_lines = false;
     bool has_same_last_four_as_server_card_but_different_expiration_date =
         false;
+    std::optional<int> num_strikes;
     CardSaveType card_save_type = CardSaveType::kCardSaveOnly;
   };
 
@@ -473,6 +481,10 @@ class PaymentsAutofillClient : public RiskDataLoader {
       base::WeakPtr<CardUnmaskDelegate> delegate);
   virtual void OnUnmaskVerificationResult(PaymentsRpcResult result);
 
+  // Shows a view that presents the Buy-Now-Pay-Later Terms of Service to the
+  // user to accept or decline.
+  virtual void ShowBnplTos();
+
   // Returns a pointer to a VirtualCardEnrollmentManager that is owned by
   // PaymentsAutofillClient. VirtualCardEnrollmentManager is used for virtual
   // card enroll and unenroll related flows. This function will return a nullptr
@@ -560,6 +572,14 @@ class PaymentsAutofillClient : public RiskDataLoader {
   // platform.
   virtual void HideTouchToFillPaymentMethod();
 
+  // Return the `PaymentsDataManager` which is payments-specific version of
+  // PersonalDataManager. It has two main responsibilities:
+  // - Caching the payments related data stored in `AutofillTable` for
+  // synchronous retrieval.
+  // - Posting changes to `AutofillTable` via the `AutofillWebDataService`
+  //   and updating its state accordingly.
+  virtual const PaymentsDataManager& GetPaymentsDataManager() const = 0;
+
 #if !BUILDFLAG(IS_IOS)
   // Creates the appropriate implementation of InternalAuthenticator. May be
   // null for platforms that don't support this, in which case standard CVC
@@ -572,6 +592,14 @@ class PaymentsAutofillClient : public RiskDataLoader {
   // used to handle payments mandatory re-auth related flows.
   virtual payments::MandatoryReauthManager*
   GetOrCreatePaymentsMandatoryReauthManager();
+
+  // Gets the payments BNPL manager owned by the client. This will be used to
+  // handle BNPL flows. It is not implemented on iOS and iOS WebView, and should
+  // not be used on those platforms.
+  virtual payments::BnplManager* GetPaymentsBnplManager();
+
+  // Shows the `Save and Fill` modal dialog.
+  virtual void ShowCreditCardSaveAndFillDialog();
 };
 
 }  // namespace payments

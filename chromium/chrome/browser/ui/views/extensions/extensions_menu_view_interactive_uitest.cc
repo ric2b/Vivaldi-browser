@@ -6,7 +6,6 @@
 #include <optional>
 
 #include "base/memory/raw_ptr.h"
-#include "base/ranges/algorithm.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/browsertest_util.h"
@@ -121,7 +120,7 @@ class ExtensionsMenuViewInteractiveUITest : public ExtensionsToolbarUITest {
   void TriggerExtensionButton(const std::string& id) {
     auto menu_items = GetExtensionMenuItemViews();
     auto iter =
-        base::ranges::find(menu_items, id, [](ExtensionMenuItemView* view) {
+        std::ranges::find(menu_items, id, [](ExtensionMenuItemView* view) {
           return view->view_controller()->GetId();
         });
     ASSERT_TRUE(iter != menu_items.end());
@@ -441,7 +440,6 @@ IN_PROC_BROWSER_TEST_F(ExtensionsMenuViewInteractiveUITest,
 
   // Verify extension is pinned but not stored as the popped out action.
   auto visible_icons = GetVisibleToolbarActionViews();
-  visible_icons = GetVisibleToolbarActionViews();
   ASSERT_EQ(1u, visible_icons.size());
   EXPECT_EQ(std::nullopt, extensions_container->GetPoppedOutActionId());
 

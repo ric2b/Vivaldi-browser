@@ -29,7 +29,9 @@
 #include "content/public/browser/page.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "ui/base/interaction/element_tracker.h"
 #include "ui/views/controls/textfield/textfield.h"
+#include "ui/views/interaction/element_tracker_views.h"
 #include "ui/views/view_utils.h"
 #include "ui/views/widget/widget.h"
 
@@ -52,9 +54,9 @@ int64_t ToLong(web_app::WebAppInstallStatus web_app_install_status) {
 }
 #endif
 
-constexpr int kMinBoundsForInstallDialog = 50;
-
 }  // namespace
+
+constexpr int kMinBoundsForInstallDialog = 50;
 
 std::u16string NormalizeSuggestedAppTitle(const std::u16string& title) {
   std::u16string normalized = title;
@@ -78,6 +80,10 @@ bool IsWidgetCurrentSizeSmallerThanPreferredSize(views::Widget* widget) {
 
 DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(WebAppInstallDialogDelegate,
                                       kDiyAppsDialogOkButtonId);
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(WebAppInstallDialogDelegate,
+                                      kPwaInstallDialogInstallButton);
+DEFINE_CLASS_CUSTOM_ELEMENT_EVENT_TYPE(WebAppInstallDialogDelegate,
+                                       kInstalledPWAEventId);
 
 WebAppInstallDialogDelegate::WebAppInstallDialogDelegate(
     content::WebContents* web_contents,
@@ -154,6 +160,21 @@ void WebAppInstallDialogDelegate::OnAccept() {
     install_info_->title = text_field_contents_;
     install_info_->user_display_mode =
         web_app::mojom::UserDisplayMode::kStandalone;
+  }
+
+  // The password manager PWA installation tutorial requires the
+  // `kInstalledPWAEventId` event to be fired from the detailed install dialog.
+  // See `kPasswordManagerTutorialMetricPrefix` in
+  // `MaybeRegisterChromeTutorials()` for more information.
+  if (dialog_type_ == InstallDialogType::kDetailed) {
+    auto* element_tracker = ui::ElementTracker::GetElementTracker();
+    auto* element_framework = ui::ElementTracker::GetFrameworkDelegate();
+    CHECK(element_tracker);
+    auto* ok_button =
+        element_tracker->GetElementInAnyContext(kPwaInstallDialogInstallButton);
+    if (ok_button && element_framework) {
+      element_framework->NotifyCustomEvent(ok_button, kInstalledPWAEventId);
+    }
   }
 
   CHECK(callback_);

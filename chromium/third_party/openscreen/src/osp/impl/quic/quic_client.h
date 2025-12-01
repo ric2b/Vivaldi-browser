@@ -99,12 +99,13 @@ class QuicClient final : public ProtocolConnectionClient,
   void OnReceiverRemoved(const ServiceInfo& info) override;
   void OnAllReceiversRemoved() override;
   void OnError(const Error& error) override;
-  void OnMetrics(ServiceListener::Metrics) override;
+
+  // ProtocolConnectionClient overrides.
+  void CancelConnectRequest(uint64_t request_id) override;
 
   bool StartConnectionRequest(std::string_view instance_name,
                               ConnectRequest& request,
                               ConnectRequestCallback* request_callback);
-  void CancelConnectRequest(uint64_t request_id) override;
 
   // Value that will be used for the next new connection request.
   uint64_t next_request_id_ = 1u;

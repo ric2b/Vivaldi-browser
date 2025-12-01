@@ -20,6 +20,10 @@
 #define FUZZTEST_HAS_OSS_GLOB
 #endif  // !defined(_MSC_VER) && !defined(__ANDROID__) && !defined(__Fuchsia__)
 
+#if defined(_MSC_VER)
+#include <windows.h>
+#endif  // defined(_MSC_VER)
+
 #include <cerrno>
 #include <cstdint>
 #include <cstdio>
@@ -164,11 +168,11 @@ absl::Status RemoteMkdir(std::string_view path) {
   LOG(FATAL) << "Filesystem API not supported in iOS/MacOS";
 }
 
-absl::Status RemotePathExists(std::string_view path) {
+bool RemotePathExists(std::string_view path) {
   LOG(FATAL) << "Filesystem API not supported in iOS/MacOS";
 }
 
-absl::Status RemotePathIsDirectory(std::string_view path) {
+bool RemotePathIsDirectory(std::string_view path) {
   LOG(FATAL) << "Filesystem API not supported in iOS/MacOS";
 }
 
@@ -178,6 +182,10 @@ absl::StatusOr<std::vector<std::string>> RemoteListFiles(std::string_view path,
 }
 
 absl::Status RemotePathRename(std::string_view from, std::string_view to) {
+  LOG(FATAL) << "Filesystem API not supported in iOS/MacOS";
+}
+
+absl::Status RemotePathTouchExistingFile(std::string_view path) {
   LOG(FATAL) << "Filesystem API not supported in iOS/MacOS";
 }
 
@@ -235,6 +243,35 @@ absl::Status RemotePathRename(std::string_view from, std::string_view to) {
         absl::StrCat("filesystem::rename() failed, from: ", std::string(from),
                      ", to: ", std::string(to), ", error: ", error.message()));
   }
+  return absl::OkStatus();
+}
+
+absl::Status RemotePathTouchExistingFile(std::string_view path) {
+  if (!RemotePathExists(path)) {
+    return absl::InvalidArgumentError(
+        absl::StrCat("path: ", std::string(path), " does not exist."));
+  }
+
+#if defined(_MSC_VER)
+  HANDLE file = CreateFileA(path.data(), GENERIC_READ, FILE_SHARE_READ, NULL,
+                            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+  if (file == INVALID_HANDLE_VALUE) {
+    return absl::InternalError(absl::StrCat("Failed to open ", path, "."));
+  }
+  SYSTEMTIME st;
+  FILETIME mtime;
+  GetSystemTime(&st);
+  SystemTimeToFileTime(&st, &mtime);
+  if (SetFileTime(file, nullptr, nullptr, &mtime)) {
+    return absl::InternalError(absl::StrCat("Failed to set mtime for ", path));
+  }
+  CloseHandle(file);
+#else
+  if (0 != utimes(path.data(), nullptr)) {
+    return absl::InternalError(absl::StrCat("Failed to set mtime for ", path,
+                                            " (errno ", errno, ")."));
+  }
+#endif
   return absl::OkStatus();
 }
 
@@ -314,6 +351,7 @@ namespace {
 
 #if defined(FUZZTEST_HAS_OSS_GLOB)
 int HandleGlobError(const char *epath, int eerrno) {
+  if (eerrno == ENOENT) return 0;
   LOG(FATAL) << "Error while globbing path: " << VV(epath) << VV(eerrno);
   return -1;
 }
@@ -329,6 +367,10 @@ absl::Status RemoteGlobMatch(std::string_view glob,
   if (int ret = ::glob(std::string{glob}.c_str(), GLOB_TILDE, HandleGlobError,
                        &glob_ret);
       ret != 0) {
+    if (ret == GLOB_NOMATCH) {
+      return absl::NotFoundError(absl::StrCat(
+          "glob() returned NOMATCH for pattern: ", std::string(glob)));
+    }
     return absl::UnknownError(absl::StrCat(
         "glob() failed, pattern: ", std::string(glob), ", returned: ", ret));
   }
@@ -338,7 +380,8 @@ absl::Status RemoteGlobMatch(std::string_view glob,
   ::globfree(&glob_ret);
   return absl::OkStatus();
 #else
-  LOG(FATAL) << __func__ << "() is not supported on this platform.";
+  return absl::UnimplementedError(
+      absl::StrCat(__func__, "() is not supported on this platform"));
 #endif  // defined(FUZZTEST_HAS_OSS_GLOB)
 }
 

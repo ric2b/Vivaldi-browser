@@ -250,7 +250,7 @@ SkBitmap RenderBitmap(base::span<const uint8_t> data,
 
   // Loop over qr module data and paint to canvas.
   // Paint data modules first, then locators and dino.
-  int data_index = 0;
+  size_t data_index = 0;
   for (int y = 0; y < data_size.height(); y++) {
     for (int x = 0; x < data_size.width(); x++) {
       if (data[data_index++] & 0x1) {
@@ -352,7 +352,7 @@ base::expected<SkBitmap, Error> GenerateBitmap(base::span<const uint8_t> data,
 
   {
     gfx::Size data_size = {qr_code.qr_size, qr_code.qr_size};
-    return RenderBitmap(base::make_span(qr_code.data), data_size, module_style,
+    return RenderBitmap(base::span(qr_code.data), data_size, module_style,
                         locator_style, center_image, quiet_zone);
   }
 }

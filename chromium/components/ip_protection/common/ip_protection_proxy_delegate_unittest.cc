@@ -16,14 +16,13 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
-#include "components/ip_protection/common/ip_protection_core_impl.h"
+#include "components/ip_protection/common/ip_protection_core.h"
 #include "components/ip_protection/common/ip_protection_data_types.h"
 #include "components/ip_protection/common/ip_protection_proxy_config_manager.h"
 #include "components/ip_protection/common/ip_protection_telemetry.h"
 #include "components/ip_protection/common/ip_protection_token_manager.h"
 #include "components/ip_protection/common/masked_domain_list_manager.h"
-#include "mojo/public/cpp/bindings/remote.h"
-#include "mojo/public/cpp/bindings/self_owned_receiver.h"
+#include "components/privacy_sandbox/masked_domain_list/masked_domain_list.pb.h"
 #include "net/base/network_anonymization_key.h"
 #include "net/base/proxy_chain.h"
 #include "net/base/proxy_string_util.h"
@@ -42,6 +41,10 @@ using net::test::IsOk;
 
 namespace ip_protection {
 namespace {
+using ::masked_domain_list::MaskedDomainList;
+using ::masked_domain_list::Resource;
+using ::masked_domain_list::ResourceOwner;
+using ::network::mojom::IpProtectionProxyBypassPolicy;
 
 constexpr char kHttpsUrl[] = "https://example.com";
 constexpr char kHttpUrl[] = "http://example.com";
@@ -61,8 +64,11 @@ constexpr char kAvailabilityHistogram[] =
 class MockIpProtectionCore : public IpProtectionCore {
  public:
   explicit MockIpProtectionCore(
-      MaskedDomainListManager* masked_domain_list_manager)
-      : masked_domain_list_manager_(masked_domain_list_manager) {}
+      MaskedDomainListManager* masked_domain_list_manager,
+      bool use_regular_mdl = false)
+      : masked_domain_list_manager_(masked_domain_list_manager) {
+    mdl_type_ = use_regular_mdl ? MdlType::kRegularBrowsing : MdlType::kDefault;
+  }
 
   bool IsMdlPopulated() override {
     return masked_domain_list_manager_->IsPopulated();
@@ -71,8 +77,8 @@ class MockIpProtectionCore : public IpProtectionCore {
   bool RequestShouldBeProxied(
       const GURL& request_url,
       const net::NetworkAnonymizationKey& network_anonymization_key) override {
-    return masked_domain_list_manager_->Matches(request_url,
-                                                network_anonymization_key);
+    return masked_domain_list_manager_->Matches(
+        request_url, network_anonymization_key, mdl_type_);
   }
 
   bool IsIpProtectionEnabled() override { return is_ip_protection_enabled_; }
@@ -136,6 +142,7 @@ class MockIpProtectionCore : public IpProtectionCore {
  private:
   bool is_ip_protection_enabled_ = true;
   bool were_token_caches_ever_filled_ = false;
+  MdlType mdl_type_;
   std::optional<BlindSignedAuthToken> auth_token_;
   std::optional<std::vector<net::ProxyChain>> proxy_list_;
   std::vector<net::ProxyChain> proxy_chain_list_;
@@ -143,6 +150,28 @@ class MockIpProtectionCore : public IpProtectionCore {
   base::OnceClosure on_proxies_failed_;
   raw_ptr<MaskedDomainListManager> masked_domain_list_manager_;
 };
+
+MaskedDomainListManager CreateMdlManager(
+    const std::map<std::string, std::set<std::string>>& first_party_map) {
+  auto allow_list = MaskedDomainListManager(
+      IpProtectionProxyBypassPolicy::kFirstPartyToTopLevelFrame);
+
+  MaskedDomainList mdl = masked_domain_list::MaskedDomainList();
+
+  for (auto const& [domain, properties] : first_party_map) {
+    ResourceOwner& resourceOwner = *mdl.add_resource_owners();
+    for (auto property : properties) {
+      resourceOwner.add_owned_properties(property);
+    }
+    Resource& resource = *resourceOwner.add_owned_resources();
+    resource.set_domain(domain);
+  }
+
+  allow_list.UpdateMaskedDomainList(
+      mdl,
+      /*exclusion_list=*/std::vector<std::string>());
+  return allow_list;
+}
 
 }  // namespace
 
@@ -244,10 +273,9 @@ class IpProtectionProxyDelegateTest : public testing::Test {
 };
 
 TEST_F(IpProtectionProxyDelegateTest, AddsTokenToTunnelRequest) {
-  auto masked_domain_list_manager = MaskedDomainListManager::CreateForTesting(
+  MaskedDomainListManager mdl_manager = CreateMdlManager(
       /*first_party_map=*/{});
-  auto ipp_core =
-      std::make_unique<MockIpProtectionCore>(&masked_domain_list_manager);
+  auto ipp_core = std::make_unique<MockIpProtectionCore>(&mdl_manager);
   ipp_core->SetNextAuthToken(MakeAuthToken("Bearer: a-token"));
   ipp_core->SetProxyList({MakeChain({"proxya", "proxyb"})});
   auto delegate = CreateDelegate(ipp_core.get());
@@ -266,7 +294,7 @@ TEST_F(IpProtectionProxyDelegateTest, AddsTokenToTunnelRequest) {
 }
 
 TEST_F(IpProtectionProxyDelegateTest, ErrorIfConnectionWithNoTokens) {
-  auto masked_domain_list_manager = MaskedDomainListManager::CreateForTesting(
+  auto masked_domain_list_manager = CreateMdlManager(
       /*first_party_map=*/{});
   auto ipp_core =
       std::make_unique<MockIpProtectionCore>(&masked_domain_list_manager);
@@ -294,7 +322,7 @@ TEST_F(IpProtectionProxyDelegateTest, AddsDebugExperimentArm) {
   scoped_feature_list.InitAndEnableFeatureWithParameters(
       net::features::kEnableIpProtectionProxy, std::move(parameters));
   for (int chain_index : {0, 1}) {
-    auto masked_domain_list_manager = MaskedDomainListManager::CreateForTesting(
+    auto masked_domain_list_manager = CreateMdlManager(
         /*first_party_map=*/{});
     auto ipp_core =
         std::make_unique<MockIpProtectionCore>(&masked_domain_list_manager);
@@ -318,8 +346,7 @@ TEST_F(IpProtectionProxyDelegateTest, AddsDebugExperimentArm) {
 TEST_F(IpProtectionProxyDelegateTest, OnResolveProxyDeprioritizesBadProxies) {
   std::map<std::string, std::set<std::string>> first_party_map;
   first_party_map["example.com"] = {};
-  auto masked_domain_list_manager =
-      MaskedDomainListManager::CreateForTesting(first_party_map);
+  auto masked_domain_list_manager = CreateMdlManager(first_party_map);
   auto ipp_core =
       std::make_unique<MockIpProtectionCore>(&masked_domain_list_manager);
   ipp_core->SetNextAuthToken(MakeAuthToken("Bearer: a-token"));
@@ -367,8 +394,7 @@ TEST_F(IpProtectionProxyDelegateTest, OnResolveProxyDeprioritizesBadProxies) {
 TEST_F(IpProtectionProxyDelegateTest, OnResolveProxyAllProxiesBad) {
   std::map<std::string, std::set<std::string>> first_party_map;
   first_party_map["example.com"] = {};
-  auto masked_domain_list_manager =
-      MaskedDomainListManager::CreateForTesting(first_party_map);
+  auto masked_domain_list_manager = CreateMdlManager(first_party_map);
   auto ipp_core =
       std::make_unique<MockIpProtectionCore>(&masked_domain_list_manager);
   ipp_core->SetNextAuthToken(MakeAuthToken("Bearer: a-token"));
@@ -407,8 +433,7 @@ TEST_F(IpProtectionProxyDelegateTest,
        OnResolveProxyMaskedDomainListManagerMatch) {
   std::map<std::string, std::set<std::string>> first_party_map;
   first_party_map["example.com"] = {};
-  auto masked_domain_list_manager =
-      MaskedDomainListManager::CreateForTesting(first_party_map);
+  auto masked_domain_list_manager = CreateMdlManager(first_party_map);
   auto ipp_core =
       std::make_unique<MockIpProtectionCore>(&masked_domain_list_manager);
   ipp_core->SetNextAuthToken(MakeAuthToken("Bearer: a-token"));
@@ -472,8 +497,7 @@ TEST_F(IpProtectionProxyDelegateTest,
       net::features::kEnableIpProtectionProxy, std::move(parameters));
   std::map<std::string, std::set<std::string>> first_party_map;
   first_party_map["example.com"] = {};
-  auto masked_domain_list_manager =
-      MaskedDomainListManager::CreateForTesting(first_party_map);
+  auto masked_domain_list_manager = CreateMdlManager(first_party_map);
   auto ipp_core =
       std::make_unique<MockIpProtectionCore>(&masked_domain_list_manager);
   ipp_core->SetNextAuthToken(MakeAuthToken("Bearer: a-token"));
@@ -507,8 +531,7 @@ TEST_F(IpProtectionProxyDelegateTest,
        OnResolveProxyMaskedDomainListManagerDoesNotMatch_FirstPartyException) {
   std::map<std::string, std::set<std::string>> first_party_map;
   first_party_map["example.com"] = {"top.com"};
-  auto masked_domain_list_manager =
-      MaskedDomainListManager::CreateForTesting(first_party_map);
+  auto masked_domain_list_manager = CreateMdlManager(first_party_map);
   auto ipp_core =
       std::make_unique<MockIpProtectionCore>(&masked_domain_list_manager);
   ipp_core->SetNextAuthToken(MakeAuthToken("Bearer: a-token"));
@@ -536,8 +559,7 @@ TEST_F(IpProtectionProxyDelegateTest,
 TEST_F(IpProtectionProxyDelegateTest, OnResolveProxy_NoAuthTokenEver) {
   std::map<std::string, std::set<std::string>> first_party_map;
   first_party_map["example.com"] = {};
-  auto masked_domain_list_manager =
-      MaskedDomainListManager::CreateForTesting(first_party_map);
+  auto masked_domain_list_manager = CreateMdlManager(first_party_map);
   auto ipp_core =
       std::make_unique<MockIpProtectionCore>(&masked_domain_list_manager);
   ipp_core->SetProxyList({MakeChain({"proxy"})});
@@ -568,8 +590,7 @@ TEST_F(IpProtectionProxyDelegateTest, OnResolveProxy_NoAuthTokenEver) {
 TEST_F(IpProtectionProxyDelegateTest, OnResolveProxy_NoAuthToken_Exhausted) {
   std::map<std::string, std::set<std::string>> first_party_map;
   first_party_map["example.com"] = {};
-  auto masked_domain_list_manager =
-      MaskedDomainListManager::CreateForTesting(first_party_map);
+  auto masked_domain_list_manager = CreateMdlManager(first_party_map);
   auto ipp_core =
       std::make_unique<MockIpProtectionCore>(&masked_domain_list_manager);
   ipp_core->SetProxyList({MakeChain({"proxy"})});
@@ -604,8 +625,7 @@ TEST_F(IpProtectionProxyDelegateTest, OnResolveProxy_NoAuthToken_Exhausted) {
 TEST_F(IpProtectionProxyDelegateTest, OnResolveProxy_NoProxyList) {
   std::map<std::string, std::set<std::string>> first_party_map;
   first_party_map["example.com"] = {};
-  auto masked_domain_list_manager =
-      MaskedDomainListManager::CreateForTesting(first_party_map);
+  auto masked_domain_list_manager = CreateMdlManager(first_party_map);
   auto ipp_core =
       std::make_unique<MockIpProtectionCore>(&masked_domain_list_manager);
   // No proxy list is added to the cache, so the result will be direct.
@@ -636,8 +656,7 @@ TEST_F(IpProtectionProxyDelegateTest, OnResolveProxy_NoProxyList) {
 TEST_F(IpProtectionProxyDelegateTest, OnResolveProxy_IpProtectionDisabled) {
   std::map<std::string, std::set<std::string>> first_party_map;
   first_party_map["example.com"] = {};
-  auto masked_domain_list_manager =
-      MaskedDomainListManager::CreateForTesting(first_party_map);
+  auto masked_domain_list_manager = CreateMdlManager(first_party_map);
   auto ipp_core =
       std::make_unique<MockIpProtectionCore>(&masked_domain_list_manager);
   ipp_core->SetNextAuthToken(MakeAuthToken("Bearer: a-token"));
@@ -668,8 +687,7 @@ TEST_F(IpProtectionProxyDelegateTest, OnResolveProxy_IpProtectionDisabled) {
 TEST_F(IpProtectionProxyDelegateTest, OnResolveProxyIpProtectionNoMatch) {
   std::map<std::string, std::set<std::string>> first_party_map;
   first_party_map["not.example.com"] = {};
-  auto masked_domain_list_manager =
-      MaskedDomainListManager::CreateForTesting(first_party_map);
+  auto masked_domain_list_manager = CreateMdlManager(first_party_map);
   auto ipp_core =
       std::make_unique<MockIpProtectionCore>(&masked_domain_list_manager);
   ipp_core->SetNextAuthToken(MakeAuthToken("Bearer: a-token"));
@@ -699,8 +717,7 @@ TEST_F(IpProtectionProxyDelegateTest, OnResolveProxyIpProtectionNoMatch) {
 TEST_F(IpProtectionProxyDelegateTest,
        OnResolveProxyIpProtectionNoMatch_UnpopulatedAllowList) {
   std::map<std::string, std::set<std::string>> first_party_map;
-  auto masked_domain_list_manager =
-      MaskedDomainListManager::CreateForTesting(first_party_map);
+  auto masked_domain_list_manager = CreateMdlManager(first_party_map);
   auto ipp_core =
       std::make_unique<MockIpProtectionCore>(&masked_domain_list_manager);
   ipp_core->SetNextAuthToken(MakeAuthToken("Bearer: a-token"));
@@ -730,8 +747,7 @@ TEST_F(IpProtectionProxyDelegateTest,
        OnResolveProxyIpProtectionMultiProxyHttpSuccess) {
   std::map<std::string, std::set<std::string>> first_party_map;
   first_party_map["example.com"] = {};
-  auto masked_domain_list_manager =
-      MaskedDomainListManager::CreateForTesting(first_party_map);
+  auto masked_domain_list_manager = CreateMdlManager(first_party_map);
   auto ipp_core =
       std::make_unique<MockIpProtectionCore>(&masked_domain_list_manager);
   ipp_core->SetNextAuthToken(MakeAuthToken("Bearer: a-token"));
@@ -759,8 +775,7 @@ TEST_F(IpProtectionProxyDelegateTest,
 TEST_F(IpProtectionProxyDelegateTest, OnResolveProxyIpProtectionSuccess) {
   std::map<std::string, std::set<std::string>> first_party_map;
   first_party_map["example.com"] = {};
-  auto masked_domain_list_manager =
-      MaskedDomainListManager::CreateForTesting(first_party_map);
+  auto masked_domain_list_manager = CreateMdlManager(first_party_map);
   auto ipp_core =
       std::make_unique<MockIpProtectionCore>(&masked_domain_list_manager);
   ipp_core->SetNextAuthToken(MakeAuthToken("Bearer: a-token"));
@@ -791,7 +806,7 @@ TEST_F(IpProtectionProxyDelegateTest, OnSuccessfulRequestAfterFailures) {
                       bool expected_call) {
     SCOPED_TRACE(name);
     bool on_proxies_failed_called = false;
-    auto masked_domain_list_manager = MaskedDomainListManager::CreateForTesting(
+    auto masked_domain_list_manager = CreateMdlManager(
         /*first_party_map=*/{});
     auto ipp_core =
         std::make_unique<MockIpProtectionCore>(&masked_domain_list_manager);
@@ -845,7 +860,7 @@ TEST_F(IpProtectionProxyDelegateTest, OnFallback) {
       kChainId);
   bool force_refresh_called = false;
 
-  auto masked_domain_list_manager = MaskedDomainListManager::CreateForTesting(
+  auto masked_domain_list_manager = CreateMdlManager(
       /*first_party_map=*/{});
   auto ipp_core =
       std::make_unique<MockIpProtectionCore>(&masked_domain_list_manager);

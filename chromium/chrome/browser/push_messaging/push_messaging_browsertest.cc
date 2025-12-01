@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include <stddef.h>
 #include <stdint.h>
 
@@ -127,9 +122,8 @@ std::string GetTestApplicationServerKey(bool base64_url_encoded = false) {
                           base::Base64UrlEncodePolicy::OMIT_PADDING,
                           &application_server_key);
   } else {
-    application_server_key =
-        std::string(kApplicationServerKey,
-                    kApplicationServerKey + std::size(kApplicationServerKey));
+    application_server_key = std::string(std::begin(kApplicationServerKey),
+                                         std::end(kApplicationServerKey));
   }
 
   return application_server_key;
@@ -1704,18 +1698,7 @@ IN_PROC_BROWSER_TEST_F(
       static_cast<int>(blink::mojom::PushEventStatus::SUCCESS), 1);
 }
 
-class PushMessagingBrowserTestWithNotificationTriggersEnabled
-    : public PushMessagingBrowserTestBase {
- public:
-  PushMessagingBrowserTestWithNotificationTriggersEnabled() {
-    feature_list_.InitAndEnableFeature(features::kNotificationTriggers);
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
-IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTestWithNotificationTriggersEnabled,
+IN_PROC_BROWSER_TEST_F(PushMessagingBrowserTestBase,
                        PushEventIgnoresScheduledNotificationsForEnforcement) {
   ASSERT_NO_FATAL_FAILURE(SubscribeSuccessfully());
   PushMessagingAppIdentifier app_identifier =

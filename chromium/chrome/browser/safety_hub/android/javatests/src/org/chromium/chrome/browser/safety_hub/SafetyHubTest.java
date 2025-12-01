@@ -30,6 +30,7 @@ import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 import static org.junit.Assert.assertEquals;
 
+import static org.chromium.chrome.browser.safety_hub.SafetyHubMetricUtils.ABUSIVE_NOTIFICATION_REVOCATION_INTERACTIONS_HISTOGRAM_NAME;
 import static org.chromium.chrome.browser.safety_hub.SafetyHubMetricUtils.DASHBOARD_INTERACTIONS_HISTOGRAM_NAME;
 import static org.chromium.chrome.browser.safety_hub.SafetyHubMetricUtils.NOTIFICATIONS_INTERACTIONS_HISTOGRAM_NAME;
 import static org.chromium.chrome.browser.safety_hub.SafetyHubMetricUtils.PERMISSIONS_INTERACTIONS_HISTOGRAM_NAME;
@@ -63,10 +64,10 @@ import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.HistogramWatcher;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.base.test.util.RequiresRestart;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.build.BuildConfig;
@@ -158,8 +159,6 @@ public final class SafetyHubTest {
     public SettingsActivityTestRule<SafetyHubFragment> mSafetyHubFragmentTestRule =
             new SettingsActivityTestRule<>(SafetyHubFragment.class);
 
-    @Rule public JniMocker mJniMocker = new JniMocker();
-
     @Rule
     public ChromeRenderTestRule mRenderTestRule =
             ChromeRenderTestRule.Builder.withPublicCorpus()
@@ -202,16 +201,17 @@ public final class SafetyHubTest {
 
     @Before
     public void setUp() {
-        mJniMocker.mock(UnusedSitePermissionsBridgeJni.TEST_HOOKS, mUnusedPermissionsBridge);
-        mJniMocker.mock(
-                NotificationPermissionReviewBridgeJni.TEST_HOOKS,
+        UnusedSitePermissionsBridgeJni.setInstanceForTesting(mUnusedPermissionsBridge);
+        NotificationPermissionReviewBridgeJni.setInstanceForTesting(
                 mNotificationPermissionReviewBridge);
 
         mActivityTestRule.startMainActivityOnBlankPage();
         mProfile = mActivityTestRule.getProfile(/* incognito= */ false);
 
-        // Make sure the compromised passwords count is reset at the beginning of the test suite.
+        // Reset state to the default of the compromised passwords count and the browsing data
+        // state.
         clearCompromisedPasswordsCount();
+        setSafeBrowsingState(SafeBrowsingState.STANDARD_PROTECTION);
     }
 
     @Test
@@ -253,6 +253,8 @@ public final class SafetyHubTest {
                                 PERMISSIONS_INTERACTIONS_HISTOGRAM_NAME,
                                 PermissionsModuleInteractions.ALLOW_AGAIN,
                                 PermissionsModuleInteractions.UNDO_ALLOW_AGAIN)
+                        .expectNoRecords(
+                                ABUSIVE_NOTIFICATION_REVOCATION_INTERACTIONS_HISTOGRAM_NAME)
                         .build();
 
         // Regrant the permissions by clicking the corresponding action button.
@@ -280,6 +282,8 @@ public final class SafetyHubTest {
                                 PermissionsModuleInteractions.OPEN_REVIEW_UI,
                                 PermissionsModuleInteractions.ACKNOWLEDGE_ALL,
                                 PermissionsModuleInteractions.UNDO_ACKNOWLEDGE_ALL)
+                        .expectNoRecords(
+                                ABUSIVE_NOTIFICATION_REVOCATION_INTERACTIONS_HISTOGRAM_NAME)
                         .build();
 
         // Verify the permissions module is displaying the info state.
@@ -335,9 +339,8 @@ public final class SafetyHubTest {
         scrollToPreference(withText(permissionsTitle));
         onView(withText(permissionsTitle)).check(matches(isDisplayed()));
 
-        // Module should be collapsed initially since it's in an info state.
-        verifyButtonsNextToTextVisibility(permissionsTitle, false);
-        expandPreferenceWithText(permissionsTitle);
+        // Module should be expanded initially since it's in an info state.
+        verifyButtonsNextToTextVisibility(permissionsTitle, true);
 
         // Open the permissions subpage.
         scrollToExpandedPreference(permissionsTitle);
@@ -435,6 +438,7 @@ public final class SafetyHubTest {
     @Test
     @LargeTest
     @Feature({"SafetyHubNotifications"})
+    @DisableIf.Build(supported_abis_includes = "x86_64", message = "https://crbug.com/382238797")
     public void testResetAllNotifications() {
         mNotificationPermissionReviewBridge.setNotificationPermissionsForReview(
                 new NotificationPermissions[] {
@@ -663,6 +667,9 @@ public final class SafetyHubTest {
         expandPreferenceWithText(safeBrowsingTitle);
         verifyButtonsNextToTextVisibility(safeBrowsingTitle, true);
         verifySummaryNextToTextVisibility(safeBrowsingTitle, true);
+
+        // Reset Safe Browsing state so it doesn't leak to other tests.
+        setSafeBrowsingState(SafeBrowsingState.STANDARD_PROTECTION);
     }
 
     @Test
@@ -908,6 +915,8 @@ public final class SafetyHubTest {
                                 PERMISSIONS_INTERACTIONS_HISTOGRAM_NAME,
                                 PermissionsModuleInteractions.ACKNOWLEDGE_ALL,
                                 PermissionsModuleInteractions.UNDO_ACKNOWLEDGE_ALL)
+                        .expectNoRecords(
+                                ABUSIVE_NOTIFICATION_REVOCATION_INTERACTIONS_HISTOGRAM_NAME)
                         .build();
 
         // Verify the permissions module is displaying the info state.
@@ -1226,6 +1235,91 @@ public final class SafetyHubTest {
         clickOnPreferenceWithTextAndWaitForActivity(
                 withId(R.id.menu_id_targeted_help), SafetyHubFragment.HELP_CENTER_URL);
         pressBack();
+
+        histogramWatcher.assertExpected();
+    }
+
+    @Test
+    @LargeTest
+    @Feature({"SafetyHubPermissions"})
+    public void testAbusiveNotificationPermissionRegrant() {
+        mUnusedPermissionsBridge.setPermissionsDataForReview(
+                new PermissionsData[] {PERMISSIONS_DATA_3});
+        mPermissionsFragmentTestRule.startSettingsActivity();
+        var histogramWatcher =
+                HistogramWatcher.newBuilder()
+                        .expectIntRecords(
+                                ABUSIVE_NOTIFICATION_REVOCATION_INTERACTIONS_HISTOGRAM_NAME,
+                                PermissionsModuleInteractions.ALLOW_AGAIN,
+                                PermissionsModuleInteractions.UNDO_ALLOW_AGAIN)
+                        .expectIntRecords(
+                                PERMISSIONS_INTERACTIONS_HISTOGRAM_NAME,
+                                PermissionsModuleInteractions.ALLOW_AGAIN,
+                                PermissionsModuleInteractions.UNDO_ALLOW_AGAIN)
+                        .build();
+
+        // Regrant the permissions by clicking the corresponding action button.
+        clickOnButtonNextToText(PERMISSIONS_DATA_3.getOrigin());
+        onView(withText(PERMISSIONS_DATA_3.getOrigin())).check(doesNotExist());
+
+        // Click on the action button of the snackbar to undo the above action.
+        onViewWaiting(withText(R.string.undo)).perform(click());
+        onViewWaiting(withText(PERMISSIONS_DATA_3.getOrigin())).check(matches(isDisplayed()));
+
+        histogramWatcher.assertExpected();
+    }
+
+    @Test
+    @LargeTest
+    @Feature({"SafetyHubPermissions"})
+    public void testClearAbusiveNotificationPermissionsReviewList() {
+        mUnusedPermissionsBridge.setPermissionsDataForReview(
+                new PermissionsData[] {PERMISSIONS_DATA_3});
+        mSafetyHubFragmentTestRule.startSettingsActivity();
+        var histogramWatcher =
+                HistogramWatcher.newBuilder()
+                        .expectIntRecords(
+                                ABUSIVE_NOTIFICATION_REVOCATION_INTERACTIONS_HISTOGRAM_NAME,
+                                PermissionsModuleInteractions.ACKNOWLEDGE_ALL,
+                                PermissionsModuleInteractions.UNDO_ACKNOWLEDGE_ALL)
+                        .expectIntRecords(
+                                PERMISSIONS_INTERACTIONS_HISTOGRAM_NAME,
+                                PermissionsModuleInteractions.OPEN_REVIEW_UI,
+                                PermissionsModuleInteractions.ACKNOWLEDGE_ALL,
+                                PermissionsModuleInteractions.UNDO_ACKNOWLEDGE_ALL)
+                        .build();
+
+        // Verify the permissions module is displaying the info state.
+        String permissionsTitle =
+                mSafetyHubFragmentTestRule
+                        .getActivity()
+                        .getResources()
+                        .getQuantityString(R.plurals.safety_hub_permissions_warning_title, 1, 1);
+        scrollToExpandedPreference(permissionsTitle);
+        onView(withText(permissionsTitle)).check(matches(isDisplayed()));
+
+        // Module should be expanded initially since it's in an info state and there are no other
+        // warning states.
+        verifyButtonsNextToTextVisibility(permissionsTitle, true);
+
+        // Open the permissions subpage.
+        clickOnSecondaryButtonNextToText(permissionsTitle);
+
+        // Verify that 2 sites are displayed.
+        onView(withText(PERMISSIONS_DATA_3.getOrigin())).check(matches(isDisplayed()));
+
+        // Click the button at the bottom of the page.
+        onView(withText(R.string.got_it)).perform(click());
+
+        // Verify tha the permissions subpage has been dismissed and the state of the permissions
+        // module has changed.
+        onViewWaiting(withText(R.string.safety_hub_permissions_ok_title))
+                .check(matches(isDisplayed()));
+
+        // Click on the snackbar action button and verify that the info state is displayed
+        // again.
+        onViewWaiting(withText(R.string.undo)).perform(click());
+        onViewWaiting(withText(permissionsTitle)).check(matches(isDisplayed()));
 
         histogramWatcher.assertExpected();
     }

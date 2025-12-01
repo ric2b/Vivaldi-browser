@@ -44,6 +44,7 @@ class DelegatedIdpNetworkRequestManager : public MockIdpNetworkRequestManager {
       const GURL& token_url,
       const std::string& account,
       const std::string& url_encoded_post_data,
+      bool idp_blidness,
       TokenRequestCallback callback,
       ContinueOnCallback continue_on_callback,
       RecordErrorMetricsCallback record_error_metrics_callback) override;
@@ -55,6 +56,7 @@ class DelegatedIdpNetworkRequestManager : public MockIdpNetworkRequestManager {
       base::TimeDelta api_call_to_token_response_time) override;
   void SendFailedTokenRequestMetrics(
       const GURL& metrics_endpoint_url,
+      bool did_show_ui,
       MetricsEndpointErrorCode error_code) override;
   void SendLogout(const GURL& logout_url, LogoutCallback callback) override;
   void SendDisconnectRequest(const GURL& disconnect_url,

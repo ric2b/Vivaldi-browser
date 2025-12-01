@@ -37,6 +37,7 @@ enum class PasswordTitleType {
 
 class Browser;
 class Profile;
+struct AccountInfo;
 
 // The desired width and height in pixels for an account avatar.
 constexpr int kAvatarImageSize = 32;
@@ -113,10 +114,6 @@ void NavigateToPasswordDetailsPage(
     const std::string& password_domain_name,
     password_manager::ManagePasswordsReferrer referrer);
 
-// Navigates to the Password Manager settings page and focuses the account store
-// toggle.
-void NavigateToManagePasswordsSettingsAccountStoreToggle(Browser* browser);
-
 #endif  // !BUILDFLAG(IS_ANDROID)
 
 mojo::Remote<network::mojom::URLLoaderFactory> GetURLLoaderForMainFrame(
@@ -125,5 +122,14 @@ mojo::Remote<network::mojom::URLLoaderFactory> GetURLLoaderForMainFrame(
 // Returns that vector icon to represent Google Password Manager in Desktop UI.
 // Returns different version for branded builds.
 const gfx::VectorIcon& GooglePasswordManagerVectorIcon();
+
+std::optional<AccountInfo> GetAccountInfoForPasswordMessages(
+    syncer::SyncService* sync_service,
+    signin::IdentityManager* identity_manager);
+
+// Returns the user account name to be displayed in dialogs, bubbles, etc.
+std::string GetDisplayableAccountName(
+    syncer::SyncService* sync_service,
+    signin::IdentityManager* identity_manager);
 
 #endif  // CHROME_BROWSER_UI_PASSWORDS_UI_UTILS_H_

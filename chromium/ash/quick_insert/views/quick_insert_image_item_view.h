@@ -20,18 +20,24 @@ class ImageView;
 namespace ash {
 
 // Quick Insert item which contains just an image.
-class ASH_EXPORT PickerImageItemView : public QuickInsertItemView {
-  METADATA_HEADER(PickerImageItemView, QuickInsertItemView)
+class ASH_EXPORT QuickInsertImageItemView : public QuickInsertItemView {
+  METADATA_HEADER(QuickInsertImageItemView, QuickInsertItemView)
 
  public:
-  PickerImageItemView(std::unique_ptr<views::ImageView> image,
-                      std::u16string accessible_name,
-                      SelectItemCallback select_item_callback);
-  PickerImageItemView(const PickerImageItemView&) = delete;
-  PickerImageItemView& operator=(const PickerImageItemView&) = delete;
-  ~PickerImageItemView() override;
+  QuickInsertImageItemView(std::unique_ptr<views::ImageView> image,
+                           std::u16string accessible_name,
+                           SelectItemCallback select_item_callback);
+  QuickInsertImageItemView(const QuickInsertImageItemView&) = delete;
+  QuickInsertImageItemView& operator=(const QuickInsertImageItemView&) = delete;
+  ~QuickInsertImageItemView() override;
 
   void SetAction(QuickInsertActionType action);
+
+  // Resizes the contained image to `width`, with the height scaled to retain
+  // the same aspect ratio.
+  void FitToWidth(int width);
+
+  views::ImageView* image_view_for_testing() const { return image_view_; }
 
  private:
   raw_ptr<views::ImageView> image_view_ = nullptr;

@@ -209,14 +209,14 @@ TEST_F(ExtensionsMetricsProviderTest, ProvideCurrentSessionData) {
 class ExtensionMetricsProviderInstallsTest
     : public extensions::ExtensionServiceTestBase {
  public:
-  ExtensionMetricsProviderInstallsTest() {}
+  ExtensionMetricsProviderInstallsTest() = default;
 
   ExtensionMetricsProviderInstallsTest(
       const ExtensionMetricsProviderInstallsTest&) = delete;
   ExtensionMetricsProviderInstallsTest& operator=(
       const ExtensionMetricsProviderInstallsTest&) = delete;
 
-  ~ExtensionMetricsProviderInstallsTest() override {}
+  ~ExtensionMetricsProviderInstallsTest() override = default;
 
   void SetUp() override {
     ExtensionServiceTestBase::SetUp();
@@ -364,6 +364,19 @@ TEST_F(ExtensionMetricsProviderInstallsTest, TestProtoConstruction) {
   }
 
   {
+    // Test the extension action as an MV3 action.
+    scoped_refptr<const Extension> extension =
+        ExtensionBuilder("action")
+            .SetLocation(ManifestLocation::kInternal)
+            .SetManifestVersion(3)
+            .SetAction(extensions::ActionInfo::Type::kAction)
+            .Build();
+    add_extension(extension.get());
+    ExtensionInstallProto install = ConstructProto(*extension);
+    EXPECT_EQ(ExtensionInstallProto::ACTION, install.action_type());
+  }
+
+  {
     // Test the disable reasons field.
     scoped_refptr<const Extension> extension =
         ExtensionBuilder("disable_reasons")
@@ -371,7 +384,7 @@ TEST_F(ExtensionMetricsProviderInstallsTest, TestProtoConstruction) {
             .Build();
     add_extension(extension.get());
     prefs()->SetExtensionDisabled(
-        extension->id(), extensions::disable_reason::DISABLE_USER_ACTION);
+        extension->id(), {extensions::disable_reason::DISABLE_USER_ACTION});
     {
       ExtensionInstallProto install = ConstructProto(*extension);
       ASSERT_EQ(1, install.disable_reasons_size());

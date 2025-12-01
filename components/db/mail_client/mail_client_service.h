@@ -30,6 +30,7 @@
 #include "mail_client_backend.h"
 #include "mail_client_database_params.h"
 #include "mail_client_model_observer.h"
+#include "message_type.h"
 
 class Profile;
 
@@ -68,9 +69,9 @@ class MailClientService : public KeyedService {
   // want to check state during their own initializer.
   bool IsDoingExtensiveChanges() const { return extensive_changes_ > 0; }
 
-  typedef base::OnceCallback<void(MessageResult)> MessageCallback;
+  typedef base::OnceCallback<void(mail_client::StatusCB)> StatusCallback;
 
-  typedef base::OnceCallback<void(SearchListIDs)> EmailSearchCallback;
+  typedef base::OnceCallback<void(MailSearchCB)> EmailSearchCallback;
 
   typedef base::OnceCallback<void(bool)> ResultCallback;
   typedef base::OnceCallback<void(Migration)> VersionCallback;
@@ -87,7 +88,7 @@ class MailClientService : public KeyedService {
 
   base::CancelableTaskTracker::TaskId UpdateMessage(
       MessageRow message,
-      MessageCallback callback,
+      StatusCallback callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId SearchEmail(
@@ -111,6 +112,10 @@ class MailClientService : public KeyedService {
 
   base::CancelableTaskTracker::TaskId DeleteMailSearchDB(
       ResultCallback callback,
+      base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId CheckDBHealth(
+      StatusCallback callback,
       base::CancelableTaskTracker* tracker);
 
  private:

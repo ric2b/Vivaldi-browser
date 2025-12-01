@@ -4,11 +4,11 @@
 
 #include "chrome/browser/ui/global_media_controls/media_notification_service.h"
 
+#include <algorithm>
 #include <memory>
 
 #include "base/callback_list.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/ranges/algorithm.h"
 #include "base/unguessable_token.h"
 #include "chrome/browser/feature_engagement/tracker_factory.h"
 #include "chrome/browser/media/router/media_router_feature.h"
@@ -42,13 +42,10 @@
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ash/crosapi/crosapi_ash.h"
 #include "chrome/browser/ash/crosapi/crosapi_manager.h"
 #include "chrome/browser/ash/crosapi/media_ui_ash.h"
-#elif BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "chromeos/crosapi/mojom/media_ui.mojom.h"
-#include "chromeos/lacros/lacros_service.h"
 #endif
 
 namespace mojom {
@@ -91,17 +88,11 @@ bool IsWebContentsFocused(content::WebContents* web_contents) {
 
 #if BUILDFLAG(IS_CHROMEOS)
 crosapi::mojom::MediaUI* GetMediaUI() {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // TODO(crbug.com/373971535): Figure how to call `media_ui_ash()` once crosapi
+  // is gone.
   if (crosapi::CrosapiManager::IsInitialized()) {
     return crosapi::CrosapiManager::Get()->crosapi_ash()->media_ui_ash();
   }
-#elif BUILDFLAG(IS_CHROMEOS_LACROS)
-  if (chromeos::LacrosService::Get()->IsAvailable<crosapi::mojom::MediaUI>()) {
-    return chromeos::LacrosService::Get()
-        ->GetRemote<crosapi::mojom::MediaUI>()
-        .get();
-  }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   return nullptr;
 }
 #endif  // BUILDFLAG(IS_CHROMEOS)
@@ -174,35 +165,31 @@ MediaNotificationService::MediaNotificationService(Profile* profile,
   }
   // CastMediaNotificationProducer is owned by
   // CastMediaNotificationProducerKeyedService in Ash.
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
   // base::Unretained() is safe here because `cast_notification_producer_` is
   // deleted before `item_manager_`.
   cast_notification_producer_ = std::make_unique<CastMediaNotificationProducer>(
       profile, item_manager_.get());
   item_manager_->AddItemProducer(cast_notification_producer_.get());
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
-
-  if (media_router::GlobalMediaControlsCastStartStopEnabled(profile)) {
-    presentation_request_notification_producer_ =
-        std::make_unique<PresentationRequestNotificationProducer>(
-            base::BindRepeating(
-                &MediaNotificationService::HasActiveNotificationsForWebContents,
-                base::Unretained(this)),
-            content::MediaSession::GetSourceId(profile));
-#if !BUILDFLAG(IS_CHROMEOS)
-    supplemental_device_picker_producer_ =
-        std::make_unique<SupplementalDevicePickerProducer>(item_manager_.get());
-    item_manager_->AddItemProducer(supplemental_device_picker_producer_.get());
-    // On Chrome OS, SetDevicePickerProvider() gets called by Ash via the
-    // crosapi.
-    SetDevicePickerProvider(supplemental_device_picker_producer_->PassRemote());
 #endif  // !BUILDFLAG(IS_CHROMEOS)
-  }
+
+  presentation_request_notification_producer_ =
+      std::make_unique<PresentationRequestNotificationProducer>(
+          base::BindRepeating(
+              &MediaNotificationService::HasActiveNotificationsForWebContents,
+              base::Unretained(this)),
+          content::MediaSession::GetSourceId(profile));
+#if !BUILDFLAG(IS_CHROMEOS)
+  supplemental_device_picker_producer_ =
+      std::make_unique<SupplementalDevicePickerProducer>(item_manager_.get());
+  item_manager_->AddItemProducer(supplemental_device_picker_producer_.get());
+  // On Chrome OS, SetDevicePickerProvider() gets called by Ash via the
+  // crosapi.
+  SetDevicePickerProvider(supplemental_device_picker_producer_->PassRemote());
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_CHROMEOS)
-  // On Lacros-enabled Chrome OS, MediaNotificationService instances exist on
-  // both Ash and Lacros sides. The Ash-side instance manages Casting from
-  // System Web Apps.
+  // The Ash instance manages Casting from System Web Apps.
   if (GetMediaUI()) {
     GetMediaUI()->RegisterDeviceService(
         content::MediaSession::GetSourceId(profile),
@@ -221,12 +208,11 @@ void MediaNotificationService::ShowDialogAsh(
   auto routes = media_router::WebContentsPresentationManager::Get(web_contents)
                     ->GetMediaRoutes();
   std::string item_id;
-  // TODO(crbug.com/1462768): When `routes` is not empty, we'd ideally set
-  // `item_id` to be the ID of a MediaRoute so that we'd only show the
-  // corresponding notification item. However, MediaRoute IDs are not the same
-  // between Lacros and Ash, so we resort to showing all the items by leaving
-  // `item_id` empty.
-  if (routes.empty()) {
+  if (!routes.empty()) {
+    // When `routes` is not empty, we'd ideally set `item_id` to be the ID of a
+    // MediaRoute so that we'd only show the corresponding notification item.
+    item_id = routes.begin()->media_route_id();
+  } else {
     item_id = content::MediaSession::GetRequestIdFromWebContents(web_contents)
                   .ToString();
   }
@@ -599,7 +585,7 @@ bool MediaNotificationService::HasActiveControllableSessionForWebContents(
     content::WebContents* web_contents) const {
   DCHECK(web_contents);
   auto item_ids = media_session_item_producer_->GetActiveControllableItemIds();
-  return base::ranges::any_of(item_ids, [web_contents](const auto& item_id) {
+  return std::ranges::any_of(item_ids, [web_contents](const auto& item_id) {
     return web_contents ==
            content::MediaSession::GetWebContentsFromRequestId(item_id);
   });

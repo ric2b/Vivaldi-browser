@@ -13,10 +13,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <utility>
-#include <vector>
 
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/APInt.h"
@@ -249,8 +249,7 @@ class FoldBroadcastPass
     RewritePatternSet patterns(&getContext());
     patterns.add<FoldBroadcastInDimBeforeMulOp>(&getContext());
     patterns.add(ConstantFoldMul);
-    if (failed(applyPatternsAndFoldGreedily(getOperation(),
-                                            std::move(patterns)))) {
+    if (failed(applyPatternsGreedily(getOperation(), std::move(patterns)))) {
       return signalPassFailure();
     }
   }

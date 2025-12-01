@@ -39,7 +39,6 @@ void OnGpuChannelEstablished(
   auto context_provider =
       base::MakeRefCounted<viz::ContextProviderCommandBuffer>(
           std::move(gpu_channel_host), stream_id, stream_priority,
-          gpu::kNullSurfaceHandle,
           GURL(std::string("chrome://gpu/"
                            "BrowserGpuVideoAcceleratorFactories::"
                            "CreateGpuVideoAcceleratorFactories")),
@@ -140,14 +139,6 @@ BrowserGpuVideoAcceleratorFactories::CreateVideoDecoder(
 
 std::unique_ptr<media::VideoEncodeAccelerator>
 BrowserGpuVideoAcceleratorFactories::CreateVideoEncodeAccelerator() {
-  return nullptr;
-}
-
-std::unique_ptr<gfx::GpuMemoryBuffer>
-BrowserGpuVideoAcceleratorFactories::CreateGpuMemoryBuffer(
-    const gfx::Size& size,
-    gfx::BufferFormat format,
-    gfx::BufferUsage usage) {
   return nullptr;
 }
 

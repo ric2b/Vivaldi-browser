@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 import type * as Common from '../../core/common/common.js';
-import type * as Platform from '../../core/platform/platform.js';
+import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
 import {createTarget, stubNoopSettings} from '../../testing/EnvironmentHelpers.js';
@@ -12,12 +12,12 @@ import {
   setMockConnectionResponseHandler,
 } from '../../testing/MockConnection.js';
 import {createResource, getMainFrame} from '../../testing/ResourceTreeHelpers.js';
-import * as Coordinator from '../../ui/components/render_coordinator/render_coordinator.js';
+import * as RenderCoordinator from '../../ui/components/render_coordinator/render_coordinator.js';
 import * as UI from '../../ui/legacy/legacy.js';
 
 import * as Application from './application.js';
 
-const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
+const {urlString} = Platform.DevToolsPath;
 
 class SharedStorageTreeElementListener {
   #sidebar: Application.ApplicationPanelSidebar.ApplicationPanelSidebar;
@@ -145,7 +145,7 @@ describeWithMockConnection('ApplicationPanelSidebar', () => {
     resourceTreeModel.dispatchEventToListeners(SDK.ResourceTreeModel.Events.CachedResourcesLoaded, resourceTreeModel);
 
     assert.strictEqual(sidebar.cookieListTreeElement.childCount(), 2);
-    assert.deepStrictEqual(
+    assert.deepEqual(
         sidebar.cookieListTreeElement.children().map(e => e.title),
         ['http://www.example.com', 'http://www.example.org']);
   });
@@ -180,7 +180,7 @@ describeWithMockConnection('ApplicationPanelSidebar', () => {
     assert.isTrue(setTrackingSpy.calledOnceWithExactly({enable: true}));
 
     assert.strictEqual(sidebar.sharedStorageListTreeElement.childCount(), 3);
-    assert.deepStrictEqual(sidebar.sharedStorageListTreeElement.children().map(e => e.title), [
+    assert.deepEqual(sidebar.sharedStorageListTreeElement.children().map(e => e.title), [
       TEST_ORIGIN_A,
       TEST_ORIGIN_B,
       TEST_ORIGIN_C,
@@ -221,12 +221,11 @@ describeWithMockConnection('ApplicationPanelSidebar', () => {
       if (useTreeView) {
         assert.strictEqual(sidebar.extensionStorageListTreeElement!.childCount(), 1);
         assert.strictEqual(sidebar.extensionStorageListTreeElement!.children()[0].title, TEST_EXTENSION_NAME);
-        assert.deepStrictEqual(
+        assert.deepEqual(
             sidebar.extensionStorageListTreeElement!.children()[0].children().map(e => e.title), ['Session', 'Local']);
       } else {
         assert.strictEqual(sidebar.extensionStorageListTreeElement!.childCount(), 2);
-        assert.deepStrictEqual(
-            sidebar.extensionStorageListTreeElement!.children().map(e => e.title), ['Session', 'Local']);
+        assert.deepEqual(sidebar.extensionStorageListTreeElement!.children().map(e => e.title), ['Session', 'Local']);
       }
 
       extensionStorageModel.dispatchEventToListeners(
@@ -281,7 +280,7 @@ describeWithMockConnection('ApplicationPanelSidebar', () => {
     Application.ResourcesPanel.ResourcesPanel.instance({forceNew: true});
     const sidebar = await Application.ResourcesPanel.ResourcesPanel.showAndGetSidebar();
     const components = expectedCall.split('.');
-    assert.strictEqual(components.length, 2);
+    assert.lengthOf(components, 2);
     // @ts-ignore
     const object = sidebar[components[0]];
     assert.exists(object);
@@ -300,7 +299,7 @@ describeWithMockConnection('ApplicationPanelSidebar', () => {
     SDK.TargetManager.TargetManager.instance().setScopeTarget(inScope ? target : null);
     const expectedCall = await getExpectedCall(expectedCallString);
     const model = target.model(modelClass);
-    await coordinator.done({waitForWork: true});
+    await RenderCoordinator.done({waitForWork: true});
     assert.exists(model);
     const data = [{...MOCK_EVENT_ITEM, model}] as Common.EventTarget.EventPayloadToRestParameters<Events, T>;
     model.dispatchEventToListeners(event as Platform.TypeScriptUtilities.NoUnion<T>, ...data);
@@ -365,7 +364,7 @@ describeWithMockConnection('ApplicationPanelSidebar', () => {
     sinon.stub(model, getter).returns([MOCK_GETTER_ITEM]);
     SDK.TargetManager.TargetManager.instance().setScopeTarget(target);
     await new Promise(resolve => setTimeout(resolve, 0));
-    assert.strictEqual(expectedCall.called, true);
+    assert.isTrue(expectedCall.called);
   };
 
   it('adds DOM storage element after scope change',
@@ -437,7 +436,7 @@ describeWithMockConnection('ResourcesSection', () => {
       assert.strictEqual(treeElement.childCount(), 0);
       const frame = getMainFrame(target);
 
-      const url = 'http://example.com' as Platform.DevToolsPath.UrlString;
+      const url = urlString`http://example.com`;
       assert.strictEqual(treeElement.firstChild()?.childCount() ?? 0, 0);
       createResource(frame, url, 'text/html', '');
       assert.strictEqual(treeElement.firstChild()?.childCount() ?? 0, inScope ? 1 : 0);
@@ -449,7 +448,7 @@ describeWithMockConnection('ResourcesSection', () => {
       const treeElement = new UI.TreeOutline.TreeElement();
       new Application.ApplicationPanelSidebar.ResourcesSection(panel, treeElement);
 
-      const url = 'http://example.com' as Platform.DevToolsPath.UrlString;
+      const url = urlString`http://example.com`;
       createResource(getMainFrame(target), url, 'text/html', '');
       assert.strictEqual(treeElement.firstChild()?.childCount() ?? 0, 0);
 

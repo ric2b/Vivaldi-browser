@@ -8,9 +8,13 @@ import '../../../ui/components/panel_introduction_steps/panel_introduction_steps
 import * as i18n from '../../../core/i18n/i18n.js';
 import type * as Platform from '../../../core/platform/platform.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
-import * as LitHtml from '../../../ui/lit-html/lit-html.js';
+import {html, render} from '../../../ui/lit/lit.js';
 
-import cssOverviewStartViewStyles from './cssOverviewStartView.css.js';
+import cssOverviewStartViewStylesRaw from './cssOverviewStartView.css.js';
+
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const cssOverviewStartViewStyles = new CSSStyleSheet();
+cssOverviewStartViewStyles.replaceSync(cssOverviewStartViewStylesRaw.cssContent);
 
 const UIStrings = {
   /**
@@ -41,8 +45,6 @@ const UIStrings = {
 };
 const str_ = i18n.i18n.registerUIStrings('panels/css_overview/components/CSSOverviewStartView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
-
-const {render, html} = LitHtml;
 
 const FEEDBACK_LINK = 'https://g.co/devtools/css-overview-feedback' as Platform.DevToolsPath.UrlString;
 const DOC_LINK = 'https://developer.chrome.com/docs/devtools/css-overview' as Platform.DevToolsPath.UrlString;

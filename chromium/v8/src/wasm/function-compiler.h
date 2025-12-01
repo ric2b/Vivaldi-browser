@@ -114,10 +114,6 @@ class V8_EXPORT_PRIVATE WasmCompilationUnit final {
                                   const WasmFunction*, ExecutionTier);
 
  private:
-  WasmCompilationResult ExecuteFunctionCompilation(
-      CompilationEnv*, const WireBytesStorage*, Counters*,
-      WasmDetectedFeatures* detected);
-
   int func_index_;
   ExecutionTier tier_;
   ForDebugging for_debugging_;
@@ -143,15 +139,14 @@ class V8_EXPORT_PRIVATE JSToWasmWrapperCompilationUnit final {
   Isolate* isolate() const { return isolate_; }
 
   void Execute();
-  Handle<Code> Finalize();
+  DirectHandle<Code> Finalize();
 
   const CanonicalSig* sig() const { return sig_; }
   CanonicalTypeIndex sig_index() const { return sig_index_; }
 
   // Run a compilation unit synchronously.
-  static Handle<Code> CompileJSToWasmWrapper(Isolate* isolate,
-                                             const CanonicalSig* sig,
-                                             CanonicalTypeIndex sig_index);
+  static DirectHandle<Code> CompileJSToWasmWrapper(
+      Isolate* isolate, const CanonicalSig* sig, CanonicalTypeIndex sig_index);
 
  private:
   // Wrapper compilation is bound to an isolate. Concurrent accesses to the

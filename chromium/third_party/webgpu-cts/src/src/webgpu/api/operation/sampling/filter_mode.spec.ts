@@ -481,6 +481,7 @@ g.test('magFilter,nearest')
   )
   .beforeAllSubcases(t => {
     t.skipIfTextureFormatNotSupported(t.params.format);
+    t.skipIfColorRenderableNotSupportedForFormat(t.params.format);
     if (kTextureFormatInfo[t.params.format].color.type === 'unfilterable-float') {
       t.selectDeviceOrSkipTestCase('float32-filterable');
     }
@@ -604,6 +605,7 @@ g.test('magFilter,linear')
   )
   .beforeAllSubcases(t => {
     t.skipIfTextureFormatNotSupported(t.params.format);
+    t.skipIfColorRenderableNotSupportedForFormat(t.params.format);
     if (kTextureFormatInfo[t.params.format].color.type === 'unfilterable-float') {
       t.selectDeviceOrSkipTestCase('float32-filterable');
     }
@@ -739,6 +741,7 @@ g.test('minFilter,nearest')
   )
   .beforeAllSubcases(t => {
     t.skipIfTextureFormatNotSupported(t.params.format);
+    t.skipIfColorRenderableNotSupportedForFormat(t.params.format);
     if (kTextureFormatInfo[t.params.format].color.type === 'unfilterable-float') {
       t.selectDeviceOrSkipTestCase('float32-filterable');
     }
@@ -872,6 +875,7 @@ g.test('minFilter,linear')
   )
   .beforeAllSubcases(t => {
     t.skipIfTextureFormatNotSupported(t.params.format);
+    t.skipIfColorRenderableNotSupportedForFormat(t.params.format);
     if (kTextureFormatInfo[t.params.format].color.type === 'unfilterable-float') {
       t.selectDeviceOrSkipTestCase('float32-filterable');
     }
@@ -968,6 +972,7 @@ g.test('mipmapFilter')
   )
   .beforeAllSubcases(t => {
     t.skipIfTextureFormatNotSupported(t.params.format);
+    t.skipIfColorRenderableNotSupportedForFormat(t.params.format);
     if (kTextureFormatInfo[t.params.format].color.type === 'unfilterable-float') {
       t.selectDeviceOrSkipTestCase('float32-filterable');
     }

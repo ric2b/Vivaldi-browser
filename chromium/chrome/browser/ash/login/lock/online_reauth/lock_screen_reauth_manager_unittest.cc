@@ -29,14 +29,15 @@
 #include "components/user_manager/scoped_user_manager.h"
 #include "components/user_manager/user_names.h"
 #include "content/public/test/browser_task_environment.h"
+#include "google_apis/gaia/gaia_id.h"
 
 namespace ash {
 namespace {
-const char kSAMLUserId1[] = "12345";
-const char kSAMLUserEmail1[] = "alice@corp.example.com";
+constexpr GaiaId::Literal kSAMLUserId1("12345");
+constexpr char kSAMLUserEmail1[] = "alice@corp.example.com";
 
-const char kSAMLUserId2[] = "67891";
-const char kSAMLUserEmail2[] = "bob@corp.example.com";
+constexpr GaiaId::Literal kSAMLUserId2("67891");
+constexpr char kSAMLUserEmail2[] = "bob@corp.example.com";
 
 constexpr base::TimeDelta kSamlOnlineShortDelay = base::Seconds(10);
 

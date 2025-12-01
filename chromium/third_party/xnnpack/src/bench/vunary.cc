@@ -43,7 +43,7 @@ struct UniformDistribution<xnn_float16> {
 
   template <class Generator>
   xnn_float16 operator()(Generator& g) {
-    return dist(g);
+    return static_cast<xnn_float16>(dist(g));
   }
 };
 
@@ -289,16 +289,13 @@ void vlrelu(benchmark::State& state, uint64_t arch_flags,
 #include "f32-f16-vcvt/f32-f16-vcvt.h"
 #include "f32-qs8-vcvt/f32-qs8-vcvt.h"
 #include "f32-qu8-vcvt/f32-qu8-vcvt.h"
-#include "qs16-qs8-vcvt/qs16-qs8-vcvt.h"
 #include "qs8-f16-vcvt/qs8-f16-vcvt.h"
 #include "qs8-f32-vcvt/qs8-f32-vcvt.h"
 #include "qs8-vcvt/qs8-vcvt.h"
 #include "qu8-f32-vcvt/qu8-f32-vcvt.h"
 #include "qu8-vcvt/qu8-vcvt.h"
-#include "s32-f32-vcvt/s32-f32-vcvt.h"
-#include "u32-f32-vcvt/u32-f32-vcvt.h"
 #undef XNN_CVT_UKERNEL_WITH_PARAMS
 
 #ifndef XNNPACK_BENCHMARK_NO_MAIN
-BENCHMARK_MAIN();
+XNN_BENCHMARK_MAIN();
 #endif

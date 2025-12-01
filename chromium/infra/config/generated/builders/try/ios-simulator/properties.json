@@ -14,7 +14,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "ios-simulator",
-              "project": "chromium-m132"
+              "project": "chromium-m134"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-mac-archive",
@@ -44,7 +44,7 @@
         {
           "bucket": "ci",
           "builder": "ios-simulator",
-          "project": "chromium-m132"
+          "project": "chromium-m134"
         }
       ],
       "targets_spec_directory": "src/infra/config/generated/builders/try/ios-simulator/targets"
@@ -62,18 +62,17 @@
     "check_for_flakiness": true,
     "check_for_flakiness_with_resultdb": true
   },
-  "$build/reclient": {
-    "instance": "rbe-chromium-untrusted",
-    "metrics_project": "chromium-reclient-metrics",
-    "scandeps_server": true
-  },
   "$build/siso": {
     "configs": [
       "builder"
     ],
+    "enable_cloud_monitoring": true,
     "enable_cloud_profiler": true,
     "enable_cloud_trace": true,
-    "experiments": [],
+    "experiments": [
+      "no-fast-deps"
+    ],
+    "metrics_project": "chromium-reclient-metrics",
     "project": "rbe-chromium-untrusted",
     "remote_jobs": -1
   },
@@ -87,5 +86,5 @@
   "builder_group": "tryserver.chromium.mac",
   "cq": "required",
   "recipe": "chromium/orchestrator",
-  "xcode_build_version": "16b40"
+  "xcode_build_version": "16c5032a"
 }

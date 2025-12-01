@@ -74,5 +74,6 @@ for site breakage.
 The NetLog only covers cookies accessed over the network via HTTP(S) and does not include other
 methods of cookie access such as document.cookie (JavaScript) or chrome.cookies (extensions).
 
-The [instructions to use NetLog to debug cookie issues caused by SameSite attribute](https://www.chromium.org/updates/same-site/test-debug/#using-a-netlog-dump) is applicable to third-party cookie deprecation,
+The [instructions to use NetLog to debug cookie issues caused by SameSite attribute](/updates/same-site/test-debug/#using-a-netlog-dump)
+is applicable to third-party cookie deprecation,
 with some tweeks needed: make sure to look for cookies marked with “EXCLUDE_USER_PREFERENCES”.

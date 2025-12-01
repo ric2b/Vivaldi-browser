@@ -83,6 +83,10 @@ extern "C" void CentipedeSetTimeoutPerInput(uint64_t timeout_per_input);
 // throughout the entire process life-time.
 extern "C" absl::Nullable<const char *> CentipedeGetRunnerFlags();
 
+// An overridable function to override `LLVMFuzzerMutate` behavior.
+extern "C" size_t CentipedeLLVMFuzzerMutateCallback(uint8_t *data, size_t size,
+                                                    size_t max_size);
+
 // Prepares to run a batch of test executions that ends with calling
 // `CentipedeEndExecutionBatch`.
 //
@@ -99,6 +103,9 @@ extern "C" void CentipedeEndExecutionBatch();
 extern "C" void CentipedePrepareProcessing();
 
 // Finalizes the processing of an input and stores the state internally.
+//
+// For tool integration, it can be called inside `RunnerCallbacks::Execute()` to
+// finalize the execution early before extra cleanups.
 extern "C" void CentipedeFinalizeProcessing();
 
 // Retrieves the execution results (including coverage information) after

@@ -23,7 +23,7 @@ to end support.
 
 #### Announcements/ Artifacts
 
-*   Tracking [issue](http://crbug.com/1064647) for the removal of Flash
+*   Tracking [issue](https://crbug.com/1064647) for the removal of Flash
             Player support.
 
 #### **Notes for Administrators**

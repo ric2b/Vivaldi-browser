@@ -7,7 +7,6 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> a mis fin à la connexion de manière inattendue.</translation>
 <translation id="1161325031994447685">Se reconnecter au réseau Wi-Fi</translation>
 <translation id="1175364870820465910">Im&amp;primer...</translation>
-<translation id="132390688737681464">Enregistrer et renseigner les adresses</translation>
 <translation id="1375198122581997741">À propos de la version</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> n’a envoyé aucune donnée.</translation>
 <translation id="1555191101192706055">Des pirates informatiques qui se trouvent sur le site que vous avez essayé de consulter peuvent vous inciter à installer des logiciels malveillants affectant votre façon de naviguer, par exemple en modifiant votre page d’accueil ou en vous montrant des annonces supplémentaires sur les sites que vous consultez.</translation>
@@ -52,6 +51,7 @@
 <translation id="2991571918955627853">Le site <ph name="SITE" /> est actuellement inaccessible, car il utilise la technologie HSTS. Les erreurs réseau et les attaques sont généralement temporaires. Vous devriez donc pouvoir accéder à cette page plus tard.</translation>
 <translation id="3005723025932146533">Afficher la copie enregistrée</translation>
 <translation id="301521992641321250">Bloquée automatiquement</translation>
+<translation id="3037605927509011580">Aïe !</translation>
 <translation id="3041612393474885105">Informations relatives au certificat</translation>
 <translation id="3109728660330352905">Vous n’êtes pas autorisé à consulter cette page.</translation>
 <translation id="31207688938192855"><ph name="BEGIN_LINK" />Essayez d’exécuter les diagnostics de connectivité<ph name="END_LINK" />.</translation>
@@ -64,7 +64,6 @@
 <translation id="3234666976984236645">Toujours détecter du contenu important sur ce site</translation>
 <translation id="3308738399950580893">publicités</translation>
 <translation id="3384522979010096022">Votre organisation ne vous autorise pas à consulter ce site</translation>
-<translation id="3387261909427947069">Modes de paiement</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> est actuellement inaccessible.</translation>
 <translation id="3427092606871434483">Autoriser (par défaut)</translation>
 <translation id="3447661539832366887">Le propriétaire de cet appareil a désactivé le jeu avec Antonio, la boule de lave.</translation>
@@ -125,7 +124,6 @@
 <translation id="5386426401304769735">La chaîne de certificats de ce site contient un certificat signé avec SHA-1.</translation>
 <translation id="5452270690849572955">Cette page du site <ph name="HOST_NAME" /> est introuvable</translation>
 <translation id="5457113250005438886">Non valide</translation>
-<translation id="5490432419156082418">Adresses et autres</translation>
 <translation id="5492298309214877701">Ce site situé sur l’intranet de l’entreprise, de l’organisation ou de l’établissement scolaire possède la même URL qu’un site Web externe.
     <ph name="LINE_BREAK" />
     Essayez de contacter votre administrateur système.</translation>
@@ -171,7 +169,6 @@
 <translation id="7111012039238467737">(Valide)</translation>
 <translation id="7113310725918019676">Autoriser <ph name="BLOCKED_TYPE" /> depuis <ph name="DOMAIN" /></translation>
 <translation id="7126644664682723998">Coller et rechercher</translation>
-<translation id="7179323680825933600">Enregistrer et saisir les modes de paiement</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> ne respecte pas les normes de sécurité.</translation>
 <translation id="7219179957768738017">La connexion utilise <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Afficher les notifications</translation>
@@ -223,6 +220,7 @@
 <translation id="9062620674789239642">Il a peut-être été déplacé, modifié ou supprimé.</translation>
 <translation id="9069693763241529744">Bloqué par une extension</translation>
 <translation id="9073799351042754113">Vous avez choisi de désactiver les avertissements de sécurité pour ce site.</translation>
+<translation id="9168814207360376865">Autorisez les sites à vérifier si vous avez enregistré des modes de paiement</translation>
 <translation id="9169664750068251925">Toujours bloquer sur ce site</translation>
 <translation id="9180553614777056266">Bloqueur de publicités</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> utilise un protocole incompatible.</translation>

@@ -3,13 +3,15 @@
 // found in the LICENSE file.
 
 import type * as Common from '../../core/common/common.js';
-import type * as Platform from '../../core/platform/platform.js';
+import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
 import {createTarget} from '../../testing/EnvironmentHelpers.js';
 import {describeWithMockConnection} from '../../testing/MockConnection.js';
 
 import * as Resources from './application.js';
+
+const {urlString} = Platform.DevToolsPath;
 
 class ExtensionStorageListener {
   #model: Resources.ExtensionStorageModel.ExtensionStorageModel;
@@ -76,7 +78,7 @@ describeWithMockConnection('ExtensionStorageModel', () => {
     return {
       id: id as Protocol.Runtime.ExecutionContextId,
       uniqueId: '',
-      origin: origin as Platform.DevToolsPath.UrlString,
+      origin: urlString`${origin}`,
       name: 'Test Extension',
     };
   };
@@ -190,10 +192,10 @@ describeWithMockConnection('ExtensionStorageModel', () => {
     await addedPromise;
 
     STORAGE_AREAS.forEach(area => assert.exists(extensionStorageModel.storageForIdAndArea(initId, area)));
-    assert.strictEqual(4, extensionStorageModel.storages().length);
+    assert.lengthOf(extensionStorageModel.storages(), 4);
 
     runtime.executionContextCreated(mockExecutionContext);
-    assert.strictEqual(4, extensionStorageModel.storages().length);
+    assert.lengthOf(extensionStorageModel.storages(), 4);
   });
 
   it('removes ExtensionStorage when last ExecutionContext is removed', async () => {
@@ -219,15 +221,15 @@ describeWithMockConnection('ExtensionStorageModel', () => {
     await addedPromise;
 
     STORAGE_AREAS.forEach(area => assert.exists(extensionStorageModel.storageForIdAndArea(initId, area)));
-    assert.strictEqual(4, extensionStorageModel.storages().length);
+    assert.lengthOf(extensionStorageModel.storages(), 4);
 
     // If a single execution context is destroyed but another remains,
     // ExtensionStorage should not be removed.
     runtime.executionContextDestroyed(mockExecutionContext1.id);
-    assert.strictEqual(4, extensionStorageModel.storages().length);
+    assert.lengthOf(extensionStorageModel.storages(), 4);
 
     runtime.executionContextDestroyed(mockExecutionContext2.id);
-    assert.strictEqual(0, extensionStorageModel.storages().length);
+    assert.lengthOf(extensionStorageModel.storages(), 0);
   });
 
   it('matches service worker target on same origin', () => {

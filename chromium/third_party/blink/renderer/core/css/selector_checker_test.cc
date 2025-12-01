@@ -11,7 +11,6 @@
 #include "third_party/blink/renderer/core/css/selector_checker-inl.h"
 #include "third_party/blink/renderer/core/css/style_rule.h"
 #include "third_party/blink/renderer/core/dom/document.h"
-#include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
@@ -319,7 +318,7 @@ TEST_P(MatchFlagsTest, All) {
   CSSSelectorList* selector_list =
       css_test_helpers::ParseSelectorList(param.selector);
   ASSERT_TRUE(selector_list);
-  ASSERT_TRUE(selector_list->HasOneSelector());
+  ASSERT_TRUE(selector_list->IsSingleComplexSelector());
 
   SelectorChecker checker(SelectorChecker::kResolvingStyle);
   SelectorChecker::SelectorCheckingContext context{
@@ -370,7 +369,7 @@ class ImpactTest : public PageTestBase {
     CSSSelectorList* selector_list =
         css_test_helpers::ParseSelectorList(selector);
     DCHECK(selector_list);
-    DCHECK(selector_list->HasOneSelector());
+    DCHECK(selector_list->IsSingleComplexSelector());
 
     SelectorChecker checker(SelectorChecker::kResolvingStyle);
     SelectorChecker::SelectorCheckingContext context{
@@ -688,13 +687,14 @@ TEST_P(MatchFlagsShadowTest, Host) {
   CSSSelectorList* selector_list =
       css_test_helpers::ParseSelectorList(param.selector);
   ASSERT_TRUE(selector_list);
-  ASSERT_TRUE(selector_list->HasOneSelector());
+  ASSERT_TRUE(selector_list->IsSingleComplexSelector());
 
   SelectorChecker checker(SelectorChecker::kResolvingStyle);
   SelectorChecker::SelectorCheckingContext context{
       ElementResolveContext(*host)};
   context.selector = selector_list->First();
   context.scope = host->GetShadowRoot();
+  context.tree_scope = host->GetShadowRoot();
 
   SelectorChecker::MatchResult result;
   checker.Match(context, result);
@@ -862,8 +862,8 @@ TEST_F(EasySelectorCheckerTest, IsEasy) {
   EXPECT_FALSE(IsEasy("a:link"));
   EXPECT_FALSE(IsEasy("::before"));
   EXPECT_FALSE(IsEasy("div::before"));
-  EXPECT_FALSE(IsEasy("* .a"));  // Due to the universal selector.
-  EXPECT_TRUE(IsEasy(".a *"));   // Due to bucketing.
+  EXPECT_TRUE(IsEasy("* .a"));
+  EXPECT_TRUE(IsEasy(".a *"));
   EXPECT_TRUE(IsEasy("[attr]"));
   EXPECT_TRUE(IsEasy("[attr=\"foo\"]"));
   EXPECT_TRUE(IsEasy("[attr=\"foo\" i]"));
@@ -931,53 +931,6 @@ TEST_F(SelectorCheckerTest, PseudoScopeWithoutScope) {
 
   // Don't crash.
   EXPECT_FALSE(checker.Match(context, result));
-}
-
-TEST_F(SelectorCheckerTest, PseudoTrue) {
-  GetDocument().body()->setInnerHTML("<div id=foo></div>");
-  UpdateAllLifecyclePhasesForTest();
-
-  CSSSelector selector;
-  selector.SetTrue();
-  selector.SetLastInComplexSelector(true);
-
-  Element* foo = GetDocument().getElementById(AtomicString("foo"));
-  ASSERT_TRUE(foo);
-
-  SelectorChecker checker(SelectorChecker::kResolvingStyle);
-  SelectorChecker::SelectorCheckingContext context{ElementResolveContext(*foo)};
-  context.selector = &selector;
-
-  SelectorChecker::MatchResult result;
-  EXPECT_TRUE(checker.Match(context, result));
-}
-
-TEST_F(SelectorCheckerTest, PseudoTrueMatchesHost) {
-  GetDocument().body()->setHTMLUnsafe(R"HTML(
-    <div id=host>
-      <template shadowrootmode=open>
-      </template>
-    </div>
-  )HTML");
-  UpdateAllLifecyclePhasesForTest();
-
-  CSSSelector selector;
-  selector.SetTrue();
-  selector.SetLastInComplexSelector(true);
-
-  Element* host = GetElementById("host");
-  ASSERT_TRUE(host);
-  ShadowRoot* shadow = host->GetShadowRoot();
-  ASSERT_TRUE(shadow);
-
-  SelectorChecker checker(SelectorChecker::kResolvingStyle);
-  SelectorChecker::SelectorCheckingContext context{
-      ElementResolveContext(*host)};
-  context.selector = &selector;
-  context.scope = shadow;
-
-  SelectorChecker::MatchResult result;
-  EXPECT_TRUE(checker.Match(context, result));
 }
 
 }  // namespace blink

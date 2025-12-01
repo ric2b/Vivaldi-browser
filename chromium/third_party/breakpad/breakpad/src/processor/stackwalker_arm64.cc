@@ -36,7 +36,10 @@
 #include <config.h>  // Must come first
 #endif
 
-#include <cstdint>
+#include "processor/stackwalker_arm64.h"
+
+#include <stdint.h>
+
 #include <vector>
 
 #include "common/scoped_ptr.h"
@@ -46,7 +49,6 @@
 #include "google_breakpad/processor/stack_frame_cpu.h"
 #include "processor/cfi_frame_info.h"
 #include "processor/logging.h"
-#include "processor/stackwalker_arm64.h"
 
 namespace google_breakpad {
 

@@ -90,7 +90,6 @@ export class SearchManagerImpl {
         raf.scheduleFullRedraw();
       });
     }
-    raf.scheduleFullRedraw();
   }
 
   reset() {
@@ -158,7 +157,6 @@ export class SearchManagerImpl {
         source: this._results.sources[this._resultIndex],
       });
     }
-    raf.scheduleFullRedraw();
   }
 
   private setResultIndexWithSaturation(nextIndex: number) {
@@ -287,7 +285,7 @@ export class SearchManagerImpl {
     };
 
     const lowerSearch = search.toLowerCase();
-    for (const track of workspace.flatTracks) {
+    for (const track of workspace.flatTracksOrdered) {
       // We don't support searching for tracks that don't have a URI.
       if (!track.uri) continue;
       if (track.title.toLowerCase().indexOf(lowerSearch) === -1) {

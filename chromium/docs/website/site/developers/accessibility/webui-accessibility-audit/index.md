@@ -26,7 +26,7 @@ For example, suppose your test fails with the following error:
 ```none
 *** Begin accessibility audit results ***
 An accessibility audit found 1 error on this page.
-For more information, please see http://chromium.org/developers/accessibility/webui-accessibility-audit
+For more information, please see https://www.chromium.org/developers/accessibility/webui-accessibility-audit
 Error: controlsWithoutLabel (AX_TEXT_01) failed on the following elements (1 - 2 of 2):
 #searchbox > INPUT
 #searchbox > SELECT

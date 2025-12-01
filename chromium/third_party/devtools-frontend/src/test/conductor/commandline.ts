@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import type {Argv} from 'yargs';
+
 export enum DiffBehaviors {
   UPDATE = 'update',
   THROW = 'throw',
@@ -36,25 +38,49 @@ function validateDiffBehaviors(args: undefined|string|string[]) {
   return asArray(args);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function commandLineArgs(yargs: any) {
-  return yargs.parserConfiguration({'camel-case-expansion': false})
-      .command('$0 [tests..]')
-      .option(
-          'artifacts-dir',
-          {type: 'string', desc: 'Path to a directory to store test artifacts in (e.g., coverage reports)'})
-      .option('debug', {type: 'boolean', desc: 'Execute tests in debug mode'})
-      .option('headless', {type: 'boolean', desc: 'Run tests headless even when in debug mode'})
-      .option('coverage', {type: 'boolean', desc: 'Enable coverage reporting'})
+export function commandLineArgs<T = Record<string, unknown>>(yargs: Argv<T>) {
+  return yargs
+      .parserConfiguration({
+        'camel-case-expansion': false,
+      })
+      // TODO: add description
+      .command('$0 [tests..]', '')
+      .option('debug', {
+        type: 'boolean',
+        default: false,
+        desc: 'Execute tests in debug mode',
+      })
+      .option('headless', {
+        type: 'boolean',
+        default: false,
+        desc: 'Run tests headless even when in debug mode',
+      })
+      .option('coverage', {
+        type: 'boolean',
+        default: false,
+        desc: 'Enable coverage reporting',
+      })
+      .option('repeat', {
+        type: 'number',
+        default: 1,
+        desc: 'Repeat tests',
+      })
+      .option('artifacts-dir', {
+        type: 'string',
+        desc: 'Path to a directory to store test artifacts in (e.g., coverage reports)',
+      })
       .option('chrome-binary', {type: 'string', desc: 'Run tests with a custom chrome binary'})
-      .option('repeat', {type: 'number', default: 1, desc: 'Repeat tests'})
       .option('on-diff', {
         type: 'string',
         coerce: validateDiffBehaviors,
         desc: `Define how to deal with diffs in snapshots/screenshots. Options are: ${
             Object.values(DiffBehaviors).join(', ')}`,
       })
-      .option('shuffle', {type: 'boolean', desc: 'Execute tests in random order'})
+      .option('shuffle', {
+        type: 'boolean',
+        desc: 'Execute tests in random order',
+        default: false,
+      })
       .option('grep', {type: 'string', conflicts: 'fgrep', desc: 'Filter tests by name using grep'})
       .option('fgrep', {type: 'string', conflicts: 'grep', desc: 'Filter tests by name using fgrep'})
       .option('invert-grep', {type: 'boolean', desc: 'Invert the grep/fgrep result'});

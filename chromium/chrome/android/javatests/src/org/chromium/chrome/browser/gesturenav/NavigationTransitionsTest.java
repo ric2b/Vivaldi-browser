@@ -44,6 +44,7 @@ import org.chromium.chrome.browser.ViewportTestUtils;
 import org.chromium.chrome.browser.back_press.BackPressManager;
 import org.chromium.chrome.browser.back_press.BackPressMetrics;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
@@ -87,6 +88,7 @@ import java.util.concurrent.atomic.AtomicInteger;
     "hide-scrollbars"
 })
 @Batch(Batch.PER_CLASS)
+// Native fence extension doesn't work properly on Android emulator
 @DisableIf.Build(supported_abis_includes = "x86", message = "https://crbug.com/337886037")
 @DisableIf.Build(supported_abis_includes = "x86_64", message = "https://crbug.com/337886037")
 public class NavigationTransitionsTest {
@@ -117,6 +119,41 @@ public class NavigationTransitionsTest {
 
     private int mTestNavigationMode;
 
+    private static class ScreenshotCallback
+            implements ScreenshotCaptureTestHelper.NavScreenshotCallback {
+
+        @Override
+        public Bitmap onAvailable(int navIndex, Bitmap bitmap, boolean requested) {
+            Assert.assertEquals("Requested screenshot", mExpectRequested, requested);
+            Bitmap overrideBitmap = null;
+            if (requested) {
+                // TODO(crbug.com/337886037) Capturing a screenshot currently fails in
+                // emulators due to GPU issues. This override ensures we always return a
+                // bitmap so that we can reliably run the test. This is ok since the current
+                // tests don't pixel test the output (we do pixel test in other tests). Once
+                // the emulator issues are fixed though it'd be better to remove this
+                // override to perform a more realistic test.
+                overrideBitmap = Bitmap.createBitmap(100, 100, Bitmap.Config.ARGB_8888);
+                overrideBitmap.eraseColor(Color.YELLOW);
+            }
+            if (mCallbackHelper != null) {
+                mCallbackHelper.notifyCalled();
+            }
+            return overrideBitmap;
+        }
+
+        public CallbackHelper expectRequested(boolean expectRequested) {
+            mCallbackHelper = new CallbackHelper();
+            mExpectRequested = expectRequested;
+            return mCallbackHelper;
+        }
+
+        private boolean mExpectRequested = true;
+        private CallbackHelper mCallbackHelper;
+    }
+
+    private ScreenshotCallback mScreenshotCallback;
+
     public NavigationTransitionsTest(int navigationModeParam) {
         mTestNavigationMode = navigationModeParam;
     }
@@ -134,34 +171,17 @@ public class NavigationTransitionsTest {
         BackPressManager backPressManager =
                 mActivityTestRule.getActivity().getBackPressManagerForTesting();
 
-        if (mTestNavigationMode == NAVIGATION_MODE_THREE_BUTTON) {
-            ThreadUtils.runOnUiThreadBlocking(
-                    () -> {
-                        GestureNavigationTestUtils utils =
-                                new GestureNavigationTestUtils(mActivityTestRule);
-                        utils.enableGestureNavigationForTesting();
-                    });
-            backPressManager.setIsGestureNavEnabledSupplier(() -> false);
-        } else {
-            backPressManager.setIsGestureNavEnabledSupplier(() -> true);
-        }
-
-        mScreenshotCaptureTestHelper.setNavScreenshotCallbackForTesting(
-                new ScreenshotCaptureTestHelper.NavScreenshotCallback() {
-                    @Override
-                    public Bitmap onAvailable(int navIndex, Bitmap bitmap, boolean requested) {
-                        // TODO(crbug.com/337886037) Capturing a screenshot currently fails in
-                        // emulators due to GPU issues. This override ensures we always return a
-                        // bitmap so that we can reliably run the test. This is ok since the current
-                        // tests don't pixel test the output (we do pixel test in other tests). Once
-                        // the emulator issues are fixed though it'd be better to remove this
-                        // override to perform a more realistic test.
-                        Bitmap overrideBitmap =
-                                Bitmap.createBitmap(100, 100, Bitmap.Config.ARGB_8888);
-                        overrideBitmap.eraseColor(Color.YELLOW);
-                        return overrideBitmap;
-                    }
+        boolean three_button_mode = mTestNavigationMode == NAVIGATION_MODE_THREE_BUTTON;
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    GestureNavigationTestUtils utils =
+                            new GestureNavigationTestUtils(mActivityTestRule);
+                    utils.enableGestureNavigationForTesting(three_button_mode);
                 });
+        backPressManager.setIsGestureNavEnabledSupplier(() -> !three_button_mode);
+
+        mScreenshotCallback = new ScreenshotCallback();
+        mScreenshotCaptureTestHelper.setNavScreenshotCallbackForTesting(mScreenshotCallback);
         mViewportTestUtils = new ViewportTestUtils(mActivityTestRule);
         mViewportTestUtils.setUpForBrowserControls();
     }
@@ -320,9 +340,16 @@ public class NavigationTransitionsTest {
         String url1 = mTestServer.getURL("/chrome/test/data/android/blue.html");
         String url2 = mTestServer.getURL("/chrome/test/data/android/green.html");
         String url3 = mTestServer.getURL("/chrome/test/data/android/simple.html");
+        var helper = mScreenshotCallback.expectRequested(true);
         mActivityTestRule.loadUrl(url1);
+        WebContentsUtils.waitForCopyableViewInWebContents(getWebContents());
+        helper.waitForNext();
         mActivityTestRule.loadUrl(url2);
+        WebContentsUtils.waitForCopyableViewInWebContents(getWebContents());
+        helper.waitForNext();
         mActivityTestRule.loadUrl(url3);
+        WebContentsUtils.waitForCopyableViewInWebContents(getWebContents());
+        helper.waitForNext();
 
         HistogramWatcher.Builder builder = HistogramWatcher.newBuilder();
         HistogramWatcher watcher;
@@ -351,9 +378,13 @@ public class NavigationTransitionsTest {
 
         WebContentsUtils.waitForCopyableViewInWebContents(getWebContents());
 
+        helper =
+                mScreenshotCallback.expectRequested(
+                        mTestNavigationMode == NAVIGATION_MODE_THREE_BUTTON);
         // Perform a back gesture transition from the left edge.
         performNavigationTransition(url2, BackEventCompat.EDGE_LEFT);
         waitForTransitionFinished();
+        helper.waitForNext();
 
         watcher.assertExpected();
         Assert.assertEquals(url2, getCurrentUrl());
@@ -369,6 +400,112 @@ public class NavigationTransitionsTest {
             waitForTransitionFinished();
             Assert.assertEquals(url1, getCurrentUrl());
         }
+        helper.waitForNext();
+    }
+
+    /**
+     * Tests that when the user swipes from the right edge in OS gesture navigation mode, the tab
+     * navigates forward with a preview if there is forward history.
+     */
+    @Test
+    @MediumTest
+    @EnableFeatures(ChromeFeatureList.RIGHT_EDGE_GOES_FORWARD_GESTURE_NAV)
+    @MinAndroidSdkLevel(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    public void testRightEdgeGoesForwardInGestureNavMode() throws Throwable {
+        // This test is only for gesture nav mode.
+        if (mTestNavigationMode == NAVIGATION_MODE_THREE_BUTTON) return;
+
+        String url1 = mTestServer.getURL("/chrome/test/data/android/blue.html");
+        String url2 = mTestServer.getURL("/chrome/test/data/android/green.html");
+        String url3 = mTestServer.getURL("/chrome/test/data/android/simple.html");
+        mActivityTestRule.loadUrl(url1);
+        mActivityTestRule.loadUrl(url2);
+        mActivityTestRule.loadUrl(url3);
+
+        WebContentsUtils.waitForCopyableViewInWebContents(getWebContents());
+
+        // Swipe from the left edge (back nav) twice. url3 -> url2 -> url1.
+        performNavigationTransition(url2, BackEventCompat.EDGE_LEFT);
+        waitForTransitionFinished();
+        Assert.assertEquals(url2, getCurrentUrl());
+
+        performNavigationTransition(url1, BackEventCompat.EDGE_LEFT);
+        waitForTransitionFinished();
+        Assert.assertEquals(url1, getCurrentUrl());
+
+        // Swipe from the right edge (forward nav) twice. url1 -> url2 -> url3.
+        performNavigationTransition(url2, BackEventCompat.EDGE_RIGHT);
+        waitForTransitionFinished();
+        Assert.assertEquals(url2, getCurrentUrl());
+
+        performNavigationTransition(url3, BackEventCompat.EDGE_RIGHT);
+        waitForTransitionFinished();
+        Assert.assertEquals(url3, getCurrentUrl());
+
+        // Swipe from the left edge (back nav) once and then from the right edge (forward nav) once.
+        // url3 -> url2 -> url3.
+        performNavigationTransition(url2, BackEventCompat.EDGE_LEFT);
+        waitForTransitionFinished();
+        Assert.assertEquals(url2, getCurrentUrl());
+
+        performNavigationTransition(url3, BackEventCompat.EDGE_RIGHT);
+        waitForTransitionFinished();
+        Assert.assertEquals(url3, getCurrentUrl());
+    }
+
+    /**
+     * Test semantic forward and backward swipes when directions are mirrored due to an RTL UI
+     * direction.
+     */
+    @Test
+    @MediumTest
+    @EnableFeatures({
+        ChromeFeatureList.RIGHT_EDGE_GOES_FORWARD_GESTURE_NAV,
+        UiAndroidFeatures.MIRROR_BACK_FORWARD_GESTURES_IN_RTL
+    })
+    @MinAndroidSdkLevel(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    public void testRightEdgeGoesForwardInGestureNavModeInRTL() throws Throwable {
+        // This test is only for gesture nav mode.
+        if (mTestNavigationMode == NAVIGATION_MODE_THREE_BUTTON) return;
+
+        setRtlForTesting(true);
+
+        String url1 = mTestServer.getURL("/chrome/test/data/android/blue.html");
+        String url2 = mTestServer.getURL("/chrome/test/data/android/green.html");
+        String url3 = mTestServer.getURL("/chrome/test/data/android/simple.html");
+        mActivityTestRule.loadUrl(url1);
+        mActivityTestRule.loadUrl(url2);
+        mActivityTestRule.loadUrl(url3);
+
+        WebContentsUtils.waitForCopyableViewInWebContents(getWebContents());
+
+        // Swipe from the right edge (back nav) twice. url3 -> url2 -> url1.
+        performNavigationTransition(url2, BackEventCompat.EDGE_RIGHT);
+        waitForTransitionFinished();
+        Assert.assertEquals(url2, getCurrentUrl());
+
+        performNavigationTransition(url1, BackEventCompat.EDGE_RIGHT);
+        waitForTransitionFinished();
+        Assert.assertEquals(url1, getCurrentUrl());
+
+        // Swipe from the left edge (forward nav) twice. url1 -> url2 -> url3.
+        performNavigationTransition(url2, BackEventCompat.EDGE_LEFT);
+        waitForTransitionFinished();
+        Assert.assertEquals(url2, getCurrentUrl());
+
+        performNavigationTransition(url3, BackEventCompat.EDGE_LEFT);
+        waitForTransitionFinished();
+        Assert.assertEquals(url3, getCurrentUrl());
+
+        // Swipe from the right edge (back nav) once and then from the left edge (forward nav) once.
+        // url3 -> url2 -> url3.
+        performNavigationTransition(url2, BackEventCompat.EDGE_RIGHT);
+        waitForTransitionFinished();
+        Assert.assertEquals(url2, getCurrentUrl());
+
+        performNavigationTransition(url3, BackEventCompat.EDGE_LEFT);
+        waitForTransitionFinished();
+        Assert.assertEquals(url3, getCurrentUrl());
     }
 
     /**
@@ -390,6 +527,9 @@ public class NavigationTransitionsTest {
         mActivityTestRule.loadUrl(url2);
 
         WebContentsUtils.waitForCopyableViewInWebContents(getWebContents());
+
+        // No screenshot on gesture mode when navigating back.
+        mScreenshotCallback.expectRequested(mTestNavigationMode == NAVIGATION_MODE_THREE_BUTTON);
         performNavigationTransition(url1, BackEventCompat.EDGE_LEFT);
         waitForTransitionFinished();
 
@@ -436,6 +576,9 @@ public class NavigationTransitionsTest {
         mActivityTestRule.loadUrl(url3);
 
         WebContentsUtils.waitForCopyableViewInWebContents(getWebContents());
+        // No screenshot on gesture mode when navigating back.
+        mScreenshotCallback.expectRequested(mTestNavigationMode == NAVIGATION_MODE_THREE_BUTTON);
+
         performNavigationTransition(url2, BackEventCompat.EDGE_RIGHT);
         waitForTransitionFinished();
         Assert.assertEquals(url2, getCurrentUrl());
@@ -478,9 +621,11 @@ public class NavigationTransitionsTest {
                                 public void onControlsOffsetChanged(
                                         int topOffset,
                                         int topControlsMinHeightOffset,
+                                        boolean topControlsMinHeightChanged,
                                         int bottomOffset,
                                         int bottomControlsMinHeightOffset,
-                                        boolean needsAnimate,
+                                        boolean bottomControlsMinHeightChanged,
+                                        boolean requestNewFrame,
                                         boolean isVisibilityForced) {
                                     // Since in 3-button mode the gesture sequence is two seconds,
                                     // the top control must have started to show during the two
@@ -500,6 +645,9 @@ public class NavigationTransitionsTest {
         mActivityTestRule.loadUrl(url2);
 
         WebContentsUtils.waitForCopyableViewInWebContents(getWebContents());
+
+        // No screenshot on gesture mode when navigating back.
+        mScreenshotCallback.expectRequested(mTestNavigationMode == NAVIGATION_MODE_THREE_BUTTON);
 
         // Perform a back gesture transition.
         mViewportTestUtils.hideBrowserControls();
@@ -546,6 +694,9 @@ public class NavigationTransitionsTest {
                                         }
                                     });
                 });
+
+        // No screenshot on gesture mode when navigating back.
+        mScreenshotCallback.expectRequested(false);
 
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
@@ -651,6 +802,8 @@ public class NavigationTransitionsTest {
         WebContentsUtils.waitForCopyableViewInWebContents(getWebContents());
 
         // Perform a back gesture transition from the left edge.
+        // No screenshot on gesture mode when navigating back.
+        mScreenshotCallback.expectRequested(mTestNavigationMode == NAVIGATION_MODE_THREE_BUTTON);
         performNavigationTransition(url2, BackEventCompat.EDGE_LEFT);
         waitForTransitionFinished();
 
@@ -714,6 +867,7 @@ public class NavigationTransitionsTest {
     /** Test that it falls back to fallback screenshot when navigating between native pages. */
     @Test
     @MediumTest
+    @DisabledTest(message = "https://crbug.com/379861088")
     public void testNavigateBetweenNativePages() throws TimeoutException {
         if (mTestNavigationMode == NAVIGATION_MODE_GESTURAL
                 && VERSION.SDK_INT < VERSION_CODES.UPSIDE_DOWN_CAKE) return;
@@ -738,5 +892,39 @@ public class NavigationTransitionsTest {
 
         callbackHelper.waitForOnly();
         Assert.assertNull("Should capture a null when navigating between native pages", mBitmap);
+    }
+
+    /** Tests that the favicon bitmap when navigating back to a native page is not null. */
+    @Test
+    @MediumTest
+    @DisabledTest(message = "https://crbug.com/392629755")
+    public void testFallbackUxFaviconForNativePages() throws TimeoutException {
+        // This test is for both 3-button and gesture nav mode.
+        if (mTestNavigationMode == NAVIGATION_MODE_GESTURAL
+                && VERSION.SDK_INT < VERSION_CODES.UPSIDE_DOWN_CAKE) return;
+        // 1. Load NTP.
+        mActivityTestRule.loadUrl(UrlConstants.NTP_URL);
+        WebContentsUtils.waitForCopyableViewInWebContents(getWebContents());
+        // 2. Load url1.
+        String url1 = mTestServer.getURL("/chrome/test/data/android/blue.html");
+        mActivityTestRule.loadUrl(url1);
+        WebContentsUtils.waitForCopyableViewInWebContents(getWebContents());
+
+        CallbackHelper callbackHelper = new CallbackHelper();
+        mScreenshotCaptureTestHelper.setNavScreenshotCallbackForTesting(
+                (navIndex, bitmap, requested) -> {
+                    mBitmap = bitmap;
+                    callbackHelper.notifyCalled();
+                    return mBitmap;
+                });
+
+        // 3. Swipe back to the NTP.
+        performNavigationTransition(UrlConstants.NTP_URL, BackEventCompat.EDGE_LEFT);
+        waitForTransitionFinished();
+        Assert.assertEquals(UrlConstants.NTP_URL, getCurrentUrl());
+
+        Assert.assertNotNull(
+                "The favicon bitmap in the fallback ux of a native page should not be null.",
+                mBitmap);
     }
 }

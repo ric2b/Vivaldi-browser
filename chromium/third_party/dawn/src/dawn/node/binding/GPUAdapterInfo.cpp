@@ -40,7 +40,16 @@ GPUAdapterInfo::GPUAdapterInfo(const wgpu::AdapterInfo& info)
     : vendor_(info.vendor),
       architecture_(info.architecture),
       device_(info.device),
-      description_(info.description) {}
+      description_(info.description) {
+    for (wgpu::ChainedStructOut* chain = info.nextInChain; chain; chain = chain->nextInChain) {
+        if (chain->sType == wgpu::SType::AdapterPropertiesSubgroups) {
+            subgroup_properties_ = *static_cast<wgpu::AdapterPropertiesSubgroups*>(chain);
+            // Clear to prevent using invalid pointer.
+            subgroup_properties_.nextInChain = nullptr;
+            break;
+        }
+    }
+}
 
 std::string GPUAdapterInfo::getVendor(Napi::Env) {
     return vendor_;
@@ -56,6 +65,14 @@ std::string GPUAdapterInfo::getDevice(Napi::Env) {
 
 std::string GPUAdapterInfo::getDescription(Napi::Env) {
     return description_;
+}
+
+uint32_t GPUAdapterInfo::getSubgroupMinSize(Napi::Env) {
+    return subgroup_properties_.subgroupMinSize;
+}
+
+uint32_t GPUAdapterInfo::getSubgroupMaxSize(Napi::Env) {
+    return subgroup_properties_.subgroupMaxSize;
 }
 
 }  // namespace wgpu::binding

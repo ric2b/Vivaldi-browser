@@ -36,10 +36,10 @@
 #include "third_party/blink/renderer/core/svg/graphics/svg_image_for_container.h"
 #include "third_party/blink/renderer/platform/bindings/enumeration_base.h"
 #include "third_party/blink/renderer/platform/graphics/accelerated_static_bitmap_image.h"
-#include "third_party/blink/renderer/platform/graphics/canvas_color_params.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_resource_provider.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/shared_gpu_context.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context.h"
+#include "third_party/blink/renderer/platform/graphics/graphics_types.h"
 #include "third_party/blink/renderer/platform/graphics/image.h"
 #include "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image_transform.h"
@@ -453,10 +453,9 @@ ImageBitmap::ImageBitmap(const SkPixmap& pixmap,
 ImageBitmap::ImageBitmap(ImageData* data,
                          std::optional<gfx::Rect> crop_rect,
                          const ImageBitmapOptions* options) {
-  const ParsedOptions parsed_options =
-      ParseOptions(options, crop_rect, data->BitmapSourceSize(),
-                   ImageOrientationEnum::kOriginTopLeft,
-                   /*source_is_unpremul=*/true);
+  const ParsedOptions parsed_options = ParseOptions(
+      options, crop_rect, data->Size(), ImageOrientationEnum::kOriginTopLeft,
+      /*source_is_unpremul=*/true);
   if (DstBufferSizeHasOverflow(parsed_options))
     return;
 
@@ -752,6 +751,13 @@ gfx::Size ImageBitmap::Size() const {
   DCHECK_GT(image_->width(), 0);
   DCHECK_GT(image_->height(), 0);
   return image_->PreferredDisplaySize();
+}
+
+ImageBitmapSourceStatus ImageBitmap::CheckUsability() const {
+  if (is_neutered_) {
+    return base::unexpected(ImageBitmapSourceError::kInvalid);
+  }
+  return base::ok();
 }
 
 ScriptPromise<ImageBitmap> ImageBitmap::CreateImageBitmap(

@@ -295,7 +295,7 @@ impl Av1SequenceHeader {
         Ok(ObuHeader { obu_type, size })
     }
 
-    pub fn parse_from_obus(data: &[u8]) -> AvifResult<Self> {
+    pub(crate) fn parse_from_obus(data: &[u8]) -> AvifResult<Self> {
         let mut stream = IStream::create(data);
 
         while stream.has_bytes_left()? {

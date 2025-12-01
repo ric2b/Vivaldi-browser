@@ -3,7 +3,8 @@
 // found in the LICENSE file.
 
 import {CustomFormatters, type TypeInfo} from '../src/CustomFormatters.js';
-import * as Formatters from '../src/Formatters.js';  // eslint-disable-line rulesdir/es_modules_import
+import * as Formatters from '../src/Formatters.js';
+
 import {TestValue, TestWasmInterface} from './TestUtils.js';
 
 describe('Formatters', () => {
@@ -89,8 +90,8 @@ describe('Formatters', () => {
     // eslint-disable-next-line @typescript-eslint/naming-convention
     const __l = TestValue.fromMembers('__l', {});
     const str = TestValue.fromMembers('std::string', {
-      '__r_': TestValue.fromMembers('__r_', {
-        '__value_': TestValue.fromMembers('__value_', {'<union>': TestValue.fromMembers('__value_union', {__s, __l})}),
+      __r_: TestValue.fromMembers('__r_', {
+        __value_: TestValue.fromMembers('__value_', {'<union>': TestValue.fromMembers('__value_union', {__s, __l})}),
       }),
     });
 

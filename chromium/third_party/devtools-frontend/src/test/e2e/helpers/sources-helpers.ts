@@ -93,7 +93,7 @@ export async function doubleClickSourceTreeItem(selector: string) {
 
 export async function waitForSourcesPanel(): Promise<void> {
   // Wait for the navigation panel to show up
-  await Promise.any([waitFor('.navigator-file-tree-item'), waitFor('.empty-view')]);
+  await waitFor('.navigator-file-tree-item, .empty-state');
 }
 
 export async function openSourcesPanel() {
@@ -317,7 +317,7 @@ export async function checkBreakpointDidNotActivate() {
     const breakpointIndicator = await Promise.all(pauseIndicators.map(elements => {
       return elements.evaluate(el => el.className);
     }));
-    assert.deepEqual(breakpointIndicator.length, 0, 'script had been paused');
+    assert.lengthOf(breakpointIndicator, 0, 'script had been paused');
   });
 }
 
@@ -444,7 +444,6 @@ export async function setEventListenerBreakpoint(groupName: string, eventName: s
 }
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface Window {
     /* eslint-disable @typescript-eslint/naming-convention */
     __sourceFileEvents: Map<number, {files: string[], handler: (e: Event) => void}>;
@@ -524,11 +523,12 @@ export function isEqualOrAbbreviation(abbreviated: string, full: string): boolea
 }
 
 // Helpers for navigating the file tree.
-export type NestedFileSelector = {
-  rootSelector: string,
-  domainSelector: string,
-  folderSelector?: string, fileSelector: string,
-};
+export interface NestedFileSelector {
+  rootSelector: string;
+  domainSelector: string;
+  folderSelector?: string;
+  fileSelector: string;
+}
 
 export function createSelectorsForWorkerFile(
     workerName: string, folderName: string, fileName: string, workerIndex = 1): NestedFileSelector {
@@ -742,14 +742,14 @@ export async function enableLocalOverrides() {
   await waitFor(CLEAR_CONFIGURATION_SELECTOR);
 }
 
-export type LabelMapping = {
-  label: string,
-  moduleOffset: number,
-  bytecode: number,
-  sourceLine: number,
-  labelLine: number,
-  labelColumn: number,
-};
+export interface LabelMapping {
+  label: string;
+  moduleOffset: number;
+  bytecode: number;
+  sourceLine: number;
+  labelLine: number;
+  labelColumn: number;
+}
 
 export class WasmLocationLabels {
   readonly #mappings: Map<string, LabelMapping[]>;

@@ -27,12 +27,14 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+import '../../ui/legacy/legacy.js';
+
 import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as IconButton from '../../ui/components/icon_button/icon_button.js';
-// eslint-disable-next-line rulesdir/es_modules_import
+// eslint-disable-next-line rulesdir/es-modules-import
 import objectValueStyles from '../../ui/legacy/components/object_ui/objectValue.css.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
@@ -101,6 +103,7 @@ export class ProfilesPanel extends UI.Panel.PanelWithSidebar implements DataDisp
   constructor(name: string, profileTypes: ProfileType[], recordingActionId: string) {
     super(name);
     this.profileTypes = profileTypes;
+    this.registerRequiredCSS(objectValueStyles, profilesPanelStyles, heapProfilerStyles);
 
     const mainContainer = new UI.Widget.VBox();
     this.splitWidget().setMainWidget(mainContainer);
@@ -108,7 +111,7 @@ export class ProfilesPanel extends UI.Panel.PanelWithSidebar implements DataDisp
     this.profilesItemTreeElement = new ProfilesSidebarTreeElement(this);
 
     this.sidebarTree = new UI.TreeOutline.TreeOutlineInShadow();
-
+    this.sidebarTree.registerRequiredCSS(profilesSidebarTreeStyles);
     this.sidebarTree.element.classList.add('profiles-sidebar-tree-box');
     this.panelSidebarElement().appendChild(this.sidebarTree.element);
 
@@ -130,24 +133,24 @@ export class ProfilesPanel extends UI.Panel.PanelWithSidebar implements DataDisp
     toolbarContainerLeft.classList.add('profiles-toolbar');
     toolbarContainerLeft.setAttribute('jslog', `${VisualLogging.toolbar('profiles-sidebar')}`);
     this.panelSidebarElement().insertBefore(toolbarContainerLeft, this.panelSidebarElement().firstChild);
-    const toolbar = new UI.Toolbar.Toolbar('', toolbarContainerLeft);
-    toolbar.makeWrappable(true);
+    const toolbar = toolbarContainerLeft.createChild('devtools-toolbar');
+    toolbar.wrappable = true;
     this.toggleRecordAction = UI.ActionRegistry.ActionRegistry.instance().getAction(recordingActionId);
     this.toggleRecordButton = UI.Toolbar.Toolbar.createActionButton(this.toggleRecordAction);
     toolbar.appendToolbarItem(this.toggleRecordButton);
 
-    toolbar.appendToolbarItem(UI.Toolbar.Toolbar.createActionButtonForId('profiler.clear-all'));
+    toolbar.appendToolbarItem(UI.Toolbar.Toolbar.createActionButton('profiler.clear-all'));
     toolbar.appendSeparator();
-    toolbar.appendToolbarItem(UI.Toolbar.Toolbar.createActionButtonForId('profiler.load-from-file'));
+    toolbar.appendToolbarItem(UI.Toolbar.Toolbar.createActionButton('profiler.load-from-file'));
     this.#saveToFileAction = UI.ActionRegistry.ActionRegistry.instance().getAction('profiler.save-to-file');
     this.#saveToFileAction.setEnabled(false);
     toolbar.appendToolbarItem(UI.Toolbar.Toolbar.createActionButton(this.#saveToFileAction));
     toolbar.appendSeparator();
-    toolbar.appendToolbarItem(UI.Toolbar.Toolbar.createActionButtonForId('components.collect-garbage'));
+    toolbar.appendToolbarItem(UI.Toolbar.Toolbar.createActionButton('components.collect-garbage'));
 
-    this.profileViewToolbar = new UI.Toolbar.Toolbar('', this.toolbarElement);
-    this.profileViewToolbar.makeWrappable(true);
-    this.profileViewToolbar.element.setAttribute('jslog', `${VisualLogging.toolbar('profile-view')}`);
+    this.profileViewToolbar = this.toolbarElement.createChild('devtools-toolbar');
+    this.profileViewToolbar.wrappable = true;
+    this.profileViewToolbar.setAttribute('jslog', `${VisualLogging.toolbar('profile-view')}`);
 
     this.profileGroups = {};
     this.launcherView = new ProfileLauncherView(this);
@@ -288,6 +291,9 @@ export class ProfilesPanel extends UI.Panel.PanelWithSidebar implements DataDisp
   }
 
   updateProfileTypeSpecificUI(): void {
+    if (this.selectedProfileType?.isInstantProfile()) {
+      this.toggleRecordButton.toggleOnClick(false);
+    }
     this.updateToggleRecordAction(this.toggleRecordAction.toggled());
   }
 
@@ -455,8 +461,6 @@ export class ProfilesPanel extends UI.Panel.PanelWithSidebar implements DataDisp
   override wasShown(): void {
     super.wasShown();
     UI.Context.Context.instance().setFlavor(ProfilesPanel, this);
-    this.registerCSSFiles([objectValueStyles, profilesPanelStyles, heapProfilerStyles]);
-    this.sidebarTree.registerCSSFiles([profilesSidebarTreeStyles]);
   }
 
   override willHide(): void {

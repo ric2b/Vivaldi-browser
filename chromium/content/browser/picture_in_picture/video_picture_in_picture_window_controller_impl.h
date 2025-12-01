@@ -87,6 +87,11 @@ class CONTENT_EXPORT VideoPictureInPictureWindowControllerImpl
       base::OnceClosure on_window_created_notify_observers_callback) override;
 
   const gfx::Rect& GetSourceBounds() const override;
+  void GetMediaImage(
+      const media_session::MediaImage& image,
+      int minimum_size_px,
+      int desired_size_px,
+      MediaSession::GetMediaImageBitmapCallback callback) override;
   std::optional<gfx::Rect> GetWindowBounds() override;
 
   std::optional<url::Origin> GetOrigin() override;
@@ -101,6 +106,13 @@ class CONTENT_EXPORT VideoPictureInPictureWindowControllerImpl
 
   void MediaSessionPositionChanged(
       const std::optional<media_session::MediaPosition>& media_position);
+
+  void MediaSessionImagesChanged(
+      const base::flat_map<media_session::mojom::MediaSessionImageType,
+                           std::vector<media_session::MediaImage>>& images);
+
+  void MediaSessionMetadataChanged(
+      const std::optional<media_session::MediaMetadata>& metadata);
 
   gfx::Size GetSize();
 
@@ -224,6 +236,17 @@ class CONTENT_EXPORT VideoPictureInPictureWindowControllerImpl
 
   // The media position info as last reported to us by MediaSessionImpl.
   std::optional<media_session::MediaPosition> media_position_;
+
+  // The media metadata's source title as last reported to us by
+  // MediaSessionImpl.
+  std::u16string source_title_;
+
+  // True if the last media_session::MediaPosition we received in
+  // |MediaSessionPositionChanged()| was sent to |window_|. Used to track
+  // whether we should send it again.
+  bool window_received_media_position_ = false;
+
+  std::vector<media_session::MediaImage> favicon_images_;
 
   // Coordinates of the video element in WebContents coordinates.
   gfx::Rect source_bounds_;

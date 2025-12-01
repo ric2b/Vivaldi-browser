@@ -154,6 +154,9 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
   // Like Assert(), but always enabled.
   void Check(Condition cc, AbortReason reason, Register rs, Operand rt);
 
+  // Same as Check() but expresses that the check is needed for the sandbox.
+  void SbxCheck(Condition cc, AbortReason reason, Register rs, Operand rt);
+
   // Print a message to stdout and abort execution.
   void Abort(AbortReason msg);
 
@@ -279,8 +282,8 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
     if (!RelocInfo::IsNoInfo(rmode)) RecordRelocInfo(rmode, offset);
     GenPCRelativeJump(temp, offset);
   }
-  // Generate a BL immediate instruction with the corresponding relocation info.
-  // As for near_jump, 'offset' is the immediate to encode in the BL
+  // Generate a auipc+jalr instruction with the corresponding relocation info.
+  // As for near_jump, 'offset' is the immediate to encode in the auipc+jalr
   // instruction.
   void near_call(int offset, RelocInfo::Mode rmode) {
     UseScratchRegisterScope temps(this);
@@ -309,8 +312,8 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
   bool CanUseNearCallOrJump(RelocInfo::Mode rmode) {
     return rmode != RelocInfo::EXTERNAL_REFERENCE;
   }
-  int64_t CalculateTargetOffset(Address target, RelocInfo::Mode rmode,
-                                uint8_t* pc);
+  static int64_t CalculateTargetOffset(Address target, RelocInfo::Mode rmode,
+                                       uint8_t* pc);
   void PatchAndJump(Address target);
   void Jump(Handle<Code> code, RelocInfo::Mode rmode, COND_ARGS);
   void Jump(const ExternalReference& reference);
@@ -335,6 +338,17 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
   void CallJSFunction(Register function_object, uint16_t argument_count);
   void JumpJSFunction(Register function_object,
                       JumpMode jump_mode = JumpMode::kJump);
+#ifdef V8_ENABLE_LEAPTIERING
+  void CallJSDispatchEntry(JSDispatchHandle dispatch_handle,
+                           uint16_t argument_count);
+#endif
+#ifdef V8_ENABLE_WEBASSEMBLY
+  void ResolveWasmCodePointer(Register target, uint64_t signature_hash);
+  void CallWasmCodePointer(Register target, uint64_t signature_hash,
+                           CallJumpMode call_jump_mode = CallJumpMode::kCall);
+  void CallWasmCodePointerNoSignatureCheck(Register target);
+  void LoadWasmCodePointer(Register dst, MemOperand src);
+#endif
 
   // Load the builtin given by the Smi in |builtin| into the same
   // register.
@@ -877,16 +891,12 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
                             Register scratch_other = no_reg);
 
   template <int NBYTES>
-  void UnalignedFLoadHelper(FPURegister frd, const MemOperand& rs,
-                            Register scratch);
+  void UnalignedFLoadHelper(FPURegister frd, const MemOperand& rs);
   template <int NBYTES>
-  void UnalignedFStoreHelper(FPURegister frd, const MemOperand& rs,
-                             Register scratch);
+  void UnalignedFStoreHelper(FPURegister frd, const MemOperand& rs);
 #if V8_TARGET_ARCH_RISCV32
-  void UnalignedDoubleHelper(FPURegister frd, const MemOperand& rs,
-                             Register scratch_base);
-  void UnalignedDStoreHelper(FPURegister frd, const MemOperand& rs,
-                             Register scratch);
+  void UnalignedDoubleHelper(FPURegister frd, const MemOperand& rs);
+  void UnalignedDStoreHelper(FPURegister frd, const MemOperand& rs);
 #endif
 
   template <typename Reg_T, typename Func>
@@ -910,11 +920,11 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
   void Uld(Register rd, const MemOperand& rs);
   void Usd(Register rd, const MemOperand& rs);
 
-  void ULoadFloat(FPURegister fd, const MemOperand& rs, Register scratch);
-  void UStoreFloat(FPURegister fd, const MemOperand& rs, Register scratch);
+  void ULoadFloat(FPURegister fd, const MemOperand& rs);
+  void UStoreFloat(FPURegister fd, const MemOperand& rs);
 
-  void ULoadDouble(FPURegister fd, const MemOperand& rs, Register scratch);
-  void UStoreDouble(FPURegister fd, const MemOperand& rs, Register scratch);
+  void ULoadDouble(FPURegister fd, const MemOperand& rs);
+  void UStoreDouble(FPURegister fd, const MemOperand& rs);
 
   using Trapper = std::function<void(int)>;
 
@@ -1795,6 +1805,9 @@ class V8_EXPORT_PRIVATE MacroAssembler : public MacroAssemblerBase {
   // Load the entrypoint pointer of a JSDispatchTable entry.
   void LoadEntrypointFromJSDispatchTable(Register destination,
                                          Register dispatch_handle,
+                                         Register scratch);
+  void LoadEntrypointFromJSDispatchTable(Register destination,
+                                         JSDispatchHandle dispatch_handle,
                                          Register scratch);
   void LoadParameterCountFromJSDispatchTable(Register destination,
                                              Register dispatch_handle,

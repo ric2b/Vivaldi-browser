@@ -56,6 +56,12 @@ animation-range-end: normal
 animation-range-start: normal
 animation-timeline: auto
 animation-timing-function: ease
+animation-trigger-exit-range-end: normal
+animation-trigger-exit-range-start: normal
+animation-trigger-range-end: normal
+animation-trigger-range-start: normal
+animation-trigger-timeline: auto
+animation-trigger-type: once
 app-region: none
 appearance: none
 backdrop-filter: none
@@ -211,6 +217,8 @@ inset-block-start: auto
 inset-inline-end: auto
 inset-inline-start: auto
 interactivity: auto
+interest-target-hide-delay: 0.5s
+interest-target-show-delay: 0.5s
 interpolate-size: numeric-only
 isolation: auto
 justify-content: normal
@@ -245,6 +253,9 @@ mask-position: 0% 0%
 mask-repeat: repeat
 mask-size: auto
 mask-type: luminance
+masonry-auto-tracks: auto
+masonry-direction: column
+masonry-fill: normal
 masonry-slack: normal
 masonry-template-tracks: auto
 masonry-track-end: auto
@@ -299,8 +310,6 @@ paint-order: normal
 perspective: none
 perspective-origin: 50% 50%
 pointer-events: auto
-popover-hide-delay: infinity * 1s
-popover-show-delay: 0.5s
 position: static
 position-anchor: auto
 position-area: none
@@ -319,6 +328,7 @@ rx: auto
 ry: auto
 scale: none
 scroll-behavior: auto
+scroll-initial-target: none
 scroll-margin-block-end: 0px
 scroll-margin-block-start: 0px
 scroll-margin-inline-end: 0px
@@ -330,7 +340,6 @@ scroll-padding-inline-end: auto
 scroll-padding-inline-start: auto
 scroll-start-block: auto
 scroll-start-inline: auto
-scroll-start-target: none
 scroll-start-x: auto
 scroll-start-y: auto
 scroll-timeline-axis: block

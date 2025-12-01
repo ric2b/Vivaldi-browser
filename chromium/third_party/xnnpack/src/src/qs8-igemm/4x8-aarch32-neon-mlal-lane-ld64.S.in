@@ -19,7 +19,6 @@ $XMAX = "VMAX.U8" if DATATYPE == "QU8" else "VMAX.S8"
 $XXTL = "VMOVL.U8" if DATATYPE == "QU8" else "VMOVL.S8"
 $SQXTXN = "VQMOVUN.S16" if DATATYPE == "QU8" else "VQMOVN.S16"
 $XINT8_T = "uint8_t" if DATATYPE == "QU8" else "int8_t"
-# LINT.IfChange
 // void xnn_${DATATYPE_SPEC}_igemm_minmax_${REQUANTIZATION.lower()}_ukernel_4x8__asm_aarch32_${ISA}_mlal_lane_ld64${"_prfm" if PREFETCH else ""}
 //     size_t mr,                                     (r0)
 //     size_t nc,                                      r1
@@ -61,7 +60,8 @@ $if REQUANTIZATION == "RNDNU" and DATATYPE != "QU8":
 $elif REQUANTIZATION == "RNDNU" and DATATYPE == "QU8":
   // params structure is 20 bytes
   //  struct {
-  //    ${XINT8_T} kernel_zero_point[4]; d14
+  //    ${XINT8_T} kernel_zero_point;    d14
+  //    ${XINT8_T} padding[3];
   //    int32_t right_pre_shift;         d12[0]
   //    int32_t multiplier;              d12[1]
   //    int32_t right_post_shift;        d13[0]
@@ -116,7 +116,8 @@ BEGIN_FUNCTION xnn_${DATATYPE_SPEC}_igemm_minmax_${REQUANTIZATION.lower()}_ukern
 
         # Load params values
         $if DATATYPE == "QU8":
-          VLD1.32     {d14[]}, [r5]!          // QU8 kernel_zero_point
+          VLD1.8     {d14[]}, [r5]            // QU8 kernel_zero_point
+          ADD        r5, r5, 4                // Skip padding
         $if REQUANTIZATION == "RNDNU":
           VLDM        r5, {d12-d13}           // RNDNU params
         $elif DATATYPE == "QC8" and ARMV8:
@@ -645,7 +646,6 @@ BEGIN_FUNCTION xnn_${DATATYPE_SPEC}_igemm_minmax_${REQUANTIZATION.lower()}_ukern
         POP         {r4, r5, r6, r7, r8, r9, r10, r11, pc}
 
 END_FUNCTION xnn_${DATATYPE_SPEC}_igemm_minmax_${REQUANTIZATION.lower()}_ukernel_4x8__asm_aarch32_${ISA}_mlal_lane_ld64${"_prfm" if PREFETCH else ""}
-# LINT.ThenChange(../qs8-qc8w-igemm/gen/qs8-qc8w-igemm-4x8-fp32-aarch32-neonv8-mlal-lane-ld64.cc,gen/qs8-igemm-4x8-rndnu-aarch32-neon-mlal-lane-ld64.cc)
 #ifdef __ELF__
 .section ".note.GNU-stack","",%progbits
 #endif

@@ -573,13 +573,13 @@ void MarkCompactCollector::ComputeEvacuationHeuristics(
         kTargetFragmentationPercentForOptimizeMemory;
     *max_evacuated_bytes = kMaxEvacuatedBytesForOptimizeMemory;
   } else {
-    const double estimated_compaction_speed =
+    const std::optional<double> estimated_compaction_speed =
         heap_->tracer()->CompactionSpeedInBytesPerMillisecond();
-    if (estimated_compaction_speed != 0) {
+    if (estimated_compaction_speed.has_value()) {
       // Estimate the target fragmentation based on traced compaction speed
       // and a goal for a single page.
       const double estimated_ms_per_area =
-          1 + area_size / estimated_compaction_speed;
+          1 + area_size / *estimated_compaction_speed;
       *target_fragmentation_percent = static_cast<int>(
           100 - 100 * kTargetMsPerArea / estimated_ms_per_area);
       if (*target_fragmentation_percent <
@@ -1169,8 +1169,8 @@ class MarkExternalPointerFromExternalStringTable : public RootVisitor {
         : table_(table), space_(space) {}
     void VisitExternalPointer(Tagged<HeapObject> host,
                               ExternalPointerSlot slot) override {
-      DCHECK_NE(slot.tag(), kExternalPointerNullTag);
-      DCHECK(IsSharedExternalPointerType(slot.tag()));
+      DCHECK(!slot.tag_range().IsEmpty());
+      DCHECK(IsSharedExternalPointerType(slot.tag_range()));
       ExternalPointerHandle handle = slot.Relaxed_LoadHandle();
       table_->Mark(space_, handle, slot.address());
     }
@@ -1344,6 +1344,12 @@ class RecordMigratedSlotVisitor
     RecordMigratedSlot(host, slot.load(), slot.address());
   }
 
+  inline void VisitProtectedPointer(Tagged<TrustedObject> host,
+                                    ProtectedMaybeObjectSlot slot) final {
+    DCHECK(!MapWord::IsPacked(slot.Relaxed_Load().ptr()));
+    RecordMigratedSlot(host, slot.load(), slot.address());
+  }
+
  protected:
   inline void RecordMigratedSlot(Tagged<HeapObject> host,
                                  Tagged<MaybeObject> value, Address slot) {
@@ -1362,7 +1368,9 @@ class RecordMigratedSlotVisitor
         MutablePageMetadata* host_metadata =
             MutablePageMetadata::cast(host_chunk->Metadata());
         if (value_chunk->IsFlagSet(MemoryChunk::IS_EXECUTABLE)) {
-          RememberedSet<OLD_TO_CODE>::Insert<AccessMode::NON_ATOMIC>(
+          // TODO(377724745): currently needed because flags are untrusted.
+          SBXCHECK(!InsideSandbox(value_chunk->address()));
+          RememberedSet<TRUSTED_TO_CODE>::Insert<AccessMode::NON_ATOMIC>(
               host_metadata, host_chunk->Offset(slot));
         } else if (value_chunk->IsFlagSet(MemoryChunk::IS_TRUSTED) &&
                    host_chunk->IsFlagSet(MemoryChunk::IS_TRUSTED)) {
@@ -1371,6 +1379,8 @@ class RecordMigratedSlotVisitor
           // references we want to use the OLD_TO_OLD remembered set, so here
           // we need to check that both the value chunk and the host chunk are
           // trusted space chunks.
+          // TODO(377724745): currently needed because flags are untrusted.
+          SBXCHECK(!InsideSandbox(value_chunk->address()));
           if (value_chunk->InWritableSharedSpace()) {
             RememberedSet<TRUSTED_TO_SHARED_TRUSTED>::Insert<
                 AccessMode::NON_ATOMIC>(host_metadata,
@@ -2594,7 +2604,7 @@ class ParallelClearingJob final : public v8::JobTask {
   void Run(JobDelegate* delegate) override {
     std::unique_ptr<ClearingItem> item;
     {
-      base::MutexGuard guard(&items_mutex_);
+      base::SpinningMutexGuard guard(&items_mutex_);
       item = std::move(items_.back());
       items_.pop_back();
     }
@@ -2602,7 +2612,7 @@ class ParallelClearingJob final : public v8::JobTask {
   }
 
   size_t GetMaxConcurrency(size_t worker_count) const override {
-    base::MutexGuard guard(&items_mutex_);
+    base::SpinningMutexGuard guard(&items_mutex_);
     if (!v8_flags.parallel_weak_ref_clearing ||
         !collector_->UseBackgroundThreadsInCycle()) {
       return std::min<size_t>(items_.size(), 1);
@@ -2616,7 +2626,7 @@ class ParallelClearingJob final : public v8::JobTask {
 
  private:
   MarkCompactCollector* collector_;
-  mutable base::Mutex items_mutex_;
+  mutable base::SpinningMutex items_mutex_;
   std::vector<std::unique_ptr<ClearingItem>> items_;
 };
 
@@ -2884,6 +2894,7 @@ class MarkCompactCollector::ClearTrivialWeakRefJobItem final
                                                     : ThreadKind::kBackground,
                         trace_id_, TRACE_EVENT_FLAG_FLOW_IN);
     collector_->ClearTrivialWeakReferences();
+    collector_->ClearTrustedWeakReferences();
   }
 
   uint64_t trace_id() const { return trace_id_; }
@@ -3022,8 +3033,9 @@ void MarkCompactCollector::ClearNonLiveReferences() {
 #ifdef V8_ENABLE_LEAPTIERING
   {
     TRACE_GC(heap_->tracer(), GCTracer::Scope::MC_SWEEP_JS_DISPATCH_TABLE);
-    JSDispatchTable* jdt = GetProcessWideJSDispatchTable();
-    Tagged<Code> compile_lazy = *BUILTIN_CODE(heap_->isolate(), CompileLazy);
+    JSDispatchTable* jdt = IsolateGroup::current()->js_dispatch_table();
+    Tagged<Code> compile_lazy =
+        heap_->isolate()->builtins()->code(Builtin::kCompileLazy);
     jdt->Sweep(heap_->js_dispatch_table_space(), isolate->counters(),
                [&](JSDispatchEntry& entry) {
                  Tagged<Code> code = entry.GetCode();
@@ -3231,7 +3243,8 @@ void MarkCompactCollector::MarkDependentCodeForDeoptimization() {
             heap_, non_atomic_marking_state_, object) &&
         !code->embedded_objects_cleared()) {
       if (!code->marked_for_deoptimization()) {
-        code->SetMarkedForDeoptimization(heap_->isolate(), "weak objects");
+        code->SetMarkedForDeoptimization(heap_->isolate(),
+                                         LazyDeoptimizeReason::kWeakObjects);
         have_code_to_deoptimize_ = true;
       }
       code->ClearEmbeddedObjects(heap_);
@@ -3753,7 +3766,7 @@ void MarkCompactCollector::RightTrimDescriptorArray(
 void MarkCompactCollector::RecordStrongDescriptorArraysForWeakening(
     GlobalHandleVector<DescriptorArray> strong_descriptor_arrays) {
   DCHECK(heap_->incremental_marking()->IsMajorMarking());
-  base::MutexGuard guard(&strong_descriptor_arrays_mutex_);
+  base::SpinningMutexGuard guard(&strong_descriptor_arrays_mutex_);
   strong_descriptor_arrays_.push_back(std::move(strong_descriptor_arrays));
 }
 
@@ -3848,22 +3861,24 @@ void MarkCompactCollector::ClearWeakCollections() {
   }
 }
 
-void MarkCompactCollector::ClearTrivialWeakReferences() {
-  HeapObjectAndSlot slot;
-  Tagged<HeapObjectReference> cleared_weak_ref = ClearedValue(heap_->isolate());
-  while (local_weak_objects()->weak_references_trivial_local.Pop(&slot)) {
+template <typename TObjectAndSlot, typename TMaybeSlot>
+void MarkCompactCollector::ClearWeakReferences(
+    WeakObjects::WeakObjectWorklist<TObjectAndSlot>::Local& worklist,
+    Tagged<HeapObjectReference> cleared_weak_ref) {
+  TObjectAndSlot slot;
+  while (worklist.Pop(&slot)) {
     Tagged<HeapObject> value;
     // The slot could have been overwritten, so we have to treat it
-    // as MaybeObjectSlot.
-    MaybeObjectSlot location(slot.slot);
-    if ((*location).GetHeapObjectIfWeak(&value)) {
+    // as [Protected]MaybeObjectSlot.
+    TMaybeSlot location(slot.slot);
+    if (location.load().GetHeapObjectIfWeak(&value)) {
       DCHECK(!IsWeakCell(value));
       // Values in RO space have already been filtered, but a non-RO value may
       // have been overwritten by a RO value since marking.
       if (MarkingHelper::IsMarkedOrAlwaysLive(heap_, non_atomic_marking_state_,
                                               value)) {
         // The value of the weak reference is alive.
-        RecordSlot(slot.heap_object, HeapObjectSlot(location), value);
+        RecordSlot(slot.heap_object, slot.slot, value);
       } else {
         DCHECK(MainMarkingVisitor::IsTrivialWeakReferenceValue(slot.heap_object,
                                                                value));
@@ -3874,6 +3889,18 @@ void MarkCompactCollector::ClearTrivialWeakReferences() {
       }
     }
   }
+}
+
+void MarkCompactCollector::ClearTrivialWeakReferences() {
+  Tagged<HeapObjectReference> cleared_weak_ref = ClearedValue(heap_->isolate());
+  ClearWeakReferences<HeapObjectAndSlot, MaybeObjectSlot>(
+      local_weak_objects()->weak_references_trivial_local, cleared_weak_ref);
+}
+
+void MarkCompactCollector::ClearTrustedWeakReferences() {
+  Tagged<HeapObjectReference> cleared_weak_ref = ClearedTrustedValue();
+  ClearWeakReferences<TrustedObjectAndSlot, ProtectedMaybeObjectSlot>(
+      local_weak_objects()->weak_references_trusted_local, cleared_weak_ref);
 }
 
 void MarkCompactCollector::FilterNonTrivialWeakReferences() {
@@ -4062,7 +4089,7 @@ void MarkCompactCollector::RecordRelocSlot(Tagged<InstructionStream> host,
 
   // Access to TypeSlots need to be protected, since LocalHeaps might
   // publish code in the background thread.
-  std::optional<base::MutexGuard> opt_guard;
+  std::optional<base::SpinningMutexGuard> opt_guard;
   if (v8_flags.concurrent_sparkplug) {
     opt_guard.emplace(info.page_metadata->mutex());
   }
@@ -4110,6 +4137,20 @@ Tagged<Object> MakeSlotValue<WriteProtectedSlot<ProtectedPointerSlot>,
                              HeapObjectReferenceType::STRONG>(
     Tagged<HeapObject> heap_object) {
   return heap_object;
+}
+
+template <>
+Tagged<MaybeObject>
+MakeSlotValue<ProtectedMaybeObjectSlot, HeapObjectReferenceType::STRONG>(
+    Tagged<HeapObject> heap_object) {
+  return heap_object;
+}
+
+template <>
+Tagged<MaybeObject>
+MakeSlotValue<ProtectedMaybeObjectSlot, HeapObjectReferenceType::WEAK>(
+    Tagged<HeapObject> heap_object) {
+  return MakeWeak(heap_object);
 }
 #endif
 
@@ -4168,18 +4209,19 @@ template <HeapObjectReferenceType reference_type, typename TSlot>
 static inline void UpdateSlot(PtrComprCageBase cage_base, TSlot slot,
                               Tagged<HeapObject> heap_obj) {
   static_assert(
-      std::is_same<TSlot, FullObjectSlot>::value ||
-          std::is_same<TSlot, ObjectSlot>::value ||
-          std::is_same<TSlot, FullMaybeObjectSlot>::value ||
-          std::is_same<TSlot, MaybeObjectSlot>::value ||
-          std::is_same<TSlot, OffHeapObjectSlot>::value ||
-          std::is_same<TSlot, InstructionStreamSlot>::value ||
-          std::is_same<TSlot, ProtectedPointerSlot>::value ||
-          std::is_same<TSlot, WriteProtectedSlot<ObjectSlot>>::value ||
-          std::is_same<TSlot, WriteProtectedSlot<ProtectedPointerSlot>>::value,
+      std::is_same_v<TSlot, FullObjectSlot> ||
+          std::is_same_v<TSlot, ObjectSlot> ||
+          std::is_same_v<TSlot, FullMaybeObjectSlot> ||
+          std::is_same_v<TSlot, MaybeObjectSlot> ||
+          std::is_same_v<TSlot, OffHeapObjectSlot> ||
+          std::is_same_v<TSlot, InstructionStreamSlot> ||
+          std::is_same_v<TSlot, ProtectedPointerSlot> ||
+          std::is_same_v<TSlot, ProtectedMaybeObjectSlot> ||
+          std::is_same_v<TSlot, WriteProtectedSlot<ObjectSlot>> ||
+          std::is_same_v<TSlot, WriteProtectedSlot<ProtectedPointerSlot>>,
       "Only [Full|OffHeap]ObjectSlot, [Full]MaybeObjectSlot, "
-      "InstructionStreamSlot, ProtectedPointerSlot, or WriteProtectedSlot are "
-      "expected here");
+      "InstructionStreamSlot, Protected[Pointer|MaybeObject]Slot, "
+      "or WriteProtectedSlot are expected here");
   MapWord map_word = heap_obj->map_word(cage_base, kRelaxedLoad);
   if (!map_word.IsForwardingAddress()) return;
   DCHECK_IMPLIES((!v8_flags.minor_ms && !Heap::InFromPage(heap_obj)),
@@ -4812,17 +4854,20 @@ void TraceEvacuation(Isolate* isolate, size_t pages_count,
                      size_t wanted_num_tasks, size_t live_bytes,
                      size_t aborted_pages) {
   DCHECK(v8_flags.trace_evacuation);
-  PrintIsolate(
-      isolate,
-      "%8.0f ms: evacuation-summary: parallel=%s pages=%zu "
-      "wanted_tasks=%zu cores=%d live_bytes=%" V8PRIdPTR
-      " compaction_speed=%.f aborted=%zu\n",
-      isolate->time_millis_since_init(),
-      v8_flags.parallel_compaction ? "yes" : "no", pages_count,
-      wanted_num_tasks, V8::GetCurrentPlatform()->NumberOfWorkerThreads() + 1,
-      live_bytes,
-      isolate->heap()->tracer()->CompactionSpeedInBytesPerMillisecond(),
-      aborted_pages);
+  PrintIsolate(isolate,
+               "%8.0f ms: evacuation-summary: parallel=%s pages=%zu "
+               "wanted_tasks=%zu cores=%d live_bytes=%" V8PRIdPTR
+               " compaction_speed=%.f aborted=%zu\n",
+               isolate->time_millis_since_init(),
+               v8_flags.parallel_compaction ? "yes" : "no", pages_count,
+               wanted_num_tasks,
+               V8::GetCurrentPlatform()->NumberOfWorkerThreads() + 1,
+               live_bytes,
+               isolate->heap()
+                   ->tracer()
+                   ->CompactionSpeedInBytesPerMillisecond()
+                   .value_or(0),
+               aborted_pages);
 }
 
 }  // namespace
@@ -4951,7 +4996,7 @@ class EvacuationWeakObjectRetainer : public WeakObjectRetainer {
 
 void MarkCompactCollector::Evacuate() {
   TRACE_GC(heap_->tracer(), GCTracer::Scope::MC_EVACUATE);
-  base::MutexGuard guard(heap_->relocation_mutex());
+  base::SpinningMutexGuard guard(heap_->relocation_mutex());
 
   {
     TRACE_GC(heap_->tracer(), GCTracer::Scope::MC_EVACUATE_PROLOGUE);
@@ -5005,7 +5050,7 @@ void MarkCompactCollector::Evacuate() {
         MarkBit::From(object).Clear();
         p->SetLiveBytes(0);
       }
-      p->ProgressBar().ResetIfEnabled();
+      p->marking_progress_tracker().ResetIfEnabled();
     }
     promoted_large_pages_.clear();
 
@@ -5172,8 +5217,8 @@ class RememberedSetUpdatingItem : public UpdatingItem {
   inline void CheckAndUpdateOldToNewSlot(TSlot slot,
                                          const PtrComprCageBase cage_base) {
     static_assert(
-        std::is_same<TSlot, FullMaybeObjectSlot>::value ||
-            std::is_same<TSlot, MaybeObjectSlot>::value,
+        std::is_same_v<TSlot, FullMaybeObjectSlot> ||
+            std::is_same_v<TSlot, MaybeObjectSlot>,
         "Only FullMaybeObjectSlot and MaybeObjectSlot are expected here");
     Tagged<HeapObject> heap_object;
     if (!(*slot).GetHeapObject(&heap_object)) return;
@@ -5197,13 +5242,15 @@ class RememberedSetUpdatingItem : public UpdatingItem {
     UpdateUntypedOldToNewPointers<OLD_TO_NEW>();
     UpdateUntypedOldToNewPointers<OLD_TO_NEW_BACKGROUND>();
     UpdateUntypedOldToOldPointers();
-    UpdateUntypedOldToCodePointers();
+    UpdateUntypedTrustedToCodePointers();
     UpdateUntypedTrustedToTrustedPointers();
   }
 
   template <RememberedSetType old_to_new_type>
   void UpdateUntypedOldToNewPointers() {
-    if (!chunk_->slot_set<old_to_new_type, AccessMode::NON_ATOMIC>()) return;
+    if (!chunk_->slot_set<old_to_new_type, AccessMode::NON_ATOMIC>()) {
+      return;
+    }
 
     const PtrComprCageBase cage_base = heap_->isolate();
     // Marking bits are cleared already when the page is already swept. This
@@ -5229,7 +5276,9 @@ class RememberedSetUpdatingItem : public UpdatingItem {
   }
 
   void UpdateUntypedOldToOldPointers() {
-    if (!chunk_->slot_set<OLD_TO_OLD, AccessMode::NON_ATOMIC>()) return;
+    if (!chunk_->slot_set<OLD_TO_OLD, AccessMode::NON_ATOMIC>()) {
+      return;
+    }
 
     const PtrComprCageBase cage_base = heap_->isolate();
     if (chunk_->Chunk()->executable()) {
@@ -5269,8 +5318,20 @@ class RememberedSetUpdatingItem : public UpdatingItem {
     chunk_->ReleaseSlotSet(OLD_TO_OLD);
   }
 
-  void UpdateUntypedOldToCodePointers() {
-    if (!chunk_->slot_set<OLD_TO_CODE, AccessMode::NON_ATOMIC>()) return;
+  void UpdateUntypedTrustedToCodePointers() {
+    if (!chunk_->slot_set<TRUSTED_TO_CODE, AccessMode::NON_ATOMIC>()) {
+      return;
+    }
+
+#ifdef V8_ENABLE_SANDBOX
+    // When the sandbox is enabled, we must not process the TRUSTED_TO_CODE
+    // remembered set on any chunk that is located inside the sandbox (in which
+    // case the set should be unused). This is because an attacker could either
+    // directly modify the TRUSTED_TO_CODE set on such a chunk, or trick the GC
+    // into populating it with invalid pointers, both of which may lead to
+    // memory corruption inside the (trusted) code space here.
+    SBXCHECK(!InsideSandbox(chunk_->ChunkAddress()));
+#endif
 
     const PtrComprCageBase cage_base = heap_->isolate();
 #ifdef V8_EXTERNAL_CODE_SPACE
@@ -5278,7 +5339,7 @@ class RememberedSetUpdatingItem : public UpdatingItem {
 #else
     const PtrComprCageBase code_cage_base = cage_base;
 #endif
-    RememberedSet<OLD_TO_CODE>::Iterate(
+    RememberedSet<TRUSTED_TO_CODE>::Iterate(
         chunk_,
         [=](MaybeObjectSlot slot) {
           Tagged<HeapObject> host = HeapObject::FromAddress(
@@ -5292,10 +5353,14 @@ class RememberedSetUpdatingItem : public UpdatingItem {
         },
         SlotSet::FREE_EMPTY_BUCKETS);
 
-    chunk_->ReleaseSlotSet(OLD_TO_CODE);
+    chunk_->ReleaseSlotSet(TRUSTED_TO_CODE);
   }
 
   void UpdateUntypedTrustedToTrustedPointers() {
+    if (!chunk_->slot_set<TRUSTED_TO_TRUSTED, AccessMode::NON_ATOMIC>()) {
+      return;
+    }
+
 #ifdef V8_ENABLE_SANDBOX
     // When the sandbox is enabled, we must not process the TRUSTED_TO_TRUSTED
     // remembered set on any chunk that is located inside the sandbox (in which
@@ -5303,9 +5368,8 @@ class RememberedSetUpdatingItem : public UpdatingItem {
     // directly modify the TRUSTED_TO_TRUSTED set on such a chunk, or trick the
     // GC into populating it with invalid pointers, both of which may lead to
     // memory corruption inside the trusted space here.
-    if (InsideSandbox(chunk_->ChunkAddress())) return;
+    SBXCHECK(!InsideSandbox(chunk_->ChunkAddress()));
 #endif
-    if (!chunk_->slot_set<TRUSTED_TO_TRUSTED, AccessMode::NON_ATOMIC>()) return;
 
     // TODO(saelo) we can probably drop all the cage_bases here once we no
     // longer need to pass them into our slot implementations.
@@ -5333,8 +5397,8 @@ class RememberedSetUpdatingItem : public UpdatingItem {
       RememberedSet<TRUSTED_TO_TRUSTED>::Iterate(
           chunk_,
           [&](MaybeObjectSlot slot) {
-            UpdateStrongSlot(unused_cage_base,
-                             ProtectedPointerSlot(slot.address()));
+            UpdateSlot(unused_cage_base,
+                       ProtectedMaybeObjectSlot(slot.address()));
             // Always keep slot since all slots are dropped at once after
             // iteration.
             return KEEP_SLOT;
@@ -5658,7 +5722,7 @@ void MarkCompactCollector::UpdatePointersInClientHeap(Isolate* client) {
 }
 
 void MarkCompactCollector::UpdatePointersInPointerTables() {
-#ifdef V8_ENABLE_SANDBOX
+#if defined(V8_ENABLE_SANDBOX) || defined(V8_ENABLE_LEAPTIERING)
   // Process an entry of a pointer table, returning either the relocated object
   // or a null pointer if the object wasn't relocated.
   auto process_entry = [&](Address content) -> Tagged<ExposedTrustedObject> {
@@ -5670,7 +5734,9 @@ void MarkCompactCollector::UpdatePointersInPointerTables() {
     DCHECK(IsExposedTrustedObject(relocated_object));
     return Cast<ExposedTrustedObject>(relocated_object);
   };
+#endif  // defined(V8_ENABLE_SANDBOX) || defined(V8_ENABLE_LEAPTIERING)
 
+#ifdef V8_ENABLE_SANDBOX
   TrustedPointerTable* const tpt = &heap_->isolate()->trusted_pointer_table();
   tpt->IterateActiveEntriesIn(
       heap_->trusted_pointer_space(),
@@ -5712,7 +5778,8 @@ void MarkCompactCollector::UpdatePointersInPointerTables() {
 #endif  // V8_ENABLE_SANDBOX
 
 #ifdef V8_ENABLE_LEAPTIERING
-  JSDispatchTable* const jdt = GetProcessWideJSDispatchTable();
+  JSDispatchTable* const jdt = IsolateGroup::current()->js_dispatch_table();
+  const EmbeddedData& embedded_data = EmbeddedData::FromBlob(heap_->isolate());
   jdt->IterateActiveEntriesIn(
       heap_->js_dispatch_table_space(), [&](JSDispatchHandle handle) {
         Address code_address = jdt->GetCodeAddress(handle);
@@ -5725,7 +5792,20 @@ void MarkCompactCollector::UpdatePointersInPointerTables() {
         bool instruction_stream_was_relocated =
             code->instruction_start() != entrypoint_address;
         if (code_object_was_relocated || instruction_stream_was_relocated) {
-          jdt->SetCodeNoWriteBarrier(handle, code);
+          Address old_entrypoint = jdt->GetEntrypoint(handle);
+          // Ensure tiering trampolines are not overwritten here.
+          Address new_entrypoint = ([&]() {
+#define CASE(name, ...)                                                       \
+  if (old_entrypoint == embedded_data.InstructionStartOf(Builtin::k##name)) { \
+    return old_entrypoint;                                                    \
+  }
+            BUILTIN_LIST_BASE_TIERING(CASE)
+#undef CASE
+            return code->instruction_start();
+          })();
+          jdt->SetCodeAndEntrypointNoWriteBarrier(handle, code, new_entrypoint);
+          CHECK_IMPLIES(jdt->IsTieringRequested(handle),
+                        old_entrypoint == new_entrypoint);
         }
       });
 #endif  // V8_ENABLE_LEAPTIERING
@@ -5733,7 +5813,7 @@ void MarkCompactCollector::UpdatePointersInPointerTables() {
 
 void MarkCompactCollector::ReportAbortedEvacuationCandidateDueToOOM(
     Address failed_start, PageMetadata* page) {
-  base::MutexGuard guard(&mutex_);
+  base::SpinningMutexGuard guard(&mutex_);
   aborted_evacuation_candidates_due_to_oom_.push_back(
       std::make_pair(failed_start, page));
 }
@@ -5743,7 +5823,7 @@ void MarkCompactCollector::ReportAbortedEvacuationCandidateDueToFlags(
   MemoryChunk* chunk = page->Chunk();
   DCHECK(!chunk->IsFlagSet(MemoryChunk::COMPACTION_WAS_ABORTED));
   chunk->SetFlagSlow(MemoryChunk::COMPACTION_WAS_ABORTED);
-  base::MutexGuard guard(&mutex_);
+  base::SpinningMutexGuard guard(&mutex_);
   aborted_evacuation_candidates_due_to_flags_.push_back(
       std::make_pair(failed_start, page));
 }
@@ -5978,7 +6058,7 @@ void MarkCompactCollector::SweepLargeSpace(LargeObjectSpace* space) {
       MarkBit::From(object).Clear();
       current->SetLiveBytes(0);
     }
-    current->ProgressBar().ResetIfEnabled();
+    current->marking_progress_tracker().ResetIfEnabled();
     surviving_object_size += static_cast<size_t>(object->Size(cage_base));
   }
   space->set_objects_size(surviving_object_size);

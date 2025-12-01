@@ -4,8 +4,10 @@
 
 #include "content/browser/preloading/prefetch/prefetch_response_reader.h"
 
+#include <algorithm>
+
 #include "base/metrics/histogram_functions.h"
-#include "base/ranges/algorithm.h"
+#include "base/notreached.h"
 #include "base/strings/string_util.h"
 #include "base/task/sequenced_task_runner.h"
 #include "content/browser/preloading/prefetch/prefetch_features.h"
@@ -346,17 +348,13 @@ void PrefetchResponseReader::OnComplete(
       load_state_ = LoadState::kFailed;
       break;
     case LoadState::kRedirectHandled:
-      CHECK(false);
-      break;
+      NOTREACHED();
     case LoadState::kCompleted:
-      CHECK(false);
-      break;
+      NOTREACHED();
     case LoadState::kFailed:
-      CHECK(false);
-      break;
+      NOTREACHED();
     case LoadState::kFailedRedirect:
-      CHECK(false);
-      break;
+      NOTREACHED();
   }
 
   CHECK(!response_complete_time_);
@@ -532,20 +530,6 @@ void PrefetchResponseReader::SetPriority(net::RequestPriority priority,
   }
 }
 
-void PrefetchResponseReader::PauseReadingBodyFromNet() {
-  // Forward calls from the serving URL loader to the prefetch URL loader.
-  if (streaming_url_loader_) {
-    streaming_url_loader_->PauseReadingBodyFromNet();
-  }
-}
-
-void PrefetchResponseReader::ResumeReadingBodyFromNet() {
-  // Forward calls from the serving URL loader to the prefetch URL loader.
-  if (streaming_url_loader_) {
-    streaming_url_loader_->ResumeReadingBodyFromNet();
-  }
-}
-
 PrefetchStreamingURLLoaderStatus PrefetchResponseReader::GetStatusForRecording()
     const {
   switch (load_state_) {
@@ -613,9 +597,9 @@ void PrefetchResponseReader::StoreInfoFromResponseHead(
   if (vary_on_cookie && head.parsed_headers->cookie_indices.has_value()) {
     auto& indices = cookie_indices_.emplace();
     indices.cookie_names = *head.parsed_headers->cookie_indices;
-    base::ranges::sort(indices.cookie_names);
-    indices.cookie_names.erase(base::ranges::unique(indices.cookie_names),
-                               indices.cookie_names.end());
+    std::ranges::sort(indices.cookie_names);
+    auto repeated = std::ranges::unique(indices.cookie_names);
+    indices.cookie_names.erase(repeated.begin(), repeated.end());
     indices.cookie_names.shrink_to_fit();
     indices.expected_hash =
         net::HashCookieIndices(indices.cookie_names, head.request_cookies);

@@ -5,7 +5,7 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/ui/toolbar/public/toolbar_type.h"
+#import "ios/chrome/browser/toolbar/ui_bundled/public/toolbar_type.h"
 
 @interface PanelTransitioningDelegate
     : NSObject<UIViewControllerTransitioningDelegate>

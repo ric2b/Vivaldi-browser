@@ -60,6 +60,20 @@ const JSHandle_js_1 = require("./JSHandle.js");
 const Realm_js_1 = require("./Realm.js");
 const util_js_2 = require("./util.js");
 const WebWorker_js_1 = require("./WebWorker.js");
+// TODO: Remove this and map CDP the correct method.
+// Requires breaking change.
+function convertConsoleMessageLevel(method) {
+    switch (method) {
+        case 'group':
+            return 'startGroup';
+        case 'groupCollapsed':
+            return 'startGroupCollapsed';
+        case 'groupEnd':
+            return 'endGroup';
+        default:
+            return method;
+    }
+}
 let BidiFrame = (() => {
     var _a;
     let _classSuper = Frame_js_1.Frame;
@@ -167,7 +181,7 @@ let BidiFrame = (() => {
                 default: Realm_js_1.BidiFrameRealm.from(this.browsingContext.defaultRealm, this),
                 internal: Realm_js_1.BidiFrameRealm.from(this.browsingContext.createWindowRealm(`__puppeteer_internal_${Math.ceil(Math.random() * 10000)}`), this),
             };
-            this.accessibility = new Accessibility_js_1.Accessibility(this.realms.default);
+            this.accessibility = new Accessibility_js_1.Accessibility(this.realms.default, this._id);
         }
         #initialize() {
             for (const browsingContext of this.browsingContext.children) {
@@ -226,7 +240,7 @@ let BidiFrame = (() => {
                         return `${value} ${parsedValue}`;
                     }, '')
                         .slice(1);
-                    this.page().trustedEmitter.emit("console" /* PageEvent.Console */, new ConsoleMessage_js_1.ConsoleMessage(entry.method, text, args, getStackTraceLocations(entry.stackTrace)));
+                    this.page().trustedEmitter.emit("console" /* PageEvent.Console */, new ConsoleMessage_js_1.ConsoleMessage(convertConsoleMessageLevel(entry.method), text, args, getStackTraceLocations(entry.stackTrace), this));
                 }
                 else if (isJavaScriptLogEntry(entry)) {
                     const error = new Error(entry.text ?? '');
@@ -328,6 +342,12 @@ let BidiFrame = (() => {
                         error.message.includes('net::ERR_HTTP_RESPONSE_CODE_FAILURE')) {
                         return;
                     }
+                    if (error.message.includes('navigation canceled')) {
+                        return;
+                    }
+                    if (error.message.includes('Navigation was aborted by another navigation')) {
+                        return;
+                    }
                     throw error;
                 }),
             ]).catch((0, util_js_2.rewriteNavigationError)(url, options.timeout ?? this.timeoutSettings.navigationTimeout()));
@@ -348,9 +368,14 @@ let BidiFrame = (() => {
                 return frame.#detached$();
             });
             return await (0, rxjs_js_1.firstValueFrom)((0, rxjs_js_1.combineLatest)([
-                (0, util_js_1.fromEmitterEvent)(this.browsingContext, 'navigation')
+                (0, rxjs_js_1.race)((0, util_js_1.fromEmitterEvent)(this.browsingContext, 'navigation'), (0, util_js_1.fromEmitterEvent)(this.browsingContext, 'historyUpdated').pipe((0, rxjs_js_1.map)(() => {
+                    return { navigation: null };
+                })))
                     .pipe((0, rxjs_js_1.first)())
                     .pipe((0, rxjs_js_1.switchMap)(({ navigation }) => {
+                    if (navigation === null) {
+                        return (0, rxjs_js_1.of)(null);
+                    }
                     return this.#waitForLoad$(options).pipe((0, rxjs_js_1.delayWhen)(() => {
                         if (frames.length === 0) {
                             return (0, rxjs_js_1.of)(undefined);
@@ -361,6 +386,9 @@ let BidiFrame = (() => {
                     }))), (0, rxjs_js_1.switchMap)(() => {
                         if (navigation.request) {
                             function requestFinished$(request) {
+                                if (navigation === null) {
+                                    return (0, rxjs_js_1.of)(null);
+                                }
                                 // Reduces flakiness if the response events arrive after
                                 // the load event.
                                 // Usually, the response or error is already there at this point.
@@ -383,6 +411,9 @@ let BidiFrame = (() => {
                 })),
                 this.#waitForNetworkIdle$(options),
             ]).pipe((0, rxjs_js_1.map)(([navigation]) => {
+                if (!navigation) {
+                    return null;
+                }
                 const request = navigation.request;
                 if (!request) {
                     return null;

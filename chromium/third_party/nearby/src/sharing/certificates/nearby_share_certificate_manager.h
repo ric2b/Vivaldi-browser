@@ -119,9 +119,16 @@ class NearbyShareCertificateManager {
   // OnPublicCertificatesDownloaded().
   virtual void DownloadPublicCertificates() = 0;
 
+  // Checks the expiration of the private certificates and Refreshes if needed.
+  // If force_upload is true, the private certificates will always be uploaded.
+  virtual void PrivateCertificateRefresh(bool force_upload) = 0;
+
   // Clears all public certificates. when account logout,the public certificates
   // should be cleared.
   virtual void ClearPublicCertificates(std::function<void(bool)> callback) = 0;
+
+  // Sets the vendor ID to generate certificates for.
+  virtual void SetVendorId(int32_t vendor_id) = 0;
 
   // Dump certificates ID information for troubleshooting.
   virtual std::string Dump() const = 0;

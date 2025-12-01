@@ -9,9 +9,9 @@
 // Requirements
 //------------------------------------------------------------------------------
 
-const path = require("path");
+const path = require("node:path");
 const spawn = require("cross-spawn");
-const os = require("os");
+const os = require("node:os");
 const log = require("../shared/logging");
 const packageJson = require("../../package.json");
 
@@ -97,7 +97,7 @@ function environment() {
      */
     function getNpmPackageVersion(pkg, { global = false } = {}) {
         const npmBinArgs = ["bin", "-g"];
-        const npmLsArgs = ["ls", "--depth=0", "--json", "eslint"];
+        const npmLsArgs = ["ls", "--depth=0", "--json", pkg];
 
         if (global) {
             npmLsArgs.push("-g");
@@ -162,6 +162,7 @@ function version() {
 //------------------------------------------------------------------------------
 
 module.exports = {
+    __esModule: true, // Indicate intent for imports, remove ambiguity for Knip (see: https://github.com/eslint/eslint/pull/18005#discussion_r1484422616)
     environment,
     version
 };

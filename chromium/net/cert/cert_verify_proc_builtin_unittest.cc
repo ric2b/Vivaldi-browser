@@ -4,13 +4,13 @@
 
 #include "net/cert/cert_verify_proc_builtin.h"
 
+#include <algorithm>
 #include <optional>
 #include <string_view>
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/sequenced_task_runner.h"
@@ -410,8 +410,10 @@ TEST_F(CertVerifyProcBuiltinTest, ShouldBypassHSTS) {
     context()->transport_security_state()->AddHSTS(
         test_server.base_url().host(), base::Time::Now() + base::Seconds(30),
         /*include_subdomains=*/true);
+    // Setting `is_top_level_nav` true prevents the upgrade from being blocked
+    // by kHstsTopLevelNavigationsOnly.
     ASSERT_TRUE(context()->transport_security_state()->ShouldUpgradeToSSL(
-        test_server.base_url().host()));
+        test_server.base_url().host(), /*is_top_level_nav=*/true));
     Verify(chain.get(), "www.example.com",
            CertVerifyProc::VERIFY_REV_CHECKING_ENABLED,
            &verify_result, &verify_net_log_source, verify_callback.callback());
@@ -1101,27 +1103,27 @@ TEST_F(CertVerifyProcBuiltinTest, EVNoOCSPRevocationChecks) {
 
   auto events = net_log_observer.GetEntriesForSource(verify_net_log_source);
 
-  auto event = base::ranges::find(
+  auto event = std::ranges::find(
       events, NetLogEventType::CERT_VERIFY_PROC_PATH_BUILD_ATTEMPT,
       &NetLogEntry::type);
   ASSERT_NE(event, events.end());
   EXPECT_EQ(net::NetLogEventPhase::BEGIN, event->phase);
   EXPECT_EQ(true, event->params.FindBool("is_ev_attempt"));
 
-  event = base::ranges::find(++event, events.end(),
-                             NetLogEventType::CERT_VERIFY_PROC_PATH_BUILT,
-                             &NetLogEntry::type);
+  event = std::ranges::find(++event, events.end(),
+                            NetLogEventType::CERT_VERIFY_PROC_PATH_BUILT,
+                            &NetLogEntry::type);
   ASSERT_NE(event, events.end());
   EXPECT_EQ(net::NetLogEventPhase::BEGIN, event->phase);
 
-  event = base::ranges::find(++event, events.end(),
-                             NetLogEventType::CERT_VERIFY_PROC_PATH_BUILT,
-                             &NetLogEntry::type);
+  event = std::ranges::find(++event, events.end(),
+                            NetLogEventType::CERT_VERIFY_PROC_PATH_BUILT,
+                            &NetLogEntry::type);
   ASSERT_NE(event, events.end());
   EXPECT_EQ(net::NetLogEventPhase::END, event->phase);
   EXPECT_FALSE(event->params.FindString("errors"));
 
-  event = base::ranges::find(
+  event = std::ranges::find(
       ++event, events.end(),
       NetLogEventType::CERT_VERIFY_PROC_PATH_BUILD_ATTEMPT, &NetLogEntry::type);
   ASSERT_NE(event, events.end());
@@ -2097,7 +2099,7 @@ TEST_F(CertVerifyProcBuiltinTest, IterationLimit) {
   int error = callback.WaitForResult();
 
   auto events = net_log_observer.GetEntriesForSource(verify_net_log_source);
-  auto event = base::ranges::find_if(events, [](const NetLogEntry& e) {
+  auto event = std::ranges::find_if(events, [](const NetLogEntry& e) {
     return e.type == NetLogEventType::CERT_VERIFY_PROC_PATH_BUILD_ATTEMPT &&
            e.phase == NetLogEventPhase::END;
   });

@@ -29,7 +29,7 @@ describe('RequestResolver', () => {
         throw new Error('This should not get called');
       });
       assert.isTrue(networkLog.hasEventListeners(Logs.NetworkLog.Events.RequestAdded));
-      assert.strictEqual(request, null);
+      assert.isNull(request);
       requestResolver.clear();
     });
 
@@ -39,7 +39,7 @@ describe('RequestResolver', () => {
       const requestResolver = new Logs.RequestResolver.RequestResolver(networkLog);
       const waitForCall = new Promise<SDK.NetworkRequest.NetworkRequest>(resolve => {
         const request = requestResolver.tryGet(requestId1, resolve);
-        assert.strictEqual(request, null);
+        assert.isNull(request);
       });
       assert.isTrue(networkLog.hasEventListeners(Logs.NetworkLog.Events.RequestAdded));
       const mockRequest = createNetworkRequest(requestId1);
@@ -70,7 +70,7 @@ describe('RequestResolver', () => {
       assert.isFalse(networkLog.hasEventListeners(Logs.NetworkLog.Events.RequestAdded));
       try {
         await request;
-      } catch (e) {
+      } catch {
         return;
       }
       assert.fail('Expected `await request` to throw.');

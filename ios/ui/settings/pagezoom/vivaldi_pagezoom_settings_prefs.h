@@ -20,16 +20,10 @@ class PrefService;
 /// Returns page zoom level
 + (int)getPageZoomLevelWithPrefService: (PrefService*)prefService;
 
-/// Returns page zoom enabled status
-+ (BOOL)getGlobalPageZoomEnabledWithPrefService:(PrefService*)prefService;
-
 /// Sets page zoom level
 + (void)setPageZoomLevelWithPrefService:(int)level
                        inPrefServices:(PrefService*)prefService;
 
-/// Sets page zoom enabled status
-+ (void)setGlobalPageZoomEnabledWithPrefService:(BOOL)enabled
-                                inPrefServices:(PrefService*)prefService;
 @end
 
 #endif  // IOS_UI_SETTINGS_PAGEZOOM_VIVALDI_PAGEZOOM_SETTING_PREFS_H_

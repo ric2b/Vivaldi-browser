@@ -64,6 +64,18 @@ class MockComponentManager : public ComponentManager {
   // See comments in mock_translate_kit_lib.cc for more details.
   void InstallMockTranslateKitComponent();
 
+  // Installs the mock TranslateKit component which library does not contain any
+  // of the methods in the TranslateKit API.
+  void InstallMockInvalidFunctionPointerLibraryComponent();
+
+  // Installs the mock TranslateKit component which library does contain all of
+  // the methods in the TranslateKit API, but its CreateTranslateKit() method
+  // always fails.
+  void InstallMockFailingLibraryComponent();
+
+  // Installs the mock TranslateKit component without any library.
+  void InstallEmptyMockComponent();
+
   // Registers the mock language pack to the PrefService.
   void RegisterLanguagePack(LanguagePackKey language_pack_key);
 
@@ -79,6 +91,9 @@ class MockComponentManager : public ComponentManager {
   void InstallMockLanguagePackLater(LanguagePackKey language_pack_key);
 
  private:
+  // Installs the mock TranslateKit component with the given library path.
+  void InstallComponent(base::FilePath library_path);
+
   const base::FilePath package_dir_;
   base::WeakPtrFactory<MockComponentManager> weak_ptr_factory_{this};
 };
@@ -108,6 +123,18 @@ void TestCanTranslate(Browser* browser,
                       const std::string_view sourceLang,
                       const std::string_view targetLang,
                       const std::string_view result);
+
+// Tests that the AITranslatorCapabilities.available returns the expected
+// result.
+void TestTranslatorCapabilitiesAvailable(Browser* browser,
+                                         const std::string_view result);
+
+// Tests that the AITranslatorCapabilities.languagePairAvailable() returns the
+// expected result.
+void TestLanguagePairAvailable(Browser* browser,
+                               const std::string_view sourceLang,
+                               const std::string_view targetLang,
+                               const std::string_view result);
 
 }  // namespace on_device_translation
 

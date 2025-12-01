@@ -2,7 +2,7 @@
 breadcrumbs:
 - - /chromium-os
   - ChromiumOS
-- - /chromium-os/developer-information-for-chrome-os-devices
+- - /chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices
   - Developer Information for ChromeOS Devices
 page_name: hp-chromebook-11
 title: HP Chromebook 11
@@ -13,7 +13,7 @@ title: HP Chromebook 11
 ## Introduction
 
 This page contains information about the [HP Chromebook
-11](http://www.google.com/intl/en/chrome/devices/hp-chromebook-11/) that is
+11](https://www.google.com/intl/en/chrome/devices/hp-chromebook-11/) that is
 interesting and/or useful to software developers. For general information about
 getting started with developing on ChromiumOS (the open-source version of the
 software on the Chrome Notebook), see the [ChromiumOS Developer
@@ -30,7 +30,7 @@ Note: there have been multiple devices released under the moniker "HP Chromebook
 *   GPU: [ARM
             Mali-T604](http://www.arm.com/products/multimedia/mali-graphics-hardware/mali-t604.php)
             (Quad Core)
-    *   1366x768 [IPS screen](http://en.wikipedia.org/wiki/IPS_panel)
+    *   1366x768 [IPS screen](https://en.wikipedia.org/wiki/IPS_panel)
                 with 300 nits (spring board)
     *   1366x768 TN panel (skate board)
 *   RAM: 2 GiB DDR3
@@ -42,12 +42,12 @@ Note: there have been multiple devices released under the moniker "HP Chromebook
 *   WiFi: 802.11 a/b/g/n
     *   USB ports can handle Ethernet dongle
 *   Power supply: 5.25V <img alt="image"
-            src="/chromium-os/developer-information-for-chrome-os-devices/direct-current.svg"
-            height=5> ([DC](http://en.wikipedia.org/wiki/Direct_current)) 3.A
+            src="/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/direct-current.svg"
+            height=5> ([DC](https://en.wikipedia.org/wiki/Direct_current)) 3.A
             [micro
             USB](https://play.google.com/store/devices/details/Charger_for_HP_Chromebook_11)
 *   No [Kensington Security
-            Slot](http://en.wikipedia.org/wiki/Kensington_Security_Slot)
+            Slot](https://en.wikipedia.org/wiki/Kensington_Security_Slot)
 *   [Servo header](/chromium-os/servo): Standard 2x25 / AXK750347G
 
 The first release was the "spring" board. A later revision was named "skate"
@@ -59,7 +59,7 @@ with a slightly different BOM.
 cause hardware, software or security issues and may void warranty.**
 
 Details for working with developer mode can be found [on this
-page](/chromium-os/developer-information-for-chrome-os-devices/samsung-arm-chromebook).
+page](/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/samsung-arm-chromebook).
 
 ## Firmware
 

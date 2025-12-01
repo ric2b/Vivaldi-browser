@@ -16,7 +16,6 @@ import {
   waitForAria,
   waitForNone,
 } from '../../shared/helper.js';
-
 import {waitForDomNodeToBeVisible} from '../helpers/elements-helpers.js';
 import {
   clickZoomDropDown,
@@ -148,7 +147,7 @@ describe('Custom devices', () => {
     const firstDevice = await waitFor('.devices-list-item');
     await firstDevice.focus();
 
-    const editButton = await waitFor('devtools-button[aria-label="Edit"]');
+    const editButton = await waitForAria('Edit');
     await editButton.click();
 
     // Make sure the device name field is what's focused.

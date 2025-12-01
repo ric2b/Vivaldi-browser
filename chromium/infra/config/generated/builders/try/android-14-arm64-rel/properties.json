@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "android-14-arm64-rel",
-              "project": "chromium-m132"
+              "project": "chromium-m134"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-android-archive",
@@ -25,7 +25,7 @@
                   "mb"
                 ],
                 "build_config": "Release",
-                "config": "android",
+                "config": "main_builder",
                 "target_bits": 64,
                 "target_platform": "android"
               },
@@ -43,7 +43,7 @@
         {
           "bucket": "ci",
           "builder": "android-14-arm64-rel",
-          "project": "chromium-m132"
+          "project": "chromium-m134"
         }
       ],
       "targets_spec_directory": "src/infra/config/generated/builders/try/android-14-arm64-rel/targets"
@@ -55,11 +55,6 @@
       "overall"
     ],
     "use_clang_coverage": true
-  },
-  "$build/reclient": {
-    "instance": "rbe-chromium-untrusted",
-    "metrics_project": "chromium-reclient-metrics",
-    "scandeps_server": true
   },
   "$build/siso": {
     "configs": [

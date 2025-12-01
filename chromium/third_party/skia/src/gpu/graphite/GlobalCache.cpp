@@ -7,16 +7,41 @@
 
 #include "src/gpu/graphite/GlobalCache.h"
 
+#include "include/private/base/SkTArray.h"
+#include "src/core/SkTraceEvent.h"
 #include "src/gpu/graphite/ComputePipeline.h"
 #include "src/gpu/graphite/ContextUtils.h"
 #include "src/gpu/graphite/GraphicsPipeline.h"
 #include "src/gpu/graphite/Resource.h"
 
+namespace {
+
+uint32_t next_compilation_id() {
+    static std::atomic<uint32_t> nextId{0};
+    // Not worried about overflow since we don't expect that many GraphicsPipelines.
+    // Even if it wraps around to 0, this is solely for debug logging.
+    return nextId.fetch_add(1, std::memory_order_relaxed);
+}
+
+#if defined(GPU_TEST_UTILS)
+// TODO(b/391403921): get rid of this special case once we've got color space transform shader
+// specialization more under control
+constexpr int kGlobalGraphicsPipelineCacheSizeLimit = 1 << 13;
+constexpr int kGlobalComputePipelineCacheSizeLimit = 256;
+
+#else
+// TODO: find a good value for these limits
+constexpr int kGlobalGraphicsPipelineCacheSizeLimit = 256;
+constexpr int kGlobalComputePipelineCacheSizeLimit = 256;
+#endif
+
+} // anonymous namespce
+
 namespace skgpu::graphite {
 
 GlobalCache::GlobalCache()
-        : fGraphicsPipelineCache(256)  // TODO: find a good value for these limits
-        , fComputePipelineCache(256) {}
+        : fGraphicsPipelineCache(kGlobalGraphicsPipelineCacheSizeLimit)
+        , fComputePipelineCache(kGlobalComputePipelineCacheSizeLimit) {}
 
 GlobalCache::~GlobalCache() {
     // These should have been cleared out earlier by deleteResources().
@@ -24,6 +49,13 @@ GlobalCache::~GlobalCache() {
     SkASSERT(fGraphicsPipelineCache.count() == 0);
     SkASSERT(fComputePipelineCache.count() == 0);
     SkASSERT(fStaticResource.empty());
+}
+
+void GlobalCache::setPipelineCallback(PipelineCallback callback, PipelineCallbackContext context) {
+    SkAutoSpinlock lock{ fSpinLock };
+
+    fPipelineCallback = callback;
+    fPipelineCallbackContext = context;
 }
 
 void GlobalCache::deleteResources() {
@@ -34,14 +66,73 @@ void GlobalCache::deleteResources() {
     fStaticResource.clear();
 }
 
-sk_sp<GraphicsPipeline> GlobalCache::findGraphicsPipeline(const UniqueKey& key) {
+void GlobalCache::LogPurge(const UniqueKey& key, sk_sp<GraphicsPipeline>* p) {
+#if defined(SK_PIPELINE_LIFETIME_LOGGING)
+    // A "Bad" Purge is one where the Pipeline was never retrieved from the Cache (i.e., unused
+    // overgeneration).
+    static const char* kNames[2][2] = { { "BadPurgedN", "BadPurgedP" },
+                                        { "PurgedN",    "PurgedP"} };
+
+    TRACE_EVENT_INSTANT2("skia.gpu",
+                         TRACE_STR_STATIC(kNames[(*p)->wasUsed()][(*p)->fromPrecompile()]),
+                         TRACE_EVENT_SCOPE_THREAD,
+                         "key", key.hash(),
+                         "compilationID", (*p)->getPipelineInfo().fCompilationID);
+#endif
+}
+
+sk_sp<GraphicsPipeline> GlobalCache::findGraphicsPipeline(
+        const UniqueKey& key,
+        SkEnumBitMask<PipelineCreationFlags> pipelineCreationFlags,
+        uint32_t *compilationID) {
+
+    [[maybe_unused]] bool forPrecompile =
+            SkToBool(pipelineCreationFlags & PipelineCreationFlags::kForPrecompilation);
+
     SkAutoSpinlock lock{fSpinLock};
 
     sk_sp<GraphicsPipeline>* entry = fGraphicsPipelineCache.find(key);
+    if (entry) {
 #if defined(GPU_TEST_UTILS)
-    if (entry) { ++fStats.fGraphicsCacheHits; } else { ++fStats.fGraphicsCacheMisses; }
+        ++fStats.fGraphicsCacheHits;
 #endif
-    return entry ? *entry : nullptr;
+
+        (*entry)->updateAccessTime();
+        (*entry)->markUsed();
+
+#if defined(SK_PIPELINE_LIFETIME_LOGGING)
+        static const char* kNames[2] = { "CacheHitForN", "CacheHitForP" };
+        TRACE_EVENT_INSTANT2("skia.gpu",
+                             TRACE_STR_STATIC(kNames[forPrecompile]),
+                             TRACE_EVENT_SCOPE_THREAD,
+                             "key", key.hash(),
+                             "compilationID", (*entry)->getPipelineInfo().fCompilationID);
+#endif
+
+        return *entry;
+    } else {
+#if defined(GPU_TEST_UTILS)
+        ++fStats.fGraphicsCacheMisses;
+#endif
+
+        if (compilationID) {
+            // This is a cache miss so we know the next step is going to be a Pipeline
+            // creation. Create the compilationID here so we can use it in the "CacheMissFor"
+            // trace event.
+            *compilationID = next_compilation_id();
+
+#if defined(SK_PIPELINE_LIFETIME_LOGGING)
+            static const char* kNames[2] = { "CacheMissForN", "CacheMissForP" };
+            TRACE_EVENT_INSTANT2("skia.gpu",
+                                 TRACE_STR_STATIC(kNames[forPrecompile]),
+                                 TRACE_EVENT_SCOPE_THREAD,
+                                 "key", key.hash(),
+                                 "compilationID", *compilationID);
+#endif
+        }
+
+        return nullptr;
+    }
 }
 
 #if SK_HISTOGRAMS_ENABLED
@@ -74,24 +165,83 @@ sk_sp<GraphicsPipeline> GlobalCache::addGraphicsPipeline(const UniqueKey& key,
         // No equivalent pipeline was stored in the cache between a previous call to
         // findGraphicsPipeline() that returned null (triggering the pipeline creation) and this
         // later adding to the cache.
+        entry = fGraphicsPipelineCache.insert(key, std::move(pipeline));
+
 #if defined(GPU_TEST_UTILS)
         ++fStats.fGraphicsCacheAdditions;
 #endif
-        entry = fGraphicsPipelineCache.insert(key, std::move(pipeline));
+
+        // Precompile Pipelines are only marked as used when they get a cache hit in
+        // findGraphicsPipeline
+        if (!(*entry)->fromPrecompile()) {
+            (*entry)->updateAccessTime();
+            (*entry)->markUsed();
+        }
+
+#if defined(SK_PIPELINE_LIFETIME_LOGGING)
+        static const char* kNames[2] = { "AddedN", "AddedP" };
+        TRACE_EVENT_INSTANT2("skia.gpu",
+                             TRACE_STR_STATIC(kNames[(*entry)->fromPrecompile()]),
+                             TRACE_EVENT_SCOPE_THREAD,
+                             "key", key.hash(),
+                             "compilationID", (*entry)->getPipelineInfo().fCompilationID);
+#endif
     } else {
 #if defined(GPU_TEST_UTILS)
         // else there was a race creating the same pipeline and this thread lost, so return
         // the winner
         ++fStats.fGraphicsRaces;
 #endif
-#if SK_HISTOGRAMS_ENABLED
+
         [[maybe_unused]] int race = (*entry)->fromPrecompile() * 2 + pipeline->fromPrecompile();
+
+#if defined(SK_PIPELINE_LIFETIME_LOGGING)
+        static const char* kNames[4] = {
+                "NWonRaceOverN",
+                "NWonRaceOverP",
+                "PWonRaceOverN",
+                "PWonRaceOverP"
+        };
+        TRACE_EVENT_INSTANT2("skia.gpu",
+                             TRACE_STR_STATIC(kNames[race]),
+                             TRACE_EVENT_SCOPE_THREAD,
+                             "key", key.hash(),
+                             // The losing compilation
+                             "compilationID", pipeline->getPipelineInfo().fCompilationID);
+#endif
+
+#if SK_HISTOGRAMS_ENABLED
         SK_HISTOGRAM_ENUMERATION("Graphite.PipelineCreationRace",
                                  race,
                                  kPipelineCreationRaceCount);
 #endif
     }
     return *entry;
+}
+
+
+void GlobalCache::purgePipelinesNotUsedSince(StdSteadyClock::time_point purgeTime) {
+    SkAutoSpinlock lock{fSpinLock};
+
+    skia_private::TArray<skgpu::UniqueKey> toRemove;
+
+    // This is probably fine for now but is looping from most-recently-used to least-recently-used.
+    // It seems like a reverse loop with an early out could be more efficient.
+    fGraphicsPipelineCache.foreach([&toRemove, purgeTime](const UniqueKey* key,
+                                                          const sk_sp<GraphicsPipeline>* pipeline) {
+        if ((*pipeline)->lastAccessTime() < purgeTime) {
+            toRemove.push_back(*key);
+        }
+    });
+
+    for (const skgpu::UniqueKey& k : toRemove) {
+#if defined(GPU_TEST_UTILS)
+        ++fStats.fGraphicsPurges;
+#endif
+        fGraphicsPipelineCache.remove(k);
+    }
+
+    // TODO: add purging of Compute Pipelines (b/389073204)
 }
 
 #if defined(GPU_TEST_UTILS)

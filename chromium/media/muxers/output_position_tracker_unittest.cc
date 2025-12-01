@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "media/muxers/output_position_tracker.h"
 
 #include <string>
@@ -30,7 +35,7 @@ TEST(OutputPositionTrackerTest, OutputPositionTracker) {
       }));
 
   base::span<const uint8_t> span = base::byte_span_from_cstring("abc\0\0");
-  buffer.WriteSpan(span.subspan(0, 3));
+  buffer.WriteSpan(span.first<3>());
   EXPECT_EQ(buffer.GetCurrentPos(), 3u);
 
   buffer.WriteSpan(span);

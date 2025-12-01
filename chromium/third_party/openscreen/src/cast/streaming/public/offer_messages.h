@@ -24,15 +24,15 @@ namespace openscreen::cast {
 // If the target delay provided by the sender is not bounded by
 // [kMinTargetDelay, kMaxTargetDelay], it will be set to
 // kDefaultTargetPlayoutDelay.
-constexpr auto kMinTargetPlayoutDelay = std::chrono::milliseconds(0);
-constexpr auto kMaxTargetPlayoutDelay = std::chrono::milliseconds(5000);
+inline constexpr auto kMinTargetPlayoutDelay = std::chrono::milliseconds(0);
+inline constexpr auto kMaxTargetPlayoutDelay = std::chrono::milliseconds(5000);
 
 // If the sender provides an invalid maximum frame rate, it ill
 // be set to kDefaultMaxFrameRate.
-constexpr int kDefaultMaxFrameRate = 30;
+inline constexpr int kDefaultMaxFrameRate = 30;
 
-constexpr int kDefaultNumVideoChannels = 1;
-constexpr int kDefaultNumAudioChannels = 2;
+inline constexpr int kDefaultNumVideoChannels = 1;
+inline constexpr int kDefaultNumAudioChannels = 2;
 
 // A stream, as detailed by the CastV2 protocol spec, is a segment of an
 // offer message specifically representing a configuration object for

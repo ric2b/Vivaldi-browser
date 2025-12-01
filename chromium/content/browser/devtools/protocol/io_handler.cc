@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "content/browser/devtools/protocol/io_handler.h"
 
 #include <stddef.h>
@@ -50,11 +55,10 @@ void IOHandler::SetRenderer(int process_host_id,
   }
 }
 
-void IOHandler::Read(
-    const std::string& handle,
-    Maybe<int> offset,
-    Maybe<int> max_size,
-    std::unique_ptr<ReadCallback> callback) {
+void IOHandler::Read(const std::string& handle,
+                     std::optional<int> offset,
+                     std::optional<int> max_size,
+                     std::unique_ptr<ReadCallback> callback) {
   static const size_t kDefaultChunkSize = 10 * 1024 * 1024;
   static const char kBlobPrefix[] = "blob:";
 

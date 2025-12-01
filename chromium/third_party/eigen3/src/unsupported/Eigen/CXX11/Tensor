@@ -109,6 +109,7 @@
 #include "src/Tensor/TensorMorphing.h"
 #include "src/Tensor/TensorPadding.h"
 #include "src/Tensor/TensorReverse.h"
+#include "src/Tensor/TensorRoll.h"
 #include "src/Tensor/TensorShuffling.h"
 #include "src/Tensor/TensorStriding.h"
 #include "src/Tensor/TensorCustomOp.h"

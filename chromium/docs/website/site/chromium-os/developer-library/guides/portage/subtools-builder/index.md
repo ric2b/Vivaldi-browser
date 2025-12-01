@@ -65,11 +65,13 @@ To test your subtools changes, you can run the subtools builder locally.  To do
 so, execute:
 
 ```shellsession
-(outside) ~/chromiumos $ chromite/bin/build_sdk_subtools
+(outside) ~/chromiumos $ chromite/bin/build_sdk_subtools --dry-run
 ```
 
 This tool will create its own specialized chroot for building in, so it should
 be run *outside* the SDK.
+
+The built binaries are put in `out/sdk/tmp/cros-subtools`.
 
 ## How it works
 

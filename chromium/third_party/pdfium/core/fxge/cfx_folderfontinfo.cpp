@@ -6,6 +6,7 @@
 
 #include "core/fxge/cfx_folderfontinfo.h"
 
+#include <algorithm>
 #include <array>
 #include <iterator>
 #include <limits>
@@ -16,6 +17,7 @@
 #include "core/fxcrt/check_op.h"
 #include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/containers/contains.h"
+#include "core/fxcrt/debug/alias.h"
 #include "core/fxcrt/fixed_size_data_vector.h"
 #include "core/fxcrt/fx_codepage.h"
 #include "core/fxcrt/fx_extension.h"
@@ -80,8 +82,11 @@ ByteString ReadStringFromFile(FILE* pFile, uint32_t size) {
   {
     // Span's lifetime must end before ReleaseBuffer() below.
     pdfium::span<char> buffer = result.GetBuffer(size);
-    if (!fread(buffer.data(), size, 1, pFile))
+
+    // SAFETY: GetBuffer(size) ensures size bytes available.
+    if (!UNSAFE_BUFFERS(fread(buffer.data(), size, 1, pFile))) {
       return ByteString();
+    }
   }
   result.ReleaseBuffer(size);
   return result;
@@ -189,7 +194,9 @@ void CFX_FolderFontInfo::ScanFile(const ByteString& path) {
   uint8_t buffer[16];
   fseek(pFile.get(), 0, SEEK_SET);
 
-  size_t items_read = fread(buffer, /*size=*/12, /*nmemb=*/1, pFile.get());
+  // SAFETY: 12 byte read fits into 16 byte buffer,
+  size_t items_read =
+      UNSAFE_BUFFERS(fread(buffer, /*size=*/12, /*nmemb=*/1, pFile.get()));
   if (items_read != 1) {
     return;
   }
@@ -210,8 +217,8 @@ void CFX_FolderFontInfo::ScanFile(const ByteString& path) {
   auto offsets =
       FixedSizeDataVector<uint8_t>::Uninit(safe_face_bytes.ValueOrDie());
   pdfium::span<uint8_t> offsets_span = offsets.span();
-  items_read = fread(offsets_span.data(), /*size=*/1,
-                     /*nmemb=*/offsets_span.size(), pFile.get());
+  items_read = UNSAFE_TODO(fread(offsets_span.data(), /*size=*/1,
+                                 /*nmemb=*/offsets_span.size(), pFile.get()));
   if (items_read != offsets_span.size()) {
     return;
   }
@@ -227,8 +234,13 @@ void CFX_FolderFontInfo::ReportFace(const ByteString& path,
                                     FX_FILESIZE filesize,
                                     uint32_t offset) {
   char buffer[16];
-  if (fseek(pFile, offset, SEEK_SET) < 0 || !fread(buffer, 12, 1, pFile))
+  if (fseek(pFile, offset, SEEK_SET) < 0) {
     return;
+  }
+  // SAFTEY: 12 byt read fits in 16 byte buffer.
+  if (UNSAFE_BUFFERS(!fread(buffer, 12, 1, pFile))) {
+    return;
+  }
 
   uint32_t nTables =
       fxcrt::GetUInt16MSBFirst(pdfium::as_byte_span(buffer).subspan<4, 2>());
@@ -287,12 +299,15 @@ void CFX_FolderFontInfo::ReportFace(const ByteString& path,
   m_pMapper->AddInstalledFont(facename, FX_Charset::kANSI);
   pInfo->m_Charsets |= CHARSET_FLAG_ANSI;
   pInfo->m_Styles = 0;
-  if (style.Contains("Bold"))
-    pInfo->m_Styles |= FXFONT_FORCE_BOLD;
-  if (style.Contains("Italic") || style.Contains("Oblique"))
-    pInfo->m_Styles |= FXFONT_ITALIC;
-  if (facename.Contains("Serif"))
-    pInfo->m_Styles |= FXFONT_SERIF;
+  if (style.Contains("Bold")) {
+    pInfo->m_Styles |= pdfium::kFontStyleForceBold;
+  }
+  if (style.Contains("Italic") || style.Contains("Oblique")) {
+    pInfo->m_Styles |= pdfium::kFontStyleItalic;
+  }
+  if (facename.Contains("Serif")) {
+    pInfo->m_Styles |= pdfium::kFontStyleSerif;
+  }
 
   m_FontList[facename] = std::move(pInfo);
 }
@@ -414,8 +429,19 @@ size_t CFX_FolderFontInfo::GetFontData(void* hFont,
   if (!pFile)
     return 0;
 
-  if (fseek(pFile.get(), offset, SEEK_SET) < 0 ||
-      fread(buffer.data(), datasize, 1, pFile.get()) != 1) {
+  if (fseek(pFile.get(), offset, SEEK_SET) < 0) {
+    return 0;
+  }
+
+  // TODO(crbug.com/376633555): Remove debugging data after fixing the bug.
+  pdfium::Alias(&datasize);
+  char buf[256] = {};
+  pdfium::Alias(&buf);
+  ByteStringView font_path = pFont->m_FilePath.AsStringView();
+  size_t path_char_count = std::min(font_path.GetLength(), std::size(buf));
+  fxcrt::spancpy(pdfium::span(buf), font_path.Last(path_char_count).span());
+
+  if (UNSAFE_TODO(fread(buffer.data(), datasize, 1, pFile.get())) != 1) {
     return 0;
   }
   return datasize;

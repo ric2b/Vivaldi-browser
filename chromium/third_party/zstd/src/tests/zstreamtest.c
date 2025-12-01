@@ -436,7 +436,7 @@ static int basicUnitTests(U32 seed, double compressibility, int bigTests)
 
     /* context size functions */
     DISPLAYLEVEL(3, "test%3i : estimate DStream size : ", testNb++);
-    {   ZSTD_frameHeader fhi;
+    {   ZSTD_FrameHeader fhi;
         const void* cStart = (char*)compressedBuffer + (skippableFrameSize + 8);
         size_t const gfhError = ZSTD_getFrameHeader(&fhi, cStart, cSize);
         if (gfhError!=0) goto _output_error;
@@ -1530,7 +1530,7 @@ static int basicUnitTests(U32 seed, double compressibility, int bigTests)
 
     DISPLAYLEVEL(3, "test%3i : decompress large frame created from multiple threads + dictionary : ", testNb++);
     {   ZSTD_DStream* const dstream = ZSTD_createDCtx();
-        ZSTD_frameHeader zfh;
+        ZSTD_FrameHeader zfh;
         ZSTD_getFrameHeader(&zfh, compressedBuffer, cSize);
         DISPLAYLEVEL(5, "frame windowsize = %u : ", (unsigned)zfh.windowSize);
         outBuff.dst = decodedBuffer;

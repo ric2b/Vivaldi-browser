@@ -15,7 +15,6 @@
 #include "components/security_interstitials/content/security_interstitial_controller_client.h"
 #include "components/security_interstitials/core/common_string_util.h"
 #include "components/strings/grit/components_strings.h"
-#include "components/supervised_user/core/common/features.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/referrer.h"
@@ -96,18 +95,18 @@ SupervisedUserVerificationPage::SupervisedUserVerificationPage(
 SupervisedUserVerificationPage::~SupervisedUserVerificationPage() = default;
 
 void SupervisedUserVerificationPage::CloseSignInTabs() {
-  if (signin_tabs_handle_id_list_.empty()) {
+  if (signin_tabs_handle_list_.empty()) {
     return;
   }
 
   int closed_tab_count = 0;
   int skipped_tab_count = 0;
-  while (!signin_tabs_handle_id_list_.empty()) {
-    auto tab_handle_id = signin_tabs_handle_id_list_.front();
-    signin_tabs_handle_id_list_.pop_front();
+  while (!signin_tabs_handle_list_.empty()) {
+    const tabs::TabHandle tab_handle = signin_tabs_handle_list_.front();
+    signin_tabs_handle_list_.pop_front();
     // Obtains the tab associated with the unique tab handle id. A tab pointer
     // is only returned if the tab is still valid.
-    auto* tab_interface = tabs::TabInterface::MaybeGetFromHandle(tab_handle_id);
+    tabs::TabInterface* const tab_interface = tab_handle.Get();
     if (!tab_interface) {
       continue;
     }
@@ -151,10 +150,7 @@ void SupervisedUserVerificationPage::OnGoogleAuthStateUpdate() {
   // Re-authentication metrics will be recorded in the destructor, since this
   // method could be invoked more than once.
   is_reauth_completed_ = true;
-  if (base::FeatureList::IsEnabled(
-          supervised_user::kCloseSignTabsFromReauthenticationInterstitial)) {
-    CloseSignInTabs();
-  }
+  CloseSignInTabs();
   controller()->Reload();
 }
 
@@ -205,13 +201,10 @@ void SupervisedUserVerificationPage::CommandReceived(
       auto* signin_web_contents =
           SecurityInterstitialPage::web_contents()->OpenURL(
               params, /*navigation_handle_callback=*/{});
-      if (base::FeatureList::IsEnabled(
-              supervised_user::
-                  kCloseSignTabsFromReauthenticationInterstitial) &&
-          signin_web_contents) {
+      if (signin_web_contents) {
         tabs::TabInterface* tab_interface =
             tabs::TabInterface::GetFromContents(signin_web_contents);
-        signin_tabs_handle_id_list_.emplace_back(tab_interface->GetTabHandle());
+        signin_tabs_handle_list_.emplace_back(tab_interface->GetHandle());
       }
       break;
     }

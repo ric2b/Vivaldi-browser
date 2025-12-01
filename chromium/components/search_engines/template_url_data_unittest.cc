@@ -8,9 +8,9 @@
 
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
-#include "components/search_engines/prepopulated_engines.h"
 #include "components/search_engines/regulatory_extension_type.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/search_engines_data/resources/definitions/prepopulated_engines.h"
 
 namespace {
 TemplateURLData BuildDataForRegulatoryExtensions(
@@ -20,9 +20,9 @@ TemplateURLData BuildDataForRegulatoryExtensions(
       std::string_view(), std::string_view(), std::string_view(),
       std::string_view(), std::string_view(), std::string_view(),
       std::string_view(), std::string_view(), std::string_view(),
-      std::string_view(), std::string_view(), std::string_view(),
-      std::string_view(), {}, std::string_view(), std::string_view(),
-      std::u16string_view(), base::Value::List(), false, false, 0, extensions);
+      std::string_view(), std::string_view(), {}, std::string_view(),
+      std::string_view(), std::u16string_view(), base::Value::List(), false,
+      false, 0, extensions);
 }
 }  // namespace
 
@@ -32,10 +32,9 @@ TEST(TemplateURLDataTest, Trim) {
       std::string_view(), std::string_view(), std::string_view(),
       std::string_view(), std::string_view(), std::string_view(),
       std::string_view(), std::string_view(), std::string_view(),
-      std::string_view(), std::string_view(), std::string_view(),
-      std::string_view(), std::string_view(), {}, std::string_view(),
-      std::string_view(), std::u16string_view(), base::Value::List(), false,
-      false, 0, {});
+      std::string_view(), std::string_view(), std::string_view(), {},
+      std::string_view(), std::string_view(), std::u16string_view(),
+      base::Value::List(), false, false, 0, {});
 
   EXPECT_EQ(u"shortname", data.short_name());
   EXPECT_EQ(u"keyword", data.keyword());

@@ -6,10 +6,7 @@
 
 .timeline-overlays-container {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   /* Ensure it appears on top of everything */
   z-index: 200;
   pointer-events: none;
@@ -50,8 +47,16 @@
   }
 }
 
+.overlay-type-ENTRY_SELECTED {
+  /* Ensure ENTRY_SELECTED overlays are always displayed on top of ENTRY_OUTLINE overlays */
+  z-index: 1;
+}
+
 .overlay-type-ENTRY_OUTLINE {
   background-color: transparent;
+  border-width: 1px;
+  /* Ensure ENTRY_SELECTED overlays are always displayed on top of ENTRY_OUTLINE overlays */
+  z-index: 0;
 
   &.outline-reason-ERROR {
     border-color: var(--sys-color-error-bright);
@@ -74,7 +79,7 @@
       transparent var(--red-stripe-width),
       transparent var(--white-stripe-width)
     );
-  border: 2px solid var(--sys-color-error-bright);
+  border: 1px solid var(--sys-color-error-bright);
 
   &.cut-off-bottom {
     border-bottom: none;
@@ -136,4 +141,37 @@
   top: unset;
   bottom: 0;
   height: 100px;
+}
+
+.overlay-type-TIMINGS_MARKER {
+  bottom: 0;
+  width: 0.5px;
+  pointer-events: auto;
+}
+
+.marker-title {
+  display: flex;
+  justify-content: center;
+  padding: 0 var(--sys-size-3);
+  font-size: var(--sys-typescale-body4-size);
+  color: var(--sys-color-base);
+
+  &:hover {
+    cursor: default;
+    transition: opacity 0.2s ease;
+  }
+}
+
+.markers {
+  position: fixed;
+  display: flex;
+  bottom: 0;
+}
+
+.overlay-popover span {
+  margin-right: var(--sys-size-3);
+}
+
+.overlay-popover span.overlay-popover-time {
+  color: var(--sys-color-green);
 }

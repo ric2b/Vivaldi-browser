@@ -29,10 +29,12 @@ module.exports = {
     meta: {
         type: "suggestion",
 
+        defaultOptions: ["always", {}],
+
         docs: {
             description: "Require or disallow named `function` expressions",
             recommended: false,
-            url: "https://eslint.org/docs/rules/func-names"
+            url: "https://eslint.org/docs/latest/rules/func-names"
         },
 
         schema: {
@@ -68,8 +70,7 @@ module.exports = {
     },
 
     create(context) {
-
-        const sourceCode = context.getSourceCode();
+        const sourceCode = context.sourceCode;
 
         /**
          * Returns the config option for the given node.
@@ -79,13 +80,12 @@ module.exports = {
         function getConfigForNode(node) {
             if (
                 node.generator &&
-                context.options.length > 1 &&
                 context.options[1].generators
             ) {
                 return context.options[1].generators;
             }
 
-            return context.options[0] || "always";
+            return context.options[0];
         }
 
         /**
@@ -159,7 +159,7 @@ module.exports = {
         function handleFunction(node) {
 
             // Skip recursive functions.
-            const nameVar = context.getDeclaredVariables(node)[0];
+            const nameVar = sourceCode.getDeclaredVariables(node)[0];
 
             if (isFunctionName(nameVar) && nameVar.references.length > 0) {
                 return;

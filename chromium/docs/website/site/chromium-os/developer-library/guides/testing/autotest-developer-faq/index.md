@@ -267,7 +267,7 @@ test to IUSE_TESTS or it won't be picked up by autotest when you ask it to build
 specific tests.
 
 For more information on writing your test, see the [user
-docs](http://www.chromium.org/chromium-os/testing/autotest-user-doc).
+docs](/chromium-os/testing/autotest-user-doc).
 
 ### Adding binaries for your tests to call as part of the test
 
@@ -370,7 +370,7 @@ Autotest](/chromium-os/developer-library/guides/autotest-design-patterns#TOC-Wra
 
 ### How do I bundle a bunch of tests into a suite that can be scheduled and run as a group?
 
-See [Test Suites](/chromium-os/testing/test-suites)
+See [Test Suites](/chromium-os/developer-library/guides/testing/test-suites)
 
 ### How do I write a test that requires some human interaction?
 
@@ -415,7 +415,7 @@ Here's an example. This is the content of platform_NullTest.py:
 
 ```none
 #!/usr/bin/python
-# Copyright 2018 The Chromium Authors.
+# Copyright 2018 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 import os
@@ -522,7 +522,7 @@ In harry.py you will want something like the following:
 
 ```none
 #!/usr/bin/python
-# Copyright 2018 The ChromiumOS Authors.
+# Copyright 2018 The ChromiumOS Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 import os
@@ -568,7 +568,7 @@ Finally for reasons that we won't go into you should create the file common.py
 in your directory, like this:
 
 ```none
-# Copyright 2018 The ChromiumOS Authors.
+# Copyright 2018 The ChromiumOS Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 import os, sys
@@ -584,7 +584,7 @@ setup_modules.setup(base_path=client_dir,
 and you need a file called 'control' too:
 
 ```none
-# Copyright 2018 The ChromiumOS Authors.
+# Copyright 2018 The ChromiumOS Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 job.setup_dep(['fio'])
@@ -656,7 +656,7 @@ since you asked). This file is very simple:
 
 ```none
 #!/usr/bin/python
-# Copyright 2018 The ChromiumOS Authors.
+# Copyright 2018 The ChromiumOS Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 import common, commands, logging, os

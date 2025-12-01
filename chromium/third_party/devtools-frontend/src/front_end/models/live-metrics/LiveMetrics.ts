@@ -4,12 +4,24 @@
 
 import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
+import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
-import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import type * as Protocol from '../../generated/protocol.js';
+import * as EmulationModel from '../../models/emulation/emulation.js';
 
 import * as Spec from './web-vitals-injected/spec/spec.js';
+
+const UIStrings = {
+  /**
+   * @description Warning text indicating that the Largest Contentful Paint (LCP) performance metric was affected by the user changing the simulated device.
+   */
+  lcpEmulationWarning:
+      'Simulating a new device after the page loads can affect LCP. Reload the page after simulating a new device for accurate LCP data.',
+};
+
+const str_ = i18n.i18n.registerUIStrings('models/live-metrics/LiveMetrics.ts', UIStrings);
+const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
 const LIVE_METRICS_WORLD_NAME = 'DevTools Performance Metrics';
 
@@ -34,20 +46,22 @@ export class LiveMetrics extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
   #target?: SDK.Target.Target;
   #scriptIdentifier?: Protocol.Page.ScriptIdentifier;
   #lastResetContextId?: Protocol.Runtime.ExecutionContextId;
-  #lcpValue?: LCPValue;
-  #clsValue?: CLSValue;
-  #inpValue?: INPValue;
+  #lcpValue?: LcpValue;
+  #clsValue?: ClsValue;
+  #inpValue?: InpValue;
   #interactions: InteractionMap = new Map();
   #interactionsByGroupId = new Map<Spec.InteractionEntryGroupId, Interaction[]>();
   #layoutShifts: LayoutShift[] = [];
+  #lastEmulationChangeTime?: number;
   #mutex = new Common.Mutex.Mutex();
+  #deviceModeModel = EmulationModel.DeviceModeModel.DeviceModeModel.tryInstance();
 
   private constructor() {
     super();
     SDK.TargetManager.TargetManager.instance().observeTargets(this);
   }
 
-  static instance(opts: {forceNew: boolean|null} = {forceNew: null}): LiveMetrics {
+  static instance(opts: {forceNew?: boolean} = {forceNew: false}): LiveMetrics {
     const {forceNew} = opts;
     if (!liveMetricsInstance || forceNew) {
       liveMetricsInstance = new LiveMetrics();
@@ -56,15 +70,15 @@ export class LiveMetrics extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
     return liveMetricsInstance;
   }
 
-  get lcpValue(): LCPValue|undefined {
+  get lcpValue(): LcpValue|undefined {
     return this.#lcpValue;
   }
 
-  get clsValue(): CLSValue|undefined {
+  get clsValue(): ClsValue|undefined {
     return this.#clsValue;
   }
 
-  get inpValue(): INPValue|undefined {
+  get inpValue(): InpValue|undefined {
     return this.#inpValue;
   }
 
@@ -137,12 +151,15 @@ export class LiveMetrics extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
     return true;
   }
 
+  #onEmulationChanged(): void {
+    this.#lastEmulationChangeTime = Date.now();
+  }
+
   /**
    * DOM nodes can't be sent over a runtime binding, so we have to retrieve
    * them separately.
    */
-  async #resolveDomNode(index: number, executionContextId: Protocol.Runtime.ExecutionContextId):
-      Promise<SDK.DOMModel.DOMNode|null> {
+  async #resolveNodeRef(index: number, executionContextId: Protocol.Runtime.ExecutionContextId): Promise<NodeRef|null> {
     if (!this.#target) {
       return null;
     }
@@ -166,15 +183,21 @@ export class LiveMetrics extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
       return null;
     }
 
-    const remoteObject = runtimeModel.createRemoteObject(result);
-    return domModel.pushObjectAsNodeToFrontend(remoteObject);
-  }
+    let remoteObject;
+    try {
+      remoteObject = runtimeModel.createRemoteObject(result);
+      const node = await domModel.pushObjectAsNodeToFrontend(remoteObject);
+      if (!node) {
+        return null;
+      }
 
-  async #refreshNode(domModel: SDK.DOMModel.DOMModel, node: SDK.DOMModel.DOMNode):
-      Promise<SDK.DOMModel.DOMNode|undefined> {
-    const backendNodeId = node.backendNodeId();
-    const nodes = await domModel.pushNodesByBackendIdsToFrontend(new Set([backendNodeId]));
-    return nodes?.get(backendNodeId) || undefined;
+      const link = await Common.Linkifier.Linkifier.linkify(node);
+      return {node, link};
+    } catch {
+      return null;
+    } finally {
+      remoteObject?.release();
+    }
   }
 
   #sendStatusUpdate(): void {
@@ -203,24 +226,29 @@ export class LiveMetrics extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
   async #onDocumentUpdate(event: Common.EventTarget.EventTargetEvent<SDK.DOMModel.DOMModel>): Promise<void> {
     const domModel = event.data;
 
-    const allLayoutAffectedNodes = this.#layoutShifts.flatMap(shift => shift.affectedNodes);
-    const toRefresh: Array<{node?: SDK.DOMModel.DOMNode}> =
-        [this.#lcpValue || {}, ...this.#interactions.values(), ...allLayoutAffectedNodes];
+    const toRefresh = [
+      this.#lcpValue?.nodeRef,
+      ...this.#interactions.values().map(i => i.nodeRef),
+      ...this.#layoutShifts.flatMap(shift => shift.affectedNodeRefs),
+    ].filter((nodeRef): nodeRef is NodeRef => Boolean(nodeRef));
 
-    const allPromises = toRefresh.map(item => {
-      const node = item.node;
-      if (node === undefined) {
+    const idsToRefresh = new Set(toRefresh.map(nodeRef => nodeRef.node.backendNodeId()));
+    const nodes = await domModel.pushNodesByBackendIdsToFrontend(idsToRefresh);
+    if (!nodes) {
+      return;
+    }
+
+    const allPromises = toRefresh.map(async nodeRef => {
+      const refreshedNode = nodes.get(nodeRef.node.backendNodeId());
+
+      // It is possible for the refreshed node to be undefined even though it was defined previously.
+      // We should keep the affected nodes consistent from the user perspective, so we will just keep the stale node instead of removing it.
+      if (!refreshedNode) {
         return;
       }
 
-      return this.#refreshNode(domModel, node).then(refreshedNode => {
-        // In theory, it is possible for `node` to be undefined even though it was defined previously.
-        // We should keep the affected nodes consistent from the user perspective, so we will just keep the stale node instead of removing it.
-        // This is unlikely to happen in practice.
-        if (refreshedNode) {
-          item.node = refreshedNode;
-        }
-      });
+      nodeRef.node = refreshedNode;
+      nodeRef.link = await Common.Linkifier.Linkifier.linkify(refreshedNode);
     });
 
     await Promise.all(allPromises);
@@ -232,22 +260,28 @@ export class LiveMetrics extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
       webVitalsEvent: Spec.WebVitalsEvent, executionContextId: Protocol.Runtime.ExecutionContextId): Promise<void> {
     switch (webVitalsEvent.name) {
       case 'LCP': {
-        const lcpEvent: LCPValue = {
+        const warnings: string[] = [];
+        const lcpEvent: LcpValue = {
           value: webVitalsEvent.value,
           phases: webVitalsEvent.phases,
+          warnings,
         };
         if (webVitalsEvent.nodeIndex !== undefined) {
-          const node = await this.#resolveDomNode(webVitalsEvent.nodeIndex, executionContextId);
-          if (node) {
-            lcpEvent.node = node;
+          const nodeRef = await this.#resolveNodeRef(webVitalsEvent.nodeIndex, executionContextId);
+          if (nodeRef) {
+            lcpEvent.nodeRef = nodeRef;
           }
+        }
+
+        if (this.#lastEmulationChangeTime && Date.now() - this.#lastEmulationChangeTime < 500) {
+          warnings.push(i18nString(UIStrings.lcpEmulationWarning));
         }
 
         this.#lcpValue = lcpEvent;
         break;
       }
       case 'CLS': {
-        const event: CLSValue = {
+        const event: ClsValue = {
           value: webVitalsEvent.value,
           clusterShiftIds: webVitalsEvent.clusterShiftIds,
         };
@@ -255,7 +289,7 @@ export class LiveMetrics extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
         break;
       }
       case 'INP': {
-        const inpEvent: INPValue = {
+        const inpEvent: InpValue = {
           value: webVitalsEvent.value,
           phases: webVitalsEvent.phases,
           interactionId: `interaction-${webVitalsEvent.entryGroupId}-${webVitalsEvent.startTime}`,
@@ -297,26 +331,25 @@ export class LiveMetrics extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
         }
 
         if (webVitalsEvent.nodeIndex !== undefined) {
-          const node = await this.#resolveDomNode(webVitalsEvent.nodeIndex, executionContextId);
+          const node = await this.#resolveNodeRef(webVitalsEvent.nodeIndex, executionContextId);
           if (node) {
-            interaction.node = node;
+            interaction.nodeRef = node;
           }
         }
         break;
       }
       case 'LayoutShift': {
         const nodePromises = webVitalsEvent.affectedNodeIndices.map(nodeIndex => {
-          return this.#resolveDomNode(nodeIndex, executionContextId);
+          return this.#resolveNodeRef(nodeIndex, executionContextId);
         });
 
-        const affectedNodes = (await Promise.all(nodePromises))
-                                  .filter((node): node is SDK.DOMModel.DOMNode => Boolean(node))
-                                  .map(node => ({node}));
+        const affectedNodes =
+            (await Promise.all(nodePromises)).filter((nodeRef): nodeRef is NodeRef => Boolean(nodeRef));
 
         const layoutShift: LayoutShift = {
           score: webVitalsEvent.score,
           uniqueLayoutShiftId: webVitalsEvent.uniqueLayoutShiftId,
-          affectedNodes,
+          affectedNodeRefs: affectedNodes,
         };
         this.#layoutShifts.push(layoutShift);
         break;
@@ -447,10 +480,6 @@ export class LiveMetrics extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
   }
 
   async enable(): Promise<void> {
-    if (!Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.TIMELINE_OBSERVATIONS)) {
-      return;
-    }
-
     if (Host.InspectorFrontendHost.isUnderTest()) {
       // Enabling this impacts a lot of layout tests; we will work on fixing
       // them but for now it is easier to not run this page in layout tests.
@@ -459,6 +488,11 @@ export class LiveMetrics extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
     }
 
     if (!this.#target || this.#enabled) {
+      return;
+    }
+
+    // Only frame targets will actually give us CWV
+    if (this.#target.type() !== SDK.Target.Type.FRAME) {
       return;
     }
 
@@ -495,6 +529,9 @@ export class LiveMetrics extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
     });
     this.#scriptIdentifier = identifier;
 
+    this.#deviceModeModel?.addEventListener(
+        EmulationModel.DeviceModeModel.Events.UPDATED, this.#onEmulationChanged, this);
+
     this.#enabled = true;
   }
 
@@ -526,6 +563,9 @@ export class LiveMetrics extends Common.ObjectWrapper.ObjectWrapper<EventTypes> 
     }
     this.#scriptIdentifier = undefined;
 
+    this.#deviceModeModel?.removeEventListener(
+        EmulationModel.DeviceModeModel.Events.UPDATED, this.#onEmulationChanged, this);
+
     this.#enabled = false;
   }
 }
@@ -536,26 +576,34 @@ export const enum Events {
 
 export type InteractionId = `interaction-${number}-${number}`;
 
-export type MetricValue = Pick<Spec.MetricChangeEvent, 'value'>;
-
-export interface LCPValue extends MetricValue {
-  phases: Spec.LCPPhases;
-  node?: SDK.DOMModel.DOMNode;
+export interface MetricValue {
+  value: number;
+  warnings?: string[];
 }
 
-export interface INPValue extends MetricValue {
-  phases: Spec.INPPhases;
+export interface NodeRef {
+  node: SDK.DOMModel.DOMNode;
+  link: Node;
+}
+
+export interface LcpValue extends MetricValue {
+  phases: Spec.LcpPhases;
+  nodeRef?: NodeRef;
+}
+
+export interface InpValue extends MetricValue {
+  phases: Spec.InpPhases;
   interactionId: InteractionId;
 }
 
-export interface CLSValue extends MetricValue {
+export interface ClsValue extends MetricValue {
   clusterShiftIds: Spec.UniqueLayoutShiftId[];
 }
 
 export interface LayoutShift {
   score: number;
   uniqueLayoutShiftId: Spec.UniqueLayoutShiftId;
-  affectedNodes: Array<{node: SDK.DOMModel.DOMNode}>;
+  affectedNodeRefs: NodeRef[];
 }
 
 export interface Interaction {
@@ -565,19 +613,19 @@ export interface Interaction {
   duration: number;
   startTime: number;
   nextPaintTime: number;
-  phases: Spec.INPPhases;
+  phases: Spec.InpPhases;
   longAnimationFrameTimings: Spec.PerformanceLongAnimationFrameTimingJSON[];
-  node?: SDK.DOMModel.DOMNode;
+  nodeRef?: NodeRef;
 }
 
 export interface StatusEvent {
-  lcp?: LCPValue;
-  cls?: CLSValue;
-  inp?: INPValue;
+  lcp?: LcpValue;
+  cls?: ClsValue;
+  inp?: InpValue;
   interactions: InteractionMap;
   layoutShifts: LayoutShift[];
 }
 
-type EventTypes = {
-  [Events.STATUS]: StatusEvent,
-};
+interface EventTypes {
+  [Events.STATUS]: StatusEvent;
+}

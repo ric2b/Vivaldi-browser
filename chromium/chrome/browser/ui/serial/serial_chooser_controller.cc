@@ -4,13 +4,14 @@
 
 #include "chrome/browser/ui/serial/serial_chooser_controller.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "base/containers/contains.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/ranges/algorithm.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/unguessable_token.h"
 #include "chrome/browser/chooser_controller/title_util.h"
@@ -33,11 +34,11 @@
 #include "services/device/public/mojom/serial.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "ash/webui/settings/public/constants/routes.mojom.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/common/webui_url_constants.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_MAC)
 #include "base/mac/mac_util.h"
@@ -115,8 +116,9 @@ SerialChooserController::SerialChooserController(
 }
 
 SerialChooserController::~SerialChooserController() {
-  if (callback_)
+  if (callback_) {
     RunCallback(/*port=*/nullptr);
+  }
 }
 
 const device::mojom::SerialPortInfo& SerialChooserController::GetPortForTest(
@@ -183,7 +185,7 @@ size_t SerialChooserController::NumOptions() const {
 bool SerialChooserController::DisplayServiceClassId(
     const device::mojom::SerialPortInfo& port) const {
   CHECK_EQ(port.type, device::mojom::SerialPortType::BLUETOOTH_CLASSIC_RFCOMM);
-  return base::ranges::any_of(
+  return std::ranges::any_of(
       ports_, [&port](const device::mojom::SerialPortInfoPtr& p) {
         return p->token != port.token &&
                p->type == SerialPortType::BLUETOOTH_CLASSIC_RFCOMM &&
@@ -225,8 +227,9 @@ std::u16string SerialChooserController::GetOption(size_t index) const {
 bool SerialChooserController::IsPaired(size_t index) const {
   DCHECK_LE(index, ports_.size());
 
-  if (!chooser_context_)
+  if (!chooser_context_) {
     return false;
+  }
 
   return chooser_context_->HasPortPermission(origin_, *ports_[index]);
 }
@@ -254,7 +257,7 @@ void SerialChooserController::OpenAdapterOffHelpUrl() const {
   CHECK(chooser_context_);
   Profile* profile = chooser_context_->profile();
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   // Chrome OS can directly link to the OS setting to turn on the adapter.
   chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
       profile, chromeos::settings::mojom::kBluetoothDevicesSubpagePath);
@@ -277,8 +280,9 @@ void SerialChooserController::OpenHelpCenterUrl() const {
   auto* web_contents = rfh && rfh->IsActive()
                            ? content::WebContents::FromRenderFrameHost(rfh)
                            : nullptr;
-  if (!web_contents)
+  if (!web_contents) {
     return;
+  }
 
   web_contents->OpenURL(
       content::OpenURLParams(
@@ -332,23 +336,26 @@ void SerialChooserController::AdapterPoweredChanged(BluetoothAdapter* adapter,
 
 void SerialChooserController::OnPortAdded(
     const device::mojom::SerialPortInfo& port) {
-  if (!DisplayDevice(port))
+  if (!DisplayDevice(port)) {
     return;
+  }
 
   ports_.push_back(port.Clone());
-  if (view())
+  if (view()) {
     view()->OnOptionAdded(ports_.size() - 1);
+  }
 }
 
 void SerialChooserController::OnPortRemoved(
     const device::mojom::SerialPortInfo& port) {
-  const auto it = base::ranges::find(ports_, port.token,
-                                     &device::mojom::SerialPortInfo::token);
+  const auto it = std::ranges::find(ports_, port.token,
+                                    &device::mojom::SerialPortInfo::token);
   if (it != ports_.end()) {
     const size_t index = it - ports_.begin();
     ports_.erase(it);
-    if (view())
+    if (view()) {
       view()->OnOptionRemoved(index);
+    }
   }
 }
 
@@ -366,12 +373,14 @@ void SerialChooserController::OnGetDevices(
 
   ports_.clear();
   for (auto& port : ports) {
-    if (DisplayDevice(*port))
+    if (DisplayDevice(*port)) {
       ports_.push_back(std::move(port));
+    }
   }
 
-  if (view())
+  if (view()) {
     view()->OnOptionsInitialized();
+  }
 }
 
 bool SerialChooserController::DisplayDevice(

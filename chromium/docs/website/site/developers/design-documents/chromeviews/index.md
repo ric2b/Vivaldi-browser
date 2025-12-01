@@ -101,6 +101,6 @@ However it has a few rough edges that can be improved over time:
             native controls have API methods that require them to exist within a
             window hierarchy. This means that they cannot be fully initialized
             until they are inserted. The View API will eventually be improved to
-            make this clearer ([bug 5191](http://crbug.com/5191)).
+            make this clearer ([bug 5191](https://crbug.com/5191)).
 *   The base Widget interface itself is somewhat frozen in time. Some
             improvement and consolidation would be worthwhile.

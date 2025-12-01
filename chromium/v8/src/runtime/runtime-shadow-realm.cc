@@ -12,7 +12,7 @@ RUNTIME_FUNCTION(Runtime_ShadowRealmWrappedFunctionCreate) {
   DCHECK_EQ(2, args.length());
   HandleScope scope(isolate);
   DirectHandle<NativeContext> native_context = args.at<NativeContext>(0);
-  Handle<JSReceiver> value = args.at<JSReceiver>(1);
+  DirectHandle<JSReceiver> value = args.at<JSReceiver>(1);
 
   RETURN_RESULT_OR_FAILURE(
       isolate, JSWrappedFunction::Create(isolate, native_context, value));
@@ -24,10 +24,10 @@ RUNTIME_FUNCTION(Runtime_ShadowRealmImportValue) {
   HandleScope scope(isolate);
   Handle<String> specifier = args.at<String>(0);
 
-  Handle<JSPromise> inner_capability;
+  DirectHandle<JSPromise> inner_capability;
 
-  MaybeHandle<Object> import_options;
-  MaybeHandle<Script> referrer;
+  MaybeDirectHandle<Object> import_options;
+  MaybeDirectHandle<Script> referrer;
   ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
       isolate, inner_capability,
       isolate->RunHostImportModuleDynamicallyCallback(
@@ -43,7 +43,7 @@ RUNTIME_FUNCTION(Runtime_ShadowRealmThrow) {
   DCHECK_EQ(2, args.length());
   HandleScope scope(isolate);
   int message_id_smi = args.smi_value_at(0);
-  Handle<Object> value = args.at(1);
+  DirectHandle<Object> value = args.at(1);
 
   MessageTemplate message_id = MessageTemplateFromInt(message_id_smi);
 

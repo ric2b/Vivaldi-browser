@@ -17,7 +17,7 @@
 #include "mojo/core/embedder/embedder.h"
 #include "net/base/network_change_notifier.h"
 #include "remoting/base/auto_thread_task_runner.h"
-#include "remoting/base/breakpad.h"
+#include "remoting/base/crash/crash_reporting.h"
 #include "remoting/base/host_settings.h"
 #include "remoting/base/logging.h"
 #include "remoting/host/base/host_exit_codes.h"
@@ -99,14 +99,14 @@ int It2MeNativeMessagingHostMain(int argc, char** argv) {
   base::apple::ScopedNSAutoreleasePool pool;
 #endif  // BUILDFLAG(IS_APPLE)
 
-#if defined(REMOTING_ENABLE_BREAKPAD)
-  // Initialize Breakpad as early as possible. On Mac the command-line needs to
-  // be initialized first, so that the preference for crash-reporting can be
-  // looked up in the config file.
+#if defined(REMOTING_ENABLE_CRASH_REPORTING)
+  // Initialize crash reporting as early as possible. On Mac the command-line
+  // needs to be initialized first, so that the preference for crash-reporting
+  // can be looked up in the config file.
   if (IsUsageStatsAllowed()) {
     InitializeCrashReporting();
   }
-#endif  // defined(REMOTING_ENABLE_BREAKPAD)
+#endif  // defined(REMOTING_ENABLE_CRASH_REPORTING)
 
 #if BUILDFLAG(IS_WIN)
   // Register and initialize common controls.
@@ -208,9 +208,7 @@ int It2MeNativeMessagingHostMain(int argc, char** argv) {
     SetStdHandle(STD_OUTPUT_HANDLE, nullptr);
   }
 #elif BUILDFLAG(IS_POSIX)
-  // The files are automatically closed.
-  read_file = base::File(STDIN_FILENO);
-  write_file = base::File(STDOUT_FILENO);
+  PipeMessagingChannel::OpenAndBlockStdio(read_file, write_file);
 #else
 #error Not implemented.
 #endif
@@ -245,10 +243,6 @@ int It2MeNativeMessagingHostMain(int argc, char** argv) {
   // Set up the native messaging channel.
   std::unique_ptr<extensions::NativeMessagingChannel> channel(
       new PipeMessagingChannel(std::move(read_file), std::move(write_file)));
-
-#if BUILDFLAG(IS_POSIX)
-  PipeMessagingChannel::ReopenStdinStdout();
-#endif  // BUILDFLAG(IS_POSIX)
 
   std::unique_ptr<ChromotingHostContext> context =
       ChromotingHostContext::Create(new remoting::AutoThreadTaskRunner(

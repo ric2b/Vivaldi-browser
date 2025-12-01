@@ -114,7 +114,7 @@ bool ProgressiveDecoder::PngReadHeader(int width,
     case FXDIB_Format::k1bppRgb:
     case FXDIB_Format::k8bppMask:
     case FXDIB_Format::k8bppRgb:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
     case FXDIB_Format::kBgr:
       *color_type = 2;
       break;
@@ -126,7 +126,7 @@ bool ProgressiveDecoder::PngReadHeader(int width,
     case FXDIB_Format::kBgraPremul:
       // TODO(crbug.com/355630556): Consider adding support for
       // `FXDIB_Format::kBgraPremul`
-      NOTREACHED_NORETURN();
+      NOTREACHED();
 #endif
   }
   *gamma = kPngGamma;
@@ -346,7 +346,7 @@ bool ProgressiveDecoder::BmpDetectImageTypeInBuffer(
   }
 
   // Set to 0 to make CalculatePitchAndSize() calculate it.
-  constexpr uint32_t kNoPitch = 0;
+  static constexpr uint32_t kNoPitch = 0;
   std::optional<CFX_DIBitmap::PitchAndSize> needed_data =
       CFX_DIBitmap::CalculatePitchAndSize(m_SrcWidth, m_SrcHeight, format,
                                           kNoPitch);
@@ -505,48 +505,35 @@ bool ProgressiveDecoder::JpegDetectImageTypeInBuffer(
   JpegProgressiveDecoder::GetInstance()->Input(m_pJpegContext.get(),
                                                m_pCodecMemory);
 
-  // Setting jump marker before calling ReadHeader, since a longjmp to
-  // the marker indicates a fatal error.
-  if (setjmp(JpegProgressiveDecoder::GetJumpMark(m_pJpegContext.get())) == -1) {
-    m_pJpegContext.reset();
-    m_status = FXCODEC_STATUS::kError;
-    return false;
-  }
-
-  int32_t readResult = JpegProgressiveDecoder::ReadHeader(
-      m_pJpegContext.get(), &m_SrcWidth, &m_SrcHeight, &m_SrcComponents,
-      pAttribute);
-  while (readResult == 2) {
-    FXCODEC_STATUS error_status = FXCODEC_STATUS::kError;
-    if (!JpegReadMoreData(&error_status)) {
-      m_status = error_status;
-      return false;
-    }
-    readResult = JpegProgressiveDecoder::ReadHeader(
+  while (1) {
+    int read_result = JpegProgressiveDecoder::ReadHeader(
         m_pJpegContext.get(), &m_SrcWidth, &m_SrcHeight, &m_SrcComponents,
         pAttribute);
+    switch (read_result) {
+      case JpegProgressiveDecoder::kFatal:
+      case JpegProgressiveDecoder::kError:
+        m_status = FXCODEC_STATUS::kError;
+        return false;
+      case JpegProgressiveDecoder::kOk:
+        m_SrcBPC = 8;
+        return true;
+      case JpegProgressiveDecoder::kNeedsMoreInput: {
+        FXCODEC_STATUS error_status = FXCODEC_STATUS::kError;
+        if (!JpegReadMoreData(&error_status)) {
+          m_status = error_status;
+          return false;
+        }
+        break;
+      }
+      default:
+        NOTREACHED();
+    }
   }
-  if (!readResult) {
-    m_SrcBPC = 8;
-    return true;
-  }
-  m_pJpegContext.reset();
-  m_status = FXCODEC_STATUS::kError;
-  return false;
 }
 
 FXCODEC_STATUS ProgressiveDecoder::JpegStartDecode() {
-  // Setting jump marker before calling StartScanLine, since a longjmp to
-  // the marker indicates a fatal error.
-  if (setjmp(JpegProgressiveDecoder::GetJumpMark(m_pJpegContext.get())) == -1) {
-    m_pJpegContext.reset();
-    m_status = FXCODEC_STATUS::kError;
-    return FXCODEC_STATUS::kError;
-  }
-
-  bool start_status =
-      JpegProgressiveDecoder::StartScanline(m_pJpegContext.get());
-  while (!start_status) {
+  while (!JpegProgressiveDecoder::StartScanline(m_pJpegContext.get())) {
+    // Maybe it needs more data.
     FXCODEC_STATUS error_status = FXCODEC_STATUS::kError;
     if (!JpegReadMoreData(&error_status)) {
       m_pDeviceBitmap = nullptr;
@@ -554,8 +541,6 @@ FXCODEC_STATUS ProgressiveDecoder::JpegStartDecode() {
       m_status = error_status;
       return m_status;
     }
-
-    start_status = JpegProgressiveDecoder::StartScanline(m_pJpegContext.get());
   }
   m_DecodeBuf.resize(FxAlignToBoundary<4>(m_SrcWidth * m_SrcComponents));
   FXDIB_ResampleOptions options;
@@ -579,28 +564,24 @@ FXCODEC_STATUS ProgressiveDecoder::JpegStartDecode() {
 }
 
 FXCODEC_STATUS ProgressiveDecoder::JpegContinueDecode() {
-  // JpegModule* pJpegModule = m_pCodecMgr->GetJpegModule();
-  // Setting jump marker before calling ReadScanLine, since a longjmp to
-  // the marker indicates a fatal error.
-  if (setjmp(JpegProgressiveDecoder::GetJumpMark(m_pJpegContext.get())) == -1) {
-    m_pJpegContext.reset();
-    m_status = FXCODEC_STATUS::kError;
-    return FXCODEC_STATUS::kError;
-  }
-
   while (true) {
-    bool readRes = JpegProgressiveDecoder::ReadScanline(m_pJpegContext.get(),
+    int err_code = JpegProgressiveDecoder::ReadScanline(m_pJpegContext.get(),
                                                         m_DecodeBuf.data());
-    while (!readRes) {
+    if (err_code == JpegProgressiveDecoder::kFatal) {
+      m_pJpegContext.reset();
+      m_status = FXCODEC_STATUS::kError;
+      return FXCODEC_STATUS::kError;
+    }
+    if (err_code != JpegProgressiveDecoder::kOk) {
+      // Maybe it needs more data.
       FXCODEC_STATUS error_status = FXCODEC_STATUS::kDecodeFinished;
-      if (!JpegReadMoreData(&error_status)) {
-        m_pDeviceBitmap = nullptr;
-        m_pFile = nullptr;
-        m_status = error_status;
-        return m_status;
+      if (JpegReadMoreData(&error_status)) {
+        continue;
       }
-      readRes = JpegProgressiveDecoder::ReadScanline(m_pJpegContext.get(),
-                                                     m_DecodeBuf.data());
+      m_pDeviceBitmap = nullptr;
+      m_pFile = nullptr;
+      m_status = error_status;
+      return m_status;
     }
     if (m_SrcFormat == FXCodec_Rgb) {
       RGB2BGR(UNSAFE_TODO(m_DecodeBuf.data()), m_SrcWidth);
@@ -890,7 +871,7 @@ void ProgressiveDecoder::SetTransMethod() {
     case FXDIB_Format::k1bppRgb:
     case FXDIB_Format::k8bppMask:
     case FXDIB_Format::k8bppRgb:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
     case FXDIB_Format::kBgr: {
       switch (m_SrcFormat) {
         case FXCodec_Invalid:
@@ -946,7 +927,7 @@ void ProgressiveDecoder::SetTransMethod() {
     case FXDIB_Format::kBgraPremul:
       // TODO(crbug.com/355630556): Consider adding support for
       // `FXDIB_Format::kBgraPremul`
-      NOTREACHED_NORETURN();
+      NOTREACHED();
 #endif
   }
 }

@@ -7,7 +7,13 @@ import * as Handlers from '../handlers/handlers.js';
 import * as Helpers from '../helpers/helpers.js';
 import * as Types from '../types/types.js';
 
-import {type InsightModel, type InsightSetContext, InsightWarning, type RequiredData} from './types.js';
+import {
+  InsightCategory,
+  type InsightModel,
+  type InsightSetContext,
+  InsightWarning,
+  type RequiredData,
+} from './types.js';
 
 const UIStrings = {
   /**
@@ -35,10 +41,11 @@ export type LCPDiscoveryInsightModel = InsightModel<{
   shouldPreloadImage?: boolean,
   /** The network request for the LCP image, if there was one. */
   lcpRequest?: Types.Events.SyntheticNetworkRequest,
-  earliestDiscoveryTimeTs?: Types.Timing.MicroSeconds,
+  earliestDiscoveryTimeTs?: Types.Timing.Micro,
 }>;
 
-function finalize(partialModel: Omit<LCPDiscoveryInsightModel, 'title'|'description'>): LCPDiscoveryInsightModel {
+function finalize(partialModel: Omit<LCPDiscoveryInsightModel, 'title'|'description'|'category'|'shouldShow'>):
+    LCPDiscoveryInsightModel {
   const relatedEvents = partialModel.lcpEvent && partialModel.lcpRequest ?
       // TODO: add entire request initiator chain?
       [partialModel.lcpEvent, partialModel.lcpRequest] :
@@ -46,6 +53,11 @@ function finalize(partialModel: Omit<LCPDiscoveryInsightModel, 'title'|'descript
   return {
     title: i18nString(UIStrings.title),
     description: i18nString(UIStrings.description),
+    category: InsightCategory.LCP,
+    shouldShow: Boolean(
+        partialModel.lcpRequest &&
+        (partialModel.shouldIncreasePriorityHint || partialModel.shouldPreloadImage ||
+         partialModel.shouldRemoveLazyLoading)),
     ...partialModel,
     relatedEvents,
   };
@@ -95,8 +107,8 @@ export function generateInsight(
   const imageFetchPriorityHint = lcpRequest?.args.data.fetchPriorityHint;
   // This is the earliest discovery time an LCP request could have - it's TTFB.
   const earliestDiscoveryTime = docRequest && docRequest.args.data.timing ?
-      Helpers.Timing.secondsToMicroseconds(docRequest.args.data.timing.requestTime) +
-          Helpers.Timing.millisecondsToMicroseconds(docRequest.args.data.timing.receiveHeadersStart) :
+      Helpers.Timing.secondsToMicro(docRequest.args.data.timing.requestTime) +
+          Helpers.Timing.milliToMicro(docRequest.args.data.timing.receiveHeadersStart) :
       undefined;
 
   return finalize({
@@ -105,6 +117,6 @@ export function generateInsight(
     shouldIncreasePriorityHint: imageFetchPriorityHint !== 'high',
     shouldPreloadImage: !imgPreloadedOrFoundInHTML,
     lcpRequest,
-    earliestDiscoveryTimeTs: earliestDiscoveryTime ? Types.Timing.MicroSeconds(earliestDiscoveryTime) : undefined,
+    earliestDiscoveryTimeTs: earliestDiscoveryTime ? Types.Timing.Micro(earliestDiscoveryTime) : undefined,
   });
 }

@@ -6,6 +6,7 @@
 // should be kept in sync with those in ios/chrome/browser/variations/
 // variations_safe_mode_egtest.mm.
 
+#include <ranges>
 #include <string>
 
 #include "base/atomic_sequence_num.h"
@@ -16,7 +17,6 @@
 #include "base/metrics/field_trial.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
-#include "base/ranges/ranges.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -126,6 +126,11 @@ class VariationsSafeModeEndToEndBrowserTest : public ::testing::Test {
     // compatibility with the crashing study in the seed.
     sub_test.AppendSwitchASCII(switches::kFakeVariationsChannel, "canary");
 
+    // TODO(crbug.com/379869158): Update the test to also support
+    // seed-file-based variations seeds.
+    sub_test.AppendSwitchASCII(::switches::kForceFieldTrials,
+                               "SeedFileTrial/Control_V5");
+
     // Explicitly avoid any terminal control characters in the output.
     sub_test.AppendSwitchASCII("gtest_color", "no");
     return sub_test;
@@ -223,6 +228,7 @@ TEST_F(VariationsSafeModeEndToEndBrowserTest, ExtendedSafeSeedEndToEnd) {
 }
 
 TEST_F(VariationsSafeModeEndToEndBrowserTest, ExtendedNullSeedEndToEnd) {
+  base::ScopedAllowBlockingForTesting allow_io;
   base::CommandLine sub_test = SetUpSubTest();
 
   // Initial sub-test run should be successful.

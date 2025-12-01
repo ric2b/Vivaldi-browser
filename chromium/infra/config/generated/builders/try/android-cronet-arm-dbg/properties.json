@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "android-cronet-arm-dbg",
-              "project": "chromium-m132"
+              "project": "chromium-m134"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-android-archive",
@@ -25,7 +25,7 @@
                   "mb"
                 ],
                 "build_config": "Debug",
-                "config": "android",
+                "config": "main_builder",
                 "target_bits": 32,
                 "target_platform": "android"
               },
@@ -43,7 +43,7 @@
         {
           "bucket": "ci",
           "builder": "android-cronet-arm-dbg",
-          "project": "chromium-m132"
+          "project": "chromium-m134"
         }
       ],
       "targets_spec_directory": "src/infra/config/generated/builders/try/android-cronet-arm-dbg/targets"
@@ -52,11 +52,6 @@
   "$build/flakiness": {
     "check_for_flakiness": true,
     "check_for_flakiness_with_resultdb": true
-  },
-  "$build/reclient": {
-    "instance": "rbe-chromium-untrusted",
-    "metrics_project": "chromium-reclient-metrics",
-    "scandeps_server": true
   },
   "$build/siso": {
     "configs": [

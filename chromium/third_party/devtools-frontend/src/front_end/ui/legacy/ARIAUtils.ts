@@ -146,10 +146,6 @@ export function markAsRadioGroup(element: Element): void {
   element.setAttribute('role', 'radiogroup');
 }
 
-export function markAsHidden(element: Element): void {
-  element.setAttribute('aria-hidden', 'true');
-}
-
 export function markAsSlider(element: Element, min: number|undefined = 0, max: number|undefined = 100): void {
   element.setAttribute('role', 'slider');
   element.setAttribute('aria-valuemin', String(min));
@@ -246,7 +242,7 @@ export function unsetExpandable(element: Element): void {
 }
 
 export function setHidden(element: Element, value: boolean): void {
-  element.setAttribute('aria-hidden', (Boolean(value)).toString());
+  element.setAttribute('aria-hidden', value.toString());
 }
 
 export function setLevel(element: Element, level: number): void {
@@ -380,11 +376,11 @@ function hideFromLayout(element: HTMLElement): void {
   element.style.overflow = 'hidden';
 }
 
-type AlertState = {
-  one: HTMLDivElement,
-  two: HTMLDivElement,
-  alertToggle: boolean,
-};
+interface AlertState {
+  one: HTMLDivElement;
+  two: HTMLDivElement;
+  alertToggle: boolean;
+}
 const alertElements = new WeakMap<HTMLElement, AlertState>();
 
 function createAlertElement(container: HTMLElement): HTMLDivElement {

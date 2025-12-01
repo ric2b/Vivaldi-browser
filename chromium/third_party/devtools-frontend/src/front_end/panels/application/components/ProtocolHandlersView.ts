@@ -9,16 +9,22 @@ import * as i18n from '../../../core/i18n/i18n.js';
 import * as Platform from '../../../core/platform/platform.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
 import * as Input from '../../../ui/components/input/input.js';
-// inspectorCommonStyles is imported for the chrome-select class that is used for the dropdown
-// eslint-disable-next-line rulesdir/es_modules_import
-import inspectorCommonStyles from '../../../ui/legacy/inspectorCommon.css.js';
+// inspectorCommonStyles is imported for the <select> styling that is used for the dropdown
+// eslint-disable-next-line rulesdir/es-modules-import
+import inspectorCommonStylesRaw from '../../../ui/legacy/inspectorCommon.css.js';
 import * as UI from '../../../ui/legacy/legacy.js';
-import * as LitHtml from '../../../ui/lit-html/lit-html.js';
+import * as Lit from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
-import protocolHandlersViewStyles from './protocolHandlersView.css.js';
+import protocolHandlersViewStylesRaw from './protocolHandlersView.css.js';
 
-const {html} = LitHtml;
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const inspectorCommonStyles = new CSSStyleSheet();
+inspectorCommonStyles.replaceSync(inspectorCommonStylesRaw.cssContent);
+const protocolHandlersViewStyles = new CSSStyleSheet();
+protocolHandlersViewStyles.replaceSync(protocolHandlersViewStylesRaw.cssContent);
+
+const {html} = Lit;
 
 const PROTOCOL_DOCUMENT_URL = 'https://web.dev/url-protocol-handler/';
 const UIStrings = {
@@ -108,7 +114,7 @@ export class ProtocolHandlersView extends HTMLElement {
     this.#render();
   }
 
-  #renderStatusMessage(): LitHtml.TemplateResult {
+  #renderStatusMessage(): Lit.TemplateResult {
     const manifestInTextLink =
         UI.XLink.XLink.create(this.#manifestLink, i18nString(UIStrings.manifest), undefined, undefined, 'manifest');
     const statusString = this.#protocolHandlers.length > 0 ? UIStrings.protocolDetected : UIStrings.protocolNotDetected;
@@ -126,9 +132,9 @@ export class ProtocolHandlersView extends HTMLElement {
     // clang-format on
   }
 
-  #renderProtocolTest(): LitHtml.LitTemplate {
+  #renderProtocolTest(): Lit.LitTemplate {
     if (this.#protocolHandlers.length === 0) {
-      return LitHtml.nothing;
+      return Lit.nothing;
     }
     const protocolOptions =
         this.#protocolHandlers.filter(p => p.protocol)
@@ -137,7 +143,7 @@ export class ProtocolHandlersView extends HTMLElement {
                  })}>${p.protocol}://</option>`);
     return html`
        <div class="protocol-handlers-row">
-        <select class="chrome-select protocol-select" @change=${this.#handleProtocolSelect} aria-label=${
+        <select class="protocol-select" @change=${this.#handleProtocolSelect} aria-label=${
         i18nString(UIStrings.dropdownLabel)}>
            ${protocolOptions}
         </select>
@@ -178,7 +184,7 @@ export class ProtocolHandlersView extends HTMLElement {
     const protocolDocLink = UI.XLink.XLink.create(
         PROTOCOL_DOCUMENT_URL, i18nString(UIStrings.protocolHandlerRegistrations), undefined, undefined, 'learn-more');
     // clang-format off
-    LitHtml.render(html`
+    Lit.render(html`
       ${this.#renderStatusMessage()}
       <div class="protocol-handlers-row">
           ${i18n.i18n.getFormatLocalizedString(str_, UIStrings.needHelpReadOur, {PH1: protocolDocLink})}

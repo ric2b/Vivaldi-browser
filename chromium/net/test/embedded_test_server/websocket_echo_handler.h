@@ -19,9 +19,6 @@ namespace net::test_server {
 // back any received text or binary messages to the sender.
 class WebSocketEchoHandler : public WebSocketHandler {
  public:
-  // Creates a handler callback for managing WebSocket upgrade requests.
-  static EmbeddedTestServer::HandleUpgradeRequestCallback CreateHandler();
-
   // Constructs the handler with a given WebSocket connection.
   explicit WebSocketEchoHandler(scoped_refptr<WebSocketConnection> connection);
 
@@ -34,10 +31,6 @@ class WebSocketEchoHandler : public WebSocketHandler {
 
   // Echoes back any received binary message.
   void OnBinaryMessage(base::span<const uint8_t> message) override;
-
-  // Handles a closing handshake; does nothing in this implementation.
-  void OnClosingHandshake(std::optional<uint16_t> code,
-                          std::string_view message) override;
 };
 
 }  // namespace net::test_server

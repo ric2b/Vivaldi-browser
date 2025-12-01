@@ -13,252 +13,196 @@
 // limitations under the License.
 
 import m from 'mithril';
-import {NUM} from '../../trace_processor/query_result';
-import {Slice} from '../../public/track';
-import {
-  BaseSliceTrack,
-  OnSliceClickArgs,
-} from '../../frontend/base_slice_track';
-import {NewTrackArgs} from '../../frontend/track';
-import {NAMED_ROW, NamedRow} from '../../frontend/named_slice_track';
-import {getColorForSample} from '../../public/lib/colorizer';
-import {
-  ProfileType,
-  TrackEventDetails,
-  TrackEventSelection,
-} from '../../public/selection';
-import {assertExists} from '../../base/logging';
+import {LONG, NUM} from '../../trace_processor/query_result';
+import {getColorForSample} from '../../components/colorizer';
 import {
   metricsFromTableOrSubquery,
   QueryFlamegraph,
-} from '../../public/lib/query_flamegraph';
+} from '../../components/query_flamegraph';
 import {DetailsShell} from '../../widgets/details_shell';
-import {Timestamp} from '../../frontend/widgets/timestamp';
-import {time} from '../../base/time';
-import {TrackEventDetailsPanel} from '../../public/details_panel';
+import {Timestamp} from '../../components/widgets/timestamp';
+import {Time, time} from '../../base/time';
 import {Flamegraph, FLAMEGRAPH_STATE_SCHEMA} from '../../widgets/flamegraph';
+import {Trace} from '../../public/trace';
+import {DatasetSliceTrack} from '../../components/tracks/dataset_slice_track';
+import {SourceDataset} from '../../trace_processor/dataset';
 
-interface PerfSampleRow extends NamedRow {
-  callsiteId: number;
-}
+// TODO(stevegolton): Dedupe this file with instrument_samples_profile_track.ts
 
-abstract class BasePerfSamplesProfileTrack extends BaseSliceTrack<
-  Slice,
-  PerfSampleRow
-> {
-  constructor(args: NewTrackArgs) {
-    super(args);
-  }
-
-  protected getRowSpec(): PerfSampleRow {
-    return {...NAMED_ROW, callsiteId: NUM};
-  }
-
-  protected rowToSlice(row: PerfSampleRow): Slice {
-    const baseSlice = super.rowToSliceBase(row);
-    const name = assertExists(row.name);
-    const colorScheme = getColorForSample(row.callsiteId);
-    return {...baseSlice, title: name, colorScheme};
-  }
-
-  onUpdatedSlices(slices: Slice[]) {
-    for (const slice of slices) {
-      slice.isHighlighted = slice === this.hoveredSlice;
-    }
-  }
-
-  onSliceClick(args: OnSliceClickArgs<Slice>): void {
-    // TODO(stevegolton): Perhaps we could just move this to BaseSliceTrack?
-    this.trace.selection.selectTrackEvent(this.uri, args.slice.id);
-  }
-}
-
-export class ProcessPerfSamplesProfileTrack extends BasePerfSamplesProfileTrack {
-  constructor(
-    args: NewTrackArgs,
-    private upid: number,
-  ) {
-    super(args);
-  }
-
-  getSqlSource(): string {
-    return `
-      select
-        p.id,
-        ts,
-        0 as dur,
-        0 as depth,
-        'Perf Sample' as name,
-        callsite_id as callsiteId
-      from perf_sample p
-      join thread using (utid)
-      where upid = ${this.upid} and callsite_id is not null
-      order by ts
-    `;
-  }
-
-  async getSelectionDetails(
-    id: number,
-  ): Promise<TrackEventDetails | undefined> {
-    const details = await super.getSelectionDetails(id);
-    if (details === undefined) return undefined;
-    return {
-      ...details,
-      upid: this.upid,
-      profileType: ProfileType.PERF_SAMPLE,
-    };
-  }
-
-  detailsPanel(sel: TrackEventSelection) {
-    const upid = assertExists(sel.upid);
-    const ts = sel.ts;
-
-    const metrics = metricsFromTableOrSubquery(
-      `
-        (
-          select
-            id,
-            parent_id as parentId,
-            name,
-            mapping_name,
-            source_file,
-            cast(line_number AS text) as line_number,
-            self_count
-          from _callstacks_for_callsites!((
-            select p.callsite_id
-            from perf_sample p
-            join thread t using (utid)
-            where p.ts >= ${ts}
-              and p.ts <= ${ts}
-              and t.upid = ${upid}
-          ))
-        )
+export function createProcessPerfSamplesProfileTrack(
+  trace: Trace,
+  uri: string,
+  upid: number,
+) {
+  return new DatasetSliceTrack({
+    trace,
+    uri,
+    dataset: new SourceDataset({
+      schema: {
+        id: NUM,
+        ts: LONG,
+        callsiteId: NUM,
+      },
+      src: `
+       SELECT
+          p.id,
+          ts,
+          callsite_id as callsiteId,
+          upid
+        FROM perf_sample p
+        JOIN thread using (utid)
+        WHERE callsite_id IS NOT NULL
+        ORDER BY ts
       `,
-      [
-        {
-          name: 'Perf Samples',
-          unit: '',
-          columnName: 'self_count',
-        },
-      ],
-      'include perfetto module linux.perf.samples',
-      [{name: 'mapping_name', displayName: 'Mapping'}],
-      [
-        {
-          name: 'source_file',
-          displayName: 'Source File',
-          mergeAggregation: 'ONE_OR_NULL',
-        },
-        {
-          name: 'line_number',
-          displayName: 'Line Number',
-          mergeAggregation: 'ONE_OR_NULL',
-        },
-      ],
-    );
-    const serialization = {
-      schema: FLAMEGRAPH_STATE_SCHEMA,
-      state: Flamegraph.createDefaultState(metrics),
-    };
-    const flamegraph = new QueryFlamegraph(this.trace, metrics, serialization);
-    return {
-      render: () => renderDetailsPanel(flamegraph, ts),
-      serialization,
-    };
-  }
+      filter: {
+        col: 'upid',
+        eq: upid,
+      },
+    }),
+    sliceName: () => 'Perf Sample',
+    colorizer: (row) => getColorForSample(row.callsiteId),
+    detailsPanel: (row) => {
+      const metrics = metricsFromTableOrSubquery(
+        `
+          (
+            select
+              id,
+              parent_id as parentId,
+              name,
+              mapping_name,
+              source_file,
+              cast(line_number AS text) as line_number,
+              self_count
+            from _callstacks_for_callsites!((
+              select p.callsite_id
+              from perf_sample p
+              join thread t using (utid)
+              where p.ts >= ${row.ts}
+                and p.ts <= ${row.ts}
+                and t.upid = ${upid}
+            ))
+          )
+        `,
+        [
+          {
+            name: 'Perf Samples',
+            unit: '',
+            columnName: 'self_count',
+          },
+        ],
+        'include perfetto module linux.perf.samples',
+        [{name: 'mapping_name', displayName: 'Mapping'}],
+        [
+          {
+            name: 'source_file',
+            displayName: 'Source File',
+            mergeAggregation: 'ONE_OR_NULL',
+          },
+          {
+            name: 'line_number',
+            displayName: 'Line Number',
+            mergeAggregation: 'ONE_OR_NULL',
+          },
+        ],
+      );
+      const serialization = {
+        schema: FLAMEGRAPH_STATE_SCHEMA,
+        state: Flamegraph.createDefaultState(metrics),
+      };
+      const flamegraph = new QueryFlamegraph(trace, metrics, serialization);
+      return {
+        render: () => renderDetailsPanel(flamegraph, Time.fromRaw(row.ts)),
+        serialization,
+      };
+    },
+  });
 }
 
-export class ThreadPerfSamplesProfileTrack extends BasePerfSamplesProfileTrack {
-  constructor(
-    args: NewTrackArgs,
-    private utid: number,
-  ) {
-    super(args);
-  }
-
-  getSqlSource(): string {
-    return `
-      select
-        p.id,
-        ts,
-        0 as dur,
-        0 as depth,
-        'Perf Sample' as name,
-        callsite_id as callsiteId
-      from perf_sample p
-      where utid = ${this.utid} and callsite_id is not null
-      order by ts
-    `;
-  }
-
-  async getSelectionDetails(
-    id: number,
-  ): Promise<TrackEventDetails | undefined> {
-    const details = await super.getSelectionDetails(id);
-    if (details === undefined) return undefined;
-    return {
-      ...details,
-      utid: this.utid,
-      profileType: ProfileType.PERF_SAMPLE,
-    };
-  }
-
-  detailsPanel(sel: TrackEventSelection): TrackEventDetailsPanel {
-    const utid = assertExists(sel.utid);
-    const ts = sel.ts;
-
-    const metrics = metricsFromTableOrSubquery(
-      `
-        (
-          select
-            id,
-            parent_id as parentId,
-            name,
-            mapping_name,
-            source_file,
-            cast(line_number AS text) as line_number,
-            self_count
-          from _callstacks_for_callsites!((
-            select p.callsite_id
-            from perf_sample p
-            where p.ts >= ${ts}
-              and p.ts <= ${ts}
-              and p.utid = ${utid}
-          ))
-        )
+export function createThreadPerfSamplesProfileTrack(
+  trace: Trace,
+  uri: string,
+  utid: number,
+) {
+  return new DatasetSliceTrack({
+    trace,
+    uri,
+    dataset: new SourceDataset({
+      schema: {
+        id: NUM,
+        ts: LONG,
+        callsiteId: NUM,
+      },
+      src: `
+        SELECT
+          p.id,
+          ts,
+          callsite_id as callsiteId,
+          utid
+        FROM perf_sample p
+        WHERE callsite_id IS NOT NULL
+        ORDER BY ts
       `,
-      [
-        {
-          name: 'Perf Samples',
-          unit: '',
-          columnName: 'self_count',
-        },
-      ],
-      'include perfetto module linux.perf.samples',
-      [{name: 'mapping_name', displayName: 'Mapping'}],
-      [
-        {
-          name: 'source_file',
-          displayName: 'Source File',
-          mergeAggregation: 'ONE_OR_NULL',
-        },
-        {
-          name: 'line_number',
-          displayName: 'Line Number',
-          mergeAggregation: 'ONE_OR_NULL',
-        },
-      ],
-    );
-    const serialization = {
-      schema: FLAMEGRAPH_STATE_SCHEMA,
-      state: Flamegraph.createDefaultState(metrics),
-    };
-    const flamegraph = new QueryFlamegraph(this.trace, metrics, serialization);
-    return {
-      render: () => renderDetailsPanel(flamegraph, ts),
-      serialization,
-    };
-  }
+      filter: {
+        col: 'utid',
+        eq: utid,
+      },
+    }),
+    sliceName: () => 'Perf Sample',
+    colorizer: (row) => getColorForSample(row.callsiteId),
+    detailsPanel: (row) => {
+      const metrics = metricsFromTableOrSubquery(
+        `
+          (
+            select
+              id,
+              parent_id as parentId,
+              name,
+              mapping_name,
+              source_file,
+              cast(line_number AS text) as line_number,
+              self_count
+            from _callstacks_for_callsites!((
+              select p.callsite_id
+              from perf_sample p
+              where p.ts >= ${row.ts}
+                and p.ts <= ${row.ts}
+                and p.utid = ${utid}
+            ))
+          )
+        `,
+        [
+          {
+            name: 'Perf Samples',
+            unit: '',
+            columnName: 'self_count',
+          },
+        ],
+        'include perfetto module linux.perf.samples',
+        [{name: 'mapping_name', displayName: 'Mapping'}],
+        [
+          {
+            name: 'source_file',
+            displayName: 'Source File',
+            mergeAggregation: 'ONE_OR_NULL',
+          },
+          {
+            name: 'line_number',
+            displayName: 'Line Number',
+            mergeAggregation: 'ONE_OR_NULL',
+          },
+        ],
+      );
+      const serialization = {
+        schema: FLAMEGRAPH_STATE_SCHEMA,
+        state: Flamegraph.createDefaultState(metrics),
+      };
+      const flamegraph = new QueryFlamegraph(trace, metrics, serialization);
+      return {
+        render: () => renderDetailsPanel(flamegraph, Time.fromRaw(row.ts)),
+        serialization,
+      };
+    },
+  });
 }
 
 function renderDetailsPanel(flamegraph: QueryFlamegraph, ts: time) {

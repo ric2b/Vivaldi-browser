@@ -7,14 +7,18 @@
 
 #include "chrome/browser/ui/browser_user_data.h"
 #include "chrome/browser/ui/views/bubble/webui_bubble_manager.h"
+#include "chrome/browser/ui/webui/data_sharing/data_sharing_ui.h"
 #include "components/data_sharing/public/group_data.h"
 #include "components/saved_tab_groups/public/types.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/views/widget/widget_observer.h"
 
 // Controller responsible for hosting the data sharing bubble per browser.
 class DataSharingBubbleController
-    : public BrowserUserData<DataSharingBubbleController> {
+    : public BrowserUserData<DataSharingBubbleController>,
+      public views::WidgetObserver,
+      public DataSharingUI::Delegate {
  public:
   DataSharingBubbleController(const DataSharingBubbleController&) = delete;
   DataSharingBubbleController& operator=(const DataSharingBubbleController&) =
@@ -28,10 +32,36 @@ class DataSharingBubbleController
   // Closes the instance of the data sharing bubble.
   void Close();
 
+  // Set a callback to invoke when the widget is closed.
+  void SetOnCloseCallback(base::OnceCallback<void()> callback);
+
+  // Set a callback to invoke when there's an error.
+  void SetShowErrorDialogCallback(base::OnceCallback<void()> callback);
+
+  // views::WidgetObserver
+  void OnWidgetClosing(views::Widget* widget) override;
+
+  // DataSharingUI::Delegate
+  void ApiInitComplete() override;
+  void ShowErrorDialog(int status_code) override;
+
+  base::WeakPtr<WebUIBubbleDialogView> BubbleViewForTesting() {
+    return bubble_view_;
+  }
+
  private:
   friend class BrowserUserData<DataSharingBubbleController>;
 
   explicit DataSharingBubbleController(Browser* browser);
+
+  base::ScopedObservation<views::Widget, views::WidgetObserver>
+      bubble_widget_observation_{this};
+
+  // Callback to invoke when the widget closes.
+  base::OnceCallback<void()> on_close_callback_;
+
+  // Callback to invoke when there's an error.
+  base::OnceCallback<void()> on_error_callback_;
 
   base::WeakPtr<WebUIBubbleDialogView> bubble_view_;
 

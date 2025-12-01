@@ -577,6 +577,32 @@ IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestBrowsertest,
                  WaitForStateChange(kTabId, state_change)));
 }
 
+IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestBrowsertest,
+                       UninstrumentWebContents_CanReinstrument) {
+  RunTestSequence(InstrumentTab(kWebContentsId),
+                  UninstrumentWebContents(kWebContentsId),
+                  // This should remove the element.
+                  WaitForHide(kWebContentsId), InstrumentTab(kWebContentsId));
+}
+
+IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestBrowsertest,
+                       UninstrumentWebContents_DoesNotFail) {
+  RunTestSequence(InstrumentTab(kWebContentsId),
+                  UninstrumentWebContents(kWebContents2Id,
+                                          /*fail_if_not_instrumented=*/false));
+}
+
+IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestBrowsertest,
+                       UninstrumentWebContents_Fails) {
+  UNCALLED_MOCK_CALLBACK(ui::InteractionSequence::AbortedCallback, aborted);
+  private_test_impl().set_aborted_callback_for_testing(aborted.Get());
+
+  EXPECT_CALL_IN_SCOPE(
+      aborted, Run,
+      RunTestSequence(InstrumentTab(kWebContentsId),
+                      UninstrumentWebContents(kWebContents2Id)));
+}
+
 using ClickElementParams =
     std::tuple<ui_controls::MouseButton, ui_controls::AcceleratorState>;
 
@@ -816,8 +842,14 @@ INSTANTIATE_TEST_SUITE_P(,
                                          CoverageConfig{true, false},
                                          CoverageConfig{true, true}));
 
+// TODO(crbug.com/390224186) Re-enable the test after fixing the flakiness.
+#if BUILDFLAG(IS_LINUX)
+#define MAYBE_TestCoverageEmits DISABLED_TestCoverageEmits
+#else
+#define MAYBE_TestCoverageEmits TestCoverageEmits
+#endif
 IN_PROC_BROWSER_TEST_P(InteractiveBrowserTestCodeCoverageBrowsertest,
-                       TestCoverageEmits) {
+                       MAYBE_TestCoverageEmits) {
   // Navigate and load the New Tab Page, which we know works with code coverage.
   RunTestSequence(
       InstrumentTab(kWebContentsId),

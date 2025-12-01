@@ -55,13 +55,15 @@ jint JNI_PasswordManagerUtilBridge_GetPasswordAccessLossWarningType(
 }
 
 namespace password_manager_android_util {
-bool IsInternalBackendPresent() {
+
+bool PasswordManagerUtilBridge::IsInternalBackendPresent() {
   return Java_PasswordManagerUtilBridge_isInternalBackendPresent(
       base::android::AttachCurrentThread());
 }
 
-bool IsPlayStoreAppPresent() {
+bool PasswordManagerUtilBridge::IsPlayStoreAppPresent() {
   return Java_PasswordManagerUtilBridge_isPlayStoreAppPresent(
       base::android::AttachCurrentThread());
 }
+
 }  // namespace password_manager_android_util

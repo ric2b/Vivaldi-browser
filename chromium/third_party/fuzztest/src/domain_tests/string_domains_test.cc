@@ -15,6 +15,7 @@
 // Tests of character and string domains.
 
 #include <cctype>
+#include <cstdint>
 #include <deque>
 #include <optional>
 #include <string>
@@ -27,6 +28,7 @@
 #include "absl/random/random.h"
 #include "./fuzztest/domain_core.h"
 #include "./domain_tests/domain_testing.h"
+#include "./fuzztest/internal/table_of_recent_compares.h"
 
 namespace fuzztest {
 namespace {
@@ -37,6 +39,7 @@ using ::testing::Each;
 using ::testing::Eq;
 using ::testing::Ge;
 using ::testing::Gt;
+using ::testing::HasSubstr;
 using ::testing::IsTrue;
 using ::testing::Lt;
 using ::testing::Matches;
@@ -96,7 +99,7 @@ TEST(Domain, Forwarding) {
   elems.clear();
   Value c(domain, bitgen);
   while (elems.size() < 'z' - 'a' + 1) {
-    c.Mutate(domain, bitgen, false);
+    c.Mutate(domain, bitgen, {}, false);
     elems.insert(c.user_value);
   }
 }

@@ -78,23 +78,23 @@ int GetSelectionLength(ui::TextInputClient* client) {
 }
 
 cros_events::PickerSessionOutcome ConvertToCrosEventSessionOutcome(
-    PickerSessionMetrics::SessionOutcome outcome) {
+    QuickInsertSessionMetrics::SessionOutcome outcome) {
   switch (outcome) {
-    case PickerSessionMetrics::SessionOutcome::kUnknown:
+    case QuickInsertSessionMetrics::SessionOutcome::kUnknown:
       return cros_events::PickerSessionOutcome::UNKNOWN;
-    case PickerSessionMetrics::SessionOutcome::kInsertedOrCopied:
+    case QuickInsertSessionMetrics::SessionOutcome::kInsertedOrCopied:
       return cros_events::PickerSessionOutcome::INSERTED_OR_COPIED;
-    case PickerSessionMetrics::SessionOutcome::kAbandoned:
+    case QuickInsertSessionMetrics::SessionOutcome::kAbandoned:
       return cros_events::PickerSessionOutcome::ABANDONED;
-    case PickerSessionMetrics::SessionOutcome::kRedirected:
+    case QuickInsertSessionMetrics::SessionOutcome::kRedirected:
       return cros_events::PickerSessionOutcome::REDIRECTED;
-    case PickerSessionMetrics::SessionOutcome::kFormat:
+    case QuickInsertSessionMetrics::SessionOutcome::kFormat:
       return cros_events::PickerSessionOutcome::FORMAT;
-    case PickerSessionMetrics::SessionOutcome::kOpenFile:
+    case QuickInsertSessionMetrics::SessionOutcome::kOpenFile:
       return cros_events::PickerSessionOutcome::OPEN_FILE;
-    case PickerSessionMetrics::SessionOutcome::kOpenLink:
+    case QuickInsertSessionMetrics::SessionOutcome::kOpenLink:
       return cros_events::PickerSessionOutcome::OPEN_LINK;
-    case PickerSessionMetrics::SessionOutcome::kCreate:
+    case QuickInsertSessionMetrics::SessionOutcome::kCreate:
       return cros_events::PickerSessionOutcome::CREATE;
   }
 }
@@ -117,6 +117,8 @@ cros_events::PickerAction ConvertToCrosEventAction(
     case QuickInsertCategory::kEmojisGifs:
     case QuickInsertCategory::kEmojis:
       return cros_events::PickerAction::OPEN_EXPRESSIONS;
+    case QuickInsertCategory::kGifs:
+      return cros_events::PickerAction::OPEN_GIFS;
     case QuickInsertCategory::kClipboard:
       return cros_events::PickerAction::OPEN_CLIPBOARD;
     case QuickInsertCategory::kDriveFiles:
@@ -267,33 +269,37 @@ cros_events::PickerResultType GetResultType(
 
 }  // namespace
 
-PickerSessionMetrics::PickerSessionMetrics() = default;
+QuickInsertSessionMetrics::QuickInsertSessionMetrics() = default;
 
-PickerSessionMetrics::PickerSessionMetrics(PrefService* prefs)
+QuickInsertSessionMetrics::QuickInsertSessionMetrics(PrefService* prefs)
     : prefs_(prefs) {}
 
-PickerSessionMetrics::~PickerSessionMetrics() {
+QuickInsertSessionMetrics::~QuickInsertSessionMetrics() {
   OnFinishSession();
 }
 
-void PickerSessionMetrics::RegisterProfilePrefs(PrefRegistrySimple* registry) {
-  registry->RegisterIntegerPref(prefs::kPickerCapsLockSelectedCountPrefName, 0);
-  registry->RegisterIntegerPref(prefs::kPickerCapsLockDislayedCountPrefName, 0);
+void QuickInsertSessionMetrics::RegisterProfilePrefs(
+    PrefRegistrySimple* registry) {
+  registry->RegisterIntegerPref(prefs::kQuickInsertLockSelectedCountPrefName,
+                                0);
+  registry->RegisterIntegerPref(
+      prefs::kQuickInsertCapsLockDisplayedCountPrefName, 0);
 }
 
-void PickerSessionMetrics::SetOutcome(SessionOutcome outcome) {
+void QuickInsertSessionMetrics::SetOutcome(SessionOutcome outcome) {
   if (outcome_ == SessionOutcome::kUnknown) {
     outcome_ = outcome;
   }
 }
 
-void PickerSessionMetrics::SetSelectedCategory(QuickInsertCategory category) {
+void QuickInsertSessionMetrics::SetSelectedCategory(
+    QuickInsertCategory category) {
   if (!last_category_.has_value()) {
     last_category_ = category;
   }
 }
 
-void PickerSessionMetrics::SetSelectedResult(
+void QuickInsertSessionMetrics::SetSelectedResult(
     QuickInsertSearchResult selected_result,
     int index) {
   if (!selected_result_.has_value()) {
@@ -302,13 +308,14 @@ void PickerSessionMetrics::SetSelectedResult(
   }
 }
 
-void PickerSessionMetrics::UpdateSearchQuery(std::u16string_view search_query) {
+void QuickInsertSessionMetrics::UpdateSearchQuery(
+    std::u16string_view search_query) {
   int new_length = static_cast<int>(search_query.length());
   search_query_total_edits_ += abs(new_length - search_query_length_);
   search_query_length_ = new_length;
 }
 
-void PickerSessionMetrics::OnStartSession(ui::TextInputClient* client) {
+void QuickInsertSessionMetrics::OnStartSession(ui::TextInputClient* client) {
   metrics::structured::StructuredMetricsClient::Record(
       std::move(cros_events::Picker_StartSession()
                     .SetInputFieldType(GetInputFieldType(client))
@@ -316,7 +323,7 @@ void PickerSessionMetrics::OnStartSession(ui::TextInputClient* client) {
                         static_cast<int64_t>(GetSelectionLength(client)))));
 }
 
-void PickerSessionMetrics::OnFinishSession() {
+void QuickInsertSessionMetrics::OnFinishSession() {
   if (caps_lock_displayed_) {
     UpdateCapLockPrefs(
         selected_result_.has_value() &&
@@ -334,18 +341,18 @@ void PickerSessionMetrics::OnFinishSession() {
           .SetResultIndex(result_index_));
 }
 
-void PickerSessionMetrics::SetCapsLockDisplayed(bool displayed) {
+void QuickInsertSessionMetrics::SetCapsLockDisplayed(bool displayed) {
   caps_lock_displayed_ = displayed;
 }
 
-void PickerSessionMetrics::UpdateCapLockPrefs(bool caps_lock_selected) {
+void QuickInsertSessionMetrics::UpdateCapLockPrefs(bool caps_lock_selected) {
   if (prefs_ == nullptr) {
     return;
   }
   int caps_lock_displayed_count =
-      prefs_->GetInteger(prefs::kPickerCapsLockDislayedCountPrefName) + 1;
+      prefs_->GetInteger(prefs::kQuickInsertCapsLockDisplayedCountPrefName) + 1;
   int caps_lock_selected_count =
-      prefs_->GetInteger(prefs::kPickerCapsLockSelectedCountPrefName);
+      prefs_->GetInteger(prefs::kQuickInsertLockSelectedCountPrefName);
   if (caps_lock_selected) {
     ++caps_lock_selected_count;
   }
@@ -357,9 +364,9 @@ void PickerSessionMetrics::UpdateCapLockPrefs(bool caps_lock_selected) {
     caps_lock_displayed_count /= 2;
     caps_lock_selected_count /= 2;
   }
-  prefs_->SetInteger(prefs::kPickerCapsLockDislayedCountPrefName,
+  prefs_->SetInteger(prefs::kQuickInsertCapsLockDisplayedCountPrefName,
                      caps_lock_displayed_count);
-  prefs_->SetInteger(prefs::kPickerCapsLockSelectedCountPrefName,
+  prefs_->SetInteger(prefs::kQuickInsertLockSelectedCountPrefName,
                      caps_lock_selected_count);
 }
 

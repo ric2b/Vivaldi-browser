@@ -15,7 +15,7 @@ bool IsTopSitesEnabled() {
 
 BASE_FEATURE(kViewMarkdownAsHTML,
              "kViewMarkdownAsHTML",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsViewMarkdownAsHTMLEnabled() {
   return base::FeatureList::IsEnabled(kViewMarkdownAsHTML);

@@ -17,12 +17,17 @@ const astUtils = require("./utils/ast-utils");
 /** @type {import('../shared/types').Rule} */
 module.exports = {
     meta: {
+        hasSuggestions: true,
         type: "suggestion",
+
+        defaultOptions: [{
+            allowEmptyCatch: false
+        }],
 
         docs: {
             description: "Disallow empty block statements",
             recommended: true,
-            url: "https://eslint.org/docs/rules/no-empty"
+            url: "https://eslint.org/docs/latest/rules/no-empty"
         },
 
         schema: [
@@ -30,8 +35,7 @@ module.exports = {
                 type: "object",
                 properties: {
                     allowEmptyCatch: {
-                        type: "boolean",
-                        default: false
+                        type: "boolean"
                     }
                 },
                 additionalProperties: false
@@ -39,15 +43,14 @@ module.exports = {
         ],
 
         messages: {
-            unexpected: "Empty {{type}} statement."
+            unexpected: "Empty {{type}} statement.",
+            suggestComment: "Add comment inside empty {{type}} statement."
         }
     },
 
     create(context) {
-        const options = context.options[0] || {},
-            allowEmptyCatch = options.allowEmptyCatch || false;
-
-        const sourceCode = context.getSourceCode();
+        const [{ allowEmptyCatch }] = context.options;
+        const sourceCode = context.sourceCode;
 
         return {
             BlockStatement(node) {
@@ -71,7 +74,22 @@ module.exports = {
                     return;
                 }
 
-                context.report({ node, messageId: "unexpected", data: { type: "block" } });
+                context.report({
+                    node,
+                    messageId: "unexpected",
+                    data: { type: "block" },
+                    suggest: [
+                        {
+                            messageId: "suggestComment",
+                            data: { type: "block" },
+                            fix(fixer) {
+                                const range = [node.range[0] + 1, node.range[1] - 1];
+
+                                return fixer.replaceTextRange(range, " /* empty */ ");
+                            }
+                        }
+                    ]
+                });
             },
 
             SwitchStatement(node) {

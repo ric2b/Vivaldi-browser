@@ -113,7 +113,7 @@
 }
 
 #define YUV2RGBFUNC(func_name, dst_type, alpha)                                     \
-           int func_name(SwsContext *c, const uint8_t *const src[],                 \
+           int func_name(SwsInternal *c, const uint8_t *const src[],                \
                          const int srcStride[], int srcSliceY, int srcSliceH,       \
                          uint8_t *const dst[], const int dstStride[])               \
 {                                                                                   \
@@ -128,9 +128,9 @@
                                                                                     \
     YUV2RGB_LOAD_COE                                                                \
                                                                                     \
-    h_size = c->dstW >> 4;                                                          \
-    res = (c->dstW & 15) >> 1;                                                      \
-    vshift = c->srcFormat != AV_PIX_FMT_YUV422P;                                    \
+    h_size = c->opts.dst_w >> 4;                                                    \
+    res = (c->opts.dst_w & 15) >> 1;                                                \
+    vshift = c->opts.src_format != AV_PIX_FMT_YUV422P;                              \
     for (y = 0; y < srcSliceH; y += 2) {                                            \
         dst_type av_unused *r, *g, *b;                                              \
         dst_type *image1    = (dst_type *)(dst[0] + (y + srcSliceY) * dstStride[0]);\
@@ -142,7 +142,7 @@
         for(x = 0; x < h_size; x++) {                                               \
 
 #define YUV2RGBFUNC32(func_name, dst_type, alpha)                                   \
-           int func_name(SwsContext *c, const uint8_t *const src[],                 \
+           int func_name(SwsInternal *c, const uint8_t *const src[],                \
                          const int srcStride[], int srcSliceY, int srcSliceH,       \
                          uint8_t *const dst[], const int dstStride[])               \
 {                                                                                   \
@@ -156,9 +156,9 @@
                                                                                     \
     YUV2RGB_LOAD_COE                                                                \
                                                                                     \
-    h_size = c->dstW >> 4;                                                          \
-    res = (c->dstW & 15) >> 1;                                                      \
-    vshift = c->srcFormat != AV_PIX_FMT_YUV422P;                                    \
+    h_size = c->opts.dst_w >> 4;                                                    \
+    res = (c->opts.dst_w & 15) >> 1;                                                \
+    vshift = c->opts.src_format != AV_PIX_FMT_YUV422P;                              \
     for (y = 0; y < srcSliceH; y += 2) {                                            \
         int yd = y + srcSliceY;                                                     \
         dst_type av_unused *r, *g, *b;                                              \

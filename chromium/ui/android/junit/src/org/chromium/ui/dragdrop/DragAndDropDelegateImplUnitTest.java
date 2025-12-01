@@ -419,7 +419,6 @@ public class DragAndDropDelegateImplUnitTest {
     }
 
     @Test
-    @EnableFeatures({UiAndroidFeatureList.DRAG_DROP_FILES})
     public void testDragImage_ReceivedDropBeforeDragEnds() {
         final Bitmap shadowImage = Bitmap.createBitmap(100, 200, Bitmap.Config.ALPHA_8);
         final DropDataAndroid imageDropData =
@@ -587,14 +586,14 @@ public class DragAndDropDelegateImplUnitTest {
         final DropDataAndroid data =
                 DropDataAndroid.create("", JUnitTestGURLs.EXAMPLE_URL, null, null, null);
         int flag = mDragAndDropDelegateImpl.buildFlags(data);
-        Assert.assertEquals("Expect flag(s): DRAG_FLAG_GLOBAL.", flag, View.DRAG_FLAG_GLOBAL);
+        Assert.assertEquals("Expect flag(s): DRAG_FLAG_GLOBAL.", View.DRAG_FLAG_GLOBAL, flag);
     }
 
     @Test
     public void testBuildFlag_Text() {
         final DropDataAndroid data = DropDataAndroid.create("text", null, null, null, null);
         int flag = mDragAndDropDelegateImpl.buildFlags(data);
-        Assert.assertEquals("Expect flag(s): DRAG_FLAG_GLOBAL.", flag, View.DRAG_FLAG_GLOBAL);
+        Assert.assertEquals("Expect flag(s): DRAG_FLAG_GLOBAL.", View.DRAG_FLAG_GLOBAL, flag);
     }
 
     @Test
@@ -602,7 +601,7 @@ public class DragAndDropDelegateImplUnitTest {
         final DropDataAndroid data =
                 DropDataAndroid.create("text", JUnitTestGURLs.EXAMPLE_URL, null, null, null);
         int flag = mDragAndDropDelegateImpl.buildFlags(data);
-        Assert.assertEquals("Expect flag(s): DRAG_FLAG_GLOBAL.", flag, View.DRAG_FLAG_GLOBAL);
+        Assert.assertEquals("Expect flag(s): DRAG_FLAG_GLOBAL.", View.DRAG_FLAG_GLOBAL, flag);
     }
 
     @Test
@@ -614,8 +613,8 @@ public class DragAndDropDelegateImplUnitTest {
         int flag = mDragAndDropDelegateImpl.buildFlags(imageData);
         Assert.assertEquals(
                 "Expect flag(s): DRAG_FLAG_GLOBAL | DRAG_FLAG_GLOBAL_URI_READ | DRAG_FLAG_OPAQUE.",
-                flag,
-                View.DRAG_FLAG_GLOBAL | View.DRAG_FLAG_GLOBAL_URI_READ | View.DRAG_FLAG_OPAQUE);
+                View.DRAG_FLAG_GLOBAL | View.DRAG_FLAG_GLOBAL_URI_READ | View.DRAG_FLAG_OPAQUE,
+                flag);
     }
 
     @Test
@@ -630,8 +629,8 @@ public class DragAndDropDelegateImplUnitTest {
         int flag = mDragAndDropDelegateImpl.buildFlags(imageData);
         Assert.assertEquals(
                 "Expect flag(s): DRAG_FLAG_GLOBAL | DRAG_FLAG_GLOBAL_URI_READ.",
-                flag,
-                View.DRAG_FLAG_GLOBAL | View.DRAG_FLAG_GLOBAL_URI_READ);
+                View.DRAG_FLAG_GLOBAL | View.DRAG_FLAG_GLOBAL_URI_READ,
+                flag);
     }
 
     @Test
@@ -646,8 +645,8 @@ public class DragAndDropDelegateImplUnitTest {
         int flag = mDragAndDropDelegateImpl.buildFlags(browserData);
         Assert.assertEquals(
                 "Expect flag(s): DRAG_FLAG_GLOBAL | DRAG_FLAG_OPAQUE.",
-                flag,
-                View.DRAG_FLAG_GLOBAL | View.DRAG_FLAG_OPAQUE);
+                View.DRAG_FLAG_GLOBAL | View.DRAG_FLAG_OPAQUE,
+                flag);
     }
 
     @Test

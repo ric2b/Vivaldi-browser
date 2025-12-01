@@ -17,7 +17,7 @@ namespace openscreen::discovery {
 
 namespace {
 
-constexpr std::chrono::seconds kTtl{120};
+constexpr std::chrono::seconds kTtl(120);
 
 template <class T>
 void TestReadEntrySucceeds(const uint8_t* data,

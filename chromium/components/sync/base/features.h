@@ -44,11 +44,6 @@ BASE_DECLARE_FEATURE(kSyncAutofillWalletUsageData);
 // Controls whether to enable syncing of Autofill Wallet Credential Data.
 BASE_DECLARE_FEATURE(kSyncAutofillWalletCredentialData);
 
-// Controls if the `PlusAddressSettingSyncBridge`, controlling
-// PLUS_ADDRESS_SETTING should be instantiated.
-// TODO(b/342089839): Cleanup when launched.
-BASE_DECLARE_FEATURE(kSyncPlusAddressSetting);
-
 #if BUILDFLAG(IS_CHROMEOS)
 // Whether Apps toggle value is exposed by Ash to Lacros.
 BASE_DECLARE_FEATURE(kSyncChromeOSAppsToggleSharing);
@@ -59,7 +54,6 @@ BASE_DECLARE_FEATURE(kSyncChromeOSAppsToggleSharing);
 // DeviceInfo has been updated.
 BASE_DECLARE_FEATURE(kSkipInvalidationOptimizationsWhenDeviceInfoUpdated);
 
-BASE_DECLARE_FEATURE(kSyncEnableContactInfoDataTypeInTransportMode);
 BASE_DECLARE_FEATURE(kSyncEnableContactInfoDataTypeForCustomPassphraseUsers);
 BASE_DECLARE_FEATURE(kSyncEnableContactInfoDataTypeForDasherUsers);
 
@@ -89,9 +83,6 @@ constexpr bool IsWebauthnCredentialSyncEnabled() {
 #endif  // !BUILDFLAG(IOS_PASSKEYS_ENABLED)
 }
 #endif  // BUILDFLAG(IS_IOS)
-
-// If enabled, ignore GetUpdates retry delay command from the server.
-BASE_DECLARE_FEATURE(kSyncIgnoreGetUpdatesRetryDelay);
 
 // Wrapper flag to control the nudge delay of the #tab-groups-save feature.
 BASE_DECLARE_FEATURE(kTabGroupsSaveNudgeDelay);
@@ -123,7 +114,7 @@ BASE_DECLARE_FEATURE(kEnableBookmarksSelectedTypeOnSigninForTesting);
 
 // Feature flag used for enabling sync (transport mode) for signed-in users that
 // haven't turned on full sync.
-#if !BUILDFLAG(IS_IOS)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 BASE_DECLARE_FEATURE(kReadingListEnableSyncTransportModeUponSignIn);
 // Returns whether reading list storage related UI can be enabled, by testing
 // `kReadingListEnableSyncTransportModeUponSignIn`.
@@ -132,7 +123,7 @@ bool IsReadingListAccountStorageEnabled();
 constexpr bool IsReadingListAccountStorageEnabled() {
   return true;
 }
-#endif  // !BUILDFLAG(IS_IOS)
+#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 
 // Flag to allow SHARED_TAB_GROUP_DATA to run in transport mode.
 BASE_DECLARE_FEATURE(kSyncSharedTabGroupDataInTransportMode);
@@ -141,9 +132,6 @@ BASE_DECLARE_FEATURE(kSyncSharedTabGroupDataInTransportMode);
 // respectively, to run in transport mode.
 BASE_DECLARE_FEATURE(kSyncEnableWalletMetadataInTransportMode);
 BASE_DECLARE_FEATURE(kSyncEnableWalletOfferInTransportMode);
-
-// Flag to enable setting `deleted_by_version` on a `EntityMetadata`.
-BASE_DECLARE_FEATURE(kSyncEntityMetadataRecordDeletedByVersionOnLocalDeletion);
 
 // Flag to enable clean up of password deletions that may be unintentional.
 BASE_DECLARE_FEATURE(kSyncPasswordCleanUpAccidentalBatchDeletions);
@@ -163,6 +151,12 @@ inline constexpr base::FeatureParam<base::TimeDelta>
 // If enabled, sync-the-transport will auto-start (avoid deferring startup) if
 // sync metadata isn't available (i.e. initial sync never completed).
 BASE_DECLARE_FEATURE(kSyncAlwaysForceImmediateStartIfTransportDataMissing);
+
+#if BUILDFLAG(IS_IOS) || BUILDFLAG(IS_ANDROID)
+// If enabled, holds the account preference values under a dictionary in the
+// main preferences file.
+BASE_DECLARE_FEATURE(kMigrateAccountPrefs);
+#endif  // BUILDFLAG(IS_IOS) || BUILDFLAG(IS_ANDROID)
 
 // If enabled, distinguishes between local and account themes.
 BASE_DECLARE_FEATURE(kSeparateLocalAndAccountThemes);
@@ -188,6 +182,15 @@ BASE_DECLARE_FEATURE(kWebApkBackupAndRestoreBackend);
 // Enables syncing for extensions when in transport mode (when a user is signed
 // in but has not turned on full sync).
 BASE_DECLARE_FEATURE(kSyncEnableExtensionsInTransportMode);
+
+#if BUILDFLAG(IS_ANDROID)
+// Flag to test different alternatives for the passwords sync error message
+// content.
+BASE_DECLARE_FEATURE(kSyncEnablePasswordsSyncErrorMessageAlternative);
+inline constexpr base::FeatureParam<int>
+    kSyncEnablePasswordsSyncErrorMessageAlternativeVersion{
+        &kSyncEnablePasswordsSyncErrorMessageAlternative, "version", 1};
+#endif  // BUILDFLAG(IS_ANDROID)
 
 }  // namespace syncer
 

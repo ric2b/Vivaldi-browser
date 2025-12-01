@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.browserservices.ui.splashscreen.webapps;
 
+import android.app.Activity;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.net.Uri;
@@ -18,7 +19,6 @@ import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntent
 import org.chromium.chrome.browser.browserservices.intents.WebappInfo;
 import org.chromium.chrome.browser.browserservices.ui.splashscreen.SplashController;
 import org.chromium.chrome.browser.browserservices.ui.splashscreen.SplashDelegate;
-import org.chromium.chrome.browser.customtabs.BaseCustomTabActivity;
 import org.chromium.chrome.browser.customtabs.content.TabObserverRegistrar;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.webapps.WebApkSplashNetworkErrorObserver;
@@ -27,8 +27,6 @@ import org.chromium.chrome.browser.webapps.WebappRegistry;
 import org.chromium.ui.util.ColorUtils;
 import org.chromium.webapk.lib.common.WebApkCommonUtils;
 import org.chromium.webapk.lib.common.splash.SplashLayout;
-
-import javax.inject.Inject;
 
 /** Displays the splash screen for homescreen shortcuts and WebAPKs. */
 public class WebappSplashController implements SplashDelegate {
@@ -40,13 +38,13 @@ public class WebappSplashController implements SplashDelegate {
 
     private WebApkSplashNetworkErrorObserver mWebApkNetworkErrorObserver;
 
-    @Inject
     public WebappSplashController(
+            Activity activity,
             SplashController splashController,
-            BaseCustomTabActivity activity,
+            TabObserverRegistrar tabObserverRegistrar,
             BrowserServicesIntentDataProvider intentDataProvider) {
         mSplashController = splashController;
-        mTabObserverRegistrar = activity.getTabObserverRegistrar();
+        mTabObserverRegistrar = tabObserverRegistrar;
 
         mWebappInfo = WebappInfo.create(intentDataProvider);
 

@@ -334,7 +334,7 @@ class WebMediaPlayer {
   virtual void SetIsEffectivelyFullscreen(WebFullscreenVideoStatus) {}
 
   virtual void EnabledAudioTracksChanged(
-      const WebVector<TrackId>& enabled_track_ids) {}
+      const std::vector<TrackId>& enabled_track_ids) {}
   virtual void SelectedVideoTrackChanged(
       std::optional<TrackId> selected_track_id) {}
 
@@ -358,10 +358,9 @@ class WebMediaPlayer {
 
   virtual bool IsOpaque() const { return false; }
 
-  // Returns the id given by the WebMediaPlayerDelegate. This is used by the
-  // Blink code to pass a player id to mojo services.
-  // TODO(mlamouri): remove this and move the id handling to Blink.
-  virtual int GetDelegateId() { return -1; }
+  // Returns a per-process unique ID for this WebMediaPlayer that can
+  // be passed to mojo services.
+  virtual int GetPlayerId() { return -1; }
 
   // Returns the SurfaceId the video element is currently using.
   // Returns std::nullopt if the element isn't a video or doesn't have a

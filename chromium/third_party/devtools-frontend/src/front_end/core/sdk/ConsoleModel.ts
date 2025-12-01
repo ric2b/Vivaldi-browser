@@ -403,6 +403,8 @@ export class ConsoleModel extends SDKModel<EventTypes> {
     }
     for (const runtimeModel of TargetManager.instance().models(RuntimeModel)) {
       runtimeModel.discardConsoleEntries();
+      // Runtime.discardConsoleEntries implies Runtime.releaseObjectGroup('console').
+      runtimeModel.releaseObjectGroup('live-expression');
     }
     for (const target of TargetManager.instance().targets()) {
       target.model(ConsoleModel)?.clear();
@@ -521,12 +523,12 @@ export interface CommandEvaluatedEvent {
   exceptionDetails?: Protocol.Runtime.ExceptionDetails|undefined;
 }
 
-export type EventTypes = {
-  [Events.ConsoleCleared]: void,
-  [Events.MessageAdded]: ConsoleMessage,
-  [Events.MessageUpdated]: ConsoleMessage,
-  [Events.CommandEvaluated]: CommandEvaluatedEvent,
-};
+export interface EventTypes {
+  [Events.ConsoleCleared]: void;
+  [Events.MessageAdded]: ConsoleMessage;
+  [Events.MessageUpdated]: ConsoleMessage;
+  [Events.CommandEvaluated]: CommandEvaluatedEvent;
+}
 
 export interface AffectedResources {
   requestId?: Protocol.Network.RequestId;
@@ -586,6 +588,7 @@ export interface ConsoleMessageDetails {
   context?: string;
   affectedResources?: AffectedResources;
   category?: Protocol.Log.LogEntryCategory;
+  isCookieReportIssue?: boolean;
 }
 
 export class ConsoleMessage {
@@ -609,6 +612,7 @@ export class ConsoleMessage {
   #exceptionId?: number = undefined;
   #affectedResources?: AffectedResources;
   category?: Protocol.Log.LogEntryCategory;
+  isCookieReportIssue: boolean = false;
 
   /**
    * The parent frame of the `console.log` call of logpoints or conditional breakpoints
@@ -639,6 +643,7 @@ export class ConsoleMessage {
     this.workerId = details?.workerId;
     this.#affectedResources = details?.affectedResources;
     this.category = details?.category;
+    this.isCookieReportIssue = Boolean(details?.isCookieReportIssue);
 
     if (!this.#executionContextId && this.#runtimeModelInternal) {
       if (this.scriptId) {

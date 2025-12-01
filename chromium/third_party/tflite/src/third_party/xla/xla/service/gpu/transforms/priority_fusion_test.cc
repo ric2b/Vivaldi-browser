@@ -26,6 +26,7 @@ limitations under the License.
 #include "absl/strings/string_view.h"
 #include "xla/hlo/ir/hlo_computation.h"
 #include "xla/hlo/ir/hlo_instruction.h"
+#include "xla/hlo/testlib/pattern_matcher_gmock.h"
 #include "xla/service/gpu/backend_configs.pb.h"
 #include "xla/service/gpu/gpu_device_info_for_tests.h"
 #include "xla/service/gpu/gpu_fusible.h"
@@ -33,7 +34,6 @@ limitations under the License.
 #include "xla/service/gpu/model/gpu_hlo_cost_analysis.h"
 #include "xla/service/hlo_cost_analysis.h"
 #include "xla/service/pattern_matcher.h"
-#include "xla/service/pattern_matcher_gmock.h"
 #include "xla/stream_executor/device_description.h"
 #include "xla/tests/hlo_test_base.h"
 #include "tsl/platform/status_matchers.h"
@@ -521,8 +521,8 @@ TEST_F(PriorityFusionTest, DontFuseIntoFirstOperandOfScatter) {
     ENTRY FuseIntoScatter {
       p0 = s32[3,3] parameter(0)
       operand = s32[3,3] add(p0, p0)
-      p1 = s32[2] parameter(1)
-      indices = s32[2] add(p1, p1)
+      p1 = s32[2,1] parameter(1)
+      indices = s32[2,1] add(p1, p1)
       p2 = s32[2,3] parameter(2)
       updates = s32[2,3] add(p2, p2)
       scatter = s32[3,3] scatter(operand, indices, updates),
@@ -822,7 +822,7 @@ ENTRY main {
               GmockMatch(m::Reduce(m::Parameter(), m::Constant())));
 }
 
-TEST_F(PriorityFusionTest, DoNotFuseProducerConsumerMergedTooLarge) {
+TEST_F(PriorityFusionTest, FuseProducerConsumerMergedNotTooLarge) {
   auto module = *ParseAndReturnVerifiedModule(R"(
     HloModule module
 
@@ -870,9 +870,7 @@ TEST_F(PriorityFusionTest, DoNotFuseProducerConsumerMergedTooLarge) {
       ROOT fusion2 = pred[6]{0} fusion(fusion1), kind=kInput, calls=fused_computation.2
     }
   )");
-  auto& debug_options = module->mutable_config().mutable_debug_options();
-  debug_options.set_xla_gpu_mlir_emitter_level(3);
-  EXPECT_THAT(priority_fusion_.Run(module.get()), IsOkAndHolds(false));
+  EXPECT_THAT(priority_fusion_.Run(module.get()), IsOkAndHolds(true));
 }
 
 TEST_F(PriorityFusionTest, CanMergeTritonFusionWithBothProducerAndConsumer) {

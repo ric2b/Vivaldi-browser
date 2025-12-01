@@ -13,6 +13,7 @@
 #include <winhttp.h>
 #include <wrl/client.h>
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <string>
@@ -21,8 +22,6 @@
 #include <vector>
 
 #include "base/check_op.h"
-#include "base/debug/alias.h"
-#include "base/debug/dump_without_crashing.h"
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
 #include "base/json/json_string_value_serializer.h"
@@ -63,12 +62,12 @@
 #include "chrome/updater/util/win_util.h"
 #include "chrome/updater/win/installer/exit_code.h"
 #include "chrome/updater/win/manifest_util.h"
+#include "chrome/updater/win/protocol_parser_xml.h"
 #include "chrome/updater/win/ui/l10n_util.h"
 #include "chrome/updater/win/ui/progress_wnd.h"
 #include "chrome/updater/win/ui/resources/resources.grh"
 #include "chrome/updater/win/ui/resources/updater_installer_strings.h"
 #include "chrome/updater/win/win_constants.h"
-#include "components/update_client/protocol_parser.h"
 #include "components/update_client/update_client_errors.h"
 #include "url/gurl.h"
 
@@ -78,7 +77,6 @@ namespace {
 class InstallProgressSilentObserver : public AppInstallProgress {
  public:
   explicit InstallProgressSilentObserver(ui::OmahaWndEvents* events_sink);
-  ~InstallProgressSilentObserver() override = default;
 
   // Overrides for AppInstallProgress.
   void OnCheckingForUpdate() override;
@@ -201,7 +199,6 @@ class AppInstallProgressIPC : public AppInstallProgress {
 
   AppInstallProgressIPC(const AppInstallProgressIPC&) = delete;
   AppInstallProgressIPC& operator=(const AppInstallProgressIPC&) = delete;
-  ~AppInstallProgressIPC() override = default;
 
   // Called by the window proc when a specific application message is processed
   // by the progress window. This call always occurs in the context of the
@@ -412,7 +409,7 @@ class AppInstallControllerImpl : public AppInstallController,
                      const std::string& app_name,
                      base::OnceCallback<void(int)> callback);
   void DoInstallAppOffline(
-      const update_client::ProtocolParser::Results& results,
+      const OfflineManifestSystemRequirements& requirements,
       const std::string& installer_version,
       const base::FilePath& installer_path,
       const std::string& install_args,
@@ -525,6 +522,7 @@ void AppInstallControllerImpl::InstallApp(
   }
   if (tag_args) {
     request.brand_code = tag_args->brand_code;
+    request.install_id = tag_args->installation_id;
   }
 
   base::ThreadPool::PostTaskAndReply(
@@ -536,6 +534,7 @@ void AppInstallControllerImpl::InstallApp(
           GetDecodedInstallDataFromAppArgs(app_id_),
           GetInstallDataIndexFromAppArgs(app_id_),
           UpdateService::Priority::kForeground,
+          tag_args ? tag_args->language : "",
           base::BindRepeating(&AppInstallControllerImpl::StateChange, this),
           base::BindOnce(&AppInstallControllerImpl::InstallComplete, this)));
 }
@@ -578,7 +577,7 @@ void AppInstallControllerImpl::InstallAppOffline(
           [](const std::string& app_id) {
             // Parse the offline manifest to get the install
             // command and install data.
-            update_client::ProtocolParser::Results results;
+            OfflineManifestSystemRequirements requirements;
             std::string installer_version;
             base::FilePath installer_path;
             std::string install_args;
@@ -586,13 +585,13 @@ void AppInstallControllerImpl::InstallAppOffline(
             ReadInstallCommandFromManifest(
                 base::CommandLine::ForCurrentProcess()->GetSwitchValueNative(
                     kOfflineDirSwitch),
-                app_id, GetInstallDataIndexFromAppArgs(app_id), results,
+                app_id, GetInstallDataIndexFromAppArgs(app_id), requirements,
                 installer_version, installer_path, install_args, install_data);
 
             const std::string client_install_data =
                 GetDecodedInstallDataFromAppArgs(app_id);
             return std::make_tuple(
-                results, installer_version, installer_path, install_args,
+                requirements, installer_version, installer_path, install_args,
                 client_install_data.empty() ? install_data
                                             : client_install_data);
           },
@@ -600,7 +599,7 @@ void AppInstallControllerImpl::InstallAppOffline(
       base::BindOnce(
           [](scoped_refptr<AppInstallControllerImpl> self,
              const std::tuple<
-                 update_client::ProtocolParser::Results /*results*/,
+                 OfflineManifestSystemRequirements /*requirements*/,
                  std::string /*installer_version*/,
                  base::FilePath /*installer_path*/, std::string /*arguments*/,
                  std::string /*install_data*/>& result) {
@@ -612,14 +611,14 @@ void AppInstallControllerImpl::InstallAppOffline(
 }
 
 void AppInstallControllerImpl::DoInstallAppOffline(
-    const update_client::ProtocolParser::Results& results,
+    const OfflineManifestSystemRequirements& requirements,
     const std::string& installer_version,
     const base::FilePath& installer_path,
     const std::string& install_args,
     const std::string& install_data) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  if (!IsOsSupported(results)) {
+  if (!IsOsSupported(requirements)) {
     HandleOsNotSupported();
     return;
   }
@@ -650,6 +649,7 @@ void AppInstallControllerImpl::DoInstallAppOffline(
   }
   if (tag_args) {
     request.brand_code = tag_args->brand_code;
+    request.install_id = tag_args->installation_id;
   }
 
   VLOG(1) << __func__ << ": " << installer_path << ": " << install_args << ": "
@@ -666,7 +666,8 @@ void AppInstallControllerImpl::DoInstallAppOffline(
                  const base::FilePath& installer_path,
                  const std::string& install_args,
                  const std::string& install_data,
-                 const std::string& install_settings, int result) {
+                 const std::string& install_settings,
+                 const std::string& language, int result) {
                 if (result != kRegistrationSuccess) {
                   VLOG(1) << "Registration failed: " << result;
                   self->InstallComplete(UpdateService::Result::kServiceFailed);
@@ -674,14 +675,15 @@ void AppInstallControllerImpl::DoInstallAppOffline(
                 }
                 self->update_service_->RunInstaller(
                     self->app_id_, installer_path, install_args, install_data,
-                    install_settings,
+                    install_settings, language,
                     base::BindRepeating(&AppInstallControllerImpl::StateChange,
                                         self),
                     base::BindOnce(&AppInstallControllerImpl::InstallComplete,
                                    self));
               },
               base::WrapRefCounted(this), installer_path, install_args,
-              install_data, install_settings)));
+              install_data, install_settings,
+              tag_args ? tag_args->language : "")));
 }
 
 void AppInstallControllerImpl::HandleOsNotSupported() {
@@ -744,19 +746,7 @@ void AppInstallControllerImpl::StateChange(
     const UpdateService::UpdateState& update_state) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  AppInstallProgressIPC* dbg_ipc = install_progress_observer_ipc_.get();
-  base::debug::Alias(&dbg_ipc);
-  CHECK(install_progress_observer_ipc_);
-
-  // TODO(crbug.com/345250525) - understand why the check fails.
-  UpdateService::UpdateState::State state = update_state.state;
-  base::debug::Alias(&state);
-  DEBUG_ALIAS_FOR_CSTR(dbg_app_id1, app_id_.c_str(), 64);
-  DEBUG_ALIAS_FOR_CSTR(dbg_app_id2, update_state.app_id.c_str(), 64);
-  if (app_id_ != update_state.app_id) {
-    base::debug::DumpWithoutCrashing();
-    return;
-  }
+  CHECK_EQ(app_id_, update_state.app_id);
 
   switch (update_state.state) {
     case UpdateService::UpdateState::State::kCheckingForUpdates:
@@ -890,8 +880,30 @@ void AppInstallControllerImpl::RunUI() {
   if (!callback_) {
     return;
   }
-  main_task_runner_->PostTask(FROM_HERE,
-                              base::BindOnce(std::move(callback_), kErrorOk));
+
+  main_task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback_), [&]() {
+        if (!observer_completion_info_) {
+          return kErrorNoObserverCompletionInfo;
+        }
+
+        if (observer_completion_info_->completion_code !=
+            CompletionCodes::COMPLETION_CODE_ERROR) {
+          return kErrorOk;
+        }
+
+        if (observer_completion_info_->apps_info.empty()) {
+          return kErrorNoApps;
+        }
+
+        return std::ranges::max_element(
+                   observer_completion_info_->apps_info,
+                   [](const auto& app_info1, const auto& app_info2) {
+                     return GetPriority(app_info1.completion_code) <
+                            GetPriority(app_info2.completion_code);
+                   })
+            ->error_code;
+      }()));
 }
 
 void AppInstallControllerImpl::DoExit() {

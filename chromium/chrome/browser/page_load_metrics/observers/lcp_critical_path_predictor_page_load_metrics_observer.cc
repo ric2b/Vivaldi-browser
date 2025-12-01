@@ -4,6 +4,9 @@
 
 #include "chrome/browser/page_load_metrics/observers/lcp_critical_path_predictor_page_load_metrics_observer.h"
 
+#include <algorithm>
+
+#include "base/notreached.h"
 #include "base/trace_event/base_tracing.h"
 #include "chrome/browser/predictors/lcp_critical_path_predictor/lcp_critical_path_predictor_util.h"
 #include "chrome/browser/predictors/loading_predictor.h"
@@ -25,11 +28,57 @@ const char kHistogramLCPPFirstContentfulPaint[] =
 const char kHistogramLCPPLargestContentfulPaint[] =
     HISTOGRAM_PREFIX "PaintTiming.NavigationToLargestContentfulPaint";
 const char kHistogramLCPPPredictResult[] =
-    HISTOGRAM_PREFIX "PaintTiming.PredictLCPResult";
+    HISTOGRAM_PREFIX "PaintTiming.PredictLCPResult2";
+const char kHistogramLCPPPredictSuccessLCPTiming[] = HISTOGRAM_PREFIX
+    "PaintTiming.PredictSuccess.NavigationToLargestContentfulPaint";
 const char kHistogramLCPPPredictHitIndex[] =
-    HISTOGRAM_PREFIX "PaintTiming.PredictHitIndex";
+    HISTOGRAM_PREFIX "PaintTiming.PredictHitIndex2";
 const char kHistogramLCPPActualLCPIndex[] =
-    HISTOGRAM_PREFIX "PaintTiming.ActualLCPIndex";
+    HISTOGRAM_PREFIX "PaintTiming.ActualLCPIndex2";
+const char kHistogramLCPPActualLCPIsImage[] =
+    HISTOGRAM_PREFIX "PaintTiming.ActualLCPIsImage";
+const char kHistogramLCPPSubresourceCountPrecision[] =
+    HISTOGRAM_PREFIX "Subresource.Count.Precision";
+const char kHistogramLCPPSubresourceCountRecall[] =
+    HISTOGRAM_PREFIX "Subresource.Count.Recall";
+const char kHistogramLCPPSubresourceCountSameSiteRatio[] =
+    HISTOGRAM_PREFIX "Subresource.Count.SameSiteRatio";
+const char kHistogramLCPPSubresourceCountType[] =
+    HISTOGRAM_PREFIX "Subresource.Count.Type";
+
+const char kHistogramLCPPImageLoadingPriorityFrequencyOfActualPositive[] =
+    HISTOGRAM_PREFIX "ImageLoadingPriority.FrequencyOfActualPositive";
+const char kHistogramLCPPImageLoadingPriorityFrequencyOfActualNegative[] =
+    HISTOGRAM_PREFIX "ImageLoadingPriority.FrequencyOfActualNegative";
+const char kHistogramLCPPImageLoadingPriorityConfidenceOfActualPositive[] =
+    HISTOGRAM_PREFIX "ImageLoadingPriority.ConfidenceOfActualPositive";
+const char kHistogramLCPPImageLoadingPriorityConfidenceOfActualNegative[] =
+    HISTOGRAM_PREFIX "ImageLoadingPriority.ConfidenceOfActualNegative";
+
+const char kHistogramLCPPSubresourceFrequencyOfActualPositive[] =
+    HISTOGRAM_PREFIX "Subresource.FrequencyOfActualPositive";
+const char kHistogramLCPPSubresourceFrequencyOfActualNegative[] =
+    HISTOGRAM_PREFIX "Subresource.FrequencyOfActualNegative";
+const char kHistogramLCPPSubresourceConfidenceOfActualPositive[] =
+    HISTOGRAM_PREFIX "Subresource.ConfidenceOfActualPositive";
+const char kHistogramLCPPSubresourceConfidenceOfActualNegative[] =
+    HISTOGRAM_PREFIX "Subresource.ConfidenceOfActualNegative";
+const char kHistogramLCPPSubresourceFrequencyOfActualPositiveSameSite[] =
+    HISTOGRAM_PREFIX "Subresource.FrequencyOfActualPositive.SameSite";
+const char kHistogramLCPPSubresourceFrequencyOfActualNegativeSameSite[] =
+    HISTOGRAM_PREFIX "Subresource.FrequencyOfActualNegative.SameSite";
+const char kHistogramLCPPSubresourceConfidenceOfActualPositiveSameSite[] =
+    HISTOGRAM_PREFIX "Subresource.ConfidenceOfActualPositive.SameSite";
+const char kHistogramLCPPSubresourceConfidenceOfActualNegativeSameSite[] =
+    HISTOGRAM_PREFIX "Subresource.ConfidenceOfActualNegative.SameSite";
+const char kHistogramLCPPSubresourceFrequencyOfActualPositiveCrossSite[] =
+    HISTOGRAM_PREFIX "Subresource.FrequencyOfActualPositive.CrossSite";
+const char kHistogramLCPPSubresourceFrequencyOfActualNegativeCrossSite[] =
+    HISTOGRAM_PREFIX "Subresource.FrequencyOfActualNegative.CrossSite";
+const char kHistogramLCPPSubresourceConfidenceOfActualPositiveCrossSite[] =
+    HISTOGRAM_PREFIX "Subresource.ConfidenceOfActualPositive.CrossSite";
+const char kHistogramLCPPSubresourceConfidenceOfActualNegativeCrossSite[] =
+    HISTOGRAM_PREFIX "Subresource.ConfidenceOfActualNegative.CrossSite";
 
 }  // namespace internal
 
@@ -58,7 +107,418 @@ bool IsSameSite(const GURL& url1, const GURL& url2) {
              net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
 }
 
+void ReportSubresourceUMA(
+    const GURL& commit_url,
+    const std::optional<predictors::LcppStat>& lcpp_stat_prelearn,
+    const predictors::LcppDataInputs& lcpp_data_inputs) {
+  std::set<GURL> predicted_subresource_urls;
+  if (lcpp_stat_prelearn) {
+    for (const GURL& url : PredictFetchedSubresourceUrls(*lcpp_stat_prelearn)) {
+      predicted_subresource_urls.insert(url);
+    }
+  }
+
+  int predict_hit_count = 0;
+  int same_site_count = 0;
+  for (const auto& it : lcpp_data_inputs.subresource_urls) {
+    const GURL& actual_subresource_url = it.first;
+    if (predicted_subresource_urls.contains(actual_subresource_url)) {
+      predict_hit_count++;
+    }
+    if (IsSameSite(commit_url, actual_subresource_url)) {
+      same_site_count++;
+    }
+    base::UmaHistogramEnumeration(internal::kHistogramLCPPSubresourceCountType,
+                                  it.second.second);
+  }
+
+  if (!predicted_subresource_urls.empty()) {
+    const int precision = base::saturated_cast<int>(
+        predict_hit_count * 100 / predicted_subresource_urls.size());
+    base::UmaHistogramPercentage(
+        internal::kHistogramLCPPSubresourceCountPrecision, precision);
+  }
+
+  if (!lcpp_data_inputs.subresource_urls.empty()) {
+    const size_t actual_url_count = lcpp_data_inputs.subresource_urls.size();
+    const int recall =
+        base::saturated_cast<int>(predict_hit_count * 100 / actual_url_count);
+    base::UmaHistogramPercentage(internal::kHistogramLCPPSubresourceCountRecall,
+                                 recall);
+
+    const int same_site_ratio =
+        base::saturated_cast<int>(same_site_count * 100 / actual_url_count);
+    base::UmaHistogramPercentage(
+        internal::kHistogramLCPPSubresourceCountSameSiteRatio, same_site_ratio);
+  }
+}
+
+const char* ConvertConfidenceToSuffix(double confidence) {
+  switch (static_cast<int>(10 * confidence)) {
+    case 0:
+      return "0To10";
+    case 1:
+      return "10To20";
+    case 2:
+      return "20To30";
+    case 3:
+      return "30To40";
+    case 4:
+      return "40To50";
+    case 5:
+      return "50To60";
+    case 6:
+      return "60To70";
+    case 7:
+      return "70To80";
+    case 8:
+      return "80To90";
+    case 9:
+    case 10:
+      return "90To100";
+    default:
+      NOTREACHED();
+  }
+}
+
+int CalculateScoreFromConfidenceAndTotalFrequency(double confidence,
+                                                  double total_frequency) {
+  int normalized_confidence_0_to_9 =
+      static_cast<int>(std::floor(std::clamp(10.0 * confidence, 0.0, 9.9)));
+  int normalized_total_frequency_0_to_9 = static_cast<int>(
+      std::floor(std::clamp(total_frequency / 10.0, 0.0, 9.9)));
+  return 10 * normalized_confidence_0_to_9 + normalized_total_frequency_0_to_9;
+}
+
+void MaybeReportConfidenceUMAs(
+    const GURL& commit_url,
+    const std::optional<predictors::LcppStat>& lcpp_stat_prelearn,
+    const predictors::LcppDataInputs& lcpp_data_inputs) {
+  if (!lcpp_stat_prelearn) {
+    return;
+  }
+
+  const std::string& actual_lcp_element_locator =
+      lcpp_data_inputs.lcp_element_locator;
+  if (!actual_lcp_element_locator.empty() &&
+      lcpp_stat_prelearn->has_lcp_element_locator_stat()) {
+    const auto record_frequency_of_actual_positives = [](double frequency) {
+      // The maximum count is defined by `lcpp_histogram_sliding_window_size`.
+      // The default value is 1000.
+      base::UmaHistogramCounts1000(
+          internal::kHistogramLCPPImageLoadingPriorityFrequencyOfActualPositive,
+          frequency);
+    };
+
+    const auto record_frequency_of_actual_negatives = [](double frequency) {
+      base::UmaHistogramCounts1000(
+          internal::kHistogramLCPPImageLoadingPriorityFrequencyOfActualNegative,
+          frequency);
+    };
+
+    const auto record_confidence_of_actual_positives = [](double confidence) {
+      base::UmaHistogramPercentage(
+          internal::
+              kHistogramLCPPImageLoadingPriorityConfidenceOfActualPositive,
+          100 * confidence);
+    };
+
+    const auto record_confidence_of_actual_negatives = [](double confidence) {
+      base::UmaHistogramPercentage(
+          internal::
+              kHistogramLCPPImageLoadingPriorityConfidenceOfActualNegative,
+          100 * confidence);
+    };
+
+    const auto record_total_frequency_of_actual_positives =
+        [](double confidence, double total_frequency) {
+          base::UmaHistogramCounts1000(
+              base::StrCat({HISTOGRAM_PREFIX "ImageLoadingPriority"
+                                             ".TotalFrequencyOfActualPositive"
+                                             ".WithConfidence",
+                            ConvertConfidenceToSuffix(confidence)}),
+              total_frequency);
+          base::UmaHistogramPercentage(
+              HISTOGRAM_PREFIX
+              "ImageLoadingPriority"
+              ".TotalFrequencyOfActualPositive"
+              ".PerConfidence"
+              ".2",
+              CalculateScoreFromConfidenceAndTotalFrequency(confidence,
+                                                            total_frequency));
+        };
+
+    const auto record_total_frequency_of_actual_negatives =
+        [](double confidence, double total_frequency) {
+          base::UmaHistogramCounts1000(
+              base::StrCat({HISTOGRAM_PREFIX "ImageLoadingPriority"
+                                             ".TotalFrequencyOfActualNegative"
+                                             ".WithConfidence",
+                            ConvertConfidenceToSuffix(confidence)}),
+              total_frequency);
+          base::UmaHistogramPercentage(
+              HISTOGRAM_PREFIX
+              "ImageLoadingPriority"
+              ".TotalFrequencyOfActualNegative"
+              ".PerConfidence"
+              ".2",
+              CalculateScoreFromConfidenceAndTotalFrequency(confidence,
+                                                            total_frequency));
+        };
+
+    double total_frequency =
+        lcpp_stat_prelearn->lcp_element_locator_stat().other_bucket_frequency();
+    bool actual_positive_was_predicted = false;
+    for (const auto& bucket : lcpp_stat_prelearn->lcp_element_locator_stat()
+                                  .lcp_element_locator_buckets()) {
+      total_frequency += bucket.frequency();
+      if (bucket.lcp_element_locator() == actual_lcp_element_locator) {
+        actual_positive_was_predicted = true;
+        record_frequency_of_actual_positives(bucket.frequency());
+      } else {
+        record_frequency_of_actual_negatives(bucket.frequency());
+      }
+    }
+
+    for (auto& [confidence, lcp_element_locator] :
+         predictors::ConvertLcpElementLocatorStatToConfidenceStringPairs(
+             lcpp_stat_prelearn->lcp_element_locator_stat())) {
+      if (lcp_element_locator == actual_lcp_element_locator) {
+        record_confidence_of_actual_positives(confidence);
+        record_total_frequency_of_actual_positives(confidence, total_frequency);
+      } else {
+        record_confidence_of_actual_negatives(confidence);
+        record_total_frequency_of_actual_negatives(confidence, total_frequency);
+      }
+    }
+
+    if (!actual_positive_was_predicted) {
+      // If the actual-positive sample was not recorded, it means that the model
+      // didn't have any knowledge about it, hence we record it as 0 frequency
+      // and 0 confidence.
+      record_frequency_of_actual_positives(/*frequency=*/0.0);
+      record_confidence_of_actual_positives(/*confidence=*/0.0);
+      record_total_frequency_of_actual_positives(/*confidence=*/0.0,
+                                                 total_frequency);
+    }
+  }
+
+  // At this moment, we know the ground truth data `lcpp_data_inputs` that came
+  // from the recent actual navigation result. We also know the
+  // {confidence, frequency} values from the intermediate result of prediction
+  // that comes from `lcpp_stat_prelearn`. From these information, we can obtain
+  // the following information.
+  //
+  // - Actual positive samples. These are the same as `actual_urls`. Actual
+  //   positive samples contain true positives and false negatives.
+  // - Actual negative samples. These are the urls that were predicted by our
+  //   model, but were not loaded. Actual negative samples contain false
+  //   positives.
+  //
+  // Unfortunately, in our case, we don't have true negatives.
+  const auto& actual_urls = lcpp_data_inputs.subresource_urls;
+  if (!actual_urls.empty() &&
+      lcpp_stat_prelearn->has_fetched_subresource_url_stat()) {
+    const auto record_frequency_of_actual_positives = [](double frequency,
+                                                         bool is_same_site) {
+      // The maximum count is defined by `lcpp_histogram_sliding_window_size`.
+      // The default value is 1000.
+      base::UmaHistogramCounts1000(
+          internal::kHistogramLCPPSubresourceFrequencyOfActualPositive,
+          frequency);
+      if (is_same_site) {
+        base::UmaHistogramCounts1000(
+            internal::
+                kHistogramLCPPSubresourceFrequencyOfActualPositiveSameSite,
+            frequency);
+      } else {
+        base::UmaHistogramCounts1000(
+            internal::
+                kHistogramLCPPSubresourceFrequencyOfActualPositiveCrossSite,
+            frequency);
+      }
+    };
+
+    const auto record_frequency_of_actual_negatives = [](double frequency,
+                                                         bool is_same_site) {
+      base::UmaHistogramCounts1000(
+          internal::kHistogramLCPPSubresourceFrequencyOfActualNegative,
+          frequency);
+      if (is_same_site) {
+        base::UmaHistogramCounts1000(
+            internal::
+                kHistogramLCPPSubresourceFrequencyOfActualNegativeSameSite,
+            frequency);
+      } else {
+        base::UmaHistogramCounts1000(
+            internal::
+                kHistogramLCPPSubresourceFrequencyOfActualNegativeCrossSite,
+            frequency);
+      }
+    };
+
+    const auto record_confidence_of_actual_positives = [](double confidence,
+                                                          bool is_same_site) {
+      base::UmaHistogramPercentage(
+          internal::kHistogramLCPPSubresourceConfidenceOfActualPositive,
+          100.0 * confidence);
+      if (is_same_site) {
+        base::UmaHistogramPercentage(
+            internal::
+                kHistogramLCPPSubresourceConfidenceOfActualPositiveSameSite,
+            100.0 * confidence);
+      } else {
+        base::UmaHistogramPercentage(
+            internal::
+                kHistogramLCPPSubresourceConfidenceOfActualPositiveCrossSite,
+            100.0 * confidence);
+      }
+    };
+
+    const auto record_confidence_of_actual_negatives = [](double confidence,
+                                                          bool is_same_site) {
+      base::UmaHistogramPercentage(
+          internal::kHistogramLCPPSubresourceConfidenceOfActualNegative,
+          100.0 * confidence);
+      if (is_same_site) {
+        base::UmaHistogramPercentage(
+            internal::
+                kHistogramLCPPSubresourceConfidenceOfActualNegativeSameSite,
+            100.0 * confidence);
+      } else {
+        base::UmaHistogramPercentage(
+            internal::
+                kHistogramLCPPSubresourceConfidenceOfActualNegativeCrossSite,
+            100.0 * confidence);
+      }
+    };
+
+    const auto record_total_frequency_of_actual_positives =
+        [](double confidence, double total_frequency, bool is_same_site) {
+          base::UmaHistogramCounts1000(
+              base::StrCat({HISTOGRAM_PREFIX "Subresource"
+                                             ".TotalFrequencyOfActualPositive"
+                                             ".WithConfidence",
+                            ConvertConfidenceToSuffix(confidence)}),
+              total_frequency);
+          base::UmaHistogramCounts1000(
+              base::StrCat({HISTOGRAM_PREFIX "Subresource"
+                                             ".TotalFrequencyOfActualPositive"
+                                             ".WithConfidence",
+                            ConvertConfidenceToSuffix(confidence),
+                            is_same_site ? ".SameSite" : ".CrossSite"}),
+              total_frequency);
+          base::UmaHistogramPercentage(
+              HISTOGRAM_PREFIX
+              "Subresource"
+              ".TotalFrequencyOfActualPositive"
+              ".PerConfidence"
+              ".2",
+              CalculateScoreFromConfidenceAndTotalFrequency(confidence,
+                                                            total_frequency));
+          base::UmaHistogramPercentage(
+              base::StrCat({HISTOGRAM_PREFIX "Subresource"
+                                             ".TotalFrequencyOfActualPositive"
+                                             ".PerConfidence",
+                            is_same_site ? ".SameSite" : ".CrossSite", ".2"}),
+              CalculateScoreFromConfidenceAndTotalFrequency(confidence,
+                                                            total_frequency));
+        };
+
+    const auto record_total_frequency_of_actual_negatives =
+        [](double confidence, double total_frequency, bool is_same_site) {
+          base::UmaHistogramCounts1000(
+              base::StrCat({HISTOGRAM_PREFIX "Subresource"
+                                             ".TotalFrequencyOfActualNegative"
+                                             ".WithConfidence",
+                            ConvertConfidenceToSuffix(confidence)}),
+              total_frequency);
+          base::UmaHistogramCounts1000(
+              base::StrCat({HISTOGRAM_PREFIX "Subresource"
+                                             ".TotalFrequencyOfActualNegative"
+                                             ".WithConfidence",
+                            ConvertConfidenceToSuffix(confidence),
+                            is_same_site ? ".SameSite" : ".CrossSite"}),
+              total_frequency);
+          base::UmaHistogramPercentage(
+              HISTOGRAM_PREFIX
+              "Subresource"
+              ".TotalFrequencyOfActualNegative"
+              ".PerConfidence"
+              ".2",
+              CalculateScoreFromConfidenceAndTotalFrequency(confidence,
+                                                            total_frequency));
+          base::UmaHistogramPercentage(
+              base::StrCat({HISTOGRAM_PREFIX "Subresource"
+                                             ".TotalFrequencyOfActualNegative"
+                                             ".PerConfidence",
+                            is_same_site ? ".SameSite" : ".CrossSite", ".2"}),
+              CalculateScoreFromConfidenceAndTotalFrequency(confidence,
+                                                            total_frequency));
+        };
+
+    double total_frequency = lcpp_stat_prelearn->fetched_subresource_url_stat()
+                                 .other_bucket_frequency();
+    std::set<GURL> predicted_urls;
+    for (const auto& [predicted_url_string, frequency] :
+         lcpp_stat_prelearn->fetched_subresource_url_stat().main_buckets()) {
+      total_frequency += frequency;
+      const GURL predicted_url(predicted_url_string);
+      predicted_urls.insert(predicted_url);
+      bool is_same_site = IsSameSite(commit_url, predicted_url);
+      if (actual_urls.contains(predicted_url)) {
+        record_frequency_of_actual_positives(frequency, is_same_site);
+      } else {
+        record_frequency_of_actual_negatives(frequency, is_same_site);
+      }
+    }
+
+    for (auto& [confidence, predicted_url_string] :
+         predictors::ConvertLcppStringFrequencyStatDataToConfidenceStringPairs(
+             lcpp_stat_prelearn->fetched_subresource_url_stat())) {
+      GURL predicted_url(predicted_url_string);
+      bool is_same_site = IsSameSite(commit_url, predicted_url);
+      if (actual_urls.contains(GURL(predicted_url))) {
+        record_confidence_of_actual_positives(confidence, is_same_site);
+        record_total_frequency_of_actual_positives(confidence, total_frequency,
+                                                   is_same_site);
+      } else {
+        record_confidence_of_actual_negatives(confidence, is_same_site);
+        record_total_frequency_of_actual_negatives(confidence, total_frequency,
+                                                   is_same_site);
+      }
+    }
+
+    // The following code records the URLs that were not predicted but actually
+    // loaded. These samples must be included as part of the actual positives.
+    for (const auto& it : actual_urls) {
+      const GURL& actual_url = it.first;
+      if (predicted_urls.contains(actual_url)) {
+        continue;
+      }
+      bool is_same_site = IsSameSite(commit_url, actual_url);
+      // There was no data for this actually loaded URL in the LCPP database,
+      // hence the frequency and confidence is 0.
+      record_frequency_of_actual_positives(/*frequency=*/0.0, is_same_site);
+      record_confidence_of_actual_positives(/*confidence=*/0.0, is_same_site);
+      record_total_frequency_of_actual_positives(/*confidence=*/0.0,
+                                                 total_frequency, is_same_site);
+    }
+  }
+}
+
 }  // namespace
+
+namespace internal {
+
+void MaybeReportConfidenceUMAsForTesting(  // IN-TEST
+    const GURL& commit_url,
+    const std::optional<predictors::LcppStat>& lcpp_stat_prelearn,
+    const predictors::LcppDataInputs& lcpp_data_inputs) {
+  MaybeReportConfidenceUMAs(commit_url, lcpp_stat_prelearn, lcpp_data_inputs);
+}
+
+}  // namespace internal
 
 PAGE_USER_DATA_KEY_IMPL(
     LcpCriticalPathPredictorPageLoadMetricsObserver::PageData);
@@ -180,6 +640,9 @@ void LcpCriticalPathPredictorPageLoadMetricsObserver::FinalizeLCP() {
     RemoveFetchedSubresourceUrlsAfterLCP(
         lcpp_data_inputs_->subresource_urls,
         largest_contentful_paint.Time().value());
+    ReportSubresourceUMA(*commit_url_, lcpp_stat_prelearn, *lcpp_data_inputs_);
+    MaybeReportConfidenceUMAs(*commit_url_, lcpp_stat_prelearn,
+                              *lcpp_data_inputs_);
     predictor->LearnLcpp(initiator_origin_, *commit_url_, *lcpp_data_inputs_);
   }
 
@@ -194,7 +657,11 @@ void LcpCriticalPathPredictorPageLoadMetricsObserver::FinalizeLCP() {
             GetDelegate(), largest_contentful_paint.Time().value());
     PAGE_LOAD_HISTOGRAM(internal::kHistogramLCPPLargestContentfulPaint,
                         corrected);
-    ReportUMAForTimingPredictor(std::move(lcpp_stat_prelearn));
+    ReportUMAForTimingPredictor(std::move(lcpp_stat_prelearn), corrected);
+    if (is_lcp_element_image_) {
+      base::UmaHistogramBoolean(internal::kHistogramLCPPActualLCPIsImage,
+                                *is_lcp_element_image_);
+    }
   }
 }
 
@@ -211,13 +678,17 @@ void LcpCriticalPathPredictorPageLoadMetricsObserver::
   PAGE_LOAD_HISTOGRAM(internal::kHistogramLCPPFirstContentfulPaint, corrected);
 }
 
-void LcpCriticalPathPredictorPageLoadMetricsObserver::SetLcpElementLocator(
-    const std::string& lcp_element_locator,
+void LcpCriticalPathPredictorPageLoadMetricsObserver::OnLcpUpdated(
+    const std::optional<std::string>& lcp_element_locator,
+    bool is_image_element,
     std::optional<uint32_t> predicted_lcp_index) {
-  if (!lcpp_data_inputs_) {
-    lcpp_data_inputs_.emplace();
+  if (lcp_element_locator) {
+    if (!lcpp_data_inputs_) {
+      lcpp_data_inputs_.emplace();
+    }
+    lcpp_data_inputs_->lcp_element_locator = *lcp_element_locator;
   }
-  lcpp_data_inputs_->lcp_element_locator = lcp_element_locator;
+  is_lcp_element_image_ = is_image_element;
   predicted_lcp_indexes_.push_back(predicted_lcp_index);
 }
 
@@ -307,7 +778,8 @@ void LcpCriticalPathPredictorPageLoadMetricsObserver::SetUnusedPreloads(
 
 void LcpCriticalPathPredictorPageLoadMetricsObserver::
     ReportUMAForTimingPredictor(
-        std::optional<predictors::LcppStat> lcpp_stat_prelearn) {
+        std::optional<predictors::LcppStat> lcpp_stat_prelearn,
+        base::TimeDelta lcp_timing) {
   if (!lcpp_data_inputs_.has_value() || !commit_url_ || !lcpp_stat_prelearn ||
       !IsValidLcppStat(*lcpp_stat_prelearn)) {
     return;
@@ -362,6 +834,8 @@ void LcpCriticalPathPredictorPageLoadMetricsObserver::
           internal::kHistogramLCPPPredictHitIndex,
           *last_lcp_index + internal::kLCPIndexHistogramOffset,
           max_lcpp_histogram_buckets);
+      PAGE_LOAD_HISTOGRAM(internal::kHistogramLCPPPredictSuccessLCPTiming,
+                          lcp_timing);
     } else {
       // `predicted_lcp_indexes_` is like {null*}.
       result = internal::LCPPPredictResult::kFailureNoHit;

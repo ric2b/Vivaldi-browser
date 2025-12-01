@@ -4,6 +4,7 @@
 
 #include "content/browser/renderer_host/render_view_host_impl.h"
 
+#include <algorithm>
 #include <set>
 #include <string>
 #include <unordered_map>
@@ -20,10 +21,10 @@
 #include "base/json/json_reader.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/field_trial.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/not_fatal_until.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -172,8 +173,8 @@ class PerProcessRenderViewHostSet : public base::SupportsUserData::Data {
   }
 
   bool HasNonBackForwardCachedInstances() const {
-    return !base::ranges::all_of(render_view_host_instances_,
-                                 &RenderViewHostImpl::is_in_back_forward_cache);
+    return !std::ranges::all_of(render_view_host_instances_,
+                                &RenderViewHostImpl::is_in_back_forward_cache);
   }
 
  private:
@@ -342,7 +343,7 @@ RenderViewHostImpl::RenderViewHostImpl(
 
   std::pair<RoutingIDViewMap::iterator, bool> result =
       g_routing_id_view_map.Get().emplace(
-          RenderViewHostID(GetProcess()->GetID(), routing_id_), this);
+          RenderViewHostID(GetProcess()->GetDeprecatedID(), routing_id_), this);
   CHECK(result.second) << "Inserting a duplicate item!";
   GetAgentSchedulingGroup().AddRoute(routing_id_, this);
 
@@ -381,7 +382,7 @@ RenderViewHostImpl::~RenderViewHostImpl() {
   // Detach the routing ID as the object is going away.
   GetAgentSchedulingGroup().RemoveRoute(GetRoutingID());
   g_routing_id_view_map.Get().erase(
-      RenderViewHostID(GetProcess()->GetID(), GetRoutingID()));
+      RenderViewHostID(GetProcess()->GetDeprecatedID(), GetRoutingID()));
 
   delegate_->RenderViewDeleted(this);
   GetProcess()->RemoveObserver(this);
@@ -436,12 +437,12 @@ bool RenderViewHostImpl::CreateRenderView(
   RenderFrameHostImpl* main_rfh = nullptr;
   RenderFrameProxyHost* main_rfph = nullptr;
   if (main_frame_routing_id_ != MSG_ROUTING_NONE) {
-    main_rfh = RenderFrameHostImpl::FromID(GetProcess()->GetID(),
+    main_rfh = RenderFrameHostImpl::FromID(GetProcess()->GetDeprecatedID(),
                                            main_frame_routing_id_);
     DCHECK(main_rfh);
   } else {
-    main_rfph =
-        RenderFrameProxyHost::FromID(GetProcess()->GetID(), proxy_route_id);
+    main_rfph = RenderFrameProxyHost::FromID(GetProcess()->GetDeprecatedID(),
+                                             proxy_route_id);
     DCHECK(main_rfph);
   }
   FrameTreeNode* const frame_tree_node =
@@ -450,7 +451,7 @@ bool RenderViewHostImpl::CreateRenderView(
   mojom::CreateViewParamsPtr params = mojom::CreateViewParams::New();
 
   params->renderer_preferences = delegate_->GetRendererPrefs(this);
-  params->web_preferences = delegate_->GetOrCreateWebPreferences();
+  params->web_preferences = delegate_->GetOrCreateWebPreferences(this);
   params->color_provider_colors = delegate_->GetColorProviderColorMaps();
   params->opener_frame_token = opener_frame_token;
   params->replication_state =
@@ -541,9 +542,19 @@ bool RenderViewHostImpl::CreateRenderView(
               mojom::CreateProvisionalLocalMainFrameParams::New(
                   std::move(local_frame_params),
                   frame_tree_node->current_frame_host()->GetFrameToken()));
-    } else if (frame_tree_->is_prerendering()) {
-      // During a prerender navigation, a local main frame for a new
-      // RenderViewHost must always start as a provisinonal RenderFrame in the
+    } else if (frame_tree_->is_prerendering() &&
+               (!base::FeatureList::IsEnabled(
+                    features::kPrerenderMoreCorrectSpeculativeRFHCreation) ||
+                main_rfh->lifecycle_state() ==
+                    RenderFrameHostImpl::LifecycleStateImpl::kSpeculative)) {
+      // During prerender, the browser may need to create new speculative local
+      // main frames. Normally, creating a speculative local main frame is a
+      // two step process: the browser first creates a RenderViewHost with a
+      // main RenderFrameProxyHost and then creates the speculative main
+      // RenderFrameHost.
+      //
+      // Prerender skips the RenderFrameProxyHost creation step, but the new
+      // RenderViewHost must still start with a provisional RenderFrame in the
       // renderer. Otherwise, discarding a speculative RFH during prerender
       // navigation causes the browser and the renderer to go out of sync. See
       // https://crbug.com/40076091 for more background and details.
@@ -766,7 +777,7 @@ blink::web_pref::WebPreferences
 RenderViewHostImpl::GetWebkitPreferencesForWidget() {
   if (!delegate_)
     return blink::web_pref::WebPreferences();
-  return delegate_->GetOrCreateWebPreferences();
+  return delegate_->GetOrCreateWebPreferences(this);
 }
 
 void RenderViewHostImpl::RenderViewCreated(
@@ -788,7 +799,7 @@ RenderFrameHostImpl* RenderViewHostImpl::GetMainRenderFrameHost() {
     return nullptr;
   }
 
-  return RenderFrameHostImpl::FromID(GetProcess()->GetID(),
+  return RenderFrameHostImpl::FromID(GetProcess()->GetDeprecatedID(),
                                      main_frame_routing_id_);
 }
 
@@ -908,7 +919,7 @@ void RenderViewHostImpl::SendWebPreferencesToRenderer() {
     if (!will_send_web_preferences_callback_for_testing_.is_null()) {
       will_send_web_preferences_callback_for_testing_.Run();
     }
-    broadcast->UpdateWebPreferences(delegate_->GetOrCreateWebPreferences());
+    broadcast->UpdateWebPreferences(delegate_->GetOrCreateWebPreferences(this));
   }
 }
 
@@ -954,11 +965,7 @@ std::vector<viz::SurfaceId> RenderViewHostImpl::CollectSurfaceIdsForEviction() {
     // <webview>, and PDF. These may have a compositor surface as well,
     // in which case we need to explore not the outer node only, but the inner
     // ones as well.
-    FrameTree::NodeRange node_range =
-        base::FeatureList::IsEnabled(
-            features::kInnerFrameCompositorSurfaceEviction)
-            ? tree.NodesIncludingInnerTreeNodes()
-            : tree.SubtreeNodes(root);
+    FrameTree::NodeRange node_range = tree.NodesIncludingInnerTreeNodes();
     CollectSurfaceIdsForEvictionForFrameTreeNodeRange(node_range, ids);
   } else if (is_in_back_forward_cache_) {
     // `FrameTree::SubtreeAndInnerTreeNodes` starts with the children of `rfh`

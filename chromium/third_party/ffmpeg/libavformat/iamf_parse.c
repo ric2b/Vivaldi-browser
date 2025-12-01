@@ -413,7 +413,7 @@ static int ambisonics_config(void *s, AVIOContext *pb,
 
     ambisonics_mode = ffio_read_leb(pb);
     if (ambisonics_mode > 1)
-        return 0;
+        return AVERROR_INVALIDDATA;
 
     output_channel_count = avio_r8(pb);  // C
     substream_count = avio_r8(pb);  // N
@@ -956,7 +956,8 @@ static int mix_presentation_obu(void *s, IAMFContext *c, AVIOContext *pb, int le
                     goto fail;
                 }
                 av_channel_layout_copy(&submix_layout->sound_system, &ff_iamf_sound_system_map[sound_system].layout);
-            }
+            } else
+                submix_layout->sound_system = (AVChannelLayout)AV_CHANNEL_LAYOUT_BINAURAL;
 
             info_type = avio_r8(pbc);
             submix_layout->integrated_loudness = av_make_q(sign_extend(avio_rb16(pbc), 16), 1 << 8);

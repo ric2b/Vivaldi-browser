@@ -1,0 +1,6 @@
+module vivaldi.mojom;
+
+interface VivaldiEncryptedMediaAccess {
+  [EnableIfNot=is_android]
+  NotifyEncryptedMediaAccess(string key_system);
+};

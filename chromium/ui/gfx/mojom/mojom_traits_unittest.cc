@@ -11,8 +11,8 @@
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/test_support/test_utils.h"
-#include "skia/ext/skcolorspace_primaries.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/skia/include/core/SkColorSpace.h"
 #include "ui/gfx/geometry/rrect_f.h"
 #include "ui/gfx/geometry/transform.h"
 #include "ui/gfx/hdr_metadata.h"
@@ -183,7 +183,7 @@ TEST_F(StructTraitsTest, GpuMemoryBufferHandle) {
   gfx::GpuMemoryBufferHandle handle;
   handle.type = gfx::SHARED_MEMORY_BUFFER;
   handle.id = kId;
-  handle.region = shared_memory_region.Duplicate();
+  handle.set_region(shared_memory_region.Duplicate());
   handle.offset = kOffset;
   handle.stride = kStride;
 
@@ -195,7 +195,7 @@ TEST_F(StructTraitsTest, GpuMemoryBufferHandle) {
   EXPECT_EQ(kOffset, output.offset);
   EXPECT_EQ(kStride, output.stride);
 
-  base::UnsafeSharedMemoryRegion output_memory = std::move(output.region);
+  base::UnsafeSharedMemoryRegion output_memory = std::move(output.region());
   EXPECT_TRUE(output_memory.Map().IsValid());
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_OZONE)
@@ -347,7 +347,7 @@ TEST_F(StructTraitsTest, HDRMetadata) {
   EXPECT_EQ(input, output);
 
   // Include SMPTE ST 2086.
-  input.smpte_st_2086.emplace(SkNamedPrimariesExt::kRec2020, 789, 123);
+  input.smpte_st_2086.emplace(SkNamedPrimaries::kRec2020, 789, 123);
   mojo::test::SerializeAndDeserialize<gfx::mojom::HDRMetadata>(input, output);
   EXPECT_EQ(input, output);
 

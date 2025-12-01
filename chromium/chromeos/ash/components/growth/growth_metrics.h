@@ -72,16 +72,24 @@ enum class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_GROWTH)
       kRecordEventBeforeCampaignsLoaded = 49,
       kNudgeSheflIconAnchorViewNotFound = 50,
       kNoBoardInfo = 51,
+      kFeatureIndexOutOfRange = 52,
+      kInvalidUrlRegrex = 53,
+      kUnrecognizedBuiltInImage = 54,
+      kMissingBuiltInVectorIcon = 55,
 
-      kMaxValue = kNoBoardInfo,
+      kMaxValue = kMissingBuiltInVectorIcon,
     };
 
 // Records errors encountered during the campaigns loading and matching flow.
 COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_GROWTH)
 void RecordCampaignsManagerError(CampaignsManagerError error_code);
 
+// Records how many times a campaign will be fetched for the given `slot`.
+void RecordGetCampaignBySlotAttempt(Slot slot);
+
 // Records how many times a campaign is fetched for the given `slot`.
-void RecordGetCampaignBySlot(Slot slot);
+// Also records the fetched campaign's id.
+void RecordGetCampaignBySlot(Slot slot, int campaign_id);
 
 void RecordCampaignsComponentDownloadDuration(const base::TimeDelta duration,
                                               bool in_oobe);

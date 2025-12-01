@@ -66,14 +66,21 @@
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "components/signin/public/identity_manager/primary_account_mutator.h"
+#include "components/signin/public/identity_manager/signin_constants.h"
 #include "components/sync/base/pref_names.h"
+#include "components/sync/base/user_selectable_type.h"
+#include "components/sync/service/sync_service.h"
+#include "components/sync/service/sync_user_settings.h"
 #include "components/version_info/version_info.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_launcher.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "services/network/test/test_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
+
+using signin::constants::kNoHostedDomainFound;
 
 namespace {
 
@@ -182,11 +189,10 @@ Profile* InterceptAndWaitProfileCreation(content::WebContents* contents,
   DiceWebSigninInterceptor* interceptor =
       DiceWebSigninInterceptorFactory::GetForProfile(
           Profile::FromBrowserContext(contents->GetBrowserContext()));
-  interceptor->MaybeInterceptWebSignin(
-      contents, account_id,
-      signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN,
-      /*is_new_account=*/true,
-      /*is_sync_signin=*/false);
+  interceptor->MaybeInterceptWebSignin(contents, account_id,
+                                       signin_metrics::AccessPoint::kWebSignin,
+                                       /*is_new_account=*/true,
+                                       /*is_sync_signin=*/false);
   // Wait for the interception to be complete.
   return profile_waiter.WaitForProfileAdded();
 }
@@ -260,7 +266,7 @@ class DiceWebSigninInterceptorBrowserTest : public SigninBrowserTestBase {
 
   AccountInfo MakeAccountInfoAvailableAndUpdate(
       std::string_view email,
-      const std::string& hosted_domain = "example.com") {
+      const std::string& hosted_domain) {
     AccountInfo account_info = identity_test_env()->MakeAccountAvailable(email);
     // Fill the account info, in particular for the hosted_domain field.
     account_info.full_name = "fullname";
@@ -319,8 +325,8 @@ class DiceWebSigninInterceptorBrowserTest : public SigninBrowserTestBase {
 // Tests the complete profile switch flow when the profile is not loaded.
 IN_PROC_BROWSER_TEST_F(DiceWebSigninInterceptorBrowserTest, SwitchAndLoad) {
   base::HistogramTester histogram_tester;
-  AccountInfo account_info =
-      MakeAccountInfoAvailableAndUpdate("alice@example.com");
+  AccountInfo account_info = MakeAccountInfoAvailableAndUpdate(
+      "alice@example.com", kNoHostedDomainFound);
   // Add a profile in the cache (simulate the profile on disk).
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   ProfileAttributesStorage* profile_storage =
@@ -387,8 +393,8 @@ IN_PROC_BROWSER_TEST_F(DiceWebSigninInterceptorBrowserTest, SwitchAndLoad) {
 // Tests the complete profile switch flow when the profile is already loaded.
 IN_PROC_BROWSER_TEST_F(DiceWebSigninInterceptorBrowserTest, SwitchAlreadyOpen) {
   base::HistogramTester histogram_tester;
-  AccountInfo account_info =
-      MakeAccountInfoAvailableAndUpdate("alice@example.com");
+  AccountInfo account_info = MakeAccountInfoAvailableAndUpdate(
+      "alice@example.com", kNoHostedDomainFound);
   // Create another profile with a browser window.
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   const base::FilePath profile_path =
@@ -414,7 +420,7 @@ IN_PROC_BROWSER_TEST_F(DiceWebSigninInterceptorBrowserTest, SwitchAlreadyOpen) {
   other_identity_manager->GetAccountsMutator()->AddOrUpdateAccount(
       account_info.gaia, account_info.email, "dummy_refresh_token",
       /*is_under_advanced_protection=*/false,
-      signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN,
+      signin_metrics::AccessPoint::kUnknown,
       signin_metrics::SourceForRefreshTokenOperation::kUnknown);
   other_identity_manager->GetPrimaryAccountMutator()->SetPrimaryAccount(
       account_info.account_id, signin::ConsentLevel::kSync);
@@ -431,11 +437,10 @@ IN_PROC_BROWSER_TEST_F(DiceWebSigninInterceptorBrowserTest, SwitchAlreadyOpen) {
           WebSigninInterceptor::SigninInterceptionType::kProfileSwitch);
   DiceWebSigninInterceptor* interceptor =
       DiceWebSigninInterceptorFactory::GetForProfile(GetProfile());
-  interceptor->MaybeInterceptWebSignin(
-      web_contents, account_info.account_id,
-      signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN,
-      /*is_new_account=*/true,
-      /*is_sync_signin=*/false);
+  interceptor->MaybeInterceptWebSignin(web_contents, account_info.account_id,
+                                       signin_metrics::AccessPoint::kWebSignin,
+                                       /*is_new_account=*/true,
+                                       /*is_sync_signin=*/false);
 
   // Add the account to the cookies (simulates the account reconcilor).
   signin::SetCookieAccounts(other_identity_manager, test_url_loader_factory(),
@@ -478,11 +483,10 @@ IN_PROC_BROWSER_TEST_F(DiceWebSigninInterceptorBrowserTest, CloseSourceTab) {
   DiceWebSigninInterceptor* interceptor =
       DiceWebSigninInterceptorFactory::GetForProfile(
           Profile::FromBrowserContext(contents->GetBrowserContext()));
-  interceptor->MaybeInterceptWebSignin(
-      contents, account_info.account_id,
-      signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN,
-      /*is_new_account=*/true,
-      /*is_sync_signin=*/false);
+  interceptor->MaybeInterceptWebSignin(contents, account_info.account_id,
+                                       signin_metrics::AccessPoint::kWebSignin,
+                                       /*is_new_account=*/true,
+                                       /*is_sync_signin=*/false);
   // Close the source tab during the profile creation.
   contents->Close();
   // Wait for the interception to be complete.
@@ -547,7 +551,7 @@ class DiceWebSigninInterceptorWithChromeSigninHelpersBrowserTest
             Profile::FromBrowserContext(contents->GetBrowserContext()));
     interceptor->MaybeInterceptWebSignin(
         contents, account_info.account_id,
-        signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN,
+        signin_metrics::AccessPoint::kWebSignin,
         /*is_new_account=*/true,
         /*is_sync_signin=*/false);
 
@@ -599,7 +603,7 @@ class DiceWebSigninInterceptorWithExplicitSigninEnabledBrowserTest
   // This function is specific to ChromeSigninDecline reprompt logic, as it does
   // not really advance time, but marks the prefs of interest in the past in
   // order to satisfy the `delta` given.
-  void SimulateChromeSigninDeclinedAdvanceTime(const std::string& gaia,
+  void SimulateChromeSigninDeclinedAdvanceTime(const GaiaId& gaia,
                                                base::TimeDelta delta) {
     SigninPrefs signin_prefs(*GetProfile()->GetPrefs());
     std::optional<base::Time> last_bubble_decline_time =
@@ -610,7 +614,7 @@ class DiceWebSigninInterceptorWithExplicitSigninEnabledBrowserTest
     }
   }
 
-  base::TimeDelta time_since_last_reprompt(const std::string& gaia) {
+  base::TimeDelta time_since_last_reprompt(const GaiaId& gaia) {
     return DiceWebSigninInterceptor::
         GetTimeSinceLastChromeSigninDeclineForTesting(
             SigninPrefs(*GetProfile()->GetPrefs()), gaia);
@@ -643,7 +647,8 @@ IN_PROC_BROWSER_TEST_F(
 
   // Setup account for interception.
   const std::string account_email("alice@example.com");
-  AccountInfo account_info = MakeAccountInfoAvailableAndUpdate(account_email);
+  AccountInfo account_info =
+      MakeAccountInfoAvailableAndUpdate(account_email, kNoHostedDomainFound);
   // Makes sure Chrome is not signed in to trigger the Chrome Sigin intercept
   // bubble.
   ASSERT_FALSE(IsChromeSignedIn());
@@ -657,16 +662,12 @@ IN_PROC_BROWSER_TEST_F(
   PrefService* pref_service = GetProfile()->GetPrefs();
   syncer::SyncService* sync_service =
       SyncServiceFactory::GetForProfile(GetProfile());
-  EXPECT_TRUE(password_manager::features_util::IsOptedInForAccountStorage(
+  EXPECT_TRUE(password_manager::features_util::IsAccountStorageEnabled(
       pref_service, sync_service));
-  EXPECT_EQ(password_manager::features_util::GetDefaultPasswordStore(
-                pref_service, sync_service),
-            password_manager::PasswordForm::Store::kAccountStore);
 
   CheckHistograms(histogram_tester,
                   SigninInterceptionHeuristicOutcome::kInterceptChromeSignin);
-  auto access_point =
-      signin_metrics::AccessPoint::ACCESS_POINT_CHROME_SIGNIN_INTERCEPT_BUBBLE;
+  auto access_point = signin_metrics::AccessPoint::kChromeSigninInterceptBubble;
   histogram_tester.ExpectUniqueSample("Signin.SignIn.Started", access_point, 1);
   histogram_tester.ExpectUniqueSample("Signin.SignIn.Completed", access_point,
                                       1);
@@ -684,7 +685,8 @@ IN_PROC_BROWSER_TEST_F(
   Signout();
   ASSERT_FALSE(IsChromeSignedIn());
   // Make account available again.
-  account_info = MakeAccountInfoAvailableAndUpdate(account_email);
+  account_info =
+      MakeAccountInfoAvailableAndUpdate(account_email, kNoHostedDomainFound);
   // Chrome Signin bubble should not show if the user already made a choice.
   ExpectAttemptToShowChromeSigninBubbleNotToShow(account_info);
 }
@@ -696,8 +698,8 @@ IN_PROC_BROWSER_TEST_F(
   base::UserActionTester user_action_tester;
 
   // Setup account for interception.
-  AccountInfo account_info =
-      MakeAccountInfoAvailableAndUpdate("alice@example.com");
+  AccountInfo account_info = MakeAccountInfoAvailableAndUpdate(
+      "alice@example.com", kNoHostedDomainFound);
   // Makes sure Chrome is not signed in to trigger the Chrome Sigin intercept
   // bubble.
   ASSERT_FALSE(IsChromeSignedIn());
@@ -712,14 +714,13 @@ IN_PROC_BROWSER_TEST_F(
                                         SigninInterceptionResult::kDeclined);
 
   EXPECT_FALSE(IsChromeSignedIn());
-  EXPECT_FALSE(password_manager::features_util::IsOptedInForAccountStorage(
+  EXPECT_FALSE(password_manager::features_util::IsAccountStorageEnabled(
       GetProfile()->GetPrefs(),
       SyncServiceFactory::GetForProfile(GetProfile())));
 
   CheckHistograms(histogram_tester,
                   SigninInterceptionHeuristicOutcome::kInterceptChromeSignin);
-  auto access_point =
-      signin_metrics::AccessPoint::ACCESS_POINT_CHROME_SIGNIN_INTERCEPT_BUBBLE;
+  auto access_point = signin_metrics::AccessPoint::kChromeSigninInterceptBubble;
   histogram_tester.ExpectUniqueSample("Signin.SignIn.Started", access_point, 0);
   histogram_tester.ExpectUniqueSample("Signin.SignIn.Completed", access_point,
                                       0);
@@ -755,7 +756,8 @@ IN_PROC_BROWSER_TEST_F(
     ChromeSigninInterceptDeclinesAndReprompts) {
   base::HistogramTester histogram_tester;
   // Setup account for interception.
-  AccountInfo info = MakeAccountInfoAvailableAndUpdate("alice@example.com");
+  AccountInfo info = MakeAccountInfoAvailableAndUpdate("alice@example.com",
+                                                       kNoHostedDomainFound);
   // Makes sure Chrome is not signed in to trigger the Chrome Sigin intercept
   // bubble.
   ASSERT_FALSE(IsChromeSignedIn());
@@ -878,7 +880,8 @@ IN_PROC_BROWSER_TEST_F(
     DiceWebSigninInterceptorWithExplicitSigninEnabledBrowserTest,
     ChromeSigninInterceptRepromptsHasNoTimeLimit) {
   // Setup account for interception.
-  AccountInfo info = MakeAccountInfoAvailableAndUpdate("alice@example.com");
+  AccountInfo info = MakeAccountInfoAvailableAndUpdate("alice@example.com",
+                                                       kNoHostedDomainFound);
   // Makes sure Chrome is not signed in to trigger the Chrome Sigin intercept
   // bubble.
   ASSERT_FALSE(IsChromeSignedIn());
@@ -920,7 +923,8 @@ IN_PROC_BROWSER_TEST_F(
     DiceWebSigninInterceptorWithExplicitSigninEnabledBrowserTest,
     ChromeSigninInterceptDeclinesRepromptAttemptWithExplicitDoNotSignin) {
   // Setup account for interception.
-  AccountInfo info = MakeAccountInfoAvailableAndUpdate("alice@example.com");
+  AccountInfo info = MakeAccountInfoAvailableAndUpdate("alice@example.com",
+                                                       kNoHostedDomainFound);
   // Makes sure Chrome is not signed in to trigger the Chrome Sigin intercept
   // bubble.
   ASSERT_FALSE(IsChromeSignedIn());
@@ -956,7 +960,8 @@ IN_PROC_BROWSER_TEST_F(
     DiceWebSigninInterceptorWithExplicitSigninEnabledBrowserTest,
     ChromeSigninInterceptDeclinesRepromptsThenDismissReprompt) {
   // Setup account for interception.
-  AccountInfo info = MakeAccountInfoAvailableAndUpdate("alice@example.com");
+  AccountInfo info = MakeAccountInfoAvailableAndUpdate("alice@example.com",
+                                                       kNoHostedDomainFound);
   // Makes sure Chrome is not signed in to trigger the Chrome Sigin intercept
   // bubble.
   ASSERT_FALSE(IsChromeSignedIn());
@@ -1015,7 +1020,8 @@ IN_PROC_BROWSER_TEST_F(
     DiceWebSigninInterceptorWithExplicitSigninEnabledBrowserTest,
     ChromeSigninInterceptDeclinesRepromptsThenAcceptReprompt) {
   // Setup account for interception.
-  AccountInfo info = MakeAccountInfoAvailableAndUpdate("alice@example.com");
+  AccountInfo info = MakeAccountInfoAvailableAndUpdate("alice@example.com",
+                                                       kNoHostedDomainFound);
   // Makes sure Chrome is not signed in to trigger the Chrome Sigin intercept
   // bubble.
   ASSERT_FALSE(IsChromeSignedIn());
@@ -1052,10 +1058,11 @@ IN_PROC_BROWSER_TEST_F(
 // Test the memory of the user's account storage preference.
 IN_PROC_BROWSER_TEST_F(
     DiceWebSigninInterceptorWithExplicitSigninEnabledBrowserTest,
-    OptOutOfAccountStorage) {
+    DisableAccountStorage) {
   // Setup account and accept intersection.
   const std::string email("alice@example.com");
-  AccountInfo account_info = MakeAccountInfoAvailableAndUpdate(email);
+  AccountInfo account_info =
+      MakeAccountInfoAvailableAndUpdate(email, kNoHostedDomainFound);
   ShowAndCompleteSigninBubbleWithResult(account_info,
                                         SigninInterceptionResult::kAccepted);
 
@@ -1063,21 +1070,21 @@ IN_PROC_BROWSER_TEST_F(
   PrefService* pref_service = GetProfile()->GetPrefs();
   syncer::SyncService* sync_service =
       SyncServiceFactory::GetForProfile(GetProfile());
-  EXPECT_TRUE(password_manager::features_util::IsOptedInForAccountStorage(
+  EXPECT_TRUE(password_manager::features_util::IsAccountStorageEnabled(
       pref_service, sync_service));
 
-  // Opt out of account storage.
-  password_manager::features_util::OptOutOfAccountStorageAndClearSettings(
-      pref_service, sync_service);
+  // Disable account storage.
+  sync_service->GetUserSettings()->SetSelectedType(
+      syncer::UserSelectableType::kPasswords, false);
 
   // Check that the password account storage is disabled.
-  EXPECT_FALSE(password_manager::features_util::IsOptedInForAccountStorage(
+  EXPECT_FALSE(password_manager::features_util::IsAccountStorageEnabled(
       pref_service, sync_service));
 
   Signout();
 
   // Check that the password account storage is false if there is no account.
-  EXPECT_FALSE(password_manager::features_util::IsOptedInForAccountStorage(
+  EXPECT_FALSE(password_manager::features_util::IsAccountStorageEnabled(
       pref_service, sync_service));
 
   // Log in again.
@@ -1086,7 +1093,7 @@ IN_PROC_BROWSER_TEST_F(
       email, signin::ConsentLevel::kSignin);
 
   // Check that the password account storage is still disabled.
-  EXPECT_FALSE(password_manager::features_util::IsOptedInForAccountStorage(
+  EXPECT_FALSE(password_manager::features_util::IsAccountStorageEnabled(
       pref_service, sync_service));
 }
 
@@ -1119,11 +1126,11 @@ IN_PROC_BROWSER_TEST_F(
       WebSigninInterceptor::SigninInterceptionType::kMultiUser);
   source_interceptor_delegate->set_expected_interception_result(
       SigninInterceptionResult::kDismissed);
-  interceptor->MaybeInterceptWebSignin(
-      web_contents, secondary_account_info.account_id,
-      signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN,
-      /*is_new_account=*/false,
-      /*is_sync_signin=*/false);
+  interceptor->MaybeInterceptWebSignin(web_contents,
+                                       secondary_account_info.account_id,
+                                       signin_metrics::AccessPoint::kWebSignin,
+                                       /*is_new_account=*/false,
+                                       /*is_sync_signin=*/false);
 
   histogram_tester.ExpectBucketCount(
       "Signin.SigninPending.InconsistentStateInvoked", true, 1);
@@ -1153,11 +1160,11 @@ IN_PROC_BROWSER_TEST_F(
   source_interceptor_delegate->set_expected_interception_result(
       SigninInterceptionResult::kAccepted);
   ProfileWaiter waiter;
-  interceptor->MaybeInterceptWebSignin(
-      web_contents, secondary_account_info.account_id,
-      signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN,
-      /*is_new_account=*/true,
-      /*is_sync_signin=*/false);
+  interceptor->MaybeInterceptWebSignin(web_contents,
+                                       secondary_account_info.account_id,
+                                       signin_metrics::AccessPoint::kWebSignin,
+                                       /*is_new_account=*/true,
+                                       /*is_sync_signin=*/false);
 
   // New Profile created from accepting the signin interception.
   Profile* new_profile = waiter.WaitForProfileAdded();
@@ -1197,7 +1204,8 @@ IN_PROC_BROWSER_TEST_F(
 
   // Setup a first account for interception.
   const std::string email1("alice1@example.com");
-  AccountInfo info1 = MakeAccountInfoAvailableAndUpdate(email1);
+  AccountInfo info1 =
+      MakeAccountInfoAvailableAndUpdate(email1, kNoHostedDomainFound);
   ASSERT_EQ(GetChromeSigninInterceptDismissCountPref(info1), 0);
   ASSERT_EQ(GetChromeSigninUserChoicePref(info1),
             ChromeSigninUserChoice::kNoChoice);
@@ -1222,7 +1230,8 @@ IN_PROC_BROWSER_TEST_F(
             expected_dismiss_count);
 
   // Setup the second account for interception.
-  AccountInfo info2 = MakeAccountInfoAvailableAndUpdate("alice2@example.com");
+  AccountInfo info2 = MakeAccountInfoAvailableAndUpdate("alice2@example.com",
+                                                        kNoHostedDomainFound);
   ASSERT_FALSE(info2.IsEmpty());
   ASSERT_EQ(GetChromeSigninInterceptDismissCountPref(info2), 0);
 
@@ -1270,7 +1279,7 @@ IN_PROC_BROWSER_TEST_F(
   // Make sure to signout account2.
   Signout();
   // Make account1 available again.
-  info1 = MakeAccountInfoAvailableAndUpdate(email1);
+  info1 = MakeAccountInfoAvailableAndUpdate(email1, kNoHostedDomainFound);
   // Override account1 pref to always ask.
   SigninPrefs(*GetProfile()->GetPrefs())
       .SetChromeSigninInterceptionUserChoice(
@@ -1290,7 +1299,8 @@ IN_PROC_BROWSER_TEST_F(
     OverrideUserChoicePrefAfterAccept) {
   // Setup an account for interception.
   const std::string email("alice1@example.com");
-  AccountInfo info = MakeAccountInfoAvailableAndUpdate(email);
+  AccountInfo info =
+      MakeAccountInfoAvailableAndUpdate(email, kNoHostedDomainFound);
 
   // Makes sure Chrome is not signed in to trigger the Chrome Sigin intercept
   // bubble.
@@ -1305,7 +1315,7 @@ IN_PROC_BROWSER_TEST_F(
   // Signout to attempt signing in again.
   Signout();
   // Make account available again.
-  info = MakeAccountInfoAvailableAndUpdate(email);
+  info = MakeAccountInfoAvailableAndUpdate(email, kNoHostedDomainFound);
   // Attempting to show the bubble again should fail since we already have a
   // user choice.
   ExpectAttemptToShowChromeSigninBubbleNotToShow(info);
@@ -1325,7 +1335,8 @@ IN_PROC_BROWSER_TEST_F(
     OverrideUserChoicePrefAfterDecline) {
   // Setup an account for interception.
   const std::string email("alice1@example.com");
-  AccountInfo info = MakeAccountInfoAvailableAndUpdate(email);
+  AccountInfo info =
+      MakeAccountInfoAvailableAndUpdate(email, kNoHostedDomainFound);
 
   // Makes sure Chrome is not signed in to trigger the Chrome Sigin intercept
   // bubble.
@@ -1356,7 +1367,8 @@ IN_PROC_BROWSER_TEST_F(
     ChromeSigninBubbleResultsWithAlwaysAskUserChoice) {
   // Setup an account for interception.
   const std::string email("alice1@example.com");
-  AccountInfo info = MakeAccountInfoAvailableAndUpdate(email);
+  AccountInfo info =
+      MakeAccountInfoAvailableAndUpdate(email, kNoHostedDomainFound);
 
   // Set user choice to `ChromeSigninUserChoice::kAlwaysAsk` mode.
   SigninPrefs(*GetProfile()->GetPrefs())
@@ -1423,15 +1435,15 @@ IN_PROC_BROWSER_TEST_F(
       identity_manager(),
       builder
           .AsPrimary(signin::ConsentLevel::kSignin)
-          // `ACCESS_POINT_UNKNOWN` is not explicit signin.
-          .WithAccessPoint(signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN)
+          // `kUnknown` is not explicit signin.
+          .WithAccessPoint(signin_metrics::AccessPoint::kWebSignin)
           .Build(email_));
 
   EXPECT_TRUE(IsChromeSignedIn());
   EXPECT_FALSE(browser()->profile()->GetPrefs()->GetBoolean(
       prefs::kExplicitBrowserSignin));
   // Passwords are defaulted to disabled without an explicit signin.
-  EXPECT_FALSE(password_manager::features_util::IsOptedInForAccountStorage(
+  EXPECT_FALSE(password_manager::features_util::IsAccountStorageEnabled(
       GetProfile()->GetPrefs(),
       SyncServiceFactory::GetForProfile(GetProfile())));
 
@@ -1457,7 +1469,7 @@ IN_PROC_BROWSER_TEST_F(
   PrefService* pref_service = GetProfile()->GetPrefs();
   syncer::SyncService* sync_service =
       SyncServiceFactory::GetForProfile(GetProfile());
-  EXPECT_FALSE(password_manager::features_util::IsOptedInForAccountStorage(
+  EXPECT_FALSE(password_manager::features_util::IsAccountStorageEnabled(
       pref_service, sync_service));
 
   // Sign out, and sign back in.
@@ -1468,8 +1480,8 @@ IN_PROC_BROWSER_TEST_F(
       identity_manager(),
       signin::AccountAvailabilityOptionsBuilder()
           .AsPrimary(signin::ConsentLevel::kSignin)
-          .WithAccessPoint(signin_metrics::AccessPoint::
-                               ACCESS_POINT_CHROME_SIGNIN_INTERCEPT_BUBBLE)
+          .WithAccessPoint(
+              signin_metrics::AccessPoint::kChromeSigninInterceptBubble)
           .Build(email_));
 
   // Explicit Signing in while `switches::kExplicitBrowserSigninUIOnDesktop` is
@@ -1478,7 +1490,7 @@ IN_PROC_BROWSER_TEST_F(
       prefs::kExplicitBrowserSignin));
   // Signing in with `switches::kExplicitBrowserSigninUIOnDesktop` enabled,
   // should affect the passwords default.
-  EXPECT_TRUE(password_manager::features_util::IsOptedInForAccountStorage(
+  EXPECT_TRUE(password_manager::features_util::IsAccountStorageEnabled(
       pref_service, sync_service));
 
   // Sign out should clear the explicit signin pref.
@@ -1512,8 +1524,8 @@ IN_PROC_BROWSER_TEST_F(
       identity_manager(),
       signin::AccountAvailabilityOptionsBuilder()
           .AsPrimary(signin::ConsentLevel::kSignin)
-          .WithAccessPoint(signin_metrics::AccessPoint::
-                               ACCESS_POINT_CHROME_SIGNIN_INTERCEPT_BUBBLE)
+          .WithAccessPoint(
+              signin_metrics::AccessPoint::kChromeSigninInterceptBubble)
           .Build("alice@example.com"));
 
   EXPECT_TRUE(IsChromeSignedIn());
@@ -1521,7 +1533,7 @@ IN_PROC_BROWSER_TEST_F(
       prefs::kExplicitBrowserSignin));
   // Passwords are defaulted to enabled with an explicit sign in and
   // `switches::kExplicitBrowserSigninUIOnDesktop` active.
-  EXPECT_TRUE(password_manager::features_util::IsOptedInForAccountStorage(
+  EXPECT_TRUE(password_manager::features_util::IsAccountStorageEnabled(
       GetProfile()->GetPrefs(),
       SyncServiceFactory::GetForProfile(GetProfile())));
 
@@ -1540,7 +1552,7 @@ IN_PROC_BROWSER_TEST_F(
   // Disabling `switches::kExplicitBrowserSigninUIOnDesktop` feature should
   // revert back to the previous default state, since there were no
   // interactions, defaults to disabled.
-  EXPECT_FALSE(password_manager::features_util::IsOptedInForAccountStorage(
+  EXPECT_FALSE(password_manager::features_util::IsAccountStorageEnabled(
       GetProfile()->GetPrefs(),
       SyncServiceFactory::GetForProfile(GetProfile())));
 }
@@ -1552,8 +1564,8 @@ IN_PROC_BROWSER_TEST_F(DiceWebSigninInterceptorBrowserTest,
   base::HistogramTester histogram_tester;
   // Setup profile for interception.
   identity_test_env()->MakeAccountAvailable("alice@example.com");
-  AccountInfo account_info =
-      MakeAccountInfoAvailableAndUpdate("bob@example.com");
+  AccountInfo account_info = MakeAccountInfoAvailableAndUpdate(
+      "bob@example.com", kNoHostedDomainFound);
 
   SetupGaiaResponses();
 
@@ -1579,8 +1591,7 @@ IN_PROC_BROWSER_TEST_F(DiceWebSigninInterceptorBrowserTest,
       DiceWebSigninInterceptorFactory::GetForProfile(profile);
   interceptor->MaybeInterceptWebSignin(
       app_browser->tab_strip_model()->GetActiveWebContents(),
-      account_info.account_id,
-      signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN,
+      account_info.account_id, signin_metrics::AccessPoint::kWebSignin,
       /*is_new_account=*/true,
       /*is_sync_signin=*/false);
 
@@ -1596,16 +1607,16 @@ IN_PROC_BROWSER_TEST_F(DiceWebSigninInterceptorBrowserTest,
   base::HistogramTester histogram_tester;
 
   AccountInfo primary_account_info =
-      MakeAccountInfoAvailableAndUpdate("bob@example.com");
+      MakeAccountInfoAvailableAndUpdate("bob@example.com", "example.com");
   IdentityManagerFactory::GetForProfile(GetProfile())
       ->GetPrimaryAccountMutator()
       ->SetPrimaryAccount(primary_account_info.account_id,
                           signin::ConsentLevel::kSync);
 
   AccountInfo account_info =
-      MakeAccountInfoAvailableAndUpdate("alice@example.com");
+      MakeAccountInfoAvailableAndUpdate("alice@example.com", "example.com");
 
-  // Enforce enterprise profile sepatation.
+  // Enforce enterprise profile separation.
   GetProfile()->GetPrefs()->SetString(prefs::kManagedAccountsSigninRestriction,
                                       "none");
   DiceWebSigninInterceptorFactory::GetForProfile(GetProfile())
@@ -1680,17 +1691,17 @@ IN_PROC_BROWSER_TEST_F(DiceWebSigninInterceptorBrowserTest,
                        EnterpriseInterceptionDeclined) {
   base::HistogramTester histogram_tester;
   AccountInfo account_info =
-      MakeAccountInfoAvailableAndUpdate("alice@example.com");
+      MakeAccountInfoAvailableAndUpdate("alice@example.com", "example.com");
 
   AccountInfo primary_account_info =
-      MakeAccountInfoAvailableAndUpdate("bob@example.com");
+      MakeAccountInfoAvailableAndUpdate("bob@example.com", "example.com");
 
   IdentityManagerFactory::GetForProfile(GetProfile())
       ->GetPrimaryAccountMutator()
       ->SetPrimaryAccount(primary_account_info.account_id,
                           signin::ConsentLevel::kSignin);
 
-  // Enforce enterprise profile sepatation.
+  // Enforce enterprise profile separation.
   GetProfile()->GetPrefs()->SetString(prefs::kManagedAccountsSigninRestriction,
                                       "none");
 
@@ -1713,11 +1724,10 @@ IN_PROC_BROWSER_TEST_F(DiceWebSigninInterceptorBrowserTest,
   // Start the interception.
   DiceWebSigninInterceptor* interceptor =
       DiceWebSigninInterceptorFactory::GetForProfile(GetProfile());
-  interceptor->MaybeInterceptWebSignin(
-      web_contents, account_info.account_id,
-      signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN,
-      /*is_new_account=*/true,
-      /*is_sync_signin=*/false);
+  interceptor->MaybeInterceptWebSignin(web_contents, account_info.account_id,
+                                       signin_metrics::AccessPoint::kWebSignin,
+                                       /*is_new_account=*/true,
+                                       /*is_sync_signin=*/false);
   base::RunLoop run_loop;
   run_loop.RunUntilIdle();
 
@@ -1769,16 +1779,16 @@ IN_PROC_BROWSER_TEST_F(DiceWebSigninInterceptorBrowserTest,
   DiceWebSigninInterceptor* interceptor =
       DiceWebSigninInterceptorFactory::GetForProfile(GetProfile());
 
-  // Enforce enterprise profile sepatation.
+  // Enforce enterprise profile separation.
   interceptor->SetInterceptedAccountProfileSeparationPoliciesForTesting(
       policy::ProfileSeparationPolicies(
           policy::ProfileSeparationSettings::ENFORCED, std::nullopt));
 
-  interceptor->MaybeInterceptWebSignin(
-      web_contents, primary_account_info.account_id,
-      signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN,
-      /*is_new_account=*/false,
-      /*is_sync_signin=*/false);
+  interceptor->MaybeInterceptWebSignin(web_contents,
+                                       primary_account_info.account_id,
+                                       signin_metrics::AccessPoint::kWebSignin,
+                                       /*is_new_account=*/false,
+                                       /*is_sync_signin=*/false);
   base::RunLoop run_loop;
   run_loop.RunUntilIdle();
 
@@ -1807,9 +1817,9 @@ IN_PROC_BROWSER_TEST_F(DiceWebSigninInterceptorBrowserTest,
                        ForcedEnterpriseInterceptionTestAccountLevelPolicy) {
   base::HistogramTester histogram_tester;
   AccountInfo account_info =
-      MakeAccountInfoAvailableAndUpdate("alice@example.com");
+      MakeAccountInfoAvailableAndUpdate("alice@example.com", "example.com");
 
-  // Enforce enterprise profile sepatation.
+  // Enforce enterprise profile separation.
   GetProfile()->GetPrefs()->SetString(prefs::kManagedAccountsSigninRestriction,
                                       "none");
   DiceWebSigninInterceptorFactory::GetForProfile(GetProfile())
@@ -1886,9 +1896,9 @@ IN_PROC_BROWSER_TEST_F(
     ForcedEnterpriseInterceptionTestAccountLevelPolicyMergeData) {
   base::HistogramTester histogram_tester;
   AccountInfo account_info =
-      MakeAccountInfoAvailableAndUpdate("alice@example.com");
+      MakeAccountInfoAvailableAndUpdate("alice@example.com", "example.com");
 
-  // Enforce enterprise profile sepatation.
+  // Enforce enterprise profile separation.
   GetProfile()->GetPrefs()->SetString(prefs::kManagedAccountsSigninRestriction,
                                       "none");
   DiceWebSigninInterceptorFactory::GetForProfile(GetProfile())
@@ -1912,11 +1922,10 @@ IN_PROC_BROWSER_TEST_F(
 
   DiceWebSigninInterceptor* interceptor =
       DiceWebSigninInterceptorFactory::GetForProfile(GetProfile());
-  interceptor->MaybeInterceptWebSignin(
-      web_contents, account_info.account_id,
-      signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN,
-      /*is_new_account=*/true,
-      /*is_sync_signin=*/false);
+  interceptor->MaybeInterceptWebSignin(web_contents, account_info.account_id,
+                                       signin_metrics::AccessPoint::kWebSignin,
+                                       /*is_new_account=*/true,
+                                       /*is_sync_signin=*/false);
   // Wait for the interception to be complete.
   base::RunLoop run_loop;
   run_loop.RunUntilIdle();
@@ -1939,9 +1948,9 @@ IN_PROC_BROWSER_TEST_F(
     ForcedEnterpriseInterceptionTestAccountLevelPolicyDeclined) {
   base::HistogramTester histogram_tester;
   AccountInfo account_info =
-      MakeAccountInfoAvailableAndUpdate("alice@example.com");
+      MakeAccountInfoAvailableAndUpdate("alice@example.com", "example.com");
 
-  // Enforce enterprise profile sepatation.
+  // Enforce enterprise profile separation.
   GetProfile()->GetPrefs()->SetString(prefs::kManagedAccountsSigninRestriction,
                                       "none");
   DiceWebSigninInterceptorFactory::GetForProfile(GetProfile())
@@ -1967,11 +1976,10 @@ IN_PROC_BROWSER_TEST_F(
   // Start the interception.
   DiceWebSigninInterceptor* interceptor =
       DiceWebSigninInterceptorFactory::GetForProfile(GetProfile());
-  interceptor->MaybeInterceptWebSignin(
-      web_contents, account_info.account_id,
-      signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN,
-      /*is_new_account=*/true,
-      /*is_sync_signin=*/false);
+  interceptor->MaybeInterceptWebSignin(web_contents, account_info.account_id,
+                                       signin_metrics::AccessPoint::kWebSignin,
+                                       /*is_new_account=*/true,
+                                       /*is_sync_signin=*/false);
   base::RunLoop run_loop;
   run_loop.RunUntilIdle();
 
@@ -1999,9 +2007,9 @@ IN_PROC_BROWSER_TEST_F(
     ForcedEnterpriseInterceptionTestAccountLevelPolicyStrictDeclined) {
   base::HistogramTester histogram_tester;
   AccountInfo account_info =
-      MakeAccountInfoAvailableAndUpdate("alice@example.com");
+      MakeAccountInfoAvailableAndUpdate("alice@example.com", "example.com");
 
-  // Enforce enterprise profile sepatation.
+  // Enforce enterprise profile separation.
   GetProfile()->GetPrefs()->SetString(prefs::kManagedAccountsSigninRestriction,
                                       "none");
   DiceWebSigninInterceptorFactory::GetForProfile(GetProfile())
@@ -2027,11 +2035,10 @@ IN_PROC_BROWSER_TEST_F(
   // Start the interception.
   DiceWebSigninInterceptor* interceptor =
       DiceWebSigninInterceptorFactory::GetForProfile(GetProfile());
-  interceptor->MaybeInterceptWebSignin(
-      web_contents, account_info.account_id,
-      signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN,
-      /*is_new_account=*/true,
-      /*is_sync_signin=*/false);
+  interceptor->MaybeInterceptWebSignin(web_contents, account_info.account_id,
+                                       signin_metrics::AccessPoint::kWebSignin,
+                                       /*is_new_account=*/true,
+                                       /*is_sync_signin=*/false);
   base::RunLoop run_loop;
   run_loop.RunUntilIdle();
 
@@ -2058,7 +2065,7 @@ IN_PROC_BROWSER_TEST_F(DiceWebSigninInterceptorBrowserTest,
                        ForcedEnterpriseInterceptionTest) {
   base::HistogramTester histogram_tester;
   AccountInfo account_info =
-      MakeAccountInfoAvailableAndUpdate("alice@example.com");
+      MakeAccountInfoAvailableAndUpdate("alice@example.com", "example.com");
 
   // Enforce enterprise profile separation.
   GetProfile()->GetPrefs()->SetString(prefs::kManagedAccountsSigninRestriction,
@@ -2135,7 +2142,7 @@ IN_PROC_BROWSER_TEST_F(
     ForcedEnterpriseInterceptionPrimaryACcountReauthSyncDisabledTest) {
   base::HistogramTester histogram_tester;
   AccountInfo account_info =
-      MakeAccountInfoAvailableAndUpdate("alice@example.com");
+      MakeAccountInfoAvailableAndUpdate("alice@example.com", "example.com");
 
   IdentityManagerFactory::GetForProfile(GetProfile())
       ->GetPrimaryAccountMutator()
@@ -2164,11 +2171,10 @@ IN_PROC_BROWSER_TEST_F(
   // Start the interception.
   DiceWebSigninInterceptor* interceptor =
       DiceWebSigninInterceptorFactory::GetForProfile(GetProfile());
-  interceptor->MaybeInterceptWebSignin(
-      web_contents, account_info.account_id,
-      signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN,
-      /*is_new_account=*/false,
-      /*is_sync_signin=*/false);
+  interceptor->MaybeInterceptWebSignin(web_contents, account_info.account_id,
+                                       signin_metrics::AccessPoint::kWebSignin,
+                                       /*is_new_account=*/false,
+                                       /*is_sync_signin=*/false);
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(enterprise_util::UserAcceptedAccountManagement(GetProfile()));
   // Interception bubble was closed.
@@ -2194,7 +2200,7 @@ IN_PROC_BROWSER_TEST_F(
     ForcedEnterpriseInterceptionPrimaryAccountReauthSyncEnabledTest) {
   base::HistogramTester histogram_tester;
   AccountInfo account_info =
-      MakeAccountInfoAvailableAndUpdate("alice@example.com");
+      MakeAccountInfoAvailableAndUpdate("alice@example.com", "example.com");
 
   IdentityManagerFactory::GetForProfile(GetProfile())
       ->GetPrimaryAccountMutator()
@@ -2212,15 +2218,14 @@ IN_PROC_BROWSER_TEST_F(
   int original_tab_count = browser()->tab_strip_model()->count();
 
   EXPECT_EQ(BrowserList::GetInstance()->size(), 1u);
-  EXPECT_FALSE(enterprise_util::UserAcceptedAccountManagement(GetProfile()));
+  enterprise_util::SetUserAcceptedAccountManagement(GetProfile(), true);
   // Start the interception.
   DiceWebSigninInterceptor* interceptor =
       DiceWebSigninInterceptorFactory::GetForProfile(GetProfile());
-  interceptor->MaybeInterceptWebSignin(
-      web_contents, account_info.account_id,
-      signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN,
-      /*is_new_account=*/false,
-      /*is_sync_signin=*/false);
+  interceptor->MaybeInterceptWebSignin(web_contents, account_info.account_id,
+                                       signin_metrics::AccessPoint::kWebSignin,
+                                       /*is_new_account=*/false,
+                                       /*is_sync_signin=*/false);
   base::RunLoop().RunUntilIdle();
   // Interception bubble was closed.
   FakeDiceWebSigninInterceptorDelegate* source_interceptor_delegate =
@@ -2248,7 +2253,7 @@ IN_PROC_BROWSER_TEST_F(DiceWebSigninInterceptorBrowserTest,
   GetProfile()->GetPrefs()->SetString(prefs::kManagedAccountsSigninRestriction,
                                       "primary_account_strict");
   AccountInfo account_info =
-      MakeAccountInfoAvailableAndUpdate("alice@example.com");
+      MakeAccountInfoAvailableAndUpdate("alice@example.com", "example.com");
 
   // Add a profile in the cache (simulate the profile on disk).
   ProfileManager* profile_manager = g_browser_process->profile_manager();
@@ -2324,7 +2329,7 @@ IN_PROC_BROWSER_TEST_F(DiceWebSigninInterceptorBrowserTest,
   GetProfile()->GetPrefs()->SetString(prefs::kManagedAccountsSigninRestriction,
                                       "primary_account_strict");
   AccountInfo account_info =
-      MakeAccountInfoAvailableAndUpdate("alice@example.com");
+      MakeAccountInfoAvailableAndUpdate("alice@example.com", "example.com");
   // Create another profile with a browser window.
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   const base::FilePath profile_path =
@@ -2350,7 +2355,7 @@ IN_PROC_BROWSER_TEST_F(DiceWebSigninInterceptorBrowserTest,
   other_identity_manager->GetAccountsMutator()->AddOrUpdateAccount(
       account_info.gaia, account_info.email, "dummy_refresh_token",
       /*is_under_advanced_protection=*/false,
-      signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN,
+      signin_metrics::AccessPoint::kUnknown,
       signin_metrics::SourceForRefreshTokenOperation::kUnknown);
   other_identity_manager->GetPrimaryAccountMutator()->SetPrimaryAccount(
       account_info.account_id, signin::ConsentLevel::kSync);
@@ -2367,11 +2372,10 @@ IN_PROC_BROWSER_TEST_F(DiceWebSigninInterceptorBrowserTest,
           WebSigninInterceptor::SigninInterceptionType::kProfileSwitchForced);
   DiceWebSigninInterceptor* interceptor =
       DiceWebSigninInterceptorFactory::GetForProfile(GetProfile());
-  interceptor->MaybeInterceptWebSignin(
-      web_contents, account_info.account_id,
-      signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN,
-      /*is_new_account=*/true,
-      /*is_sync_signin=*/false);
+  interceptor->MaybeInterceptWebSignin(web_contents, account_info.account_id,
+                                       signin_metrics::AccessPoint::kWebSignin,
+                                       /*is_new_account=*/true,
+                                       /*is_sync_signin=*/false);
 
   // Add the account to the cookies (simulates the account reconcilor).
   signin::SetCookieAccounts(other_identity_manager, test_url_loader_factory(),

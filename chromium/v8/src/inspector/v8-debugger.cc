@@ -22,6 +22,7 @@
 #include "src/inspector/v8-runtime-agent-impl.h"
 #include "src/inspector/v8-stack-trace-impl.h"
 #include "src/inspector/v8-value-utils.h"
+#include "src/tracing/trace-event.h"
 
 namespace v8_inspector {
 
@@ -1200,6 +1201,12 @@ void V8Debugger::asyncTaskFinished(void* task) {
 void V8Debugger::asyncTaskScheduledForStack(const StringView& taskName,
                                             void* task, bool recurring,
                                             bool skipTopFrame) {
+#ifdef V8_USE_PERFETTO
+  TRACE_EVENT(TRACE_DISABLED_BY_DEFAULT("v8.inspector"),
+              "v8::Debugger::AsyncTaskScheduled", "taskName",
+              TRACE_STR_COPY(toString16(taskName).utf8().c_str()),
+              perfetto::Flow::ProcessScoped(reinterpret_cast<uintptr_t>(task)));
+#endif  // V8_USE_PERFETTO
   if (!m_maxAsyncCallStackDepth) return;
   v8::HandleScope scope(m_isolate);
   std::shared_ptr<AsyncStackTrace> asyncStack =
@@ -1213,12 +1220,22 @@ void V8Debugger::asyncTaskScheduledForStack(const StringView& taskName,
 }
 
 void V8Debugger::asyncTaskCanceledForStack(void* task) {
+#ifdef V8_USE_PERFETTO
+  TRACE_EVENT(TRACE_DISABLED_BY_DEFAULT("v8.inspector"),
+              "v8::Debugger::AsyncTaskCanceled",
+              perfetto::Flow::ProcessScoped(reinterpret_cast<uintptr_t>(task)));
+#endif  // V8_USE_PERFETTO
   if (!m_maxAsyncCallStackDepth) return;
   m_asyncTaskStacks.erase(task);
   m_recurringTasks.erase(task);
 }
 
 void V8Debugger::asyncTaskStartedForStack(void* task) {
+#ifdef V8_USE_PERFETTO
+  TRACE_EVENT_BEGIN(
+      TRACE_DISABLED_BY_DEFAULT("v8.inspector"), "v8::Debugger::AsyncTaskRun",
+      perfetto::Flow::ProcessScoped(reinterpret_cast<uintptr_t>(task)));
+#endif  // V8_USE_PERFETTO
   if (!m_maxAsyncCallStackDepth) return;
   // Needs to support following order of events:
   // - asyncTaskScheduled
@@ -1239,6 +1256,10 @@ void V8Debugger::asyncTaskStartedForStack(void* task) {
 }
 
 void V8Debugger::asyncTaskFinishedForStack(void* task) {
+#ifdef V8_USE_PERFETTO
+  TRACE_EVENT_END0(TRACE_DISABLED_BY_DEFAULT("v8.inspector"),
+                   "v8::Debugger::AsyncTaskRun");
+#endif  // V8_USE_PERFETTO
   if (!m_maxAsyncCallStackDepth) return;
   // We could start instrumenting half way and the stack is empty.
   if (m_currentTasks.empty()) return;
@@ -1376,8 +1397,8 @@ std::shared_ptr<StackFrame> V8Debugger::symbolize(
   CachedStackFrameKey key{scriptId, lineNumber, columnNumber};
   auto functionName = toProtocolString(isolate(), v8Frame->GetFunctionName());
   auto it = m_cachedStackFrames.find(key);
-  if (it != m_cachedStackFrames.end() && !it->second.expired()) {
-    auto stackFrame = it->second.lock();
+  std::shared_ptr<StackFrame> stackFrame;
+  if (it != m_cachedStackFrames.end() && (stackFrame = it->second.lock())) {
     if (stackFrame->functionName() == functionName) {
       DCHECK_EQ(
           stackFrame->sourceURL(),
@@ -1389,9 +1410,9 @@ std::shared_ptr<StackFrame> V8Debugger::symbolize(
       toProtocolString(isolate(), v8Frame->GetScriptNameOrSourceURL());
   auto hasSourceURLComment =
       v8Frame->GetScriptName() != v8Frame->GetScriptNameOrSourceURL();
-  auto stackFrame = std::make_shared<StackFrame>(
-      std::move(functionName), scriptId, std::move(sourceURL), lineNumber,
-      columnNumber, hasSourceURLComment);
+  stackFrame = std::make_shared<StackFrame>(std::move(functionName), scriptId,
+                                            std::move(sourceURL), lineNumber,
+                                            columnNumber, hasSourceURLComment);
   m_cachedStackFrames.emplace(key, stackFrame);
   return stackFrame;
 }

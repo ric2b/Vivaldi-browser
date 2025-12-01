@@ -92,6 +92,8 @@ class CharacterPropertyValues {
   void Initialize() {
     memset(values_.get(), 0, sizeof(CharacterProperty) * kSize);
 
+    SetIsCJKIdeographOrSymbolForEmoji();
+
 #define SET(name)                                     \
   SetForRanges(name##Ranges, std::size(name##Ranges), \
                CharacterProperty::name);              \
@@ -104,6 +106,13 @@ class CharacterPropertyValues {
     SetForRanges(kIsHangulRanges, std::size(kIsHangulRanges),
                  CharacterProperty::kIsHangul);
     SetHanKerning();
+  }
+
+  // Set all characters that have the `UCHAR_EMOJI_PRESENTATION` property as CJK
+  // symbol characters.
+  void SetIsCJKIdeographOrSymbolForEmoji() {
+    SetForUnicodeSet("[:Emoji_Presentation:]",
+                     CharacterProperty::kIsCJKIdeographOrSymbol);
   }
 
   void SetHanKerning() {
@@ -148,6 +157,10 @@ class CharacterPropertyValues {
 
   // For `patterns`, see:
   // https://unicode-org.github.io/icu/userguide/strings/unicodeset.html#unicodeset-patterns
+  void SetForUnicodeSet(const char* pattern, CharacterProperty value) {
+    SetForUnicodeSet(pattern, value, value);
+  }
+
   void SetForUnicodeSet(const char* pattern,
                         CharacterProperty value,
                         CharacterProperty mask) {
@@ -157,6 +170,7 @@ class CharacterPropertyValues {
     const int32_t range_count = set.getRangeCount();
     for (int32_t i = 0; i < range_count; ++i) {
       const UChar32 end = set.getRangeEnd(i);
+      CHECK_LE(end, kMaxCodepoint);
       for (UChar32 ch = set.getRangeStart(i); ch <= end; ++ch) {
         CHECK_EQ(static_cast<unsigned>(values_[ch] & mask), 0u);
         values_[ch] |= value;
@@ -200,20 +214,21 @@ class CharacterPropertyValues {
 };
 
 static void GenerateUTrieSerialized(FILE* fp,
-                                    int32_t size,
+                                    size_t size,
                                     base::span<uint8_t> array) {
   fprintf(fp,
           "#include <cstdint>\n\n"
           "namespace blink {\n\n"
-          "extern const int32_t kSerializedCharacterDataSize = %d;\n"
+          "extern const int32_t kSerializedCharacterDataSize = %zu;\n"
           // The utrie2_openFromSerialized function requires character data to
           // be aligned to 4 bytes.
           "alignas(4) extern const uint8_t kSerializedCharacterData[] = {",
           size);
-  for (int32_t i = 0; i < size;) {
+  for (size_t i = 0; i < size;) {
     fprintf(fp, "\n   ");
-    for (int col = 0; col < 16 && i < size; col++, i++)
+    for (size_t col = 0; col < 16 && i < size; ++col, ++i) {
       fprintf(fp, " 0x%02X,", array[i]);
+    }
   }
   fprintf(fp,
           "\n};\n\n"
@@ -258,17 +273,20 @@ static void GenerateCharacterPropertyData(FILE* fp) {
 
   int32_t serialized_size =
       ucptrie_toBinary(immutable_trie.get(), nullptr, 0, &error);
+  CHECK_GE(serialized_size, 0);
   error = U_ZERO_ERROR;
 
-  auto serialized = base::HeapArray<uint8_t>::Uninit(serialized_size);
+  auto serialized =
+      base::HeapArray<uint8_t>::Uninit(static_cast<size_t>(serialized_size));
   // Ensure 32-bit alignment, as ICU requires that to the ucptrie_toBinary call.
   CHECK(!(reinterpret_cast<intptr_t>(serialized.data()) % 4));
 
   serialized_size = ucptrie_toBinary(immutable_trie.get(), serialized.data(),
                                      serialized.size(), &error);
+  CHECK_GE(serialized_size, 0);
   assert(error == U_ZERO_ERROR);
 
-  GenerateUTrieSerialized(fp, serialized_size, serialized);
+  GenerateUTrieSerialized(fp, static_cast<size_t>(serialized_size), serialized);
 }
 
 //

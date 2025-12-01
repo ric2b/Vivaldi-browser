@@ -14,13 +14,17 @@
 <translation id="2433507940547922241">Изглед</translation>
 <translation id="2501278716633472235">Иди назад</translation>
 <translation id="2633278372998075009">Приватне картице</translation>
+<translation id="265156376773362237">Стандардно предучитавање</translation>
 <translation id="272026394418727548">Vivaldi-јева матична страница</translation>
+<translation id="2871733351037274014">Предучитавање страница</translation>
 <translation id="2951071800649516099">Додајте странице на листу за читање за касније</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> обележивач}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> обележивача}}</translation>
 <translation id="3076631378407175873">Ауторско право <ph name="YEAR" />. Vivaldi Technologies AS. Сва права задржана.</translation>
+<translation id="3232293466644486101">Избриши податке прегледања…</translation>
 <translation id="3234355010754616171">Нова приватна картица</translation>
+<translation id="3237087289225714896">Стандардно предучитавање:</translation>
 <translation id="3377025655491224618">Приватна картица</translation>
 <translation id="3504699618187058974">Групиши картице</translation>
 <translation id="3518985090088779359">Прихвати и настави</translation>
@@ -28,6 +32,7 @@
 <translation id="3602290021589620013">Преглед</translation>
 <translation id="3700829948786686853">Добро дошли у Vivaldi</translation>
 <translation id="3719826155360621982">Матична страница</translation>
+<translation id="3738139272394829648">Додир за претрагу</translation>
 <translation id="385051799172605136">Назад</translation>
 <translation id="399014816462153200">Прочитани чланци:</translation>
 <translation id="4121750346708795461">Коришћењем ове апликације прихватате <ph name="BEGIN_LINK1" />Уговор о лиценцирању са крајњим корисником<ph name="END_LINK1" /> и <ph name="BEGIN_LINK2" />Политику приватности<ph name="END_LINK2" /> Vivaldi прегледача.</translation>
@@ -36,6 +41,7 @@
 <translation id="4195643157523330669">Отвори у новој картици</translation>
 <translation id="4225895483398857530">Пречица на алатној траци</translation>
 <translation id="4243710787042215766">Отвори у приватној картици</translation>
+<translation id="4291407919474070700"><ph name="BEGIN_LINK" />Укључите закључавање екрана у Android подешавањима<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Управљач лозинкама</translation>
 <translation id="451872707440238414">Претражи обележиваче</translation>
 <translation id="4526803704855831732">Приватне картице</translation>
@@ -57,24 +63,34 @@
 <translation id="572328651809341494">Недавне картице</translation>
 <translation id="6150320133806434356">Обележивач је сачуван</translation>
 <translation id="6336451774241870485">Нова приватна картица</translation>
+<translation id="6337323516034698937">Да бисте послали ову картицу на други уређај, пријавите се на Vivaldi синхронизацију на оба уређаја. Уверите се да сте унели лозинку за шифровање ако је потребно.</translation>
 <translation id="6404511346730675251">Уреди обележивач</translation>
 <translation id="6585139692466700358">Понуди превод страница на друге језике користећи Vivald-јеву услугу превођења</translation>
+<translation id="6588043302623806746">Коришћење безбедног DNS-а</translation>
 <translation id="6593061639179217415">Десктоп верзија сајта</translation>
 <translation id="6610147964972079463">Затвори приватне картице</translation>
 <translation id="7029995644714925509">Када сајт затражи да приватно унапред учита везе на својој страници, Vivaldi шифрује и учитава странице преко Google сервера без колачића. Ово скрива ваш идентитет од унапред учитаног сајта.</translation>
 <translation id="706339621163631076">Политика приватности прегледача</translation>
 <translation id="732145680195464316">Обележивач је сачуван у <ph name="PRODUCT_NAME" /></translation>
+<translation id="7324354302972299151">Слање захтева „Не прати”</translation>
+<translation id="7359002509206457351">Приступ начинима плаћања</translation>
+<translation id="7419565702166471774">Увек користи безбедне везе</translation>
 <translation id="7427132068601343474">О Vivaldi прегледачу</translation>
+<translation id="7456774706094330779">Проширено предучитавање</translation>
 <translation id="7465104139234185284">Затвори све приватне картице</translation>
 <translation id="7481312909269577407">Напред</translation>
 <translation id="7968014550143838305">Додато на листу за читање</translation>
 <translation id="804786196054284061">Уговор о лиценцирању са крајњим корисником</translation>
+<translation id="8062594758852531064">Проширено предучитавање:</translation>
 <translation id="8127542551745560481">Уреди матичну страницу</translation>
+<translation id="8348430946834215779">Користите HTTPS кад год је то могуће и добијajте упозорење пре учитавања сајтова који га не подржавају</translation>
 <translation id="8560602726703398413">Пронађите своју листу за читање у обележивачима</translation>
 <translation id="85991616550051997">Иди на матичну страницу</translation>
 <translation id="8820817407110198400">Обележивачи</translation>
 <translation id="9042893549633094279">Приватност и безбедност</translation>
 <translation id="9063523880881406963">Искључи захтевање десктоп верзије сајта</translation>
 <translation id="9080642952018487277">Уђи у приватни режим</translation>
+<translation id="930124987204876019">Брисање историје, колачића, података о сајтовима, кеша…</translation>
+<translation id="961856697154696964">Брисање података прегледања</translation>
 <translation id="96681097142096641">Приказати поједностављену страницу?</translation>
 </translationbundle>

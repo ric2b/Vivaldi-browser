@@ -64,6 +64,14 @@ void CommandBuffer::callFinishedProcs(bool success) {
         for (int i = 0; i < fFinishedProcs.size(); ++i) {
             fFinishedProcs[i]->setFailureResult();
         }
+    } else {
+        if (auto stats = this->gpuStats()) {
+            for (int i = 0; i < fFinishedProcs.size(); ++i) {
+                if (fFinishedProcs[i]->receivesGpuStats()) {
+                    fFinishedProcs[i]->setStats(*stats);
+                }
+            }
+        }
     }
     fFinishedProcs.clear();
 }
@@ -84,7 +92,7 @@ bool CommandBuffer::addRenderPass(const RenderPassDesc& renderPassDesc,
                                   sk_sp<Texture> resolveTexture,
                                   sk_sp<Texture> depthStencilTexture,
                                   const Texture* dstCopy,
-                                  SkIRect dstCopyBounds,
+                                  SkIRect dstReadBounds,
                                   SkISize viewportDims,
                                   const DrawPassList& drawPasses) {
     TRACE_EVENT0("skia.gpu", TRACE_FUNC);
@@ -106,16 +114,16 @@ bool CommandBuffer::addRenderPass(const RenderPassDesc& renderPassDesc,
         return true;
     }
 
-    dstCopyBounds.offset(fReplayTranslation.x(), fReplayTranslation.y());
-    if (!dstCopyBounds.intersect(colorAttachmentBounds)) {
+    dstReadBounds.offset(fReplayTranslation.x(), fReplayTranslation.y());
+    if (!dstReadBounds.intersect(colorAttachmentBounds)) {
         // The draws within the RenderPass that would sample from the dstCopy have been translated
         // off screen. Set the bounds to empty and let the GPU clipping do its job.
-        dstCopyBounds = SkIRect::MakeEmpty();
+        dstReadBounds = SkIRect::MakeEmpty();
     }
     // Save the dstCopy texture so that it can be embedded into texture bind commands later on.
     // Stash the texture's full dimensions on the rect so we can calculate normalized coords later.
     fDstCopy.first = dstCopy;
-    fDstCopyBounds = dstCopy ? SkIRect::MakePtSize(dstCopyBounds.topLeft(), dstCopy->dimensions())
+    fDstReadBounds = dstCopy ? SkIRect::MakePtSize(dstReadBounds.topLeft(), dstCopy->dimensions())
                              : SkIRect::MakeEmpty();
     if (dstCopy && !fDstCopy.second) {
         // Only lookup the sampler the first time we require a dstCopy. The texture can change

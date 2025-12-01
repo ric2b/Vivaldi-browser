@@ -24,10 +24,10 @@ This page discusses how to debug a **ChromiumOS minidump**.
             minidump into Visual Studio or windbg, set up the Chrome symbol
             server and Microsoft symbol server, and enable source indexing.
             Instructions can be found on the [Debugging Chromium on
-            Windows](http://www.chromium.org/developers/how-tos/debugging-on-windows)
+            Windows](/developers/how-tos/debugging-on-windows)
             page.
 *   For other thoughts on crash analysis see [Crash
-            Reports](http://www.chromium.org/developers/crash-reports).
+            Reports](/developers/crash-reports).
 
 ## ==Use minidump_stackwalk to show a stack trace==
 
@@ -141,17 +141,17 @@ gdb --core=minidump.core
 ## ==If backtrace in gdb did not help==
 
 Sometimes, the gdb backtrace command ([Use gdb to show a
-backtrace](http://www.chromium.org/chromium-os/how-tos-and-troubleshooting/crash-reporting/debugging-a-minidump#TOC-Use-gdb-to-show-a-backtrace))
+backtrace](#use-gdb-to-show-a-backtrace))
 doesn't show a stack trace any better than that of minidump_stackwalk ([Use
 minidump_stackwalk to show a stack
-trace](http://www.chromium.org/chromium-os/how-tos-and-troubleshooting/crash-reporting/debugging-a-minidump#TOC-Use-minidump_stackwalk-to-show-a-stack-trace)).
+trace](#use-minidump_stackwalk-to-show-a-stack-trace)).
 If you think there's more to it than what those two are showing you, try this
 method to naively dump all the known symbol addresses seen on the stack. You'll
 see some false positives, but you may just find the name of a function that
 seems like a plausible place to look.
 
 First, start from the above step of [using gdb to show a
-backtrace](http://www.chromium.org/chromium-os/how-tos-and-troubleshooting/crash-reporting/debugging-a-minidump#TOC-Use-gdb-to-show-a-backtrace).
+backtrace](#use-gdb-to-show-a-backtrace).
 We can reuse the gdb command file that was generated for it. Googlers: If you
 didn't use my generate_gdb_command_file script, you can manually create the gdb
 command file containing any "add-symbol-file" commands you ran.

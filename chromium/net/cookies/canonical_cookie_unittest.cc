@@ -38,8 +38,9 @@ void MatchCookieLineToVector(
     const std::string& line,
     const std::vector<std::unique_ptr<CanonicalCookie>>& cookies) {
   std::vector<CanonicalCookie> list;
-  for (const auto& cookie : cookies)
+  for (const auto& cookie : cookies) {
     list.push_back(*cookie);
+  }
   EXPECT_EQ(line, CanonicalCookie::BuildCookieLine(list));
 }
 
@@ -336,6 +337,169 @@ TEST(CanonicalCookieTest, CreateInvalidUrl) {
       CookieInclusionStatus::ExclusionReason::EXCLUDE_FAILURE_TO_STORE));
 }
 
+// Test that when net feature kDisallowNonAsciiCookies is enabled a cookie with
+// a non-ascii value in its name or value is properly excluded.
+TEST(CanonicalCookieTest, CreateNonAsciiCookieNameAndValue) {
+  base::Time creation_time = base::Time::Now();
+  std::optional<base::Time> server_time = std::nullopt;
+  CookieInclusionStatus status;
+  std::unique_ptr<CanonicalCookie> cc;
+
+  // Feature is not enabled yet so cookie with non-ascii name or value should
+  // still be included.
+  cc = CanonicalCookie::Create(GURL("https://www.foo.com/path"), "€=2",
+                               creation_time, server_time,
+                               /*cookie_partition_key=*/std::nullopt,
+                               CookieSourceType::kUnknown, &status);
+  EXPECT_TRUE(cc.get());
+  EXPECT_TRUE(status.IsInclude());
+  cc = CanonicalCookie::Create(GURL("https://www.foo.com/path"), "A=€",
+                               creation_time, server_time,
+                               /*cookie_partition_key=*/std::nullopt,
+                               CookieSourceType::kUnknown, &status);
+  EXPECT_TRUE(cc.get());
+  EXPECT_TRUE(status.IsInclude());
+
+  cc = CanonicalCookie::Create(GURL("https://www.foo.com/path"), "€=€",
+                               creation_time, server_time,
+                               /*cookie_partition_key=*/std::nullopt,
+                               CookieSourceType::kUnknown, &status);
+  EXPECT_TRUE(cc.get());
+  EXPECT_TRUE(status.IsInclude());
+
+  // Since feature is not enabled this should be true.
+  EXPECT_TRUE(cc->IsCanonical());
+
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures(
+      {net::features::kDisallowNonAsciiCookies}, {});
+
+  // Now that feature is enabled this should return false.
+  EXPECT_FALSE(cc->IsCanonical());
+
+  // Valid cookie which should be included.
+  cc = CanonicalCookie::Create(GURL("https://www.foo.com/path"), "A=2",
+                               creation_time, server_time,
+                               /*cookie_partition_key=*/std::nullopt,
+                               CookieSourceType::kUnknown, &status);
+  EXPECT_TRUE(cc.get());
+  EXPECT_TRUE(status.IsInclude());
+  // Now that feature is enabled this cookie will be excluded.
+  cc = CanonicalCookie::Create(GURL("https://www.foo.com/path"), "€=2",
+                               creation_time, server_time,
+                               /*cookie_partition_key=*/std::nullopt,
+                               CookieSourceType::kUnknown, &status);
+  EXPECT_FALSE(cc.get());
+  EXPECT_TRUE(status.HasExclusionReason(
+      CookieInclusionStatus::ExclusionReason::EXCLUDE_DISALLOWED_CHARACTER));
+
+  // Now that feature is enabled this cookie will be excluded.
+  cc = CanonicalCookie::Create(GURL("https://www.foo.com/path"), "A=€",
+                               creation_time, server_time,
+                               /*cookie_partition_key=*/std::nullopt,
+                               CookieSourceType::kUnknown, &status);
+  EXPECT_FALSE(cc.get());
+  EXPECT_TRUE(status.HasExclusionReason(
+      CookieInclusionStatus::ExclusionReason::EXCLUDE_DISALLOWED_CHARACTER));
+
+  // Now that feature is enabled this cookie will be excluded.
+  cc = CanonicalCookie::Create(GURL("https://www.foo.com/path"), "€=€",
+                               creation_time, server_time,
+                               /*cookie_partition_key=*/std::nullopt,
+                               CookieSourceType::kUnknown, &status);
+  EXPECT_FALSE(cc.get());
+  EXPECT_TRUE(status.HasExclusionReason(
+      CookieInclusionStatus::ExclusionReason::EXCLUDE_DISALLOWED_CHARACTER));
+
+  cc = CanonicalCookie::CreateSanitizedCookie(
+      GURL("https://www.foo.com"), "A", "B", std::string(), "/foo",
+      base::Time(), base::Time(), base::Time(), false /*secure*/,
+      false /*httponly*/, CookieSameSite::NO_RESTRICTION,
+      COOKIE_PRIORITY_DEFAULT, std::nullopt /*partition_key*/, &status);
+}
+
+// Test that when net feature kDisallowNonAsciiCookies is enabled a cookie with
+// a non-ascii value in its name or value is properly excluded.
+TEST(CanonicalCookieTest, CreateSanitizedNonAsciiCookieNameAndValue) {
+  CookieInclusionStatus status;
+  std::unique_ptr<CanonicalCookie> cc;
+
+  // Feature is not enabled yet so cookie with non-ascii name or value should
+  // still be included.
+  cc = CanonicalCookie::CreateSanitizedCookie(
+      GURL("https://www.foo.com"), "€", "A", std::string(), "/foo",
+      base::Time(), base::Time(), base::Time(), false /*secure*/,
+      false /*httponly*/, CookieSameSite::NO_RESTRICTION,
+      COOKIE_PRIORITY_DEFAULT, std::nullopt /*partition_key*/, &status);
+
+  EXPECT_TRUE(cc.get());
+  EXPECT_TRUE(status.IsInclude());
+
+  cc = CanonicalCookie::CreateSanitizedCookie(
+      GURL("https://www.foo.com"), "A", "€", std::string(), "/foo",
+      base::Time(), base::Time(), base::Time(), false /*secure*/,
+      false /*httponly*/, CookieSameSite::NO_RESTRICTION,
+      COOKIE_PRIORITY_DEFAULT, std::nullopt /*partition_key*/, &status);
+  EXPECT_TRUE(cc.get());
+  EXPECT_TRUE(status.IsInclude());
+
+  cc = CanonicalCookie::CreateSanitizedCookie(
+      GURL("https://www.foo.com"), "€", "€", std::string(), "/foo",
+      base::Time(), base::Time(), base::Time(), false /*secure*/,
+      false /*httponly*/, CookieSameSite::NO_RESTRICTION,
+      COOKIE_PRIORITY_DEFAULT, std::nullopt /*partition_key*/, &status);
+  EXPECT_TRUE(cc.get());
+  EXPECT_TRUE(status.IsInclude());
+
+  // Since feature is not enabled this should be true.
+  EXPECT_TRUE(cc->IsCanonical());
+
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures(
+      {net::features::kDisallowNonAsciiCookies}, {});
+
+  // Now that feature is enabled this should return false.
+  EXPECT_FALSE(cc->IsCanonical());
+
+  // Valid cookie which should be included.
+  cc = CanonicalCookie::CreateSanitizedCookie(
+      GURL("https://www.foo.com"), "A", "B", std::string(), "/foo",
+      base::Time(), base::Time(), base::Time(), false /*secure*/,
+      false /*httponly*/, CookieSameSite::NO_RESTRICTION,
+      COOKIE_PRIORITY_DEFAULT, std::nullopt /*partition_key*/, &status);
+  EXPECT_TRUE(cc.get());
+  EXPECT_TRUE(status.IsInclude());
+  // Now that feature is enabled this cookie will be excluded.
+  cc = CanonicalCookie::CreateSanitizedCookie(
+      GURL("https://www.foo.com"), "€", "2", std::string(), "/foo",
+      base::Time(), base::Time(), base::Time(), false /*secure*/,
+      false /*httponly*/, CookieSameSite::NO_RESTRICTION,
+      COOKIE_PRIORITY_DEFAULT, std::nullopt /*partition_key*/, &status);
+  EXPECT_FALSE(cc.get());
+  EXPECT_TRUE(status.HasExclusionReason(
+      CookieInclusionStatus::ExclusionReason::EXCLUDE_DISALLOWED_CHARACTER));
+
+  // Now that feature is enabled this cookie will be excluded.
+  cc = CanonicalCookie::CreateSanitizedCookie(
+      GURL("https://www.foo.com"), "A", "€", std::string(), "/foo",
+      base::Time(), base::Time(), base::Time(), false /*secure*/,
+      false /*httponly*/, CookieSameSite::NO_RESTRICTION,
+      COOKIE_PRIORITY_DEFAULT, std::nullopt /*partition_key*/, &status);
+  EXPECT_FALSE(cc.get());
+  EXPECT_TRUE(status.HasExclusionReason(
+      CookieInclusionStatus::ExclusionReason::EXCLUDE_DISALLOWED_CHARACTER));
+
+  // Now that feature is enabled this cookie will be excluded.
+  cc = CanonicalCookie::CreateSanitizedCookie(
+      GURL("https://www.foo.com"), "€", "€", std::string(), "/foo",
+      base::Time(), base::Time(), base::Time(), false /*secure*/,
+      false /*httponly*/, CookieSameSite::NO_RESTRICTION,
+      COOKIE_PRIORITY_DEFAULT, std::nullopt /*partition_key*/, &status);
+  EXPECT_FALSE(cc.get());
+  EXPECT_TRUE(status.HasExclusionReason(
+      CookieInclusionStatus::ExclusionReason::EXCLUDE_DISALLOWED_CHARACTER));
+}
+
 // Test that a cookie string with an empty domain attribute generates a
 // canonical host cookie.
 TEST(CanonicalCookieTest, CreateHostCookieFromString) {
@@ -419,7 +583,7 @@ TEST(CanonicalCookieTest, CreateWithInvalidDomain) {
       &status);
   EXPECT_EQ(nullptr, cookie.get());
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_DOMAIN}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_DOMAIN}));
 }
 
 // Creating a cookie for an eTLD is possible, but it must match the hostname and
@@ -495,14 +659,14 @@ TEST(CanonicalCookieTest, CreateFromPublicSuffix) {
                                    CookieSourceType::kUnknown, &status);
   EXPECT_EQ(nullptr, cookie.get());
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_DOMAIN}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_DOMAIN}));
 
   cookie = CanonicalCookie::Create(multilabel_url, "A=2; domain=.uk", now,
                                    server_time, std::nullopt,
                                    CookieSourceType::kUnknown, &status);
   EXPECT_EQ(nullptr, cookie.get());
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_DOMAIN}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_DOMAIN}));
 
   // Don't allow setting a domain cookie for an unrelated domain.
   cookie = CanonicalCookie::Create(multilabel_url, "A=2; domain=foo.com", now,
@@ -510,7 +674,7 @@ TEST(CanonicalCookieTest, CreateFromPublicSuffix) {
                                    CookieSourceType::kUnknown, &status);
   EXPECT_EQ(nullptr, cookie.get());
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_DOMAIN}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_DOMAIN}));
 
   // Don't allow setting a domain cookie for some other domain with no
   // registrable domain.
@@ -519,7 +683,7 @@ TEST(CanonicalCookieTest, CreateFromPublicSuffix) {
                                    CookieSourceType::kUnknown, &status);
   EXPECT_EQ(nullptr, cookie.get());
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_DOMAIN}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_DOMAIN}));
 }
 
 TEST(CanonicalCookieTest, CreateWithNonASCIIDomain) {
@@ -540,10 +704,10 @@ TEST(CanonicalCookieTest, CreateWithNonASCIIDomain) {
         &status);
     EXPECT_EQ(nullptr, cookie.get());
     EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-        {CookieInclusionStatus::EXCLUDE_INVALID_DOMAIN,
-         CookieInclusionStatus::EXCLUDE_DOMAIN_NON_ASCII}));
-    EXPECT_FALSE(
-        status.HasWarningReason(CookieInclusionStatus::WARN_DOMAIN_NON_ASCII));
+        {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_DOMAIN,
+         CookieInclusionStatus::ExclusionReason::EXCLUDE_DOMAIN_NON_ASCII}));
+    EXPECT_FALSE(status.HasWarningReason(
+        CookieInclusionStatus::WarningReason::WARN_DOMAIN_NON_ASCII));
   }
 
   // Test with feature flag disabled.
@@ -559,8 +723,8 @@ TEST(CanonicalCookieTest, CreateWithNonASCIIDomain) {
 
     EXPECT_TRUE(cookie2.get());
     EXPECT_TRUE(status2.IsInclude());
-    EXPECT_TRUE(
-        status2.HasWarningReason(CookieInclusionStatus::WARN_DOMAIN_NON_ASCII));
+    EXPECT_TRUE(status2.HasWarningReason(
+        CookieInclusionStatus::WarningReason::WARN_DOMAIN_NON_ASCII));
   }
 
   // Test that regular ascii punycode still works.
@@ -571,8 +735,8 @@ TEST(CanonicalCookieTest, CreateWithNonASCIIDomain) {
       &status3);
   EXPECT_TRUE(cookie3.get());
   EXPECT_TRUE(status3.IsInclude());
-  EXPECT_FALSE(
-      status3.HasWarningReason(CookieInclusionStatus::WARN_DOMAIN_NON_ASCII));
+  EXPECT_FALSE(status3.HasWarningReason(
+      CookieInclusionStatus::WarningReason::WARN_DOMAIN_NON_ASCII));
 }
 
 TEST(CanonicalCookieTest, CreateWithDomainAsIP) {
@@ -618,7 +782,7 @@ TEST(CanonicalCookieTest, CreateWithDomainAsIP) {
     } else {
       EXPECT_EQ(nullptr, cookie.get());
       EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-          {CookieInclusionStatus::EXCLUDE_INVALID_DOMAIN}));
+          {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_DOMAIN}));
     }
   }
 }
@@ -671,7 +835,7 @@ TEST(CanonicalCookieTest, CreateWithPartitioned) {
                                    CookieSourceType::kUnknown, &status);
   EXPECT_FALSE(cookie.get());
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_PARTITIONED}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_PARTITIONED}));
 
   // Partitioned attribute: No Path attribute.
   status = CookieInclusionStatus();
@@ -1571,8 +1735,9 @@ TEST(CanonicalCookieTest, GetEffectiveSameSite) {
     std::vector<CookieAccessSemantics> access_semantics = {
         CookieAccessSemantics::UNKNOWN, CookieAccessSemantics::LEGACY,
         CookieAccessSemantics::NONLEGACY};
-    if (test.access_semantics.has_value())
+    if (test.access_semantics.has_value()) {
       access_semantics = {*test.access_semantics};
+    }
 
     for (const auto& cookie : cookies) {
       for (const auto semantics : access_semantics) {
@@ -1596,6 +1761,7 @@ TEST(CanonicalCookieTest, IncludeForRequestURL) {
           ->IncludeForRequestURL(
               url, options,
               CookieAccessParams{net::CookieAccessSemantics::UNKNOWN,
+                                 net::CookieScopeSemantics::UNKNOWN,
                                  /*delegate_treats_url_as_trustworthy=*/false})
           .status.IsInclude());
   EXPECT_TRUE(
@@ -1603,6 +1769,7 @@ TEST(CanonicalCookieTest, IncludeForRequestURL) {
           ->IncludeForRequestURL(
               GURL("http://www.example.com/foo/bar"), options,
               CookieAccessParams{net::CookieAccessSemantics::UNKNOWN,
+                                 net::CookieScopeSemantics::UNKNOWN,
                                  /*delegate_treats_url_as_trustworthy=*/false})
           .status.IsInclude());
   EXPECT_TRUE(
@@ -1610,6 +1777,7 @@ TEST(CanonicalCookieTest, IncludeForRequestURL) {
           ->IncludeForRequestURL(
               GURL("https://www.example.com/foo/bar"), options,
               CookieAccessParams{net::CookieAccessSemantics::UNKNOWN,
+                                 net::CookieScopeSemantics::UNKNOWN,
                                  /*delegate_treats_url_as_trustworthy=*/false})
           .status.IsInclude());
   EXPECT_TRUE(
@@ -1617,17 +1785,21 @@ TEST(CanonicalCookieTest, IncludeForRequestURL) {
           ->IncludeForRequestURL(
               GURL("https://sub.example.com"), options,
               CookieAccessParams{net::CookieAccessSemantics::UNKNOWN,
+                                 net::CookieScopeSemantics::UNKNOWN,
                                  /*delegate_treats_url_as_trustworthy=*/false})
           .status.HasExactlyExclusionReasonsForTesting(
-              {CookieInclusionStatus::EXCLUDE_DOMAIN_MISMATCH}));
+              {CookieInclusionStatus::ExclusionReason::
+                   EXCLUDE_DOMAIN_MISMATCH}));
   EXPECT_TRUE(
       cookie
           ->IncludeForRequestURL(
               GURL("https://sub.www.example.com"), options,
               CookieAccessParams{net::CookieAccessSemantics::UNKNOWN,
+                                 net::CookieScopeSemantics::UNKNOWN,
                                  /*delegate_treats_url_as_trustworthy=*/false})
           .status.HasExactlyExclusionReasonsForTesting(
-              {CookieInclusionStatus::EXCLUDE_DOMAIN_MISMATCH}));
+              {CookieInclusionStatus::ExclusionReason::
+                   EXCLUDE_DOMAIN_MISMATCH}));
   // Test that cookie with a cookie path that does not match the url path are
   // not included.
   cookie = CanonicalCookie::CreateForTesting(url, "A=2; Path=/foo/bar",
@@ -1637,14 +1809,16 @@ TEST(CanonicalCookieTest, IncludeForRequestURL) {
           ->IncludeForRequestURL(
               url, options,
               CookieAccessParams{net::CookieAccessSemantics::UNKNOWN,
+                                 net::CookieScopeSemantics::UNKNOWN,
                                  /*delegate_treats_url_as_trustworthy=*/false})
           .status.HasExactlyExclusionReasonsForTesting(
-              {CookieInclusionStatus::EXCLUDE_NOT_ON_PATH}));
+              {CookieInclusionStatus::ExclusionReason::EXCLUDE_NOT_ON_PATH}));
   EXPECT_TRUE(
       cookie
           ->IncludeForRequestURL(
               GURL("http://www.example.com/foo/bar/index.html"), options,
               CookieAccessParams{net::CookieAccessSemantics::UNKNOWN,
+                                 net::CookieScopeSemantics::UNKNOWN,
                                  /*delegate_treats_url_as_trustworthy=*/false})
           .status.IsInclude());
   // Test that a secure cookie is not included for a non secure URL.
@@ -1657,6 +1831,7 @@ TEST(CanonicalCookieTest, IncludeForRequestURL) {
           ->IncludeForRequestURL(
               secure_url, options,
               CookieAccessParams{net::CookieAccessSemantics::UNKNOWN,
+                                 net::CookieScopeSemantics::UNKNOWN,
                                  /*delegate_treats_url_as_trustworthy=*/false})
           .status.IsInclude());
   EXPECT_TRUE(
@@ -1664,9 +1839,10 @@ TEST(CanonicalCookieTest, IncludeForRequestURL) {
           ->IncludeForRequestURL(
               url, options,
               CookieAccessParams{net::CookieAccessSemantics::UNKNOWN,
+                                 net::CookieScopeSemantics::UNKNOWN,
                                  /*delegate_treats_url_as_trustworthy=*/false})
           .status.HasExactlyExclusionReasonsForTesting(
-              {CookieInclusionStatus::EXCLUDE_SECURE_ONLY}));
+              {CookieInclusionStatus::ExclusionReason::EXCLUDE_SECURE_ONLY}));
 
   // Test that a delegate can make an exception, however, and ask for a
   // non-secure URL to be treated as trustworthy... with a warning.
@@ -1677,10 +1853,12 @@ TEST(CanonicalCookieTest, IncludeForRequestURL) {
   CookieAccessResult result = cookie->IncludeForRequestURL(
       url, options,
       CookieAccessParams{net::CookieAccessSemantics::UNKNOWN,
+                         net::CookieScopeSemantics::UNKNOWN,
                          /*delegate_treats_url_as_trustworthy=*/true});
   EXPECT_TRUE(result.status.IsInclude());
   EXPECT_TRUE(result.status.HasWarningReason(
-      CookieInclusionStatus::WARN_SECURE_ACCESS_GRANTED_NON_CRYPTOGRAPHIC));
+      CookieInclusionStatus::WarningReason::
+          WARN_SECURE_ACCESS_GRANTED_NON_CRYPTOGRAPHIC));
 
   // The same happens for localhost even w/o delegate intervention.
   GURL localhost_url("http://localhost/");
@@ -1691,10 +1869,12 @@ TEST(CanonicalCookieTest, IncludeForRequestURL) {
   result = cookie->IncludeForRequestURL(
       localhost_url, options,
       CookieAccessParams{net::CookieAccessSemantics::UNKNOWN,
+                         net::CookieScopeSemantics::UNKNOWN,
                          /*delegate_treats_url_as_trustworthy=*/false});
   EXPECT_TRUE(result.status.IsInclude());
   EXPECT_TRUE(result.status.HasWarningReason(
-      CookieInclusionStatus::WARN_SECURE_ACCESS_GRANTED_NON_CRYPTOGRAPHIC));
+      CookieInclusionStatus::WarningReason::
+          WARN_SECURE_ACCESS_GRANTED_NON_CRYPTOGRAPHIC));
 
   // An unneeded exception doesn't add a warning, however.
   cookie = CanonicalCookie::CreateForTesting(secure_url, "A=2; Secure",
@@ -1704,6 +1884,7 @@ TEST(CanonicalCookieTest, IncludeForRequestURL) {
   result = cookie->IncludeForRequestURL(
       secure_url, options,
       CookieAccessParams{net::CookieAccessSemantics::UNKNOWN,
+                         net::CookieScopeSemantics::UNKNOWN,
                          /*delegate_treats_url_as_trustworthy=*/true});
   EXPECT_TRUE(result.status.IsInclude());
   EXPECT_FALSE(result.status.ShouldWarn());
@@ -1719,6 +1900,7 @@ TEST(CanonicalCookieTest, IncludeForRequestURL) {
           ->IncludeForRequestURL(
               url, options,
               CookieAccessParams{net::CookieAccessSemantics::UNKNOWN,
+                                 net::CookieScopeSemantics::UNKNOWN,
                                  /*delegate_treats_url_as_trustworthy=*/false})
           .status.IsInclude());
   options.set_exclude_httponly();
@@ -1727,9 +1909,10 @@ TEST(CanonicalCookieTest, IncludeForRequestURL) {
           ->IncludeForRequestURL(
               url, options,
               CookieAccessParams{net::CookieAccessSemantics::UNKNOWN,
+                                 net::CookieScopeSemantics::UNKNOWN,
                                  /*delegate_treats_url_as_trustworthy=*/false})
           .status.HasExactlyExclusionReasonsForTesting(
-              {CookieInclusionStatus::EXCLUDE_HTTP_ONLY}));
+              {CookieInclusionStatus::ExclusionReason::EXCLUDE_HTTP_ONLY}));
 }
 
 struct IncludeForRequestURLTestCase {
@@ -1755,14 +1938,14 @@ void VerifyIncludeForRequestURLTestCases(
     request_options.set_same_site_cookie_context(
         test.request_options_samesite_context);
 
-    EXPECT_THAT(
-        cookie->IncludeForRequestURL(
-            url, request_options,
-            CookieAccessParams{access_semantics,
-                               /*delegate_treats_url_as_trustworthy=*/false}),
-        MatchesCookieAccessResult(test.expected_inclusion_status,
-                                  test.expected_effective_samesite,
-                                  access_semantics, true))
+    EXPECT_THAT(cookie->IncludeForRequestURL(
+                    url, request_options,
+                    CookieAccessParams{
+                        access_semantics, net::CookieScopeSemantics::UNKNOWN,
+                        /*delegate_treats_url_as_trustworthy=*/false}),
+                MatchesCookieAccessResult(test.expected_inclusion_status,
+                                          test.expected_effective_samesite,
+                                          access_semantics, true))
         << cookie->Name() << "=" << cookie->Value();
   }
 }
@@ -1781,16 +1964,22 @@ TEST(CanonicalCookieTest, IncludeForRequestURLSameSite) {
       {"Common=1;SameSite=Strict", CookieSameSite::STRICT_MODE,
        CookieEffectiveSameSite::STRICT_MODE,
        SameSiteCookieContext(SameSiteCookieContext::ContextType::CROSS_SITE),
-       CookieInclusionStatus(CookieInclusionStatus::EXCLUDE_SAMESITE_STRICT)},
+       CookieInclusionStatus::MakeFromReasonsForTesting(
+           /*exclusions=*/{CookieInclusionStatus::ExclusionReason::
+                               EXCLUDE_SAMESITE_STRICT})},
       {"Common=2;SameSite=Strict", CookieSameSite::STRICT_MODE,
        CookieEffectiveSameSite::STRICT_MODE,
        SameSiteCookieContext(
            SameSiteCookieContext::ContextType::SAME_SITE_LAX_METHOD_UNSAFE),
-       CookieInclusionStatus(CookieInclusionStatus::EXCLUDE_SAMESITE_STRICT)},
+       CookieInclusionStatus::MakeFromReasonsForTesting(
+           /*exclusions=*/{CookieInclusionStatus::ExclusionReason::
+                               EXCLUDE_SAMESITE_STRICT})},
       {"Common=3;SameSite=Strict", CookieSameSite::STRICT_MODE,
        CookieEffectiveSameSite::STRICT_MODE,
        SameSiteCookieContext(SameSiteCookieContext::ContextType::SAME_SITE_LAX),
-       CookieInclusionStatus(CookieInclusionStatus::EXCLUDE_SAMESITE_STRICT)},
+       CookieInclusionStatus::MakeFromReasonsForTesting(
+           /*exclusions=*/{CookieInclusionStatus::ExclusionReason::
+                               EXCLUDE_SAMESITE_STRICT})},
       {"Common=4;SameSite=Strict", CookieSameSite::STRICT_MODE,
        CookieEffectiveSameSite::STRICT_MODE,
        SameSiteCookieContext(
@@ -1800,12 +1989,16 @@ TEST(CanonicalCookieTest, IncludeForRequestURLSameSite) {
       {"Common=5;SameSite=Lax", CookieSameSite::LAX_MODE,
        CookieEffectiveSameSite::LAX_MODE,
        SameSiteCookieContext(SameSiteCookieContext::ContextType::CROSS_SITE),
-       CookieInclusionStatus(CookieInclusionStatus::EXCLUDE_SAMESITE_LAX)},
+       CookieInclusionStatus::MakeFromReasonsForTesting(
+           /*exclusions=*/{
+               CookieInclusionStatus::ExclusionReason::EXCLUDE_SAMESITE_LAX})},
       {"Common=6;SameSite=Lax", CookieSameSite::LAX_MODE,
        CookieEffectiveSameSite::LAX_MODE,
        SameSiteCookieContext(
            SameSiteCookieContext::ContextType::SAME_SITE_LAX_METHOD_UNSAFE),
-       CookieInclusionStatus(CookieInclusionStatus::EXCLUDE_SAMESITE_LAX)},
+       CookieInclusionStatus::MakeFromReasonsForTesting(
+           /*exclusions=*/{
+               CookieInclusionStatus::ExclusionReason::EXCLUDE_SAMESITE_LAX})},
       {"Common=7;SameSite=Lax", CookieSameSite::LAX_MODE,
        CookieEffectiveSameSite::LAX_MODE,
        SameSiteCookieContext(SameSiteCookieContext::ContextType::SAME_SITE_LAX),
@@ -1881,17 +2074,15 @@ TEST(CanonicalCookieTest, IncludeForRequestURLSameSite) {
        CookieEffectiveSameSite::NO_RESTRICTION,
        SameSiteCookieContext(SameSiteCookieContext::ContextType::CROSS_SITE),
        CookieInclusionStatus::MakeFromReasonsForTesting(
-           std::vector<CookieInclusionStatus::ExclusionReason>(),
-           {CookieInclusionStatus::
-                WARN_SAMESITE_UNSPECIFIED_CROSS_SITE_CONTEXT})},
+           {}, {CookieInclusionStatus::WarningReason::
+                    WARN_SAMESITE_UNSPECIFIED_CROSS_SITE_CONTEXT})},
       {"DefaultNone=2", CookieSameSite::UNSPECIFIED,
        CookieEffectiveSameSite::NO_RESTRICTION,
        SameSiteCookieContext(
            SameSiteCookieContext::ContextType::SAME_SITE_LAX_METHOD_UNSAFE),
        CookieInclusionStatus::MakeFromReasonsForTesting(
-           std::vector<CookieInclusionStatus::ExclusionReason>(),
-           {CookieInclusionStatus::
-                WARN_SAMESITE_UNSPECIFIED_CROSS_SITE_CONTEXT})},
+           {}, {CookieInclusionStatus::WarningReason::
+                    WARN_SAMESITE_UNSPECIFIED_CROSS_SITE_CONTEXT})},
 
       {"DefaultNone=3", CookieSameSite::UNSPECIFIED,
        CookieEffectiveSameSite::NO_RESTRICTION,
@@ -1909,17 +2100,19 @@ TEST(CanonicalCookieTest, IncludeForRequestURLSameSite) {
       {"DefaultLax=1", CookieSameSite::UNSPECIFIED,
        CookieEffectiveSameSite::LAX_MODE_ALLOW_UNSAFE,
        SameSiteCookieContext(SameSiteCookieContext::ContextType::CROSS_SITE),
-       CookieInclusionStatus(
-           CookieInclusionStatus::EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX,
-           CookieInclusionStatus::WARN_SAMESITE_UNSPECIFIED_CROSS_SITE_CONTEXT),
+       CookieInclusionStatus::MakeFromReasonsForTesting(
+           {CookieInclusionStatus::ExclusionReason::
+                EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX},
+           {CookieInclusionStatus::WarningReason::
+                WARN_SAMESITE_UNSPECIFIED_CROSS_SITE_CONTEXT}),
        kShortAge},
       {"DefaultLax=2", CookieSameSite::UNSPECIFIED,
        CookieEffectiveSameSite::LAX_MODE_ALLOW_UNSAFE,
        SameSiteCookieContext(
            SameSiteCookieContext::ContextType::SAME_SITE_LAX_METHOD_UNSAFE),
        CookieInclusionStatus::MakeFromReasonsForTesting(
-           std::vector<CookieInclusionStatus::ExclusionReason>(),
-           {CookieInclusionStatus::WARN_SAMESITE_UNSPECIFIED_LAX_ALLOW_UNSAFE}),
+           {}, {CookieInclusionStatus::WarningReason::
+                    WARN_SAMESITE_UNSPECIFIED_LAX_ALLOW_UNSAFE}),
        kShortAge},
       {"DefaultLax=3", CookieSameSite::UNSPECIFIED,
        CookieEffectiveSameSite::LAX_MODE_ALLOW_UNSAFE,
@@ -1934,17 +2127,21 @@ TEST(CanonicalCookieTest, IncludeForRequestURLSameSite) {
       {"DefaultLax=5", CookieSameSite::UNSPECIFIED,
        CookieEffectiveSameSite::LAX_MODE,
        SameSiteCookieContext(SameSiteCookieContext::ContextType::CROSS_SITE),
-       CookieInclusionStatus(
-           CookieInclusionStatus::EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX,
-           CookieInclusionStatus::WARN_SAMESITE_UNSPECIFIED_CROSS_SITE_CONTEXT),
+       CookieInclusionStatus::MakeFromReasonsForTesting(
+           {CookieInclusionStatus::ExclusionReason::
+                EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX},
+           {CookieInclusionStatus::WarningReason::
+                WARN_SAMESITE_UNSPECIFIED_CROSS_SITE_CONTEXT}),
        kLongAge},
       {"DefaultLax=6", CookieSameSite::UNSPECIFIED,
        CookieEffectiveSameSite::LAX_MODE,
        SameSiteCookieContext(
            SameSiteCookieContext::ContextType::SAME_SITE_LAX_METHOD_UNSAFE),
-       CookieInclusionStatus(
-           CookieInclusionStatus::EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX,
-           CookieInclusionStatus::WARN_SAMESITE_UNSPECIFIED_CROSS_SITE_CONTEXT),
+       CookieInclusionStatus::MakeFromReasonsForTesting(
+           {CookieInclusionStatus::ExclusionReason::
+                EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX},
+           {CookieInclusionStatus::WarningReason::
+                WARN_SAMESITE_UNSPECIFIED_CROSS_SITE_CONTEXT}),
        kLongAge},
       {"DefaultLax=7", CookieSameSite::UNSPECIFIED,
        CookieEffectiveSameSite::LAX_MODE,
@@ -1966,49 +2163,47 @@ TEST(CanonicalCookieTest, IncludeForRequestURLSameSite) {
            SameSiteCookieContext::ContextType::SAME_SITE_STRICT,
            SameSiteCookieContext::ContextType::SAME_SITE_LAX),
        CookieInclusionStatus::MakeFromReasonsForTesting(
-           std::vector<CookieInclusionStatus::ExclusionReason>(),
-           {CookieInclusionStatus::WARN_STRICT_LAX_DOWNGRADE_STRICT_SAMESITE})},
+           {}, {CookieInclusionStatus::WarningReason::
+                    WARN_STRICT_LAX_DOWNGRADE_STRICT_SAMESITE})},
       {"LEGACY_Schemeful=2;SameSite=Strict", CookieSameSite::STRICT_MODE,
        CookieEffectiveSameSite::STRICT_MODE,
        SameSiteCookieContext(
            SameSiteCookieContext::ContextType::SAME_SITE_STRICT,
            SameSiteCookieContext::ContextType::SAME_SITE_LAX_METHOD_UNSAFE),
        CookieInclusionStatus::MakeFromReasonsForTesting(
-           std::vector<CookieInclusionStatus::ExclusionReason>(),
-           {CookieInclusionStatus::
-                WARN_STRICT_CROSS_DOWNGRADE_STRICT_SAMESITE})},
+           {}, {CookieInclusionStatus::WarningReason::
+                    WARN_STRICT_CROSS_DOWNGRADE_STRICT_SAMESITE})},
       {"LEGACY_Schemeful=3;SameSite=Strict", CookieSameSite::STRICT_MODE,
        CookieEffectiveSameSite::STRICT_MODE,
        SameSiteCookieContext(
            SameSiteCookieContext::ContextType::SAME_SITE_STRICT,
            SameSiteCookieContext::ContextType::CROSS_SITE),
        CookieInclusionStatus::MakeFromReasonsForTesting(
-           std::vector<CookieInclusionStatus::ExclusionReason>(),
-           {CookieInclusionStatus::
-                WARN_STRICT_CROSS_DOWNGRADE_STRICT_SAMESITE})},
+           {}, {CookieInclusionStatus::WarningReason::
+                    WARN_STRICT_CROSS_DOWNGRADE_STRICT_SAMESITE})},
       {"LEGACY_Schemeful=4;SameSite=Lax", CookieSameSite::LAX_MODE,
        CookieEffectiveSameSite::LAX_MODE,
        SameSiteCookieContext(
            SameSiteCookieContext::ContextType::SAME_SITE_STRICT,
            SameSiteCookieContext::ContextType::SAME_SITE_LAX_METHOD_UNSAFE),
        CookieInclusionStatus::MakeFromReasonsForTesting(
-           std::vector<CookieInclusionStatus::ExclusionReason>(),
-           {CookieInclusionStatus::WARN_STRICT_CROSS_DOWNGRADE_LAX_SAMESITE})},
+           {}, {CookieInclusionStatus::WarningReason::
+                    WARN_STRICT_CROSS_DOWNGRADE_LAX_SAMESITE})},
       {"LEGACY_Schemeful=5;SameSite=Lax", CookieSameSite::LAX_MODE,
        CookieEffectiveSameSite::LAX_MODE,
        SameSiteCookieContext(
            SameSiteCookieContext::ContextType::SAME_SITE_STRICT,
            SameSiteCookieContext::ContextType::CROSS_SITE),
        CookieInclusionStatus::MakeFromReasonsForTesting(
-           std::vector<CookieInclusionStatus::ExclusionReason>(),
-           {CookieInclusionStatus::WARN_STRICT_CROSS_DOWNGRADE_LAX_SAMESITE})},
+           {}, {CookieInclusionStatus::WarningReason::
+                    WARN_STRICT_CROSS_DOWNGRADE_LAX_SAMESITE})},
       {"LEGACY_Schemeful=6;SameSite=Lax", CookieSameSite::LAX_MODE,
        CookieEffectiveSameSite::LAX_MODE,
        SameSiteCookieContext(SameSiteCookieContext::ContextType::SAME_SITE_LAX,
                              SameSiteCookieContext::ContextType::CROSS_SITE),
        CookieInclusionStatus::MakeFromReasonsForTesting(
-           std::vector<CookieInclusionStatus::ExclusionReason>(),
-           {CookieInclusionStatus::WARN_LAX_CROSS_DOWNGRADE_LAX_SAMESITE})},
+           {}, {CookieInclusionStatus::WarningReason::
+                    WARN_LAX_CROSS_DOWNGRADE_LAX_SAMESITE})},
   };
 
   // Test cases that require NONLEGACY or UNKNOWN semantics with Schemeful
@@ -2020,16 +2215,17 @@ TEST(CanonicalCookieTest, IncludeForRequestURLSameSite) {
            SameSiteCookieContext::ContextType::SAME_SITE_STRICT,
            SameSiteCookieContext::ContextType::SAME_SITE_LAX),
        CookieInclusionStatus::MakeFromReasonsForTesting(
-           {CookieInclusionStatus::EXCLUDE_SAMESITE_STRICT},
-           {CookieInclusionStatus::WARN_STRICT_LAX_DOWNGRADE_STRICT_SAMESITE})},
+           {CookieInclusionStatus::ExclusionReason::EXCLUDE_SAMESITE_STRICT},
+           {CookieInclusionStatus::WarningReason::
+                WARN_STRICT_LAX_DOWNGRADE_STRICT_SAMESITE})},
       {"NONLEGACY_Schemeful=2;SameSite=Strict", CookieSameSite::STRICT_MODE,
        CookieEffectiveSameSite::STRICT_MODE,
        SameSiteCookieContext(
            SameSiteCookieContext::ContextType::SAME_SITE_STRICT,
            SameSiteCookieContext::ContextType::SAME_SITE_LAX_METHOD_UNSAFE),
        CookieInclusionStatus::MakeFromReasonsForTesting(
-           {CookieInclusionStatus::EXCLUDE_SAMESITE_STRICT},
-           {CookieInclusionStatus::
+           {CookieInclusionStatus::ExclusionReason::EXCLUDE_SAMESITE_STRICT},
+           {CookieInclusionStatus::WarningReason::
                 WARN_STRICT_CROSS_DOWNGRADE_STRICT_SAMESITE})},
       {"NONLEGACY_Schemeful=3;SameSite=Strict", CookieSameSite::STRICT_MODE,
        CookieEffectiveSameSite::STRICT_MODE,
@@ -2037,8 +2233,8 @@ TEST(CanonicalCookieTest, IncludeForRequestURLSameSite) {
            SameSiteCookieContext::ContextType::SAME_SITE_STRICT,
            SameSiteCookieContext::ContextType::CROSS_SITE),
        CookieInclusionStatus::MakeFromReasonsForTesting(
-           {CookieInclusionStatus::EXCLUDE_SAMESITE_STRICT},
-           {CookieInclusionStatus::
+           {CookieInclusionStatus::ExclusionReason::EXCLUDE_SAMESITE_STRICT},
+           {CookieInclusionStatus::WarningReason::
                 WARN_STRICT_CROSS_DOWNGRADE_STRICT_SAMESITE})},
       {"NONLEGACY_Schemeful=4;SameSite=Lax", CookieSameSite::LAX_MODE,
        CookieEffectiveSameSite::LAX_MODE,
@@ -2046,23 +2242,26 @@ TEST(CanonicalCookieTest, IncludeForRequestURLSameSite) {
            SameSiteCookieContext::ContextType::SAME_SITE_STRICT,
            SameSiteCookieContext::ContextType::SAME_SITE_LAX_METHOD_UNSAFE),
        CookieInclusionStatus::MakeFromReasonsForTesting(
-           {CookieInclusionStatus::EXCLUDE_SAMESITE_LAX},
-           {CookieInclusionStatus::WARN_STRICT_CROSS_DOWNGRADE_LAX_SAMESITE})},
+           {CookieInclusionStatus::ExclusionReason::EXCLUDE_SAMESITE_LAX},
+           {CookieInclusionStatus::WarningReason::
+                WARN_STRICT_CROSS_DOWNGRADE_LAX_SAMESITE})},
       {"NONLEGACY_Schemeful=5;SameSite=Lax", CookieSameSite::LAX_MODE,
        CookieEffectiveSameSite::LAX_MODE,
        SameSiteCookieContext(
            SameSiteCookieContext::ContextType::SAME_SITE_STRICT,
            SameSiteCookieContext::ContextType::CROSS_SITE),
        CookieInclusionStatus::MakeFromReasonsForTesting(
-           {CookieInclusionStatus::EXCLUDE_SAMESITE_LAX},
-           {CookieInclusionStatus::WARN_STRICT_CROSS_DOWNGRADE_LAX_SAMESITE})},
+           {CookieInclusionStatus::ExclusionReason::EXCLUDE_SAMESITE_LAX},
+           {CookieInclusionStatus::WarningReason::
+                WARN_STRICT_CROSS_DOWNGRADE_LAX_SAMESITE})},
       {"NONLEGACY_Schemeful=6;SameSite=Lax", CookieSameSite::LAX_MODE,
        CookieEffectiveSameSite::LAX_MODE,
        SameSiteCookieContext(SameSiteCookieContext::ContextType::SAME_SITE_LAX,
                              SameSiteCookieContext::ContextType::CROSS_SITE),
        CookieInclusionStatus::MakeFromReasonsForTesting(
-           {CookieInclusionStatus::EXCLUDE_SAMESITE_LAX},
-           {CookieInclusionStatus::WARN_LAX_CROSS_DOWNGRADE_LAX_SAMESITE})},
+           {CookieInclusionStatus::ExclusionReason::EXCLUDE_SAMESITE_LAX},
+           {CookieInclusionStatus::WarningReason::
+                WARN_LAX_CROSS_DOWNGRADE_LAX_SAMESITE})},
   };
 
   auto SchemefulIndependentCases = [&]() {
@@ -2144,26 +2343,30 @@ TEST(CanonicalCookieTest, TestFirstPartyPartitionedAndCrossSiteContext) {
   histogram_tester.ExpectBucketCount(histogram_name, false, 0);
   no_partition_key_cookie->IncludeForRequestURL(
       url, options,
-      CookieAccessParams{CookieAccessSemantics::NONLEGACY, false});
+      CookieAccessParams{CookieAccessSemantics::NONLEGACY,
+                         CookieScopeSemantics::UNKNOWN, false});
 
   histogram_tester.ExpectBucketCount(histogram_name, true, 0);
   histogram_tester.ExpectBucketCount(histogram_name, false, 0);
 
   partitioned_cookie->IncludeForRequestURL(
       url, options,
-      CookieAccessParams{CookieAccessSemantics::NONLEGACY, false});
+      CookieAccessParams{CookieAccessSemantics::NONLEGACY,
+                         CookieScopeSemantics::UNKNOWN, false});
   histogram_tester.ExpectBucketCount(histogram_name, true, 1);
   histogram_tester.ExpectBucketCount(histogram_name, false, 0);
 
   nonced_partition_key_cookie->IncludeForRequestURL(
       url, options,
-      CookieAccessParams{CookieAccessSemantics::NONLEGACY, false});
+      CookieAccessParams{CookieAccessSemantics::NONLEGACY,
+                         CookieScopeSemantics::UNKNOWN, false});
   histogram_tester.ExpectBucketCount(histogram_name, true, 1);
   histogram_tester.ExpectBucketCount(histogram_name, false, 0);
 
   different_site_partition_key_cookie->IncludeForRequestURL(
       url, options,
-      CookieAccessParams{CookieAccessSemantics::NONLEGACY, false});
+      CookieAccessParams{CookieAccessSemantics::NONLEGACY,
+                         CookieScopeSemantics::UNKNOWN, false});
   histogram_tester.ExpectBucketCount(histogram_name, true, 1);
   histogram_tester.ExpectBucketCount(histogram_name, false, 0);
 
@@ -2175,7 +2378,8 @@ TEST(CanonicalCookieTest, TestFirstPartyPartitionedAndCrossSiteContext) {
 
   partitioned_cookie->IncludeForRequestURL(
       url, options,
-      CookieAccessParams{CookieAccessSemantics::NONLEGACY, false});
+      CookieAccessParams{CookieAccessSemantics::NONLEGACY,
+                         CookieScopeSemantics::UNKNOWN, false});
   histogram_tester.ExpectBucketCount(histogram_name, true, 1);
   histogram_tester.ExpectBucketCount(histogram_name, false, 1);
 }
@@ -2201,9 +2405,11 @@ TEST(CanonicalCookieTest, IncludeCookiesWithoutSameSiteMustBeSecure) {
           ->IncludeForRequestURL(
               url, options,
               CookieAccessParams{CookieAccessSemantics::UNKNOWN,
+                                 CookieScopeSemantics::UNKNOWN,
                                  /*delegate_treats_url_as_trustworthy=*/false})
           .status.HasExactlyExclusionReasonsForTesting(
-              {CookieInclusionStatus::EXCLUDE_SAMESITE_NONE_INSECURE}));
+              {CookieInclusionStatus::ExclusionReason::
+                   EXCLUDE_SAMESITE_NONE_INSECURE}));
 
   // LEGACY semantics does not require Secure for SameSite=None cookies.
   EXPECT_TRUE(
@@ -2211,6 +2417,7 @@ TEST(CanonicalCookieTest, IncludeCookiesWithoutSameSiteMustBeSecure) {
           ->IncludeForRequestURL(
               url, options,
               CookieAccessParams{CookieAccessSemantics::LEGACY,
+                                 CookieScopeSemantics::UNKNOWN,
                                  /*delegate_treats_url_as_trustworthy=*/false})
           .status.IsInclude());
 
@@ -2220,9 +2427,11 @@ TEST(CanonicalCookieTest, IncludeCookiesWithoutSameSiteMustBeSecure) {
           ->IncludeForRequestURL(
               url, options,
               CookieAccessParams{CookieAccessSemantics::NONLEGACY,
+                                 CookieScopeSemantics::UNKNOWN,
                                  /*delegate_treats_url_as_trustworthy=*/false})
           .status.HasExactlyExclusionReasonsForTesting(
-              {CookieInclusionStatus::EXCLUDE_SAMESITE_NONE_INSECURE}));
+              {CookieInclusionStatus::ExclusionReason::
+                   EXCLUDE_SAMESITE_NONE_INSECURE}));
 }
 
 TEST(CanonicalCookieTest, IncludeForRequestURL_SameSiteNone_Metrics) {
@@ -2250,16 +2459,19 @@ TEST(CanonicalCookieTest, IncludeForRequestURL_SameSiteNone_Metrics) {
   EXPECT_THAT(same_site_none_cookie->IncludeForRequestURL(
                   url, options,
                   CookieAccessParams(CookieAccessSemantics::LEGACY,
+                                     CookieScopeSemantics::UNKNOWN,
                                      delegate_treats_url_as_trustworthy)),
               MatchesCookieAccessResult(CookieInclusionStatus(), _, _, true));
   EXPECT_THAT(same_site_lax_cookie->IncludeForRequestURL(
                   url, options,
                   CookieAccessParams(CookieAccessSemantics::LEGACY,
+                                     CookieScopeSemantics::UNKNOWN,
                                      delegate_treats_url_as_trustworthy)),
               MatchesCookieAccessResult(Not(net::IsInclude()), _, _, true));
   EXPECT_THAT(same_site_strict_cookie->IncludeForRequestURL(
                   url, options,
                   CookieAccessParams(CookieAccessSemantics::LEGACY,
+                                     CookieScopeSemantics::UNKNOWN,
                                      delegate_treats_url_as_trustworthy)),
               MatchesCookieAccessResult(Not(net::IsInclude()), _, _, true));
 
@@ -2269,16 +2481,19 @@ TEST(CanonicalCookieTest, IncludeForRequestURL_SameSiteNone_Metrics) {
   EXPECT_THAT(same_site_none_cookie->IncludeForRequestURL(
                   url, options,
                   CookieAccessParams(CookieAccessSemantics::LEGACY,
+                                     CookieScopeSemantics::UNKNOWN,
                                      delegate_treats_url_as_trustworthy)),
               MatchesCookieAccessResult(CookieInclusionStatus(), _, _, true));
   EXPECT_THAT(same_site_lax_cookie->IncludeForRequestURL(
                   url, options,
                   CookieAccessParams(CookieAccessSemantics::LEGACY,
+                                     CookieScopeSemantics::UNKNOWN,
                                      delegate_treats_url_as_trustworthy)),
               MatchesCookieAccessResult(net::IsInclude(), _, _, true));
   EXPECT_THAT(same_site_strict_cookie->IncludeForRequestURL(
                   url, options,
                   CookieAccessParams(CookieAccessSemantics::LEGACY,
+                                     CookieScopeSemantics::UNKNOWN,
                                      delegate_treats_url_as_trustworthy)),
               MatchesCookieAccessResult(Not(net::IsInclude()), _, _, true));
 
@@ -2288,11 +2503,13 @@ TEST(CanonicalCookieTest, IncludeForRequestURL_SameSiteNone_Metrics) {
   EXPECT_THAT(same_site_none_cookie->IncludeForRequestURL(
                   url, options,
                   CookieAccessParams(CookieAccessSemantics::LEGACY,
+                                     CookieScopeSemantics::UNKNOWN,
                                      delegate_treats_url_as_trustworthy)),
               MatchesCookieAccessResult(CookieInclusionStatus(), _, _, true));
   EXPECT_THAT(same_site_strict_cookie->IncludeForRequestURL(
                   url, options,
                   CookieAccessParams(CookieAccessSemantics::LEGACY,
+                                     CookieScopeSemantics::UNKNOWN,
                                      delegate_treats_url_as_trustworthy)),
               MatchesCookieAccessResult(net::IsInclude(), _, _, true));
 }
@@ -2309,13 +2526,6 @@ TEST(CanonicalCookieTest, IncludeForRequestURL_RedirectDowngradeWarning) {
       Context::ContextMetadata::ContextDowngradeType::kStrictToLax;
   strict_cross_downgrade_metadata.cross_site_redirect_downgrade =
       Context::ContextMetadata::ContextDowngradeType::kStrictToCross;
-
-  // Because there are downgrades we need to set the HTTP method as well, since
-  // some metrics code expects that. The actual method doesn't matter here.
-  strict_lax_downgrade_metadata.http_method_bug_1221316 =
-      Context::ContextMetadata::HttpMethod::kGet;
-  strict_cross_downgrade_metadata.http_method_bug_1221316 =
-      Context::ContextMetadata::HttpMethod::kGet;
 
   GURL url("https://www.example.test/test");
   GURL insecure_url("http://www.example.test/test");
@@ -2384,10 +2594,10 @@ TEST(CanonicalCookieTest, IncludeForRequestURL_RedirectDowngradeWarning) {
                   ->IncludeForRequestURL(
                       url, options,
                       CookieAccessParams(
-                          semantics,
+                          semantics, CookieScopeSemantics::UNKNOWN,
                           /*delegate_treats_url_as_trustworthy=*/false))
                   .status.HasWarningReason(
-                      CookieInclusionStatus::
+                      CookieInclusionStatus::WarningReason::
                           WARN_CROSS_SITE_REDIRECT_DOWNGRADE_CHANGES_INCLUSION));
         }
       }
@@ -2408,10 +2618,10 @@ TEST(CanonicalCookieTest, IncludeForRequestURL_RedirectDowngradeWarning) {
                 ->IncludeForRequestURL(
                     url, options,
                     CookieAccessParams(
-                        semantics,
+                        semantics, CookieScopeSemantics::UNKNOWN,
                         /*delegate_treats_url_as_trustworthy=*/false))
                 .status.HasWarningReason(
-                    CookieInclusionStatus::
+                    CookieInclusionStatus::WarningReason::
                         WARN_CROSS_SITE_REDIRECT_DOWNGRADE_CHANGES_INCLUSION),
             test.expect_cross_site_redirect_warning);
 
@@ -2422,10 +2632,10 @@ TEST(CanonicalCookieTest, IncludeForRequestURL_RedirectDowngradeWarning) {
                 ->IncludeForRequestURL(
                     insecure_url, options,
                     CookieAccessParams(
-                        semantics,
+                        semantics, CookieScopeSemantics::UNKNOWN,
                         /*delegate_treats_url_as_trustworthy=*/false))
                 .status.HasWarningReason(
-                    CookieInclusionStatus::
+                    CookieInclusionStatus::WarningReason::
                         WARN_CROSS_SITE_REDIRECT_DOWNGRADE_CHANGES_INCLUSION));
       }
     }
@@ -2442,10 +2652,19 @@ TEST(CanonicalCookieTest, IncludeForRequestURL_SchemeBoundStatus) {
       CookieOptions::SameSiteCookieContext::MakeInclusive());
 
   CookieAccessParams params(CookieAccessSemantics::UNKNOWN,
+                            CookieScopeSemantics::NONLEGACY,
                             /*delegate_treats_url_as_trustworthy=*/false);
   CookieAccessParams trusted_params(
-      CookieAccessSemantics::UNKNOWN,
+      CookieAccessSemantics::UNKNOWN, CookieScopeSemantics::UNKNOWN,
       /*delegate_treats_url_as_trustworthy=*/true);
+
+  CookieAccessParams trusted_legacy_params(
+      CookieAccessSemantics::UNKNOWN, CookieScopeSemantics::LEGACY,
+      /*delegate_treats_url_as_trustworthy=*/true);
+
+  CookieAccessParams legacy_params(
+      CookieAccessSemantics::UNKNOWN, CookieScopeSemantics::LEGACY,
+      /*delegate_treats_url_as_trustworthy=*/false);
 
   GURL secure_url("https://www.example.test:123/");
   GURL insecure_url("http://www.example.test:123/");
@@ -2479,15 +2698,15 @@ TEST(CanonicalCookieTest, IncludeForRequestURL_SchemeBoundStatus) {
     EXPECT_TRUE(
         secure_cookie->IncludeForRequestURL(insecure_url, options, params)
             .status.HasWarningReason(
-                CookieInclusionStatus::WARN_SCHEME_MISMATCH));
+                CookieInclusionStatus::WarningReason::WARN_SCHEME_MISMATCH));
 
     // If a cookie is already blocked due to the `Secure` attribute then we
     // don't bother warning.
     auto status =
         secure_attr_cookie->IncludeForRequestURL(insecure_url, options, params)
             .status;
-    EXPECT_TRUE(
-        status.HasExclusionReason(CookieInclusionStatus::EXCLUDE_SECURE_ONLY));
+    EXPECT_TRUE(status.HasExclusionReason(
+        CookieInclusionStatus::ExclusionReason::EXCLUDE_SECURE_ONLY));
     EXPECT_FALSE(status.ShouldWarn());
 
     EXPECT_FALSE(
@@ -2497,7 +2716,7 @@ TEST(CanonicalCookieTest, IncludeForRequestURL_SchemeBoundStatus) {
     EXPECT_TRUE(
         insecure_cookie->IncludeForRequestURL(secure_url, options, params)
             .status.HasWarningReason(
-                CookieInclusionStatus::WARN_SCHEME_MISMATCH));
+                CookieInclusionStatus::WarningReason::WARN_SCHEME_MISMATCH));
 
     // If a url is treated as trustworthy, then it's allowed to access cookies
     // with a secure source scheme.
@@ -2524,18 +2743,18 @@ TEST(CanonicalCookieTest, IncludeForRequestURL_SchemeBoundStatus) {
 
     EXPECT_TRUE(
         secure_cookie->IncludeForRequestURL(insecure_url, options, params)
-            .status.HasExclusionReason(
-                CookieInclusionStatus::EXCLUDE_SCHEME_MISMATCH));
+            .status.HasExclusionReason(CookieInclusionStatus::ExclusionReason::
+                                           EXCLUDE_SCHEME_MISMATCH));
 
     // If a cookie is already blocked due to the `Secure` attribute then we
     // don't bother with our exclusion reason.
     auto status =
         secure_attr_cookie->IncludeForRequestURL(insecure_url, options, params)
             .status;
-    EXPECT_TRUE(
-        status.HasExclusionReason(CookieInclusionStatus::EXCLUDE_SECURE_ONLY));
+    EXPECT_TRUE(status.HasExclusionReason(
+        CookieInclusionStatus::ExclusionReason::EXCLUDE_SECURE_ONLY));
     EXPECT_FALSE(status.HasExclusionReason(
-        CookieInclusionStatus::EXCLUDE_SCHEME_MISMATCH));
+        CookieInclusionStatus::ExclusionReason::EXCLUDE_SCHEME_MISMATCH));
 
     EXPECT_TRUE(
         insecure_cookie->IncludeForRequestURL(insecure_url, options, params)
@@ -2543,8 +2762,30 @@ TEST(CanonicalCookieTest, IncludeForRequestURL_SchemeBoundStatus) {
 
     EXPECT_TRUE(
         insecure_cookie->IncludeForRequestURL(secure_url, options, params)
-            .status.HasExclusionReason(
-                CookieInclusionStatus::EXCLUDE_SCHEME_MISMATCH));
+            .status.HasExclusionReason(CookieInclusionStatus::ExclusionReason::
+                                           EXCLUDE_SCHEME_MISMATCH));
+
+    // When cookie scope semantic is LEGACY OBC behavior is not applied
+    // meaning we should not exclude due to scheme mismatch
+    auto status_insecure =
+        insecure_cookie
+            ->IncludeForRequestURL(secure_url, options, legacy_params)
+            .status;
+    auto status_secure =
+        secure_cookie->IncludeForRequestURL(secure_url, options, legacy_params)
+            .status;
+    EXPECT_TRUE(status_insecure.IsInclude());
+
+    EXPECT_TRUE(status_secure.IsInclude());
+
+    // Cookie will have scheme mismatch warning instead of exclusion when cookie
+    // scope semantics is set to LEGACY
+    EXPECT_TRUE(status_insecure.HasWarningReason(
+        CookieInclusionStatus::WarningReason::WARN_SCHEME_MISMATCH));
+
+    // Secure cookie with secure_url should have no warnings
+    EXPECT_FALSE(status_secure.HasWarningReason(
+        CookieInclusionStatus::WarningReason::WARN_SCHEME_MISMATCH));
 
     // If a url is treated as trustworthy, then it's allowed to access cookies
     // with a secure source scheme. But we should have a warning indicating
@@ -2554,7 +2795,17 @@ TEST(CanonicalCookieTest, IncludeForRequestURL_SchemeBoundStatus) {
                  .status;
     EXPECT_TRUE(status.IsInclude());
     EXPECT_TRUE(status.HasWarningReason(
-        CookieInclusionStatus::WARN_SECURE_ACCESS_GRANTED_NON_CRYPTOGRAPHIC));
+        CookieInclusionStatus::WarningReason::
+            WARN_SECURE_ACCESS_GRANTED_NON_CRYPTOGRAPHIC));
+
+    // If cookie scope semantics in params is set to LEGACY we will no longer
+    // have a warning indicition.
+    EXPECT_FALSE(
+        secure_cookie
+            ->IncludeForRequestURL(insecure_url, options, trusted_legacy_params)
+            .status.HasWarningReason(
+                CookieInclusionStatus::WarningReason::
+                    WARN_SECURE_ACCESS_GRANTED_NON_CRYPTOGRAPHIC));
 
     // Cookies with an unset source scheme should match any url scheme.
     EXPECT_TRUE(unset_cookie->IncludeForRequestURL(secure_url, options, params)
@@ -2575,7 +2826,12 @@ TEST(CanonicalCookieTest, IncludeForRequestURL_PortBoundStatus) {
       CookieOptions::SameSiteCookieContext::MakeInclusive());
 
   CookieAccessParams params(CookieAccessSemantics::UNKNOWN,
+                            CookieScopeSemantics::NONLEGACY,
                             /*delegate_treats_url_as_trustworthy=*/false);
+
+  CookieAccessParams legacy_scoped_params(
+      CookieAccessSemantics::UNKNOWN, CookieScopeSemantics::LEGACY,
+      /*delegate_treats_url_as_trustworthy=*/false);
 
   GURL url1("https://www.example.test:443/");
   GURL url2("https://www.example.test:123/");
@@ -2601,9 +2857,10 @@ TEST(CanonicalCookieTest, IncludeForRequestURL_PortBoundStatus) {
     EXPECT_FALSE(cookie1->IncludeForRequestURL(url1, options, params)
                      .status.ShouldWarn());
 
-    EXPECT_TRUE(cookie1->IncludeForRequestURL(url2, options, params)
-                    .status.HasWarningReason(
-                        CookieInclusionStatus::WARN_PORT_MISMATCH));
+    EXPECT_TRUE(
+        cookie1->IncludeForRequestURL(url2, options, params)
+            .status.HasWarningReason(
+                CookieInclusionStatus::WarningReason::WARN_PORT_MISMATCH));
 
     // Cookies with an unspecified port should match any url port.
     EXPECT_FALSE(unspecified_cookie->IncludeForRequestURL(url1, options, params)
@@ -2619,9 +2876,21 @@ TEST(CanonicalCookieTest, IncludeForRequestURL_PortBoundStatus) {
     EXPECT_TRUE(cookie1->IncludeForRequestURL(url1, options, params)
                     .status.IsInclude());
 
-    EXPECT_TRUE(cookie1->IncludeForRequestURL(url2, options, params)
-                    .status.HasExclusionReason(
-                        CookieInclusionStatus::EXCLUDE_PORT_MISMATCH));
+    EXPECT_TRUE(
+        cookie1->IncludeForRequestURL(url2, options, params)
+            .status.HasExclusionReason(
+                CookieInclusionStatus::ExclusionReason::EXCLUDE_PORT_MISMATCH));
+
+    auto status =
+        cookie1->IncludeForRequestURL(url2, options, legacy_scoped_params)
+            .status;
+    // When cookie scope semantic is LEGACY OBC behavior is not applied
+    // meaning we should not exclude due to port mismatch
+    EXPECT_TRUE(status.IsInclude());
+    // Cookie will have port mismatch warning instead of exclusion when cookie
+    // scope semantics is set to LEGACY
+    EXPECT_TRUE(status.HasWarningReason(
+        CookieInclusionStatus::WarningReason::WARN_PORT_MISMATCH));
 
     // Cookies with an unspecified port should match any url port.
     EXPECT_TRUE(unspecified_cookie->IncludeForRequestURL(url1, options, params)
@@ -2640,6 +2909,7 @@ TEST(CanonicalCookieTest, IncludeForRequestURL_DomainCookiesPortMatch) {
       CookieOptions::SameSiteCookieContext::MakeInclusive());
 
   CookieAccessParams params(CookieAccessSemantics::UNKNOWN,
+                            CookieScopeSemantics::NONLEGACY,
                             /*delegate_treats_url_as_trustworthy=*/false);
 
   GURL url1("https://www.example.test:443/");
@@ -2666,9 +2936,10 @@ TEST(CanonicalCookieTest, IncludeForRequestURL_DomainCookiesPortMatch) {
     EXPECT_FALSE(domain_cookie->IncludeForRequestURL(url1, options, params)
                      .status.ShouldWarn());
 
-    EXPECT_TRUE(host_cookie->IncludeForRequestURL(url2, options, params)
-                    .status.HasWarningReason(
-                        CookieInclusionStatus::WARN_PORT_MISMATCH));
+    EXPECT_TRUE(
+        host_cookie->IncludeForRequestURL(url2, options, params)
+            .status.HasWarningReason(
+                CookieInclusionStatus::WarningReason::WARN_PORT_MISMATCH));
 
     EXPECT_FALSE(domain_cookie->IncludeForRequestURL(url2, options, params)
                      .status.ShouldWarn());
@@ -2684,9 +2955,10 @@ TEST(CanonicalCookieTest, IncludeForRequestURL_DomainCookiesPortMatch) {
     EXPECT_TRUE(domain_cookie->IncludeForRequestURL(url1, options, params)
                     .status.IsInclude());
 
-    EXPECT_TRUE(host_cookie->IncludeForRequestURL(url2, options, params)
-                    .status.HasExclusionReason(
-                        CookieInclusionStatus::EXCLUDE_PORT_MISMATCH));
+    EXPECT_TRUE(
+        host_cookie->IncludeForRequestURL(url2, options, params)
+            .status.HasExclusionReason(
+                CookieInclusionStatus::ExclusionReason::EXCLUDE_PORT_MISMATCH));
 
     EXPECT_TRUE(domain_cookie->IncludeForRequestURL(url2, options, params)
                     .status.IsInclude());
@@ -2752,14 +3024,15 @@ TEST(CanonicalCookieTest, MultipleExclusionReasons) {
       cookie1->IncludeForRequestURL(
           url, options,
           CookieAccessParams{CookieAccessSemantics::UNKNOWN,
+                             CookieScopeSemantics::UNKNOWN,
                              /*delegate_treats_url_as_trustworthy=*/false}),
       MatchesCookieAccessResult(
           CookieInclusionStatus::MakeFromReasonsForTesting({
-              CookieInclusionStatus::EXCLUDE_HTTP_ONLY,
-              CookieInclusionStatus::EXCLUDE_SECURE_ONLY,
-              CookieInclusionStatus::EXCLUDE_DOMAIN_MISMATCH,
-              CookieInclusionStatus::EXCLUDE_NOT_ON_PATH,
-              CookieInclusionStatus::EXCLUDE_SAMESITE_STRICT,
+              CookieInclusionStatus::ExclusionReason::EXCLUDE_HTTP_ONLY,
+              CookieInclusionStatus::ExclusionReason::EXCLUDE_SECURE_ONLY,
+              CookieInclusionStatus::ExclusionReason::EXCLUDE_DOMAIN_MISMATCH,
+              CookieInclusionStatus::ExclusionReason::EXCLUDE_NOT_ON_PATH,
+              CookieInclusionStatus::ExclusionReason::EXCLUDE_SAMESITE_STRICT,
           }),
           _, _, false));
 
@@ -2771,8 +3044,8 @@ TEST(CanonicalCookieTest, MultipleExclusionReasons) {
       CookieSourceType::kUnknown, &create_status);
   ASSERT_FALSE(cookie2);
   EXPECT_TRUE(create_status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_PREFIX,
-       CookieInclusionStatus::EXCLUDE_INVALID_DOMAIN}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_PREFIX,
+       CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_DOMAIN}));
 
   // Test IsSetPermittedInContext()
   auto cookie3 = CanonicalCookie::CreateForTesting(
@@ -2782,43 +3055,15 @@ TEST(CanonicalCookieTest, MultipleExclusionReasons) {
       cookie3->IsSetPermittedInContext(
           url, options,
           CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                             CookieScopeSemantics::UNKNOWN,
                              false /* delegate_treats_url_as_trustworthy */
                              ),
           kCookieableSchemes),
       MatchesCookieAccessResult(
           CookieInclusionStatus::MakeFromReasonsForTesting(
-              {CookieInclusionStatus::EXCLUDE_HTTP_ONLY,
-               CookieInclusionStatus::EXCLUDE_SAMESITE_LAX}),
+              {CookieInclusionStatus::ExclusionReason::EXCLUDE_HTTP_ONLY,
+               CookieInclusionStatus::ExclusionReason::EXCLUDE_SAMESITE_LAX}),
           _, _, false));
-}
-
-TEST(CanonicalCookieTest, PartialCompare) {
-  GURL url("http://www.example.com");
-  base::Time creation_time = base::Time::Now();
-  std::optional<base::Time> server_time = std::nullopt;
-  std::unique_ptr<CanonicalCookie> cookie(CanonicalCookie::CreateForTesting(
-      url, "a=b", creation_time, server_time));
-  std::unique_ptr<CanonicalCookie> cookie_different_path(
-      CanonicalCookie::CreateForTesting(url, "a=b; path=/foo", creation_time,
-                                        server_time));
-  std::unique_ptr<CanonicalCookie> cookie_different_value(
-      CanonicalCookie::CreateForTesting(url, "a=c", creation_time,
-                                        server_time));
-
-  // Cookie is equivalent to itself.
-  EXPECT_FALSE(cookie->PartialCompare(*cookie));
-
-  // Changing the path affects the ordering.
-  EXPECT_TRUE(cookie->PartialCompare(*cookie_different_path));
-  EXPECT_FALSE(cookie_different_path->PartialCompare(*cookie));
-
-  // Changing the value does not affect the ordering.
-  EXPECT_FALSE(cookie->PartialCompare(*cookie_different_value));
-  EXPECT_FALSE(cookie_different_value->PartialCompare(*cookie));
-
-  // Cookies identical for PartialCompare() are equivalent.
-  EXPECT_TRUE(cookie->IsEquivalent(*cookie_different_value));
-  EXPECT_TRUE(cookie->IsEquivalent(*cookie));
 }
 
 TEST(CanonicalCookieTest, SecureCookiePrefix) {
@@ -2834,28 +3079,28 @@ TEST(CanonicalCookieTest, SecureCookiePrefix) {
                                        /*cookie_partition_key=*/std::nullopt,
                                        CookieSourceType::kUnknown, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_PREFIX}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_PREFIX}));
   EXPECT_FALSE(CanonicalCookie::Create(https_url, "__Secure-A=B; httponly",
                                        creation_time, server_time,
                                        /*cookie_partition_key=*/std::nullopt,
                                        CookieSourceType::kUnknown, &status));
   // (EXCLUDE_HTTP_ONLY would be fine, too)
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_PREFIX}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_PREFIX}));
 
   // Prefixes are case insensitive.
   EXPECT_FALSE(CanonicalCookie::CreateForTesting(https_url, "__secure-A=C;",
                                                  creation_time, server_time));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_PREFIX}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_PREFIX}));
   EXPECT_FALSE(CanonicalCookie::CreateForTesting(https_url, "__SECURE-A=C;",
                                                  creation_time, server_time));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_PREFIX}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_PREFIX}));
   EXPECT_FALSE(CanonicalCookie::CreateForTesting(https_url, "__SeCuRe-A=C;",
                                                  creation_time, server_time));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_PREFIX}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_PREFIX}));
 
   // A typoed prefix does not have to be Secure.
   EXPECT_TRUE(CanonicalCookie::CreateForTesting(
@@ -2873,7 +3118,7 @@ TEST(CanonicalCookieTest, SecureCookiePrefix) {
                                        /*cookie_partition_key=*/std::nullopt,
                                        CookieSourceType::kUnknown, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_PREFIX}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_PREFIX}));
 
   // Hidden __Secure- prefixes should be rejected.
   EXPECT_FALSE(CanonicalCookie::Create(https_url, "=__Secure-A=B; Secure",
@@ -2881,13 +3126,13 @@ TEST(CanonicalCookieTest, SecureCookiePrefix) {
                                        /*cookie_partition_key=*/std::nullopt,
                                        CookieSourceType::kUnknown, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_PREFIX}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_PREFIX}));
   EXPECT_FALSE(CanonicalCookie::Create(https_url, "=__Secure-A; Secure",
                                        creation_time, server_time,
                                        /*cookie_partition_key=*/std::nullopt,
                                        CookieSourceType::kUnknown, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_PREFIX}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_PREFIX}));
 
   // While tricky, this isn't considered hidden and is fine.
   EXPECT_TRUE(CanonicalCookie::CreateForTesting(
@@ -2908,13 +3153,13 @@ TEST(CanonicalCookieTest, HostCookiePrefix) {
                                        /*cookie_partition_key=*/std::nullopt,
                                        CookieSourceType::kUnknown, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_PREFIX}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_PREFIX}));
   EXPECT_FALSE(CanonicalCookie::Create(
       https_url, "__Host-A=B; Domain=" + domain + "; Path=/;", creation_time,
       server_time, /*cookie_partition_key=*/std::nullopt,
       CookieSourceType::kUnknown, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_PREFIX}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_PREFIX}));
   EXPECT_TRUE(CanonicalCookie::CreateForTesting(
       https_url, "__Host-A=B; Path=/; Secure;", creation_time, server_time));
 
@@ -2924,7 +3169,7 @@ TEST(CanonicalCookieTest, HostCookiePrefix) {
       creation_time, server_time, /*cookie_partition_key=*/std::nullopt,
       CookieSourceType::kUnknown, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_PREFIX}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_PREFIX}));
   EXPECT_TRUE(CanonicalCookie::CreateForTesting(
       https_url, "__Host-A=B; Path=/; Secure;", creation_time, server_time));
 
@@ -2934,13 +3179,13 @@ TEST(CanonicalCookieTest, HostCookiePrefix) {
       creation_time, server_time, /*cookie_partition_key=*/std::nullopt,
       CookieSourceType::kUnknown, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_PREFIX}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_PREFIX}));
   EXPECT_FALSE(CanonicalCookie::Create(
       https_url, "__Host-A=B; Domain=" + domain + "; Secure;", creation_time,
       server_time, /*cookie_partition_key=*/std::nullopt,
       CookieSourceType::kUnknown, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_PREFIX}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_PREFIX}));
 
   // A __Host- cookie may have a domain if it's an IP address that matches the
   // URL.
@@ -2962,13 +3207,13 @@ TEST(CanonicalCookieTest, HostCookiePrefix) {
       /*cookie_partition_key=*/std::nullopt, CookieSourceType::kUnknown,
       &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_PREFIX}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_PREFIX}));
   EXPECT_FALSE(CanonicalCookie::Create(https_url, "__Host-A=B; Secure;",
                                        creation_time, server_time,
                                        /*cookie_partition_key=*/std::nullopt,
                                        CookieSourceType::kUnknown, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_PREFIX}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_PREFIX}));
   EXPECT_TRUE(CanonicalCookie::CreateForTesting(
       https_url, "__Host-A=B; Secure; Path=/;", creation_time, server_time));
 
@@ -2978,21 +3223,21 @@ TEST(CanonicalCookieTest, HostCookiePrefix) {
       server_time, /*cookie_partition_key=*/std::nullopt,
       CookieSourceType::kUnknown, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_PREFIX}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_PREFIX}));
 
   EXPECT_FALSE(CanonicalCookie::Create(
       http_url, "__HOST-A=B; Domain=" + domain + "; Path=/;", creation_time,
       server_time, /*cookie_partition_key=*/std::nullopt,
       CookieSourceType::kUnknown, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_PREFIX}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_PREFIX}));
 
   EXPECT_FALSE(CanonicalCookie::Create(
       http_url, "__HoSt-A=B; Domain=" + domain + "; Path=/;", creation_time,
       server_time, /*cookie_partition_key=*/std::nullopt,
       CookieSourceType::kUnknown, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_PREFIX}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_PREFIX}));
 
   // Rules don't apply for a typoed prefix.
   EXPECT_TRUE(CanonicalCookie::CreateForTesting(
@@ -3013,13 +3258,13 @@ TEST(CanonicalCookieTest, HostCookiePrefix) {
       /*cookie_partition_key=*/std::nullopt, CookieSourceType::kUnknown,
       &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_PREFIX}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_PREFIX}));
   EXPECT_FALSE(CanonicalCookie::Create(https_url, "=__Host-A; Path=/; Secure;",
                                        creation_time, server_time,
                                        /*cookie_partition_key=*/std::nullopt,
                                        CookieSourceType::kUnknown, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_PREFIX}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_PREFIX}));
 
   // While tricky, this isn't considered hidden and is fine.
   EXPECT_TRUE(CanonicalCookie::CreateForTesting(
@@ -3806,7 +4051,7 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       CookieSameSite::NO_RESTRICTION, COOKIE_PRIORITY_DEFAULT,
       std::nullopt /*partition_key*/, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_DOMAIN}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_DOMAIN}));
 
   // Test that malformed attributes fail to set the cookie.
   EXPECT_FALSE(CanonicalCookie::CreateSanitizedCookie(
@@ -3816,7 +4061,7 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       COOKIE_PRIORITY_DEFAULT,
       /*partition_key=*/std::nullopt, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_DISALLOWED_CHARACTER}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_DISALLOWED_CHARACTER}));
   EXPECT_FALSE(CanonicalCookie::CreateSanitizedCookie(
       GURL("http://www.foo.com/foo"), "A;", "B", std::string(), "/foo",
       base::Time(), base::Time(), base::Time(), /*secure=*/false,
@@ -3824,7 +4069,7 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       COOKIE_PRIORITY_DEFAULT,
       /*partition_key=*/std::nullopt, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_DISALLOWED_CHARACTER}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_DISALLOWED_CHARACTER}));
   EXPECT_FALSE(CanonicalCookie::CreateSanitizedCookie(
       GURL("http://www.foo.com/foo"), "A=", "B", std::string(), "/foo",
       base::Time(), base::Time(), base::Time(), /*secure=*/false,
@@ -3832,7 +4077,7 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       COOKIE_PRIORITY_DEFAULT,
       /*partition_key=*/std::nullopt, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_DISALLOWED_CHARACTER}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_DISALLOWED_CHARACTER}));
   EXPECT_FALSE(CanonicalCookie::CreateSanitizedCookie(
       GURL("http://www.foo.com/foo"), "A\x07", "B", std::string(), "/foo",
       one_hour_ago, one_hour_from_now, base::Time(), /*secure=*/false,
@@ -3840,7 +4085,7 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       COOKIE_PRIORITY_DEFAULT,
       /*partition_key=*/std::nullopt, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_DISALLOWED_CHARACTER}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_DISALLOWED_CHARACTER}));
   EXPECT_FALSE(CanonicalCookie::CreateSanitizedCookie(
       GURL("http://www.foo.com"), "A", " B", std::string(), "/foo",
       base::Time(), base::Time(), base::Time(), /*secure=*/false,
@@ -3848,7 +4093,7 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       COOKIE_PRIORITY_DEFAULT,
       /*partition_key=*/std::nullopt, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_DISALLOWED_CHARACTER}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_DISALLOWED_CHARACTER}));
   EXPECT_FALSE(CanonicalCookie::CreateSanitizedCookie(
       GURL("http://www.foo.com"), "A", "\x0fZ", std::string(), "/foo",
       base::Time(), base::Time(), base::Time(), /*secure=*/false,
@@ -3856,28 +4101,28 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       COOKIE_PRIORITY_DEFAULT,
       /*partition_key=*/std::nullopt, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_DISALLOWED_CHARACTER}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_DISALLOWED_CHARACTER}));
   EXPECT_FALSE(CanonicalCookie::CreateSanitizedCookie(
       GURL("http://www.foo.com"), "A", "B", "www.foo.com ", "/foo",
       base::Time(), base::Time(), base::Time(), false /*secure*/,
       false /*httponly*/, CookieSameSite::NO_RESTRICTION,
       COOKIE_PRIORITY_DEFAULT, std::nullopt /*partition_key*/, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_DOMAIN}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_DOMAIN}));
   EXPECT_FALSE(CanonicalCookie::CreateSanitizedCookie(
       GURL("http://www.foo.com/foo"), "A", "B", "foo.ozzzzzzle", "/foo",
       base::Time(), base::Time(), base::Time(), false /*secure*/,
       false /*httponly*/, CookieSameSite::NO_RESTRICTION,
       COOKIE_PRIORITY_DEFAULT, std::nullopt /*partition_key*/, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_DOMAIN}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_DOMAIN}));
   EXPECT_FALSE(CanonicalCookie::CreateSanitizedCookie(
       GURL("http://www.foo.com/foo"), "A", "B", std::string(), "foo",
       base::Time(), base::Time(), base::Time(), false /*secure*/,
       false /*httponly*/, CookieSameSite::NO_RESTRICTION,
       COOKIE_PRIORITY_DEFAULT, std::nullopt /*partition_key*/, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_FAILURE_TO_STORE}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_FAILURE_TO_STORE}));
   EXPECT_FALSE(CanonicalCookie::CreateSanitizedCookie(
       GURL("http://www.foo.com"), "A", "B", std::string(), "/foo ",
       base::Time(), base::Time(), base::Time(), /*secure=*/false,
@@ -3885,14 +4130,14 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       COOKIE_PRIORITY_DEFAULT,
       /*partition_key=*/std::nullopt, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_DISALLOWED_CHARACTER}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_DISALLOWED_CHARACTER}));
   EXPECT_FALSE(CanonicalCookie::CreateSanitizedCookie(
       GURL("http://www.foo.com/foo"), "A", "B", "%2Efoo.com", "/foo",
       one_hour_ago, one_hour_from_now, base::Time(), false /*secure*/,
       false /*httponly*/, CookieSameSite::NO_RESTRICTION,
       COOKIE_PRIORITY_DEFAULT, std::nullopt /*partition_key*/, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_DOMAIN}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_DOMAIN}));
   EXPECT_FALSE(CanonicalCookie::CreateSanitizedCookie(
       GURL("http://domaintest.%E3%81%BF%E3%82%93%E3%81%AA"), "A", "B",
       "domaintest.%E3%81%BF%E3%82%93%E3%81%AA", "/foo", base::Time(),
@@ -3900,7 +4145,7 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       CookieSameSite::NO_RESTRICTION, COOKIE_PRIORITY_DEFAULT,
       std::nullopt /*partition_key*/, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_DOMAIN}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_DOMAIN}));
 
   std::unique_ptr<CanonicalCookie> cc;
 
@@ -3943,7 +4188,7 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       COOKIE_PRIORITY_DEFAULT, std::nullopt /*partition_key*/, &status);
   EXPECT_FALSE(cc);
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_DOMAIN}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_DOMAIN}));
 
   // Secure/URL Scheme mismatch.
   EXPECT_TRUE(CanonicalCookie::CreateSanitizedCookie(
@@ -3954,7 +4199,8 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       /*partition_key=*/std::nullopt, &status));
   EXPECT_TRUE(status.IsInclude());
   EXPECT_TRUE(status.HasExactlyWarningReasonsForTesting(
-      {CookieInclusionStatus::WARN_TENTATIVELY_ALLOWING_SECURE_SOURCE_SCHEME}));
+      {CookieInclusionStatus::WarningReason::
+           WARN_TENTATIVELY_ALLOWING_SECURE_SOURCE_SCHEME}));
 
   // Null creation date/non-null last access date conflict.
   EXPECT_FALSE(CanonicalCookie::CreateSanitizedCookie(
@@ -3963,7 +4209,7 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       CookieSameSite::NO_RESTRICTION, COOKIE_PRIORITY_DEFAULT,
       std::nullopt /*partition_key*/, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_FAILURE_TO_STORE}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_FAILURE_TO_STORE}));
 
   // Domain doesn't match URL
   EXPECT_FALSE(CanonicalCookie::CreateSanitizedCookie(
@@ -3972,7 +4218,7 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       CookieSameSite::NO_RESTRICTION, COOKIE_PRIORITY_DEFAULT,
       std::nullopt /*partition_key*/, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_DOMAIN}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_DOMAIN}));
 
   // Path with unusual characters escaped.
   cc = CanonicalCookie::CreateSanitizedCookie(
@@ -4025,7 +4271,7 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       CookieSameSite::NO_RESTRICTION, COOKIE_PRIORITY_DEFAULT,
       std::nullopt /*partition_key*/, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_NO_COOKIE_CONTENT}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_NO_COOKIE_CONTENT}));
 
   // Check that value can contain an equal sign, even when no name is present.
   // Note that in newer drafts of RFC6265bis, it is specified that a cookie with
@@ -4056,7 +4302,7 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       COOKIE_PRIORITY_DEFAULT,
       /*partition_key=*/std::nullopt, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_DISALLOWED_CHARACTER}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_DISALLOWED_CHARACTER}));
 
   // A __Secure- cookie must be Secure.
   EXPECT_TRUE(CanonicalCookie::CreateSanitizedCookie(
@@ -4071,7 +4317,7 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       CookieSameSite::NO_RESTRICTION, CookiePriority::COOKIE_PRIORITY_DEFAULT,
       std::nullopt /*partition_key*/, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_PREFIX}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_PREFIX}));
 
   // A __Host- cookie must be Secure.
   EXPECT_TRUE(CanonicalCookie::CreateSanitizedCookie(
@@ -4086,7 +4332,7 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       CookieSameSite::NO_RESTRICTION, CookiePriority::COOKIE_PRIORITY_DEFAULT,
       std::nullopt /*partition_key*/, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_PREFIX}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_PREFIX}));
 
   // A __Host- cookie must have path "/".
   EXPECT_TRUE(CanonicalCookie::CreateSanitizedCookie(
@@ -4101,7 +4347,7 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       CookieSameSite::NO_RESTRICTION, CookiePriority::COOKIE_PRIORITY_DEFAULT,
       std::nullopt /*partition_key*/, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_PREFIX}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_PREFIX}));
 
   // A __Host- cookie must not specify a domain.
   EXPECT_TRUE(CanonicalCookie::CreateSanitizedCookie(
@@ -4116,7 +4362,7 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       CookieSameSite::NO_RESTRICTION, CookiePriority::COOKIE_PRIORITY_DEFAULT,
       std::nullopt /*partition_key*/, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_PREFIX}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_PREFIX}));
 
   // Without __Host- prefix, this is a valid host cookie because it does not
   // specify a domain.
@@ -4173,7 +4419,7 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       CookieSameSite::NO_RESTRICTION, CookiePriority::COOKIE_PRIORITY_DEFAULT,
       std::nullopt /*partition_key*/, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_PREFIX}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_PREFIX}));
 
   EXPECT_FALSE(CanonicalCookie::CreateSanitizedCookie(
       GURL("https://www.foo.com"), "", "__Host-A", "", "/", two_hours_ago,
@@ -4181,7 +4427,7 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       CookieSameSite::NO_RESTRICTION, CookiePriority::COOKIE_PRIORITY_DEFAULT,
       std::nullopt /*partition_key*/, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_PREFIX}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_PREFIX}));
 
   EXPECT_FALSE(CanonicalCookie::CreateSanitizedCookie(
       GURL("https://www.foo.com"), "", "__Secure-A=B", "", "/", two_hours_ago,
@@ -4189,7 +4435,7 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       CookieSameSite::NO_RESTRICTION, CookiePriority::COOKIE_PRIORITY_DEFAULT,
       std::nullopt /*partition_key*/, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_PREFIX}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_PREFIX}));
 
   EXPECT_FALSE(CanonicalCookie::CreateSanitizedCookie(
       GURL("https://www.foo.com"), "", "__Secure-A", "", "/", two_hours_ago,
@@ -4197,7 +4443,7 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       CookieSameSite::NO_RESTRICTION, CookiePriority::COOKIE_PRIORITY_DEFAULT,
       std::nullopt /*partition_key*/, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_PREFIX}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_PREFIX}));
 
   // While tricky, this aren't considered hidden prefixes and should succeed.
   EXPECT_TRUE(CanonicalCookie::CreateSanitizedCookie(
@@ -4245,7 +4491,7 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
           GURL("https://toplevelsite.com"))),
       &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_PARTITIONED}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_PARTITIONED}));
   // Invalid: invalid Path.
   status = CookieInclusionStatus();
   EXPECT_TRUE(CanonicalCookie::CreateSanitizedCookie(
@@ -4281,21 +4527,21 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       CookieSameSite::NO_RESTRICTION, COOKIE_PRIORITY_DEFAULT,
       std::nullopt /*partition_key*/, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_DOMAIN}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_DOMAIN}));
   EXPECT_FALSE(CanonicalCookie::CreateSanitizedCookie(
       GURL("http://."), "A", "B", std::string(), "/", base::Time(),
       base::Time(), base::Time(), false /*secure*/, false /*httponly*/,
       CookieSameSite::NO_RESTRICTION, COOKIE_PRIORITY_DEFAULT,
       std::nullopt /*partition_key*/, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_DOMAIN}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_DOMAIN}));
   EXPECT_FALSE(CanonicalCookie::CreateSanitizedCookie(
       GURL("http://.chromium.org"), "A", "B", ".chromium.org", "/",
       base::Time(), base::Time(), base::Time(), false /*secure*/,
       false /*httponly*/, CookieSameSite::NO_RESTRICTION,
       COOKIE_PRIORITY_DEFAULT, std::nullopt /*partition_key*/, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_DOMAIN}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_DOMAIN}));
 
   // Check that a file URL with an IPv6 host, and matching IPv6 domain, are
   // valid.
@@ -4320,7 +4566,7 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
 #else
   EXPECT_FALSE(double_backslash_ipv6_cookie);
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_INVALID_DOMAIN}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_DOMAIN}));
 #endif
 
   // Confirm multiple error types can be set.
@@ -4329,9 +4575,9 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       true /*secure*/, true /*httponly*/, CookieSameSite::STRICT_MODE,
       COOKIE_PRIORITY_DEFAULT, std::nullopt /*partition_key*/, &status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_NO_COOKIE_CONTENT,
-       CookieInclusionStatus::EXCLUDE_FAILURE_TO_STORE,
-       CookieInclusionStatus::EXCLUDE_INVALID_DOMAIN}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_NO_COOKIE_CONTENT,
+       CookieInclusionStatus::ExclusionReason::EXCLUDE_FAILURE_TO_STORE,
+       CookieInclusionStatus::ExclusionReason::EXCLUDE_INVALID_DOMAIN}));
 
   // Check that RFC6265bis name + value string length limits are enforced.
   std::string max_name(ParsedCookie::kMaxCookieNamePlusValueSize, 'a');
@@ -4371,7 +4617,8 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       COOKIE_PRIORITY_DEFAULT, std::nullopt /*partition_key*/, &status);
   EXPECT_FALSE(cc);
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_NAME_VALUE_PAIR_EXCEEDS_MAX_SIZE}));
+      {CookieInclusionStatus::ExclusionReason::
+           EXCLUDE_NAME_VALUE_PAIR_EXCEEDS_MAX_SIZE}));
 
   cc = CanonicalCookie::CreateSanitizedCookie(
       GURL("http://www.foo.com/foo"), "X", max_value, std::string(), "/foo",
@@ -4380,7 +4627,8 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       COOKIE_PRIORITY_DEFAULT, std::nullopt /*partition_key*/, &status);
   EXPECT_FALSE(cc);
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_NAME_VALUE_PAIR_EXCEEDS_MAX_SIZE}));
+      {CookieInclusionStatus::ExclusionReason::
+           EXCLUDE_NAME_VALUE_PAIR_EXCEEDS_MAX_SIZE}));
 
   // Check that the RFC6265bis attribute value size limits apply to the Path
   // attribute value.
@@ -4406,7 +4654,8 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       std::nullopt /*partition_key*/, &status);
   EXPECT_FALSE(cc);
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_ATTRIBUTE_VALUE_EXCEEDS_MAX_SIZE}));
+      {CookieInclusionStatus::ExclusionReason::
+           EXCLUDE_ATTRIBUTE_VALUE_EXCEEDS_MAX_SIZE}));
 
   // Check that length limits on the Path attribute value are not enforced
   // in the case where no Path attribute is specified and the path value is
@@ -4437,7 +4686,8 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       std::nullopt /*partition_key*/, &status);
   EXPECT_FALSE(cc);
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_ATTRIBUTE_VALUE_EXCEEDS_MAX_SIZE}));
+      {CookieInclusionStatus::ExclusionReason::
+           EXCLUDE_ATTRIBUTE_VALUE_EXCEEDS_MAX_SIZE}));
 
   // Check that the RFC6265bis attribute value size limits apply to the Domain
   // attribute value.
@@ -4460,7 +4710,8 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_Logic) {
       COOKIE_PRIORITY_DEFAULT, std::nullopt /*partition_key*/, &status);
   EXPECT_FALSE(cc);
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_ATTRIBUTE_VALUE_EXCEEDS_MAX_SIZE}));
+      {CookieInclusionStatus::ExclusionReason::
+           EXCLUDE_ATTRIBUTE_VALUE_EXCEEDS_MAX_SIZE}));
   // Check that length limits on the Domain attribute value are not enforced
   // in the case where no Domain attribute is specified and the domain value
   // is implicitly set from the URL.
@@ -4544,7 +4795,8 @@ TEST(CanonicalCookieTest, Create_SourceSchemePort) {
   EXPECT_TRUE(cc);
   EXPECT_TRUE(status.IsInclude());
   EXPECT_TRUE(status.HasExactlyWarningReasonsForTesting(
-      {CookieInclusionStatus::WARN_TENTATIVELY_ALLOWING_SECURE_SOURCE_SCHEME}));
+      {CookieInclusionStatus::WarningReason::
+           WARN_TENTATIVELY_ALLOWING_SECURE_SOURCE_SCHEME}));
   EXPECT_TRUE(cc->SecureAttribute());
   EXPECT_EQ(cc->SourceScheme(), CookieSourceScheme::kSecure);
   EXPECT_EQ(cc->SourcePort(), 443);
@@ -4570,7 +4822,8 @@ TEST(CanonicalCookieTest, Create_SourceSchemePort) {
   EXPECT_TRUE(cc);
   EXPECT_TRUE(status.IsInclude());
   EXPECT_TRUE(status.HasExactlyWarningReasonsForTesting(
-      {CookieInclusionStatus::WARN_TENTATIVELY_ALLOWING_SECURE_SOURCE_SCHEME}));
+      {CookieInclusionStatus::WarningReason::
+           WARN_TENTATIVELY_ALLOWING_SECURE_SOURCE_SCHEME}));
   EXPECT_TRUE(cc->SecureAttribute());
   EXPECT_EQ(cc->SourceScheme(), CookieSourceScheme::kSecure);
   EXPECT_EQ(cc->SourcePort(), 123);
@@ -4638,7 +4891,8 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_SourceSchemePort) {
   EXPECT_TRUE(cc);
   EXPECT_TRUE(status.IsInclude());
   EXPECT_TRUE(status.HasExactlyWarningReasonsForTesting(
-      {CookieInclusionStatus::WARN_TENTATIVELY_ALLOWING_SECURE_SOURCE_SCHEME}));
+      {CookieInclusionStatus::WarningReason::
+           WARN_TENTATIVELY_ALLOWING_SECURE_SOURCE_SCHEME}));
   EXPECT_TRUE(cc->SecureAttribute());
   EXPECT_EQ(cc->SourceScheme(), CookieSourceScheme::kSecure);
   EXPECT_EQ(cc->SourcePort(), 443);
@@ -4668,7 +4922,8 @@ TEST(CanonicalCookieTest, CreateSanitizedCookie_SourceSchemePort) {
   EXPECT_TRUE(cc);
   EXPECT_TRUE(status.IsInclude());
   EXPECT_TRUE(status.HasExactlyWarningReasonsForTesting(
-      {CookieInclusionStatus::WARN_TENTATIVELY_ALLOWING_SECURE_SOURCE_SCHEME}));
+      {CookieInclusionStatus::WarningReason::
+           WARN_TENTATIVELY_ALLOWING_SECURE_SOURCE_SCHEME}));
   EXPECT_TRUE(cc->SecureAttribute());
   EXPECT_EQ(cc->SourceScheme(), CookieSourceScheme::kSecure);
   EXPECT_EQ(cc->SourcePort(), 123);
@@ -4764,14 +5019,16 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
       cookie_scriptable->IsSetPermittedInContext(
           GURL("file://foo/bar.txt"), context_network,
           CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                             CookieScopeSemantics::UNKNOWN,
                              false /* delegate_treats_url_as_trustworthy */
                              ),
           kCookieableSchemes),
       MatchesCookieAccessResult(
           CookieInclusionStatus::MakeFromReasonsForTesting({
-              CookieInclusionStatus::EXCLUDE_NONCOOKIEABLE_SCHEME,
-              CookieInclusionStatus::EXCLUDE_SECURE_ONLY,
-              CookieInclusionStatus::EXCLUDE_DOMAIN_MISMATCH,
+              CookieInclusionStatus::ExclusionReason::
+                  EXCLUDE_NONCOOKIEABLE_SCHEME,
+              CookieInclusionStatus::ExclusionReason::EXCLUDE_SECURE_ONLY,
+              CookieInclusionStatus::ExclusionReason::EXCLUDE_DOMAIN_MISMATCH,
           }),
           _, _, false));
 
@@ -4779,17 +5036,19 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
       cookie_scriptable->IsSetPermittedInContext(
           insecure_url, context_network,
           CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                             CookieScopeSemantics::UNKNOWN,
                              false /* delegate_treats_url_as_trustworthy */
                              ),
           kCookieableSchemes),
       MatchesCookieAccessResult(
           CookieInclusionStatus::MakeFromReasonsForTesting(
-              {CookieInclusionStatus::EXCLUDE_SECURE_ONLY}),
+              {CookieInclusionStatus::ExclusionReason::EXCLUDE_SECURE_ONLY}),
           _, _, false));
   EXPECT_THAT(
       cookie_scriptable->IsSetPermittedInContext(
           url, context_network,
           CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                             CookieScopeSemantics::UNKNOWN,
                              false /* delegate_treats_url_as_trustworthy */
                              ),
           kCookieableSchemes),
@@ -4798,6 +5057,7 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
       cookie_scriptable->IsSetPermittedInContext(
           url, context_script,
           CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                             CookieScopeSemantics::UNKNOWN,
                              false /* delegate_treats_url_as_trustworthy */
                              ),
           kCookieableSchemes),
@@ -4807,6 +5067,7 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
       cookie_httponly->IsSetPermittedInContext(
           url, context_network,
           CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                             CookieScopeSemantics::UNKNOWN,
                              false /* delegate_treats_url_as_trustworthy */
                              ),
           kCookieableSchemes),
@@ -4815,24 +5076,27 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
       cookie_httponly->IsSetPermittedInContext(
           url, context_script,
           CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                             CookieScopeSemantics::UNKNOWN,
                              false /* delegate_treats_url_as_trustworthy */
                              ),
           kCookieableSchemes),
       MatchesCookieAccessResult(
           CookieInclusionStatus::MakeFromReasonsForTesting(
-              {CookieInclusionStatus::EXCLUDE_HTTP_ONLY}),
+              {CookieInclusionStatus::ExclusionReason::EXCLUDE_HTTP_ONLY}),
           _, _, true));
 
   EXPECT_THAT(
       cookie_scriptable->IsSetPermittedInContext(
           GURL("https://www.badexample.com/test"), context_script,
           CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                             CookieScopeSemantics::UNKNOWN,
                              false /* delegate_treats_url_as_trustworthy */
                              ),
           kCookieableSchemes),
       MatchesCookieAccessResult(
           CookieInclusionStatus::MakeFromReasonsForTesting(
-              {CookieInclusionStatus::EXCLUDE_DOMAIN_MISMATCH}),
+              {CookieInclusionStatus::ExclusionReason::
+                   EXCLUDE_DOMAIN_MISMATCH}),
           _, _, true));
 
   CookieOptions context_cross_site;
@@ -4874,6 +5138,7 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
         cookie_same_site_unrestricted->IsSetPermittedInContext(
             url, context_cross_site,
             CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                               CookieScopeSemantics::UNKNOWN,
                                false /* delegate_treats_url_as_trustworthy */
                                ),
             kCookieableSchemes),
@@ -4882,6 +5147,7 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
         cookie_same_site_unrestricted->IsSetPermittedInContext(
             url, context_same_site_lax,
             CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                               CookieScopeSemantics::UNKNOWN,
                                false /* delegate_treats_url_as_trustworthy */
                                ),
             kCookieableSchemes),
@@ -4890,6 +5156,7 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
         cookie_same_site_unrestricted->IsSetPermittedInContext(
             url, context_same_site_strict,
             CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                               CookieScopeSemantics::UNKNOWN,
                                false /* delegate_treats_url_as_trustworthy */
                                ),
             kCookieableSchemes),
@@ -4904,6 +5171,7 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
           cookie_same_site_unrestricted->IsSetPermittedInContext(
               url, context_same_site_strict_to_lax,
               CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                                 CookieScopeSemantics::UNKNOWN,
                                  false /* delegate_treats_url_as_trustworthy */
                                  ),
               kCookieableSchemes),
@@ -4914,6 +5182,7 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
           cookie_same_site_unrestricted->IsSetPermittedInContext(
               url, context_same_site_strict_to_cross,
               CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                                 CookieScopeSemantics::UNKNOWN,
                                  false /* delegate_treats_url_as_trustworthy */
                                  ),
               kCookieableSchemes),
@@ -4924,6 +5193,7 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
           cookie_same_site_unrestricted->IsSetPermittedInContext(
               url, context_same_site_lax_to_cross,
               CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                                 CookieScopeSemantics::UNKNOWN,
                                  false /* delegate_treats_url_as_trustworthy */
                                  ),
               kCookieableSchemes),
@@ -4940,6 +5210,7 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
           cookie_same_site_unrestricted->IsSetPermittedInContext(
               url, context_same_site_strict_to_lax,
               CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                                 CookieScopeSemantics::UNKNOWN,
                                  false /* delegate_treats_url_as_trustworthy */
                                  ),
               kCookieableSchemes),
@@ -4950,6 +5221,7 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
           cookie_same_site_unrestricted->IsSetPermittedInContext(
               url, context_same_site_strict_to_cross,
               CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                                 CookieScopeSemantics::UNKNOWN,
                                  false /* delegate_treats_url_as_trustworthy */
                                  ),
               kCookieableSchemes),
@@ -4960,6 +5232,7 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
           cookie_same_site_unrestricted->IsSetPermittedInContext(
               url, context_same_site_lax_to_cross,
               CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                                 CookieScopeSemantics::UNKNOWN,
                                  false /* delegate_treats_url_as_trustworthy */
                                  ),
               kCookieableSchemes),
@@ -4979,17 +5252,19 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
         cookie_same_site_lax->IsSetPermittedInContext(
             url, context_cross_site,
             CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                               CookieScopeSemantics::UNKNOWN,
                                false /* delegate_treats_url_as_trustworthy */
                                ),
             kCookieableSchemes),
         MatchesCookieAccessResult(
             CookieInclusionStatus::MakeFromReasonsForTesting(
-                {CookieInclusionStatus::EXCLUDE_SAMESITE_LAX}),
+                {CookieInclusionStatus::ExclusionReason::EXCLUDE_SAMESITE_LAX}),
             _, _, true));
     EXPECT_THAT(
         cookie_same_site_lax->IsSetPermittedInContext(
             url, context_same_site_lax,
             CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                               CookieScopeSemantics::UNKNOWN,
                                false /* delegate_treats_url_as_trustworthy */
                                ),
             kCookieableSchemes),
@@ -4998,6 +5273,7 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
         cookie_same_site_lax->IsSetPermittedInContext(
             url, context_same_site_strict,
             CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                               CookieScopeSemantics::UNKNOWN,
                                false /* delegate_treats_url_as_trustworthy */
                                ),
             kCookieableSchemes),
@@ -5012,6 +5288,7 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
           cookie_same_site_lax->IsSetPermittedInContext(
               url, context_same_site_strict_to_lax,
               CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                                 CookieScopeSemantics::UNKNOWN,
                                  false /* delegate_treats_url_as_trustworthy */
                                  ),
               kCookieableSchemes),
@@ -5022,26 +5299,28 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
           cookie_same_site_lax->IsSetPermittedInContext(
               url, context_same_site_strict_to_cross,
               CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                                 CookieScopeSemantics::UNKNOWN,
                                  false /* delegate_treats_url_as_trustworthy */
                                  ),
               kCookieableSchemes),
           MatchesCookieAccessResult(
               AllOf(IsInclude(),
                     HasWarningReason(
-                        CookieInclusionStatus::
+                        CookieInclusionStatus::WarningReason::
                             WARN_STRICT_CROSS_DOWNGRADE_LAX_SAMESITE)),
               _, _, true));
       EXPECT_THAT(
           cookie_same_site_lax->IsSetPermittedInContext(
               url, context_same_site_lax_to_cross,
               CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                                 CookieScopeSemantics::UNKNOWN,
                                  false /* delegate_treats_url_as_trustworthy */
                                  ),
               kCookieableSchemes),
           MatchesCookieAccessResult(
               AllOf(
                   IsInclude(),
-                  HasWarningReason(CookieInclusionStatus::
+                  HasWarningReason(CookieInclusionStatus::WarningReason::
                                        WARN_LAX_CROSS_DOWNGRADE_LAX_SAMESITE)),
               _, _, true));
     }
@@ -5054,6 +5333,7 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
           cookie_same_site_lax->IsSetPermittedInContext(
               url, context_same_site_strict_to_lax,
               CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                                 CookieScopeSemantics::UNKNOWN,
                                  false /* delegate_treats_url_as_trustworthy */
                                  ),
               kCookieableSchemes),
@@ -5064,30 +5344,32 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
           cookie_same_site_lax->IsSetPermittedInContext(
               url, context_same_site_strict_to_cross,
               CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                                 CookieScopeSemantics::UNKNOWN,
                                  false /* delegate_treats_url_as_trustworthy */
                                  ),
               kCookieableSchemes),
           MatchesCookieAccessResult(
               AllOf(Not(IsInclude()),
                     HasWarningReason(
-                        CookieInclusionStatus::
+                        CookieInclusionStatus::WarningReason::
                             WARN_STRICT_CROSS_DOWNGRADE_LAX_SAMESITE),
-                    HasExclusionReason(
-                        CookieInclusionStatus::EXCLUDE_SAMESITE_LAX)),
+                    HasExclusionReason(CookieInclusionStatus::ExclusionReason::
+                                           EXCLUDE_SAMESITE_LAX)),
               _, _, true));
       EXPECT_THAT(
           cookie_same_site_lax->IsSetPermittedInContext(
               url, context_same_site_lax_to_cross,
               CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                                 CookieScopeSemantics::UNKNOWN,
                                  false /* delegate_treats_url_as_trustworthy */
                                  ),
               kCookieableSchemes),
           MatchesCookieAccessResult(
               AllOf(Not(IsInclude()),
-                    HasWarningReason(CookieInclusionStatus::
+                    HasWarningReason(CookieInclusionStatus::WarningReason::
                                          WARN_LAX_CROSS_DOWNGRADE_LAX_SAMESITE),
-                    HasExclusionReason(
-                        CookieInclusionStatus::EXCLUDE_SAMESITE_LAX)),
+                    HasExclusionReason(CookieInclusionStatus::ExclusionReason::
+                                           EXCLUDE_SAMESITE_LAX)),
               _, _, true));
     }
   }
@@ -5105,17 +5387,20 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
         cookie_same_site_strict->IsSetPermittedInContext(
             url, context_cross_site,
             CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                               CookieScopeSemantics::UNKNOWN,
                                false /* delegate_treats_url_as_trustworthy */
                                ),
             kCookieableSchemes),
         MatchesCookieAccessResult(
             CookieInclusionStatus::MakeFromReasonsForTesting(
-                {CookieInclusionStatus::EXCLUDE_SAMESITE_STRICT}),
+                {CookieInclusionStatus::ExclusionReason::
+                     EXCLUDE_SAMESITE_STRICT}),
             _, _, true));
     EXPECT_THAT(
         cookie_same_site_strict->IsSetPermittedInContext(
             url, context_same_site_lax,
             CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                               CookieScopeSemantics::UNKNOWN,
                                false /* delegate_treats_url_as_trustworthy */
                                ),
             kCookieableSchemes),
@@ -5124,6 +5409,7 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
         cookie_same_site_strict->IsSetPermittedInContext(
             url, context_same_site_strict,
             CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                               CookieScopeSemantics::UNKNOWN,
                                false /* delegate_treats_url_as_trustworthy */
                                ),
             kCookieableSchemes),
@@ -5138,6 +5424,7 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
           cookie_same_site_strict->IsSetPermittedInContext(
               url, context_same_site_strict_to_lax,
               CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                                 CookieScopeSemantics::UNKNOWN,
                                  false /* delegate_treats_url_as_trustworthy */
                                  ),
               kCookieableSchemes),
@@ -5148,26 +5435,28 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
           cookie_same_site_strict->IsSetPermittedInContext(
               url, context_same_site_strict_to_cross,
               CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                                 CookieScopeSemantics::UNKNOWN,
                                  false /* delegate_treats_url_as_trustworthy */
                                  ),
               kCookieableSchemes),
           MatchesCookieAccessResult(
               AllOf(IsInclude(),
                     HasWarningReason(
-                        CookieInclusionStatus::
+                        CookieInclusionStatus::WarningReason::
                             WARN_STRICT_CROSS_DOWNGRADE_STRICT_SAMESITE)),
               _, _, true));
       EXPECT_THAT(
           cookie_same_site_strict->IsSetPermittedInContext(
               url, context_same_site_lax_to_cross,
               CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                                 CookieScopeSemantics::UNKNOWN,
                                  false /* delegate_treats_url_as_trustworthy */
                                  ),
               kCookieableSchemes),
           MatchesCookieAccessResult(
               AllOf(IsInclude(),
                     HasWarningReason(
-                        CookieInclusionStatus::
+                        CookieInclusionStatus::WarningReason::
                             WARN_LAX_CROSS_DOWNGRADE_STRICT_SAMESITE)),
               _, _, true));
     }
@@ -5180,6 +5469,7 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
           cookie_same_site_strict->IsSetPermittedInContext(
               url, context_same_site_strict_to_lax,
               CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                                 CookieScopeSemantics::UNKNOWN,
                                  false /* delegate_treats_url_as_trustworthy */
                                  ),
               kCookieableSchemes),
@@ -5190,31 +5480,33 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
           cookie_same_site_strict->IsSetPermittedInContext(
               url, context_same_site_strict_to_cross,
               CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                                 CookieScopeSemantics::UNKNOWN,
                                  false /* delegate_treats_url_as_trustworthy */
                                  ),
               kCookieableSchemes),
           MatchesCookieAccessResult(
               AllOf(Not(IsInclude()),
                     HasWarningReason(
-                        CookieInclusionStatus::
+                        CookieInclusionStatus::WarningReason::
                             WARN_STRICT_CROSS_DOWNGRADE_STRICT_SAMESITE),
-                    HasExclusionReason(
-                        CookieInclusionStatus::EXCLUDE_SAMESITE_STRICT)),
+                    HasExclusionReason(CookieInclusionStatus::ExclusionReason::
+                                           EXCLUDE_SAMESITE_STRICT)),
               _, _, true));
       EXPECT_THAT(
           cookie_same_site_strict->IsSetPermittedInContext(
               url, context_same_site_lax_to_cross,
               CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                                 CookieScopeSemantics::UNKNOWN,
                                  false /* delegate_treats_url_as_trustworthy */
                                  ),
               kCookieableSchemes),
           MatchesCookieAccessResult(
               AllOf(Not(IsInclude()),
                     HasWarningReason(
-                        CookieInclusionStatus::
+                        CookieInclusionStatus::WarningReason::
                             WARN_LAX_CROSS_DOWNGRADE_STRICT_SAMESITE),
-                    HasExclusionReason(
-                        CookieInclusionStatus::EXCLUDE_SAMESITE_STRICT)),
+                    HasExclusionReason(CookieInclusionStatus::ExclusionReason::
+                                           EXCLUDE_SAMESITE_STRICT)),
               _, _, true));
     }
 
@@ -5228,6 +5520,7 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
           cookie_same_site_strict->IsSetPermittedInContext(
               url, context_same_site_strict_to_cross,
               CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                                 CookieScopeSemantics::UNKNOWN,
                                  false /* delegate_treats_url_as_trustworthy */
                                  ),
               kCookieableSchemes),
@@ -5236,6 +5529,7 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
           cookie_same_site_strict->IsSetPermittedInContext(
               url, context_same_site_strict_to_cross,
               CookieAccessParams(CookieAccessSemantics::NONLEGACY,
+                                 CookieScopeSemantics::UNKNOWN,
                                  false /* delegate_treats_url_as_trustworthy */
                                  ),
               kCookieableSchemes),
@@ -5246,6 +5540,7 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
           cookie_same_site_strict->IsSetPermittedInContext(
               url, context_same_site_strict_to_cross,
               CookieAccessParams(CookieAccessSemantics::LEGACY,
+                                 CookieScopeSemantics::UNKNOWN,
                                  false /* delegate_treats_url_as_trustworthy */
                                  ),
               kCookieableSchemes),
@@ -5264,19 +5559,20 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
       cookie_same_site_unspecified->IsSetPermittedInContext(
           url, context_cross_site,
           CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                             CookieScopeSemantics::UNKNOWN,
                              false /* delegate_treats_url_as_trustworthy */
                              ),
           kCookieableSchemes),
       MatchesCookieAccessResult(
           HasExactlyExclusionReasonsForTesting(
-              std::vector<CookieInclusionStatus::ExclusionReason>(
-                  {CookieInclusionStatus::
-                       EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX})),
+              {CookieInclusionStatus::ExclusionReason::
+                   EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX}),
           _, _, true));
   EXPECT_THAT(
       cookie_same_site_unspecified->IsSetPermittedInContext(
           url, context_same_site_lax,
           CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                             CookieScopeSemantics::UNKNOWN,
                              false /* delegate_treats_url_as_trustworthy */
                              ),
           kCookieableSchemes),
@@ -5285,6 +5581,7 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
       cookie_same_site_unspecified->IsSetPermittedInContext(
           url, context_same_site_strict,
           CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                             CookieScopeSemantics::UNKNOWN,
                              false /* delegate_treats_url_as_trustworthy */
                              ),
           kCookieableSchemes),
@@ -5293,6 +5590,7 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
       cookie_same_site_unspecified->IsSetPermittedInContext(
           url, context_cross_site,
           CookieAccessParams(CookieAccessSemantics::LEGACY,
+                             CookieScopeSemantics::UNKNOWN,
                              false /* delegate_treats_url_as_trustworthy */
                              ),
           kCookieableSchemes),
@@ -5301,6 +5599,7 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
       cookie_same_site_unspecified->IsSetPermittedInContext(
           url, context_same_site_lax,
           CookieAccessParams(CookieAccessSemantics::LEGACY,
+                             CookieScopeSemantics::UNKNOWN,
                              false /* delegate_treats_url_as_trustworthy */
                              ),
           kCookieableSchemes),
@@ -5309,6 +5608,7 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
       cookie_same_site_unspecified->IsSetPermittedInContext(
           url, context_same_site_strict,
           CookieAccessParams(CookieAccessSemantics::LEGACY,
+                             CookieScopeSemantics::UNKNOWN,
                              false /* delegate_treats_url_as_trustworthy */
                              ),
           kCookieableSchemes),
@@ -5317,19 +5617,20 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
       cookie_same_site_unspecified->IsSetPermittedInContext(
           url, context_cross_site,
           CookieAccessParams(CookieAccessSemantics::NONLEGACY,
+                             CookieScopeSemantics::UNKNOWN,
                              false /* delegate_treats_url_as_trustworthy */
                              ),
           kCookieableSchemes),
       MatchesCookieAccessResult(
           HasExactlyExclusionReasonsForTesting(
-              std::vector<CookieInclusionStatus::ExclusionReason>(
-                  {CookieInclusionStatus::
-                       EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX})),
+              {CookieInclusionStatus::ExclusionReason::
+                   EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX}),
           _, _, true));
   EXPECT_THAT(
       cookie_same_site_unspecified->IsSetPermittedInContext(
           url, context_same_site_lax,
           CookieAccessParams(CookieAccessSemantics::NONLEGACY,
+                             CookieScopeSemantics::UNKNOWN,
                              false /* delegate_treats_url_as_trustworthy */
                              ),
           kCookieableSchemes),
@@ -5338,6 +5639,7 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
       cookie_same_site_unspecified->IsSetPermittedInContext(
           url, context_same_site_strict,
           CookieAccessParams(CookieAccessSemantics::NONLEGACY,
+                             CookieScopeSemantics::UNKNOWN,
                              false /* delegate_treats_url_as_trustworthy */
                              ),
           kCookieableSchemes),
@@ -5359,12 +5661,13 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext) {
       cookie_with_long_path->IsSetPermittedInContext(
           url, cookie_with_long_path_options,
           CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                             CookieScopeSemantics::UNKNOWN,
                              false /* delegate_treats_url_as_trustworthy */
                              ),
           kCookieableSchemes, cookie_access_result),
       MatchesCookieAccessResult(
-          HasWarningReason(
-              CookieInclusionStatus::WARN_ATTRIBUTE_VALUE_EXCEEDS_MAX_SIZE),
+          HasWarningReason(CookieInclusionStatus::WarningReason::
+                               WARN_ATTRIBUTE_VALUE_EXCEEDS_MAX_SIZE),
           _, _, _));
 }
 
@@ -5384,6 +5687,7 @@ TEST(CanonicalCookieTest, IsSetPermittedEffectiveSameSite) {
       cookie_no_restriction->IsSetPermittedInContext(
           url, options,
           CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                             CookieScopeSemantics::UNKNOWN,
                              false /* delegate_treats_url_as_trustworthy */
                              ),
           kCookieableSchemes),
@@ -5401,6 +5705,7 @@ TEST(CanonicalCookieTest, IsSetPermittedEffectiveSameSite) {
       cookie_lax->IsSetPermittedInContext(
           url, options,
           CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                             CookieScopeSemantics::UNKNOWN,
                              false /* delegate_treats_url_as_trustworthy */
                              ),
           kCookieableSchemes),
@@ -5418,6 +5723,7 @@ TEST(CanonicalCookieTest, IsSetPermittedEffectiveSameSite) {
       cookie_strict->IsSetPermittedInContext(
           url, options,
           CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                             CookieScopeSemantics::UNKNOWN,
                              false /* delegate_treats_url_as_trustworthy */
                              ),
           kCookieableSchemes),
@@ -5440,6 +5746,7 @@ TEST(CanonicalCookieTest, IsSetPermittedEffectiveSameSite) {
       cookie_old_unspecified->IsSetPermittedInContext(
           url, options,
           CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                             CookieScopeSemantics::UNKNOWN,
                              false /* delegate_treats_url_as_trustworthy */
                              ),
           kCookieableSchemes),
@@ -5450,6 +5757,7 @@ TEST(CanonicalCookieTest, IsSetPermittedEffectiveSameSite) {
       cookie_unspecified->IsSetPermittedInContext(
           url, options,
           CookieAccessParams(CookieAccessSemantics::UNKNOWN,
+                             CookieScopeSemantics::UNKNOWN,
                              false /* delegate_treats_url_as_trustworthy */
                              ),
           kCookieableSchemes),
@@ -5460,6 +5768,7 @@ TEST(CanonicalCookieTest, IsSetPermittedEffectiveSameSite) {
       cookie_unspecified->IsSetPermittedInContext(
           url, options,
           CookieAccessParams(CookieAccessSemantics::NONLEGACY,
+                             CookieScopeSemantics::UNKNOWN,
                              false /* delegate_treats_url_as_trustworthy */
                              ),
           kCookieableSchemes),
@@ -5470,6 +5779,7 @@ TEST(CanonicalCookieTest, IsSetPermittedEffectiveSameSite) {
       cookie_unspecified->IsSetPermittedInContext(
           url, options,
           CookieAccessParams(CookieAccessSemantics::LEGACY,
+                             CookieScopeSemantics::UNKNOWN,
                              false /* delegate_treats_url_as_trustworthy */
                              ),
           kCookieableSchemes),
@@ -5501,28 +5811,28 @@ TEST(CanonicalCookieTest, IsSetPermitted_AllowedToAccessSecureCookies) {
                  CookieAccessSemantics::LEGACY,
                  CookieAccessSemantics::NONLEGACY,
              }) {
-          EXPECT_THAT(
-              cookie->IsSetPermittedInContext(
-                  url, options,
-                  CookieAccessParams(access_semantics,
-                                     delegate_treats_url_as_trustworthy),
-                  kCookieableSchemes),
-              MatchesCookieAccessResult(_, _, _, true));
-          EXPECT_THAT(
-              cookie->IsSetPermittedInContext(
-                  insecure_url, options,
-                  CookieAccessParams(access_semantics,
-                                     delegate_treats_url_as_trustworthy),
-                  kCookieableSchemes),
-              MatchesCookieAccessResult(_, _, _,
-                                        delegate_treats_url_as_trustworthy));
-          EXPECT_THAT(
-              cookie->IsSetPermittedInContext(
-                  localhost_url, options,
-                  CookieAccessParams(access_semantics,
-                                     delegate_treats_url_as_trustworthy),
-                  kCookieableSchemes),
-              MatchesCookieAccessResult(_, _, _, true));
+          EXPECT_THAT(cookie->IsSetPermittedInContext(
+                          url, options,
+                          CookieAccessParams(
+                              access_semantics, CookieScopeSemantics::UNKNOWN,
+                              delegate_treats_url_as_trustworthy),
+                          kCookieableSchemes),
+                      MatchesCookieAccessResult(_, _, _, true));
+          EXPECT_THAT(cookie->IsSetPermittedInContext(
+                          insecure_url, options,
+                          CookieAccessParams(
+                              access_semantics, CookieScopeSemantics::UNKNOWN,
+                              delegate_treats_url_as_trustworthy),
+                          kCookieableSchemes),
+                      MatchesCookieAccessResult(
+                          _, _, _, delegate_treats_url_as_trustworthy));
+          EXPECT_THAT(cookie->IsSetPermittedInContext(
+                          localhost_url, options,
+                          CookieAccessParams(
+                              access_semantics, CookieScopeSemantics::UNKNOWN,
+                              delegate_treats_url_as_trustworthy),
+                          kCookieableSchemes),
+                      MatchesCookieAccessResult(_, _, _, true));
         }
       }
     }
@@ -5553,18 +5863,21 @@ TEST(CanonicalCookieTest, IsSetPermitted_SameSiteNone_Metrics) {
   EXPECT_THAT(same_site_none_cookie->IsSetPermittedInContext(
                   url, options,
                   CookieAccessParams(CookieAccessSemantics::LEGACY,
+                                     CookieScopeSemantics::UNKNOWN,
                                      delegate_treats_url_as_trustworthy),
                   kCookieableSchemes),
               MatchesCookieAccessResult(CookieInclusionStatus(), _, _, true));
   EXPECT_THAT(same_site_lax_cookie->IsSetPermittedInContext(
                   url, options,
                   CookieAccessParams(CookieAccessSemantics::LEGACY,
+                                     CookieScopeSemantics::UNKNOWN,
                                      delegate_treats_url_as_trustworthy),
                   kCookieableSchemes),
               MatchesCookieAccessResult(Not(net::IsInclude()), _, _, true));
   EXPECT_THAT(same_site_strict_cookie->IsSetPermittedInContext(
                   url, options,
                   CookieAccessParams(CookieAccessSemantics::LEGACY,
+                                     CookieScopeSemantics::UNKNOWN,
                                      delegate_treats_url_as_trustworthy),
                   kCookieableSchemes),
               MatchesCookieAccessResult(Not(net::IsInclude()), _, _, true));
@@ -5575,18 +5888,21 @@ TEST(CanonicalCookieTest, IsSetPermitted_SameSiteNone_Metrics) {
   EXPECT_THAT(same_site_none_cookie->IsSetPermittedInContext(
                   url, options,
                   CookieAccessParams(CookieAccessSemantics::LEGACY,
+                                     CookieScopeSemantics::UNKNOWN,
                                      delegate_treats_url_as_trustworthy),
                   kCookieableSchemes),
               MatchesCookieAccessResult(CookieInclusionStatus(), _, _, true));
   EXPECT_THAT(same_site_lax_cookie->IsSetPermittedInContext(
                   url, options,
                   CookieAccessParams(CookieAccessSemantics::LEGACY,
+                                     CookieScopeSemantics::UNKNOWN,
                                      delegate_treats_url_as_trustworthy),
                   kCookieableSchemes),
               MatchesCookieAccessResult(net::IsInclude(), _, _, true));
   EXPECT_THAT(same_site_strict_cookie->IsSetPermittedInContext(
                   url, options,
                   CookieAccessParams(CookieAccessSemantics::LEGACY,
+                                     CookieScopeSemantics::UNKNOWN,
                                      delegate_treats_url_as_trustworthy),
                   kCookieableSchemes),
               MatchesCookieAccessResult(net::IsInclude(), _, _, true));
@@ -5643,11 +5959,11 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext_RedirectDowngradeWarning) {
                   ->IsSetPermittedInContext(
                       url, options,
                       CookieAccessParams(
-                          semantics,
+                          semantics, CookieScopeSemantics::UNKNOWN,
                           /*delegate_treats_url_as_trustworthy=*/false),
                       kCookieableSchemes)
                   .status.HasWarningReason(
-                      CookieInclusionStatus::
+                      CookieInclusionStatus::WarningReason::
                           WARN_CROSS_SITE_REDIRECT_DOWNGRADE_CHANGES_INCLUSION));
         }
       }
@@ -5672,11 +5988,11 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext_RedirectDowngradeWarning) {
                 ->IsSetPermittedInContext(
                     url, options,
                     CookieAccessParams(
-                        semantics,
+                        semantics, CookieScopeSemantics::UNKNOWN,
                         /*delegate_treats_url_as_trustworthy=*/false),
                     kCookieableSchemes)
                 .status.HasWarningReason(
-                    CookieInclusionStatus::
+                    CookieInclusionStatus::WarningReason::
                         WARN_CROSS_SITE_REDIRECT_DOWNGRADE_CHANGES_INCLUSION),
             test.expect_cross_site_redirect_warning);
 
@@ -5687,11 +6003,11 @@ TEST(CanonicalCookieTest, IsSetPermittedInContext_RedirectDowngradeWarning) {
                 ->IsSetPermittedInContext(
                     insecure_url, options,
                     CookieAccessParams(
-                        semantics,
+                        semantics, CookieScopeSemantics::UNKNOWN,
                         /*delegate_treats_url_as_trustworthy=*/false),
                     kCookieableSchemes)
                 .status.HasWarningReason(
-                    CookieInclusionStatus::
+                    CookieInclusionStatus::WarningReason::
                         WARN_CROSS_SITE_REDIRECT_DOWNGRADE_CHANGES_INCLUSION));
       }
     }
@@ -5702,8 +6018,8 @@ TEST(CanonicalCookieTest, TestIsCanonicalWithInvalidSizeHistograms) {
   base::HistogramTester histograms;
   const char kFromStorageWithValidLengthHistogram[] =
       "Cookie.FromStorageWithValidLength";
-  const base::HistogramBase::Sample kInValid = 0;
-  const base::HistogramBase::Sample kValid = 1;
+  const base::HistogramBase::Sample32 kInValid = 0;
+  const base::HistogramBase::Sample32 kValid = 1;
 
   base::Time two_hours_ago = base::Time::Now() - base::Hours(2);
   base::Time one_hour_ago = base::Time::Now() - base::Hours(1);

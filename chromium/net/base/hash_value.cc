@@ -3,8 +3,8 @@
 // found in the LICENSE file.
 
 #ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
-#pragma allow_unsafe_buffers
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
 #endif
 
 #include "net/base/hash_value.h"
@@ -16,6 +16,7 @@
 
 #include "base/base64.h"
 #include "base/check_op.h"
+#include "base/compiler_specific.h"
 #include "base/containers/span.h"
 #include "base/notreached.h"
 #include "base/strings/string_split.h"
@@ -68,7 +69,7 @@ bool HashValue::FromString(std::string_view value) {
 }
 
 std::string HashValue::ToString() const {
-  std::string base64_str = base::Base64Encode(base::make_span(data(), size()));
+  std::string base64_str = base::Base64Encode(*this);
   switch (tag_) {
     case HASH_VALUE_SHA256:
       return std::string(kSha256Slash) + base64_str;

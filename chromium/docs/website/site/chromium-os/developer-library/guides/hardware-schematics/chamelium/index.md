@@ -232,11 +232,10 @@ to hex numbers of your choice):
 
 ### Setup your Linux host, DUT and the FPGA
 
-    [Checkout the source
-    tree](http://www.chromium.org/chromium-os/developer-guide) for Chromium OS
+    [Checkout the source tree](/chromium-os/developer-guide) for Chromium OS
 
     [Create and enter a
-    chroot](http://www.chromium.org/chromium-os/developer-guide#TOC-Building-Chromium-OS)
+    chroot](/chromium-os/developer-guide#TOC-Building-Chromium-OS)
     via the command cros_sdk
 
     Build the packages and images to run the tests

@@ -22,7 +22,6 @@ source_set("prediction_service") {
     "prediction_service_base.h",
   ]
   deps = [
-    "//build:chromeos_buildflags",
     "//components/keyed_service/content",
     "//components/permissions:permissions_common",
     "//components/version_info",
@@ -42,8 +41,6 @@ source_set("prediction_service") {
       "prediction_model_executor.h",
       "prediction_model_handler.cc",
       "prediction_model_handler.h",
-      "prediction_model_handler_provider.cc",
-      "prediction_model_handler_provider.h",
       "prediction_signature_model_executor.cc",
       "prediction_signature_model_executor.h",
     ]

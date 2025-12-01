@@ -62,15 +62,6 @@ LensPreselectionBubble::LensPreselectionBubble(
       offline_(offline),
       exit_clicked_callback_(std::move(exit_clicked_callback)) {
   SetShowCloseButton(false);
-  // Should be true to enable the menu button, although this constraint is not
-  // being upheld on Mac and Linux, and setting it to true on Mac causes
-  // undesired mouse pointer behavior on the overlay. See crbug.com/378566071.
-  // TODO(crbug.com/379927907): Rewrite this class to avoid these issues.
-#if BUILDFLAG(IS_MAC)
-  SetCanActivate(false);
-#else
-  SetCanActivate(true);
-#endif
   set_close_on_deactivate(false);
   DialogDelegate::SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
   set_corner_radius(48);
@@ -107,8 +98,8 @@ void LensPreselectionBubble::Init() {
     views::HighlightPathGenerator::Install(
         button.get(),
         std::make_unique<views::CircleHighlightPathGenerator>(gfx::Insets()));
-    button->SetTooltipText(l10n_util::GetStringUTF16(
-        IDS_SIDE_PANEL_HEADER_MORE_INFO_BUTTON_TOOLTIP));
+    button->SetTooltipText(
+        l10n_util::GetStringUTF16(IDS_LENS_OVERLAY_MORE_OPTIONS_BUTTON_LABEL));
     more_info_button_ = AddChildView(std::move(button));
     more_info_button_->SetButtonController(
         std::make_unique<views::MenuButtonController>(

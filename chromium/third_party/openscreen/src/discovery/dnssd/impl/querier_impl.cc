@@ -19,7 +19,7 @@
 namespace openscreen::discovery {
 namespace {
 
-static constexpr char kLocalDomain[] = "local";
+constexpr char kLocalDomain[] = "local";
 
 // Removes all error instances from the below records, and calls the log
 // function on all errors present in `new_endpoints`. Input vectors are expected

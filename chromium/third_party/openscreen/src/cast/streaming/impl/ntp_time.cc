@@ -11,7 +11,7 @@ namespace openscreen::cast {
 namespace {
 
 // The number of seconds between 1 January 1900 and 1 January 1970.
-constexpr NtpSeconds kTimeBetweenNtpEpochAndUnixEpoch{INT64_C(2208988800)};
+constexpr NtpSeconds kTimeBetweenNtpEpochAndUnixEpoch(2208988800);
 
 }  // namespace
 

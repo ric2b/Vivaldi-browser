@@ -81,7 +81,7 @@
 <translation id="2326931316514688470">アプリもっかい読み込む (&amp;R)</translation>
 <translation id="2327492829706409234">アプリ有効にする</translation>
 <translation id="2348176352564285430">アプリ: <ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="2378982052244864789">拡張機能のフォルダーどれにするん</translation>
+<translation id="2378982052244864789">拡張機能のフォルダー選んで。</translation>
 <translation id="2379281330731083556">システムダイアログ使うて印刷... <ph name="SHORTCUT_KEY" /></translation>
 <translation id="241082044617551207">不明なプラグイン</translation>
 <translation id="2423578206845792524">芸名付けて画像保存するわ... (&amp;V)</translation>
@@ -170,6 +170,7 @@
 <translation id="3838085852053358637">拡張機能、読み込めまれへんかったわ</translation>
 <translation id="383891835335927981">拡大縮小を設定したサイトないわ</translation>
 <translation id="385051799172605136">戻る</translation>
+<translation id="3861977424605124250">起動時に出す</translation>
 <translation id="3867944738977021751">証明書の項目</translation>
 <translation id="3905761538810670789">アプリ直す</translation>
 <translation id="3908501907586732282">拡張機能有効にする</translation>
@@ -260,7 +261,7 @@
 <translation id="5317780077021120954">保存</translation>
 <translation id="5334142896108694079">スクリプトキャッシュ</translation>
 <translation id="5360150013186312835">ツールバーに出す</translation>
-<translation id="5362741141255528695">秘密鍵ファイルどれにするん</translation>
+<translation id="5362741141255528695">秘密鍵ファイル選んで。</translation>
 <translation id="536638840841140142">なし</translation>
 <translation id="5370819323174483825">もっかい読み込む (&amp;R)</translation>
 <translation id="5398572795982417028">ページ範囲が上限超えてるわ。<ph name="MAXIMUM_PAGE" />が上限やねん。</translation>
@@ -278,6 +279,7 @@
 <translation id="5582839680698949063">メインメニュー</translation>
 <translation id="5614553682702429503">パスワード保存しとく？</translation>
 <translation id="5623842676595125836">ログ</translation>
+<translation id="5624959475330585145">安全やない接続使う前に確認する</translation>
 <translation id="5638309510554459422"><ph name="BEGIN_LINK" />Chrome ウェブストア<ph name="END_LINK" />で拡張機能とかテーマ探せるで</translation>
 <translation id="5677928146339483299">ブロックしてるで</translation>
 <translation id="5707185214361380026">拡張機能、読み込めまれへんかったわ：</translation>
@@ -466,6 +468,7 @@
 <translation id="9218430445555521422">デフォルトにしとく</translation>
 <translation id="93766956588638423">拡張機能直す</translation>
 <translation id="961012016278832836">レガシーMicrosoft Edge</translation>
+<translation id="961856697154696964">ブラウジングデータほかす</translation>
 <translation id="994289308992179865">ループ (&amp;L)</translation>
 <translation id="998747458861718449">検証 (&amp;N)</translation>
 </translationbundle>

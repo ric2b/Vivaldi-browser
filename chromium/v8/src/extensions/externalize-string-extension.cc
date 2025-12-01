@@ -100,7 +100,8 @@ void ExternalizeStringExtension::Externalize(
     return;
   }
   bool result = false;
-  Handle<String> string = Utils::OpenHandle(*info[0].As<v8::String>());
+  DirectHandle<String> string =
+      Utils::OpenDirectHandle(*info[0].As<v8::String>());
   const bool externalize_as_one_byte = string->IsOneByteRepresentation();
   if (!string->SupportsExternalization(
           externalize_as_one_byte ? v8::String::Encoding::ONE_BYTE_ENCODING
@@ -143,8 +144,8 @@ void ExternalizeStringExtension::Externalize(
 
 namespace {
 
-MaybeHandle<String> CopyConsStringToOld(Isolate* isolate,
-                                        DirectHandle<ConsString> string) {
+MaybeDirectHandle<String> CopyConsStringToOld(Isolate* isolate,
+                                              DirectHandle<ConsString> string) {
   return isolate->factory()->NewConsString(handle(string->first(), isolate),
                                            handle(string->second(), isolate),
                                            AllocationType::kOld);
@@ -160,7 +161,8 @@ void ExternalizeStringExtension::CreateExternalizableString(
         "First parameter to createExternalizableString() must be a string.");
     return;
   }
-  Handle<String> string = Utils::OpenHandle(*info[0].As<v8::String>());
+  DirectHandle<String> string =
+      Utils::OpenDirectHandle(*info[0].As<v8::String>());
   Isolate* isolate = reinterpret_cast<Isolate*>(info.GetIsolate());
   v8::String::Encoding encoding = string->IsOneByteRepresentation()
                                       ? v8::String::Encoding::ONE_BYTE_ENCODING
@@ -192,10 +194,13 @@ void ExternalizeStringExtension::CreateExternalizableString(
 
   // Special handling for ConsStrings, as the ConsString -> ExternalString
   // migration is special for GC (Tagged pointers to Untagged pointers).
-  // Skip if the ConsString is flat (second is empty), as we won't be guaranteed
-  // a string in old space in that case.
-  if (IsConsString(*string, isolate) && !string->IsFlat()) {
-    Handle<String> result;
+  // Skip if the ConsString is flat, as we won't be guaranteed a string in old
+  // space in that case. Note that this is also true for non-canonicalized
+  // ConsStrings that TurboFan might create (the first part is empty), so we
+  // explicitly check for that case as well.
+  if (IsConsString(*string, isolate) && !string->IsFlat() &&
+      Cast<ConsString>(string)->first()->length() != 0) {
+    DirectHandle<String> result;
     if (CopyConsStringToOld(isolate, Cast<ConsString>(string))
             .ToHandle(&result)) {
       DCHECK(result->SupportsExternalization(encoding));
@@ -205,10 +210,10 @@ void ExternalizeStringExtension::CreateExternalizableString(
   }
   // All other strings can be implicitly flattened.
   if (encoding == v8::String::ONE_BYTE_ENCODING) {
-    MaybeHandle<SeqOneByteString> maybe_result =
+    MaybeDirectHandle<SeqOneByteString> maybe_result =
         isolate->factory()->NewRawOneByteString(string->length(),
                                                 AllocationType::kOld);
-    Handle<SeqOneByteString> result;
+    DirectHandle<SeqOneByteString> result;
     if (maybe_result.ToHandle(&result)) {
       DisallowGarbageCollection no_gc;
       String::WriteToFlat(*string, result->GetChars(no_gc), 0,
@@ -218,10 +223,10 @@ void ExternalizeStringExtension::CreateExternalizableString(
       return;
     }
   } else {
-    MaybeHandle<SeqTwoByteString> maybe_result =
+    MaybeDirectHandle<SeqTwoByteString> maybe_result =
         isolate->factory()->NewRawTwoByteString(string->length(),
                                                 AllocationType::kOld);
-    Handle<SeqTwoByteString> result;
+    DirectHandle<SeqTwoByteString> result;
     if (maybe_result.ToHandle(&result)) {
       DisallowGarbageCollection no_gc;
       String::WriteToFlat(*string, result->GetChars(no_gc), 0,

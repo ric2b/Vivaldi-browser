@@ -13,7 +13,7 @@ title: Monday, November 23, 2015
 Big update this weeks as we didn't have a meeting during BlinkOn and I
 apparently forgot to send out notes for last weeks meeting.
 Updates since last meeting (on Monday, November 2nd):
-Scrolling (skobes, szager) \[[crbug.com/417782](http://crbug.com/417782)\]
+Scrolling (skobes, szager) \[[crbug.com/417782](https://crbug.com/417782)\]
 - Unified animation curves across Blink and CC. They now share the same
 curve. (skobes)
 - Looking into RTL scrollbar placement for root layer scrolling.
@@ -23,7 +23,7 @@ scrolling and bugs for a few weeks. (skobes)
 - Landed fix for scrollbar clipping, basically scroll containers should
 clip their scrollers but they don't. Chocking they didn't but now
 works as expected. (skobes)
-CSS Flexbox (cbiesinger) \[[crbug.com/426898](http://crbug.com/426898)\]
+CSS Flexbox (cbiesinger) \[[crbug.com/426898](https://crbug.com/426898)\]
 - Fixed a number of regressions relating to recent changes in behavior.
 (cbiesinger)
 - Spent some time not fixing a flexbox bug for a change, had to do with
@@ -35,7 +35,7 @@ different bug that turned out to be the same. (cbiesinger)
 (cbiesinger)
 - Moar release blocking bugs! (cbiesinger)
 CSS Grid Layout (svillar, jfernandez, rego, javif)
-\[[crbug.com/79180](http://crbug.com/79180)\]
+\[[crbug.com/79180](https://crbug.com/79180)\]
 - Simplified interface of GridResolvedPosition. (sergio)
 - Grid sizing under min|max constraints with implicit sizes. (sergio)
 - Added support for implicit grid before explicit grid. (rego)
@@ -43,7 +43,7 @@ CSS Grid Layout (svillar, jfernandez, rego, javif)
 - Landed a small refactoring of grid layout code. (rego)
 - Gave talk at BlinkOn 5 about recent work on grid layout and what the
 future holds. (javif)
-CSS Multi-column (mstensho) \[[crbug.com/334335](http://crbug.com/334335)\]
+CSS Multi-column (mstensho) \[[crbug.com/334335](https://crbug.com/334335)\]
 - Bombing Levi with multicol patches as usual, and he's an unstoppable
 reviewing machine.
 - The way it looks now, we're one patch away from being ready to
@@ -62,14 +62,14 @@ Standards work
 - Published UTR#50 Unicode Vertical Text Layout revision 15, supporting
 Unicode 8.0. (kojii)
 Add API for layout (leviw, pilgrim, ojan)
-\[[crbug.com/495288](http://crbug.com/495288)\]
+\[[crbug.com/495288](https://crbug.com/495288)\]
 - Line layout, last patch got rid of it in LineText delayed due to
 conflicting advice and opinions. (pilgrim)
-CSS Containment (leviw) \[[crbug.com/312978](http://crbug.com/312978)\]
+CSS Containment (leviw) \[[crbug.com/312978](https://crbug.com/312978)\]
 - Plan to send Intent to Implement this week.
 - Have pending spec patch that needs to be upstreamed.
 Intersection Observer (szager, mpb)
-\[[crbug.com/540528](http://crbug.com/540528)\]
+\[[crbug.com/540528](https://crbug.com/540528)\]
 - Everyone understands how it should work but managing the lifetime of
 the objects are extremely hard is it involves relationships between
 two objects with very different documents and lifetimes. Makes it very
@@ -99,14 +99,14 @@ M48 (Thanks to wkorman@ for sharing Android tricks and test phone),
 reached out to WebView TL in LON regarding final verification on the
 Beta build. (drott)
 - Investigated T-crossbar issue: woff2 or freetype hinting issue,
-[crbug.com/550523](http://crbug.com/550523). (drott)
+[crbug.com/550523](https://crbug.com/550523). (drott)
 - Prepared CL for font code memory infra instrumentation, instrumenting
 word cache done, but larger remaining issue with tracking web font
 blobs down to SkTypeface. (drott)
 - Discussed deduplicating fallback font streams on linux with skia
 folks, fmalita@ added API to SkFontconfigInterface, which on closer
 inspection unblocks as, we can implement deduplication on Blink side
-[crbug.com/524578](http://crbug.com/524578). (drott)
+[crbug.com/524578](https://crbug.com/524578). (drott)
 - Prepared harfbuzz roll, failed building on Mac, filed issue, fixed by
 behdad, new release expected. (drott)
 - Investigating Houdini custom line layout and ruby on top of it.

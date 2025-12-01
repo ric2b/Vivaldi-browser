@@ -134,10 +134,15 @@ export class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy
     if (loadTimeData.getBoolean('enableHandTrackingContentSetting')) {
       this.categoryList_.push(ContentSettingsTypes.HAND_TRACKING);
     }
-    if (loadTimeData.getBoolean('enableKeyboardAndPointerLockPrompt')) {
+    if (loadTimeData.getBoolean('enableKeyboardLockPrompt')) {
       this.categoryList_.push(ContentSettingsTypes.KEYBOARD_LOCK);
-      this.categoryList_.push(ContentSettingsTypes.POINTER_LOCK);
     }
+
+    // <if expr="is_chromeos">
+    if (loadTimeData.getBoolean('enableSmartCardReadersContentSetting')) {
+      this.categoryList_.push(ContentSettingsTypes.SMART_CARD_READERS);
+    }
+    // </if>
 
     this.prefs_ = createSiteSettingsPrefs([], [], []);
   }

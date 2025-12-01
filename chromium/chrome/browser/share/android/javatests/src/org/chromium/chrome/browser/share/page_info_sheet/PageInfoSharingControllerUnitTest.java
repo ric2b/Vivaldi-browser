@@ -53,13 +53,11 @@ import org.robolectric.shadows.ShadowActivity;
 import org.robolectric.shadows.ShadowLooper;
 
 import org.chromium.base.Callback;
-import org.chromium.base.FeatureList;
-import org.chromium.base.FeatureList.TestValues;
+import org.chromium.base.FeatureOverrides;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.HistogramWatcher;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.content_extraction.InnerTextBridge;
 import org.chromium.chrome.browser.content_extraction.InnerTextBridgeJni;
@@ -95,8 +93,6 @@ import java.util.Optional;
 public class PageInfoSharingControllerUnitTest {
     @Rule public final MockitoRule mMockitoRule = MockitoJUnit.rule();
 
-    @Rule public JniMocker mJniMocker = new JniMocker();
-
     @Rule
     public ActivityScenarioRule<TestActivity> mActivityScenarioRule =
             new ActivityScenarioRule<>(TestActivity.class);
@@ -124,9 +120,9 @@ public class PageInfoSharingControllerUnitTest {
     public void setUp() {
         PageInfoSharingControllerImpl.resetForTesting();
         HelpAndFeedbackLauncherFactory.setInstanceForTesting(mMockFeedbackLauncher);
-        mJniMocker.mock(InnerTextBridgeJni.TEST_HOOKS, mInnerTextJniMock);
-        mJniMocker.mock(DomDistillerUrlUtilsJni.TEST_HOOKS, mDomDistillerUrlUtilsJni);
-        mJniMocker.mock(PageInfoSharingBridgeJni.TEST_HOOKS, mPageInfoSharingBridgeJni);
+        InnerTextBridgeJni.setInstanceForTesting(mInnerTextJniMock);
+        DomDistillerUrlUtilsJni.setInstanceForTesting(mDomDistillerUrlUtilsJni);
+        PageInfoSharingBridgeJni.setInstanceForTesting(mPageInfoSharingBridgeJni);
         when(mDomDistillerUrlUtilsJni.getOriginalUrlFromDistillerUrl(anyString()))
                 .thenAnswer(
                         (invocation) -> {
@@ -847,13 +843,10 @@ public class PageInfoSharingControllerUnitTest {
     @Test
     public void testOpenLearnMoreLink() {
         String testLearnMoreUrl = "https://google.com/learn_more";
-        TestValues testValues = new TestValues();
-        testValues.addFeatureFlagOverride(ChromeFeatureList.CHROME_SHARE_PAGE_INFO, true);
-        testValues.addFieldTrialParamOverride(
-                ChromeFeatureList.CHROME_SHARE_PAGE_INFO,
-                PageSummarySharingRequest.LEARN_MORE_URL_PARAM,
-                testLearnMoreUrl);
-        FeatureList.setTestValues(testValues);
+        FeatureOverrides.newBuilder()
+                .enable(ChromeFeatureList.CHROME_SHARE_PAGE_INFO)
+                .param(PageSummarySharingRequest.LEARN_MORE_URL_PARAM, testLearnMoreUrl)
+                .apply();
 
         ArgumentCaptor<BottomSheetContent> sheetContentCaptor =
                 ArgumentCaptor.forClass(BottomSheetContent.class);

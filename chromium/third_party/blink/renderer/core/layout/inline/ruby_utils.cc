@@ -235,7 +235,11 @@ bool CanApplyStartOverhang(const LineInfo& line_info,
   if (previous_item.item->Style()->FontSize() > ruby_style.FontSize()) {
     return false;
   }
-  start_overhang = std::min(start_overhang, previous_item.inline_size);
+  LayoutUnit text_inline_size = previous_item.inline_size;
+  if (RuntimeEnabledFeatures::RubyOverhangOverlapFixEnabled()) {
+    text_inline_size = text_inline_size / 2;
+  }
+  start_overhang = std::min(start_overhang, text_inline_size);
   return true;
 }
 
@@ -275,9 +279,13 @@ LayoutUnit CommitPendingEndOverhang(const InlineItem& text_item,
   // width of the InlineItem's ShapeResult. However it's impossible to compute
   // inline_size of |text_item| before calling BreakText(), and BreakText()
   // requires precise |position_| which takes |end_overhang| into account.
+  LayoutUnit text_inline_size =
+      LayoutUnit(text_item.TextShapeResult()->Width());
+  if (RuntimeEnabledFeatures::RubyOverhangOverlapFixEnabled()) {
+    text_inline_size = text_inline_size / 2;
+  }
   LayoutUnit end_overhang =
-      std::min(column_item.pending_end_overhang,
-               LayoutUnit(text_item.TextShapeResult()->Width()));
+      std::min(column_item.pending_end_overhang, text_inline_size);
   InlineItemResult& end_item =
       column_item.ruby_column->base_line.MutableResults()->back();
   DCHECK_EQ(end_item.item->Type(), InlineItem::kRubyLinePlaceholder);
@@ -603,8 +611,8 @@ RubyBlockPositionCalculator::RubyLine&
 RubyBlockPositionCalculator::EnsureRubyLine(const RubyLevel& level) {
   // We do linear search because ruby_lines_ typically has only two items.
   auto it =
-      base::ranges::find_if(ruby_lines_, [&](const Member<RubyLine>& line) {
-        return base::ranges::equal(line->Level(), level);
+      std::ranges::find_if(ruby_lines_, [&](const Member<RubyLine>& line) {
+        return std::ranges::equal(line->Level(), level);
       });
   if (it != ruby_lines_.end()) {
     return **it;
@@ -620,19 +628,19 @@ RubyBlockPositionCalculator& RubyBlockPositionCalculator::PlaceLines(
   annotation_metrics_ = FontHeight();
 
   // Sort `ruby_lines` from the lowest to the highest.
-  base::ranges::sort(ruby_lines_, [](const Member<RubyLine>& line1,
-                                     const Member<RubyLine>& line2) {
+  std::ranges::sort(ruby_lines_, [](const Member<RubyLine>& line1,
+                                    const Member<RubyLine>& line2) {
     return *line1 < *line2;
   });
 
-  auto base_iterator = base::ranges::find_if(
+  auto base_iterator = std::ranges::find_if(
       ruby_lines_,
       [](const Member<RubyLine>& line) { return line->Level().empty(); });
   CHECK_NE(base_iterator, ruby_lines_.end());
 
   // Place "under" annotations from the base level to the lowest one.
   if (base_iterator != ruby_lines_.begin()) {
-    auto first_under_iterator = base::ranges::find_if(
+    auto first_under_iterator = std::ranges::find_if(
         ruby_lines_.begin(), base_iterator,
         [](const Member<RubyLine>& line) { return line->IsFirstUnderLevel(); });
     FontHeight em_height = ComputeLogicalLineEmHeight(
@@ -656,7 +664,7 @@ RubyBlockPositionCalculator& RubyBlockPositionCalculator::PlaceLines(
 
   // Place "over" annotations from the base level to the highest one.
   if (std::next(base_iterator) != ruby_lines_.end()) {
-    auto first_over_iterator = base::ranges::find_if(
+    auto first_over_iterator = std::ranges::find_if(
         base_iterator, ruby_lines_.end(),
         [](const Member<RubyLine>& line) { return line->IsFirstOverLevel(); });
     FontHeight em_height = ComputeLogicalLineEmHeight(
@@ -741,11 +749,14 @@ FontHeight RubyBlockPositionCalculator::RubyLine::UpdateMetrics() {
     if (!margins.has_value()) {
       metrics_.Unite(ComputeLogicalLineEmHeight(*column->annotation_items));
     } else {
-      DCHECK_GT(column->annotation_items->size(), 0u);
-      const LogicalLineItem& item = (*column->annotation_items)[0];
-      DCHECK(item.IsPlaceholder());
-      metrics_.Unite({-item.BlockOffset() + margins->first,
-                      item.BlockEndOffset() + margins->second});
+      // A placeholder item is at [0] in LTR, but it's not at [0] in RTL.
+      for (const LogicalLineItem& item : *column->annotation_items) {
+        if (item.IsPlaceholder()) {
+          metrics_.Unite({-item.BlockOffset() + margins->first,
+                          item.BlockEndOffset() + margins->second});
+          break;
+        }
+      }
     }
   }
   return metrics_;

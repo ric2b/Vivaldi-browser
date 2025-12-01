@@ -14,12 +14,6 @@
 
 namespace ui {
 
-bool IsPlatformWindowStateFullscreen(PlatformWindowState state) {
-  return state == PlatformWindowState::kFullScreen ||
-         state == PlatformWindowState::kPinnedFullscreen ||
-         state == PlatformWindowState::kTrustedPinnedFullscreen;
-}
-
 bool PlatformWindowDelegate::State::WillProduceFrameOnUpdateFrom(
     const State& old) const {
   // None of the following changes will produce a new frame:
@@ -90,8 +84,6 @@ SkPath PlatformWindowDelegate::GetWindowMaskForWindowShapeInPixels() {
   return SkPath();
 }
 
-void PlatformWindowDelegate::OnSurfaceFrameLockingChanged(bool lock) {}
-
 void PlatformWindowDelegate::OnOcclusionStateChanged(
     PlatformWindowOcclusionState occlusion_state) {}
 
@@ -105,18 +97,11 @@ PlatformWindowDelegate::GetOwnedWindowAnchorAndRectInDIP() {
   return std::nullopt;
 }
 
-void PlatformWindowDelegate::SetFrameRateThrottleEnabled(bool enabled) {}
-
-void PlatformWindowDelegate::OnTooltipShownOnServer(const std::u16string& text,
-                                                    const gfx::Rect& bounds) {}
-
 bool PlatformWindowDelegate::OnRotateFocus(
     PlatformWindowDelegate::RotateDirection direction,
     bool reset) {
   return false;
 }
-
-void PlatformWindowDelegate::OnTooltipHiddenOnServer() {}
 
 gfx::Rect PlatformWindowDelegate::ConvertRectToPixels(
     const gfx::Rect& rect_in_dip) const {
@@ -137,7 +122,5 @@ gfx::Insets PlatformWindowDelegate::ConvertInsetsToPixels(
     const gfx::Insets& insets_dip) const {
   return insets_dip;
 }
-
-void PlatformWindowDelegate::DisableNativeWindowOcclusion() {}
 
 }  // namespace ui

@@ -30,15 +30,15 @@ PerformanceScriptTiming::PerformanceScriptTiming(
     base::TimeTicks time_origin,
     bool cross_origin_isolated_capability,
     DOMWindow* source)
-    : PerformanceEntry(
-          (info->EndTime() - info->StartTime()).InMilliseconds(),
-          performance_entry_names::kScript,
-          DOMWindowPerformance::performance(*source->ToLocalDOMWindow())
-              ->MonotonicTimeToDOMHighResTimeStamp(info->StartTime()),
-          source) {
+    : PerformanceEntry((info->EndTime() - info->StartTime()).InMilliseconds(),
+                       performance_entry_names::kScript,
+                       Performance::MonotonicTimeToDOMHighResTimeStamp(
+                           time_origin,
+                           info->StartTime(),
+                           false,
+                           cross_origin_isolated_capability),
+                       source) {
   info_ = info;
-  time_origin_ = time_origin;
-  cross_origin_isolated_capability_ = cross_origin_isolated_capability;
   if (!info_->Window() || !source) {
     window_attribution_ = V8ScriptWindowAttribution::Enum::kOther;
   } else if (info_->Window() == source) {
@@ -57,6 +57,10 @@ PerformanceScriptTiming::PerformanceScriptTiming(
   } else {
     window_attribution_ = V8ScriptWindowAttribution::Enum::kOther;
   }
+
+  execution_start_ = Performance::MonotonicTimeToDOMHighResTimeStamp(
+      time_origin, info->ExecutionStartTime(), false,
+      cross_origin_isolated_capability);
 }
 
 PerformanceScriptTiming::~PerformanceScriptTiming() = default;
@@ -115,17 +119,9 @@ AtomicString PerformanceScriptTiming::invoker() const {
                          : "catch");
       return builder.ToAtomicString();
     }
+    case ScriptTimingInfo::InvokerType::kUserEntryPoint:
+      return AtomicString(info_->GetSourceLocation().function_name);
   }
-}
-DOMHighResTimeStamp PerformanceScriptTiming::executionStart() const {
-  return ToMonotonicTime(info_->ExecutionStartTime());
-}
-
-DOMHighResTimeStamp PerformanceScriptTiming::ToMonotonicTime(
-    base::TimeTicks time) const {
-  return Performance::MonotonicTimeToDOMHighResTimeStamp(
-      time_origin_, time, /*allow_negative_value=*/false,
-      cross_origin_isolated_capability_);
 }
 
 DOMHighResTimeStamp PerformanceScriptTiming::forcedStyleAndLayoutDuration()
@@ -159,6 +155,8 @@ V8ScriptInvokerType PerformanceScriptTiming::invokerType() const {
       return V8ScriptInvokerType(V8ScriptInvokerType::Enum::kResolvePromise);
     case ScriptTimingInfo::InvokerType::kPromiseReject:
       return V8ScriptInvokerType(V8ScriptInvokerType::Enum::kRejectPromise);
+    case ScriptTimingInfo::InvokerType::kUserEntryPoint:
+      return V8ScriptInvokerType(V8ScriptInvokerType::Enum::kUserEntryPoint);
   }
   NOTREACHED();
 }

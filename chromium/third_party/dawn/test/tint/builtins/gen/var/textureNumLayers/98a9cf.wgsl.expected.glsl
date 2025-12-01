@@ -1,9 +1,12 @@
+//
+// fragment_main
+//
 #version 310 es
 precision highp float;
 precision highp int;
 
 layout(binding = 0, std430)
-buffer prevent_dce_block_1_ssbo {
+buffer f_prevent_dce_block_ssbo {
   uint inner;
 } v;
 layout(binding = 0, rgba16f) uniform highp writeonly image2DArray arg_0;
@@ -14,6 +17,9 @@ uint textureNumLayers_98a9cf() {
 void main() {
   v.inner = textureNumLayers_98a9cf();
 }
+//
+// compute_main
+//
 #version 310 es
 
 layout(binding = 0, std430)

@@ -36,6 +36,7 @@ constexpr char kCompilationHintsString[] = "compilationHints";
 constexpr char kBranchHintsString[] = "metadata.code.branch_hint";
 constexpr char kDebugInfoString[] = ".debug_info";
 constexpr char kExternalDebugInfoString[] = "external_debug_info";
+constexpr char kBuildIdString[] = "build_id";
 
 inline const char* ExternalKindName(ImportExportKindCode kind) {
   switch (kind) {
@@ -143,7 +144,8 @@ inline SectionCode IdentifyUnknownSectionInternal(Decoder* decoder,
       {base::StaticCharVector(kBranchHintsString), kBranchHintsSectionCode},
       {base::StaticCharVector(kDebugInfoString), kDebugInfoSectionCode},
       {base::StaticCharVector(kExternalDebugInfoString),
-       kExternalDebugInfoSectionCode}};
+       kExternalDebugInfoSectionCode},
+      {base::StaticCharVector(kBuildIdString), kBuildIdSectionCode}};
 
   auto name_vec = base::Vector<const char>::cast(
       base::VectorOf(section_name_start, string.length()));
@@ -477,6 +479,9 @@ class ModuleDecoderImpl : public Decoder {
       case kExternalDebugInfoSectionCode:
         DecodeExternalDebugInfoSection();
         break;
+      case kBuildIdSectionCode:
+        DecodeBuildIdSection();
+        break;
       case kInstTraceSectionCode:
         if (enabled_features_.has_instruction_tracing()) {
           DecodeInstTraceSection();
@@ -568,17 +573,30 @@ class ModuleDecoderImpl : public Decoder {
     if (tracer_) tracer_->Description(TypeKindName(kind));
     switch (kind) {
       case kWasmFunctionTypeCode: {
-        const FunctionSig* sig = consume_sig(&module_->signature_zone);
+        const FunctionSig* sig = consume_sig(&module_->signature_zone, shared);
+        if (sig == nullptr) {
+          CHECK(!ok());
+          return {};
+        }
         return {sig, kNoSuperType, is_final, shared};
       }
       case kWasmStructTypeCode: {
         module_->is_wasm_gc = true;
-        const StructType* type = consume_struct(&module_->signature_zone);
+        const StructType* type =
+            consume_struct(&module_->signature_zone, shared);
+        if (type == nullptr) {
+          CHECK(!ok());
+          return {};
+        }
         return {type, kNoSuperType, is_final, shared};
       }
       case kWasmArrayTypeCode: {
         module_->is_wasm_gc = true;
-        const ArrayType* type = consume_array(&module_->signature_zone);
+        const ArrayType* type = consume_array(&module_->signature_zone, shared);
+        if (type == nullptr) {
+          CHECK(!ok());
+          return {};
+        }
         return {type, kNoSuperType, is_final, shared};
       }
       default:
@@ -759,14 +777,24 @@ class ModuleDecoderImpl : public Decoder {
           });
           WasmTable* table = &module_->tables.back();
           consume_table_flags(table);
-          if (table->shared) module_->has_shared_part = true;
+          DCHECK_IMPLIES(table->shared,
+                         v8_flags.experimental_wasm_shared || !ok());
+          if (table->shared && v8_flags.experimental_wasm_shared) {
+            module_->has_shared_part = true;
+            if (!IsShared(type, module_.get())) {
+              errorf(type_position,
+                     "Shared table %i must have shared element type, actual "
+                     "type %s",
+                     i, type.name().c_str());
+              break;
+            }
+          }
           // Note that we should not throw an error if the declared maximum size
           // is oob. We will instead fail when growing at runtime.
-          // TODO(369904698): Allow true 64-bit maximum values.
+          uint64_t kNoMaximum = kMaxUInt64;
           consume_resizable_limits(
-              "table", "elements", v8_flags.wasm_max_table_size,
-              &table->initial_size, table->has_maximum_size,
-              std::numeric_limits<uint32_t>::max(), &table->maximum_size,
+              "table", "elements", wasm::max_table_size(), &table->initial_size,
+              table->has_maximum_size, kNoMaximum, &table->maximum_size,
               table->is_table64() ? k64BitLimits : k32BitLimits);
           break;
         }
@@ -835,7 +863,12 @@ class ModuleDecoderImpl : public Decoder {
           break;
       }
     }
-    if (module_->memories.size() > 1) detected_features_->add_multi_memory();
+    if (module_->memories.size() > 1) {
+      detected_features_->add_multi_memory();
+      if (v8_flags.wasm_jitless) {
+        error("Multiple memories not supported in Wasm jitless mode");
+      }
+    }
     UpdateComputedMemoryInformation();
     module_->type_feedback.well_known_imports.Initialize(
         module_->num_imported_functions);
@@ -910,13 +943,23 @@ class ModuleDecoderImpl : public Decoder {
       table->type = table_type;
 
       consume_table_flags(table);
-      if (table->shared) module_->has_shared_part = true;
+      DCHECK_IMPLIES(table->shared, v8_flags.experimental_wasm_shared || !ok());
+      if (table->shared && v8_flags.experimental_wasm_shared) {
+        module_->has_shared_part = true;
+        if (!IsShared(table_type, module_.get())) {
+          errorf(
+              type_position,
+              "Shared table %i must have shared element type, actual type %s",
+              i + module_->num_imported_tables, table_type.name().c_str());
+          break;
+        }
+      }
       // Note that we should not throw an error if the declared maximum size is
       // oob. We will instead fail when growing at runtime.
+      uint64_t kNoMaximum = kMaxUInt64;
       consume_resizable_limits(
-          "table", "elements", v8_flags.wasm_max_table_size,
-          &table->initial_size, table->has_maximum_size,
-          std::numeric_limits<uint32_t>::max(), &table->maximum_size,
+          "table", "elements", wasm::max_table_size(), &table->initial_size,
+          table->has_maximum_size, kNoMaximum, &table->maximum_size,
           table->is_table64() ? k64BitLimits : k32BitLimits);
 
       if (has_initializer) {
@@ -955,7 +998,12 @@ class ModuleDecoderImpl : public Decoder {
           memory->has_maximum_pages, max_pages, &memory->maximum_pages,
           memory->is_memory64() ? k64BitLimits : k32BitLimits);
     }
-    if (module_->memories.size() > 1) detected_features_->add_multi_memory();
+    if (module_->memories.size() > 1) {
+      detected_features_->add_multi_memory();
+      if (v8_flags.wasm_jitless) {
+        error("Multiple memories not supported in Wasm jitless mode");
+      }
+    }
     UpdateComputedMemoryInformation();
   }
 
@@ -974,9 +1022,16 @@ class ModuleDecoderImpl : public Decoder {
     for (uint32_t i = 0; ok() && i < globals_count; ++i) {
       TRACE("DecodeGlobal[%d] module+%d\n", i, static_cast<int>(pc_ - start_));
       if (tracer_) tracer_->GlobalOffset(pc_offset());
+      const uint8_t* pos = pc_;
       ValueType type = consume_value_type();
       auto [mutability, shared] = consume_global_flags();
-      if (failed()) break;
+      if (failed()) return;
+      if (shared && !IsShared(type, module_.get())) {
+        CHECK(v8_flags.experimental_wasm_shared);
+        errorf(pos, "Shared global %i must have shared type, actual type %s",
+               i + imported_globals, type.name().c_str());
+        return;
+      }
       // Validation that {type} and {shared} are compatible will happen in
       // {consume_init_expr}.
       ConstantExpression init = consume_init_expr(module_.get(), type, shared);
@@ -1118,7 +1173,7 @@ class ModuleDecoderImpl : public Decoder {
 
   void DecodeElementSection() {
     uint32_t segment_count =
-        consume_count("segment count", v8_flags.wasm_max_table_size);
+        consume_count("segment count", wasm::max_table_size());
 
     for (uint32_t i = 0; i < segment_count; ++i) {
       if (tracer_) tracer_->ElementOffset(pc_offset());
@@ -1342,6 +1397,17 @@ class ModuleDecoderImpl : public Decoder {
       module_->debug_symbols[WasmDebugSymbols::Type::ExternalDWARF] = {
           WasmDebugSymbols::Type::ExternalDWARF, url};
       set_seen_unordered_section(kExternalDebugInfoSectionCode);
+    }
+    consume_bytes(static_cast<uint32_t>(end_ - start_), nullptr);
+  }
+
+  void DecodeBuildIdSection() {
+    Decoder inner(start_, pc_, end_, buffer_offset_);
+    WireBytesRef build_id =
+        consume_string(&inner, unibrow::Utf8Variant::kLossyUtf8, "build_id");
+    if (inner.ok()) {
+      module_->build_id = build_id;
+      set_seen_unordered_section(kBuildIdSectionCode);
     }
     consume_bytes(static_cast<uint32_t>(end_ - start_), nullptr);
   }
@@ -1718,7 +1784,8 @@ class ModuleDecoderImpl : public Decoder {
     pc_ = start_;
     expect_u8("type form", kWasmFunctionTypeCode);
     WasmFunction function;
-    function.sig = consume_sig(zone);
+    const bool is_shared = false;
+    function.sig = consume_sig(zone, is_shared);
     function.code = {off(pc_), static_cast<uint32_t>(end_ - pc_)};
 
     if (!ok()) return FunctionResult{std::move(error_)};
@@ -1736,10 +1803,12 @@ class ModuleDecoderImpl : public Decoder {
   }
 
   // Decodes a single function signature at {start}.
-  const FunctionSig* DecodeFunctionSignature(Zone* zone, const uint8_t* start) {
+  const FunctionSig* DecodeFunctionSignatureForTesting(Zone* zone,
+                                                       const uint8_t* start) {
     pc_ = start;
     if (!expect_u8("type form", kWasmFunctionTypeCode)) return nullptr;
-    const FunctionSig* result = consume_sig(zone);
+    const bool is_shared = false;
+    const FunctionSig* result = consume_sig(zone, is_shared);
     return ok() ? result : nullptr;
   }
 
@@ -2000,10 +2069,11 @@ class ModuleDecoderImpl : public Decoder {
   }
 
   enum ResizableLimitsType : bool { k32BitLimits, k64BitLimits };
-  void consume_resizable_limits(const char* name, const char* units,
-                                uint32_t max_initial, uint32_t* initial,
-                                bool has_maximum, uint32_t max_maximum,
-                                uint32_t* maximum, ResizableLimitsType type) {
+  void consume_resizable_limits(
+      const char* name, const char* units,
+      // Not: both memories and tables have a 32-bit limit on the initial size.
+      uint32_t max_initial, uint32_t* initial, bool has_maximum,
+      uint64_t max_maximum, uint64_t* maximum, ResizableLimitsType type) {
     const uint8_t* pos = pc();
     // Note that even if we read the values as 64-bit value, all V8 limits are
     // still within uint32_t range.
@@ -2029,7 +2099,7 @@ class ModuleDecoderImpl : public Decoder {
       if (maximum_64 > max_maximum) {
         errorf(pos,
                "maximum %s size (%" PRIu64
-               " %s) is larger than implementation limit (%u %s)",
+               " %s) is larger than implementation limit (%" PRIu64 " %s)",
                name, maximum_64, units, max_maximum, units);
       }
       if (maximum_64 < *initial) {
@@ -2037,7 +2107,7 @@ class ModuleDecoderImpl : public Decoder {
                "maximum %s size (%" PRIu64 " %s) is less than initial (%u %s)",
                name, maximum_64, units, *initial, units);
       }
-      *maximum = static_cast<uint32_t>(maximum_64);
+      *maximum = maximum_64;
       if (tracer_) {
         tracer_->Description(*maximum);
         tracer_->NextLine();
@@ -2242,7 +2312,7 @@ class ModuleDecoderImpl : public Decoder {
     }
   }
 
-  const FunctionSig* consume_sig(Zone* zone) {
+  const FunctionSig* consume_sig(Zone* zone, bool is_shared) {
     if (tracer_) tracer_->NextLine();
     // Parse parameter types.
     uint32_t param_count =
@@ -2252,7 +2322,17 @@ class ModuleDecoderImpl : public Decoder {
     // storage later.
     base::SmallVector<ValueType, 8> params{param_count};
     for (uint32_t i = 0; i < param_count; ++i) {
-      params[i] = consume_value_type();
+      const uint8_t* pos = pc_;
+      ValueType param_type = consume_value_type();
+      if (is_shared && !IsShared(param_type, module_.get())) {
+        CHECK(v8_flags.experimental_wasm_shared);
+        errorf(pos,
+               "Shared signature types must have shared parameter types, "
+               "actual type %s for parameter %i",
+               param_type.name().c_str(), i);
+        return nullptr;
+      }
+      params[i] = param_type;
       if (tracer_) tracer_->NextLineIfFull();
     }
     if (tracer_) tracer_->NextLineIfNonEmpty();
@@ -2267,7 +2347,17 @@ class ModuleDecoderImpl : public Decoder {
     // Note: Returns come first in the signature storage.
     std::copy_n(params.begin(), param_count, sig_storage + return_count);
     for (uint32_t i = 0; i < return_count; ++i) {
-      sig_storage[i] = consume_value_type();
+      const uint8_t* pos = pc_;
+      ValueType return_type = consume_value_type();
+      if (is_shared && !IsShared(return_type, module_.get())) {
+        CHECK(v8_flags.experimental_wasm_shared || !ok());
+        errorf(pos,
+               "Shared signature types must have shared return types, actual "
+               "type %s for return %i",
+               return_type.name().c_str(), i);
+        return nullptr;
+      }
+      sig_storage[i] = return_type;
       if (tracer_) tracer_->NextLineIfFull();
     }
     if (tracer_) tracer_->NextLineIfNonEmpty();
@@ -2275,14 +2365,24 @@ class ModuleDecoderImpl : public Decoder {
     return zone->New<FunctionSig>(return_count, param_count, sig_storage);
   }
 
-  const StructType* consume_struct(Zone* zone) {
+  const StructType* consume_struct(Zone* zone, bool is_shared) {
     uint32_t field_count =
         consume_count(", field count", kV8MaxWasmStructFields);
     if (failed()) return nullptr;
     ValueType* fields = zone->AllocateArray<ValueType>(field_count);
     bool* mutabilities = zone->AllocateArray<bool>(field_count);
     for (uint32_t i = 0; ok() && i < field_count; ++i) {
-      fields[i] = consume_storage_type();
+      const uint8_t* pos = pc_;
+      ValueType field_type = consume_storage_type();
+      if (is_shared && !IsShared(field_type, module_.get())) {
+        CHECK(v8_flags.experimental_wasm_shared);
+        errorf(pos,
+               "Shared struct type must have shared field types, actual type "
+               "%s for field %i",
+               field_type.name().c_str(), i);
+        return nullptr;
+      }
+      fields[i] = field_type;
       mutabilities[i] = consume_mutability();
       if (tracer_) tracer_->NextLine();
     }
@@ -2294,8 +2394,16 @@ class ModuleDecoderImpl : public Decoder {
     return result;
   }
 
-  const ArrayType* consume_array(Zone* zone) {
+  const ArrayType* consume_array(Zone* zone, bool is_shared) {
+    const uint8_t* pos = pc_;
     ValueType element_type = consume_storage_type();
+    if (is_shared && !IsShared(element_type, module_.get())) {
+      CHECK(v8_flags.experimental_wasm_shared);
+      errorf(pos,
+             "Shared array type must have shared element type, actual type %s",
+             element_type.name().c_str());
+      return nullptr;
+    }
     bool mutability = consume_mutability();
     if (tracer_) tracer_->NextLine();
     if (failed()) return nullptr;

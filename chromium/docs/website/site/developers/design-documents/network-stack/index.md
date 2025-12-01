@@ -19,9 +19,9 @@ for more modern information.
 The network stack is a mostly single-threaded cross-platform library primarily
 for resource fetching. Its main interfaces are `URLRequest` and
 `URLRequestContext`. `URLRequest`, as indicated by its name, represents the
-request for a [URL](http://en.wikipedia.org/wiki/URL). `URLRequestContext`
+request for a [URL](https://en.wikipedia.org/wiki/URL). `URLRequestContext`
 contains all the associated context necessary to fulfill the URL request, such
-as [cookies](http://en.wikipedia.org/wiki/HTTP_cookie), host resolver, proxy
+as [cookies](https://en.wikipedia.org/wiki/HTTP_cookie), host resolver, proxy
 resolver, [cache](/developers/design-documents/network-stack/http-cache), etc.
 Many URLRequest objects may share the same URLRequestContext. Most `net` objects
 are not threadsafe, although the disk cache can use a dedicated thread, and
@@ -45,32 +45,32 @@ Chromium developers wrote the network stack in order to:
 
 *   net/base - Grab bag of `net` utilities, such as host resolution,
             cookies, network change detection,
-            [SSL](http://en.wikipedia.org/wiki/Transport_Layer_Security).
+            [SSL](https://en.wikipedia.org/wiki/Transport_Layer_Security).
 *   net/disk_cache - [Cache for web
             resources](/developers/design-documents/network-stack/disk-cache).
-*   net/ftp - [FTP](http://en.wikipedia.org/wiki/File_Transfer_Protocol)
+*   net/ftp - [FTP](https://en.wikipedia.org/wiki/File_Transfer_Protocol)
             implementation. Code is primarily based on the old HTTP
             implementation.
 *   net/http -
-            [HTTP](http://en.wikipedia.org/wiki/Hypertext_Transfer_Protocol)
+            [HTTP](https://en.wikipedia.org/wiki/Hypertext_Transfer_Protocol)
             implementation.
 *   net/ocsp -
-            [OCSP](http://en.wikipedia.org/wiki/Online_Certificate_Status_Protocol)
+            [OCSP](https://en.wikipedia.org/wiki/Online_Certificate_Status_Protocol)
             implementation when not using the system libraries or if the system
             does not provide an OCSP implementation. Currently only contains an
             NSS based implementation.
-*   net/proxy - Proxy ([SOCKS](http://en.wikipedia.org/wiki/SOCKS) and
+*   net/proxy - Proxy ([SOCKS](https://en.wikipedia.org/wiki/SOCKS) and
             HTTP) configuration, resolution, script fetching, etc.
 *   net/quic - [QUIC](/quic) implementation.
 *   net/socket - Cross-platform implementations of
-            [TCP](http://en.wikipedia.org/wiki/Transmission_Control_Protocol)
+            [TCP](https://en.wikipedia.org/wiki/Transmission_Control_Protocol)
             sockets, "SSL sockets", and socket pools.
 *   net/socket_stream - socket streams for WebSockets.
 *   net/spdy - HTTP2 (and its predecessor) [SPDY](/spdy) implementation.
 *   net/url_request - `URLRequest`, `URLRequestContext`, and
             `URLRequestJob` implementations.
 *   net/websockets -
-            [WebSockets](http://en.wikipedia.org/wiki/WebSockets)
+            [WebSockets](https://en.wikipedia.org/wiki/WebSockets)
             implementation.
 
 ## Anatomy of a Network Request (focused on HTTP)
@@ -118,7 +118,7 @@ notify the `URLRequest::Delegate` as needed.
 URLRequestHttpJob will first identify the cookies to set for the HTTP request,
 which requires querying the `CookieMonster` in the request context. This can be
 asynchronous since the CookieMonster may be backed by an
-[sqlite](http://en.wikipedia.org/wiki/SQLite) database. After doing so, it will
+[sqlite](https://en.wikipedia.org/wiki/SQLite) database. After doing so, it will
 ask the request context's `HttpTransactionFactory` to create a
 `HttpTransaction`. Typically, the
 `[HttpCache](/developers/design-documents/network-stack/http-cache)` will be
@@ -173,7 +173,7 @@ class HttpStream {
 
 Currently, there are only two main `HttpStream` subclasses: `HttpBasicStream`
 and `SpdyHttpStream`, although we're planning on creating subclasses for [HTTP
-pipelining](http://en.wikipedia.org/wiki/HTTP_pipelining). HttpBasicStream
+pipelining](https://en.wikipedia.org/wiki/HTTP_pipelining). HttpBasicStream
 assumes it is reading/writing directly to a socket. SpdyHttpStream reads and
 writes to a `SpdyStream`. The network transaction will call methods on the
 stream, and on completion, will invoke callbacks back to the
@@ -209,10 +209,10 @@ configuration. If not, it uses the `ProxyConfigService` to query the system for
 the current proxy settings. If the proxy settings are set to no proxy or a
 specific proxy, then proxy resolution is simple (we return no proxy or the
 specific proxy). Otherwise, we need to run a [PAC
-script](http://en.wikipedia.org/wiki/Proxy_auto-config) to determine the
+script](https://en.wikipedia.org/wiki/Proxy_auto-config) to determine the
 appropriate proxy (or lack thereof). If we don't already have the PAC script,
 then the proxy settings will indicate we're supposed to use [WPAD
-auto-detection](http://en.wikipedia.org/wiki/Web_Proxy_Autodiscovery_Protocol),
+auto-detection](https://en.wikipedia.org/wiki/Web_Proxy_Autodiscovery_Protocol),
 or a custom PAC url will be specified, and we'll fetch the PAC script with the
 `ProxyScriptFetcher`. Once we have the PAC script, we'll execute it via the
 `ProxyResolver`. Note that we use a shim `MultiThreadedProxyResolver` object to
@@ -220,7 +220,7 @@ dispatch the PAC script execution to threads, which run a `ProxyResolverV8`
 instance. This is because PAC script execution may block on host resolution.
 Therefore, in order to prevent one stalled PAC script execution from blocking
 other proxy resolutions, we allow for executing multiple PAC scripts
-concurrently (caveat: [V8](http://en.wikipedia.org/wiki/V8_(JavaScript_engine))
+concurrently (caveat: [V8](https://en.wikipedia.org/wiki/V8_(JavaScript_engine))
 is not threadsafe, so we acquire locks for the javascript bindings, so while one
 V8 instance is blocked on host resolution, it releases the lock so another V8
 instance can execute the PAC script to resolve the proxy for a different URL).
@@ -232,7 +232,7 @@ endpoint or proxy endpoint), it needs to establish a connection. It does so by
 identifying the appropriate "socket" pool and requesting a socket from it. Note
 that "socket" here basically means something that we can read and write to, to
 send data over the network. An SSL socket is built on top of a transport
-([TCP](http://en.wikipedia.org/wiki/Transmission_Control_Protocol)) socket, and
+([TCP](https://en.wikipedia.org/wiki/Transmission_Control_Protocol)) socket, and
 encrypts/decrypts the raw TCP data for the user. Different socket types also
 handle different connection setups, for HTTP/SOCKS proxies, SSL handshakes, etc.
 Socket pools are designed to be layered, so the various connection setups can be
@@ -245,7 +245,7 @@ implemented exactly correctly, but good enough). Socket pools also abstract the
 socket request from the fulfillment, thereby giving us "late binding" of
 sockets. A socket request can be fulfilled by a newly connected socket or an
 idle socket ([reused from a previous http
-transaction](http://en.wikipedia.org/wiki/HTTP_persistent_connection)).
+transaction](https://en.wikipedia.org/wiki/HTTP_persistent_connection)).
 
 #### Host Resolution
 
@@ -254,9 +254,9 @@ transport (TCP) handshake, but probably already requires host resolution.
 `HostResolverImpl` uses assorted mechanisms including getaddrinfo() to perform
 host resolutions, which is a blocking call, so the resolver invokes these calls
 on unjoined worker threads. Typically host resolution usually involves
-[DNS](http://en.wikipedia.org/wiki/Domain_Name_System) resolution, but may
+[DNS](https://en.wikipedia.org/wiki/Domain_Name_System) resolution, but may
 involve non-DNS namespaces such as
-[NetBIOS](http://en.wikipedia.org/wiki/NetBIOS)/[WINS](http://en.wikipedia.org/wiki/Windows_Internet_Name_Service).
+[NetBIOS](https://en.wikipedia.org/wiki/NetBIOS)/[WINS](https://en.wikipedia.org/wiki/Windows_Internet_Name_Service).
 Note that, as of time of writing, we cap the number of concurrent host
 resolutions to 8, but are looking to optimize this value. `HostResolverImpl`
 also contains a `HostCache` which caches up to 1000 hostnames.

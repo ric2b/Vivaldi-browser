@@ -10,6 +10,8 @@
 #include "third_party/blink/public/mojom/ai/ai_manager.mojom-shared.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
+#include "third_party/blink/renderer/platform/bindings/exception_state.h"
+#include "third_party/blink/renderer/platform/bindings/script_state.h"
 
 namespace blink {
 
@@ -23,21 +25,28 @@ const char kExceptionMessagePermissionDenied[] =
     "allowed to execute model.";
 const char kExceptionMessageGenericError[] = "Other generic failures occurred.";
 const char kExceptionMessageFiltered[] =
-    "The execution yielded a bad response.";
+    "The execution yielded an unsafe response.";
 const char kExceptionMessageOutputLanguageFiltered[] =
     "The model attempted to output text in an untested language, and was "
     "prevented from doing so.";
+const char kExceptionMessageResponseLowQuality[] =
+    "The model attempted to output text with low quality, and was prevented "
+    "from doing so.";
 const char kExceptionMessageDisabled[] = "The response was disabled.";
 const char kExceptionMessageCancelled[] = "The request was cancelled.";
 const char kExceptionMessageSessionDestroyed[] =
     "The model execution session has been destroyed.";
 const char kExceptionMessageRequestAborted[] = "The request has been aborted.";
+const char kExceptionRequestTooLarge[] = "The prompt request is too large.";
 
 const char kExceptionMessageInvalidTemperatureAndTopKFormat[] =
     "Initializing a new session must either specify both topK and temperature, "
     "or neither of them.";
 const char kExceptionMessageUnableToCreateSession[] =
     "The session cannot be created.";
+const char kExceptionMessageInitialPromptTooLarge[] =
+    "The initial prompts / system prompts are too large to fit in the "
+    "context.";
 const char kExceptionMessageUnableToCloneSession[] =
     "The session cannot be cloned.";
 const char kExceptionMessageSystemPromptIsDefinedMultipleTimes[] =
@@ -72,6 +81,23 @@ DOMException* CreateInternalErrorException() {
   return DOMException::Create(
       kExceptionMessageServiceUnavailable,
       DOMException::GetErrorName(DOMExceptionCode::kOperationError));
+}
+
+bool HandleAbortSignal(AbortSignal* signal,
+                       ScriptState* script_state,
+                       ExceptionState& exception_state) {
+  if (signal && signal->aborted()) {
+    auto reason = signal->reason(script_state);
+    if (reason.IsEmpty()) {
+      ThrowAbortedException(exception_state);
+    } else {
+      V8ThrowException::ThrowException(script_state->GetIsolate(),
+                                       reason.V8Value());
+    }
+    return true;
+  }
+
+  return false;
 }
 
 namespace {
@@ -132,6 +158,14 @@ DOMException* ConvertModelStreamingResponseErrorToDOMException(
       return DOMException::Create(
           kExceptionMessageSessionDestroyed,
           DOMException::GetErrorName(DOMExceptionCode::kInvalidStateError));
+    case ModelStreamingResponseStatus::kErrorPromptRequestTooLarge:
+      return DOMException::Create(
+          kExceptionRequestTooLarge,
+          DOMException::GetErrorName(DOMExceptionCode::kQuotaExceededError));
+    case ModelStreamingResponseStatus::kErrorResponseLowQuality:
+      return DOMException::Create(
+          kExceptionMessageResponseLowQuality,
+          DOMException::GetErrorName(DOMExceptionCode::kNotSupportedError));
     case ModelStreamingResponseStatus::kOngoing:
     case ModelStreamingResponseStatus::kComplete:
       NOTREACHED();

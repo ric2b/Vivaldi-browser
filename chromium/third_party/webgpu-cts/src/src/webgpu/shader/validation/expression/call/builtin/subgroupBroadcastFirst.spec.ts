@@ -25,28 +25,6 @@ fn foo() {
     t.expectCompileResult(t.params.enable, wgsl);
   });
 
-g.test('requires_subgroups_f16')
-  .desc('Validates that the subgroups feature is required')
-  .params(u => u.combine('enable', [false, true] as const))
-  .beforeAllSubcases(t => {
-    const features: GPUFeatureName[] = ['shader-f16', 'subgroups' as GPUFeatureName];
-    if (t.params.enable) {
-      features.push('subgroups-f16' as GPUFeatureName);
-    }
-    t.selectDeviceOrSkipTestCase(features);
-  })
-  .fn(t => {
-    const wgsl = `
-enable f16;
-enable subgroups;
-${t.params.enable ? 'enable subgroups_f16;' : ''}
-fn foo() {
-  _ = subgroupBroadcastFirst(0h);
-}`;
-
-    t.expectCompileResult(t.params.enable, wgsl);
-  });
-
 const kArgumentTypes = objectsToRecord(kAllScalarsAndVectors);
 
 const kStages: Record<string, string> = {
@@ -102,7 +80,6 @@ g.test('data_type')
     const features = ['subgroups' as GPUFeatureName];
     const type = kArgumentTypes[t.params.type];
     if (type.requiresF16()) {
-      features.push('subgroups-f16' as GPUFeatureName);
       features.push('shader-f16');
     }
     t.selectDeviceOrSkipTestCase(features);
@@ -111,7 +88,7 @@ g.test('data_type')
     const type = kArgumentTypes[t.params.type];
     let enables = `enable subgroups;\n`;
     if (type.requiresF16()) {
-      enables += `enable subgroups_f16;\nenable f16;`;
+      enables += `enable f16;`;
     }
     const wgsl = `
 ${enables}
@@ -147,7 +124,6 @@ g.test('return_type')
     const dataType = kArgumentTypes[t.params.dataType];
     const retType = kArgumentTypes[t.params.retType];
     if (dataType.requiresF16() || retType.requiresF16()) {
-      features.push('subgroups-f16' as GPUFeatureName);
       features.push('shader-f16');
     }
     t.selectDeviceOrSkipTestCase(features);
@@ -157,7 +133,7 @@ g.test('return_type')
     const retType = kArgumentTypes[t.params.retType];
     let enables = `enable subgroups;\n`;
     if (dataType.requiresF16() || retType.requiresF16()) {
-      enables += `enable subgroups_f16;\nenable f16;`;
+      enables += `enable f16;`;
     }
     const wgsl = `
 ${enables}

@@ -29,6 +29,14 @@ update_target("//chrome/browser:browser") {
   ]
 }
 
+if (!is_android) {
+  update_target("//chrome/browser:browser") {
+    public_deps += [
+      "//vivaldi/components:panel_request_filter",
+    ]
+  }
+}
+
 update_target("//chrome/renderer:renderer") {
   deps += [
     "//vivaldi/components/content_injection/renderer",

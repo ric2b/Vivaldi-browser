@@ -451,7 +451,7 @@ generating `PREF_CHANGED` notifications as appropriate.
 
 Covering the design of all `ConfigurationPolicyProvider` implementations is out
 of scope for this document, but here is a quick overview (see also
-<http://www.chromium.org/administrators>):
+<https://www.chromium.org/administrators>):
 
 *   On Windows, `ConfigurationPolicyProviderWin` integrates with Windows
             Group Policy. Policy settings are read from the registry and

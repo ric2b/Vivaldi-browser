@@ -27,7 +27,7 @@ same time:
     environment) helps to minimize any damage done by severely limiting what an
     attacker can do after gaining control of a process.
 
-![](images/rule-of-two.png)
+![](./rule-of-two.png)
 
 <mark><strong>Since Chromium code is usually written in C++, this means that all
 code that handles untrustworthy inputs must be sandboxed.</strong></mark>

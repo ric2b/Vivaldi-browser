@@ -279,6 +279,7 @@
 <translation id="5582839680698949063">主選單</translation>
 <translation id="5614553682702429503">要儲存密碼嗎？</translation>
 <translation id="5623842676595125836">日誌</translation>
+<translation id="5624959475330585145">在使用不安全連線前先詢問</translation>
 <translation id="5638309510554459422">歡迎前往 <ph name="BEGIN_LINK" />Chrome 線上應用程式商店<ph name="END_LINK" />尋找擴充功能和主題</translation>
 <translation id="5677928146339483299">已封鎖</translation>
 <translation id="5707185214361380026">擴充功能載入失敗：</translation>
@@ -354,7 +355,7 @@
 <translation id="6916590542764765824">管理擴充功能</translation>
 <translation id="6945221475159498467">選取</translation>
 <translation id="6955446738988643816">檢查跳出視窗</translation>
-<translation id="6970856801391541997">列印特定網頁</translation>
+<translation id="6970856801391541997">列印指定頁面</translation>
 <translation id="6991665348624301627">選取印表機</translation>
 <translation id="7005848115657603926">頁面範圍無效，請使用 <ph name="EXAMPLE_PAGE_RANGE" /></translation>
 <translation id="7006634003215061422">下邊界</translation>
@@ -454,7 +455,7 @@
 <translation id="8929696694736010839">僅限目前的無痕模式瀏覽階段</translation>
 <translation id="895944840846194039">JavaScript 記憶體</translation>
 <translation id="8962083179518285172">隱藏詳細資訊</translation>
-<translation id="8973557916016709913">重設為預設縮放比例</translation>
+<translation id="8973557916016709913">移除縮放比例</translation>
 <translation id="897939795688207351">在 <ph name="ORIGIN" /> 上</translation>
 <translation id="9003647077635673607">允許在全部網站啟用</translation>
 <translation id="9027459031423301635">在新分頁開啟連結 (&amp;T)</translation>
@@ -468,6 +469,7 @@
 <translation id="9218430445555521422">設定為預設瀏覽器</translation>
 <translation id="93766956588638423">修復擴充功能</translation>
 <translation id="961012016278832836">舊版 Microsoft Edge</translation>
+<translation id="961856697154696964">刪除瀏覽資料</translation>
 <translation id="994289308992179865">循環播放 (&amp;L)</translation>
 <translation id="998747458861718449">檢查 (&amp;N)</translation>
 </translationbundle>

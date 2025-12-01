@@ -137,7 +137,7 @@ class CORE_EXPORT WebPagePopupImpl final : public WebPagePopup,
  private:
   // WidgetBaseClient overrides:
   void OnCommitRequested() override;
-  void BeginMainFrame(base::TimeTicks last_frame_time) override;
+  void BeginMainFrame(const viz::BeginFrameArgs& args) override;
   void SetSuppressFrameRequestsWorkaroundFor704763Only(bool) final;
   WebInputEventResult DispatchBufferedTouchEvents() override;
   void WillHandleGestureEvent(const WebGestureEvent& event,
@@ -199,7 +199,7 @@ class CORE_EXPORT WebPagePopupImpl final : public WebPagePopup,
   gfx::Rect ViewRect() override;
   void SetScreenRects(const gfx::Rect& widget_screen_rect,
                       const gfx::Rect& window_screen_rect) override;
-  gfx::Size VisibleViewportSizeInDIPs() override;
+  gfx::Size VisibleViewportSize() override;
   bool IsHidden() const override;
 
   // WidgetEventHandler functions

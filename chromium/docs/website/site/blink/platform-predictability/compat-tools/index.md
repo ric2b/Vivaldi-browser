@@ -27,11 +27,11 @@ the [dominant milestone per
 day](https://github.com/GoogleChrome/chromium-dashboard/issues/279)) . More
 detailed break-downs are available to Google employees via the
 [Blink.UseCounter.Features histogram using a formula with the PageVisits bucket
-in the denominator](https://goto.google.com/uma-usecounter). Internally it's
+in the denominator](http://go/uma-usecounter). Internally it's
 also possible to look at UseCounter by the [fraction of users that hit it at
-least once in a day](https://goto.google.com/uma-usecounter-peruser), and
+least once in a day](http://go/uma-usecounter-peruser), and
 UseCounters [hit within Android
-WebView](https://goto.google.com/uma-usecounter-webview). In the vast majority
+WebView](http://go/uma-usecounter-webview). In the vast majority
 of cases, compat tradeoffs are made entirely based on public UseCounter data.
 
 **Pros:**

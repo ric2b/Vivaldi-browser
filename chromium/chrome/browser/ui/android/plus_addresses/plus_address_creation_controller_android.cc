@@ -17,6 +17,7 @@
 #include "chrome/browser/ui/android/plus_addresses/plus_address_creation_view_android.h"
 #include "chrome/browser/ui/android/tab_model/tab_model.h"
 #include "chrome/browser/ui/android/tab_model/tab_model_list.h"
+#include "components/autofill/content/browser/content_autofill_client.h"
 #include "components/plus_addresses/features.h"
 #include "components/plus_addresses/grit/plus_addresses_strings.h"
 #include "components/plus_addresses/metrics/plus_address_metrics.h"
@@ -167,6 +168,7 @@ PlusAddressCreationControllerAndroid::~PlusAddressCreationControllerAndroid() =
     default;
 void PlusAddressCreationControllerAndroid::OfferCreation(
     const url::Origin& main_frame_origin,
+    bool is_manual_fallback,
     PlusAddressCallback callback) {
   if (view_) {
     return;
@@ -187,6 +189,7 @@ void PlusAddressCreationControllerAndroid::OfferCreation(
   }
 
   callback_ = std::move(callback);
+  is_manual_fallback_ = is_manual_fallback;
   relevant_origin_ = main_frame_origin;
   const bool should_show_notice = ShouldShowNotice();
   metrics::RecordModalEvent(metrics::PlusAddressModalEvent::kModalShown,
@@ -213,6 +216,10 @@ void PlusAddressCreationControllerAndroid::TryAgainToReservePlusAddress() {
   if (!plus_address_service) {
     return;
   }
+  base::RecordAction(
+      base::UserMetricsAction("PlusAddresses.ReserveErrorTryAgainClicked"));
+  modal_error_status_.reset();
+  modal_error_state_info_.reset();
   plus_address_service->ReservePlusAddress(
       relevant_origin_,
       base::BindOnce(
@@ -225,6 +232,7 @@ void PlusAddressCreationControllerAndroid::OnRefreshClicked() {
   if (!plus_address_service) {
     return;
   }
+  base::RecordAction(base::UserMetricsAction("PlusAddresses.Refreshed"));
   plus_address_service->RefreshPlusAddress(
       relevant_origin_,
       base::BindOnce(
@@ -234,6 +242,12 @@ void PlusAddressCreationControllerAndroid::OnRefreshClicked() {
 
 void PlusAddressCreationControllerAndroid::OnConfirmed() {
   CHECK(plus_profile_.has_value());
+  if (modal_error_status_ ==
+      metrics::PlusAddressModalCompletionStatus::kConfirmPlusAddressError) {
+    base::RecordAction(
+        base::UserMetricsAction("PlusAddresses.CreateErrorTryAgainClicked"));
+  }
+  modal_error_status_.reset();
   metrics::RecordModalEvent(metrics::PlusAddressModalEvent::kModalConfirmed,
                             ShouldShowNotice());
   if (plus_profile_->is_confirmed) {
@@ -258,12 +272,17 @@ void PlusAddressCreationControllerAndroid::OnCanceled() {
   metrics::RecordModalEvent(metrics::PlusAddressModalEvent::kModalCanceled,
                             was_notice_shown);
   if (modal_error_status_.has_value()) {
-    RecordModalShownOutcome(modal_error_status_.value(), was_notice_shown);
+    RecordModalShownOutcome(modal_error_status_.value(),
+                            modal_error_state_info_, was_notice_shown);
     modal_error_status_.reset();
+    modal_error_state_info_.reset();
   } else {
     RecordModalShownOutcome(
         metrics::PlusAddressModalCompletionStatus::kModalCanceled,
-        was_notice_shown);
+        modal_error_state_info_, was_notice_shown);
+    if (was_notice_shown) {
+      TriggerUserPerceptionSurvey(hats::SurveyType::kDeclinedFirstTimeCreate);
+    }
   }
 }
 
@@ -319,34 +338,47 @@ void PlusAddressCreationControllerAndroid::OnPlusAddressConfirmed(
             ->GetPrefs()
             ->SetTime(prefs::kFirstPlusAddressCreationTime, base::Time::Now());
         GetPlusAddressSettingService()->SetHasAcceptedNotice();
+        TriggerUserPerceptionSurvey(hats::SurveyType::kAcceptedFirstTimeCreate);
+      } else if (is_manual_fallback_) {
+        TriggerUserPerceptionSurvey(
+            hats::SurveyType::kCreatedPlusAddressViaManualFallback);
+      } else if (PlusAddressService* service = GetPlusAddressService();
+                 service && service->GetPlusAddressesCount() > 2) {
+        TriggerUserPerceptionSurvey(
+            hats::SurveyType::kCreatedMultiplePlusAddresses);
       }
       std::move(callback_).Run(*maybe_plus_profile->plus_address);
       RecordModalShownOutcome(
           metrics::PlusAddressModalCompletionStatus::kModalConfirmed,
-          was_notice_shown);
+          modal_error_state_info_, was_notice_shown);
     } else {
       // Persist the confirmed profile if it's different from the reserved one.
       plus_profile_ = maybe_plus_profile.value();
       modal_error_status_ =
           metrics::PlusAddressModalCompletionStatus::kConfirmPlusAddressError;
+      modal_error_state_info_ =
+          GetAffiliationErrorStateInfo(maybe_plus_profile.value());
       if (view_) {
-        view_->ShowError(
-            GetAffiliationErrorStateInfo(maybe_plus_profile.value()));
+        view_->ShowError(*modal_error_state_info_);
       }
     }
   } else {
     modal_error_status_ =
         metrics::PlusAddressModalCompletionStatus::kConfirmPlusAddressError;
+    modal_error_state_info_ =
+        GetCreateErrorStateInfo(maybe_plus_profile.error());
     // Note that in case of `suppress_ui_for_testing_` or bottom sheet dismissal
     // prior to service response, `view_` will be null.
     if (view_) {
-      view_->ShowError(GetCreateErrorStateInfo(maybe_plus_profile.error()));
+      view_->ShowError(*modal_error_state_info_);
     }
   }
 }
 
 void PlusAddressCreationControllerAndroid::RecordModalShownOutcome(
     metrics::PlusAddressModalCompletionStatus status,
+    const std::optional<PlusAddressCreationErrorStateInfo>&
+        modal_error_state_info,
     bool was_notice_shown) {
   if (!modal_shown_time_.has_value()) {
     return;
@@ -362,15 +394,40 @@ void PlusAddressCreationControllerAndroid::RecordModalShownOutcome(
           base::UserMetricsAction("PlusAddresses.OfferedPlusAddressDeclined"));
       break;
     case kModalConfirmed:
-      base::RecordAction(
-          base::UserMetricsAction("PlusAddresses.OfferedPlusAddressAccepted"));
+      if (modal_error_state_info &&
+          modal_error_state_info.value().error_type ==
+              PlusAddressCreationBottomSheetErrorType::kCreateAffiliation) {
+        base::RecordAction(base::UserMetricsAction(
+            "PlusAddresses.AffiliationErrorFilledExisting"));
+      } else {
+        base::RecordAction(base::UserMetricsAction(
+            "PlusAddresses.OfferedPlusAddressAccepted"));
+      }
       break;
     case kReservePlusAddressError:
+      base::RecordAction(
+          base::UserMetricsAction("PlusAddresses.ReserveErrorCanceled"));
+      break;
     case kConfirmPlusAddressError:
+      if (modal_error_state_info &&
+          modal_error_state_info.value().error_type ==
+              PlusAddressCreationBottomSheetErrorType::kCreateAffiliation) {
+        base::RecordAction(
+            base::UserMetricsAction("PlusAddresses.AffiliationErrorCanceled"));
+      } else if (modal_error_state_info &&
+                 modal_error_state_info.value().error_type ==
+                     PlusAddressCreationBottomSheetErrorType::kCreateQuota) {
+        base::RecordAction(
+            base::UserMetricsAction("PlusAddresses.QuotaErrorAccepted"));
+      } else {
+        base::RecordAction(
+            base::UserMetricsAction("PlusAddresses.CreateErrorCanceled"));
+      }
       break;
   }
 
   modal_shown_time_.reset();
+  modal_error_state_info_.reset();
   reserve_response_count_ = 0;
 }
 
@@ -380,9 +437,15 @@ bool PlusAddressCreationControllerAndroid::ShouldShowNotice() const {
       const_cast<PlusAddressCreationControllerAndroid*>(this)
           ->GetPlusAddressSettingService();
 
-  return setting_service && !setting_service->GetHasAcceptedNotice() &&
-         base::FeatureList::IsEnabled(
-             features::kPlusAddressUserOnboardingEnabled);
+  return setting_service && !setting_service->GetHasAcceptedNotice();
+}
+
+void PlusAddressCreationControllerAndroid::TriggerUserPerceptionSurvey(
+    hats::SurveyType survey_type) {
+  if (autofill::ContentAutofillClient* autofill_client =
+          autofill::ContentAutofillClient::FromWebContents(&GetWebContents())) {
+    autofill_client->TriggerPlusAddressUserPerceptionSurvey(survey_type);
+  }
 }
 
 PlusAddressService*

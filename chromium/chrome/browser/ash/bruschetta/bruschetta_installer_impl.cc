@@ -64,8 +64,15 @@ struct BruschettaInstallerImpl::Fds {
 
 BruschettaInstallerImpl::BruschettaInstallerImpl(
     Profile* profile,
+    PrefService& local_state,
     base::OnceClosure close_closure)
-    : profile_(profile), close_closure_(std::move(close_closure)) {}
+    : profile_(profile),
+      download_factory_(base::BindRepeating(
+          [](PrefService& local_state) -> std::unique_ptr<BruschettaDownload> {
+            return std::make_unique<SimpleURLLoaderDownload>(local_state);
+          },
+          std::ref(local_state))),
+      close_closure_(std::move(close_closure)) {}
 
 BruschettaInstallerImpl::~BruschettaInstallerImpl() = default;
 
@@ -495,7 +502,7 @@ void BruschettaInstallerImpl::InstallPflash() {
 }
 
 void BruschettaInstallerImpl::OnInstallPflash(
-    std::optional<vm_tools::concierge::InstallPflashResponse> result) {
+    std::optional<vm_tools::concierge::SuccessFailureResponse> result) {
   if (MaybeClose()) {
     return;
   }

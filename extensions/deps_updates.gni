@@ -56,6 +56,8 @@ update_target("//chrome/browser/ui:ui") {
 
 update_target("//components/guest_view/browser:browser") {
   public_deps += [
+    "//chrome/browser/extensions:cws_item_service_proto",
+    "//chrome/browser/resource_coordinator:mojo_bindings",
     "//extensions/buildflags",
     "//vivaldi/extensions/helper:app_helper"
   ]

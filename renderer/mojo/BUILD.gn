@@ -21,3 +21,12 @@ mojom("frame_host_service") {
   export_define_blink = "BLINK_CORE_IMPLEMENTATION=1"
   export_header_blink = "third_party/blink/renderer/core/core_export.h"
 }
+
+mojom("encrypted_media_access") {
+  sources = [ "vivaldi_encrypted_media_access.mojom" ]
+  input_root_override = "//vivaldi/"
+
+  public_deps = [
+    "//mojo/public/mojom/base",
+  ]
+}

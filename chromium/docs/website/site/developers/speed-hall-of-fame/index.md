@@ -23,7 +23,7 @@ This week, we highlight the performance sheriffing process working as it should
 due to reliability improvements. A few weeks ago, Joshua Bell landed a [patch
 impacting IndexedDB](http://f27dd1d7e9322388546c613cfed39bafda153859/). The
 performance sheriff Oystein Eftevaag filed a [bug for an IndexedDB
-regression](http://crbug.com/454622) and the autobisect bot submitted a bisect
+regression](https://crbug.com/454622) and the autobisect bot submitted a bisect
 job on his behalf. It returned with high confidence that Joshua's patch was to
 blame. While the regression was unexpected, Joshua investigated, determined it
 was his patch, and then posted a [fix that resolved the performance
@@ -136,7 +136,7 @@ upgraded](https://src.chromium.org/viewvc/chrome?revision=266629&view=revision)
 the capabilities of our bisect bots so that they can now bisect functional
 breakages and changes in variance. You can find instructions in the ["tips"
 section of the
-documentation](http://www.chromium.org/developers/tree-sheriffs/perf-sheriffs/bisecting-performance-regressions#TOC-Tips),
+documentation](/developers/tree-sheriffs/perf-sheriffs/bisecting-performance-regressions#TOC-Tips),
 but it's as easy as setting bisect_mode to return_code or std_dev in your bisect
 jobs. Simon's work should help us quite a bit in our quest for reliable, stable
 benchmarks!
@@ -319,7 +319,7 @@ Elly Jones [landed a
 fix](https://src.chromium.org/viewvc/chrome?revision=224030&view=revision) that
 reduces startup time by 1.5s for most users on Windows. The win was secured by
 decreasing the timeout for
-[WPAD](http://en.wikipedia.org/wiki/Web_Proxy_Autodiscovery_Protocol) to a
+[WPAD](https://en.wikipedia.org/wiki/Web_Proxy_Autodiscovery_Protocol) to a
 reasonable value.
 
 ### 2013-10-31

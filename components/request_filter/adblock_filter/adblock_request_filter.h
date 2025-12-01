@@ -55,6 +55,10 @@ class AdBlockRequestFilter : public vivaldi::RequestFilter {
                       const vivaldi::FilteredRequestInfo* request,
                       int net_error) override;
 
+  void set_allow_blocking_documents(bool allow) {
+    allow_blocking_documents_ = allow;
+  }
+
  private:
   bool DoesAdAttributionMatch(content::RenderFrameHost* frame,
                               std::string_view tracker_url_spec,
@@ -63,6 +67,8 @@ class AdBlockRequestFilter : public vivaldi::RequestFilter {
   base::WeakPtr<RulesIndexManager> rules_index_manager_;
   base::WeakPtr<StateAndLogsImpl> state_and_logs_;
   base::WeakPtr<Resources> resources_;
+
+  bool allow_blocking_documents_;
 };
 
 }  // namespace adblock_filter

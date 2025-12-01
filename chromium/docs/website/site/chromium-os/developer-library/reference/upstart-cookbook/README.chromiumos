@@ -1,0 +1,6 @@
+Upstart is the init program for Chromium OS.  Its documentation is no longer
+maintained at Ubuntu, and Chromium OS developers have had to find in in the Web
+Archive.  This is a copy of the archive, for convenience.  Some of the images
+are missing.
+
+https://web.archive.org/web/20230322064449/http://upstart.ubuntu.com/cookbook/.

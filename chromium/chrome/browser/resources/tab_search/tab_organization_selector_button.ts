@@ -6,6 +6,7 @@ import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/cr_icon/cr_icon.js';
 import 'chrome://resources/cr_elements/icons.html.js';
 
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {CrLitElement} from 'chrome://resources/lit/v3_0/lit.rollup.js';
 
 import {getCss} from './tab_organization_selector_button.css.js';
@@ -50,6 +51,11 @@ export class TabOrganizationSelectorButtonElement extends CrLitElement {
 
   override focus() {
     this.$.button.focus();
+  }
+
+  protected getAriaLabel_() {
+    return loadTimeData.getStringF(
+        'selectorAriaLabel', this.heading, this.subheading);
   }
 }
 

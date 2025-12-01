@@ -13,7 +13,6 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/spare_render_process_host_manager_impl.h"
@@ -77,7 +76,7 @@ TEST_F(RenderProcessHostUnitTest, GuestsAreNotSuitableHosts) {
             RenderProcessHostImpl::GetExistingProcessHost(site_instance.get()));
 }
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
 TEST_F(RenderProcessHostUnitTest, RendererProcessLimit) {
   // This test shouldn't run with --site-per-process mode, which prohibits
   // the renderer process reuse this test explicitly exercises.
@@ -105,7 +104,7 @@ TEST_F(RenderProcessHostUnitTest, RendererProcessLimit) {
 }
 #endif
 
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS)
 TEST_F(RenderProcessHostUnitTest, NoRendererProcessLimitOnAndroidOrChromeOS) {
   // Add a few dummy process hosts.
   static constexpr size_t kMaxRendererProcessCountForTesting = 82;
@@ -207,7 +206,7 @@ TEST_F(RenderProcessHostUnitTest, IsUnused) {
     scoped_refptr<SiteInstanceImpl> site_instance =
         SiteInstanceImpl::Create(browser_context());
     EXPECT_FALSE(site_instance->HasSite());
-    EXPECT_TRUE(site_instance->GetProcess()->IsUnused());
+    EXPECT_TRUE(site_instance->GetOrCreateProcess()->IsUnused());
   }
 
   // Navigation should mark the process as unable to become a dedicated process
@@ -219,7 +218,7 @@ TEST_F(RenderProcessHostUnitTest, IsUnused) {
   // "used" from the point the process is created via GetProcess().
   {
     scoped_refptr<SiteInstanceImpl> site_instance = CreateForUrl(kUrl1);
-    EXPECT_FALSE(site_instance->GetProcess()->IsUnused());
+    EXPECT_FALSE(site_instance->GetOrCreateProcess()->IsUnused());
   }
 }
 
@@ -229,7 +228,7 @@ TEST_F(RenderProcessHostUnitTest, ReuseUnmatchedServiceWorkerProcess) {
   // Gets a RenderProcessHost for an unmatched service worker.
   scoped_refptr<SiteInstanceImpl> sw_site_instance1 =
       CreateForServiceWorker(kUrl);
-  RenderProcessHost* sw_host1 = sw_site_instance1->GetProcess();
+  RenderProcessHost* sw_host1 = sw_site_instance1->GetOrCreateProcess();
   EXPECT_EQ(SiteInstanceProcessAssignment::CREATED_NEW_PROCESS,
             sw_site_instance1->GetLastProcessAssignmentOutcome());
 
@@ -238,7 +237,7 @@ TEST_F(RenderProcessHostUnitTest, ReuseUnmatchedServiceWorkerProcess) {
   // second service worker to test the "find the newest process" logic later.
   scoped_refptr<SiteInstanceImpl> sw_site_instance2 =
       CreateForServiceWorker(kUrl);
-  RenderProcessHost* sw_host2 = sw_site_instance2->GetProcess();
+  RenderProcessHost* sw_host2 = sw_site_instance2->GetOrCreateProcess();
   EXPECT_NE(sw_host1, sw_host2);
   EXPECT_EQ(SiteInstanceProcessAssignment::CREATED_NEW_PROCESS,
             sw_site_instance2->GetLastProcessAssignmentOutcome());
@@ -246,7 +245,7 @@ TEST_F(RenderProcessHostUnitTest, ReuseUnmatchedServiceWorkerProcess) {
   // Getting a RenderProcessHost for a navigation to the same site must reuse
   // the newest unmatched service worker's process (i.e., sw_host2).
   scoped_refptr<SiteInstanceImpl> site_instance1 = CreateForUrl(kUrl);
-  EXPECT_EQ(sw_host2, site_instance1->GetProcess());
+  EXPECT_EQ(sw_host2, site_instance1->GetOrCreateProcess());
   EXPECT_EQ(SiteInstanceProcessAssignment::REUSED_EXISTING_PROCESS,
             site_instance1->GetLastProcessAssignmentOutcome());
 
@@ -255,14 +254,14 @@ TEST_F(RenderProcessHostUnitTest, ReuseUnmatchedServiceWorkerProcess) {
   // is no longer unmatched, so sw_host1 is now the newest (and only) process
   // with a corresponding unmatched service worker.
   scoped_refptr<SiteInstanceImpl> site_instance2 = CreateForUrl(kUrl);
-  EXPECT_EQ(sw_host1, site_instance2->GetProcess());
+  EXPECT_EQ(sw_host1, site_instance2->GetOrCreateProcess());
   EXPECT_EQ(SiteInstanceProcessAssignment::REUSED_EXISTING_PROCESS,
             site_instance2->GetLastProcessAssignmentOutcome());
 
   // Getting a RenderProcessHost for a navigation should return a new process
   // because there is no unmatched service worker's process.
   scoped_refptr<SiteInstanceImpl> site_instance3 = CreateForUrl(kUrl);
-  EXPECT_NE(sw_host1, site_instance3->GetProcess());
+  EXPECT_NE(sw_host1, site_instance3->GetOrCreateProcess());
   EXPECT_NE(sw_host2, site_instance3->GetProcess());
   EXPECT_EQ(SiteInstanceProcessAssignment::CREATED_NEW_PROCESS,
             site_instance3->GetLastProcessAssignmentOutcome());
@@ -289,7 +288,7 @@ TEST_F(RenderProcessHostUnitTest,
   // Gets a RenderProcessHost for an unmatched service worker.
   scoped_refptr<SiteInstanceImpl> sw_site_instance =
       CreateForServiceWorker(kUrl);
-  RenderProcessHost* sw_host = sw_site_instance->GetProcess();
+  RenderProcessHost* sw_host = sw_site_instance->GetOrCreateProcess();
   EXPECT_EQ(SiteInstanceProcessAssignment::CREATED_NEW_PROCESS,
             sw_site_instance->GetLastProcessAssignmentOutcome());
 
@@ -310,7 +309,7 @@ TEST_F(RenderProcessHostUnitTest,
   // not reuse the unmatched service worker's process (i.e., |sw_host|), as
   // it's unsuitable.
   scoped_refptr<SiteInstanceImpl> site_instance = CreateForUrl(kUrl);
-  EXPECT_NE(sw_host, site_instance->GetProcess());
+  EXPECT_NE(sw_host, site_instance->GetOrCreateProcess());
   EXPECT_EQ(SiteInstanceProcessAssignment::CREATED_NEW_PROCESS,
             sw_site_instance->GetLastProcessAssignmentOutcome());
 
@@ -324,7 +323,7 @@ TEST_F(RenderProcessHostUnitTest, ReuseServiceWorkerProcessForServiceWorker) {
   scoped_refptr<SiteInstanceImpl> sw_site_instance1 =
       CreateForServiceWorker(kUrl,
                              /*can_reuse_process=*/true);
-  RenderProcessHost* sw_host1 = sw_site_instance1->GetProcess();
+  RenderProcessHost* sw_host1 = sw_site_instance1->GetOrCreateProcess();
   EXPECT_EQ(SiteInstanceProcessAssignment::CREATED_NEW_PROCESS,
             sw_site_instance1->GetLastProcessAssignmentOutcome());
 
@@ -335,7 +334,7 @@ TEST_F(RenderProcessHostUnitTest, ReuseServiceWorkerProcessForServiceWorker) {
   // second service worker to test the "find the newest process" logic later.
   scoped_refptr<SiteInstanceImpl> sw_site_instance2 =
       CreateForServiceWorker(kUrl);
-  RenderProcessHost* sw_host2 = sw_site_instance2->GetProcess();
+  RenderProcessHost* sw_host2 = sw_site_instance2->GetOrCreateProcess();
   EXPECT_NE(sw_host1, sw_host2);
   EXPECT_EQ(SiteInstanceProcessAssignment::CREATED_NEW_PROCESS,
             sw_site_instance2->GetLastProcessAssignmentOutcome());
@@ -346,7 +345,7 @@ TEST_F(RenderProcessHostUnitTest, ReuseServiceWorkerProcessForServiceWorker) {
   scoped_refptr<SiteInstanceImpl> sw_site_instance3 =
       CreateForServiceWorker(kUrl,
                              /*can_reuse_process=*/true);
-  RenderProcessHost* sw_host3 = sw_site_instance3->GetProcess();
+  RenderProcessHost* sw_host3 = sw_site_instance3->GetOrCreateProcess();
   EXPECT_EQ(sw_host2, sw_host3);
   EXPECT_EQ(SiteInstanceProcessAssignment::REUSED_EXISTING_PROCESS,
             sw_site_instance3->GetLastProcessAssignmentOutcome());
@@ -359,7 +358,7 @@ TEST_F(RenderProcessHostUnitTest, ReuseServiceWorkerProcessForServiceWorker) {
   scoped_refptr<SiteInstanceImpl> sw_site_instance4 =
       CreateForServiceWorker(kUrl,
                              /*can_reuse_process=*/true);
-  RenderProcessHost* sw_host4 = sw_site_instance4->GetProcess();
+  RenderProcessHost* sw_host4 = sw_site_instance4->GetOrCreateProcess();
   EXPECT_EQ(sw_host2, sw_host4);
   EXPECT_EQ(SiteInstanceProcessAssignment::REUSED_EXISTING_PROCESS,
             sw_site_instance4->GetLastProcessAssignmentOutcome());
@@ -367,7 +366,7 @@ TEST_F(RenderProcessHostUnitTest, ReuseServiceWorkerProcessForServiceWorker) {
   // Getting a RenderProcessHost for a navigation to the same site must reuse
   // the newest unmatched service worker's process (i.e., sw_host2).
   scoped_refptr<SiteInstanceImpl> site_instance1 = CreateForUrl(kUrl);
-  EXPECT_EQ(sw_host2, site_instance1->GetProcess());
+  EXPECT_EQ(sw_host2, site_instance1->GetOrCreateProcess());
   EXPECT_EQ(SiteInstanceProcessAssignment::REUSED_EXISTING_PROCESS,
             site_instance1->GetLastProcessAssignmentOutcome());
 
@@ -376,7 +375,7 @@ TEST_F(RenderProcessHostUnitTest, ReuseServiceWorkerProcessForServiceWorker) {
   // is no longer unmatched, so sw_host1 is now the newest (and only) process
   // with a corresponding unmatched service worker.
   scoped_refptr<SiteInstanceImpl> site_instance2 = CreateForUrl(kUrl);
-  EXPECT_EQ(sw_host1, site_instance2->GetProcess());
+  EXPECT_EQ(sw_host1, site_instance2->GetOrCreateProcess());
   EXPECT_EQ(SiteInstanceProcessAssignment::REUSED_EXISTING_PROCESS,
             site_instance2->GetLastProcessAssignmentOutcome());
 }
@@ -390,7 +389,7 @@ TEST_F(RenderProcessHostUnitTest,
   // Gets a RenderProcessHost for a service worker with process-per-site flag.
   scoped_refptr<SiteInstanceImpl> sw_site_instance1 =
       CreateForServiceWorker(kUrl);
-  RenderProcessHost* sw_host1 = sw_site_instance1->GetProcess();
+  RenderProcessHost* sw_host1 = sw_site_instance1->GetOrCreateProcess();
   EXPECT_EQ(SiteInstanceProcessAssignment::CREATED_NEW_PROCESS,
             sw_site_instance1->GetLastProcessAssignmentOutcome());
 
@@ -398,7 +397,7 @@ TEST_F(RenderProcessHostUnitTest,
   // process-per-site flag should reuse the unmatched service worker's process.
   scoped_refptr<SiteInstanceImpl> sw_site_instance2 =
       CreateForServiceWorker(kUrl);
-  RenderProcessHost* sw_host2 = sw_site_instance2->GetProcess();
+  RenderProcessHost* sw_host2 = sw_site_instance2->GetOrCreateProcess();
   EXPECT_EQ(sw_host1, sw_host2);
   EXPECT_EQ(SiteInstanceProcessAssignment::REUSED_EXISTING_PROCESS,
             sw_site_instance2->GetLastProcessAssignmentOutcome());
@@ -406,7 +405,7 @@ TEST_F(RenderProcessHostUnitTest,
   // Getting a RenderProcessHost for a navigation to the same site with
   // process-per-site flag should reuse the unmatched service worker's process.
   scoped_refptr<SiteInstanceImpl> sw_site_instance3 = CreateForUrl(kUrl);
-  RenderProcessHost* sw_host3 = sw_site_instance3->GetProcess();
+  RenderProcessHost* sw_host3 = sw_site_instance3->GetOrCreateProcess();
   EXPECT_EQ(sw_host1, sw_host3);
   EXPECT_EQ(SiteInstanceProcessAssignment::REUSED_EXISTING_PROCESS,
             sw_site_instance3->GetLastProcessAssignmentOutcome());
@@ -414,7 +413,7 @@ TEST_F(RenderProcessHostUnitTest,
   // Getting a RenderProcessHost for a navigation to the same site again with
   // process-per-site flag should reuse the unmatched service worker's process.
   scoped_refptr<SiteInstanceImpl> sw_site_instance4 = CreateForUrl(kUrl);
-  RenderProcessHost* sw_host4 = sw_site_instance4->GetProcess();
+  RenderProcessHost* sw_host4 = sw_site_instance4->GetOrCreateProcess();
   EXPECT_EQ(sw_host1, sw_host4);
   EXPECT_EQ(SiteInstanceProcessAssignment::REUSED_EXISTING_PROCESS,
             sw_site_instance4->GetLastProcessAssignmentOutcome());
@@ -427,14 +426,14 @@ TEST_F(RenderProcessHostUnitTest, DoNotReuseOtherSiteServiceWorkerProcess) {
   // Gets a RenderProcessHost for a service worker.
   scoped_refptr<SiteInstanceImpl> sw_site_instance1 =
       CreateForServiceWorker(kUrl1);
-  RenderProcessHost* sw_host1 = sw_site_instance1->GetProcess();
+  RenderProcessHost* sw_host1 = sw_site_instance1->GetOrCreateProcess();
   EXPECT_EQ(SiteInstanceProcessAssignment::CREATED_NEW_PROCESS,
             sw_site_instance1->GetLastProcessAssignmentOutcome());
 
   // Getting a RenderProcessHost for a service worker of a different site should
   // return a new process because there is no reusable process.
   scoped_refptr<SiteInstanceImpl> sw_site_instance2 = CreateForUrl(kUrl2);
-  EXPECT_NE(sw_host1, sw_site_instance2->GetProcess());
+  EXPECT_NE(sw_host1, sw_site_instance2->GetOrCreateProcess());
   EXPECT_EQ(SiteInstanceProcessAssignment::CREATED_NEW_PROCESS,
             sw_site_instance2->GetLastProcessAssignmentOutcome());
 }
@@ -464,14 +463,14 @@ TEST_F(RenderProcessHostWebUIUnitTest,
   // Gets a RenderProcessHost for an unmatched service worker.
   scoped_refptr<SiteInstanceImpl> sw_site_instance1 =
       CreateForServiceWorker(kWebUI1);
-  RenderProcessHost* sw_host = sw_site_instance1->GetProcess();
+  RenderProcessHost* sw_host = sw_site_instance1->GetOrCreateProcess();
   EXPECT_EQ(SiteInstanceProcessAssignment::CREATED_NEW_PROCESS,
             sw_site_instance1->GetLastProcessAssignmentOutcome());
 
   // Getting RenderProcessHost for a service worker for a different WebUI
   // should return a new process because there is no reusable process.
   scoped_refptr<SiteInstanceImpl> sw_site_instance2 = CreateForUrl(kWebUI2);
-  EXPECT_NE(sw_host, sw_site_instance2->GetProcess());
+  EXPECT_NE(sw_host, sw_site_instance2->GetOrCreateProcess());
   EXPECT_EQ(SiteInstanceProcessAssignment::CREATED_NEW_PROCESS,
             sw_site_instance2->GetLastProcessAssignmentOutcome());
 }
@@ -485,7 +484,7 @@ TEST_F(RenderProcessHostWebUIUnitTest, DontReuseServiceWorkerProcessForWebUrl) {
   // Gets a RenderProcessHost for an unmatched service worker.
   scoped_refptr<SiteInstanceImpl> sw_site_instance1 =
       CreateForServiceWorker(kWebUI1);
-  RenderProcessHost* sw_host = sw_site_instance1->GetProcess();
+  RenderProcessHost* sw_host = sw_site_instance1->GetOrCreateProcess();
   EXPECT_EQ(SiteInstanceProcessAssignment::CREATED_NEW_PROCESS,
             sw_site_instance1->GetLastProcessAssignmentOutcome());
 
@@ -495,14 +494,14 @@ TEST_F(RenderProcessHostWebUIUnitTest, DontReuseServiceWorkerProcessForWebUrl) {
   // return a new process because there is no reusable process.
   scoped_refptr<SiteInstanceImpl> web_sw_site_instance =
       CreateForServiceWorker(kWebUrl);
-  EXPECT_NE(sw_host, web_sw_site_instance->GetProcess());
+  EXPECT_NE(sw_host, web_sw_site_instance->GetOrCreateProcess());
   EXPECT_EQ(SiteInstanceProcessAssignment::CREATED_NEW_PROCESS,
             web_sw_site_instance->GetLastProcessAssignmentOutcome());
 
   // Getting RenderProcessHost for a navigation to a regular site should
   // re-use the Web Service Worker process and not the WebUI one.
   scoped_refptr<SiteInstanceImpl> web_site_instance = CreateForUrl(kWebUrl);
-  EXPECT_NE(sw_host, web_site_instance->GetProcess());
+  EXPECT_NE(sw_host, web_site_instance->GetOrCreateProcess());
   EXPECT_EQ(SiteInstanceProcessAssignment::REUSED_EXISTING_PROCESS,
             web_site_instance->GetLastProcessAssignmentOutcome());
 }
@@ -520,7 +519,7 @@ TEST_F(RenderProcessHostWebUIUnitTest,
   scoped_refptr<SiteInstanceImpl> sw_site_instance1 =
       CreateForServiceWorker(kUrl,
                              /*can_reuse_process=*/true);
-  RenderProcessHost* sw_host1 = sw_site_instance1->GetProcess();
+  RenderProcessHost* sw_host1 = sw_site_instance1->GetOrCreateProcess();
   EXPECT_EQ(SiteInstanceProcessAssignment::CREATED_NEW_PROCESS,
             sw_site_instance1->GetLastProcessAssignmentOutcome());
 
@@ -531,7 +530,7 @@ TEST_F(RenderProcessHostWebUIUnitTest,
   // second service worker to test the "find the newest process" logic later.
   scoped_refptr<SiteInstanceImpl> sw_site_instance2 =
       CreateForServiceWorker(kUrl);
-  RenderProcessHost* sw_host2 = sw_site_instance2->GetProcess();
+  RenderProcessHost* sw_host2 = sw_site_instance2->GetOrCreateProcess();
   EXPECT_NE(sw_host1, sw_host2);
   EXPECT_EQ(SiteInstanceProcessAssignment::CREATED_NEW_PROCESS,
             sw_site_instance2->GetLastProcessAssignmentOutcome());
@@ -542,7 +541,7 @@ TEST_F(RenderProcessHostWebUIUnitTest,
   scoped_refptr<SiteInstanceImpl> sw_site_instance3 =
       CreateForServiceWorker(kUrl,
                              /*can_reuse_process=*/true);
-  RenderProcessHost* sw_host3 = sw_site_instance3->GetProcess();
+  RenderProcessHost* sw_host3 = sw_site_instance3->GetOrCreateProcess();
   EXPECT_NE(sw_host1, sw_host3);
   EXPECT_NE(sw_host2, sw_host3);
   EXPECT_EQ(SiteInstanceProcessAssignment::CREATED_NEW_PROCESS,
@@ -551,9 +550,9 @@ TEST_F(RenderProcessHostWebUIUnitTest,
   // Getting a RenderProcessHost for a navigation to the same WebUI doesn't
   // reuse any service worker's processes.
   scoped_refptr<SiteInstanceImpl> site_instance1 = CreateForUrl(kUrl);
-  EXPECT_NE(sw_host1, site_instance1->GetProcess());
-  EXPECT_NE(sw_host2, site_instance1->GetProcess());
-  EXPECT_NE(sw_host3, site_instance1->GetProcess());
+  EXPECT_NE(sw_host1, site_instance1->GetOrCreateProcess());
+  EXPECT_NE(sw_host2, site_instance1->GetOrCreateProcess());
+  EXPECT_NE(sw_host3, site_instance1->GetOrCreateProcess());
   EXPECT_EQ(SiteInstanceProcessAssignment::CREATED_NEW_PROCESS,
             site_instance1->GetLastProcessAssignmentOutcome());
 
@@ -561,9 +560,9 @@ TEST_F(RenderProcessHostWebUIUnitTest,
   // service worker's processes.
   const GURL kWebUrl("https://test.example");
   scoped_refptr<SiteInstanceImpl> web_site_instance = CreateForUrl(kWebUrl);
-  EXPECT_NE(sw_host1, web_site_instance->GetProcess());
-  EXPECT_NE(sw_host2, web_site_instance->GetProcess());
-  EXPECT_NE(sw_host3, web_site_instance->GetProcess());
+  EXPECT_NE(sw_host1, web_site_instance->GetOrCreateProcess());
+  EXPECT_NE(sw_host2, web_site_instance->GetOrCreateProcess());
+  EXPECT_NE(sw_host3, web_site_instance->GetOrCreateProcess());
   EXPECT_EQ(SiteInstanceProcessAssignment::CREATED_NEW_PROCESS,
             web_site_instance->GetLastProcessAssignmentOutcome());
 }
@@ -594,14 +593,14 @@ TEST_F(RenderProcessHostUntrustedWebUIUnitTest,
   // Gets a RenderProcessHost for an unmatched service worker.
   scoped_refptr<SiteInstanceImpl> sw_site_instance1 =
       CreateForServiceWorker(kWebUI1);
-  RenderProcessHost* sw_host = sw_site_instance1->GetProcess();
+  RenderProcessHost* sw_host = sw_site_instance1->GetOrCreateProcess();
   EXPECT_EQ(SiteInstanceProcessAssignment::CREATED_NEW_PROCESS,
             sw_site_instance1->GetLastProcessAssignmentOutcome());
 
   // Getting RenderProcessHost for a service worker for a different WebUI
   // should return a new process because there is no reusable process.
   scoped_refptr<SiteInstanceImpl> sw_site_instance2 = CreateForUrl(kWebUI2);
-  EXPECT_NE(sw_host, sw_site_instance2->GetProcess());
+  EXPECT_NE(sw_host, sw_site_instance2->GetOrCreateProcess());
   EXPECT_EQ(SiteInstanceProcessAssignment::CREATED_NEW_PROCESS,
             sw_site_instance2->GetLastProcessAssignmentOutcome());
 }
@@ -616,7 +615,7 @@ TEST_F(RenderProcessHostUntrustedWebUIUnitTest,
   // Gets a RenderProcessHost for an unmatched service worker.
   scoped_refptr<SiteInstanceImpl> sw_site_instance1 =
       CreateForServiceWorker(kWebUI1);
-  RenderProcessHost* sw_host = sw_site_instance1->GetProcess();
+  RenderProcessHost* sw_host = sw_site_instance1->GetOrCreateProcess();
   EXPECT_EQ(SiteInstanceProcessAssignment::CREATED_NEW_PROCESS,
             sw_site_instance1->GetLastProcessAssignmentOutcome());
 
@@ -626,14 +625,14 @@ TEST_F(RenderProcessHostUntrustedWebUIUnitTest,
   // return a new process because there is no reusable process.
   scoped_refptr<SiteInstanceImpl> web_sw_site_instance =
       CreateForServiceWorker(kWebUrl);
-  EXPECT_NE(sw_host, web_sw_site_instance->GetProcess());
+  EXPECT_NE(sw_host, web_sw_site_instance->GetOrCreateProcess());
   EXPECT_EQ(SiteInstanceProcessAssignment::CREATED_NEW_PROCESS,
             web_sw_site_instance->GetLastProcessAssignmentOutcome());
 
   // Getting RenderProcessHost for a navigation to a regular site should
   // re-use the Web Service Worker process and not the WebUI one.
   scoped_refptr<SiteInstanceImpl> web_site_instance = CreateForUrl(kWebUrl);
-  EXPECT_NE(sw_host, web_site_instance->GetProcess());
+  EXPECT_NE(sw_host, web_site_instance->GetOrCreateProcess());
   EXPECT_EQ(SiteInstanceProcessAssignment::REUSED_EXISTING_PROCESS,
             web_site_instance->GetLastProcessAssignmentOutcome());
 }
@@ -651,7 +650,7 @@ TEST_F(RenderProcessHostUntrustedWebUIUnitTest,
   scoped_refptr<SiteInstanceImpl> sw_site_instance1 =
       CreateForServiceWorker(kUrl,
                              /*can_reuse_process=*/true);
-  RenderProcessHost* sw_host1 = sw_site_instance1->GetProcess();
+  RenderProcessHost* sw_host1 = sw_site_instance1->GetOrCreateProcess();
   EXPECT_EQ(SiteInstanceProcessAssignment::CREATED_NEW_PROCESS,
             sw_site_instance1->GetLastProcessAssignmentOutcome());
 
@@ -662,7 +661,7 @@ TEST_F(RenderProcessHostUntrustedWebUIUnitTest,
   // second service worker to test the "find the newest process" logic later.
   scoped_refptr<SiteInstanceImpl> sw_site_instance2 =
       CreateForServiceWorker(kUrl);
-  RenderProcessHost* sw_host2 = sw_site_instance2->GetProcess();
+  RenderProcessHost* sw_host2 = sw_site_instance2->GetOrCreateProcess();
   EXPECT_NE(sw_host1, sw_host2);
   EXPECT_EQ(SiteInstanceProcessAssignment::CREATED_NEW_PROCESS,
             sw_site_instance2->GetLastProcessAssignmentOutcome());
@@ -673,7 +672,7 @@ TEST_F(RenderProcessHostUntrustedWebUIUnitTest,
   scoped_refptr<SiteInstanceImpl> sw_site_instance3 =
       CreateForServiceWorker(kUrl,
                              /*can_reuse_process=*/true);
-  RenderProcessHost* sw_host3 = sw_site_instance3->GetProcess();
+  RenderProcessHost* sw_host3 = sw_site_instance3->GetOrCreateProcess();
   EXPECT_NE(sw_host1, sw_host3);
   EXPECT_NE(sw_host2, sw_host3);
   EXPECT_EQ(SiteInstanceProcessAssignment::CREATED_NEW_PROCESS,
@@ -682,9 +681,9 @@ TEST_F(RenderProcessHostUntrustedWebUIUnitTest,
   // Getting a RenderProcessHost for a navigation to the same WebUI doesn't
   // reuse any service worker's processes.
   scoped_refptr<SiteInstanceImpl> site_instance1 = CreateForUrl(kUrl);
-  EXPECT_NE(sw_host1, site_instance1->GetProcess());
-  EXPECT_NE(sw_host2, site_instance1->GetProcess());
-  EXPECT_NE(sw_host3, site_instance1->GetProcess());
+  EXPECT_NE(sw_host1, site_instance1->GetOrCreateProcess());
+  EXPECT_NE(sw_host2, site_instance1->GetOrCreateProcess());
+  EXPECT_NE(sw_host3, site_instance1->GetOrCreateProcess());
   EXPECT_EQ(SiteInstanceProcessAssignment::CREATED_NEW_PROCESS,
             site_instance1->GetLastProcessAssignmentOutcome());
 
@@ -692,9 +691,9 @@ TEST_F(RenderProcessHostUntrustedWebUIUnitTest,
   // service worker's processes.
   const GURL kWebUrl("https://test.example");
   scoped_refptr<SiteInstanceImpl> web_site_instance = CreateForUrl(kWebUrl);
-  EXPECT_NE(sw_host1, web_site_instance->GetProcess());
-  EXPECT_NE(sw_host2, web_site_instance->GetProcess());
-  EXPECT_NE(sw_host3, web_site_instance->GetProcess());
+  EXPECT_NE(sw_host1, web_site_instance->GetOrCreateProcess());
+  EXPECT_NE(sw_host2, web_site_instance->GetOrCreateProcess());
+  EXPECT_NE(sw_host3, web_site_instance->GetOrCreateProcess());
   EXPECT_EQ(SiteInstanceProcessAssignment::CREATED_NEW_PROCESS,
             web_site_instance->GetLastProcessAssignmentOutcome());
 }
@@ -781,12 +780,15 @@ TEST_F(RenderProcessHostUnitTest, ReuseNavigationProcess) {
   // Remember the process id and cancel the navigation. Getting
   // RenderProcessHost with the REUSE_PENDING_OR_COMMITTED_SITE policy should
   // no longer return the process of the speculative RenderFrameHost.
-  int speculative_process_host_id =
-      contents()->GetSpeculativePrimaryMainFrame()->GetProcess()->GetID();
+  int speculative_process_host_id = contents()
+                                        ->GetSpeculativePrimaryMainFrame()
+                                        ->GetProcess()
+                                        ->GetDeprecatedID();
   navigation->Fail(net::ERR_ABORTED);
   site_instance = SiteInstanceImpl::CreateReusableInstanceForTesting(
       browser_context(), kUrl2);
-  EXPECT_NE(speculative_process_host_id, site_instance->GetProcess()->GetID());
+  EXPECT_NE(speculative_process_host_id,
+            site_instance->GetProcess()->GetDeprecatedID());
 }
 
 // Tests that RenderProcessHost reuse considers navigations correctly during
@@ -890,8 +892,10 @@ TEST_F(RenderProcessHostUnitTest,
   contents()->GetController().LoadURL(kUrl, Referrer(),
                                       ui::PAGE_TRANSITION_TYPED, std::string());
   main_test_rfh()->SimulateBeforeUnloadCompleted(true);
-  int speculative_process_host_id =
-      contents()->GetSpeculativePrimaryMainFrame()->GetProcess()->GetID();
+  int speculative_process_host_id = contents()
+                                        ->GetSpeculativePrimaryMainFrame()
+                                        ->GetProcess()
+                                        ->GetDeprecatedID();
   bool speculative_is_default_site_instance =
       contents()
           ->GetSpeculativePrimaryMainFrame()
@@ -899,7 +903,8 @@ TEST_F(RenderProcessHostUnitTest,
           ->IsDefaultSiteInstance();
   site_instance = SiteInstanceImpl::CreateReusableInstanceForTesting(
       browser_context(), kUrl);
-  EXPECT_EQ(speculative_process_host_id, site_instance->GetProcess()->GetID());
+  EXPECT_EQ(speculative_process_host_id,
+            site_instance->GetProcess()->GetDeprecatedID());
 
   // Simulate a same-site redirect. Getting RenderProcessHost with the
   // REUSE_PENDING_OR_COMMITTED_SITE policy should return the speculative
@@ -907,7 +912,8 @@ TEST_F(RenderProcessHostUnitTest,
   main_test_rfh()->SimulateRedirect(kRedirectUrl1);
   site_instance = SiteInstanceImpl::CreateReusableInstanceForTesting(
       browser_context(), kUrl);
-  EXPECT_EQ(speculative_process_host_id, site_instance->GetProcess()->GetID());
+  EXPECT_EQ(speculative_process_host_id,
+            site_instance->GetProcess()->GetDeprecatedID());
 
   // Simulate a cross-site redirect. Getting a RenderProcessHost with the
   // REUSE_PENDING_OR_COMMITTED_SITE policy should no longer return the
@@ -917,19 +923,20 @@ TEST_F(RenderProcessHostUnitTest,
   site_instance = SiteInstanceImpl::CreateReusableInstanceForTesting(
       browser_context(), kUrl);
   EXPECT_NE(main_test_rfh()->GetProcess(), site_instance->GetProcess());
-  EXPECT_NE(speculative_process_host_id, site_instance->GetProcess()->GetID());
+  EXPECT_NE(speculative_process_host_id,
+            site_instance->GetProcess()->GetDeprecatedID());
   site_instance = SiteInstanceImpl::CreateReusableInstanceForTesting(
       browser_context(), kRedirectUrl2);
   EXPECT_NE(main_test_rfh()->GetProcess(), site_instance->GetProcess());
-  if (AreDefaultSiteInstancesEnabled()) {
+  if (AreAllSitesIsolatedForTesting()) {
+    EXPECT_NE(speculative_process_host_id,
+              site_instance->GetProcess()->GetDeprecatedID());
+  } else {
     EXPECT_TRUE(speculative_is_default_site_instance);
     // The process ID should be the same as the default SiteInstance because
     // kRedirectUrl1 and kRedirectUrl2 do not require a dedicated process.
     EXPECT_EQ(speculative_process_host_id,
-              site_instance->GetProcess()->GetID());
-  } else {
-    EXPECT_NE(speculative_process_host_id,
-              site_instance->GetProcess()->GetID());
+              site_instance->GetProcess()->GetDeprecatedID());
   }
 
   // Once the navigation is ready to commit, Getting RenderProcessHost with the
@@ -937,15 +944,19 @@ TEST_F(RenderProcessHostUnitTest,
   // process for the final site, but not the initial one. The current process
   // shouldn't be returned either.
   main_test_rfh()->PrepareForCommit();
-  speculative_process_host_id =
-      contents()->GetSpeculativePrimaryMainFrame()->GetProcess()->GetID();
+  speculative_process_host_id = contents()
+                                    ->GetSpeculativePrimaryMainFrame()
+                                    ->GetProcess()
+                                    ->GetDeprecatedID();
   site_instance = SiteInstanceImpl::CreateReusableInstanceForTesting(
       browser_context(), kUrl);
   EXPECT_NE(main_test_rfh()->GetProcess(), site_instance->GetProcess());
-  EXPECT_NE(speculative_process_host_id, site_instance->GetProcess()->GetID());
+  EXPECT_NE(speculative_process_host_id,
+            site_instance->GetProcess()->GetDeprecatedID());
   site_instance = SiteInstanceImpl::CreateReusableInstanceForTesting(
       browser_context(), kRedirectUrl2);
-  EXPECT_EQ(speculative_process_host_id, site_instance->GetProcess()->GetID());
+  EXPECT_EQ(speculative_process_host_id,
+            site_instance->GetProcess()->GetDeprecatedID());
 }
 
 // Tests that RenderProcessHost reuse works correctly even if the site URL of a
@@ -1108,7 +1119,7 @@ TEST_F(RenderProcessHostUnitTest,
   // Create a RenderProcessHost for a service worker.
   scoped_refptr<SiteInstanceImpl> sw_site_instance =
       CreateForServiceWorker(kUrl);
-  RenderProcessHost* sw_process = sw_site_instance->GetProcess();
+  RenderProcessHost* sw_process = sw_site_instance->GetOrCreateProcess();
 
   // Change foo.com SiteInstances to use a different StoragePartition.
   StoragePartitionContentBrowserClient modified_client(kUrl, "foo_domain",
@@ -1141,7 +1152,7 @@ TEST_F(RenderProcessHostUnitTest,
           UrlInfo::CreateForTesting(kUrl,
                                     site_instance->GetStoragePartitionConfig()),
           /*can_reuse_process=*/true);
-  RenderProcessHost* sw_process2 = sw_site_instance2->GetProcess();
+  RenderProcessHost* sw_process2 = sw_site_instance2->GetOrCreateProcess();
   EXPECT_EQ(sw_process2, foo_process_in_new_partition);
   EXPECT_NE(sw_process2, sw_process);
   EXPECT_EQ(SiteInstanceProcessAssignment::REUSED_EXISTING_PROCESS,
@@ -1165,8 +1176,8 @@ TEST_F(RenderProcessHostUnitTest, RendererLockedToSite) {
                {GURL("http://user:pass@google.com:99/foo;bar?q=a#ref"), true}};
   for (const auto& test : tests) {
     scoped_refptr<SiteInstanceImpl> site_instance = CreateForUrl(test.test_url);
-    auto* host =
-        static_cast<MockRenderProcessHost*>(site_instance->GetProcess());
+    auto* host = static_cast<MockRenderProcessHost*>(
+        site_instance->GetOrCreateProcess());
     if (AreAllSitesIsolatedForTesting())
       EXPECT_EQ(test.should_lock_renderer, host->is_renderer_locked_to_site());
     else
@@ -1183,6 +1194,19 @@ TEST_F(RenderProcessHostUnitTest, ProcessAssignmentDefault) {
   EXPECT_EQ(SiteInstanceProcessAssignment::UNKNOWN,
             site_instance->GetLastProcessAssignmentOutcome());
   EXPECT_FALSE(site_instance->HasProcess());
+}
+
+// Tests the GetPendingReuseRefCount() function.
+TEST_F(RenderProcessHostUnitTest, GetPendingReuseRefCount) {
+  MockRenderProcessHost mock_host(browser_context());
+
+  EXPECT_EQ(0, mock_host.GetPendingReuseRefCountForTesting());
+
+  mock_host.IncrementPendingReuseRefCount();
+  EXPECT_EQ(1, mock_host.GetPendingReuseRefCountForTesting());
+
+  mock_host.DecrementPendingReuseRefCount();
+  EXPECT_EQ(0, mock_host.GetPendingReuseRefCountForTesting());
 }
 
 class SpareRenderProcessHostUnitTest : public RenderViewHostImplTestHarness {
@@ -1290,13 +1314,13 @@ TEST_F(SpareRenderProcessHostUnitTest, TestRendererNotTaken) {
   EXPECT_EQ(old_spare, rph_factory_.GetProcesses()->at(0).get());
   // Remember the ID of the spare, so as to not compare a pointer of a deleted
   // RenderProcessHost at the end of the test.
-  int old_spare_id = old_spare->GetID();
+  int old_spare_id = old_spare->GetDeprecatedID();
 
   const GURL kUrl1("http://foo.com");
   base::HistogramTester histograms;
   SetContents(CreateTestWebContents());
   NavigateAndCommit(kUrl1);
-  EXPECT_NE(old_spare_id, main_test_rfh()->GetProcess()->GetID());
+  EXPECT_NE(old_spare_id, main_test_rfh()->GetProcess()->GetDeprecatedID());
   ExpectSpareProcessMaybeTakeActionBucket(
       histograms, SpareProcessMaybeTakeAction::kMismatchedBrowserContext);
 
@@ -1311,7 +1335,7 @@ TEST_F(SpareRenderProcessHostUnitTest, TestRendererNotTaken) {
     EXPECT_EQ(2U, rph_factory_.GetProcesses()->size());
     ASSERT_EQ(1U, spare_manager.GetSpares().size());
     RenderProcessHost* new_spare = spare_manager.GetSpares()[0];
-    ASSERT_NE(old_spare_id, new_spare->GetID());
+    ASSERT_NE(old_spare_id, new_spare->GetDeprecatedID());
     EXPECT_EQ(GetBrowserContext(), new_spare->GetBrowserContext());
   } else {
     EXPECT_EQ(1U, rph_factory_.GetProcesses()->size());
@@ -1368,7 +1392,7 @@ TEST_F(SpareRenderProcessHostUnitTest,
   for (auto reason : test_reasons) {
     base::HistogramTester histograms;
     test_client.SetSpareProcessRefuseReason(reason);
-    SiteInstanceImpl::Create(GetBrowserContext())->GetProcess();
+    SiteInstanceImpl::Create(GetBrowserContext())->GetOrCreateProcess();
     ExpectSpareProcessRefusedByEmbedderReason(histograms, reason);
     PruneDeadRenderProcessHosts();
     spare_manager.WarmupSpare(browser_context());
@@ -1419,7 +1443,8 @@ TEST_F(SpareRenderProcessHostUnitTest,
   scoped_refptr<SiteInstanceImpl> site_instance =
       SiteInstanceImpl::CreateForTesting(browser_context(),
                                          GURL("http://foo.com"));
-  RenderProcessHost* site_instance_process = site_instance->GetProcess();
+  RenderProcessHost* site_instance_process =
+      site_instance->GetOrCreateProcess();
 
   // The SiteInstance shouldn't get the old spare, because of BrowserContext
   // mismatch.  The SiteInstance will get a new process instead.

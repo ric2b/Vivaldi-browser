@@ -31,6 +31,7 @@ struct Menu_Control {
   std::string format;
   std::string version;
   std::vector<std::string> deleted;
+  std::vector<std::string> expired;
 };
 
 class Menu_Node : public ui::TreeNode<Menu_Node> {

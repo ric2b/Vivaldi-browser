@@ -22,7 +22,7 @@ using clock_operators::operator<<;
 
 namespace {
 // Threshold at which a warning about media pausing should be logged.
-constexpr std::chrono::seconds kPauseWarningThreshold{3};
+constexpr std::chrono::seconds kPauseWarningThreshold(3);
 }  // namespace
 
 SimulatedCapturer::Observer::~Observer() = default;

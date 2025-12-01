@@ -10,6 +10,7 @@ import("//build/config/ui.gni")
 import("../webrtc.gni")
 if (is_android) {
   import("//build/config/android/rules.gni")
+  import("//third_party/jni_zero/jni_zero.gni")
 }
 
 if (!build_with_chromium) {
@@ -709,16 +710,21 @@ if (rtc_include_tests) {
         ":video_frame_writer",
         ":video_test_common",
         ":video_test_support",
+        ":wait_until",
         ":y4m_frame_generator",
         "../api:array_view",
         "../api:create_frame_generator",
         "../api:create_simulcast_test_fixture_api",
+        "../api:create_time_controller",
         "../api:frame_generator_api",
         "../api:mock_video_codec_factory",
         "../api:mock_video_decoder",
         "../api:mock_video_encoder",
+        "../api:rtc_error",
+        "../api:rtc_error_matchers",
         "../api:scoped_refptr",
         "../api:simulcast_test_fixture_api",
+        "../api:time_controller",
         "../api/environment",
         "../api/environment:environment_factory",
         "../api/task_queue",
@@ -729,6 +735,7 @@ if (rtc_include_tests) {
         "../api/units:data_size",
         "../api/units:frequency",
         "../api/units:time_delta",
+        "../api/units:timestamp",
         "../api/video:encoded_image",
         "../api/video:video_frame",
         "../api/video_codecs:builtin_video_decoder_factory",
@@ -748,9 +755,12 @@ if (rtc_include_tests) {
         "../modules/video_coding:webrtc_vp9",
         "../modules/video_coding/svc:scalability_mode_util",
         "../rtc_base:criticalsection",
+        "../rtc_base:rtc_base_tests_utils",
         "../rtc_base:rtc_event",
+        "../rtc_base:threading",
         "../rtc_base/synchronization:mutex",
         "../rtc_base/system:file_wrapper",
+        "../system_wrappers",
         "jitter:jitter_unittests",
         "pc/e2e:e2e_unittests",
         "pc/e2e/analyzer/video:video_analyzer_unittests",
@@ -782,6 +792,7 @@ if (rtc_include_tests) {
         "testsupport/yuv_frame_reader_unittest.cc",
         "testsupport/yuv_frame_writer_unittest.cc",
         "video_codec_tester_unittest.cc",
+        "wait_until_unittest.cc",
       ]
 
       if (rtc_enable_protobuf) {
@@ -791,7 +802,6 @@ if (rtc_include_tests) {
 
       data = test_support_unittests_resources
       if (is_android) {
-        deps += [ "//testing/android/native_test:native_test_support" ]
         shard_timeout = 900
       }
 
@@ -1294,13 +1304,42 @@ if (!build_with_chromium && is_android) {
   rtc_android_library("native_test_java") {
     testonly = true
     sources = [
+      "android/org/webrtc/native_test/NativeTestWebrtc.java",
+      "android/org/webrtc/native_test/RTCNativeTestApplication.java",
       "android/org/webrtc/native_test/RTCNativeUnitTest.java",
       "android/org/webrtc/native_test/RTCNativeUnitTestActivity.java",
+      "android/org/webrtc/native_test/StrictModeContext.java",
+    ]
+    srcjar_deps = [ ":native_test_jni" ]
+    deps = [
+      ":native_test_support",
+      "../rtc_base:base_java",
+      "//build/android:build_java",
+      "//build/android/gtest_apk:native_test_instrumentation_test_runner_java",
+      "//testing/android/reporter:reporter_java",
+      "//third_party/jni_zero:jni_zero_java",
+    ]
+  }
+
+  source_set("native_test_support") {
+    testonly = true
+    sources = [
+      "android/native_test_launcher.cc",
+      "android/native_test_launcher.h",
+      "android/native_test_util.cc",
+      "android/native_test_util.h",
     ]
     deps = [
-      "../rtc_base:base_java",
-      "//testing/android/native_test:native_test_java",
+      ":native_test_jni",
+      "//testing/gtest",
+      "//third_party/abseil-cpp/absl/strings",
+      "//third_party/jni_zero:jni_zero",
     ]
+  }
+
+  generate_jni("native_test_jni") {
+    testonly = true
+    sources = [ "android/org/webrtc/native_test/NativeTestWebrtc.java" ]
   }
 }
 
@@ -1383,5 +1422,30 @@ rtc_library("video_codec_tester") {
     "../video/config:streams_config",
     "//third_party/abseil-cpp/absl/strings",
     "//third_party/libyuv",
+  ]
+}
+
+rtc_library("wait_until") {
+  testonly = true
+  sources = [
+    "wait_until.cc",
+    "wait_until.h",
+    "wait_until_internal.h",
+  ]
+  deps = [
+    ":test_support",
+    "../api:rtc_error",
+    "../api:time_controller",
+    "../api/units:time_delta",
+    "../api/units:timestamp",
+    "../rtc_base:checks",
+    "../rtc_base:rtc_base_tests_utils",
+    "../rtc_base:threading",
+    "../rtc_base:timeutils",
+    "../system_wrappers",
+    "//third_party/abseil-cpp/absl/base:nullability",
+    "//third_party/abseil-cpp/absl/functional:overload",
+    "//third_party/abseil-cpp/absl/strings:string_view",
+    "//third_party/abseil-cpp/absl/types:variant",
   ]
 }

@@ -9,6 +9,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "xnnpack/hardware-config.h"
 #include "xnnpack/microfnptr.h"
 
 #ifdef __cplusplus
@@ -63,14 +64,8 @@ struct xnn_unary_elementwise_config {
 struct xnn_reduce_config {
   xnn_reduce_ukernel_fn ukernel;
   xnn_rdsum_ukernel_fn rd_ukernel;
-  union {
-    xnn_init_qs8_reduce_minmax_params_fn qs8_reduce;
-    xnn_init_qu8_reduce_minmax_params_fn qu8_reduce;
-    xnn_init_f16_f32acc_scale_params_fn f16_f32acc_scale;
-    xnn_init_f16_default_params_fn f16_default;
-    xnn_init_f32_default_params_fn f32_default;
-    xnn_init_f32_scale_params_fn f32_scale;
-  } init;
+  xnn_init_reduce_params_fn init;
+  xnn_update_reduce_params_fn update;
 };
 
 struct xnn_xx_fill_config {
@@ -103,8 +98,9 @@ struct xnn_avgpool_config {
 };
 
 struct xnn_pack_lh_config {
-  xnn_x32_pack_lh_ukernel_fn ukernel;
-  xnn_x32_pack_lh_size_fn size_fn;
+  xnn_pack_lh_ukernel_fn ukernel;
+  xnn_pack_lh_size_fn size_fn;
+  xnn_pack_lh_offset_fn offset_fn;
 };
 
 struct xnn_pavgpool_config {
@@ -209,6 +205,7 @@ struct xnn_gemm_config {
   uint8_t log2_sr;
   uint8_t planes;  // number of 4 bit planes (1 for legacy, 2 for unzip)
   uint8_t mr_packed;  // `mr` value used for packed left-hand operands.
+  enum xnn_arch_flags arch;
 };
 
 struct xnn_maxpool_config {

@@ -33,11 +33,13 @@ AutoPipSettingHelper::AutoPipSettingHelper(
 
 AutoPipSettingHelper::~AutoPipSettingHelper() = default;
 
-void AutoPipSettingHelper::OnUserClosedWindow() {
+void AutoPipSettingHelper::OnUserClosedWindow(
+    std::string histogram_name_for_autopip_reason) {
   if (ui_was_shown_but_not_acknowledged_) {
-    RecordResult(PromptResult::kIgnored);
+    RecordResult(PromptResult::kIgnored,
+                 std::move(histogram_name_for_autopip_reason));
 
-    // Usually, this isn't needed, since any later pip window that re-uses us
+    // Usually, this isn't needed, since any later pip window that reuses us
     // will be for the same site and will still be set to 'ASK'.  In that case,
     // we'll show the permission UI.  However, if the permission changes out
     // from under us somehow (e.g., the user sets it to allow via the permission
@@ -79,15 +81,18 @@ void AutoPipSettingHelper::UpdateContentSetting(ContentSetting new_setting) {
 }
 
 AutoPipSettingHelper::ResultCb AutoPipSettingHelper::CreateResultCb(
-    base::OnceClosure close_pip_cb) {
+    base::OnceClosure close_pip_cb,
+    std::string histogram_name_for_autopip_reason) {
   weak_factory_.InvalidateWeakPtrs();
   return base::BindOnce(&AutoPipSettingHelper::OnUiResult,
-                        weak_factory_.GetWeakPtr(), std::move(close_pip_cb));
+                        weak_factory_.GetWeakPtr(), std::move(close_pip_cb),
+                        std::move(histogram_name_for_autopip_reason));
 }
 
 std::unique_ptr<AutoPipSettingOverlayView>
 AutoPipSettingHelper::CreateOverlayViewIfNeeded(
     base::OnceClosure close_pip_cb,
+    std::string histogram_name_for_autopip_reason,
     views::View* anchor_view,
     views::BubbleBorder::Arrow arrow) {
   switch (GetEffectiveContentSetting()) {
@@ -95,20 +100,25 @@ AutoPipSettingHelper::CreateOverlayViewIfNeeded(
       // If the user already said to allow once, then continue allowing.  It's
       // assumed that we're used for at most one visit to a site.
       if (already_selected_allow_once_) {
-        RecordResult(PromptResult::kNotShownAllowedOnce);
+        RecordResult(PromptResult::kNotShownAllowedOnce,
+                     std::move(histogram_name_for_autopip_reason));
         return nullptr;
       }
       // Create and return the UI to ask the user.
       ui_was_shown_but_not_acknowledged_ = true;
       return std::make_unique<AutoPipSettingOverlayView>(
-          CreateResultCb(std::move(close_pip_cb)), origin_, anchor_view, arrow);
+          CreateResultCb(std::move(close_pip_cb),
+                         std::move(histogram_name_for_autopip_reason)),
+          origin_, anchor_view, arrow);
     case CONTENT_SETTING_ALLOW:
       // Nothing to do -- allow the auto pip to proceed.
-      RecordResult(PromptResult::kNotShownAllowedOnEveryVisit);
+      RecordResult(PromptResult::kNotShownAllowedOnEveryVisit,
+                   std::move(histogram_name_for_autopip_reason));
       return nullptr;
     case CONTENT_SETTING_BLOCK:
       // Auto-pip is not allowed.  Close the window.
-      RecordResult(PromptResult::kNotShownBlocked);
+      RecordResult(PromptResult::kNotShownBlocked,
+                   std::move(histogram_name_for_autopip_reason));
       std::move(close_pip_cb).Run();
       return nullptr;
     default:
@@ -116,40 +126,55 @@ AutoPipSettingHelper::CreateOverlayViewIfNeeded(
   }
 }
 
-void AutoPipSettingHelper::OnAutoPipBlockedByPermission() {
-  RecordResult(PromptResult::kNotShownBlocked);
+void AutoPipSettingHelper::OnAutoPipBlockedByPermission(
+    std::string histogram_name_for_autopip_reason) {
+  RecordResult(PromptResult::kNotShownBlocked,
+               std::move(histogram_name_for_autopip_reason));
 }
 
-void AutoPipSettingHelper::OnAutoPipBlockedByIncognito() {
-  RecordResult(PromptResult::kNotShownIncognito);
+void AutoPipSettingHelper::OnAutoPipBlockedByIncognito(
+    std::string histogram_name_for_autopip_reason) {
+  RecordResult(PromptResult::kNotShownIncognito,
+               std::move(histogram_name_for_autopip_reason));
 }
 
-void AutoPipSettingHelper::OnUiResult(base::OnceClosure close_pip_cb,
-                                      AutoPipSettingView::UiResult result) {
+void AutoPipSettingHelper::OnUiResult(
+    base::OnceClosure close_pip_cb,
+    std::string histogram_name_for_autopip_reason,
+    AutoPipSettingView::UiResult result) {
   // The UI was both shown and acknowledged, so we don't have to worry about it
   // being dismissed without being acted on for the permission embargo.
   ui_was_shown_but_not_acknowledged_ = false;
   switch (result) {
     case AutoPipSettingView::UiResult::kBlock:
-      RecordResult(PromptResult::kBlock);
+      RecordResult(PromptResult::kBlock,
+                   std::move(histogram_name_for_autopip_reason));
       UpdateContentSetting(CONTENT_SETTING_BLOCK);
       // Also close the pip window.
       std::move(close_pip_cb).Run();
       break;
     case AutoPipSettingView::UiResult::kAllowOnEveryVisit:
-      RecordResult(PromptResult::kAllowOnEveryVisit);
+      RecordResult(PromptResult::kAllowOnEveryVisit,
+                   std::move(histogram_name_for_autopip_reason));
       UpdateContentSetting(CONTENT_SETTING_ALLOW);
       break;
     case AutoPipSettingView::UiResult::kAllowOnce:
       already_selected_allow_once_ = true;
-      RecordResult(PromptResult::kAllowOnce);
+      RecordResult(PromptResult::kAllowOnce,
+                   std::move(histogram_name_for_autopip_reason));
       // Leave at 'ASK'.  Do not update the embargo, since the user allowed the
       // feature to continue.  If anything, this should vote for 'anti-embargo'.
       break;
   }
 }
 
-void AutoPipSettingHelper::RecordResult(PromptResult result) {
+void AutoPipSettingHelper::RecordResult(PromptResult result,
+                                        std::string metric_name) {
   base::UmaHistogramEnumeration("Media.AutoPictureInPicture.PromptResultV2",
                                 result);
+  if (metric_name.empty()) {
+    return;
+  }
+
+  base::UmaHistogramEnumeration(metric_name, result);
 }

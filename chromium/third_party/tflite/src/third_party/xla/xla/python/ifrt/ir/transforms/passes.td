@@ -308,11 +308,12 @@ func.func @main(%arg0: !array0, %arg1: !array1) -> (!array1, !array2)
   let constructor = "CreateIfrtReshardToCopyArraysPass()";
 }
 
-def IfrtLowerShardingToXlaPass :
-    Pass<"ifrt-lower-sharding-to-xla", "mlir::ModuleOp"> {
-  let summary = "Converts IFRT sharding to HLO sharding for xla modules";
+def IfrtLowerAtomProgramMetadataToXlaPass :
+    Pass<"ifrt-lower-atom-program-metadata-to-xla", "mlir::ModuleOp"> {
+  let summary = "Converts IFRT metadata to XLA-compatible attributes";
   let description = [{
-Replaces `ifrt.sharding` attr by `mhlo.sharding` attr.
+Replaces `ifrt.sharding` attr by `mhlo.sharding` attr, and `ifrt.memory_kind`
+by `mhlo.memory_kind`.
 
 For example, the following code
 
@@ -337,7 +338,7 @@ module attributes {
 ```
   }];
 
-  let constructor = "CreateIfrtLowerShardingToXlaPass()";
+  let constructor = "CreateIfrtLowerAtomProgramMetadataToXlaPass()";
 }
 
 def IfrtRemoveIfrtAttrsPass :
@@ -371,6 +372,16 @@ module {
   }];
 
   let constructor = "CreateIfrtRemoveIfrtAttrsPass()";
+}
+
+def IfrtRemoveAttrsFromOtherDialectsPass :
+    Pass<"ifrt-remove-attrs-from-other-dialects", "mlir::ModuleOp"> {
+  let summary = "Remove attrs from other dialects in IFRT functions";
+  let description = [{
+Remove attributes that are not from IFRT or Builtin dialect from IFRT functions.
+Does not modify atom programs.
+  }];
+  let constructor = "CreateIfrtRemoveAttrsFromOtherDialectsPass()";
 }
 
 def IfrtLowerMpmdReshardToCallPass :
@@ -419,6 +430,78 @@ module @reshard attributes {
   }];
 
   let constructor = "CreateIfrtLowerMpmdReshardToCallPass()";
+}
+
+def IfrtPrecompileAtomProgramPreprocessingPass :
+    Pass<"ifrt-precompile-atom-program-preprocessing", "mlir::ModuleOp"> {
+  let summary = "Prepares atom modules for compilation depending on their type";
+  let description = [{
+This passes visits each CallOp and does the following:
+1. it sets `ifrt.module_type` attribute based on the platform name of the
+ devices used by the atom program at compilation time.
+2. depending on the module type it invokes a different preprocessing pipeline on
+ the atom program module to prepare it for compilation (e.g., set MHLO shardings
+ for XLA compilation).
+```
+  }];
+
+  let constructor = "CreateIfrtPrecompileAtomProgramPreprocessingPass()";
+  let options = [
+    ListOption<"platform_names", "platform_names", "std::string",
+               "The mapping from logical device ID to platform name (e.g., tpu, cuda) corresponding to the logical device ID.">
+  ];
+}
+
+def IfrtVerifyDeviceTypeConsistencyPass :
+    Pass<"ifrt-verify-device-type-consistency", "mlir::ModuleOp"> {
+  let summary = "Verify the device types in `ifrt.CallOp` to ensure consistency.";
+  let description = [{
+Verify that each `ifrt.CallOp` uses devices of a single platform type and the
+platform type is consistent with the dialects the callee is using.
+
+
+This pass fails if
+1. any `ifrt.CallOp` uses more than one platform type.
+2. any callee of `ifrt.CallOp` has a mixture of MHLO and TF dialects.
+3. the platform type and dialect in `ifrt.CallOp` callee is inconsistent with
+ each other.
+  }];
+
+  let constructor = "CreateIfrtVerifyDeviceTypeConsistencyPass()";
+  let options = [
+    ListOption<"platform_names", "platform_names", "std::string",
+               "The mapping from logical device ID to platform name (e.g., tpu, cuda) corresponding to the logical device ID.">
+  ];
+}
+
+def IfrtDumpAtomProgramsPass
+    : Pass<"ifrt-dump-atom-programs", "mlir::ModuleOp"> {
+  let summary = "Extracts atom programs from module and dumps them to files.";
+  let constructor = "CreateIfrtDumpAtomProgramsPass()";
+  let options = [
+    Option<"dump_dir", "dump_dir", "std::string", "",
+           "The directory to dump the atom programs and the main function to.">,
+  ];
+}
+
+def IfrtLegalizeToVifrtPass : Pass<"ifrt-legalize-to-vifrt", "mlir::ModuleOp"> {
+  let summary = "Legalize IFRT to VIFRT.";
+  let dependentDialects = ["xla::ifrt::VifrtDialect"];
+}
+
+def VifrtLegalizeToIfrtPass : Pass<"vifrt-legalize-to-ifrt", "mlir::ModuleOp"> {
+  let summary = "Legalize VIFRT to IFRT.";
+  let dependentDialects = ["xla::ifrt::IfrtDialect"];
+}
+
+def VifrtToVersionPass : Pass<"vifrt-to-version", "mlir::ModuleOp"> {
+  let summary = "Convert between versions of VIFRT.";
+  let options = [
+    Option<"target_version", "target_version", "std::string", "",
+           "The VIFRT target version. Must be a version of the form #.#.#.">,
+  ];
+  let constructor = "CreateVifrtToVersionPass()";
+  let dependentDialects = ["xla::ifrt::VifrtDialect"];
 }
 
 #endif  // XLA_PYTHON_IFRT_IR_TRANSFORMS_PASSES_TD_

@@ -30,10 +30,18 @@ module.exports = {
     meta: {
         type: "problem",
 
+        defaultOptions: [{
+            skipComments: false,
+            skipJSXText: false,
+            skipRegExps: false,
+            skipStrings: true,
+            skipTemplates: false
+        }],
+
         docs: {
             description: "Disallow irregular whitespace",
             recommended: true,
-            url: "https://eslint.org/docs/rules/no-irregular-whitespace"
+            url: "https://eslint.org/docs/latest/rules/no-irregular-whitespace"
         },
 
         schema: [
@@ -41,20 +49,19 @@ module.exports = {
                 type: "object",
                 properties: {
                     skipComments: {
-                        type: "boolean",
-                        default: false
+                        type: "boolean"
                     },
                     skipStrings: {
-                        type: "boolean",
-                        default: true
+                        type: "boolean"
                     },
                     skipTemplates: {
-                        type: "boolean",
-                        default: false
+                        type: "boolean"
                     },
                     skipRegExps: {
-                        type: "boolean",
-                        default: false
+                        type: "boolean"
+                    },
+                    skipJSXText: {
+                        type: "boolean"
                     }
                 },
                 additionalProperties: false
@@ -67,19 +74,19 @@ module.exports = {
     },
 
     create(context) {
+        const [{
+            skipComments,
+            skipStrings,
+            skipRegExps,
+            skipTemplates,
+            skipJSXText
+        }] = context.options;
+
+        const sourceCode = context.sourceCode;
+        const commentNodes = sourceCode.getAllComments();
 
         // Module store of errors that we have found
         let errors = [];
-
-        // Lookup the `skipComments` option, which defaults to `false`.
-        const options = context.options[0] || {};
-        const skipComments = !!options.skipComments;
-        const skipStrings = options.skipStrings !== false;
-        const skipRegExps = !!options.skipRegExps;
-        const skipTemplates = !!options.skipTemplates;
-
-        const sourceCode = context.getSourceCode();
-        const commentNodes = sourceCode.getAllComments();
 
         /**
          * Removes errors that occur inside the given node
@@ -100,12 +107,12 @@ module.exports = {
         }
 
         /**
-         * Checks identifier or literal nodes for errors that we are choosing to ignore and calls the relevant methods to remove the errors
+         * Checks literal nodes for errors that we are choosing to ignore and calls the relevant methods to remove the errors
          * @param {ASTNode} node to check for matching errors.
          * @returns {void}
          * @private
          */
-        function removeInvalidNodeErrorsInIdentifierOrLiteral(node) {
+        function removeInvalidNodeErrorsInLiteral(node) {
             const shouldCheckStrings = skipStrings && (typeof node.value === "string");
             const shouldCheckRegExps = skipRegExps && Boolean(node.regex);
 
@@ -140,6 +147,18 @@ module.exports = {
          */
         function removeInvalidNodeErrorsInComment(node) {
             if (ALL_IRREGULARS.test(node.value)) {
+                removeWhitespaceError(node);
+            }
+        }
+
+        /**
+         * Checks JSX nodes for errors that we are choosing to ignore and calls the relevant methods to remove the errors
+         * @param {ASTNode} node to check for matching errors.
+         * @returns {void}
+         * @private
+         */
+        function removeInvalidNodeErrorsInJSXText(node) {
+            if (ALL_IRREGULARS.test(node.raw)) {
                 removeWhitespaceError(node);
             }
         }
@@ -216,7 +235,7 @@ module.exports = {
          * @returns {void}
          * @private
          */
-        function noop() {}
+        function noop() { }
 
         const nodes = {};
 
@@ -237,9 +256,9 @@ module.exports = {
                 checkForIrregularLineTerminators(node);
             };
 
-            nodes.Identifier = removeInvalidNodeErrorsInIdentifierOrLiteral;
-            nodes.Literal = removeInvalidNodeErrorsInIdentifierOrLiteral;
+            nodes.Literal = removeInvalidNodeErrorsInLiteral;
             nodes.TemplateElement = skipTemplates ? removeInvalidNodeErrorsInTemplateLiteral : noop;
+            nodes.JSXText = skipJSXText ? removeInvalidNodeErrorsInJSXText : noop;
             nodes["Program:exit"] = function() {
                 if (skipComments) {
 

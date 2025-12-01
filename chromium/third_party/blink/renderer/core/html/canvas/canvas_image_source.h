@@ -29,7 +29,6 @@
 
 #include "base/memory/scoped_refptr.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/platform/graphics/canvas_resource_provider.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_types.h"
 #include "third_party/blink/renderer/platform/graphics/image_orientation.h"
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
@@ -43,7 +42,7 @@ class Image;
 enum SourceImageStatus {
   kNormalSourceImageStatus,
   kUndecodableSourceImageStatus,     // Image element with a 'broken' image
-  kZeroSizeCanvasSourceImageStatus,  // Source is a canvas with width or heigh
+  kZeroSizeCanvasSourceImageStatus,  // Source is a canvas with width or height
                                      // of zero
   kZeroSizeImageSourceStatus,    // Image element with width or height of zero
   kIncompleteSourceImageStatus,  // Image element with no source media

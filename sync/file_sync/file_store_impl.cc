@@ -182,7 +182,7 @@ std::string SyncedFileStoreImpl::SetLocalFile(base::Uuid owner_uuid,
   // The checskum will be used as a file name for storage on disk. We use base32
   // in order to support case-insensitive file systems.
   std::string checksum = base32::Base32Encode(
-      base::make_span(hash),
+      base::span(hash),
       base32::Base32EncodePolicy::OMIT_PADDING);
 
   checksum += "." + base::NumberToString(content.size());

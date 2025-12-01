@@ -30,12 +30,84 @@
 #include <memory>
 #include <utility>
 
+#include "src/tint/lang/core/ir/module.h"
+#include "src/tint/lang/core/ir/var.h"
+#include "src/tint/lang/core/type/input_attachment.h"
 #include "src/tint/lang/msl/writer/ast_printer/ast_printer.h"
 #include "src/tint/lang/msl/writer/common/option_helpers.h"
 #include "src/tint/lang/msl/writer/printer/printer.h"
 #include "src/tint/lang/msl/writer/raise/raise.h"
 
 namespace tint::msl::writer {
+
+Result<SuccessType> CanGenerate(const core::ir::Module& ir, const Options& options) {
+    // Check for unsupported module-scope variable address spaces and types.
+    for (auto* inst : *ir.root_block) {
+        auto* var = inst->As<core::ir::Var>();
+        auto* ptr = var->Result(0)->Type()->As<core::type::Pointer>();
+        if (ptr->AddressSpace() == core::AddressSpace::kPushConstant) {
+            return Failure("push constants are not supported by the MSL backend");
+        }
+        if (ptr->AddressSpace() == core::AddressSpace::kPixelLocal) {
+            return Failure("pixel_local address space is not supported by the MSL backend");
+        }
+        if (ptr->StoreType()->Is<core::type::InputAttachment>()) {
+            return Failure("input attachments are not supported by the MSL backend");
+        }
+    }
+
+    // Check the vertex pulling config, if provided.
+    if (options.vertex_pulling_config) {
+        // Find the vertex entry point.
+        const core::ir::Function* ep = nullptr;
+        for (auto& func : ir.functions) {
+            if (func->IsVertex()) {
+                if (ep) {
+                    return Failure("vertex pulling config provided with multiple vertex shaders");
+                }
+                ep = func;
+            }
+        }
+        if (!ep) {
+            return Failure("vertex pulling config provided without a vertex shader");
+        }
+
+        // Gather all of the vertex attribute locations in the config.
+        Hashset<uint32_t, 4> locations;
+        for (auto& buffer : options.vertex_pulling_config->vertex_state) {
+            if (buffer.array_stride & 3) {
+                return Failure(
+                    "vertex pulling config contains array stride that is not a multiple of 4");
+            }
+            for (auto& attr : buffer.attributes) {
+                if (!locations.Add(attr.shader_location)) {
+                    return Failure("vertex pulling config contains duplicate shader locations");
+                }
+            }
+        }
+
+        // Check the parameters to make sure all vertex attributes are present in the config.
+        for (auto* param : ep->Params()) {
+            if (auto* str = param->Type()->As<core::type::Struct>()) {
+                for (auto* member : str->Members()) {
+                    if (auto loc = member->Attributes().location) {
+                        if (!locations.Contains(*loc)) {
+                            return Failure("shader location " + std::to_string(*loc) +
+                                           " missing from vertex pulling map");
+                        }
+                    }
+                }
+            } else if (auto loc = param->Location()) {
+                if (!locations.Contains(*loc)) {
+                    return Failure("shader location " + std::to_string(*loc) +
+                                   " missing from vertex pulling map");
+                }
+            }
+        }
+    }
+
+    return Success;
+}
 
 Result<Output> Generate(core::ir::Module& ir, const Options& options) {
     {
@@ -53,16 +125,13 @@ Result<Output> Generate(core::ir::Module& ir, const Options& options) {
         return raise_result.Failure();
     }
 
-    // Generate the MSL code.
-    auto result = Print(ir);
+    auto result = Print(ir, options);
     if (result != Success) {
         return result.Failure();
     }
-    output.msl = result->msl;
-    output.workgroup_allocations = std::move(result->workgroup_allocations);
-    output.needs_storage_buffer_sizes = raise_result->needs_storage_buffer_sizes;
-    output.has_invariant_attribute = result->has_invariant_attribute;
-    return output;
+
+    result->needs_storage_buffer_sizes = raise_result->needs_storage_buffer_sizes;
+    return result;
 }
 
 Result<Output> Generate(const Program& program, const Options& options) {
@@ -87,13 +156,13 @@ Result<Output> Generate(const Program& program, const Options& options) {
     output.needs_storage_buffer_sizes = sanitized_result.needs_storage_buffer_sizes;
 
     // Generate the MSL code.
-    auto impl = std::make_unique<ASTPrinter>(sanitized_result.program);
+    auto impl = std::make_unique<ASTPrinter>(sanitized_result.program, options);
     if (!impl->Generate()) {
         return Failure{impl->Diagnostics()};
     }
     output.msl = impl->Result();
     output.has_invariant_attribute = impl->HasInvariant();
-    output.workgroup_allocations = impl->DynamicWorkgroupAllocations();
+    output.workgroup_info.allocations = impl->DynamicWorkgroupAllocations();
 
     return output;
 }

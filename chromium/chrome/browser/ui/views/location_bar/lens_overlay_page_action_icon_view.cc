@@ -33,9 +33,9 @@
 
 namespace {
 
-// TODO(tluk): Similar bespoke checks are used throughout the codebase, this
-// approach is taken from BookmarkTabHelper. This should be factored out as a
-// common util and other callsites converted to use this.
+// TODO(crbug.com/382494946): Similar bespoke checks are used throughout the
+// codebase, this approach is taken from BookmarkTabHelper. This should be
+// factored out as a common util and other callsites converted to use this.
 bool IsNewTabPage(content::WebContents* const web_contents) {
   // Use the committed entry (or the visible entry, if the committed entry is
   // the initial NavigationEntry) so the bookmarks bar disappears at the same
@@ -173,7 +173,8 @@ void LensOverlayPageActionIconView::UpdateImpl() {
   // LocationBar construction.
   auto* controller =
       browser_->GetFeatures().lens_overlay_entry_point_controller();
-  const bool is_broader_feature_enabled = controller && controller->IsEnabled();
+  const bool is_broader_feature_enabled =
+      controller && controller->AreVisible();
 
   const bool should_show_lens_overlay = enabled_by_pref &&
                                         location_bar_has_focus && !is_ntp &&
@@ -203,7 +204,6 @@ void LensOverlayPageActionIconView::OnExecuting(
     }
     lens_region_search_controller_->Start(
         GetWebContents(), /*use_fullscreen_capture=*/true,
-        /*force_open_in_new_tab=*/true,
         /*is_google_default_search_provider=*/true,
         lens::AmbientSearchEntryPoint::
             LENS_OVERLAY_LOCATION_BAR_ACCESSIBILITY_FALLBACK);

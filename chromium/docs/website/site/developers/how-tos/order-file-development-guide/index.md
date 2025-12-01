@@ -79,7 +79,7 @@ The repo, containing orderfiles is here:
 http://git.chromium.org/gitweb/?p=chromiumos/profile/chromium.git
 
 Intructions on how to update the repo:
-http://www.chromium.org/chromium-os/how-tos-and-troubleshooting/git-server-side-information
+https://www.chromium.org/chromium-os/developer-library/reference/development/source-layout#git-server-layout
 
 11. Update
 src/third_party/chromiumos-overlay/chromeos-base/chromeos-chrome/chromeos-chrome-9999.ebuild

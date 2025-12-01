@@ -11,6 +11,9 @@ from typing import List, Tuple, Optional
 _THIS_DIR = os.path.abspath(os.path.dirname(__file__))
 # The repo's root directory.
 _ROOT_DIR = os.path.abspath(os.path.join(_THIS_DIR, "..", "..", ".."))
+# Bad delimiter characters.
+BAD_DELIMITERS = ["/", ";", " and ", " or "]
+BAD_DELIMITERS_REGEX = re.compile("|".join(re.escape(delimiter) for delimiter in BAD_DELIMITERS))
 
 # Add the repo's root directory for clearer imports.
 sys.path.insert(0, _ROOT_DIR)
@@ -18,41 +21,7 @@ sys.path.insert(0, _ROOT_DIR)
 import metadata.fields.field_types as field_types
 import metadata.fields.util as util
 import metadata.validation_result as vr
-
-# Copied from ANDROID_ALLOWED_LICENSES in
-# https://chromium.googlesource.com/chromium/src/+/refs/heads/main/third_party/PRESUBMIT.py
-_ANDROID_ALLOWED_LICENSES = [
-    "A(pple )?PSL 2(\.0)?",
-    "Android Software Development Kit License",
-    "Apache( License)?,?( Version)? 2(\.0)?",
-    "(New )?([23]-Clause )?BSD( [23]-Clause)?( with advertising clause)?",
-    "GNU Lesser Public License",
-    "L?GPL ?v?2(\.[01])?( or later)?( with the classpath exception)?",
-    "(The )?MIT(/X11)?(-like)?( License)?",
-    "MPL 1\.1 ?/ ?GPL 2(\.0)? ?/ ?LGPL 2\.1",
-    "MPL 2(\.0)?",
-    "Microsoft Limited Public License",
-    "Microsoft Permissive License",
-    "Public Domain",
-    "Python",
-    "SIL Open Font License, Version 1.1",
-    "SGI Free Software License B",
-    "Unicode, Inc. License",
-    "University of Illinois\/NCSA Open Source",
-    "X11",
-    "Zlib",
-]
-_PATTERN_LICENSE_ALLOWED = re.compile(
-    "^({})$".format("|".join(_ANDROID_ALLOWED_LICENSES)),
-    re.IGNORECASE,
-)
-
-_PATTERN_VERBOSE_DELIMITER = re.compile(r" and | or | / ")
-
-# Split on the canonical delimiter, or any of the non-canonical delimiters.
-_PATTERN_SPLIT_LICENSE = re.compile("{}|{}".format(
-    _PATTERN_VERBOSE_DELIMITER.pattern,
-    field_types.MetadataField.VALUE_DELIMITER))
+from metadata.fields.custom.license_allowlist import ALLOWED_LICENSES, ALLOWED_OPEN_SOURCE_LICENSES, ALL_LICENSES, WITH_PERMISSION_ONLY
 
 
 def process_license_value(value: str,
@@ -67,76 +36,93 @@ def process_license_value(value: str,
                           delimiter.
 
     Returns: a list of the constituent licenses within the given value,
-             and whether the constituent license is on the allowlist.
+             and whether the constituent license is a recognized license type.
              e.g. [("Apache, 2.0", True), ("MIT", True),
                    ("custom", False)]
     """
     # Check if the value is on the allowlist as-is, and thus does not
     # require further processing.
-    if is_license_allowlisted(value):
+    if is_license_valid(value):
         return [(value, True)]
 
     breakdown = []
-    if re.search(_PATTERN_VERBOSE_DELIMITER, value):
-        # Split using the verbose delimiters.
-        for component in re.split(_PATTERN_VERBOSE_DELIMITER, value):
-            breakdown.extend(
-                process_license_value(component.strip(), atomic_delimiter))
-    else:
-        # Split using the standard value delimiter. This results in
-        # atomic values; there is no further splitting possible.
-        for atomic_value in value.split(atomic_delimiter):
-            atomic_value = atomic_value.strip()
-            breakdown.append(
-                (atomic_value, is_license_allowlisted(atomic_value)))
+    # Split using the standard value delimiter. This results in
+    # atomic values; there is no further splitting possible.
+    for atomic_value in value.split(atomic_delimiter):
+        atomic_value = atomic_value.strip()
+        breakdown.append(
+            (atomic_value, is_license_valid(
+                atomic_value,
+            ))
+        )
 
     return breakdown
 
 
-def is_license_allowlisted(value: str) -> bool:
+def is_license_valid(value: str) -> bool:
+    """Returns whether the value is a valid license type.
+    """
+    return value in ALL_LICENSES
+
+def is_license_allowlisted(value: str, is_open_source_project: bool = False) -> bool:
     """Returns whether the value is in the allowlist for license
     types.
     """
-    return util.matches(_PATTERN_LICENSE_ALLOWED, value)
-
+    # Restricted licenses are not enforced by presubmits, see b/388620886 😢.
+    if value in WITH_PERMISSION_ONLY:
+      return True
+    if is_open_source_project:
+        return value in ALLOWED_OPEN_SOURCE_LICENSES
+    return value in ALLOWED_LICENSES
 
 class LicenseField(field_types.SingleLineTextField):
-    """Custom field for the package's license type(s).
+  """Custom field for the package's license type(s).
 
-    e.g. Apache 2.0, MIT, BSD, Public Domain.
+    e.g. Apache-2.0, MIT, BSD-2.0
     """
-    def __init__(self):
-        super().__init__(name="License")
+  def __init__(self):
+    super().__init__(name="License")
 
-    def validate(self, value: str) -> Optional[vr.ValidationResult]:
-        """Checks the given value consists of recognized license types.
+  def validate(self, value: str) -> Optional[vr.ValidationResult]:
+    """Checks the given value consists of recognized license types.
 
         Note: this field supports multiple values.
         """
-        not_allowlisted = []
-        licenses = process_license_value(value,
-                                         atomic_delimiter=self.VALUE_DELIMITER)
-        for license, allowed in licenses:
-            if util.is_empty(license):
-                return vr.ValidationError(
+    not_allowlisted = []
+    licenses = process_license_value(value,
+          atomic_delimiter=self.VALUE_DELIMITER,
+    )
+    for license, allowed in licenses:
+      if util.is_empty(license):
+        return vr.ValidationError(
                     reason=f"{self._name} has an empty value.")
-            if not allowed:
-                not_allowlisted.append(license)
+      if BAD_DELIMITERS_REGEX.search(license):
+        return vr.ValidationError(
+                reason=f"{self._name} contains a bad license separator. "
+                "Separate licenses by commas only.",
+                # Try and preemptively address the root cause of this behaviour,
+                # which is having multiple choices for a license.
+                additional=[f"When given a choice of licenses, chose the most "
+                            "permissive one, do not list all options."]
+        )
+      if not allowed:
+        not_allowlisted.append(license)
 
-        if not_allowlisted:
-            return vr.ValidationWarning(
-                reason=f"{self._name} has a license not in the allowlist.",
+    if not_allowlisted:
+      return vr.ValidationWarning(
+                reason=f"{self._name} has a license not in the allowlist."
+                " (see https://source.chromium.org/chromium/chromium/tools/depot_tools/+/main:metadata/fields/custom/license_allowlist.py).",
                 additional=[
                     "Licenses not allowlisted: "
                     f"{util.quoted(not_allowlisted)}.",
                 ])
 
-        return None
+    return None
 
-    def narrow_type(self, value: str) -> Optional[List[str]]:
-        if not value:
-            # Empty License field is equivalent to "not declared".
-            return None
+  def narrow_type(self, value: str) -> Optional[List[str]]:
+    if not value:
+      # Empty License field is equivalent to "not declared".
+      return None
 
-        parts = _PATTERN_SPLIT_LICENSE.split(value)
-        return list(filter(bool, map(lambda str: str.strip(), parts)))
+    parts = value.split(self.VALUE_DELIMITER)
+    return list(filter(bool, map(lambda str: str.strip(), parts)))

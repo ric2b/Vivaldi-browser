@@ -40,6 +40,7 @@ typedef void (^ServerRequestCompletionHandler)
 
 #pragma mark - GETTERS
 - (BOOL)hasSyncConsent;
+- (BOOL)isSyncActive;
 - (NSString*)accountUsername;
 - (UIImage*)accountUserAvatar;
 - (BOOL)isSyncBookmarksEnabled;
@@ -51,6 +52,7 @@ typedef void (^ServerRequestCompletionHandler)
 - (BOOL)isSyncNotesEnabled;
 - (BOOL)isSyncTabsEnabled;
 - (VivaldiAccountSimplifiedState)getCurrentAccountState;
+- (BOOL)shouldShowSyncErrorDialog;
 
 #pragma mark - SETTERS
 - (void)enableTabsSync;

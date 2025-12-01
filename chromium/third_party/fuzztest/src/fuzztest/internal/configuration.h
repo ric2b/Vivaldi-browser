@@ -59,6 +59,23 @@ struct Configuration {
   // Generate separate TESTs that replay crashing inputs for the selected fuzz
   // tests.
   bool reproduce_findings_as_separate_tests = false;
+  // When working on a corpus database, a few steps can be performed for each
+  // test:
+  //   1. Replaying inputs from the database, by default the regression inputs
+  //      will be used.
+  //   2. Fuzzing with generated inputs, some of which trigger crashes.
+  //   3. Updating the database with the coverage-increasing and crashing
+  //      inputs.
+  //
+  // If set, coverage inputs are included for replaying.
+  bool replay_coverage_inputs = false;
+  // If set, further steps are skipped after replaying.
+  bool only_replay = false;
+  // If set, will be used when working on a corpus database to resume
+  // the progress in case the execution got interrupted.
+  std::optional<std::string> execution_id;
+  // If set, print log from subprocesses spawned by FuzzTest.
+  bool print_subprocess_log = false;
 
   // Stack limit in bytes.
   size_t stack_limit = 128 * 1024;
@@ -70,6 +87,9 @@ struct Configuration {
   absl::Duration time_limit = absl::InfiniteDuration();
   // Whether the time limit is for each test or for all tests in the binary.
   TimeBudgetType time_budget_type = TimeBudgetType::kPerTest;
+  // The number of fuzzing jobs to run in parallel. Zero indicates that the
+  // number of jobs is unspecified by the test binary.
+  size_t jobs = 0;
 
   // When set, `FuzzTestFuzzer` replays only one input (no fuzzing is done).
   std::optional<std::string> crashing_input_to_reproduce;

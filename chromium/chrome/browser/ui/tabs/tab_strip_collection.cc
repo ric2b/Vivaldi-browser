@@ -18,7 +18,9 @@
 
 namespace tabs {
 
-TabStripCollection::TabStripCollection() {
+TabStripCollection::TabStripCollection()
+    : TabCollection(TabCollection::Type::TABSTRIP),
+      impl_(std::make_unique<TabCollectionStorage>(*this)) {
   impl_ = std::make_unique<TabCollectionStorage>(*this);
   pinned_collection_ = static_cast<PinnedTabCollection*>(
       impl_->AddCollection(std::make_unique<PinnedTabCollection>(), 0));
@@ -120,8 +122,7 @@ void TabStripCollection::MoveTabsRecursive(
   }
 }
 
-void TabStripCollection::MoveGroupTo(const TabGroupModel* group_model,
-                                     const tab_groups::TabGroupId& group,
+void TabStripCollection::MoveGroupTo(const tab_groups::TabGroupId& group,
                                      int to_index) {
   tabs::TabGroupTabCollection* group_collection =
       unpinned_collection_->GetTabGroupCollection(group);
@@ -260,7 +261,7 @@ void TabStripCollection::MaybeRemoveGroupCollection(
   }
 }
 
-void TabStripCollection::ValidateData(const TabGroupModel* group_model) {
+void TabStripCollection::ValidateData() {
   unpinned_collection_->ValidateCollections();
 }
 

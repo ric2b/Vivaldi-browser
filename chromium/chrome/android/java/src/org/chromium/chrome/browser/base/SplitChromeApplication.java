@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.base;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.os.Build;
 import android.os.Handler;
@@ -14,15 +15,13 @@ import android.os.HandlerThread;
 import android.os.SystemClock;
 import android.util.ArraySet;
 
-import dagger.hilt.internal.GeneratedComponentManager;
-import dagger.hilt.internal.GeneratedComponentManagerHolder;
-
 import org.chromium.base.BundleUtils;
 import org.chromium.base.JNIUtils;
 import org.chromium.base.JavaUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.build.annotations.IdentifierNameString;
+import org.chromium.chrome.browser.language.GlobalAppLocaleController;
 
 /**
  * Application class for Chrome that knows how to deal with isolated splits. This class will perform
@@ -30,11 +29,14 @@ import org.chromium.build.annotations.IdentifierNameString;
  * split. In the browser process, the necessary logic is loaded from the chrome split using
  * reflection.
  */
-public class SplitChromeApplication extends SplitCompatApplication
-        implements GeneratedComponentManagerHolder {
+public class SplitChromeApplication extends SplitCompatApplication {
 
     private static @IdentifierNameString String sImplClassName =
             "org.chromium.chrome.browser.ChromeApplicationImpl";
+    private static @IdentifierNameString String sChromePreloadName =
+            "org.chromium.chrome.browser.ChromeTabbedActivity$Preload";
+    private static @IdentifierNameString String sGoogle3PreloadName =
+            "org.chromium.chrome.modules.google3.Google3ModuleEntryImpl";
     private static final Object sSplitLock = new Object();
     private static final ArraySet<String> sCachedSplits = new ArraySet<>();
 
@@ -43,7 +45,6 @@ public class SplitChromeApplication extends SplitCompatApplication
 
     private String mChromeApplicationClassName;
     private Resources mResources;
-    private GeneratedComponentManager<?> mHiltComponentManager;
 
     public SplitChromeApplication() {
         this(sImplClassName);
@@ -68,18 +69,28 @@ public class SplitChromeApplication extends SplitCompatApplication
             }
             setImplSupplier(
                     () -> {
-                        Context chromeContext = createChromeContext(this);
                         return (Impl)
-                                BundleUtils.newInstance(chromeContext, mChromeApplicationClassName);
+                                BundleUtils.newInstance(
+                                        mChromeApplicationClassName, CHROME_SPLIT_NAME);
                     });
         } else {
             setImplSupplier(() -> createNonBrowserApplication());
         }
     }
 
+    private static String getPreloadClassName(String split) {
+        if (split.equals(CHROME_SPLIT_NAME)) {
+            return sChromePreloadName;
+        }
+        if (split.equals("google3")) {
+            return sGoogle3PreloadName;
+        }
+        return null;
+    }
+
     private Context createContextForSplitNoWait(String name) {
         synchronized (sSplitLock) {
-            boolean shouldRecordHistogram = sCachedSplits.contains(name);
+            boolean shouldRecordHistogram = !sCachedSplits.contains(name);
             try {
                 long startTime = SystemClock.uptimeMillis();
                 Context context = super.createContextForSplit(name);
@@ -91,6 +102,27 @@ public class SplitChromeApplication extends SplitCompatApplication
                             "Android.IsolatedSplits.ContextCreateTime2." + name,
                             SystemClock.uptimeMillis() - startTime);
                     sCachedSplits.add(name);
+                    String preloadClass = getPreloadClassName(name);
+                    if (preloadClass != null) {
+                        long loadStartTime = SystemClock.uptimeMillis();
+                        try {
+                            context.getClassLoader().loadClass(preloadClass);
+                        } catch (ReflectiveOperationException e) {
+                            throw new RuntimeException(
+                                    "Preload of "
+                                            + preloadClass
+                                            + " for split "
+                                            + name
+                                            + " failed.");
+                        }
+                        long endTime = SystemClock.uptimeMillis();
+                        RecordHistogram.recordTimesHistogram(
+                                "Android.IsolatedSplits.LoadFirstClassTime." + name,
+                                endTime - loadStartTime);
+                        RecordHistogram.recordTimesHistogram(
+                                "Android.IsolatedSplits.ContextCreateTime3." + name,
+                                endTime - startTime);
+                    }
                 }
                 return context;
             } catch (PackageManager.NameNotFoundException e) {
@@ -120,16 +152,8 @@ public class SplitChromeApplication extends SplitCompatApplication
     }
 
     @Override
-    protected void performBrowserProcessPreloading(Context context) {
-        // The chrome split has a large amount of code, which can slow down startup. Loading
-        // this in the background allows us to do this in parallel with startup tasks which do
-        // not depend on code in the chrome split.
-        sSplitPreloader = new SplitPreloader(context);
-        // If the chrome module is not enabled or isolated splits are not supported (e.g. in Android
-        // N), the onComplete function will run immediately so it must handle the case where the
-        // base context of the application has not been set yet.
-        sSplitPreloader.preload(
-                CHROME_SPLIT_NAME,
+    protected void performBrowserProcessPreloading(Context context, boolean blockingLoad) {
+        SplitPreloader.PreloadHooks hooks =
                 new SplitPreloader.PreloadHooks() {
                     @Override
                     public void runImmediatelyInBackgroundThread(Context chromeContext) {
@@ -151,8 +175,7 @@ public class SplitChromeApplication extends SplitCompatApplication
                                                 // background.
                                                 chromeContext
                                                         .getClassLoader()
-                                                        .loadClass(
-                                                                "org.chromium.chrome.browser.ChromeTabbedActivity$Preload")
+                                                        .loadClass(sChromePreloadName)
                                                         .newInstance();
                                             } catch (ReflectiveOperationException e) {
                                                 throw new RuntimeException(e);
@@ -173,6 +196,13 @@ public class SplitChromeApplication extends SplitCompatApplication
                             BundleUtils.replaceClassLoader(
                                     SplitChromeApplication.this, chromeContext.getClassLoader());
                             JNIUtils.setClassLoader(chromeContext.getClassLoader());
+
+                            if (GlobalAppLocaleController.getInstance().isOverridden()) {
+                                Configuration config =
+                                        GlobalAppLocaleController.getInstance()
+                                                .getOverrideConfig(chromeContext);
+                                chromeContext = chromeContext.createConfigurationContext(config);
+                            }
                             // Resources holds a reference to a ClassLoader. Make our Application's
                             // getResources() return a reference to the Chrome split's resources
                             // since there are a spots where ContextUtils.getApplicationContext()
@@ -185,7 +215,26 @@ public class SplitChromeApplication extends SplitCompatApplication
                     public Context createIsolatedSplitContext(String name) {
                         return createContextForSplitNoWait(name);
                     }
-                });
+                };
+
+        if (blockingLoad) {
+            Context chromeContext = hooks.createIsolatedSplitContext(CHROME_SPLIT_NAME);
+            hooks.runInUiThread(chromeContext);
+        } else {
+            // The chrome split has a large amount of code, which can slow down startup. Loading
+            // this in the background allows us to do this in parallel with startup tasks which do
+            // not depend on code in the chrome split.
+            sSplitPreloader = new SplitPreloader(context);
+            // If the chrome module is not enabled or isolated splits are not supported (e.g. in
+            // Android N), the onComplete function will run immediately so it must handle the case
+            // where the base context of the application has not been set yet.
+            sSplitPreloader.preload(CHROME_SPLIT_NAME, hooks);
+        }
+    }
+
+    @Override
+    protected void performBrowserProcessPreloading(Context context) {
+        performBrowserProcessPreloading(context, false);
     }
 
     @Override
@@ -210,23 +259,5 @@ public class SplitChromeApplication extends SplitCompatApplication
 
     protected Impl createNonBrowserApplication() {
         return new Impl();
-    }
-
-    /** Initializes Hilt. */
-    public void setHiltComponentManager(GeneratedComponentManager<?> componentManager) {
-        mHiltComponentManager = componentManager;
-    }
-
-    @Override
-    public GeneratedComponentManager<?> componentManager() {
-        if (mHiltComponentManager != null) {
-            return mHiltComponentManager;
-        }
-        throw new IllegalStateException();
-    }
-
-    @Override
-    public Object generatedComponent() {
-        return componentManager().generatedComponent();
     }
 }

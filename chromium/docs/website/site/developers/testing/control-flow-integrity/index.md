@@ -41,13 +41,13 @@ use_cfi_cast=true use_cfi_diag=true use_thin_lto=true' --check**
 
 The deployment is being tracked here:
 
-Meta bug: [crbug.com/701937](http://crbug.com/701937)
+Meta bug: [crbug.com/701937](https://crbug.com/701937)
 
-Linux: [crbug.com/464797](http://crbug.com/464797)
+Linux: [crbug.com/464797](https://crbug.com/464797)
 
-Android: [crbug.com/469376](http://crbug.com/469376)
+Android: [crbug.com/469376](https://crbug.com/469376)
 
-ChromeOS: [crbug.com/537386](http://crbug.com/537386)
+ChromeOS: [crbug.com/537386](https://crbug.com/537386)
 
 ## Diagnosing problems with the CFI instrumentation
 

@@ -11,6 +11,7 @@
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/task/bind_post_task.h"
 #include "build/build_config.h"
 #include "content/browser/media/media_devices_util.h"
@@ -114,7 +115,6 @@ bool MayApplySubCaptureTarget(GlobalRenderFrameHostId capturing_id,
 
   // * target.is_zero() = uncrop-request.
   // * !target.is_zero() = crop-request.
-  // TODO(crbug.com/1418194): Extend to support other types.
   return target.is_zero() || helper->IsAssociatedWith(target, type);
 }
 
@@ -181,18 +181,18 @@ bool AllowedStreamTypeCombination(
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 bool IsValidZoomLevel(int zoom_level) {
-  if (blink::kPresetBrowserZoomFactors.size() == 0u) {
+  if (blink::kPresetBrowserZoomFactors.empty()) {
     return false;
   }
 
   if (zoom_level ==
-      static_cast<int>(std::ceil(100 * blink::kPresetBrowserZoomFactors[0]))) {
+      base::ClampCeil(100 * blink::kPresetBrowserZoomFactors[0])) {
     return true;
   }
 
   for (size_t i = 1; i < blink::kPresetBrowserZoomFactors.size(); ++i) {
-    if (zoom_level == static_cast<int>(std::floor(
-                          100 * blink::kPresetBrowserZoomFactors[i]))) {
+    if (zoom_level ==
+        base::ClampFloor(100 * blink::kPresetBrowserZoomFactors[i])) {
       return true;
     }
   }

@@ -11,8 +11,6 @@
 
 #include "base/functional/callback_helpers.h"
 #include "base/i18n/case_conversion.h"
-#include "chrome/browser/picture_in_picture/picture_in_picture_occlusion_observer.h"
-#include "chrome/browser/picture_in_picture/scoped_picture_in_picture_occlusion_observation.h"
 #include "chrome/browser/ui/monogram_utils.h"
 #include "chrome/browser/ui/views/controls/hover_button.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -27,16 +25,10 @@
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/styled_label.h"
-#include "ui/views/widget/widget_observer.h"
 
-using IdentityProviderDataPtr = scoped_refptr<content::IdentityProviderData>;
-using IdentityRequestAccountPtr =
-    scoped_refptr<content::IdentityRequestAccount>;
-using TokenError = content::IdentityCredentialTokenError;
+namespace webid {
 
-namespace content {
-class IdentityRequestAccount;
-}  // namespace content
+class FedCmAccountSelectionView;
 
 // The radius used for the corner of the "Continue as" button.
 inline constexpr int kButtonRadius = 16;
@@ -200,68 +192,13 @@ class AccountHoverButtonSecondaryView : public views::View {
 };
 
 // Base class for interacting with FedCM account selection dialog.
-class AccountSelectionViewBase : public PictureInPictureOcclusionObserver {
+class AccountSelectionViewBase {
  public:
-  // Used to observe changes to the account selection dialog.
-  class Observer {
-   public:
-    // Called when a user either selects the account from the multi-account
-    // chooser or clicks the "continue" button.
-    // Takes `account` as well as `idp_data` since passing `account_id`
-    // is insufficient in the multiple IDP case. The caller should pass a cref,
-    // as these objects are owned by the observer.
-    virtual void OnAccountSelected(
-        const content::IdentityRequestAccount& account,
-        const content::IdentityProviderData& idp_data,
-        const ui::Event& event) = 0;
-
-    // Called when the user clicks "privacy policy" or "terms of service" link.
-    virtual void OnLinkClicked(
-        content::IdentityRequestDialogController::LinkType link_type,
-        const GURL& url,
-        const ui::Event& event) = 0;
-
-    // Called when the user clicks "back" button.
-    virtual void OnBackButtonClicked() = 0;
-
-    // Called when the user clicks "close" button.
-    virtual void OnCloseButtonClicked(const ui::Event& event) = 0;
-
-    // Called when the user clicks the "continue" button on the sign-in
-    // failure dialog or wants to sign in to another account.
-    virtual void OnLoginToIdP(const GURL& idp_config_url,
-                              const GURL& idp_login_url,
-                              const ui::Event& event) = 0;
-
-    // Called when the user clicks "got it" button.
-    virtual void OnGotIt(const ui::Event& event) = 0;
-
-    // Called when the user clicks the "more details" button on the error
-    // dialog.
-    virtual void OnMoreDetails(const ui::Event& event) = 0;
-
-    // Called when the accounts UI is displayed.
-    virtual void OnAccountsDisplayed() = 0;
-
-    // Called when the user clicks on the 'Choose an account' button
-    virtual void OnChooseAnAccountClicked() = 0;
-  };
-
   AccountSelectionViewBase(
-      content::WebContents* web_contents,
-      AccountSelectionViewBase::Observer* observer,
-      views::WidgetObserver* widget_observer,
+      FedCmAccountSelectionView* owner,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       std::u16string rp_for_display);
-  AccountSelectionViewBase();
-  ~AccountSelectionViewBase() override;
-
-  // PictureInPictureOcclusionObserver:
-  void OnOcclusionStateChanged(bool occluded) override;
-
-  // Creates and sets the appropriate dialog widget, depending on whether the
-  // dialog is bubble or modal.
-  virtual void InitDialogWidget() = 0;
+  virtual ~AccountSelectionViewBase();
 
   // Updates the FedCM dialog to show the "account picker" sheet.
   // `is_choose_an_account` is true if the dialog must change its title to
@@ -274,15 +211,14 @@ class AccountSelectionViewBase : public PictureInPictureOcclusionObserver {
       bool is_choose_an_account) = 0;
 
   // Updates the FedCM dialog to show the "verifying" sheet.
-  virtual void ShowVerifyingSheet(
-      const content::IdentityRequestAccount& account,
-      const std::u16string& title) = 0;
+  virtual void ShowVerifyingSheet(const IdentityRequestAccountPtr& account,
+                                  const std::u16string& title) = 0;
 
   // Updates to show a single account. On widget mode, used when showing the
   // account confirmation dialog after the user picks one of multiple accounts.
   // On button mode, used for the user to pick the single account.
   virtual void ShowSingleAccountConfirmDialog(
-      const content::IdentityRequestAccount& account,
+      const IdentityRequestAccountPtr& account,
       bool show_back_button) = 0;
 
   // Updates the FedCM dialog to show the "failure" sheet.
@@ -298,8 +234,7 @@ class AccountSelectionViewBase : public PictureInPictureOcclusionObserver {
 
   // Updates the FedCM dialog to show the "request permission" sheet.
   virtual void ShowRequestPermissionDialog(
-      const content::IdentityRequestAccount& account,
-      const content::IdentityProviderData& idp_data) = 0;
+      const IdentityRequestAccountPtr& account) = 0;
 
   // Updates to show a single account along with a button to show all options.
   // Currently used when there are multiple IDPs and exactly one returning
@@ -308,41 +243,14 @@ class AccountSelectionViewBase : public PictureInPictureOcclusionObserver {
       const std::vector<IdentityRequestAccountPtr>& accounts,
       const std::vector<IdentityProviderDataPtr>& idp_list) = 0;
 
-  // Updates the FedCM dialog to show the "loading" sheet.
-  virtual void ShowLoadingDialog() = 0;
-
-  // Closes the dialog, without dismissing the FedCM API.
-  virtual void CloseDialog() = 0;
-
   // Gets the title of the dialog.
   virtual std::string GetDialogTitle() const = 0;
-
-  // Retrieves the dialog widget used to control the dialog, if available. This
-  // method is virtual for testing purposes.
-  virtual base::WeakPtr<views::Widget> GetDialogWidget();
 
   // Populates `brand_icon_images_` when an IDP image has been fetched.
   void AddIdpImage(const GURL& image_url, const gfx::ImageSkia& idp_image);
 
   // Returns the network traffic annotation tag for FedCM.
   static net::NetworkTrafficAnnotationTag GetTrafficAnnotation();
-
-  // Updates the position of the dialog. Used when the contents of the dialog
-  // has changed or when the widget which the dialog is anchored on has been
-  // resized.
-  virtual void UpdateDialogPosition() = 0;
-
-  // Whether the dialog can fit in the web contents at its preferred size.
-  // Virtual for testing purposes.
-  virtual bool CanFitInWebContents();
-
-  // Temporary logic to disable interactions with the tab's WebContents for the
-  // modal dialog.
-  // TODO(https://crbug.com/377803489): Remove this.
-  virtual void DidShowWidget();
-  virtual void DidHideWidget();
-
-  bool IsOccluded() const { return is_occluded_; }
 
  protected:
   void SetLabelProperties(views::Label* label);
@@ -353,7 +261,7 @@ class AccountSelectionViewBase : public PictureInPictureOcclusionObserver {
   // HoverButton, and in that case the number is the 0-based position of that
   // account in the overall dialog.
   std::unique_ptr<views::View> CreateAccountRow(
-      const content::IdentityRequestAccount& account,
+      const IdentityRequestAccountPtr& account,
       std::optional<int> clickable_position,
       bool should_include_idp,
       bool is_modal_dialog = false,
@@ -379,35 +287,32 @@ class AccountSelectionViewBase : public PictureInPictureOcclusionObserver {
   // The ImageFetcher used to fetch the account pictures for FedCM.
   std::unique_ptr<image_fetcher::ImageFetcher> image_fetcher_;
 
-  // Web contents which the dialog is rendered on.
-  base::WeakPtr<content::WebContents> web_contents_;
-
   // The images for the brand icons. Stored so that they can be reused upon
   // pressing the back button after choosing an account.
   base::flat_map<GURL, gfx::ImageSkia> brand_icon_images_;
 
-  // Widget to control the dialog i.e. hide, show, add observer etc.
-  base::WeakPtr<views::Widget> dialog_widget_;
-
-  // Observes events on `dialog_widget_`.
-  // Dangling when running Chromedriver's run_py_tests.py test suite.
-  raw_ptr<views::WidgetObserver, DanglingUntriaged> widget_observer_{nullptr};
-
   // Observes events on AccountSelectionBubbleView.
   // Dangling when running Chromedriver's run_py_tests.py test suite.
-  raw_ptr<Observer, DanglingUntriaged> observer_{nullptr};
+  // TODO(https://crbug.com/377803489): This is a real dangling pointer in
+  // production code. The subclasses of AccountSelectionViewBase also inherit
+  // (indirectly) from views::DialogDelegate, with owned_by_widget = true. This
+  // means that this class is owned by the widget, which in turn is owned by
+  // FedCmAccountSelectionView. The problem is that the widget uses
+  // NATIVE_WIDGET_OWNS_WIDGET ownership semantics and is closed via
+  // Widget::Close() which is asynchronous. ~FedCmAccountSelectionView() calls
+  // into FedCmAccountSelectionView::Close() which asynchronously closes the
+  // Widget. When the Widget is eventually destroyed, this class is destroyed,
+  // but that's after FedCmAccountSelectionView is destroyed.
+  raw_ptr<FedCmAccountSelectionView, DanglingUntriaged> owner_{nullptr};
 
   // The description of the RP to be used in the dialog.
   std::u16string rp_for_display_;
-
-  // Whether the widget is occluded (and therefore we should ignore inputs.
-  bool is_occluded_{false};
-
-  ScopedPictureInPictureOcclusionObservation occlusion_observation_{this};
 
   // Used to ensure that callbacks are not run if the AccountSelectionViewBase
   // is destroyed.
   base::WeakPtrFactory<AccountSelectionViewBase> weak_ptr_factory_{this};
 };
+
+}  // namespace webid
 
 #endif  // CHROME_BROWSER_UI_VIEWS_WEBID_ACCOUNT_SELECTION_VIEW_BASE_H_

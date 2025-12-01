@@ -3,17 +3,7 @@
 // found in the LICENSE file.
 
 import {describeWithEnvironment} from '../../../testing/EnvironmentHelpers.js';
-import {getInsightOrError} from '../../../testing/InsightHelpers.js';
-import {TraceLoader} from '../../../testing/TraceLoader.js';
-
-export async function processTrace(testContext: Mocha.Suite|Mocha.Context|null, traceFile: string) {
-  const {parsedTrace, insights} = await TraceLoader.traceEngine(testContext, traceFile);
-  if (!insights) {
-    throw new Error('No insights');
-  }
-
-  return {data: parsedTrace, insights};
-}
+import {getInsightOrError, processTrace} from '../../../testing/InsightHelpers.js';
 
 describeWithEnvironment('SelectorStatsInsights', function() {
   it('generates slow selectors', async function() {
@@ -29,8 +19,8 @@ describeWithEnvironment('SelectorStatsInsights', function() {
     const topElapsedMs = insight.topElapsedMs;
     const topMatchAttempts = insight.topMatchAttempts;
 
-    assert.strictEqual(topElapsedMs.length, 3);
-    assert.strictEqual(topMatchAttempts.length, 3);
+    assert.lengthOf(topElapsedMs, 3);
+    assert.lengthOf(topMatchAttempts, 3);
 
     assert.strictEqual(topElapsedMs[0].selector, ':root');
     assert.strictEqual(topElapsedMs[0]['elapsed (us)'], 14);
@@ -60,8 +50,8 @@ describeWithEnvironment('SelectorStatsInsights', function() {
     const topElapsedMs = insight.topElapsedMs;
     const topMatchAttempts = insight.topMatchAttempts;
 
-    assert.strictEqual(topElapsedMs.length, 3);
-    assert.strictEqual(topMatchAttempts.length, 3);
+    assert.lengthOf(topElapsedMs, 3);
+    assert.lengthOf(topMatchAttempts, 3);
 
     assert.strictEqual(topElapsedMs[0].selector, 'h1');
     assert.strictEqual(topElapsedMs[0]['elapsed (us)'], 2);

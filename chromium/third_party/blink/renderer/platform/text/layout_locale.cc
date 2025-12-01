@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "third_party/blink/renderer/platform/text/layout_locale.h"
 
 #include <hb.h>
@@ -362,13 +367,14 @@ AtomicString LayoutLocale::LocaleWithBreakKeyword(
         : length_(base::saturated_cast<wtf_size_t>(utf8_locale.length())),
           buffer_(length_ + kMaxKeywordsLen + 1, 0) {
       // The `buffer_` is initialized to 0 above.
-      memcpy(buffer_.data(), utf8_locale.c_str(), length_);
+      base::span(buffer_).copy_prefix_from(
+          base::span(utf8_locale).first(length_));
     }
     explicit ULocaleKeywordBuilder(const String& locale)
         : ULocaleKeywordBuilder(locale.Utf8()) {}
 
     AtomicString ToAtomicString() const {
-      return AtomicString::FromUTF8(buffer_.data(), length_);
+      return AtomicString::FromUTF8(base::as_byte_span(buffer_).first(length_));
     }
 
     bool SetStrictness(LineBreakStrictness strictness) {

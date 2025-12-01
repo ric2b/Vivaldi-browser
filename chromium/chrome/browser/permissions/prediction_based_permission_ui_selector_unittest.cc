@@ -62,7 +62,7 @@ class PredictionBasedPermissionUiSelectorTest : public testing::Test {
           {{permissions::feature_params::kPermissionPredictionsV2HoldbackChance
                 .name,
             holdback_chance_string}}}},
-        {} /* disabled_features */);
+        /*disabled_features=*/{});
   }
 
   void RecordHistoryActions(size_t action_count,
@@ -86,7 +86,8 @@ class PredictionBasedPermissionUiSelectorTest : public testing::Test {
         request_type, permissions::PermissionRequestGestureType::GESTURE);
 
     selector->SelectUiToUse(
-        &request, base::BindLambdaForTesting([&](const Decision& decision) {
+        /*web_contents=*/nullptr, &request,
+        base::BindLambdaForTesting([&](const Decision& decision) {
           actual_decision = decision;
           run_loop.Quit();
         }));
@@ -135,15 +136,13 @@ TEST_F(PredictionBasedPermissionUiSelectorTest,
   }
 }
 
-TEST_F(PredictionBasedPermissionUiSelectorTest,
-       RequestsWithFewPromptsAreNotSent) {
+TEST_F(PredictionBasedPermissionUiSelectorTest, RequestsWithFewPromptsAreSent) {
   base::test::ScopedCommandLine scoped_command_line;
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
       "prediction-service-mock-likelihood", "very-unlikely");
   PredictionBasedPermissionUiSelector prediction_selector(profile());
 
-  // Requests that have 0-3 previous permission prompts will return "normal"
-  // without making a prediction service request.
+  // Requests that have 0-3 previous permission prompts will return "quiet".
   for (size_t request_id = 0; request_id < 4; ++request_id) {
     Decision notification_decision = SelectUiToUseAndGetDecision(
         &prediction_selector, permissions::RequestType::kNotifications);
@@ -151,8 +150,12 @@ TEST_F(PredictionBasedPermissionUiSelectorTest,
     Decision geolocation_decision = SelectUiToUseAndGetDecision(
         &prediction_selector, permissions::RequestType::kGeolocation);
 
-    EXPECT_EQ(Decision::UseNormalUi(), notification_decision.quiet_ui_reason);
-    EXPECT_EQ(Decision::UseNormalUi(), geolocation_decision.quiet_ui_reason);
+    EXPECT_EQ(PredictionBasedPermissionUiSelector::QuietUiReason::
+                  kServicePredictedVeryUnlikelyGrant,
+              notification_decision.quiet_ui_reason);
+    EXPECT_EQ(PredictionBasedPermissionUiSelector::QuietUiReason::
+                  kServicePredictedVeryUnlikelyGrant,
+              geolocation_decision.quiet_ui_reason);
 
     RecordHistoryActions(/*action_count=*/1,
                          permissions::RequestType::kNotifications);
@@ -184,7 +187,7 @@ TEST_F(PredictionBasedPermissionUiSelectorTest,
       "prediction-service-mock-likelihood", "very-unlikely");
   PredictionBasedPermissionUiSelector prediction_selector(profile());
 
-  // Set up history to need one more prompt before we actually send requests.
+  // In CPSSv3 we do not check the action history.
   RecordHistoryActions(/*action_count=*/3,
                        permissions::RequestType::kNotifications);
   RecordHistoryActions(/*action_count=*/3,
@@ -196,52 +199,9 @@ TEST_F(PredictionBasedPermissionUiSelectorTest,
   Decision geolocation_decision = SelectUiToUseAndGetDecision(
       &prediction_selector, permissions::RequestType::kGeolocation);
 
-  EXPECT_EQ(Decision::UseNormalUi(), notification_decision.quiet_ui_reason);
-  EXPECT_EQ(Decision::UseNormalUi(), geolocation_decision.quiet_ui_reason);
-
-  // Record a bunch of history actions for other request types.
-  RecordHistoryActions(/*action_count=*/2,
-                       permissions::RequestType::kCameraStream);
-  RecordHistoryActions(/*action_count=*/1,
-                       permissions::RequestType::kClipboard);
-  RecordHistoryActions(/*action_count=*/10,
-                       permissions::RequestType::kMidiSysex);
-
-  // Should still not send requests.
-  notification_decision = SelectUiToUseAndGetDecision(
-      &prediction_selector, permissions::RequestType::kNotifications);
-  EXPECT_EQ(Decision::UseNormalUi(), notification_decision.quiet_ui_reason);
-
-  geolocation_decision = SelectUiToUseAndGetDecision(
-      &prediction_selector, permissions::RequestType::kNotifications);
-  EXPECT_EQ(Decision::UseNormalUi(), geolocation_decision.quiet_ui_reason);
-
-  // Record one more notification prompt, now it should send requests.
-  RecordHistoryActions(1, permissions::RequestType::kNotifications);
-
-  notification_decision = SelectUiToUseAndGetDecision(
-      &prediction_selector, permissions::RequestType::kNotifications);
   EXPECT_EQ(PredictionBasedPermissionUiSelector::QuietUiReason::
                 kServicePredictedVeryUnlikelyGrant,
             notification_decision.quiet_ui_reason);
-
-  // Geolocation still has too few actions.
-  geolocation_decision = SelectUiToUseAndGetDecision(
-      &prediction_selector, permissions::RequestType::kGeolocation);
-  EXPECT_EQ(Decision::UseNormalUi(), geolocation_decision.quiet_ui_reason);
-
-  // Now both notifications and geolocation send requests.
-  RecordHistoryActions(1, permissions::RequestType::kGeolocation);
-
-  notification_decision = SelectUiToUseAndGetDecision(
-      &prediction_selector, permissions::RequestType::kNotifications);
-  EXPECT_EQ(PredictionBasedPermissionUiSelector::QuietUiReason::
-                kServicePredictedVeryUnlikelyGrant,
-            notification_decision.quiet_ui_reason);
-
-  geolocation_decision = SelectUiToUseAndGetDecision(
-      &prediction_selector, permissions::RequestType::kGeolocation);
-
   EXPECT_EQ(PredictionBasedPermissionUiSelector::QuietUiReason::
                 kServicePredictedVeryUnlikelyGrant,
             geolocation_decision.quiet_ui_reason);
@@ -266,10 +226,10 @@ TEST_F(PredictionBasedPermissionUiSelectorTest, GetPredictionTypeToUse) {
       });
 // Use server side for desktop but not for android
 #if BUILDFLAG(IS_ANDROID)
-  EXPECT_EQ(PredictionSource::USE_ONDEVICE,
+  EXPECT_EQ(PredictionSource::USE_ONDEVICE_TFLITE,
             prediction_selector.GetPredictionTypeToUse(
                 permissions::RequestType::kNotifications));
-  EXPECT_EQ(PredictionSource::USE_ONDEVICE,
+  EXPECT_EQ(PredictionSource::USE_ONDEVICE_TFLITE,
             prediction_selector.GetPredictionTypeToUse(
                 permissions::RequestType::kGeolocation));
 #else
@@ -294,6 +254,7 @@ TEST_F(PredictionBasedPermissionUiSelectorTest, GetPredictionTypeToUse) {
 #endif
       },
       {});
+
   // Use server side for both desktop and android
   EXPECT_EQ(PredictionSource::USE_SERVER_SIDE,
             prediction_selector.GetPredictionTypeToUse(
@@ -301,6 +262,28 @@ TEST_F(PredictionBasedPermissionUiSelectorTest, GetPredictionTypeToUse) {
   EXPECT_EQ(PredictionSource::USE_SERVER_SIDE,
             prediction_selector.GetPredictionTypeToUse(
                 permissions::RequestType::kGeolocation));
+
+#if !BUILDFLAG(IS_ANDROID)
+  // All CPSS related flags enabled + the one for using the on-device genai
+  // model.
+  feature_list_->Reset();
+  feature_list_->InitWithFeatures(
+      {
+          permissions::features::kPermissionsAIv1,
+          permissions::features::kPermissionPredictionsV2,
+          permissions::features::kPermissionOnDeviceNotificationPredictions,
+          permissions::features::kPermissionOnDeviceGeolocationPredictions,
+          features::kQuietNotificationPrompts,
+      },
+      /*disabled_features=*/{});
+  // Use on-device genai model.
+  EXPECT_EQ(PredictionSource::USE_ONDEVICE_GENAI_AND_SERVER_SIDE,
+            prediction_selector.GetPredictionTypeToUse(
+                permissions::RequestType::kNotifications));
+  EXPECT_EQ(PredictionSource::USE_ONDEVICE_GENAI_AND_SERVER_SIDE,
+            prediction_selector.GetPredictionTypeToUse(
+                permissions::RequestType::kGeolocation));
+#endif
 }
 
 TEST_F(PredictionBasedPermissionUiSelectorTest, HoldbackHistogramTest) {

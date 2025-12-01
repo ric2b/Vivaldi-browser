@@ -28,7 +28,7 @@ namespace capture_recommendations {
 
 // Default maximum delay for both audio and video. Used if the sender fails
 // to provide any constraints.
-constexpr std::chrono::milliseconds kDefaultMaxDelayMs(400);
+inline constexpr std::chrono::milliseconds kDefaultMaxDelayMs(400);
 
 // Bit rate limits, used for both audio and video streams.
 struct BitRateLimits {
@@ -45,17 +45,17 @@ struct BitRateLimits {
 // for audio. Depending on the type of audio content (narrowband, fullband,
 // etc.) Opus specifically can perform very well at this bitrate.
 // See: https://research.google/pubs/pub41650/
-constexpr int kDefaultAudioMinBitRate = 32 * 1000;
+inline constexpr int kDefaultAudioMinBitRate = 32 * 1000;
 
 // Opus generally sees little improvement above 192kbps, but some older codecs
 // that we may consider supporting improve at up to 256kbps.
-constexpr int kDefaultAudioMaxBitRate = 256 * 1000;
-constexpr BitRateLimits kDefaultAudioBitRateLimits{kDefaultAudioMinBitRate,
-                                                   kDefaultAudioMaxBitRate};
+inline constexpr int kDefaultAudioMaxBitRate = 256 * 1000;
+inline constexpr BitRateLimits kDefaultAudioBitRateLimits{
+    kDefaultAudioMinBitRate, kDefaultAudioMaxBitRate};
 
 // While generally audio should be captured at the maximum sample rate, 16kHz is
 // the recommended absolute minimum.
-constexpr int kDefaultAudioMinSampleRate = 16000;
+inline constexpr int kDefaultAudioMinSampleRate = 16000;
 
 // Audio capture recommendations. Maximum delay is determined by buffer
 // constraints, and capture bit rate may vary between limits as appropriate.
@@ -81,24 +81,26 @@ struct Audio {
 
 // The minimum dimensions are as close as possible to low-definition
 // television, factoring in the receiver's aspect ratio if provided.
-constexpr Resolution kDefaultMinResolution{kMinVideoWidth, kMinVideoHeight};
+inline constexpr Resolution kDefaultMinResolution{kMinVideoWidth,
+                                                  kMinVideoHeight};
 
 // Currently mirroring only supports 1080P.
-constexpr Dimensions kDefaultMaxResolution{1920, 1080, kDefaultFrameRate};
+inline constexpr Dimensions kDefaultMaxResolution{1920, 1080,
+                                                  kDefaultFrameRate};
 
 // The mirroring spec suggests 300kbps as the absolute minimum bitrate.
-constexpr int kDefaultVideoMinBitRate = 300 * 1000;
+inline constexpr int kDefaultVideoMinBitRate = 300 * 1000;
 
 // The theoretical maximum pixels per second is the maximum bit rate
 // divided by 8 (the max byte rate). In practice it should generally be
 // less.
-constexpr int kDefaultVideoMaxPixelsPerSecond =
+inline constexpr int kDefaultVideoMaxPixelsPerSecond =
     kDefaultMaxResolution.effective_bit_rate() / 8;
 
 // Our default limits are merely the product of the minimum and maximum
 // dimensions, and are only used if the receiver fails to give better
 // constraint information.
-const BitRateLimits kDefaultVideoBitRateLimits{
+inline constexpr BitRateLimits kDefaultVideoBitRateLimits{
     kDefaultVideoMinBitRate, kDefaultMaxResolution.effective_bit_rate()};
 
 // Video capture recommendations.

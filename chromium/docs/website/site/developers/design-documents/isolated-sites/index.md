@@ -8,7 +8,7 @@ page_name: isolated-sites
 title: Isolated Sites
 ---
 
-### NOTE: This project is no longer being pursued, and <http://crbug.com/69335> has been marked WontFix. We are investigating other ways to get similar protections once the [Site Isolation](/developers/design-documents/site-isolation) effort is deployed.
+### NOTE: This project is no longer being pursued, and <https://crbug.com/69335> has been marked WontFix. We are investigating other ways to get similar protections once the [Site Isolation](/developers/design-documents/site-isolation) effort is deployed.
 
 ### Motivation
 
@@ -70,7 +70,7 @@ handle multiple storage contexts within a single renderer process.
 
 ### Current State
 
-Tracking bug here: <http://crbug.com/69335> (marked WontFix)
+Tracking bug here: <https://crbug.com/69335> (marked WontFix)
 
 Much of the state isolation infrastructure needed for this effort now exists in
 the StoragePartition class, which is used by Chrome's Platform Apps. Chrome no

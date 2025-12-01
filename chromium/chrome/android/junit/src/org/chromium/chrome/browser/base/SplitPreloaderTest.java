@@ -16,7 +16,6 @@ import android.content.ContextWrapper;
 import android.content.pm.PackageManager;
 import android.os.Build;
 
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -27,7 +26,6 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.CallbackHelper;
-import org.chromium.build.BuildConfig;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -125,15 +123,7 @@ public class SplitPreloaderTest {
 
     @Before
     public void setUp() {
-        BuildConfig.IS_BUNDLE = true;
-        mContext = new MainContext(ContextUtils.getApplicationContext());
-        ContextUtils.initApplicationContextForTests(mContext);
-        mPreloader = new SplitPreloader(mContext);
-    }
-
-    @After
-    public void tearDown() {
-        BuildConfig.IS_BUNDLE = false;
+        BundleUtils.setIsBundleForTesting(true);
         mContext = new MainContext(ContextUtils.getApplicationContext());
         ContextUtils.initApplicationContextForTests(mContext);
         mPreloader = new SplitPreloader(mContext);
@@ -166,9 +156,9 @@ public class SplitPreloaderTest {
         assertThat(mContext.getUiThreadContextNames()).containsExactly(SPLIT_A);
         assertThat(mContext.getBackgroundThreadContextNames()).containsExactly(SPLIT_A);
         assertTrue(tracker.getUiContext().wasCreatedOnUiThread());
-        assertEquals(tracker.getUiContext().getName(), SPLIT_A);
+        assertEquals(SPLIT_A, tracker.getUiContext().getName());
         assertFalse(tracker.getBackgroundContext().wasCreatedOnUiThread());
-        assertEquals(tracker.getBackgroundContext().getName(), SPLIT_A);
+        assertEquals(SPLIT_A, tracker.getBackgroundContext().getName());
     }
 
     @Test
@@ -184,7 +174,7 @@ public class SplitPreloaderTest {
         assertThat(mContext.getUiThreadContextNames()).containsExactly(SPLIT_A);
         assertThat(mContext.getBackgroundThreadContextNames()).containsExactly(SPLIT_A);
         assertTrue(tracker.getUiContext().wasCreatedOnUiThread());
-        assertEquals(tracker.getUiContext().getName(), SPLIT_A);
+        assertEquals(SPLIT_A, tracker.getUiContext().getName());
     }
 
     @Test
@@ -202,10 +192,10 @@ public class SplitPreloaderTest {
         assertThat(mContext.getUiThreadContextNames()).containsExactly(SPLIT_A, SPLIT_B);
         assertThat(mContext.getBackgroundThreadContextNames()).containsExactly(SPLIT_A, SPLIT_B);
         assertTrue(trackerA.getUiContext().wasCreatedOnUiThread());
-        assertEquals(trackerA.getUiContext().getName(), SPLIT_A);
+        assertEquals(SPLIT_A, trackerA.getUiContext().getName());
 
         assertTrue(trackerB.getUiContext().wasCreatedOnUiThread());
-        assertEquals(trackerB.getUiContext().getName(), SPLIT_B);
+        assertEquals(SPLIT_B, trackerB.getUiContext().getName());
     }
 
     @Test

@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Generic collection of functions and objects used by different scripts."""
+
 import dataclasses
 import multiprocessing
 import os
 import queue
+import shutil
 import sys
 import time
 import urllib.parse
@@ -25,6 +27,9 @@ REPO_DIR = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 
 # The absolute path to the directory containing the content.
 SITE_DIR = os.path.join(REPO_DIR, 'site')
+
+# Terminal escape sequence to erase the current line after the cursor.
+CSI_ERASE_LINE_AFTER = '\x1b[K'
 
 
 def walk(top):
@@ -79,7 +84,6 @@ class JobQueue:
         self._response_q = multiprocessing.Queue()
         self._start_time = None
         self._procs = []
-        self._last_msg = None
         self._isatty = sys.stdout.isatty()
 
     def all_tasks(self):
@@ -161,21 +165,21 @@ class JobQueue:
         sys.stdout.flush()
 
     def _print(self, msg, truncate=True):
+        msg = '[%d/%d] %s' % (len(self.finished), len(self.all_tasks()), msg)
+
         if not self._isatty:
-            print('[%d/%d] %s' % (len(self.finished), len(self.all_tasks()),
-                                  msg))
+            print(msg)
             return
 
-        if len(msg) > 76 and truncate:
-            msg = msg[:76] + '...'
-        if self._last_msg is not None:
-            print('\r', end='')
-        msg = '[%d/%d] %s' % (len(self.finished), len(self.all_tasks()), msg)
-        print(msg, end='' if self._isatty else '\n')
-        if self._last_msg is not None and len(self._last_msg) > len(msg):
-            print(' ' * (len(self._last_msg) - len(msg)), end='')
-            print('\r', end='')
-        self._last_msg = msg
+        if truncate:
+            # Requery every print in case the terminal resized.  If it's very
+            # very narrow, the output will be nonsense, so just ignore it.
+            width = max(20, shutil.get_terminal_size().columns)
+            if len(msg) > width:
+                msg = msg[:width - 3] + '...'
+            else:
+                msg += CSI_ERASE_LINE_AFTER
+        print('\r' + msg, end='', flush=True)
 
 
 def _worker(request_q, response_q, handler):
@@ -183,8 +187,8 @@ def _worker(request_q, response_q, handler):
     while True:
         message, task, obj = request_q.get()
 
-        assert message in ('exit', 'handle'), (
-            "Unknown message type '%s'" % message)
+        assert message in ('exit',
+                           'handle'), ("Unknown message type '%s'" % message)
 
         if message == 'exit':
             break

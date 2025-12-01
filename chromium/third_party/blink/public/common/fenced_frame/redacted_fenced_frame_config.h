@@ -133,7 +133,7 @@ struct BLINK_COMMON_EXPORT RedactedFencedFrameConfig {
     return shared_storage_budget_metadata_;
   }
   const DeprecatedFencedFrameMode& mode() const { return mode_; }
-  const std::vector<blink::mojom::PermissionsPolicyFeature>&
+  const std::vector<network::mojom::PermissionsPolicyFeature>&
   effective_enabled_permissions() const {
     return effective_enabled_permissions_;
   }
@@ -163,7 +163,7 @@ struct BLINK_COMMON_EXPORT RedactedFencedFrameConfig {
   // TODO(crbug.com/1347953): Not yet used.
   DeprecatedFencedFrameMode mode_ = DeprecatedFencedFrameMode::kDefault;
 
-  std::vector<blink::mojom::PermissionsPolicyFeature>
+  std::vector<network::mojom::PermissionsPolicyFeature>
       effective_enabled_permissions_;
 
   // Fenced frames with flexible permissions are allowed to inherit certain
@@ -214,11 +214,8 @@ struct BLINK_COMMON_EXPORT RedactedFencedFrameProperties {
   shared_storage_budget_metadata() const {
     return shared_storage_budget_metadata_;
   }
-  bool has_fenced_frame_reporting() const {
-    return has_fenced_frame_reporting_;
-  }
   const DeprecatedFencedFrameMode& mode() const { return mode_; }
-  const std::vector<blink::mojom::PermissionsPolicyFeature>&
+  const std::vector<network::mojom::PermissionsPolicyFeature>&
   effective_enabled_permissions() const {
     return effective_enabled_permissions_;
   }
@@ -250,9 +247,8 @@ struct BLINK_COMMON_EXPORT RedactedFencedFrameProperties {
       nested_urn_config_pairs_;
   std::optional<RedactedFencedFrameProperty<SharedStorageBudgetMetadata>>
       shared_storage_budget_metadata_;
-  bool has_fenced_frame_reporting_ = false;
   DeprecatedFencedFrameMode mode_ = DeprecatedFencedFrameMode::kDefault;
-  std::vector<blink::mojom::PermissionsPolicyFeature>
+  std::vector<network::mojom::PermissionsPolicyFeature>
       effective_enabled_permissions_;
   std::optional<ParentPermissionsInfo> parent_permissions_info_;
   bool can_disable_untrusted_network_ = false;

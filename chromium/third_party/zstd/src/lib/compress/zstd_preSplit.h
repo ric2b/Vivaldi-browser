@@ -13,27 +13,21 @@
 
 #include <stddef.h>  /* size_t */
 
-#if defined (__cplusplus)
-extern "C" {
-#endif
-
 #define ZSTD_SLIPBLOCK_WORKSPACESIZE 8208
 
-/* @level must be a value between 0 and 3.
- *        higher levels spend more energy to find block boundaries
- * @workspace must be aligned on 8-bytes boundaries
+/* ZSTD_splitBlock():
+ * @level must be a value between 0 and 4.
+ *        higher levels spend more energy to detect block boundaries.
+ * @workspace must be aligned for size_t.
  * @wkspSize must be at least >= ZSTD_SLIPBLOCK_WORKSPACESIZE
- * note2:
- * for the time being, this function only accepts full 128 KB blocks,
- * therefore @blockSizeMax must be == 128 KB.
- * This could be extended to smaller sizes in the future.
+ * note:
+ * For the time being, this function only accepts full 128 KB blocks.
+ * Therefore, @blockSize must be == 128 KB.
+ * While this could be extended to smaller sizes in the future,
+ * it is not yet clear if this would be useful. TBD.
  */
 size_t ZSTD_splitBlock(const void* blockStart, size_t blockSize,
                     int level,
                     void* workspace, size_t wkspSize);
-
-#if defined (__cplusplus)
-}
-#endif
 
 #endif /* ZSTD_PRESPLIT_H */

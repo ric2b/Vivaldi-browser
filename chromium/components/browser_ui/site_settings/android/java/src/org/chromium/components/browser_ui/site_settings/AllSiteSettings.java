@@ -343,7 +343,8 @@ public class AllSiteSettings extends BaseSiteSettingsFragment
     @Override
     public void onActivityCreated(Bundle savedInstanceState) {
         addPreferencesFromXml();
-
+        // Vivaldi ref. VAB-10766
+        if (getArguments() != null) {
         String title = getArguments().getString(EXTRA_TITLE);
         if (title != null) mPageTitle.set(title);
 
@@ -356,7 +357,7 @@ public class AllSiteSettings extends BaseSiteSettingsFragment
                 getArguments().containsKey(EXTRA_SEARCH)
                         ? RWS_SEARCH_PREFIX + getArguments().getString(EXTRA_SEARCH)
                         : mSearch;
-
+        } // Vivaldi
         setHasOptionsMenu(true);
 
         super.onActivityCreated(savedInstanceState);

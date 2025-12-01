@@ -22,8 +22,8 @@ page, you can use either the keyboard shortcuts (see table below) or access
 src="/developers/design-documents/accessibility/xoom_menu.png">](/developers/design-documents/accessibility/xoom_menu.png)
 
 Page zoom level will be remembered for *each unique domain*, e.g. if you
-increase zoom for Google Search (http://www.google.com), zoom level will also be
-increased for Google Calendar (http://www.google.com/calendar). However, since
+increase zoom for Google Search (https://www.google.com), zoom level will also be
+increased for Google Calendar (https://www.google.com/calendar). However, since
 Gmail (http://mail.google.com) is on a different domain, zoom level will remain
 unchanged in this example.
 
@@ -59,7 +59,7 @@ for:
 To access these settings, open the Google Chrome Options, select the Under the
 Hood tab and click the Fonts and Languages button. The dialog that opens allows
 you to adjust your font settings (note: there is an open bug
-([1040](http://crbug.com/1040)) to allow these settings to override fonts
+([1040](https://crbug.com/1040)) to allow these settings to override fonts
 specified in web pages).
 
 [<img alt="image"
@@ -87,7 +87,7 @@ partial support for system-level color schemes. Dark mode for Chrome's UI is now
 supported on Mac, and Windows support is on the way.
 
 1.  Install a [Chrome
-            Extension](http://www.google.com/support/chrome/bin/answer.py?answer=154007)
+            Extension](https://www.google.com/support/chrome/bin/answer.py?answer=154007)
             which allows you to specify your own custom color combinations, for
             instance the [Change
             Colors](https://chrome.google.com/extensions/detail/jbmkekhehjedonbhoikhhkmlapalklgn)

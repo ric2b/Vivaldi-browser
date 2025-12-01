@@ -21,7 +21,7 @@ the latest code. Not intended to be used as a primary or day-to-day system by
 anyone.
 
 Read more about ChromeOS releases
-[here](https://www.chromium.org/chromium-os/developer-library/reference/release/releases/).
+[here](/chromium-os/developer-library/reference/release/releases/).
 
 To see the current schedule of ChromeOS release, see go/chrome-schedule.
 To easily stay up to date with the release schedule, add the

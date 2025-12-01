@@ -71,14 +71,16 @@ class TableHeader::HighlightPathGenerator
 
   // HighlightPathGenerator:
   SkPath GetHighlightPath(const View* view) override {
-    if (!PlatformStyle::kTableViewSupportsKeyboardNavigationByCell)
+    if constexpr (!PlatformStyle::kTableViewSupportsKeyboardNavigationByCell) {
       return SkPath();
+    }
 
     const TableHeader* const header = static_cast<const TableHeader*>(view);
     // If there's no focus indicator fall back on the default highlight path
     // (highlights entire view instead of active cell).
-    if (!header->HasFocusIndicator())
+    if (!header->HasFocusIndicator()) {
       return SkPath();
+    }
 
     // Draw a focus indicator around the active cell.
     gfx::Rect bounds = header->GetActiveHeaderCellBounds();
@@ -129,6 +131,21 @@ int TableHeader::GetSeparatorHorizontalPadding() const {
       kHorizontalSeparatorPaddingDefault);
 }
 
+ui::ColorId TableHeader::GetSeparatorHorizontalColorId() const {
+  return table_->header_style().separator_horizontal_color_id.value_or(
+      ui::kColorFocusableBorderUnfocused);
+}
+
+ui::ColorId TableHeader::GetSeparatorVerticalColorId() const {
+  return table_->header_style().separator_vertical_color_id.value_or(
+      ui::kColorTableHeaderSeparator);
+}
+
+ui::ColorId TableHeader::GetBackgroundColorId() const {
+  return table_->header_style().background_color_id.value_or(
+      ui::kColorTableHeaderBackground);
+}
+
 gfx::Font::Weight TableHeader::GetFontWeight() const {
   return table_->header_style().font_weight.value_or(gfx::Font::Weight::NORMAL);
 }
@@ -144,19 +161,19 @@ void TableHeader::OnPaint(gfx::Canvas* canvas) {
   const int horizontal_padding = GetCellHorizontalPadding();
   const SkColor text_color =
       color_provider->GetColor(ui::kColorTableHeaderForeground);
-  const SkColor separator_color =
-      color_provider->GetColor(ui::kColorTableHeaderSeparator);
+  const SkColor separator_vertical_color =
+      color_provider->GetColor(GetSeparatorVerticalColorId());
   const int resize_bar_vertical_padding = GetResizeBarVerticalPadding();
   const int separator_horizontal_padding = GetSeparatorHorizontalPadding();
   // Paint the background and a separator at the bottom. The separator color
   // matches that of the border around the scrollview.
   OnPaintBackground(canvas);
-  SkColor border_color =
-      color_provider->GetColor(ui::kColorFocusableBorderUnfocused);
+  SkColor separator_horizontal_color =
+      color_provider->GetColor(GetSeparatorHorizontalColorId());
   canvas->DrawSharpLine(
       gfx::PointF(separator_horizontal_padding, height() - 1),
       gfx::PointF(width() - separator_horizontal_padding, height() - 1),
-      border_color);
+      separator_horizontal_color);
 
   const Columns& columns = table_->visible_columns();
   const int sorted_column_id = table_->sort_descriptors().empty()
@@ -169,13 +186,14 @@ void TableHeader::OnPaint(gfx::Canvas* canvas) {
       canvas->DrawSharpLine(
           gfx::PointF(separator_x, resize_bar_vertical_padding),
           gfx::PointF(separator_x, height() - resize_bar_vertical_padding),
-          separator_color);
+          separator_vertical_color);
     }
 
     const int x = column.x + horizontal_padding;
     int width = column.width - horizontal_padding - horizontal_padding;
-    if (width <= 0)
+    if (width <= 0) {
       continue;
+    }
 
     const int title_width =
         gfx::GetStringWidth(column.column.title, font_list_);
@@ -183,8 +201,9 @@ void TableHeader::OnPaint(gfx::Canvas* canvas) {
         (column.column.id == sorted_column_id &&
          title_width + sort_indicator_width <= width);
 
-    if (paint_sort_indicator)
+    if (paint_sort_indicator) {
       width -= sort_indicator_width;
+    }
 
     canvas->DrawStringRectWithFlags(
         column.column.title, font_list_, text_color,
@@ -287,8 +306,9 @@ bool TableHeader::OnMouseDragged(const ui::MouseEvent& event) {
 void TableHeader::OnMouseReleased(const ui::MouseEvent& event) {
   const bool was_resizing = resize_details_ != nullptr;
   resize_details_.reset();
-  if (!was_resizing && event.IsOnlyLeftMouseButton())
+  if (!was_resizing && event.IsOnlyLeftMouseButton()) {
     ToggleSortOrder(event);
+  }
 }
 
 void TableHeader::OnMouseCaptureLost() {
@@ -302,8 +322,9 @@ void TableHeader::OnMouseCaptureLost() {
 void TableHeader::OnGestureEvent(ui::GestureEvent* event) {
   switch (event->type()) {
     case ui::EventType::kGestureTap:
-      if (!resize_details_.get())
+      if (!resize_details_.get()) {
         ToggleSortOrder(*event);
+      }
       break;
     case ui::EventType::kGestureScrollBegin:
       StartResize(*event);
@@ -322,8 +343,12 @@ void TableHeader::OnGestureEvent(ui::GestureEvent* event) {
 
 void TableHeader::OnThemeChanged() {
   View::OnThemeChanged();
+
+  // Note: If custom background tokens are set, then it's the custom token's
+  // responsibility to ensure platform specific colors are set in the
+  // appropriate mixers.
   SetBackground(CreateSolidBackground(
-      GetColorProvider()->GetColor(ui::kColorTableHeaderBackground)));
+      GetColorProvider()->GetColor(GetBackgroundColorId())));
 }
 
 void TableHeader::ResizeColumnViaKeyboard(
@@ -366,13 +391,15 @@ bool TableHeader::HasFocusIndicator() const {
 }
 
 bool TableHeader::StartResize(const ui::LocatedEvent& event) {
-  if (is_resizing())
+  if (is_resizing()) {
     return false;
+  }
 
   const std::optional<size_t> index =
       GetResizeColumn(GetMirroredXInView(event.x()));
-  if (!index.has_value())
+  if (!index.has_value()) {
     return false;
+  }
 
   resize_details_ = std::make_unique<ColumnResizeDetails>();
   resize_details_->column_index = index.value();
@@ -383,8 +410,9 @@ bool TableHeader::StartResize(const ui::LocatedEvent& event) {
 }
 
 void TableHeader::ContinueResize(const ui::LocatedEvent& event) {
-  if (!is_resizing())
+  if (!is_resizing()) {
     return;
+  }
 
   const int scale = base::i18n::IsRTL() ? -1 : 1;
   const int delta =
@@ -401,13 +429,15 @@ void TableHeader::ContinueResize(const ui::LocatedEvent& event) {
 }
 
 void TableHeader::ToggleSortOrder(const ui::LocatedEvent& event) {
-  if (table_->visible_columns().empty())
+  if (table_->visible_columns().empty()) {
     return;
+  }
 
   const int x = GetMirroredXInView(event.x());
   const std::optional<size_t> index = GetClosestVisibleColumnIndex(*table_, x);
-  if (!index.has_value())
+  if (!index.has_value()) {
     return;
+  }
   const TableView::VisibleColumn& column(
       table_->GetVisibleColumn(index.value()));
   if (x >= column.x && x < column.x + column.width && event.y() >= 0 &&
@@ -418,8 +448,9 @@ void TableHeader::ToggleSortOrder(const ui::LocatedEvent& event) {
 
 std::optional<size_t> TableHeader::GetResizeColumn(int x) const {
   const Columns& columns(table_->visible_columns());
-  if (columns.empty())
+  if (columns.empty()) {
     return std::nullopt;
+  }
 
   const std::optional<size_t> index = GetClosestVisibleColumnIndex(*table_, x);
   DCHECK(index.has_value());

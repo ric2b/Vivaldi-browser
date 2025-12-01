@@ -11,14 +11,9 @@ import("../visibility.gni")
 generate_css("css_files") {
   sources = [
     "fileSourceIcon.css",
+    "icon.css",
     "iconButton.css",
   ]
-}
-
-generate_css("legacy_css_files") {
-  sources = [ "icon.css" ]
-
-  legacy = true
 }
 
 devtools_module("icon_button") {
@@ -30,7 +25,7 @@ devtools_module("icon_button") {
   deps = [
     "../../../ui/components/helpers:bundle",
     "../../../ui/components/render_coordinator:bundle",
-    "../../../ui/lit-html:bundle",
+    "../../../ui/lit:bundle",
   ]
 }
 
@@ -40,7 +35,6 @@ devtools_entrypoint("bundle") {
   deps = [
     ":css_files",
     ":icon_button",
-    ":legacy_css_files",
   ]
 
   visibility = [
@@ -67,6 +61,6 @@ ts_library("unittests") {
   deps = [
     ":bundle",
     "../../../testing",
-    "../../lit-html:bundle",
+    "../../lit:bundle",
   ]
 }

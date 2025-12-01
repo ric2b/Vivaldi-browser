@@ -94,6 +94,16 @@ typedef NS_ENUM(NSInteger, ItemType) {
         attributes:textAttributes];
 }
 
+- (void)setupLeftCancelButton {
+  UIBarButtonItem* cancelButton =
+      [[UIBarButtonItem alloc]
+          initWithBarButtonSystemItem:UIBarButtonSystemItemCancel
+                               target:self
+                               action:@selector(dismissView)];
+  self.customLeftBarButtonItem = cancelButton;
+  self.navigationItem.leftBarButtonItem = self.customLeftBarButtonItem;
+}
+
 #pragma mark - TableViewModel
 
 - (void)loadModel {
@@ -409,6 +419,10 @@ typedef NS_ENUM(NSInteger, ItemType) {
       IDS_VIVALDI_ACCOUNT_ENCRYPTION_PASSPHRASE_WRONG)
                       section:SectionIdentifierEncryptionPassword
                     itemType:ItemTypeError];
+}
+
+- (void)dismissView {
+  [self.delegate vivaldiSyncEncryptionPasswordViewControllerWasRemoved:self];
 }
 
 @end

@@ -7,11 +7,9 @@ import {
   describeWithEnvironment,
   setupActionRegistry,
 } from '../../../testing/EnvironmentHelpers.js';
-import * as Coordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
+import * as RenderCoordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
 
 import * as Components from './components.js';
-
-const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
 
 describeWithEnvironment('RecordingListView', () => {
   setupActionRegistry();
@@ -20,9 +18,9 @@ describeWithEnvironment('RecordingListView', () => {
     const view = new Components.RecordingListView.RecordingListView();
     renderElementIntoDOM(view);
     view.recordings = [{storageName: 'storage-test', name: 'test'}];
-    await coordinator.done();
+    await RenderCoordinator.done();
     const recording = view.shadowRoot?.querySelector('.row') as HTMLDivElement;
-    assert.ok(recording);
+    assert.isOk(recording);
     const eventSent = new Promise<Components.RecordingListView.OpenRecordingEvent>(
         resolve => {
           view.addEventListener('openrecording', resolve, {once: true});
@@ -37,11 +35,11 @@ describeWithEnvironment('RecordingListView', () => {
     const view = new Components.RecordingListView.RecordingListView();
     renderElementIntoDOM(view);
     view.recordings = [{storageName: 'storage-test', name: 'test'}];
-    await coordinator.done();
+    await RenderCoordinator.done();
     const deleteButton = view.shadowRoot?.querySelector(
                              '.delete-recording-button',
                              ) as HTMLButtonElement;
-    assert.ok(deleteButton);
+    assert.isOk(deleteButton);
     const eventSent = new Promise<Components.RecordingListView.DeleteRecordingEvent>(
         resolve => {
           view.addEventListener('deleterecording', resolve, {once: true});
@@ -56,11 +54,11 @@ describeWithEnvironment('RecordingListView', () => {
     const view = new Components.RecordingListView.RecordingListView();
     renderElementIntoDOM(view);
     view.recordings = [{storageName: 'storage-test', name: 'test'}];
-    await coordinator.done();
+    await RenderCoordinator.done();
     const deleteButton = view.shadowRoot?.querySelector(
                              '.delete-recording-button',
                              ) as HTMLDivElement;
-    assert.ok(deleteButton);
+    assert.isOk(deleteButton);
     let forceResolve: Function|undefined;
     const eventSent = new Promise<Components.RecordingListView.OpenRecordingEvent>(
         resolve => {

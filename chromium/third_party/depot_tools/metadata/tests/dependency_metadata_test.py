@@ -30,7 +30,7 @@ class DependencyValidationTest(unittest.TestCase):
         dependency.add_entry(known_fields.URL.get_name(),
                              "https://www.example.com")
         dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
-        dependency.add_entry(known_fields.LICENSE.get_name(), "Public Domain")
+        dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
         dependency.add_entry(known_fields.LICENSE_FILE.get_name(), "LICENSE")
         dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(), "no")
         dependency.add_entry(known_fields.SHIPPED.get_name(), "no")
@@ -53,7 +53,7 @@ class DependencyValidationTest(unittest.TestCase):
                              "Test alias field used")
         dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
         dependency.add_entry(known_fields.LICENSE_FILE.get_name(), "LICENSE")
-        dependency.add_entry(known_fields.LICENSE.get_name(), "Public domain")
+        dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
         # Use Shipped in Chromium instead of Shipped.
         dependency.add_entry(known_fields.SHIPPED_IN_CHROMIUM.get_name(), "no")
         dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(), "no")
@@ -75,7 +75,7 @@ class DependencyValidationTest(unittest.TestCase):
                              "Test alias field overwrite")
         dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
         dependency.add_entry(known_fields.LICENSE_FILE.get_name(), "LICENSE")
-        dependency.add_entry(known_fields.LICENSE.get_name(), "Public domain")
+        dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
         dependency.add_entry(known_fields.SHIPPED_IN_CHROMIUM.get_name(), "no")
         dependency.add_entry(known_fields.SHIPPED.get_name(), "test")
         dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(), "no")
@@ -98,7 +98,7 @@ class DependencyValidationTest(unittest.TestCase):
                              "Test alias field error attributed")
         dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
         dependency.add_entry(known_fields.LICENSE_FILE.get_name(), "LICENSE")
-        dependency.add_entry(known_fields.LICENSE.get_name(), "Public domain")
+        dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
         dependency.add_entry(known_fields.SHIPPED_IN_CHROMIUM.get_name(),
                              "test")
         dependency.add_entry(known_fields.SHIPPED.get_name(), "yes")
@@ -121,7 +121,7 @@ class DependencyValidationTest(unittest.TestCase):
         dependency.add_entry(known_fields.URL.get_name(),
                              "https://www.example.com")
         dependency.add_entry(known_fields.VERSION.get_name(), "N/A")
-        dependency.add_entry(known_fields.LICENSE.get_name(), "Public Domain")
+        dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
         dependency.add_entry(known_fields.LICENSE_FILE.get_name(), "LICENSE")
         dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(), "no")
         dependency.add_entry(known_fields.SHIPPED.get_name(), "no")
@@ -145,7 +145,7 @@ class DependencyValidationTest(unittest.TestCase):
                              "https://www.example.com")
         dependency.add_entry(known_fields.VERSION.get_name(), "N/A")
         dependency.add_entry(known_fields.REVISION.get_name(), "N/A")
-        dependency.add_entry(known_fields.LICENSE.get_name(), "Public Domain")
+        dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
         dependency.add_entry(known_fields.LICENSE_FILE.get_name(), "LICENSE")
         dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(), "no")
         dependency.add_entry(known_fields.SHIPPED.get_name(), "no")
@@ -173,7 +173,7 @@ class DependencyValidationTest(unittest.TestCase):
         dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
         dependency.add_entry(known_fields.REVISION.get_name(),
                              "invalid_revision")
-        dependency.add_entry(known_fields.LICENSE.get_name(), "Public Domain")
+        dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
         dependency.add_entry(known_fields.LICENSE_FILE.get_name(), "LICENSE")
         dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(), "no")
         dependency.add_entry(known_fields.SHIPPED.get_name(), "no")
@@ -197,7 +197,7 @@ class DependencyValidationTest(unittest.TestCase):
         dependency.add_entry(known_fields.URL.get_name(),
                              "https://www.example.com")
         dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
-        dependency.add_entry(known_fields.LICENSE.get_name(), "Public Domain")
+        dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
         dependency.add_entry(known_fields.LICENSE_FILE.get_name(), "LICENSE")
         dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(), "no")
         dependency.add_entry(known_fields.SHIPPED.get_name(), "no")
@@ -227,7 +227,7 @@ class DependencyValidationTest(unittest.TestCase):
                              "https://www.example.com")
         dependency.add_entry(known_fields.VERSION.get_name(), "N/A")
         dependency.add_entry(known_fields.REVISION.get_name(), "DEPS")
-        dependency.add_entry(known_fields.LICENSE.get_name(), "Public Domain")
+        dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
         dependency.add_entry(known_fields.LICENSE_FILE.get_name(), "LICENSE")
         dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(), "no")
         dependency.add_entry(known_fields.SHIPPED.get_name(), "no")
@@ -245,7 +245,7 @@ class DependencyValidationTest(unittest.TestCase):
         dependency.add_entry(known_fields.SHIPPED.get_name(), "no")
         dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(), "no")
         dependency.add_entry(known_fields.LICENSE_FILE.get_name(), "LICENSE")
-        dependency.add_entry(known_fields.LICENSE.get_name(), "Public Domain")
+        dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
         dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
         dependency.add_entry(known_fields.NAME.get_name(), "Test missing field")
         # Leave URL field unspecified.
@@ -267,7 +267,7 @@ class DependencyValidationTest(unittest.TestCase):
         dependency.add_entry(known_fields.NAME.get_name(), "Test invalid field")
         dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
         dependency.add_entry(known_fields.LICENSE_FILE.get_name(), "LICENSE")
-        dependency.add_entry(known_fields.LICENSE.get_name(), "Public domain")
+        dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
         dependency.add_entry(known_fields.SHIPPED.get_name(), "no")
         dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(), "test")
 
@@ -288,7 +288,7 @@ class DependencyValidationTest(unittest.TestCase):
         dependency.add_entry(known_fields.URL.get_name(),
                              "https://www.example.com")
         dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
-        dependency.add_entry(known_fields.LICENSE.get_name(), "Public domain")
+        dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
         dependency.add_entry(known_fields.LICENSE_FILE.get_name(),
                              "MISSING-LICENSE")
         dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(), "no")
@@ -309,7 +309,7 @@ class DependencyValidationTest(unittest.TestCase):
                              "Test multiple errors")
         # Leave URL field unspecified.
         dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
-        dependency.add_entry(known_fields.LICENSE.get_name(), "Public domain")
+        dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
         dependency.add_entry(known_fields.LICENSE_FILE.get_name(),
                              "MISSING-LICENSE")
         dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(), "test")
@@ -335,7 +335,7 @@ class DependencyValidationTest(unittest.TestCase):
         dependency.add_entry(known_fields.URL.get_name(),
                              "https://www.example.com")
         dependency.add_entry(known_fields.VERSION.get_name(), "1.0.0")
-        dependency.add_entry(known_fields.LICENSE.get_name(), "Public Domain")
+        dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
         dependency.add_entry(known_fields.LICENSE_FILE.get_name(), "LICENSE")
         dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(), "no")
         dependency.add_entry(known_fields.SHIPPED.get_name(), "no")
@@ -357,7 +357,7 @@ class DependencyValidationTest(unittest.TestCase):
         dependency.add_entry(known_fields.URL.get_name(),
                              "This is the canonical repository")
         dependency.add_entry(known_fields.VERSION.get_name(), "N/A")
-        dependency.add_entry(known_fields.LICENSE.get_name(), "Public Domain")
+        dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
         dependency.add_entry(known_fields.LICENSE_FILE.get_name(), "LICENSE")
         dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(), "yes")
         dependency.add_entry(known_fields.SHIPPED.get_name(), "yes")
@@ -367,6 +367,92 @@ class DependencyValidationTest(unittest.TestCase):
             repo_root_dir=_THIS_DIR,
         )
         self.assertEqual(len(results), 0)
+
+    def test_all_licenses_allowlisted(self):
+        """Test that a single allowlisted license returns True."""
+        dependency = dm.DependencyMetadata()
+        self.assertTrue(dependency.all_licenses_allowlisted("MIT", False))
+        self.assertTrue(dependency.all_licenses_allowlisted("MIT, GPL-2.0", False))
+        self.assertTrue(dependency.all_licenses_allowlisted("MIT, Apache-2.0", False))
+        self.assertFalse(dependency.all_licenses_allowlisted("InvalidLicense", False))
+        self.assertFalse(dependency.all_licenses_allowlisted("MIT, InvalidLicense", False))
+        self.assertFalse(dependency.all_licenses_allowlisted("", False))
+
+        # "MPL-2.0" is a reciprocal license, i.e. only allowed in open source projects.
+        self.assertTrue(dependency.all_licenses_allowlisted("MPL-2.0", True))
+        self.assertFalse(dependency.all_licenses_allowlisted("MPL-2.0", False))
+
+        # Restricted licenses are treated the same as other license types, until
+        # the exception and enforcement is resourced.
+        self.assertTrue(dependency.all_licenses_allowlisted("GPL-2.0", False))
+        self.assertTrue(dependency.all_licenses_allowlisted("GPL-2.0", True))
+        self.assertFalse(dependency.all_licenses_allowlisted("MPL-2.0, GPL-2.0", False))
+
+
+    def test_only_open_source_licenses(self):
+        """Test that only open source licenses are returned."""
+        dependency = dm.DependencyMetadata()
+        self.assertEqual(dependency.only_open_source_licenses(""), [])
+        self.assertEqual(dependency.only_open_source_licenses("MIT"), [])
+        self.assertEqual(dependency.only_open_source_licenses("GPL-2.0"), [])
+        self.assertEqual(dependency.only_open_source_licenses("MPL-2.0"), ["MPL-2.0"])
+        result = dependency.only_open_source_licenses("MIT, MPL-2.0")
+        self.assertEqual(result, ["MPL-2.0"])
+        result = dependency.only_open_source_licenses("MPL-2.0, APSL-2.0")
+        self.assertEqual(set(result), {"MPL-2.0", "APSL-2.0"})
+        # Test with mix of invalid and valid licenses
+        result = dependency.only_open_source_licenses("InvalidLicense, MPL-2.0")
+        self.assertEqual(result, ["MPL-2.0"])
+
+    def test_mitigated_validation(self):
+        """Tests validation of Mitigated field and corresponding CVE descriptions."""
+        dependency = dm.DependencyMetadata()
+        dependency.add_entry(known_fields.NAME.get_name(), "Test Dependency")
+        dependency.add_entry(known_fields.URL.get_name(), "http://example.com")
+        dependency.add_entry(known_fields.VERSION.get_name(), "1.0")
+        dependency.add_entry(known_fields.LICENSE.get_name(), "MIT")
+        dependency.add_entry(known_fields.LICENSE_FILE.get_name(), "LICENSE")
+        dependency.add_entry(known_fields.SECURITY_CRITICAL.get_name(), "yes")
+        dependency.add_entry(known_fields.SHIPPED.get_name(), "yes")
+
+        # Add description for one CVE and an extra one.
+        dependency.add_entry("CVE-2024-1234", "Fixed in this version")
+        dependency.add_entry("CVE-2024-9999", "This shouldn't be here")
+
+        results = dependency.validate(
+            source_file_dir=os.path.join(_THIS_DIR, "data"),
+            repo_root_dir=_THIS_DIR,
+        )
+        # Check that a warning is returned when only CVE descriptions are
+        # present.
+        self.assertEqual(len(results), 1)
+        self.assertTrue(isinstance(results[0], vr.ValidationWarning))
+        self.assertEqual(results[0].get_reason(),
+                         "Found descriptions for unlisted vulnerability IDs")
+        self.assertIn("CVE-2024-1234",results[0].get_additional()[0])
+        self.assertIn("CVE-2024-9999",results[0].get_additional()[0])
+
+        # Add Mitigated field with two CVEs.
+        dependency.add_entry(known_fields.MITIGATED.get_name(),
+                             "CVE-2024-1234, CVE-2024-5678")
+
+        results = dependency.validate(
+            source_file_dir=os.path.join(_THIS_DIR, "data"),
+            repo_root_dir=_THIS_DIR,
+        )
+
+        # Should get two warnings:
+        # 1. Missing description for CVE-2024-5678
+        # 2. Extra description for CVE-2024-9999
+        self.assertEqual(len(results), 2)
+        self.assertTrue(isinstance(results[0], vr.ValidationWarning))
+        self.assertEqual(results[0].get_reason(),
+                         "Missing descriptions for vulnerability IDs")
+        self.assertIn("CVE-2024-5678",results[0].get_additional()[0])
+        self.assertTrue(isinstance(results[1], vr.ValidationWarning))
+        self.assertEqual(results[1].get_reason(),
+                         "Found descriptions for unlisted vulnerability IDs")
+        self.assertIn("CVE-2024-9999",results[1].get_additional()[0])
 
 if __name__ == "__main__":
     unittest.main()

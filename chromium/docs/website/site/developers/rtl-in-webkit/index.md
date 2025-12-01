@@ -23,7 +23,7 @@ Hassan, Mohamed Elhawary, Michal Levin (UX).
 
 ## Standard Proposal: Additional Requirements for Bidi in HTML
 
-*   [Proposal](http://www.w3.org/TR/html-bidi/)
+*   [Proposal](https://www.w3.org/TR/html-bidi/)
 
 *   [Implementation
             status](https://docs.google.com/a/google.com/document/d/17nb3wlYkIG9MNtL1mlXVPOVe4QwyApiHRYim3nTi5CE/edit?hl=en#)
@@ -35,7 +35,7 @@ Hassan, Mohamed Elhawary, Michal Levin (UX).
 RTL in Rich Text Edit in [browserscope](http://www.browserscope.org/).
 
 HTML+CSS internationalization test suite:[ text
-direction](http://www.w3.org/International/tests/tests-html-css/list-text-direction).
+direction](https://www.w3.org/International/tests/tests-html-css/list-text-direction).
 
 ## The Challenges
 
@@ -165,23 +165,23 @@ distinct code path handling scroll view) as well.
 
 "dir" attribute:
 
-<http://www.w3.org/TR/html401/struct/dirlang.html#h-8.2>
+<https://www.w3.org/TR/html401/struct/dirlang.html#h-8.2>
 
 "direction" and "unicode-bidi" properties:
 
-<http://www.w3.org/TR/CSS21/visuren.html#direction>
+<https://www.w3.org/TR/CSS21/visuren.html#direction>
 
 Handling right-to-left scripts:
 
-<http://www.w3.org/TR/i18n-html-tech-bidi/>
+<https://www.w3.org/TR/i18n-html-tech-bidi/>
 
 Internationalization techniques: handling text direction:
 
-<http://www.w3.org/International/techniques/authoring-html#direction>
+<https://www.w3.org/International/techniques/authoring-html#direction>
 
 What you need to know about the bidi algorithm and inline markup:
 
-<http://www.w3.org/International/articles/inline-bidi-markup/>
+<https://www.w3.org/International/articles/inline-bidi-markup/>
 
 Unicode Bidi Algorithm:
 

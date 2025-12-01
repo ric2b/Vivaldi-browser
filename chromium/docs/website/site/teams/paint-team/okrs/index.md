@@ -31,14 +31,14 @@ Improve quality of implementation
 
 *   P2Top-starred bugs fixed
 *   Fix at least the following"
-    \* White flash: <http://crbug.com/470669> (chrishtr)
-    \* Blurry fractional posn text: <http://crbug.com/521364> (trchen)
-    \* Jittery images: <http://crbug.com/608874> (schenney)
-    \* border-radius children: <http://crbug.com/157218> (schenney)
-    \* imageSmoothingQuality not right: <http://crbug.com/618324> (junov)
-    \* flickering dithered content: <http://crbug.com/226753> (fmalita)
-    \* raster scale heuristics: <http://crbug.com/652448> (chrishtr)
-    \* SVGTextContentElement.getSubStringLength(): <http://crbug.com/622336>
+    \* White flash: <https://crbug.com/470669> (chrishtr)
+    \* Blurry fractional posn text: <https://crbug.com/521364> (trchen)
+    \* Jittery images: <https://crbug.com/608874> (schenney)
+    \* border-radius children: <https://crbug.com/157218> (schenney)
+    \* imageSmoothingQuality not right: <https://crbug.com/618324> (junov)
+    \* flickering dithered content: <https://crbug.com/226753> (fmalita)
+    \* raster scale heuristics: <https://crbug.com/652448> (chrishtr)
+    \* SVGTextContentElement.getSubStringLength(): <https://crbug.com/622336>
     (pdr)
     \* Mac controls painting bugs: 607438, 611753, 158426 (schenney)
 *   P2Remove need for FrameView::forceLayoutParentViewIfNeeded in SVG
@@ -675,9 +675,9 @@ Owner: paint-dev
     of 0.7
 *   0.66P2High-priority / most-starred bugs fixed
 *   Fix at least these:
-    <http://crbug.com/596382>
-    <http://crbug.com/521364>
-    <http://crbug.com/470669>
+    <https://crbug.com/596382>
+    <https://crbug.com/521364>
+    <https://crbug.com/470669>
     Mid-quarter update: 596382 is fixed (with followup to re-enable safely). The
     other two bugs have some progress
     but Need Work.
@@ -689,7 +689,7 @@ Owner: paint-dev
 Owner: paint-dev
 
 *   0.00P1Implement a partial repaint Telemetry test
-*   <http://crbug.com/527189>
+*   <https://crbug.com/527189>
     Mid-quarter update: no progress. Needs Work.
     EOQ update: nothing done.
 *   0.80P1Monitor UMA stats for paint, raster, paint invalidation and

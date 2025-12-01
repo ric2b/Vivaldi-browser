@@ -7,7 +7,9 @@
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/strings/strcat.h"
+#include "base/types/pass_key.h"
 #include "net/base/features.h"
+#include "net/cookies/cookie_constants.h"
 #include "net/cookies/cookie_inclusion_status.h"
 #include "net/cookies/cookie_util.h"
 
@@ -103,8 +105,8 @@ void ApplySameSiteCookieWarningToStatus(
   if (samesite == CookieSameSite::UNSPECIFIED &&
       same_site_context.GetContextForCookieInclusion() <
           CookieOptions::SameSiteCookieContext::ContextType::SAME_SITE_LAX) {
-    status->AddWarningReason(
-        CookieInclusionStatus::WARN_SAMESITE_UNSPECIFIED_CROSS_SITE_CONTEXT);
+    status->AddWarningReason(CookieInclusionStatus::WarningReason::
+                                 WARN_SAMESITE_UNSPECIFIED_CROSS_SITE_CONTEXT);
   }
   if (effective_samesite == CookieEffectiveSameSite::LAX_MODE_ALLOW_UNSAFE &&
       same_site_context.GetContextForCookieInclusion() ==
@@ -113,13 +115,14 @@ void ApplySameSiteCookieWarningToStatus(
     // This warning is more specific so remove the previous, more general,
     // warning.
     status->RemoveWarningReason(
-        CookieInclusionStatus::WARN_SAMESITE_UNSPECIFIED_CROSS_SITE_CONTEXT);
-    status->AddWarningReason(
-        CookieInclusionStatus::WARN_SAMESITE_UNSPECIFIED_LAX_ALLOW_UNSAFE);
+        CookieInclusionStatus::WarningReason::
+            WARN_SAMESITE_UNSPECIFIED_CROSS_SITE_CONTEXT);
+    status->AddWarningReason(CookieInclusionStatus::WarningReason::
+                                 WARN_SAMESITE_UNSPECIFIED_LAX_ALLOW_UNSAFE);
   }
   if (samesite == CookieSameSite::NO_RESTRICTION && !is_secure) {
     status->AddWarningReason(
-        CookieInclusionStatus::WARN_SAMESITE_NONE_INSECURE);
+        CookieInclusionStatus::WarningReason::WARN_SAMESITE_NONE_INSECURE);
   }
 
   // Add a warning if the cookie would be accessible in
@@ -128,19 +131,19 @@ void ApplySameSiteCookieWarningToStatus(
   if (IsBreakingStrictToLaxDowngrade(same_site_context.context(),
                                      same_site_context.schemeful_context(),
                                      effective_samesite, is_cookie_being_set)) {
-    status->AddWarningReason(
-        CookieInclusionStatus::WARN_STRICT_LAX_DOWNGRADE_STRICT_SAMESITE);
+    status->AddWarningReason(CookieInclusionStatus::WarningReason::
+                                 WARN_STRICT_LAX_DOWNGRADE_STRICT_SAMESITE);
   } else if (IsBreakingStrictToCrossDowngrade(
                  same_site_context.context(),
                  same_site_context.schemeful_context(), effective_samesite)) {
     // Which warning to apply depends on the SameSite value.
     if (effective_samesite == CookieEffectiveSameSite::STRICT_MODE) {
-      status->AddWarningReason(
-          CookieInclusionStatus::WARN_STRICT_CROSS_DOWNGRADE_STRICT_SAMESITE);
+      status->AddWarningReason(CookieInclusionStatus::WarningReason::
+                                   WARN_STRICT_CROSS_DOWNGRADE_STRICT_SAMESITE);
     } else {
       // LAX_MODE or LAX_MODE_ALLOW_UNSAFE.
-      status->AddWarningReason(
-          CookieInclusionStatus::WARN_STRICT_CROSS_DOWNGRADE_LAX_SAMESITE);
+      status->AddWarningReason(CookieInclusionStatus::WarningReason::
+                                   WARN_STRICT_CROSS_DOWNGRADE_LAX_SAMESITE);
     }
 
   } else if (IsBreakingLaxToCrossDowngrade(
@@ -149,13 +152,13 @@ void ApplySameSiteCookieWarningToStatus(
                  is_cookie_being_set)) {
     // Which warning to apply depends on the SameSite value.
     if (effective_samesite == CookieEffectiveSameSite::STRICT_MODE) {
-      status->AddWarningReason(
-          CookieInclusionStatus::WARN_LAX_CROSS_DOWNGRADE_STRICT_SAMESITE);
+      status->AddWarningReason(CookieInclusionStatus::WarningReason::
+                                   WARN_LAX_CROSS_DOWNGRADE_STRICT_SAMESITE);
     } else {
       // LAX_MODE or LAX_MODE_ALLOW_UNSAFE.
       // This warning applies to both set/send.
-      status->AddWarningReason(
-          CookieInclusionStatus::WARN_LAX_CROSS_DOWNGRADE_LAX_SAMESITE);
+      status->AddWarningReason(CookieInclusionStatus::WarningReason::
+                                   WARN_LAX_CROSS_DOWNGRADE_LAX_SAMESITE);
     }
   }
 
@@ -195,7 +198,7 @@ void ApplySameSiteCookieWarningToStatus(
   }
   if (apply_cross_site_redirect_downgrade_warning) {
     status->AddWarningReason(
-        CookieInclusionStatus::
+        CookieInclusionStatus::WarningReason::
             WARN_CROSS_SITE_REDIRECT_DOWNGRADE_CHANGES_INCLUSION);
   }
 
@@ -213,7 +216,8 @@ CookieAccessResult CookieBase::IncludeForRequestURL(
   CookieInclusionStatus status;
   // Filter out HttpOnly cookies, per options.
   if (options.exclude_httponly() && IsHttpOnly()) {
-    status.AddExclusionReason(CookieInclusionStatus::EXCLUDE_HTTP_ONLY);
+    status.AddExclusionReason(
+        CookieInclusionStatus::ExclusionReason::EXCLUDE_HTTP_ONLY);
   }
   // Secure cookies should not be included in requests for URLs with an
   // insecure scheme, unless it is a localhost url, or the CookieAccessDelegate
@@ -229,16 +233,18 @@ CookieAccessResult CookieBase::IncludeForRequestURL(
   switch (cookie_access_scheme) {
     case CookieAccessScheme::kNonCryptographic:
       if (SecureAttribute()) {
-        status.AddExclusionReason(CookieInclusionStatus::EXCLUDE_SECURE_ONLY);
+        status.AddExclusionReason(
+            CookieInclusionStatus::ExclusionReason::EXCLUDE_SECURE_ONLY);
       }
       break;
     case CookieAccessScheme::kTrustworthy:
       is_allowed_to_access_secure_cookies = true;
       if (SecureAttribute() ||
           (cookie_util::IsSchemeBoundCookiesEnabled() &&
-           source_scheme_ == CookieSourceScheme::kSecure)) {
+           source_scheme_ == CookieSourceScheme::kSecure &&
+           params.scope_semantics != net::CookieScopeSemantics::LEGACY)) {
         status.AddWarningReason(
-            CookieInclusionStatus::
+            CookieInclusionStatus::WarningReason::
                 WARN_SECURE_ACCESS_GRANTED_NON_CRYPTOGRAPHIC);
       }
       break;
@@ -265,21 +271,28 @@ CookieAccessResult CookieBase::IncludeForRequestURL(
   // already blocked due to the `Secure` attribute.
   if (source_scheme_ == CookieSourceScheme::kSecure &&
       cookie_access_scheme == CookieAccessScheme::kNonCryptographic &&
-      !status.HasExclusionReason(CookieInclusionStatus::EXCLUDE_SECURE_ONLY)) {
-    if (cookie_util::IsSchemeBoundCookiesEnabled()) {
-      status.AddExclusionReason(CookieInclusionStatus::EXCLUDE_SCHEME_MISMATCH);
+      !status.HasExclusionReason(
+          CookieInclusionStatus::ExclusionReason::EXCLUDE_SECURE_ONLY)) {
+    if (cookie_util::IsSchemeBoundCookiesEnabled() &&
+        params.scope_semantics != net::CookieScopeSemantics::LEGACY) {
+      status.AddExclusionReason(
+          CookieInclusionStatus::ExclusionReason::EXCLUDE_SCHEME_MISMATCH);
     } else {
-      status.AddWarningReason(CookieInclusionStatus::WARN_SCHEME_MISMATCH);
+      status.AddWarningReason(
+          CookieInclusionStatus::WarningReason::WARN_SCHEME_MISMATCH);
     }
   }
   // A cookie with a source scheme of kNonSecure shouldn't be accessible by
   // kCryptographic urls.
   else if (source_scheme_ == CookieSourceScheme::kNonSecure &&
            cookie_access_scheme == CookieAccessScheme::kCryptographic) {
-    if (cookie_util::IsSchemeBoundCookiesEnabled()) {
-      status.AddExclusionReason(CookieInclusionStatus::EXCLUDE_SCHEME_MISMATCH);
+    if (cookie_util::IsSchemeBoundCookiesEnabled() &&
+        params.scope_semantics != net::CookieScopeSemantics::LEGACY) {
+      status.AddExclusionReason(
+          CookieInclusionStatus::ExclusionReason::EXCLUDE_SCHEME_MISMATCH);
     } else {
-      status.AddWarningReason(CookieInclusionStatus::WARN_SCHEME_MISMATCH);
+      status.AddWarningReason(
+          CookieInclusionStatus::WarningReason::WARN_SCHEME_MISMATCH);
     }
   }
   // Else, the cookie has a source scheme of kUnset or the access scheme is
@@ -298,21 +311,26 @@ CookieAccessResult CookieBase::IncludeForRequestURL(
       cookie_access_scheme == CookieAccessScheme::kTrustworthy &&
       source_port_ == 443;
   if (!port_matches && !trustworthy_and_443) {
-    if (cookie_util::IsPortBoundCookiesEnabled()) {
-      status.AddExclusionReason(CookieInclusionStatus::EXCLUDE_PORT_MISMATCH);
+    if (cookie_util::IsPortBoundCookiesEnabled() &&
+        params.scope_semantics != net::CookieScopeSemantics::LEGACY) {
+      status.AddExclusionReason(
+          CookieInclusionStatus::ExclusionReason::EXCLUDE_PORT_MISMATCH);
     } else {
-      status.AddWarningReason(CookieInclusionStatus::WARN_PORT_MISMATCH);
+      status.AddWarningReason(
+          CookieInclusionStatus::WarningReason::WARN_PORT_MISMATCH);
     }
   }
 
   // Don't include cookies for requests that don't apply to the cookie domain.
   if (!IsDomainMatch(url.host())) {
-    status.AddExclusionReason(CookieInclusionStatus::EXCLUDE_DOMAIN_MISMATCH);
+    status.AddExclusionReason(
+        CookieInclusionStatus::ExclusionReason::EXCLUDE_DOMAIN_MISMATCH);
   }
   // Don't include cookies for requests with a url path that does not path
   // match the cookie-path.
   if (!IsOnPath(url.path())) {
-    status.AddExclusionReason(CookieInclusionStatus::EXCLUDE_NOT_ON_PATH);
+    status.AddExclusionReason(
+        CookieInclusionStatus::ExclusionReason::EXCLUDE_NOT_ON_PATH);
   }
 
   // For LEGACY cookies we should always return the schemeless context,
@@ -334,7 +352,7 @@ CookieAccessResult CookieBase::IncludeForRequestURL(
       if (cookie_inclusion_context <
           CookieOptions::SameSiteCookieContext::ContextType::SAME_SITE_STRICT) {
         status.AddExclusionReason(
-            CookieInclusionStatus::EXCLUDE_SAMESITE_STRICT);
+            CookieInclusionStatus::ExclusionReason::EXCLUDE_SAMESITE_STRICT);
       }
       break;
     case CookieEffectiveSameSite::LAX_MODE:
@@ -342,9 +360,9 @@ CookieAccessResult CookieBase::IncludeForRequestURL(
           CookieOptions::SameSiteCookieContext::ContextType::SAME_SITE_LAX) {
         status.AddExclusionReason(
             (SameSite() == CookieSameSite::UNSPECIFIED)
-                ? CookieInclusionStatus::
+                ? CookieInclusionStatus::ExclusionReason::
                       EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX
-                : CookieInclusionStatus::EXCLUDE_SAMESITE_LAX);
+                : CookieInclusionStatus::ExclusionReason::EXCLUDE_SAMESITE_LAX);
       }
       break;
     // TODO(crbug.com/40638805): Add a browsertest for this behavior.
@@ -355,7 +373,8 @@ CookieAccessResult CookieBase::IncludeForRequestURL(
               SAME_SITE_LAX_METHOD_UNSAFE) {
         // TODO(chlily): Do we need a separate CookieInclusionStatus for this?
         status.AddExclusionReason(
-            CookieInclusionStatus::EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX);
+            CookieInclusionStatus::ExclusionReason::
+                EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX);
       }
       break;
     default:
@@ -369,7 +388,7 @@ CookieAccessResult CookieBase::IncludeForRequestURL(
   if (params.access_semantics != CookieAccessSemantics::LEGACY &&
       SameSite() == CookieSameSite::NO_RESTRICTION && !SecureAttribute()) {
     status.AddExclusionReason(
-        CookieInclusionStatus::EXCLUDE_SAMESITE_NONE_INSECURE);
+        CookieInclusionStatus::ExclusionReason::EXCLUDE_SAMESITE_NONE_INSECURE);
   }
 
   ApplySameSiteCookieWarningToStatus(SameSite(), effective_same_site,
@@ -378,7 +397,7 @@ CookieAccessResult CookieBase::IncludeForRequestURL(
                                      &status, false /* is_cookie_being_set */);
 
   CookieAccessResult result{effective_same_site, status,
-                            params.access_semantics,
+                            params.access_semantics, params.scope_semantics,
                             is_allowed_to_access_secure_cookies};
 
   PostIncludeForRequestURL(result, options, cookie_inclusion_context);
@@ -399,12 +418,12 @@ CookieAccessResult CookieBase::IsSetPermittedInContext(
 
   if (!base::Contains(cookieable_schemes, source_url.scheme())) {
     access_result.status.AddExclusionReason(
-        CookieInclusionStatus::EXCLUDE_NONCOOKIEABLE_SCHEME);
+        CookieInclusionStatus::ExclusionReason::EXCLUDE_NONCOOKIEABLE_SCHEME);
   }
 
   if (!IsDomainMatch(source_url.host())) {
     access_result.status.AddExclusionReason(
-        CookieInclusionStatus::EXCLUDE_DOMAIN_MISMATCH);
+        CookieInclusionStatus::ExclusionReason::EXCLUDE_DOMAIN_MISMATCH);
   }
 
   CookieAccessScheme access_scheme =
@@ -419,7 +438,7 @@ CookieAccessResult CookieBase::IsSetPermittedInContext(
       access_result.is_allowed_to_access_secure_cookies = false;
       if (SecureAttribute()) {
         access_result.status.AddExclusionReason(
-            CookieInclusionStatus::EXCLUDE_SECURE_ONLY);
+            CookieInclusionStatus::ExclusionReason::EXCLUDE_SECURE_ONLY);
       }
       break;
 
@@ -438,7 +457,7 @@ CookieAccessResult CookieBase::IsSetPermittedInContext(
         // when they also specify "Secure" this if statement will already apply
         // to them.
         access_result.status.AddWarningReason(
-            CookieInclusionStatus::
+            CookieInclusionStatus::WarningReason::
                 WARN_SECURE_ACCESS_GRANTED_NON_CRYPTOGRAPHIC);
       }
       break;
@@ -449,7 +468,7 @@ CookieAccessResult CookieBase::IsSetPermittedInContext(
     DVLOG(net::cookie_util::kVlogSetCookies)
         << "HttpOnly cookie not permitted in script context.";
     access_result.status.AddExclusionReason(
-        CookieInclusionStatus::EXCLUDE_HTTP_ONLY);
+        CookieInclusionStatus::ExclusionReason::EXCLUDE_HTTP_ONLY);
   }
 
   // Unless legacy access semantics are in effect, SameSite=None cookies without
@@ -459,7 +478,7 @@ CookieAccessResult CookieBase::IsSetPermittedInContext(
     DVLOG(net::cookie_util::kVlogSetCookies)
         << "SetCookie() rejecting insecure cookie with SameSite=None.";
     access_result.status.AddExclusionReason(
-        CookieInclusionStatus::EXCLUDE_SAMESITE_NONE_INSECURE);
+        CookieInclusionStatus::ExclusionReason::EXCLUDE_SAMESITE_NONE_INSECURE);
   }
 
   // For LEGACY cookies we should always return the schemeless context,
@@ -484,7 +503,7 @@ CookieAccessResult CookieBase::IsSetPermittedInContext(
             << "Trying to set a `SameSite=Strict` cookie from a "
                "cross-site URL.";
         access_result.status.AddExclusionReason(
-            CookieInclusionStatus::EXCLUDE_SAMESITE_STRICT);
+            CookieInclusionStatus::ExclusionReason::EXCLUDE_SAMESITE_STRICT);
       }
       break;
     case CookieEffectiveSameSite::LAX_MODE:
@@ -496,13 +515,13 @@ CookieAccessResult CookieBase::IsSetPermittedInContext(
               << "Cookies with no known SameSite attribute being treated as "
                  "lax; attempt to set from a cross-site URL denied.";
           access_result.status.AddExclusionReason(
-              CookieInclusionStatus::
+              CookieInclusionStatus::ExclusionReason::
                   EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX);
         } else {
           DVLOG(net::cookie_util::kVlogSetCookies)
               << "Trying to set a `SameSite=Lax` cookie from a cross-site URL.";
           access_result.status.AddExclusionReason(
-              CookieInclusionStatus::EXCLUDE_SAMESITE_LAX);
+              CookieInclusionStatus::ExclusionReason::EXCLUDE_SAMESITE_LAX);
         }
       }
       break;
@@ -548,26 +567,29 @@ std::string CookieBase::DomainWithoutDot() const {
   return cookie_util::CookieDomainAsHost(domain_);
 }
 
-CookieBase::UniqueCookieKey CookieBase::UniqueKey() const {
+UniqueCookieKey CookieBase::UniqueKey() const {
   std::optional<CookieSourceScheme> source_scheme =
       cookie_util::IsSchemeBoundCookiesEnabled()
           ? std::make_optional(source_scheme_)
           : std::nullopt;
-  std::optional<int> source_port = cookie_util::IsPortBoundCookiesEnabled()
-                                       ? std::make_optional(source_port_)
-                                       : std::nullopt;
 
-  return std::make_tuple(partition_key_, name_, domain_, path_, source_scheme,
-                         source_port);
+  if (IsHostCookie()) {
+    std::optional<int> source_port = cookie_util::IsPortBoundCookiesEnabled()
+                                         ? std::make_optional(source_port_)
+                                         : std::nullopt;
+
+    return UniqueCookieKey::Host(base::PassKey<CookieBase>(), partition_key_,
+                                 name_, domain_, path_, source_scheme,
+                                 source_port);
+  }
+
+  return UniqueCookieKey::Domain(base::PassKey<CookieBase>(), partition_key_,
+                                 name_, domain_, path_, source_scheme);
 }
 
-CookieBase::UniqueDomainCookieKey CookieBase::UniqueDomainKey() const {
-  std::optional<CookieSourceScheme> source_scheme =
-      cookie_util::IsSchemeBoundCookiesEnabled()
-          ? std::make_optional(source_scheme_)
-          : std::nullopt;
-
-  return std::make_tuple(partition_key_, name_, domain_, path_, source_scheme);
+UniqueCookieKey CookieBase::LegacyUniqueKey() const {
+  return UniqueCookieKey::Legacy(base::PassKey<CookieBase>(), partition_key_,
+                                 name_, domain_, path_);
 }
 
 void CookieBase::SetSourcePort(int port) {

@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <algorithm>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -11,7 +12,6 @@
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/memory/raw_ptr.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
 #include "base/strings/stringprintf.h"
@@ -1268,21 +1268,10 @@ IN_PROC_BROWSER_TEST_F(OrbAndCorsExtensionBrowserTest,
 //
 // (Specifically, this makes sure RFHI is passing the correct factory
 // parameter to URLLoaderFactoryParamsHelper::CreateForIsolatedWorld.)
-class TrustTokenExtensionBrowserTest : public OrbAndCorsExtensionBrowserTest {
- public:
-  TrustTokenExtensionBrowserTest() {
-    scoped_feature_list_.InitAndEnableFeature(
-        network::features::kPrivateStateTokens);
-  }
-
- protected:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
 // TODO(crbug.com/40221677): Have trust tokens handle the existence, or not, of
 // PrivacySandboxSettings3.
 IN_PROC_BROWSER_TEST_F(
-    TrustTokenExtensionBrowserTest,
+    OrbAndCorsExtensionBrowserTest,
     DISABLED_FromProgrammaticContentScript_TrustTokenRedemptionAllowed) {
   // Trust Tokens operations only work on secure origins - set up a https test
   // server to help with this. One alternative would be using a localhost URL
@@ -2111,7 +2100,7 @@ class ReadyToCommitWaiter : public content::WebContentsObserver {
   ReadyToCommitWaiter(const ReadyToCommitWaiter&) = delete;
   ReadyToCommitWaiter& operator=(const ReadyToCommitWaiter&) = delete;
 
-  ~ReadyToCommitWaiter() override {}
+  ~ReadyToCommitWaiter() override = default;
 
   void Wait() { run_loop_.Run(); }
 

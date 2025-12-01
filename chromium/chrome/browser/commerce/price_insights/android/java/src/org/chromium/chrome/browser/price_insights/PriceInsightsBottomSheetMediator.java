@@ -22,7 +22,6 @@ import android.view.View.OnClickListener;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.StringRes;
-import androidx.core.app.NotificationManagerCompat;
 
 import org.chromium.base.Callback;
 import org.chromium.base.metrics.RecordHistogram;
@@ -32,6 +31,7 @@ import org.chromium.chrome.browser.price_insights.PriceInsightsBottomSheetCoordi
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.components.browser_ui.notifications.NotificationProxyUtils;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.components.commerce.core.PriceBucket;
 import org.chromium.components.commerce.core.ShoppingService;
@@ -160,7 +160,7 @@ public class PriceInsightsBottomSheetMediator {
             RecordHistogram.recordEnumeratedHistogram(
                     "Commerce.PriceInsights.PriceTracking." + histogramActionName,
                     mPriceBucket,
-                    PriceBucket.MAX_VALUE + 1);
+                    PriceBucket.MAX_VALUE);
             Callback<Boolean> callback =
                     (success) -> {
                         updatePriceTrackingButtonModel(mPriceTrackingStateSupplier.get());
@@ -176,7 +176,7 @@ public class PriceInsightsBottomSheetMediator {
         if (success) {
             if (shouldBeTracked) {
                 textResId =
-                        NotificationManagerCompat.from(mContext).areNotificationsEnabled()
+                        NotificationProxyUtils.areNotificationsEnabled()
                                 ? R.string
                                         .price_insights_content_price_tracked_success_notification_enabled_message
                                 : R.string
@@ -221,7 +221,7 @@ public class PriceInsightsBottomSheetMediator {
         RecordHistogram.recordEnumeratedHistogram(
                 "Commerce.PriceInsights.BuyingOptionsClicked",
                 mPriceBucket,
-                PriceBucket.MAX_VALUE + 1);
+                PriceBucket.MAX_VALUE);
         LoadUrlParams loadUrlParams = new LoadUrlParams(url);
         mTabModelSelector.openNewTab(
                 loadUrlParams, TabLaunchType.FROM_LINK, mTab, /* incognito= */ false);

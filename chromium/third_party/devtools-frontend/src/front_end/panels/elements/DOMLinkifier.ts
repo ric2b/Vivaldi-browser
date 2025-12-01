@@ -21,8 +21,12 @@ const UIStrings = {
 const str_ = i18n.i18n.registerUIStrings('panels/elements/DOMLinkifier.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
+export interface Options extends Common.Linkifier.Options {
+  hiddenClassList?: string[];
+}
+
 export const decorateNodeLabel = function(
-    node: SDK.DOMModel.DOMNode, parentElement: HTMLElement, options: Common.Linkifier.Options): void {
+    node: SDK.DOMModel.DOMNode, parentElement: HTMLElement, options: Options): void {
   const originalNode = node;
   const isPseudo = node.nodeType() === Node.ELEMENT_NODE && node.pseudoType();
   if (isPseudo && node.parentNode) {
@@ -69,7 +73,7 @@ export const decorateNodeLabel = function(
       const classesElement = parentElement.createChild('span', 'extra node-label-class');
       for (let i = 0; i < classes.length; ++i) {
         const className = classes[i];
-        if (className && !foundClasses.has(className)) {
+        if (className && !options.hiddenClassList?.includes(className) && !foundClasses.has(className)) {
           const part = '.' + className;
           title += part;
           UI.UIUtils.createTextChild(classesElement, part);
@@ -93,22 +97,20 @@ export const decorateNodeLabel = function(
   UI.Tooltip.Tooltip.install(parentElement, options.tooltip || title);
 };
 
-export const linkifyNodeReference = function(
-    node: SDK.DOMModel.DOMNode|null, options: Common.Linkifier.Options|undefined = {
-      tooltip: undefined,
-      preventKeyboardFocus: undefined,
-      textContent: undefined,
-      isDynamicLink: false,
-    }): Node {
+export const linkifyNodeReference = function(node: SDK.DOMModel.DOMNode|null, options: Options|undefined = {
+  tooltip: undefined,
+  preventKeyboardFocus: undefined,
+  textContent: undefined,
+  isDynamicLink: false,
+}): Node {
   if (!node) {
     return document.createTextNode(i18nString(UIStrings.node));
   }
 
   const root = document.createElement('span');
   root.classList.add('monospace');
-  const shadowRoot =
-      UI.UIUtils.createShadowRootWithCoreStyles(root, {cssFile: [domLinkifierStyles], delegatesFocus: undefined});
-  const link = (shadowRoot.createChild('button', 'node-link text-button link-style') as HTMLButtonElement);
+  const shadowRoot = UI.UIUtils.createShadowRootWithCoreStyles(root, {cssFile: domLinkifierStyles});
+  const link = shadowRoot.createChild('button', 'node-link text-button link-style');
   link.classList.toggle('dynamic-link', options.isDynamicLink);
   link.setAttribute('jslog', `${VisualLogging.link('node').track({click: true, keydown: 'Enter'})}`);
 
@@ -129,14 +131,13 @@ export const linkifyNodeReference = function(
 };
 
 export const linkifyDeferredNodeReference = function(
-    deferredNode: SDK.DOMModel.DeferredDOMNode, options: Common.Linkifier.Options|undefined = {
+    deferredNode: SDK.DOMModel.DeferredDOMNode, options: Options|undefined = {
       tooltip: undefined,
       preventKeyboardFocus: undefined,
     }): Node {
   const root = document.createElement('div');
-  const shadowRoot =
-      UI.UIUtils.createShadowRootWithCoreStyles(root, {cssFile: [domLinkifierStyles], delegatesFocus: undefined});
-  const link = (shadowRoot.createChild('button', 'node-link text-button link-style') as HTMLDivElement);
+  const shadowRoot = UI.UIUtils.createShadowRootWithCoreStyles(root, {cssFile: domLinkifierStyles});
+  const link = shadowRoot.createChild('button', 'node-link text-button link-style');
   link.setAttribute('jslog', `${VisualLogging.link('node').track({click: true})}`);
   link.createChild('slot');
   link.addEventListener('click', deferredNode.resolve.bind(deferredNode, onDeferredNodeResolved), false);
@@ -166,7 +167,7 @@ export class Linkifier implements Common.Linkifier.Linkifier {
 
     return linkifierInstance;
   }
-  linkify(object: Object, options?: Common.Linkifier.Options): Node {
+  linkify(object: Object, options?: Options): Node {
     if (object instanceof SDK.DOMModel.DOMNode) {
       return linkifyNodeReference(object, options);
     }

@@ -44,7 +44,7 @@ Some specific differences:
             binary-only blobs. A non-exhaustive list:
     *   Graphics Libraries (e.g. OpenGL) on ARM platforms
 *   Google Chrome ships with its own set of [API
-            keys](http://www.chromium.org/developers/how-tos/api-keys) while
+            keys](/developers/how-tos/api-keys) while
             Chromium does not include any
     *   Users are expected to set up their own
 *   Google ChromeOS has a [green/yellow/red
@@ -62,7 +62,7 @@ for increased security and performance. We are working with manufacturers to
 develop reference hardware for Google ChromeOS.
 
 Chromebooks are available for sale now! Check out the [Google Chromebook
-site](http://www.google.com/chromebook/) for more information.
+site](https://www.google.com/chromebook/) for more information.
 
 ## Where can I download ChromiumOS?
 

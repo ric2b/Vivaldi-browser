@@ -263,7 +263,11 @@ void RealtimeAudioDestinationHandler::Render(
 
   context->HandlePostRenderTasks();
 
+  // Handle audibility before handling the volume multiplier since the volume
+  // multiplier should not be taken into account for audibility.
   context->HandleAudibility(destination_bus);
+
+  context->HandleVolumeMultiplier(destination_bus);
 
   // Advances the current sample-frame.
   AdvanceCurrentSampleFrame(number_of_frames);
@@ -291,32 +295,20 @@ void RealtimeAudioDestinationHandler::OnRenderError() {
   Context()->OnRenderError();
 }
 
-// A flag for using FakeAudioWorker when an AudioContext with "playback"
-// latency outputs silence.
-BASE_FEATURE(kUseFakeAudioWorkerForPlaybackLatency,
-             "UseFakeAudioWorkerForPlaybackLatency",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 void RealtimeAudioDestinationHandler::SetDetectSilenceIfNecessary(
     bool has_automatic_pull_nodes) {
-  // Use a FakeAudioWorker for a silent AudioContext with playback latency only
-  // when it is allowed by a command line flag.
-  if (base::FeatureList::IsEnabled(kUseFakeAudioWorkerForPlaybackLatency)) {
-    // For playback latency, relax the callback timing restriction so the
-    // SilentSinkSuspender can fall back a FakeAudioWorker if necessary.
-    if (latency_hint_.Category() == WebAudioLatencyHint::kCategoryPlayback) {
-      DCHECK(is_detecting_silence_);
-      return;
-    }
+  // For playback latency, relax the callback timing restriction so the
+  // SilentSinkSuspender can fall back a FakeAudioWorker if necessary.
+  if (latency_hint_.Category() == WebAudioLatencyHint::kCategoryPlayback) {
+    DCHECK(is_detecting_silence_);
+    return;
   }
 
   // For other latency profiles (interactive, balanced, exact), use the
   // following heristics for the FakeAudioWorker activation after detecting
-  // silence:
-  // a) When there is no automatic pull nodes (APN) in the graph, or
-  // b) When this destination node has one or more input connection.
-  bool needs_silence_detection =
-      !has_automatic_pull_nodes || Input(0).IsConnected();
+  // 30-seconds of silence when there are no automatic pull nodes (APN) in the
+  // graph.
+  bool needs_silence_detection = !has_automatic_pull_nodes;
 
   // Post a cross-thread task only when the detecting condition has changed.
   if (is_detecting_silence_ != needs_silence_detection) {
@@ -333,6 +325,7 @@ void RealtimeAudioDestinationHandler::SetDetectSilence(bool detect_silence) {
   DCHECK(IsMainThread());
 
   platform_destination_->SetDetectSilence(detect_silence);
+  is_silence_detection_active_for_testing_ = detect_silence;
 }
 
 uint32_t RealtimeAudioDestinationHandler::GetCallbackBufferSize() const {

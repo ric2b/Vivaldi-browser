@@ -24,8 +24,6 @@
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/linux/linux_ui.h"
-#include "ui/platform_window/extensions/desk_extension.h"
-#include "ui/platform_window/extensions/pinned_mode_extension.h"
 #include "ui/platform_window/extensions/wayland_extension.h"
 #include "ui/platform_window/extensions/x11_extension.h"
 #include "ui/platform_window/platform_window.h"
@@ -105,10 +103,11 @@ gfx::Rect DesktopWindowTreeHostLinux::GetXRootWindowOuterBounds() const {
 }
 
 void DesktopWindowTreeHostLinux::LowerWindow() {
-  if (GetX11Extension())
+  if (GetX11Extension()) {
     GetX11Extension()->LowerXWindow();
-  else
+  } else {
     NOTIMPLEMENTED_LOG_ONCE();
+  }
 }
 
 base::OnceClosure DesktopWindowTreeHostLinux::DisableEventListening() {
@@ -190,8 +189,9 @@ Widget::MoveLoopResult DesktopWindowTreeHostLinux::RunMoveLoop(
 
   Widget::MoveLoopResult result = DesktopWindowTreeHostPlatform::RunMoveLoop(
       drag_offset, source, escape_behavior);
-  if (weak_this.get())
+  if (weak_this.get()) {
     GetContentWindow()->ReleaseCapture();
+  }
 
   return result;
 }
@@ -223,8 +223,9 @@ void DesktopWindowTreeHostLinux::DispatchEvent(ui::Event* event) {
           GetRootTransform().InverseMapPoint(location).value_or(location);
       hit_test_code = GetContentWindow()->delegate()->GetNonClientComponent(
           gfx::ToRoundedPoint(location_in_dip));
-      if (hit_test_code != HTCLIENT && hit_test_code != HTNOWHERE)
+      if (hit_test_code != HTCLIENT && hit_test_code != HTNOWHERE) {
         flags |= ui::EF_IS_NON_CLIENT;
+      }
       located_event->SetFlags(flags);
     }
 
@@ -232,8 +233,9 @@ void DesktopWindowTreeHostLinux::DispatchEvent(ui::Event* event) {
     // it on mouse clicks because we can call FlashFrame() on an active window.
     if (located_event->IsMouseEvent() &&
         (located_event->AsMouseEvent()->IsAnyButton() ||
-         located_event->IsMouseWheelEvent()))
+         located_event->IsMouseWheelEvent())) {
       FlashFrame(false);
+    }
 
     if (vivaldi::IsVivaldiRunning()) {
       // NOTE(espen@vivaldi.com): Support for page history navigation with
@@ -256,7 +258,7 @@ void DesktopWindowTreeHostLinux::DispatchEvent(ui::Event* event) {
           }
         }
       }
-    }
+    } // Vivaldi
   }
 
   // Prehandle the event as long as as we are not able to track if it is handled
@@ -269,8 +271,9 @@ void DesktopWindowTreeHostLinux::DispatchEvent(ui::Event* event) {
         hit_test_code, event->AsLocatedEvent());
   }
 
-  if (!event->handled())
+  if (!event->handled()) {
     WindowTreeHostPlatform::DispatchEvent(event);
+  }
 }
 
 void DesktopWindowTreeHostLinux::OnClosed() {
@@ -303,14 +306,16 @@ const ui::X11Extension* DesktopWindowTreeHostLinux::GetX11Extension() const {
 #if BUILDFLAG(USE_ATK)
 bool DesktopWindowTreeHostLinux::OnAtkKeyEvent(AtkKeyEventStruct* atk_event,
                                                bool transient) {
-  if (!transient && !IsActive() && !HasCapture())
+  if (!transient && !IsActive() && !HasCapture()) {
     return false;
+  }
   return ui::AtkUtilAuraLinux::HandleAtkKeyEvent(atk_event) ==
          ui::DiscardAtkKeyEvent::Discard;
 }
 #endif
 
-bool DesktopWindowTreeHostLinux::IsOverrideRedirect() const {
+bool DesktopWindowTreeHostLinux::IsOverrideRedirect(
+    const ui::X11Extension& x11_extension) const {
   // BrowserDesktopWindowTreeHostLinux implements this for browser windows.
   return false;
 }
@@ -360,15 +365,17 @@ void DesktopWindowTreeHostLinux::AddAdditionalInitProperties(
 
 base::flat_map<std::string, std::string>
 DesktopWindowTreeHostLinux::GetKeyboardLayoutMap() {
-  if (auto* linux_ui = ui::LinuxUi::instance())
+  if (auto* linux_ui = ui::LinuxUi::instance()) {
     return linux_ui->GetKeyboardLayoutMap();
+  }
   return WindowTreeHostPlatform::GetKeyboardLayoutMap();
 }
 
 void DesktopWindowTreeHostLinux::OnCompleteSwapWithNewSize(
     const gfx::Size& size) {
-  if (GetX11Extension())
+  if (GetX11Extension()) {
     GetX11Extension()->OnCompleteSwapAfterResize();
+  }
 }
 
 void DesktopWindowTreeHostLinux::CreateNonClientEventFilter() {
@@ -387,8 +394,9 @@ void DesktopWindowTreeHostLinux::OnLostMouseGrab() {
 
 void DesktopWindowTreeHostLinux::EnableEventListening() {
   DCHECK_GT(modal_dialog_counter_, 0UL);
-  if (!--modal_dialog_counter_)
+  if (!--modal_dialog_counter_) {
     targeter_for_modal_.reset();
+  }
 }
 
 // static

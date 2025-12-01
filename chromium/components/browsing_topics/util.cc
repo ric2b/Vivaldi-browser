@@ -4,8 +4,10 @@
 
 #include "components/browsing_topics/util.h"
 
+#include <algorithm>
+
+#include "base/numerics/byte_conversions.h"
 #include "base/rand_util.h"
-#include "base/ranges/algorithm.h"
 #include "crypto/hmac.h"
 #include "crypto/sha2.h"
 #include "third_party/blink/public/common/features.h"
@@ -34,14 +36,9 @@ const char kMainFrameHostStoragePrefix[] = "TopicsV1_MainFrameHostStorage|";
 uint64_t HmacHash(ReadOnlyHmacKey hmac_key,
                   const std::string& use_case_prefix,
                   const std::string& data) {
-  crypto::HMAC hmac(crypto::HMAC::SHA256);
-  CHECK(hmac.Init(hmac_key));
-
-  uint64_t result;
-  CHECK(hmac.Sign(use_case_prefix + data,
-                  reinterpret_cast<unsigned char*>(&result), sizeof(result)));
-
-  return result;
+  auto hash = crypto::hmac::SignSha256(
+      hmac_key, base::as_byte_span(use_case_prefix + data));
+  return base::U64FromNativeEndian(base::span(hash).first<8u>());
 }
 
 bool g_hmac_key_overridden = false;
@@ -133,7 +130,7 @@ HashedHost HashMainFrameHostForStorage(const std::string& main_frame_host) {
 
 void OverrideHmacKeyForTesting(ReadOnlyHmacKey hmac_key) {
   g_hmac_key_overridden = true;
-  base::ranges::copy(hmac_key, GetHmacKeyOverrideForTesting().begin());
+  std::ranges::copy(hmac_key, GetHmacKeyOverrideForTesting().begin());
 }
 
 }  // namespace browsing_topics

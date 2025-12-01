@@ -66,6 +66,8 @@ tint_add_target(tint_lang_core_type lib
   lang/core/type/f16.h
   lang/core/type/f32.cc
   lang/core/type/f32.h
+  lang/core/type/function.cc
+  lang/core/type/function.h
   lang/core/type/i32.cc
   lang/core/type/i32.h
   lang/core/type/i8.cc
@@ -124,19 +126,17 @@ tint_add_target(tint_lang_core_type lib
 
 tint_target_add_dependencies(tint_lang_core_type lib
   tint_lang_core
+  tint_utils
   tint_utils_containers
   tint_utils_diagnostic
   tint_utils_ice
-  tint_utils_id
   tint_utils_macros
   tint_utils_math
   tint_utils_memory
-  tint_utils_reflection
   tint_utils_result
   tint_utils_rtti
   tint_utils_symbol
   tint_utils_text
-  tint_utils_traits
 )
 
 tint_target_add_external_dependencies(tint_lang_core_type lib
@@ -190,19 +190,17 @@ tint_target_add_dependencies(tint_lang_core_type_test test
   tint_lang_wgsl_program
   tint_lang_wgsl_resolver
   tint_lang_wgsl_sem
+  tint_utils
   tint_utils_containers
   tint_utils_diagnostic
   tint_utils_ice
-  tint_utils_id
   tint_utils_macros
   tint_utils_math
   tint_utils_memory
-  tint_utils_reflection
   tint_utils_result
   tint_utils_rtti
   tint_utils_symbol
   tint_utils_text
-  tint_utils_traits
 )
 
 tint_target_add_external_dependencies(tint_lang_core_type_test test

@@ -7,12 +7,15 @@
 #include <memory>
 
 #include "base/debug/crash_logging.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
+#include "base/strings/strcat.h"
 #include "base/time/time.h"
 #include "components/variations/net/variations_http_headers.h"
 #include "content/browser/devtools/devtools_instrumentation.h"
+#include "content/browser/loader/navigation_url_loader_impl.h"
 #include "content/browser/preloading/prefetch/no_vary_search_helper.h"
 #include "content/browser/preloading/prefetch/prefetch_cookie_listener.h"
 #include "content/browser/preloading/prefetch/prefetch_document_manager.h"
@@ -38,7 +41,7 @@
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/client_hints.h"
 #include "content/public/browser/global_routing_id.h"
-#include "content/public/browser/prefetch_browser_callbacks.h"
+#include "content/public/browser/prefetch_request_status_listener.h"
 #include "content/public/browser/preloading.h"
 #include "content/public/browser/web_contents.h"
 #include "net/base/load_flags.h"
@@ -49,6 +52,7 @@
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "services/network/public/cpp/client_hints.h"
+#include "services/network/public/cpp/devtools_observer_util.h"
 #include "services/network/public/mojom/cookie_manager.mojom.h"
 #include "third_party/blink/public/common/client_hints/client_hints.h"
 #include "url/gurl.h"
@@ -145,7 +149,6 @@ std::optional<PreloadingTriggeringOutcome> TriggeringOutcomeFromStatus(
     case PrefetchStatus::kPrefetchIneligiblePrefetchProxyNotAvailable:
       return PreloadingTriggeringOutcome::kFailure;
     case PrefetchStatus::kPrefetchHeldback:
-    case PrefetchStatus::kPrefetchAllowed:
     case PrefetchStatus::kPrefetchNotStarted:
       return std::nullopt;
   }
@@ -188,7 +191,6 @@ bool StatusUpdateIsPossibleAfterFailure(PrefetchStatus status) {
     case PrefetchStatus::
         kPrefetchIneligibleSameSiteCrossOriginPrefetchRequiredProxy:
     case PrefetchStatus::kPrefetchHeldback:
-    case PrefetchStatus::kPrefetchAllowed:
     case PrefetchStatus::kPrefetchNotStarted:
     case PrefetchStatus::kPrefetchIneligiblePrefetchProxyNotAvailable:
       return false;
@@ -202,10 +204,10 @@ void RecordWasBlockedUntilHeadWhenServingHistogram(
 
   if (IsSpeculationRuleType(prefetch_type.trigger_type())) {
     base::UmaHistogramBoolean(
-        base::StringPrintf(
-            "PrefetchProxy.AfterClick.WasBlockedUntilHeadWhenServing.%s",
-            GetPrefetchEagernessHistogramSuffix(prefetch_type.GetEagerness())
-                .c_str()),
+        base::StrCat(
+            {"PrefetchProxy.AfterClick.WasBlockedUntilHeadWhenServing.",
+             GetPrefetchEagernessHistogramSuffix(
+                 prefetch_type.GetEagerness())}),
         blocked_until_head);
   } else {
     // TODO(crbug.com/40946257, crbug.com/40898833): Extend the metrics for
@@ -220,11 +222,10 @@ void RecordPrefetchMatchingBlockedNavigationWithPrefetchHistogram(
 
   if (IsSpeculationRuleType(prefetch_type.trigger_type())) {
     base::UmaHistogramBoolean(
-        base::StringPrintf(
-            "PrefetchProxy.AfterClick."
-            "PrefetchMatchingBlockedNavigationWithPrefetch.%s",
-            GetPrefetchEagernessHistogramSuffix(prefetch_type.GetEagerness())
-                .c_str()),
+        base::StrCat({"PrefetchProxy.AfterClick."
+                      "PrefetchMatchingBlockedNavigationWithPrefetch.",
+                      GetPrefetchEagernessHistogramSuffix(
+                          prefetch_type.GetEagerness())}),
         blocked_until_head);
   } else {
     // TODO(crbug.com/40946257, crbug.com/40898833): Extend the metrics for
@@ -240,11 +241,10 @@ void RecordBlockUntilHeadDurationHistogram(
 
   if (IsSpeculationRuleType(prefetch_type.trigger_type())) {
     base::UmaHistogramTimes(
-        base::StringPrintf(
-            "PrefetchProxy.AfterClick.BlockUntilHeadDuration.%s.%s",
-            served ? "Served" : "NotServed",
-            GetPrefetchEagernessHistogramSuffix(prefetch_type.GetEagerness())
-                .c_str()),
+        base::StrCat({"PrefetchProxy.AfterClick.BlockUntilHeadDuration.",
+                      served ? "Served." : "NotServed.",
+                      GetPrefetchEagernessHistogramSuffix(
+                          prefetch_type.GetEagerness())}),
         blocked_duration);
   } else {
     // TODO(crbug.com/40946257, crbug.com/40898833): Extend the metrics for
@@ -260,19 +260,17 @@ void MaybeRecordBlockUntilHeadDuration2Histogram(
 
   if (IsSpeculationRuleType(prefetch_type.trigger_type())) {
     base::UmaHistogramTimes(
-        base::StringPrintf(
-            "PrefetchProxy.AfterClick.BlockUntilHeadDuration2NoBias.%s.%s",
-            served ? "Served" : "NotServed",
-            GetPrefetchEagernessHistogramSuffix(prefetch_type.GetEagerness())
-                .c_str()),
+        base::StrCat({"PrefetchProxy.AfterClick.BlockUntilHeadDuration2NoBias.",
+                      served ? "Served." : "NotServed.",
+                      GetPrefetchEagernessHistogramSuffix(
+                          prefetch_type.GetEagerness())}),
         blocked_duration.value_or(base::Seconds(0)));
     if (blocked_duration.has_value()) {
       base::UmaHistogramTimes(
-          base::StringPrintf(
-              "PrefetchProxy.AfterClick.BlockUntilHeadDuration2.%s.%s",
-              served ? "Served" : "NotServed",
-              GetPrefetchEagernessHistogramSuffix(prefetch_type.GetEagerness())
-                  .c_str()),
+          base::StrCat({"PrefetchProxy.AfterClick.BlockUntilHeadDuration2.",
+                        served ? "Served." : "NotServed.",
+                        GetPrefetchEagernessHistogramSuffix(
+                            prefetch_type.GetEagerness())}),
           blocked_duration.value());
     }
   } else {
@@ -418,7 +416,7 @@ PrefetchContainer::PrefetchContainer(
           /*holdback_status_override=*/std::nullopt,
           referring_render_frame_host.GetDevToolsNavigationToken(),
           /*Must be empty: additional_headers=*/{},
-          /*prefetch_start_callback=*/std::nullopt,
+          /*request_status_listener=*/nullptr,
           WebContentsImpl::FromRenderFrameHostImpl(&referring_render_frame_host)
               ->GetOrCreateWebPreferences()
               .javascript_enabled) {
@@ -452,7 +450,7 @@ PrefetchContainer::PrefetchContainer(
           holdback_status_override,
           /*initiator_devtools_navigation_token=*/std::nullopt,
           /*Must be empty: additional_headers=*/{},
-          /*prefetch_start_callback=*/std::nullopt,
+          /*request_status_listener=*/nullptr,
           referring_web_contents.GetOrCreateWebPreferences()
               .javascript_enabled) {
   CHECK(!prefetch_type_.IsRendererInitiated());
@@ -469,7 +467,7 @@ PrefetchContainer::PrefetchContainer(
     std::optional<net::HttpNoVarySearchData> no_vary_search_hint,
     base::WeakPtr<PreloadingAttempt> attempt,
     const net::HttpRequestHeaders& additional_headers,
-    std::optional<PrefetchStartCallback> prefetch_start_callback)
+    std::unique_ptr<PrefetchRequestStatusListener> request_status_listener)
     : PrefetchContainer(GlobalRenderFrameHostId(),
                         referring_origin,
                         /*referring_url_hash=*/std::nullopt,
@@ -487,7 +485,7 @@ PrefetchContainer::PrefetchContainer(
                         /*holdback_status_override=*/std::nullopt,
                         /*initiator_devtools_navigation_token=*/std::nullopt,
                         additional_headers,
-                        std::move(prefetch_start_callback),
+                        std::move(request_status_listener),
                         javascript_enabled) {
   CHECK(!prefetch_type_.IsRendererInitiated());
   CHECK(PrefetchBrowserInitiatedTriggersEnabled());
@@ -509,7 +507,7 @@ PrefetchContainer::PrefetchContainer(
     std::optional<PreloadingHoldbackStatus> holdback_status_override,
     std::optional<base::UnguessableToken> initiator_devtools_navigation_token,
     const net::HttpRequestHeaders& additional_headers,
-    std::optional<PrefetchStartCallback> prefetch_start_callback,
+    std::unique_ptr<PrefetchRequestStatusListener> request_status_listener,
     bool is_javascript_enabled)
     : referring_render_frame_host_id_(referring_render_frame_host_id),
       referring_origin_(referring_origin),
@@ -528,7 +526,7 @@ PrefetchContainer::PrefetchContainer(
       initiator_devtools_navigation_token_(
           std::move(initiator_devtools_navigation_token)),
       additional_headers_(additional_headers),
-      prefetch_start_callback_(std::move(prefetch_start_callback)),
+      request_status_listener_(std::move(request_status_listener)),
       is_javascript_enabled_(is_javascript_enabled) {
   is_likely_ahead_of_prerender_ =
       CalculateIsLikelyAheadOfPrerender(attempt_.get());
@@ -774,17 +772,16 @@ void PrefetchContainer::SetTriggeringOutcomeAndFailureReasonFromStatus(
             ToPreloadingFailureReason(new_prefetch_status));
         break;
       case PrefetchStatus::kPrefetchHeldback:
-      // `kPrefetchAllowed` will soon transition into `kPrefetchNotStarted`.
-      case PrefetchStatus::kPrefetchAllowed:
       case PrefetchStatus::kPrefetchNotStarted:
         // `kPrefetchNotStarted` is set in
-        // `PrefetchService::OnGotEligibilityResult` when the container is
-        // pushed onto the prefetch queue, which occurs before the holdback
-        // status is determined in `PrefetchService::StartSinglePrefetch`.
-        // After the container is queued and before it is sent for prefetch, the
-        // only status change is when the container is popped from the queue but
-        // heldback. This is covered by attempt's holdback status. For these two
-        // reasons this PrefetchStatus does not fire a `SetTriggeringOutcome`.
+        // `PrefetchService::OnGotEligibilityForNonRedirect()` when the
+        // container is pushed onto the prefetch queue, which occurs before the
+        // holdback status is determined in
+        // `PrefetchService::StartSinglePrefetch`. After the container is queued
+        // and before it is sent for prefetch, the only status change is when
+        // the container is popped from the queue but heldback. This is covered
+        // by attempt's holdback status. For these two reasons this
+        // PrefetchStatus does not fire a `SetTriggeringOutcome`.
         break;
       case PrefetchStatus::kPrefetchIneligibleUserHasServiceWorker:
       case PrefetchStatus::kPrefetchIneligibleSchemeIsNotHttps:
@@ -825,7 +822,8 @@ void PrefetchContainer::SetPrefetchStatusWithoutUpdatingTriggeringOutcome(
         preloading_trigger_outcome.has_value()) {
       devtools_instrumentation::DidUpdatePrefetchStatus(
           ftn, initiator_devtools_navigation_token_.value(), GetURL(),
-          preloading_trigger_outcome.value(), prefetch_status, RequestId());
+          preload_pipeline_info_->id(), preloading_trigger_outcome.value(),
+          prefetch_status, RequestId());
     }
   }
 }
@@ -1062,10 +1060,6 @@ void PrefetchContainer::MarkCrossSiteContaminated() {
 
 void PrefetchContainer::AddXClientDataHeader(
     network::ResourceRequest& request) {
-  if (!base::FeatureList::IsEnabled(features::kPrefetchXClientDataHeader)) {
-    return;
-  }
-
   if (browser_context_) {
     // Add X-Client-Data header with experiment IDs from field trials.
     variations::AppendVariationsHeader(request.url,
@@ -1083,10 +1077,24 @@ void PrefetchContainer::RegisterCookieListener(
       this_prefetch.url_, cookie_manager);
 }
 
-void PrefetchContainer::StopAllCookieListeners() {
+void PrefetchContainer::PauseAllCookieListeners() {
+  // TODO(crbug.com/377440445): Consider whether we actually need to
+  // pause/resume all single prefetch's cookie listener during each single
+  // prefetch's isolated cookie copy.
   for (const auto& single_prefetch : redirect_chain_) {
     if (single_prefetch->cookie_listener_) {
-      single_prefetch->cookie_listener_->StopListening();
+      single_prefetch->cookie_listener_->PauseListening();
+    }
+  }
+}
+
+void PrefetchContainer::ResumeAllCookieListeners() {
+  // TODO(crbug.com/377440445): Consider whether we actually need to
+  // pause/resume all single prefetch's cookie listener during each single
+  // prefetch's isolated cookie copy.
+  for (const auto& single_prefetch : redirect_chain_) {
+    if (single_prefetch->cookie_listener_) {
+      single_prefetch->cookie_listener_->ResumeListening();
     }
   }
 }
@@ -1122,9 +1130,17 @@ bool PrefetchContainer::Reader::IsIsolatedCookieCopyInProgress() const {
 void PrefetchContainer::Reader::OnIsolatedCookieCopyStart() const {
   DCHECK(!IsIsolatedCookieCopyInProgress());
 
-  // We don't want any of the cookie listeners for this prefetch to pick up
-  // changes from the copy.
-  prefetch_container_->StopAllCookieListeners();
+  // We should temporarily ignore the cookie monitoring by
+  // `PrefetchCookieListener` during the isolated cookie is written to the
+  // default network context.
+  // `PrefetchCookieListener` should monitor whether the cookie is changed from
+  // what we stored in isolated network context when prefetching so that we can
+  // avoid serving the stale prefetched content. Currently
+  // `PrefetchCookieListener` will also catch isolated cookie copy as a cookie
+  // change. To handle this event as a false positive (as the cookie isn't
+  // changed from what we stored on prefetching), we can pause the lisner during
+  // copying, keeping the prefetch servable.
+  prefetch_container_->PauseAllCookieListeners();
 
   GetCurrentSinglePrefetchToServe().cookie_copy_status_ =
       SinglePrefetch::CookieCopyStatus::kInProgress;
@@ -1143,6 +1159,10 @@ void PrefetchContainer::Reader::OnIsolatedCookiesReadCompleteAndWriteStart()
 
 void PrefetchContainer::Reader::OnIsolatedCookieCopyComplete() const {
   DCHECK(IsIsolatedCookieCopyInProgress());
+
+  // Resumes `PrefetchCookieListener` so that we can keep monitoring the
+  // cookie change for the prefetch, which may be served again.
+  prefetch_container_->ResumeAllCookieListeners();
 
   const auto& this_prefetch = GetCurrentSinglePrefetchToServe();
 
@@ -1206,9 +1226,7 @@ bool PrefetchContainer::IsStreamingURLLoaderDeletionScheduledForTesting()
 
 const PrefetchResponseReader* PrefetchContainer::GetNonRedirectResponseReader()
     const {
-  if (redirect_chain_.empty()) {
-    return nullptr;
-  }
+  CHECK(!redirect_chain_.empty());
   if (!redirect_chain_.back()->response_reader_->GetHead()) {
     // Either the last PrefetchResponseReader is for a redirect response, or for
     // a final response not yet receiving its header.
@@ -1313,14 +1331,7 @@ void PrefetchContainer::OnDeterminedHead() {
 
   // Propagates the header to `no_vary_search_data_` if a non-redirect response
   // header is got.
-  //
-  // TODO(crbug.com/40946257): Current code doesn't support NVS for
-  // browser-initated triggers.
-  if (IsRendererInitiated()) {
-    auto* rfhi_can_be_null =
-        RenderFrameHostImpl::FromID(referring_render_frame_host_id_);
-    MaybeSetNoVarySearchData(rfhi_can_be_null);
-  }
+  MaybeSetNoVarySearchData();
 
   UnblockPrefetchMatchResolver();
 }
@@ -1330,29 +1341,26 @@ void PrefetchContainer::OnDeterminedHead2() {
 
   // Propagates the header to `no_vary_search_data_` if a non-redirect response
   // header is got.
-  //
-  // TODO(crbug.com/40946257): Current code doesn't support NVS for
-  // browser-initated triggers.
-  if (IsRendererInitiated()) {
-    auto* rfhi_can_be_null =
-        RenderFrameHostImpl::FromID(referring_render_frame_host_id_);
-    MaybeSetNoVarySearchData(rfhi_can_be_null);
-  }
+  MaybeSetNoVarySearchData();
 
   for (auto& observer : observers_) {
     observer.OnDeterminedHead(*this);
   }
 }
 
-void PrefetchContainer::MaybeSetNoVarySearchData(RenderFrameHost* rfh) {
+void PrefetchContainer::MaybeSetNoVarySearchData() {
   CHECK(!no_vary_search_data_.has_value());
 
   if (!GetNonRedirectHead()) {
     return;
   }
 
-  no_vary_search_data_ =
-      no_vary_search::ProcessHead(*GetNonRedirectHead(), GetURL(), rfh);
+  // RenderFrameHostImpl will be used to display error messagse in DevTools
+  // console. Can be null when the prefetch is browser-initiated.
+  auto* rfhi_can_be_null =
+      RenderFrameHostImpl::FromID(referring_render_frame_host_id_);
+  no_vary_search_data_ = no_vary_search::ProcessHead(
+      *GetNonRedirectHead(), GetURL(), rfhi_can_be_null);
 }
 
 void PrefetchContainer::UnblockPrefetchMatchResolver() {
@@ -1396,13 +1404,9 @@ void PrefetchContainer::OnPrefetchComplete(
   }
 
   // TODO(crbug.com/40250089): Call
-  // SpeculationHostDevToolsObserver::OnPrefetchBodyDataReceived with body of
-  // the response.
-  const auto& devtools_observer = GetDevToolsObserver();
-  if (devtools_observer) {
-    devtools_observer->OnPrefetchRequestComplete(RequestId(),
-                                                 completion_status);
-  }
+  // `devtools_instrumentation::OnPrefetchBodyDataReceived()` with body of the
+  // response.
+  NotifyPrefetchRequestComplete(completion_status);
 
   int net_error = completion_status.error_code;
   int64_t body_length = completion_status.decoded_body_length;
@@ -1411,7 +1415,7 @@ void PrefetchContainer::OnPrefetchComplete(
 
   // Updates the prefetch's status if it hasn't been updated since the request
   // first started. For the prefetch to reach the network stack, it must have
-  // `PrefetchStatus::kPrefetchAllowed` or beyond.
+  // `PrefetchStatus::kPrefetchNotStarted` or beyond.
   DCHECK(HasPrefetchStatus());
   if (GetPrefetchStatus() == PrefetchStatus::kPrefetchNotFinishedInTime) {
     SetPrefetchStatus(net_error == net::OK
@@ -1424,13 +1428,32 @@ void PrefetchContainer::OnPrefetchComplete(
     RecordPrefetchProxyPrefetchMainframeBodyLength(body_length);
   }
 
-  if (GetPrefetchStatus() == PrefetchStatus::kPrefetchSuccessful) {
+  const PrefetchStatus prefetch_status = GetPrefetchStatus();
+  if (prefetch_status == PrefetchStatus::kPrefetchSuccessful &&
+      IsRendererInitiated()) {
     // TODO(crbug.com/40946257): Current code doesn't support
     // PrefetchReferringPageMetrics when the prefetch is initiated by browser.
-    if (IsRendererInitiated()) {
-      if (prefetch_document_manager_) {
-        prefetch_document_manager_->OnPrefetchSuccessful(this);
+    if (prefetch_document_manager_) {
+      prefetch_document_manager_->OnPrefetchSuccessful(this);
+    }
+  }
+
+  if (request_status_listener_) {
+    switch (prefetch_status) {
+      case PrefetchStatus::kPrefetchSuccessful:
+      case PrefetchStatus::kPrefetchResponseUsed:
+        request_status_listener_->OnPrefetchResponseCompleted();
+        break;
+      case PrefetchStatus::kPrefetchFailedNon2XX: {
+        int response_code = GetNonRedirectHead()
+                                ? GetNonRedirectHead()->headers->response_code()
+                                : 0;
+        request_status_listener_->OnPrefetchResponseServerError(response_code);
+        break;
       }
+      default:
+        request_status_listener_->OnPrefetchResponseError();
+        break;
     }
   }
 }
@@ -1488,11 +1511,11 @@ PrefetchContainer::ServableState PrefetchContainer::GetServableState(
   }
 
   DVLOG(1) << *this << "(GetServableState)"
-           << "(streaming_loader=" << streaming_loader_.get() << ")"
-           << "(redirect_chain.empty=" << redirect_chain_.empty() << ")";
+           << "(streaming_loader=" << streaming_loader_.get()
+           << ", LoadState=" << load_state_ << ")";
   // Can only block until head if the request has been started using a
   // streaming URL loader and head/failure/redirect hasn't been received yet.
-  if (streaming_loader_ && !redirect_chain_.empty() &&
+  if (streaming_loader_ &&
       redirect_chain_.back()->response_reader_->IsWaitingForResponse()) {
     return ServableState::kShouldBlockUntilHeadReceived;
   }
@@ -1574,29 +1597,25 @@ void PrefetchContainer::UpdateServingPageMetrics() {
   }
 }
 
-void PrefetchContainer::SimulateAttemptAtRequestStartForTest() {
+void PrefetchContainer::SimulatePrefetchEligibleForTest() {
   if (attempt_) {
     attempt_->SetEligibility(PreloadingEligibility::kEligible);
     attempt_->SetHoldbackStatus(PreloadingHoldbackStatus::kAllowed);
   }
   SetLoadState(LoadState::kEligible);
-  SetPrefetchStatus(PrefetchStatus::kPrefetchAllowed);
+  SetPrefetchStatus(PrefetchStatus::kPrefetchNotStarted);
+}
+
+void PrefetchContainer::SimulatePrefetchStartedForTest() {
   SetLoadState(LoadState::kStarted);
   SetPrefetchStatus(PrefetchStatus::kPrefetchNotFinishedInTime);
 }
 
-void PrefetchContainer::SimulateAttemptAtInterceptorForTest() {
-  if (attempt_) {
-    attempt_->SetEligibility(PreloadingEligibility::kEligible);
-    attempt_->SetHoldbackStatus(PreloadingHoldbackStatus::kAllowed);
-  }
-  SetLoadState(LoadState::kEligible);
-  SetPrefetchStatus(PrefetchStatus::kPrefetchAllowed);
-  SetLoadState(LoadState::kStarted);
+void PrefetchContainer::SimulatePrefetchCompletedForTest() {
   SetPrefetchStatus(PrefetchStatus::kPrefetchSuccessful);
 }
 
-void PrefetchContainer::SimulateEligibilityCheckFailedForTest(
+void PrefetchContainer::SimulatePrefetchFailedIneligibleForTest(
     PreloadingEligibility eligibility) {
   CHECK_NE(PreloadingEligibility::kEligible, eligibility);
 
@@ -1614,7 +1633,9 @@ void PrefetchContainer::OnDetectedCookiesChange() {
   CancelStreamingURLLoaderIfNotServing();
 }
 
-void PrefetchContainer::OnDetectedCookiesChange2() {
+void PrefetchContainer::OnDetectedCookiesChange2(
+    std::optional<bool>
+        is_unblock_for_cookies_changed_triggered_by_this_prefetch_container) {
   CHECK(UseNewWaitLoop());
 
   // If `kPrefetchNewWaitLoop` is enabled, multiple `PrefetchMatchResolver2` can
@@ -1631,16 +1652,32 @@ void PrefetchContainer::OnDetectedCookiesChange2() {
     return;
   }
 
+  // There are cases that `prefetch_status_` is failure but this method is
+  // called. For more details, see
+  // https://docs.google.com/document/d/1G48SaWbdOy1yNBT1wio2IHVuUtddF5VLFsT6BRSYPMI/edit?tab=t.hpkotaxo7tfh#heading=h.woaoy8erwx63
+  //
+  // To prevent crash, we don't call `SetPrefetchStatus()`.
+  if (prefetch_status_ &&
+      TriggeringOutcomeFromStatus(prefetch_status_.value()) ==
+          PreloadingTriggeringOutcome::kFailure) {
+    SCOPED_CRASH_KEY_NUMBER("PrefetchContainer", "ODCC2_from",
+                            static_cast<int>(prefetch_status_.value()));
+    if (is_unblock_for_cookies_changed_triggered_by_this_prefetch_container
+            .has_value()) {
+      SCOPED_CRASH_KEY_BOOL(
+          "PrefetchContainer", "ODCC2_iufcctbtpc",
+          is_unblock_for_cookies_changed_triggered_by_this_prefetch_container
+              .value());
+    }
+    base::debug::DumpWithoutCrashing();
+    return;
+  }
+
   OnDetectedCookiesChange();
 }
 
 void PrefetchContainer::OnPrefetchStarted() {
   SetLoadState(PrefetchContainer::LoadState::kStarted);
-  if (prefetch_start_callback_.has_value()) {
-    CHECK(prefetch_start_callback_.value());
-    std::move(prefetch_start_callback_.value())
-        .Run(PrefetchStartResultCode::kSuccess);
-  }
 }
 
 // TODO(crbug.com/40274818): We might be waiting on PrefetchContainer's head
@@ -1782,43 +1819,8 @@ void PrefetchContainer::MakeResourceRequest(
   net::IsolationInfo isolation_info = net::IsolationInfo::Create(
       net::IsolationInfo::RequestType::kMainFrame, origin, origin,
       net::SiteForCookies::FromOrigin(origin));
-  network::ResourceRequest::TrustedParams trusted_params;
-  trusted_params.isolation_info = isolation_info;
 
-  auto request = std::make_unique<network::ResourceRequest>();
-  request->url = url;
-  request->method = "GET";
-  request->referrer = referrer_.url;
-  request->referrer_policy =
-      Referrer::ReferrerPolicyForUrlRequest(referrer_.policy);
-  request->enable_load_timing = true;
-  // Note: Even without LOAD_DISABLE_CACHE, a cross-site prefetch uses a
-  // separate network context, which means responses cached before the prefetch
-  // are not visible to the prefetch, and anything cached by this request will
-  // not be visible outside of the network context.
-  request->load_flags = net::LOAD_PREFETCH;
-  request->credentials_mode = network::mojom::CredentialsMode::kInclude;
-  request->headers.MergeFrom(additional_headers_);
-  request->headers.MergeFrom(additional_headers);
-  request->headers.SetHeader(kCorsExemptPurposeHeaderName, "prefetch");
-  request->headers.SetHeader("Sec-Purpose", GetSecPurposeHeaderValue(url));
-  request->headers.SetHeader("Upgrade-Insecure-Requests", "1");
-
-  // There are sometimes other headers that are set during navigation.  These
-  // aren't yet supported for prefetch, including browsing topics.
-
-  request->trusted_params = trusted_params;
-  request->site_for_cookies = trusted_params.isolation_info.site_for_cookies();
-
-  // This causes us to reset the site for cookies on cross-site redirect. This
-  // is correct as long as we are looking at top-level navigations. If we ever
-  // implement prefetching for subframes, this will need to consider that.
-  // See also the code which sets this in |NavigationUrlLoaderImpl|.
-  request->update_first_party_url_on_redirect = true;
-
-  request->devtools_request_id = RequestId();
-
-  request->priority = [&] {
+  auto priority = [&] {
     if (IsSpeculationRuleType(prefetch_type_.trigger_type())) {
       // This may seem inverted (surely eager prefetches would be higher
       // priority), but the fact that we're doing this at all for more
@@ -1847,14 +1849,42 @@ void PrefetchContainer::MakeResourceRequest(
     }
   }();
 
+  mojo::PendingRemote<network::mojom::DevToolsObserver>
+      devtools_observer_remote;
+  if (std::optional<mojo::PendingRemote<network::mojom::DevToolsObserver>>
+          devtools_observer = MakeSelfOwnedNetworkServiceDevToolsObserver()) {
+    devtools_observer_remote = std::move(devtools_observer.value());
+  }
+
+  // If we ever implement prefetching for subframes, this value should be
+  // reconsidered, as this causes us to reset the site for cookies on cross-site
+  // redirect.
+  const bool is_main_frame = true;
+
+  auto request = CreateResourceRequestForNavigation(
+      net::HttpRequestHeaders::kGetMethod, url,
+      network::mojom::RequestDestination::kDocument, referrer_, isolation_info,
+      std::move(devtools_observer_remote), priority, is_main_frame);
+
+  // Note: Even without LOAD_DISABLE_CACHE, a cross-site prefetch uses a
+  // separate network context, which means responses cached before the prefetch
+  // are not visible to the prefetch, and anything cached by this request will
+  // not be visible outside of the network context.
+  request->load_flags = net::LOAD_PREFETCH;
+
+  request->headers.MergeFrom(additional_headers_);
+  request->headers.MergeFrom(additional_headers);
+  request->headers.SetHeader(kCorsExemptPurposeHeaderName, "prefetch");
+  request->headers.SetHeader("Sec-Purpose", GetSecPurposeHeaderValue(url));
+  request->headers.SetHeader("Upgrade-Insecure-Requests", "1");
+
+  // There are sometimes other headers that are set during navigation.  These
+  // aren't yet supported for prefetch, including browsing topics.
+
+  request->devtools_request_id = RequestId();
+
   AddClientHintsHeaders(origin, &request->headers);
   AddXClientDataHeader(*request.get());
-
-  const auto& devtools_observer = GetDevToolsObserver();
-  if (devtools_observer && !IsDecoy()) {
-    request->trusted_params->devtools_observer =
-        devtools_observer->MakeSelfOwnedNetworkServiceDevToolsObserver();
-  }
 
   resource_request_ = std::move(request);
 }
@@ -2030,18 +2060,9 @@ void PrefetchContainer::OnInitialPrefetchFailedIneligible(
     PreloadingEligibility eligibility) {
   CHECK(redirect_chain_.size() == 1);
   CHECK_NE(eligibility, PreloadingEligibility::kEligible);
-  if (prefetch_start_callback_.has_value()) {
-    CHECK(prefetch_start_callback_.value());
-    std::move(prefetch_start_callback_.value())
-        .Run(GetPrefetchFailedIneligibleStartResultCode(eligibility));
+  if (request_status_listener_) {
+    request_status_listener_->OnPrefetchStartFailed();
   }
-}
-
-PrefetchStartResultCode
-PrefetchContainer::GetPrefetchFailedIneligibleStartResultCode(
-    PreloadingEligibility eligibility) {
-  CHECK_NE(eligibility, PreloadingEligibility::kEligible);
-  return PrefetchStartResultCode::kFailed;
 }
 
 void PrefetchContainer::AddObserver(Observer* observer) {
@@ -2148,6 +2169,88 @@ void PrefetchContainer::MigrateNewlyAdded(
   inherited_preload_pipeline_infos_.push_back(
       std::move(added->preload_pipeline_info_));
   is_likely_ahead_of_prerender_ |= added->is_likely_ahead_of_prerender_;
+}
+
+void PrefetchContainer::NotifyPrefetchRequestWillBeSent(
+    const network::mojom::URLResponseHeadPtr* redirect_head) {
+  if (IsDecoy()) {
+    return;
+  }
+
+  auto* rfh = RenderFrameHostImpl::FromID(referring_render_frame_host_id_);
+  auto* ftn = FrameTreeNode::From(rfh);
+  // Don't emit CDP events if the trigger is not Spec Rules or the document
+  // isn't alive.
+  if (!rfh) {
+    return;
+  }
+  CHECK(ftn);
+
+  if (redirect_head && *redirect_head) {
+    const network::mojom::URLResponseHeadDevToolsInfoPtr info =
+        network::ExtractDevToolsInfo(**redirect_head);
+    const GURL url = GetPreviousURL();
+    std::pair<const GURL&, const network::mojom::URLResponseHeadDevToolsInfo&>
+        redirect_info{url, *info.get()};
+    devtools_instrumentation::OnPrefetchRequestWillBeSent(
+        *ftn, RequestId(), rfh->GetLastCommittedURL(), *GetResourceRequest(),
+        std::move(redirect_info));
+  } else {
+    devtools_instrumentation::OnPrefetchRequestWillBeSent(
+        *ftn, RequestId(), rfh->GetLastCommittedURL(), *GetResourceRequest(),
+        std::nullopt);
+  }
+}
+
+void PrefetchContainer::NotifyPrefetchResponseReceived(
+    const network::mojom::URLResponseHead& head) {
+  // Ensured by the caller `PrefetchService::OnPrefetchResponseStarted()`.
+  CHECK(!IsDecoy());
+
+  auto* ftn = FrameTreeNode::From(
+      RenderFrameHostImpl::FromID(referring_render_frame_host_id_));
+  // Don't emit CDP events if the trigger is not Spec Rules or the document
+  // isn't alive.
+  if (!ftn) {
+    return;
+  }
+
+  devtools_instrumentation::OnPrefetchResponseReceived(ftn, RequestId(),
+                                                       GetCurrentURL(), head);
+}
+
+void PrefetchContainer::NotifyPrefetchRequestComplete(
+    const network::URLLoaderCompletionStatus& completion_status) {
+  // Ensured by the caller `PrefetchService::OnPrefetchResponseStarted()`.
+  CHECK(!IsDecoy());
+
+  auto* ftn = FrameTreeNode::From(
+      RenderFrameHostImpl::FromID(referring_render_frame_host_id_));
+  // Don't emit CDP events if the trigger is not Spec Rules or the document
+  // isn't alive.
+  if (!ftn) {
+    return;
+  }
+
+  devtools_instrumentation::OnPrefetchRequestComplete(ftn, RequestId(),
+                                                      completion_status);
+}
+
+std::optional<mojo::PendingRemote<network::mojom::DevToolsObserver>>
+PrefetchContainer::MakeSelfOwnedNetworkServiceDevToolsObserver() {
+  if (IsDecoy()) {
+    return std::nullopt;
+  }
+
+  auto* ftn = FrameTreeNode::From(
+      RenderFrameHostImpl::FromID(referring_render_frame_host_id_));
+  // Return nullopt if the trigger is not Spec Rules or the document isn't
+  // alive.
+  if (!ftn) {
+    return std::nullopt;
+  }
+
+  return NetworkServiceDevToolsObserver::MakeSelfOwned(ftn);
 }
 
 void PrefetchContainer::MaybeRecordPrefetchStatusToUMA(

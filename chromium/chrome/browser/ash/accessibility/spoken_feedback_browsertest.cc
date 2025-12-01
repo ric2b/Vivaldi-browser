@@ -587,8 +587,8 @@ class SpokenFeedbackTest
     : public LoggedInSpokenFeedbackTest,
       public ::testing::WithParamInterface<SpokenFeedbackTestVariant> {
  protected:
-  SpokenFeedbackTest() {}
-  virtual ~SpokenFeedbackTest() {}
+  SpokenFeedbackTest() = default;
+  virtual ~SpokenFeedbackTest() = default;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     if (GetParam() == kTestAsGuestUser) {
@@ -921,15 +921,14 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest,
   std::string app_id = "TestApp";
 
   // Set the app status as paused;
-  apps::AppPtr app =
-      std::make_unique<apps::App>(apps::AppType::kBuiltIn, app_id);
+  apps::AppPtr app = std::make_unique<apps::App>(apps::AppType::kWeb, app_id);
   app->readiness = apps::Readiness::kReady;
   app->paused = true;
 
   std::vector<apps::AppPtr> apps;
   apps.push_back(std::move(app));
   apps::AppServiceProxyFactory::GetForProfile(GetProfile())
-      ->OnApps(std::move(apps), apps::AppType::kBuiltIn,
+      ->OnApps(std::move(apps), apps::AppType::kWeb,
                false /* should_notify_initialized */);
 
   // Create and add a test app to the shelf model.
@@ -1009,13 +1008,12 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest,
   std::string app_id = "TestApp";
 
   // Set the app status as paused;
-  apps::AppPtr app =
-      std::make_unique<apps::App>(apps::AppType::kBuiltIn, app_id);
+  apps::AppPtr app = std::make_unique<apps::App>(apps::AppType::kWeb, app_id);
   app->readiness = apps::Readiness::kDisabledByPolicy;
   std::vector<apps::AppPtr> apps;
   apps.push_back(std::move(app));
   apps::AppServiceProxyFactory::GetForProfile(GetProfile())
-      ->OnApps(std::move(apps), apps::AppType::kBuiltIn,
+      ->OnApps(std::move(apps), apps::AppType::kWeb,
                false /* should_notify_initialized */);
 
   // Create and add a test app to the shelf model.
@@ -1387,13 +1385,7 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, ChromeVoxStickyMode) {
 // sending js commands above. This variant may be subject to flakes as it
 // depends on more of the UI events stack and sticky mode invocation has a
 // timing element to it.
-// Consistently failing on ChromiumOS MSan and ASan. http://crbug.com/1182542
-#if defined(MEMORY_SANITIZER) || defined(ADDRESS_SANITIZER)
-#define MAYBE_ChromeVoxStickyModeRawKeys DISABLED_ChromeVoxStickyModeRawKeys
-#else
-#define MAYBE_ChromeVoxStickyModeRawKeys ChromeVoxStickyModeRawKeys
-#endif
-IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, MAYBE_ChromeVoxStickyModeRawKeys) {
+IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, ChromeVoxStickyModeRawKeys) {
   EnableChromeVox();
   StablizeChromeVoxState();
 

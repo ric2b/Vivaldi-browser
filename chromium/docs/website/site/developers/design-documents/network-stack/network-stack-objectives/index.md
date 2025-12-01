@@ -62,7 +62,7 @@ title: Network Stack Objectives
             sockets (mbelshe, willchan)
 *   Finish Downloads System major refactors (dataflow, file
             determination, state granularity) (ahendrickson, rdsmith)
-*   Fix Download incorrect name problems -- see http://crbug.com/78200
+*   Fix Download incorrect name problems -- see https://crbug.com/78200
             (asanka)
 *   Fix Downloads error detection and cache interface (ahendrickson)
 *   Substantially reduce downloads crashers. Tentative Goal: halve
@@ -146,11 +146,11 @@ Improve network performance / features
             regressions (tonyg,mbelshe) -- 0.5 lots of good progress; up and
             running, not yet done!
 *   [Improve tests for HTTP
-            authentication](http://www.chromium.org/developers/design-documents/http-authentication).
+            authentication](/developers/design-documents/http-authentication).
             (cbentzel, wtc) - 0.2 Added unit tests and manual system-level
             tests, but still need automated system level tests.
 *   [Add tests for SSL client
-            authentication](http://www.chromium.org/developers/design-documents/ssl-client-authentication).
+            authentication](/developers/design-documents/ssl-client-authentication).
             (wtc) -- 0.2. (by rsleevi) Implemented a better way to trust a test
             root CA that doesn't require changing the system certificate store.
             Regenerated test certificates to have long validity periods.
@@ -302,7 +302,7 @@ davidben)**
 
 **Implement HTTP pipelining (vandebo)**
 
-*   [crbug.com/8991](http://crbug.com/8991)
+*   [crbug.com/8991](https://crbug.com/8991)
 
 **WebKit/Chrome network integration (tonyg)**
 

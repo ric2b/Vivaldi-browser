@@ -57,12 +57,12 @@ inline v8::internal::Address ToCData(
     v8::internal::Tagged<v8::internal::Object> obj);
 
 template <internal::ExternalPointerTag tag, typename T>
-inline v8::internal::Handle<
+inline v8::internal::DirectHandle<
     v8::internal::UnionOf<v8::internal::Smi, v8::internal::Foreign>>
 FromCData(v8::internal::Isolate* isolate, T obj);
 
 template <internal::ExternalPointerTag tag>
-inline v8::internal::Handle<
+inline v8::internal::DirectHandle<
     v8::internal::UnionOf<v8::internal::Smi, v8::internal::Foreign>>
 FromCData(v8::internal::Isolate* isolate, v8::internal::Address obj);
 
@@ -91,46 +91,47 @@ class RegisteredExtension {
   static RegisteredExtension* first_extension_;
 };
 
-#define TO_LOCAL_LIST(V)                                 \
-  V(ToLocal, AccessorPair, debug::AccessorPair)          \
-  V(ToLocal, NativeContext, Context)                     \
-  V(ToLocal, Object, Value)                              \
-  V(ToLocal, Module, Module)                             \
-  V(ToLocal, Name, Name)                                 \
-  V(ToLocal, String, String)                             \
-  V(ToLocal, Symbol, Symbol)                             \
-  V(ToLocal, JSRegExp, RegExp)                           \
-  V(ToLocal, JSReceiver, Object)                         \
-  V(ToLocal, JSObject, Object)                           \
-  V(ToLocal, JSFunction, Function)                       \
-  V(ToLocal, JSArray, Array)                             \
-  V(ToLocal, JSMap, Map)                                 \
-  V(ToLocal, JSSet, Set)                                 \
-  V(ToLocal, JSProxy, Proxy)                             \
-  V(ToLocal, JSArrayBuffer, ArrayBuffer)                 \
-  V(ToLocal, JSArrayBufferView, ArrayBufferView)         \
-  V(ToLocal, JSDataView, DataView)                       \
-  V(ToLocal, JSRabGsabDataView, DataView)                \
-  V(ToLocal, JSTypedArray, TypedArray)                   \
-  V(ToLocalShared, JSArrayBuffer, SharedArrayBuffer)     \
-  V(ToLocal, FunctionTemplateInfo, FunctionTemplate)     \
-  V(ToLocal, ObjectTemplateInfo, ObjectTemplate)         \
-  V(ToLocal, DictionaryTemplateInfo, DictionaryTemplate) \
-  V(SignatureToLocal, FunctionTemplateInfo, Signature)   \
-  V(MessageToLocal, Object, Message)                     \
-  V(PromiseToLocal, JSObject, Promise)                   \
-  V(StackTraceToLocal, StackTraceInfo, StackTrace)       \
-  V(StackFrameToLocal, StackFrameInfo, StackFrame)       \
-  V(NumberToLocal, Object, Number)                       \
-  V(IntegerToLocal, Object, Integer)                     \
-  V(Uint32ToLocal, Object, Uint32)                       \
-  V(ToLocal, BigInt, BigInt)                             \
-  V(ExternalToLocal, JSObject, External)                 \
-  V(CallableToLocal, JSReceiver, Function)               \
-  V(ToLocalPrimitive, Object, Primitive)                 \
-  V(FixedArrayToLocal, FixedArray, FixedArray)           \
-  V(PrimitiveArrayToLocal, FixedArray, PrimitiveArray)   \
-  V(ToLocal, ScriptOrModule, ScriptOrModule)             \
+#define TO_LOCAL_LIST(V)                                                \
+  V(ToLocal, AccessorPair, debug::AccessorPair)                         \
+  V(ToLocal, NativeContext, Context)                                    \
+  V(ToLocal, Object, Value)                                             \
+  V(ToLocal, Module, Module)                                            \
+  V(ToLocal, Name, Name)                                                \
+  V(ToLocal, String, String)                                            \
+  V(ToLocal, Symbol, Symbol)                                            \
+  V(ToLocal, JSRegExp, RegExp)                                          \
+  V(ToLocal, JSReceiver, Object)                                        \
+  V(ToLocal, JSObject, Object)                                          \
+  V(ToLocal, JSFunction, Function)                                      \
+  V(ToLocal, JSArray, Array)                                            \
+  V(ToLocal, JSMap, Map)                                                \
+  V(ToLocal, JSSet, Set)                                                \
+  V(ToLocal, JSProxy, Proxy)                                            \
+  V(ToLocal, JSArrayBuffer, ArrayBuffer)                                \
+  V(ToLocal, JSArrayBufferView, ArrayBufferView)                        \
+  V(ToLocal, JSDataView, DataView)                                      \
+  V(ToLocal, JSRabGsabDataView, DataView)                               \
+  V(ToLocal, JSTypedArray, TypedArray)                                  \
+  V(ToLocalShared, JSArrayBuffer, SharedArrayBuffer)                    \
+  V(ToLocal, FunctionTemplateInfo, FunctionTemplate)                    \
+  V(ToLocal, ObjectTemplateInfo, ObjectTemplate)                        \
+  V(ToLocal, DictionaryTemplateInfo, DictionaryTemplate)                \
+  V(SignatureToLocal, FunctionTemplateInfo, Signature)                  \
+  V(MessageToLocal, Object, Message)                                    \
+  V(PromiseToLocal, JSObject, Promise)                                  \
+  V(StackTraceToLocal, StackTraceInfo, StackTrace)                      \
+  V(StackFrameToLocal, StackFrameInfo, StackFrame)                      \
+  V(NumberToLocal, Object, Number)                                      \
+  V(IntegerToLocal, Object, Integer)                                    \
+  V(Uint32ToLocal, Object, Uint32)                                      \
+  V(ToLocal, BigInt, BigInt)                                            \
+  V(ExternalToLocal, JSObject, External)                                \
+  V(CallableToLocal, JSReceiver, Function)                              \
+  V(ToLocalPrimitive, Object, Primitive)                                \
+  V(FixedArrayToLocal, FixedArray, FixedArray)                          \
+  V(PrimitiveArrayToLocal, FixedArray, PrimitiveArray)                  \
+  V(ToLocal, ScriptOrModule, ScriptOrModule)                            \
+  IF_WASM(V, ToLocal, WasmMemoryMapDescriptor, WasmMemoryMapDescriptor) \
   IF_WASM(V, ToLocal, WasmModuleObject, WasmModuleObject)
 
 #define TO_LOCAL_NAME_LIST(V) \
@@ -150,61 +151,62 @@ class RegisteredExtension {
   V(FixedArrayToLocal)        \
   V(PrimitiveArrayToLocal)
 
-#define OPEN_HANDLE_LIST(V)                     \
-  V(Template, TemplateInfo)                     \
-  V(FunctionTemplate, FunctionTemplateInfo)     \
-  V(ObjectTemplate, ObjectTemplateInfo)         \
-  V(DictionaryTemplate, DictionaryTemplateInfo) \
-  V(Signature, FunctionTemplateInfo)            \
-  V(Data, Object)                               \
-  V(Number, Number)                             \
-  V(RegExp, JSRegExp)                           \
-  V(Object, JSReceiver)                         \
-  V(Array, JSArray)                             \
-  V(Map, JSMap)                                 \
-  V(Set, JSSet)                                 \
-  V(ArrayBuffer, JSArrayBuffer)                 \
-  V(ArrayBufferView, JSArrayBufferView)         \
-  V(TypedArray, JSTypedArray)                   \
-  V(Uint8Array, JSTypedArray)                   \
-  V(Uint8ClampedArray, JSTypedArray)            \
-  V(Int8Array, JSTypedArray)                    \
-  V(Uint16Array, JSTypedArray)                  \
-  V(Int16Array, JSTypedArray)                   \
-  V(Uint32Array, JSTypedArray)                  \
-  V(Int32Array, JSTypedArray)                   \
-  V(Float16Array, JSTypedArray)                 \
-  V(Float32Array, JSTypedArray)                 \
-  V(Float64Array, JSTypedArray)                 \
-  V(DataView, JSDataViewOrRabGsabDataView)      \
-  V(SharedArrayBuffer, JSArrayBuffer)           \
-  V(Name, Name)                                 \
-  V(String, String)                             \
-  V(Symbol, Symbol)                             \
-  V(Script, JSFunction)                         \
-  V(UnboundModuleScript, SharedFunctionInfo)    \
-  V(UnboundScript, SharedFunctionInfo)          \
-  V(Module, Module)                             \
-  V(Function, JSReceiver)                       \
-  V(CompileHintsCollector, Script)              \
-  V(Message, JSMessageObject)                   \
-  V(Context, NativeContext)                     \
-  V(External, Object)                           \
-  V(StackTrace, StackTraceInfo)                 \
-  V(StackFrame, StackFrameInfo)                 \
-  V(Proxy, JSProxy)                             \
-  V(debug::GeneratorObject, JSGeneratorObject)  \
-  V(debug::ScriptSource, HeapObject)            \
-  V(debug::Script, Script)                      \
-  V(debug::EphemeronTable, EphemeronHashTable)  \
-  V(debug::AccessorPair, AccessorPair)          \
-  V(Promise, JSPromise)                         \
-  V(Primitive, Object)                          \
-  V(PrimitiveArray, FixedArray)                 \
-  V(BigInt, BigInt)                             \
-  V(ScriptOrModule, ScriptOrModule)             \
-  V(FixedArray, FixedArray)                     \
-  V(ModuleRequest, ModuleRequest)               \
+#define OPEN_HANDLE_LIST(V)                                    \
+  V(Template, TemplateInfo)                                    \
+  V(FunctionTemplate, FunctionTemplateInfo)                    \
+  V(ObjectTemplate, ObjectTemplateInfo)                        \
+  V(DictionaryTemplate, DictionaryTemplateInfo)                \
+  V(Signature, FunctionTemplateInfo)                           \
+  V(Data, Object)                                              \
+  V(Number, Number)                                            \
+  V(RegExp, JSRegExp)                                          \
+  V(Object, JSReceiver)                                        \
+  V(Array, JSArray)                                            \
+  V(Map, JSMap)                                                \
+  V(Set, JSSet)                                                \
+  V(ArrayBuffer, JSArrayBuffer)                                \
+  V(ArrayBufferView, JSArrayBufferView)                        \
+  V(TypedArray, JSTypedArray)                                  \
+  V(Uint8Array, JSTypedArray)                                  \
+  V(Uint8ClampedArray, JSTypedArray)                           \
+  V(Int8Array, JSTypedArray)                                   \
+  V(Uint16Array, JSTypedArray)                                 \
+  V(Int16Array, JSTypedArray)                                  \
+  V(Uint32Array, JSTypedArray)                                 \
+  V(Int32Array, JSTypedArray)                                  \
+  V(Float16Array, JSTypedArray)                                \
+  V(Float32Array, JSTypedArray)                                \
+  V(Float64Array, JSTypedArray)                                \
+  V(DataView, JSDataViewOrRabGsabDataView)                     \
+  V(SharedArrayBuffer, JSArrayBuffer)                          \
+  V(Name, Name)                                                \
+  V(String, String)                                            \
+  V(Symbol, Symbol)                                            \
+  V(Script, JSFunction)                                        \
+  V(UnboundModuleScript, SharedFunctionInfo)                   \
+  V(UnboundScript, SharedFunctionInfo)                         \
+  V(Module, Module)                                            \
+  V(Function, JSReceiver)                                      \
+  V(CompileHintsCollector, Script)                             \
+  V(Message, JSMessageObject)                                  \
+  V(Context, NativeContext)                                    \
+  V(External, Object)                                          \
+  V(StackTrace, StackTraceInfo)                                \
+  V(StackFrame, StackFrameInfo)                                \
+  V(Proxy, JSProxy)                                            \
+  V(debug::GeneratorObject, JSGeneratorObject)                 \
+  V(debug::ScriptSource, HeapObject)                           \
+  V(debug::Script, Script)                                     \
+  V(debug::EphemeronTable, EphemeronHashTable)                 \
+  V(debug::AccessorPair, AccessorPair)                         \
+  V(Promise, JSPromise)                                        \
+  V(Primitive, Object)                                         \
+  V(PrimitiveArray, FixedArray)                                \
+  V(BigInt, BigInt)                                            \
+  V(ScriptOrModule, ScriptOrModule)                            \
+  V(FixedArray, FixedArray)                                    \
+  V(ModuleRequest, ModuleRequest)                              \
+  IF_WASM(V, WasmMemoryMapDescriptor, WasmMemoryMapDescriptor) \
   IF_WASM(V, WasmMemoryObject, WasmMemoryObject)
 
 class Utils {
@@ -263,7 +265,7 @@ class Utils {
   }
 
   template <class T>
-  static inline v8::internal::Handle<v8::internal::Object> OpenPersistent(
+  static inline v8::internal::DirectHandle<v8::internal::Object> OpenPersistent(
       v8::Persistent<T>* persistent) {
     return OpenPersistent(*persistent);
   }
@@ -292,20 +294,15 @@ class Utils {
 };
 
 template <class T>
-inline T* ToApi(v8::internal::Handle<v8::internal::Object> obj) {
-  return reinterpret_cast<T*>(obj.location());
-}
-
-template <class T>
 inline v8::Local<T> ToApiHandle(
     v8::internal::DirectHandle<v8::internal::Object> obj) {
   return Utils::Convert<v8::internal::Object, T>(obj);
 }
 
 template <class T>
-inline bool ToLocal(v8::internal::MaybeHandle<v8::internal::Object> maybe,
+inline bool ToLocal(v8::internal::MaybeDirectHandle<v8::internal::Object> maybe,
                     Local<T>* local) {
-  v8::internal::Handle<v8::internal::Object> handle;
+  v8::internal::DirectHandle<v8::internal::Object> handle;
   if (maybe.ToHandle(&handle)) {
     *local = Utils::Convert<v8::internal::Object, T>(handle);
     return true;
@@ -373,7 +370,7 @@ class HandleScopeImplementer {
 
   // Returns the last entered context or an empty handle if no
   // contexts have been entered.
-  inline Handle<NativeContext> LastEnteredContext();
+  inline DirectHandle<NativeContext> LastEnteredContext();
 
   inline void SaveContext(Tagged<Context> context);
   inline Tagged<Context> RestoreContext();
@@ -491,14 +488,14 @@ void HandleScopeImplementer::DeleteExtensions(internal::Address* prev_limit) {
             reinterpret_cast<Address>(prev_limit) &&
         reinterpret_cast<Address>(prev_limit) <=
             reinterpret_cast<Address>(block_limit)) {
-#ifdef ENABLE_HANDLE_ZAPPING
+#ifdef ENABLE_LOCAL_HANDLE_ZAPPING
       internal::HandleScope::ZapRange(prev_limit, block_limit);
 #endif
       break;
     }
 
     blocks_.pop_back();
-#ifdef ENABLE_HANDLE_ZAPPING
+#ifdef ENABLE_LOCAL_HANDLE_ZAPPING
     internal::HandleScope::ZapRange(block_start, block_limit);
 #endif
     if (spare_ != nullptr) {
@@ -532,9 +529,8 @@ void InvokeFunctionCallbackOptimized(
     const v8::FunctionCallbackInfo<v8::Value>& info);
 
 void InvokeFinalizationRegistryCleanupFromTask(
-    Handle<NativeContext> native_context,
-    Handle<JSFinalizationRegistry> finalization_registry,
-    Handle<Object> callback);
+    DirectHandle<NativeContext> native_context,
+    DirectHandle<JSFinalizationRegistry> finalization_registry);
 
 template <typename T>
 EXPORT_TEMPLATE_DECLARE(V8_EXPORT_PRIVATE)
@@ -548,32 +544,9 @@ template <typename T>
 EXPORT_TEMPLATE_DECLARE(V8_EXPORT_PRIVATE)
 bool ValidateCallbackInfo(const PropertyCallbackInfo<T>& info);
 
+#ifdef ENABLE_SLOW_DCHECKS
 DECLARE_CONTEXTUAL_VARIABLE_WITH_DEFAULT(StackAllocatedCheck, const bool, true);
-
-// TODO(crbug.com/42203776): This should move to the API and be integrated into
-// `AdjustAmountOfExternalAllocatedMemory()` to make sure there are no
-// unbalanced bytes floating around.
-class V8_EXPORT_PRIVATE ExternalMemoryAccounterBase {
- public:
-  ExternalMemoryAccounterBase() = default;
-  ~ExternalMemoryAccounterBase();
-  ExternalMemoryAccounterBase(ExternalMemoryAccounterBase&&) V8_NOEXCEPT;
-  ExternalMemoryAccounterBase& operator=(ExternalMemoryAccounterBase&&)
-      V8_NOEXCEPT;
-  ExternalMemoryAccounterBase(const ExternalMemoryAccounterBase&) = delete;
-  ExternalMemoryAccounterBase& operator=(const ExternalMemoryAccounterBase&) =
-      delete;
-
-  void Increase(Isolate* isolate, size_t size);
-  void Update(Isolate* isolate, int64_t delta);
-  void Decrease(Isolate* isolate, size_t size);
-
- private:
-#ifdef DEBUG
-  size_t amount_of_external_memory_ = 0;
-  Isolate* isolate_ = nullptr;
 #endif
-};
 
 }  // namespace internal
 }  // namespace v8

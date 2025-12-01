@@ -9,10 +9,14 @@ import org.jni_zero.JNINamespace;
 import org.jni_zero.JniType;
 import org.jni_zero.NativeMethods;
 
+import org.chromium.build.annotations.NullMarked;
+
+import java.util.Locale;
 import java.util.Objects;
 
 /** An origin is either a (scheme, host, port) tuple or is opaque. */
 @JNINamespace("url")
+@NullMarked
 public class Origin {
     private final String mScheme;
     private final String mHost;
@@ -123,7 +127,9 @@ public class Origin {
      */
     @Override
     public String toString() {
-        return isOpaque() ? "null" : String.format("%s://%s:%s", mScheme, mHost, mPort);
+        return isOpaque()
+                ? "null"
+                : String.format(Locale.ROOT, "%s://%s:%d", mScheme, mHost, getPort());
     }
 
     @CalledByNative

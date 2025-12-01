@@ -17,7 +17,6 @@ import {AggregationPanel} from './aggregation_panel';
 import {isEmptyData} from '../public/aggregation';
 import {DetailsShell} from '../widgets/details_shell';
 import {Button, ButtonBar} from '../widgets/button';
-import {raf} from '../core/raf_scheduler';
 import {EmptyState} from '../widgets/empty_state';
 import {FlowEventsAreaSelectedPanel} from './flow_events_panel';
 import {PivotTable} from './pivot_table';
@@ -26,12 +25,13 @@ import {Monitor} from '../base/monitor';
 import {
   CPU_PROFILE_TRACK_KIND,
   PERF_SAMPLES_PROFILE_TRACK_KIND,
+  INSTRUMENTS_SAMPLES_PROFILE_TRACK_KIND,
   SLICE_TRACK_KIND,
 } from '../public/track_kinds';
 import {
   QueryFlamegraph,
   metricsFromTableOrSubquery,
-} from '../public/lib/query_flamegraph';
+} from '../components/query_flamegraph';
 import {DisposableStack} from '../base/disposable_stack';
 import {assertExists} from '../base/logging';
 import {TraceImpl} from '../core/trace_impl';
@@ -39,9 +39,13 @@ import {Trace} from '../public/trace';
 import {Flamegraph} from '../widgets/flamegraph';
 
 interface View {
-  key: string;
-  name: string;
-  content: m.Children;
+  readonly key: string;
+  readonly name: string;
+  readonly specificity?: {
+    readonly kind: number;
+    readonly schema: number;
+  };
+  readonly content: m.Children;
 }
 
 export type AreaDetailsPanelAttrs = {trace: TraceImpl};
@@ -52,6 +56,7 @@ class AreaDetailsPanel implements m.ClassComponent<AreaDetailsPanelAttrs> {
   private currentTab: string | undefined = undefined;
   private cpuProfileFlamegraph?: QueryFlamegraph;
   private perfSampleFlamegraph?: QueryFlamegraph;
+  private instrumentsSampleFlamegraph?: QueryFlamegraph;
   private sliceFlamegraph?: QueryFlamegraph;
 
   constructor({attrs}: m.CVnode<AreaDetailsPanelAttrs>) {
@@ -88,6 +93,12 @@ class AreaDetailsPanel implements m.ClassComponent<AreaDetailsPanelAttrs> {
         views.push({
           key: value.tabName,
           name: value.tabName,
+          specificity: {
+            kind: aggregator.trackKind ? 1 : 0,
+            schema: aggregator.schema
+              ? Object.keys(aggregator.schema).length
+              : 0,
+          },
           content: m(AggregationPanel, {
             aggregatorId,
             data: value,
@@ -96,6 +107,23 @@ class AreaDetailsPanel implements m.ClassComponent<AreaDetailsPanelAttrs> {
         });
       }
     }
+
+    views.sort((a, b) => {
+      if (a.specificity === undefined || b.specificity === undefined) {
+        return 0;
+      }
+
+      if (a.specificity.kind !== b.specificity.kind) {
+        return b.specificity.kind - a.specificity.kind;
+      }
+
+      if (a.specificity.schema !== b.specificity.schema) {
+        return b.specificity.schema - a.specificity.schema;
+      }
+
+      // If all else is equal, fall back to the registration order.
+      return 0;
+    });
 
     const pivotTableState = this.trace.pivotTable.state;
     const tree = pivotTableState.queryResult?.tree;
@@ -135,7 +163,6 @@ class AreaDetailsPanel implements m.ClassComponent<AreaDetailsPanelAttrs> {
       return m(Button, {
         onclick: () => {
           this.currentTab = key;
-          raf.scheduleFullRedraw();
         },
         key,
         label: name,
@@ -194,6 +221,17 @@ class AreaDetailsPanel implements m.ClassComponent<AreaDetailsPanelAttrs> {
         key: 'perf_sample_flamegraph_selection',
         name: 'Perf Sample Flamegraph',
         content: this.perfSampleFlamegraph.render(),
+      });
+    }
+    this.instrumentsSampleFlamegraph = this.computeInstrumentsSampleFlamegraph(
+      trace,
+      isChanged,
+    );
+    if (this.instrumentsSampleFlamegraph !== undefined) {
+      views.push({
+        key: 'instruments_sample_flamegraph_selection',
+        name: 'Instruments Sample Flamegraph',
+        content: this.instrumentsSampleFlamegraph.render(),
       });
     }
     this.sliceFlamegraph = this.computeSliceFlamegraph(trace, isChanged);
@@ -318,6 +356,52 @@ class AreaDetailsPanel implements m.ClassComponent<AreaDetailsPanelAttrs> {
     });
   }
 
+  private computeInstrumentsSampleFlamegraph(trace: Trace, isChanged: boolean) {
+    const currentSelection = trace.selection.selection;
+    if (currentSelection.kind !== 'area') {
+      return undefined;
+    }
+    if (!isChanged) {
+      // If the selection has not changed, just return a copy of the last seen
+      // attrs.
+      return this.instrumentsSampleFlamegraph;
+    }
+    const upids = getUpidsFromInstrumentsSampleAreaSelection(currentSelection);
+    const utids = getUtidsFromInstrumentsSampleAreaSelection(currentSelection);
+    if (utids.length === 0 && upids.length === 0) {
+      return undefined;
+    }
+    const metrics = metricsFromTableOrSubquery(
+      `
+        (
+          select id, parent_id as parentId, name, self_count
+          from _callstacks_for_callsites!((
+            select p.callsite_id
+            from instruments_sample p
+            join thread t using (utid)
+            where p.ts >= ${currentSelection.start}
+              and p.ts <= ${currentSelection.end}
+              and (
+                p.utid in (${utids.join(',')})
+                or t.upid in (${upids.join(',')})
+              )
+          ))
+        )
+      `,
+      [
+        {
+          name: 'Instruments Samples',
+          unit: '',
+          columnName: 'self_count',
+        },
+      ],
+      'include perfetto module appleos.instruments.samples',
+    );
+    return new QueryFlamegraph(trace, metrics, {
+      state: Flamegraph.createDefaultState(metrics),
+    });
+  }
+
   private computeSliceFlamegraph(trace: Trace, isChanged: boolean) {
     const currentSelection = trace.selection.selection;
     if (currentSelection.kind !== 'area') {
@@ -416,6 +500,36 @@ function getUtidsFromPerfSampleAreaSelection(currentSelection: AreaSelection) {
   for (const trackInfo of currentSelection.tracks) {
     if (
       trackInfo?.tags?.kind === PERF_SAMPLES_PROFILE_TRACK_KIND &&
+      trackInfo.tags?.utid !== undefined
+    ) {
+      utids.push(trackInfo.tags?.utid);
+    }
+  }
+  return utids;
+}
+
+function getUpidsFromInstrumentsSampleAreaSelection(
+  currentSelection: AreaSelection,
+) {
+  const upids = [];
+  for (const trackInfo of currentSelection.tracks) {
+    if (
+      trackInfo?.tags?.kind === INSTRUMENTS_SAMPLES_PROFILE_TRACK_KIND &&
+      trackInfo.tags?.utid === undefined
+    ) {
+      upids.push(assertExists(trackInfo.tags?.upid));
+    }
+  }
+  return upids;
+}
+
+function getUtidsFromInstrumentsSampleAreaSelection(
+  currentSelection: AreaSelection,
+) {
+  const utids = [];
+  for (const trackInfo of currentSelection.tracks) {
+    if (
+      trackInfo?.tags?.kind === INSTRUMENTS_SAMPLES_PROFILE_TRACK_KIND &&
       trackInfo.tags?.utid !== undefined
     ) {
       utids.push(trackInfo.tags?.utid);

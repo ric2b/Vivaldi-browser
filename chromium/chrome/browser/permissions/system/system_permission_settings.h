@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "base/auto_reset.h"
 #include "base/functional/callback_forward.h"
 #include "base/observer_list_types.h"
 #include "components/content_settings/core/common/content_settings_types.h"
@@ -48,6 +49,10 @@ bool CanPrompt(ContentSettingsType type);
 // For testing purposes only. Mocks that Chrome can request system-level
 // permissions.
 base::AutoReset<bool> MockSystemPromptForTesting();
+
+// For testing purposes only. Mocks that Chrome doesn't have access to a system
+// level permission.
+base::AutoReset<bool> MockShowSystemSettingsForTesting();
 
 // Check whether the system blocks the access to the specified content type /
 // permission.

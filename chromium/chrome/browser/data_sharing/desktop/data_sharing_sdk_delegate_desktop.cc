@@ -39,12 +39,15 @@ void DataSharingSDKDelegateDesktop::ReadGroups(
                 web_contents->GetWebUI()->GetController())
                 ->page_handler();
         CHECK(handler);
-        std::vector<std::string> group_ids;
-        for (auto group_id : params.group_ids()) {
-          group_ids.push_back(group_id);
+        auto mojom_params = data_sharing::mojom::ReadGroupsParams::New();
+        for (auto group_param : params.group_params()) {
+          auto param = data_sharing::mojom::ReadGroupParams::New();
+          param->group_id = group_param.group_id();
+          param->consistency_token = group_param.consistency_token();
+          mojom_params->params.push_back(std::move(param));
         }
         handler->ReadGroups(
-            group_ids,
+            std::move(mojom_params),
             base::BindOnce(&DataSharingSDKDelegateDesktop::OnReadGroups,
                            base::Unretained(delegate), std::move(callback)));
       },
@@ -66,7 +69,22 @@ void DataSharingSDKDelegateDesktop::RemoveMember(
 void DataSharingSDKDelegateDesktop::LeaveGroup(
     const data_sharing_pb::LeaveGroupParams& params,
     base::OnceCallback<void(const absl::Status&)> callback) {
-  NOTIMPLEMENTED();
+  MaybeLoadWebContents(base::BindOnce(
+      [](data_sharing_pb::LeaveGroupParams params,
+         base::OnceCallback<void(const absl::Status&)> callback,
+         DataSharingSDKDelegateDesktop* delegate,
+         content::WebContents* web_contents) {
+        DataSharingPageHandler* handler =
+            static_cast<DataSharingUI*>(
+                web_contents->GetWebUI()->GetController())
+                ->page_handler();
+        CHECK(handler);
+        handler->LeaveGroup(
+            params.group_id(),
+            base::BindOnce(&DataSharingSDKDelegateDesktop::OnLeaveGroup,
+                           base::Unretained(delegate), std::move(callback)));
+      },
+      params, std::move(callback), this));
 }
 
 void DataSharingSDKDelegateDesktop::DeleteGroup(
@@ -148,6 +166,10 @@ void DataSharingSDKDelegateDesktop::ApiInitComplete() {
   callback_subscriptions_.clear();
 }
 
+void DataSharingSDKDelegateDesktop::ShowErrorDialog(int status_code) {
+  // No-op for this class.
+}
+
 void DataSharingSDKDelegateDesktop::Shutdown() {
   // Since WebContents depends on BrowserContext, it needs to be destroyed
   // before the BrowserContext is destroyed.
@@ -168,6 +190,13 @@ void DataSharingSDKDelegateDesktop::OnReadGroups(
     *result.add_group_data() = ConvertGroup(group);
   }
   std::move(callback).Run(result);
+}
+
+void DataSharingSDKDelegateDesktop::OnLeaveGroup(
+    base::OnceCallback<void(const absl::Status&)> callback,
+    int status_code) {
+  std::move(callback).Run(
+      absl::Status(static_cast<absl::StatusCode>(status_code), "Leave Group"));
 }
 
 void DataSharingSDKDelegateDesktop::OnDeleteGroup(

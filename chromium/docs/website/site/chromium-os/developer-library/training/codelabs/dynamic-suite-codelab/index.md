@@ -8,7 +8,7 @@ title: Creating and deploying ChromiumOS dynamic test suites
 
 [TOC]
 
-[go/dynamic_suite_codelab](http://goto.google.com/dynamic_suite_codelab)
+[go/dynamic_suite_codelab](http://go/dynamic_suite_codelab)
 
 ## References and Further Reading
 
@@ -18,9 +18,9 @@ title: Creating and deploying ChromiumOS dynamic test suites
             test](/chromium-os/developer-library/training/codelabs/server-side-test)
 3.  [Codelab: Writing a client side test](/system/errors/NodeNotFound)
 4.  [Design Doc: Dynamic Test
-            Suites](/chromium-os/testing/dynamic-test-suites)
+            Suites](/chromium-os/developer-library/reference/design-docs/dynamic-test-suites)
 5.  [Documentation: Working with Test
-            Suites](/chromium-os/testing/test-suites)
+            Suites](/chromium-os/developer-library/guides/testing/test-suites)
 6.  [Test Dependencies in Dynamic
             Suites](/chromium-os/testing/test-dependencies-in-dynamic-suites)
 
@@ -104,7 +104,7 @@ Google Docs has been known to convert consecutive whitespace characters into
 unicode characters, which will break your control file. Using CTRL-C + CTRL-V is
 safer than using middle-click pasting on Linux.**
 
-<pre><code># Copyright 2013 The ChromiumOS Authors.
+<pre><code># Copyright 2013 The ChromiumOS Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 AUTHOR = "ChromeOS Team"
@@ -153,7 +153,7 @@ to convert consecutive whitespace characters into unicode characters, which will
 break your control file. Using CTRL-C + CTRL-V is safer than using middle-click
 pasting on Linux.**
 
-<pre><code># Copyright 2013 The ChromiumOS Authors.
+<pre><code># Copyright 2013 The ChromiumOS Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 AUTHOR = "ChromeOS Team"
@@ -342,7 +342,7 @@ be run, which branches should trigger the suite to run, which machine pool the
 suite should be assigned to, and the number of DUTs that the suite should
 attempt to use. For more information on what pool to select, refer to [What pool
 should I
-select](/chromium-os/testing/test-suites#TOC-What-pool-should-I-select-).
+select](/chromium-os/developer-library/guides/testing/test-suites#TOC-What-pool-should-I-select-).
 
 If you have added a new suite to suite_scheduler.ini, one for which a suite
 control file did not exist before, you need to pay attention to the branch_specs

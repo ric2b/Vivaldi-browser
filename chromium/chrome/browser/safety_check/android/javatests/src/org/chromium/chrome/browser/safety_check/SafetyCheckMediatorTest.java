@@ -13,7 +13,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
@@ -40,6 +39,7 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.robolectric.ParameterizedRobolectricTestRunner;
@@ -47,15 +47,12 @@ import org.robolectric.ParameterizedRobolectricTestRunner.Parameters;
 import org.robolectric.annotation.Config;
 
 import org.chromium.base.Callback;
-import org.chromium.base.CollectionUtil;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.shared_preferences.SharedPreferencesManager;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.test.BaseRobolectricTestRule;
-import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.Features.DisableFeatures;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.loading_modal.LoadingModalDialogCoordinator;
 import org.chromium.chrome.browser.password_check.PasswordCheck;
@@ -89,13 +86,15 @@ import org.chromium.chrome.browser.safety_check.SafetyCheckProperties.SafeBrowsi
 import org.chromium.chrome.browser.safety_check.SafetyCheckProperties.UpdatesState;
 import org.chromium.chrome.browser.settings.SettingsNavigationFactory;
 import org.chromium.chrome.browser.sync.SyncServiceFactory;
-import org.chromium.chrome.browser.ui.signin.BottomSheetSigninAndHistorySyncCoordinator;
+import org.chromium.chrome.browser.ui.signin.BottomSheetSigninAndHistorySyncConfig;
+import org.chromium.chrome.browser.ui.signin.BottomSheetSigninAndHistorySyncConfig.NoAccountSigninMode;
+import org.chromium.chrome.browser.ui.signin.BottomSheetSigninAndHistorySyncConfig.WithAccountSigninMode;
 import org.chromium.chrome.browser.ui.signin.SigninAndHistorySyncActivityLauncher;
-import org.chromium.chrome.browser.ui.signin.SyncConsentActivityLauncher;
 import org.chromium.chrome.browser.ui.signin.history_sync.HistorySyncConfig;
 import org.chromium.components.browser_ui.settings.SettingsNavigation;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.signin.base.CoreAccountInfo;
+import org.chromium.components.signin.base.GaiaId;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.components.sync.SyncService;
 import org.chromium.components.sync.UserSelectableType;
@@ -110,6 +109,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Optional;
+import java.util.Set;
 
 /** Unit tests for {@link SafetyCheckMediator}. */
 @RunWith(ParameterizedRobolectricTestRunner.class)
@@ -131,8 +131,6 @@ public class SafetyCheckMediatorTest {
     @Rule(order = -2)
     public BaseRobolectricTestRule mBaseRule = new BaseRobolectricTestRule();
 
-    @Rule public JniMocker mJniMocker = new JniMocker();
-
     private PropertyModel mSafetyCheckModel;
     private PropertyModel mPasswordCheckModel;
 
@@ -140,7 +138,6 @@ public class SafetyCheckMediatorTest {
     @Mock private Profile mProfile;
     @Mock private SafetyCheckUpdatesDelegate mUpdatesDelegate;
     @Mock private SigninAndHistorySyncActivityLauncher mSigninLauncher;
-    @Mock private SyncConsentActivityLauncher mSyncLauncher;
     @Mock private SettingsNavigation mSettingsNavigation;
     @Mock private SyncService mSyncService;
     @Mock private Handler mHandler;
@@ -221,7 +218,9 @@ public class SafetyCheckMediatorTest {
         when(mSyncService.isEngineInitialized()).thenReturn(true);
         when(mSyncService.hasSyncConsent()).thenReturn(true);
         when(mSyncService.getAccountInfo())
-                .thenReturn(CoreAccountInfo.createFromEmailAndGaiaId(TEST_EMAIL_ADDRESS, "0"));
+                .thenReturn(
+                        CoreAccountInfo.createFromEmailAndGaiaId(
+                                TEST_EMAIL_ADDRESS, new GaiaId("0")));
         when(mPasswordManagerHelperNativeMock.hasChosenToSyncPasswords(mSyncService))
                 .thenReturn(true);
 
@@ -229,8 +228,7 @@ public class SafetyCheckMediatorTest {
         // account storage.
         // This will no longer be true once the local and account store split happens.
         if (mUseGmsApi) {
-            when(mSyncService.getSelectedTypes())
-                    .thenReturn(CollectionUtil.newHashSet(UserSelectableType.PASSWORDS));
+            when(mSyncService.getSelectedTypes()).thenReturn(Set.of(UserSelectableType.PASSWORDS));
         } else {
             when(mSyncService.getSelectedTypes()).thenReturn(new HashSet<>());
         }
@@ -246,7 +244,6 @@ public class SafetyCheckMediatorTest {
                 mUpdatesDelegate,
                 new SafetyCheckBridge(mProfile),
                 mSigninLauncher,
-                mSyncLauncher,
                 mSyncService,
                 mPrefService,
                 mPasswordStoreBridge,
@@ -269,9 +266,8 @@ public class SafetyCheckMediatorTest {
     @Before
     public void setUp() throws PasswordCheckBackendException, CredentialManagerBackendException {
         MockitoAnnotations.initMocks(this);
-        mJniMocker.mock(
-                PasswordManagerUtilBridgeJni.TEST_HOOKS, mPasswordManagerUtilBridgeNativeMock);
-        mJniMocker.mock(PasswordManagerHelperJni.TEST_HOOKS, mPasswordManagerHelperNativeMock);
+        PasswordManagerUtilBridgeJni.setInstanceForTesting(mPasswordManagerUtilBridgeNativeMock);
+        PasswordManagerHelperJni.setInstanceForTesting(mPasswordManagerHelperNativeMock);
         when(mProfile.getOriginalProfile()).thenReturn(mProfile);
         configureMockSyncService();
 
@@ -288,9 +284,9 @@ public class SafetyCheckMediatorTest {
         when(mPasswordManagerUtilBridgeNativeMock.shouldUseUpmWiring(mSyncService, mPrefService))
                 .thenReturn(mUseGmsApi);
 
-        mJniMocker.mock(SafetyCheckBridgeJni.TEST_HOOKS, mSafetyCheckBridge);
+        SafetyCheckBridgeJni.setInstanceForTesting(mSafetyCheckBridge);
 
-        mJniMocker.mock(UserPrefsJni.TEST_HOOKS, mUserPrefsJniMock);
+        UserPrefsJni.setInstanceForTesting(mUserPrefsJniMock);
         when(mUserPrefsJniMock.get(mProfile)).thenReturn(mPrefService);
         when(mPrefService.getBoolean(Pref.UNENROLLED_FROM_GOOGLE_MOBILE_SERVICES_DUE_TO_ERRORS))
                 .thenReturn(false);
@@ -778,7 +774,6 @@ public class SafetyCheckMediatorTest {
     }
 
     @Test
-    @Features.EnableFeatures(ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS)
     public void testClickListenerStartsSignInFlowWhenUserSignedOut() {
         mMediator.setInitialState();
         setUpPasswordCheckToReturnError(
@@ -789,20 +784,20 @@ public class SafetyCheckMediatorTest {
 
         click(getPasswordsClickListener(mPasswordCheckModel));
 
+        ArgumentCaptor<BottomSheetSigninAndHistorySyncConfig> configCaptor =
+                ArgumentCaptor.forClass(BottomSheetSigninAndHistorySyncConfig.class);
         verify(mSigninLauncher)
                 .createBottomSheetSigninIntentOrShowError(
                         any(),
                         eq(mProfile),
-                        any(),
-                        eq(
-                                BottomSheetSigninAndHistorySyncCoordinator.NoAccountSigninMode
-                                        .ADD_ACCOUNT),
-                        eq(
-                                BottomSheetSigninAndHistorySyncCoordinator.WithAccountSigninMode
-                                        .DEFAULT_ACCOUNT_BOTTOM_SHEET),
-                        eq(HistorySyncConfig.OptInMode.NONE),
-                        eq(SigninAccessPoint.SAFETY_CHECK),
-                        isNull());
+                        configCaptor.capture(),
+                        eq(SigninAccessPoint.SAFETY_CHECK));
+        BottomSheetSigninAndHistorySyncConfig config = configCaptor.getValue();
+        assertEquals(NoAccountSigninMode.BOTTOM_SHEET, config.noAccountSigninMode);
+        assertEquals(
+                WithAccountSigninMode.DEFAULT_ACCOUNT_BOTTOM_SHEET, config.withAccountSigninMode);
+        assertEquals(HistorySyncConfig.OptInMode.NONE, config.historyOptInMode);
+        assertNull(config.selectedCoreAccountId);
     }
 
     @Test
@@ -816,7 +811,7 @@ public class SafetyCheckMediatorTest {
 
         setUpPasswordCheckToReturnResult(
                 PasswordStorageType.ACCOUNT_STORAGE,
-                new PasswordCheckResult(/* passwordsTotalCount= */ 20, /* breachedCount= */ 18));
+                new PasswordCheckResult(/* totalPasswordsCount= */ 20, /* breachedCount= */ 18));
         assertEquals(PasswordsState.COMPROMISED_EXIST, mPasswordCheckModel.get(PASSWORDS_STATE));
 
         click(getPasswordsClickListener(mPasswordCheckModel));
@@ -898,7 +893,7 @@ public class SafetyCheckMediatorTest {
 
         setUpPasswordCheckToReturnResult(
                 PasswordStorageType.LOCAL_STORAGE,
-                new PasswordCheckResult(/* passwordsTotalCount= */ 20, /* breachedCount= */ 18));
+                new PasswordCheckResult(/* totalPasswordsCount= */ 20, /* breachedCount= */ 18));
         assertEquals(
                 PasswordsState.COMPROMISED_EXIST, passwordCheckLocalModel.get(PASSWORDS_STATE));
 
@@ -926,14 +921,14 @@ public class SafetyCheckMediatorTest {
 
         setUpPasswordCheckToReturnResult(
                 PasswordStorageType.ACCOUNT_STORAGE,
-                new PasswordCheckResult(/* passwordsTotalCount= */ 20, /* breachedCount= */ 18));
+                new PasswordCheckResult(/* totalPasswordsCount= */ 20, /* breachedCount= */ 18));
         assertEquals(
                 PasswordsState.COMPROMISED_EXIST, passwordCheckAccountModel.get(PASSWORDS_STATE));
         assertEquals(PasswordsState.CHECKING, passwordCheckLocalModel.get(PASSWORDS_STATE));
 
         setUpPasswordCheckToReturnResult(
                 PasswordStorageType.LOCAL_STORAGE,
-                new PasswordCheckResult(/* passwordsTotalCount= */ 20, /* breachedCount= */ 0));
+                new PasswordCheckResult(/* totalPasswordsCount= */ 20, /* breachedCount= */ 0));
         assertEquals(PasswordsState.UNCHECKED, passwordCheckLocalModel.get(PASSWORDS_STATE));
 
         mMediator.performSafetyCheck();
@@ -942,14 +937,14 @@ public class SafetyCheckMediatorTest {
 
         setUpPasswordCheckToReturnResult(
                 PasswordStorageType.LOCAL_STORAGE,
-                new PasswordCheckResult(/* passwordsTotalCount= */ 20, /* breachedCount= */ 18));
+                new PasswordCheckResult(/* totalPasswordsCount= */ 20, /* breachedCount= */ 18));
         assertEquals(
                 PasswordsState.COMPROMISED_EXIST, passwordCheckLocalModel.get(PASSWORDS_STATE));
         assertEquals(PasswordsState.CHECKING, passwordCheckAccountModel.get(PASSWORDS_STATE));
 
         setUpPasswordCheckToReturnResult(
                 PasswordStorageType.ACCOUNT_STORAGE,
-                new PasswordCheckResult(/* passwordsTotalCount= */ 20, /* breachedCount= */ 18));
+                new PasswordCheckResult(/* totalPasswordsCount= */ 20, /* breachedCount= */ 18));
         assertEquals(
                 PasswordsState.COMPROMISED_EXIST, passwordCheckAccountModel.get(PASSWORDS_STATE));
     }

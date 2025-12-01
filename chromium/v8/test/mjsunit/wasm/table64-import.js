@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Flags: --experimental-wasm-memory64
 
 d8.file.execute('test/mjsunit/wasm/wasm-module-builder.js');
 
@@ -14,7 +13,8 @@ d8.file.execute('test/mjsunit/wasm/wasm-module-builder.js');
 
   let builder2 = new WasmModuleBuilder();
   builder2.addImportedTable(
-      'imports', 'table', 10, 10, kWasmAnyFunc, /* table64 */ true);
+      'imports', 'table', 10, 10, kWasmAnyFunc, /*shared*/ false,
+      /*table64*/ true);
   builder2.instantiate({imports: {table: table64}});
 })();
 
@@ -26,7 +26,8 @@ d8.file.execute('test/mjsunit/wasm/wasm-module-builder.js');
 
   let builder2 = new WasmModuleBuilder();
   builder2.addImportedTable(
-      'imports', 'table', 10, 10, kWasmAnyFunc, /* table64 */ false);
+      'imports', 'table', 10, 10, kWasmAnyFunc, /*shared*/ false,
+      /*table64*/ false);
   builder2.instantiate({imports: {table: table32}});
 })();
 
@@ -38,7 +39,8 @@ d8.file.execute('test/mjsunit/wasm/wasm-module-builder.js');
 
   let builder2 = new WasmModuleBuilder();
   builder2.addImportedTable(
-      'imports', 'table', 10, 10, kWasmAnyFunc, /* table64 */ false);
+      'imports', 'table', 10, 10, kWasmAnyFunc, /*shared*/ false,
+      /*table64*/ false);
   assertThrows(
       () => builder2.instantiate({imports: {table: table64}}),
       WebAssembly.LinkError,
@@ -53,7 +55,8 @@ d8.file.execute('test/mjsunit/wasm/wasm-module-builder.js');
 
   let builder2 = new WasmModuleBuilder();
   builder2.addImportedTable(
-      'imports', 'table', 10, 10, kWasmAnyFunc, /* table64 */ true);
+      'imports', 'table', 10, 10, kWasmAnyFunc, /*shared*/ false,
+      /*table64*/ true);
   assertThrows(
       () => builder2.instantiate({imports: {table: table32}}),
       WebAssembly.LinkError,

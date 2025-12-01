@@ -516,7 +516,8 @@ void InstructionSelectorT<TurboshaftAdapter>::VisitLoadTransform(node_t node) {
 template <>
 void InstructionSelectorT<TurbofanAdapter>::VisitLoadTransform(Node* node) {
   LoadTransformParameters params = LoadTransformParametersOf(node->op());
-  bool is_protected = (params.kind == MemoryAccessKind::kProtected);
+  bool is_protected =
+      (params.kind == MemoryAccessKind::kProtectedByTrapHandler);
   InstructionCode opcode = kArchNop;
   switch (params.transformation) {
     case LoadTransformation::kS128Load8Splat:
@@ -2233,6 +2234,18 @@ void InstructionSelectorT<Adapter>::VisitF64x2Pmin(node_t node) {
 template <typename Adapter>
 void InstructionSelectorT<Adapter>::VisitF64x2Pmax(node_t node) {
     VisitUniqueRRR(this, kRiscvF64x2Pmax, node);
+}
+
+template <typename Adapter>
+void InstructionSelectorT<Adapter>::VisitTruncateFloat64ToFloat16RawBits(
+    node_t node) {
+  UNIMPLEMENTED();
+}
+
+template <typename Adapter>
+void InstructionSelectorT<Adapter>::VisitChangeFloat16RawBitsToFloat64(
+    node_t node) {
+  UNIMPLEMENTED();
 }
 
 // static

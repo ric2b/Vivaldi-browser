@@ -2,13 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
+#include "extensions/common/permissions/permission_set.h"
 
 #include <stddef.h>
 
+#include <array>
 #include <memory>
 #include <utility>
 
@@ -31,7 +29,6 @@
 #include "extensions/common/permissions/permission_message_provider.h"
 #include "extensions/common/permissions/permission_message_test_util.h"
 #include "extensions/common/permissions/permission_message_util.h"
-#include "extensions/common/permissions/permission_set.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "extensions/common/permissions/permissions_info.h"
 #include "extensions/common/permissions/socket_permission.h"
@@ -661,10 +658,11 @@ TEST(PermissionsTest, CreateDifference) {
 }
 
 TEST(PermissionsTest, IsPrivilegeIncrease) {
-  const struct {
+  struct Tests {
     const char* base_name;
     bool expect_increase;
-  } kTests[] = {
+  };
+  const auto kTests = std::to_array<Tests>({
       {"allhosts1", false},     // all -> all
       {"allhosts2", false},     // all -> one
       {"allhosts3", true},      // one -> all
@@ -701,7 +699,7 @@ TEST(PermissionsTest, IsPrivilegeIncrease) {
       {"sockets1", true},           // none -> tcp:*:*
       {"sockets2", false},          // tcp:*:* -> tcp:*:*
       {"sockets3", true},           // tcp:a.com:80 -> tcp:*:*
-  };
+  });
 
   for (size_t i = 0; i < std::size(kTests); ++i) {
     scoped_refptr<Extension> old_extension(
@@ -897,10 +895,6 @@ TEST(PermissionsTest, PermissionMessages) {
   skip.insert(APIPermissionID::kSocket);
   skip.insert(APIPermissionID::kUsb);
   skip.insert(APIPermissionID::kVirtualKeyboard);
-
-  // The lock screen apps are set by user through settings, no need to warn at
-  // installation time.
-  skip.insert(APIPermissionID::kLockScreen);
 
   // We already have a generic message for declaring externally_connectable.
   skip.insert(APIPermissionID::kDeprecated_ExternallyConnectableAllUrls);
@@ -1601,7 +1595,7 @@ TEST(PermissionsTest, GetDistinctHosts_FirstInListIs4thBestRcd) {
 }
 
 TEST(PermissionsTest, IsHostPrivilegeIncrease) {
-  const struct {
+  struct TestCases {
     struct host_spec {
       int schemes;
       std::string pattern;
@@ -1611,7 +1605,8 @@ TEST(PermissionsTest, IsHostPrivilegeIncrease) {
     Manifest::Type type;
     bool is_increase;
     bool reverse_is_increase;
-  } test_cases[] = {
+  };
+  const auto test_cases = std::to_array<TestCases>({
       // Order doesn't matter.
       {{{URLPattern::SCHEME_HTTP, "http://www.google.com.hk/path"},
         {URLPattern::SCHEME_HTTP, "http://www.google.com/path"}},
@@ -1698,7 +1693,7 @@ TEST(PermissionsTest, IsHostPrivilegeIncrease) {
        Manifest::TYPE_EXTENSION,
        true,
        false},
-  };
+  });
   const PermissionMessageProvider* provider = PermissionMessageProvider::Get();
   for (size_t i = 0; i < std::size(test_cases); ++i) {
     URLPatternSet explicit_hosts1;

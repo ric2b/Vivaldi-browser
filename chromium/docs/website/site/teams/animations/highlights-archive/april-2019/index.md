@@ -38,7 +38,7 @@ title: April 2019
 
 <td><td>Scroll Snap</td></td>
 
-<td><td>With sunyunjia@ sadly leaving the team, girard@ took over finishing up the work on scroll snap. Initial ramp-up went well; discovered <a href="http://crbug.com/944184">an issue</a> with scrollbar arrow buttons and scroll snap, file a <a href="https://github.com/w3c/csswg-drafts/issues/3752">spec bug</a> and <a href="https://github.com/w3c/csswg-drafts/commit/09e040f05e12bb4c303d5839e0ceee3f6bf58c67">patched the spec</a>, and Gene is now working on <a href="https://chromium-review.googlesource.com/c/chromium/src/+/1534988">a fix</a> for the Chrome implementation.</td></td>
+<td><td>With sunyunjia@ sadly leaving the team, girard@ took over finishing up the work on scroll snap. Initial ramp-up went well; discovered <a href="https://crbug.com/944184">an issue</a> with scrollbar arrow buttons and scroll snap, file a <a href="https://github.com/w3c/csswg-drafts/issues/3752">spec bug</a> and <a href="https://github.com/w3c/csswg-drafts/commit/09e040f05e12bb4c303d5839e0ceee3f6bf58c67">patched the spec</a>, and Gene is now working on <a href="https://chromium-review.googlesource.com/c/chromium/src/+/1534988">a fix</a> for the Chrome implementation.</td></td>
 
 <td><td><img alt="image" src="https://lh6.googleusercontent.com/qTkpiW1DKDbFNM12EZdAmQ7OgdOCE8ZQPZtvqIb6Za4WC-mWlNDCmaQ3zc5Bdd1R2uEaD-dvClmRRVblyw5ChI_lRLJ3uLR6GhDp-wAYSc48ziHdOSY8F5MqRzFAF2njgYJycyle" height=172 width=172></td></td>
 

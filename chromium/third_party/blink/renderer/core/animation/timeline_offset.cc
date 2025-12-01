@@ -156,7 +156,7 @@ std::optional<TimelineOffset> TimelineOffset::Create(
         DynamicTo<CSSPrimitiveValue>(offset->ToCSSValue());
 
     if (!css_value || (!css_value->IsPx() && !css_value->IsPercentage() &&
-                       !css_value->IsCalculatedPercentageWithLength())) {
+                       css_value->IsResolvableBeforeLayout())) {
       exception_state.ThrowTypeError(
           "CSSNumericValue must be a length or percentage for animation "
           "range.");
@@ -168,7 +168,7 @@ std::optional<TimelineOffset> TimelineOffset::Create(
     } else if (css_value->IsPercentage()) {
       parsed_offset = Length::Percent(css_value->GetDoubleValue());
     } else {
-      DCHECK(css_value->IsCalculatedPercentageWithLength());
+      DCHECK(!css_value->IsResolvableBeforeLayout());
       parsed_offset = TimelineOffset::ResolveLength(element, css_value);
       style_dependent_offset_str = css_value->CssText();
     }
@@ -199,12 +199,12 @@ bool TimelineOffset::IsStyleDependent(const CSSValue* value) {
 
 /* static */
 Length TimelineOffset::ResolveLength(Element* element, const CSSValue* value) {
-  if (auto* primitive_value = DynamicTo<CSSPrimitiveValue>(value)) {
-    if (primitive_value->IsPercentage()) {
-      return Length::Percent(primitive_value->GetDoubleValue());
+  if (auto* numeric_literal = DynamicTo<CSSNumericLiteralValue>(value)) {
+    if (numeric_literal->IsPercentage()) {
+      return Length::Percent(numeric_literal->ClampedDoubleValue());
     }
-    if (primitive_value->IsPx()) {
-      return Length::Fixed(primitive_value->GetDoubleValue());
+    if (numeric_literal->IsPx()) {
+      return Length::Fixed(numeric_literal->ClampedDoubleValue());
     }
   }
 
@@ -223,7 +223,7 @@ Length TimelineOffset::ResolveLength(Element* element, const CSSValue* value) {
       CSSToLengthConversionData::ViewportSize(document.GetLayoutView()),
       CSSToLengthConversionData::ContainerSizes(element),
       CSSToLengthConversionData::AnchorData(),
-      element->GetComputedStyle()->EffectiveZoom(), ignored_flags);
+      element->GetComputedStyle()->EffectiveZoom(), ignored_flags, element);
 
   return DynamicTo<CSSPrimitiveValue>(value)->ConvertToLength(
       length_conversion_data);

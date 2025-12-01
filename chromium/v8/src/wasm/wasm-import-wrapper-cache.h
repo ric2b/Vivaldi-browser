@@ -20,8 +20,6 @@ namespace v8::internal::wasm {
 class WasmCode;
 class WasmEngine;
 
-using FunctionSig = Signature<ValueType>;
-
 // Implements a cache for import wrappers.
 class WasmImportWrapperCache {
  public:
@@ -61,11 +59,11 @@ class WasmImportWrapperCache {
     V8_EXPORT_PRIVATE WasmCode* operator[](const CacheKey& key);
 
     WasmCode* AddWrapper(const CacheKey& key, WasmCompilationResult result,
-                         WasmCode::Kind kind);
+                         WasmCode::Kind kind, uint64_t signature_hash);
 
    private:
     WasmImportWrapperCache* const cache_;
-    base::MutexGuard guard_;
+    base::SpinningMutexGuard guard_;
   };
 
   WasmImportWrapperCache() = default;
@@ -89,13 +87,7 @@ class WasmImportWrapperCache {
   size_t EstimateCurrentMemoryConsumption() const;
 
   // Returns nullptr if {call_target} doesn't belong to a known wrapper.
-  WasmCode* FindWrapper(WasmCodePointer call_target) {
-    if (call_target == kInvalidWasmCodePointer) return nullptr;
-    base::MutexGuard lock(&mutex_);
-    auto iter = codes_.find(WasmCodePointerAddress(call_target));
-    if (iter == codes_.end()) return nullptr;
-    return iter->second;
-  }
+  V8_EXPORT_PRIVATE WasmCode* FindWrapper(WasmCodePointer call_target);
 
   WasmCode* CompileWasmImportCallWrapper(Isolate* isolate, ImportCallKind kind,
                                          const CanonicalSig* sig,
@@ -105,7 +97,7 @@ class WasmImportWrapperCache {
 
  private:
   std::unique_ptr<WasmCodeAllocator> code_allocator_;
-  mutable base::Mutex mutex_;
+  mutable base::SpinningMutex mutex_;
   std::unordered_map<CacheKey, WasmCode*, CacheKeyHash> entry_map_;
   // Lookup support. The map key is the instruction start address.
   std::map<Address, WasmCode*> codes_;

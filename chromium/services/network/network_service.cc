@@ -12,6 +12,7 @@
 
 #include "base/check.h"
 #include "base/check_op.h"
+#include "base/command_line.h"
 #include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/environment.h"
@@ -36,7 +37,6 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromecast_buildflags.h"
-#include "build/chromeos_buildflags.h"
 #include "components/ip_protection/common/masked_domain_list_manager.h"
 #include "components/network_session_configurator/common/network_features.h"
 #include "components/os_crypt/sync/os_crypt.h"
@@ -85,7 +85,6 @@
 #include "services/network/public/cpp/crash_keys.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/initiator_lock_compatibility.h"
-#include "services/network/public/cpp/load_info_util.h"
 #include "services/network/public/cpp/network_switches.h"
 #include "services/network/public/cpp/parsed_headers.h"
 #include "services/network/public/mojom/key_pinning.mojom.h"
@@ -99,9 +98,7 @@
 #include "third_party/boringssl/src/include/openssl/cpu.h"
 #endif
 
-#if (BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CASTOS)) || \
-    BUILDFLAG(IS_CHROMEOS_LACROS)
-
+#if BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CASTOS)
 #include "components/os_crypt/sync/key_storage_config_linux.h"
 #endif
 
@@ -225,8 +222,17 @@ std::unique_ptr<net::HttpAuthMechanism> CreateAuthSystem(
 // message handling inside the Browser process is sufficient).
 void HandleBadMessage(const std::string& error) {
   LOG(WARNING) << "Mojo error in NetworkService: " << error;
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kIgnoreBadMessageForTesting)) {
+    return;
+  }
   mojo::debug::ScopedMessageErrorCrashKey crash_key_value(error);
-  base::debug::DumpWithoutCrashing();
+  // Don't expect bad message in normal testing and usage, but it could happen
+  // if a compromised renderer process sends a bad message. Therefore, use
+  // DUMP_WILL_BE_NOTREACHED to create dump in official build and crash
+  // otherwise so that it is more visible when unexpected bad message is
+  // encountered in tests.
+  DUMP_WILL_BE_NOTREACHED();
   network::debug::ClearDeserializationCrashKeyString();
 }
 
@@ -479,9 +485,7 @@ void NetworkService::Initialize(mojom::NetworkServiceParamsPtr params,
       std::make_unique<SCTAuditingCache>(kMaxSCTAuditingCacheEntries);
 #endif
 
-  if (base::FeatureList::IsEnabled(features::kGetCookiesStringUma)) {
-    metrics_updater_ = std::make_unique<RestrictedCookieManagerMetrics>();
-  }
+  metrics_updater_ = std::make_unique<RestrictedCookieManagerMetrics>();
 }
 
 NetworkService::~NetworkService() {
@@ -1101,6 +1105,10 @@ NetworkService::GetDefaultURLLoaderNetworkServiceObserver() {
     return default_url_loader_network_service_observer_.get();
   }
   return nullptr;
+}
+
+void NetworkService::ResetMetricsUpdaterForTesting() {
+  metrics_updater_.reset();
 }
 
 // static

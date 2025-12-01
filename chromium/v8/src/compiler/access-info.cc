@@ -172,6 +172,15 @@ PropertyAccessInfo PropertyAccessInfo::StringWrapperLength(
 }
 
 // static
+PropertyAccessInfo PropertyAccessInfo::TypedArrayLength(Zone* zone,
+                                                        MapRef receiver_map) {
+  PropertyAccessInfo result(zone, kTypedArrayLength, {},
+                            {{receiver_map}, zone});
+  result.set_elements_kind(receiver_map.elements_kind());
+  return result;
+}
+
+// static
 PropertyAccessInfo PropertyAccessInfo::DictionaryProtoDataConstant(
     Zone* zone, MapRef receiver_map, JSObjectRef holder,
     InternalIndex dictionary_index, NameRef name) {
@@ -358,6 +367,10 @@ bool PropertyAccessInfo::Merge(PropertyAccessInfo const* that,
       AppendVector(&lookup_start_object_maps_, that->lookup_start_object_maps_);
       return true;
     }
+    case kTypedArrayLength:
+      DCHECK_EQ(lookup_start_object_maps_.size(), 1);
+      DCHECK_EQ(that->lookup_start_object_maps_.size(), 1);
+      return lookup_start_object_maps_[0] == that->lookup_start_object_maps_[0];
     case kModuleExport:
       return false;
   }
@@ -484,8 +497,9 @@ PropertyAccessInfo AccessInfoFactory::ComputeDataFieldAccessInfo(
       OptionalMapRef maybe_field_map =
           TryMakeRef(broker(), FieldType::AsClass(*descriptors_field_type));
       if (!maybe_field_map.has_value()) return Invalid();
-      field_type = Type::For(maybe_field_map.value(), broker());
       field_map = maybe_field_map;
+      // field_type can only be inferred from field_map if it is stable and we
+      // add a stability dependency. This happens on use in the access builder.
     }
   } else {
     CHECK(details_representation.IsTagged());
@@ -563,7 +577,7 @@ PropertyAccessInfo AccessorAccessInfoHelper(
     return PropertyAccessInfo::FastAccessorConstant(zone, receiver_map, holder,
                                                     {}, {});
   }
-  Handle<Object> maybe_accessors = get_accessors();
+  DirectHandle<Object> maybe_accessors = get_accessors();
   if (!IsAccessorPair(*maybe_accessors)) {
     return PropertyAccessInfo::Invalid(zone);
   }
@@ -1081,6 +1095,13 @@ PropertyAccessInfo AccessInfoFactory::LookupSpecialFieldAccessor(
       return PropertyAccessInfo::StringWrapperLength(zone(), map);
     }
   }
+  if (v8_flags.typed_array_length_loading && IsJSTypedArrayMap(*map.object()) &&
+      !IsRabGsabTypedArrayElementsKind(map.elements_kind()) &&
+      Name::Equals(isolate(), name.object(),
+                   isolate()->factory()->length_string()) &&
+      broker_->dependencies()->DependOnTypedArrayLengthProtector()) {
+    return PropertyAccessInfo::TypedArrayLength(zone(), map);
+  }
   // Check for special JSObject field accessors.
   FieldIndex field_index;
   if (Accessors::IsJSObjectFieldAccessor(isolate(), map.object(), name.object(),
@@ -1186,8 +1207,9 @@ PropertyAccessInfo AccessInfoFactory::LookupTransition(
       OptionalMapRef maybe_field_map =
           TryMakeRef(broker(), FieldType::AsClass(*descriptors_field_type));
       if (!maybe_field_map.has_value()) return Invalid();
-      field_type = Type::For(maybe_field_map.value(), broker());
       field_map = maybe_field_map;
+      // field_type can only be inferred from field_map if it is stable and we
+      // add a stability dependency. This happens on use in the access builder.
     }
   }
 

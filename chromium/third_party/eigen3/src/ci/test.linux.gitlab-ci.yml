@@ -415,6 +415,38 @@ test:linux:ppc64le:clang-12:default:unsupported:
   variables:
     EIGEN_CI_TEST_LABEL: Unsupported
 
+##### loongarch64 ###################################################################
+.test:linux:loongarch64:
+  extends: .test:linux
+  image: ubuntu:24.04
+  variables:
+    EIGEN_CI_TARGET_ARCH: loongarch64
+    EIGEN_CI_CROSS_TARGET_TRIPLE: loongarch64-linux-gnu
+    # Install QEMU and set up the execution environment in the image
+    EIGEN_CI_CROSS_INSTALL: g++-14-loongarch64-linux-gnu qemu-user-static
+    EIGEN_CI_BEFORE_SCRIPT: "ln -sf /usr/loongarch64-linux-gnu/lib64/ld-linux-loongarch-lp64d.so.1  /lib64/ld-linux-loongarch-lp64d.so.1 && \
+                             export LD_LIBRARY_PATH=/usr/loongarch64-linux-gnu/lib:$LD_LIBRARY_PATH"
+  tags:
+    - eigen-runner
+    - linux
+    - x86-64
+
+# GCC-14 (Ubuntu 24)
+.test:linux:loongarch64:gcc-14:default:
+  extends: .test:linux:loongarch64
+  image: ubuntu:24.04
+  needs: [ build:linux:cross:loongarch64:gcc-14:default ]
+
+test:linux:loongarch64:gcc-14:default:official:
+  extends: .test:linux:loongarch64:gcc-14:default
+  variables:
+    EIGEN_CI_TEST_LABEL: Official
+
+test:linux:loongarch64:gcc-14:default:unsupported:
+  extends: .test:linux:loongarch64:gcc-14:default
+  variables:
+    EIGEN_CI_TEST_LABEL: Unsupported
+
 ##### MR Smoke Tests ###########################################################
 
 test:linux:x86-64:gcc-10:default:smoketest:

@@ -137,6 +137,7 @@ export class Layers3DView extends Common.ObjectWrapper.eventMixin<EventTypes, ty
 
   constructor(layerViewHost: LayerViewHost) {
     super(true);
+    this.registerRequiredCSS(layers3DViewStyles);
     this.element.setAttribute('jslog', `${VisualLogging.pane('layers-3d-view')}`);
 
     this.contentElement.classList.add('layers-3d-view');
@@ -150,7 +151,7 @@ export class Layers3DView extends Common.ObjectWrapper.eventMixin<EventTypes, ty
     this.transformController.addEventListener(TransformControllerEvents.TRANSFORM_CHANGED, this.update, this);
 
     this.initToolbar();
-    this.canvasElement = this.contentElement.createChild('canvas') as HTMLCanvasElement;
+    this.canvasElement = this.contentElement.createChild('canvas');
     this.canvasElement.tabIndex = 0;
     this.canvasElement.addEventListener('dblclick', this.onDoubleClick.bind(this), false);
     this.canvasElement.addEventListener('mousedown', this.onMouseDown.bind(this), false);
@@ -211,7 +212,6 @@ export class Layers3DView extends Common.ObjectWrapper.eventMixin<EventTypes, ty
 
   override wasShown(): void {
     this.textureManager.resume();
-    this.registerCSSFiles([layers3DViewStyles]);
     if (!this.needsUpdate) {
       return;
     }
@@ -738,7 +738,7 @@ export class Layers3DView extends Common.ObjectWrapper.eventMixin<EventTypes, ty
     }
   }
 
-  private update(): void {
+  update(): void {
     if (!this.isShowing()) {
       this.needsUpdate = true;
       return;
@@ -820,8 +820,9 @@ export class Layers3DView extends Common.ObjectWrapper.eventMixin<EventTypes, ty
     return closestObject;
   }
 
-  private createVisibilitySetting(caption: string, name: string, value: boolean, toolbar: UI.Toolbar.Toolbar):
-      Common.Settings.Setting<boolean> {
+  private createVisibilitySetting(
+      caption: Common.UIString.LocalizedString, name: string, value: boolean,
+      toolbar: UI.Toolbar.Toolbar): Common.Settings.Setting<boolean> {
     const setting = Common.Settings.Settings.instance().createSetting(name, value);
     setting.setTitle(caption);
     setting.addChangeListener(this.update, this);
@@ -831,7 +832,7 @@ export class Layers3DView extends Common.ObjectWrapper.eventMixin<EventTypes, ty
 
   private initToolbar(): void {
     this.panelToolbar = this.transformController.toolbar();
-    this.contentElement.appendChild(this.panelToolbar.element);
+    this.contentElement.appendChild(this.panelToolbar);
     this.showPaintsSetting = this.createVisibilitySetting(
         i18nString(UIStrings.paints), 'frame-viewer-show-paints', false, this.panelToolbar);
     this.showSlowScrollRectsSetting = this.createVisibilitySetting(
@@ -920,10 +921,10 @@ export const enum Events {
   SCALE_CHANGED = 'ScaleChanged',
 }
 
-export type EventTypes = {
-  [Events.PAINT_PROFILER_REQUESTED]: Selection,
-  [Events.SCALE_CHANGED]: number,
-};
+export interface EventTypes {
+  [Events.PAINT_PROFILER_REQUESTED]: Selection;
+  [Events.SCALE_CHANGED]: number;
+}
 
 export const enum ChromeTexture {
   LEFT = 0,

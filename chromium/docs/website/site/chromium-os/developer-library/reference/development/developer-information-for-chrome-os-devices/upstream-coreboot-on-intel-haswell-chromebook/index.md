@@ -2,13 +2,13 @@
 breadcrumbs:
 - - /chromium-os
   - ChromiumOS
-- - /chromium-os/developer-information-for-chrome-os-devices
+- - /chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices
   - Developer Information for ChromeOS Devices
 page_name: upstream-coreboot-on-intel-haswell-chromebook
 title: Upstream coreboot on Intel Haswell Chromebook
 ---
 
-### Disable write protection by following the [ChromiumOS wiki](/chromium-os/developer-information-for-chrome-os-devices)
+### Disable write protection by following the [ChromiumOS wiki](/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices)
 
 1.  Open device
 2.  Remove write protect screw

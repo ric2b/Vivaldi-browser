@@ -26,10 +26,16 @@ class Config {
     this.speeds = {up: 20, down: 20, left: 20, right: 20};
     /** @type {number} */
     this.repeatDelayMs = undefined;
+    /** @type {number} */
+    this.minDurationMs = undefined;
     /** @type {boolean} */
     this.cursorControlEnabled = true;
     /** @type {boolean} */
     this.actionsEnabled = true;
+    /** @type {boolean} */
+    this.precisionEnabled = false;
+    /** @type {number|undefined} */
+    this.precisionSpeedFactor = undefined;
   }
 
   /**
@@ -43,18 +49,11 @@ class Config {
 
   /**
    * @param {!Map<FacialGesture, MacroName>} gestureToMacroName
-   * @return {!Config}
-   */
-  withGestureToMacroName(gestureToMacroName) {
-    this.gestureToMacroName = gestureToMacroName;
-    return this;
-  }
-
-  /**
    * @param {!Map<FacialGesture, number>} gestureToConfidence
    * @return {!Config}
    */
-  withGestureToConfidence(gestureToConfidence) {
+  withBindings(gestureToMacroName, gestureToConfidence) {
+    this.gestureToMacroName = gestureToMacroName;
     this.gestureToConfidence = gestureToConfidence;
     return this;
   }
@@ -87,6 +86,16 @@ class Config {
   }
 
   /**
+   * @param {number} speedFactor
+   * @return {!Config}
+   */
+  withPrecisionEnabled(speedFactor) {
+    this.precisionEnabled = true;
+    this.precisionSpeedFactor = speedFactor;
+    return this;
+  }
+
+  /**
    * @param {number} up
    * @param {number} down
    * @param {number} left
@@ -104,6 +113,15 @@ class Config {
    */
   withRepeatDelayMs(repeatDelayMs) {
     this.repeatDelayMs = repeatDelayMs;
+    return this;
+  }
+
+  /**
+   * @param {number} minDurationMs
+   * @return {!Config}
+   */
+  withMinDurationMs(minDurationMs) {
+    this.minDurationMs = minDurationMs;
     return this;
   }
 
@@ -227,6 +245,7 @@ FaceGazeTestBase = class extends E2ETestBase {
     assertNotNullNorUndefined(MediapipeFacialGesture);
     assertNotNullNorUndefined(MetricsUtils);
     assertNotNullNorUndefined(MouseController);
+    assertNotNullNorUndefined(PrefNames);
     assertNotNullNorUndefined(ScrollModeController);
     assertNotNullNorUndefined(WebCamFaceLandmarker);
     await new Promise(resolve => {
@@ -263,9 +282,19 @@ FaceGazeTestBase = class extends E2ETestBase {
     return accessibilityCommon.getFaceGazeForTest();
   }
 
+  /** @return {!MouseController} */
+  getMouseController() {
+    return this.getFaceGaze().mouseController_;
+  }
+
   /** @return {!ScrollModeController} */
   getScrollModeController() {
-    return this.getFaceGaze().mouseController_.scrollModeController_;
+    return this.getMouseController().scrollModeController_;
+  }
+
+  /** @return {!GestureHandler} */
+  getGestureHandler() {
+    return this.getFaceGaze().gestureHandler_;
   }
 
   async startFacegazeWithConfigAndForeheadLocation_(
@@ -300,8 +329,7 @@ FaceGazeTestBase = class extends E2ETestBase {
       for (const [gesture, macroName] of config.gestureToMacroName) {
         gestureToMacroName[gesture] = macroName;
       }
-      await this.setPref(
-          GestureHandler.GESTURE_TO_MACRO_PREF, gestureToMacroName);
+      await this.setPref(PrefNames.GESTURE_TO_MACRO, gestureToMacroName);
     }
 
     if (config.gestureToConfidence) {
@@ -309,26 +337,36 @@ FaceGazeTestBase = class extends E2ETestBase {
       for (const [gesture, confidence] of config.gestureToConfidence) {
         gestureToConfidence[gesture] = confidence * 100;
       }
-      await this.setPref(
-          GestureHandler.GESTURE_TO_CONFIDENCE_PREF, gestureToConfidence);
+      await this.setPref(PrefNames.GESTURE_TO_CONFIDENCE, gestureToConfidence);
     }
 
     if (config.bufferSize !== -1) {
       faceGaze.mouseController_.setBufferSizeForTesting(config.bufferSize);
     }
 
-    await this.setPref(MouseController.PREF_SPD_UP, config.speeds.up);
-    await this.setPref(MouseController.PREF_SPD_DOWN, config.speeds.down);
-    await this.setPref(MouseController.PREF_SPD_LEFT, config.speeds.left);
-    await this.setPref(MouseController.PREF_SPD_RIGHT, config.speeds.right);
+    await this.setPref(PrefNames.SPD_UP, config.speeds.up);
+    await this.setPref(PrefNames.SPD_DOWN, config.speeds.down);
+    await this.setPref(PrefNames.SPD_LEFT, config.speeds.left);
+    await this.setPref(PrefNames.SPD_RIGHT, config.speeds.right);
 
     if (config.repeatDelayMs !== undefined) {
-      faceGaze.gestureHandler_.repeatDelayMs_ = config.repeatDelayMs;
+      faceGaze.gestureHandler_.gestureTimer_.repeatDelayMs_ =
+          config.repeatDelayMs;
+    }
+
+    // If no min duration is set then by default, set the timer to recognize
+    // all gestures instantly without requiring a duration.
+    if (config.minDurationMs === undefined) {
+      faceGaze.gestureHandler_.gestureTimer_.setGestureDurationForTesting(
+          false);
+    } else {
+      faceGaze.gestureHandler_.gestureTimer_.minDurationMs_ =
+          config.minDurationMs;
     }
 
     // Increase the bubble controller timeout to avoid flaky behavior when
     // asserting the text content of the bubble.
-    BubbleController.CLEAR_BUBBLE_TIMEOUT_MS = 100 * 1000;
+    BubbleController.RESET_BUBBLE_TIMEOUT_MS = 100 * 1000;
 
     faceGaze.mouseController_.setLandmarkWeightsForTesting(
         config.useLandmarkWeights);
@@ -337,18 +375,23 @@ FaceGazeTestBase = class extends E2ETestBase {
         config.useVelocityThreshold);
 
     await this.setPref(
-        MouseController.PREF_CURSOR_USE_ACCELERATION,
-        config.useMouseAcceleration);
+        PrefNames.CURSOR_USE_ACCELERATION, config.useMouseAcceleration);
     assertEquals(
         faceGaze.mouseController_.useMouseAcceleration_,
         config.useMouseAcceleration);
 
     await this.setPref(
-        FaceGaze.PREF_CURSOR_CONTROL_ENABLED, config.cursorControlEnabled);
+        PrefNames.CURSOR_CONTROL_ENABLED, config.cursorControlEnabled);
     assertEquals(faceGaze.cursorControlEnabled_, config.cursorControlEnabled);
 
-    await this.setPref(FaceGaze.PREF_ACTIONS_ENABLED, config.actionsEnabled);
+    await this.setPref(PrefNames.ACTIONS_ENABLED, config.actionsEnabled);
     assertEquals(faceGaze.actionsEnabled_, config.actionsEnabled);
+
+    if (config.precisionEnabled) {
+      await this.setPref(PrefNames.PRECISION_CLICK, true);
+      await this.setPref(
+          PrefNames.PRECISION_CLICK_SPEED_FACTOR, config.precisionSpeedFactor);
+    }
 
     if (config.cursorControlEnabled) {
       // The MouseController gets constructed and started before this test
@@ -399,9 +442,20 @@ FaceGazeTestBase = class extends E2ETestBase {
     }
   }
 
+  /**
+   * Gets the timestamp at which the given gesture was last recognized.
+   * @param {MediapipeFacialGesture} gesture
+   * @return {Date}
+   */
+  getGestureLastRecognized(gesture) {
+    return this.getFaceGaze()
+        .gestureHandler_.gestureTimer_.gestureLastRecognized_.get(gesture);
+  }
+
   /** Clears the timestamps at which gestures were last recognized. */
   clearGestureLastRecognizedTime() {
-    this.getFaceGaze().gestureHandler_.gestureLastRecognized_.clear();
+    this.getFaceGaze()
+        .gestureHandler_.gestureTimer_.gestureLastRecognized_.clear();
   }
 
   /**
@@ -411,6 +465,14 @@ FaceGazeTestBase = class extends E2ETestBase {
   sendAutomationMouseEvent(mockEvent) {
     this.getFaceGaze().mouseController_.onMouseMovedHandler_.handleEvent_(
         mockEvent);
+  }
+
+  /**
+   * Sets the gesture repeat delay in ms to given value.
+   * @param {number} delayMs
+   */
+  setGestureRepeatDelay(delayMs) {
+    this.getFaceGaze().gestureHandler_.gestureTimer_.repeatDelayMs_ = delayMs;
   }
 
   /** @param {!{x: number, y: number}} expected */
@@ -493,5 +555,19 @@ FaceGazeTestBase = class extends E2ETestBase {
         }
       }, 300);
     });
+  }
+
+  /** @return {string|undefined} */
+  getBubbleText() {
+    return this.mockAccessibilityPrivate.getFaceGazeBubbleText();
+  }
+
+  /** @return {boolean} */
+  getBubbleIsWarning() {
+    return this.mockAccessibilityPrivate.getFaceGazeBubbleIsWarning();
+  }
+
+  getLatestCursorPosition() {
+    return this.mockAccessibilityPrivate.getLatestCursorPosition();
   }
 };

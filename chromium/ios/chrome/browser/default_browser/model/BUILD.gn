@@ -85,7 +85,16 @@ source_set("event_exporter") {
     "default_browser_promo_event_exporter.mm",
   ]
   deps = [
+    ":features",
     ":utils",
     "//components/feature_engagement/public",
   ]
+}
+
+source_set("features") {
+  sources = [
+    "features.h",
+    "features.mm",
+  ]
+  public_deps = [ "//base" ]
 }

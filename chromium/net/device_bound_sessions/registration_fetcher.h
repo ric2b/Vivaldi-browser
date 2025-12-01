@@ -16,6 +16,7 @@
 #include "net/device_bound_sessions/registration_fetcher_param.h"
 #include "net/device_bound_sessions/session_params.h"
 #include "net/http/http_response_headers.h"
+#include "net/log/net_log_source.h"
 #include "url/gurl.h"
 
 namespace net {
@@ -37,29 +38,26 @@ class RegistrationRequestParam;
 class NET_EXPORT RegistrationFetcher {
  public:
   struct NET_EXPORT RegistrationCompleteParams {
-    RegistrationCompleteParams(
-        SessionParams params,
-        unexportable_keys::UnexportableKeyId key_id,
-        const GURL& url,
-        std::optional<std::string> referral_session_identifier);
+    RegistrationCompleteParams(ParsedSessionParams params,
+                               unexportable_keys::UnexportableKeyId key_id,
+                               const GURL& url);
     RegistrationCompleteParams(RegistrationCompleteParams&& other) noexcept;
     RegistrationCompleteParams& operator=(
         RegistrationCompleteParams&& other) noexcept;
 
     ~RegistrationCompleteParams();
 
-    SessionParams params;
+    ParsedSessionParams params;
     unexportable_keys::UnexportableKeyId key_id;
     GURL url;
-    // The session identifier which initiated the registration request.
-    // It is `std::nullopt` for first time registration.
-    std::optional<std::string> referral_session_identifier;
   };
 
+  // Returning std::nullopt indicates that the fetch failed.
   using RegistrationCompleteCallback =
       base::OnceCallback<void(std::optional<RegistrationCompleteParams>)>;
 
-  using FetcherType = std::optional<RegistrationCompleteParams> (*)();
+  using FetcherType =
+      base::RepeatingCallback<std::optional<RegistrationCompleteParams>()>;
 
   // TODO(kristianm): Add more parameters when the returned JSON is parsed.
   struct NET_EXPORT RegistrationTokenResult {
@@ -78,6 +76,8 @@ class NET_EXPORT RegistrationFetcher {
       unexportable_keys::UnexportableKeyService& key_service,
       const URLRequestContext* context,
       const IsolationInfo& isolation_info,
+      std::optional<NetLogSource> net_log_source,
+      const std::optional<url::Origin>& original_request_initiator,
       RegistrationCompleteCallback callback);
 
   // Starts the network request to the DBSC refresh endpoint with existing key
@@ -89,6 +89,8 @@ class NET_EXPORT RegistrationFetcher {
       unexportable_keys::UnexportableKeyService& key_service,
       const URLRequestContext* context,
       const IsolationInfo& isolation_info,
+      std::optional<net::NetLogSource> net_log_source,
+      const std::optional<url::Origin>& original_request_initiator,
       RegistrationCompleteCallback callback,
       unexportable_keys::ServiceErrorOr<unexportable_keys::UnexportableKeyId>
           key_id);
@@ -105,7 +107,7 @@ class NET_EXPORT RegistrationFetcher {
           void(std::optional<RegistrationFetcher::RegistrationTokenResult>)>
           callback);
 
-  static void SetFetcherForTesting(FetcherType);
+  static void SetFetcherForTesting(FetcherType* fetcher);
 };
 
 }  // namespace net::device_bound_sessions

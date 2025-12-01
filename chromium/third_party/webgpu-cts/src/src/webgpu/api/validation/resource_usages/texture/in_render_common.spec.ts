@@ -4,6 +4,7 @@ Texture Usages Validation Tests in Same or Different Render Pass Encoders.
 
 import { makeTestGroup } from '../../../../../common/framework/test_group.js';
 import { assert, unreachable } from '../../../../../common/util/util.js';
+import { MaxLimitsTestMixin } from '../../../../gpu_test.js';
 import { ValidationTest } from '../../validation_test.js';
 
 export type TextureBindingType =
@@ -92,7 +93,7 @@ class F extends ValidationTest {
   }
 }
 
-export const g = makeTestGroup(F);
+export const g = makeTestGroup(MaxLimitsTestMixin(F));
 
 const kTextureSize = 16;
 const kTextureLevels = 3;
@@ -114,6 +115,9 @@ g.test('subresources,color_attachments')
       .combine('inSamePass', [true, false])
       .unless(t => t.inSamePass && t.level0 !== t.level1)
   )
+  .beforeAllSubcases(t => {
+    t.skipIfColorRenderableNotSupportedForFormat('r32float');
+  })
   .fn(t => {
     const { layer0, level0, layer1, level1, inSamePass } = t.params;
 
@@ -193,6 +197,7 @@ g.test('subresources,color_attachment_and_bind_group')
         t.params.bgLayerCount !== kTextureLayers,
         'view array layers must equal texture array layers in compatibility mode'
       );
+      t.skipIfColorRenderableNotSupportedForFormat('r32float');
     }
   })
   .fn(t => {
@@ -206,6 +211,13 @@ g.test('subresources,color_attachment_and_bind_group')
       bgUsage,
       inSamePass,
     } = t.params;
+
+    t.skipIf(
+      t.isCompatibility &&
+        bgUsage !== 'sampled-texture' &&
+        !(t.device.limits.maxStorageTexturesInFragmentStage! >= 1),
+      `maxStorageTexturesInFragmentStage(${t.device.limits.maxStorageTexturesInFragmentStage}) < 1`
+    );
 
     const texture = t.createTextureTracked({
       format: 'r32float',
@@ -464,10 +476,18 @@ g.test('subresources,multiple_bind_groups')
         t.params.bg0Layers.count !== kTextureLayers || t.params.bg1Layers.count !== kTextureLayers,
         'view array layers must equal texture array layers in compatibility mode'
       );
+      t.skipIfColorRenderableNotSupportedForFormat('r32float');
     }
   })
   .fn(t => {
     const { bg0Levels, bg0Layers, bg1Levels, bg1Layers, bgUsage0, bgUsage1, inSamePass } = t.params;
+
+    t.skipIf(
+      t.isCompatibility &&
+        (bgUsage0 !== 'sampled-texture' || bgUsage1 !== 'sampled-texture') &&
+        !(t.device.limits.maxStorageTexturesInFragmentStage! >= 2),
+      `maxStorageTexturesInFragmentStage(${t.device.limits.maxStorageTexturesInFragmentStage}) < 2`
+    );
 
     const texture = t.createTextureTracked({
       format: 'r32float',

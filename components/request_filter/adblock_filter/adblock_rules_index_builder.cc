@@ -265,7 +265,7 @@ void SaveIndex(std::unique_ptr<flatbuffers::FlatBufferBuilder> index_builder,
       FROM_HERE,
       base::BindOnce(
           std::move(index_saved_callback),
-          DoSaveIndex(base::make_span(index_builder->GetBufferPointer(),
+          DoSaveIndex(base::span(index_builder->GetBufferPointer(),
                                       index_builder->GetSize()),
                       index_path)));
 }

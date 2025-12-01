@@ -58,7 +58,7 @@ provide a boot path to end users which provides assurancesthat they are running
 known good code.
 
 **Important note:** To reemphasize the point made in the [Verified
-Boot](http://www.chromium.org/chromium-os/chromiumos-design-docs/verified-boot)
+Boot](/chromium-os/chromiumos-design-docs/verified-boot)
 design document, we are **not** *preventing* users from running *any* operating
 system they please, only to provide a mechanism that guarantees that a Chrome OS
 device is running the authentic Google Chrome OS.

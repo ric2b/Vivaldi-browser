@@ -36,9 +36,9 @@ limitations under the License.
 #include "xla/python/ifrt/sharding.h"
 #include "xla/tsl/concurrency/ref_count.h"
 #include "xla/tsl/lib/core/status_test_util.h"
-#include "tsl/platform/status_matchers.h"
-#include "tsl/platform/statusor.h"
-#include "tsl/platform/test.h"
+#include "xla/tsl/platform/status_matchers.h"
+#include "xla/tsl/platform/statusor.h"
+#include "xla/tsl/platform/test.h"
 
 namespace xla {
 namespace ifrt {
@@ -82,7 +82,8 @@ TEST_P(CustomCallProgramSerDesTest, RoundTrip) {
                     /*sharding=*/sharding1},
       });
 
-  TF_ASSERT_OK_AND_ASSIGN(Serialized serialized, Serialize(orig));
+  TF_ASSERT_OK_AND_ASSIGN(Serialized serialized,
+                          Serialize(orig, /*options=*/nullptr));
   TF_ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<CustomCallProgram> deserialized_program,
       Deserialize<CustomCallProgram>(
@@ -126,7 +127,8 @@ INSTANTIATE_TEST_SUITE_P(NumDevices, CustomCallProgramSerDesTest,
 
 TEST(CustomCallCompileOptionsSerDesTest, RoundTrip) {
   CustomCallCompileOptions orig;
-  TF_ASSERT_OK_AND_ASSIGN(Serialized serialized, Serialize(orig));
+  TF_ASSERT_OK_AND_ASSIGN(Serialized serialized,
+                          Serialize(orig, /*options=*/nullptr));
   TF_EXPECT_OK(
       Deserialize<CustomCallCompileOptions>(serialized, /*options=*/nullptr)
           .status());
@@ -134,7 +136,8 @@ TEST(CustomCallCompileOptionsSerDesTest, RoundTrip) {
 
 TEST(CustomCallCompileOptionsSerDesTest, InvalidSerialized) {
   CustomCallCompileOptions orig;
-  TF_ASSERT_OK_AND_ASSIGN(Serialized serialized, Serialize(orig));
+  TF_ASSERT_OK_AND_ASSIGN(Serialized serialized,
+                          Serialize(orig, /*options=*/nullptr));
   serialized.set_data("abc");
   EXPECT_THAT(
       Deserialize<CustomCallCompileOptions>(serialized, /*options=*/nullptr),

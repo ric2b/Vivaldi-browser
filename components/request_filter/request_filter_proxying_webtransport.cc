@@ -261,7 +261,7 @@ void StartWebRequestProxyingWebTransport(
   request.url = url;
   request.request_initiator = initiator_origin;
 
-  const int process_id = render_process_host.GetID();
+  const int process_id = render_process_host.GetDeprecatedID();
   FilteredRequestInfo params = FilteredRequestInfo(
       request_id, process_id, frame_routing_id, request,
       content::ContentBrowserClient::URLLoaderFactoryType::kDocumentSubResource,

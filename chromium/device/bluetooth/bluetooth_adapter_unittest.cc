@@ -743,13 +743,6 @@ TEST_P(BluetoothTestWinrt, ConstructDefaultAdapter) {
 #else
 TEST_F(BluetoothTest, MAYBE_ConstructDefaultAdapter) {
 #endif
-#if BUILDFLAG(IS_ANDROID)
-  if (base::android::BuildInfo::GetInstance()->sdk_int() >=
-      base::android::SDK_VERSION_S) {
-    GTEST_SKIP() << "Android S+ requires runtime permissions that can't be "
-                    "granted automatically, skipping unit test.";
-  }
-#endif  // BUILDFLAG(IS_ANDROID)
   InitWithDefaultAdapter();
   if (!adapter_->IsPresent() || !adapter_->IsPowered()) {
     GTEST_SKIP()
@@ -784,6 +777,10 @@ TEST_F(BluetoothTest, MAYBE_ConstructWithoutDefaultAdapter) {
 #endif
   EXPECT_FALSE(adapter_->IsDiscoverable());
   EXPECT_FALSE(adapter_->IsDiscovering());
+#if BUILDFLAG(IS_ANDROID)
+  EXPECT_EQ(adapter_->GetOsPermissionStatus(),
+            BluetoothAdapter::PermissionStatus::kDenied);
+#endif  // BUILDFLAG(IS_ANDROID)
 }
 
 // TODO(scheib): Enable BluetoothTest fixture tests on all platforms.
@@ -809,6 +806,10 @@ TEST_F(BluetoothTest, MAYBE_ConstructFakeAdapter) {
   EXPECT_TRUE(adapter_->CanPower());
   EXPECT_TRUE(adapter_->IsPresent());
   EXPECT_TRUE(adapter_->IsPowered());
+#if !BUILDFLAG(IS_APPLE)
+  EXPECT_EQ(BluetoothAdapter::PermissionStatus::kAllowed,
+            adapter_->GetOsPermissionStatus());
+#endif  //  !BUILDFLAG(IS_APPLE)
   EXPECT_TRUE(adapter_->IsPeripheralRoleSupported());
   EXPECT_FALSE(adapter_->IsDiscoverable());
   EXPECT_FALSE(adapter_->IsDiscovering());
@@ -924,6 +925,9 @@ TEST_F(BluetoothTest, MAYBE_NoPermissions) {
     return;
   }
 
+  EXPECT_EQ(BluetoothAdapter::PermissionStatus::kDenied,
+            adapter_->GetOsPermissionStatus());
+
   StartLowEnergyDiscoverySessionExpectedToFail();
 
   EXPECT_EQ(0, callback_count_);
@@ -948,6 +952,9 @@ TEST_F(BluetoothTest, NoLocationServices) {
   TestBluetoothAdapterObserver observer(adapter_);
 
   SimulateLocationServicesOff();
+
+  EXPECT_EQ(BluetoothAdapter::PermissionStatus::kDenied,
+            adapter_->GetOsPermissionStatus());
 
   StartLowEnergyDiscoverySessionExpectedToFail();
 

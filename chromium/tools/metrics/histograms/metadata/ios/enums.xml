@@ -228,6 +228,19 @@ the generic promo launch. -->
   <int value="4" label="Set Up List"/>
 </enum>
 
+<!-- LINT.IfChange(IOSDefaultBrowserBannerPromoPromoSessionEndedReason) -->
+
+<enum name="IOSDefaultBrowserBannerPromoPromoSessionEndedReason">
+  <int value="0" label="Impressions used up"/>
+  <int value="1" label="User manually closed promo"/>
+  <int value="2" label="User tapped promo"/>
+  <int value="3" label="User navigated to SRP"/>
+  <int value="4" label="User navigated to NTP"/>
+  <int value="5" label="Chrome is now default browser"/>
+</enum>
+
+<!-- LINT.ThenChange(//ios/chrome/browser/default_browser/model/utils.h:IOSDefaultBrowserBannerPromoPromoSessionEndedReason) -->
+
 <enum name="IOSDefaultBrowserFullscreenPromoAction">
   <int value="0" label="Action Button"/>
   <int value="1" label="Cancel"/>
@@ -267,11 +280,17 @@ the generic promo launch. -->
   <int value="3" label="Tertiary Action Button"/>
 </enum>
 
+<enum name="IOSDeleteAllSavedCredentialsActions">
+  <int value="0" label="User confirmed delete all saved credentials"/>
+  <int value="1" label="User cancelled delete all saved credentials"/>
+</enum>
+
 <enum name="IOSDockingPromoAction">
   <int value="0" label="Toggle appearance"/>
   <int value="1" label="Primary Action Button (Got It)"/>
   <int value="2" label="Secondary Action Button (Remind Me Later)"/>
   <int value="3" label="Dismiss via Swipe"/>
+  <int value="4" label="Dismiss via No Thanks"/>
 </enum>
 
 <enum name="IOSEditMenuActions">
@@ -393,6 +412,7 @@ the generic promo launch. -->
   <int value="2" label="The feature was disabled"/>
   <int value="3" label="The tab was OTR"/>
   <int value="4" label="The user was not signed in"/>
+  <int value="5" label="The feature was disabled by an enterprise policy"/>
 </enum>
 
 <enum name="IOSFilePickerDriveFilter">
@@ -667,6 +687,7 @@ the generic promo launch. -->
   <int value="13" label="Help"/>
   <int value="14" label="ShareChrome"/>
   <int value="15" label="EditActions"/>
+  <int value="16" label="LensOverlay"/>
 </enum>
 
 <enum name="IOSOverflowMenuActionType">
@@ -820,6 +841,21 @@ the generic promo launch. -->
   <int value="1" label="No issues"/>
 </enum>
 
+<!-- LINT.IfChange(IOSSafetyCheckNotificationsOptInSource) -->
+
+<enum name="IOSSafetyCheckNotificationsOptInSource">
+  <int value="0" label="SafetyCheckPageOptIn"/>
+  <int value="1" label="SafetyCheckPageOptOut"/>
+  <int value="2" label="PasswordCheckupPageOptIn"/>
+  <int value="3" label="PasswordCheckupPageOptOut"/>
+  <int value="4" label="MagicStackLongPressMenuOptIn"/>
+  <int value="5" label="MagicStackLongPressMenuOptOut"/>
+  <int value="6" label="MagicStackTopRightActionButtonOptIn"/>
+  <int value="7" label="MagicStackTopRightActionButtonOptOut"/>
+</enum>
+
+<!-- LINT.ThenChange(/ios/chrome/browser/safety_check_notifications/utils/constants.h:SafetyCheckNotificationsOptInSource) -->
+
 <!-- LINT.IfChange(IOSSafetyCheckNotificationType) -->
 
 <enum name="IOSSafetyCheckNotificationType">
@@ -925,6 +961,19 @@ the generic promo launch. -->
   <int value="3" label="Incognito Mode, Other Search engine"/>
 </enum>
 
+<!-- LINT.IfChange(IOSSegmentedDefaultBrowserPromoAction) -->
+
+<enum name="IOSSegmentedDefaultBrowserPromoAction">
+  <int value="0" label="Static Promo Appeared"/>
+  <int value="1" label="Static Promo Accepted"/>
+  <int value="2" label="Static Promo Dismissed"/>
+  <int value="3" label="Animated Promo Appeared"/>
+  <int value="4" label="Animated Promo Accepted"/>
+  <int value="5" label="Animated Promo Dismissed"/>
+</enum>
+
+<!-- LINT.ThenChange(//ios/chrome/browser/ui/content_suggestions/set_up_list/constants.h:SegmentedDefaultBrowserPromoAction) -->
+
 <enum name="IOSSessionMigration">
   <int value="0" label="No Migration"/>
   <int value="1" label="Migration Failed"/>
@@ -942,6 +991,8 @@ the generic promo launch. -->
   <int value="4" label="Follow"/>
   <int value="5" label="All Set"/>
   <int value="6" label="Notifications"/>
+  <int value="7" label="Docking"/>
+  <int value="8" label="Address Bar"/>
 </enum>
 
 <enum name="IOSShareExtensionReceivedEntrySource">
@@ -1151,6 +1202,24 @@ the generic promo launch. -->
   <int value="9" label="Exceeded allocated time for background task"/>
 </enum>
 
+<!-- LINT.IfChange(NotificationType) -->
+
+<enum name="NotificationType">
+  <int value="0" label="Default Browser [Tip]"/>
+  <int value="1" label="Whats New [Tip]"/>
+  <int value="2" label="Sign in [Tip]"/>
+  <int value="4" label="Set Up List Continuation [Tip]"/>
+  <int value="5" label="Docking [Tip]"/>
+  <int value="6" label="Omnibox Position [Tip"/>
+  <int value="7" label="Lens [Tip]"/>
+  <int value="8" label="Enhanced Safe Browsing [Tip]"/>
+  <int value="9" label="Passwords [SafetyCheck]"/>
+  <int value="10" label="Safe Browsing [SafetyCheck]"/>
+  <int value="11" label="Update Chrome [SafetyCheck]"/>
+</enum>
+
+<!-- LINT.ThenChange(/ios/chrome/browser/push_notification/model/constants.h:NotificationType) -->
+
 <enum name="OmniboxDeviceSwitcherResult">
   <int value="1" label="Unavailable"/>
   <int value="2" label="Top omnibox by default"/>
@@ -1234,6 +1303,7 @@ the generic promo launch. -->
   <int value="4" label="Sports"/>
   <int value="5" label="Safety Check"/>
   <int value="6" label="Send Tab"/>
+  <int value="7" label="Reminders"/>
 </enum>
 
 <!-- LINT.ThenChange(/ios/chrome/browser/push_notification/model/push_notification_client_id.h:PushNotificationClientId) -->
@@ -1244,6 +1314,19 @@ the generic promo launch. -->
       label="Notification presented on device while is in foreground"/>
   <int value="2" label="User tapped on notification"/>
 </enum>
+
+<!-- LINT.IfChange(PushNotificationOptInAccessPoint) -->
+
+<enum name="PushNotificationOptInAccessPoint">
+  <int value="1" label="Tips"/>
+  <int value="2" label="SetUpList"/>
+  <int value="3" label="SendTabMagicStackPromo"/>
+  <int value="4" label="SafetyCheck"/>
+  <int value="5" label="Feed"/>
+  <int value="6" label="Settings"/>
+</enum>
+
+<!-- LINT.ThenChange(/ios/chrome/browser/push_notification/model/constants.h:NotificationOptInAccessPoint) -->
 
 <enum name="PushNotificationPermissionPromptStatus">
   <int value="0" label="Accepted"/>

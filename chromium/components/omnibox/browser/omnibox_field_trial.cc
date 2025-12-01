@@ -300,6 +300,21 @@ size_t OmniboxFieldTrial::GetProviderMaxMatches(
   size_t default_max_matches_per_provider = 3;
 
   std::string param_value;
+#if defined(VIVALDI_BUILD) && !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+  // Don't add TYPE_RECENT_TYPED_HISTORY here, this is handled by
+  // autocomplete_grouper_sections.cc.
+  // The group of TYPE_RECENT_TYPED_HISTORY is GROUP_PERSONALIZED_ZERO_SUGGEST.
+  param_value =
+    std::to_string(AutocompleteProvider::Type::TYPE_BOOKMARK) +
+    ":10," +
+    std::to_string(AutocompleteProvider::Type::TYPE_HISTORY_QUICK) +
+    ":10," +
+    std::to_string(AutocompleteProvider::Type::TYPE_HISTORY_CLUSTER_PROVIDER) +
+    ":10," +
+    std::to_string(AutocompleteProvider::Type::TYPE_HISTORY_URL) +
+    ":10," +
+    "*:3";
+#else
   if (OmniboxFieldTrial::IsMlUrlScoringEnabled()) {
     param_value =
         OmniboxFieldTrial::GetMLConfig().ml_url_scoring_max_matches_by_provider;
@@ -308,6 +323,7 @@ size_t OmniboxFieldTrial::GetProviderMaxMatches(
         omnibox::kUIExperimentMaxAutocompleteMatches,
         OmniboxFieldTrial::kUIMaxAutocompleteMatchesByProviderParam);
   }
+#endif
 
   // If the experiment param specifies a max results for |provider|, return the
   // specified limit.
@@ -601,11 +617,11 @@ bool OmniboxFieldTrial::ShouldApplyOnDeviceHeadModelSelectionFix() {
   return base::GetFieldTrialParamByFeatureAsBool(
              omnibox::kOnDeviceHeadProviderNonIncognito,
              OmniboxFieldTrial::kOnDeviceHeadModelSelectionFix,
-             /*default_value=*/false) ||
+             /*default_value=*/true) ||
          base::GetFieldTrialParamByFeatureAsBool(
              omnibox::kOnDeviceHeadProviderIncognito,
              OmniboxFieldTrial::kOnDeviceHeadModelSelectionFix,
-             /*default_value=*/false);
+             /*default_value=*/true);
 }
 
 bool OmniboxFieldTrial::IsOnDeviceHeadSuggestEnabledForLocale(

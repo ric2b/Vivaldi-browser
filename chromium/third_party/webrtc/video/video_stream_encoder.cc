@@ -174,6 +174,15 @@ bool RequiresEncoderReset(const VideoCodec& prev_send_codec,
             prev_send_codec.simulcastStream[i].qpMax) {
       return true;
     }
+
+    if (new_send_codec.simulcastStream[i].maxFramerate !=
+            prev_send_codec.simulcastStream[i].maxFramerate &&
+        new_send_codec.simulcastStream[i].maxFramerate !=
+            new_send_codec.maxFramerate) {
+      // SetRates can only represent maxFramerate for one layer. Reset the
+      // encoder if there are multiple layers that differ in maxFramerate.
+      return true;
+    }
   }
 
   if (new_send_codec.codecType == kVideoCodecVP9) {
@@ -943,12 +952,6 @@ void VideoStreamEncoder::ConfigureEncoder(VideoEncoderConfig config,
     max_data_payload_length_ = max_data_payload_length;
     pending_encoder_reconfiguration_ = true;
 
-    if (settings_.enable_frame_instrumentation_generator) {
-      frame_instrumentation_generator_ =
-          std::make_unique<FrameInstrumentationGenerator>(
-              encoder_config_.codec_type);
-    }
-
     // Reconfigure the encoder now if the frame resolution is known.
     // Otherwise, the reconfiguration is deferred until the next frame to
     // minimize the number of reconfigurations. The codec configuration
@@ -1314,6 +1317,11 @@ void VideoStreamEncoder::ReconfigureEncoder() {
       next_frame_types_.resize(
           std::max(static_cast<int>(codec.numberOfSimulcastStreams), 1),
           VideoFrameType::kVideoFrameKey);
+      if (settings_.enable_frame_instrumentation_generator) {
+        frame_instrumentation_generator_ =
+            std::make_unique<FrameInstrumentationGenerator>(
+                encoder_config_.codec_type);
+      }
     }
 
     frame_encode_metadata_writer_.Reset();
@@ -1436,8 +1444,7 @@ void VideoStreamEncoder::ReconfigureEncoder() {
   if (!encoder_initialized_) {
     RTC_LOG(LS_WARNING) << "Failed to initialize "
                         << CodecTypeToPayloadString(codec.codecType)
-                        << " encoder."
-                        << "switch_encoder_on_init_failures: "
+                        << " encoder." << "switch_encoder_on_init_failures: "
                         << switch_encoder_on_init_failures_;
 
     if (switch_encoder_on_init_failures_) {
@@ -2150,45 +2157,45 @@ EncodedImageCallback::Result VideoStreamEncoder::OnEncodedImage(
   // need to update on quality convergence.
   unsigned int image_width = image_copy._encodedWidth;
   unsigned int image_height = image_copy._encodedHeight;
-  encoder_queue_->PostTask([this, codec_type, image_width, image_height,
-                            simulcast_index, qp = image_copy.qp_,
-                            is_steady_state_refresh_frame =
-                                image_copy.IsSteadyStateRefreshFrame()] {
-    RTC_DCHECK_RUN_ON(encoder_queue_.get());
+  encoder_queue_->PostTask(
+      [this, codec_type, image_width, image_height, simulcast_index,
+       qp = image_copy.qp_,
+       is_steady_state_refresh_frame = image_copy.IsSteadyStateRefreshFrame()] {
+        RTC_DCHECK_RUN_ON(encoder_queue_.get());
 
-    // Check if the encoded image has reached target quality.
-    bool at_target_quality =
-        quality_convergence_controller_.AddSampleAndCheckTargetQuality(
-            simulcast_index, qp, is_steady_state_refresh_frame);
+        // Check if the encoded image has reached target quality.
+        bool at_target_quality =
+            quality_convergence_controller_.AddSampleAndCheckTargetQuality(
+                simulcast_index, qp, is_steady_state_refresh_frame);
 
-    // Let the frame cadence adapter know about quality convergence.
-    if (frame_cadence_adapter_)
-      frame_cadence_adapter_->UpdateLayerQualityConvergence(simulcast_index,
-                                                            at_target_quality);
+        // Let the frame cadence adapter know about quality convergence.
+        if (frame_cadence_adapter_)
+          frame_cadence_adapter_->UpdateLayerQualityConvergence(
+              simulcast_index, at_target_quality);
 
-    // Currently, the internal quality scaler is used for VP9 instead of the
-    // webrtc qp scaler (in the no-svc case or if only a single spatial layer is
-    // encoded). It has to be explicitly detected and reported to adaptation
-    // metrics.
-    if (codec_type == VideoCodecType::kVideoCodecVP9 &&
-        send_codec_.VP9()->automaticResizeOn) {
-      unsigned int expected_width = send_codec_.width;
-      unsigned int expected_height = send_codec_.height;
-      int num_active_layers = 0;
-      for (int i = 0; i < send_codec_.VP9()->numberOfSpatialLayers; ++i) {
-        if (send_codec_.spatialLayers[i].active) {
-          ++num_active_layers;
-          expected_width = send_codec_.spatialLayers[i].width;
-          expected_height = send_codec_.spatialLayers[i].height;
+        // Currently, the internal quality scaler is used for VP9 instead of the
+        // webrtc qp scaler (in the no-svc case or if only a single spatial
+        // layer is encoded). It has to be explicitly detected and reported to
+        // adaptation metrics.
+        if (codec_type == VideoCodecType::kVideoCodecVP9 &&
+            send_codec_.VP9()->automaticResizeOn) {
+          unsigned int expected_width = send_codec_.width;
+          unsigned int expected_height = send_codec_.height;
+          int num_active_layers = 0;
+          for (int i = 0; i < send_codec_.VP9()->numberOfSpatialLayers; ++i) {
+            if (send_codec_.spatialLayers[i].active) {
+              ++num_active_layers;
+              expected_width = send_codec_.spatialLayers[i].width;
+              expected_height = send_codec_.spatialLayers[i].height;
+            }
+          }
+          RTC_DCHECK_LE(num_active_layers, 1)
+              << "VP9 quality scaling is enabled for "
+                 "SVC with several active layers.";
+          encoder_stats_observer_->OnEncoderInternalScalerUpdate(
+              image_width < expected_width || image_height < expected_height);
         }
-      }
-      RTC_DCHECK_LE(num_active_layers, 1)
-          << "VP9 quality scaling is enabled for "
-             "SVC with several active layers.";
-      encoder_stats_observer_->OnEncoderInternalScalerUpdate(
-          image_width < expected_width || image_height < expected_height);
-    }
-  });
+      });
 
   // Encoded is called on whatever thread the real encoder implementation run
   // on. In the case of hardware encoders, there might be several encoders
@@ -2495,6 +2502,7 @@ void VideoStreamEncoder::ReleaseEncoder() {
   }
   encoder_->Release();
   encoder_initialized_ = false;
+  frame_instrumentation_generator_ = nullptr;
   TRACE_EVENT0("webrtc", "VCMGenericEncoder::Release");
 }
 

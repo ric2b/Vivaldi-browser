@@ -53,6 +53,7 @@
 #include "src/objects/elements-kind.h"
 #include "src/objects/heap-object.h"
 #include "src/objects/js-array-buffer.h"
+#include "src/objects/map.h"
 #include "src/objects/objects.h"
 #include "src/objects/property-cell.h"
 #include "src/zone/zone-containers.h"
@@ -77,19 +78,6 @@ MachineType MachineTypeFor(maglev::ValueRepresentation repr) {
       return MachineType::Float64();
     case maglev::ValueRepresentation::kHoleyFloat64:
       return MachineType::HoleyFloat64();
-  }
-}
-
-int ElementsKindSize(ElementsKind element_kind) {
-  switch (element_kind) {
-#define TYPED_ARRAY_CASE(Type, type, TYPE, ctype) \
-  case TYPE##_ELEMENTS:                           \
-    DCHECK_LE(sizeof(ctype), 8);                  \
-    return sizeof(ctype);
-    TYPED_ARRAYS(TYPED_ARRAY_CASE)
-    default:
-      UNREACHABLE();
-#undef TYPED_ARRAY_CASE
   }
 }
 
@@ -538,7 +526,7 @@ class GraphBuildingNodeProcessor {
     if (graph->has_resumable_generator()) {
       generator_analyzer_.Analyze(graph);
 
-      dummy_object_input_ = __ SmiConstant(0);
+      dummy_object_input_ = __ SmiZeroConstant();
       dummy_word32_input_ = __ Word32Constant(0);
       dummy_float64_input_ = __ Float64Constant(0);
 
@@ -802,7 +790,8 @@ class GraphBuildingNodeProcessor {
                                             ConversionMode::kCanonicalizeSmi));
           break;
         case maglev::ValueRepresentation::kIntPtr:
-          UNREACHABLE();
+          __ SetVariable(var,
+                         __ ConvertIntPtrToNumber(V<WordPtr>::Cast(ts_idx)));
       }
     });
   }
@@ -1092,7 +1081,7 @@ class GraphBuildingNodeProcessor {
                                 const maglev::ProcessingState& state) {
     // TODO(dmercadier): should this really be a SmiConstant, or rather a
     // Word32Constant?
-    SetMap(node, __ SmiConstant(node->value().ptr()));
+    SetMap(node, __ SmiConstant(i::Tagged<Smi>(node->value().ptr())));
     return maglev::ProcessResult::kContinue;
   }
   maglev::ProcessResult Process(maglev::TrustedConstant* node,
@@ -1315,8 +1304,9 @@ class GraphBuildingNodeProcessor {
       arguments.push_back(callee);
       arguments.push_back(Map(node->new_target()));
       arguments.push_back(__ Word32Constant(actual_parameter_count));
-#ifdef V8_ENABLE_LEAPTIERING
-      arguments.push_back(__ Word32Constant(kPlaceholderDispatchHandle));
+#ifdef V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE
+      arguments.push_back(
+          __ Word32Constant(kPlaceholderDispatchHandle.value()));
 #endif
       arguments.push_back(Map(node->receiver()));
       for (int i = 0; i < node->num_args(); i++) {
@@ -1347,8 +1337,9 @@ class GraphBuildingNodeProcessor {
       }
       arguments.push_back(Map(node->new_target()));
       arguments.push_back(__ Word32Constant(actual_parameter_count));
-#ifdef V8_ENABLE_LEAPTIERING
-      arguments.push_back(__ Word32Constant(kPlaceholderDispatchHandle));
+#ifdef V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE
+      arguments.push_back(
+          __ Word32Constant(kPlaceholderDispatchHandle.value()));
 #endif
 
       // Load the context from {callee}.
@@ -1800,14 +1791,37 @@ class GraphBuildingNodeProcessor {
     arguments.push_back(Map(node->new_target()));
     arguments.push_back(__ Word32Constant(node->num_args()));
 
+#ifndef V8_TARGET_ARCH_ARM64
+    arguments.push_back(__ WordPtrConstant(node->feedback().index()));
+    arguments.push_back(__ HeapConstant(node->feedback().vector));
+#endif
+
     for (auto arg : node->args()) {
       arguments.push_back(Map(arg));
     }
 
     arguments.push_back(Map(node->context()));
 
-    GENERATE_AND_MAP_BUILTIN_CALL(node, Builtin::kConstruct, frame_state,
-                                  base::VectorOf(arguments), node->num_args());
+#ifndef V8_TARGET_ARCH_ARM64
+    // Construct_WithFeedback can't be called from Turbofan on Arm64, because of
+    // the stack alignment requirements: the feedback vector is dropped by
+    // Construct_WithFeedback while the other arguments are passed through to
+    // Construct. As a result, when the feedback vector is pushed on the stack,
+    // it should be padded to 16-bytes, but there is no way to express this in
+    // Turbofan.
+    // Anyways, long-term we'll want to feedback-specialize Construct in the
+    // frontend (ie, probably in Maglev), so we don't really need to adapt
+    // Turbofan to be able to call Construct_WithFeedback on Arm64.
+    static constexpr int kFeedbackVector = 1;
+    int stack_arg_count = node->num_args() + kFeedbackVector;
+    Builtin builtin = Builtin::kConstruct_WithFeedback;
+#else
+    int stack_arg_count = node->num_args();
+    Builtin builtin = Builtin::kConstruct;
+#endif
+
+    GENERATE_AND_MAP_BUILTIN_CALL(node, builtin, frame_state,
+                                  base::VectorOf(arguments), stack_arg_count);
 
     return maglev::ProcessResult::kContinue;
   }
@@ -2201,6 +2215,27 @@ class GraphBuildingNodeProcessor {
                          node->eager_deopt_info()->feedback_to_update());
     return maglev::ProcessResult::kContinue;
   }
+  maglev::ProcessResult Process(maglev::CheckUint32IsSmi* node,
+                                const maglev::ProcessingState& state) {
+    GET_FRAME_STATE_MAYBE_ABORT(frame_state, node->eager_deopt_info());
+    __ DeoptimizeIfNot(__ Uint32LessThan(Map(node->input()), Smi::kMaxValue),
+                       frame_state, DeoptimizeReason::kNotASmi,
+                       node->eager_deopt_info()->feedback_to_update());
+    return maglev::ProcessResult::kContinue;
+  }
+
+  maglev::ProcessResult Process(maglev::CheckIntPtrIsSmi* node,
+                                const maglev::ProcessingState& state) {
+    GET_FRAME_STATE_MAYBE_ABORT(frame_state, node->eager_deopt_info());
+    __ DeoptimizeIfNot(
+        __ UintPtrLessThanOrEqual(Map(node->input()), Smi::kMaxValue),
+        frame_state, DeoptimizeReason::kNotASmi,
+        node->eager_deopt_info()->feedback_to_update());
+    // TODO(388844115): Rename the IntPtr in Maglev to make it clear it's
+    // non-negative.
+    return maglev::ProcessResult::kContinue;
+  }
+
   maglev::ProcessResult Process(maglev::CheckHoleyFloat64IsSmi* node,
                                 const maglev::ProcessingState& state) {
     GET_FRAME_STATE_MAYBE_ABORT(frame_state, node->eager_deopt_info());
@@ -2237,6 +2272,25 @@ class GraphBuildingNodeProcessor {
                     node->eager_deopt_info()->feedback_to_update());
     return maglev::ProcessResult::kContinue;
   }
+  maglev::ProcessResult Process(maglev::CheckedNumberToInt32* node,
+                                const maglev::ProcessingState& state) {
+    GET_FRAME_STATE_MAYBE_ABORT(frame_state, node->eager_deopt_info());
+    V<Object> input = Map(node->input());
+    ScopedVar<Word32, AssemblerT> value(this);
+    IF (__ IsSmi(input)) {
+      value = __ UntagSmi(V<Smi>::Cast(input));
+    } ELSE {
+      __ DeoptimizeIfNot(__ IsHeapNumberMap(__ LoadMapField(input)),
+                         frame_state, DeoptimizeReason::kNotInt32,
+                         node->eager_deopt_info()->feedback_to_update());
+      value = __ ChangeFloat64ToInt32OrDeopt(
+          __ LoadHeapNumberValue(V<HeapNumber>::Cast(input)), frame_state,
+          CheckForMinusZeroMode::kCheckForMinusZero,
+          node->eager_deopt_info()->feedback_to_update());
+    }
+    SetMap(node, value);
+    return maglev::ProcessResult::kContinue;
+  }
   maglev::ProcessResult Process(maglev::CheckFloat64IsNan* node,
                                 const maglev::ProcessingState& state) {
     GET_FRAME_STATE_MAYBE_ABORT(frame_state, node->eager_deopt_info());
@@ -2246,9 +2300,9 @@ class GraphBuildingNodeProcessor {
     return maglev::ProcessResult::kContinue;
   }
   void CheckMaps(V<Object> receiver_input, V<FrameState> frame_state,
-                 const FeedbackSource& feedback,
+                 OptionalV<Map> object_map, const FeedbackSource& feedback,
                  const compiler::ZoneRefSet<Map>& maps, bool check_heap_object,
-                 bool try_migrate) {
+                 CheckMapsFlags flags) {
     Label<> done(this);
     if (check_heap_object) {
       OpIndex is_smi = __ IsSmi(receiver_input);
@@ -2261,20 +2315,21 @@ class GraphBuildingNodeProcessor {
       }
     }
 
-    bool has_migration_targets = false;
-    if (try_migrate) {
+#ifdef DEBUG
+    if (flags & CheckMapsFlag::kTryMigrateInstance) {
+      bool has_migration_targets = false;
       for (MapRef map : maps) {
         if (map.object()->is_migration_target()) {
           has_migration_targets = true;
           break;
         }
       }
+      DCHECK(has_migration_targets);
     }
+#endif  // DEBUG
 
-    __ CheckMaps(V<HeapObject>::Cast(receiver_input), frame_state, maps,
-                 has_migration_targets ? CheckMapsFlag::kTryMigrateInstance
-                                       : CheckMapsFlag::kNone,
-                 feedback);
+    __ CheckMaps(V<HeapObject>::Cast(receiver_input), frame_state, object_map,
+                 maps, flags, feedback);
 
     if (done.has_incoming_jump()) {
       GOTO(done);
@@ -2284,21 +2339,40 @@ class GraphBuildingNodeProcessor {
   maglev::ProcessResult Process(maglev::CheckMaps* node,
                                 const maglev::ProcessingState& state) {
     GET_FRAME_STATE_MAYBE_ABORT(frame_state, node->eager_deopt_info());
-    CheckMaps(Map(node->receiver_input()), frame_state,
+    CheckMaps(Map(node->receiver_input()), frame_state, {},
               node->eager_deopt_info()->feedback_to_update(),
               node->maps().Clone(graph_zone()),
               node->check_type() == maglev::CheckType::kCheckHeapObject,
-              /* try_migrate */ false);
+              CheckMapsFlag::kNone);
+    return maglev::ProcessResult::kContinue;
+  }
+  maglev::ProcessResult Process(maglev::CheckMapsWithAlreadyLoadedMap* node,
+                                const maglev::ProcessingState& state) {
+    GET_FRAME_STATE_MAYBE_ABORT(frame_state, node->eager_deopt_info());
+    CheckMaps(Map(node->object_input()), frame_state, Map(node->map_input()),
+              node->eager_deopt_info()->feedback_to_update(),
+              node->maps().Clone(graph_zone()), /*check_heap_object*/ false,
+              CheckMapsFlag::kNone);
     return maglev::ProcessResult::kContinue;
   }
   maglev::ProcessResult Process(maglev::CheckMapsWithMigration* node,
                                 const maglev::ProcessingState& state) {
     GET_FRAME_STATE_MAYBE_ABORT(frame_state, node->eager_deopt_info());
-    CheckMaps(Map(node->receiver_input()), frame_state,
+    CheckMaps(Map(node->receiver_input()), frame_state, {},
               node->eager_deopt_info()->feedback_to_update(),
               node->maps().Clone(graph_zone()),
               node->check_type() == maglev::CheckType::kCheckHeapObject,
-              /* try_migrate */ true);
+              CheckMapsFlag::kTryMigrateInstance);
+    return maglev::ProcessResult::kContinue;
+  }
+  maglev::ProcessResult Process(maglev::CheckMapsWithMigrationAndDeopt* node,
+                                const maglev::ProcessingState& state) {
+    GET_FRAME_STATE_MAYBE_ABORT(frame_state, node->eager_deopt_info());
+    CheckMaps(Map(node->receiver_input()), frame_state, {},
+              node->eager_deopt_info()->feedback_to_update(),
+              node->maps().Clone(graph_zone()),
+              node->check_type() == maglev::CheckType::kCheckHeapObject,
+              CheckMapsFlag::kTryMigrateInstanceAndDeopt);
     return maglev::ProcessResult::kContinue;
   }
   maglev::ProcessResult Process(maglev::MigrateMapIfNeeded* node,
@@ -2412,7 +2486,14 @@ class GraphBuildingNodeProcessor {
     __ DeoptimizeIf(RootEqual(node->object_input(), RootIndex::kTheHoleValue),
                     frame_state, DeoptimizeReason::kHole,
                     node->eager_deopt_info()->feedback_to_update());
-    SetMap(node, Map(node->object_input()));
+    return maglev::ProcessResult::kContinue;
+  }
+  maglev::ProcessResult Process(maglev::CheckHoleyFloat64NotHole* node,
+                                const maglev::ProcessingState& state) {
+    GET_FRAME_STATE_MAYBE_ABORT(frame_state, node->eager_deopt_info());
+    __ DeoptimizeIf(__ Float64IsHole(Map(node->float64_input())), frame_state,
+                    DeoptimizeReason::kHole,
+                    node->eager_deopt_info()->feedback_to_update());
     return maglev::ProcessResult::kContinue;
   }
   maglev::ProcessResult Process(maglev::CheckInt32Condition* node,
@@ -2491,26 +2572,20 @@ class GraphBuildingNodeProcessor {
   maglev::ProcessResult Process(maglev::TransitionElementsKindOrCheckMap* node,
                                 const maglev::ProcessingState& state) {
     GET_FRAME_STATE_MAYBE_ABORT(frame_state, node->eager_deopt_info());
-    bool check_heap_object;
-    switch (node->check_type()) {
-      case maglev::CheckType::kCheckHeapObject:
-        check_heap_object = true;
-        break;
-      case maglev::CheckType::kOmitHeapObjectCheck:
-        check_heap_object = false;
-        break;
-    }
+    ZoneRefSet<i::Map> sources(node->transition_sources().begin(),
+                               node->transition_sources().end(), graph_zone());
     __ TransitionElementsKindOrCheckMap(
-        Map(node->object_input()), frame_state, check_heap_object,
-        node->transition_sources(), node->transition_target(),
-        node->eager_deopt_info()->feedback_to_update());
+        Map(node->object_input()), Map(node->map_input()), frame_state,
+        ElementsTransitionWithMultipleSources(
+            sources, node->transition_target(),
+            node->eager_deopt_info()->feedback_to_update()));
     return maglev::ProcessResult::kContinue;
   }
   maglev::ProcessResult Process(maglev::TransitionElementsKind* node,
                                 const maglev::ProcessingState& state) {
-    __ TransitionMultipleElementsKind(Map(node->object_input()),
-                                      node->transition_sources(),
-                                      node->transition_target());
+    SetMap(node, __ TransitionMultipleElementsKind(
+                     Map(node->object_input()), Map(node->map_input()),
+                     node->transition_sources(), node->transition_target()));
     return maglev::ProcessResult::kContinue;
   }
 
@@ -2595,7 +2670,7 @@ class GraphBuildingNodeProcessor {
     }
 
     BIND(done);
-    SetMap(node, __ StringConcat(left, right));
+    SetMap(node, __ StringConcat(__ TagSmi(len), left, right));
     return maglev::ProcessResult::kContinue;
   }
   maglev::ProcessResult Process(maglev::StringConcat* node,
@@ -2792,6 +2867,25 @@ class GraphBuildingNodeProcessor {
     SetMap(node, __ LoadHeapNumberValue(field));
     return maglev::ProcessResult::kContinue;
   }
+  maglev::ProcessResult Process(maglev::LoadFloat64* node,
+                                const maglev::ProcessingState& state) {
+    SetMap(node, __ Load(Map(node->object_input()), LoadOp::Kind::TaggedBase(),
+                         MemoryRepresentation::Float64(), node->offset()));
+    return maglev::ProcessResult::kContinue;
+  }
+  maglev::ProcessResult Process(maglev::LoadInt32* node,
+                                const maglev::ProcessingState& state) {
+    SetMap(node, __ Load(Map(node->object_input()), LoadOp::Kind::TaggedBase(),
+                         MemoryRepresentation::Int32(), node->offset()));
+    return maglev::ProcessResult::kContinue;
+  }
+  maglev::ProcessResult Process(maglev::LoadHeapInt32* node,
+                                const maglev::ProcessingState& state) {
+    V<HeapNumber> field = __ LoadTaggedField<HeapNumber>(
+        Map(node->object_input()), node->offset());
+    SetMap(node, __ LoadHeapInt32Value(field));
+    return maglev::ProcessResult::kContinue;
+  }
   maglev::ProcessResult Process(maglev::LoadFixedArrayElement* node,
                                 const maglev::ProcessingState& state) {
     SetMap(node, __ LoadFixedArrayElement(
@@ -2848,14 +2942,14 @@ class GraphBuildingNodeProcessor {
       const maglev::ProcessingState& state) {
     Label<> done(this);
     V<Context> context = V<i::Context>::Cast(Map(node->context_input()));
-    V<Object> old_value = Map(node->old_value_input());
     V<Object> new_value = Map(node->new_value_input());
+    V<Object> old_value = __ LoadTaggedField(context, node->offset());
     IF_NOT (__ TaggedEqual(old_value, new_value)) {
       V<Object> side_data =
           __ LoadScriptContextSideData(context, node->index());
       IF_NOT (UNLIKELY(__ TaggedEqual(
                   side_data,
-                  __ SmiConstant(ContextSidePropertyCell::kOther)))) {
+                  __ SmiConstant(ContextSidePropertyCell::Other())))) {
         GET_FRAME_STATE_MAYBE_ABORT(frame_state, node->eager_deopt_info());
         __ StoreScriptContextSlowPath(
             context, old_value, new_value, side_data, frame_state,
@@ -2874,6 +2968,14 @@ class GraphBuildingNodeProcessor {
     V<HeapNumber> field = __ LoadTaggedField<HeapNumber>(
         Map(node->object_input()), node->offset());
     __ StoreField(field, AccessBuilder::ForHeapNumberValue(),
+                  Map(node->value_input()));
+    return maglev::ProcessResult::kContinue;
+  }
+  maglev::ProcessResult Process(maglev::StoreHeapInt32* node,
+                                const maglev::ProcessingState& state) {
+    V<HeapNumber> field = __ LoadTaggedField<HeapNumber>(
+        Map(node->object_input()), node->offset());
+    __ StoreField(field, AccessBuilder::ForHeapInt32Value(),
                   Map(node->value_input()));
     return maglev::ProcessResult::kContinue;
   }
@@ -2928,6 +3030,13 @@ class GraphBuildingNodeProcessor {
              WriteBarrierKind::kNoWriteBarrier, node->offset());
     return maglev::ProcessResult::kContinue;
   }
+  maglev::ProcessResult Process(maglev::StoreInt32* node,
+                                const maglev::ProcessingState& state) {
+    __ Store(Map(node->object_input()), Map(node->value_input()),
+             StoreOp::Kind::TaggedBase(), MemoryRepresentation::Int32(),
+             WriteBarrierKind::kNoWriteBarrier, node->offset());
+    return maglev::ProcessResult::kContinue;
+  }
 
   // For-in specific operations.
   maglev::ProcessResult Process(maglev::LoadEnumCacheLength* node,
@@ -2973,11 +3082,10 @@ class GraphBuildingNodeProcessor {
         __ LoadField<WordPtr>(Map<JSTypedArray>(node->receiver_input()),
                               AccessBuilder::ForJSTypedArrayByteLength());
 
-    int element_size = ElementsKindSize(node->elements_kind());
-    if (element_size > 1) {
-      DCHECK(element_size == 2 || element_size == 4 || element_size == 8);
-      length = __ WordPtrShiftRightLogical(
-          length, base::bits::CountTrailingZeros(element_size));
+    int shift_size = ElementsKindToShiftSize(node->elements_kind());
+    if (shift_size > 0) {
+      DCHECK(shift_size == 1 || shift_size == 2 || shift_size == 3);
+      length = __ WordPtrShiftRightLogical(length, shift_size);
     }
     SetMap(node, length);
     return maglev::ProcessResult::kContinue;
@@ -3357,6 +3465,16 @@ class GraphBuildingNodeProcessor {
     __ Branch(condition, Map(node->if_true()), Map(node->if_false()));
     return maglev::ProcessResult::kContinue;
   }
+
+  maglev::ProcessResult Process(maglev::BranchIfIntPtrToBooleanTrue* node,
+                                const maglev::ProcessingState& state) {
+    V<Word32> condition =
+        __ Equal(Map(node->condition_input()), __ IntPtrConstant(0),
+                 RegisterRepresentation::WordPtr());
+    __ Branch(condition, Map(node->if_true()), Map(node->if_false()));
+    return maglev::ProcessResult::kContinue;
+  }
+
   maglev::ProcessResult Process(maglev::BranchIfFloat64ToBooleanTrue* node,
                                 const maglev::ProcessingState& state) {
     V<Word32> condition = Float64ToBit(Map(node->condition_input()));
@@ -3543,6 +3661,21 @@ class GraphBuildingNodeProcessor {
                node->eager_deopt_info()->feedback_to_update()));
     return maglev::ProcessResult::kContinue;
   }
+
+  maglev::ProcessResult Process(maglev::CheckedSmiTagIntPtr* node,
+                                const maglev::ProcessingState& state) {
+    GET_FRAME_STATE_MAYBE_ABORT(frame_state, node->eager_deopt_info());
+    SetMap(
+        node,
+        __ ConvertUntaggedToJSPrimitiveOrDeopt(
+            Map(node->input()), frame_state,
+            ConvertUntaggedToJSPrimitiveOrDeoptOp::JSPrimitiveKind::kSmi,
+            RegisterRepresentation::WordPtr(),
+            ConvertUntaggedToJSPrimitiveOrDeoptOp::InputInterpretation::kSigned,
+            node->eager_deopt_info()->feedback_to_update()));
+    return maglev::ProcessResult::kContinue;
+  }
+
   maglev::ProcessResult Process(maglev::CheckedSmiTagFloat64* node,
                                 const maglev::ProcessingState& state) {
     GET_FRAME_STATE_MAYBE_ABORT(frame_state, node->eager_deopt_info());
@@ -3568,6 +3701,14 @@ class GraphBuildingNodeProcessor {
   maglev::ProcessResult Process(maglev::UnsafeSmiTagUint32* node,
                                 const maglev::ProcessingState& state) {
     SetMap(node, __ TagSmi(Map(node->input())));
+    return maglev::ProcessResult::kContinue;
+  }
+
+  maglev::ProcessResult Process(maglev::UnsafeSmiTagIntPtr* node,
+                                const maglev::ProcessingState& state) {
+    // TODO(388844115): Rename the IntPtr in Maglev to make it clear it's
+    // non-negative.
+    SetMap(node, __ TagSmi(__ TruncateWordPtrToWord32(Map(node->input()))));
     return maglev::ProcessResult::kContinue;
   }
 
@@ -3878,6 +4019,13 @@ class GraphBuildingNodeProcessor {
     SetMap(node, ConvertWord32ToJSBool(Map(node->value()), node->flip()));
     return maglev::ProcessResult::kContinue;
   }
+
+  maglev::ProcessResult Process(maglev::IntPtrToBoolean* node,
+                                const maglev::ProcessingState& state) {
+    SetMap(node, ConvertWordPtrToJSBool(Map(node->value()), node->flip()));
+    return maglev::ProcessResult::kContinue;
+  }
+
   maglev::ProcessResult Process(maglev::Float64ToBoolean* node,
                                 const maglev::ProcessingState& state) {
     V<Word32> condition = Float64ToBit(Map(node->value()));
@@ -3894,6 +4042,13 @@ class GraphBuildingNodeProcessor {
     SetMap(node, __ ConvertUint32ToNumber(Map(node->input())));
     return maglev::ProcessResult::kContinue;
   }
+
+  maglev::ProcessResult Process(maglev::IntPtrToNumber* node,
+                                const maglev::ProcessingState& state) {
+    SetMap(node, __ ConvertIntPtrToNumber(Map(node->input())));
+    return maglev::ProcessResult::kContinue;
+  }
+
   maglev::ProcessResult Process(maglev::Float64ToTagged* node,
                                 const maglev::ProcessingState& state) {
     SetMap(node, Float64ToTagged(Map(node->input()), node->conversion_mode()));
@@ -3923,7 +4078,12 @@ class GraphBuildingNodeProcessor {
     return maglev::ProcessResult::kContinue;
   }
 
-  maglev::ProcessResult Process(maglev::CheckedNumberOrOddballToFloat64* node,
+  template <typename NumberToFloat64Op>
+    requires(std::is_same_v<NumberToFloat64Op,
+                            maglev::CheckedNumberOrOddballToFloat64> ||
+             std::is_same_v<NumberToFloat64Op,
+                            maglev::CheckedNumberOrOddballToHoleyFloat64>)
+  maglev::ProcessResult Process(NumberToFloat64Op* node,
                                 const maglev::ProcessingState& state) {
     GET_FRAME_STATE_MAYBE_ABORT(frame_state, node->eager_deopt_info());
     ConvertJSPrimitiveToUntaggedOrDeoptOp::JSPrimitiveKind kind;
@@ -3975,6 +4135,22 @@ class GraphBuildingNodeProcessor {
     SetMap(node, __ Word32SignHintUnsigned(Map(node->input())));
     return maglev::ProcessResult::kContinue;
   }
+
+  maglev::ProcessResult Process(maglev::CheckedIntPtrToUint32* node,
+                                const maglev::ProcessingState& state) {
+    GET_FRAME_STATE_MAYBE_ABORT(frame_state, node->eager_deopt_info());
+    // TODO(388844115): Rename the IntPtr in Maglev to make it clear it's
+    // non-negative.
+    __ DeoptimizeIfNot(
+        __ UintPtrLessThanOrEqual(Map(node->input()),
+                                  std::numeric_limits<uint32_t>::max()),
+        frame_state, DeoptimizeReason::kNotUint32,
+        node->eager_deopt_info()->feedback_to_update());
+    SetMap(node, __ Word32SignHintUnsigned(
+                     __ TruncateWordPtrToWord32(Map(node->input()))));
+    return maglev::ProcessResult::kContinue;
+  }
+
   maglev::ProcessResult Process(maglev::CheckedUint32ToInt32* node,
                                 const maglev::ProcessingState& state) {
     GET_FRAME_STATE_MAYBE_ABORT(frame_state, node->eager_deopt_info());
@@ -3984,6 +4160,22 @@ class GraphBuildingNodeProcessor {
     SetMap(node, __ Word32SignHintSigned(Map(node->input())));
     return maglev::ProcessResult::kContinue;
   }
+
+  maglev::ProcessResult Process(maglev::CheckedIntPtrToInt32* node,
+                                const maglev::ProcessingState& state) {
+    GET_FRAME_STATE_MAYBE_ABORT(frame_state, node->eager_deopt_info());
+    // TODO(388844115): Rename the IntPtr in Maglev to make it clear it's
+    // non-negative.
+    __ DeoptimizeIfNot(
+        __ UintPtrLessThanOrEqual(Map(node->input()),
+                                  std::numeric_limits<int32_t>::max()),
+        frame_state, DeoptimizeReason::kNotInt32,
+        node->eager_deopt_info()->feedback_to_update());
+    SetMap(node, __ Word32SignHintSigned(
+                     __ TruncateWordPtrToWord32(Map(node->input()))));
+    return maglev::ProcessResult::kContinue;
+  }
+
   maglev::ProcessResult Process(maglev::UnsafeInt32ToUint32* node,
                                 const maglev::ProcessingState& state) {
     SetMap(node, __ Word32SignHintUnsigned(Map(node->input())));
@@ -4021,6 +4213,13 @@ class GraphBuildingNodeProcessor {
     SetMap(node, __ ChangeUint32ToFloat64(Map(node->input())));
     return maglev::ProcessResult::kContinue;
   }
+
+  maglev::ProcessResult Process(maglev::ChangeIntPtrToFloat64* node,
+                                const maglev::ProcessingState& state) {
+    SetMap(node, __ ChangeIntPtrToFloat64(Map(node->input())));
+    return maglev::ProcessResult::kContinue;
+  }
+
   maglev::ProcessResult Process(maglev::CheckedTruncateFloat64ToInt32* node,
                                 const maglev::ProcessingState& state) {
     GET_FRAME_STATE_MAYBE_ABORT(frame_state, node->eager_deopt_info());
@@ -4421,10 +4620,6 @@ class GraphBuildingNodeProcessor {
                                 const maglev::ProcessingState&) {
     UNREACHABLE();
   }
-  maglev::ProcessResult Process(maglev::CheckUint32IsSmi*,
-                                const maglev::ProcessingState&) {
-    UNREACHABLE();
-  }
   maglev::ProcessResult Process(maglev::CallCPPBuiltin*,
                                 const maglev::ProcessingState&) {
     UNREACHABLE();
@@ -4445,6 +4640,13 @@ class GraphBuildingNodeProcessor {
   AssemblerT& Asm() { return assembler_; }
   Zone* temp_zone() { return temp_zone_; }
   Zone* graph_zone() { return Asm().output_graph().graph_zone(); }
+
+  bool IsMapped(const maglev::NodeBase* node) const {
+    if (V8_UNLIKELY(node == maglev_generator_context_node_)) {
+      return true;
+    }
+    return node_mapping_.count(node);
+  }
 
  private:
   OptionalV<FrameState> BuildFrameState(
@@ -4537,7 +4739,7 @@ class GraphBuildingNodeProcessor {
     // skipped. We thus use SmiConstant(0) as a fake Closure input here, but it
     // would be nicer to fix the instruction selector to not require this input
     // at all for such frames.
-    V<Any> fake_closure_input = __ SmiConstant(0);
+    V<Any> fake_closure_input = __ SmiZeroConstant();
     builder.AddInput(MachineType::AnyTagged(), fake_closure_input);
 
     // Parameters
@@ -4583,7 +4785,7 @@ class GraphBuildingNodeProcessor {
     // should be skipped. We thus use SmiConstant(0) as a fake Context input
     // here, but it would be nicer to fix the instruction selector to not
     // require this input at all for such frames.
-    V<Any> fake_context_input = __ SmiConstant(0);
+    V<Any> fake_context_input = __ SmiZeroConstant();
     builder.AddInput(MachineType::AnyTagged(), fake_context_input);
 
     if (builder.Inputs().size() >
@@ -4625,13 +4827,13 @@ class GraphBuildingNodeProcessor {
     // Extra fixed JS frame parameters. These are at the end since JS builtins
     // push their parameters in reverse order.
     constexpr int kExtraFixedJSFrameParameters =
-        V8_ENABLE_LEAPTIERING_BOOL ? 4 : 3;
+        V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE_BOOL ? 4 : 3;
     if (frame.is_javascript()) {
       DCHECK_EQ(Builtins::CallInterfaceDescriptorFor(frame.builtin_id())
                     .GetRegisterParameterCount(),
                 kExtraFixedJSFrameParameters);
       static_assert(kExtraFixedJSFrameParameters ==
-                    3 + (V8_ENABLE_LEAPTIERING_BOOL ? 1 : 0));
+                    3 + (V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE_BOOL ? 1 : 0));
       // kJavaScriptCallTargetRegister
       builder.AddInput(MachineType::AnyTagged(),
                        __ HeapConstant(frame.javascript_target().object()));
@@ -4643,10 +4845,11 @@ class GraphBuildingNodeProcessor {
           MachineType::AnyTagged(),
           __ SmiConstant(Smi::FromInt(
               Builtins::GetStackParameterCount(frame.builtin_id()))));
-#ifdef V8_ENABLE_LEAPTIERING
+#ifdef V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE
       // kJavaScriptCallDispatchHandleRegister
-      builder.AddInput(MachineType::AnyTagged(),
-                       __ SmiConstant(Smi::FromInt(kInvalidDispatchHandle)));
+      builder.AddInput(
+          MachineType::AnyTagged(),
+          __ SmiConstant(Smi::FromInt(kInvalidDispatchHandle.value())));
 #endif
     }
 
@@ -4942,7 +5145,7 @@ class GraphBuildingNodeProcessor {
     static const uint32_t kNotDuplicated = -1;
 
    private:
-    std::vector<const maglev::VirtualObject*> object_ids_{10};
+    std::vector<const maglev::VirtualObject*> object_ids_;
     uint32_t next_id_ = 0;
   };
 
@@ -4984,9 +5187,11 @@ class GraphBuildingNodeProcessor {
     int local_count = 0;
     Handle<SharedFunctionInfo> shared_info =
         maglev_frame.unit().shared_function_info().object();
+    Handle<BytecodeArray> bytecode_array =
+        maglev_frame.unit().bytecode().object();
     FrameStateFunctionInfo* info = graph_zone()->New<FrameStateFunctionInfo>(
         type, parameter_count, max_arguments, local_count, shared_info,
-        kNullMaybeHandle);
+        bytecode_array);
 
     return graph_zone()->New<FrameStateInfo>(maglev_frame.bytecode_position(),
                                              OutputFrameStateCombine::Ignore(),
@@ -4998,12 +5203,14 @@ class GraphBuildingNodeProcessor {
     FrameStateType type = FrameStateType::kConstructInvokeStub;
     Handle<SharedFunctionInfo> shared_info =
         maglev_frame.unit().shared_function_info().object();
+    Handle<BytecodeArray> bytecode_array =
+        maglev_frame.unit().bytecode().object();
     constexpr uint16_t kParameterCount = 1;  // Only 1 parameter: the receiver.
     constexpr uint16_t kMaxArguments = 0;
     constexpr int kLocalCount = 0;
     FrameStateFunctionInfo* info = graph_zone()->New<FrameStateFunctionInfo>(
         type, kParameterCount, kMaxArguments, kLocalCount, shared_info,
-        kNullMaybeHandle);
+        bytecode_array);
 
     return graph_zone()->New<FrameStateInfo>(
         BytecodeOffset::None(), OutputFrameStateCombine::Ignore(), info);
@@ -5018,7 +5225,7 @@ class GraphBuildingNodeProcessor {
         static_cast<uint16_t>(maglev_frame.parameters().length());
     if (maglev_frame.is_javascript()) {
       constexpr int kExtraFixedJSFrameParameters =
-          V8_ENABLE_LEAPTIERING_BOOL ? 4 : 3;
+          V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE_BOOL ? 4 : 3;
       DCHECK_EQ(Builtins::CallInterfaceDescriptorFor(maglev_frame.builtin_id())
                     .GetRegisterParameterCount(),
                 kExtraFixedJSFrameParameters);
@@ -5247,13 +5454,20 @@ class GraphBuildingNodeProcessor {
     DCHECK(loop->is_loop());
     if (!loop->has_phi()) return;
     for (maglev::Phi* maglev_phi : *loop->phis()) {
-      OpIndex phi_index = Map(maglev_phi);
+      // Note that we've already emited the backedge Goto, which means that
+      // we're currently not in a block, which means that we need to pass
+      // can_be_invalid=false to `Map`, otherwise it will think that we're
+      // currently emitting unreachable operations and return
+      // OpIndex::Invalid().
+      constexpr bool kIndexCanBeInvalid = false;
+      OpIndex phi_index = Map(maglev_phi, kIndexCanBeInvalid);
       PendingLoopPhiOp& pending_phi =
           __ output_graph().Get(phi_index).Cast<PendingLoopPhiOp>();
       __ output_graph().Replace<PhiOp>(
           phi_index,
           base::VectorOf(
-              {pending_phi.first(), Map(maglev_phi -> backedge_input())}),
+              {pending_phi.first(),
+               Map(maglev_phi -> backedge_input(), kIndexCanBeInvalid)}),
           pending_phi.rep);
     }
   }
@@ -5287,6 +5501,15 @@ class GraphBuildingNodeProcessor {
     V<Boolean> false_idx = __ HeapConstant(local_factory_->false_value());
     if (flip) std::swap(true_idx, false_idx);
     return __ Select(b, true_idx, false_idx, RegisterRepresentation::Tagged(),
+                     BranchHint::kNone, SelectOp::Implementation::kBranch);
+  }
+
+  V<Boolean> ConvertWordPtrToJSBool(V<WordPtr> b, bool flip = false) {
+    V<Boolean> true_idx = __ HeapConstant(local_factory_->true_value());
+    V<Boolean> false_idx = __ HeapConstant(local_factory_->false_value());
+    if (flip) std::swap(true_idx, false_idx);
+    return __ Select(__ WordPtrEqual(b, __ WordPtrConstant(0)), false_idx,
+                     true_idx, RegisterRepresentation::Tagged(),
                      BranchHint::kNone, SelectOp::Implementation::kBranch);
   }
 
@@ -5485,11 +5708,21 @@ class GraphBuildingNodeProcessor {
   }
 
   template <typename T>
-  V<T> Map(const maglev::Input input) {
-    return V<T>::Cast(Map(input.node()));
+  V<T> Map(const maglev::Input input, bool can_be_invalid = true) {
+    return V<T>::Cast(Map(input.node(), can_be_invalid));
   }
-  OpIndex Map(const maglev::Input input) { return Map(input.node()); }
-  OpIndex Map(const maglev::NodeBase* node) {
+  OpIndex Map(const maglev::Input input, bool can_be_invalid = true) {
+    return Map(input.node(), can_be_invalid);
+  }
+  OpIndex Map(const maglev::NodeBase* node, bool can_be_invalid = true) {
+    // If {can_be_invalid} is true (which it should be in most cases) and we're
+    // currently in unreachable code, then `OpIndex::Invalid` is returned. The
+    // only case where `can_be_invalid` is false is FixLoopPhis: this is called
+    // after having emitted the backedge Goto, which means that we are in
+    // unreachable code, but we know that the mappings should still exist.
+    if (can_be_invalid && __ generating_unreachable_operations()) {
+      return OpIndex::Invalid();
+    }
     if (V8_UNLIKELY(node == maglev_generator_context_node_)) {
       return __ GetVariable(generator_context_);
     }
@@ -5499,6 +5732,7 @@ class GraphBuildingNodeProcessor {
   Block* Map(const maglev::BasicBlock* block) { return block_mapping_[block]; }
 
   void SetMap(maglev::NodeBase* node, V<Any> idx) {
+    if (__ generating_unreachable_operations()) return;
     DCHECK(idx.valid());
     DCHECK_EQ(__ output_graph().Get(idx).outputs_rep().size(), 1);
     node_mapping_[node] = idx;
@@ -5675,6 +5909,11 @@ class NodeProcessorBase : public GraphBuildingNodeProcessor {
     OpIndex end_index_before = graph_.EndIndex();
     maglev::ProcessResult result =
         GraphBuildingNodeProcessor::Process(node, state);
+    DCHECK_IMPLIES(result == maglev::ProcessResult::kContinue &&
+                       !GraphBuildingNodeProcessor::Asm()
+                            .generating_unreachable_operations() &&
+                       maglev::IsValueNode(node->opcode()),
+                   IsMapped(node));
 
     // Recording the SourcePositions of the OpIndex that were just created.
     SourcePosition source = labeller_->GetNodeProvenance(node).position;
@@ -5767,7 +6006,8 @@ void RunMaglevOptimizations(PipelineData* data,
 }
 
 std::optional<BailoutReason> MaglevGraphBuildingPhase::Run(PipelineData* data,
-                                                           Zone* temp_zone) {
+                                                           Zone* temp_zone,
+                                                           Linkage* linkage) {
   JSHeapBroker* broker = data->broker();
   UnparkedScopeIfNeeded unparked_scope(broker);
 
@@ -5776,6 +6016,13 @@ std::optional<BailoutReason> MaglevGraphBuildingPhase::Run(PipelineData* data,
           data->isolate(), broker, data->info()->closure(),
           data->info()->osr_offset(),
           data->info()->function_context_specializing());
+
+  // We need to be certain that the parameter count reported by our output
+  // Code object matches what the code we compile expects. Otherwise, this
+  // may lead to effectively signature mismatches during function calls. This
+  // CHECK is a defense-in-depth measure to ensure this doesn't happen.
+  SBXCHECK_EQ(compilation_info->toplevel_compilation_unit()->parameter_count(),
+              linkage->GetIncomingDescriptor()->ParameterSlotCount());
 
   if (V8_UNLIKELY(data->info()->trace_turbo_graph())) {
     PrintBytecode(*data, compilation_info.get());

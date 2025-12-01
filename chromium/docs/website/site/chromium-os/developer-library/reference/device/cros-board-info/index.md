@@ -190,7 +190,7 @@ component is probeable to avoid SKU explosion.
 
 Any other information about a device should be captured and stored in the higher
 level configuration system. See
-[SKU and FW Configuration Fields](../firmware_config/) for more details.
+[SKU and FW Configuration Fields](../firmware-config/) for more details.
 
 Below are a few, non-exhaustive examples of how the firmware configuration bits
 could be portioned.
@@ -281,13 +281,13 @@ it doesn't always work.
 WP should be connected to the same wire as the write-protect pin of the EC SPI
 flash.
 
-![wp_circuitry_1](../images/wp_circuitry_1.png)
+![wp_circuitry_1](./wp_circuitry_1.png)
 
 The power well should be the same as the EC. When the WP is high, the data is
 write protected. If the WP pin of an EC SPI Flash has active low logic (low =
 protect), a MOSFET can be used to reverse the voltage:
 
-![wp_circuitry_2](../images/wp_circuitry_2.png)
+![wp_circuitry_2](./wp_circuitry_2.png)
 
 The following EEPROM parts have been tested and deployed on the past projects:
 

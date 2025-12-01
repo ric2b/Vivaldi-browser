@@ -50,8 +50,8 @@ Miscellaneous Areas
 ===================
 
 documentation                           Stefano Sabatini, Mike Melanson, Timothy Gu, Gyan Doshi
-project server day to day operations    (L: root@ffmpeg.org) Árpád Gereöffy, Michael Niedermayer, Reimar Doeffinger, Alexander Strasser, Nikolay Aleksandrov, Timo Rothenpieler
-project server emergencies              (L: root@ffmpeg.org) Árpád Gereöffy, Reimar Doeffinger, Alexander Strasser, Nikolay Aleksandrov, Timo Rothenpieler
+project server day to day operations    (L: root@ffmpeg.org) Michael Niedermayer, Reimar Doeffinger, Alexander Strasser, Nikolay Aleksandrov, Timo Rothenpieler
+project server emergencies              (L: root@ffmpeg.org) Reimar Doeffinger, Alexander Strasser, Nikolay Aleksandrov, Timo Rothenpieler
 presets                             [0]
 metadata subsystem                      Aurelien Jacobs
 release management                      Michael Niedermayer
@@ -82,6 +82,7 @@ Other:
   aes_ctr.c, aes_ctr.h                  Eran Kornblau
   bprint                                Nicolas George
   bswap.h
+  csp.c, csp.h                          Leo Izen, Ronald S. Bultje
   des                                   Reimar Doeffinger
   dynarray.h                            Nicolas George
   eval.c, eval.h                    [2] Michael Niedermayer
@@ -511,9 +512,10 @@ Operating systems / CPU architectures
 Alpha                               [0]
 MIPS                                    Manojkumar Bhosale, Shiyou Yin
 LoongArch                           [2] Shiyou Yin
-Mac OS X / PowerPC                      Romain Dolbeau, Guillaume Poirier
+Darwin (macOS, iOS)                 [2] Marvin Scholz
+Mac OS X / PowerPC                  [0]
 Amiga / PowerPC                         Colin Ward
-Linux / PowerPC                         Lauri Kasanen
+Linux / PowerPC                     [1] Lauri Kasanen
 RISC-V                              [2] Rémi Denis-Courmont
 Windows MinGW                           Alex Beregszaszi, Ramiro Polla
 Windows Cygwin                          Victor Paesa

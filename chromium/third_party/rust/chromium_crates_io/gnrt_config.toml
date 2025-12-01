@@ -162,13 +162,13 @@ ban_features = [
     'extra_traits',
 ]
 
+[crate.libm]
+license_files= ["LICENSE.txt"]
+
 [crate.log]
 
 [crate.nom]
 remove_deps = ['minimal-lexical']
-
-[crate.png]
-extra_kv = { allow_unstable_features = 'portable_simd' }
 
 [crate.prost]
 extra_input_roots = ['../README.md']
@@ -217,9 +217,6 @@ extra_src_roots = ['../generated']
 
 [crate.small_ctor]
 group = 'test'
-
-[crate.unicode-ident]
-license_files = ['LICENSE-APACHE', 'LICENSE-UNICODE']
 
 [crate.unicode-linebreak]
 allow_first_party_usage = false

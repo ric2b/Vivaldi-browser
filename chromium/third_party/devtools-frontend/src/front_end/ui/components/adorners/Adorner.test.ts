@@ -12,7 +12,7 @@ const ADORNER_TAG_NAME = 'DEVTOOLS-ADORNER';
 describe('Adorner', () => {
   function assertIsAdorner(element: HTMLElement) {
     assert.strictEqual(element.tagName, ADORNER_TAG_NAME, `element tag name is not ${ADORNER_TAG_NAME}`);
-    assert.isTrue(element instanceof Adorners.Adorner.Adorner, 'element is not an instance of Adorner');
+    assert.instanceOf(element, Adorners.Adorner.Adorner, 'element is not an instance of Adorner');
     assert.strictEqual(
         Object.getPrototypeOf(element), Adorners.Adorner.Adorner.prototype,
         'element is not on Adorner\'s prototype chain');
@@ -127,7 +127,7 @@ describe('Adorner', () => {
     };
 
     const slottedChildren = adorner.querySelectorAll('[slot="content"]');
-    assert.strictEqual(slottedChildren.length, 1, 'adorner light dom should only have one child with [slot="content"]');
+    assert.lengthOf(slottedChildren, 1, 'adorner light dom should only have one child with [slot="content"]');
     assert.strictEqual(
         slottedChildren[0].textContent, 'content 3', 'adorner content slot should have the most recent content');
   });

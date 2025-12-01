@@ -51,7 +51,7 @@ void compute_main_inner(uint local_invocation_index_2, threadgroup tint_array<ti
     uint const x_31 = idx;
     uint const x_33 = idx;
     uint const x_35 = idx;
-    atomic_store_explicit(&((*(tint_symbol_1))[tint_div(x_31, 2u)][tint_mod(x_33, 2u)][tint_mod(x_35, 1u)]), 0u, memory_order_relaxed);
+    atomic_store_explicit(&((*(tint_symbol_1))[min(tint_div(x_31, 2u), 2u)][min(tint_mod(x_33, 2u), 1u)][min(tint_mod(x_35, 1u), 0u)]), 0u, memory_order_relaxed);
     {
       idx = (idx + 1u);
     }

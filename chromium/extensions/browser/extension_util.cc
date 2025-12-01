@@ -16,6 +16,7 @@
 #include "content/public/browser/storage_partition_config.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/browser/extension_system.h"
 #include "extensions/browser/extension_util.h"
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/browser/script_injection_tracker.h"
@@ -118,6 +119,16 @@ bool CanCrossIncognito(const Extension* extension,
   return IsIncognitoEnabled(extension->id(), context) &&
          !IncognitoInfo::IsSplitMode(extension);
 }
+
+#if BUILDFLAG(IS_ANDROID)
+void InitExtensionSystemForIncognitoSplit(
+    content::BrowserContext* incognito_context) {
+  ExtensionSystem* extension_system = ExtensionSystem::Get(incognito_context);
+  if (!extension_system->is_ready()) {
+    extension_system->InitForRegularProfile(/*extensions_enabled=*/true);
+  }
+}
+#endif
 
 bool AllowFileAccess(const ExtensionId& extension_id,
                      content::BrowserContext* context) {
@@ -404,14 +415,14 @@ bool CanRendererActOnBehalfOfExtension(
 
   // Can `render_process_id` host a chrome-extension:// origin (frame, worker,
   // etc.)?
-  if (CanRendererHostExtensionOrigin(render_process_host.GetID(), extension_id,
-                                     is_sandboxed)) {
+  if (CanRendererHostExtensionOrigin(render_process_host.GetDeprecatedID(),
+                                     extension_id, is_sandboxed)) {
     return true;
   }
 
   if (render_frame_host) {
-    DCHECK_EQ(render_process_host.GetID(),
-              render_frame_host->GetProcess()->GetID());
+    DCHECK_EQ(render_process_host.GetDeprecatedID(),
+              render_frame_host->GetProcess()->GetDeprecatedID());
     content::SiteInstance& site_instance =
         *render_frame_host->GetSiteInstance();
 
@@ -451,9 +462,10 @@ bool IsChromeApp(const ExtensionId& extension_id,
 
 bool IsAppLaunchable(const ExtensionId& extension_id,
                      content::BrowserContext* context) {
-  int reason = ExtensionPrefs::Get(context)->GetDisableReasons(extension_id);
-  return !((reason & disable_reason::DISABLE_UNSUPPORTED_REQUIREMENT) ||
-           (reason & disable_reason::DISABLE_CORRUPTED));
+  DisableReasonSet reason =
+      ExtensionPrefs::Get(context)->GetDisableReasons(extension_id);
+  return !reason.contains(disable_reason::DISABLE_UNSUPPORTED_REQUIREMENT) &&
+         !reason.contains(disable_reason::DISABLE_CORRUPTED);
 }
 
 bool IsAppLaunchableWithoutEnabling(const ExtensionId& extension_id,

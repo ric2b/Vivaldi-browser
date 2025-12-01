@@ -4,11 +4,14 @@
 
 #include "third_party/blink/renderer/core/html/html_permission_element.h"
 
+#include <stdint.h>
+
 #include <optional>
 
 #include "base/functional/bind.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/strings/string_split.h"
 #include "third_party/blink/public/common/input/web_pointer_properties.h"
 #include "third_party/blink/public/mojom/permissions/permission.mojom-blink.h"
 #include "third_party/blink/public/strings/grit/blink_strings.h"
@@ -21,6 +24,7 @@
 #include "third_party/blink/renderer/core/css/properties/longhands.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
+#include "third_party/blink/renderer/core/dom/dom_node_ids.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/dom/focus_params.h"
@@ -57,6 +61,7 @@
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
+#include "third_party/blink/renderer/platform/wtf/text/string_utf8_adaptor.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 
@@ -93,6 +98,9 @@ constexpr int kMaxHorizontalPaddingToFontSizeRatio = 5;
 // being too close.
 constexpr int kMinMargin = 4;
 constexpr float kIntersectionThreshold = 1.0f;
+
+constexpr float kDefaultSmallFontSize = 13;     // Default 'small' font size.
+constexpr float kDefaultXxxLargeFontSize = 48;  // Default 'xxxlarge' font size.
 
 PermissionDescriptorPtr CreatePermissionDescriptor(PermissionName name) {
   auto descriptor = PermissionDescriptor::New();
@@ -148,31 +156,22 @@ Vector<PermissionDescriptorPtr> ParsePermissionDescriptorsFromString(
   return Vector<PermissionDescriptorPtr>();
 }
 
-int GetTranslatedMessageID(int message_id,
-                           const AtomicString& language_string) {
+uint16_t GetTranslatedMessageID(uint16_t message_id,
+                                const AtomicString& language_string) {
   DCHECK(language_string.IsLowerASCII());
-  DEFINE_STATIC_LOCAL(GeneratedMessagesMap, generated_message_ids, ());
   if (language_string.empty()) {
     return message_id;
   }
 
-  if (generated_message_ids.empty()) {
-    FillInPermissionElementTranslationsMap(generated_message_ids);
+  StringUTF8Adaptor lang_adaptor(language_string);
+  std::string_view lang_utf8 = lang_adaptor.AsStringView();
+  if (auto mapped_id = GetPermissionElementMessageId(lang_utf8, message_id);
+      mapped_id.has_value()) {
+    return *mapped_id;
   }
 
-  const auto language_map_itr = generated_message_ids.find(language_string);
-  if (language_map_itr != generated_message_ids.end()) {
-    const auto& language_map = language_map_itr->value;
-    const auto translated_message_itr = language_map.find(message_id);
-    if (translated_message_itr != language_map.end()) {
-      return translated_message_itr->value;
-    }
-  }
-
-  Vector<String> parts;
-  language_string.GetString().Split('-', parts);
-
-  if (parts.size() == 0) {
+  auto parts = base::SplitStringOnce(lang_utf8, '-');
+  if (!parts) {
     return message_id;
   }
   // This is to support locales with unknown combination of languages and
@@ -181,20 +180,15 @@ int GetTranslatedMessageID(int message_id,
   // locale.
   // Eg: en-au is a unknown combination, in this case we will fall back to
   // en strings.
-  if (generated_message_ids.Contains(parts[0])) {
-    const auto& language_map = generated_message_ids.find(parts[0])->value;
-    if (language_map.Contains(message_id)) {
-      return language_map.find(message_id)->value;
-    }
-  }
-  return message_id;
+  return GetPermissionElementMessageId(parts->first, message_id)
+      .value_or(message_id);
 }
 
 // Helper to get permission text resource ID for the given map which has only
 // one element.
-int GetUntranslatedMessageIDSinglePermission(PermissionName name,
-                                             bool granted,
-                                             bool is_precise_location) {
+uint16_t GetUntranslatedMessageIDSinglePermission(PermissionName name,
+                                                  bool granted,
+                                                  bool is_precise_location) {
   if (name == PermissionName::VIDEO_CAPTURE) {
     return granted ? IDS_PERMISSION_REQUEST_CAMERA_ALLOWED
                    : IDS_PERMISSION_REQUEST_CAMERA;
@@ -221,21 +215,21 @@ int GetUntranslatedMessageIDSinglePermission(PermissionName name,
 // Helper to get permission text resource ID for the given map which has
 // multiple elements. Currently we only support "camera microphone" grouped
 // permissions.
-int GetUntranslatedMessageIDMultiplePermissions(bool granted) {
+uint16_t GetUntranslatedMessageIDMultiplePermissions(bool granted) {
   return granted ? IDS_PERMISSION_REQUEST_CAMERA_MICROPHONE_ALLOWED
                  : IDS_PERMISSION_REQUEST_CAMERA_MICROPHONE;
 }
 
 // Helper to get `PermissionsPolicyFeature` from permission name
-mojom::blink::PermissionsPolicyFeature PermissionNameToPermissionsPolicyFeature(
-    PermissionName permission_name) {
+network::mojom::PermissionsPolicyFeature
+PermissionNameToPermissionsPolicyFeature(PermissionName permission_name) {
   switch (permission_name) {
     case PermissionName::AUDIO_CAPTURE:
-      return mojom::blink::PermissionsPolicyFeature::kMicrophone;
+      return network::mojom::PermissionsPolicyFeature::kMicrophone;
     case PermissionName::VIDEO_CAPTURE:
-      return mojom::blink::PermissionsPolicyFeature::kCamera;
+      return network::mojom::PermissionsPolicyFeature::kCamera;
     case PermissionName::GEOLOCATION:
-      return mojom::blink::PermissionsPolicyFeature::kGeolocation;
+      return network::mojom::PermissionsPolicyFeature::kGeolocation;
     default:
       NOTREACHED() << "Not supported permission " << permission_name;
   }
@@ -546,8 +540,8 @@ bool HTMLPermissionElement::CanGeneratePseudoElement(PseudoId id) const {
   switch (id) {
     case PseudoId::kPseudoIdAfter:
     case PseudoId::kPseudoIdBefore:
-    case PseudoId::kPseudoIdCheck:
-    case PseudoId::kPseudoIdSelectArrow:
+    case PseudoId::kPseudoIdCheckMark:
+    case PseudoId::kPseudoIdPickerIcon:
       return false;
     default:
       return Element::CanGeneratePseudoElement(id);
@@ -705,6 +699,11 @@ bool HTMLPermissionElement::MaybeRegisterPageEmbeddedPermissionControl() {
   return true;
 }
 
+void HTMLPermissionElement::LangAttributeChanged() {
+  UpdateText();
+  HTMLElement::LangAttributeChanged();
+}
+
 void HTMLPermissionElement::AttributeChanged(
     const AttributeModificationParams& params) {
   if (params.name == html_names::kTypeAttr) {
@@ -738,10 +737,6 @@ void HTMLPermissionElement::AttributeChanged(
     }
 
     is_precise_location_ = true;
-    UpdateText();
-  }
-
-  if (params.name == html_names::kLangAttr) {
     UpdateText();
   }
 
@@ -906,6 +901,19 @@ void HTMLPermissionElement::AdjustStyle(ComputedStyleBuilder& builder) {
   } else {
     builder.ResetPaddingTop();
     builder.ResetPaddingBottom();
+  }
+
+  if (builder.BorderBottomWidth() > builder.FontSize()) {
+    builder.SetBorderBottomWidth(builder.FontSize());
+  }
+  if (builder.BorderTopWidth() > builder.FontSize()) {
+    builder.SetBorderTopWidth(builder.FontSize());
+  }
+  if (builder.BorderLeftWidth() > builder.FontSize()) {
+    builder.SetBorderLeftWidth(builder.FontSize());
+  }
+  if (builder.BorderRightWidth() > builder.FontSize()) {
+    builder.SetBorderRightWidth(builder.FontSize());
   }
 }
 
@@ -1298,11 +1306,11 @@ void HTMLPermissionElement::RefreshDisableReasonsAndUpdateTimer() {
 }
 
 void HTMLPermissionElement::UpdatePermissionStatusAndAppearance() {
-  if (base::ranges::any_of(permission_status_map_, [](const auto& status) {
+  if (std::ranges::any_of(permission_status_map_, [](const auto& status) {
         return status.value == MojoPermissionStatus::DENIED;
       })) {
     aggregated_permission_status_ = MojoPermissionStatus::DENIED;
-  } else if (base::ranges::any_of(
+  } else if (std::ranges::any_of(
                  permission_status_map_, [](const auto& status) {
                    return status.value == MojoPermissionStatus::ASK;
                  })) {
@@ -1340,12 +1348,12 @@ void HTMLPermissionElement::UpdateText() {
 
   AtomicString language_string = ComputeInheritedLanguage().LowerASCII();
 
-  int untranslated_message_id =
+  uint16_t untranslated_message_id =
       permission_count == 1
           ? GetUntranslatedMessageIDSinglePermission(
                 permission_name, permission_granted, is_precise_location_)
           : GetUntranslatedMessageIDMultiplePermissions(permission_granted);
-  int translated_message_id =
+  uint16_t translated_message_id =
       GetTranslatedMessageID(untranslated_message_id, language_string);
   CHECK(translated_message_id);
   permission_text_span_->setInnerText(
@@ -1353,11 +1361,13 @@ void HTMLPermissionElement::UpdateText() {
 }
 
 void HTMLPermissionElement::AddConsoleError(String error) {
+  LOG(ERROR) << error;
   AddConsoleMessage(mojom::blink::ConsoleMessageSource::kRendering,
                     mojom::blink::ConsoleMessageLevel::kError, error);
 }
 
 void HTMLPermissionElement::AddConsoleWarning(String warning) {
+  LOG(WARNING) << warning;
   AddConsoleMessage(mojom::blink::ConsoleMessageSource::kRendering,
                     mojom::blink::ConsoleMessageLevel::kWarning, warning);
 }
@@ -1462,13 +1472,17 @@ bool HTMLPermissionElement::IsStyleValid() {
       GetComputedStyle()->EffectiveZoom() /
       GetDocument().GetFrame()->LocalFrameRoot().LayoutZoomFactor();
 
+  bool is_font_monospace =
+      GetComputedStyle()->GetFontDescription().IsMonospace();
+
   // The min size is what `font-size:small` looks like when rendered in the
   // document element of the local root frame, without any intervening CSS
   // zoom factors applied.
   float min_font_size_dip = FontSizeFunctions::FontSizeForKeyword(
       &GetDocument(), FontSizeFunctions::KeywordSize(CSSValueID::kSmall),
-      GetComputedStyle()->GetFontDescription().IsMonospace());
-  if (font_size_dip < min_font_size_dip / css_zoom_factor) {
+      is_font_monospace);
+  if (font_size_dip <
+      std::min(min_font_size_dip, kDefaultSmallFontSize) / css_zoom_factor) {
     AddConsoleWarning(
         String::Format("Font size of the permission element '%s' is too small",
                        GetType().Utf8().c_str()));
@@ -1482,8 +1496,9 @@ bool HTMLPermissionElement::IsStyleValid() {
   // zoom factors applied.
   float max_font_size_dip = FontSizeFunctions::FontSizeForKeyword(
       &GetDocument(), FontSizeFunctions::KeywordSize(CSSValueID::kXxxLarge),
-      GetComputedStyle()->GetFontDescription().IsMonospace());
-  if (font_size_dip > max_font_size_dip / css_zoom_factor) {
+      is_font_monospace);
+  if (font_size_dip >
+      std::max(max_font_size_dip, kDefaultXxxLargeFontSize) / css_zoom_factor) {
     AddConsoleWarning(
         String::Format("Font size of the permission element '%s' is too large",
                        GetType().Utf8().c_str()));

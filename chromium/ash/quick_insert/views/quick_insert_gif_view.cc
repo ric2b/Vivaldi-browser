@@ -36,12 +36,13 @@ constexpr base::TimeDelta kAdjustedDurationForShortFrames =
 
 }  // namespace
 
-PickerGifView::PickerGifView(FramesFetcher frames_fetcher,
-                             PreviewImageFetcher preview_image_fetcher,
-                             const gfx::Size& original_dimensions)
+QuickInsertGifView::QuickInsertGifView(
+    FramesFetcher frames_fetcher,
+    PreviewImageFetcher preview_image_fetcher,
+    const gfx::Size& original_dimensions)
     : original_dimensions_(original_dimensions) {
   // Show a placeholder rect while the gif loads.
-  views::Builder<PickerGifView>(this)
+  views::Builder<QuickInsertGifView>(this)
       .SetBackground(views::CreateThemedRoundedRectBackground(
           cros_tokens::kCrosSysAppBaseShaded, kQuickInsertGifCornerRadius))
       .SetImage(ui::ImageModel::FromImageSkia(
@@ -49,33 +50,19 @@ PickerGifView::PickerGifView(FramesFetcher frames_fetcher,
       .BuildChildren();
 
   fetch_frames_start_time_ = base::TimeTicks::Now();
-  std::move(preview_image_fetcher)
-      .Run(base::BindOnce(&PickerGifView::OnPreviewImageFetched,
-                          weak_factory_.GetWeakPtr()));
-  std::move(frames_fetcher)
-      .Run(base::BindOnce(&PickerGifView::OnFramesFetched,
-                          weak_factory_.GetWeakPtr()));
+  preview_request_ =
+      std::move(preview_image_fetcher)
+          .Run(base::BindOnce(&QuickInsertGifView::OnPreviewImageFetched,
+                              weak_factory_.GetWeakPtr()));
+  frames_request_ =
+      std::move(frames_fetcher)
+          .Run(base::BindOnce(&QuickInsertGifView::OnFramesFetched,
+                              weak_factory_.GetWeakPtr()));
 }
 
-PickerGifView::~PickerGifView() = default;
+QuickInsertGifView::~QuickInsertGifView() = default;
 
-gfx::Size PickerGifView::CalculatePreferredSize(
-    const views::SizeBounds& available_size) const {
-  int width = 0;
-  if (!available_size.width().is_bounded()) {
-    width = views::ImageView::CalculatePreferredSize(available_size).width();
-  } else {
-    width = available_size.width().value();
-  }
-
-  const int height = original_dimensions_.width() == 0
-                         ? 0
-                         : (width * original_dimensions_.height()) /
-                               original_dimensions_.width();
-  return gfx::Size(width, height);
-}
-
-void PickerGifView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
+void QuickInsertGifView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
   views::ImageView::OnBoundsChanged(previous_bounds);
 
   SkPath path;
@@ -85,18 +72,22 @@ void PickerGifView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
   SetClipPath(path);
 }
 
-void PickerGifView::UpdateFrame() {
+void QuickInsertGifView::UpdateFrame() {
   CHECK(next_frame_index_ < frames_.size());
-  SetImage(ui::ImageModel::FromImageSkia(frames_[next_frame_index_].image));
+  // Don't update the frame image if the view is not visible, but keep the timer
+  // going.
+  if (!GetVisibleBounds().IsEmpty()) {
+    SetImage(ui::ImageModel::FromImageSkia(frames_[next_frame_index_].image));
+  }
 
   // Schedule next frame update.
-  update_frame_timer_.Start(
-      FROM_HERE, frames_[next_frame_index_].duration,
-      base::BindOnce(&PickerGifView::UpdateFrame, weak_factory_.GetWeakPtr()));
+  update_frame_timer_.Start(FROM_HERE, frames_[next_frame_index_].duration,
+                            base::BindOnce(&QuickInsertGifView::UpdateFrame,
+                                           weak_factory_.GetWeakPtr()));
   next_frame_index_ = (next_frame_index_ + 1) % frames_.size();
 }
 
-void PickerGifView::OnFramesFetched(
+void QuickInsertGifView::OnFramesFetched(
     std::vector<image_util::AnimationFrame> frames) {
   if (frames.empty()) {
     // TODO: b/316936723 - Handle frames being empty.
@@ -117,7 +108,8 @@ void PickerGifView::OnFramesFetched(
   RecordFetchFramesTime();
 }
 
-void PickerGifView::OnPreviewImageFetched(const gfx::ImageSkia& preview_image) {
+void QuickInsertGifView::OnPreviewImageFetched(
+    const gfx::ImageSkia& preview_image) {
   // Only show preview image if gif frames have not already been fetched.
   if (frames_.empty()) {
     SetImage(ui::ImageModel::FromImageSkia(preview_image));
@@ -128,7 +120,7 @@ void PickerGifView::OnPreviewImageFetched(const gfx::ImageSkia& preview_image) {
   }
 }
 
-void PickerGifView::RecordFetchFramesTime() {
+void QuickInsertGifView::RecordFetchFramesTime() {
   if (fetch_frames_start_time_.has_value()) {
     UmaHistogramCustomTimes("Ash.Picker.TimeToFirstGifFrame",
                             base::TimeTicks::Now() - *fetch_frames_start_time_,
@@ -138,7 +130,7 @@ void PickerGifView::RecordFetchFramesTime() {
   }
 }
 
-BEGIN_METADATA(PickerGifView)
+BEGIN_METADATA(QuickInsertGifView)
 END_METADATA
 
 }  // namespace ash

@@ -426,7 +426,7 @@ Chromebook Pixel (link)), here's the steps required.
 
 1.  Put the device into dev mode
     *   See the [official list of
-                devices](/chromium-os/developer-information-for-chrome-os-devices)
+                devices](/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices)
                 for more details
 2.  If you're already in dev mode, you'll need to
             [Powerwash](https://support.google.com/chromebook/answer/183084) or

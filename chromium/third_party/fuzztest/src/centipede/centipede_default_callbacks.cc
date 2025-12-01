@@ -21,10 +21,13 @@
 
 #include "absl/log/check.h"
 #include "absl/log/log.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "./centipede/centipede_callbacks.h"
 #include "./centipede/environment.h"
 #include "./centipede/mutation_input.h"
 #include "./centipede/runner_result.h"
+#include "./centipede/stop.h"
 #include "./common/defs.h"
 #include "./common/logging.h"  // IWYU pragma: keep
 
@@ -52,19 +55,21 @@ bool CentipedeDefaultCallbacks::Execute(std::string_view binary,
 size_t CentipedeDefaultCallbacks::GetSeeds(size_t num_seeds,
                                            std::vector<ByteArray> &seeds) {
   seeds.resize(num_seeds);
-  if (GetSeedsViaExternalBinary(env_.binary, num_seeds, seeds))
+  if (GetSeedsViaExternalBinary(env_.binary, num_seeds, seeds)) {
     return num_seeds;
-  else
-    return CentipedeCallbacks::GetSeeds(num_seeds, seeds);
+  }
+  return CentipedeCallbacks::GetSeeds(num_seeds, seeds);
 }
 
-std::string CentipedeDefaultCallbacks::GetSerializedTargetConfig() {
+absl::StatusOr<std::string>
+CentipedeDefaultCallbacks::GetSerializedTargetConfig() {
   std::string serialized_target_config;
   if (GetSerializedTargetConfigViaExternalBinary(env_.binary,
                                                  serialized_target_config)) {
     return serialized_target_config;
   }
-  return CentipedeCallbacks::GetSerializedTargetConfig();
+  return absl::InternalError(
+      "Failed to get serialized configuration from the target binary.");
 }
 
 void CentipedeDefaultCallbacks::Mutate(
@@ -83,6 +88,11 @@ void CentipedeDefaultCallbacks::Mutate(
       LOG_FIRST_N(WARNING, 5)
           << "Custom mutator returned no mutants: falling back to internal "
              "default mutator";
+    } else if (ShouldStop()) {
+      LOG(WARNING) << "Custom mutator failed, but ignored since the stop "
+                      "condition it met. Possibly what triggered the stop "
+                      "condition also interrupted the mutator.";
+      return;
     } else {
       LOG(WARNING) << "Custom mutator undetected or misbehaving:";
       CHECK(!custom_mutator_is_usable_.has_value())

@@ -39,8 +39,8 @@ if (pdf_enable_fontations) {
     deps = [
       ":path_bridge",
       "//third_party/rust/font_types/v0_7:lib",
-      "//third_party/rust/read_fonts/v0_22:lib",
-      "//third_party/rust/skrifa/v0_22:lib",
+      "//third_party/rust/read_fonts/v0_23:lib",
+      "//third_party/rust/skrifa/v0_24:lib",
     ]
     configs -= [ "//build/config/compiler:chromium_code" ]
     configs += [
@@ -218,7 +218,7 @@ component("skia") {
   sources += skia_sksl_pipeline_sources
   sources += skia_sksl_codegen_sources
   sources += skia_sksl_core_sources
-  sources += skia_sksl_default_module_sources
+  sources += skia_sksl_core_module_sources
   sources += skia_utils_private
   sources += skia_xps_sources
   sources += skia_codec_decode_bmp

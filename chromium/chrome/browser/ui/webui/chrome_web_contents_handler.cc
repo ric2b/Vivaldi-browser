@@ -6,7 +6,6 @@
 
 #include <utility>
 
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/file_select_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -23,11 +22,9 @@ using content::BrowserContext;
 using content::OpenURLParams;
 using content::WebContents;
 
-ChromeWebContentsHandler::ChromeWebContentsHandler() {
-}
+ChromeWebContentsHandler::ChromeWebContentsHandler() = default;
 
-ChromeWebContentsHandler::~ChromeWebContentsHandler() {
-}
+ChromeWebContentsHandler::~ChromeWebContentsHandler() = default;
 
 // Opens a new URL inside |source|. |context| is the browser context that the
 // browser should be owned by. |params| contains the URL to open and various
@@ -40,8 +37,9 @@ WebContents* ChromeWebContentsHandler::OpenURLFromTab(
     const OpenURLParams& params,
     base::OnceCallback<void(content::NavigationHandle&)>
         navigation_handle_callback) {
-  if (!context)
+  if (!context) {
     return nullptr;
+  }
 
   Profile* profile = Profile::FromBrowserContext(context);
 
@@ -75,8 +73,9 @@ WebContents* ChromeWebContentsHandler::OpenURLFromTab(
   }
 
   // Close the browser if chrome::Navigate created a new one.
-  if (browser_created && (browser != nav_params.browser))
+  if (browser_created && (browser != nav_params.browser)) {
     browser->window()->Close();
+  }
 
   return nav_params.navigated_or_inserted_contents;
 }
@@ -95,8 +94,9 @@ void ChromeWebContentsHandler::AddNewContents(
     WindowOpenDisposition disposition,
     const blink::mojom::WindowFeatures& window_features,
     bool user_gesture) {
-  if (!context)
+  if (!context) {
     return;
+  }
 
   Profile* profile = Profile::FromBrowserContext(context);
 
@@ -121,8 +121,9 @@ void ChromeWebContentsHandler::AddNewContents(
   Navigate(&params);
 
   // Close the browser if chrome::Navigate created a new one.
-  if (browser_created && (browser != params.browser))
+  if (browser_created && (browser != params.browser)) {
     browser->window()->Close();
+  }
 }
 
 void ChromeWebContentsHandler::RunFileChooser(

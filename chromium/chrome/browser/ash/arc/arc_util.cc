@@ -8,16 +8,15 @@
 #include <sys/statfs.h>
 
 #include <map>
+#include <optional>
 #include <set>
 #include <string>
 #include <utility>
 
-#include "ash/components/arc/arc_features.h"
-#include "ash/components/arc/arc_prefs.h"
-#include "ash/components/arc/arc_util.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/lazy_instance.h"
@@ -54,6 +53,9 @@
 #include "chromeos/ash/components/browser_context_helper/browser_context_helper.h"
 #include "chromeos/ash/components/install_attributes/install_attributes.h"
 #include "chromeos/ash/components/settings/cros_settings.h"
+#include "chromeos/ash/experiences/arc/arc_features.h"
+#include "chromeos/ash/experiences/arc/arc_prefs.h"
+#include "chromeos/ash/experiences/arc/arc_util.h"
 #include "chromeos/components/mgs/managed_guest_session_utils.h"
 #include "components/embedder_support/user_agent_utils.h"
 #include "components/prefs/pref_service.h"
@@ -138,6 +140,18 @@ bool g_disallow_for_testing = false;
 // during test runs. Doesn't affect public session.
 bool g_arc_blocked_due_to_incompatible_filesystem_for_testing = false;
 
+// Indicates whether the ARCVM DLC image is available on the device with the
+// arcvm_dlc USE flag. This value must be updated before calling
+// IsArcAllowedForProfile() to maintain consistency.
+//
+// 1. Regular login: The check is performed in UserSessionManager when the user
+// logs in.
+// 2. Chrome restart: On ash-chrome restart, the session bypasses
+// UserSessionManager. In this case, the check is done in
+// ArcServiceLauncher, blocking the main thread to ensure the check
+// completes before calling IsArcAllowedForProfile().
+std::optional<bool> g_is_arcvm_dlc_image_available;
+
 // TODO(kinaba): Temporary workaround for crbug.com/729034.
 //
 // Some type of accounts don't have user prefs. As a short-term workaround,
@@ -213,6 +227,26 @@ void StoreCompatibilityCheckResult(const AccountId& account_id,
   std::move(callback).Run();
 }
 
+// Returns whether the ARCVM DLC image is already installed on the reven device.
+// This function performs a blocking IO operation and should only be called on
+// threads that allow blocking IO, such as worker threads or IO threads. It
+// must not be called on the UI thread.
+bool IsArcVmDlcImageExist() {
+  DCHECK(!content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
+  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
+                                                base::BlockingType::MAY_BLOCK);
+  const char arc_vm_dlc_image_path[] = "/opt/google/vms/android/system.raw.img";
+  return base::PathExists(base::FilePath(arc_vm_dlc_image_path));
+}
+
+// Stores the result of IsArcVmDlcImageExist posted back from the blocking
+// task runner.
+void StoreArcVmDlcImageCheckResult(base::OnceClosure callback,
+                                   bool is_available) {
+  g_is_arcvm_dlc_image_available = is_available;
+  std::move(callback).Run();
+}
+
 bool IsUnaffiliatedArcAllowed() {
   bool arc_allowed;
   ArcSessionManager* arc_session_manager = ArcSessionManager::Get();
@@ -252,12 +286,21 @@ ArcStatus GetArcStatusForProfile(const Profile* profile,
     return ArcStatus::kNotAvailable;
   }
 
-  if (ash::switches::IsRevenBranding() &&
-      (!policy_util::IsAccountManaged(profile) ||
-       !ash::InstallAttributes::Get()->IsEnterpriseManaged())) {
-    VLOG_IF(1, should_report_reason)
-        << "ARC unavailable on reven board due to unmanaged device or account.";
-    return ArcStatus::kNotAvailable;
+  if (ash::switches::IsRevenBranding()) {
+    CHECK(g_is_arcvm_dlc_image_available.has_value());
+
+    if (!g_is_arcvm_dlc_image_available.value()) {
+      VLOG_IF(1, should_report_reason)
+          << "ARC unavailable on reven board due to no arcvm dlc images.";
+      return ArcStatus::kNotAvailable;
+    }
+
+    if (!policy_util::IsAccountManaged(profile) ||
+        !ash::InstallAttributes::Get()->IsEnterpriseManaged()) {
+      VLOG_IF(1, should_report_reason) << "ARC unavailable on reven board due "
+                                          "to unmanaged device or account.";
+      return ArcStatus::kNotAvailable;
+    }
   }
 
   if (!ash::ProfileHelper::IsPrimaryProfile(profile)) {
@@ -465,6 +508,10 @@ bool IsArcBlockedDueToIncompatibleFileSystem(const Profile* profile) {
 
 void SetArcBlockedDueToIncompatibleFileSystemForTesting(bool block) {
   g_arc_blocked_due_to_incompatible_filesystem_for_testing = block;
+}
+
+void SetArcvmDlcImageStatusForTesting(std::optional<bool> availability) {
+  g_is_arcvm_dlc_image_available = availability;
 }
 
 bool IsArcCompatibleFileSystemUsedForUser(const user_manager::User* user) {
@@ -725,6 +772,24 @@ void UpdateArcFileSystemCompatibilityPrefIfNeeded(
                      std::move(callback)));
 }
 
+void CheckArcVmDlcImageExist(base::OnceClosure callback) {
+  if (!arc::IsArcVmDlcEnabled()) {
+    std::move(callback).Run();
+    return;
+  }
+
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE,
+      {base::MayBlock(), base::TaskPriority::USER_BLOCKING,
+       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
+      base::BindOnce(&IsArcVmDlcImageExist),
+      base::BindOnce(&StoreArcVmDlcImageCheckResult, std::move(callback)));
+}
+
+void SetArcvmDlcImageStatus(bool availability) {
+  g_is_arcvm_dlc_image_available = availability;
+}
+
 ArcManagementTransition GetManagementTransition(const Profile* profile) {
   DCHECK(profile);
   DCHECK(profile->GetPrefs());
@@ -732,12 +797,6 @@ ArcManagementTransition GetManagementTransition(const Profile* profile) {
   const ArcManagementTransition management_transition =
       static_cast<ArcManagementTransition>(
           profile->GetPrefs()->GetInteger(prefs::kArcManagementTransition));
-  const bool is_unmanaged_to_managed_enabled =
-      base::FeatureList::IsEnabled(kEnableUnmanagedToManagedTransitionFeature);
-  if (management_transition == ArcManagementTransition::UNMANAGED_TO_MANAGED &&
-      !is_unmanaged_to_managed_enabled) {
-    return ArcManagementTransition::NO_TRANSITION;
-  }
   return management_transition;
 }
 

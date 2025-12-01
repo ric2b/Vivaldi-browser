@@ -74,15 +74,6 @@ namespace blink {
 
 namespace {
 
-constexpr hb_feature_t CreateFeature(char c1,
-                                     char c2,
-                                     char c3,
-                                     char c4,
-                                     uint32_t value = 0) {
-  return {HB_TAG(c1, c2, c3, c4), value, 0 /* start */,
-          static_cast<unsigned>(-1) /* end */};
-}
-
 #if EXPENSIVE_DCHECKS_ARE_ON()
 // Check if the ShapeResult has the specified range.
 // |text| and |font| are only for logging.
@@ -250,9 +241,9 @@ struct RangeContext {
         start(start),
         end(end),
         buffer(hb_buffer_create()),
+        font_features(font->GetFontFeatures()),
         options(options) {
     DCHECK_GE(end, start);
-    font_features.Initialize(font->GetFontDescription());
   }
 
   const Font* const font;
@@ -330,31 +321,27 @@ inline bool ShapeRange(hb_buffer_t* buffer,
                        hb_direction_t direction,
                        hb_language_t language,
                        float specified_size) {
-  const FontPlatformData* platform_data = &(current_font->PlatformData());
-  HarfBuzzFace* face = platform_data->GetHarfBuzzFace();
+  const FontPlatformData& platform_data = current_font->PlatformData();
+  HarfBuzzFace* face = platform_data.GetHarfBuzzFace();
   if (!face) {
     DLOG(ERROR) << "Could not create HarfBuzzFace from FontPlatformData.";
     return false;
   }
 
-  FontFeatures variant_features;
-  if (!platform_data->ResolvedFeatures().empty()) {
-    const ResolvedFontFeatures& resolved_features =
-        platform_data->ResolvedFeatures();
-    for (const std::pair<uint32_t, uint32_t>& feature : resolved_features) {
-      variant_features.Append({feature.first, feature.second, 0 /* start */,
-                               static_cast<unsigned>(-1) /* end */});
+  std::optional<FontFeatures> variant_features;
+  if (const ResolvedFontFeatures& resolved_features =
+          platform_data.ResolvedFeatures();
+      !resolved_features.empty()) {
+    // Insert `resolved_features` before `font_features`.
+    variant_features.emplace();
+    variant_features->Reserve(resolved_features.size() + font_features.size());
+    for (const FontFeatureValue& feature : resolved_features) {
+      variant_features->Append({feature});
     }
-  }
-
-  bool needs_feature_merge = variant_features.size();
-  if (needs_feature_merge) {
-    for (wtf_size_t i = 0; i < font_features.size(); ++i) {
-      variant_features.Append(font_features.data()[i]);
-    }
+    variant_features->AppendVector(font_features);
   }
   const FontFeatures& argument_features =
-      needs_feature_merge ? variant_features : font_features;
+      variant_features ? *variant_features : font_features;
 
   hb_buffer_set_language(buffer, language);
   hb_buffer_set_script(buffer, ICUScriptToHBScript(current_run_script));
@@ -366,7 +353,8 @@ inline bool ShapeRange(hb_buffer_t* buffer,
                               ? HarfBuzzFace::kPrepareForVerticalLayout
                               : HarfBuzzFace::kNoVerticalLayout,
                           specified_size);
-  hb_shape(hb_font, buffer, argument_features.data(), argument_features.size());
+  hb_shape(hb_font, buffer, argument_features.ToHarfBuzzData(),
+           argument_features.size());
   if (!face->ShouldSubpixelPosition()) {
     RoundHarfBuzzBufferPositions(buffer);
   }
@@ -815,7 +803,7 @@ class CapsFeatureSettingsScopedOverlay final {
 
  private:
   void OverlayCapsFeatures(FontDescription::FontVariantCaps);
-  void PrependCounting(const hb_feature_t&);
+  void PrependCounting(const FontFeatureRange&);
   FontFeatures* features_;
   wtf_size_t count_features_;
 };
@@ -829,12 +817,12 @@ CapsFeatureSettingsScopedOverlay::CapsFeatureSettingsScopedOverlay(
 
 void CapsFeatureSettingsScopedOverlay::OverlayCapsFeatures(
     FontDescription::FontVariantCaps variant_caps) {
-  static constexpr hb_feature_t smcp = CreateFeature('s', 'm', 'c', 'p', 1);
-  static constexpr hb_feature_t pcap = CreateFeature('p', 'c', 'a', 'p', 1);
-  static constexpr hb_feature_t c2sc = CreateFeature('c', '2', 's', 'c', 1);
-  static constexpr hb_feature_t c2pc = CreateFeature('c', '2', 'p', 'c', 1);
-  static constexpr hb_feature_t unic = CreateFeature('u', 'n', 'i', 'c', 1);
-  static constexpr hb_feature_t titl = CreateFeature('t', 'i', 't', 'l', 1);
+  static constexpr FontFeatureRange smcp{{{'s', 'm', 'c', 'p'}, 1}};
+  static constexpr FontFeatureRange pcap{{{'p', 'c', 'a', 'p'}, 1}};
+  static constexpr FontFeatureRange c2sc{{{'c', '2', 's', 'c'}, 1}};
+  static constexpr FontFeatureRange c2pc{{{'c', '2', 'p', 'c'}, 1}};
+  static constexpr FontFeatureRange unic{{{'u', 'n', 'i', 'c'}, 1}};
+  static constexpr FontFeatureRange titl{{{'t', 'i', 't', 'l'}, 1}};
   if (variant_caps == FontDescription::kSmallCaps ||
       variant_caps == FontDescription::kAllSmallCaps) {
     PrependCounting(smcp);
@@ -858,7 +846,7 @@ void CapsFeatureSettingsScopedOverlay::OverlayCapsFeatures(
 }
 
 void CapsFeatureSettingsScopedOverlay::PrependCounting(
-    const hb_feature_t& feature) {
+    const FontFeatureRange& feature) {
   features_->Insert(feature);
   count_features_++;
 }
@@ -1073,7 +1061,7 @@ ShapeResult* HarfBuzzShaper::Shape(const Font* font,
 
   const unsigned length = end - start;
   ShapeResult* result =
-      MakeGarbageCollected<ShapeResult>(font, start, length, direction);
+      MakeGarbageCollected<ShapeResult>(start, length, direction);
   RangeContext range_data(font, direction, start, end);
   if (text_.Is8Bit()) {
     // 8-bit text is guaranteed to be horizontal latin-1.
@@ -1126,7 +1114,7 @@ ShapeResult* HarfBuzzShaper::Shape(
 
   const unsigned length = end - start;
   ShapeResult* result =
-      MakeGarbageCollected<ShapeResult>(font, start, length, direction);
+      MakeGarbageCollected<ShapeResult>(start, length, direction);
   RangeContext range_data(font, direction, start, end, options);
   for (const RunSegmenter::RunSegmenterRange& segmented_range : ranges) {
     DCHECK_GE(segmented_range.end, segmented_range.start);
@@ -1155,7 +1143,7 @@ ShapeResult* HarfBuzzShaper::Shape(
 
   const unsigned length = end - start;
   ShapeResult* result =
-      MakeGarbageCollected<ShapeResult>(font, start, length, direction);
+      MakeGarbageCollected<ShapeResult>(start, length, direction);
   RangeContext range_data(font, direction, start, end, options);
   ShapeSegment(&range_data, pre_segmented, result);
 

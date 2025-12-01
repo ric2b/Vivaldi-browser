@@ -43,6 +43,7 @@ import org.chromium.chrome.browser.autofill.PersonalDataManager.Iban;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.test.ChromeBrowserTestRule;
 import org.chromium.components.autofill.AutofillProfile;
+import org.chromium.components.autofill.FieldType;
 import org.chromium.components.autofill.IbanRecordType;
 import org.chromium.components.autofill.ImageSize;
 import org.chromium.components.autofill.VerificationStatus;
@@ -157,9 +158,120 @@ public class PersonalDataManagerTest {
 
         AutofillProfile storedProfile = mHelper.getProfile(profileOneGUID);
         Assert.assertEquals(profileOneGUID, storedProfile.getGUID());
-        Assert.assertEquals("CA", storedProfile.getCountryCode());
-        Assert.assertEquals("San Francisco", storedProfile.getLocality());
+        Assert.assertEquals("CA", storedProfile.getInfo(FieldType.ADDRESS_HOME_COUNTRY));
+        Assert.assertEquals("San Francisco", storedProfile.getInfo(FieldType.ADDRESS_HOME_CITY));
         Assert.assertNotNull(mHelper.getProfile(profileTwoGUID));
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Autofill"})
+    public void testRecordSeparatorMetricForAddAndEditProfiles() throws TimeoutException {
+        AutofillProfile profile =
+                AutofillProfile.builder()
+                        .setFullName("John Smith")
+                        .setAlternativeFullName("James Bond")
+                        .setCompanyName("Acme Inc.")
+                        .setStreetAddress("1 Main\nApt A")
+                        .setRegion("CA")
+                        .setLocality("San Francisco")
+                        .setPostalCode("94102")
+                        .setCountryCode("US")
+                        .setPhoneNumber("4158889999")
+                        .setEmailAddress("john@acme.inc")
+                        .build();
+
+        // Expect histogram to record separator existence in alternative name.
+        HistogramWatcher recordSeparatorCountHistogram =
+                HistogramWatcher.newBuilder()
+                        .expectBooleanRecord(
+                                "Autofill.Settings.EditedAlternativeNameContainsASeparator", true)
+                        .build();
+
+        String profileOneGUID = mHelper.setProfile(profile);
+        recordSeparatorCountHistogram.assertExpected();
+        Assert.assertEquals(1, mHelper.getNumberOfProfilesForSettings());
+
+        // Expect histogram to record no separator existence in alternative name.
+        recordSeparatorCountHistogram =
+                HistogramWatcher.newBuilder()
+                        .expectBooleanRecord(
+                                "Autofill.Settings.EditedAlternativeNameContainsASeparator", false)
+                        .build();
+
+        profile.setGUID(profileOneGUID);
+        profile.setAlternativeFullName("JamesBond");
+        profileOneGUID = mHelper.setProfile(profile);
+
+        recordSeparatorCountHistogram.assertExpected();
+
+        // Expect histogram to record separator existence in alternative name again.
+        recordSeparatorCountHistogram =
+                HistogramWatcher.newBuilder()
+                        .expectBooleanRecord(
+                                "Autofill.Settings.EditedAlternativeNameContainsASeparator", true)
+                        .build();
+
+        profile.setAlternativeFullName("James NonBond");
+        profileOneGUID = mHelper.setProfile(profile);
+
+        recordSeparatorCountHistogram.assertExpected();
+
+        // Expect histogram to not record anything.
+        recordSeparatorCountHistogram =
+                HistogramWatcher.newBuilder()
+                        .expectNoRecords(
+                                "Autofill.Settings.EditedAlternativeNameContainsASeparator")
+                        .build();
+
+        profile.setAlternativeFullName("");
+        profileOneGUID = mHelper.setProfile(profile);
+
+        recordSeparatorCountHistogram.assertExpected();
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Autofill"})
+    public void testRecordSeparatorMetricForAddAndEditProfilesForHiragana()
+            throws TimeoutException {
+        AutofillProfile profile =
+                AutofillProfile.builder()
+                        .setFullName("山本 葵")
+                        .setAlternativeFullName("やまもと·あおい")
+                        .setCompanyName("Acme Inc.")
+                        .setStreetAddress("1 Main\nApt A")
+                        .setRegion("CA")
+                        .setLocality("San Francisco")
+                        .setPostalCode("94102")
+                        .setCountryCode("US")
+                        .setPhoneNumber("4158889999")
+                        .setEmailAddress("aoi_yamamoto@acme.inc")
+                        .build();
+
+        // Expect histogram to record separator existence in alternative name.
+        HistogramWatcher recordSeparatorCountHistogram =
+                HistogramWatcher.newBuilder()
+                        .expectBooleanRecord(
+                                "Autofill.Settings.EditedAlternativeNameContainsASeparator", true)
+                        .build();
+
+        String profileOneGUID = mHelper.setProfile(profile);
+        recordSeparatorCountHistogram.assertExpected();
+        Assert.assertEquals(1, mHelper.getNumberOfProfilesForSettings());
+
+        // Expect histogram to record no separator existence in alternative name.
+        recordSeparatorCountHistogram =
+                HistogramWatcher.newBuilder()
+                        .expectBooleanRecord(
+                                "Autofill.Settings.EditedAlternativeNameContainsASeparator", false)
+                        .build();
+
+        profile.setGUID(profileOneGUID);
+        profile.setAlternativeFullName("やまもとあおい");
+        profileOneGUID = mHelper.setProfile(profile);
+
+        recordSeparatorCountHistogram.assertExpected();
     }
 
     @Test
@@ -186,7 +298,7 @@ public class PersonalDataManagerTest {
         AutofillProfile storedProfile = mHelper.getProfile(profileOneGUID);
         Assert.assertEquals(profileOneGUID, storedProfile.getGUID());
         Assert.assertEquals("fr", storedProfile.getLanguageCode());
-        Assert.assertEquals("US", storedProfile.getCountryCode());
+        Assert.assertEquals("US", storedProfile.getInfo(FieldType.ADDRESS_HOME_COUNTRY));
 
         profile.setGUID(profileOneGUID);
         profile.setLanguageCode("en");
@@ -195,8 +307,8 @@ public class PersonalDataManagerTest {
         AutofillProfile storedProfile2 = mHelper.getProfile(profileOneGUID);
         Assert.assertEquals(profileOneGUID, storedProfile2.getGUID());
         Assert.assertEquals("en", storedProfile2.getLanguageCode());
-        Assert.assertEquals("US", storedProfile2.getCountryCode());
-        Assert.assertEquals("San Francisco", storedProfile2.getLocality());
+        Assert.assertEquals("US", storedProfile2.getInfo(FieldType.ADDRESS_HOME_COUNTRY));
+        Assert.assertEquals("San Francisco", storedProfile2.getInfo(FieldType.ADDRESS_HOME_CITY));
     }
 
     @Test
@@ -286,7 +398,7 @@ public class PersonalDataManagerTest {
                         /* isLocal= */ false,
                         "John Doe Server",
                         "41111111111111111",
-                        /* obfuscatedCardNumber= */ "",
+                        /* networkAndLastFourDigits= */ "",
                         "3",
                         "2019",
                         "Visa",
@@ -335,9 +447,7 @@ public class PersonalDataManagerTest {
     @Test
     @SmallTest
     @Feature({"Autofill"})
-    @DisableFeatures(ChromeFeatureList.AUTOFILL_ENABLE_CARD_ART_SERVER_SIDE_STRETCHING)
-    public void testCreditCardArtUrlIsFormattedWithImageSpecs_serverSideStretchingDisabled()
-            throws TimeoutException {
+    public void testCreditCardArtUrlIsFormattedWithImageSpecs() throws TimeoutException {
         GURL capitalOneIconUrl = new GURL(AutofillUiUtils.CAPITAL_ONE_ICON_URL);
         GURL cardArtUrl = new GURL("http://google.com/test");
         int widthPixels = 32;
@@ -364,42 +474,6 @@ public class PersonalDataManagerTest {
     @Test
     @SmallTest
     @Feature({"Autofill"})
-    @EnableFeatures(ChromeFeatureList.AUTOFILL_ENABLE_CARD_ART_SERVER_SIDE_STRETCHING)
-    public void testCreditCardArtUrlIsFormattedWithImageSpecs_serverSideStretchingEnabled()
-            throws TimeoutException {
-        GURL capitalOneIconUrl = new GURL(AutofillUiUtils.CAPITAL_ONE_ICON_URL);
-        GURL cardArtUrl = new GURL("http://google.com/test");
-        int widthPixels = 32;
-        int heightPixels = 20;
-
-        // The URL should be updated as `cardArtUrl=w{width}-h{height}-s`.
-        assertThat(
-                        AutofillUiUtils.getCreditCardIconUrlWithParams(
-                                capitalOneIconUrl, widthPixels, heightPixels))
-                .isEqualTo(
-                        new GURL(
-                                capitalOneIconUrl.getSpec()
-                                        + "=w"
-                                        + widthPixels
-                                        + "-h"
-                                        + heightPixels
-                                        + "-s"));
-        assertThat(
-                        AutofillUiUtils.getCreditCardIconUrlWithParams(
-                                cardArtUrl, widthPixels, heightPixels))
-                .isEqualTo(
-                        new GURL(
-                                cardArtUrl.getSpec()
-                                        + "=w"
-                                        + widthPixels
-                                        + "-h"
-                                        + heightPixels
-                                        + "-s"));
-    }
-
-    @Test
-    @SmallTest
-    @Feature({"Autofill"})
     public void testAddAndDeleteCreditCard() throws TimeoutException {
         CreditCard card = createLocalCreditCard("Visa", "1234123412341234", "5", "2020");
         card.setOrigin("Chrome settings");
@@ -415,7 +489,7 @@ public class PersonalDataManagerTest {
     @Feature({"Autofill"})
     public void testRespectCountryCodes() throws TimeoutException {
         // The constructor should accept country names and ISO 3166-1-alpha-2 country codes.
-        // getCountryCode() should return a country code.
+        // getInfo(FieldType.ADDRESS_HOME_CONTRY) should return a country code.
         AutofillProfile profile1 =
                 AutofillProfile.builder()
                         .setFullName("John Smith")
@@ -447,10 +521,10 @@ public class PersonalDataManagerTest {
         Assert.assertEquals(2, mHelper.getNumberOfProfilesForSettings());
 
         AutofillProfile storedProfile1 = mHelper.getProfile(profileGuid1);
-        Assert.assertEquals("CA", storedProfile1.getCountryCode());
+        Assert.assertEquals("CA", storedProfile1.getInfo(FieldType.ADDRESS_HOME_COUNTRY));
 
         AutofillProfile storedProfile2 = mHelper.getProfile(profileGuid2);
-        Assert.assertEquals("CA", storedProfile2.getCountryCode());
+        Assert.assertEquals("CA", storedProfile2.getInfo(FieldType.ADDRESS_HOME_COUNTRY));
     }
 
     @Test
@@ -470,7 +544,7 @@ public class PersonalDataManagerTest {
                         .setSortingCode("", VerificationStatus.NO_STATUS)
                         .setCountryCode("Canada", VerificationStatus.USER_VERIFIED)
                         .setPhoneNumber("", VerificationStatus.NO_STATUS)
-                        .setEmailAddress(/* email= */ "", VerificationStatus.NO_STATUS)
+                        .setEmailAddress(/* emailAddress= */ "", VerificationStatus.NO_STATUS)
                         .setLanguageCode("")
                         .build();
         String guid = mHelper.setProfile(profileWithDifferentStatuses);
@@ -479,11 +553,20 @@ public class PersonalDataManagerTest {
         AutofillProfile storedProfile = mHelper.getProfile(guid);
         // When converted to C++ and back the verification statuses for name and address components
         // should be preserved.
-        Assert.assertEquals(VerificationStatus.PARSED, storedProfile.getFullNameStatus());
-        Assert.assertEquals(VerificationStatus.FORMATTED, storedProfile.getStreetAddressStatus());
-        Assert.assertEquals(VerificationStatus.OBSERVED, storedProfile.getRegionStatus());
-        Assert.assertEquals(VerificationStatus.USER_VERIFIED, storedProfile.getLocalityStatus());
-        Assert.assertEquals(VerificationStatus.SERVER_PARSED, storedProfile.getPostalCodeStatus());
+        Assert.assertEquals(
+                VerificationStatus.PARSED, storedProfile.getInfoStatus(FieldType.NAME_FULL));
+        Assert.assertEquals(
+                VerificationStatus.FORMATTED,
+                storedProfile.getInfoStatus(FieldType.ADDRESS_HOME_STREET_ADDRESS));
+        Assert.assertEquals(
+                VerificationStatus.OBSERVED,
+                storedProfile.getInfoStatus(FieldType.ADDRESS_HOME_STATE));
+        Assert.assertEquals(
+                VerificationStatus.USER_VERIFIED,
+                storedProfile.getInfoStatus(FieldType.ADDRESS_HOME_CITY));
+        Assert.assertEquals(
+                VerificationStatus.SERVER_PARSED,
+                storedProfile.getInfoStatus(FieldType.ADDRESS_HOME_ZIP));
     }
 
     @Test
@@ -491,16 +574,25 @@ public class PersonalDataManagerTest {
     @Feature({"Autofill"})
     public void testValuesSetInProfileGainUserVerifiedStatus() {
         AutofillProfile profile = AutofillProfile.builder().build();
-        Assert.assertEquals(VerificationStatus.NO_STATUS, profile.getFullNameStatus());
-        Assert.assertEquals(VerificationStatus.NO_STATUS, profile.getStreetAddressStatus());
-        Assert.assertEquals(VerificationStatus.NO_STATUS, profile.getLocalityStatus());
+        Assert.assertEquals(
+                VerificationStatus.NO_STATUS, profile.getInfoStatus(FieldType.NAME_FULL));
+        Assert.assertEquals(
+                VerificationStatus.NO_STATUS,
+                profile.getInfoStatus(FieldType.ADDRESS_HOME_STREET_ADDRESS));
+        Assert.assertEquals(
+                VerificationStatus.NO_STATUS, profile.getInfoStatus(FieldType.ADDRESS_HOME_CITY));
 
         profile.setFullName("Homer Simpson");
-        Assert.assertEquals(VerificationStatus.USER_VERIFIED, profile.getFullNameStatus());
+        Assert.assertEquals(
+                VerificationStatus.USER_VERIFIED, profile.getInfoStatus(FieldType.NAME_FULL));
         profile.setStreetAddress("123 Main St.");
-        Assert.assertEquals(VerificationStatus.USER_VERIFIED, profile.getStreetAddressStatus());
+        Assert.assertEquals(
+                VerificationStatus.USER_VERIFIED,
+                profile.getInfoStatus(FieldType.ADDRESS_HOME_STREET_ADDRESS));
         profile.setLocality("Springfield");
-        Assert.assertEquals(VerificationStatus.USER_VERIFIED, profile.getLocalityStatus());
+        Assert.assertEquals(
+                VerificationStatus.USER_VERIFIED,
+                profile.getInfoStatus(FieldType.ADDRESS_HOME_CITY));
     }
 
     @Test
@@ -529,22 +621,26 @@ public class PersonalDataManagerTest {
         String profileGuid1 = mHelper.setProfile(profile);
         Assert.assertEquals(1, mHelper.getNumberOfProfilesForSettings());
         AutofillProfile storedProfile1 = mHelper.getProfile(profileGuid1);
-        Assert.assertEquals("PF", storedProfile1.getCountryCode());
-        Assert.assertEquals("Monsieur Jean DELHOURME", storedProfile1.getFullName());
-        Assert.assertEquals(streetAddress1, storedProfile1.getStreetAddress());
-        Assert.assertEquals("Tahiti", storedProfile1.getRegion());
-        Assert.assertEquals("Mahina", storedProfile1.getLocality());
-        Assert.assertEquals("Orofara", storedProfile1.getDependentLocality());
-        Assert.assertEquals("98709", storedProfile1.getPostalCode());
-        Assert.assertEquals("CEDEX 98703", storedProfile1.getSortingCode());
-        Assert.assertEquals("44.71.53", storedProfile1.getPhoneNumber());
-        Assert.assertEquals("john@acme.inc", storedProfile1.getEmailAddress());
+        Assert.assertEquals("PF", storedProfile1.getInfo(FieldType.ADDRESS_HOME_COUNTRY));
+        Assert.assertEquals("Monsieur Jean DELHOURME", storedProfile1.getInfo(FieldType.NAME_FULL));
+        Assert.assertEquals(
+                streetAddress1, storedProfile1.getInfo(FieldType.ADDRESS_HOME_STREET_ADDRESS));
+        Assert.assertEquals("Tahiti", storedProfile1.getInfo(FieldType.ADDRESS_HOME_STATE));
+        Assert.assertEquals("Mahina", storedProfile1.getInfo(FieldType.ADDRESS_HOME_CITY));
+        Assert.assertEquals(
+                "Orofara", storedProfile1.getInfo(FieldType.ADDRESS_HOME_DEPENDENT_LOCALITY));
+        Assert.assertEquals("98709", storedProfile1.getInfo(FieldType.ADDRESS_HOME_ZIP));
+        Assert.assertEquals(
+                "CEDEX 98703", storedProfile1.getInfo(FieldType.ADDRESS_HOME_SORTING_CODE));
+        Assert.assertEquals("44.71.53", storedProfile1.getInfo(FieldType.PHONE_HOME_WHOLE_NUMBER));
+        Assert.assertEquals("john@acme.inc", storedProfile1.getInfo(FieldType.EMAIL_ADDRESS));
 
         profile.setStreetAddress(streetAddress2);
         String profileGuid2 = mHelper.setProfile(profile);
         Assert.assertEquals(2, mHelper.getNumberOfProfilesForSettings());
         AutofillProfile storedProfile2 = mHelper.getProfile(profileGuid2);
-        Assert.assertEquals(streetAddress2, storedProfile2.getStreetAddress());
+        Assert.assertEquals(
+                streetAddress2, storedProfile2.getInfo(FieldType.ADDRESS_HOME_STREET_ADDRESS));
     }
 
     @Test
@@ -700,19 +796,15 @@ public class PersonalDataManagerTest {
         CreditCard card3 = createLocalCreditCard("Mastercard", "1234123412341234", "11", "2020");
         card3.setOrigin("http://www.example.com");
 
-        String guid1 = mHelper.setCreditCard(card1);
-        String guid2 = mHelper.setCreditCard(card2);
-        String guid3 = mHelper.setCreditCard(card3);
-
         // The first credit card has the lowest use count but has most recently been used, making it
         // ranked first.
-        mHelper.setCreditCardUseStatsForTesting(guid1, 6, 1);
-        // The second credit card has the median use count and use date, and with these values it is
-        // ranked third.
-        mHelper.setCreditCardUseStatsForTesting(guid2, 25, 10);
+        String guid1 = mHelper.addCreditCardWithUseStatsForTesting(card1, 6, 1);
+        // The second credit card has the median use count and use date, and with these
+        // values it is ranked third.
+        String guid2 = mHelper.addCreditCardWithUseStatsForTesting(card2, 25, 10);
         // The third credit card has the highest use count and is the credit card with the farthest
         // last use date. Because of its very high use count, it is still ranked second.
-        mHelper.setCreditCardUseStatsForTesting(guid3, 100, 20);
+        String guid3 = mHelper.addCreditCardWithUseStatsForTesting(card3, 100, 20);
 
         List<CreditCard> cards = mHelper.getCreditCardsToSuggest();
         Assert.assertEquals(3, cards.size());
@@ -771,19 +863,15 @@ public class PersonalDataManagerTest {
         CreditCard card3 = createLocalCreditCard("Mastercard", "1234123412341234", "11", "2020");
         card3.setOrigin("http://www.example.com");
 
-        String guid1 = mHelper.setCreditCard(card1);
-        String guid2 = mHelper.setCreditCard(card2);
-        String guid3 = mHelper.setCreditCard(card3);
-
         // The first credit card has the lowest use count but has most recently been used, making it
-        // ranked second.
-        mHelper.setCreditCardUseStatsForTesting(guid1, 6, 1);
-        // The second credit card has the median use count and use date, and with these values it is
         // ranked first.
-        mHelper.setCreditCardUseStatsForTesting(guid2, 25, 10);
-        // The third credit card has the highest use count and is the profile with the farthest last
-        // use date. Because of its very far last use date, it's ranked third.
-        mHelper.setCreditCardUseStatsForTesting(guid3, 100, 20);
+        String guid1 = mHelper.addCreditCardWithUseStatsForTesting(card1, 6, 1);
+        // The second credit card has the median use count and use date, and with these
+        // values it is ranked third.
+        String guid2 = mHelper.addCreditCardWithUseStatsForTesting(card2, 25, 10);
+        // The third credit card has the highest use count and is the credit card with the farthest
+        // last use date. Because of its very high use count, it is still ranked second.
+        String guid3 = mHelper.addCreditCardWithUseStatsForTesting(card3, 100, 20);
 
         List<CreditCard> cards = mHelper.getCreditCardsToSuggest();
         Assert.assertEquals(3, cards.size());
@@ -859,9 +947,10 @@ public class PersonalDataManagerTest {
     @Test
     @SmallTest
     @Feature({"Autofill"})
-    public void testCreditCardUseStatsSettingAndGetting() throws TimeoutException {
+    public void testCreditCardWithUseStatsSettingAndGetting() throws TimeoutException {
+        // Set a credit card with specific use stats.
         String guid =
-                mHelper.setCreditCard(
+                mHelper.addCreditCardWithUseStatsForTesting(
                         new CreditCard(
                                 /* guid= */ "",
                                 /* origin= */ "",
@@ -874,14 +963,9 @@ public class PersonalDataManagerTest {
                                 "Visa",
                                 /* issuerIconDrawableId= */ 0,
                                 /* billingAddressId= */ "",
-                                /* serverId= */ ""));
-
-        // Make sure the credit card does not have the specific use stats form the start.
-        Assert.assertTrue(1234 != mHelper.getCreditCardUseCountForTesting(guid));
-        Assert.assertTrue(1234 != mHelper.getCreditCardUseDateForTesting(guid));
-
-        // Set specific use stats for the credit card.
-        mHelper.setCreditCardUseStatsForTesting(guid, 1234, 1234);
+                                /* serverId= */ ""),
+                        1234,
+                        1234);
 
         // Make sure the specific use stats were set for the credit card.
         Assert.assertEquals(1234, mHelper.getCreditCardUseCountForTesting(guid));
@@ -919,7 +1003,7 @@ public class PersonalDataManagerTest {
     @Feature({"Autofill"})
     public void testRecordAndLogCreditCardUse() throws TimeoutException {
         String guid =
-                mHelper.setCreditCard(
+                mHelper.addCreditCardWithUseStatsForTesting(
                         new CreditCard(
                                 /* guid= */ "",
                                 /* origin= */ "",
@@ -932,10 +1016,9 @@ public class PersonalDataManagerTest {
                                 "Visa",
                                 /* issuerIconDrawableId= */ 0,
                                 /* billingAddressId= */ "",
-                                /* serverId= */ ""));
-
-        // Set specific use stats for the credit card.
-        mHelper.setCreditCardUseStatsForTesting(guid, 1234, 1234);
+                                /* serverId= */ ""),
+                        1234,
+                        1234);
 
         // Get the current date value just before the call to record and log.
         long timeBeforeRecord = mHelper.getCurrentDateForTesting();
@@ -1047,7 +1130,7 @@ public class PersonalDataManagerTest {
                         /* isLocal= */ false,
                         "John Doe Server",
                         "41111111111111111",
-                        /* obfuscatedCardNumber= */ "",
+                        /* networkAndLastFourDigits= */ "",
                         "3",
                         "2019",
                         "MasterCard",
@@ -1095,7 +1178,7 @@ public class PersonalDataManagerTest {
                         /* isLocal= */ false,
                         "John Doe Server",
                         "41111111111111111",
-                        /* obfuscatedCardNumber= */ "",
+                        /* networkAndLastFourDigits= */ "",
                         "3",
                         "2019",
                         "MasterCard",
@@ -1140,7 +1223,7 @@ public class PersonalDataManagerTest {
                         /* isLocal= */ false,
                         "John Doe Server",
                         "41111111111111111",
-                        /* obfuscatedCardNumber= */ "",
+                        /* networkAndLastFourDigits= */ "",
                         "3",
                         "2019",
                         "",

@@ -2,10 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "third_party/blink/renderer/core/css/css_numeric_literal_value.h"
 
 #include "build/build_config.h"
 #include "third_party/blink/renderer/core/css/css_length_resolver.h"
+#include "third_party/blink/renderer/core/css/css_value_clamping_utils.h"
 #include "third_party/blink/renderer/core/css/css_value_pool.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
 #include "third_party/blink/renderer/platform/wtf/size_assertions.h"
@@ -139,13 +145,17 @@ int CSSNumericLiteralValue::ComputeInteger() const {
 }
 
 double CSSNumericLiteralValue::ComputeNumber() const {
-  DCHECK(IsNumber());
-  return ClampTo<double>(num_);
+  DCHECK(IsNumber() || IsPercentage());
+  if (IsPercentage()) {
+    return ClampTo<double>(num_ / 100.0);
+  } else {
+    return ClampTo<double>(num_);
+  }
 }
 
 double CSSNumericLiteralValue::ComputePercentage() const {
   DCHECK(IsPercentage());
-  return ClampTo<double>(num_);
+  return CSSValueClampingUtils::ClampDouble(num_);
 }
 
 bool CSSNumericLiteralValue::AccumulateLengthArray(CSSLengthArray& length_array,
@@ -307,7 +317,7 @@ String CSSNumericLiteralValue::CustomCSSText() const {
         int int_value = value;
         const char* unit_type = UnitTypeToString(GetType());
         builder.AppendNumber(int_value);
-        builder.Append(unit_type, static_cast<unsigned>(strlen(unit_type)));
+        builder.Append(StringView(unit_type));
         text = builder.ReleaseString();
       }
     } break;

@@ -11,23 +11,23 @@ title: Monday, November 30, 2015
 ---
 
 Updates since last meeting (on Monday, November 23rd):
-Scrolling (skobes, szager) \[[crbug.com/417782](http://crbug.com/417782)\]
+Scrolling (skobes, szager) \[[crbug.com/417782](https://crbug.com/417782)\]
 - Flag specific expectations for root layer scrolling landed. (skobes)
 - Have patch for RTL scrollbar placement, investigating custom scrollbar
 test failures. (skobes)
 - Smooth scrolling; working on main thread toggled, compositors driven
 animations, a little complicated but have a prototype. On track to hit
 OKR. (skobes)
-CSS Flexbox (cbiesinger) \[[crbug.com/426898](http://crbug.com/426898)\]
+CSS Flexbox (cbiesinger) \[[crbug.com/426898](https://crbug.com/426898)\]
 - Still problems with flexbox/scrollbars (need to add height of
 scrollbar to flex basis). Beed to sync with cbiesinger, original
 problem with devtools still exists. Need to figure out how to test and
 how to proceed. (szager)
 - Release blockers and misc flexbox bugs. (cbiesinger)
 CSS Grid Layout (svillar, jfernandez, rego, javif)
-\[[crbug.com/79180](http://crbug.com/79180)\]
+\[[crbug.com/79180](https://crbug.com/79180)\]
 - No update since last week.
-CSS Multi-column (mstensho) \[[crbug.com/334335](http://crbug.com/334335)\]
+CSS Multi-column (mstensho) \[[crbug.com/334335](https://crbug.com/334335)\]
 - Found out that support for column-span:all is really broken in nested
 fragmentation contexts. So that's what I'm currently working on. If I
 find nothing else after this, I'll then be ready to file the patch
@@ -42,13 +42,13 @@ Standards work
 - Preparing to upstream flexbox tests, we now have a version of check-
 layout that runs on top of testharness. (cbiesinger)
 Add API for layout (leviw, pilgrim, ojan)
-\[[crbug.com/495288](http://crbug.com/495288)\]
+\[[crbug.com/495288](https://crbug.com/495288)\]
 - No update since last week.
-CSS Containment (leviw) \[[crbug.com/312978](http://crbug.com/312978)\]
+CSS Containment (leviw) \[[crbug.com/312978](https://crbug.com/312978)\]
 - Plan to send Intent to Implement this week.
 - Have pending spec patch that needs to be upstreamed.
 Intersection Observer (szager, mpb)
-\[[crbug.com/540528](http://crbug.com/540528)\]
+\[[crbug.com/540528](https://crbug.com/540528)\]
 - The memory model for intersection observer is really complicated,
 especially when multiple documents are involved. Still not sure about
 how it fits in with oilpan. Making solid progress but getting the

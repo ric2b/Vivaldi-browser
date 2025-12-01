@@ -37,6 +37,7 @@ class SharedStorageBindings;
 class AuctionConfigLazyFiller;
 class BiddingBrowserSignalsLazyFiller;
 class InterestGroupLazyFiller;
+class ReportWinBrowserSignalsLazyFiller;
 class SellerBrowserSignalsLazyFiller;
 
 // Base class for bindings used with contexts used with ContextRecycler.
@@ -115,7 +116,7 @@ class CONTENT_EXPORT ContextRecycler {
     return register_ad_macro_bindings_.get();
   }
 
-  void AddReportBindings();
+  void AddReportBindings(bool queue_report_aggregate_win_allowed);
   ReportBindings* report_bindings() { return report_bindings_.get(); }
 
   void AddSetBidBindings();
@@ -152,6 +153,11 @@ class CONTENT_EXPORT ContextRecycler {
   void AddSellerBrowserSignalsLazyFiller();
   SellerBrowserSignalsLazyFiller* seller_browser_signals_lazy_filler() {
     return seller_browser_signals_lazy_filler_.get();
+  }
+
+  void AddReportWinBrowserSignalsLazyFiller();
+  ReportWinBrowserSignalsLazyFiller* report_win_lazy_filler() {
+    return report_win_browser_signals_lazy_filler_.get();
   }
 
   void EnsureAuctionConfigLazyFillers(size_t required);
@@ -204,6 +210,8 @@ class CONTENT_EXPORT ContextRecycler {
 
   std::unique_ptr<SellerBrowserSignalsLazyFiller>
       seller_browser_signals_lazy_filler_;
+  std::unique_ptr<ReportWinBrowserSignalsLazyFiller>
+      report_win_browser_signals_lazy_filler_;
 };
 
 // Helper to enter a context scope on creation and reset all bindings

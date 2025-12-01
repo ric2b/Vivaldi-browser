@@ -18,7 +18,6 @@
 #include "base/test/bind.h"
 #include "base/threading/thread.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "gpu/ipc/common/gpu_memory_buffer_support.h"
 #include "gpu/ipc/common/surface_handle.h"
 #include "media/media_buildflags.h"
@@ -95,20 +94,23 @@ class TestGpuService : public mojom::GpuService {
     gfx::GpuMemoryBufferHandle handle;
     handle.id = req.id;
 
-    handle.type =
-        emulate_native_handle ? gfx::NATIVE_PIXMAP : gfx::SHARED_MEMORY_BUFFER;
-
-    // In the context of these tests, HostGpuMemoryBufferManager will create
-    // shared-memory GMBs from these handles, and creation of those GMBs will
-    // fail if the buffer size and stride are determined to be invalid. In
-    // production this is not an issue as the handle itself will be created via
-    // GpuMemoryBufferImplSharedMemory, which takes care of setting the buffer
-    // size and stride appropriately based on the requested format and size.
-    // However, as we don't have the requested format or size here, simply set
-    // hardcoded parameter values that ensure that this creation will succeed
-    // for the formats and sizes used in these tests.
-    constexpr size_t kBufferSizeBytes = 6144;
-    handle.region = base::UnsafeSharedMemoryRegion::Create(kBufferSizeBytes);
+    if (emulate_native_handle) {
+      handle.type = gfx::NATIVE_PIXMAP;
+    } else {
+      // In the context of these tests, HostGpuMemoryBufferManager will create
+      // shared-memory GMBs from these handles, and creation of those GMBs will
+      // fail if the buffer size and stride are determined to be invalid. In
+      // production this is not an issue as the handle itself will be created
+      // via GpuMemoryBufferImplSharedMemory, which takes care of setting the
+      // buffer size and stride appropriately based on the requested format and
+      // size. However, as we don't have the requested format or size here,
+      // simply set hardcoded parameter values that ensure that this creation
+      // will succeed for the formats and sizes used in these tests.
+      handle.type = gfx::SHARED_MEMORY_BUFFER;
+      constexpr size_t kBufferSizeBytes = 6144;
+      handle.set_region(
+          base::UnsafeSharedMemoryRegion::Create(kBufferSizeBytes));
+    }
     handle.stride = 64;
 
     DCHECK(req.callback);
@@ -133,7 +135,7 @@ class TestGpuService : public mojom::GpuService {
       const gpu::GpuDiskCacheHandle& handle) override {}
 
   void CloseChannel(int32_t client_id) override {}
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #if BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
   void CreateArcVideoDecodeAccelerator(
       mojo::PendingReceiver<arc::mojom::VideoDecodeAccelerator> vda_receiver)
@@ -162,7 +164,7 @@ class TestGpuService : public mojom::GpuService {
   void CreateJpegEncodeAccelerator(
       mojo::PendingReceiver<chromeos_camera::mojom::JpegEncodeAccelerator>
           jea_receiver) override {}
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
   void BindWebNNContextProvider(
       mojo::PendingReceiver<webnn::mojom::WebNNContextProvider> receiver,

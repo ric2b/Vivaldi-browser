@@ -1768,6 +1768,9 @@ TEST_F(FileUtilTest, ContentUriGetInfo) {
   EXPECT_EQ(info.last_modified.ToTimeT(),
             content_uri_tree_info.last_modified.ToTimeT());
   EXPECT_TRUE(info.is_directory);
+#if BUILDFLAG(IS_WIN)
+  EXPECT_EQ(info.size, 0u);
+#endif
   EXPECT_TRUE(content_uri_info.is_directory);
   EXPECT_TRUE(content_uri_tree_info.is_directory);
 
@@ -3049,7 +3052,7 @@ TEST_F(FileUtilTest, FileToFILE) {
 
   stream = FileToFILE(std::move(file), "w");
   EXPECT_TRUE(stream);
-  EXPECT_FALSE(file.IsValid());
+  EXPECT_FALSE(file.IsValid());  // NOLINT(bugprone-use-after-move)
   EXPECT_TRUE(CloseFile(stream));
 }
 

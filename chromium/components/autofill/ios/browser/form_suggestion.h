@@ -9,8 +9,11 @@
 #import <UIKit/UIKit.h>
 
 #import "components/autofill/core/browser/field_types.h"
-#import "components/autofill/core/browser/ui/suggestion.h"
-#import "components/autofill/core/browser/ui/suggestion_type.h"
+#import "components/autofill/core/browser/suggestions/suggestion.h"
+#import "components/autofill/core/browser/suggestions/suggestion_type.h"
+#import "components/autofill/ios/form_util/form_activity_params.h"
+
+@protocol FormSuggestionProvider;
 
 // Metadata tied to the form suggestion that gives more context around the
 // suggestion.
@@ -70,6 +73,16 @@ enum class SuggestionFeatureForIPH {
 // Metadata tied to the suggestion that gives more context.
 @property(assign, readonly, nonatomic) FormSuggestionMetadata metadata;
 
+// Parameters giving the context surrounding the form activity for which that
+// suggestion was generated. Must be set before the suggestion is filled when
+// using the stateless FormSuggestionController.
+@property(assign, nonatomic) std::optional<autofill::FormActivityParams> params;
+
+// The FormSuggestionProvider that provided this suggestion. This allows
+// knowing which provider to use for filling the suggestion. Must be set before
+// the suggestion is filled when kStatelessFormSuggestionController is enabled.
+@property(nonatomic, weak) id<FormSuggestionProvider> provider;
+
 // Returns FormSuggestion (immutable) with given values.
 + (FormSuggestion*)suggestionWithValue:(NSString*)value
                     displayDescription:(NSString*)displayDescription
@@ -99,6 +112,12 @@ enum class SuggestionFeatureForIPH {
                                   type:(autofill::SuggestionType)type
                                payload:(autofill::Suggestion::Payload)payload
                         requiresReauth:(BOOL)requiresReauth;
+
+// Copies the contents of `formSuggestionToCopy` and sets/overrides the
+// params and provider of the copy.
++ (FormSuggestion*)copy:(FormSuggestion*)formSuggestionToCopy
+           andSetParams:(std::optional<autofill::FormActivityParams>)params
+               provider:(id<FormSuggestionProvider>)provider;
 
 @end
 

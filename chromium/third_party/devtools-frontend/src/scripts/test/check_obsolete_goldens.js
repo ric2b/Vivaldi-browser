@@ -2,14 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-const path = require('path');
-const fs = require('fs');
 const childProcess = require('child_process');
+const fs = require('fs');
+const path = require('path');
 const util = require('util');
+const yargs = require('yargs');
 const exec = util.promisify(childProcess.exec);
 
 const yargsObject =
-    require('yargs')
+    yargs
         .option(
             'remove-files', {type: 'boolean', desc: 'Set to true to have obsolete goldens removed.', default: false})
         .argv;
@@ -72,16 +73,14 @@ async function run() {
     ...await checkGoldensForPlatform('win32')
   ];
   if (obsoleteImages.length > 0) {
-    // eslint-disable-next-line no-console
     console.log('Obsolete screenshots found. These can safely be deleted from the repository as part of this CL');
     if (!shouldRemoveFiles) {
-      // eslint-disable-next-line no-console
       console.log('Alternatively, run this script with --remove-files to have the script remove these files.');
     }
 
     for (const image of obsoleteImages) {
       const imagePath = path.relative(process.cwd(), path.join(GOLDENS_LOCATION, image));
-      // eslint-disable-next-line no-console
+
       console.log(shouldRemoveFiles ? 'Removing: ' : '', imagePath);
       if (shouldRemoveFiles) {
         await exec(`rm ${imagePath}`);

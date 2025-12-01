@@ -16,6 +16,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/stringprintf.h"
 #include "components/fingerprinting_protection_filter/common/fingerprinting_protection_filter_constants.h"
 #include "components/fingerprinting_protection_filter/common/fingerprinting_protection_filter_features.h"
 #include "components/fingerprinting_protection_filter/mojom/fingerprinting_protection_filter.mojom.h"
@@ -163,8 +164,12 @@ void RendererAgent::DidCreateNewDocument() {
     notified_disallow_ = false;
     auto new_origin = url::Origin::Create(new_document_url);
     auto current_origin = url::Origin::Create(current_document_url_);
-    // Could be same origin for refreshes, etc.
-    if (!new_origin.IsSameOriginWith(current_origin)) {
+    // Reset the filter handle and re-initialize to get a new activation state
+    // if:
+    //   1. The origin has changed, meaning this is not just a refresh, or
+    //   2. The activation state has already been reset i.e. by a call to
+    //      `DidFailProvisionalLoad`.
+    if (!new_origin.IsSameOriginWith(current_origin) || pending_activation_) {
       filter_.reset();
       Initialize();
     }
@@ -173,11 +178,13 @@ void RendererAgent::DidCreateNewDocument() {
 }
 
 void RendererAgent::DidFailProvisionalLoad() {
-  // We know the document will change (or this agent will be deleted) since a
-  // navigation did not commit - set up to request new activation in
-  // `DidCreateNewDocument()`.
-  activation_state_ = subresource_filter::mojom::ActivationState();
-  pending_activation_ = true;
+  if (IsTopLevelMainFrame()) {
+    // We know the document will change (or this agent will be deleted) since a
+    // navigation did not commit - set up to request new activation in
+    // `DidCreateNewDocument()`.
+    activation_state_ = subresource_filter::mojom::ActivationState();
+    pending_activation_ = true;
+  }
 }
 
 void RendererAgent::DidFinishLoad() {
@@ -195,7 +202,7 @@ void RendererAgent::OnDestruct() {
   delete this;
 }
 
-void RendererAgent::OnSubresourceDisallowed(std::string_view subresource_url) {
+void RendererAgent::OnSubresourceDisallowed() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!notified_disallow_) {
     notified_disallow_ = true;
@@ -206,16 +213,6 @@ void RendererAgent::OnSubresourceDisallowed(std::string_view subresource_url) {
     if (fp_host) {
       fp_host->DidDisallowFirstSubresource();
     }
-
-#if defined(_DEBUG)
-    if (features::IsFingerprintingProtectionConsoleLoggingEnabled()) {
-      // Log message to console.
-      std::string console_message = base::StringPrintf(
-          kDisallowSubresourceConsoleDebugMessageFormat, subresource_url);
-      render_frame()->AddMessageToConsole(
-          blink::mojom::ConsoleMessageLevel::kError, console_message);
-    }
-#endif
   }
 }
 

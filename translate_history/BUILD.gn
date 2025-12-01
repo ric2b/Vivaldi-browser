@@ -10,26 +10,30 @@ static_library("translate_history") {
     "th_codec.h",
     "th_constants.cc",
     "th_constants.h",
-    "th_model.cc",
-    "th_model.h",
     "th_model_loaded_observer.cc",
     "th_model_loaded_observer.h",
     "th_model_loader.cc",
     "th_model_loader.h",
+    "th_model_observer.h",
+    "th_model.cc",
+    "th_model.h",
     "th_node.cc",
     "th_node.h",
-    "th_service_factory.cc",
-    "th_service_factory.h",
     "th_storage.cc",
     "th_storage.h",
   ]
+
+  if (!is_ios) {
+    sources += [
+      "th_service_factory.cc",
+      "th_service_factory.h",
+    ]
+  }
+
   deps = [
     "//base:base",
     "//base:i18n",
-    "//chrome/common:constants",
     "//components/keyed_service/core:core",
-    "//components/keyed_service/content:content",
-    "//content/public/browser",
     "//skia",
     "//third_party/icu",
     "//ui/base:base",
@@ -38,6 +42,15 @@ static_library("translate_history") {
     "//vivaldi/app:vivaldi_unscaled_native_resources",
     "//vivaldi/prefs",
   ]
+
+  if (!is_ios) {
+    deps += [
+      "//components/keyed_service/content:content",
+      "//content/public/browser",
+      "//chrome/common:constants",
+    ]
+  }
+
   public_deps = [
     "//components/sync/protocol",
   ]

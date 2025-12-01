@@ -23,7 +23,7 @@ title: Chrome Frame
 
 ### Chrome for Business
 
-## Deploying [Chrome for Business](http://www.google.com/chrome/work) lets you configure over 100 policies to fit your organization's needs. As an admin, you have solid control over the browser deployment, including managing updates, supporting compatibility of older apps, and installing extensions globally.
+## Deploying [Chrome for Business](https://www.google.com/chrome/work) lets you configure over 100 policies to fit your organization's needs. As an admin, you have solid control over the browser deployment, including managing updates, supporting compatibility of older apps, and installing extensions globally.
 
 ### Chrome Legacy Browser Support
 

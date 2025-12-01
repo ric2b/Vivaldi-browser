@@ -40,9 +40,19 @@ void SetAutofillFormFeatureFlags(WebFrame* web_frame) {
           base::FeatureList::IsEnabled(features::kAutofillAcrossIframesIos));
 
   AutofillFormFeaturesJavaScriptFeature::GetInstance()
+      ->SetAutofillAcrossIframesThrottling(
+          web_frame, base::FeatureList::IsEnabled(
+                         features::kAutofillAcrossIframesIosThrottling));
+
+  AutofillFormFeaturesJavaScriptFeature::GetInstance()
       ->SetAutofillIsolatedContentWorld(
           web_frame,
           base::FeatureList::IsEnabled(kAutofillIsolatedWorldForJavascriptIos));
+
+  AutofillFormFeaturesJavaScriptFeature::GetInstance()
+      ->SetAutofillFixPaymentSheetSpam(
+          web_frame,
+          base::FeatureList::IsEnabled(kAutofillFixPaymentSheetSpam));
 }
 
 AutofillFormFeaturesInjector::~AutofillFormFeaturesInjector() = default;

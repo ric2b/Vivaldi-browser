@@ -12,7 +12,6 @@
 
 #include "discovery/mdns/public/mdns_reader.h"
 #include "discovery/mdns/public/mdns_writer.h"
-#include "discovery/mdns/testing/hash_test_util.h"
 #include "discovery/mdns/testing/mdns_test_util.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -24,7 +23,7 @@ using testing::ElementsAreArray;
 
 namespace {
 
-constexpr std::chrono::seconds kTtl{120};
+constexpr std::chrono::seconds kTtl(120);
 
 template <class T>
 void TestCopyAndMove(const T& value) {
@@ -46,7 +45,7 @@ TEST(MdnsDomainNameTest, Construct) {
   EXPECT_EQ(name1.MaxWireSize(), size_t{1});
   EXPECT_EQ(name1.labels().size(), size_t{0});
 
-  DomainName name2{"MyDevice", "_mYSERvice", "local"};
+  DomainName name2({"MyDevice", "_mYSERvice", "local"});
   EXPECT_FALSE(name2.empty());
   EXPECT_EQ(name2.MaxWireSize(), size_t{27});
   ASSERT_EQ(name2.labels().size(), size_t{3});
@@ -57,7 +56,7 @@ TEST(MdnsDomainNameTest, Construct) {
   name2_stream << name2;
   EXPECT_EQ(name2_stream.str(), "MyDevice._mYSERvice.local");
 
-  std::vector<std::string_view> labels{"OtherDevice", "_MYservice", "LOcal"};
+  std::vector<std::string_view> labels = {"OtherDevice", "_MYservice", "LOcal"};
   DomainName name3(labels);
   EXPECT_FALSE(name3.empty());
   EXPECT_EQ(name3.MaxWireSize(), size_t{30});
@@ -71,11 +70,11 @@ TEST(MdnsDomainNameTest, Construct) {
 }
 
 TEST(MdnsDomainNameTest, Compare) {
-  DomainName first{"testing", "local"};
-  DomainName second{"TeStInG", "LOCAL"};
-  DomainName third{"testing"};
-  DomainName fourth{"testing.local"};
-  DomainName fifth{"Testing.Local"};
+  DomainName first({"testing", "local"});
+  DomainName second({"TeStInG", "LOCAL"});
+  DomainName third({"testing"});
+  DomainName fourth({"testing.local"});
+  DomainName fifth({"Testing.Local"});
 
   EXPECT_EQ(first, second);
   EXPECT_TRUE(first >= second);
@@ -112,9 +111,6 @@ TEST(MdnsDomainNameTest, Compare) {
 
   EXPECT_FALSE(fourth < fifth);
   EXPECT_FALSE(fifth < fourth);
-
-  EXPECT_TRUE(VerifyTypeImplementsAbslHashCorrectly(
-      {first, second, third, fourth, fifth}));
 }
 
 TEST(MdnsDomainNameTest, CopyAndMove) {
@@ -160,8 +156,6 @@ TEST(MdnsRawRecordRdataTest, Compare) {
 
   EXPECT_EQ(rdata1, rdata2);
   EXPECT_NE(rdata1, rdata3);
-
-  EXPECT_TRUE(VerifyTypeImplementsAbslHashCorrectly({rdata1, rdata2, rdata3}));
 }
 
 TEST(MdnsRawRecordRdataTest, CopyAndMove) {
@@ -200,9 +194,6 @@ TEST(MdnsSrvRecordRdataTest, Compare) {
   EXPECT_NE(rdata1, rdata4);
   EXPECT_NE(rdata1, rdata5);
   EXPECT_NE(rdata1, rdata6);
-
-  EXPECT_TRUE(VerifyTypeImplementsAbslHashCorrectly(
-      {rdata1, rdata2, rdata3, rdata4, rdata5, rdata6}));
 }
 
 TEST(MdnsSrvRecordRdataTest, CopyAndMove) {
@@ -226,8 +217,6 @@ TEST(MdnsARecordRdataTest, Compare) {
 
   EXPECT_EQ(rdata1, rdata2);
   EXPECT_NE(rdata1, rdata3);
-
-  EXPECT_TRUE(VerifyTypeImplementsAbslHashCorrectly({rdata1, rdata2, rdata3}));
 }
 
 TEST(MdnsARecordRdataTest, CopyAndMove) {
@@ -269,8 +258,6 @@ TEST(MdnsAAAARecordRdataTest, Compare) {
 
   EXPECT_EQ(rdata1, rdata2);
   EXPECT_NE(rdata1, rdata3);
-
-  EXPECT_TRUE(VerifyTypeImplementsAbslHashCorrectly({rdata1, rdata2, rdata3}));
 }
 
 TEST(MdnsAAAARecordRdataTest, CopyAndMove) {
@@ -297,8 +284,6 @@ TEST(MdnsPtrRecordRdataTest, Compare) {
 
   EXPECT_EQ(rdata1, rdata2);
   EXPECT_NE(rdata1, rdata3);
-
-  EXPECT_TRUE(VerifyTypeImplementsAbslHashCorrectly({rdata1, rdata2, rdata3}));
 }
 
 TEST(MdnsPtrRecordRdataTest, CopyAndMove) {
@@ -324,9 +309,6 @@ TEST(MdnsTxtRecordRdataTest, Compare) {
   EXPECT_EQ(rdata1, rdata2);
   EXPECT_NE(rdata1, rdata3);
   EXPECT_NE(rdata1, rdata4);
-
-  EXPECT_TRUE(
-      VerifyTypeImplementsAbslHashCorrectly({rdata1, rdata2, rdata3, rdata4}));
 }
 
 TEST(MdnsTxtRecordRdataTest, CopyAndMove) {
@@ -334,7 +316,7 @@ TEST(MdnsTxtRecordRdataTest, CopyAndMove) {
 }
 
 TEST(MdnsNsecRecordRdataTest, Construct) {
-  const DomainName domain{"testing", "local"};
+  const DomainName domain({"testing", "local"});
   NsecRecordRdata rdata(domain);
   EXPECT_EQ(rdata.MaxWireSize(), domain.MaxWireSize());
   EXPECT_EQ(rdata.next_domain_name(), domain);
@@ -406,7 +388,7 @@ TEST(MdnsNsecRecordRdataTest, Construct) {
   // - DnsTypes kNSEC = 255
   // So 32 bits are required for the bitfield, for a total of 34 bits.
   rdata = NsecRecordRdata(domain, DnsType::kANY);
-  std::vector<uint8_t> results{0x00, 32};
+  std::vector<uint8_t> results = {0x00, 32};
   for (int i = 1; i < 32; i++) {
     results.push_back(0x00);
   }
@@ -439,7 +421,7 @@ TEST(MdnsNsecRecordRdataTest, Construct) {
 }
 
 TEST(MdnsNsecRecordRdataTest, Compare) {
-  const DomainName domain{"testing", "local"};
+  const DomainName domain({"testing", "local"});
   const NsecRecordRdata rdata1(domain, DnsType::kA, DnsType::kSRV);
   const NsecRecordRdata rdata2(domain, DnsType::kSRV, DnsType::kA);
   const NsecRecordRdata rdata3(domain, DnsType::kSRV, DnsType::kA,
@@ -455,9 +437,6 @@ TEST(MdnsNsecRecordRdataTest, Compare) {
   EXPECT_NE(rdata1, rdata3);
   EXPECT_NE(rdata1, rdata4);
   EXPECT_NE(rdata3, rdata4);
-
-  EXPECT_TRUE(
-      VerifyTypeImplementsAbslHashCorrectly({rdata1, rdata2, rdata3, rdata4}));
 }
 
 TEST(MdnsNsecRecordRdataTest, CopyAndMove) {
@@ -506,9 +485,6 @@ TEST(MdnsOptRecordRdataTest, Compare) {
   EXPECT_NE(rdata2, rdata3);
   EXPECT_NE(rdata2, rdata4);
   EXPECT_NE(rdata3, rdata4);
-
-  EXPECT_TRUE(
-      VerifyTypeImplementsAbslHashCorrectly({rdata1, rdata2, rdata3, rdata4}));
 }
 
 TEST(MdnsOptRecordRdataTest, CopyAndMove) {
@@ -592,10 +568,6 @@ TEST(MdnsRecordTest, Compare) {
           << "failure for i=" << i << " , j=" << j;
     }
   }
-
-  EXPECT_TRUE(VerifyTypeImplementsAbslHashCorrectly(
-      {record1, record2, record3, record4, record5, record6, record7, record8,
-       record9}));
 }
 
 TEST(MdnsRecordTest, CopyAndMove) {
@@ -638,9 +610,6 @@ TEST(MdnsQuestionTest, Compare) {
   EXPECT_NE(question1, question3);
   EXPECT_NE(question1, question4);
   EXPECT_NE(question1, question5);
-
-  EXPECT_TRUE(VerifyTypeImplementsAbslHashCorrectly(
-      {question1, question2, question3, question4, question5}));
 }
 
 TEST(MdnsQuestionTest, CopyAndMove) {
@@ -766,10 +735,6 @@ TEST(MdnsMessageTest, Compare) {
   EXPECT_NE(message1, message6);
   EXPECT_NE(message1, message7);
   EXPECT_NE(message1, message8);
-
-  EXPECT_TRUE(VerifyTypeImplementsAbslHashCorrectly(
-      {message1, message2, message3, message4, message5, message6, message7,
-       message8}));
 }
 
 TEST(MdnsMessageTest, CopyAndMove) {

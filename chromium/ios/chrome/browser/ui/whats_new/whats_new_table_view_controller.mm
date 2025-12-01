@@ -73,8 +73,9 @@ typedef NS_ENUM(NSInteger, SectionIdentifier) {
 
 - (void)reloadData {
   [self loadModel];
-  if (self.viewLoaded)
+  if (self.viewLoaded) {
     [self.tableView reloadData];
+  }
 }
 
 + (NSString*)accessibilityIdentifier {
@@ -208,7 +209,7 @@ typedef NS_ENUM(NSInteger, SectionIdentifier) {
   TableViewModel* model = self.tableViewModel;
 
   // Add subtitle
-  if (IsPriceInsightsEnabled()) {
+  if (IsPriceInsightsRegionEnabled()) {
     [model addSectionWithIdentifier:SectionSubtitleIdentifier];
     [model setHeader:[self subtitleSectionCell]
         forSectionWithIdentifier:SectionSubtitleIdentifier];

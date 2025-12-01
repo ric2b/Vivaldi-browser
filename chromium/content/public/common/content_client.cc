@@ -95,10 +95,6 @@ ContentClient::ContentClient()
 ContentClient::~ContentClient() {
 }
 
-std::vector<url::Origin> ContentClient::GetPdfInternalPluginAllowedOrigins() {
-  return {};
-}
-
 std::u16string ContentClient::GetLocalizedString(int message_id) {
   return std::u16string();
 }
@@ -159,5 +155,10 @@ media::MediaDrmBridgeClient* ContentClient::GetMediaDrmBridgeClient() {
 void ContentClient::ExposeInterfacesToBrowser(
     scoped_refptr<base::SequencedTaskRunner> io_task_runner,
     mojo::BinderMap* binders) {}
+
+bool ContentClient::IsFilePickerAllowedForCrossOriginSubframe(
+    const url::Origin& origin) {
+  return false;
+}
 
 }  // namespace content

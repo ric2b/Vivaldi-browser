@@ -1,11 +1,13 @@
 // Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+
 #ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
-#pragma allow_unsafe_buffers
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
 #endif
 
+#include <array>
 #include <memory>
 #include <set>
 #include <string>
@@ -19,6 +21,7 @@
 #include "base/metrics/persistent_histogram_allocator.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/no_destructor.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/simple_thread.h"
@@ -38,7 +41,7 @@ char const* GetPermanentName(const std::string& name) {
   return result.first->c_str();
 }
 
-size_t GetBucketIndex(HistogramBase::Sample value, const BucketRanges* ranges) {
+size_t GetBucketIndex(HistogramBase::Sample32 value, const BucketRanges* ranges) {
   size_t bucket_count = ranges->bucket_count();
   EXPECT_GE(bucket_count, 1U);
   for (size_t i = 0; i < bucket_count; ++i) {
@@ -58,7 +61,7 @@ class SnapshotDeltaThread : public SimpleThread {
   SnapshotDeltaThread(const std::string& name,
                       size_t num_emissions,
                       span<HistogramBase*> histograms,
-                      HistogramBase::Sample histogram_max,
+                      HistogramBase::Sample32 histogram_max,
                       subtle::Atomic32* real_total_samples_count,
                       span<subtle::Atomic32> real_bucket_counts,
                       subtle::Atomic32* snapshots_total_samples_count,
@@ -84,7 +87,7 @@ class SnapshotDeltaThread : public SimpleThread {
         // but the randomness does not really matter as thread-safety is what is
         // being tested here and there is already a lot of non-determinism
         // surrounding scheduling.
-        Histogram::Sample sample = rand() % histogram_max_;
+        Histogram::Sample32 sample = rand() % histogram_max_;
         histogram->Add(sample);
 
         // Take a snapshot of the histogram. Because of the multithreading
@@ -104,7 +107,7 @@ class SnapshotDeltaThread : public SimpleThread {
  private:
   // Stores an actual |sample| that was emitted for |histogram|. This is done
   // to compare what was found in histogram snapshots (see StoreSnapshot()).
-  void StoreActualSample(HistogramBase* histogram, Histogram::Sample sample) {
+  void StoreActualSample(HistogramBase* histogram, Histogram::Sample32 sample) {
     subtle::NoBarrier_AtomicIncrement(real_total_samples_count_, 1);
     switch (histogram->GetHistogramType()) {
       case HISTOGRAM: {
@@ -116,7 +119,8 @@ class SnapshotDeltaThread : public SimpleThread {
         break;
       }
       case SPARSE_HISTOGRAM:
-        subtle::NoBarrier_AtomicIncrement(&real_bucket_counts_[sample], 1);
+        subtle::NoBarrier_AtomicIncrement(
+            &real_bucket_counts_[checked_cast<size_t>(sample)], 1);
         break;
       case LINEAR_HISTOGRAM:
       case BOOLEAN_HISTOGRAM:
@@ -129,25 +133,26 @@ class SnapshotDeltaThread : public SimpleThread {
   // Store a |snapshot| that was taken of a histogram. This is done to compare
   // what was actually emitted (see StoreActualSample()).
   void StoreSnapshot(std::unique_ptr<HistogramSamples> snapshot) {
-    HistogramBase::Count snapshot_samples_count = snapshot->TotalCount();
+    HistogramBase::Count32 snapshot_samples_count = snapshot->TotalCount();
     subtle::NoBarrier_AtomicIncrement(snapshots_total_samples_count_,
                                       snapshot_samples_count);
     for (auto it = snapshot->Iterator(); !it->Done(); it->Next()) {
-      HistogramBase::Sample min;
+      HistogramBase::Sample32 min;
       int64_t max;
-      HistogramBase::Count count;
+      HistogramBase::Count32 count;
       it->Get(&min, &max, &count);
       // Verify that the snapshot contains only positive bucket counts.
       // This is to ensure SnapshotDelta() is fully thread-safe, not just
       // "eventually consistent".
       ASSERT_GE(count, 0);
-      subtle::NoBarrier_AtomicIncrement(&snapshots_bucket_counts_[min], count);
+      subtle::NoBarrier_AtomicIncrement(
+          &snapshots_bucket_counts_[checked_cast<size_t>(min)], count);
     }
   }
 
   const size_t num_emissions_;
   raw_span<HistogramBase*> histograms_;
-  const HistogramBase::Sample histogram_max_;
+  const HistogramBase::Sample32 histogram_max_;
   raw_ptr<subtle::Atomic32> real_total_samples_count_;
   raw_span<subtle::Atomic32> real_bucket_counts_;
   raw_ptr<subtle::Atomic32> snapshots_total_samples_count_;
@@ -197,7 +202,7 @@ class HistogramThreadsafeTest : public testing::Test {
   // underlying data as those that live on the persistent memory but are
   // different objects).
   std::vector<HistogramBase*> CreateHistograms(size_t suffix,
-                                               HistogramBase::Sample max,
+                                               HistogramBase::Sample32 max,
                                                size_t bucket_count) {
     // There are 4 ways histograms can store their underlying data:
     // PersistentSampleVector, PersistentSampleMap, SampleVector, and SampleMap.
@@ -381,7 +386,7 @@ TEST_F(HistogramThreadsafeTest, SnapshotDeltaThreadsafe) {
     // The max values of the histograms will alternate between 2 and 50 in order
     // to have coverage of histograms that are being emitted to with a small
     // range of values, and a large range of values.
-    const HistogramBase::Sample kHistogramMax = (iteration % 2 == 0) ? 2 : 50;
+    const HistogramBase::Sample32 kHistogramMax = (iteration % 2 == 0) ? 2 : 50;
     const size_t kBucketCount = (iteration % 2 == 0) ? 3 : 10;
     std::vector<HistogramBase*> histograms =
         CreateHistograms(/*suffix=*/iteration, kHistogramMax, kBucketCount);
@@ -396,7 +401,7 @@ TEST_F(HistogramThreadsafeTest, SnapshotDeltaThreadsafe) {
     std::vector<subtle::Atomic32> real_bucket_counts(kHistogramMax, 0);
     subtle::Atomic32 snapshots_total_samples_count = 0;
     std::vector<subtle::Atomic32> snapshots_bucket_counts(kHistogramMax, 0);
-    std::unique_ptr<SnapshotDeltaThread> threads[kNumThreads];
+    std::array<std::unique_ptr<SnapshotDeltaThread>, kNumThreads> threads;
     for (size_t i = 0; i < kNumThreads; ++i) {
       threads[i] = std::make_unique<SnapshotDeltaThread>(
           StringPrintf("SnapshotDeltaThread.%zu.%zu", iteration, i),
@@ -415,15 +420,15 @@ TEST_F(HistogramThreadsafeTest, SnapshotDeltaThreadsafe) {
     ASSERT_EQ(static_cast<size_t>(real_total_samples_count),
               kNumThreads * kNumEmissions * histograms.size());
     ASSERT_EQ(snapshots_total_samples_count, real_total_samples_count);
-    for (HistogramBase::Sample i = 0; i < kHistogramMax; ++i) {
+    for (HistogramBase::Sample32 i = 0; i < kHistogramMax; ++i) {
       ASSERT_EQ(snapshots_bucket_counts[i], real_bucket_counts[i]);
     }
 
     // Also verify that no more unlogged samples remain, and that the internal
     // logged samples of the histograms match what we emitted.
 
-    HistogramBase::Count logged_total_samples_count = 0;
-    std::vector<HistogramBase::Count> logged_bucket_counts(
+    HistogramBase::Count32 logged_total_samples_count = 0;
+    std::vector<HistogramBase::Count32> logged_bucket_counts(
         /*value=*/kHistogramMax, 0);
     // We ignore the last four histograms since they are the same as the first
     // two (they are simulations of histogram instances from a subprocess that
@@ -448,9 +453,9 @@ TEST_F(HistogramThreadsafeTest, SnapshotDeltaThreadsafe) {
                 expected_logged_samples_count);
 
       for (auto it = logged_samples->Iterator(); !it->Done(); it->Next()) {
-        HistogramBase::Sample min;
+        HistogramBase::Sample32 min;
         int64_t max;
-        HistogramBase::Count count;
+        HistogramBase::Count32 count;
         it->Get(&min, &max, &count);
         ASSERT_GE(count, 0);
         logged_total_samples_count += count;
@@ -458,7 +463,7 @@ TEST_F(HistogramThreadsafeTest, SnapshotDeltaThreadsafe) {
       }
     }
     ASSERT_EQ(logged_total_samples_count, real_total_samples_count);
-    for (HistogramBase::Sample i = 0; i < kHistogramMax; ++i) {
+    for (HistogramBase::Sample32 i = 0; i < kHistogramMax; ++i) {
       ASSERT_EQ(logged_bucket_counts[i], real_bucket_counts[i]);
     }
 

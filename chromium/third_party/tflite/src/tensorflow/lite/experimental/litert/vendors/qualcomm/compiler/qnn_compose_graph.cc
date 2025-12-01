@@ -26,23 +26,39 @@
 #include "tensorflow/lite/experimental/litert/c/litert_common.h"
 #include "tensorflow/lite/experimental/litert/c/litert_logging.h"
 #include "tensorflow/lite/experimental/litert/c/litert_model.h"
-#include "tensorflow/lite/experimental/litert/c/litert_support.h"
+#include "tensorflow/lite/experimental/litert/cc/litert_macros.h"
 #include "tensorflow/lite/experimental/litert/cc/litert_model.h"
-#include "tensorflow/lite/experimental/litert/cc/litert_support.h"
 #include "tensorflow/lite/experimental/litert/vendors/qualcomm/common.h"
 #include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/IR/qnn_op.h"
 #include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/IR/qnn_tensor.h"
 #include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/graph_mapper.h"
 #include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/legalizations/add_op_legalization.h"
 #include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/legalizations/batch_matmul_op_legalization.h"
+#include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/legalizations/cast_op_legalization.h"
+#include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/legalizations/concatenation_op_legalization.h"
+#include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/legalizations/cos_op_legalization.h"
 #include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/legalizations/div_op_legalization.h"
+#include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/legalizations/dynamic_update_slice_op_legalization.h"
+#include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/legalizations/embedding_lookup_op_legalization.h"
+#include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/legalizations/fully_connected_op_legalization.h"
+#include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/legalizations/gelu_op_legalization.h"
+#include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/legalizations/greater_op_legalization.h"
 #include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/legalizations/legalization.h"
+#include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/legalizations/less_op_legalization.h"
+#include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/legalizations/logical_and_op_legalization.h"
 #include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/legalizations/mul_op_legalization.h"
+#include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/legalizations/pack_op_legalization.h"
+#include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/legalizations/quantize_op_legalization.h"
 #include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/legalizations/reshape_op_legalization.h"
 #include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/legalizations/rsqrt_op_legalization.h"
+#include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/legalizations/select_op_legalization.h"
+#include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/legalizations/sin_op_legalization.h"
 #include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/legalizations/slice_op_legalization.h"
+#include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/legalizations/softmax_op_legalization.h"
 #include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/legalizations/sub_op_legalization.h"
+#include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/legalizations/sum_op_legalization.h"
 #include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/legalizations/tanh_op_legalization.h"
+#include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/legalizations/transpose_op_legalization.h"
 #include "tensorflow/lite/experimental/litert/vendors/qualcomm/qnn_manager.h"
 
 namespace litert::qnn {
@@ -60,6 +76,23 @@ LiteRtStatus RegisterAllLegalizations(
   legalizations.push_back(TanhOpLegalization::Create());
   legalizations.push_back(SubOpLegalization::Create());
   legalizations.push_back(ReshapeOpLegalization::Create());
+  legalizations.push_back(SumOpLegalization::Create());
+  legalizations.push_back(ConcatenationOpLegalization::Create());
+  legalizations.push_back(SoftmaxOpLegalization::Create());
+  legalizations.push_back(CastOpLegalization::Create());
+  legalizations.push_back(TransposeOpLegalization::Create());
+  legalizations.push_back(SinOpLegalization::Create());
+  legalizations.push_back(CosOpLegalization::Create());
+  legalizations.push_back(SelectOpLegalization::Create());
+  legalizations.push_back(FullyConnectedOpLegalization::Create());
+  legalizations.push_back(EmbeddingLookupOpLegalization::Create());
+  legalizations.push_back(LogicalAndOpLegalization::Create());
+  legalizations.push_back(LessOpLegalization::Create());
+  legalizations.push_back(GreaterOpLegalization::Create());
+  legalizations.push_back(GeluOpLegalization::Create());
+  legalizations.push_back(DynamicUpdateSliceOpLegalization::Create());
+  legalizations.push_back(PackOpLegalization::Create());
+  legalizations.push_back(QuantizeOpLegalization::Create());
   LITERT_LOG(LITERT_INFO, "Scheduling %lu legalizations", legalizations.size());
   return kLiteRtStatusOk;
 }
@@ -69,37 +102,37 @@ LiteRtStatus MapGraph(QnnManager& qnn, Qnn_ContextHandle_t context_handle,
                       absl::string_view qnn_graph_name) {
   // Register legalizations.
   std::vector<std::unique_ptr<Legalization>> legalizations;
-  LITERT_RETURN_STATUS_IF_NOT_OK(RegisterAllLegalizations(legalizations));
+  LITERT_RETURN_IF_ERROR(RegisterAllLegalizations(legalizations));
 
   GraphMapper graph_mapper(subgraph, qnn, context_handle);
-  LITERT_RETURN_STATUS_IF_NOT_OK(graph_mapper.ParseLiteRtSubgraph());
-  LITERT_RETURN_STATUS_IF_NOT_OK(graph_mapper.IsLiteRtSubgraphSupported());
-  LITERT_RETURN_STATUS_IF_NOT_OK(graph_mapper.InitQnnGraph(qnn_graph_name));
+  LITERT_RETURN_IF_ERROR(graph_mapper.IsLiteRtSubgraphSupported());
+  LITERT_RETURN_IF_ERROR(graph_mapper.InitQnnGraph(qnn_graph_name));
 
   //
   // Legalize subgraph inputs and update tensors in scope
   //
 
-  for (auto subgraph_input : graph_mapper.LiteRtSubgraphInputs()) {
+  for (const auto& subgraph_input : graph_mapper.Graph().Inputs()) {
     Qnn_Tensor_t qnn_subgraph_input = BuildInputTensor();
 
-    LITERT_RETURN_STATUS_IF_NOT_OK(
-        graph_mapper.LegalizeAndRegister(subgraph_input, qnn_subgraph_input));
+    LITERT_RETURN_IF_ERROR(graph_mapper.LegalizeAndRegister(
+        subgraph_input.Get(), qnn_subgraph_input));
 
-    LITERT_RETURN_STATUS_IF_NOT_OK(
-        graph_mapper.PushToScope(subgraph_input, qnn_subgraph_input));
+    LITERT_RETURN_IF_ERROR(
+        graph_mapper.PushToScope(subgraph_input.Get(), qnn_subgraph_input));
+  }
+
+  for (const auto& subgraph_output : graph_mapper.Graph().Outputs()) {
+    graph_mapper.RegisterOutput(subgraph_output.Get());
   }
   //
   // Topologically traverse graph, legalizing and updating tensors in scope
   //
 
-  // Use simple traversal for now.
-  // TODO: Drive traversal here.
-  for (auto litert_op : graph_mapper.LiteRtSubgraphOps()) {
+  for (const auto& op : graph_mapper.Graph().Ops()) {
     Qnn_OpConfig_t qnn_op = BuildDefaultOp();
-    Op op(litert_op);
     for (auto it = legalizations.begin(); it != legalizations.end(); ++it) {
-      LITERT_RETURN_STATUS_IF_NOT_OK_OR_NOT_MATCHED(
+      LITERT_RETURN_IF_ERROR_OR_NOT_MATCHED(
           (*it)->LegalizeOp(op, qnn_op, graph_mapper));
     }
   }
@@ -120,16 +153,8 @@ LiteRtStatus MapGraph(QnnManager& qnn, Qnn_ContextHandle_t context_handle,
 //
 // APPROACH:
 //
-// Currently demoing by just handling a simple case where there is one
-// partitions and the partitions is as follows:
-//
-// func(%arg0: tensor<2x2xf32>, %arg1: tensor<2x2xf32>)
-//   %0 = tfl.mul(%arg0, %arg1)
-//   return %0
-//
 // To support the general case we will need a driver loop that either
 // traverses input recursively through edges or just iterates topologically.
-// Currently we just have only implemented n=1.
 //
 // The algorithm is pretty straightforward:
 // * Store mapping between already evaluated LiteRtTensors and their
@@ -148,7 +173,7 @@ LiteRtStatus MapGraph(QnnManager& qnn, Qnn_ContextHandle_t context_handle,
 LiteRtStatus ComposeGraph(QnnManager& qnn, Qnn_ContextHandle_t context_handle,
                           LiteRtSubgraph subgraph,
                           absl::string_view qnn_graph_name) {
-  LITERT_RETURN_STATUS_IF_NOT_OK(
+  LITERT_RETURN_IF_ERROR(
       MapGraph(qnn, context_handle, subgraph, qnn_graph_name));
   return kLiteRtStatusOk;
 }

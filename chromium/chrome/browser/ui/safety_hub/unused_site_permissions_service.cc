@@ -27,7 +27,6 @@
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/ui/safety_hub/safety_hub_prefs.h"
 #include "chrome/browser/ui/safety_hub/safety_hub_service.h"
 #include "chrome/browser/ui/safety_hub/safety_hub_util.h"
@@ -58,6 +57,10 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 #include "url/origin.h"
+
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+#include "chrome/browser/safe_browsing/safe_browsing_service.h"
+#endif
 
 constexpr base::TimeDelta kRevocationThresholdNoDelayForTesting = base::Days(0);
 constexpr base::TimeDelta kRevocationThresholdWithDelayForTesting =
@@ -307,7 +310,7 @@ bool UnusedSitePermissionsService::UnusedSitePermissionsResult::
   }
 
   std::set<ContentSettingsPattern> new_origins = GetRevokedOrigins();
-  return !base::ranges::includes(old_origins, new_origins);
+  return !std::ranges::includes(old_origins, new_origins);
 }
 
 std::u16string UnusedSitePermissionsService::UnusedSitePermissionsResult::
@@ -350,6 +353,7 @@ UnusedSitePermissionsService::UnusedSitePermissionsService(
   pref_change_registrar_ = std::make_unique<PrefChangeRegistrar>();
   pref_change_registrar_->Init(prefs);
 
+#if BUILDFLAG(IS_ANDROID)
   if (base::FeatureList::IsEnabled(features::kSafetyHub)) {
     pref_change_registrar_->Add(
         safety_hub_prefs::kUnusedSitePermissionsRevocationEnabled,
@@ -357,14 +361,25 @@ UnusedSitePermissionsService::UnusedSitePermissionsService(
                                 OnPermissionsAutorevocationControlChanged,
                             base::Unretained(this)));
   }
+#else   // BUILDFLAG(IS_ANDROID)
+  pref_change_registrar_->Add(
+      safety_hub_prefs::kUnusedSitePermissionsRevocationEnabled,
+      base::BindRepeating(&UnusedSitePermissionsService::
+                              OnPermissionsAutorevocationControlChanged,
+                          base::Unretained(this)));
+#endif  // BUILDFLAG(IS_ANDROID)
 
   if (base::FeatureList::IsEnabled(
           safe_browsing::kSafetyHubAbusiveNotificationRevocation)) {
     abusive_notification_manager_ =
         std::make_unique<AbusiveNotificationPermissionsManager>(
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
             g_browser_process->safe_browsing_service()
                 ? g_browser_process->safe_browsing_service()->database_manager()
                 : nullptr,
+#else
+            nullptr,
+#endif
             hcsm());
 
     pref_change_registrar_->Add(
@@ -1014,12 +1029,12 @@ base::WeakPtr<SafetyHubService> UnusedSitePermissionsService::GetAsWeakRef() {
 }
 
 bool UnusedSitePermissionsService::IsUnusedSiteAutoRevocationEnabled() {
-  // If kSafetyHub is disabled, then the auto-revocation directly depends on
-  // kSafetyCheckUnusedSitePermissions.
+#if BUILDFLAG(IS_ANDROID)
   if (!base::FeatureList::IsEnabled(features::kSafetyHub)) {
-    return base::FeatureList::IsEnabled(
-        content_settings::features::kSafetyCheckUnusedSitePermissions);
+    return false;
   }
+#endif  // BUILDFLAG(IS_ANDROID)
+
   return pref_change_registrar_->prefs()->GetBoolean(
       safety_hub_prefs::kUnusedSitePermissionsRevocationEnabled);
 }

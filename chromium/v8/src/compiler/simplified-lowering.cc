@@ -99,7 +99,7 @@ MachineRepresentation MachineRepresentationFromArrayType(
     case kExternalBigUint64Array:
       return MachineRepresentation::kWord64;
     case kExternalFloat16Array:
-      UNIMPLEMENTED();
+      return MachineRepresentation::kWord16;
   }
   UNREACHABLE();
 }
@@ -494,6 +494,11 @@ class RepresentationSelector {
                                    info->restriction_type(), graph_zone());
         break;
 
+      case IrOpcode::kCheckNumberFitsInt32:
+        new_type = Type::Intersect(op_typer_.CheckNumberFitsInt32(input0_type),
+                                   info->restriction_type(), graph_zone());
+        break;
+
       case IrOpcode::kPhi: {
         new_type = TypePhi(node);
         if (!type.IsInvalid()) {
@@ -514,6 +519,14 @@ class RepresentationSelector {
       }
 
       case IrOpcode::kSelect: {
+        const auto& p = SelectParametersOf(node->op());
+        if (p.semantics() == BranchSemantics::kMachine) {
+          if (type.IsInvalid()) {
+            GetInfo(node)->set_feedback_type(NodeProperties::GetType(node));
+            return true;
+          }
+          return false;
+        }
         new_type = TypeSelect(node);
         break;
       }
@@ -758,7 +771,7 @@ class RepresentationSelector {
     }
   }
 
-  void RunVerifyPhase(OptimizedCompilationInfo* info) {
+  void RunVerifyPhase(OptimizedCompilationInfo* compilation_info) {
     DCHECK_NOT_NULL(verifier_);
 
     TRACE("--{Verify Phase}--\n");
@@ -790,11 +803,11 @@ class RepresentationSelector {
     }
 
     // Print graph.
-    if (info != nullptr && info->trace_turbo_json()) {
+    if (compilation_info != nullptr && compilation_info->trace_turbo_json()) {
       UnparkedScopeIfNeeded scope(broker_);
       AllowHandleDereference allow_deref;
 
-      TurboJsonFile json_of(info, std::ios_base::app);
+      TurboJsonFile json_of(compilation_info, std::ios_base::app);
       JSONGraphWriter writer(json_of, graph(), source_positions_,
                              node_origins_);
       writer.PrintPhase("V8.TFSimplifiedLowering [after lower]");
@@ -806,11 +819,11 @@ class RepresentationSelector {
     }
 
     // Print graph.
-    if (info != nullptr && info->trace_turbo_json()) {
+    if (compilation_info != nullptr && compilation_info->trace_turbo_json()) {
       UnparkedScopeIfNeeded scope(broker_);
       AllowHandleDereference allow_deref;
 
-      TurboJsonFile json_of(info, std::ios_base::app);
+      TurboJsonFile json_of(compilation_info, std::ios_base::app);
       JSONGraphWriterWithVerifierTypes writer(
           json_of, graph(), source_positions_, node_origins_, verifier_);
       writer.PrintPhase("V8.TFSimplifiedLowering [after verify]");
@@ -1943,6 +1956,7 @@ class RepresentationSelector {
   UseInfo UseInfoForFastApiCallArgument(CTypeInfo type,
                                         CFunctionInfo::Int64Representation repr,
                                         FeedbackSource const& feedback) {
+    START_ALLOW_USE_DEPRECATED()
     switch (type.GetSequenceType()) {
       case CTypeInfo::SequenceType::kScalar: {
         uint8_t flags = uint8_t(type.GetFlags());
@@ -1993,15 +2007,11 @@ class RepresentationSelector {
         CHECK_EQ(type.GetType(), CTypeInfo::Type::kVoid);
         return UseInfo::AnyTagged();
       }
-        START_ALLOW_USE_DEPRECATED()
-      case CTypeInfo::SequenceType::kIsTypedArray: {
-        return UseInfo::AnyTagged();
-      }
-        END_ALLOW_USE_DEPRECATED()
       default: {
         UNREACHABLE();  // TODO(mslekova): Implement array buffers.
       }
     }
+    END_ALLOW_USE_DEPRECATED()
   }
 
   static constexpr int kInitialArgumentsCount = 10;
@@ -2015,7 +2025,7 @@ class RepresentationSelector {
     // argument, which must be a JSArray in one function and a TypedArray in the
     // other function, and both JSArrays and TypedArrays have the same UseInfo
     // UseInfo::AnyTagged(). All the other argument types must match.
-    const CFunctionInfo* c_signature = op_params.c_functions()[0].signature;
+    const CFunctionInfo* c_signature = op_params.c_function().signature;
     const int c_arg_count = c_signature->ArgumentCount();
     CallDescriptor* call_descriptor = op_params.descriptor();
     // Arguments for CallApiCallbackOptimizedXXX builtin (including context)
@@ -2057,12 +2067,8 @@ class RepresentationSelector {
 
     // Effect and Control.
     ProcessRemainingInputs<T>(node, value_input_count);
-    if (op_params.c_functions().empty()) {
-      SetOutput<T>(node, MachineRepresentation::kTagged);
-      return;
-    }
 
-    CTypeInfo return_type = op_params.c_functions()[0].signature->ReturnInfo();
+    CTypeInfo return_type = op_params.c_function().signature->ReturnInfo();
     switch (return_type.GetType()) {
       case CTypeInfo::Type::kBool:
         SetOutput<T>(node, MachineRepresentation::kBit);
@@ -2443,8 +2449,19 @@ class RepresentationSelector {
         ProcessInput<T>(node, 0, UseInfo::TruncatingWord32());
         EnqueueInput<T>(node, NodeProperties::FirstControlIndex(node));
         return;
-      case IrOpcode::kSelect:
-        return VisitSelect<T>(node, truncation, lowering);
+      case IrOpcode::kSelect: {
+        const auto& p = SelectParametersOf(node->op());
+        if (p.semantics() == BranchSemantics::kMachine) {
+          // If this is a machine select, all inputs are machine operators.
+          ProcessInput<T>(node, 0, UseInfo::Any());
+          ProcessInput<T>(node, 1, UseInfo::Any());
+          ProcessInput<T>(node, 2, UseInfo::Any());
+          SetOutput<T>(node, p.representation());
+        } else {
+          VisitSelect<T>(node, truncation, lowering);
+        }
+        return;
+      }
       case IrOpcode::kPhi:
         return VisitPhi<T>(node, truncation, lowering);
       case IrOpcode::kCall:
@@ -3445,6 +3462,20 @@ class RepresentationSelector {
         }
         return;
       }
+      case IrOpcode::kNumberToFloat16RawBits: {
+        VisitUnop<T>(node, UseInfo::TruncatingFloat64(),
+                     MachineRepresentation::kWord16);
+
+        if (lower<T>()) lowering->DoNumberToFloat16RawBits(node);
+        return;
+      }
+      case IrOpcode::kFloat16RawBitsToNumber: {
+        VisitUnop<T>(node, UseInfo::TruncatingFloat16RawBits(),
+                     MachineRepresentation::kFloat64);
+
+        if (lower<T>()) lowering->DoFloat16RawBitsToNumber(node);
+        return;
+      }
       case IrOpcode::kIntegral32OrMinusZeroToBigInt: {
         VisitUnop<T>(node, UseInfo::Word64(kIdentifyZeros),
                      MachineRepresentation::kWord64);
@@ -3730,6 +3761,11 @@ class RepresentationSelector {
                      MachineRepresentation::kWord32);
         return;
       }
+      case IrOpcode::kTypedArrayLength: {
+        VisitUnop<T>(node, UseInfo::AnyTagged(),
+                     MachineType::PointerRepresentation());
+        return;
+      }
       case IrOpcode::kStringSubstring: {
         ProcessInput<T>(node, 0, UseInfo::AnyTagged());
         ProcessInput<T>(node, 1, UseInfo::TruncatingWord32());
@@ -3771,6 +3807,16 @@ class RepresentationSelector {
       case IrOpcode::kCheckNumber: {
         Type const input_type = TypeOf(node->InputAt(0));
         if (input_type.Is(Type::Number())) {
+          VisitNoop<T>(node, truncation);
+        } else {
+          VisitUnop<T>(node, UseInfo::AnyTagged(),
+                       MachineRepresentation::kTagged);
+        }
+        return;
+      }
+      case IrOpcode::kCheckNumberFitsInt32: {
+        Type const input_type = TypeOf(node->InputAt(0));
+        if (input_type.Is(Type::Signed32())) {
           VisitNoop<T>(node, truncation);
         } else {
           VisitUnop<T>(node, UseInfo::AnyTagged(),
@@ -4466,6 +4512,11 @@ class RepresentationSelector {
             MachineRepresentation::kNone);
       }
       case IrOpcode::kTransitionElementsKind: {
+        return VisitUnop<T>(
+            node, UseInfo::CheckedHeapObjectAsTaggedPointer(FeedbackSource()),
+            MachineRepresentation::kNone);
+      }
+      case IrOpcode::kTransitionElementsKindOrCheckMap: {
         return VisitUnop<T>(
             node, UseInfo::CheckedHeapObjectAsTaggedPointer(FeedbackSource()),
             MachineRepresentation::kNone);
@@ -5622,6 +5673,14 @@ void SimplifiedLowering::DoIntegerToUint8Clamped(Node* node) {
           max));
   node->AppendInput(graph()->zone(), min);
   ChangeOp(node, common()->Select(MachineRepresentation::kFloat64));
+}
+
+void SimplifiedLowering::DoNumberToFloat16RawBits(Node* node) {
+  ChangeOp(node, machine()->TruncateFloat64ToFloat16RawBits().placeholder());
+}
+
+void SimplifiedLowering::DoFloat16RawBitsToNumber(Node* node) {
+  ChangeOp(node, machine()->ChangeFloat16RawBitsToFloat64().placeholder());
 }
 
 void SimplifiedLowering::DoNumberToUint8Clamped(Node* node) {

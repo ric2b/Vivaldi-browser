@@ -5,6 +5,7 @@
 #include "content/browser/devtools/worker_devtools_manager.h"
 
 #include "base/containers/contains.h"
+#include "base/metrics/histogram_functions.h"
 #include "content/browser/devtools/dedicated_worker_devtools_agent_host.h"
 #include "content/browser/devtools/devtools_instrumentation.h"
 #include "content/browser/worker_host/dedicated_worker_host.h"
@@ -66,7 +67,21 @@ void WorkerDevToolsManager::WorkerCreated(
 
 void WorkerDevToolsManager::WorkerDestroyed(const DedicatedWorkerHost* host) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  // If the worker thread in the renderer has never establiashed a mojo
+  // connection to the DedicatedWorkerDevToolsAgentHost we need to
+  // explicitly run disconnect.
+  // Generally, the host should be there except for unit tests.
+  if (!hosts_.contains(host)) {
+    return;
+  }
+  hosts_[host]->DisconnectIfNotCreated();
   hosts_.erase(host);
+}
+
+void WorkerDevToolsManager::AddAllAgentHosts(DevToolsAgentHost::List* result) {
+  for (const auto& it : hosts_) {
+    result->push_back(it.second);
+  }
 }
 
 }  // namespace content

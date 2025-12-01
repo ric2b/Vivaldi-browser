@@ -115,9 +115,6 @@ if (angle_build_all) {
     if (angle_enable_cl) {
       deps += [ "$angle_root/src/libOpenCL:angle_cl" ]
     }
-    if (angle_enable_cl_testing) {
-      deps += [ "$angle_root/third_party/OpenCL-CTS/:opencl_cts" ]
-    }
     if (angle_enable_cl && angle_enable_vulkan) {
       # OpenCL through Vulkan in ANGLE requires clspv for online compiler
       deps += [ "$angle_clspv_dir:clspv" ]
@@ -1847,4 +1844,19 @@ group("angle_static") {
     ":preprocessor",
     ":translator",
   ]
+}
+
+# GN evaluates each .gn file once per toolchain, so restricting to default
+# toolchain will ensure write_file() is called only once.
+if (!build_with_chromium && angle_has_build &&
+    current_toolchain == default_toolchain) {
+  import("//build/gn_logs.gni")
+
+  # Write debug logs to gn_logs.txt.
+  _lines = [
+             "Generated during 'gn gen' by //BUILD.gn.",
+             "",
+           ] + build_gn_logs
+
+  write_file("$root_build_dir/gn_logs.txt", _lines)
 }

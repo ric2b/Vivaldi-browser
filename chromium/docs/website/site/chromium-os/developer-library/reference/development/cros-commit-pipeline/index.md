@@ -12,7 +12,7 @@ This document provides a brief overview of how ChromeOS changes get committed
 and tested.
 
 For details on **Chrome** changes, see
-[Life of a Chrome commit on ChromeOS](chrome_commit_pipeline.md).
+[Life of a Chrome commit on ChromeOS](/chromium-os/developer-library/guides/development/chrome-commit-pipeline).
 
 ## Create a ChromeOS change
 

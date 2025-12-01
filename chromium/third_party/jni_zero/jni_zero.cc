@@ -24,6 +24,7 @@ JavaVM* g_jvm = nullptr;
 jclass (*g_class_resolver)(JNIEnv*, const char*, const char*) = nullptr;
 
 void (*g_exception_handler_callback)(JNIEnv*) = nullptr;
+void (*g_native_to_java_callback)(const char*, const char*) = nullptr;
 
 jclass GetClassInternal(JNIEnv* env,
                         const char* class_name,
@@ -64,6 +65,9 @@ jclass GetSystemClassGlobalRef(JNIEnv* env, const char* class_name) {
 
 jclass g_object_class = nullptr;
 jclass g_string_class = nullptr;
+LeakedJavaGlobalRef<jstring> g_empty_string = nullptr;
+LeakedJavaGlobalRef<jobject> g_empty_list = nullptr;
+LeakedJavaGlobalRef<jobject> g_empty_map = nullptr;
 
 JNIEnv* AttachCurrentThread() {
   JNI_ZERO_DCHECK(g_jvm);
@@ -123,6 +127,8 @@ void InitVM(JavaVM* vm) {
   JNIEnv* env = AttachCurrentThread();
   g_object_class = GetSystemClassGlobalRef(env, "java/lang/Object");
   g_string_class = GetSystemClassGlobalRef(env, "java/lang/String");
+  g_empty_string.Reset(
+      env, ScopedJavaLocalRef<jstring>(env, env->NewString(nullptr, 0)));
 #if defined(JNI_ZERO_MULTIPLEXING_ENABLED)
   Java_JniInit_crashIfMultiplexingMisaligned(env, kJniZeroHashWhole,
                                              kJniZeroHashPriority);
@@ -130,7 +136,13 @@ void InitVM(JavaVM* vm) {
   // Mark as used when multiplexing not enabled.
   (void)&Java_JniInit_crashIfMultiplexingMisaligned;
 #endif
-  CheckException(env);
+  ScopedJavaLocalRef<jobjectArray> globals = Java_JniInit_init(env);
+  g_empty_list.Reset(env,
+                     ScopedJavaLocalRef<jobject>(
+                         env, env->GetObjectArrayElement(globals.obj(), 0)));
+  g_empty_map.Reset(env,
+                    ScopedJavaLocalRef<jobject>(
+                        env, env->GetObjectArrayElement(globals.obj(), 1)));
 }
 
 void DisableJvmForTesting() {
@@ -162,6 +174,16 @@ void SetExceptionHandler(void (*callback)(JNIEnv*)) {
   g_exception_handler_callback = callback;
 }
 
+void SetNativeToJavaCallback(void (*callback)(char const*, char const*)) {
+  g_native_to_java_callback = callback;
+}
+
+void CallNativeToJavaCallback(char const* class_name, char const* method_name) {
+  if (g_native_to_java_callback) {
+    g_native_to_java_callback(class_name, method_name);
+  }
+}
+
 void CheckException(JNIEnv* env) {
   if (!HasException(env)) {
     return;
@@ -170,6 +192,7 @@ void CheckException(JNIEnv* env) {
   if (g_exception_handler_callback) {
     return g_exception_handler_callback(env);
   }
+  env->ExceptionDescribe();
   JNI_ZERO_FLOG("jni_zero crashing due to uncaught Java exception");
 }
 

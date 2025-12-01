@@ -7,9 +7,11 @@
 #include <optional>
 
 #include "base/containers/contains.h"
+#include "third_party/blink/renderer/core/css/css_attr_type.h"
 #include "third_party/blink/renderer/core/css/css_syntax_component.h"
 #include "third_party/blink/renderer/core/css/css_syntax_definition.h"
 #include "third_party/blink/renderer/core/css/css_unparsed_declaration_value.h"
+#include "third_party/blink/renderer/core/css/parser/container_query_parser.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_token.h"
 #include "third_party/blink/renderer/core/css/properties/css_parsing_utils.h"
 #include "third_party/blink/renderer/core/css/resolver/style_cascade.h"
@@ -170,8 +172,8 @@ static bool ConsumeEnvVariableReference(CSSParserTokenStream& stream,
   return stream.AtEnd();
 }
 
-// attr() = attr( <attr-name> <syntax>? , <declaration-value>?)
-// https://drafts.csswg.org/css-values-5/#attr-notation
+// attr() = attr( <attr-name> [ type(<syntax>) | string | <unit> ]?,
+// <declaration-value>?) https://drafts.csswg.org/css-values-5/#attr-notation
 static bool ConsumeAttributeReference(CSSParserTokenStream& stream,
                                       bool& has_references,
                                       bool& has_font_units,
@@ -190,9 +192,10 @@ static bool ConsumeAttributeReference(CSSParserTokenStream& stream,
     return true;
   }
 
-  std::optional<CSSSyntaxDefinition> syntax =
-      CSSSyntaxDefinition::Consume(stream);
-  if (syntax.has_value() && stream.AtEnd()) {
+  std::optional<CSSAttrType> attr_type = CSSAttrType::Consume(stream);
+  if (stream.AtEnd() && attr_type.has_value()) {
+    // attr = attr(<attr-name> [ type(<syntax>) | string | <unit> ]) is
+    // allowed, so return true.
     return true;
   }
 
@@ -201,7 +204,7 @@ static bool ConsumeAttributeReference(CSSParserTokenStream& stream,
   }
   stream.Consume();
   if (stream.AtEnd()) {
-    // attr = attr(<attr-name>,) and attr = attr(<attr-name> <syntax>,) is
+    // attr = attr(<attr-name> [ type(<syntax>) | string | <unit> ]?,) is
     // allowed, so return true.
     return true;
   }
@@ -216,7 +219,74 @@ static bool ConsumeAttributeReference(CSSParserTokenStream& stream,
   return stream.AtEnd();
 }
 
-static bool ConsumeInternalAppearanceAutoBaseSelect(
+// <if-condition> = <boolean-expr[ <if-test> ]> | else
+// <if-test> =
+//   supports( [ <supports-condition> | <ident> : <declaration-value> ] ) |
+//   media( <media-query> ) |
+//   style( <style-query> )
+// https://www.w3.org/TR/css-values-5/#if-notation
+static bool ConsumeIfCondition(CSSParserTokenStream& stream,
+                               const CSSParserContext& context) {
+  if (stream.Peek().Id() == CSSValueID::kElse) {
+    stream.ConsumeIncludingWhitespace();
+    return true;
+  }
+
+  ContainerQueryParser parser(context);
+
+  const MediaQueryExpNode* exp_node = parser.ConsumeIfTest(stream);
+  if (!exp_node) {
+    return false;
+  }
+
+  stream.ConsumeWhitespace();
+  return true;
+}
+
+// <if()> = if( [ <if-condition> : <declaration-value>? ; ]*
+//              <if-condition> : <declaration-value>? ;? )
+// <if-condition> = <boolean-expr[ <if-test> ]> | else
+// <if-test> =
+//   supports( [ <supports-condition> | <ident> : <declaration-value> ] ) |
+//   media( <media-query> ) |
+//   style( <style-query> )
+// https://www.w3.org/TR/css-values-5/#if-notation
+static bool ConsumeIfReference(CSSParserTokenStream& stream,
+                               bool& has_references,
+                               bool& has_font_units,
+                               bool& has_root_font_units,
+                               bool& has_line_height_units,
+                               const CSSParserContext& context) {
+  CSSParserTokenStream::BlockGuard guard(stream);
+
+  stream.ConsumeWhitespace();
+  while (ConsumeIfCondition(stream, context)) {
+    if (stream.Peek().GetType() != kColonToken) {
+      return false;
+    }
+    stream.ConsumeIncludingWhitespace();
+    // Parse <declaration-value>
+    if (!ConsumeUnparsedValue(stream, /*restricted_value=*/false,
+                              /*comma_ends_declaration=*/false, has_references,
+                              has_font_units, has_root_font_units,
+                              has_line_height_units, context)) {
+      return false;
+    }
+    if (stream.AtEnd()) {
+      return true;
+    }
+    if (stream.Peek().GetType() != kSemicolonToken) {
+      return false;
+    }
+    stream.ConsumeIncludingWhitespace();
+    if (stream.AtEnd()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool ConsumeInternalAutoBase(
     CSSParserTokenStream& stream,
     bool& has_references,
     bool& has_font_units,
@@ -349,13 +419,24 @@ static bool ConsumeUnparsedValue(CSSParserTokenStream& stream,
           }
           has_references = true;
           continue;
-        case CSSValueID::kInternalAppearanceAutoBaseSelect:
+        case CSSValueID::kInternalAutoBase:
           if (context.GetMode() != kUASheetMode) {
             break;
           }
-          if (!ConsumeInternalAppearanceAutoBaseSelect(
+          if (!ConsumeInternalAutoBase(
                   stream, has_references, has_font_units, has_root_font_units,
                   has_line_height_units, context)) {
+            error = true;
+          }
+          has_references = true;
+          continue;
+        case CSSValueID::kIf:
+          if (!RuntimeEnabledFeatures::CSSInlineIfForStyleQueriesEnabled()) {
+            break;
+          }
+          if (!ConsumeIfReference(stream, has_references, has_font_units,
+                                  has_root_font_units, has_line_height_units,
+                                  context)) {
             error = true;
           }
           has_references = true;
@@ -478,7 +559,7 @@ CSSVariableData* CSSVariableParser::ConsumeUnparsedDeclaration(
   original_text =
       CSSVariableParser::StripTrailingWhitespaceAndComments(original_text);
 
-  return CSSVariableData::Create(original_text, is_animation_tainted,
+  return CSSVariableData::Create(original_text, is_animation_tainted, false,
                                  /*needs_variable_resolution=*/has_references,
                                  has_font_units, has_root_font_units,
                                  has_line_height_units);

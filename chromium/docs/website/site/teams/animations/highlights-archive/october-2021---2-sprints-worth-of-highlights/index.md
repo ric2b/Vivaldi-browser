@@ -60,15 +60,15 @@ title: October 2021 - 2 sprint's worth of highlights
 <td><td>Scroll unification is an important code health project to streamline the scrolling process. Currently, there are multiple code paths, which need to be considered when addressing a bug or updating scroll behavior. This cycle, skobes@ has focused on burning down the number of test failures.</td></td>
 
     <td><td>lock-renderer-for-middle-click-autoscroll.html  (<a
-    href="http://crrev.com/925854">r925854</a>)</td></td>
+    href="https://crrev.com/925854">r925854</a>)</td></td>
 
     <td><td>scrollbar-double-click.html             (<a
-    href="http://crrev.com/925896">r925896</a>)</td></td>
+    href="https://crrev.com/925896">r925896</a>)</td></td>
     <td><td>background-attachment-local-scrolling.htm</td></td>
     <td><td>plugin-overlay-scrollbar-mouse-capture.html</td></td>
 
     <td><td>reset-scroll-in-onscroll.html                   (<a
-    href="http://crrev.com/927008">r927008</a>)</td></td>
+    href="https://crrev.com/927008">r927008</a>)</td></td>
 
 <td></tr></td>
 <td></table></td>
@@ -129,7 +129,7 @@ title: October 2021 - 2 sprint's worth of highlights
 
 <td><td>Smooth scroll vs. JS scroll (skobes@)</td></td>
 
-<td><td>Achievements: Learned a lot about how to handle JS scrolls in the middle of a user-triggered smooth scroll (wheel, keyboard). Both the main thread and the compositor thread were handling this improperly in different ways. A <a href="http://crbug.com/1264266">new proposal</a> enables "adjustment" behavior in virtual scrollers.</td></td>
+<td><td>Achievements: Learned a lot about how to handle JS scrolls in the middle of a user-triggered smooth scroll (wheel, keyboard). Both the main thread and the compositor thread were handling this improperly in different ways. A <a href="https://crbug.com/1264266">new proposal</a> enables "adjustment" behavior in virtual scrollers.</td></td>
 
 <td><td><img alt="easeinout.png" src="https://lh4.googleusercontent.com/yGrqbqHLvUia7IuId5eOlAJfQBx_nDnxaIoHd3zkYY81tyIbm70sr05msy4z1E1VKMayvR5eN_AK49mDMAfUfmlpLmHKlgqOCYiNpw9GoSwuUkq6hmFltMGkvFXk4ybC-MZphtoMMA" height=145 width=148></td></td>
 

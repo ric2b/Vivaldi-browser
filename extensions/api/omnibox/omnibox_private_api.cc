@@ -12,13 +12,18 @@
 #include <vector>
 
 #include "base/lazy_instance.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/autocomplete/chrome_autocomplete_provider_client.h"
+#include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
+#include "components/omnibox/browser/autocomplete_match_type.h"
+#include "components/omnibox/omnibox_input.h"
 #include "components/omnibox/omnibox_service.h"
 #include "components/omnibox/omnibox_service_factory.h"
 #include "extensions/api/history/history_private_api.h"
 #include "extensions/schema/omnibox_private.h"
 #include "extensions/tools/vivaldi_tools.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
 
 namespace extensions {
 
@@ -69,7 +74,9 @@ void OmniboxPrivateAPI::OnListenerAdded(const EventListenerInfo& details) {
 
 OmniboxEventRouter::OmniboxEventRouter(Profile* profile,
                                        OmniboxService* omnibox_service)
-    : profile_(profile), omnibox_service_observer_(this) {
+    : profile_(profile),
+      omnibox_service_observer_(this),
+      template_url_service_(TemplateURLServiceFactory::GetForProfile(profile)) {
   DCHECK(profile);
   omnibox_service_observer_.Observe(omnibox_service);
 }
@@ -134,6 +141,9 @@ vivaldi::omnibox_private::OmniboxItemCategory GetProviderCategory(
   }
   if (type == "direct-match") {
     return vivaldi::omnibox_private::OmniboxItemCategory::kDirectMatch;
+  }
+  if (type == "recent-typed-history") {
+    return vivaldi::omnibox_private::OmniboxItemCategory::kRecentTypedHistory;
   }
   // "url-what-you-typed" is included in kOther.
   // It correspond to a fully typed url and shouldn't be in a category.
@@ -218,10 +228,13 @@ vivaldi::omnibox_private::OmniboxProviderName providerNameToVivaldiProviderName(
   if (name == "DirectMatch") {
     return vivaldi::omnibox_private::OmniboxProviderName::kDirectMatch;
   }
+  if (name == "RecentTypedHistory") {
+    return vivaldi::omnibox_private::OmniboxProviderName::kRecentTypedHistory;
+  }
   return vivaldi::omnibox_private::OmniboxProviderName::kUnknown;
 }
 
-OmniboxItem CreateOmniboxItem(AutocompleteMatch match) {
+OmniboxItem CreateOmniboxItem(AutocompleteMatch match,  TemplateURLService* template_url_service) {
   OmniboxItem res;
 
   res.allowed_to_be_default_match = match.allowed_to_be_default_match;
@@ -239,6 +252,20 @@ OmniboxItem CreateOmniboxItem(AutocompleteMatch match) {
   res.category =
       GetProviderCategory(AutocompleteMatchType::ToString(match.type));
   res.deletable = match.deletable;
+  res.type = AutocompleteMatchType::ToString(match.type);
+  if (res.category ==
+      vivaldi::omnibox_private::OmniboxItemCategory::kDirectMatch) {
+    res.favicon_url = base::UTF16ToUTF8(match.local_favicon_path);
+    res.favicon_type = "url";
+  } else {
+    if (!match.keyword.empty() && template_url_service) {
+      TemplateURL* template_url = template_url_service->GetTemplateURLForKeyword(match.keyword);
+      res.favicon_url = template_url ? template_url->favicon_url().spec().c_str() : res.destination_url;
+    } else {
+      res.favicon_url = res.destination_url;
+    }
+    res.favicon_type = "favicon";
+  }
 
   return res;
 }
@@ -248,18 +275,31 @@ void OmniboxEventRouter::OnResultChanged(AutocompleteController* controller,
   std::vector<OmniboxItem> urls;
   OnOmniboxResultChanged::Results results;
 
-  if (controller->done()) {
-    results.cursor_position = controller->input().cursor_position();
-    results.input_text = base::UTF16ToUTF8(controller->input().text());
+  results.input_text = base::UTF16ToUTF8(controller->input().text());
+  results.done = controller->done();
 
-    for (const auto& result : controller->result()) {
-      results.combined_results.push_back(CreateOmniboxItem(result));
-    }
-
-    base::Value::List args = OnOmniboxResultChanged::Create(results);
-    DispatchEvent(profile_, OnOmniboxResultChanged::kEventName,
-                  std::move(args));
+  for (const auto& result : controller->result()) {
+    // TODO: Decide if we should use SEARCH_OTHER_ENGINE or continue to use
+    // our implementation in the frontend.
+    if (result.type == AutocompleteMatchType::SEARCH_OTHER_ENGINE &&
+        result.destination_url.spec().size() == 0)
+      continue;
+    results.combined_results.push_back(CreateOmniboxItem(result, template_url_service_));
   }
+
+  base::Value::List args = OnOmniboxResultChanged::Create(results);
+  DispatchEvent(profile_, OnOmniboxResultChanged::kEventName, std::move(args));
+}
+
+metrics::OmniboxEventProto::PageClassification
+            OmniboxPrivateStartOmniboxFunction::GetPageClassification(
+                vivaldi::omnibox_private::PageClassification name) {
+  if (name == vivaldi::omnibox_private::PageClassification::kNtp) {
+    return metrics::OmniboxEventProto::NTP;
+  } else if (name == vivaldi::omnibox_private::PageClassification::kBlank) {
+    return metrics::OmniboxEventProto::BLANK;
+  }
+  return metrics::OmniboxEventProto::OTHER;
 }
 
 ExtensionFunction::ResponseAction OmniboxPrivateStartOmniboxFunction::Run() {
@@ -270,7 +310,24 @@ ExtensionFunction::ResponseAction OmniboxPrivateStartOmniboxFunction::Run() {
   Profile* profile = GetFunctionCallerProfile(*this);
   OmniboxService* service = OmniboxServiceFactory::GetForProfile(profile);
   DCHECK(service);
-  service->StartSearch(base::UTF8ToUTF16(params->query));
+
+  vivaldi_omnibox::OmniboxPrivateInput input;
+  input.clear_state_before_searching =
+      params->parameters.clear_state_before_searching;
+  input.prevent_inline_autocomplete =
+      params->parameters.prevent_inline_autocomplete;
+  input.from_search_field = params->parameters.from_search_field;
+  input.search_engine_guid = params->parameters.search_engine_guid;
+  input.focus_type = params->parameters.focus_type ==
+    extensions::vivaldi::omnibox_private::OmniboxFocusType::kInteractionFocus ?
+      metrics::OmniboxFocusType::INTERACTION_FOCUS :
+      metrics::OmniboxFocusType::INTERACTION_DEFAULT;
+
+
+  service->StartSearch(
+      base::UTF8ToUTF16(params->parameters.query),
+      input,
+      GetPageClassification(params->parameters.page_classification));
   return RespondNow(NoArguments());
 }
 

@@ -192,6 +192,40 @@ fn main() {
     t.expectCompileResult(t.params.short_circuit, code);
   });
 
+g.test('invalid_rhs_fn_override')
+  .desc(
+    `
+Validates that a short-circuiting expression in functions with a override-expression LHS guards the evaluation of its RHS expression.
+`
+  )
+  .params(u =>
+    u
+      .combine('op', ['&&', '||'])
+      .combine('rhs', keysOf(kInvalidRhsExpressions))
+      .combine('short_circuit', [true, false])
+      .beginSubcases()
+  )
+  .fn(t => {
+    let lhs = kLhsForShortCircuit[t.params.op];
+    if (!t.params.short_circuit) {
+      lhs = !lhs;
+    }
+    const code = `
+override cond : bool;
+override thirty_one = 31u;
+override zero_i32 = 0i;
+override one_f32 = 1.0f;`;
+    const code_entry = `let foo = cond ${t.params.op} ${kInvalidRhsExpressions[t.params.rhs]};`;
+    const constants: Record<string, number> = {};
+    constants['cond'] = lhs ? 1 : 0;
+    t.expectPipelineResult({
+      expectedResult: t.params.short_circuit,
+      code,
+      constants,
+      statements: [code_entry],
+    });
+  });
+
 g.test('invalid_rhs_override')
   .desc(
     `
@@ -225,6 +259,44 @@ override foo = cond ${t.params.op} ${kInvalidRhsExpressions[t.params.rhs]};
       code,
       constants,
       reference: ['foo'],
+    });
+  });
+
+g.test('nested_invalid_rhs_override')
+  .desc(
+    `
+  Validates that nested short-circuiting expressions with an override-expression LHS guards the evaluation of its RHS expression.
+  `
+  )
+  .params(u =>
+    u
+      .combine('op_a', ['&&', '||'])
+      .combine('op_b', ['&&', '||'])
+      .combine('cond_a_val', [false, true])
+      .combine('cond_b_val', [false, true])
+      .beginSubcases()
+  )
+  .fn(t => {
+    const code = `
+override cond_a : bool;
+override cond_b : bool;
+override zero_i32 = 0i;
+`;
+    const code_entry = `let foo = (cond_a ${t.params.op_a}  cond_b ) ${t.params.op_b}   (1 / zero_i32) == 0;`;
+    const op_a_or = kLhsForShortCircuit[t.params.op_a];
+    const op_b_or = kLhsForShortCircuit[t.params.op_b];
+    const constants: Record<string, number> = {};
+    constants['cond_a'] = t.params.cond_a_val ? 1 : 0;
+    constants['cond_b'] = t.params.cond_b_val ? 1 : 0;
+    const lhs = op_a_or
+      ? t.params.cond_a_val || t.params.cond_b_val
+      : t.params.cond_a_val && t.params.cond_b_val;
+    const evals_rhs = op_b_or ? !lhs : lhs;
+    t.expectPipelineResult({
+      expectedResult: !evals_rhs,
+      code,
+      constants,
+      statements: [code_entry],
     });
   });
 

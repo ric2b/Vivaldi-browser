@@ -9,11 +9,11 @@
 
 #include "gpu/vulkan/vulkan_util.h"
 
+#include <algorithm>
 #include <string_view>
 
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -29,6 +29,7 @@
 
 #if BUILDFLAG(IS_ANDROID)
 #include "base/android/build_info.h"
+#include "build/android_buildflags.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -222,9 +223,9 @@ bool ShouldBypassMediatekBlock(const GPUInfo& gpu_info) {
   return IsVulkanV2Enabled(gpu_info, "Mediatek");
 }
 
-// Imagination is allowed with V2.
 bool IsVulkanV2EnabledForImagination(const GPUInfo& gpu_info) {
-  return IsVulkanV2Enabled(gpu_info, "Imagination");
+  // Imagination shows regression even with 2022 deQP tests.
+  return false;
 }
 
 // Everything except MediaTek.
@@ -256,22 +257,11 @@ bool IsVulkanV1EnabledForAdreno(
   return device_properties.device_name == std::string_view("Adreno (TM) 630");
 }
 
-// Adreno 630+ and 2022 deQP tests.
 bool IsVulkanV2EnabledForAdreno(
     const GPUInfo& gpu_info,
     const VulkanPhysicalDeviceProperties& device_properties) {
-  std::vector<const char*> slow_gpus_for_v2 = {
-      "Adreno (TM) 2??", "Adreno (TM) 3??", "Adreno (TM) 4??",
-      "Adreno (TM) 5??", "Adreno (TM) 61?", "Adreno (TM) 62?",
-  };
-
-  const bool is_slow_gpu_for_v2 =
-      base::ranges::any_of(slow_gpus_for_v2, [&](const char* pattern) {
-        return base::MatchPattern(device_properties.device_name, pattern);
-      });
-
-  // Don't run vulkan for old gpus or if we are not in v2.
-  return !is_slow_gpu_for_v2 && IsVulkanV2Enabled(gpu_info, "Adreno");
+  // Adreno shows regression even with 2022 deQP tests.
+  return false;
 }
 
 // Adreno 610+ and drivers 502+.
@@ -293,7 +283,7 @@ bool IsVulkanV3EnabledForAdreno(
   };
 
   const bool is_slow_gpu_for_v3 =
-      base::ranges::any_of(slow_gpus_for_v3, [&](const char* pattern) {
+      std::ranges::any_of(slow_gpus_for_v3, [&](const char* pattern) {
         return base::MatchPattern(device_properties.device_name, pattern);
       });
 
@@ -315,6 +305,11 @@ bool IsVulkanV3EnabledForAdreno(
   }
 
   return true;
+}
+
+bool SkipVulkanBlocklist() {
+  // Expectation is for all desktop android devices to use vulkan
+  return BUILDFLAG(IS_DESKTOP_ANDROID);
 }
 
 #endif
@@ -480,6 +475,10 @@ bool CheckVulkanCompatibilities(
   return true;
 #endif
 #else   // BUILDFLAG(IS_ANDROID)
+   if (SkipVulkanBlocklist()) {
+    return true;
+  }
+
   if (IsBlockedByBuildInfo() && !ShouldBypassMediatekBlock(gpu_info)) {
     return false;
   }
@@ -514,6 +513,16 @@ bool CheckVulkanCompatibilities(
       }
     }
 
+    // Most Mali-G57 devices had vkCreateInstance() fail and would use GL. Add
+    // them to the blocklist to keep these devices from using Vulkan with
+    // Graphite. The exception is devices with driver version >= 41 had
+    // vkCreateInstance() pass and were running Vulkan. See
+    // https://crbug.com/384531040 for more info.
+    if (device_name == "G57" &&
+        device_properties.driver_version < VK_MAKE_VERSION(41, 0, 0)) {
+      return false;
+    }
+
     return IsVulkanV1EnabledForMali(gpu_info) ||
            IsVulkanV2EnabledForMali(gpu_info);
   }
@@ -527,7 +536,10 @@ bool CheckVulkanCompatibilities(
   // https://crbug.com/1122650: Poor performance and untriaged crashes with
   // Imagination GPUs.
   if (device_properties.vendor_id == kVendorImagination) {
-    // Not allowed with V1.
+    // Only PowerVR D series allowed in V1.
+    if (base::StartsWith(device_properties.device_name, "PowerVR D")) {
+      return true;
+    }
     return IsVulkanV2EnabledForImagination(gpu_info);
   }
 

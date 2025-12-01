@@ -16,7 +16,6 @@ import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import 'chrome://resources/cr_elements/icons.html.js';
 import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
-import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
 import '../icons.html.js';
 import '../privacy_icons.html.js';
 import '../settings_shared.css.js';
@@ -133,6 +132,16 @@ export class SiteDetailsElement extends SiteDetailsElementBase {
             loadTimeData.getBoolean('enableWebBluetoothNewPermissionsBackend'),
       },
 
+      // <if expr="is_chromeos">
+      enableSmartCardReadersContentSetting_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean(
+              'enableSmartCardReadersContentSetting');
+        },
+      },
+      // </if>
+
       autoPictureInPictureEnabled_: {
         type: Boolean,
         value: () => loadTimeData.getBoolean('autoPictureInPictureEnabled'),
@@ -147,7 +156,7 @@ export class SiteDetailsElement extends SiteDetailsElementBase {
       enableHandTrackingContentSetting_: {
         type: Boolean,
         value: () =>
-              loadTimeData.getBoolean('enableHandTrackingContentSetting'),
+            loadTimeData.getBoolean('enableHandTrackingContentSetting'),
       },
 
       capturedSurfaceControlEnabled_: {
@@ -165,10 +174,9 @@ export class SiteDetailsElement extends SiteDetailsElementBase {
         value: ChooserType,
       },
 
-      enableKeyboardAndPointerLockPrompt_: {
+      enableKeyboardLockPrompt_: {
         type: Boolean,
-        value: () =>
-            loadTimeData.getBoolean('enableKeyboardAndPointerLockPrompt'),
+        value: () => loadTimeData.getBoolean('enableKeyboardLockPrompt'),
       },
 
       enableWebAppInstallation_: {
@@ -187,6 +195,9 @@ export class SiteDetailsElement extends SiteDetailsElementBase {
   private rwsEnterprisePref_: chrome.settingsPrivate.PrefObject;
   private enableExperimentalWebPlatformFeatures_: boolean;
   private enableWebBluetoothNewPermissionsBackend_: boolean;
+  // <if expr="is_chromeos">
+  private enableSmartCardReadersContentSetting_: boolean;
+  // </if>
   private autoPictureInPictureEnabled_: boolean;
   private enableAutomaticFullscreenContentSetting_: boolean;
   private enableHandTrackingContentSetting_: boolean;
@@ -194,7 +205,7 @@ export class SiteDetailsElement extends SiteDetailsElementBase {
   private enableWebAppInstallation_: boolean;
   private websiteUsageProxy_: WebsiteUsageBrowserProxy =
       WebsiteUsageBrowserProxyImpl.getInstance();
-  private enableKeyboardAndPointerLockPrompt_: boolean;
+  private enableKeyboardLockPrompt_: boolean;
 
   override connectedCallback() {
     super.connectedCallback();

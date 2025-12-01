@@ -35,6 +35,9 @@ enum : unsigned {
   // Used to paint SVG resource subtree for masks.
   kPaintingSVGMask = 1 << 5,
 
+  // Used to paint CanvasRenderingContext2D.placeElement()
+  kPlacedElement = 1 << 6,
+
   // Vivaldi-specific flag for capturing the whole page.
   kVivaldiPaintWholePage = 1 << 30,
 };

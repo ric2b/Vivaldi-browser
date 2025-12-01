@@ -4,6 +4,7 @@
 
 #include "chrome/enterprise_companion/telemetry_logger/telemetry_logger.h"
 
+#include <algorithm>
 #include <iterator>
 #include <list>
 #include <memory>
@@ -17,7 +18,6 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -43,7 +43,7 @@ std::string SerializeEvents(base::span<TestEvent> events) {
   return base::JoinString(
       [](base::span<TestEvent> events) {
         std::vector<std::string> serialized_events;
-        base::ranges::transform(
+        std::ranges::transform(
             events, std::back_inserter(serialized_events),
             [](const TestEvent& event) {
               return base::StringPrintf(
@@ -113,7 +113,6 @@ class MockServer : public base::RefCountedThreadSafe<MockServer> {
 class TestDelegate : public TelemetryLogger<TestEvent>::Delegate {
  public:
   explicit TestDelegate(scoped_refptr<MockServer> server) : server_(server) {}
-  ~TestDelegate() override = default;
 
   // Overrides for TelemetryLogger<TestEvent>::Delegate.
   bool StoreNextAllowedAttemptTime(base::Time time) override {
@@ -152,9 +151,6 @@ class TestDelegate : public TelemetryLogger<TestEvent>::Delegate {
 
 class TelemetryLoggerTest : public testing::Test {
  protected:
-  TelemetryLoggerTest() = default;
-  ~TelemetryLoggerTest() override = default;
-
   void WaitForExpectedRequests(
       scoped_refptr<MockServer> server,
       base::TimeDelta fast_forward_interval = base::Seconds(1)) {
@@ -271,13 +267,13 @@ TEST_F(TelemetryLoggerTest, UploadCombinesPreviousEvents) {
         TestEvent(3, 1, "more event happened after failed upload.")};
 
     logger->Log(events[0]);
-    server->ExpectRequest(SerializeEvents(base::span(events).subspan(0, 1)),
+    server->ExpectRequest(SerializeEvents(base::span(events).first<1>()),
                           std::make_pair(net::HTTP_INTERNAL_SERVER_ERROR, ""));
     logger->Flush(base::DoNothing());
     WaitForExpectedRequests(server);
 
     logger->Log(events[1]);
-    server->ExpectRequest(SerializeEvents(base::span(events).subspan(0, 2)),
+    server->ExpectRequest(SerializeEvents(base::span(events).first<2>()),
                           std::make_pair(net::HTTP_INTERNAL_SERVER_ERROR, ""));
     logger->Flush(base::DoNothing());
     WaitForExpectedRequests(server);

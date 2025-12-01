@@ -297,7 +297,7 @@ class ExternalReferenceList {
   uint32_t tags_ordered_by_address_[kNumExternalReferences];
 };
 
-static_assert(std::is_trivially_destructible<ExternalReferenceList>::value,
+static_assert(std::is_trivially_destructible_v<ExternalReferenceList>,
               "static destructors not allowed");
 
 }  // namespace
@@ -492,7 +492,7 @@ void NativeModuleSerializer::WriteCode(
       RelocInfo::ModeMask(RelocInfo::WASM_CALL) |
       RelocInfo::ModeMask(RelocInfo::WASM_STUB_CALL) |
       RelocInfo::ModeMask(RelocInfo::WASM_CANONICAL_SIG_ID) |
-      RelocInfo::ModeMask(RelocInfo::WASM_INDIRECT_CALL_TARGET) |
+      RelocInfo::ModeMask(RelocInfo::WASM_CODE_POINTER_TABLE_ENTRY) |
       RelocInfo::ModeMask(RelocInfo::EXTERNAL_REFERENCE) |
       RelocInfo::ModeMask(RelocInfo::INTERNAL_REFERENCE) |
       RelocInfo::ModeMask(RelocInfo::INTERNAL_REFERENCE_ENCODED);
@@ -529,11 +529,12 @@ void NativeModuleSerializer::WriteCode(
             CanonicalSigIdToModuleLocalTypeId(canonical_sig_id);
         iter.rinfo()->set_wasm_canonical_sig_id(module_local_sig_id);
       } break;
-      case RelocInfo::WASM_INDIRECT_CALL_TARGET: {
-        WasmCodePointer target = orig_iter.rinfo()->wasm_indirect_call_target();
+      case RelocInfo::WASM_CODE_POINTER_TABLE_ENTRY: {
+        WasmCodePointer target =
+            orig_iter.rinfo()->wasm_code_pointer_table_entry();
         uint32_t function_index = function_index_map.at(target);
-        iter.rinfo()->set_wasm_indirect_call_target(function_index,
-                                                    SKIP_ICACHE_FLUSH);
+        iter.rinfo()->set_wasm_code_pointer_table_entry(
+            WasmCodePointer{function_index}, SKIP_ICACHE_FLUSH);
       } break;
       case RelocInfo::EXTERNAL_REFERENCE: {
         Address orig_target = orig_iter.rinfo()->target_external_reference();
@@ -546,7 +547,7 @@ void NativeModuleSerializer::WriteCode(
         Address orig_target = orig_iter.rinfo()->target_internal_reference();
         Address offset = orig_target - code->instruction_start();
         Assembler::deserialization_set_target_internal_reference_at(
-            iter.rinfo()->pc(), offset, mode);
+            iter.rinfo()->pc(), offset, jit_allocation, mode);
       } break;
       default:
         UNREACHABLE();
@@ -657,12 +658,12 @@ class DeserializationQueue {
  public:
   void Add(std::vector<DeserializationUnit> batch) {
     DCHECK(!batch.empty());
-    base::MutexGuard guard(&mutex_);
+    base::SpinningMutexGuard guard(&mutex_);
     queue_.emplace(std::move(batch));
   }
 
   std::vector<DeserializationUnit> Pop() {
-    base::MutexGuard guard(&mutex_);
+    base::SpinningMutexGuard guard(&mutex_);
     if (queue_.empty()) return {};
     auto batch = std::move(queue_.front());
     queue_.pop();
@@ -670,7 +671,7 @@ class DeserializationQueue {
   }
 
   std::vector<DeserializationUnit> PopAll() {
-    base::MutexGuard guard(&mutex_);
+    base::SpinningMutexGuard guard(&mutex_);
     if (queue_.empty()) return {};
     auto units = std::move(queue_.front());
     queue_.pop();
@@ -683,12 +684,12 @@ class DeserializationQueue {
   }
 
   size_t NumBatches() const {
-    base::MutexGuard guard(&mutex_);
+    base::SpinningMutexGuard guard(&mutex_);
     return queue_.size();
   }
 
  private:
-  mutable base::Mutex mutex_;
+  mutable base::SpinningMutex mutex_;
   std::queue<std::vector<DeserializationUnit>> queue_;
 };
 
@@ -974,7 +975,7 @@ void NativeModuleDeserializer::CopyAndRelocate(
   int kMask = RelocInfo::ModeMask(RelocInfo::WASM_CALL) |
               RelocInfo::ModeMask(RelocInfo::WASM_STUB_CALL) |
               RelocInfo::ModeMask(RelocInfo::WASM_CANONICAL_SIG_ID) |
-              RelocInfo::ModeMask(RelocInfo::WASM_INDIRECT_CALL_TARGET) |
+              RelocInfo::ModeMask(RelocInfo::WASM_CODE_POINTER_TABLE_ENTRY) |
               RelocInfo::ModeMask(RelocInfo::EXTERNAL_REFERENCE) |
               RelocInfo::ModeMask(RelocInfo::INTERNAL_REFERENCE) |
               RelocInfo::ModeMask(RelocInfo::INTERNAL_REFERENCE_ENCODED);
@@ -1010,11 +1011,13 @@ void NativeModuleDeserializer::CopyAndRelocate(
             native_module_->module()->canonical_sig_id(module_local_sig_id);
         iter.rinfo()->set_wasm_canonical_sig_id(canonical_sig_id.index);
       } break;
-      case RelocInfo::WASM_INDIRECT_CALL_TARGET: {
-        Address function_index = iter.rinfo()->wasm_indirect_call_target();
-        WasmCodePointer target = native_module_->GetIndirectCallTarget(
+      case RelocInfo::WASM_CODE_POINTER_TABLE_ENTRY: {
+        Address function_index =
+            iter.rinfo()->wasm_code_pointer_table_entry().value();
+        WasmCodePointer target = native_module_->GetCodePointerHandle(
             base::checked_cast<uint32_t>(function_index));
-        iter.rinfo()->set_wasm_indirect_call_target(target, SKIP_ICACHE_FLUSH);
+        iter.rinfo()->set_wasm_code_pointer_table_entry(target,
+                                                        SKIP_ICACHE_FLUSH);
       } break;
       case RelocInfo::EXTERNAL_REFERENCE: {
         uint32_t tag = GetWasmCalleeTag(iter.rinfo());
@@ -1027,7 +1030,7 @@ void NativeModuleDeserializer::CopyAndRelocate(
         Address offset = iter.rinfo()->target_internal_reference();
         Address target = unit.code->instruction_start() + offset;
         Assembler::deserialization_set_target_internal_reference_at(
-            iter.rinfo()->pc(), target, mode);
+            iter.rinfo()->pc(), target, jit_allocation, mode);
         break;
       }
       default:
@@ -1055,10 +1058,15 @@ void NativeModuleDeserializer::ReadTieringBudget(Reader* reader) {
 
 void NativeModuleDeserializer::Publish(std::vector<DeserializationUnit> batch) {
   DCHECK(!batch.empty());
-  std::vector<std::unique_ptr<WasmCode>> codes;
+  std::vector<UnpublishedWasmCode> codes;
   codes.reserve(batch.size());
   for (auto& unit : batch) {
-    codes.emplace_back(std::move(unit).code);
+    // We serialized the code assumptions for well-known imports (see
+    // {WasmSerializer::import_statuses_}, so when publishing the deserialized
+    // code here we do not need to pass any assumptions.
+    codes.emplace_back(UnpublishedWasmCode{
+        std::move(unit).code, std::unique_ptr<AssumptionsJournal>{
+                                  UnpublishedWasmCode::kNoAssumptions}});
   }
   auto published_codes = native_module_->PublishCode(base::VectorOf(codes));
   for (auto* wasm_code : published_codes) {
@@ -1089,7 +1097,8 @@ MaybeHandle<WasmModuleObject> DeserializeNativeModule(
 
   // Make the copy of the wire bytes early, so we use the same memory for
   // decoding, lookup in the native module cache, and insertion into the cache.
-  auto owned_wire_bytes = base::OwnedVector<uint8_t>::Of(wire_bytes_vec);
+  base::OwnedVector<const uint8_t> owned_wire_bytes =
+      base::OwnedCopyOf(wire_bytes_vec);
 
   WasmDetectedFeatures detected_features;
   ModuleResult decode_result = DecodeWasmModule(

@@ -22,7 +22,7 @@ struct StructTraits<webnn::mojom::DataTypeLimitsDataView,
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.constant;
   }
-  static webnn::SupportedDataTypes arg_min_max_input(
+  static webnn::SupportedTensors arg_min_max_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.arg_min_max_input;
   }
@@ -34,11 +34,11 @@ struct StructTraits<webnn::mojom::DataTypeLimitsDataView,
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.batch_normalization_input;
   }
-  static webnn::SupportedDataTypes cast_input(
+  static webnn::SupportedTensors cast_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.cast_input;
   }
-  static webnn::SupportedDataTypes clamp_input(
+  static webnn::SupportedTensors clamp_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.clamp_input;
   }
@@ -54,7 +54,7 @@ struct StructTraits<webnn::mojom::DataTypeLimitsDataView,
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.conv_transpose2d_input;
   }
-  static webnn::SupportedDataTypes cumulative_sum_input(
+  static webnn::SupportedTensors cumulative_sum_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.cumulative_sum_input;
   }
@@ -66,67 +66,71 @@ struct StructTraits<webnn::mojom::DataTypeLimitsDataView,
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.dequantize_linear_scale;
   }
-  static webnn::SupportedDataTypes add_input(
+  static webnn::SupportedTensors add_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.add_input;
   }
-  static webnn::SupportedDataTypes sub_input(
+  static webnn::SupportedTensors sub_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.sub_input;
   }
-  static webnn::SupportedDataTypes mul_input(
+  static webnn::SupportedTensors mul_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.mul_input;
   }
-  static webnn::SupportedDataTypes div_input(
+  static webnn::SupportedTensors div_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.div_input;
   }
-  static webnn::SupportedDataTypes max_input(
+  static webnn::SupportedTensors max_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.max_input;
   }
-  static webnn::SupportedDataTypes min_input(
+  static webnn::SupportedTensors min_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.min_input;
   }
-  static webnn::SupportedDataTypes pow_input(
+  static webnn::SupportedTensors pow_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.pow_input;
   }
-  static webnn::SupportedDataTypes equal_input(
+  static webnn::SupportedTensors equal_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.equal_input;
   }
-  static webnn::SupportedDataTypes greater_input(
+  static webnn::SupportedTensors greater_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.greater_input;
   }
-  static webnn::SupportedDataTypes greater_or_equal_input(
+  static webnn::SupportedTensors greater_or_equal_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.greater_or_equal_input;
   }
-  static webnn::SupportedDataTypes lesser_input(
+  static webnn::SupportedTensors lesser_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.lesser_input;
   }
-  static webnn::SupportedDataTypes lesser_or_equal_input(
+  static webnn::SupportedTensors lesser_or_equal_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.lesser_or_equal_input;
   }
-  static webnn::SupportedDataTypes logical_and_input(
+  static webnn::SupportedTensors not_equal_input(
+      const webnn::DataTypeLimits& data_type_limits) {
+    return data_type_limits.not_equal_input;
+  }
+  static webnn::SupportedTensors logical_and_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.logical_and_input;
   }
-  static webnn::SupportedDataTypes logical_or_input(
+  static webnn::SupportedTensors logical_or_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.logical_or_input;
   }
-  static webnn::SupportedDataTypes logical_xor_input(
+  static webnn::SupportedTensors logical_xor_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.logical_xor_input;
   }
-  static webnn::SupportedDataTypes logical_not_input(
+  static webnn::SupportedTensors logical_not_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.logical_not_input;
   }
@@ -134,67 +138,67 @@ struct StructTraits<webnn::mojom::DataTypeLimitsDataView,
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.logical_output;
   }
-  static webnn::SupportedDataTypes abs_input(
+  static webnn::SupportedTensors abs_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.abs_input;
   }
-  static webnn::SupportedDataTypes ceil_input(
+  static webnn::SupportedTensors ceil_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.ceil_input;
   }
-  static webnn::SupportedDataTypes cos_input(
+  static webnn::SupportedTensors cos_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.cos_input;
   }
-  static webnn::SupportedDataTypes erf_input(
+  static webnn::SupportedTensors erf_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.erf_input;
   }
-  static webnn::SupportedDataTypes exp_input(
+  static webnn::SupportedTensors exp_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.exp_input;
   }
-  static webnn::SupportedDataTypes floor_input(
+  static webnn::SupportedTensors floor_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.floor_input;
   }
-  static webnn::SupportedDataTypes identity_input(
+  static webnn::SupportedTensors identity_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.identity_input;
   }
-  static webnn::SupportedDataTypes log_input(
+  static webnn::SupportedTensors log_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.log_input;
   }
-  static webnn::SupportedDataTypes neg_input(
+  static webnn::SupportedTensors neg_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.neg_input;
   }
-  static webnn::SupportedDataTypes reciprocal_input(
+  static webnn::SupportedTensors reciprocal_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.reciprocal_input;
   }
-  static webnn::SupportedDataTypes sign_input(
+  static webnn::SupportedTensors sign_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.sign_input;
   }
-  static webnn::SupportedDataTypes sin_input(
+  static webnn::SupportedTensors sin_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.sin_input;
   }
-  static webnn::SupportedDataTypes sqrt_input(
+  static webnn::SupportedTensors sqrt_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.sqrt_input;
   }
-  static webnn::SupportedDataTypes tan_input(
+  static webnn::SupportedTensors tan_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.tan_input;
   }
-  static webnn::SupportedDataTypes elu_input(
+  static webnn::SupportedTensors elu_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.elu_input;
   }
-  static webnn::SupportedDataTypes expand_input(
+  static webnn::SupportedTensors expand_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.expand_input;
   }
@@ -222,7 +226,7 @@ struct StructTraits<webnn::mojom::DataTypeLimitsDataView,
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.gather_nd_indices;
   }
-  static webnn::SupportedDataTypes gelu_input(
+  static webnn::SupportedTensors gelu_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.gelu_input;
   }
@@ -238,11 +242,11 @@ struct StructTraits<webnn::mojom::DataTypeLimitsDataView,
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.gru_cell_input;
   }
-  static webnn::SupportedDataTypes hard_sigmoid_input(
+  static webnn::SupportedTensors hard_sigmoid_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.hard_sigmoid_input;
   }
-  static webnn::SupportedDataTypes hard_swish_input(
+  static webnn::SupportedTensors hard_swish_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.hard_swish_input;
   }
@@ -254,11 +258,11 @@ struct StructTraits<webnn::mojom::DataTypeLimitsDataView,
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.layer_normalization_input;
   }
-  static webnn::SupportedDataTypes leaky_relu_input(
+  static webnn::SupportedTensors leaky_relu_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.leaky_relu_input;
   }
-  static webnn::SupportedDataTypes linear_input(
+  static webnn::SupportedTensors linear_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.linear_input;
   }
@@ -270,23 +274,23 @@ struct StructTraits<webnn::mojom::DataTypeLimitsDataView,
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.lstm_cell_input;
   }
-  static webnn::SupportedDataTypes matmul_input(
+  static webnn::SupportedTensors matmul_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.matmul_input;
   }
-  static webnn::SupportedDataTypes pad_input(
+  static webnn::SupportedTensors pad_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.pad_input;
   }
-  static webnn::SupportedDataTypes average_pool2d_input(
+  static webnn::SupportedTensors average_pool2d_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.average_pool2d_input;
   }
-  static webnn::SupportedDataTypes l2_pool2d_input(
+  static webnn::SupportedTensors l2_pool2d_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.l2_pool2d_input;
   }
-  static webnn::SupportedDataTypes max_pool2d_input(
+  static webnn::SupportedTensors max_pool2d_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.max_pool2d_input;
   }
@@ -302,57 +306,61 @@ struct StructTraits<webnn::mojom::DataTypeLimitsDataView,
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.quantize_linear_zero_point;
   }
-  static webnn::SupportedDataTypes reduce_l1_input(
+  static webnn::SupportedTensors reduce_l1_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.reduce_l1_input;
   }
-  static webnn::SupportedDataTypes reduce_l2_input(
+  static webnn::SupportedTensors reduce_l2_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.reduce_l2_input;
   }
-  static webnn::SupportedDataTypes reduce_log_sum_input(
+  static webnn::SupportedTensors reduce_log_sum_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.reduce_log_sum_input;
   }
-  static webnn::SupportedDataTypes reduce_log_sum_exp_input(
+  static webnn::SupportedTensors reduce_log_sum_exp_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.reduce_log_sum_exp_input;
   }
-  static webnn::SupportedDataTypes reduce_max_input(
+  static webnn::SupportedTensors reduce_max_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.reduce_max_input;
   }
-  static webnn::SupportedDataTypes reduce_mean_input(
+  static webnn::SupportedTensors reduce_mean_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.reduce_mean_input;
   }
-  static webnn::SupportedDataTypes reduce_min_input(
+  static webnn::SupportedTensors reduce_min_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.reduce_min_input;
   }
-  static webnn::SupportedDataTypes reduce_product_input(
+  static webnn::SupportedTensors reduce_product_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.reduce_product_input;
   }
-  static webnn::SupportedDataTypes reduce_sum_input(
+  static webnn::SupportedTensors reduce_sum_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.reduce_sum_input;
   }
-  static webnn::SupportedDataTypes reduce_sum_square_input(
+  static webnn::SupportedTensors reduce_sum_square_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.reduce_sum_square_input;
   }
-  static webnn::SupportedDataTypes relu_input(
+  static webnn::SupportedTensors relu_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.relu_input;
   }
-  static webnn::SupportedDataTypes resample2d_input(
+  static webnn::SupportedTensors resample2d_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.resample2d_input;
   }
-  static webnn::SupportedDataTypes reshape_input(
+  static webnn::SupportedTensors reshape_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.reshape_input;
+  }
+  static webnn::SupportedTensors reverse_input(
+      const webnn::DataTypeLimits& data_type_limits) {
+    return data_type_limits.reverse_input;
   }
   static webnn::SupportedDataTypes scatter_elements_input(
       const webnn::DataTypeLimits& data_type_limits) {
@@ -370,51 +378,51 @@ struct StructTraits<webnn::mojom::DataTypeLimitsDataView,
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.scatter_nd_indices;
   }
-  static webnn::SupportedDataTypes sigmoid_input(
+  static webnn::SupportedTensors sigmoid_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.sigmoid_input;
   }
-  static webnn::SupportedDataTypes slice_input(
+  static webnn::SupportedTensors slice_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.slice_input;
   }
-  static webnn::SupportedDataTypes softmax_input(
+  static webnn::SupportedTensors softmax_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.softmax_input;
   }
-  static webnn::SupportedDataTypes softplus_input(
+  static webnn::SupportedTensors softplus_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.softplus_input;
   }
-  static webnn::SupportedDataTypes softsign_input(
+  static webnn::SupportedTensors softsign_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.softsign_input;
   }
-  static webnn::SupportedDataTypes split_input(
+  static webnn::SupportedTensors split_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.split_input;
   }
-  static webnn::SupportedDataTypes tanh_input(
+  static webnn::SupportedTensors tanh_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.tanh_input;
   }
-  static webnn::SupportedDataTypes tile_input(
+  static webnn::SupportedTensors tile_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.tile_input;
   }
-  static webnn::SupportedDataTypes transpose_input(
+  static webnn::SupportedTensors transpose_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.transpose_input;
   }
-  static webnn::SupportedDataTypes triangular_input(
+  static webnn::SupportedTensors triangular_input(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.triangular_input;
   }
-  static webnn::SupportedDataTypes where_condition(
+  static webnn::SupportedTensors where_condition(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.where_condition;
   }
-  static webnn::SupportedDataTypes where_value(
+  static webnn::SupportedTensors where_value(
       const webnn::DataTypeLimits& data_type_limits) {
     return data_type_limits.where_value;
   }
@@ -445,6 +453,7 @@ struct StructTraits<webnn::mojom::DataTypeLimitsDataView,
            data.ReadGreaterOrEqualInput(&out->greater_or_equal_input) &&
            data.ReadLesserInput(&out->lesser_input) &&
            data.ReadLesserOrEqualInput(&out->lesser_or_equal_input) &&
+           data.ReadNotEqualInput(&out->not_equal_input) &&
            data.ReadLogicalAndInput(&out->logical_and_input) &&
            data.ReadLogicalOrInput(&out->logical_or_input) &&
            data.ReadLogicalXorInput(&out->logical_xor_input) &&
@@ -506,6 +515,7 @@ struct StructTraits<webnn::mojom::DataTypeLimitsDataView,
            data.ReadReluInput(&out->relu_input) &&
            data.ReadResample2dInput(&out->resample2d_input) &&
            data.ReadReshapeInput(&out->reshape_input) &&
+           data.ReadReverseInput(&out->reverse_input) &&
            data.ReadScatterElementsInput(&out->scatter_elements_input) &&
            data.ReadScatterElementsIndices(&out->scatter_elements_indices) &&
            data.ReadScatterNdInput(&out->scatter_nd_input) &&

@@ -16,6 +16,18 @@ skia_filegroup(
     srcs = ["FFI.rs"],
 )
 
+# Note: the `hdrs` of the `utils` target are included in *two* `.gni` lists
+# (`skia_codec_rust_png` and `skia_encode_rust_png_srcs`) - this works only
+# because this is a header-only library.  If `utils` needs `srcs` in the
+# future, then a separate `.gni` list may be required.
+skia_cc_library(
+    name = "utils",
+    hdrs = ["UtilsForFFI.h"],
+    features = ["layering_check"],
+    visibility = ["//experimental/rust_png:__subpackages__"],
+    deps = ["//:core"],
+)
+
 skia_cc_library(
     name = "ffi_cpp",
     hdrs = ["FFI.h"],
@@ -29,7 +41,7 @@ rust_cxx_bridge(
     name = "cxx_bridge",
     src = "FFI.rs",
     visibility = [
-        "//experimental/rust_png:__pkg__",
+        "//experimental/rust_png:__subpackages__",
     ],
     deps = [":ffi_cpp"],
 )
@@ -37,8 +49,9 @@ rust_cxx_bridge(
 rust_static_library(
     name = "ffi_rs",
     srcs = [":rs_srcs"],
+    rustc_flags = ["-Dwarnings"],
     visibility = [
-        "//experimental/rust_png:__pkg__",
+        "//experimental/rust_png:__subpackages__",
     ],
     deps = [
         ":ffi_cpp",

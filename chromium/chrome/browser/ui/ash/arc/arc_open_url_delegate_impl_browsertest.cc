@@ -4,12 +4,12 @@
 
 #include "chrome/browser/ui/ash/arc/arc_open_url_delegate_impl.h"
 
+#include <algorithm>
 #include <memory>
 #include <string>
 
 #include "ash/webui/settings/public/constants/routes.mojom.h"
 #include "ash/webui/system_apps/public/system_web_app_type.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
@@ -26,7 +26,7 @@
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "components/arc/intent_helper/intent_constants.h"
+#include "chromeos/ash/experiences/arc/intent_helper/intent_constants.h"
 #include "components/services/app_service/public/cpp/share_target.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
@@ -40,11 +40,11 @@ using arc::mojom::ChromePage;
 
 // Return the number of windows that hosts OS Settings.
 size_t GetNumberOfSettingsWindows() {
-  return base::ranges::count_if(*BrowserList::GetInstance(),
-                                [](Browser* browser) {
-                                  return ash::IsBrowserForSystemWebApp(
-                                      browser, ash::SystemWebAppType::SETTINGS);
-                                });
+  return std::ranges::count_if(*BrowserList::GetInstance(),
+                               [](Browser* browser) {
+                                 return ash::IsBrowserForSystemWebApp(
+                                     browser, ash::SystemWebAppType::SETTINGS);
+                               });
 }
 
 // Give the underlying function a clearer name.
@@ -106,8 +106,9 @@ void TestOpenSettingFromArc(Browser* browser,
   ui_test_utils::BrowserChangeObserver browser_opened(
       nullptr, ui_test_utils::BrowserChangeObserver::ChangeType::kAdded);
   ArcOpenUrlDelegateImpl::GetForTesting()->OpenChromePageFromArc(page);
-  if (expected_setting_window)
+  if (expected_setting_window) {
     browser_opened.Wait();
+  }
 
   EXPECT_EQ(expected_setting_window ? 1ul : 0ul, GetNumberOfSettingsWindows());
 
@@ -289,7 +290,8 @@ void TestAllOSSettingPages(const GURL& base_url) {
           chromeos::settings::mojom::kBluetoothDevicesSubpagePath));
   TestOpenOSSettingsChromePage(
       ChromePage::DATETIME,
-      base_url.Resolve(chromeos::settings::mojom::kDateAndTimeSectionPath));
+      base_url.Resolve(
+          chromeos::settings::mojom::kSystemPreferencesSectionPath));
   TestOpenOSSettingsChromePage(
       ChromePage::DISPLAY,
       base_url.Resolve(chromeos::settings::mojom::kDisplaySubpagePath));

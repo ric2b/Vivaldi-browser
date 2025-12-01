@@ -6,6 +6,7 @@
 #define ASH_PUBLIC_CPP_CORAL_DELEGATE_H_
 
 #include "ash/public/cpp/ash_public_export.h"
+#include "ash/public/cpp/scanner/scanner_delegate.h"
 #include "chromeos/ash/services/coral/public/mojom/coral_service.mojom.h"
 
 namespace ash {
@@ -22,14 +23,20 @@ class ASH_PUBLIC_EXPORT CoralDelegate {
   // ash/wm/window_restore/README.md for more details about post-login.
   virtual void LaunchPostLoginGroup(coral::mojom::GroupPtr group) = 0;
 
-  // Moves the `tabs` to a browser on the new desk.
+  // Moves the `tabs` from the desk with the given `src_desk_index` to a browser
+  // on the new desk.
   virtual void MoveTabsInGroupToNewDesk(
-      const std::vector<coral::mojom::Tab>& tabs) = 0;
+      const std::vector<coral::mojom::Tab>& tabs,
+      size_t src_desk_index) = 0;
 
-  // Creates a saved desk with up to one browser with tabs from `group`.
-  // Closes apps based on the apps from `group`, and places them in the saved
-  // desk to be launched at a later time.
-  virtual void CreateSavedDeskFromGroup(coral::mojom::GroupPtr group) = 0;
+  // The default restore Id for chrome browser is under chrome/browser/. This
+  // lets us get the correct Id in ash/.
+  virtual int GetChromeDefaultRestoreId() = 0;
+
+  // We are using the feedback flow of `ScannerFeedbackDialog`.
+  virtual void OpenFeedbackDialog(
+      const std::string& group_description,
+      ScannerDelegate::SendFeedbackCallback send_feedback_callback) = 0;
 };
 
 }  // namespace ash

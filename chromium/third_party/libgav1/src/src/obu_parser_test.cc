@@ -25,7 +25,6 @@
 
 #include "gtest/gtest.h"
 #include "src/buffer_pool.h"
-#include "src/decoder_impl.h"
 #include "src/decoder_state.h"
 #include "src/gav1/decoder_buffer.h"
 #include "src/gav1/status_code.h"

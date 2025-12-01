@@ -148,8 +148,6 @@ class SearchPreloadUnifiedBrowserTest : public PlatformBrowserTest,
     prediction_entry_builder_ =
         std::make_unique<content::test::PreloadingPredictionUkmEntryBuilder>(
             chrome_preloading_predictor::kDefaultSearchEngine);
-    scoped_test_timer_ =
-        std::make_unique<base::ScopedMockElapsedTimersForTest>();
 
     // Reset pointer position to avoid the pointer hover on the back button
     // that unintentionally triggers `kBackButtonHover` preloading, which may
@@ -441,6 +439,7 @@ class SearchPreloadUnifiedBrowserTest : public PlatformBrowserTest,
 
   constexpr static char kSearchDomain[] = "a.test";
   constexpr static char16_t kSearchDomain16[] = u"a.test";
+  base::ScopedMockElapsedTimersForTest scoped_test_timer_;
   raw_ptr<PrerenderManager, AcrossTasksDanglingUntriaged> prerender_manager_ =
       nullptr;
   raw_ptr<SearchPrefetchService, AcrossTasksDanglingUntriaged>
@@ -456,7 +455,6 @@ class SearchPreloadUnifiedBrowserTest : public PlatformBrowserTest,
 
   content::test::PrerenderTestHelper prerender_helper_;
   base::test::ScopedFeatureList scoped_feature_list_;
-  std::unique_ptr<base::ScopedMockElapsedTimersForTest> scoped_test_timer_;
 };
 
 // Tests that the SearchSuggestionService can trigger prerendering after the
@@ -1140,6 +1138,23 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedBrowserTest, DoNotRefetchSameTerms) {
 class HoldbackSearchPreloadUnifiedBrowserTest
     : public SearchPreloadUnifiedBrowserTest {
  public:
+  HoldbackSearchPreloadUnifiedBrowserTest() {
+    scoped_feature_list_.InitWithFeaturesAndParameters(
+        {
+            {features::kSupportSearchSuggestionForPrerender2, {{}}},
+            {kSearchPrefetchServicePrefetching,
+             {{"max_attempts_per_caching_duration", "3"},
+              {"cache_size", "4"},
+              {"device_memory_threshold_MB", "0"}}},
+        },
+        {});
+    preloading_config_override_.SetHoldback(
+        content::PreloadingType::kPrerender,
+        chrome_preloading_predictor::kDefaultSearchEngine, true);
+  }
+
+  ~HoldbackSearchPreloadUnifiedBrowserTest() override = default;
+
   void RunTest() {
     base::HistogramTester histogram_tester;
     const GURL kInitialUrl = embedded_test_server()->GetURL("/empty.html");
@@ -1219,62 +1234,15 @@ class HoldbackSearchPreloadUnifiedBrowserTest
                  ukm_entries, expected_entries);
     }
   }
-  ~HoldbackSearchPreloadUnifiedBrowserTest() override = default;
-
- protected:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-class DSEPrerenderHoldbackSearchPreloadUnifiedBrowserTest
-    : public HoldbackSearchPreloadUnifiedBrowserTest {
- public:
-  DSEPrerenderHoldbackSearchPreloadUnifiedBrowserTest() {
-    scoped_feature_list_.InitWithFeaturesAndParameters(
-        {
-            {features::kSupportSearchSuggestionForPrerender2, {{}}},
-            {kSearchPrefetchServicePrefetching,
-             {{"max_attempts_per_caching_duration", "3"},
-              {"cache_size", "4"},
-              {"device_memory_threshold_MB", "0"}}},
-            {features::kPrerenderDSEHoldback, {{}}},
-        },
-        /*disabled_features=*/{});
-  }
-};
-
-// Tests that we log correct metrics for Prerender holdback in case of Search
-// Prerender.
-IN_PROC_BROWSER_TEST_F(DSEPrerenderHoldbackSearchPreloadUnifiedBrowserTest,
-                       PrerenderDSEHoldbackTest) {
-  RunTest();
-}
-
-class PreloadingConfigHoldbackSearchPreloadUnifiedBrowserTest
-    : public HoldbackSearchPreloadUnifiedBrowserTest {
- public:
-  PreloadingConfigHoldbackSearchPreloadUnifiedBrowserTest() {
-    scoped_feature_list_.InitWithFeaturesAndParameters(
-        {
-            {features::kSupportSearchSuggestionForPrerender2, {{}}},
-            {kSearchPrefetchServicePrefetching,
-             {{"max_attempts_per_caching_duration", "3"},
-              {"cache_size", "4"},
-              {"device_memory_threshold_MB", "0"}}},
-            {features::kPrerenderDSEHoldback, {{}}},
-        },
-        {});
-    preloading_config_override_.SetHoldback(
-        content::PreloadingType::kPrerender,
-        chrome_preloading_predictor::kDefaultSearchEngine, true);
-  }
 
  private:
+  base::test::ScopedFeatureList scoped_feature_list_;
   content::test::PreloadingConfigOverride preloading_config_override_;
 };
 
 // Tests that we log correct metrics for Prerender holdback in case of Search
 // Prerender.
-IN_PROC_BROWSER_TEST_F(PreloadingConfigHoldbackSearchPreloadUnifiedBrowserTest,
+IN_PROC_BROWSER_TEST_F(HoldbackSearchPreloadUnifiedBrowserTest,
                        PrerenderDSEHoldbackTest) {
   RunTest();
 }

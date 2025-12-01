@@ -350,7 +350,9 @@ using vivaldi::IsVivaldiRunning;
 
   VivaldiBookmarksEditorCoordinator* bookmarksEditorCoordinator =
       [[VivaldiBookmarksEditorCoordinator alloc]
-         initWithBaseNavigationController:_baseNavigationController
+         initWithBaseNavigationController:(_baseNavigationController
+                                       ? _baseNavigationController
+                                       : _navigationController)
                                   browser:self.browser
                                      item:nil
                                    parent:parentItem

@@ -21,9 +21,9 @@ import {
   waitForDialogAnimationEnd,
 } from '../../../shared/screenshots.js';
 
-type GetSelectMenuOptions = {
-  placeholderSelector?: string,
-};
+interface GetSelectMenuOptions {
+  placeholderSelector?: string;
+}
 async function getFocusedItemValue() {
   const focusedItem = await waitFor('devtools-menu-item:focus');
   return await focusedItem.evaluate((item: Element) => (item as Menus.Menu.MenuItem).value);
@@ -308,7 +308,7 @@ describe('SelectMenu', () => {
 
   itScreenshot('renders a menu with a connector', async () => {
     await loadComponentDocExample('select_menu/basic.html');
-    await testScreenshotOnPlaceholder('#place-holder-3', 'select_menu/select_menu_with_connector.png');
+    await testScreenshotOnPlaceholder('#place-holder-3', 'select_menu/select_menu.png');
   });
 
   itScreenshot('renders a menu with groups', async () => {

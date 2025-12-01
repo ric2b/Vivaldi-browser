@@ -907,7 +907,7 @@
     // TODO(crbug.com/1511354): "base-select" is a temporary name for customizable
     // <select>. It should be renamed when a standardized name is chosen.
     "base-select",
-    "-internal-appearance-auto-base-select",
+    "-internal-auto-base",
 
     //
     // background-clip/background-origin
@@ -1236,6 +1236,21 @@
     // luminance
     "match-source",
 
+    // masonry-auto-tracks
+    // min-content
+    // max-content
+    // auto
+
+    // masonry-direction
+    // row
+    // row-reverse
+    // column
+    // column-reverse
+
+    // masonry-fill
+    // normal
+    // reverse
+
     // color-interpolation / color-interpolation-filters
     // auto
     "srgb",
@@ -1263,6 +1278,11 @@
     "ideographic",
     "hanging",
     "mathematical",
+
+    // column-rule-break
+    // none
+    "intersection",
+    "spanning-item",
 
     // dominant-baseline
     // auto
@@ -1371,6 +1391,27 @@
 
     // shapes
     "polygon",
+    "shape",
+    // "from",
+    // "to",
+    "by",
+    "line",
+    "close",
+    "hline",
+    "vline",
+    "arc",
+    // "rotate",
+    "cw",
+    "ccw",
+    // "large",
+    // "small",
+    // "of",
+    "curve",
+    // "smooth",
+    // "start",
+    // "end",
+    "origin",
+    "with",
 
     // @font-face src
     "format",
@@ -1728,6 +1769,8 @@
 
     // supports in import rule: @import supports()
     "supports",
+    // @import scope()
+    "scope",
 
     // color-contrast()
     "color-contrast",
@@ -1794,6 +1837,9 @@
     // view-transition-capture-mode
     "layered",
     // flat
+
+    // view-transition-name
+    "match-element",
 
     // container-type
     // inline-size,
@@ -1920,5 +1966,22 @@
     // interactivity
     // auto
     "inert",
+
+    // Used as functions in calc()
+    "sibling-count",
+    "sibling-index",
+
+    // @function
+    "returns",
+
+    // animation-trigger-type
+    // repeat
+    // alternate
+    "once",
+    "state",
+
+    // inline conditional
+    "if",
+    "else",
   ],
 }

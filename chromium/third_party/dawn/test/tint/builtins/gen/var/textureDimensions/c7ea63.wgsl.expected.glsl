@@ -1,9 +1,12 @@
+//
+// fragment_main
+//
 #version 460
 precision highp float;
 precision highp int;
 
 layout(binding = 0, std430)
-buffer prevent_dce_block_1_ssbo {
+buffer f_prevent_dce_block_ssbo {
   uint inner;
 } v;
 layout(binding = 0, rg32f) uniform highp image2D arg_0;
@@ -14,6 +17,9 @@ uint textureDimensions_c7ea63() {
 void main() {
   v.inner = textureDimensions_c7ea63();
 }
+//
+// compute_main
+//
 #version 460
 
 layout(binding = 0, std430)

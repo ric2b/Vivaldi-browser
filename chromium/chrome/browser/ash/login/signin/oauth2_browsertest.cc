@@ -15,6 +15,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/to_string.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/test_future.h"
@@ -65,6 +66,7 @@
 #include "extensions/test/extension_test_message_listener.h"
 #include "extensions/test/result_catcher.h"
 #include "google_apis/gaia/gaia_auth_util.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
@@ -79,7 +81,7 @@ using ::net::test_server::HttpResponse;
 using ::net::test_server::HungResponse;
 
 // Email of owner account for test.
-const char kTestGaiaId[] = "12345";
+const GaiaId::Literal kTestGaiaId("12345");
 const char kTestEmail[] = "username@gmail.com";
 const char kTestRawEmail[] = "User.Name@gmail.com";
 const char kTestAccountPassword[] = "fake-password";
@@ -111,15 +113,11 @@ constexpr char kRandomPagePath[] = "/non_google_page";
 constexpr char kMultiLoginPath[] = "/oauth/multilogin";
 
 CoreAccountId PickAccountId(Profile* profile,
-                            const std::string& gaia_id,
+                            const GaiaId& gaia_id,
                             const std::string& email) {
   return IdentityManagerFactory::GetInstance()
       ->GetForProfile(profile)
       ->PickAccountIdForAccount(gaia_id, email);
-}
-
-const char* BoolToString(bool value) {
-  return value ? "true" : "false";
 }
 
 class OAuth2LoginManagerStateWaiter : public OAuth2LoginManager::Observer {
@@ -597,7 +595,7 @@ IN_PROC_BROWSER_TEST_F(OAuth2Test, DISABLED_MergeSession) {
 
   CoreAccountId account_id =
       PickAccountId(GetProfile(), kTestGaiaId, kTestEmail);
-  ASSERT_EQ(kTestGaiaId, account_id.ToString());
+  ASSERT_EQ(CoreAccountId::FromGaiaId(kTestGaiaId), account_id);
 
   // Wait for the session merge to finish.
   WaitForMergeSessionCompletion(OAuth2LoginManager::SESSION_RESTORE_DONE);
@@ -987,7 +985,7 @@ IN_PROC_BROWSER_TEST_P(MergeSessionTest, Throttle) {
       ext->id(), base::StringPrintf("startThrottledTests('%s', '%s', %s)",
                                     fake_google_page_url_.spec().c_str(),
                                     non_google_page_url_.spec().c_str(),
-                                    BoolToString(do_async_xhr())));
+                                    base::ToString(do_async_xhr())));
   ExtensionTestMessageListener listener("Both XHR's Opened");
   ASSERT_TRUE(listener.WaitUntilSatisfied());
 
@@ -1055,7 +1053,7 @@ IN_PROC_BROWSER_TEST_P(MergeSessionTest, MAYBE_XHRNotThrottled) {
       ext->id(), base::StringPrintf("startThrottledTests('%s', '%s', %s)",
                                     fake_google_page_url_.spec().c_str(),
                                     non_google_page_url_.spec().c_str(),
-                                    BoolToString(do_async_xhr())));
+                                    base::ToString(do_async_xhr())));
 
   if (do_async_xhr()) {
     // Verify that we've sent XHR request from the extension side...
@@ -1137,7 +1135,7 @@ IN_PROC_BROWSER_TEST_P(MergeSessionTimeoutTest, XHRMergeTimeout) {
       ext->id(), base::StringPrintf("startThrottledTests('%s', '%s', %s)",
                                     fake_google_page_url_.spec().c_str(),
                                     non_google_page_url_.spec().c_str(),
-                                    BoolToString(do_async_xhr())));
+                                    base::ToString(do_async_xhr())));
 
   if (do_async_xhr()) {
     // Verify that we've sent XHR requests from the extension side...

@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include <stdint.h>
 
 #include <memory>
@@ -223,9 +218,8 @@ TEST_F(PlatformNotificationServiceTest, DisplayPersistentThenClose) {
 }
 
 TEST_F(PlatformNotificationServiceTest, DisplayNonPersistentPropertiesMatch) {
-  std::vector<int> vibration_pattern(
-      kNotificationVibrationPattern,
-      kNotificationVibrationPattern + std::size(kNotificationVibrationPattern));
+  std::vector<int> vibration_pattern(std::begin(kNotificationVibrationPattern),
+                                     std::end(kNotificationVibrationPattern));
 
   PlatformNotificationData data;
   data.title = u"My notification's title";
@@ -255,9 +249,8 @@ TEST_F(PlatformNotificationServiceTest, DisplayNonPersistentPropertiesMatch) {
 }
 
 TEST_F(PlatformNotificationServiceTest, DisplayPersistentPropertiesMatch) {
-  std::vector<int> vibration_pattern(
-      kNotificationVibrationPattern,
-      kNotificationVibrationPattern + std::size(kNotificationVibrationPattern));
+  std::vector<int> vibration_pattern(std::begin(kNotificationVibrationPattern),
+                                     std::end(kNotificationVibrationPattern));
   PlatformNotificationData data;
   data.title = u"My notification's title";
   data.body = u"Hello, world!";
@@ -704,8 +697,16 @@ INSTANTIATE_TEST_SUITE_P(
     PlatformNotificationServiceTest_NotificationContentDetection,
     testing::Combine(testing::Bool(), testing::Bool()));
 
+// TODO(crbug.com/378566914): Test fails on Linux MSAN
+#if BUILDFLAG(IS_LINUX) && defined(MEMORY_SANITIZER)
+#define MAYBE_PerformNotificationContentDetectionWhenEnabled \
+  DISABLED_PerformNotificationContentDetectionWhenEnabled
+#else
+#define MAYBE_PerformNotificationContentDetectionWhenEnabled \
+  PerformNotificationContentDetectionWhenEnabled
+#endif
 TEST_P(PlatformNotificationServiceTest_NotificationContentDetection,
-       PerformNotificationContentDetectionWhenEnabled) {
+       MAYBE_PerformNotificationContentDetectionWhenEnabled) {
   PlatformNotificationData data;
   data.title = u"My notification's title";
   data.body = u"Hello, world!";
@@ -715,7 +716,7 @@ TEST_P(PlatformNotificationServiceTest_NotificationContentDetection,
     expected_number_of_calls = 1;
   }
   EXPECT_CALL(*mock_notification_content_detection_service_,
-              MaybeCheckNotificationContentDetectionModel(_, _))
+              MaybeCheckNotificationContentDetectionModel(_, _, _, _))
       .Times(expected_number_of_calls);
   service()->DisplayPersistentNotification(
       kNotificationId, GURL() /* service_worker_scope */,

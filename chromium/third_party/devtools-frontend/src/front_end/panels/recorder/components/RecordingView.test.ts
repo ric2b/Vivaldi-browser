@@ -15,14 +15,12 @@ import {
 } from '../../../testing/EnvironmentHelpers.js';
 import {expectCall} from '../../../testing/ExpectStubCall.js';
 import * as Menus from '../../../ui/components/menus/menus.js';
-import * as Coordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
+import * as RenderCoordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
 import type * as TextEditor from '../../../ui/components/text_editor/text_editor.js';
 import * as Converters from '../converters/converters.js';
 import * as Models from '../models/models.js';
 
 import * as Components from './components.js';
-
-const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
 
 describeWithEnvironment('RecordingView', () => {
   setupActionRegistry();
@@ -58,7 +56,7 @@ describeWithEnvironment('RecordingView', () => {
       extensionConverters: [],
       replayExtensions: [],
     };
-    await coordinator.done();
+    await RenderCoordinator.done();
     return view;
   }
 
@@ -98,7 +96,7 @@ describeWithEnvironment('RecordingView', () => {
     const button = view.shadowRoot?.querySelector(
                        '.show-code',
                        ) as HTMLDivElement;
-    assert.ok(button);
+    assert.isOk(button);
     dispatchClickEvent(button);
   }
 
@@ -106,7 +104,7 @@ describeWithEnvironment('RecordingView', () => {
     const button = view.shadowRoot?.querySelector(
                        '[title="Hide code"]',
                        ) as HTMLDivElement;
-    assert.ok(button);
+    assert.isOk(button);
     dispatchClickEvent(button);
   }
 
@@ -122,7 +120,7 @@ describeWithEnvironment('RecordingView', () => {
     const menu = view.shadowRoot?.querySelector(
                      'devtools-select-menu',
                      ) as Menus.SelectMenu.SelectMenu;
-    assert.ok(menu);
+    assert.isOk(menu);
 
     const event = new Menus.SelectMenu.SelectMenuItemSelectedEvent(Models.ConverterIds.ConverterIds.REPLAY);
     menu.dispatchEvent(event);
@@ -135,13 +133,13 @@ describeWithEnvironment('RecordingView', () => {
 
     // Click is handled async, therefore, waiting for the text editor.
     const textEditor = await waitForTextEditor(view);
-    assert.deepStrictEqual(textEditor.editor.state.selection.toJSON(), {
+    assert.deepEqual(textEditor.editor.state.selection.toJSON(), {
       ranges: [{anchor: 0, head: 0}],
       main: 0,
     });
 
     hoverOverScrollStep(view);
-    assert.deepStrictEqual(textEditor.editor.state.selection.toJSON(), {
+    assert.deepEqual(textEditor.editor.state.selection.toJSON(), {
       ranges: [{anchor: 34, head: 68}],
       main: 0,
     });

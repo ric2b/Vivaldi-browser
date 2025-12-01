@@ -11,7 +11,6 @@
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/keyboard/keyboard_controller_impl.h"
-#include "ash/public/cpp/external_arc/overlay/arc_overlay_manager.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_helper.h"
 #include "ash/test/test_widget_builder.h"
@@ -22,6 +21,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
+#include "chromeos/ash/experiences/arc/overlay/arc_overlay_manager.h"
 #include "chromeos/ui/base/app_types.h"
 #include "chromeos/ui/base/window_properties.h"
 #include "components/exo/buffer.h"
@@ -1183,7 +1183,9 @@ TEST_F(KeyboardTest, KeyRepeatSettingsUpdateAtRuntime) {
 
 TEST_F(KeyboardTest, KeyRepeatSettingsIgnoredForNonActiveUser) {
   // Simulate two users, with the first user as active.
-  CreateUserSessions(2);
+  auto active_account_id = SimulateUserLogin("user0@gmail.com");
+  auto inactive_account_id = SimulateUserLogin("user1@gmail.com");
+  SwitchActiveUser(active_account_id);
 
   // Key repeat settings should be sent exactly once, for the default values.
   auto delegate = std::make_unique<NiceMockKeyboardDelegate>();
@@ -1198,7 +1200,7 @@ TEST_F(KeyboardTest, KeyRepeatSettingsIgnoredForNonActiveUser) {
   EXPECT_CALL(*delegate_ptr,
               OnKeyRepeatSettingsChanged(testing::_, testing::_, testing::_))
       .Times(0);
-  const std::string email = "user1@tray";
+  const auto email = inactive_account_id.GetUserEmail();
   SetUserPref(email, ash::prefs::kXkbAutoRepeatEnabled, base::Value(true));
   SetUserPref(email, ash::prefs::kXkbAutoRepeatDelay, base::Value(1000));
   SetUserPref(email, ash::prefs::kXkbAutoRepeatInterval, base::Value(1000));
@@ -1207,10 +1209,12 @@ TEST_F(KeyboardTest, KeyRepeatSettingsIgnoredForNonActiveUser) {
 
 TEST_F(KeyboardTest, KeyRepeatSettingsUpdateOnProfileChange) {
   // Simulate two users, with the first user as active.
-  CreateUserSessions(2);
+  auto active_account_id = SimulateUserLogin("user0@gmail.com");
+  auto inactive_account_id = SimulateUserLogin("user1@gmail.com");
+  SwitchActiveUser(active_account_id);
 
   // Second user has different preferences.
-  std::string email = "user1@tray";
+  std::string email = inactive_account_id.GetUserEmail();
   SetUserPref(email, ash::prefs::kXkbAutoRepeatEnabled, base::Value(true));
   SetUserPref(email, ash::prefs::kXkbAutoRepeatDelay, base::Value(1000));
   SetUserPref(email, ash::prefs::kXkbAutoRepeatInterval, base::Value(1000));

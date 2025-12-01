@@ -119,7 +119,7 @@ To get a visual overlay, hit Ctrl-Alt-/ and then hold modifier keys like Ctrl,
 Alt, and Shift to see the associated hotkeys.
 
 Most browser shortcuts also apply:
-<http://www.google.com/support/chrome/bin/answer.py?hl=en&answer=95743>
+<https://www.google.com/support/chrome/bin/answer.py?hl=en&answer=95743>
 
 ### Are native applications supported?
 

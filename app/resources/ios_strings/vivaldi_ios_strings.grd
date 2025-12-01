@@ -11,10 +11,12 @@ locale.  The strings in this file are specific to iOS.
     <output filename="ios_strings_af.pak" type="data_package" lang="af" />
     <output filename="ios_strings_az.pak" type="data_package" lang="az" />
     <output filename="ios_strings_be.pak" type="data_package" lang="be" />
+    <output filename="ios_strings_bn.pak" type="data_package" lang="bn" />
     <output filename="ios_strings_ca-valencia.pak" type="data_package" lang="ca@valencia" />
     <output filename="ios_strings_de-CH.pak" type="data_package" lang="de-CH" />
     <output filename="ios_strings_eo.pak" type="data_package" lang="eo" />
     <output filename="ios_strings_es-PE.pak" type="data_package" lang="es-PE" />
+    <output filename="ios_strings_et.pak" type="data_package" lang="et" />
     <output filename="ios_strings_eu.pak" type="data_package" lang="eu" />
     <output filename="ios_strings_fy.pak" type="data_package" lang="fy" />
     <output filename="ios_strings_gd.pak" type="data_package" lang="gd" />
@@ -31,6 +33,7 @@ locale.  The strings in this file are specific to iOS.
     <output filename="ios_strings_nn.pak" type="data_package" lang="nn" />
     <output filename="ios_strings_pa.pak" type="data_package" lang="pa" />
     <output filename="ios_strings_sc.pak" type="data_package" lang="sc" />
+    <output filename="ios_strings_sl.pak" type="data_package" lang="sl" />
     <output filename="ios_strings_sq.pak" type="data_package" lang="sq" />
     <output filename="ios_strings_sr-Latn.pak" type="data_package" lang="sr-Latn" />
   </outputs>
@@ -200,7 +203,7 @@ locale.  The strings in this file are specific to iOS.
         Copy Link to Highlight
       </message>
       <message name="IDS_IOS_PARTIAL_TRANSLATE_EDIT_MENU_ENTRY" desc="Action displayed in Edit Menu to trigger Partial Translate. As an action, it should be an infinitive verb, but should also respect the 'Google Translate' branding. Possible variations are 'Google Translate' or 'Translate with Google' are acceptable to meet those criteria [MAX_LENGTH=25em]." meaning="Action displayed in Edit Menu to trigger Partial Translate. As an action, it should be an infinitive verb, but should also respect the 'Google Translate' branding. Possible variations are 'Google Translate' or 'Translate with Google' are acceptable to meet those criteria [MAX_LENGTH=25em].">
-        Vivaldi Translate
+        Translate
       </message>
       <message name="IDS_IOS_VISIT_COPIED_LINK" desc="If a user has a URL on their clipboard, this string will appear as an option when the user long-presses on Chrome's address bar. The user can select this option to visit the URL. This string is a complete sentence. If necessary for your language, you can translate as 'Visit link that you copied.' [iOS only]" meaning="Maximum characters: 32">
         Paste and Go

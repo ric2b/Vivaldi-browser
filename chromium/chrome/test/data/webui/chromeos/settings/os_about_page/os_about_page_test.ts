@@ -5,7 +5,8 @@
 import 'chrome://os-settings/os_settings.js';
 import 'chrome://os-settings/lazy_load.js';
 
-import {AboutPageBrowserProxyImpl, BrowserChannel, IronIconElement, LifetimeBrowserProxyImpl, OsAboutPageElement, Router, routes, settingMojom, setUserActionRecorderForTesting, UpdateStatus, userActionRecorderMojom} from 'chrome://os-settings/os_settings.js';
+import type {IronIconElement, OsAboutPageElement, userActionRecorderMojom} from 'chrome://os-settings/os_settings.js';
+import {AboutPageBrowserProxyImpl, BrowserChannel, LifetimeBrowserProxyImpl, Router, routes, settingMojom, setUserActionRecorderForTesting, UpdateStatus} from 'chrome://os-settings/os_settings.js';
 import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -23,8 +24,6 @@ type UserActionRecorderInterface =
     userActionRecorderMojom.UserActionRecorderInterface;
 
 suite('<os-about-page> AllBuilds', () => {
-  const isRevampWayfindingEnabled =
-      loadTimeData.getBoolean('isRevampWayfindingEnabled');
   let page: OsAboutPageElement;
   let aboutBrowserProxy: TestAboutPageBrowserProxy;
   let lifetimeBrowserProxy: TestLifetimeBrowserProxy;
@@ -99,14 +98,12 @@ suite('<os-about-page> AllBuilds', () => {
     flush();
   }
 
-  if (isRevampWayfindingEnabled) {
-    test('Crostini settings card is visible', async () => {
-      await initPage();
-      const crostiniSettingsCard =
-          page.shadowRoot!.querySelector('crostini-settings-card');
-      assertTrue(isVisible(crostiniSettingsCard));
-    });
-  }
+  test('Crostini settings card is visible', async () => {
+    await initPage();
+    const crostiniSettingsCard =
+        page.shadowRoot!.querySelector('crostini-settings-card');
+    assertTrue(isVisible(crostiniSettingsCard));
+  });
 
   ['light', 'dark'].forEach((mode) => {
     suite(`with ${mode} mode active`, () => {
@@ -153,10 +150,7 @@ suite('<os-about-page> AllBuilds', () => {
 
         fireStatusChanged(UpdateStatus.NEARLY_UPDATED);
         assertNull(updateRowIcon.src);
-        assertEquals(
-            isRevampWayfindingEnabled ? 'os-settings:about-update-complete' :
-                                        'settings:check-circle',
-            updateRowIcon.icon);
+        assertEquals('os-settings:about-update-complete', updateRowIcon.icon);
         assertNotEquals(previousMessageText, statusMessageEl.innerText);
         previousMessageText = statusMessageEl.innerText;
 
@@ -167,10 +161,7 @@ suite('<os-about-page> AllBuilds', () => {
 
         fireStatusChanged(UpdateStatus.FAILED);
         assertNull(updateRowIcon.src);
-        assertEquals(
-            isRevampWayfindingEnabled ? 'os-settings:about-update-error' :
-                                        'cr:error-outline',
-            updateRowIcon.icon);
+        assertEquals('os-settings:about-update-error', updateRowIcon.icon);
         assertEquals(0, statusMessageEl.innerText.trim().length);
 
         fireStatusChanged(UpdateStatus.DISABLED);

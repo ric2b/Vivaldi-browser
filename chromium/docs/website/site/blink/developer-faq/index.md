@@ -6,7 +6,7 @@ page_name: developer-faq
 title: Developer FAQ - Why Blink?
 ---
 
-[« Back to the Blink project page](http://www.chromium.org/blink)
+[« Back to the Blink project page](/blink)
 
 [TOC]
 
@@ -35,9 +35,8 @@ benefits all users of the web, on all browsers.
 
 ### What sorts of things should I expect from Chrome?
 
-In the Blink [Architectural
-Changes](http://www.chromium.org/blink#architectural-changes) section we have
-listed a few changes that will improve the speed and stability of the web
+In the Blink [Architectural Changes](/blink#architectural-changes) section we
+have listed a few changes that will improve the speed and stability of the web
 platform in Chrome. Meanwhile, there are more improvements whose feasibility and
 performance benefits we're excited to investigate:
 
@@ -58,10 +57,9 @@ performance benefits we're excited to investigate:
                 loaded pages.
 *   Keep the platform secure
     *   Better sandboxing of the compositor thread
-    *   [Out-of-process
-                iframes](http://www.chromium.org/developers/design-documents/oop-iframes).
+    *   [Out-of-process iframes](/developers/design-documents/oop-iframes).
                 Use renderer processes [as a security
-                boundary](http://www.chromium.org/developers/design-documents/site-isolation)
+                boundary](/developers/design-documents/site-isolation)
                 between cross-site iframes.
 *   Refactor for performance
     *   Reduce binding layer overhead. We can make things even faster by
@@ -103,7 +101,7 @@ currently shares and runs tests that were authored by Opera, Mozilla, and W3C
 Working Groups and we'll be doing a better job of this going forward. Developers
 need to be able to rely on Chrome’s implementation of standards, and that’s
 something we take very seriously. See the
-[Testing](http://www.chromium.org/blink#testing) section for our plans.
+[Testing](/blink#testing) section for our plans.
 
 ### Hold up, isn't more browsers sharing WebKit better for compatibility?
 
@@ -181,10 +179,10 @@ what's in Chrome on Android.
 Our goal is to drive innovation and improve the compatible, open web platform,
 not to add a ton of features and break compatibility with other browsers. We're
 introducing strong developer-facing policies on [adding new
-features](http://www.chromium.org/blink#new-features), the [use of vendor
-prefixes](http://www.chromium.org/blink#vendor-prefixes), and [when a feature
+features](/blink#new-features), the [use of vendor
+prefixes](/blink#vendor-prefixes), and [when a feature
 should be considered stable enough to
-ship](http://www.chromium.org/blink#compatibility). This codifies our policy on
+ship](/blink#compatibility). This codifies our policy on
 thoughtfully augmenting the platform, and as transparency is a core principle of
 Blink, we hope this process is equally visible to you. The [Chromium Feature
 Dashboard](http://www.chromestatus.com/features) we recently introduced offers a
@@ -204,7 +202,7 @@ the broader open web community by letting our actions speak louder than words.
 ### Is this just a ruse to land Google-developed technologies?
 
 Nope, not at all! We're instituting [strong guidelines on new
-features](http://www.chromium.org/blink#new-features) that emphasize standards,
+features](/blink#new-features) that emphasize standards,
 interoperability, and transparency. We expect to hold all new shipping features
 that affect web developers on the open web up to the same level of scrutiny.
 Technologies and standards developed primarily within Google will be held to the
@@ -221,9 +219,9 @@ open web.
 
 ### Is this going to be open source?
 
-Yes, of course. [Chromium is already open-source](http://www.chromium.org/Home)
+Yes, of course. [Chromium is already open-source](/Home)
 and Blink is part of that project. Transparency is one of our core principles.
-[Developing Blink](http://www.chromium.org/blink#participating) covers this in
+[Developing Blink](/blink#participating) covers this in
 detail.
 
 ### Opera recently announced they adopted Chromium for their browsers. What's their plan?
@@ -246,7 +244,7 @@ that have made Chrome the browser it is today. You should also expect improved
 transparency in Blink's development processes, so getting involved will be
 easier than ever. Please, review the [Chromium Feature
 Dashboard](http://www.chromestatus.com/features), experiment with future
-features in Dev/Canary and [file any bugs](http://crbug.com/) you find.
+features in Dev/Canary and [file any bugs](https://crbug.com/) you find.
 
 ~ FAQ authored by Paul Irish and Paul Lewis on the Chrome Developer Relations
 team
@@ -267,52 +265,52 @@ and Developer Advocate Paul Irish
 
 Below are the top-voted questions, along with timecodes you can click (will open
 in a new window):
-[1:12](http://www.youtube.com/watch?v=TlJob8K_OwE#t=1m12s) What will be the
+[1:12](https://youtube.com/watch?v=TlJob8K_OwE#t=1m12s) What will be the
 relationship between the WebKit and Blink codebases going forward?
-[2:42](http://www.youtube.com/watch?v=TlJob8K_OwE#t=2m42s) When will Blink ship
+[2:42](https://youtube.com/watch?v=TlJob8K_OwE#t=2m42s) When will Blink ship
 on the Chrome channels Canary/Beta/Stable?
-[3:25](http://www.youtube.com/watch?v=TlJob8K_OwE#t=3m25s) How does the plan for
+[3:25](https://youtube.com/watch?v=TlJob8K_OwE#t=3m25s) How does the plan for
 transitioning the WebKit integrated in Android to Blink look like?
-[4:59](http://www.youtube.com/watch?v=TlJob8K_OwE#t=4m59s) Can you elaborate on
+[4:59](https://youtube.com/watch?v=TlJob8K_OwE#t=4m59s) Can you elaborate on
 the idea of moving the DOM into JavaScript?
-[6:40](http://www.youtube.com/watch?v=TlJob8K_OwE#t=6m40s) Can you elaborate on
+[6:40](https://youtube.com/watch?v=TlJob8K_OwE#t=6m40s) Can you elaborate on
 the idea of "removing obscure parts of the DOM and make backwards incompatible
 changesthat benefit performance or remove complexity"?
-[8:35](http://www.youtube.com/watch?v=TlJob8K_OwE#t=8m35s) How will Blink
+[8:35](https://youtube.com/watch?v=TlJob8K_OwE#t=8m35s) How will Blink
 responsibly deprecate prefixed CSS properties?
-[9:30](http://www.youtube.com/watch?v=TlJob8K_OwE#t=9m30s) What will prevent the
+[9:30](https://youtube.com/watch?v=TlJob8K_OwE#t=9m30s) What will prevent the
 same collaborative development difficulties that have hampered Webkit emerging
 in Blink, as it gains more contributors and is ported to more platforms?
-[12:35](http://www.youtube.com/watch?v=TlJob8K_OwE#t=12m35s) Will changes to
+[12:35](https://youtube.com/watch?v=TlJob8K_OwE#t=12m35s) Will changes to
 Blink be contributed back to the WebKit project?
-[13:34](http://www.youtube.com/watch?v=TlJob8K_OwE#t=13m34s) Google said
+[13:34](https://youtube.com/watch?v=TlJob8K_OwE#t=13m34s) Google said
 problems living with the WebKit2 multi-process model was a prime reason to
 create Blink, but Apple engineers say they asked to integrate Chromium's
 multi-process into WebKit prior to creating WebKit2, and were refused. What
 gives?
-[16:46](http://www.youtube.com/watch?v=TlJob8K_OwE#t=16m46s) Is the plan to
+[16:46](https://youtube.com/watch?v=TlJob8K_OwE#t=16m46s) Is the plan to
 shift Android's &lt;webview&gt; implementation over to Blink as well?
-[17:26](http://www.youtube.com/watch?v=TlJob8K_OwE#t=17m26s) Will blink be able
+[17:26](https://youtube.com/watch?v=TlJob8K_OwE#t=17m26s) Will blink be able
 to support multiple scripting languages? E.g. Dart.
-[19:34](http://www.youtube.com/watch?v=TlJob8K_OwE#t=19m34s) How will affect
+[19:34](https://youtube.com/watch?v=TlJob8K_OwE#t=19m34s) How will affect
 other browsers that have adopted WebKit?
-[20:44](http://www.youtube.com/watch?v=TlJob8K_OwE#t=20m44s) Does this means
+[20:44](https://youtube.com/watch?v=TlJob8K_OwE#t=20m44s) Does this means
 Google stops contributions to WebKit?
-[21:31](http://www.youtube.com/watch?v=TlJob8K_OwE#t=21m31s) What Open Source
+[21:31](https://youtube.com/watch?v=TlJob8K_OwE#t=21m31s) What Open Source
 license will Blink have? Will it continue to support the H.264 video codec?
-[22:11](http://www.youtube.com/watch?v=TlJob8K_OwE#t=22m11s) Any user-agent
+[22:11](https://youtube.com/watch?v=TlJob8K_OwE#t=22m11s) Any user-agent
 string changes?
-[23:38](http://www.youtube.com/watch?v=TlJob8K_OwE#t=23m38s) When we'll be able
+[23:38](https://youtube.com/watch?v=TlJob8K_OwE#t=23m38s) When we'll be able
 to test first versions of Blink in Chromium?
-[24:15](http://www.youtube.com/watch?v=TlJob8K_OwE#t=24m15s) How can developers
+[24:15](https://youtube.com/watch?v=TlJob8K_OwE#t=24m15s) How can developers
 follow Blink's development?
-[25:40](http://www.youtube.com/watch?v=TlJob8K_OwE#t=25m40s) What is
+[25:40](https://youtube.com/watch?v=TlJob8K_OwE#t=25m40s) What is
 [chromestatus.com](http://chromestatus.com/) about?
-[26:40](http://www.youtube.com/watch?v=TlJob8K_OwE#t=26m40s) How will this
+[26:40](https://youtube.com/watch?v=TlJob8K_OwE#t=26m40s) How will this
 impact Dart language's progress?
-[27:13](http://www.youtube.com/watch?v=TlJob8K_OwE#t=27m13s) Will this be a
+[27:13](https://youtube.com/watch?v=TlJob8K_OwE#t=27m13s) Will this be a
 direct competitor against Mozilla's new engine?
-[29:03](http://www.youtube.com/watch?v=TlJob8K_OwE#t=29m03s) When will all
+[29:03](https://youtube.com/watch?v=TlJob8K_OwE#t=29m03s) When will all
 existing vendor prefixes in Blink be phased out?
-[30:20](http://www.youtube.com/watch?v=TlJob8K_OwE#t=30m20s) Will you support
+[30:20](https://youtube.com/watch?v=TlJob8K_OwE#t=30m20s) Will you support
 -blink-text-decoration: blink? ;)

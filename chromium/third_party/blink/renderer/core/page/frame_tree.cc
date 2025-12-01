@@ -18,6 +18,11 @@
  * Boston, MA 02110-1301, USA.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "third_party/blink/renderer/core/page/frame_tree.h"
 
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -254,16 +259,12 @@ Frame* FrameTree::FindFrameForNavigationInternal(
     return &Top();
   }
 
-  // The target _unfencedTop should only be treated as a special name in
-  // opaque-ads mode fenced frames.
   if (EqualIgnoringASCIICase(name, "_unfencedTop")) {
     // In fenced frames, we set a flag that will later indicate to the browser
     // that this is an _unfencedTop navigation, and return the current frame
     // so that the renderer-side checks will succeed.
     // TODO(crbug.com/1315802): Refactor MPArch _unfencedTop handling.
-    if (current_frame->GetDeprecatedFencedFrameMode() ==
-            blink::FencedFrame::DeprecatedFencedFrameMode::kOpaqueAds &&
-        request != nullptr) {
+    if (current_frame->IsInFencedFrameTree() && request != nullptr) {
       request->SetIsUnfencedTopNavigation(true);
       return current_frame;
     }

@@ -10,14 +10,25 @@
 #include "extensions/browser/extension_function.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
-#include "extensions/api/auto_update/auto_update_status.h"
-#include "vivaldi/extensions/schema/autoupdate.h"
-#include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "base/files/file_path_watcher.h"
+#include "extensions/api/auto_update/auto_update_status.h"
+#include "extensions/browser/browser_context_keyed_api_factory.h"
+#include "vivaldi/extensions/schema/autoupdate.h"
+
+#if !BUILDFLAG(IS_ANDROID)
+#include "base/scoped_observation.h"
+#include "components/component_updater/component_updater_service.h"
+#endif
+
+// Forward for friendship.
+namespace drm_helper {
+class DRMContentTabHelper;
+}  // namespace drm_helper
 
 namespace extensions {
 
-class AutoUpdateAPI : public BrowserContextKeyedAPI {
+class AutoUpdateAPI : public BrowserContextKeyedAPI,
+                      public update_client::UpdateClient::Observer {
  public:
   explicit AutoUpdateAPI(content::BrowserContext* context);
   ~AutoUpdateAPI() override;
@@ -43,18 +54,43 @@ class AutoUpdateAPI : public BrowserContextKeyedAPI {
                                     const std::string& reason);
   static void SendUpdateFinished();
 
+#if !BUILDFLAG(IS_ANDROID)
+  bool WasWidevineAvailable() { return widevine_was_available_; }
+#endif
+
  private:
   friend class BrowserContextKeyedAPIFactory<AutoUpdateAPI>;
+  friend class drm_helper::DRMContentTabHelper;
 
 #if BUILDFLAG(IS_WIN)
   static void InitUpgradeDetection();
   static void ShutdownUpgradeDetection();
 #endif
 
-  static const char* service_name() {
-    return "AutoUpdateAPI";
-  }
+  static const char* service_name() { return "AutoUpdateAPI"; }
   const raw_ptr<content::BrowserContext> browser_context_;
+
+#if !BUILDFLAG(IS_ANDROID)
+  void InitWidevineMonitoring();
+  void HandleWidevineRequested();
+  void HandleWidevineUpdated();
+
+  // For linux this handles restart notification.
+  void HandleRequestedWidevineUpdate();
+
+  // True if we started browaer with widevine support.
+  bool widevine_was_available_ = false;
+  // True if any tab tried to play widevine protected content.
+  bool widevine_was_requested_ = false;
+  // True if the Widevine module updated.
+  bool widevine_was_updated_ = false;
+
+  void OnEvent(const update_client::CrxUpdateItem& item) override;
+
+  base::ScopedObservation<component_updater::ComponentUpdateService,
+                          component_updater::ComponentUpdateService::Observer>
+      observer_{this};
+#endif
 
 #if BUILDFLAG(IS_LINUX)
   void InitUpgradeDetection();

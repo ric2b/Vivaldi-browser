@@ -8,7 +8,7 @@
 #include <optional>
 
 #include "src/base/macros.h"
-#include "src/execution/shared-mutex-guard-if-off-thread.h"
+#include "src/execution/mutex-guard-if-off-thread.h"
 #include "src/execution/thread-id.h"
 #include "src/handles/handles.h"
 #include "src/handles/local-handles.h"
@@ -63,6 +63,8 @@ class V8_EXPORT_PRIVATE LocalIsolate final : private HiddenLocalFactory {
   inline Address cage_base() const;
   inline Address code_cage_base() const;
   inline ReadOnlyHeap* read_only_heap() const;
+  inline RootsTable& roots_table();
+  inline const RootsTable& roots_table() const;
   inline Tagged<Object> root(RootIndex index) const;
   inline Handle<Object> root_handle(RootIndex index) const;
 
@@ -71,10 +73,10 @@ class V8_EXPORT_PRIVATE LocalIsolate final : private HiddenLocalFactory {
   }
 
   StringTable* string_table() const { return isolate_->string_table(); }
-  base::SharedMutex* internalized_string_access() {
+  base::SpinningMutex* internalized_string_access() {
     return isolate_->internalized_string_access();
   }
-  base::SharedMutex* shared_function_info_access() {
+  base::SpinningMutex* shared_function_info_access() {
     return isolate_->shared_function_info_access();
   }
   const AstStringConstants* ast_string_constants() {
@@ -132,6 +134,12 @@ class V8_EXPORT_PRIVATE LocalIsolate final : private HiddenLocalFactory {
     if (!bigint_processor_) InitializeBigIntProcessor();
     return bigint_processor_;
   }
+
+#ifdef V8_ENABLE_LEAPTIERING
+  JSDispatchTable::Space* GetJSDispatchTableSpaceFor(Address owning_slot) {
+    return isolate_->GetJSDispatchTableSpaceFor(owning_slot);
+  }
+#endif  // V8_ENABLE_LEAPTIERING
 
   // AsIsolate is only allowed on the main-thread.
   Isolate* AsIsolate() {
@@ -201,21 +209,20 @@ class V8_EXPORT_PRIVATE LocalIsolate final : private HiddenLocalFactory {
 #endif
 };
 
-template <base::MutexSharedType kIsShared>
-class V8_NODISCARD SharedMutexGuardIfOffThread<LocalIsolate, kIsShared> final {
+template <>
+class V8_NODISCARD MutexGuardIfOffThread<LocalIsolate> final {
  public:
-  SharedMutexGuardIfOffThread(base::SharedMutex* mutex, LocalIsolate* isolate) {
+  MutexGuardIfOffThread(base::SpinningMutex* mutex, LocalIsolate* isolate) {
     DCHECK_NOT_NULL(mutex);
     DCHECK_NOT_NULL(isolate);
     if (!isolate->is_main_thread()) mutex_guard_.emplace(mutex);
   }
 
-  SharedMutexGuardIfOffThread(const SharedMutexGuardIfOffThread&) = delete;
-  SharedMutexGuardIfOffThread& operator=(const SharedMutexGuardIfOffThread&) =
-      delete;
+  MutexGuardIfOffThread(const MutexGuardIfOffThread&) = delete;
+  MutexGuardIfOffThread& operator=(const MutexGuardIfOffThread&) = delete;
 
  private:
-  std::optional<base::SharedMutexGuard<kIsShared>> mutex_guard_;
+  std::optional<base::SpinningMutexGuard> mutex_guard_;
 };
 
 }  // namespace internal

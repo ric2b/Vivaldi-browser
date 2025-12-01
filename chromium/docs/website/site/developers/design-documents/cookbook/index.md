@@ -43,7 +43,7 @@ src="/developers/design-documents/cookbook/layercake.png">](/developers/design-d
 ## Creating a new Browser Component
 
 Creating a new component is straightforward. Follow the rules in the [design
-document](http://www.chromium.org/developers/design-documents/browser-components),
+document](/developers/design-documents/browser-components),
 and the examples already in the //components directory. TL;DR version:
 
     A component named xyz lives in //components/xyz.
@@ -64,7 +64,7 @@ and the examples already in the //components directory. TL;DR version:
 
     A component that is used on iOS and also wishes to depend on //content must
     be in the form of a [layered
-    component](http://www.chromium.org/developers/design-documents/layered-components-design).
+    component](/developers/design-documents/layered-components-design).
 
     A component used only by the browser process contains code directly in its
     directory.
@@ -100,8 +100,7 @@ These are the typical steps to extract a feature:
     involved in the componentization (e.g., inject FooService dependency
     directly instead of obtaining FooService from Profile); if the feature is
     intended for use by iOS, determine whether the component needs to be a
-    [layered
-    component](http://www.chromium.org/developers/design-documents/layered-components-design);
+    [layered component](/developers/design-documents/layered-components-design);
     and determine whether the feature's componentization is blocked by that of
     other //chrome features (if so, go back to step 2 for the blocking
     features).
@@ -147,7 +146,7 @@ process of reformatting that often needs to occur when doing refactorings.
 *   ## Abstract all //content dependencies through the embedder and have
             the component not depend on //content at all.
 *   ## Make the component into a [layered
-            component](http://www.chromium.org/developers/design-documents/layered-components-design),
+            component](/developers/design-documents/layered-components-design),
             wherein it has a "core/" directory containing code that is shared by
             iOS and cannot depend on //content, and a "content/" directory that
             drives the core code via interactions with //content.
@@ -159,9 +158,9 @@ alternative is necessary when the feature has significant //content
 dependencies, e.g. it interacts heavily with content::WebContents.
 
 ## For strategies to abstracting //content dependencies, please see
-[here](http://www.chromium.org/developers/design-documents/layered-components-technical-approach).
+[here](/developers/design-documents/layered-components-technical-approach).
 For an example of the structure of a layered component, please see
-[here](http://www.chromium.org/developers/design-documents/structure-of-layered-components-within-the-chromium-codebase).
+[here](/developers/design-documents/structure-of-layered-components-within-the-chromium-codebase).
 
 ## Recipes for Breaking //chrome Dependencies
 
@@ -224,7 +223,7 @@ SequencedTaskRunner for the IO thread.
 In cases like this, you should change the code to pass the most fundamental
 objects possible, rather than passing more complex “everything” or “bag of
 stuff” objects. See also [Law of
-Demeter](http://en.wikipedia.org/wiki/Law_of_Demeter).
+Demeter](https://en.wikipedia.org/wiki/Law_of_Demeter).
 
 Examples:
 

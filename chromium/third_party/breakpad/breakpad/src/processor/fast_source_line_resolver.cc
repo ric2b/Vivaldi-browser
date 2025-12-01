@@ -41,16 +41,17 @@
 #endif
 
 #include "google_breakpad/processor/fast_source_line_resolver.h"
-#include "processor/fast_source_line_resolver_types.h"
 
-#include <cassert>
-#include <cstdint>
+#include <assert.h>
+#include <stdint.h>
+
 #include <map>
 #include <string>
 #include <utility>
 
 #include "common/scoped_ptr.h"
 #include "common/using_std_string.h"
+#include "processor/fast_source_line_resolver_types.h"
 #include "processor/logging.h"
 #include "processor/module_factory.h"
 #include "processor/simple_serializer-inl.h"

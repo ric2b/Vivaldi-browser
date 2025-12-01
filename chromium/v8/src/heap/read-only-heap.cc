@@ -24,19 +24,17 @@
 namespace v8 {
 namespace internal {
 
-#ifndef V8_COMPRESS_POINTERS_IN_MULTIPLE_CAGES
-ReadOnlyHeap* ReadOnlyHeap::shared_ro_heap_ = nullptr;
-#endif
-
 ReadOnlyHeap::~ReadOnlyHeap() {
 #ifdef V8_ENABLE_SANDBOX
   IsolateGroup::current()->code_pointer_table()->TearDownSpace(
       &code_pointer_space_);
 #endif
 #ifdef V8_ENABLE_LEAPTIERING
-  GetProcessWideJSDispatchTable()->DetachSpaceFromReadOnlySegment(
-      &js_dispatch_table_space_);
-  GetProcessWideJSDispatchTable()->TearDownSpace(&js_dispatch_table_space_);
+  JSDispatchTable* jdt = IsolateGroup::current()->js_dispatch_table();
+#if V8_STATIC_DISPATCH_HANDLES_BOOL
+  jdt->DetachSpaceFromReadOnlySegment(&js_dispatch_table_space_);
+#endif  // V8_STATIC_DISPATCH_HANDLES_BOOL
+  jdt->TearDownSpace(&js_dispatch_table_space_);
 #endif
 }
 
@@ -45,65 +43,40 @@ void ReadOnlyHeap::SetUp(Isolate* isolate,
                          SnapshotData* read_only_snapshot_data,
                          bool can_rehash) {
   DCHECK_NOT_NULL(isolate);
-
-  if (IsReadOnlySpaceShared()) {
-    ReadOnlyHeap* ro_heap;
-    IsolateGroup* group = isolate->isolate_group();
-    if (read_only_snapshot_data != nullptr) {
-      bool read_only_heap_created = false;
-      base::MutexGuard guard(group->read_only_heap_creation_mutex());
-      ReadOnlyArtifacts* artifacts = group->read_only_artifacts();
-      if (!artifacts) {
-        artifacts = group->InitializeReadOnlyArtifacts();
-        artifacts->InitializeChecksum(read_only_snapshot_data);
-        ro_heap = CreateInitialHeapForBootstrapping(isolate, artifacts);
-        ro_heap->DeserializeIntoIsolate(isolate, read_only_snapshot_data,
-                                        can_rehash);
-        artifacts->set_initial_next_unique_sfi_id(
-            isolate->next_unique_sfi_id());
-        read_only_heap_created = true;
-      } else {
-        ro_heap = artifacts->read_only_heap();
-        isolate->SetUpFromReadOnlyArtifacts(artifacts, ro_heap);
-#ifdef V8_COMPRESS_POINTERS
-        isolate->external_pointer_table().SetUpFromReadOnlyArtifacts(
-            isolate->heap()->read_only_external_pointer_space(), artifacts);
-#endif  // V8_COMPRESS_POINTERS
-      }
-      artifacts->VerifyChecksum(read_only_snapshot_data,
-                                read_only_heap_created);
-      ro_heap->InitializeIsolateRoots(isolate);
-    } else {
-      // This path should only be taken in mksnapshot, should only be run once
-      // before tearing down the Isolate that holds this ReadOnlyArtifacts and
-      // is not thread-safe.
-      ReadOnlyArtifacts* artifacts = group->read_only_artifacts();
-      CHECK(!artifacts);
-      artifacts = group->InitializeReadOnlyArtifacts();
-      ro_heap = CreateInitialHeapForBootstrapping(isolate, artifacts);
-
-      // Ensure the first read-only page ends up first in the cage.
-      ro_heap->read_only_space()->EnsurePage();
-      artifacts->VerifyChecksum(read_only_snapshot_data, true);
-    }
-  } else {
-    ReadOnlyHeap* ro_heap =
-        new ReadOnlyHeap(new ReadOnlySpace(isolate->heap()));
-    isolate->SetUpFromReadOnlyArtifacts(nullptr, ro_heap);
-    if (read_only_snapshot_data != nullptr) {
-      ro_heap->DeserializeIntoIsolate(isolate, read_only_snapshot_data,
-                                      can_rehash);
-    }
-  }
-}
-
-// static
-void ReadOnlyHeap::TearDown(Isolate* isolate) {
   IsolateGroup* group = isolate->isolate_group();
-  if (group->DecrementIsolateCount() == 0) {
-    base::MutexGuard guard(group->read_only_heap_creation_mutex());
-    if (isolate->is_shared_space_isolate()) group->ClearSharedSpaceIsolate();
-    group->ClearReadOnlyArtifacts();
+  group->mutex()->AssertHeld();
+  if (read_only_snapshot_data != nullptr) {
+    bool read_only_heap_created = false;
+    ReadOnlyArtifacts* artifacts = group->read_only_artifacts();
+    if (!artifacts) {
+      artifacts = group->InitializeReadOnlyArtifacts();
+      artifacts->InitializeChecksum(read_only_snapshot_data);
+      CreateInitialHeapForBootstrapping(isolate, artifacts);
+      artifacts->read_only_heap()->DeserializeIntoIsolate(
+          isolate, read_only_snapshot_data, can_rehash);
+      artifacts->set_initial_next_unique_sfi_id(isolate->next_unique_sfi_id());
+      read_only_heap_created = true;
+    } else {
+      isolate->SetUpFromReadOnlyArtifacts(artifacts);
+#ifdef V8_COMPRESS_POINTERS
+      isolate->external_pointer_table().SetUpFromReadOnlyArtifacts(
+          isolate->heap()->read_only_external_pointer_space(), artifacts);
+#endif  // V8_COMPRESS_POINTERS
+    }
+    artifacts->VerifyChecksum(read_only_snapshot_data, read_only_heap_created);
+    artifacts->read_only_heap()->InitializeIsolateRoots(isolate);
+  } else {
+    // This path should only be taken in mksnapshot, should only be run once
+    // before tearing down the Isolate that holds this ReadOnlyArtifacts and
+    // is not thread-safe.
+    ReadOnlyArtifacts* artifacts = group->read_only_artifacts();
+    CHECK(!artifacts);
+    artifacts = group->InitializeReadOnlyArtifacts();
+    CreateInitialHeapForBootstrapping(isolate, artifacts);
+
+    // Ensure the first read-only page ends up first in the cage.
+    artifacts->read_only_heap()->read_only_space()->EnsurePage();
+    artifacts->VerifyChecksum(read_only_snapshot_data, true);
   }
 }
 
@@ -116,8 +89,8 @@ void ReadOnlyHeap::DeserializeIntoIsolate(Isolate* isolate,
   des.DeserializeIntoIsolate();
   OnCreateRootsComplete(isolate);
 
-#ifdef V8_ENABLE_EXTENSIBLE_RO_SNAPSHOT
-  if (isolate->serializer_enabled()) {
+  if (V8_UNLIKELY(v8_flags.extensible_ro_snapshot &&
+                  isolate->serializer_enabled())) {
     // If this isolate will be serialized, leave RO space unfinalized and
     // allocatable s.t. it can be extended (e.g. by future Context::New calls).
     // We reach this scenario when creating custom snapshots - these initially
@@ -126,15 +99,12 @@ void ReadOnlyHeap::DeserializeIntoIsolate(Isolate* isolate,
   } else {
     InitFromIsolate(isolate);
   }
-#else
-  InitFromIsolate(isolate);
-#endif  // V8_ENABLE_EXTENSIBLE_RO_SNAPSHOT
 }
 
 void ReadOnlyHeap::OnCreateRootsComplete(Isolate* isolate) {
   DCHECK_NOT_NULL(isolate);
   DCHECK(!roots_init_complete_);
-  if (IsReadOnlySpaceShared()) InitializeFromIsolateRoots(isolate);
+  InitializeFromIsolateRoots(isolate);
   roots_init_complete_ = true;
 }
 
@@ -158,21 +128,13 @@ void ReadOnlyHeap::OnCreateHeapObjectsComplete(Isolate* isolate) {
 }
 
 // static
-ReadOnlyHeap* ReadOnlyHeap::CreateInitialHeapForBootstrapping(
+void ReadOnlyHeap::CreateInitialHeapForBootstrapping(
     Isolate* isolate, ReadOnlyArtifacts* artifacts) {
-  DCHECK(IsReadOnlySpaceShared());
-
-  std::unique_ptr<ReadOnlyHeap> ro_heap;
   ReadOnlySpace* ro_space = new ReadOnlySpace(isolate->heap());
   std::unique_ptr<ReadOnlyHeap> shared_ro_heap(new ReadOnlyHeap(ro_space));
   isolate->isolate_group()->set_shared_read_only_heap(shared_ro_heap.get());
-#ifndef V8_COMPRESS_POINTERS_IN_MULTIPLE_CAGES
-  shared_ro_heap_ = shared_ro_heap.get();
-#endif
-  ro_heap = std::move(shared_ro_heap);
-  artifacts->set_read_only_heap(std::move(ro_heap));
-  isolate->SetUpFromReadOnlyArtifacts(artifacts, artifacts->read_only_heap());
-  return artifacts->read_only_heap();
+  artifacts->set_read_only_heap(std::move(shared_ro_heap));
+  isolate->SetUpFromReadOnlyArtifacts(artifacts);
 }
 
 void ReadOnlyHeap::InitializeIsolateRoots(Isolate* isolate) {
@@ -192,20 +154,16 @@ void ReadOnlyHeap::InitializeFromIsolateRoots(Isolate* isolate) {
 void ReadOnlyHeap::InitFromIsolate(Isolate* isolate) {
   DCHECK(roots_init_complete_);
   read_only_space_->ShrinkPages();
-  if (IsReadOnlySpaceShared()) {
-    ReadOnlyArtifacts* artifacts =
-        isolate->isolate_group()->read_only_artifacts();
-    read_only_space()->DetachPagesAndAddToArtifacts(artifacts);
-    artifacts->ReinstallReadOnlySpace(isolate);
+  ReadOnlyArtifacts* artifacts =
+      isolate->isolate_group()->read_only_artifacts();
+  read_only_space()->DetachPagesAndAddToArtifacts(artifacts);
+  artifacts->ReinstallReadOnlySpace(isolate);
 
-    read_only_space_ = artifacts->shared_read_only_space();
+  read_only_space_ = artifacts->shared_read_only_space();
 
 #ifdef DEBUG
-    artifacts->VerifyHeapAndSpaceRelationships(isolate);
+  artifacts->VerifyHeapAndSpaceRelationships(isolate);
 #endif
-  } else {
-    read_only_space_->Seal(ReadOnlySpace::SealMode::kDoNotDetachFromHeap);
-  }
 }
 
 ReadOnlyHeap::ReadOnlyHeap(ReadOnlySpace* ro_space)
@@ -215,16 +173,17 @@ ReadOnlyHeap::ReadOnlyHeap(ReadOnlySpace* ro_space)
       &code_pointer_space_);
 #endif  // V8_ENABLE_SANDBOX
 #ifdef V8_ENABLE_LEAPTIERING
-  GetProcessWideJSDispatchTable()->InitializeSpace(&js_dispatch_table_space_);
+  JSDispatchTable* jdt = IsolateGroup::current()->js_dispatch_table();
+  jdt->InitializeSpace(&js_dispatch_table_space_);
   // To avoid marking trying to write to these read-only cells they are
   // allocated black. Target code objects in the read-only dispatch table are
   // read-only code objects.
   js_dispatch_table_space_.set_allocate_black(true);
-  GetProcessWideJSDispatchTable()->AttachSpaceToReadOnlySegment(
-      &js_dispatch_table_space_);
-  GetProcessWideJSDispatchTable()->PreAllocateEntries(
-      &js_dispatch_table_space_, JSBuiltinDispatchHandleRoot::kCount,
-      Isolate::kBuiltinDispatchHandlesAreStatic);
+#if V8_STATIC_DISPATCH_HANDLES_BOOL
+  jdt->AttachSpaceToReadOnlySegment(&js_dispatch_table_space_);
+  jdt->PreAllocateEntries(&js_dispatch_table_space_,
+                          JSBuiltinDispatchHandleRoot::kCount, true);
+#endif  // V8_STATIC_DISPATCH_HANDLES_BOOL
 #endif  // V8_ENABLE_LEAPTIERING
 }
 
@@ -234,16 +193,13 @@ void ReadOnlyHeap::PopulateReadOnlySpaceStatistics(
   statistics->read_only_space_size_ = 0;
   statistics->read_only_space_used_size_ = 0;
   statistics->read_only_space_physical_size_ = 0;
-  if (IsReadOnlySpaceShared()) {
-    ReadOnlyArtifacts* artifacts =
-        IsolateGroup::current()->read_only_artifacts();
-    if (artifacts) {
-      SharedReadOnlySpace* ro_space = artifacts->shared_read_only_space();
-      statistics->read_only_space_size_ = ro_space->CommittedMemory();
-      statistics->read_only_space_used_size_ = ro_space->Size();
-      statistics->read_only_space_physical_size_ =
-          ro_space->CommittedPhysicalMemory();
-    }
+  ReadOnlyArtifacts* artifacts = IsolateGroup::current()->read_only_artifacts();
+  if (artifacts) {
+    SharedReadOnlySpace* ro_space = artifacts->shared_read_only_space();
+    statistics->read_only_space_size_ = ro_space->CommittedMemory();
+    statistics->read_only_space_used_size_ = ro_space->Size();
+    statistics->read_only_space_physical_size_ =
+        ro_space->CommittedPhysicalMemory();
   }
 }
 

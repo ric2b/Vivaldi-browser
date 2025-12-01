@@ -56,7 +56,7 @@ class BrowserContextData : public base::SupportsUserData::Data {
   BrowserContextData(const BrowserContextData&) = delete;
   BrowserContextData& operator=(const BrowserContextData&) = delete;
 
-  ~BrowserContextData() override {}
+  ~BrowserContextData() override = default;
 
   static void StartProxying(Profile* profile,
                             const net::IsolationInfo& factory_isolation_info,
@@ -100,7 +100,7 @@ class BrowserContextData : public base::SupportsUserData::Data {
   }
 
  private:
-  BrowserContextData() {}
+  BrowserContextData() = default;
 
   std::set<std::unique_ptr<ProxyingURLLoaderFactory>, base::UniquePtrComparator>
       proxies_;
@@ -142,14 +142,6 @@ class ProxyingURLLoaderFactory::InProgressRequest
   void SetPriority(net::RequestPriority priority,
                    int32_t intra_priority_value) override {
     target_loader_->SetPriority(priority, intra_priority_value);
-  }
-
-  void PauseReadingBodyFromNet() override {
-    target_loader_->PauseReadingBodyFromNet();
-  }
-
-  void ResumeReadingBodyFromNet() override {
-    target_loader_->ResumeReadingBodyFromNet();
   }
 
   // network::mojom::URLLoaderClient:
@@ -328,8 +320,8 @@ class ProxyingURLLoaderFactory::InProgressRequest::ProxyResponseAdapter
   }
 
  private:
-  const raw_ptr<InProgressRequest, DanglingUntriaged> in_progress_request_;
-  const raw_ptr<net::HttpResponseHeaders, DanglingUntriaged> headers_;
+  const raw_ptr<InProgressRequest> in_progress_request_;
+  const raw_ptr<net::HttpResponseHeaders> headers_;
 };
 
 ProxyingURLLoaderFactory::InProgressRequest::InProgressRequest(
@@ -429,8 +421,12 @@ void ProxyingURLLoaderFactory::InProgressRequest::OnReceiveResponse(
     std::optional<mojo_base::BigBuffer> cached_metadata) {
   // Even though |head| is const we can get a non-const pointer to the headers
   // and modifications we made are passed to the target client.
-  ProxyResponseAdapter adapter(this, head->headers.get());
-  factory_->delegate_->ProcessResponse(&adapter, GURL() /* redirect_url */);
+  {
+    ProxyResponseAdapter adapter(this, head->headers.get());
+    factory_->delegate_->ProcessResponse(&adapter, GURL() /* redirect_url */);
+    // The `adapter` must be destroyed before moving the `head` in the
+    // `target_client_`.
+  }
   target_client_->OnReceiveResponse(std::move(head), std::move(body),
                                     std::move(cached_metadata));
 }
@@ -440,8 +436,12 @@ void ProxyingURLLoaderFactory::InProgressRequest::OnReceiveRedirect(
     network::mojom::URLResponseHeadPtr head) {
   // Even though |head| is const we can get a non-const pointer to the headers
   // and modifications we made are passed to the target client.
-  ProxyResponseAdapter adapter(this, head->headers.get());
-  factory_->delegate_->ProcessResponse(&adapter, redirect_info.new_url);
+  {
+    ProxyResponseAdapter adapter(this, head->headers.get());
+    factory_->delegate_->ProcessResponse(&adapter, redirect_info.new_url);
+    // The `adapter` must be destroyed before moving the `head` in the
+    // `target_client_`.
+  }
   target_client_->OnReceiveRedirect(redirect_info, std::move(head));
 
   // The request URL returned by ProxyResponseAdapter::GetURL() is updated

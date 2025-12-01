@@ -9,19 +9,17 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import type {CrExpandButtonElement, SettingsPrivacySandboxAdMeasurementSubpageElement, SettingsPrivacySandboxManageTopicsSubpageElement, SettingsPrivacySandboxPageElement, SettingsPrivacySandboxTopicsSubpageElement, SettingsSimpleConfirmationDialogElement} from 'chrome://settings/lazy_load.js';
 import {SettingsPrivacySandboxFledgeSubpageElement} from 'chrome://settings/lazy_load.js';
 import type {CrButtonElement, CrLinkRowElement, FirstLevelTopicsState, SettingsPrefsElement, TopicsState} from 'chrome://settings/settings.js';
-import {CrSettingsPrefs, HatsBrowserProxyImpl, MetricsBrowserProxyImpl, PrivacySandboxBrowserProxyImpl, Router, routes, TrustSafetyInteraction} from 'chrome://settings/settings.js';
+import {CrSettingsPrefs, MetricsBrowserProxyImpl, PrivacySandboxBrowserProxyImpl, Router, routes} from 'chrome://settings/settings.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {flushTasks, waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 import {eventToPromise, isChildVisible, isVisible, whenAttributeIs} from 'chrome://webui-test/test_util.js';
 
-import {TestHatsBrowserProxy} from './test_hats_browser_proxy.js';
 import {TestMetricsBrowserProxy} from './test_metrics_browser_proxy.js';
 import {TestPrivacySandboxBrowserProxy} from './test_privacy_sandbox_browser_proxy.js';
 
 suite('PrivacySandboxPage', function() {
   let page: SettingsPrivacySandboxPageElement;
   let settingsPrefs: SettingsPrefsElement;
-  let hatsBrowserProxy: TestHatsBrowserProxy;
   let metricsBrowserProxy: TestMetricsBrowserProxy;
 
   suiteSetup(function() {
@@ -35,14 +33,11 @@ suite('PrivacySandboxPage', function() {
   setup(function() {
     metricsBrowserProxy = new TestMetricsBrowserProxy();
     MetricsBrowserProxyImpl.setInstance(metricsBrowserProxy);
-    hatsBrowserProxy = new TestHatsBrowserProxy();
-    HatsBrowserProxyImpl.setInstance(hatsBrowserProxy);
 
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
     document.body.appendChild(settingsPrefs);
     page = document.createElement('settings-privacy-sandbox-page');
     page.prefs = settingsPrefs.prefs!;
-    Router.getInstance().navigateTo(routes.PRIVACY_SANDBOX);
     document.body.appendChild(page);
     return flushTasks();
   });
@@ -55,12 +50,6 @@ suite('PrivacySandboxPage', function() {
     assertTrue(isChildVisible(page, '#privacySandboxTopicsLinkRow'));
     assertTrue(isChildVisible(page, '#privacySandboxFledgeLinkRow'));
     assertTrue(isChildVisible(page, '#privacySandboxAdMeasurementLinkRow'));
-  });
-
-  test('hatsSurveyRequested', async function() {
-    const result =
-        await hatsBrowserProxy.whenCalled('trustSafetyInteractionOccurred');
-    assertEquals(TrustSafetyInteraction.OPENED_AD_PRIVACY, result);
   });
 
   test('privacySandboxTopicsRowSublabel', async function() {
@@ -201,6 +190,7 @@ suite('FledgeSubpage', function() {
   suiteSetup(function() {
     loadTimeData.overrideValues({
       isPrivacySandboxRestricted: false,
+      isPrivacySandboxAdsApiUxEnhancementsEnabled: false,
     });
     settingsPrefs = document.createElement('settings-prefs');
     return CrSettingsPrefs.initialized;
@@ -217,7 +207,6 @@ suite('FledgeSubpage', function() {
     document.body.appendChild(settingsPrefs);
     page = document.createElement('settings-privacy-sandbox-fledge-subpage');
     page.prefs = settingsPrefs.prefs!;
-    Router.getInstance().navigateTo(routes.PRIVACY_SANDBOX_FLEDGE);
     document.body.appendChild(page);
     await testPrivacySandboxBrowserProxy.whenCalled('getFledgeState');
     return flushTasks();
@@ -253,19 +242,128 @@ suite('FledgeSubpage', function() {
     ];
     assertDeepEquals(hrefs, expectedLinks);
   });
+
+  test('siteSuggestedAdsContentV2NotShown', async function() {
+    assertTrue(isVisible(page.shadowRoot!.querySelector('#fledgeToggle')));
+    assertFalse(
+        isVisible(page.shadowRoot!.querySelector('#siteSuggestedAdsToggleV2')));
+    assertTrue(isVisible(page.shadowRoot!.querySelector('#secondDescription')));
+    assertFalse(
+        isVisible(page.shadowRoot!.querySelector('#secondDescriptionV2')));
+    assertTrue(isVisible(page.shadowRoot!.querySelector('#footer')));
+    assertFalse(isVisible(page.shadowRoot!.querySelector('#footerV2')));
+    assertFalse(isVisible(page.shadowRoot!.querySelector('#disclaimer')));
+    const learnMoreLink =
+        page.shadowRoot!.querySelector<HTMLElement>('#learnMoreLink');
+    assertTrue(!!learnMoreLink);
+    assertTrue(isVisible(learnMoreLink));
+    assertFalse(isVisible(page.shadowRoot!.querySelector('#learnMoreLinkV2')));
+    learnMoreLink!.click();
+    await flushTasks();
+    assertTrue(isVisible(page.shadowRoot!.querySelector('#body')));
+    assertFalse(isVisible(page.shadowRoot!.querySelector('#bodyV2')));
+  });
 });
 
+suite('SiteSuggestedAdsSubpageAdsApiUxEnhancement', function() {
+  let page: SettingsPrivacySandboxFledgeSubpageElement;
+  let testPrivacySandboxBrowserProxy: TestPrivacySandboxBrowserProxy;
+  let settingsPrefs: SettingsPrefsElement;
+  let metricsBrowserProxy: TestMetricsBrowserProxy;
+
+  suiteSetup(function() {
+    loadTimeData.overrideValues({
+      isPrivacySandboxRestricted: false,
+      isPrivacySandboxAdsApiUxEnhancementsEnabled: true,
+    });
+    settingsPrefs = document.createElement('settings-prefs');
+    return CrSettingsPrefs.initialized;
+  });
+
+  setup(async function() {
+    metricsBrowserProxy = new TestMetricsBrowserProxy();
+    MetricsBrowserProxyImpl.setInstance(metricsBrowserProxy);
+    testPrivacySandboxBrowserProxy = new TestPrivacySandboxBrowserProxy();
+    testPrivacySandboxBrowserProxy.setFledgeState({
+      joiningSites: ['test-site-one.com'],
+      blockedSites: ['test-site-two.com'],
+    });
+    PrivacySandboxBrowserProxyImpl.setInstance(testPrivacySandboxBrowserProxy);
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+    document.body.appendChild(settingsPrefs);
+    page = document.createElement('settings-privacy-sandbox-fledge-subpage');
+    page.prefs = settingsPrefs.prefs!;
+    Router.getInstance().navigateTo(routes.PRIVACY_SANDBOX_FLEDGE);
+    document.body.appendChild(page);
+    await testPrivacySandboxBrowserProxy.whenCalled('getFledgeState');
+    return flushTasks();
+  });
+
+  teardown(function() {
+    Router.getInstance().resetRouteForTesting();
+  });
+
+  test('footerLinksV2', async function() {
+    assertTrue(isVisible(page.shadowRoot!.querySelector('#footerV2')));
+    const links = page.shadowRoot!.querySelectorAll<HTMLAnchorElement>(
+        '#footerV2 a[href]');
+    assertEquals(links.length, 2, 'footer should contains two links');
+    links.forEach(
+        link => assertEquals(
+            link.getAttribute('aria-description'),
+            loadTimeData.getString('opensInNewTab'),
+            'the link should indicate that it will be opened in a new tab'));
+    const hrefs = Array.from<HTMLAnchorElement>(links).map(link => link.href);
+    const expectedLinks = [
+      'chrome://settings/adPrivacy/interests',
+      'chrome://settings/cookies',
+    ];
+    assertDeepEquals(hrefs, expectedLinks);
+  });
+
+  test('siteSuggestedAdsContentV2', async function() {
+    assertFalse(isVisible(page.shadowRoot!.querySelector('#fledgeToggle')));
+    assertTrue(
+        isVisible(page.shadowRoot!.querySelector('#siteSuggestedAdsToggleV2')));
+    assertFalse(
+        isVisible(page.shadowRoot!.querySelector('#secondDescription')));
+    assertTrue(
+        isVisible(page.shadowRoot!.querySelector('#secondDescriptionV2')));
+    assertFalse(isVisible(page.shadowRoot!.querySelector('#footer')));
+    assertTrue(isVisible(page.shadowRoot!.querySelector('#footerV2')));
+    assertTrue(isVisible(page.shadowRoot!.querySelector('#disclaimer')));
+    assertFalse(isVisible(page.shadowRoot!.querySelector('#learnMoreLink')));
+    const learnMoreLinkV2 =
+        page.shadowRoot!.querySelector<HTMLElement>('#learnMoreLinkV2');
+    assertTrue(!!learnMoreLinkV2);
+    assertTrue(isVisible(learnMoreLinkV2));
+    learnMoreLinkV2.click();
+    await flushTasks();
+    assertFalse(isVisible(page.shadowRoot!.querySelector('#body')));
+    assertTrue(isVisible(page.shadowRoot!.querySelector('#bodyV2')));
+  });
+
+  test('privacyPolicyLink', async function() {
+    const privacyPolicyLink =
+        page.shadowRoot!.querySelector<HTMLElement>('#privacyPolicyLink');
+    assertTrue(!!privacyPolicyLink);
+    privacyPolicyLink!.click();
+    assertEquals(
+        'Settings.PrivacySandbox.SiteSuggestedAds.PrivacyPolicyLinkClicked',
+        await metricsBrowserProxy.whenCalled('recordAction'));
+  });
+});
 
 suite('TopicsSubpage', function() {
   let page: SettingsPrivacySandboxTopicsSubpageElement;
   let testPrivacySandboxBrowserProxy: TestPrivacySandboxBrowserProxy;
   let settingsPrefs: SettingsPrefsElement;
   let metricsBrowserProxy: TestMetricsBrowserProxy;
-  let hatsBrowserProxy: TestHatsBrowserProxy;
 
   suiteSetup(function() {
     loadTimeData.overrideValues({
       isPrivacySandboxRestricted: false,
+      isPrivacySandboxAdsApiUxEnhancementsEnabled: false,
     });
     settingsPrefs = document.createElement('settings-prefs');
     return CrSettingsPrefs.initialized;
@@ -277,8 +375,6 @@ suite('TopicsSubpage', function() {
     testPrivacySandboxBrowserProxy.setTestTopicState(getTestTopicsState());
     metricsBrowserProxy = new TestMetricsBrowserProxy();
     MetricsBrowserProxyImpl.setInstance(metricsBrowserProxy);
-    hatsBrowserProxy = new TestHatsBrowserProxy();
-    HatsBrowserProxyImpl.setInstance(hatsBrowserProxy);
 
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
     document.body.appendChild(settingsPrefs);
@@ -325,12 +421,6 @@ suite('TopicsSubpage', function() {
       }],
     };
   }
-
-  test('hatsSurveyRequested', async function() {
-    const result =
-        await hatsBrowserProxy.whenCalled('trustSafetyInteractionOccurred');
-    assertEquals(TrustSafetyInteraction.OPENED_TOPICS_SUBPAGE, result);
-  });
 
   // When prefs.privacy_sandbox.m1.topics_enabled value is false
   // and Proactive Topic Blocking feature is turned on,
@@ -901,6 +991,144 @@ suite('TopicsSubpage', function() {
     document.body.appendChild(manageTopicsPage);
     assertEquals(
         Router.getInstance().getCurrentRoute(), routes.PRIVACY_SANDBOX_TOPICS);
+  });
+});
+
+suite('TopicsSubpageAdsApiUxEnhancementsDisabled', function() {
+  let page: SettingsPrivacySandboxTopicsSubpageElement;
+  let testPrivacySandboxBrowserProxy: TestPrivacySandboxBrowserProxy;
+  let settingsPrefs: SettingsPrefsElement;
+  let metricsBrowserProxy: TestMetricsBrowserProxy;
+
+  suiteSetup(function() {
+    loadTimeData.overrideValues({
+      isPrivacySandboxRestricted: false,
+      isPrivacySandboxAdsApiUxEnhancementsEnabled: false,
+    });
+    settingsPrefs = document.createElement('settings-prefs');
+    return CrSettingsPrefs.initialized;
+  });
+
+  setup(async function() {
+    testPrivacySandboxBrowserProxy = new TestPrivacySandboxBrowserProxy();
+    PrivacySandboxBrowserProxyImpl.setInstance(testPrivacySandboxBrowserProxy);
+    metricsBrowserProxy = new TestMetricsBrowserProxy();
+    MetricsBrowserProxyImpl.setInstance(metricsBrowserProxy);
+
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+    document.body.appendChild(settingsPrefs);
+    page = document.createElement('settings-privacy-sandbox-topics-subpage');
+    page.prefs = settingsPrefs.prefs!;
+    page.set('prefs.privacy_sandbox.m1.topics_enabled', {value: true});
+    Router.getInstance().navigateTo(routes.PRIVACY_SANDBOX_TOPICS);
+    document.body.appendChild(page);
+    await testPrivacySandboxBrowserProxy.whenCalled('getTopicsState');
+    return flushTasks();
+  });
+
+  teardown(function() {
+    Router.getInstance().resetRouteForTesting();
+  });
+
+  test('footerLinksV2NotShown', async function() {
+    assertTrue(isVisible(page.shadowRoot!.querySelector('#footer')));
+    const links =
+        page.shadowRoot!.querySelectorAll<HTMLAnchorElement>('#footer a[href]');
+    assertEquals(links.length, 3, 'footer should contains three links');
+    links.forEach(
+        link => assertEquals(
+            link.getAttribute('aria-description'),
+            loadTimeData.getString('opensInNewTab'),
+            'the link should indicate that it will be opened in a new tab'));
+    const hrefs = Array.from<HTMLAnchorElement>(links).map(link => link.href);
+    const expectedLinks = [
+      'chrome://settings/adPrivacy/sites',
+      'chrome://settings/cookies',
+      'https://support.google.com/chrome?p=ad_privacy',
+    ];
+    assertDeepEquals(hrefs, expectedLinks);
+  });
+
+  test('TopicsPageContentV2NotShown', async function() {
+    assertTrue(isVisible(page.shadowRoot!.querySelector('#footer')));
+    assertFalse(isVisible(page.shadowRoot!.querySelector('#footerV2')));
+    const footerDisclaimer =
+        page.shadowRoot!.querySelector('#footerDisclaimer');
+    assertFalse(isVisible(footerDisclaimer));
+  });
+});
+
+suite('TopicsSubpageAdsApiUxEnhancements', function() {
+  let page: SettingsPrivacySandboxTopicsSubpageElement;
+  let testPrivacySandboxBrowserProxy: TestPrivacySandboxBrowserProxy;
+  let settingsPrefs: SettingsPrefsElement;
+  let metricsBrowserProxy: TestMetricsBrowserProxy;
+
+  suiteSetup(function() {
+    loadTimeData.overrideValues({
+      isPrivacySandboxRestricted: false,
+      isPrivacySandboxAdsApiUxEnhancementsEnabled: true,
+    });
+    settingsPrefs = document.createElement('settings-prefs');
+    return CrSettingsPrefs.initialized;
+  });
+
+  setup(async function() {
+    testPrivacySandboxBrowserProxy = new TestPrivacySandboxBrowserProxy();
+    PrivacySandboxBrowserProxyImpl.setInstance(testPrivacySandboxBrowserProxy);
+    metricsBrowserProxy = new TestMetricsBrowserProxy();
+    MetricsBrowserProxyImpl.setInstance(metricsBrowserProxy);
+
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+    document.body.appendChild(settingsPrefs);
+    page = document.createElement('settings-privacy-sandbox-topics-subpage');
+    page.prefs = settingsPrefs.prefs!;
+    page.set('prefs.privacy_sandbox.m1.topics_enabled', {value: true});
+    Router.getInstance().navigateTo(routes.PRIVACY_SANDBOX_TOPICS);
+    document.body.appendChild(page);
+    await testPrivacySandboxBrowserProxy.whenCalled('getTopicsState');
+    return flushTasks();
+  });
+
+  teardown(function() {
+    Router.getInstance().resetRouteForTesting();
+  });
+
+
+  test('footerLinksV2', async function() {
+    assertTrue(isVisible(page.shadowRoot!.querySelector('#footerV2')));
+    const links = page.shadowRoot!.querySelectorAll<HTMLAnchorElement>(
+        '#footerV2 a[href]');
+    assertEquals(links.length, 2, 'footer should contains three links');
+    links.forEach(
+        link => assertEquals(
+            link.getAttribute('aria-description'),
+            loadTimeData.getString('opensInNewTab'),
+            'the link should indicate that it will be opened in a new tab'));
+    const hrefs = Array.from<HTMLAnchorElement>(links).map(link => link.href);
+    const expectedLinks = [
+      'chrome://settings/adPrivacy/sites',
+      'chrome://settings/cookies',
+    ];
+    assertDeepEquals(hrefs, expectedLinks);
+  });
+
+  test('TopicsPageContentV2', async function() {
+    assertFalse(isVisible(page.shadowRoot!.querySelector('#footer')));
+    assertTrue(isVisible(page.shadowRoot!.querySelector('#footerV2')));
+    const footerDisclaimer =
+        page.shadowRoot!.querySelector('#footerDisclaimer');
+    assertTrue(isVisible(footerDisclaimer));
+  });
+
+  test('privacyPolicyLink', async function() {
+    const privacyPolicyLink =
+        page.shadowRoot!.querySelector<HTMLElement>('#privacyPolicyLink');
+    assertTrue(!!privacyPolicyLink);
+    privacyPolicyLink!.click();
+    assertEquals(
+        'Settings.PrivacySandbox.AdTopics.PrivacyPolicyLinkClicked',
+        await metricsBrowserProxy.whenCalled('recordAction'));
   });
 });
 
@@ -1730,7 +1958,6 @@ suite('FledgeSubpageSeeAllSites', function() {
 suite('AdMeasurementSubpage', function() {
   let page: SettingsPrivacySandboxAdMeasurementSubpageElement;
   let settingsPrefs: SettingsPrefsElement;
-  let hatsBrowserProxy: TestHatsBrowserProxy;
   let metricsBrowserProxy: TestMetricsBrowserProxy;
 
   suiteSetup(function() {
@@ -1744,27 +1971,18 @@ suite('AdMeasurementSubpage', function() {
   setup(function() {
     metricsBrowserProxy = new TestMetricsBrowserProxy();
     MetricsBrowserProxyImpl.setInstance(metricsBrowserProxy);
-    hatsBrowserProxy = new TestHatsBrowserProxy();
-    HatsBrowserProxyImpl.setInstance(hatsBrowserProxy);
 
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
     document.body.appendChild(settingsPrefs);
     page = document.createElement(
         'settings-privacy-sandbox-ad-measurement-subpage');
     page.prefs = settingsPrefs.prefs!;
-    Router.getInstance().navigateTo(routes.PRIVACY_SANDBOX_AD_MEASUREMENT);
     document.body.appendChild(page);
     return flushTasks();
   });
 
   teardown(function() {
     Router.getInstance().resetRouteForTesting();
-  });
-
-  test('hatsSurveyRequested', async function() {
-    const result =
-        await hatsBrowserProxy.whenCalled('trustSafetyInteractionOccurred');
-    assertEquals(TrustSafetyInteraction.OPENED_AD_MEASUREMENT_SUBPAGE, result);
   });
 
   test('enableAdMeasurementToggle', async function() {
@@ -1827,5 +2045,87 @@ suite('AdMeasurementSubpage', function() {
     await flushTasks();
     assertFalse(page.$.adMeasurementToggle.checked);
     assertTrue(page.$.adMeasurementToggle.controlDisabled());
+  });
+});
+
+suite('AdMeasurementSubpageAdsApiUxEnhancementsDisabled', function() {
+  let page: SettingsPrivacySandboxAdMeasurementSubpageElement;
+  let settingsPrefs: SettingsPrefsElement;
+
+  suiteSetup(function() {
+    loadTimeData.overrideValues({
+      isPrivacySandboxRestricted: false,
+      isPrivacySandboxAdsApiUxEnhancementsEnabled: false,
+    });
+    settingsPrefs = document.createElement('settings-prefs');
+    return CrSettingsPrefs.initialized;
+  });
+
+  setup(function() {
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+    document.body.appendChild(settingsPrefs);
+    page = document.createElement(
+        'settings-privacy-sandbox-ad-measurement-subpage');
+    page.prefs = settingsPrefs.prefs!;
+    Router.getInstance().navigateTo(routes.PRIVACY_SANDBOX_AD_MEASUREMENT);
+    document.body.appendChild(page);
+    return flushTasks();
+  });
+
+  teardown(function() {
+    Router.getInstance().resetRouteForTesting();
+  });
+
+  test('contentV2NotShown', async function() {
+    const disclaimer = page.shadowRoot!.querySelector('#disclaimer');
+    assertFalse(isVisible(disclaimer));
+  });
+});
+
+suite('AdMeasurementSubpageAdsApiUxEnhancements', function() {
+  let page: SettingsPrivacySandboxAdMeasurementSubpageElement;
+  let settingsPrefs: SettingsPrefsElement;
+  let metricsBrowserProxy: TestMetricsBrowserProxy;
+
+  suiteSetup(function() {
+    loadTimeData.overrideValues({
+      isPrivacySandboxRestricted: false,
+      isPrivacySandboxAdsApiUxEnhancementsEnabled: true,
+    });
+    settingsPrefs = document.createElement('settings-prefs');
+    return CrSettingsPrefs.initialized;
+  });
+
+  setup(function() {
+    metricsBrowserProxy = new TestMetricsBrowserProxy();
+    MetricsBrowserProxyImpl.setInstance(metricsBrowserProxy);
+
+    document.body.innerHTML = window.trustedTypes!.emptyHTML;
+    document.body.appendChild(settingsPrefs);
+    page = document.createElement(
+        'settings-privacy-sandbox-ad-measurement-subpage');
+    page.prefs = settingsPrefs.prefs!;
+    Router.getInstance().navigateTo(routes.PRIVACY_SANDBOX_AD_MEASUREMENT);
+    document.body.appendChild(page);
+    return flushTasks();
+  });
+
+  teardown(function() {
+    Router.getInstance().resetRouteForTesting();
+  });
+
+  test('contentV2', async function() {
+    const disclaimer = page.shadowRoot!.querySelector('#disclaimer');
+    assertTrue(isVisible(disclaimer));
+  });
+
+  test('privacyPolicyLink', async function() {
+    const privacyPolicyLink =
+        page.shadowRoot!.querySelector<HTMLElement>('#privacyPolicyLink');
+    assertTrue(!!privacyPolicyLink);
+    privacyPolicyLink!.click();
+    assertEquals(
+        'Settings.PrivacySandbox.AdMeasurement.PrivacyPolicyLinkClicked',
+        await metricsBrowserProxy.whenCalled('recordAction'));
   });
 });

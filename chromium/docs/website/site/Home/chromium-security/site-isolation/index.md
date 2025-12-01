@@ -91,8 +91,8 @@ a way to compromise a renderer process, for several reasons:
   overruns [can be turned into an
   exploit](https://googleprojectzero.blogspot.com/2014/08/the-poisoned-nul-byte-2014-edition.html).
 * Deployed mitigations (like
-  [ASLR](http://en.wikipedia.org/wiki/Address_space_layout_randomization)
-  or [DEP](http://en.wikipedia.org/wiki/Data_Execution_Prevention))
+  [ASLR](https://en.wikipedia.org/wiki/Address_space_layout_randomization)
+  or [DEP](https://en.wikipedia.org/wiki/Data_Execution_Prevention))
   are [not always
   effective](https://googleprojectzero.blogspot.com/2019/04/virtually-unlimited-memory-escaping.html).
 
@@ -331,20 +331,20 @@ practice, you can follow the steps below:
      <http://csreis.github.io/tests/cross-site-iframe.html>.
    * Click the "Go cross-site (complex page)" button.
    * The main page will now be on the http://csreis.github.io site
-     and the subframe will be on the https://chromium.org site.
+     and the subframe will be on the https://www.chromium.org site.
 2. Open Chrome's Task Manager: Chrome Menu -&gt; More tools -&gt; Task
    manager (Shift+Esc).
 3. Verify that the main page and the subframe are listed in separate
    rows associated with different processes. For example:
    * Tab: creis.github.io/tests/cross-site-iframe.html - Process ID = 1234
-   * Subframe: https://chromium.org - Process ID = 5678
+   * Subframe: https://www.chromium.org - Process ID = 5678
 
 If you see the subframe process in Chrome's Task Manager, then Site Isolation is
 correctly enabled. These steps work when using the "Isolating all sites"
 approach above (e.g., --site-per-process). They also work when using the
 "Isolating certain sites" approach above (e.g., --isolate-origins), as long as
 the list of origins provided includes either http://csreis.github.io or
-https://chromium.org.
+https://www.chromium.org.
 
 ## Recommendations for Web Developers
 

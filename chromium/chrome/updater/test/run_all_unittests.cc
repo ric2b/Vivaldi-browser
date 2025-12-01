@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "base/base_paths.h"
 #include "base/check.h"
 #include "base/command_line.h"
@@ -185,8 +190,6 @@ int main(int argc, char** argv) {
   SkipFallbackNetworkFetcher();
 
 #if BUILDFLAG(IS_WIN)
-  updater::test::MaybeExcludePathsFromWindowsDefender();
-
   VLOG(0) << "Process priority: " << base::Process::Current().GetOSPriority();
   VLOG(0) << updater::GetUACState();
 

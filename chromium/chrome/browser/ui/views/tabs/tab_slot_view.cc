@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/views/tabs/tab_slot_view.h"
+
 #include "ui/base/metadata/metadata_impl_macros.h"
 
 TabSlotView::TabSlotView() = default;
@@ -14,6 +15,10 @@ gfx::Rect TabSlotView::GetAnchorBoundsInScreen() const {
   // Slightly inset anchor bounds to let bubbles hug the tabs more closely.
   bounds.Inset(gfx::Insets::VH(2, 0));
   return bounds;
+}
+
+void TabSlotView::SetGroup(std::optional<tab_groups::TabGroupId> group) {
+  group_ = group;
 }
 
 BEGIN_METADATA(TabSlotView)

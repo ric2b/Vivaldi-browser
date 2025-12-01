@@ -46,7 +46,7 @@ try_.builder(
     # TODO: crbug.com/370594503 - Add documents for compile-size.
     description_html = "Measures and prevents unexpected compile input size " +
                        "growth. See docs for details.",
-    executable = "recipe:build_size_trybot",
+    executable = "recipe:compile_size_trybot",
     gn_args = gn_args.config(
         configs = [
             "release_try_builder",
@@ -57,8 +57,7 @@ try_.builder(
             "x64",
         ],
     ),
-    # TODO: crbug.com/40190002 - Make builderful before productionizing.
-    builderless = True,
+    builderless = False,
     cores = 8,
     contact_team_email = "build@chromium.org",
     properties = {
@@ -71,6 +70,11 @@ try_.builder(
             ],
         },
     },
+    # TODO: crbug.com/40190002 - make this required once confirming there are
+    # no false rejections.
+    tryjob = try_.job(
+        experiment_percentage = 100,
+    ),
 )
 
 try_.builder(
@@ -119,6 +123,20 @@ try_.builder(
             "x64",
         ],
     ),
+)
+
+try_.builder(
+    name = "linux-trees-in-viz-rel",
+    mirrors = ["ci/linux-trees-in-viz-rel"],
+    gn_args = gn_args.config(
+        configs = [
+            "ci/linux-trees-in-viz-rel",
+            "try_builder",
+            "no_symbols",
+        ],
+    ),
+    contact_team_email = "chrome-compositor@google.com",
+    siso_remote_jobs = siso.remote_jobs.LOW_JOBS_FOR_CQ,
 )
 
 try_.builder(
@@ -174,6 +192,21 @@ try_.builder(
             "third_party/openscreen/.+",
         ],
     ),
+)
+
+try_.builder(
+    name = "linux-oi-rel",
+    mirrors = [
+        "ci/Linux Builder",
+        "ci/linux-oi-rel",
+    ],
+    gn_args = gn_args.config(
+        configs = [
+            "ci/Linux Builder",
+        ],
+    ),
+    contact_team_email = "chrome-security-architecture@google.com",
+    siso_remote_jobs = siso.remote_jobs.LOW_JOBS_FOR_CQ,
 )
 
 try_.builder(
@@ -465,6 +498,22 @@ try_.compilator_builder(
 )
 
 try_.builder(
+    name = "linux-rel-test-selection",
+    description_html = "Experimental " + linkify_builder("try", "linux-rel", "chromium") + " builder with smart tests selection. go/chrome-sts",
+    mirrors = builder_config.copy_from("linux-rel"),
+    gn_args = "try/linux-rel",
+    builderless = False,
+    contact_team_email = "chrome-sts@google.com",
+    experiments = {
+        "chromium_rts.rts": 100,
+    },
+    tryjob = try_.job(
+        experiment_percentage = 10,
+    ),
+    use_clang_coverage = True,
+)
+
+try_.builder(
     name = "linux-wayland-rel",
     branch_selector = branches.selector.LINUX_BRANCHES,
     mirrors = [
@@ -489,6 +538,7 @@ try_.builder(
             "chrome/browser/.+(ui|browser)test.+",
             "chrome/browser/ui/views/.+test.+",
             "chrome/browser/ui/views/tabs/.+",
+            "testing/xvfb\\.py",
             "third_party/wayland/.+",
             "third_party/wayland-protocols/.+",
             "ui/ozone/platform/wayland/.+",
@@ -598,7 +648,6 @@ try_.orchestrator_builder(
     experiments = {
         # go/nplus1shardsproposal
         "chromium.add_one_test_shard": 10,
-        "chromium.compilator_can_outlive_parent": 100,
         # crbug/940930
         "chromium.enable_cleandead": 100,
         # b/346598710
@@ -716,6 +765,22 @@ try_.builder(
     gn_args = gn_args.config(
         configs = [
             "debug_try_builder",
+            # Enable the instance tracer in a CQ compile-only builder, since
+            # developers use this config, but it otherwise has no build coverage
+            # and periodically breaks.
+            #
+            # However, do not include this in Linux Builder (dbg), since there
+            # is a runtime performance cost with the instance tracer enabled:
+            # ~10% in release builds and likely much higher for debug builds.
+            #
+            # While this means there is a delta between these two builders, this
+            # should not be problematic in practice since:
+            # - there is a lot of remaining coverage for builds without the
+            #   instance tracer enabled
+            # - a successful build with the instance tracer enabled almost
+            #   always implies a successful build with the instance tracer
+            #   disabled, while the reverse is not true.
+            "enable_backup_ref_ptr_instance_tracer",
             "remoteexec",
             "linux",
             "x64",
@@ -854,6 +919,19 @@ try_.builder(
 )
 
 try_.builder(
+    name = "linux-modules-compile-fyi-rel",
+    mirrors = [
+        "ci/linux-modules-compile-fyi-rel",
+    ],
+    gn_args = "ci/linux-modules-compile-fyi-rel",
+    cores = 32,
+    ssd = True,
+    contact_team_email = "chrome-build-team@google.com",
+    execution_timeout = 6 * time.hour,
+    siso_keep_going = True,
+)
+
+try_.builder(
     name = "linux_upload_clang",
     executable = "recipe:chromium_toolchain/package_clang",
     gn_args = gn_args.config(
@@ -914,16 +992,27 @@ try_.builder(
 try_.builder(
     name = "tricium-metrics-analysis",
     executable = "recipe:tricium_metrics",
+    tryjob = try_.job(
+        custom_cq_run_modes = [cq.MODE_NEW_PATCHSET_RUN],
+        disable_reuse = True,
+        experiment_percentage = 100,
+        location_filters = [
+            cq.location_filter(path_regexp = r".*\.(json|xml)"),
+        ],
+    ),
 )
 
 try_.builder(
     name = "tricium-oilpan-analysis",
     executable = "recipe:tricium_oilpan",
-)
-
-try_.builder(
-    name = "tricium-simple",
-    executable = "recipe:tricium_simple",
+    tryjob = try_.job(
+        custom_cq_run_modes = [cq.MODE_NEW_PATCHSET_RUN],
+        disable_reuse = True,
+        experiment_percentage = 100,
+        location_filters = [
+            cq.location_filter(path_regexp = r".*\.(c|cc|cpp|h)"),
+        ],
+    ),
 )
 
 try_.gpu.optional_tests_builder(

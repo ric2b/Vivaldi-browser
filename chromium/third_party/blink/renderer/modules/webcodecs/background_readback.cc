@@ -49,8 +49,8 @@ SkImageInfo GetImageInfoForFrame(const media::VideoFrame& frame,
 
 gpu::raster::RasterInterface* GetSharedGpuRasterInterface() {
   auto wrapper = blink::SharedGpuContext::ContextProviderWrapper();
-  if (wrapper && wrapper->ContextProvider()) {
-    auto* raster_provider = wrapper->ContextProvider()->RasterContextProvider();
+  if (wrapper) {
+    auto* raster_provider = wrapper->ContextProvider().RasterContextProvider();
     if (raster_provider)
       return raster_provider->RasterInterface();
   }
@@ -210,12 +210,9 @@ void BackgroundReadback::ReadbackRGBTextureBackedFrameToMemory(
   int rgba_stide = result->stride(media::VideoFrame::Plane::kARGB);
   DCHECK_GT(rgba_stide, 0);
 
-  auto origin = txt_frame->metadata().texture_origin_is_top_left
-                    ? kTopLeft_GrSurfaceOrigin
-                    : kBottomLeft_GrSurfaceOrigin;
-
   gfx::Point src_point;
   auto shared_image = txt_frame->shared_image();
+  auto origin = shared_image->surface_origin();
   ri->WaitSyncTokenCHROMIUM(txt_frame->acquire_sync_token().GetConstData());
 
   gfx::Size texture_size = txt_frame->coded_size();
@@ -289,11 +286,8 @@ void BackgroundReadback::ReadbackRGBTextureBackedFrameToBuffer(
 
   SkImageInfo info = GetImageInfoForFrame(*txt_frame, src_rect.size());
   gfx::Point src_point = src_rect.origin();
-  auto origin = txt_frame->metadata().texture_origin_is_top_left
-                    ? kTopLeft_GrSurfaceOrigin
-                    : kBottomLeft_GrSurfaceOrigin;
-
   auto shared_image = txt_frame->shared_image();
+  auto origin = shared_image->surface_origin();
   ri->WaitSyncTokenCHROMIUM(txt_frame->acquire_sync_token().GetConstData());
 
   gfx::Size texture_size = txt_frame->coded_size();
@@ -370,8 +364,8 @@ scoped_refptr<media::VideoFrame> SyncReadbackThread::ReadbackToFrame(
     return nullptr;
 
   auto* ri = context_provider_->RasterInterface();
-  return media::ReadbackTextureBackedFrameToMemorySync(
-      *frame, ri, context_provider_->GetCapabilities(), &result_frame_pool_);
+  return media::ReadbackTextureBackedFrameToMemorySync(*frame, ri,
+                                                       &result_frame_pool_);
 }
 
 bool SyncReadbackThread::ReadbackToBuffer(
@@ -395,9 +389,9 @@ bool SyncReadbackThread::ReadbackToBuffer(
         media::VideoFrame::SampleSize(dest_layout.Format(), i);
     gfx::Rect plane_src_rect = PlaneRect(src_rect, sample_size);
     uint8_t* dest_pixels = dest_buffer.data() + dest_layout.Offset(i);
-    if (!media::ReadbackTexturePlaneToMemorySync(
-            *frame, i, plane_src_rect, dest_pixels, dest_layout.Stride(i), ri,
-            context_provider_->GetCapabilities())) {
+    if (!media::ReadbackTexturePlaneToMemorySync(*frame, i, plane_src_rect,
+                                                 dest_pixels,
+                                                 dest_layout.Stride(i), ri)) {
       // It's possible to fail after copying some but not all planes, leaving
       // the output buffer in a corrupt state D:
       return false;

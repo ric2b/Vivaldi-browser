@@ -13,6 +13,7 @@
 
 #include "base/feature_list.h"
 #include "base/gtest_prod_util.h"
+#include "base/rand_util.h"
 #include "base/time/time.h"
 #include "base/types/pass_key.h"
 #include "crypto/process_bound_string.h"
@@ -240,17 +241,8 @@ class NET_EXPORT CanonicalCookie : public CookieBase {
   bool IsEquivalent(const CanonicalCookie& ecc) const {
     // It seems like it would make sense to take secure, httponly, and samesite
     // into account, but the RFC doesn't specify this.
-    // NOTE: Keep this logic in-sync with TrimDuplicateCookiesForKey().
 
-    // A host cookie will never match a domain cookie or vice-versa, this is
-    // because the "host-only-flag" is encoded within the `domain` field of the
-    // respective keys. So we don't need to explicitly check if ecc is also host
-    // or domain.
-    if (IsHostCookie()) {
-      return UniqueKey() == ecc.UniqueKey();
-    }
-    // Is domain cookie
-    return UniqueDomainKey() == ecc.UniqueDomainKey();
+    return UniqueKey() == ecc.UniqueKey();
   }
 
   // Checks a looser set of equivalency rules than 'IsEquivalent()' in order
@@ -311,13 +303,6 @@ class NET_EXPORT CanonicalCookie : public CookieBase {
   static base::Time ValidateAndAdjustExpiryDate(const base::Time& expiry_date,
                                                 const base::Time& creation_date,
                                                 net::CookieSourceScheme scheme);
-
-  // Cookie ordering methods.
-
-  // Returns true if the cookie is less than |other|, considering only name,
-  // domain and path. In particular, two equivalent cookies (see IsEquivalent())
-  // are identical for PartialCompare().
-  bool PartialCompare(const CanonicalCookie& other) const;
 
   // Return whether this object is a valid CanonicalCookie().  Invalid
   // cookies may be constructed by the detailed constructor.
@@ -419,6 +404,7 @@ class NET_EXPORT CanonicalCookie : public CookieBase {
   base::Time last_update_date_;
   CookiePriority priority_{COOKIE_PRIORITY_MEDIUM};
   CookieSourceType source_type_{CookieSourceType::kUnknown};
+  base::MetricsSubSampler metrics_subsampler_;
 };
 
 // Used to pass excluded cookie information when it's possible that the

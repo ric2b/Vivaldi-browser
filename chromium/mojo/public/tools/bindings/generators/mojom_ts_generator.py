@@ -196,6 +196,10 @@ def _GetWebUiModulePath(module):
   return '/{}/'.format(path.strip('/'))
 
 
+def _GetTypemapImport(typemap):
+  return Path(typemap['converter_import']).with_suffix('.js').name
+
+
 class TypeScriptStylizer(generator.Stylizer):
   def StylizeConstant(self, mojom_name):
     return generator.ToUpperSnakeCase(mojom_name)
@@ -260,6 +264,7 @@ class Generator(generator.Generator):
         "is_primary_nullable_value_kind_packed_field":
         pack.IsPrimaryNullableValueKindPackedField,
         "constant_value": self._GetConstantValue,
+        "converter_import": _GetTypemapImport,
         "default_ts_value": self._GetDefaultValue,
         "imports_for_kind": self._GetImportsForKind,
         "is_bool_kind": mojom.IsBoolKind,
@@ -534,7 +539,7 @@ class Generator(generator.Generator):
     if field.kind in mojom.PRIMITIVES:
       return _kind_to_javascript_default_value[field.kind]
     if mojom.IsEnumKind(field.kind):
-      return "0"
+      return "0" if field.kind.min_value is None else str(field.kind.min_value)
     return "null"
 
   def _TypeScriptSanitizeIdentifier(self, identifier):

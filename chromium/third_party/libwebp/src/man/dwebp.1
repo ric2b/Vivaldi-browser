@@ -1,5 +1,5 @@
 .\"                                      Hey, EMACS: -*- nroff -*-
-.TH DWEBP 1 "November 17, 2021"
+.TH DWEBP 1 "July 18, 2024"
 .SH NAME
 dwebp \- decompress a WebP file to an image file
 .SH SYNOPSIS
@@ -108,12 +108,12 @@ Print extra information (decoding time in particular).
 .B \-noasm
 Disable all assembly optimizations.
 
-.SH BUGS
-Please report all bugs to the issue tracker:
-https://bugs.chromium.org/p/webp
-.br
-Patches welcome! See this page to get started:
-https://www.webmproject.org/code/contribute/submitting\-patches/
+.SH EXIT STATUS
+If there were no problems during execution, \fBdwebp\fP exits with the value of
+the C constant \fBEXIT_SUCCESS\fP. This is usually zero.
+.PP
+If an error occurs, \fBdwebp\fP exits with the value of the C constant
+\fBEXIT_FAILURE\fP. This is usually one.
 
 .SH EXAMPLES
 dwebp picture.webp \-o output.png
@@ -132,6 +132,13 @@ https://chromium.googlesource.com/webm/libwebp
 .PP
 This manual page was written by Pascal Massimino <pascal.massimino@gmail.com>,
 for the Debian project (and may be used by others).
+
+.SH REPORTING BUGS
+Please report all bugs to the issue tracker:
+https://issues.webmproject.org
+.br
+Patches welcome! See this page to get started:
+https://www.webmproject.org/code/contribute/submitting\-patches/
 
 .SH SEE ALSO
 .BR cwebp (1),

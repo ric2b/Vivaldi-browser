@@ -53,7 +53,7 @@ class PriceTrackingPromoMediatorTest : public PlatformTest {
         IOSChromeFaviconLoaderFactory::GetInstance(),
         IOSChromeFaviconLoaderFactory::GetDefaultFactory());
 
-    profile_ = std::move(builder).Build();
+    profile_ = profile_manager_.AddProfileWithBuilder(std::move(builder));
     auth_service_ = AuthenticationServiceFactory::GetForProfile(profile_.get());
     identity_ = [FakeSystemIdentity fakeIdentity1];
     FakeSystemIdentityManager* system_identity_manager =
@@ -61,8 +61,7 @@ class PriceTrackingPromoMediatorTest : public PlatformTest {
             GetApplicationContext()->GetSystemIdentityManager());
     system_identity_manager->AddIdentity(identity_);
 
-    auth_service_->SignIn(identity_,
-                          signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+    auth_service_->SignIn(identity_, signin_metrics::AccessPoint::kUnknown);
 
     shopping_service_ = std::make_unique<commerce::MockShoppingService>();
     bookmark_model_ = bookmarks::TestBookmarkClient::CreateModel();
@@ -129,7 +128,7 @@ class PriceTrackingPromoMediatorTest : public PlatformTest {
   web::WebTaskEnvironment task_environment_;
   IOSChromeScopedTestingLocalState scoped_testing_local_state_;
   TestProfileManagerIOS profile_manager_;
-  std::unique_ptr<TestProfileIOS> profile_;
+  raw_ptr<TestProfileIOS> profile_;
   raw_ptr<AuthenticationService> auth_service_;
   id<SystemIdentity> identity_;
   std::unique_ptr<commerce::MockShoppingService> shopping_service_;

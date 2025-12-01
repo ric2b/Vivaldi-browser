@@ -95,7 +95,7 @@ void WriteBarrier::SharedSlow(Tagged<InstructionStream> host,
   MarkCompactCollector::RecordRelocSlotInfo info =
       MarkCompactCollector::ProcessRelocInfo(host, reloc_info, value);
 
-  base::MutexGuard write_scope(info.page_metadata->mutex());
+  base::SpinningMutexGuard write_scope(info.page_metadata->mutex());
   RememberedSet<OLD_TO_SHARED>::InsertTyped(info.page_metadata, info.slot_type,
                                             info.offset);
 }
@@ -142,9 +142,10 @@ void WriteBarrier::MarkingSlow(Tagged<HeapObject> host,
   MarkingBarrier* marking_barrier = CurrentMarkingBarrier(host);
   IsolateForPointerCompression isolate(marking_barrier->heap()->isolate());
 
-  ExternalPointerTable& table = isolate.GetExternalPointerTableFor(slot.tag());
+  ExternalPointerTable& table =
+      isolate.GetExternalPointerTableFor(slot.tag_range());
   ExternalPointerTable::Space* space =
-      isolate.GetExternalPointerTableSpaceFor(slot.tag(), host.address());
+      isolate.GetExternalPointerTableSpaceFor(slot.tag_range(), host.address());
 
   ExternalPointerHandle handle = slot.Relaxed_LoadHandle();
   table.Mark(space, handle, slot.address());
@@ -177,7 +178,7 @@ void WriteBarrier::MarkingSlow(Tagged<HeapObject> host,
   if (marking_barrier->is_minor()) return;
 
   // Mark both the table entry and its content.
-  JSDispatchTable* jdt = GetProcessWideJSDispatchTable();
+  JSDispatchTable* jdt = IsolateGroup::current()->js_dispatch_table();
   static_assert(JSDispatchTable::kWriteBarrierSetsEntryMarkBit);
   jdt->Mark(handle);
   marking_barrier->MarkValue(host, jdt->GetCode(handle));
@@ -328,7 +329,7 @@ void WriteBarrier::GenerationalBarrierForCodeSlow(
   const MarkCompactCollector::RecordRelocSlotInfo info =
       MarkCompactCollector::ProcessRelocInfo(host, rinfo, value);
 
-  base::MutexGuard write_scope(info.page_metadata->mutex());
+  base::SpinningMutexGuard write_scope(info.page_metadata->mutex());
   RememberedSet<OLD_TO_NEW>::InsertTyped(info.page_metadata, info.slot_type,
                                          info.offset);
 }
@@ -535,9 +536,9 @@ bool WriteBarrier::VerifyDispatchHandleMarkingState(Tagged<HeapObject> host,
                                                     JSDispatchHandle handle,
                                                     WriteBarrierMode mode) {
 #ifdef V8_ENABLE_LEAPTIERING
+  JSDispatchTable* jdt = IsolateGroup::current()->js_dispatch_table();
   if (mode == SKIP_WRITE_BARRIER &&
-      WriteBarrier::IsRequired(
-          host, GetProcessWideJSDispatchTable()->GetCode(handle))) {
+      WriteBarrier::IsRequired(host, jdt->GetCode(handle))) {
     return false;
   }
 
@@ -551,10 +552,10 @@ bool WriteBarrier::VerifyDispatchHandleMarkingState(Tagged<HeapObject> host,
       !CurrentMarkingBarrier(host)->IsMarked(host)) {
     return true;
   }
-  if (GetProcessWideJSDispatchTable()->IsMarked(handle)) {
+  if (jdt->IsMarked(handle)) {
     return true;
   }
-  Tagged<Code> value = GetProcessWideJSDispatchTable()->GetCode(handle);
+  Tagged<Code> value = jdt->GetCode(handle);
   if (ReadOnlyHeap::Contains(value)) {
     return true;
   }

@@ -23,6 +23,7 @@
 
 #include "absl/base/nullability.h"
 #include "absl/log/check.h"
+#include "absl/status/statusor.h"
 #include "./centipede/binary_info.h"
 #include "./centipede/byte_array_mutator.h"
 #include "./centipede/command.h"
@@ -93,7 +94,7 @@ class CentipedeCallbacks {
 
   // Returns the configuration from the test target in the serialized form.
   // Returns an empty string if the test target doesn't provide configuration.
-  virtual std::string GetSerializedTargetConfig() { return ""; }
+  virtual absl::StatusOr<std::string> GetSerializedTargetConfig() { return ""; }
 
  protected:
   // Helpers that the user-defined class may use if needed.
@@ -166,6 +167,9 @@ class CentipedeCallbacks {
   // Returns a Command object with matching `binary` from commands_,
   // creates one if needed.
   Command &GetOrCreateCommandForBinary(std::string_view binary);
+
+  // Prints the execution log from the last executed binary.
+  void PrintExecutionLog() const;
 
   // Variables required for ExecuteCentipedeSancovBinaryWithShmem.
   // They are computed in CTOR, to avoid extra computation in the hot loop.

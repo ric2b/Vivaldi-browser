@@ -76,11 +76,11 @@ public class WebappDisclosureControllerTest {
                 new WebApkIntentDataProviderBuilder(webApkPackageName, "https://pwa.rocks/")
                         .build();
         return new WebappDisclosureController(
-                intentDataProvider,
-                mock(WebappDeferredStartupWithStorageHandler.class),
                 mModel,
                 mock(ActivityLifecycleDispatcher.class),
-                mCurrentPageVerifier);
+                mCurrentPageVerifier,
+                intentDataProvider,
+                mock(WebappDeferredStartupWithStorageHandler.class));
     }
 
     private WebappDataStorage registerStorageForWebApk(String packageName) {

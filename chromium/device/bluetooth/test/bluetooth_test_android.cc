@@ -4,21 +4,28 @@
 
 #include "device/bluetooth/test/bluetooth_test_android.h"
 
+#include <algorithm>
 #include <iterator>
 #include <sstream>
 
+#include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/check.h"
+#include "base/feature_list.h"
 #include "base/functional/bind.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
+#include "base/test/task_environment.h"
+#include "base/time/time.h"
+#include "device/base/features.h"
 #include "device/bluetooth/android/wrappers.h"
 #include "device/bluetooth/bluetooth_adapter_android.h"
+#include "device/bluetooth/bluetooth_common.h"
 #include "device/bluetooth/bluetooth_device_android.h"
 #include "device/bluetooth/bluetooth_remote_gatt_characteristic_android.h"
 #include "device/bluetooth/bluetooth_remote_gatt_descriptor_android.h"
 #include "device/bluetooth/bluetooth_remote_gatt_service_android.h"
+#include "device/bluetooth/test/bluetooth_test.h"
 #include "device/bluetooth/test/test_bluetooth_adapter_observer.h"
 
 // Must come after all headers that specialize FromJniType() / ToJniType().
@@ -30,8 +37,11 @@ using base::android::ScopedJavaLocalRef;
 
 namespace device {
 
-BluetoothTestAndroid::BluetoothTestAndroid() {
-}
+BluetoothTestAndroid::BluetoothTestAndroid() = default;
+
+BluetoothTestAndroid::BluetoothTestAndroid(
+    base::test::TaskEnvironment::TimeSource time_source)
+    : BluetoothTestBase(time_source) {}
 
 BluetoothTestAndroid::~BluetoothTestAndroid() {
 }
@@ -76,13 +86,29 @@ void BluetoothTestAndroid::PostTaskFromJava(
       FROM_HERE, base::BindOnce(&RunJavaRunnable, runnable_ref));
 }
 
+void BluetoothTestAndroid::PostDelayedTaskFromJava(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& runnable,
+    jlong delayMillis) {
+  base::android::ScopedJavaGlobalRef<jobject> runnable_ref;
+  // ScopedJavaGlobalRef does not hold onto the env reference, so it is safe to
+  // use it across threads. |RunJavaRunnable| will acquire a new JNIEnv before
+  // running the Runnable.
+  runnable_ref.Reset(env, runnable);
+  task_environment_.GetMainThreadTaskRunner()->PostDelayedTask(
+      FROM_HERE, base::BindOnce(&RunJavaRunnable, runnable_ref),
+      base::Milliseconds(delayMillis));
+}
+
 bool BluetoothTestAndroid::PlatformSupportsLowEnergy() {
   return true;
 }
 
 void BluetoothTestAndroid::InitWithDefaultAdapter() {
-  adapter_ = BluetoothAdapterAndroid::Create(
-      BluetoothAdapterWrapper_CreateWithDefaultAdapter());
+  j_default_bluetooth_adapter_ =
+      BluetoothAdapterWrapper_CreateWithDefaultAdapter(
+          base::FeatureList::IsEnabled(features::kBluetoothRfcommAndroid));
+  adapter_ = BluetoothAdapterAndroid::Create(j_default_bluetooth_adapter_);
 }
 
 void BluetoothTestAndroid::InitWithoutDefaultAdapter() {
@@ -110,6 +136,17 @@ BluetoothDevice* BluetoothTestAndroid::SimulateLowEnergyDevice(
   return observer.last_device();
 }
 
+BluetoothDevice* BluetoothTestAndroid::SimulateClassicDevice() {
+  TestBluetoothAdapterObserver observer(adapter_);
+  SimulatePairedClassicDevice(0);
+  return observer.last_device();
+}
+
+void BluetoothTestAndroid::SimulatePairedClassicDevice(int device_ordinal) {
+  Java_FakeBluetoothAdapter_simulatePairedClassicDevice(
+      AttachCurrentThread(), j_fake_bluetooth_adapter_, device_ordinal);
+}
+
 void BluetoothTestAndroid::RememberDeviceForSubsequentAction(
     BluetoothDevice* device) {
   BluetoothDeviceAndroid* device_android =
@@ -117,6 +154,12 @@ void BluetoothTestAndroid::RememberDeviceForSubsequentAction(
 
   Java_FakeBluetoothDevice_rememberDeviceForSubsequentAction(
       base::android::AttachCurrentThread(), device_android->GetJavaObject());
+}
+
+void BluetoothTestAndroid::SetEnabledDeviceTransport(
+    BluetoothTransport transport) {
+  Java_FakeBluetoothAdapter_setEnabledTransport(
+      AttachCurrentThread(), j_fake_bluetooth_adapter_, transport);
 }
 
 void BluetoothTestAndroid::SimulateLocationServicesOff() {
@@ -127,6 +170,11 @@ void BluetoothTestAndroid::SimulateLocationServicesOff() {
 void BluetoothTestAndroid::ForceIllegalStateException() {
   Java_FakeBluetoothAdapter_forceIllegalStateException(
       AttachCurrentThread(), j_fake_bluetooth_adapter_);
+}
+
+void BluetoothTestAndroid::FailCurrentLeScan(int error_code) {
+  Java_FakeBluetoothAdapter_failCurrentLeScan(
+      AttachCurrentThread(), j_fake_bluetooth_adapter_, error_code);
 }
 
 void BluetoothTestAndroid::SimulateGattConnection(BluetoothDevice* device) {
@@ -176,7 +224,7 @@ void BluetoothTestAndroid::SimulateGattServicesDiscovered(
 
   // Join UUID strings into a single string.
   std::ostringstream uuids_space_delimited;
-  base::ranges::copy(
+  std::ranges::copy(
       uuids, std::ostream_iterator<std::string>(uuids_space_delimited, " "));
 
   JNIEnv* env = base::android::AttachCurrentThread();

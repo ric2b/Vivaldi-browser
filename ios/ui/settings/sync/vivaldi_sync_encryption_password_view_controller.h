@@ -41,6 +41,9 @@
                          bundle:(NSBundle*)nibBundleOrNil NS_UNAVAILABLE;
 - (instancetype)initWithCoder:(NSCoder*)aDecoder NS_UNAVAILABLE;
 
+// Setup the cancel button on the navigation's left bar button.
+- (void)setupLeftCancelButton;
+
 @end
 
 #endif  // IOS_UI_SETTINGS_SYNC_VIVALDI_SYNC_ENCRYPTION_PASSWORD_VIEW_CONTROLLER_H_

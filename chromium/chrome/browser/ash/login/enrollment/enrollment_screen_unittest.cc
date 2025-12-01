@@ -44,6 +44,7 @@
 #include "chromeos/ash/components/system/fake_statistics_provider.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/prefs/testing_pref_service.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace ash {
@@ -52,7 +53,7 @@ constexpr char kTestDomain[] = "test.org";
 constexpr char kTestAuthCode[] = "test_auth_code";
 constexpr char kTestDeviceId[] = "test_device_id";
 constexpr char kTestUserEmail[] = "user@test.org";
-constexpr char kTestUserGaiaId[] = "test_user_gaia_id";
+constexpr GaiaId::Literal kTestUserGaiaId("test_user_gaia_id");
 constexpr char kTestUserPassword[] = "test_password";
 constexpr char kTestRefreshToken[] = "test_refresh_token";
 

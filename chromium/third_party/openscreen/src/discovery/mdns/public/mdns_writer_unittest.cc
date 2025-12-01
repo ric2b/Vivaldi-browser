@@ -17,7 +17,7 @@ using testing::ElementsAreArray;
 
 namespace {
 
-constexpr std::chrono::seconds kTtl{120};
+constexpr std::chrono::seconds kTtl(120);
 
 template <class T>
 void TestWriteEntrySucceeds(const T& entry,

@@ -491,7 +491,7 @@ executing a script requires that the current buildfile execution be
 suspended until a Python process completes execution, relying on
 external scripts is slow and should be minimized.
 
-To prevent abuse, files permitted to call `exec_script` can be whitelisted in
+To prevent abuse, files permitted to call `exec_script` can be allowlisted in
 the toplevel `.gn` file. Chrome does this to require additional code review
 for such additions. See `gn help dotfile`.
 

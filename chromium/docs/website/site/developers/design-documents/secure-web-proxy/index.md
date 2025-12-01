@@ -19,7 +19,7 @@ these cases.
 ## **Using a Secure Web Proxy with Chrome**
 
 To make use of a secure web proxy, Chrome needs to be configured to use a [proxy
-auto-config](http://en.wikipedia.org/wiki/Proxy_auto-config) file which specify
+auto-config](https://en.wikipedia.org/wiki/Proxy_auto-config) file which specify
 the `HTTPS` proxy type. For example:
 
 ```none

@@ -272,8 +272,10 @@ bool NinjaBuildWriter::RunAndWriteFile(const BuildSettings* build_settings,
   std::string ninja_contents = file.str();
   if (util::WriteFileAtomically(ninja_file_name, ninja_contents.data(),
                                 static_cast<int>(ninja_contents.size())) !=
-      static_cast<int>(ninja_contents.size()))
+      static_cast<int>(ninja_contents.size())) {
+    *err = Err(Location(), "Failed to write build.ninja.");
     return false;
+  }
 
   // Dep file listing build dependencies.
   base::FilePath dep_file_name(build_settings->GetFullPath(
@@ -281,8 +283,10 @@ bool NinjaBuildWriter::RunAndWriteFile(const BuildSettings* build_settings,
   std::string dep_contents = depfile.str();
   if (util::WriteFileAtomically(dep_file_name, dep_contents.data(),
                                 static_cast<int>(dep_contents.size())) !=
-      static_cast<int>(dep_contents.size()))
+      static_cast<int>(dep_contents.size())) {
+    *err = Err(Location(), "Failed to write build.ninja.d");
     return false;
+  }
 
   // Finally, write the empty build.ninja.stamp file. This is the output
   // expected by the first of the two ninja rules used to accomplish
@@ -293,8 +297,10 @@ bool NinjaBuildWriter::RunAndWriteFile(const BuildSettings* build_settings,
   std::string stamp_contents;
   if (util::WriteFileAtomically(stamp_file_name, stamp_contents.data(),
                                 static_cast<int>(stamp_contents.size())) !=
-      static_cast<int>(stamp_contents.size()))
+      static_cast<int>(stamp_contents.size())) {
+    *err = Err(Location(), "Failed to write build.ninja.stamp.");
     return false;
+  }
 
   return true;
 }

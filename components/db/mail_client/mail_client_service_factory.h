@@ -49,7 +49,7 @@ class MailClientServiceFactory : public BrowserContextKeyedServiceFactory {
       content::BrowserContext* context) const override;
 
   // BrowserContextKeyedServiceFactory:
-  KeyedService* BuildServiceInstanceFor(
+  std::unique_ptr<KeyedService> BuildServiceInstanceForBrowserContext(
       content::BrowserContext* context) const override;
 
   bool ServiceIsNULLWhileTesting() const override;

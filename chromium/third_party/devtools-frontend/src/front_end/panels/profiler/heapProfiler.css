@@ -93,6 +93,7 @@
 }
 
 .heap-snapshot-view .heap-snapshot-view-resizer .verticalResizerIcon {
+  /* stylelint-disable-next-line custom-property-pattern */
   background-image: var(--image-file-toolbarResizerVertical);
   background-repeat: no-repeat;
   background-position: center;
@@ -118,6 +119,12 @@
 
 .heap-snapshot-view td.object-column span.heap-object-source-link {
   float: right;
+
+  & > button.text-button.devtools-link {
+    background-color: inherit;
+    outline-offset: calc(-1 * var(--sys-size-1));
+    padding-inline: var(--sys-size-2) !important;  /* stylelint-disable-line declaration-no-important */
+  }
 }
 
 .heap-snapshot-view td.object-column span.heap-object-source-link:empty {
@@ -176,10 +183,7 @@
 
 .heap-recording-overview-canvas {
   position: absolute;
-  top: 20px;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 20px 0 0;
 }
 
 .heap-snapshot-statistics-view {

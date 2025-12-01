@@ -22,12 +22,10 @@
 
 #include <array>
 #include <atomic>
-#include <functional>
 #include <memory>
 #include <mutex>
 
 // No perfetto headers (other than tracing/api and protozero) should be here.
-#include "perfetto/tracing/buffer_exhausted_policy.h"
 #include "perfetto/tracing/core/data_source_config.h"
 #include "perfetto/tracing/internal/basic_types.h"
 #include "perfetto/tracing/trace_writer_base.h"
@@ -116,6 +114,10 @@ struct DataSourceState {
   // when it's stopped.
   bool will_notify_on_stop = false;
 
+  // Incremented whenever incremental state should be reset for this instance of
+  // this data source.
+  std::atomic<uint32_t> incremental_state_generation{0};
+
   // This lock is not held to implement Trace() and it's used only if the trace
   // code wants to access its own data source state.
   // This is to prevent that accessing the data source on an arbitrary embedder
@@ -148,10 +150,6 @@ struct DataSourceStaticState {
   std::atomic<uint32_t> valid_instances{};
   std::array<DataSourceStateStorage, kMaxDataSourceInstances> instances{};
 
-  // Incremented whenever incremental state should be reset for any instance of
-  // this data source.
-  std::atomic<uint32_t> incremental_state_generation{};
-
   // The caller must be sure that `n` was a valid instance at some point (either
   // through a previous read of `valid_instances` or because the instance lock
   // is held).
@@ -178,7 +176,6 @@ struct DataSourceStaticState {
     index = kMaxDataSources;
     valid_instances.store(0, std::memory_order_release);
     instances = {};
-    incremental_state_generation.store(0, std::memory_order_release);
   }
 };
 

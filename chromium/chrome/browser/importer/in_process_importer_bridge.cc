@@ -194,4 +194,4 @@ std::u16string InProcessImporterBridge::GetLocalizedString(int message_id) {
   return l10n_util::GetStringUTF16(message_id);
 }
 
-InProcessImporterBridge::~InProcessImporterBridge() {}
+InProcessImporterBridge::~InProcessImporterBridge() = default;

@@ -28,8 +28,14 @@ KNOWN_BUILDS = [
   'clang_x86/d8',
   'clang_x86_v8_arm/d8',
   'clang_x64_v8_arm64/d8',
-  'clang_x64_pointer_compression/d8',
+  'clang_x64_fuzzer_experiments/d8',
 ]
+
+
+def output(stdout, is_crash):
+  exit_code = -1 if is_crash else 0
+  return v8_commands.Output(
+      exit_code=exit_code, stdout_bytes=stdout.encode('utf-8'), pid=0)
 
 
 class ConfigTest(unittest.TestCase):
@@ -162,11 +168,6 @@ otherfile.js: TypeError: undefined is not a constructor
     self.assertEqual(diff, diff_fun(one, two))
 
   def testOutputCapping(self):
-    def output(stdout, is_crash):
-      exit_code = -1 if is_crash else 0
-      return v8_commands.Output(
-          exit_code=exit_code, stdout_bytes=stdout.encode('utf-8'), pid=0)
-
     def check(stdout1, stdout2, is_crash1, is_crash2, capped_lines1,
               capped_lines2):
       output1 = output(stdout1, is_crash1)
@@ -200,6 +201,39 @@ otherfile.js: TypeError: undefined is not a constructor
     check('1\n2\n3', '4\n5', True, True, '1\n2', '4\n5')
     check('12', '345', True, True, '12', '34')
     check('123', '45', True, True, '12', '45')
+
+  @unittest.mock.patch(
+      'v8_suppressions.IGNORE_LINES',
+      [re.compile('^ign1.*\n'.encode('utf-8'), re.M),
+       re.compile('^ign2.*\n'.encode('utf-8'), re.M)])
+  def testIgnoredLines(self):
+    def check(stdout1, stdout2, is_crash1, is_crash2, diff):
+      output1 = output(stdout1, is_crash1)
+      output2 = output(stdout2, is_crash2)
+      suppress = v8_suppressions.get_suppression()
+      self.assertEqual(
+          (diff, v8_suppressions.SMOKE_TEST_SOURCE),
+          suppress.diff(output1, output2))
+
+    # One run has lines to ignore, the other crashes.
+    check('ign1X\n111\nign2X\n222\n333', '111\n22', False, True, None)
+    check('111\n22', 'ign1X\n111\nign2X\n222\n333', True, False, None)
+
+    # Ignored lines in both runs at different positions.
+    check('ign1X\n111\n222\n333', '111\nign2X\n22', False, True, None)
+    check('111\nign2X\n22', 'ign1X\n111\n222\n333', True, False, None)
+
+    # Ignored lines at different positions, no crash.
+    check('ign2X\n111\n\n222', 'ign1X\n111\nign1X\n\n222', False, False, None)
+    check('ign1X\n111\nign1X\n\n222', 'ign2X\n111\n\n222', False, False, None)
+
+    # Ignored lines and a difference, no crash.
+    check('1\n2\nign2\n3', 'ign1X\n1\nign1\n2', False, False, '- 3')
+    check('ign1X\n1\nign1\n2', '1\n2\nign2\n3', False, False, '+ 3')
+
+    # Ignored lines, a difference and a crash.
+    check('\n1\n3\nign1X\n4', '\nign2\n1\nign1\n2', False, True, '- 3\n+ 2')
+    check('\nign2\n1\nign1\n2', '\n1\n3\nign1X\n4', True, False, '- 2\n+ 3')
 
   def testReduceOutput(self):
     suppress = v8_suppressions.get_suppression()
@@ -247,6 +281,19 @@ otherfile.js: TypeError: undefined is not a constructor
     check(['D', 'B'], ['B'])
     check(['C', 'B', 'D'], ['C', 'D'])
     check(['E', 'C', 'A', 'F', 'B', 'G', 'D'], ['E', 'C', 'F', 'G', 'D'])
+
+  @unittest.mock.patch('v8_foozzie.DISALLOWED_FLAG_PREFIXES', ['A', 'B='])
+  def testFilterFlagPrefixes(self):
+    def check(input_flags, expected):
+      self.assertEqual(expected, v8_foozzie.filter_flags(input_flags))
+
+    check([], [])
+    check(['A'], [])
+    check(['D', 'A1'], ['D'])
+    check(['A1', 'D'], ['D'])
+    check(['B=42', 'D'], ['D'])
+    check(['D', 'B=42'], ['D'])
+    check(['A', 'B', 'C=42', 'D', 'B=-1'], ['B', 'C=42', 'D'])
 
   def _test_content(self, filename):
     with (TEST_DATA / filename).open() as f:

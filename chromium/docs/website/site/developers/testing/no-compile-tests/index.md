@@ -67,3 +67,7 @@ you know that the tests were at least run.
 
 The comment at the top of build/nocompile.gni has most of the documentation for
 how to use this system.
+
+The verification logic is built as part of clang. Full documentation is at
+[“Clang” CFE Internals Manual > Specifying Diagnostics](https://clang.llvm.org/docs/InternalsManual.html#specifying-diagnostics)
+

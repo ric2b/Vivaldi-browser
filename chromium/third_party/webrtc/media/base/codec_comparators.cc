@@ -9,6 +9,7 @@
  */
 #include "media/base/codec_comparators.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <optional>
 #include <string>
@@ -181,34 +182,34 @@ bool MatchesWithReferenceAttributesAndComparator(
       return true;
     }
     if (has_parameters_1 && has_parameters_2) {
-      // Different levels of redundancy between offer and answer are
+      // Different levels of redundancy between offer and answer are OK
       // since RED is considered to be declarative.
       std::vector<absl::string_view> redundant_payloads_1 =
           rtc::split(red_parameters_1->second, '/');
       std::vector<absl::string_view> redundant_payloads_2 =
           rtc::split(red_parameters_2->second, '/');
-      if (redundant_payloads_1.size() > 0 && redundant_payloads_2.size() > 0) {
-        // Mixed reference codecs (i.e. 111/112) are not supported.
-        for (size_t i = 1; i < redundant_payloads_1.size(); i++) {
-          if (redundant_payloads_1[i] != redundant_payloads_1[0]) {
-            return false;
-          }
-        }
-        for (size_t i = 1; i < redundant_payloads_2.size(); i++) {
-          if (redundant_payloads_2[i] != redundant_payloads_2[0]) {
-            return false;
-          }
-        }
+      // note: rtc::split returns at least 1 string even on empty strings.
+      size_t smallest_size =
+          std::min(redundant_payloads_1.size(), redundant_payloads_2.size());
+      // If the smaller list is equivalent to the longer list, we consider them
+      // equivalent even if size differs.
+      for (size_t i = 0; i < smallest_size; i++) {
         int red_value_1;
         int red_value_2;
-        if (rtc::FromString(redundant_payloads_1[0], &red_value_1) &&
-            rtc::FromString(redundant_payloads_2[0], &red_value_2)) {
-          if (reference_comparator(red_value_1, red_value_2)) {
-            return true;
+        if (rtc::FromString(redundant_payloads_1[i], &red_value_1) &&
+            rtc::FromString(redundant_payloads_2[i], &red_value_2)) {
+          if (!reference_comparator(red_value_1, red_value_2)) {
+            return false;
           }
+        } else {
+          // At least one parameter was not an integer.
+          // This is a syntax error, but we allow it here if the whole parameter
+          // equals the other parameter, in order to not generate more errors
+          // by duplicating the bad parameter.
+          return red_parameters_1->second == red_parameters_2->second;
         }
-        return false;
       }
+      return true;
     }
     if (!has_parameters_1 && !has_parameters_2) {
       // Both parameters are missing. Happens for video RED.
@@ -342,6 +343,11 @@ bool MatchesWithCodecRules(const Codec& left_codec, const Codec& right_codec) {
   return matches_id && matches_type_specific();
 }
 
+bool MatchesWithReferenceAttributes(const Codec& codec1, const Codec& codec2) {
+  return MatchesWithReferenceAttributesAndComparator(
+      codec1, codec2, [](int a, int b) { return a == b; });
+}
+
 // Finds a codec in `codecs2` that matches `codec_to_match`, which is
 // a member of `codecs1`. If `codec_to_match` is an RED or RTX codec, both
 // the codecs themselves and their associated codecs must match.
@@ -375,6 +381,34 @@ bool IsSameRtpCodec(const Codec& codec, const RtpCodec& rtp_codec) {
          rtp_codec.clock_rate == rtp_codec2.clock_rate &&
          InsertDefaultParams(rtp_codec.name, rtp_codec.parameters) ==
              InsertDefaultParams(rtp_codec2.name, rtp_codec2.parameters);
+}
+
+bool IsSameRtpCodecIgnoringLevel(const Codec& codec,
+                                 const RtpCodec& rtp_codec) {
+  RtpCodecParameters rtp_codec2 = codec.ToCodecParameters();
+
+  if (!absl::EqualsIgnoreCase(rtp_codec.name, rtp_codec2.name) ||
+      rtp_codec.kind != rtp_codec2.kind ||
+      rtp_codec.num_channels != rtp_codec2.num_channels ||
+      rtp_codec.clock_rate != rtp_codec2.clock_rate) {
+    return false;
+  }
+
+  CodecParameterMap params1 =
+      InsertDefaultParams(rtp_codec.name, rtp_codec.parameters);
+  CodecParameterMap params2 =
+      InsertDefaultParams(rtp_codec2.name, rtp_codec2.parameters);
+
+  // Some video codecs are compatible with others (e.g. same profile but
+  // different level). This comparison looks at the relevant parameters,
+  // ignoring ones that are either irrelevant or unrecognized.
+  if (rtp_codec.kind == cricket::MediaType::MEDIA_TYPE_VIDEO &&
+      rtp_codec.IsMediaCodec()) {
+    return IsSameCodecSpecific(rtp_codec.name, params1, rtp_codec2.name,
+                               params2);
+  }
+
+  return params1 == params2;
 }
 
 }  // namespace webrtc

@@ -770,6 +770,7 @@ void LiftoffAssembler::PrepareCall(const ValueKindSig* sig,
                                    compiler::CallDescriptor* call_descriptor,
                                    Register* target,
                                    Register target_instance_data) {
+  ASM_CODE_COMMENT(this);
   uint32_t num_params = static_cast<uint32_t>(sig->parameter_count());
 
   LiftoffStackSlots stack_slots{this};
@@ -806,14 +807,13 @@ void LiftoffAssembler::PrepareCall(const ValueKindSig* sig,
   if (target && param_regs.has(LiftoffRegister(*target))) {
     // Try to find another free register.
     LiftoffRegList free_regs = kGpCacheRegList.MaskOut(param_regs);
+    static_assert(sizeof(WasmCodePointer) == kUInt32Size);
     if (!free_regs.is_empty()) {
       LiftoffRegister new_target = free_regs.GetFirstRegSet();
-      parallel_move.MoveRegister(new_target, LiftoffRegister(*target),
-                                 kIntPtrKind);
+      parallel_move.MoveRegister(new_target, LiftoffRegister(*target), kI32);
       *target = new_target.gp();
     } else {
-      stack_slots.Add(VarState(kIntPtrKind, LiftoffRegister(*target), 0),
-                      param_slots);
+      stack_slots.Add(VarState(kI32, LiftoffRegister(*target), 0), param_slots);
       param_slots++;
       *target = no_reg;
     }

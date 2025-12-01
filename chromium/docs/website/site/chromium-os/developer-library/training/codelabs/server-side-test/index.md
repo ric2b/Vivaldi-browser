@@ -11,11 +11,11 @@ title: Server Side test for ChromiumOS autotest codelab
 ## References
 
 - [Autotest Best Practices](https://chromium.googlesource.com/chromiumos/third_party/autotest/+/HEAD/docs/best-practices.md)
-- [Writing Autotests](http://www.chromium.org/chromium-os/testing/autotest-developer-faq#TOC-Writing-Autotests)
+- [Writing Autotests](/chromium-os/developer-library/guides/testing/autotest-developer-faq#TOC-Writing-Autotests)
 - [Codelab for Writing an Autotest Test](https://wiki.corp.google.com/twiki/bin/view/Codelab/WritingAutotestTests)
     - This is a codelab teaching you how to write a generic test for Autotest.
-- [Autotest for ChromiumOS developers](http://www.chromium.org/chromium-os/testing/autotest-user-doc)
-- [ChromiumOS Developer Guide](http://www.chromium.org/chromium-os/developer-guide)
+- [Autotest for ChromiumOS developers](/chromium-os/testing/autotest-user-doc)
+- [ChromiumOS Developer Guide](/chromium-os/developer-guide)
 
 ## Overview
 
@@ -29,8 +29,8 @@ In this codelab, you will build a server-side Autotest to test if the backlight 
 This Codelab is for ChromiumOS developers and testers to learn how to write a server side Autotest. Assumptions:
 
 - You know the Python programming language.
-- You have a device under test (DUT) with a test image installed. See [ChromiumOS Developer Guide](http://www.chromium.org/chromium-os/developer-guide#TOC-Installing-Chromium-OS-on-your-Device) for details.
-- You have ChromiumOS development environment setup, see [ChromiumOS Developer Guide](http://www.chromium.org/chromium-os/developer-guide#TOC-Get-the-Source) for details.
+- You have a device under test (DUT) with a test image installed. See [ChromiumOS Developer Guide](/chromium-os/developer-guide#TOC-Installing-Chromium-OS-on-your-Device) for details.
+- You have ChromiumOS development environment setup, see [ChromiumOS Developer Guide](/chromium-os/developer-guide#TOC-Get-the-Source) for details.
 
 ## Objectives
 
@@ -59,7 +59,7 @@ Decide if your test is a client or server test and choose the appropriate direct
 
 ## Create a new server side test
 
-[Adding a test](https://github.com/autotest/autotest/wiki/AddingTest) involves putting a control file and a properly-written test wrapper in the right place in the source tree. There are [conventions](http://www.chromium.org/chromium-os/testing/autotest-best-practices#TOC-Writing-tests) that must be followed, and a[ variety of primitives](https://github.com/autotest/autotest/wiki/AutotestApi) available for use. When writing any code, whether client-side test, server-side test, or library, have a strong bias towards using[ Autotest utility code](http://www.chromium.org/chromium-os/testing/existing-autotest-utilities). This keeps the codebase consistent and avoids duplicated effort.
+[Adding a test](https://github.com/autotest/autotest/wiki/AddingTest) involves putting a control file and a properly-written test wrapper in the right place in the source tree. There are [conventions](/chromium-os/testing/autotest-best-practices#TOC-Writing-tests) that must be followed, and a[ variety of primitives](https://github.com/autotest/autotest/wiki/AutotestApi) available for use. When writing any code, whether client-side test, server-side test, or library, have a strong bias towards using[ Autotest utility code](/chromium-os/testing/existing-autotest-utilities). This keeps the codebase consistent and avoids duplicated effort.
 
 In the subsections below, we will discuss the detail of following topics:
 
@@ -86,7 +86,7 @@ Some basic rules include:
 - Use single quote for strings if possible.
 - End comment with period.
 
-[Here](http://www.chromium.org/developers/coding-style) is another resources talking about coding style, including languages other than Python. Keep in mind that the best practice is to keep the test file in pure Python i.e. one should avoid “shelling out” and generally use Python instead of tools like awk and grep.
+[Here](/developers/coding-style) is another resources talking about coding style, including languages other than Python. Keep in mind that the best practice is to keep the test file in pure Python i.e. one should avoid “shelling out” and generally use Python instead of tools like awk and grep.
 
 ### Step 1. Name your test
 
@@ -147,7 +147,7 @@ Some important attributes are listed here:
 Some optional attributes:
 
 - SUITE: A comma-delimited string of suite names that this test should be a part of, e.g. bvt, regression, smoke
-- [DEPENDENCIES](http://www.chromium.org/chromium-os/testing/test-dependencies-in-dynamic-suites): list, of, tags known to the HW test lab, e.g., webcam, blue-tooth
+- [DEPENDENCIES](/chromium-os/testing/test-dependencies-in-dynamic-suites): list, of, tags known to the HW test lab, e.g., webcam, blue-tooth
 - (absolete) EXPERIMENTAL: if the test is experimental, value can be True or False. For experimental tests, failure is considered to be non-fatal. For the test you uploaded, EXPERIMENTAL should be set to True until the test passes reliably on all intended platforms in the lab.
 
 #### Step 2.2. Create a test wrapper
@@ -201,7 +201,14 @@ The method initialize runs once for each job. The method is equivalent to _init_
 
 *Setup*
 
-This method is the only one called when you `cros build-packages --withautotest`, while other methods are called during testing.  The method is triggered when version attribute's value is changed or the test package is built the first time to produce expected binaries.  If the test is scheduled to run in a DUT in which the test has already been installed, Autotest will check the version attribute's value of the test class.  If the value is changed, the test will be reinstalled.  One sample usage of this method can be found [here](http://www.chromium.org/chromium-os/testing/autotest-developer-faq#TOC-Adding-binaries-for-your-tests-to-call-as-part-of-the-test).
+This method is the only one called when you
+`cros build-packages --withautotest`, while other methods are called during
+testing.  The method is triggered when version attribute's value is changed or
+the test package is built the first time to produce expected binaries.  If the
+test is scheduled to run in a DUT in which the test has already been installed,
+Autotest will check the version attribute's value of the test class.  If the
+value is changed, the test will be reinstalled.  One sample usage of this method
+can be found [here](/chromium-os/developer-library/guides/testing/autotest-developer-faq#TOC-Adding-binaries-for-your-tests-to-call-as-part-of-the-test).
 
 *run_once*
 
@@ -215,10 +222,10 @@ cleanup is the method where you do the custodial work, e.g., restore the system�
 
 #### Run Autotest manually
 
-After the control file and test wrapper file are created, you can try to manually run your Autotest against DUT, which has a test image installed (follow [this instruction](http://www.chromium.org/chromium-os/developer-guide#TOC-Build-a-disk-image-for-your-board) to build a test image using the “test” argument).
+After the control file and test wrapper file are created, you can try to manually run your Autotest against DUT, which has a test image installed (follow [this instruction](/chromium-os/developer-guide#TOC-Build-a-disk-image-for-your-board) to build a test image using the “test” argument).
 
 To get started, first you need to create or enter a chroot in your host machine.
-Details can be found [here](http://www.chromium.org/chromium-os/developer-guide#TOC-Create-a-chroot).
+Details can be found [here](/chromium-os/developer-guide#TOC-Create-a-chroot).
 Go to chromiumos directory, run following command to create or enter a chroot.
 
 ```
@@ -317,9 +324,9 @@ from autotest_lib.server import utils
 
 These modules include some useful base classes to be used to run commands in a
 test device or control a servo device. More details about how
-[import](http://www.chromium.org/chromium-os/testing/autotest-developer-faq#TOC-Writing-Autotests)
+[import](/chromium-os/developer-library/guides/testing/autotest-developer-faq#TOC-Writing-Autotests)
 is used in Autotest can be found
-[here](/chromium-os/testing/autotest-developer-faq#TOC-A-word-about-imports).
+[here](/chromium-os/developer-library/guides/testing/autotest-developer-faq#TOC-A-word-about-imports).
 Note that each line only imports one module and modules are ordered
 alphabetically.
 
@@ -505,7 +512,7 @@ def cleanup(self):
     self._set_brightness_percent(self._original_brightness)
 ```
 
-For more information on writing your test, see the [frequently asked questions](http://www.chromium.org/chromium-os/testing/autotest-developer-faq).
+For more information on writing your test, see the [frequently asked questions](/chromium-os/developer-library/guides/testing/autotest-developer-faq).
 
 ## Verify Test by Running Autotest Manually
 
@@ -570,7 +577,7 @@ Reference:
 
 ---
 
-# Copyright 2018 The ChromiumOS Authors.
+# Copyright 2018 The ChromiumOS Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 import logging, os, subprocess, tempfile, time

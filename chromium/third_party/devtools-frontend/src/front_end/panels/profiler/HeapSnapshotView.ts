@@ -125,6 +125,14 @@ const UIStrings = {
    */
   systemObjects: 'System objects',
   /**
+   *@description Label on a pie chart in the statistics view for the Heap Snapshot tool
+   */
+  otherJSObjects: 'Other JS objects',
+  /**
+   *@description Label on a pie chart in the statistics view for the Heap Snapshot tool
+   */
+  otherNonJSObjects: 'Other non-JS objects (such as HTML and CSS)',
+  /**
    *@description The reported total size used in the selected time frame of the allocation sampling profile
    *@example {3 MB} PH1
    */
@@ -584,13 +592,25 @@ export class HeapSnapshotView extends UI.View.SimpleView implements DataDisplayD
   async retrieveStatistics(heapSnapshotProxy: HeapSnapshotProxy):
       Promise<HeapSnapshotModel.HeapSnapshotModel.Statistics> {
     const statistics = await heapSnapshotProxy.getStatistics();
+    const {v8heap, native} = statistics;
+    const otherJSObjectsSize = v8heap.total - v8heap.code - v8heap.strings - v8heap.jsArrays - v8heap.system;
 
     const records = [
-      {value: statistics.code, color: '#f77', title: i18nString(UIStrings.code)},
-      {value: statistics.strings, color: '#5e5', title: i18nString(UIStrings.strings)},
-      {value: statistics.jsArrays, color: '#7af', title: i18nString(UIStrings.jsArrays)},
-      {value: statistics.native, color: '#fc5', title: i18nString(UIStrings.typedArrays)},
-      {value: statistics.system, color: '#98f', title: i18nString(UIStrings.systemObjects)},
+      {value: v8heap.code, color: 'var(--app-color-code)', title: i18nString(UIStrings.code)},
+      {value: v8heap.strings, color: 'var(--app-color-strings)', title: i18nString(UIStrings.strings)},
+      {value: v8heap.jsArrays, color: 'var(--app-color-js-arrays)', title: i18nString(UIStrings.jsArrays)},
+      {value: native.typedArrays, color: 'var(--app-color-typed-arrays)', title: i18nString(UIStrings.typedArrays)},
+      {value: v8heap.system, color: 'var(--app-color-system)', title: i18nString(UIStrings.systemObjects)},
+      {
+        value: otherJSObjectsSize,
+        color: 'var(--app-color-other-js-objects)',
+        title: i18nString(UIStrings.otherJSObjects)
+      },
+      {
+        value: native.total - native.typedArrays,
+        color: 'var(--app-color-other-non-js-objects)',
+        title: i18nString(UIStrings.otherNonJSObjects)
+      },
     ];
     this.statisticsView.setTotalAndRecords(statistics.total, records);
     return statistics;
@@ -1315,9 +1335,8 @@ export class HeapSnapshotProfileType extends
   override customContent(): Element|null {
     const showOptionToExposeInternalsInHeapSnapshot =
         Root.Runtime.experiments.isEnabled('show-option-tp-expose-internals-in-heap-snapshot');
-    const omitParagraphElement = true;
-    const exposeInternalsInHeapSnapshotCheckbox = UI.SettingsUI.createSettingCheckbox(
-        i18nString(UIStrings.exposeInternals), this.exposeInternals, omitParagraphElement);
+    const exposeInternalsInHeapSnapshotCheckbox =
+        UI.SettingsUI.createSettingCheckbox(i18nString(UIStrings.exposeInternals), this.exposeInternals);
     this.customContentInternal = exposeInternalsInHeapSnapshotCheckbox as UI.UIUtils.CheckboxLabel;
     return showOptionToExposeInternalsInHeapSnapshot ? exposeInternalsInHeapSnapshotCheckbox : null;
   }
@@ -1409,9 +1428,9 @@ export const enum HeapSnapshotProfileTypeEvents {
   SNAPSHOT_RECEIVED = 'SnapshotReceived',
 }
 
-export type HeapSnapshotProfileTypeEventTypes = {
-  [HeapSnapshotProfileTypeEvents.SNAPSHOT_RECEIVED]: ProfileHeader,
-};
+export interface HeapSnapshotProfileTypeEventTypes {
+  [HeapSnapshotProfileTypeEvents.SNAPSHOT_RECEIVED]: ProfileHeader;
+}
 
 export class TrackingHeapSnapshotProfileType extends
     Common.ObjectWrapper.eventMixin<TrackingHeapSnapshotProfileTypeEventTypes, typeof HeapSnapshotProfileType>(
@@ -1513,7 +1532,7 @@ export class TrackingHeapSnapshotProfileType extends
 
   override customContent(): Element|null {
     const checkboxSetting = UI.SettingsUI.createSettingCheckbox(
-        i18nString(UIStrings.recordAllocationStacksExtra), this.recordAllocationStacksSettingInternal, true);
+        i18nString(UIStrings.recordAllocationStacksExtra), this.recordAllocationStacksSettingInternal);
     this.customContentInternal = (checkboxSetting as UI.UIUtils.CheckboxLabel);
     return checkboxSetting;
   }
@@ -1617,11 +1636,11 @@ export const enum TrackingHeapSnapshotProfileTypeEvents {
   TRACKING_STOPPED = 'TrackingStopped',
 }
 
-export type TrackingHeapSnapshotProfileTypeEventTypes = {
-  [TrackingHeapSnapshotProfileTypeEvents.HEAP_STATS_UPDATE]: Samples,
-  [TrackingHeapSnapshotProfileTypeEvents.TRACKING_STARTED]: void,
-  [TrackingHeapSnapshotProfileTypeEvents.TRACKING_STOPPED]: void,
-};
+export interface TrackingHeapSnapshotProfileTypeEventTypes {
+  [TrackingHeapSnapshotProfileTypeEvents.HEAP_STATS_UPDATE]: Samples;
+  [TrackingHeapSnapshotProfileTypeEvents.TRACKING_STARTED]: void;
+  [TrackingHeapSnapshotProfileTypeEvents.TRACKING_STOPPED]: void;
+}
 
 export class HeapProfileHeader extends ProfileHeader {
   readonly heapProfilerModelInternal: SDK.HeapProfilerModel.HeapProfilerModel|null;
@@ -1960,7 +1979,7 @@ export class HeapAllocationStackView extends UI.Widget.Widget {
     const stackDiv = this.element.createChild('div', 'heap-allocation-stack');
     stackDiv.addEventListener('keydown', this.onStackViewKeydown.bind(this), false);
     for (const frame of frames) {
-      const frameDiv = (stackDiv.createChild('div', 'stack-frame') as HTMLElement);
+      const frameDiv = stackDiv.createChild('div', 'stack-frame');
       this.frameElements.push(frameDiv);
       frameDiv.tabIndex = -1;
       const name = frameDiv.createChild('div');

@@ -45,6 +45,24 @@ export declare interface Course {
 }
 
 /**
+ * Declare a classroom course assignment information
+ */
+export declare interface Assignment {
+  title: string;
+  url: string;
+  lastUpdateTime: Date;
+  materials: Material[];
+}
+
+/**
+ * Declare an assignment material information
+ */
+export declare interface Material {
+  title: string;
+  type: MaterialType;
+}
+
+/**
  * Declare navigation enum type
  */
 export enum NavigationType {
@@ -86,6 +104,25 @@ export enum NetworkType {
   ETHERNET = 1,
   WIFI = 2,
   UNSUPPORTED = 3,
+}
+
+/**
+ * Declare boca user pref type.
+ */
+export enum BocaValidPref {
+  NAVIGATION_SETTING = 0,
+  CAPTION_ENABLEMENT_SETTING = 1,
+}
+
+/**
+ * Declare course assignment material type enum type
+ */
+export enum MaterialType {
+  UNKNOWN = 0,
+  SHARED_DRIVE_FILE = 1,
+  YOUTUBE_VIDEO = 2,
+  LINK = 3,
+  FORM = 4,
 }
 
 /**
@@ -148,6 +185,7 @@ export declare interface StudentActivity {
   // TODO(b/365191878): Remove this after refactoring existing schema to support
   // multi-group.
   joinMethod: JoinMethod;
+  viewScreenSessionCode?: string;
 }
 
 /**
@@ -173,6 +211,11 @@ export declare interface NetworkInfo {
  */
 export declare interface ClientApiDelegate {
   /**
+   * Request authentication for the webview.
+   */
+  authenticateWebview(): Promise<boolean>;
+
+  /**
    * Get a list of Window tabs opened on device.
    */
   getWindowsTabsList(): Promise<DeviceWindow[]>;
@@ -186,6 +229,11 @@ export declare interface ClientApiDelegate {
    * Get list of students in a course.
    */
   getStudentList(courseId: string): Promise<Identity[]>;
+
+  /**
+   * Get list of assignments in a course.
+   */
+  getAssignmentList(courseId: string): Promise<Assignment[]>;
 
   /**
    * Create a new session.
@@ -223,6 +271,26 @@ export declare interface ClientApiDelegate {
    * Submit an access code for student to join the session.
    */
   submitAccessCode(accessCode: string): Promise<SubmitAccessCodeResult>;
+
+  /**
+   * Request to view the screen of the student with the given id.
+   */
+  viewStudentScreen(id: string): Promise<boolean>;
+
+  /**
+   * Request to end the view screen session of the student with the given id.
+   */
+  endViewScreenSession(id: string): Promise<boolean>;
+
+  /**
+   * Get the value of a boca specific user pref.
+   */
+  getUserPref(pref: BocaValidPref): Promise<any>;
+
+  /**
+   * Set the value of a boca specific user pref.
+   */
+  setUserPref(pref: BocaValidPref, value: any): Promise<void>;
 }
 
 /**

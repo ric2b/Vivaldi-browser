@@ -21,6 +21,7 @@
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/base/SkTInternalLList.h"
 #include "src/core/SkTraceEvent.h"
+#include "src/gpu/GpuTypesPriv.h"
 #include "src/gpu/ganesh/GrAuditTrail.h"
 #include "src/gpu/ganesh/GrBufferTransferRenderTask.h"
 #include "src/gpu/ganesh/GrBufferUpdateRenderTask.h"
@@ -55,6 +56,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <utility>
 
 using namespace skia_private;
@@ -160,6 +162,10 @@ bool GrDrawingManager::flush(SkSpan<GrSurfaceProxy*> proxies,
 
     GrOpFlushState flushState(gpu, resourceProvider, &fTokenTracker, fCpuBufferCache);
 
+    std::optional<GrTimerQuery> timerQuery;
+    if (info.fFinishedWithStatsProc && (info.fGpuStatsFlags & skgpu::GpuStatsFlags::kElapsedTime)) {
+        timerQuery = gpu->startTimerQuery();
+    }
     GrOnFlushResourceProvider onFlushProvider(this);
 
     // Prepare any onFlush op lists (e.g. atlases).
@@ -204,7 +210,7 @@ bool GrDrawingManager::flush(SkSpan<GrSurfaceProxy*> proxies,
     }
     this->removeRenderTasks();
 
-    gpu->executeFlushInfo(proxies, access, info, newState);
+    gpu->executeFlushInfo(proxies, access, info, std::move(timerQuery), newState);
 
     // Give the cache a chance to purge resources that become purgeable due to flushing.
     if (cachePurgeNeeded) {
@@ -271,6 +277,9 @@ bool GrDrawingManager::executeRenderTasks(GrOpFlushState* flushState) {
     static constexpr int kMaxRenderTasksBeforeFlush = 100;
     int numRenderTasksExecuted = 0;
 
+    // Unlike kMaxRenderTasksBeforeFlush, this is a global limit.
+    static constexpr int kMaxRenderPassesBeforeFlush = 100;
+
     // Execute the normal op lists.
     for (const auto& renderTask : fDAG) {
         SkASSERT(renderTask);
@@ -281,7 +290,8 @@ bool GrDrawingManager::executeRenderTasks(GrOpFlushState* flushState) {
         if (renderTask->execute(flushState)) {
             anyRenderTasksExecuted = true;
         }
-        if (++numRenderTasksExecuted >= kMaxRenderTasksBeforeFlush) {
+        if (++numRenderTasksExecuted >= kMaxRenderTasksBeforeFlush ||
+            flushState->gpu()->getCurrentSubmitRenderPassCount() >= kMaxRenderPassesBeforeFlush) {
             flushState->gpu()->submitToGpu();
             numRenderTasksExecuted = 0;
         }
@@ -1059,19 +1069,4 @@ skgpu::ganesh::PathRenderer* GrDrawingManager::getTessellationPathRenderer() {
                                                                  fOptionsForPathRendererChain);
     }
     return fPathRendererChain->getTessellationPathRenderer();
-}
-
-void GrDrawingManager::flushIfNecessary() {
-    auto direct = fContext->asDirectContext();
-    if (!direct) {
-        return;
-    }
-
-    auto resourceCache = direct->priv().getResourceCache();
-    if (resourceCache && resourceCache->requestsFlush()) {
-        if (this->flush({}, SkSurfaces::BackendSurfaceAccess::kNoAccess, GrFlushInfo(), nullptr)) {
-            this->submitToGpu();
-        }
-        resourceCache->purgeAsNeeded();
-    }
 }

@@ -31,6 +31,7 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.IntentUtils;
+import org.chromium.base.ResettersForTesting;
 import org.chromium.base.test.BaseActivityTestRule;
 import org.chromium.base.test.util.ApplicationTestUtils;
 import org.chromium.base.test.util.Batch;
@@ -649,6 +650,12 @@ public class QuickActionSearchWidgetProviderDelegateTest {
 
         final Resources r = mContext.getResources();
         r.updateConfiguration(c, null);
+
+        ResettersForTesting.register(
+                () -> {
+                    c.setLayoutDirection(Locale.getDefault());
+                    r.updateConfiguration(c, null);
+                });
 
         // Again, apply half the size of what the widget was designed for.
         final int areaWidthDp = mDinoWidgetEdgeSizeDp / 4;

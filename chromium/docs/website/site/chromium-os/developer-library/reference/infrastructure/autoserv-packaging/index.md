@@ -79,8 +79,8 @@ tar_package function if it doesn't exist.
 Currently, fetching packages via autoserv is only used in non-prod situations,
 such as with run_remote_tests.sh. In prod, all of the packages are instead
 pulled from devservers via the HttpFetcher using the job_repo_url. This is a
-result of [crbug.com/212641](http://crbug.com/212641) and
-[crbug.com/216918](http://crbug.com/216918); we were hitting a case where
+result of [crbug.com/212641](https://crbug.com/212641) and
+[crbug.com/216918](https://crbug.com/216918); we were hitting a case where
 fetching would hang (it creates a fifo that gets written to, once the package
 has been pushed down to the DUT). A few CLs were subsequently pushed so that
 fetching from autoserv could be disabled in prod

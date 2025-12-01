@@ -1,4 +1,4 @@
-// Copyright 2024 The Chromium Authors. All rights reserved.
+// Copyright 2025 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,14 +43,6 @@ export const UIStrings = {
    */
   CrossOriginWindowConfirm: "Triggering window.confirm from cross origin iframes has been deprecated and will be removed in the future.",
   /**
-   * @description Warning displayed to developers when their website uses `:--customstatename` in CSS. They can simply switch their CSS to `:state(customstatename)` and it will be the same.
-   */
-  CSSCustomStateDeprecatedSyntax: "`:--customstatename` is deprecated. Please use the `:state(customstatename)` syntax instead.",
-  /**
-   * @description Warning displayed to developers when their website uses `inset-area` in CSS. They can simply switch their CSS to `position-area` and it will function in the same way.
-   */
-  CSSInsetAreaProperty: "The `inset-area` property is deprecated. Please use the `position-area` property instead.",
-  /**
    * @description Warning displayed to developers when they hide the Cast button on a video element using the deprecated CSS selector instead of using the disableRemotePlayback attribute on the element.
    */
   CSSSelectorInternalMediaControlsOverlayCastButton: "The `disableRemotePlayback` attribute should be used in order to disable the default Cast integration instead of using `-internal-media-controls-overlay-cast-button` selector.",
@@ -74,10 +66,6 @@ export const UIStrings = {
    * @description Warning displayed to developers when the Geolocation API is used from an insecure origin (one that isn't localhost or doesn't use HTTPS) to notify them that this use is deprecated.
    */
   GeolocationInsecureOriginDeprecatedNotRemoved: "`getCurrentPosition()` and `watchPosition()` are deprecated on insecure origins. To use this feature, you should consider switching your application to a secure origin, such as HTTPS. See https://goo.gle/chrome-insecure-origins for more details.",
-  /**
-   * @description Warning displayed to developers when non-standard getInnerHTML function is called. This function is deprecated and will be removed.
-   */
-  GetInnerHTML: "The getInnerHTML() function is deprecated, and will be removed from this browser very soon. Please use getHTML() instead.",
   /**
    * @description This warning occurs when the `getUserMedia()` API is invoked on an insecure (e.g., HTTP) site. This is only permitted on secure sites (e.g., HTTPS).
    */
@@ -223,13 +211,13 @@ export const UIStrings = {
    */
   UnloadHandler: "Unload event listeners are deprecated and will be removed.",
   /**
-   * @description This warning occurs when the website attempts to invoke the deprecated GPUAdapter `requestAdapterInfo()` method.
-   */
-  V8GPUAdapter_RequestAdapterInfo_Method: "The GPUAdapter `requestAdapterInfo()` method is deprecated, instead use the GPUAdapter `info` attribute.",
-  /**
    * @description A deprecation warning shown in the DevTools Issues tab. The placeholder is always the noun 'SharedArrayBuffer' which refers to a JavaScript construct. 'Extensions' refers to Chrome extensions. The warning is shown when Chrome Extensions attempt to use 'SharedArrayBuffer's under insecure circumstances.
    */
   V8SharedArrayBufferConstructedInExtensionWithoutIsolation: "Extensions should opt into cross-origin isolation to continue using `SharedArrayBuffer`. See https://developer.chrome.com/docs/extensions/mv3/cross-origin-isolation/.",
+  /**
+   * @description This warning occurs when the website attempts to use the deprecated WebGPU limit `maxInterStageShaderComponents`.
+   */
+  WebGPULimitMaxInterStageShaderComponents: "The WebGPU limit `maxInterStageShaderComponents` is deprecated, instead use the WebGPU limit `maxInterStageShaderVariables`.",
   /**
    * @description Warning displayed to developers when the Web SQL API is used to let them know this API is deprecated.
    */
@@ -256,14 +244,6 @@ export interface DeprecationDescriptor {
 export const DEPRECATIONS_METADATA: Partial<Record<string, DeprecationDescriptor>> = {
   "AuthorizationCoveredByWildcard": {
     "milestone": 97
-  },
-  "CSSCustomStateDeprecatedSyntax": {
-    "chromeStatusFeature": 5140610730426368,
-    "milestone": 122
-  },
-  "CSSInsetAreaProperty": {
-    "chromeStatusFeature": 5142143019253760,
-    "milestone": 129
   },
   "CSSSelectorInternalMediaControlsOverlayCastButton": {
     "chromeStatusFeature": 5714245488476160
@@ -296,9 +276,6 @@ export const DEPRECATIONS_METADATA: Partial<Record<string, DeprecationDescriptor
   "DataUrlInSvgUse": {
     "chromeStatusFeature": 5128825141198848,
     "milestone": 119
-  },
-  "GetInnerHTML": {
-    "chromeStatusFeature": 5081733588582400
   },
   "IdentityInCanMakePaymentEvent": {
     "chromeStatusFeature": 5190978431352832
@@ -370,11 +347,11 @@ export const DEPRECATIONS_METADATA: Partial<Record<string, DeprecationDescriptor
   "UnloadHandler": {
     "chromeStatusFeature": 5579556305502208
   },
-  "V8GPUAdapter_RequestAdapterInfo_Method": {
-    "chromeStatusFeature": 5140787340509184
-  },
   "V8SharedArrayBufferConstructedInExtensionWithoutIsolation": {
     "milestone": 96
+  },
+  "WebGPULimitMaxInterStageShaderComponents": {
+    "chromeStatusFeature": 4853767735083008
   },
   "WebSQL": {
     "chromeStatusFeature": 5134293578285056,

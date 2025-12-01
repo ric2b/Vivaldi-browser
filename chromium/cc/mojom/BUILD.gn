@@ -22,18 +22,13 @@ component("shared_mojom_traits") {
 mojom("mojom") {
   generate_java = true
   sources = [
-    "browser_controls_offset_tags_info.mojom",
+    "browser_controls_offset_tag_modifications.mojom",
     "browser_controls_params.mojom",
     "browser_controls_state.mojom",
     "overscroll_behavior.mojom",
     "render_frame_metadata.mojom",
     "touch_action.mojom",
   ]
-
-  enabled_features = []
-  if (is_android || is_ios) {
-    enabled_features += [ "is_android_or_ios" ]
-  }
 
   public_deps = [
     "//mojo/public/mojom/base",
@@ -90,12 +85,17 @@ mojom("mojom") {
     {
       types = [
         {
-          mojom = "cc.mojom.BrowserControlsOffsetTagsInfo"
-          cpp = "::cc::BrowserControlsOffsetTagsInfo"
+          mojom = "cc.mojom.BrowserControlsOffsetTagModifications"
+          cpp = "::cc::BrowserControlsOffsetTagModifications"
+        },
+        {
+          mojom = "cc.mojom.BrowserControlsOffsetTags"
+          cpp = "::cc::BrowserControlsOffsetTags"
         },
       ]
-      traits_headers =
-          [ "//cc/mojom/browser_controls_offset_tags_info_mojom_traits.h" ]
+      traits_headers = [
+        "//cc/mojom/browser_controls_offset_tag_modifications_mojom_traits.h",
+      ]
       traits_public_deps = [ "//components/viz/common" ]
     },
     {
@@ -133,6 +133,27 @@ mojom("element_id") {
         },
       ]
       traits_headers = [ "element_id_mojom_traits.h" ]
+      traits_public_deps = [ "//cc/paint" ]
+    },
+  ]
+}
+
+mojom("paint_flags") {
+  generate_java = true
+  sources = [ "paint_flags.mojom" ]
+  cpp_typemaps = [
+    {
+      types = [
+        {
+          mojom = "cc.mojom.FilterQuality"
+          cpp = "::cc::PaintFlags::FilterQuality"
+        },
+        {
+          mojom = "cc.mojom.DynamicRangeLimit"
+          cpp = "::cc::PaintFlags::DynamicRangeLimitMixture"
+        },
+      ]
+      traits_headers = [ "paint_flags_mojom_traits.h" ]
       traits_public_deps = [ "//cc/paint" ]
     },
   ]

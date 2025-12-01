@@ -41,7 +41,10 @@ const char kBackgroundDumpMode[] = "background";
 perfetto::protos::gen::TraceConfig TraceConfigWithHistograms(
     const std::string& category_filter_string,
     const std::vector<std::string>& histograms) {
-  base::trace_event::TraceConfig trace_event_config(category_filter_string, "");
+  // Which categories are specified in the legacy config should not affect
+  // anything. Only the list of enabled histograms should be read from the
+  // legacy config.
+  base::trace_event::TraceConfig trace_event_config;
   for (const auto& histogram : histograms) {
     trace_event_config.EnableHistogram(histogram);
   }
@@ -249,9 +252,8 @@ IN_PROC_BROWSER_TEST_F(TracingEndToEndBrowserTest, ThreadAndProcessName) {
       "process.name AS process_name "
       "FROM slice "
       "JOIN thread_track ON thread_track.id = slice.track_id "
-      "JOIN thread ON thread.utid = thread_track.utid "
-      "JOIN process_track ON process_track.id = thread_track.parent_id "
-      "JOIN process ON process.upid = process_track.upid "
+      "JOIN thread USING (utid) "
+      "JOIN process USING (upid) "
       "WHERE slice.cat = 'foo'";
   auto result = ttp.RunQuery(query);
   ASSERT_TRUE(result.has_value()) << result.error();
@@ -689,8 +691,8 @@ class SystemTracingEndToEndBrowserTest : public ContentBrowserTest {
                             .c_str(),
                         /*overwrite=*/true));
     feature_list_.InitAndEnableFeature(features::kEnablePerfettoSystemTracing);
-    tracing::PerfettoTracedProcess::Get()
-        ->SetAllowSystemTracingConsumerForTesting(true);
+    tracing::PerfettoTracedProcess::SetAllowSystemTracingConsumerForTesting(
+        true);
 
     ContentBrowserTest::SetUp();
   }
@@ -739,7 +741,7 @@ class SystemTracingEndToEndBrowserTest : public ContentBrowserTest {
   // producer.
   bool WaitForCurrentProcessConnected() {
     std::string current_process_name = tracing::PerfettoTracedProcess::Get()
-                                           ->perfetto_platform_for_testing()
+                                           .perfetto_platform_for_testing()
                                            ->GetCurrentProcessName();
     std::unique_ptr<perfetto::TracingSession> session =
         perfetto::Tracing::NewTrace(perfetto::kSystemBackend);

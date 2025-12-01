@@ -29,6 +29,7 @@
 
 #include "third_party/blink/renderer/core/dom/document.h"
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -41,7 +42,6 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/not_fatal_until.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
@@ -60,6 +60,7 @@
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/web_sandbox_flags.h"
+#include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink-forward.h"
 #include "services/network/public/mojom/trust_tokens.mojom-blink.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-blink.h"
 #include "third_party/blink/public/common/features.h"
@@ -73,7 +74,6 @@
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/page_state/page_state.mojom-blink.h"
 #include "third_party/blink/public/mojom/permissions/permission_status.mojom-blink-forward.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
@@ -135,6 +135,7 @@
 #include "third_party/blink/renderer/core/dom/attr.h"
 #include "third_party/blink/renderer/core/dom/beforeunload_event_listener.h"
 #include "third_party/blink/renderer/core/dom/cdata_section.h"
+#include "third_party/blink/renderer/core/dom/column_pseudo_element.h"
 #include "third_party/blink/renderer/core/dom/comment.h"
 #include "third_party/blink/renderer/core/dom/document_data.h"
 #include "third_party/blink/renderer/core/dom/document_fragment.h"
@@ -160,7 +161,6 @@
 #include "third_party/blink/renderer/core/dom/mutation_observer.h"
 #include "third_party/blink/renderer/core/dom/node_child_removal_tracker.h"
 #include "third_party/blink/renderer/core/dom/node_cloning_data.h"
-#include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/node_iterator.h"
 #include "third_party/blink/renderer/core/dom/node_lists_node_data.h"
 #include "third_party/blink/renderer/core/dom/node_rare_data.h"
@@ -181,6 +181,7 @@
 #include "third_party/blink/renderer/core/dom/visited_link_state.h"
 #include "third_party/blink/renderer/core/dom/whitespace_attacher.h"
 #include "third_party/blink/renderer/core/dom/xml_document.h"
+#include "third_party/blink/renderer/core/editing/drag_caret.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
 #include "third_party/blink/renderer/core/editing/ime/edit_context.h"
@@ -198,6 +199,7 @@
 #include "third_party/blink/renderer/core/events/visual_viewport_scroll_event.h"
 #include "third_party/blink/renderer/core/events/visual_viewport_scrollend_event.h"
 #include "third_party/blink/renderer/core/execution_context/window_agent.h"
+#include "third_party/blink/renderer/core/fetch/fetch_later_util.h"
 #include "third_party/blink/renderer/core/fragment_directive/fragment_directive.h"
 #include "third_party/blink/renderer/core/fragment_directive/text_fragment_handler.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
@@ -231,6 +233,7 @@
 #include "third_party/blink/renderer/core/html/forms/form_controller.h"
 #include "third_party/blink/renderer/core/html/forms/html_form_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
+#include "third_party/blink/renderer/core/html/forms/html_select_element.h"
 #include "third_party/blink/renderer/core/html/html_all_collection.h"
 #include "third_party/blink/renderer/core/html/html_anchor_element.h"
 #include "third_party/blink/renderer/core/html/html_base_element.h"
@@ -388,6 +391,7 @@
 #include "third_party/blink/renderer/platform/wtf/text/character_visitor.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_buffer.h"
 #include "third_party/blink/renderer/platform/wtf/text/text_encoding_registry.h"
+#include "third_party/blink/renderer/platform/wtf/text/utf16.h"
 
 #ifndef NDEBUG
 using WeakDocumentSet = blink::HeapHashSet<blink::WeakMember<blink::Document>>;
@@ -716,6 +720,14 @@ ExplicitlySetAttrElementsMap* Document::GetExplicitlySetAttrElementsMap(
   return add_result.stored_value->value.Get();
 }
 
+bool Document::HasExplicitlySetAttrElements(const Element* element) const {
+  auto it = element_explicitly_set_attr_elements_map_.find(element);
+  if (it == element_explicitly_set_attr_elements_map_.end()) {
+    return false;
+  }
+  return !it->value->empty();
+}
+
 void Document::MoveElementExplicitlySetAttrElementsMapToNewDocument(
     const Element* element,
     Document& new_document) {
@@ -777,6 +789,7 @@ Document::Document(const DocumentInit& initializer,
       token_(initializer.GetToken()),
       is_initial_empty_document_(initializer.IsInitialEmptyDocument()),
       is_prerendering_(initializer.IsPrerendering()),
+      is_for_discard_(initializer.IsForDiscard()),
       dom_window_(initializer.GetWindow()),
       execution_context_(initializer.GetExecutionContext()),
       agent_(initializer.GetAgent()),
@@ -870,7 +883,7 @@ Document::Document(const DocumentInit& initializer,
         RuntimeEnabledFeatures::ExperimentalPoliciesEnabled() &&
         !frame->IsOutermostMainFrame() &&
         !dom_window_->IsFeatureEnabled(
-            mojom::blink::PermissionsPolicyFeature::kVerticalScroll);
+            network::mojom::PermissionsPolicyFeature::kVerticalScroll);
     cached_top_frame_site_for_visited_links_ =
         net::SchemefulSite(TopFrameOrigin()->ToUrlOrigin());
   } else {
@@ -919,6 +932,13 @@ Document::Document(const DocumentInit& initializer,
   lifecycle_.AdvanceTo(DocumentLifecycle::kInactive);
 
   UpdateThemeColorCache();
+
+  if (GetFrame() && IsFetchLaterUseDeferredFetchPolicyEnabled()) {
+    if (auto* owner = DynamicTo<HTMLFrameOwnerElement>(GetFrame()->Owner());
+        owner) {
+      owner->MaybeClearDeferredFetchPolicy();
+    }
+  }
 
   // The parent's parser should be suspended together with all the other
   // objects, else this new Document would have a new ExecutionContext which
@@ -974,7 +994,7 @@ const Position Document::PositionAdjustedToTreeScope(
 
 SelectorQueryCache& Document::GetSelectorQueryCache() {
   if (!selector_query_cache_)
-    selector_query_cache_ = std::make_unique<SelectorQueryCache>();
+    selector_query_cache_ = MakeGarbageCollected<SelectorQueryCache>();
   return *selector_query_cache_;
 }
 
@@ -1626,6 +1646,8 @@ void Document::SetContentFromDOMParser(const String& content) {
                                                 parser_behavior, nullptr);
     SetParsingState(kFinishedParsing);
     if (success) {
+      body->ParserFinishedBuildingDocumentFragment(
+          ShouldNotifyInsertedNodes::kNotify);
       // When DCHECK is enabled, use SetContent() and verify fast-path
       // content matches. This effectively means the results of the fast-path
       // parser aren't used with DCHECK enabled, but it provides a way to
@@ -2198,19 +2220,32 @@ static void AssertNodeClean(const Node& node) {
 
 static void AssertLayoutTreeUpdatedForPseudoElements(const Element& element) {
   WTF::Vector<PseudoId> pseudo_ids = {kPseudoIdFirstLetter,
-                                      kPseudoIdCheck,
+                                      kPseudoIdCheckMark,
                                       kPseudoIdBefore,
                                       kPseudoIdAfter,
-                                      kPseudoIdSelectArrow,
+                                      kPseudoIdPickerIcon,
                                       kPseudoIdMarker,
                                       kPseudoIdBackdrop,
                                       kPseudoIdScrollMarkerGroupBefore,
                                       kPseudoIdScrollMarkerGroupAfter,
-                                      kPseudoIdScrollNextButton,
-                                      kPseudoIdScrollPrevButton};
+                                      kPseudoIdScrollButtonBlockStart,
+                                      kPseudoIdScrollButtonInlineStart,
+                                      kPseudoIdScrollButtonInlineEnd,
+                                      kPseudoIdScrollButtonBlockEnd,
+                                      kPseudoIdScrollMarker};
   for (auto pseudo_id : pseudo_ids) {
-    if (auto* pseudo_element = element.GetPseudoElement(pseudo_id))
+    if (const PseudoElement* pseudo_element =
+            element.GetPseudoElement(pseudo_id)) {
       AssertNodeClean(*pseudo_element);
+      AssertLayoutTreeUpdatedForPseudoElements(*pseudo_element);
+    }
+  }
+  if (const ColumnPseudoElementsVector* columns =
+          element.GetColumnPseudoElements()) {
+    for (const ColumnPseudoElement* column : *columns) {
+      AssertNodeClean(*column);
+      AssertLayoutTreeUpdatedForPseudoElements(*column);
+    }
   }
 }
 
@@ -2422,6 +2457,12 @@ void Document::UpdateStyleAndLayoutTreeForThisDocument() {
   UpdateStyle();
   GetStyleResolver().ClearResizedForViewportUnits();
   InvalidatePendingSVGResources();
+
+  if (GetFrame()->IsMainFrame() &&
+      RuntimeEnabledFeatures::UpdateComplexSafaAreaConstraintsEnabled()) {
+    GetViewportData().SetHasComplexSafaAreaConstraint(
+        style_engine.HasComplexSafaAreaConstraints());
+  }
 
   rendering_had_begun_for_last_style_update_ = RenderingHasBegun();
 
@@ -3079,14 +3120,7 @@ void Document::Shutdown() {
 
   GetFrame()->DocumentDetached();
   GetFrame()->GetEventHandlerRegistry().DocumentDetached(*this);
-
-  // Signal destruction to mutation observers.
-  synchronous_mutation_observer_set_.ForEachObserver(
-      [](SynchronousMutationObserver* observer) {
-        observer->ContextDestroyed();
-        observer->ObserverSetWillBeCleared();
-      });
-  synchronous_mutation_observer_set_.Clear();
+  GetFrame()->Selection().ContextDestroyed();
 
   cookie_jar_ = nullptr;  // Not accessible after navigated away.
   fetcher_->ClearContext();
@@ -3233,7 +3267,7 @@ void Document::AXContextModeChanged() {
 }
 
 void Document::RemoveAXContext(AXContext* context) {
-  auto iter = base::ranges::find(ax_contexts_, context);
+  auto iter = std::ranges::find(ax_contexts_, context);
   if (iter != ax_contexts_.end())
     ax_contexts_.erase(iter);
   if (ax_contexts_.size() == 0) {
@@ -3545,6 +3579,8 @@ void Document::open(LocalDOMWindow* entered_window,
 
 // https://html.spec.whatwg.org/C/dynamic-markup-insertion.html#document-open-steps
 void Document::open() {
+  TRACE_EVENT("blink", "Document::open");
+
   DCHECK(!ignore_opens_during_unload_count_);
   if (ScriptableDocumentParser* parser = GetScriptableDocumentParser())
     DCHECK(!parser->IsParsing() || !parser->IsExecutingScript());
@@ -3870,6 +3906,8 @@ void Document::close(ExceptionState& exception_state) {
 
 // https://html.spec.whatwg.org/C/dynamic-markup-insertion.html#dom-document-close
 void Document::close() {
+  TRACE_EVENT("blink", "Document::close");
+
   // If there is no script-created parser associated with the document, then
   // return.
   if (!GetScriptableDocumentParser() ||
@@ -4227,9 +4265,11 @@ void Document::DispatchUnloadEvents(UnloadEventTimingInfo* unload_timing_info) {
     parser_->StopParsing();
   }
 
-  if (IsPrerendering()) {
-    // We do not dispatch unload event while prerendering.
-    return;
+  if (!base::FeatureList::IsEnabled(features::kPageHideEventForPrerender2)) {
+    if (IsPrerendering()) {
+      // We do not dispatch unload event while prerendering.
+      return;
+    }
   }
 
   if (load_event_progress_ == kLoadEventNotRun ||
@@ -4377,6 +4417,8 @@ bool Document::ShouldScheduleLayout() const {
 void Document::write(const String& text,
                      LocalDOMWindow* entered_window,
                      ExceptionState& exception_state) {
+  TRACE_EVENT("blink", "Document::write");
+
   if (!IsA<HTMLDocument>(this)) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       "Only HTML documents support write().");
@@ -4573,9 +4615,9 @@ void Document::UpdateBaseURL() {
       anchor.InvalidateCachedVisitedLinkHash();
   }
 
-  for (Element* element : *scripts()) {
-    auto* script = To<HTMLScriptElement>(element);
-    script->Loader()->DocumentBaseURLChanged();
+  for (HTMLScriptElement& script :
+       Traversal<HTMLScriptElement>::DescendantsOf(*this)) {
+    script.Loader()->DocumentBaseURLChanged();
   }
 
   if (auto* document_rules = DocumentSpeculationRules::FromIfExists(*this)) {
@@ -5207,6 +5249,29 @@ void Document::DynamicViewportUnitsChanged() {
   GetStyleEngine().MarkViewportUnitDirty(ViewportUnitFlag::kDynamic);
 }
 
+// For changing :active and :hover we want to traverse the flat tree
+// ancestors of an element, except we don't want to cross from the
+// popover of an appearance:base <select> into the <select> (or any of
+// its ancestors).
+//
+// This reimplements TraversalParent<FlatTreeTraversal> with that slight
+// variation so that we can do traversals this way in a bunch of places.
+class FlatTreeTraversalParentElementExceptSelectPopover {
+ public:
+  using Traversal = FlatTreeTraversal;
+  using TraversalNodeType = Element;
+  static TraversalNodeType* Next(const TraversalNodeType& node) {
+    if (RuntimeEnabledFeatures::CustomizableSelectEnabled() &&
+        HTMLSelectElement::IsPopoverForAppearanceBase(&node)) {
+      return nullptr;
+    }
+    return Traversal::ParentElement(node);
+  }
+};
+
+using InclusiveAncestorsForActiveOrHover = TraversalRange<
+    TraversalIterator<FlatTreeTraversalParentElementExceptSelectPopover>>;
+
 void EmitDidChangeHoverElement(Document& document, Element* new_hover_element) {
   LocalFrame* local_frame = document.GetFrame();
   if (!local_frame) {
@@ -5224,7 +5289,6 @@ void EmitDidChangeHoverElement(Document& document, Element* new_hover_element) {
 }
 
 void Document::SetHoverElement(Element* new_hover_element) {
-  HTMLElement::HoveredElementChanged(hover_element_, new_hover_element);
   EmitDidChangeHoverElement(*this, new_hover_element);
 
   hover_element_ = new_hover_element;
@@ -5737,10 +5801,6 @@ void Document::DidMoveTreeToNewDocument(const Node& root) {
     for (Range* range : ranges)
       range->UpdateOwnerDocumentIfNeeded();
   }
-  synchronous_mutation_observer_set_.ForEachObserver(
-      [&](SynchronousMutationObserver* observer) {
-        observer->DidMoveTreeToNewDocument(root);
-      });
 }
 
 void Document::NodeChildrenWillBeRemoved(ContainerNode& container) {
@@ -5756,10 +5816,19 @@ void Document::NodeChildrenWillBeRemoved(ContainerNode& container) {
       ni->NodeWillBeRemoved(n);
   }
 
-  synchronous_mutation_observer_set_.ForEachObserver(
-      [&](SynchronousMutationObserver* observer) {
-        observer->NodeChildrenWillBeRemoved(container);
-      });
+  if (LocalFrame* frame = GetFrame()) {
+    // TODO(dbaron): Could this also be inside the IsActiveDocument test?
+    frame->Selection().NodeChildrenWillBeRemoved(container);
+    if (container.isConnected()) {
+      frame->GetEventHandler().NodeChildrenWillBeRemoved(container);
+    }
+  }
+
+  if (container.InActiveDocument()) {
+    if (Page* page = GetPage()) {
+      page->GetDragCaret().NodeChildrenWillBeRemoved(container);
+    }
+  }
 
   if (MayContainShadowRoots()) {
     for (Node& n : NodeTraversal::ChildrenOf(container))
@@ -5771,7 +5840,11 @@ void Document::NodeWillBeRemoved(Node& n) {
   for (NodeIterator* ni : node_iterators_)
     ni->NodeWillBeRemoved(n);
 
-  if (!StatePreservingAtomicMoveInProgress()) {
+  // We want to run the normal Range reset code when we're not in the middle of
+  // `moveBefore()`, or when we *are* but when range preservation is disabled
+  // (it is by default).
+  if (!StatePreservingAtomicMoveInProgress() ||
+      !RuntimeEnabledFeatures::AtomicMoveRangePreservationEnabled()) {
     for (Range* range : ranges_) {
       range->NodeWillBeRemoved(n);
       if (range == sequential_focus_navigation_starting_point_) {
@@ -5780,10 +5853,19 @@ void Document::NodeWillBeRemoved(Node& n) {
     }
   }
 
-  synchronous_mutation_observer_set_.ForEachObserver(
-      [&](SynchronousMutationObserver* observer) {
-        observer->NodeWillBeRemoved(n);
-      });
+  if (LocalFrame* frame = GetFrame()) {
+    // TODO(dbaron): Could this also be inside the IsActiveDocument test?
+    frame->Selection().NodeWillBeRemoved(n);
+    if (n.isConnected()) {
+      frame->GetEventHandler().NodeWillBeRemoved(n);
+    }
+  }
+
+  if (n.InActiveDocument()) {
+    if (Page* page = GetPage()) {
+      page->GetDragCaret().NodeWillBeRemoved(n);
+    }
+  }
 
   if (MayContainShadowRoots())
     n.CheckSlotChangeBeforeRemoved();
@@ -5794,11 +5876,12 @@ void Document::NodeWillBeRemoved(Node& n) {
 
 void Document::NotifyUpdateCharacterData(CharacterData* character_data,
                                          const TextDiffRange& diff) {
-  synchronous_mutation_observer_set_.ForEachObserver(
-      [&](SynchronousMutationObserver* observer) {
-        observer->DidUpdateCharacterData(character_data, diff.offset,
-                                         diff.old_size, diff.new_size);
-      });
+  Markers().DidUpdateCharacterData(character_data, diff.offset, diff.old_size,
+                                   diff.new_size);
+  if (LocalFrame* frame = GetFrame()) {
+    frame->Selection().DidUpdateCharacterData(character_data, diff.offset,
+                                              diff.old_size, diff.new_size);
+  }
 }
 
 void Document::NotifyChangeChildren(
@@ -5810,10 +5893,9 @@ void Document::NotifyChangeChildren(
     }
   }
 
-  synchronous_mutation_observer_set_.ForEachObserver(
-      [&](SynchronousMutationObserver* observer) {
-        observer->DidChangeChildren(container, change);
-      });
+  if (LocalFrame* frame = GetFrame()) {
+    frame->Selection().DidChangeChildren(change);
+  }
 }
 
 void Document::NotifyAttributeChanged(const Element& element,
@@ -5831,16 +5913,24 @@ void Document::NotifyAttributeChanged(const Element& element,
       }
     }
   }
-
-  synchronous_mutation_observer_set_.ForEachObserver(
-      [&](SynchronousMutationObserver* observer) {
-        observer->AttributeChanged(element, name, old_value, new_value);
-      });
 }
 
 void Document::DidInsertText(const CharacterData& text,
                              unsigned offset,
                              unsigned length) {
+  // Note that the current callers of DidInsertText call it *only* for
+  // the cases that are needed for adjusting Range boundary points.  It
+  // is not called by CharacterData::setData or
+  // CharacterData::appendData.  If other code is added here, the calls
+  // to DidInsertText may need to be fixed.
+  //
+  // Document::NotifyUpdateCharacterData gets the complete set of
+  // notifications.
+  //
+  // TODO(dbaron): It may be worth removing DidInsertText/DidRemoveText
+  // in favor of NotifyUpdateCharacterData, but it's also possible the
+  // separation may be faster.
+
   for (Range* range : ranges_)
     range->DidInsertText(text, offset, length);
 }
@@ -5862,11 +5952,10 @@ void Document::DidMergeTextNodes(const Text& merged_node,
       range->DidMergeTextNodes(node_to_be_removed_with_index, old_length);
   }
 
-  synchronous_mutation_observer_set_.ForEachObserver(
-      [&](SynchronousMutationObserver* observer) {
-        observer->DidMergeTextNodes(merged_node, node_to_be_removed_with_index,
-                                    old_length);
-      });
+  if (LocalFrame* frame = GetFrame()) {
+    frame->Selection().DidMergeTextNodes(
+        merged_node, node_to_be_removed_with_index, old_length);
+  }
 
   // FIXME: This should update markers for spelling and grammar checking.
 }
@@ -5875,10 +5964,9 @@ void Document::DidSplitTextNode(const Text& old_node) {
   for (Range* range : ranges_)
     range->DidSplitTextNode(old_node);
 
-  synchronous_mutation_observer_set_.ForEachObserver(
-      [&](SynchronousMutationObserver* observer) {
-        observer->DidSplitTextNode(old_node);
-      });
+  if (LocalFrame* frame = GetFrame()) {
+    frame->Selection().DidSplitTextNode(old_node);
+  }
 
   // FIXME: This should update markers for spelling and grammar checking.
 }
@@ -5975,13 +6063,11 @@ void Document::EnqueueScrollSnapChangingEvent(Node* target,
 }
 
 void Document::EnqueueMoveEvent() {
-  CHECK(
-      RuntimeEnabledFeatures::DesktopPWAsAdditionalWindowingControlsEnabled());
+  CHECK(RuntimeEnabledFeatures::WindowOnMoveEventEnabled());
 
   Event* event = Event::Create(event_type_names::kMove);
   event->SetTarget(domWindow());
-
-  // TODO(crbug.com/1515101): When launching AWC, requires spec work.
+  // TODO(crbug.com/379542213): This requires spec work.
   scripted_animation_controller_->EnqueuePerFrameEvent(event);
 }
 
@@ -6766,8 +6852,7 @@ static bool IsValidNameNonASCII(base::span<const LChar> characters) {
 static bool IsValidNameNonASCII(base::span<const UChar> characters) {
   for (size_t i = 0; i < characters.size();) {
     bool first = i == 0;
-    UChar32 c;
-    U16_NEXT(characters, i, characters.size(), c);  // Increments i.
+    UChar32 c = CodePointAtAndNext(characters, i);
     if (first ? !IsValidNameStart(c) : !IsValidNamePart(c))
       return false;
   }
@@ -6833,8 +6918,7 @@ static ParseQualifiedNameResult ParseQualifiedNameInternal(
   size_t colon_pos = 0;
 
   for (size_t i = 0; i < characters.size();) {
-    UChar32 c;
-    U16_NEXT(characters, i, characters.size(), c);
+    UChar32 c = CodePointAtAndNext(characters, i);
     if (c == ':') {
       if (saw_colon)
         return ParseQualifiedNameResult(kQNMultipleColons);
@@ -7369,7 +7453,8 @@ void Document::FinishedParsing() {
         UpdateStyleAndLayoutTree();
         if (base::FeatureList::IsEnabled(
                 features::kPrerender2EarlyDocumentLifecycleUpdate) &&
-            IsPrerendering() && GetFrame()->IsLocalRoot()) {
+            IsPrerendering() && GetFrame()->IsLocalRoot() &&
+            GetPage()->ShouldPreparePaintTreeOnPrerender()) {
           View()->DryRunPaintingForPrerender();
         }
       }
@@ -7571,7 +7656,7 @@ std::optional<Color> Document::ThemeColor() {
   return std::nullopt;
 }
 
-void Document::UpdateAppTitle() {
+void Document::UpdateApplicationTitle() {
   auto* root_element = documentElement();
   if (!root_element) {
     return;
@@ -7579,15 +7664,16 @@ void Document::UpdateAppTitle() {
 
   for (HTMLMetaElement& meta_element :
        Traversal<HTMLMetaElement>::DescendantsOf(*root_element)) {
-    if (EqualIgnoringASCIICase(meta_element.GetName(), "app-title")) {
-      GetFrame()->GetLocalFrameHostRemote().UpdateAppTitle(
+    if (EqualIgnoringASCIICase(meta_element.GetName(), "application-title")) {
+      GetFrame()->GetLocalFrameHostRemote().UpdateApplicationTitle(
           meta_element.Content().GetString());
       return;
     }
   }
 
-  // Handle case of meta tag being removed by setting app title to empty string.
-  GetFrame()->GetLocalFrameHostRemote().UpdateAppTitle(String(""));
+  // Handle case of meta tag being removed by setting application title to empty
+  // string.
+  GetFrame()->GetLocalFrameHostRemote().UpdateApplicationTitle(g_empty_string);
 }
 
 void Document::ColorSchemeMetaChanged() {
@@ -8013,6 +8099,11 @@ void Document::SetPopoverPointerdownTarget(const HTMLElement* popover) {
   popover_pointerdown_target_ = popover;
 }
 
+void Document::SetCustomizableSelectMousedownLocation(
+    std::optional<gfx::PointF> point) {
+  customizable_select_mousedown_location_ = point;
+}
+
 const HTMLDialogElement* Document::DialogPointerdownTarget() const {
   CHECK(RuntimeEnabledFeatures::HTMLDialogLightDismissEnabled());
   return dialog_pointerdown_target_.Get();
@@ -8022,6 +8113,12 @@ void Document::SetDialogPointerdownTarget(const HTMLDialogElement* dialog) {
   CHECK(RuntimeEnabledFeatures::HTMLDialogLightDismissEnabled());
   DCHECK(!dialog || dialog->IsOpen());
   dialog_pointerdown_target_ = dialog;
+}
+
+void Document::SetKeyboardInterestTargetElement(Element* element) {
+  CHECK(RuntimeEnabledFeatures::HTMLInterestTargetAttributeEnabled());
+  CHECK(!element || element->interestTargetElement());
+  keyboard_interest_target_element_ = element;
 }
 
 void Document::exitPointerLock() {
@@ -8172,19 +8269,19 @@ void Document::UpdateActiveState(bool is_active,
     // The oldActiveElement layoutObject is null, dropped on :active by setting
     // display: none, for instance. We still need to clear the ActiveChain as
     // the mouse is released.
-    for (Element* element = old_active_element; element;
-         element = FlatTreeTraversal::ParentElement(*element)) {
-      element->SetActive(false);
-      user_action_elements_.SetInActiveChain(element, false);
+    for (Element& element :
+         InclusiveAncestorsForActiveOrHover(old_active_element)) {
+      element.SetActive(false);
+      user_action_elements_.SetInActiveChain(&element, false);
     }
     SetActiveElement(nullptr);
   } else {
     if (!old_active_element && new_active_element && is_active) {
       // We are setting the :active chain and freezing it. If future moves
       // happen, they will need to reference this chain.
-      for (Element* element = new_active_element; element;
-           element = FlatTreeTraversal::ParentElement(*element)) {
-        user_action_elements_.SetInActiveChain(element, true);
+      for (Element& element :
+           InclusiveAncestorsForActiveOrHover(new_active_element)) {
+        user_action_elements_.SetInActiveChain(&element, true);
       }
       SetActiveElement(new_active_element);
     }
@@ -8204,10 +8301,10 @@ void Document::UpdateActiveState(bool is_active,
   // is down and if this is a mouse move event, we want to restrict changes in
   // :active to only apply to elements that are in the :active chain that we
   // froze at the time the mouse went down.
-  for (Element* curr = new_element; curr;
-       curr = FlatTreeTraversal::ParentElement(*curr)) {
-    if (update_active_chain || curr->InActiveChain())
-      curr->SetActive(true);
+  for (Element& curr : InclusiveAncestorsForActiveOrHover(new_element)) {
+    if (update_active_chain || curr.InActiveChain()) {
+      curr.SetActive(true);
+    }
   }
 }
 
@@ -8227,44 +8324,65 @@ void Document::UpdateHoverState(Element* inner_element_in_document) {
   // Update our current hover element.
   SetHoverElement(new_hover_element);
 
-  Node* ancestor_element = nullptr;
-  if (old_hover_element && old_hover_element->isConnected() &&
-      new_hover_element) {
-    Node* ancestor = FlatTreeTraversal::CommonAncestor(*old_hover_element,
-                                                       *new_hover_element);
-    if (auto* element = DynamicTo<Element>(ancestor))
-      ancestor_element = element;
-  }
+  using ElementVector = HeapVector<Member<Element>, 64>;
+  using ElementSpan = base::span<Member<Element>>;
+  ElementVector elements_to_remove_from_chain;
+  ElementVector elements_to_add_to_chain;
 
-  HeapVector<Member<Element>, 32> elements_to_remove_from_chain;
-  HeapVector<Member<Element>, 32> elements_to_add_to_hover_chain;
-
-  // The old hover path only needs to be cleared up to (and not including) the
-  // common ancestor;
-  //
   // TODO(emilio): old_hover_element may be disconnected from the tree already.
   if (old_hover_element && old_hover_element->isConnected()) {
-    for (Element* curr = old_hover_element; curr && curr != ancestor_element;
-         curr = FlatTreeTraversal::ParentElement(*curr)) {
-      elements_to_remove_from_chain.push_back(curr);
+    for (Element& curr :
+         InclusiveAncestorsForActiveOrHover(old_hover_element)) {
+      elements_to_remove_from_chain.push_back(&curr);
     }
   }
 
   // Now set the hover state for our new object up to the root.
-  for (Element* curr = new_hover_element; curr;
-       curr = FlatTreeTraversal::ParentElement(*curr)) {
-    elements_to_add_to_hover_chain.push_back(curr);
+  for (Element& curr : InclusiveAncestorsForActiveOrHover(new_hover_element)) {
+    elements_to_add_to_chain.push_back(&curr);
   }
 
-  for (Element* element : elements_to_remove_from_chain)
-    element->SetHovered(false);
+  // The old hover path only needs to be cleared up to (and not including) the
+  // common ancestor.
+  //
+  // No need to notify elements that aren't changing because they're in both
+  // chains.  Find the index that starts the part of chains where they're the
+  // same.
+  wtf_size_t remove_size = elements_to_remove_from_chain.size();
+  wtf_size_t add_size = elements_to_add_to_chain.size();
+  wtf_size_t remove_index;
+  wtf_size_t add_index;
+  if (remove_size > add_size) {
+    add_index = 0;
+    remove_index = remove_size - add_size;
+  } else {
+    remove_index = 0;
+    add_index = add_size - remove_size;
+  }
+  while (add_index < add_size) {
+    if (elements_to_remove_from_chain[remove_index] ==
+        elements_to_add_to_chain[add_index]) {
+      break;
+    }
+    ++add_index;
+    ++remove_index;
+  }
 
-  bool saw_common_ancestor = false;
-  for (Element* element : elements_to_add_to_hover_chain) {
-    if (element == ancestor_element)
-      saw_common_ancestor = true;
-    if (!saw_common_ancestor || element == hover_element_)
+  for (Element* element :
+       ElementSpan(elements_to_remove_from_chain).first(remove_index)) {
+    element->SetHovered(false);
+  }
+
+  for (Element* element :
+       ElementSpan(elements_to_add_to_chain).first(add_index)) {
+    element->SetHovered(true);
+  }
+
+  for (Element* element :
+       ElementSpan(elements_to_add_to_chain).subspan(add_index)) {
+    if (element == hover_element_) {
       element->SetHovered(true);
+    }
   }
 }
 
@@ -8655,8 +8773,9 @@ PropertyRegistry& Document::EnsurePropertyRegistry() {
 
 DocumentResourceCoordinator* Document::GetResourceCoordinator() {
   // `resource_coordinator_` is cleared in Shutdown() and must not be recreated
-  // afterwards, when the Document is no longer active.
-  if (!resource_coordinator_ && IsActive()) {
+  // afterwards, when the Document is no longer active. If `is_for_discard_` do
+  // not instantiate a resource coordinator.
+  if (!resource_coordinator_ && IsActive() && !is_for_discard_) {
     CHECK(GetFrame(), base::NotFatalUntil::M135);
     if (auto* frame = GetFrame()) {
       resource_coordinator_ = DocumentResourceCoordinator::MaybeCreate(
@@ -8741,6 +8860,8 @@ void Document::Trace(Visitor* visitor) const {
   visitor->Trace(dialog_pointerdown_target_);
   visitor->Trace(popovers_waiting_to_hide_);
   visitor->Trace(all_open_popovers_);
+  visitor->Trace(all_open_dialogs_);
+  visitor->Trace(keyboard_interest_target_element_);
   visitor->Trace(document_part_root_);
   visitor->Trace(load_event_delay_timer_);
   visitor->Trace(plugin_loading_timer_);
@@ -8770,6 +8891,7 @@ void Document::Trace(Visitor* visitor) const {
   visitor->Trace(template_document_host_);
   visitor->Trace(user_action_elements_);
   visitor->Trace(svg_extensions_);
+  visitor->Trace(selector_query_cache_);
   visitor->Trace(layout_view_);
   visitor->Trace(document_animations_);
   visitor->Trace(timeline_);
@@ -8786,7 +8908,6 @@ void Document::Trace(Visitor* visitor) const {
   visitor->Trace(lazy_load_image_observer_);
   visitor->Trace(mime_handler_view_before_unload_event_listener_);
   visitor->Trace(cookie_jar_);
-  visitor->Trace(synchronous_mutation_observer_set_);
   visitor->Trace(fragment_directive_);
   visitor->Trace(element_explicitly_set_attr_elements_map_);
   visitor->Trace(element_cached_attr_associated_elements_map_);
@@ -8846,8 +8967,10 @@ bool Document::IsFocusAllowed() const {
   CountUse(uma_type);
   if (!RuntimeEnabledFeatures::BlockingFocusWithoutUserActivationEnabled())
     return true;
-  return GetExecutionContext()->IsFeatureEnabled(
-      mojom::blink::PermissionsPolicyFeature::kFocusWithoutUserActivation);
+  return GetFrame()->AllowFocusDuringFocusAdvance() ||
+         GetExecutionContext()->IsFeatureEnabled(
+             network::mojom::PermissionsPolicyFeature::
+                 kFocusWithoutUserActivation);
 }
 
 LazyLoadImageObserver& Document::EnsureLazyLoadImageObserver() {
@@ -9053,6 +9176,13 @@ bool Document::IsAnimatedPropertyCounted(CSSPropertyID property) const {
 void Document::ClearUseCounterForTesting(mojom::WebFeature feature) {
   if (DocumentLoader* loader = Loader())
     loader->GetUseCounter().ClearMeasurementForTesting(feature);
+}
+
+void Document::ClearWebDXFeatureCounterForTesting(
+    mojom::blink::WebDXFeature feature) {
+  if (DocumentLoader* loader = Loader()) {
+    loader->GetUseCounter().ClearMeasurementForTesting(feature);
+  }
 }
 
 void Document::RenderBlockingResourceUnblocked() {

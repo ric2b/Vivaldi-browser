@@ -5,6 +5,9 @@
 import * as Helpers from '../helpers/helpers.js';
 import * as Types from '../types/types.js';
 
+import {data as AsyncJSCallsHandlerData} from './AsyncJSCallsHandler.js';
+import {data as flowsHandlerData} from './FlowsHandler.js';
+
 const lastScheduleStyleRecalcByFrame = new Map<string, Types.Events.ScheduleStyleRecalculation>();
 
 // This tracks the last event that is considered to have invalidated the layout
@@ -20,10 +23,6 @@ const lastInvalidationEventForFrame = new Map<string, Types.Events.Event>();
 // is called.
 const lastUpdateLayoutTreeByFrame = new Map<string, Types.Events.UpdateLayoutTree>();
 
-// This tracks postmessage dispatch and handler events for creating initiator association
-const postMessageHandlerEvents: Types.Events.HandlePostMessage[] = [];
-const schedulePostMessageEventByTraceId: Map<string, Types.Events.SchedulePostMessage> = new Map();
-
 // These two maps store the same data but in different directions.
 // For a given event, tell me what its initiator was. An event can only have one initiator.
 const eventToInitiatorMap = new Map<Types.Events.Event, Types.Events.Event>();
@@ -31,9 +30,14 @@ const eventToInitiatorMap = new Map<Types.Events.Event, Types.Events.Event>();
 // multiple events, hence why the value for this map is an array.
 const initiatorToEventsMap = new Map<Types.Events.Event, Types.Events.Event[]>();
 
+// Note: we are keeping the parsing of the following async JS schedulers
+// for backwards compatibility only. They are targeted to be removed
+// completely by M134. See more details at crbug.com/383974422
+// TODO(andoli): remove manual parsing of async JS schedulers.
 const requestAnimationFrameEventsById: Map<number, Types.Events.RequestAnimationFrame> = new Map();
 const timerInstallEventsById: Map<number, Types.Events.TimerInstall> = new Map();
 const requestIdleCallbackEventsById: Map<number, Types.Events.RequestIdleCallback> = new Map();
+
 const webSocketCreateEventsById: Map<number, Types.Events.WebSocketCreate> = new Map();
 const schedulePostTaskCallbackEventsById: Map<number, Types.Events.SchedulePostTaskCallback> = new Map();
 
@@ -48,8 +52,6 @@ export function reset(): void {
   requestIdleCallbackEventsById.clear();
   webSocketCreateEventsById.clear();
   schedulePostTaskCallbackEventsById.clear();
-  schedulePostMessageEventByTraceId.clear();
-  postMessageHandlerEvents.length = 0;
 }
 
 function storeInitiator(data: {initiator: Types.Events.Event, event: Types.Events.Event}): void {
@@ -59,6 +61,16 @@ function storeInitiator(data: {initiator: Types.Events.Event, event: Types.Event
   initiatorToEventsMap.set(data.initiator, eventsForInitiator);
 }
 
+/**
+ * IMPORTANT: Before adding support for new initiator relationships in
+ * trace events consider using Perfetto's flow API on the events in
+ * question, so that they get automatically computed.
+ * @see {@link flowsHandlerData}
+ *
+ * The events manually computed here were added before we had support
+ * for flow events. As such they should be migrated to use the flow
+ * API so that no manual parsing is needed.
+ */
 export function handleEvent(event: Types.Events.Event): void {
   if (Types.Events.isScheduleStyleRecalculation(event)) {
     lastScheduleStyleRecalcByFrame.set(event.args.data.frame, event);
@@ -164,34 +176,30 @@ export function handleEvent(event: Types.Events.Event): void {
       storeInitiator({event, initiator: matchingSchedule});
     }
   }
-  // Store schedulePostMessage Events by their traceIds.
-  // so they can be reconciled later with matching handlePostMessage events with same traceIds.
-  else if (Types.Events.isHandlePostMessage(event)) {
-    postMessageHandlerEvents.push(event);
-  } else if (Types.Events.isSchedulePostMessage(event)) {
-    const traceId = event.args.data?.traceId;
-    if (traceId) {
-      schedulePostMessageEventByTraceId.set(traceId, event);
+}
+
+function createRelationshipsFromFlows(): void {
+  const flows = flowsHandlerData().flows;
+  for (let i = 0; i < flows.length; i++) {
+    const flow = flows[i];
+    for (let j = 0; j < flow.length - 1; j++) {
+      storeInitiator({event: flow[j + 1], initiator: flow[j]});
     }
   }
 }
 
-function finalizeInitiatorRelationship(): void {
-  for (const handlerEvent of postMessageHandlerEvents) {
-    const traceId = handlerEvent.args.data?.traceId;
-    const matchingSchedulePostMesssageEvent = schedulePostMessageEventByTraceId.get(traceId);
-    if (matchingSchedulePostMesssageEvent) {
-      // Set schedulePostMesssage events as initiators for handler events.
-      storeInitiator({event: handlerEvent, initiator: matchingSchedulePostMesssageEvent});
+function createRelationshipsFromAsyncJSCalls(): void {
+  const asyncCallEntries = AsyncJSCallsHandlerData().schedulerToRunEntryPoints.entries();
+  for (const [asyncCaller, asyncCallees] of asyncCallEntries) {
+    for (const asyncCallee of asyncCallees) {
+      storeInitiator({event: asyncCallee, initiator: asyncCaller});
     }
   }
 }
 
 export async function finalize(): Promise<void> {
-  // During event processing, we may encounter initiators before the handler events themselves
-  // (e.g dispatch events on worker and handler events on the main thread)
-  // we don't want to miss out on events whose initiators haven't been processed yet
-  finalizeInitiatorRelationship();
+  createRelationshipsFromFlows();
+  createRelationshipsFromAsyncJSCalls();
 }
 
 export interface InitiatorsData {
@@ -204,4 +212,8 @@ export function data(): InitiatorsData {
     eventToInitiator: eventToInitiatorMap,
     initiatorToEvents: initiatorToEventsMap,
   };
+}
+
+export function deps(): ['Flows', 'AsyncJSCalls'] {
+  return ['Flows', 'AsyncJSCalls'];
 }

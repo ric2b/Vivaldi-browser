@@ -390,28 +390,27 @@ void BufferVk::destroy(const gl::Context *context)
     (void)release(contextVk);
 }
 
-void BufferVk::releaseConversionBuffers(vk::Renderer *renderer)
+void BufferVk::releaseConversionBuffers(vk::Context *context)
 {
     for (ConversionBuffer &buffer : mVertexConversionBuffers)
     {
-        buffer.release(renderer);
+        buffer.release(context);
     }
     mVertexConversionBuffers.clear();
 }
 
 angle::Result BufferVk::release(ContextVk *contextVk)
 {
-    vk::Renderer *renderer = contextVk->getRenderer();
     if (mBuffer.valid())
     {
         ANGLE_TRY(contextVk->releaseBufferAllocation(&mBuffer));
     }
     if (mStagingBuffer.valid())
     {
-        mStagingBuffer.release(renderer);
+        mStagingBuffer.release(contextVk);
     }
 
-    releaseConversionBuffers(renderer);
+    releaseConversionBuffers(contextVk);
 
     return angle::Result::Continue;
 }
@@ -620,7 +619,7 @@ angle::Result BufferVk::allocStagingBuffer(ContextVk *contextVk,
             mIsStagingBufferMapped = true;
             return angle::Result::Continue;
         }
-        mStagingBuffer.release(contextVk->getRenderer());
+        mStagingBuffer.release(contextVk);
     }
 
     ANGLE_TRY(
@@ -803,8 +802,8 @@ angle::Result BufferVk::mapRangeImpl(ContextVk *contextVk,
             // If there are unflushed write commands for the resource, flush them.
             if (contextVk->hasUnsubmittedUse(mBuffer.getWriteResourceUse()))
             {
-                ANGLE_TRY(contextVk->flushImpl(nullptr, nullptr,
-                                               RenderPassClosureReason::BufferWriteThenMap));
+                ANGLE_TRY(contextVk->flushAndSubmitCommands(
+                    nullptr, nullptr, RenderPassClosureReason::BufferWriteThenMap));
             }
             ANGLE_TRY(renderer->finishResourceUse(contextVk, mBuffer.getWriteResourceUse()));
         }

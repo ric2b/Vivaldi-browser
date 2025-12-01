@@ -129,7 +129,7 @@ tsize_t tiff_read(thandle_t context, tdata_t buf, tsize_t length) {
 }
 
 tsize_t tiff_write(thandle_t context, tdata_t buf, tsize_t length) {
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 toff_t tiff_seek(thandle_t context, toff_t offset, int whence) {
@@ -187,7 +187,7 @@ bool CTiffContext::InitDecoder(
     const RetainPtr<IFX_SeekableReadStream>& file_ptr) {
   // Limit set to make fuzzers happy. If this causes problems in the real world,
   // then adjust as needed.
-  constexpr tmsize_t kMaxTiffAllocBytes = 1536 * 1024 * 1024;  // 1.5 GB
+  static constexpr tmsize_t kMaxTiffAllocBytes = 1536 * 1024 * 1024;  // 1.5 GB
   std::unique_ptr<TIFFOpenOptions, TIFFOpenOptionsDeleter> options(
       TIFFOpenOptionsAlloc());
   CHECK(options);

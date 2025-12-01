@@ -5,18 +5,8 @@
 import 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.js';
 import 'chrome://resources/cr_elements/cr_hidden_style.css.js';
 import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
-// <if expr="not is_chromeos">
 import './destination_dialog.js';
-// </if>
-// <if expr="is_chromeos">
-import './destination_dialog_cros.js';
-// </if>
-// <if expr="not is_chromeos">
 import './destination_select.js';
-// </if>
-// <if expr="is_chromeos">
-import './destination_select_cros.js';
-// </if>
 import './print_preview_shared.css.js';
 import './print_preview_vars.css.js';
 import './throbber.css.js';
@@ -33,25 +23,11 @@ import {beforeNextRender, PolymerElement} from 'chrome://resources/polymer/v3_0/
 import type {Destination, RecentDestination} from '../data/destination.js';
 import {createRecentDestinationKey, isPdfPrinter, makeRecentDestination, PrinterType} from '../data/destination.js';
 
-// <if expr="is_chromeos">
-import {SAVE_TO_DRIVE_CROS_DESTINATION_KEY} from '../data/destination.js';
-// </if>
-
 import {DestinationErrorType, DestinationStore, DestinationStoreEventType} from '../data/destination_store.js';
 import {Error, State} from '../data/state.js';
 
-// <if expr="not is_chromeos">
 import type {PrintPreviewDestinationDialogElement} from './destination_dialog.js';
-// </if>
-// <if expr="is_chromeos">
-import type {PrintPreviewDestinationDialogCrosElement} from './destination_dialog_cros.js';
-// </if>
-// <if expr="not is_chromeos">
 import type {PrintPreviewDestinationSelectElement} from './destination_select.js';
-// </if>
-// <if expr="is_chromeos">
-import type {PrintPreviewDestinationSelectCrosElement} from './destination_select_cros.js';
-// </if>
 import {getTemplate} from './destination_settings.html.js';
 import {SettingsMixin} from './settings_mixin.js';
 

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 import * as i18n from '../../../core/i18n/i18n.js';
+import type * as Platform from '../../../core/platform/platform.js';
 import * as Trace from '../../../models/trace/trace.js';
 import * as ThemeSupport from '../../../ui/legacy/theme_support/theme_support.js';
 
@@ -47,6 +48,10 @@ const UIStrings = {
    *@description Text in Timeline UIUtils of the Performance panel
    */
   task: 'Task',
+  /**
+   *@description Text in Timeline UIUtils of the Performance panel
+   */
+  consoleTaskRun: 'Run console task',
   /**
    *@description Text for other types of items
    */
@@ -551,13 +556,15 @@ export class TimelineRecordStyle {
 }
 export class TimelineCategory {
   name: EventCategory;
-  title: string;
+  title: Platform.UIString.LocalizedString;
   visible: boolean;
   childColor: string;
   colorInternal: string;
   #hidden?: boolean;
 
-  constructor(name: EventCategory, title: string, visible: boolean, childColor: string, color: string) {
+  constructor(
+      name: EventCategory, title: Platform.UIString.LocalizedString, visible: boolean, childColor: string,
+      color: string) {
     this.name = name;
     this.title = title;
     this.visible = visible;
@@ -901,7 +908,7 @@ export function maybeInitSylesMap(): EventStylesMap {
         true,
         ),
 
-    [Trace.Types.Events.Name.TIME_STAMP]:
+    [Trace.Types.Events.Name.CONSOLE_TIME_STAMP]:
         new TimelineRecordStyle(i18nString(UIStrings.timestamp), defaultCategoryStyles.scripting),
 
     [Trace.Types.Events.Name.CONSOLE_TIME]:
@@ -1037,7 +1044,13 @@ export function maybeInitSylesMap(): EventStylesMap {
     [Trace.Types.Events.Name.ASYNC_TASK]:
         new TimelineRecordStyle(i18nString(UIStrings.asyncTask), defaultCategoryStyles.async),
 
-    [Trace.Types.Events.Name.LAYOUT_SHIFT]:
+    [Trace.Types.Events.Name.LAYOUT_SHIFT]: new TimelineRecordStyle(
+        i18nString(UIStrings.layoutShift), defaultCategoryStyles.experience,
+        /* Mark LayoutShifts as hidden; in the timeline we render
+        * SyntheticLayoutShifts so those are the ones visible to the user */
+        true),
+
+    [Trace.Types.Events.Name.SYNTHETIC_LAYOUT_SHIFT]:
         new TimelineRecordStyle(i18nString(UIStrings.layoutShift), defaultCategoryStyles.experience),
 
     [Trace.Types.Events.Name.SYNTHETIC_LAYOUT_SHIFT_CLUSTER]:
@@ -1060,6 +1073,8 @@ export function maybeInitSylesMap(): EventStylesMap {
 
     [Trace.Types.Events.Name.ABORT_POST_TASK_CALLBACK]:
         new TimelineRecordStyle(i18nString(UIStrings.abortPostTaskCallback), defaultCategoryStyles.scripting),
+    [Trace.Types.Events.Name.V8_CONSOLE_RUN_TASK]:
+        new TimelineRecordStyle(i18nString(UIStrings.consoleTaskRun), defaultCategoryStyles.scripting),
   };
   return eventStylesMap;
 }
@@ -1102,4 +1117,33 @@ export function getTimelineMainEventCategories(): EventCategory[] {
 
 export function setTimelineMainEventCategories(categories: EventCategory[]): void {
   mainEventCategories = categories;
+}
+
+export function markerDetailsForEvent(event: Trace.Types.Events.Event): {
+  color: string,
+  title: string,
+} {
+  let title = '';
+  let color = 'var(--color-text-primary)';
+  if (Trace.Types.Events.isFirstContentfulPaint(event)) {
+    color = 'var(--sys-color-green-bright)';
+    title = Trace.Handlers.ModelHandlers.PageLoadMetrics.MetricName.FCP;
+  }
+  if (Trace.Types.Events.isLargestContentfulPaintCandidate(event)) {
+    color = 'var(--sys-color-green)';
+    title = Trace.Handlers.ModelHandlers.PageLoadMetrics.MetricName.LCP;
+  }
+  if (Trace.Types.Events.isNavigationStart(event)) {
+    color = 'var(--color-text-primary)';
+    title = Trace.Handlers.ModelHandlers.PageLoadMetrics.MetricName.NAV;
+  }
+  if (Trace.Types.Events.isMarkDOMContent(event)) {
+    color = 'var(--color-text-disabled)';
+    title = Trace.Handlers.ModelHandlers.PageLoadMetrics.MetricName.DCL;
+  }
+  if (Trace.Types.Events.isMarkLoad(event)) {
+    color = 'var(--color-text-disabled)';
+    title = Trace.Handlers.ModelHandlers.PageLoadMetrics.MetricName.L;
+  }
+  return {color, title};
 }

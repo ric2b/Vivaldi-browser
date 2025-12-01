@@ -17,6 +17,7 @@ import platform
 import queue
 import re
 import shlex
+import shutil
 import stat
 import subprocess
 import sys
@@ -636,6 +637,22 @@ def CheckCallAndFilter(args,
             pipe_reader, pipe_writer = os.openpty()
         else:
             pipe_reader, pipe_writer = os.pipe()
+
+        # subprocess2 will use pseudoterminals (ptys) for the child process,
+        # and ptys do not support a terminal size directly, so if we want
+        # a hook to be able to customize what it does based on the terminal
+        # size, we need to explicitly pass the size information down to
+        # the subprocess. Setting COLUMNS and LINES explicitly in the
+        # environment will cause those values to be picked up by
+        # `shutil.get_terminal_size()` in the subprocess (and of course
+        # anything that checks for the env vars direcstly as well).
+        if 'env' not in kwargs:
+            kwargs['env'] = os.environ.copy()
+        if 'COLUMNS' not in kwargs['env'] or 'LINES' not in kwargs['env']:
+            size = shutil.get_terminal_size()
+            if size.columns and size.lines:
+                kwargs['env']['COLUMNS'] = str(size.columns)
+                kwargs['env']['LINES'] = str(size.lines)
 
         kid = subprocess2.Popen(args,
                                 bufsize=0,

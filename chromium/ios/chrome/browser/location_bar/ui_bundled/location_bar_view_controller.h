@@ -7,10 +7,10 @@
 
 #import <UIKit/UIKit.h>
 
+#import "ios/chrome/browser/fullscreen/ui_bundled/fullscreen_ui_element.h"
 #import "ios/chrome/browser/location_bar/ui_bundled/location_bar_consumer.h"
 #import "ios/chrome/browser/orchestrator/ui_bundled/location_bar_animatee.h"
 #import "ios/chrome/browser/shared/public/commands/omnibox_commands.h"
-#import "ios/chrome/browser/ui/fullscreen/fullscreen_ui_element.h"
 
 // Vivaldi
 #import "ios/chrome/browser/location_bar/ui_bundled/location_bar_steady_view.h"
@@ -22,7 +22,9 @@
 @protocol ApplicationCommands;
 @protocol BadgeViewVisibilityDelegate;
 @protocol ContextualPanelEntrypointVisibilityDelegate;
+@protocol FakeboxButtonsSnapshotProvider;
 @protocol HelpCommands;
+@protocol LensCommands;
 @protocol LensOverlayCommands;
 @protocol LocationBarOffsetProvider;
 @protocol LoadQueryCommands;
@@ -31,7 +33,7 @@ namespace feature_engagement {
 class Tracker;
 }
 
-@protocol LocationBarViewControllerDelegate<NSObject>
+@protocol LocationBarViewControllerDelegate <NSObject>
 
 // Notifies the delegate about a tap on the steady-state location bar.
 - (void)locationBarSteadyViewTapped;
@@ -83,6 +85,7 @@ class Tracker;
 @property(nonatomic, weak) id<ActivityServiceCommands,
                               ApplicationCommands,
                               LoadQueryCommands,
+                              LensCommands,
                               LensOverlayCommands,
                               OmniboxCommands>
     dispatcher;
@@ -105,6 +108,11 @@ class Tracker;
 
 // The help command handler.
 @property(nonatomic, weak) id<HelpCommands> helpCommandsHandler;
+
+// An object to provide a snapshot of the fakebox buttons to be used during
+// focus and defocus transitions.
+@property(nonatomic, weak) id<FakeboxButtonsSnapshotProvider>
+    fakeboxButtonsSnapshotProvider;
 
 // Sets the edit view to use in the editing state. This must be set before the
 // view of this view controller is initialized. This must only be called once.

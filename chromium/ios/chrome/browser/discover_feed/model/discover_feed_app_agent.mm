@@ -7,10 +7,10 @@
 #import <BackgroundTasks/BackgroundTasks.h>
 #import <UserNotifications/UserNotifications.h>
 
+#import <algorithm>
+
 #import "base/barrier_callback.h"
-#import "base/ranges/algorithm.h"
 #import "components/metrics/metrics_service.h"
-#import "components/search_engines/prepopulated_engines.h"
 #import "components/search_engines/template_url.h"
 #import "components/search_engines/template_url_prepopulate_data.h"
 #import "components/search_engines/template_url_service.h"
@@ -32,6 +32,13 @@
 #import "ios/chrome/browser/shared/model/utils/first_run_util.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/signin/model/identity_manager_factory.h"
+#import "ios/chrome/browser/start_surface/ui_bundled/start_surface_features.h"
+
+#if defined(VIVALDI_BUILD)
+#import "components/search_engines/prepopulated_engines.h"
+#else
+#import "third_party/search_engines_data/resources/definitions/prepopulated_engines.h"
+#endif // End Vivaldi
 
 namespace {
 
@@ -105,7 +112,7 @@ base::OnceCallback<R(Args...)> EnsureCallbackCalled(
 
 // Returns whether `values` only contains `true`.
 bool AllOperationSucceeded(std::vector<bool> values) {
-  return base::ranges::all_of(values, std::identity());
+  return std::ranges::all_of(values, std::identity());
 }
 
 // Wraps a list of DiscoverFeedProfileHelper. This code is derived
@@ -239,10 +246,12 @@ class DiscoverFeedProfileHelperList {
 #pragma mark - ObservingAppAgent
 
 - (void)appDidEnterBackground {
-  if (IsFeedBackgroundRefreshEnabled()) {
-    [self scheduleBackgroundRefresh];
-  } else {
-    _helpers.RefreshFeedInBackground();
+  if (!IsAvoidFeedRefreshOnBackgroundEnabled()) {
+    if (IsFeedBackgroundRefreshEnabled()) {
+      [self scheduleBackgroundRefresh];
+    } else {
+      _helpers.RefreshFeedInBackground();
+    }
   }
 }
 

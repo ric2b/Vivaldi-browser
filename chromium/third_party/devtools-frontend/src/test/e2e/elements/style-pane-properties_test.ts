@@ -56,7 +56,6 @@ const prepareElementsTab = async () => {
   await expandSelectedNodeRecursively();
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const deletePropertyByBackspace = async (selector: string, root?: puppeteer.ElementHandle<Element>) => {
   const {frontend} = getBrowserAndPages();
   await click(selector, {root});
@@ -151,7 +150,7 @@ describe('The Styles pane', () => {
     const propertiesSection = await getStyleRule(PROPERTIES_TO_INSPECT_SELECTOR);
     const propertyValue = await waitFor(FIRST_PROPERTY_VALUE_SELECTOR, propertiesSection);
     const link = await $$('.link-swatch-link', propertyValue);
-    assert.strictEqual(link.length, 1, 'The expected var link was not created');
+    assert.lengthOf(link, 1, 'The expected var link was not created');
   });
 
   it('renders computed CSS variables in @keyframes rules', async () => {
@@ -461,7 +460,7 @@ describe('The Styles pane', () => {
     // 12. The h1's inherited selection pseudo
     // And there is no 13th block for the ::first-letter style, since only
     // highlight pseudos are inherited.
-    assert.strictEqual(h1Rules.length, 12, 'The h1 should have 12 style rule blocks');
+    assert.lengthOf(h1Rules, 12, 'The h1 should have 12 style rule blocks');
     assert.deepEqual(
         h1Rules[2], {
           selectorText: 'body',
@@ -932,7 +931,7 @@ describe('The Styles pane', () => {
     await waitForStyleRule('#inspected4');
 
     const inspectedRules = await getDisplayedCSSDeclarations();
-    assert.deepStrictEqual(inspectedRules, [
+    assert.deepEqual(inspectedRules, [
       'margin: 10px;',
       'margin-top: 10px;',
       'margin-right: 10px;',
@@ -1255,7 +1254,7 @@ describe('The Styles pane', () => {
     const innerText = await infobox.evaluate(node => {
       return node.shadowRoot?.querySelector('span')?.innerText;
     });
-    assert.strictEqual(innerText?.toLowerCase().startsWith('specificity'), true);
+    assert.isTrue(innerText?.toLowerCase().startsWith('specificity'));
   });
 
   describe('Editing', () => {
@@ -1371,7 +1370,7 @@ describe('The Styles pane', () => {
         const swatches = await waitForMany('.color-swatch-inner', 3);
         const swatchColors = await Promise.all(
             swatches.map(swatch => swatch.evaluate(swatch => getComputedStyle(swatch).backgroundColor)));
-        assert.deepStrictEqual(swatchColors.slice(1), [red, blue]);
+        assert.deepEqual(swatchColors.slice(1), [red, blue]);
 
         return isLight ? swatchColors[0] === red : swatchColors[0] === blue;
       });

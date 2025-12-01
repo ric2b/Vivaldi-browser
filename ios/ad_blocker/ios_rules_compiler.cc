@@ -597,8 +597,10 @@ void CompilePlainRequestFilter(const RequestFilterRule& rule,
 
 void CompileRequestFilterRule(
     const RequestFilterRule& rule,
+    const RuleSourceSettings& source_settings,
     base::Value::Dict& compiled_request_filter_rules,
-    base::Value::Dict& compiled_cosmetic_filter_rules) {
+    base::Value::Dict& compiled_cosmetic_filter_rules,
+    base::Value::List& partner_list_allowed_documents) {
   static const std::bitset<RequestFilterRule::kTypeCount> subdocument_type =
       (1 << RequestFilterRule::kSubDocument);
   std::optional<std::string> url_filter = GetRegexFromRule(rule);
@@ -643,6 +645,9 @@ void CompileRequestFilterRule(
     trigger.set_load_type(rule.party);
     trigger.set_top_url_filter(*url_filter, false, rule.is_case_sensitive);
     if (activations.test(RequestFilterRule::kDocument)) {
+      if (source_settings.allow_attribution_tracker_rules && rule.host) {
+        partner_list_allowed_documents.Append(*rule.host);
+      }
       compiled_request_filter_rules.EnsureList(rules_json::kAllowRules)
           ->Append(MakeRule(trigger, Action::IgnorePreviousAction()));
       compiled_cosmetic_filter_rules.EnsureList(rules_json::kAllowRules)
@@ -714,13 +719,16 @@ void CompileScriptletInjectionRule(
 }  // namespace
 
 std::string CompileIosRulesToString(const ParseResult& parse_result,
+                                    const RuleSourceSettings& source_settings,
                                     bool pretty_print) {
   base::Value::Dict compiled_request_filter_rules;
   base::Value::Dict compiled_cosmetic_filter_rules;
   base::Value::Dict compiled_scriptlet_injection_rules;
+  base::Value::List partner_list_allowed_documents;
   for (const auto& request_filter_rule : parse_result.request_filter_rules) {
-    CompileRequestFilterRule(request_filter_rule, compiled_request_filter_rules,
-                             compiled_cosmetic_filter_rules);
+    CompileRequestFilterRule(
+        request_filter_rule, source_settings, compiled_request_filter_rules,
+        compiled_cosmetic_filter_rules, partner_list_allowed_documents);
   }
   for (const auto& cosmetic_rule : parse_result.cosmetic_rules) {
     CompileCosmeticRule(cosmetic_rule, compiled_cosmetic_filter_rules);
@@ -739,6 +747,10 @@ std::string CompileIosRulesToString(const ParseResult& parse_result,
              std::move(compiled_cosmetic_filter_rules));
   result.Set(rules_json::kScriptletRules,
              std::move(compiled_scriptlet_injection_rules));
+  if (!partner_list_allowed_documents.empty()) {
+    result.Set(rules_json::kPartnerListAllowedDocuments,
+               std::move(partner_list_allowed_documents));
+  }
   std::string output;
   JSONStringValueSerializer serializer(&output);
   serializer.set_pretty_print(pretty_print);
@@ -747,11 +759,13 @@ std::string CompileIosRulesToString(const ParseResult& parse_result,
 }
 
 bool CompileIosRules(const ParseResult& parse_result,
+                     const RuleSourceSettings& source_settings,
                      const base::FilePath& output_path,
                      std::string& checksum) {
   if (!base::CreateDirectory(output_path.DirName()))
     return false;
-  std::string ios_rules = CompileIosRulesToString(parse_result, false);
+  std::string ios_rules =
+      CompileIosRulesToString(parse_result, source_settings, false);
   checksum = CalculateBufferChecksum(ios_rules);
   return base::WriteFile(output_path, ios_rules);
 }

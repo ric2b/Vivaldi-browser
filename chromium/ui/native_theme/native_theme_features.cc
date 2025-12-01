@@ -4,6 +4,7 @@
 
 #include "ui/native_theme/native_theme_features.h"
 
+#include "base/feature_list.h"
 #include "build/build_config.h"
 
 namespace features {
@@ -22,11 +23,22 @@ constexpr base::FeatureState kOverlayScrollbarFeatureState =
 BASE_FEATURE(kOverlayScrollbar,
              "OverlayScrollbar",
              kOverlayScrollbarFeatureState);
+
+// Disable to keep scrollbars visible forever once shown, and immediately
+// update scrollbar states instead of animating. This is used to ensure
+// ref tests in WPT do not flake based on the time taken before the
+// screenshot is captured.
+BASE_FEATURE(kScrollbarAnimations,
+             "ScrollbarAnimations",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 // Enables the os settings of overlay scrollbars for ChromeOS.
+// TODO(crbug.com/392961914): Deprecate the overlay scrollbar related feature
+// flags in M135: `kOverlayScrollbarsOSSetting` and `kOverlayScrollbar`.
 #if BUILDFLAG(IS_CHROMEOS)
 BASE_FEATURE(kOverlayScrollbarsOSSetting,
              "OverlayScrollbarsOSSetting",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsOverlayScrollbarOSSettingEnabled() {
   return base::FeatureList::IsEnabled(features::kOverlayScrollbarsOSSetting);
@@ -50,6 +62,11 @@ BASE_FEATURE(kFluentOverlayScrollbar,
              "FluentOverlayScrollbar",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Enables modifying CSS `scrollbar-color` foreground elements colors on hover
+// or press. This feature flag is meant to be used as a killswitch.
+BASE_FEATURE(kModifyScrollbarCssColorOnHoverOrPress,
+             "ModifyScrollbarCssColorOnHoverOrPress",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 }  // namespace features
 
 namespace ui {
@@ -76,6 +93,11 @@ bool IsFluentScrollbarEnabled() {
 bool IsOverlayScrollbarEnabledByFeatureFlag() {
   return base::FeatureList::IsEnabled(features::kOverlayScrollbar) ||
          IsFluentOverlayScrollbarEnabled();
+}
+
+bool IsModifyScrollbarCssColorOnHoverOrPressEnabled() {
+  return base::FeatureList::IsEnabled(
+      features::kModifyScrollbarCssColorOnHoverOrPress);
 }
 
 }  // namespace ui

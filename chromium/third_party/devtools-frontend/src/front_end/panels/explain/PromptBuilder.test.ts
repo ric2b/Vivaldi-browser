@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 import * as Common from '../../core/common/common.js';
-import type * as Platform from '../../core/platform/platform.js';
+import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
 import * as Bindings from '../../models/bindings/bindings.js';
@@ -21,6 +21,8 @@ import {
 } from '../../testing/UISourceCodeHelpers.js';
 
 import * as Explain from './explain.js';
+
+const {urlString} = Platform.DevToolsPath;
 
 describeWithLocale('PromptBuilder', () => {
   describe('allowHeader', () => {
@@ -47,7 +49,7 @@ describeWithLocale('PromptBuilder', () => {
 
   const NETWORK_REQUEST = {
     url() {
-      return 'https://example.com' as Platform.DevToolsPath.UrlString;
+      return urlString`https://example.com`;
     },
     requestHeaders() {
       return [{
@@ -202,8 +204,8 @@ export const y = "";
   it('Extracts expected whitespace from beginnings of lines', () => {
     assert.strictEqual(Explain.lineWhitespace(' a'), ' ');
     assert.strictEqual(Explain.lineWhitespace('a'), '');
-    assert.strictEqual(Explain.lineWhitespace(' '), null);
-    assert.strictEqual(Explain.lineWhitespace(''), null);
+    assert.isNull(Explain.lineWhitespace(' '));
+    assert.isNull(Explain.lineWhitespace(''));
     assert.strictEqual(Explain.lineWhitespace('\t\ta'), '\t\t');
   });
 
@@ -220,9 +222,9 @@ export const y = "";
           {forceNew: true, resourceMapping, targetManager});
     });
 
-    const PREAMBLE = 'Why does browser show an error';
-    const RELATED_CODE_PREFIX = 'For the following code in my web app';
-    const RELATED_NETWORK_REQUEST_PREFIX = 'For the following network request in my web app';
+    const PROMPT_PREFIX = 'Please explain the following console error or warning:';
+    const RELATED_CODE_PREFIX = 'For the following code:';
+    const RELATED_NETWORK_REQUEST_PREFIX = 'For the following network request:';
 
     it('builds a simple prompt', async () => {
       const runtimeModel = target.model(SDK.RuntimeModel.RuntimeModel);
@@ -237,17 +239,20 @@ export const y = "";
       const promptBuilder = new Explain.PromptBuilder(message);
       const {prompt, sources} = await promptBuilder.buildPrompt();
       assert.strictEqual(prompt, [
-        PREAMBLE,
+        PROMPT_PREFIX,
+        '',
+        '```',
         ERROR_MESSAGE,
+        '```',
       ].join('\n'));
-      assert.deepStrictEqual(sources, [{type: 'message', value: ERROR_MESSAGE}]);
+      assert.deepEqual(sources, [{type: 'message', value: ERROR_MESSAGE}]);
     });
 
     it('builds a prompt with related code', async () => {
       const runtimeModel = target.model(SDK.RuntimeModel.RuntimeModel);
       const SCRIPT_ID = '1' as Protocol.Runtime.ScriptId;
       const LINE_NUMBER = 42;
-      const URL = 'http://example.com/script.js' as Platform.DevToolsPath.UrlString;
+      const URL = urlString`http://example.com/script.js`;
       const stackTrace = createStackTrace([
         `${SCRIPT_ID}::userNestedFunction::${URL}::${LINE_NUMBER}::15`,
         `${SCRIPT_ID}::userFunction::http://example.com/script.js::10::2`,
@@ -272,8 +277,11 @@ export const y = "";
       const promptBuilder = new Explain.PromptBuilder(message);
       const {prompt, sources} = await promptBuilder.buildPrompt();
       assert.strictEqual(prompt, [
-        PREAMBLE,
+        PROMPT_PREFIX,
+        '',
+        '```',
         ERROR_MESSAGE,
+        '```',
         RELATED_CODE_PREFIX,
         '',
         '```',
@@ -281,7 +289,7 @@ export const y = "";
         '```',
       ].join('\n'));
 
-      assert.deepStrictEqual(
+      assert.deepEqual(
           sources, [{type: 'message', value: ERROR_MESSAGE}, {type: 'relatedCode', value: RELATED_CODE.trim()}]);
 
       Workspace.Workspace.WorkspaceImpl.instance().removeProject(project);
@@ -292,7 +300,7 @@ export const y = "";
       const runtimeModel = target.model(SDK.RuntimeModel.RuntimeModel);
       const SCRIPT_ID = '1' as Protocol.Runtime.ScriptId;
       const LINE_NUMBER = 42;
-      const URL = 'http://example.com/script.js' as Platform.DevToolsPath.UrlString;
+      const URL = urlString`http://example.com/script.js`;
       const stackTrace = createStackTrace([
         `${SCRIPT_ID}::userNestedFunction::${URL}::${LINE_NUMBER}::15`,
         `${SCRIPT_ID}::userFunction::http://example.com/script.js::10::2`,
@@ -319,9 +327,12 @@ export const y = "";
       const promptBuilder = new Explain.PromptBuilder(message);
       const {prompt, sources} = await promptBuilder.buildPrompt();
       assert.strictEqual(prompt, [
-        PREAMBLE,
+        PROMPT_PREFIX,
+        '',
+        '```',
         ERROR_MESSAGE,
         STACK_TRACE,
+        '```',
         RELATED_CODE_PREFIX,
         '',
         '```',
@@ -329,7 +340,7 @@ export const y = "";
         '```',
       ].join('\n'));
 
-      assert.deepStrictEqual(sources, [
+      assert.deepEqual(sources, [
         {type: 'message', value: ERROR_MESSAGE},
         {type: 'stacktrace', value: STACK_TRACE},
         {type: 'relatedCode', value: RELATED_CODE.trim()},
@@ -350,7 +361,7 @@ export const y = "";
       };
       const NETWORK_REQUEST = {
         url() {
-          return 'https://example.com' as Platform.DevToolsPath.UrlString;
+          return urlString`https://example.com`;
         },
         requestHeaders() {
           return Array(100).fill({
@@ -385,8 +396,11 @@ export const y = "";
       const promptBuilder = new Explain.PromptBuilder(message);
       const {prompt, sources} = await promptBuilder.buildPrompt();
       assert.strictEqual(prompt, [
-        PREAMBLE,
+        PROMPT_PREFIX,
+        '',
+        '```',
         ERROR_MESSAGE,
+        '```',
         RELATED_NETWORK_REQUEST_PREFIX,
         '',
         '```',
@@ -394,7 +408,7 @@ export const y = "";
         '```',
       ].join('\n'));
 
-      assert.deepStrictEqual(
+      assert.deepEqual(
           sources, [{type: 'message', value: ERROR_MESSAGE}, {type: 'networkRequest', value: RELATED_REQUEST}]);
     });
 
@@ -412,17 +426,20 @@ export const y = "";
       const promptBuilder = new Explain.PromptBuilder(message);
       const {prompt, sources} = await promptBuilder.buildPrompt();
       assert.strictEqual(prompt, [
-        PREAMBLE,
+        PROMPT_PREFIX,
+        '',
+        '```',
         TRIMMED_ERROR_MESSAGE,
+        '```',
       ].join('\n'));
-      assert.deepStrictEqual(sources, [{type: 'message', value: TRIMMED_ERROR_MESSAGE}]);
+      assert.deepEqual(sources, [{type: 'message', value: TRIMMED_ERROR_MESSAGE}]);
     });
 
     it('trims a very long stack trace', async () => {
       const runtimeModel = target.model(SDK.RuntimeModel.RuntimeModel);
       const SCRIPT_ID = '1' as Protocol.Runtime.ScriptId;
       const LINE_NUMBER = 0;
-      const URL = `http://example.com/${'a'.repeat(100)}.js` as Platform.DevToolsPath.UrlString;
+      const URL = urlString`${`http://example.com/${'a'.repeat(100)}.js`}`;
       const STACK_FRAME = `${SCRIPT_ID}::userNestedFunction::${URL}::${LINE_NUMBER}::15`;
       const stackTrace = createStackTrace(Array(80).fill(STACK_FRAME));
       const STACK_TRACE = 'userNestedFunction @ \n'.repeat(45).trim();
@@ -445,9 +462,12 @@ export const y = "";
       const promptBuilder = new Explain.PromptBuilder(message);
       const {prompt, sources} = await promptBuilder.buildPrompt();
       assert.strictEqual(prompt, [
-        PREAMBLE,
+        PROMPT_PREFIX,
+        '',
+        '```',
         ERROR_MESSAGE,
         STACK_TRACE,
+        '```',
         RELATED_CODE_PREFIX,
         '',
         '```',
@@ -455,7 +475,7 @@ export const y = "";
         '```',
       ].join('\n'));
 
-      assert.deepStrictEqual(sources, [
+      assert.deepEqual(sources, [
         {type: 'message', value: ERROR_MESSAGE},
         {type: 'stacktrace', value: STACK_TRACE},
         {type: 'relatedCode', value: RELATED_CODE.trim()},
@@ -496,8 +516,11 @@ export const y = "";
       const promptBuilder = new Explain.PromptBuilder(message);
       const {prompt, sources, isPageReloadRecommended} = await promptBuilder.buildPrompt();
       assert.strictEqual(prompt, [
-        PREAMBLE,
+        PROMPT_PREFIX,
+        '',
+        '```',
         ERROR_MESSAGE,
+        '```',
         RELATED_NETWORK_REQUEST_PREFIX,
         '',
         '```',
@@ -506,7 +529,7 @@ export const y = "";
       ].join('\n'));
 
       assert.isNotTrue(isPageReloadRecommended, 'PromptBuilder did recommend reloading the page');
-      assert.deepStrictEqual(
+      assert.deepEqual(
           sources, [{type: 'message', value: ERROR_MESSAGE}, {type: 'networkRequest', value: RELATED_REQUEST}]);
     });
 

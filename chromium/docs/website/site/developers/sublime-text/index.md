@@ -217,7 +217,7 @@ system:
 
 file_regex explained for easier tweaking in future:
 
-<pre><code>
+```
 Aims to capture the following error formats while respecting [Sublime's perl-like group matching](http://sublimetext.info/docs/en/reference/build_systems.html):
  1. <i>d:\src\chrome\src\base\threading\sequenced_worker_pool.cc(670): error C2653: 'Foo': is not a class or namespace name</i>
  2. <i>../../base/threading/sequenced_worker_pool.cc:670:26: error: use of undeclared identifier 'Foo'</i>
@@ -235,7 +235,7 @@ Aims to capture the following error formats while respecting [Sublime's perl-lik
 (6) Capture "column filename group" if any.
 (7) If (6) is non-empty there will be a closed bracket or another colon (but can't put it inside brackets as the "column filename group" only wants digits).
 (8) Everything else until EOL is the error message.
-</code></pre>
+```
 
 *On Linux and Mac, fix the targets up appropriately, fwd slash instead of
 backslash, no .exe, etc*

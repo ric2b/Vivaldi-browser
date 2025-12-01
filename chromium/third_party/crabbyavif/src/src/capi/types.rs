@@ -137,7 +137,7 @@ impl From<avifResult> for AvifError {
 }
 
 impl avifResult {
-    pub fn to_usize(&self) -> usize {
+    pub(crate) fn as_usize(&self) -> usize {
         match self {
             Self::Ok => 0,
             Self::UnknownError => 1,
@@ -212,7 +212,7 @@ impl Default for avifDiagnostics {
 }
 
 impl avifDiagnostics {
-    pub fn set_from_result<T>(&mut self, res: &AvifResult<T>) {
+    pub(crate) fn set_from_result<T>(&mut self, res: &AvifResult<T>) {
         match res {
             Ok(_) => self.set_error_empty(),
             Err(AvifError::BmffParseFailed(s))
@@ -241,7 +241,7 @@ impl avifDiagnostics {
         }
     }
 
-    pub fn set_error_empty(&mut self) {
+    pub(crate) fn set_error_empty(&mut self) {
         self.error[0] = 0;
     }
 }
@@ -257,7 +257,7 @@ pub enum avifCodecChoice {
     Avm = 6,
 }
 
-pub fn to_avifBool(val: bool) -> avifBool {
+pub(crate) fn to_avifBool(val: bool) -> avifBool {
     if val {
         AVIF_TRUE
     } else {
@@ -265,7 +265,7 @@ pub fn to_avifBool(val: bool) -> avifBool {
     }
 }
 
-pub fn to_avifResult<T>(res: &AvifResult<T>) -> avifResult {
+pub(crate) fn to_avifResult<T>(res: &AvifResult<T>) -> avifResult {
     match res {
         Ok(_) => avifResult::Ok,
         Err(err) => {
@@ -313,7 +313,7 @@ const RESULT_TO_STRING: &[&str] = &[
 #[no_mangle]
 pub unsafe extern "C" fn crabby_avifResultToString(res: avifResult) -> *const c_char {
     unsafe {
-        std::ffi::CStr::from_bytes_with_nul_unchecked(RESULT_TO_STRING[res.to_usize()].as_bytes())
+        std::ffi::CStr::from_bytes_with_nul_unchecked(RESULT_TO_STRING[res.as_usize()].as_bytes())
             .as_ptr() as *const _
     }
 }

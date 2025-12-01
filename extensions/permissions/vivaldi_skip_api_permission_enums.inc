@@ -49,6 +49,8 @@ void SkipVivaldiAPIPermissions(extensions::APIPermissionSet& skip) {
   skip.insert(APIPermissionID::kWindowPrivate);
   skip.insert(APIPermissionID::kZoom);
   skip.insert(APIPermissionID::kOmniboxPrivate);
+  skip.insert(APIPermissionID::kDirectMatch);
+  skip.insert(APIPermissionID::kProtonVPN);
 }
 
 }  // namespace extensions

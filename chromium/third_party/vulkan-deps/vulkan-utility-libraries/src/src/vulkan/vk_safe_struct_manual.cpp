@@ -47,6 +47,13 @@ safe_VkAccelerationStructureGeometryKHR::safe_VkAccelerationStructureGeometryKHR
     : sType(in_struct->sType), geometryType(in_struct->geometryType), geometry(in_struct->geometry), flags(in_struct->flags) {
     if (copy_pnext) {
         pNext = SafePnextCopy(in_struct->pNext, copy_state);
+        if (geometryType == VK_GEOMETRY_TYPE_INSTANCES_KHR) {
+            geometry.instances.pNext = SafePnextCopy(in_struct->geometry.instances.pNext, copy_state);
+        } else if (geometryType == VK_GEOMETRY_TYPE_TRIANGLES_KHR) {
+            geometry.triangles.pNext = SafePnextCopy(in_struct->geometry.triangles.pNext, copy_state);
+        } else if (geometryType == VK_GEOMETRY_TYPE_AABBS_KHR) {
+            geometry.aabbs.pNext = SafePnextCopy(in_struct->geometry.aabbs.pNext, copy_state);
+        }
     }
     if (is_host && geometryType == VK_GEOMETRY_TYPE_INSTANCES_KHR) {
         if (geometry.instances.arrayOfPointers) {
@@ -93,6 +100,13 @@ safe_VkAccelerationStructureGeometryKHR::safe_VkAccelerationStructureGeometryKHR
     flags = copy_src.flags;
 
     pNext = SafePnextCopy(copy_src.pNext);
+    if (geometryType == VK_GEOMETRY_TYPE_INSTANCES_KHR) {
+        geometry.instances.pNext = SafePnextCopy(copy_src.geometry.instances.pNext);
+    } else if (geometryType == VK_GEOMETRY_TYPE_TRIANGLES_KHR) {
+        geometry.triangles.pNext = SafePnextCopy(copy_src.geometry.triangles.pNext);
+    } else if (geometryType == VK_GEOMETRY_TYPE_AABBS_KHR) {
+        geometry.aabbs.pNext = SafePnextCopy(copy_src.geometry.aabbs.pNext);
+    }
     auto src_iter = GetAccelStructGeomHostAllocMap().find(&copy_src);
     if (src_iter != GetAccelStructGeomHostAllocMap().end()) {
         auto& src_alloc = src_iter->second;
@@ -133,6 +147,13 @@ safe_VkAccelerationStructureGeometryKHR& safe_VkAccelerationStructureGeometryKHR
         delete iter->second;
     }
     FreePnextChain(pNext);
+    if (geometryType == VK_GEOMETRY_TYPE_INSTANCES_KHR) {
+        FreePnextChain(geometry.instances.pNext);
+    } else if (geometryType == VK_GEOMETRY_TYPE_TRIANGLES_KHR) {
+        FreePnextChain(geometry.triangles.pNext);
+    } else if (geometryType == VK_GEOMETRY_TYPE_AABBS_KHR) {
+        FreePnextChain(geometry.aabbs.pNext);
+    }
 
     sType = copy_src.sType;
     geometryType = copy_src.geometryType;
@@ -140,6 +161,13 @@ safe_VkAccelerationStructureGeometryKHR& safe_VkAccelerationStructureGeometryKHR
     flags = copy_src.flags;
 
     pNext = SafePnextCopy(copy_src.pNext);
+    if (geometryType == VK_GEOMETRY_TYPE_INSTANCES_KHR) {
+        geometry.instances.pNext = SafePnextCopy(copy_src.geometry.instances.pNext);
+    } else if (geometryType == VK_GEOMETRY_TYPE_TRIANGLES_KHR) {
+        geometry.triangles.pNext = SafePnextCopy(copy_src.geometry.triangles.pNext);
+    } else if (geometryType == VK_GEOMETRY_TYPE_AABBS_KHR) {
+        geometry.aabbs.pNext = SafePnextCopy(copy_src.geometry.aabbs.pNext);
+    }
     auto src_iter = GetAccelStructGeomHostAllocMap().find(&copy_src);
     if (src_iter != GetAccelStructGeomHostAllocMap().end()) {
         auto& src_alloc = src_iter->second;
@@ -179,6 +207,13 @@ safe_VkAccelerationStructureGeometryKHR::~safe_VkAccelerationStructureGeometryKH
         delete iter->second;
     }
     FreePnextChain(pNext);
+    if (geometryType == VK_GEOMETRY_TYPE_INSTANCES_KHR) {
+        FreePnextChain(geometry.instances.pNext);
+    } else if (geometryType == VK_GEOMETRY_TYPE_TRIANGLES_KHR) {
+        FreePnextChain(geometry.triangles.pNext);
+    } else if (geometryType == VK_GEOMETRY_TYPE_AABBS_KHR) {
+        FreePnextChain(geometry.aabbs.pNext);
+    }
 }
 
 void safe_VkAccelerationStructureGeometryKHR::initialize(const VkAccelerationStructureGeometryKHR* in_struct, const bool is_host,
@@ -189,6 +224,13 @@ void safe_VkAccelerationStructureGeometryKHR::initialize(const VkAccelerationStr
         delete iter->second;
     }
     FreePnextChain(pNext);
+    if (geometryType == VK_GEOMETRY_TYPE_INSTANCES_KHR) {
+        FreePnextChain(geometry.instances.pNext);
+    } else if (geometryType == VK_GEOMETRY_TYPE_TRIANGLES_KHR) {
+        FreePnextChain(geometry.triangles.pNext);
+    } else if (geometryType == VK_GEOMETRY_TYPE_AABBS_KHR) {
+        FreePnextChain(geometry.aabbs.pNext);
+    }
     sType = in_struct->sType;
     geometryType = in_struct->geometryType;
     geometry = in_struct->geometry;
@@ -237,6 +279,13 @@ void safe_VkAccelerationStructureGeometryKHR::initialize(const safe_VkAccelerati
     flags = copy_src->flags;
 
     pNext = SafePnextCopy(copy_src->pNext);
+    if (geometryType == VK_GEOMETRY_TYPE_INSTANCES_KHR) {
+        geometry.instances.pNext = SafePnextCopy(copy_src->geometry.instances.pNext, copy_state);
+    } else if (geometryType == VK_GEOMETRY_TYPE_TRIANGLES_KHR) {
+        geometry.triangles.pNext = SafePnextCopy(copy_src->geometry.triangles.pNext, copy_state);
+    } else if (geometryType == VK_GEOMETRY_TYPE_AABBS_KHR) {
+        geometry.aabbs.pNext = SafePnextCopy(copy_src->geometry.aabbs.pNext, copy_state);
+    }
     auto src_iter = GetAccelStructGeomHostAllocMap().find(copy_src);
     if (src_iter != GetAccelStructGeomHostAllocMap().end()) {
         auto& src_alloc = src_iter->second;

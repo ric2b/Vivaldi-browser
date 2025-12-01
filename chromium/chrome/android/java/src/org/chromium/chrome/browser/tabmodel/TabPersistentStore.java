@@ -63,9 +63,12 @@ import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
@@ -108,6 +111,7 @@ public class TabPersistentStore {
     private TabModelSelectorTabRegistrationObserver mTabRegistrationObserver;
 
     private int mDuplicateTabIdsSeen;
+    private boolean mSkipSaveTabList;
 
     @IntDef({ActiveTabState.OTHER, ActiveTabState.NTP, ActiveTabState.EMPTY})
     @Retention(RetentionPolicy.SOURCE)
@@ -321,6 +325,8 @@ public class TabPersistentStore {
     }
 
     private final Set<Integer> mSeenTabIds = new HashSet<>();
+    // Counts distinct URLs.
+    private final Map<String, Integer> mSeenTabUrlMap = new HashMap<>();
     private final String mClientTag;
     private final TabPersistencePolicy mPersistencePolicy;
     private final TabModelSelector mTabModelSelector;
@@ -847,11 +853,17 @@ public class TabPersistentStore {
                 }
             }
         }
+        // Track duplicate tab ids, and don't restore tab ids which already exist in the tab model.
         int tabId = tabToRestore.id;
         if (ChromeFeatureList.sAndroidTabDeclutterDedupeTabIdsKillSwitch.isEnabled()
                 && mSeenTabIds.contains(tabId)) {
             mDuplicateTabIdsSeen++;
             return;
+        }
+        // Track duplicate tab urls in the regular tab models.
+        if (!isIncognito) {
+            mSeenTabUrlMap.put(
+                    tabToRestore.url, mSeenTabUrlMap.getOrDefault(tabToRestore.url, 0) + 1);
         }
 
         if (tabState != null) {
@@ -870,7 +882,7 @@ public class TabPersistentStore {
                 mTabsToMigrate.add(tab);
             }
 
-            if (tab != null) {
+            if (!isIncognito && tab != null) {
                 RecordHistogram.recordBooleanHistogram(
                         "Tabs.TabRestoreUrlMatch", tabToRestore.url.equals(tab.getUrl().getSpec()));
             }
@@ -1509,9 +1521,20 @@ public class TabPersistentStore {
 
     /** Kick off an AsyncTask to save the current list of Tabs. */
     public void saveTabListAsynchronously() {
+        if (ChromeFeatureList.sAndroidTabSkipSaveTabsKillswitch.isEnabled() && mSkipSaveTabList) {
+            return;
+        }
         if (mSaveListTask != null) mSaveListTask.cancel(true);
         mSaveListTask = new SaveListTask();
         mSaveListTask.executeOnTaskRunner(mSequencedTaskRunner);
+    }
+
+    /**
+     * Sets the condition which no-ops {#saveTabList} used in cases where there are batch updates to
+     * {@link TabModel}s.
+     */
+    public void setSkipSaveTabList(boolean skipSaveTabList) {
+        mSkipSaveTabList = skipSaveTabList;
     }
 
     private class SaveTabTask extends AsyncTask<Void> {
@@ -1672,7 +1695,7 @@ public class TabPersistentStore {
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     public File getTabStateFile(int tabId, boolean encrypted) {
         return TabStateFileManager.getTabStateFile(
-                getStateDirectory(), tabId, encrypted, /* isFlatBuffer= */ false);
+                getStateDirectory(), tabId, encrypted, /* isFlatbuffer= */ false);
     }
 
     /**
@@ -1746,6 +1769,7 @@ public class TabPersistentStore {
             recordLegacyTabCountMetrics();
             recordTabCountMetrics();
             recordRestoreDuration();
+            recordUniqueTabUrlMetrics();
             cleanUpPersistentData();
             onStateLoaded();
             mTabLoader = null;
@@ -1803,6 +1827,14 @@ public class TabPersistentStore {
                     Math.round((float) duration / tabCount));
         }
         mTabRestoreStartTime = INVALID_TIME;
+    }
+
+    private void recordUniqueTabUrlMetrics() {
+        for (Entry<String, Integer> entry : mSeenTabUrlMap.entrySet()) {
+            RecordHistogram.recordCount1000Histogram(
+                    "Tabs.Startup.UniqueUrlCount." + mClientTag, entry.getValue());
+        }
+        mSeenTabUrlMap.clear();
     }
 
     /**

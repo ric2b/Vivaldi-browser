@@ -111,11 +111,6 @@ bool IsScrollBlockingEvent(const AtomicString& event_type) {
          IsWheelScrollBlockingEvent(event_type);
 }
 
-bool IsInstrumentedForAsyncStack(const AtomicString& event_type) {
-  return event_type == event_type_names::kLoad ||
-         event_type == event_type_names::kError;
-}
-
 base::TimeDelta BlockedEventsWarningThreshold(ExecutionContext* context,
                                               const Event& event) {
   if (!event.cancelable())
@@ -339,23 +334,25 @@ void ObservableSubscribeDelegate::OnSubscribe(Subscriber* subscriber,
   // getting here.
   CHECK(script_state->ContextIsValid());
 
+  // The weak `event_target_` could be null at this point, if the target has
+  // been garbage collected by the time `this`'s associated Observable has been
+  // subscribed to. We early return in this case, as to avoid setting up the
+  // entire event listener / abort signal mechanism.
+  //
+  // "If event target is null, abort these steps."
+  if (!event_target_) {
+    return;
+  }
+
   // If the subscriber is already aborted, early return because there is no use
   // in adding the event listener, since it will never be able to removed again.
   // It is possible for the subscriber to be aborted at this point if
   // `Observable#subscribe()` is called with an already-aborted signal in
   // `SubscribeOptions`.
   //
-  // TODO(crbug.com/1485981): Once we agree on proper spec text for this, quote
-  // it here.
+  // "If subscriber's subscription controller's signal is aborted, abort these
+  // steps."
   if (subscriber->signal()->aborted()) {
-    return;
-  }
-
-  // The weak `event_target_` could be null at this point, if the target has
-  // been garbage collected by the time `this`'s associated Observable has been
-  // subscribed to. We early return in this case, as to avoid setting up the
-  // entire event listener / abort signal mechanism.
-  if (!event_target_) {
     return;
   }
 
@@ -613,7 +610,7 @@ bool EventTarget::AddEventListenerInternal(
       !RuntimeEnabledFeatures::DeprecateUnloadOptOutEnabled(
           execution_context) &&
       !execution_context->IsFeatureEnabled(
-          mojom::blink::PermissionsPolicyFeature::kUnload,
+          network::mojom::PermissionsPolicyFeature::kUnload,
           ReportOptions::kReportOnFailure)) {
     return false;
   }
@@ -673,11 +670,6 @@ bool EventTarget::AddEventListenerInternal(
     }
 
     AddedEventListener(event_type, *registered_listener);
-    if (IsA<JSBasedEventListener>(listener) &&
-        IsInstrumentedForAsyncStack(event_type)) {
-      listener->async_task_context()->Schedule(GetExecutionContext(),
-                                               event_type);
-    }
   }
   return added;
 }
@@ -708,6 +700,9 @@ void EventTarget::AddedEventListener(
       UseCounter::Count(*document, WebFeature::kScrollend);
     } else if (event_util::IsSnapEventType(event_type)) {
       UseCounter::Count(*document, WebFeature::kSnapEvent);
+    } else if (RuntimeEnabledFeatures::WindowOnMoveEventEnabled() &&
+               (event_type == event_type_names::kMove)) {
+      UseCounter::Count(*document, WebFeature::kMoveEvent);
     }
   }
 
@@ -864,11 +859,6 @@ bool EventTarget::SetAttributeEventListener(const AtomicString& event_type,
     return false;
   }
   if (registered_listener) {
-    if (IsA<JSBasedEventListener>(listener) &&
-        IsInstrumentedForAsyncStack(event_type)) {
-      listener->async_task_context()->Schedule(GetExecutionContext(),
-                                               event_type);
-    }
     registered_listener->SetCallback(listener);
     return true;
   }
@@ -1100,9 +1090,6 @@ bool EventTarget::FireEventListeners(Event& event,
     event.SetHandlingPassive(EventPassiveMode(*registered_listener));
 
     probe::UserCallback probe(context, nullptr, event.type(), false, this);
-    probe::AsyncTask async_task(context, listener->async_task_context(),
-                                "event",
-                                IsInstrumentedForAsyncStack(event.type()));
 
     // To match Mozilla, the AT_TARGET phase fires both capturing and bubbling
     // event listeners, even though that violates some versions of the DOM spec.

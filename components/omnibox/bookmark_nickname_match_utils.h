@@ -23,9 +23,7 @@ namespace bookmarks {
 
 // Compose an AutocompleteMatch based on |match| that has the match's nickname
 // title, type |type|, and relevance score |relevance|. |input| is used to
-// compute the match's inline_autocompletion. |fixed_up_input_text| is used in
-// that way as well; it's passed separately so this function doesn't have to
-// compute it.
+// compute the match's inline_autocompletion.
 AutocompleteMatch NicknameMatchToAutocompleteMatch(
     const TitledUrlMatch& match,
     AutocompleteMatchType::Type type,
@@ -33,8 +31,7 @@ AutocompleteMatch NicknameMatchToAutocompleteMatch(
     int bookmark_count,
     AutocompleteProvider* provider,
     const AutocompleteSchemeClassifier& scheme_classifier,
-    const AutocompleteInput& input,
-    const std::u16string& fixed_up_input_text);
+    const AutocompleteInput& input);
 
 }  // namespace bookmarks
 

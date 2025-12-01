@@ -32,8 +32,12 @@ import {AnalyticsInternal, initAnalytics} from './analytics_impl';
 import {createProxy, getOrCreate} from '../base/utils';
 import {PageManagerImpl} from './page_manager';
 import {PageHandler} from '../public/page';
-import {setPerfHooks} from './perf';
+import {PerfManager} from './perf_manager';
 import {ServiceWorkerController} from '../frontend/service_worker_controller';
+import {FeatureFlagManager, FlagSettings} from '../public/feature_flag';
+import {featureFlags} from './feature_flags';
+import {Raf} from '../public/raf';
+import {AsyncLimiter} from '../base/async_limiter';
 
 // The args that frontend/index.ts passes when calling AppImpl.initialize().
 // This is to deal with injections that would otherwise cause circular deps.
@@ -57,6 +61,7 @@ export class AppContext {
   readonly pageMgr = new PageManagerImpl();
   readonly sidebarMgr: SidebarManagerImpl;
   readonly pluginMgr: PluginManagerImpl;
+  readonly perfMgr = new PerfManager();
   readonly analytics: AnalyticsInternal;
   readonly serviceWorkerController: ServiceWorkerController;
   httpRpc = {
@@ -65,10 +70,10 @@ export class AppContext {
   };
   initialRouteArgs: RouteArgs;
   isLoadingTrace = false; // Set when calling openTrace().
-  perfDebugging = false; // Enables performance debugging of tracks/panels.
   readonly initArgs: AppInitArgs;
   readonly embeddedMode: boolean;
   readonly testingMode: boolean;
+  readonly openTraceAsyncLimiter = new AsyncLimiter();
 
   // This is normally empty and is injected with extra google-internal packages
   // via is_internal_user.js
@@ -77,19 +82,31 @@ export class AppContext {
   // The currently open trace.
   currentTrace?: TraceContext;
 
+  private static _instance: AppContext;
+
+  static initialize(initArgs: AppInitArgs): AppContext {
+    assertTrue(AppContext._instance === undefined);
+    return (AppContext._instance = new AppContext(initArgs));
+  }
+
+  static get instance(): AppContext {
+    return assertExists(AppContext._instance);
+  }
+
   // This constructor is invoked only once, when frontend/index.ts invokes
   // AppMainImpl.initialize().
-  constructor(initArgs: AppInitArgs) {
+  private constructor(initArgs: AppInitArgs) {
     this.initArgs = initArgs;
     this.initialRouteArgs = initArgs.initialRouteArgs;
-    this.sidebarMgr = new SidebarManagerImpl({
-      sidebarEnabled: !this.initialRouteArgs.hideSidebar,
-    });
     this.serviceWorkerController = new ServiceWorkerController();
     this.embeddedMode = this.initialRouteArgs.mode === 'embedded';
     this.testingMode =
       self.location !== undefined &&
       self.location.search.indexOf('testing=1') >= 0;
+    this.sidebarMgr = new SidebarManagerImpl({
+      disabled: this.embeddedMode,
+      hidden: this.initialRouteArgs.hideSidebar,
+    });
     this.analytics = initAnalytics(this.testingMode, this.embeddedMode);
     this.pluginMgr = new PluginManagerImpl({
       forkForPlugin: (pluginId) => this.forPlugin(pluginId),
@@ -141,19 +158,16 @@ export class AppImpl implements App {
   private readonly appCtx: AppContext;
   private readonly pageMgrProxy: PageManagerImpl;
 
+  // Invoked by frontend/index.ts.
+  static initialize(args: AppInitArgs) {
+    AppContext.initialize(args).forPlugin(CORE_PLUGIN_ID);
+  }
+
   // Gets access to the one instance that the core can use. Note that this is
   // NOT the only instance, as other AppImpl instance will be created for each
   // plugin.
-  private static _instance: AppImpl;
-
-  // Invoked by frontend/index.ts.
-  static initialize(args: AppInitArgs) {
-    assertTrue(AppImpl._instance === undefined);
-    AppImpl._instance = new AppContext(args).forPlugin(CORE_PLUGIN_ID);
-  }
-
   static get instance(): AppImpl {
-    return assertExists(AppImpl._instance);
+    return AppContext.instance.forPlugin(CORE_PLUGIN_ID);
   }
 
   // Only called by AppContext.forPlugin().
@@ -169,6 +183,10 @@ export class AppImpl implements App {
         });
       },
     });
+  }
+
+  forPlugin(pluginId: string): AppImpl {
+    return this.appCtx.forPlugin(pluginId);
   }
 
   get commands(): CommandManagerImpl {
@@ -199,8 +217,8 @@ export class AppImpl implements App {
     return this.appCtx.currentTrace?.forPlugin(this.pluginId);
   }
 
-  scheduleFullRedraw(): void {
-    raf.scheduleFullRedraw();
+  get raf(): Raf {
+    return raf;
   }
 
   get httpRpc() {
@@ -209,6 +227,12 @@ export class AppImpl implements App {
 
   get initialRouteArgs(): RouteArgs {
     return this.appCtx.initialRouteArgs;
+  }
+
+  get featureFlags(): FeatureFlagManager {
+    return {
+      register: (settings: FlagSettings) => featureFlags.register(settings),
+    };
   }
 
   openTraceFromFile(file: File): void {
@@ -228,31 +252,53 @@ export class AppImpl implements App {
   }
 
   private async openTrace(src: TraceSource) {
-    assertTrue(this.pluginId === CORE_PLUGIN_ID);
-    this.appCtx.closeCurrentTrace();
-    this.appCtx.isLoadingTrace = true;
-    try {
-      // loadTrace() in trace_loader.ts will do the following:
-      // - Create a new engine.
-      // - Pump the data from the TraceSource into the engine.
-      // - Do the initial queries to build the TraceImpl object
-      // - Call AppImpl.setActiveTrace(TraceImpl)
-      // - Continue with the trace loading logic (track decider, plugins, etc)
-      // - Resolve the promise when everything is done.
-      await loadTrace(this, src);
-      this.omnibox.reset(/* focus= */ false);
-      // loadTrace() internally will call setActiveTrace() and change our
-      // _currentTrace in the middle of its ececution. We cannot wait for
-      // loadTrace to be finished before setting it because some internal
-      // implementation details of loadTrace() rely on that trace to be current
-      // to work properly (mainly the router hash uuid).
-    } catch (err) {
-      this.omnibox.showStatusMessage(`${err}`);
-      throw err;
-    } finally {
-      this.appCtx.isLoadingTrace = false;
-      raf.scheduleFullRedraw();
+    if (src.type === 'ARRAY_BUFFER' && src.buffer instanceof Uint8Array) {
+      // Even though the type of `buffer` is ArrayBuffer, it's possible to
+      // accidentally pass a Uint8Array here, because the interface of
+      // Uint8Array is compatible with ArrayBuffer. That can cause subtle bugs
+      // in TraceStream when creating chunks out of it (see b/390473162).
+      // So if we get a Uint8Array in input, convert it into an actual
+      // ArrayBuffer, as various parts of the codebase assume that this is a
+      // pure ArrayBuffer, and not a logical view of it with a byteOffset > 0.
+      if (
+        src.buffer.byteOffset === 0 &&
+        src.buffer.byteLength === src.buffer.buffer.byteLength
+      ) {
+        src.buffer = src.buffer.buffer;
+      } else {
+        src.buffer = src.buffer.slice().buffer;
+      }
     }
+
+    // Rationale for asyncLimiter: openTrace takes several seconds and involves
+    // a long sequence of async tasks (e.g. invoking plugins' onLoad()). These
+    // tasks cannot overlap if the user opens traces in rapid succession, as
+    // they will mess up the state of registries. So once we start, we must
+    // complete trace loading (we don't bother supporting cancellations. If the
+    // user is too bothered, they can reload the tab).
+    this.appCtx.openTraceAsyncLimiter.schedule(async () => {
+      this.appCtx.closeCurrentTrace();
+      this.appCtx.isLoadingTrace = true;
+      try {
+        // loadTrace() in trace_loader.ts will do the following:
+        // - Create a new engine.
+        // - Pump the data from the TraceSource into the engine.
+        // - Do the initial queries to build the TraceImpl object
+        // - Call AppImpl.setActiveTrace(TraceImpl)
+        // - Continue with the trace loading logic (track decider, plugins, etc)
+        // - Resolve the promise when everything is done.
+        await loadTrace(this, src);
+        this.omnibox.reset(/* focus= */ false);
+        // loadTrace() internally will call setActiveTrace() and change our
+        // _currentTrace in the middle of its ececution. We cannot wait for
+        // loadTrace to be finished before setting it because some internal
+        // implementation details of loadTrace() rely on that trace to be current
+        // to work properly (mainly the router hash uuid).
+      } finally {
+        this.appCtx.isLoadingTrace = false;
+        raf.scheduleFullRedraw();
+      }
+    });
   }
 
   // Called by trace_loader.ts soon after it has created a new TraceImpl.
@@ -276,17 +322,8 @@ export class AppImpl implements App {
     return this.appCtx.extraSqlPackages;
   }
 
-  get perfDebugging(): boolean {
-    return this.appCtx.perfDebugging;
-  }
-
-  setPerfDebuggingEnabled(enabled: boolean) {
-    this.appCtx.perfDebugging = enabled;
-    setPerfHooks(
-      () => this.perfDebugging,
-      () => this.setPerfDebuggingEnabled(!this.perfDebugging),
-    );
-    raf.scheduleFullRedraw();
+  get perfDebugging(): PerfManager {
+    return this.appCtx.perfMgr;
   }
 
   get serviceWorkerController(): ServiceWorkerController {

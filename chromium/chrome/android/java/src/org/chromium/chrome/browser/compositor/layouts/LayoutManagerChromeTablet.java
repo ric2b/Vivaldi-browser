@@ -60,6 +60,7 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
 
     protected ObservableSupplierImpl<LayerTitleCache> mLayerTitleCacheSupplier =
             new ObservableSupplierImpl<>();
+    private final ObservableSupplier<Integer> mTabStripHeightSupplier;
 
     /**
      * Creates an instance of a LayoutManagerChromePhone.
@@ -79,6 +80,7 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
      *     tab drag and drop.
      * @param toolbarContainerView View passed to StripLayoutHelper to support tab drag and drop.
      * @param tabHoverCardViewStub The ViewStub representing the strip tab hover card.
+     * @param tabStripTooltipViewStub The ViewStub representing the tooltip for NTB or MSB.
      * @param toolbarManager The ToolbarManager instance.
      * @param desktopWindowStateManager The DesktopWindowStateManager for the app header.
      */
@@ -97,6 +99,7 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
             DragAndDropDelegate dragAndDropDelegate,
             View toolbarContainerView,
             @NonNull ViewStub tabHoverCardViewStub,
+            @NonNull ViewStub tabStripTooltipViewStub,
             @NonNull WindowAndroid windowAndroid,
             @NonNull ToolbarManager toolbarManager,
             @Nullable DesktopWindowStateManager desktopWindowStateManager,
@@ -126,6 +129,7 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
                         dragAndDropDelegate,
                         toolbarContainerView,
                         tabHoverCardViewStub,
+                        tabStripTooltipViewStub,
                         tabContentManagerSupplier,
                         browserControlsStateProvider,
                         windowAndroid,
@@ -142,18 +146,21 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
         // Note(david@vivaldi.com): We create two tab strips here. The first one is the main strip.
         // The second one is the stack strip.
         for (int i = 0; i < 2; i++) {
-        mTabStrips.add(new StripLayoutHelperManager(host.getContext(), host, this,
-                mHost.getLayoutRenderHost(), new ObservableSupplierImpl<>(mLayerTitleCache),
-                tabModelStartupInfoSupplier, lifecycleDispatcher, multiInstanceManager,
-                dragAndDropDelegate, toolbarContainerView,
-                i == 0 ? tabHoverCardViewStub : tabHoverCardViewStubStack,
-                tabContentManagerSupplier, browserControlsStateProvider, windowAndroid,
-                toolbarManager, desktopWindowStateManager, actionConfirmationManager,
-                modalDialogManager, dataSharingTabManager));
-        mTabStrips.get(i).setIsStackStrip(i != 0);
-        addObserver(mTabStrips.get(i).getTabSwitcherObserver());
-        addSceneOverlay(mTabStrips.get(i));
+            mTabStrips.add(new StripLayoutHelperManager(host.getContext(), host, this,
+                    mHost.getLayoutRenderHost(), new ObservableSupplierImpl<>(mLayerTitleCache),
+                    tabModelStartupInfoSupplier, lifecycleDispatcher, multiInstanceManager,
+                    dragAndDropDelegate, toolbarContainerView,
+                    i == 0 ? tabHoverCardViewStub : tabHoverCardViewStubStack,
+                    tabStripTooltipViewStub, tabContentManagerSupplier,
+                    browserControlsStateProvider, windowAndroid, toolbarManager,
+                    desktopWindowStateManager, actionConfirmationManager, modalDialogManager,
+                    dataSharingTabManager));
+            mTabStrips.get(i).setIsStackStrip(i != 0);
+            addObserver(mTabStrips.get(i).getTabSwitcherObserver());
+            addSceneOverlay(mTabStrips.get(i));
         }
+
+        mTabStripHeightSupplier = toolbarManager.getTabStripHeightSupplier();
 
         setNextLayout(null, true);
     }
@@ -206,7 +213,7 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
             ControlContainer controlContainer,
             DynamicResourceLoader dynamicResourceLoader,
             TopUiThemeColorProvider topUiColorProvider,
-            Supplier<Integer> bottomControlsOffsetSupplier) {
+            ObservableSupplier<Integer> bottomControlsOffsetSupplier) {
 
         // Vivaldi
         for (int i = 0; i < 2; i++) mTabStrips.get(i).setTabModelSelector(selector, creator);
@@ -219,7 +226,11 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
                 topUiColorProvider,
                 bottomControlsOffsetSupplier);
         if (DeviceClassManager.enableLayerDecorationCache()) {
-            mLayerTitleCache = new LayerTitleCache(mHost.getContext(), getResourceManager());
+            mLayerTitleCache =
+                    new LayerTitleCache(
+                            mHost.getContext(),
+                            getResourceManager(),
+                            mTabStripHeightSupplier.get());
             // TODO: TitleCache should be a part of the ResourceManager.
             mLayerTitleCache.setTabModelSelector(selector);
             mLayerTitleCacheSupplier.set(mLayerTitleCache);
@@ -243,5 +254,10 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
         // Vivaldi: We always return our main strip here.
         if (ChromeApplicationImpl.isVivaldi()) return mTabStrips.get(0);
         return mTabStripLayoutHelperManager;
+    }
+
+    @Override
+    public boolean hasTabletUi() {
+        return true;
     }
 }

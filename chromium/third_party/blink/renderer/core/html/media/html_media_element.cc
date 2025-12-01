@@ -36,6 +36,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/not_fatal_until.h"
+#include "base/strings/to_string.h"
 #include "base/synchronization/lock.h"
 #include "base/time/time.h"
 #include "cc/layers/layer.h"
@@ -190,10 +191,6 @@ String UrlForLoggingMedia(const KURL& url) {
     return url.GetString();
   return url.GetString().GetString().Substring(0, kMaximumURLLengthForLogging) +
          "...";
-}
-
-const char* BoolString(bool val) {
-  return val ? "true" : "false";
 }
 
 DocumentElementSetMap& DocumentToElementSetMap() {
@@ -1582,7 +1579,7 @@ void HTMLMediaElement::StartPlayerLoad() {
 
   GetMediaPlayerHostRemote().OnMediaPlayerAdded(
       std::move(media_player_remote), AddMediaPlayerObserverAndPassReceiver(),
-      web_media_player_->GetDelegateId());
+      web_media_player_->GetPlayerId());
 
   if (GetLayoutObject())
     GetLayoutObject()->SetShouldDoFullPaintInvalidation();
@@ -1603,7 +1600,7 @@ void HTMLMediaElement::StartPlayerLoad() {
           MediaPlaybackWhileNotVisiblePermissionPolicyEnabled()) {
     web_media_player_->SetShouldPauseWhenFrameIsHidden(
         !GetDocument().GetExecutionContext()->IsFeatureEnabled(
-            mojom::blink::PermissionsPolicyFeature::
+            network::mojom::PermissionsPolicyFeature::
                 kMediaPlaybackWhileNotVisible,
             ReportOptions::kDoNotReport));
   }
@@ -2976,6 +2973,8 @@ bool HTMLMediaElement::preservesPitch() const {
 }
 
 void HTMLMediaElement::setPreservesPitch(bool preserves_pitch) {
+  UseCounter::Count(GetDocument(), WebFeature::kPreservesPitch);
+
   preserves_pitch_ = preserves_pitch;
 
   if (web_media_player_)
@@ -3021,7 +3020,7 @@ bool HTMLMediaElement::Loop() const {
 }
 
 void HTMLMediaElement::SetLoop(bool b) {
-  DVLOG(3) << "setLoop(" << *this << ", " << BoolString(b) << ")";
+  DVLOG(3) << "setLoop(" << *this << ", " << base::ToString(b) << ")";
   SetBooleanAttribute(html_names::kLoopAttr, b);
 }
 
@@ -3120,7 +3119,7 @@ bool HTMLMediaElement::muted() const {
 }
 
 void HTMLMediaElement::setMuted(bool muted) {
-  DVLOG(2) << "setMuted(" << *this << ", " << BoolString(muted) << ")";
+  DVLOG(2) << "setMuted(" << *this << ", " << base::ToString(muted) << ")";
 
   if (muted_ == muted)
     return;
@@ -3237,8 +3236,8 @@ AudioTrackList& HTMLMediaElement::audioTracks() {
 void HTMLMediaElement::AudioTrackChanged(AudioTrack* track) {
   DVLOG(3) << "audioTrackChanged(" << *this
            << ") trackId= " << String(track->id())
-           << " enabled=" << BoolString(track->enabled())
-           << " exclusive=" << BoolString(track->IsExclusive());
+           << " enabled=" << base::ToString(track->enabled())
+           << " exclusive=" << base::ToString(track->IsExclusive());
 
   if (track->enabled()) {
     audioTracks().TrackEnabled(track->id(), track->IsExclusive());
@@ -3254,7 +3253,7 @@ void HTMLMediaElement::AudioTrackChanged(AudioTrack* track) {
 }
 
 void HTMLMediaElement::AudioTracksTimerFired(TimerBase*) {
-  Vector<WebMediaPlayer::TrackId> enabled_track_ids;
+  std::vector<WebMediaPlayer::TrackId> enabled_track_ids;
   for (unsigned i = 0; i < audioTracks().length(); ++i) {
     AudioTrack* track = audioTracks().AnonymousIndexedGetter(i);
     if (track->enabled())
@@ -3724,7 +3723,7 @@ void HTMLMediaElement::DurationChanged() {
 
 void HTMLMediaElement::DurationChanged(double duration, bool request_seek) {
   DVLOG(3) << "durationChanged(" << *this << ", " << duration << ", "
-           << BoolString(request_seek) << ")";
+           << base::ToString(request_seek) << ")";
 
   // Abort if duration unchanged.
   if (duration_ == duration)
@@ -3882,8 +3881,8 @@ void HTMLMediaElement::UpdatePlayState(bool pause_speech /* = true */) {
   bool should_be_playing = PotentiallyPlaying();
 
   DVLOG(3) << "updatePlayState(" << *this
-           << ") - shouldBePlaying = " << BoolString(should_be_playing)
-           << ", isPlaying = " << BoolString(is_playing);
+           << ") - shouldBePlaying = " << base::ToString(should_be_playing)
+           << ", isPlaying = " << base::ToString(is_playing);
 
   if (should_be_playing && !muted_)
     was_always_muted_ = false;
@@ -3911,11 +3910,14 @@ void HTMLMediaElement::UpdatePlayState(bool pause_speech /* = true */) {
     StartPlaybackProgressTimer();
     playing_ = true;
   } else {  // Should not be playing right now
-    if (is_playing) {
+    // Always tell WMP about the pause since it may need to clear a pending
+    // automatic playback resumption.
+    if (web_media_player_ && ready_state_ >= kHaveMetadata) {
       web_media_player_->Pause();
-
-      if (pause_speech && ::features::IsTextBasedAudioDescriptionEnabled())
-        SpeechSynthesis()->Pause();
+    }
+    if (is_playing && pause_speech &&
+        ::features::IsTextBasedAudioDescriptionEnabled()) {
+      SpeechSynthesis()->Pause();
     }
 
     playback_progress_timer_.Stop();
@@ -4282,7 +4284,7 @@ void HTMLMediaElement::SetShouldDelayLoadEvent(bool should_delay) {
     return;
 
   DVLOG(3) << "setShouldDelayLoadEvent(" << *this << ", "
-           << BoolString(should_delay) << ")";
+           << base::ToString(should_delay) << ")";
 
   should_delay_load_event_ = should_delay;
   if (should_delay)
@@ -4683,9 +4685,9 @@ void HTMLMediaElement::AudioSourceProviderImpl::ProvideInput(
     return;
   }
 
-  // Wrap the AudioBus channel data using WebVector.
+  // Wrap the AudioBus channel data using std::vector.
   unsigned n = bus->NumberOfChannels();
-  WebVector<float*> web_audio_data(n);
+  std::vector<float*> web_audio_data(n);
   for (unsigned i = 0; i < n; ++i)
     web_audio_data[i] = bus->Channel(i)->MutableData();
 
@@ -4967,6 +4969,11 @@ std::string HTMLMediaElement::GetActivePresentationId() {
   // If MediaRouterBase::CreatePresentationId() were changed, this line might
   // need to be updated.
   return remote_playback_client_->GetPresentationId().Ascii();
+}
+
+ExecutionContext* HTMLMediaElement::GetExecutionContextForPlayer() const {
+  return opener_document_ ? opener_document_->GetExecutionContext()
+                          : GetExecutionContext();
 }
 
 HTMLMediaElement::OpenerContextObserver::OpenerContextObserver(

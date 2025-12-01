@@ -6,6 +6,8 @@
 
 #include <stdint.h>
 
+#include <algorithm>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -17,8 +19,6 @@
 #include "base/functional/overloaded.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/ranges/algorithm.h"
-#include "base/ranges/functional.h"
 #include "base/time/time.h"
 #include "base/types/expected.h"
 #include "base/types/expected_macros.h"
@@ -730,6 +730,8 @@ CreateReportResult AttributionResolverImpl::MaybeCreateAndStoreReport(
           GetSuccessResult(*aggregatable_result)) {
     aggregatable_result = storage_.MaybeStoreAggregatableAttributionReportData(
         source_to_attribute->source,
+        trigger_registration.aggregatable_trigger_config.trigger_context_id()
+            .has_value(),
         source_to_attribute->source.remaining_aggregatable_attribution_budget(),
         source_to_attribute->num_aggregatable_attribution_reports,
         aggregatable_dedup_key,
@@ -839,7 +841,7 @@ AttributionResolverImpl::MaybeCreateEventLevelReport(
 
   const SourceType source_type = common_info.source_type();
 
-  auto event_trigger = base::ranges::find_if(
+  auto event_trigger = std::ranges::find_if(
       trigger.registration().event_triggers,
       [&](const attribution_reporting::EventTriggerData& event_trigger) {
         return source.filter_data().Matches(
@@ -908,7 +910,7 @@ AttributionResolverImpl::MaybeCreateAggregatableAttributionReport(
 
   const SourceType source_type = common_info.source_type();
 
-  auto matched_dedup_key = base::ranges::find_if(
+  auto matched_dedup_key = std::ranges::find_if(
       trigger.registration().aggregatable_dedup_keys,
       [&](const attribution_reporting::AggregatableDedupKey&
               aggregatable_dedup_key) {
@@ -1058,6 +1060,12 @@ base::Time AttributionResolverImpl::GetAggregatableReportTime(
 }
 
 std::vector<AttributionReport> AttributionResolverImpl::GetAttributionReports(
+    base::Time max_report_time) {
+  return GetAttributionReportsWithLimit(max_report_time, /*limit=*/-1);
+}
+
+std::vector<AttributionReport>
+AttributionResolverImpl::GetAttributionReportsWithLimit(
     base::Time max_report_time,
     int limit) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -1080,7 +1088,13 @@ std::optional<AttributionReport> AttributionResolverImpl::GetReport(
   return storage_.GetReport(id);
 }
 
-std::vector<StoredSource> AttributionResolverImpl::GetActiveSources(int limit) {
+std::vector<StoredSource> AttributionResolverImpl::GetActiveSources() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return storage_.GetActiveSources(/*limit=*/-1);
+}
+
+std::vector<StoredSource> AttributionResolverImpl::GetActiveSourcesWithLimit(
+    int limit) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return storage_.GetActiveSources(limit);
 }
@@ -1088,6 +1102,7 @@ std::vector<StoredSource> AttributionResolverImpl::GetActiveSources(int limit) {
 std::set<AttributionDataModel::DataKey>
 AttributionResolverImpl::GetAllDataKeys() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  SCOPED_UMA_HISTOGRAM_TIMER("Conversions.GetAllDataKeysTime");
   return storage_.GetAllDataKeys();
 }
 
@@ -1121,6 +1136,13 @@ std::optional<base::Time> AttributionResolverImpl::AdjustOfflineReportTimes() {
   }
 
   return storage_.GetNextReportTime(base::Time::Min());
+}
+
+void AttributionResolverImpl::ClearDataIncludingRateLimit(
+    base::Time delete_begin,
+    base::Time delete_end,
+    StoragePartition::StorageKeyMatcherFunction filter) {
+  ClearData(delete_begin, delete_end, filter, /*delete_rate_limit_data=*/true);
 }
 
 void AttributionResolverImpl::ClearData(

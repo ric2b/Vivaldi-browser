@@ -55,8 +55,8 @@ void UpdateMetadataForUsage(password_manager::PasswordForm* credential);
 
 // A convenience function for testing that |client| has a non-null LogManager
 // and that that LogManager returns true for IsLoggingActive. This function can
-// be removed once PasswordManagerClient::GetLogManager is implemented on iOS
-// and required to always return non-null.
+// be removed once PasswordManagerClient::GetCurrentLogManager is implemented on
+// iOS and required to always return non-null.
 bool IsLoggingActive(password_manager::PasswordManagerClient* client);
 
 // True iff the manual password generation is enabled for the current site.
@@ -191,6 +191,9 @@ bool IsSpecialSymbol(char16_t c);
 
 // Returns true if 'type' is a username in a password-less form.
 bool IsSingleUsernameType(autofill::FieldType type);
+
+// Returns the prettified version of |signon_realm| to be displayed on the UI.
+std::u16string GetHumanReadableRealm(const std::string& signon_realm);
 
 }  // namespace password_manager_util
 

@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "chrome/browser/signin/bound_session_credentials/bound_session_cookie_refresh_service_impl.h"
 
 #include <memory>
@@ -381,9 +376,8 @@ class FakeServer {
              << "Failed to decode the public key: " << *encoded_pubkey;
     }
 
-    return signin::VerifyJwtSignature(
-        jwt, *algorithm,
-        base::as_bytes(base::make_span(pubkey.begin(), pubkey.end())));
+    return signin::VerifyJwtSignature(jwt, *algorithm,
+                                      base::as_byte_span(pubkey));
   }
 
   const Params server_params_;

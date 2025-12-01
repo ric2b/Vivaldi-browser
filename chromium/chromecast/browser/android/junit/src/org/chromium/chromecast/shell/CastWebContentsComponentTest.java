@@ -89,7 +89,7 @@ public class CastWebContentsComponentTest {
     }
 
     @Test
-    @Config(minSdk = VERSION_CODES.R)
+    @Config(sdk = VERSION_CODES.R)
     public void testStartStartsWebContentsActivityWithDisplayId() {
         ContextWrapper context =
                 Mockito.spy(new ContextWrapper(ContextUtils.getApplicationContext()) {
@@ -106,7 +106,7 @@ public class CastWebContentsComponentTest {
 
         ArgumentCaptor<Bundle> bundle = ArgumentCaptor.forClass(Bundle.class);
         verify(context).startActivity(any(Intent.class), bundle.capture());
-        Assert.assertEquals(bundle.getValue().getInt(ACTIVITY_OPTIONS_DISPLAY_ID), DISPLAY_ID);
+        Assert.assertEquals(DISPLAY_ID, bundle.getValue().getInt(ACTIVITY_OPTIONS_DISPLAY_ID));
     }
 
     @Test

@@ -10,6 +10,7 @@
 #include "third_party/blink/renderer/platform/graphics/canvas_resource_provider.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/shared_gpu_context.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_canvas.h"
+#include "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
 namespace cc {
@@ -41,9 +42,6 @@ class FakeCanvasResourceHost : public CanvasResourceHost {
       RasterModeHint hint) override {
     if (ResourceProvider())
       return ResourceProvider();
-    const SkImageInfo resource_info =
-        SkImageInfo::MakeN32Premul(Size().width(), Size().height());
-    constexpr auto kFilterQuality = cc::PaintFlags::FilterQuality::kMedium;
     constexpr auto kShouldInitialize =
         CanvasResourceProvider::ShouldInitialize::kCallClear;
     std::unique_ptr<CanvasResourceProvider> provider;
@@ -53,7 +51,8 @@ class FakeCanvasResourceHost : public CanvasResourceHost {
           gpu::SHARED_IMAGE_USAGE_DISPLAY_READ |
           gpu::SHARED_IMAGE_USAGE_SCANOUT;
       provider = CanvasResourceProvider::CreateSharedImageProvider(
-          resource_info, kFilterQuality, kShouldInitialize,
+          Size(), GetN32FormatForCanvas(), kPremul_SkAlphaType,
+          gfx::ColorSpace::CreateSRGB(), kShouldInitialize,
           SharedGpuContext::ContextProviderWrapper(),
           hint == RasterModeHint::kPreferGPU ? RasterMode::kGPU
                                              : RasterMode::kCPU,
@@ -61,13 +60,14 @@ class FakeCanvasResourceHost : public CanvasResourceHost {
     }
     if (!provider) {
       provider = CanvasResourceProvider::CreateSharedBitmapProvider(
-          resource_info, kFilterQuality, kShouldInitialize,
-          /*resource_dispatcher=*/nullptr,
-          /*shared_image_interface_provider=*/nullptr, this);
+          Size(), GetN32FormatForCanvas(), kPremul_SkAlphaType,
+          gfx::ColorSpace::CreateSRGB(), kShouldInitialize,
+          SharedGpuContext::SharedImageInterfaceProvider(), this);
     }
     if (!provider) {
       provider = CanvasResourceProvider::CreateBitmapProvider(
-          resource_info, kFilterQuality, kShouldInitialize, this);
+          Size(), GetN32FormatForCanvas(), kPremul_SkAlphaType,
+          gfx::ColorSpace::CreateSRGB(), kShouldInitialize, this);
     }
 
     ReplaceResourceProvider(std::move(provider));

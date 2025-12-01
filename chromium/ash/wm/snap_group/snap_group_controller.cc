@@ -67,8 +67,6 @@ SnapGroupController::~SnapGroupController() {
 
 // static
 SnapGroupController* SnapGroupController::Get() {
-  // TODO(michelefan): Add CHECK(g_instance) after the snap group controller
-  // feature is enabled by default.
   return g_instance;
 }
 
@@ -245,7 +243,7 @@ bool SnapGroupController::RemoveSnapGroup(SnapGroup* snap_group,
   CHECK_EQ(window_to_snap_group_map_.erase(window2), 1u);
 
   auto iter =
-      base::ranges::find_if(snap_groups_, base::MatchesUniquePtr(snap_group));
+      std::ranges::find_if(snap_groups_, base::MatchesUniquePtr(snap_group));
   DCHECK(iter != snap_groups_.end());
 
   for (auto& observer : observers_) {

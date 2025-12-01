@@ -168,6 +168,7 @@ NSString* vMarkdownToggleOff = @"markdown_toggle_off";
 
 // Bottom constraint for the note text view.
 @property(nonatomic, strong) NSLayoutConstraint* noteTextViewBottomConstraint;
+@property(nonatomic, strong) NSLayoutConstraint* webViewBottomConstraint;
 
 @property(nonatomic, strong) id<ApplicationCommands> handler;
 
@@ -191,6 +192,7 @@ NSString* vMarkdownToggleOff = @"markdown_toggle_off";
 @synthesize noteTextView = _noteTextView;
 @synthesize allowsCancel = _allowsCancel;
 @synthesize noteTextViewBottomConstraint = _noteTextViewBottomConstraint;
+@synthesize webViewBottomConstraint = _webViewBottomConstraint;
 @synthesize bodyContainerView = _bodyContainerView;
 @synthesize webView = _webView;
 @synthesize markdownKeyboardInputView = _markdownKeyboardInputView;
@@ -263,6 +265,11 @@ NSString* vMarkdownToggleOff = @"markdown_toggle_off";
     [self.webView.configuration.userContentController
         addScriptMessageHandler:self
                            name:vSetNoteContent];
+
+    // VIB-1114 Indicate which text format is active
+    [self.webView.configuration.userContentController
+        addScriptMessageHandler:self.markdownKeyboardInputView
+                           name:vCurrentMarkdownFormat];
 
     // VIB-802 Disable pinch zoom
     self.webView.scrollView.minimumZoomScale = 1.0;
@@ -432,7 +439,19 @@ NSString* vMarkdownToggleOff = @"markdown_toggle_off";
 
   self.webView.navigationDelegate = self;
   [self.bodyContainerView addSubview:self.webView];
-  [self.webView fillSuperview];
+
+  [self.webView anchorTop:self.bodyContainerView.topAnchor
+                  leading:self.bodyContainerView.leadingAnchor
+                   bottom:nil
+                 trailing:self.bodyContainerView.trailingAnchor
+                  padding:noteTextViewPadding];
+
+  self.webViewBottomConstraint =
+    [self.webView.bottomAnchor
+     constraintEqualToAnchor:self.bodyContainerView.bottomAnchor
+     constant:-noteTextViewBottomPadding];
+  [self.webViewBottomConstraint setActive:YES];
+
   [self setWebViewHidden:YES];
   [self injectMarkdownWebView];
 }
@@ -451,25 +470,47 @@ NSString* vMarkdownToggleOff = @"markdown_toggle_off";
                  replyHandler:
                      (void (^)(id reply, NSString* errorMessage))replyHandler {
   if ([message.name isEqualToString:vMarkdownMessageHandlerWithReply]) {
-    if ([message.body isEqualToString:vGetNoteContent]) {
-      NSDictionary* reply;
-      if (self.note) {
-        reply = @{
-          @"id" :
-              base::SysUTF8ToNSString(self.note->uuid().AsLowercaseString()),
-          @"content" : base::SysUTF16ToNSString(self.note->GetContent())
-        };
+    if ([message.body isKindOfClass:[NSDictionary class]]) {
+      NSString* command = message.body[vDictMessageCommandField];
+      if ([command isEqualToString:vOpenLinkEditor]) {
+        NSString* url = message.body[vLinkEditorUrlField];
+        [self showEditLinkDialog:url replyHandler:replyHandler];
       }
-      replyHandler(reply, /*errormessage=*/nil);
-    } else if ([message.body isEqualToString:vGetEditorHeight]) {
-      CGFloat height = self.bodyContainerView.bounds.size.height;
-      replyHandler([NSNumber numberWithFloat:height], /*errormessage=*/nil);
-    } else if ([message.body isEqualToString:vGetLinkURL]) {
-      [self showLinkUrlDialog:replyHandler];
-    } else if ([message.body isEqualToString:vGetImageTitleAndURL]) {
-      [self showImageUrlDialog:replyHandler];
+    } else if ([message.body isKindOfClass:[NSString class]]) {
+      if ([message.body isEqualToString:vGetNoteContent]) {
+        NSDictionary* reply;
+        if (self.note) {
+          // Dictionary fields must match type defined in NoteDictType
+          // in vivapp/src/mobile/markdown/Types.js
+          reply = @{
+            @"id" :
+                base::SysUTF8ToNSString(self.note->uuid().AsLowercaseString()),
+            @"content" : base::SysUTF16ToNSString(self.note->GetContent())
+          };
+        }
+        replyHandler(reply, /*errormessage=*/nil);
+      } else if ([message.body isEqualToString:vGetEditorHeight]) {
+        CGFloat height = self.webView.frame.size.height;
+        replyHandler([NSNumber numberWithFloat:height], /*errormessage=*/nil);
+      } else if ([message.body isEqualToString:vGetLinkURL]) {
+        [self showAddLinkDialog:replyHandler];
+      } else if ([message.body isEqualToString:vGetImageTitleAndURL]) {
+        [self showImageUrlDialog:replyHandler];
+      }
+    } else {
+      //unknown msg type
     }
   }
+}
+
+- (void)setWebViewFocus {
+  [self.webView becomeFirstResponder];
+  // NOTE(tomas@vivaldi): VIB-1113
+  // The following script is to mitigate a bug in webkit
+  // https://bugs.webkit.org/show_bug.cgi?id=229600
+  // The id must match vivapp/src/mobile/markdown/MobileEditor.jsx
+  NSString* focus_js = @"document.getElementById('editor-focus').focus();";
+  [self.webView evaluateJavaScript:focus_js completionHandler:nil];
 }
 
 - (void)showImageUrlDialog:(void (^)(id reply,
@@ -504,30 +545,117 @@ NSString* vMarkdownToggleOff = @"markdown_toggle_off";
                 if (replyHandler) {
                   replyHandler(reply, nil);
                 }
+                [self setWebViewFocus];
               }];
 
   UIAlertAction* cancelAction = [UIAlertAction
       actionWithTitle:l10n_util::GetNSString(
                           IDS_VIVALDI_NOTE_MARKDOWN_URL_DIALOG_CANCEL)
                 style:UIAlertActionStyleCancel
-              handler:nil];
+              handler:^(UIAlertAction* _Nonnull action) {
+                [self setWebViewFocus];
+              }];
 
   [imageDialog addAction:confirmAction];
   [imageDialog addAction:cancelAction];
 
+  [GetFirstResponder() resignFirstResponder];
   [self presentViewController:imageDialog animated:YES completion:nil];
 }
 
-- (void)showLinkUrlDialog:(void (^)(id reply,
+- (void)showEditLinkDialog:(NSString*)url
+              replyHandler:
+                  (void (^)(id reply, NSString* errorMessage))replyHandler {
+  // Show popup with url displayed and options to follow, remove or edit link
+  UIAlertController* dialog = [UIAlertController
+      alertControllerWithTitle:l10n_util::GetNSString(
+                                   IDS_VIVALDI_NOTE_MARKDOWN_EDIT_LINK_TITLE)
+                       message:l10n_util::GetNSString(
+                                   IDS_VIVALDI_NOTE_MARKDOWN_EDIT_LINK_MESSAGE)
+                preferredStyle:UIAlertControllerStyleAlert];
+
+  [dialog addTextFieldWithConfigurationHandler:^(UITextField* textField) {
+    textField.text = url;
+    textField.keyboardType = UIKeyboardTypeURL;
+  }];
+
+  UIAlertAction* confirmAction = [UIAlertAction
+      actionWithTitle:l10n_util::GetNSString(
+                          IDS_VIVALDI_NOTE_MARKDOWN_URL_DIALOG_UPDATE_LINK)
+                style:UIAlertActionStyleDefault
+              handler:^(UIAlertAction* _Nonnull action) {
+                // Expected reply is LinkEditorReply defined in
+                // vivapp/src/mobile/markdown/Types.js
+                NSDictionary* reply;
+                reply = @{
+                  @"action" : vActionUpdateLink,
+                  @"url" : dialog.textFields[0].text,
+                };
+                if (replyHandler) {
+                  replyHandler(reply, nil);
+                }
+                [self setWebViewFocus];
+              }];
+
+  UIAlertAction* removeAction = [UIAlertAction
+      actionWithTitle:l10n_util::GetNSString(
+                          IDS_VIVALDI_NOTE_MARKDOWN_URL_DIALOG_REMOVE_LINK)
+                style:UIAlertActionStyleDestructive
+              handler:^(UIAlertAction* _Nonnull action) {
+                // Expected reply is LinkEditorReply defined in
+                // vivapp/src/mobile/markdown/Types.js
+                NSDictionary* reply;
+                reply = @{
+                  @"action" : vActionRemoveLink,
+                };
+                if (replyHandler) {
+                  replyHandler(reply, nil);
+                }
+                [self setWebViewFocus];
+              }];
+
+  __weak NoteAddEditViewController* weakSelf = self;
+  UIAlertAction* openLinkAction = [UIAlertAction
+      actionWithTitle:l10n_util::GetNSString(
+                          IDS_VIVALDI_NOTE_MARKDOWN_URL_DIALOG_OPEN_LINK)
+                style:UIAlertActionStyleDefault
+              handler:^(UIAlertAction* _Nonnull action) {
+                // Expected reply is LinkEditorReply defined in
+                // vivapp/src/mobile/markdown/Types.js
+                const std::string urlString = [url UTF8String];
+                GURL gurl(urlString);
+                dispatch_async(dispatch_get_main_queue(), ^{
+                  [weakSelf openURL:gurl];
+                });
+              }];
+
+  UIAlertAction* cancelAction = [UIAlertAction
+      actionWithTitle:l10n_util::GetNSString(
+                          IDS_VIVALDI_NOTE_MARKDOWN_URL_DIALOG_CANCEL)
+                style:UIAlertActionStyleCancel
+              handler:^(UIAlertAction* _Nonnull action) {
+                [self setWebViewFocus];
+              }];
+
+  [dialog addAction:confirmAction];
+  [dialog addAction:openLinkAction];
+  [dialog addAction:removeAction];
+  [dialog addAction:cancelAction];
+
+  [GetFirstResponder() resignFirstResponder];
+  [self presentViewController:dialog animated:YES completion:nil];
+}
+
+- (void)showAddLinkDialog:(void (^)(id reply,
                                     NSString* errorMessage))replyHandler {
-  UIAlertController* linkDialog = [UIAlertController
+  UIAlertController* dialog = [UIAlertController
       alertControllerWithTitle:l10n_util::GetNSString(
                                    IDS_VIVALDI_NOTE_MARKDOWN_ADD_LINK_TITLE)
                        message:l10n_util::GetNSString(
                                    IDS_VIVALDI_NOTE_MARKDOWN_ADD_LINK_MESSAGE)
                 preferredStyle:UIAlertControllerStyleAlert];
 
-  [linkDialog addTextFieldWithConfigurationHandler:^(UITextField* textField) {
+  [dialog addTextFieldWithConfigurationHandler:^(UITextField* textField) {
     textField.placeholder = vURLPlaceholderText;
     textField.keyboardType = UIKeyboardTypeURL;
   }];
@@ -537,25 +665,32 @@ NSString* vMarkdownToggleOff = @"markdown_toggle_off";
                           IDS_VIVALDI_NOTE_MARKDOWN_URL_DIALOG_CONFIRM)
                 style:UIAlertActionStyleDefault
               handler:^(UIAlertAction* _Nonnull action) {
+                // Expected reply is LinkEditorReply defined in
+                // vivapp/src/mobile/markdown/Types.js
                 NSDictionary* reply;
                 reply = @{
-                  @"url" : linkDialog.textFields[0].text,
+                  @"action" : vActionAddLink,
+                  @"url" : dialog.textFields[0].text,
                 };
                 if (replyHandler) {
                   replyHandler(reply, nil);
                 }
+                [self setWebViewFocus];
               }];
 
   UIAlertAction* cancelAction = [UIAlertAction
       actionWithTitle:l10n_util::GetNSString(
                           IDS_VIVALDI_NOTE_MARKDOWN_URL_DIALOG_CANCEL)
                 style:UIAlertActionStyleCancel
-              handler:nil];
+              handler:^(UIAlertAction* _Nonnull action) {
+                [self setWebViewFocus];
+              }];
 
-  [linkDialog addAction:confirmAction];
-  [linkDialog addAction:cancelAction];
+  [dialog addAction:confirmAction];
+  [dialog addAction:cancelAction];
 
-  [self presentViewController:linkDialog animated:YES completion:nil];
+  [GetFirstResponder() resignFirstResponder];
+  [self presentViewController:dialog animated:YES completion:nil];
 }
 
 - (void)injectMarkdownWebView {
@@ -594,7 +729,6 @@ NSString* vMarkdownToggleOff = @"markdown_toggle_off";
 
 - (void)fallbackToMarkdownViewDueToError {
   [self setWebViewHidden:YES];
-  [self setupContentView];
   [self updateUIFromNote];
 }
 
@@ -604,12 +738,12 @@ NSString* vMarkdownToggleOff = @"markdown_toggle_off";
     [self commitNoteChanges];
     [self.webView reloadFromOrigin];
     [self setWebViewHidden:NO];
+    [self setWebViewFocus];
   } else {
     [self commitNoteChanges];
     [self setWebViewHidden:YES];
-    [self setupContentView];
     [self updateUIFromNote];
-    [GetFirstResponder() resignFirstResponder];
+    [self.noteTextView setFocus];
   }
 
   // set toggle button
@@ -631,26 +765,6 @@ NSString* vMarkdownToggleOff = @"markdown_toggle_off";
     [UIView animateWithDuration:0.3 animations:^{
       self.webView.alpha = 1.0;
     }];
-  }
-}
-
-- (void)webView:(WKWebView*)webView
-    decidePolicyForNavigationAction:(WKNavigationAction*)navigationAction
-      decisionHandler:(void (^)(WKNavigationActionPolicy))decisionHandler {
-  // Check if the navigation action is a link click
-  if (navigationAction.navigationType == WKNavigationTypeLinkActivated) {
-    NSURL* url = navigationAction.request.URL;
-    const std::string urlString = [url.absoluteString UTF8String];
-    GURL gurl(urlString);
-    __weak NoteAddEditViewController* weakSelf = self;
-    dispatch_async(dispatch_get_main_queue(), ^{
-      [weakSelf openURL:gurl];
-    });
-    // Cancel the navigation so the link is not opened in the WebView
-    decisionHandler(WKNavigationActionPolicyCancel);
-  } else {
-    // Allow all other types of navigation actions
-    decisionHandler(WKNavigationActionPolicyAllow);
   }
 }
 
@@ -742,13 +856,16 @@ NSString* vMarkdownToggleOff = @"markdown_toggle_off";
   if (usedHeight >= keyboardFrame.size.height) {
     keyboardVisibleConstant = noteTextViewBottomPadding;
   } else {
-    keyboardVisibleConstant = keyboardFrame.size.height - usedHeight;
+    keyboardVisibleConstant =
+        keyboardFrame.size.height - usedHeight + noteTextViewBottomPadding;
   }
 
   // Set the new constant for the note text view's bottom constraint
   // If the keyboard is showing, the constant is negative to move the view up.
   // Otherwise, it's the negative of noteTextViewBottomPadding
   self.noteTextViewBottomConstraint.constant =
+    isKeyboardShowing ? -keyboardVisibleConstant : -noteTextViewBottomPadding;
+  self.webViewBottomConstraint.constant =
     isKeyboardShowing ? -keyboardVisibleConstant : -noteTextViewBottomPadding;
 
   // Animate the change in the view's frame
@@ -757,7 +874,16 @@ NSString* vMarkdownToggleOff = @"markdown_toggle_off";
                       options:UIViewAnimationOptionCurveEaseOut
                    animations:^{
     [self.view layoutIfNeeded];
-  } completion: nil];
+  } completion: ^(BOOL finished){
+    [self.webView setNeedsLayout];
+    [self.webView layoutIfNeeded];
+    if (IsViewMarkdownAsHTMLEnabled() && self.webView &&
+        ![VivaldiGlobalHelpers isDeviceTablet]) {
+      // Adjust the height of the editor inside the webview (VIB-959)
+      CGFloat height = self.webView.bounds.size.height;
+      [self updateEditorHeight:height];
+    }
+  }];
 }
 
 #pragma mark - Presentation controller integration
@@ -1105,8 +1231,22 @@ NSString* vMarkdownToggleOff = @"markdown_toggle_off";
   [self.webView evaluateJavaScript:commandScript
                  completionHandler:^(id object, NSError* err) {
                    if (err != nil) {
-                     // TODO(tomas@vivaldi): What should happen in case of JS
-                     // error? For now, fall back to the markdown view
+                     // In case of JS error, fall back to the markdown view
+                     [weakSelf fallbackToMarkdownViewDueToError];
+                     return;
+                   }
+                 }];
+}
+
+- (void)updateEditorHeight:(CGFloat)height {
+  NSString* commandScript =
+      [NSString stringWithFormat:@"window.updateEditorHeight(\"%f\")", height];
+
+  __weak __typeof(self) weakSelf = self;
+  [self.webView evaluateJavaScript:commandScript
+                 completionHandler:^(id object, NSError* err) {
+                   if (err != nil) {
+                     // In case of JS error, fall back to the markdown view
                      [weakSelf fallbackToMarkdownViewDueToError];
                      return;
                    }

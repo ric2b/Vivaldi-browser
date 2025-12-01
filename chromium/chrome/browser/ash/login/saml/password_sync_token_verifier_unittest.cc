@@ -26,15 +26,16 @@
 #include "components/user_manager/user_names.h"
 #include "components/user_manager/user_type.h"
 #include "content/public/test/browser_task_environment.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace ash {
 namespace {
 
-const char kSAMLUserId1[] = "12345";
-const char kSAMLUserEmail1[] = "alice@corp.example.com";
+constexpr GaiaId::Literal kSAMLUserId1("12345");
+constexpr char kSAMLUserEmail1[] = "alice@corp.example.com";
 
-const char kSyncToken[] = "sync-token-1";
+constexpr char kSyncToken[] = "sync-token-1";
 
 constexpr base::TimeDelta kSyncTokenCheckInterval = base::Minutes(6);
 

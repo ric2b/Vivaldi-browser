@@ -204,13 +204,6 @@ void DuckDuckGoRulesParser::ParseRule(
     }
   }
 
-  if (default_ignore && ignore) {
-    // Ignore rules are always redundant for an ignored tracker under the
-    // DDG extension implementation
-    parse_result_->rules_info.unsupported_rules++;
-    return;
-  }
-
   const std::string* surrogate = rule.GetDict().FindString(kSurrogateKey);
   const base::Value* exceptions = rule.GetDict().Find(kExceptionsKey);
   const base::Value* options = rule.GetDict().Find(kOptionssKey);
@@ -280,10 +273,9 @@ void DuckDuckGoRulesParser::ParseRule(
   if (make_request_filter_rule) {
     RequestFilterRule filter_rule;
     filter_rule.party.set();
-    if (!default_ignore)
+    if (!default_ignore || ignore)
       filter_rule.decision = RequestFilterRule::kPass;
-    if (default_ignore == ignore) {
-      DCHECK(ignore == false);
+    if (default_ignore == false && ignore == false) {
       DCHECK(exceptions);
       // Under the DDG implementation, if a block rule has options and
       // exceptions, the rule is matched if the options are matched and the
@@ -368,7 +360,8 @@ void DuckDuckGoRulesParser::ParseRule(
     }
     filter_rule.host = domain;
 
-    if (excluded_origins) {
+    if (excluded_origins &&
+        filter_rule.decision == RequestFilterRule::kModify) {
       for (const auto& origin : *excluded_origins) {
         if (origin.is_string())
           filter_rule.excluded_domains.insert(origin.GetString());

@@ -13,24 +13,32 @@
 
 #include <stdint.h>
 
+#include <functional>
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "absl/functional/any_invocable.h"
 #include "absl/strings/string_view.h"
+#include "api/array_view.h"
 #include "api/candidate.h"
+#include "api/field_trials_view.h"
 #include "api/rtc_error.h"
 #include "api/transport/enums.h"
+#include "api/transport/stun.h"
+#include "p2p/base/candidate_pair_interface.h"
 #include "p2p/base/connection.h"
+#include "p2p/base/connection_info.h"
 #include "p2p/base/packet_transport_internal.h"
 #include "p2p/base/port.h"
 #include "p2p/base/stun_dictionary.h"
 #include "p2p/base/transport_description.h"
+#include "rtc_base/callback_list.h"
+#include "rtc_base/checks.h"
 #include "rtc_base/network_constants.h"
 #include "rtc_base/system/rtc_export.h"
 #include "rtc_base/third_party/sigslot/sigslot.h"
-#include "rtc_base/time_utils.h"
 
 namespace cricket {
 
@@ -195,6 +203,9 @@ struct RTC_EXPORT IceConfig {
 
   webrtc::VpnPreference vpn_preference = webrtc::VpnPreference::kDefault;
 
+  // Experimental feature to transport the DTLS handshake in STUN packets.
+  bool dtls_handshake_in_stun = false;
+
   IceConfig();
   IceConfig(int receiving_timeout_ms,
             int backup_connection_ping_interval,
@@ -257,7 +268,9 @@ class RTC_EXPORT IceTransportInternal : public rtc::PacketTransportInternal {
   // Default implementation in order to allow downstream usage deletion.
   // TODO: bugs.webrtc.org/42224914 - Remove when all downstream overrides are
   // gone.
-  virtual void SetIceTiebreaker(uint64_t tiebreaker) { RTC_CHECK_NOTREACHED(); }
+  virtual void SetIceTiebreaker(uint64_t /* tiebreaker */) {
+    RTC_CHECK_NOTREACHED();
+  }
 
   virtual void SetIceCredentials(absl::string_view ice_ufrag,
                                  absl::string_view ice_pwd);
@@ -274,6 +287,10 @@ class RTC_EXPORT IceTransportInternal : public rtc::PacketTransportInternal {
   virtual void SetRemoteIceMode(IceMode mode) = 0;
 
   virtual void SetIceConfig(const IceConfig& config) = 0;
+  // Default implementation in order to allow downstream usage deletion.
+  // TODO: bugs.webrtc.org/367395350 - Make virutal when all downstream
+  // overrides are gone.
+  virtual const IceConfig& config() const { RTC_CHECK_NOTREACHED(); }
 
   // Start gathering candidates if not already started, or if an ICE restart
   // occurred.
@@ -383,10 +400,20 @@ class RTC_EXPORT IceTransportInternal : public rtc::PacketTransportInternal {
     dictionary_writer_synced_callback_list_.RemoveReceivers(tag);
   }
 
- protected:
-  void SendGatheringStateEvent() {
-    gathering_state_callback_list_.Send(this);
+  virtual const webrtc::FieldTrialsView* field_trials() const {
+    return nullptr;
   }
+  virtual void SetDtlsPiggybackingCallbacks(
+      absl::AnyInvocable<std::optional<absl::string_view>(StunMessageType)>
+          dtls_piggyback_get_data,
+      absl::AnyInvocable<std::optional<absl::string_view>(StunMessageType)>
+          dtls_piggyback_get_ack,
+      absl::AnyInvocable<void(const StunByteStringAttribute*,
+                              const StunByteStringAttribute*)>
+          dtls_piggyback_report_data) {}
+
+ protected:
+  void SendGatheringStateEvent() { gathering_state_callback_list_.Send(this); }
 
   webrtc::CallbackList<IceTransportInternal*,
                        const StunDictionaryView&,

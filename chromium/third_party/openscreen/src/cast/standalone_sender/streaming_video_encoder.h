@@ -14,7 +14,6 @@
 #include <thread>
 #include <vector>
 
-#include "absl/base/thread_annotations.h"
 #include "cast/streaming/public/constants.h"
 #include "cast/streaming/public/frame_id.h"
 #include "cast/streaming/public/sender.h"

@@ -43,6 +43,7 @@
 #include "chrome/browser/safe_browsing/network_context_service_factory.h"
 #include "chrome/browser/safe_browsing/safe_browsing_metrics_collector_factory.h"
 #include "chrome/browser/safe_browsing/safe_browsing_navigation_observer_manager_factory.h"
+#include "chrome/browser/safe_browsing/safe_browsing_pref_change_handler.h"
 #include "chrome/browser/safe_browsing/services_delegate.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
@@ -80,15 +81,6 @@
 
 #if BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/safe_browsing/android/safe_browsing_referring_app_bridge_android.h"
-#endif
-
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_WIN) || \
-    BUILDFLAG(IS_MAC)
-#include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/browser_window/public/browser_window_features.h"
-#include "chrome/browser/ui/toasts/api/toast_id.h"
-#include "chrome/browser/ui/toasts/toast_controller.h"
-#include "chrome/browser/ui/views/frame/browser_view.h"
 #endif
 
 #if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
@@ -262,6 +254,8 @@ void SafeBrowsingServiceImpl::ShutDown() {
   // observer of the preferences.
   prefs_map_.clear();
   user_population_prefs_.clear();
+  min_allowed_time_for_referrer_chains_.clear();
+  pref_change_handlers_map_.clear();
 
   Stop(true);
 
@@ -330,9 +324,12 @@ SafeBrowsingServiceImpl::GetReferrerChainProviderFromBrowserContext(
 }
 
 #if BUILDFLAG(IS_ANDROID)
-ReferringAppInfo SafeBrowsingServiceImpl::GetReferringAppInfo(
+internal::ReferringAppInfo SafeBrowsingServiceImpl::GetReferringAppInfo(
     content::WebContents* web_contents) {
-  return safe_browsing::GetReferringAppInfo(web_contents);
+  // This is currently only used for the chrome://safe-browsing UI, which does
+  // not need WebAPK info.
+  return safe_browsing::GetReferringAppInfo(web_contents,
+                                            /*get_webapk_info=*/false);
 }
 #endif
 
@@ -458,25 +455,35 @@ void SafeBrowsingServiceImpl::OnProfileAdded(Profile* profile) {
                  base::BindRepeating(
                      &SafeBrowsingServiceImpl::EnhancedProtectionPrefChange,
                      base::Unretained(this), profile));
+  registrar->Add(
+      unified_consent::prefs::kUrlKeyedAnonymizedDataCollectionEnabled,
+      base::BindRepeating(
+          &SafeBrowsingServiceImpl::UpdateMinAllowedTimeForReferrerChains,
+          base::Unretained(this), profile));
   prefs_map_[pref_service] = std::move(registrar);
   RefreshState();
+  UpdateMinAllowedTimeForReferrerChains(profile);
 
-  registrar = std::make_unique<PrefChangeRegistrar>();
-  registrar->Init(pref_service);
-  registrar->Add(prefs::kSafeBrowsingEnabled,
-                 base::BindRepeating(&ClearCachedUserPopulation, profile,
-                                     NoCachedPopulationReason::kChangeSbPref));
-  registrar->Add(prefs::kSafeBrowsingScoutReportingEnabled,
-                 base::BindRepeating(&ClearCachedUserPopulation, profile,
-                                     NoCachedPopulationReason::kChangeSbPref));
-  registrar->Add(prefs::kSafeBrowsingEnhanced,
-                 base::BindRepeating(&ClearCachedUserPopulation, profile,
-                                     NoCachedPopulationReason::kChangeSbPref));
-  registrar->Add(
+  std::unique_ptr<PrefChangeRegistrar> user_population_registrar =
+      std::make_unique<PrefChangeRegistrar>();
+  user_population_registrar->Init(pref_service);
+  user_population_registrar->Add(
+      prefs::kSafeBrowsingEnabled,
+      base::BindRepeating(&ClearCachedUserPopulation, profile,
+                          NoCachedPopulationReason::kChangeSbPref));
+  user_population_registrar->Add(
+      prefs::kSafeBrowsingScoutReportingEnabled,
+      base::BindRepeating(&ClearCachedUserPopulation, profile,
+                          NoCachedPopulationReason::kChangeSbPref));
+  user_population_registrar->Add(
+      prefs::kSafeBrowsingEnhanced,
+      base::BindRepeating(&ClearCachedUserPopulation, profile,
+                          NoCachedPopulationReason::kChangeSbPref));
+  user_population_registrar->Add(
       unified_consent::prefs::kUrlKeyedAnonymizedDataCollectionEnabled,
       base::BindRepeating(&ClearCachedUserPopulation, profile,
                           NoCachedPopulationReason::kChangeMbbPref));
-  user_population_prefs_[pref_service] = std::move(registrar);
+  user_population_prefs_[pref_service] = std::move(user_population_registrar);
 
   // Record the current pref state for standard protection.
   UMA_HISTOGRAM_BOOLEAN(kSafeBrowsingEnabledHistogramName,
@@ -511,6 +518,10 @@ void SafeBrowsingServiceImpl::OnProfileAdded(Profile* profile) {
         prefs::kSafeBrowsingScoutReportingEnabledWhenDeprecated, false);
   }
 
+  // Create pref change handler for each profile.
+  pref_change_handlers_map_[profile] =
+      std::make_unique<SafeBrowsingPrefChangeHandler>(profile);
+
   SafeBrowsingMetricsCollectorFactory::GetForProfile(profile)->StartLogging();
 
   CreateServicesForProfile(profile);
@@ -533,7 +544,9 @@ void SafeBrowsingServiceImpl::OnProfileWillBeDestroyed(Profile* profile) {
   PrefService* pref_service = profile->GetPrefs();
   DCHECK(pref_service);
   prefs_map_.erase(pref_service);
+  pref_change_handlers_map_.erase(profile);
   user_population_prefs_.erase(pref_service);
+  min_allowed_time_for_referrer_chains_.erase(profile);
 }
 
 void SafeBrowsingServiceImpl::CreateServicesForProfile(Profile* profile) {
@@ -547,62 +560,43 @@ base::CallbackListSubscription SafeBrowsingServiceImpl::RegisterStateCallback(
   return state_callback_list_.Add(callback);
 }
 
-// TODO(crbug.com/378888301): Add tests for Chrome Toast Logic.
-// Currently, zackhan@ is investigating how to effectively mock or simulate the
-// Chrome toast controller within the existing safe_browsing_service browser
-// tests.
 void SafeBrowsingServiceImpl::EnhancedProtectionPrefChange(Profile* profile) {
   RefreshState();
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_WIN) || \
-    BUILDFLAG(IS_MAC)
-  if (!base::FeatureList::IsEnabled(safe_browsing::kEsbAsASyncedSetting) ||
-      !profile) {
-    return;
+  UpdateMinAllowedTimeForReferrerChains(profile);
+  // Get the handler for this profile.
+  auto it = pref_change_handlers_map_.find(profile);
+  if (it != pref_change_handlers_map_.end()) {
+    it->second->MaybeShowEnhancedProtectionSettingChangeNotification();
   }
-  Browser* const browser = chrome::FindBrowserWithProfile(profile);
-  if (!browser) {
-    return;
-  }
-  ToastController* const controller =
-      browser->browser_window_features()->toast_controller();
-  if (!controller) {
-    return;
-  }
-  // We need to handle the toast for the security settings page differently:
-  // 1. If the user has turned off ESB and is on the security page, we show
-  // the toast but without the action button that prompts users to the
-  // settings page.
-  // 2. If the user has turned off ESB and is on the security page, we do
-  // not show a toast at all.
-  TabStripModel* tab_strip_model = browser->GetTabStripModel();
-  content::WebContents* web_contents = tab_strip_model->GetActiveWebContents();
-  bool is_security_page =
-      web_contents ? web_contents->GetLastCommittedURL().spec().starts_with(
-                         "chrome://settings/security")
-                   : false;
+}
 
-  // Extract the enhanced protection pref value.
-  bool is_enhanced_enabled = IsEnhancedProtectionEnabled(*profile->GetPrefs());
-
-  // The enhanced protection setting has been updated. To reflect this
-  // change, we will show toasts to the user, taking into account both the
-  // new setting value and whether they are currently on the settings page.
-  if (is_enhanced_enabled) {
-    // When the user is currently on the security settings page, show a
-    // toast without the action button to go to the settings page.
-    // Otherwise, we should a button that takes user to the settings page to
-    // change the enhanced protection settings.
-    controller->MaybeShowToast(
-        ToastParams(is_security_page ? ToastId::kSyncEsbOnWithoutActionButton
-                                     : ToastId::kSyncEsbOn));
-  } else if (!is_security_page) {
-    // Toast messages are not displayed on the security page when a user
-    // disables a security setting. This applies whether the user disables
-    // the setting on the current device or the change is synced from
-    // another device.
-    controller->MaybeShowToast(ToastParams(ToastId::kSyncEsbOff));
+void SafeBrowsingServiceImpl::UpdateMinAllowedTimeForReferrerChains(
+    Profile* profile) {
+  bool enabled = RealTimePolicyEngine::HasPrefPermissionsToPerformFullURLLookup(
+      profile->GetPrefs());
+  std::optional<base::Time> url_lookup_enabled_timestamp =
+      min_allowed_time_for_referrer_chains_[profile];
+  bool previously_enabled = url_lookup_enabled_timestamp.has_value();
+  // Only update the timestamp if the prefs are enabling full URL lookups.
+  if (enabled && !previously_enabled) {
+    url_lookup_enabled_timestamp = base::Time::Now();
   }
-#endif
+  // Reset the timestamp when full URL lookups are disabled.
+  if (!enabled) {
+    url_lookup_enabled_timestamp = std::nullopt;
+  }
+  min_allowed_time_for_referrer_chains_[profile] = url_lookup_enabled_timestamp;
+}
+
+base::Time SafeBrowsingServiceImpl::GetMinAllowedTimestampForReferrerChains(
+    Profile* profile) {
+  if (!min_allowed_time_for_referrer_chains_.contains(profile) ||
+      min_allowed_time_for_referrer_chains_[profile] == std::nullopt) {
+    // If this method gets called when the map value indicates no referrer
+    // chains are allowed, return the max time.
+    return base::Time::Max();
+  }
+  return min_allowed_time_for_referrer_chains_[profile].value();
 }
 
 void SafeBrowsingServiceImpl::RefreshState() {
@@ -819,15 +813,15 @@ bool SafeBrowsingServiceImpl::IsURLAllowlisted(
     return true;
   }
 
-  security_interstitials::UnsafeResource resource;
-  resource.url = url;
-  resource.original_url = url;
-  resource.threat_type = SBThreatType::SB_THREAT_TYPE_URL_PHISHING;
   const content::GlobalRenderFrameHostId primary_main_frame_id =
       primary_main_frame->GetGlobalId();
-  resource.render_process_id = primary_main_frame_id.child_id;
-  resource.render_frame_token = primary_main_frame->GetFrameToken().value();
-  return ui_manager_->IsAllowlisted(resource);
+  auto rfh_locator =
+      security_interstitials::UnsafeResourceLocator::CreateForRenderFrameToken(
+          primary_main_frame_id.child_id,
+          primary_main_frame->GetFrameToken().value());
+  return ui_manager_->IsAllowlisted(url, rfh_locator,
+                                    /*navigation_id=*/std::nullopt,
+                                    SBThreatType::SB_THREAT_TYPE_URL_PHISHING);
 }
 
 void SafeBrowsingServiceImpl::MaybeSendExternalAppRedirectReport(
@@ -864,7 +858,7 @@ class SafeBrowsingServiceFactoryImpl : public SafeBrowsingServiceFactory {
  private:
   friend class base::NoDestructor<SafeBrowsingServiceFactoryImpl>;
 
-  SafeBrowsingServiceFactoryImpl() {}
+  SafeBrowsingServiceFactoryImpl() = default;
 };
 
 SafeBrowsingServiceFactory* GetSafeBrowsingServiceFactory() {

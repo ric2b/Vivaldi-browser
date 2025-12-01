@@ -61,6 +61,10 @@ class QUICHE_EXPORT QuicReceivedPacketManager {
   // received after this call.
   void DontWaitForPacketsBefore(QuicPacketNumber least_unacked);
 
+  // An IMMEDIATE_ACK frame arrived, so update the ack_timeout_ to now the next
+  // time it's set.
+  void OnImmediateAckFrame() { ack_now_ = true; }
+
   // Called to update ack_timeout_ to the time when an ACK needs to be sent. A
   // caller can decide whether and when to send an ACK by retrieving
   // ack_timeout_. If ack_timeout_ is not initialized, no ACK needs to be sent.
@@ -205,6 +209,15 @@ class QUICHE_EXPORT QuicReceivedPacketManager {
   QuicTime time_of_previous_received_packet_;
   // Whether the most recent packet was missing before it was received.
   bool was_last_packet_missing_;
+
+  // Was the previous received packet CE-marked?
+  bool last_packet_was_ce_marked_ = false;
+  // The current packet is CE-marked, and the previous packet was not. This
+  // condition should trigger an immediate ACK.
+  bool changed_to_ce_marked_ = false;
+  // Because of an IMMEDIATE_ACK frame, the next call to MaybeUpdateAckTimeout
+  // should set the ack timeout to now.
+  bool ack_now_ = false;
 
   // Last sent largest acked, which gets updated when ACK was successfully sent.
   QuicPacketNumber last_sent_largest_acked_;

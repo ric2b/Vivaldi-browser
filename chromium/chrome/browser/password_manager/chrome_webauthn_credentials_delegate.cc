@@ -13,6 +13,7 @@
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
 #include "build/build_config.h"
+#include "chrome/browser/webauthn/authenticator_request_dialog_model.h"
 #include "components/password_manager/core/browser/passkey_credential.h"
 #include "components/password_manager/core/browser/password_ui_utils.h"
 #include "content/public/browser/web_contents.h"
@@ -41,8 +42,8 @@ constexpr base::TimeDelta kFlickerDuration = base::Milliseconds(300);
 bool IsGpmPasskeyAuthenticatorType(AuthenticatorType type) {
   return type == AuthenticatorType::kEnclave;
 }
-
 #endif  // !BUILDFLAG(IS_ANDROID)
+
 }  // namespace
 
 using password_manager::PasskeyCredential;
@@ -123,6 +124,10 @@ ChromeWebAuthnCredentialsDelegate::GetPasskeys() const {
   return passkeys_;
 }
 
+void ChromeWebAuthnCredentialsDelegate::NotifyForPasskeysDisplay() {
+  passkey_display_has_happened_ = true;
+}
+
 base::WeakPtr<password_manager::WebAuthnCredentialsDelegate>
 ChromeWebAuthnCredentialsDelegate::AsWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
@@ -147,7 +152,8 @@ void ChromeWebAuthnCredentialsDelegate::OnStepTransition() {
   }
   // Do not dismiss the autofill popup when the AuthenticatorRequestDialogModel
   // says that UI is disabled.
-  if (!model->ui_disabled_) {
+  if (!model->ui_disabled_ &&
+      model->step() != AuthenticatorRequestDialogModel::Step::kNotStarted) {
     authenticator_observation_.Reset();
     flickering_timer_.Start(FROM_HERE, kFlickerDuration,
                             std::move(passkey_selected_callback_));
@@ -176,6 +182,13 @@ void ChromeWebAuthnCredentialsDelegate::RetrievePasskeys(
 void ChromeWebAuthnCredentialsDelegate::OnCredentialsReceived(
     std::vector<PasskeyCredential> credentials,
     SecurityKeyOrHybridFlowAvailable security_key_or_hybrid_flow_available) {
+  if (!credentials.empty() && !passkeys_after_fill_recorded_) {
+    passkeys_after_fill_recorded_ = true;
+    base::UmaHistogramBoolean(
+        "PasswordManager.PasskeysArrivedAfterAutofillDisplay",
+        passkey_display_has_happened_);
+  }
+
   passkeys_ = std::move(credentials);
   security_key_or_hybrid_flow_available_ =
       security_key_or_hybrid_flow_available;

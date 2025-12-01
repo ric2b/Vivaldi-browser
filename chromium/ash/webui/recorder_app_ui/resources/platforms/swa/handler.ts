@@ -27,7 +27,6 @@ import {
 import {computed, Signal, signal} from '../../core/reactive/signal.js';
 import {LangPackInfo, LanguageCode} from '../../core/soda/language_info.js';
 import {SodaSession} from '../../core/soda/types.js';
-import {settings} from '../../core/state/settings.js';
 import {
   assertExists,
   assertInstanceof,
@@ -143,7 +142,7 @@ export class PlatformHandler extends PlatformHandlerBase {
       const monitor = new ModelStateMonitorReceiver({update});
       // This should be relatively quick since in recorder_app_ui.cc we just
       // return the cached state here, but we await here to avoid UI showing
-      // temporary unavailabe state.
+      // temporary unavailable state.
       const {state} = await this.remote.addSodaMonitor(
         language,
         monitor.$.bindNewPipeAndPassRemote(),
@@ -163,6 +162,8 @@ export class PlatformHandler extends PlatformHandlerBase {
 
     await this.summaryModelLoader.init();
     await this.titleSuggestionModelLoader.init();
+
+    this.initPerfEventWatchers();
   }
 
   override getLangPackList = lazyInit((): readonly LangPackInfo[] => {
@@ -171,6 +172,16 @@ export class PlatformHandler extends PlatformHandlerBase {
 
   override getLangPackInfo(language: LanguageCode): LangPackInfo {
     return assertExists(this.langPacks.get(language));
+  }
+
+  override isMultipleLanguageAvailable(): boolean {
+    let count = 0;
+    for (const state of this.sodaStates.values()) {
+      if (state.value.kind !== 'unavailable') {
+        count += 1;
+      }
+    }
+    return count > 1;
   }
 
   override async installSoda(language: LanguageCode): Promise<void> {
@@ -195,15 +206,7 @@ export class PlatformHandler extends PlatformHandlerBase {
     return assertExists(this.sodaStates.get(language));
   }
 
-  override getSelectedLanguageState(): Signal<ModelState>|null {
-    const selectedLanguage = settings.value.transcriptionLanguage;
-    return selectedLanguage === null ? null :
-                                       this.getSodaState(selectedLanguage);
-  }
-
-  override async newSodaSession(
-    language: LanguageCode,
-  ): Promise<SodaSession> {
+  override async newSodaSession(language: LanguageCode): Promise<SodaSession> {
     const recognizer = new SodaRecognizerRemote();
     const session = new MojoSodaSession(recognizer);
     const client = new SodaClientReceiver(session);

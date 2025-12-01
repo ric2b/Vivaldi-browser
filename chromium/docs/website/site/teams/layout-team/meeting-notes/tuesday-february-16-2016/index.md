@@ -14,12 +14,12 @@ Updates since last meeting (on Monday, February 8th):
 Scrolling (skobes, szager)
 - Working on scroll anchoring, investigating a crash where it looks
 we're holding stale pointers. (skobes)
-\[[crbug.com/558575](http://crbug.com/558575)\]
+\[[crbug.com/558575](https://crbug.com/558575)\]
 - Smooth scrolling is under control one outstanding bug where
 we're not handling the interaction between man and cc correctly. (skobes)
 - Started looking at a scrollbar-renders-weirdly
 bug, most likely it's the compositor pointing to a stale Scrollbar,
-no fix yet. (szager) \[[crbug.com/553860](http://crbug.com/553860)\]
+no fix yet. (szager) \[[crbug.com/553860](https://crbug.com/553860)\]
 CSS Flexbox (cbiesinger)
 - Have quite a few release blockers. All the same issue, related to
 autoflow auto. Finally figured it all out. Stefan made a change to delay
@@ -35,9 +35,9 @@ we don't do it for every flexbox change as that wouldn't work for
 nested flexboxes, we delay until after last flex. The new fix is to
 do relayout without updating the cache for the flebox.
 CSS Grid Layout (svillar, jfernandez, rego, javif)
-\[[crbug.com/79180](http://crbug.com/79180)\]
+\[[crbug.com/79180](https://crbug.com/79180)\]
 - No update since last week -
-CSS Multi-column (mstensho) \[[crbug.com/334335](http://crbug.com/334335)\]
+CSS Multi-column (mstensho) \[[crbug.com/334335](https://crbug.com/334335)\]
 - No update since last week -
 CSS Houdini (ikilpatrick)
 - Last week was working on Worklet stuff, working with AudioWG to see
@@ -45,7 +45,7 @@ how it interacts with audioWorklet and their needs.
 - This week will start on PaintRenderingContext2d, which is the subset
 of canvas for custom paint.
 Add API for layout (leviw, pilgrim, dgrogan)
-\[[crbug.com/495288](http://crbug.com/495288)\]
+\[[crbug.com/495288](https://crbug.com/495288)\]
 - Removed remaining uses of deprecated InlineBox::layoutObject()
 accessor and made it private. (dgrogan)
 - Had to add many methods to the API. (dgrogan) :(
@@ -58,10 +58,10 @@ LayoutNG and have it co-exitst with and interact with our current
 layout code. Will do work on branch but in public. (leviw)
 - Have a patch out for for LineLayoutTextSVG class. Dave identified as
 necessary, working through Levi's feedback. (pilgrim)
-CSS Containment (leviw) \[[crbug.com/312978](http://crbug.com/312978)\]
+CSS Containment (leviw) \[[crbug.com/312978](https://crbug.com/312978)\]
 - Style containment landed this morning, yay!
 Intersection Observer (szager, mpb)
-\[[crbug.com/540528](http://crbug.com/540528)\]
+\[[crbug.com/540528](https://crbug.com/540528)\]
 - Trying to get the spec solid so we can get feedback from other
 browser vendors. Getting other browsers on board is going to be the
 long pole in shipping. (szager)
@@ -88,11 +88,11 @@ cache has incorrect measurements causing extra line wrapping. (eae)
 - Various layout release blockers. (eae)
 HTML Tables (dgrogan)
 - Fixed regression around width:50% handling for tables.
-\[[crbug.com/244182](http://crbug.com/244182)\]
+\[[crbug.com/244182](https://crbug.com/244182)\]
 - Fix incorrect handling of percentage heights inside table cells,
 cased a small issue for hangouts but got them to fix it on their end.
-\[[crbug.com/353580](http://crbug.com/353580)\]
-- Fixed a renderer crash. \[[crbug.com/570139](http://crbug.com/570139)\]
+\[[crbug.com/353580](https://crbug.com/353580)\]
+- Fixed a renderer crash. \[[crbug.com/570139](https://crbug.com/570139)\]
 Misc
 - Next week or two will take stab at flipped blocks approach.
 News at 11! (wkorman)

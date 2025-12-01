@@ -34,7 +34,7 @@ title: August 2020 - Code Health, Animations, Context Menu and more!
 
 <td><td><img alt="image" src="https://lh4.googleusercontent.com/owiAyDpZzfTYW5rAik3nJan9W6E4DsI0s127oetssl1Zpt1CrnI3BFqNW_HoOR3IRQFga05EQ1eiobzNGqISyuo4jxVC6H8eGZyxNXd_uGdBAVUImHk-koHYjRv4E26J-BPZ-7h9QA" height=168 width=307></td></td>
 
-<td><td>Thanks to kevers@, we now have a bug dashboard (<a href="http://goto.google.com/interactions-dashboard">go/interactions-dashboard</a>). The above graph shows opened vs closed bugs during this sprint. The dashboard also includes:</td></td>
+<td><td>Thanks to kevers@, we now have a bug dashboard (<a href="http://go/interactions-dashboard">go/interactions-dashboard</a>). The above graph shows opened vs closed bugs during this sprint. The dashboard also includes:</td></td>
 
     <td><td>Breakdown of cumulative issues opened and closed by
     component</td></td>
@@ -54,10 +54,10 @@ title: August 2020 - Code Health, Animations, Context Menu and more!
 <td><td>liviutinta@ fixed several bugs:</td></td>
 
     <td><td>A Pointer Events tiltY reversed on Mac bug (<a
-    href="http://crbug.com/1111347">1111347</a>).</td></td>
+    href="https://crbug.com/1111347">1111347</a>).</td></td>
 
     <td><td>Fixed flaky test where pointermove on chorded mouse buttons when
-    pointer is locked (<a href="http://crbug.com/1025944">1025944</a> <a
+    pointer is locked (<a href="https://crbug.com/1025944">1025944</a> <a
     href="https://chromium-review.googlesource.com/c/chromium/src/+/2360494">CL</a>)</td></td>
 
     <td><td>Fixed 3 failing browser tests for Unified Scrolling: <a
@@ -121,7 +121,7 @@ title: August 2020 - Code Health, Animations, Context Menu and more!
     href="https://groups.google.com/a/chromium.org/forum/?utm_medium=email&utm_source=footer#!msg/blink-dev/ZRI-7X_4GwM/Sp1ZMIw5AgAJ">Intent
     to Ship</a></td></td>
 
-    <td><td>Landed <a href="http://crrev.com/c/2343385">CL</a> to enable the
+    <td><td>Landed <a href="https://crrev.com/c/2343385">CL</a> to enable the
     feature flag by default</td></td>
 
     <td><td>No feedback yet from <a

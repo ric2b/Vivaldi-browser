@@ -187,7 +187,8 @@ void VivaldiUIWebContentsDelegate::PrintCrossProcessSubframe(
     content::RenderFrameHost* subframe_host) const {
   // |web_contents| is the app-contents which we do not want to print.
   web_contents = content::WebContentsImpl::FromRenderFrameHostID(
-      subframe_host->GetProcess()->GetID(), subframe_host->GetRoutingID());
+      subframe_host->GetProcess()->GetID().value(),
+      subframe_host->GetRoutingID());
 
   auto* client = printing::PrintCompositeClient::FromWebContents(web_contents);
   if (client) {

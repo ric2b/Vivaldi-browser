@@ -41,7 +41,8 @@ class SafeBrowsingTabHelperTest
     : public testing::TestWithParam<SafeBrowsingDecisionTimingWithAsync> {
  protected:
   SafeBrowsingTabHelperTest()
-      : browser_state_(std::make_unique<web::FakeBrowserState>()) {
+      : browser_state_(std::make_unique<web::FakeBrowserState>()),
+        client_(/*pref_service=*/nullptr) {
     use_async_safe_browsing_ = IsAsyncEnabled();
     scoped_feature_list_.InitWithFeatureState(
         safe_browsing::kSafeBrowsingAsyncRealTimeCheck,
@@ -783,8 +784,9 @@ TEST_P(SafeBrowsingTabHelperTest, RedirectWithMissingShouldAllowRequest) {
   RunSyncCallbacksThenAsyncCallbacks();
 
   SimulateMainFrameRedirect();
-  if (SafeBrowsingDecisionArrivesBeforeResponse())
+  if (SafeBrowsingDecisionArrivesBeforeResponse()) {
     base::RunLoop().RunUntilIdle();
+  }
 
   web::WebStatePolicyDecider::PolicyDecision response_decision =
       ShouldAllowResponseUrl(url2);
@@ -819,8 +821,9 @@ TEST_P(SafeBrowsingTabHelperTest, SafeMainFrameRequestDoesNotNotifyClient) {
   EXPECT_TRUE(ShouldAllowRequestUrl(safe_url).ShouldAllowNavigation());
   RunSyncCallbacksThenAsyncCallbacks();
   EXPECT_FALSE(client_.main_frame_cancellation_decided_called());
-  if (SafeBrowsingDecisionArrivesBeforeResponse())
+  if (SafeBrowsingDecisionArrivesBeforeResponse()) {
     base::RunLoop().RunUntilIdle();
+  }
 
   web::WebStatePolicyDecider::PolicyDecision response_decision =
       ShouldAllowResponseUrl(safe_url);

@@ -44,6 +44,8 @@ update_target("//components/omnibox/browser:browser") {
     "//vivaldi/components/omnibox/bookmark_nickname_provider.cc",
     "//vivaldi/components/omnibox/direct_match_provider.h",
     "//vivaldi/components/omnibox/direct_match_provider.cc",
+    "//vivaldi/components/omnibox/recent_typed_history_provider.h",
+    "//vivaldi/components/omnibox/recent_typed_history_provider.cc",
   ]
 
   if (is_ios) {
@@ -84,15 +86,16 @@ update_target("//components/sessions:shared") {
 }
 
 if (is_mac || is_ios) {
-  update_target("//components/os_crypt/sync:os_crypt") {
+  update_target("//components/os_crypt/sync:sync") {
     sources += [
       "//vivaldi/components/os_crypt/viv_keychain_password_mac.mm",
+      "//vivaldi/components/os_crypt/viv_os_crypt_mac.mm",
     ]
   }
 }
 
 if (is_linux && use_dbus) {
-  update_target("//components/os_crypt/sync:os_crypt") {
+  update_target("//components/os_crypt/sync:sync") {
     sources += [
       "//vivaldi/components/os_crypt/xdg_desktop_portal_dbus.cc",
       "//vivaldi/components/os_crypt/xdg_desktop_portal_dbus.h",
@@ -104,20 +107,22 @@ if (is_linux && use_dbus) {
   }
 }
 
-update_template_instance("//components/search_engines:prepopulated_engines") {
+update_template_instance("//third_party/search_engines_data:prepopulated_engines") {
   namespace = "TemplateURLPrepopulateDataOriginal"
+  source = "//vivaldi/components/search_engines/search_engines.json"
 }
 
-update_target("//components/search_engines:prepopulated_engines_action") {
+update_target("//third_party/search_engines_data:prepopulated_engines_action") {
   # change the actual output folder from gen/vivaldi/components/search_engines
   # to gen/components/search_engines
-  args += ["-b", rebase_path("$root_gen_dir/components/search_engines/original/")]
+  args += ["-b", rebase_path("$root_gen_dir/third_party/search_engines_data/original/")]
+
   # updates the path of the resulting files to be compiled to match the new
   # output folder
   outputs = []
   outputs = [
-    "$root_gen_dir/components/search_engines/original/prepopulated_engines.cc",
-    "$root_gen_dir/components/search_engines/original/prepopulated_engines.h",
+    "$root_gen_dir/third_party/search_engines_data/original/search_engines.cc",
+    "$root_gen_dir/third_party/search_engines_data/original/search_engines.h",
   ]
 }
 
@@ -126,9 +131,9 @@ update_target("//components/search_engines:search_engines") {
     sources -= [
       "search_engine_choice/generated_marketing_snippets.cc",
     ]
-      sources += [
+    sources += [
       "//vivaldi/components/search_engines/vivaldi_marketting_snippets_and_engine_resource_ids.cc"
-      ]
+    ]
   }
 
   sources += [
@@ -174,6 +179,14 @@ update_target("//components/search_engines:search_engine_utils") {
   ]
 }
 
+if (!is_android) {
+  update_target("//components/search_engines:generate_search_engine_icons") {
+    inputs -= [
+      "//third_party/search_engines_data/resources/definitions/prepopulated_engines.json",
+    ]
+  }
+}
+
 if (!is_ios) {
   update_target("//third_party/blink/renderer/platform:platform") {
     sources -= [
@@ -195,13 +208,30 @@ update_target("//components/shared_highlighting/core/common:common") {
 if (vivaldi_build_tests) {
   update_target("//components/search_engines:unit_tests") {
     sources -= [
+      "default_search_manager_unittest.cc",
+      "search_engine_choice/search_engine_choice_service_unittest.cc",
+      "search_engine_choice/search_engine_choice_utils_unittest.cc",
+      "template_url_data_unittest.cc",
       "template_url_prepopulate_data_unittest.cc",
+      "template_url_service_unittest.cc",
       "template_url_service_util_unittest.cc",
-      "search_engine_choice/search_engine_choice_service_unittest.cc"
     ]
+  }
+  update_target("//chrome/test:unit_tests") {
+    sources -= [
+      "../browser/search_engines/template_url_service_sync_unittest.cc",
+    ]
+  }
 
-    deps -= [
-      ":prepopulated_engines"
+  update_target("//components/page_info/core:unit_tests") {
+    sources -= [
+      "about_this_site_service_unittest.cc",
+    ]
+  }
+
+  update_target("//chrome/test:interactive_ui_tests") {
+    sources -= [
+      "../browser/ui/views/profiles/first_run_interactive_uitest.cc",
     ]
   }
 

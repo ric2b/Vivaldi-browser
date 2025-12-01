@@ -20,27 +20,31 @@
   align-items: stretch;
 }
 
-.device-mode-toolbar .toolbar {
+.device-mode-x {
+  margin: 0 1px;
+  font-size: 16px;
+}
+
+.device-mode-empty-toolbar-element {
+  width: 0;
+}
+
+devtools-toolbar {
   overflow: hidden;
   flex: 0 100000 auto;
   padding: 0 5px;
+
+  &[wrappable] {
+    height: var(--toolbar-height);
+  }
 }
 
-.device-mode-toolbar .toolbar.device-mode-toolbar-fixed-size {
-  flex: 0 1 auto;
+devtools-toolbar.main-toolbar {
+  margin: 0 auto;
 }
 
-.device-mode-toolbar-options.toolbar {
-  position: sticky;
-  right: 0;
+devtools-toolbar.device-mode-toolbar-options {
   flex: none;
-}
-
-.device-mode-toolbar-spacer {
-  flex: 1 1 0;
-  display: flex;
-  flex-direction: row;
-  overflow: hidden;
 }
 
 .device-mode-content-clip {
@@ -188,34 +192,31 @@
 }
 
 .device-mode-bottom-right-resizer {
-  left: 0;
-  top: 0;
-  right: -20px;
-  bottom: -20px;
+  inset: 0 -20px -20px 0;
   background-color: var(--sys-color-surface1);
 }
 
 .device-mode-bottom-left-resizer {
-  left: -20px;
-  top: 0;
-  right: 0;
-  bottom: -20px;
+  inset: 0 0 -20px -20px;
   opacity: 0%;
 }
 
 .device-mode-right-resizer > div {
+  /* stylelint-disable-next-line custom-property-pattern */
   content: var(--image-file-resizeHorizontal);
   width: 6px;
   height: 26px;
 }
 
 .device-mode-left-resizer > div {
+  /* stylelint-disable-next-line custom-property-pattern */
   content: var(--image-file-resizeHorizontal);
   width: 6px;
   height: 26px;
 }
 
 .device-mode-bottom-resizer > div {
+  /* stylelint-disable-next-line custom-property-pattern */
   content: var(--image-file-resizeVertical);
   margin-bottom: -2px;
   width: 26px;
@@ -228,6 +229,7 @@
   right: 3px;
   width: 13px;
   height: 13px;
+  /* stylelint-disable-next-line custom-property-pattern */
   content: var(--image-file-resizeDiagonal);
 }
 
@@ -237,6 +239,7 @@
   left: 3px;
   width: 13px;
   height: 13px;
+  /* stylelint-disable-next-line custom-property-pattern */
   content: var(--image-file-resizeDiagonal);
   transform: rotate(90deg);
 }
@@ -301,18 +304,12 @@
 }
 
 .device-mode-ruler-top .device-mode-ruler-inner {
-  top: 0;
-  bottom: 0;
-  left: 20px;
-  right: 0;
+  inset: 0 0 0 20px;
   border-bottom: 1px solid var(--sys-color-token-subtle);
 }
 
 .device-mode-ruler-left .device-mode-ruler-inner {
-  left: 0;
-  right: 0;
-  top: 19px;
-  bottom: 0;
+  inset: 19px 0 0;
   border-right: 1px solid var(--sys-color-token-subtle);
   background-color: var(--sys-color-cdt-base-container);
 }

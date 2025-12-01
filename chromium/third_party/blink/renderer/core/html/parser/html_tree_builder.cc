@@ -24,11 +24,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "third_party/blink/renderer/core/html/parser/html_tree_builder.h"
 
 #include <memory>
@@ -42,8 +37,6 @@
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/html/forms/html_form_control_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_form_element.h"
-#include "third_party/blink/renderer/core/html/forms/html_option_element.h"
-#include "third_party/blink/renderer/core/html/forms/html_select_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_text_area_element.h"
 #include "third_party/blink/renderer/core/html/html_template_element.h"
 #include "third_party/blink/renderer/core/html/parser/atomic_html_token.h"
@@ -212,7 +205,7 @@ class HTMLTreeBuilder::CharacterTokenBuffer {
 
   void GiveRemainingTo(StringBuilder& recipient) {
     WTF::VisitCharacters(characters_, [&](auto chars) {
-      recipient.Append(chars.data() + current_, end_ - current_);
+      recipient.Append(chars.subspan(current_, end_ - current_));
     });
     current_ = end_;
   }
@@ -538,11 +531,9 @@ void HTMLTreeBuilder::ProcessCloseWhenNestedTag(AtomicHTMLToken* token) {
 namespace {
 typedef HashMap<AtomicString, QualifiedName> PrefixedNameToQualifiedNameMap;
 
-template <typename TableQualifiedName>
 void MapLoweredLocalNameToName(PrefixedNameToQualifiedNameMap* map,
-                               const TableQualifiedName* const* names,
-                               size_t length) {
-  for (size_t i = 0; i < length; ++i) {
+                               base::span<const QualifiedName*> names) {
+  for (size_t i = 0; i < names.size(); ++i) {
     const QualifiedName& name = *names[i];
     const AtomicString& local_name = name.LocalName();
     AtomicString lowered_local_name = local_name.LowerASCII();
@@ -553,8 +544,8 @@ void MapLoweredLocalNameToName(PrefixedNameToQualifiedNameMap* map,
 
 void AddManualLocalName(PrefixedNameToQualifiedNameMap* map, const char* name) {
   const QualifiedName item{AtomicString(name)};
-  const blink::QualifiedName* const names = &item;
-  MapLoweredLocalNameToName<QualifiedName>(map, &names, 1);
+  const QualifiedName* names = &item;
+  MapLoweredLocalNameToName(map, base::span_from_ref(names));
 }
 
 // "Any other start tag" bullet in
@@ -563,8 +554,8 @@ void AdjustSVGTagNameCase(AtomicHTMLToken* token) {
   static PrefixedNameToQualifiedNameMap* case_map = nullptr;
   if (!case_map) {
     case_map = new PrefixedNameToQualifiedNameMap;
-    std::unique_ptr<const SVGQualifiedName*[]> svg_tags = svg_names::GetTags();
-    MapLoweredLocalNameToName(case_map, svg_tags.get(), svg_names::kTagsCount);
+    base::HeapArray<const QualifiedName*> svg_tags = svg_names::GetTags();
+    MapLoweredLocalNameToName(case_map, svg_tags);
     // These tags aren't implemented by Chromium, so they don't exist in
     // svg_tag_names.json5.
     AddManualLocalName(case_map, "altGlyph");
@@ -580,16 +571,14 @@ void AdjustSVGTagNameCase(AtomicHTMLToken* token) {
   }
 }
 
-template <std::unique_ptr<const QualifiedName* []> getAttrs(),
-          unsigned length,
-          bool forSVG>
+template <base::HeapArray<const QualifiedName*> GetAttrs(), bool for_svg>
 void AdjustAttributes(AtomicHTMLToken* token) {
   static PrefixedNameToQualifiedNameMap* case_map = nullptr;
   if (!case_map) {
     case_map = new PrefixedNameToQualifiedNameMap;
-    std::unique_ptr<const QualifiedName*[]> attrs = getAttrs();
-    MapLoweredLocalNameToName(case_map, attrs.get(), length);
-    if (forSVG) {
+    base::HeapArray<const QualifiedName*> attrs = GetAttrs();
+    MapLoweredLocalNameToName(case_map, attrs);
+    if (for_svg) {
       // This attribute isn't implemented by Chromium, so it doesn't exist in
       // svg_attribute_names.json5.
       AddManualLocalName(case_map, "viewTarget");
@@ -607,25 +596,22 @@ void AdjustAttributes(AtomicHTMLToken* token) {
 
 // https://html.spec.whatwg.org/C/#adjust-svg-attributes
 void AdjustSVGAttributes(AtomicHTMLToken* token) {
-  AdjustAttributes<svg_names::GetAttrs, svg_names::kAttrsCount,
-                   /*forSVG*/ true>(token);
+  AdjustAttributes<svg_names::GetAttrs, /*for_svg=*/true>(token);
 }
 
 // https://html.spec.whatwg.org/C/#adjust-mathml-attributes
 void AdjustMathMLAttributes(AtomicHTMLToken* token) {
-  AdjustAttributes<mathml_names::GetAttrs, mathml_names::kAttrsCount,
-                   /*forSVG*/ false>(token);
+  AdjustAttributes<mathml_names::GetAttrs, /*for_svg=*/false>(token);
 }
 
 void AddNamesWithPrefix(PrefixedNameToQualifiedNameMap* map,
                         const AtomicString& prefix,
-                        const QualifiedName* const* names,
-                        size_t length) {
-  for (size_t i = 0; i < length; ++i) {
-    const QualifiedName* name = names[i];
-    const AtomicString& local_name = name->LocalName();
+                        base::span<const QualifiedName*> names) {
+  for (size_t i = 0; i < names.size(); ++i) {
+    const QualifiedName& name = *names[i];
+    const AtomicString& local_name = name.LocalName();
     AtomicString prefix_colon_local_name = prefix + ':' + local_name;
-    QualifiedName name_with_prefix(prefix, local_name, name->NamespaceURI());
+    QualifiedName name_with_prefix(prefix, local_name, name.NamespaceURI());
     map->insert(prefix_colon_local_name, name_with_prefix);
   }
 }
@@ -635,13 +621,11 @@ void AdjustForeignAttributes(AtomicHTMLToken* token) {
   if (!map) {
     map = new PrefixedNameToQualifiedNameMap;
 
-    std::unique_ptr<const QualifiedName*[]> attrs = xlink_names::GetAttrs();
-    AddNamesWithPrefix(map, g_xlink_atom, attrs.get(),
-                       xlink_names::kAttrsCount);
+    base::HeapArray<const QualifiedName*> attrs = xlink_names::GetAttrs();
+    AddNamesWithPrefix(map, g_xlink_atom, attrs);
 
-    std::unique_ptr<const QualifiedName*[]> xml_attrs = xml_names::GetAttrs();
-    AddNamesWithPrefix(map, g_xml_atom, xml_attrs.get(),
-                       xml_names::kAttrsCount);
+    base::HeapArray<const QualifiedName*> xml_attrs = xml_names::GetAttrs();
+    AddNamesWithPrefix(map, g_xml_atom, xml_attrs);
 
     map->insert(WTF::g_xmlns_atom, xmlns_names::kXmlnsAttr);
     map->insert(
@@ -901,8 +885,7 @@ void HTMLTreeBuilder::ProcessStartTagForInBody(AtomicHTMLToken* token) {
       ProcessFakePEndTagIfPInButtonScope();
       if (RuntimeEnabledFeatures::SelectParserRelaxationEnabled()) {
         if (tree_.OpenElements()->InScope(HTMLTag::kSelect)) {
-          tree_.GenerateImpliedEndTagsWithExclusion(
-              HTMLTokenName(HTMLTag::kOptgroup));
+          tree_.GenerateImpliedEndTags();
         }
       }
       tree_.InsertSelfClosingHTMLElementDestroyingToken(token);
@@ -938,17 +921,35 @@ void HTMLTreeBuilder::ProcessStartTagForInBody(AtomicHTMLToken* token) {
       }
       break;
     case HTMLTag::kSelect:
-      if (RuntimeEnabledFeatures::SelectParserRelaxationEnabled() &&
-          tree_.OpenElements()->InScope(HTMLTag::kSelect)) {
-        tree_.OpenElements()->TopNode()->AddConsoleMessage(
-            mojom::blink::ConsoleMessageSource::kJavaScript,
-            mojom::blink::ConsoleMessageLevel::kWarning,
-            "A <select> tag was parsed within another <select> tag and was converted into </select><select>. Please add the missing </select> end tag.");
-        // Don't allow nested <select>s. This is the exact same logic as
-        // <button>s.
-        ParseError(token);
-        ProcessFakeEndTag(HTMLTag::kSelect);
+      if (RuntimeEnabledFeatures::SelectParserRelaxationEnabled()) {
+        if (IsParsingFragment() &&
+            fragment_context_.ContextElement()->HasTagName(
+                html_names::kSelectTag)) {
+          fragment_context_.ContextElement()->AddConsoleMessage(
+              mojom::blink::ConsoleMessageSource::kJavaScript,
+              mojom::blink::ConsoleMessageLevel::kWarning,
+              "A <select> tag was parsed within another <select> tag and was "
+              "ignored. Please do not nest <select> tags.");
+          // Don't allow nested <select>s.
+          ParseError(token);
+          break;
+        }
+
+        if (tree_.OpenElements()->InScope(HTMLTag::kSelect)) {
+          tree_.OpenElements()->TopNode()->AddConsoleMessage(
+              mojom::blink::ConsoleMessageSource::kJavaScript,
+              mojom::blink::ConsoleMessageLevel::kWarning,
+              "A <select> tag was parsed within another <select> tag and was "
+              "converted into </select>. Please add the missing </select> end "
+              "tag.");
+          // Don't allow nested <select>s. This is the exact same logic as
+          // <button>s.
+          ParseError(token);
+          ProcessFakeEndTag(HTMLTag::kSelect);
+          break;
+        }
       }
+
       tree_.ReconstructTheActiveFormattingElements();
       tree_.InsertHTMLElement(token);
       frameset_ok_ = false;
@@ -991,8 +992,8 @@ void HTMLTreeBuilder::ProcessStartTagForInBody(AtomicHTMLToken* token) {
           AtomicHTMLToken end_option(HTMLToken::kEndTag, HTMLTag::kOption);
           ProcessEndTag(&end_option);
         }
-        tree_.ReconstructTheActiveFormattingElements();
       }
+      tree_.ReconstructTheActiveFormattingElements();
       tree_.InsertHTMLElement(token);
       break;
     case HTMLTag::kRb:
@@ -2093,21 +2094,6 @@ void HTMLTreeBuilder::ProcessEndTagForInBody(AtomicHTMLToken* token) {
         ParseError(token);
       tree_.OpenElements()->PopUntilPopped(tag);
       return;
-    case HTMLTag::kOption: {
-      auto* option =
-          DynamicTo<HTMLOptionElement>(tree_.OpenElements()->TopNode());
-      ProcessAnyOtherEndTagForInBody(token);
-      if (RuntimeEnabledFeatures::CustomizableSelectEnabled()) {
-        if (option && option->Selected()) {
-          auto* select = option->OwnerSelectElement();
-          if (select && select->UsesMenuList() && !select->IsMultiple()) {
-            CHECK_EQ(option, select->SelectedOption());
-            select->UpdateAllSelectedcontents();
-          }
-        }
-      }
-      return;
-    }
     case HTMLTag::kForm:
       if (!IsParsingTemplateContents()) {
         Element* node = tree_.TakeForm();
@@ -2119,6 +2105,21 @@ void HTMLTreeBuilder::ProcessEndTagForInBody(AtomicHTMLToken* token) {
         if (tree_.CurrentElement() != node)
           ParseError(token);
         tree_.OpenElements()->Remove(node);
+        if (RuntimeEnabledFeatures::CorrectTemplateFormParsingEnabled()) {
+          return;
+        }
+      }
+      if (RuntimeEnabledFeatures::CorrectTemplateFormParsingEnabled()) {
+        if (!tree_.OpenElements()->InScope(tag)) {
+          ParseError(token);
+          return;
+        }
+        tree_.GenerateImpliedEndTags();
+        if (!tree_.CurrentStackItem()->MatchesHTMLTag(tag)) {
+          ParseError(token);
+        }
+        tree_.OpenElements()->PopUntilPopped(tag);
+        return;
       }
       break;
     case HTMLTag::kP:

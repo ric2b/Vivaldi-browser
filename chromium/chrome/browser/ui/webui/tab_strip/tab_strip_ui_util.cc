@@ -31,8 +31,9 @@ namespace tab_strip_ui {
 std::optional<tab_groups::TabGroupId> GetTabGroupIdFromString(
     TabGroupModel* tab_group_model,
     std::string group_id_string) {
-  if (!tab_group_model)
+  if (!tab_group_model) {
     return std::nullopt;
+  }
   for (tab_groups::TabGroupId candidate : tab_group_model->ListTabGroups()) {
     if (candidate.ToString() == group_id_string) {
       return std::optional<tab_groups::TabGroupId>{candidate};
@@ -84,9 +85,7 @@ void MoveGroupAcrossWindows(Browser* source_browser,
     return;
   }
 
-  target_tab_strip->group_model()->AddTabGroup(
-      group_id,
-      std::optional<tab_groups::TabGroupVisualData>{*group->visual_data()});
+  target_tab_strip->AddTabGroup(group_id, *group->visual_data());
 
   const gfx::Range source_tab_indices = group->ListTabs();
   const int tab_count = source_tab_indices.length();
@@ -178,8 +177,9 @@ bool DropTabsInNewBrowser(Browser* new_browser,
 bool DropTabsInNewBrowser(Browser* new_browser,
                           const std::u16string& tab_id_str,
                           const std::u16string& group_id_str) {
-  if (tab_id_str.empty() && group_id_str.empty())
+  if (tab_id_str.empty() && group_id_str.empty()) {
     return false;
+  }
 
   Browser* source_browser = nullptr;
   gfx::Range tab_indices_to_move;
@@ -191,8 +191,9 @@ bool DropTabsInNewBrowser(Browser* new_browser,
 
   if (!tab_id_str.empty()) {
     int tab_id = -1;
-    if (!base::StringToInt(tab_id_str, &tab_id))
+    if (!base::StringToInt(tab_id_str, &tab_id)) {
       return false;
+    }
 
     extensions::WindowController* source_window = nullptr;
     int source_index = -1;
@@ -211,25 +212,29 @@ bool DropTabsInNewBrowser(Browser* new_browser,
     std::string group_id_utf8 = base::UTF16ToUTF8(group_id_str);
     source_browser =
         GetBrowserWithGroupId(new_browser->profile(), group_id_utf8);
-    if (!source_browser)
+    if (!source_browser) {
       return false;
+    }
     TabGroupModel* source_group_model =
         source_browser->tab_strip_model()->group_model();
-    if (!source_group_model)
+    if (!source_group_model) {
       return false;
+    }
     source_group_id =
         GetTabGroupIdFromString(source_group_model, group_id_utf8);
-    if (!source_group_id)
+    if (!source_group_id) {
       return false;
+    }
     TabGroup* source_group = source_group_model->GetTabGroup(*source_group_id);
     tab_indices_to_move = source_group->ListTabs();
 
     TabGroupModel* new_group_model =
         new_browser->tab_strip_model()->group_model();
-    if (!new_group_model)
+    if (!new_group_model) {
       return false;
-    new_group_model->AddTabGroup(*source_group_id,
-                                 *source_group->visual_data());
+    }
+    new_browser->tab_strip_model()->AddTabGroup(*source_group_id,
+                                                *source_group->visual_data());
   }
 
   const int source_index = tab_indices_to_move.start();

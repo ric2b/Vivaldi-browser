@@ -109,7 +109,7 @@ bool Code::IsIsolateIndependent(Isolate* isolate) {
       ~RelocInfo::ModeMask(RelocInfo::OFF_HEAP_TARGET) &
       ~RelocInfo::ModeMask(RelocInfo::VENEER_POOL) &
       ~RelocInfo::ModeMask(RelocInfo::WASM_CANONICAL_SIG_ID) &
-      ~RelocInfo::ModeMask(RelocInfo::WASM_INDIRECT_CALL_TARGET);
+      ~RelocInfo::ModeMask(RelocInfo::WASM_CODE_POINTER_TABLE_ENTRY);
   static_assert(kModeMask ==
                 (RelocInfo::ModeMask(RelocInfo::CODE_TARGET) |
                  RelocInfo::ModeMask(RelocInfo::RELATIVE_CODE_TARGET) |
@@ -118,6 +118,7 @@ bool Code::IsIsolateIndependent(Isolate* isolate) {
                  RelocInfo::ModeMask(RelocInfo::EXTERNAL_REFERENCE) |
                  RelocInfo::ModeMask(RelocInfo::INTERNAL_REFERENCE) |
                  RelocInfo::ModeMask(RelocInfo::INTERNAL_REFERENCE_ENCODED) |
+                 RelocInfo::ModeMask(RelocInfo::JS_DISPATCH_HANDLE) |
                  RelocInfo::ModeMask(RelocInfo::NEAR_BUILTIN_ENTRY) |
                  RelocInfo::ModeMask(RelocInfo::WASM_CALL) |
                  RelocInfo::ModeMask(RelocInfo::WASM_STUB_CALL)));
@@ -201,9 +202,6 @@ void Disassemble(const char* name, std::ostream& os, Isolate* isolate,
   }
   if ((name != nullptr) && (name[0] != '\0')) {
     os << "name = " << name << "\n";
-  }
-  if (CodeKindIsOptimizedJSFunction(kind)) {
-    os << "stack_slots = " << code->stack_slots() << "\n";
   }
   os << "compiler = "
      << (code->is_turbofanned()       ? "turbofan"
@@ -326,8 +324,8 @@ void Code::DisassembleOnlyCode(const char* name, std::ostream& os,
 
 #endif  // ENABLE_DISASSEMBLER
 
-void Code::SetMarkedForDeoptimization(Isolate* isolate, const char* reason) {
-  set_marked_for_deoptimization(true);
+void Code::TraceMarkForDeoptimization(Isolate* isolate,
+                                      LazyDeoptimizeReason reason) {
   Deoptimizer::TraceMarkForDeoptimization(isolate, *this, reason);
 }
 

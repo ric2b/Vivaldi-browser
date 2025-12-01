@@ -20,7 +20,7 @@ namespace {
 
 // Maximum size for the receiver model prefix at start of MDNS service instance
 // names. Any model names that are larger than this size will be truncated.
-const size_t kMaxReceiverModelSize = 20;
+constexpr size_t kMaxReceiverModelSize = 20;
 
 // Build the MDNS instance name for service. This will be the receiver model (up
 // to 20 bytes) appended with the virtual receiver ID (receiver UUID) and

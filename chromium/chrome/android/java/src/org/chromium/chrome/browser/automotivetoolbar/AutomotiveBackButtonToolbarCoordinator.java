@@ -8,9 +8,11 @@ import android.content.Context;
 import android.os.Handler;
 import android.view.View;
 import android.view.ViewStub;
+import android.view.animation.Animation;
+import android.view.animation.AnimationUtils;
 import android.widget.FrameLayout;
 
-import androidx.annotation.VisibleForTesting;
+import androidx.annotation.AnimRes;
 import androidx.appcompat.widget.Toolbar;
 
 import org.chromium.chrome.R;
@@ -18,7 +20,9 @@ import org.chromium.chrome.browser.back_press.BackPressManager;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.fullscreen.FullscreenOptions;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.components.browser_ui.util.AutomotiveUtils;
 import org.chromium.components.browser_ui.widget.TouchEventProvider;
+import org.chromium.ui.animation.EmptyAnimationListener;
 
 /**
  * The automotive back button toolbar allows users to navigate backwards. This coordinator supports
@@ -33,15 +37,16 @@ public class AutomotiveBackButtonToolbarCoordinator {
                 @Override
                 public void run() {
                     if (mIsFullscreen) {
-                        mOnSwipeAutomotiveToolbar.setVisibility(View.GONE);
-                        if (mEdgeSwipeGestureDetector != null) {
-                            mEdgeSwipeGestureDetector.setIsActive(false);
-                        }
+                        assert (mEdgeSwipeGestureDetector != null);
+                        mEdgeSwipeGestureDetector.setIsReadyForNewScroll(false);
+                        mIsAnimationActive = true;
+                        mOnSwipeAutomotiveToolbar.startAnimation(mHideOnSwipeToolbarAnimation);
                     }
                 }
             };
 
     private final Handler mHandler = new Handler();
+    private final Context mContext;
     private final View mBackButtonToolbarForAutomotive;
     private final FullscreenManager mFullscreenManager;
     private final TouchEventProvider mTouchEventProvider;
@@ -49,12 +54,45 @@ public class AutomotiveBackButtonToolbarCoordinator {
 
     private Toolbar mOnSwipeAutomotiveToolbar;
     private EdgeSwipeGestureDetector mEdgeSwipeGestureDetector;
+    private Animation mShowOnSwipeToolbarAnimation;
+    private Animation mHideOnSwipeToolbarAnimation;
     private boolean mIsFullscreen;
+    private boolean mIsVerticalToolbar;
+    private boolean mIsAnimationActive;
 
     interface OnSwipeCallback {
         /** Handles actions required after a swipe occurs. */
         void handleSwipe();
+
+        /** Handles actions required after a back swipe occurs. */
+        void handleBackSwipe();
     }
+
+    private OnSwipeCallback mOnSwipeCallback =
+            new OnSwipeCallback() {
+                @Override
+                public void handleSwipe() {
+                    if (mIsFullscreen
+                            && !mIsAnimationActive
+                            && mOnSwipeAutomotiveToolbar.getVisibility() == View.GONE) {
+                        mIsAnimationActive = true;
+                        mOnSwipeAutomotiveToolbar.setVisibility(View.VISIBLE);
+                        mOnSwipeAutomotiveToolbar.startAnimation(mShowOnSwipeToolbarAnimation);
+                        mHandler.postDelayed(mHideToolbar, SHOW_TOOLBAR_ON_SWIPE_DURATION_MS);
+                    }
+                }
+
+                @Override
+                public void handleBackSwipe() {
+                    if (mIsFullscreen
+                            && !mIsAnimationActive
+                            && mOnSwipeAutomotiveToolbar.getVisibility() == View.VISIBLE) {
+                        mIsAnimationActive = true;
+                        mOnSwipeAutomotiveToolbar.startAnimation(mHideOnSwipeToolbarAnimation);
+                        mHandler.removeCallbacks(mHideToolbar);
+                    }
+                }
+            };
 
     private FullscreenManager.Observer mFullscreenObserver =
             new FullscreenManager.Observer() {
@@ -64,6 +102,7 @@ public class AutomotiveBackButtonToolbarCoordinator {
                     mTouchEventProvider.addTouchEventObserver(mEdgeSwipeGestureDetector);
                     mBackButtonToolbarForAutomotive.setVisibility(View.GONE);
                     mIsFullscreen = true;
+                    mEdgeSwipeGestureDetector.setIsReadyForNewScroll(true);
                 }
 
                 @Override
@@ -91,25 +130,19 @@ public class AutomotiveBackButtonToolbarCoordinator {
             FullscreenManager fullscreenManager,
             TouchEventProvider touchEventProvider,
             BackPressManager backPressManager) {
+        mContext = context;
         mFullscreenManager = fullscreenManager;
         mTouchEventProvider = touchEventProvider;
         mBackPressedManager = backPressManager;
-        mEdgeSwipeGestureDetector = new EdgeSwipeGestureDetector(context, this::handleSwipe);
+        mEdgeSwipeGestureDetector = new EdgeSwipeGestureDetector(mContext, mOnSwipeCallback);
         mFullscreenManager.addObserver(mFullscreenObserver);
         mBackButtonToolbarForAutomotive =
                 automotiveBaseFrameLayout.findViewById(R.id.back_button_toolbar);
+        // Check if back button toolbar is vertical
+        mIsVerticalToolbar = AutomotiveUtils.useVerticalAutomotiveBackButtonToolbar(context);
         setOnSwipeBackButtonToolbar(
                 automotiveBaseFrameLayout.findViewById(
                         R.id.automotive_on_swipe_back_button_toolbar_stub));
-    }
-
-    /** Handles back button toolbar visibility on a swipe. */
-    @VisibleForTesting
-    void handleSwipe() {
-        if (mIsFullscreen) {
-            mOnSwipeAutomotiveToolbar.setVisibility(View.VISIBLE);
-            mHandler.postDelayed(mHideToolbar, SHOW_TOOLBAR_ON_SWIPE_DURATION_MS);
-        }
     }
 
     private void setOnSwipeBackButtonToolbar(ViewStub onSwipeAutomotiveToolbarStub) {
@@ -120,12 +153,45 @@ public class AutomotiveBackButtonToolbarCoordinator {
                 view -> {
                     mBackPressedManager.getCallback().handleOnBackPressed();
                 });
+
+        @AnimRes
+        int showOnSwipeTransition =
+                mIsVerticalToolbar ? R.anim.slide_in_left : R.anim.slide_in_down;
+        mShowOnSwipeToolbarAnimation =
+                AnimationUtils.loadAnimation(mContext, showOnSwipeTransition);
+        mShowOnSwipeToolbarAnimation.setAnimationListener(
+                new EmptyAnimationListener() {
+                    @Override
+                    public void onAnimationEnd(Animation animation) {
+                        assert (mEdgeSwipeGestureDetector != null);
+                        mEdgeSwipeGestureDetector.setIsReadyForNewScroll(true);
+                        mIsAnimationActive = false;
+                    }
+                });
+
+        @AnimRes
+        int hideOnSwipeTransition =
+                mIsVerticalToolbar ? R.anim.slide_out_left : R.anim.slide_out_down;
+        mHideOnSwipeToolbarAnimation =
+                AnimationUtils.loadAnimation(mContext, hideOnSwipeTransition);
+        mHideOnSwipeToolbarAnimation.setAnimationListener(
+                new EmptyAnimationListener() {
+                    @Override
+                    public void onAnimationEnd(Animation animation) {
+                        mOnSwipeAutomotiveToolbar.setVisibility(View.GONE);
+                        assert (mEdgeSwipeGestureDetector != null);
+                        mEdgeSwipeGestureDetector.setIsReadyForNewScroll(true);
+                        mIsAnimationActive = false;
+                    }
+                });
         // TODO(https://crbug.com/376740682): Configure back press behavior for Automotive Toolbar
         // here.
     }
 
     /** Destroy the Automotive Back Button Toolbar coordinator and its components. */
     public void destroy() {
+        mHideOnSwipeToolbarAnimation.cancel();
+        mShowOnSwipeToolbarAnimation.cancel();
         mHandler.removeCallbacks(mHideToolbar);
         mFullscreenManager.removeObserver(mFullscreenObserver);
         mTouchEventProvider.removeTouchEventObserver(mEdgeSwipeGestureDetector);
@@ -139,5 +205,9 @@ public class AutomotiveBackButtonToolbarCoordinator {
 
     EdgeSwipeGestureDetector getEdgeSwipeGestureDetectorForTesting() {
         return mEdgeSwipeGestureDetector;
+    }
+
+    OnSwipeCallback getOnSwipeCallbackForTesting() {
+        return mOnSwipeCallback;
     }
 }

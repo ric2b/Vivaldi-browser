@@ -48,11 +48,6 @@ class COMPONENT_EXPORT(INPUT) InputRouterClient {
   virtual void DecrementInFlightEventCount(
       blink::mojom::InputEventResultSource ack_source) = 0;
 
-  // Called each time the browser UI scheduler should be notified of a gesture
-  // event which is a scroll state update.
-  virtual void NotifyUISchedulerOfGestureEventUpdate(
-      blink::WebInputEvent::Type gesture_event) = 0;
-
   // Called when the router has received an overscroll notification from the
   // renderer.
   virtual void DidOverscroll(const ui::DidOverscrollParams& params) = 0;
@@ -114,6 +109,8 @@ class COMPONENT_EXPORT(INPUT) InputRouterClient {
       const std::optional<std::vector<gfx::Rect>>& line_bounds) = 0;
   virtual StylusInterface* GetStylusInterface() = 0;
   virtual void OnStartStylusWriting() = 0;
+
+  virtual DispatchToRendererCallback GetDispatchToRendererCallback() = 0;
 };
 
 }  // namespace input

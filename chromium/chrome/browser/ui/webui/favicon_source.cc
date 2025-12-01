@@ -50,15 +50,21 @@ GURL GetUnsafeRequestOrigin(const content::WebContents::Getter& wc_getter) {
   return web_contents ? web_contents->GetLastCommittedURL() : GURL();
 }
 
-bool ParseHistoryUiOrigin(const GURL& url,
-                          favicon::HistoryUiFaviconRequestOrigin* origin) {
+bool IsOriginAllowedServerFallback(const GURL& url) {
+  // Allow chrome-untrusted://data-sharing to use Google server fallback.
+  if (url.scheme() == content::kChromeUIUntrustedScheme &&
+      url.host() == chrome::kChromeUIUntrustedDataSharingHost) {
+    return true;
+  }
   GURL history_url(chrome::kChromeUIHistoryURL);
   if (url == history_url) {
-    *origin = favicon::HistoryUiFaviconRequestOrigin::kHistory;
     return true;
   }
   if (url == history_url.Resolve(chrome::kChromeUIHistorySyncedTabs)) {
-    *origin = favicon::HistoryUiFaviconRequestOrigin::kHistorySyncedTabs;
+    return true;
+  }
+  if (url == GURL(chrome::kChromeUINewTabURL) ||
+      url == GURL(chrome::kChromeUINewTabPageURL)) {
     return true;
   }
   return false;
@@ -67,18 +73,23 @@ bool ParseHistoryUiOrigin(const GURL& url,
 }  // namespace
 
 FaviconSource::FaviconSource(Profile* profile,
-                             chrome::FaviconUrlFormat url_format)
-    : profile_(profile->GetOriginalProfile()), url_format_(url_format) {}
+                             chrome::FaviconUrlFormat url_format,
+                             bool serve_untrusted)
+    : profile_(profile->GetOriginalProfile()),
+      url_format_(url_format),
+      serve_untrusted_(serve_untrusted) {}
 
-FaviconSource::~FaviconSource() {}
+FaviconSource::~FaviconSource() = default;
 
 std::string FaviconSource::GetSource() {
   switch (url_format_) {
     case chrome::FaviconUrlFormat::kFaviconLegacy:
       return chrome::kChromeUIFaviconHost;
     case chrome::FaviconUrlFormat::kFavicon2:
-      return chrome::kChromeUIFavicon2Host;
+      return serve_untrusted_ ? chrome::kChromeUIUntrustedFavicon2URL
+                              : chrome::kChromeUIFavicon2Host;
   }
+
   NOTREACHED();
 }
 
@@ -150,10 +161,8 @@ void FaviconSource::StartDataRequest(
       }
     }
 
-    favicon::HistoryUiFaviconRequestOrigin parsed_history_ui_origin;
-    if (!parsed.allow_favicon_server_fallback ||
-        !ParseHistoryUiOrigin(GetUnsafeRequestOrigin(wc_getter),
-                              &parsed_history_ui_origin)) {
+    if (!(parsed.allow_favicon_server_fallback &&
+          IsOriginAllowedServerFallback(GetUnsafeRequestOrigin(wc_getter)))) {
       // Request from local storage only.
       // NOTE(espen@vivaldi.com): We need to make an exception for at least
       // preloaded bookmark urls. Otherwise they will all be shown with the
@@ -184,8 +193,7 @@ void FaviconSource::StartDataRequest(
         page_url, desired_size_in_pixel,
         base::BindOnce(&FaviconSource::OnFaviconDataAvailable,
                        weak_ptr_factory_.GetWeakPtr(), std::move(callback),
-                       parsed, wc_getter),
-        parsed_history_ui_origin);
+                       parsed, wc_getter));
   }
 }
 

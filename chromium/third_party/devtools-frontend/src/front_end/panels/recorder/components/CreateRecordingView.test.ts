@@ -30,11 +30,11 @@ describeWithEnvironment('CreateRecordingView', () => {
     const input = view.shadowRoot?.querySelector(
                       '#user-flow-name',
                       ) as HTMLInputElement;
-    assert.ok(input);
+    assert.isOk(input);
     const button = view.shadowRoot?.querySelector(
                        'devtools-control-button',
                        ) as Components.ControlButton.ControlButton;
-    assert.ok(button);
+    assert.isOk(button);
     const onceClicked = new Promise<Components.CreateRecordingView.RecordingStartedEvent>(
         resolve => {
           view.addEventListener('recordingstarted', resolve, {once: true});
@@ -78,11 +78,11 @@ describeWithEnvironment('CreateRecordingView', () => {
     let input = view.shadowRoot?.querySelector(
                     '#selector-attribute',
                     ) as HTMLInputElement;
-    assert.ok(input);
+    assert.isOk(input);
     const button = view.shadowRoot?.querySelector(
                        'devtools-control-button',
                        ) as Components.ControlButton.ControlButton;
-    assert.ok(button);
+    assert.isOk(button);
     const onceClicked = new Promise<Components.CreateRecordingView.RecordingStartedEvent>(
         resolve => {
           view.addEventListener('recordingstarted', resolve, {once: true});
@@ -96,7 +96,7 @@ describeWithEnvironment('CreateRecordingView', () => {
     input = view.shadowRoot?.querySelector(
                 '#selector-attribute',
                 ) as HTMLInputElement;
-    assert.ok(input);
+    assert.isOk(input);
     assert.strictEqual(input.value, 'data-custom-attribute');
   });
 
@@ -106,11 +106,11 @@ describeWithEnvironment('CreateRecordingView', () => {
     let checkboxes = view.shadowRoot?.querySelectorAll(
                          '.selector-type input[type=checkbox]',
                          ) as NodeListOf<HTMLInputElement>;
-    assert.strictEqual(checkboxes.length, 5);
+    assert.lengthOf(checkboxes, 5);
     const button = view.shadowRoot?.querySelector(
                        'devtools-control-button',
                        ) as Components.ControlButton.ControlButton;
-    assert.ok(button);
+    assert.isOk(button);
     const onceClicked = new Promise<Components.CreateRecordingView.RecordingStartedEvent>(
         resolve => {
           view.addEventListener('recordingstarted', resolve, {once: true});
@@ -120,7 +120,7 @@ describeWithEnvironment('CreateRecordingView', () => {
     button.dispatchEvent(new Event('click'));
     const event = await onceClicked;
 
-    assert.deepStrictEqual(event.selectorTypesToRecord, [
+    assert.deepEqual(event.selectorTypesToRecord, [
       'aria',
       'text',
       'xpath',
@@ -131,7 +131,7 @@ describeWithEnvironment('CreateRecordingView', () => {
     checkboxes = view.shadowRoot?.querySelectorAll(
                      '.selector-type input[type=checkbox]',
                      ) as NodeListOf<HTMLInputElement>;
-    assert.strictEqual(checkboxes.length, 5);
+    assert.lengthOf(checkboxes, 5);
     assert.isFalse(checkboxes[0].checked);
     assert.isTrue(checkboxes[1].checked);
     assert.isTrue(checkboxes[2].checked);

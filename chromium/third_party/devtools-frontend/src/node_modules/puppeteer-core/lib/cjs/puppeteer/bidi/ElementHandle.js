@@ -41,7 +41,7 @@ var __esDecorate = (this && this.__esDecorate) || function (ctor, descriptorIn, 
 var __addDisposableResource = (this && this.__addDisposableResource) || function (env, value, async) {
     if (value !== null && value !== void 0) {
         if (typeof value !== "object" && typeof value !== "function") throw new TypeError("Object expected.");
-        var dispose;
+        var dispose, inner;
         if (async) {
             if (!Symbol.asyncDispose) throw new TypeError("Symbol.asyncDispose is not defined.");
             dispose = value[Symbol.asyncDispose];
@@ -49,8 +49,10 @@ var __addDisposableResource = (this && this.__addDisposableResource) || function
         if (dispose === void 0) {
             if (!Symbol.dispose) throw new TypeError("Symbol.dispose is not defined.");
             dispose = value[Symbol.dispose];
+            if (async) inner = dispose;
         }
         if (typeof dispose !== "function") throw new TypeError("Object not disposable.");
+        if (inner) dispose = function() { try { inner.call(this); } catch (e) { return Promise.reject(e); } };
         env.stack.push({ value: value, dispose: dispose, async: async });
     }
     else if (async) {
@@ -64,17 +66,22 @@ var __disposeResources = (this && this.__disposeResources) || (function (Suppres
             env.error = env.hasError ? new SuppressedError(e, env.error, "An error was suppressed during disposal.") : e;
             env.hasError = true;
         }
+        var r, s = 0;
         function next() {
-            while (env.stack.length) {
-                var rec = env.stack.pop();
+            while (r = env.stack.pop()) {
                 try {
-                    var result = rec.dispose && rec.dispose.call(rec.value);
-                    if (rec.async) return Promise.resolve(result).then(next, function(e) { fail(e); return next(); });
+                    if (!r.async && s === 1) return s = 0, env.stack.push(r), Promise.resolve().then(next);
+                    if (r.dispose) {
+                        var result = r.dispose.call(r.value);
+                        if (r.async) return s |= 2, Promise.resolve(result).then(next, function(e) { fail(e); return next(); });
+                    }
+                    else s |= 1;
                 }
                 catch (e) {
                     fail(e);
                 }
             }
+            if (s === 1) return env.hasError ? Promise.reject(env.error) : Promise.resolve();
             if (env.hasError) throw env.error;
         }
         return next();
@@ -86,6 +93,7 @@ var __disposeResources = (this && this.__disposeResources) || (function (Suppres
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BidiElementHandle = void 0;
 const ElementHandle_js_1 = require("../api/ElementHandle.js");
+const Errors_js_1 = require("../common/Errors.js");
 const environment_js_1 = require("../environment.js");
 const AsyncIterableUtil_js_1 = require("../util/AsyncIterableUtil.js");
 const decorators_js_1 = require("../util/decorators.js");
@@ -94,7 +102,6 @@ const JSHandle_js_1 = require("./JSHandle.js");
  * @internal
  */
 let BidiElementHandle = (() => {
-    var _a;
     let _classSuper = ElementHandle_js_1.ElementHandle;
     let _instanceExtraInitializers = [];
     let _autofill_decorators;
@@ -103,17 +110,17 @@ let BidiElementHandle = (() => {
         static {
             const _metadata = typeof Symbol === "function" && Symbol.metadata ? Object.create(_classSuper[Symbol.metadata] ?? null) : void 0;
             _autofill_decorators = [(0, decorators_js_1.throwIfDisposed)()];
-            _contentFrame_decorators = [(0, decorators_js_1.throwIfDisposed)(), (_a = ElementHandle_js_1.ElementHandle).bindIsolatedHandle.bind(_a)];
+            _contentFrame_decorators = [(0, decorators_js_1.throwIfDisposed)(), ElementHandle_js_1.bindIsolatedHandle];
             __esDecorate(this, null, _autofill_decorators, { kind: "method", name: "autofill", static: false, private: false, access: { has: obj => "autofill" in obj, get: obj => obj.autofill }, metadata: _metadata }, null, _instanceExtraInitializers);
             __esDecorate(this, null, _contentFrame_decorators, { kind: "method", name: "contentFrame", static: false, private: false, access: { has: obj => "contentFrame" in obj, get: obj => obj.contentFrame }, metadata: _metadata }, null, _instanceExtraInitializers);
             if (_metadata) Object.defineProperty(this, Symbol.metadata, { enumerable: true, configurable: true, writable: true, value: _metadata });
         }
+        #backendNodeId = __runInitializers(this, _instanceExtraInitializers);
         static from(value, realm) {
             return new BidiElementHandle(value, realm);
         }
         constructor(value, realm) {
             super(JSHandle_js_1.BidiJSHandle.from(value, realm));
-            __runInitializers(this, _instanceExtraInitializers);
         }
         get realm() {
             // SAFETY: See the super call in the constructor.
@@ -170,14 +177,16 @@ let BidiElementHandle = (() => {
         async uploadFile(...files) {
             // Locate all files and confirm that they exist.
             const path = environment_js_1.environment.value.path;
-            files = files.map(file => {
-                if (path.win32.isAbsolute(file) || path.posix.isAbsolute(file)) {
-                    return file;
-                }
-                else {
-                    return path.resolve(file);
-                }
-            });
+            if (path) {
+                files = files.map(file => {
+                    if (path.win32.isAbsolute(file) || path.posix.isAbsolute(file)) {
+                        return file;
+                    }
+                    else {
+                        return path.resolve(file);
+                    }
+                });
+            }
             await this.frame.setFiles(this, files);
         }
         async *queryAXTree(name, role) {
@@ -192,6 +201,19 @@ let BidiElementHandle = (() => {
                 // TODO: maybe change ownership since the default ownership is probably none.
                 return Promise.resolve(BidiElementHandle.from(node, this.realm));
             });
+        }
+        async backendNodeId() {
+            if (!this.frame.page().browser().cdpSupported) {
+                throw new Errors_js_1.UnsupportedOperation();
+            }
+            if (this.#backendNodeId) {
+                return this.#backendNodeId;
+            }
+            const { node } = await this.frame.client.send('DOM.describeNode', {
+                objectId: this.handle.id,
+            });
+            this.#backendNodeId = node.backendNodeId;
+            return this.#backendNodeId;
         }
     };
 })();

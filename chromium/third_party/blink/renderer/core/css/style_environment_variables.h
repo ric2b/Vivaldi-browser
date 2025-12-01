@@ -30,6 +30,14 @@ enum class UADefinedVariable {
   kSafeAreaInsetBottom,
   kSafeAreaInsetRight,
 
+  // When safe-area-inset-* values can change dynamically during the browsing
+  // session, their maximum values are expressed as safe-area-max-inset-*.
+  // Currently only the bottom inset is dynamic, for Android edge-to-edge UI.
+  kSafeAreaMaxInsetTop,
+  kSafeAreaMaxInsetLeft,
+  kSafeAreaMaxInsetBottom,
+  kSafeAreaMaxInsetRight,
+
   // The keyboard area insets are six environment variables that define a
   // virtual keyboard rectangle by its top, right, bottom, left, width and
   // height insets
@@ -131,6 +139,7 @@ class CORE_EXPORT StyleEnvironmentVariables
 
   // Stringify |value| and append 'px'. Helper for setting variables that are
   // CSS lengths.
+  static String FormatFloatPx(float value);
   static String FormatPx(int value);
 
   virtual const FeatureContext* GetFeatureContext() const;

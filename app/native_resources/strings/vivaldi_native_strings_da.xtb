@@ -4,6 +4,7 @@
 <translation id="1033008476608128425">Landskab 3</translation>
 <translation id="1118377629180821201">Landskab 12</translation>
 <translation id="1158503667684816647">Vis ikke bekræftelse igen</translation>
+<translation id="1159983379553246472">Genindlæs denne fane for at løse problemer med medieafspilning.</translation>
 <translation id="1222195720020481779">Starter installationen...</translation>
 <translation id="1224683873953469764">Få Vivaldi til mobil</translation>
 <translation id="1270785070369717623">Desværre er dine Opera GX-indstillinger ikke tilgængelige, mens den browser kører. Importér disse indstillinger til Vivaldi ved at gemme dit arbejde og lukke alle Opera GX-vinduer. Klik derefter på Fortsæt.</translation>
@@ -36,7 +37,7 @@
 <translation id="2441056087170876076">Monster 2</translation>
 <translation id="2444387452209867610">Indsæt note</translation>
 <translation id="2486841023299517366">Dyr 4</translation>
-<translation id="2612127540243995147">Klar til installation. Vivaldi bliver lukket og genstartet.</translation>
+<translation id="2612127540243995147">Klar til installation. Vivaldi bliver genstartet.</translation>
 <translation id="2613387515621326337">Vis opdateringsside</translation>
 <translation id="2645477450146475243">Desværre er dine Opera-indstillinger ikke tilgængelige, mens den browser kører. Importér disse indstillinger til Vivaldi ved at gemme dit arbejde og lukke alle Opera-vinduer. Klik derefter på Fortsæt.</translation>
 <translation id="2647368062414805334">Desværre er dine Edge-indstillinger ikke tilgængelige, mens den browser kører. Importér disse indstillinger til Vivaldi ved at gemme dit arbejde og lukke alle Edge-vinduer. Klik derefter på Fortsæt.</translation>
@@ -45,14 +46,14 @@
 <translation id="2873951654529031587">Papirkurv</translation>
 <translation id="292258461174562431">Monster 4</translation>
 <translation id="2923448633003185837">Indsæt og gå til</translation>
-<translation id="2953943267837858202">Ikke tilladt at afspille video automatisk</translation>
+<translation id="2953943267837858202">Ikke tilladt at afspille videoer automatisk</translation>
 <translation id="2977472760057091832">Åbn link i privat vindue</translation>
 <translation id="2978824962390592855">Opera</translation>
 <translation id="2989805286512600854">Åbn i ny fane</translation>
 <translation id="3027988479108856431">Desværre er dine Yandex-indstillinger ikke tilgængelige, mens den browser kører. Importér disse indstillinger til Vivaldi ved at gemme dit arbejde og lukke alle Yandex-vinduer. Klik derefter på Fortsæt.</translation>
 <translation id="3084011186245865060">Landskab 6</translation>
 <translation id="3085906383264247940">Opera (Beta)</translation>
-<translation id="3093931836425623631">Vivaldi er muliggjort af Chromium open source-projektet og anden open source software.</translation>
+<translation id="3093931836425623631">Vivaldi er muliggjort af Chromium open source-projektet og anden open source-software.</translation>
 <translation id="3127383884976966729">Dyr 7</translation>
 <translation id="3131120041041402952">Arc</translation>
 <translation id="3156398087075132709">Nyt bogmærke</translation>
@@ -72,7 +73,7 @@
 <translation id="3542768452570884558">Åbn link i nyt vindue</translation>
 <translation id="3588820906588687999">Åbn billede i ny fane</translation>
 <translation id="3601066750251199488">Monster 3</translation>
-<translation id="3620979700683094848">Websites kan afspille video automatisk</translation>
+<translation id="3620979700683094848">Websites kan afspille videoer automatisk</translation>
 <translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">En ny version af Vivaldi er tilgængelig!</translation>
 <translation id="3708982624815781692">Download blev annulleret.</translation>
@@ -87,9 +88,9 @@
 <translation id="3943857333388298514">Indsæt</translation>
 <translation id="4005270918754737597">Spring denne version over</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
-<translation id="4064545092083709582">Vivaldi kunne ikke låse dit sikre nøglelager op. Uden nøglelageret mister du dine gemte logins, sikre cookies, og nogle funktioner som Synkronisering, Mail og Kalender stopper med at fungere.
+<translation id="4064545092083709582">Vivaldi kunne ikke låse dit sikre nøglelager op. Uden det mister du gemte logins, sikre cookies, og nogle funktioner som Sync, Mail og Kalender stopper med at fungere.
 
-    Afslut venligst nu, lås op eller reparér dit nøglelager, og prøv derefter igen. Vil du virkelig fortsætte, men miste data?</translation>
+    Afslut venligst nu, lås op eller reparer nøglelageret, og prøv igen. Vil du virkelig fortsætte og miste data?</translation>
 <translation id="4074744496918018786">Åbn billede i privat vindue</translation>
 <translation id="410351446219883937">Automatisk afspilning</translation>
 <translation id="4281844954008187215">Servicevilkår</translation>
@@ -122,6 +123,7 @@
 <translation id="5388358297987318779">Åbn billede</translation>
 <translation id="5416008465899576639">En ny version af Vivaldi er tilgængelig.</translation>
 <translation id="5497042274492038489">Bekræft lukning af vindue</translation>
+<translation id="5556459405103347317">Genindlæs</translation>
 <translation id="5594602170491763400">Monster 5</translation>
 <translation id="5648110075441906505">Åbn billede i nyt vindue</translation>
 <translation id="5656371807944747581">Opdateringsfejl!</translation>
@@ -148,7 +150,7 @@
 <translation id="6896758677409633944">Kopiér</translation>
 <translation id="6960139763942959188">Denne profil er i øjeblikket gemt usikkert i et ukrypteret format. Vivaldi skal til at opgradere din profil til et mere sikkert krypteret format. Du bør afslutte nu og sikkerhedskopiere din profil, før du fortsætter.</translation>
 <translation id="7086554968911045110">Landskab 7</translation>
-<translation id="7099506190679014195">Opgradering af sikkert nøglearkiv</translation>
+<translation id="7099506190679014195">Opgradering af sikkert nøglelager</translation>
 <translation id="7111492742514999492">Landskab 9</translation>
 <translation id="7208252576848052204">Desværre er dine Arc-indstillinger ikke tilgængelige, mens den browser kører. Importér disse indstillinger til Vivaldi ved at gemme dit arbejde og lukke alle Arc-vinduer. Klik derefter på Fortsæt.</translation>
 <translation id="7321500017121629018">Aktiv i går</translation>
@@ -185,14 +187,14 @@
 <translation id="875142999698251063">Afslut nu</translation>
 <translation id="8768970203213061953">Landskab 14</translation>
 <translation id="8773635261052182196">Du vil ikke længere se disse meddelelser. Du kan aktivere dem igen fra Vivaldi's indstillinger.</translation>
-<translation id="8774017153185436870">Websites kan måske afspille video automatisk</translation>
-<translation id="8813277370772331957">Mind mig om det senere</translation>
+<translation id="8774017153185436870">Websites kan afspille videoer automatisk</translation>
+<translation id="8813277370772331957">Påmind mig senere</translation>
 <translation id="8894900864683381599">Tilføj link som webpanel</translation>
 <translation id="8912720443398351457">Vil du virkelig lukke Vivaldi?</translation>
 <translation id="8947109330183116400">Vælg HTML-bogmærkefil</translation>
 <translation id="9017566390391482291">Vælg Vivaldi-profilmappe til import</translation>
 <translation id="9048058608784130603">Afventer opdatering <ph name="VERSION" /></translation>
-<translation id="9048224371732578627">Tilladt at afspille video automatisk</translation>
+<translation id="9048224371732578627">Tilladt at afspille videoer automatisk</translation>
 <translation id="9065203028668620118">Rediger</translation>
 <translation id="9090254883741610153">Lad mig fortsætte</translation>
 <translation id="910680796491389880">Thunderbird</translation>

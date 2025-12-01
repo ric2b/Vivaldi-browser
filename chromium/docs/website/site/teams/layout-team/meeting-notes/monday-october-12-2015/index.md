@@ -11,22 +11,22 @@ title: Monday, October 12, 2015
 ---
 
 Updates since last meeting (on Monday, October 5th):
-Scrolling (skobes, szager) \[[crbug.com/417782](http://crbug.com/417782)\]
+Scrolling (skobes, szager) \[[crbug.com/417782](https://crbug.com/417782)\]
 - Misc root layer scrolling fixes. (skobes)
 - Plan to start working on smooth scrolling this week. (skobes)
-CSS Flexbox (cbiesinger) \[[crbug.com/426898](http://crbug.com/426898)\]
+CSS Flexbox (cbiesinger) \[[crbug.com/426898](https://crbug.com/426898)\]
 - Fixed height calculation to consider tallest column.
 - FIxed handling of minimum for fill available.
 CSS Grid Layout (svillar, jfernandez, rego)
-\[[crbug.com/79180](http://crbug.com/79180)\]
+\[[crbug.com/79180](https://crbug.com/79180)\]
 - No updates since last week.
 Region-based multi-column support (mstensho)
-\[[crbug.com/334335](http://crbug.com/334335)\]
+\[[crbug.com/334335](https://crbug.com/334335)\]
 - Reworked column rebalancing.
 - Fix handling for block pagination struts.
 - Changes to break handling.
 Add API for layout (leviw, pilgrim, ojan)
-\[[crbug.com/495288](http://crbug.com/495288)\]
+\[[crbug.com/495288](https://crbug.com/495288)\]
 - API fixes fot SVG text chunk handling. (pilgrim)
 Text (eae, drott, kojii)
 - Fixed further selection painting bugs. (eae)

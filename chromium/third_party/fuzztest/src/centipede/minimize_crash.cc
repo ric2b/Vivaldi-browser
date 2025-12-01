@@ -27,10 +27,10 @@
 #include "absl/log/log.h"
 #include "absl/synchronization/mutex.h"
 #include "./centipede/centipede_callbacks.h"
-#include "./centipede/early_exit.h"
 #include "./centipede/environment.h"
 #include "./centipede/mutation_input.h"
 #include "./centipede/runner_result.h"
+#include "./centipede/stop.h"
 #include "./centipede/thread_pool.h"
 #include "./centipede/util.h"
 #include "./centipede/workdir.h"
@@ -97,7 +97,7 @@ static void MinimizeCrash(const Environment &env,
   size_t num_batches = env.num_runs / env.batch_size;
   for (size_t i = 0; i < num_batches; ++i) {
     LOG_EVERY_POW_2(INFO) << "[" << i << "] Minimizing... Interrupt to stop";
-    if (EarlyExitRequested()) break;
+    if (ShouldStop()) break;
     // Get up to kMaxNumCrashersToGet most recent crashers. We don't want just
     // the most recent crasher to avoid being stuck in local minimum.
     constexpr size_t kMaxNumCrashersToGet = 20;
@@ -152,7 +152,7 @@ int MinimizeCrash(ByteSpan crashy_input, const Environment &env,
   LOG(INFO) << "Starting the crash minimization loop in " << env.num_threads
             << "threads";
 
-  MinimizerWorkQueue queue(WorkDir{env}.CrashReproducerDirPath(),
+  MinimizerWorkQueue queue(WorkDir{env}.CrashReproducerDirPaths().MyShard(),
                            original_crashy_input);
 
   {

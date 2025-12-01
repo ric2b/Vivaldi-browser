@@ -7,17 +7,17 @@
 #include <memory>
 #include <vector>
 
-#include "ash/components/arc/mojom/process.mojom.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "base/memory/raw_ptr.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
-#include "chrome/browser/ash/arc/process/arc_process.h"
-#include "chrome/browser/ash/arc/process/arc_process_service.h"
 #include "chrome/browser/ash/arc/vmm/arcvm_working_set_trim_executor.h"
 #include "chrome/browser/performance_manager/policies/policy_features.h"
 #include "chrome/browser/performance_manager/policies/working_set_trimmer_policy_arcvm.h"
+#include "chromeos/ash/experiences/arc/mojom/process.mojom.h"
+#include "chromeos/ash/experiences/arc/process/arc_process.h"
+#include "chromeos/ash/experiences/arc/process/arc_process_service.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
 #include "chromeos/dbus/power_manager/suspend.pb.h"
 #include "components/performance_manager/graph/graph_impl_operations.h"
@@ -180,7 +180,7 @@ class MockWorkingSetTrimmerPolicyChromeOS
   MockWorkingSetTrimmerPolicyChromeOS& operator=(
       const MockWorkingSetTrimmerPolicyChromeOS&) = delete;
 
-  ~MockWorkingSetTrimmerPolicyChromeOS() override {}
+  ~MockWorkingSetTrimmerPolicyChromeOS() override = default;
 
   base::MemoryPressureListener& listener() {
     return memory_pressure_listener_.value();
@@ -290,7 +290,7 @@ class WorkingSetTrimmerPolicyChromeOSTest : public GraphTestHarness {
   WorkingSetTrimmerPolicyChromeOSTest& operator=(
       const WorkingSetTrimmerPolicyChromeOSTest&) = delete;
 
-  ~WorkingSetTrimmerPolicyChromeOSTest() override {}
+  ~WorkingSetTrimmerPolicyChromeOSTest() override = default;
 
   void SetUp() override {
     chromeos::PowerManagerClient::InitializeFake();

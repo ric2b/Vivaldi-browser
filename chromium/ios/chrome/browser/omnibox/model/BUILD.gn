@@ -1,18 +1,21 @@
-# Copyright 2024 The Chromium Authors
+# Copyright 2025 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
 source_set("model") {
   sources = [
-    "omnibox_position_browser_agent.h",
-    "omnibox_position_browser_agent.mm",
-    "omnibox_position_browser_agent_observer.h",
-    "omnibox_position_browser_agent_observer_bridge.h",
-    "omnibox_position_browser_agent_observer_bridge.mm",
-    "omnibox_position_browser_agent_observing.h",
+    "omnibox_autocomplete_controller.h",
+    "omnibox_autocomplete_controller.mm",
+    "omnibox_controller.h",
+    "omnibox_controller.mm",
+    "omnibox_popup_controller.h",
+    "omnibox_popup_controller.mm",
+    "omnibox_popup_controller_delegate.h",
+    "omnibox_text_controller.h",
+    "omnibox_text_controller.mm",
   ]
   deps = [
     "//base",
-    "//ios/chrome/browser/shared/model/browser",
+    "//components/omnibox/browser",
   ]
 }

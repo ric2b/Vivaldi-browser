@@ -6,20 +6,28 @@ import '../../../ui/components/request_link_icon/request_link_icon.js';
 
 import * as i18n from '../../../core/i18n/i18n.js';
 import type * as Platform from '../../../core/platform/platform.js';
-import type * as SDK from '../../../core/sdk/sdk.js';
+import * as SDK from '../../../core/sdk/sdk.js';
 import * as Helpers from '../../../models/trace/helpers/helpers.js';
 import * as Trace from '../../../models/trace/trace.js';
 import * as LegacyComponents from '../../../ui/legacy/components/utils/utils.js';
 import * as UI from '../../../ui/legacy/legacy.js';
-import * as LitHtml from '../../../ui/lit-html/lit-html.js';
-import * as TimelineUtils from '../utils/utils.js';
+import * as Lit from '../../../ui/lit/lit.js';
+import type * as TimelineUtils from '../utils/utils.js';
 
-import NetworkRequestDetailsStyles from './networkRequestDetails.css.js';
-import networkRequestTooltipStyles from './networkRequestTooltip.css.js';
+import NetworkRequestDetailsStylesRaw from './networkRequestDetails.css.js';
+import networkRequestTooltipStylesRaw from './networkRequestTooltip.css.js';
 import {NetworkRequestTooltip} from './NetworkRequestTooltip.js';
 import {colorForNetworkRequest} from './Utils.js';
 
-const {html} = LitHtml;
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const NetworkRequestDetailsStyles = new CSSStyleSheet();
+NetworkRequestDetailsStyles.replaceSync(NetworkRequestDetailsStylesRaw.cssContent);
+
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const networkRequestTooltipStyles = new CSSStyleSheet();
+networkRequestTooltipStyles.replaceSync(networkRequestTooltipStylesRaw.cssContent);
+
+const {html} = Lit;
 
 const MAX_URL_LENGTH = 100;
 
@@ -48,10 +56,6 @@ const UIStrings = {
    *@description Text in Timeline indicating that input has not happened recently
    */
   no: 'No',
-  /**
-   *@description Text for previewing items
-   */
-  preview: 'Preview',
   /**
    *@description Text to indicate to the user they are viewing an event representing a network request.
    */
@@ -96,6 +100,10 @@ const UIStrings = {
    *@description Text that refers to if the network request is render blocking
    */
   renderBlocking: 'Render blocking',
+  /**
+   * @description Text to refer to a 3rd Party entity.
+   */
+  entity: 'Third party',
 };
 const str_ = i18n.i18n.registerUIStrings('panels/timeline/components/NetworkRequestDetails.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -108,6 +116,7 @@ export class NetworkRequestDetails extends HTMLElement {
   #requestPreviewElements = new WeakMap<Trace.Types.Events.SyntheticNetworkRequest, HTMLImageElement>();
   #linkifier: LegacyComponents.Linkifier.Linkifier;
   #parsedTrace: Trace.Handlers.Types.ParsedTrace|null = null;
+  #entityMapper: TimelineUtils.EntityMapper.EntityMapper|null = null;
   constructor(linkifier: LegacyComponents.Linkifier.Linkifier) {
     super();
     this.#linkifier = linkifier;
@@ -119,17 +128,18 @@ export class NetworkRequestDetails extends HTMLElement {
 
   async setData(
       parsedTrace: Trace.Handlers.Types.ParsedTrace, networkRequest: Trace.Types.Events.SyntheticNetworkRequest,
-      maybeTarget: SDK.Target.Target|null): Promise<void> {
+      maybeTarget: SDK.Target.Target|null, entityMapper: TimelineUtils.EntityMapper.EntityMapper|null): Promise<void> {
     if (this.#networkRequest === networkRequest && parsedTrace === this.#parsedTrace) {
       return;
     }
     this.#parsedTrace = parsedTrace;
     this.#networkRequest = networkRequest;
     this.#maybeTarget = maybeTarget;
+    this.#entityMapper = entityMapper;
     await this.#render();
   }
 
-  #renderTitle(): LitHtml.TemplateResult|null {
+  #renderTitle(): Lit.TemplateResult|null {
     if (!this.#networkRequest) {
       return null;
     }
@@ -138,13 +148,13 @@ export class NetworkRequestDetails extends HTMLElement {
     };
     return html`
       <div class="network-request-details-title">
-        <div style=${LitHtml.Directives.styleMap(style)}></div>
+        <div style=${Lit.Directives.styleMap(style)}></div>
         ${i18nString(UIStrings.networkRequest)}
       </div>
     `;
   }
 
-  #renderRow(title: string, value?: string|Node|LitHtml.TemplateResult): LitHtml.TemplateResult|null {
+  #renderRow(title: string, value?: string|Node|Lit.TemplateResult): Lit.TemplateResult|null {
     if (!value) {
       return null;
     }
@@ -153,7 +163,7 @@ export class NetworkRequestDetails extends HTMLElement {
     `;
   }
 
-  #renderURL(): LitHtml.TemplateResult|null {
+  #renderURL(): Lit.TemplateResult|null {
     if (!this.#networkRequest) {
       return null;
     }
@@ -166,28 +176,22 @@ export class NetworkRequestDetails extends HTMLElement {
     const linkifiedURL = LegacyComponents.Linkifier.Linkifier.linkifyURL(
         this.#networkRequest.args.data.url as Platform.DevToolsPath.UrlString, options);
 
-    const networkRequest = TimelineUtils.NetworkRequest.getNetworkRequest(this.#networkRequest);
+    // Potentially link to request within Network Panel
+    const networkRequest = SDK.TraceObject.RevealableNetworkRequest.create(this.#networkRequest);
     if (networkRequest) {
       linkifiedURL.addEventListener('contextmenu', (event: MouseEvent) => {
         if (!this.#networkRequest) {
           return;
         }
-        // Add a wrapper class here.
-        // The main reason is the `Open in Network panel` option is handled by the context menu provider, which will
-        // add this option for all supporting types. And there are a lot of context menu providers that support
-        // `SDK.NetworkRequest.NetworkRequest`, for example `Override content` by PersistenceActions, but we so far just
-        // want the one to reveal in network panel, so add a new class which will only be supported by Network panel.
-        // Also we want to have a different behavior(select the network request) from the
-        // `SDK.NetworkRequest.NetworkRequest` (highlight the network request once).
-        const contextMenu = new UI.ContextMenu.ContextMenu(event, {useSoftMenu: true});
-        contextMenu.appendApplicableItems(new TimelineUtils.NetworkRequest.TimelineNetworkRequest(networkRequest));
+        const contextMenu = new UI.ContextMenu.ContextMenu(event);
+        contextMenu.appendApplicableItems(networkRequest);
         void contextMenu.show();
       });
 
       // clang-format off
       const urlElement = html`
         ${linkifiedURL}
-        <devtools-request-link-icon .data=${{request: networkRequest}}>
+        <devtools-request-link-icon .data=${{request: networkRequest.networkRequest}}>
         </devtools-request-link-icon>
       `;
       // clang-format on
@@ -197,7 +201,7 @@ export class NetworkRequestDetails extends HTMLElement {
     return html`<div class="network-request-details-row">${linkifiedURL}</div>`;
   }
 
-  #renderFromCache(): LitHtml.TemplateResult|null {
+  #renderFromCache(): Lit.TemplateResult|null {
     if (!this.#networkRequest) {
       return null;
     }
@@ -207,7 +211,18 @@ export class NetworkRequestDetails extends HTMLElement {
         i18nString(UIStrings.fromCache), cached ? i18nString(UIStrings.yes) : i18nString(UIStrings.no));
   }
 
-  #renderEncodedDataLength(): LitHtml.TemplateResult|null {
+  #renderThirdPartyEntity(): Lit.TemplateResult|null {
+    if (!this.#entityMapper || !this.#networkRequest) {
+      return null;
+    }
+    const entity = this.#entityMapper.entityForEvent(this.#networkRequest);
+    if (!entity) {
+      return null;
+    }
+    return this.#renderRow(i18nString(UIStrings.entity), entity.name);
+  }
+
+  #renderEncodedDataLength(): Lit.TemplateResult|null {
     if (!this.#networkRequest) {
       return null;
     }
@@ -228,12 +243,12 @@ export class NetworkRequestDetails extends HTMLElement {
     return this.#renderRow(i18nString(UIStrings.encodedData), lengthText);
   }
 
-  #renderInitiatedBy(): LitHtml.TemplateResult|null {
+  #renderInitiatedBy(): Lit.TemplateResult|null {
     if (!this.#networkRequest) {
       return null;
     }
 
-    const hasStackTrace = Trace.Helpers.Trace.stackTraceForEvent(this.#networkRequest) !== null;
+    const hasStackTrace = Trace.Helpers.Trace.stackTraceInEvent(this.#networkRequest) !== null;
 
     // If we have a stack trace, that is the most reliable way to get the initiator data and display a link to the source.
     if (hasStackTrace) {
@@ -263,7 +278,7 @@ export class NetworkRequestDetails extends HTMLElement {
     return null;
   }
 
-  #renderBlockingRow(): LitHtml.TemplateResult|null {
+  #renderBlockingRow(): Lit.TemplateResult|null {
     if (!this.#networkRequest || !Helpers.Network.isSyntheticNetworkRequestEventRenderBlocking(this.#networkRequest)) {
       return null;
     }
@@ -283,7 +298,7 @@ export class NetworkRequestDetails extends HTMLElement {
     return this.#renderRow(i18nString(UIStrings.blocking), renderBlockingText);
   }
 
-  async #renderPreviewElement(): Promise<LitHtml.TemplateResult|null> {
+  async #renderPreviewElement(): Promise<Lit.TemplateResult|null> {
     if (!this.#networkRequest) {
       return null;
     }
@@ -296,6 +311,7 @@ export class NetworkRequestDetails extends HTMLElement {
                      this.#networkRequest.args.data.url as Platform.DevToolsPath.UrlString),
                  precomputedFeatures: undefined,
                  align: LegacyComponents.ImagePreview.Align.START,
+                 hideFileData: true,
                }) as HTMLImageElement);
 
       this.#requestPreviewElements.set(this.#networkRequest, previewElement);
@@ -303,7 +319,7 @@ export class NetworkRequestDetails extends HTMLElement {
 
     const requestPreviewElement = this.#requestPreviewElements.get(this.#networkRequest);
     if (requestPreviewElement) {
-      return this.#renderRow(i18nString(UIStrings.preview), requestPreviewElement);
+      return html`<div class="network-request-details-row">${requestPreviewElement}</div>`;
     }
     return null;
   }
@@ -318,6 +334,7 @@ export class NetworkRequestDetails extends HTMLElement {
     const output = html`
       ${this.#renderTitle()}
       ${this.#renderURL()}
+      ${await this.#renderPreviewElement()}
       <div class="network-request-details-cols">
         <div class="network-request-details-col">
           ${this.#renderRow(i18nString(UIStrings.requestMethod), networkData.requestMethod)}
@@ -327,6 +344,7 @@ export class NetworkRequestDetails extends HTMLElement {
           ${this.#renderRow(i18nString(UIStrings.decodedBody), i18n.ByteUtilities.bytesToString(this.#networkRequest.args.data.decodedBodyLength))}
           ${this.#renderBlockingRow()}
           ${this.#renderFromCache()}
+          ${this.#renderThirdPartyEntity()}
         </div>
         <div class="network-request-details-col">
           <div class="timing-rows">
@@ -335,10 +353,9 @@ export class NetworkRequestDetails extends HTMLElement {
         </div>
       </div>
       ${this.#renderInitiatedBy()}
-      ${await this.#renderPreviewElement()}
     `; // The last items are outside the 2 column layout because InitiatedBy can be very wide
     // clang-format on
-    LitHtml.render(output, this.#shadow, {host: this});
+    Lit.render(output, this.#shadow, {host: this});
   }
 }
 

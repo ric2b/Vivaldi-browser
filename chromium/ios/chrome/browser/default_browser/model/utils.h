@@ -16,7 +16,7 @@ class Tracker;
 namespace base {
 class Time;
 class TimeDelta;
-}
+}  // namespace base
 
 // Enum for the different types of default browser modal promo. These are stored
 // as values, if adding a new one, make sure to add it at the end.
@@ -58,6 +58,20 @@ enum class IOSDefaultBrowserVideoPromoAction {
   kMaxValue = kTertiaryActionTapped,
 };
 
+// Enum actions for the IOS.DefaultBrowserBannerPromo.PromoSessionEnded UMA
+// metrics.
+// LINT.IfChange(IOSDefaultBrowserBannerPromoPromoSessionEndedReason)
+enum class IOSDefaultBrowserBannerPromoPromoSessionEndedReason {
+  kImpressionsMet = 0,
+  kUserClosed = 1,
+  kUserTappedPromo = 2,
+  kNavigationToSRP = 3,
+  kNavigationToNTP = 4,
+  kChromeNowDefault = 5,
+  kMaxValue = kChromeNowDefault,
+};
+// LINT.ThenChange(//tools/metrics/histograms/metadata/ios/enums.xml:IOSDefaultBrowserBannerPromoPromoSessionEndedReason)
+
 // Visible for testing
 
 // Key in storage containing an NSDate corresponding to the last time
@@ -67,6 +81,10 @@ extern NSString* const kLastHTTPURLOpenTime;
 // Key in storage containing an NSDate indicating the last time a user
 // interacted with a non-modal promo.
 extern NSString* const kLastTimeUserInteractedWithNonModalPromo;
+
+// Key in storage containing an int indicating the number of times the
+// user has interacted with a non-modal promo.
+extern NSString* const kUserInteractedWithNonModalPromoCount;
 
 // Key in storage containing an NSDate indicating the last time a user
 // interacted with ANY full screen promo. The string value is kept from when the
@@ -352,7 +370,7 @@ base::Time GetTailoredDefaultBrowserPromoTimestamp();
 // Log to UserDefaults FRE timestamp migration is done.
 void LogFRETimestampMigrationDone();
 
-// Returns whether FRE timestamp migratin is done.
+// Returns whether FRE timestamp migrating is done.
 BOOL FRETimestampMigrationDone();
 
 // Log to UserDefaults promo interest event migration is done.
@@ -370,6 +388,15 @@ BOOL IsPromoImpressionsMigrationDone();
 // Records the last action the user took when a Default Browser Promo was
 // presented.
 void RecordDefaultBrowserPromoLastAction(IOSDefaultBrowserPromoAction action);
+
+// Log to UserDefaults non-modal promo migration done.
+void LogNonModalPromoMigrationDone();
+
+// Returns whether the non-modal promo migration is done.
+bool IsNonModalPromoMigrationDone();
+
+// Gets the date when the user last interacted with the non-modal promo.
+NSDate* LastTimeUserInteractedWithNonModalPromo();
 
 // Returns the last action, if any, that the user took when a Default Browser
 // Promo was presented.

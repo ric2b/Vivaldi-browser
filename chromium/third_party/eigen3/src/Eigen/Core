@@ -234,6 +234,11 @@ using std::ptrdiff_t;
 #include "src/Core/arch/NEON/TypeCasting.h"
 #include "src/Core/arch/NEON/MathFunctions.h"
 #include "src/Core/arch/NEON/Complex.h"
+#elif defined EIGEN_VECTORIZE_LSX
+#include "src/Core/arch/LSX/PacketMath.h"
+#include "src/Core/arch/LSX/TypeCasting.h"
+#include "src/Core/arch/LSX/MathFunctions.h"
+#include "src/Core/arch/LSX/Complex.h"
 #elif defined EIGEN_VECTORIZE_SVE
 #include "src/Core/arch/SVE/PacketMath.h"
 #include "src/Core/arch/SVE/TypeCasting.h"
@@ -318,6 +323,7 @@ using std::ptrdiff_t;
 #include "src/Core/PlainObjectBase.h"
 #include "src/Core/Matrix.h"
 #include "src/Core/Array.h"
+#include "src/Core/Fill.h"
 #include "src/Core/CwiseTernaryOp.h"
 #include "src/Core/CwiseBinaryOp.h"
 #include "src/Core/CwiseUnaryOp.h"
@@ -380,6 +386,8 @@ using std::ptrdiff_t;
 #include "src/Core/arch/AltiVec/MatrixProduct.h"
 #elif defined EIGEN_VECTORIZE_NEON
 #include "src/Core/arch/NEON/GeneralBlockPanelKernel.h"
+#elif defined EIGEN_VECTORIZE_LSX
+#include "src/Core/arch/LSX/GeneralBlockPanelKernel.h"
 #endif
 
 #if defined(EIGEN_VECTORIZE_AVX512)

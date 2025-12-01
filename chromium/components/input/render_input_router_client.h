@@ -16,15 +16,8 @@
 
 namespace input {
 
-class StylusInterface;
-
 class COMPONENT_EXPORT(INPUT) RenderInputRouterClient {
  public:
-  // TODO(b/331420891): Move these methods into RenderInputRouter.
-  virtual void IncrementInFlightEventCount() = 0;
-  virtual void DecrementInFlightEventCount(
-      blink::mojom::InputEventResultSource ack_source) = 0;
-
   virtual void ForwardWheelEventWithLatencyInfo(
       const blink::WebMouseWheelEvent& wheel_event,
       const ui::LatencyInfo& latency_info) = 0;
@@ -45,17 +38,17 @@ class COMPONENT_EXPORT(INPUT) RenderInputRouterClient {
       const gfx::Range& range,
       const std::optional<std::vector<gfx::Rect>>& character_bounds,
       const std::optional<std::vector<gfx::Rect>>& line_bounds) = 0;
-  virtual StylusInterface* GetStylusInterface() = 0;
   // Initiate stylus handwriting.
   virtual void OnStartStylusWriting() = 0;
   // Update which editable element has focus for stylus writing. When
-  // `focus_rect_in_widget` is provided, sets focus and caret position based on
-  // a hit test performed with that rect. Otherwise fallback to the Element
-  // CurrentTouchDownElement() and use default focus caret position. Caret
-  // position is only updated if the target element doesn't already have focus.
+  // `focus_widget_rect_in_dips` is provided, sets focus and caret position
+  // based on a hit test performed with that rect. Otherwise fallback to the
+  // Element CurrentTouchDownElement() and use default focus caret position.
+  // Caret position is only updated if the target element doesn't already have
+  // focus.
   virtual void UpdateElementFocusForStylusWriting(
 #if BUILDFLAG(IS_WIN)
-      const gfx::Rect& focus_rect_in_widget
+      const gfx::Rect& focus_widget_rect_in_dips
 #endif  // BUILDFLAG(IS_WIN)
       ) = 0;
 };

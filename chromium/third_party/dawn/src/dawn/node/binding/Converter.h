@@ -157,8 +157,7 @@ class Converter {
     [[nodiscard]] bool Convert(wgpu::TextureViewDimension& out,
                                const interop::GPUTextureViewDimension& in);
 
-    [[nodiscard]] bool Convert(wgpu::ProgrammableStageDescriptor& out,
-                               const interop::GPUProgrammableStage& in);
+    [[nodiscard]] bool Convert(wgpu::ComputeState& out, const interop::GPUProgrammableStage& in);
 
     [[nodiscard]] bool Convert(wgpu::ConstantEntry& out,
                                const std::string& in_name,
@@ -291,8 +290,10 @@ class Converter {
     // https://gpuweb.github.io/gpuweb/#gpu-supportedfeatures)
     [[nodiscard]] bool Convert(wgpu::FeatureName& out, interop::GPUFeatureName in);
     [[nodiscard]] bool Convert(interop::GPUFeatureName& out, wgpu::FeatureName in);
-    [[nodiscard]] bool Convert(wgpu::WGSLFeatureName& out, interop::WGSLFeatureName in);
-    [[nodiscard]] bool Convert(interop::WGSLFeatureName& out, wgpu::WGSLFeatureName in);
+    [[nodiscard]] bool Convert(wgpu::WGSLLanguageFeatureName& out,
+                               interop::WGSLLanguageFeatureName in);
+    [[nodiscard]] bool Convert(interop::WGSLLanguageFeatureName& out,
+                               wgpu::WGSLLanguageFeatureName in);
 
     // std::string to C string / wgpu::StringView types
     [[nodiscard]] inline bool Convert(const char*& out, const std::string& in) {

@@ -187,5 +187,5 @@ revisit this decision in future releases.
 
 We use a custom split config to help keep settings unified across different
 architectures. See the [Kernel Configuration
-document](/chromium-os/how-tos-and-troubleshooting/kernel-configuration) for
-more details.
+document](/chromium-os/developer-library/guides/kernel/kernel-configuration)
+for more details.

@@ -78,6 +78,7 @@ export class TestService extends TestBrowserProxy implements ServiceInterface {
       'updateExtensionCommandKeybinding',
       'updateExtensionCommandScope',
       'updateSiteAccess',
+      'uploadItemToAccount',
     ]);
   }
 
@@ -166,6 +167,7 @@ export class TestService extends TestBrowserProxy implements ServiceInterface {
 
   setItemEnabled(id: string, isEnabled: boolean) {
     this.methodCalled('setItemEnabled', [id, isEnabled]);
+    return Promise.resolve();
   }
 
   setItemCollectsErrors(id: string, collectsErrors: boolean) {
@@ -405,5 +407,10 @@ export class TestService extends TestBrowserProxy implements ServiceInterface {
 
   dismissMv2DeprecationNotice() {
     this.methodCalled('dismissMv2DeprecationNotice');
+  }
+
+  uploadItemToAccount(id: string) {
+    this.methodCalled('uploadItemToAccount', id);
+    return Promise.resolve();
   }
 }

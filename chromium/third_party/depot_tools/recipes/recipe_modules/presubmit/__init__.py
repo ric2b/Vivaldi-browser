@@ -11,19 +11,20 @@ from PB.recipe_modules.depot_tools.presubmit import properties
 PYTHON_VERSION_COMPATIBILITY = 'PY3'
 
 DEPS = [
-  'bot_update',
-  'depot_tools',
-  'gclient',
-  'git',
-  'recipe_engine/buildbucket',
-  'recipe_engine/context',
-  'recipe_engine/cv',
-  'recipe_engine/json',
-  'recipe_engine/path',
-  'recipe_engine/properties',
-  'recipe_engine/step',
-  'recipe_engine/resultdb',
-  'tryserver',
+    'bot_update',
+    'depot_tools',
+    'gclient',
+    'git',
+    'recipe_engine/buildbucket',
+    'recipe_engine/context',
+    'recipe_engine/cv',
+    'recipe_engine/json',
+    'recipe_engine/path',
+    'recipe_engine/properties',
+    'recipe_engine/raw_io',
+    'recipe_engine/resultdb',
+    'recipe_engine/step',
+    'tryserver',
 ]
 
 

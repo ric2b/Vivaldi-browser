@@ -332,7 +332,7 @@ ZoneBuffer GetValidCompiledModuleBytes(v8::Isolate* isolate, Zone* zone,
 
   auto* i_isolate = reinterpret_cast<i::Isolate*>(isolate);
   ErrorThrower thrower{i_isolate, "GetValidCompiledModuleBytes"};
-  Handle<WasmInstanceObject> instance =
+  DirectHandle<WasmInstanceObject> instance =
       GetWasmEngine()
           ->SyncInstantiate(i_isolate, &thrower, tester.module_object(), {}, {})
           .ToHandleChecked();
@@ -353,11 +353,11 @@ ZoneBuffer GetValidCompiledModuleBytes(v8::Isolate* isolate, Zone* zone,
         })) {
       break;
     }
-    for (Handle<WasmExportedFunction> exported_function : exported_functions) {
+    for (DirectHandle<WasmExportedFunction> exported_function :
+         exported_functions) {
       DirectHandle<Object> return_value =
           Execution::Call(i_isolate, exported_function,
-                          ReadOnlyRoots{i_isolate}.undefined_value_handle(), 0,
-                          nullptr)
+                          i_isolate->factory()->undefined_value(), {})
               .ToHandleChecked();
       CHECK(IsSmi(*return_value));
       CHECK_EQ(0, Cast<Smi>(*return_value).value());
@@ -1455,7 +1455,7 @@ STREAM_TEST(TestMoreFunctionsCanBeSerializedCallback) {
   // callback is called at least once.
   auto* i_isolate = CcTest::i_isolate();
   ErrorThrower thrower{i_isolate, "TestMoreFunctionsCanBeSerializedCallback"};
-  Handle<WasmInstanceObject> instance =
+  DirectHandle<WasmInstanceObject> instance =
       GetWasmEngine()
           ->SyncInstantiate(i_isolate, &thrower, tester.module_object(), {}, {})
           .ToHandleChecked();
@@ -1470,10 +1470,10 @@ STREAM_TEST(TestMoreFunctionsCanBeSerializedCallback) {
   // tiering up.
   CHECK_IMPLIES(v8_flags.liftoff, !callback_called);
   while (!callback_called) {
-    for (Handle<WasmExportedFunction> exported_function : exported_functions) {
+    for (DirectHandle<WasmExportedFunction> exported_function :
+         exported_functions) {
       Execution::Call(i_isolate, exported_function,
-                      ReadOnlyRoots{i_isolate}.undefined_value_handle(), 0,
-                      nullptr)
+                      i_isolate->factory()->undefined_value(), {})
           .Check();
     }
     tester.RunCompilerTasks();
@@ -1565,7 +1565,7 @@ STREAM_TEST(TestMoreFunctionsCanBeSerializedCallbackWithTimeout) {
   // Create an instance.
   auto* i_isolate = CcTest::i_isolate();
   ErrorThrower thrower{i_isolate, "TestMoreFunctionsCanBeSerializedCallback"};
-  Handle<WasmInstanceObject> instance =
+  DirectHandle<WasmInstanceObject> instance =
       GetWasmEngine()
           ->SyncInstantiate(i_isolate, &thrower, tester.module_object(), {}, {})
           .ToHandleChecked();
@@ -1573,11 +1573,11 @@ STREAM_TEST(TestMoreFunctionsCanBeSerializedCallbackWithTimeout) {
 
   // Execute the first function 100 times (which triggers tier-up and hence
   // caching).
-  Handle<WasmExportedFunction> func_a =
+  DirectHandle<WasmExportedFunction> func_a =
       testing::GetExportedFunction(i_isolate, instance, "a").ToHandleChecked();
-  Handle<Object> receiver = ReadOnlyRoots{i_isolate}.undefined_value_handle();
+  DirectHandle<Object> receiver = i_isolate->factory()->undefined_value();
   for (int i = 0; i < 100; ++i) {
-    Execution::Call(i_isolate, func_a, receiver, 0, nullptr).Check();
+    Execution::Call(i_isolate, func_a, receiver, {}).Check();
   }
 
   // Ensure that background compilation is being executed.
@@ -1596,7 +1596,7 @@ STREAM_TEST(TestMoreFunctionsCanBeSerializedCallbackWithTimeout) {
       testing::GetExportedFunction(i_isolate, instance, "c").ToHandleChecked()};
   for (int i = 0; i < 100; ++i) {
     for (auto func : func_b_and_c) {
-      Execution::Call(i_isolate, func, receiver, 0, nullptr).Check();
+      Execution::Call(i_isolate, func, receiver, {}).Check();
     }
   }
 
@@ -1658,7 +1658,7 @@ STREAM_TEST(TestHardCachingThreshold) {
   // Create an instance.
   auto* i_isolate = CcTest::i_isolate();
   ErrorThrower thrower{i_isolate, "TestMoreFunctionsCanBeSerializedCallback"};
-  Handle<WasmInstanceObject> instance =
+  DirectHandle<WasmInstanceObject> instance =
       GetWasmEngine()
           ->SyncInstantiate(i_isolate, &thrower, tester.module_object(), {}, {})
           .ToHandleChecked();
@@ -1666,11 +1666,11 @@ STREAM_TEST(TestHardCachingThreshold) {
   CHECK(!caching_was_triggered);
 
   // Execute the function 100 times (which triggers tier-up and hence caching).
-  Handle<WasmExportedFunction> func_a =
+  DirectHandle<WasmExportedFunction> func_a =
       testing::GetExportedFunction(i_isolate, instance, "a").ToHandleChecked();
-  Handle<Object> receiver = ReadOnlyRoots{i_isolate}.undefined_value_handle();
+  DirectHandle<Object> receiver = i_isolate->factory()->undefined_value();
   for (int i = 0; i < 100; ++i) {
-    Execution::Call(i_isolate, func_a, receiver, 0, nullptr).Check();
+    Execution::Call(i_isolate, func_a, receiver, {}).Check();
   }
 
   // Ensure that background compilation is being executed.

@@ -26,15 +26,13 @@
 
 #include "src/buffer_pool.h"
 #include "src/decoder_state.h"
-#include "src/dsp/common.h"
 #include "src/gav1/decoder_buffer.h"
 #include "src/gav1/status_code.h"
-#include "src/quantizer.h"
-#include "src/utils/common.h"
 #include "src/utils/compiler_attributes.h"
 #include "src/utils/constants.h"
+#include "src/utils/memory.h"
 #include "src/utils/raw_bit_reader.h"
-#include "src/utils/segmentation.h"
+#include "src/utils/types.h"
 #include "src/utils/vector.h"
 
 namespace libgav1 {

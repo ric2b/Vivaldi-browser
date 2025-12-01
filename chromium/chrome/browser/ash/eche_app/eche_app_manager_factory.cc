@@ -32,7 +32,6 @@
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/secure_channel/nearby_connector_factory.h"
 #include "chrome/browser/ash/secure_channel/secure_channel_client_provider.h"
-#include "chrome/browser/ash/system_web_apps/types/system_web_app_delegate.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -40,6 +39,7 @@
 #include "chrome/common/channel_info.h"
 #include "chromeos/ash/components/multidevice/logging/logging.h"
 #include "chromeos/ash/components/phonehub/phone_hub_manager.h"
+#include "chromeos/ash/experiences/system_web_apps/types/system_web_app_delegate.h"
 #include "chromeos/ash/services/secure_channel/presence_monitor_impl.h"
 #include "chromeos/ash/services/secure_channel/public/cpp/client/presence_monitor_client_impl.h"
 #include "chromeos/ash/services/secure_channel/public/cpp/shared/presence_monitor.h"
@@ -48,6 +48,7 @@
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/user_manager/user_manager.h"
 #include "components/version_info/channel.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/chromeos/devicetype_utils.h"
 #include "ui/gfx/image/image.h"
@@ -322,7 +323,7 @@ std::unique_ptr<SystemInfo> EcheAppManagerFactory::GetSystemInfo(
   const std::u16string device_type = ui::GetChromeOSDeviceName();
   const user_manager::User* user =
       ProfileHelper::Get()->GetUserByProfile(profile);
-  std::string gaia_id;
+  GaiaId gaia_id;
   if (user) {
     std::u16string given_name = user->GetGivenName();
     if (!given_name.empty()) {

@@ -7,7 +7,6 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> hat de ferbining ûnferwachts ferbrutsen.</translation>
 <translation id="1161325031994447685">Meitsje op 'e nei ferbining mei Wi-Fi</translation>
 <translation id="1175364870820465910">&amp;Printsje...</translation>
-<translation id="132390688737681464">Adressen bewarje en ynfolje</translation>
 <translation id="1375198122581997741">Oer dizze ferzje</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> hat gjin gegevens stjoerd.</translation>
 <translation id="1555191101192706055">Oanfallers op de webstee dyst besocht hast te besykjen, kinne dy misliede ta it ynstallearjen fan skeadlike software dy ynfloed ha op de manier fan sneupen, bygelyks troch in startside te feroarjen of ekstra advertinsjes te litten sjen op siden wêrst komst.</translation>
@@ -52,6 +51,7 @@
 <translation id="2991571918955627853">Jo kinne <ph name="SITE" /> op it stuit net besykje omdat de webstee HSTS brûkt. Netwurk flaters en oanfollen binne meastentiids tydlik, dus dizze side wurket letter wierskynlik wer goed.</translation>
 <translation id="3005723025932146533">Bewarre kopy sjen litte</translation>
 <translation id="301521992641321250">Automatysk tsjinkeard</translation>
+<translation id="3037605927509011580">Asjemenou!</translation>
 <translation id="3041612393474885105">Sertifikaat ynformaasje</translation>
 <translation id="3109728660330352905">Jo ha gjin tastimming om dizze side te besjen.</translation>
 <translation id="31207688938192855"><ph name="BEGIN_LINK" />Besykje it útfieren fan ferbining diagnoaze<ph name="END_LINK" />.</translation>
@@ -63,7 +63,6 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3234666976984236645">Altyd wichtige ynhâld op dizze webstee detektearje</translation>
 <translation id="3308738399950580893">advertinsjes</translation>
 <translation id="3384522979010096022">Dyn organisaasje stiet it net ta datst dizze side besjochst</translation>
-<translation id="3387261909427947069">Metoaden fan beteljen</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> is op it stuit net berikber.</translation>
 <translation id="3427092606871434483">Tastean (standert)</translation>
 <translation id="3447661539832366887">De eigner fan dit apparaat hat it spultsje dinosaurus útskeakele.</translation>
@@ -124,7 +123,6 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="5386426401304769735">De sertifikaat keten foar dizze webstee befettet in sertifikaat ûndertekene mei SHA-1.</translation>
 <translation id="5452270690849572955">Dizze <ph name="HOST_NAME" /> side koe net fûn wurde</translation>
 <translation id="5457113250005438886">Unjildich</translation>
-<translation id="5490432419156082418">Adressen en mear</translation>
 <translation id="5492298309214877701">Dizze webstee op it yntranet dan it bedriuw, de organisaasje of skoalle hat itselde URL-adres as in eksterne webstee.
     <ph name="LINE_BREAK" />
     Nim kontakt op mei jo netwurkbehearder.</translation>
@@ -170,7 +168,6 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="7111012039238467737">(Jildich)</translation>
 <translation id="7113310725918019676"><ph name="BLOCKED_TYPE" /> tastean op <ph name="DOMAIN" /></translation>
 <translation id="7126644664682723998">Plakke en sykje</translation>
-<translation id="7179323680825933600">Metoaden fan beteljen bewarje en ynfolje</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> foldocht net oan de feiligens standerts.</translation>
 <translation id="7219179957768738017">De ferbining makket brûkme fan <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Notifikaasjes sjen litte</translation>
@@ -222,6 +219,7 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="9062620674789239642">It is mooglik ferpleatst, bewurke, of wiske.</translation>
 <translation id="9069693763241529744">Tsjinkeard troch in tafoeging</translation>
 <translation id="9073799351042754113">Jo ha der foar keazen foar it útskeakeljen fan feiligens warskôgingen foar dizze webstee.</translation>
+<translation id="9168814207360376865">It tastean dat websteën hifje as der ek betelmetoades bewarre binne</translation>
 <translation id="9169664750068251925">Altyd tsjinkeare op dizze webstee</translation>
 <translation id="9180553614777056266">Advertinsje tsjinkearder</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> brûkt in net stipe protokol.</translation>

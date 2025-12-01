@@ -561,6 +561,7 @@ bool StructTraits<autofill::mojom::PasswordAndMetadataDataView,
     return false;
 
   out->uses_account_store = data.uses_account_store();
+  out->is_grouped_affiliation = data.is_grouped_affiliation();
 
   return true;
 }
@@ -583,6 +584,8 @@ bool StructTraits<autofill::mojom::PasswordFormFillDataDataView,
   out->wait_for_username = data.wait_for_username();
   out->username_may_use_prefilled_placeholder =
       data.username_may_use_prefilled_placeholder();
+  out->notify_browser_of_successful_filling =
+      data.notify_browser_of_successful_filling();
 
   return true;
 }
@@ -608,7 +611,7 @@ bool StructTraits<autofill::mojom::PasswordGenerationUIDataDataView,
   out->max_length = data.max_length();
   out->is_generation_element_password_type =
       data.is_generation_element_password_type();
-  out->input_field_empty = data.input_field_empty();
+  out->generation_rejected = data.generation_rejected();
 
   return data.ReadGenerationElementId(&out->generation_element_id) &&
          data.ReadGenerationElement(&out->generation_element) &&

@@ -5,8 +5,10 @@
 #include "src/objects/js-disposable-stack.h"
 
 #include "include/v8-maybe.h"
+#include "include/v8-promise.h"
 #include "src/base/logging.h"
 #include "src/base/macros.h"
+#include "src/debug/debug.h"
 #include "src/execution/isolate.h"
 #include "src/handles/handles.h"
 #include "src/handles/maybe-handles.h"
@@ -22,7 +24,6 @@
 #include "src/objects/objects.h"
 #include "src/objects/oddball.h"
 #include "src/objects/tagged.h"
-#include "v8-promise.h"
 
 namespace v8 {
 namespace internal {
@@ -31,14 +32,19 @@ namespace internal {
   do {                                                                       \
     DCHECK(isolate->has_exception());                                        \
     Handle<Object> current_error(isolate->exception(), isolate);             \
+    DirectHandle<Object> current_error_message(isolate->pending_message(),   \
+                                               isolate);                     \
     if (!isolate->is_catchable_by_javascript(*current_error)) {              \
       return return_value;                                                   \
     }                                                                        \
-    HandleErrorInDisposal(isolate, disposable_stack, current_error);         \
+    isolate->clear_internal_exception();                                     \
+    isolate->clear_pending_message();                                        \
+    HandleErrorInDisposal(isolate, disposable_stack, current_error,          \
+                          current_error_message);                            \
   } while (false)
 
 // https://arai-a.github.io/ecma262-compare/?pr=3000&id=sec-disposeresources
-MaybeHandle<Object> JSDisposableStackBase::DisposeResources(
+MaybeDirectHandle<Object> JSDisposableStackBase::DisposeResources(
     Isolate* isolate, DirectHandle<JSDisposableStackBase> disposable_stack,
     MaybeHandle<Object> maybe_continuation_error,
     DisposableStackResourcesType resources_type) {
@@ -52,11 +58,12 @@ MaybeHandle<Object> JSDisposableStackBase::DisposeResources(
 
   int length = disposable_stack->length();
 
-  MaybeHandle<Object> result;
+  MaybeDirectHandle<Object> result;
   Handle<Object> continuation_error;
 
   if (maybe_continuation_error.ToHandle(&continuation_error)) {
     disposable_stack->set_error(*continuation_error);
+    disposable_stack->set_error_message(isolate->pending_message());
   }
 
   // 3. For each element resource of
@@ -68,12 +75,12 @@ MaybeHandle<Object> JSDisposableStackBase::DisposeResources(
     Tagged<Object> stack_type = stack->get(--length);
 
     Tagged<Object> tagged_method = stack->get(--length);
-    Handle<Object> method(tagged_method, isolate);
+    DirectHandle<Object> method(tagged_method, isolate);
 
     Tagged<Object> tagged_value = stack->get(--length);
-    Handle<Object> value(tagged_value, isolate);
+    DirectHandle<Object> value(tagged_value, isolate);
 
-    Handle<Object> argv[] = {value};
+    DirectHandle<Object> args[] = {value};
 
     auto stack_type_case = static_cast<int>(Cast<Smi>(stack_type).value());
     DisposeMethodCallType call_type =
@@ -86,32 +93,29 @@ MaybeHandle<Object> JSDisposableStackBase::DisposeResources(
     //    ii. Set needsAwait to false.
 
     if (hint == DisposeMethodHint::kSyncDispose &&
-        disposable_stack->needsAwait() == true &&
-        disposable_stack->hasAwaited() == false) {
+        disposable_stack->needs_await() == true &&
+        disposable_stack->has_awaited() == false) {
       //  i. Perform ! Await(undefined).
       //  ii. Set needsAwait to false.
-      disposable_stack->set_needsAwait(false);
+      disposable_stack->set_needs_await(false);
 
       return ResolveAPromiseWithValueAndReturnIt(
-          isolate, ReadOnlyRoots(isolate).undefined_value_handle());
+          isolate, isolate->factory()->undefined_value());
     }
 
     //  e. If method is not undefined, then
     if (!IsUndefined(*method)) {
       //    i. Let result be Completion(Call(method, value)).
-      v8::TryCatch try_catch(reinterpret_cast<v8::Isolate*>(isolate));
-      try_catch.SetVerbose(false);
-      try_catch.SetCaptureMessage(false);
 
       if (call_type == DisposeMethodCallType::kValueIsReceiver) {
-        result = Execution::Call(isolate, method, value, 0, nullptr);
+        result = Execution::Call(isolate, method, value, {});
       } else if (call_type == DisposeMethodCallType::kValueIsArgument) {
-        result = Execution::Call(
-            isolate, method, ReadOnlyRoots(isolate).undefined_value_handle(), 1,
-            argv);
+        result = Execution::Call(isolate, method,
+                                 isolate->factory()->undefined_value(),
+                                 base::VectorOf(args));
       }
 
-      Handle<Object> result_handle;
+      DirectHandle<Object> result_handle;
       //    ii. If result is a normal completion and hint is async-dispose, then
       //      1. Set result to Completion(Await(result.[[Value]])).
       //      2. Set hasAwaited to true.
@@ -120,9 +124,9 @@ MaybeHandle<Object> JSDisposableStackBase::DisposeResources(
           DCHECK_NE(resources_type, DisposableStackResourcesType::kAllSync);
           disposable_stack->set_length(length);
 
-          disposable_stack->set_hasAwaited(true);
+          disposable_stack->set_has_awaited(true);
 
-          MaybeHandle<JSReceiver> resolved_promise =
+          MaybeDirectHandle<JSReceiver> resolved_promise =
               ResolveAPromiseWithValueAndReturnIt(isolate, result_handle);
 
           if (resolved_promise.is_null()) {
@@ -138,14 +142,12 @@ MaybeHandle<Object> JSDisposableStackBase::DisposeResources(
             //        f. Set completion to ThrowCompletion(error).
             //      2. Else,
             //        a. Set completion to result.
-            DCHECK(try_catch.HasCaught());
             CHECK_EXCEPTION_ON_DISPOSAL(isolate, disposable_stack, {});
           } else {
             return resolved_promise;
           }
         }
       } else {
-        DCHECK(try_catch.HasCaught());
         CHECK_EXCEPTION_ON_DISPOSAL(isolate, disposable_stack, {});
       }
     } else {
@@ -156,19 +158,19 @@ MaybeHandle<Object> JSDisposableStackBase::DisposeResources(
       //    iii. NOTE: This can only indicate a case where either null or
       //    undefined was the initialized value of an await using declaration.
       disposable_stack->set_length(length);
-      disposable_stack->set_needsAwait(true);
+      disposable_stack->set_needs_await(true);
     }
   }
 
   // 4. If needsAwait is true and hasAwaited is false, then
   //   a. Perform ! Await(undefined).
-  if (disposable_stack->needsAwait() == true &&
-      disposable_stack->hasAwaited() == false) {
+  if (disposable_stack->needs_await() == true &&
+      disposable_stack->has_awaited() == false) {
     disposable_stack->set_length(length);
-    disposable_stack->set_hasAwaited(true);
+    disposable_stack->set_has_awaited(true);
 
     return ResolveAPromiseWithValueAndReturnIt(
-        isolate, ReadOnlyRoots(isolate).undefined_value_handle());
+        isolate, isolate->factory()->undefined_value());
   }
 
   // 5. NOTE: After disposeCapability has been disposed, it will never be used
@@ -180,43 +182,50 @@ MaybeHandle<Object> JSDisposableStackBase::DisposeResources(
   disposable_stack->set_state(DisposableStackState::kDisposed);
 
   Handle<Object> existing_error_handle(disposable_stack->error(), isolate);
+  DirectHandle<Object> existing_error_message_handle(
+      disposable_stack->error_message(), isolate);
   disposable_stack->set_error(*(isolate->factory()->uninitialized_value()));
+  disposable_stack->set_error_message(
+      *(isolate->factory()->uninitialized_value()));
 
   // 7. Return ? completion.
   if (!IsUninitialized(*existing_error_handle) &&
       !(existing_error_handle.equals(continuation_error))) {
-    isolate->Throw(*existing_error_handle);
-    return MaybeHandle<Object>();
+    if (disposable_stack->suppressed_error_created() == true) {
+      // Created SuppressedError is intentionally suppressed here for debug.
+      SuppressDebug while_processing(isolate->debug());
+      isolate->Throw(*existing_error_handle);
+    } else {
+      isolate->ReThrow(*existing_error_handle, *existing_error_message_handle);
+    }
+    return MaybeDirectHandle<Object>();
   }
   return isolate->factory()->true_value();
 }
 
-MaybeHandle<JSReceiver>
+MaybeDirectHandle<JSReceiver>
 JSDisposableStackBase::ResolveAPromiseWithValueAndReturnIt(
-    Isolate* isolate, Handle<Object> value) {
-  Handle<JSFunction> promise_function = isolate->promise_function();
-  Handle<Object> argv[] = {value};
-  Handle<Object> result;
+    Isolate* isolate, DirectHandle<Object> value) {
+  DirectHandle<JSFunction> promise_function = isolate->promise_function();
+  DirectHandle<Object> args[] = {value};
+  DirectHandle<Object> result;
   ASSIGN_RETURN_ON_EXCEPTION_VALUE(
       isolate, result,
       Execution::CallBuiltin(isolate, isolate->promise_resolve(),
-                             promise_function, arraysize(argv), argv),
-      MaybeHandle<JSReceiver>());
+                             promise_function, base::VectorOf(args)),
+      MaybeDirectHandle<JSReceiver>());
   return Cast<JSReceiver>(result);
 }
 
 Maybe<bool> JSAsyncDisposableStack::NextDisposeAsyncIteration(
     Isolate* isolate,
     DirectHandle<JSDisposableStackBase> async_disposable_stack,
-    Handle<JSPromise> outer_promise) {
-  MaybeHandle<Object> result;
+    DirectHandle<JSPromise> outer_promise) {
+  MaybeDirectHandle<Object> result;
 
   bool done;
   do {
     done = true;
-    v8::TryCatch try_catch(reinterpret_cast<v8::Isolate*>(isolate));
-    try_catch.SetVerbose(false);
-    try_catch.SetCaptureMessage(false);
 
     // 6. Let result be
     //   DisposeResources(asyncDisposableStack.[[DisposeCapability]],
@@ -225,11 +234,11 @@ Maybe<bool> JSAsyncDisposableStack::NextDisposeAsyncIteration(
         DisposeResources(isolate, async_disposable_stack, MaybeHandle<Object>(),
                          DisposableStackResourcesType::kAtLeastOneAsync);
 
-    Handle<Object> result_handle;
+    DirectHandle<Object> result_handle;
 
     if (result.ToHandle(&result_handle)) {
       if (!IsTrue(*result_handle)) {
-        Handle<Context> async_disposable_stack_context =
+        DirectHandle<Context> async_disposable_stack_context =
             isolate->factory()->NewBuiltinContext(
                 isolate->native_context(),
                 static_cast<int>(
@@ -245,7 +254,7 @@ Maybe<bool> JSAsyncDisposableStack::NextDisposeAsyncIteration(
                     kOuterPromise),
             *outer_promise);
 
-        Handle<JSFunction> on_fulfilled =
+        DirectHandle<JSFunction> on_fulfilled =
             Factory::JSFunctionBuilder{
                 isolate,
                 isolate->factory()
@@ -253,7 +262,7 @@ Maybe<bool> JSAsyncDisposableStack::NextDisposeAsyncIteration(
                 async_disposable_stack_context}
                 .Build();
 
-        Handle<JSFunction> on_rejected =
+        DirectHandle<JSFunction> on_rejected =
             Factory::JSFunctionBuilder{
                 isolate,
                 isolate->factory()
@@ -261,10 +270,10 @@ Maybe<bool> JSAsyncDisposableStack::NextDisposeAsyncIteration(
                 async_disposable_stack_context}
                 .Build();
 
-        Handle<Object> argv[] = {on_fulfilled, on_rejected};
+        DirectHandle<Object> args[] = {on_fulfilled, on_rejected};
         if (Execution::CallBuiltin(isolate, isolate->perform_promise_then(),
                                    Cast<JSPromise>(result_handle),
-                                   arraysize(argv), argv)
+                                   base::VectorOf(args))
                 .is_null()) {
           CHECK_EXCEPTION_ON_DISPOSAL(isolate, async_disposable_stack,
                                       Nothing<bool>());
@@ -274,7 +283,7 @@ Maybe<bool> JSAsyncDisposableStack::NextDisposeAsyncIteration(
         // 8. Perform ! Call(promiseCapability.[[Resolve]], undefined, « result
         // »).
         if (JSPromise::Resolve(outer_promise,
-                               ReadOnlyRoots(isolate).undefined_value_handle())
+                               isolate->factory()->undefined_value())
                 .is_null()) {
           CHECK_EXCEPTION_ON_DISPOSAL(isolate, async_disposable_stack,
                                       Nothing<bool>());
@@ -283,11 +292,12 @@ Maybe<bool> JSAsyncDisposableStack::NextDisposeAsyncIteration(
       }
     } else {
       // 7. IfAbruptRejectPromise(result, promiseCapability).
-      Handle<Object> exception(isolate->exception(), isolate);
+      DirectHandle<Object> exception(isolate->exception(), isolate);
       if (!isolate->is_catchable_by_javascript(*exception)) {
         return Nothing<bool>();
       }
-      DCHECK(try_catch.HasCaught());
+      isolate->clear_internal_exception();
+      isolate->clear_pending_message();
       JSPromise::Reject(outer_promise, exception);
     }
   } while (!done);

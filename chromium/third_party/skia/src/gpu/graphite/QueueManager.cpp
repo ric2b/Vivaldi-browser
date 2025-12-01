@@ -9,6 +9,7 @@
 
 #include "include/gpu/graphite/Recording.h"
 #include "src/core/SkTraceEvent.h"
+#include "src/gpu/GpuTypesPriv.h"
 #include "src/gpu/RefCntedCallback.h"
 #include "src/gpu/graphite/Buffer.h"
 #include "src/gpu/graphite/Caps.h"
@@ -83,8 +84,16 @@ bool QueueManager::setupCommandBuffer(ResourceProvider* resourceProvider, Protec
 bool QueueManager::addRecording(const InsertRecordingInfo& info, Context* context) {
     TRACE_EVENT0("skia.gpu", TRACE_FUNC);
 
+    bool addTimerQuery = false;
     sk_sp<RefCntedCallback> callback;
-    if (info.fFinishedProc) {
+    if (info.fFinishedWithStatsProc) {
+        addTimerQuery = info.fGpuStatsFlags & GpuStatsFlags::kElapsedTime;
+        if (addTimerQuery && !(context->supportedGpuStats() & GpuStatsFlags::kElapsedTime)) {
+            addTimerQuery = false;
+            SKGPU_LOG_W("Requested elapsed time reporting but not supported by Context.");
+        }
+        callback = RefCntedCallback::Make(info.fFinishedWithStatsProc, info.fFinishedContext);
+    } else if (info.fFinishedProc) {
         callback = RefCntedCallback::Make(info.fFinishedProc, info.fFinishedContext);
     }
 
@@ -133,6 +142,30 @@ bool QueueManager::addRecording(const InsertRecordingInfo& info, Context* contex
         return false;
     }
 
+    // This must happen before instantiating the lazy proxies, because the target for draws in this
+    // recording may itself be a lazy proxy whose instantiation must be handled specially here.
+    // We must also make sure the lazy proxies are instantiated successfully before we make any
+    // modifications to the current command buffer, so we can't just do all this work in
+    // Recording::addCommands below.
+    TextureProxy* deferredTargetProxy = info.fRecording->priv().deferredTargetProxy();
+    AutoDeinstantiateTextureProxy autoDeinstantiateTargetProxy(deferredTargetProxy);
+    const Texture* replayTarget = nullptr;
+    if (deferredTargetProxy && info.fTargetSurface) {
+        replayTarget = info.fRecording->priv().setupDeferredTarget(
+                resourceProvider,
+                static_cast<Surface*>(info.fTargetSurface),
+                info.fTargetTranslation,
+                info.fTargetClip);
+        if (!replayTarget) {
+            SKGPU_LOG_E("Failed to set up deferred replay target");
+            return false;
+        }
+
+    } else if (deferredTargetProxy && !info.fTargetSurface) {
+        SKGPU_LOG_E("No surface provided to instantiate deferred replay target.");
+        return false;
+    }
+
     if (info.fRecording->priv().hasNonVolatileLazyProxies()) {
         if (!info.fRecording->priv().instantiateNonVolatileLazyProxies(resourceProvider)) {
             if (callback) {
@@ -156,10 +189,13 @@ bool QueueManager::addRecording(const InsertRecordingInfo& info, Context* contex
         }
     }
 
+    if (addTimerQuery) {
+        fCurrentCommandBuffer->startTimerQuery();
+    }
     fCurrentCommandBuffer->addWaitSemaphores(info.fNumWaitSemaphores, info.fWaitSemaphores);
     if (!info.fRecording->priv().addCommands(context,
                                              fCurrentCommandBuffer.get(),
-                                             static_cast<Surface*>(info.fTargetSurface),
+                                             replayTarget,
                                              info.fTargetTranslation,
                                              info.fTargetClip)) {
         if (callback) {
@@ -174,6 +210,9 @@ bool QueueManager::addRecording(const InsertRecordingInfo& info, Context* contex
     if (info.fTargetTextureState) {
         fCurrentCommandBuffer->prepareSurfaceForStateUpdate(info.fTargetSurface,
                                                             info.fTargetTextureState);
+    }
+    if (addTimerQuery) {
+        fCurrentCommandBuffer->endTimerQuery();
     }
 
     if (callback) {

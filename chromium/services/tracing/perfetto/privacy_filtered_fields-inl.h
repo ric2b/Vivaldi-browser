@@ -155,8 +155,8 @@ constexpr MessageInfo kChromeHistogramSample = {kChromeHistogramSampleIndices,
                                                 nullptr};
 
 // Proto Message: ChromeFrameReporter
-constexpr int kChromeFrameReporterIndices[] = {1, 2, 3, 4,  5,  6,
-                                               7, 8, 9, 10, 11, -1};
+constexpr int kChromeFrameReporterIndices[] = {1, 2, 3,  4,  5,  6,  7,
+                                               8, 9, 10, 11, 17, 18, -1};
 constexpr MessageInfo kChromeFrameReporter = {kChromeFrameReporterIndices,
                                               nullptr};
 
@@ -344,7 +344,7 @@ constexpr MessageInfo kRendererMainThreadTaskExecution = {
     kRendererMainThreadTaskExecutionIndices, nullptr};
 
 // Proto Message: EventLatency
-constexpr int kEventLatencyIndices[] = {1, 2, 4, 5, 6, -1};
+constexpr int kEventLatencyIndices[] = {1, 2, 4, 5, 6, 7, 8, -1};
 constexpr MessageInfo kEventLatency = {kEventLatencyIndices, nullptr};
 
 // Proto Message: ProcessSingleton
@@ -380,8 +380,8 @@ constexpr MessageInfo kTabSwitchMeasurement = {kTabSwitchMeasurementIndices,
                                                nullptr};
 
 // Proto Message: ScrollDeltas
-constexpr int kScrollDeltasIndices[] = {1, 2,  3,  4,  5,  6,  7, 8,
-                                        9, 10, 11, 12, 13, 14, -1};
+constexpr int kScrollDeltasIndices[] = {1,  2,  3,  4,  5,  6,  7,  8,  9,
+                                        10, 11, 12, 13, 14, 15, 16, 17, -1};
 constexpr MessageInfo kScrollDeltas = {kScrollDeltasIndices, nullptr};
 
 // Proto Message: WinRenderAudioFromSource
@@ -809,7 +809,7 @@ constexpr int kTraceUuidIndices[] = {1, 2, -1};
 constexpr MessageInfo kTraceUuid = {kTraceUuidIndices, nullptr};
 
 // Proto Message: ChromeTrigger
-constexpr int kChromeTriggerIndices[] = {2, -1};
+constexpr int kChromeTriggerIndices[] = {2, 3, -1};
 constexpr MessageInfo kChromeTrigger = {kChromeTriggerIndices, nullptr};
 
 // Proto Message: TracePacket

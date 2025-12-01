@@ -800,4 +800,60 @@ bool RowQualifiesAsSignificant(const URLRow& row,
          (row.last_visit() >= real_threshold);
 }
 
+// Vivaldi
+void URLDatabase::GetRecentTypedHistoryItems(
+    base::OnceCallback<void(sql::Statement&&)> callback,
+    int max_results) {
+  sql::Statement statement(
+  GetDB().GetCachedStatement(SQL_FROM_HERE,
+    R"(
+      SELECT
+        kst.term,
+        u.url
+      FROM
+        urls u
+      LEFT JOIN keyword_search_terms kst
+        ON kst.url_id = u.id
+      WHERE
+        (u.typed_count > 0 AND
+        LENGTH(u.url) < 2048)
+      OR
+        (kst.term IS NOT NULL)
+      ORDER BY u.last_visit_time DESC
+      LIMIT ?
+    )")
+  );
+  statement.BindInt64(0, max_results);
+  std::move(callback).Run(std::move(statement));
+}
+
+void URLDatabase::GetRecentTypedSearchItems(
+    base::OnceCallback<void(sql::Statement&&)> callback,
+    int max_results,
+    KeywordID keyword_id) {
+  if (!keyword_id)
+    return;
+
+  sql::Statement statement(
+  GetDB().GetCachedStatement(SQL_FROM_HERE,
+    R"(
+      SELECT
+        kst.term,
+        u.url
+      FROM
+        keyword_search_terms kst
+      JOIN urls u
+        ON kst.url_id = u.id
+      WHERE
+        kst.keyword_id = ? AND
+        kst.normalized_term <> ''
+      ORDER BY u.last_visit_time DESC
+      LIMIT ?
+    )")
+  );
+  statement.BindInt64(0, keyword_id);
+  statement.BindInt64(1, max_results);
+  std::move(callback).Run(std::move(statement));
+}
+
 }  // namespace history

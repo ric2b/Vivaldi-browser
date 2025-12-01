@@ -34,6 +34,7 @@
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_helper.h"
 #include "chrome/browser/ui/ash/multi_user/test_multi_user_window_manager.h"
 #include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
+#include "chrome/browser/ui/ash/test_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -41,7 +42,6 @@
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/chromeos/test_util.h"
 #include "chrome/browser/ui/passwords/passwords_client_ui_delegate.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -593,9 +593,9 @@ class WebAppNonClientFrameViewChromeOSTest
         content_settings::PageSpecificContentSettings::GetForFrame(frame);
     content_settings->OnContentAllowed(ContentSettingsType::GEOLOCATION);
 
-    return *base::ranges::find(*content_setting_views_,
-                               ContentSettingImageModel::ImageType::GEOLOCATION,
-                               &ContentSettingImageView::GetType);
+    return *std::ranges::find(*content_setting_views_,
+                              ContentSettingImageModel::ImageType::GEOLOCATION,
+                              &ContentSettingImageView::GetType);
   }
 
   void SimulateClickOnView(views::View* view) {
@@ -1462,12 +1462,14 @@ using LockedFullscreenBrowserNonClientFrameViewChromeOSTest =
     TopChromeMdParamTest<ChromeOSBrowserUITest>;
 
 IN_PROC_BROWSER_TEST_P(LockedFullscreenBrowserNonClientFrameViewChromeOSTest,
-                       ToggleTabletMode) {
+                       ToggleTabletModeWhenNotLockedForOnTask) {
   if (!IsIsShelfVisibleSupported()) {
     GTEST_SKIP() << "Ash is too old.";
   }
 
-  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
+  browser()->SetLockedForOnTask(false);
+  BrowserView* const browser_view =
+      BrowserView::GetBrowserViewForBrowser(browser());
   EXPECT_FALSE(browser_view->immersive_mode_controller()->IsEnabled());
 
   // Set locked fullscreen state.
@@ -1479,15 +1481,57 @@ IN_PROC_BROWSER_TEST_P(LockedFullscreenBrowserNonClientFrameViewChromeOSTest,
   EXPECT_FALSE(browser_view->immersive_mode_controller()->IsEnabled());
   EXPECT_FALSE(IsShelfVisible());
 
-  auto* widget = browser_view->GetWidget();
-  auto* immersive_controller = chromeos::ImmersiveFullscreenController::Get(
-      views::Widget::GetWidgetForNativeView(widget->GetNativeWindow()));
+  auto* const widget = browser_view->GetWidget();
+  auto* const immersive_controller =
+      chromeos::ImmersiveFullscreenController::Get(
+          views::Widget::GetWidgetForNativeView(widget->GetNativeWindow()));
   EXPECT_FALSE(immersive_controller->IsEnabled());
 
   EnterTabletMode();
-
   EXPECT_TRUE(browser_view->GetWidget()->IsFullscreen());
   EXPECT_FALSE(browser_view->immersive_mode_controller()->IsEnabled());
+  EXPECT_FALSE(IsShelfVisible());
+
+  ExitTabletMode();
+  EXPECT_TRUE(browser_view->GetWidget()->IsFullscreen());
+  EXPECT_FALSE(browser_view->immersive_mode_controller()->IsEnabled());
+  EXPECT_FALSE(IsShelfVisible());
+}
+
+IN_PROC_BROWSER_TEST_P(LockedFullscreenBrowserNonClientFrameViewChromeOSTest,
+                       ToggleTabletModeWhenLockedForOnTask) {
+  if (!IsIsShelfVisibleSupported()) {
+    GTEST_SKIP() << "Ash is too old.";
+  }
+
+  browser()->SetLockedForOnTask(true);
+  BrowserView* const browser_view =
+      BrowserView::GetBrowserViewForBrowser(browser());
+  EXPECT_FALSE(browser_view->immersive_mode_controller()->IsEnabled());
+
+  // Set locked fullscreen state.
+  PinWindow(browser_view->GetWidget()->GetNativeWindow(), /*trusted=*/true);
+
+  // Verify immersive mode is enabled in locked fullscreen mode and when locked
+  // for OnTask. Also verify that the shelf is hidden.
+  EXPECT_TRUE(browser_view->GetWidget()->IsFullscreen());
+  EXPECT_TRUE(browser_view->immersive_mode_controller()->IsEnabled());
+  EXPECT_FALSE(IsShelfVisible());
+
+  auto* const widget = browser_view->GetWidget();
+  auto* const immersive_controller =
+      chromeos::ImmersiveFullscreenController::Get(
+          views::Widget::GetWidgetForNativeView(widget->GetNativeWindow()));
+  EXPECT_TRUE(immersive_controller->IsEnabled());
+
+  EnterTabletMode();
+  EXPECT_TRUE(browser_view->GetWidget()->IsFullscreen());
+  EXPECT_TRUE(browser_view->immersive_mode_controller()->IsEnabled());
+  EXPECT_FALSE(IsShelfVisible());
+
+  ExitTabletMode();
+  EXPECT_TRUE(browser_view->GetWidget()->IsFullscreen());
+  EXPECT_TRUE(browser_view->immersive_mode_controller()->IsEnabled());
   EXPECT_FALSE(IsShelfVisible());
 }
 
@@ -1705,7 +1749,7 @@ IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewAshThemeChangeTest,
   // Verify background color is immediately resolved from the app controller
   // despite the fact that the web contents background color hasn't loaded
   // yet.
-  EXPECT_EQ(contents_web_view->GetBackground()->get_color(),
+  EXPECT_EQ(contents_web_view->layer()->background_color(),
             browser->app_controller()->GetBackgroundColor().value());
   EXPECT_FALSE(web_contents->GetBackgroundColor().has_value());
 
@@ -1714,9 +1758,9 @@ IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewAshThemeChangeTest,
   {
     content::BackgroundColorChangeWaiter waiter(web_contents);
     waiter.Wait();
-    EXPECT_EQ(contents_web_view->GetBackground()->get_color(),
+    EXPECT_EQ(contents_web_view->layer()->background_color(),
               browser->app_controller()->GetBackgroundColor().value());
-    EXPECT_EQ(contents_web_view->GetBackground()->get_color(),
+    EXPECT_EQ(contents_web_view->layer()->background_color(),
               web_contents->GetBackgroundColor().value());
   }
 
@@ -1728,9 +1772,9 @@ IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewAshThemeChangeTest,
   // background color and the web contents background color due to the fact
   // that the web contents background color update is async.
   ToggleColorMode();
-  EXPECT_EQ(contents_web_view->GetBackground()->get_color(),
+  EXPECT_EQ(contents_web_view->layer()->background_color(),
             browser->app_controller()->GetBackgroundColor().value());
-  EXPECT_EQ(contents_web_view->GetBackground()->get_color(),
+  EXPECT_EQ(contents_web_view->layer()->background_color(),
             web_contents->GetBackgroundColor().value());
 
   // If theme changes should be animated, the layer associated with the
@@ -1747,9 +1791,9 @@ IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewAshThemeChangeTest,
   {
     content::BackgroundColorChangeWaiter waiter(web_contents);
     waiter.Wait();
-    EXPECT_EQ(contents_web_view->GetBackground()->get_color(),
+    EXPECT_EQ(contents_web_view->layer()->background_color(),
               browser->app_controller()->GetBackgroundColor().value());
-    EXPECT_EQ(contents_web_view->GetBackground()->get_color(),
+    EXPECT_EQ(contents_web_view->layer()->background_color(),
               web_contents->GetBackgroundColor().value());
   }
 

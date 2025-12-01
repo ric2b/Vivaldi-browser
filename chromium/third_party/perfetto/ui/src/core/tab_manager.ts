@@ -14,7 +14,10 @@
 
 import {DetailsPanel} from '../public/details_panel';
 import {TabDescriptor, TabManager} from '../public/tab';
-import {raf} from './raf_scheduler';
+import {
+  SplitPanelDrawerVisibility,
+  toggleVisibility,
+} from '../widgets/split_panel';
 
 export interface ResolvedTab {
   uri: string;
@@ -34,7 +37,7 @@ export class TabManagerImpl implements TabManager, Disposable {
   private _instantiatedTabs = new Map<string, TabDescriptor>();
   private _openTabs: string[] = []; // URIs of the tabs open.
   private _currentTab: string = 'current_selection';
-  private _tabPanelVisibility: TabPanelVisibility = 'COLLAPSED';
+  private _tabPanelVisibility = SplitPanelDrawerVisibility.COLLAPSED;
   private _tabPanelVisibilityChanged = false;
 
   [Symbol.dispose]() {
@@ -90,12 +93,10 @@ export class TabManagerImpl implements TabManager, Disposable {
     // they are.
     if (
       !this._tabPanelVisibilityChanged &&
-      this._tabPanelVisibility === 'COLLAPSED'
+      this._tabPanelVisibility === SplitPanelDrawerVisibility.COLLAPSED
     ) {
-      this.setTabPanelVisibility('VISIBLE');
+      this.setTabPanelVisibility(SplitPanelDrawerVisibility.VISIBLE);
     }
-
-    raf.scheduleFullRedraw();
   }
 
   // Hide a tab in the tab bar pick a new tab to show.
@@ -127,7 +128,6 @@ export class TabManagerImpl implements TabManager, Disposable {
       // Otherwise just remove the tab
       this._openTabs = this._openTabs.filter((x) => x !== uri);
     }
-    raf.scheduleFullRedraw();
   }
 
   toggleTab(uri: string): void {
@@ -198,21 +198,13 @@ export class TabManagerImpl implements TabManager, Disposable {
     return tabs;
   }
 
-  setTabPanelVisibility(visibility: TabPanelVisibility): void {
+  setTabPanelVisibility(visibility: SplitPanelDrawerVisibility): void {
     this._tabPanelVisibility = visibility;
     this._tabPanelVisibilityChanged = true;
-    raf.scheduleFullRedraw();
   }
 
   toggleTabPanelVisibility(): void {
-    switch (this._tabPanelVisibility) {
-      case 'COLLAPSED':
-      case 'FULLSCREEN':
-        return this.setTabPanelVisibility('VISIBLE');
-      case 'VISIBLE':
-        this.setTabPanelVisibility('COLLAPSED');
-        break;
-    }
+    this.setTabPanelVisibility(toggleVisibility(this._tabPanelVisibility));
   }
 
   get tabPanelVisibility() {

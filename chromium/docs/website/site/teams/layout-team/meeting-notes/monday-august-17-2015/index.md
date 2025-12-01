@@ -11,28 +11,28 @@ title: Monday, August 17, 2015
 ---
 
 Updates since last meeting (on Monday, August 10th):
-Scrolling (skobes, szager) \[[crbug.com/417782](http://crbug.com/417782)\]
+Scrolling (skobes, szager) \[[crbug.com/417782](https://crbug.com/417782)\]
 - Moved scrolled-by-user flag out of FrameView. (skobes)
 - Custom scrollbars are now working with root layer scrolling. (skobes)
-CSS Flexbox (cbiesinger) \[[crbug.com/426898](http://crbug.com/426898)\]
+CSS Flexbox (cbiesinger) \[[crbug.com/426898](https://crbug.com/426898)\]
 - Got go-ahead to unprefix intrinsic sizing keywords (min-content,
 max-content, fill and, fit-content). Will go ahead and unprefix all
 but fill (currently -webkit-fill-available) as there is still some
 open questions around it and the CSS working group doesn't quite think
 it's ready for prime time yet.
 - Added use counter for prefixed intrinsic size keywords.
-CSS Grid Layout (svillar) \[[crbug.com/79180](http://crbug.com/79180)\]
+CSS Grid Layout (svillar) \[[crbug.com/79180](https://crbug.com/79180)\]
 - Working on refactoring min/max ContentForChild calls to share more
 code and logic.
 Region-based multi-column support (mstensho)
-\[[crbug.com/334335](http://crbug.com/334335)\]
+\[[crbug.com/334335](https://crbug.com/334335)\]
 - Landed initial support for nested multicol layout. Column balancing
 still needs work but the most common use cases work.
 - Plan to hook up printing code once I'm more confident about the
 implementation. Will finally enable multicol for printing for the
 first time ever in Blink. :) (mstensho)
 Add API for layout (leviw, pilgrim, ojan)
-\[[crbug.com/495288](http://crbug.com/495288)\]
+\[[crbug.com/495288](https://crbug.com/495288)\]
 - Landed several API patches and finishing up API conversion for box
 model object. Estimate about a weeks worth of work remains. (pilgrim)
 Text (eae, drott, kojii)

@@ -301,8 +301,7 @@ RuntimePrivateOpenProfileSelectionWindowFunction::Run() {
   if (profile->IsGuestSession()) {
     profiles::CloseProfileWindows(profile);
   } else {
-    ProfilePicker::Show(ProfilePicker::Params::FromEntryPoint(
-        ProfilePicker::EntryPoint::kBackgroundModeManager));
+    ProfilePicker::Show(ProfilePicker::Params::ForBackgroundManager(GURL()));
   }
   return RespondNow(ArgumentList(Results::Create(true)));
 }
@@ -555,7 +554,7 @@ RuntimePrivateGetProfileDefaultsFunction::Run() {
 
   ProfileAttributesStorage& storage =
       g_browser_process->profile_manager()->GetProfileAttributesStorage();
-  std::string name = base::UTF16ToUTF8(storage.ChooseNameForNewProfile(0));
+  std::string name = base::UTF16ToUTF8(storage.ChooseNameForNewProfile());
 
   return RespondNow(ArgumentList(Results::Create(name)));
 }

@@ -55,14 +55,6 @@ INSTANTIATE_TEST_SUITE_P(All,
                          PrivacySandboxDialogTest,
                          testing::Values(WindowSize::kSmall, WindowSize::kBig));
 
-IN_PROC_BROWSER_TEST_P(PrivacySandboxDialogTest, Consent) {
-  RunTestSuite("Consent");
-}
-
-IN_PROC_BROWSER_TEST_P(PrivacySandboxDialogTest, Notice) {
-  RunTestSuite("Notice");
-}
-
 IN_PROC_BROWSER_TEST_P(PrivacySandboxDialogTest, Combined) {
   RunTestSuite("Combined");
 }
@@ -90,4 +82,17 @@ IN_PROC_BROWSER_TEST_P(PrivacySandboxDialogTest,
 
 IN_PROC_BROWSER_TEST_P(PrivacySandboxDialogTest, CombinedAdsApiUxEnhancement) {
   RunTestSuite("CombinedAdsApiUxEnhancement");
+}
+
+IN_PROC_BROWSER_TEST_P(PrivacySandboxDialogTest, NoticeEEAAdsApiUxEnhancement) {
+  RunTestSuite("NoticeEEAAdsApiUxEnhancement");
+}
+
+IN_PROC_BROWSER_TEST_P(PrivacySandboxDialogTest, NoticeROWAdsApiUxEnhancement) {
+  RunTestSuite("NoticeROWAdsApiUxEnhancement");
+}
+
+IN_PROC_BROWSER_TEST_P(PrivacySandboxDialogTest,
+                       NoticeROWAdsApiUxEnhancementDisabled) {
+  RunTestSuite("NoticeROWAdsApiUxEnhancementDisabled");
 }

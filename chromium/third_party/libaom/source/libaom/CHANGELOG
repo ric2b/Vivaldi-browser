@@ -1,3 +1,46 @@
+2024-10-24 v3.11.0
+  This release includes perceptual quality improvements, binary size reduction
+  under certain configurations and many bug fixes. This release changes the
+  default encoder configuration for the AOM_USAGE_REALTIME mode. This release
+  is ABI compatible with the last release.
+
+  - Perceptual Quality Improvements
+    * Visual quality improvements for RTC screen content
+      * Higher quality on scene or slide changes
+      * Faster quality ramp-up for static content after scene change
+      * Quality improvements for screen content with active maps
+
+  - Speedup
+    * Added and improved Neon SIMD paths for dynamic frame scaling with ~1.5%
+      overall encoding speedup.
+
+  - Other Improvements
+    * Binary size reduction: 10% compared with last release, with
+      CONFIG_REALTIME_ONLY enabled, CONFIG_AV1_DECODER and
+      CONFIG_AV1_HIGHBITDEPTH disabled.
+    * Update default_extra_cfg for CONFIG_REALTIME_ONLY to provide proper RTC
+      defaults settings
+    * Change the default valuess of the following encoder config options in the
+      AOM_USAGE_REALTIME mode:
+      *  rc_overshoot_pct and rc_undershoot_pct are changed from 25 to 50
+      *  rc_buf_sz is changed from 6000 to 1000
+      *  rc_buf_initial_sz is changed from 4000 to 600
+      *  rc_buf_optimal_sz is changed from 5000 to 600
+
+  - Bug Fixes
+    * aomedia:363016123: rtc: Fix setting of intra-only frame for
+      set_ref_frame_config and add checks
+    * aomedia:42302583: rtc: Fix for artifacts for screen with active_maps
+    * b:365088425: rtc: Allow for lower-QP on scene/slide changes
+    * b:367285382: Fix to encoder quality max-out too early for screen
+    * b:362936830: rtc: Allow QP to decrease more aggressively for static
+      content
+    * b:361617762: Clamp the calculation of sb64_target_rate to INT_MAX
+    * chromium:362123224: rtc-svc: Reset ref_map_idx for references not used
+    * chromium:367892770: Fix to possible integer overflow in reset_rc
+    * webrtc:369633254: rtc-svc: Fix to reset ref_idx for svc
+    * Fix exit condition in rate correction update
+
 2024-08-27 v3.10.0
   This release includes new codec interfaces, compression efficiency and
   perceptual improvements, speedup and memory optimizations and many bug

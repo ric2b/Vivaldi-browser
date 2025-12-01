@@ -1,12 +1,14 @@
+/// <reference types="node" preserve="true" />
 /**
  * @license
  * Copyright 2017 Google Inc.
  * SPDX-License-Identifier: Apache-2.0
  */
-/// <reference types="node" />
 import type { ChildProcess } from 'child_process';
 import type { Protocol } from 'devtools-protocol';
 import type { ProtocolType } from '../common/ConnectOptions.js';
+import type { Cookie } from '../common/Cookie.js';
+import type { DownloadBehavior } from '../common/DownloadBehavior.js';
 import { EventEmitter, type EventType } from '../common/EventEmitter.js';
 import { asyncDisposeSymbol, disposeSymbol } from '../util/disposable.js';
 import type { BrowserContext } from './BrowserContext.js';
@@ -25,6 +27,13 @@ export interface BrowserContextOptions {
      * Bypass the proxy for the given list of hosts.
      */
     proxyBypassList?: string[];
+    /**
+     * Behavior definition for when downloading a file.
+     *
+     * @remarks
+     * If not set, the default behavior will be used.
+     */
+    downloadBehavior?: DownloadBehavior;
 }
 /**
  * @internal
@@ -56,6 +65,10 @@ export interface WaitForTargetOptions {
      * @defaultValue `30_000`
      */
     timeout?: number;
+    /**
+     * A signal object that allows you to cancel a waitFor call.
+     */
+    signal?: AbortSignal;
 }
 /**
  * All the events a {@link Browser | browser instance} may emit.
@@ -217,9 +230,8 @@ export declare abstract class Browser extends EventEmitter<BrowserEvents> {
      * You can find the debugger URL (`webSocketDebuggerUrl`) from
      * `http://HOST:PORT/json/version`.
      *
-     * See {@link
-     * https://chromedevtools.github.io/devtools-protocol/#how-do-i-access-the-browser-target
-     * | browser endpoint} for more information.
+     * See {@link https://chromedevtools.github.io/devtools-protocol/#how-do-i-access-the-browser-target | browser endpoint}
+     * for more information.
      *
      * @remarks The format is always `ws://HOST:PORT/devtools/browser/<id>`.
      */
@@ -253,7 +265,7 @@ export declare abstract class Browser extends EventEmitter<BrowserEvents> {
      * ```ts
      * await page.evaluate(() => window.open('https://www.example.com/'));
      * const newWindowTarget = await browser.waitForTarget(
-     *   target => target.url() === 'https://www.example.com/'
+     *   target => target.url() === 'https://www.example.com/',
      * );
      * ```
      */
@@ -261,7 +273,7 @@ export declare abstract class Browser extends EventEmitter<BrowserEvents> {
     /**
      * Gets a list of all open {@link Page | pages} inside this {@link Browser}.
      *
-     * If there ar multiple {@link BrowserContext | browser contexts}, this
+     * If there are multiple {@link BrowserContext | browser contexts}, this
      * returns all {@link Page | pages} in all
      * {@link BrowserContext | browser contexts}.
      *
@@ -299,6 +311,33 @@ export declare abstract class Browser extends EventEmitter<BrowserEvents> {
      * process running.
      */
     abstract disconnect(): Promise<void>;
+    /**
+     * Returns all cookies in the default {@link BrowserContext}.
+     *
+     * @remarks
+     *
+     * Shortcut for
+     * {@link BrowserContext.cookies | browser.defaultBrowserContext().cookies()}.
+     */
+    cookies(): Promise<Cookie[]>;
+    /**
+     * Sets cookies in the default {@link BrowserContext}.
+     *
+     * @remarks
+     *
+     * Shortcut for
+     * {@link BrowserContext.setCookie | browser.defaultBrowserContext().setCookie()}.
+     */
+    setCookie(...cookies: Cookie[]): Promise<void>;
+    /**
+     * Removes cookies from the default {@link BrowserContext}.
+     *
+     * @remarks
+     *
+     * Shortcut for
+     * {@link BrowserContext.deleteCookie | browser.defaultBrowserContext().deleteCookie()}.
+     */
+    deleteCookie(...cookies: Cookie[]): Promise<void>;
     /**
      * Whether Puppeteer is connected to this {@link Browser | browser}.
      *

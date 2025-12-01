@@ -4,7 +4,7 @@
 
 import("//build/config/chromeos/ui_mode.gni")
 
-assert(is_chromeos_ash)
+assert(is_chromeos)
 
 static_library("core") {
   sources = [
@@ -66,11 +66,9 @@ static_library("core") {
 
   deps = [
     "//ash",
-    "//ash/components/arc:arc_features",
     "//ash/constants",
     "//base",
     "//build:buildflag_header_h",
-    "//build:chromeos_buildflags",
     "//chrome/browser:browser_process",
     "//chrome/browser/ash/policy/dev_mode",
     "//chrome/browser/ash/policy/enrollment",
@@ -105,6 +103,7 @@ static_library("core") {
     "//chromeos/ash/components/network",
     "//chromeos/ash/components/settings",
     "//chromeos/ash/components/system",
+    "//chromeos/ash/experiences/arc:arc_features",
     "//chromeos/constants",
     "//chromeos/dbus/constants",
     "//chromeos/dbus/power",
@@ -318,7 +317,6 @@ source_set("browser_tests") {
     ":test_support",
     "//ash",
     "//ash:test_support",
-    "//ash/components/arc:prefs",
     "//ash/constants",
     "//ash/public/cpp",
     "//base",
@@ -365,6 +363,7 @@ source_set("browser_tests") {
     "//chromeos/ash/components/network",
     "//chromeos/ash/components/settings",
     "//chromeos/ash/components/system",
+    "//chromeos/ash/experiences/arc:prefs",
     "//chromeos/components/mgs",
     "//components/crx_file",
     "//components/invalidation",

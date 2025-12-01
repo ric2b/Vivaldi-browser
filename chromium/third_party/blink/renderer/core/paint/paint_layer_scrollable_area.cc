@@ -44,12 +44,14 @@
 
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 
+#include <optional>
 #include <utility>
 
 #include "base/numerics/checked_math.h"
 #include "base/task/single_thread_task_runner.h"
 #include "cc/animation/animation_timeline.h"
 #include "cc/input/main_thread_scrolling_reason.h"
+#include "cc/input/scroll_snap_data.h"
 #include "cc/input/snap_selection_strategy.h"
 #include "cc/layers/picture_layer.h"
 #include "third_party/blink/public/common/features.h"
@@ -67,7 +69,6 @@
 #include "third_party/blink/renderer/core/css/style_request.h"
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
 #include "third_party/blink/renderer/core/dom/node.h"
-#include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/scroll_marker_group_pseudo_element.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
@@ -109,6 +110,7 @@
 #include "third_party/blink/renderer/core/paint/paint_invalidator.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_fragment.h"
+#include "third_party/blink/renderer/core/scroll/programmatic_scroll_animator.h"
 #include "third_party/blink/renderer/core/scroll/scroll_alignment.h"
 #include "third_party/blink/renderer/core/scroll/scroll_animator_base.h"
 #include "third_party/blink/renderer/core/scroll/scroll_into_view_util.h"
@@ -166,6 +168,12 @@ PaintLayerScrollableArea::PaintLayerScrollableArea(PaintLayer& layer)
       GetScrollAnimator().SetCurrentOffset(scroll_offset_);
     element->SetSavedLayerScrollOffset(ScrollOffset());
   }
+
+  if (RuntimeEnabledFeatures::UnifiedScrollableAreasEnabled()) {
+    if (LocalFrameView* frame_view = GetLayoutBox()->GetFrameView()) {
+      frame_view->AddScrollableArea(*this);
+    }
+  }
 }
 
 PaintLayerScrollableArea::~PaintLayerScrollableArea() {
@@ -192,14 +200,9 @@ void PaintLayerScrollableArea::DisposeImpl() {
       frame->GetEventHandler().ResizeScrollableAreaDestroyed();
   }
 
-  if (LocalFrame* frame = GetLayoutBox()->GetFrame()) {
-    if (LocalFrameView* frame_view = frame->View()) {
-      frame_view->RemoveScrollAnchoringScrollableArea(this);
-      frame_view->RemoveUserScrollableArea(this);
-      frame_view->RemoveAnimatingScrollableArea(this);
-      frame_view->RemovePendingSnapUpdate(this);
-      probe::UpdateScrollableFlag(GetLayoutBox()->GetNode(), false);
-    }
+  if (LocalFrameView* frame_view = GetLayoutBox()->GetFrameView()) {
+    frame_view->RemoveScrollableArea(*this);
+    probe::UpdateScrollableFlag(GetLayoutBox()->GetNode(), false);
   }
 
   if (!GetLayoutBox()->DocumentBeingDestroyed()) {
@@ -1098,7 +1101,7 @@ void PaintLayerScrollableArea::UpdateAfterLayout() {
     ApplyScrollStart();
   }
 
-  UpdateScrollMarkers(GetScrollOffset());
+  UpdateScrollMarkers();
 }
 
 Element* PaintLayerScrollableArea::GetElementForScrollStart() const {
@@ -1141,8 +1144,8 @@ bool PaintLayerScrollableArea::IsApplyingScrollStart() const {
     if (element->HasBeenExplicitlyScrolled()) {
       return false;
     }
-    if (RuntimeEnabledFeatures::CSSScrollStartTargetEnabled() &&
-        GetScrollStartTarget()) {
+    if (RuntimeEnabledFeatures::CSSScrollInitialTargetEnabled() &&
+        GetScrollInitialTarget()) {
       return true;
     }
     return RuntimeEnabledFeatures::CSSScrollStartEnabled() &&
@@ -1196,8 +1199,15 @@ void PaintLayerScrollableArea::ClampScrollOffsetAfterOverflowChangeInternal() {
   if (ScrollOriginChanged()) {
     SetScrollOffsetUnconditionally(ClampScrollOffset(GetScrollOffset()));
   } else {
+    // Avoid unpinning the associated scroll-marker group's selected marker by
+    // indicating that this is a |targeted_scroll| if the group's selected
+    // marker is currently pinned.
+    ScrollMarkerGroupPseudoElement* group = GetScrollMarkerGroup();
+    bool targeted_scroll = group && group->SelectedMarkerIsPinned();
     ScrollableArea::SetScrollOffset(GetScrollOffset(),
-                                    mojom::blink::ScrollType::kClamping);
+                                    mojom::blink::ScrollType::kClamping,
+                                    mojom::blink::ScrollBehavior::kInstant,
+                                    ScrollCallback(), targeted_scroll);
   }
 
   SetNeedsScrollOffsetClamp(false);
@@ -1966,27 +1976,39 @@ void PaintLayerScrollableArea::SetImplSnapStrategy(
   EnsureRareData().impl_snap_strategy_ = std::move(strategy);
 }
 
-std::optional<gfx::PointF>
-PaintLayerScrollableArea::GetSnapPositionAndSetTarget(
-    const cc::SnapSelectionStrategy& strategy) {
+std::optional<cc::SnapPositionData> PaintLayerScrollableArea::GetSnapPosition(
+    const cc::SnapSelectionStrategy& strategy) const {
   if (!RareData() || !RareData()->snap_container_data_)
     return std::nullopt;
 
-  cc::SnapContainerData& data = RareData()->snap_container_data_.value();
+  const cc::SnapContainerData& data = RareData()->snap_container_data_.value();
   if (!data.size())
     return std::nullopt;
 
-  std::optional<gfx::PointF> snap_point;
   cc::SnapPositionData snap = data.FindSnapPosition(strategy);
-  if (snap.type != cc::SnapPositionData::Type::kNone) {
-    snap_point = gfx::PointF(snap.position.x(), snap.position.y());
+  return std::make_optional(snap);
+}
+
+std::optional<gfx::PointF>
+PaintLayerScrollableArea::GetSnapPositionAndSetTarget(
+    const cc::SnapSelectionStrategy& strategy) {
+  std::optional<cc::SnapPositionData> snap = GetSnapPosition(strategy);
+  if (!snap.has_value()) {
+    return std::nullopt;
   }
 
-  if (data.SetTargetSnapAreaElementIds(snap.target_element_ids)) {
+  // Update the target element ids whether we found a snap position or not -
+  // as we may have to clear them if we are no longer snapped.
+  cc::SnapContainerData& data = RareData()->snap_container_data_.value();
+  if (data.SetTargetSnapAreaElementIds(snap->target_element_ids)) {
     GetLayoutBox()->SetNeedsPaintPropertyUpdate();
   }
 
-  return snap_point;
+  if (snap->type == cc::SnapPositionData::Type::kNone) {
+    return std::nullopt;
+  }
+
+  return std::make_optional<gfx::PointF>(snap->position);
 }
 
 bool PaintLayerScrollableArea::HasOverflowControls() const {
@@ -2444,7 +2466,8 @@ PhysicalRect PaintLayerScrollableArea::ScrollIntoView(
     mojom::blink::ScrollBehavior behavior = DetermineScrollBehavior(
         params->behavior, GetLayoutBox()->StyleRef().GetScrollBehavior());
     if (RuntimeEnabledFeatures::MultiSmoothScrollIntoViewEnabled()) {
-      SetScrollOffset(new_scroll_offset, params->type, behavior);
+      SetScrollOffset(new_scroll_offset, params->type, behavior,
+                      ScrollCallback(), true);
     } else {
       CHECK(GetSmoothScrollSequencer());
       DCHECK(params->type == mojom::blink::ScrollType::kProgrammatic ||
@@ -2454,7 +2477,8 @@ PhysicalRect PaintLayerScrollableArea::ScrollIntoView(
     }
   } else {
     SetScrollOffset(new_scroll_offset, params->type,
-                    mojom::blink::ScrollBehavior::kInstant);
+                    mojom::blink::ScrollBehavior::kInstant, ScrollCallback(),
+                    true);
   }
   ScrollOffset scroll_offset_difference = new_scroll_offset - old_scroll_offset;
   // The container hasn't performed the scroll yet if it's for scroll sequence.
@@ -2559,11 +2583,13 @@ void PaintLayerScrollableArea::UpdateScrollableAreaSet() {
   // (see: BoxPainter::PaintBoxDecorationBackground).
   GetLayoutBox()->SetBackgroundNeedsFullPaintInvalidation();
 
-  if (scrolls_overflow_) {
-    DCHECK(CanHaveOverflowScrollbars(*GetLayoutBox()));
-    frame_view->AddUserScrollableArea(this);
-  } else {
-    frame_view->RemoveUserScrollableArea(this);
+  if (!RuntimeEnabledFeatures::UnifiedScrollableAreasEnabled()) {
+    if (scrolls_overflow_) {
+      DCHECK(CanHaveOverflowScrollbars(*GetLayoutBox()));
+      frame_view->AddUserScrollableArea(*this);
+    } else {
+      frame_view->RemoveUserScrollableArea(*this);
+    }
   }
   probe::UpdateScrollableFlag(GetLayoutBox()->GetNode(), std::nullopt);
 
@@ -2978,7 +3004,7 @@ void PaintLayerScrollableArea::InvalidatePaintOfScrollbarIfNeeded(
   if (!previously_was_overlay)
     previous_scrollbar_used_space_in_box = visual_rect.size();
 
-  // The IsEmpty() check avoids invalidaiton in cases when the visual rect
+  // The IsEmpty() check avoids invalidation in cases when the visual rect
   // changes from (0,0 0x0) to (0,0 0x100).
   if (!(new_scrollbar_used_space_in_box.IsEmpty() &&
         previous_scrollbar_used_space_in_box.IsEmpty()) &&
@@ -3393,17 +3419,37 @@ void PaintLayerScrollableArea::SetSnappedQueryTargetIds(
   EnsureRareData().snapped_query_target_ids_ = ids;
 }
 
-void PaintLayerScrollableArea::UpdateScrollMarkers(const ScrollOffset& offset) {
+ScrollOffset PaintLayerScrollableArea::GetScrollOffsetForScrollMarkerUpdate() {
+  ScrollOffset offset_for_scroll_marker_update = GetScrollOffset();
+  if (GetScrollAnimator().HasRunningAnimation()) {
+    offset_for_scroll_marker_update = GetScrollAnimator().DesiredTargetOffset();
+  } else if (GetProgrammaticScrollAnimator().HasRunningAnimation()) {
+    offset_for_scroll_marker_update =
+        GetProgrammaticScrollAnimator().TargetOffset();
+  }
+  return offset_for_scroll_marker_update;
+}
+
+ScrollMarkerGroupPseudoElement* PaintLayerScrollableArea::GetScrollMarkerGroup()
+    const {
   if (Element* element = DynamicTo<Element>(GetLayoutBox()->GetNode())) {
     if (PseudoElement* before =
             element->GetPseudoElement(kPseudoIdScrollMarkerGroupBefore)) {
       auto* group_before = DynamicTo<ScrollMarkerGroupPseudoElement>(before);
-      group_before->UpdateSelectedScrollMarker(offset);
+      return group_before;
     } else if (PseudoElement* after =
                    element->GetPseudoElement(kPseudoIdScrollMarkerGroupAfter)) {
       auto* group_after = DynamicTo<ScrollMarkerGroupPseudoElement>(after);
-      group_after->UpdateSelectedScrollMarker(offset);
+      return group_after;
     }
+  }
+  return nullptr;
+}
+
+void PaintLayerScrollableArea::UpdateScrollMarkers() {
+  if (ScrollMarkerGroupPseudoElement* marker_group = GetScrollMarkerGroup()) {
+    ScrollOffset scroll_offset = GetScrollOffsetForScrollMarkerUpdate();
+    marker_group->UpdateSelectedScrollMarker(scroll_offset);
   }
 }
 

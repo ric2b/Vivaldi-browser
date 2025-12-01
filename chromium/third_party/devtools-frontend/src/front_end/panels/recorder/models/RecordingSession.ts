@@ -5,26 +5,25 @@
 import * as Common from '../../../core/common/common.js';
 import * as Platform from '../../../core/platform/platform.js';
 import * as SDK from '../../../core/sdk/sdk.js';
-import * as UI from '../../../ui/legacy/legacy.js';
-import * as Util from '../util/util.js';
-
 import type * as ProtocolProxyApi from '../../../generated/protocol-proxy-api.js';
 import type * as Protocol from '../../../generated/protocol.js';
+import * as UI from '../../../ui/legacy/legacy.js';
 import type * as Injected from '../injected/injected.js';
+import * as Util from '../util/util.js';
 
 import {
   AssertedEventType,
-  StepType,
-  type Key,
   type ChangeStep,
   type ClickStep,
   type DoubleClickStep,
   type FrameSelector,
+  type Key,
   type KeyDownStep,
   type KeyUpStep,
   type NavigationEvent,
   type SelectorType,
   type Step,
+  StepType,
   type Target,
   type UserFlow,
 } from './Schema.js';
@@ -33,30 +32,30 @@ import {evaluateInAllFrames, getTargetFrameContext} from './SDKUtils.js';
 
 const formatAsJSLiteral = Platform.StringUtilities.formatAsJSLiteral;
 
-type TargetInfoChangedEvent = {
-  type: 'targetInfoChanged',
-  event: Common.EventTarget.EventTargetEvent<Protocol.Target.TargetInfo>,
-  target: SDK.Target.Target,
-};
+interface TargetInfoChangedEvent {
+  type: 'targetInfoChanged';
+  event: Common.EventTarget.EventTargetEvent<Protocol.Target.TargetInfo>;
+  target: SDK.Target.Target;
+}
 
-type TargerCreatedRecorderEvent = {
-  type: 'targetCreated',
-  event: Common.EventTarget.EventTargetEvent<Protocol.Target.TargetInfo>,
-  target: SDK.Target.Target,
-};
+interface TargerCreatedRecorderEvent {
+  type: 'targetCreated';
+  event: Common.EventTarget.EventTargetEvent<Protocol.Target.TargetInfo>;
+  target: SDK.Target.Target;
+}
 
-type TargetClosedRecorderEvent = {
-  type: 'targetClosed',
-  event: Common.EventTarget.EventTargetEvent<Protocol.Target.TargetID>,
-  target: SDK.Target.Target,
-};
+interface TargetClosedRecorderEvent {
+  type: 'targetClosed';
+  event: Common.EventTarget.EventTargetEvent<Protocol.Target.TargetID>;
+  target: SDK.Target.Target;
+}
 
-type BindingCalledRecorderEvent = {
-  type: 'bindingCalled',
-  event: Common.EventTarget.EventTargetEvent<Protocol.Runtime.BindingCalledEvent>,
-  target: SDK.Target.Target,
-  frameId: Protocol.Page.FrameId,
-};
+interface BindingCalledRecorderEvent {
+  type: 'bindingCalled';
+  event: Common.EventTarget.EventTargetEvent<Protocol.Runtime.BindingCalledEvent>;
+  target: SDK.Target.Target;
+  frameId: Protocol.Page.FrameId;
+}
 
 type RecorderEvent =
     |TargetInfoChangedEvent|TargerCreatedRecorderEvent|TargetClosedRecorderEvent|BindingCalledRecorderEvent;
@@ -773,7 +772,7 @@ export const enum Events {
   RECORDING_STOPPED = 'recordingstopped',
 }
 
-type EventTypes = {
-  [Events.RECORDING_UPDATED]: UserFlow,
-  [Events.RECORDING_STOPPED]: UserFlow,
-};
+interface EventTypes {
+  [Events.RECORDING_UPDATED]: UserFlow;
+  [Events.RECORDING_STOPPED]: UserFlow;
+}

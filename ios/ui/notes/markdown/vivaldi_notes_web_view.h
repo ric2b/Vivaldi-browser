@@ -10,6 +10,8 @@
 // Webview for showing custom keyboards & toolbars in markdown editor
 @interface VivaldiNotesWebView : WKWebView
 
++ (void)allowDisplayingKeyboardWithoutUserAction;
+
 @property(nonatomic, weak) id<MarkdownInputViewProvider> inputViewProvider;
 
 @end

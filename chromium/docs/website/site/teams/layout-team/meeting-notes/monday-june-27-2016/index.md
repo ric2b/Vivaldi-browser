@@ -19,12 +19,12 @@ for all children. This happens even if the content width didn't
 change. Landed a patch to fix that; it may not be perfect yet but it's
 close, needs a few tweaks. (szager)
 - Assisted ymalik in investigating smooth scroll jank issues. (skobes)
-\[[crbug.com/616995](http://crbug.com/616995)\]
+\[[crbug.com/616995](https://crbug.com/616995)\]
 - Working on a fix for incorrect repainting of negative z-index children
-on scroll. (skobes) \[[crbug.com/596060](http://crbug.com/596060)\]
-Scroll Anchoring \[[crbug.com/558575](http://crbug.com/558575)\]
+on scroll. (skobes) \[[crbug.com/596060](https://crbug.com/596060)\]
+Scroll Anchoring \[[crbug.com/558575](https://crbug.com/558575)\]
 - Thinking about the scroll anchoring cycle problem
-\[[crbug.com/601906](http://crbug.com/601906)\],
+\[[crbug.com/601906](https://crbug.com/601906)\],
 will likely add a limit on number of adjustments between user scrolls
 per Kenji's suggestion. (skobes)
 CSS Flexbox
@@ -33,7 +33,7 @@ steadily decreasing. No new major issues detected or reported latelty.
 (cbiesinger)
 - Refactored flexbox layout algorithm to make it easier to understand
 and maintain. (cbiesinger)
-CSS Grid Layout \[[crbug.com/79180](http://crbug.com/79180)\]
+CSS Grid Layout \[[crbug.com/79180](https://crbug.com/79180)\]
 - Fixed some small layout bugs related to intrinsic sizes and border/
 padding. (jfernandez)
 - Working on grid orthogonal flows. (jfernandez)
@@ -42,21 +42,21 @@ padding. (jfernandez)
 - Fixed issues with height percentages on grid items. (rego)
 - Gave CSS Grid update talk at BlinkOn 6 in Munich. (rego)
 - Implemented repeat (auto-fit). (svillar)
-CSS Multi-column (mstensho) \[[crbug.com/334335](http://crbug.com/334335)\]
+CSS Multi-column (mstensho) \[[crbug.com/334335](https://crbug.com/334335)\]
 - No updates since last week. Morten out for the next two months.
 CSS Houdini
 - Added support for prefixed properties to the CSS Paint API. (glebl)
 - Renamed Geometry to PaintSize for the CSS Paint API to match latest
-spec update. \[[crbug.com/578252](http://crbug.com/578252)\] (glebl)
+spec update. \[[crbug.com/578252](https://crbug.com/578252)\] (glebl)
 - Enabled worklets and the CSS Paint API as experimental web platform
 features. (ikilpatrick)
-LayoutNG \[[crbug.com/591099](http://crbug.com/591099)\]
+LayoutNG \[[crbug.com/591099](https://crbug.com/591099)\]
 - Working on design doc, will be ready for circulation among the team
 post BlinkOn. (eae, ikilpatrick)
-CSS Containment \[[crbug.com/312978](http://crbug.com/312978)\]
+CSS Containment \[[crbug.com/312978](https://crbug.com/312978)\]
 - No updates since last week.
 Intersection Observer (szager, mpb)
-\[[crbug.com/540528](http://crbug.com/540528)\]
+\[[crbug.com/540528](https://crbug.com/540528)\]
 - Misc minor intersection observer fixes. (szager)
 - OOPIF will need to support intersection observer, unclear what
 priority or who should own the work. Complicated as it needs to walk

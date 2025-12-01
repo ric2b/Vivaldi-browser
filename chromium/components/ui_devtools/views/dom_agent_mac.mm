@@ -6,8 +6,9 @@
 
 #import <AppKit/AppKit.h>
 
+#include <algorithm>
+
 #include "base/functional/bind.h"
-#include "base/ranges/algorithm.h"
 #include "components/ui_devtools/views/widget_element.h"
 #include "ui/views/widget/native_widget_mac.h"
 
@@ -49,7 +50,7 @@ std::vector<UIElement*> DOMAgentMac::CreateChildrenForRoot() {
 
 void DOMAgentMac::OnWidgetDestroying(views::Widget* widget) {
   widget->RemoveObserver(this);
-  roots_.erase(base::ranges::find(roots_, widget), roots_.end());
+  roots_.erase(std::ranges::find(roots_, widget), roots_.end());
 }
 
 void DOMAgentMac::OnNativeWidgetAdded(views::NativeWidgetMac* native_widget) {
@@ -64,8 +65,7 @@ void DOMAgentMac::OnNativeWidgetAdded(views::NativeWidgetMac* native_widget) {
 std::unique_ptr<protocol::DOM::Node> DOMAgentMac::BuildTreeForWindow(
     UIElement* window_element_root) {
   // Window elements aren't supported on Mac.
-  NOTREACHED_IN_MIGRATION();
-  return nullptr;
+  NOTREACHED();
 }
 
 void DOMAgentMac::InitializeRootsFromOpenWindows() {

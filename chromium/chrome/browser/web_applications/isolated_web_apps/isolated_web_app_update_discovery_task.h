@@ -14,34 +14,45 @@
 #include "base/functional/callback_forward.h"
 #include "base/types/expected.h"
 #include "base/version.h"
+#include "chrome/browser/web_applications/isolated_web_apps/commands/isolated_web_app_prepare_and_store_update_command.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_downloader.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_url_info.h"
 #include "chrome/browser/web_applications/isolated_web_apps/update_manifest/update_manifest.h"
 #include "chrome/browser/web_applications/isolated_web_apps/update_manifest/update_manifest_fetcher.h"
-#include "chrome/browser/web_applications/web_app_command_scheduler.h"
-#include "chrome/browser/web_applications/web_app_registrar.h"
 #include "components/webapps/common/web_app_id.h"
 #include "net/base/net_errors.h"
 
 namespace web_app {
+class WebAppCommandScheduler;
+class WebAppRegistrar;
 
 class IwaUpdateDiscoveryTaskParams {
  public:
-  IwaUpdateDiscoveryTaskParams(const GURL& update_manifest_url,
-                               const UpdateChannel& update_channel,
-                               const IsolatedWebAppUrlInfo& url_info,
-                               bool dev_mode);
+  IwaUpdateDiscoveryTaskParams(
+      const GURL& update_manifest_url,
+      const UpdateChannel& update_channel,
+      bool allow_downgrades,
+      const std::optional<base::Version>& pinned_version,
+      const IsolatedWebAppUrlInfo& url_info,
+      bool dev_mode);
 
   IwaUpdateDiscoveryTaskParams(IwaUpdateDiscoveryTaskParams&& other);
+  ~IwaUpdateDiscoveryTaskParams();
 
   const GURL& update_manifest_url() const { return update_manifest_url_; }
   const UpdateChannel& update_channel() const { return update_channel_; }
+  bool allow_downgrades() const { return allow_downgrades_; }
+  const std::optional<base::Version>& pinned_version() const {
+    return pinned_version_;
+  }
   const IsolatedWebAppUrlInfo& url_info() const { return url_info_; }
   bool dev_mode() const { return dev_mode_; }
 
  private:
   GURL update_manifest_url_;
   UpdateChannel update_channel_;
+  bool allow_downgrades_;
+  std::optional<base::Version> pinned_version_;
   IsolatedWebAppUrlInfo url_info_;
   bool dev_mode_;
 };
@@ -81,7 +92,9 @@ class IsolatedWebAppUpdateDiscoveryTask {
       IwaUpdateDiscoveryTaskParams task_params,
       WebAppCommandScheduler& command_scheduler,
       WebAppRegistrar& registrar,
-      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+      std::unique_ptr<ScopedKeepAlive> optional_keep_alive,
+      std::unique_ptr<ScopedProfileKeepAlive> optional_profile_keep_alive);
   ~IsolatedWebAppUpdateDiscoveryTask();
 
   IsolatedWebAppUpdateDiscoveryTask(const IsolatedWebAppUpdateDiscoveryTask&) =
@@ -132,6 +145,8 @@ class IsolatedWebAppUpdateDiscoveryTask {
   raw_ref<WebAppCommandScheduler> command_scheduler_;
   raw_ref<WebAppRegistrar> registrar_;
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
+  std::unique_ptr<ScopedKeepAlive> optional_keep_alive_;
+  std::unique_ptr<ScopedProfileKeepAlive> optional_profile_keep_alive_;
 
   ScopedTempWebBundleFile bundle_;
 

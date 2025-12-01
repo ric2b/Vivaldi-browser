@@ -669,7 +669,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerInteractiveTestWithSigninInterception,
   FillElementWithValue("password_field", "new", "pwnew");
 
   // Wait until the form change is picked up by the password manager.
-  const PasswordManager* password_manager =
+  const PasswordManagerInterface* password_manager =
       ChromePasswordManagerClient::FromWebContents(WebContents())
           ->GetPasswordManager();
   EXPECT_TRUE(base::test::RunUntil([&]() {
@@ -690,8 +690,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerInteractiveTestWithSigninInterception,
   DiceWebSigninInterceptor* signin_interceptor =
       helper_.GetSigninInterceptor(profile);
   signin_interceptor->MaybeInterceptWebSignin(
-      WebContents(), account_id,
-      signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN,
+      WebContents(), account_id, signin_metrics::AccessPoint::kUnknown,
       /*is_new_account=*/true,
       /*is_sync_signin=*/false);
   EXPECT_FALSE(signin_interceptor->is_interception_in_progress());

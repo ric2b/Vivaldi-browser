@@ -43,6 +43,7 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "content/child/browser_exposed_child_interfaces.h"
+#include "content/child/child_performance_coordinator.h"
 #include "content/child/child_process.h"
 #include "content/child/child_process_synthetic_trial_syncer.h"
 #include "content/common/child_process.mojom.h"
@@ -427,7 +428,7 @@ class ChildThreadImpl::IOThreadState
     content::SetPseudonymizationSalt(salt);
   }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   void ReinitializeLogging(mojom::LoggingSettingsPtr settings) override {
     logging::LoggingSettings logging_settings;
     logging_settings.logging_dest = settings->logging_dest;
@@ -453,13 +454,14 @@ class ChildThreadImpl::IOThreadState
 #endif
 
   void SetBatterySaverMode(bool battery_saver_mode_enabled) override {
-    if (base::FeatureList::IsEnabled(features::kBatterySaverModeAlignWakeUps)) {
-      if (battery_saver_mode_enabled) {
+    if (battery_saver_mode_enabled) {
+      if (base::FeatureList::IsEnabled(
+              features::kBatterySaverModeAlignWakeUps)) {
         base::MessagePump::OverrideAlignWakeUpsState(true,
                                                      base::Milliseconds(32));
-      } else {
-        base::MessagePump::ResetAlignWakeUpsState();
       }
+    } else {
+      base::MessagePump::ResetAlignWakeUpsState();
     }
     main_thread_task_runner_->PostTask(
         FROM_HERE,
@@ -720,6 +722,9 @@ void ChildThreadImpl::Init(const Options& options) {
     BindHostReceiver(remote_power_monitor.InitWithNewPipeAndPassReceiver());
     source_ptr->Init(std::move(remote_power_monitor));
   }
+
+  performance_coordinator_ = std::make_unique<ChildPerformanceCoordinator>();
+  BindHostReceiver(performance_coordinator_->InitializeAndPassReceiver());
 
 #if BUILDFLAG(IS_POSIX)
   // Check that --process-type is specified so we don't do this in unit tests

@@ -758,6 +758,7 @@ set_defaults("component") {
 # import("//build/toolchain/siso.gni")
 
 # TODO(b/253987456): Add action_foreach support.
+# TODO(379584977): remove this. no need this for siso native.
 # foreach(_target_type, [ "action" ]) {
 #   template(_target_type) {
 #     forward_variables_from(invoker, TESTONLY_AND_VISIBILITY)
@@ -831,7 +832,7 @@ set_defaults("component") {
 #                  "remote_worker = " + remote_worker + " is not supported")
 #           rewrapper_cfg = "$reclient_py_cfg_file"
 #         }
-# 
+#
 #         args = []
 #         args += [ "$reclient_bin_dir/rewrapper" ]
 #         if (defined(invoker.custom_processor)) {

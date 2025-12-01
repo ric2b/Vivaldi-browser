@@ -67,21 +67,21 @@ before:
 <https://www.chromium.org/developers/design-documents/reserved-keys-api>
 
 Other groups interested in this functionality have commented on
-<http://crbug.com/84332>.
+<https://crbug.com/84332>.
 
 The W3C Games Community has on their wishlist a request for better keyboard
 support. This issue is larger in scope than this extension can address, but it
 would be a welcome first step.
 
 See "Keyboard Lock" on
-<http://www.w3.org/community/games/2011/11/10/w3c-games-community-group-new-game-summit-november-2011/>
+<https://www.w3.org/community/games/2011/11/10/w3c-games-community-group-new-game-summit-november-2011/>
 
 **Could this API be part of the web platform?**
 
 Other browser vendors don't suffer from this problem as much as Chromium because
 they send browser accelerator keys to the page before handling them. For
 usability/responsiveness reasons, Chromium decided not to send these key events
-to plugins (see <http://crbug.com/84332> for discussion) so we are alone with
+to plugins (see <https://crbug.com/84332> for discussion) so we are alone with
 this particular keyboard problem.
 
 Because this is basically a Chromium-only problem, there is unlikely to be

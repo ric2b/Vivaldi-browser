@@ -53,6 +53,34 @@ FieldAccess AccessBuilder::ForHeapNumberValue() {
 }
 
 // static
+FieldAccess AccessBuilder::ForHeapInt32Value() {
+  FieldAccess access = {
+      kTaggedBase,
+      offsetof(HeapNumber, value_) + kIeeeDoubleMantissaWordOffset,
+      MaybeHandle<Name>(),
+      OptionalMapRef(),
+      TypeCache::Get()->kInt32,
+      MachineType::Int32(),
+      kNoWriteBarrier,
+      "HeapInt32Value"};
+  return access;
+}
+
+// static
+FieldAccess AccessBuilder::ForHeapInt32UpperValue() {
+  FieldAccess access = {
+      kTaggedBase,
+      offsetof(HeapNumber, value_) + kIeeeDoubleExponentWordOffset,
+      MaybeHandle<Name>(),
+      OptionalMapRef(),
+      TypeCache::Get()->kInt32,
+      MachineType::Int32(),
+      kNoWriteBarrier,
+      "HeapInt32ValueUpperValue"};
+  return access;
+}
+
+// static
 FieldAccess AccessBuilder::ForHeapNumberOrOddballOrHoleValue() {
   STATIC_ASSERT_FIELD_OFFSETS_EQUAL(offsetof(HeapNumber, value_),
                                     offsetof(Oddball, to_number_raw_));
@@ -1270,8 +1298,9 @@ ElementAccess AccessBuilder::ForTypedArrayElement(ExternalArrayType type,
       return access;
     }
     case kExternalFloat16Array: {
-      // TODO(v8:14012): support machine logic
-      UNIMPLEMENTED();
+      ElementAccess access = {taggedness, header_size, Type::Number(),
+                              MachineType::Uint16(), kNoWriteBarrier};
+      return access;
     }
     case kExternalFloat32Array: {
       ElementAccess access = {taggedness, header_size, Type::Number(),

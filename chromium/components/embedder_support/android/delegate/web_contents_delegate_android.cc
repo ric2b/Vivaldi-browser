@@ -156,6 +156,9 @@ void WebContentsDelegateAndroid::LoadingStateChanged(
     bool should_show_loading_ui) {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = GetJavaDelegate(env);
+  if (obj.is_null()) {
+    return;
+  }
   Java_WebContentsDelegateAndroid_loadingStateChanged(env, obj,
                                                       should_show_loading_ui);
 }
@@ -267,10 +270,10 @@ bool WebContentsDelegateAndroid::DidAddMessageToConsole(
       jlevel = WEB_CONTENTS_DELEGATE_LOG_LEVEL_ERROR;
       break;
     default:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
   return Java_WebContentsDelegateAndroid_addMessageToConsole(
-      env, GetJavaDelegate(env), jlevel, jmessage, line_no, jsource_id);
+      env, obj, jlevel, jmessage, line_no, jsource_id);
 }
 
 // This is either called from TabContents::DidNavigateMainFramePostCommit() with
@@ -374,7 +377,6 @@ bool WebContentsDelegateAndroid::IsFullscreenForTabOrPending(
 
 void WebContentsDelegateAndroid::OnDidBlockNavigation(
     content::WebContents* web_contents,
-    const GURL& initiator_url,
     const GURL& blocked_url,
     blink::mojom::NavigationBlockedReason reason) {}
 
@@ -486,17 +488,47 @@ bool WebContentsDelegateAndroid::MaybeCopyContentAreaAsBitmap(
 }
 
 SkBitmap WebContentsDelegateAndroid::MaybeCopyContentAreaAsBitmapSync() {
+  TRACE_EVENT("content",
+              "WebContentsDelegateAndroid::MaybeCopyContentAreaAsBitmapSync");
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = GetJavaDelegate(env);
   if (obj.is_null()) {
     return SkBitmap();
   }
+  base::TimeTicks start_time = base::TimeTicks::Now();
   ScopedJavaLocalRef<jobject> bitmap =
       Java_WebContentsDelegateAndroid_maybeCopyContentAreaAsBitmapSync(env,
                                                                        obj);
   if (bitmap.is_null()) {
     return SkBitmap();
   }
+  gfx::JavaBitmap java_bitmap_lock(bitmap);
+  SkBitmap skbitmap = gfx::CreateSkBitmapFromJavaBitmap(java_bitmap_lock);
+  skbitmap.setImmutable();
+  base::UmaHistogramTimes("Android.MaybeCopyContentAreaAsBitmapSync.Time",
+                          base::TimeTicks::Now() - start_time);
+  return skbitmap;
+}
+
+SkBitmap WebContentsDelegateAndroid::
+    GetBackForwardTransitionFallbackUXInternalPageIcon() {
+  TRACE_EVENT("content",
+              "WebContentsDelegateAndroid::"
+              "GetBackForwardTransitionFallbackUXInternalPageIcon");
+  JNIEnv* env = AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> obj = GetJavaDelegate(env);
+  if (obj.is_null()) {
+    return SkBitmap();
+  }
+  // Call Java's #getBackForwardTransitionFallbackUXInternalPageIcon via JNI.
+  ScopedJavaLocalRef<jobject> bitmap =
+      Java_WebContentsDelegateAndroid_getBackForwardTransitionFallbackUXInternalPageIcon(
+          env, obj);
+  if (bitmap.is_null()) {
+    return SkBitmap();
+  }
+
+  // Covert bitmap to SkBitmap.
   gfx::JavaBitmap java_bitmap_lock(bitmap);
   SkBitmap skbitmap = gfx::CreateSkBitmapFromJavaBitmap(java_bitmap_lock);
   skbitmap.setImmutable();
@@ -516,13 +548,17 @@ void WebContentsDelegateAndroid::DidBackForwardTransitionAnimationChange() {
 content::BackForwardTransitionAnimationManager::FallbackUXConfig
 WebContentsDelegateAndroid::GetBackForwardTransitionFallbackUXConfig() {
   JNIEnv* env = AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> obj = GetJavaDelegate(env);
+  if (obj.is_null()) {
+    return {};
+  }
   // Java colors are already in 32bit ARBG, same as `SkColor`.
   jint favicon_background =
       Java_WebContentsDelegateAndroid_getBackForwardTransitionFallbackUXFaviconBackgroundColor(
-          env, GetJavaDelegate(env));
+          env, obj);
   jint page_background =
       Java_WebContentsDelegateAndroid_getBackForwardTransitionFallbackUXPageBackgroundColor(
-          env, GetJavaDelegate(env));
+          env, obj);
   return {
       .rounded_rectangle_color =
           SkColor4f::FromColor(static_cast<SkColor>(favicon_background)),
@@ -533,8 +569,11 @@ WebContentsDelegateAndroid::GetBackForwardTransitionFallbackUXConfig() {
 
 void WebContentsDelegateAndroid::ContentsZoomChange(bool zoom_in) {
   JNIEnv* env = AttachCurrentThread();
-  Java_WebContentsDelegateAndroid_contentsZoomChange(env, GetJavaDelegate(env),
-                                                     zoom_in);
+  ScopedJavaLocalRef<jobject> obj = GetJavaDelegate(env);
+  if (obj.is_null()) {
+    return;
+  }
+  Java_WebContentsDelegateAndroid_contentsZoomChange(env, obj, zoom_in);
 }
 
 void JNI_WebContentsDelegateAndroid_MaybeCopyContentAreaAsBitmapOutcome(

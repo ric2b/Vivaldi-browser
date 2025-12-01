@@ -64,8 +64,8 @@ is not so prefixed.
 ### Modifying this document
 
 If you're a ChromiumOS developer, **YOU SHOULD UPDATE THIS DOCUMENT** and fix
-things as appropriate. See [README.md] for how to update this document. Bias
-towards action:
+things as appropriate. See [CONTRIBUTING.md] for how to update this document.
+Bias towards action:
 
 *   If you see a TODO and you know the right answer, fix it!
 *   If you see something wrong, fix it.
@@ -119,6 +119,15 @@ do not expect us to figure out your distro.
     of Ubuntu) and Debian testing (Trixie).
     Things might work if you're running a different Linux distribution, but you
     will probably find life easier if you're on one of these.
+
+    Ubuntu 24.04 has [disabled user namespaces](https://ubuntu.com/blog/ubuntu-23-10-restricted-unprivileged-user-namespaces) by default. Run the
+    following to re-enable them, otherwise you might encounter some strange
+    failures, such as `Permission denied: '/proc/self/setgroups'`:
+
+    ```
+    sudo sysctl -w kernel.apparmor_restrict_unprivileged_unconfined=0
+    sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+    ```
 
 *   an x86_64 64-bit system for performing the build
 
@@ -364,6 +373,19 @@ $ repo init -u https://chrome-internal.googlesource.com/chromeos/manifest-intern
 $ repo sync -j4
 ```
 
+Gerrit Review-Enforcement has been enabled on the Chromium/Chrome gerrit hosts.
+In order to only require one CR+2 from another Googler you need to use the
+`sso://` URLs when uploading a CL. Add the following to  your `.git/config`:
+```
+[url "sso://chromium"]
+	insteadof = https://chromium.googlesource.com
+	insteadof = https://chromium-review.googlesource.com
+[url "sso://chrome-internal"]
+	insteadof = https://chrome-internal.googlesource.com
+	insteadof = https://chrome-internal-review.googlesource.com
+
+```
+
 *** note
 **Note:** `-j4` tells `repo` to concurrently sync up to 4 repositories at once.
 You can adjust the number based on how fast your internet connection is. For
@@ -410,7 +432,8 @@ building off of.
 
 *** note
 **Note:** You can also sync to a specific version, for example, `R117-15550`.
-Please refer to [Switch repo to the snapshot](/recreating_a_snapshot_or_buildspec.md#switch-repo-to-the-buildspec).
+Please refer to [Switch repo to the
+snapshot](/chromium-os/developer-library/guides/debugging/recreating-a-snapshot-or-buildspec#switch-repo-to-the-buildspec).
 ***
 
 #### Enable `cros cron` for faster syncing and builds
@@ -476,7 +499,7 @@ cache such as RBE for faster builds. If your organization (Google, and maybe
 eventually others) has enabled remote caching in RBE for your Bazel-based
 builds, you'll need to install the `gcloud` CLI
 (https://cloud.google.com/sdk/docs/install, or
-[go/installgcloud](https://goto.google.com/installgcloud) for Googlers) and run:
+[go/installgcloud](http://go/installgcloud) for Googlers) and run:
 
 ```bash
 (outside)
@@ -774,7 +797,7 @@ HARD DISK CLEAN**.
 
 Many times it is easier to simply run ChromiumOS in a virtual machine like QEMU.
 You can use the
-[cros_vm](https://www.chromium.org/chromium-os/developer-library/guides/containers/cros-vm)
+[cros_vm](/chromium-os/developer-library/guides/containers/cros-vm)
 command to start a VM with the previously built image.
 
 When you start the VM, `cros_vm` will print out information about how to connect
@@ -1157,12 +1180,12 @@ not a `cros workon`-able package), you need to do the following:
 
 First, find the package ebuild file under `third_party/chromiumos-overlay`.
 
-Then, [create a patch file](portage/how_to_patch_an_ebuild.md) from the exact
-version of the package that is used by the current ebuild. If other patches
-are already in the ebuild, you'll want to add your patch LAST, and build the
-patch off of the source that has already had the existing patches applied
-(either do it by hand, or set `FEATURES=noclean` and build your patch off of
-the temp source). Note that patch order is significant, since the ebuild
+Then, [create a patch file](/chromium-os/developer-library/guides/portage/how-to-patch-an-ebuild)
+from the exact version of the package that is used by the current ebuild. If
+other patches are already in the ebuild, you'll want to add your patch LAST,
+and build the patch off of the source that has already had the existing patches
+applied (either do it by hand, or set `FEATURES=noclean` and build your patch
+off of the temp source). Note that patch order is significant, since the ebuild
 expects each patch line number to be accurate after the previous patch is
 applied.
 
@@ -1682,7 +1705,7 @@ Please choose an option [0-1]: 1
 #### Tips For Googlers
 Googlers may find the SSH setup instructions [here](#for-googlers) helpful,
 especially for connecting to DUTs which require corp-ssh.
-[corp-ssh-helper-helper](https://goto.google.com/corp-ssh-helper-helper) creates
+[corp-ssh-helper-helper](http://go/corp-ssh-helper-helper) creates
 the most seamless experience with `cros debug`.
 
 
@@ -1914,10 +1937,10 @@ If you are a Google engineer using a corp workstation, you may be required some
 extra settings, depending on where your DUT is.
 
 -   DUT at office: Use
-    [corp-ssh-helper-helper](https://goto.google.com/corp-ssh-helper-helper).
--   DUT at your home: See [go/arc-wfh](https://goto.google.com/arc-wfh).
+    [corp-ssh-helper-helper](http://go/corp-ssh-helper-helper).
+-   DUT at your home: See [go/arc-wfh](http://go/arc-wfh).
 -   DUT at lab: See
-    [go/chromeos-lab-duts-ssh](https://goto.google.com/chromeos-lab-duts-ssh).
+    [go/chromeos-lab-duts-ssh](http://go/chromeos-lab-duts-ssh).
 
 ### Tast
 
@@ -2193,9 +2216,10 @@ ordered by relevance):
 *   The [Go in ChromiumOS] page provides information on using [Go] in
     ChromiumOS, including recommendations for project organization, importing
     and managing third party packages, and writing ebuilds.
-*   The [SELinux](security/selinux.md) page provides information on SELinux in Chrome
-    OS, including overview, writing policies, and troubleshooting.
-*   The [Running a single binary with UBSAN](testing/single-binary-ubsan.md)
+*   The [SELinux](/chromium-os/developer-library/reference/security/selinux)
+    page provides information on SELinux in ChromeOS, including overview,
+    writing policies, and troubleshooting.
+*   The [Running a single binary with UBSAN](/chromium-os/developer-library/guides/testing/single-binary-ubsan)
     page gives tips for using UBSAN (undefined behavior sanitizer) to find bugs
     in a binary. Instructions can also be used for ASAN (address sanitizer) and
     TSAN (thread sanitizer).
@@ -2229,7 +2253,7 @@ Below are a few links to external sites that you might also find helpful
 *   The  [repo-discuss group]  is a good place to talk about repo.
 
 
-[README.md]: README.md
+[CONTRIBUTING.md]: https://chromium.googlesource.com/website/+/HEAD/docs/CONTRIBUTING.md
 [Prerequisites]: #prerequisites
 [Getting the source code]: #get-the-source
 [sync to stable]: #sync-to-stable
@@ -2248,11 +2272,10 @@ Below are a few links to external sites that you might also find helpful
 [install depot_tools]: https://commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools_tutorial.html#_setting_up
 [Sync to Green]: #Sync-to-Green
 [Making sudo a little more permissive]: /chromium-os/developer-library/guides/recipes/tips-and-tricks/#how-to-make-sudo-a-little-more-permissive
-[Gerrit guide]: https://www.chromium.org/chromium-os/developer-guide/gerrit-guide
+[Gerrit guide]: /chromium-os/developer-guide/gerrit-guide
 [repo]: https://code.google.com/p/git-repo/
 [git]: https://git-scm.com/
-[goto/chromeos-building]: http://goto/chromeos-building
-[API Keys]: https://www.chromium.org/developers/how-tos/api-keys
+[API Keys]: /developers/how-tos/api-keys
 [working on a branch page]: /chromium-os/developer-library/guides/development/work-on-branch/
 [chroot]: https://en.wikipedia.org/wiki/Chroot
 [gsutil]: /chromium-os/developer-library/reference/tools/gsutil/
@@ -2264,17 +2287,17 @@ Below are a few links to external sites that you might also find helpful
 [What does cros build-packages actually do?]: /chromium-os/developer-library/guides/portage/ebuild-faq/#what-does-build-packages-do
 [CrOS Flash page]: /chromium-os/developer-library/reference/tools/cros-flash/
 [Debug Button Shortcuts]: /chromium-os/developer-library/guides/debugging/debug-buttons
-[ChromeOS Devices]: https://dev.chromium.org/chromium-os/developer-information-for-chrome-os-devices
-[Developer Hardware]: https://dev.chromium.org/chromium-os/getting-dev-hardware/dev-hardware-list
+[ChromeOS Devices]: /chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices
+[Developer Hardware]: /chromium-os/getting-dev-hardware/dev-hardware-list
 [crosh]: https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/crosh/
 [cros_vm]: /chromium-os/developer-library/guides/containers/cros-vm/#launch-a-locally-built-vm-from-within-the-chroot
 [cros deploy]: /chromium-os/developer-library/reference/tools/cros-deploy/
 [Create a branch for your changes]: #Create-a-branch-for-your-changes
 [chromeos-uprev-tester]: /chromium-os/developer-library/guides/development/simple-chrome-workflow/#testing-a-chromium-cl-remotely-on-cros-cq
-[Remote Debugging in ChromiumOS]: https://www.chromium.org/chromium-os/how-tos-and-troubleshooting/remote-debugging
+[Remote Debugging in ChromiumOS]: /chromium-os/how-tos-and-troubleshooting/remote-debugging
 [cgdb]: https://cgdb.github.io/
 [crbug.com/new]: https://crbug.com/new
-[Simple Chrome Workflow]: https://www.chromium.org/chromium-os/developer-library/guides/development/simple-chrome-workflow
+[Simple Chrome Workflow]: /chromium-os/developer-library/guides/development/simple-chrome-workflow
 [Tast]: https://chromium.googlesource.com/chromiumos/platform/tast/
 [Autotest]: https://autotest.github.io/
 [Tast Quickstart]: https://chromium.googlesource.com/chromiumos/platform/tast/+/HEAD/docs/quickstart.md
@@ -2285,21 +2308,21 @@ Below are a few links to external sites that you might also find helpful
 [ChromeOS lab]: http://sites/chromeos/for-team-members/lab/lab-faq
 [Autotest User Documentation]: https://chromium.googlesource.com/chromiumos/third_party/autotest/+/HEAD/docs/user-doc.md
 [Creating a new Autotest test]: https://chromium.googlesource.com/chromiumos/third_party/autotest/+/HEAD/docs/user-doc.md#Writing-and-developing-tests
-[Running Autotest Smoke Suite On a VM Image]: https://dev.chromium.org/chromium-os/testing/running-smoke-suite-on-a-vm-image
+[Running Autotest Smoke Suite On a VM Image]: /chromium-os/developer-library/guides/testing/testing/running-smoke-suite-on-a-vm-image
 [Seeing which Autotest tests are implemented by an ebuild]: https://chromium.googlesource.com/chromiumos/third_party/autotest/+/HEAD/docs/user-doc.md#Q4_I-have-an-ebuild_what-tests-does-it-build
 [Creating an image that has been modified for test]: https://chromium.googlesource.com/chromiumos/third_party/autotest/+/HEAD/docs/user-doc.md#W4_Create-and-run-a-test_enabled-image-on-your-device
 [devserver]: https://chromium.googlesource.com/chromiumos/chromite/+/HEAD/docs/devserver.md
 [directory structure]: /chromium-os/developer-library/reference/development/source-layout/
-[The ChromiumOS developer FAQ]: https://dev.chromium.org/chromium-os/how-tos-and-troubleshooting/developer-faq
+[The ChromiumOS developer FAQ]: /chromium-os/developer-library/reference/development/developer-faq
 [ChromiumOS Portage Build FAQ]: /chromium-os/developer-library/guides/portage/ebuild-faq/
 [rootfs-thread]: https://groups.google.com/a/chromium.org/group/chromium-os-dev/browse_thread/thread/967e783e27dd3a9d/0fa20a1547de2c77?lnk=gst
-[Running Smoke Suite on a VM Image]: https://dev.chromium.org/chromium-os/testing/running-smoke-suite-on-a-vm-image
-[Debugging Tips]: https://dev.chromium.org/chromium-os/how-tos-and-troubleshooting/debugging-tips
+[Running Smoke Suite on a VM Image]: /chromium-os/developer-library/guides/testing/testing/running-smoke-suite-on-a-vm-image
+[Debugging Tips]: /chromium-os/developer-library/guides/debugging/debugging-tips
 [Working on a Branch]: /chromium-os/developer-library/guides/development/work-on-branch/
-[Git server-side information]: https://dev.chromium.org/chromium-os/how-tos-and-troubleshooting/git-server-side-information
+[Git server-side information]: /chromium-os/developer-library/reference/development/source-layout#git-server-layout
 [Portage Package Upgrade Process]: /chromium-os/developer-library/guides/portage/package-upgrade-process/
 [ChromiumOS Sandboxing]: /chromium-os/developer-library/guides/development/sandboxing/
-[Go in ChromiumOS]: https://dev.chromium.org/chromium-os/developer-guide/go-in-chromium-os
+[Go in ChromiumOS]: /chromium-os/developer-guide/go-in-chromium-os
 [Go]: https://golang.org
 [ChromiumOS dev group]: https://groups.google.com/a/chromium.org/group/chromium-os-dev
 [Chromium bug tracker]: https://crbug.com/

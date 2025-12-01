@@ -170,10 +170,10 @@ fn find_conversion_function(
             // What Android considers to be NV21 is actually NV12 in libyuv.
             Some(ConversionFunction::NVToARGBMatrix(NV12ToARGBMatrix))
         }
-        (_, 10, Format::Rgba1010102, PixelFormat::AndroidP010) => Some(
+        (_, 16, Format::Rgba1010102, PixelFormat::AndroidP010) => Some(
             ConversionFunction::P010ToRGBMatrix(P010ToAR30Matrix, AR30ToAB30),
         ),
-        (_, 10, Format::Rgba, PixelFormat::AndroidP010) => Some(
+        (_, 16, Format::Rgba, PixelFormat::AndroidP010) => Some(
             ConversionFunction::P010ToRGBMatrix(P010ToARGBMatrix, ARGBToABGR),
         ),
         (true, 10, Format::Rgba | Format::Bgra, PixelFormat::Yuv422)
@@ -361,10 +361,8 @@ fn find_conversion_function(
     }
 }
 
-pub fn yuv_to_rgb(image: &image::Image, rgb: &mut rgb::Image) -> AvifResult<bool> {
-    if (rgb.depth != 8 && rgb.depth != 10)
-        || (image.depth != 8 && image.depth != 10 && image.depth != 12)
-    {
+pub(crate) fn yuv_to_rgb(image: &image::Image, rgb: &mut rgb::Image) -> AvifResult<bool> {
+    if (rgb.depth != 8 && rgb.depth != 10) || !image.depth_valid() {
         return Err(AvifError::NotImplemented);
     }
     if rgb.depth == 10
@@ -391,7 +389,7 @@ pub fn yuv_to_rgb(image: &image::Image, rgb: &mut rgb::Image) -> AvifResult<bool
         .iter()
         .map(|x| {
             if image.has_plane(*x) {
-                image.planes[x.to_usize()].unwrap_ref().ptr()
+                image.planes[x.as_usize()].unwrap_ref().ptr()
             } else {
                 std::ptr::null()
             }
@@ -403,7 +401,7 @@ pub fn yuv_to_rgb(image: &image::Image, rgb: &mut rgb::Image) -> AvifResult<bool
         .iter()
         .map(|x| {
             if image.has_plane(*x) {
-                image.planes[x.to_usize()].unwrap_ref().ptr16()
+                image.planes[x.as_usize()].unwrap_ref().ptr16()
             } else {
                 std::ptr::null()
             }
@@ -537,7 +535,7 @@ pub fn yuv_to_rgb(image: &image::Image, rgb: &mut rgb::Image) -> AvifResult<bool
                 .iter()
                 .map(|x| {
                     if image8.has_plane(*x) {
-                        image8.planes[x.to_usize()].unwrap_ref().ptr()
+                        image8.planes[x.as_usize()].unwrap_ref().ptr()
                     } else {
                         std::ptr::null()
                     }
@@ -675,9 +673,9 @@ fn downshift_to_8bit(
         if pd.width == 0 {
             continue;
         }
-        let source_ptr = image.planes[plane.to_usize()].unwrap_ref().ptr16();
+        let source_ptr = image.planes[plane.as_usize()].unwrap_ref().ptr16();
         let pd8 = image8.plane_data(plane).unwrap();
-        let dst_ptr = image8.planes[plane.to_usize()].unwrap_mut().ptr_mut();
+        let dst_ptr = image8.planes[plane.as_usize()].unwrap_mut().ptr_mut();
         unsafe {
             Convert16To8Plane(
                 source_ptr,
@@ -693,7 +691,7 @@ fn downshift_to_8bit(
     Ok(())
 }
 
-pub fn process_alpha(rgb: &mut rgb::Image, multiply: bool) -> AvifResult<()> {
+pub(crate) fn process_alpha(rgb: &mut rgb::Image, multiply: bool) -> AvifResult<()> {
     if rgb.depth != 8 {
         return Err(AvifError::NotImplemented);
     }
@@ -729,7 +727,7 @@ pub fn process_alpha(rgb: &mut rgb::Image, multiply: bool) -> AvifResult<()> {
     }
 }
 
-pub fn convert_to_half_float(rgb: &mut rgb::Image, scale: f32) -> AvifResult<()> {
+pub(crate) fn convert_to_half_float(rgb: &mut rgb::Image, scale: f32) -> AvifResult<()> {
     let res = unsafe {
         HalfFloatPlane(
             rgb.pixels() as *const u16,

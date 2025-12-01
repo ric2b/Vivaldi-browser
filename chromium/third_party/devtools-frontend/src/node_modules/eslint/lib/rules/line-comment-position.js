@@ -1,6 +1,7 @@
 /**
  * @fileoverview Rule to enforce the position of line comments
  * @author Alberto Rodríguez
+ * @deprecated in ESLint v9.3.0
  */
 "use strict";
 
@@ -13,12 +14,14 @@ const astUtils = require("./utils/ast-utils");
 /** @type {import('../shared/types').Rule} */
 module.exports = {
     meta: {
+        deprecated: true,
+        replacedBy: [],
         type: "layout",
 
         docs: {
             description: "Enforce position of line comments",
             recommended: false,
-            url: "https://eslint.org/docs/rules/line-comment-position"
+            url: "https://eslint.org/docs/latest/rules/line-comment-position"
         },
 
         schema: [
@@ -68,7 +71,7 @@ module.exports = {
             above = !options.position || options.position === "above";
             ignorePattern = options.ignorePattern;
 
-            if (Object.prototype.hasOwnProperty.call(options, "applyDefaultIgnorePatterns")) {
+            if (Object.hasOwn(options, "applyDefaultIgnorePatterns")) {
                 applyDefaultIgnorePatterns = options.applyDefaultIgnorePatterns;
             } else {
                 applyDefaultIgnorePatterns = options.applyDefaultPatterns !== false;
@@ -78,7 +81,7 @@ module.exports = {
         const defaultIgnoreRegExp = astUtils.COMMENTS_IGNORE_PATTERN;
         const fallThroughRegExp = /^\s*falls?\s?through/u;
         const customIgnoreRegExp = new RegExp(ignorePattern, "u");
-        const sourceCode = context.getSourceCode();
+        const sourceCode = context.sourceCode;
 
         //--------------------------------------------------------------------------
         // Public

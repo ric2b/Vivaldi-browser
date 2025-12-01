@@ -25,7 +25,6 @@ import org.robolectric.shadows.ShadowSystemClock;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Features.DisableFeatures;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.cc.input.BrowserControlsState;
 import org.chromium.components.security_state.SecurityStateModel;
 import org.chromium.components.security_state.SecurityStateModelJni;
@@ -45,7 +44,6 @@ import java.util.concurrent.TimeUnit;
 @LooperMode(Mode.PAUSED)
 public class TabStateBrowserControlsVisibilityDelegateTest {
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
-    @Rule public JniMocker mJniMocker = new JniMocker();
 
     @Mock private TabImpl mTabImpl;
     @Mock private WebContents mWebContents;
@@ -58,7 +56,7 @@ public class TabStateBrowserControlsVisibilityDelegateTest {
 
     @Before
     public void setup() {
-        mJniMocker.mock(SecurityStateModelJni.TEST_HOOKS, mSecurityStateModelNatives);
+        SecurityStateModelJni.setInstanceForTesting(mSecurityStateModelNatives);
     }
 
     @Test

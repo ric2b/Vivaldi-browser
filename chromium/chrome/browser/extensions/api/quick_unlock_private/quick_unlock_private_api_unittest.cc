@@ -101,7 +101,7 @@ class FakeSmartLockService : public ash::SmartLockService {
   FakeSmartLockService(const FakeSmartLockService&) = delete;
   FakeSmartLockService& operator=(const FakeSmartLockService&) = delete;
 
-  ~FakeSmartLockService() override {}
+  ~FakeSmartLockService() override = default;
 };
 
 std::unique_ptr<KeyedService> CreateSmartLockServiceForTest(
@@ -211,7 +211,9 @@ class QuickUnlockPrivateUnitTest
     RunSetModes(QuickUnlockModeList{}, CredentialList{});
   }
 
-  std::string GetDefaultProfileName() override { return kTestUserEmail; }
+  std::optional<std::string> GetDefaultProfileName() override {
+    return kTestUserEmail;
+  }
 
   TestingProfile* CreateProfile(const std::string& profile_name) override {
     auto pref_service =
@@ -222,7 +224,6 @@ class QuickUnlockPrivateUnitTest
     TestingProfile* profile = profile_manager()->CreateTestingProfile(
         profile_name, std::move(pref_service), u"Test profile",
         1 /* avatar_id */, GetTestingFactories());
-    OnUserProfileCreated(profile_name, profile);
 
     // Setup a primary user.
     ash::ProfileHelper::Get()->SetUserToProfileMappingForTesting(

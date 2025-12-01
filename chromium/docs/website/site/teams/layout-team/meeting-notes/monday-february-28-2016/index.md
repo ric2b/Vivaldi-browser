@@ -21,26 +21,26 @@ animation. (skobes)
 CSS Flexbox (cbiesinger)
 - No updates since last week -
 CSS Grid Layout (svillar, jfernandez, rego, javif)
-\[[crbug.com/79180](http://crbug.com/79180)\]
+\[[crbug.com/79180](https://crbug.com/79180)\]
 - No updates since last week -
-CSS Multi-column (mstensho) \[[crbug.com/334335](http://crbug.com/334335)\]
+CSS Multi-column (mstensho) \[[crbug.com/334335](https://crbug.com/334335)\]
 - No updates since last week -
 CSS Houdini
 - Wrote up a giant patch for CSS paint. Plan to split it up into to, fix
 bugs and add tests this week before landing. (ikilpatrick)
 Add API for layout (leviw, pilgrim, dgrogan)
-\[[crbug.com/495288](http://crbug.com/495288)\]
+\[[crbug.com/495288](https://crbug.com/495288)\]
 - Converting layout view to api. (pilgrim)
 - Added an include guard for the line layout api and fixed the few small
 API gaps it exposed. (dgrogan)
-LayoutNG \[[crbug.com/591099](http://crbug.com/591099)\]
+LayoutNG \[[crbug.com/591099](https://crbug.com/591099)\]
 - Finishing up document reporing the outcome from the LayoutNG
 hackathon. (leviw, eae)
-CSS Containment (leviw) \[[crbug.com/312978](http://crbug.com/312978)\]
+CSS Containment (leviw) \[[crbug.com/312978](https://crbug.com/312978)\]
 - Some CSS Containment discussions. Current options are layout, paint,
 style, and strict. Adding one more, bike-shedding on name.
 Intersection Observer (szager, mpb)
-\[[crbug.com/540528](http://crbug.com/540528)\]
+\[[crbug.com/540528](https://crbug.com/540528)\]
 - szager on vacation this week, eae will try to land a couple of
 outstanding changes in his absence. (eae)
 Text (eae, drott, kojii)

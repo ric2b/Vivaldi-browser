@@ -11,6 +11,7 @@ source_set("test_support") {
     "scoped_log_grabber.h",
     "scoped_medium_integrity.h",
     "scoped_mock_context.h",
+    "service_environment.h",
   ]
   public_deps = [ "//base" ]
   sources = [
@@ -18,8 +19,10 @@ source_set("test_support") {
     "scoped_log_grabber.cc",
     "scoped_medium_integrity.cc",
     "scoped_mock_context.cc",
+    "service_environment.cc",
   ]
   deps = [
+    "//chrome/common:non_code_constants",
     "//chrome/install_static:install_static_util",
     "//chrome/installer/util:work_item",
     "//chrome/windows_services/service_program:constants",

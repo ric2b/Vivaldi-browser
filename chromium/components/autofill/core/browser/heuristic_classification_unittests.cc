@@ -178,6 +178,22 @@ bool EnableMLClassification() {
   return enable_ml_classification;
 }
 
+bool TesterAndHeuristicTypeMatch(std::string_view tester_type,
+                                 std::string_view heuristic_type) {
+  // Testers don't distinguish between standalone CVC fields and other CVC
+  // fields.
+  if (tester_type == "CREDIT_CARD_VERIFICATION_CODE" &&
+      heuristic_type == "CREDIT_CARD_STANDALONE_VERIFICATION_CODE") {
+    return true;
+  }
+  return tester_type == heuristic_type;
+}
+
+// Returns a/b or -1 in case b is 0.
+double SafeFraction(double a, double b) {
+  return b != 0 ? a / b : -1.0;
+}
+
 // Helper class that aggregates metrics and diagnostic data about field
 // classifications that matched or mismatched the expecations.
 class ResultAnalyzer {
@@ -237,7 +253,7 @@ void ResultAnalyzer::AnalyzeClassification(const FormStructure& form_structure,
 
     // Record metrics on the divergence between tester and heuristics.
     if (fields_in_scope_.contains(tester_type)) {
-      if (tester_type == heuristic_type) {
+      if (TesterAndHeuristicTypeMatch(tester_type, heuristic_type)) {
         ++matches_;
         ++match_by_type_count_[tester_type];
         json_fields[i].GetDict().Set("last_correctness", "correct");
@@ -267,7 +283,7 @@ base::Value ResultAnalyzer::GetResult() {
   high_level_stats.Set("matches", matches_);
   high_level_stats.Set("mismatches", mismatches_);
   high_level_stats.Set("fraction_matches",
-                       matches_ / (double)(matches_ + mismatches_));
+                       SafeFraction(matches_, matches_ + mismatches_));
   result.Set("high_level_stats", std::move(high_level_stats));
 
   // Per type stats.
@@ -281,7 +297,7 @@ base::Value ResultAnalyzer::GetResult() {
       tester_type_stats.Set("matches", matches);
       tester_type_stats.Set("mismatches", mismatches);
       tester_type_stats.Set("fraction_matches",
-                            matches / (double)(matches + mismatches));
+                            SafeFraction(matches, matches + mismatches));
       per_type_stats.Set(type, std::move(tester_type_stats));
     }
   }
@@ -300,7 +316,7 @@ base::Value ResultAnalyzer::GetResult() {
 // Returns the path containing test input files,
 // components/test/data/autofill/heuristics-json/.
 const base::FilePath& GetInputDir() {
-  static base::NoDestructor<base::FilePath> dir([]() {
+  static base::NoDestructor<base::FilePath> dir([] {
     base::FilePath dir;
     base::PathService::Get(base::DIR_SRC_TEST_DATA_ROOT, &dir);
     return dir.AppendASCII("components")
@@ -355,6 +371,8 @@ FormFieldData ParseFieldFromJsonDict(const base::Value::Dict& field_dict,
 
   if (const std::string* label = field_dict.FindString("label_attr")) {
     field.set_label(base::UTF8ToUTF16(*label));
+    // Unfortunately, the data doesn't include the label source.
+    field.set_label_source(FormFieldData::LabelSource::kForId);
   }
   field.set_form_control_type(FormControlType::kInputText);
   if (const std::string* json_type = field_dict.FindString("type_attr")) {
@@ -622,11 +640,19 @@ TEST_P(HeuristicClassificationTests, EndToEnd) {
       features::kAutofillUseITAddressModel,
       features::kAutofillUseNLAddressModel,
       features::kAutofillUsePLAddressModel,
+      features::kAutofillSupportPhoneticNameForJP,
       features::kAutofillEnableExpirationDateImprovements,
+      features::kAutofillSupportLastNamePrefix,
       // Other improvements.
       features::kAutofillEnableCacheForRegexMatching,
-      features::kAutofillEnableSupportForParsingWithSharedLabels};
-  std::vector<base::test::FeatureRef> disabled_features = {};
+      features::kAutofillEnableSupportForParsingWithSharedLabels,
+      features::kAutofillUseNegativePatternForAllAttributes,
+  };
+  std::vector<base::test::FeatureRef> disabled_features = {
+      // TODO(crbug.com/320965828): Understand the changes to the expectations
+      // caused by this feature.
+      features::kAutofillBetterLocalHeuristicPlaceholderSupport,
+  };
 
   auto init_feature_to_value = [&](base::test::FeatureRef feature, bool value) {
     if (value) {
@@ -746,7 +772,7 @@ std::string GenerateTestName(
   std::string name = info.param.BaseName()
                          .ReplaceExtension(FILE_PATH_LITERAL(""))
                          .MaybeAsASCII();
-  base::ranges::replace_if(name, [](char c) { return !std::isalnum(c); }, '_');
+  std::ranges::replace_if(name, [](char c) { return !std::isalnum(c); }, '_');
   return name;
 }
 

@@ -95,6 +95,9 @@ constexpr char kSetParametersFunction[] = "SetParameters";
 constexpr char kSendPacketFunction[] = "SendPacket";
 constexpr char kUpdateConnectionStateFunction[] = "UpdateConnectionState";
 
+// WiFi interface priority function name.
+constexpr char kSetWiFiInterfacePriorityFunction[] = "SetWiFiInterfacePriority";
+
 // Manager property names.
 constexpr char kActiveProfileProperty[] = "ActiveProfile";
 constexpr char kAlwaysOnVpnPackageProperty[] = "AlwaysOnVpnPackage";
@@ -114,6 +117,10 @@ constexpr char kDOHIncludedDomainsProperty[] = "DOHIncludedDomains";
 constexpr char kEnabledTechnologiesProperty[] = "EnabledTechnologies";
 constexpr char kEnableDHCPQoSProperty[] = "EnableDHCPQoS";
 constexpr char kEnableRFC8925Property[] = "EnableRFC8925";
+constexpr char kEnableSingleCACertVerificationPhase1Property[] =
+    "EnableSingleCACertVerificationPhase1";
+constexpr char kEnableSingleCACertVerificationPhase2Property[] =
+    "EnableSingleCACertVerificationPhase2";
 constexpr char kExperimentalTetheringFunctionality[] =
     "ExperimentalTetheringFunctionality";
 constexpr char kLOHSConfigProperty[] = "LOHSConfig";
@@ -168,6 +175,8 @@ constexpr char kErrorProperty[] = "Error";
 constexpr char kGuidProperty[] = "GUID";
 constexpr char kIPConfigProperty[] = "IPConfig";
 constexpr char kIsConnectedProperty[] = "IsConnected";
+// The LinkMonitorDisable should only used for testing purposes.
+constexpr char kLinkMonitorDisableProperty[] = "LinkMonitorDisable";
 constexpr char kManagedCredentialsProperty[] = "ManagedCredentials";
 constexpr char kMeteredProperty[] = "Metered";
 constexpr char kNameProperty[] = "Name";  // Also used for Device and Profile.
@@ -1270,6 +1279,10 @@ constexpr char kDisconnectFromP2PGroupResultOperationFailed[] =
 
 // Manager DNSProxyDOHProviders wildcard IP address value.
 constexpr char kDNSProxyDOHProvidersMatchAnyIPAddress[] = "*";
+
+// Default cellular interface name which may appear in the kInterfaceProperty of
+// Device. This value means that the Cellular Device is not active.
+constexpr char kCellularDefaultInterfaceName[] = "cell_iface";
 
 // Represents the priority level of a Wi-Fi interface. When a new interface is
 // requested, existing interfaces of lower priority may be destroyed to make

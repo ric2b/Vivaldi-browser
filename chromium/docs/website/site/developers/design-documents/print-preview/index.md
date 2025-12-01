@@ -159,7 +159,7 @@ Points to consider are:
             but the PDF viewer plugin needs to know how to display them together
             as one PDF.
 *   Duplicate the Frame/DOM/Render tree for printing?
-            <http://crbug.com/21555>
+            <https://crbug.com/21555>
 
 ##### Persistent On Disk Data
 

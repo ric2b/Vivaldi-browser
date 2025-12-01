@@ -39,6 +39,7 @@
 #include "base/win/object_watcher.h"
 #include "base/win/scoped_handle.h"
 #include "base/win/windows_types.h"
+#include "content/browser/file_system_access/features.h"
 #include "content/browser/file_system_access/file_path_watcher/file_path_watcher_change_tracker.h"
 #include "content/browser/file_system_access/file_path_watcher/file_path_watcher_histogram.h"
 
@@ -591,17 +592,16 @@ void FilePathWatcherImpl::WatchedDirectoryDeleted(
     return;
   }
 
-  bool target_was_deleted = watched_path == target_;
+  auto self = weak_factory_.GetWeakPtr();
 
   if (!notification_batch.empty()) {
-    auto self = weak_factory_.GetWeakPtr();
-
     // `ProcessNotificationBatch` will decrement `upcoming_batch_count`.
     upcoming_batch_count_decrementer.Cancel();
 
     // `ProcessNotificationBatch` may delete `this`.
     ProcessNotificationBatch(std::move(watched_path),
                              std::move(notification_batch));
+
     if (!self) {
       return;
     }
@@ -613,12 +613,16 @@ void FilePathWatcherImpl::WatchedDirectoryDeleted(
     pending_delete_timer_.FireNow();
   }
 
-  if (target_was_deleted || change_tracker_->KnowTargetExists()) {
+  if (watched_path == target_ || change_tracker_->KnowTargetExists()) {
     // `this` may be deleted after `callback_` is run.
     callback_.Run(FilePathWatcher::ChangeInfo(
                       FilePathWatcher::FilePathType::kDirectory,
                       FilePathWatcher::ChangeType::kDeleted, target_),
                   target_, /*error=*/false);
+
+    if (!self) {
+      return;
+    }
   }
 
   change_tracker_->MayHaveMissedChanges();
@@ -789,5 +793,10 @@ void FilePathWatcherImpl::RunCallbackOnPendingDelete() {
 
 FilePathWatcher::FilePathWatcher()
     : FilePathWatcher(std::make_unique<FilePathWatcherImpl>()) {}
+
+// static
+size_t FilePathWatcher::GetQuotaLimitImpl() {
+  return features::kFileSystemObserverQuotaLimitWindows.Get();
+}
 
 }  // namespace content

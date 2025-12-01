@@ -6,6 +6,7 @@
 
 #include "base/at_exit.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/process/memory.h"
 #include "base/strings/utf_string_conversions.h"
@@ -14,6 +15,7 @@
 #include "base/win/scoped_com_initializer.h"
 #include "chrome/install_static/install_details.h"
 #include "chrome/install_static/product_install_details.h"
+#include "chrome/windows_services/service_program/crashpad_handler.h"
 #include "chrome/windows_services/service_program/logging_support.h"
 #include "chrome/windows_services/service_program/process_wrl_module.h"
 #include "chrome/windows_services/service_program/service.h"
@@ -37,6 +39,11 @@ int ServiceProgramMain(ServiceDelegate& delegate) {
           install_static::InstallDetails::Get().install_full_name()),
       delegate.GetLogEventCategory(), delegate.GetLogEventMessageId());
 
+  if (auto optional_result = RunAsCrashpadHandlerIfRequired(*cmd_line);
+      optional_result.has_value()) {
+    return *optional_result;
+  }
+
   // Make sure the process exits cleanly on unexpected errors.
   base::EnableTerminationOnHeapCorruption();
   base::EnableTerminationOnOutOfMemory();
@@ -54,6 +61,9 @@ int ServiceProgramMain(ServiceDelegate& delegate) {
 
   // Create the global WRL::Module instance.
   CreateWrlModule();
+
+  // Register an empty FeatureList so that queries on it do not fail.
+  base::FeatureList::SetInstance(std::make_unique<base::FeatureList>());
 
   // Run the COM service.
   Service service(delegate);

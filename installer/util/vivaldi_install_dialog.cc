@@ -346,6 +346,8 @@ void VivaldiInstallDialog::TranslateDialog() {
   btn_simple_mode_str_ = GetLocalizedString(IDS_INSTALL_MODE_SIMPLE_BASE);
   btn_advanced_mode_str_ = GetLocalizedString(IDS_INSTALL_MODE_ADVANCED_BASE);
 
+  select_folder_str_ = GetLocalizedString(IDS_INSTALL_SELECT_A_FOLDER_BASE).c_str();
+
   auto caption_string = GetLocalizedString(IDS_INSTALL_INSTALL_CAPTION_BASE);
 #if !defined(NDEBUG)
   caption_string += L" [" + vivaldi::GetInstallerLanguage() + L"]";
@@ -464,9 +466,8 @@ static int CALLBACK BrowseCallbackProc(HWND hwnd,
 void VivaldiInstallDialog::ShowBrowseFolderDialog() {
   BROWSEINFO bi;
   memset(&bi, 0, sizeof(bi));
-
   bi.hwndOwner = hdlg_;
-  bi.lpszTitle = GetLocalizedString(IDS_INSTALL_SELECT_A_FOLDER_BASE).c_str();
+  bi.lpszTitle = select_folder_str_.c_str();
   bi.ulFlags = BIF_USENEWUI | BIF_RETURNONLYFSDIRS;
   bi.lpfn = BrowseCallbackProc;
   bi.lParam = (LPARAM)options_.install_dir.value().c_str();

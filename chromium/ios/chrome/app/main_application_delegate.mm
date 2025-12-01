@@ -14,7 +14,6 @@
 #import "base/metrics/user_metrics.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/download/public/background_service/background_download_service.h"
-#import "components/search_engines/prepopulated_engines.h"
 #import "components/send_tab_to_self/features.h"
 #import "components/signin/public/identity_manager/identity_manager.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
@@ -47,24 +46,25 @@
 #import "ios/web/public/thread/web_task_traits.h"
 #import "ios/web/public/thread/web_thread.h"
 
+#if defined(VIVALDI_BUILD)
+#import "components/search_engines/prepopulated_engines.h"
+#else
+#import "third_party/search_engines_data/resources/definitions/prepopulated_engines.h"
+#endif // End Vivaldi
+
 namespace {
 // The time delay after firstSceneWillEnterForeground: before checking for main
 // intent signals.
 constexpr base::TimeDelta kMainIntentCheckDelay = base::Seconds(1);
 }  // namespace
 
-@interface MainApplicationDelegate () <AppStateObserver> {
+@interface MainApplicationDelegate () {
   MainController* _mainController;
   // Memory helper used to log the number of memory warnings received.
   MemoryWarningHelper* _memoryHelper;
   // Metrics mediator used to check and update the metrics accordingly to the
   // user preferences.
   MetricsMediator* _metricsMediator;
-  // Container for startup information.
-  id<StartupInformation> _startupInformation;
-  // The set of "scene sessions" that needs to be discarded. See
-  // -application:didDiscardSceneSessions: for details.
-  NSSet<UISceneSession*>* _sceneSessionsToDiscard;
 }
 
 // YES if application:didFinishLaunchingWithOptions: was called. Used to
@@ -85,9 +85,7 @@ constexpr base::TimeDelta kMainIntentCheckDelay = base::Seconds(1);
     _mainController = [[MainController alloc] init];
     _metricsMediator = [[MetricsMediator alloc] init];
     [_mainController setMetricsMediator:_metricsMediator];
-    _startupInformation = _mainController;
-    _appState =
-        [[AppState alloc] initWithStartupInformation:_startupInformation];
+    _appState = [[AppState alloc] initWithStartupInformation:_mainController];
     _pushNotificationDelegate =
         [[PushNotificationDelegate alloc] initWithAppState:_appState];
     [_mainController setAppState:_appState];
@@ -158,8 +156,9 @@ constexpr base::TimeDelta kMainIntentCheckDelay = base::Seconds(1);
   // If `self.didFinishLaunching` is NO, that indicates that the app was
   // terminated before startup could be run. In this situation, skip running
   // shutdown, since the app was never fully started.
-  if (!self.didFinishLaunching)
+  if (!self.didFinishLaunching) {
     return;
+  }
 
   if (_appState.initStage <= AppInitStage::kSafeMode) {
     return;
@@ -167,7 +166,7 @@ constexpr base::TimeDelta kMainIntentCheckDelay = base::Seconds(1);
 
   // Instead of adding code here, consider if it could be handled by listening
   // for  UIApplicationWillterminate.
-  [_appState applicationWillTerminate:application];
+  [_mainController applicationWillTerminate:application];
 }
 
 - (void)applicationDidReceiveMemoryWarning:(UIApplication*)application {
@@ -180,25 +179,8 @@ constexpr base::TimeDelta kMainIntentCheckDelay = base::Seconds(1);
 
 - (void)application:(UIApplication*)application
     didDiscardSceneSessions:(NSSet<UISceneSession*>*)sceneSessions {
-  // This method is invoked by iOS to inform the application that the sessions
-  // for "closed windows" are garbage collected and that any data associated
-  // with them by the application needs to be deleted.
-  //
-  // The documentation says that if the application is not running when the OS
-  // decides to discard the sessions, then it will call this method the next
-  // time the application starts up. As seen by crbug.com/1292641, this call
-  // happens before -[UIApplicationDelegate sceneWillConnect:] which means
-  // that it can happen before Chrome has properly initialized. In that case,
-  // record the list of sessions to discard and clean them once Chrome is
-  // initialized.
-  if (_appState.initStage <=
-      AppInitStage::kBrowserObjectsForBackgroundHandlers) {
-    _sceneSessionsToDiscard = [sceneSessions copy];
-    [_appState addObserver:self];
-    return;
-  }
-
-  [_appState application:application didDiscardSceneSessions:sceneSessions];
+  [_mainController application:application
+       didDiscardSceneSessions:sceneSessions];
 }
 
 - (UIInterfaceOrientationMask)application:(UIApplication*)application
@@ -331,36 +313,26 @@ constexpr base::TimeDelta kMainIntentCheckDelay = base::Seconds(1);
   // Under some iOS 15 betas, Chrome gets scene connection events for some
   // system scene connections. To handle this, early return if the connecting
   // scene doesn't have a valid delegate. (See crbug.com/1217461)
-  if (!sceneDelegate)
+  if (!sceneDelegate) {
     return;
+  }
 
   // TODO(crbug.com/40679152): This should be called later, or this flow should
   // be changed completely.
   if (self.foregroundSceneCount == 0) {
-    [_appState applicationWillEnterForeground:UIApplication.sharedApplication
-                              metricsMediator:_metricsMediator
-                                 memoryHelper:_memoryHelper];
+    [_mainController
+        applicationWillEnterForeground:UIApplication.sharedApplication
+                          memoryHelper:_memoryHelper];
   }
 }
 
 - (void)lastSceneWillEnterBackground:(NSNotification*)notification {
-  if (_appState.initStage <= AppInitStage::kSafeMode) {
-    return;
-  }
-
-  [_appState willResignActive];
+  [_mainController applicationWillResignActive:UIApplication.sharedApplication];
 }
 
 - (void)lastSceneDidEnterBackground:(NSNotification*)notification {
-  // Reset `startupHadExternalIntent` for all scenes in case external intents
-  // were triggered while the application was in the foreground.
-  for (SceneState* scene in self.appState.connectedScenes) {
-    if (scene.startupHadExternalIntent) {
-      scene.startupHadExternalIntent = NO;
-    }
-  }
-  [_appState applicationDidEnterBackground:UIApplication.sharedApplication
-                              memoryHelper:_memoryHelper];
+  [_mainController applicationDidEnterBackground:UIApplication.sharedApplication
+                                    memoryHelper:_memoryHelper];
 }
 
 - (void)firstSceneWillEnterForeground:(NSNotification*)notification {
@@ -374,36 +346,15 @@ constexpr base::TimeDelta kMainIntentCheckDelay = base::Seconds(1);
         [weakSelf firstSceneDidEnterForeground];
       });
 
-  // Register if it's a cold start or when bringing Chrome to foreground with
-  // Content Push Notifications available.
-  if (_startupInformation.isColdStart ||
-      [self provisionalNotificationTypesEnabled]) {
+  if (_mainController.isColdStart) {
     [PushNotificationUtil
         registerDeviceWithAPNSWithProvisionalNotificationsAvailable:
             [self provisionalNotificationTypesEnabled]];
   }
 
-  [_appState applicationWillEnterForeground:UIApplication.sharedApplication
-                            metricsMediator:_metricsMediator
-                               memoryHelper:_memoryHelper];
-}
-
-#pragma mark - AppStateObserver methods
-
-- (void)appState:(AppState*)appState
-    didTransitionFromInitStage:(AppInitStage)previousInitStage {
-  DCHECK_EQ(_appState, appState);
-
-  // The app transitioned to AppInitStage::kBrowserObjectsForBackgroundHandlers
-  // or past that stage.
-  if (_appState.initStage >=
-      AppInitStage::kBrowserObjectsForBackgroundHandlers) {
-    DCHECK(_sceneSessionsToDiscard);
-    [_appState removeObserver:self];
-    [_appState application:[UIApplication sharedApplication]
-        didDiscardSceneSessions:_sceneSessionsToDiscard];
-    _sceneSessionsToDiscard = nil;
-  }
+  [_mainController
+      applicationWillEnterForeground:UIApplication.sharedApplication
+                        memoryHelper:_memoryHelper];
 }
 
 #pragma mark - UIResponder methods

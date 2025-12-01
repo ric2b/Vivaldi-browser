@@ -23,21 +23,19 @@ import androidx.core.app.ActivityOptionsCompat;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.IntentUtils;
+import org.chromium.base.Log;
 import org.chromium.base.PackageManagerUtils;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.IntentHandler;
-import org.chromium.chrome.browser.back_press.BackPressManager;
 import org.chromium.chrome.browser.back_press.MinimizeAppAndCloseTabBackPressHandler;
 import org.chromium.chrome.browser.back_press.MinimizeAppAndCloseTabBackPressHandler.MinimizeAppAndCloseTabType;
 import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.crash.ChromePureJavaExceptionReporter;
-import org.chromium.chrome.browser.customtabs.BaseCustomTabActivity;
 import org.chromium.chrome.browser.customtabs.CloseButtonNavigator;
 import org.chromium.chrome.browser.customtabs.CustomTabObserver;
-import org.chromium.chrome.browser.dependency_injection.ActivityScope;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.externalnav.ExternalNavigationDelegateImpl;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -51,6 +49,7 @@ import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.PageTransition;
+import org.chromium.ui.widget.Toast;
 import org.chromium.url.GURL;
 import org.chromium.url.Origin;
 
@@ -60,15 +59,14 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.util.function.Predicate;
 
-import javax.inject.Inject;
-
 // Vivaldi
 import org.chromium.build.BuildConfig;
 
 /** Responsible for navigating to new pages and going back to previous pages. */
-@ActivityScope
 public class CustomTabActivityNavigationController
         implements StartStopWithNativeObserver, BackPressHandler {
+    private static final String TAG = "CTANavigationCtrl";
+
     @IntDef({
         FinishReason.USER_NAVIGATION,
         FinishReason.REPARENTING,
@@ -145,17 +143,18 @@ public class CustomTabActivityNavigationController
                 }
             };
 
-    @Inject
     public CustomTabActivityNavigationController(
             CustomTabActivityTabController tabController,
+            CustomTabActivityTabProvider tabProvider,
             BrowserServicesIntentDataProvider intentDataProvider,
+            CustomTabObserver customTabObserver,
             CloseButtonNavigator closeButtonNavigator,
-            BaseCustomTabActivity activity,
+            Activity activity,
             ActivityLifecycleDispatcher lifecycleDispatcher) {
         mTabController = tabController;
-        mTabProvider = activity.getCustomTabActivityTabProvider();
+        mTabProvider = tabProvider;
         mIntentDataProvider = intentDataProvider;
-        mCustomTabObserver = activity.getCustomTabObserver();
+        mCustomTabObserver = customTabObserver;
         mCloseButtonNavigator = closeButtonNavigator;
         mActivity = activity;
 
@@ -236,11 +235,6 @@ public class CustomTabActivityNavigationController
                         != 0;
         RecordUserAction.record("CustomTabs.SystemBack");
         if (mTabProvider.getTab() == null) return false;
-        if (BackPressManager.correctTabNavigationOnFallback()) {
-            if (mTabProvider.getTab().canGoBack()) {
-                return false;
-            }
-        }
 
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.CCT_BEFORE_UNLOAD)
                 && mTabController.onlyOneTabRemaining()) {
@@ -308,6 +302,9 @@ public class CustomTabActivityNavigationController
         }
         String url = gurl.getSpec();
         if (TextUtils.isEmpty(url)) url = mIntentDataProvider.getUrlToLoad();
+
+        assertUrlNotNullForOpenInBrowser(url, tab);
+
         Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         intent.putExtra(IntentHandler.EXTRA_FROM_OPEN_IN_BROWSER, true);
@@ -366,6 +363,11 @@ public class CustomTabActivityNavigationController
                 mActivity.startActivity(intent, startActivityOptions);
                 finish(FinishReason.OPEN_IN_BROWSER);
             } else {
+                Toast.makeText(
+                                mActivity,
+                                R.string.custom_tab_cant_perform_action_toast,
+                                Toast.LENGTH_LONG)
+                        .show();
                 // Silently crash to investigate https://crbug.com/384992232
                 boolean isPdf = tab.isNativePage() && tab.getNativePage().isPdf();
                 String logMessage =
@@ -435,5 +437,30 @@ public class CustomTabActivityNavigationController
         } else {
             mTabController.saveState();
         }
+    }
+
+    // Debug log dump for https://crbug.com/374871254.
+    private void assertUrlNotNullForOpenInBrowser(String url, @NonNull Tab tab) {
+        if (url != null) return;
+
+        String tabInfo =
+                "Tab: isInitialized "
+                        + tab.isInitialized()
+                        + " getWebContents() == null "
+                        + (tab.getWebContents() == null);
+
+        String intentDataProviderInfo =
+                " IntentDataProvider: activityType "
+                        + mIntentDataProvider.getActivityType()
+                        + " getCustomTabMode "
+                        + mIntentDataProvider.getCustomTabMode()
+                        // #getUrlToLoad "must be called only after native has
+                        // loaded".
+                        + " isFullBrowserInitialized "
+                        + ChromeBrowserInitializer.getInstance().isFullBrowserInitialized();
+
+        String assertMsg = "URL used to open browser is null. " + tabInfo + intentDataProviderInfo;
+        Log.e(TAG, assertMsg);
+        assert false : assertMsg;
     }
 }

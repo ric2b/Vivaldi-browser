@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/chromeos/ui_mode.gni")
+import("//components/enterprise/buildflags/buildflags.gni")
 import("//components/safe_browsing/buildflags.gni")
 import("//extensions/buildflags/buildflags.gni")
 
@@ -108,6 +109,10 @@ static_library("safe_browsing") {
       "chrome_client_side_detection_host_delegate.h",
       "chrome_client_side_detection_service_delegate.cc",
       "chrome_client_side_detection_service_delegate.h",
+      "chrome_enterprise_url_lookup_service.cc",
+      "chrome_enterprise_url_lookup_service.h",
+      "chrome_enterprise_url_lookup_service_factory.cc",
+      "chrome_enterprise_url_lookup_service_factory.h",
       "chrome_password_protection_service.cc",
       "chrome_password_protection_service.h",
       "chrome_password_protection_service_factory.cc",
@@ -144,12 +149,16 @@ static_library("safe_browsing") {
       "phishy_interaction_tracker.h",
       "safe_browsing_navigation_observer_manager_factory.cc",
       "safe_browsing_navigation_observer_manager_factory.h",
+      "safe_browsing_pref_change_handler.cc",
+      "safe_browsing_pref_change_handler.h",
       "safe_browsing_service.cc",
       "safe_browsing_service.h",
       "services_delegate.cc",
       "services_delegate.h",
       "tailored_security/chrome_tailored_security_service.cc",
       "tailored_security/chrome_tailored_security_service.h",
+      "tailored_security/message_retry_handler.cc",
+      "tailored_security/message_retry_handler.h",
       "tailored_security/tailored_security_service_factory.cc",
       "tailored_security/tailored_security_service_factory.h",
       "tailored_security/tailored_security_url_observer.cc",
@@ -172,6 +181,7 @@ static_library("safe_browsing") {
       "//build:branding_buildflags",
       "//build:chromeos_buildflags",
       "//chrome/browser:browser_process",
+      "//chrome/browser/content_extraction:content_extraction",
       "//chrome/browser/content_settings:content_settings_factory",
       "//chrome/browser/download",
       "//chrome/browser/profiles:profile",
@@ -180,6 +190,7 @@ static_library("safe_browsing") {
       "//components/autofill/core/browser",
       "//components/content_settings/core/browser",
       "//components/enterprise/common/proto:connectors_proto",
+      "//components/enterprise/connectors/core",
       "//components/no_state_prefetch/browser",
       "//components/omnibox/browser",
       "//components/password_manager/content/browser",
@@ -198,6 +209,7 @@ static_library("safe_browsing") {
       "//components/safe_browsing/content/browser/triggers:trigger_throttler",
       "//components/safe_browsing/content/common:file_type_policies",
       "//components/safe_browsing/core/browser",
+      "//components/safe_browsing/core/browser:referring_app_info",
       "//components/safe_browsing/core/browser:token_fetcher",
       "//components/safe_browsing/core/browser:verdict_cache_manager",
       "//components/safe_browsing/core/browser/db:allowlist_checker_client",
@@ -205,11 +217,13 @@ static_library("safe_browsing") {
       "//components/safe_browsing/core/browser/password_protection:password_reuse_detection_manager_client",
       "//components/safe_browsing/core/browser/realtime:policy_engine",
       "//components/safe_browsing/core/browser/realtime:url_lookup_service",
+      "//components/safe_browsing/core/browser/realtime:url_lookup_service_base",
       "//components/safe_browsing/core/browser/sync",
       "//components/safe_browsing/core/browser/tailored_security_service",
       "//components/safe_browsing/core/common",
       "//components/safe_browsing/core/common:safe_browsing_prefs",
       "//components/safe_browsing/core/common/proto:csd_proto",
+      "//components/safe_browsing/core/common/proto:realtimeapi_proto",
       "//components/signin/public/identity_manager",
       "//components/site_engagement/core/mojom:mojo_bindings",
       "//components/sync_user_events",
@@ -228,10 +242,6 @@ static_library("safe_browsing") {
       sources += [
         "../download/download_completion_blocker.cc",
         "../download/download_completion_blocker.h",
-        "chrome_enterprise_url_lookup_service.cc",
-        "chrome_enterprise_url_lookup_service.h",
-        "chrome_enterprise_url_lookup_service_factory.cc",
-        "chrome_enterprise_url_lookup_service_factory.h",
         "chrome_safe_browsing_hats_delegate.cc",
         "chrome_safe_browsing_hats_delegate.h",
         "cloud_content_scanning/binary_fcm_service.cc",
@@ -413,7 +423,6 @@ static_library("safe_browsing") {
         "//chrome/services/file_util/public/cpp",
         "//components/content_settings/core/browser",
         "//components/enterprise/common/proto:connectors_proto",
-        "//components/enterprise/connectors/core",
         "//components/file_access",
         "//components/gcm_driver",
         "//components/gcm_driver/instance_id",
@@ -428,11 +437,9 @@ static_library("safe_browsing") {
         "//components/safe_browsing/core/browser/db:v4_store",
         "//components/safe_browsing/core/browser/hashprefix_realtime:hash_realtime_service",
         "//components/safe_browsing/core/browser/realtime:policy_engine",
-        "//components/safe_browsing/core/browser/realtime:url_lookup_service_base",
         "//components/safe_browsing/core/common/hashprefix_realtime:hash_realtime_utils",
         "//components/safe_browsing/core/common/proto:client_model_proto",
         "//components/safe_browsing/core/common/proto:csd_proto",
-        "//components/safe_browsing/core/common/proto:realtimeapi_proto",
         "//components/security_interstitials/content:security_interstitial_page",
         "//components/security_interstitials/core:unsafe_resource",
         "//components/sync",
@@ -456,14 +463,8 @@ static_library("safe_browsing") {
           "//chromeos/ash/components/browser_context_helper:browser_context_helper",
         ]
       }
-      if (is_chromeos_lacros) {
-        deps += [ "//chromeos/lacros:lacros" ]
-      }
       if (is_chromeos) {
-        deps += [
-          "//chromeos/components/mgs:mgs",
-          "//chromeos/crosapi/cpp:cpp",
-        ]
+        deps += [ "//chromeos/components/mgs:mgs" ]
       }
       if (!is_android) {
         deps += [ "//chrome/browser/ui:browser_list" ]

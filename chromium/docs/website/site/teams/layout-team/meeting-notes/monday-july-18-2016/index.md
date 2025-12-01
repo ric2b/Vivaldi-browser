@@ -17,7 +17,7 @@ two no-meeting period.
 Scrolling
 - Work on root layer scrolling continues, will carry over into Q3.
 (szager)
-Scroll Anchoring \[[crbug.com/558575](http://crbug.com/558575)\]
+Scroll Anchoring \[[crbug.com/558575](https://crbug.com/558575)\]
 - We now have a real spec for scroll anchoring \[1\]. (skobes)
 - Sent Intent to Implement \[2\] to blink-dev. (skobes)
 - Added support for the css overflow anchor property. (skobes)
@@ -29,9 +29,9 @@ CSS Flexbox
 - Getting better metrics for new intristic size to see if it can
 potentially be enabled by default.
 (cbiesinger)
-CSS Grid Layout \[[crbug.com/79180](http://crbug.com/79180)\]
+CSS Grid Layout \[[crbug.com/79180](https://crbug.com/79180)\]
 - No updates since last week. See tracking bug for status.
-CSS Multi-column (mstensho) \[[crbug.com/334335](http://crbug.com/334335)\]
+CSS Multi-column (mstensho) \[[crbug.com/334335](https://crbug.com/334335)\]
 - No updates since last week. Morten out for the next few weeks.
 CSS Houdini
 - Pretty large update to the Houdini layout API spec, got into some
@@ -44,15 +44,15 @@ that this week. (ikilpatrick)
 - Fixed zoom in CSS paint worklets. (glebl)
 - Fixed a small regression with select elements complicated by a lack
 of tests. (glebl)
-LayoutNG \[[crbug.com/591099](http://crbug.com/591099)\]
+LayoutNG \[[crbug.com/591099](https://crbug.com/591099)\]
 - The design doc for LayoutNG has been updated and the feedback from the
 layout team incorporated. Thanks for your help and input everyone!
 It's all but finished and I plan to circulate among the wider blink
 team later this week. (eae, ikilpatrick)
-CSS Containment \[[crbug.com/312978](http://crbug.com/312978)\]
+CSS Containment \[[crbug.com/312978](https://crbug.com/312978)\]
 - Shiped in M52. No further updates will be provided. (eae)
 Intersection Observer (szager, mpb)
-\[[crbug.com/540528](http://crbug.com/540528)\]
+\[[crbug.com/540528](https://crbug.com/540528)\]
 - Shiped in M51 with the last few fixes and improvements shipping in 52.
 No further updates expected for the time being. (szager)
 Resize Observer (atotic)

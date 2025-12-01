@@ -98,7 +98,7 @@ extension:
 1, "manifest": { "key":
 "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC5cK3ybDkh173plsjDXoqUzvsjFRMtbc5+a8HR6dxYBETeXQ7GOR5/xYnsY2R4smo5ly4yUK69iF7rnPNH+X97K7e7JFbuH5W/ZRc8YaIG66oJ9JwKZagSOZasSJPWNz4f1GdaHD1Z4KRucvOYxsaPVdwS2W3nbG6i3oQFaio+JQIDAQAB",
 "name": "Google Reader Notifier (Installing...)", "permissions": \[ "tabs",
-"http://www.google.com/" \], "update_url":
+"https://www.google.com/" \], "update_url":
 "http://clients2.google.com/service/update2/crx", "version": "0.0",
 "manifest_version": 2 }, "path": "apflmjolhbonpkbkooiamcnenbmbjcbf\\\\0.0",
 "state": 1 } } } }

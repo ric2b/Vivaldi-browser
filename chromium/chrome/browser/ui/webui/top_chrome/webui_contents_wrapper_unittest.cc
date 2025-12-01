@@ -86,8 +86,7 @@ class MockHost : public WebUIContentsWrapper::Host {
   base::WeakPtrFactory<MockHost> weak_ptr_factory_{this};
 };
 
-class TestWebUIContentsWrapper
-    : public WebUIContentsWrapper {
+class TestWebUIContentsWrapper : public WebUIContentsWrapper {
  public:
   explicit TestWebUIContentsWrapper(Profile* profile)
       : WebUIContentsWrapper(GURL(""), profile, 0, true, true, true, "Test") {}
@@ -111,8 +110,7 @@ class WebUIContentsWrapperTest : public ChromeViewsTestBase {
  public:
   WebUIContentsWrapperTest() = default;
   WebUIContentsWrapperTest(const WebUIContentsWrapperTest&) = delete;
-  WebUIContentsWrapperTest& operator=(const WebUIContentsWrapperTest&) =
-      delete;
+  WebUIContentsWrapperTest& operator=(const WebUIContentsWrapperTest&) = delete;
   ~WebUIContentsWrapperTest() override = default;
 
   // ViewsTestBase:
@@ -122,7 +120,7 @@ class WebUIContentsWrapperTest : public ChromeViewsTestBase {
 
     scoped_refptr<content::SiteInstance> instance =
         content::SiteInstance::Create(profile_.get());
-    instance->GetProcess()->Init();
+    instance->GetOrCreateProcess()->Init();
     auto test_contents = content::WebContentsTester::CreateTestWebContents(
         profile_.get(), std::move(instance));
 

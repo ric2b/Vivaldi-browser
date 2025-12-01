@@ -93,11 +93,6 @@ struct StructTraits<media::mojom::VideoFrameMetadataDataView,
     return input.interactive_content;
   }
 
-  static bool texture_origin_is_top_left(
-      const media::VideoFrameMetadata& input) {
-    return input.texture_origin_is_top_left;
-  }
-
   static uint32_t sub_capture_target_version(
       const media::VideoFrameMetadata& input) {
     return input.sub_capture_target_version;
@@ -186,6 +181,11 @@ struct StructTraits<media::mojom::VideoFrameMetadataDataView,
   static std::optional<uint64_t> frame_sequence(
       const media::VideoFrameMetadata& input) {
     return input.frame_sequence;
+  }
+
+  static std::optional<uint64_t> source_id(
+      const media::VideoFrameMetadata& input) {
+    return input.source_id;
   }
 
   static intermediate::EffectState background_blur(

@@ -343,16 +343,8 @@ void AwPermissionManager::RequestPermissions(
         // custom data is represented with the CLIPBOARD_READ_WRITE permission,
         // and that requires an explicit user approval, which is not implemented
         // yet. See crbug.com/1271620
-        if (base::FeatureList::IsEnabled(
-                features::kWebViewAutoGrantSanitizedClipboardWrite)) {
-          pending_request_raw->SetPermissionStatus(permissions[i],
-                                                   PermissionStatus::GRANTED);
-        } else {
-          pending_request_raw->SetPermissionStatus(
-              permissions[i], request_description.user_gesture
-                                  ? PermissionStatus::GRANTED
-                                  : PermissionStatus::DENIED);
-        }
+        pending_request_raw->SetPermissionStatus(permissions[i],
+                                                 PermissionStatus::GRANTED);
         break;
       case PermissionType::AUDIO_CAPTURE:
       case PermissionType::VIDEO_CAPTURE:
@@ -563,14 +555,6 @@ PermissionStatus AwPermissionManager::GetPermissionStatusInternal(
       return GetGeolocationPermission(requesting_origin, web_contents);
 
     case blink::PermissionType::CLIPBOARD_SANITIZED_WRITE:
-      // These permissions are auto-granted by WebView.
-      if (base::FeatureList::IsEnabled(
-              features::kWebViewAutoGrantSanitizedClipboardWrite)) {
-        return PermissionStatus::GRANTED;
-      } else {
-        return PermissionStatus::ASK;
-      }
-
     case blink::PermissionType::MIDI:
     case blink::PermissionType::SENSORS:
       // These permissions are auto-granted by WebView.
@@ -624,6 +608,12 @@ PermissionStatus AwPermissionManager::GetGeolocationPermission(
   }
 
   AwSettings* settings = AwSettings::FromWebContents(web_contents);
+  if (!settings) {
+    // If we don't have a settings, we can't determine if we have
+    // permission.
+    return PermissionStatus::ASK;
+  }
+
   if (!settings->geolocation_enabled()) {
     return PermissionStatus::DENIED;
   }
@@ -847,7 +837,7 @@ void AwPermissionManager::ClearEnumerateDevicesCachedPermission(
 
 int AwPermissionManager::GetRenderProcessID(
     content::RenderFrameHost* render_frame_host) {
-  return render_frame_host->GetProcess()->GetID();
+  return render_frame_host->GetProcess()->GetDeprecatedID();
 }
 
 int AwPermissionManager::GetRenderFrameID(

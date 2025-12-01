@@ -9,6 +9,7 @@ import androidx.annotation.VisibleForTesting;
 
 import org.jni_zero.CalledByNative;
 import org.jni_zero.JNINamespace;
+import org.jni_zero.JniType;
 import org.jni_zero.NativeMethods;
 
 import org.chromium.base.Callback;
@@ -27,12 +28,6 @@ public class WebFeedBridge {
     public static final int CHANGE_REASON_MANAGEMENT = 3;
     public static final int CHANGE_REASON_RECOMMENDATION_WEB_PAGE_ACCELERATOR = 6;
     public static final int CHANGE_REASON_SINGLE_WEB_FEED = 7;
-
-    // Access to JNI test hooks for other libraries. This can go away once more Feed code is
-    // migrated to chrome/browser/feed.
-    public static org.jni_zero.JniStaticTestMocker<WebFeedBridge.Natives> getTestHooksForTesting() {
-        return WebFeedBridgeJni.TEST_HOOKS;
-    }
 
     private WebFeedBridge() {}
 
@@ -88,7 +83,7 @@ public class WebFeedBridge {
         @CalledByNative("WebFeedMetadata")
         public WebFeedMetadata(
                 byte[] id,
-                String title,
+                @JniType("std::string") String title,
                 GURL visitUrl,
                 @WebFeedSubscriptionStatus int subscriptionStatus,
                 @WebFeedAvailabilityStatus int availabilityStatus,
@@ -217,7 +212,10 @@ public class WebFeedBridge {
     /** Container for results from an QueryWebFeed request. */
     public static class QueryResult {
         @CalledByNative("QueryResult")
-        public QueryResult(String webFeedId, String title, String url) {
+        public QueryResult(
+                @JniType("std::string") String webFeedId,
+                @JniType("std::string") String title,
+                @JniType("std::string") String url) {
             this.webFeedId = webFeedId;
             this.title = title;
             this.url = url;
@@ -358,9 +356,9 @@ public class WebFeedBridge {
 
         void incrementFollowedFromWebPageMenuCount();
 
-        void queryWebFeed(String url, Callback<QueryResult> callback);
+        void queryWebFeed(@JniType("std::string") String url, Callback<QueryResult> callback);
 
-        void queryWebFeedId(String id, Callback<QueryResult> callback);
+        void queryWebFeedId(@JniType("std::string") String id, Callback<QueryResult> callback);
 
         boolean isCormorantEnabledForLocale();
 

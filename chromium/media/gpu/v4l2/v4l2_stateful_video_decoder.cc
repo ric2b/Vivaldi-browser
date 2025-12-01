@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40285824): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "media/gpu/v4l2/v4l2_stateful_video_decoder.h"
 
 #include <fcntl.h>
@@ -374,12 +379,13 @@ void V4L2StatefulVideoDecoder::Initialize(const VideoDecoderConfig& config,
   // |OUTPUT_queue_| for the driver to know the output details. The driver will
   // let us know that moment via a V4L2_EVENT_SOURCE_CHANGE.
   // [1] https://www.kernel.org/doc/html/v5.15/userspace-api/media/v4l/dev-decoder.html#initialization
-  OUTPUT_queue_ = base::WrapRefCounted(new V4L2Queue(
+  OUTPUT_queue_ = base::MakeRefCounted<V4L2Queue>(
+      V4L2Queue::PassKey::Get(),
       base::BindRepeating(&HandledIoctl, device_fd_.get()),
       /*schedule_poll_cb=*/base::DoNothing(),
       /*mmap_cb=*/base::BindRepeating(&Mmap, device_fd_.get()),
       AllocateSecureBufferAsCallback(), V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE,
-      /*destroy_cb=*/base::DoNothing()));
+      /*destroy_cb=*/base::DoNothing());
 
   const auto profile_as_v4l2_fourcc =
       VideoCodecProfileToV4L2PixFmt(config.profile(), /*slice_based=*/false);
@@ -678,12 +684,13 @@ bool V4L2StatefulVideoDecoder::InitializeCAPTUREQueue() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(IsInitialized()) << "V4L2StatefulVideoDecoder must be Initialize()d";
 
-  CAPTURE_queue_ = base::WrapRefCounted(new V4L2Queue(
+  CAPTURE_queue_ = base::MakeRefCounted<V4L2Queue>(
+      V4L2Queue::PassKey::Get(),
       base::BindRepeating(&HandledIoctl, device_fd_.get()),
       /*schedule_poll_cb=*/base::DoNothing(),
       /*mmap_cb=*/base::BindRepeating(&Mmap, device_fd_.get()),
       AllocateSecureBufferAsCallback(), V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE,
-      /*destroy_cb=*/base::DoNothing()));
+      /*destroy_cb=*/base::DoNothing());
 
   const auto v4l2_format_or_error = CAPTURE_queue_->GetFormat();
   if (!v4l2_format_or_error.first || v4l2_format_or_error.second != kIoctlOk) {
@@ -1236,20 +1243,16 @@ H264FrameReassembler::Process(scoped_refptr<DecoderBuffer> buffer,
     if (nalu_info->is_whole_frame) {
       VLOGF(3) << "Found a whole frame, size=" << found_nalu_size << " bytes";
       frames.emplace_back(
-          DecoderBuffer::CopyFrom(remaining.first(found_nalu_size)),
+          DecoderBuffer::CopyFrom(remaining.take_first(found_nalu_size)),
           base::DoNothing());
       frames.back().first->set_timestamp(buffer->timestamp());
-
-      remaining = remaining.subspan(found_nalu_size);
       continue;
     }
 
     VLOGF(4) << "This was a frame fragment; storing it for later reassembly.";
     frame_fragments_.emplace_back(
-        DecoderBuffer::CopyFrom(remaining.first(found_nalu_size)));
+        DecoderBuffer::CopyFrom(remaining.take_first(found_nalu_size)));
     frame_fragments_.back()->set_timestamp(buffer->timestamp());
-
-    remaining = remaining.subspan(found_nalu_size);
   } while (!remaining.empty());
 
   // |decode_cb| is used to signal to our client that encoded chunks have been

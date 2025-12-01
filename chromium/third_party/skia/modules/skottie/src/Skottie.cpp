@@ -17,6 +17,7 @@
 #include "include/private/base/SkFloatingPoint.h"
 #include "include/private/base/SkTPin.h"
 #include "include/private/base/SkTo.h"
+#include "modules/jsonreader/SkJSONReader.h"
 #include "modules/skottie/include/ExternalLayer.h"
 #include "modules/skottie/include/SkottieProperty.h"
 #include "modules/skottie/include/SlotManager.h"
@@ -33,7 +34,6 @@
 #include "modules/skshaper/include/SkShaper_factory.h"
 #include "src/core/SkTHash.h"
 #include "src/core/SkTraceEvent.h"
-#include "src/utils/SkJSON.h"
 
 #include <algorithm>
 #include <chrono>
@@ -402,13 +402,13 @@ sk_sp<Animation> Animation::Builder::make(const char* data, size_t data_len) {
                outPoint = std::max(ParseDefault<float>(json["op"], SK_ScalarMax), inPoint),
                duration = sk_ieee_float_divide(outPoint - inPoint, fps);
 
-    if (size.isEmpty() || version.isEmpty() || fps <= 0 ||
+    if (size.isEmpty() || fps <= 0 ||
         !SkIsFinite(inPoint, outPoint, duration)) {
         if (fLogger) {
             const auto msg = SkStringPrintf(
-                         "Invalid animation params (version: %s, size: [%f %f], frame rate: %f, "
+                         "Invalid animation params (size: [%f %f], frame rate: %f, "
                          "in-point: %f, out-point: %f)\n",
-                         version.c_str(), size.width(), size.height(), fps, inPoint, outPoint);
+                         size.width(), size.height(), fps, inPoint, outPoint);
             fLogger->log(Logger::Level::kError, msg.c_str());
         }
         return nullptr;

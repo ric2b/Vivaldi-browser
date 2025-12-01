@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "base/auto_reset.h"
 #include "base/functional/bind.h"
 #include "base/trace_event/trace_event.h"
 #include "base/types/to_address.h"
@@ -435,12 +434,12 @@ void CompoundTabContainer::UpdateTabGroupVisuals(
   unpinned_tab_container_->UpdateTabGroupVisuals(group_id);
 }
 
-void CompoundTabContainer::NotifyTabGroupEditorBubbleOpened() {
-  unpinned_tab_container_->NotifyTabGroupEditorBubbleOpened();
+void CompoundTabContainer::NotifyTabstripBubbleOpened() {
+  unpinned_tab_container_->NotifyTabstripBubbleOpened();
 }
 
-void CompoundTabContainer::NotifyTabGroupEditorBubbleClosed() {
-  unpinned_tab_container_->NotifyTabGroupEditorBubbleClosed();
+void CompoundTabContainer::NotifyTabstripBubbleClosed() {
+  unpinned_tab_container_->NotifyTabstripBubbleClosed();
 }
 
 std::optional<int> CompoundTabContainer::GetModelIndexOf(

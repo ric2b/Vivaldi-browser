@@ -43,7 +43,7 @@
 #include "chrome/browser/lacros/account_manager/account_profile_mapper.h"
 #endif
 
-constexpr char kGuestProfileName[] = "Guest";
+constexpr char kGuestProfileName[] = "$guest";
 #if !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_ANDROID)
 constexpr char kSystemProfileName[] = "System";
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_ANDROID)
@@ -148,6 +148,11 @@ TestingProfile* TestingProfileManager::CreateTestingProfile(
   testing_profiles_.insert(std::make_pair(profile_name, profile_ptr));
   profile_observations_.AddObservation(profile_ptr);
 
+#if BUILDFLAG(IS_CHROMEOS)
+  if (!callback_.is_null()) {
+    callback_.Run(profile_name, profile_ptr);
+  }
+#endif
   return profile_ptr;
 }
 
@@ -174,22 +179,23 @@ TestingProfile* TestingProfileManager::CreateTestingProfile(
       shared_url_loader_factory);
 }
 
-TestingProfile* TestingProfileManager::CreateGuestProfile() {
+TestingProfile* TestingProfileManager::CreateGuestProfile(
+    std::optional<TestingProfile::Builder> builder) {
   DCHECK(called_set_up_);
-
-  // Create the profile and register it.
-  TestingProfile::Builder builder;
-  builder.SetDelegate(profile_manager_.get());
-  builder.SetGuestSession();
-  builder.SetPath(ProfileManager::GetGuestProfilePath());
-  builder.SetProfileName(kGuestProfileName);
+  if (!builder) {
+    builder = TestingProfile::Builder();
+  }
+  builder->SetGuestSession();
+  builder->SetPath(ProfileManager::GetGuestProfilePath());
+  builder->SetProfileName(kGuestProfileName);
+  builder->SetDelegate(profile_manager_.get());
 
   // Add the guest profile to the profile manager, but not to the attributes
   // storage.
   auto* profile_ptr =
       static_cast<TestingProfile*>(profile_manager_->CreateAndInitializeProfile(
           ProfileManager::GetGuestProfilePath(),
-          base::BindOnce(&BuildTestingProfile, std::move(builder))));
+          base::BindOnce(&BuildTestingProfile, std::move(*builder))));
 
   // Set up a profile with an off the record profile.
   TestingProfile::Builder off_the_record_builder;
@@ -199,6 +205,11 @@ TestingProfile* TestingProfileManager::CreateGuestProfile() {
   testing_profiles_.insert(std::make_pair(kGuestProfileName, profile_ptr));
   profile_observations_.AddObservation(profile_ptr);
 
+#if BUILDFLAG(IS_CHROMEOS)
+  if (!callback_.is_null()) {
+    callback_.Run(kGuestProfileName, profile_ptr);
+  }
+#endif
   return profile_ptr;
 }
 

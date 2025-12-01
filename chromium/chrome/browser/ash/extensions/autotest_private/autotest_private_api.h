@@ -10,8 +10,6 @@
 #include <string>
 #include <vector>
 
-#include "ash/components/arc/mojom/power.mojom.h"
-#include "ash/components/arc/mojom/process.mojom.h"
 #include "ash/display/screen_orientation_controller.h"
 #include "ash/public/cpp/assistant/assistant_state.h"
 #include "ash/rotator/screen_rotation_animator_observer.h"
@@ -22,13 +20,15 @@
 #include "cc/metrics/frame_sequence_metrics.h"
 #include "chrome/browser/ash/arc/tracing/arc_app_performance_tracing.h"
 #include "chrome/browser/ash/bruschetta/bruschetta_installer.h"
-#include "chrome/browser/ash/crosapi/browser_manager.h"
 #include "chrome/browser/ash/printing/cups_printers_manager.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/common/extensions/api/autotest_private.h"
+#include "chromeos/ash/experiences/arc/mojom/power.mojom.h"
+#include "chromeos/ash/experiences/arc/mojom/process.mojom.h"
 #include "chromeos/services/machine_learning/public/mojom/machine_learning_service.mojom-forward.h"
 #include "chromeos/services/machine_learning/public/mojom/model.mojom.h"
 #include "chromeos/ui/base/window_state_type.h"
+#include "components/session_manager/session_manager_types.h"
 #include "components/webapps/common/web_app_id.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/extension_function.h"
@@ -320,19 +320,6 @@ class AutotestPrivateIsArcProvisionedFunction : public ExtensionFunction {
  private:
   ~AutotestPrivateIsArcProvisionedFunction() override;
   ResponseAction Run() override;
-};
-
-class AutotestPrivateGetLacrosInfoFunction : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("autotestPrivate.getLacrosInfo",
-                             AUTOTESTPRIVATE_GETLACROSINFO)
-
- private:
-  ~AutotestPrivateGetLacrosInfoFunction() override;
-  ResponseAction Run() override;
-  static api::autotest_private::LacrosState ToLacrosState(
-      crosapi::BrowserManager::State state);
-  static api::autotest_private::LacrosMode ToLacrosMode(bool is_enabled);
 };
 
 class AutotestPrivateGetArcAppFunction : public ExtensionFunction {
@@ -1705,6 +1692,19 @@ class AutotestPrivateIsInputMethodReadyForTestingFunction
   ResponseAction Run() override;
 };
 
+class AutotestPrivateOverrideLobsterResponseForTestingFunction
+    : public ExtensionFunction {
+ public:
+  AutotestPrivateOverrideLobsterResponseForTestingFunction();
+  DECLARE_EXTENSION_FUNCTION(
+      "autotestPrivate.overrideLobsterResponseForTesting",
+      AUTOTESTPRIVATE_OVERRIDELOBSTERRESPONSE)
+
+ private:
+  ~AutotestPrivateOverrideLobsterResponseForTestingFunction() override;
+  ResponseAction Run() override;
+};
+
 class AutotestPrivateOverrideOrcaResponseForTestingFunction
     : public ExtensionFunction {
  public:
@@ -1915,9 +1915,10 @@ BrowserContextKeyedAPIFactory<AutotestPrivateAPI>::
         content::BrowserContext* context) const;
 
 template <>
-KeyedService*
-BrowserContextKeyedAPIFactory<AutotestPrivateAPI>::BuildServiceInstanceFor(
-    content::BrowserContext* context) const;
+std::unique_ptr<KeyedService>
+BrowserContextKeyedAPIFactory<AutotestPrivateAPI>::
+    BuildServiceInstanceForBrowserContext(
+        content::BrowserContext* context) const;
 
 }  // namespace extensions
 

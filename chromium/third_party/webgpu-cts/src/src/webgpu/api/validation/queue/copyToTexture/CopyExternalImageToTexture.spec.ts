@@ -682,6 +682,7 @@ g.test('destination_texture,format')
     const { format } = t.params;
     t.skipIfTextureFormatNotSupported(format);
     t.selectDeviceOrSkipTestCase(kTextureFormatInfo[format].feature);
+    t.skipIfColorRenderableNotSupportedForFormat(format);
   })
   .fn(async t => {
     const { format, copySize } = t.params;

@@ -72,7 +72,7 @@ class Deserializer : public SerializerDeserializer {
 
   // Add an object to back an attached reference. The order to add objects must
   // mirror the order they are added in the serializer.
-  void AddAttachedObject(Handle<HeapObject> attached_object) {
+  void AddAttachedObject(DirectHandle<HeapObject> attached_object) {
     attached_objects_.push_back(attached_object);
   }
 
@@ -111,7 +111,7 @@ class Deserializer : public SerializerDeserializer {
   bool deserializing_user_code() const { return deserializing_user_code_; }
   bool should_rehash() const { return should_rehash_; }
 
-  void PushObjectToRehash(Handle<HeapObject> object) {
+  void PushObjectToRehash(DirectHandle<HeapObject> object) {
     to_rehash_.push_back(object);
   }
   void Rehash();
@@ -171,7 +171,8 @@ class Deserializer : public SerializerDeserializer {
                        WriteBarrierMode mode = UPDATE_WRITE_BARRIER);
 
   inline int WriteExternalPointer(Tagged<HeapObject> host,
-                                  ExternalPointerSlot dest, Address value);
+                                  ExternalPointerSlot dest, Address value,
+                                  ExternalPointerTag tag);
   inline int WriteIndirectPointer(IndirectPointerSlot dest,
                                   Tagged<HeapObject> value);
 
@@ -234,6 +235,8 @@ class Deserializer : public SerializerDeserializer {
   template <typename SlotAccessor>
   int ReadAllocateJSDispatchEntry(uint8_t data, SlotAccessor slot_accessor);
   template <typename SlotAccessor>
+  int ReadJSDispatchEntry(uint8_t data, SlotAccessor slot_accessor);
+  template <typename SlotAccessor>
   int ReadProtectedPointerPrefix(uint8_t data, SlotAccessor slot_accessor);
   template <typename SlotAccessor>
   int ReadRootArrayConstants(uint8_t data, SlotAccessor slot_accessor);
@@ -293,10 +296,8 @@ class Deserializer : public SerializerDeserializer {
   // Vector of allocated objects that can be accessed by a backref, by index.
   std::vector<IndirectHandle<HeapObject>> back_refs_;
 
-  // Map of JSDispatchTable entries. When such an entry is serialized, we also
-  // serialize an ID of the entry, which then allows the deserializer to
-  // correctly reconstruct shared table entries.
-  std::unordered_map<int, JSDispatchHandle> js_dispatch_entries_map_;
+  // Vector of already allocated JSDispatchTable entries.
+  std::vector<JSDispatchHandle> js_dispatch_entries_;
 
   // Unresolved forward references (registered with kRegisterPendingForwardRef)
   // are collected in order as (object, field offset) pairs. The subsequent

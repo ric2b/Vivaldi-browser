@@ -33,8 +33,6 @@ class MockInputRouterClient : public input::InputRouterClient,
   void IncrementInFlightEventCount() override;
   void DecrementInFlightEventCount(
       blink::mojom::InputEventResultSource ack_source) override;
-  void NotifyUISchedulerOfGestureEventUpdate(
-      blink::WebInputEvent::Type gesture_event) override;
   void DidOverscroll(const ui::DidOverscrollParams& params) override;
   void OnSetCompositorAllowedTouchAction(cc::TouchAction touch_action) override;
   void DidStartScrollingViewport() override;
@@ -64,6 +62,7 @@ class MockInputRouterClient : public input::InputRouterClient,
       const std::optional<std::vector<gfx::Rect>>& line_bounds) override {}
   input::StylusInterface* GetStylusInterface() override;
   void OnStartStylusWriting() override;
+  input::DispatchToRendererCallback GetDispatchToRendererCallback() override;
 
   bool GetAndResetFilterEventCalled();
   ui::DidOverscrollParams GetAndResetOverscroll();

@@ -440,8 +440,7 @@ void NotesModel::SetTitle(const NoteNode* node,
     return;
 
   if (is_permanent_node(node)) {
-    NOTREACHED_IN_MIGRATION();
-    return;
+    NOTREACHED();
   }
 
   for (auto& observer : observers_)

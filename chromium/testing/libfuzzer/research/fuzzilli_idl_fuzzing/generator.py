@@ -51,18 +51,21 @@ def _GetDirAbove(dirname: str):
 
 SOURCE_DIR = _GetDirAbove('testing')
 
+# //third_party imports.
 sys.path.insert(1, os.path.join(SOURCE_DIR, 'third_party'))
-sys.path.append(os.path.join(SOURCE_DIR, 'build'))
+import jinja2
+
+# //third_party/blink/renderer/bindings/scripts imports.
 sys.path.append(
     os.path.join(SOURCE_DIR, 'third_party/blink/renderer/bindings/scripts/'))
-
-import jinja2
 import web_idl
 
 
 class SwiftExpression:
   """Generic type for representing a Swift type."""
 
+  # Overridden by subclasses.
+  # pylint: disable=no-self-use
   def fuzzilli_repr(self) -> str:
     """Returns the Fuzzilli representation of this expression.
 
@@ -70,6 +73,7 @@ class SwiftExpression:
         the string representation of this expression.
     """
     raise Exception('Not implemented.')
+  # pylint: enable=no-self-use
 
 
 class SwiftNil(SwiftExpression):
@@ -322,6 +326,7 @@ class ObjectGroup(SwiftExpression):
   instanceType: ILType
   properties: Dict[str, ILType]
   methods: Dict[str, ILType]
+  parent: Optional[str] = None
 
 
 def idl_type_to_iltype(idl_type: web_idl.idl_type.IdlType) -> ILType:
@@ -427,10 +432,14 @@ def parse_interface(
   obj = ILType.object(group=interface.identifier,
                       props=list(attributes.keys()),
                       methods=list(methods.keys()))
+  parent = None
+  if hasattr(interface, 'inherited') and interface.inherited:
+    parent = interface.inherited.identifier
   group = ObjectGroup(name=interface.identifier,
                       instanceType=ILType.refType(f'js{interface.identifier}'),
                       properties=attributes,
-                      methods=methods)
+                      methods=methods,
+                      parent=parent)
   return obj, group
 
 
@@ -507,10 +516,14 @@ def parse_dictionary(
   obj = ILType.object(group=f'{dictionary.identifier}',
                       props=list(props.keys()),
                       methods=[])
+  parent = None
+  if hasattr(dictionary, 'inherited') and dictionary.inherited:
+    parent = dictionary.inherited.identifier
   group = ObjectGroup(name=f'{dictionary.identifier}',
                       instanceType=ILType.refType(f'js{dictionary.identifier}'),
                       properties=props,
-                      methods={})
+                      methods={},
+                      parent=parent)
   return obj, group
 
 
@@ -529,7 +542,6 @@ def main():
 
   args = parser.parse_args()
   database = web_idl.Database.read_from_file(args.path)
-
   template_dir = os.path.dirname(os.path.abspath(__file__))
   environment = jinja2.Environment(loader=jinja2.FileSystemLoader(template_dir))
   environment.filters['parse_interface'] = parse_interface

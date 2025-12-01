@@ -8,6 +8,7 @@
 #include <wayland-server-protocol-core.h>
 #include <xdg-shell-server-protocol.h>
 
+#include <algorithm>
 #include <limits>
 #include <memory>
 #include <string_view>
@@ -16,7 +17,7 @@
 
 #include "ash/display/display_util.h"
 #include "ash/display/screen_orientation_controller.h"
-#include "ash/focus_cycler.h"
+#include "ash/focus/focus_cycler.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
@@ -28,7 +29,6 @@
 #include "base/bit_cast.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chromeos/constants/chromeos_features.h"

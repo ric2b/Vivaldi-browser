@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import '../../ui/legacy/legacy.js';
+
 import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as UI from '../../ui/legacy/legacy.js';
@@ -31,6 +33,7 @@ export class CSSOverviewSidebarPanel extends Common.ObjectWrapper.eventMixin<Eve
 
   constructor() {
     super(true);
+    this.registerRequiredCSS(cssOverviewSidebarPanelStyles);
 
     this.contentElement.classList.add('overview-sidebar-panel');
     this.contentElement.addEventListener('click', this.#onItemClick.bind(this));
@@ -40,8 +43,7 @@ export class CSSOverviewSidebarPanel extends Common.ObjectWrapper.eventMixin<Eve
     // longest item, so that the selected item's background expands fully
     // even when the sidebar overflows.
     // Also see crbug/1408003
-    this.containerElement =
-        this.contentElement.createChild('div', 'overview-sidebar-panel-container') as HTMLDivElement;
+    this.containerElement = this.contentElement.createChild('div', 'overview-sidebar-panel-container');
     UI.ARIAUtils.setLabel(this.containerElement, i18nString(UIStrings.cssOverviewPanelSidebar));
     UI.ARIAUtils.markAsTree(this.containerElement);
 
@@ -52,7 +54,7 @@ export class CSSOverviewSidebarPanel extends Common.ObjectWrapper.eventMixin<Eve
 
     // Toolbar.
     const toolbarElement = this.containerElement.createChild('div', 'overview-toolbar');
-    const toolbar = new UI.Toolbar.Toolbar('', toolbarElement);
+    const toolbar = toolbarElement.createChild('devtools-toolbar');
     toolbar.appendToolbarItem(clearResultsButton);
   }
 
@@ -159,10 +161,6 @@ export class CSSOverviewSidebarPanel extends Common.ObjectWrapper.eventMixin<Eve
       target.contentEditable = 'false';
     }
   }
-  override wasShown(): void {
-    super.wasShown();
-    this.registerCSSFiles([cssOverviewSidebarPanelStyles]);
-  }
 }
 
 export const enum SidebarEvents {
@@ -176,7 +174,7 @@ export interface ItemSelectedEvent {
   key: string|undefined;
 }
 
-export type EventTypes = {
-  [SidebarEvents.ITEM_SELECTED]: ItemSelectedEvent,
-  [SidebarEvents.RESET]: void,
-};
+export interface EventTypes {
+  [SidebarEvents.ITEM_SELECTED]: ItemSelectedEvent;
+  [SidebarEvents.RESET]: void;
+}

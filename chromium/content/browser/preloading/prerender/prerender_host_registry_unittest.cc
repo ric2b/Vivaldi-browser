@@ -50,7 +50,7 @@ void SendCandidates(const std::vector<GURL>& urls,
                     mojo::Remote<blink::mojom::SpeculationHost>& remote) {
   std::vector<blink::mojom::SpeculationCandidatePtr> candidates;
   candidates.resize(urls.size());
-  base::ranges::transform(urls, candidates.begin(), &CreatePrerenderCandidate);
+  std::ranges::transform(urls, candidates.begin(), &CreatePrerenderCandidate);
   remote->UpdateSpeculationCandidates(std::move(candidates));
   remote.FlushForTesting();
 }
@@ -196,8 +196,8 @@ class PrerenderHostRegistryTest : public RenderViewHostImplTestHarness {
         return PrerenderAttributes(
             url, trigger_type, embedder_histogram_suffix,
             blink::mojom::SpeculationTargetHint::kNoHint, Referrer(), eagerness,
-            /*no_vary_search_expected=*/std::nullopt, rfh,
-            contents()->GetWeakPtr(), ui::PAGE_TRANSITION_LINK,
+            /*no_vary_search_hint=*/std::nullopt, rfh, contents()->GetWeakPtr(),
+            ui::PAGE_TRANSITION_LINK,
             /*should_warm_up_compositor=*/false,
             /*should_prepare_paint_tree=*/false,
             /*url_match_predicate=*/{},
@@ -208,7 +208,7 @@ class PrerenderHostRegistryTest : public RenderViewHostImplTestHarness {
             url, trigger_type, embedder_histogram_suffix,
             /*target_hint=*/std::nullopt, Referrer(),
             /*eagerness=*/std::nullopt,
-            /*no_vary_search_expected=*/std::nullopt,
+            /*no_vary_search_hint=*/std::nullopt,
             /*initiator_render_frame_host=*/nullptr, contents()->GetWeakPtr(),
             ui::PageTransitionFromInt(ui::PAGE_TRANSITION_TYPED |
                                       ui::PAGE_TRANSITION_FROM_ADDRESS_BAR),
@@ -222,7 +222,7 @@ class PrerenderHostRegistryTest : public RenderViewHostImplTestHarness {
 
   void ExpectUniqueSampleOfSpeculationRuleFinalStatus(
       PrerenderFinalStatus status,
-      base::HistogramBase::Count count = 1) {
+      base::HistogramBase::Count32 count = 1) {
     histogram_tester_.ExpectUniqueSample(
         "Prerender.Experimental.PrerenderHostFinalStatus.SpeculationRule",
         status, count);
@@ -230,7 +230,7 @@ class PrerenderHostRegistryTest : public RenderViewHostImplTestHarness {
 
   void ExpectBucketCountOfSpeculationRuleFinalStatus(
       PrerenderFinalStatus status,
-      base::HistogramBase::Count count = 1) {
+      base::HistogramBase::Count32 count = 1) {
     histogram_tester_.ExpectBucketCount(
         "Prerender.Experimental.PrerenderHostFinalStatus.SpeculationRule",
         status, count);
@@ -239,7 +239,7 @@ class PrerenderHostRegistryTest : public RenderViewHostImplTestHarness {
   void ExpectUniqueSampleOfEmbedderFinalStatus(
       PrerenderFinalStatus status,
       const std::string& embedder_histogram_suffix,
-      base::HistogramBase::Count count = 1) {
+      base::HistogramBase::Count32 count = 1) {
     histogram_tester_.ExpectUniqueSample(
         "Prerender.Experimental.PrerenderHostFinalStatus.Embedder_" +
             embedder_histogram_suffix,
@@ -249,7 +249,7 @@ class PrerenderHostRegistryTest : public RenderViewHostImplTestHarness {
   void ExpectBucketCountOfEmbedderFinalStatus(
       PrerenderFinalStatus status,
       const std::string& embedder_histogram_suffix,
-      base::HistogramBase::Count count = 1) {
+      base::HistogramBase::Count32 count = 1) {
     histogram_tester_.ExpectBucketCount(
         "Prerender.Experimental.PrerenderHostFinalStatus.Embedder_" +
             embedder_histogram_suffix,
@@ -258,7 +258,7 @@ class PrerenderHostRegistryTest : public RenderViewHostImplTestHarness {
 
   void ExpectUniqueSampleOfActivationNavigationParamsMatch(
       PrerenderHost::ActivationNavigationParamsMatch result,
-      base::HistogramBase::Count count = 1) {
+      base::HistogramBase::Count32 count = 1) {
     histogram_tester_.ExpectUniqueSample(
         "Prerender.Experimental.ActivationNavigationParamsMatch."
         "SpeculationRule",
@@ -267,7 +267,7 @@ class PrerenderHostRegistryTest : public RenderViewHostImplTestHarness {
 
   void ExpectBucketCountOfActivationNavigationParamsMatch(
       PrerenderHost::ActivationNavigationParamsMatch result,
-      base::HistogramBase::Count count = 1) {
+      base::HistogramBase::Count32 count = 1) {
     histogram_tester_.ExpectBucketCount(
         "Prerender.Experimental.ActivationNavigationParamsMatch."
         "SpeculationRule",

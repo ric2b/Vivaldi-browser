@@ -273,7 +273,7 @@ void LayerTreeView::BeginMainFrame(const viz::BeginFrameArgs& args) {
   if (!delegate_)
     return;
   widget_scheduler_->WillBeginFrame(args);
-  delegate_->BeginMainFrame(args.frame_time);
+  delegate_->BeginMainFrame(args);
 }
 
 void LayerTreeView::OnDeferMainFrameUpdatesChanged(bool status) {
@@ -482,7 +482,7 @@ LayerTreeView::GetBeginMainFrameMetrics() {
   return delegate_->GetBeginMainFrameMetrics();
 }
 
-void LayerTreeView::NotifyThroughputTrackerResults(
+void LayerTreeView::NotifyCompositorMetricsTrackerResults(
     cc::CustomTrackerResults results) {
   NOTREACHED();
 }

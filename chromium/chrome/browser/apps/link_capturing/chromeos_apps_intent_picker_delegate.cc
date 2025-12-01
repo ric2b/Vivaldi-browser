@@ -33,17 +33,13 @@ PickerEntryType GetPickerEntryType(AppType app_type) {
   PickerEntryType picker_entry_type = PickerEntryType::kUnknown;
   switch (app_type) {
     case AppType::kUnknown:
-    case AppType::kBuiltIn:
     case AppType::kCrostini:
     case AppType::kPluginVm:
     case AppType::kChromeApp:
     case AppType::kExtension:
-    case AppType::kStandaloneBrowser:
-    case AppType::kStandaloneBrowserChromeApp:
     case AppType::kRemote:
     case AppType::kBorealis:
     case AppType::kBruschetta:
-    case AppType::kStandaloneBrowserExtension:
       break;
     case AppType::kArc:
       picker_entry_type = PickerEntryType::kArc;
@@ -88,6 +84,7 @@ bool ChromeOsAppsIntentPickerDelegate::ShouldShowIntentPickerWithApps() {
 
 void ChromeOsAppsIntentPickerDelegate::FindAllAppsForUrl(
     const GURL& url,
+    int icon_size_in_dep,
     IntentPickerAppsCallback apps_callback) {
   CHECK(&profile_.get());
   std::vector<apps::IntentPickerAppInfo> apps;

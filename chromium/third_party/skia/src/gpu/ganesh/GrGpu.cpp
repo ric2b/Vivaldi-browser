@@ -683,6 +683,7 @@ void GrGpu::didWriteToSurface(GrSurface* surface, GrSurfaceOrigin origin, const 
 void GrGpu::executeFlushInfo(SkSpan<GrSurfaceProxy*> proxies,
                              SkSurfaces::BackendSurfaceAccess access,
                              const GrFlushInfo& info,
+                             std::optional<GrTimerQuery> timerQuery,
                              const skgpu::MutableTextureState* newState) {
     TRACE_EVENT0("skia.gpu", TRACE_FUNC);
 
@@ -712,8 +713,18 @@ void GrGpu::executeFlushInfo(SkSpan<GrSurfaceProxy*> proxies,
         }
     }
 
-    if (info.fFinishedProc) {
-        this->addFinishedProc(info.fFinishedProc, info.fFinishedContext);
+    if (timerQuery) {
+        this->endTimerQuery(*timerQuery);
+    }
+
+    skgpu::AutoCallback callback;
+    if (info.fFinishedWithStatsProc) {
+        callback = skgpu::AutoCallback(info.fFinishedWithStatsProc, info.fFinishedContext);
+    } else {
+        callback = skgpu::AutoCallback(info.fFinishedProc, info.fFinishedContext);
+    }
+    if (callback) {
+        this->addFinishedCallback(std::move(callback), std::move(timerQuery));
     }
 
     if (info.fSubmittedProc) {
@@ -738,9 +749,7 @@ GrOpsRenderPass* GrGpu::getOpsRenderPass(
         const GrOpsRenderPass::StencilLoadAndStoreInfo& stencilInfo,
         const TArray<GrSurfaceProxy*, true>& sampledProxies,
         GrXferBarrierFlags renderPassXferBarriers) {
-#if SK_HISTOGRAMS_ENABLED
     fCurrentSubmitRenderPassCount++;
-#endif
     fStats.incRenderPasses();
     return this->onGetOpsRenderPass(renderTarget, useMSAASurface, stencil, origin, bounds,
                                     colorInfo, stencilInfo, sampledProxies, renderPassXferBarriers);
@@ -763,6 +772,8 @@ bool GrGpu::submitToGpu(const GrSubmitInfo& info) {
 
     this->reportSubmitHistograms();
 
+    fCurrentSubmitRenderPassCount = 0;
+
     return submitted;
 }
 
@@ -775,7 +786,6 @@ void GrGpu::reportSubmitHistograms() {
     SK_HISTOGRAM_EXACT_LINEAR("SubmitRenderPasses",
                               std::min(fCurrentSubmitRenderPassCount, kMaxRenderPassBucketValue),
                               kMaxRenderPassBucketValue);
-    fCurrentSubmitRenderPassCount = 0;
 #endif
 
     this->onReportSubmitHistograms();

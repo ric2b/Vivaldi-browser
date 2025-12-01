@@ -25,6 +25,7 @@
 #include "src/deoptimizer/deoptimizer.h"
 #include "src/execution/frames.h"
 #include "src/execution/isolate-utils-inl.h"
+#include "src/objects/heap-object-inl.h"
 #include "src/objects/instance-type-inl.h"
 #include "src/utils/ostreams.h"
 
@@ -719,7 +720,7 @@ static InstructionBlock* InstructionBlockFor(Zone* zone,
   InstructionBlock* instr_block = zone->New<InstructionBlock>(
       zone, GetRpo(block), GetRpo(block->loop_header()), GetLoopEndRpo(block),
       GetRpo(block->dominator()), block->deferred(), is_handler);
-  // Map successors and precessors
+  // Map successors and predecessors
   instr_block->successors().reserve(block->SuccessorCount());
   for (BasicBlock* successor : block->successors()) {
     instr_block->successors().push_back(GetRpo(successor));
@@ -1226,7 +1227,7 @@ FrameStateDescriptor::FrameStateDescriptor(
     OutputFrameStateCombine state_combine, uint16_t parameters_count,
     uint16_t max_arguments, size_t locals_count, size_t stack_count,
     MaybeIndirectHandle<SharedFunctionInfo> shared_info,
-    MaybeIndirectHandle<BytecodeArray> bytecode_aray,
+    MaybeIndirectHandle<BytecodeArray> bytecode_array,
     FrameStateDescriptor* outer_state, uint32_t wasm_liftoff_frame_size,
     uint32_t wasm_function_index)
     : type_(type),
@@ -1242,7 +1243,7 @@ FrameStateDescriptor::FrameStateDescriptor(
               wasm_liftoff_frame_size, outer_state)),
       values_(zone),
       shared_info_(shared_info),
-      bytecode_array_(bytecode_aray),
+      bytecode_array_(bytecode_array),
       outer_state_(outer_state),
       wasm_function_index_(wasm_function_index) {}
 
@@ -1357,16 +1358,19 @@ std::ostream& operator<<(std::ostream& os, StateValueKind kind) {
       return os << "Plain";
     case StateValueKind::kOptimizedOut:
       return os << "OptimizedOut";
-    case StateValueKind::kNested:
-      return os << "Nested";
+    case StateValueKind::kNestedObject:
+      return os << "NestedObject";
     case StateValueKind::kDuplicate:
       return os << "Duplicate";
+    case StateValueKind::kStringConcat:
+      return os << "StringConcat";
   }
 }
 
 void StateValueDescriptor::Print(std::ostream& os) const {
   os << "kind=" << kind_ << ", type=" << type_;
-  if (kind_ == StateValueKind::kDuplicate || kind_ == StateValueKind::kNested) {
+  if (kind_ == StateValueKind::kDuplicate ||
+      kind_ == StateValueKind::kNestedObject) {
     os << ", id=" << id_;
   } else if (kind_ == StateValueKind::kArgumentsElements) {
     os << ", args_type=" << args_type_;

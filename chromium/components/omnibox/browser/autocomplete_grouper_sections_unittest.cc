@@ -9,8 +9,8 @@
 
 #include "base/test/scoped_feature_list.h"
 #include "components/omnibox/browser/autocomplete_match.h"
-#include "components/omnibox/browser/omnibox_feature_configs.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
+#include "components/omnibox/common/omnibox_feature_configs.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/omnibox_proto/groups.pb.h"
@@ -29,8 +29,8 @@ AutocompleteMatch CreateMatch(int relevance,
 void VerifyMatches(const ACMatches& matches,
                    std::vector<int> expected_relevances) {
   std::vector<int> relevances = {};
-  base::ranges::transform(matches, std::back_inserter(relevances),
-                          [&](const auto& match) { return match.relevance; });
+  std::ranges::transform(matches, std::back_inserter(relevances),
+                         [&](const auto& match) { return match.relevance; });
 
   EXPECT_THAT(relevances, testing::ElementsAreArray(expected_relevances));
 }

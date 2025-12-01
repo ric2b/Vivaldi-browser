@@ -17,32 +17,34 @@ namespace openscreen::cast {
 /// Protocol specification.
 
 // Namespace for OFFER/ANSWER messages.
-constexpr char kCastWebrtcNamespace[] = "urn:x-cast:com.google.cast.webrtc";
-constexpr char kCastRemotingNamespace[] = "urn:x-cast:com.google.cast.remoting";
+inline constexpr char kCastWebrtcNamespace[] =
+    "urn:x-cast:com.google.cast.webrtc";
+inline constexpr char kCastRemotingNamespace[] =
+    "urn:x-cast:com.google.cast.remoting";
 
 // JSON message field values specific to the Sender Session.
-constexpr char kMessageType[] = "type";
+inline constexpr char kMessageType[] = "type";
 
 // List of OFFER message fields.
-constexpr char kMessageTypeOffer[] = "OFFER";
-constexpr char kOfferMessageBody[] = "offer";
-constexpr char kSequenceNumber[] = "seqNum";
-constexpr char kCodecName[] = "codecName";
+inline constexpr char kMessageTypeOffer[] = "OFFER";
+inline constexpr char kOfferMessageBody[] = "offer";
+inline constexpr char kSequenceNumber[] = "seqNum";
+inline constexpr char kCodecName[] = "codecName";
 
 /// ANSWER message fields.
-constexpr char kMessageTypeAnswer[] = "ANSWER";
-constexpr char kAnswerMessageBody[] = "answer";
-constexpr char kResult[] = "result";
-constexpr char kResultOk[] = "ok";
-constexpr char kResultError[] = "error";
-constexpr char kErrorMessageBody[] = "error";
-constexpr char kErrorCode[] = "code";
-constexpr char kErrorDescription[] = "description";
+inline constexpr char kMessageTypeAnswer[] = "ANSWER";
+inline constexpr char kAnswerMessageBody[] = "answer";
+inline constexpr char kResult[] = "result";
+inline constexpr char kResultOk[] = "ok";
+inline constexpr char kResultError[] = "error";
+inline constexpr char kErrorMessageBody[] = "error";
+inline constexpr char kErrorCode[] = "code";
+inline constexpr char kErrorDescription[] = "description";
 
 // Other message fields.
-constexpr char kRpcMessageBody[] = "rpc";
-constexpr char kCapabilitiesMessageBody[] = "capabilities";
-constexpr char kStatusMessageBody[] = "status";
+inline constexpr char kRpcMessageBody[] = "rpc";
+inline constexpr char kCapabilitiesMessageBody[] = "capabilities";
+inline constexpr char kStatusMessageBody[] = "status";
 
 // Conversion methods for codec message fields.
 const char* CodecToString(AudioCodec codec);

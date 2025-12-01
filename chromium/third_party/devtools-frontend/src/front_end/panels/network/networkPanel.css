@@ -147,30 +147,27 @@
 }
 
 .network-settings-pane {
+  display: grid;
+  grid-template-columns: 50% 50%;
   flex: none;
-  background-color: var(--sys-color-cdt-base-container);
-}
-
-.network-settings-pane .toolbar {
-  flex: 1 1;
-}
-
-.network-toolbar-container {
-  display: flex;
-  flex: none;
-}
-
-.network-toolbar-container > :first-child {
-  flex: 1 1 auto;
-}
-
-.panel.network .toolbar {
   background-color: var(--sys-color-cdt-base-container);
   border-bottom: 1px solid var(--sys-color-divider);
 }
 
+.network-toolbar-container {
+  display: flex;
+  align-items: flex-start;
+  flex: none;
+  background-color: var(--sys-color-cdt-base-container);
+  border-bottom: 1px solid var(--sys-color-divider);
+
+  & > :first-child {
+    flex: 1 1 auto;
+  }
+}
+
 @media (forced-colors: active) {
-  .panel.network .toolbar {
+  .panel.network devtools-toolbar {
     background-color: canvas;
   }
 }

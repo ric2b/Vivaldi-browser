@@ -23,9 +23,11 @@ VivaldiAdverseAdFilterListFactory::VivaldiAdverseAdFilterListFactory()
           "AdverseAdFilterListService",
           BrowserContextDependencyManager::GetInstance()) {}
 
-KeyedService* VivaldiAdverseAdFilterListFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+VivaldiAdverseAdFilterListFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
-  return new AdverseAdFilterListService(static_cast<Profile*>(context));
+  return std::make_unique<AdverseAdFilterListService>(
+      static_cast<Profile*>(context));
 }
 
 bool VivaldiAdverseAdFilterListFactory::ServiceIsNULLWhileTesting() const {

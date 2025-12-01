@@ -54,7 +54,6 @@ class PaintFlags;
 namespace blink {
 
 class FontSelector;
-class NGShapeCache;
 class ShapeCache;
 class TextRun;
 struct TextFragmentPaintInfo;
@@ -90,12 +89,12 @@ class PLATFORM_EXPORT Font {
   };
 
   void DrawText(cc::PaintCanvas*,
-                const TextRunPaintInfo&,
+                const TextRun&,
                 const gfx::PointF&,
                 const cc::PaintFlags&,
                 DrawType = DrawType::kGlyphsOnly) const;
   void DrawText(cc::PaintCanvas*,
-                const TextRunPaintInfo&,
+                const TextRun&,
                 const gfx::PointF&,
                 cc::NodeId node_id,
                 const cc::PaintFlags&,
@@ -113,7 +112,7 @@ class PLATFORM_EXPORT Font {
                     const cc::PaintFlags&,
                     DrawType = DrawType::kGlyphsOnly) const;
   void DrawEmphasisMarks(cc::PaintCanvas*,
-                         const TextRunPaintInfo&,
+                         const TextRun&,
                          const AtomicString& mark,
                          const gfx::PointF&,
                          const cc::PaintFlags&) const;
@@ -131,14 +130,10 @@ class PLATFORM_EXPORT Font {
 
   // Compute the text intercepts along the axis of the advance and write them
   // into the specified Vector of TextIntercepts. The number of those is zero or
-  // a multiple of two, and is at most the number of glyphs * 2 in the TextRun
-  // part of TextRunPaintInfo. Specify bounds for the upper and lower extend of
+  // a multiple of two, and is at most the number of glyphs * 2 in the text part
+  // of TextFragmentPaintInfo. Specify bounds for the upper and lower extend of
   // a line crossing through the text, parallel to the baseline.
   // TODO(drott): crbug.com/655154 Fix this for upright in vertical.
-  void GetTextIntercepts(const TextRunPaintInfo&,
-                         const cc::PaintFlags&,
-                         const std::tuple<float, float>& bounds,
-                         Vector<TextIntercept>&) const;
   void GetTextIntercepts(const TextFragmentPaintInfo&,
                          const cc::PaintFlags&,
                          const std::tuple<float, float>& bounds,
@@ -188,6 +183,14 @@ class PLATFORM_EXPORT Font {
   // loaded. This *should* not happen but in reality it does ever now and then
   // when, for whatever reason, the last resort font cannot be loaded.
   const SimpleFontData* PrimaryFont() const;
+
+  // Returns a list of font features for this `FontDescription`. The returned
+  // list is common for all `SimpleFontData` for `this`.
+  const FontFeatures& GetFontFeatures() const;
+
+  // True if `this` has any non-initial font features. This includes not only
+  // `GetFontFeatures()` but also features computed in later stages.
+  bool HasNonInitialFontFeatures() const;
 
   // Access the NG shape cache associated with this particular font object.
   // Should *not* be retained across layout calls as it may become invalid.

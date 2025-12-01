@@ -38,6 +38,7 @@
 #include "sharing/internal/api/public_certificate_database.h"
 #include "sharing/internal/api/sharing_platform.h"
 #include "sharing/internal/api/sharing_rpc_client.h"
+#include "sharing/internal/impl/common/nearby_identity_grpc_client.h"
 #include "sharing/internal/public/context.h"
 #include "sharing/local_device_data/nearby_share_local_device_data_manager.h"
 #include "sharing/proto/enums.pb.h"
@@ -88,6 +89,8 @@ class NearbyShareCertificateManagerImpl
 
   ~NearbyShareCertificateManagerImpl() override;
 
+  void SetVendorId(int32_t vendor_id) override;
+
  private:
   // Class for maintaining a single instance of public certificate download
   // request.  It is responsible for downloading all available pages and making
@@ -96,6 +99,7 @@ class NearbyShareCertificateManagerImpl
    public:
     CertificateDownloadContext(
         nearby::sharing::api::SharingRpcClient* nearby_share_client,
+        nearby::sharing::api::IdentityRpcClient* nearby_identity_client,
         std::string device_id,
         absl::AnyInvocable<void() &&> download_failure_callback,
         absl::AnyInvocable<
@@ -103,6 +107,7 @@ class NearbyShareCertificateManagerImpl
                      certificates) &&>
             download_success_callback)
         : nearby_share_client_(nearby_share_client),
+          nearby_identity_client_(nearby_identity_client),
           device_id_(std::move(device_id)),
           download_failure_callback_(std::move(download_failure_callback)),
           download_success_callback_(std::move(download_success_callback)) {}
@@ -113,8 +118,13 @@ class NearbyShareCertificateManagerImpl
     // |download_success_callback_| is invoked with all downloaded certificates.
     void FetchNextPage();
 
+    // Fetches the next page of certificates by calling Identity API
+    // QuerySharedCredentials.
+    void QuerySharedCredentialsFetchNextPage();
+
    private:
-     nearby::sharing::api::SharingRpcClient* const nearby_share_client_;
+    nearby::sharing::api::SharingRpcClient* const nearby_share_client_;
+    nearby::sharing::api::IdentityRpcClient* const nearby_identity_client_;
     std::string device_id_;
     std::optional<std::string> next_page_token_;
     int page_number_ = 1;
@@ -144,6 +154,7 @@ class NearbyShareCertificateManagerImpl
       NearbyShareEncryptedMetadataKey encrypted_metadata_key,
       CertDecryptedCallback callback) override;
   void DownloadPublicCertificates() override;
+  void PrivateCertificateRefresh(bool force_upload) override;
   void ClearPublicCertificates(std::function<void(bool)> callback) override;
   void OnStart() override;
   void OnStop() override;
@@ -181,7 +192,6 @@ class NearbyShareCertificateManagerImpl
   // yet. New certificate(s) will be created, and an upload to the Nearby Share
   // server will be requested.
   void OnPrivateCertificateExpiration();
-  void FinishPrivateCertificateRefresh();
 
   // Invoked by the public certificate expiration scheduler when an expired
   // public certificate needs to be removed from storage.
@@ -198,7 +208,10 @@ class NearbyShareCertificateManagerImpl
   AccountManager& account_manager_;
   NearbyShareLocalDeviceDataManager* const local_device_data_manager_;
   NearbyShareContactManager* const contact_manager_;
+  int32_t vendor_id_ = 0;  // Defaults to GOOGLE.
   std::unique_ptr< nearby::sharing::api::SharingRpcClient> nearby_client_;
+  std::unique_ptr<nearby::sharing::api::IdentityRpcClient>
+      nearby_identity_client_;
 
   std::shared_ptr<NearbyShareCertificateStorage> certificate_storage_;
   std::unique_ptr<NearbyShareScheduler>
@@ -210,6 +223,11 @@ class NearbyShareCertificateManagerImpl
   std::unique_ptr<NearbyShareScheduler> download_public_certificates_scheduler_;
 
   std::unique_ptr<TaskRunner> executor_;
+  // Whether we need to regenerate the certificates and make another
+  // PublishDevice call. At every PublishDevice call, we check
+  // PublishDeviceResponse to see if contacts are removed. In which case, we
+  // need to regenerate the certificates and make another PublishDevice call.
+  bool call_publish_device_after_certs_regen_ = false;
 };
 
 }  // namespace sharing

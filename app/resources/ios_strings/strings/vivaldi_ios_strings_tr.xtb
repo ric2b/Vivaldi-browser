@@ -2,25 +2,47 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="tr">
 <translation id="1063263220330818888">Özel Arama</translation>
+<translation id="1097355661841455597">Düşüncelerinizi duymak isteriz.</translation>
 <translation id="1137850887415122856">Özel sekmelerinizi kilitlemek için Touch ID, Face ID veya Parola ayarlayın.</translation>
 <translation id="1310184829257917508">Diğer Uygulamalardan Bağlantıları Gizli Olarak Açmayı İsteyin</translation>
+<translation id="1561609750546413721">Vivaldi Çeviri</translation>
 <translation id="207677936531967364">Yeni Özel Sekme Sayfası</translation>
+<translation id="2353953000228441783">Varsayılan site görünümü</translation>
+<translation id="2394192052244849643">Yapıştır ve Ara</translation>
 <translation id="2418705169960294134">Yeni Özel sekmesi</translation>
+<translation id="2783161812871838616">Masaüstü Sitesi İste</translation>
 <translation id="2899836479226240291">Vivaldi'yi Varsayılan Tarayıcı Uygulamanız yaparak bağlantıları otomatik olarak açabilirsiniz.</translation>
+<translation id="3365529507898144230">Fotoğraflara kaydet</translation>
+<translation id="3434473769478814796">Yapıştır ve Git</translation>
 <translation id="3463990832590571933">Yeni Özel sekmede aç</translation>
 <translation id="3473652525653758699">Yeni Özel Pencere</translation>
 <translation id="3501504415290398157">Özel sekmelerinizin kilidini açmak için <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> kullanın.</translation>
 <translation id="3692650606013198282">Özel Olarak Aç</translation>
 <translation id="3981599532037327317">${url} adresini Özel olarak açın</translation>
 <translation id="398477389655464998">Bağlantıyı Vurguya Kopyala</translation>
+<translation id="4026745073321351206">🙄 Bir sorun mu fark ettiniz?</translation>
+<translation id="4304713468139749426">Şifre Yöneticisi</translation>
+<translation id="473775607612524610">Güncelle</translation>
 <translation id="4755216899422789286">URL'leri Vivaldi'de aç</translation>
+<translation id="4802185666270672526">Masaüstü Sitesi İste Seçeneğini Gizle</translation>
+<translation id="5217245356412073535">Varsayılan site görünümünü Ayarlar &gt; İçerik ayarları'ndan masaüstüne değiştirebilirsiniz</translation>
+<translation id="5271549068863921519">Şifreyi kaydet</translation>
+<translation id="5317780077021120954">Kaydet</translation>
 <translation id="5431239785743546285">Okuduğunuz sayfalar</translation>
+<translation id="5614553682702429503">Şifre kaydedilsin mi?</translation>
+<translation id="570209299585559496">Varsayılan site görünümünü ayarlardan masaüstüne, ardından içerik ayarlarına giderek değiştirebilirsiniz</translation>
+<translation id="5962477178930921574">Yapıştır ve Ara</translation>
 <translation id="6233792867654386826">Girilen URL'leri Vivaldi'de açar.</translation>
+<translation id="6680416467695217368">Menüyü Özelleştir</translation>
 <translation id="6827597288286078054">Özel Arama</translation>
+<translation id="6851516051005285358">Masaüstü Sitesi İste</translation>
 <translation id="7307970171564921489"><ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> İle Özel Sekmelerin Kilidini Açın</translation>
 <translation id="7347289093190902150">Özelde Aç?</translation>
 <translation id="7549299604720382000">Yeni Özel Sekme</translation>
+<translation id="755255281989213264">Menüyü özelleştir</translation>
 <translation id="7920949005883349320">Gizlilik ve Güvenlik</translation>
-<translation id="8031932676440435547">Fotoğraflarda kaydet</translation>
+<translation id="7961015016161918242">Hiçbir Zaman</translation>
 <translation id="8326104954595890674">Yeni Özel Sekme</translation>
+<translation id="8756969031206844760">Şifre güncellensin mi?</translation>
+<translation id="9094033019050270033">Şifreyi güncelle</translation>
 </translationbundle>

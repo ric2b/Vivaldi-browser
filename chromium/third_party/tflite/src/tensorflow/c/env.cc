@@ -15,6 +15,12 @@ limitations under the License.
 
 #include "tensorflow/c/env.h"
 
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <vector>
+
+#include "absl/status/status.h"
 #include "tensorflow/c/c_api_macros.h"
 #include "tensorflow/c/tf_file_statistics.h"
 #include "tensorflow/c/tf_status.h"
@@ -104,7 +110,7 @@ void TF_AppendWritableFile(TF_WritableFileHandle* handle, const char* data,
   auto* cc_file = reinterpret_cast<::tensorflow::WritableFile*>(handle);
   TF_SetStatus(status, TF_OK, "");
   ::tensorflow::Set_TF_Status_from_Status(
-      status, cc_file->Append(::tensorflow::StringPiece{data, length}));
+      status, cc_file->Append(absl::string_view{data, length}));
 }
 
 void TF_DeleteFile(const char* filename, TF_Status* status) {

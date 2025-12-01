@@ -19,7 +19,6 @@
 #include "base/test/test_future.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/ash/login/existing_user_controller.h"
 #include "chrome/browser/ash/login/helper.h"
 #include "chrome/browser/ash/login/startup_utils.h"
@@ -139,7 +138,7 @@ class WebTrustedCertsChangedObserver
 // cert change has occurred.
 class CertDatabaseChangedObserver : public net::CertDatabase::Observer {
  public:
-  CertDatabaseChangedObserver() {}
+  CertDatabaseChangedObserver() = default;
 
   CertDatabaseChangedObserver(const CertDatabaseChangedObserver&) = delete;
   CertDatabaseChangedObserver& operator=(const CertDatabaseChangedObserver&) =
@@ -495,7 +494,7 @@ class PolicyProvidedCertsOnUserSessionInitTest : public LoginPolicyTestBase {
       const PolicyProvidedCertsOnUserSessionInitTest&) = delete;
 
  protected:
-  PolicyProvidedCertsOnUserSessionInitTest() {}
+  PolicyProvidedCertsOnUserSessionInitTest() = default;
 
   void GetPolicySettings(em::CloudPolicySettings* policy) const override {
     std::string user_policy_blob = GetTestCertsFileContents(kRootCaCertOnc);
@@ -532,8 +531,8 @@ IN_PROC_BROWSER_TEST_F(PolicyProvidedCertsOnUserSessionInitTest,
 // Testing policy-provided client cert import.
 class PolicyProvidedClientCertsTest : public DevicePolicyCrosBrowserTest {
  protected:
-  PolicyProvidedClientCertsTest() {}
-  ~PolicyProvidedClientCertsTest() override {}
+  PolicyProvidedClientCertsTest() = default;
+  ~PolicyProvidedClientCertsTest() override = default;
 
   void SetUpInProcessBrowserTestFixture() override {
     // Set up the mock policy provider.

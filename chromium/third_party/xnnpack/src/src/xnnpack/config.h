@@ -25,6 +25,7 @@ XNN_INTERNAL const struct xnn_transpose_config* xnn_init_transpose_config();
 XNN_INTERNAL const struct xnn_cmul_config* xnn_init_f16_cmul_config();
 XNN_INTERNAL const struct xnn_cmul_config* xnn_init_f32_cmul_config();
 
+XNN_INTERNAL const struct xnn_pack_lh_config* xnn_init_x16_pack_lh_config();
 XNN_INTERNAL const struct xnn_pack_lh_config* xnn_init_x32_pack_lh_config();
 
 XNN_INTERNAL const struct xnn_binary_elementwise_config* xnn_init_f16_vadd_config();
@@ -37,7 +38,6 @@ XNN_INTERNAL const struct xnn_binary_elementwise_config* xnn_init_f16_vsub_confi
 XNN_INTERNAL const struct xnn_binary_elementwise_config* xnn_init_f16_vsqrdiff_config();
 XNN_INTERNAL const struct xnn_binary_elementwise_config* xnn_init_f32_vadd_config();
 XNN_INTERNAL const struct xnn_binary_elementwise_config* xnn_init_f32_vcopysign_config();
-XNN_INTERNAL const struct xnn_binary_elementwise_config* xnn_init_s32_vmul_config();
 XNN_INTERNAL const struct xnn_binary_elementwise_config* xnn_init_f32_vdiv_config();
 XNN_INTERNAL const struct xnn_binary_elementwise_config* xnn_init_f32_vmax_config();
 XNN_INTERNAL const struct xnn_binary_elementwise_config* xnn_init_f32_vmin_config();
@@ -68,6 +68,8 @@ XNN_INTERNAL const struct xnn_unary_elementwise_config* xnn_init_f16_sqrt_config
 XNN_INTERNAL const struct xnn_unary_elementwise_config* xnn_init_f16_tanh_config();
 XNN_INTERNAL const struct xnn_unary_elementwise_config* xnn_init_f16_to_f32_cvt_config();
 XNN_INTERNAL const struct xnn_unary_elementwise_config* xnn_init_f16_to_qs8_cvt_config();
+XNN_INTERNAL const struct xnn_unary_elementwise_config*
+xnn_init_f16_to_qu8_cvt_config();
 XNN_INTERNAL const struct xnn_unary_elementwise_config* xnn_init_f32_abs_config();
 XNN_INTERNAL const struct xnn_unary_elementwise_config* xnn_init_f32_clamp_config();
 XNN_INTERNAL const struct xnn_unary_elementwise_config* xnn_init_f32_elu_config();
@@ -242,6 +244,7 @@ XNN_INTERNAL const struct xnn_gemm_config* xnn_init_f32_gemm_config();
 XNN_INTERNAL const struct xnn_gemm_config* xnn_init_f32_gemm_nr2_config();
 XNN_INTERNAL const struct xnn_gemm_config* xnn_init_f32_qc8w_gemm_config();
 XNN_INTERNAL const struct xnn_gemm_config* xnn_init_f32_qc4w_gemm_config();
+XNN_INTERNAL const struct xnn_gemm_config* xnn_init_pf16_gemm_config();
 XNN_INTERNAL const struct xnn_gemm_config* xnn_init_pf32_gemm_config();
 XNN_INTERNAL const struct xnn_gemm_config* xnn_init_qd8_f16_qb4w_gemm_config();
 XNN_INTERNAL const struct xnn_gemm_config* xnn_init_qd8_f16_qc4w_gemm_config();
@@ -250,7 +253,14 @@ XNN_INTERNAL const struct xnn_gemm_config* xnn_init_qd8_f32_qb4w_gemm_config();
 XNN_INTERNAL const struct xnn_gemm_config* xnn_init_qd8_f32_qc4w_gemm_config();
 XNN_INTERNAL const struct xnn_gemm_config* xnn_init_qd8_f32_qc8w_gemm_config();
 XNN_INTERNAL const struct xnn_gemm_config* xnn_init_qp8_f32_qc4w_gemm_config();
+XNN_INTERNAL const struct xnn_gemm_config* xnn_init_qp8_f32_qc8w_gemm_config();
 XNN_INTERNAL const struct xnn_gemm_config* xnn_init_qp8_f32_qb4w_gemm_config();
+XNN_INTERNAL const struct xnn_gemm_config* xnn_init_qdu8_f32_qc4w_gemm_config();
+XNN_INTERNAL const struct xnn_gemm_config* xnn_init_qdu8_f16_qc8w_gemm_config();
+XNN_INTERNAL const struct xnn_gemm_config* xnn_init_qdu8_f32_qc8w_gemm_config();
+XNN_INTERNAL const struct xnn_gemm_config* xnn_init_qdu8_f32_qb4w_gemm_config();
+XNN_INTERNAL const struct xnn_gemm_config* xnn_init_qdu8_f16_qc4w_gemm_config();
+XNN_INTERNAL const struct xnn_gemm_config* xnn_init_qd8_f16_qc8w_gemm_config();
 XNN_INTERNAL const struct xnn_gemm_config* xnn_init_qs8_qc8w_gemm_config();
 XNN_INTERNAL const struct xnn_gemm_config* xnn_init_qu8_gemm_config();
 
@@ -258,9 +268,6 @@ XNN_INTERNAL const struct xnn_maxpool_config* xnn_init_f16_maxpool_config();
 XNN_INTERNAL const struct xnn_maxpool_config* xnn_init_f32_maxpool_config();
 XNN_INTERNAL const struct xnn_maxpool_config* xnn_init_s8_maxpool_config();
 XNN_INTERNAL const struct xnn_maxpool_config* xnn_init_u8_maxpool_config();
-
-XNN_INTERNAL const struct xnn_zip_config* xnn_init_x8_zip_config();
-XNN_INTERNAL const struct xnn_zip_config* xnn_init_x32_zip_config();
 
 XNN_INTERNAL const struct xnn_rmax_config* xnn_init_f16_rmax_config();
 XNN_INTERNAL const struct xnn_rmax_config* xnn_init_f32_rmax_config();

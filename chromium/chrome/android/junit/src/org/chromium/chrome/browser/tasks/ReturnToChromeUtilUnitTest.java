@@ -15,8 +15,8 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import static org.chromium.chrome.browser.flags.ChromeFeatureList.sStartSurfaceReturnTimeTabletSecs;
 import static org.chromium.chrome.browser.tasks.ReturnToChromeUtil.FAIL_TO_SHOW_HOME_SURFACE_UI_UMA;
-import static org.chromium.chrome.browser.tasks.ReturnToChromeUtil.HOME_SURFACE_RETURN_TIME_SECONDS;
 import static org.chromium.chrome.browser.tasks.ReturnToChromeUtil.HOME_SURFACE_SHOWN_AT_STARTUP_UMA;
 import static org.chromium.chrome.browser.tasks.ReturnToChromeUtil.HOME_SURFACE_SHOWN_UMA;
 
@@ -30,7 +30,6 @@ import androidx.test.filters.SmallTest;
 
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
@@ -49,7 +48,6 @@ import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.HistogramWatcher;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.ChromeInactivityTracker;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -94,8 +92,6 @@ public class ReturnToChromeUtilUnitTest {
 
     private static final int ON_RETURN_THRESHOLD_SECOND = 1000;
     private static final int DELTA_MS = 100;
-
-    @Rule public JniMocker mJniMocker = new JniMocker();
     @Mock private Context mContext;
     @Mock private TabModelSelector mTabModelSelector;
     @Mock private ChromeInactivityTracker mInactivityTracker;
@@ -141,11 +137,11 @@ public class ReturnToChromeUtilUnitTest {
     @SmallTest
     public void testShouldShowTabSwitcher() {
         Assert.assertEquals(
-                HOME_SURFACE_RETURN_TIME_SECONDS.getDefaultValue(),
-                HOME_SURFACE_RETURN_TIME_SECONDS.getValue());
+                sStartSurfaceReturnTimeTabletSecs.getDefaultValue(),
+                sStartSurfaceReturnTimeTabletSecs.getValue());
 
         long returnTimeMs =
-                HOME_SURFACE_RETURN_TIME_SECONDS.getValue() * DateUtils.SECOND_IN_MILLIS;
+                sStartSurfaceReturnTimeTabletSecs.getValue() * DateUtils.SECOND_IN_MILLIS;
         // When return time doesn't arrive, return false:
         Assert.assertFalse(
                 ReturnToChromeUtil.shouldShowTabSwitcher(
@@ -167,7 +163,7 @@ public class ReturnToChromeUtilUnitTest {
         ChromeSharedPreferences.getInstance()
                 .addToStringSet(
                         ChromePreferenceKeys.TABBED_ACTIVITY_LAST_BACKGROUNDED_TIME_MS_PREF, "0");
-        HOME_SURFACE_RETURN_TIME_SECONDS.setForTesting(0);
+        sStartSurfaceReturnTimeTabletSecs.setForTesting(0);
         assertTrue(ReturnToChromeUtil.shouldShowTabSwitcher(0));
 
         // Tests the case when there isn't any Tab. Verifies that home surface NTP is shown.
@@ -422,7 +418,7 @@ public class ReturnToChromeUtilUnitTest {
         ChromeSharedPreferences.getInstance()
                 .addToStringSet(
                         ChromePreferenceKeys.TABBED_ACTIVITY_LAST_BACKGROUNDED_TIME_MS_PREF, "0");
-        HOME_SURFACE_RETURN_TIME_SECONDS.setForTesting(0);
+        sStartSurfaceReturnTimeTabletSecs.setForTesting(0);
         assertTrue(ReturnToChromeUtil.shouldShowTabSwitcher(0));
 
         // There should always be at least 1 tab. Otherwise one will be created regardless.
@@ -477,14 +473,6 @@ public class ReturnToChromeUtilUnitTest {
                         .build();
         ReturnToChromeUtil.showHomeSurfaceUiOnNtp(mNtpTab, mTab1, mHomeSurfaceTracker);
         histogram.assertExpected();
-    }
-
-    private void setupAndVerifyTablets() {
-        doReturn(mResources).when(mContext).getResources();
-        doReturn(DeviceFormFactor.SCREEN_BUCKET_TABLET)
-                .when(mResources)
-                .getInteger(org.chromium.ui.R.integer.min_screen_width_bucket);
-        assertTrue(DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext));
     }
 
     private Intent createMainIntentFromLauncher() {

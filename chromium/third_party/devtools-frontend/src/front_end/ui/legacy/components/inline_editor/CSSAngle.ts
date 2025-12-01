@@ -5,9 +5,9 @@
 import './CSSAngleEditor.js';
 import './CSSAngleSwatch.js';
 
-import * as LitHtml from '../../../lit-html/lit-html.js';
+import * as Lit from '../../../lit/lit.js';
 
-import cssAngleStyles from './cssAngle.css.js';
+import cssAngleStylesRaw from './cssAngle.css.js';
 import {
   type Angle,
   AngleUnit,
@@ -19,8 +19,12 @@ import {
 } from './CSSAngleUtils.js';
 import {ValueChangedEvent} from './InlineEditorUtils.js';
 
-const {render, html} = LitHtml;
-const styleMap = LitHtml.Directives.styleMap;
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const cssAngleStyles = new CSSStyleSheet();
+cssAngleStyles.replaceSync(cssAngleStylesRaw.cssContent);
+
+const {render, html} = Lit;
+const styleMap = Lit.Directives.styleMap;
 
 export class PopoverToggledEvent extends Event {
   static readonly eventName = 'popovertoggled';
@@ -162,6 +166,7 @@ export class CSSAngle extends HTMLElement {
     this.displayedAngle = roundAngleByUnit(convertAngleUnit(angle, this.displayedAngle.unit));
     this.angle = this.displayedAngle;
     this.dispatchEvent(new ValueChangedEvent(`${this.angle.value}${this.angle.unit}`));
+    this.render();
   }
 
   private displayNextUnit(): void {
@@ -243,7 +248,7 @@ export class CSSAngle extends HTMLElement {
     // clang-format on
   }
 
-  private renderPopover(): LitHtml.TemplateResult {
+  private renderPopover(): Lit.TemplateResult {
     let contextualBackground = '';
     if (this.propertyValue && !this.propertyValue.match(/url\(.*\)/i)) {
       contextualBackground = this.propertyValue;

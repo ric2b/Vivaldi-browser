@@ -7,7 +7,6 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> 意外中斷連線。</translation>
 <translation id="1161325031994447685">重新連線至 Wi-Fi 網路</translation>
 <translation id="1175364870820465910">列印 (&amp;P)…</translation>
-<translation id="132390688737681464">儲存並填入地址</translation>
 <translation id="1375198122581997741">關於版本</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> 未傳送任何資料。</translation>
 <translation id="1555191101192706055">您嘗試造訪的網站上的攻擊者，可能會誘騙您安裝有害軟體，以影響您的瀏覽方式 — 例如變更您的首頁，或在您造訪的網站上顯示額外廣告。</translation>
@@ -52,6 +51,7 @@
 <translation id="2991571918955627853">目前無法造訪 <ph name="SITE" />，因為這個網站使用 HSTS。網路錯誤和攻擊行為通常是暫時性的，因此這個網頁可能稍後就會恢復正常狀態。</translation>
 <translation id="3005723025932146533">顯示儲存的複本</translation>
 <translation id="301521992641321250">已自動封鎖</translation>
+<translation id="3037605927509011580">糟糕！</translation>
 <translation id="3041612393474885105">憑證資訊</translation>
 <translation id="3109728660330352905">您未獲得授權，無法瀏覽這個網頁。</translation>
 <translation id="31207688938192855"><ph name="BEGIN_LINK" />正在嘗試執行連線診斷<ph name="END_LINK" />。</translation>
@@ -64,7 +64,6 @@
 <translation id="3234666976984236645">一律偵測這個網站的重要內容</translation>
 <translation id="3308738399950580893">廣告</translation>
 <translation id="3384522979010096022">貴機構不允許您瀏覽這個網站</translation>
-<translation id="3387261909427947069">付款方式</translation>
 <translation id="3422472998109090673">目前無法連上 <ph name="HOST_NAME" />。</translation>
 <translation id="3427092606871434483">允許 (預設)</translation>
 <translation id="3447661539832366887">這個裝置的擁有者已關閉恐龍遊戲。</translation>
@@ -125,7 +124,6 @@
 <translation id="5386426401304769735">這個網站的憑證鏈結包含使用 SHA-1 進行簽署的憑證。</translation>
 <translation id="5452270690849572955">找不到網頁「<ph name="HOST_NAME" />」</translation>
 <translation id="5457113250005438886">無效</translation>
-<translation id="5490432419156082418">地址和其它資訊</translation>
 <translation id="5492298309214877701">這個位於公司、機構或學校內部網路的網站使用的網址與某個外部網站相同。
     <ph name="LINE_BREAK" />
     請與您的系統管理員聯絡。</translation>
@@ -171,7 +169,6 @@
 <translation id="7111012039238467737">（有效）</translation>
 <translation id="7113310725918019676">允許來自 <ph name="DOMAIN" /> 的 <ph name="BLOCKED_TYPE" /></translation>
 <translation id="7126644664682723998">貼上並搜尋</translation>
-<translation id="7179323680825933600">儲存並填入付款方式</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> 不符合安全性標準。</translation>
 <translation id="7219179957768738017">這個連線使用 <ph name="SSL_VERSION" />。</translation>
 <translation id="7221855153210829124">顯示通知</translation>
@@ -223,6 +220,7 @@
 <translation id="9062620674789239642">檔案可能已遭到移動、編輯或刪除。</translation>
 <translation id="9069693763241529744">依據擴充功能設定封鎖</translation>
 <translation id="9073799351042754113">您已選擇關閉此網站的安全性警告。</translation>
+<translation id="9168814207360376865">允許網站檢查您是否有已儲存的付款方式</translation>
 <translation id="9169664750068251925">永遠禁止在這個網站執行</translation>
 <translation id="9180553614777056266">廣告攔截器</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> 使用了不支援的通訊協定。</translation>

@@ -8,17 +8,17 @@
 #include <memory>
 #include <vector>
 
+#include "discovery/common/reporting_client.h"
 #include "discovery/dnssd/public/dns_sd_service.h"
 #include "discovery/public/dns_sd_service_watcher.h"
-#include "osp/impl/service_listener_impl.h"
 #include "osp/public/service_info.h"
+#include "osp/public/service_listener.h"
 #include "platform/api/task_runner.h"
 
-namespace openscreen {
+namespace openscreen::osp {
 
-namespace osp {
-
-class DnsSdWatcherClient final : public ServiceListenerImpl::Delegate {
+class DnsSdWatcherClient final : public ServiceListener::Delegate,
+                                 public openscreen::discovery::ReportingClient {
  public:
   explicit DnsSdWatcherClient(TaskRunner& task_runner);
   DnsSdWatcherClient(const DnsSdWatcherClient&) = delete;
@@ -36,6 +36,10 @@ class DnsSdWatcherClient final : public ServiceListenerImpl::Delegate {
   void SearchNow(ServiceListener::State from) override;
 
  private:
+  // openscreen::discovery::ReportingClient overrides.
+  void OnFatalError(const Error&) override;
+  void OnRecoverableError(const Error&) override;
+
   void StartWatcherInternal(const ServiceListener::Config& config);
   discovery::DnsSdServicePtr CreateDnsSdServiceInternal(
       const ServiceListener::Config& config);
@@ -49,7 +53,6 @@ class DnsSdWatcherClient final : public ServiceListenerImpl::Delegate {
   std::unique_ptr<OspDnsSdWatcher> dns_sd_watcher_;
 };
 
-}  // namespace osp
-}  // namespace openscreen
+}  // namespace openscreen::osp
 
 #endif  // OSP_IMPL_DNS_SD_WATCHER_CLIENT_H_

@@ -185,6 +185,6 @@ Yes! As of C++11, you can store smart pointers in STL containers.
 *   [StackOverflow guide to smart
             pointers](http://stackoverflow.com/questions/106508/what-is-a-smart-pointer-and-when-should-i-use-one)
 *   [Wikipedia article on smart
-            pointers](http://en.wikipedia.org/wiki/Smart_pointer)
+            pointers](https://en.wikipedia.org/wiki/Smart_pointer)
 *   [Guide to smart pointer usage in
             WebKit](http://www.webkit.org/coding/RefPtr.html)

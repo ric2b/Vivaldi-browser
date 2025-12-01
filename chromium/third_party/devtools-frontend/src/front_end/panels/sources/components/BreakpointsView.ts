@@ -16,15 +16,19 @@ import * as TextUtils from '../../../models/text_utils/text_utils.js';
 import * as Workspace from '../../../models/workspace/workspace.js';
 import * as Input from '../../../ui/components/input/input.js';
 import * as LegacyWrapper from '../../../ui/components/legacy_wrapper/legacy_wrapper.js';
-import * as Coordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
+import * as RenderCoordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
 import * as UI from '../../../ui/legacy/legacy.js';
-import * as LitHtml from '../../../ui/lit-html/lit-html.js';
+import * as Lit from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
-import breakpointsViewStyles from './breakpointsView.css.js';
+import breakpointsViewStylesRaw from './breakpointsView.css.js';
 import {findNextNodeForKeyboardNavigation, getDifferentiatingPathMap, type TitleInfo} from './BreakpointsViewUtils.js';
 
-const {html, Directives: {ifDefined, repeat, classMap, live}} = LitHtml;
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const breakpointsViewStyles = new CSSStyleSheet();
+breakpointsViewStyles.replaceSync(breakpointsViewStylesRaw.cssContent);
+
+const {html, Directives: {ifDefined, repeat, classMap, live}} = Lit;
 
 const UIStrings = {
   /**
@@ -109,8 +113,6 @@ const UIStrings = {
 };
 const str_ = i18n.i18n.registerUIStrings('panels/sources/components/BreakpointsView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
-const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
-
 const MAX_SNIPPET_LENGTH = 200;
 
 export interface BreakpointsViewData {
@@ -568,7 +570,7 @@ export class BreakpointsView extends LegacyWrapper.LegacyWrapper.WrappableCompon
   }
 
   override async render(): Promise<void> {
-    await coordinator.write('BreakpointsView render', () => {
+    await RenderCoordinator.write('BreakpointsView render', () => {
       const clickHandler = async(event: Event): Promise<void> => {
         const currentTarget = event.currentTarget as HTMLElement;
         await this.#setSelected(currentTarget);
@@ -611,12 +613,12 @@ export class BreakpointsView extends LegacyWrapper.LegacyWrapper.WrappableCompon
             (group, groupIndex) => html`${this.#renderBreakpointGroup(group, groupIndex)}`)}
         </div>`;
       // clang-format on
-      LitHtml.render(out, this.#shadow, {host: this});
+      Lit.render(out, this.#shadow, {host: this});
     });
 
     // If no element is tabbable, set the pause-on-exceptions to be tabbable. This can happen
     // if the previously focused element was removed.
-    await coordinator.write('BreakpointsView make pause-on-exceptions focusable', () => {
+    await RenderCoordinator.write('BreakpointsView make pause-on-exceptions focusable', () => {
       if (this.#shadow.querySelector('[tabindex="0"]') === null) {
         const element = this.#shadow.querySelector<HTMLElement>('[data-first-pause]');
         element?.setAttribute('tabindex', '0');
@@ -653,7 +655,7 @@ export class BreakpointsView extends LegacyWrapper.LegacyWrapper.WrappableCompon
     if (!element) {
       return;
     }
-    void coordinator.write('BreakpointsView focus on selected element', () => {
+    void RenderCoordinator.write('BreakpointsView focus on selected element', () => {
       const prevSelected = this.#shadow.querySelector('[tabindex="0"]');
       prevSelected?.setAttribute('tabindex', '-1');
       element.setAttribute('tabindex', '0');
@@ -664,11 +666,11 @@ export class BreakpointsView extends LegacyWrapper.LegacyWrapper.WrappableCompon
   async #handleArrowKey(key: Platform.KeyboardUtilities.ArrowKey, target: HTMLElement): Promise<void> {
     const setGroupExpandedState = (detailsElement: HTMLDetailsElement, expanded: boolean): Promise<void> => {
       if (expanded) {
-        return coordinator.write('BreakpointsView expand', () => {
+        return RenderCoordinator.write('BreakpointsView expand', () => {
           detailsElement.setAttribute('open', '');
         });
       }
-      return coordinator.write('BreakpointsView expand', () => {
+      return RenderCoordinator.write('BreakpointsView expand', () => {
         detailsElement.removeAttribute('open');
       });
     };
@@ -701,7 +703,7 @@ export class BreakpointsView extends LegacyWrapper.LegacyWrapper.WrappableCompon
     return;
   }
 
-  #renderEditBreakpointButton(breakpointItem: BreakpointItem): LitHtml.TemplateResult {
+  #renderEditBreakpointButton(breakpointItem: BreakpointItem): Lit.TemplateResult {
     const clickHandler = (event: Event): void => {
       void this.#controller.breakpointEdited(breakpointItem, true /* editButtonClicked */);
       event.consume();
@@ -719,7 +721,7 @@ export class BreakpointsView extends LegacyWrapper.LegacyWrapper.WrappableCompon
   }
 
   #renderRemoveBreakpointButton(
-      breakpointItems: BreakpointItem[], tooltipText: string, action: Host.UserMetrics.Action): LitHtml.TemplateResult {
+      breakpointItems: BreakpointItem[], tooltipText: string, action: Host.UserMetrics.Action): Lit.TemplateResult {
     const clickHandler = (event: Event): void => {
       Host.userMetrics.actionTaken(action);
       void this.#controller.breakpointsRemoved(breakpointItems);
@@ -772,7 +774,7 @@ export class BreakpointsView extends LegacyWrapper.LegacyWrapper.WrappableCompon
     void menu.show();
   }
 
-  #renderBreakpointGroup(group: BreakpointGroup, groupIndex: number): LitHtml.TemplateResult {
+  #renderBreakpointGroup(group: BreakpointGroup, groupIndex: number): Lit.TemplateResult {
     const contextmenuHandler = (event: Event): void => {
       this.#onBreakpointGroupContextMenu(event, group);
       event.consume();
@@ -819,7 +821,7 @@ export class BreakpointsView extends LegacyWrapper.LegacyWrapper.WrappableCompon
     // clang-format on
   }
 
-  #renderGroupCheckbox(group: BreakpointGroup): LitHtml.TemplateResult {
+  #renderGroupCheckbox(group: BreakpointGroup): Lit.TemplateResult {
     const groupCheckboxToggled = (e: Event): void => {
       Host.userMetrics.actionTaken(Host.UserMetrics.Action.BreakpointsInFileCheckboxToggled);
       const element = e.target as HTMLInputElement;
@@ -844,7 +846,7 @@ export class BreakpointsView extends LegacyWrapper.LegacyWrapper.WrappableCompon
     `;
   }
 
-  #renderFileIcon(): LitHtml.TemplateResult {
+  #renderFileIcon(): Lit.TemplateResult {
     return html`<devtools-icon name="file-script"></devtools-icon>`;
   }
 
@@ -894,7 +896,7 @@ export class BreakpointsView extends LegacyWrapper.LegacyWrapper.WrappableCompon
 
   #renderBreakpointEntry(
       breakpointItem: BreakpointItem, editable: boolean, groupIndex: number,
-      breakpointItemIndex: number): LitHtml.TemplateResult {
+      breakpointItemIndex: number): Lit.TemplateResult {
     const codeSnippetClickHandler = (event: Event): void => {
       void this.#controller.jumpToSource(breakpointItem);
       event.consume();
@@ -942,7 +944,7 @@ export class BreakpointsView extends LegacyWrapper.LegacyWrapper.WrappableCompon
       </label>
       <span class='code-snippet' @click=${codeSnippetClickHandler} title=${ifDefined(codeSnippetTooltip)} jslog=${VisualLogging.action('sources.jump-to-breakpoint').track({click: true})}>${codeSnippet}</span>
       <span class='breakpoint-item-location-or-actions'>
-        ${editable ? this.#renderEditBreakpointButton(breakpointItem) : LitHtml.nothing}
+        ${editable ? this.#renderEditBreakpointButton(breakpointItem) : Lit.nothing}
         ${this.#renderRemoveBreakpointButton([breakpointItem], i18nString(UIStrings.removeBreakpoint), Host.UserMetrics.Action.BreakpointRemovedFromRemoveButton)}
         <span class='location'>${breakpointItem.location}</span>
       </span>
@@ -1004,7 +1006,7 @@ export class BreakpointsView extends LegacyWrapper.LegacyWrapper.WrappableCompon
         pauseOnCaughtCheckbox.click();
       }
 
-      void coordinator.write('BreakpointsView update pause-on-uncaught-exception', () => {
+      void RenderCoordinator.write('BreakpointsView update pause-on-uncaught-exception', () => {
         // Disable/enable the pause on caught exception checkbox depending on whether
         // or not we are pausing on uncaught exceptions.
         if (checked) {

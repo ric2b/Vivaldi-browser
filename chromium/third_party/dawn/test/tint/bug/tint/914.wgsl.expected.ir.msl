@@ -30,14 +30,12 @@ struct tint_module_vars_struct {
   const constant Uniforms* uniforms;
   threadgroup tint_array<tint_array<float, 64>, 64>* mm_Asub;
   threadgroup tint_array<tint_array<float, 64>, 64>* mm_Bsub;
+  const constant tint_array<uint4, 1>* tint_storage_buffer_sizes;
 };
 
-#define TINT_ISOLATE_UB(VOLATILE_NAME) \
-  {volatile bool VOLATILE_NAME = false; if (VOLATILE_NAME) break;}
-
-struct tint_symbol_3 {
+struct tint_symbol_2 {
+  tint_array<tint_array<float, 64>, 64> tint_symbol;
   tint_array<tint_array<float, 64>, 64> tint_symbol_1;
-  tint_array<tint_array<float, 64>, 64> tint_symbol_2;
 };
 
 float mm_readA(uint row, uint col, tint_module_vars_struct tint_module_vars) {
@@ -48,7 +46,7 @@ float mm_readA(uint row, uint col, tint_module_vars_struct tint_module_vars) {
     v = false;
   }
   if (v) {
-    float const result = (*tint_module_vars.firstMatrix).numbers[((row * (*tint_module_vars.uniforms).dimInner) + col)];
+    float const result = (*tint_module_vars.firstMatrix).numbers[min(((row * (*tint_module_vars.uniforms).dimInner) + col), ((((*tint_module_vars.tint_storage_buffer_sizes)[0u].x - 0u) / 4u) - 1u))];
     return result;
   }
   return 0.0f;
@@ -62,7 +60,7 @@ float mm_readB(uint row, uint col, tint_module_vars_struct tint_module_vars) {
     v_1 = false;
   }
   if (v_1) {
-    float const result = (*tint_module_vars.secondMatrix).numbers[((row * (*tint_module_vars.uniforms).dimBOuter) + col)];
+    float const result = (*tint_module_vars.secondMatrix).numbers[min(((row * (*tint_module_vars.uniforms).dimBOuter) + col), ((((*tint_module_vars.tint_storage_buffer_sizes)[0u].y - 0u) / 4u) - 1u))];
     return result;
   }
   return 0.0f;
@@ -77,7 +75,7 @@ void mm_write(uint row, uint col, float value, tint_module_vars_struct tint_modu
   }
   if (v_2) {
     uint const index = (col + (row * (*tint_module_vars.uniforms).dimBOuter));
-    (*tint_module_vars.resultMatrix).numbers[index] = value;
+    (*tint_module_vars.resultMatrix).numbers[min(index, ((((*tint_module_vars.tint_storage_buffer_sizes)[0u].z - 0u) / 4u) - 1u))] = value;
   }
 }
 
@@ -85,12 +83,11 @@ uint tint_div_u32(uint lhs, uint rhs) {
   return (lhs / select(rhs, 1u, (rhs == 0u)));
 }
 
-void tint_symbol_inner(uint3 local_id, uint3 global_id, uint tint_local_index, tint_module_vars_struct tint_module_vars) {
+void main_inner(uint3 local_id, uint3 global_id, uint tint_local_index, tint_module_vars_struct tint_module_vars) {
   {
     uint v_3 = 0u;
     v_3 = tint_local_index;
     while(true) {
-      TINT_ISOLATE_UB(tint_volatile_false)
       uint const v_4 = v_3;
       if ((v_4 >= 4096u)) {
         break;
@@ -104,10 +101,10 @@ void tint_symbol_inner(uint3 local_id, uint3 global_id, uint tint_local_index, t
     }
   }
   threadgroup_barrier(mem_flags::mem_threadgroup);
-  uint const tileRow = (local_id[1u] * 4u);
-  uint const tileCol = (local_id[0u] * 4u);
-  uint const globalRow = (global_id[1u] * 4u);
-  uint const globalCol = (global_id[0u] * 4u);
+  uint const tileRow = (local_id.y * 4u);
+  uint const tileCol = (local_id.x * 4u);
+  uint const globalRow = (global_id.y * 4u);
+  uint const globalCol = (global_id.x * 4u);
   uint const numTiles = (tint_div_u32(((*tint_module_vars.uniforms).dimInner - 1u), 64u) + 1u);
   tint_array<float, 16> acc = {};
   float ACached = 0.0f;
@@ -115,12 +112,11 @@ void tint_symbol_inner(uint3 local_id, uint3 global_id, uint tint_local_index, t
   {
     uint index = 0u;
     while(true) {
-      TINT_ISOLATE_UB(tint_volatile_false_1)
       if ((index < 16u)) {
       } else {
         break;
       }
-      acc[index] = 0.0f;
+      acc[min(index, 15u)] = 0.0f;
       {
         index = (index + 1u);
       }
@@ -128,13 +124,12 @@ void tint_symbol_inner(uint3 local_id, uint3 global_id, uint tint_local_index, t
     }
   }
   uint const ColPerThreadA = 4u;
-  uint const tileColA = (local_id[0u] * ColPerThreadA);
+  uint const tileColA = (local_id.x * ColPerThreadA);
   uint const RowPerThreadB = 4u;
-  uint const tileRowB = (local_id[1u] * RowPerThreadB);
+  uint const tileRowB = (local_id.y * RowPerThreadB);
   {
     uint t = 0u;
     while(true) {
-      TINT_ISOLATE_UB(tint_volatile_false_2)
       if ((t < numTiles)) {
       } else {
         break;
@@ -142,7 +137,6 @@ void tint_symbol_inner(uint3 local_id, uint3 global_id, uint tint_local_index, t
       {
         uint innerRow = 0u;
         while(true) {
-          TINT_ISOLATE_UB(tint_volatile_false_3)
           if ((innerRow < 4u)) {
           } else {
             break;
@@ -150,14 +144,13 @@ void tint_symbol_inner(uint3 local_id, uint3 global_id, uint tint_local_index, t
           {
             uint innerCol = 0u;
             while(true) {
-              TINT_ISOLATE_UB(tint_volatile_false_4)
               if ((innerCol < ColPerThreadA)) {
               } else {
                 break;
               }
               uint const inputRow = (tileRow + innerRow);
               uint const inputCol = (tileColA + innerCol);
-              (*tint_module_vars.mm_Asub)[inputRow][inputCol] = mm_readA((globalRow + innerRow), ((t * 64u) + inputCol), tint_module_vars);
+              (*tint_module_vars.mm_Asub)[min(inputRow, 63u)][min(inputCol, 63u)] = mm_readA((globalRow + innerRow), ((t * 64u) + inputCol), tint_module_vars);
               {
                 innerCol = (innerCol + 1u);
               }
@@ -173,7 +166,6 @@ void tint_symbol_inner(uint3 local_id, uint3 global_id, uint tint_local_index, t
       {
         uint innerRow = 0u;
         while(true) {
-          TINT_ISOLATE_UB(tint_volatile_false_5)
           if ((innerRow < RowPerThreadB)) {
           } else {
             break;
@@ -181,14 +173,13 @@ void tint_symbol_inner(uint3 local_id, uint3 global_id, uint tint_local_index, t
           {
             uint innerCol = 0u;
             while(true) {
-              TINT_ISOLATE_UB(tint_volatile_false_6)
               if ((innerCol < 4u)) {
               } else {
                 break;
               }
               uint const inputRow = (tileRowB + innerRow);
               uint const inputCol = (tileCol + innerCol);
-              threadgroup float* const v_5 = (&(*tint_module_vars.mm_Bsub)[innerCol][inputCol]);
+              threadgroup float* const v_5 = (&(*tint_module_vars.mm_Bsub)[min(innerCol, 63u)][min(inputCol, 63u)]);
               (*v_5) = mm_readB(((t * 64u) + inputRow), (globalCol + innerCol), tint_module_vars);
               {
                 innerCol = (innerCol + 1u);
@@ -206,7 +197,6 @@ void tint_symbol_inner(uint3 local_id, uint3 global_id, uint tint_local_index, t
       {
         uint k = 0u;
         while(true) {
-          TINT_ISOLATE_UB(tint_volatile_false_7)
           if ((k < 64u)) {
           } else {
             break;
@@ -214,12 +204,11 @@ void tint_symbol_inner(uint3 local_id, uint3 global_id, uint tint_local_index, t
           {
             uint inner = 0u;
             while(true) {
-              TINT_ISOLATE_UB(tint_volatile_false_8)
               if ((inner < 4u)) {
               } else {
                 break;
               }
-              BCached[inner] = (*tint_module_vars.mm_Bsub)[k][(tileCol + inner)];
+              BCached[min(inner, 3u)] = (*tint_module_vars.mm_Bsub)[min(k, 63u)][min((tileCol + inner), 63u)];
               {
                 inner = (inner + 1u);
               }
@@ -229,22 +218,20 @@ void tint_symbol_inner(uint3 local_id, uint3 global_id, uint tint_local_index, t
           {
             uint innerRow = 0u;
             while(true) {
-              TINT_ISOLATE_UB(tint_volatile_false_9)
               if ((innerRow < 4u)) {
               } else {
                 break;
               }
-              ACached = (*tint_module_vars.mm_Asub)[(tileRow + innerRow)][k];
+              ACached = (*tint_module_vars.mm_Asub)[min((tileRow + innerRow), 63u)][min(k, 63u)];
               {
                 uint innerCol = 0u;
                 while(true) {
-                  TINT_ISOLATE_UB(tint_volatile_false_10)
                   if ((innerCol < 4u)) {
                   } else {
                     break;
                   }
                   uint const index = ((innerRow * 4u) + innerCol);
-                  acc[index] = (acc[index] + (ACached * BCached[innerCol]));
+                  acc[min(index, 15u)] = (acc[min(index, 15u)] + (ACached * BCached[min(innerCol, 3u)]));
                   {
                     innerCol = (innerCol + 1u);
                   }
@@ -273,7 +260,6 @@ void tint_symbol_inner(uint3 local_id, uint3 global_id, uint tint_local_index, t
   {
     uint innerRow = 0u;
     while(true) {
-      TINT_ISOLATE_UB(tint_volatile_false_11)
       if ((innerRow < 4u)) {
       } else {
         break;
@@ -281,13 +267,12 @@ void tint_symbol_inner(uint3 local_id, uint3 global_id, uint tint_local_index, t
       {
         uint innerCol = 0u;
         while(true) {
-          TINT_ISOLATE_UB(tint_volatile_false_12)
           if ((innerCol < 4u)) {
           } else {
             break;
           }
           uint const index = ((innerRow * 4u) + innerCol);
-          mm_write((globalRow + innerRow), (globalCol + innerCol), acc[index], tint_module_vars);
+          mm_write((globalRow + innerRow), (globalCol + innerCol), acc[min(index, 15u)], tint_module_vars);
           {
             innerCol = (innerCol + 1u);
           }
@@ -302,7 +287,7 @@ void tint_symbol_inner(uint3 local_id, uint3 global_id, uint tint_local_index, t
   }
 }
 
-kernel void tint_symbol(uint3 local_id [[thread_position_in_threadgroup]], uint3 global_id [[thread_position_in_grid]], uint tint_local_index [[thread_index_in_threadgroup]], const device Matrix* firstMatrix [[buffer(2)]], const device Matrix* secondMatrix [[buffer(3)]], device Matrix* resultMatrix [[buffer(1)]], const constant Uniforms* uniforms [[buffer(0)]], threadgroup tint_symbol_3* v_6 [[threadgroup(0)]]) {
-  tint_module_vars_struct const tint_module_vars = tint_module_vars_struct{.firstMatrix=firstMatrix, .secondMatrix=secondMatrix, .resultMatrix=resultMatrix, .uniforms=uniforms, .mm_Asub=(&(*v_6).tint_symbol_1), .mm_Bsub=(&(*v_6).tint_symbol_2)};
-  tint_symbol_inner(local_id, global_id, tint_local_index, tint_module_vars);
+kernel void v_6(uint3 local_id [[thread_position_in_threadgroup]], uint3 global_id [[thread_position_in_grid]], uint tint_local_index [[thread_index_in_threadgroup]], const device Matrix* firstMatrix [[buffer(2)]], const device Matrix* secondMatrix [[buffer(3)]], device Matrix* resultMatrix [[buffer(1)]], const constant Uniforms* uniforms [[buffer(0)]], threadgroup tint_symbol_2* v_7 [[threadgroup(0)]], const constant tint_array<uint4, 1>* tint_storage_buffer_sizes [[buffer(30)]]) {
+  tint_module_vars_struct const tint_module_vars = tint_module_vars_struct{.firstMatrix=firstMatrix, .secondMatrix=secondMatrix, .resultMatrix=resultMatrix, .uniforms=uniforms, .mm_Asub=(&(*v_7).tint_symbol), .mm_Bsub=(&(*v_7).tint_symbol_1), .tint_storage_buffer_sizes=tint_storage_buffer_sizes};
+  main_inner(local_id, global_id, tint_local_index, tint_module_vars);
 }

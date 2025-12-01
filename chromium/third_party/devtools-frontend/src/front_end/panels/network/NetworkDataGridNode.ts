@@ -314,10 +314,10 @@ export interface RequestActivatedEvent {
   tab?: NetworkForward.UIRequestLocation.UIRequestTabs;
 }
 
-export type EventTypes = {
-  [Events.RequestSelected]: SDK.NetworkRequest.NetworkRequest,
-  [Events.RequestActivated]: RequestActivatedEvent,
-};
+export interface EventTypes {
+  [Events.RequestSelected]: SDK.NetworkRequest.NetworkRequest;
+  [Events.RequestActivated]: RequestActivatedEvent;
+}
 
 export interface NetworkLogViewInterface extends Common.EventTarget.EventTarget<EventTypes> {
   onLoadFromFile(file: File): Promise<void>;
@@ -1489,6 +1489,7 @@ export class NetworkRequestNode extends NetworkNode {
       const aiButtonContainer = document.createElement('span');
       aiButtonContainer.classList.add('ai-button-container');
       const floatingButton = new FloatingButton.FloatingButton.FloatingButton({
+        title: action.title(),
         iconName: 'smart-assistant',
       });
       floatingButton.addEventListener('click', ev => {

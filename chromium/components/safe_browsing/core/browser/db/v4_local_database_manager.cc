@@ -4,6 +4,7 @@
 
 #include "components/safe_browsing/core/browser/db/v4_local_database_manager.h"
 
+#include <algorithm>
 #include <utility>
 #include <vector>
 
@@ -23,7 +24,6 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/not_fatal_until.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_tokenizer.h"
 #include "base/task/sequenced_task_runner.h"
@@ -56,11 +56,6 @@ const int64_t kBytesPerFullHashEntry = 32;
 // The minimum number of entries in the allowlist. If the actual size is
 // smaller than this number, the allowlist is considered as unavailable.
 const int kHighConfidenceAllowlistMinimumEntryCount = 100;
-
-// If the switch is present, any high-confidence allowlist check will return
-// that it does not match the allowlist.
-const char kSkipHighConfidenceAllowlist[] =
-    "safe-browsing-skip-high-confidence-allowlist";
 
 const ThreatSeverity kLeastSeverity =
     std::numeric_limits<ThreatSeverity>::max();
@@ -131,11 +126,12 @@ ListInfos GetListInfos() {
 base::span<const CommandLineSwitchAndThreatType> GetSwitchAndThreatTypes() {
   static constexpr CommandLineSwitchAndThreatType
       kCommandLineSwitchAndThreatType[] = {
-          {"mark_as_allowlisted_for_phish_guard", CSD_ALLOWLIST},
-          {"mark_as_allowlisted_for_real_time", HIGH_CONFIDENCE_ALLOWLIST},
+          {switches::kMarkAsPasswordProtectionAllowlisted, CSD_ALLOWLIST},
+          {switches::kMarkAsHighConfidenceAllowlisted,
+           HIGH_CONFIDENCE_ALLOWLIST},
           {switches::kMarkAsPhishing, SOCIAL_ENGINEERING},
-          {"mark_as_malware", MALWARE_THREAT},
-          {"mark_as_uws", UNWANTED_SOFTWARE}};
+          {switches::kMarkAsMalware, MALWARE_THREAT},
+          {switches::kMarkAsUws, UNWANTED_SOFTWARE}};
   return kCommandLineSwitchAndThreatType;
 }
 
@@ -189,7 +185,27 @@ ListIdentifier GetUrlIdFromSBThreatType(SBThreatType sb_threat_type) {
     case SB_THREAT_TYPE_BILLING:
       return GetUrlBillingId();
 
-    default:
+    case SB_THREAT_TYPE_UNUSED:
+    case SB_THREAT_TYPE_SAFE:
+    case SB_THREAT_TYPE_URL_BINARY_MALWARE:
+    case SB_THREAT_TYPE_URL_CLIENT_SIDE_PHISHING:
+    case SB_THREAT_TYPE_EXTENSION:
+    case DEPRECATED_SB_THREAT_TYPE_URL_CLIENT_SIDE_MALWARE:
+    case SB_THREAT_TYPE_API_ABUSE:
+    case SB_THREAT_TYPE_SUBRESOURCE_FILTER:
+    case SB_THREAT_TYPE_CSD_ALLOWLIST:
+    case DEPRECATED_SB_THREAT_TYPE_URL_PASSWORD_PROTECTION_PHISHING:
+    case SB_THREAT_TYPE_SAVED_PASSWORD_REUSE:
+    case SB_THREAT_TYPE_SIGNED_IN_SYNC_PASSWORD_REUSE:
+    case SB_THREAT_TYPE_SIGNED_IN_NON_SYNC_PASSWORD_REUSE:
+    case SB_THREAT_TYPE_BLOCKED_AD_REDIRECT:
+    case SB_THREAT_TYPE_AD_SAMPLE:
+    case SB_THREAT_TYPE_BLOCKED_AD_POPUP:
+    case SB_THREAT_TYPE_ENTERPRISE_PASSWORD_REUSE:
+    case SB_THREAT_TYPE_APK_DOWNLOAD:
+    case SB_THREAT_TYPE_HIGH_CONFIDENCE_ALLOWLIST:
+    case SB_THREAT_TYPE_MANAGED_POLICY_WARN:
+    case SB_THREAT_TYPE_MANAGED_POLICY_BLOCK:
       NOTREACHED();
   }
 }
@@ -349,14 +365,14 @@ void V4LocalDatabaseManager::CancelCheck(Client* client) {
   // being closed).
   DCHECK(enabled_ || is_shutdown_);
   auto pending_it =
-      base::ranges::find(pending_checks_, client, &PendingCheck::client);
+      std::ranges::find(pending_checks_, client, &PendingCheck::client);
   if (pending_it != pending_checks_.end()) {
     (*pending_it)->Abandon();
     RemovePendingCheck(pending_it);
   }
 
   auto queued_it =
-      base::ranges::find(queued_checks_, client, &PendingCheck::client);
+      std::ranges::find(queued_checks_, client, &PendingCheck::client);
   if (queued_it != queued_checks_.end()) {
     queued_checks_.erase(queued_it);
   }
@@ -438,7 +454,7 @@ void V4LocalDatabaseManager::CheckUrlForHighConfidenceAllowlist(
     CheckUrlForHighConfidenceAllowlistCallback callback) {
   DCHECK(ui_task_runner()->RunsTasksInCurrentSequence());
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          kSkipHighConfidenceAllowlist)) {
+          switches::kSkipHighConfidenceAllowlist)) {
     ui_task_runner()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback),
                                   /*url_on_high_confidence_allowlist=*/false,
@@ -721,7 +737,7 @@ void V4LocalDatabaseManager::GetSeverestThreatTypeAndMetadata(
     ThreatSeverity severity = GetThreatSeverity(fhi.list_id);
     SBThreatType threat_type = GetSBThreatTypeForList(fhi.list_id);
 
-    const auto& it = base::ranges::find(full_hashes, fhi.full_hash);
+    const auto& it = std::ranges::find(full_hashes, fhi.full_hash);
     CHECK(it != full_hashes.end(), base::NotFatalUntil::M130);
     (*full_hash_threat_types)[it - full_hashes.begin()] = threat_type;
 
@@ -748,7 +764,7 @@ std::unique_ptr<StoreStateMap> V4LocalDatabaseManager::GetStoreStateMap() {
 // Returns the SBThreatType corresponding to a given SafeBrowsing list.
 SBThreatType V4LocalDatabaseManager::GetSBThreatTypeForList(
     const ListIdentifier& list_id) {
-  auto it = base::ranges::find(list_infos_, list_id, &ListInfo::list_id);
+  auto it = std::ranges::find(list_infos_, list_id, &ListInfo::list_id);
   CHECK(list_infos_.end() != it, base::NotFatalUntil::M130);
   DCHECK_NE(SBThreatType::SB_THREAT_TYPE_SAFE, it->sb_threat_type());
   DCHECK_NE(SBThreatType::SB_THREAT_TYPE_UNUSED, it->sb_threat_type());

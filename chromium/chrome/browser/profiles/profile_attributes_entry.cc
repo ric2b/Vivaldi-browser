@@ -30,6 +30,7 @@
 #include "components/signin/public/base/signin_pref_names.h"
 #include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/account_info.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
@@ -132,12 +133,14 @@ const char ProfileAttributesEntry::kGAIAIdKey[] = "gaia_id";
 const char ProfileAttributesEntry::kIsConsentedPrimaryAccountKey[] =
     "is_consented_primary_account";
 const char ProfileAttributesEntry::kNameKey[] = "name";
+const char ProfileAttributesEntry::kEnterpriseLabelKey[] = "enterprise_label";
 const char ProfileAttributesEntry::kIsUsingDefaultNameKey[] =
     "is_using_default_name";
 const char ProfileAttributesEntry::kIsUsingDefaultAvatarKey[] =
     "is_using_default_avatar";
 const char ProfileAttributesEntry::kUseGAIAPictureKey[] = "use_gaia_picture";
 const char ProfileAttributesEntry::kAccountIdKey[] = "account_id_key";
+const char ProfileAttributesEntry::kIsGlicEligible[] = "is_glic_eligible";
 
 // static
 void ProfileAttributesEntry::RegisterLocalStatePrefs(
@@ -149,7 +152,7 @@ void ProfileAttributesEntry::RegisterLocalStatePrefs(
 
 ProfileAttributesEntry::ProfileAttributesEntry() = default;
 
-ProfileManagementOidcTokens::ProfileManagementOidcTokens() {}
+ProfileManagementOidcTokens::ProfileManagementOidcTokens() = default;
 
 ProfileManagementOidcTokens::ProfileManagementOidcTokens(
     const std::string& auth_token,
@@ -164,6 +167,10 @@ ProfileManagementOidcTokens::ProfileManagementOidcTokens(
     const std::string& id_token,
     const std::string& state)
     : auth_token(auth_token), id_token(id_token), state(state) {}
+
+ProfileManagementOidcTokens::ProfileManagementOidcTokens(
+    const std::string& encrypted_user_info)
+    : auth_token(""), id_token(encrypted_user_info), is_token_encrypted(true) {}
 
 ProfileManagementOidcTokens::ProfileManagementOidcTokens(
     ProfileManagementOidcTokens&& other) = default;
@@ -221,7 +228,14 @@ void ProfileAttributesEntry::InitializeLastNameToDisplay() {
 }
 
 std::u16string ProfileAttributesEntry::GetLocalProfileName() const {
+  if (!GetEnterpriseProfileLabel().empty()) {
+    return GetEnterpriseProfileLabel();
+  }
   return GetString16(kNameKey);
+}
+
+std::u16string ProfileAttributesEntry::GetEnterpriseProfileLabel() const {
+  return GetString16(kEnterpriseLabelKey);
 }
 
 std::u16string ProfileAttributesEntry::GetGAIANameToDisplay() const {
@@ -239,8 +253,9 @@ bool ProfileAttributesEntry::ShouldShowProfileLocalName(
   }
 
   // Customized profile name that is not equal to Gaia name, e.g. Matt (Work).
-  if (!IsUsingDefaultName())
+  if (!IsUsingDefaultName() || !GetEnterpriseProfileLabel().empty()) {
     return true;
+  }
 
   // The profile local name is a default profile name : Person n.
   std::vector<ProfileAttributesEntry*> entries =
@@ -416,8 +431,8 @@ std::u16string ProfileAttributesEntry::GetGAIAGivenName() const {
   return GetString16(kGAIAGivenNameKey);
 }
 
-std::string ProfileAttributesEntry::GetGAIAId() const {
-  return GetString(ProfileAttributesEntry::kGAIAIdKey);
+GaiaId ProfileAttributesEntry::GetGAIAId() const {
+  return GaiaId(GetString(ProfileAttributesEntry::kGAIAIdKey));
 }
 
 const gfx::Image* ProfileAttributesEntry::GetGAIAPicture() const {
@@ -584,9 +599,13 @@ std::string ProfileAttributesEntry::GetProfileManagementEnrollmentToken()
 
 ProfileManagementOidcTokens
 ProfileAttributesEntry::GetProfileManagementOidcTokens() const {
-  return ProfileManagementOidcTokens(GetString(kProfileManagementOidcAuthToken),
-                                     GetString(kProfileManagementOidcIdToken),
-                                     GetString(kProfileManagementOidcState));
+  std::string auth_token = GetString(kProfileManagementOidcAuthToken);
+  std::string id_token = GetString(kProfileManagementOidcIdToken);
+  return (auth_token.empty() && !id_token.empty())
+             ? ProfileManagementOidcTokens(id_token)
+             : ProfileManagementOidcTokens(
+                   auth_token, id_token,
+                   GetString(kProfileManagementOidcState));
 }
 
 std::string ProfileAttributesEntry::GetProfileManagementId() const {
@@ -595,6 +614,14 @@ std::string ProfileAttributesEntry::GetProfileManagementId() const {
 
 std::string ProfileAttributesEntry::GetAccountIdKey() const {
   return GetString(kAccountIdKey);
+}
+
+bool ProfileAttributesEntry::IsGlicEligible() const {
+  return GetBool(kIsGlicEligible);
+}
+
+void ProfileAttributesEntry::SetIsGlicEligible(bool value) {
+  SetBool(kIsGlicEligible, value);
 }
 
 base::flat_set<std::string> ProfileAttributesEntry::GetGaiaIds() const {
@@ -623,6 +650,11 @@ void ProfileAttributesEntry::SetLocalProfileName(const std::u16string& name,
   changed |= SetBool(kIsUsingDefaultNameKey, is_default_name);
   if (changed)
     profile_attributes_storage_->NotifyIfProfileNamesHaveChanged();
+}
+
+void ProfileAttributesEntry::SetEnterpriseProfileLabel(
+    const std::u16string& label) {
+  SetString16(kEnterpriseLabelKey, label);
 }
 
 void ProfileAttributesEntry::SetShortcutName(const std::u16string& name) {
@@ -830,7 +862,7 @@ void ProfileAttributesEntry::SetProfileManagementId(const std::string& id) {
   }
 }
 
-void ProfileAttributesEntry::SetAuthInfo(const std::string& gaia_id,
+void ProfileAttributesEntry::SetAuthInfo(const GaiaId& gaia_id,
                                          const std::u16string& user_name,
                                          bool is_consented_primary_account) {
   // If gaia_id, username and consent state are unchanged, abort early.
@@ -844,7 +876,7 @@ void ProfileAttributesEntry::SetAuthInfo(const std::string& gaia_id,
     ScopedDictPrefUpdate update(prefs_, prefs::kProfileAttributes);
     base::Value::Dict& attributes_dict = update.Get();
     base::Value::Dict* entry = attributes_dict.EnsureDict(storage_key_);
-    entry->Set(kGAIAIdKey, gaia_id);
+    entry->Set(kGAIAIdKey, gaia_id.ToString());
     entry->Set(kUserNameKey, user_name);
     DCHECK(!is_consented_primary_account || !gaia_id.empty() ||
            !user_name.empty());

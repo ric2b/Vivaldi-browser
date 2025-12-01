@@ -152,7 +152,8 @@ bool RequestFilterManager::ProxyURLLoaderFactory(
           static_cast<Profile*>(browser_context)->GetOriginalProfile() ==
               browser_context_));
   RequestFilterProxyingURLLoaderFactory::StartProxying(
-      browser_context, frame ? frame->GetProcess()->GetID() : render_process_id,
+      browser_context,
+      frame ? frame->GetProcess()->GetID().value() : render_process_id,
       frame ? frame->GetRoutingID() : MSG_ROUTING_NONE,
       frame ? frame->GetRenderViewHost()->GetRoutingID() : MSG_ROUTING_NONE,
       &request_handler_, &request_id_generator_, std::move(navigation_id),

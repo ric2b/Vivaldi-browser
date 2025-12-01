@@ -38,6 +38,7 @@
 #include "chromeos/test/chromeos_test_utils.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -54,7 +55,7 @@ const test::UIPath kEnterpriseEnrollmentDialogue = {kEnterpriseEnrollment,
                                                     "step-signin"};
 
 constexpr char kTestUserEmail[] = "testuser@test.com";
-constexpr char kTestUserGaiaId[] = "test_user_gaia_id";
+constexpr GaiaId::Literal kTestUserGaiaId("test_user_gaia_id");
 constexpr char kTestUserPassword[] = "test_user_password";
 
 const test::UIPath kEnterpriseEnrollmentSkipDialogue = {

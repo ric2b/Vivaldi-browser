@@ -18,7 +18,6 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "base/observer_list.h"
-#include "base/ranges/algorithm.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
@@ -229,39 +228,6 @@ void PasswordStore::RemoveLogin(const base::Location& location,
           .Then(
               base::BindOnce(&PasswordStore::NotifyLoginsChangedOnMainSequence,
                              this, LoginsChangedTrigger::Deletion)));
-}
-
-void PasswordStore::RemoveLoginsByURLAndTime(
-    const base::Location& location,
-    const base::RepeatingCallback<bool(const GURL&)>& url_filter,
-    base::Time delete_begin,
-    base::Time delete_end,
-    base::OnceClosure completion,
-    base::OnceCallback<void(bool)> sync_completion) {
-  DCHECK(main_task_runner_->RunsTasksInCurrentSequence());
-  if (!backend_) {
-    std::move(sync_completion).Run(false);
-    return;  // Once the shutdown started, ignore new requests.
-  }
-
-  if (post_init_callback_) {
-    post_init_callback_ =
-        std::move(post_init_callback_)
-            .Then(base::BindOnce(&PasswordStore::RemoveLoginsByURLAndTime, this,
-                                 location, url_filter, delete_begin, delete_end,
-                                 std::move(completion),
-                                 std::move(sync_completion)));
-    return;
-  }
-
-  backend_->RemoveLoginsByURLAndTimeAsync(
-      location, url_filter, delete_begin, delete_end,
-      std::move(sync_completion),
-      base::BindOnce(&GetPasswordChangesOrNulloptOnFailure)
-          .Then(
-              base::BindOnce(&PasswordStore::NotifyLoginsChangedOnMainSequence,
-                             this, LoginsChangedTrigger::BatchDeletion))
-          .Then(std::move(completion)));
 }
 
 void PasswordStore::RemoveLoginsCreatedBetween(

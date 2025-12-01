@@ -279,6 +279,7 @@
 <translation id="5582839680698949063">Menu principal</translation>
 <translation id="5614553682702429503">Salvar senha?</translation>
 <translation id="5623842676595125836">Log</translation>
+<translation id="5624959475330585145">Perguntar antes de usar conexões não seguras</translation>
 <translation id="5638309510554459422">Encontre extensões e temas na <ph name="BEGIN_LINK" />Chrome Web Store<ph name="END_LINK" /></translation>
 <translation id="5677928146339483299">Bloqueado</translation>
 <translation id="5707185214361380026">Erro ao carregar a extensão de:</translation>
@@ -468,6 +469,7 @@ Mantenha o seu arquivo de chave privada em um local seguro. Você precisará del
 <translation id="9218430445555521422">Definir como padrão</translation>
 <translation id="93766956588638423">Reparar extensão</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
+<translation id="961856697154696964">Excluir dados de navegação</translation>
 <translation id="994289308992179865">&amp;Repetir</translation>
 <translation id="998747458861718449">&amp;Inspecionar</translation>
 </translationbundle>

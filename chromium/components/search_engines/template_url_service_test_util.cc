@@ -10,9 +10,11 @@
 #include "components/country_codes/country_codes.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/os_crypt/async/browser/test_utils.h"
+#include "components/regional_capabilities/regional_capabilities_service.h"
+#include "components/regional_capabilities/regional_capabilities_switches.h"
+#include "components/regional_capabilities/regional_capabilities_test_utils.h"
 #include "components/search_engines/keyword_table.h"
 #include "components/search_engines/search_engine_choice/search_engine_choice_service.h"
-#include "components/search_engines/search_engines_switches.h"
 #include "components/search_engines/search_terms_data.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
 #include "components/search_engines/template_url_service.h"
@@ -77,9 +79,12 @@ void TemplateURLServiceUnitTestBase::SetUp() {
       switches::kSearchEngineChoiceCountry,
       switches::kDefaultListCountryOverride);
 
+  regional_capabilities_service_ =
+      regional_capabilities::CreateServiceWithFakeClient(pref_service_);
+
   search_engine_choice_service_ =
       std::make_unique<search_engines::SearchEngineChoiceService>(
-          pref_service_, &local_state_,
+          pref_service_, &local_state_, *regional_capabilities_service_,
 #if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
           /*is_profile_eligible_for_dse_guest_propagation=*/false,
 #endif
@@ -93,12 +98,7 @@ TemplateURLServiceUnitTestBase::CreateService() {
   return std::make_unique<TemplateURLService>(
       pref_service_, *search_engine_choice_service_,
       std::make_unique<SearchTermsData>(), nullptr /* KeywordWebDataService */,
-      nullptr /* TemplateURLServiceClient */, base::RepeatingClosure()
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-                                                  ,
-      false
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
-  );
+      nullptr /* TemplateURLServiceClient */, base::RepeatingClosure());
 }
 
 // -- LoadedTemplateURLServiceUnitTestBase ------------------------------------
@@ -129,12 +129,7 @@ LoadedTemplateURLServiceUnitTestBase::CreateService() {
   auto template_url_service = std::make_unique<TemplateURLService>(
       pref_service(), search_engine_choice_service(),
       std::make_unique<SearchTermsData>(), keyword_data_service_,
-      nullptr /* TemplateURLServiceClient */, base::RepeatingClosure()
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-                                                  ,
-      false
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
-  );
+      nullptr /* TemplateURLServiceClient */, base::RepeatingClosure());
 
   return template_url_service;
 }
@@ -164,11 +159,10 @@ TemplateURLService::TemplateURLVector
 LoadedTemplateURLServiceUnitTestBase::GetKeywordTemplateURLs() {
   TemplateURLService::TemplateURLVector turls =
       template_url_service().GetTemplateURLs();
-  turls.erase(base::ranges::remove_if(turls,
-                                      [](const TemplateURL* turl) {
-                                        return turl->starter_pack_id() != 0;
-                                      }),
-              turls.end());
+  auto to_remove = std::ranges::remove_if(turls, [](const TemplateURL* turl) {
+    return turl->starter_pack_id() != 0;
+  });
+  turls.erase(to_remove.begin(), to_remove.end());
   return turls;
 }
 

@@ -26,6 +26,12 @@ import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.identitymanager.IdentityManager;
 import org.chromium.components.sync.SyncService;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+import org.chromium.chrome.browser.settings.SettingsNavigationFactory;
+import org.chromium.components.browser_ui.settings.SettingsNavigation;
+import org.vivaldi.browser.preferences.VivaldiNewSyncPreference;
+
 /**
  * This activity is used for requesting a sync passphrase from the user. Typically, this will be the
  * target of an Android notification.
@@ -59,6 +65,13 @@ public class PassphraseActivity extends AppCompatActivity
     @Override
     protected void onResume() {
         super.onResume();
+
+        // Vivaldi: Open Vivaldi sync settings to enter passphrase details.
+        if (BuildConfig.IS_VIVALDI) {
+            SettingsNavigation settingsNavigation =
+                    SettingsNavigationFactory.createSettingsNavigation();
+            settingsNavigation.startSettings(this, VivaldiNewSyncPreference.class);
+        }
         Account account =
                 CoreAccountInfo.getAndroidAccountFrom(
                         mIdentityManager.getPrimaryAccountInfo(ConsentLevel.SIGNIN));

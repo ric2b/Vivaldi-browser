@@ -135,7 +135,7 @@ below.
 
 We should use the OIB to show the origin name in an unambiguous,
 human-meaningful way. (As described in [Presenting Origins To
-Users](http://www.chromium.org/Home/chromium-security/enamel).)
+Users](/Home/chromium-security/enamel).)
 
 For origins whose hostnames have many labels we should show at least the
 effective TLD + 1 label. (We call this “eTLD + 1”.) For example if the full

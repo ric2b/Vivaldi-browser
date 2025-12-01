@@ -3,10 +3,12 @@
 //
 
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "components/extensions/vivaldi_panel_utils.h"
 
 bool TabStripModel::IsVivPanel(int index) const {
   CHECK(ContainsIndex(index)) << index;
-  return GetTabAtIndex(index)->is_viv_panel();
+  auto *contents = GetTabAtIndex(index)->GetContents();
+  return vivaldi::GetVivPanelId(contents).has_value();
 }
 
 int TabStripModel::ConstrainVivaldiMoveIndex(int index,

@@ -2,13 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as LitHtml from '../../../lit-html/lit-html.js';
+import * as Lit from '../../../lit/lit.js';
 
-import cssAngleSwatchStyles from './cssAngleSwatch.css.js';
+import cssAngleSwatchStylesRaw from './cssAngleSwatch.css.js';
 import {type Angle, AngleUnit, get2DTranslationsForAngle} from './CSSAngleUtils.js';
 
-const {render, html} = LitHtml;
-const styleMap = LitHtml.Directives.styleMap;
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const cssAngleSwatchStyles = new CSSStyleSheet();
+cssAngleSwatchStyles.replaceSync(cssAngleSwatchStylesRaw.cssContent);
+
+const {render, html} = Lit;
+const styleMap = Lit.Directives.styleMap;
 
 const swatchWidth = 11;
 

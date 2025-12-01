@@ -29,6 +29,7 @@ import org.mockito.Mockito;
 
 import org.chromium.base.MathUtils;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.test.BaseActivityTestRule;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.DisableIf;
@@ -46,7 +47,7 @@ import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.IntentRequestTracker;
 import org.chromium.ui.base.PhotoPickerListener;
 import org.chromium.ui.base.WindowAndroid;
-import org.chromium.ui.test.util.BlankUiTestActivityTestCase;
+import org.chromium.ui.test.util.BlankUiTestActivity;
 import org.chromium.ui.test.util.RenderTestRule;
 
 import java.io.File;
@@ -57,7 +58,7 @@ import java.util.concurrent.TimeUnit;
 
 /** Tests for the PhotoPickerDialog class. */
 @RunWith(BaseJUnit4ClassRunner.class)
-public class PhotoPickerDialogTest extends BlankUiTestActivityTestCase
+public class PhotoPickerDialogTest
         implements PhotoPickerListener,
                 SelectionObserver<PickerBitmap>,
                 DecoderServiceHost.DecoderStatusCallback,
@@ -66,6 +67,10 @@ public class PhotoPickerDialogTest extends BlankUiTestActivityTestCase
     // The timeout (in seconds) to wait for the decoder service to be ready.
     private static final long WAIT_TIMEOUT_SECONDS = 30L;
     private static final long VIDEO_TIMEOUT_SECONDS = 10L;
+
+    @Rule
+    public BaseActivityTestRule<BlankUiTestActivity> mActivityTestRule =
+            new BaseActivityTestRule<>(BlankUiTestActivity.class);
 
     @Rule
     public RenderTestRule mRenderTestRule =
@@ -132,20 +137,25 @@ public class PhotoPickerDialogTest extends BlankUiTestActivityTestCase
     @Before
     public void setUp() throws Exception {
         NativeLibraryTestUtils.loadNativeLibraryNoBrowserProcess();
+        mActivityTestRule.launchActivity(null);
         mWindowAndroid =
                 ThreadUtils.runOnUiThreadBlocking(
                         () -> {
                             return new ActivityWindowAndroid(
-                                    getActivity(),
+                                    mActivityTestRule.getActivity(),
                                     /* listenToActivityState= */ true,
-                                    IntentRequestTracker.createFromActivity(getActivity()),
-                                    /* insetObserver= */ null);
+                                    IntentRequestTracker.createFromActivity(
+                                            mActivityTestRule.getActivity()),
+                                    /* insetObserver= */ null,
+                                    /* trackOcclusion= */ true);
                         });
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     DecoderServiceHost.setIntentSupplier(
                             () -> {
-                                return new Intent(getActivity(), TestImageDecoderService.class);
+                                return new Intent(
+                                        mActivityTestRule.getActivity(),
+                                        TestImageDecoderService.class);
                             });
                 });
         PickerVideoPlayer.setProgressCallback(this);
@@ -322,7 +332,7 @@ public class PhotoPickerDialogTest extends BlankUiTestActivityTestCase
     private PhotoPickerDialog createDialog(final boolean multiselect, final List<String> mimeTypes)
             throws Exception {
         return createDialogWithContentResolver(
-                getActivity().getContentResolver(), multiselect, mimeTypes);
+                mActivityTestRule.getActivity().getContentResolver(), multiselect, mimeTypes);
     }
 
     private void waitForDecoder() throws Exception {
@@ -371,7 +381,7 @@ public class PhotoPickerDialogTest extends BlankUiTestActivityTestCase
         mLastActionRecorded = PhotoPickerAction.NUM_ENTRIES;
 
         PickerCategoryView categoryView = mDialog.getCategoryViewForTesting();
-        View cancel = new View(getActivity());
+        View cancel = new View(mActivityTestRule.getActivity());
         int callCount = mOnActionCallback.getCallCount();
         categoryView.onClick(cancel);
         mOnActionCallback.waitForCallback(callCount, 1);
@@ -428,6 +438,7 @@ public class PhotoPickerDialogTest extends BlankUiTestActivityTestCase
 
     @Test
     @LargeTest
+    @DisableIf.Build(sdk_equals = Build.VERSION_CODES.S_V2, message = "crbug.com/1360427")
     public void testNoSelection() throws Throwable {
         setupTestFiles();
         createDialog(false, Arrays.asList("image/*")); // Multi-select = false.
@@ -444,6 +455,7 @@ public class PhotoPickerDialogTest extends BlankUiTestActivityTestCase
 
     @Test
     @LargeTest
+    @DisableIf.Build(sdk_equals = Build.VERSION_CODES.S_V2, message = "crbug.com/1360427")
     public void testSingleSelectionPhoto() throws Throwable {
         setupTestFiles();
         createDialog(false, Arrays.asList("image/*")); // Multi-select = false.
@@ -472,6 +484,7 @@ public class PhotoPickerDialogTest extends BlankUiTestActivityTestCase
 
     @Test
     @LargeTest
+    @DisableIf.Build(sdk_equals = Build.VERSION_CODES.S_V2, message = "crbug.com/1360427")
     public void testBackPressDismiss() throws Throwable {
         setupTestFiles();
         createDialog(false, Arrays.asList("image/*")); // Multi-select = false.
@@ -503,6 +516,7 @@ public class PhotoPickerDialogTest extends BlankUiTestActivityTestCase
 
     @Test
     @LargeTest
+    @DisableIf.Build(sdk_equals = Build.VERSION_CODES.S_V2, message = "crbug.com/1360427")
     public void testMultiSelectionPhoto() throws Throwable {
         setupTestFiles();
         createDialog(true, Arrays.asList("image/*")); // Multi-select = true.
@@ -792,7 +806,8 @@ public class PhotoPickerDialogTest extends BlankUiTestActivityTestCase
         int callCount = mOnDecoderReadyCallback.getCallCount();
 
         // Simulate an early configuration change for the photo grid.
-        Configuration configuration = getActivity().getResources().getConfiguration();
+        Configuration configuration =
+                mActivityTestRule.getActivity().getResources().getConfiguration();
         PickerCategoryView categoryView = mDialog.getCategoryViewForTesting();
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
@@ -815,6 +830,7 @@ public class PhotoPickerDialogTest extends BlankUiTestActivityTestCase
     @Test
     @LargeTest
     @Feature("RenderTest")
+    @DisableIf.Build(sdk_equals = Build.VERSION_CODES.S_V2, message = "crbug.com/1360427")
     public void testBorderPersistence() throws Exception {
         setupTestFilesWith80ColoredSquares();
         createDialog(false, Arrays.asList("image/*")); // Multi-select = false.

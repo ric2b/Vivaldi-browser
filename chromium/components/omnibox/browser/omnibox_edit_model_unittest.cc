@@ -2,15 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "components/omnibox/browser/omnibox_edit_model.h"
 
 #include <stddef.h>
 
+#include <array>
 #include <memory>
 #include <string>
 
@@ -25,6 +21,7 @@
 #include "components/omnibox/browser/actions/tab_switch_action.h"
 #include "components/omnibox/browser/autocomplete_controller.h"
 #include "components/omnibox/browser/autocomplete_match.h"
+#include "components/omnibox/browser/fake_autocomplete_controller.h"
 #include "components/omnibox/browser/omnibox_controller.h"
 #include "components/omnibox/browser/omnibox_popup_view.h"
 #include "components/omnibox/browser/omnibox_prefs.h"
@@ -43,8 +40,10 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/omnibox_proto/answer_type.pb.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/image/image_unittest_util.h"
 
 using metrics::OmniboxEventProto;
 using Selection = OmniboxPopupSelection;
@@ -69,9 +68,8 @@ class TestOmniboxPopupView : public OmniboxPopupView {
   void ProvideButtonFocusHint(size_t line) override {}
   void OnMatchIconUpdated(size_t match_index) override {}
   void OnDragCanceled() override {}
-  void GetPopupAccessibleNodeData(ui::AXNodeData* node_data) override {}
-  void AddPopupAccessibleNodeData(ui::AXNodeData* node_data) override {}
-  std::u16string GetAccessibleButtonTextForResult(size_t line) override {
+  void GetPopupAccessibleNodeData(ui::AXNodeData* node_data) const override {}
+  std::u16string GetAccessibleButtonTextForResult(size_t line) const override {
     return u"";
   }
 };
@@ -139,7 +137,8 @@ TEST_F(OmniboxEditModelTest, AdjustTextForCopy) {
     const char* expected_url;
 
     const char* url_for_display = "";
-  } input[] = {
+  };
+  auto input = std::to_array<Data>({
       // Test that http:// is inserted if all text is selected.
       {"a.de/b", 0, "", false, "a.de/b", "http://a.de/b", true,
        "http://a.de/b"},
@@ -229,7 +228,7 @@ TEST_F(OmniboxEditModelTest, AdjustTextForCopy) {
       {"https://ja.wikipedia.org/wiki/目次", 0, "", false,
        "https://wikipedia.org/wiki/目次", "https://wikipedia.org/wiki/目次",
        false, ""},
-  };
+  });
 
   for (size_t i = 0; i < std::size(input); ++i) {
     location_bar_model()->set_formatted_full_url(
@@ -392,7 +391,7 @@ TEST_F(OmniboxEditModelTest, AlternateNavHasHTTP) {
 
   AutocompleteMatch alternate_nav_match;
   EXPECT_CALL(*omnibox_client_,
-              OnAutocompleteAccept(_, _, _, _, _, _, _, _, _, _, _, _))
+              OnAutocompleteAccept(_, _, _, _, _, _, _, _, _, _, _))
       .WillOnce(SaveArg<10>(&alternate_nav_match));
 
   model()->OnSetFocus(false);  // Avoids DCHECK in OpenMatch().
@@ -403,7 +402,7 @@ TEST_F(OmniboxEditModelTest, AlternateNavHasHTTP) {
       AutocompleteInput::HasHTTPScheme(alternate_nav_match.fill_into_edit));
 
   EXPECT_CALL(*omnibox_client_,
-              OnAutocompleteAccept(_, _, _, _, _, _, _, _, _, _, _, _))
+              OnAutocompleteAccept(_, _, _, _, _, _, _, _, _, _, _))
       .WillOnce(SaveArg<10>(&alternate_nav_match));
 
   model()->SetUserText(u"abcd");
@@ -1327,6 +1326,105 @@ TEST_F(OmniboxEditModelPopupTest, OpenThumbsDownSelectionShowsFeedback) {
   EXPECT_EQ(FeedbackType::kNone, result->match_at(1)->feedback_type);
 }
 
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+// Tests the `GetMatchIcon()` method, verifying that a page favicon is used for
+// `URL_WHAT_YOU_TYPED` matches.
+TEST_F(OmniboxEditModelPopupTest,
+       GetMatchIconForUrlWhatYouTypedUsesPageFavicon) {
+  const GURL kUrl("https://foo.com");
+
+  GURL page_url;
+  EXPECT_CALL(*client(), GetFaviconForPageUrl(_, _))
+      .WillOnce(DoAll(SaveArg<0>(&page_url), Return(gfx::Image())));
+  EXPECT_CALL(*client(), GetFaviconForKeywordSearchProvider(_, _)).Times(0);
+
+  AutocompleteMatch match;
+  match.type = AutocompleteMatchType::URL_WHAT_YOU_TYPED;
+  match.destination_url = kUrl;
+
+  gfx::Image image = model()->GetMatchIcon(match, 0);
+  EXPECT_EQ(page_url, kUrl);
+}
+
+// Tests the `GetMatchIcon()` method, verifying that a keyword favicon is used
+// for `FEATURED_ENTERPRISE_SEARCH` matches with `kSiteSearch` policy origin.
+TEST_F(OmniboxEditModelPopupTest,
+       GetMatchIconForFeaturedEnterpriseSiteSearchUsesKeywordFavicon) {
+  SkBitmap bitmap;
+  bitmap.allocN32Pixels(16, 16);
+  bitmap.eraseColor(SK_ColorRED);
+  gfx::Image expected_image =
+      gfx::Image(gfx::ImageSkia::CreateFrom1xBitmap(bitmap));
+
+  EXPECT_CALL(*client(), GetFaviconForPageUrl(_, _)).Times(0);
+  EXPECT_CALL(*client(), GetFaviconForKeywordSearchProvider(_, _))
+      .WillOnce(Return(expected_image));
+
+  TemplateURLData data;
+  data.SetKeyword(u"sitesearch");
+  data.SetURL("https://sitesearch.com");
+  data.featured_by_policy = true;
+  data.policy_origin = TemplateURLData::PolicyOrigin::kSiteSearch;
+  TemplateURL* turl = controller()->client()->GetTemplateURLService()->Add(
+      std::make_unique<TemplateURL>(data));
+  ASSERT_TRUE(turl);
+
+  AutocompleteMatch match;
+  match.type = AutocompleteMatchType::FEATURED_ENTERPRISE_SEARCH;
+  match.destination_url = GURL("https://sitesearch.com");
+  match.keyword = u"sitesearch";
+  match.associated_keyword = std::make_unique<AutocompleteMatch>(match);
+
+  gfx::Image image = model()->GetMatchIcon(match, 0);
+  gfx::test::CheckColors(bitmap.getColor(0, 0),
+                         image.ToSkBitmap()->getColor(0, 0));
+}
+
+// Tests the `GetMatchIcon()` method, verifying that no favicon is used for
+// `FEATURED_ENTERPRISE_SEARCH` matches with `kSearchAggregator` policy origin.
+TEST_F(OmniboxEditModelPopupTest,
+       GetMatchIconForFeaturedEnterpriseSearchAggregatorUsesDoesNotUseFavicon) {
+  SkBitmap bitmap;
+  bitmap.allocN32Pixels(16, 16);
+  bitmap.eraseColor(SK_ColorRED);
+
+  EXPECT_CALL(*client(), GetFaviconForPageUrl(_, _)).Times(0);
+  EXPECT_CALL(*client(), GetFaviconForKeywordSearchProvider(_, _)).Times(0);
+
+  TemplateURLData data;
+  data.SetKeyword(u"searchaggregator");
+  data.SetURL("https://searchaggregator.com");
+  data.featured_by_policy = true;
+  data.policy_origin = TemplateURLData::PolicyOrigin::kSearchAggregator;
+  TemplateURL* turl = controller()->client()->GetTemplateURLService()->Add(
+      std::make_unique<TemplateURL>(data));
+  ASSERT_TRUE(turl);
+
+  // Creates a set of matches.
+  ACMatches matches;
+  AutocompleteMatch search_aggregator_match(
+      nullptr, 1350, false, AutocompleteMatchType::FEATURED_ENTERPRISE_SEARCH);
+  search_aggregator_match.keyword = u"searchaggregator";
+  search_aggregator_match.associated_keyword =
+      std::make_unique<AutocompleteMatch>(search_aggregator_match);
+  matches.push_back(search_aggregator_match);
+  AutocompleteMatch url_match(nullptr, 1000, false,
+                              AutocompleteMatchType::URL_WHAT_YOU_TYPED);
+  url_match.keyword = u"match";
+  matches.push_back(url_match);
+  AutocompleteResult* result =
+      &controller()->autocomplete_controller()->published_result_;
+  result->AppendMatches(matches);
+
+  // Sets the popup rich suggestion bitmap for search aggregator match.
+  model()->SetPopupRichSuggestionBitmap(0, bitmap);
+
+  gfx::Image image = model()->GetMatchIcon(search_aggregator_match, 0);
+  gfx::test::CheckColors(bitmap.getColor(0, 0),
+                         image.ToSkBitmap()->getColor(0, 0));
+}
+#endif
+
 TEST_F(OmniboxEditModelTest, OmniboxEscapeHistogram) {
   // Escape should incrementally revert temporary text, close the popup, clear
   // input, and blur the omnibox.
@@ -1437,7 +1535,7 @@ TEST_F(OmniboxEditModelTest, OpenTabMatch) {
 
   WindowOpenDisposition disposition;
   EXPECT_CALL(*omnibox_client_,
-              OnAutocompleteAccept(_, _, _, _, _, _, _, _, _, _, _, _))
+              OnAutocompleteAccept(_, _, _, _, _, _, _, _, _, _, _))
       .WillOnce(SaveArg<2>(&disposition));
 
   model()->OnSetFocus(false);  // Avoids DCHECK in OpenMatch().
@@ -1447,7 +1545,7 @@ TEST_F(OmniboxEditModelTest, OpenTabMatch) {
   EXPECT_EQ(disposition, WindowOpenDisposition::SWITCH_TO_TAB);
 
   EXPECT_CALL(*omnibox_client_,
-              OnAutocompleteAccept(_, _, _, _, _, _, _, _, _, _, _, _))
+              OnAutocompleteAccept(_, _, _, _, _, _, _, _, _, _, _))
       .WillOnce(SaveArg<2>(&disposition));
 
   // Suggestions not from the Open Tab Provider or not from keyword mode should
@@ -1458,7 +1556,7 @@ TEST_F(OmniboxEditModelTest, OpenTabMatch) {
   EXPECT_EQ(disposition, WindowOpenDisposition::CURRENT_TAB);
 
   EXPECT_CALL(*omnibox_client_,
-              OnAutocompleteAccept(_, _, _, _, _, _, _, _, _, _, _, _))
+              OnAutocompleteAccept(_, _, _, _, _, _, _, _, _, _, _))
       .WillOnce(SaveArg<2>(&disposition));
 
   match.provider = controller()->autocomplete_controller()->search_provider();

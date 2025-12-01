@@ -14,6 +14,7 @@
 #include "base/containers/circular_deque.h"
 #include "base/containers/flat_map.h"
 #include "components/request_filter/adblock_filter/adblock_rules_index_manager.h"
+#include "content/public/browser/child_process_id.h"
 #include "content/public/browser/render_process_host_observer.h"
 #include "vivaldi/components/request_filter/adblock_filter/flat/adblock_rules_list_generated.h"
 
@@ -52,7 +53,7 @@ class RulesIndex : public content::RenderProcessHostObserver {
 
     std::optional<RuleAndSource> rule_and_source;
 
-    std::optional<flat::Decision> GetDecision() {
+    std::optional<flat::Decision> GetDecision() const {
       if (type == ALWAYS_PASS)
         return flat::Decision_PASS;
       if (rule_and_source)
@@ -146,7 +147,8 @@ class RulesIndex : public content::RenderProcessHostObserver {
   RulesBufferMap rules_buffers_;
   std::string rules_index_buffer_;
   const raw_ptr<const flat::RulesIndex> rules_index_;
-  std::map<int, std::map<int, base::circular_deque<CachedActivation>>>
+  std::map<content::ChildProcessId,
+           std::map<int, base::circular_deque<CachedActivation>>>
       cached_activations_;
 };
 

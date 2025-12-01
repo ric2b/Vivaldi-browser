@@ -7,7 +7,7 @@ title: Layout Team
 ---
 
 The layout team has been subsumed into the new [rendering
-core](//chromium.org/teams/rendering) team. Please see the rendering core page
+core](/teams/rendering) team. Please see the rendering core page
 for details about ongoing style and layout work.
 This page is preserved for posterity and will no longer be updated.
 

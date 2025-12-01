@@ -142,6 +142,8 @@ public class SingleWebsiteSettings extends BaseSiteSettingsFragment
                 return "idle_detection_permission_list";
             case ContentSettingsType.JAVASCRIPT:
                 return "javascript_permission_list";
+            case ContentSettingsType.JAVASCRIPT_OPTIMIZER:
+                return "javascript_optimizer";
             case ContentSettingsType.POPUPS:
                 return "popup_permission_list";
             case ContentSettingsType.SOUND:
@@ -1317,12 +1319,6 @@ public class SingleWebsiteSettings extends BaseSiteSettingsFragment
                 permission,
                 /* isEmbargoed= */ false,
                 isOneTime(ContentSettingsType.ADS));
-    }
-
-    private String getDseCategorySummary(@ContentSettingValues int value) {
-        return value == ContentSettingValues.ALLOW
-                ? getString(R.string.website_settings_permissions_allowed_dse)
-                : getString(R.string.website_settings_permissions_blocked_dse);
     }
 
     public @ContentSettingsType.EnumType int getContentSettingsTypeFromPreferenceKey(

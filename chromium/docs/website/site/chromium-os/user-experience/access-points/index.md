@@ -10,7 +10,7 @@ title: Access Points
 
 **UI under development. Designs are subject to change.**
 
-<img alt="image" src="/chromium-os/user-experience/access-points/apppng">
+<img alt="image" src="app.png">
 
 The apps menu is the primary access point in Chromium OS. It is available via an
 icon in the upper left, and provides access to universal search, document and

@@ -28,7 +28,7 @@
 #include "content/common/content_export.h"
 #include "content/public/browser/background_tracing_manager.h"
 #include "mojo/public/cpp/bindings/remote.h"
-#include "services/tracing/public/cpp/perfetto/trace_event_data_source.h"
+#include "services/tracing/public/cpp/perfetto/trace_event_metadata_source.h"
 #include "services/tracing/public/mojom/background_tracing_agent.mojom.h"
 
 namespace tracing::mojom {
@@ -74,20 +74,20 @@ class BackgroundTracingManagerImpl
   enum class Metrics {
     SCENARIO_ACTIVATION_REQUESTED = 0,
     SCENARIO_ACTIVATED_SUCCESSFULLY = 1,
-    RECORDING_ENABLED = 2,
-    PREEMPTIVE_TRIGGERED = 3,
-    REACTIVE_TRIGGERED = 4,
-    FINALIZATION_ALLOWED = 5,
-    FINALIZATION_DISALLOWED = 6,
+    // RECORDING_ENABLED = 2, Obsolete
+    // PREEMPTIVE_TRIGGERED = 3, Obsolete
+    // REACTIVE_TRIGGERED = 4, Obsolete
+    // FINALIZATION_ALLOWED = 5, Obsolete
+    // FINALIZATION_DISALLOWED = 6, Obsolete
     FINALIZATION_STARTED = 7,
-    OBSOLETE_FINALIZATION_COMPLETE = 8,
+    // OBSOLETE_FINALIZATION_COMPLETE = 8, Obsolete
     SCENARIO_ACTION_FAILED_LOWRES_CLOCK = 9,
     UPLOAD_FAILED = 10,
     UPLOAD_SUCCEEDED = 11,
-    STARTUP_SCENARIO_TRIGGERED = 12,
+    // STARTUP_SCENARIO_TRIGGERED = 12, Obsolete
     LARGE_UPLOAD_WAITING_TO_RETRY = 13,
-    SYSTEM_TRIGGERED = 14,
-    REACHED_CODE_SCENARIO_TRIGGERED = 15,
+    // SYSTEM_TRIGGERED = 14, Obsolete
+    // REACHED_CODE_SCENARIO_TRIGGERED = 15, Obsolete
     FINALIZATION_STARTED_WITH_LOCAL_OUTPUT = 16,
     DATABASE_INITIALIZATION_FAILED = 17,
     DATABASE_CLEANUP_FAILED = 18,
@@ -156,9 +156,9 @@ class BackgroundTracingManagerImpl
   CONTENT_EXPORT std::vector<std::string> GetEnabledScenarios() const;
 
   bool HasTraceToUpload() override;
-  void GetTraceToUpload(
-      base::OnceCallback<void(std::optional<std::string>,
-                              std::optional<std::string>)>) override;
+  void GetTraceToUpload(base::OnceCallback<void(std::optional<std::string>,
+                                                std::optional<std::string>,
+                                                base::OnceClosure)>) override;
   void SetSystemProfileRecorder(
       base::RepeatingCallback<std::string()> recorder) override;
 
@@ -189,12 +189,11 @@ class BackgroundTracingManagerImpl
   void AddAgentObserver(AgentObserver* observer);
   void RemoveAgentObserver(AgentObserver* observer);
 
-  void AddMetadataGeneratorFunction();
-
   void OnStartTracingDone();
   void OnProtoDataComplete(std::string&& serialized_trace,
                            const std::string& scenario_name,
                            const std::string& rule_name,
+                           std::optional<int32_t> rule_value,
                            bool privacy_filter_enabled,
                            bool is_local_scenario,
                            bool force_upload,
@@ -218,6 +217,10 @@ class BackgroundTracingManagerImpl
       perfetto::protos::pbzero::ChromeMetadataPacket* metadata,
       bool privacy_filtering_enabled);
 
+  // Returns the embedder's tracing delegate, or null if it does not provide
+  // one.
+  TracingDelegate* tracing_delegate() { return delegate_.get(); }
+
  private:
 #if BUILDFLAG(IS_ANDROID)
   // ~1MB compressed size.
@@ -228,6 +231,7 @@ class BackgroundTracingManagerImpl
 #endif
 
   bool RequestActivateScenario();
+  void AddMetadataGeneratorFunction();
 
   // Named triggers
   bool DoEmitNamedTrigger(const std::string& trigger_name,
@@ -247,7 +251,7 @@ class BackgroundTracingManagerImpl
                               bool success);
   void OnTraceDatabaseUpdated(ScenarioCountMap scenario_saved_counts);
   void OnTraceSaved(const std::string& scenario_name,
-                    std::optional<NewTraceReport> trace_to_upload,
+                    std::optional<BaseTraceReport> trace_to_upload,
                     bool success);
   void CleanDatabase();
   size_t GetTraceUploadLimitKb() const;
@@ -287,7 +291,7 @@ class BackgroundTracingManagerImpl
   std::unique_ptr<TraceReportDatabase, base::OnTaskRunnerDeleter>
       trace_database_;
 
-  std::optional<NewTraceReport> trace_report_to_upload_;
+  std::optional<BaseTraceReport> trace_report_to_upload_;
 
   // Timer to delete traces older than 2 weeks.
   base::RepeatingTimer clean_database_timer_;

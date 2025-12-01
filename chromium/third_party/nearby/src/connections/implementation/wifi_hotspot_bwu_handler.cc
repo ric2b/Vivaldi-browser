@@ -15,7 +15,6 @@
 #include "connections/implementation/wifi_hotspot_bwu_handler.h"
 
 #include <cstdint>
-#include <locale>
 #include <memory>
 #include <string>
 #include <utility>
@@ -25,17 +24,21 @@
 #include "connections/implementation/client_proxy.h"
 #include "connections/implementation/endpoint_channel.h"
 #include "connections/implementation/mediums/mediums.h"
-#include "connections/implementation/mediums/utils.h"
 #include "connections/implementation/offline_frames.h"
 #include "connections/implementation/wifi_hotspot_endpoint_channel.h"
 #include "connections/strategy.h"
 #include "internal/platform/byte_array.h"
+#include "internal/platform/expected.h"
 #include "internal/platform/logging.h"
 #include "internal/platform/wifi_credential.h"
 #include "internal/platform/wifi_hotspot.h"
 
 namespace nearby {
 namespace connections {
+
+namespace {
+using ::location::nearby::proto::connections::OperationResultCode;
+}  // namespace
 
 WifiHotspotBwuHandler::WifiHotspotBwuHandler(
     Mediums& mediums, IncomingConnectionCallback incoming_connection_callback)
@@ -50,7 +53,7 @@ ByteArray WifiHotspotBwuHandler::HandleInitializeUpgradedMediumForEndpoint(
     const std::string& endpoint_id) {
   // Create SoftAP
   if (!wifi_hotspot_medium_.StartWifiHotspot()) {
-    NEARBY_LOGS(INFO) << "Failed to start Wifi Hotspot!";
+    LOG(INFO) << "Failed to start Wifi Hotspot!";
     return {};
   }
 
@@ -60,14 +63,14 @@ ByteArray WifiHotspotBwuHandler::HandleInitializeUpgradedMediumForEndpoint(
             absl::bind_front(
                 &WifiHotspotBwuHandler::OnIncomingWifiHotspotConnection, this,
                 client))) {
-      NEARBY_LOGS(ERROR)
+      LOG(ERROR)
           << "WifiHotspotBwuHandler couldn't initiate WifiHotspot upgrade for "
           << "service " << upgrade_service_id << " and endpoint " << endpoint_id
           << " because it failed to start listening for incoming WifiLan "
              "connections.";
       return {};
     }
-    NEARBY_LOGS(INFO)
+    LOG(INFO)
         << "WifiHotspotBwuHandler successfully started listening for incoming "
            "WifiHotspot connections while upgrading endpoint "
         << endpoint_id;
@@ -84,9 +87,9 @@ ByteArray WifiHotspotBwuHandler::HandleInitializeUpgradedMediumForEndpoint(
   std::int32_t port = hotspot_crendential->GetPort();
   std::int32_t frequency = hotspot_crendential->GetFrequency();
 
-  NEARBY_LOGS(INFO) << "Start SoftAP with SSID:" << ssid
-                    << ",  Password:" << password << ",  Port:" << port
-                    << ",  Gateway:" << gateway << ",  Frequency:" << frequency;
+  LOG(INFO) << "Start SoftAP with SSID:" << ssid << ",  Password:" << password
+            << ",  Port:" << port << ",  Gateway:" << gateway
+            << ",  Frequency:" << frequency;
 
   bool disabling_encryption =
       (client->GetAdvertisingOptions().strategy == Strategy::kP2pPointToPoint);
@@ -101,57 +104,66 @@ void WifiHotspotBwuHandler::HandleRevertInitiatorStateForService(
   wifi_hotspot_medium_.StopWifiHotspot();
   wifi_hotspot_medium_.DisconnectWifiHotspot();
 
-  NEARBY_LOGS(INFO)
-      << "WifiHotspotBwuHandler successfully reverted all states for "
-      << "upgrade service ID " << upgrade_service_id;
+  LOG(INFO) << "WifiHotspotBwuHandler successfully reverted all states for "
+            << "upgrade service ID " << upgrade_service_id;
 }
 
 // Called by BWU target. Retrieves a new medium info from incoming message,
 // and establishes connection over WifiHotspot using this info.
-std::unique_ptr<EndpointChannel>
+ErrorOr<std::unique_ptr<EndpointChannel>>
 WifiHotspotBwuHandler::CreateUpgradedEndpointChannel(
     ClientProxy* client, const std::string& service_id,
     const std::string& endpoint_id, const UpgradePathInfo& upgrade_path_info) {
   if (!upgrade_path_info.has_wifi_hotspot_credentials()) {
-    NEARBY_LOGS(INFO) << "No Hotspot Credential";
-    return nullptr;
+    LOG(INFO) << "No Hotspot Credential";
+    return {Error(
+        OperationResultCode::CONNECTIVITY_WIFI_HOTSPOT_INVALID_CREDENTIAL)};
   }
   const UpgradePathInfo::WifiHotspotCredentials& upgrade_path_info_credentials =
       upgrade_path_info.wifi_hotspot_credentials();
 
-  const std::string& ssid = upgrade_path_info_credentials.ssid();
-  const std::string& password = upgrade_path_info_credentials.password();
-  const std::string& gateway = upgrade_path_info_credentials.gateway();
-  std::int32_t port = upgrade_path_info_credentials.port();
-  std::int32_t frequency = upgrade_path_info_credentials.frequency();
+  HotspotCredentials hotspot_credentials;
+  hotspot_credentials.SetSSID(upgrade_path_info_credentials.ssid());
+  hotspot_credentials.SetPassword(upgrade_path_info_credentials.password());
+  hotspot_credentials.SetGateway(upgrade_path_info_credentials.gateway());
+  hotspot_credentials.SetPort(upgrade_path_info_credentials.port());
+  hotspot_credentials.SetFrequency(upgrade_path_info_credentials.frequency());
 
-  NEARBY_LOGS(INFO) << "Received Hotspot credential SSID: " << ssid
-                    << ",  Password:" << password << ",  Port:" << port
-                    << ",  Gateway:" << gateway << ",  Frequency:" << frequency;
+  LOG(INFO) << "Received Hotspot credential SSID: "
+            << hotspot_credentials.GetSSID()
+            << ",  Password:" << hotspot_credentials.GetPassword()
+            << ",  Port:" << hotspot_credentials.GetPort()
+            << ",  Gateway:" << hotspot_credentials.GetGateway()
+            << ",  Frequency:" << hotspot_credentials.GetFrequency();
 
-  if (!wifi_hotspot_medium_.ConnectWifiHotspot(ssid, password, frequency)) {
-    NEARBY_LOGS(ERROR) << "Connect to Hotspot failed";
-    return nullptr;
+  if (!wifi_hotspot_medium_.ConnectWifiHotspot(hotspot_credentials)) {
+    LOG(ERROR) << "Connect to Hotspot failed";
+    return {Error(
+        OperationResultCode::CONNECTIVITY_WIFI_HOTSPOT_INVALID_CREDENTIAL)};
   }
 
-  WifiHotspotSocket socket = wifi_hotspot_medium_.Connect(
-      service_id, gateway, port, client->GetCancellationFlag(endpoint_id));
-  if (!socket.IsValid()) {
-    NEARBY_LOGS(ERROR)
+  ErrorOr<WifiHotspotSocket> socket_result = wifi_hotspot_medium_.Connect(
+      service_id, hotspot_credentials.GetGateway(),
+      hotspot_credentials.GetPort(), client->GetCancellationFlag(endpoint_id));
+  if (socket_result.has_error()) {
+    LOG(ERROR)
         << "WifiHotspotBwuHandler failed to connect to the WifiHotspot service("
-        << gateway << ":" << port << ") for endpoint " << endpoint_id;
-    return nullptr;
+        << hotspot_credentials.GetGateway() << ":"
+        << hotspot_credentials.GetPort() << ") for endpoint " << endpoint_id;
+    return {Error(socket_result.error().operation_result_code().value())};
   }
 
   NEARBY_VLOG(1)
       << "WifiHotspotBwuHandler successfully connected to WifiHotspot service ("
-      << gateway << ":" << port << ") while upgrading endpoint " << endpoint_id;
+      << hotspot_credentials.GetGateway() << ":"
+      << hotspot_credentials.GetPort() << ") while upgrading endpoint "
+      << endpoint_id;
 
   // Create a new WifiHotspotEndpointChannel.
   auto channel = std::make_unique<WifiHotspotEndpointChannel>(
-      service_id, /*channel_name=*/service_id, socket);
+      service_id, /*channel_name=*/service_id, socket_result.value());
 
-  return channel;
+  return {std::move(channel)};
 }
 
 // Accept Connection Callback.

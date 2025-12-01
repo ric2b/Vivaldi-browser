@@ -8,7 +8,6 @@
 #include <memory>
 #include <utility>
 
-#include "array-buffer-sweeper.h"
 #include "src/base/logging.h"
 #include "src/heap/gc-tracer-inl.h"
 #include "src/heap/gc-tracer.h"
@@ -348,19 +347,18 @@ void ArrayBufferSweeper::ReleaseAll(ArrayBufferList* list) {
   *list = ArrayBufferList(list->age_);
 }
 
-void ArrayBufferSweeper::Append(Tagged<JSArrayBuffer> object,
-                                ArrayBufferExtension* extension) {
+void ArrayBufferSweeper::Append(ArrayBufferExtension* extension) {
   size_t bytes = extension->accounting_length();
 
   FinishIfDone();
 
-  // `Heap::InYoungGeneration` during full GC with sticky markbits is generally
-  // inaccurate. However, a full GC will sweep both lists and promote all to
-  // old, so it doesn't matter which list initially holds the extension.
-  if (HeapLayout::InYoungGeneration(object)) {
-    young_.Append(extension);
-  } else {
-    old_.Append(extension);
+  switch (extension->age()) {
+    case ArrayBufferExtension::Age::kYoung:
+      young_.Append(extension);
+      break;
+    case v8::internal::ArrayBufferExtension::Age::kOld:
+      old_.Append(extension);
+      break;
   }
 
   IncrementExternalMemoryCounters(bytes);
@@ -370,9 +368,8 @@ void ArrayBufferSweeper::Resize(ArrayBufferExtension* extension,
                                 int64_t delta) {
   FinishIfDone();
 
-  ArrayBufferExtension::AccountingState previous_value =
+  const ArrayBufferExtension::AccountingState previous_value =
       extension->UpdateAccountingLength(delta);
-
   UpdateApproximateBytes(delta, previous_value.age());
   if (delta > 0) {
     IncrementExternalMemoryCounters(delta);
@@ -422,14 +419,16 @@ void ArrayBufferSweeper::IncrementExternalMemoryCounters(size_t bytes) {
   if (bytes == 0) return;
   heap_->IncrementExternalBackingStoreBytes(
       ExternalBackingStoreType::kArrayBuffer, bytes);
-  external_memory_accounter_.Increase(heap_->isolate(), bytes);
+  external_memory_accounter_.Increase(
+      reinterpret_cast<v8::Isolate*>(heap_->isolate()), bytes);
 }
 
 void ArrayBufferSweeper::DecrementExternalMemoryCounters(size_t bytes) {
   if (bytes == 0) return;
   heap_->DecrementExternalBackingStoreBytes(
       ExternalBackingStoreType::kArrayBuffer, bytes);
-  external_memory_accounter_.Decrease(heap_->isolate(), bytes);
+  external_memory_accounter_.Decrease(
+      reinterpret_cast<v8::Isolate*>(heap_->isolate()), bytes);
 }
 
 void ArrayBufferSweeper::FinalizeAndDelete(ArrayBufferExtension* extension) {

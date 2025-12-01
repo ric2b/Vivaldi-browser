@@ -20,7 +20,6 @@
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/ranges/algorithm.h"
 #include "base/sequence_checker.h"
 #include "base/stl_util.h"
 #include "base/task/sequenced_task_runner.h"
@@ -38,13 +37,14 @@
 #include "components/trusted_vault/trusted_vault_histograms.h"
 #include "components/trusted_vault/trusted_vault_server_constants.h"
 #include "google_apis/gaia/gaia_auth_util.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 
 namespace trusted_vault {
 
 namespace {
 
-constexpr int kCurrentLocalTrustedVaultVersion = 2;
+constexpr int kCurrentLocalTrustedVaultVersion = 3;
 constexpr int kCurrentDeviceRegistrationVersion = 1;
 
 trusted_vault_pb::LocalTrustedVault ReadDataFromDiskImpl(
@@ -132,9 +132,9 @@ std::vector<std::vector<uint8_t>> GetAllVaultKeys(
   return vault_keys;
 }
 
-base::flat_set<std::string> GetGaiaIDs(
+base::flat_set<GaiaId> GetGaiaIDs(
     const std::vector<gaia::ListedAccount>& listed_accounts) {
-  base::flat_set<std::string> result;
+  base::flat_set<GaiaId> result;
   for (const gaia::ListedAccount& listed_account : listed_accounts) {
     result.insert(listed_account.gaia_id);
   }
@@ -181,8 +181,7 @@ GetDeviceRegistrationOutcomeForUMAFromResponse(
     case TrustedVaultRegistrationStatus::kOtherError:
       return TrustedVaultDeviceRegistrationOutcomeForUMA::kOtherError;
   }
-  NOTREACHED_IN_MIGRATION();
-  return TrustedVaultDeviceRegistrationOutcomeForUMA::kOtherError;
+  NOTREACHED();
 }
 
 // Version 0 may contain corrupted data: missing constant key if the client
@@ -225,6 +224,26 @@ void UpgradeToVersion2(
     per_user_vault.set_keys_marked_as_stale_by_consumer(false);
   }
   local_trusted_vault->set_data_version(2);
+}
+
+// Version 2 may contain `device_registered_version` set to 0 or 1, this concept
+// was introduced a while ago to address a bug, upgrade to version 3 resets
+// device registered flag to false if `device_registered_version` is 0, so the
+// rest of the implementation doesn't need to handle this case.
+void UpgradeToVersion3(
+    trusted_vault_pb::LocalTrustedVault* local_trusted_vault) {
+  CHECK(local_trusted_vault);
+  CHECK_EQ(local_trusted_vault->data_version(), 2);
+
+  for (trusted_vault_pb::LocalTrustedVaultPerUser& per_user_vault :
+       *local_trusted_vault->mutable_user()) {
+    if (per_user_vault.local_device_registration_info()
+            .device_registered_version() == 0) {
+      per_user_vault.mutable_local_device_registration_info()
+          ->set_device_registered(false);
+    }
+    local_trusted_vault->set_data_version(3);
+  }
 }
 
 }  // namespace
@@ -294,8 +313,7 @@ StandaloneTrustedVaultBackend::GetDownloadKeysStatusForUMAFromResponse(
       return TrustedVaultDownloadKeysStatusForUMA::kOtherError;
   }
 
-  NOTREACHED_IN_MIGRATION();
-  return TrustedVaultDownloadKeysStatusForUMA::kOtherError;
+  NOTREACHED();
 }
 
 StandaloneTrustedVaultBackend::StandaloneTrustedVaultBackend(
@@ -341,6 +359,11 @@ void StandaloneTrustedVaultBackend::ReadDataFromDisk() {
 
   if (data_.data_version() == 1) {
     UpgradeToVersion2(&data_);
+    WriteDataToDisk();
+  }
+
+  if (data_.data_version() == 2) {
+    UpgradeToVersion3(&data_);
     WriteDataToDisk();
   }
 
@@ -438,7 +461,7 @@ void StandaloneTrustedVaultBackend::FetchKeys(
 }
 
 void StandaloneTrustedVaultBackend::StoreKeys(
-    const std::string& gaia_id,
+    const GaiaId& gaia_id,
     const std::vector<std::vector<uint8_t>>& keys,
     int last_key_version) {
   // Find or create user for |gaid_id|.
@@ -446,7 +469,7 @@ void StandaloneTrustedVaultBackend::StoreKeys(
       FindUserVault(gaia_id);
   if (!per_user_vault) {
     per_user_vault = data_.add_user();
-    per_user_vault->set_gaia_id(gaia_id);
+    per_user_vault->set_gaia_id(gaia_id.ToString());
   }
 
   // Having retrieved (or downloaded) new keys indicates that past failures may
@@ -509,7 +532,7 @@ void StandaloneTrustedVaultBackend::SetPrimaryAccount(
       FindUserVault(primary_account->gaia);
   if (!per_user_vault) {
     per_user_vault = data_.add_user();
-    per_user_vault->set_gaia_id(primary_account->gaia);
+    per_user_vault->set_gaia_id(primary_account->gaia.ToString());
   }
 
   degraded_recoverability_handler_ =
@@ -550,8 +573,8 @@ void StandaloneTrustedVaultBackend::SetPrimaryAccount(
 
 void StandaloneTrustedVaultBackend::UpdateAccountsInCookieJarInfo(
     const signin::AccountsInCookieJarInfo& accounts_in_cookie_jar_info) {
-  const base::flat_set<std::string> gaia_ids_in_cookie_jar =
-      base::STLSetUnion<base::flat_set<std::string>>(
+  const base::flat_set<GaiaId> gaia_ids_in_cookie_jar =
+      base::STLSetUnion<base::flat_set<GaiaId>>(
           GetGaiaIDs(accounts_in_cookie_jar_info
                          .GetPotentiallyInvalidSignedInAccounts()),
           GetGaiaIDs(accounts_in_cookie_jar_info.GetSignedOutAccounts()));
@@ -569,7 +592,7 @@ void StandaloneTrustedVaultBackend::UpdateAccountsInCookieJarInfo(
   auto should_remove_user_data =
       [&gaia_ids_in_cookie_jar, &primary_account = primary_account_](
           const trusted_vault_pb::LocalTrustedVaultPerUser& per_user_data) {
-        const std::string& gaia_id = per_user_data.gaia_id();
+        const GaiaId gaia_id(per_user_data.gaia_id());
         if (primary_account.has_value() && gaia_id == primary_account->gaia) {
           // Don't delete primary account data.
           return false;
@@ -578,9 +601,9 @@ void StandaloneTrustedVaultBackend::UpdateAccountsInCookieJarInfo(
         return !gaia_ids_in_cookie_jar.contains(gaia_id);
       };
 
-  data_.mutable_user()->erase(
-      base::ranges::remove_if(*data_.mutable_user(), should_remove_user_data),
-      data_.mutable_user()->end());
+  auto removed =
+      std::ranges::remove_if(*data_.mutable_user(), should_remove_user_data);
+  data_.mutable_user()->erase(removed.begin(), removed.end());
   WriteDataToDisk();
 }
 
@@ -613,7 +636,7 @@ void StandaloneTrustedVaultBackend::GetIsRecoverabilityDegraded(
 }
 
 void StandaloneTrustedVaultBackend::AddTrustedRecoveryMethod(
-    const std::string& gaia_id,
+    const GaiaId& gaia_id,
     const std::vector<uint8_t>& public_key,
     int method_type_hint,
     base::OnceClosure cb) {
@@ -695,7 +718,7 @@ void StandaloneTrustedVaultBackend::ClearLocalDataForAccount(
   }
 
   *per_user_vault = trusted_vault_pb::LocalTrustedVaultPerUser();
-  per_user_vault->set_gaia_id(account_info.gaia);
+  per_user_vault->set_gaia_id(account_info.gaia.ToString());
   WriteDataToDisk();
 
   // This codepath invoked as part of sync reset. While sync reset can cause
@@ -712,7 +735,7 @@ StandaloneTrustedVaultBackend::GetPrimaryAccountForTesting() const {
 
 trusted_vault_pb::LocalDeviceRegistrationInfo
 StandaloneTrustedVaultBackend::GetDeviceRegistrationInfoForTesting(
-    const std::string& gaia_id) {
+    const GaiaId& gaia_id) {
   trusted_vault_pb::LocalTrustedVaultPerUser* per_user_vault =
       FindUserVault(gaia_id);
   if (!per_user_vault) {
@@ -728,7 +751,7 @@ StandaloneTrustedVaultBackend::GetLastAddedRecoveryMethodPublicKeyForTesting()
 }
 
 int StandaloneTrustedVaultBackend::GetLastKeyVersionForTesting(
-    const std::string& gaia_id) {
+    const GaiaId& gaia_id) {
   trusted_vault_pb::LocalTrustedVaultPerUser* per_user_vault =
       FindUserVault(gaia_id);
   if (!per_user_vault) {
@@ -737,20 +760,9 @@ int StandaloneTrustedVaultBackend::GetLastKeyVersionForTesting(
   return per_user_vault->last_vault_key_version();
 }
 
-void StandaloneTrustedVaultBackend::SetDeviceRegisteredVersionForTesting(
-    const std::string& gaia_id,
-    int version) {
-  trusted_vault_pb::LocalTrustedVaultPerUser* per_user_vault =
-      FindUserVault(gaia_id);
-  DCHECK(per_user_vault);
-  per_user_vault->mutable_local_device_registration_info()
-      ->set_device_registered_version(version);
-  WriteDataToDisk();
-}
-
 void StandaloneTrustedVaultBackend::
     SetLastRegistrationReturnedLocalDataObsoleteForTesting(
-        const std::string& gaia_id) {
+        const GaiaId& gaia_id) {
   trusted_vault_pb::LocalTrustedVaultPerUser* per_user_vault =
       FindUserVault(gaia_id);
   DCHECK(per_user_vault);
@@ -791,10 +803,7 @@ StandaloneTrustedVaultBackend::MaybeRegisterDevice() {
       FindUserVault(primary_account_->gaia);
   DCHECK(per_user_vault);
 
-  if (per_user_vault->local_device_registration_info().device_registered() &&
-      per_user_vault->local_device_registration_info()
-              .device_registered_version() ==
-          kCurrentDeviceRegistrationVersion) {
+  if (per_user_vault->local_device_registration_info().device_registered()) {
     static_assert(kCurrentDeviceRegistrationVersion == 1);
     return TrustedVaultDeviceRegistrationStateForUMA::kAlreadyRegisteredV1;
   }
@@ -1089,20 +1098,14 @@ void StandaloneTrustedVaultBackend::FulfillOngoingFetchKeys(
 }
 
 void StandaloneTrustedVaultBackend::FulfillFetchKeys(
-    const std::string& gaia_id,
+    const GaiaId& gaia_id,
     FetchKeysCallback callback,
     std::optional<TrustedVaultDownloadKeysStatusForUMA> status_for_uma) {
   const trusted_vault_pb::LocalTrustedVaultPerUser* per_user_vault =
       FindUserVault(gaia_id);
 
   if (status_for_uma.has_value()) {
-    const bool also_log_with_v1_suffix =
-        per_user_vault &&
-        per_user_vault->local_device_registration_info().device_registered() &&
-        per_user_vault->local_device_registration_info()
-                .device_registered_version() == 1;
-    RecordTrustedVaultDownloadKeysStatus(*status_for_uma,
-                                         also_log_with_v1_suffix);
+    RecordTrustedVaultDownloadKeysStatus(security_domain_id_, *status_for_uma);
   }
 
   std::vector<std::vector<uint8_t>> vault_keys;
@@ -1155,19 +1158,19 @@ void StandaloneTrustedVaultBackend::
           const trusted_vault_pb::LocalTrustedVaultPerUser& per_user_data) {
         return per_user_data.should_delete_keys_when_non_primary() &&
                (!primary_account.has_value() ||
-                primary_account->gaia != per_user_data.gaia_id());
+                primary_account->gaia != GaiaId(per_user_data.gaia_id()));
       };
 
-  data_.mutable_user()->erase(
-      base::ranges::remove_if(*data_.mutable_user(), should_remove_user_data),
-      data_.mutable_user()->end());
+  auto removed =
+      std::ranges::remove_if(*data_.mutable_user(), should_remove_user_data);
+  data_.mutable_user()->erase(removed.begin(), removed.end());
   WriteDataToDisk();
 }
 
 trusted_vault_pb::LocalTrustedVaultPerUser*
-StandaloneTrustedVaultBackend::FindUserVault(const std::string& gaia_id) {
+StandaloneTrustedVaultBackend::FindUserVault(const GaiaId& gaia_id) {
   for (int i = 0; i < data_.user_size(); ++i) {
-    if (data_.user(i).gaia_id() == gaia_id) {
+    if (GaiaId(data_.user(i).gaia_id()) == gaia_id) {
       return data_.mutable_user(i);
     }
   }

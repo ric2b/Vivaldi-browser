@@ -28,23 +28,23 @@ class LinuxTests(TestSuite):
         query="""
         INCLUDE PERFETTO MODULE linux.threads;
 
-        SELECT upid, utid, pid, tid, process_name, thread_name
+        SELECT pid, tid, process_name, thread_name
         FROM linux_kernel_threads
-        ORDER by utid LIMIT 10;
+        ORDER by tid LIMIT 10;
         """,
         out=Csv("""
-        "upid","utid","pid","tid","process_name","thread_name"
-        7,14,510,510,"sugov:0","sugov:0"
-        89,23,1365,1365,"com.google.usf.","com.google.usf."
-        87,37,1249,1249,"irq/357-dwc3","irq/357-dwc3"
-        31,38,6,6,"kworker/u16:0","kworker/u16:0"
-        11,42,511,511,"sugov:4","sugov:4"
-        83,43,1152,1152,"irq/502-fts_ts","irq/502-fts_ts"
-        93,44,2374,2374,"csf_sync_update","csf_sync_update"
-        18,45,2379,2379,"csf_kcpu_0","csf_kcpu_0"
-        12,47,247,247,"decon0_kthread","decon0_kthread"
-        65,48,159,159,"spi0","spi0"
-            """))
+            "pid","tid","process_name","thread_name"
+            2,2,"kthreadd","kthreadd"
+            5,5,"kworker/0:0H","kworker/0:0H"
+            6,6,"kworker/u16:0","kworker/u16:0"
+            8,8,"kworker/u16:1","kworker/u16:1"
+            11,11,"ksoftirqd/0","ksoftirqd/0"
+            12,12,"rcu_preempt","rcu_preempt"
+            13,13,"rcuog/0","rcuog/0"
+            14,14,"rcuop/0","rcuop/0"
+            15,15,"rcub/0","rcub/0"
+            17,17,"rcu_exp_gp_kthr","rcu_exp_gp_kthr"
+        """))
 
   # Tests that DSU devfreq counters are working properly
   def test_dsu_devfreq(self):
@@ -78,3 +78,43 @@ class LinuxTests(TestSuite):
             7637,4106960128306,11008505,970000
             7880,4106971136811,9282511,1197000
             """))
+
+  def test_active_block_io_operations_by_device(self):
+    return DiffTestBlueprint(
+        trace=DataPath('linux_block_io_trace.pb'),
+        query="""
+        INCLUDE PERFETTO MODULE linux.block_io;
+
+        SELECT
+            ts,
+            ops_in_queue_or_device,
+            dev,
+            linux_device_major_id(dev) as major,
+            linux_device_minor_id(dev) as minor
+        FROM linux_active_block_io_operations_by_device
+        ORDER by ts
+        LIMIT 20;
+        """,
+        out=Csv("""
+        "ts","ops_in_queue_or_device","dev","major","minor"
+        241211905210838,1,45824,179,0
+        241211909452069,0,45824,179,0
+        241211909585838,1,45824,179,0
+        241211909845222,0,45824,179,0
+        241211910299145,1,1795,7,3
+        241211910636838,0,1795,7,3
+        241211912818299,1,45824,179,0
+        241211913170838,0,45824,179,0
+        241211916130530,1,45824,179,0
+        241211916325222,0,45824,179,0
+        241211916472453,1,45824,179,0
+        241211916809376,0,45824,179,0
+        241211917486915,1,45824,179,0
+        241211917815761,0,45824,179,0
+        241211918424838,1,45824,179,0
+        241211918650915,0,45824,179,0
+        241211918760222,1,45824,179,0
+        241211918973684,0,45824,179,0
+        241211919810453,1,45824,179,0
+        241211920094761,0,45824,179,0
+        """))

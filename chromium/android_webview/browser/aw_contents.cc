@@ -37,12 +37,14 @@
 #include "android_webview/browser/permission/permission_callback.h"
 #include "android_webview/browser/permission/permission_request_handler.h"
 #include "android_webview/browser/permission/simple_permission_request.h"
+#include "android_webview/browser/prefetch/aw_preloading_utils.h"
 #include "android_webview/browser/state_serializer.h"
 #include "android_webview/common/aw_features.h"
 #include "android_webview/common/aw_switches.h"
 #include "android_webview/common/devtools_instrumentation.h"
 #include "android_webview/common/mojom/frame.mojom.h"
 #include "base/android/build_info.h"
+#include "base/android/callback_android.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
@@ -75,8 +77,8 @@
 #include "components/autofill/content/browser/content_autofill_client.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
-#include "components/autofill/core/browser/autofill_client.h"
-#include "components/autofill/core/browser/browser_autofill_manager.h"
+#include "components/autofill/core/browser/foundations/autofill_client.h"
+#include "components/autofill/core/browser/foundations/browser_autofill_manager.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/js_injection/browser/js_communication_host.h"
@@ -462,30 +464,6 @@ static void JNI_AwContents_SetAwDrawSWFunctionTable(JNIEnv* env,
 
 static void JNI_AwContents_SetAwDrawGLFunctionTable(JNIEnv* env,
                                                     jlong function_table) {}
-
-static void JNI_AwContents_UpdateScreenCoverage(
-    JNIEnv* env,
-    jint global_percentage,
-    const base::android::JavaParamRef<jobjectArray>& jschemes,
-    const base::android::JavaParamRef<jintArray>& jscheme_percentages) {
-  std::vector<std::string> schemes;
-  AppendJavaStringArrayToStringVector(env, jschemes, &schemes);
-
-  std::vector<int> scheme_percentages;
-  JavaIntArrayToIntVector(env, jscheme_percentages, &scheme_percentages);
-
-  DCHECK(schemes.size() == scheme_percentages.size());
-
-  std::vector<VisibilityMetricsLogger::Scheme> scheme_enums(schemes.size());
-  for (size_t i = 0; i < schemes.size(); i++) {
-    scheme_enums[i] = VisibilityMetricsLogger::SchemeStringToEnum(schemes[i]);
-  }
-
-  AwBrowserProcess::GetInstance()
-      ->visibility_metrics_logger()
-      ->UpdateScreenCoverage(global_percentage, scheme_enums,
-                             scheme_percentages);
-}
 
 // static
 jint JNI_AwContents_GetNativeInstanceCount(JNIEnv* env) {
@@ -1514,6 +1492,96 @@ void AwContents::FlushBackForwardCache(JNIEnv* env, jint reason) {
       static_cast<NotRestoredReason>(reason));
 }
 
+jint AwContents::StartPrerendering(
+    JNIEnv* env,
+    const std::string& prerendering_url,
+    const base::android::JavaParamRef<jobject>& j_prefetch_params,
+    const base::android::JavaParamRef<jobject>& j_activation_callback,
+    const base::android::JavaParamRef<jobject>& j_error_callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  CHECK(j_activation_callback);
+  CHECK(j_error_callback);
+
+  base::OnceClosure activation_callback =
+      base::BindOnce(&base::android::RunRunnableAndroid,
+                     ScopedJavaGlobalRef<jobject>(env, j_activation_callback));
+  base::OnceClosure error_callback =
+      base::BindOnce(&base::android::RunRunnableAndroid,
+                     ScopedJavaGlobalRef<jobject>(env, j_error_callback));
+
+  // Clean up the canceled handles.
+  base::EraseIf(prerender_handles_,
+                [](std::unique_ptr<content::PrerenderHandle>& handle) {
+                  return !handle->IsValid();
+                });
+
+  // If the valid PrerenderHandle for the same URL exists, add the callbacks to
+  // the handle instead of starting a new one.
+  for (auto& handle : prerender_handles_) {
+    if (handle->GetInitialPrerenderingUrl().spec() == prerendering_url) {
+      handle->AddActivationCallback(std::move(activation_callback));
+      handle->AddErrorCallback(std::move(error_callback));
+      return handle->GetHandleId();
+    }
+  }
+
+  // Cancel existing prerendering before starting a new one to avoid hitting the
+  // limit.
+  if (!web_contents_->IsAllowedToStartPrerendering()) {
+    // Erase the oldest prerendering to free up the capacity for the new
+    // attempt. If the handles are already empty, other embedder triggers should
+    // be running. In that case, there is no way to trigger. Let this request
+    // fail eventually.
+    if (!prerender_handles_.empty()) {
+      prerender_handles_.pop_front();
+    }
+  }
+
+  net::HttpRequestHeaders additional_headers =
+      GetAdditionalHeadersFromPrefetchParameters(env, j_prefetch_params);
+  std::optional<net::HttpNoVarySearchData> no_vary_search_hint =
+      GetExpectedNoVarySearchFromPrefetchParameters(env, j_prefetch_params);
+
+  // This is the same as the page transition of WebView.loadUrl().
+  auto page_transition = ui::PageTransitionFromInt(
+      ui::PAGE_TRANSITION_TYPED | ui::PAGE_TRANSITION_FROM_API);
+
+  // TODO(https://crbug.com/41490450): Do the following:
+  // - Pass a valid PreloadingAttempt.
+  // - Pass a valid navigation handle callback.
+  // - Run multiple prerendering in a sequential manner, not in parallel.
+  std::unique_ptr<content::PrerenderHandle> prerender_handle =
+      web_contents_->StartPrerendering(
+          GURL(prerendering_url), content::PreloadingTriggerType::kEmbedder,
+          "WebView", std::move(additional_headers),
+          std::move(no_vary_search_hint), page_transition,
+          /*should_warm_up_compositor=*/false,
+          /*should_prepare_paint_tree=*/false,
+          content::PreloadingHoldbackStatus::kUnspecified,
+          /*preloading_attempt=*/nullptr, /*url_match_predicate=*/{},
+          /*prerender_navigation_handle_callback=*/{});
+
+  int32_t handle_id = -1;
+  if (prerender_handle) {
+    handle_id = prerender_handle->GetHandleId();
+    prerender_handle->AddActivationCallback(std::move(activation_callback));
+    prerender_handle->AddErrorCallback(std::move(error_callback));
+    prerender_handles_.push_back(std::move(prerender_handle));
+  } else {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, std::move(error_callback));
+  }
+  return handle_id;
+}
+
+void AwContents::CancelPrerendering(JNIEnv* env, jint prerender_id) {
+  EraseIf(
+      prerender_handles_,
+      [prerender_id](const std::unique_ptr<content::PrerenderHandle>& handle) {
+        return handle->GetHandleId() == prerender_id;
+      });
+}
+
 void AwContents::CancelAllPrerendering(JNIEnv* env) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   web_contents()->CancelAllPrerendering();
@@ -1571,7 +1639,7 @@ void AwContents::TrimMemory(JNIEnv* env, jint level, jboolean visible) {
 
 void AwContents::GrantFileSchemeAccesstoChildProcess(JNIEnv* env) {
   content::ChildProcessSecurityPolicy::GetInstance()->GrantRequestScheme(
-      web_contents_->GetPrimaryMainFrame()->GetProcess()->GetID(),
+      web_contents_->GetPrimaryMainFrame()->GetProcess()->GetDeprecatedID(),
       url::kFileScheme);
 }
 
@@ -1625,6 +1693,11 @@ void LogSiteVisit(std::string etld_plus1, jlong site_hash) {
 }
 
 void AwContents::PrimaryPageChanged(content::Page& page) {
+  // TODO(https://crbug.com/378601799): Consider allowing prerendered pages
+  // triggered by the WebView prerender API to outlive PrimaryPageChanged. See
+  // the issue for the context.
+  prerender_handles_.clear();
+
   std::string scheme = page.GetMainDocument().GetLastCommittedURL().scheme();
   const url::Origin& origin = page.GetMainDocument().GetLastCommittedOrigin();
   std::string etld_plus1 =

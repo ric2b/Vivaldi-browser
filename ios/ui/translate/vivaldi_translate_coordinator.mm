@@ -31,6 +31,9 @@ NSUInteger halfSheetCharsThreshold = 300;
 // View controller for the translate scene.
 @property(nonatomic, strong) UIViewController* controller;
 
+// View controller for the translate history.
+@property(nonatomic, strong) UIViewController* historyController;
+
 // View controller for the translate scene editor for iPad side panel.
 @property(nonatomic, strong) UIViewController* sidePanelEditorController;
 
@@ -109,6 +112,7 @@ NSUInteger halfSheetCharsThreshold = 300;
 
   self.viewProvider = nil;
   self.controller = nil;
+  self.historyController = nil;
   self.presentingViewController = nil;
   self.sidePanelEditorController = nil;
   self.navigationController = nil;
@@ -134,6 +138,10 @@ NSUInteger halfSheetCharsThreshold = 300;
   }];
 
   return characterCount > halfSheetCharsThreshold;
+}
+
+- (BOOL)isEditorPresented {
+  return self.sidePanelEditorController != nil;
 }
 
 #pragma mark - Actions
@@ -186,6 +194,43 @@ NSUInteger halfSheetCharsThreshold = 300;
                                       completion:nil];
 }
 
+- (void)handleHistoryButtonTapEvent {
+  UIViewController *controller =
+      [self.viewProvider makeTranslateHistoryViewController];
+  controller.title =
+      l10n_util::GetNSString(IDS_VIVALDI_TRANSLATE_HISTORY_TITLE);
+  self.historyController = controller;
+
+  UIBarButtonItem *doneItem =
+      [[UIBarButtonItem alloc]
+          initWithBarButtonSystemItem:UIBarButtonSystemItemDone
+                               target:self
+                               action:@selector(handleCloseButtonTap)];
+  controller.navigationItem.rightBarButtonItem = doneItem;
+
+  [self.navigationController pushViewController:controller animated:YES];
+}
+
+- (void)handleHistoryItemTapEvent {
+  if (self.entryPoint == VivaldiTranslateEntryPointSidePanel) {
+    [self handleTabletEditorFocusEvent];
+  } else {
+    [self.navigationController popViewControllerAnimated:YES];
+    if (self.historyController) {
+      self.historyController = nil;
+    }
+  }
+}
+
+- (void)handleAllHistoryDeleteEvent {
+  if (self.entryPoint != VivaldiTranslateEntryPointSidePanel) {
+    [self.navigationController popViewControllerAnimated:YES];
+    if (self.historyController) {
+      self.historyController = nil;
+    }
+  }
+}
+
 #pragma mark - Private
 
 - (void)setupViewProvider {
@@ -201,6 +246,19 @@ NSUInteger halfSheetCharsThreshold = 300;
 
   [self.viewProvider observeTapOnSidePanelInputFieldEvent:^{
     [weakSelf handleTabletEditorFocusEvent];
+  }];
+
+  [self.viewProvider observeHistoryButtonTapEvent:^{
+    [weakSelf handleHistoryButtonTapEvent];
+  }];
+
+  [self.viewProvider observeHistoryItemTapEvent:^
+      (VivaldiTranslateHistoryItem* historyItem){
+    [weakSelf handleHistoryItemTapEvent];
+  }];
+
+  [self.viewProvider observeAllHistoryDeleteEvent:^{
+    [weakSelf handleAllHistoryDeleteEvent];
   }];
 }
 

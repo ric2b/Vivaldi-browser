@@ -16,7 +16,7 @@ scheduled programming.
 
 Updates since last meeting (on Monday, July 27th):
 
-Scrolling (skobes, szager) \[[crbug.com/417782](http://crbug.com/417782)\]
+Scrolling (skobes, szager) \[[crbug.com/417782](https://crbug.com/417782)\]
 
 - Fixed under-painting issue on android. (skobes)
 
@@ -36,7 +36,7 @@ wasn't taken into account when computing the flexed size. (szager)
 
 effort to have sane scroll bounds for the root layer. (szager)
 
-CSS Flexbox (cbiesinger) \[[crbug.com/426898](http://crbug.com/426898)\]
+CSS Flexbox (cbiesinger) \[[crbug.com/426898](https://crbug.com/426898)\]
 
 - Had a meeting with CSS flexbox spec authors last week and leared that
 
@@ -50,12 +50,12 @@ change further. Will follow up this week.
 
 take a week or two to resolve.
 
-CSS Grid Layout (svillar) \[[crbug.com/79180](http://crbug.com/79180)\]
+CSS Grid Layout (svillar) \[[crbug.com/79180](https://crbug.com/79180)\]
 
 - cbiesinger have been helping with reviews.
 
 Region-based multi-column support (mstensho)
-\[[crbug.com/334335](http://crbug.com/334335)\]
+\[[crbug.com/334335](https://crbug.com/334335)\]
 
 - Doing a lot of cleanup and bug fixing work.
 
@@ -64,7 +64,7 @@ Region-based multi-column support (mstensho)
 but nothing landed yet.
 
 Add API for layout (leviw, pilgrim, ojan)
-\[[crbug.com/495288](http://crbug.com/495288)\]
+\[[crbug.com/495288](https://crbug.com/495288)\]
 
 - Working on moving layout box and descendants over to use the API.
 

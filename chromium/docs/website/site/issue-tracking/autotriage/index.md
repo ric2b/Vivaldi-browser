@@ -16,7 +16,7 @@ and the triage process is often error prone, tedious, and time consuming. In
 order to make triage more efficient, we automate certain tasks.
 
 Googlers can view sheriffbot's source at
-[go/sheriffbot-source](https://goto.google.com/sheriffbot-source). Please file
+[go/sheriffbot-source](http://go/sheriffbot-source). Please file
 issues with Sheriffbot
 [here](https://bugs.chromium.org/p/chromium/issues/entry?components=Tools%3EStability%3ESheriffbot).
 

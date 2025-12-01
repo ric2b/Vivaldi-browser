@@ -16,6 +16,12 @@ BASE_FEATURE(kToastFramework,
              "ToastFramework",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// Enables refinements of the toast framework that allow for controlling the
+// visibility of non-actionable toasts.
+BASE_FEATURE(kToastRefinements,
+             "ToastRefinements",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 const base::FeatureParam<bool> kToastDemoMode{&kToastFramework,
                                               "toast_demo_mode", false};
 
@@ -23,7 +29,7 @@ const base::FeatureParam<base::TimeDelta> kToastTimeout{
     &kToastFramework, "toast_timeout", base::Seconds(8)};
 
 const base::FeatureParam<base::TimeDelta> kToastWithoutActionTimeout{
-    &kToastFramework, "toast_without_action_timeout", base::Seconds(8)};
+    &kToastFramework, "toast_without_action_timeout", base::Seconds(4)};
 
 // Enables the link copied confirmation toast.
 BASE_FEATURE(kLinkCopiedToast,

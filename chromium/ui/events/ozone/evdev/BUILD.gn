@@ -131,7 +131,6 @@ component("evdev") {
     ":keyboard_mouse_combo_metrics",
     ":mouse_button_property",
     "//base",
-    "//build:chromeos_buildflags",
     "//third_party/re2:re2",
     "//ui/display",
     "//ui/events",
@@ -149,6 +148,8 @@ component("evdev") {
     sources += [
       "fake_keyboard_heuristic_metrics.cc",
       "fake_keyboard_heuristic_metrics.h",
+      "microphone_mute_key_metrics.cc",
+      "microphone_mute_key_metrics.h",
       "numberpad_metrics.cc",
       "numberpad_metrics.h",
     ]
@@ -158,7 +159,6 @@ component("evdev") {
     ]
     visibility += [
       "//chrome/browser/ui",
-      "//chrome/browser/ui/ash",
       "//chrome/browser/ui/ash/main_extra_parts",
       "//chromeos/ash/components/heatmap/*",
     ]
@@ -252,7 +252,6 @@ source_set("event_device_info") {
   deps = [
     ":keyboard_mouse_combo_metrics",
     "//base",
-    "//build:chromeos_buildflags",
     "//ui/events/devices",
     "//ui/events/ozone",
   ]
@@ -302,6 +301,7 @@ source_set("unittests") {
     "gamepad_event_converter_evdev_unittest.cc",
     "input_controller_evdev_unittest.cc",
     "input_injector_evdev_unittest.cc",
+    "keyboard_evdev_unittest.cc",
     "libgestures_glue/haptic_touchpad_handler.cc",
     "libgestures_glue/haptic_touchpad_handler.h",
     "libgestures_glue/haptic_touchpad_handler_unittest.cc",
@@ -325,7 +325,6 @@ source_set("unittests") {
     ":mouse_button_property",
     "//base",
     "//base/test:test_support",
-    "//build:chromeos_buildflags",
     "//testing/gmock",
     "//testing/gtest",
     "//third_party/re2:re2",

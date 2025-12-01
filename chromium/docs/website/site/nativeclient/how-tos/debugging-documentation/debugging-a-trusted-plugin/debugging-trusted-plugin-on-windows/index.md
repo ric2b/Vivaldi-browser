@@ -59,7 +59,7 @@ title: Debugging a Trusted Plugin on Windows
             the Attach panel and attaching the the new "chrome.exe" process. I
             have not been able to figure out how to debug startup issues. There
             are some extra debugging hints here:
-            <http://www.chromium.org/developers/how-tos/debugging>
+            <https://www.chromium.org/developers/how-tos/debugging>
 
 Implications:
 

@@ -18,6 +18,7 @@
 #include "remoting/base/logging.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/simple_url_loader.h"
+#include "services/network/public/mojom/shared_storage.mojom.h"
 #include "url/gurl.h"
 
 namespace remoting {
@@ -149,7 +150,9 @@ void UrlLoaderNetworkServiceObserver::OnDataUseUpdate(
 
 void UrlLoaderNetworkServiceObserver::OnSharedStorageHeaderReceived(
     const url::Origin& request_origin,
-    std::vector<network::mojom::SharedStorageOperationPtr> operations,
+    std::vector<network::mojom::SharedStorageModifierMethodWithOptionsPtr>
+        methods_with_options,
+    const std::optional<std::string>& with_lock,
     OnSharedStorageHeaderReceivedCallback callback) {
   std::move(callback).Run();
 }
@@ -162,6 +165,12 @@ void UrlLoaderNetworkServiceObserver::Clone(
 
 void UrlLoaderNetworkServiceObserver::OnWebSocketConnectedToPrivateNetwork(
     network::mojom::IPAddressSpace ip_address_space) {}
+
+void UrlLoaderNetworkServiceObserver::OnUrlLoaderConnectedToPrivateNetwork(
+    const GURL& request_url,
+    network::mojom::IPAddressSpace response_address_space,
+    network::mojom::IPAddressSpace client_address_space,
+    network::mojom::IPAddressSpace target_address_space) {}
 
 void UrlLoaderNetworkServiceObserver::OnCertificatesSelected(
     mojo::PendingRemote<network::mojom::ClientCertificateResponder>

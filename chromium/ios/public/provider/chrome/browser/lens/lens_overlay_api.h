@@ -7,6 +7,8 @@
 
 #import <UIKit/UIKit.h>
 
+#import "ios/public/provider/chrome/browser/lens/lens_image_source.h"
+
 class GURL;
 
 @protocol ChromeLensOverlayResult;
@@ -47,9 +49,6 @@ class GURL;
 
 // Defines the interface for interacting with a Chrome Lens Overlay.
 @protocol ChromeLensOverlay
-
-// Whether the user is currently panning the selection UI.
-@property(nonatomic, readonly) BOOL isPanningSelectionUI;
 
 // Sets the delegate for `ChromeLensOverlay`.
 - (void)setLensOverlayDelegate:(id<ChromeLensOverlayDelegate>)delegate;
@@ -93,6 +92,11 @@ namespace provider {
 
 // Creates a controller for the given snapshot that can facilitate
 // communication with the downstream Lens controller.
+UIViewController<ChromeLensOverlay>* NewChromeLensOverlay(
+    LensImageSource* imageSource,
+    LensConfiguration* config,
+    NSArray<UIAction*>* additionalMenuItems);
+
 UIViewController<ChromeLensOverlay>* NewChromeLensOverlay(
     UIImage* snapshot,
     LensConfiguration* config,

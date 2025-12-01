@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include <memory>
+#include <string>
 
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
@@ -12,7 +13,6 @@
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/extension_disabled_ui.h"
 #include "chrome/browser/extensions/extension_error_controller.h"
@@ -92,8 +92,9 @@ class GlobalErrorWaiter : public GlobalErrorObserver {
 
   // GlobalErrorObserver
   void OnGlobalErrorsChanged() override {
-    if (service_->GetFirstGlobalErrorWithBubbleView())
+    if (service_->GetFirstGlobalErrorWithBubbleView()) {
       run_loop_.Quit();
+    }
   }
 
   void Wait() { run_loop_.Run(); }
@@ -137,6 +138,20 @@ void GlobalErrorBubbleTest::ShowUi(const std::string& name) {
     GlobalErrorWaiter waiter(profile);
     extensions::AddExtensionDisabledError(extension_service,
                                           test_extension.get(), false);
+    waiter.Wait();
+    ShowPendingError(browser());
+  } else if (name == "ExtensionWithLongNameDisabledGlobalError") {
+    const std::string long_name =
+        "This extension name should be longer than our truncation threshold "
+        "to test that the bubble can handle long names";
+    scoped_refptr<const extensions::Extension> long_name_extension =
+        extensions::ExtensionBuilder(long_name).Build();
+    extension_service->AddExtension(long_name_extension.get());
+
+    GlobalErrorWaiter waiter(profile);
+    extensions::AddExtensionDisabledError(extension_service,
+                                          long_name_extension.get(),
+                                          /*is_remote_install=*/false);
     waiter.Wait();
     ShowPendingError(browser());
   } else if (name == "ExtensionDisabledGlobalErrorRemote") {
@@ -207,6 +222,11 @@ void GlobalErrorBubbleTest::ShowUi(const std::string& name) {
 
 IN_PROC_BROWSER_TEST_F(GlobalErrorBubbleTest,
                        InvokeUi_ExtensionDisabledGlobalError) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(GlobalErrorBubbleTest,
+                       InvokeUi_ExtensionWithLongNameDisabledGlobalError) {
   ShowAndVerifyUi();
 }
 

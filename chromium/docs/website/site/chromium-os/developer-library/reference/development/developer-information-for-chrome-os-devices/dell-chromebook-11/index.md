@@ -2,7 +2,7 @@
 breadcrumbs:
 - - /chromium-os
   - ChromiumOS
-- - /chromium-os/developer-information-for-chrome-os-devices
+- - /chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices
   - Developer Information for ChromeOS Devices
 page_name: dell-chromebook-11
 title: Dell Chromebook 11
@@ -13,11 +13,11 @@ title: Dell Chromebook 11
 ## Introduction
 
 This page contains information about the [Dell Chromebook
-11](http://www.google.com/intl/en/chrome/education/devices/chromebooks.html#d11)
+11](https://www.google.com/intl/en/chrome/education/devices/chromebooks.html#d11)
 that is interesting and/or useful to software developers. For general
 information about getting started with developing on ChromiumOS (the
 open-source version of the software on the Chrome Notebook), see the [Chromium
-OS Developer Guide](http://www.chromium.org/chromium-os/developer-guide).
+OS Developer Guide](/chromium-os/developer-guide).
 
 ### Specifications
 
@@ -28,7 +28,7 @@ OS Developer Guide](http://www.chromium.org/chromium-os/developer-guide).
 *   I/O:
     *   HDMI port
     *   2 x USB 3
-    *   [SD slot](http://en.wikipedia.org/wiki/Secure_Digital) (SDXC
+    *   [SD slot](https://en.wikipedia.org/wiki/Secure_Digital) (SDXC
                 compatible)
     *   Headphone/mic combo jack
     *   Camera & mic
@@ -38,7 +38,7 @@ OS Developer Guide](http://www.chromium.org/chromium-os/developer-guide).
     *   USB ports can handle some Ethernet dongles
     *   [Servo header](/chromium-os/servo): Standard 2x25 / AXK750347G
 *   [Kensington Security
-            Slot](http://en.wikipedia.org/wiki/Kensington_Security_Slot)
+            Slot](https://en.wikipedia.org/wiki/Kensington_Security_Slot)
 
 ## Developer Mode
 
@@ -46,7 +46,7 @@ OS Developer Guide](http://www.chromium.org/chromium-os/developer-guide).
 cause hardware, software or security issues and may void warranty.**
 
 Details for working with developer mode can be found [on this
-page](/chromium-os/developer-information-for-chrome-os-devices/acer-c720-chromebook).
+page](../acer-c720-chromebook).
 
 ## Running ChromiumOS
 
@@ -60,7 +60,7 @@ center](https://support.google.com/chromebook/answer/1080595?hl=en) site.
 
 You can build and run ChromiumOS on your Dell Chromebook 11 (versions R31 and
 later). Follow the [quick start
-guide](http://www.chromium.org/chromium-os/quick-start-guide) to setup a build
+guide](/chromium-os/quick-start-guide) to setup a build
 environment. The board name for Dell Chromebook 11 is "wolf". Build an image and
 write it to a USB stick or SD card.
 
@@ -104,6 +104,6 @@ red arrow below. Remove the screw, boot the system and run "flashrom
 --wp-disable" to enable writing to the write protected regions of flash.
 
 [<img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/dell-chromebook-11/Selection_459.png"
+src="Selection_459.png"
 height=231
-width=320>](/chromium-os/developer-information-for-chrome-os-devices/dell-chromebook-11/Selection_459.png)
+width=320>](./Selection_459.png)

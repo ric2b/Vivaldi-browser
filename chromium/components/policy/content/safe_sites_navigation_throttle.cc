@@ -42,7 +42,7 @@ SafeSitesNavigationThrottle::WillStartRequest() {
     return PROCEED;
   }
 
-  // Safe Sites filter applies to top-level HTTP[S] requests.
+  // Safe Sites filter applies to HTTP[S] requests.
   if (!url.SchemeIsHTTPOrHTTPS()) {
     return PROCEED;
   }

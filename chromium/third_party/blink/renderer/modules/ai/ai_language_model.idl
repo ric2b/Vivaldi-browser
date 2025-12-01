@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// https://github.com/explainers-by-googlers/prompt-api
+// https://github.com/webmachinelearning/prompt-api
 
 dictionary AILanguageModelCloneOptions {
   AbortSignal signal;
@@ -14,6 +14,7 @@ dictionary AILanguageModelPromptOptions {
 
 [
   Exposed=(Window,Worker),
+  SecureContext,
   RuntimeEnabled=AIPromptAPI
 ]
 interface AILanguageModel : EventTarget {

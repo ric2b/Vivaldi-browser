@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "content/browser/web_package/prefetched_signed_exchange_cache.h"
 
 #include <optional>
@@ -107,14 +112,6 @@ class RedirectResponseURLLoader : public network::mojom::URLLoader {
                    int intra_priority_value) override {
     // There is nothing to do, because this class just calls OnReceiveRedirect.
   }
-  void PauseReadingBodyFromNet() override {
-    // There is nothing to do, because we don't fetch the resource from the
-    // network.
-  }
-  void ResumeReadingBodyFromNet() override {
-    // There is nothing to do, because we don't fetch the resource from the
-    // network.
-  }
 
   mojo::Remote<network::mojom::URLLoaderClient> client_;
 };
@@ -198,6 +195,7 @@ class PrefetchedNavigationLoaderInterceptor
         *request.trusted_params->isolation_info.top_frame_origin(),
         request.storage_access_api_status, std::move(match_options),
         request.is_ad_tagged,
+        /*apply_devtools_overrides=*/false,
         /*force_disable_third_party_cookies=*/false,
         base::BindOnce(&PrefetchedNavigationLoaderInterceptor::OnGetCookies,
                        weak_factory_.GetWeakPtr(), std::move(callback)));
@@ -449,11 +447,15 @@ PrefetchedSignedExchangeCache::MaybeCreateInterceptor(
             network::mojom::RestrictedCookieManagerRole::NETWORK,
             inner_url_origin, inner_url_isolation_info,
             /* is_service_worker = */ false,
-            render_frame_host ? render_frame_host->GetProcess()->GetID() : -1,
+            render_frame_host
+                ? render_frame_host->GetProcess()->GetDeprecatedID()
+                : -1,
             render_frame_host ? render_frame_host->GetRoutingID()
                               : MSG_ROUTING_NONE,
+            /*cookie_setting_overrides=*/
             render_frame_host ? render_frame_host->GetCookieSettingOverrides()
                               : net::CookieSettingOverrides(),
+            /*devtools_cookie_setting_overrides=*/net::CookieSettingOverrides(),
             cookie_manager.BindNewPipeAndPassReceiver(),
             render_frame_host ? render_frame_host->CreateCookieAccessObserver()
                               : mojo::NullRemote());

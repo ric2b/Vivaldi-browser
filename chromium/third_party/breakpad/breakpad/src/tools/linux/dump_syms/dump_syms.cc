@@ -32,9 +32,9 @@
 
 #include <paths.h>
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 
-#include <cstring>
 #include <iostream>
 #include <string>
 #include <vector>

@@ -187,9 +187,9 @@ $ git checkout origin/main
         1.  image-{BOARD}.net.bin - Debug build. Only applicable on Intel
             platforms
 
-[ChromeOS Developer guide]: https://www.chromium.org/chromium-os/developer-library/guides/development/developer-guide
-[ChromiumOS Contributing Guide]: https://www.chromium.org/chromium-os/developer-library/guides/development/contributing
-[CL dependencies]: https://www.chromium.org/chromium-os/developer-library/guides/development/contributing/#cl-dependencies
+[ChromeOS Developer guide]: /chromium-os/developer-library/guides/development/developer-guide
+[ChromiumOS Contributing Guide]: /chromium-os/developer-library/guides/development/contributing
+[CL dependencies]: /chromium-os/developer-library/guides/development/contributing/#cl-dependencies
 [coreboot.org]: https://coreboot.org
 [Gerrit account page]: https://review.coreboot.org/#/settings/ssh-keys
 [Gerrit's documentation]: https://gerrit-review.googlesource.com/Documentation/user-upload.html#ssh

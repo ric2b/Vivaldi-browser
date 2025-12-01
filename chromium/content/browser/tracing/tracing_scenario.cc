@@ -11,16 +11,18 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
 #include "base/token.h"
 #include "base/tracing/trace_time.h"
 #include "components/variations/hashing.h"
 #include "content/browser/tracing/background_tracing_manager_impl.h"
+#include "content/browser/tracing/triggers_data_source.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "services/tracing/public/cpp/perfetto/perfetto_config.h"
 #include "services/tracing/public/cpp/perfetto/perfetto_traced_process.h"
-#include "services/tracing/public/cpp/triggers_data_source.h"
+#include "services/tracing/public/cpp/tracing_features.h"
 #include "third_party/perfetto/protos/perfetto/config/track_event/track_event_config.gen.h"
 
 namespace content {
@@ -102,7 +104,7 @@ void TracingScenarioBase::Enable() {
 uint32_t TracingScenarioBase::TriggerNameHash(
     const BackgroundTracingRule* triggered_rule) const {
   return variations::HashName(
-      base::StrCat({scenario_name(), ".", triggered_rule->rule_id()}));
+      base::StrCat({scenario_name(), ".", triggered_rule->rule_name()}));
 }
 
 TracingScenarioBase::TracingScenarioBase(std::string scenario_name)
@@ -165,7 +167,7 @@ bool NestedTracingScenario::OnStartTrigger(
   if (current_state() != State::kEnabled) {
     return false;
   }
-  tracing::TriggersDataSource::EmitTrigger(triggered_rule->rule_id());
+  TriggersDataSource::EmitTrigger(triggered_rule);
   base::UmaHistogramSparse("Tracing.Background.Scenario.Trigger.Start",
                            TriggerNameHash(triggered_rule));
   for (auto& rule : start_rules_) {
@@ -187,7 +189,7 @@ bool NestedTracingScenario::OnStartTrigger(
 bool NestedTracingScenario::OnStopTrigger(
     const BackgroundTracingRule* triggered_rule) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  tracing::TriggersDataSource::EmitTrigger(triggered_rule->rule_id());
+  TriggersDataSource::EmitTrigger(triggered_rule);
   base::UmaHistogramSparse("Tracing.Background.Scenario.Trigger.Stop",
                            TriggerNameHash(triggered_rule));
   for (auto& rule : stop_rules_) {
@@ -241,10 +243,10 @@ TracingScenario::TracingScenario(
     bool is_local_scenario,
     bool request_startup_tracing)
     : TracingScenarioBase(config.scenario_name()),
-      config_hash_(base::MD5String(config.SerializeAsString())),
       privacy_filtering_enabled_(enable_privacy_filter),
       is_local_scenario_(is_local_scenario),
       request_startup_tracing_(request_startup_tracing),
+      use_system_backend_(config.use_system_backend()),
       trace_config_(config.trace_config()),
       scenario_delegate_(scenario_delegate) {}
 
@@ -253,10 +255,13 @@ TracingScenario::~TracingScenario() = default;
 bool TracingScenario::Initialize(
     const perfetto::protos::gen::ScenarioConfig& config,
     bool enable_package_name_filter) {
+  bool enable_system_backend =
+      use_system_backend_ && tracing::SystemBackgroundTracingEnabled();
   if (!tracing::AdaptPerfettoConfigForChrome(
           &trace_config_, privacy_filtering_enabled_,
           enable_package_name_filter,
-          perfetto::protos::gen::ChromeConfig::BACKGROUND)) {
+          perfetto::protos::gen::ChromeConfig::BACKGROUND,
+          enable_system_backend)) {
     return false;
   }
   for (const auto& nested_config : config.nested_scenarios()) {
@@ -318,7 +323,15 @@ void TracingScenario::GenerateMetadataProto(
 
 std::unique_ptr<perfetto::TracingSession>
 TracingScenario::CreateTracingSession() {
-  return perfetto::Tracing::NewTrace(perfetto::BackendType::kCustomBackend);
+  // If the scenario is configured to use the system backend, the platform
+  // should support it (see OnSetupTrigger()). Otherwise this is a configuration
+  // error.
+  DCHECK(!use_system_backend_ || tracing::SystemBackgroundTracingEnabled());
+  auto backend_type =
+      (use_system_backend_ && tracing::SystemBackgroundTracingEnabled())
+          ? perfetto::BackendType::kSystemBackend
+          : perfetto::BackendType::kCustomBackend;
+  return perfetto::Tracing::NewTrace(backend_type);
 }
 
 void TracingScenario::SetupTracingSession() {
@@ -397,7 +410,7 @@ void TracingScenario::OnNestedScenarioUpload(
   CHECK_EQ(nested_scenario->current_state(),
            NestedTracingScenario::State::kDisabled);
   CHECK_EQ(current_state_, State::kRecording);
-  tracing::TriggersDataSource::EmitTrigger(triggered_rule->rule_id());
+  TriggersDataSource::EmitTrigger(triggered_rule);
   base::UmaHistogramSparse("Tracing.Background.Scenario.Trigger.Upload",
                            TriggerNameHash(triggered_rule));
 
@@ -430,6 +443,12 @@ void TracingScenario::OnNestedScenarioUpload(
 bool TracingScenario::OnSetupTrigger(
     const BackgroundTracingRule* triggered_rule) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  // Skip this scenario if it requires the system backend, but the system
+  // backend is unavailable (a configuration error).
+  if (use_system_backend_ && !tracing::SystemBackgroundTracingEnabled()) {
+    return false;
+  }
 
   if (!scenario_delegate_->OnScenarioActive(this)) {
     return false;
@@ -477,8 +496,8 @@ bool TracingScenario::OnStartTrigger(
     perfetto::Tracing::SetupStartupTracingOpts opts;
     opts.timeout_ms = kStartupTracingTimeoutMs;
     opts.backend = perfetto::kCustomBackend;
-    tracing::PerfettoTracedProcess::Get()->RequestStartupTracing(trace_config_,
-                                                                 opts);
+    tracing::PerfettoTracedProcess::Get().RequestStartupTracing(trace_config_,
+                                                                opts);
   }
 
   tracing_session_->SetOnStopCallback([task_runner = task_runner_,
@@ -488,7 +507,7 @@ bool TracingScenario::OnStartTrigger(
   });
   tracing_session_->Start();
   if (triggered_rule) {
-    tracing::TriggersDataSource::EmitTrigger(triggered_rule->rule_id());
+    TriggersDataSource::EmitTrigger(triggered_rule);
     base::UmaHistogramSparse("Tracing.Background.Scenario.Trigger.Start",
                              TriggerNameHash(triggered_rule));
   }
@@ -499,7 +518,7 @@ bool TracingScenario::OnStopTrigger(
     const BackgroundTracingRule* triggered_rule) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  tracing::TriggersDataSource::EmitTrigger(triggered_rule->rule_id());
+  TriggersDataSource::EmitTrigger(triggered_rule);
   base::UmaHistogramSparse("Tracing.Background.Scenario.Trigger.Stop",
                            TriggerNameHash(triggered_rule));
   for (auto& rule : stop_rules_) {
@@ -536,7 +555,7 @@ bool TracingScenario::OnUploadTrigger(
     const BackgroundTracingRule* triggered_rule) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  tracing::TriggersDataSource::EmitTrigger(triggered_rule->rule_id());
+  TriggersDataSource::EmitTrigger(triggered_rule);
   base::UmaHistogramSparse("Tracing.Background.Scenario.Trigger.Upload",
                            TriggerNameHash(triggered_rule));
   for (auto& rule : stop_rules_) {

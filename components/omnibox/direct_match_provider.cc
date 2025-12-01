@@ -56,6 +56,18 @@ void DirectMatchProvider::Start(const AutocompleteInput& input,
   StartDirectMatchSearch(input);
 }
 
+void DirectMatchProvider::DeleteMatch(const AutocompleteMatch& match) {
+  if (!match.destination_url.is_valid())
+    return;
+  std::string destination_url = match.destination_url.spec();
+  if (direct_match_service_->HideDirectMatchFromOmnibox(destination_url)) {
+    // Immediately update the list of matches to reflect the match was deleted.
+    std::erase_if(matches_, [&](const auto& item) {
+      return match.destination_url == item.destination_url;
+    });
+  }
+}
+
 DirectMatchProvider::~DirectMatchProvider() = default;
 
 AutocompleteMatch DirectMatchToAutocompleteMatch(
@@ -85,6 +97,8 @@ AutocompleteMatch DirectMatchToAutocompleteMatch(
   match.contents = name;
   match.description = title;
   match.local_favicon_path = local_favicon_path;
+  match.deletable = true;
+  match.transition = ui::PAGE_TRANSITION_GENERATED;
 
   auto contents_terms = FindTermMatches(input.text(), match.contents);
   match.contents_class = ClassifyTermMatches(
@@ -118,14 +132,14 @@ AutocompleteMatch DirectMatchToAutocompleteMatch(
 
 void DirectMatchProvider::StartDirectMatchSearch(
     const AutocompleteInput& input) {
-  if (!direct_match_service_ || input.prevent_inline_autocomplete()) {
+  if (!direct_match_service_) {
     return;
   }
 
   const std::u16string input_text = input.text();
   const std::string input_text_utf8 = base::UTF16ToUTF8(input_text);
 
-  auto [ unit_found, allowed_to_be_default_match ] =
+  auto [unit_found, allowed_to_be_default_match] =
       direct_match_service_->GetDirectMatch(input_text_utf8);
   if (!unit_found) {
     return;
@@ -154,7 +168,8 @@ void DirectMatchProvider::StartDirectMatchSearch(
       client_->GetSchemeClassifier(), input);
   if (match.relevance > 0) {
     match.boosted = dm_boost;
-    match.allowed_to_be_default_match = allowed_to_be_default_match;
+    match.allowed_to_be_default_match =
+        !input.prevent_inline_autocomplete() && allowed_to_be_default_match;
     match.RecordAdditionalInfo("Title", unit_found->name);
     match.RecordAdditionalInfo("URL", unit_found->redirect_url);
     match.RecordAdditionalInfo("Path", unit_found->title);
@@ -183,5 +198,5 @@ int DirectMatchProvider::CalculateDirectMatchRelevance(
   int relevance =
       static_cast<int>(normalized_sum * kDMScoreRange) + kBaseDirectMatchScore;
 
-  return std::min(kMaxDirectMatchScore, relevance + (dm_boost ? 0 : -450));
+  return std::min(kMaxDirectMatchScore, relevance + (dm_boost ? 500 : 0));
 }

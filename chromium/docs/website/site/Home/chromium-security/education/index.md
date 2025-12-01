@@ -39,7 +39,7 @@ security-dev@chromium.org
             review from the security team.
 *   When manipulating buffers in trusted memory, do not implement your
             own code for handling [integer
-            overflows](http://en.wikipedia.org/wiki/Integer_overflow#Security_ramifications),
+            overflows](https://en.wikipedia.org/wiki/Integer_overflow#Security_ramifications),
             truncations, or other integral boundary conditions. Instead use
             [base/numerics](https://code.google.com/p/chromium/codesearch#chromium/src/base/numerics/&ct=rc&cd=1&q=base/numerics&sq=package:chromium)
             templates which are already used in several parts of Chrome. The

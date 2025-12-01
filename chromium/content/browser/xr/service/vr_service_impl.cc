@@ -4,6 +4,7 @@
 
 #include "content/browser/xr/service/vr_service_impl.h"
 
+#include <algorithm>
 #include <utility>
 #include <vector>
 
@@ -12,7 +13,6 @@
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/ranges/algorithm.h"
 #include "base/stl_util.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
@@ -101,7 +101,7 @@ std::vector<blink::PermissionType> GetRequiredPermissionsForFeatures(
   return permissions;
 }
 
-// TODO(crbug.com/40930146): Replace with base::ranges::set_difference
+// TODO(crbug.com/40930146): Replace with std::ranges::set_difference
 std::unordered_set<device::mojom::XRSessionFeature> GetMissingRequiredFeatures(
     const std::unordered_set<device::mojom::XRSessionFeature>& enabled_features,
     const std::unordered_set<device::mojom::XRSessionFeature>&
@@ -728,7 +728,7 @@ void VRServiceImpl::EnsureRuntimeInstalled(SessionRequestData request,
   }
 
   runtime->EnsureInstalled(
-      render_frame_host_->GetProcess()->GetID(),
+      render_frame_host_->GetProcess()->GetDeprecatedID(),
       render_frame_host_->GetRoutingID(),
       base::BindOnce(&VRServiceImpl::OnInstallResult,
                      weak_ptr_factory_.GetWeakPtr(), std::move(request)));
@@ -804,7 +804,7 @@ void VRServiceImpl::DoRequestSession(SessionRequestData request) {
 #endif
     if (send_renderer_information) {
       runtime_options->render_process_id =
-          render_frame_host_->GetProcess()->GetID();
+          render_frame_host_->GetProcess()->GetDeprecatedID();
       runtime_options->render_frame_id = render_frame_host_->GetRoutingID();
     }
   }

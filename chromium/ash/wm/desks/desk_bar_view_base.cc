@@ -313,7 +313,7 @@ class DeskBarScrollViewLayout : public views::LayoutManager {
     // views before laying them out.
     const bool is_rtl = base::i18n::IsRTL();
     if (is_rtl) {
-      base::ranges::reverse(mini_views);
+      std::ranges::reverse(mini_views);
     }
 
     width_ = std::max(scroll_bounds.width(), contents_size.width());
@@ -744,7 +744,7 @@ class DeskBarViewBase::ScrollForActiveMiniView
   void Run() override {
     // When the bar is initialized, scroll to make active desk mini view
     // visible.
-    auto it = base::ranges::find_if(
+    auto it = std::ranges::find_if(
         bar_view_->mini_views_,
         [](DeskMiniView* mini_view) { return mini_view->desk()->is_active(); });
     if (it != bar_view_->mini_views_.end()) {
@@ -1067,7 +1067,7 @@ DeskMiniView* DeskBarViewBase::FindMiniViewForDesk(const Desk* desk) const {
 }
 
 int DeskBarViewBase::GetMiniViewIndex(const DeskMiniView* mini_view) const {
-  auto iter = base::ranges::find(mini_views_, mini_view);
+  auto iter = std::ranges::find(mini_views_, mini_view);
   return (iter == mini_views_.cend())
              ? -1
              : std::distance(mini_views_.cbegin(), iter);
@@ -1247,7 +1247,8 @@ bool DeskBarViewBase::ShouldShowLibraryUi() {
       auto* desk_model = Shell::Get()->saved_desk_delegate()->GetDeskModel();
       CHECK(desk_model);
       size_t saved_desk_count = desk_model->GetDeskTemplateEntryCount() +
-                                desk_model->GetSaveAndRecallDeskEntryCount();
+                                desk_model->GetSaveAndRecallDeskEntryCount() +
+                                desk_model->GetCoralEntryCount();
       library_ui_visibility_ = saved_desk_count ? LibraryUiVisibility::kVisible
                                                 : LibraryUiVisibility::kHidden;
     }
@@ -1446,7 +1447,7 @@ void DeskBarViewBase::ContinueDragDesk(DeskMiniView* mini_view,
     return;
   }
 
-  const auto drag_view_iter = base::ranges::find(mini_views_, drag_view_);
+  const auto drag_view_iter = std::ranges::find(mini_views_, drag_view_);
   CHECK(drag_view_iter != mini_views_.cend());
 
   const int old_index = drag_view_iter - mini_views_.cbegin();
@@ -1522,7 +1523,7 @@ void DeskBarViewBase::OnDeskAdded(const Desk* desk, bool from_undo) {
 
 void DeskBarViewBase::OnDeskRemoved(const Desk* desk) {
   DeskNameView::CommitChanges(GetWidget());
-  auto iter = base::ranges::find_if(
+  auto iter = std::ranges::find_if(
       mini_views_,
       [desk](DeskMiniView* mini_view) { return mini_view->desk() == desk; });
 
@@ -1630,20 +1631,6 @@ void DeskBarViewBase::UpdateNewMiniViews(bool initializing_bar_view,
       new_mini_views.push_back(mini_view);
     }
     ++mini_view_index;
-  }
-
-  // Only record for `initializing_bar_view` since that's what impacts the
-  // presentation time and animation smoothness when entering overview.
-  if (initializing_bar_view && type_ == Type::kOverview) {
-    size_t total_layers_mirrored = 0;
-    for (const auto& mini_view : mini_views_) {
-      total_layers_mirrored +=
-          mini_view->desk_preview()->GetNumLayersMirrored();
-    }
-    // From local testing, 16 chrome browser windows (which metrics show is
-    // likely much more than what most users have) resulted in ~1000 layers.
-    base::UmaHistogramCounts1000("Ash.Overview.DeskBarNumLayersMirrored",
-                                 total_layers_mirrored);
   }
 
   if (expanding_bar_view) {

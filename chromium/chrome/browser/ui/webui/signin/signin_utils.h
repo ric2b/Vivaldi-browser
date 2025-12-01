@@ -12,7 +12,6 @@
 #include "base/functional/callback_helpers.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "build/chromeos_buildflags.h"
 #include "components/signin/public/identity_manager/account_info.h"
 
 struct AccountInfo;
@@ -24,7 +23,7 @@ namespace content {
 class RenderFrameHost;
 class WebContents;
 class WebUI;
-}
+}  // namespace content
 
 namespace extensions {
 class WebViewGuest;
@@ -52,12 +51,20 @@ enum SigninChoiceOperationResult {
   SIGNIN_CONFIRM_SUCCESS = 3
 };
 
+enum class SigninChoiceErrorType {
+  kNoError = 0,
+  kUnknown = 1,
+  kSigninDisabled = 2,
+};
+
 // Callback with the signin choice and a handler for when the choice has been
 // handled.
 using SigninChoiceOperationDoneCallback =
-    base::OnceCallback<void(SigninChoiceOperationResult)>;
+    base::OnceCallback<void(SigninChoiceOperationResult,
+                            SigninChoiceErrorType)>;
 using SigninChoiceOperationRetryCallback =
-    base::RepeatingCallback<void(SigninChoiceOperationResult)>;
+    base::RepeatingCallback<void(SigninChoiceOperationResult,
+                                 SigninChoiceErrorType)>;
 using SigninChoiceWithConfirmAndRetryCallback =
     base::OnceCallback<void(SigninChoice,
                             SigninChoiceOperationDoneCallback,
@@ -115,7 +122,7 @@ void SetInitializedModalHeight(Browser* browser,
                                content::WebUI* web_ui,
                                const base::Value::List& args);
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 // Helps clear Profile info, mainly for managed accounts.
 // Idealy this function should not be used much, consider deleting the profile
 // if possible instead.

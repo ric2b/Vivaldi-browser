@@ -11,6 +11,7 @@
 
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
@@ -51,6 +52,12 @@ class TaskGraphTest : public testing::Test {
 
     sequence_info_.emplace(sequence_key,
                            SequenceInfo(sequence_id, command_buffer_id));
+  }
+
+  SequenceId GetSequenceId(int sequence_key) {
+    auto info_it = sequence_info_.find(sequence_key);
+    CHECK(info_it != sequence_info_.end());
+    return info_it->second.sequence_id;
   }
 
   void CreateSyncToken(int sequence_key, int release_sync) {
@@ -148,17 +155,6 @@ class TaskGraphTest : public testing::Test {
     task_graph_->ValidateSequenceTaskFenceDeps(sequence);
   }
 
-  base::test::SingleThreadTaskEnvironment task_environment_;
-
-  std::vector<int> tasks_executed_;
-
-  std::unique_ptr<SyncPointManager> sync_point_manager_;
-
- private:
-  const CommandBufferNamespace kNamespaceId = CommandBufferNamespace::GPU_IO;
-
-  int num_tasks_added_ = 0;
-
   struct SequenceInfo {
     SequenceInfo(SequenceId sequence_id, CommandBufferId command_buffer_id)
         : sequence_id(sequence_id), command_buffer_id(command_buffer_id) {}
@@ -167,13 +163,50 @@ class TaskGraphTest : public testing::Test {
     CommandBufferId command_buffer_id;
   };
 
-  base::test::ScopedFeatureList scoped_feature_list_;
+  base::test::SingleThreadTaskEnvironment task_environment_;
+
+  std::vector<int> tasks_executed_;
+
+  std::unique_ptr<SyncPointManager> sync_point_manager_;
 
   std::unique_ptr<TaskGraph> task_graph_;
 
   std::map<int, const SequenceInfo> sequence_info_;
+
   std::map<int, const SyncToken> sync_tokens_;
+
+ private:
+  const CommandBufferNamespace kNamespaceId = CommandBufferNamespace::GPU_IO;
+
+  int num_tasks_added_ = 0;
+
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
+
+TEST_F(TaskGraphTest, DestroySequenceReleasesSyncPoints) {
+  // Test that when a sequence is destroyed, all wait fences that are supposed
+  // to be released by the destroyed sequence will be unblocked. No validation
+  // is required.
+
+  CreateSequence(0);
+  CreateSequence(1);
+
+  CreateSyncToken(1, 0);  // declare sync_token 0 on seq 1
+
+  AddTask(0, 0, -1);  // task 0: seq 0, wait 0, no release
+
+  RunAllPendingTasks();
+
+  EXPECT_TRUE(tasks_executed_.empty());
+
+  task_graph_->DestroySequence(GetSequenceId(1));
+  sequence_info_.erase(1);
+
+  RunAllPendingTasks();
+
+  std::vector<int> expected_task_order{0};
+  EXPECT_THAT(tasks_executed_, testing::ElementsAreArray(expected_task_order));
+}
 
 TEST_F(TaskGraphTest, ValidationWaitWithoutRelease) {
   // Two tasks on the same sequence wait for unreleased fences.
@@ -216,6 +249,10 @@ TEST_F(TaskGraphTest, ValidationWaitWithoutRelease) {
 
 TEST_F(TaskGraphTest, ManuallyCallValidationWaitWithoutRelease) {
   // Two tasks on the same sequence wait for unreleased fences.
+  // Also test histogram emission.
+
+  base::HistogramTester histogram_tester;
+
   CreateSequence(0, /*manual_validation=*/true);
   CreateSequence(1);
   CreateSequence(2);
@@ -259,6 +296,9 @@ TEST_F(TaskGraphTest, ManuallyCallValidationWaitWithoutRelease) {
 
   expected_task_order = {0, 1};
   EXPECT_THAT(tasks_executed_, testing::ElementsAreArray(expected_task_order));
+
+  histogram_tester.ExpectTotalCount("GPU.GraphValidation.NeedsForceRelease", 2);
+  histogram_tester.ExpectTotalCount("GPU.GraphValidation.Duration", 2);
 }
 
 TEST_F(TaskGraphTest, ValidationWaitWithoutRelease2) {
@@ -508,6 +548,39 @@ TEST_F(TaskGraphTest, ValidationPartiallyValidated) {
 
   RunAllPendingTasks();
   std::vector<int> expected_task_order{1, 0, 3, 2};
+  EXPECT_THAT(tasks_executed_, testing::ElementsAreArray(expected_task_order));
+}
+
+TEST_F(TaskGraphTest, ValidationNonExistentReleaseSequence) {
+  // Test validation happens between
+  // (1) a sequence has been destroyed and
+  // (2) wait fences that are supposed to be released by the destroyed sequence
+  //     haven't been cleaned up from other sequences.
+
+  CreateSequence(0, /*manual_validation=*/true);
+  CreateSequence(1);
+
+  CreateSyncToken(1, 0);  // declare sync_token 0 on seq 1
+  SyncToken sync_token = sync_tokens_[0];
+
+  // Add a callback waiting for `sync_token` before adding task 0. When
+  // sequence 1 is destroyed, this callback will be run before cleaning up
+  // wait fences of task 0.
+  sync_point_manager_->Wait(
+      sync_token, GetSequenceId(0), sync_point_manager_->GenerateOrderNumber(),
+      base::BindLambdaForTesting([this]() { RunValidation(0); }));
+
+  AddTask(0, 0, -1);  // task 0: seq 0, wait 0, no release
+
+  task_environment_.FastForwardBy(TaskGraph::kMaxValidationDelay +
+                                  base::Seconds(1));
+
+  task_graph_->DestroySequence(GetSequenceId(1));
+  sequence_info_.erase(1);
+
+  RunAllPendingTasks();
+
+  std::vector<int> expected_task_order{0};
   EXPECT_THAT(tasks_executed_, testing::ElementsAreArray(expected_task_order));
 }
 

@@ -39,7 +39,6 @@ import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
@@ -51,14 +50,13 @@ import org.robolectric.annotation.LooperMode;
 import org.robolectric.shadows.ShadowPackageManager;
 
 import org.chromium.base.ContextUtils;
-import org.chromium.base.FeatureList;
-import org.chromium.base.FeatureList.TestValues;
 import org.chromium.base.ResettersForTesting;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.util.JniMocker;
+import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.build.BuildConfig;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
@@ -71,6 +69,7 @@ import org.chromium.chrome.browser.device.DeviceConditions;
 import org.chromium.chrome.browser.device.ShadowDeviceConditions;
 import org.chromium.chrome.browser.enterprise.util.ManagedBrowserUtils;
 import org.chromium.chrome.browser.enterprise.util.ManagedBrowserUtilsJni;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.incognito.IncognitoUtils;
 import org.chromium.chrome.browser.incognito.IncognitoUtilsJni;
 import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthController;
@@ -133,8 +132,6 @@ import java.util.Optional;
 @LooperMode(LooperMode.Mode.LEGACY)
 public class AppMenuPropertiesDelegateUnitTest {
 
-    @Rule public JniMocker mJniMocker = new JniMocker();
-
     @Mock private ActivityTabProvider mActivityTabProvider;
     @Mock private Tab mTab;
     @Mock private WebContents mWebContents;
@@ -177,7 +174,6 @@ public class AppMenuPropertiesDelegateUnitTest {
     private ObservableSupplierImpl<ReadAloudController> mReadAloudControllerSupplier =
             new ObservableSupplierImpl<>();
 
-    private final TestValues mTestValues = new TestValues();
     private AppMenuPropertiesDelegateImpl mAppMenuPropertiesDelegate;
     private MenuUiState mMenuUiState;
     private ShadowPackageManager mShadowPackageManager;
@@ -216,25 +212,25 @@ public class AppMenuPropertiesDelegateUnitTest {
         mMenuUiState = new MenuUiState();
         doReturn(mMenuUiState).when(mUpdateMenuItemHelper).getUiState();
 
-        mJniMocker.mock(UserPrefsJni.TEST_HOOKS, mUserPrefsJniMock);
-        mJniMocker.mock(WebsitePreferenceBridgeJni.TEST_HOOKS, mWebsitePreferenceBridgeJniMock);
+        UserPrefsJni.setInstanceForTesting(mUserPrefsJniMock);
+        WebsitePreferenceBridgeJni.setInstanceForTesting(mWebsitePreferenceBridgeJniMock);
         Mockito.when(mUserPrefsJniMock.get(mProfile)).thenReturn(mPrefService);
         PowerBookmarkUtils.setPriceTrackingEligibleForTesting(false);
         WebappRegistry.refreshSharedPrefsForTesting();
 
-        mJniMocker.mock(ManagedBrowserUtilsJni.TEST_HOOKS, mManagedBrowserUtilsJniMock);
+        ManagedBrowserUtilsJni.setInstanceForTesting(mManagedBrowserUtilsJniMock);
         Mockito.when(mManagedBrowserUtilsJniMock.isBrowserManaged(mProfile)).thenReturn(false);
         Mockito.when(mManagedBrowserUtilsJniMock.getTitle(mProfile)).thenReturn("title");
 
-        mJniMocker.mock(AppBannerManagerJni.TEST_HOOKS, mAppBannerManagerJniMock);
+        AppBannerManagerJni.setInstanceForTesting(mAppBannerManagerJniMock);
         Mockito.when(mAppBannerManagerJniMock.getInstallableWebAppManifestId(any()))
                 .thenReturn(null);
 
-        mJniMocker.mock(TranslateBridgeJni.TEST_HOOKS, mTranslateBridgeJniMock);
+        TranslateBridgeJni.setInstanceForTesting(mTranslateBridgeJniMock);
         Mockito.when(mTranslateBridgeJniMock.canManuallyTranslate(any(), anyBoolean()))
                 .thenReturn(false);
 
-        mJniMocker.mock(IncognitoUtilsJni.TEST_HOOKS, mIncognitoUtilsJniMock);
+        IncognitoUtilsJni.setInstanceForTesting(mIncognitoUtilsJniMock);
 
         mBookmarkModelSupplier.set(mBookmarkModel);
         PowerBookmarkUtils.setPriceTrackingEligibleForTesting(false);
@@ -253,8 +249,8 @@ public class AppMenuPropertiesDelegateUnitTest {
                                 mIncognitoReauthControllerSupplier,
                                 mReadAloudControllerSupplier));
 
-        mJniMocker.mock(CommerceFeatureUtilsJni.TEST_HOOKS, mCommerceFeatureUtilsJniMock);
-        mJniMocker.mock(ShoppingServiceFactoryJni.TEST_HOOKS, mShoppingServiceFactoryJniMock);
+        CommerceFeatureUtilsJni.setInstanceForTesting(mCommerceFeatureUtilsJniMock);
+        ShoppingServiceFactoryJni.setInstanceForTesting(mShoppingServiceFactoryJniMock);
         doReturn(mShoppingService).when(mShoppingServiceFactoryJniMock).getForProfile(any());
         BuildConfig.IS_DESKTOP_ANDROID = false;
         ResettersForTesting.register(() -> BuildConfig.IS_DESKTOP_ANDROID = false);
@@ -267,12 +263,10 @@ public class AppMenuPropertiesDelegateUnitTest {
 
     private void setupFeatureDefaults() {
         setShoppingListEligible(false);
-        FeatureList.setTestValues(mTestValues);
     }
 
     private void setShoppingListEligible(boolean enabled) {
         doReturn(enabled).when(mCommerceFeatureUtilsJniMock).isShoppingListEligible(anyLong());
-        FeatureList.setTestValues(mTestValues);
     }
 
     @Test
@@ -334,6 +328,50 @@ public class AppMenuPropertiesDelegateUnitTest {
                                                 .getDisplayMetrics()
                                                 .density));
         assertTrue(mAppMenuPropertiesDelegate.shouldShowIconRow());
+    }
+
+    @Test
+    @EnableFeatures({ChromeFeatureList.HIDE_TABLET_TOOLBAR_DOWNLOAD_BUTTON})
+    @Config(qualifiers = "sw600dp")
+    public void testShouldShowDownloadPageMenuItem_Tablet_WithFeatureOnAndEnabledDownloadPage() {
+        when(mAppMenuPropertiesDelegate.shouldEnableDownloadPage(any(Tab.class))).thenReturn(true);
+        when(mActivityTabProvider.get()).thenReturn(mTab);
+        assertTrue(
+                mAppMenuPropertiesDelegate.shouldShowDownloadPageMenuItem(
+                        mActivityTabProvider.get()));
+    }
+
+    @Test
+    @DisableFeatures({ChromeFeatureList.HIDE_TABLET_TOOLBAR_DOWNLOAD_BUTTON})
+    @Config(qualifiers = "sw600dp")
+    public void testShouldShowDownloadPageMenuItem_Tablet_WithFeatureOffAndEnabledDownloadPage() {
+        when(mAppMenuPropertiesDelegate.shouldEnableDownloadPage(any(Tab.class))).thenReturn(true);
+        when(mActivityTabProvider.get()).thenReturn(mTab);
+        assertFalse(
+                mAppMenuPropertiesDelegate.shouldShowDownloadPageMenuItem(
+                        mActivityTabProvider.get()));
+    }
+
+    @Test
+    @EnableFeatures({ChromeFeatureList.HIDE_TABLET_TOOLBAR_DOWNLOAD_BUTTON})
+    @Config(qualifiers = "sw600dp")
+    public void testShouldShowDownloadPageMenuItem_Tablet_WithFeatureOnAndDisabledDownloadPage() {
+        when(mAppMenuPropertiesDelegate.shouldEnableDownloadPage(any(Tab.class))).thenReturn(false);
+        when(mActivityTabProvider.get()).thenReturn(mTab);
+        assertFalse(
+                mAppMenuPropertiesDelegate.shouldShowDownloadPageMenuItem(
+                        mActivityTabProvider.get()));
+    }
+
+    @Test
+    @EnableFeatures({ChromeFeatureList.HIDE_TABLET_TOOLBAR_DOWNLOAD_BUTTON})
+    @Config(qualifiers = "sw320dp")
+    public void testShouldShowDownloadPageMenuItem_Phone_WithFeatureOnAndEnabledDownloadPage() {
+        when(mAppMenuPropertiesDelegate.shouldEnableDownloadPage(any(Tab.class))).thenReturn(true);
+        when(mActivityTabProvider.get()).thenReturn(mTab);
+        assertFalse(
+                mAppMenuPropertiesDelegate.shouldShowDownloadPageMenuItem(
+                        mActivityTabProvider.get()));
     }
 
     @Test
@@ -400,6 +438,7 @@ public class AppMenuPropertiesDelegateUnitTest {
             R.id.divider_line_id,
             R.id.share_row_menu_id,
             R.id.find_in_page_id,
+            R.id.open_with_id,
             R.id.divider_line_id,
             R.id.preferences_id,
             R.id.help_id
@@ -1625,10 +1664,6 @@ public class AppMenuPropertiesDelegateUnitTest {
             return mShowReaderModePrefs;
         }
 
-        protected boolean showAddToHomeScreen() {
-            return mShowAddToHomeScreen;
-        }
-
         protected boolean showPaintPreview() {
             return mShowPaintPreview;
         }
@@ -1689,10 +1724,6 @@ public class AppMenuPropertiesDelegateUnitTest {
             return setShowUpdate(true);
         }
 
-        protected MenuOptions withShowMoveToOtherWindow() {
-            return setShowMoveToOtherWindow(true);
-        }
-
         protected MenuOptions withShowReaderModePrefs() {
             return setShowReaderModePrefs(true);
         }
@@ -1742,8 +1773,6 @@ public class AppMenuPropertiesDelegateUnitTest {
                                 ? ContentSettingValues.DEFAULT
                                 : ContentSettingValues.BLOCK);
     }
-
-    private void verifyManagedByMenuItem(boolean chromeManagementPageEnabled) {}
 
     /**
      * Preparation to mock the "final" method TabGroupModelFilter#getTabsWithNoOtherRelatedTabs

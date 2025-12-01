@@ -4,6 +4,7 @@
 
 #include "components/os_crypt/async/common/encryptor.h"
 
+#include <algorithm>
 #include <optional>
 #include <string>
 #include <vector>
@@ -11,11 +12,11 @@
 #include "base/check.h"
 #include "base/containers/span.h"
 #include "base/logging.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/os_crypt/async/common/algorithm.mojom.h"
 #include "components/os_crypt/sync/os_crypt.h"
 #include "crypto/aead.h"
+#include "crypto/aes_cbc.h"
 #include "crypto/random.h"
 #include "mojo/public/cpp/bindings/default_construct_tag.h"
 #include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
@@ -24,8 +25,6 @@
 #include <windows.h>
 
 #include <dpapi.h>
-
-#include "components/os_crypt/async/common/encryptor_features.h"
 #endif
 
 namespace os_crypt_async {
@@ -33,6 +32,11 @@ namespace os_crypt_async {
 namespace {
 
 constexpr size_t kNonceLength = 96 / 8;  // AES_GCM_NONCE_LENGTH
+
+constexpr std::array<uint8_t, crypto::aes_cbc::kBlockSize> kFixedIvForAes128Cbc{
+    ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
+    ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
+};
 
 }  // namespace
 
@@ -47,8 +51,7 @@ Encryptor::Key::Key(base::span<const uint8_t> key,
 #endif
 {
 #if BUILDFLAG(IS_WIN)
-  if (base::FeatureList::IsEnabled(features::kProtectEncryptionKey) &&
-      !encrypted_) {
+  if (!encrypted_) {
     encrypted_ = ::CryptProtectMemory(std::data(key_), std::size(key_),
                                       CRYPTPROTECTMEMORY_SAME_PROCESS);
   }
@@ -58,6 +61,9 @@ Encryptor::Key::Key(base::span<const uint8_t> key,
   switch (*algorithm_) {
     case mojom::Algorithm::kAES256GCM:
       CHECK_EQ(key.size(), Key::kAES256GCMKeySize);
+      break;
+    case mojom::Algorithm::kAES128CBC:
+      CHECK_EQ(key.size(), Key::kAES128CBCKeySize);
       break;
   }
 }
@@ -79,7 +85,6 @@ Encryptor::Key Encryptor::Key::Clone() const {
 #else
   Encryptor::Key key(key_, *algorithm_, /*encrypted=*/false);
 #endif
-  key.is_os_crypt_sync_compatible_ = is_os_crypt_sync_compatible_;
   return key;
 }
 
@@ -89,20 +94,14 @@ Encryptor::Encryptor(mojo::DefaultConstruct::Tag) : Encryptor() {}
 Encryptor::Encryptor(Encryptor&& other) = default;
 Encryptor& Encryptor::operator=(Encryptor&& other) = default;
 
-Encryptor::Encryptor(KeyRing keys, const std::string& provider_for_encryption)
+Encryptor::Encryptor(
+    KeyRing keys,
+    const std::string& provider_for_encryption,
+    const std::string& provider_for_os_crypt_sync_compatible_encryption)
     : keys_(std::move(keys)),
-      provider_for_encryption_(provider_for_encryption) {
-  // It is not permitted to have multiple keys that mark themselves as OSCrypt
-  // sync compatible.
-  bool already_found_os_crypt_compatible = false;
-  for (const auto& key : keys_) {
-    if (key.second.is_os_crypt_sync_compatible_) {
-      CHECK(!already_found_os_crypt_compatible)
-          << "Cannot have more than one key marked OSCrypt sync compatible.";
-      already_found_os_crypt_compatible = true;
-    }
-  }
-}
+      provider_for_encryption_(provider_for_encryption),
+      provider_for_os_crypt_sync_compatible_encryption_(
+          provider_for_os_crypt_sync_compatible_encryption) {}
 Encryptor::~Encryptor() = default;
 
 std::vector<uint8_t> Encryptor::Key::Encrypt(
@@ -141,6 +140,11 @@ std::vector<uint8_t> Encryptor::Key::Encrypt(
       ciphertext.insert(ciphertext.begin(), nonce.cbegin(), nonce.cend());
       return ciphertext;
     }
+    case mojom::Algorithm::kAES128CBC: {
+      std::vector<uint8_t> ciphertext = crypto::aes_cbc::Encrypt(
+          key_, base::as_byte_span(kFixedIvForAes128Cbc), plaintext);
+      return ciphertext;
+    }
   }
   LOG(FATAL) << "Unsupported algorithm" << static_cast<int>(*algorithm_);
 }
@@ -177,6 +181,21 @@ std::optional<std::vector<uint8_t>> Encryptor::Key::Decrypt(
 
       return aead.Open(data, nonce, /*additional_data=*/{});
     }
+    case mojom::Algorithm::kAES128CBC: {
+      auto plaintext =
+          crypto::aes_cbc::Decrypt(key_, kFixedIvForAes128Cbc, ciphertext);
+      if (plaintext.has_value()) {
+        return plaintext;
+      }
+      // Decryption failed - try the empty fallback key. See
+      // https://crbug.com/40055416.
+      // PBKDF2-HMAC-SHA1(1 iteration, key = "", salt = "saltysalt")
+      constexpr auto kEmptyKey = std::to_array<uint8_t>(
+          {0xd0, 0xd0, 0xec, 0x9c, 0x7d, 0x77, 0xd4, 0x3a, 0xc5, 0x41, 0x87,
+           0xfa, 0x48, 0x18, 0xd1, 0x7f});
+      return crypto::aes_cbc::Decrypt(kEmptyKey, kFixedIvForAes128Cbc,
+                                      ciphertext);
+    }
   }
   LOG(FATAL) << "Unsupported algorithm" << static_cast<int>(*algorithm_);
 }
@@ -197,8 +216,7 @@ bool Encryptor::EncryptString(const std::string& plaintext,
 bool Encryptor::DecryptString(const std::string& ciphertext,
                               std::string* plaintext,
                               DecryptFlags* flags) const {
-  auto decrypted =
-      DecryptData(base::as_bytes(base::make_span(ciphertext)), flags);
+  auto decrypted = DecryptData(base::as_byte_span(ciphertext), flags);
 
   if (!decrypted.has_value()) {
     return false;
@@ -228,8 +246,7 @@ std::optional<std::vector<uint8_t>> Encryptor::EncryptString(
   }
 
   const auto& [provider, key] = *it;
-  std::vector<uint8_t> ciphertext =
-      key.Encrypt(base::as_bytes(base::make_span(data)));
+  std::vector<uint8_t> ciphertext = key.Encrypt(base::as_byte_span(data));
 
   // This adds the provider prefix on the start of the data.
   ciphertext.insert(ciphertext.begin(), provider.cbegin(), provider.cend());
@@ -252,7 +269,7 @@ std::optional<std::string> Encryptor::DecryptData(
     if (data.size() < provider.size()) {
       continue;
     }
-    if (base::ranges::equal(provider, data.first(provider.size()))) {
+    if (std::ranges::equal(provider, data.first(provider.size()))) {
       // This removes the provider prefix from the front of the data.
       auto ciphertext = data.subspan(provider.size());
       // The Key does the raw decrypt.
@@ -271,20 +288,8 @@ std::optional<std::string> Encryptor::DecryptData(
   std::string string_data(data.begin(), data.end());
   std::string plaintext;
   if (OSCrypt::DecryptString(string_data, &plaintext)) {
-    // If OSCrypt is using os_crypt_posix.cc and it's passed invalid data to
-    // decrypt, it simply returns the data. This is a quirk of
-    // os_crypt_posix.cc. In this case, it's not really possible to tell whether
-    // or not encryption worked or not, and certainly not advisable to recommend
-    // a re-encryption of this potentially invalid data.
-    // TODO(crbug.com/365712505): Remove this fallback.
-#if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_APPLE) &&         \
-        !(BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CASTOS)) || \
-    BUILDFLAG(IS_FUCHSIA)
-    if (plaintext == string_data) {
-      return plaintext;
-    }
-#endif  // BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_APPLE) && !(BUILDFLAG(IS_LINUX)
-        // && !BUILDFLAG(IS_CASTOS)) || BUILDFLAG(IS_FUCHSIA)
+    // If fallback to OSCrypt happened but there is a valid key provider, then
+    // recommend re-encryption.
     if (!provider_for_encryption_.empty() && flags) {
       flags->should_reencrypt = true;
     }
@@ -317,24 +322,15 @@ Encryptor Encryptor::Clone(Option option) const {
     keyring.emplace(provider, key.Clone());
   }
 
-  std::string provider_for_encryption;
-
   switch (option) {
     case Option::kNone:
-      provider_for_encryption = provider_for_encryption_;
-      break;
+      return Encryptor(std::move(keyring), provider_for_encryption_,
+                       provider_for_os_crypt_sync_compatible_encryption_);
     case Option::kEncryptSyncCompat:
-      for (const auto& [provider, key] : keyring) {
-        if (key.is_os_crypt_sync_compatible_) {
-          provider_for_encryption = provider;
-          break;
-        }
-      }
-      break;
+      return Encryptor(std::move(keyring),
+                       provider_for_os_crypt_sync_compatible_encryption_,
+                       provider_for_os_crypt_sync_compatible_encryption_);
   }
-
-  // Can be empty provider, if no suitable provider is available.
-  return Encryptor(std::move(keyring), provider_for_encryption);
 }
 
 bool Encryptor::IsEncryptionAvailable() const {

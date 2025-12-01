@@ -16,6 +16,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/auto_reset.h"
 #include "base/callback_list.h"
 #include "base/check.h"
 #include "base/containers/contains.h"
@@ -527,6 +528,9 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // Returns the index of |view|, or nullopt if |view| is not a child of this
   // view.
   std::optional<size_t> GetIndexOf(const View* view) const;
+
+  // Propagates WillClearFocusManager() notification through all the children.
+  void PropagateWillClearFocusManager();
 
   // Size and disposition ------------------------------------------------------
   // Methods for obtaining and modifying the position and size of the view.
@@ -1374,12 +1378,26 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
 
   // Tooltips ------------------------------------------------------------------
 
-  // Gets the tooltip for this View. If the View does not have a tooltip,
+  // Gets the rendered tooltip for this View. If the View does not have a
+  // tooltip, the returned value should be empty. `p` provides the coordinates
+  // of the mouse (relative to this view). If a View needs to provide a tooltip
+  // that depends on the mouse location, or a point, it should override this
+  // method to provide it.
+  virtual std::u16string GetRenderedTooltipText(const gfx::Point& p) const;
+
+  // Gets the cached tooltip for this View. If the View does not have a tooltip,
   // the returned value should be empty.
-  // Any time the tooltip text that a View is displaying changes, it must
-  // invoke TooltipTextChanged.
-  // |p| provides the coordinates of the mouse (relative to this view).
-  virtual std::u16string GetTooltipText(const gfx::Point& p) const;
+  // In most cases, this and GetRenderedTooltipText should return the same, but
+  // there are some Views that require a Point to compute the tooltip text.
+  const std::u16string& GetTooltipText() const;
+  void SetTooltipText(const std::u16string& text);
+
+  // Views can override this to add custom logic after the tooltip has changed
+  // and they need the old tooltip text.
+  virtual void OnTooltipTextChanged(const std::u16string& old_tooltip_text);
+
+  base::CallbackListSubscription AddTooltipTextChangedCallback(
+      PropertyChangedCallback callback);
 
   // Views will normally display tooltips (if any) when they are focused
   // (which usually happens via a keyboard event). Because they are both
@@ -1768,6 +1786,11 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // invoked for that view as well as all the children recursively.
   virtual void VisibilityChanged(View* starting_from, bool is_visible);
 
+  // This method is invoked when the view will soon no longer have a focus
+  // manager. This should prompt it to unregister all accelerators. They can be
+  // re-registered if it is added (to the same manager or another) later.
+  virtual void WillClearFocusManager();
+
   // This method is invoked when the parent NativeView of the widget that the
   // view is attached to has changed and the view hierarchy has not changed.
   // ViewHierarchyChanged() is called when the parent NativeView of the widget
@@ -1946,6 +1969,10 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
 
   void OnPropertyChanged(ui::metadata::PropertyKey property,
                          PropertyEffects property_effects);
+
+  // TODO(crbug.com/378724151): Once refactor is done, rename this member to
+  // `tooltip_text_`.
+  std::u16string cached_tooltip_text_;
 
  private:
   friend class internal::PreEventDispatchHandler;
@@ -2456,9 +2483,6 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   std::unique_ptr<views::ViewMaskLayer> mask_layer_;
 
   // Accelerators --------------------------------------------------------------
-
-  // Focus manager accelerators registered on.
-  raw_ptr<FocusManager> accelerator_focus_manager_ = nullptr;
 
   // The list of accelerators. List elements in the range
   // [0, registered_accelerator_count_) are already registered to FocusManager,

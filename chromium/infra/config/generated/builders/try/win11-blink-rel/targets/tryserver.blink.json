@@ -20,7 +20,7 @@
         "results_handler": "layout tests",
         "swarming": {
           "dimensions": {
-            "os": "Windows-11-22000|Windows-11-22631"
+            "os": "Windows-11-22631"
           },
           "hard_timeout": 2400,
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
@@ -48,11 +48,11 @@
         "results_handler": "layout tests",
         "swarming": {
           "dimensions": {
-            "os": "Windows-11-22000|Windows-11-22631"
+            "os": "Windows-11-22631"
           },
           "hard_timeout": 2400,
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 7
+          "shards": 2
         },
         "test": "blink_wpt_tests",
         "test_id_prefix": "ninja://:blink_wpt_tests/"
@@ -75,7 +75,7 @@
         "results_handler": "layout tests",
         "swarming": {
           "dimensions": {
-            "os": "Windows-11-22000|Windows-11-22631"
+            "os": "Windows-11-22631"
           },
           "hard_timeout": 900,
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -91,7 +91,7 @@
           "crashtest",
           "print-reftest",
           "--inverted-test-launcher-filter-file=../../third_party/blink/web_tests/TestLists/chrome.filter",
-          "--test-launcher-filter-file=../../third_party/blink/web_tests/TestLists/headless_shell.filter"
+          "--inverted-test-launcher-filter-file=../../third_party/blink/web_tests/TestLists/content_shell.filter"
         ],
         "merge": {
           "args": [
@@ -107,11 +107,11 @@
         "results_handler": "layout tests",
         "swarming": {
           "dimensions": {
-            "os": "Windows-11-22000|Windows-11-22631"
+            "os": "Windows-11-22631"
           },
           "hard_timeout": 900,
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 4
+          "shards": 18
         },
         "test": "headless_shell_wpt",
         "test_id_prefix": "ninja://:headless_shell_wpt/"

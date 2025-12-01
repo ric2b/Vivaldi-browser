@@ -9,6 +9,7 @@
 #include <ostream>
 #include <ratio>
 #include <string>
+#include <type_traits>
 
 namespace openscreen {
 

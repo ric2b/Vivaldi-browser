@@ -4,25 +4,17 @@
 
 #include "ios/chrome/browser/bookmarks/model/bookmark_model_factory.h"
 
-#include <memory>
-#include <utility>
-
 #include "base/containers/extend.h"
-#include "base/no_destructor.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
-#include "components/keyed_service/ios/browser_state_dependency_manager.h"
 #include "components/undo/bookmark_undo_service.h"
 #include "ios/chrome/browser/bookmarks/model/account_bookmark_sync_service_factory.h"
 #include "ios/chrome/browser/bookmarks/model/bookmark_client_impl.h"
 #include "ios/chrome/browser/bookmarks/model/bookmark_storage_type.h"
 #include "ios/chrome/browser/bookmarks/model/bookmark_undo_service_factory.h"
 #include "ios/chrome/browser/bookmarks/model/local_or_syncable_bookmark_sync_service_factory.h"
-#import "ios/chrome/browser/bookmarks/model/managed_bookmark_service_factory.h"
-#include "ios/chrome/browser/shared/model/browser_state/browser_state_otr_helper.h"
+#include "ios/chrome/browser/bookmarks/model/managed_bookmark_service_factory.h"
 #include "ios/chrome/browser/shared/model/profile/profile_ios.h"
-#include "ios/web/public/thread/web_task_traits.h"
-#include "ios/web/public/thread/web_thread.h"
 
 #include "ios/sync/file_store_factory.h"
 
@@ -55,15 +47,15 @@ std::unique_ptr<KeyedService> BuildBookmarkModel(web::BrowserState* context) {
 // static
 bookmarks::BookmarkModel* BookmarkModelFactory::GetForProfile(
     ProfileIOS* profile) {
-  return static_cast<bookmarks::BookmarkModel*>(
-      GetInstance()->GetServiceForBrowserState(profile, true));
+  return GetInstance()->GetServiceForProfileAs<bookmarks::BookmarkModel>(
+      profile, /*create=*/true);
 }
 
 // static
 bookmarks::BookmarkModel* BookmarkModelFactory::GetForProfileIfExists(
     ProfileIOS* profile) {
-  return static_cast<bookmarks::BookmarkModel*>(
-      GetInstance()->GetServiceForBrowserState(profile, false));
+  return GetInstance()->GetServiceForProfileAs<bookmarks::BookmarkModel>(
+      profile, /*create=*/false);
 }
 
 // static
@@ -78,9 +70,9 @@ BookmarkModelFactory::TestingFactory BookmarkModelFactory::GetDefaultFactory() {
 }
 
 BookmarkModelFactory::BookmarkModelFactory()
-    : BrowserStateKeyedServiceFactory(
-          "BookmarkModel",
-          BrowserStateDependencyManager::GetInstance()) {
+    : ProfileKeyedServiceFactoryIOS("BookmarkModel",
+                                    ProfileSelection::kRedirectedInIncognito,
+                                    TestingCreation::kNoServiceForTests) {
   DependsOn(ios::AccountBookmarkSyncServiceFactory::GetInstance());
   DependsOn(ios::LocalOrSyncableBookmarkSyncServiceFactory::GetInstance());
   DependsOn(ios::BookmarkUndoServiceFactory::GetInstance());
@@ -88,7 +80,7 @@ BookmarkModelFactory::BookmarkModelFactory()
   DependsOn(SyncedFileStoreFactory::GetInstance()); // Vivaldi
 }
 
-BookmarkModelFactory::~BookmarkModelFactory() {}
+BookmarkModelFactory::~BookmarkModelFactory() = default;
 
 void BookmarkModelFactory::RegisterBrowserStatePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
@@ -98,15 +90,6 @@ void BookmarkModelFactory::RegisterBrowserStatePrefs(
 std::unique_ptr<KeyedService> BookmarkModelFactory::BuildServiceInstanceFor(
     web::BrowserState* context) const {
   return BuildBookmarkModel(context);
-}
-
-web::BrowserState* BookmarkModelFactory::GetBrowserStateToUse(
-    web::BrowserState* context) const {
-  return GetBrowserStateRedirectedInIncognito(context);
-}
-
-bool BookmarkModelFactory::ServiceIsNULLWhileTesting() const {
-  return true;
 }
 
 }  // namespace ios

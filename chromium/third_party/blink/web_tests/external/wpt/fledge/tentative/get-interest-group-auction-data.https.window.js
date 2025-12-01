@@ -10,6 +10,7 @@
 // META: variant=?5-8
 // META: variant=?9-12
 // META: variant=?13-16
+// META: variant=?17-last
 
 // These tests focus on the navigator.getInterestGroupAdAuctionData() method.
 
@@ -28,12 +29,18 @@ function validateWithOneIg(decoded) {
 }
 
 subsetTest(promise_test, async test => {
-  const result = await navigator.getInterestGroupAdAuctionData({ seller: window.location.origin });
+  const result = await navigator.getInterestGroupAdAuctionData({
+    coordinatorOrigin: await BA.configureCoordinator(),
+    seller: window.location.origin
+  });
   assert_true(result.requestId !== null);
   assert_true(result.request.length === 0);
 }, 'getInterestGroupAdAuctionData() with no interest groups returns a zero length result.');
 
 async function testInvalidConfig(test, configObj, desc) {
+  if (!configObj.coordinatorOrigin) {
+    configObj.coordinatorOrigin = await BA.configureCoordinator();
+  }
   await promise_rejects_js(
       test, TypeError, navigator.getInterestGroupAdAuctionData(configObj),
       desc);
@@ -84,6 +91,7 @@ subsetTest(promise_test, async test => {
 
   // These two actually succeed.
   let result = await navigator.getInterestGroupAdAuctionData({
+    coordinatorOrigin: await BA.configureCoordinator(),
     seller: 'https://example.org',
     perBuyerConfig:
         {'https://a.com': {targetSize: 400}, 'https://b.com': {targetSize: 500}}
@@ -91,6 +99,7 @@ subsetTest(promise_test, async test => {
   assert_true(result.requestId !== null);
 
   result = await navigator.getInterestGroupAdAuctionData({
+    coordinatorOrigin: await BA.configureCoordinator(),
     seller: 'https://example.org',
     perBuyerConfig: {'https://a.com': {targetSize: 400}, 'https://b.com': {}},
     requestSize: 5000
@@ -102,7 +111,10 @@ subsetTest(promise_test, async test => {
   const uuid = generateUuid(test);
   await joinInterestGroup(test, uuid);
 
-  const result = await navigator.getInterestGroupAdAuctionData({ seller: window.location.origin });
+  const result = await navigator.getInterestGroupAdAuctionData({
+    coordinatorOrigin: await BA.configureCoordinator(),
+    seller: window.location.origin
+  });
   assert_true(result.requestId !== null);
   assert_true(result.request.length > 0);
 
@@ -128,8 +140,10 @@ subsetTest(promise_test, async test => {
     ]
   });
 
-  const result = await navigator.getInterestGroupAdAuctionData(
-      {seller: window.location.origin});
+  const result = await navigator.getInterestGroupAdAuctionData({
+    coordinatorOrigin: await BA.configureCoordinator(),
+    seller: window.location.origin
+  });
   assert_true(result.requestId !== null);
   assert_true(result.request.length > 0);
 
@@ -154,8 +168,10 @@ subsetTest(promise_test, async test => {
     ]
   });
 
-  const result = await navigator.getInterestGroupAdAuctionData(
-      {seller: window.location.origin});
+  const result = await navigator.getInterestGroupAdAuctionData({
+    coordinatorOrigin: await BA.configureCoordinator(),
+    seller: window.location.origin
+  });
   assert_true(result.requestId !== null);
   assert_true(result.request.length > 0);
 
@@ -178,8 +194,10 @@ subsetTest(promise_test, async test => {
       test, uuid,
       {auctionServerRequestFlags: ['include-full-ads'], ads: adsArray});
 
-  const result = await navigator.getInterestGroupAdAuctionData(
-      {seller: window.location.origin});
+  const result = await navigator.getInterestGroupAdAuctionData({
+    coordinatorOrigin: await BA.configureCoordinator(),
+    seller: window.location.origin
+  });
   assert_true(result.requestId !== null);
   assert_true(result.request.length > 0);
 
@@ -253,8 +271,10 @@ subsetTest(promise_test, async test => {
   igConfig.auctionServerRequestFlags = ['include-full-ads'];
   await joinInterestGroup(test, uuid, igConfig);
 
-  const result = await navigator.getInterestGroupAdAuctionData(
-      {seller: window.location.origin});
+  const result = await navigator.getInterestGroupAdAuctionData({
+    coordinatorOrigin: await BA.configureCoordinator(),
+    seller: window.location.origin
+  });
   assert_true(result.requestId !== null);
   assert_true(result.request.length > 0);
 
@@ -304,8 +324,10 @@ subsetTest(promise_test, async test => {
   const igConfig = makeTemplateIgConfig(uuid);
   await joinInterestGroup(test, uuid, igConfig);
 
-  const result = await navigator.getInterestGroupAdAuctionData(
-      {seller: window.location.origin});
+  const result = await navigator.getInterestGroupAdAuctionData({
+    coordinatorOrigin: await BA.configureCoordinator(),
+    seller: window.location.origin
+  });
   assert_true(result.requestId !== null);
   assert_true(result.request.length > 0);
 
@@ -330,8 +352,10 @@ subsetTest(promise_test, async test => {
   igConfig.auctionServerRequestFlags = ['omit-user-bidding-signals'];
   await joinInterestGroup(test, uuid, igConfig);
 
-  const result = await navigator.getInterestGroupAdAuctionData(
-      {seller: window.location.origin});
+  const result = await navigator.getInterestGroupAdAuctionData({
+    coordinatorOrigin: await BA.configureCoordinator(),
+    seller: window.location.origin
+  });
   assert_true(result.requestId !== null);
   assert_true(result.request.length > 0);
 
@@ -364,8 +388,10 @@ subsetTest(promise_test, async test => {
   await waitForObservedRequests(
       uuid, [createBidderReportURL(uuid), createSellerReportURL(uuid)]);
 
-  const result = await navigator.getInterestGroupAdAuctionData(
-      {seller: window.location.origin});
+  const result = await navigator.getInterestGroupAdAuctionData({
+    coordinatorOrigin: await BA.configureCoordinator(),
+    seller: window.location.origin
+  });
   assert_true(result.requestId !== null);
   assert_true(result.request.length > 0);
 
@@ -424,8 +450,10 @@ subsetTest(promise_test, async test => {
   await waitForObservedRequests(
       uuid, [createBidderReportURL(uuid), createSellerReportURL(uuid)]);
 
-  const result = await navigator.getInterestGroupAdAuctionData(
-      {seller: window.location.origin});
+  const result = await navigator.getInterestGroupAdAuctionData({
+    coordinatorOrigin: await BA.configureCoordinator(),
+    seller: window.location.origin
+  });
   assert_true(result.requestId !== null);
   assert_true(result.request.length > 0);
 
@@ -480,8 +508,10 @@ subsetTest(promise_test, async test => {
   await joinInterestGroup(test, uuid, {...igTemplate, name: 'first'});
   await joinInterestGroup(test, uuid, {...igTemplate, name: 'second'});
 
-  const result = await navigator.getInterestGroupAdAuctionData(
-      {seller: window.location.origin});
+  const result = await navigator.getInterestGroupAdAuctionData({
+    coordinatorOrigin: await BA.configureCoordinator(),
+    seller: window.location.origin
+  });
   assert_true(result.requestId !== null);
   assert_true(result.request.length > 0);
 
@@ -516,8 +546,10 @@ subsetTest(promise_test, async test => {
   await joinCrossOriginIG(test, uuid, OTHER_ORIGIN3, 'o3');
   await joinCrossOriginIG(test, uuid, OTHER_ORIGIN4, 'o4');
 
-  const result = await navigator.getInterestGroupAdAuctionData(
-      {seller: window.location.origin});
+  const result = await navigator.getInterestGroupAdAuctionData({
+    coordinatorOrigin: await BA.configureCoordinator(),
+    seller: window.location.origin
+  });
   assert_true(result.requestId !== null);
   assert_true(result.request.length > 0);
 
@@ -548,6 +580,7 @@ subsetTest(promise_test, async test => {
   await joinCrossOriginIG(test, uuid, OTHER_ORIGIN4, 'o4');
 
   let config = {
+    coordinatorOrigin: await BA.configureCoordinator(),
     seller: window.location.origin,
     perBuyerConfig: {},
     requestSize: 5000
@@ -569,3 +602,186 @@ subsetTest(promise_test, async test => {
   assert_equals(decoded.message.interestGroups[OTHER_ORIGIN3].length, 1);
   assert_equals(decoded.message.interestGroups[OTHER_ORIGIN3][0].name, 'o3');
 }, 'getInterestGroupAdAuctionData() uses perBuyerConfig to select buyers');
+
+subsetTest(promise_test, async test => {
+  const uuid = generateUuid(test);
+  await joinInterestGroup(test, uuid);
+
+  const result = await navigator.getInterestGroupAdAuctionData({
+    coordinatorOrigin: await BA.configureCoordinator(),
+    seller: window.location.origin
+  });
+  assert_true(result.requestId !== null);
+  assert_true(result.request.length > 0);
+
+  let decoded = await BA.decodeInterestGroupData(result.request);
+
+  assert_own_property(decoded.message, 'enforceKAnon');
+  assert_equals(decoded.message.enforceKAnon, true);
+}, 'getInterestGroupAdAuctionData() requests k-anon.');
+
+
+/*************************************************************************
+ * Tests for the multi-seller variant of the API
+ *************************************************************************/
+
+ async function validateForSeller(adAuctionData, seller) {
+  assert_equals(adAuctionData.seller, seller);
+  assert_not_own_property(adAuctionData, 'error');
+  assert_own_property(adAuctionData, 'request');
+  assert_true(adAuctionData.request.length > 0);
+
+  let decoded = await BA.decodeInterestGroupData(adAuctionData.request);
+  let ig = validateWithOneIg(decoded);
+
+  assert_equals(ig.name, DEFAULT_INTEREST_GROUP_NAME);
+  assert_array_equals(ig.ads, ['a', 'b']);
+
+  assert_true(ig.components instanceof Array);
+  assert_array_equals(ig.components, ['ca', 'cb', 'cc']);
+
+  assert_array_equals(ig.biddingSignalsKeys, ['alpha', 'beta']);
+  assert_equals(ig.userBiddingSignals, '14');
+}
+
+ subsetTest(promise_test, async test => {
+  const uuid = generateUuid(test);
+  const igConfig = makeTemplateIgConfig(uuid);
+  await joinInterestGroup(test, uuid, igConfig);
+
+  const result = await navigator.getInterestGroupAdAuctionData({
+    sellers: [{
+      coordinatorOrigin: await BA.configureCoordinator(),
+      seller: window.location.origin,
+    }]
+  });
+
+  assert_true(result.requestId !== null);
+  assert_own_property(result, 'requests');
+  assert_equals(result.requests.length, 1);
+  validateForSeller(result.requests[0], window.location.origin);
+}, 'getInterestGroupAdAuctionData() multi-seller with single seller');
+
+subsetTest(promise_test, async test => {
+  const uuid = generateUuid(test);
+  const igConfig = makeTemplateIgConfig(uuid);
+  await joinInterestGroup(test, uuid, igConfig);
+
+  const result = await navigator.getInterestGroupAdAuctionData({
+    sellers: [{
+        coordinatorOrigin: await BA.configureCoordinator(),
+        seller: window.location.origin,
+      }, {
+        coordinatorOrigin: await BA.configureCoordinator(),
+        seller: OTHER_ORIGIN1,
+    }]
+  });
+
+  assert_true(result.requestId !== null);
+  assert_own_property(result, 'requests');
+  assert_equals(result.requests.length, 2, JSON.stringify(result));
+  result.requests.sort((a,b)=> (a.seller < b.seller ? -1 : +(a.seller > b.seller)));
+
+  await validateForSeller(result.requests[0], OTHER_ORIGIN1);
+  await validateForSeller(result.requests[1], window.location.origin);
+
+  assert_not_equals(result.requests[0].request.toString(), result.requests[1].request.toString());
+}, 'getInterestGroupAdAuctionData() multi-seller with multiple sellers - valid');
+
+subsetTest(promise_test, async test => {
+  const uuid = generateUuid(test);
+  const igConfig = makeTemplateIgConfig(uuid);
+  await joinInterestGroup(test, uuid, igConfig);
+
+  const result = await navigator.getInterestGroupAdAuctionData({
+    sellers: [{
+        coordinatorOrigin: await BA.configureCoordinator(),
+        seller: window.location.origin,
+      }, {
+        coordinatorOrigin: "https://invalid.coordinator.test/",
+        seller: OTHER_ORIGIN1,
+    }]
+  });
+
+  assert_true(result.requestId !== null);
+  assert_own_property(result, 'requests');
+  assert_equals(result.requests.length, 2, JSON.stringify(result));
+  result.requests.sort((a,b)=> (a.seller < b.seller ? -1 : +(a.seller > b.seller)));
+
+  assert_equals(result.requests[0].seller, OTHER_ORIGIN1);
+  assert_own_property(result.requests[0], 'error');
+  assert_not_own_property(result.requests[0], 'request');
+
+  await validateForSeller(result.requests[1], window.location.origin);
+}, 'getInterestGroupAdAuctionData() multi-seller with multiple sellers - one invalid coordinator');
+
+subsetTest(promise_test, async test => {
+  const uuid = generateUuid(test);
+  const igConfig = makeTemplateIgConfig(uuid);
+  await joinInterestGroup(test, uuid, igConfig);
+
+  await promise_rejects_js(test, TypeError, navigator.getInterestGroupAdAuctionData({
+    sellers: [{
+        coordinatorOrigin: await BA.configureCoordinator(),
+        seller: window.location.origin,
+      }, {
+        coordinatorOrigin: await BA.configureCoordinator(),
+        seller: "http://not.secure.test/",
+    }]
+  }));
+}, 'getInterestGroupAdAuctionData() multi-seller with multiple sellers - one invalid seller');
+
+subsetTest(promise_test, async test => {
+  const uuid = generateUuid(test);
+  const igConfig = makeTemplateIgConfig(uuid);
+  await joinInterestGroup(test, uuid, igConfig);
+
+  await promise_rejects_js(test, TypeError, navigator.getInterestGroupAdAuctionData({
+  }));
+}, 'getInterestGroupAdAuctionData() one of "seller" and "sellers" is required');
+
+subsetTest(promise_test, async test => {
+  const uuid = generateUuid(test);
+  const igConfig = makeTemplateIgConfig(uuid);
+  await joinInterestGroup(test, uuid, igConfig);
+
+  await promise_rejects_js(test, TypeError, navigator.getInterestGroupAdAuctionData({
+    seller: window.location.origin,
+    sellers: [{
+      coordinatorOrigin: await BA.configureCoordinator(),
+      seller: window.location.origin,
+    }]
+  }));
+}, 'getInterestGroupAdAuctionData() doesn\'t allow "seller" and "sellers" fields');
+
+subsetTest(promise_test, async test => {
+  const uuid = generateUuid(test);
+  const igConfig = makeTemplateIgConfig(uuid);
+  await joinInterestGroup(test, uuid, igConfig);
+
+  await promise_rejects_js(test, TypeError, navigator.getInterestGroupAdAuctionData({
+    coordinatorOrigin: window.location.origin,
+    sellers: [{
+      coordinatorOrigin: await BA.configureCoordinator(),
+      seller: window.location.origin,
+    }]
+  }));
+}, 'getInterestGroupAdAuctionData() doesn\'t allow "coordinatorOrigin" and "sellers" fields');
+
+subsetTest(promise_test, async test => {
+  const uuid = generateUuid(test);
+  const igConfig = makeTemplateIgConfig(uuid);
+  await joinInterestGroup(test, uuid, igConfig);
+
+  await promise_rejects_js(test, TypeError, navigator.getInterestGroupAdAuctionData({
+    coordinatorOrigin: window.location.origin,
+    sellers: [{
+      coordinatorOrigin: await BA.configureCoordinator(),
+      seller: window.location.origin,
+    }, {
+      coordinatorOrigin: await BA.configureCoordinator(),
+      seller: window.location.origin,
+    }
+  ]
+  }));
+}, 'getInterestGroupAdAuctionData() doesn\'t allow duplicate sellers in "sellers" field');

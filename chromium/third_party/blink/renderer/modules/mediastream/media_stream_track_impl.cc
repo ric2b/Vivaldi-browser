@@ -29,6 +29,7 @@
 
 #include "base/check_op.h"
 #include "base/functional/callback_helpers.h"
+#include "base/strings/to_string.h"
 #include "build/build_config.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/modules/mediastream/web_media_stream_track.h"
@@ -297,6 +298,10 @@ MediaStreamTrackImpl::MediaStreamTrackImpl(
   if (ready_state_ != MediaStreamSource::kReadyStateEnded) {
     EnsureFeatureHandleForScheduler();
   }
+  const std::optional<const MediaStreamDevice> source_device = device();
+  if (source_device && source_device->display_media_info) {
+    zoom_level_ = source_device->display_media_info->initial_zoom_level;
+  }
 }
 
 MediaStreamTrackImpl::~MediaStreamTrackImpl() = default;
@@ -334,8 +339,8 @@ void MediaStreamTrackImpl::setEnabled(bool enabled) {
 
   component_->SetEnabled(enabled);
 
-  SendLogMessage(
-      String::Format("%s({enabled=%s})", __func__, enabled ? "true" : "false"));
+  SendLogMessage(String::Format("%s({enabled=%s})", __func__,
+                                base::ToString(enabled).c_str()));
 }
 
 bool MediaStreamTrackImpl::muted() const {
@@ -925,6 +930,18 @@ void MediaStreamTrackImpl::SourceChangedCaptureHandle() {
   DispatchEvent(*Event::Create(event_type_names::kCapturehandlechange));
 }
 
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+void MediaStreamTrackImpl::SourceChangedZoomLevel(int zoom_level) {
+  DCHECK(IsMainThread());
+  if (Ended()) {
+    return;
+  }
+
+  zoom_level_ = zoom_level;
+  // TODO(383946052): Send an event to notify resolution change.
+}
+#endif
+
 void MediaStreamTrackImpl::PropagateTrackEnded() {
   CHECK(!is_iterating_registered_media_streams_);
   is_iterating_registered_media_streams_ = true;
@@ -1033,6 +1050,11 @@ void MediaStreamTrackImpl::UnregisterMediaStream(MediaStream* media_stream) {
   registered_media_streams_.erase(iter);
 }
 
+void MediaStreamTrackImpl::RegisterSink(
+    SpeechRecognitionMediaStreamAudioSink* sink) {
+  registered_sinks_.insert(sink);
+}
+
 const AtomicString& MediaStreamTrackImpl::InterfaceName() const {
   return event_target_names::kMediaStreamTrack;
 }
@@ -1051,6 +1073,7 @@ void MediaStreamTrackImpl::AddedEventListener(
 
 void MediaStreamTrackImpl::Trace(Visitor* visitor) const {
   visitor->Trace(registered_media_streams_);
+  visitor->Trace(registered_sinks_);
   visitor->Trace(component_);
   visitor->Trace(image_capture_);
   visitor->Trace(execution_context_);

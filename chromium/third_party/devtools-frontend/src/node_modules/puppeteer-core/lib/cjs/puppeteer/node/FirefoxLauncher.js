@@ -25,25 +25,11 @@ class FirefoxLauncher extends BrowserLauncher_js_1.BrowserLauncher {
     constructor(puppeteer) {
         super(puppeteer, 'firefox');
     }
-    static getPreferences(extraPrefsFirefox, protocol) {
+    static getPreferences(extraPrefsFirefox) {
         return {
             ...extraPrefsFirefox,
-            ...(protocol === 'webDriverBiDi'
-                ? {
-                    // Only enable the WebDriver BiDi protocol
-                    'remote.active-protocols': 1,
-                }
-                : {
-                    // Do not close the window when the last tab gets closed
-                    'browser.tabs.closeWindowWithLastTab': false,
-                    // Prevent various error message on the console
-                    // jest-puppeteer asserts that no error message is emitted by the console
-                    'network.cookie.cookieBehavior': 0,
-                    // Temporarily force disable BFCache in parent (https://bit.ly/bug-1732263)
-                    'fission.bfcacheInParent': false,
-                    // Only enable the CDP protocol
-                    'remote.active-protocols': 2,
-                }),
+            // Only enable the WebDriver BiDi protocol
+            'remote.active-protocols': 1,
             // Force all web content to use a single content process. TODO: remove
             // this once Firefox supports mouse event dispatch from the main frame
             // context. Once this happens, webContentIsolationStrategy should only
@@ -100,7 +86,7 @@ class FirefoxLauncher extends BrowserLauncher_js_1.BrowserLauncher {
         }
         await (0, browsers_1.createProfile)(browsers_1.Browser.FIREFOX, {
             path: userDataDir,
-            preferences: FirefoxLauncher.getPreferences(extraPrefsFirefox, options.protocol),
+            preferences: FirefoxLauncher.getPreferences(extraPrefsFirefox),
         });
         let firefoxExecutable;
         if (this.puppeteer._isPuppeteerCore || executablePath) {
@@ -108,7 +94,7 @@ class FirefoxLauncher extends BrowserLauncher_js_1.BrowserLauncher {
             firefoxExecutable = executablePath;
         }
         else {
-            firefoxExecutable = this.executablePath();
+            firefoxExecutable = this.executablePath(undefined);
         }
         return {
             isTempUserDataDir,
@@ -132,14 +118,20 @@ class FirefoxLauncher extends BrowserLauncher_js_1.BrowserLauncher {
         }
         else {
             try {
-                // When an existing user profile has been used remove the user
-                // preferences file and restore possibly backuped preferences.
-                await (0, promises_1.unlink)(path_1.default.join(userDataDir, 'user.js'));
-                const prefsBackupPath = path_1.default.join(userDataDir, 'prefs.js.puppeteer');
-                if (fs_1.default.existsSync(prefsBackupPath)) {
-                    const prefsPath = path_1.default.join(userDataDir, 'prefs.js');
-                    await (0, promises_1.unlink)(prefsPath);
-                    await (0, promises_1.rename)(prefsBackupPath, prefsPath);
+                const backupSuffix = '.puppeteer';
+                const backupFiles = ['prefs.js', 'user.js'];
+                const results = await Promise.allSettled(backupFiles.map(async (file) => {
+                    const prefsBackupPath = path_1.default.join(userDataDir, file + backupSuffix);
+                    if (fs_1.default.existsSync(prefsBackupPath)) {
+                        const prefsPath = path_1.default.join(userDataDir, file);
+                        await (0, promises_1.unlink)(prefsPath);
+                        await (0, promises_1.rename)(prefsBackupPath, prefsPath);
+                    }
+                }));
+                for (const result of results) {
+                    if (result.status === 'rejected') {
+                        throw result.reason;
+                    }
                 }
             }
             catch (error) {
@@ -147,8 +139,9 @@ class FirefoxLauncher extends BrowserLauncher_js_1.BrowserLauncher {
             }
         }
     }
-    executablePath() {
-        return this.resolveExecutablePath();
+    executablePath(_, validatePath = true) {
+        return this.resolveExecutablePath(undefined, 
+        /* validatePath=*/ validatePath);
     }
     defaultArgs(options = {}) {
         const { devtools = false, headless = !devtools, args = [], userDataDir = null, } = options;

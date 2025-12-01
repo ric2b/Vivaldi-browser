@@ -11,6 +11,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <string>
 #include <utility>
 #include <vector>
@@ -18,7 +19,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/ranges/ranges.h"
 #include "base/strings/utf_offset_string_conversions.h"
 #include "build/build_config.h"
 #include "components/omnibox/browser/actions/omnibox_action_concepts.h"
@@ -435,15 +435,11 @@ struct AutocompleteMatch {
   // - If the match's keyword is known, it can be provided in `keyword`.
   //   Otherwise, it can be left empty and the template URL (if any) is
   //   determined from the destination's hostname.
-  // - If `normalize_search_terms` is true, the search terms in the final URL
-  //   will be converted to lowercase with extra whitespace characters
-  //   collapsed.
   static GURL GURLToStrippedGURL(const GURL& url,
                                  const AutocompleteInput& input,
                                  const TemplateURLService* template_url_service,
                                  const std::u16string& keyword,
-                                 const bool keep_search_intent_params,
-                                 const bool normalize_search_terms);
+                                 const bool keep_search_intent_params);
 
   // Sets the |match_in_scheme| and |match_in_subdomain| flags based on the
   // provided |url| and list of substring |match_positions|. |match_positions|
@@ -699,7 +695,7 @@ struct AutocompleteMatch {
   template <typename UnaryPredicate>
   bool MatchOrDuplicateMeets(UnaryPredicate predicate) const {
     return predicate(*this) ||
-           base::ranges::any_of(duplicate_matches, std::move(predicate));
+           std::ranges::any_of(duplicate_matches, std::move(predicate));
   }
 
   // Finds first action where `predicate` returns true. This is a special use
@@ -707,7 +703,7 @@ struct AutocompleteMatch {
   // need to be selected. If no such action is found, returns nullptr.
   template <typename UnaryPredicate>
   OmniboxAction* GetActionWhere(UnaryPredicate predicate) const {
-    auto it = base::ranges::find_if(actions, std::move(predicate));
+    auto it = std::ranges::find_if(actions, std::move(predicate));
     return it != actions.end() ? it->get() : nullptr;
   }
 
@@ -921,7 +917,14 @@ struct AutocompleteMatch {
   // it!
   std::u16string keyword;
 
-  // Set in matches originating from keyword results.
+  // Set in matches originating in keyword mode. `from_keyword` can be true even
+  // if `keyword` is empty and vice versa. `from_keyword` basically means the
+  // user input is in keyword mode. `!keyword.empty()` basically means the match
+  // was generated using a template URL.
+  //
+  // CAUTION: Not consistently set by all providers. That's fine-ish since this
+  // field isn't used much. But code relying on this feature to be correctly set
+  // should take care.
   bool from_keyword = false;
 
   // Vivaldi

@@ -1319,6 +1319,42 @@ class RunWithStderr(GitCommonTestBase):
         self.assertEqual(run_mock.call_count, 1)  # 1 + 0 (retry)
 
 
+class ExtractGitPathFromGitBatTest(GitCommonTestBase):
+
+    def test_unexpected_format(self):
+        git_bat = os.path.join(DEPOT_TOOLS_ROOT, 'tests',
+                               'git_common_test.inputs',
+                               'testGitBatUnexpectedFormat', 'git.bat')
+        actual = self.gc._extract_git_path_from_git_bat(git_bat)
+        self.assertEqual(actual, git_bat)
+
+    def test_non_exe(self):
+        git_bat = os.path.join(DEPOT_TOOLS_ROOT, 'tests',
+                               'git_common_test.inputs', 'testGitBatNonExe',
+                               'git.bat')
+        actual = self.gc._extract_git_path_from_git_bat(git_bat)
+        self.assertEqual(actual, git_bat)
+
+    def test_absolute_path(self):
+        git_bat = os.path.join(DEPOT_TOOLS_ROOT, 'tests',
+                               'git_common_test.inputs',
+                               'testGitBatAbsolutePath', 'git.bat')
+        actual = self.gc._extract_git_path_from_git_bat(git_bat)
+        expected = 'C:\\Absolute\\Path\\To\\Git\\cmd\\git.exe'
+        self.assertEqual(actual, expected)
+
+    def test_relative_path(self):
+        git_bat = os.path.join(DEPOT_TOOLS_ROOT, 'tests',
+                               'git_common_test.inputs',
+                               'testGitBatRelativePath', 'git.bat')
+        actual = self.gc._extract_git_path_from_git_bat(git_bat)
+        expected = os.path.join(DEPOT_TOOLS_ROOT, 'tests',
+                                'git_common_test.inputs',
+                                'testGitBatRelativePath',
+                                'Relative\\Path\\To\\Git\\cmd\\git.exe')
+        self.assertEqual(actual, expected)
+
+
 if __name__ == '__main__':
     sys.exit(
         coverage_utils.covered_main(

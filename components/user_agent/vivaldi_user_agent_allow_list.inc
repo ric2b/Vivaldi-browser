@@ -15,12 +15,14 @@
 "tests.viv.int",
 
 // Partners with branding for Vivaldi
+/* NOTE(jarle@vivaldi.com): Experiment: Do not use Vivaldi UA for partners.
 "duckduckgo.com",
 "ecosia.com",
 "ecosia.org",
 "qwant.com",
 "startpage.com",
 "you.com",
+*/
 
 // Sites that fails or use messages like Add to Chrome
 

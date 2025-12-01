@@ -16,6 +16,7 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_MLIR_LITE_QUANTIZATION_DEVICE_TARGET_H_
 #define TENSORFLOW_COMPILER_MLIR_LITE_QUANTIZATION_DEVICE_TARGET_H_
 
+#include <cstdint>
 #include <functional>
 #include <optional>
 
@@ -159,7 +160,7 @@ class DeviceTarget {
   // Adds the kernel spec with the scale constraint type for the kernel.
   LogicalResult RegisterKernel(llvm::StringRef kernel,
                                const KernelSpecs::Signature& signature,
-                               const ScaleConstraintType constraint);
+                               ScaleConstraintType constraint);
 
   // Adds the kernel with the name. Retrun an existing one if it has been
   // added before.

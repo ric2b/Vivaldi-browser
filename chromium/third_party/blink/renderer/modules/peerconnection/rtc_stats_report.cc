@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "third_party/blink/renderer/modules/peerconnection/rtc_stats_report.h"
 
 #include "base/feature_list.h"
@@ -52,7 +57,7 @@ v8::Local<v8::Value> HashMapToValue(ScriptState* script_state,
   for (auto& it : map) {
     builder.Add(it.key, it.value);
   }
-  v8::Local<v8::Object> v8_object = builder.V8Value();
+  v8::Local<v8::Object> v8_object = builder.V8Object();
   if (v8_object.IsEmpty()) {
     NOTREACHED();
   }
@@ -1032,14 +1037,14 @@ class RTCStatsReportIterationSource final
 
   bool FetchNextItem(ScriptState* script_state,
                      String& key,
-                     ScriptValue& value,
+                     ScriptObject& object,
                      ExceptionState& exception_state) override {
-    return FetchNextItemIdl(script_state, key, value, exception_state);
+    return FetchNextItemIdl(script_state, key, object, exception_state);
   }
 
   bool FetchNextItemIdl(ScriptState* script_state,
                         String& key,
-                        ScriptValue& value,
+                        ScriptObject& object,
                         ExceptionState& exception_state) {
     const bool expose_hardware_caps =
         ExposeHardwareCapabilityStats(script_state);
@@ -1057,7 +1062,7 @@ class RTCStatsReportIterationSource final
       return false;
     }
     key = String::FromUTF8(rtc_stats->id());
-    value = ScriptValue::From(script_state, v8_stat);
+    object = ScriptObject::From(script_state, v8_stat);
     return true;
   }
 
@@ -1082,7 +1087,7 @@ RTCStatsReport::CreateIterationSource(ScriptState*, ExceptionState&) {
 
 bool RTCStatsReport::GetMapEntryIdl(ScriptState* script_state,
                                     const String& key,
-                                    ScriptValue& value,
+                                    ScriptObject& object,
                                     ExceptionState&) {
   const webrtc::RTCStats* stats = report_->stats_report().Get(key.Utf8());
   if (!stats) {
@@ -1094,15 +1099,15 @@ bool RTCStatsReport::GetMapEntryIdl(ScriptState* script_state,
   if (!v8_stats) {
     return false;
   }
-  value = ScriptValue::From(script_state, v8_stats);
+  object = ScriptObject::From(script_state, v8_stats);
   return true;
 }
 
 bool RTCStatsReport::GetMapEntry(ScriptState* script_state,
                                  const String& key,
-                                 ScriptValue& value,
+                                 ScriptObject& object,
                                  ExceptionState& exception_state) {
-  return GetMapEntryIdl(script_state, key, value, exception_state);
+  return GetMapEntryIdl(script_state, key, object, exception_state);
 }
 
 }  // namespace blink

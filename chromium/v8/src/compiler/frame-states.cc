@@ -6,7 +6,7 @@
 
 #include <optional>
 
-#include "src/base/functional.h"
+#include "src/base/hashing.h"
 #include "src/codegen/callable.h"
 #include "src/compiler/js-graph.h"
 #include "src/compiler/node.h"
@@ -88,7 +88,7 @@ std::ostream& operator<<(std::ostream& os, FrameStateType type) {
 std::ostream& operator<<(std::ostream& os, FrameStateInfo const& info) {
   os << info.type() << ", " << info.bailout_id() << ", "
      << info.state_combine();
-  Handle<SharedFunctionInfo> shared_info;
+  DirectHandle<SharedFunctionInfo> shared_info;
   if (info.shared_info().ToHandle(&shared_info)) {
     os << ", " << Brief(*shared_info);
   }
@@ -238,13 +238,13 @@ FrameState CreateJavaScriptBuiltinContinuationFrameState(
   // instruction selector during FrameState translation.
   DCHECK_EQ(
       Builtins::CallInterfaceDescriptorFor(name).GetRegisterParameterCount(),
-      V8_ENABLE_LEAPTIERING_BOOL ? 4 : 3);
+      V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE_BOOL ? 4 : 3);
   actual_parameters.push_back(target);      // kJavaScriptCallTargetRegister
   actual_parameters.push_back(new_target);  // kJavaScriptCallNewTargetRegister
   actual_parameters.push_back(argc);        // kJavaScriptCallArgCountRegister
-#ifdef V8_ENABLE_LEAPTIERING
+#ifdef V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE
   // The dispatch handle isn't used by the continuation builtins.
-  Node* handle = jsgraph->ConstantNoHole(kInvalidDispatchHandle);
+  Node* handle = jsgraph->ConstantNoHole(kInvalidDispatchHandle.value());
   actual_parameters.push_back(handle);  // kJavaScriptDispatchHandleRegister
 #endif
 

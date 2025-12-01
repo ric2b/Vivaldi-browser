@@ -229,7 +229,7 @@ title: April 2021 (Vol. 2) - New features, Testing, Stability fixes, Interop fix
 
 <td><td><img alt="image" src="https://lh5.googleusercontent.com/_abXC_M3LqFDCPe31DLX4hv01AyN19LMYlV3UDx7fPGchqAutCc9tGLKuDaM51LBUKc6SBcVYiQRjJCaznQzw16sJD8xir4Mqyq1RuBfJtk05ganqrhVTSqdVv0QKdCTkkmSGUCwSQ" height=196 width=318> <img alt="image" src="https://lh3.googleusercontent.com/iYcG2KtoT0Mt7qB3T7P-PzUhH-A6HYmLG5gw28veSDEhvvxp_O0DQ18EeJwRXqB4mqaclC1PJ6WZW1T0YrMiU7AAlHLUzLbDRCA721-B2d54YoNlo1TlsNWx83zDgrDjSqODzTG8kA" height=198 width=234></td></td>
 
-<td><td>skobes@ fixed a scroll unification bug (<a href="http://crbug.com/1155655">crbug.com/1155655</a>).</td></td>
+<td><td>skobes@ fixed a scroll unification bug (<a href="https://crbug.com/1155655">crbug.com/1155655</a>).</td></td>
 
 <td><td>Symptom: can't scroll sub-scroller in iframe. Root cause: compositor thread hit testing had an early exit if it saw no scrolling layers, which did not check for slow-scroll regions. Extra challenges:</td></td>
 

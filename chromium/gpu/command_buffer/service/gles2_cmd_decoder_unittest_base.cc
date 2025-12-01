@@ -157,7 +157,6 @@ void GLES2DecoderTestBase::CacheBlob(gpu::GpuDiskCacheType type,
 void GLES2DecoderTestBase::OnFenceSyncRelease(uint64_t release) {}
 void GLES2DecoderTestBase::OnDescheduleUntilFinished() {}
 void GLES2DecoderTestBase::OnRescheduleAfterFinished() {}
-void GLES2DecoderTestBase::OnSwapBuffers(uint64_t swap_id, uint32_t flags) {}
 bool GLES2DecoderTestBase::ShouldYield() {
   return false;
 }
@@ -439,6 +438,13 @@ ContextResult GLES2DecoderTestBase::MaybeInitDecoderWithWorkarounds(
     EXPECT_CALL(*gl_, ClearColor(0, 0, 0, 0)).Times(1).RetiresOnSaturation();
   }
 #endif
+
+  if (init.context_type == CONTEXT_TYPE_WEBGL2 &&
+      group_->feature_info()->gl_version_info().is_es3) {
+    EXPECT_CALL(*gl_, Enable(GL_PRIMITIVE_RESTART_FIXED_INDEX))
+        .Times(1)
+        .RetiresOnSaturation();
+  }
 
   if (context_->HasRobustness()) {
     EXPECT_CALL(*gl_, GetGraphicsResetStatusARB())
@@ -2336,8 +2342,6 @@ void GLES2DecoderPassthroughTestBase::CacheBlob(gpu::GpuDiskCacheType type,
 void GLES2DecoderPassthroughTestBase::OnFenceSyncRelease(uint64_t release) {}
 void GLES2DecoderPassthroughTestBase::OnDescheduleUntilFinished() {}
 void GLES2DecoderPassthroughTestBase::OnRescheduleAfterFinished() {}
-void GLES2DecoderPassthroughTestBase::OnSwapBuffers(uint64_t swap_id,
-                                                    uint32_t flags) {}
 bool GLES2DecoderPassthroughTestBase::ShouldYield() {
   return false;
 }

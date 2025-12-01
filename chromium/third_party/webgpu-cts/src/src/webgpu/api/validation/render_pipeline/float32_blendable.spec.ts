@@ -30,6 +30,7 @@ pipeline that uses blending with any float32-format attachment.
     if (t.params.enabled) {
       t.selectDeviceOrSkipTestCase('float32-blendable');
     }
+    t.skipIfColorRenderableNotSupportedForFormat('r32float');
   })
   .fn(t => {
     const { isAsync, enabled, hasBlend, format } = t.params;

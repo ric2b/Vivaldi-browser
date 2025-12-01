@@ -83,6 +83,9 @@ extern "C" {
 /// Static weights of the FP16 operator are in FP32 format.
 #define XNN_FLAG_FP32_STATIC_WEIGHTS 0x00000008
 
+/// Static biases of the FP16 operator are in FP32 format.
+#define XNN_FLAG_FP32_STATIC_BIASES 0x00000080
+
 /// Align corners of input and output images in resize operations.
 #define XNN_FLAG_ALIGN_CORNERS 0x00000008
 
@@ -95,13 +98,13 @@ extern "C" {
 /// Retain reduced dimensions with length 1.
 #define XNN_FLAG_KEEP_DIMS 0x00000040
 
-// Next unused flag value: 0x00000100.
+// Next unused flag value: 0x00000200.
 
 /// The number of entries in an array of xnn_quantization_params that XNNPACK may read beyond array bounds.
 /// The caller must allocate at least this many extra xnn_quantization_params before passing the array to XNNPACK.
 ///
 /// Note: XNNPACK reads, but never writes beyond array bounds.
-#define XNN_EXTRA_QUANTIZATION_PARAMS 10
+#define XNN_EXTRA_QUANTIZATION_PARAMS 15
 
 /// The minimum blocksize for blockwise quantized operators.
 #define XNN_MIN_BLOCKSIZE 32
@@ -286,6 +289,13 @@ enum xnn_datatype {
   xnn_datatype_qbint4 = 12,
   /// IEEE754 single-precision packed floating-point.
   xnn_datatype_pfp32 = 13,
+  /// BFloat16, i.e. the upper 16 bits of a float32.
+  xnn_datatype_bf16 = 14,
+  /// Dynamically quantized 8-bit unsigned integer with per-batch quantization
+  /// parameters.
+  xnn_datatype_qduint8 = 15,
+  /// IEEE754 half-precision packed floating-point.
+  xnn_datatype_pfp16 = 16,
 };
 
 /// Define a tensor-type Value and add it to a Subgraph.
@@ -495,6 +505,14 @@ enum xnn_unary_operator {
   xnn_unary_square_root,
   xnn_unary_reciprocal_square_root,
   xnn_unary_tanh,
+  // The following operators are experimental and may be removed.
+  xnn_unary_cube_root,
+  xnn_unary_cosine,
+  xnn_unary_sine,
+  xnn_unary_count_leading_zeros,
+  xnn_unary_bitwise_not,
+  xnn_unary_popcount,
+  xnn_unary_sign,
 };
 
 /// Parameters for xnn_define_unary
@@ -1061,6 +1079,16 @@ enum xnn_binary_operator {
   xnn_binary_copysign,
   xnn_binary_squared_difference,
   xnn_binary_prelu,
+  // The following operators are experimental and may be removed.
+  xnn_binary_modulus,
+  xnn_binary_atan2,
+  xnn_binary_pow,
+  xnn_binary_bitwise_and,
+  xnn_binary_bitwise_or,
+  xnn_binary_bitwise_xor,
+  xnn_binary_shift_left,
+  xnn_binary_shift_right_logical,
+  xnn_binary_shift_right_arithmetic,
 };
 
 struct xnn_binary_params {
@@ -1424,6 +1452,34 @@ enum xnn_status xnn_define_static_reduce(
   uint32_t input_id,
   uint32_t output_id,
   uint32_t flags);
+
+/// Define a Reduce Node and add it to a Subgraph.
+///
+/// @param subgraph - a Subgraph object that will own the created Node.
+/// @param num_reduction_axes - number of axes along which reduce is computed.
+/// @param reduction_axes - axes along which reduce is computed. Negative values
+///                         are interpreted as offsets from @a
+///                         num_reduction_axes.
+/// @param input_id - Value ID for the input tensor. The input tensor must be a
+///                   dense tensor with at least @a num_reduction_axes
+///                   dimensions defined in the @a subgraph.
+/// @param output_id - Value ID for the output tensor. The output tensor must be
+///                    a dense tensor defined in the @a subgraph with @a
+///                    num_reduction_axes fewer dimensions than the input tensor
+///                    (if XNN_FLAG_KEEP_DIMS is not specified), or has same
+///                    dimension rank but the dimension at
+///                    @a reduction_axes reduced to 1 (if XNN_FLAG_KEEP_DIMS is
+///                    specified).
+/// @param flags - binary features of the Reduce Node. The only currently
+///                supported value is XNN_FLAG_KEEP_DIMS
+enum xnn_status xnn_define_static_reduce_v2(        //
+    xnn_subgraph_t subgraph,                        //
+    enum xnn_reduce_operator reduce_operator_type,  //
+    size_t num_reduction_axes,                      //
+    const int64_t* reduction_axes,                  //
+    uint32_t input_id,                              //
+    uint32_t output_id,                             //
+    uint32_t flags);
 
 /// Define a 2-Input Concatenate Node and add it to a Subgraph.
 ///
@@ -2021,16 +2077,6 @@ XNN_DEPRECATED enum xnn_status xnn_define_reciprocal_square_root(
   uint32_t output_id,
   uint32_t flags);
 
-/// Define a Static Slice Node add it to a Subgraph.
-///
-/// @param subgraph - a Subgraph object that will own the created Node.
-/// @param num_dims - number of shape dimensions in the input and output tensor.
-/// @param offsets - offsets in each dimension of the input tensor. This array must have @a num_dims elements.
-/// @param sizes - size of each dimension in output tensor. This array must have @a num_dims elements.
-/// @param input_id - Value ID for the input tensor. The input tensor must be defined in the @a subgraph.
-/// @param output_id - Value ID for the output tensor. The output tensor must be defined in the @a subgraph, and its
-///                    dimensions must match @a sizes.
-/// @param flags - binary features of the Static Slice Node. No supported flags are currently defined.
 enum xnn_status xnn_define_static_slice(
   xnn_subgraph_t subgraph,
   size_t num_dims,
@@ -2039,6 +2085,25 @@ enum xnn_status xnn_define_static_slice(
   uint32_t input_id,
   uint32_t output_id,
   uint32_t flags);
+/// Define a Static Slice Node add it to a Subgraph.
+///
+/// @param subgraph - a Subgraph object that will own the created Node.
+/// @param num_dims - number of shape dimensions in the input and output tensor.
+/// @param offsets - offsets in each dimension of the input tensor. This array must have @a num_dims elements. Can be
+///                  negative meaning that the offset is relative to the end of the dimension.
+/// @param sizes - size of each dimension in output tensor. This array must have @a num_dims elements.
+/// @param input_id - Value ID for the input tensor. The input tensor must be defined in the @a subgraph.
+/// @param output_id - Value ID for the output tensor. The output tensor must be defined in the @a subgraph, and its
+///                    dimensions must match @a sizes.
+/// @param flags - binary features of the Static Slice Node. No supported flags are currently defined.
+enum xnn_status xnn_define_static_slice_v2(  //
+    xnn_subgraph_t subgraph,                 //
+    size_t num_dims,                         //
+    const int64_t* offsets,                  //
+    const size_t* sizes,                     //
+    uint32_t input_id,                       //
+    uint32_t output_id,                      //
+    uint32_t flags);
 
 /// Define a Static Transpose Node and add it to a Subgraph.
 ///
@@ -2617,42 +2682,6 @@ enum xnn_status xnn_setup_batch_matrix_multiply_nc_qd8_f32_qc8w(
     const struct xnn_quantization_params* quantization_params,
     float* output);
 
-enum xnn_status xnn_create_channel_shuffle_nc_x8(
-  size_t groups,
-  size_t group_channels,
-  size_t input_stride,
-  size_t output_stride,
-  uint32_t flags,
-  xnn_operator_t* channel_shuffle_op_out);
-
-enum xnn_status xnn_reshape_channel_shuffle_nc_x8(
-  xnn_operator_t channel_shuffle_op,
-  size_t batch_size,
-  pthreadpool_t threadpool);
-
-enum xnn_status xnn_setup_channel_shuffle_nc_x8(
-  xnn_operator_t channel_shuffle_op,
-  const void* input,
-  void* output);
-
-enum xnn_status xnn_create_channel_shuffle_nc_x32(
-  size_t groups,
-  size_t group_channels,
-  size_t input_stride,
-  size_t output_stride,
-  uint32_t flags,
-  xnn_operator_t* channel_shuffle_op_out);
-
-enum xnn_status xnn_reshape_channel_shuffle_nc_x32(
-  xnn_operator_t channel_shuffle_op,
-  size_t batch_size,
-  pthreadpool_t threadpool);
-
-enum xnn_status xnn_setup_channel_shuffle_nc_x32(
-  xnn_operator_t channel_shuffle_op,
-  const void* input,
-  void* output);
-
 enum xnn_status xnn_create_constant_pad_nd_x8(
   const void* padding_value,
   uint32_t flags,
@@ -2926,6 +2955,31 @@ enum xnn_status xnn_create_convolution2d_nhwc_f32(
   size_t output_channel_stride,
   const float* kernel,
   const float* bias,
+  float output_min,
+  float output_max,
+  uint32_t flags,
+  xnn_code_cache_t code_cache,
+  xnn_weights_cache_t weights_cache,
+  xnn_operator_t* convolution_op_out);
+
+enum xnn_status xnn_create_convolution2d_nhwc_f32_f16(
+  uint32_t input_padding_top,
+  uint32_t input_padding_right,
+  uint32_t input_padding_bottom,
+  uint32_t input_padding_left,
+  uint32_t kernel_height,
+  uint32_t kernel_width,
+  uint32_t subsampling_height,
+  uint32_t subsampling_width,
+  uint32_t dilation_height,
+  uint32_t dilation_width,
+  uint32_t groups,
+  size_t group_input_channels,
+  size_t group_output_channels,
+  size_t input_channel_stride,
+  size_t output_channel_stride,
+  const void* kernel,
+  const void* bias,
   float output_min,
   float output_max,
   uint32_t flags,
@@ -3287,6 +3341,31 @@ enum xnn_status xnn_create_deconvolution2d_nhwc_f32(
   size_t output_pixel_stride,
   const float* kernel,
   const float* bias,
+  float output_min,
+  float output_max,
+  uint32_t flags,
+  xnn_code_cache_t code_cache,
+  xnn_weights_cache_t weights_cache,
+  xnn_operator_t* deconvolution_op_out);
+
+enum xnn_status xnn_create_deconvolution2d_nhwc_f32_f16(
+  uint32_t output_padding_top,
+  uint32_t output_padding_right,
+  uint32_t output_padding_bottom,
+  uint32_t output_padding_left,
+  uint32_t kernel_height,
+  uint32_t kernel_width,
+  uint32_t stride_height,
+  uint32_t stride_width,
+  uint32_t dilation_height,
+  uint32_t dilation_width,
+  uint32_t groups,
+  size_t group_input_channels,
+  size_t group_output_channels,
+  size_t input_pixel_stride,
+  size_t output_pixel_stride,
+  const void* kernel,
+  const void* bias,
   float output_min,
   float output_max,
   uint32_t flags,
@@ -4156,22 +4235,20 @@ enum xnn_status xnn_setup_max_pooling2d_nhwc_u8(
 enum xnn_status xnn_create_reduce_nd(
   enum xnn_reduce_operator reduce_operator_type,
   enum xnn_datatype datatype,
-  float scale,
-  int32_t input_zero_point,
-  int32_t output_zero_point,
+  const struct xnn_quantization_params* input_quantization,
+  const struct xnn_quantization_params* output_quantization,
   uint32_t flags,
   xnn_operator_t* reduce_op_out);
 
-enum xnn_status xnn_reshape_reduce_nd(
-  xnn_operator_t reduce_op,
-  enum xnn_datatype type,
-  size_t num_reduction_axes,
-  const size_t* reduction_axes,
-  size_t num_input_dims,
-  const size_t* input_shape,
-  size_t* workspace_size,
-  size_t* workspace_alignment,
-  pthreadpool_t threadpool);
+enum xnn_status xnn_reshape_reduce_nd(  //
+    xnn_operator_t reduce_op,           //
+    size_t num_reduction_axes,          //
+    const int64_t* reduction_axes,      //
+    size_t num_input_dims,              //
+    const size_t* input_shape,          //
+    size_t* workspace_size,             //
+    size_t* workspace_alignment,        //
+    pthreadpool_t threadpool);
 
 enum xnn_status xnn_setup_reduce_nd(
     xnn_operator_t reduce_op,

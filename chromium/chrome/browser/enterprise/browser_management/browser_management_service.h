@@ -22,20 +22,25 @@ class Image;
 namespace policy {
 
 // This class gives information related to the browser's management state.
-// For more imformation please read
+// For more information please read
 // //components/policy/core/common/management/management_service.md
 class BrowserManagementService : public ManagementService, public KeyedService {
  public:
   explicit BrowserManagementService(Profile* profile);
   ~BrowserManagementService() override;
-  ui::ImageModel* GetManagementIcon() override;
+
+  // Returns the management icon used to indicate profile level management.
+  ui::ImageModel* GetManagementIconForProfile() override;
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
  private:
-  void UpdateManagementIcon(Profile* profile);
-  void SetManagementIcon(const gfx::Image& management_icon);
+  // Updates the management icon used to indicate profile level management.
+  void UpdateManagementIconForProfile(Profile* profile);
+  // Updates the management label used to indicate profile level management.
+  void UpdateEnterpriseLabelForProfile(Profile* profile);
+  void SetManagementIconForProfile(const gfx::Image& management_icon);
 
   PrefChangeRegistrar pref_change_registrar_;
-  ui::ImageModel management_icon_;
+  ui::ImageModel management_icon_for_profile_;
   base::WeakPtrFactory<BrowserManagementService> weak_ptr_factory_{this};
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 };

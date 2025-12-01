@@ -23,7 +23,8 @@ import {
   openFileWithLegacyTraceViewer,
 } from '../../frontend/legacy_trace_viewer';
 import {AppImpl} from '../../core/app_impl';
-import {addQueryResultsTab} from '../../public/lib/query_table/query_result_tab';
+import {addQueryResultsTab} from '../../components/query_table/query_result_tab';
+import {featureFlags} from '../../core/feature_flags';
 
 const SQL_STATS = `
 with first as (select started as ts from sqlstats limit 1)
@@ -91,6 +92,24 @@ group by
 order by total_self_size desc
 limit 100;`;
 
+const SHOW_OPEN_WITH_LEGACY_UI_BUTTON = featureFlags.register({
+  id: 'showOpenWithLegacyUiButton',
+  name: 'Show "Open with legacy UI" button',
+  description: 'Show "Open with legacy UI" button in the sidebar',
+  defaultValue: false,
+});
+
+function getOrPromptForTimestamp(tsRaw: unknown): time | undefined {
+  if (exists(tsRaw)) {
+    if (typeof tsRaw !== 'bigint') {
+      throw Error(`${tsRaw} is not a bigint`);
+    }
+    return Time.fromRaw(tsRaw);
+  }
+  // No args passed, probably run from the command palette.
+  return promptForTimestamp('Enter a timestamp');
+}
+
 export default class implements PerfettoPlugin {
   static readonly id = 'perfetto.CoreCommands';
   static onActivate(ctx: App) {
@@ -137,11 +156,13 @@ export default class implements PerfettoPlugin {
         input.click();
       },
     });
-    ctx.sidebar.addMenuItem({
-      commandId: OPEN_LEGACY_COMMAND_ID,
-      section: 'navigation',
-      icon: 'filter_none',
-    });
+    if (SHOW_OPEN_WITH_LEGACY_UI_BUTTON.get()) {
+      ctx.sidebar.addMenuItem({
+        commandId: OPEN_LEGACY_COMMAND_ID,
+        section: 'navigation',
+        icon: 'filter_none',
+      });
+    }
   }
 
   async onTraceLoad(ctx: Trace): Promise<void> {
@@ -240,17 +261,22 @@ export default class implements PerfettoPlugin {
       id: 'perfetto.CoreCommands#PanToTimestamp',
       name: 'Pan to timestamp',
       callback: (tsRaw: unknown) => {
-        if (exists(tsRaw)) {
-          if (typeof tsRaw !== 'bigint') {
-            throw Error(`${tsRaw} is not a bigint`);
-          }
-          ctx.timeline.panToTimestamp(Time.fromRaw(tsRaw));
-        } else {
-          // No args passed, probably run from the command palette.
-          const ts = promptForTimestamp('Enter a timestamp');
-          if (exists(ts)) {
-            ctx.timeline.panToTimestamp(Time.fromRaw(ts));
-          }
+        const ts = getOrPromptForTimestamp(tsRaw);
+        if (ts !== undefined) {
+          ctx.timeline.panToTimestamp(ts);
+        }
+      },
+    });
+
+    ctx.commands.registerCommand({
+      id: 'perfetto.CoreCommands#MarkTimestamp',
+      name: 'Mark timestamp',
+      callback: (tsRaw: unknown) => {
+        const ts = getOrPromptForTimestamp(tsRaw);
+        if (ts !== undefined) {
+          ctx.notes.addNote({
+            timestamp: ts,
+          });
         }
       },
     });
@@ -267,7 +293,7 @@ export default class implements PerfettoPlugin {
       id: 'createNewEmptyWorkspace',
       name: 'Create new empty workspace',
       callback: async () => {
-        const workspaces = AppImpl.instance.trace?.workspaces;
+        const workspaces = ctx.workspaces;
         if (workspaces === undefined) return; // No trace loaded.
         const name = await ctx.omnibox.prompt('Give it a name...');
         if (name === undefined || name === '') return;
@@ -279,17 +305,12 @@ export default class implements PerfettoPlugin {
       id: 'switchWorkspace',
       name: 'Switch workspace',
       callback: async () => {
-        const workspaces = AppImpl.instance.trace?.workspaces;
+        const workspaces = ctx.workspaces;
         if (workspaces === undefined) return; // No trace loaded.
-        const options = workspaces.all.map((ws) => {
-          return {key: ws.id, displayName: ws.title};
+        const workspace = await ctx.omnibox.prompt('Choose a workspace...', {
+          values: workspaces.all,
+          getName: (ws) => ws.title,
         });
-        const workspaceId = await ctx.omnibox.prompt(
-          'Choose a workspace...',
-          options,
-        );
-        if (workspaceId === undefined) return;
-        const workspace = workspaces.all.find((ws) => ws.id === workspaceId);
         if (workspace) {
           workspaces.switchWorkspace(workspace);
         }

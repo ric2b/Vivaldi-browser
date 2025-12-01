@@ -23,7 +23,7 @@
 <translation id="1451375123200651445">Rûpela Tevnê, Pelê Tenê</translation>
 <translation id="1465176863081977902">Navnîşana dengê j&amp;ê bigire</translation>
 <translation id="1476607407192946488">&amp;Sazkariyên zimên</translation>
-<translation id="1546280085599573572">Pêvekê malper guherand a ku gava tu li ser bişkoka malê ditikînî û diherî wê.</translation>
+<translation id="1546280085599573572">Pêvekê malper guherand a ku dema tu li ser bişkoka malê ditikînî û diherî wê.</translation>
 <translation id="1552752544932680961">Pêvekan bi rê ve bibe</translation>
 <translation id="15662109988763471">Çapkera hilbijartî ne amade ye an jî rast nayê sazkirin. Çapkera xwe kontrol bike an jî hewl bide çapkereke din hilbijêre.</translation>
 <translation id="1588438908519853928">Normal</translation>
@@ -35,7 +35,7 @@
 <translation id="1682548588986054654">Çarçoveya nû ya veşartî</translation>
 <translation id="1708338024780164500">(Neçalak)</translation>
 <translation id="1723824996674794290">&amp;Çarçoveya nû</translation>
-<translation id="1729533290416704613">Bi ser de, gava ku tu li ser Omnibox-ê lêgerînê dikî, rûpela ku xuya dikî, kontrol dike.</translation>
+<translation id="1729533290416704613">Bi ser de, dema ku tu li ser Omnibox-ê lêgerînê dikî, rûpela ku xuya dikî, kontrol dike.</translation>
 <translation id="174123615272205933">Kesanekirî</translation>
 <translation id="1744108098763830590">rûpela paşrûyê</translation>
 <translation id="176587472219019965">&amp;Çarçoveya nû</translation>
@@ -47,7 +47,7 @@
 <translation id="1886996562706621347">Mafê bide malperan ên ku dipirsin bibin protokolên nermalavê (tê pêşniyazkirin)</translation>
 <translation id="1901303067676059328">Hemûyan hilbijêre</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
-<translation id="1936931585862840749">Ji bo çapkirinê hejmara jêgirtinê binivîse (1 heya <ph name="MAX_COPIES" />).</translation>
+<translation id="1936931585862840749">Ji bo çapkirinê jimara jêgirtinê binivîse (1 heya <ph name="MAX_COPIES" />).</translation>
 <translation id="2019718679933488176">&amp;Di rûgera nû de deng veke</translation>
 <translation id="2050339315714019657">Profîl</translation>
 <translation id="2076269580855484719">Vê pêvekê veşêre</translation>
@@ -80,7 +80,7 @@
 <translation id="2485422356828889247">Jê rake</translation>
 <translation id="2498539833203011245">Kêmkirin</translation>
 <translation id="2509495747794740764">Nirxa pîvanê divê di navbera 10 û 200 de be.</translation>
-<translation id="253557089021624350">Hejmarên zindî</translation>
+<translation id="253557089021624350">Jimarên zindî</translation>
 <translation id="2550212893339833758">Bîrgeha alegorkirî</translation>
 <translation id="2553440850688409052">Vê pêvekê veşêre</translation>
 <translation id="26224892172169984">Mafê nede tu malperan ên ku dixwazin protokolan bi rê ve bibin</translation>
@@ -166,7 +166,7 @@
 <translation id="4165986682804962316">Sazkariyên malperê</translation>
 <translation id="4176463684765177261">Neçalak</translation>
 <translation id="4200983522494130825">&amp;Rûgera nû</translation>
-<translation id="4225397296022057997">Li ser hemû malperan</translation>
+<translation id="4225397296022057997">Li ser tevahiya malperan</translation>
 <translation id="4256316378292851214">Vîdyoyê tomar bike wekî...</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K zindî)</translation>
 <translation id="4345587454538109430">Pevsaz bike...</translation>
@@ -177,12 +177,12 @@
 <translation id="4478664379124702289">Girêdanê tomar bike wekî...</translation>
 <translation id="4595560905247879544">Sepan û pêvek tenê ji aliyê rêberê ve têne guhertin (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Pêvek guhertinekê pêk anî. Dê di rûgera nû de êdî rûpela wê vebe.</translation>
-<translation id="4616405296204756919">Tu dikarî pêboriyên tomarkirî li ser hemû amûran bi kar bînî. Ew li <ph name="VIVALDI_PASSWORD_MANAGER" /> hatine tomarkirin.</translation>
+<translation id="4616405296204756919">Tu dikarî pêboriyên tomarkirî li ser tevahiya amûran bi kar bînî. Ew li <ph name="VIVALDI_PASSWORD_MANAGER" /> hatine tomarkirin.</translation>
 <translation id="4643612240819915418">&amp;Di rûgera nû de vîdyoyê veke</translation>
 <translation id="4677772697204437347">Bîrgeha YKG-yê</translation>
 <translation id="4681930562518940301">Wêneya resen di rûgerekê nû de veke</translation>
 <translation id="4711638718396952945">Sazkariyan vegerîne</translation>
-<translation id="4726710629007580002">Di gava sazkirina vê pêvekê de hişyarî derdikeve:</translation>
+<translation id="4726710629007580002">Di dema sazkirina vê pêvekê de hişyarî derdikeve:</translation>
 <translation id="479536056609751218">Rûpela Tevnê, HTML Tenê</translation>
 <translation id="4827904420700932487">Koda QR ji bo vê wêneyê biafrîne</translation>
 <translation id="4839303808932127586">Vîdyoyê tomar bike wekî ...</translation>
@@ -208,7 +208,7 @@
 <translation id="5233019165164992427">Deriyê pirsgirêkan a rajegira xwecihî</translation>
 <translation id="5233231016133573565">Nasnameya pêvajoyê</translation>
 <translation id="5233736638227740678">&amp;Pêve bike</translation>
-<translation id="5256861893479663409">Li ser hemû malperan</translation>
+<translation id="5256861893479663409">Li ser tevahiya malperan</translation>
 <translation id="5260334392110301220">Dunikên jîr</translation>
 <translation id="5269977353971873915">Çapkirin biserneket</translation>
 <translation id="5284445933715251131">Daxistinê bidomîne</translation>
@@ -267,7 +267,7 @@
 <translation id="6295855836753816081">Tê tomarkirin ...</translation>
 <translation id="6308937455967653460">Girêdanê tomar bike wekî...</translation>
 <translation id="6315493146179903667">Hemûyan bîne pêş</translation>
-<translation id="6326855256003666642">Hejmarên zindî</translation>
+<translation id="6326855256003666642">Jimarên zindî</translation>
 <translation id="6374469231428023295">Dîsa biceribîne</translation>
 <translation id="6398765197997659313">Ji dîmendera tijî derkeve</translation>
 <translation id="6406303162637086258">Ji nû ve gerokê sîmule bike</translation>
@@ -304,7 +304,7 @@
 <translation id="7186088072322679094">Di alavbendê de bihêle</translation>
 <translation id="7287143125007575591">Têketin hat redkirin.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /><ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7385854874724088939">Gava çapkirinê tiştekî çewt pêk hat. Ji kerema xwe, çapkera xwe kontrol bike û dîsa biceribîne.</translation>
+<translation id="7385854874724088939">Dema çapkirinê tiştekî çewt pêk hat. Ji kerema xwe, çapkera xwe kontrol bike û dîsa biceribîne.</translation>
 <translation id="7412226954991670867">Bîrgeha YKG-yê</translation>
 <translation id="7421925624202799674">&amp;Çavkaniya rûpelê nîşan bide</translation>
 <translation id="7427348830195639090">Rûpela paşrûyê: <ph name="BACKGROUND_PAGE_URL" /></translation>
@@ -381,7 +381,7 @@ Pelê xwe yê kilîdê li cihekî ewle biparêze. Ji bo afirandina gohertoyekê 
 <translation id="895944840846194039">Bîrgeha JavaScript-ê</translation>
 <translation id="8962083179518285172">Hûrguliyan veşêre</translation>
 <translation id="8973557916016709913">Asta mezinahiyê rake</translation>
-<translation id="9003647077635673607">Mafê bide hemû malperan</translation>
+<translation id="9003647077635673607">Mafê bide tevahiya malperan</translation>
 <translation id="9027459031423301635">Girêdanê di rûgereke nû de veke</translation>
 <translation id="9056810968620647706">Tu girêdan nehat dîtin.</translation>
 <translation id="9084064520949870008">Wekî çarçove veke</translation>

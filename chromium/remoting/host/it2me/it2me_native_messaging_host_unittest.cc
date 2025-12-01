@@ -342,7 +342,7 @@ void It2MeNativeMessagingHostTest::SetUp() {
       base::BindOnce(&It2MeNativeMessagingHostTest::ExitTest,
                      base::Unretained(this)));
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   test_url_loader_factory_ = new network::TestSharedURLLoaderFactory();
 #endif
 
@@ -416,17 +416,17 @@ It2MeNativeMessagingHostTest::ReadMessageFromOutputPipe() {
       return std::nullopt;
     }
 
-    std::optional<base::Value> message = base::JSONReader::Read(message_json);
-    if (!message || !message->is_dict()) {
+    std::optional<base::Value::Dict> message =
+        base::JSONReader::ReadDict(message_json);
+    if (!message) {
       LOG(ERROR) << "Malformed message:" << message_json;
       return std::nullopt;
     }
 
-    base::Value::Dict result = std::move(*message).TakeDict();
     // If this is a debug message log, ignore it, otherwise return it.
-    const std::string* type = result.FindString(kMessageType);
+    const std::string* type = message->FindString(kMessageType);
     if (!type || *type != LogMessageHandler::kDebugMessageTypeName) {
-      return result;
+      return std::move(*message);
     }
   }
 }
@@ -705,7 +705,7 @@ TEST_F(It2MeNativeMessagingHostTest,
   connect_message.Set(kSuppressUserDialogs, true);
   WriteMessageToInputPipe(connect_message);
   VerifyConnectResponses(next_id);
-#if BUILDFLAG(IS_CHROMEOS_ASH) || !defined(NDEBUG)
+#if BUILDFLAG(IS_CHROMEOS) || !defined(NDEBUG)
   ASSERT_TRUE(get_chrome_os_enterprise_params().has_value());
   ASSERT_TRUE(get_chrome_os_enterprise_params()->suppress_user_dialogs);
 #else
@@ -724,7 +724,7 @@ TEST_F(It2MeNativeMessagingHostTest,
   connect_message.Set(kSuppressNotifications, true);
   WriteMessageToInputPipe(connect_message);
   VerifyConnectResponses(next_id);
-#if BUILDFLAG(IS_CHROMEOS_ASH) || !defined(NDEBUG)
+#if BUILDFLAG(IS_CHROMEOS) || !defined(NDEBUG)
   ASSERT_TRUE(get_chrome_os_enterprise_params().has_value());
   ASSERT_TRUE(get_chrome_os_enterprise_params()->suppress_notifications);
 #else
@@ -743,7 +743,7 @@ TEST_F(It2MeNativeMessagingHostTest,
   connect_message.Set(kTerminateUponInput, true);
   WriteMessageToInputPipe(connect_message);
   VerifyConnectResponses(next_id);
-#if BUILDFLAG(IS_CHROMEOS_ASH) || !defined(NDEBUG)
+#if BUILDFLAG(IS_CHROMEOS) || !defined(NDEBUG)
   ASSERT_TRUE(get_chrome_os_enterprise_params().has_value());
   ASSERT_TRUE(get_chrome_os_enterprise_params()->terminate_upon_input);
 #else
@@ -761,7 +761,7 @@ TEST_F(It2MeNativeMessagingHostTest,
   connect_message.Set(kIsEnterpriseAdminUser, true);
   WriteMessageToInputPipe(connect_message);
   VerifyConnectResponses(next_id);
-#if BUILDFLAG(IS_CHROMEOS_ASH) || !defined(NDEBUG)
+#if BUILDFLAG(IS_CHROMEOS) || !defined(NDEBUG)
   EXPECT_TRUE(factory_raw_ptr_->host->is_enterprise_session());
 #else
   EXPECT_FALSE(factory_raw_ptr_->host->is_enterprise_session());
@@ -779,7 +779,7 @@ TEST_F(It2MeNativeMessagingHostTest,
   connect_message.Set(kCurtainLocalUserSession, true);
   WriteMessageToInputPipe(connect_message);
   VerifyConnectResponses(next_id);
-#if BUILDFLAG(IS_CHROMEOS_ASH) || !defined(NDEBUG)
+#if BUILDFLAG(IS_CHROMEOS) || !defined(NDEBUG)
   ASSERT_TRUE(get_chrome_os_enterprise_params().has_value());
   ASSERT_TRUE(get_chrome_os_enterprise_params()->curtain_local_user_session);
 #else

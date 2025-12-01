@@ -1203,7 +1203,7 @@ from today's HTTP header block, with the following differences:
                 "POST", "HEAD", etc)
     *   ":path" - the url-path for this url with "/" prefixed. (See
                 [RFC3986](http://mbelshe.github.com/SPDY-Specification/draft-mbelshe-spdy-00.xml#RFC3986)).
-                For example, for "http://www.google.com/search?q=dogs" the path
+                For example, for "https://www.google.com/search?q=dogs" the path
                 would be "/search?q=dogs".
     *   ":version" - the HTTP version of this request (e.g. "HTTP/1.1")
 *   In addition, the following two name/value pairs must also be present
@@ -1427,7 +1427,7 @@ HEADERS frame for the same stream, the client must issue a stream error (Section
 If the server sends a HEADERS frame after sending a data frame for the same
 stream, the client MAY ignore the HEADERS frame. Ignoring the HEADERS frame
 after a data frame prevents handling of HTTP's trailing headers
-(http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.40).
+(https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.40).
 
 ---
 

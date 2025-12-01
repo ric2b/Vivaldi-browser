@@ -1,3 +1,128 @@
+Overview of changes leading to 10.2.0
+Saturday, January 11, 2025
+====================================
+- Consider Unicode Variation Selectors when subsetting “cmap” table.
+- Guard hb_cairo_glyphs_from_buffer() against malformed UTF-8 strings.
+- Fix incorrect “COLR” v1 glyph scaling in hb-cairo.
+- Use locale-independent parsing of double numbers is “hb-subset” command line
+  tool.
+- Fix incorrect zeroing of advance width of base glyphs in various “Courier New”
+  font versions due to incorrect “GDEF” glyph classes.
+- Fix handling of long language codes with “HB_LEAN” configuration.
+- Update OpenType language system registry.
+- Allow all Myanmar tone marks (including visarga) in any order
+- Don’t insert U+25CC DOTTED CIRCLE before superscript/subscript digits
+- Handle Garay script as right to left script.
+- New API for serializing font tables and potentially repacking them in optimal
+  way. This was a previously experimental-only API.
+- New API for converting font variation setting from and to strings.
+- Various build fixes
+- Various subsetter and instancer fixes.
+
+- New API:
++hb_subset_serialize_link_t
++hb_subset_serialize_object_t
++hb_subset_serialize_or_fail()
++hb_subset_axis_range_from_string()
++hb_subset_axis_range_to_string()
+
+
+Overview of changes leading to 10.1.0
+Tuesday, November 5, 2024
+====================================
+- Fix the sign of fallback vertical glyph advance (used when font has no
+  vertical advance data).
+- Increase maximum “CFF” operands limit 20 times to support more complex fonts.
+- Add “--face-loader” option to command line utilities.
+- Support “COLR” v0 table in hb_font_get_glyph_extents().
+- Add support for font functions that use Core Text APIs, similar to FreeType
+  font functions. This allows, for example, using drawing fonts that use the new
+  (and undocumented) “hvgl” table.
+- Update IANA and OT language registries, as well ase USE data files.
+- Fix build with ICU 76.
+- Various compiler warnings and build fixes.
+- Various subsetter fixes.
+
+- New API:
++hb_face_create_or_fail()
++hb_face_create_from_file_or_fail()
++hb_coretext_face_create_from_file_or_fail()
++hb_coretext_font_set_funcs()
++hb_ft_face_create_from_file_or_fail()
+
+Overview of changes leading to 10.0.1
+Tuesday, September 24, 2024
+====================================
+- Relax sanitization checks for “morx” subtables to fix broken AAT shaping of
+  macOS 15.0 version of GeezaPro.
+
+
+Overview of changes leading to 10.0.0
+Monday, September 23, 2024
+====================================
+- Unicode 16.0.0 support.
+- Various documentation fixes.
+- Various build fixes.
+- Add API to allow HarfBuzz client to set what glyph to use when a Unicode
+  Variation Selector is not supported by the font, which would allow the client
+  to customize what happens in this case, by using a different font for example.
+- Add a callback to for “hb_face_t” for getting the list of table tags. This is
+  now used to make calling “hb_face_get_table_tags()” work on a faces created by
+  “hb_face_create_for_tables()” (e.g. faces returned by “hb_subset_or_fail()”).
+- CGJ and Mongolian Variation Selectors are now ignored during glyph
+  positioning, previously they would block both glyph substitution and
+  positioning across them.
+- Support cairo script as an output format for “hb-view” command line tool.
+- Drop an optimization that would cause HarfBuzz not apply pair positioning
+  lookup subtables under certain circumstances, for compatibility with other
+  implementations that do apply these subtables.
+- Subsetting will now fail if source font has no glyphs, so feeding the subsetter
+  invalid data will not silently return an empty face.
+- If after partially instancing a font no variation data is left (the instance
+  is fully static), don’t consider this a failure.
+- Workaround a Firefox bug in displaying SVGs generated be “hb-view” command
+  line tool under certain circumstances.
+- Fix bug in macroman mapping for “cmap” table.
+- Fix difference shaping output when HarfBuzz is built with with
+  “HB_NO_OT_RULESETS_FAST_PATH” enabled.
+- Various subsetting and instancing fixes.
+- Various fuzzing fixes.
+- Add “with_libstdcxx” meson build option.
+
+
+- New API:
++HB_SCRIPT_GARAY
++HB_SCRIPT_GURUNG_KHEMA
++HB_SCRIPT_KIRAT_RAI
++HB_SCRIPT_OL_ONAL
++HB_SCRIPT_SUNUWAR
++HB_SCRIPT_TODHRI
++HB_SCRIPT_TULU_TIGALARI
++hb_buffer_set_not_found_variation_selector_glyph()
++hb_buffer_get_not_found_variation_selector_glyph()
++hb_get_table_tags_func_t
++hb_face_set_get_table_tags_func()
+
+
+Overview of changes leading to 9.0.0
+Thursday, Jun 27, 2024
+====================================
+- HarfBuzz now the supports the proposed new OpenType “VARC” table. This
+  replaces the previously supported “Variable Composites” experimental feature.
+  “VARC” support is still experimental and it is not enabled unless HarfBuzz is
+  built with experimental APIs enabled:
+  https://github.com/harfbuzz/boring-expansion-spec/blob/main/VARC.md
+- Autotools build system have been dropped. Meson is the only supported build
+  system in HarfBuzz going forward.
+- Speed up “AAT” shaping for short words by up to 4%.
+- Ignore unknown “CFF” operators.
+- “hb_subset_input_keep_everything()” now keeps also non-unicode “name” table
+  records.
+- Update the IANA and OpenType language tag registries.
+- Support composite glyphs with very large number of points in hb-draw API.
+- Various build fixes.
+
+
 Overview of changes leading to 8.5.0
 Monday, May 13, 2024
 ====================================
@@ -8,7 +133,7 @@ Monday, May 13, 2024
 - Various build fixes.
 - Various subsetter and instancer fixes.
 
-- New API
+- New API:
 +HB_SUBSET_FLAGS_OPTIMIZE_IUP_DELTAS
 +hb_subset_input_get_axis_range()
 +hb_subset_input_pin_axis_location()

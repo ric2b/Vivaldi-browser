@@ -29,14 +29,12 @@
  */
 
 import * as i18n from '../../core/i18n/i18n.js';
-
-import platformFontsWidgetStyles from './platformFontsWidget.css.js';
-
 import type * as SDK from '../../core/sdk/sdk.js';
-import * as UI from '../../ui/legacy/legacy.js';
 import type * as Protocol from '../../generated/protocol.js';
+import * as UI from '../../ui/legacy/legacy.js';
 
-import {Events, type ComputedStyleModel} from './ComputedStyleModel.js';
+import {type ComputedStyleModel, Events} from './ComputedStyleModel.js';
+import platformFontsWidgetStyles from './platformFontsWidget.css.js';
 
 const UIStrings = {
   /**
@@ -78,8 +76,10 @@ export class PlatformFontsWidget extends UI.ThrottledWidget.ThrottledWidget {
 
   constructor(sharedModel: ComputedStyleModel) {
     super(true);
+    this.registerRequiredCSS(platformFontsWidgetStyles);
 
     this.sharedModel = sharedModel;
+    this.sharedModel.addEventListener(Events.CSS_MODEL_CHANGED, this.update, this);
     this.sharedModel.addEventListener(Events.COMPUTED_STYLE_CHANGED, this.update, this);
 
     this.sectionTitle = document.createElement('div');
@@ -134,9 +134,5 @@ export class PlatformFontsWidget extends UI.ThrottledWidget.ThrottledWidget {
       const usage = platformFont.glyphCount;
       fontUsageElement.textContent = i18nString(UIStrings.dGlyphs, {n: usage});
     }
-  }
-  override wasShown(): void {
-    super.wasShown();
-    this.registerCSSFiles([platformFontsWidgetStyles]);
   }
 }

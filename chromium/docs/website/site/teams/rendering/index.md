@@ -211,7 +211,7 @@ compositing](https://bugs.chromium.org/p/chromium/issues/list?can=2&q=Component%
 ## Documentation
 
 For a high-level overview of the rendering pipeline please see the [Life of a
-Pixel](https://www.youtube.com/watch?v=w8lm4GV7ahg) ([slide
+Pixel](https://youtube.com/watch?v=w8lm4GV7ahg) ([slide
 deck](http://bit.ly/lifeofapixel)) talk that Steve Kobes gave a little while
 ago. It gives a very good overview and explains how the different steps in the
 pipeline work and interact with each other.

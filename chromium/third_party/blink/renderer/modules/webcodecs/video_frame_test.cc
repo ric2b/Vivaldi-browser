@@ -32,6 +32,7 @@
 #include "third_party/blink/renderer/modules/webcodecs/webcodecs_logger.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_resource_provider.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/shared_gpu_context.h"
+#include "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
 #include "third_party/blink/renderer/platform/graphics/test/gpu_test_utils.h"
 #include "third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
@@ -398,7 +399,8 @@ TEST_F(VideoFrameTest, VideoFrameFromGPUImageBitmap) {
 
   auto context_provider_wrapper = SharedGpuContext::ContextProviderWrapper();
   auto resource_provider = CanvasResourceProvider::CreateSharedImageProvider(
-      SkImageInfo::MakeN32Premul(100, 100), cc::PaintFlags::FilterQuality::kLow,
+      gfx::Size(100, 100), GetN32FormatForCanvas(), kPremul_SkAlphaType,
+      gfx::ColorSpace::CreateSRGB(),
       CanvasResourceProvider::ShouldInitialize::kNo, context_provider_wrapper,
       RasterMode::kGPU, gpu::SharedImageUsageSet());
 
@@ -586,33 +588,41 @@ TEST_F(VideoFrameTest, TestExternalAllocatedMemoryIsReportedCorrectlyOnClose) {
       gfx::Size(112, 208) /* coded_size */,
       gfx::Size(100, 200) /* visible_size */);
 
-  int64_t initial_external_memory =
-      scope.GetIsolate()->AdjustAmountOfExternalAllocatedMemory(0);
+  int64_t initial_external_memory = V8ExternalMemoryAccounterBase::
+      GetTotalAmountOfExternalAllocatedMemoryForTesting(scope.GetIsolate());
 
   VideoFrame* blink_frame =
       CreateBlinkVideoFrame(media_frame, scope.GetExecutionContext());
 
-  EXPECT_GT(scope.GetIsolate()->AdjustAmountOfExternalAllocatedMemory(0),
-            initial_external_memory);
+  EXPECT_GT(
+      V8ExternalMemoryAccounterBase::
+          GetTotalAmountOfExternalAllocatedMemoryForTesting(scope.GetIsolate()),
+      initial_external_memory);
 
   // Calling close should decrement externally allocated memory.
   blink_frame->close();
 
-  EXPECT_EQ(scope.GetIsolate()->AdjustAmountOfExternalAllocatedMemory(0),
-            initial_external_memory);
+  EXPECT_EQ(
+      V8ExternalMemoryAccounterBase::
+          GetTotalAmountOfExternalAllocatedMemoryForTesting(scope.GetIsolate()),
+      initial_external_memory);
 
   // Calling close another time should not decrement external memory twice.
   blink_frame->close();
 
-  EXPECT_EQ(scope.GetIsolate()->AdjustAmountOfExternalAllocatedMemory(0),
-            initial_external_memory);
+  EXPECT_EQ(
+      V8ExternalMemoryAccounterBase::
+          GetTotalAmountOfExternalAllocatedMemoryForTesting(scope.GetIsolate()),
+      initial_external_memory);
 
   blink_frame = nullptr;
   blink::WebHeap::CollectAllGarbageForTesting();
 
   // Check the destructor does not double decrement the external memory.
-  EXPECT_EQ(scope.GetIsolate()->AdjustAmountOfExternalAllocatedMemory(0),
-            initial_external_memory);
+  EXPECT_EQ(
+      V8ExternalMemoryAccounterBase::
+          GetTotalAmountOfExternalAllocatedMemoryForTesting(scope.GetIsolate()),
+      initial_external_memory);
 }
 
 TEST_F(VideoFrameTest,
@@ -624,20 +634,24 @@ TEST_F(VideoFrameTest,
       gfx::Size(112, 208) /* coded_size */,
       gfx::Size(100, 200) /* visible_size */);
 
-  int64_t initial_external_memory =
-      scope.GetIsolate()->AdjustAmountOfExternalAllocatedMemory(0);
+  int64_t initial_external_memory = V8ExternalMemoryAccounterBase::
+      GetTotalAmountOfExternalAllocatedMemoryForTesting(scope.GetIsolate());
 
   CreateBlinkVideoFrame(media_frame, scope.GetExecutionContext());
 
-  EXPECT_GT(scope.GetIsolate()->AdjustAmountOfExternalAllocatedMemory(0),
-            initial_external_memory);
+  EXPECT_GT(
+      V8ExternalMemoryAccounterBase::
+          GetTotalAmountOfExternalAllocatedMemoryForTesting(scope.GetIsolate()),
+      initial_external_memory);
 
   blink::WebHeap::CollectAllGarbageForTesting();
 
   // Check the destructor correctly decrements the reported
   // externally allocated memory  when close has not been called before.
-  EXPECT_EQ(scope.GetIsolate()->AdjustAmountOfExternalAllocatedMemory(0),
-            initial_external_memory);
+  EXPECT_EQ(
+      V8ExternalMemoryAccounterBase::
+          GetTotalAmountOfExternalAllocatedMemoryForTesting(scope.GetIsolate()),
+      initial_external_memory);
 }
 
 TEST_F(VideoFrameTest, MetadataBackgroundBlurIsExposedCorrectly) {

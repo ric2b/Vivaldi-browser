@@ -1,0 +1,28 @@
+# Copyright 2024 Vivaldi Technologies. All rights reserved.
+
+import("//build/config/ios/rules.gni")
+
+bundle_data_xcassets("assets") {
+  catalog = "Assets.xcassets"
+  sources = [
+    # logo_se_duckduckgo
+    "Assets.xcassets/logo_se_duckduckgo.imageset/Contents.json",
+    "Assets.xcassets/logo_se_duckduckgo.imageset/logo_se_duckduckgo.svg",
+
+    # logo_se_startpage
+    "Assets.xcassets/logo_se_startpage.imageset/Contents.json",
+    "Assets.xcassets/logo_se_startpage.imageset/logo_se_startpage.svg",
+
+    # logo_se_yahoo
+    "Assets.xcassets/logo_se_yahoo.imageset/Contents.json",
+    "Assets.xcassets/logo_se_yahoo.imageset/logo_se_yahoo.svg",
+
+    # logo_se_ecosia
+    "Assets.xcassets/logo_se_ecosia.imageset/Contents.json",
+    "Assets.xcassets/logo_se_ecosia.imageset/logo_se_ecosia.svg",
+
+    # logo_se_quant
+    "Assets.xcassets/logo_se_quant.imageset/Contents.json",
+    "Assets.xcassets/logo_se_quant.imageset/logo_se_quant.svg",
+  ]
+}

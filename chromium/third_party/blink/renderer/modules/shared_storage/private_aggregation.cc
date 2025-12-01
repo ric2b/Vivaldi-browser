@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 
+#include <algorithm>
 #include <bit>
 #include <iterator>
 #include <memory>
@@ -13,10 +14,7 @@
 #include <utility>
 
 #include "base/check.h"
-#include "base/feature_list.h"
-#include "base/ranges/algorithm.h"
 #include "third_party/abseil-cpp/absl/numeric/int128.h"
-#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/shared_storage/shared_storage_worklet_service.mojom-blink.h"
 #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-blink.h"
 #include "third_party/blink/public/platform/cross_variant_mojo_util.h"
@@ -99,9 +97,7 @@ void PrivateAggregation::contributeToHistogram(
   }
 
   std::optional<uint64_t> filtering_id;
-  if (contribution->hasFilteringId() &&
-      base::FeatureList::IsEnabled(
-          features::kPrivateAggregationApiFilteringIds)) {
+  if (contribution->hasFilteringId()) {
     EnsureFilteringIdUseCounterIsRecorded();
     std::optional<absl::uint128> filtering_id_128 =
         contribution->filteringId().ToUInt128();
@@ -128,7 +124,6 @@ void PrivateAggregation::contributeToHistogram(
     }
   }
 
-  // TODO(crbug.com/330744610): Allow filtering ID to be set.
   Vector<mojom::blink::AggregatableReportHistogramContributionPtr>
       mojom_contribution_vector;
   mojom_contribution_vector.push_back(
@@ -225,11 +220,11 @@ void PrivateAggregation::OnWorkletDestroyed() {
   // Ensure any unfinished operations are properly handled.
   Vector<int64_t> remaining_operation_ids;
   remaining_operation_ids.reserve(operation_states_.size());
-  base::ranges::transform(operation_states_,
-                          std::back_inserter(remaining_operation_ids),
-                          [](auto& elem) { return elem.key; });
+  std::ranges::transform(operation_states_,
+                         std::back_inserter(remaining_operation_ids),
+                         [](auto& elem) { return elem.key; });
 
-  base::ranges::for_each(remaining_operation_ids, [this](int64_t operation_id) {
+  std::ranges::for_each(remaining_operation_ids, [this](int64_t operation_id) {
     OnOperationFinished(operation_id);
   });
 

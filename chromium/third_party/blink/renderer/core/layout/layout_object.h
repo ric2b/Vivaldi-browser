@@ -732,16 +732,7 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   // Returns true if the LayoutObject is rendered in the top layer or the layer
   // for view transitions. Such objects are rendered as subsequent siblings of
   // the root element box and have specific stacking requirements.
-  bool IsInTopOrViewTransitionLayer() const {
-    NOT_DESTROYED();
-    if (IsViewTransitionRoot()) {
-      return true;
-    }
-    if (Element* element = DynamicTo<Element>(GetNode())) {
-      return StyleRef().IsRenderedInTopLayer(*element);
-    }
-    return false;
-  }
+  bool IsInTopOrViewTransitionLayer() const;
 
   void NotifyPriorityScrollAnchorStatusChanged();
 
@@ -1072,14 +1063,17 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   inline bool IsCheckContent() const;
   inline bool IsBeforeContent() const;
   inline bool IsAfterContent() const;
-  inline bool IsSelectArrowContent() const;
+  inline bool IsPickerIconContent() const;
   inline bool IsMarkerContent() const;
+  inline bool IsScrollButtonContent() const;
+  inline bool IsScrollMarkerContent() const;
+  inline bool IsScrollButtonOrMarkerContent() const;
   inline bool IsBeforeOrAfterContent() const;
   static inline bool IsAfterContent(const LayoutObject* obj) {
     return obj && obj->IsAfterContent();
   }
-  static inline bool IsSelectArrowContent(const LayoutObject* obj) {
-    return obj && obj->IsSelectArrowContent();
+  static inline bool IsPickerIconContent(const LayoutObject* obj) {
+    return obj && obj->IsPickerIconContent();
   }
 
   // Returns true if the text is generated (from, e.g., list marker,
@@ -1673,9 +1667,11 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
 
   bool IsRenderedLegendInternal() const;
 
+  bool IsScrollMarker() const;
   bool IsScrollMarkerGroup() const;
   bool IsScrollMarkerGroupBefore() const;
   LayoutObject* GetScrollMarkerGroup() const;
+  LayoutBlock* ScrollerFromScrollMarkerGroup() const;
 
   // Returns true if this object represents ::marker for the first SUMMARY
   // child of a DETAILS, and list-style-type is disclosure-*.
@@ -1851,17 +1847,17 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
            (position == EPosition::kFixed && CanContainFixedPositionObjects());
   }
 
-  // Returns true if style would make this object an absolute container. This
-  // value gets cached by bitfields_.can_contain_absolute_position_objects_.
-  //
-  // `style` should be the current :first-line style or the current normal
-  // style. This function doesn't work for old_style in StyleDidChange().
-  // Use CanContainAbsolutePositionObjects() for old_style.
-  bool ComputeIsAbsoluteContainer(const ComputedStyle* style) const;
-
   // Returns true if style would make this object a fixed container.
   // This value gets cached by bitfields_.can_contain_fixed_position_objects_.
-  bool ComputeIsFixedContainer(const ComputedStyle* style) const;
+  //
+  // This function doesn't work for old_style in StyleDidChange(). Use
+  // CanContainFixedPositionObjects() for old_style.
+  bool ComputeIsFixedContainer(const ComputedStyle& style) const;
+
+  // Returns true if style would make this object an absolute container. This
+  // value gets cached by bitfields_.can_contain_absolute_position_objects_.
+  bool ComputeIsAbsoluteContainer(const ComputedStyle& style,
+                                  bool is_fixed_container) const;
 
   // If |base| is provided, then this function will not return an Element which
   // is closed shadow hidden from |base|.
@@ -2403,10 +2399,14 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
     return AncestorToLocalPoint(nullptr, p, mode);
   }
 
-  // Return the offset from the container() layoutObject (excluding transforms
-  // and multicol).
-  PhysicalOffset OffsetFromContainer(const LayoutObject*,
-                                     MapCoordinatesFlags = 0) const;
+  // Return the offset from the Container() LayoutObject (excluding transforms
+  // and multicol). For efficiency reasons, the container is supplied as a
+  // parameter. It is however required that it be equal to Container().
+  PhysicalOffset OffsetFromContainer(const LayoutObject* container,
+                                     MapCoordinatesFlags mode = 0) const {
+    NOT_DESTROYED();
+    return OffsetFromContainerInternal(container, mode);
+  }
   // Return the offset from an object from the ancestor. The ancestor need
   // not be on the containing block chain of |this|. Note that this function
   // cannot be used when there are transforms between this object and the
@@ -2666,6 +2666,7 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   void NotifyImageFullyRemoved(ImageResourceContent*) override;
   bool WillRenderImage() final;
   bool GetImageAnimationPolicy(mojom::blink::ImageAnimationPolicy&) final;
+  InterpolationQuality GetSpeculativeDecodeQuality() const final;
 
   void Remove() {
     NOT_DESTROYED();
@@ -3339,6 +3340,15 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   }
   void SetSVGDescendantMayHaveTransformRelatedAnimation();
 
+  bool HasViewportDependence() const {
+    NOT_DESTROYED();
+    return bitfields_.HasViewportDependence();
+  }
+  void SetHasViewportDependence(bool b) {
+    NOT_DESTROYED();
+    bitfields_.SetHasViewportDependence(b);
+  }
+
   bool SVGSelfOrDescendantHasViewportDependency() const {
     NOT_DESTROYED();
     return bitfields_.SVGSelfOrDescendantHasViewportDependency();
@@ -3489,7 +3499,7 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
       const LayoutObject*,
       MapCoordinatesFlags mode) const;
   PhysicalOffset OffsetFromScrollableContainer(const LayoutObject*,
-                                               bool ignore_scroll_offset) const;
+                                               MapCoordinatesFlags mode) const;
 
   virtual void QuadsInAncestorInternal(Vector<gfx::QuadF>&,
                                        const LayoutBoxModelObject* ancestor,
@@ -3599,6 +3609,10 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
 
   LayoutFlowThread* LocateFlowThreadContainingBlock() const;
   void RemoveFromLayoutFlowThreadRecursive(LayoutFlowThread*);
+
+  // Returns `true` if the LayoutObject is for the specified pseudo-element
+  // type.
+  inline bool IsPseudoElementContent(PseudoId pseudo_id) const;
 
   // It's unclear why Clang doesn't inline this.
   ALWAYS_INLINE
@@ -4052,6 +4066,10 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
                          SVGDescendantMayHaveTransformRelatedAnimation);
 
     // For SVG objects, indicates if this object or any descendant depends on
+    // the dimensions of the viewport. Updated during layout.
+    ADD_BOOLEAN_BITFIELD(has_viewport_dependence_, HasViewportDependence);
+
+    // For SVG objects, indicates if this object or any descendant depends on
     // the dimensions of the viewport.
     ADD_BOOLEAN_BITFIELD(svg_self_or_descendant_has_viewport_dependency_,
                          SVGSelfOrDescendantHasViewportDependency);
@@ -4149,6 +4167,11 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
 #endif
 };
 
+template <typename T>
+struct ThreadingTrait<T, std::enable_if_t<std::is_base_of_v<LayoutObject, T>>> {
+  static constexpr ThreadAffinity kAffinity = kMainThreadOnly;
+};
+
 // Allow equality comparisons of LayoutObjects by reference or pointer,
 // interchangeably.
 DEFINE_COMPARISON_OPERATORS_WITH_REFERENCES(LayoutObject)
@@ -4157,8 +4180,8 @@ inline bool LayoutObject::DocumentBeingDestroyed() const {
   return GetDocument().Lifecycle().GetState() >= DocumentLifecycle::kStopping;
 }
 
-inline bool LayoutObject::IsCheckContent() const {
-  if (StyleRef().StyleType() != kPseudoIdCheck) {
+inline bool LayoutObject::IsPseudoElementContent(PseudoId pseudo_id) const {
+  if (StyleRef().StyleType() != pseudo_id) {
     return false;
   }
   // Text nodes don't have their own styles, so ignore the style on a text node.
@@ -4166,28 +4189,34 @@ inline bool LayoutObject::IsCheckContent() const {
     return false;
   }
   return true;
+}
+
+inline bool LayoutObject::IsCheckContent() const {
+  return IsPseudoElementContent(kPseudoIdCheckMark);
 }
 
 inline bool LayoutObject::IsBeforeContent() const {
-  if (StyleRef().StyleType() != kPseudoIdBefore)
-    return false;
-  // Text nodes don't have their own styles, so ignore the style on a text node.
-  if (IsText() && !IsBR())
-    return false;
-  return true;
+  return IsPseudoElementContent(kPseudoIdBefore);
 }
 
 inline bool LayoutObject::IsAfterContent() const {
-  if (StyleRef().StyleType() != kPseudoIdAfter)
-    return false;
-  // Text nodes don't have their own styles, so ignore the style on a text node.
-  if (IsText() && !IsBR())
-    return false;
-  return true;
+  return IsPseudoElementContent(kPseudoIdAfter);
 }
 
-inline bool LayoutObject::IsSelectArrowContent() const {
-  if (StyleRef().StyleType() != kPseudoIdSelectArrow) {
+inline bool LayoutObject::IsPickerIconContent() const {
+  return IsPseudoElementContent(kPseudoIdPickerIcon);
+}
+
+inline bool LayoutObject::IsMarkerContent() const {
+  return IsPseudoElementContent(kPseudoIdMarker);
+}
+
+inline bool LayoutObject::IsScrollButtonContent() const {
+  if (StyleRef().StyleType() != kPseudoIdScrollButton &&
+      StyleRef().StyleType() != kPseudoIdScrollButtonBlockStart &&
+      StyleRef().StyleType() != kPseudoIdScrollButtonInlineStart &&
+      StyleRef().StyleType() != kPseudoIdScrollButtonInlineEnd &&
+      StyleRef().StyleType() != kPseudoIdScrollButtonBlockEnd) {
     return false;
   }
   // Text nodes don't have their own styles, so ignore the style on a text node.
@@ -4197,13 +4226,12 @@ inline bool LayoutObject::IsSelectArrowContent() const {
   return true;
 }
 
-inline bool LayoutObject::IsMarkerContent() const {
-  if (StyleRef().StyleType() != kPseudoIdMarker)
-    return false;
-  // Text nodes don't have their own styles, so ignore the style on a text node.
-  if (IsText() && !IsBR())
-    return false;
-  return true;
+inline bool LayoutObject::IsScrollMarkerContent() const {
+  return IsPseudoElementContent(kPseudoIdScrollMarker);
+}
+
+inline bool LayoutObject::IsScrollButtonOrMarkerContent() const {
+  return IsScrollButtonContent() || IsScrollMarkerContent();
 }
 
 inline bool LayoutObject::IsBeforeOrAfterContent() const {

@@ -42,9 +42,7 @@ class MockBrowserViewLayoutDelegate : public BrowserViewLayoutDelegate {
   void set_should_draw_tab_strip(bool visible) {
     should_draw_tab_strip_ = visible;
   }
-  void set_toolbar_visible(bool visible) {
-    toolbar_visible_ = visible;
-  }
+  void set_toolbar_visible(bool visible) { toolbar_visible_ = visible; }
   void set_bookmark_bar_visible(bool visible) {
     bookmark_bar_visible_ = visible;
   }
@@ -175,7 +173,7 @@ class BrowserViewLayoutTest : public ChromeViewsTestBase {
   BrowserViewLayoutTest(const BrowserViewLayoutTest&) = delete;
   BrowserViewLayoutTest& operator=(const BrowserViewLayoutTest&) = delete;
 
-  ~BrowserViewLayoutTest() override {}
+  ~BrowserViewLayoutTest() override = default;
 
   BrowserViewLayout* layout() { return layout_; }
   MockBrowserViewLayoutDelegate* delegate() { return delegate_; }
@@ -224,15 +222,18 @@ class BrowserViewLayoutTest : public ChromeViewsTestBase {
     devtools_web_view_->SetVisible(false);
     contents_web_view_ = contents_container_->AddChildView(
         CreateFixedSizeView(gfx::Size(800, 600)));
+    contents_scrim_view_ = contents_container_->AddChildView(
+        CreateFixedSizeView(gfx::Size(800, 600)));
     contents_container_->SetLayoutManager(
-        std::make_unique<ContentsLayoutManager>(devtools_web_view_,
-                                                contents_web_view_));
+        std::make_unique<ContentsLayoutManager>(
+            devtools_web_view_, contents_web_view_, contents_scrim_view_,
+            /*contents_border_view=*/nullptr, /*watermark_view=*/nullptr));
 
     auto delegate = std::make_unique<MockBrowserViewLayoutDelegate>();
     delegate_ = delegate.get();
     auto layout = std::make_unique<BrowserViewLayout>(
         std::move(delegate),
-        /*browser_view=*/nullptr, top_container_,
+        /*browser_view=*/nullptr, /*window_scrim=*/nullptr, top_container_,
         /*web_app_frame_toolbar=*/nullptr,
         /*web_app_window_title=*/nullptr, tab_strip_region_view, tab_strip_,
         toolbar_, infobar_container_, contents_container_,
@@ -244,6 +245,13 @@ class BrowserViewLayoutTest : public ChromeViewsTestBase {
     layout->set_webui_tab_strip(webui_tab_strip());
     layout_ = layout.get();
     browser_view_->SetLayoutManager(std::move(layout));
+  }
+
+  void TearDown() override {
+    // Avoid dangling pointers.
+    layout_ = nullptr;
+    browser_view_->SetLayoutManager(nullptr);
+    ChromeViewsTestBase::TearDown();
   }
 
   // For the purposes of this test, boolean values are directly set on a
@@ -272,6 +280,7 @@ class BrowserViewLayoutTest : public ChromeViewsTestBase {
   raw_ptr<views::View> contents_container_;
   raw_ptr<views::View> contents_web_view_;
   raw_ptr<views::View> devtools_web_view_;
+  raw_ptr<views::View> contents_scrim_view_;
 
   std::unique_ptr<MockImmersiveModeController> immersive_mode_controller_;
 };
@@ -339,6 +348,9 @@ TEST_F(BrowserViewLayoutTest, LayoutDownloadShelf) {
   constexpr int kTop = kBottom - kHeight;
   EXPECT_EQ(kTop, layout()->LayoutDownloadShelf(kBottom));
   EXPECT_EQ(gfx::Rect(0, kTop, 0, kHeight), download_shelf->bounds());
+
+  // avoid dangling pointer.
+  layout()->set_download_shelf(nullptr);
 }
 
 TEST_F(BrowserViewLayoutTest, LayoutContentsWithTopControlsSlideBehavior) {

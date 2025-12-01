@@ -40,6 +40,7 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/notreached.h"
 #include "base/strings/strcat.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
@@ -363,6 +364,26 @@ int CompareResourcePriorities(const ResourcePriority& a,
     return a.is_lcp_resource ? 1 : -1;
   }
   return a.intra_priority_value - b.intra_priority_value;
+}
+
+Resource* PopHighestPriorityDecodableResource(
+    HeapHashSet<WeakMember<Resource>>& resources) {
+  Resource* result = nullptr;
+  for (Resource* resource : resources) {
+    const ResourcePriority& priority = resource->PriorityFromObservers().first;
+    if (priority.visibility != ResourcePriority::kVisible ||
+        !resource->HasNonDegenerateSizeForDecode()) {
+      continue;
+    }
+    if (!result || CompareResourcePriorities(
+                       priority, result->PriorityFromObservers().first) > 0) {
+      result = resource;
+    }
+  }
+  if (result) {
+    resources.erase(result);
+  }
+  return result;
 }
 
 }  // namespace
@@ -926,13 +947,12 @@ void ResourceFetcher::DidLoadResourceFromMemoryCache(
                                   resource->GetResponse());
   }
 
-  // Only call ResourceLoadObserver callbacks for placeholder images when
-  // devtools is opened to get maximum performance.
-  // TODO(crbug.com/41496436): Explore optimizing this in general for
-  // `is_static_data`.
-  if (!IsSimplifyLoadingTransparentPlaceholderImageEnabled() ||
-      (request.GetKnownTransparentPlaceholderImageIndex() == kNotFound) ||
-      (resource_load_observer_->InterestedInAllRequests())) {
+  // Only call ResourceLoadObserver callbacks when devtools is opened to get
+  // maximum performance.
+  if (!(RuntimeEnabledFeatures::SkipCallbacksWhenDevToolsNotOpenEnabled() ||
+        (IsSimplifyLoadingTransparentPlaceholderImageEnabled() &&
+         request.GetKnownTransparentPlaceholderImageIndex() != kNotFound)) ||
+      resource_load_observer_->InterestedInAllRequests()) {
     resource_load_observer_->WillSendRequest(
         request, ResourceResponse() /* redirects */, resource->GetType(),
         resource->Options(), render_blocking_behavior, resource);
@@ -1103,8 +1123,8 @@ Resource* ResourceFetcher::CreateResourceForStaticData(
       break;
 
     default:
-      CHECK(false) << "Unexpected resource status: "
-                   << (int)resource->GetStatus();
+      NOTREACHED() << "Unexpected resource status: "
+                   << static_cast<int>(resource->GetStatus());
   }
 
   AddToMemoryCacheIfNeeded(params, resource);
@@ -1392,20 +1412,30 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
   // MHTML archives do not load from the network and must load immediately. Data
   // urls can also load immediately, except in cases when they should be
   // deferred.
+
+  bool is_data_url_in_preloads_list = false;
   if (!is_stale_revalidation &&
       (archive_ || (is_data_url && defer_policy != DeferPolicy::kDefer))) {
-    prepare_helper.UpgradeForLoaderIfNecessary(pauser);
-    resource = CreateResourceForStaticData(params, factory);
-    if (resource) {
-      policy =
-          DetermineRevalidationPolicy(resource_type, params, *resource, true);
-    } else if (!is_data_url && archive_) {
-      // Abort the request if the archive doesn't contain the resource, except
-      // in the case of data URLs which might have resources such as fonts that
-      // need to be decoded only on demand. These data URLs are allowed to be
-      // processed using the normal ResourceFetcher machinery.
-      return ResourceForBlockedRequest(
-          params, factory, ResourceRequestBlockedReason::kOther, client);
+    if (RuntimeEnabledFeatures::PreloadLinkRelDataUrlsEnabled() &&
+        is_data_url) {
+      is_data_url_in_preloads_list =
+          preloads_.find(PreloadKey(params.Url(), resource_type)) !=
+          preloads_.end();
+    }
+    if (!is_data_url_in_preloads_list) {
+      prepare_helper.UpgradeForLoaderIfNecessary(pauser);
+      resource = CreateResourceForStaticData(params, factory);
+      if (resource) {
+        policy =
+            DetermineRevalidationPolicy(resource_type, params, *resource, true);
+      } else if (!is_data_url && archive_) {
+        // Abort the request if the archive doesn't contain the resource, except
+        // in the case of data URLs which might have resources such as fonts
+        // that need to be decoded only on demand. These data URLs are allowed
+        // to be processed using the normal ResourceFetcher machinery.
+        return ResourceForBlockedRequest(
+            params, factory, ResourceRequestBlockedReason::kOther, client);
+      }
     }
   }
 
@@ -1415,8 +1445,9 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
 
   if (!is_stale_revalidation && !resource) {
     if (!prepare_helper.WasUpgradeForLoaderCalled() &&
-        preloads_.find(PreloadKey(params.Url(), resource_type)) !=
-            preloads_.end()) {
+        (is_data_url_in_preloads_list ||
+         preloads_.find(PreloadKey(params.Url(), resource_type)) !=
+             preloads_.end())) {
       prepare_helper.UpgradeForLoaderIfNecessary(pauser);
     }
     resource = MatchPreload(params, resource_type);
@@ -1574,7 +1605,16 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
     ScheduleLoadingPotentiallyUnusedPreload(resource);
   }
 
-  if (policy != RevalidationPolicy::kUse) {
+  if (policy != RevalidationPolicy::kUse ||
+      (RuntimeEnabledFeatures::PreloadLinkRelDataUrlsEnabled() && is_data_url &&
+       defer_policy != DeferPolicy::kDefer && params.IsLinkPreload())) {
+    // If `resource` needs to be loaded, or is a data URL preloaded via a link
+    // element, and not a potentially unused preload, store it in the preloads
+    // list.
+    // Note: params.IsLinkPreload() indicates that this request was initiated
+    // from a `link rel=preload`, as opposed to resource->IsLinkPreload()
+    // which is also true if the resource was originally from a
+    // `link rel=preload` in a previous request.
     InsertAsPreloadIfNecessary(resource, params, resource_type);
   }
 
@@ -2757,18 +2797,18 @@ void ResourceFetcher::SetDefersLoading(LoaderFreezeMode mode) {
   }
 }
 
-void ResourceFetcher::UpdateAllImageResourcePriorities() {
-  TRACE_EVENT0(
-      "blink",
-      "ResourceLoadPriorityOptimizer::updateAllImageResourcePriorities");
+void ResourceFetcher::UpdateImagePrioritiesAndSpeculativeDecodes() {
+  TRACE_EVENT0("blink",
+               "ResourceLoadPriorityOptimizer::"
+               "UpdateImagePrioritiesAndSpeculativeDecodes");
 
-  // Force all images to update their LastComputedPriority.
+  // Update ResourcePriority for all resources.
   for (Resource* resource : speculative_decode_candidate_images_) {
-    resource->PriorityFromObservers();
+    resource->UpdateResourceInfoFromObservers();
   }
   speculative_decode_candidate_images_.erase_if(
       [](const WeakMember<Resource>& resource) -> bool {
-        return resource->LastComputedPriority().visibility ==
+        return resource->PriorityFromObservers().first.visibility ==
                ResourcePriority::kNotVisible;
       });
   MaybeStartSpeculativeImageDecode();
@@ -2784,6 +2824,7 @@ void ResourceFetcher::UpdateAllImageResourcePriorities() {
       continue;
     }
 
+    resource->UpdateResourceInfoFromObservers();
     auto priorities = resource->PriorityFromObservers();
     ResourcePriority resource_priority = priorities.first;
     ResourceLoadPriority computed_load_priority = ComputeLoadPriority(
@@ -3165,25 +3206,19 @@ void ResourceFetcher::MaybeStartSpeculativeImageDecode() {
     return;
   }
   // Find the highest priority image to decode.
-  Resource* image_to_decode = nullptr;
-  for (Resource* resource : speculative_decode_candidate_images_) {
-    const ResourcePriority& priority = resource->LastComputedPriority();
-    if (priority.visibility != ResourcePriority::kVisible) {
-      continue;
+  while (true) {
+    Resource* image_to_decode = PopHighestPriorityDecodableResource(
+        speculative_decode_candidate_images_);
+    if (!image_to_decode) {
+      break;
     }
-    if (!image_to_decode ||
-        CompareResourcePriorities(
-            priority, image_to_decode->LastComputedPriority()) > 0) {
-      image_to_decode = resource;
+    if (Context().StartSpeculativeImageDecode(
+            image_to_decode,
+            WTF::BindOnce(&ResourceFetcher::SpeculativeImageDecodeFinished,
+                          WrapWeakPersistent(this)))) {
+      speculative_decode_in_flight_ = true;
+      break;
     }
-  }
-  if (image_to_decode) {
-    speculative_decode_candidate_images_.erase(image_to_decode);
-    Context().StartSpeculativeImageDecode(
-        image_to_decode,
-        WTF::BindOnce(&ResourceFetcher::SpeculativeImageDecodeFinished,
-                      WrapWeakPersistent(this)));
-    speculative_decode_in_flight_ = true;
   }
 }
 

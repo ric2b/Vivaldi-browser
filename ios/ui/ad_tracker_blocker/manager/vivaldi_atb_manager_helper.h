@@ -5,23 +5,24 @@
 
 #import <Foundation/Foundation.h>
 
-@interface ATBSourceTitleAndOrigin: NSObject
+@interface ATBSourceTitleAndOrigin : NSObject
 
-@property (nonatomic, copy, readonly) NSString* title;
-@property (nonatomic, assign, readonly) NSInteger stringId;
+@property(nonatomic, copy, readonly) NSString* title;
+@property(nonatomic, assign, readonly) NSInteger stringId;
 
-- (instancetype)initWithTitle:(NSString*)title
-                     stringId:(NSInteger)stringId;
+- (instancetype)initWithTitle:(NSString*)title stringId:(NSInteger)stringId;
 
 @end
 
-@interface VivaldiATBManagerHelper: NSObject
+@interface VivaldiATBManagerHelper : NSObject
 
-@property (nonatomic,strong,readonly)
-    NSDictionary<NSString*, ATBSourceTitleAndOrigin*> *sourcesMap;
+@property(nonatomic, strong, readonly)
+    NSDictionary<NSString*, ATBSourceTitleAndOrigin*>* sourcesMap;
 
 - (instancetype)init;
-- (NSString*)titleForSourceForKey:(NSString*)key;
+- (NSString*)titleForSourceForKey:(NSString*)key
+                        sourceURL:(NSString*)sourceURL
+                      unsafeTitle:(NSString*)unsafeTitle;
 
 @end
 

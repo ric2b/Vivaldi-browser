@@ -49,7 +49,7 @@ Debugging tools:
     The flip server is a fully implemented SPDY server or SPDY-to-HTTP gateway.
     Full source is available in the chromium tree at net/tools/flip_server. You
     can read more about it here:
-    <http://www.chromium.org/spdy/running_flipinmemserver>
+    <https://www.chromium.org/spdy/running_flipinmemserver>
 *   Wireshark SPDY extension
     The wireshark extension needs some love. You'll find it checked into the
     chromium source tree under net/tools.

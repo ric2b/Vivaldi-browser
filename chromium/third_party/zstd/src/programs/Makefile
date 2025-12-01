@@ -388,7 +388,7 @@ datarootdir ?= $(PREFIX)/share
 mandir      ?= $(datarootdir)/man
 man1dir     ?= $(mandir)/man1
 
-ifneq (,$(filter OpenBSD FreeBSD NetBSD DragonFly SunOS,$(UNAME)))
+ifneq (,$(filter OpenBSD NetBSD DragonFly SunOS,$(UNAME)))
   MANDIR  ?= $(PREFIX)/man
   MAN1DIR ?= $(MANDIR)/man1
 else

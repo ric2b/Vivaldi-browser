@@ -139,6 +139,8 @@ if (enable_pdf) {
       "pdfium/pdfium_print.h",
       "pdfium/pdfium_range.cc",
       "pdfium/pdfium_range.h",
+      "pdfium/pdfium_text_fragment_finder.cc",
+      "pdfium/pdfium_text_fragment_finder.h",
       "pdfium/pdfium_unsupported_features.cc",
       "pdfium/pdfium_unsupported_features.h",
       "preview_mode_client.cc",
@@ -228,6 +230,8 @@ if (enable_pdf) {
         "pdf_ink_cursor.cc",
         "pdf_ink_cursor.h",
         "pdf_ink_ids.h",
+        "pdf_ink_metrics_handler.cc",
+        "pdf_ink_metrics_handler.h",
         "pdf_ink_module.cc",
         "pdf_ink_module.h",
         "pdf_ink_module_client.h",
@@ -323,6 +327,7 @@ if (enable_pdf) {
 
     deps = [
       "//base",
+      "//services/screen_ai/buildflags",
       "//skia",
       "//ui/gfx/geometry",
     ]
@@ -441,6 +446,7 @@ if (enable_pdf) {
       "pdfium/pdfium_test_base.h",
       "pdfium/pdfium_test_helpers.cc",
       "pdfium/pdfium_test_helpers.h",
+      "pdfium/pdfium_text_fragment_finder_unittest.cc",
       "test/run_all_unittests.cc",
       "ui/document_properties_unittest.cc",
       "ui/file_name_unittest.cc",

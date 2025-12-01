@@ -46,6 +46,7 @@
 #include "ui/base/page_transition_types.h"
 #include "url/third_party/mozilla/url_parse.h"
 #include "url/url_util.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 namespace {
 constexpr int kAndroidHubMaxMatches = 5;
@@ -61,6 +62,17 @@ void HistoryQuickProvider::Start(const AutocompleteInput& input,
                                  bool minimal_changes) {
   TRACE_EVENT0("omnibox", "HistoryQuickProvider::Start");
   matches_.clear();
+
+#if defined(VIVALDI_BUILD)
+  PrefService* prefs = client()->GetPrefs();
+  auto show_search =
+      prefs->GetBoolean(vivaldiprefs::kAddressBarOmniboxShowBrowserHistory);
+
+  if (!show_search) {
+    return;
+  }
+#endif
+
   if (disabled_ || input.IsZeroSuggest() ||
       input.type() == metrics::OmniboxInputType::EMPTY) {
     return;
@@ -69,8 +81,8 @@ void HistoryQuickProvider::Start(const AutocompleteInput& input,
   // Remove the keyword from input if we're in keyword mode for a starter pack
   // engine.
   const auto [adjusted_input, starter_pack_engine] =
-      KeywordProvider::AdjustInputForStarterPackEngines(
-          input, client()->GetTemplateURLService());
+      AdjustInputForStarterPackKeyword(input,
+                                       client()->GetTemplateURLService());
   autocomplete_input_ = std::move(adjusted_input);
   starter_pack_engine_ = starter_pack_engine;
 

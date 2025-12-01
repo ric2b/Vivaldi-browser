@@ -15,12 +15,16 @@
 #ifndef CORE_INTERNAL_MEDIUMS_WIFI_HOTSPOT_H_
 #define CORE_INTERNAL_MEDIUMS_WIFI_HOTSPOT_H_
 
-#include <cstdint>
-#include <functional>
 #include <string>
 
+#include "absl/base/thread_annotations.h"
+#include "absl/container/flat_hash_map.h"
+#include "absl/strings/string_view.h"
+#include "internal/platform/cancellation_flag.h"
+#include "internal/platform/expected.h"
 #include "internal/platform/multi_thread_executor.h"
 #include "internal/platform/mutex.h"
+#include "internal/platform/wifi_credential.h"
 #include "internal/platform/wifi_hotspot.h"
 
 namespace nearby {
@@ -49,8 +53,8 @@ class WifiHotspot {
   bool StopWifiHotspot() ABSL_LOCKS_EXCLUDED(mutex_);
 
   bool IsConnectedToHotspot() ABSL_LOCKS_EXCLUDED(mutex_);
-  bool ConnectWifiHotspot(const std::string& ssid, const std::string& password,
-                          int frequency) ABSL_LOCKS_EXCLUDED(mutex_);
+  bool ConnectWifiHotspot(const HotspotCredentials& hotspot_credentials)
+      ABSL_LOCKS_EXCLUDED(mutex_);
   bool DisconnectWifiHotspot() ABSL_LOCKS_EXCLUDED(mutex_);
 
   // Starts a worker thread, creates a WifiHotspot socket, associates it with a
@@ -70,9 +74,9 @@ class WifiHotspot {
   // bandwidth upgradation.
   // Returns socket instance. On success, WifiHotspotSocket.IsValid() return
   // true.
-  WifiHotspotSocket Connect(const std::string& service_id,
-                            const std::string& ip_address, int port,
-                            CancellationFlag* cancellation_flag)
+  ErrorOr<WifiHotspotSocket> Connect(const std::string& service_id,
+                                     const std::string& ip_address, int port,
+                                     CancellationFlag* cancellation_flag)
       ABSL_LOCKS_EXCLUDED(mutex_);
 
   // Gets SoftAP ssid + password + ip address + gateway + port etc for remote

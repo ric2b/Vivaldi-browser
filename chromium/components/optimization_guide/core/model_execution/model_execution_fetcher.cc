@@ -134,6 +134,8 @@ net::NetworkTrafficAnnotationTag GetNetworkTrafficAnnotation(
         })");
     case ModelBasedCapabilityKey::kTextSafety:
       // TODO: b/330346344 - Add traffic annotation.
+    case ModelBasedCapabilityKey::kPasswordChangeSubmission:
+      // TODO: b/380116258 - Add traffic annotation.
       return MISSING_TRAFFIC_ANNOTATION;
     case ModelBasedCapabilityKey::kTest:
     case ModelBasedCapabilityKey::kBlingPrototyping:
@@ -217,10 +219,16 @@ net::NetworkTrafficAnnotationTag GetNetworkTrafficAnnotation(
             }
           }
         })");
+    case ModelBasedCapabilityKey::kFormsClassifications:
+      // TODO(crbug.com/389631477) - Add traffic annotation.
+      return MISSING_TRAFFIC_ANNOTATION;
     case ModelBasedCapabilityKey::kHistorySearch:
     case ModelBasedCapabilityKey::kHistoryQueryIntent:
     case ModelBasedCapabilityKey::kPromptApi:
+    case ModelBasedCapabilityKey::kScamDetection:
+    case ModelBasedCapabilityKey::kPermissionsAi:
     case ModelBasedCapabilityKey::kSummarize:
+    case ModelBasedCapabilityKey::kWritingAssistanceApi:
       // On-device only feature.
       NOTREACHED();
   }

@@ -6,7 +6,6 @@
 #define COMPONENTS_SYNC_BASE_PREF_NAMES_H_
 
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 
 namespace syncer::prefs {
 
@@ -42,6 +41,11 @@ inline constexpr char kSyncKeepEverythingSynced[] =
 // users only.
 inline constexpr char kSelectedTypesPerAccount[] =
     "sync.selected_types_per_account";
+
+// Dict specifying the sync transport data (e.g. cache GUID, birthday, etc) per
+// account.
+inline constexpr char kSyncTransportDataPerAccount[] =
+    "sync.transport_data_per_account";
 
 #if BUILDFLAG(IS_CHROMEOS)
 // Boolean specifying whether sync was disabled due to a dashboard reset event.

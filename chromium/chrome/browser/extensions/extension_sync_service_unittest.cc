@@ -2,15 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "chrome/browser/extensions/extension_sync_service.h"
 
 #include <stddef.h>
 
+#include <array>
 #include <map>
 #include <memory>
 #include <string>
@@ -132,7 +128,7 @@ class StatefulChangeProcessor : public syncer::FakeSyncChangeProcessor {
   StatefulChangeProcessor(const StatefulChangeProcessor&) = delete;
   StatefulChangeProcessor& operator=(const StatefulChangeProcessor&) = delete;
 
-  ~StatefulChangeProcessor() override {}
+  ~StatefulChangeProcessor() override = default;
 
   // We let our parent class, FakeSyncChangeProcessor, handle saving the
   // changes for us, but in addition we "apply" these changes by treating
@@ -389,8 +385,9 @@ TEST_F(ExtensionSyncServiceTest, ReenableDisabledExtensionFromSync) {
 
   // The extension should be disabled.
   EXPECT_TRUE(registry()->disabled_extensions().GetByID(kExtensionId));
-  EXPECT_EQ(extensions::disable_reason::DISABLE_USER_ACTION,
-            ExtensionPrefs::Get(profile())->GetDisableReasons(kExtensionId));
+  EXPECT_THAT(ExtensionPrefs::Get(profile())->GetDisableReasons(kExtensionId),
+              testing::UnorderedElementsAre(
+                  extensions::disable_reason::DISABLE_USER_ACTION));
   EXPECT_TRUE(processor_raw->changes().empty());
 
   // Enable the extension. Sync should push the new state.
@@ -498,9 +495,6 @@ TEST_F(ExtensionSyncServiceTest, IgnoreSyncChangesWhenLocalStateIsMoreRecent) {
       params.ConfigureByTestDataDirectory(data_dir().AppendASCII("good")));
   InitializeExtensionService(std::move(params));
 
-  // Make sure ExtensionSyncService is created, so it'll be notified of changes.
-  extension_sync_service();
-
   service()->Init();
   ASSERT_TRUE(extension_system()->is_ready());
   ASSERT_EQ(3u, loaded_extensions().size());
@@ -553,9 +547,6 @@ TEST_F(ExtensionSyncServiceTest, DontSelfNotify) {
   ASSERT_TRUE(
       params.ConfigureByTestDataDirectory(data_dir().AppendASCII("good")));
   InitializeExtensionService(std::move(params));
-
-  // Make sure ExtensionSyncService is created, so it'll be notified of changes.
-  extension_sync_service();
 
   service()->Init();
   ASSERT_TRUE(extension_system()->is_ready());
@@ -936,7 +927,7 @@ TEST_F(ExtensionSyncServiceTest, GetSyncAppDataUserSettings) {
 TEST_F(ExtensionSyncServiceTest, GetSyncAppDataUserSettingsOnExtensionMoved) {
   InitializeEmptyExtensionService();
   const size_t kAppCount = 3;
-  const Extension* apps[kAppCount];
+  std::array<const Extension*, kAppCount> apps;
   apps[0] = PackAndInstallCRX(data_dir().AppendASCII("app1"), INSTALL_NEW);
   apps[1] = PackAndInstallCRX(data_dir().AppendASCII("app2"), INSTALL_NEW);
   apps[2] = PackAndInstallCRX(data_dir().AppendASCII("app4"), INSTALL_NEW);
@@ -957,7 +948,7 @@ TEST_F(ExtensionSyncServiceTest, GetSyncAppDataUserSettingsOnExtensionMoved) {
         extension_sync_service()->GetAllSyncDataForTesting(syncer::APPS);
     ASSERT_EQ(list.size(), 3U);
 
-    std::unique_ptr<ExtensionSyncData> data[kAppCount];
+    std::array<std::unique_ptr<ExtensionSyncData>, kAppCount> data;
     for (size_t i = 0; i < kAppCount; ++i) {
       data[i] = ExtensionSyncData::CreateFromSyncData(list[i]);
       ASSERT_TRUE(data[i].get());
@@ -966,7 +957,7 @@ TEST_F(ExtensionSyncServiceTest, GetSyncAppDataUserSettingsOnExtensionMoved) {
     // The sync data is not always in the same order our apps were installed in,
     // so we do that sorting here so we can make sure the values are changed as
     // expected.
-    syncer::StringOrdinal app_launch_ordinals[kAppCount];
+    std::array<syncer::StringOrdinal, kAppCount> app_launch_ordinals;
     for (size_t i = 0; i < kAppCount; ++i) {
       for (size_t j = 0; j < kAppCount; ++j) {
         if (apps[i]->id() == data[j]->id())
@@ -1161,7 +1152,7 @@ TEST_F(ExtensionSyncServiceTest, ProcessSyncDataNewExtension) {
     // The disable reason(s) that should be set on the installed extension.
     // This will usually be the same as `sync_disable_reasons`, but see the
     // "Legacy" case.
-    int expect_disable_reasons;
+    extensions::DisableReasonSet expect_disable_reasons;
     // Whether the extension's permissions should be auto-granted during
     // installation.
     bool expect_permissions_granted;
@@ -1169,23 +1160,31 @@ TEST_F(ExtensionSyncServiceTest, ProcessSyncDataNewExtension) {
       // Standard case: Extension comes in enabled; permissions should be
       // granted
       // during installation.
-      {"Standard", true, 0, 0, true},
+      {"Standard", true, 0, {}, true},
       // If the extension comes in disabled, its permissions should still be
       // granted (the user already approved them on another machine).
-      {"Disabled", false, extensions::disable_reason::DISABLE_USER_ACTION,
-       extensions::disable_reason::DISABLE_USER_ACTION, true},
+      {"Disabled",
+       false,
+       extensions::disable_reason::DISABLE_USER_ACTION,
+       {extensions::disable_reason::DISABLE_USER_ACTION},
+       true},
       // Legacy case (<M45): No disable reasons come in from Sync (see
       // crbug.com/484214). After installation, the reason should be set to
       // DISABLE_USER_ACTION (default assumption).
-      {"Legacy", false, -1, extensions::disable_reason::DISABLE_USER_ACTION,
+      {"Legacy",
+       false,
+       -1,
+       {extensions::disable_reason::DISABLE_USER_ACTION},
        true},
       // If the extension came in disabled due to a permissions increase, then
       // the
       // user has *not* approved the permissions, and they shouldn't be granted.
       // crbug.com/484214
-      {"PermissionsIncrease", false,
+      {"PermissionsIncrease",
+       false,
        extensions::disable_reason::DISABLE_PERMISSIONS_INCREASE,
-       extensions::disable_reason::DISABLE_PERMISSIONS_INCREASE, false},
+       {extensions::disable_reason::DISABLE_PERMISSIONS_INCREASE},
+       false},
   };
 
   for (const TestCase& test_case : test_cases) {
@@ -1374,6 +1373,11 @@ TEST_F(ExtensionSyncServiceTest, ProcessSyncDataEnableDisable) {
 
   const ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
 
+  constexpr int kUnknownDisableReason_1 =
+      (extensions::disable_reason::DISABLE_REASON_LAST << 2);
+  constexpr int kUnknownDisableReason_2 =
+      (extensions::disable_reason::DISABLE_REASON_LAST << 3);
+
   struct TestCase {
     const char* name;  // For failure output only.
     // Set of disable reasons before any Sync data comes in. If this is != 0,
@@ -1383,53 +1387,107 @@ TEST_F(ExtensionSyncServiceTest, ProcessSyncDataEnableDisable) {
     // The disable reason(s) coming in from Sync, or -1 for "not set".
     int sync_disable_reasons;
     // The expected set of disable reasons after processing the Sync update. The
-    // extension should be disabled iff this is != 0.
-    int expect_disable_reasons;
+    // extension should be disabled iff this is non empty. Use a set of raw
+    // integers instead of DisableReasonSet because we test for unknown reasons.
+    base::flat_set<int> expect_disable_reasons;
   } test_cases[] = {
-      {"NopEnable", 0, true, 0, 0},
-      {"NopDisable", extensions::disable_reason::DISABLE_USER_ACTION, false,
+      {"NopEnable", 0, true, 0, {}},
+      {"NopDisable",
        extensions::disable_reason::DISABLE_USER_ACTION,
-       extensions::disable_reason::DISABLE_USER_ACTION},
-      {"Enable", extensions::disable_reason::DISABLE_USER_ACTION, true, 0, 0},
-      {"Disable", 0, false, extensions::disable_reason::DISABLE_USER_ACTION,
-       extensions::disable_reason::DISABLE_USER_ACTION},
-      {"AddDisableReason", extensions::disable_reason::DISABLE_REMOTE_INSTALL,
+       false,
+       extensions::disable_reason::DISABLE_USER_ACTION,
+       {extensions::disable_reason::DISABLE_USER_ACTION}},
+      {"Enable", extensions::disable_reason::DISABLE_USER_ACTION, true, 0, {}},
+      {"Disable",
+       0,
+       false,
+       extensions::disable_reason::DISABLE_USER_ACTION,
+       {extensions::disable_reason::DISABLE_USER_ACTION}},
+      {"AddDisableReason",
+       extensions::disable_reason::DISABLE_REMOTE_INSTALL,
        false,
        extensions::disable_reason::DISABLE_REMOTE_INSTALL |
            extensions::disable_reason::DISABLE_USER_ACTION,
-       extensions::disable_reason::DISABLE_REMOTE_INSTALL |
-           extensions::disable_reason::DISABLE_USER_ACTION},
+       {extensions::disable_reason::DISABLE_REMOTE_INSTALL,
+        extensions::disable_reason::DISABLE_USER_ACTION}},
       {"RemoveDisableReason",
        extensions::disable_reason::DISABLE_REMOTE_INSTALL |
            extensions::disable_reason::DISABLE_USER_ACTION,
-       false, extensions::disable_reason::DISABLE_USER_ACTION,
-       extensions::disable_reason::DISABLE_USER_ACTION},
-      {"PreserveLocalDisableReason", extensions::disable_reason::DISABLE_RELOAD,
-       true, 0, extensions::disable_reason::DISABLE_RELOAD},
+       false,
+       extensions::disable_reason::DISABLE_USER_ACTION,
+       {extensions::disable_reason::DISABLE_USER_ACTION}},
+      {"PreserveLocalDisableReason",
+       extensions::disable_reason::DISABLE_RELOAD,
+       true,
+       0,
+       {extensions::disable_reason::DISABLE_RELOAD}},
       {"PreserveOnlyLocalDisableReason",
        extensions::disable_reason::DISABLE_USER_ACTION |
            extensions::disable_reason::DISABLE_RELOAD,
-       true, 0, extensions::disable_reason::DISABLE_RELOAD},
+       true,
+       0,
+       {extensions::disable_reason::DISABLE_RELOAD}},
+
+      // The disable reasons not known to the client should be considered as
+      // syncable.
+      {"UnknownDisableReasons",
+
+       // Existing disable reasons. We keep one syncable, one local and
+       // one unknown one (which should be considered as syncable).
+       extensions::disable_reason::DISABLE_USER_ACTION |
+           extensions::disable_reason::DISABLE_RELOAD | kUnknownDisableReason_1,
+
+       // Incoming enabled state.
+       false,
+
+       // Incoming reasons via sync. We keep one known syncable reason and one
+       // unknown one. The unknown one which is incoming is different from the
+       // one which is present locally.
+       extensions::disable_reason::DISABLE_PERMISSIONS_INCREASE |
+           kUnknownDisableReason_2,
+
+       // Expected reasons after processing the sync update. Local
+       // reasons should be preserved. Syncable reasons should be replaced with
+       // the incoming ones.
+       {extensions::disable_reason::DISABLE_RELOAD,
+        extensions::disable_reason::DISABLE_PERMISSIONS_INCREASE,
+        kUnknownDisableReason_2}},
 
       // Interaction with Chrome clients <=M44, which don't sync disable_reasons
       // at all (any existing reasons are preserved).
-      {"M44Enable", extensions::disable_reason::DISABLE_USER_ACTION, true, -1,
-       0},
+      {"M44Enable",
+       extensions::disable_reason::DISABLE_USER_ACTION,
+       true,
+       -1,
+       {}},
       // An M44 client enables an extension that had been disabled on a new
       // client. The disable reasons are still be there, but should be ignored.
-      {"M44ReEnable", extensions::disable_reason::DISABLE_USER_ACTION, true,
-       extensions::disable_reason::DISABLE_USER_ACTION, 0},
-      {"M44Disable", 0, false, -1,
-       extensions::disable_reason::DISABLE_USER_ACTION},
-      {"M44ReDisable", 0, false, 0,
-       extensions::disable_reason::DISABLE_USER_ACTION},
+      {"M44ReEnable",
+       extensions::disable_reason::DISABLE_USER_ACTION,
+       true,
+       extensions::disable_reason::DISABLE_USER_ACTION,
+       {}},
+      {"M44Disable",
+       0,
+       false,
+       -1,
+       {extensions::disable_reason::DISABLE_USER_ACTION}},
+      {"M44ReDisable",
+       0,
+       false,
+       0,
+       {extensions::disable_reason::DISABLE_USER_ACTION}},
       {"M44AlreadyDisabledByUser",
-       extensions::disable_reason::DISABLE_USER_ACTION, false, -1,
-       extensions::disable_reason::DISABLE_USER_ACTION},
+       extensions::disable_reason::DISABLE_USER_ACTION,
+       false,
+       -1,
+       {extensions::disable_reason::DISABLE_USER_ACTION}},
       {"M44AlreadyDisabledWithOtherReason",
-       extensions::disable_reason::DISABLE_REMOTE_INSTALL, false, -1,
-       extensions::disable_reason::DISABLE_REMOTE_INSTALL |
-           extensions::disable_reason::DISABLE_USER_ACTION},
+       extensions::disable_reason::DISABLE_REMOTE_INSTALL,
+       false,
+       -1,
+       {extensions::disable_reason::DISABLE_REMOTE_INSTALL,
+        extensions::disable_reason::DISABLE_USER_ACTION}},
   };
 
   for (const TestCase& test_case : test_cases) {
@@ -1469,9 +1527,12 @@ TEST_F(ExtensionSyncServiceTest, ProcessSyncDataEnableDisable) {
     extension_sync_service()->ProcessSyncChanges(FROM_HERE, list);
 
     // Check expectations.
-    const bool expect_enabled = !test_case.expect_disable_reasons;
+    const bool expect_enabled = test_case.expect_disable_reasons.empty();
     EXPECT_EQ(expect_enabled, service()->IsExtensionEnabled(id));
-    EXPECT_EQ(test_case.expect_disable_reasons, prefs->GetDisableReasons(id));
+    auto passkey =
+        extensions::ExtensionPrefs::DisableReasonRawManipulationPasskey();
+    EXPECT_EQ(test_case.expect_disable_reasons,
+              prefs->GetDisableReasons(passkey, id));
 
     // Remove the extension again, so we can install it again for the next case.
     UninstallExtension(id);
@@ -1652,23 +1713,28 @@ TEST_F(ExtensionSyncServiceCustomGalleryTest,
     int sync_disable_reasons;
     // The expected set of disable reasons after processing the Sync update. The
     // extension should be enabled iff this is 0.
-    int expect_disable_reasons;
+    extensions::DisableReasonSet expect_disable_reasons;
     // Whether the extension's permissions should be auto-granted.
     bool expect_permissions_granted;
   } test_cases[] = {
       // Sync tells us to re-enable an older version. No permissions should be
       // granted, since we can't be sure if the user actually approved the right
       // set of permissions.
-      {"OldVersion", raw_ref(v1), 0,
-       extensions::disable_reason::DISABLE_PERMISSIONS_INCREASE, false},
+      {"OldVersion",
+       raw_ref(v1),
+       0,
+       {extensions::disable_reason::DISABLE_PERMISSIONS_INCREASE},
+       false},
       // Legacy case: Sync tells us to re-enable the extension, but doesn't
       // specify disable reasons. No permissions should be granted.
-      {"Legacy", raw_ref(v2), -1,
-       extensions::disable_reason::DISABLE_PERMISSIONS_INCREASE, false},
+      {"Legacy",
+       raw_ref(v2),
+       -1,
+       {extensions::disable_reason::DISABLE_PERMISSIONS_INCREASE},
+       false},
       // Sync tells us to re-enable the extension and explicitly removes the
       // disable reasons. Now the extension should have its permissions granted.
-      {"GrantPermissions", raw_ref(v2), 0,
-       extensions::disable_reason::DISABLE_NONE, true},
+      {"GrantPermissions", raw_ref(v2), 0, {}, true},
   };
 
   for (const TestCase& test_case : test_cases) {
@@ -1722,7 +1788,7 @@ TEST_F(ExtensionSyncServiceCustomGalleryTest,
     extension_sync_service()->ProcessSyncChanges(FROM_HERE, list);
 
     // Check expectations.
-    const bool expect_enabled = !test_case.expect_disable_reasons;
+    const bool expect_enabled = test_case.expect_disable_reasons.empty();
     EXPECT_EQ(expect_enabled, service()->IsExtensionEnabled(id));
     EXPECT_EQ(test_case.expect_disable_reasons, prefs->GetDisableReasons(id));
     std::unique_ptr<const PermissionSet> granted_permissions =
@@ -1743,9 +1809,6 @@ TEST_F(ExtensionSyncServiceCustomGalleryTest,
 // Regression test for crbug.com/558299
 TEST_F(ExtensionSyncServiceTest, DontSyncThemes) {
   InitializeEmptyExtensionService();
-
-  // Make sure ExtensionSyncService is created, so it'll be notified of changes.
-  extension_sync_service();
 
   service()->Init();
   ASSERT_TRUE(extension_system()->is_ready());
@@ -1862,7 +1925,7 @@ TEST_F(ExtensionSyncServiceTest, AppToExtension) {
 
 class BlocklistedExtensionSyncServiceTest : public ExtensionSyncServiceTest {
  public:
-  BlocklistedExtensionSyncServiceTest() {}
+  BlocklistedExtensionSyncServiceTest() = default;
 
   BlocklistedExtensionSyncServiceTest(
       const BlocklistedExtensionSyncServiceTest&) = delete;
@@ -1917,9 +1980,11 @@ class BlocklistedExtensionSyncServiceTest : public ExtensionSyncServiceTest {
 
 // Test that sync cannot enable blocklisted extensions.
 TEST_F(BlocklistedExtensionSyncServiceTest, SyncBlocklistedExtension) {
-  std::string& extension_id = this->extension_id();
+  // The extension should be syncable before being blocklisted.
+  EXPECT_TRUE(extensions::sync_util::ShouldSync(profile(), extension()));
 
   // Blocklist the extension.
+  std::string& extension_id = this->extension_id();
   test_blocklist().SetBlocklistState(extension_id,
                                      extensions::BLOCKLISTED_MALWARE, true);
   ForceBlocklistUpdate();
@@ -1930,6 +1995,9 @@ TEST_F(BlocklistedExtensionSyncServiceTest, SyncBlocklistedExtension) {
   // The extension should not be enabled.
   EXPECT_FALSE(registry()->enabled_extensions().GetByID(extension_id));
   EXPECT_TRUE(processor()->changes().empty());
+
+  // Double check that the extension is not syncable.
+  EXPECT_FALSE(extensions::sync_util::ShouldSync(profile(), extension()));
 }
 
 // Test that some greylisted extensions can be enabled through sync.
@@ -1983,7 +2051,8 @@ TEST_F(BlocklistedExtensionSyncServiceTest, InstallBlocklistedExtension) {
   ASSERT_TRUE(registry()->GetInstalledExtension(extension_id));
   EXPECT_FALSE(registry()->enabled_extensions().GetByID(extension_id));
   EXPECT_TRUE(registry()->blocklisted_extensions().GetByID(extension_id));
-  EXPECT_EQ(0, ExtensionPrefs::Get(profile())->GetDisableReasons(extension_id));
+  EXPECT_TRUE(
+      ExtensionPrefs::Get(profile())->GetDisableReasons(extension_id).empty());
   EXPECT_TRUE(processor()->changes().empty());
 }
 
@@ -2005,6 +2074,8 @@ class ExtensionSyncServiceTransportModeTest : public ExtensionSyncServiceTest {
     service()->Init();
 
     AccountExtensionTracker::Get(profile());
+    identity_test_env_profile_adaptor_ =
+        std::make_unique<IdentityTestEnvironmentProfileAdaptor>(profile());
   }
 
  protected:
@@ -2016,8 +2087,20 @@ class ExtensionSyncServiceTransportModeTest : public ExtensionSyncServiceTest {
         data_dir().AppendASCII(extension_path));
   }
 
+  // Simulates an explicit sign in. This involves both the sign in itself and
+  // flipping the pref to record an explicit sign in.
+  void SimulateExplicitSignIn() {
+    identity_test_env_profile_adaptor_->identity_test_env()
+        ->MakePrimaryAccountAvailable("testy@mctestface.com",
+                                      signin::ConsentLevel::kSignin);
+    profile()->GetPrefs()->SetBoolean(prefs::kExplicitBrowserSignin, true);
+  }
+
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
+
+  std::unique_ptr<IdentityTestEnvironmentProfileAdaptor>
+      identity_test_env_profile_adaptor_;
 };
 
 // Test that only extensions associated with the signed in user will be synced
@@ -2042,14 +2125,9 @@ TEST_F(ExtensionSyncServiceTransportModeTest, OnlySyncAccountExtensions) {
   const std::string first_extension_id = first_extension->id();
   ASSERT_TRUE(registry()->enabled_extensions().GetByID(first_extension_id));
 
-  // Use a test identity environment to mimic signing a user into transport mode
-  // with syncing for extension enabled via an explicit sign in.
-  auto identity_test_env_profile_adaptor =
-      std::make_unique<IdentityTestEnvironmentProfileAdaptor>(profile());
-  identity_test_env_profile_adaptor->identity_test_env()
-      ->MakePrimaryAccountAvailable("testy@mctestface.com",
-                                    signin::ConsentLevel::kSignin);
-  profile()->GetPrefs()->SetBoolean(prefs::kExplicitBrowserSignin, true);
+  // Mimic signing a user into transport mode with syncing for extensions
+  // enabled via an explicit sign in.
+  SimulateExplicitSignIn();
 
   scoped_refptr<const Extension> second_extension =
       LoadExtension("simple_with_icon");
@@ -2095,4 +2173,126 @@ TEST_F(ExtensionSyncServiceTransportModeTest, OnlySyncAccountExtensions) {
               data->disable_reasons());
     EXPECT_FALSE(data->enabled());
   }
+}
+
+// Test that local changes made to an extension before initial sync data is
+// received is counted as more recent, but the account extension state should
+// still be updated.
+TEST_F(ExtensionSyncServiceTransportModeTest,
+       OnlyUpdateAccountExtensionTypeWhenLocalStateIsMoreRecent) {
+  scoped_refptr<const Extension> first_extension =
+      LoadExtension("simple_with_file");
+  ASSERT_TRUE(first_extension);
+  const std::string first_extension_id = first_extension->id();
+  ASSERT_TRUE(registry()->enabled_extensions().GetByID(first_extension_id));
+
+  // Mimic signing a user into transport mode with syncing for extensions
+  // enabled via an explicit sign in.
+  SimulateExplicitSignIn();
+
+  // Disable and re-enable `first_extension` before first sync data arrives.
+  service()->DisableExtension(first_extension_id,
+                              extensions::disable_reason::DISABLE_USER_ACTION);
+  ASSERT_FALSE(service()->IsExtensionEnabled(first_extension_id));
+  service()->EnableExtension(first_extension_id);
+  ASSERT_TRUE(service()->IsExtensionEnabled(first_extension_id));
+
+  // After the user has signed in but before any sync data is received,
+  // `first_extension` is treated as a local extension.
+  EXPECT_EQ(AccountExtensionTracker::AccountExtensionType::kLocal,
+            GetAccountExtensionType(first_extension_id));
+
+  // Sync starts up. Initial data arrives telling us to disable
+  // `first_extension_id`. However, local changes (disabling and re-enabling) is
+  // considered more recent so the extension should ignore this change.
+  ExtensionSyncData disable_first_extension(
+      *first_extension, false, extensions::disable_reason::DISABLE_USER_ACTION,
+      false, false, extension_urls::GetWebstoreUpdateUrl());
+
+  syncer::SyncDataList list;
+  list.push_back(disable_first_extension.GetSyncData());
+  extension_sync_service()->MergeDataAndStartSyncing(
+      syncer::EXTENSIONS, list,
+      std::make_unique<syncer::FakeSyncChangeProcessor>());
+
+  ASSERT_TRUE(service()->IsExtensionEnabled(first_extension_id));
+
+  // `first_extension` has the AccountExtensionType `kAccountInstalledLocally`
+  // since it's part of the signed in user's account data, despite having its
+  // local state take precedence over the incoming sync state.
+  EXPECT_EQ(
+      AccountExtensionTracker::AccountExtensionType::kAccountInstalledLocally,
+      GetAccountExtensionType(first_extension_id));
+}
+
+// Same test as ExtensionSyncServiceTest version, to test that local extensions
+// get promoted to account extensions from incoming sync data.
+TEST_F(ExtensionSyncServiceTransportModeTest,
+       AccountExtensionTypeChangesWithSync) {
+  // Install two extensions: `first_extension` before a user signs in, and
+  // `second_extension` after a user signs in.
+  scoped_refptr<const Extension> first_extension =
+      LoadExtension("simple_with_file");
+  ASSERT_TRUE(first_extension);
+  const std::string first_extension_id = first_extension->id();
+  ASSERT_TRUE(registry()->enabled_extensions().GetByID(first_extension_id));
+
+  // Mimic signing a user into transport mode with syncing for extensions
+  // enabled via an explicit sign in.
+  SimulateExplicitSignIn();
+
+  scoped_refptr<const Extension> second_extension =
+      LoadExtension("simple_with_icon");
+  ASSERT_TRUE(second_extension);
+  const std::string second_extension_id = second_extension->id();
+
+  // After the user has signed in but before any sync data is received,
+  // `first_extension` is treated as a local extension and `second_extension` is
+  // treated as an account extension since it was installed after sign in.
+  // Note that both extensions are syncable.
+  EXPECT_EQ(AccountExtensionTracker::AccountExtensionType::kLocal,
+            GetAccountExtensionType(first_extension_id));
+  EXPECT_EQ(
+      AccountExtensionTracker::AccountExtensionType::kAccountInstalledSignedIn,
+      GetAccountExtensionType(second_extension_id));
+
+  // Sync starts up.
+  extension_sync_service()->MergeDataAndStartSyncing(
+      syncer::EXTENSIONS, syncer::SyncDataList(),
+      std::make_unique<syncer::FakeSyncChangeProcessor>());
+
+  // Then sync data arrives telling us to disable both `first_extension_id` and
+  // `second_extension_id`. In practice, any incoming sync will do. Note if
+  // incoming sync data contains an extension ID, then that extension is part of
+  // a user's account data.
+  ExtensionSyncData disable_first_extension(
+      *first_extension, false, extensions::disable_reason::DISABLE_USER_ACTION,
+      false, false, extension_urls::GetWebstoreUpdateUrl());
+  ExtensionSyncData disable_second_extension(
+      *second_extension, false, extensions::disable_reason::DISABLE_USER_ACTION,
+      false, false, extension_urls::GetWebstoreUpdateUrl());
+  SyncChangeList list;
+  list.push_back(
+      disable_first_extension.GetSyncChange(SyncChange::ACTION_UPDATE));
+  list.push_back(
+      disable_second_extension.GetSyncChange(SyncChange::ACTION_UPDATE));
+
+  extension_sync_service()->ProcessSyncChanges(FROM_HERE, list);
+
+  ASSERT_FALSE(service()->IsExtensionEnabled(first_extension_id));
+  ASSERT_FALSE(service()->IsExtensionEnabled(second_extension_id));
+
+  // `first_extension` has the AccountExtensionType `kAccountInstalledLocally`
+  // since it's part of the signed in user's account data but was first
+  // installed on this device before the user has signed in. Note that the
+  // incoming sync above links it to the user's account data.
+  EXPECT_EQ(
+      AccountExtensionTracker::AccountExtensionType::kAccountInstalledLocally,
+      GetAccountExtensionType(first_extension_id));
+
+  // `second_extension`'s AccountExtensionType should remain unchanged since we
+  // already know it's part of the signed in user's account data.
+  EXPECT_EQ(
+      AccountExtensionTracker::AccountExtensionType::kAccountInstalledSignedIn,
+      GetAccountExtensionType(second_extension_id));
 }

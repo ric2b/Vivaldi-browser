@@ -1,5 +1,5 @@
 .\"                                      Hey, EMACS: -*- nroff -*-
-.TH CWEBP 1 "March 26, 2024"
+.TH CWEBP 1 "September 17, 2024"
 .SH NAME
 cwebp \- compress an image file to a WebP file
 .SH SYNOPSIS
@@ -180,8 +180,8 @@ Disable strong filtering (if filtering is being used thanks to the
 \fB\-f\fP option) and use simple filtering instead.
 .TP
 .B \-sharp_yuv
-Use more accurate and sharper RGB->YUV conversion if needed. Note that this
-process is slower than the default 'fast' RGB->YUV conversion.
+Use more accurate and sharper RGB->YUV conversion. Note that this process is
+slower than the default 'fast' RGB->YUV conversion.
 .TP
 .BI \-sns " int
 Specify the amplitude of the spatial noise shaping. Spatial noise shaping
@@ -299,12 +299,12 @@ Note: each input format may not support all combinations.
 .B \-noasm
 Disable all assembly optimizations.
 
-.SH BUGS
-Please report all bugs to the issue tracker:
-https://bugs.chromium.org/p/webp
-.br
-Patches welcome! See this page to get started:
-https://www.webmproject.org/code/contribute/submitting\-patches/
+.SH EXIT STATUS
+If there were no problems during execution, \fBcwebp\fP exits with the value of
+the C constant \fBEXIT_SUCCESS\fP. This is usually zero.
+.PP
+If an error occurs, \fBcwebp\fP exits with the value of the C constant
+\fBEXIT_FAILURE\fP. This is usually one.
 
 .SH EXAMPLES
 cwebp \-q 50 -lossless picture.png \-o picture_lossless.webp
@@ -323,6 +323,13 @@ https://chromium.googlesource.com/webm/libwebp
 .PP
 This manual page was written by Pascal Massimino <pascal.massimino@gmail.com>,
 for the Debian project (and may be used by others).
+
+.SH REPORTING BUGS
+Please report all bugs to the issue tracker:
+https://issues.webmproject.org
+.br
+Patches welcome! See this page to get started:
+https://www.webmproject.org/code/contribute/submitting\-patches/
 
 .SH SEE ALSO
 .BR dwebp (1),

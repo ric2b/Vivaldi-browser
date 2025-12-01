@@ -25,6 +25,7 @@
 #include "api/enable_media.h"
 #include "api/enable_media_with_defaults.h"
 #include "api/environment/environment_factory.h"
+#include "api/field_trials.h"
 #include "api/jsep.h"
 #include "api/make_ref_counted.h"
 #include "api/media_stream_interface.h"
@@ -56,7 +57,6 @@
 #include "rtc_base/time_utils.h"
 #include "test/gmock.h"
 #include "test/gtest.h"
-#include "test/scoped_key_value_config.h"
 
 #ifdef WEBRTC_ANDROID
 #include "pc/test/android_test_initializer.h"
@@ -120,7 +120,9 @@ class MockNetworkManager : public rtc::NetworkManager {
  public:
   MOCK_METHOD(void, StartUpdating, (), (override));
   MOCK_METHOD(void, StopUpdating, (), (override));
-  MOCK_METHOD(std::vector<const rtc::Network*>, GetNetworks, (),
+  MOCK_METHOD(std::vector<const rtc::Network*>,
+              GetNetworks,
+              (),
               (const, override));
   MOCK_METHOD(std::vector<const rtc::Network*>,
               GetAnyAddressNetworks,
@@ -158,7 +160,8 @@ class PeerConnectionFactoryTest : public ::testing::Test {
     packet_socket_factory_.reset(
         new rtc::BasicPacketSocketFactory(socket_server_.get()));
     port_allocator_.reset(new cricket::FakePortAllocator(
-        rtc::Thread::Current(), packet_socket_factory_.get(), &field_trials_));
+        rtc::Thread::Current(), packet_socket_factory_.get(),
+        field_trials_.get()));
     raw_port_allocator_ = port_allocator_.get();
   }
 
@@ -253,7 +256,7 @@ class PeerConnectionFactoryTest : public ::testing::Test {
     }
   }
 
-  test::ScopedKeyValueConfig field_trials_;
+  std::unique_ptr<FieldTrials> field_trials_ = FieldTrials::CreateNoGlobal("");
   std::unique_ptr<rtc::SocketServer> socket_server_;
   rtc::AutoSocketServerThread main_thread_;
   rtc::scoped_refptr<PeerConnectionFactoryInterface> factory_;
@@ -753,7 +756,10 @@ TEST(PeerConnectionFactoryDependenciesTest, UsesAudioProcessingWhenProvided) {
 
   PeerConnectionFactoryDependencies pcf_dependencies;
   pcf_dependencies.adm = FakeAudioCaptureModule::Create();
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
   pcf_dependencies.audio_processing = std::move(audio_processing);
+#pragma clang diagnostic pop
   EnableMediaWithDefaults(pcf_dependencies);
 
   scoped_refptr<PeerConnectionFactoryInterface> pcf =

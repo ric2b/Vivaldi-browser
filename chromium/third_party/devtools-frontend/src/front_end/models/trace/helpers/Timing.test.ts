@@ -8,35 +8,35 @@ import {TraceLoader} from '../../../testing/TraceLoader.js';
 import * as Trace from '../trace.js';
 
 function milliToMicro(value: number) {
-  return Trace.Types.Timing.MicroSeconds(value * 1000);
+  return Trace.Types.Timing.Micro(value * 1000);
 }
 
 describeWithEnvironment('Timing helpers', () => {
   describe('Timing conversions', () => {
     it('can convert milliseconds to microseconds', () => {
-      const input = Trace.Types.Timing.MilliSeconds(1);
-      const expected = Trace.Types.Timing.MicroSeconds(1000);
-      assert.strictEqual(Trace.Helpers.Timing.millisecondsToMicroseconds(input), expected);
+      const input = Trace.Types.Timing.Milli(1);
+      const expected = Trace.Types.Timing.Micro(1000);
+      assert.strictEqual(Trace.Helpers.Timing.milliToMicro(input), expected);
     });
 
     it('can convert seconds to milliseconds', () => {
       const input = Trace.Types.Timing.Seconds(1);
-      const expected = Trace.Types.Timing.MilliSeconds(1000);
-      assert.strictEqual(Trace.Helpers.Timing.secondsToMilliseconds(input), expected);
+      const expected = Trace.Types.Timing.Milli(1000);
+      assert.strictEqual(Trace.Helpers.Timing.secondsToMilli(input), expected);
     });
 
     it('can convert seconds to microseconds', () => {
       const input = Trace.Types.Timing.Seconds(1);
       // 1 Second = 1000 Milliseconds
       // 1000 Milliseconds = 1,000,000 Microseconds
-      const expected = Trace.Types.Timing.MicroSeconds(1_000_000);
-      assert.strictEqual(Trace.Helpers.Timing.secondsToMicroseconds(input), expected);
+      const expected = Trace.Types.Timing.Micro(1_000_000);
+      assert.strictEqual(Trace.Helpers.Timing.secondsToMicro(input), expected);
     });
 
     it('can convert microSeconds milliseconds', () => {
-      const input = Trace.Types.Timing.MicroSeconds(1_000_000);
-      const expected = Trace.Types.Timing.MilliSeconds(1_000);
-      assert.strictEqual(Trace.Helpers.Timing.microSecondsToMilliseconds(input), expected);
+      const input = Trace.Types.Timing.Micro(1_000_000);
+      const expected = Trace.Types.Timing.Milli(1_000);
+      assert.strictEqual(Trace.Helpers.Timing.microToMilli(input), expected);
     });
   });
 
@@ -46,9 +46,9 @@ describeWithEnvironment('Timing helpers', () => {
       dur: 5,
     } as unknown as Trace.Types.Events.Event;
     assert.deepEqual(Trace.Helpers.Timing.eventTimingsMicroSeconds(event), {
-      startTime: Trace.Types.Timing.MicroSeconds(10),
-      endTime: Trace.Types.Timing.MicroSeconds(15),
-      duration: Trace.Types.Timing.MicroSeconds(5),
+      startTime: Trace.Types.Timing.Micro(10),
+      endTime: Trace.Types.Timing.Micro(15),
+      duration: Trace.Types.Timing.Micro(5),
     });
   });
 
@@ -58,21 +58,9 @@ describeWithEnvironment('Timing helpers', () => {
       dur: 5_000,
     } as unknown as Trace.Types.Events.Event;
     assert.deepEqual(Trace.Helpers.Timing.eventTimingsMilliSeconds(event), {
-      startTime: Trace.Types.Timing.MilliSeconds(10),
-      endTime: Trace.Types.Timing.MilliSeconds(15),
-      duration: Trace.Types.Timing.MilliSeconds(5),
-    });
-  });
-
-  it('eventTimingsSeconds returns the right numbers', async () => {
-    const event = {
-      ts: 100_000,  // 100k microseconds = 100ms = 0.1second
-      dur: 50_000,  // 50k microseconds = 50ms = 0.05second
-    } as unknown as Trace.Types.Events.Event;
-    assert.deepEqual(Trace.Helpers.Timing.eventTimingsSeconds(event), {
-      startTime: Trace.Types.Timing.Seconds(0.1),
-      endTime: Trace.Types.Timing.Seconds(0.15),
-      duration: Trace.Types.Timing.Seconds(0.05),
+      startTime: Trace.Types.Timing.Milli(10),
+      endTime: Trace.Types.Timing.Milli(15),
+      duration: Trace.Types.Timing.Milli(5),
     });
   });
 
@@ -95,13 +83,13 @@ describeWithEnvironment('Timing helpers', () => {
           parsedTrace.Meta.navigationsByFrameId,
       );
 
-      const unadjustedTime = Trace.Helpers.Timing.microSecondsToMilliseconds(
-          Trace.Types.Timing.MicroSeconds(lcpEvent.ts - parsedTrace.Meta.traceBounds.min),
+      const unadjustedTime = Trace.Helpers.Timing.microToMilli(
+          Trace.Types.Timing.Micro(lcpEvent.ts - parsedTrace.Meta.traceBounds.min),
       );
       assert.strictEqual(unadjustedTime.toFixed(2), String(130.31));
 
       // To make the assertion easier to read.
-      const timeAsMS = Trace.Helpers.Timing.microSecondsToMilliseconds(adjustedTime);
+      const timeAsMS = Trace.Helpers.Timing.microToMilli(adjustedTime);
       assert.strictEqual(timeAsMS.toFixed(2), String(118.44));
     });
 
@@ -116,8 +104,8 @@ describeWithEnvironment('Timing helpers', () => {
       // Ensure we are testing the frameID path!
       assert.isUndefined(dclEvent.args.data?.navigationId);
 
-      const unadjustedTime = Trace.Helpers.Timing.microSecondsToMilliseconds(
-          Trace.Types.Timing.MicroSeconds(dclEvent.ts - parsedTrace.Meta.traceBounds.min),
+      const unadjustedTime = Trace.Helpers.Timing.microToMilli(
+          Trace.Types.Timing.Micro(dclEvent.ts - parsedTrace.Meta.traceBounds.min),
       );
       assert.strictEqual(unadjustedTime.toFixed(2), String(190.79));
       const adjustedTime = Trace.Helpers.Timing.timeStampForEventAdjustedByClosestNavigation(
@@ -128,7 +116,7 @@ describeWithEnvironment('Timing helpers', () => {
       );
 
       // To make the assertion easier to read.
-      const timeAsMS = Trace.Helpers.Timing.microSecondsToMilliseconds(adjustedTime);
+      const timeAsMS = Trace.Helpers.Timing.microToMilli(adjustedTime);
       assert.strictEqual(timeAsMS.toFixed(2), String(178.92));
     });
   });
@@ -158,8 +146,8 @@ describeWithEnvironment('Timing helpers', () => {
     it('if the expanded window is smaller than 1 millisecond, expands it to 1 millisecond ', async function() {
       // Trace window that is smaller than 1 millisecond
       const traceWindow = Trace.Helpers.Timing.traceWindowFromMicroSeconds(
-          Trace.Types.Timing.MicroSeconds(1000),
-          Trace.Types.Timing.MicroSeconds(1500),
+          Trace.Types.Timing.Micro(1000),
+          Trace.Types.Timing.Micro(1500),
       );
       const maxTraceWindow = Trace.Helpers.Timing.traceWindowFromMicroSeconds(
           milliToMicro(0),
@@ -306,17 +294,17 @@ describeWithEnvironment('Timing helpers', () => {
 
   describe('timestampIsInBounds', () => {
     const {eventIsInBounds} = Trace.Helpers.Timing;
-    const {MicroSeconds} = Trace.Types.Timing;
+    const {Micro: MicroSeconds} = Trace.Types.Timing;
 
-    const bounds: Trace.Types.Timing.TraceWindowMicroSeconds = {
+    const bounds: Trace.Types.Timing.TraceWindowMicro = {
       min: MicroSeconds(100),
       max: MicroSeconds(200),
       range: MicroSeconds(100),
     };
 
     const makeEvent = (ts: number, dur: number) => ({
-                                                     ts: Trace.Types.Timing.MicroSeconds(ts),
-                                                     dur: Trace.Types.Timing.MicroSeconds(dur),
+                                                     ts: Trace.Types.Timing.Micro(ts),
+                                                     dur: Trace.Types.Timing.Micro(dur),
                                                    }) as unknown as Trace.Types.Events.Event;
 
     // Left boundary
@@ -337,9 +325,9 @@ describeWithEnvironment('Timing helpers', () => {
 
   describe('timestampIsInBounds', () => {
     const {timestampIsInBounds} = Trace.Helpers.Timing;
-    const {MicroSeconds} = Trace.Types.Timing;
+    const {Micro: MicroSeconds} = Trace.Types.Timing;
     it('is true if the value is in the bounds and false otherwise', async () => {
-      const bounds: Trace.Types.Timing.TraceWindowMicroSeconds = {
+      const bounds: Trace.Types.Timing.TraceWindowMicro = {
         min: MicroSeconds(1),
         max: MicroSeconds(10),
         range: MicroSeconds(9),
@@ -355,9 +343,9 @@ describeWithEnvironment('Timing helpers', () => {
 
   describe('WindowFitsInsideBounds', () => {
     const {windowFitsInsideBounds} = Trace.Helpers.Timing;
-    const {MicroSeconds} = Trace.Types.Timing;
+    const {Micro: MicroSeconds} = Trace.Types.Timing;
 
-    const bounds: Trace.Types.Timing.TraceWindowMicroSeconds = {
+    const bounds: Trace.Types.Timing.TraceWindowMicro = {
       min: MicroSeconds(5),
       max: MicroSeconds(15),
       range: MicroSeconds(10),

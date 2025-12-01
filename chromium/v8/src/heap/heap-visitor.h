@@ -6,6 +6,7 @@
 #define V8_HEAP_HEAP_VISITOR_H_
 
 #include "src/base/logging.h"
+#include "src/execution/local-isolate.h"
 #include "src/objects/bytecode-array.h"
 #include "src/objects/contexts.h"
 #include "src/objects/fixed-array.h"
@@ -43,60 +44,61 @@ class MaybeObjectSize final {
 
 // Visitation in here will refer to BodyDescriptors with the regular instance
 // size.
-#define TYPED_VISITOR_ID_LIST(V)     \
-  V(AccessorInfo)                    \
-  V(AllocationSite)                  \
-  V(BigInt)                          \
-  V(BytecodeWrapper)                 \
-  V(CallSiteInfo)                    \
-  V(Cell)                            \
-  V(CodeWrapper)                     \
-  V(ConsString)                      \
-  V(ContextSidePropertyCell)         \
-  V(CoverageInfo)                    \
-  V(DataHandler)                     \
-  V(DebugInfo)                       \
-  V(EmbedderDataArray)               \
-  V(EphemeronHashTable)              \
-  V(ExternalString)                  \
-  V(FeedbackCell)                    \
-  V(FeedbackMetadata)                \
-  V(Foreign)                         \
-  V(FunctionTemplateInfo)            \
-  V(HeapNumber)                      \
-  V(Hole)                            \
-  V(Map)                             \
-  V(NativeContext)                   \
-  V(Oddball)                         \
-  V(PreparseData)                    \
-  V(PropertyArray)                   \
-  V(PropertyCell)                    \
-  V(PrototypeInfo)                   \
-  V(RegExpBoilerplateDescription)    \
-  V(RegExpDataWrapper)               \
-  V(SeqOneByteString)                \
-  V(SeqTwoByteString)                \
-  V(SharedFunctionInfo)              \
-  V(SlicedString)                    \
-  V(SloppyArgumentsElements)         \
-  V(SmallOrderedHashMap)             \
-  V(SmallOrderedHashSet)             \
-  V(SmallOrderedNameDictionary)      \
-  V(SourceTextModule)                \
-  V(SwissNameDictionary)             \
-  V(Symbol)                          \
-  V(SyntheticModule)                 \
-  V(ThinString)                      \
-  V(TransitionArray)                 \
-  V(WeakCell)                        \
-  IF_WASM(V, WasmArray)              \
-  IF_WASM(V, WasmContinuationObject) \
-  IF_WASM(V, WasmFuncRef)            \
-  IF_WASM(V, WasmNull)               \
-  IF_WASM(V, WasmResumeData)         \
-  IF_WASM(V, WasmStruct)             \
-  IF_WASM(V, WasmSuspenderObject)    \
-  IF_WASM(V, WasmTypeInfo)           \
+#define TYPED_VISITOR_ID_LIST(V)      \
+  V(AccessorInfo)                     \
+  V(AllocationSite)                   \
+  V(BigInt)                           \
+  V(BytecodeWrapper)                  \
+  V(CallSiteInfo)                     \
+  V(Cell)                             \
+  V(CodeWrapper)                      \
+  V(ConsString)                       \
+  V(ContextSidePropertyCell)          \
+  V(CoverageInfo)                     \
+  V(DataHandler)                      \
+  V(DebugInfo)                        \
+  V(EmbedderDataArray)                \
+  V(EphemeronHashTable)               \
+  V(ExternalString)                   \
+  V(FeedbackCell)                     \
+  V(FeedbackMetadata)                 \
+  V(Foreign)                          \
+  V(FunctionTemplateInfo)             \
+  V(HeapNumber)                       \
+  V(Hole)                             \
+  V(Map)                              \
+  V(NativeContext)                    \
+  V(Oddball)                          \
+  V(PreparseData)                     \
+  V(PropertyArray)                    \
+  V(PropertyCell)                     \
+  V(PrototypeInfo)                    \
+  V(RegExpBoilerplateDescription)     \
+  V(RegExpDataWrapper)                \
+  V(SeqOneByteString)                 \
+  V(SeqTwoByteString)                 \
+  V(SharedFunctionInfo)               \
+  V(SlicedString)                     \
+  V(SloppyArgumentsElements)          \
+  V(SmallOrderedHashMap)              \
+  V(SmallOrderedHashSet)              \
+  V(SmallOrderedNameDictionary)       \
+  V(SourceTextModule)                 \
+  V(SwissNameDictionary)              \
+  V(Symbol)                           \
+  V(SyntheticModule)                  \
+  V(ThinString)                       \
+  V(TransitionArray)                  \
+  V(WeakCell)                         \
+  IF_WASM(V, WasmArray)               \
+  IF_WASM(V, WasmContinuationObject)  \
+  IF_WASM(V, WasmFuncRef)             \
+  IF_WASM(V, WasmMemoryMapDescriptor) \
+  IF_WASM(V, WasmNull)                \
+  IF_WASM(V, WasmResumeData)          \
+  IF_WASM(V, WasmStruct)              \
+  IF_WASM(V, WasmSuspenderObject)     \
+  IF_WASM(V, WasmTypeInfo)            \
   SIMPLE_HEAP_OBJECT_LIST1(V)
 
 // Visitation in here will refer to BodyDescriptors with the used size of the
@@ -190,8 +192,7 @@ TRUSTED_VISITOR_ID_LIST(FORWARD_DECLARE)
 template <typename ConcreteVisitor>
 class HeapVisitor : public ObjectVisitorWithCageBases {
  public:
-  inline HeapVisitor(PtrComprCageBase cage_base,
-                     PtrComprCageBase code_cage_base);
+  inline explicit HeapVisitor(LocalIsolate* isolate);
   inline explicit HeapVisitor(Isolate* isolate);
   inline explicit HeapVisitor(Heap* heap);
 
@@ -281,13 +282,16 @@ class HeapVisitor : public ObjectVisitorWithCageBases {
                                            MaybeObjectSize maybe_object_size);
 
   template <typename T>
-  static V8_INLINE Tagged<T> Cast(Tagged<HeapObject> object);
+  static V8_INLINE Tagged<T> Cast(Tagged<HeapObject> object, const Heap* heap);
 
   // Inspects the slot and filters some well-known RO objects and Smis in a fast
   // way. May still return Smis or RO objects.
   template <typename TSlot>
   std::optional<Tagged<Object>> GetObjectFilterReadOnlyAndSmiFast(
       TSlot slot) const;
+
+ protected:
+  const Heap* heap_;
 };
 
 // These strings can be sources of safe string transitions. Transitions are safe
@@ -332,7 +336,7 @@ class ConcurrentHeapVisitor : public HeapVisitor<ConcreteVisitor> {
 #undef VISIT_AS_LOCKED_STRING
 
   template <typename T>
-  static V8_INLINE Tagged<T> Cast(Tagged<HeapObject> object);
+  static V8_INLINE Tagged<T> Cast(Tagged<HeapObject> object, const Heap* heap);
 
  private:
   template <typename T>

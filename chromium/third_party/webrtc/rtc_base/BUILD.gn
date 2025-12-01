@@ -187,6 +187,8 @@ rtc_library("event_tracer") {
   sources = [
     "event_tracer.cc",
     "event_tracer.h",
+    "trace_categories.cc",
+    "trace_categories.h",
     "trace_event.h",
   ]
   deps = [
@@ -203,12 +205,6 @@ rtc_library("event_tracer") {
     "system:rtc_export",
     "//third_party/abseil-cpp/absl/strings:string_view",
   ]
-  if (rtc_use_perfetto) {
-    sources += [
-      "trace_categories.cc",
-      "trace_categories.h",
-    ]
-  }
 }
 
 rtc_library("histogram_percentile_counter") {
@@ -641,34 +637,6 @@ rtc_source_set("rtc_operations_chain") {
   ]
 }
 
-if (rtc_enable_libevent) {
-  rtc_library("rtc_task_queue_libevent") {
-    visibility = [ "../api/task_queue:default_task_queue_factory" ]
-    sources = [
-      "task_queue_libevent.cc",
-      "task_queue_libevent.h",
-    ]
-    deps = [
-      ":checks",
-      ":logging",
-      ":macromagic",
-      ":platform_thread",
-      ":platform_thread_types",
-      ":safe_conversions",
-      ":timeutils",
-      "../api/task_queue",
-      "../api/units:time_delta",
-      "synchronization:mutex",
-      "//third_party/abseil-cpp/absl/container:inlined_vector",
-      "//third_party/abseil-cpp/absl/functional:any_invocable",
-      "//third_party/abseil-cpp/absl/strings:string_view",
-    ]
-    if (rtc_build_libevent) {
-      deps += [ "//third_party/libevent" ]
-    }
-  }
-}
-
 if (is_mac || is_ios) {
   rtc_library("rtc_task_queue_gcd") {
     visibility = [ "../api/task_queue:default_task_queue_factory" ]
@@ -905,8 +873,15 @@ rtc_library("async_dns_resolver_unittests") {
   deps = [
     ":async_dns_resolver",
     ":gunit_helpers",
+    ":logging",
+    ":net_helpers",
+    ":socket_address",
+    ":threading",
+    "../api:rtc_error_matchers",
+    "../api/units:time_delta",
     "../test:run_loop",
     "../test:test_support",
+    "../test:wait_until",
   ]
 }
 
@@ -1638,10 +1613,10 @@ rtc_library("ssl_adapter") {
     ":threading",
     ":timeutils",
     "../api:array_view",
+    "../api:field_trials_view",
     "../api:sequence_checker",
     "../api/task_queue:pending_task_safety_flag",
     "../api/units:time_delta",
-    "../system_wrappers:field_trial",
     "system:rtc_export",
     "task_utils:repeating_task",
     "//third_party/abseil-cpp/absl/functional:any_invocable",
@@ -1681,12 +1656,16 @@ rtc_library("testclient") {
     "test_client.h",
   ]
   deps = [
+    ":async_packet_socket",
     ":async_udp_socket",
     ":buffer",
     ":gunit_helpers",
     ":rtc_base_tests_utils",
+    ":socket",
+    ":socket_address",
     ":threading",
     ":timeutils",
+    "../api/units:time_delta",
     "../api/units:timestamp",
     "network:received_packet",
     "synchronization:mutex",
@@ -1836,11 +1815,16 @@ if (rtc_include_tests) {
 
     sources = [ "operations_chain_unittest.cc" ]
     deps = [
+      ":checks",
       ":gunit_helpers",
       ":rtc_event",
       ":rtc_operations_chain",
       ":threading",
+      "../api:rtc_error_matchers",
+      "../api:scoped_refptr",
+      "../api/units:time_delta",
       "../test:test_support",
+      "../test:wait_until",
     ]
   }
 
@@ -1874,10 +1858,12 @@ if (rtc_include_tests) {
         ":rtc_base_tests_utils",
         ":socket",
         ":socket_address",
+        ":socket_factory",
         ":socket_server",
         ":testclient",
         ":threading",
         ":timeutils",
+        "../api:rtc_error_matchers",
         "../api/units:time_delta",
         "../api/units:timestamp",
         "../system_wrappers",
@@ -1885,6 +1871,8 @@ if (rtc_include_tests) {
         "../test:fileutils",
         "../test:test_main",
         "../test:test_support",
+        "../test:wait_until",
+        "network:ecn_marking",
         "third_party/sigslot",
         "//testing/gtest",
         "//third_party/abseil-cpp/absl/memory",
@@ -2136,6 +2124,7 @@ if (rtc_include_tests) {
         ":net_helpers",
         ":net_test_helpers",
         ":network",
+        ":network_constants",
         ":network_route",
         ":null_socket_server",
         ":refcount",
@@ -2161,6 +2150,8 @@ if (rtc_include_tests) {
         "../api:array_view",
         "../api:field_trials_view",
         "../api:make_ref_counted",
+        "../api:rtc_error_matchers",
+        "../api:scoped_refptr",
         "../api:sequence_checker",
         "../api/task_queue",
         "../api/task_queue:pending_task_safety_flag",
@@ -2172,6 +2163,7 @@ if (rtc_include_tests) {
         "../test:scoped_key_value_config",
         "../test:test_main",
         "../test:test_support",
+        "../test:wait_until",
         "memory:fifo_buffer",
         "network:received_packet",
         "synchronization:mutex",

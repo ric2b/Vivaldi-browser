@@ -5,6 +5,7 @@ source_set("omnibox") {
     "omnibox_service.cc",
     "omnibox_service.h",
     "omnibox_service_observer.h",
+    "omnibox_input.h",
   ]
   deps = [
     "//third_party/flatbuffers",

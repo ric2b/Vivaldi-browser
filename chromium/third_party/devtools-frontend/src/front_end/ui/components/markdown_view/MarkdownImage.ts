@@ -5,12 +5,16 @@
 import '../../components/icon_button/icon_button.js';
 
 import type * as IconButton from '../../components/icon_button/icon_button.js';
-import * as LitHtml from '../../lit-html/lit-html.js';
+import * as Lit from '../../lit/lit.js';
 
-import markdownImageStyles from './markdownImage.css.js';
+import markdownImageStylesRaw from './markdownImage.css.js';
 import {getMarkdownImage, type ImageData} from './MarkdownImagesMap.js';
 
-const {html, Directives: {ifDefined}} = LitHtml;
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const markdownImageStyles = new CSSStyleSheet();
+markdownImageStyles.replaceSync(markdownImageStylesRaw.cssContent);
+
+const {html, Directives: {ifDefined}} = Lit;
 
 export interface MarkdownImageData {
   key: string;
@@ -40,7 +44,7 @@ export class MarkdownImage extends HTMLElement {
     this.#render();
   }
 
-  #getIconComponent(): LitHtml.TemplateResult {
+  #getIconComponent(): Lit.TemplateResult {
     if (!this.#imageData) {
       return html``;
     }
@@ -50,7 +54,7 @@ export class MarkdownImage extends HTMLElement {
     `;
   }
 
-  #getImageComponent(): LitHtml.TemplateResult {
+  #getImageComponent(): Lit.TemplateResult {
     if (!this.#imageData) {
       return html``;
     }
@@ -66,7 +70,7 @@ export class MarkdownImage extends HTMLElement {
     }
     const {isIcon} = this.#imageData;
     const imageComponent = isIcon ? this.#getIconComponent() : this.#getImageComponent();
-    LitHtml.render(imageComponent, this.#shadow, {host: this});
+    Lit.render(imageComponent, this.#shadow, {host: this});
   }
 }
 

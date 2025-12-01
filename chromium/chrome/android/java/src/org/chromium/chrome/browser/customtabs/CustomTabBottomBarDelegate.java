@@ -37,7 +37,6 @@ import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntent
 import org.chromium.chrome.browser.browserservices.intents.CustomButtonParams;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager.OverlayPanelManagerObserver;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerImpl;
-import org.chromium.chrome.browser.dependency_injection.ActivityScope;
 import org.chromium.chrome.browser.night_mode.RemoteViewsWithNightModeInflater;
 import org.chromium.chrome.browser.night_mode.SystemNightModeMonitor;
 import org.chromium.chrome.browser.omnibox.styles.OmniboxResourceProvider;
@@ -52,10 +51,7 @@ import org.chromium.ui.interpolators.Interpolators;
 
 import java.util.List;
 
-import javax.inject.Inject;
-
 /** Delegate that manages bottom bar area inside of {@link CustomTabActivity}. */
-@ActivityScope
 public class CustomTabBottomBarDelegate
         implements BrowserControlsStateProvider.Observer, SwipeGestureListener.SwipeHandler {
     private static final String TAG = "CustomTab";
@@ -113,20 +109,21 @@ public class CustomTabBottomBarDelegate
                 }
             };
 
-    @Inject
     public CustomTabBottomBarDelegate(
-            BaseCustomTabActivity activity,
+            Activity activity,
             WindowAndroid windowAndroid,
             BrowserServicesIntentDataProvider dataProvider,
             BrowserControlsSizer browserControlsSizer,
+            CustomTabNightModeStateController nightModeStateController,
+            Supplier<Tab> tabProvider,
             CustomTabCompositorContentInitializer compositorContentInitializer) {
         mActivity = activity;
         mWindowAndroid = windowAndroid;
         mDataProvider = dataProvider;
         mBrowserControlsSizer = browserControlsSizer;
-        mNightModeStateController = activity.getCustomTabNightModeStateController();
-        mTabProvider = activity.getCustomTabActivityTabProvider();
-        browserControlsSizer.addObserver(this);
+        mNightModeStateController = nightModeStateController;
+        mTabProvider = tabProvider;
+        mBrowserControlsSizer.addObserver(this);
         mKeepContentView = false;
         compositorContentInitializer.addCallback(this::addOverlayPanelManagerObserver);
 
@@ -474,7 +471,7 @@ public class CustomTabBottomBarDelegate
         }
         try {
             ActivityOptions options = ActivityOptions.makeBasic();
-            ApiCompatibilityUtils.setActivityOptionsBackgroundActivityStartMode(options);
+            ApiCompatibilityUtils.setActivityOptionsBackgroundActivityStartAllowAlways(options);
             pendingIntent.send(activity, 0, addedIntent, null, null, null, options.toBundle());
         } catch (CanceledException e) {
             Log.e(TAG, "CanceledException when sending pending intent.");
@@ -499,9 +496,11 @@ public class CustomTabBottomBarDelegate
     public void onControlsOffsetChanged(
             int topOffset,
             int topControlsMinHeightOffset,
+            boolean topControlsMinHeightChanged,
             int bottomOffset,
             int bottomControlsMinHeightOffset,
-            boolean needsAnimate,
+            boolean bottomControlsMinHeightChanged,
+            boolean requestNewFrame,
             boolean isVisibilityForced) {
         if (mBottomBarView != null) {
             int minHeight = mBrowserControlsSizer.getBottomControlsMinHeight();

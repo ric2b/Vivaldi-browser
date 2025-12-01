@@ -28,7 +28,7 @@ enum TestLensProviderErrors : NSInteger {
   kTestLensProviderErrorNotImplemented,
 };
 
-}
+}  // namespace
 
 using LensWebParamsCallback =
     base::OnceCallback<void(web::NavigationManager::WebLoadParams)>;
@@ -36,6 +36,19 @@ using LensWebParamsCallback =
 id<ChromeLensController> NewChromeLensController(LensConfiguration* config) {
   // Lens is not supported for tests.
   return nil;
+}
+
+UIViewController<ChromeLensViewFinderController>*
+NewChromeLensViewFinderController(LensConfiguration* config) {
+  // Lens is not supported for tests.
+  return nil;
+}
+
+UIViewController<ChromeLensOverlay>* NewChromeLensOverlay(
+    LensImageSource* imageSource,
+    LensConfiguration* config,
+    NSArray<UIAction*>* additionalMenuItems) {
+  return [[TestLensOverlayController alloc] init];
 }
 
 UIViewController<ChromeLensOverlay>* NewChromeLensOverlay(

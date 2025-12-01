@@ -31,6 +31,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "src/tint/api/common/binding_point.h"
@@ -246,6 +247,9 @@ struct Options {
     /// Copy constructor
     Options(const Options&);
 
+    /// Set to `true` to strip all user-declared identifiers from the module.
+    bool strip_all_names = false;
+
     /// Set to `true` to disable software robustness that prevents out-of-bounds accesses.
     bool disable_robustness = false;
 
@@ -267,11 +271,15 @@ struct Options {
     /// Offsets of the minDepth and maxDepth push constants.
     std::optional<RangeOffsets> depth_range_offsets;
 
+    /// Vertex inputs to perform BGRA swizzle on.
+    std::unordered_set<uint32_t> bgra_swizzle_locations;
+
     /// The bindings
     Bindings bindings{};
 
     /// Reflect the fields of this class so that it can be used by tint::ForeachField()
     TINT_REFLECT(Options,
+                 strip_all_names,
                  disable_robustness,
                  disable_workgroup_init,
                  disable_polyfill_integer_div_mod,
@@ -279,6 +287,7 @@ struct Options {
                  first_vertex_offset,
                  first_instance_offset,
                  depth_range_offsets,
+                 bgra_swizzle_locations,
                  bindings);
 };
 

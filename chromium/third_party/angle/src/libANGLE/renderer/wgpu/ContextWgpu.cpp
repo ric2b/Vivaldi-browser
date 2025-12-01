@@ -11,6 +11,7 @@
 
 #include "common/debug.h"
 
+#include "compiler/translator/wgsl/OutputUniformBlocks.h"
 #include "libANGLE/Context.h"
 #include "libANGLE/renderer/OverlayImpl.h"
 #include "libANGLE/renderer/wgpu/BufferWgpu.h"
@@ -30,6 +31,7 @@
 #include "libANGLE/renderer/wgpu/TextureWgpu.h"
 #include "libANGLE/renderer/wgpu/TransformFeedbackWgpu.h"
 #include "libANGLE/renderer/wgpu/VertexArrayWgpu.h"
+#include "libANGLE/renderer/wgpu/wgpu_pipeline_state.h"
 #include "libANGLE/renderer/wgpu/wgpu_utils.h"
 
 namespace rx
@@ -55,6 +57,8 @@ constexpr angle::PackedEnumMap<webgpu::RenderPassClosureReason, const char *>
          "Render pass closed due to index buffer read back for streamed client data"},
         {webgpu::RenderPassClosureReason::VertexArrayStreaming,
          "Render pass closed for uploading streamed client data"},
+        {webgpu::RenderPassClosureReason::VertexArrayLineLoop,
+         "Render pass closed for line loop emulation"},
     }};
 
 }  // namespace
@@ -68,6 +72,7 @@ ContextWgpu::ContextWgpu(const gl::State &state, gl::ErrorSet *errorSet, Display
         DIRTY_BIT_SCISSOR,
         DIRTY_BIT_VERTEX_BUFFERS,
         DIRTY_BIT_INDEX_BUFFER,
+        DIRTY_BIT_BIND_GROUPS,
     };
 }
 
@@ -81,6 +86,7 @@ void ContextWgpu::onDestroy(const gl::Context *context)
 angle::Result ContextWgpu::initialize(const angle::ImageLoadContext &imageLoadContext)
 {
     mImageLoadContext = imageLoadContext;
+
     return angle::Result::Continue;
 }
 
@@ -208,7 +214,7 @@ angle::Result ContextWgpu::drawArrays(const gl::Context *context,
     }
 
     ANGLE_TRY(setupDraw(context, mode, first, count, 1, gl::DrawElementsType::InvalidEnum, nullptr,
-                        0, nullptr));
+                        0, nullptr, nullptr));
     mCommandBuffer.draw(static_cast<uint32_t>(count), 1, static_cast<uint32_t>(first), 0);
     return angle::Result::Continue;
 }
@@ -231,7 +237,7 @@ angle::Result ContextWgpu::drawArraysInstanced(const gl::Context *context,
     }
 
     ANGLE_TRY(setupDraw(context, mode, first, count, instanceCount,
-                        gl::DrawElementsType::InvalidEnum, nullptr, 0, nullptr));
+                        gl::DrawElementsType::InvalidEnum, nullptr, 0, nullptr, nullptr));
     mCommandBuffer.draw(static_cast<uint32_t>(count), static_cast<uint32_t>(instanceCount),
                         static_cast<uint32_t>(first), 0);
     return angle::Result::Continue;
@@ -256,7 +262,7 @@ angle::Result ContextWgpu::drawArraysInstancedBaseInstance(const gl::Context *co
     }
 
     ANGLE_TRY(setupDraw(context, mode, first, count, instanceCount,
-                        gl::DrawElementsType::InvalidEnum, nullptr, 0, nullptr));
+                        gl::DrawElementsType::InvalidEnum, nullptr, 0, nullptr, nullptr));
     mCommandBuffer.draw(static_cast<uint32_t>(count), static_cast<uint32_t>(instanceCount),
                         static_cast<uint32_t>(first), baseInstance);
     return angle::Result::Continue;
@@ -268,20 +274,16 @@ angle::Result ContextWgpu::drawElements(const gl::Context *context,
                                         gl::DrawElementsType type,
                                         const void *indices)
 {
-    if (mode == gl::PrimitiveMode::LineLoop)
-    {
-        UNIMPLEMENTED();
-        return angle::Result::Continue;
-    }
-    else if (mode == gl::PrimitiveMode::TriangleFan)
+    uint32_t firstVertex = 0;
+    uint32_t indexCount  = static_cast<uint32_t>(count);
+    if (mode == gl::PrimitiveMode::TriangleFan)
     {
         UNIMPLEMENTED();
         return angle::Result::Continue;
     }
 
-    uint32_t firstVertex = 0;
-    ANGLE_TRY(setupDraw(context, mode, 0, count, 1, type, indices, 0, &firstVertex));
-    mCommandBuffer.drawIndexed(static_cast<uint32_t>(count), 1, firstVertex, 0, 0);
+    ANGLE_TRY(setupDraw(context, mode, 0, count, 1, type, indices, 0, &firstVertex, &indexCount));
+    mCommandBuffer.drawIndexed(indexCount, 1, firstVertex, 0, 0);
     return angle::Result::Continue;
 }
 
@@ -292,21 +294,17 @@ angle::Result ContextWgpu::drawElementsBaseVertex(const gl::Context *context,
                                                   const void *indices,
                                                   GLint baseVertex)
 {
-    if (mode == gl::PrimitiveMode::LineLoop)
-    {
-        UNIMPLEMENTED();
-        return angle::Result::Continue;
-    }
-    else if (mode == gl::PrimitiveMode::TriangleFan)
+    uint32_t firstVertex = 0;
+    uint32_t indexCount  = static_cast<uint32_t>(count);
+    if (mode == gl::PrimitiveMode::TriangleFan)
     {
         UNIMPLEMENTED();
         return angle::Result::Continue;
     }
 
-    uint32_t firstVertex = 0;
-    ANGLE_TRY(setupDraw(context, mode, 0, count, 1, type, indices, baseVertex, &firstVertex));
-    mCommandBuffer.drawIndexed(static_cast<uint32_t>(count), 1, firstVertex,
-                               static_cast<uint32_t>(baseVertex), 0);
+    ANGLE_TRY(setupDraw(context, mode, 0, count, 1, type, indices, baseVertex, &firstVertex,
+                        &indexCount));
+    mCommandBuffer.drawIndexed(indexCount, 1, firstVertex, static_cast<uint32_t>(baseVertex), 0);
     return angle::Result::Continue;
 }
 
@@ -317,21 +315,17 @@ angle::Result ContextWgpu::drawElementsInstanced(const gl::Context *context,
                                                  const void *indices,
                                                  GLsizei instances)
 {
-    if (mode == gl::PrimitiveMode::LineLoop)
-    {
-        UNIMPLEMENTED();
-        return angle::Result::Continue;
-    }
-    else if (mode == gl::PrimitiveMode::TriangleFan)
+    uint32_t firstVertex = 0;
+    uint32_t indexCount  = static_cast<uint32_t>(count);
+    if (mode == gl::PrimitiveMode::TriangleFan)
     {
         UNIMPLEMENTED();
         return angle::Result::Continue;
     }
 
-    uint32_t firstVertex = 0;
-    ANGLE_TRY(setupDraw(context, mode, 0, count, instances, type, indices, 0, &firstVertex));
-    mCommandBuffer.drawIndexed(static_cast<uint32_t>(count), static_cast<uint32_t>(instances),
-                               firstVertex, 0, 0);
+    ANGLE_TRY(
+        setupDraw(context, mode, 0, count, instances, type, indices, 0, &firstVertex, &indexCount));
+    mCommandBuffer.drawIndexed(indexCount, static_cast<uint32_t>(instances), firstVertex, 0, 0);
     return angle::Result::Continue;
 }
 
@@ -343,22 +337,18 @@ angle::Result ContextWgpu::drawElementsInstancedBaseVertex(const gl::Context *co
                                                            GLsizei instances,
                                                            GLint baseVertex)
 {
-    if (mode == gl::PrimitiveMode::LineLoop)
-    {
-        UNIMPLEMENTED();
-        return angle::Result::Continue;
-    }
-    else if (mode == gl::PrimitiveMode::TriangleFan)
+    uint32_t firstVertex = 0;
+    uint32_t indexCount  = static_cast<uint32_t>(count);
+    if (mode == gl::PrimitiveMode::TriangleFan)
     {
         UNIMPLEMENTED();
         return angle::Result::Continue;
     }
 
-    uint32_t firstVertex = 0;
-    ANGLE_TRY(
-        setupDraw(context, mode, 0, count, instances, type, indices, baseVertex, &firstVertex));
-    mCommandBuffer.drawIndexed(static_cast<uint32_t>(count), static_cast<uint32_t>(instances),
-                               firstVertex, static_cast<uint32_t>(baseVertex), 0);
+    ANGLE_TRY(setupDraw(context, mode, 0, count, instances, type, indices, baseVertex, &firstVertex,
+                        &indexCount));
+    mCommandBuffer.drawIndexed(indexCount, static_cast<uint32_t>(instances), firstVertex,
+                               static_cast<uint32_t>(baseVertex), 0);
     return angle::Result::Continue;
 }
 
@@ -371,22 +361,18 @@ angle::Result ContextWgpu::drawElementsInstancedBaseVertexBaseInstance(const gl:
                                                                        GLint baseVertex,
                                                                        GLuint baseInstance)
 {
-    if (mode == gl::PrimitiveMode::LineLoop)
-    {
-        UNIMPLEMENTED();
-        return angle::Result::Continue;
-    }
-    else if (mode == gl::PrimitiveMode::TriangleFan)
+    uint32_t firstVertex = 0;
+    uint32_t indexCount  = static_cast<uint32_t>(count);
+    if (mode == gl::PrimitiveMode::TriangleFan)
     {
         UNIMPLEMENTED();
         return angle::Result::Continue;
     }
 
-    uint32_t firstVertex = 0;
-    ANGLE_TRY(
-        setupDraw(context, mode, 0, count, instances, type, indices, baseVertex, &firstVertex));
-    mCommandBuffer.drawIndexed(static_cast<uint32_t>(count), static_cast<uint32_t>(instances),
-                               firstVertex, static_cast<uint32_t>(baseVertex),
+    ANGLE_TRY(setupDraw(context, mode, 0, count, instances, type, indices, baseVertex, &firstVertex,
+                        &indexCount));
+    mCommandBuffer.drawIndexed(indexCount, static_cast<uint32_t>(instances), firstVertex,
+                               static_cast<uint32_t>(baseVertex),
                                static_cast<uint32_t>(baseInstance));
     return angle::Result::Continue;
 }
@@ -625,10 +611,13 @@ angle::Result ContextWgpu::syncState(const gl::Context *context,
             case gl::state::DIRTY_BIT_SAMPLE_MASK:
                 break;
             case gl::state::DIRTY_BIT_DEPTH_TEST_ENABLED:
+                // Enabled and func get combined into one state in WebGPU. Only sync it once.
+                iter.setLaterBit(gl::state::DIRTY_BIT_DEPTH_FUNC);
                 break;
             case gl::state::DIRTY_BIT_DEPTH_FUNC:
                 if (mRenderPipelineDesc.setDepthFunc(
-                        gl_wgpu::getCompareFunc(glState.getDepthStencilState().depthFunc)))
+                        gl_wgpu::GetCompareFunc(glState.getDepthStencilState().depthFunc,
+                                                glState.getDepthStencilState().depthTest)))
                 {
                     invalidateCurrentRenderPipeline();
                 }
@@ -636,17 +625,22 @@ angle::Result ContextWgpu::syncState(const gl::Context *context,
             case gl::state::DIRTY_BIT_DEPTH_MASK:
                 break;
             case gl::state::DIRTY_BIT_STENCIL_TEST_ENABLED:
+                // Changing the state of stencil test affects both the front and back funcs.
+                iter.setLaterBit(gl::state::DIRTY_BIT_STENCIL_FUNCS_FRONT);
+                iter.setLaterBit(gl::state::DIRTY_BIT_STENCIL_FUNCS_BACK);
                 break;
             case gl::state::DIRTY_BIT_STENCIL_FUNCS_FRONT:
                 if (mRenderPipelineDesc.setStencilFrontFunc(
-                        gl_wgpu::getCompareFunc(glState.getDepthStencilState().stencilFunc)))
+                        gl_wgpu::GetCompareFunc(glState.getDepthStencilState().stencilFunc,
+                                                glState.getDepthStencilState().stencilTest)))
                 {
                     invalidateCurrentRenderPipeline();
                 }
                 break;
             case gl::state::DIRTY_BIT_STENCIL_FUNCS_BACK:
                 if (mRenderPipelineDesc.setStencilBackFunc(
-                        gl_wgpu::getCompareFunc(glState.getDepthStencilState().stencilBackFunc)))
+                        gl_wgpu::GetCompareFunc(glState.getDepthStencilState().stencilBackFunc,
+                                                glState.getDepthStencilState().stencilTest)))
                 {
                     invalidateCurrentRenderPipeline();
                 }
@@ -1022,11 +1016,18 @@ angle::Result ContextWgpu::setupDraw(const gl::Context *context,
                                      gl::DrawElementsType indexTypeOrInvalid,
                                      const void *indices,
                                      GLint baseVertex,
-                                     uint32_t *outFirstIndex)
+                                     uint32_t *outFirstIndex,
+                                     uint32_t *indexCountOut)
 {
     if (mRenderPipelineDesc.setPrimitiveMode(mode, indexTypeOrInvalid))
     {
         invalidateCurrentRenderPipeline();
+    }
+
+    ProgramExecutableWgpu *executableWgpu = webgpu::GetImpl(mState.getProgramExecutable());
+    if (executableWgpu->checkDirtyUniforms())
+    {
+        mDirtyBits.set(DIRTY_BIT_BIND_GROUPS);
     }
 
     const void *adjustedIndicesPtr = indices;
@@ -1034,9 +1035,9 @@ angle::Result ContextWgpu::setupDraw(const gl::Context *context,
     {
         VertexArrayWgpu *vertexArrayWgpu = GetImplAs<VertexArrayWgpu>(mState.getVertexArray());
         ANGLE_TRY(vertexArrayWgpu->syncClientArrays(
-            context, mState.getProgramExecutable()->getActiveAttribLocationsMask(),
+            context, mState.getProgramExecutable()->getActiveAttribLocationsMask(), mode,
             firstVertexOrInvalid, vertexOrIndexCount, instanceCount, indexTypeOrInvalid, indices,
-            baseVertex, mState.isPrimitiveRestartEnabled(), &adjustedIndicesPtr));
+            baseVertex, mState.isPrimitiveRestartEnabled(), &adjustedIndicesPtr, indexCountOut));
     }
 
     bool reAddDirtyIndexBufferBit = false;
@@ -1098,7 +1099,9 @@ angle::Result ContextWgpu::setupDraw(const gl::Context *context,
                         reAddDirtyIndexBufferBit = true;
                     }
                     break;
-
+                case DIRTY_BIT_BIND_GROUPS:
+                    ANGLE_TRY(handleDirtyBindGroups(&dirtyBitIter));
+                    break;
                 default:
                     UNREACHABLE();
                     break;
@@ -1257,6 +1260,17 @@ angle::Result ContextWgpu::handleDirtyIndexBuffer(gl::DrawElementsType indexType
     }
     mCommandBuffer.setIndexBuffer(buffer->getBuffer(), gl_wgpu::GetIndexFormat(indexType), 0, -1);
     mCurrentIndexBufferType = indexType;
+    return angle::Result::Continue;
+}
+
+angle::Result ContextWgpu::handleDirtyBindGroups(DirtyBits::Iterator *dirtyBitsIterator)
+{
+    ProgramExecutableWgpu *executableWgpu = webgpu::GetImpl(mState.getProgramExecutable());
+    wgpu::BindGroup bindGroup;
+    ANGLE_TRY(executableWgpu->updateUniformsAndGetBindGroup(this, &bindGroup));
+    // TODO(anglebug.com/376553328): need to set up every bind group here.
+    mCommandBuffer.setBindGroup(sh::kDefaultUniformBlockBindGroup, bindGroup);
+
     return angle::Result::Continue;
 }
 

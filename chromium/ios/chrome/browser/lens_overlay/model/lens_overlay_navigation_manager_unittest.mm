@@ -10,11 +10,16 @@
 
 #import "base/apple/foundation_util.h"
 #import "base/uuid.h"
+#import "components/lens/lens_url_utils.h"
+#import "components/variations/scoped_variations_ids_provider.h"
+#import "components/variations/variations_ids_provider.h"
 #import "ios/chrome/browser/lens_overlay/coordinator/fake_chrome_lens_overlay_result.h"
 #import "ios/chrome/browser/lens_overlay/model/lens_overlay_navigation_mutator.h"
+#import "ios/chrome/common/NSString+Chromium.h"
 #import "ios/web/public/test/fakes/fake_navigation_context.h"
 #import "ios/web/public/test/fakes/fake_navigation_manager.h"
 #import "ios/web/public/test/fakes/fake_web_state.h"
+#import "net/base/url_util.h"
 #import "testing/gmock/include/gmock/gmock.h"
 #import "testing/gtest/include/gtest/gtest.h"
 #import "testing/gtest_mac.h"
@@ -23,34 +28,42 @@
 #import "third_party/ocmock/gtest_support.h"
 #import "url/gurl.h"
 
-@interface MockLensOverlayNavigationMutator
-    : NSObject <LensOverlayNavigationMutator>
-/// Last `URL` reloaded by calling `reloadURL:`.
-@property(nonatomic, assign) GURL lastReloadedURL;
-@end
-
-@implementation MockLensOverlayNavigationMutator
-- (void)reloadURL:(GURL)URL {
-  _lastReloadedURL = URL;
-}
-
-// Methods below are mocked with OCMock.
-- (void)loadLensResult:(id<ChromeLensOverlayResult>)result {
-}
-- (void)reloadLensResult:(id<ChromeLensOverlayResult>)result {
-}
-- (void)onBackNavigationAvailabilityMaybeChanged:(BOOL)canGoBack {
-}
-@end
-
 class LensOverlayNavigationManagerTest : public PlatformTest {
  protected:
   LensOverlayNavigationManagerTest() {
     fake_web_state_ = std::make_unique<web::FakeWebState>();
-    mutator_ = [[MockLensOverlayNavigationMutator alloc] init];
-    mock_mutator_ = OCMPartialMock(mutator_);
-    manager_ = std::make_unique<LensOverlayNavigationManager>(mutator_);
+    mock_mutator_ = OCMProtocolMock(@protocol(LensOverlayNavigationMutator));
+
+    // Stub calls to `loadURL:omniboxText:` and store the arguments.
+    OCMStub([[mock_mutator_ ignoringNonObjectArgs] loadURL:GURL()
+                                               omniboxText:[OCMArg any]])
+        .andDo(^(NSInvocation* invocation) {
+          GURL* url;
+          [invocation getArgument:&url atIndex:2];
+          latest_loaded_url_ = *url;
+
+          __unsafe_unretained NSString* omnibox_text;
+          [invocation getArgument:&omnibox_text atIndex:3];
+          latest_loaded_omnibox_text_ = omnibox_text;
+        });
+
+    manager_ = std::make_unique<LensOverlayNavigationManager>(mock_mutator_);
     manager_->SetWebState(fake_web_state_.get());
+  }
+
+  /// Returns a random URL.
+  GURL GenerateRandomURL() {
+    return GURL("https://some-url.com/" +
+                base::Uuid::GenerateRandomV4().AsLowercaseString());
+  }
+
+  /// Returns a lens overlay SRP URL with `query_text` as query parameter.
+  GURL LensOverlaySRPWithQueryText(const std::string& query_text) {
+    GURL url = GURL("https://www.google.com/search");
+    url = net::AppendOrReplaceQueryParameter(
+        url, lens::kLensSurfaceQueryParameter, "4");
+    url = net::AppendOrReplaceQueryParameter(url, "q", query_text);
+    return url;
   }
 
   /// Generates a Lens result.
@@ -60,9 +73,7 @@ class LensOverlayNavigationManagerTest : public PlatformTest {
     result.isTextSelection = identifier % 2 == 0;
     result.queryText = @"";
     result.selectionRect = CGRectMake(identifier, identifier, 10, 10);
-    result.searchResultURL =
-        GURL("https://some-url.com/" +
-             base::Uuid::GenerateRandomV4().AsLowercaseString());
+    result.searchResultURL = GenerateRandomURL();
     return result;
   }
 
@@ -80,19 +91,47 @@ class LensOverlayNavigationManagerTest : public PlatformTest {
     EXPECT_OCMOCK_VERIFY(mock_mutator_);
   }
 
-  /// Simulates a web navigation.
-  void SimulateWebNavigation(const GURL& URL, BOOL expect_can_go_back) {
-    OCMExpect([mock_mutator_
-        onBackNavigationAvailabilityMaybeChanged:expect_can_go_back]);
-
+  /// Navigates to `URL`.
+  void WebNavigation(const GURL& URL) {
     web::FakeNavigationContext context;
     context.SetWebState(fake_web_state_.get());
     context.SetUrl(URL);
     context.SetIsSameDocument(NO);
     fake_web_state_->OnNavigationStarted(&context);
     fake_web_state_->OnNavigationFinished(&context);
+  }
+
+  /// Simulates a web navigation that create a new navigation entry.
+  void SimulateWebNavigation(const GURL& URL, BOOL expect_can_go_back) {
+    OCMExpect([mock_mutator_
+        onBackNavigationAvailabilityMaybeChanged:expect_can_go_back]);
+    WebNavigation(URL);
+    EXPECT_OCMOCK_VERIFY(mock_mutator_);
+  }
+
+  /// Simulates a unimodal omnibox navigation.
+  void SimulateUnimodalOmniboxNavigation(const GURL& URL,
+                                         const std::u16string& omnibox_text,
+                                         BOOL expect_can_go_back) {
+    OCMExpect([mock_mutator_
+        onBackNavigationAvailabilityMaybeChanged:expect_can_go_back]);
+    latest_loaded_url_ = GURL();
+    latest_loaded_omnibox_text_ = @"";
+
+    manager_->LoadUnimodalOmniboxNavigation(URL, omnibox_text);
+
+    // Expects `lns_surface` query param to be added in the URL.
+    GURL expected_url =
+        net::AppendOrReplaceQueryParameter(URL, "lns_surface", "4");
 
     EXPECT_OCMOCK_VERIFY(mock_mutator_);
+    EXPECT_EQ(latest_loaded_url_, expected_url);
+    EXPECT_TRUE([latest_loaded_omnibox_text_
+        isEqualToString:[NSString cr_fromString16:omnibox_text]]);
+
+    // Simulates the web navigation that happens with `loadURL:omniboxText:`.
+    // This navigation should not add a new navigation entries.
+    WebNavigation(expected_url);
   }
 
   /// Go back and expect lens `result` to be reloaded.
@@ -107,18 +146,22 @@ class LensOverlayNavigationManagerTest : public PlatformTest {
 
   /// Go back and expect `URL` to be reloaded.
   void GoBackExpectingURLReload(const GURL& URL, BOOL expect_can_go_back) {
-    mutator_.lastReloadedURL = GURL();
+    latest_loaded_url_ = GURL();
     OCMExpect([mock_mutator_
         onBackNavigationAvailabilityMaybeChanged:expect_can_go_back]);
     manager_->GoBack();
     EXPECT_OCMOCK_VERIFY(mock_mutator_);
-    EXPECT_EQ(mutator_.lastReloadedURL, URL);
+    EXPECT_EQ(latest_loaded_url_, URL);
   }
 
-  MockLensOverlayNavigationMutator* mutator_;
   id mock_mutator_;
   std::unique_ptr<web::FakeWebState> fake_web_state_;
   std::unique_ptr<LensOverlayNavigationManager> manager_;
+  GURL latest_loaded_url_;
+  NSString* latest_loaded_omnibox_text_;
+
+  variations::ScopedVariationsIdsProvider scoped_variations_ids_provider_{
+      variations::VariationsIdsProvider::Mode::kUseSignedInState};
 };
 
 // Tests simulating a lens navigation.
@@ -255,4 +298,61 @@ TEST_F(LensOverlayNavigationManagerTest, MixNavigationBack) {
   id<ChromeLensOverlayResult> result1b = GenerateResult(1);
   SimulateLensDidGenerateResult(result1b, /*expect_load=*/YES,
                                 /*expect_can_go_back=*/NO);
+}
+
+// Tests navigation with from a unimodal omnibox query.
+TEST_F(LensOverlayNavigationManagerTest, UnimodalOmniboxNavigation) {
+  id<ChromeLensOverlayResult> result1 = GenerateResult(1);
+  SimulateLensDidGenerateResult(result1, /*expect_load=*/YES,
+                                /*expect_can_go_back=*/NO);
+  // Lens navigation loads URL1.
+  GURL URL1 = result1.searchResultURL;
+
+  // Unimodal omnibox navigation to URL2.
+  GURL URL2 = GenerateRandomURL();
+  SimulateUnimodalOmniboxNavigation(URL2, u"search terms",
+                                    /*expect_can_go_back=*/YES);
+}
+
+// Tests go back on a unimodal omnibox navigation.
+TEST_F(LensOverlayNavigationManagerTest, UnimodalOmniboxNavigationBack) {
+  id<ChromeLensOverlayResult> result1 = GenerateResult(1);
+  SimulateLensDidGenerateResult(result1, /*expect_load=*/YES,
+                                /*expect_can_go_back=*/NO);
+  // Lens navigation loads URL1.
+  GURL URL1 = result1.searchResultURL;
+
+  // Unimodal omnibox navigation to URL2.
+  GURL URL2 = GenerateRandomURL();
+  SimulateUnimodalOmniboxNavigation(URL2, u"search terms",
+                                    /*expect_can_go_back=*/YES);
+
+  GoBackExpectingURLReload(URL1, /*expect_can_go_back=*/NO);
+}
+
+// Tests loading lens overlay SRP updates the navigation text.
+TEST_F(LensOverlayNavigationManagerTest, SRPNavigationUpdatesText) {
+  id<ChromeLensOverlayResult> result1 = GenerateResult(1);
+  SimulateLensDidGenerateResult(result1, /*expect_load=*/YES,
+                                /*expect_can_go_back=*/NO);
+  // Lens navigation loads `URL1`.
+  GURL URL1 = result1.searchResultURL;
+
+  // Web navigation to SRP `URL2` with `text1`.
+  NSString* text1 = @"some query text";
+  GURL URL2 = LensOverlaySRPWithQueryText(text1.cr_UTF8String);
+  OCMExpect([mock_mutator_ onSRPLoadWithOmniboxText:text1]);
+  SimulateWebNavigation(URL2, /*expect_can_go_back=*/YES);
+  EXPECT_OCMOCK_VERIFY(mock_mutator_);
+
+  // Web navigation to SRP `URL3` with `text2`.
+  NSString* text2 = @"some other text";
+  GURL URL3 = LensOverlaySRPWithQueryText(text2.cr_UTF8String);
+  OCMExpect([mock_mutator_ onSRPLoadWithOmniboxText:text2]);
+  SimulateWebNavigation(URL3, /*expect_can_go_back=*/YES);
+  EXPECT_OCMOCK_VERIFY(mock_mutator_);
+
+  // Go back expecting `URL2` with `text1`.
+  GoBackExpectingURLReload(URL2, /*expect_can_go_back=*/YES);
+  EXPECT_TRUE([latest_loaded_omnibox_text_ isEqualToString:text1]);
 }

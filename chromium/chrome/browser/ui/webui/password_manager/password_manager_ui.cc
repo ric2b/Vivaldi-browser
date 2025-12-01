@@ -2,18 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "chrome/browser/ui/webui/password_manager/password_manager_ui.h"
 
 #include "base/feature_list.h"
 #include "base/i18n/message_formatter.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_delegate.h"
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_delegate_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -28,7 +22,6 @@
 #include "chrome/browser/ui/webui/policy_indicator_localized_strings_provider.h"
 #include "chrome/browser/ui/webui/sanitized_image_source.h"
 #include "chrome/browser/ui/webui/settings/safety_hub_handler.h"
-#include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
@@ -43,7 +36,6 @@
 #include "chrome/grit/theme_resources.h"
 #include "components/favicon_base/favicon_url_parser.h"
 #include "components/grit/components_scaled_resources.h"
-#include "components/language/core/common/locale_util.h"
 #include "components/password_manager/core/browser/features/password_features.h"
 #include "components/password_manager/core/browser/leak_detection_dialog_utils.h"
 #include "components/password_manager/core/common/password_manager_constants.h"
@@ -58,6 +50,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/webui/web_ui_util.h"
+#include "ui/webui/webui_util.h"
 
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
 #include "chrome/browser/ui/webui/settings/settings_security_key_handler.h"
@@ -94,49 +87,17 @@ std::u16string InsertBrandedPasswordManager(int message_id) {
           IDS_PASSWORD_BUBBLES_PASSWORD_MANAGER_LINK_TEXT_SAVING_ON_DEVICE));
 }
 
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-bool IsSystemInEnglishLanguage() {
-  return g_browser_process != nullptr &&
-         language::ExtractBaseLanguage(
-             g_browser_process->GetApplicationLocale()) == "en";
-}
-#endif
-
 content::WebUIDataSource* CreateAndAddPasswordsUIHTMLSource(
     Profile* profile,
     content::WebUI* web_ui) {
   content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
       profile, password_manager::kChromeUIPasswordManagerHost);
 
-  webui::SetupWebUIDataSource(
-      source,
-      base::make_span(kPasswordManagerResources, kPasswordManagerResourcesSize),
-      IDR_PASSWORD_MANAGER_PASSWORD_MANAGER_HTML);
-
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  if (IsSystemInEnglishLanguage()) {
-    // Until https://github.com/w3c/manifest/pull/1101 is implemented, we avoid
-    // serving these English text images to users with a different locale. The
-    // PWA install will simply fall back to the non-rich install dialog if
-    // these resources 404.
-    source->AddResourcePath(
-        "images/password_manager_screenshot_checkup_1x.png",
-        IDR_PASSWORD_MANAGER_IMAGES_PASSWORD_MANAGER_SCREENSHOT_CHECKUP_1X_EN_PNG);
-    source->AddResourcePath(
-        "images/password_manager_screenshot_checkup_2x.png",
-        IDR_PASSWORD_MANAGER_IMAGES_PASSWORD_MANAGER_SCREENSHOT_CHECKUP_2X_EN_PNG);
-    source->AddResourcePath(
-        "images/password_manager_screenshot_passwords_1x.png",
-        IDR_PASSWORD_MANAGER_IMAGES_PASSWORD_MANAGER_SCREENSHOT_PASSWORDS_1X_EN_PNG);
-    source->AddResourcePath(
-        "images/password_manager_screenshot_passwords_2x.png",
-        IDR_PASSWORD_MANAGER_IMAGES_PASSWORD_MANAGER_SCREENSHOT_PASSWORDS_2X_EN_PNG);
-  }
-#endif
+  webui::SetupWebUIDataSource(source, base::span(kPasswordManagerResources),
+                              IDR_PASSWORD_MANAGER_PASSWORD_MANAGER_HTML);
 
 #if !BUILDFLAG(OPTIMIZE_WEBUI)
-  source->AddResourcePaths(
-      base::make_span(kSettingsSharedResources, kSettingsSharedResourcesSize));
+  source->AddResourcePaths(base::span(kSettingsSharedResources));
 #endif
 
   static const webui::LocalizedString kStrings[] = {
@@ -190,6 +151,8 @@ content::WebUIDataSource* CreateAndAddPasswordsUIHTMLSource(
       {"close", IDS_CLOSE},
       {"closePromoCardButtonAriaLabel",
        IDS_PASSWORD_MANAGER_UI_CLOSE_PROMO_CARD_BUTTON_ARIA_LABEL},
+      {"columnHeadingConsider", IDS_SETTINGS_COLUMN_HEADING_CONSIDER},
+      {"columnHeadingWhenUsed", IDS_SETTINGS_COLUMN_HEADING_WHEN_USED},
       {"compromisedPasswordsDescription",
        IDS_PASSWORD_MANAGER_UI_COMPROMISED_PASSWORDS_DESCRIPTION},
       {"compromisedPasswordsEmpty",
@@ -374,6 +337,17 @@ content::WebUIDataSource* CreateAndAddPasswordsUIHTMLSource(
        IDS_PASSWORD_MANAGER_UI_PASSKEY_DETAILS_CARD_DELETE_BUTTON_NO_USERNAME_ARIA_LABEL},
       {"passkeyManagementInfoLabel",
        IDS_PASSWORD_MANAGER_UI_PASSKEY_MANAGEMENT_INFO_LABEL},
+      {"passwordChangeSettingLabel", IDS_SETTINGS_PASSWORD_CHANGE_LABEL},
+      {"passwordChangeSettingSubLabel", IDS_SETTINGS_PASSWORD_CHANGE_SUBLABEL},
+      {"passwordChangeSettingDataBreach",
+       IDS_SETTINGS_PASSWORD_CHANGE_DATA_BREACH},
+      {"passwordChangeSettingWhereSaved",
+       IDS_SETTINGS_PASSWORD_CHANGE_WHERE_SAVED},
+      {"passwordChangeSettingExperimental",
+       IDS_SETTINGS_PASSWORD_CHANGE_EXPERIMENTAL},
+      {"passwordChangeSettingContent", IDS_SETTINGS_PASSWORD_CHANGE_CONTENT},
+      {"passwordChangeSettingEncryption",
+       IDS_SETTINGS_PASSWORD_CHANGE_ENCRYPTION},
       {"passwordCopiedToClipboard",
        IDS_PASSWORD_MANAGER_UI_PASSWORD_COPIED_TO_CLIPBOARD},
       {"passwordDeleted", IDS_PASSWORD_MANAGER_UI_PASSWORD_DELETED},

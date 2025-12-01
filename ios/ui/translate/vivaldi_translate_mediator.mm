@@ -3,20 +3,28 @@
 #import "ios/ui/translate/vivaldi_translate_mediator.h"
 
 #import "base/strings/sys_string_conversions.h"
+#import "base/uuid.h"
 #import "components/language/core/browser/language_model_manager.h"
 #import "components/prefs/pref_service.h"
 #import "components/translate/core/browser/translate_download_manager.h"
 #import "ios/chrome/browser/language/model/language_model_manager_factory.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
+#import "ios/translate/vivaldi_ios_th_service_bridge.h"
+#import "ios/translate/vivaldi_ios_th_service_factory.h"
 #import "ios/translate/vivaldi_ios_translate_client.h"
 #import "ios/translate/vivaldi_ios_translate_server_request.h"
 #import "ios/translate/vivaldi_ios_translate_service.h"
 #import "ios/ui/translate/vivaldi_translate_constants.h"
 #import "ios/ui/translate/vivaldi_translate_consumer.h"
 #import "ios/ui/translate/vivaldi_translate_language_item.h"
+#import "ios/ui/translate/vivaldi_translate_swift.h"
+#import "translate_history/th_node.h"
 
-@interface VivaldiTranslateMediator () {
+using translate_history::TH_Node;
+using translate_history::NodeList;
+
+@interface VivaldiTranslateMediator ()<VivaldiIOSTHServiceBridgeObserver> {
 
   // Profile for getting the prefs
   ProfileIOS* _profile;
@@ -33,6 +41,12 @@
 
   // The LanguageModelManager for the translation
   language::LanguageModelManager* _languageModelManager;
+
+  // Bridge to register for direct match service backend changes.
+  std::unique_ptr<translate_history::VivaldiIOSTHServiceBridge> _bridge;
+
+  // Model responsible for handling translate history.
+  translate_history::TH_Model* _translateHistoryModel;
 }
 
 // Initial text if any when mediator started. Non nil for cases when
@@ -54,6 +68,10 @@
 @property (nonatomic, strong)
   NSDictionary<NSString*, VivaldiTranslateLanguageItem*> *languageCodeToItemMap;
 
+// Loaded translate history items.
+@property (nonatomic, strong)
+    NSArray<VivaldiTranslateHistoryItem*> *translateHistoryItems;
+
 @end
 
 @implementation VivaldiTranslateMediator
@@ -69,6 +87,12 @@
         VivaldiIOSTranslateClient::CreateTranslatePrefs(_prefs);
     _languageModelManager =
         LanguageModelManagerFactory::GetForProfile(profile);
+
+    _translateHistoryModel =
+        translate_history::VivaldiIOSTHServiceFactory::GetForProfile(_profile);
+    _translateHistoryModel->Load();
+    _bridge.reset(new translate_history::VivaldiIOSTHServiceBridge(
+        self, _translateHistoryModel));
 
     // Initialize supported languages cache
     [self initializeSupportedLanguages];
@@ -102,6 +126,7 @@
   self.sourceLanguage = nil;
   self.destinationLanguage = nil;
   self.supportedLanguages = nil;
+  self.translateHistoryItems = nil;
   self.languageCodeToItemMap = nil;
 }
 
@@ -117,6 +142,7 @@
 #pragma mark - Private Helpers
 
 - (void)notifyConsumersIfNeeded {
+  [self.consumer translateHistoryDidLoad:self.translateHistoryItems];
   [self.consumer supportedLanguageListDidLoad:self.supportedLanguages];
 
   // Notify consumer that translation will begin
@@ -181,6 +207,73 @@
                                          sourceLang:self.sourceLanguage
                                            destLang:self.destinationLanguage
                                    autoDetectSource:autoDetectSource];
+
+  [self addTranslationToHistory:sourceLanguage
+            destinationLanguage:destinationLanguage
+                     sourceText:sourceText
+                 translatedText:translatedText];
+}
+
+- (void)addTranslationToHistory:(const std::string&)sourceLanguage
+            destinationLanguage:(const std::string&)destinationLanguage
+                     sourceText:(NSString*)sourceText
+                 translatedText:(NSString*)translatedText {
+
+  if (!_translateHistoryModel || !_translateHistoryModel->loaded())
+    return;
+
+  std::string source = base::SysNSStringToUTF8(sourceText);
+  std::string translated = base::SysNSStringToUTF8(translatedText);
+
+  std::unique_ptr<TH_Node> node = std::make_unique<TH_Node>(
+      base::Uuid::GenerateRandomV4().AsLowercaseString());
+  node->src().code = sourceLanguage;
+  node->src().text = source;
+  node->translated().code = destinationLanguage;
+  node->translated().text = translated;
+
+  _translateHistoryModel->Add(std::move(node),
+                              _translateHistoryModel->list()->size());
+}
+
+- (void)getTranslationHistory {
+  if (!_translateHistoryModel || !_translateHistoryModel->loaded())
+    return;
+
+  NodeList* nodeList = _translateHistoryModel->list();
+  if (!nodeList) return;
+
+  __weak __typeof(self) weakSelf = self;
+
+  dispatch_async(
+    dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+
+    NSMutableArray<VivaldiTranslateHistoryItem*> *historyItems =
+          [NSMutableArray array];
+    for (const auto& node : *nodeList) {
+      VivaldiTranslateHistoryItem *item = [weakSelf historyItemForNode:node];
+      [historyItems addObject:item];
+    }
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+      weakSelf.translateHistoryItems = [historyItems copy];
+      [weakSelf.consumer translateHistoryDidLoad:historyItems];
+    });
+  });
+
+}
+
+- (VivaldiTranslateHistoryItem*)historyItemForNode:(TH_Node*)node {
+  NSString* itemId = base::SysUTF8ToNSString(node->id());
+
+  VivaldiTranslateHistoryItem* historyItem =
+      [[VivaldiTranslateHistoryItem alloc] initWithItemId:itemId
+          source:[self languageForCode:node->src().code]
+              sourceText: base::SysUTF8ToNSString(node->src().text)
+                destination: [self languageForCode:node->translated().code]
+                    destinationText: base::SysUTF8ToNSString(node->translated().text)
+                        createdAt:node->date_added().ToNSDate()];
+  return historyItem;
 }
 
 - (NSArray<VivaldiTranslateLanguageItem*>*)supportedLanguagesItems {
@@ -341,6 +434,45 @@
 
   // Start the request
   _translationRequest->StartRequest(data, source_lang, dest_lang);
+}
+
+- (void)didDeleteHistoryItems:(NSArray<NSString*>*)historyItems {
+  if (!_translateHistoryModel || !_translateHistoryModel->loaded())
+    return;
+
+  std::vector<std::string> ids;
+  for (NSString *itemId in historyItems) {
+    std::string utf8String = base::SysNSStringToUTF8(itemId);
+    ids.push_back(utf8String);
+  }
+
+  _translateHistoryModel->Remove(ids);
+}
+
+#pragma mark - VivaldiIOSTHServiceBridgeObserver
+
+- (void)modelDidLoad {
+  [self getTranslationHistory];
+}
+
+- (void)modelDidChange {
+  // No op.
+}
+
+- (void)modelWillBeDeleted {
+  // No op.
+}
+
+- (void)modelDidAddElementAtIndex:(NSInteger)index {
+  [self getTranslationHistory];
+}
+
+- (void)modelDidMoveElementAtIndex:(NSInteger)index {
+  // No op.
+}
+
+- (void)modelDidRemoveElementsWithIds:(NSArray<NSString*>*)ids {
+  [self.consumer translateHistoryDidRemove:ids];
 }
 
 @end

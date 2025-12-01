@@ -18,7 +18,9 @@
 #import "components/signin/public/identity_manager/identity_manager.h"
 #import "components/strings/grit/components_strings.h"
 #import "components/ukm/ios/ukm_url_recorder.h"
+#import "ios/chrome/browser/authentication/ui_bundled/re_signin_infobar_delegate.h"
 #import "ios/chrome/browser/bookmarks/ui_bundled/home/bookmarks_coordinator.h"
+#import "ios/chrome/browser/browser_container/ui_bundled/browser_container_view_controller.h"
 #import "ios/chrome/browser/browser_view/ui_bundled/browser_view_controller+private.h"
 #import "ios/chrome/browser/browser_view/ui_bundled/browser_view_visibility_consumer.h"
 #import "ios/chrome/browser/browser_view/ui_bundled/key_commands_provider.h"
@@ -28,15 +30,23 @@
 #import "ios/chrome/browser/discover_feed/model/feed_constants.h"
 #import "ios/chrome/browser/find_in_page/model/util.h"
 #import "ios/chrome/browser/first_run/ui_bundled/first_run_util.h"
+#import "ios/chrome/browser/fullscreen/ui_bundled/fullscreen_animator.h"
+#import "ios/chrome/browser/fullscreen/ui_bundled/fullscreen_ui_element.h"
+#import "ios/chrome/browser/fullscreen/ui_bundled/fullscreen_ui_updater.h"
 #import "ios/chrome/browser/incognito_reauth/ui_bundled/features.h"
 #import "ios/chrome/browser/incognito_reauth/ui_bundled/incognito_reauth_constants.h"
 #import "ios/chrome/browser/incognito_reauth/ui_bundled/incognito_reauth_scene_agent.h"
 #import "ios/chrome/browser/incognito_reauth/ui_bundled/incognito_reauth_view.h"
 #import "ios/chrome/browser/intents/intents_donation_helper.h"
+#import "ios/chrome/browser/main_content/ui_bundled/main_content_ui.h"
+#import "ios/chrome/browser/main_content/ui_bundled/main_content_ui_broadcasting_util.h"
+#import "ios/chrome/browser/main_content/ui_bundled/main_content_ui_state.h"
+#import "ios/chrome/browser/main_content/ui_bundled/web_scroll_view_main_content_ui_forwarder.h"
 #import "ios/chrome/browser/metrics/model/tab_usage_recorder_browser_agent.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_util.h"
 #import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_coordinator.h"
+#import "ios/chrome/browser/omnibox/public/omnibox_ui_features.h"
 #import "ios/chrome/browser/reading_list/model/reading_list_browser_agent.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
@@ -58,32 +68,22 @@
 #import "ios/chrome/browser/side_swipe/ui_bundled/swipe_view.h"
 #import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/chrome/browser/snapshots/model/snapshot_tab_helper.h"
+#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/coordinator/tab_strip_coordinator.h"
+#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/tab_strip_utils.h"
 #import "ios/chrome/browser/tabs/ui_bundled/background_tab_animation_view.h"
 #import "ios/chrome/browser/tabs/ui_bundled/foreground_tab_animation_view.h"
 #import "ios/chrome/browser/tabs/ui_bundled/requirements/tab_strip_presentation.h"
 #import "ios/chrome/browser/tabs/ui_bundled/switch_to_tab_animation_view.h"
 #import "ios/chrome/browser/tabs/ui_bundled/tab_strip_constants.h"
 #import "ios/chrome/browser/tabs/ui_bundled/tab_strip_legacy_coordinator.h"
-#import "ios/chrome/browser/ui/authentication/re_signin_infobar_delegate.h"
-#import "ios/chrome/browser/ui/browser_container/browser_container_view_controller.h"
+#import "ios/chrome/browser/toolbar/ui_bundled/accessory/toolbar_accessory_presenter.h"
+#import "ios/chrome/browser/toolbar/ui_bundled/buttons/toolbar_configuration.h"
+#import "ios/chrome/browser/toolbar/ui_bundled/fullscreen/toolbar_ui.h"
+#import "ios/chrome/browser/toolbar/ui_bundled/fullscreen/toolbar_ui_broadcasting_util.h"
+#import "ios/chrome/browser/toolbar/ui_bundled/toolbar_coordinator.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
-#import "ios/chrome/browser/ui/fullscreen/fullscreen_animator.h"
-#import "ios/chrome/browser/ui/fullscreen/fullscreen_ui_element.h"
-#import "ios/chrome/browser/ui/fullscreen/fullscreen_ui_updater.h"
-#import "ios/chrome/browser/ui/main_content/main_content_ui.h"
-#import "ios/chrome/browser/ui/main_content/main_content_ui_broadcasting_util.h"
-#import "ios/chrome/browser/ui/main_content/main_content_ui_state.h"
-#import "ios/chrome/browser/ui/main_content/web_scroll_view_main_content_ui_forwarder.h"
-#import "ios/chrome/browser/ui/omnibox/omnibox_ui_features.h"
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/feature_flags.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_coordinator.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_strip/coordinator/tab_strip_coordinator.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_strip/ui/tab_strip_utils.h"
-#import "ios/chrome/browser/ui/toolbar/accessory/toolbar_accessory_presenter.h"
-#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_configuration.h"
-#import "ios/chrome/browser/ui/toolbar/fullscreen/toolbar_ui.h"
-#import "ios/chrome/browser/ui/toolbar/fullscreen/toolbar_ui_broadcasting_util.h"
-#import "ios/chrome/browser/ui/toolbar/toolbar_coordinator.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_params.h"
 #import "ios/chrome/browser/web/model/page_placeholder_browser_agent.h"
@@ -124,9 +124,9 @@
 #import "ios/chrome/browser/tabs/ui_bundled/requirements/tab_strip_constants.h"
 #import "ios/chrome/browser/ui/browser_view/browser_view_controller+vivaldi.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_constants+vivaldi.h"
-#import "ios/chrome/browser/ui/omnibox/omnibox_view_ios.h"
+#import "ios/chrome/browser/omnibox/ui_bundled/omnibox_view_ios.h"
 #import "ios/chrome/browser/ui/tab_strip/vivaldi_tab_strip_constants.h"
-#import "ios/chrome/browser/ui/toolbar/secondary_toolbar_view.h"
+#import "ios/chrome/browser/toolbar/ui_bundled/secondary_toolbar_view.h"
 #import "ios/chrome/browser/ui/whats_new/vivaldi_whats_new_util.h"
 #import "ios/in_app_rating/vivaldi_in_app_rating_manager_swift.h"
 #import "ios/panel/panel_interaction_controller.h"
@@ -532,8 +532,9 @@ const double kDelayForRatingPrompt = 10.0;
 
   _infobarBannerOverlayContainerViewController =
       infobarBannerOverlayContainerViewController;
-  if (!_infobarBannerOverlayContainerViewController)
+  if (!_infobarBannerOverlayContainerViewController) {
     return;
+  }
 
   DCHECK_EQ(_infobarBannerOverlayContainerViewController.parentViewController,
             self);
@@ -551,8 +552,9 @@ const double kDelayForRatingPrompt = 10.0;
 
   _infobarModalOverlayContainerViewController =
       infobarModalOverlayContainerViewController;
-  if (!_infobarModalOverlayContainerViewController)
+  if (!_infobarModalOverlayContainerViewController) {
     return;
+  }
 
   DCHECK_EQ(_infobarModalOverlayContainerViewController.parentViewController,
             self);
@@ -564,15 +566,17 @@ const double kDelayForRatingPrompt = 10.0;
 #pragma mark - Private Properties
 
 - (void)setVisible:(BOOL)visible {
-  if (_visible == visible)
+  if (_visible == visible) {
     return;
+  }
 
   _visible = visible;
 }
 
 - (void)setViewVisible:(BOOL)viewVisible {
-  if (_viewVisible == viewVisible)
+  if (_viewVisible == viewVisible) {
     return;
+  }
   _viewVisible = viewVisible;
   self.visible = viewVisible;
   [self.browserViewVisibilityConsumer browserViewDidChangeVisibility];
@@ -580,8 +584,9 @@ const double kDelayForRatingPrompt = 10.0;
 }
 
 - (void)setBroadcasting:(BOOL)broadcasting {
-  if (_broadcasting == broadcasting)
+  if (_broadcasting == broadcasting) {
     return;
+  }
   _broadcasting = broadcasting;
 
   ChromeBroadcaster* broadcaster = self.fullscreenController->broadcaster();
@@ -623,16 +628,18 @@ const double kDelayForRatingPrompt = 10.0;
 }
 
 - (void)setHideStatusBar:(BOOL)hideStatusBar {
-  if (_hideStatusBar == hideStatusBar)
+  if (_hideStatusBar == hideStatusBar) {
     return;
+  }
   _hideStatusBar = hideStatusBar;
   [self setNeedsStatusBarAppearanceUpdate];
 }
 
 - (NSArray<HeaderDefinition*>*)headerViews {
   NSMutableArray<HeaderDefinition*>* results = [[NSMutableArray alloc] init];
-  if (![self isViewLoaded])
+  if (![self isViewLoaded]) {
     return results;
+  }
 
   // Vivaldi
   if (IsVivaldiRunning()) {
@@ -1059,14 +1066,17 @@ const double kDelayForRatingPrompt = 10.0;
 // about the state of `self` can be made; accordingly, if there's anything
 // not initialized (or being torn down), this method should return NO.
 - (BOOL)shouldSupportKeyCommands {
-  if (_isShutdown)
+  if (_isShutdown) {
     return NO;
+  }
 
-  if (self.presentedViewController)
+  if (self.presentedViewController) {
     return NO;
+  }
 
-  if (_voiceSearchController.visible)
+  if (_voiceSearchController.visible) {
     return NO;
+  }
 
   return self.viewVisible;
 }
@@ -1170,6 +1180,10 @@ const double kDelayForRatingPrompt = 10.0;
   } else {
   self.view.backgroundColor = [UIColor colorNamed:kBackgroundColor];
   } // End Vivaldi
+
+  if (_isOffTheRecord) {
+    self.view.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+  }
 
   if (@available(iOS 17, *)) {
     NSArray<UITrait>* traits = TraitCollectionSetForTraits(nil);
@@ -1300,8 +1314,9 @@ const double kDelayForRatingPrompt = 10.0;
   web::WebState* activeWebState = self.currentWebState;
   if (activeWebState) {
     [self updateWebStateVisibility:NO];
-    if (!self.presentedViewController)
+    if (!self.presentedViewController) {
       activeWebState->SetKeepRenderProcessAlive(false);
+    }
   }
 
   [_bookmarksCoordinator dismissSnackbar];
@@ -1357,8 +1372,9 @@ const double kDelayForRatingPrompt = 10.0;
   [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
 
   // After `-shutdown` is called, browser is invalid and will cause a crash.
-  if (_isShutdown)
+  if (_isShutdown) {
     return;
+  }
 
   if (IsVivaldiRunning()) {
     if ([self canShowTabStrip]) {
@@ -1367,9 +1383,11 @@ const double kDelayForRatingPrompt = 10.0;
       self.tabStripView.hidden = YES;
     }
     // We will close the open panels in case of UI resizes due to rotation or
-    // multitasking window.
-    // Otherwise iPad multi tasking UI shows inappropriate panels after transition
-    [self.browserCoordinatorCommandsHandler dismissPanel];
+    // multitasking window. Otherwise iPad multi tasking UI shows
+    // incorrect panel layout after transition.
+    if ([VivaldiGlobalHelpers isDeviceTablet]) {
+      [self.browserCoordinatorCommandsHandler dismissPanel];
+    }
   } // End Vivaldi
 
   // TODO(crbug.com/40432185): Support size changes for all popups and modal
@@ -1456,8 +1474,9 @@ const double kDelayForRatingPrompt = 10.0;
                             completion:^{
                               BrowserViewController* strongSelf = weakSelf;
                               strongSelf.dismissingModal = NO;
-                              if (completion)
+                              if (completion) {
                                 completion();
+                              }
                             }];
 }
 
@@ -1512,8 +1531,9 @@ const double kDelayForRatingPrompt = 10.0;
       finalCompletionHandler = ^{
         [launchScreenView removeFromSuperview];
         weakSelf.hideStatusBar = NO;
-        if (completion)
+        if (completion) {
           completion();
+        }
       };
     }
   }
@@ -1662,8 +1682,9 @@ const double kDelayForRatingPrompt = 10.0;
       return height + vLocationBarTopPaddingDesktopTab;
     }
   } else {
-  if (primaryToolbar != topmostHeader)
+  if (primaryToolbar != topmostHeader) {
     return height;
+  }
   } // End Vivaldi
 
   // If the primary toolbar is topmost, subtract the height of the portion of
@@ -1975,8 +1996,9 @@ const double kDelayForRatingPrompt = 10.0;
   UIView* presentedContainerView =
       containerViewController.presentedViewController.presentationController
           .containerView;
-  if (presentedContainerView.superview == self.view)
+  if (presentedContainerView.superview == self.view) {
     [self.view bringSubviewToFront:presentedContainerView];
+  }
 }
 
 #pragma mark - Private Methods: UI Configuration, update and Layout
@@ -1992,8 +2014,9 @@ const double kDelayForRatingPrompt = 10.0;
 - (void)dismissPopups {
   // The dispatcher may not be fully connected during shutdown, so selectors may
   // be unrecognized.
-  if (_isShutdown)
+  if (_isShutdown) {
     return;
+  }
 
   [self.popupMenuCommandsHandler dismissPopupMenuAnimated:NO];
   [self.helpHandler hideAllHelpBubbles];
@@ -2067,17 +2090,20 @@ const double kDelayForRatingPrompt = 10.0;
     // End Vivaldi
 
     [header.view setFrame:frame];
-    if (header.behaviour != Overlap)
+    if (header.behaviour != Overlap) {
       height += CGRectGetHeight(frame);
+    }
 
-    if (header.view == self.tabStripView)
+    if (header.view == self.tabStripView) {
       [self setNeedsStatusBarAppearanceUpdate];
+    }
   }
 }
 
 - (UIView*)viewForWebState:(web::WebState*)webState {
-  if (!webState)
+  if (!webState) {
     return nil;
+  }
   if (self.ntpCoordinator.isNTPActiveForCurrentWebState) {
     return self.ntpCoordinator.started ? self.ntpCoordinator.viewController.view
                                        : nil;
@@ -2212,10 +2238,11 @@ const double kDelayForRatingPrompt = 10.0;
     } // End Vivaldi
 
     [self addConstraintsToPrimaryToolbar];
-    // If tabstrip is coming back due to a window resize or screen rotation,
-    // reset the full screen controller to adjust the tabstrip position.
-    if (ShouldShowCompactToolbar(previousTraitCollection) &&
-        !ShouldShowCompactToolbar(self)) {
+    // If tabstrip is leaving or coming back due to a window resize or screen
+    // rotation, reset the full screen controller to adjust the tabstrip
+    // position and toolbar constraints.
+    if (ShouldShowCompactToolbar(previousTraitCollection) !=
+        ShouldShowCompactToolbar(self)) {
       [self
           updateForFullscreenProgress:self.fullscreenController->GetProgress()];
     }
@@ -2361,8 +2388,9 @@ const double kDelayForRatingPrompt = 10.0;
 }
 
 - (void)updateForFullscreenEnabled:(BOOL)enabled {
-  if (!enabled)
+  if (!enabled) {
     [self updateForFullscreenProgress:1.0];
+  }
 }
 
 - (void)animateFullscreenWithAnimator:(FullscreenAnimator*)animator {
@@ -2540,8 +2568,9 @@ const double kDelayForRatingPrompt = 10.0;
 // Updates the browser container view such that its viewport is the space
 // between the primary and secondary toolbars.
 - (void)updateBrowserViewportForFullscreenProgress:(CGFloat)progress {
-  if (!self.currentWebState)
+  if (!self.currentWebState) {
     return;
+  }
 
   // Calculate the heights of the toolbars for `progress`.  `-toolbarHeight`
   // returns the height of the toolbar extending below this view controller's
@@ -2560,8 +2589,9 @@ const double kDelayForRatingPrompt = 10.0;
 // on the the proxy's `shouldUseViewContentInset` property.
 - (void)updateContentPaddingForTopToolbarHeight:(CGFloat)topToolbarHeight
                             bottomToolbarHeight:(CGFloat)bottomToolbarHeight {
-  if (!self.currentWebState)
+  if (!self.currentWebState) {
     return;
+  }
 
   id<CRWWebViewProxy> webViewProxy = self.currentWebState->GetWebViewProxy();
   UIEdgeInsets contentPadding = webViewProxy.contentInset;
@@ -2572,8 +2602,9 @@ const double kDelayForRatingPrompt = 10.0;
 
 - (CGFloat)currentHeaderOffset {
   NSArray<HeaderDefinition*>* headers = [self headerViews];
-  if (!headers.count)
+  if (!headers.count) {
     return 0.0;
+  }
 
   // Prerender tab does not have a toolbar, return `headerHeight` as promised by
   // API documentation.
@@ -2795,8 +2826,9 @@ const double kDelayForRatingPrompt = 10.0;
 - (void)executeAndClearForegroundTabWasAddedCompletionBlock:(BOOL)animated {
   // Test existence again as the block may have been deleted.
   ProceduralBlock completion = self.foregroundTabWasAddedCompletionBlock;
-  if (!completion)
+  if (!completion) {
     return;
+  }
 
   // Clear the property before executing the completion, in case the
   // completion calls appendTabAddedCompletion:tabAddedCompletion.
@@ -2875,8 +2907,9 @@ const double kDelayForRatingPrompt = 10.0;
     }
 
     // Do not resize the same view.
-    if (webStateView != newPage)
+    if (webStateView != newPage) {
       webStateView.frame = strongSelf.contentArea.bounds;
+    }
 
     if (currentAnimationIdentifier != strongSelf->_NTPAnimationIdentifier) {
       // Prevent the completion block from being executed if a new animation has
@@ -2890,8 +2923,9 @@ const double kDelayForRatingPrompt = 10.0;
     strongSelf.inNewTabAnimation = NO;
 
     [strongSelf webStateSelected];
-    if (completion)
+    if (completion) {
       completion();
+    }
 
     [strongSelf executeAndClearForegroundTabWasAddedCompletionBlock:YES];
   };
@@ -3047,6 +3081,10 @@ const double kDelayForRatingPrompt = 10.0;
 // helper
 #pragma mark - SideSwipeMediatorDelegate
 
+- (UIView*)sideSwipeFullscreenView {
+  return self.view;
+}
+
 - (void)sideSwipeViewDismissAnimationDidEnd:(UIView*)sideSwipeView {
 
   if (IsVivaldiRunning()) {
@@ -3080,14 +3118,17 @@ const double kDelayForRatingPrompt = 10.0;
     return YES;
   } // End Vivaldi
 
-  if ([self.popupMenuCoordinator isShowingPopupMenu])
+  if ([self.popupMenuCoordinator isShowingPopupMenu]) {
     return YES;
+  }
 
-  if (_voiceSearchController.visible)
+  if (_voiceSearchController.visible) {
     return YES;
+  }
 
-  if (!self.active)
+  if (!self.active) {
     return YES;
+  }
 
   BOOL isShowingIncognitoBlocker = (self.blockingView.superview != nil);
   if (isShowingIncognitoBlocker) {
@@ -3138,6 +3179,10 @@ const double kDelayForRatingPrompt = 10.0;
 #pragma mark - ToolbarHeightDelegate
 
 - (void)toolbarsHeightChanged {
+  if (![self isViewLoaded]) {
+    return;
+  }
+
   // Toolbar state must be updated before `updateForFullscreenProgress` as the
   // later uses the insets from fullscreen model.
   [self updateToolbarState];

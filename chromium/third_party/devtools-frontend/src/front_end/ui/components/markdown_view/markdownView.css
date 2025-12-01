@@ -13,10 +13,19 @@
   to { width: 100%; }
 }
 
+@keyframes expand {
+  from { height: 0; }
+  to { height: auto; }
+}
+
 .animating {
   overflow: hidden;
   white-space: nowrap;
-  animation: typing 0.3s steps(40, end);
+  animation: typing 0.4s steps(40, end);
+}
+
+devtools-code-block.animating {
+  animation: expand 0.1s linear;
 }
 
 .pending {
@@ -26,7 +35,7 @@
 .message {
   line-height: 18px;
   font-size: 12px;
-  color: var(--override-markdown-view-message-color, --sys-color-token-subtle);
+  color: var(--sys-color-on-surface);
   user-select: text;
 }
 
@@ -76,9 +85,11 @@ devtools-code-block {
 .devtools-link {
   color: var(--sys-color-primary);
   outline-offset: 2px;
-  text-decoration: none;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
-.devtools-link:hover {
-  text-decoration: underline;
+h1.insight, h2.insight, h3.insight, h4.insight, h5.insight, h6.insight {
+  font: var(--sys-typescale-body4-bold);
+  margin: var(--sys-size-1) 0 10px;
 }

@@ -51,9 +51,7 @@ class DownloadManagerMediatorTest : public PlatformTest {
     DownloadManagerTabHelper::CreateForWebState(web_state_.get());
     task_.SetWebState(web_state_.get());
   }
-  ~DownloadManagerMediatorTest() override {
-    [application_ stopMocking];
-  }
+  ~DownloadManagerMediatorTest() override { [application_ stopMocking]; }
 
   web::FakeDownloadTask* task() { return &task_; }
 
@@ -282,8 +280,6 @@ TEST_F(DownloadManagerMediatorTest, SetConsumerAfterDownloadComplete) {
 // Tests that calling `mediator_.SetGoogleDriveAppInstalled()` does inform the
 // consumer accordingly.
 TEST_F(DownloadManagerMediatorTest, SetGoogleDriveAppInstalled) {
-  base::test::ScopedFeatureList feature_list(kIOSSaveToDrive);
-
   // Add WebState to the task with the required tab helpers.
   web::FakeWebState web_state;
   DocumentDownloadTabHelper::CreateForWebState(&web_state);

@@ -4,8 +4,6 @@
 
 #include "content/browser/scheduler/browser_task_queues.h"
 
-#include <array>
-#include <cstdint>
 #include <iterator>
 
 #include "base/check.h"
@@ -22,12 +20,6 @@
 
 namespace content {
 namespace {
-
-// (crbug/1375174): Make kServiceWorkerStorageControlResponse queue use high
-// priority.
-BASE_FEATURE(kServiceWorkerStorageControlResponseUseHighPriority,
-             "ServiceWorkerStorageControlResponseUseHighPriority",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 using BrowserTaskPriority = ::content::internal::BrowserTaskPriority;
 using QueueName = ::perfetto::protos::pbzero::SequenceManagerTask::QueueName;
@@ -65,8 +57,6 @@ QueueName GetUITaskQueueName(BrowserTaskQueues::QueueType queue_type) {
       return QueueName::UI_BEST_EFFORT_TQ;
     case BrowserTaskQueues::QueueType::kDefault:
       return QueueName::UI_DEFAULT_TQ;
-    case BrowserTaskQueues::QueueType::kDeferrableUserBlocking:
-      return QueueName::UI_USER_BLOCKING_DEFERRABLE_TQ;
     case BrowserTaskQueues::QueueType::kUserBlocking:
       return QueueName::UI_USER_BLOCKING_TQ;
     case BrowserTaskQueues::QueueType::kUserVisible:
@@ -88,8 +78,6 @@ QueueName GetIOTaskQueueName(BrowserTaskQueues::QueueType queue_type) {
       return QueueName::IO_BEST_EFFORT_TQ;
     case BrowserTaskQueues::QueueType::kDefault:
       return QueueName::IO_DEFAULT_TQ;
-    case BrowserTaskQueues::QueueType::kDeferrableUserBlocking:
-      return QueueName::IO_USER_BLOCKING_DEFERRABLE_TQ;
     case BrowserTaskQueues::QueueType::kUserBlocking:
       return QueueName::IO_USER_BLOCKING_TQ;
     case BrowserTaskQueues::QueueType::kUserVisible:
@@ -225,16 +213,6 @@ BrowserTaskQueues::CreateBrowserTaskRunners() const {
   return task_runners;
 }
 
-std::array<std::unique_ptr<QueueEnabledVoter>,
-           BrowserTaskQueues::kNumQueueTypes>
-BrowserTaskQueues::CreateQueueEnabledVoters() const {
-  std::array<std::unique_ptr<QueueEnabledVoter>, kNumQueueTypes> voters;
-  for (size_t i = 0; i < voters.size(); ++i) {
-    voters[i] = queue_data_[i].task_queue->CreateQueueEnabledVoter();
-  }
-  return voters;
-}
-
 void BrowserTaskQueues::OnStartupComplete() {
   // Enable all queues
   for (const auto& queue : queue_data_) {
@@ -248,11 +226,7 @@ void BrowserTaskQueues::OnStartupComplete() {
               ->GetQueuePriority()),
       BrowserTaskPriority::kHighestPriority);
   GetBrowserTaskQueue(QueueType::kServiceWorkerStorageControlResponse)
-      ->SetQueuePriority(
-          base::FeatureList::IsEnabled(
-              kServiceWorkerStorageControlResponseUseHighPriority)
-              ? BrowserTaskPriority::kHighPriority
-              : BrowserTaskPriority::kNormalPriority);
+      ->SetQueuePriority(BrowserTaskPriority::kHighPriority);
 }
 
 void BrowserTaskQueues::EnableAllExceptBestEffortQueues() {

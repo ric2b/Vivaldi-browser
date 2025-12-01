@@ -22,10 +22,10 @@ using proto::CastMessage;
 
 namespace {
 
-static constexpr size_t kHeaderSize = sizeof(uint32_t);
+constexpr size_t kHeaderSize = sizeof(uint32_t);
 
 // Cast specifies a max message body size of 64 KiB.
-static constexpr size_t kMaxBodySize = 65536;
+constexpr size_t kMaxBodySize = 65536;
 
 }  // namespace
 

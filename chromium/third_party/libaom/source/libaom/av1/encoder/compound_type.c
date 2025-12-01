@@ -1202,8 +1202,8 @@ static int64_t masked_compound_type_rd(
 
 // scaling values to be used for gating wedge/compound segment based on best
 // approximate rd
-static int comp_type_rd_threshold_mul[3] = { 1, 11, 12 };
-static int comp_type_rd_threshold_div[3] = { 3, 16, 16 };
+static const int comp_type_rd_threshold_mul[3] = { 1, 11, 12 };
+static const int comp_type_rd_threshold_div[3] = { 3, 16, 16 };
 
 int av1_compound_type_rd(const AV1_COMP *const cpi, MACROBLOCK *x,
                          HandleInterModeArgs *args, BLOCK_SIZE bsize,

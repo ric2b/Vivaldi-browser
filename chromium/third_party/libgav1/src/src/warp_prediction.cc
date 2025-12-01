@@ -18,11 +18,9 @@
 #include <cstdint>
 #include <cstdlib>
 
-#include "src/tile.h"
-#include "src/utils/block_parameters_holder.h"
 #include "src/utils/common.h"
 #include "src/utils/constants.h"
-#include "src/utils/logging.h"
+#include "src/utils/types.h"
 
 namespace libgav1 {
 namespace {

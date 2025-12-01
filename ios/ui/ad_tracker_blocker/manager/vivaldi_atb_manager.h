@@ -43,6 +43,9 @@
 - (VivaldiATBSourceItem*)getBlockerSourceForSourceId:(uint32_t)key
                                           sourceType:(ATBSourceType)sourceType;
 - (BOOL)isApplyingExceptionRules;
+/// Returns whether blocking exceptions enabled for current
+/// URL, i.e. Partner URL.
+- (BOOL)isBlockingExceptionsForURL:(GURL)url;
 
 #pragma mark - SETTERS
 /// Updates the global ads and tracker blocking settings

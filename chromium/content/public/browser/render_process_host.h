@@ -24,6 +24,7 @@
 #include "build/build_config.h"
 #include "content/common/buildflags.h"
 #include "content/common/content_export.h"
+#include "content/public/browser/child_process_id.h"
 #include "content/public/browser/web_exposed_isolation_level.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
@@ -34,6 +35,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/network_isolation_key.h"
 #include "services/network/public/mojom/cross_origin_embedder_policy.mojom-forward.h"
+#include "services/network/public/mojom/document_isolation_policy.mojom-forward.h"
 #include "services/network/public/mojom/network_context.mojom-forward.h"
 #include "services/network/public/mojom/restricted_cookie_manager.mojom-forward.h"
 #include "services/network/public/mojom/url_loader_factory.mojom-forward.h"
@@ -132,7 +134,7 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   ADVANCED_MEMORY_SAFETY_CHECKS();
 
  public:
-  using iterator = base::IDMap<RenderProcessHost*>::iterator;
+  using iterator = base::IDMap<RenderProcessHost*, ChildProcessId>::iterator;
 
   // Crash reporting mode for ShutdownForBadMessage.
   enum class CrashReportMode {
@@ -237,6 +239,10 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // leaving the basic JIT compiler in V8 (and the wasm JIT compiler) enabled.
   virtual bool AreV8OptimizationsDisabled() = 0;
 
+  // Indicates whether the current RenderProcessHost disallows overrides of
+  // v8 feature flags.
+  virtual bool DisallowV8FeatureFlagOverrides() = 0;
+
   // Indicates whether the current RenderProcessHost exclusively hosts PDF
   // content.
   virtual bool IsPdf() = 0;
@@ -312,7 +318,11 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // plugins, etc.
   //
   // This will never return ChildProcessHost::kInvalidUniqueID.
-  virtual int GetID() const = 0;
+  virtual ChildProcessId GetID() const = 0;
+
+  // TODO(crbug.com/379869738): Deprecated, please use the ChildProcessId
+  // version above.
+  virtual int GetDeprecatedID() const = 0;
 
   // Returns a SafeRef to `this`. It should only be used in non-owning cases,
   // where the caller is not expected to outlive `this`.
@@ -465,7 +475,7 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   virtual const base::TimeTicks& GetLastInitTime() = 0;
 
   // Returns the priority of this process.
-  virtual base::Process::Priority GetPriority() = 0;
+  virtual base::Process::Priority GetPriority() const = 0;
 
   // Returns a list of durations for active KeepAlive requests.
   // For debugging only. TODO(wjmaclean): Remove once the causes behind
@@ -542,6 +552,9 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   virtual void IncrementPendingReuseRefCount() = 0;
   virtual void DecrementPendingReuseRefCount() = 0;
 
+  // Returns the pending reuse ref count.
+  virtual int GetPendingReuseRefCountForTesting() const = 0;
+
   // Sets all the various process lifetime ref counts to zero (e.g., keep alive,
   // worker, etc). Called when the browser context will be destroyed so this
   // RenderProcessHost can immediately die.
@@ -616,6 +629,8 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
       mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>
           coep_reporter_remote,
       const network::DocumentIsolationPolicy& document_isolation_policy,
+      mojo::PendingRemote<network::mojom::DocumentIsolationPolicyReporter>
+          dip_reporter_remote,
       const storage::BucketLocator& bucket_locator,
       mojo::PendingReceiver<blink::mojom::CacheStorage> receiver) = 0;
   virtual void BindFileSystemManager(
@@ -740,7 +755,7 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   virtual void DumpProfilingData(base::OnceClosure callback) {}
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   // Reinitializes the child process's logging with the given settings. This
   // is needed on Chrome OS, which switches to a log file in the user's home
   // directory once they log in.
@@ -788,6 +803,10 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
 
   // Returns the RenderProcessHost given its ID.  Returns nullptr if the ID does
   // not correspond to a live RenderProcessHost.
+  static RenderProcessHost* FromID(ChildProcessId render_process_id);
+
+  // TODO(crbug.com/379869738): Deprecated, please use the ChildProcessId
+  // version above.
   static RenderProcessHost* FromID(int render_process_id);
 
   // Returns the RenderProcessHost given its renderer's service instance ID,
@@ -825,7 +844,7 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // IOThreadHostImpl::BindHostReceiver() will pass through |callback| first if
   // non-null. |callback| is only called from the IO thread.
   using BindHostReceiverInterceptor =
-      base::RepeatingCallback<void(int render_process_id,
+      base::RepeatingCallback<void(ChildProcessId render_process_id,
                                    mojo::GenericPendingReceiver* receiver)>;
   static void InterceptBindHostReceiverForTesting(
       BindHostReceiverInterceptor callback);

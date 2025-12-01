@@ -5,6 +5,7 @@
 #include "base/json/values_util.h"
 #include "base/power_monitor/battery_state_sampler.h"
 #include "base/strings/string_util.h"
+#include "base/strings/to_string.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/power_monitor_test_utils.h"
@@ -33,10 +34,10 @@
 #include "net/dns/mock_host_resolver.h"
 #include "url/gurl.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "ash/constants/ash_features.h"
 #include "chrome/test/base/ash/interactive/interactive_ash_test.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 using performance_manager::user_tuning::prefs::BatterySaverModeState;
 using performance_manager::user_tuning::prefs::MemorySaverModeAggressiveness;
@@ -164,7 +165,7 @@ IN_PROC_BROWSER_TEST_F(PerformanceSettingsInteractiveTest,
       InAnyContext(WaitForShow(FeedbackDialog::kFeedbackDialogForTesting)));
 }
 
-#elif BUILDFLAG(IS_CHROMEOS_ASH)
+#elif BUILDFLAG(IS_CHROMEOS)
 class PerformanceSettingsCrosInteractiveTest
     : public WebUiInteractiveTestMixin<InteractiveAshTest> {};
 
@@ -189,7 +190,7 @@ IN_PROC_BROWSER_TEST_F(PerformanceSettingsCrosInteractiveTest,
       WaitForShow(kOsFeedbackDialogElementId));
 }
 
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
 class MemorySettingsInteractiveTest
@@ -306,7 +307,7 @@ IN_PROC_BROWSER_TEST_F(MemorySettingsInteractiveTest,
       InAnyContext(WaitForShow(FeedbackDialog::kFeedbackDialogForTesting)));
 }
 
-#elif BUILDFLAG(IS_CHROMEOS_ASH)
+#elif BUILDFLAG(IS_CHROMEOS)
 class MemorySettingsCrosInteractiveTest
     : public WebUiInteractiveTestMixin<InteractiveAshTest> {};
 
@@ -331,7 +332,7 @@ IN_PROC_BROWSER_TEST_F(MemorySettingsCrosInteractiveTest,
       WaitForShow(kOsFeedbackDialogElementId));
 }
 
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
 class MemorySaverAggressivenessSettingsInteractiveTest
@@ -581,7 +582,7 @@ IN_PROC_BROWSER_TEST_F(BatterySettingsInteractiveTest,
 }
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
-#elif BUILDFLAG(IS_CHROMEOS_ASH)
+#elif BUILDFLAG(IS_CHROMEOS)
 class BatterySettingsInteractiveTest
     : public WebUiInteractiveTestMixin<InteractiveAshTest> {
  public:
@@ -647,7 +648,7 @@ IN_PROC_BROWSER_TEST_F(BatterySettingsInteractiveTest,
       WaitForShow(kOsFeedbackDialogElementId));
 }
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 class TabDiscardExceptionsSettingsInteractiveTest
     : public MemorySaverInteractiveTestMixin<
@@ -707,8 +708,8 @@ class TabDiscardExceptionsSettingsInteractiveTest
     toggle_selection_change.event = kButtonWasClicked;
     toggle_selection_change.where = element;
     toggle_selection_change.type = StateChange::Type::kExistsAndConditionTrue;
-    toggle_selection_change.test_function = base::StrCat(
-        {"(el) => el.disabled === ", is_disabled ? "true" : "false"});
+    toggle_selection_change.test_function =
+        base::StrCat({"(el) => el.disabled === ", base::ToString(is_disabled)});
     return WaitForStateChange(contents_id, toggle_selection_change);
   }
 };

@@ -9,21 +9,26 @@ import("../../../../../scripts/build/typescript/typescript.gni")
 
 generate_css("css_files") {
   sources = [
-    "sidebarInsight.css",
+    "baseInsightComponent.css",
     "table.css",
   ]
 }
 
 devtools_module("insights") {
   sources = [
+    "BaseInsightComponent.ts",
     "CLSCulprits.ts",
+    "DOMSize.ts",
     "DocumentLatency.ts",
     "EventRef.ts",
     "FontDisplay.ts",
+    "ForcedReflow.ts",
     "Helpers.ts",
+    "ImageDelivery.ts",
     "InteractionToNextPaint.ts",
     "LCPDiscovery.ts",
     "LCPPhases.ts",
+    "LongCriticalNetworkTree.ts",
     "NodeLink.ts",
     "RenderBlocking.ts",
     "SidebarInsight.ts",
@@ -40,13 +45,11 @@ devtools_module("insights") {
     "../../../../core/sdk:bundle",
     "../../../../models/trace:bundle",
     "../../../../services/trace_bounds:bundle",
-    "../../../../third_party/marked:bundle",
     "../../../../ui/components/buttons:bundle",
     "../../../../ui/components/helpers:bundle",
     "../../../../ui/components/icon_button:bundle",
     "../../../../ui/components/linkifier:bundle",
-    "../../../../ui/components/markdown_view:bundle",
-    "../../../../ui/lit-html:bundle",
+    "../../../../ui/lit:bundle",
     "../../overlays:bundle",
     "../../utils:bundle",
   ]
@@ -69,7 +72,10 @@ devtools_entrypoint("bundle") {
 ts_library("unittests") {
   testonly = true
 
-  sources = [ "SidebarInsight.test.ts" ]
+  sources = [
+    "BaseInsightComponent.test.ts",
+    "CLSCulprits.test.ts",
+  ]
 
   deps = [
     ":bundle",

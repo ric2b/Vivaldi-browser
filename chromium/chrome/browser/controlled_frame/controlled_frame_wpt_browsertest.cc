@@ -21,18 +21,22 @@
 #include "services/device/public/cpp/test/scoped_geolocation_overrider.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/permissions_policy/policy_helper_public.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom-shared.h"
 
 namespace controlled_frame {
 
 namespace {
+
 const auto kTestFiles = testing::Values("add_content_scripts.window.js",
                                         "camera.window.js",
                                         "client_hints_user_agent.window.js",
+                                        "frame_event_handlers_part_1.window.js",
+                                        "frame_event_handlers_part_2.window.js",
                                         "geolocation.window.js",
                                         "new_window.window.js",
                                         "no_callback.window.js",
-                                        "scheme.window.js");
+                                        "scheme.window.js",
+                                        "user_agent_override.window.js",
+                                        "webrequest_event_handlers.window.js");
 
 constexpr char kTestDirectory[] = "chrome/test/data/controlled_frame";
 constexpr char kTestHarnessPath[] =

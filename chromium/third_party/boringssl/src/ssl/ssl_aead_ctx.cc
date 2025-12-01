@@ -1,16 +1,16 @@
-/* Copyright (c) 2015, Google Inc.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
- * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
- * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
- * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. */
+// Copyright 2015 The BoringSSL Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <openssl/ssl.h>
 
@@ -109,8 +109,8 @@ UniquePtr<SSLAEADContext> SSLAEADContext::Create(
     OPENSSL_memcpy(merged_key + mac_key.size(), enc_key.data(), enc_key.size());
     OPENSSL_memcpy(merged_key + mac_key.size() + enc_key.size(),
                    fixed_iv.data(), fixed_iv.size());
-    enc_key = MakeConstSpan(merged_key,
-                            enc_key.size() + mac_key.size() + fixed_iv.size());
+    enc_key =
+        Span(merged_key, enc_key.size() + mac_key.size() + fixed_iv.size());
 
     // The |EVP_AEAD|'s per-encryption nonce, if any, is actually the CBC IV. It
     // must be generated randomly and prepended to the record.
@@ -226,7 +226,7 @@ Span<const uint8_t> SSLAEADContext::GetAdditionalData(
     storage[len++] = static_cast<uint8_t>((plaintext_len >> 8));
     storage[len++] = static_cast<uint8_t>(plaintext_len);
   }
-  return MakeConstSpan(storage, len);
+  return Span(storage, len);
 }
 
 bool SSLAEADContext::Open(Span<uint8_t> *out, uint8_t type,

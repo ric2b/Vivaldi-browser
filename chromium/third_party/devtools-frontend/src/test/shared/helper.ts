@@ -14,7 +14,6 @@ import {getBrowserAndPages, getTestServerPort} from '../conductor/puppeteer-stat
 export {platform} from '../conductor/mocha-interface-helpers.js';
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   interface Window {
     // eslint-disable-next-line @typescript-eslint/naming-convention
     __pendingEvents: Map<string, Event[]>;
@@ -86,7 +85,7 @@ async function performActionOnSelector(
     try {
       await action(element);
       return element;
-    } catch (err) {
+    } catch {
       // A bit of delay to not retry too often.
       await new Promise(resolve => setTimeout(resolve, 50));
     }
@@ -287,8 +286,9 @@ export const waitForNone =
                                }, asyncScope), `Waiting for no elements to match selector '${selector}'`);
 };
 
-export const waitForAria = (selector: string, root?: puppeteer.JSHandle, asyncScope = new AsyncScope()) => {
-  return waitFor(selector, root, asyncScope, 'aria');
+export const waitForAria = <ElementType extends Element = Element>(
+    selector: string, root?: puppeteer.JSHandle, asyncScope = new AsyncScope()) => {
+  return waitFor<ElementType>(selector, root, asyncScope, 'aria');
 };
 
 export const waitForAriaNone = (selector: string, root?: puppeteer.JSHandle, asyncScope = new AsyncScope()) => {
@@ -823,4 +823,12 @@ export async function raf(page: puppeteer.Page): Promise<void> {
   await page.evaluate(() => {
     return new Promise(resolve => window.requestAnimationFrame(resolve));
   });
+}
+
+export async function readClipboard() {
+  const {frontend, browser} = getBrowserAndPages();
+  await browser.defaultBrowserContext().overridePermissions(frontend.url(), ['clipboard-read']);
+  const clipboard = await frontend.evaluate(async () => navigator.clipboard.readText());
+  await browser.defaultBrowserContext().clearPermissionOverrides();
+  return clipboard;
 }

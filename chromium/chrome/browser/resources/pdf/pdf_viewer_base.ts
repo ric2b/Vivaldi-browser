@@ -166,6 +166,7 @@ export abstract class PdfViewerBaseElement extends CrLitElement {
         this.browserApi!.getDefaultZoom() :
         1.0;
 
+    assert(!this.viewport_);
     this.viewport_ = new Viewport(
         scroller, sizer, content, getScrollbarWidth(), defaultZoom);
     this.viewport_!.setViewportChangedCallback(() => this.viewportChanged_());
@@ -177,9 +178,6 @@ export abstract class PdfViewerBaseElement extends CrLitElement {
     });
     this.viewport_!.setUserInitiatedCallback(
         userInitiated => this.setUserInitiated_(userInitiated));
-    window.addEventListener('beforeunload', (event: BeforeUnloadEvent) =>
-        this.onBeforeUnload(event),
-    );
 
     // Handle scripting messages from outside the extension that wish to
     // interact with it. We also send a message indicating that extension has
@@ -255,7 +253,7 @@ export abstract class PdfViewerBaseElement extends CrLitElement {
         this.viewport_!.setPosition(this.lastViewportPosition);
       }
       this.paramsParser!.getViewportFromUrlParams(this.originalUrl)
-          .then(params => this.handleUrlParams_(params));
+          .then(params => this.handleUrlParams(params));
       this.setLoadState(LoadState.SUCCESS);
       this.sendDocumentLoadedMessage();
       while (this.delayedScriptingMessages_.length > 0) {
@@ -450,7 +448,7 @@ export abstract class PdfViewerBaseElement extends CrLitElement {
    * later actions can override the effects of previous actions.
    * @param params The open params passed in the URL.
    */
-  private handleUrlParams_(params: OpenPdfParams) {
+  handleUrlParams(params: OpenPdfParams) {
     assert(this.viewport_);
 
     if (params.zoom) {
@@ -473,7 +471,7 @@ export abstract class PdfViewerBaseElement extends CrLitElement {
       this.viewport_.setFittingType(params.view, fittingTypeParams);
       this.forceFit(params.view);
       this.isUserInitiatedEvent = true;
-    } else if (!params.position && params.page) {
+    } else if (!params.position && params.page !== undefined) {
       // No fitting type provided, so just go to page.
       this.viewport_.goToPage(params.page);
     }
@@ -564,20 +562,5 @@ export abstract class PdfViewerBaseElement extends CrLitElement {
   protected rotateCounterclockwise() {
     record(UserAction.ROTATE);
     this.currentController!.rotateCounterclockwise();
-  }
-
-  /**
-   * Handles the `BeforeUnloadEvent` event.
-   * @param event The `BeforeUnloadEvent` object representing the event.
-   */
-  protected onBeforeUnload(_: BeforeUnloadEvent) {
-    this.resetTrackers_();
-  }
-
-  private resetTrackers_() {
-    this.viewport_!.resetTracker();
-    if (this.tracker) {
-      this.tracker.removeAll();
-    }
   }
 }

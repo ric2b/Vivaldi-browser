@@ -366,10 +366,6 @@ TrayBubbleView::TrayBubbleView(const InitParams& init_params)
     }
   }
 
-  if (init_params.transparent) {
-    set_color(SK_ColorTRANSPARENT);
-  }
-
   if (params_.has_shadow) {
     // Draws shadow on texture layer for large corner radius bubbles.
     if (params_.has_large_corner_radius) {
@@ -399,6 +395,12 @@ TrayBubbleView::TrayBubbleView(const InitParams& init_params)
   GetViewAccessibility().SetRole(ax::mojom::Role::kWindow);
   UpdateAccessibleName();
   UpdateAccessibleIgnoredState();
+
+  name_changed_subscription_ =
+      GetViewAccessibility().AddStringAttributeChangedCallback(
+          ax::mojom::StringAttribute::kName,
+          base::BindRepeating(&TrayBubbleView::OnAXNameChanged,
+                              base::Unretained(this)));
 }
 
 TrayBubbleView::~TrayBubbleView() {
@@ -538,7 +540,7 @@ void TrayBubbleView::OnWidgetBoundsChanged(views::Widget* widget,
 }
 
 ui::LayerType TrayBubbleView::GetLayerType() const {
-  if (params_.translucent) {
+  if (params_.translucent || params_.transparent) {
     return ui::LAYER_NOT_DRAWN;
   }
   return ui::LAYER_TEXTURED;
@@ -643,9 +645,7 @@ void TrayBubbleView::OnThemeChanged() {
 
   SetBorder(std::make_unique<views::HighlightBorder>(
       params_.corner_radius,
-      chromeos::features::IsJellyrollEnabled()
-          ? views::HighlightBorder::Type::kHighlightBorderOnShadow
-          : views::HighlightBorder::Type::kHighlightBorder1));
+      views::HighlightBorder::Type::kHighlightBorderOnShadow));
 
   const ui::ColorId background_color_id =
       chromeos::features::IsSystemBlurEnabled()
@@ -766,6 +766,13 @@ void TrayBubbleView::SetBubbleBorderInsets(gfx::Insets insets) {
 
 void TrayBubbleView::UpdateAccessibleIgnoredState() {
   GetViewAccessibility().SetIsIgnored(!delegate_ || !CanActivate());
+}
+
+void TrayBubbleView::OnAXNameChanged(ax::mojom::StringAttribute attribute,
+                                     const std::optional<std::string>& name) {
+  if (GetWidget()) {
+    GetWidget()->UpdateAccessibleNameForRootView();
+  }
 }
 
 BEGIN_METADATA(TrayBubbleView)

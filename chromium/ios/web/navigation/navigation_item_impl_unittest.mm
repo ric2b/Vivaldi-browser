@@ -87,7 +87,7 @@ TEST_F(NavigationItemTest, Clone) {
 
   // Check that changes occurred in `item_`, but not in `copy`.
   EXPECT_NSEQ([postData1 dataUsingEncoding:NSUTF8StringEncoding],
-              item_->GetPostData());
+              item_ -> GetPostData());
   EXPECT_NSEQ(state1, item_->GetSerializedStateObject());
   EXPECT_NSEQ([postData0 dataUsingEncoding:NSUTF8StringEncoding],
               clone -> GetPostData());
@@ -260,8 +260,7 @@ TEST_F(NavigationItemTest, NavigationItemImplRoundTripNonHTTPURL) {
 
   NavigationItemImpl decoded(storage);
 
-  EXPECT_NE(original.GetURL(), decoded.GetURL());
-  EXPECT_EQ(original.GetVirtualURL(), decoded.GetURL());
+  EXPECT_EQ(original.GetURL(), decoded.GetURL());
   EXPECT_EQ(original.GetVirtualURL(), decoded.GetVirtualURL());
 }
 
@@ -338,7 +337,7 @@ TEST_F(NavigationItemTest, DecodeFileScheme) {
   ASSERT_NE(storage.url(), storage.virtual_url());
 
   NavigationItemImpl navigation_item(storage);
-  EXPECT_EQ(GURL(storage.virtual_url()), navigation_item.GetURL());
+  EXPECT_EQ(GURL(storage.url()), navigation_item.GetURL());
   EXPECT_EQ(GURL(storage.virtual_url()), navigation_item.GetVirtualURL());
 }
 
@@ -350,7 +349,7 @@ TEST_F(NavigationItemTest, DecodeBlobScheme) {
   ASSERT_NE(storage.url(), storage.virtual_url());
 
   NavigationItemImpl navigation_item(storage);
-  EXPECT_EQ(GURL(storage.virtual_url()), navigation_item.GetURL());
+  EXPECT_EQ(GURL(storage.url()), navigation_item.GetURL());
   EXPECT_EQ(GURL(storage.virtual_url()), navigation_item.GetVirtualURL());
 }
 

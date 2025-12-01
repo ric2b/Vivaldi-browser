@@ -21,13 +21,17 @@
 #include <filesystem>  // NOLINT
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include "absl/log/check.h"
 #include "absl/strings/str_cat.h"
 #include "./centipede/feature.h"
 #include "./centipede/workdir.h"
+#include "./common/defs.h"
 #include "./common/logging.h"  // IWYU pragma: keep
+#include "./common/remote_file.h"
 #include "./common/test_util.h"
 
 namespace centipede {
@@ -36,6 +40,7 @@ namespace {
 namespace fs = std::filesystem;
 
 using ::testing::IsSubsetOf;
+using ::testing::IsSupersetOf;
 
 inline constexpr auto kIdxDigits = WorkDir::kDigitsInShardIndex;
 
@@ -53,21 +58,23 @@ void VerifyShardsExist(            //
       std::string{binary_hash},
       /*my_shard_index=*/0,
   };
-  const WorkDir::ShardedFileInfo corpus_files =
-      shard_type == kNormal ? wd.CorpusFiles() : wd.DistilledCorpusFiles();
-  const WorkDir::ShardedFileInfo features_files =
-      shard_type == kNormal ? wd.FeaturesFiles() : wd.DistilledFeaturesFiles();
+  const WorkDir::PathShards corpus_file_paths =
+      shard_type == kNormal ? wd.CorpusFilePaths()
+                            : wd.DistilledCorpusFilePaths();
+  const WorkDir::PathShards features_file_paths =
+      shard_type == kNormal ? wd.FeaturesFilePaths()
+                            : wd.DistilledFeaturesFilePaths();
   for (int shard = 0; shard < num_shards + 2; ++shard) {
     if (shard < num_shards) {
-      ASSERT_TRUE(fs::exists(corpus_files.ShardPath(shard)))
-          << VV(shard) << VV(corpus_files.ShardPath(shard));
-      ASSERT_TRUE(fs::exists(features_files.ShardPath(shard)))
-          << VV(shard) << VV(features_files.ShardPath(shard));
+      ASSERT_TRUE(fs::exists(corpus_file_paths.Shard(shard)))
+          << VV(shard) << VV(corpus_file_paths.Shard(shard));
+      ASSERT_TRUE(fs::exists(features_file_paths.Shard(shard)))
+          << VV(shard) << VV(features_file_paths.Shard(shard));
     } else {
-      ASSERT_FALSE(fs::exists(corpus_files.ShardPath(shard)))
-          << VV(shard) << VV(corpus_files.ShardPath(shard));
-      ASSERT_FALSE(fs::exists(features_files.ShardPath(shard)))
-          << VV(shard) << VV(features_files.ShardPath(shard));
+      ASSERT_FALSE(fs::exists(corpus_file_paths.Shard(shard)))
+          << VV(shard) << VV(corpus_file_paths.Shard(shard));
+      ASSERT_FALSE(fs::exists(features_file_paths.Shard(shard)))
+          << VV(shard) << VV(features_file_paths.Shard(shard));
     }
   }
 }
@@ -173,6 +180,70 @@ TEST(SeedCorpusMakerLibTest, RoundTripWriteReadWrite) {
       ASSERT_NO_FATAL_FAILURE(VerifyShardsExist(  //
           workdir, kCovBin, kCovHash, kNumShards, ShardType::kNormal));
     }
+  }
+}
+
+TEST(SeedCorpusMakerLibTest, LoadsBothIndividualInputsAndShardsFromSource) {
+  const fs::path test_dir = GetTestTempDir(test_info_->name());
+  chdir(test_dir.c_str());
+
+  const InputAndFeaturesVec kShardedInputs = {
+      {{0}, {}},
+      {{1}, {feature_domains::kNoFeature}},
+      {{0, 1}, {0x11, 0x23}},
+  };
+  constexpr std::string_view kCovBin = "bin";
+  constexpr std::string_view kCovHash = "hash";
+  constexpr std::string_view kRelDir = "dir/foo";
+
+  const std::vector<ByteArray> kIndividualInputs = {
+      {0, 1, 2},
+      {0, 1, 2, 3},
+      // Empty input expected to be not in the sample result.
+      {}};
+  // Write sharded inputs.
+  {
+    constexpr size_t kNumShards = 2;
+    const SeedCorpusDestination destination = {
+        .dir_path = std::string(kRelDir),
+        .shard_rel_glob = absl::StrCat("distilled-", kCovBin, ".*"),
+        .shard_index_digits = kIdxDigits,
+        .num_shards = kNumShards,
+    };
+    CHECK_OK(WriteSeedCorpusElementsToDestination(  //
+        kShardedInputs, kCovBin, kCovHash, destination));
+    const std::string workdir = (test_dir / kRelDir).c_str();
+    ASSERT_NO_FATAL_FAILURE(VerifyShardsExist(  //
+        workdir, kCovBin, kCovHash, kNumShards, ShardType::kDistilled));
+  }
+
+  // Write individual inputs
+  for (int i = 0; i < kIndividualInputs.size(); ++i) {
+    const auto path = std::filesystem::path(test_dir) / kRelDir /
+                      absl::StrCat("individual_input_", i);
+    CHECK_OK(RemoteFileSetContents(path.string(), kIndividualInputs[i]));
+  }
+
+  // Test that sharded and individual inputs matches what we wrote.
+  {
+    InputAndFeaturesVec elements;
+    ASSERT_OK(SampleSeedCorpusElementsFromSource(  //
+        SeedCorpusSource{
+            .dir_glob = std::string(kRelDir),
+            .num_recent_dirs = 1,
+            .shard_rel_glob = absl::StrCat("distilled-", kCovBin, ".*"),
+            // Intentionally try to match the shard files and test if they will
+            // be read as individual inputs.
+            .individual_input_rel_glob = "*",
+            .sampled_fraction_or_count = 1.0f,
+        },
+        kCovBin, kCovHash, elements));
+    EXPECT_EQ(elements.size(), 5);  // Non-empty inputs
+    EXPECT_THAT(elements, IsSupersetOf(kShardedInputs));
+    EXPECT_THAT(elements, IsSupersetOf(InputAndFeaturesVec{
+                              {{0, 1, 2}, {}},
+                              {{0, 1, 2, 3}, {}},
+                          }));
   }
 }
 

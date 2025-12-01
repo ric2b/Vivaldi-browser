@@ -43,7 +43,6 @@ import org.robolectric.annotation.Config;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Features;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.content.browser.RenderCoordinatesImpl;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.WindowAndroid;
@@ -79,7 +78,6 @@ public class AutofillProviderTest {
     private SparseArray<VirtualViewFillInfo> mPrefillRequestInfos;
 
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
-    @Rule public JniMocker mJniMocker = new JniMocker();
     @Mock private AutofillProvider.Natives mNativeMock;
     @Mock private RenderCoordinatesImpl mRenderCoordinates;
     @Mock private AutofillManager mAutofillManager;
@@ -157,7 +155,7 @@ public class AutofillProviderTest {
         RenderCoordinatesImpl.setInstanceForTesting(mRenderCoordinates);
         when(mRenderCoordinates.getContentOffsetYPixInt()).thenReturn(0);
 
-        mJniMocker.mock(AutofillProviderJni.TEST_HOOKS, mNativeMock);
+        AutofillProviderJni.setInstanceForTesting(mNativeMock);
     }
 
     @Test
@@ -247,7 +245,7 @@ public class AutofillProviderTest {
     }
 
     @Test
-    @Config(minSdk = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    @Config(sdk = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     public void testSendingPrefillRequestUsesCorrectHints() {
         FormFieldDataBuilder field1Builder = new FormFieldDataBuilder();
@@ -267,7 +265,7 @@ public class AutofillProviderTest {
     }
 
     @Test
-    @Config(minSdk = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    @Config(sdk = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     public void testStartSessionWithPrefillRequestWithShowingBottomSheet() {
         int focus = 1;
@@ -288,17 +286,17 @@ public class AutofillProviderTest {
         // showAutofillDialog should be called so it has to hold the correct virtualId.
         assertEquals(mDialogVirtualId, virtualId);
         // notifyVirtualViewEntered shouldn't be called so this has to be unset.
-        assertEquals(mFocusVirtualId, 0);
+        assertEquals(0, mFocusVirtualId);
 
         verify(mNativeMock)
                 .onShowBottomSheetResult(
                         mMockedNativeAndroidAutofillProvider,
                         /* isShown= */ true,
-                        /* provided_structure= */ true);
+                        /* providedAutofillStructure= */ true);
     }
 
     @Test
-    @Config(minSdk = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    @Config(sdk = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     public void testStartSessionWithPrefillRequestWithoutShowingBottomSheet() {
         int focus = 1;
@@ -330,7 +328,7 @@ public class AutofillProviderTest {
     }
 
     @Test
-    @Config(minSdk = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    @Config(sdk = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     public void
             testStartSessionWithPrefillRequestWithoutShowingBottomSheetAndNoAutofillStructure() {
@@ -362,7 +360,7 @@ public class AutofillProviderTest {
     }
 
     @Test
-    @Config(minSdk = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    @Config(sdk = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     public void testStartSessionWithDifferentSessionIdThanPrefillRequest() {
         int focus = 1;
@@ -384,7 +382,7 @@ public class AutofillProviderTest {
                 /* hasServerPrediction= */ false);
 
         // showAutofillDialog shouldn't be called so this has to be 0.
-        assertEquals(mDialogVirtualId, 0);
+        assertEquals(0, mDialogVirtualId);
         // notifyVirtualViewEntered should be called so this has to hold the correct virtualId.
         assertEquals(mFocusVirtualId, FormData.toFieldVirtualId(newSessionId, (short) focus));
 

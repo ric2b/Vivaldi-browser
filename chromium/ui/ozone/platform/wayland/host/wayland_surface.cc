@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "ui/ozone/platform/wayland/host/wayland_surface.h"
 
 #include <alpha-compositing-unstable-v1-client-protocol.h>
@@ -11,9 +16,9 @@
 #include <linux-drm-syncobj-v1-client-protocol.h>
 #include <linux-explicit-synchronization-unstable-v1-client-protocol.h>
 #include <overlay-prioritizer-client-protocol.h>
-#include <surface-augmenter-client-protocol.h>
 #include <viewporter-client-protocol.h>
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
@@ -22,7 +27,6 @@
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/not_fatal_until.h"
-#include "base/ranges/algorithm.h"
 #include "base/trace_event/trace_event.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/rect.h"
@@ -36,7 +40,6 @@
 #include "ui/ozone/platform/wayland/common/wayland_util.h"
 #include "ui/ozone/platform/wayland/host/fractional_scale_manager.h"
 #include "ui/ozone/platform/wayland/host/overlay_prioritizer.h"
-#include "ui/ozone/platform/wayland/host/surface_augmenter.h"
 #include "ui/ozone/platform/wayland/host/wayland_buffer_handle.h"
 #include "ui/ozone/platform/wayland/host/wayland_buffer_manager_host.h"
 #include "ui/ozone/platform/wayland/host/wayland_connection.h"
@@ -45,8 +48,6 @@
 #include "ui/ozone/platform/wayland/host/wayland_subsurface.h"
 #include "ui/ozone/platform/wayland/host/wayland_syncobj_timeline.h"
 #include "ui/ozone/platform/wayland/host/wayland_window.h"
-#include "ui/ozone/platform/wayland/host/wayland_zaura_shell.h"
-#include "ui/ozone/platform/wayland/host/wayland_zaura_surface.h"
 #include "ui/ozone/platform/wayland/host/wayland_zcr_color_management_output.h"
 #include "ui/ozone/platform/wayland/host/wayland_zcr_color_management_surface.h"
 #include "ui/ozone/platform/wayland/host/wayland_zcr_color_manager.h"
@@ -54,6 +55,19 @@
 namespace ui {
 
 namespace {
+
+// Floating points may have a precision error as they may not correctly be
+// represented in binary, but approximately. In order to mitigate that, round
+// the value to a specified precision to ensure consistency when working with
+// floating-point values. This avoids potential inaccuracies in calculations
+// that could arise from small rounding errors. This function rounds the input
+// value to the nearest multiple of the specified precision (0.001f in this
+// case, which is a default precision in cc/viz).
+double RoundToNearestThousandth(float value) {
+  // This is a default precision that cc/viz uses.
+  static constexpr float kPrecision = 0.001f;
+  return std::round(value / kPrecision) * kPrecision;
+}
 
 uint32_t TranslatePriority(gfx::OverlayPriorityHint priority_hint) {
   uint32_t priority = OVERLAY_PRIORITIZED_SURFACE_OVERLAY_PRIORITY_NONE;
@@ -120,19 +134,6 @@ WaylandSurface::~WaylandSurface() {
     std::move(release.second.explicit_release_callback)
         .Run(release.second.buffer.get(), base::ScopedFD());
   }
-}
-
-WaylandZAuraSurface* WaylandSurface::CreateZAuraSurface() {
-  auto* zaura_shell = connection_->zaura_shell();
-  if (!zaura_surface_ && zaura_shell) {
-    zaura_surface_ = std::make_unique<WaylandZAuraSurface>(
-        zaura_shell->wl_object(), surface(), connection_);
-  }
-  return zaura_surface_.get();
-}
-
-void WaylandSurface::ResetZAuraSurface() {
-  zaura_surface_.reset();
 }
 
 void WaylandSurface::RequestExplicitRelease(ExplicitReleaseCallback callback) {
@@ -213,22 +214,6 @@ bool WaylandSurface::Initialize() {
     if (!log_once) {
       log_once = true;
       LOG(WARNING) << "Server doesn't support overlay_prioritizer.";
-    }
-  }
-
-  auto* surface_augmenter = connection_->surface_augmenter();
-  if (surface_augmenter && root_window() &&
-      root_window()->root_surface() != this) {
-    augmented_surface_ = surface_augmenter->CreateAugmentedSurface(surface());
-    if (!augmented_surface_) {
-      LOG(ERROR) << "Failed to create augmented_surface.";
-      return false;
-    }
-  } else {
-    static bool log_once = false;
-    if (!log_once) {
-      log_once = true;
-      LOG(WARNING) << "Server doesn't support surface_augmenter.";
     }
   }
 
@@ -358,8 +343,6 @@ void WaylandSurface::set_surface_buffer_scale(float scale) {
       wl_surface_set_buffer_scale(
           surface_.get(), static_cast<int32_t>(GetWaylandScale(state_)));
     }
-    if (root_window_)
-      root_window_->PropagateBufferScale(scale);
   }
 }
 
@@ -443,7 +426,6 @@ wl::Object<wl_region> WaylandSurface::CreateAndAddRegion(
       wl_compositor_create_region(connection_->compositor()));
 
   for (const auto& rect_px : region_px) {
-    // On Lacros, the buffer scale should be 1, so no need to ignore error.
     gfx::Rect rect = gfx::ScaleToEnclosedRect(rect_px, 1.f / buffer_scale);
     wl_region_add(region.get(), rect.x(), rect.y(), rect.width(),
                   rect.height());
@@ -708,85 +690,6 @@ std::optional<bool> WaylandSurface::ApplyPendingState() {
     needs_commit = true;
   }
 
-  if (pending_state_.background_color != state_.background_color) {
-    DCHECK(get_augmented_surface());
-    if (augmented_surface_get_version(get_augmented_surface()) >=
-        static_cast<uint32_t>(
-            AUGMENTED_SURFACE_SET_BACKGROUND_COLOR_SINCE_VERSION)) {
-      wl_array color_data;
-      wl_array_init(&color_data);
-      if (pending_state_.background_color.has_value())
-        wl::SkColorToWlArray(pending_state_.background_color.value(),
-                             color_data);
-
-      augmented_surface_set_background_color(get_augmented_surface(),
-                                             &color_data);
-      needs_commit = true;
-
-      wl_array_release(&color_data);
-    }
-  }
-
-  if (pending_state_.rounded_clip_bounds != state_.rounded_clip_bounds) {
-    DCHECK(get_augmented_surface());
-    gfx::RRectF rounded_clip_bounds = pending_state_.rounded_clip_bounds;
-    rounded_clip_bounds.Scale(1.f / GetWaylandScale(pending_state_));
-
-    if (augmented_surface_get_version(get_augmented_surface()) >=
-        AUGMENTED_SURFACE_SET_ROUNDED_CORNERS_CLIP_BOUNDS_SINCE_VERSION) {
-      augmented_surface_set_rounded_corners_clip_bounds(
-          get_augmented_surface(),
-          wl_fixed_from_double(rounded_clip_bounds.rect().x()),
-          wl_fixed_from_double(rounded_clip_bounds.rect().y()),
-          wl_fixed_from_double(rounded_clip_bounds.rect().width()),
-          wl_fixed_from_double(rounded_clip_bounds.rect().height()),
-          wl_fixed_from_double(
-              rounded_clip_bounds
-                  .GetCornerRadii(gfx::RRectF::Corner::kUpperLeft)
-                  .x()),
-          wl_fixed_from_double(
-              rounded_clip_bounds
-                  .GetCornerRadii(gfx::RRectF::Corner::kUpperRight)
-                  .x()),
-          wl_fixed_from_double(
-              rounded_clip_bounds
-                  .GetCornerRadii(gfx::RRectF::Corner::kLowerRight)
-                  .x()),
-          wl_fixed_from_double(
-              rounded_clip_bounds
-                  .GetCornerRadii(gfx::RRectF::Corner::kLowerLeft)
-                  .x()));
-      needs_commit = true;
-    } else if (augmented_surface_get_version(get_augmented_surface()) >=
-               AUGMENTED_SURFACE_SET_ROUNDED_CLIP_BOUNDS_SINCE_VERSION) {
-      // For debugging purposes, stdout uses of the old incarnation of this API.
-      // In the future, this API will get a clean up pass.
-      LOG(WARNING) << "The 'augmented_surface::set_rounded_clip_bounds' "
-                      "request has been deprecated in favor of "
-                      "augmented_surface::set_rounded_corners_clip_bounds.";
-    }
-  }
-
-  if (pending_state_.clip_rect != state_.clip_rect) {
-    DCHECK(get_augmented_surface());
-    if (connection_->surface_augmenter()
-            ->SupportsClipRectOnAugmentedSurface()) {
-      std::optional<gfx::RectF> clip_rect = pending_state_.clip_rect;
-      if (clip_rect) {
-        clip_rect->Scale(1.f / GetWaylandScale(pending_state_));
-        augmented_surface_set_clip_rect(
-            get_augmented_surface(), wl_fixed_from_double(clip_rect->x()),
-            wl_fixed_from_double(clip_rect->y()),
-            wl_fixed_from_double(clip_rect->width()),
-            wl_fixed_from_double(clip_rect->height()));
-      } else {
-        augmented_surface_set_clip_rect(get_augmented_surface(), kMinusOne,
-                                        kMinusOne, kMinusOne, kMinusOne);
-      }
-      needs_commit = true;
-    }
-  }
-
   if (content_type_ &&
       (pending_state_.contains_video != state_.contains_video)) {
     wp_content_type_v1_set_content_type(content_type_.get(),
@@ -864,19 +767,12 @@ std::optional<bool> WaylandSurface::ApplyPendingState() {
   }
   DCHECK_GE(surface_scale_set_, 1);
 
-  // If this is not a subsurface, propagate the buffer scale.
-  if (root_window_ && root_window_->root_surface() == this)
-    root_window_->PropagateBufferScale(pending_state_.buffer_scale_float);
-
   gfx::RectF viewport_src_dip;
   wl_fixed_t src_to_set[4] = {wl_fixed_from_int(-1), wl_fixed_from_int(-1),
                               wl_fixed_from_int(-1), wl_fixed_from_int(-1)};
   if (crop.IsEmpty()) {
     viewport_src_dip = gfx::RectF(bounds);
   } else {
-    // TODO(crbug.com/359904707) Fix rounding errors which can lead to imprecise
-    // values below.
-
     // viewport_src_dip needs to be in post-transform coordinates.
     gfx::RectF crop_transformed = wl::ApplyWaylandTransform(
         crop, gfx::SizeF(1, 1),
@@ -898,14 +794,16 @@ std::optional<bool> WaylandSurface::ApplyPendingState() {
         viewport_src_dip.set_width(kViewPortSizeMinFloat);
         src_to_set[2] = kViewportSizeMin;
       } else {
-        src_to_set[2] = wl_fixed_from_double(viewport_src_dip.width());
+        src_to_set[2] = wl_fixed_from_double(
+            RoundToNearestThousandth(viewport_src_dip.width()));
       }
 
       if (wl_fixed_from_double(viewport_src_dip.height()) <= 0) {
         viewport_src_dip.set_height(kViewPortSizeMinFloat);
         src_to_set[3] = kViewportSizeMin;
       } else {
-        src_to_set[3] = wl_fixed_from_double(viewport_src_dip.height());
+        src_to_set[3] = wl_fixed_from_double(
+            RoundToNearestThousandth(viewport_src_dip.height()));
       }
     }
 
@@ -925,11 +823,13 @@ std::optional<bool> WaylandSurface::ApplyPendingState() {
       viewport_src_dip.set_y(std::max(viewport_src_dip.y(), 0.f));
     }
 
-    src_to_set[0] = wl_fixed_from_double(viewport_src_dip.x()),
-    src_to_set[1] = wl_fixed_from_double(viewport_src_dip.y());
+    src_to_set[0] =
+        wl_fixed_from_double(RoundToNearestThousandth(viewport_src_dip.x()));
+    src_to_set[1] =
+        wl_fixed_from_double(RoundToNearestThousandth(viewport_src_dip.y()));
   }
   // Apply crop (wp_viewport.set_source).
-  if (viewport() && !base::ranges::equal(src_to_set, src_set_)) {
+  if (viewport() && !std::ranges::equal(src_to_set, src_set_)) {
     wp_viewport_set_source(viewport(), src_to_set[0], src_to_set[1],
                            src_to_set[2], src_to_set[3]);
     memcpy(src_set_, src_to_set, 4 * sizeof(*src_to_set));
@@ -946,22 +846,8 @@ std::optional<bool> WaylandSurface::ApplyPendingState() {
     dst_to_set[1] = viewport_dst_dip.height();
   }
   // Apply viewport scale (wp_viewport.set_destination).
-  if (!base::ranges::equal(dst_to_set, dst_set_)) {
-    auto* augmented_surface = get_augmented_surface();
-    if (dst_to_set[0] > 0.f && augmented_surface &&
-        connection_->surface_augmenter()->SupportsSubpixelAccuratePosition()) {
-      // Subpixel accurate positioning is available since the surface augmenter
-      // version 2. Since that version, the augmented surface also supports
-      // setting destination with wl_fixed. Verify that with dchecks.
-      DCHECK_EQ(AUGMENTED_SURFACE_SET_DESTINATION_SIZE_SINCE_VERSION,
-                SURFACE_AUGMENTER_GET_AUGMENTED_SUBSURFACE_SINCE_VERSION);
-      DCHECK(augmented_surface_get_version(get_augmented_surface()) >=
-             AUGMENTED_SURFACE_SET_DESTINATION_SIZE_SINCE_VERSION);
-      augmented_surface_set_destination_size(
-          augmented_surface, wl_fixed_from_double(viewport_dst_dip.width()),
-          wl_fixed_from_double(viewport_dst_dip.height()));
-      needs_commit = true;
-    } else if (viewport()) {
+  if (!std::ranges::equal(dst_to_set, dst_set_)) {
+    if (viewport()) {
       wp_viewport_set_destination(
           viewport(),
           dst_to_set[0] > 0.f ? base::ClampRound(viewport_dst_dip.width())
@@ -971,23 +857,6 @@ std::optional<bool> WaylandSurface::ApplyPendingState() {
       needs_commit = true;
     }
     memcpy(dst_set_, dst_to_set, 2 * sizeof(*dst_to_set));
-  }
-
-  if (pending_state_.frame_trace_id >= 0) {
-    bool is_frame_tracing_enabled;
-    TRACE_EVENT_CATEGORY_GROUP_ENABLED("viz,benchmark,graphics.pipeline",
-                                       &is_frame_tracing_enabled);
-    if (is_frame_tracing_enabled) {
-      auto* augmented_surface = get_augmented_surface();
-      if (augmented_surface &&
-          augmented_surface_get_version(augmented_surface) >=
-              AUGMENTED_SURFACE_SET_FRAME_TRACE_ID_SINCE_VERSION) {
-        augmented_surface_set_frame_trace_id(
-            augmented_surface, pending_state_.frame_trace_id >> 32,
-            pending_state_.frame_trace_id & 0xffffffff);
-      }
-    }
-    pending_state_.frame_trace_id = -1;
   }
 
   DCHECK_LE(pending_state_.damage_px.size(), 1u);
@@ -1000,9 +869,6 @@ std::optional<bool> WaylandSurface::ApplyPendingState() {
 
   DCHECK(pending_state_.buffer);
 
-  // Lacros on Ash will always have a scale factory of 1, so damage will be
-  // unchanged on Ash and no need to ignore error, but that won't always be true
-  // on other compositors.
   gfx::Rect damage = ScaleToEnclosingRect(
       pending_state_.damage_px.back(), 1.f / GetWaylandScale(pending_state_));
 
@@ -1021,14 +887,6 @@ std::optional<bool> WaylandSurface::ApplyPendingState() {
 
 void WaylandSurface::ForceImmediateStateApplication() {
   apply_state_immediately_ = true;
-}
-
-void WaylandSurface::EnableTrustedDamageIfPossible() {
-  if (get_augmented_surface() &&
-      augmented_surface_get_version(get_augmented_surface()) >=
-          AUGMENTED_SURFACE_SET_TRUSTED_DAMAGE_SINCE_VERSION) {
-    augmented_surface_set_trusted_damage(get_augmented_surface(), true);
-  }
 }
 
 void WaylandSurface::ExplicitRelease(
@@ -1061,10 +919,7 @@ WaylandSurface::State& WaylandSurface::State::operator=(
   viewport_px = other.viewport_px;
   opacity = other.opacity;
   use_blending = other.use_blending;
-  rounded_clip_bounds = other.rounded_clip_bounds;
   priority_hint = other.priority_hint;
-  background_color = other.background_color;
-  clip_rect = other.clip_rect;
   contains_video = other.contains_video;
   return *this;
 }
@@ -1089,8 +944,8 @@ void WaylandSurface::OnEnter(void* data,
                 wayland_output->output_id()),
             nullptr);
 
-  if (auto it = base::ranges::find(self->entered_outputs_,
-                                   wayland_output->output_id());
+  if (auto it = std::ranges::find(self->entered_outputs_,
+                                  wayland_output->output_id());
       it == self->entered_outputs_.end()) {
     self->entered_outputs_.emplace_back(wayland_output->output_id());
   }
@@ -1142,7 +997,7 @@ void WaylandSurface::OnPreferredScale(void* data,
 }
 
 void WaylandSurface::RemoveEnteredOutput(uint32_t output_id) {
-  auto it = base::ranges::find(entered_outputs_, output_id);
+  auto it = std::ranges::find(entered_outputs_, output_id);
   if (it == entered_outputs_.end())
     return;
 

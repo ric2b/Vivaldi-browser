@@ -31,6 +31,7 @@ const fileContentsCache = new Map<string, Trace.Types.File.Contents>();
 const traceEngineCache = new Map<string, Map<string, {
                                    parsedTrace: Trace.Handlers.Types.ParsedTrace,
                                    insights: Trace.Insights.Types.TraceInsightSets | null,
+                                   metadata: Trace.Types.File.MetaData | null,
                                    model: Trace.TraceModel.Model,
                                  }>>();
 
@@ -91,6 +92,20 @@ export class TraceLoader {
   }
 
   /**
+   * Load the metadata from a trace file (throws if not present).
+   **/
+  static async metadata(context: Mocha.Context|Mocha.Suite|null, name: string): Promise<Trace.Types.File.MetaData> {
+    const contents = await TraceLoader.fixtureContents(context, name);
+
+    const metadata = 'metadata' in contents ? contents.metadata : null;
+    if (!metadata) {
+      throw new Error('expected metadata but found none');
+    }
+
+    return metadata;
+  }
+
+  /**
    * Load an array of raw events from the trace file.
    * Will default to typing those events using the types from Trace Engine, but
    * can be overriden by passing the legacy EventPayload type as the generic.
@@ -125,6 +140,7 @@ export class TraceLoader {
       config: Trace.Types.Configuration.Configuration = Trace.Types.Configuration.defaults()): Promise<{
     parsedTrace: Trace.Handlers.Types.ParsedTrace,
     insights: Trace.Insights.Types.TraceInsightSets|null,
+    metadata: Trace.Types.File.MetaData|null,
   }> {
     // Force the TraceBounds to be reset to empty. This ensures that in
     // tests where we are using the new engine data we don't accidentally
@@ -146,16 +162,17 @@ export class TraceLoader {
       TraceLoader.initTraceBoundsManager(fromCache.parsedTrace);
       Timeline.ModificationsManager.ModificationsManager.reset();
       Timeline.ModificationsManager.ModificationsManager.initAndActivateModificationsManager(fromCache.model, 0);
-      return {parsedTrace: fromCache.parsedTrace, insights: fromCache.insights};
+      return {parsedTrace: fromCache.parsedTrace, insights: fromCache.insights, metadata: fromCache.metadata};
     }
 
     const fileContents = await TraceLoader.fixtureContents(context, name);
     const parsedTraceData =
         await TraceLoader.executeTraceEngineOnFileContents(fileContents, /* emulate fresh recording */ false, config);
 
-    const cacheByName = traceEngineCache.get(name) || new Map<string, {
+    const cacheByName = traceEngineCache.get(name) ?? new Map<string, {
                           parsedTrace: Trace.Handlers.Types.ParsedTrace,
                           insights: Trace.Insights.Types.TraceInsightSets | null,
+                          metadata: Trace.Types.File.MetaData | null,
                           model: Trace.TraceModel.Model,
                         }>();
     cacheByName.set(configCacheKey, parsedTraceData);
@@ -167,6 +184,7 @@ export class TraceLoader {
     return {
       parsedTrace: parsedTraceData.parsedTrace,
       insights: parsedTraceData.insights,
+      metadata: parsedTraceData.metadata,
     };
   }
 

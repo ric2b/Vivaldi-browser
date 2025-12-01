@@ -62,9 +62,9 @@ class LegacyMetricsHistogramFlattener : public base::HistogramFlattener {
 
     for (std::unique_ptr<base::SampleCountIterator> it = snapshot.Iterator();
          !it->Done(); it->Next()) {
-      base::Histogram::Sample min;
+      base::Histogram::Sample32 min;
       int64_t max = 0;
-      base::Histogram::Count count;
+      base::Histogram::Count32 count;
       it->Get(&min, &max, &count);
 
       fuchsia::legacymetrics::HistogramBucket bucket;

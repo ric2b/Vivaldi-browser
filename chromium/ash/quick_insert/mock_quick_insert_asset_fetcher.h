@@ -10,19 +10,23 @@
 
 namespace ash {
 
-class ASH_EXPORT MockPickerAssetFetcher : public PickerAssetFetcher {
+class ASH_EXPORT MockQuickInsertAssetFetcher : public QuickInsertAssetFetcher {
  public:
-  MockPickerAssetFetcher();
-  MockPickerAssetFetcher(const MockPickerAssetFetcher&) = delete;
-  MockPickerAssetFetcher& operator=(const MockPickerAssetFetcher&) = delete;
-  ~MockPickerAssetFetcher() override;
+  MockQuickInsertAssetFetcher();
+  MockQuickInsertAssetFetcher(const MockQuickInsertAssetFetcher&) = delete;
+  MockQuickInsertAssetFetcher& operator=(const MockQuickInsertAssetFetcher&) =
+      delete;
+  ~MockQuickInsertAssetFetcher() override;
 
-  // PickerAssetFetcher:
-  void FetchGifFromUrl(const GURL& url,
-                       PickerGifFetchedCallback callback) override;
-  void FetchGifPreviewImageFromUrl(
+  // QuickInsertAssetFetcher:
+  std::unique_ptr<network::SimpleURLLoader> FetchGifFromUrl(
       const GURL& url,
-      PickerImageFetchedCallback callback) override;
+      size_t rank,
+      QuickInsertGifFetchedCallback callback) override;
+  std::unique_ptr<network::SimpleURLLoader> FetchGifPreviewImageFromUrl(
+      const GURL& url,
+      size_t rank,
+      QuickInsertImageFetchedCallback callback) override;
   void FetchFileThumbnail(const base::FilePath& path,
                           const gfx::Size& size,
                           FetchFileThumbnailCallback callback) override;

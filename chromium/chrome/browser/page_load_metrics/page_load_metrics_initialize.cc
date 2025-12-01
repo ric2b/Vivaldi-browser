@@ -46,6 +46,7 @@
 #include "chrome/browser/preloading/prefetch/no_state_prefetch/chrome_no_state_prefetch_contents_delegate.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/search.h"
+#include "chrome/common/url_constants.h"
 #include "components/no_state_prefetch/browser/no_state_prefetch_contents.h"
 #include "components/page_load_metrics/browser/metrics_web_contents_observer.h"
 #include "components/page_load_metrics/browser/observers/ad_metrics/ads_page_load_metrics_observer.h"
@@ -114,6 +115,8 @@ class PageLoadMetricsEmbedder
   bool IsNoStatePrefetch(content::WebContents* web_contents) override;
   bool IsExtensionUrl(const GURL& url) override;
   bool IsNonTabWebUI(const GURL& url) override;
+  bool ShouldObserveScheme(std::string_view scheme) override;
+  bool IsIncognito(content::WebContents* web_contents) override;
   page_load_metrics::PageLoadMetricsMemoryTracker*
   GetMemoryTrackerForBrowserContext(
       content::BrowserContext* browser_context) override;
@@ -185,20 +188,21 @@ void PageLoadMetricsEmbedder::RegisterObservers(
         std::make_unique<HttpsEngagementPageLoadMetricsObserver>(
             web_contents()->GetBrowserContext()));
     tracker->AddObserver(std::make_unique<ProtocolPageLoadMetricsObserver>());
+    bool is_incognito = IsIncognito(tracker->GetWebContents());
     std::unique_ptr<page_load_metrics::AdsPageLoadMetricsObserver>
         ads_observer =
             page_load_metrics::AdsPageLoadMetricsObserver::CreateIfNeeded(
                 tracker->GetWebContents(),
                 HeavyAdServiceFactory::GetForBrowserContext(
                     tracker->GetWebContents()->GetBrowserContext()),
-                base::BindRepeating(&GetApplicationLocale));
+                base::BindRepeating(&GetApplicationLocale), is_incognito);
     if (ads_observer)
       tracker->AddObserver(std::move(ads_observer));
 
     tracker->AddObserver(std::make_unique<ThirdPartyMetricsObserver>());
 
     std::unique_ptr<page_load_metrics::PageLoadMetricsObserver> ukm_observer =
-        UkmPageLoadMetricsObserver::CreateIfNeeded();
+        UkmPageLoadMetricsObserver::CreateIfNeeded(is_incognito);
     if (ukm_observer)
       tracker->AddObserver(std::move(ukm_observer));
 
@@ -275,6 +279,18 @@ bool PageLoadMetricsEmbedder::IsExtensionUrl(const GURL& url) {
 
 bool PageLoadMetricsEmbedder::IsNonTabWebUI(const GURL& url) {
   return ::IsNonTabWebUI(web_contents()->GetBrowserContext(), url);
+}
+
+bool PageLoadMetricsEmbedder::ShouldObserveScheme(std::string_view scheme) {
+  return scheme == chrome::kIsolatedAppScheme;
+}
+
+bool PageLoadMetricsEmbedder::IsIncognito(content::WebContents* web_contents) {
+  if (Profile* profile =
+          Profile::FromBrowserContext(web_contents->GetBrowserContext())) {
+    return profile->IsIncognitoProfile();
+  }
+  return false;
 }
 
 page_load_metrics::PageLoadMetricsMemoryTracker*

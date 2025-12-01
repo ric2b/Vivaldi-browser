@@ -226,7 +226,7 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
                 tryAddingReadAloud = false;
             } else if (mUiType == CustomTabsUiType.NETWORK_BOUND_TAB) {
                 openInChromeItemVisible = false;
-                addToHomeScreenVisible = true;
+                addToHomeScreenVisible = false;
                 requestDesktopSiteVisible = true;
             }
 
@@ -302,6 +302,9 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
             } else {
                 menu.findItem(R.id.readaloud_menu_id).setVisible(false);
             }
+
+            boolean showOpenWith = currentTab.isNativePage() && currentTab.getNativePage().isPdf();
+            menu.findItem(R.id.open_with_id).setVisible(showOpenWith);
 
             MenuItem openInChromeItem = menu.findItem(R.id.open_in_browser_id);
             if (openInChromeItemVisible) {

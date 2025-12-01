@@ -176,8 +176,7 @@ describe('Recorder', function() {
           await waitFor('.expanded');
         }
 
-        // Flaky test
-        it.skip('[crbug.com/1443421]: should select through the selector picker', async () => {
+        it('should select through the selector picker', async () => {
           const {target, frontend} = getBrowserAndPages();
           await frontend.bringToFront();
           await frontend.waitForSelector('pierce/.settings');
@@ -197,7 +196,7 @@ describe('Recorder', function() {
         });
 
         // Flaky test
-        it.skip('[crbug.com/1443421]: should select through the selector picker twice', async () => {
+        it.skip('[crbug.com/383478771] should select through the selector picker twice', async () => {
           const {target, frontend} = getBrowserAndPages();
           await frontend.bringToFront();
           await frontend.waitForSelector('pierce/.settings');
@@ -226,8 +225,7 @@ describe('Recorder', function() {
           assertRecordingMatchesSnapshot(recording);
         });
 
-        // Flaky test
-        it.skip('[crbug.com/1443421]: should select through the selector picker during recording', async () => {
+        it('should select through the selector picker during recording', async () => {
           const {target, frontend} = getBrowserAndPages();
           await frontend.bringToFront();
           await frontend.waitForSelector('pierce/.settings');
@@ -329,13 +327,14 @@ describe('Recorder', function() {
         const {frontend} = getBrowserAndPages();
         await frontend.bringToFront();
         const shortcutDialog = await waitFor('devtools-shortcut-dialog');
+        const buttonDialog = await waitFor('devtools-button-dialog', shortcutDialog);
 
-        await click('devtools-button', {root: shortcutDialog});
+        await click('devtools-button', {root: buttonDialog});
 
-        const dialog = await waitFor('devtools-dialog', shortcutDialog);
+        const dialog = await waitFor('devtools-dialog', buttonDialog);
         assert.isOk(dialog);
 
-        const shortcuts = await $$('.keybinds-list-item', dialog);
+        const shortcuts = await $$('.keybinds-list-item', buttonDialog);
         assert.lengthOf(shortcuts, 4);
       });
     });
@@ -355,7 +354,7 @@ describe('Recorder', function() {
       await frontend.select('pierce/select', 'AllRecordingsPage');
       await click('pierce/.delete-recording-button');
 
-      await frontend.waitForSelector('pierce/devtools-start-view');
+      await frontend.waitForSelector('pierce/.empty-state');
     });
   });
 });

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "chrome/browser/enterprise/connectors/connectors_service.h"
 
 #include <memory>
@@ -32,6 +37,7 @@
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/version_info/version_info.h"
 #include "content/public/test/browser_test.h"
+#include "google_apis/gaia/gaia_id.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
@@ -231,7 +237,7 @@ class ConnectorsServiceProfileBrowserTest
     user_manager_enabler_ = std::make_unique<user_manager::ScopedUserManager>(
         base::WrapUnique(fake_user_manager));
     AccountId account_id =
-        AccountId::FromUserEmailGaiaId(kTestEmail, kTestGaiaId);
+        AccountId::FromUserEmailGaiaId(kTestEmail, GaiaId(kTestGaiaId));
     fake_user_manager->AddUserWithAffiliationAndTypeAndProfile(
         account_id, management_status() == ManagementStatus::AFFILIATED,
         user_manager::UserType::kRegular,
@@ -845,6 +851,9 @@ IN_PROC_BROWSER_TEST_P(ConnectorsServiceRealtimeURLCheckProfileBrowserTest,
 #if BUILDFLAG(IS_CHROMEOS)
   if (management_status() == ManagementStatus::UNMANAGED) {
     ASSERT_FALSE(maybe_dm_token.has_value());
+    ASSERT_EQ(
+        maybe_dm_token.error(),
+        ConnectorsServiceBase::NoDMTokenForRealTimeUrlCheckReason::kNoDmToken);
     ASSERT_EQ(REAL_TIME_CHECK_DISABLED, url_check_pref);
   } else {
     ASSERT_TRUE(maybe_dm_token.has_value());

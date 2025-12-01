@@ -7,6 +7,7 @@
 #include <string>
 #include <utility>
 
+#include "base/check_deref.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/metrics/histogram_functions.h"
@@ -217,16 +218,16 @@ void CrostiniHandler::RegisterMessages() {
         base::BindRepeating(&CrostiniHandler::HandleSetVmDeviceShared,
                             handler_weak_ptr_factory_.GetWeakPtr()));
   }
-    web_ui()->RegisterMessageCallback(
-        "requestBruschettaInstallerView",
-        base::BindRepeating(
-            &CrostiniHandler::HandleRequestBruschettaInstallerView,
-            handler_weak_ptr_factory_.GetWeakPtr()));
-    web_ui()->RegisterMessageCallback(
-        "requestBruschettaUninstallerView",
-        base::BindRepeating(
-            &CrostiniHandler::HandleRequestBruschettaUninstallerView,
-            handler_weak_ptr_factory_.GetWeakPtr()));
+  web_ui()->RegisterMessageCallback(
+      "requestBruschettaInstallerView",
+      base::BindRepeating(
+          &CrostiniHandler::HandleRequestBruschettaInstallerView,
+          handler_weak_ptr_factory_.GetWeakPtr()));
+  web_ui()->RegisterMessageCallback(
+      "requestBruschettaUninstallerView",
+      base::BindRepeating(
+          &CrostiniHandler::HandleRequestBruschettaUninstallerView,
+          handler_weak_ptr_factory_.GetWeakPtr()));
 }
 
 void CrostiniHandler::OnJavascriptAllowed() {
@@ -1027,6 +1028,7 @@ void CrostiniHandler::HandleRequestBruschettaInstallerView(
     const base::Value::List& args) {
   AllowJavascript();
   BruschettaInstallerView::Show(Profile::FromWebUI(web_ui()),
+                                CHECK_DEREF(g_browser_process->local_state()),
                                 bruschetta::GetBruschettaAlphaId());
 }
 

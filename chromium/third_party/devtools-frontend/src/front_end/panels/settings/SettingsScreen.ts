@@ -28,13 +28,16 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+import '../../ui/components/cards/cards.js';
+
 import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import type * as Platform from '../../core/platform/platform.js';
 import * as Root from '../../core/root/root.js';
 import * as Buttons from '../../ui/components/buttons/buttons.js';
-import * as Cards from '../../ui/components/cards/cards.js';
+import type * as Cards from '../../ui/components/cards/cards.js';
+import * as IconButton from '../../ui/components/icon_button/icon_button.js';
 import * as Components from '../../ui/legacy/components/utils/utils.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
@@ -86,7 +89,7 @@ const UIStrings = {
    * @description Warning text shown when the user has entered text to filter the
    * list of experiments, but no experiments match the filter.
    */
-  noResults: 'Warning: No experiments match the filter',
+  noResults: 'No experiments match the filter',
   /**
    *@description Text that is usually a hyperlink to more documentation
    */
@@ -102,8 +105,9 @@ const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 let settingsScreenInstance: SettingsScreen;
 
 function createSettingsCard(heading: Common.UIString.LocalizedString, ...content: HTMLElement[]): Cards.Card.Card {
-  const card = new Cards.Card.Card();
-  card.data = {heading, content};
+  const card = document.createElement('devtools-card');
+  card.heading = heading;
+  card.append(...content);
   return card;
 }
 
@@ -114,6 +118,7 @@ export class SettingsScreen extends UI.Widget.VBox implements UI.View.ViewLocati
 
   private constructor() {
     super(true);
+    this.registerRequiredCSS(settingsScreenStyles);
 
     this.contentElement.classList.add('settings-window-main');
     this.contentElement.classList.add('vbox');
@@ -121,9 +126,7 @@ export class SettingsScreen extends UI.Widget.VBox implements UI.View.ViewLocati
     const settingsLabelElement = document.createElement('div');
     settingsLabelElement.classList.add('settings-window-label-element');
     const settingsTitleElement =
-        UI.UIUtils
-            .createShadowRootWithCoreStyles(
-                settingsLabelElement, {cssFile: [settingsScreenStyles], delegatesFocus: undefined})
+        UI.UIUtils.createShadowRootWithCoreStyles(settingsLabelElement, {cssFile: settingsScreenStyles})
             .createChild('div', 'settings-window-title');
 
     UI.ARIAUtils.markAsHeading(settingsTitleElement, 1);
@@ -132,7 +135,7 @@ export class SettingsScreen extends UI.Widget.VBox implements UI.View.ViewLocati
     this.tabbedLocation = UI.ViewManager.ViewManager.instance().createTabbedLocation(
         () => SettingsScreen.revealSettingsScreen(), 'settings-view');
     const tabbedPane = this.tabbedLocation.tabbedPane();
-    tabbedPane.registerCSSFiles([settingsScreenStyles]);
+    tabbedPane.registerRequiredCSS(settingsScreenStyles);
     tabbedPane.headerElement().prepend(settingsLabelElement);
     tabbedPane.setShrinkableTabs(false);
     tabbedPane.makeVerticalTabLayout();
@@ -165,6 +168,7 @@ export class SettingsScreen extends UI.Widget.VBox implements UI.View.ViewLocati
 
     settingsScreen.reportTabOnReveal = true;
     const dialog = new UI.Dialog.Dialog('settings');
+    dialog.contentElement.removeAttribute('aria-modal');
     dialog.contentElement.tabIndex = -1;
     dialog.addCloseButton();
     dialog.setOutsideClickCallback(() => {});
@@ -234,10 +238,6 @@ export class SettingsScreen extends UI.Widget.VBox implements UI.View.ViewLocati
     if (this.tabbedLocation.tabbedPane().selectedTabId === 'keybinds' && this.keybindsTab) {
       this.keybindsTab.onEscapeKeyPressed(event);
     }
-  }
-  override wasShown(): void {
-    super.wasShown();
-    this.registerCSSFiles([settingsScreenStyles]);
   }
 }
 
@@ -467,13 +467,17 @@ export class ExperimentsSettingsTab extends SettingsTab {
 
   private createExperimentsWarningSubsection(warningMessage: string): HTMLElement {
     const subsection = document.createElement('div');
+    subsection.classList.add('experiments-warning-subsection');
+    const warningIcon = IconButton.Icon.create('warning');
+    subsection.appendChild(warningIcon);
     const warning = subsection.createChild('span');
     warning.textContent = warningMessage;
     return subsection;
   }
 
   private createExperimentCheckbox(experiment: Root.Runtime.Experiment): HTMLParagraphElement {
-    const label = UI.UIUtils.CheckboxLabel.create(experiment.title, experiment.isEnabled(), undefined, experiment.name);
+    const label = UI.UIUtils.CheckboxLabel.createWithStringLiteral(
+        experiment.title, experiment.isEnabled(), undefined, experiment.name);
     label.classList.add('experiment-label');
     const input = label.checkboxElement;
     input.name = experiment.name;

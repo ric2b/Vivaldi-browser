@@ -7,7 +7,6 @@
 <translation id="1158211211994409885">Host <ph name="HOST_NAME" /> sulges ootamatult ühenduse.</translation>
 <translation id="1161325031994447685">Loo WiFi-ühendus uuesti</translation>
 <translation id="1175364870820465910">&amp;Prindi...</translation>
-<translation id="132390688737681464">Salvestamine ja automaatne täitmine</translation>
 <translation id="1375198122581997741">Teave versiooni kohta</translation>
 <translation id="139305205187523129">Host <ph name="HOST_NAME" /> ei saatnud andmeid.</translation>
 <translation id="1555191101192706055">Külastatava saidi taga peituvad ründajad võivad üritada sind ära petta, et paigaldaksid kahjulikku tarkvara, mis mõjutab sinu sirvimisviisi – näiteks muutes sinu avalehte või näidates külastatavatel saitidel lisareklaame.</translation>
@@ -52,6 +51,7 @@
 <translation id="2991571918955627853">Saiti <ph name="SITE" /> ei saa praegu külastada, sest see kasutab HSTS-i. Võrguvead ja -rünnakud on tavaliselt ajutised, nii et tõenäoliselt leht hiljem taas töötab.</translation>
 <translation id="3005723025932146533">Näita salvestatud koopiat</translation>
 <translation id="301521992641321250">Automaatselt blokeeritud</translation>
+<translation id="3037605927509011580">Ah sa sinder!</translation>
 <translation id="3041612393474885105">Sertifikaadi teave</translation>
 <translation id="3109728660330352905">Sul pole volitust selle lehe vaatamiseks.</translation>
 <translation id="31207688938192855"><ph name="BEGIN_LINK" />Proovi, kas ühenduvusdiagnostika käitamine aitab<ph name="END_LINK" />.</translation>
@@ -64,7 +64,6 @@
 <translation id="3234666976984236645">Sellel saidil tuvastatakse alati oluline sisu</translation>
 <translation id="3308738399950580893">reklaamid</translation>
 <translation id="3384522979010096022">Asutus ei luba seda saiti külastada</translation>
-<translation id="3387261909427947069">Makseviisid</translation>
 <translation id="3422472998109090673">Hostiga <ph name="HOST_NAME" /> ei saa praegu ühendust.</translation>
 <translation id="3427092606871434483">Lubatud (vaikimisi)</translation>
 <translation id="3447661539832366887">Seadme omanik lülitas dinosaurusemängu välja.</translation>
@@ -125,7 +124,6 @@
 <translation id="5386426401304769735">Selle saidi sertifikaadiahel sisaldab SHA-1-ga allkirjastatud sertifikaati.</translation>
 <translation id="5452270690849572955">Seda lehte saidilt <ph name="HOST_NAME" /> ei leita</translation>
 <translation id="5457113250005438886">Kehtetu</translation>
-<translation id="5490432419156082418">Aadressi- ja kontaktandmed</translation>
 <translation id="5492298309214877701">Sellel asutuse intranetis oleval saidil on sama URL nagu välisel veebisaidil.
     <ph name="LINE_BREAK" />
     Võta ühendust süsteemiadministraatoriga.</translation>
@@ -171,7 +169,6 @@
 <translation id="7111012039238467737">(kehtiv)</translation>
 <translation id="7113310725918019676">Luba <ph name="BLOCKED_TYPE" /> domeenist <ph name="DOMAIN" /></translation>
 <translation id="7126644664682723998">Aseta ja otsi</translation>
-<translation id="7179323680825933600">Salvestamine ja automaatne täitmine</translation>
 <translation id="7210863904660874423">Host <ph name="HOST_NAME" /> ei pea turvastandarditest kinni.</translation>
 <translation id="7219179957768738017">Ühenduse jaoks on kasutusel <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">märguandeid näidata</translation>
@@ -223,6 +220,7 @@
 <translation id="9062620674789239642">See võidi teisaldada või kustutada, seda võidi muuta.</translation>
 <translation id="9069693763241529744">Laienduse poolt blokeeritud</translation>
 <translation id="9073799351042754113">Oled otsustanud selle saidi puhul turvahoiatused välja lülitada.</translation>
+<translation id="9168814207360376865">Saitidel lubatakse salvestatud makseviise otsida</translation>
 <translation id="9169664750068251925">Sellel saidil alati blokeeritud</translation>
 <translation id="9180553614777056266">reklaamiblokeerija</translation>
 <translation id="9183425211371246419">Host <ph name="HOST_NAME" /> kasutab toetamata protokolli.</translation>

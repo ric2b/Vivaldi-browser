@@ -17,4 +17,4 @@ title: Contact
             in your browser)
     *   IRC is for developer technical discussions only; for user
                 support please [go
-                here](http://www.google.com/support/forum/p/Chrome).
+                here](https://www.google.com/support/forum/p/Chrome).

@@ -9,6 +9,7 @@
 
 #include "media/gpu/h264_decoder.h"
 
+#include <algorithm>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -18,7 +19,6 @@
 #include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/ranges/algorithm.h"
 #include "media/base/media_switches.h"
 #include "media/parsers/h264_level_limits.h"
 
@@ -524,8 +524,9 @@ void H264Decoder::ConstructReferencePicListsB() {
 
   // If lists identical, swap first two entries in RefPicList1 (spec 8.2.4.2.3)
   if (ref_pic_list_b1_.size() > 1 &&
-      base::ranges::equal(ref_pic_list_b0_, ref_pic_list_b1_))
+      std::ranges::equal(ref_pic_list_b0_, ref_pic_list_b1_)) {
     std::swap(ref_pic_list_b1_[0], ref_pic_list_b1_[1]);
+  }
 }
 
 // See 8.2.4
@@ -1478,8 +1479,7 @@ void H264Decoder::SetStream(int32_t id, const DecoderBuffer& decoder_buffer) {
     parser_.SetStream(ptr, size);
     current_decrypt_config_ = nullptr;
   }
-  if (decoder_buffer.has_side_data() &&
-      decoder_buffer.side_data()->secure_handle) {
+  if (decoder_buffer.side_data() && decoder_buffer.side_data()->secure_handle) {
     secure_handle_ = decoder_buffer.side_data()->secure_handle;
   } else {
     secure_handle_ = 0;

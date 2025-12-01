@@ -32,7 +32,10 @@ namespace aura {
 namespace {
 
 // ~16 ms = time between frames when frame rate is 60 FPS.
-const base::TimeDelta kUpdateOcclusionDelay = base::Milliseconds(16);
+const base::TimeDelta kUpdateOcclusionDelayMin = base::Milliseconds(16);
+
+// ~100 ms = time between frames when frame rate is 10 FPS.
+const base::TimeDelta kUpdateOcclusionDelayMax = base::Milliseconds(100);
 
 // This global variable can be accessed only on main thread.
 NativeWindowOcclusionTrackerWin* g_tracker = nullptr;
@@ -243,7 +246,7 @@ bool NativeWindowOcclusionTrackerWin::IsWindowVisibleAndFullyOpaque(
   }
 
   // Filter out windows that do not have a simple rectangular region.
-  base::win::ScopedRegion region(CreateRectRgn(0, 0, 0, 0));
+  base::win::ScopedGDIObject<HRGN> region(CreateRectRgn(0, 0, 0, 0));
   if (GetWindowRgn(hwnd, region.get()) == COMPLEXREGION)
     return false;
 
@@ -362,11 +365,6 @@ void NativeWindowOcclusionTrackerWin::OnSessionChange(
 }
 
 void NativeWindowOcclusionTrackerWin::OnDisplayStateChanged(bool display_on) {
-  static bool screen_power_listener_enabled = base::FeatureList::IsEnabled(
-      features::kScreenPowerListenerForNativeWinOcclusion);
-  if (!screen_power_listener_enabled)
-    return;
-
   if (display_on == display_on_)
     return;
 
@@ -657,9 +655,14 @@ void NativeWindowOcclusionTrackerWin::WindowOcclusionCalculator::
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!occlusion_update_timer_.IsRunning()) {
     occlusion_update_timer_.Start(
-        FROM_HERE, kUpdateOcclusionDelay, this,
+        FROM_HERE, GetUpdateOcclusionDelay(), this,
         &WindowOcclusionCalculator::ComputeNativeWindowOcclusionStatus);
   }
+}
+
+const base::TimeDelta NativeWindowOcclusionTrackerWin::
+    WindowOcclusionCalculator::GetUpdateOcclusionDelay() {
+  return moving_window_ ? kUpdateOcclusionDelayMax : kUpdateOcclusionDelayMin;
 }
 
 void NativeWindowOcclusionTrackerWin::WindowOcclusionCalculator::

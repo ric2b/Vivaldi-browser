@@ -100,4 +100,10 @@ void DesktopNativeCursorManager::InitCursorSizeObserver(
   NOTREACHED();
 }
 
+void DesktopNativeCursorManager::SetCursorColor(
+    SkColor color,
+    wm::NativeCursorManagerDelegate* delegate) {
+  NOTIMPLEMENTED();
+}
+
 }  // namespace views

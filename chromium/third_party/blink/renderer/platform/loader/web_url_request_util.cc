@@ -98,8 +98,7 @@ WebHTTPBody GetWebHTTPBodyForRequestBody(
     switch (element.type()) {
       case network::DataElement::Tag::kBytes: {
         const auto& bytes = element.As<network::DataElementBytes>().bytes();
-        http_body.AppendData(
-            WebData(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
+        http_body.AppendData(WebData(bytes));
         break;
       }
       case network::DataElement::Tag::kFile: {
@@ -151,7 +150,7 @@ scoped_refptr<network::ResourceRequestBody> GetRequestBodyForWebHTTPBody(
   while (httpBody.ElementAt(i++, element)) {
     switch (element.type) {
       case HTTPBodyElementType::kTypeData:
-        request_body->AppendBytes(element.data.Copy().ReleaseVector());
+        request_body->AppendBytes(element.data.Copy());
         break;
       case HTTPBodyElementType::kTypeFile:
         if (element.file_length == -1) {

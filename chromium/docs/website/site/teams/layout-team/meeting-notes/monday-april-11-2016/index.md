@@ -25,9 +25,9 @@ scroll clamping to after the layout phase.
 - Landed a few cleanup patches.
 - Focus on other flexbox issues this week.
 CSS Grid Layout (svillar, jfernandez, rego, javif)
-\[[crbug.com/79180](http://crbug.com/79180)\]
+\[[crbug.com/79180](https://crbug.com/79180)\]
 - No updates since last week -
-CSS Multi-column (mstensho) \[[crbug.com/334335](http://crbug.com/334335)\]
+CSS Multi-column (mstensho) \[[crbug.com/334335](https://crbug.com/334335)\]
 - Fixed multicol assertion failures. (mstensho)
 - Improved the forced fragmentainer break implementation: Only allow
 those at class A break points. (mstensho)
@@ -38,15 +38,15 @@ CSS Houdini
 - Working on style invalidation this week. (ikilpatrick)
 - Next up, spec stuff for houdini. (ikilpatrick)
 Add API for layout (leviw, pilgrim, dgrogan)
-\[[crbug.com/495288](http://crbug.com/495288)\]
+\[[crbug.com/495288](https://crbug.com/495288)\]
 - As promised, spent last week working on layout view. Migrated callers
 to use the new block layout API (LayoutViewItem). (pilgrim)
-LayoutNG \[[crbug.com/591099](http://crbug.com/591099)\]
+LayoutNG \[[crbug.com/591099](https://crbug.com/591099)\]
 - mstensho getting up to speed.
-CSS Containment (leviw) \[[crbug.com/312978](http://crbug.com/312978)\]
+CSS Containment (leviw) \[[crbug.com/312978](https://crbug.com/312978)\]
 - No updates since last week -
 Intersection Observer (szager, mpb)
-\[[crbug.com/540528](http://crbug.com/540528)\]
+\[[crbug.com/540528](https://crbug.com/540528)\]
 - Intersection observer on by default in M51. Yay! (szager)
 Text (eae, drott, kojii)
 - Attended Edge Summit, interesting discussion on potential underlying

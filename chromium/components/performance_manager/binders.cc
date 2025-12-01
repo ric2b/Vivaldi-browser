@@ -8,12 +8,16 @@
 
 #include "base/check.h"
 #include "base/functional/bind.h"
+#include "base/memory/weak_ptr.h"
 #include "base/task/sequenced_task_runner.h"
 #include "components/performance_manager/graph/process_node_impl.h"
 #include "components/performance_manager/performance_manager_impl.h"
 #include "components/performance_manager/performance_manager_tab_helper.h"
 #include "components/performance_manager/public/mojom/coordination_unit.mojom.h"
 #include "components/performance_manager/render_process_user_data.h"
+#include "content/public/browser/browser_child_process_host.h"
+#include "content/public/browser/child_process_data.h"
+#include "content/public/browser/child_process_id.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
@@ -23,8 +27,8 @@ namespace performance_manager {
 
 namespace {
 
-void BindProcessCoordinationUnit(
-    int render_process_host_id,
+void BindRenderProcessCoordinationUnit(
+    content::ChildProcessId render_process_host_id,
     mojo::PendingReceiver<mojom::ProcessCoordinationUnit> receiver) {
   content::RenderProcessHost* render_process_host =
       content::RenderProcessHost::FromID(render_process_host_id);
@@ -36,9 +40,45 @@ void BindProcessCoordinationUnit(
 
   DCHECK(PerformanceManagerImpl::IsAvailable());
   PerformanceManagerImpl::CallOnGraphImpl(
-      FROM_HERE, base::BindOnce(&ProcessNodeImpl::Bind,
-                                base::Unretained(user_data->process_node()),
-                                std::move(receiver)));
+      FROM_HERE,
+      base::BindOnce(&ProcessNodeImpl::BindRenderProcessCoordinationUnit,
+                     base::Unretained(user_data->process_node()),
+                     std::move(receiver)));
+}
+
+void BindChildProcessCoordinationUnitOnPMSequence(
+    base::WeakPtr<ProcessNode> process_node,
+    mojo::PendingReceiver<mojom::ChildProcessCoordinationUnit> receiver) {
+  if (process_node) {
+    ProcessNodeImpl::FromNode(process_node.get())
+        ->BindChildProcessCoordinationUnit(std::move(receiver));
+  }
+}
+
+void BindChildProcessCoordinationUnitForRenderProcessHost(
+    content::ChildProcessId render_process_host_id,
+    mojo::PendingReceiver<mojom::ChildProcessCoordinationUnit> receiver) {
+  DCHECK(PerformanceManagerImpl::IsAvailable());
+  PerformanceManagerImpl::CallOnGraph(
+      FROM_HERE,
+      base::BindOnce(
+          &BindChildProcessCoordinationUnitOnPMSequence,
+          PerformanceManagerImpl::GetProcessNodeForRenderProcessHostId(
+              render_process_host_id),
+          std::move(receiver)));
+}
+
+void BindChildProcessCoordinationUnitForBrowserChildProcessHost(
+    content::BrowserChildProcessHost* host,
+    mojo::PendingReceiver<mojom::ChildProcessCoordinationUnit> receiver) {
+  DCHECK(PerformanceManagerImpl::IsAvailable());
+  PerformanceManagerImpl::CallOnGraph(
+      FROM_HERE,
+      base::BindOnce(
+          &BindChildProcessCoordinationUnitOnPMSequence,
+          PerformanceManagerImpl::GetProcessNodeForBrowserChildProcessHost(
+              host),
+          std::move(receiver)));
 }
 
 void BindDocumentCoordinationUnit(
@@ -62,8 +102,18 @@ void Binders::ExposeInterfacesToRendererProcess(
     service_manager::BinderRegistry* registry,
     content::RenderProcessHost* host) {
   registry->AddInterface(
-      base::BindRepeating(&BindProcessCoordinationUnit, host->GetID()),
+      base::BindRepeating(&BindRenderProcessCoordinationUnit, host->GetID()),
       base::SequencedTaskRunner::GetCurrentDefault());
+  registry->AddInterface(
+      base::BindRepeating(&BindChildProcessCoordinationUnitForRenderProcessHost,
+                          host->GetID()),
+      base::SequencedTaskRunner::GetCurrentDefault());
+}
+
+void Binders::ExposeInterfacesToBrowserChildProcess(
+    mojo::BinderMapWithContext<content::BrowserChildProcessHost*>* map) {
+  map->Add<mojom::ChildProcessCoordinationUnit>(base::BindRepeating(
+      &BindChildProcessCoordinationUnitForBrowserChildProcessHost));
 }
 
 void Binders::ExposeInterfacesToRenderFrame(

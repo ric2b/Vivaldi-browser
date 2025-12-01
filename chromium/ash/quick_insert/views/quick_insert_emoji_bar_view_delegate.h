@@ -14,12 +14,14 @@ enum class EmojiPickerCategory;
 
 namespace ash {
 
-// Delegate for `PickerEmojiBarView`.
-class ASH_EXPORT PickerEmojiBarViewDelegate {
+// Delegate for `QuickInsertEmojiBarView`.
+class ASH_EXPORT QuickInsertEmojiBarViewDelegate {
  public:
   virtual void SelectSearchResult(const QuickInsertSearchResult& result) = 0;
 
-  virtual void ToggleGifs() = 0;
+  // Toggle whether to show GIF results or not.
+  // `is_checked` is whether the GIFs button is checked.
+  virtual void ToggleGifs(bool is_checked) = 0;
 
   virtual void ShowEmojiPicker(ui::EmojiPickerCategory category) = 0;
 };

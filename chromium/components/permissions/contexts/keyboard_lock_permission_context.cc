@@ -12,17 +12,17 @@ namespace permissions {
 
 KeyboardLockPermissionContext::KeyboardLockPermissionContext(
     content::BrowserContext* browser_context)
-    : PermissionContextBase(browser_context,
-                            ContentSettingsType::KEYBOARD_LOCK,
-                            blink::mojom::PermissionsPolicyFeature::kNotFound) {
-}
+    : PermissionContextBase(
+          browser_context,
+          ContentSettingsType::KEYBOARD_LOCK,
+          network::mojom::PermissionsPolicyFeature::kNotFound) {}
 
 #if !BUILDFLAG(IS_ANDROID)
 ContentSetting KeyboardLockPermissionContext::GetPermissionStatusInternal(
     content::RenderFrameHost* render_frame_host,
     const GURL& requesting_origin,
     const GURL& embedding_origin) const {
-  if (base::FeatureList::IsEnabled(features::kKeyboardAndPointerLockPrompt)) {
+  if (base::FeatureList::IsEnabled(features::kKeyboardLockPrompt)) {
     return PermissionsClient::Get()
         ->GetSettingsMap(browser_context())
         ->GetContentSetting(requesting_origin, embedding_origin,

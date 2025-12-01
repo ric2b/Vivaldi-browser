@@ -137,6 +137,7 @@ export abstract class CategorizedBreakpointsSidebarPane extends UI.Widget.VBox {
       detailsPausedReason: Protocol.Debugger.PausedEventReason) {
     super(true);
     this.#categoriesTreeOutline = new UI.TreeOutline.TreeOutlineInShadow();
+    this.#categoriesTreeOutline.registerRequiredCSS(categorizedBreakpointsSidebarPaneStyles);
 
     this.#categoriesTreeOutline.setShowSelectionOnKeyboardFocus(/* show */ true);
     this.contentElement.appendChild(this.#categoriesTreeOutline.element);
@@ -219,7 +220,7 @@ export abstract class CategorizedBreakpointsSidebarPane extends UI.Widget.VBox {
     const labelNode = UI.UIUtils.CheckboxLabel.create(
         Sources.CategorizedBreakpointL10n.getLocalizedBreakpointName(breakpoint.name), undefined, undefined,
         Platform.StringUtilities.toKebabCase(breakpoint.name), /* small */ true);
-    labelNode.classList.add('source-code');
+    labelNode.classList.add('source-code', 'breakpoint');
     labelNode.checkboxElement.addEventListener('click', this.breakpointCheckboxClicked.bind(this, breakpoint), true);
     labelNode.checkboxElement.tabIndex = -1;
 
@@ -249,7 +250,7 @@ export abstract class CategorizedBreakpointsSidebarPane extends UI.Widget.VBox {
     return null;
   }
 
-  private update(): void {
+  update(): void {
     const target = UI.Context.Context.instance().flavor(SDK.Target.Target);
     const debuggerModel = target ? target.model(SDK.DebuggerModel.DebuggerModel) : null;
     const details = debuggerModel ? debuggerModel.debuggerPausedDetails() : null;
@@ -339,10 +340,6 @@ export abstract class CategorizedBreakpointsSidebarPane extends UI.Widget.VBox {
     } else {
       UI.ARIAUtils.setChecked(category.element.listItemElement, hasEnabled);
     }
-  }
-  override wasShown(): void {
-    super.wasShown();
-    this.#categoriesTreeOutline.registerCSSFiles([categorizedBreakpointsSidebarPaneStyles]);
   }
 }
 export interface Item {

@@ -252,24 +252,7 @@ void FontSizeTabHelper::PageLoaded(
     web::WebState* web_state,
     web::PageLoadCompletionStatus load_completion_status) {
   DCHECK_EQ(web_state, web_state_);
-
-  // Vivaldi
-  if (!CurrentPageSupportsTextZoom()) {
-    return;
-  }
-  PrefService* prefService = GetPrefService();
-  BOOL globalZoomEnabled =
-    [VivaldiPageZoomSettingPrefs
-      getGlobalPageZoomEnabledWithPrefService:prefService];
-  if (vivaldi::IsVivaldiRunning() && prefService && globalZoomEnabled) {
-     int zoom_level =
-       [VivaldiPageZoomSettingPrefs getPageZoomLevelWithPrefService:prefService];
-     SetPageFontSize(zoom_level);
-     tab_helper_has_zoomed_ = true;
-  } else {
   NewPageZoom();
-  } // End Vivaldi
-
 }
 
 void FontSizeTabHelper::DidFinishNavigation(web::WebState* web_state,
@@ -305,22 +288,6 @@ void FontSizeTabHelper::CreateNotificationObserver() {
 void FontSizeTabHelper::WebFrameBecameAvailable(
     web::WebFramesManager* web_frames_manager,
     web::WebFrame* web_frame) {
-
-  // Vivaldi
-  if (!CurrentPageSupportsTextZoom()) {
-    return;
-  }
-  PrefService* prefService = GetPrefService();
-  BOOL globalZoomEnabled =
-    [VivaldiPageZoomSettingPrefs
-      getGlobalPageZoomEnabledWithPrefService:prefService];
-  if (vivaldi::IsVivaldiRunning() && prefService && globalZoomEnabled) {
-      // Get and apply the global zoom level
-      int zoomLevel = [VivaldiPageZoomSettingPrefs
-                        getPageZoomLevelWithPrefService:prefService];
-      SetPageFontSize(zoomLevel);
-      tab_helper_has_zoomed_ = true;
-  } else {
   // Make sure that any new web frame starts with the correct zoom level.
   int size = GetFontSize();
   // Prevent any zooming errors by only zooming when necessary. This is mostly
@@ -329,8 +296,6 @@ void FontSizeTabHelper::WebFrameBecameAvailable(
   if (tab_helper_has_zoomed_ || size != 100) {
     FontSizeJavaScriptFeature::GetInstance()->AdjustFontSize(web_frame, size);
   }
-  } // End Vivaldi
-
 }
 
 void FontSizeTabHelper::NewPageZoom() {
@@ -373,6 +338,18 @@ double FontSizeTabHelper::GetCurrentUserZoomMultiplier() const {
   const base::Value::Dict& pref =
       GetPrefService()->GetDict(prefs::kIosUserZoomMultipliers);
 
+  if (vivaldi::IsVivaldiRunning()) {
+    std::string current_key = GetCurrentUserZoomMultiplierKey();
+    // Check if there's a saved zoom value for this page using dotted path
+    if (!pref.FindDoubleByDottedPath(current_key)) {
+      // No saved zoom found - always apply default zoom from pref
+      int zoomLevel = [VivaldiPageZoomSettingPrefs
+                        getPageZoomLevelWithPrefService:GetPrefService()];
+      const double defaultZoom = zoomLevel/100.0;
+      return defaultZoom;
+    }
+  } // End Vivaldi
+
   return pref.FindDoubleByDottedPath(GetCurrentUserZoomMultiplierKey())
       .value_or(1);
 }
@@ -380,12 +357,24 @@ double FontSizeTabHelper::GetCurrentUserZoomMultiplier() const {
 void FontSizeTabHelper::StoreCurrentUserZoomMultiplier(double multiplier) {
   ScopedDictPrefUpdate update(GetPrefService(), prefs::kIosUserZoomMultipliers);
 
+  if (vivaldi::IsVivaldiRunning()) {
+    int zoomLevel = [VivaldiPageZoomSettingPrefs
+                      getPageZoomLevelWithPrefService:GetPrefService()];
+    const double defaultZoom = zoomLevel/100.0;
+    if (multiplier == defaultZoom) {
+      update->RemoveByDottedPath(GetCurrentUserZoomMultiplierKey());
+    } else {
+      update->SetByDottedPath(GetCurrentUserZoomMultiplierKey(), multiplier);
+    }
+  } else {
   // Don't bother to store all the ones. This helps keep the pref dict clean.
   if (multiplier == 1) {
     update->RemoveByDottedPath(GetCurrentUserZoomMultiplierKey());
   } else {
     update->SetByDottedPath(GetCurrentUserZoomMultiplierKey(), multiplier);
   }
+  } // End Vivaldi
+
 }
 
 bool FontSizeTabHelper::IsGoogleCachedAMPPage() const {

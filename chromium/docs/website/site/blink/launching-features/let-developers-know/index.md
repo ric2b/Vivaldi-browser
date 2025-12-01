@@ -60,7 +60,7 @@ you at the top, which I'll now explain.
 
 1.  Between feature freeze and beta, Chrome Developer Relations creates
             [articles](https://web.dev/blog/) and
-            [videos](https://www.youtube.com/channel/UCnUYZLuoy1rq1aVMwx4aTzw)
+            [videos](https://youtube.com/channel/UCnUYZLuoy1rq1aVMwx4aTzw)
             about the new features. We also draft a [beta release
             post](https://blog.chromium.org/search/label/beta) for the [Chromium
             blog](https://blog.chromium.org/).

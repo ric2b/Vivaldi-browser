@@ -14,13 +14,17 @@
 <translation id="2433507940547922241">外觀</translation>
 <translation id="2501278716633472235">返回上一頁</translation>
 <translation id="2633278372998075009">無痕分頁</translation>
+<translation id="265156376773362237">標準預先載入模式</translation>
 <translation id="272026394418727548">Vivaldi 首頁</translation>
+<translation id="2871733351037274014">預先載入網頁</translation>
 <translation id="2951071800649516099">將頁面新增至閱讀清單以供日後閱讀</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> 個書籤}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> 個書籤}}</translation>
-<translation id="3076631378407175873">版權所有 <ph name="YEAR" /> Vivaldi Technologies AS. 保留一切權利。</translation>
+<translation id="3076631378407175873">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. 保留所有權利。</translation>
+<translation id="3232293466644486101">刪除瀏覽資料…</translation>
 <translation id="3234355010754616171">新增無痕分頁</translation>
+<translation id="3237087289225714896">標準預先載入模式：</translation>
 <translation id="3377025655491224618">無痕分頁</translation>
 <translation id="3504699618187058974">分頁堆疊</translation>
 <translation id="3518985090088779359">接受並繼續</translation>
@@ -28,7 +32,8 @@
 <translation id="3602290021589620013">預覽</translation>
 <translation id="3700829948786686853">歡迎使用 Vivaldi</translation>
 <translation id="3719826155360621982">首頁</translation>
-<translation id="385051799172605136">上一頁</translation>
+<translation id="3738139272394829648">輕觸搜尋</translation>
+<translation id="385051799172605136">返回</translation>
 <translation id="399014816462153200">閱讀文章：</translation>
 <translation id="4121750346708795461">使用這個應用程式即表示您同意接受 Vivaldi 的<ph name="BEGIN_LINK1" />終端使用者授權合約<ph name="END_LINK1" />及<ph name="BEGIN_LINK2" />隱私權政策<ph name="END_LINK2" />。</translation>
 <translation id="4137746084635924146">目前裝置語言</translation>
@@ -36,6 +41,7 @@
 <translation id="4195643157523330669">在新分頁中開啟</translation>
 <translation id="4225895483398857530">工具列快速鍵</translation>
 <translation id="4243710787042215766">在無痕分頁中開啟</translation>
+<translation id="4291407919474070700"><ph name="BEGIN_LINK" />在 Android 設定中開啟螢幕鎖定功能<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">密碼管理工具</translation>
 <translation id="451872707440238414">搜尋您的書籤</translation>
 <translation id="4526803704855831732">無痕分頁</translation>
@@ -53,28 +59,38 @@
 <translation id="5233638681132016545">新增分頁</translation>
 <translation id="5375131951310889874">不用離開頁面就能了解更多頁面上的資訊，這個觸控搜尋功能需要在 Vivaldi 中把 Google 設定為預設搜尋引擎。這個功能會傳送詞彙周圍的文字至 Google 搜尋，並返回定義、圖片、搜尋結果以及其它詳細訊息。
 
-要調整您的搜尋關鍵字，請長按並選取。要改善搜尋，請將面板向上滑動並點選搜尋框。</translation>
+要調整您的搜尋關鍵字，請長按以選取。要改善搜尋，請將面板向上滑動並點選搜尋框。</translation>
 <translation id="572328651809341494">最近開啟的分頁</translation>
 <translation id="6150320133806434356">已儲存書籤</translation>
 <translation id="6336451774241870485">新增無痕分頁</translation>
+<translation id="6337323516034698937">若要將此分頁傳送到其它裝置，請在兩個裝置上登入 Vivaldi 資料同步。如有必要，請輸入加密密碼。</translation>
 <translation id="6404511346730675251">編輯書籤</translation>
 <translation id="6585139692466700358">透過 Vivaldi 的翻譯服務翻譯其它語言的頁面</translation>
+<translation id="6588043302623806746">使用安全 DNS</translation>
 <translation id="6593061639179217415">電腦版網站</translation>
 <translation id="6610147964972079463">關閉無痕分頁</translation>
 <translation id="7029995644714925509">當網站要求在其頁面上私下預先載入連結時，Vivaldi 會透過 Google 伺服器加密和預先載入頁面，而不使用 Cookie。這會在預先載入的網站中隱藏您的身份。</translation>
 <translation id="706339621163631076">瀏覽器隱私權政策</translation>
 <translation id="732145680195464316">書籤儲存於 <ph name="PRODUCT_NAME" /></translation>
+<translation id="7324354302972299151">傳送「Do Not Track」要求</translation>
+<translation id="7359002509206457351">存取付款方式</translation>
+<translation id="7419565702166471774">一律使用安全連線</translation>
 <translation id="7427132068601343474">關於 Vivaldi</translation>
+<translation id="7456774706094330779">延伸預先載入模式</translation>
 <translation id="7465104139234185284">關閉全部無痕分頁</translation>
 <translation id="7481312909269577407">下一頁</translation>
 <translation id="7968014550143838305">已加入至閱讀清單</translation>
 <translation id="804786196054284061">終端使用者授權合約</translation>
+<translation id="8062594758852531064">延伸預先載入模式：</translation>
 <translation id="8127542551745560481">編輯首頁</translation>
+<translation id="8348430946834215779">盡可能使用 HTTPS，並在載入不支援此通訊協定的網站前收到警告</translation>
 <translation id="8560602726703398413">在書籤中搜尋您的閱讀清單</translation>
 <translation id="85991616550051997">前往首頁</translation>
 <translation id="8820817407110198400">書籤</translation>
 <translation id="9042893549633094279">隱私和安全性</translation>
 <translation id="9063523880881406963">關閉要求電腦版網站</translation>
 <translation id="9080642952018487277">進入無痕模式</translation>
+<translation id="930124987204876019">刪除瀏覽紀錄、Cookie、網站資料、快取…</translation>
+<translation id="961856697154696964">刪除瀏覽資料</translation>
 <translation id="96681097142096641">要檢視簡化版頁面嗎？</translation>
 </translationbundle>

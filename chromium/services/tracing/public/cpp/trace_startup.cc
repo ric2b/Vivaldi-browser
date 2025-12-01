@@ -10,19 +10,20 @@
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/trace_event/trace_log.h"
 #include "build/build_config.h"
-#include "components/tracing/common/etw_export_win.h"
 #include "components/tracing/common/trace_to_console.h"
 #include "components/tracing/common/tracing_switches.h"
 #include "services/tracing/public/cpp/perfetto/perfetto_config.h"
-#include "services/tracing/public/cpp/perfetto/producer_client.h"
-#include "services/tracing/public/cpp/perfetto/system_producer.h"
-#include "services/tracing/public/cpp/perfetto/trace_event_data_source.h"
+#include "services/tracing/public/cpp/perfetto/perfetto_traced_process.h"
+#include "services/tracing/public/cpp/perfetto/shared_memory.h"
 #include "services/tracing/public/cpp/perfetto/traced_value_proto_writer.h"
-#include "services/tracing/public/cpp/trace_event_agent.h"
 #include "services/tracing/public/cpp/trace_event_args_allowlist.h"
 #include "services/tracing/public/cpp/trace_startup_config.h"
 #include "services/tracing/public/cpp/tracing_features.h"
 #include "third_party/perfetto/include/perfetto/tracing/track.h"
+
+#if BUILDFLAG(IS_WIN)
+#include "components/tracing/common/etw_export_win.h"
+#endif
 
 #if BUILDFLAG(IS_APPLE)
 #include "base/apple/mach_port_rendezvous.h"
@@ -34,6 +35,8 @@ namespace {
 #if BUILDFLAG(IS_APPLE)
 constexpr base::MachPortsForRendezvous::key_type kTraceConfigRendezvousKey =
     'trcc';
+constexpr base::MachPortsForRendezvous::key_type kTraceBufferRendezvousKey =
+    'trbc';
 #endif
 
 constexpr uint32_t kStartupTracingTimeoutMs = 30 * 1000;  // 30 sec
@@ -51,10 +54,9 @@ bool IsTracingInitialized() {
 
 void EnableStartupTracingIfNeeded() {
   RegisterTracedValueProtoWriter();
-  TraceEventDataSource::GetInstance()->RegisterStartupHooks();
 
   // Create the PerfettoTracedProcess.
-  PerfettoTracedProcess::Get();
+  PerfettoTracedProcess::MaybeCreateInstance();
 
   // Initialize the client library's TrackRegistry to support trace points
   // during startup tracing. We don't setup the client library completely here
@@ -70,9 +72,6 @@ void EnableStartupTracingIfNeeded() {
   auto& startup_config = TraceStartupConfig::GetInstance();
 
   if (startup_config.IsEnabled()) {
-    // Ensure that data sources are created and registered.
-    TraceEventAgent::GetInstance();
-
     auto perfetto_config = startup_config.GetPerfettoConfig();
 
     perfetto::Tracing::SetupStartupTracingOpts opts;
@@ -83,7 +82,7 @@ void EnableStartupTracingIfNeeded() {
     // TODO(khokhlov): After client library is moved onto a separate thread
     // and it's possible to start startup tracing early, replace this call with
     // perfetto::Tracing::SetupStartupTracing(perfetto_config, args).
-    PerfettoTracedProcess::Get()->RequestStartupTracing(perfetto_config, opts);
+    PerfettoTracedProcess::Get().RequestStartupTracing(perfetto_config, opts);
   }
 }
 
@@ -95,7 +94,7 @@ bool EnableStartupTracingForProcess(
   // TODO(khokhlov): After client library is moved onto a separate thread
   // and it's possible to start startup tracing early, replace this call with
   // perfetto::Tracing::SetupStartupTracing(perfetto_config, args).
-  PerfettoTracedProcess::Get()->RequestStartupTracing(perfetto_config, opts);
+  PerfettoTracedProcess::Get().RequestStartupTracing(perfetto_config, opts);
   return true;
 }
 
@@ -106,7 +105,9 @@ void InitTracingPostThreadPoolStartAndFeatureList(bool enable_consumer) {
   DCHECK(base::ThreadPoolInstance::Get());
   DCHECK(base::FeatureList::GetInstance());
 
-  PerfettoTracedProcess::Get()->OnThreadPoolAvailable(enable_consumer);
+  // Create the PerfettoTracedProcess.
+  PerfettoTracedProcess::MaybeCreateInstance();
+  PerfettoTracedProcess::Get().OnThreadPoolAvailable(enable_consumer);
 #if BUILDFLAG(IS_WIN)
   tracing::EnableETWExport();
 #endif  // BUILDFLAG(IS_WIN)
@@ -147,8 +148,34 @@ base::ReadOnlySharedMemoryRegion CreateTracingConfigSharedMemory() {
   return std::move(shm.region);
 }
 
+base::UnsafeSharedMemoryRegion CreateTracingOutputSharedMemory() {
+#if DCHECK_IS_ON()
+  // This should not be called if tracing config shm was not created beforehand.
+  base::trace_event::TraceLog* trace_log =
+      base::trace_event::TraceLog::GetInstance();
+  const auto& startup_config = TraceStartupConfig::GetInstance();
+  DCHECK(startup_config.IsEnabled() || trace_log->IsEnabled());
+
+  if (!startup_config.IsEnabled()) {
+    bool has_relevant_config = std::any_of(
+        trace_log->GetTrackEventSessions().begin(),
+        trace_log->GetTrackEventSessions().end(), [](const auto& session) {
+          return session.backend_type == perfetto::kCustomBackend &&
+                 !session.config.has_interceptor_config();
+        });
+    DCHECK(has_relevant_config);
+  }
+#endif  // DCHECK_IS_ON()
+
+  auto shm = base::UnsafeSharedMemoryRegion::Create(kDefaultSharedMemorySize);
+  if (!shm.IsValid()) {
+    return base::UnsafeSharedMemoryRegion();
+  }
+  return shm;
+}
+
 void COMPONENT_EXPORT(TRACING_CPP) AddTraceConfigToLaunchParameters(
-    base::ReadOnlySharedMemoryRegion read_only_memory_region,
+    const base::ReadOnlySharedMemoryRegion& read_only_memory_region,
 #if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_APPLE)
     base::GlobalDescriptors::Key descriptor_key,
     base::ScopedFD& out_descriptor_to_share,
@@ -156,9 +183,28 @@ void COMPONENT_EXPORT(TRACING_CPP) AddTraceConfigToLaunchParameters(
     base::CommandLine* command_line,
     base::LaunchOptions* launch_options) {
   base::shared_memory::AddToLaunchParameters(switches::kTraceConfigHandle,
-                                             std::move(read_only_memory_region),
+                                             read_only_memory_region,
 #if BUILDFLAG(IS_APPLE)
                                              kTraceConfigRendezvousKey,
+#elif BUILDFLAG(IS_POSIX)
+                                             descriptor_key,
+                                             out_descriptor_to_share,
+#endif
+                                             command_line, launch_options);
+}
+
+void COMPONENT_EXPORT(TRACING_CPP) AddTraceOutputToLaunchParameters(
+    const base::UnsafeSharedMemoryRegion& unsafe_memory_region,
+#if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_APPLE)
+    base::GlobalDescriptors::Key descriptor_key,
+    base::ScopedFD& out_descriptor_to_share,
+#endif
+    base::CommandLine* command_line,
+    base::LaunchOptions* launch_options) {
+  base::shared_memory::AddToLaunchParameters(switches::kTraceBufferHandle,
+                                             unsafe_memory_region,
+#if BUILDFLAG(IS_APPLE)
+                                             kTraceBufferRendezvousKey,
 #elif BUILDFLAG(IS_POSIX)
                                              descriptor_key,
                                              out_descriptor_to_share,

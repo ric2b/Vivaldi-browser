@@ -4,6 +4,8 @@
  */
 "use strict";
 
+const astUtils = require("./utils/ast-utils");
+
 //------------------------------------------------------------------------------
 // Rule Definition
 //------------------------------------------------------------------------------
@@ -16,7 +18,7 @@ module.exports = {
         docs: {
             description: "Disallow sparse arrays",
             recommended: true,
-            url: "https://eslint.org/docs/rules/no-sparse-arrays"
+            url: "https://eslint.org/docs/latest/rules/no-sparse-arrays"
         },
 
         schema: [],
@@ -36,11 +38,32 @@ module.exports = {
         return {
 
             ArrayExpression(node) {
+                if (!node.elements.includes(null)) {
+                    return;
+                }
 
-                const emptySpot = node.elements.includes(null);
+                const { sourceCode } = context;
+                let commaToken;
 
-                if (emptySpot) {
-                    context.report({ node, messageId: "unexpectedSparseArray" });
+                for (const [index, element] of node.elements.entries()) {
+                    if (index === node.elements.length - 1 && element) {
+                        return;
+                    }
+
+                    commaToken = sourceCode.getTokenAfter(
+                        element ?? commaToken ?? sourceCode.getFirstToken(node),
+                        astUtils.isCommaToken
+                    );
+
+                    if (element) {
+                        continue;
+                    }
+
+                    context.report({
+                        node,
+                        loc: commaToken.loc,
+                        messageId: "unexpectedSparseArray"
+                    });
                 }
             }
 

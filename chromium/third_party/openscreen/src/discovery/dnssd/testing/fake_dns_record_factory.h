@@ -19,13 +19,14 @@ namespace openscreen::discovery {
 class FakeDnsRecordFactory {
  public:
   static constexpr uint16_t kPortNum = 80;
-  static const uint8_t kV4AddressOctets[4];
-  static const uint16_t kV6AddressHextets[8];
-  static const char kInstanceName[];
-  static const char kServiceName[];
-  static const char kServiceNameProtocolPart[];
-  static const char kServiceNameServicePart[];
-  static const char kDomainName[];
+  static constexpr uint8_t kV4AddressOctets[4] = {192, 168, 0, 0};
+  static constexpr uint16_t kV6AddressHextets[8] = {
+      0x0102, 0x0304, 0x0506, 0x0708, 0x090a, 0x0b0c, 0x0d0e, 0x0f10};
+  static constexpr char kInstanceName[] = "instance";
+  static constexpr char kServiceName[] = "_srv-name._udp";
+  static constexpr char kServiceNameProtocolPart[] = "_udp";
+  static constexpr char kServiceNameServicePart[] = "_srv-name";
+  static constexpr char kDomainName[] = "local";
 
   static MdnsRecord CreateFullyPopulatedSrvRecord(uint16_t port = kPortNum);
 };

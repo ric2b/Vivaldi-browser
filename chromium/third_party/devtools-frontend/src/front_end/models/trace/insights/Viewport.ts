@@ -6,16 +6,22 @@ import * as i18n from '../../../core/i18n/i18n.js';
 import * as Helpers from '../helpers/helpers.js';
 import type * as Types from '../types/types.js';
 
-import {type InsightModel, type InsightSetContext, InsightWarning, type RequiredData} from './types.js';
+import {
+  InsightCategory,
+  type InsightModel,
+  type InsightSetContext,
+  InsightWarning,
+  type RequiredData,
+} from './types.js';
 
 const UIStrings = {
   /** Title of an insight that provides details about if the page's viewport is optimized for mobile viewing. */
-  title: 'Viewport not optimized for mobile',
+  title: 'Optimize viewport for mobile',
   /**
    * @description Text to tell the user how a viewport meta element can improve performance. \xa0 is a non-breaking space
    */
   description:
-      'The page\'s viewport is not mobile-optimized, so tap interactions may be [delayed by up to 300\xA0ms](https://developer.chrome.com/blog/300ms-tap-delay-gone-away/).',
+      'Tap interactions may be [delayed by up to 300\xA0ms](https://developer.chrome.com/blog/300ms-tap-delay-gone-away/) if the viewport is not optimized for mobile.',
 };
 
 const str_ = i18n.i18n.registerUIStrings('models/trace/insights/Viewport.ts', UIStrings);
@@ -30,8 +36,15 @@ export type ViewportInsightModel = InsightModel<{
   viewportEvent?: Types.Events.ParseMetaViewport,
 }>;
 
-function finalize(partialModel: Omit<ViewportInsightModel, 'title'|'description'>): ViewportInsightModel {
-  return {title: i18nString(UIStrings.title), description: i18nString(UIStrings.description), ...partialModel};
+function finalize(partialModel: Omit<ViewportInsightModel, 'title'|'description'|'category'|'shouldShow'>):
+    ViewportInsightModel {
+  return {
+    title: i18nString(UIStrings.title),
+    description: i18nString(UIStrings.description),
+    category: InsightCategory.INP,
+    shouldShow: partialModel.mobileOptimized === false,
+    ...partialModel,
+  };
 }
 
 export function generateInsight(
@@ -66,7 +79,7 @@ export function generateInsight(
       return finalize({
         mobileOptimized: false,
         viewportEvent,
-        metricSavings: {INP: 300 as Types.Timing.MilliSeconds},
+        metricSavings: {INP: 300 as Types.Timing.Milli},
       });
     }
   }

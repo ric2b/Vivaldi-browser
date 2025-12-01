@@ -35,10 +35,10 @@ export class ScrollHelper {
   // See comments in ScrollToArgs for the intended semantics.
   scrollTo(args: ScrollToArgs) {
     const {time, track} = args;
-    raf.scheduleRedraw();
+    raf.scheduleCanvasRedraw();
 
     if (time !== undefined) {
-      if (time.end === undefined) {
+      if (time.end === undefined || time.start === time.end) {
         this.timeline.panToTimestamp(time.start);
       } else if (time.viewPercentage !== undefined) {
         this.focusHorizontalRangePercentage(
@@ -114,7 +114,7 @@ export class ScrollHelper {
   private verticalScrollToTrack(trackUri: string, openGroup: boolean) {
     // Find the actual track node that uses that URI, we need various properties
     // from it.
-    const trackNode = this.workspace.findTrackByUri(trackUri);
+    const trackNode = this.workspace.getTrackByUri(trackUri);
     if (!trackNode) return;
 
     // Try finding the track directly.

@@ -279,6 +279,7 @@
 <translation id="5582839680698949063">Menu principal</translation>
 <translation id="5614553682702429503">Enregistrer le mot de passe ?</translation>
 <translation id="5623842676595125836">Log</translation>
+<translation id="5624959475330585145">Me demander avant d’utiliser des connexions non sécurisées</translation>
 <translation id="5638309510554459422">Découvrez des extensions et des thèmes sur le <ph name="BEGIN_LINK" />Chrome Web Store<ph name="END_LINK" /></translation>
 <translation id="5677928146339483299">Bloqué</translation>
 <translation id="5707185214361380026">Impossible de charger l’extension depuis :</translation>
@@ -468,6 +469,7 @@ Conservez votre fichier de clé en lieu sûr. Vous en aurez besoin lors de la cr
 <translation id="9218430445555521422">Définir par défaut</translation>
 <translation id="93766956588638423">Réparer l’extension</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
+<translation id="961856697154696964">Supprimer les données de navigation</translation>
 <translation id="994289308992179865">&amp;Répéter</translation>
 <translation id="998747458861718449">I&amp;nspecter</translation>
 </translationbundle>

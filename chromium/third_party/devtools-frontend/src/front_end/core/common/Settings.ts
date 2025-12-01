@@ -367,7 +367,7 @@ export class Deprecation {
 
 export class Setting<V> {
   #titleFunction?: () => Platform.UIString.LocalizedString;
-  #titleInternal!: string;
+  #titleInternal!: Platform.UIString.LocalizedString;
   #registration: SettingRegistration|null = null;
   #requiresUserAction?: boolean;
   #value?: V;
@@ -395,14 +395,14 @@ export class Setting<V> {
     this.eventSupport.removeEventListener(this.name, listener, thisObject);
   }
 
-  title(): string {
+  title(): Platform.UIString.LocalizedString {
     if (this.#titleInternal) {
       return this.#titleInternal;
     }
     if (this.#titleFunction) {
       return this.#titleFunction();
     }
-    return '';
+    return '' as Platform.UIString.LocalizedString;
   }
 
   setTitleFunction(titleFunction: (() => Platform.UIString.LocalizedString)|undefined): void {
@@ -411,7 +411,7 @@ export class Setting<V> {
     }
   }
 
-  setTitle(title: string): void {
+  setTitle(title: Platform.UIString.LocalizedString): void {
     this.#titleInternal = title;
   }
 
@@ -431,14 +431,14 @@ export class Setting<V> {
     return this.#disabled || false;
   }
 
-  disabledReason(): string|undefined {
+  disabledReasons(): string[] {
     if (this.#registration?.disabledCondition) {
       const result = this.#registration.disabledCondition(Settings.instance().getHostConfig());
       if (result.disabled) {
-        return result.reason;
+        return result.reasons;
       }
     }
-    return undefined;
+    return [];
   }
 
   setDisabled(disabled: boolean): void {
@@ -459,7 +459,7 @@ export class Setting<V> {
     if (this.storage.has(this.name)) {
       try {
         this.#value = this.#serializer.parse(this.storage.get(this.name));
-      } catch (e) {
+      } catch {
         this.storage.remove(this.name);
       }
     }
@@ -484,7 +484,7 @@ export class Setting<V> {
     if (value) {
       try {
         this.#value = this.#serializer.parse(value);
-      } catch (e) {
+      } catch {
         this.storage.remove(this.name);
       }
     }
@@ -648,7 +648,7 @@ export class RegExpSetting extends Setting<any> {
       if (pattern) {
         this.#regex = new RegExp(pattern, this.#regexFlags || '');
       }
-    } catch (e) {
+    } catch {
     }
     return this.#regex;
   }
@@ -1396,14 +1396,14 @@ export function settingForTest(settingName: string): Setting<unknown> {
 export {
   getLocalizedSettingsCategory,
   maybeRemoveSettingExtension,
-  registerSettingExtension,
   RegExpSettingItem,
+  registerSettingExtension,
+  registerSettingsForTest,
+  resetSettings,
   SettingCategory,
   SettingExtensionOption,
   SettingRegistration,
   SettingType,
-  registerSettingsForTest,
-  resetSettings,
 };
 
 export interface Serializer<I, O> {

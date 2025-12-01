@@ -68,16 +68,16 @@ class PerfettoTable(TestSuite):
     return DiffTestBlueprint(
         trace=DataPath('android_boot.pftrace'),
         query="""
-        SELECT * FROM perfetto_table_info('counter');
+        SELECT id, name, col_type, nullable, sorted
+        FROM perfetto_table_info('__intrinsic_counter');
         """,
         out=Csv("""
-        "id","type","name","col_type","nullable","sorted"
-        0,"perfetto_table_info","id","id",0,1
-        1,"perfetto_table_info","type","string",0,0
-        2,"perfetto_table_info","ts","int64",0,1
-        3,"perfetto_table_info","track_id","uint32",0,0
-        4,"perfetto_table_info","value","double",0,0
-        5,"perfetto_table_info","arg_set_id","uint32",1,0
+        "id","name","col_type","nullable","sorted"
+        0,"id","id",0,1
+        1,"ts","int64",0,1
+        2,"track_id","uint32",0,0
+        3,"value","double",0,0
+        4,"arg_set_id","uint32",1,0
         """))
 
   def test_perfetto_table_info_runtime_table(self):
@@ -93,11 +93,11 @@ class PerfettoTable(TestSuite):
         SELECT 1 AS c)
         ORDER BY c desc;
 
-        SELECT * from perfetto_table_info('foo');
+        SELECT id, name, col_type, nullable, sorted from perfetto_table_info('foo');
         """,
         out=Csv("""
-        "id","type","name","col_type","nullable","sorted"
-        0,"perfetto_table_info","c","int64",0,0
+        "id","name","col_type","nullable","sorted"
+        0,"c","int64",0,0
         """))
 
   def test_create_perfetto_table_nullable_column(self):
@@ -116,7 +116,7 @@ class PerfettoTable(TestSuite):
         0
         """))
 
-  def test_create_perfetto_table_nullable_column(self):
+  def test_create_perfetto_table_sorted_column(self):
     return DiffTestBlueprint(
         trace=DataPath('android_boot.pftrace'),
         query="""
@@ -349,64 +349,102 @@ class PerfettoTable(TestSuite):
     return DiffTestBlueprint(
         trace=DataPath('example_android_trace_30s.pb'),
         query="""
-        CREATE PERFETTO INDEX foo ON __intrinsic_slice(track_id, name);
+          CREATE PERFETTO INDEX foo ON __intrinsic_slice(track_id, name);
 
-        SELECT
-          MIN(track_id) AS min_track_id,
-          MAX(name) AS min_name
-        FROM __intrinsic_slice
-        WHERE track_id = 13 AND name > "c"
+          WITH
+            ttid AS (
+              SELECT thread_track.id
+              FROM thread_track
+              JOIN thread USING (utid)
+              WHERE thread.name = 'android.bg'
+              LIMIT 1
+            ),
+            agg AS MATERIALIZED (
+              SELECT
+                MIN(track_id) AS min_track_id,
+                MAX(name) AS min_name
+              FROM __intrinsic_slice
+              WHERE track_id = (SELECT id FROM ttid) AND name > "c"
+            )
+            SELECT
+              min_track_id = (SELECT id FROM ttid) AS is_correct_track_id,
+              min_name
+            FROM agg
         """,
         out=Csv("""
-        "min_track_id","min_name"
-        13,"virtual bool art::ElfOatFile::Load(const std::string &, bool, bool, bool, art::MemMap *, std::string *)"
+          "is_correct_track_id","min_name"
+          1,"virtual bool art::ElfOatFile::Load(const std::string &, bool, bool, bool, art::MemMap *, std::string *)"
         """))
 
   def test_create_perfetto_index_multiple_smoke(self):
     return DiffTestBlueprint(
         trace=DataPath('example_android_trace_30s.pb'),
         query="""
-        CREATE PERFETTO INDEX idx ON __intrinsic_slice(track_id, name);
-        CREATE PERFETTO TABLE bar AS SELECT * FROM slice;
+          CREATE PERFETTO INDEX idx ON __intrinsic_slice(track_id, name);
+          CREATE PERFETTO TABLE bar AS SELECT * FROM slice;
 
-       SELECT (
-          SELECT count()
-          FROM bar
-          WHERE track_id = 13 AND dur > 1000 AND name > "b"
-        ) AS non_indexes_stats,
-        (
-          SELECT count()
-          FROM slice
-          WHERE track_id = 13 AND dur > 1000 AND name > "b"
-        ) AS indexed_stats
+          WITH ttid AS (
+            SELECT thread_track.id
+            FROM thread_track
+            JOIN thread USING (utid)
+            WHERE thread.name = 'android.bg'
+            LIMIT 1
+          )
+          SELECT (
+            SELECT count()
+            FROM bar
+            WHERE track_id = (SELECT id FROM ttid) AND dur > 1000 AND name > "b"
+          ) AS non_indexes_stats,
+          (
+            SELECT count()
+            FROM __intrinsic_slice
+            WHERE track_id = (SELECT id FROM ttid) AND dur > 1000 AND name > "b"
+          ) AS indexed_stats
         """,
         out=Csv("""
-        "non_indexes_stats","indexed_stats"
-        39,39
+          "non_indexes_stats","indexed_stats"
+          39,39
         """))
 
   def test_create_or_replace_perfetto_index(self):
     return DiffTestBlueprint(
         trace=DataPath('example_android_trace_30s.pb'),
         query="""
-        CREATE PERFETTO INDEX idx ON __intrinsic_slice(track_id, name);
-        CREATE OR REPLACE PERFETTO INDEX idx ON __intrinsic_slice(name);
+          CREATE PERFETTO INDEX idx ON __intrinsic_slice(track_id, name);
+          CREATE OR REPLACE PERFETTO INDEX idx ON __intrinsic_slice(name);
 
-       SELECT MAX(id) FROM slice WHERE track_id = 13;
+          WITH ttid AS (
+            SELECT thread_track.id
+            FROM thread_track
+            JOIN thread USING (utid)
+            WHERE thread.name = 'android.bg'
+            LIMIT 1
+          )
+          SELECT MAX(id)
+          FROM __intrinsic_slice
+          WHERE track_id = (SELECT id FROM ttid);
         """,
         out=Csv("""
         "MAX(id)"
         20745
         """))
 
-  def test_create_or_replace_perfetto_index(self):
+  def test_create_and_drop_perfetto_index(self):
     return DiffTestBlueprint(
         trace=DataPath('example_android_trace_30s.pb'),
         query="""
         CREATE PERFETTO INDEX idx ON __intrinsic_slice(track_id, name);
         DROP PERFETTO INDEX idx ON __intrinsic_slice;
 
-        SELECT MAX(id) FROM slice WHERE track_id = 13;
+        WITH ttid AS (
+          SELECT thread_track.id
+          FROM thread_track
+          JOIN thread USING (utid)
+          WHERE thread.name = 'android.bg'
+          LIMIT 1
+        )
+        SELECT MAX(id) FROM __intrinsic_slice
+        WHERE track_id = (SELECT id FROM ttid);
         """,
         out=Csv("""
         "MAX(id)"
@@ -567,4 +605,91 @@ class PerfettoTable(TestSuite):
         "vsync_id","vsync_id",24767,"[NULL]","[NULL]"
         "where","where","[NULL]","bufferLatched","[NULL]"
         "displays.dpi_x","displays[0].dpi_x","[NULL]","[NULL]",0.000000
+        """))
+
+  def test_winscope_proto_to_args_with_defaults_with_multiple_packets_per_proto(self):
+      return DiffTestBlueprint(
+          trace=Path('../parser/android/shell_transitions.textproto'),
+          query="""
+          SELECT key, int_value, real_value FROM __intrinsic_winscope_proto_to_args_with_defaults('__intrinsic_window_manager_shell_transition_protos') as tbl
+          ORDER BY tbl.base64_proto_id, key
+          LIMIT 53
+          """,
+          out=Csv("""
+          "key","int_value","real_value"
+          "create_time_ns",76799049027,"[NULL]"
+          "finish_time_ns",0,"[NULL]"
+          "finish_transaction_id",5604932321954,"[NULL]"
+          "flags",0,"[NULL]"
+          "merge_request_time_ns",0,"[NULL]"
+          "merge_target",0,"[NULL]"
+          "merge_time_ns",0,"[NULL]"
+          "send_time_ns",76875395422,"[NULL]"
+          "shell_abort_time_ns",0,"[NULL]"
+          "start_transaction_id",5604932321952,"[NULL]"
+          "targets","[NULL]","[NULL]"
+          "type",0,"[NULL]"
+          "wm_abort_time_ns",0,"[NULL]"
+          "create_time_ns",77854865352,"[NULL]"
+          "finish_transaction_id",5604932322159,"[NULL]"
+          "flags",0,"[NULL]"
+          "merge_request_time_ns",0,"[NULL]"
+          "merge_target",0,"[NULL]"
+          "merge_time_ns",0,"[NULL]"
+          "send_time_ns",77894307328,"[NULL]"
+          "shell_abort_time_ns",0,"[NULL]"
+          "start_transaction_id",5604932322158,"[NULL]"
+          "starting_window_remove_time_ns",0,"[NULL]"
+          "targets","[NULL]","[NULL]"
+          "type",0,"[NULL]"
+          "wm_abort_time_ns",0,"[NULL]"
+          "create_time_ns",82498121051,"[NULL]"
+          "finish_time_ns",0,"[NULL]"
+          "finish_transaction_id",5604932322347,"[NULL]"
+          "flags",0,"[NULL]"
+          "merge_request_time_ns",0,"[NULL]"
+          "merge_target",0,"[NULL]"
+          "merge_time_ns",0,"[NULL]"
+          "send_time_ns",82535513345,"[NULL]"
+          "shell_abort_time_ns",0,"[NULL]"
+          "start_transaction_id",5604932322346,"[NULL]"
+          "starting_window_remove_time_ns",0,"[NULL]"
+          "targets","[NULL]","[NULL]"
+          "type",0,"[NULL]"
+          "wm_abort_time_ns",0,"[NULL]"
+          "create_time_ns",76955664017,"[NULL]"
+          "finish_time_ns",0,"[NULL]"
+          "finish_transaction_id",5604932322029,"[NULL]"
+          "flags",0,"[NULL]"
+          "merge_request_time_ns",0,"[NULL]"
+          "send_time_ns",77277756832,"[NULL]"
+          "shell_abort_time_ns",0,"[NULL]"
+          "start_transaction_id",5604932322028,"[NULL]"
+          "starting_window_remove_time_ns",0,"[NULL]"
+          "targets","[NULL]","[NULL]"
+          "type",0,"[NULL]"
+          "wm_abort_time_ns",0,"[NULL]"
+          "starting_window_remove_time_ns",77706603918,"[NULL]"
+          """))
+
+  def test_winscope_proto_to_args_with_defaults_with_interned_strings(self):
+    return DiffTestBlueprint(
+        trace=Path('../parser/android/viewcapture.textproto'),
+        query="""
+        SELECT flat_key, key, int_value, string_value FROM __intrinsic_winscope_proto_to_args_with_defaults('__intrinsic_viewcapture_view')
+        WHERE flat_key LIKE '%_iid'
+          OR flat_key LIKE '%_name'
+          OR flat_key LIKE '%view_id'
+        ORDER BY base64_proto_id, key
+        """,
+        out=Csv("""
+        "flat_key","key","int_value","string_value"
+        "class_name","class_name","[NULL]","com.android.internal.policy.PhoneWindow@6cec234"
+        "view_id","view_id","[NULL]","NO_ID"
+        "class_name","class_name","[NULL]","com.android.internal.policy.DecorView"
+        "view_id","view_id","[NULL]","STRING DE-INTERNING ERROR"
+        "view_id_iid","view_id_iid",3,"[NULL]"
+        "class_name","class_name","[NULL]","STRING DE-INTERNING ERROR"
+        "class_name_iid","class_name_iid",3,"[NULL]"
+        "view_id","view_id","[NULL]","NO_ID"
         """))

@@ -34,9 +34,12 @@ class MockConnectRequestCallback final : public ConnectRequestCallback {
  public:
   ~MockConnectRequestCallback() override = default;
 
-  MOCK_METHOD2(OnConnectSucceed,
-               void(uint64_t request_id, uint64_t instance_id));
-  MOCK_METHOD1(OnConnectFailed, void(uint64_t request_id));
+  MOCK_METHOD3(OnConnectSucceed,
+               void(uint64_t request_id,
+                    std::string_view instance_name,
+                    uint64_t instance_id));
+  MOCK_METHOD2(OnConnectFailed,
+               void(uint64_t request_id, std::string_view instance_name));
 };
 
 class MockReceiverDelegate final : public ReceiverDelegate {
@@ -77,8 +80,9 @@ class PresentationReceiverTest : public ::testing::Test {
                                           &mock_connect_request_callback);
     EXPECT_TRUE(connect_request_);
     std::unique_ptr<ProtocolConnection> stream;
-    EXPECT_CALL(mock_connect_request_callback, OnConnectSucceed(_, _))
-        .WillOnce([&stream](uint64_t request_id, uint64_t instance_id) {
+    EXPECT_CALL(mock_connect_request_callback, OnConnectSucceed(_, _, _))
+        .WillOnce([&stream](uint64_t request_id, std::string_view instance_name,
+                            uint64_t instance_id) {
           stream = CreateClientProtocolConnection(instance_id);
         });
     quic_bridge_.RunTasksUntilIdle();
@@ -111,7 +115,7 @@ class PresentationReceiverTest : public ::testing::Test {
   Receiver receiver_;
   FakeClock fake_clock_;
   FakeTaskRunner task_runner_;
-  const std::string url1_{"https://www.example.com/receiver.html"};
+  const std::string url1_ = "https://www.example.com/receiver.html";
   FakeQuicBridge quic_bridge_;
   MockReceiverDelegate mock_receiver_delegate_;
   std::vector<std::unique_ptr<ProtocolConnection>> server_connections_;

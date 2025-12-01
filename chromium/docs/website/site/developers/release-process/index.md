@@ -28,7 +28,7 @@ process, which I'll describe during the presentation.
 
 ## Web vs Client app
 
-### Web app? [<img alt="Google Chrome icon" src="/developers/tech-talk-videos/release-process/chromium-24.png">](/developers/tech-talk-videos/release-process/chromium-24.png) Client app?
+### Web app? [<img alt="Google Chrome icon" src="chromium-24.png">](./chromium-24.png) Client app?
 
 You cannot approach client project infrastructure the same way you do for web
 services. The deployment cost is largely different. The feedback loop, to know
@@ -120,9 +120,9 @@ Question: Who does systematic code reviews on their projects?
 ## Continuous integration
 
 [<img alt="http://build.chromium.org/p/chromium/console screenshot"
-src="/developers/tech-talk-videos/release-process/buildbot_screenshot.PNG"
+src="buildbot_screenshot.PNG"
 height=149
-width=200>](/developers/tech-talk-videos/release-process/buildbot_screenshot.PNG)
+width=200>](./buildbot_screenshot.PNG)
 
 The second line of defense is continuous integration.
 
@@ -172,9 +172,9 @@ projects with fast auto-updates à la Google Chrome.
 ## Pipelining releases
 
 [<img alt="release pipeline graph"
-src="/developers/tech-talk-videos/release-process/release%20process%20version%202.png"
+src="/developers/release-process/release%20process%20version%202.png"
 height=118
-width=200>](/developers/tech-talk-videos/release-process/release%20process%20version%202.png)
+width=200>](/developers/release-process/release%20process%20version%202.png)
 
 I briefly talked about our release process but I want to take a pause to explain
 it more in depth.
@@ -223,7 +223,7 @@ grayed out, specific to Windows.
 ### Please! Do not prompt on start!
 
 [<img alt="fake update dialog"
-src="/developers/tech-talk-videos/release-process/update_software_popup.png">](/developers/tech-talk-videos/release-process/update_software_popup.png)
+src="update_software_popup.png">](./update_software_popup.png)
 
 As an example, I was away from my main workstation for a week and upon reboot,
 one piece of software and one device driver nagged me to be updated. After 10
@@ -261,9 +261,9 @@ users may tend to have.
 
 [<img alt="I felt a great disturbance in the Force ...as if millions of users
 suddenly cried out in terror and were suddenly silenced."
-src="/developers/tech-talk-videos/release-process/starwars-disturbance2.jpg"
+src="starwars-disturbance2.jpg"
 height=139
-width=320>](/developers/tech-talk-videos/release-process/starwars-disturbance2.jpg)
+width=320>](./starwars-disturbance2.jpg)
 
 What if you do an error? Getting good feedback from your users is not a simple
 task. They may not know what they want. They may not understand what is
@@ -291,7 +291,7 @@ really fast if something goes bad. Also, the intrinsic goal of the testing is to
 gather feedback so we must make sure we are getting it. On a web service, it's
 relatively easy to manage. It's much more fun to do on client applications. We
 made [privacy aware anonymous feedback
-infrastructure](http://www.google.com/chrome/intl/en/more/privacy.html) to
+infrastructure](https://www.google.com/chrome/intl/en/more/privacy.html) to
 gather experiment information only from users who opted to send statistics.
 
 This gives valuable information for things where the test matrix is too large.
@@ -335,9 +335,9 @@ third party programmers expectations is too large.
 ## Don't break extensions
 
 [<img alt="Death Metal Rooster extension screen shot"
-src="/developers/tech-talk-videos/release-process/death_metal_rooster3.png"
+src="death_metal_rooster3.png"
 height=123
-width=200>](/developers/tech-talk-videos/release-process/death_metal_rooster3.png)
+width=200>](./death_metal_rooster3.png)
 
 In addition, we don't want to break the 62 users of this extension. Simple
 things need to stay simple. In that case, it may mean either versioning the API

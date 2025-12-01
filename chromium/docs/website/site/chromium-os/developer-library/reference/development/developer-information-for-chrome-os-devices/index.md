@@ -20,7 +20,7 @@ This page provides developer-related information for Chrome devices. These are
 systems that *shipped from the factory* with Google ChromeOS on them. For
 details about Google ChromeOS and how it differs from ChromiumOS, see the
 [note in the FAQ about Google Chrome
-OS](https://www.chromium.org/chromium-os/developer-library/reference/development/chromium-os-faq/#whats-the-difference-between-chromiumos-and-google-chromeos).
+OS](/chromium-os/developer-library/reference/development/chromium-os-faq/#whats-the-difference-between-chromiumos-and-google-chromeos).
 ChromeOS devices typically require special setup in order to be used for
 ChromiumOS development.
 
@@ -32,7 +32,7 @@ cause hardware, software or security issues and may void warranty.**
 > if something breaks.
 
 Googlers not finding what they're looking for may want to look at
-[go/cros-names](http://goto.google.com/cros-names).
+[go/cros-names](http://go/cros-names).
 
 ## Routers
 
@@ -1549,7 +1549,7 @@ such as the auto update until date, first release, and more.
   <tr>
     <td>2017-06-30</td>
     <td>Acer</td>
-    <td><a href="http://www.chromium.org/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/generic">Acer Chromebook  Spin 11 R751T</a></td>
+    <td><a href="https://www.chromium.org/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/generic">Acer Chromebook  Spin 11 R751T</a></td>
     <td>Electro</td>
     <td>reef</td>
     <td>reef</td>
@@ -1594,7 +1594,7 @@ such as the auto update until date, first release, and more.
   <tr>
     <td>2017-09-08</td>
     <td>Acer</td>
-    <td><a href="http://www.chromium.org/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/generic">Chromebook 15 CB515-1HT/1H</a></td>
+    <td><a href="https://www.chromium.org/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/generic">Chromebook 15 CB515-1HT/1H</a></td>
     <td>Sand</td>
     <td>sand</td>
     <td>reef</td>
@@ -2869,7 +2869,7 @@ such as the auto update until date, first release, and more.
   <tr>
     <td>2020-10-23</td>
     <td>HP</td>
-    <td><a href="http://www.chromium.org/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/generic">HP Chromebox G3</a></td>
+    <td><a href="https://www.chromium.org/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/generic">HP Chromebox G3</a></td>
     <td>Noibat</td>
     <td>Puff</td>
     <td>Puff</td>
@@ -2884,7 +2884,7 @@ such as the auto update until date, first release, and more.
   <tr>
     <td>2020-10-29</td>
     <td>ASUS</td>
-    <td><a href="http://www.chromium.org/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/generic">ASUS Chromebox 4</a></td>
+    <td><a href="https://www.chromium.org/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/generic">ASUS Chromebox 4</a></td>
     <td>Duffy</td>
     <td>Puff</td>
     <td>Puff</td>
@@ -2899,7 +2899,7 @@ such as the auto update until date, first release, and more.
   <tr>
     <td>2020-10-29</td>
     <td>Acer</td>
-    <td><a href="http://www.chromium.org/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/generic">Acer Chromebox CXI4</a></td>
+    <td><a href="https://www.chromium.org/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/generic">Acer Chromebox CXI4</a></td>
     <td>Kaisa</td>
     <td>Puff</td>
     <td>Puff</td>
@@ -2914,7 +2914,7 @@ such as the auto update until date, first release, and more.
   <tr>
     <td>2020-11-13</td>
     <td>ASUS</td>
-    <td><a href="http://www.chromium.org/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/generic">ASUS Fanless Chromebox</a></td>
+    <td><a href="https://www.chromium.org/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/generic">ASUS Fanless Chromebox</a></td>
     <td>Faffy</td>
     <td>Puff</td>
     <td>Puff</td>
@@ -3364,7 +3364,7 @@ such as the auto update until date, first release, and more.
   <tr>
     <td>2021-08-23</td>
     <td>ASUS</td>
-    <td><a href="http://www.chromium.org/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/generic">ASUS Chromebook Flip CM1</a></td>
+    <td><a href="https://www.chromium.org/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/generic">ASUS Chromebook Flip CM1</a></td>
     <td>Jelboz360</td>
     <td>zork</td>
     <td>dalboz</td>
@@ -3679,14 +3679,14 @@ such as the auto update until date, first release, and more.
   <tr>
     <td>2023-01-18</td>
     <td>Lenovo</td>
-    <td>Lenovo 100e Chromebook Gen 4</td>
+    <td><a href="https://pcsupport.lenovo.com/us/en/products/chromebook-laptops/lenovo-chromebooks-series/100e-chromebook-gen4">Lenovo 100e Chromebook Gen 4</a></td>
     <td>Rusty</td>
     <td>Corsola</td>
     <td>Corsola</td>
     <td>aarch64</td>
     <td>5.15</td>
     <td>aarch64</td>
-    <td>MT8186</td>
+    <td>MT8186/MT8186T</td>
     <td>Clamshell</td>
     <td></td>
     <td>Yes</td>
@@ -3694,14 +3694,14 @@ such as the auto update until date, first release, and more.
   <tr>
     <td>2023-01-18</td>
     <td>Lenovo</td>
-    <td>Lenovo 300e Yoga Chromebook Gen 4</td>
+    <td><a href="https://pcsupport.lenovo.com/us/en/products/chromebook-laptops/lenovo-chromebooks-series/lenovo-300e-yoga-chromebook-gen4">Lenovo 300e Yoga Chromebook Gen 4</a></td>
     <td>Steelix</td>
     <td>Corsola</td>
     <td>Corsola</td>
     <td>aarch64</td>
     <td>5.15</td>
     <td>aarch64</td>
-    <td>MT8186</td>
+    <td>MT8186/MT8186T</td>
     <td>Convertible</td>
     <td></td>
     <td>Yes</td>
@@ -3724,7 +3724,7 @@ such as the auto update until date, first release, and more.
   <tr>
     <td>2023-01-18</td>
     <td>Lenovo</td>
-    <td>Lenovo IdeaPad Slim 3 Chromebook (14M868)</td>
+    <td><a href="https://pcsupport.lenovo.com/us/en/products/chromebook-laptops/lenovo-chromebooks-series/ip-slim-3-chrome-14m868">Lenovo IdeaPad Slim 3 Chromebook (14M868)</a></td>
     <td>Magneton</td>
     <td>Corsola</td>
     <td>Corsola</td>
@@ -4021,5 +4021,20 @@ such as the auto update until date, first release, and more.
     <td></td>
     <td></td>
  </tr>
+<tr>
+    <td>2024-11-02</td>
+    <td>Lenovo</td>
+    <td><a href="https://pcsupport.lenovo.com/us/en/products/chromebook-laptops/lenovo-chromebooks-series/lenovo-500e-chromebook-gen-4s?linkTrack=Caps%3ABody_SearchProduct&searchType=3&keyWordSearch=Lenovo%20500e%20Chromebook%20Gen%204s">Lenovo 500e Chromebook Gen 4s</a></td>
+    <td>Pujjoga</td>
+    <td>Nissa</td>
+    <td>Nissa</td>
+    <td>x86_64</td>
+    <td>5.15</td>
+    <td>x86_64</td>
+    <td>AlderLake-N</td>
+    <td>Chromebook</td>
+    <td>Yes</td>
+    <td>Yes</td>
+  </tr>
 
 </table>

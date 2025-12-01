@@ -17,6 +17,7 @@
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/pointer/touch_ui_controller.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/animation/ink_drop_host.h"
 #include "ui/views/animation/ink_drop_observer.h"
@@ -107,12 +108,20 @@ class IconLabelBubbleView : public views::InkDropObserver,
   // Returns true when the label should be visible.
   virtual bool ShouldShowLabel() const;
 
-  void SetBackgroundVisibility(BackgroundVisibility background_visibility);
+  virtual void SetBackgroundVisibility(
+      BackgroundVisibility background_visibility);
+
+  // Sets whether tonal colors are used for the background of the view when
+  // expanded to show the label.
+  virtual void SetUseTonalColorsWhenExpanded(bool use_tonal_colors);
 
   void SetLabel(const std::u16string& label);
   void SetLabel(const std::u16string& label,
                 const std::u16string& accessible_name);
   void SetFontList(const gfx::FontList& font_list);
+
+  gfx::RoundedCornersF GetCornerRadii() const;
+  void SetCornerRadii(const gfx::RoundedCornersF& radii);
 
   const views::View* GetImageContainerView() const {
     return image_container_view();
@@ -238,9 +247,11 @@ class IconLabelBubbleView : public views::InkDropObserver,
   // Spacing between the image and the label.
   int GetInternalSpacing() const;
 
-  // Sets whether tonal colors are used for the background of the view when
+  // Gets whether tonal colors are used for the background of the view when
   // expanded to show the label.
-  void SetUseTonalColorsWhenExpanded(bool use_tonal_colors);
+  bool GetUseTonalColorsWhenExpanded() const {
+    return use_tonal_color_when_expanded_;
+  }
 
   // Subclasses that want extra spacing added to the internal spacing can
   // override this method. This may be used when we want to align the label text
@@ -330,6 +341,8 @@ class IconLabelBubbleView : public views::InkDropObserver,
 
   std::optional<ui::ColorId> background_color_id_;
   std::optional<ui::ColorId> foreground_color_id_;
+
+  std::optional<gfx::RoundedCornersF> radii_;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_LOCATION_BAR_ICON_LABEL_BUBBLE_VIEW_H_

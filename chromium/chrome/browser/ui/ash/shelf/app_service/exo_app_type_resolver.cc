@@ -7,10 +7,10 @@
 #include <optional>
 #include <string_view>
 
-#include "ash/components/arc/arc_util.h"
 #include "ash/wm/window_properties.h"
 #include "chrome/browser/ash/plugin_vm/plugin_vm_util.h"
 #include "chromeos/ash/components/borealis/borealis_util.h"
+#include "chromeos/ash/experiences/arc/arc_util.h"
 #include "chromeos/crosapi/cpp/crosapi_constants.h"
 #include "chromeos/ui/base/app_types.h"
 #include "chromeos/ui/base/window_properties.h"
@@ -38,8 +38,9 @@ void UpdatePropertiesForArc(std::optional<int> task_id,
   out_properties_container.SetProperty(
       chromeos::kShouldHaveHighlightBorderOverlay, true);
 
-  if (task_id.has_value())
+  if (task_id.has_value()) {
     out_properties_container.SetProperty(app_restore::kWindowIdKey, *task_id);
+  }
 
   int32_t restore_window_id = 0;
   if (task_id.has_value()) {

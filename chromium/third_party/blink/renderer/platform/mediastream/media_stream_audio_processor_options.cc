@@ -8,10 +8,8 @@ namespace blink {
 
 void AudioProcessingProperties::DisableDefaultProperties() {
   echo_cancellation_type = EchoCancellationType::kEchoCancellationDisabled;
-  goog_auto_gain_control = false;
-  goog_noise_suppression = false;
-  goog_experimental_noise_suppression = false;
-  goog_highpass_filter = false;
+  auto_gain_control = false;
+  noise_suppression = false;
   voice_isolation = VoiceIsolationType::kVoiceIsolationDefault;
 }
 
@@ -32,17 +30,13 @@ bool AudioProcessingProperties::HasSameReconfigurableSettings(
 bool AudioProcessingProperties::HasSameNonReconfigurableSettings(
     const AudioProcessingProperties& other) const {
   return disable_hw_noise_suppression == other.disable_hw_noise_suppression &&
-         goog_audio_mirroring == other.goog_audio_mirroring &&
-         goog_auto_gain_control == other.goog_auto_gain_control &&
-         goog_noise_suppression == other.goog_noise_suppression &&
-         goog_experimental_noise_suppression ==
-             other.goog_experimental_noise_suppression &&
-         goog_highpass_filter == other.goog_highpass_filter &&
+         auto_gain_control == other.auto_gain_control &&
+         noise_suppression == other.noise_suppression &&
          voice_isolation == other.voice_isolation;
 }
 
 bool AudioProcessingProperties::GainControlEnabled() const {
-  return goog_auto_gain_control;
+  return auto_gain_control;
 }
 
 media::AudioProcessingSettings
@@ -52,17 +46,12 @@ AudioProcessingProperties::ToAudioProcessingSettings(
   out.echo_cancellation =
       echo_cancellation_type == EchoCancellationType::kEchoCancellationAec3;
   out.noise_suppression =
-      goog_noise_suppression && !system_noise_suppression_activated;
-  // TODO(https://bugs.webrtc.org/5298): Also toggle transient suppression when
-  // system effects are activated?
-  out.transient_noise_suppression = goog_experimental_noise_suppression;
+      noise_suppression && !system_noise_suppression_activated;
 
   out.automatic_gain_control =
-      goog_auto_gain_control && !system_gain_control_activated;
+      auto_gain_control && !system_gain_control_activated;
 
-  out.high_pass_filter = goog_highpass_filter;
   out.multi_channel_capture_processing = multi_channel_capture_processing;
-  out.stereo_mirroring = goog_audio_mirroring;
   return out;
 }
 }  // namespace blink

@@ -34,7 +34,7 @@ AndroidAutofillManager::AndroidAutofillManager(AutofillDriver* driver)
   ContentAutofillDriver* contentAutofillDriver =
       static_cast<ContentAutofillDriver*>(driver);
   contentAutofillDriver->set_browser_autofill_manager(
-    std::make_unique<BrowserAutofillManager>(contentAutofillDriver, ""));
+    std::make_unique<BrowserAutofillManager>(contentAutofillDriver));
 }
 
 AndroidAutofillManager::~AndroidAutofillManager() {
@@ -63,7 +63,7 @@ void AndroidAutofillManager::OnFormSubmittedImpl(
     manager->OnFormSubmitted(form, source);
 }
 
-void AndroidAutofillManager::OnTextFieldDidChangeImpl(
+void AndroidAutofillManager::OnTextFieldValueChangedImpl(
     const FormData& form,
     const FieldGlobalId& field_id,
     const TimeTicks timestamp) {
@@ -80,11 +80,11 @@ void AndroidAutofillManager::OnTextFieldDidChangeImpl(
   // cleared by blink. Check `provider` cache.
   bool cached_is_autofilled = provider->GetCachedIsAutofilled(*field);
 
-  provider->OnTextFieldDidChange(this, form, *field, timestamp);
+  provider->OnTextFieldValueChanged(this, form, *field, timestamp);
 
   // Vivaldi
   if (auto* manager = GetBrowserAutofillManager())
-    manager->OnTextFieldDidChange(form, field_id, timestamp);
+    manager->OnTextFieldValueChanged(form, field_id, timestamp);
 
   if (auto* logger = GetEventFormLogger(form.global_id(), field_id)) {
     if (cached_is_autofilled) {
@@ -147,16 +147,16 @@ void AndroidAutofillManager::OnFocusOnFormFieldImpl(
   }
 }
 
-void AndroidAutofillManager::OnSelectControlDidChangeImpl(
+void AndroidAutofillManager::OnSelectControlSelectionChangedImpl(
     const FormData& form,
     const FieldGlobalId& field_id) {
   if (auto* provider = GetAutofillProvider()) {
     if (const FormFieldData* field = form.FindFieldByGlobalId(field_id)) {
-      provider->OnSelectControlDidChange(this, form, *field);
+      provider->OnSelectControlSelectionChanged(this, form, *field);
 
       // Vivaldi
       if (auto* manager = GetBrowserAutofillManager())
-        manager->OnSelectControlDidChange(form, field_id);
+        manager->OnSelectControlSelectionChanged(form, field_id);
     }
   }
 }
@@ -316,8 +316,7 @@ AndroidFormEventLogger* AndroidAutofillManager::GetEventFormLogger(
     case FormType::kUnknownFormType:
       return nullptr;
   }
-  NOTREACHED_IN_MIGRATION();
-  return nullptr;
+  NOTREACHED();
 }
 
 /** Vivaldi **/

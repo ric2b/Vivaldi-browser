@@ -150,16 +150,16 @@ int RunStandaloneReceiver(int argc, char* argv[]) {
                            nullptr)) != -1) {
     switch (ch) {
       case 'p':
-        private_key_path = optarg;
+        private_key_path = get_opt::optarg;
         break;
       case 'd':
-        developer_certificate_path = optarg;
+        developer_certificate_path = get_opt::optarg;
         break;
       case 'f':
-        friendly_name = optarg;
+        friendly_name = get_opt::optarg;
         break;
       case 'm':
-        model_name = optarg;
+        model_name = get_opt::optarg;
         break;
       case 'g':
         should_generate_credentials = true;
@@ -193,7 +193,7 @@ int RunStandaloneReceiver(int argc, char* argv[]) {
     return 1;
   }
 
-  const char* interface_name = argv[optind];
+  const char* interface_name = argv[get_opt::optind];
   OSP_CHECK(interface_name && strlen(interface_name) > 0)
       << "No interface name provided.";
 

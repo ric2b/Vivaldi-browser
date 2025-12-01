@@ -11,6 +11,7 @@
 
 #import "ios/chrome/browser/lens_overlay/model/lens_overlay_sheet_detent_state.h"
 #import "ios/chrome/browser/lens_overlay/model/lens_overlay_snapshot_controller_delegate.h"
+#import "ios/web/public/navigation/navigation_item.h"
 #import "ios/web/public/web_state_observer.h"
 #import "ios/web/public/web_state_user_data.h"
 
@@ -50,6 +51,14 @@ class LensOverlayTabHelper : public LensOverlaySnapshotControllerDelegate,
     return is_updating_tab_switcher_snapshot_;
   }
 
+  // Returns true if the most recent back navigation item has lens overlay
+  // invoked.
+  bool IsLensOverlayInvokedOnMostRecentBackItem();
+
+  // Returns true if the current navigation item has lens overlay
+  // invoked.
+  bool IsLensOverlayInvokedOnCurrentNavigationItem();
+
   // Get the recorded bottom sheet detent state associate with this tab helper.
   SheetDimensionState GetRecordedSheetDimensionState() {
     return sheet_dimension_state_;
@@ -65,6 +74,9 @@ class LensOverlayTabHelper : public LensOverlaySnapshotControllerDelegate,
 
   // Clears the in memory viewport snapshot.
   void ClearViewportSnapshot() { viewport_snapshot_ = nil; }
+
+  // Clears the recorded invocation navigation id.
+  void ClearInvokationNavigationId() { invokation_navigation_id_ = 0; }
 
   // Records a volatile snapshot of the viewport window.
   void RecordViewportSnaphot();
@@ -96,12 +108,18 @@ class LensOverlayTabHelper : public LensOverlaySnapshotControllerDelegate,
 
   web::WebState* GetWebState() const { return web_state_; }
 
+  base::WeakPtr<LensOverlayTabHelper> GetWeakPtr() {
+    return weak_ptr_factory_.GetWeakPtr();
+  }
+
   // web::WebStateObserver:
   void WebStateDestroyed(web::WebState* web_state) override;
   void WasShown(web::WebState* web_state) override;
   void WasHidden(web::WebState* web_state) override;
   void DidStartNavigation(web::WebState* web_state,
                           web::NavigationContext* navigation_context) override;
+  void DidFinishNavigation(web::WebState* web_state,
+                           web::NavigationContext* navigation_context) override;
 
  private:
   explicit LensOverlayTabHelper(web::WebState* web_state);

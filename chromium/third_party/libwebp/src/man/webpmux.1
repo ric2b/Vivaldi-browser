@@ -1,5 +1,5 @@
 .\"                                      Hey, EMACS: -*- nroff -*-
-.TH WEBPMUX 1 "November 17, 2021"
+.TH WEBPMUX 1 "July 18, 2024"
 .SH NAME
 webpmux \- create animated WebP files from non\-animated WebP images, extract
 frames from animated WebP images, and manage XMP/EXIF metadata and ICC profile.
@@ -186,12 +186,12 @@ Output file in WebP format.
 .TP
 The nature of EXIF, XMP and ICC data is not checked and is assumed to be valid.
 
-.SH BUGS
-Please report all bugs to the issue tracker:
-https://bugs.chromium.org/p/webp
-.br
-Patches welcome! See this page to get started:
-https://www.webmproject.org/code/contribute/submitting\-patches/
+.SH EXIT STATUS
+If there were no problems during execution, \fBwebpmux\fP exits with the value
+of the C constant \fBEXIT_SUCCESS\fP. This is usually zero.
+.PP
+If an error occurs, \fBwebpmux\fP exits with the value of the C constant
+\fBEXIT_FAILURE\fP. This is usually one.
 
 .SH EXAMPLES
 .P
@@ -261,6 +261,13 @@ https://chromium.googlesource.com/webm/libwebp
 .PP
 This manual page was written by Vikas Arora <vikaas.arora@gmail.com>,
 for the Debian project (and may be used by others).
+
+.SH REPORTING BUGS
+Please report all bugs to the issue tracker:
+https://issues.webmproject.org
+.br
+Patches welcome! See this page to get started:
+https://www.webmproject.org/code/contribute/submitting\-patches/
 
 .SH SEE ALSO
 .BR cwebp (1),

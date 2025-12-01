@@ -127,7 +127,7 @@ views::View* SystemTrayTestApi::GetMainBubbleView() {
 
 std::u16string SystemTrayTestApi::GetBubbleViewTooltip(int view_id) {
   views::View* view = GetMainBubbleView()->GetViewByID(view_id);
-  return view ? view->GetTooltipText(gfx::Point()) : std::u16string();
+  return view ? view->GetRenderedTooltipText(gfx::Point()) : std::u16string();
 }
 
 std::u16string SystemTrayTestApi::GetShutdownButtonTooltip() {
@@ -140,7 +140,7 @@ std::u16string SystemTrayTestApi::GetShutdownButtonTooltip() {
                           ->footer_for_testing()
                           ->power_button_for_testing()
                           ->button_content_for_testing();
-  return icon_button ? icon_button->GetTooltipText(gfx::Point())
+  return icon_button ? icon_button->GetRenderedTooltipText(gfx::Point())
                      : std::u16string();
 }
 
@@ -151,7 +151,7 @@ std::u16string SystemTrayTestApi::GetBubbleViewText(int view_id) {
 
 bool SystemTrayTestApi::Is24HourClock() {
   base::HourClockType type =
-      GetTray()->time_view_->time_view()->GetHourTypeForTesting();
+      GetTray()->time_tray_item_view_->time_view()->GetHourTypeForTesting();
   return type == base::k24HourClock;
 }
 

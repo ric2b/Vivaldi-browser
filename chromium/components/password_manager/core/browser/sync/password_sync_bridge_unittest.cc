@@ -66,7 +66,7 @@ MATCHER_P(EntityDataHasSignonRealm, expected_signon_realm, "") {
 bool PasswordIssuesHasExpectedInsecureTypes(
     const sync_pb::PasswordIssues& issues,
     const std::vector<InsecureType>& expected_types) {
-  return base::ranges::all_of(expected_types, [&issues](auto type) {
+  return std::ranges::all_of(expected_types, [&issues](auto type) {
     switch (type) {
       case InsecureType::kLeaked:
         return issues.has_leaked_password_issue();
@@ -701,7 +701,8 @@ TEST_F(PasswordSyncBridgeTest, ShouldApplyRemoteDeletion) {
   EXPECT_CALL(mock_processor(), Delete).Times(0);
 
   syncer::EntityChangeList entity_change_list;
-  entity_change_list.push_back(syncer::EntityChange::CreateDelete(kStorageKey));
+  entity_change_list.push_back(
+      syncer::EntityChange::CreateDelete(kStorageKey, syncer::EntityData()));
   std::optional<syncer::ModelError> error =
       bridge()->ApplyIncrementalSyncChanges(
           bridge()->CreateMetadataChangeList(), std::move(entity_change_list));
@@ -1529,20 +1530,6 @@ TEST_F(PasswordSyncBridgeAccountStoreTest,
       "PasswordManager.AccountStoreCredentialsAfterOptIn", 2, 1);
   histogram_tester.ExpectUniqueSample(
       "PasswordManager.AccountStoreBlocklistedEntriesAfterOptIn", 1, 1);
-  histogram_tester.ExpectTotalCount(
-      "PasswordManager.ProfileStore.TotalAccountsBeforeInitialSync", 0);
-}
-
-TEST_F(PasswordSyncBridgeTest, ShouldReportStoredPasswordsIfProfileStore) {
-  fake_db()->AddLoginWithPrimaryKey(MakePasswordForm(kSignonRealm1, 100));
-  fake_db()->AddLoginWithPrimaryKey(MakePasswordForm(kSignonRealm2, 101));
-
-  base::HistogramTester histogram_tester;
-  std::optional<syncer::ModelError> error = bridge()->MergeFullSyncData(
-      bridge()->CreateMetadataChangeList(), syncer::EntityChangeList());
-  ASSERT_FALSE(error);
-  histogram_tester.ExpectUniqueSample(
-      "PasswordManager.ProfileStore.TotalAccountsBeforeInitialSync", 2, 1);
 }
 
 TEST_F(PasswordSyncBridgeTest,

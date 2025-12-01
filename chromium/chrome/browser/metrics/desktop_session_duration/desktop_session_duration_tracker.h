@@ -21,7 +21,7 @@ class DesktopSessionDurationTracker : public AudibleContentsTracker::Observer {
   // The methods for the observer will be called on the UI thread.
   class Observer {
    public:
-    virtual ~Observer() {}
+    virtual ~Observer() = default;
     virtual void OnSessionStarted(base::TimeTicks session_start) {}
     virtual void OnSessionEnded(base::TimeDelta session_length,
                                 base::TimeTicks session_end) {}
@@ -65,10 +65,6 @@ class DesktopSessionDurationTracker : public AudibleContentsTracker::Observer {
   // Cleans up any global state for testing.
   static void CleanupForTesting();
 
-  void IncrementDefaultSearchCounter() { ++default_search_counter_; }
-
-  void ResetDefaultSearchCounter() { default_search_counter_ = 0; }
-
  protected:
   DesktopSessionDurationTracker();
   ~DesktopSessionDurationTracker() override;
@@ -107,9 +103,6 @@ class DesktopSessionDurationTracker : public AudibleContentsTracker::Observer {
   bool in_session_ = false;
   bool is_audio_playing_ = false;
   bool is_first_session_ = true;
-
-  // Used to keep the number of times we navigated to the default search engine.
-  uint32_t default_search_counter_ = 0;
 
   // Timeout for waiting for user interaction.
   base::TimeDelta inactivity_timeout_;

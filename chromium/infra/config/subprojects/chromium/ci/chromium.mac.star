@@ -646,12 +646,15 @@ ci.thin_tester(
                     dimensions = {
                         "gpu": None,
                     },
-                    shards = 18,
+                    shards = 6,
                 ),
             ),
             "browser_tests": targets.mixin(
                 ci_only = True,
                 swarming = targets.swarming(
+                    dimensions = {
+                        "cores": "12",
+                    },
                     # crbug.com/1366016
                     shards = 20,
                 ),
@@ -727,12 +730,15 @@ ci.thin_tester(
                     dimensions = {
                         "gpu": None,
                     },
-                    shards = 18,
+                    shards = 6,
                 ),
             ),
             "browser_tests": targets.mixin(
                 ci_only = True,
                 swarming = targets.swarming(
+                    dimensions = {
+                        "cores": "12",
+                    },
                     # crbug.com/1361887
                     shards = 20,
                 ),
@@ -807,7 +813,7 @@ ci.thin_tester(
                     dimensions = {
                         "gpu": None,
                     },
-                    shards = 18,
+                    shards = 6,
                 ),
             ),
             "browser_tests": targets.mixin(
@@ -894,7 +900,7 @@ ci.thin_tester(
                     "--debug",
                 ],
                 swarming = targets.swarming(
-                    shards = 24,
+                    shards = 8,
                 ),
             ),
             "browser_tests": targets.remove(
@@ -992,7 +998,7 @@ ci.thin_tester(
                     dimensions = {
                         "gpu": None,
                     },
-                    shards = 18,
+                    shards = 6,
                 ),
             ),
             "browser_tests": targets.mixin(

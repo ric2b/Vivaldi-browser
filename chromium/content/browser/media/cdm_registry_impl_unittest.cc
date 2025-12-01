@@ -26,8 +26,8 @@
 #include "base/test/gmock_move_support.h"
 #include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/types/expected.h"
 #include "base/version.h"
-#include "build/chromeos_buildflags.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/public/common/cdm_info.h"
 #include "content/public/test/browser_task_environment.h"
@@ -239,15 +239,6 @@ class CdmRegistryImplTest : public testing::Test {
   }
 
   void SelectHardwareSecureDecryption(bool enabled) {
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-    if (enabled) {
-      base::CommandLine::ForCurrentProcess()->AppendSwitch(
-          switches::kLacrosUseChromeosProtectedMedia);
-    } else {
-      base::CommandLine::ForCurrentProcess()->RemoveSwitch(
-          switches::kLacrosUseChromeosProtectedMedia);
-    }
-#else
     const std::vector<base::test::FeatureRef> kHardwareSecureFeatures = {
         media::kHardwareSecureDecryption,
         media::kHardwareSecureDecryptionExperiment};
@@ -256,7 +247,6 @@ class CdmRegistryImplTest : public testing::Test {
     auto enabled_features = enabled ? kHardwareSecureFeatures : kNoFeatures;
     auto disabled_features = enabled ? kNoFeatures : kHardwareSecureFeatures;
     scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
-#endif
   }
 
 #if BUILDFLAG(IS_ANDROID)
@@ -424,8 +414,9 @@ TEST_F(CdmRegistryImplTest, KeySystemCapabilities_SoftwareSecure) {
   ASSERT_EQ(key_system_capabilities.size(), 1u);
   ASSERT_TRUE(key_system_capabilities.count(kTestKeySystem));
   const auto& support = key_system_capabilities[kTestKeySystem];
-  ASSERT_EQ(support.sw_secure_capability.value(), GetTestCdmCapability());
-  ASSERT_FALSE(support.hw_secure_capability);
+  ASSERT_EQ(support.sw_cdm_capability_or_status.value(),
+            GetTestCdmCapability());
+  ASSERT_FALSE(support.hw_cdm_capability_or_status.has_value());
 }
 
 TEST_F(CdmRegistryImplTest, KeySystemCapabilities_HardwareSecure) {
@@ -440,8 +431,9 @@ TEST_F(CdmRegistryImplTest, KeySystemCapabilities_HardwareSecure) {
   ASSERT_EQ(key_system_capabilities.size(), 1u);
   ASSERT_TRUE(key_system_capabilities.count(kTestKeySystem));
   const auto& support = key_system_capabilities[kTestKeySystem];
-  ASSERT_FALSE(support.sw_secure_capability);
-  ASSERT_EQ(support.hw_secure_capability.value(), GetTestCdmCapability());
+  ASSERT_FALSE(support.sw_cdm_capability_or_status.has_value());
+  ASSERT_EQ(support.hw_cdm_capability_or_status.value(),
+            GetTestCdmCapability());
 }
 
 TEST_F(CdmRegistryImplTest,
@@ -460,8 +452,9 @@ TEST_F(CdmRegistryImplTest,
   ASSERT_EQ(key_system_capabilities.size(), 1u);
   ASSERT_TRUE(key_system_capabilities.count(kTestKeySystem));
   const auto& support = key_system_capabilities[kTestKeySystem];
-  ASSERT_EQ(support.sw_secure_capability.value(), GetTestCdmCapability());
-  ASSERT_FALSE(support.hw_secure_capability);
+  ASSERT_EQ(support.sw_cdm_capability_or_status.value(),
+            GetTestCdmCapability());
+  ASSERT_FALSE(support.hw_cdm_capability_or_status.has_value());
 }
 
 TEST_F(CdmRegistryImplTest,
@@ -480,8 +473,9 @@ TEST_F(CdmRegistryImplTest,
   ASSERT_EQ(key_system_capabilities.size(), 1u);
   ASSERT_TRUE(key_system_capabilities.count(kTestKeySystem));
   const auto& support = key_system_capabilities[kTestKeySystem];
-  ASSERT_FALSE(support.sw_secure_capability);
-  ASSERT_EQ(support.hw_secure_capability.value(), GetTestCdmCapability());
+  ASSERT_FALSE(support.sw_cdm_capability_or_status.has_value());
+  ASSERT_EQ(support.hw_cdm_capability_or_status.value(),
+            GetTestCdmCapability());
 }
 
 TEST_F(CdmRegistryImplTest,
@@ -491,7 +485,8 @@ TEST_F(CdmRegistryImplTest,
 
   EXPECT_CALL(capability_cb_,
               Run(kTestKeySystem, Robustness::kSoftwareSecure, _))
-      .WillOnce(RunOnceCallback<2>(std::nullopt));
+      .WillOnce(RunOnceCallback<2>(
+          base::unexpected(media::CdmCapabilityQueryStatus::kUnknown)));
   GetKeySystemCapabilities();
 
   ASSERT_TRUE(results_.count(kObserver1));
@@ -512,7 +507,8 @@ TEST_F(CdmRegistryImplTest,
 
   EXPECT_CALL(capability_cb_,
               Run(kTestKeySystem, Robustness::kHardwareSecure, _))
-      .WillOnce(RunOnceCallback<2>(std::nullopt));
+      .WillOnce(RunOnceCallback<2>(
+          base::unexpected(media::CdmCapabilityQueryStatus::kUnknown)));
   GetKeySystemCapabilities();
 
   ASSERT_TRUE(results_.count(kObserver1));
@@ -562,8 +558,10 @@ TEST_F(CdmRegistryImplTest, KeySystemCapabilities_SoftwareAndHardwareSecure) {
   ASSERT_EQ(key_system_capabilities.size(), 1u);
   ASSERT_TRUE(key_system_capabilities.count(kTestKeySystem));
   const auto& support = key_system_capabilities[kTestKeySystem];
-  ASSERT_EQ(support.sw_secure_capability.value(), GetTestCdmCapability());
-  ASSERT_EQ(support.hw_secure_capability.value(), GetOtherCdmCapability());
+  ASSERT_EQ(support.sw_cdm_capability_or_status.value(),
+            GetTestCdmCapability());
+  ASSERT_EQ(support.hw_cdm_capability_or_status.value(),
+            GetOtherCdmCapability());
 }
 
 TEST_F(CdmRegistryImplTest, KeySystemCapabilities_MultipleObservers) {
@@ -588,7 +586,8 @@ TEST_F(CdmRegistryImplTest, KeySystemCapabilities_MultipleObservers) {
   ASSERT_EQ(key_system_capabilities.size(), 1u);
   ASSERT_TRUE(key_system_capabilities.count(kTestKeySystem));
   const auto& support = key_system_capabilities[kTestKeySystem];
-  ASSERT_EQ(support.sw_secure_capability.value(), GetTestCdmCapability());
+  ASSERT_EQ(support.sw_cdm_capability_or_status.value(),
+            GetTestCdmCapability());
 
   ASSERT_TRUE(results_.count(kObserver2));
   ASSERT_EQ(results_[kObserver2].size(), 1u);
@@ -624,8 +623,9 @@ TEST_F(
   ASSERT_EQ(key_system_capabilities.size(), 1u);
   ASSERT_TRUE(key_system_capabilities.count(kTestKeySystem));
   const auto& support = key_system_capabilities[kTestKeySystem];
-  ASSERT_EQ(support.sw_secure_capability.value(), GetTestCdmCapability());
-  ASSERT_FALSE(support.hw_secure_capability);
+  ASSERT_EQ(support.sw_cdm_capability_or_status.value(),
+            GetTestCdmCapability());
+  ASSERT_FALSE(support.hw_cdm_capability_or_status.has_value());
 
   ASSERT_TRUE(results_.count(kObserver2));
   ASSERT_EQ(results_[kObserver2].size(), 1u);
@@ -662,8 +662,10 @@ TEST_F(
   ASSERT_EQ(key_system_capabilities.size(), 1u);
   ASSERT_TRUE(key_system_capabilities.count(kTestKeySystem));
   const auto& support = key_system_capabilities[kTestKeySystem];
-  ASSERT_EQ(support.sw_secure_capability.value(), GetTestCdmCapability());
-  ASSERT_EQ(support.hw_secure_capability.value(), GetTestCdmCapability());
+  ASSERT_EQ(support.sw_cdm_capability_or_status.value(),
+            GetTestCdmCapability());
+  ASSERT_EQ(support.hw_cdm_capability_or_status.value(),
+            GetTestCdmCapability());
 
   ASSERT_TRUE(results_.count(kObserver2));
   ASSERT_EQ(results_[kObserver2].size(), 1u);
@@ -708,8 +710,10 @@ TEST_F(
   ASSERT_EQ(key_system_capabilities.size(), 1u);
   ASSERT_TRUE(key_system_capabilities.count(kTestKeySystem));
   const auto& support = key_system_capabilities[kTestKeySystem];
-  ASSERT_EQ(support.sw_secure_capability.value(), GetTestCdmCapability());
-  ASSERT_EQ(support.hw_secure_capability.value(), GetTestCdmCapability());
+  ASSERT_EQ(support.sw_cdm_capability_or_status.value(),
+            GetTestCdmCapability());
+  ASSERT_EQ(support.hw_cdm_capability_or_status.value(),
+            GetTestCdmCapability());
 
   ASSERT_TRUE(results_.count(kObserver2));
   ASSERT_EQ(results_[kObserver2].size(), 1u);
@@ -738,8 +742,9 @@ TEST_F(CdmRegistryImplTest, KeySystemCapabilities_RegisterCdmAfterObserving) {
   ASSERT_EQ(key_system_capabilities_1.size(), 1u);
   ASSERT_TRUE(key_system_capabilities_1.count(kTestKeySystem));
   const auto& support_1 = key_system_capabilities_1[kTestKeySystem];
-  ASSERT_EQ(support_1.sw_secure_capability.value(), GetTestCdmCapability());
-  ASSERT_FALSE(support_1.hw_secure_capability);
+  ASSERT_EQ(support_1.sw_cdm_capability_or_status.value(),
+            GetTestCdmCapability());
+  ASSERT_FALSE(support_1.hw_cdm_capability_or_status.has_value());
 
   {
     base::RunLoop run_loop;
@@ -757,8 +762,10 @@ TEST_F(CdmRegistryImplTest, KeySystemCapabilities_RegisterCdmAfterObserving) {
   ASSERT_EQ(key_system_capabilities_2.size(), 1u);
   ASSERT_TRUE(key_system_capabilities_2.count(kTestKeySystem));
   const auto& support_2 = key_system_capabilities_2[kTestKeySystem];
-  ASSERT_EQ(support_2.sw_secure_capability.value(), GetTestCdmCapability());
-  ASSERT_EQ(support_2.hw_secure_capability.value(), GetOtherCdmCapability());
+  ASSERT_EQ(support_2.sw_cdm_capability_or_status.value(),
+            GetTestCdmCapability());
+  ASSERT_EQ(support_2.hw_cdm_capability_or_status.value(),
+            GetOtherCdmCapability());
 }
 
 TEST_F(CdmRegistryImplTest,
@@ -766,8 +773,8 @@ TEST_F(CdmRegistryImplTest,
   SelectHardwareSecureDecryption(true);
 
   // Save the callbacks so we can control when and how they are fired.
-  base::OnceCallback<void(std::optional<media::CdmCapability>)> callback_1,
-      callback_2, callback_3;
+  base::OnceCallback<void(media::CdmCapabilityOrStatus)> callback_1, callback_2,
+      callback_3;
   EXPECT_CALL(capability_cb_,
               Run(kTestKeySystem, Robustness::kHardwareSecure, _))
       .WillOnce(MoveArg<2>(&callback_1))
@@ -813,13 +820,14 @@ TEST_F(CdmRegistryImplTest,
 
   ASSERT_TRUE(key_system_capabilities.count(kTestKeySystem));
   const auto& support = key_system_capabilities[kTestKeySystem];
-  ASSERT_FALSE(support.sw_secure_capability.has_value());
-  ASSERT_EQ(support.hw_secure_capability.value(), GetTestCdmCapability());
+  ASSERT_FALSE(support.sw_cdm_capability_or_status.has_value());
+  ASSERT_EQ(support.hw_cdm_capability_or_status.value(),
+            GetTestCdmCapability());
 
   ASSERT_TRUE(key_system_capabilities.count(kOtherKeySystem));
   const auto& other_support = key_system_capabilities[kOtherKeySystem];
-  ASSERT_FALSE(other_support.sw_secure_capability.has_value());
-  ASSERT_EQ(other_support.hw_secure_capability.value(),
+  ASSERT_FALSE(other_support.sw_cdm_capability_or_status.has_value());
+  ASSERT_EQ(other_support.hw_cdm_capability_or_status.value(),
             GetOtherCdmCapability());
 }
 
@@ -837,8 +845,10 @@ TEST_F(CdmRegistryImplTest, KeySystemCapabilities_DisableHardwareSecureCdms) {
   ASSERT_EQ(key_system_capabilities_1.size(), 1u);
   ASSERT_TRUE(key_system_capabilities_1.count(kTestKeySystem));
   const auto& support_1 = key_system_capabilities_1[kTestKeySystem];
-  ASSERT_EQ(support_1.sw_secure_capability.value(), GetTestCdmCapability());
-  ASSERT_EQ(support_1.hw_secure_capability.value(), GetTestCdmCapability());
+  ASSERT_EQ(support_1.sw_cdm_capability_or_status.value(),
+            GetTestCdmCapability());
+  ASSERT_EQ(support_1.hw_cdm_capability_or_status.value(),
+            GetTestCdmCapability());
 
   {
     base::RunLoop run_loop;
@@ -854,8 +864,9 @@ TEST_F(CdmRegistryImplTest, KeySystemCapabilities_DisableHardwareSecureCdms) {
   ASSERT_EQ(key_system_capabilities_2.size(), 1u);
   ASSERT_TRUE(key_system_capabilities_2.count(kTestKeySystem));
   const auto& support_2 = key_system_capabilities_2[kTestKeySystem];
-  ASSERT_EQ(support_2.sw_secure_capability.value(), GetTestCdmCapability());
-  ASSERT_FALSE(support_2.hw_secure_capability);
+  ASSERT_EQ(support_2.sw_cdm_capability_or_status.value(),
+            GetTestCdmCapability());
+  ASSERT_FALSE(support_2.hw_cdm_capability_or_status.has_value());
 }
 
 #if BUILDFLAG(IS_WIN)
@@ -1010,7 +1021,8 @@ TEST_F(CdmRegistryImplTest,
   ASSERT_EQ(results_[kObserver2].size(), 1u);
   auto& key_system_capabilities2 = results_[kObserver2][0];
   const auto& support = key_system_capabilities2[kTestKeySystem];
-  ASSERT_EQ(support.hw_secure_capability.value(), GetTestCdmCapability());
+  ASSERT_EQ(support.hw_cdm_capability_or_status.value(),
+            GetTestCdmCapability());
 }
 
 TEST_F(
@@ -1051,8 +1063,10 @@ TEST_F(
   ASSERT_EQ(key_system_capabilities.size(), 1u);
   ASSERT_TRUE(key_system_capabilities.count(kTestKeySystem));
   const auto& support = key_system_capabilities[kTestKeySystem];
-  ASSERT_EQ(support.sw_secure_capability.value(), GetTestCdmCapability());
-  ASSERT_EQ(support.hw_secure_capability.value(), GetTestCdmCapability());
+  ASSERT_EQ(support.sw_cdm_capability_or_status.value(),
+            GetTestCdmCapability());
+  ASSERT_EQ(support.hw_cdm_capability_or_status.value(),
+            GetTestCdmCapability());
 
   ASSERT_TRUE(results_.count(kObserver2));
   ASSERT_EQ(results_[kObserver2].size(), 1u);

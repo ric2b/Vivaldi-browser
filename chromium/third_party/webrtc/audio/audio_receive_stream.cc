@@ -10,22 +10,36 @@
 
 #include "audio/audio_receive_stream.h"
 
+#include <cstddef>
+#include <cstdint>
+#include <map>
+#include <memory>
+#include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
-#include "absl/memory/memory.h"
+#include "absl/strings/string_view.h"
 #include "api/array_view.h"
+#include "api/audio/audio_frame.h"
+#include "api/audio/audio_mixer.h"
 #include "api/audio_codecs/audio_format.h"
 #include "api/call/audio_sink.h"
-#include "api/rtp_parameters.h"
+#include "api/environment/environment.h"
+#include "api/frame_transformer_interface.h"
+#include "api/neteq/neteq_factory.h"
+#include "api/rtp_headers.h"
+#include "api/scoped_refptr.h"
 #include "api/sequence_checker.h"
+#include "api/transport/rtp/rtp_source.h"
 #include "audio/audio_send_stream.h"
 #include "audio/audio_state.h"
 #include "audio/channel_receive.h"
 #include "audio/conversion.h"
+#include "call/audio_state.h"
 #include "call/rtp_config.h"
 #include "call/rtp_stream_receiver_controller_interface.h"
-#include "modules/rtp_rtcp/source/rtp_packet_received.h"
+#include "call/syncable.h"
 #include "rtc_base/checks.h"
 #include "rtc_base/logging.h"
 #include "rtc_base/strings/string_builder.h"
@@ -128,7 +142,6 @@ AudioReceiveStreamImpl::~AudioReceiveStreamImpl() {
   RTC_DCHECK_RUN_ON(&worker_thread_checker_);
   RTC_LOG(LS_INFO) << "~AudioReceiveStreamImpl: " << remote_ssrc();
   Stop();
-  channel_receive_->SetAssociatedSendChannel(nullptr);
   channel_receive_->ResetReceiverCongestionControlObjects();
 }
 
@@ -255,25 +268,35 @@ webrtc::AudioReceiveStreamInterface::Stats AudioReceiveStreamImpl::GetStats(
   webrtc::AudioReceiveStreamInterface::Stats stats;
   stats.remote_ssrc = remote_ssrc();
 
-  webrtc::CallReceiveStatistics call_stats =
-      channel_receive_->GetRTCPStatistics();
   auto receive_codec = channel_receive_->GetReceiveCodec();
   if (receive_codec) {
     stats.codec_name = receive_codec->second.name;
     stats.codec_payload_type = receive_codec->first;
-    int clockrate_khz = receive_codec->second.clockrate_hz / 1000;
-    if (clockrate_khz > 0) {
-      stats.jitter_ms = call_stats.jitterSamples / clockrate_khz;
-    }
   }
+
+  webrtc::CallReceiveStatistics call_stats =
+      channel_receive_->GetRTCPStatistics();
   stats.payload_bytes_received = call_stats.payload_bytes_received;
   stats.header_and_padding_bytes_received =
       call_stats.header_and_padding_bytes_received;
-  stats.packets_received = call_stats.packetsReceived;
-  stats.packets_lost = call_stats.cumulativeLost;
+  stats.packets_received = call_stats.packets_received;
+  stats.packets_lost = call_stats.packets_lost;
+  stats.jitter_ms = call_stats.jitter_ms;
   stats.nacks_sent = call_stats.nacks_sent;
-  stats.capture_start_ntp_time_ms = call_stats.capture_start_ntp_time_ms_;
+  stats.capture_start_ntp_time_ms = call_stats.capture_start_ntp_time_ms;
   stats.last_packet_received = call_stats.last_packet_received;
+  stats.last_sender_report_timestamp = call_stats.last_sender_report_timestamp;
+  stats.last_sender_report_utc_timestamp =
+      call_stats.last_sender_report_utc_timestamp;
+  stats.last_sender_report_remote_utc_timestamp =
+      call_stats.last_sender_report_remote_utc_timestamp;
+  stats.sender_reports_packets_sent = call_stats.sender_reports_packets_sent;
+  stats.sender_reports_bytes_sent = call_stats.sender_reports_bytes_sent;
+  stats.sender_reports_reports_count = call_stats.sender_reports_reports_count;
+  stats.round_trip_time = call_stats.round_trip_time;
+  stats.round_trip_time_measurements = call_stats.round_trip_time_measurements;
+  stats.total_round_trip_time = call_stats.total_round_trip_time;
+
   stats.delay_estimate_ms = channel_receive_->GetDelayEstimate();
   stats.audio_level = channel_receive_->GetSpeechOutputLevelFullRange();
   stats.total_output_energy = channel_receive_->GetTotalOutputEnergy();
@@ -331,18 +354,6 @@ webrtc::AudioReceiveStreamInterface::Stats AudioReceiveStreamImpl::GetStats(
   stats.decoding_cng = ds.decoded_cng;
   stats.decoding_plc_cng = ds.decoded_plc_cng;
   stats.decoding_muted_output = ds.decoded_muted_output;
-
-  stats.last_sender_report_timestamp = call_stats.last_sender_report_timestamp;
-  stats.last_sender_report_utc_timestamp =
-      call_stats.last_sender_report_utc_timestamp;
-  stats.last_sender_report_remote_utc_timestamp =
-      call_stats.last_sender_report_remote_utc_timestamp;
-  stats.sender_reports_packets_sent = call_stats.sender_reports_packets_sent;
-  stats.sender_reports_bytes_sent = call_stats.sender_reports_bytes_sent;
-  stats.sender_reports_reports_count = call_stats.sender_reports_reports_count;
-  stats.round_trip_time = call_stats.round_trip_time;
-  stats.round_trip_time_measurements = call_stats.round_trip_time_measurements;
-  stats.total_round_trip_time = call_stats.total_round_trip_time;
 
   return stats;
 }
@@ -419,14 +430,6 @@ bool AudioReceiveStreamImpl::SetMinimumPlayoutDelay(int delay_ms) {
   return channel_receive_->SetMinimumPlayoutDelay(delay_ms);
 }
 
-void AudioReceiveStreamImpl::AssociateSendStream(
-    internal::AudioSendStream* send_stream) {
-  RTC_DCHECK_RUN_ON(&packet_sequence_checker_);
-  channel_receive_->SetAssociatedSendChannel(
-      send_stream ? send_stream->GetChannel() : nullptr);
-  associated_send_stream_ = send_stream;
-}
-
 void AudioReceiveStreamImpl::DeliverRtcp(const uint8_t* packet, size_t length) {
   // TODO(solenberg): Tests call this function on a network thread, libjingle
   // calls on the worker thread. We should move towards always using a network
@@ -456,12 +459,6 @@ uint32_t AudioReceiveStreamImpl::local_ssrc() const {
 const std::string& AudioReceiveStreamImpl::sync_group() const {
   RTC_DCHECK_RUN_ON(&packet_sequence_checker_);
   return config_.sync_group;
-}
-
-const AudioSendStream*
-AudioReceiveStreamImpl::GetAssociatedSendStreamForTesting() const {
-  RTC_DCHECK_RUN_ON(&packet_sequence_checker_);
-  return associated_send_stream_;
 }
 
 internal::AudioState* AudioReceiveStreamImpl::audio_state() const {

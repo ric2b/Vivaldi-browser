@@ -39,7 +39,7 @@ communication app that needs to prevent the system from suspending so that
 incoming calls may be received.
 Do you know anyone else, internal or external, that is also interested in this
 API?
-Yes, there is an internal need for this API (<http://crbug.com/178944>).
+Yes, there is an internal need for this API (<https://crbug.com/178944>).
 External users have requested the ability to e.g. disable power management
 entirely on desktop machines; this API makes it possible to write a simple
 extension that does so.

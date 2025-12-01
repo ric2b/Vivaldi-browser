@@ -16,6 +16,7 @@ TODO: Tests with more than one buffer to try to stress implementations a little 
 `;
 
 import { makeTestGroup } from '../../../../../common/framework/test_group.js';
+import { MaxLimitsTestMixin } from '../../../../gpu_test.js';
 import {
   kOperationBoundaries,
   kBoundaryInfo,
@@ -34,7 +35,7 @@ const kSrcValue = 0;
 // The op value is what the read/write operation write into the target buffer.
 const kOpValue = 1;
 
-export const g = makeTestGroup(BufferSyncTest);
+export const g = makeTestGroup(MaxLimitsTestMixin(BufferSyncTest));
 
 g.test('rw')
   .desc(
@@ -66,6 +67,12 @@ g.test('rw')
   )
   .fn(async t => {
     const { readContext, readOp, writeContext, writeOp, boundary } = t.params;
+
+    t.skipIfReadOpsOrWriteOpsUsesStorageBufferInFragmentStageAndNoSupportStorageBuffersInFragmentShaders(
+      readOp,
+      writeOp
+    );
+
     const helper = new OperationContextHelper(t);
 
     const srcBuffers: GPUBuffer[] = [];
@@ -131,6 +138,12 @@ g.test('wr')
   )
   .fn(async t => {
     const { readContext, readOp, writeContext, writeOp, boundary } = t.params;
+
+    t.skipIfReadOpsOrWriteOpsUsesStorageBufferInFragmentStageAndNoSupportStorageBuffersInFragmentShaders(
+      readOp,
+      writeOp
+    );
+
     const helper = new OperationContextHelper(t);
 
     const srcBuffers: GPUBuffer[] = [];
@@ -196,6 +209,12 @@ g.test('ww')
   )
   .fn(async t => {
     const { writeOps, contexts, boundary } = t.params;
+
+    t.skipIfReadOpsOrWriteOpsUsesStorageBufferInFragmentStageAndNoSupportStorageBuffersInFragmentShaders(
+      [],
+      writeOps
+    );
+
     const helper = new OperationContextHelper(t);
 
     const buffers: GPUBuffer[] = [];
@@ -244,6 +263,8 @@ g.test('multiple_pairs_of_draws_in_one_render_pass')
   )
   .fn(async t => {
     const { firstDrawUseBundle, secondDrawUseBundle } = t.params;
+
+    t.skipIfNoSupportForStorageBuffersInFragmentStage();
 
     const encoder = t.device.createCommandEncoder();
     const passEncoder = t.beginSimpleRenderPass(encoder);
@@ -294,6 +315,8 @@ g.test('multiple_pairs_of_draws_in_one_render_bundle')
       colorFormats: ['rgba8unorm'],
     });
 
+    t.skipIfNoSupportForStorageBuffersInFragmentStage();
+
     const kBufferCount = 4;
     const buffers: GPUBuffer[] = [];
     for (let b = 0; b < kBufferCount; ++b) {
@@ -327,6 +350,8 @@ g.test('multiple_pairs_of_dispatches_in_one_compute_pass')
   `
   )
   .fn(async t => {
+    t.skipIfNoSupportForStorageBuffersInFragmentStage();
+
     const encoder = t.device.createCommandEncoder();
     const pass = encoder.beginComputePass();
 

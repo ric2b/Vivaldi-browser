@@ -32,6 +32,7 @@ import static org.chromium.base.ThreadUtils.runOnUiThreadBlocking;
 import static org.chromium.components.browser_ui.widget.highlight.ViewHighlighterTestUtils.checkHighlightOff;
 import static org.chromium.components.browser_ui.widget.highlight.ViewHighlighterTestUtils.checkHighlightPulse;
 import static org.chromium.ui.test.util.MockitoHelper.doCallback;
+import static org.chromium.ui.test.util.ViewUtils.onViewWaiting;
 
 import android.os.Build;
 import android.text.TextUtils;
@@ -75,8 +76,7 @@ import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.DoNotBatch;
-import org.chromium.base.test.util.Features.DisableFeatures;
-import org.chromium.base.test.util.JniMocker;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.app.metrics.LaunchCauseMetrics;
@@ -104,13 +104,13 @@ import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.ui.signin.SyncPromoController.SyncPromoState;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.ActivityTestUtils;
 import org.chromium.chrome.test.util.BookmarkTestUtil;
 import org.chromium.chrome.test.util.MenuUtils;
+import org.chromium.chrome.test.util.browser.signin.SigninTestRule;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkItem;
 import org.chromium.components.bookmarks.BookmarkType;
@@ -125,7 +125,6 @@ import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.power_bookmarks.PowerBookmarkMeta;
 import org.chromium.components.power_bookmarks.ShoppingSpecifics;
 import org.chromium.components.profile_metrics.BrowserProfileType;
-import org.chromium.components.sync.SyncFeatureMap;
 import org.chromium.components.sync.SyncService;
 import org.chromium.components.sync.SyncService.SyncStateChangedListener;
 import org.chromium.content_public.browser.test.util.TouchCommon;
@@ -135,6 +134,7 @@ import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.listmenu.ListMenuButton;
 import org.chromium.ui.modelutil.MVCListAdapter.ListItem;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
+import org.chromium.ui.test.util.DeviceRestriction;
 import org.chromium.url.GURL;
 
 import java.util.ArrayList;
@@ -146,15 +146,7 @@ import java.util.concurrent.ExecutionException;
 /** Tests for the bookmark manager. */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
-@DisableFeatures({
-    SyncFeatureMap.SYNC_ENABLE_BOOKMARKS_IN_TRANSPORT_MODE,
-    // TODO(crbug.com/344981899): ReplaceSyncPromosWithSigninPromos is disabled because bookmarks
-    // account storage is disabled above, otherwise tests run into assertion failures. Long term,
-    // these tests probably need to be fixed for the bookmarks account storage case rather than
-    // force-disable the feature.
-    ChromeFeatureList.REPLACE_SYNC_PROMOS_WITH_SIGN_IN_PROMOS,
-    ChromeFeatureList.UNO_PHASE_2_FOLLOW_UP
-})
+@EnableFeatures({ChromeFeatureList.UNO_PHASE_2_FOLLOW_UP})
 // TODO(crbug.com/40899175): Investigate batching.
 @DoNotBatch(reason = "BookmarkTest has behaviours and thus can't be batched.")
 public class BookmarkTest {
@@ -172,7 +164,10 @@ public class BookmarkTest {
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
-    @Rule public JniMocker mJniMocker = new JniMocker();
+
+    // Use SigninTestRule to ensure accounts are always considered loaded, to ensure the sign-in
+    // promo's visibility. See https://crbug.com/389733589.
+    @Rule public final SigninTestRule mSigninTestRule = new SigninTestRule();
 
     @Mock private SyncService mSyncService;
     @Mock private ShoppingService mShoppingService;
@@ -200,10 +195,10 @@ public class BookmarkTest {
     @Before
     public void setUp() {
         // Setup the shopping service.
-        mJniMocker.mock(ShoppingServiceFactoryJni.TEST_HOOKS, mShoppingServiceFactoryJniMock);
+        ShoppingServiceFactoryJni.setInstanceForTesting(mShoppingServiceFactoryJniMock);
         doReturn(mShoppingService).when(mShoppingServiceFactoryJniMock).getForProfile(any());
 
-        mJniMocker.mock(CommerceFeatureUtilsJni.TEST_HOOKS, mCommerceFeatureUtilsJniMock);
+        CommerceFeatureUtilsJni.setInstanceForTesting(mCommerceFeatureUtilsJniMock);
         doReturn(false).when(mCommerceFeatureUtilsJniMock).isShoppingListEligible(anyLong());
 
         mActivityTestRule.startMainActivityOnBlankPage();
@@ -450,6 +445,7 @@ public class BookmarkTest {
 
     @Test
     @SmallTest
+    @Restriction({DeviceRestriction.RESTRICTION_TYPE_NON_AUTO})
     public void testEmptySearch() throws InterruptedException {
         openBookmarkManager();
         BookmarkTestUtil.openMobileBookmarks(mItemsContainer, mDelegate, mBookmarkModel);
@@ -481,8 +477,7 @@ public class BookmarkTest {
     @Test
     @MediumTest
     public void testSearchBookmarks() throws Exception {
-        BookmarkPromoHeader.forcePromoStateForTesting(
-                SyncPromoState.PROMO_FOR_SYNC_TURNED_OFF_STATE);
+        BookmarkPromoHeader.forcePromoVisibilityForTesting(true);
         BookmarkId folder = addFolder(TEST_FOLDER_TITLE);
         addBookmark(TEST_PAGE_TITLE_GOOGLE, mTestPage, folder);
         addBookmark(TEST_PAGE_TITLE_FOO, mTestPageFoo, folder);
@@ -535,8 +530,7 @@ public class BookmarkTest {
     @MediumTest
     @Restriction({DeviceFormFactor.PHONE})
     public void testSearchBookmarks_pressBack() throws Exception {
-        BookmarkPromoHeader.forcePromoStateForTesting(
-                SyncPromoState.PROMO_FOR_SYNC_TURNED_OFF_STATE);
+        BookmarkPromoHeader.forcePromoVisibilityForTesting(true);
         BookmarkId folder = addFolder(TEST_FOLDER_TITLE);
         addBookmark(TEST_PAGE_TITLE_GOOGLE, mTestPage, folder);
         addBookmark(TEST_PAGE_TITLE_FOO, mTestPageFoo, folder);
@@ -606,7 +600,7 @@ public class BookmarkTest {
     @Test
     @MediumTest
     public void testSearchBookmarks_Delete() throws Exception {
-        BookmarkPromoHeader.forcePromoStateForTesting(SyncPromoState.NO_PROMO);
+        BookmarkPromoHeader.forcePromoVisibilityForTesting(false);
         BookmarkId testFolder = addFolder(TEST_FOLDER_TITLE);
         addBookmark(TEST_PAGE_TITLE_GOOGLE, mTestPage, testFolder);
         openBookmarkManager();
@@ -651,7 +645,7 @@ public class BookmarkTest {
     @Test
     @MediumTest
     public void testSearchBookmarks_DeleteFolderWithChildrenInResults() throws Exception {
-        BookmarkPromoHeader.forcePromoStateForTesting(SyncPromoState.NO_PROMO);
+        BookmarkPromoHeader.forcePromoVisibilityForTesting(false);
         BookmarkId testFolder = addFolder(TEST_FOLDER_TITLE);
         addBookmark(TEST_PAGE_TITLE_FOO, mTestPageFoo, testFolder);
         openBookmarkManager();
@@ -709,9 +703,10 @@ public class BookmarkTest {
 
     @Test
     @MediumTest
+    @Restriction({DeviceRestriction.RESTRICTION_TYPE_NON_AUTO})
     public void testStopSpinnerOnEmptyFolder() throws Exception {
         // Cannot have a promo if we're going to have 0 elements in RecyclerView.
-        BookmarkPromoHeader.forcePromoStateForTesting(SyncPromoState.NO_PROMO);
+        BookmarkPromoHeader.forcePromoVisibilityForTesting(false);
 
         // Force BookmarkModel to be loaded so we can get a folder id later.
         loadBookmarkModel();
@@ -754,8 +749,7 @@ public class BookmarkTest {
         addFolder(TEST_FOLDER_TITLE);
         addBookmark(TEST_TITLE_A, mTestUrlA);
 
-        BookmarkPromoHeader.forcePromoStateForTesting(
-                SyncPromoState.PROMO_FOR_SYNC_TURNED_OFF_STATE);
+        BookmarkPromoHeader.forcePromoVisibilityForTesting(true);
         openBookmarkManager();
         BookmarkTestUtil.openMobileBookmarks(mItemsContainer, mDelegate, mBookmarkModel);
 
@@ -773,8 +767,8 @@ public class BookmarkTest {
 
         assertEquals(
                 "Expected bookmark toolbar to be selection mode",
-                mToolbar.getCurrentViewType(),
-                ViewType.SELECTION_VIEW);
+                ViewType.SELECTION_VIEW,
+                mToolbar.getCurrentViewType());
         assertEquals(
                 "Expected more button of selected item to be gone when drag is active.",
                 View.GONE,
@@ -793,8 +787,7 @@ public class BookmarkTest {
         addFolder(TEST_FOLDER_TITLE);
         addFolder(TEST_TITLE_A);
 
-        BookmarkPromoHeader.forcePromoStateForTesting(
-                SyncPromoState.PROMO_FOR_SYNC_TURNED_OFF_STATE);
+        BookmarkPromoHeader.forcePromoVisibilityForTesting(true);
         openBookmarkManager();
         BookmarkTestUtil.openMobileBookmarks(mItemsContainer, mDelegate, mBookmarkModel);
 
@@ -827,6 +820,7 @@ public class BookmarkTest {
 
     @Test
     @MediumTest
+    @DisabledTest(message = "https://crbug.com/344981899, this test needs to be fixed post-UNO")
     public void testSmallDrag_Up_BookmarksOnly() throws Exception {
         List<BookmarkId> initial = new ArrayList<>();
         List<BookmarkId> expected = new ArrayList<>();
@@ -854,8 +848,7 @@ public class BookmarkTest {
         expected.add(aId);
         expected.add(googleId);
 
-        BookmarkPromoHeader.forcePromoStateForTesting(
-                SyncPromoState.PROMO_FOR_SYNC_TURNED_OFF_STATE);
+        BookmarkPromoHeader.forcePromoVisibilityForTesting(true);
         openBookmarkManager();
         BookmarkTestUtil.openMobileBookmarks(mItemsContainer, mDelegate, mBookmarkModel);
 
@@ -908,6 +901,7 @@ public class BookmarkTest {
 
     @Test
     @MediumTest
+    @DisabledTest(message = "https://crbug.com/344981899, this test needs to be fixed post-UNO")
     public void testSmallDrag_Down_FoldersOnly() throws Exception {
         List<BookmarkId> initial = new ArrayList<>();
         List<BookmarkId> expected = new ArrayList<>();
@@ -936,8 +930,7 @@ public class BookmarkTest {
         expected.add(aId);
         expected.add(testId);
 
-        BookmarkPromoHeader.forcePromoStateForTesting(
-                SyncPromoState.PROMO_FOR_SYNC_TURNED_OFF_STATE);
+        BookmarkPromoHeader.forcePromoVisibilityForTesting(true);
         openBookmarkManager();
         BookmarkTestUtil.openMobileBookmarks(mItemsContainer, mDelegate, mBookmarkModel);
 
@@ -1006,8 +999,7 @@ public class BookmarkTest {
         expected.add(testId);
         expected.add(aId);
 
-        BookmarkPromoHeader.forcePromoStateForTesting(
-                SyncPromoState.PROMO_FOR_SYNC_TURNED_OFF_STATE);
+        BookmarkPromoHeader.forcePromoVisibilityForTesting(true);
         openBookmarkManager();
         BookmarkTestUtil.openMobileBookmarks(mItemsContainer, mDelegate, mBookmarkModel);
 
@@ -1053,11 +1045,12 @@ public class BookmarkTest {
     public void testPromoDraggability() throws Exception {
         addFolder(TEST_FOLDER_TITLE);
 
-        BookmarkPromoHeader.forcePromoStateForTesting(
-                SyncPromoState.PROMO_FOR_SYNC_TURNED_OFF_STATE);
+        BookmarkPromoHeader.forcePromoVisibilityForTesting(true);
         openBookmarkManager();
         BookmarkTestUtil.openMobileBookmarks(mItemsContainer, mDelegate, mBookmarkModel);
 
+        // Ensure that the sign-in promo is visible before testing its draggability.
+        onViewWaiting(withId(R.id.signin_promo_view_container));
         ViewHolder promo = getViewHolderAtIndex(1);
         ImprovedBookmarkRow row = getNthBookmarkRow(1);
         startSelectionThroughMoreMenu(row);
@@ -1075,8 +1068,7 @@ public class BookmarkTest {
     @DisableIf.Build(sdk_equals = Build.VERSION_CODES.S_V2, message = "https://crbug.com/41484383")
     public void testPartnerFolderDraggability() throws Exception {
         addFolderWithPartner(TEST_FOLDER_TITLE);
-        BookmarkPromoHeader.forcePromoStateForTesting(
-                SyncPromoState.PROMO_FOR_SYNC_TURNED_OFF_STATE);
+        BookmarkPromoHeader.forcePromoVisibilityForTesting(true);
         openBookmarkManager();
         BookmarkTestUtil.openMobileBookmarks(mItemsContainer, mDelegate, mBookmarkModel);
 
@@ -1095,8 +1087,7 @@ public class BookmarkTest {
         addBookmark("a", mTestUrlA);
         addFolder(TEST_FOLDER_TITLE);
 
-        BookmarkPromoHeader.forcePromoStateForTesting(
-                SyncPromoState.PROMO_FOR_SYNC_TURNED_OFF_STATE);
+        BookmarkPromoHeader.forcePromoVisibilityForTesting(true);
         openBookmarkManager();
         BookmarkTestUtil.openMobileBookmarks(mItemsContainer, mDelegate, mBookmarkModel);
 
@@ -1114,8 +1105,7 @@ public class BookmarkTest {
     public void testCannotSelectPromo() throws Exception {
         addFolder(TEST_FOLDER_TITLE);
 
-        BookmarkPromoHeader.forcePromoStateForTesting(
-                SyncPromoState.PROMO_FOR_SYNC_TURNED_OFF_STATE);
+        BookmarkPromoHeader.forcePromoVisibilityForTesting(true);
         openBookmarkManager();
 
         View promo = getNthBookmarkViewHolder(1).itemView;
@@ -1131,8 +1121,7 @@ public class BookmarkTest {
     @MediumTest
     public void testCannotSelectPartner() throws Exception {
         addFolderWithPartner(TEST_FOLDER_TITLE);
-        BookmarkPromoHeader.forcePromoStateForTesting(
-                SyncPromoState.PROMO_FOR_SYNC_TURNED_OFF_STATE);
+        BookmarkPromoHeader.forcePromoVisibilityForTesting(true);
         openBookmarkManager();
 
         View partner = getNthBookmarkViewHolder(2).itemView;
@@ -1150,8 +1139,7 @@ public class BookmarkTest {
     public void testMoveUpMenuItem() throws Exception {
         addBookmark(TEST_PAGE_TITLE_GOOGLE, mTestUrlA);
         addFolder(TEST_FOLDER_TITLE);
-        BookmarkPromoHeader.forcePromoStateForTesting(
-                SyncPromoState.PROMO_FOR_SYNC_TURNED_OFF_STATE);
+        BookmarkPromoHeader.forcePromoVisibilityForTesting(true);
 
         openBookmarkManager();
         BookmarkTestUtil.openMobileBookmarks(mItemsContainer, mDelegate, mBookmarkModel);
@@ -1176,8 +1164,7 @@ public class BookmarkTest {
     public void testMoveDownMenuItem() throws Exception {
         addBookmark(TEST_PAGE_TITLE_GOOGLE, mTestUrlA);
         addFolder(TEST_FOLDER_TITLE);
-        BookmarkPromoHeader.forcePromoStateForTesting(
-                SyncPromoState.PROMO_FOR_SYNC_TURNED_OFF_STATE);
+        BookmarkPromoHeader.forcePromoVisibilityForTesting(true);
         openBookmarkManager();
         BookmarkTestUtil.openMobileBookmarks(mItemsContainer, mDelegate, mBookmarkModel);
 
@@ -1200,8 +1187,7 @@ public class BookmarkTest {
     public void testMoveDownGoneForBottomElement() throws Exception {
         addBookmarkWithPartner(TEST_PAGE_TITLE_GOOGLE, mTestUrlA);
         addFolderWithPartner(TEST_FOLDER_TITLE);
-        BookmarkPromoHeader.forcePromoStateForTesting(
-                SyncPromoState.PROMO_FOR_SYNC_TURNED_OFF_STATE);
+        BookmarkPromoHeader.forcePromoVisibilityForTesting(true);
         openBookmarkManager();
         BookmarkTestUtil.openMobileBookmarks(mItemsContainer, mDelegate, mBookmarkModel);
 
@@ -1220,8 +1206,7 @@ public class BookmarkTest {
     public void testMoveUpGoneForTopElement() throws Exception {
         addBookmark(TEST_PAGE_TITLE_GOOGLE, mTestUrlA);
         addFolder(TEST_FOLDER_TITLE);
-        BookmarkPromoHeader.forcePromoStateForTesting(
-                SyncPromoState.PROMO_FOR_SYNC_TURNED_OFF_STATE);
+        BookmarkPromoHeader.forcePromoVisibilityForTesting(true);
         openBookmarkManager();
         BookmarkTestUtil.openMobileBookmarks(mItemsContainer, mDelegate, mBookmarkModel);
 
@@ -1259,8 +1244,7 @@ public class BookmarkTest {
     @MediumTest
     public void testMoveButtonsGoneWithOneBookmark() throws Exception {
         addFolder(TEST_FOLDER_TITLE);
-        BookmarkPromoHeader.forcePromoStateForTesting(
-                SyncPromoState.PROMO_FOR_SYNC_TURNED_OFF_STATE);
+        BookmarkPromoHeader.forcePromoVisibilityForTesting(true);
         openBookmarkManager();
         BookmarkTestUtil.openMobileBookmarks(mItemsContainer, mDelegate, mBookmarkModel);
 
@@ -1283,7 +1267,7 @@ public class BookmarkTest {
             message = "https://crbug.com/339893726")
     public void testMoveButtonsGoneForPartnerBookmarks() throws Exception {
         loadFakePartnerBookmarkShimForTesting();
-        BookmarkPromoHeader.forcePromoStateForTesting(SyncPromoState.NO_PROMO);
+        BookmarkPromoHeader.forcePromoVisibilityForTesting(false);
         openBookmarkManager();
 
         // Open partner bookmarks folder.
@@ -1379,7 +1363,7 @@ public class BookmarkTest {
     @DisabledTest(message = "Flaky, see crbug.com/335891831")
     public void testShowInFolder_NoScroll() throws Exception {
         addFolder(TEST_FOLDER_TITLE);
-        BookmarkPromoHeader.forcePromoStateForTesting(SyncPromoState.NO_PROMO);
+        BookmarkPromoHeader.forcePromoVisibilityForTesting(false);
         openBookmarkManager();
         BookmarkTestUtil.openMobileBookmarks(mItemsContainer, mDelegate, mBookmarkModel);
 
@@ -1423,8 +1407,7 @@ public class BookmarkTest {
         addFolder("C");
         addFolder("D");
         addFolder("E"); // Index 1
-        BookmarkPromoHeader.forcePromoStateForTesting(
-                SyncPromoState.PROMO_FOR_SYNC_TURNED_OFF_STATE);
+        BookmarkPromoHeader.forcePromoVisibilityForTesting(true);
         openBookmarkManager();
 
         // Enter search mode.
@@ -1456,8 +1439,7 @@ public class BookmarkTest {
     public void testShowInFolder_OpenOtherFolder() throws Exception {
         BookmarkId testId = addFolder(TEST_FOLDER_TITLE);
         runOnUiThreadBlocking(() -> mBookmarkModel.addBookmark(testId, 0, TEST_TITLE_A, mTestUrlA));
-        BookmarkPromoHeader.forcePromoStateForTesting(
-                SyncPromoState.PROMO_FOR_SYNC_TURNED_OFF_STATE);
+        BookmarkPromoHeader.forcePromoVisibilityForTesting(true);
         openBookmarkManager();
 
         // Enter search mode.
@@ -1503,7 +1485,7 @@ public class BookmarkTest {
     public void testAddBookmarkInBackgroundWithSelection() throws Exception {
         BookmarkId folder = addFolder(TEST_FOLDER_TITLE);
         addBookmark(TEST_PAGE_TITLE_FOO, mTestPageFoo, folder);
-        BookmarkPromoHeader.forcePromoStateForTesting(SyncPromoState.NO_PROMO);
+        BookmarkPromoHeader.forcePromoVisibilityForTesting(false);
         openBookmarkManager();
 
         // Open the new folder where these bookmarks were created.
@@ -1540,7 +1522,7 @@ public class BookmarkTest {
         addBookmark(TEST_PAGE_TITLE_FOO, mTestPageFoo, folder);
         BookmarkId googleId = addBookmark(TEST_PAGE_TITLE_GOOGLE, mTestPage, folder);
         addBookmark(TEST_TITLE_A, mTestUrlA, folder);
-        BookmarkPromoHeader.forcePromoStateForTesting(SyncPromoState.NO_PROMO);
+        BookmarkPromoHeader.forcePromoVisibilityForTesting(false);
         openBookmarkManager();
 
         // Open the new folder where these bookmarks were created.
@@ -1567,8 +1549,8 @@ public class BookmarkTest {
                     assertEquals(2, getBookmarkCount());
                     assertEquals(
                             "Bookmark View should be back to normal view",
-                            mToolbar.getCurrentViewType(),
-                            ViewType.NORMAL_VIEW);
+                            ViewType.NORMAL_VIEW,
+                            mToolbar.getCurrentViewType());
                 });
     }
 
@@ -1581,7 +1563,7 @@ public class BookmarkTest {
         addBookmark(TEST_PAGE_TITLE_FOO, mTestPageFoo, folder);
         BookmarkId googleId = addBookmark(TEST_PAGE_TITLE_GOOGLE, mTestPage, folder);
         addBookmark(TEST_TITLE_A, mTestUrlA, folder);
-        BookmarkPromoHeader.forcePromoStateForTesting(SyncPromoState.NO_PROMO);
+        BookmarkPromoHeader.forcePromoVisibilityForTesting(false);
         openBookmarkManager();
 
         // Open the new folder where these bookmarks were created.
@@ -1612,8 +1594,8 @@ public class BookmarkTest {
                             getNthBookmarkRow(1).isSelectedForTesting());
                     assertEquals(
                             "Should stay in selection mode because there is one selected",
-                            mToolbar.getCurrentViewType(),
-                            ViewType.SELECTION_VIEW);
+                            ViewType.SELECTION_VIEW,
+                            mToolbar.getCurrentViewType());
                 });
     }
 
@@ -1622,7 +1604,7 @@ public class BookmarkTest {
     public void testUpdateSelectedBookmarkInBackground() throws Exception {
         BookmarkId folder = addFolder(TEST_FOLDER_TITLE);
         BookmarkId id = addBookmark(TEST_PAGE_TITLE_FOO, mTestPageFoo, folder);
-        BookmarkPromoHeader.forcePromoStateForTesting(SyncPromoState.NO_PROMO);
+        BookmarkPromoHeader.forcePromoVisibilityForTesting(false);
         openBookmarkManager();
 
         // Open the new folder where these bookmarks were created.
@@ -1731,6 +1713,7 @@ public class BookmarkTest {
     @Test
     @MediumTest
     @Restriction({DeviceFormFactor.PHONE})
+    @DisabledTest(message = "https://crbug.com/344981899, this test needs to be fixed post-UNO")
     public void testRecordsHistogramWhenBookmarkManagerOpened_InIncognito() throws Throwable {
         assertEquals(
                 0,
@@ -1809,7 +1792,7 @@ public class BookmarkTest {
                 () -> {
                     mBookmarkModel.setPowerBookmarkMeta(id, meta.build());
                 });
-        BookmarkPromoHeader.forcePromoStateForTesting(SyncPromoState.NO_PROMO);
+        BookmarkPromoHeader.forcePromoVisibilityForTesting(false);
         openBookmarkManager();
         BookmarkTestUtil.waitForBookmarkModelLoaded();
         onView(withText("Tracked products")).check(matches(not(isDisplayed())));
@@ -1944,7 +1927,7 @@ public class BookmarkTest {
     }
 
     private void exitSearch() throws Exception {
-        assertEquals(mDelegate.getCurrentUiMode(), BookmarkUiMode.SEARCHING);
+        assertEquals(BookmarkUiMode.SEARCHING, mDelegate.getCurrentUiMode());
         pressBackButton();
 
         CriteriaHelper.pollUiThread(
@@ -2087,11 +2070,6 @@ public class BookmarkTest {
                 () ->
                         mBookmarkModel.addFolder(
                                 mBookmarkModel.getDefaultBookmarkFolder(), 0, title));
-    }
-
-    private BookmarkId addFolder(final String title, BookmarkId parent) throws ExecutionException {
-        BookmarkTestUtil.readPartnerBookmarks(mActivityTestRule);
-        return runOnUiThreadBlocking(() -> mBookmarkModel.addFolder(parent, 0, title));
     }
 
     private void removeBookmark(final BookmarkId bookmarkId) {

@@ -102,10 +102,19 @@ ContentVisibility ContentVisibilityForIncognito(BOOL isIncognito) {
 
 - (void)setRootViewController:(UIViewController*)rootViewController
             makeKeyAndVisible:(BOOL)makeKeyAndVisible {
-  self.window.rootViewController = rootViewController;
+  [self.window setRootViewController:rootViewController];
   if (makeKeyAndVisible) {
     [self.window makeKeyAndVisible];
   }
+}
+
+- (void)setRootViewControllerKeyAndVisible {
+  [self.window makeKeyAndVisible];
+}
+
+- (void)setWindowUserInterfaceStyle:
+    (UIUserInterfaceStyle)windowUserInterfaceStyle {
+  self.window.overrideUserInterfaceStyle = windowUserInterfaceStyle;
 }
 
 #pragma mark - Setters & Getters.
@@ -120,8 +129,16 @@ ContentVisibility ContentVisibilityForIncognito(BOOL isIncognito) {
   return mainWindow;
 }
 
+- (NSString*)windowAccessibilityIdentifier {
+  return self.window.accessibilityIdentifier;
+}
+
 - (UIViewController*)rootViewController {
   return [self.window rootViewController];
+}
+
+- (UIView*)rootView {
+  return self.rootViewController.view;
 }
 
 - (void)setScene:(UIWindowScene*)scene {

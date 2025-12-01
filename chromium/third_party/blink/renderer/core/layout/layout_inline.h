@@ -235,10 +235,6 @@ class CORE_EXPORT LayoutInline : public LayoutBoxModelObject {
                                const LayoutBoxModelObject* ancestor,
                                MapCoordinatesFlags) const override;
 
-  PhysicalOffset OffsetFromContainerInternal(
-      const LayoutObject*,
-      MapCoordinatesFlags mode) const final;
-
  private:
   bool AbsoluteTransformDependsOnPoint(const LayoutObject& object) const;
   void QuadsForSelfInternal(Vector<gfx::QuadF>& quads,
@@ -290,7 +286,7 @@ class CORE_EXPORT LayoutInline : public LayoutBoxModelObject {
   LayoutBox* CreateAnonymousBoxToSplit(
       const LayoutBox* box_to_split) const final;
 
-  void Paint(const PaintInfo&) const final;
+  void Paint(const PaintInfo&) const override;
 
   bool NodeAtPoint(HitTestResult&,
                    const HitTestLocation&,

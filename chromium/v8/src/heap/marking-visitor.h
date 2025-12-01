@@ -163,7 +163,12 @@ class MarkingVisitorBase : public ConcurrentHeapVisitor<ConcreteVisitor> {
     VisitStrongPointerImpl(host, slot);
   }
 
-  void SynchronizePageAccess(Tagged<HeapObject> heap_object) {
+  V8_INLINE void VisitProtectedPointer(Tagged<TrustedObject> host,
+                                       ProtectedMaybeObjectSlot slot) final {
+    VisitPointersImpl(host, slot, slot + 1);
+  }
+
+  void SynchronizePageAccess(Tagged<HeapObject> heap_object) const {
 #ifdef THREAD_SANITIZER
     // This is needed because TSAN does not process the memory fence
     // emitted after page initialization.
@@ -207,9 +212,9 @@ class MarkingVisitorBase : public ConcurrentHeapVisitor<ConcreteVisitor> {
 
   V8_INLINE void VisitDescriptorsForMap(Tagged<Map> map);
 
-  V8_INLINE size_t VisitFixedArrayWithProgressBar(Tagged<Map> map,
-                                                  Tagged<FixedArray> object,
-                                                  ProgressBar& progress_bar);
+  V8_INLINE size_t
+  VisitFixedArrayWithProgressTracker(Tagged<Map> map, Tagged<FixedArray> object,
+                                     MarkingProgressTracker& progress_tracker);
 
   // Methods needed for supporting code flushing.
   bool ShouldFlushCode(Tagged<SharedFunctionInfo> sfi) const;

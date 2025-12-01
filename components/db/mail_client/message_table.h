@@ -34,6 +34,7 @@ class MessageTable {
   // happening to avoid thread-safety problems.
   virtual ~MessageTable();
 
+  bool CheckDBHealth();
   bool CreateMessageTable();
   bool CreateMessages(std::vector<MessageRow> messages);
   bool SearchMessages(std::u16string search, SearchListIDs* out_ids);

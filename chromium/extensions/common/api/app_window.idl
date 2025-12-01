@@ -289,16 +289,6 @@ namespace app.window {
     // workspaces.
     boolean? visibleOnAllWorkspaces;
 
-    // <p>If set, the action that is intended to be handled by the window on
-    //   lockscreen. This has to be set to create an app window visible on the
-    //   lock screen. The app window should be created only in response to an
-    //   app launch request for handling an action from the lock screen. App
-    //   window creation will fail if the app was not launched to handle the
-    //   action.
-    //   </p>
-    // <p>This is <b>Chrome OS only</b>.</p>
-    [nodoc] app.runtime.ActionType? lockScreenAction;
-
     // (Vivaldi) If true, this window will not use the position cache app
     // windows usually use but rather the provided dimensions as-is.
     boolean ? avoidCachedPositions;

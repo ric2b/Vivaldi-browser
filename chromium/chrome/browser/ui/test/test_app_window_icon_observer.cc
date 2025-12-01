@@ -4,11 +4,11 @@
 
 #include "chrome/browser/ui/test/test_app_window_icon_observer.h"
 
+#include <algorithm>
 #include <string_view>
 #include <utility>
 
 #include "base/hash/md5.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "ui/aura/client/aura_constants.h"
@@ -24,8 +24,9 @@ TestAppWindowIconObserver::TestAppWindowIconObserver(
 
 TestAppWindowIconObserver::~TestAppWindowIconObserver() {
   extensions::AppWindowRegistry::Get(context_)->RemoveObserver(this);
-  for (aura::Window* window : windows_)
+  for (aura::Window* window : windows_) {
     window->RemoveObserver(this);
+  }
 }
 
 void TestAppWindowIconObserver::WaitForIconUpdate() {
@@ -62,7 +63,7 @@ void TestAppWindowIconObserver::OnAppWindowRemoved(
     extensions::AppWindow* app_window) {
   aura::Window* window = app_window->GetNativeWindow();
   if (window) {
-    windows_.erase(base::ranges::find(windows_, window));
+    windows_.erase(std::ranges::find(windows_, window));
     window->RemoveObserver(this);
   }
 }
@@ -70,8 +71,9 @@ void TestAppWindowIconObserver::OnAppWindowRemoved(
 void TestAppWindowIconObserver::OnWindowPropertyChanged(aura::Window* window,
                                                         const void* key,
                                                         intptr_t old) {
-  if (key != aura::client::kAppIconKey)
+  if (key != aura::client::kAppIconKey) {
     return;
+  }
 
   std::string app_icon_hash;
   const gfx::ImageSkia* image = window->GetProperty(aura::client::kAppIconKey);
@@ -97,8 +99,9 @@ void TestAppWindowIconObserver::OnWindowPropertyChanged(aura::Window* window,
     app_icon_hash = base::MD5DigestToBase16(digest);
   }
 
-  if (app_icon_hash == last_app_icon_hash_map_[window])
+  if (app_icon_hash == last_app_icon_hash_map_[window]) {
     return;
+  }
 
   last_app_icon_hash_map_[window] = app_icon_hash;
   ++icon_updates_;

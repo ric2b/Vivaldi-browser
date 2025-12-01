@@ -188,7 +188,7 @@ def generate_icon_resource_code():
     for engine_keyword, icon_name in engine_keyword_to_icon_name.items():
       resource_id = search_engine_icons_utils.keyword_to_resource_name(
           engine_keyword)
-      resources.append((resource_id, icon_name))
+      #resources.append((resource_id, icon_name))
 
     for resource_id, icon_name in sorted(resources):
       grdp_file.write(

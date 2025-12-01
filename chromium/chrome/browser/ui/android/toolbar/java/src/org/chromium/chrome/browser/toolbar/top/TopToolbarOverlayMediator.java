@@ -12,9 +12,8 @@ import androidx.annotation.ColorInt;
 import org.chromium.base.Callback;
 import org.chromium.base.ResettersForTesting;
 import org.chromium.base.supplier.ObservableSupplier;
-import org.chromium.base.supplier.Supplier;
-import org.chromium.cc.input.BrowserControlsOffsetTagsInfo;
 import org.chromium.cc.input.BrowserControlsState;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsOffsetTagsInfo;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider.ControlsPosition;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsUtils;
@@ -68,7 +67,7 @@ public class TopToolbarOverlayMediator {
     /** The view state for this overlay. */
     private final PropertyModel mModel;
 
-    private final Supplier<Integer> mBottomToolbarControlsOffsetSupplier;
+    private final ObservableSupplier<Integer> mBottomToolbarControlsOffsetSupplier;
 
     /** Whether visibility is controlled internally or manually by the feature. */
     private boolean mIsVisibilityManuallyControlled;
@@ -96,7 +95,7 @@ public class TopToolbarOverlayMediator {
             ObservableSupplier<Tab> tabSupplier,
             BrowserControlsStateProvider browserControlsStateProvider,
             TopUiThemeColorProvider topUiThemeColorProvider,
-            Supplier<Integer> bottomToolbarControlsOffsetSupplier,
+            ObservableSupplier<Integer> bottomToolbarControlsOffsetSupplier,
             int layoutsToShowOn,
             boolean manualVisibilityControl) {
         mContext = context;
@@ -106,6 +105,7 @@ public class TopToolbarOverlayMediator {
         mTopUiThemeColorProvider = topUiThemeColorProvider;
         mModel = model;
         mBottomToolbarControlsOffsetSupplier = bottomToolbarControlsOffsetSupplier;
+        mBottomToolbarControlsOffsetSupplier.addObserver((unused) -> updateContentOffset());
         mIsVisibilityManuallyControlled = manualVisibilityControl;
         mIsOnValidLayout = (mLayoutStateProvider.getActiveLayoutType() & layoutsToShowOn) > 0;
         mTabSupplier = tabSupplier;
@@ -168,14 +168,22 @@ public class TopToolbarOverlayMediator {
                     public void onControlsOffsetChanged(
                             int topOffset,
                             int topControlsMinHeightOffset,
+                            boolean topControlsMinHeightChanged,
                             int bottomOffset,
                             int bottomControlsMinHeightOffset,
-                            boolean needsAnimate,
+                            boolean bottomControlsMinHeightChanged,
+                            boolean requestNewFrame,
                             boolean isVisibilityForced) {
                         if (!ChromeFeatureList.sBrowserControlsInViz.isEnabled()
-                                || needsAnimate
+                                || requestNewFrame
                                 || isVisibilityForced) {
                             updateContentOffset();
+                        } else {
+                            // We need to set the height, as it would have changed if this is the
+                            // first frame of an animation. Any existing offsets from scrolling and
+                            // animations will be applied by OffsetTags.
+                            int height = mBrowserControlsStateProvider.getTopControlsHeight();
+                            mModel.set(TopToolbarOverlayProperties.CONTENT_OFFSET, height);
                         }
 
                         // TODO(peilinwang) Clean up this flag and remove the updateVisibility call

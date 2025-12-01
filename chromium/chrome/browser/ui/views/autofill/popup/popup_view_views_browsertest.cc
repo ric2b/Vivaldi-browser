@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
-#include "base/test/scoped_feature_list.h"
 #include "build/buildflag.h"
 #include "chrome/browser/ui/autofill/autofill_popup_view.h"
 #include "chrome/browser/ui/autofill/mock_autofill_popup_controller.h"
@@ -19,14 +18,12 @@
 #include "chrome/browser/ui/views/autofill/popup/popup_row_view.h"
 #include "chrome/browser/ui/views/autofill/popup/popup_view_utils.h"
 #include "chrome/browser/ui/views/autofill/popup/popup_view_views_test_api.h"
-#include "components/autofill/core/browser/filling_product.h"
-#include "components/autofill/core/browser/ui/suggestion.h"
-#include "components/autofill/core/browser/ui/suggestion_type.h"
+#include "components/autofill/core/browser/filling/filling_product.h"
+#include "components/autofill/core/browser/suggestions/suggestion.h"
+#include "components/autofill/core/browser/suggestions/suggestion_type.h"
 #include "components/autofill/core/common/aliases.h"
-#include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_test_utils.h"
 #include "components/plus_addresses/fake_plus_address_allocator.h"
-#include "components/plus_addresses/features.h"
 #include "components/plus_addresses/plus_address_suggestion_generator.h"
 #include "components/plus_addresses/settings/fake_plus_address_setting_service.h"
 #include "components/strings/grit/components_strings.h"
@@ -45,61 +42,30 @@ using ::testing::Return;
 using CellIndex = PopupViewViews::CellIndex;
 using CellType = PopupRowView::CellType;
 
-// Creates the typical structure of a Autofill address profile children
-// suggestions. This is not suppose to represent perfectly all the suggestions
-// added to the submenu. but the goal is to be close enough.
-std::vector<Suggestion> CreateTypicalAutofillProfileChildSuggestions() {
+// Creates the typical structure of credential subpopup suggestions. The result
+// is not supposed to mimic the exact structure of the credential subpopup
+// suggestions, but the goal is to be close enough.
+std::vector<Suggestion> CreateTypicalPasswordChildSuggestions() {
   std::vector<Suggestion> suggestions;
 
   // Fill name fields child suggestions
-  Suggestion fill_full_name(
+  Suggestion fill_username(u"username",
+                           SuggestionType::kPasswordFieldByFieldFilling);
+  suggestions.push_back(std::move(fill_username));
+
+  Suggestion fill_password(
       l10n_util::GetStringUTF16(
-          IDS_AUTOFILL_FILL_NAME_GROUP_POPUP_OPTION_SELECTED),
-      SuggestionType::kFillFullName);
-  fill_full_name.main_text.is_primary = Suggestion::Text::IsPrimary(false);
-  suggestions.push_back(std::move(fill_full_name));
-  suggestions.emplace_back(u"Charles",
-                           SuggestionType::kAddressFieldByFieldFilling);
-  suggestions.emplace_back(u"Stewart",
-                           SuggestionType::kAddressFieldByFieldFilling);
+          IDS_PASSWORD_MANAGER_MANUAL_FALLBACK_FILL_PASSWORD_ENTRY),
+      SuggestionType::kFillPassword);
+  suggestions.emplace_back(std::move(fill_password));
+
   suggestions.emplace_back(SuggestionType::kSeparator);
 
-  // Fill address fields child suggestions
-  Suggestion fill_full_address(
+  Suggestion view_password_details(
       l10n_util::GetStringUTF16(
-          IDS_AUTOFILL_FILL_ADDRESS_GROUP_POPUP_OPTION_SELECTED),
-      SuggestionType::kFillFullAddress);
-  fill_full_address.main_text.is_primary = Suggestion::Text::IsPrimary(false);
-  suggestions.push_back(std::move(fill_full_address));
-  // Also add another child suggestions layer.
-  Suggestion street_address(u"123 Apple St.",
-                            SuggestionType::kAddressFieldByFieldFilling);
-  Suggestion street_name(u"Apple St.",
-                         SuggestionType::kAddressFieldByFieldFilling);
-  street_name.labels = {{Suggestion::Text(l10n_util::GetStringUTF16(
-      IDS_AUTOFILL_HOUSE_NUMBER_SUGGESTION_SECONDARY_TEXT))}};
-  street_address.children = {std::move(street_name)};
-
-  suggestions.push_back(std::move(street_address));
-  suggestions.emplace_back(u"Munich",
-                           SuggestionType::kAddressFieldByFieldFilling);
-  suggestions.emplace_back(u"8951",
-                           SuggestionType::kAddressFieldByFieldFilling);
-  suggestions.emplace_back(SuggestionType::kSeparator);
-
-  Suggestion edit_profile_suggestion(
-      l10n_util::GetStringUTF16(
-          IDS_AUTOFILL_EDIT_ADDRESS_PROFILE_POPUP_OPTION_SELECTED),
-      SuggestionType::kDeleteAddressProfile);
-  edit_profile_suggestion.icon = Suggestion::Icon::kDelete;
-  suggestions.push_back(std::move(edit_profile_suggestion));
-
-  Suggestion delete_profile_suggestion(
-      l10n_util::GetStringUTF16(
-          IDS_AUTOFILL_DELETE_ADDRESS_PROFILE_POPUP_OPTION_SELECTED),
-      SuggestionType::kDeleteAddressProfile);
-  delete_profile_suggestion.icon = Suggestion::Icon::kDelete;
-  suggestions.push_back(std::move(delete_profile_suggestion));
+          IDS_PASSWORD_MANAGER_MANUAL_FALLBACK_VIEW_DETAILS_ENTRY),
+      SuggestionType::kViewPasswordDetails);
+  suggestions.emplace_back(std::move(view_password_details));
 
   return suggestions;
 }
@@ -326,13 +292,6 @@ IN_PROC_BROWSER_TEST_P(PopupViewViewsBrowsertest,
 }
 
 IN_PROC_BROWSER_TEST_P(PopupViewViewsBrowsertest,
-                       InvokeUi_AutofillProfile_ChildSuggestions) {
-  PrepareSuggestions(CreateTypicalAutofillProfileChildSuggestions());
-  PrepareSelectedCell(CellIndex{0, CellType::kContent});
-  ShowAndVerifyUi();
-}
-
-IN_PROC_BROWSER_TEST_P(PopupViewViewsBrowsertest,
                        InvokeUi_AutofillProfile_Selected_Footer) {
   PrepareSuggestions(CreateAutofillProfileSuggestions());
   PrepareSelectedCell(CellIndex{3, CellType::kContent});
@@ -359,6 +318,13 @@ IN_PROC_BROWSER_TEST_P(PopupViewViewsBrowsertest, InvokeUi_CreditCard) {
 
 IN_PROC_BROWSER_TEST_P(PopupViewViewsBrowsertest, InvokeUi_Passwords) {
   PrepareSuggestions(CreatePasswordSuggestions());
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_P(PopupViewViewsBrowsertest,
+                       InvokeUi_Passwords_ChildSuggestions) {
+  PrepareSuggestions(CreateTypicalPasswordChildSuggestions());
+  PrepareSelectedCell(CellIndex{0, CellType::kContent});
   ShowAndVerifyUi();
 }
 
@@ -541,11 +507,6 @@ class PopupViewViewsPlusAddressSuggestionBrowsertest
     : public PopupViewViewsBrowsertestBase {
  public:
   PopupViewViewsPlusAddressSuggestionBrowsertest() {
-    features_.InitWithFeatures(
-        /*enabled_features=*/
-        {plus_addresses::features::kPlusAddressUserOnboardingEnabled,
-         plus_addresses::features::kPlusAddressInlineCreation},
-        /*disabled_features*/ {});
     setting_service().set_is_plus_addresses_enabled(true);
   }
 
@@ -563,13 +524,12 @@ class PopupViewViewsPlusAddressSuggestionBrowsertest
     FormData form = autofill::test::CreateTestSignupFormData();
     return generator.GetSuggestions(
         affiliated_plus_addresses,
-        /*is_creation_enabled=*/true, form, /*form_field_type_groups=*/{},
-        PasswordFormClassification(), form.fields()[0].global_id(),
+        /*is_creation_enabled=*/true, form, form.fields()[0],
+        /*form_field_type_groups=*/{}, PasswordFormClassification(),
         AutofillSuggestionTriggerSource::kFormControlElementClicked);
   }
 
  private:
-  base::test::ScopedFeatureList features_;
   autofill::test::AutofillUnitTestEnvironment autofill_env_;
 
   plus_addresses::FakePlusAddressAllocator allocator_;

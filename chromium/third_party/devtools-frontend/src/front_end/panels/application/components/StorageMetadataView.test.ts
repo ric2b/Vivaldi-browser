@@ -10,13 +10,11 @@ import {
   renderElementIntoDOM,
 } from '../../../testing/DOMHelpers.js';
 import {describeWithLocale} from '../../../testing/EnvironmentHelpers.js';
-import * as Coordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
+import * as RenderCoordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
 import * as ReportView from '../../../ui/components/report_view/report_view.js';
 import * as UI from '../../../ui/legacy/legacy.js';
 
 import * as ApplicationComponents from './components.js';
-
-const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
 
 async function makeView(
     storageKeyOrBucketInfo: string|Protocol.Storage.StorageBucketInfo,
@@ -31,7 +29,7 @@ async function makeView(
   } else {
     component.setStorageBucket(storageKeyOrBucketInfo);
   }
-  await coordinator.done();
+  await RenderCoordinator.done();
   return component;
 }
 
@@ -194,7 +192,7 @@ describeWithLocale('SharedStorageMetadataView', () => {
 
     const buttons = component.shadowRoot!.querySelectorAll('devtools-button');
 
-    assert.strictEqual(buttons.length, 1);
+    assert.lengthOf(buttons, 1);
 
     const [deleteButton] = buttons;
     assert.instanceOf(deleteButton, HTMLElement);

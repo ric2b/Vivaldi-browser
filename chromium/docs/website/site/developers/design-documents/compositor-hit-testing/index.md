@@ -12,7 +12,7 @@ title: Compositor (Touch) Hit Testing
 
 # Implementation status:
 
-# Implemented: [crbug.com/135818](http://crbug.com/135818), overhauled: [crbug.com/](http://crbug.com/248522)[248522](http://crbug.com/248522), [crbug.com/261307](http://crbug.com/261307)
+# Implemented: [crbug.com/135818](https://crbug.com/135818), overhauled: [crbug.com/](https://crbug.com/248522)[248522](https://crbug.com/248522), [crbug.com/261307](https://crbug.com/261307)
 
 **NOW Obsolete** - replaced by much more elegant [RenderingNG hit
 testing](https://docs.google.com/document/d/1WZKlOSUK4XI0Le0fgCsyUTVw0dTwutZXGWwzlHXewiU/edit#heading=h.pzukwhsoocqx)
@@ -65,8 +65,7 @@ The hit testing is currently done just for the touchStart events since the point
 at which these event hit determines where the next train of events will be sent
 until we receive another touchStart (due to a different gesture starting or due
 to another finger being pressed on screen). On the compositor, (as of the fix
-for [bug
-](goog_353685820)[351723](https://code.google.com/p/chromium/issues/detail?id=351723))
+for [bug 351723](https://crbug.com/351723))
 we do a ray cast at the point of the touch and consult the
 touchEventHandlerRegion for each layer until we hit a layer we know is opaque to
 hit testing. If there is a hit, the compositor forwards this touch event to the

@@ -325,16 +325,18 @@ class OptionalRef {
   OptionalRef(std::nullopt_t) : OptionalRef() {}
 
   // Allow implicit upcasting from OptionalRefs with compatible refs.
-  template <typename SRef, typename = typename std::enable_if<
-                               std::is_convertible<SRef*, TRef*>::value>::type>
+  template <typename SRef>
   // NOLINTNEXTLINE
-  V8_INLINE OptionalRef(OptionalRef<SRef> ref) : data_(ref.data_) {}
+  V8_INLINE OptionalRef(OptionalRef<SRef> ref)
+    requires std::is_convertible_v<SRef*, TRef*>
+      : data_(ref.data_) {}
 
   // Allow implicit upcasting from compatible refs.
-  template <typename SRef, typename = typename std::enable_if<
-                               std::is_convertible<SRef*, TRef*>::value>::type>
+  template <typename SRef>
   // NOLINTNEXTLINE
-  V8_INLINE OptionalRef(SRef ref) : data_(ref.data_) {}
+  V8_INLINE OptionalRef(SRef ref)
+    requires std::is_convertible_v<SRef*, TRef*>
+      : data_(ref.data_) {}
 
   constexpr bool has_value() const { return data_ != nullptr; }
   constexpr explicit operator bool() const { return has_value(); }
@@ -523,7 +525,7 @@ class HeapObjectRef : public ObjectRef {
 
   IndirectHandle<HeapObject> object() const;
 
-  MapRef map(JSHeapBroker* broker) const;
+  V8_EXPORT_PRIVATE MapRef map(JSHeapBroker* broker) const;
 
   // Only for use in special situations where we need to read the object's
   // current map (instead of returning the cached map). Use with care.
@@ -667,6 +669,9 @@ class V8_EXPORT_PRIVATE JSFunctionRef : public JSObjectRef {
   int InitialMapInstanceSizeWithMinSlack(JSHeapBroker* broker) const;
   FeedbackCellRef raw_feedback_cell(JSHeapBroker* broker) const;
   OptionalFeedbackVectorRef feedback_vector(JSHeapBroker* broker) const;
+#ifdef V8_ENABLE_LEAPTIERING
+  JSDispatchHandle dispatch_handle() const;
+#endif
 };
 
 class RegExpBoilerplateDescriptionRef : public HeapObjectRef {
@@ -812,6 +817,9 @@ class FeedbackCellRef : public HeapObjectRef {
   OptionalFeedbackVectorRef feedback_vector(JSHeapBroker* broker) const;
   OptionalSharedFunctionInfoRef shared_function_info(
       JSHeapBroker* broker) const;
+#ifdef V8_ENABLE_LEAPTIERING
+  JSDispatchHandle dispatch_handle() const;
+#endif
 };
 
 class FeedbackVectorRef : public HeapObjectRef {
@@ -1079,7 +1087,9 @@ class ScopeInfoRef : public HeapObjectRef {
   bool HasContext() const;
   bool HasOuterScopeInfo() const;
   bool HasContextExtensionSlot() const;
+  bool SomeContextHasExtension() const;
   bool ClassScopeHasPrivateBrand() const;
+  bool SloppyEvalCanExtendVars() const;
   ScopeType scope_type() const;
 
   ScopeInfoRef OuterScopeInfo(JSHeapBroker* broker) const;
@@ -1177,6 +1187,8 @@ class JSTypedArrayRef : public JSObjectRef {
 
   bool is_on_heap() const;
   size_t length() const;
+  size_t byte_length() const;
+  ElementsKind elements_kind(JSHeapBroker* broker) const;
   void* data_ptr() const;
   HeapObjectRef buffer(JSHeapBroker* broker) const;
 };

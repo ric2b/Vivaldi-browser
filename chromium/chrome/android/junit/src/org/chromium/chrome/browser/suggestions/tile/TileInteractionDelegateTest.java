@@ -14,7 +14,6 @@ import android.view.View;
 import androidx.annotation.Nullable;
 
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
@@ -28,7 +27,6 @@ import org.robolectric.shadows.ShadowLooper;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.HistogramWatcher;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.native_page.ContextMenuManager;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
@@ -75,7 +73,6 @@ public class TileInteractionDelegateTest {
     }
 
     @Mock Tile mTile;
-    @Mock Tile mSearchTile;
     @Mock SuggestionsTileView mTileView;
     @Mock SiteSuggestion mData;
     @Mock SuggestionsUiDelegate mSuggestionsUiDelegate;
@@ -89,8 +86,6 @@ public class TileInteractionDelegateTest {
     @Mock private AndroidPrerenderManager mAndroidPrerenderManager;
     @Mock private AndroidPrerenderManager.Natives mNativeMock;
 
-    @Rule public JniMocker jniMocker = new JniMocker();
-
     @Captor
     ArgumentCaptor<View.OnTouchListener> mOnTouchListenerCaptor =
             ArgumentCaptor.forClass(View.OnTouchListener.class);
@@ -99,10 +94,9 @@ public class TileInteractionDelegateTest {
     public void setUp() {
         MockitoAnnotations.initMocks(this);
         when(mTile.getUrl()).thenReturn(new GURL("https://example.com"));
-        when(mSearchTile.getUrl()).thenReturn(new GURL("https://www.google.com/search?q=123"));
         when(mTile.getData()).thenReturn(mData);
         when(mAndroidPrerenderManager.startPrerendering(any())).thenReturn(true);
-        jniMocker.mock(AndroidPrerenderManagerJni.TEST_HOOKS, mNativeMock);
+        AndroidPrerenderManagerJni.setInstanceForTesting(mNativeMock);
     }
 
     @Test
@@ -199,31 +193,6 @@ public class TileInteractionDelegateTest {
         // mPrerenderStarted in TileInteractionDelegateImpl is true, stopPrerendering should be
         // called.
         Mockito.verify(mAndroidPrerenderManager).stopPrerendering();
-        AndroidPrerenderManager.clearAndroidPrerenderManagerForTesting();
-    }
-
-    @Test
-    public void testTileInteractionSearchTileNotTriggerPrerendering() {
-        AndroidPrerenderManager.setAndroidPrerenderManagerForTesting(mAndroidPrerenderManager);
-        TileGroupForTest tileGroup =
-                new TileGroupForTest(
-                        mTileRenderer,
-                        mSuggestionsUiDelegate,
-                        mContextMenuManager,
-                        mTileGroupDelegate,
-                        mTileGroupObserver,
-                        mOfflinePageBridge);
-        tileGroup.setTileForTesting(mSearchTile);
-        tileGroup.onIconMadeAvailable(new GURL("https://www.google.com/search?q=123"));
-        TileGroup.TileSetupDelegate tileSetupCallback = tileGroup.getTileSetupDelegate();
-        tileSetupCallback.createInteractionDelegate(mSearchTile, mTileView);
-
-        MotionEvent event = MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 0, 0, 0);
-        verify(mTileView).setOnTouchListener(mOnTouchListenerCaptor.capture());
-        mOnTouchListenerCaptor.getValue().onTouch(mTileView, event);
-        ShadowLooper.idleMainLooper(200, TimeUnit.MILLISECONDS);
-        Mockito.verify(mAndroidPrerenderManager, Mockito.never())
-                .startPrerendering(ArgumentMatchers.any());
         AndroidPrerenderManager.clearAndroidPrerenderManagerForTesting();
     }
 }

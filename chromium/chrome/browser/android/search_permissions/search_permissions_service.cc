@@ -110,16 +110,18 @@ SearchPermissionsService::Factory::Factory()
   DependsOn(TemplateURLServiceFactory::GetInstance());
 }
 
-SearchPermissionsService::Factory::~Factory() {}
+SearchPermissionsService::Factory::~Factory() = default;
 
 bool SearchPermissionsService::Factory::ServiceIsCreatedWithBrowserContext()
     const {
   return true;
 }
 
-KeyedService* SearchPermissionsService::Factory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+SearchPermissionsService::Factory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
-  return new SearchPermissionsService(Profile::FromBrowserContext(context));
+  return std::make_unique<SearchPermissionsService>(
+      Profile::FromBrowserContext(context));
 }
 
 void SearchPermissionsService::Factory::RegisterProfilePrefs(
@@ -151,7 +153,7 @@ void SearchPermissionsService::Shutdown() {
   delegate_.reset();
 }
 
-SearchPermissionsService::~SearchPermissionsService() {}
+SearchPermissionsService::~SearchPermissionsService() = default;
 
 ContentSetting SearchPermissionsService::RestoreOldSettingAndReturnPrevious(
     const GURL& dse_origin,

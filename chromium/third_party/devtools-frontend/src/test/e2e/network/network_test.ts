@@ -8,7 +8,6 @@ import {
   goTo,
   waitForFunction,
 } from '../../shared/helper.js';
-
 import {
   clearTimeWindow,
   getAllRequestNames,
@@ -49,7 +48,7 @@ describe('The Network Tab', function() {
     expectedNames.push(SIMPLE_PAGE_URL);
 
     const names = (await getAllRequestNames()).sort();
-    assert.deepStrictEqual(names, expectedNames, 'The right request names should appear in the list');
+    assert.deepEqual(names, expectedNames, 'The right request names should appear in the list');
   });
 
   it('can select requests', async () => {
@@ -91,7 +90,7 @@ describe('The Network Tab', function() {
     });
     secondPageRequestNames.sort();
 
-    assert.deepStrictEqual(secondPageRequestNames, firstPageRequestNames, 'The requests were persisted');
+    assert.deepEqual(secondPageRequestNames, firstPageRequestNames, 'The requests were persisted');
   });
 
   it('should continue receiving new requests after timeline filter is cleared', async () => {

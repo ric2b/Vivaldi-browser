@@ -18,9 +18,6 @@ struct tint_packed_vec3_f32_array_element {
   /* 0x000c */ tint_array<int8_t, 4> tint_pad;
 };
 
-#define TINT_ISOLATE_UB(VOLATILE_NAME) \
-  {volatile bool VOLATILE_NAME = false; if (VOLATILE_NAME) break;}
-
 struct S2_packed_vec3 {
   /* 0x0000 */ tint_array<tint_array<tint_packed_vec3_f32_array_element, 3>, 1> m;
 };
@@ -75,7 +72,6 @@ void tint_store_and_preserve_padding_3(device tint_array<tint_array<tint_packed_
     uint v = 0u;
     v = 0u;
     while(true) {
-      TINT_ISOLATE_UB(tint_volatile_false)
       uint const v_1 = v;
       if ((v_1 >= 1u)) {
         break;
@@ -98,7 +94,6 @@ void tint_store_and_preserve_padding_7(device tint_array<S2_packed_vec3, 1>* con
     uint v_2 = 0u;
     v_2 = 0u;
     while(true) {
-      TINT_ISOLATE_UB(tint_volatile_false_1)
       uint const v_3 = v_2;
       if ((v_3 >= 1u)) {
         break;
@@ -121,7 +116,6 @@ void tint_store_and_preserve_padding_6(device tint_array<S_packed_vec3, 1>* cons
     uint v_4 = 0u;
     v_4 = 0u;
     while(true) {
-      TINT_ISOLATE_UB(tint_volatile_false_2)
       uint const v_5 = v_4;
       if ((v_5 >= 1u)) {
         break;
@@ -143,21 +137,20 @@ void tint_store_and_preserve_padding_4(device S3_packed_vec3* const target, S3 v
   tint_store_and_preserve_padding_1((&(*target).s), value_param.s);
 }
 
-kernel void tint_symbol(device tint_array<tint_packed_vec3_f32_array_element, 3>* buffer0 [[buffer(0)]], device S_packed_vec3* buffer1 [[buffer(1)]], device S2_packed_vec3* buffer2 [[buffer(2)]], device S3_packed_vec3* buffer3 [[buffer(3)]], device S4_packed_vec3* buffer4 [[buffer(4)]], device tint_array<tint_array<tint_packed_vec3_f32_array_element, 3>, 1>* buffer5 [[buffer(5)]], device tint_array<S_packed_vec3, 1>* buffer6 [[buffer(6)]], device tint_array<S2_packed_vec3, 1>* buffer7 [[buffer(7)]]) {
+kernel void v_6(device tint_array<tint_packed_vec3_f32_array_element, 3>* buffer0 [[buffer(0)]], device S_packed_vec3* buffer1 [[buffer(1)]], device S2_packed_vec3* buffer2 [[buffer(2)]], device S3_packed_vec3* buffer3 [[buffer(3)]], device S4_packed_vec3* buffer4 [[buffer(4)]], device tint_array<tint_array<tint_packed_vec3_f32_array_element, 3>, 1>* buffer5 [[buffer(5)]], device tint_array<S_packed_vec3, 1>* buffer6 [[buffer(6)]], device tint_array<S2_packed_vec3, 1>* buffer7 [[buffer(7)]]) {
   tint_module_vars_struct const tint_module_vars = tint_module_vars_struct{.buffer0=buffer0, .buffer1=buffer1, .buffer2=buffer2, .buffer3=buffer3, .buffer4=buffer4, .buffer5=buffer5, .buffer6=buffer6, .buffer7=buffer7};
   float3x3 m = float3x3(0.0f);
   {
     uint c = 0u;
     while(true) {
-      TINT_ISOLATE_UB(tint_volatile_false_3)
       if ((c < 3u)) {
       } else {
         break;
       }
-      thread float3* const v_6 = (&m[c]);
-      float const v_7 = float(((c * 3u) + 1u));
-      float const v_8 = float(((c * 3u) + 2u));
-      (*v_6) = float3(v_7, v_8, float(((c * 3u) + 3u)));
+      thread float3* const v_7 = (&m[min(c, 2u)]);
+      float const v_8 = float(((c * 3u) + 1u));
+      float const v_9 = float(((c * 3u) + 2u));
+      (*v_7) = float3(v_8, v_9, float(((c * 3u) + 3u)));
       {
         c = (c + 1u);
       }

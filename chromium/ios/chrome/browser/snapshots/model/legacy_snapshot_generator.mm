@@ -8,6 +8,7 @@
 #import "base/debug/dump_without_crashing.h"
 #import "base/functional/bind.h"
 #import "build/blink_buildflags.h"
+#import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/snapshots/model/model_swift.h"
 #import "ios/chrome/browser/snapshots/model/snapshot_scale.h"
 #import "ios/chrome/browser/snapshots/model/web_state_snapshot_info.h"
@@ -40,9 +41,8 @@ struct SnapshotInfo {
 }
 
 - (void)generateSnapshotWithCompletion:(void (^)(UIImage*))completion {
-  bool showing_native_content =
-      web::GetWebClient()->IsAppSpecificURL(_webState->GetLastCommittedURL());
-  if (!showing_native_content && _webState->CanTakeSnapshot()) {
+  bool isNTP = _webState->GetLastCommittedURL() == kChromeUINewTabURL;
+  if (!isNTP && _webState->CanTakeSnapshot()) {
     // Take the snapshot using the optimized WKWebView snapshotting API for
     // pages loaded in the web view when the WebState snapshot API is available.
     [self generateWKWebViewSnapshotWithCompletion:completion];
@@ -101,8 +101,7 @@ struct SnapshotInfo {
   if (!_webState) {
     return;
   }
-  DCHECK(
-      !web::GetWebClient()->IsAppSpecificURL(_webState->GetLastCommittedURL()));
+  CHECK(_webState->CanTakeSnapshot());
 
   if (![self canTakeSnapshot]) {
     if (completion) {
@@ -138,7 +137,6 @@ struct SnapshotInfo {
   _webState->TakeSnapshot(snapshotInfo.value().snapshotFrameInBaseView,
                           base::BindRepeating(wrappedCompletion, weakSelf));
 }
-
 
 // Returns NO if WebState or the view is not ready for snapshot.
 - (BOOL)canTakeSnapshot {
@@ -183,17 +181,17 @@ struct SnapshotInfo {
   __block BOOL snapshotSuccess = YES;
   UIImage* image =
       [renderer imageWithActions:^(UIGraphicsImageRendererContext* UIContext) {
-          // Render the view's layer via `-renderInContext:`.
-          // To mitigate against crashes like crbug.com/1429512, ensure that
-          // the layer's position is valid. If not, mark the snapshotting as
-          // failed.
-          CALayer* layer = baseView.layer;
-          CGPoint pos = layer.position;
-          if (isnan(pos.x) || isnan(pos.y)) {
-            snapshotSuccess = NO;
-          } else {
-            [layer renderInContext:UIContext.CGContext];
-          }
+        // Render the view's layer via `-renderInContext:`.
+        // To mitigate against crashes like crbug.com/1429512, ensure that
+        // the layer's position is valid. If not, mark the snapshotting as
+        // failed.
+        CALayer* layer = baseView.layer;
+        CGPoint pos = layer.position;
+        if (isnan(pos.x) || isnan(pos.y)) {
+          snapshotSuccess = NO;
+        } else {
+          [layer renderInContext:UIContext.CGContext];
+        }
       }];
 
   if (!snapshotSuccess) {

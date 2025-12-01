@@ -4,12 +4,13 @@
 
 #include "net/log/net_log.h"
 
+#include <algorithm>
+
 #include "base/check_op.h"
 #include "base/containers/contains.h"
 #include "base/no_destructor.h"
 #include "base/not_fatal_until.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
 #include "net/log/net_log_values.h"
@@ -83,7 +84,7 @@ void NetLog::AddGlobalEntryWithStringParams(NetLogEventType type,
 }
 
 uint32_t NetLog::NextID() {
-  return base::subtle::NoBarrier_AtomicIncrement(&last_id_, 1);
+  return last_id_.fetch_add(1, std::memory_order_relaxed) + 1;
 }
 
 void NetLog::AddObserver(NetLog::ThreadSafeObserver* observer,
@@ -106,7 +107,7 @@ void NetLog::RemoveObserver(NetLog::ThreadSafeObserver* observer) {
 
   DCHECK_EQ(this, observer->net_log_);
 
-  auto it = base::ranges::find(observers_, observer);
+  auto it = std::ranges::find(observers_, observer);
   CHECK(it != observers_.end(), base::NotFatalUntil::M130);
   observers_.erase(it);
 
@@ -134,7 +135,7 @@ void NetLog::RemoveCaptureModeObserver(
   DCHECK_EQ(this, observer->net_log_);
   DCHECK(HasCaptureModeObserver(observer));
 
-  auto it = base::ranges::find(capture_mode_observers_, observer);
+  auto it = std::ranges::find(capture_mode_observers_, observer);
   CHECK(it != capture_mode_observers_.end(), base::NotFatalUntil::M130);
   capture_mode_observers_.erase(it);
 
@@ -149,7 +150,7 @@ void NetLog::UpdateObserverCaptureModes() {
     NetLogCaptureModeSetAdd(observer->capture_mode_, &capture_mode_set);
   }
 
-  base::subtle::NoBarrier_Store(&observer_capture_modes_, capture_mode_set);
+  observer_capture_modes_.store(capture_mode_set, std::memory_order_relaxed);
 
   // Notify any capture mode observers with the new |capture_mode_set|.
   for (net::NetLog::ThreadSafeCaptureModeObserver* capture_mode_observer :
@@ -228,8 +229,8 @@ const char* NetLog::EventPhaseToString(NetLogEventPhase phase) {
 }
 
 void NetLog::InitializeSourceIdPartition() {
-  int32_t old_value = base::subtle::NoBarrier_AtomicExchange(
-      &last_id_, std::numeric_limits<base::subtle::Atomic32>::min());
+  int32_t old_value = last_id_.exchange(std::numeric_limits<int32_t>::min(),
+                                        std::memory_order_relaxed);
   DCHECK_EQ(old_value, 0) << " NetLog::InitializeSourceIdPartition() called "
                              "after NextID() or called multiple times";
 }

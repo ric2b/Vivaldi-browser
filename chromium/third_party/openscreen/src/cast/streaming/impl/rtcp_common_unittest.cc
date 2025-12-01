@@ -112,7 +112,7 @@ TEST(RtcpCommonTest, WillNotParseHeaderWithInvalidData) {
 // Test that the Report Block optionally included in Sender Reports or Receiver
 // Reports can be serialized and re-parsed correctly.
 TEST(RtcpCommonTest, SerializesAndParsesRtcpReportBlocks) {
-  constexpr Ssrc kSsrc{0x04050607};
+  constexpr Ssrc kSsrc = 0x04050607;
 
   RtcpReportBlock original;
   original.ssrc = kSsrc;
@@ -149,7 +149,7 @@ TEST(RtcpCommonTest, SerializesAndParsesRtcpReportBlocks) {
 // Tests that the Report Block parser can, among multiple Report Blocks, find
 // the one with a matching recipient SSRC.
 TEST(RtcpCommonTest, ParsesOneReportBlockFromMultipleBlocks) {
-  constexpr Ssrc kSsrc{0x04050607};
+  constexpr Ssrc kSsrc = 0x04050607;
   constexpr int kNumBlocks = 5;
 
   RtcpReportBlock expected;

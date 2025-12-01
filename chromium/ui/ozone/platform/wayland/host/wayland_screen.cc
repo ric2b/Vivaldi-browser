@@ -10,9 +10,10 @@
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/observer_list.h"
+#include "base/strings/string_split.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "components/device_event_log/device_event_log.h"
 #include "ui/base/linux/linux_desktop.h"
 #include "ui/base/pointer/touch_ui_controller.h"
@@ -41,7 +42,7 @@
 #include "ui/ozone/platform/wayland/host/wayland_zcr_color_manager.h"
 #include "ui/ozone/platform/wayland/host/zwp_idle_inhibit_manager.h"
 
-#if defined(USE_DBUS)
+#if BUILDFLAG(USE_DBUS)
 #include "ui/ozone/platform/wayland/host/org_gnome_mutter_idle_monitor.h"
 #endif
 
@@ -468,7 +469,7 @@ base::TimeDelta WaylandScreen::CalculateIdleTime() const {
       return *idle_time;
   }
 
-#if defined(USE_DBUS)
+#if BUILDFLAG(USE_DBUS)
   // Try the org.gnome.Mutter.IdleMonitor D-Bus service (Mutter).
   if (!org_gnome_mutter_idle_monitor_)
     org_gnome_mutter_idle_monitor_ =
@@ -476,7 +477,7 @@ base::TimeDelta WaylandScreen::CalculateIdleTime() const {
   const auto idle_time = org_gnome_mutter_idle_monitor_->GetIdleTime();
   if (idle_time)
     return *idle_time;
-#endif  // defined(USE_DBUS)
+#endif  // BUILDFLAG(USE_DBUS)
 
   NOTIMPLEMENTED_LOG_ONCE();
 
@@ -534,7 +535,7 @@ bool WaylandScreen::VerifyOutputStateConsistentForTesting() const {
   // Both the display_list_ and the display_id_map_ should be tracking the same
   // displays.
   for (const auto& pair : display_id_map_) {
-    if (base::ranges::find(displays, pair.second, &display::Display::id) ==
+    if (std::ranges::find(displays, pair.second, &display::Display::id) ==
         displays.end()) {
       return false;
     }

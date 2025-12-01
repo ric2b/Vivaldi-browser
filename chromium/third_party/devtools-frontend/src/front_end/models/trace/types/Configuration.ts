@@ -2,19 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-export type Configuration = {
+import type * as File from './File.js';
+
+export interface Configuration {
   /**
    * Include V8 RCS functions in the JS stacks
    */
-  includeRuntimeCallStats: boolean,
+  includeRuntimeCallStats: boolean;
   /**
    * Show all events: disable the default filtering which hides and excludes some events.
    */
-  showAllEvents: boolean,
+  showAllEvents: boolean;
   /**
    * Extra detail for RPP developers (eg Trace Event json in Summary, and individual JS Sample events)
    */
-  debugMode: boolean,
+  debugMode: boolean;
   /**
    * How many invalidation events will be stored for a layout (or similar) event.
    * On large sites with a lot of DOM there can be thousands of invalidations
@@ -30,8 +32,8 @@ export type Configuration = {
    * 0 effectively disables the InvalidationsHandler and it will not even
    * attempt to gather or track invalidations.
    */
-  maxInvalidationEventsPerEvent: number,
-};
+  maxInvalidationEventsPerEvent: number;
+}
 
 export const defaults = (): Configuration => ({
   includeRuntimeCallStats: false,
@@ -47,4 +49,19 @@ export const defaults = (): Configuration => ({
  */
 export function configToCacheKey(config: Configuration): string {
   return JSON.stringify(config);
+}
+
+export interface ParseOptions {
+  /**
+   * If the trace was just recorded on the current page, rather than an imported file.
+   * TODO(paulirish): Maybe remove. This is currently unused by the Processor and Handlers
+   * @default false
+   */
+  isFreshRecording?: boolean;
+  /**
+   * If the trace is a CPU Profile rather than a Chrome tracing trace.
+   * @default false
+   */
+  isCPUProfile?: boolean;
+  metadata?: File.MetaData;
 }

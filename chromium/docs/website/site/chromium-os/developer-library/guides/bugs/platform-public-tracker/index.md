@@ -126,7 +126,7 @@ Connectivity, Services, and System.
 
 ### Security
 
-If you want to report a security bug, please follow [Reporting Security Bugs](https://dev.chromium.org/Home/chromium-security/reporting-security-bugs).
+If you want to report a security bug, please follow [Reporting Security Bugs](/Home/chromium-security/reporting-security-bugs).
 
 The Security component in the ChromeOS Public Tracker is for issues in Chrome
 OS userland daemons like cryptohome, chaps, attestation, etc. These are also
@@ -153,7 +153,7 @@ your bug in one of these components.
 If you find an issue that impacts ChromeOS core services, file a bug in one of
 these components.
 
-[Browse all Services issues](http://issuetracker.google.com/issues?q=componentid:953286+)
+[Browse all Services issues](https://issuetracker.google.com/issues?q=componentid:953286+)
 
 | Browse | File |
 |-------------|------------|
@@ -168,7 +168,7 @@ these components.
 If you find an issue that impacts any ChromeOS media, file a
 bug in one of these components.
 
-[Browse all Multimedia issues](http://issuetracker.google.com/issues?q=componentid:960592+)
+[Browse all Multimedia issues](https://issuetracker.google.com/issues?q=componentid:960592+)
 
 | Browse | File |
 |-------------|------------|
@@ -183,7 +183,7 @@ bug in one of these components.
 If you find an issue that impacts ChromeOS peripherals, file a bug in one of
 these components.
 
-[Browse all Peripherals issues](http://issuetracker.google.com/issues?q=componentid:960593+)
+[Browse all Peripherals issues](https://issuetracker.google.com/issues?q=componentid:960593+)
 
 | Browse | File |
 |-------------|------------|
@@ -197,7 +197,7 @@ these components.
 If you find a core ChromeOS System issue, please file it in one of the
 following components.
 
-[Browse all Core Systems issues](http://issuetracker.google.com/issues?q=componentid:192633%2B)
+[Browse all Core Systems issues](https://issuetracker.google.com/issues?q=componentid:192633%2B)
 
 | Browse | File |
 |-------------|------------|

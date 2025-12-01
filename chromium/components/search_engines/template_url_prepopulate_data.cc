@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <random>
+#include <variant>
 #include <vector>
 
 #include "base/check_is_test.h"
@@ -15,19 +16,18 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/not_fatal_until.h"
 #include "base/rand_util.h"
-#include "base/ranges/algorithm.h"
 #include "build/build_config.h"
 #include "components/country_codes/country_codes.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
-#include "components/search_engines/eea_countries_ids.h"
-#include "components/search_engines/prepopulated_engines.h"
+#include "components/regional_capabilities/eea_countries_ids.h"
+#include "components/regional_capabilities/regional_capabilities_utils.h"
 #include "components/search_engines/search_engine_choice/search_engine_choice_service.h"
-#include "components/search_engines/search_engine_choice/search_engine_choice_utils.h"
 #include "components/search_engines/search_engines_pref_names.h"
 #include "components/search_engines/template_url_data.h"
 #include "components/search_engines/template_url_data_util.h"
 #include "components/version_info/version_info.h"
+#include "components/search_engines/prepopulated_engines.h"
 
 #include "app/vivaldi_apptools.h"
 #include "components/search_engines/search_engines_helper.h"
@@ -113,15 +113,16 @@ std::vector<std::unique_ptr<TemplateURLData>> GetPrepopulatedTemplateURLData(
     // TODO(crbug.com/40287734): Update tests and remove associated branches.
     CHECK_IS_TEST();
   } else if (search_engines::IsEeaChoiceCountry(country_id) && !vivaldi::IsVivaldiRunning()) {
-    if (search_engines::HasSearchEngineCountryListOverride()) {
+    if (regional_capabilities::HasSearchEngineCountryListOverride()) {
       auto country_override =
-          absl::get<search_engines::SearchEngineCountryListOverride>(
-              search_engines::GetSearchEngineCountryOverride().value());
+          std::get<regional_capabilities::SearchEngineCountryListOverride>(
+              regional_capabilities::GetSearchEngineCountryOverride().value());
 
       switch (country_override) {
-        case search_engines::SearchEngineCountryListOverride::kEeaAll:
+        case regional_capabilities::SearchEngineCountryListOverride::kEeaAll:
           return GetAllEeaRegionPrepopulatedEngines();
-        case search_engines::SearchEngineCountryListOverride::kEeaDefault:
+        case regional_capabilities::SearchEngineCountryListOverride::
+            kEeaDefault:
           return GetDefaultPrepopulatedEngines();
       }
     }
@@ -364,7 +365,7 @@ GetAllEeaRegionPrepopulatedEngines() {
   // because they point to the same search engine so we only want to record one
   // instance.
   base::flat_set<int> used_engines;
-  for (int eea_country_id : search_engines::kEeaChoiceCountriesIds) {
+  for (int eea_country_id : regional_capabilities::kEeaChoiceCountriesIds) {
     std::vector<EngineAndTier> country_engines =
         GetPrepopulationSetFromCountryID(eea_country_id);
     for (const EngineAndTier& engine : country_engines) {

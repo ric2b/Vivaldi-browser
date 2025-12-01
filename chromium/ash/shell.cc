@@ -20,7 +20,6 @@
 #include "ash/accelerators/accelerator_prefs.h"
 #include "ash/accelerators/accelerator_tracker.h"
 #include "ash/accelerators/ash_accelerator_configuration.h"
-#include "ash/accelerators/ash_focus_manager_factory.h"
 #include "ash/accelerators/magnifier_key_scroller.h"
 #include "ash/accelerators/modifier_key_combo_recorder.h"
 #include "ash/accelerators/pre_target_accelerator_handler.h"
@@ -87,7 +86,9 @@
 #include "ash/drag_drop/drag_drop_controller.h"
 #include "ash/events/event_rewriter_controller_impl.h"
 #include "ash/fast_ink/laser/laser_pointer_controller.h"
-#include "ash/focus_cycler.h"
+#include "ash/focus/ash_focus_manager_factory.h"
+#include "ash/focus/ash_focus_rules.h"
+#include "ash/focus/focus_cycler.h"
 #include "ash/frame/multitask_menu_nudge_delegate_ash.h"
 #include "ash/frame/non_client_frame_view_ash.h"
 #include "ash/frame/snap_controller_impl.h"
@@ -211,7 +212,6 @@
 #include "ash/user_education/user_education_delegate.h"
 #include "ash/utility/occlusion_tracker_pauser.h"
 #include "ash/wallpaper/wallpaper_controller_impl.h"
-#include "ash/wm/ash_focus_rules.h"
 #include "ash/wm/container_finder.h"
 #include "ash/wm/coral/coral_controller.h"
 #include "ash/wm/cursor_manager_chromeos.h"
@@ -256,7 +256,6 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/system/sys_info.h"
 #include "base/trace_event/trace_event.h"
 #include "chromeos/ash/components/audio/system_sounds_delegate.h"
@@ -482,6 +481,16 @@ bool Shell::IsSystemModalWindowOpen() {
   return GetOpenSystemModalWindowContainerId() >= 0;
 }
 
+// static
+void Shell::UpdateAccessibilityForStatusAreaWidget() {
+  for (RootWindowController* rwc : GetAllRootWindowControllers()) {
+    StatusAreaWidget* saw = rwc->GetStatusAreaWidget();
+    if (saw) {
+      saw->InitializeAccessibleProperties();
+    }
+  }
+}
+
 display::DisplayConfigurator* Shell::display_configurator() {
   return display_manager_->configurator();
 }
@@ -564,8 +573,7 @@ void Shell::SetLargeCursorSizeInDip(int large_cursor_size_in_dip) {
 }
 
 void Shell::SetCursorColor(SkColor cursor_color) {
-  window_tree_host_manager_->cursor_window_controller()->SetCursorColor(
-      cursor_color);
+  cursor_manager_->SetCursorColor(cursor_color);
 }
 
 void Shell::UpdateCursorCompositingEnabled() {
@@ -798,8 +806,7 @@ Shell::~Shell() {
   }
   RemovePreTargetHandler(system_gesture_filter_.get());
   RemoveAccessibilityEventHandler(mouse_cursor_filter_.get());
-  if (features::IsPeripheralCustomizationEnabled() ||
-      ::features::IsShortcutCustomizationEnabled()) {
+  if (features::IsPeripheralCustomizationEnabled()) {
     RemovePreTargetHandler(shortcut_input_handler_.get());
   }
   RemovePreTargetHandler(modality_filter_.get());
@@ -994,6 +1001,13 @@ Shell::~Shell() {
   // notification.
   focus_mode_controller_.reset();
 
+  // DetachableBaseNotificationController depends on DetachableBaseHandler, and
+  // has to be destructed before it.
+  detachable_base_notification_controller_.reset();
+  // DetachableBaseHandler depends on the PrefService and must be destructed
+  // before it.
+  detachable_base_handler_.reset();
+
   system_notification_controller_.reset();
   // Should be destroyed after Shelf and |system_notification_controller_|.
   system_tray_model_.reset();
@@ -1164,12 +1178,6 @@ Shell::~Shell() {
   // TouchDevicesController depends on the PrefService and must be destructed
   // before it.
   touch_devices_controller_ = nullptr;
-  // DetachableBaseNotificationController depends on DetachableBaseHandler, and
-  // has to be destructed before it.
-  detachable_base_notification_controller_.reset();
-  // DetachableBaseHandler depends on the PrefService and must be destructed
-  // before it.
-  detachable_base_handler_.reset();
 
   diagnostics_log_controller_.reset();
 
@@ -1276,11 +1284,6 @@ void Shell::Init(
   // These controllers call Shell::Get() in their constructors, so they cannot
   // be in the member initialization list.
   touch_devices_controller_ = std::make_unique<TouchDevicesController>();
-  detachable_base_handler_ =
-      std::make_unique<DetachableBaseHandler>(local_state_);
-  detachable_base_notification_controller_ =
-      std::make_unique<DetachableBaseNotificationController>(
-          detachable_base_handler_.get());
   display_speaker_controller_ = std::make_unique<DisplaySpeakerController>();
   policy_recommendation_restorer_ =
       std::make_unique<PolicyRecommendationRestorer>();
@@ -1544,8 +1547,8 @@ void Shell::Init(
 
   // AcceleratorTracker should be placed before AcceleratorFilter to make sure
   // the accelerators won't be filtered out before getting AcceleratorTracker.
-  accelerator_tracker_ = std::make_unique<AcceleratorTracker>(
-      base::make_span(kAcceleratorTrackerList, kAcceleratorTrackerListLength));
+  accelerator_tracker_ =
+      std::make_unique<AcceleratorTracker>(kAcceleratorTrackerList);
   AddPreTargetHandler(accelerator_tracker_.get());
 
   accelerator_filter_ = std::make_unique<::wm::AcceleratorFilter>(
@@ -1663,8 +1666,7 @@ void Shell::Init(
   modality_filter_ = std::make_unique<SystemModalContainerEventFilter>(this);
   AddPreTargetHandler(modality_filter_.get());
 
-  if (features::IsPeripheralCustomizationEnabled() ||
-      ::features::IsShortcutCustomizationEnabled()) {
+  if (features::IsPeripheralCustomizationEnabled()) {
     shortcut_input_handler_ = std::make_unique<ShortcutInputHandler>();
     AddPreTargetHandler(shortcut_input_handler_.get());
   }
@@ -1724,6 +1726,13 @@ void Shell::Init(
   // One of the subcontrollers accesses the SystemNotificationController.
   system_notification_controller_ =
       std::make_unique<SystemNotificationController>();
+
+  // They listen to session controller after notification controller.
+  detachable_base_handler_ =
+      std::make_unique<DetachableBaseHandler>(local_state_);
+  detachable_base_notification_controller_ =
+      std::make_unique<DetachableBaseNotificationController>(
+          detachable_base_handler_.get());
 
   // WmModeController should be created before initializing the window tree
   // hosts, since the latter will initialize the shelf on each display, which
@@ -1812,10 +1821,8 @@ void Shell::Init(
   multitask_menu_nudge_delegate_ =
       std::make_unique<MultitaskMenuNudgeDelegateAsh>();
 
-  if (features::IsFederatedServiceEnabled()) {
-    federated_service_controller_ =
-        std::make_unique<federated::FederatedServiceControllerImpl>();
-  }
+  federated_service_controller_ =
+      std::make_unique<federated::FederatedServiceControllerImpl>();
 
   if (features::IsUserEducationEnabled()) {
     user_education_controller_ = std::make_unique<UserEducationController>(
@@ -1829,8 +1836,9 @@ void Shell::Init(
   }
 
   if (features::IsScannerEnabled()) {
+    // Depends on `session_controller_` (instantiated in the constructor).
     scanner_controller_ = std::make_unique<ScannerController>(
-        shell_delegate_->CreateScannerDelegate());
+        shell_delegate_->CreateScannerDelegate(), *session_controller_);
   }
 
   if (features::IsTilingWindowResizeEnabled()) {
@@ -1857,8 +1865,8 @@ void Shell::Init(
         if (clipboard_history_util::IsEnabledInCurrentMode()) {
           const auto& items = controller->history()->GetItems();
           descriptors.reserve(items.size());
-          base::ranges::transform(items, std::back_inserter(descriptors),
-                                  &clipboard_history_util::ItemToDescriptor);
+          std::ranges::transform(items, std::back_inserter(descriptors),
+                                 &clipboard_history_util::ItemToDescriptor);
         }
         return descriptors;
       },

@@ -12,7 +12,7 @@ title: Monday, July 20, 2015
 
 Updates since last meeting (on Monday, July 13th):
 
-Scrolling (skobes, szager) \[[crbug.com/417782](http://crbug.com/417782)\]
+Scrolling (skobes, szager) \[[crbug.com/417782](https://crbug.com/417782)\]
 
 - Continuing root layer scrolling conversion. Judging progress is hard
 
@@ -28,25 +28,25 @@ test failures but should give us a rough idea and a way to track
 
 progerss. (szager)
 
-CSS Flexbox (cbiesinger) \[[crbug.com/426898](http://crbug.com/426898)\]
+CSS Flexbox (cbiesinger) \[[crbug.com/426898](https://crbug.com/426898)\]
 
 - Back from vacation, resuming flexbox work.
 
-CSS Grid Layout (svillar) \[[crbug.com/79180](http://crbug.com/79180)\]
+CSS Grid Layout (svillar) \[[crbug.com/79180](https://crbug.com/79180)\]
 
 - No update.
 
 Region-based multi-column support (mstensho)
-\[[crbug.com/334335](http://crbug.com/334335)\]
+\[[crbug.com/334335](https://crbug.com/334335)\]
 
 - No update, mstensho on vacation.
 
 Add API for layout (leviw, pilgrim, ojan)
-\[[crbug.com/495288](http://crbug.com/495288)\]
+\[[crbug.com/495288](https://crbug.com/495288)\]
 
 - Landed a couple of line-layout API patches. (ojan)
 
-Isolate core/fetch (japhet) \[[crbug.com/458222](http://crbug.com/458222)\]
+Isolate core/fetch (japhet) \[[crbug.com/458222](https://crbug.com/458222)\]
 
 - No update.
 

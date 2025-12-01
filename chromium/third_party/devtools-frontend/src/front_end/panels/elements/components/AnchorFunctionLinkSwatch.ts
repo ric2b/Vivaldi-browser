@@ -7,10 +7,14 @@ import '../../../ui/legacy/components/inline_editor/inline_editor.js';
 import * as i18n from '../../../core/i18n/i18n.js';
 import type * as SDK from '../../../core/sdk/sdk.js';
 import type * as InlineEditor from '../../../ui/legacy/components/inline_editor/inline_editor.js';
-import * as LitHtml from '../../../ui/lit-html/lit-html.js';
+import * as Lit from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
-import anchorFunctionLinkSwatchStyles from './anchorFunctionLinkSwatch.css.js';
+import anchorFunctionLinkSwatchStylesRaw from './anchorFunctionLinkSwatch.css.js';
+
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const anchorFunctionLinkSwatchStyles = new CSSStyleSheet();
+anchorFunctionLinkSwatchStyles.replaceSync(anchorFunctionLinkSwatchStylesRaw.cssContent);
 
 const UIStrings = {
   /**
@@ -20,28 +24,28 @@ const UIStrings = {
 };
 const str_ = i18n.i18n.registerUIStrings('panels/elements/components/AnchorFunctionLinkSwatch.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
-const {render, html} = LitHtml;
+const {render, html} = Lit;
 
 // Clang format is messing up the formatting of the functions below. It's best
 // to leave formatting off for this type declaration.
 // clang-format off
-export type AnchorFunctionLinkSwatchData = {
-  onLinkActivate: () => void,
-  onMouseEnter: () => void,
-  onMouseLeave: () => void,
+export interface AnchorFunctionLinkSwatchData {
+  onLinkActivate: () => void;
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
   // The dashed identifier for the anchor function.
   // It is undefined when we're rendering for implicit or default anchor cases.
-  identifier?: string,
+  identifier?: string;
   // The anchor node, it is undefined when it is not resolved correctly.
-  anchorNode?: SDK.DOMModel.DOMNode,
+  anchorNode?: SDK.DOMModel.DOMNode;
   // Whether to add a space after the link or not. This is needed because for some cases,
   // even though the link swatch is created; there might not be any links rendered for it.
   // So adding the space from the outside causes an unnecessary space to be rendered for these cases.
   // That's the reason we're controlling space behavior from the inside.
   // However for `position-anchor: --dashed-ident` case, there is no space needed at all.
   // That's why we need the parameter so that we don't render a space for that case.
-  needsSpace?: boolean,
-};
+  needsSpace?: boolean;
+}
 // clang-format on
 
 export class AnchorFunctionLinkSwatch extends HTMLElement {
@@ -72,7 +76,7 @@ export class AnchorFunctionLinkSwatch extends HTMLElement {
     this.#data.onLinkActivate();
   }
 
-  #renderIdentifierLink(): LitHtml.LitTemplate {
+  #renderIdentifierLink(): Lit.LitTemplate {
     // clang-format off
     return html`<devtools-link-swatch
       @mouseenter=${this.#data.onMouseEnter}
@@ -86,7 +90,7 @@ export class AnchorFunctionLinkSwatch extends HTMLElement {
     // clang-format on
   }
 
-  #renderIconLink(): LitHtml.LitTemplate {
+  #renderIconLink(): Lit.LitTemplate {
     // clang-format off
     return html`<devtools-icon
       role='button'

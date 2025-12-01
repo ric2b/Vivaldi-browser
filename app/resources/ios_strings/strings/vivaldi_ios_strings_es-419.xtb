@@ -1,5 +1,32 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="es-419">
+<translation id="1063263220330818888">Búsqueda privada</translation>
+<translation id="1097355661841455597">Nos encantaría escuchar tus comentarios.</translation>
+<translation id="1137850887415122856">Para bloquear tus pestañas privadas, configura Touch ID, Face ID o Passcode.</translation>
 <translation id="1310184829257917508">Pedir Abrir Links de Otras Aplicaciones en Privado</translation>
+<translation id="1561609750546413721">Traductor de Vivaldi</translation>
+<translation id="207677936531967364">Nueva página de pestaña privada</translation>
+<translation id="2394192052244849643">Pegar y buscar</translation>
+<translation id="2418705169960294134">Pestaña privada nueva</translation>
+<translation id="2899836479226240291">Puedes abrir enlaces en Vivaldi automáticamente al establecer Vivaldi como tu navegador predeterminado.</translation>
+<translation id="3365529507898144230">Guardar en Fotos</translation>
+<translation id="3434473769478814796">Pegar e ir</translation>
+<translation id="3463990832590571933">Abrir en nueva pestaña privada</translation>
+<translation id="3473652525653758699">Nueva ventana privada</translation>
+<translation id="3501504415290398157">Usar <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> para desbloquear tus pestañas privadas.</translation>
+<translation id="3692650606013198282">Abrir en pestaña privada</translation>
+<translation id="3981599532037327317">Abrir ${url} en privado</translation>
+<translation id="398477389655464998">Copiar enlace para destacar</translation>
+<translation id="4026745073321351206">🙄 ¿Has encontrado un problema?</translation>
+<translation id="4755216899422789286">Abrir URLs en Vivaldi</translation>
+<translation id="5431239785743546285">Páginas que leíste</translation>
+<translation id="5962477178930921574">Pegar y buscar</translation>
+<translation id="6233792867654386826">Abre la URL de entrada en Vivaldi.</translation>
+<translation id="6827597288286078054">Búsqueda privada</translation>
+<translation id="7307970171564921489">Desbloquear pestañas privadas con <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
+<translation id="7347289093190902150">¿Abrir en privado?</translation>
+<translation id="7549299604720382000">Pestaña privada nueva</translation>
+<translation id="7920949005883349320">Privacidad y seguridad</translation>
+<translation id="8326104954595890674">Pestaña privada nueva</translation>
 </translationbundle>

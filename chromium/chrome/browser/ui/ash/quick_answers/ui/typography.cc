@@ -6,8 +6,10 @@
 
 #include <ostream>
 
+#include "ash/style/typography.h"
 #include "base/check.h"
 #include "base/no_destructor.h"
+#include "base/notreached.h"
 #include "chromeos/components/quick_answers/public/cpp/constants.h"
 #include "ui/gfx/font_list.h"
 
@@ -26,34 +28,17 @@ constexpr int kCurrentDesignLineHeight = 20;
 
 }  // namespace
 
-const gfx::FontList& GetCrosAnnotation1FontList() {
-  static const base::NoDestructor<gfx::FontList> annotation_1_font_list(
-      gfx::FontList({"Google Sans", "Roboto"}, gfx::Font::NORMAL, 12,
-                    gfx::Font::Weight::NORMAL));
-  return *annotation_1_font_list;
-}
-
-int GetCrosAnnotation1LineHeight() {
-  return 18;
-}
-
-const gfx::FontList& GetFirstLineFontList(Design design) {
-  static const base::NoDestructor<gfx::FontList> cros_headline_1(
-      gfx::FontList({"Google Sans", "Roboto"}, gfx::Font::NORMAL, 15,
-                    gfx::Font::Weight::MEDIUM));
-
+const gfx::FontList GetFirstLineFontList(Design design) {
   switch (design) {
     case Design::kCurrent:
       return GetCurrentDesignFontList();
     case Design::kRefresh:
     case Design::kMagicBoost:
-      // TODO(b/340629098): remove a dependency from lacros and use
-      // `ash::TypographyProvider`
-      // `ash::TypographyToken::kCrosHeadline1`
-      return *cros_headline_1;
+      return ash::TypographyProvider::Get()->ResolveTypographyToken(
+          ash::TypographyToken::kCrosHeadline1);
   }
 
-  CHECK(false) << "Invalid design enum value provided";
+  NOTREACHED() << "Invalid design enum value provided";
 }
 
 int GetFirstLineHeight(Design design) {
@@ -62,23 +47,24 @@ int GetFirstLineHeight(Design design) {
       return kCurrentDesignLineHeight;
     case Design::kRefresh:
     case Design::kMagicBoost:
-      // `ash::TypographyToken::kCrosHeadline1`
-      return 22;
+      return ash::TypographyProvider::Get()->ResolveLineHeight(
+          ash::TypographyToken::kCrosHeadline1);
   }
 
-  CHECK(false) << "Invalid design enum value provided";
+  NOTREACHED() << "Invalid design enum value provided";
 }
 
-const gfx::FontList& GetSecondLineFontList(Design design) {
+const gfx::FontList GetSecondLineFontList(Design design) {
   switch (design) {
     case Design::kCurrent:
       return GetCurrentDesignFontList();
     case Design::kRefresh:
     case Design::kMagicBoost:
-      return GetCrosAnnotation1FontList();
+      return ash::TypographyProvider::Get()->ResolveTypographyToken(
+          ash::TypographyToken::kCrosAnnotation1);
   }
 
-  CHECK(false) << "Invalid design enum value provided";
+  NOTREACHED() << "Invalid design enum value provided";
 }
 
 int GetSecondLineHeight(Design design) {
@@ -87,10 +73,11 @@ int GetSecondLineHeight(Design design) {
       return kCurrentDesignLineHeight;
     case Design::kRefresh:
     case Design::kMagicBoost:
-      return GetCrosAnnotation1LineHeight();
+      return ash::TypographyProvider::Get()->ResolveLineHeight(
+          ash::TypographyToken::kCrosAnnotation1);
   }
 
-  CHECK(false) << "Invalid design enum value provided";
+  NOTREACHED() << "Invalid design enum value provided";
 }
 
 }  // namespace quick_answers

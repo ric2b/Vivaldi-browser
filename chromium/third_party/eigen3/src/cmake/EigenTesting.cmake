@@ -367,6 +367,12 @@ macro(ei_testing_print_summary)
       message(STATUS "S390X ZVECTOR:     Using architecture defaults")
     endif()
 
+    if(EIGEN_TEST_LSX)
+        message(STATUS "LSX:               ON")
+    else()
+        message(STATUS "LSX:               Using architecture defaults")
+    endif()
+
     if(EIGEN_TEST_SYCL)
       if(EIGEN_SYCL_TRISYCL)
         message(STATUS "SYCL:              ON (using triSYCL)")

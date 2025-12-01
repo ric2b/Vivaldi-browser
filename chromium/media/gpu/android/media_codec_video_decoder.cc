@@ -254,9 +254,9 @@ MediaCodecVideoDecoder::MediaCodecVideoDecoder(
           gpu_preferences.enable_threaded_texture_mailboxes),
       allow_nonsecure_overlays_(
           base::FeatureList::IsEnabled(media::kAllowNonSecureOverlays)),
-      use_block_model_(base::FeatureList::IsEnabled(kMediaCodecBlockModel) &&
-                       device_info_->SdkVersion() >=
-                           base::android::SDK_VERSION_R) {
+      use_block_model_(device_info_->SdkVersion() >=
+                           base::android::SDK_VERSION_V &&
+                       base::FeatureList::IsEnabled(kMediaCodecBlockModel)) {
   DVLOG(2) << __func__;
   surface_chooser_helper_.chooser()->SetClientCallbacks(
       base::BindRepeating(&MediaCodecVideoDecoder::OnSurfaceChosen,
@@ -784,7 +784,8 @@ void MediaCodecVideoDecoder::OnCodecConfigured(
   codec_name_ = codec->GetName();
   MEDIA_LOG(INFO, media_log_)
       << "Created MediaCodec " << codec_name_
-      << ", is_software_codec=" << codec->IsSoftwareCodec();
+      << ", is_software_codec=" << codec->IsSoftwareCodec()
+      << ", use_block_model_=" << use_block_model_;
 
   // Since we can't get the coded size w/o rendering the frame, we try to guess
   // in cases where we are unable to render the frame (resolution changes). If
@@ -813,7 +814,7 @@ void MediaCodecVideoDecoder::OnCodecConfigured(
               &MediaCodecVideoDecoder::PumpCodec, weak_factory_.GetWeakPtr()))),
       decoder_config_.coded_size(),
       decoder_config_.color_space_info().ToGfxColorSpace(),
-      coded_size_alignment, use_block_model_);
+      coded_size_alignment);
 
   // If the target surface changed while codec creation was in progress,
   // transition to it immediately.

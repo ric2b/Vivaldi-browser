@@ -39,7 +39,7 @@ widget will appear under the user's mouse cursor that will minimize the panel
 when clicked. The widget disappears as soon as the user's mouse moves away from
 the edge. This allows users to quickly open and close panels.
 
-<img alt="image" src="/chromium-os/user-experience/panels/windowstylespng">
+<img alt="image" src="windowstyles.png">
 
 Notifications
 

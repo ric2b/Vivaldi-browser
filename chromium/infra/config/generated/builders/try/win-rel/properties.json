@@ -14,7 +14,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "GPU Win x64 Builder",
-              "project": "chromium-m132"
+              "project": "chromium-m134"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-gpu-archive",
@@ -42,7 +42,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Win x64 Builder",
-              "project": "chromium-m132"
+              "project": "chromium-m134"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-win-archive",
@@ -70,7 +70,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Win10 Tests x64",
-              "project": "chromium-m132"
+              "project": "chromium-m134"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-win-archive",
@@ -94,7 +94,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "Win x64 Builder",
-                "project": "chromium-m132"
+                "project": "chromium-m134"
               }
             }
           },
@@ -102,7 +102,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Win10 x64 Release (NVIDIA)",
-              "project": "chromium-m132"
+              "project": "chromium-m134"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-gpu-archive",
@@ -126,7 +126,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "GPU Win x64 Builder",
-                "project": "chromium-m132"
+                "project": "chromium-m134"
               }
             }
           }
@@ -136,24 +136,24 @@
         {
           "bucket": "ci",
           "builder": "GPU Win x64 Builder",
-          "project": "chromium-m132"
+          "project": "chromium-m134"
         },
         {
           "bucket": "ci",
           "builder": "Win x64 Builder",
-          "project": "chromium-m132"
+          "project": "chromium-m134"
         }
       ],
       "builder_ids_in_scope_for_testing": [
         {
           "bucket": "ci",
           "builder": "Win10 Tests x64",
-          "project": "chromium-m132"
+          "project": "chromium-m134"
         },
         {
           "bucket": "ci",
           "builder": "Win10 x64 Release (NVIDIA)",
-          "project": "chromium-m132"
+          "project": "chromium-m134"
         }
       ],
       "targets_spec_directory": "src/infra/config/generated/builders/try/win-rel/targets"
@@ -170,18 +170,17 @@
     "check_for_flakiness": true,
     "check_for_flakiness_with_resultdb": true
   },
-  "$build/reclient": {
-    "instance": "rbe-chromium-untrusted",
-    "metrics_project": "chromium-reclient-metrics",
-    "scandeps_server": true
-  },
   "$build/siso": {
     "configs": [
       "builder"
     ],
+    "enable_cloud_monitoring": true,
     "enable_cloud_profiler": true,
     "enable_cloud_trace": true,
-    "experiments": [],
+    "experiments": [
+      "no-fast-deps"
+    ],
+    "metrics_project": "chromium-reclient-metrics",
     "project": "rbe-chromium-untrusted",
     "remote_jobs": -1
   },

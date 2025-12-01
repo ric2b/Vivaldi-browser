@@ -27,6 +27,7 @@ import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.components.payments.AndroidPaymentAppFinder;
 import org.chromium.components.payments.AppCreationFailureReason;
 import org.chromium.components.payments.CSPChecker;
+import org.chromium.components.payments.DialogController;
 import org.chromium.components.payments.PaymentApp;
 import org.chromium.components.payments.PaymentAppFactoryDelegate;
 import org.chromium.components.payments.PaymentAppFactoryInterface;
@@ -157,9 +158,15 @@ public class AndroidPaymentAppFinderTest
                     GURL urlBeforeRedirects,
                     boolean didFollowRedirect,
                     Callback<Boolean> resultCallback) {
-                resultCallback.onResult(/* allow= */ true);
+                resultCallback.onResult(/* result= */ true);
             }
         };
+    }
+
+    // PaymentAppFactoryDelegate implementation.
+    @Override
+    public DialogController getDialogController() {
+        return null;
     }
 
     // PaymentAppFactoryParams implementation.
@@ -1695,7 +1702,7 @@ public class AndroidPaymentAppFinderTest
                                     mDownloader,
                                     new PaymentManifestParser(),
                                     mPackageManager,
-                                    /* delegate= */ this,
+                                    /* factoryDelegate= */ this,
                                     /* factory= */ null);
                     finder.bypassIsReadyToPayServiceInTest();
                     if (appStorePackageName != null) {

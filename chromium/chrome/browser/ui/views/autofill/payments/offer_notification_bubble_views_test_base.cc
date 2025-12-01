@@ -8,6 +8,7 @@
 
 #include "chrome/browser/autofill/autofill_uitest_util.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -18,9 +19,9 @@
 #include "components/autofill/content/browser/content_autofill_client.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/content/browser/test_autofill_manager_injector.h"
+#include "components/autofill/core/browser/data_manager/payments/payments_data_manager.h"
+#include "components/autofill/core/browser/data_manager/payments/payments_data_manager_test_api.h"
 #include "components/autofill/core/browser/payments/payments_autofill_client.h"
-#include "components/autofill/core/browser/payments_data_manager.h"
-#include "components/autofill/core/browser/payments_data_manager_test_api.h"
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/commerce/core/commerce_feature_list.h"
@@ -29,12 +30,15 @@
 
 namespace autofill {
 
-const char kDefaultTestPromoCode[] = "5PCTOFFSHOES";
-const char kDefaultTestValuePropText[] = "5% off on shoes. Up to $50.";
-const char kDefaultTestSeeDetailsText[] = "See details";
-const char kDefaultTestUsageInstructionsText[] =
+namespace {
+constexpr char kDefaultTestPromoCode[] = "5PCTOFFSHOES";
+constexpr char kDefaultTestValuePropText[] = "5% off on shoes. Up to $50.";
+constexpr char kDefaultTestSeeDetailsText[] = "See details";
+constexpr char kDefaultTestUsageInstructionsText[] =
     "Click the promo code field at checkout to autofill it.";
-const char kDefaultTestDetailsUrlString[] = "https://pay.google.com";
+constexpr char kDefaultTestDetailsUrlString[] = "https://pay.google.com";
+constexpr int64_t kCreditCardInstrumentId = 0x4444;
+}  // namespace
 
 OfferNotificationBubbleViewsTestBase::OfferNotificationBubbleViewsTestBase()
     : https_server_(net::EmbeddedTestServer::TYPE_HTTPS) {}
@@ -91,8 +95,9 @@ void OfferNotificationBubbleViewsTestBase::SetUpCommandLine(
 }
 
 void OfferNotificationBubbleViewsTestBase::OnBubbleShown() {
-  if (event_waiter_)
+  if (event_waiter_) {
     event_waiter_->OnEvent(DialogEvent::BUBBLE_SHOWN);
+  }
 }
 
 std::unique_ptr<AutofillOfferData>
@@ -106,8 +111,9 @@ OfferNotificationBubbleViewsTestBase::CreateCardLinkedOfferDataWithDomains(
   int64_t offer_id = 4444;
   base::Time expiry = AutofillClock::Now() + base::Days(2);
   std::vector<GURL> merchant_origins;
-  for (auto url : domains)
+  for (auto url : domains) {
     merchant_origins.emplace_back(url.DeprecatedGetOriginAsURL());
+  }
   GURL offer_details_url;
   DisplayStrings display_strings;
   std::vector<int64_t> eligible_instrument_ids = {kCreditCardInstrumentId};
@@ -124,8 +130,9 @@ OfferNotificationBubbleViewsTestBase::CreateGPayPromoCodeOfferDataWithDomains(
   int64_t offer_id = 5555;
   base::Time expiry = AutofillClock::Now() + base::Days(2);
   std::vector<GURL> merchant_origins;
-  for (auto url : domains)
+  for (auto url : domains) {
     merchant_origins.emplace_back(url.DeprecatedGetOriginAsURL());
+  }
   DisplayStrings display_strings;
   display_strings.value_prop_text = GetDefaultTestValuePropText();
   display_strings.see_details_text = GetDefaultTestSeeDetailsText();
@@ -145,8 +152,6 @@ void OfferNotificationBubbleViewsTestBase::SetUpOfferDataWithDomains(
   switch (offer_type) {
     case AutofillOfferData::OfferType::GPAY_CARD_LINKED_OFFER:
       SetUpCardLinkedOfferDataWithDomains(domains);
-      break;
-    case AutofillOfferData::OfferType::FREE_LISTING_COUPON_OFFER:
       break;
     case AutofillOfferData::OfferType::GPAY_PROMO_CODE_OFFER:
       SetUpGPayPromoCodeOfferDataWithDomains(domains);

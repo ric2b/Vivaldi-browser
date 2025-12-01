@@ -442,6 +442,15 @@ def PrepareSetupExec(options, current_version, prev_version):
         CompressUsingLZMA(options.build_dir, setup_file_path, patch_file,
                           options.verbose, options.fast_archive_compression)
     else:
+        setup_file_path = os.path.join(options.build_dir, SETUP_EXEC)
+        # The mtime of the setup file gets baked into makecab's output,
+        # so if build_time is specified, then apply it here too.
+        original_mtimestamp = None
+        if options.build_time:
+            original_mtimestamp = os.path.getmtime(setup_file_path)
+            mtimestamp = int(options.build_time)
+            os.utime(setup_file_path, (mtimestamp, mtimestamp))
+
         vivaldi_signer.SignTarget("INSTALLER", os.path.join(options.build_dir, SETUP_EXEC))
         # Use makecab.py instead of makecab.exe so that this works when building
         # on non-Windows hosts too.
@@ -454,9 +463,13 @@ def PrepareSetupExec(options, current_version, prev_version):
             '/V1',
             '/L',
             options.output_dir,
-            os.path.join(options.build_dir, SETUP_EXEC),
+            setup_file_path,
         ]
         RunSystemCommand(cmd, options.verbose)
+        if original_mtimestamp:
+            # Restore the original mtime, for Ninja's benefit.
+            os.utime(setup_file_path,
+                     (original_mtimestamp, original_mtimestamp))
         setup_file = SETUP_EXEC[:-1] + "_"
     return setup_file
 
@@ -785,7 +798,7 @@ def _ParseOptions():
 
     #Vivaldi specific options
     vivaldi_signer.AddOptionFlags(parser)
-                      
+
     options, _ = parser.parse_args()
     if not options.build_dir:
         parser.error('You must provide a build dir.')

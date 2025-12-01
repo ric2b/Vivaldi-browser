@@ -79,6 +79,8 @@ enum class ActionType {
   ShareChrome,
   EditActions,
   LensOverlay,
+  AIPrototype,
+  SetTabReminder,
 
   // Vivaldi action groups
   vStartPage,

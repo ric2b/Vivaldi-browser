@@ -1369,7 +1369,11 @@ class GitWrapper(SCMWrapper):
 
         # Set up Git authentication configuration that is needed to clone/fetch the repo.
 #        if newauth.Enabled():
-#            git_auth.ConfigureGlobal('/', url)
+            # We need the host from the URL to determine auth settings.
+            # The url parameter might have been re-written to a local
+            # cache directory, so we need self.url, which contains the
+            # original remote URL.
+#            git_auth.ConfigureGlobal('/', self.url)
 
         if hasattr(options, 'no_history') and options.no_history:
             self._Run(['init', self.checkout_path], options, cwd=self._root_dir)

@@ -22,6 +22,7 @@
 #import "base/strings/stringprintf.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
+#import "components/prefs/pref_service.h"
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/download/model/confirm_download_closing_overlay.h"
 #import "ios/chrome/browser/download/model/confirm_download_replacing_overlay.h"
@@ -35,20 +36,25 @@
 #import "ios/chrome/browser/download/ui_bundled/download_manager_view_controller.h"
 #import "ios/chrome/browser/download/ui_bundled/download_manager_view_controller_delegate.h"
 #import "ios/chrome/browser/download/ui_bundled/download_manager_view_controller_protocol.h"
-#import "ios/chrome/browser/download/ui_bundled/legacy_download_manager_view_controller.h"
 #import "ios/chrome/browser/download/ui_bundled/unopened_downloads_tracker.h"
 #import "ios/chrome/browser/drive/model/drive_service_factory.h"
 #import "ios/chrome/browser/drive/model/upload_task.h"
+#import "ios/chrome/browser/fullscreen/ui_bundled/fullscreen_controller.h"
 #import "ios/chrome/browser/overlays/model/public/common/confirmation/confirmation_overlay_response.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_callback_manager.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_request_queue.h"
+#import "ios/chrome/browser/presenters/ui_bundled/contained_presenter.h"
+#import "ios/chrome/browser/presenters/ui_bundled/contained_presenter_delegate.h"
 #import "ios/chrome/browser/shared/coordinator/layout_guide/layout_guide_util.h"
+#import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list_observer.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
+#import "ios/chrome/browser/shared/public/commands/auto_deletion_commands.h"
 #import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
@@ -57,9 +63,6 @@
 #import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/chrome/browser/store_kit/model/store_kit_coordinator.h"
 #import "ios/chrome/browser/store_kit/model/store_kit_coordinator_delegate.h"
-#import "ios/chrome/browser/ui/fullscreen/fullscreen_controller.h"
-#import "ios/chrome/browser/ui/presenters/contained_presenter.h"
-#import "ios/chrome/browser/ui/presenters/contained_presenter_delegate.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/components/webui/web_ui_url_constants.h"
 #import "ios/web/common/features.h"
@@ -98,6 +101,11 @@
 }
 
 - (void)start {
+  [self restart];
+}
+
+// Similar to start but can be called after pause.
+- (void)restart {
   DCHECK(self.presenter);
   DCHECK(self.browser);
 
@@ -115,9 +123,7 @@
                       object:nil];
 
   BOOL isIncognito = self.browser->GetProfile()->IsOffTheRecord();
-  _viewController = base::FeatureList::IsEnabled(kIOSSaveToDrive)
-                        ? [[DownloadManagerViewController alloc] init]
-                        : [[LegacyDownloadManagerViewController alloc] init];
+  _viewController = [[DownloadManagerViewController alloc] init];
   _viewController.delegate = self;
   _viewController.layoutGuideCenter = LayoutGuideCenterForBrowser(self.browser);
   _viewController.incognito = isIncognito;
@@ -128,15 +134,11 @@
     [_viewController setFullscreenController:fullscreenController];
   }
 
-  if (base::FeatureList::IsEnabled(kIOSSaveToDrive)) {
-    _mediator.SetIsIncognito(isIncognito);
-    ProfileIOS* profile = self.browser->GetProfile();
-    _mediator.SetIdentityManager(
-        IdentityManagerFactory::GetForProfile(profile));
-    _mediator.SetDriveService(
-        drive::DriveServiceFactory::GetForProfile(profile));
-    _mediator.SetPrefService(profile->GetPrefs());
-  }
+  _mediator.SetIsIncognito(isIncognito);
+  ProfileIOS* profile = self.browser->GetProfile();
+  _mediator.SetIdentityManager(IdentityManagerFactory::GetForProfile(profile));
+  _mediator.SetDriveService(drive::DriveServiceFactory::GetForProfile(profile));
+  _mediator.SetPrefService(profile->GetPrefs());
 
   _mediator.SetDownloadTask(_downloadTask);
   _mediator.SetConsumer(_viewController);
@@ -156,6 +158,11 @@
 }
 
 - (void)stop {
+  [self pause];
+}
+
+// Similar to stop, but the coordinator can be restarted later.
+- (void)pause {
   _mediator.SetDriveService(nullptr);
   _mediator.SetPrefService(nullptr);
   _mediator.SetIdentityManager(nullptr);
@@ -174,8 +181,9 @@
   _shouldObserveFullscreen = NO;
   _downloadTask = nullptr;
 
-  if (self.browser)
+  if (self.browser) {
     (self.browser->GetWebStateList())->RemoveObserver(&_unopenedDownloads);
+  }
 
   [self stopStoreKitCoordinator];
 
@@ -214,7 +222,7 @@
     _mediator.SetDownloadTask(_downloadTask);
   } else {
     self.animatesPresentation = YES;
-    [self start];
+    [self restart];
   }
 }
 
@@ -277,7 +285,7 @@
   }
   DCHECK_EQ(_downloadTask, download);
   self.animatesPresentation = NO;
-  [self stop];
+  [self pause];
   self.animatesPresentation = YES;
 }
 
@@ -380,7 +388,6 @@
 
 - (void)downloadManagerViewControllerDidOpenInDriveApp:
     (UIViewController*)controller {
-  CHECK(base::FeatureList::IsEnabled(kIOSSaveToDrive));
   UploadTask* uploadTask = _mediator.GetUploadTask();
   if (!uploadTask) {
     // While it should not be possible that uploadTask is nil at this point,
@@ -466,6 +473,7 @@
   } else {
     base::RecordAction(base::UserMetricsAction("IOSDownloadStartDownload"));
     _unopenedDownloads.Add(_downloadTask);
+    [self maybePresentAutoDeletionActionSheet];
   }
   _mediator.StartDownloading();
 }
@@ -482,7 +490,7 @@
   // first to perform all coordinator cleanups, but copy `_downloadTask`
   // pointer to destroy the task.
   web::DownloadTask* downloadTask = _downloadTask;
-  [self stop];
+  [self pause];
 
   // The pointer may be null if -stop was called before -cancelDownload.
   // This can happen during shutdown because -stop is called when the UI
@@ -503,9 +511,7 @@
       "Download.IOSDownloadFileUIGoogleDrive",
       DownloadFileUIGoogleDrive::GoogleDriveInstalledAfterDisplay,
       DownloadFileUIGoogleDrive::Count);
-  if (base::FeatureList::IsEnabled(kIOSSaveToDrive)) {
-    _mediator.SetGoogleDriveAppInstalled(true);
-  }
+  _mediator.SetGoogleDriveAppInstalled(true);
   _mediator.UpdateConsumer();
 }
 
@@ -522,16 +528,25 @@
     };
   }
   [_storeKitCoordinator start];
-  if (!base::FeatureList::IsEnabled(kIOSSaveToDrive) &&
-      [_viewController respondsToSelector:@selector
-                       (setInstallDriveButtonVisible:animated:)]) {
-    [_viewController setInstallDriveButtonVisible:NO animated:YES];
-  }
-
   [[InstallationNotifier sharedInstance]
       registerForInstallationNotifications:self
                               withSelector:@selector(didInstallGoogleDriveApp)
                                  forScheme:kGoogleDriveAppURLScheme];
+}
+
+// Presents the Download auto-deletion action sheet if the feature flag is
+// enabled and the user has the enabled in settings.
+- (void)maybePresentAutoDeletionActionSheet {
+  PrefService* localState = GetApplicationContext()->GetLocalState();
+  if (!IsDownloadAutoDeletionFeatureEnabled() ||
+      !localState->GetBoolean(prefs::kDownloadAutoDeletionEnabled)) {
+    return;
+  }
+
+  id<AutoDeletionCommands> autoDeletionHandler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), AutoDeletionCommands);
+  [autoDeletionHandler
+      presentAutoDeletionActionSheetWithDownloadTask:_downloadTask];
 }
 
 #pragma mark - Notification callback

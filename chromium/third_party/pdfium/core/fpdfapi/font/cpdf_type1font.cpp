@@ -13,6 +13,7 @@
 
 #include "build/build_config.h"
 #include "core/fpdfapi/parser/cpdf_dictionary.h"
+#include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_memcpy_wrappers.h"
 #include "core/fxcrt/fx_system.h"
 #include "core/fxcrt/span_util.h"
@@ -101,9 +102,9 @@ bool CPDF_Type1Font::Load() {
   if (pFontDesc && pFontDesc->KeyExist("Flags")) {
     m_Flags = pFontDesc->GetIntegerFor("Flags");
   } else if (IsSymbolicFont()) {
-    m_Flags = FXFONT_SYMBOLIC;
+    m_Flags = pdfium::kFontStyleSymbolic;
   } else {
-    m_Flags = FXFONT_NONSYMBOLIC;
+    m_Flags = pdfium::kFontStyleNonSymbolic;
   }
   if (IsFixedFont()) {
     std::fill(std::begin(m_CharWidth), std::end(m_CharWidth), 600);
@@ -150,7 +151,8 @@ void CPDF_Type1Font::LoadGlyphMap() {
     if (UseTTCharmapMSSymbol(face)) {
       bool bGotOne = false;
       for (uint32_t charcode = 0; charcode < kInternalTableSize; charcode++) {
-        constexpr std::array<uint8_t, 4> prefix = {{0x00, 0xf0, 0xf1, 0xf2}};
+        static constexpr std::array<uint8_t, 4> prefix = {
+            {0x00, 0xf0, 0xf1, 0xf2}};
         for (int j = 0; j < 4; j++) {
           uint16_t unicode = prefix[j] * 256 + charcode;
           m_GlyphIndex[charcode] = face->GetCharIndex(unicode);
@@ -188,7 +190,8 @@ void CPDF_Type1Font::LoadGlyphMap() {
 #if BUILDFLAG(IS_APPLE)
       CalcExtGID(charcode);
 #endif
-      if (m_GlyphIndex[charcode] == 0 && strcmp(name, ".notdef") == 0) {
+      if (m_GlyphIndex[charcode] == 0 &&
+          UNSAFE_TODO(strcmp(name, ".notdef")) == 0) {
         m_Encoding.SetUnicode(charcode, 0x20);
         m_GlyphIndex[charcode] = face->GetCharIndex(0x20);
 #if BUILDFLAG(IS_APPLE)
@@ -297,7 +300,8 @@ void CPDF_Type1Font::LoadGlyphMap() {
     if (m_GlyphIndex[charcode] != 0)
       continue;
 
-    if (strcmp(name, ".notdef") != 0 && strcmp(name, "space") != 0) {
+    if (UNSAFE_TODO(strcmp(name, ".notdef")) != 0 &&
+        UNSAFE_TODO(strcmp(name, "space")) != 0) {
       m_GlyphIndex[charcode] =
           face->GetCharIndex(bUnicode ? m_Encoding.UnicodeFromCharCode(charcode)
                                       : static_cast<uint32_t>(charcode));

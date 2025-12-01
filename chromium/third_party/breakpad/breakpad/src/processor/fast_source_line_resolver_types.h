@@ -36,7 +36,8 @@
 #ifndef PROCESSOR_FAST_SOURCE_LINE_RESOLVER_TYPES_H__
 #define PROCESSOR_FAST_SOURCE_LINE_RESOLVER_TYPES_H__
 
-#include <cstdint>
+#include <stdint.h>
+
 #include <map>
 #include <string>
 

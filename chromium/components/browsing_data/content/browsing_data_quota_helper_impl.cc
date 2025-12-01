@@ -42,15 +42,6 @@ void BrowsingDataQuotaHelperImpl::StartFetching(FetchResultCallback callback) {
                      this, std::move(callback)));
 }
 
-void BrowsingDataQuotaHelperImpl::DeleteHostData(const std::string& host,
-                                                 StorageType type) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  content::GetIOThreadTaskRunner({})->PostTask(
-      FROM_HERE,
-      base::BindOnce(&BrowsingDataQuotaHelperImpl::DeleteHostDataOnIOThread,
-                     this, host, type));
-}
-
 void BrowsingDataQuotaHelperImpl::DeleteStorageKeyData(
     const blink::StorageKey& storage_key,
     blink::mojom::StorageType type,
@@ -101,7 +92,7 @@ void BrowsingDataQuotaHelperImpl::GotStorageKeys(
     StorageType type,
     const std::set<blink::StorageKey>& storage_keys) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  int storage_key_count = base::ranges::count_if(
+  int storage_key_count = std::ranges::count_if(
       storage_keys, [](const blink::StorageKey& storage_key) {
         return browsing_data::IsWebScheme(storage_key.origin().scheme());
       });
@@ -136,7 +127,7 @@ void BrowsingDataQuotaHelperImpl::GotStorageKeyUsage(
       (*quota_info)[storage_key].syncable_usage += usage;
       break;
     default:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
 }
 
@@ -154,14 +145,6 @@ void BrowsingDataQuotaHelperImpl::OnGetHostsUsageComplete(
 
   content::GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), result));
-}
-
-void BrowsingDataQuotaHelperImpl::DeleteHostDataOnIOThread(
-    const std::string& host,
-    blink::mojom::StorageType type) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  quota_manager_->DeleteHostData(
-      host, type, base::DoNothingAs<void(blink::mojom::QuotaStatusCode)>());
 }
 
 void BrowsingDataQuotaHelperImpl::DeleteStorageKeyDataOnIOThread(

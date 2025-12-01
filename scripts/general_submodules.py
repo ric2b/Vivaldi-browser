@@ -55,6 +55,13 @@ excluded_modules = [
   "third_party/domato/src",
   "tools/page_cycler/acid3",
   "third_party/webdriver/pylib",
+  "third_party/libva-fake-driver/src",
+  "third_party/search_engines_data/resources",
+  "third_party/speedometer/main",
+  "third_party/speedometer/v2.0",
+  "third_party/speedometer/v2.1",
+  "third_party/speedometer/v3.0",
+  "third_party/webpagereplay",
   ]
 
 def main():

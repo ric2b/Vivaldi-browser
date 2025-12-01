@@ -24,6 +24,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/rand_util.h"
 #include "base/thread_annotations.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
@@ -60,6 +61,28 @@ class CookieChangeDispatcher;
 class NET_EXPORT CookieMonster : public CookieStore {
  public:
   class PersistentCookieStore;
+
+  // Provides an interface to interact with persistent preferences storage
+  // implemented by the embedder KnownLegacyScopeDomainsPrefDelegate.
+  // This pref delegate is used to store known legacy scope domains.
+  class PrefDelegate {
+   public:
+    virtual ~PrefDelegate() = default;
+
+    // Returns a dict of all domains under legacy mode.
+    virtual const base::Value::Dict& GetLegacyDomains() const = 0;
+
+    // Sets a dict of domain names under legacy scope mode.
+    virtual void SetLegacyDomains(base::Value::Dict dict) = 0;
+
+    // Starts listening for prefs to be loaded. If prefs are already loaded,
+    // `pref_loaded_callback` will be invoked asynchronously. Callback will be
+    // invoked even if prefs fail to load.
+    virtual void WaitForPrefLoad(base::OnceClosure pref_loaded_callback) = 0;
+
+    // Will return true if the pref system is ready to be used.
+    virtual bool IsPrefReady() = 0;
+  };
 
   // Terminology:
   //    * The 'top level domain' (TLD) of an internet domain name is
@@ -159,13 +182,16 @@ class NET_EXPORT CookieMonster : public CookieStore {
   // this class, but it must remain valid for the duration of the cookie
   // monster's existence. If |store| is NULL, then no backing store will be
   // updated. |net_log| must outlive the CookieMonster and can be null.
-  CookieMonster(scoped_refptr<PersistentCookieStore> store, NetLog* net_log);
+  CookieMonster(scoped_refptr<PersistentCookieStore> store,
+                NetLog* net_log,
+                std::unique_ptr<PrefDelegate> pref_delegate = nullptr);
 
   // Only used during unit testing.
   // |net_log| must outlive the CookieMonster.
   CookieMonster(scoped_refptr<PersistentCookieStore> store,
                 base::TimeDelta last_access_threshold,
-                NetLog* net_log);
+                NetLog* net_log,
+                std::unique_ptr<PrefDelegate> pref_delegate);
 
   CookieMonster(const CookieMonster&) = delete;
   CookieMonster& operator=(const CookieMonster&) = delete;
@@ -672,6 +698,12 @@ class NET_EXPORT CookieMonster : public CookieStore {
   CookieAccessSemantics GetAccessSemanticsForCookie(
       const CanonicalCookie& cookie) const;
 
+  // Get the cookie's scope semantics (LEGACY or NONLEGACY), by checking for a
+  // value from the cookie access delegate, if it is non-null. Otherwise returns
+  // UNKNOWN.
+  CookieScopeSemantics GetScopeSemanticsForCookie(
+      const CanonicalCookie& cookie) const;
+
   // Statistics support
 
   // This function should be called repeatedly, and will record
@@ -777,6 +809,8 @@ class NET_EXPORT CookieMonster : public CookieStore {
 
   NetLogWithSource net_log_;
 
+  std::unique_ptr<PrefDelegate> pref_delegate_;
+
   scoped_refptr<PersistentCookieStore> store_;
 
   // Minimum delay after updating a cookie's LastAccessDate before we will
@@ -799,6 +833,8 @@ class NET_EXPORT CookieMonster : public CookieStore {
   base::Time last_statistic_record_time_;
 
   bool persist_session_cookies_ = false;
+
+  base::MetricsSubSampler metrics_subsampler_;
 
   THREAD_CHECKER(thread_checker_);
 

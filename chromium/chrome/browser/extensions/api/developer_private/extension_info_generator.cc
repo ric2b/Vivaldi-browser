@@ -17,6 +17,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
+#include "chrome/browser/extensions/account_extension_tracker.h"
 #include "chrome/browser/extensions/api/developer_private/developer_private_api.h"
 #include "chrome/browser/extensions/api/developer_private/inspectable_views_finder.h"
 #include "chrome/browser/extensions/commands/command_service.h"
@@ -24,6 +25,7 @@
 #include "chrome/browser/extensions/extension_allowlist.h"
 #include "chrome/browser/extensions/extension_safety_check_utils.h"
 #include "chrome/browser/extensions/extension_service.h"
+#include "chrome/browser/extensions/extension_sync_util.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/manifest_v2_experiment_manager.h"
 #include "chrome/browser/extensions/mv2_experiment_stage.h"
@@ -70,6 +72,8 @@
 #include "extensions/common/permissions/permissions_data.h"
 #include "extensions/grit/extensions_browser_resources.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/base/accelerators/command.h"
+#include "ui/base/accelerators/global_accelerator_listener/global_accelerator_listener.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/codec/png_codec.h"
@@ -191,7 +195,7 @@ developer::RuntimeError ConstructRuntimeError(const RuntimeError& error) {
 void ConstructCommands(CommandService* command_service,
                        const ExtensionId& extension_id,
                        std::vector<developer::Command>* commands) {
-  auto construct_command = [](const Command& command, bool active,
+  auto construct_command = [](const ui::Command& command, bool active,
                               bool is_extension_action) {
     developer::Command command_value;
     command_value.description =
@@ -221,13 +225,13 @@ void ConstructCommands(CommandService* command_service,
     }
   }
 
-  CommandMap named_commands;
+  ui::CommandMap named_commands;
   if (command_service->GetNamedCommands(extension_id,
                                         CommandService::ALL,
                                         CommandService::ANY_SCOPE,
                                         &named_commands)) {
     for (auto& pair : named_commands) {
-      Command& command_to_use = pair.second;
+      ui::Command& command_to_use = pair.second;
       // TODO(devlin): For some reason beyond my knowledge, FindCommandByName
       // returns different data than GetNamedCommands, including the
       // accelerators, but not the descriptions - and even then, only if the
@@ -411,9 +415,31 @@ ExtensionInfoGenerator::ExtensionInfoGenerator(
       error_console_(ErrorConsole::Get(browser_context)),
       image_loader_(ImageLoader::Get(browser_context)),
       pending_image_loads_(0u) {
+  profile_observation_.Observe(Profile::FromBrowserContext(browser_context));
 }
 
-ExtensionInfoGenerator::~ExtensionInfoGenerator() {
+ExtensionInfoGenerator::~ExtensionInfoGenerator() = default;
+
+void ExtensionInfoGenerator::OnProfileWillBeDestroyed(Profile* profile) {
+  // Reset all references for keyed services in case this object outlives the
+  // profile or browser context.
+  profile_observation_.Reset();
+  browser_context_ = nullptr;
+  command_service_ = nullptr;
+  extension_system_ = nullptr;
+  extension_prefs_ = nullptr;
+  warning_service_ = nullptr;
+  error_console_ = nullptr;
+  image_loader_ = nullptr;
+
+  // Remove any WeakPtr to terminate any async tasks.
+  weak_factory_.InvalidateWeakPtrs();
+
+  // Flush the callback if there is one.
+  if (!callback_.is_null()) {
+    std::move(callback_).Run({});
+  }
+  // WARNING: `this` is possibly deleted after this line!
 }
 
 void ExtensionInfoGenerator::CreateExtensionInfo(
@@ -591,6 +617,10 @@ void ExtensionInfoGenerator::CreateExtensionInfoHelper(
   // Commands.
   if (is_enabled)
     ConstructCommands(command_service_, extension.id(), &info->commands);
+  info->is_command_registration_handled_externally =
+      ui::GlobalAcceleratorListener::GetInstance() &&
+      ui::GlobalAcceleratorListener::GetInstance()
+          ->IsRegistrationHandledExternally();
 
   // Dependent extensions.
   if (extension.is_shared_module()) {
@@ -610,25 +640,24 @@ void ExtensionInfoGenerator::CreateExtensionInfoHelper(
   info->description = extension.description();
 
   // Disable reasons.
-  int disable_reasons = extension_prefs_->GetDisableReasons(extension.id());
+  DisableReasonSet disable_reasons =
+      extension_prefs_->GetDisableReasons(extension.id());
   info->disable_reasons.suspicious_install =
-      (disable_reasons & disable_reason::DISABLE_NOT_VERIFIED) != 0;
+      disable_reasons.contains(disable_reason::DISABLE_NOT_VERIFIED);
   info->disable_reasons.corrupt_install =
-      (disable_reasons & disable_reason::DISABLE_CORRUPTED) != 0;
-  info->disable_reasons.update_required =
-      (disable_reasons & disable_reason::DISABLE_UPDATE_REQUIRED_BY_POLICY) !=
-      0;
+      disable_reasons.contains(disable_reason::DISABLE_CORRUPTED);
+  info->disable_reasons.update_required = disable_reasons.contains(
+      disable_reason::DISABLE_UPDATE_REQUIRED_BY_POLICY);
   info->disable_reasons.blocked_by_policy =
-      (disable_reasons & disable_reason::DISABLE_BLOCKED_BY_POLICY) != 0;
+      disable_reasons.contains(disable_reason::DISABLE_BLOCKED_BY_POLICY);
   info->disable_reasons.reloading =
-      (disable_reasons & disable_reason::DISABLE_RELOAD) != 0;
-  bool custodian_approval_required =
-      (disable_reasons & disable_reason::DISABLE_CUSTODIAN_APPROVAL_REQUIRED) !=
-      0;
+      disable_reasons.contains(disable_reason::DISABLE_RELOAD);
+  bool custodian_approval_required = disable_reasons.contains(
+      disable_reason::DISABLE_CUSTODIAN_APPROVAL_REQUIRED);
   info->disable_reasons.custodian_approval_required =
       custodian_approval_required;
   bool permissions_increase =
-      (disable_reasons & disable_reason::DISABLE_PERMISSIONS_INCREASE) != 0;
+      disable_reasons.contains(disable_reason::DISABLE_PERMISSIONS_INCREASE);
   info->disable_reasons.parent_disabled_permissions =
       supervised_user::AreExtensionsPermissionsEnabled(profile) &&
       !supervised_user::
@@ -636,12 +665,13 @@ void ExtensionInfoGenerator::CreateExtensionInfoHelper(
       !profile->GetPrefs()->GetBoolean(
           prefs::kSupervisedUserExtensionsMayRequestPermissions) &&
       (custodian_approval_required || permissions_increase);
-  info->disable_reasons.published_in_store_required =
-      (disable_reasons &
-       disable_reason::DISABLE_PUBLISHED_IN_STORE_REQUIRED_BY_POLICY) != 0;
-  info->disable_reasons.unsupported_manifest_version =
-      (disable_reasons &
-       disable_reason::DISABLE_UNSUPPORTED_MANIFEST_VERSION) != 0;
+  info->disable_reasons.published_in_store_required = disable_reasons.contains(
+      disable_reason::DISABLE_PUBLISHED_IN_STORE_REQUIRED_BY_POLICY);
+  info->disable_reasons.unsupported_manifest_version = disable_reasons.contains(
+      disable_reason::DISABLE_UNSUPPORTED_MANIFEST_VERSION);
+  info->disable_reasons.unsupported_developer_extension =
+      disable_reasons.contains(
+          disable_reason::DISABLE_UNSUPPORTED_DEVELOPER_EXTENSION);
 
   // Error collection.
   bool error_console_enabled =
@@ -828,6 +858,14 @@ void ExtensionInfoGenerator::CreateExtensionInfoHelper(
             .spec();
   }
 
+  // Whether the extension can be uploaded as an account extension.
+  // `CanUploadAsAccountExtension` should already check for the feature flag
+  // somewhere but add another guard for it here just in case.
+  info->can_upload_as_account_extension =
+      sync_util::IsExtensionsExplicitSigninEnabled() &&
+      AccountExtensionTracker::Get(profile)->CanUploadAsAccountExtension(
+          extension);
+
   // The icon.
   ExtensionResource icon = IconsInfo::GetIconResource(
       &extension, extension_misc::EXTENSION_ICON_MEDIUM,
@@ -877,7 +915,7 @@ void ExtensionInfoGenerator::OnImageLoaded(
     ExtensionInfoList list = std::move(list_);
     list_.clear();
     std::move(callback_).Run(std::move(list));
-    // WARNING: |this| is possibly deleted after this line!
+    // WARNING: `this` is possibly deleted after this line!
   }
 }
 

@@ -48,6 +48,7 @@
 #include "content/public/browser/browser_main_parts.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -62,10 +63,10 @@ namespace policy {
 namespace {
 
 constexpr char kUnaffiliatedUser[] = "user@gmail.com";
-constexpr char kUnaffiliatedGaiaID[] = "11111";
+constexpr GaiaId::Literal kUnaffiliatedGaiaID("11111");
 
 constexpr char kAffiliatedUser[] = "user@example.com";
-constexpr char kAffiliatedGaiaID[] = "22222";
+constexpr GaiaId::Literal kAffiliatedGaiaID("22222");
 
 // Use a number larger than int32 to catch truncation errors.
 const int64_t kInitialCommandId = (1LL << 35) + 1;
@@ -260,8 +261,8 @@ class DeviceCommandFetchSupportPacketBrowserTestParameterized
     ash::FakeChromeUserManager* fake_user_manager =
         static_cast<ash::FakeChromeUserManager*>(
             user_manager::UserManager::Get());
-    fake_user_manager->SetUserAffiliationForTesting(user.account_id,
-                                                    is_affiliated);
+    fake_user_manager->SetUserPolicyStatus(user.account_id, /*is_managed=*/true,
+                                           is_affiliated);
   }
 
   void LaunchMGS() {

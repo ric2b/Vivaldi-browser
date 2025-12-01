@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "remoting/host/setup/start_host_main.h"
 
 #include <stddef.h>
@@ -22,7 +27,7 @@
 #include "build/build_config.h"
 #include "mojo/core/embedder/embedder.h"
 #include "net/url_request/url_request_context_getter.h"
-#include "remoting/base/breakpad.h"
+#include "remoting/base/crash/crash_reporting.h"
 #include "remoting/base/logging.h"
 #include "remoting/base/url_request_context_getter.h"
 #include "remoting/host/setup/cloud_host_starter.h"
@@ -440,13 +445,13 @@ int StartHostMain(int argc, char** argv) {
     return 1;
   }
 
-#if defined(REMOTING_ENABLE_BREAKPAD)
+#if defined(REMOTING_ENABLE_CRASH_REPORTING)
   // We don't have a config file yet so we can't use IsUsageStatsAllowed(),
   // instead we can just check the command line parameter.
   if (params.enable_crash_reporting) {
     InitializeCrashReporting();
   }
-#endif  // defined(REMOTING_ENABLE_BREAKPAD)
+#endif  // defined(REMOTING_ENABLE_CRASH_REPORTING)
 
   // Provide SingleThreadTaskExecutor and threads for the
   // URLRequestContextGetter.

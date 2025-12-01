@@ -14,7 +14,7 @@
 #include "base/test/task_environment.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/autofill_profile_test_api.h"
-#include "components/autofill/core/browser/test_autofill_clock.h"
+#include "components/autofill/core/browser/test_utils/test_autofill_clock.h"
 #include "components/autofill/core/browser/webdata/addresses/address_autofill_table.h"
 #include "components/autofill/core/browser/webdata/addresses/contact_info_sync_util.h"
 #include "components/autofill/core/browser/webdata/autofill_sync_metadata_table.h"
@@ -208,7 +208,8 @@ TEST_F(ContactInfoSyncBridgeTest, ApplyIncrementalSyncChanges) {
 
   // Delete the existing local profile and add + update `remote`.
   syncer::EntityChangeList entity_change_list;
-  entity_change_list.push_back(syncer::EntityChange::CreateDelete(kGUID1));
+  entity_change_list.push_back(
+      syncer::EntityChange::CreateDelete(kGUID1, syncer::EntityData()));
   entity_change_list.push_back(
       syncer::EntityChange::CreateAdd(kGUID2, ProfileToEntity(remote)));
   remote.SetRawInfo(EMAIL_ADDRESS, u"test@example.com");
@@ -250,7 +251,8 @@ TEST_F(ContactInfoSyncBridgeTest,
       bridge().CreateMetadataChangeList(), std::move(entity_change_list)));
   std::vector<AutofillProfile> profiles = GetAllDataFromTable();
   ASSERT_EQ(profiles.size(), 1u);
-  EXPECT_EQ(profiles[0].modification_date(), profile.modification_date());
+  EXPECT_EQ(profiles[0].usage_history().modification_date(),
+            profile.usage_history().modification_date());
 }
 
 // Tests that `ApplyIncrementalSyncChanges()` ensures that at most one H/W

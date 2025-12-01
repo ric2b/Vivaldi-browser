@@ -85,6 +85,7 @@ export class EditFileSystemView extends UI.Widget.VBox implements UI.ListWidget.
   private excludedFolderEditor?: UI.ListWidget.Editor<string>;
   constructor(fileSystemPath: Platform.DevToolsPath.UrlString) {
     super(true);
+    this.registerRequiredCSS(editFileSystemViewStyles);
 
     this.fileSystemPath = fileSystemPath;
 
@@ -96,7 +97,7 @@ export class EditFileSystemView extends UI.Widget.VBox implements UI.ListWidget.
     ];
 
     const excludedFoldersHeader = this.contentElement.createChild('div', 'excluded-folder-header');
-    excludedFoldersHeader.createChild('span', 'url-header').textContent = i18nString(UIStrings.url);
+    excludedFoldersHeader.createChild('span').textContent = i18nString(UIStrings.url);
     excludedFoldersHeader.createChild('span', 'excluded-folder-url').textContent = fileSystemPath;
 
     const excludeSubFoldersText = this.contentElement.createChild('span', 'exclude-subfolders-text');
@@ -104,6 +105,7 @@ export class EditFileSystemView extends UI.Widget.VBox implements UI.ListWidget.
 
     this.excludedFoldersList = new UI.ListWidget.ListWidget(this);
     this.excludedFoldersList.element.classList.add('file-system-list');
+    this.excludedFoldersList.registerRequiredCSS(editFileSystemViewStyles);
 
     const excludedFoldersPlaceholder = document.createElement('div');
     excludedFoldersPlaceholder.classList.add('file-system-list-empty');
@@ -128,7 +130,7 @@ export class EditFileSystemView extends UI.Widget.VBox implements UI.ListWidget.
     return IsolatedFileSystemManager.instance().fileSystem(this.fileSystemPath) as PlatformFileSystem;
   }
 
-  private update(): void {
+  update(): void {
     if (this.muteUpdate) {
       return;
     }
@@ -219,10 +221,5 @@ export class EditFileSystemView extends UI.Widget.VBox implements UI.ListWidget.
       return '';
     }
     return prefix + (prefix[prefix.length - 1] === '/' ? '' : '/');
-  }
-  override wasShown(): void {
-    super.wasShown();
-    this.excludedFoldersList.registerCSSFiles([editFileSystemViewStyles]);
-    this.registerCSSFiles([editFileSystemViewStyles]);
   }
 }

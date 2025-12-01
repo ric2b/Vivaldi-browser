@@ -48,7 +48,7 @@ pub struct Track {
 }
 
 impl Track {
-    pub fn check_limits(&self, size_limit: u32, dimension_limit: u32) -> bool {
+    pub(crate) fn check_limits(&self, size_limit: u32, dimension_limit: u32) -> bool {
         check_limits(self.width, self.height, size_limit, dimension_limit)
     }
 
@@ -59,18 +59,18 @@ impl Track {
             false
         }
     }
-    pub fn is_aux(&self, primary_track_id: u32) -> bool {
+    pub(crate) fn is_aux(&self, primary_track_id: u32) -> bool {
         self.has_av1_samples() && self.aux_for_id == Some(primary_track_id)
     }
-    pub fn is_color(&self) -> bool {
+    pub(crate) fn is_color(&self) -> bool {
         self.has_av1_samples() && self.aux_for_id.is_none()
     }
 
-    pub fn get_properties(&self) -> Option<&Vec<ItemProperty>> {
+    pub(crate) fn get_properties(&self) -> Option<&Vec<ItemProperty>> {
         self.sample_table.as_ref()?.get_properties()
     }
 
-    pub fn repetition_count(&self) -> AvifResult<RepetitionCount> {
+    pub(crate) fn repetition_count(&self) -> AvifResult<RepetitionCount> {
         if !self.elst_seen {
             return Ok(RepetitionCount::Unknown);
         }
@@ -104,8 +104,8 @@ impl Track {
         Ok(RepetitionCount::Finite(0))
     }
 
-    pub fn image_timing(&self, image_index: u32) -> AvifResult<ImageTiming> {
-        let sample_table = self.sample_table.as_ref().ok_or(AvifError::NoContent)?;
+    pub(crate) fn image_timing(&self, image_index: u32) -> AvifResult<ImageTiming> {
+        let sample_table = self.sample_table.unwrap_ref();
         let mut image_timing = ImageTiming {
             timescale: self.media_timescale as u64,
             pts_in_timescales: 0,
@@ -152,6 +152,17 @@ pub struct SampleDescription {
     pub properties: Vec<ItemProperty>,
 }
 
+impl SampleDescription {
+    pub(crate) fn is_supported_format(&self) -> bool {
+        [
+            "av01",
+            #[cfg(feature = "heic")]
+            "hvc1",
+        ]
+        .contains(&self.format.as_str())
+    }
+}
+
 #[derive(Debug)]
 pub enum SampleSize {
     FixedSize(u32),
@@ -175,12 +186,14 @@ pub struct SampleTable {
 }
 
 impl SampleTable {
-    pub fn has_av1_sample(&self) -> bool {
-        self.sample_descriptions.iter().any(|x| x.format == "av01")
+    pub(crate) fn has_av1_sample(&self) -> bool {
+        self.sample_descriptions
+            .iter()
+            .any(|x| x.is_supported_format())
     }
 
     // returns the number of samples in the chunk.
-    pub fn get_sample_count_of_chunk(&self, chunk_index: u32) -> u32 {
+    pub(crate) fn get_sample_count_of_chunk(&self, chunk_index: u32) -> u32 {
         for entry in self.sample_to_chunk.iter().rev() {
             if entry.first_chunk <= chunk_index + 1 {
                 return entry.samples_per_chunk;
@@ -189,17 +202,17 @@ impl SampleTable {
         0
     }
 
-    pub fn get_properties(&self) -> Option<&Vec<ItemProperty>> {
+    pub(crate) fn get_properties(&self) -> Option<&Vec<ItemProperty>> {
         Some(
             &self
                 .sample_descriptions
                 .iter()
-                .find(|x| x.format == "av01")?
+                .find(|x| x.is_supported_format())?
                 .properties,
         )
     }
 
-    pub fn sample_size(&self, index: usize) -> AvifResult<usize> {
+    pub(crate) fn sample_size(&self, index: usize) -> AvifResult<usize> {
         usize_from_u32(match &self.sample_size {
             SampleSize::FixedSize(size) => *size,
             SampleSize::Sizes(sizes) => {
@@ -213,7 +226,7 @@ impl SampleTable {
         })
     }
 
-    pub fn image_delta(&self, index: usize) -> AvifResult<u32> {
+    pub(crate) fn image_delta(&self, index: usize) -> AvifResult<u32> {
         let mut max_index: u32 = 0;
         for (i, time_to_sample) in self.time_to_sample.iter().enumerate() {
             checked_incr!(max_index, time_to_sample.sample_count);

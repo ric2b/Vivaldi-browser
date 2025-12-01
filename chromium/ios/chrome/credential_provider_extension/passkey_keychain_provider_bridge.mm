@@ -5,6 +5,7 @@
 #import "ios/chrome/credential_provider_extension/passkey_keychain_provider_bridge.h"
 
 #import "base/functional/callback.h"
+#import "components/sync/protocol/webauthn_credential_specifics.pb.h"
 #import "ios/chrome/credential_provider_extension/passkey_util.h"
 
 typedef void (^CheckEnrolledCompletionBlock)(BOOL is_enrolled, NSError* error);
@@ -30,9 +31,12 @@ NSArray<NSData*>* GetSecurityDomainSecret(
 bool ContainsValidKey(const PasskeyKeychainProvider::SharedKeyList keys,
                       id<Credential> credential) {
   NSArray<NSData*>* security_domain_secrets = GetSecurityDomainSecret(keys);
-  std::string private_key =
-      DecryptPrivateKey(credential, security_domain_secrets);
-  return !private_key.empty();
+
+  // DecryptCredentialSecrets will succeed if and only if there's at least one
+  // valid key.
+  std::optional<sync_pb::WebauthnCredentialSpecifics_Encrypted> encrypted =
+      DecryptCredentialSecrets(credential, security_domain_secrets);
+  return encrypted.has_value();
 }
 
 }  // namespace
@@ -292,16 +296,17 @@ bool ContainsValidKey(const PasskeyKeychainProvider::SharedKeyList keys,
                                   purpose
                    completion:
                        (FetchSecurityDomainSecretCompletionBlock)completion {
+  __weak __typeof(self) weakSelf = self;
   _passkeyKeychainProvider->Reauthenticate(
       gaia, _navigationController, _navigationItemTitleView, purpose,
       base::BindOnce(^(const PasskeyKeychainProvider::SharedKeyList& key_list) {
-        [self onKeysFetchedForGaia:gaia
-                        credential:credential
-                canMarkKeysAsStale:canMarkKeysAsStale
-                           purpose:purpose
-                        completion:completion
-                           keyList:key_list
-                 canReauthenticate:NO];
+        [weakSelf onKeysFetchedForGaia:gaia
+                            credential:credential
+                    canMarkKeysAsStale:canMarkKeysAsStale
+                               purpose:purpose
+                            completion:completion
+                               keyList:key_list
+                     canReauthenticate:NO];
       }));
 }
 

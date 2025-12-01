@@ -1,6 +1,7 @@
 *AddressBarPositionEphemeralModuleTest.*
 *AndroidHomeModuleRankerTest.*
 *AutofillPasswordsEphemeralModuleTest.*
+*AuxiliarySearchPromoTest.*
 *BackgroundRecorderTest.*
 *CachedResultProviderTest.*
 *CachedResultWriterTest.*
@@ -27,6 +28,7 @@
 *FeatureAggregatorImplTest.*
 *FeatureListQueryProcessorNoDbCacheTest.*
 *FeatureListQueryProcessorTest.*
+*FedCmUserModelTest.*
 *FeedUserModelTest.*
 *FieldTrialRecorderTest.*
 *FrequentFeatureUserModelTest.*
@@ -52,6 +54,8 @@
 *PowerUserModelTest.*
 *PrefsMigratorTest.*
 *PriceTrackingNotificationPromoTest.*
+*QuickDeletePromoTest.*
+*RankFetcherHelperTest.*
 *RequestDispatcherTest.*
 *RequestHandlerTest.*
 *ResultMigrationUtilsTest.*
@@ -84,6 +88,8 @@
 *SqlFeatureProcessorTest.*
 *StatsTest.*
 *SyncDeviceInfoObserverTest.*
+*TabGroupPromoTest.*
+*TabGroupSyncPromoTest.*
 *TabRankDispatcherTest.*
 *TabResumptionRankerTest.*
 *TabSessionSourceTest.*

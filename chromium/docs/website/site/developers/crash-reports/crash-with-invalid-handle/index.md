@@ -182,7 +182,7 @@ reliability of the verifier will go up.
             raw handles around and instead pass a ScopedHandle (or something
             that encapsulates the handle using a ScopedHandle internally).
             There's plenty of code to choose from!. See bugs
-            [322664](http://crbug.com/322664), [416721](http://crbug.com/416721)
-            or [417532](http://crbug.com/417532) for some examples.
+            [322664](https://crbug.com/322664), [416721](https://crbug.com/416721)
+            or [417532](https://crbug.com/417532) for some examples.
 *   Search the crash server for stacks containing OnHandleBeingClosed to
             get a summary of issues currently detected as problematic.

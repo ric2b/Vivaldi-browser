@@ -32,9 +32,10 @@ content::BrowserContext* RequestFilterManagerFactory::GetBrowserContextToUse(
   return GetBrowserContextRedirectedInIncognito(context);
 }
 
-KeyedService* RequestFilterManagerFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+RequestFilterManagerFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
-  return new RequestFilterManager(context);
+  return std::make_unique<RequestFilterManager>(context);
 }
 
 }  // namespace vivaldi

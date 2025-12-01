@@ -29,6 +29,7 @@ namespace signin {
 class IdentityManager;
 }
 
+struct AccountInfo;
 class PrefService;
 class PrefRegistrySimple;
 class OAuth2AccessTokenConsumer;
@@ -133,7 +134,8 @@ class ProfileOAuth2TokenService : public OAuth2AccessTokenManager::Delegate,
   // Used for getting tokens to send to Gaia Multilogin endpoint.
   void StartRequestForMultilogin(
       signin::OAuthMultiloginTokenRequest& request,
-      const std::string& token_binding_challenge = std::string());
+      const std::string& token_binding_challenge = std::string(),
+      const std::string& ephemeral_public_key = std::string());
 
   // This method does the same as |StartRequest| except it uses |client_id| and
   // |client_secret| to identify OAuth client app instead of using
@@ -240,17 +242,33 @@ class ProfileOAuth2TokenService : public OAuth2AccessTokenManager::Delegate,
   }
 
   // Lists account IDs of all accounts with a refresh token maintained by this
-  // instance.
+  // instance, i.e. the accounts available in this profile.
   // Note: For each account returned by |GetAccounts|, |RefreshTokenIsAvailable|
   // will return true.
   // Note: If tokens have not been fully loaded yet, an empty list is returned.
+  // TODO(crbug.com/368409110): Rename to GetAccountsInProfile(), to distinguish
+  // from GetAccountsOnDevice().
   std::vector<CoreAccountId> GetAccounts() const;
+
+#if BUILDFLAG(IS_IOS)
+  // Returns a list of accounts that exist on the device, including those that
+  // are assigned to different profiles, in the order provided by the system
+  // (usually the order in which the accounts were added).
+  std::vector<AccountInfo> GetAccountsOnDevice() const;
+#endif  // BUILDFLAG(IS_IOS)
 
   // Returns true if a refresh token exists for |account_id|. If false, calls to
   // |StartRequest| will result in a Consumer::OnGetTokenFailure callback.
   // Note: This will return |true| if and only if |account_id| is contained in
   // the list returned by |GetAccounts|.
   bool RefreshTokenIsAvailable(const CoreAccountId& account_id) const;
+
+#if BUILDFLAG(IS_IOS)
+  // Returns true if a refresh token exists for |account_id|.
+  // Note: This will return |true| if and only if |account_id| is contained in
+  // the list returned by |GetAccountsOnDevice|.
+  bool RefreshTokenIsAvailableOnDevice(const CoreAccountId& account_id) const;
+#endif  // BUILDFLAG(IS_IOS)
 
   // Returns true if a refresh token exists for |account_id| and it is in a
   // persistent error state.

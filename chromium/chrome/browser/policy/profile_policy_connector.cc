@@ -4,6 +4,7 @@
 
 #include "chrome/browser/policy/profile_policy_connector.h"
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -14,7 +15,6 @@
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/ranges/algorithm.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
@@ -55,12 +55,14 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/constants/ash_features.h"
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
 #include "chrome/browser/ash/policy/core/device_cloud_policy_manager_ash.h"
 #include "chrome/browser/ash/policy/core/device_local_account.h"
 #include "chrome/browser/ash/policy/core/device_local_account_policy_provider.h"
 #include "chrome/browser/ash/policy/login/login_profile_policy_provider.h"
 #include "chrome/browser/browser_process_platform_part.h"
+#include "chromeos/ash/components/demo_mode/utils/demo_session_utils.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_type.h"
@@ -291,7 +293,7 @@ class LocalTestInfoBarVisibilityManager :
     infobars::ContentInfoBarManager::CreateForWebContents(web_contents);
     auto* infobar_manager =
         infobars::ContentInfoBarManager::FromWebContents(web_contents);
-    const auto it = base::ranges::find(
+    const auto it = std::ranges::find(
         infobar_manager->infobars(),
         infobars::InfoBarDelegate::LOCAL_TEST_POLICIES_APPLIED_INFOBAR,
         &infobars::InfoBar::GetIdentifier);
@@ -404,10 +406,18 @@ void ProfilePolicyConnector::Init(
     is_user_new_ =
         user == manager->GetActiveUser() && manager->IsCurrentUserNew();
     // Note that |DeviceLocalAccountPolicyProvider::Create| returns nullptr when
-    // the user supplied is not a device-local account user.
+    // the user supplied is not a device-local account user or not in demo mode.
+    std::string user_id = user->GetAccountId().GetUserEmail();
+    if (ash::demo_mode::IsDemoAccountSignInEnabled()) {
+      // TODO(crbug.com/355043200): Figure out if it is safe to do so.
+      std::vector<DeviceLocalAccount> device_local_accounts =
+          GetDeviceLocalAccounts(ash::CrosSettings::Get());
+      CHECK_EQ(device_local_accounts.size(), 1u);
+      user_id = device_local_accounts[0].user_id;
+    }
+
     special_user_policy_provider_ = DeviceLocalAccountPolicyProvider::Create(
-        user->GetAccountId().GetUserEmail(),
-        browser_policy_connector->GetDeviceLocalAccountPolicyService(),
+        user_id, browser_policy_connector->GetDeviceLocalAccountPolicyService(),
         force_immediate_load);
   }
   if (special_user_policy_provider_) {

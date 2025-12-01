@@ -44,6 +44,7 @@
 #include "components/sync/base/data_type.h"
 #include "components/sync/base/features.h"
 #include "components/sync/base/time.h"
+#include "components/sync/base/user_selectable_type.h"
 #include "components/sync/engine/loopback_server/loopback_server_entity.h"
 #include "components/sync/engine/nigori/cross_user_sharing_public_private_key_pair.h"
 #include "components/sync/engine/nigori/key_derivation_params.h"
@@ -51,6 +52,8 @@
 #include "components/sync/nigori/cross_user_sharing_keys.h"
 #include "components/sync/nigori/cryptographer_impl.h"
 #include "components/sync/protocol/nigori_local_data.pb.h"
+#include "components/sync/service/sync_service.h"
+#include "components/sync/service/sync_user_settings.h"
 #include "components/sync/service/trusted_vault_synthetic_field_trial.h"
 #include "components/sync/test/fake_server_nigori_helper.h"
 #include "components/sync/test/nigori_test_utils.h"
@@ -67,6 +70,7 @@
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_launcher.h"
 #include "crypto/ec_private_key.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "google_apis/gaia/gaia_switches.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/base/features.h"
@@ -79,7 +83,6 @@
 #include "ash/constants/ash_switches.h"
 #include "chrome/browser/ash/sync/sync_error_notifier.h"
 #include "chrome/browser/ash/sync/sync_error_notifier_factory.h"
-#include "chromeos/ash/components/standalone_browser/feature_refs.h"
 #include "components/trusted_vault/features.h"
 #include "ui/views/test/widget_test.h"
 #include "ui/views/widget/any_widget_observer.h"
@@ -139,7 +142,7 @@ MATCHER_P4(StatusLabelsMatch,
   return true;
 }
 
-std::string GetDefaultUserGaiaID() {
+GaiaId GetDefaultUserGaiaID() {
   return signin::GetTestGaiaIdForEmail(SyncTest::kDefaultUserEmail);
 }
 
@@ -397,8 +400,8 @@ class SingleClientNigoriCrossUserSharingPublicPrivateKeyPairSyncTest
     // TODO(crbug.com/41483767): consider waiting for Cryptographer update
     // rather than relying on bookmarks.
     GetFakeServer()->InjectEntity(bookmarks_helper::CreateBookmarkServerEntity(
-        "title", GURL("http://abc.com")));
-    return bookmarks_helper::BookmarksTitleChecker(0, "title", 1).Wait();
+        u"title", GURL("http://abc.com")));
+    return bookmarks_helper::BookmarksTitleChecker(0, u"title", 1).Wait();
   }
 };
 
@@ -514,7 +517,7 @@ IN_PROC_BROWSER_TEST_F(
   ASSERT_FALSE(
       GetSyncService(0)->GetUserSettings()->GetAllEncryptedDataTypes().Has(
           syncer::DataType::BOOKMARKS));
-  const std::string kTitle = "Bookmark title";
+  const std::u16string kTitle = u"Bookmark title";
   const GURL kUrl = GURL("https://g.com");
   std::unique_ptr<syncer::LoopbackServerEntity> bookmark =
       bookmarks_helper::CreateBookmarkServerEntity(kTitle, kUrl);
@@ -1207,7 +1210,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientNigoriWithWebApiTest,
   ASSERT_THAT(GetSyncStatusLabels(GetProfile(0)),
               StatusLabelsMatch(
                   SyncStatusMessageType::kPasswordsOnlySyncError,
-                  IDS_SETTINGS_EMPTY_STRING, IDS_SYNC_STATUS_NEEDS_KEYS_BUTTON,
+                  IDS_SYNC_EMPTY_STRING, IDS_SYNC_STATUS_NEEDS_KEYS_BUTTON,
                   SyncStatusActionType::kRetrieveTrustedVaultKeys));
 
   // There needs to be an existing tab for the second tab (the retrieval flow)
@@ -1232,9 +1235,9 @@ IN_PROC_BROWSER_TEST_F(SingleClientNigoriWithWebApiTest,
                    ->GetUserSettings()
                    ->IsTrustedVaultKeyRequiredForPreferredDataTypes());
   EXPECT_THAT(GetSyncStatusLabels(GetProfile(0)),
-              StatusLabelsMatch(
-                  SyncStatusMessageType::kSynced, IDS_SYNC_ACCOUNT_SYNCING,
-                  IDS_SETTINGS_EMPTY_STRING, SyncStatusActionType::kNoAction));
+              StatusLabelsMatch(SyncStatusMessageType::kSynced,
+                                IDS_SYNC_ACCOUNT_SYNCING, IDS_SYNC_EMPTY_STRING,
+                                SyncStatusActionType::kNoAction));
 
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
   // Verify the profile-menu error string is empty.
@@ -1519,9 +1522,9 @@ IN_PROC_BROWSER_TEST_F(SingleClientNigoriWithWebApiTest,
                    ->IsTrustedVaultRecoverabilityDegraded());
   EXPECT_TRUE(GetSyncService(0)->GetActiveDataTypes().Has(syncer::PASSWORDS));
   EXPECT_THAT(GetSyncStatusLabels(GetProfile(0)),
-              StatusLabelsMatch(
-                  SyncStatusMessageType::kSynced, IDS_SYNC_ACCOUNT_SYNCING,
-                  IDS_SETTINGS_EMPTY_STRING, SyncStatusActionType::kNoAction));
+              StatusLabelsMatch(SyncStatusMessageType::kSynced,
+                                IDS_SYNC_ACCOUNT_SYNCING, IDS_SYNC_EMPTY_STRING,
+                                SyncStatusActionType::kNoAction));
 
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
   // Verify the profile-menu error string is empty.
@@ -1868,9 +1871,9 @@ IN_PROC_BROWSER_TEST_F(SingleClientNigoriWithWebApiTest,
 
   // No messages expected in settings.
   EXPECT_THAT(GetSyncStatusLabels(GetProfile(0)),
-              StatusLabelsMatch(
-                  SyncStatusMessageType::kSynced, IDS_SYNC_ACCOUNT_SYNCING,
-                  IDS_SETTINGS_EMPTY_STRING, SyncStatusActionType::kNoAction));
+              StatusLabelsMatch(SyncStatusMessageType::kSynced,
+                                IDS_SYNC_ACCOUNT_SYNCING, IDS_SYNC_EMPTY_STRING,
+                                SyncStatusActionType::kNoAction));
 
   // Mimic opening a web page where the user can interact with the degraded
   // recoverability flow. Before that, there needs to be an existing tab for the
@@ -2114,7 +2117,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientNigoriWithWebApiTest,
   EXPECT_FALSE(GetSecurityDomainsServer()->ReceivedInvalidRequest());
 
   histogram_tester.ExpectUniqueSample(
-      "Sync.TrustedVaultDownloadKeysStatus",
+      "TrustedVault.DownloadKeysStatus.ChromeSync",
       /*sample=*/trusted_vault::TrustedVaultDownloadKeysStatus::kSuccess,
       /*expected_bucket_count=*/1);
   histogram_tester.ExpectUniqueSample(
@@ -2292,8 +2295,8 @@ IN_PROC_BROWSER_TEST_P(SingleClientNigoriWithWebApiExplicitParamTest,
     // be surfaced yet.
     ASSERT_FALSE(GetAvatarSyncErrorType(GetProfile(0)).has_value());
 
-    password_manager::features_util::OptInToAccountStorage(
-        GetProfile(0)->GetPrefs(), GetSyncService(0));
+    GetSyncService(0)->GetUserSettings()->SetSelectedType(
+        syncer::UserSelectableType::kPasswords, true);
   }
 
   // The error is now shown, because PASSWORDS is trying to sync. The data
@@ -2356,8 +2359,8 @@ IN_PROC_BROWSER_TEST_P(
     // to passwords account storage. So the error shouldn't be surfaced yet.
     ASSERT_FALSE(GetAvatarSyncErrorType(GetProfile(0)).has_value());
 
-    password_manager::features_util::OptInToAccountStorage(
-        GetProfile(0)->GetPrefs(), GetSyncService(0));
+    GetSyncService(0)->GetUserSettings()->SetSelectedType(
+        syncer::UserSelectableType::kPasswords, true);
   }
 
   ASSERT_TRUE(TrustedVaultRecoverabilityDegradedStateChecker(GetSyncService(0),

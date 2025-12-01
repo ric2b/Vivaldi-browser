@@ -1,10 +1,12 @@
 export const description = `
 createRenderBundleEncoder validation tests.
+
+TODO(#3363): Make this into a MaxLimitTest and increase kMaxColorAttachments.
 `;
 
 import { makeTestGroup } from '../../../../common/framework/test_group.js';
 import { range } from '../../../../common/util/util.js';
-import { kMaxColorAttachmentsToTest } from '../../../capability_info.js';
+import { getDefaultLimits } from '../../../capability_info.js';
 import {
   computeBytesPerSampleFromFormats,
   kAllTextureFormats,
@@ -14,6 +16,10 @@ import {
 } from '../../../format_info.js';
 import { ValidationTest } from '../validation_test.js';
 
+// MAINTENANCE_TODO: This should be changed to kMaxColorAttachmentsToTest
+// when this is made a MaxLimitTest (see above).
+const kMaxColorAttachments = getDefaultLimits('core').maxColorAttachments.default;
+
 export const g = makeTestGroup(ValidationTest);
 
 g.test('attachment_state,limits,maxColorAttachments')
@@ -21,7 +27,7 @@ g.test('attachment_state,limits,maxColorAttachments')
   .params(u =>
     u.beginSubcases().combine(
       'colorFormatCount',
-      range(kMaxColorAttachmentsToTest, i => i + 1)
+      range(kMaxColorAttachments, i => i + 1)
     )
   )
   .fn(t => {
@@ -52,11 +58,12 @@ g.test('attachment_state,limits,maxColorAttachmentBytesPerSample,aligned')
       .beginSubcases()
       .combine(
         'colorFormatCount',
-        range(kMaxColorAttachmentsToTest, i => i + 1)
+        range(kMaxColorAttachments, i => i + 1)
       )
   )
   .beforeAllSubcases(t => {
     t.skipIfTextureFormatNotSupported(t.params.format);
+    t.skipIfColorRenderableNotSupportedForFormat(t.params.format);
   })
   .fn(t => {
     const { format, colorFormatCount } = t.params;
@@ -112,6 +119,9 @@ g.test('attachment_state,limits,maxColorAttachmentBytesPerSample,unaligned')
       },
     ])
   )
+  .beforeAllSubcases(t => {
+    t.skipIfColorRenderableNotSupportedForFormat('r32float');
+  })
   .fn(t => {
     const { formats } = t.params;
 
@@ -162,6 +172,7 @@ g.test('valid_texture_formats')
   .beforeAllSubcases(t => {
     const { format } = t.params;
     t.selectDeviceForTextureFormatOrSkipTestCase(format);
+    t.skipIfColorRenderableNotSupportedForFormat(format);
   })
   .fn(t => {
     const { format, attachment } = t.params;

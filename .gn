@@ -41,6 +41,7 @@ default_args.enable_ipc_fuzzer = false
 default_args.angle_enable_commit_id = false
 default_args.devtools_skip_typecheck = false
 default_args.use_dummy_lastchange = false
+default_args.enable_glic = false
 
 # We don't need the Chrome field trials
 default_args.disable_fieldtrial_testing_config = true
@@ -112,7 +113,7 @@ no_check_targets += []
 #      using glob, and it's possible to mess it up without glob, but globs make
 #      this situation much easier to create. if the build always lists the
 #      files and passes them to a script, it will always be correct.
-exec_script_whitelist += [
+exec_script_allowlist += [
   "//vivaldi/app/BUILD.gn",
   "//vivaldi/gn/config/product.gni",
   "//vivaldi/gn/config/stored_version.gni",

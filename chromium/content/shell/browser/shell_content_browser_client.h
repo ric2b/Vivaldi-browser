@@ -103,14 +103,18 @@ class ShellContentBrowserClient : public ContentBrowserClient {
       std::unique_ptr<ClientCertificateDelegate> delegate) override;
   SpeechRecognitionManagerDelegate* CreateSpeechRecognitionManagerDelegate()
       override;
-  void OverrideWebkitPrefs(WebContents* web_contents,
-                           blink::web_pref::WebPreferences* prefs) override;
+  void OverrideWebPreferences(WebContents* web_contents,
+                              SiteInstance& main_frame_site,
+                              blink::web_pref::WebPreferences* prefs) override;
   std::unique_ptr<content::DevToolsManagerDelegate>
   CreateDevToolsManagerDelegate() override;
   void ExposeInterfacesToRenderer(
       service_manager::BinderRegistry* registry,
       blink::AssociatedInterfaceRegistry* associated_registry,
       RenderProcessHost* render_process_host) override;
+  void ExposeInterfacesToChild(
+      mojo::BinderMapWithContext<content::BrowserChildProcessHost*>* map)
+      override;
   mojo::Remote<::media::mojom::MediaService> RunSecondaryMediaService()
       override;
   void RegisterBrowserInterfaceBindersForFrame(
@@ -131,6 +135,7 @@ class ShellContentBrowserClient : public ContentBrowserClient {
       const GURL& url,
       scoped_refptr<net::HttpResponseHeaders> response_headers,
       bool first_auth_attempt,
+      GuestPageHolder* guest,
       LoginAuthRequiredCallback auth_required_callback) override;
   base::Value::Dict GetNetLogConstants() override;
   base::FilePath GetSandboxedStorageServiceDataDirectory() override;
@@ -220,6 +225,11 @@ class ShellContentBrowserClient : public ContentBrowserClient {
           callback) {
     override_web_preferences_callback_ = std::move(callback);
   }
+
+#if BUILDFLAG(IS_IOS)
+  bool IsJITEnabled();
+  void SetJITEnabled(bool value);
+#endif
 
  protected:
   // Call this if CreateBrowserMainParts() is overridden in a subclass.

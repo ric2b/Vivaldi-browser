@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import type * as Platform from '../../core/platform/platform.js';
+import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
 import * as Bindings from '../../models/bindings/bindings.js';
@@ -16,8 +16,10 @@ import * as TextEditor from '../../ui/components/text_editor/text_editor.js';
 
 import * as Sources from './sources.js';
 
+const {urlString} = Platform.DevToolsPath;
+
 describeWithMockConnection('Inline variable view scope helpers', () => {
-  const URL = 'file:///tmp/example.js' as Platform.DevToolsPath.UrlString;
+  const URL = urlString`file:///tmp/example.js`;
   let target: SDK.Target.Target;
   let backend: MockProtocolBackend;
 
@@ -94,7 +96,7 @@ describeWithMockConnection('Inline variable view scope helpers', () => {
         await Sources.DebuggerPlugin.computeScopeMappings(callFrame, l => toOffsetWithSourceMap(sourceMap, l));
 
     const text = new TextUtils.Text.Text(originalSource);
-    assert.strictEqual(scopeMappings.length, 1);
+    assert.lengthOf(scopeMappings, 1);
     assert.strictEqual(
         scopeMappings[0].scopeStart,
         text.offsetFromPosition(expectedOffsets[0].startLine, expectedOffsets[0].startColumn));
@@ -144,7 +146,7 @@ describeWithMockConnection('Inline variable view scope helpers', () => {
         await Sources.DebuggerPlugin.computeScopeMappings(callFrame, l => toOffsetWithSourceMap(sourceMap, l));
 
     const text = new TextUtils.Text.Text(originalSource);
-    assert.strictEqual(scopeMappings.length, 2);
+    assert.lengthOf(scopeMappings, 2);
     assert.strictEqual(
         scopeMappings[0].scopeStart,
         text.offsetFromPosition(expectedOffsets[0].startLine, expectedOffsets[0].startColumn));
@@ -174,7 +176,7 @@ describeWithMockConnection('Inline variable view scope helpers', () => {
 
     const scopeMappings = await Sources.DebuggerPlugin.computeScopeMappings(callFrame, l => toOffset(source, l));
 
-    assert.strictEqual(scopeMappings.length, 1);
+    assert.lengthOf(scopeMappings, 1);
     assert.strictEqual(scopeMappings[0].scopeStart, expectedOffsets[0].startColumn);
     assert.strictEqual(scopeMappings[0].scopeEnd, expectedOffsets[0].endColumn);
     assert.strictEqual(scopeMappings[0].variableMap.get('a')?.value, 1);
@@ -194,7 +196,7 @@ describeWithMockConnection('Inline variable view scope helpers', () => {
 
     const scopeMappings = await Sources.DebuggerPlugin.computeScopeMappings(callFrame, l => toOffset(source, l));
 
-    assert.strictEqual(scopeMappings.length, 2);
+    assert.lengthOf(scopeMappings, 2);
     assert.strictEqual(scopeMappings[0].scopeStart, expectedOffsets[0].startColumn);
     assert.strictEqual(scopeMappings[0].scopeEnd, expectedOffsets[0].endColumn);
     assert.strictEqual(scopeMappings[0].variableMap.size, 0);
@@ -217,7 +219,7 @@ describeWithMockConnection('Inline variable view scope helpers', () => {
 
     const scopeMappings = await Sources.DebuggerPlugin.computeScopeMappings(callFrame, l => toOffset(source, l));
 
-    assert.strictEqual(scopeMappings.length, 2);
+    assert.lengthOf(scopeMappings, 2);
     assert.strictEqual(scopeMappings[0].scopeStart, expectedOffsets[0].startColumn);
     assert.strictEqual(scopeMappings[0].scopeEnd, expectedOffsets[0].endColumn);
     assert.strictEqual(scopeMappings[0].variableMap.size, 1);

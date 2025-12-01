@@ -1,8 +1,10 @@
 # These are the primary top-level OWNERS for the repo.
+# keep-sorted start
 dpranke@google.com
-ewag@google.com
 gatong@chromium.org
 sshrimp@google.com
+vapier@chromium.org
+# keep-sorted end
 
 # This file is only used by CrOS.
 per-file PRESUBMIT.cfg = file://site/chromium-os/build/OWNERS

@@ -7,14 +7,12 @@
 <translation id="1158211211994409885">Сервер <ph name="HOST_NAME" /> нечакана разарваў злучэнне.</translation>
 <translation id="1161325031994447685">Падлучыцеся да WI-FI яшчэ раз</translation>
 <translation id="1175364870820465910">&amp;Друкаванне...</translation>
-<translation id="132390688737681464">Захоўваць і запаўняць адрасы</translation>
 <translation id="1375198122581997741">Звесткі пра версію</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> не адправіў даных.</translation>
 <translation id="1555191101192706055">На сайце, які вы спрабавалі наведаць, дзейнічаюць зламыснікі. Яны могуць падманам прымусіць вас усталяваць шкоднае праграмнае забеспячэнне, якое перашкаджае прагляду змесціва ў інтэрнэце (напрыклад, змяняе галоўную старонку ці паказвае дадатковую рэкламу на сайтах).</translation>
 <translation id="1559528461873125649">Такога файла або каталога няма</translation>
 <translation id="1640244768702815859">Паспрабуйце <ph name="BEGIN_LINK" /> адкрыць галоўную старонку сайта <ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Пратакол не падтрымліваецца</translation>
-<translation id="1662550410081243962">Захоўваць і запаўняць даныя спосабаў аплаты</translation>
 <translation id="1710259589646384581">Аперацыйная сістэма</translation>
 <translation id="1728677426644403582">Вы праглядаеце код старонкі</translation>
 <translation id="1734878702283171397">Звярніцеся да сістэмнага адміністратара.</translation>
@@ -26,7 +24,6 @@
 <translation id="2178904466768126352">На сайце, які вы спрабавалі наведаць, дзейнічаюць зламыснікі. Яны могуць усталяваць шкоднае праграмнае забеспячэнне, якое выкрадае або выдаляе вашы даныя, напрыклад паролі, фота, паведамленні ці нумары крэдытных картак.</translation>
 <translation id="2187317261103489799">Выяўляць (прадвызначана)</translation>
 <translation id="2224337661447660594">Няма злучэння з інтэрнэтам</translation>
-<translation id="2283340219607151381">Захоўваць і запаўняць адрасы</translation>
 <translation id="2292556288342944218">Доступ у інтэрнэт заблакаваны</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> патрабуе імя карыстальніка і пароль.</translation>
 <translation id="2337852623177822836">Параметр кантралюецца адміністратарам</translation>
@@ -64,7 +61,6 @@
 <translation id="3234666976984236645">Заўседы выяўляць важнае змесціва на гэтым сайце</translation>
 <translation id="3308738399950580893">рэклама</translation>
 <translation id="3384522979010096022">Ваша арганізацыя не дазваляе вам праглядаць гэты сайт</translation>
-<translation id="3387261909427947069">Спосабы аплаты</translation>
 <translation id="3422472998109090673">Старонка <ph name="HOST_NAME" /> недаступная.</translation>
 <translation id="3427092606871434483">Дазваляць (прадвызначана)</translation>
 <translation id="3447661539832366887">Уладальнік гэтай прылады адключыў гульню з дыназаўрам.</translation>
@@ -123,7 +119,6 @@
 <translation id="5386426401304769735">Сярод сертыфікатаў гэтага сайта ёсць сертыфікат, які падпісаны з дапамогай алгарытма SHA1.</translation>
 <translation id="5452270690849572955">Старонка <ph name="HOST_NAME" /> не знойдзеная</translation>
 <translation id="5457113250005438886">Хібны</translation>
-<translation id="5490432419156082418">Адрасы і іншае</translation>
 <translation id="5492298309214877701">У гэтага сайта у сетцы арганізацыі або навучальнай установы такі самы URL, як і ў вэб-сайта ў інтэрнэце.
 …<ph name="LINE_BREAK" />
 …Звярніцеся да сістэмнага адміністратара.</translation>
@@ -168,7 +163,6 @@
 <translation id="7108819624672055576">Дазволена пашырэннем</translation>
 <translation id="7111012039238467737">(Дзейны)</translation>
 <translation id="7113310725918019676">Дазволіць <ph name="BLOCKED_TYPE" /> з <ph name="DOMAIN" /></translation>
-<translation id="7179323680825933600">Захоўваць і запаўняць даныя спосабаў аплаты</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> не адпавядае стандартам бяспекі.</translation>
 <translation id="7219179957768738017">У гэтым злучэнні выкарыстоўваецца <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Паказваць апавяшчэнні</translation>
@@ -204,7 +198,6 @@
 <translation id="8288807391153049143">Паказаць сертыфікат</translation>
 <translation id="8289355894181816810">Звярніцеся да адміністратара сеткі, каб удакладніць інфармацыю.</translation>
 <translation id="8332188693563227489">Доступ да <ph name="HOST_NAME" /> забаронены</translation>
-<translation id="8473863474539038330">Адрасы і іншае</translation>
 <translation id="8498891568109133222">Сервер <ph name="HOST_NAME" /> занадта доўга не адказвае.</translation>
 <translation id="8503813439785031346">Імя карыстальніка</translation>
 <translation id="8703575177326907206">Злучэнне з <ph name="DOMAIN" /> не зашыфравана.</translation>
@@ -225,6 +218,5 @@
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> выкарыстоўвае пратакол, які не падтрымліваецца.</translation>
 <translation id="936602727769022409">Вы можаце страціць доступ да акаўнта Google. Рэкамендуем змяніць пароль. Пасля гэтага спатрэбіцца зноў увайсці ў акаўнт.</translation>
 <translation id="969892804517981540">Афіцыйная зборка</translation>
-<translation id="984275831282074731">Спосабы аплаты</translation>
 <translation id="988159990683914416">Зборка для распрацоўнікаў</translation>
 </translationbundle>

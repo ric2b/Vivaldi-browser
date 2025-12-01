@@ -4,8 +4,6 @@
 
 #include "components/viz/service/frame_sinks/eviction_handler.h"
 
-#include <GLES2/gl2.h>
-
 #include <utility>
 
 #include "base/functional/callback_helpers.h"
@@ -18,6 +16,7 @@
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "ui/gfx/video_types.h"
+#include "ui/gl/gl_bindings.h"
 
 namespace viz {
 
@@ -164,20 +163,16 @@ EvictionHandler::CreateTransferableResourceFromCopyOutputResult(
     auto size = gfx::Size(bitmap.width(), bitmap.height());
     DCHECK_EQ(size, copy_result->size());
 
-    auto [shared_image, mapping] = sii->CreateSharedImage(
+    auto shared_image = sii->CreateSharedImageForSoftwareCompositor(
         {SinglePlaneFormat::kRGBA_8888, size, gfx::ColorSpace(),
-         gpu::SHARED_IMAGE_USAGE_CPU_WRITE,
+         gpu::SHARED_IMAGE_USAGE_CPU_WRITE_ONLY,
          "CopyOutputResultAsSoftwareSharedImage"});
-    if (!shared_image) {
-      return std::nullopt;
-    }
     output_software_shared_image = shared_image;
 
     SkImageInfo info = SkImageInfo::MakeN32Premul(size.width(), size.height());
-    size_t row_bytes = info.minRowBytes();
-    CHECK(mapping.memory());
-    CHECK_GE(mapping.size(), info.computeByteSize(row_bytes));
-    bitmap.readPixels(info, mapping.memory(), row_bytes, 0, 0);
+    auto mapping = shared_image->Map();
+    bitmap.readPixels(info, mapping->GetMemoryForPlane(0).data(),
+                      info.minRowBytes(), 0, 0);
 
     return TransferableResource::MakeSoftwareSharedImage(
         shared_image, shared_image->creation_sync_token(), size,
@@ -251,7 +246,6 @@ void EvictionHandler::SubmitPlaceholderContentForEviction(
         /*premultiplied=*/false, /*top_left=*/gfx::PointF(0.0, 0.0),
         /*bottom_right=*/gfx::PointF(1.0, 1.0),
         /*background=*/SkColors::kBlack,
-        /*flipped=*/false,
         /*nearest=*/false,
         /*secure_output=*/false, gfx::ProtectedVideoType::kClear);
 

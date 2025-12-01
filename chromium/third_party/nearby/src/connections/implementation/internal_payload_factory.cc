@@ -27,6 +27,7 @@
 #include "connections/payload_type.h"
 #include "internal/platform/byte_array.h"
 #include "internal/platform/exception.h"
+#include "internal/platform/expected.h"
 #include "internal/platform/file.h"
 #include "internal/platform/implementation/platform.h"
 #include "internal/platform/input_stream.h"
@@ -40,6 +41,7 @@ namespace connections {
 
 namespace {
 using ::location::nearby::connections::PayloadTransferFrame;
+using ::location::nearby::proto::connections::OperationResultCode;
 
 class BytesInternalPayload : public InternalPayload {
  public:
@@ -74,7 +76,7 @@ class BytesInternalPayload : public InternalPayload {
   }
 
   ExceptionOr<size_t> SkipToOffset(size_t offset) override {
-    NEARBY_LOGS(WARNING) << "Bytes payload does not support offsets";
+    LOG(WARNING) << "Bytes payload does not support offsets";
     return {Exception::kIo};
   }
 
@@ -113,8 +115,8 @@ class OutgoingStreamInternalPayload : public InternalPayload {
     ByteArray scoped_bytes_read = std::move(bytes_read.result());
 
     if (scoped_bytes_read.Empty()) {
-      NEARBY_LOGS(INFO) << "No more data for outgoing payload " << this
-                        << ", closing InputStream.";
+      LOG(INFO) << "No more data for outgoing payload " << this
+                << ", closing InputStream.";
 
       input_stream->Close();
       return {};
@@ -140,9 +142,8 @@ class OutgoingStreamInternalPayload : public InternalPayload {
     if (!real_offset.ok()) {
       return real_offset;
     }
-    NEARBY_LOGS(WARNING) << "Skip offset: " << real_offset.GetResult()
-                         << ", expected offset: " << offset << " for payload "
-                         << this;
+    LOG(WARNING) << "Skip offset: " << real_offset.GetResult()
+                 << ", expected offset: " << offset << " for payload " << this;
     return {Exception::kIo};
   }
 
@@ -170,8 +171,8 @@ class IncomingStreamInternalPayload : public InternalPayload {
 
   Exception AttachNextChunk(const ByteArray& chunk) override {
     if (chunk.Empty()) {
-      NEARBY_LOGS(INFO) << "Received null last chunk for incoming payload "
-                        << this << ", closing OutputStream.";
+      LOG(INFO) << "Received null last chunk for incoming payload " << this
+                << ", closing OutputStream.";
       Close();
       return {Exception::kSuccess};
     }
@@ -180,8 +181,7 @@ class IncomingStreamInternalPayload : public InternalPayload {
   }
 
   ExceptionOr<size_t> SkipToOffset(size_t offset) override {
-    NEARBY_LOGS(WARNING) << "Cannot skip offset for an incoming Payload "
-                         << this;
+    LOG(WARNING) << "Cannot skip offset for an incoming Payload " << this;
     return {Exception::kIo};
   }
 
@@ -232,7 +232,7 @@ class OutgoingFileInternalPayload : public InternalPayload {
   }
 
   ExceptionOr<size_t> SkipToOffset(size_t offset) override {
-    NEARBY_LOGS(INFO) << "SkipToOffset " << offset;
+    LOG(INFO) << "SkipToOffset " << offset;
     InputFile* file = payload_.AsFile();
     if (!file) {
       return {Exception::kIo};
@@ -247,9 +247,9 @@ class OutgoingFileInternalPayload : public InternalPayload {
     if (!real_offset.ok()) {
       return real_offset;
     }
-    NEARBY_LOGS(WARNING) << "Skip offset: " << real_offset.GetResult()
-                         << ", expected offset: " << offset
-                         << " for file payload " << this;
+    LOG(WARNING) << "Skip offset: " << real_offset.GetResult()
+                 << ", expected offset: " << offset << " for file payload "
+                 << this;
     return {Exception::kIo};
   }
 
@@ -292,8 +292,7 @@ class IncomingFileInternalPayload : public InternalPayload {
   }
 
   ExceptionOr<size_t> SkipToOffset(size_t offset) override {
-    NEARBY_LOGS(WARNING) << "Cannot skip offset for an incoming file Payload "
-                         << this;
+    LOG(WARNING) << "Cannot skip offset for an incoming file Payload " << this;
     return {Exception::kIo};
   }
 
@@ -309,23 +308,24 @@ class IncomingFileInternalPayload : public InternalPayload {
 using ::nearby::api::ImplementationPlatform;
 using ::nearby::api::OSName;
 
-std::unique_ptr<InternalPayload> CreateOutgoingInternalPayload(
+ErrorOr<std::unique_ptr<InternalPayload>> CreateOutgoingInternalPayload(
     Payload payload) {
   switch (payload.GetType()) {
     case PayloadType::kBytes:
-      return std::make_unique<BytesInternalPayload>(std::move(payload));
+      return {std::make_unique<BytesInternalPayload>(std::move(payload))};
 
     case PayloadType::kFile: {
-      return std::make_unique<OutgoingFileInternalPayload>(std::move(payload));
+      return {
+          std::make_unique<OutgoingFileInternalPayload>(std::move(payload))};
     }
 
     case PayloadType::kStream:
-      return std::make_unique<OutgoingStreamInternalPayload>(
-          std::move(payload));
+      return {
+          std::make_unique<OutgoingStreamInternalPayload>(std::move(payload))};
 
     default:
       DCHECK(false);  // This should never happen.
-      return {};
+      return {Error(OperationResultCode::DETAIL_UNKNOWN)};
   }
 }
 
@@ -350,26 +350,27 @@ std::string make_path(const std::string& custom_save_path,
   return api::ImplementationPlatform::GetDownloadPath(parent_folder, file_name);
 }
 
-std::unique_ptr<InternalPayload> CreateIncomingInternalPayload(
+ErrorOr<std::unique_ptr<InternalPayload>> CreateIncomingInternalPayload(
     const location::nearby::connections::PayloadTransferFrame& frame,
     const std::string& custom_save_path) {
   if (frame.packet_type() !=
       location::nearby::connections::PayloadTransferFrame::DATA) {
-    return {};
+    return {Error(
+        OperationResultCode::NEARBY_GENERIC_INCOMING_PAYLOAD_NOT_DATA_TYPE)};
   }
 
   const Payload::Id payload_id = frame.payload_header().id();
   switch (frame.payload_header().type()) {
     case PayloadTransferFrame::PayloadHeader::BYTES: {
-      return std::make_unique<BytesInternalPayload>(
-          Payload(payload_id, ByteArray(frame.payload_chunk().body())));
+      return {std::make_unique<BytesInternalPayload>(
+          Payload(payload_id, ByteArray(frame.payload_chunk().body())))};
     }
 
     case PayloadTransferFrame::PayloadHeader::STREAM: {
       auto [input, output] = CreatePipe();
 
-      return std::make_unique<IncomingStreamInternalPayload>(
-          Payload(payload_id, std::move(input)), std::move(output));
+      return {std::make_unique<IncomingStreamInternalPayload>(
+          Payload(payload_id, std::move(input)), std::move(output))};
     }
 
     case PayloadTransferFrame::PayloadHeader::FILE: {
@@ -395,9 +396,9 @@ std::unique_ptr<InternalPayload> CreateIncomingInternalPayload(
         } else {
           // This is an error condition, we don't have any way to generate a
           // file name for the output file.
-          NEARBY_LOGS(ERROR) << "File name not found in incoming file Payload, "
-                                "and the Id wasn't found.";
-          return {};
+          LOG(ERROR) << "File name not found in incoming file Payload, "
+                        "and the Id wasn't found.";
+          return {Error(OperationResultCode::IO_FILE_OPENING_ERROR)};
         }
       }
 
@@ -409,19 +410,29 @@ std::unique_ptr<InternalPayload> CreateIncomingInternalPayload(
       // there will be no input file to open.
       // On Chrome the file path should be empty, so use the payload id.
       if (ImplementationPlatform::GetCurrentOS() == OSName::kChromeOS) {
-        return std::make_unique<IncomingFileInternalPayload>(
+        OutputFile output_file(payload_id);
+        if (!output_file.IsValid()) {
+          LOG(ERROR) << "Output file payload ID is not valid: " << payload_id;
+          return {Error(OperationResultCode::IO_FILE_OPENING_ERROR)};
+        }
+        return {std::make_unique<IncomingFileInternalPayload>(
             Payload(payload_id, InputFile(payload_id, total_size)),
-            OutputFile(payload_id), total_size);
+            std::move(output_file), total_size)};
       } else {
-        return std::make_unique<IncomingFileInternalPayload>(
+        OutputFile output_file(file_path);
+        if (!output_file.IsValid()) {
+          LOG(ERROR) << "Output file payload path is not valid: " << file_path;
+          return {Error(OperationResultCode::IO_FILE_OPENING_ERROR)};
+        }
+        return {std::make_unique<IncomingFileInternalPayload>(
             Payload(payload_id, parent_folder, file_name,
                     InputFile(file_path, total_size)),
-            OutputFile(file_path), total_size);
+            std::move(output_file), total_size)};
       }
     }
     default:
       DCHECK(false);  // This should never happen.
-      return {};
+      return {Error(OperationResultCode::DETAIL_UNKNOWN)};
   }
 }
 

@@ -19,6 +19,7 @@
 #include <stdint.h>
 #include <wrl/client.h>
 
+#include <algorithm>
 #include <iterator>
 #include <optional>
 #include <string>
@@ -34,7 +35,6 @@
 #include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/pickle.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/scoped_hdc.h"
@@ -240,12 +240,12 @@ FormatEtcEnumerator* FormatEtcEnumerator::CloneFromOther(
     const FormatEtcEnumerator* other) {
   FormatEtcEnumerator* e = new FormatEtcEnumerator;
   // Copy FORMATETC data from our source into ourselves.
-  base::ranges::transform(other->contents_, std::back_inserter(e->contents_),
-                          [](const std::unique_ptr<FORMATETC>& format_etc) {
-                            auto clone = std::make_unique<FORMATETC>();
-                            CloneFormatEtc(format_etc.get(), clone.get());
-                            return clone;
-                          });
+  std::ranges::transform(other->contents_, std::back_inserter(e->contents_),
+                         [](const std::unique_ptr<FORMATETC>& format_etc) {
+                           auto clone = std::make_unique<FORMATETC>();
+                           CloneFormatEtc(format_etc.get(), clone.get());
+                           return clone;
+                         });
   // Carry over
   e->cursor_ = other->cursor_;
   return e;
@@ -462,9 +462,9 @@ void OSExchangeDataProviderWin::SetVirtualFileContentsForTesting(
 
     // Add the contents of each file as CFSTR_FILECONTENTS.
     base::span<const uint8_t> data_buffer =
-        base::make_span(reinterpret_cast<const uint8_t*>(
-                            filenames_and_contents[i].second.data()),
-                        filenames_and_contents[i].second.length());
+        base::span(reinterpret_cast<const uint8_t*>(
+                       filenames_and_contents[i].second.data()),
+                   filenames_and_contents[i].second.length());
     SetVirtualFileContentAtIndexForTesting(data_buffer, tymed,  // IN-TEST
                                            static_cast<LONG>(i));
   }
@@ -793,7 +793,7 @@ void OSExchangeDataProviderWin::SetDragImage(
   if (!SUCCEEDED(rv))
     return;
 
-  base::win::ScopedBitmap hbitmap =
+  base::win::ScopedGDIObject<HBITMAP> hbitmap =
       skia::CreateHBitmapFromN32SkBitmap(unpremul_bitmap);
   if (!hbitmap.is_valid())
     return;
@@ -1262,13 +1262,13 @@ STGMEDIUM CreateStorageForFileDescriptor(const base::FilePath& path) {
 
 const ClipboardFormatType& GetRendererTaintFormatType() {
   static base::NoDestructor<ClipboardFormatType> format(
-      ClipboardFormatType::GetType("chromium/x-renderer-taint"));
+      ClipboardFormatType::CustomPlatformType("chromium/x-renderer-taint"));
   return *format;
 }
 
 const ClipboardFormatType& GetFromPrivilegedFormatType() {
   static base::NoDestructor<ClipboardFormatType> format(
-      ClipboardFormatType::GetType("chromium/from-privileged"));
+      ClipboardFormatType::CustomPlatformType("chromium/from-privileged"));
   return *format;
 }
 
@@ -1279,7 +1279,8 @@ const ClipboardFormatType& GetFromPrivilegedFormatType() {
 // https://crbug.com/1274395 for background.
 const ClipboardFormatType& GetIgnoreFileContentsFormatType() {
   static base::NoDestructor<ClipboardFormatType> format(
-      ClipboardFormatType::GetType("chromium/x-ignore-file-contents"));
+      ClipboardFormatType::CustomPlatformType(
+          "chromium/x-ignore-file-contents"));
   return *format;
 }
 

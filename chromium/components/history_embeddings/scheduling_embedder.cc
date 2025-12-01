@@ -5,24 +5,37 @@
 #include "components/history_embeddings/scheduling_embedder.h"
 
 #include <memory>
+#include <numeric>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/check_op.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/time/time.h"
-#include "components/history_embeddings/history_embeddings_features.h"
 #include "components/history_embeddings/vector_database.h"
+#include "components/passage_embeddings/passage_embeddings_types.h"
 
 namespace history_embeddings {
 
-SchedulingEmbedder::Job::Job(PassageKind kind,
+namespace {
+
+using passage_embeddings::PassagePriority;
+
+}  // namespace
+
+SchedulingEmbedder::Job::Job(passage_embeddings::PassagePriority priority,
+                             TaskId task_id,
                              std::vector<std::string> passages,
                              ComputePassagesEmbeddingsCallback callback)
-    : kind(kind),
+    : priority(priority),
+      task_id(task_id),
       passages(std::move(passages)),
-      callback(std::move(callback)) {}
+      callback(std::move(callback)) {
+  // No Job should have an invalid task Id.
+  CHECK_NE(task_id, kInvalidTaskId);
+}
 SchedulingEmbedder::Job::~Job() = default;
 SchedulingEmbedder::Job::Job(Job&&) = default;
 SchedulingEmbedder::Job& SchedulingEmbedder::Job::operator=(Job&&) = default;
@@ -30,71 +43,99 @@ SchedulingEmbedder::Job& SchedulingEmbedder::Job::operator=(Job&&) = default;
 ////////////////////////////////////////////////////////////////////////////////
 
 SchedulingEmbedder::SchedulingEmbedder(std::unique_ptr<Embedder> embedder,
-                                       size_t scheduled_max)
+                                       size_t scheduled_max,
+                                       bool use_performance_scenario)
     : embedder_(std::move(embedder)),
-      scheduled_max_(scheduled_max) {}
+      scheduled_max_(scheduled_max),
+      use_performance_scenario_(use_performance_scenario) {
+#if BUILDFLAG(USE_BLINK)
+  if (use_performance_scenario_) {
+    performance_scenario_observation_.Observe(
+        blink::performance_scenarios::PerformanceScenarioObserverList::
+            GetForScope(blink::performance_scenarios::ScenarioScope::kGlobal)
+                .get());
+  }
+#else
+  // Performance scenario is not supported on some builds (e.g. iOS by default).
+  use_performance_scenario_ = false;
+#endif
+}
 
 SchedulingEmbedder::~SchedulingEmbedder() = default;
 
-void SchedulingEmbedder::ComputePassagesEmbeddings(
-    PassageKind kind,
+SchedulingEmbedder::TaskId SchedulingEmbedder::ComputePassagesEmbeddings(
+    passage_embeddings::PassagePriority priority,
     std::vector<std::string> passages,
     ComputePassagesEmbeddingsCallback callback) {
+  base::UmaHistogramCounts1000("History.Embeddings.ScheduledJobCount",
+                               jobs_.size());
+  base::UmaHistogramCounts1000(
+      "History.Embeddings.ScheduledPassageCount",
+      std::accumulate(
+          jobs_.begin(), jobs_.end(), 0u, [](size_t sum, const Job& job) {
+            return sum + job.passages.size() - job.embeddings.size();
+          }));
+
+  TaskId task_id = next_task_id_;
+  next_task_id_++;
+
   // Zero size jobs are expected, and can be called back immediately
   // instead of waiting in line for nothing.
   if (passages.empty()) {
     std::move(callback).Run(
-        /*passages=*/{}, /*embeddings=*/{}, ComputeEmbeddingsStatus::SUCCESS);
-    return;
+        /*passages=*/{}, /*embeddings=*/{}, task_id,
+        passage_embeddings::ComputeEmbeddingsStatus::kSuccess);
+    return task_id;
   }
 
-  // Only start work if none is in progress. If work is already begun
-  // then it will continue later when embeddings are returned.
-  bool submit = jobs_.empty();
+  jobs_.emplace_back(priority, task_id, std::move(passages),
+                     std::move(callback));
 
-  jobs_.emplace_back(kind, std::move(passages), std::move(callback));
+  SubmitWorkToEmbedder();
 
-  if (submit) {
-    SubmitWorkToEmbedder();
-  }
+  return task_id;
 }
 
 void SchedulingEmbedder::SubmitWorkToEmbedder() {
   if (!embedder_ready_) {
     // Underlying embedder not ready yet. Wait for it.
+    VLOG(5) << "SubmitWorkToEmbedder: embedder not ready";
+    return;
+  }
+
+  if (work_submitted_) {
+    // Waiting for work in progress to complete.
+    VLOG(5) << "SubmitWorkToEmbedder: work already in progress";
     return;
   }
 
   if (jobs_.empty()) {
     // No jobs to start.
+    VLOG(5) << "SubmitWorkToEmbedder: no jobs";
+    return;
+  }
+
+  if (use_performance_scenario_ && !IsPerformanceScenarioReady()) {
+    // Waiting for a suitable performance scenario.
+    VLOG(5) << "SubmitWorkToEmbedder: unsuitable scenario";
     return;
   }
 
   // Put higher priority jobs at the front. This may suspend partially
   // completed jobs of lower priority by pushing them toward the back.
-  std::stable_sort(jobs_.begin(), jobs_.end(),
-                   [](const Job& a, const Job& b) { return a.kind < b.kind; });
-
-  // When submitting a query, only the latest is kept, and old waiting queries
-  // can be removed. They will be contiguous at the front due to above sort.
-  if (jobs_.front().kind == PassageKind::QUERY) {
-    while (jobs_.size() > 1 && jobs_.at(1).kind == PassageKind::QUERY) {
-      VLOG(2) << "Dropped pending query '" << jobs_.front().passages[0]
-              << "'. Next query: '" << jobs_.at(1).passages[0] << "'";
-      std::move(jobs_.front().callback)
-          .Run({}, {}, ComputeEmbeddingsStatus::SKIPPED);
-      jobs_.pop_front();
-    }
-  }
+  std::stable_sort(jobs_.begin(), jobs_.end(), [](const Job& a, const Job& b) {
+    return a.priority < b.priority;
+  });
 
   // Submit a batch of passages taken from jobs near the front of the queue.
-  // Only submit one kind of passage, regardless of count.
-  PassageKind kind = jobs_.front().kind;
+  // Only submit one priority type of passage, regardless of count.
+  PassagePriority priority = jobs_.front().priority;
   std::vector<std::string> passages;
   size_t job_index = 0;
   while (passages.size() < scheduled_max_ && job_index < jobs_.size() &&
-         jobs_.at(job_index).kind == kind) {
-    const Job& job = jobs_.at(job_index);
+         jobs_.at(job_index).priority == priority) {
+    Job& job = jobs_.at(job_index);
+    job.in_progress = true;
     size_t accept = std::min(scheduled_max_ - passages.size(),
                              job.passages.size() - job.embeddings.size());
     VLOG(3) << "Batching range [" << job.embeddings.size() << ','
@@ -106,13 +147,31 @@ void SchedulingEmbedder::SubmitWorkToEmbedder() {
     }
     job_index++;
   }
-  if (kEraseNonAsciiCharacters.Get()) {
-    EraseNonAsciiCharacters(passages);
-  }
+
+  work_submitted_ = true;
   embedder_->ComputePassagesEmbeddings(
-      kind, std::move(passages),
+      priority, std::move(passages),
       base::BindOnce(&SchedulingEmbedder::OnEmbeddingsComputed,
                      weak_ptr_factory_.GetWeakPtr()));
+}
+
+bool SchedulingEmbedder::IsPerformanceScenarioReady() {
+#if BUILDFLAG(USE_BLINK)
+  if (!jobs_.empty() &&
+      jobs_.front().priority ==
+          passage_embeddings::PassagePriority::kUserInitiated) {
+    // Do not block on performance scenario if user initiated a query.
+    return true;
+  }
+  return (loading_scenario_ ==
+              blink::performance_scenarios::LoadingScenario::kNoPageLoading ||
+          loading_scenario_ == blink::performance_scenarios::LoadingScenario::
+                                   kBackgroundPageLoading) &&
+         input_scenario_ ==
+             blink::performance_scenarios::InputScenario::kNoInput;
+#else
+  return true;
+#endif
 }
 
 void SchedulingEmbedder::SetOnEmbedderReady(OnEmbedderReadyCallback callback) {
@@ -121,19 +180,60 @@ void SchedulingEmbedder::SetOnEmbedderReady(OnEmbedderReadyCallback callback) {
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
-void SchedulingEmbedder::OnEmbedderReady(OnEmbedderReadyCallback callback,
-                                         EmbedderMetadata metadata) {
-  embedder_ready_ = metadata.model_version != 0;
-  std::move(callback).Run(metadata);
+bool SchedulingEmbedder::TryCancel(TaskId task_id) {
+  // No Job should have an invalid task Id.
+  CHECK_NE(task_id, kInvalidTaskId);
 
-  // Work doesn't start until after the embedder is ready. There may or may not
-  // be jobs waiting, but no work is in progress yet, so it can be started now.
+  for (auto itr = jobs_.begin(); itr < jobs_.end(); itr++) {
+    Job& job = *itr;
+    if (task_id == job.task_id && !job.in_progress) {
+      VLOG(2) << "Aborted embedding work for " << job.passages.size()
+              << " passages starting with `"
+              << (job.passages.empty() ? "" : job.passages[0]) << "`";
+      std::move(job.callback)
+          .Run(std::move(job.passages), {}, job.task_id,
+               passage_embeddings::ComputeEmbeddingsStatus::kCanceled);
+      jobs_.erase(itr);
+      return true;
+    }
+  }
+  return false;
+}
+
+#if BUILDFLAG(USE_BLINK)
+void SchedulingEmbedder::OnLoadingScenarioChanged(
+    blink::performance_scenarios::ScenarioScope scope,
+    blink::performance_scenarios::LoadingScenario old_scenario,
+    blink::performance_scenarios::LoadingScenario new_scenario) {
+  VLOG(5) << "SchedulingEmbedder using new loading scenario: "
+          << static_cast<int>(new_scenario);
+  loading_scenario_ = new_scenario;
   SubmitWorkToEmbedder();
 }
 
-void SchedulingEmbedder::OnEmbeddingsComputed(std::vector<std::string> passages,
-                                              std::vector<Embedding> embeddings,
-                                              ComputeEmbeddingsStatus status) {
+void SchedulingEmbedder::OnInputScenarioChanged(
+    blink::performance_scenarios::ScenarioScope scope,
+    blink::performance_scenarios::InputScenario old_scenario,
+    blink::performance_scenarios::InputScenario new_scenario) {
+  VLOG(5) << "SchedulingEmbedder using new input scenario: "
+          << static_cast<int>(new_scenario);
+  input_scenario_ = new_scenario;
+  SubmitWorkToEmbedder();
+}
+#endif
+
+void SchedulingEmbedder::OnEmbedderReady(
+    OnEmbedderReadyCallback callback,
+    passage_embeddings::EmbedderMetadata metadata) {
+  embedder_ready_ = metadata.model_version != 0;
+  std::move(callback).Run(metadata);
+  SubmitWorkToEmbedder();
+}
+
+void SchedulingEmbedder::OnEmbeddingsComputed(
+    std::vector<std::string> passages,
+    std::vector<Embedding> embeddings,
+    passage_embeddings::ComputeEmbeddingsStatus status) {
   VLOG(3) << embeddings.size() << " embeddings computed for " << passages.size()
           << " passages with status " << static_cast<int>(status);
   CHECK_EQ(passages.size(), embeddings.size());
@@ -143,7 +243,8 @@ void SchedulingEmbedder::OnEmbeddingsComputed(std::vector<std::string> passages,
     VLOG(2) << "Aborted embedding work for " << job.passages.size()
             << " passages starting with `"
             << (job.passages.empty() ? "" : job.passages[0]) << "`";
-    std::move(job.callback).Run({}, {}, status);
+    std::move(job.callback)
+        .Run(std::move(job.passages), {}, job.task_id, status);
     jobs_.pop_front();
     // Continue on to allow possibility of resuming any remaining jobs.
     // This upholds the 1:1 callback requirement and gives jobs another
@@ -168,16 +269,20 @@ void SchedulingEmbedder::OnEmbeddingsComputed(std::vector<std::string> passages,
       read_index++;
     }
     if (job.embeddings.size() == job.passages.size()) {
+      base::UmaHistogramTimes("History.Embeddings.ScheduledJobDuration",
+                              job.timer.Elapsed());
       VLOG(2) << "Finished embedding work for " << job.passages.size()
               << " passages starting with `" << job.passages[0] << "`";
       std::move(job.callback)
-          .Run(std::move(job.passages), std::move(job.embeddings), status);
+          .Run(std::move(job.passages), std::move(job.embeddings), job.task_id,
+               status);
       jobs_.pop_front();
     }
   }
 
   // Note, this could call back later/asynchronously or
   // immediately/synchronously, depending on the embedder.
+  work_submitted_ = false;
   SubmitWorkToEmbedder();
 }
 

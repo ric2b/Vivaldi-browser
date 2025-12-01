@@ -4,6 +4,8 @@
 
 #include "third_party/blink/renderer/platform/fonts/shaping/font_features.h"
 
+#include <hb.h>
+
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/platform/fonts/font_description.h"
@@ -32,6 +34,12 @@ class FontFeaturesByOrientationTest
 INSTANTIATE_TEST_SUITE_P(FontFeaturesTest,
                          FontFeaturesByOrientationTest,
                          testing::ValuesIn(orientations));
+
+TEST_F(FontFeaturesTest, Initial) {
+  EXPECT_TRUE(FontFeatures::Initial().IsInitial());
+
+  // More tests using `RenderingTest` are in `InlineNodeTest.FontFeatures*'.
+}
 
 // Test 'chws' or 'vchw' is on by default.
 TEST_P(FontFeaturesByOrientationTest, EastAsianContextualSpacingOnByDefault) {

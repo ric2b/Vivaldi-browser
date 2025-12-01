@@ -8,14 +8,6 @@
 #include <utility>
 #include <vector>
 
-#include "ash/components/arc/arc_browser_context_keyed_service_factory_base.h"
-#include "ash/components/arc/arc_features.h"
-#include "ash/components/arc/arc_prefs.h"
-#include "ash/components/arc/arc_util.h"
-#include "ash/components/arc/mojom/auth.mojom-shared.h"
-#include "ash/components/arc/session/arc_bridge_service.h"
-#include "ash/components/arc/session/arc_management_transition.h"
-#include "ash/components/arc/session/arc_service_manager.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/webui/settings/public/constants/routes.mojom.h"
 #include "base/command_line.h"
@@ -44,6 +36,14 @@
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/webui/signin/ash/inline_login_dialog.h"
 #include "chrome/common/webui_url_constants.h"
+#include "chromeos/ash/experiences/arc/arc_browser_context_keyed_service_factory_base.h"
+#include "chromeos/ash/experiences/arc/arc_features.h"
+#include "chromeos/ash/experiences/arc/arc_prefs.h"
+#include "chromeos/ash/experiences/arc/arc_util.h"
+#include "chromeos/ash/experiences/arc/mojom/auth.mojom-shared.h"
+#include "chromeos/ash/experiences/arc/session/arc_bridge_service.h"
+#include "chromeos/ash/experiences/arc/session/arc_management_transition.h"
+#include "chromeos/ash/experiences/arc/session/arc_service_manager.h"
 #include "components/account_manager_core/account_manager_facade.h"
 #include "components/account_manager_core/chromeos/account_manager_facade_factory.h"
 #include "components/prefs/pref_service.h"
@@ -52,6 +52,7 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 // Enable VLOG level 1.
@@ -132,7 +133,7 @@ mojom::AccountInfoPtr CreateAccountInfo(bool is_enforced,
   return account_info;
 }
 
-bool IsPrimaryGaiaAccount(const std::string& gaia_id) {
+bool IsPrimaryGaiaAccount(const GaiaId& gaia_id) {
   // |GetPrimaryUser| is fine because ARC is only available on the first
   // (Primary) account that participates in multi-signin.
   const user_manager::User* user =
@@ -167,8 +168,8 @@ bool IsPrimaryOrDeviceLocalAccount(
   return IsPrimaryGaiaAccount(account_info.gaia);
 }
 
-// See //ash/components/arc/mojom/auth.mojom RequestPrimaryAccount() for the
-// spec. See also go/arc-primary-account.
+// See //chromeos/ash/experiences/arc/mojom/auth.mojom RequestPrimaryAccount()
+// for the spec. See also go/arc-primary-account.
 std::string GetAccountName(Profile* profile) {
   switch (GetAccountType(profile)) {
     case mojom::ChromeAccountType::USER_ACCOUNT:
@@ -514,10 +515,8 @@ void ArcAuthService::HandleAddAccountRequest() {
 void ArcAuthService::HandleRemoveAccountRequest(const std::string& email) {
   DCHECK(ash::IsAccountManagerAvailable(profile_));
 
-  // TODO(b/326488045) Update Settings path to kPeopleSectionPath when Settings
-  // revamp is launched.
   chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
-      profile_, chromeos::settings::mojom::kMyAccountsSubpagePath);
+      profile_, chromeos::settings::mojom::kPeopleSectionPath);
 }
 
 void ArcAuthService::HandleUpdateCredentialsRequest(const std::string& email) {
@@ -559,7 +558,7 @@ void ArcAuthService::OnAccountUnavailableInArc(
     const account_manager::Account& account) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(ash::IsAccountManagerAvailable(profile_));
-  DCHECK(!IsPrimaryGaiaAccount(account.key.id()));
+  DCHECK(!IsPrimaryGaiaAccount(GaiaId(account.key.id())));
 
   RemoveAccountFromArc(account.raw_email);
 }
@@ -806,7 +805,8 @@ void ArcAuthService::CompleteAccountsPushToArc(
       std::vector<mojom::ArcAccountInfoPtr>();
   for (const auto& account : accounts) {
     DCHECK(account.key.account_type() == account_manager::AccountType::kGaia);
-    if (filter_primary_account && IsPrimaryGaiaAccount(account.key.id())) {
+    if (filter_primary_account &&
+        IsPrimaryGaiaAccount(GaiaId(account.key.id()))) {
       continue;
     }
 
@@ -821,7 +821,8 @@ void ArcAuthService::CompleteAccountsPushToArc(
                "OnAccountAvailableInArc";
     for (const auto& account : accounts) {
       DCHECK(account.key.account_type() == account_manager::AccountType::kGaia);
-      if (filter_primary_account && IsPrimaryGaiaAccount(account.key.id())) {
+      if (filter_primary_account &&
+          IsPrimaryGaiaAccount(GaiaId(account.key.id()))) {
         continue;
       }
 

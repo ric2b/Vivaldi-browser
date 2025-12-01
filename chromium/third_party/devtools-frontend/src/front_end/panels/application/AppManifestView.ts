@@ -450,14 +450,14 @@ export type ParsedSize = {
   formatted: string,
 };
 
-type Screenshot = {
-  src: string,
-  type?: string,
-  sizes?: string,
-  label?: string,
-  form_factor?: string,  // eslint-disable-line @typescript-eslint/naming-convention
-  platform?: string,
-};
+interface Screenshot {
+  src: string;
+  type?: string;
+  sizes?: string;
+  label?: string;
+  form_factor?: string;  // eslint-disable-line @typescript-eslint/naming-convention
+  platform?: string;
+}
 
 export class AppManifestView extends Common.ObjectWrapper.eventMixin<EventTypes, typeof UI.Widget.VBox>(UI.Widget.VBox)
     implements SDK.TargetManager.Observer {
@@ -493,6 +493,7 @@ export class AppManifestView extends Common.ObjectWrapper.eventMixin<EventTypes,
       emptyView: UI.EmptyWidget.EmptyWidget, reportView: UI.ReportView.ReportView,
       throttler: Common.Throttler.Throttler) {
     super(true);
+    this.registerRequiredCSS(appManifestViewStyles);
 
     this.contentElement.classList.add('manifest-container');
     this.contentElement.setAttribute('jslog', `${VisualLogging.pane('manifest')}`);
@@ -504,7 +505,7 @@ export class AppManifestView extends Common.ObjectWrapper.eventMixin<EventTypes,
     this.emptyView.hideWidget();
 
     this.reportView = reportView;
-
+    this.reportView.registerRequiredCSS(appManifestViewStyles);
     this.reportView.element.classList.add('manifest-view-header');
     this.reportView.show(this.contentElement);
     this.reportView.hideWidget();
@@ -1091,7 +1092,7 @@ export class AppManifestView extends Common.ObjectWrapper.eventMixin<EventTypes,
     try {
       await result;
       return {wrapper, image};
-    } catch (e) {
+    } catch {
     }
     return null;
   }
@@ -1235,11 +1236,6 @@ export class AppManifestView extends Common.ObjectWrapper.eventMixin<EventTypes,
     field.appendChild(wrapper);
     return {imageResourceErrors, squareSizedIconAvailable, naturalWidth, naturalHeight};
   }
-  override wasShown(): void {
-    super.wasShown();
-    this.reportView.registerCSSFiles([appManifestViewStyles]);
-    this.registerCSSFiles([appManifestViewStyles]);
-  }
 
   private async appendWindowControlsToSection(
       overlayModel: SDK.OverlayModel.OverlayModel, url: Platform.DevToolsPath.UrlString,
@@ -1259,7 +1255,7 @@ export class AppManifestView extends Common.ObjectWrapper.eventMixin<EventTypes,
       await this.overlayModel?.toggleWindowControlsToolbar(wcoOsCheckbox.checkboxElement.checked);
     });
 
-    const osSelectElement = (wcoOsCheckbox.createChild('select', 'chrome-select') as HTMLSelectElement);
+    const osSelectElement = wcoOsCheckbox.createChild('select');
     osSelectElement.appendChild(UI.UIUtils.createOption('Windows', SDK.OverlayModel.EmulatedOSType.WINDOWS, 'windows'));
     osSelectElement.appendChild(UI.UIUtils.createOption('macOS', SDK.OverlayModel.EmulatedOSType.MAC, 'macos'));
     osSelectElement.appendChild(UI.UIUtils.createOption('Linux', SDK.OverlayModel.EmulatedOSType.LINUX, 'linux'));
@@ -1289,7 +1285,7 @@ export const enum Events {
   MANIFEST_RENDERED = 'ManifestRendered',
 }
 
-export type EventTypes = {
-  [Events.MANIFEST_DETECTED]: boolean,
-  [Events.MANIFEST_RENDERED]: void,
-};
+export interface EventTypes {
+  [Events.MANIFEST_DETECTED]: boolean;
+  [Events.MANIFEST_RENDERED]: void;
+}

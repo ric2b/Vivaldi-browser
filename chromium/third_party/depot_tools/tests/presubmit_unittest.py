@@ -194,6 +194,7 @@ index fe3de7b..54ae6e1 100755
         mock.patch('presubmit_support.warn').start()
         mock.patch('random.randint').start()
         mock.patch('scm.GIT.GenerateDiff').start()
+        mock.patch('scm.GIT.GetBranch', lambda x: None).start()
         mock.patch('scm.determine_scm').start()
         mock.patch('subprocess2.Popen').start()
         mock.patch('sys.stderr', StringIO()).start()
@@ -2890,7 +2891,7 @@ the current line as well!
         presubmit.sigint_handler.wait.return_value = (b'', None)
 
         pylint = os.path.join(_ROOT, 'pylint-2.7')
-        pylintrc = os.path.join(_ROOT, 'pylintrc')
+        pylintrc = os.path.join(_ROOT, 'pylintrc-2.7')
         env = {str('PYTHONPATH'): str('')}
         if sys.platform == 'win32':
             pylint += '.bat'

@@ -16,11 +16,13 @@ limitations under the License.
 #include "xla/literal_util.h"
 #include "xla/service/collective_ops_utils.h"
 #include "xla/service/pattern_matcher.h"
+#include "xla/service/source_target_pairs.h"
 
 namespace xla {
 
+using CycleType = SourceTargetPairs::CycleType;
+
 // Finds and returns the non-constant operand in instr.
-//
 // CHECK-fails if instr doesn't have exactly one unique non-constant operand.
 static const HloInstruction* NonConstantOperand(const HloInstruction* instr) {
   const HloInstruction* result = nullptr;
@@ -71,7 +73,7 @@ absl::StatusOr<bool> CollectivePermuteValidIterationAnnotator::Run(
   bool changed = false;
   for (HloComputation* comp : module->computations(execution_threads)) {
     for (HloInstruction* inst : comp->instructions()) {
-      if (inst->opcode() != HloOpcode::kCollectivePermute) {
+      if (HloPredicateIsNotOp<HloOpcode::kCollectivePermute>(inst)) {
         continue;
       }
 
@@ -80,8 +82,8 @@ absl::StatusOr<bool> CollectivePermuteValidIterationAnnotator::Run(
         continue;
       }
       auto sourceTargetPairs = inst->source_target_pairs();
-      if (!IsForwardCycle(sourceTargetPairs) &&
-          !IsBackwardCycle(sourceTargetPairs)) {
+      if (GetCycleTypeAndIndices(sourceTargetPairs).first ==
+          CycleType::kUnknown) {
         continue;
       }
 
@@ -136,7 +138,8 @@ absl::StatusOr<bool> CollectivePermuteValidIterationAnnotator::Run(
         sendRecvValidation[currIdx] = {currIdx, currIdx + offset};
       }
 
-      if (IsBackwardCycle(sourceTargetPairs)) {
+      if (GetCycleTypeAndIndices(sourceTargetPairs).first ==
+          CycleType::kBackward) {
         std::reverse(sendRecvValidation.begin(), sendRecvValidation.end());
       }
 

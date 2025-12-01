@@ -14,7 +14,10 @@
 
 #include "examples/file_reader_factory.h"
 
+#include <memory>
 #include <new>
+#include <string>
+#include <vector>
 
 #include "examples/logging.h"
 

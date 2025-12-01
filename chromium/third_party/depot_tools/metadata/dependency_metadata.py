@@ -19,9 +19,11 @@ sys.path.insert(0, _ROOT_DIR)
 import metadata.fields.field_types as field_types
 import metadata.fields.custom.license as license_util
 import metadata.fields.custom.version as version_util
+import metadata.fields.custom.mitigated as mitigated_util
 import metadata.fields.known as known_fields
 import metadata.fields.util as util
 import metadata.validation_result as vr
+from metadata.fields.custom.license_allowlist import OPEN_SOURCE_SPDX_LICENSES
 
 
 class DependencyMetadata:
@@ -109,7 +111,31 @@ class DependencyMetadata:
                                field: field_types.MetadataField) -> List[int]:
         return sorted(self._metadata_line_numbers[field])
 
-    def _assess_required_fields(self) -> Set[field_types.MetadataField]:
+    def all_licenses_allowlisted(self, license_field_value: str, is_open_source_project: bool) -> bool:
+        """Returns whether all licenses in the field are allowlisted.
+        Assumes a non-empty license_field_value"""
+        licenses = license_util.process_license_value(
+            license_field_value,
+            atomic_delimiter=known_fields.LICENSE.VALUE_DELIMITER)
+        for lic, valid in licenses:
+            allowed = license_util.is_license_allowlisted(lic, is_open_source_project=is_open_source_project)
+            if not valid or not allowed:
+                return False
+        return True
+
+
+    def only_open_source_licenses(self, license_field_value: str) ->List[str]:
+        """Returns a list of licenses that are only allowed in open source projects."""
+        licenses = license_util.process_license_value(
+            license_field_value,
+            atomic_delimiter=known_fields.LICENSE.VALUE_DELIMITER)
+        open_source_only = []
+        for lic, valid in licenses:
+            if valid and lic in OPEN_SOURCE_SPDX_LICENSES:
+                open_source_only.append(lic)
+        return open_source_only
+
+    def _assess_required_fields(self, is_open_source_project: bool = False) -> Set[field_types.MetadataField]:
         """Returns the set of required fields, based on the current
         metadata.
         """
@@ -127,30 +153,22 @@ class DependencyMetadata:
             # License compatibility with Android must be set if the
             # package is shipped and the license is not in the
             # allowlist.
-            has_allowlisted = False
             license_value = self._metadata.get(known_fields.LICENSE)
-            if license_value:
-                licenses = license_util.process_license_value(
-                    license_value,
-                    atomic_delimiter=known_fields.LICENSE.VALUE_DELIMITER)
-                for _, allowed in licenses:
-                    if allowed:
-                        has_allowlisted = True
-                        break
-
-            if not has_allowlisted:
+            if not license_value or not self.all_licenses_allowlisted(license_value, is_open_source_project):
                 required.add(known_fields.LICENSE_ANDROID_COMPATIBLE)
 
         return required
 
     def validate(self, source_file_dir: str,
-                 repo_root_dir: str) -> List[vr.ValidationResult]:
+                 repo_root_dir: str,
+                 is_open_source_project: bool = False) -> List[vr.ValidationResult]:
         """Validates all the metadata.
 
         Args:
             source_file_dir: the directory of the file that the metadata
                              is from.
             repo_root_dir: the repository's root directory.
+            is_open_source_project: whether the project is open source.
 
         Returns: the metadata's validation results.
         """
@@ -210,7 +228,7 @@ class DependencyMetadata:
                 results.append(field_result)
 
         # Check required fields are present.
-        required_fields = self._assess_required_fields()
+        required_fields = self._assess_required_fields(is_open_source_project=is_open_source_project)
         for field in required_fields:
             if field not in self._metadata:
                 field_name = field.get_name()
@@ -249,7 +267,60 @@ class DependencyMetadata:
                     self.get_field_line_numbers(known_fields.LICENSE_FILE))
                 results.append(result)
 
+
+        if not is_open_source_project:
+            license_value = self._metadata.get(known_fields.LICENSE)
+            if license_value is not None:
+                not_allowed_licenses = self.only_open_source_licenses(license_value)
+                if len(not_allowed_licenses) > 0:
+                    license_result = vr.ValidationWarning(
+                        reason=f"License has a license not in the allowlist."
+                        " (see https://source.chromium.org/chromium/chromium/tools/depot_tools/+/main:metadata/fields/custom/license_allowlist.py).",
+                        additional=[
+                            f"The following license{'s  are' if len(not_allowed_licenses) > 1 else ' is'} only allowed in open source projects: "
+                            f"{util.quoted(not_allowed_licenses)}.",
+                    ])
+
+                    license_result.set_tag(tag="field", value=known_fields.LICENSE.get_name())
+                    license_result.set_lines(
+                        self.get_field_line_numbers(known_fields.LICENSE))
+                    results.append(license_result)
+
+        # Match values reported in the 'Mitigated:' field with the supplementry
+        # fields e.g. 'CVE-2024-12345: description'.
+        mitigated_values = self._return_as_property(known_fields.MITIGATED)
+        mitigated_ids = set()
+        if mitigated_values is not None:
+            mitigated_ids = set(mitigated_values)
+        # Reported as their own field e.g. 'CVE-2024-12345: description'.
+        mitigated_entries = set(self._mitigations_from_entries().keys())
+
+        missing_descriptions = mitigated_ids - mitigated_entries
+        if missing_descriptions:
+            results.append(
+                vr.ValidationWarning(
+                    reason="Missing descriptions for vulnerability IDs",
+                    additional=[
+                        f"Add descriptions for: {util.quoted(missing_descriptions)}"
+                    ]))
+
+        extra_descriptions = mitigated_entries - mitigated_ids
+        if extra_descriptions:
+            results.append(
+                vr.ValidationWarning(
+                    reason="Found descriptions for unlisted vulnerability IDs",
+                    additional=[
+                        f"List these IDs in the 'Mitigated:' field: {util.quoted(extra_descriptions)}"
+                    ]))
+
         return results
+
+    def _mitigations_from_entries(self) -> Dict[str, str]:
+        result = {}
+        for key, value in self._entries:
+            if mitigated_util.PATTERN_VULN_ID_WITH_ANCHORS.match(key):
+                result[key] = value.strip()
+        return result
 
     def _return_as_property(self, field: field_types.MetadataField) -> Any:
         """Helper function to create a property for DependencyMetadata.
@@ -268,6 +339,18 @@ class DependencyMetadata:
     @property
     def name(self) -> Optional[str]:
         return self._return_as_property(known_fields.NAME)
+
+    @property
+    def mitigations(self) -> Dict[str, str]:
+        """Returns mapping of vulnerability IDs to their descriptions."""
+        result = self._mitigations_from_entries()
+        mitigated_values = self._return_as_property(known_fields.MITIGATED) or []
+        # Add entries listed in Mitigated field but without a supplement
+        # mitigation description line.
+        for id in mitigated_values:
+            if id not in result:
+                result[id] = ""
+        return result
 
     @property
     def short_name(self) -> Optional[str]:

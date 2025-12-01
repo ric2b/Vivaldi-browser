@@ -364,7 +364,6 @@ html element a
     property href
     property hrefTranslate
     property hreflang
-    property interestAction
     property interestTargetElement
     property name
     property origin
@@ -388,13 +387,13 @@ html element acronym
 html element address
 html element area
     property alt
+    property attributionSrc
     property coords
     property download
     property hash
     property host
     property hostname
     property href
-    property interestAction
     property interestTargetElement
     property noHref
     property origin
@@ -516,7 +515,6 @@ html element button
     property formMethod
     property formNoValidate
     property formTarget
-    property interestAction
     property interestTargetElement
     property labels
     property name
@@ -727,6 +725,7 @@ html element img
     property alt
     property attributionSrc
     property border
+    property browsingTopics
     property complete
     property crossOrigin
     property currentSrc
@@ -773,8 +772,6 @@ html element input
     property height
     property incremental
     property indeterminate
-    property interestAction
-    property interestTargetElement
     property labels
     property list
     property max
@@ -998,6 +995,7 @@ html element script
     property integrity
     property noModule
     property referrerPolicy
+    property signature
     property src
     property text
     property type
@@ -1275,13 +1273,7 @@ html element video
     property volume
     property webkitAudioDecodedByteCount
     property webkitDecodedFrameCount
-    property webkitDisplayingFullscreen
     property webkitDroppedFrameCount
-    property webkitEnterFullScreen
-    property webkitEnterFullscreen
-    property webkitExitFullScreen
-    property webkitExitFullscreen
-    property webkitSupportsFullscreen
     property webkitVideoDecodedByteCount
     property width
 html element wbr
@@ -1615,7 +1607,6 @@ svg element a
     property getCTM
     property getScreenCTM
     property href
-    property interestAction
     property interestTargetElement
     property nearestViewportElement
     property requiredExtensions

@@ -75,8 +75,7 @@ class VIEWS_EXPORT ViewAXPlatformNodeDelegate
   const ui::AXSelection GetUnignoredSelection() const override;
   ui::AXNodePosition::AXPositionInstance CreatePositionAt(
       int offset,
-      ax::mojom::TextAffinity affinity =
-          ax::mojom::TextAffinity::kDownstream) const override;
+      ax::mojom::TextAffinity affinity) const override;
   ui::AXNodePosition::AXPositionInstance CreateTextPositionAt(
       int offset,
       ax::mojom::TextAffinity affinity) const override;
@@ -89,7 +88,6 @@ class VIEWS_EXPORT ViewAXPlatformNodeDelegate
   bool IsLeaf() const override;
   bool IsInvisibleOrIgnored() const override;
   bool IsFocused() const override;
-  bool IsToplevelBrowserWindow() override;
   gfx::Rect GetBoundsRect(
       const ui::AXCoordinateSystem coordinate_system,
       const ui::AXClippingBehavior clipping_behavior,
@@ -153,7 +151,7 @@ class VIEWS_EXPORT ViewAXPlatformNodeDelegate
   // during the constructor.
   virtual void Init();
 
-  ui::AXNodeData data() { return data_; }
+  const ui::AXNodeData& data() const { return data_; }
   ui::AXPlatformNode* ax_platform_node() { return ax_platform_node_; }
 
   // Manager for the accessibility tree for this view. The tree will only have

@@ -34,14 +34,21 @@ WIN_GIT_STUBS = {
     'ssh-keygen.bat': 'usr\\bin\\ssh-keygen.exe',
 }
 
+# The global git config which should be applied by |git_postprocess|.
+GIT_GLOBAL_CONFIG = {
+    'core.autocrlf': 'false',
+    'core.filemode': 'false',
+    'core.preloadindex': 'true',
+    'core.fscache': 'true',
+}
+
 
 # Accumulated template parameters for generated stubs.
 class Template(
         collections.namedtuple('Template', (
             'PYTHON3_BIN_RELDIR',
             'PYTHON3_BIN_RELDIR_UNIX',
-            'GIT_BIN_RELDIR',
-            'GIT_BIN_RELDIR_UNIX',
+            'GIT_BIN_ABSDIR',
             'GIT_PROGRAM',
         ))):
     @classmethod
@@ -186,14 +193,15 @@ def _toolchain_in_use(toolchain_path):
 
 
 def _check_call(argv, stdin_input=None, **kwargs):
-    """Wrapper for subprocess.check_call that adds logging."""
+    """Wrapper for subprocess.Popen that adds logging."""
     logging.info('running %r', argv)
     if stdin_input is not None:
         kwargs['stdin'] = subprocess.PIPE
     proc = subprocess.Popen(argv, **kwargs)
-    proc.communicate(input=stdin_input)
+    stdout, stderr = proc.communicate(input=stdin_input)
     if proc.returncode:
         raise subprocess.CalledProcessError(proc.returncode, argv, None)
+    return stdout, stderr
 
 
 def _safe_rmtree(path):
@@ -222,10 +230,10 @@ def _safe_rmtree(path):
 def clean_up_old_installations(skip_dir):
     """Removes Python installations other than |skip_dir|.
 
-    This includes an "in-use" check against the "python.exe" in a given directory
-    to avoid removing Python executables that are currently ruinning. We need
-    this because our Python bootstrap may be run after (and by) other software
-    that is using the bootstrapped Python!
+    This includes an "in-use" check against the "python.exe" in a given
+    directory to avoid removing Python executables that are currently running.
+    We need this because our Python bootstrap may be run after (and by) other
+    software that is using the bootstrapped Python!
     """
     root_contents = os.listdir(ROOT_DIR)
     for f in ('win_tools-*_bin', 'python27*_bin', 'git-*_bin',
@@ -242,8 +250,61 @@ def clean_up_old_installations(skip_dir):
                 logging.info('Toolchain at %r is in-use; skipping', full_entry)
 
 
-# Version of "git_postprocess" system configuration (see |git_postprocess|).
-GIT_POSTPROCESS_VERSION = '2'
+def _within_depot_tools(path):
+    """Returns whether the given path is within depot_tools."""
+    try:
+        return os.path.commonpath([os.path.abspath(path), ROOT_DIR]) == ROOT_DIR
+    except ValueError:
+        return False
+
+
+def _traverse_to_git_root(abspath):
+    """Traverses up the path to the closest "git" directory (case-insensitive).
+
+    Returns:
+        The path to the directory with name "git" (case-insensitive), if it
+        exists as an ancestor; otherwise, None.
+
+    Examples:
+      * "C:\Program Files\Git\cmd" -> "C:\Program Files\Git"
+      * "C:\Program Files\Git\mingw64\bin" -> "C:\Program Files\Git"
+    """
+    head, tail = os.path.split(abspath)
+    while tail:
+        if tail.lower() == 'git':
+            return os.path.join(head, tail)
+        head, tail = os.path.split(head)
+    return None
+
+
+def search_win_git_directory():
+    """Searches for a git directory outside of depot_tools.
+
+    As depot_tools will soon stop bundling Git for Windows, this function logs
+    a warning if git has not yet been directly installed.
+    """
+    # Look for the git command in PATH outside of depot_tools.
+    for p in os.environ.get('PATH', '').split(os.pathsep):
+        if _within_depot_tools(p):
+            continue
+
+        for cmd in ('git.exe', 'git.bat'):
+            if os.path.isfile(os.path.join(p, cmd)):
+                git_root = _traverse_to_git_root(p)
+                if git_root:
+                    return git_root
+
+    # Log deprecation warning.
+    logging.warning(
+        'depot_tools will stop bundling Git for Windows on 2025-01-27.\n'
+        'To prepare for this change, please install Git directly. See\n'
+        'https://chromium.googlesource.com/chromium/src/+/main/docs/windows_build_instructions.md#Install-git\n'
+        '\n'
+        'Having issues and not ready for depot_tools to stop bundling\n'
+        'Git for Windows? File a bug at:\n'
+        'https://issues.chromium.org/issues/new?component=1456702&template=2045785\n'
+    )
+    return None
 
 
 def git_get_mingw_dir(git_directory):
@@ -255,42 +316,152 @@ def git_get_mingw_dir(git_directory):
     return None
 
 
-def git_postprocess(template, git_directory):
-    # Update depot_tools files for "git help <command>"
-    mingw_dir = git_get_mingw_dir(git_directory)
-    if mingw_dir:
-        docsrc = os.path.join(ROOT_DIR, 'man', 'html')
-        git_docs_dir = os.path.join(mingw_dir, 'share', 'doc', 'git-doc')
-        for name in os.listdir(docsrc):
-            maybe_copy(os.path.join(docsrc, name),
-                       os.path.join(git_docs_dir, name))
-    else:
-        logging.info('Could not find mingw directory for %r.', git_directory)
+class GitConfigDict(collections.UserDict):
+    """Custom dict to support mixed case sensitivity for Git config options.
 
+    See the docs at: https://git-scm.com/docs/git-config#_syntax
+    """
+
+    @staticmethod
+    def _to_case_compliant_key(config_key):
+        parts = config_key.split('.')
+        if len(parts) < 2:
+            # The config key does not conform to the expected format.
+            # Leave as-is.
+            return config_key
+
+        # Section headers are case-insensitive; set to lowercase for lookup
+        # consistency.
+        section = parts[0].lower()
+        # Subsection headers are case-sensitive and allow '.'.
+        subsection_parts = parts[1:-1]
+        # Variable names are case-insensitive; again, set to lowercase for
+        # lookup consistency.
+        name = parts[-1].lower()
+
+        return '.'.join([section] + subsection_parts + [name])
+
+    def __setitem__(self, key, value):
+        self.data[self._to_case_compliant_key(key)] = value
+
+    def __getitem__(self, key):
+        return self.data[self._to_case_compliant_key(key)]
+
+
+def get_git_global_config(git_path):
+    """Helper to get all values from the global git config.
+
+    Note: multivalued config variables (multivars) are not supported; only the
+    last value for each multivar will be in the returned config.
+
+    Returns:
+      - GitConfigDict of the current global git config.
+      - If there was an error reading the global git config (e.g. file doesn't
+        exist, or is an invalid config), returns an empty GitConfigDict.
+    """
+    try:
+        # List all values in the global git config. Using the `-z` option allows
+        # us to securely parse the output even if a value contains line breaks.
+        # See docs at:
+        # https://git-scm.com/docs/git-config#Documentation/git-config.txt--z
+        stdout, _ = _check_call(
+            [git_path, 'config', '--list', '--global', '-z'],
+            stdout=subprocess.PIPE,
+            encoding='utf-8')
+    except subprocess.CalledProcessError as e:
+        logging.warning(f'Failed to read your global Git config:\n{e}\n')
+        return GitConfigDict({})
+
+    # Process all entries in the config.
+    config = {}
+    for line in stdout.split('\0'):
+        entry = line.split('\n', 1)
+        if len(entry) != 2:
+            continue
+        config[entry[0]] = entry[1]
+
+    return GitConfigDict(config)
+
+
+def _win_git_bootstrap_config():
+    """Bootstraps the global git config, if enabled by the user.
+
+    To allow depot_tools to update your global git config, run:
+        git config --global depot-tools.allowGlobalGitConfig true
+
+    To prevent depot_tools updating your global git config and silence the
+    warning, run:
+        git config --global depot-tools.allowGlobalGitConfig false
+    """
+    git_bat_path = os.path.join(ROOT_DIR, 'git.bat')
+
+    # Read the current global git config in its entirety.
+    current_config = get_git_global_config(git_bat_path)
+
+    # Get the current values for the settings which have defined values for
+    # optimal Chromium development.
+    config_keys = sorted(GIT_GLOBAL_CONFIG.keys())
+    mismatching_keys = []
+    for k in config_keys:
+        if current_config.get(k) != GIT_GLOBAL_CONFIG.get(k):
+            mismatching_keys.append(k)
+    if not mismatching_keys:
+        # Global git config already has the desired values. Nothing to do.
+        return
+
+    # Check whether the user has authorized depot_tools to update their global
+    # git config.
+    allow_global_key = 'depot-tools.allowGlobalGitConfig'
+    allow_global = current_config.get(allow_global_key, '').lower()
+
+    if allow_global in ('false', '0', 'no', 'off'):
+        # The user has explicitly disabled this.
+        return
+
+    if allow_global not in ('true', '1', 'yes', 'on'):
+        lines = [
+            'depot_tools recommends setting the following for',
+            'optimal Chromium development:',
+            '',
+        ] + [
+            f'$ git config --global {k} {GIT_GLOBAL_CONFIG.get(k)}'
+            for k in mismatching_keys
+        ] + [
+            '',
+            'You can silence this message by setting these recommended values.',
+            '',
+            'You can allow depot_tools to automatically update your global',
+            'Git config to recommended settings by running:',
+            f'$ git config --global {allow_global_key} true',
+            '',
+            'To suppress this warning and silence future recommendations, run:',
+            f'$ git config --global {allow_global_key} false',
+        ]
+
+        logging.warning('\n'.join(lines))
+        return
+
+    # Global git config changes have been authorized - do the necessary updates.
+    for k in mismatching_keys:
+        desired = GIT_GLOBAL_CONFIG.get(k)
+        _check_call([git_bat_path, 'config', '--global', k, desired])
+
+    # Clean up deprecated setting depot-tools.gitPostprocessVersion.
+    postprocess_key = 'depot-tools.gitPostprocessVersion'
+    if current_config.get(postprocess_key) != None:
+        _check_call(
+            [git_bat_path, 'config', '--unset', '--global', postprocess_key])
+
+
+def git_postprocess(template):
     # Create Git templates and configure its base layout.
     for stub_name, relpath in WIN_GIT_STUBS.items():
         stub_template = template._replace(GIT_PROGRAM=relpath)
         stub_template.maybe_install('git.template.bat',
                                     os.path.join(ROOT_DIR, stub_name))
 
-    # Set-up our system configuration environment. The following set of
-    # parameters is versioned by "GIT_POSTPROCESS_VERSION". If they change,
-    # update "GIT_POSTPROCESS_VERSION" accordingly.
-    def configure_git_system():
-        git_bat_path = os.path.join(ROOT_DIR, 'git.bat')
-        _check_call(
-            [git_bat_path, 'config', '--system', 'core.autocrlf', 'false'])
-        _check_call(
-            [git_bat_path, 'config', '--system', 'core.filemode', 'false'])
-        _check_call(
-            [git_bat_path, 'config', '--system', 'core.preloadindex', 'true'])
-        _check_call(
-            [git_bat_path, 'config', '--system', 'core.fscache', 'true'])
-        _check_call(
-            [git_bat_path, 'config', '--system', 'protocol.version', '2'])
-
-    call_if_outdated(os.path.join(git_directory, '.git_postprocess'),
-                     GIT_POSTPROCESS_VERSION, configure_git_system)
+    # Bootstrap the git global config.
+    _win_git_bootstrap_config()
 
 
 def main(argv):
@@ -306,9 +477,7 @@ def main(argv):
     template = Template.empty()._replace(
         PYTHON3_BIN_RELDIR=os.path.join(args.bootstrap_name, 'python3', 'bin'),
         PYTHON3_BIN_RELDIR_UNIX=posixpath.join(args.bootstrap_name, 'python3',
-                                               'bin'),
-        GIT_BIN_RELDIR=os.path.join(args.bootstrap_name, 'git'),
-        GIT_BIN_RELDIR_UNIX=posixpath.join(args.bootstrap_name, 'git'))
+                                               'bin'))
 
     bootstrap_dir = os.path.join(ROOT_DIR, args.bootstrap_name)
 
@@ -316,7 +485,15 @@ def main(argv):
     clean_up_old_installations(bootstrap_dir)
 
     if IS_WIN:
-        git_postprocess(template, os.path.join(bootstrap_dir, 'git'))
+        # Search for a Git installation.
+        git_dir = search_win_git_directory()
+        if not git_dir:
+            logging.error('Failed to bootstrap depot_tools.\n'
+                          'Git was not found in PATH. Have you installed it?')
+            return 1
+
+        template = template._replace(GIT_BIN_ABSDIR=git_dir)
+        git_postprocess(template)
         templates = [
             ('git-bash.template.sh', 'git-bash', ROOT_DIR),
             ('python3.bat', 'python3.bat', ROOT_DIR),

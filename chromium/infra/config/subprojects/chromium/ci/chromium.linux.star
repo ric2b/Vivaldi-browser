@@ -368,6 +368,7 @@ ci.builder(
     ),
     cq_mirrors_console_view = "mirrors",
     contact_team_email = "chrome-linux-engprod@google.com",
+    siso_remote_linking = True,
 )
 
 ci.builder(
@@ -502,9 +503,6 @@ ci.thin_tester(
                 args = [
                     "--additional-env-var=LLVM_PROFILE_FILE=${ISOLATED_OUTDIR}/profraw/default-%2m.profraw",
                 ],
-                swarming = targets.swarming(
-                    shards = 10,
-                ),
             ),
             "browser_tests": targets.mixin(
                 # Only retry the individual failed tests instead of rerunning
@@ -594,11 +592,6 @@ ci.thin_tester(
                     shards = 15,
                 ),
             ),
-            "blink_wpt_tests": targets.mixin(
-                swarming = targets.swarming(
-                    shards = 18,
-                ),
-            ),
             "browser_tests": targets.mixin(
                 # crbug.com/1066161
                 # crbug.com/1459645
@@ -608,6 +601,9 @@ ci.thin_tester(
                 ),
             ),
             "interactive_ui_tests": targets.mixin(
+                args = [
+                    "--test-launcher-filter-file=../../testing/buildbot/filters/ozone-linux.interactive_ui_tests.filter",
+                ],
                 swarming = targets.swarming(
                     shards = 10,
                 ),
@@ -787,6 +783,104 @@ ci.builder(
 )
 
 ci.builder(
+    name = "linux-oi-rel",
+    description_html = "This builder runs key test suites with OriginKeyedProcessesByDefault (OriginIsolation) enabled, to provide test coverage with the feature enabled.",
+    triggered_by = ["ci/Linux Builder"],
+    builder_spec = builder_config.builder_spec(
+        execution_mode = builder_config.execution_mode.TEST,
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+            apply_configs = [
+                "use_clang_coverage",
+            ],
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = [
+                "mb",
+            ],
+            build_config = builder_config.build_config.RELEASE,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.LINUX,
+        ),
+        build_gs_bucket = "chromium-linux-archive",
+    ),
+    targets = targets.bundle(
+        name = "linux_oi_tests",
+        targets = [
+            "browser_tests",
+            "unit_tests",
+            "content_browsertests",
+            "content_unittests",
+            "blink_web_tests",
+            "blink_wpt_tests",
+            "chrome_wpt_tests",
+        ],
+        mixins = [
+            "linux-jammy",
+        ],
+        per_test_modifications = {
+            "browser_tests": targets.mixin(
+                args = [
+                    "--enable-feature=OriginKeyedProcessesByDefault",
+                ],
+                swarming = targets.swarming(
+                    shards = 33,
+                ),
+            ),
+            "unit_tests": targets.mixin(
+                args = [
+                    "--enable-feature=OriginKeyedProcessesByDefault",
+                ],
+                # Default shards = 1 should be ok here.
+            ),
+            "content_browsertests": targets.mixin(
+                args = [
+                    "--enable-feature=OriginKeyedProcessesByDefault",
+                ],
+                swarming = targets.swarming(
+                    shards = 8,
+                ),
+            ),
+            "content_unittests": targets.mixin(
+                args = [
+                    "--enable-feature=OriginKeyedProcessesByDefault",
+                ],
+                # Default shards = 1 should be ok here.
+            ),
+            "blink_web_tests": targets.mixin(
+                args = [
+                    "--additional-driver-flag=--enable-feature=OriginKeyedProcessesByDefault",
+                ],
+                swarming = targets.swarming(
+                    shards = 9,
+                ),
+            ),
+            "blink_wpt_tests": targets.mixin(
+                args = [
+                    "--additional-driver-flag=--enable-feature=OriginKeyedProcessesByDefault",
+                ],
+                swarming = targets.swarming(
+                    shards = 2,
+                ),
+            ),
+            "chrome_wpt_tests": targets.mixin(
+                args = [
+                    "--additional-driver-flag=--enable-feature=OriginKeyedProcessesByDefault",
+                ],
+                # Default shards = 1 should be ok here.
+            ),
+        },
+    ),
+    console_view_entry = consoles.console_view_entry(
+        category = "OriginIsolation",
+        short_name = "oi",
+    ),
+    contact_team_email = "chrome-security-architecture@google.com",
+    siso_remote_jobs = siso.remote_jobs.DEFAULT,
+)
+
+ci.builder(
     name = "linux-bfcache-rel",
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
@@ -920,6 +1014,51 @@ ci.builder(
         short_name = "gcc",
     ),
     contact_team_email = "build@chromium.org",
+)
+
+ci.builder(
+    name = "linux-modules-compile-fyi-rel",
+    branch_selector = branches.selector.MAIN,
+    description_html = "Experimental compile with use_libcxx_modules=true.",
+    builder_spec = builder_config.builder_spec(
+        gclient_config = builder_config.gclient_config(config = "chromium"),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = ["mb"],
+            build_config = builder_config.build_config.RELEASE,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.LINUX,
+        ),
+        build_gs_bucket = "chromium-linux-archive",
+    ),
+    gn_args = gn_args.config(
+        configs = [
+            "libcxx_modules",
+            "linux",
+            "no_siso",
+            "release_builder",
+            "x64",
+        ],
+    ),
+    targets = targets.bundle(
+        additional_compile_targets = [
+            "all",
+        ],
+    ),
+    cores = 32,
+    ssd = True,
+    gardener_rotations = args.ignore_default(None),
+    tree_closing = False,
+    console_view_entry = consoles.console_view_entry(
+        console_view = "chromium.fyi",
+        category = "linux",
+        short_name = "mod",
+    ),
+    main_console_view = None,
+    contact_team_email = "chrome-build-team@google.com",
+    execution_timeout = 6 * time.hour,
+    notifies = args.ignore_default([]),
+    siso_keep_going = True,
 )
 
 ci.builder(

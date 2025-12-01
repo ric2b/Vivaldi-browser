@@ -7,8 +7,13 @@ package org.chromium.chrome.browser.browser_controls;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+
+import android.content.Context;
+import android.content.res.Configuration;
+import android.content.res.Resources;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -18,40 +23,51 @@ import org.mockito.MockitoAnnotations;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowLooper;
 
-import org.chromium.base.FeatureList;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Features.EnableFeatures;
+import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.chrome.browser.browser_controls.BottomControlsStacker.LayerScrollBehavior;
 import org.chromium.chrome.browser.browser_controls.BottomControlsStacker.LayerType;
 import org.chromium.chrome.browser.browser_controls.BottomControlsStacker.LayerVisibility;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.ui.base.WindowAndroid;
+import org.chromium.ui.display.DisplayAndroid;
 
 /** Unit tests for the BrowserStateBrowserControlsVisibilityDelegate. */
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(
         manifest = Config.NONE,
         shadows = {ShadowLooper.class})
-@EnableFeatures(ChromeFeatureList.BOTTOM_BROWSER_CONTROLS_REFACTOR)
+@EnableFeatures({
+    ChromeFeatureList.BOTTOM_BROWSER_CONTROLS_REFACTOR
+            + ":disable_bottom_controls_stacker_y_offset/false",
+    ChromeFeatureList.BCIV_BOTTOM_CONTROLS
+})
 public class BottomControlsStackerUnitTest {
     private static final @LayerType int ZERO_HEIGHT_TOP_LAYER = LayerType.PROGRESS_BAR;
-    private static final @LayerType int TOP_LAYER = LayerType.TABSTRIP_TOOLBAR;
-    private static final @LayerType int MID_LAYER = LayerType.READ_ALOUD_PLAYER;
+    private static final @LayerType int TOP_LAYER = LayerType.READ_ALOUD_PLAYER;
+    private static final @LayerType int MID_LAYER = LayerType.TABSTRIP_TOOLBAR_BELOW_READALOUD;
     private static final @LayerType int BOTTOM_LAYER = LayerType.TEST_BOTTOM_LAYER;
 
     @Mock BrowserControlsSizer mBrowserControlsSizer;
+    @Mock private Context mContext;
+    @Mock private WindowAndroid mWindowAndroid;
+    @Mock private Resources mResources;
+    @Mock private DisplayAndroid mDisplayAndroid;
 
     private BottomControlsStacker mBottomControlsStacker;
+    private Configuration mConfig = new Configuration();
 
     @Before
     public void setup() {
         MockitoAnnotations.openMocks(this);
-        mBottomControlsStacker = new BottomControlsStacker(mBrowserControlsSizer);
-
-        FeatureList.TestValues testValues = new FeatureList.TestValues();
-        testValues.addFieldTrialParamOverride(
-                ChromeFeatureList.sDisableBottomControlsStackerYOffsetDispatching, "false");
-        testValues.addFeatureFlagOverride(ChromeFeatureList.BOTTOM_BROWSER_CONTROLS_REFACTOR, true);
-        FeatureList.setTestValues(testValues);
+        doReturn(mResources).when(mContext).getResources();
+        doReturn(mConfig).when(mResources).getConfiguration();
+        doReturn(mDisplayAndroid).when(mWindowAndroid).getDisplay();
+        doReturn(1.0f).when(mDisplayAndroid).getDipScale();
+        mConfig.screenHeightDp = 800;
+        mBottomControlsStacker =
+                new BottomControlsStacker(mBrowserControlsSizer, mContext, mWindowAndroid);
     }
 
     @Test
@@ -282,6 +298,8 @@ public class BottomControlsStackerUnitTest {
         mBottomControlsStacker.addLayer(layer);
         mBottomControlsStacker.requestLayerUpdate(false);
         verify(mBrowserControlsSizer).setBottomControlsHeight(100, 0);
+        assertLayerNonScrollable(TOP_LAYER, false);
+        assertHasMultipleNonScrollableLayer(false);
     }
 
     @Test
@@ -295,6 +313,8 @@ public class BottomControlsStackerUnitTest {
         mBottomControlsStacker.addLayer(layer);
         mBottomControlsStacker.requestLayerUpdate(false);
         verify(mBrowserControlsSizer).setBottomControlsHeight(100, 100);
+        assertLayerNonScrollable(TOP_LAYER, true);
+        assertHasMultipleNonScrollableLayer(false);
     }
 
     @Test
@@ -309,6 +329,8 @@ public class BottomControlsStackerUnitTest {
         mBottomControlsStacker.addLayer(layer);
         mBottomControlsStacker.requestLayerUpdate(false);
         verify(mBrowserControlsSizer).setBottomControlsHeight(0, 0);
+        assertLayerNonScrollable(TOP_LAYER, false);
+        assertHasMultipleNonScrollableLayer(false);
     }
 
     @Test
@@ -331,6 +353,10 @@ public class BottomControlsStackerUnitTest {
 
         verify(mBrowserControlsSizer).setBottomControlsHeight(110, 0);
         verify(mBrowserControlsSizer).setAnimateBrowserControlsHeightChanges(true);
+
+        assertLayerNonScrollable(TOP_LAYER, false);
+        assertLayerNonScrollable(BOTTOM_LAYER, false);
+        assertHasMultipleNonScrollableLayer(false);
     }
 
     @Test
@@ -353,6 +379,10 @@ public class BottomControlsStackerUnitTest {
 
         verify(mBrowserControlsSizer).setBottomControlsHeight(110, 110);
         verify(mBrowserControlsSizer).setAnimateBrowserControlsHeightChanges(true);
+
+        assertLayerNonScrollable(TOP_LAYER, true);
+        assertLayerNonScrollable(BOTTOM_LAYER, true);
+        assertHasMultipleNonScrollableLayer(true);
     }
 
     @Test
@@ -375,6 +405,10 @@ public class BottomControlsStackerUnitTest {
 
         verify(mBrowserControlsSizer).setBottomControlsHeight(110, 10);
         verify(mBrowserControlsSizer).setAnimateBrowserControlsHeightChanges(true);
+
+        assertLayerNonScrollable(TOP_LAYER, false);
+        assertLayerNonScrollable(BOTTOM_LAYER, true);
+        assertHasMultipleNonScrollableLayer(false);
     }
 
     @Test
@@ -404,6 +438,11 @@ public class BottomControlsStackerUnitTest {
 
         verify(mBrowserControlsSizer).setBottomControlsHeight(180, 80);
         verify(mBrowserControlsSizer).setAnimateBrowserControlsHeightChanges(true);
+
+        assertLayerNonScrollable(TOP_LAYER, false);
+        assertLayerNonScrollable(MID_LAYER, true);
+        assertLayerNonScrollable(BOTTOM_LAYER, true);
+        assertHasMultipleNonScrollableLayer(true);
     }
 
     @Test
@@ -426,6 +465,10 @@ public class BottomControlsStackerUnitTest {
 
         verify(mBrowserControlsSizer).setBottomControlsHeight(120, 0);
         verify(mBrowserControlsSizer).setAnimateBrowserControlsHeightChanges(true);
+
+        assertLayerNonScrollable(TOP_LAYER, false);
+        assertLayerNonScrollable(BOTTOM_LAYER, false);
+        assertHasMultipleNonScrollableLayer(false);
     }
 
     @Test(expected = AssertionError.class)
@@ -970,7 +1013,7 @@ public class BottomControlsStackerUnitTest {
         assertLayerYOffset(bottom, 0);
 
         // When animation finished, the hidden layer has its yOffset is set to its height.
-        onBottomControlsOffsetChanged(0, 0, false);
+        onBottomControlsOffsetChanged(0, 0, true);
         assertLayerYOffset(top, 100);
         assertLayerYOffset(bottom, 0);
     }
@@ -1469,16 +1512,276 @@ public class BottomControlsStackerUnitTest {
         assertLayerYOffset(bottom, 0);
     }
 
+    @Test
+    @EnableFeatures(ChromeFeatureList.BCIV_BOTTOM_CONTROLS)
+    public void testOffsetClampingMinHeightIncreased() {
+        // Final state of the animation
+        TestLayer top =
+                new TestLayer(
+                        TOP_LAYER,
+                        150,
+                        LayerScrollBehavior.ALWAYS_SCROLL_OFF,
+                        LayerVisibility.VISIBLE);
+        TestLayer bottom =
+                new TestLayer(
+                        BOTTOM_LAYER,
+                        50,
+                        LayerScrollBehavior.NEVER_SCROLL_OFF,
+                        LayerVisibility.VISIBLE);
+        mBottomControlsStacker.addLayer(top);
+        mBottomControlsStacker.addLayer(bottom);
+        mBottomControlsStacker.requestLayerUpdate(false);
+        verify(mBrowserControlsSizer).setBottomControlsHeight(200, 50);
+
+        // First frame of the animation
+        onBottomControlsOffsetChanged(50, 0, true, false);
+        assertLayerYOffset(top, -50);
+
+        // Some intermediate frame of the animation
+        onBottomControlsOffsetChanged(45, 5, true, false);
+        assertLayerYOffset(top, -50);
+
+        // Final frame of the animation
+        onBottomControlsOffsetChanged(0, 50, true, false);
+        assertLayerYOffset(top, -50);
+    }
+
+    @Test
+    @EnableFeatures(ChromeFeatureList.BCIV_BOTTOM_CONTROLS)
+    public void testOffsetClampingMinHeightDecreased() {
+        // Final state of the animation
+        TestLayer top =
+                new TestLayer(
+                        TOP_LAYER,
+                        150,
+                        LayerScrollBehavior.ALWAYS_SCROLL_OFF,
+                        LayerVisibility.VISIBLE);
+        mBottomControlsStacker.addLayer(top);
+        mBottomControlsStacker.requestLayerUpdate(false);
+        verify(mBrowserControlsSizer).setBottomControlsHeight(150, 0);
+
+        // First frame of the animation (removing a view with min height of 50)
+        onBottomControlsOffsetChanged(-50, 50, true, false);
+        assertLayerYOffset(top, -50);
+
+        // Some intermediate frame of the animation
+        onBottomControlsOffsetChanged(-45, 45, true, false);
+        assertLayerYOffset(top, -45);
+
+        // Final frame of the animation
+        onBottomControlsOffsetChanged(0, 0, true, false);
+        assertLayerYOffset(top, 0);
+    }
+
+    @Test
+    @EnableFeatures(ChromeFeatureList.BCIV_BOTTOM_CONTROLS)
+    public void testOffsetClampingMinHeightDecreasedControlsInitiallyHidden() {
+        // Final state of the animation
+        TestLayer top =
+                new TestLayer(
+                        TOP_LAYER,
+                        150,
+                        LayerScrollBehavior.ALWAYS_SCROLL_OFF,
+                        LayerVisibility.VISIBLE);
+        mBottomControlsStacker.addLayer(top);
+        mBottomControlsStacker.requestLayerUpdate(false);
+        verify(mBrowserControlsSizer).setBottomControlsHeight(150, 0);
+
+        // First frame of the animation (removing a view with min height of 50)
+        onBottomControlsOffsetChanged(100, 50, true, false);
+        assertLayerYOffset(top, 0);
+
+        // Some intermediate frame of the animation
+        onBottomControlsOffsetChanged(105, 45, true, false);
+        assertLayerYOffset(top, 0);
+
+        // Final frame of the animation
+        onBottomControlsOffsetChanged(150, 0, true, false);
+        assertLayerYOffset(top, 0);
+    }
+
+    @Test
+    public void testLayerMetrics() {
+        TestLayer top =
+                new TestLayer(
+                        TOP_LAYER,
+                        100,
+                        LayerScrollBehavior.DEFAULT_SCROLL_OFF,
+                        LayerVisibility.VISIBLE);
+        TestLayer bottom =
+                new TestLayer(
+                        BOTTOM_LAYER,
+                        50,
+                        LayerScrollBehavior.DEFAULT_SCROLL_OFF,
+                        LayerVisibility.VISIBLE_IF_OTHERS_VISIBLE);
+        mBottomControlsStacker.addLayer(top);
+        mBottomControlsStacker.addLayer(bottom);
+        mBottomControlsStacker.requestLayerUpdate(false);
+
+        HistogramWatcher histogramWatcher =
+                HistogramWatcher.newBuilder()
+                        .expectIntRecord("Android.BottomControlsStacker.NumberOfVisibleLayers", 2)
+                        .expectIntRecord(
+                                "Android.BottomControlsStacker.PercentageOfWindowUsedByBottomControlsAtMaxHeight",
+                                150 / 800)
+                        .expectIntRecord(
+                                "Android.BottomControlsStacker.PercentageOfWindowUsedByBottomControlsAtMinHeight",
+                                0)
+                        .build();
+
+        mBottomControlsStacker.notifyDidFinishNavigationInPrimaryMainFrame();
+        histogramWatcher.assertExpected();
+
+        TestLayer middle =
+                new TestLayer(
+                        MID_LAYER,
+                        10,
+                        LayerScrollBehavior.NEVER_SCROLL_OFF,
+                        LayerVisibility.VISIBLE);
+        mBottomControlsStacker.addLayer(middle);
+        mBottomControlsStacker.requestLayerUpdate(false);
+
+        histogramWatcher =
+                HistogramWatcher.newBuilder()
+                        .expectIntRecord("Android.BottomControlsStacker.NumberOfVisibleLayers", 3)
+                        .expectIntRecord(
+                                "Android.BottomControlsStacker.PercentageOfWindowUsedByBottomControlsAtMaxHeight",
+                                160 / 800)
+                        .expectIntRecord(
+                                "Android.BottomControlsStacker.PercentageOfWindowUsedByBottomControlsAtMinHeight",
+                                60 / 800)
+                        .build();
+
+        mBottomControlsStacker.notifyDidFinishNavigationInPrimaryMainFrame();
+        histogramWatcher.assertExpected();
+    }
+
+    @Test
+    public void testCalculateHeightFromLayer() {
+        TestLayer top =
+                new TestLayer(
+                        TOP_LAYER,
+                        1000,
+                        LayerScrollBehavior.ALWAYS_SCROLL_OFF,
+                        LayerVisibility.VISIBLE);
+        TestLayer mid =
+                new TestLayer(
+                        MID_LAYER,
+                        100,
+                        LayerScrollBehavior.ALWAYS_SCROLL_OFF,
+                        LayerVisibility.VISIBLE);
+        TestLayer bottom =
+                new TestLayer(
+                        BOTTOM_LAYER,
+                        10,
+                        LayerScrollBehavior.ALWAYS_SCROLL_OFF,
+                        LayerVisibility.VISIBLE);
+        mBottomControlsStacker.addLayer(top);
+        mBottomControlsStacker.addLayer(mid);
+        mBottomControlsStacker.addLayer(bottom);
+        mBottomControlsStacker.updateLayerVisibilitiesAndSizes();
+
+        assertEquals(
+                "top, mid and bottom layers should be counted",
+                1110,
+                mBottomControlsStacker.getHeightFromLayerToBottom(TOP_LAYER));
+        assertEquals(
+                "Only mid and bottom layers should be counted",
+                110,
+                mBottomControlsStacker.getHeightFromLayerToBottom(MID_LAYER));
+        assertEquals(
+                "Only bottom layer should be counted",
+                10,
+                mBottomControlsStacker.getHeightFromLayerToBottom(BOTTOM_LAYER));
+        assertEquals(
+                "invalid layer shoud return INVALID_HEIGHT",
+                BottomControlsStacker.INVALID_HEIGHT,
+                mBottomControlsStacker.getHeightFromLayerToBottom(-1));
+    }
+
+    @Test
+    public void testCalculateHeightFromLayer_oneLayerIsHiding() {
+        TestLayer top =
+                new TestLayer(
+                        TOP_LAYER,
+                        1000,
+                        LayerScrollBehavior.ALWAYS_SCROLL_OFF,
+                        LayerVisibility.VISIBLE);
+        TestLayer mid =
+                new TestLayer(
+                        MID_LAYER,
+                        100,
+                        LayerScrollBehavior.ALWAYS_SCROLL_OFF,
+                        LayerVisibility.VISIBLE);
+        TestLayer bottom =
+                new TestLayer(
+                        BOTTOM_LAYER,
+                        10,
+                        LayerScrollBehavior.ALWAYS_SCROLL_OFF,
+                        LayerVisibility.HIDING);
+        mBottomControlsStacker.addLayer(top);
+        mBottomControlsStacker.addLayer(mid);
+        mBottomControlsStacker.addLayer(bottom);
+        mBottomControlsStacker.updateLayerVisibilitiesAndSizes();
+
+        assertEquals(
+                "Only top and mid layers should be counted since bottom layer is hided.",
+                1100,
+                mBottomControlsStacker.getHeightFromLayerToBottom(TOP_LAYER));
+        assertEquals(
+                "Only mid layer should be counted since bottom layer is hided.",
+                100,
+                mBottomControlsStacker.getHeightFromLayerToBottom(MID_LAYER));
+        assertEquals(
+                "No layers should be counted",
+                0,
+                mBottomControlsStacker.getHeightFromLayerToBottom(BOTTOM_LAYER));
+        assertEquals(
+                "invalid layer shoud return INVALID_HEIGHT",
+                BottomControlsStacker.INVALID_HEIGHT,
+                mBottomControlsStacker.getHeightFromLayerToBottom(-1));
+    }
+
     // Test helpers
 
     private void onBottomControlsOffsetChanged(
-            int bottomControlsOffset, int bottomControlsMinHeightOffset, boolean needsAnimate) {
+            int bottomControlsOffset, int bottomControlsMinHeightOffset, boolean requestNewFrame) {
+        onBottomControlsOffsetChanged(
+                bottomControlsOffset, bottomControlsMinHeightOffset, false, requestNewFrame);
+    }
+
+    private void onBottomControlsOffsetChanged(
+            int bottomControlsOffset,
+            int bottomControlsMinHeightOffset,
+            boolean bottomControlsMinHeightChanged,
+            boolean requestNewFrame) {
         mBottomControlsStacker.onControlsOffsetChanged(
-                0, 0, bottomControlsOffset, bottomControlsMinHeightOffset, needsAnimate, false);
+                0,
+                0,
+                false,
+                bottomControlsOffset,
+                bottomControlsMinHeightOffset,
+                bottomControlsMinHeightChanged,
+                requestNewFrame,
+                false);
     }
 
     private void assertLayerYOffset(TestLayer layer, int expectedOffset) {
         assertEquals("Different yOffset observed.", expectedOffset, layer.mYOffset);
+    }
+
+    private void assertLayerNonScrollable(@LayerType int type, boolean nonScrollable) {
+        assertEquals(
+                "isLayerNonScrollable(" + type + ") is unexpected.",
+                nonScrollable,
+                mBottomControlsStacker.isLayerNonScrollable(type));
+    }
+
+    private void assertHasMultipleNonScrollableLayer(boolean hasOtherLayers) {
+        assertEquals(
+                "hasMultipleNonScrollableLayer() is unexpected.",
+                hasOtherLayers,
+                mBottomControlsStacker.hasMultipleNonScrollableLayer());
     }
 
     private static class TestLayer implements BottomControlsLayer {
@@ -1528,7 +1831,7 @@ public class BottomControlsStackerUnitTest {
         }
 
         @Override
-        public void onBrowserControlsOffsetUpdate(int layerYOffset) {
+        public void onBrowserControlsOffsetUpdate(int layerYOffset, boolean didMinHeightChange) {
             mYOffset = layerYOffset;
         }
     }

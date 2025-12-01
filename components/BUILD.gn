@@ -28,6 +28,16 @@ source_set("adverse_adblocking") {
   ]
 }
 
+source_set("panel_request_filter") {
+    sources = [
+      "panel/vivaldi_panels_filter.cc",
+      "panel/vivaldi_panels_filter.h",
+    ]
+    deps = [
+      "//components/subresource_filter/content/browser",
+    ]
+}
+
 source_set("panel_utils") {
     sources = [
       "//vivaldi/components/extensions/vivaldi_panel_utils.cc",
@@ -77,7 +87,7 @@ if (is_android) {
 action("search_engines_inc") {
   script = "//vivaldi/scripts/xxd.py"
   engines_json = "//vivaldi/components/search_engines/search_engines.json"
-  engines_inc = "$root_gen_dir/components/search_engines/search_engines_default.inc"
+  engines_inc = "$root_gen_dir/third_party/search_engines_data/search_engines_default.inc"
 
   inputs = [ engines_json ]
   outputs = [ engines_inc ]

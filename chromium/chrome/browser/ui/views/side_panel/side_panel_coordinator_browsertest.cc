@@ -11,6 +11,7 @@
 #include "base/i18n/rtl.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/strings/to_string.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/icu_test_util.h"
 #include "base/test/run_until.h"
@@ -27,6 +28,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/tabs/public/tab_features.h"
+#include "chrome/browser/ui/tabs/public/tab_interface.h"
 #include "chrome/browser/ui/toolbar/pinned_toolbar/pinned_toolbar_actions_model.h"
 #include "chrome/browser/ui/toolbar/pinned_toolbar/pinned_toolbar_actions_model_factory.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
@@ -220,7 +222,7 @@ class SidePanelCoordinatorTest : public InProcessBrowserTest {
                          : "";
     std::string args =
         base::StringPrintf(R"([{%s%s"enabled":%s}])", tab_id_arg.c_str(),
-                           path_arg.c_str(), enabled ? "true" : "false");
+                           path_arg.c_str(), base::ToString(enabled));
     EXPECT_TRUE(extensions::api_test_utils::RunFunction(function.get(), args,
                                                         browser()->profile()))
         << function->GetError();
@@ -528,7 +530,6 @@ IN_PROC_BROWSER_TEST_F(SidePanelCoordinatorTest, ChangeSidePanelAlignmentRTL) {
             SidePanel::HorizontalAlignment::kLeft);
 }
 
-
 IN_PROC_BROWSER_TEST_F(SidePanelCoordinatorTest,
                        SidePanelToggleWithEntriesTest) {
   Init();
@@ -599,10 +600,10 @@ IN_PROC_BROWSER_TEST_F(SidePanelCoordinatorTest, ContextualEntryDeregistered) {
   browser()->GetBrowserView().browser()->tab_strip_model()->ActivateTabAt(0);
 
   // Verify the first tab has kShoppingInsights.
-  tabs::TabModel* tab =
+  tabs::TabInterface* tab =
       browser()->GetBrowserView().browser()->tab_strip_model()->GetTabAtIndex(
           0);
-  SidePanelRegistry* registry = tab->tab_features()->side_panel_registry();
+  SidePanelRegistry* registry = tab->GetTabFeatures()->side_panel_registry();
   SidePanelEntryKey key(SidePanelEntry::Id::kShoppingInsights);
 
   EXPECT_TRUE(registry->GetEntryForKey(key));
@@ -620,10 +621,11 @@ IN_PROC_BROWSER_TEST_F(SidePanelCoordinatorTest,
                                SidePanelEntry::Id::kReadingList);
 
   // Verify the first tab's registry does not have an active entry.
-  tabs::TabModel* tab =
+  tabs::TabInterface* tab =
       browser()->GetBrowserView().browser()->tab_strip_model()->GetTabAtIndex(
           0);
-  SidePanelRegistry* tab_registry = tab->tab_features()->side_panel_registry();
+  SidePanelRegistry* tab_registry =
+      tab->GetTabFeatures()->side_panel_registry();
   SidePanelEntryKey key(SidePanelEntry::Id::kShoppingInsights);
   EXPECT_FALSE(tab_registry->active_entry().has_value());
 
@@ -658,10 +660,11 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_FALSE(global_registry()->active_entry().has_value());
 
   // Verify the first tab's registry has an active entry.
-  tabs::TabModel* tab =
+  tabs::TabInterface* tab =
       browser()->GetBrowserView().browser()->tab_strip_model()->GetTabAtIndex(
           0);
-  SidePanelRegistry* tab_registry = tab->tab_features()->side_panel_registry();
+  SidePanelRegistry* tab_registry =
+      tab->GetTabFeatures()->side_panel_registry();
   SidePanelEntryKey key(SidePanelEntry::Id::kShoppingInsights);
   VerifyEntryExistenceAndValue(tab_registry->active_entry(),
                                SidePanelEntry::Id::kShoppingInsights);

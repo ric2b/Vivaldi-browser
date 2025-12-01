@@ -11,15 +11,15 @@
 #include "base/time/time.h"
 #include "base/types/strong_alias.h"
 #include "components/autofill/core/browser/autofill_type.h"
-#include "components/autofill/core/browser/data_model/autofill_data_model.h"
+#include "components/autofill/core/browser/data_model/usage_history_information.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 
 namespace autofill {
 
 struct PaymentsMetadata;
 
-// A form group that stores IBAN information.
-class Iban : public AutofillDataModel {
+// A class storing IBAN information.
+class Iban {
  public:
   using Guid = base::StrongAlias<class GuidTag, std::string>;
   using InstrumentId = base::StrongAlias<class InstrumentIdTag, int64_t>;
@@ -140,7 +140,7 @@ class Iban : public AutofillDataModel {
   explicit Iban(const InstrumentId& instrument_id);
 
   Iban(const Iban&);
-  ~Iban() override;
+  ~Iban();
 
   Iban& operator=(const Iban& iban);
 
@@ -172,12 +172,6 @@ class Iban : public AutofillDataModel {
 
   PaymentsMetadata GetMetadata() const;
   bool SetMetadata(const PaymentsMetadata& metadata);
-
-  std::u16string GetRawInfo(FieldType type) const override;
-  void SetRawInfoWithVerificationStatus(FieldType type,
-                                        const std::u16string& value,
-                                        VerificationStatus status) override;
-  void GetSupportedTypes(FieldTypeSet* supported_types) const override;
 
   // Returns true if there are no values (field types) set.
   bool IsEmpty(const std::string& app_locale) const;
@@ -243,6 +237,9 @@ class Iban : public AutofillDataModel {
   // this IBAN.
   bool MatchesPrefixAndSuffix(const Iban& iban) const;
 
+  UsageHistoryInformation& usage_history();
+  const UsageHistoryInformation& usage_history() const;
+
  private:
   // To distinguish between local IBANs, utilize the Guid as the identifier. For
   // server-based IBANs, they are uniquely identified by the InstrumentId, a
@@ -264,6 +261,8 @@ class Iban : public AutofillDataModel {
   // but all characters between them stay masked.
   std::u16string prefix_;
   std::u16string suffix_;
+
+  UsageHistoryInformation usage_history_information_;
 };
 
 std::ostream& operator<<(std::ostream& os, const Iban& iban);

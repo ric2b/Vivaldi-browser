@@ -13,7 +13,7 @@ doing "under the hood." One way to get a more detailed view into what's going on
 is to use the about:tracing tool.
 
 Tracing records activity in Chrome's processes (see [multi-process
-architecture](http://www.chromium.org/developers/design-documents/multi-process-architecture)
+architecture](/developers/design-documents/multi-process-architecture)
 for more on what each process is doing). It records C++ or javascript method
 signatures in a hierarchical view for each thread in each process. This is a lot
 of information, but sifting through it can help identify performance

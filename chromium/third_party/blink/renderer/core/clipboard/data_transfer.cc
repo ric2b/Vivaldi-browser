@@ -58,6 +58,7 @@
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/network/mime/mime_type_registry.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-blink.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -107,9 +108,20 @@ class DraggedNodeImageBuilder {
     PaintLayer* layer = dragged_layout_object->EnclosingLayer();
     if (!layer->GetLayoutObject().IsStackingContext())
       layer = layer->AncestorStackingContext();
-
     gfx::Rect absolute_bounding_box =
         dragged_layout_object->AbsoluteBoundingBoxRectIncludingDescendants();
+
+    // Maximum reasonable dimension for a drag image which won't crash during
+    // memory allocation and DnD operation.
+    if (RuntimeEnabledFeatures::DnDScaleHeightAndWidthToMaxDimensionEnabled()) {
+      const int kMaxDimension = 64 * 128;
+      if (absolute_bounding_box.width() > kMaxDimension) {
+        absolute_bounding_box.set_width(kMaxDimension);
+      }
+      if (absolute_bounding_box.height() > kMaxDimension) {
+        absolute_bounding_box.set_height(kMaxDimension);
+      }
+    }
 
     gfx::RectF bounding_box =
         layer->GetLayoutObject()
@@ -313,6 +325,19 @@ bool DataTransfer::hasDataStoreItemListChanged() const {
 void DataTransfer::OnItemListChanged() {
   data_store_item_list_changed_ = true;
   files_->clear();
+
+  if (!CanReadData()) {
+    return;
+  }
+
+  for (uint32_t i = 0; i < data_object_->length(); ++i) {
+    if (data_object_->Item(i)->Kind() == DataObjectItem::kFileKind) {
+      File* file = data_object_->Item(i)->GetAsFile();
+      if (file) {
+        files_->Append(file);
+      }
+    }
+  }
 }
 
 Vector<String> DataTransfer::types() {
@@ -328,18 +353,6 @@ FileList* DataTransfer::files() const {
     files_->clear();
     return files_.Get();
   }
-
-  if (!files_->IsEmpty())
-    return files_.Get();
-
-  for (uint32_t i = 0; i < data_object_->length(); ++i) {
-    if (data_object_->Item(i)->Kind() == DataObjectItem::kFileKind) {
-      Blob* blob = data_object_->Item(i)->GetAsFile();
-      if (auto* file = DynamicTo<File>(blob))
-        files_->Append(file);
-    }
-  }
-
   return files_.Get();
 }
 
@@ -605,6 +618,7 @@ DataTransfer::DataTransfer(DataTransferType type,
       data_store_item_list_changed_(true),
       files_(MakeGarbageCollected<FileList>()) {
   data_object_->AddObserver(this);
+  OnItemListChanged();
 }
 
 void DataTransfer::setDragImage(ImageResourceContent* image,

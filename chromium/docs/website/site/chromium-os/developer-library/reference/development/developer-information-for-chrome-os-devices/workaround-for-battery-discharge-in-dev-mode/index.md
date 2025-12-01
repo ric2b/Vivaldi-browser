@@ -2,7 +2,7 @@
 breadcrumbs:
 - - /chromium-os
   - ChromiumOS
-- - /chromium-os/developer-information-for-chrome-os-devices
+- - /chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices
   - Developer Information for ChromeOS Devices
 page_name: workaround-for-battery-discharge-in-dev-mode
 title: Workaround for battery discharge in dev-mode
@@ -43,7 +43,7 @@ This process is long and annoying, but it's better than losing all your data.
 The issue has been resolved in newer devices, but most likely will not be
 backported to older ones. Here are all the devices impacted (the project names
 are listed; see the [Developer Information for ChromeOS
-Devices](/chromium-os/developer-information-for-chrome-os-devices) page for
+Devices](/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices) page for
 product names):
 
 *   mario & alex & zgb
@@ -78,7 +78,7 @@ through the recovery process, because that will wipe the disk.
 ### Download a recovery image
 
 If you go to
-[www.google.com/chromeos/recovery](http://www.google.com/chromeos/recovery),
+[www.google.com/chromeos/recovery](https://www.google.com/chromeos/recovery),
 you'll find instructions for running a Linux script that will download and
 format a USB stick for you. Follow them, but **don't** remove the USB stick
 afterwards, and **really** don't insert it in your Chromebook. \[Update: okay,

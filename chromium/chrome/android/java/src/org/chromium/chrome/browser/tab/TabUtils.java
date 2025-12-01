@@ -44,9 +44,6 @@ import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
@@ -271,7 +268,7 @@ public class TabUtils {
 
     private static float getWindowHeightExcludingSystemBarsDp(
             DimensionCompat compat, Context context) {
-        return (compat.getWindowHeight() - compat.getNavbarHeight() - compat.getStatusbarHeight())
+        return (compat.getWindowHeight() - compat.getNavbarHeight() - compat.getStatusBarHeight())
                 / context.getResources().getDisplayMetrics().density;
     }
 
@@ -380,14 +377,5 @@ public class TabUtils {
         final int thumbnailMargin =
                 (int) context.getResources().getDimension(R.dimen.tab_grid_card_thumbnail_margin);
         return 2 * (tabGridCardMargin + thumbnailMargin);
-    }
-
-    /** Returns the list of Tab IDs for the given Tabs. */
-    public static List<Integer> getTabIds(Collection<Tab> tabs) {
-        List<Integer> ret = new ArrayList<>(tabs.size());
-        for (Tab tab : tabs) {
-            ret.add(tab.getId());
-        }
-        return ret;
     }
 }

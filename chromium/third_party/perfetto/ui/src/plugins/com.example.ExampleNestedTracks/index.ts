@@ -14,10 +14,21 @@
 
 import {Trace} from '../../public/trace';
 import {PerfettoPlugin} from '../../public/plugin';
-import {createQuerySliceTrack} from '../../public/lib/tracks/query_slice_track';
 import {TrackNode} from '../../public/workspace';
+import {
+  DatasetSliceTrack,
+  DatasetSliceTrackAttrs,
+  ROW_SCHEMA,
+} from '../../components/tracks/dataset_slice_track';
+import {LONG, NUM, STR} from '../../trace_processor/query_result';
+import {SourceDataset} from '../../trace_processor/dataset';
+import {getColorForSlice, makeColorScheme} from '../../components/colorizer';
+import {HSLColor} from '../../base/color';
 
 export default class implements PerfettoPlugin {
+  // TODO(stevegolton): Call this plugins ExampleTracks or something, as it has
+  // turned into more of a generic plugin showcasing what you can do with
+  // tracks.
   static readonly id = 'com.example.ExampleNestedTracks';
   async onTraceLoad(ctx: Trace): Promise<void> {
     const traceStartTime = ctx.traceInfo.start;
@@ -35,16 +46,29 @@ export default class implements PerfettoPlugin {
       values
         ('Foo', ${traceStartTime}, ${traceDur}, 'aaa'),
         ('Bar', ${traceStartTime}, ${traceDur / 2n}, 'bbb'),
-        ('Baz', ${traceStartTime}, ${traceDur / 3n}, 'bbb');
+        ('Baz', ${traceStartTime}, ${traceDur / 3n}, 'aaa'),
+        ('Qux', ${traceStartTime + traceDur / 2n}, ${traceDur / 2n}, 'bbb')
+      ;
     `);
 
     const title = 'Test Track';
     const uri = `com.example.ExampleNestedTracks#TestTrack`;
-    const track = await createQuerySliceTrack({
+    const track = new DatasetSliceTrack({
       trace: ctx,
       uri,
-      data: {
-        sqlSource: 'select * from example_events',
+      dataset: new SourceDataset({
+        src: 'select *, id as depth from example_events',
+        schema: {
+          ts: LONG,
+          name: STR,
+          dur: LONG,
+          id: NUM,
+          arg: STR,
+        },
+      }),
+      colorizer: (row) => {
+        // Example usage of colorizer
+        return getColorForSlice(`${row.arg}`);
       },
     });
     ctx.tracks.registerTrack({
@@ -54,6 +78,66 @@ export default class implements PerfettoPlugin {
     });
 
     this.addNestedTracks(ctx, uri);
+
+    // The following are some examples of dataset tracks with different configurations.
+    this.addTrack(ctx, {
+      trace: ctx,
+      uri: 'Red track',
+      dataset: new SourceDataset({
+        src: 'example_events',
+        schema: {
+          id: NUM,
+          ts: LONG,
+          dur: LONG,
+          name: STR,
+        },
+      }),
+      colorizer: () => makeColorScheme(new HSLColor({h: 0, s: 50, l: 50})),
+    });
+
+    this.addTrack(ctx, {
+      trace: ctx,
+      uri: 'Instants',
+      dataset: new SourceDataset({
+        src: 'example_events',
+        schema: {
+          id: NUM,
+          ts: LONG,
+        },
+      }),
+      colorizer: () => makeColorScheme(new HSLColor({h: 90, s: 50, l: 50})),
+    });
+
+    this.addTrack(ctx, {
+      trace: ctx,
+      uri: 'Flat',
+      dataset: new SourceDataset({
+        src: 'select 0 as depth, * from example_events',
+        schema: {
+          id: NUM,
+          ts: LONG,
+          dur: LONG,
+          name: STR,
+          depth: NUM,
+        },
+      }),
+      colorizer: () => makeColorScheme(new HSLColor({h: 180, s: 50, l: 50})),
+    });
+  }
+
+  private addTrack<T extends ROW_SCHEMA>(
+    ctx: Trace,
+    attrs: DatasetSliceTrackAttrs<T>,
+  ) {
+    const title = attrs.uri;
+    const uri = attrs.uri;
+    const track = new DatasetSliceTrack(attrs);
+    ctx.tracks.registerTrack({
+      uri,
+      title,
+      track,
+    });
+    ctx.workspace.addChildInOrder(new TrackNode({title, uri, sortOrder: -100}));
   }
 
   private addNestedTracks(ctx: Trace, uri: string): void {
@@ -72,5 +156,25 @@ export default class implements PerfettoPlugin {
     track1.addChildLast(track12);
     track12.addChildLast(track121);
     track2.addChildLast(track21);
+
+    ctx.commands.registerCommand({
+      id: 'com.example.ExampleNestedTracks#CloneTracksToNewWorkspace',
+      name: 'Clone track to new workspace',
+      callback: () => {
+        const ws = ctx.workspaces.createEmptyWorkspace('New workspace');
+        ws.addChildLast(trackRoot.clone());
+        ctx.workspaces.switchWorkspace(ws);
+      },
+    });
+
+    ctx.commands.registerCommand({
+      id: 'com.example.ExampleNestedTracks#DeepCloneTracksToNewWorkspace',
+      name: 'Clone all tracks to new workspace',
+      callback: () => {
+        const ws = ctx.workspaces.createEmptyWorkspace('Deep workspace');
+        ws.addChildLast(trackRoot.clone(true));
+        ctx.workspaces.switchWorkspace(ws);
+      },
+    });
   }
 }

@@ -9,6 +9,7 @@
 
 #include "base/check_op.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/to_string.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
@@ -59,7 +60,7 @@ void PeerConnectionRemoteAudioTrack::SetEnabled(bool enabled) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   blink::WebRtcLogMessage(base::StringPrintf(
       "PCRAT::SetEnabled([id=%s] {enabled=%s})", track_interface_->id().c_str(),
-      (enabled ? "true" : "false")));
+      base::ToString(enabled).c_str()));
 
   // This affects the shared state of the source for whether or not it's a part
   // of the mixed audio that's rendered for remote tracks from WebRTC.
@@ -136,8 +137,7 @@ void PeerConnectionRemoteAudioSource::OnData(const void* audio_data,
   // legitimate for libjingle to use a different thread to invoke this method
   // whenever the audio format changes.
 #ifndef NDEBUG
-  const bool is_only_thread_here = single_audio_thread_guard_.Try();
-  DCHECK(is_only_thread_here);
+  CHECK(single_audio_thread_guard_.Try());
 #endif
 
   TRACE_EVENT2("audio", "PeerConnectionRemoteAudioSource::OnData",
@@ -174,8 +174,7 @@ void PeerConnectionRemoteAudioSource::OnData(const void* audio_data,
   MediaStreamAudioSource::DeliverDataToTracks(*audio_bus_, playout_time, {});
 
 #ifndef NDEBUG
-  if (is_only_thread_here)
-    single_audio_thread_guard_.Release();
+  single_audio_thread_guard_.Release();
 #endif
 }
 

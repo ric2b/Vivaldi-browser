@@ -16,6 +16,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "content/public/common/content_features.h"
+#include "content/public/test/shared_storage_test_utils.h"
 #include "content/services/auction_worklet/auction_v8_helper.h"
 #include "content/services/auction_worklet/bidder_lazy_filler.h"
 #include "content/services/auction_worklet/for_debugging_only_bindings.h"
@@ -27,6 +28,7 @@
 #include "content/services/auction_worklet/register_ad_beacon_bindings.h"
 #include "content/services/auction_worklet/register_ad_macro_bindings.h"
 #include "content/services/auction_worklet/report_bindings.h"
+#include "content/services/auction_worklet/report_win_browser_signals_lazy_filler.h"
 #include "content/services/auction_worklet/seller_lazy_filler.h"
 #include "content/services/auction_worklet/set_bid_bindings.h"
 #include "content/services/auction_worklet/set_priority_bindings.h"
@@ -50,6 +52,15 @@ using testing::ElementsAre;
 using testing::Pair;
 
 namespace auction_worklet {
+
+namespace {
+
+using content::MojomAppendMethod;
+using content::MojomClearMethod;
+using content::MojomDeleteMethod;
+using content::MojomSetMethod;
+
+}  // namespace
 
 // Helper to avoid excess boilerplate.
 template <typename... Ts>
@@ -99,7 +110,8 @@ class ContextRecyclerTest : public testing::Test {
     std::optional<std::string> error_msg;
     EXPECT_TRUE(helper_
                     ->Compile(code, bidding_logic_url_,
-                              /*debug_id=*/nullptr, error_msg)
+                              /*debug_id=*/nullptr, /*cached_data=*/nullptr,
+                              error_msg)
                     .ToLocal(&script));
     EXPECT_FALSE(error_msg.has_value()) << error_msg.value();
     return script;
@@ -780,7 +792,8 @@ TEST_F(ContextRecyclerTest, ReportBindings) {
   ContextRecycler context_recycler(helper_.get());
   {
     ContextRecyclerScope scope(context_recycler);  // Initialize context
-    context_recycler.AddReportBindings();
+    context_recycler.AddReportBindings(
+        /*queue_report_aggregate_win_allowed=*/false);
   }
 
   {
@@ -876,6 +889,238 @@ TEST_F(ContextRecyclerTest, ReportBindings) {
     EXPECT_FALSE(context_recycler.report_bindings()->report_url().has_value());
   }
   EXPECT_FALSE(context_recycler.report_bindings()->report_url().has_value());
+}
+
+class ContextRecyclerPrivateModelTrainingEnabledTest
+    : public ContextRecyclerTest {
+ public:
+  ContextRecyclerPrivateModelTrainingEnabledTest() {
+    scoped_feature_list_.InitAndEnableFeature(
+        blink::features::kFledgePrivateModelTraining);
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+// Exercise ReportBindings, and make sure they reset properly.
+TEST_F(ContextRecyclerPrivateModelTrainingEnabledTest,
+       ReportBindingsQueueReportAggregateWin) {
+  const char kScript[] = R"(
+    function queueReportOnce(modelingSignalsConfig) {
+      queueReportAggregateWin({
+        modelingSignalsConfig: {
+          destination: modelingSignalsConfig.destination,
+          aggregationCoordinatorOrigin: modelingSignalsConfig.aggregationCoordinatorOrigin,
+          payloadLength: modelingSignalsConfig.payloadLength,
+        }
+      });
+    }
+
+    function queueReportTwice(modelingSignalsConfig) {
+      queueReportAggregateWin({
+        modelingSignalsConfig: {
+          destination: modelingSignalsConfig.destination,
+          aggregationCoordinatorOrigin: modelingSignalsConfig.aggregationCoordinatorOrigin,
+          payloadLength: modelingSignalsConfig.payloadLength,
+        }
+      });
+      queueReportAggregateWin({
+        modelingSignalsConfig: {
+          destination: modelingSignalsConfig.destination,
+          aggregationCoordinatorOrigin: modelingSignalsConfig.aggregationCoordinatorOrigin,
+          payloadLength: modelingSignalsConfig.payloadLength,
+        }
+      });
+    }
+  )";
+
+  v8::Local<v8::UnboundScript> script = Compile(kScript);
+  ASSERT_FALSE(script.IsEmpty());
+
+  ContextRecycler context_recycler(helper_.get());
+  {
+    ContextRecyclerScope scope(context_recycler);  // Initialize context
+    context_recycler.AddReportBindings(
+        /*queue_report_aggregate_win_allowed=*/true);
+  }
+
+  {
+    // Make sure an exception doesn't stick around between executions.
+    ContextRecyclerScope scope(context_recycler);
+    gin::Dictionary config_dict =
+        gin::Dictionary::CreateEmpty(helper_->isolate());
+    config_dict.Set("destination", std::string("invalid-url"));
+    config_dict.Set("aggregationCoordinatorOrigin",
+                    std::string("https://example.test"));
+    config_dict.Set("payloadLength", 256);
+    std::vector<std::string> error_msgs;
+    Run(scope, script, "queueReportOnce", error_msgs,
+        gin::ConvertToV8(helper_->isolate(), config_dict));
+    EXPECT_THAT(
+        error_msgs,
+        ElementsAre("https://example.test/script.js:3 Uncaught TypeError: "
+                    "modelingSignalsConfig's destination must be passed a "
+                    "valid HTTPS url."));
+  }
+
+  {
+    ContextRecyclerScope scope(context_recycler);
+    gin::Dictionary config_dict =
+        gin::Dictionary::CreateEmpty(helper_->isolate());
+    config_dict.Set("destination", std::string("https://example.destination"));
+    config_dict.Set("aggregationCoordinatorOrigin",
+                    std::string("https://example.origin"));
+    config_dict.Set("payloadLength", 256);
+    std::vector<std::string> error_msgs;
+    Run(scope, script, "queueReportOnce", error_msgs,
+        gin::ConvertToV8(helper_->isolate(), config_dict));
+    EXPECT_THAT(error_msgs, ElementsAre());
+    ASSERT_TRUE(context_recycler.report_bindings()
+                    ->modeling_signals_config()
+                    .has_value());
+    EXPECT_EQ("https://example.destination/",
+              context_recycler.report_bindings()
+                  ->modeling_signals_config()
+                  ->destination.spec());
+    EXPECT_EQ("https://example.origin/",
+              context_recycler.report_bindings()
+                  ->modeling_signals_config()
+                  ->aggregation_coordinator_origin.spec());
+    EXPECT_EQ(uint32_t(256), context_recycler.report_bindings()
+                                 ->modeling_signals_config()
+                                 ->payload_length);
+  }
+  // Should already be cleared between executions.
+  EXPECT_FALSE(context_recycler.report_bindings()
+                   ->modeling_signals_config()
+                   .has_value());
+
+  // Calling queueReportAggregateWin() twice should result in an error.
+  {
+    ContextRecyclerScope scope(context_recycler);
+    gin::Dictionary config_dict =
+        gin::Dictionary::CreateEmpty(helper_->isolate());
+    config_dict.Set("destination", std::string("https://example.destination"));
+    config_dict.Set("aggregationCoordinatorOrigin",
+                    std::string("https://example.origin"));
+    config_dict.Set("payloadLength", 256);
+    std::vector<std::string> error_msgs;
+    Run(scope, script, "queueReportTwice", error_msgs,
+        gin::ConvertToV8(helper_->isolate(), config_dict));
+    EXPECT_THAT(
+        error_msgs,
+        ElementsAre("https://example.test/script.js:20 Uncaught TypeError: "
+                    "queueReportAggregateWin() may be called at most once."));
+    EXPECT_FALSE(context_recycler.report_bindings()
+                     ->modeling_signals_config()
+                     .has_value());
+  }
+  EXPECT_FALSE(context_recycler.report_bindings()
+                   ->modeling_signals_config()
+                   .has_value());
+
+  // URLs that are the max URL length should be passed along without issues.
+  {
+    ContextRecyclerScope scope(context_recycler);
+    std::vector<std::string> error_msgs;
+    gin::Dictionary config_dict =
+        gin::Dictionary::CreateEmpty(helper_->isolate());
+    config_dict.Set("destination", almost_too_long_url());
+    config_dict.Set("aggregationCoordinatorOrigin",
+                    std::string("https://example.origin"));
+    config_dict.Set("payloadLength", 256);
+    Run(scope, script, "queueReportOnce", error_msgs,
+        gin::ConvertToV8(helper_->isolate(), config_dict));
+    EXPECT_THAT(error_msgs, ElementsAre());
+    ASSERT_TRUE(context_recycler.report_bindings()
+                    ->modeling_signals_config()
+                    .has_value());
+    EXPECT_EQ(almost_too_long_url(), context_recycler.report_bindings()
+                                         ->modeling_signals_config()
+                                         ->destination.spec());
+  }
+  EXPECT_FALSE(context_recycler.report_bindings()
+                   ->modeling_signals_config()
+                   .has_value());
+
+  // URLs that are too long should throw an error
+  {
+    ContextRecyclerScope scope(context_recycler);
+    std::vector<std::string> error_msgs;
+    gin::Dictionary config_dict =
+        gin::Dictionary::CreateEmpty(helper_->isolate());
+    config_dict.Set("destination", too_long_url());
+    config_dict.Set("aggregationCoordinatorOrigin",
+                    std::string("https://example.origin"));
+    config_dict.Set("payloadLength", 256);
+    Run(scope, script, "queueReportOnce", error_msgs,
+        gin::ConvertToV8(helper_->isolate(), config_dict));
+    EXPECT_THAT(error_msgs,
+                ElementsAre("https://example.test/script.js:3 Uncaught "
+                            "TypeError: modelingSignalsConfig's destination "
+                            "exceeds the maximum URL length."));
+    EXPECT_FALSE(context_recycler.report_bindings()
+                     ->modeling_signals_config()
+                     .has_value());
+  }
+  EXPECT_FALSE(context_recycler.report_bindings()
+                   ->modeling_signals_config()
+                   .has_value());
+}
+
+class ContextRecyclerPrivateModelTrainingDisabledTest
+    : public ContextRecyclerTest {
+ public:
+  ContextRecyclerPrivateModelTrainingDisabledTest() {
+    scoped_feature_list_.InitAndDisableFeature(
+        blink::features::kFledgePrivateModelTraining);
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+TEST_F(ContextRecyclerPrivateModelTrainingDisabledTest,
+       ReportBindingsQueueReportAggregateWin) {
+  const char kScript[] = R"(
+    function queueReportOnce(modelingSignalsConfig) {
+      queueReportAggregateWin({
+        modelingSignalsConfig: {
+          destination: modelingSignalsConfig.destination,
+          aggregationCoordinatorOrigin: modelingSignalsConfig.aggregationCoordinatorOrigin,
+          payloadLength: modelingSignalsConfig.payloadLength,
+        }
+      });
+    }
+  )";
+
+  v8::Local<v8::UnboundScript> script = Compile(kScript);
+  ASSERT_FALSE(script.IsEmpty());
+
+  ContextRecycler context_recycler(helper_.get());
+  {
+    ContextRecyclerScope scope(context_recycler);  // Initialize context
+    context_recycler.AddReportBindings(
+        /*queue_report_aggregate_win_allowed=*/true);
+  }
+
+  {
+    ContextRecyclerScope scope(context_recycler);
+    gin::Dictionary config_dict =
+        gin::Dictionary::CreateEmpty(helper_->isolate());
+    config_dict.Set("destination", std::string("https://example.test"));
+    config_dict.Set("aggregationCoordinatorOrigin",
+                    std::string("https://example.test"));
+    config_dict.Set("payloadLength", 256);
+    std::vector<std::string> error_msgs;
+    Run(scope, script, "queueReportOnce", error_msgs,
+        gin::ConvertToV8(helper_->isolate(), config_dict));
+    EXPECT_THAT(
+        error_msgs,
+        ElementsAre("https://example.test/script.js:3 Uncaught ReferenceError: "
+                    "queueReportAggregateWin is not defined."));
+  }
 }
 
 // Exercise SetBidBindings, and make sure they reset properly.
@@ -2188,10 +2433,8 @@ TEST_F(ContextRecyclerTest, SharedStorageMethods) {
 
     EXPECT_THAT(test_shared_storage_host.observed_requests(),
                 ElementsAre(Request(
-                    network::mojom::SharedStorageModifierMethod::NewSetMethod(
-                        network::mojom::SharedStorageSetMethod::New(
-                            /*key=*/u"a", /*value=*/u"b",
-                            /*ignore_if_present=*/false)),
+                    MojomSetMethod(/*key=*/u"a", /*value=*/u"b",
+                                   /*ignore_if_present=*/false),
                     mojom::AuctionWorkletFunction::kBidderGenerateBid)));
 
     test_shared_storage_host.ClearObservedRequests();
@@ -2204,6 +2447,7 @@ TEST_F(ContextRecyclerTest, SharedStorageMethods) {
     gin::Dictionary options_dict =
         gin::Dictionary::CreateEmpty(helper_->isolate());
     options_dict.Set("ignoreIfPresent", true);
+    options_dict.Set("withLock", std::string("lock1"));
 
     Run(scope, script, "testSet", error_msgs,
         /*args=*/
@@ -2216,10 +2460,9 @@ TEST_F(ContextRecyclerTest, SharedStorageMethods) {
 
     EXPECT_THAT(test_shared_storage_host.observed_requests(),
                 ElementsAre(Request(
-                    network::mojom::SharedStorageModifierMethod::NewSetMethod(
-                        network::mojom::SharedStorageSetMethod::New(
-                            /*key=*/u"a", /*value=*/u"b",
-                            /*ignore_if_present=*/true)),
+                    MojomSetMethod(/*key=*/u"a", /*value=*/u"b",
+                                   /*ignore_if_present=*/true,
+                                   /*with_lock=*/"lock1"),
                     mojom::AuctionWorkletFunction::kBidderGenerateBid)));
 
     test_shared_storage_host.ClearObservedRequests();
@@ -2229,20 +2472,23 @@ TEST_F(ContextRecyclerTest, SharedStorageMethods) {
     ContextRecyclerScope scope(context_recycler);
     std::vector<std::string> error_msgs;
 
+    gin::Dictionary options_dict =
+        gin::Dictionary::CreateEmpty(helper_->isolate());
+    options_dict.Set("withLock", std::string());
+
     Run(scope, script, "testAppend", error_msgs,
         /*args=*/
         v8::LocalVector<v8::Value>(
             helper_->isolate(),
             {gin::ConvertToV8(helper_->isolate(), std::string("a")),
-             gin::ConvertToV8(helper_->isolate(), std::string("b"))}));
+             gin::ConvertToV8(helper_->isolate(), std::string("b")),
+             gin::ConvertToV8(helper_->isolate(), options_dict)}));
     EXPECT_THAT(error_msgs, ElementsAre());
 
     EXPECT_THAT(
         test_shared_storage_host.observed_requests(),
         ElementsAre(Request(
-            network::mojom::SharedStorageModifierMethod::NewAppendMethod(
-                network::mojom::SharedStorageAppendMethod::New(
-                    /*key=*/u"a", /*value=*/u"b")),
+            MojomAppendMethod(/*key=*/u"a", /*value=*/u"b", /*with_lock=*/""),
             mojom::AuctionWorkletFunction::kBidderGenerateBid)));
 
     test_shared_storage_host.ClearObservedRequests();
@@ -2251,21 +2497,23 @@ TEST_F(ContextRecyclerTest, SharedStorageMethods) {
   {
     ContextRecyclerScope scope(context_recycler);
     std::vector<std::string> error_msgs;
+
+    gin::Dictionary options_dict =
+        gin::Dictionary::CreateEmpty(helper_->isolate());
+    options_dict.Set("withLock", false);
 
     Run(scope, script, "testDelete", error_msgs,
         /*args=*/
         v8::LocalVector<v8::Value>(
             helper_->isolate(),
-            {gin::ConvertToV8(helper_->isolate(), std::string("a"))}));
+            {gin::ConvertToV8(helper_->isolate(), std::string("a")),
+             gin::ConvertToV8(helper_->isolate(), options_dict)}));
     EXPECT_THAT(error_msgs, ElementsAre());
 
-    EXPECT_THAT(
-        test_shared_storage_host.observed_requests(),
-        ElementsAre(Request(
-            network::mojom::SharedStorageModifierMethod::NewDeleteMethod(
-                network::mojom::SharedStorageDeleteMethod::New(
-                    /*key=*/u"a")),
-            mojom::AuctionWorkletFunction::kBidderGenerateBid)));
+    EXPECT_THAT(test_shared_storage_host.observed_requests(),
+                ElementsAre(Request(
+                    MojomDeleteMethod(/*key=*/u"a", /*with_lock=*/"false"),
+                    mojom::AuctionWorkletFunction::kBidderGenerateBid)));
 
     test_shared_storage_host.ClearObservedRequests();
   }
@@ -2274,17 +2522,20 @@ TEST_F(ContextRecyclerTest, SharedStorageMethods) {
     ContextRecyclerScope scope(context_recycler);
     std::vector<std::string> error_msgs;
 
+    gin::Dictionary options_dict =
+        gin::Dictionary::CreateEmpty(helper_->isolate());
+    options_dict.Set("withLock", std::string("lock2"));
+
     Run(scope, script, "testClear", error_msgs,
         /*args=*/
         v8::LocalVector<v8::Value>(
             helper_->isolate(),
-            {gin::ConvertToV8(helper_->isolate(), std::string("a"))}));
+            {gin::ConvertToV8(helper_->isolate(), options_dict)}));
     EXPECT_THAT(error_msgs, ElementsAre());
 
     EXPECT_THAT(test_shared_storage_host.observed_requests(),
                 ElementsAre(Request(
-                    network::mojom::SharedStorageModifierMethod::NewClearMethod(
-                        network::mojom::SharedStorageClearMethod::New()),
+                    MojomClearMethod(/*with_lock=*/"lock2"),
                     mojom::AuctionWorkletFunction::kBidderGenerateBid)));
 
     test_shared_storage_host.ClearObservedRequests();
@@ -2507,7 +2758,11 @@ TEST_F(ContextRecyclerTest, SharedStorageMethodsPermissionsPolicyDisabled) {
     std::vector<std::string> error_msgs;
 
     Run(scope, script, "testSet", error_msgs,
-        /*args=*/v8::LocalVector<v8::Value>(helper_->isolate()));
+        /*args=*/
+        v8::LocalVector<v8::Value>(
+            helper_->isolate(),
+            {gin::ConvertToV8(helper_->isolate(), std::string("a")),
+             gin::ConvertToV8(helper_->isolate(), std::string("b"))}));
     EXPECT_THAT(error_msgs,
                 ElementsAre("https://example.test/script.js:3 Uncaught "
                             "TypeError: The \"shared-storage\" Permissions "
@@ -2519,7 +2774,11 @@ TEST_F(ContextRecyclerTest, SharedStorageMethodsPermissionsPolicyDisabled) {
     std::vector<std::string> error_msgs;
 
     Run(scope, script, "testAppend", error_msgs,
-        /*args=*/v8::LocalVector<v8::Value>(helper_->isolate()));
+        /*args=*/
+        v8::LocalVector<v8::Value>(
+            helper_->isolate(),
+            {gin::ConvertToV8(helper_->isolate(), std::string("a")),
+             gin::ConvertToV8(helper_->isolate(), std::string("b"))}));
     EXPECT_THAT(error_msgs,
                 ElementsAre("https://example.test/script.js:7 Uncaught "
                             "TypeError: The \"shared-storage\" Permissions "
@@ -2531,7 +2790,10 @@ TEST_F(ContextRecyclerTest, SharedStorageMethodsPermissionsPolicyDisabled) {
     std::vector<std::string> error_msgs;
 
     Run(scope, script, "testDelete", error_msgs,
-        /*args=*/v8::LocalVector<v8::Value>(helper_->isolate()));
+        /*args=*/
+        v8::LocalVector<v8::Value>(
+            helper_->isolate(),
+            {gin::ConvertToV8(helper_->isolate(), std::string("a"))}));
     EXPECT_THAT(error_msgs,
                 ElementsAre("https://example.test/script.js:11 Uncaught "
                             "TypeError: The \"shared-storage\" Permissions "
@@ -2548,6 +2810,96 @@ TEST_F(ContextRecyclerTest, SharedStorageMethodsPermissionsPolicyDisabled) {
                 ElementsAre("https://example.test/script.js:15 Uncaught "
                             "TypeError: The \"shared-storage\" Permissions "
                             "Policy denied the method on sharedStorage."));
+  }
+}
+
+// When there's an IDL error and the permissions policy is disabled, the IDL
+// error should be captured, as it's evaluated first.
+TEST_F(ContextRecyclerTest,
+       SharedStorageMethodsPermissionsPolicyDisabledAndIDLError) {
+  const char kScript[] = R"(
+    function testSet(...args) {
+      sharedStorage.set(...args);
+    }
+
+    function testAppend(...args) {
+      sharedStorage.append(...args);
+    }
+
+    function testDelete(...args) {
+      sharedStorage.delete(...args);
+    }
+
+    function testClear(...args) {
+      sharedStorage.clear({
+        withLock: {
+          toString: () => {
+            throw "Error 123";
+          }
+        }
+      });
+    }
+  )";
+
+  v8::Local<v8::UnboundScript> script = Compile(kScript);
+  ASSERT_FALSE(script.IsEmpty());
+
+  ContextRecycler context_recycler(helper_.get());
+  {
+    ContextRecyclerScope scope(context_recycler);  // Initialize context
+    context_recycler.AddSharedStorageBindings(
+        nullptr, mojom::AuctionWorkletFunction::kBidderGenerateBid,
+        /*shared_storage_permissions_policy_allowed=*/false);
+  }
+
+  {
+    ContextRecyclerScope scope(context_recycler);
+    std::vector<std::string> error_msgs;
+
+    Run(scope, script, "testSet", error_msgs,
+        /*args=*/v8::LocalVector<v8::Value>(helper_->isolate()));
+    EXPECT_THAT(
+        error_msgs,
+        ElementsAre(
+            "https://example.test/script.js:3 Uncaught TypeError: "
+            "sharedStorage.set(): at least 2 argument(s) are required."));
+  }
+
+  {
+    ContextRecyclerScope scope(context_recycler);
+    std::vector<std::string> error_msgs;
+
+    Run(scope, script, "testAppend", error_msgs,
+        /*args=*/v8::LocalVector<v8::Value>(helper_->isolate()));
+    EXPECT_THAT(
+        error_msgs,
+        ElementsAre(
+            "https://example.test/script.js:7 Uncaught TypeError: "
+            "sharedStorage.append(): at least 2 argument(s) are required."));
+  }
+
+  {
+    ContextRecyclerScope scope(context_recycler);
+    std::vector<std::string> error_msgs;
+
+    Run(scope, script, "testDelete", error_msgs,
+        /*args=*/v8::LocalVector<v8::Value>(helper_->isolate()));
+    EXPECT_THAT(
+        error_msgs,
+        ElementsAre(
+            "https://example.test/script.js:11 Uncaught TypeError: "
+            "sharedStorage.delete(): at least 1 argument(s) are required."));
+  }
+
+  {
+    ContextRecyclerScope scope(context_recycler);
+    std::vector<std::string> error_msgs;
+
+    Run(scope, script, "testClear", error_msgs,
+        /*args=*/v8::LocalVector<v8::Value>(helper_->isolate()));
+    EXPECT_THAT(
+        error_msgs,
+        ElementsAre("https://example.test/script.js:15 Uncaught Error 123."));
   }
 }
 
@@ -2579,7 +2931,7 @@ TEST_F(ContextRecyclerTest, SellerBrowserSignalsLazyFiller) {
     context_recycler.AddSellerBrowserSignalsLazyFiller();
     EXPECT_TRUE(
         context_recycler.seller_browser_signals_lazy_filler()->FillInObject(
-            browser_signal_render_url_1, o1));
+            browser_signal_render_url_1, /*ad_components=*/nullptr, o1));
 
     EXPECT_EQ("\"https://a.org/render_url1\"",
               RunExpectString(scope, script, "test", o1));
@@ -2592,7 +2944,7 @@ TEST_F(ContextRecyclerTest, SellerBrowserSignalsLazyFiller) {
 
     EXPECT_TRUE(
         context_recycler.seller_browser_signals_lazy_filler()->FillInObject(
-            browser_signal_render_url_2, o2));
+            browser_signal_render_url_2, /*ad_components=*/nullptr, o2));
 
     EXPECT_EQ("\"https://a.org/render_url2\"",
               RunExpectString(scope, script, "test", o2));
@@ -2611,7 +2963,7 @@ TEST_F(ContextRecyclerTest, SellerBrowserSignalsLazyFiller) {
     // Now fill it in for later but don't access it.
     EXPECT_TRUE(
         context_recycler.seller_browser_signals_lazy_filler()->FillInObject(
-            browser_signal_render_url_1, o1));
+            browser_signal_render_url_1, /*ad_components=*/nullptr, o1));
   }
 
   {
@@ -2621,12 +2973,385 @@ TEST_F(ContextRecyclerTest, SellerBrowserSignalsLazyFiller) {
     o2 = v8::Object::New(isolate);
     EXPECT_TRUE(
         context_recycler.seller_browser_signals_lazy_filler()->FillInObject(
-            browser_signal_render_url_2, o2));
+            browser_signal_render_url_2, /*ad_components=*/nullptr, o2));
 
     EXPECT_EQ("\"https://a.org/render_url2\"",
               RunExpectString(scope, script, "test", o2));
     EXPECT_EQ("\"https://a.org/render_url2\"",
               RunExpectString(scope, script, "test", o1));
+  }
+}
+
+TEST_F(ContextRecyclerTest,
+       SellerBrowserSignalsLazyFillerAdComponentsCreativeScanningMetadata) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      blink::features::kFledgeTrustedSignalsKVv1CreativeScanning);
+
+  const char kScript[] = R"(
+    function test(browserSignals) {
+      if (!('adComponentsCreativeScanningMetadata' in browserSignals))
+        return 'missing';
+      if (!browserSignals.adComponentsCreativeScanningMetadata)
+        return typeof(browserSignals.adComponentsCreativeScanningMetadata);
+      return JSON.stringify(
+          browserSignals.adComponentsCreativeScanningMetadata);
+    }
+  )";
+
+  GURL browser_signal_render_url("https://a.org/render_url1");
+
+  v8::Local<v8::UnboundScript> script = Compile(kScript);
+  ASSERT_FALSE(script.IsEmpty());
+
+  v8::Isolate* isolate = helper_->isolate();
+  ContextRecycler context_recycler(helper_.get());
+  context_recycler.AddSellerBrowserSignalsLazyFiller();
+
+  v8::Local<v8::Object> o1;
+  v8::Local<v8::Object> o2;
+
+  std::vector<mojom::CreativeInfoWithoutOwnerPtr> ad_components;
+
+  {
+    // Null components vector.
+    ContextRecyclerScope scope(context_recycler);
+    o1 = v8::Object::New(isolate);
+    EXPECT_TRUE(
+        context_recycler.seller_browser_signals_lazy_filler()->FillInObject(
+            browser_signal_render_url, /*ad_components=*/nullptr, o1));
+
+    EXPECT_EQ("missing", RunExpectString(scope, script, "test", o1));
+  }
+
+  {
+    // Empty components vector.
+    ContextRecyclerScope scope(context_recycler);
+    o1 = v8::Object::New(isolate);
+
+    EXPECT_TRUE(
+        context_recycler.seller_browser_signals_lazy_filler()->FillInObject(
+            browser_signal_render_url, &ad_components, o1));
+
+    EXPECT_EQ("missing", RunExpectString(scope, script, "test", o1));
+  }
+
+  {
+    // Non-trivial value.
+    ad_components.push_back(
+        auction_worklet::mojom::CreativeInfoWithoutOwner::New(
+            blink::AdDescriptor(GURL("https://bar.test/1")),
+            /*creative_scanning_metadata=*/std::nullopt));
+
+    ad_components.push_back(
+        auction_worklet::mojom::CreativeInfoWithoutOwner::New(
+            blink::AdDescriptor(GURL("https://bar.test/2")),
+            /*creative_scanning_metadata=*/"a"));
+
+    ad_components.push_back(
+        auction_worklet::mojom::CreativeInfoWithoutOwner::New(
+            blink::AdDescriptor(GURL("https://bar.test/2")),
+            /*creative_scanning_metadata=*/"b"));
+
+    ContextRecyclerScope scope(context_recycler);
+    o1 = v8::Object::New(isolate);
+
+    EXPECT_TRUE(
+        context_recycler.seller_browser_signals_lazy_filler()->FillInObject(
+            browser_signal_render_url, &ad_components, o1));
+
+    EXPECT_EQ(R"([null,"a","b"])", RunExpectString(scope, script, "test", o1));
+  }
+
+  {
+    // Fill in an object with a non-empty vector, and don't access it.
+    ContextRecyclerScope scope(context_recycler);
+    o1 = v8::Object::New(isolate);
+
+    EXPECT_TRUE(
+        context_recycler.seller_browser_signals_lazy_filler()->FillInObject(
+            browser_signal_render_url, &ad_components, o1));
+  }
+
+  {
+    // Fill in a new object with a null vector, access the old object.
+    // Should not crash.
+    ContextRecyclerScope scope(context_recycler);
+    o2 = v8::Object::New(isolate);
+
+    EXPECT_TRUE(
+        context_recycler.seller_browser_signals_lazy_filler()->FillInObject(
+            browser_signal_render_url, nullptr, o2));
+
+    EXPECT_EQ("undefined", RunExpectString(scope, script, "test", o1));
+    EXPECT_EQ("missing", RunExpectString(scope, script, "test", o2));
+  }
+}
+
+TEST_F(ContextRecyclerTest,
+       SellerBrowserSignalsLazyFillerDisabledCreativeScanningMetadata) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(
+      blink::features::kFledgeTrustedSignalsKVv1CreativeScanning);
+
+  const char kScript[] = R"(
+    function test(browserSignals) {
+      if (!('adComponentsCreativeScanningMetadata' in browserSignals))
+        return 'missing';
+      if (!browserSignals.adComponentsCreativeScanningMetadata)
+        return typeof(browserSignals.adComponentsCreativeScanningMetadata);
+      return JSON.stringify(
+          browserSignals.adComponentsCreativeScanningMetadata);
+    }
+  )";
+
+  GURL browser_signal_render_url("https://a.org/render_url1");
+
+  v8::Local<v8::UnboundScript> script = Compile(kScript);
+  ASSERT_FALSE(script.IsEmpty());
+
+  v8::Isolate* isolate = helper_->isolate();
+  ContextRecycler context_recycler(helper_.get());
+  context_recycler.AddSellerBrowserSignalsLazyFiller();
+
+  v8::Local<v8::Object> o1;
+
+  std::vector<mojom::CreativeInfoWithoutOwnerPtr> ad_components;
+
+  {
+    // Non-trivial value, but missing since feature disabled.
+    ad_components.push_back(
+        auction_worklet::mojom::CreativeInfoWithoutOwner::New(
+            blink::AdDescriptor(GURL("https://bar.test/1")),
+            /*creative_scanning_metadata=*/std::nullopt));
+
+    ad_components.push_back(
+        auction_worklet::mojom::CreativeInfoWithoutOwner::New(
+            blink::AdDescriptor(GURL("https://bar.test/2")),
+            /*creative_scanning_metadata=*/"a"));
+
+    ad_components.push_back(
+        auction_worklet::mojom::CreativeInfoWithoutOwner::New(
+            blink::AdDescriptor(GURL("https://bar.test/2")),
+            /*creative_scanning_metadata=*/"b"));
+
+    ContextRecyclerScope scope(context_recycler);
+    o1 = v8::Object::New(isolate);
+
+    EXPECT_TRUE(
+        context_recycler.seller_browser_signals_lazy_filler()->FillInObject(
+            browser_signal_render_url, &ad_components, o1));
+
+    EXPECT_EQ("missing", RunExpectString(scope, script, "test", o1));
+  }
+}
+
+TEST_F(ContextRecyclerTest, ReportWinBrowserSignalsLazyFiller) {
+  const char kScript[] = R"(
+    function test(browserSignals) {
+      return JSON.stringify(browserSignals.modelingSignals) + " " +
+        JSON.stringify(browserSignals.joinCount) + " " +
+        JSON.stringify(browserSignals.recency);
+    }
+  )";
+
+  v8::Local<v8::UnboundScript> script = Compile(kScript);
+  ASSERT_FALSE(script.IsEmpty());
+
+  const uint16_t browser_signal_modeling_signals1 = 1;
+  const uint16_t browser_signal_modeling_signals2 = 4;
+
+  const uint8_t browser_signal_join_count1 = 2;
+  const uint8_t browser_signal_join_count2 = 5;
+
+  const uint8_t browser_signal_recency1 = 3;
+  const uint8_t browser_signal_recency2 = 6;
+
+  v8::Isolate* isolate = helper_->isolate();
+  ContextRecycler context_recycler(helper_.get());
+
+  v8::Local<v8::Object> o1;
+  v8::Local<v8::Object> o2;
+
+  {
+    // Fill in o1.
+    ContextRecyclerScope scope(context_recycler);
+    o1 = v8::Object::New(isolate);
+    context_recycler.AddReportWinBrowserSignalsLazyFiller();
+    EXPECT_TRUE(context_recycler.report_win_lazy_filler()->FillInObject(
+        browser_signal_modeling_signals1, browser_signal_join_count1,
+        browser_signal_recency1, o1));
+
+    EXPECT_EQ("1 2 3", RunExpectString(scope, script, "test", o1));
+  }
+
+  {
+    // Fill in o2 with a different value.
+    ContextRecyclerScope scope(context_recycler);
+    o2 = v8::Object::New(isolate);
+
+    EXPECT_TRUE(context_recycler.report_win_lazy_filler()->FillInObject(
+        browser_signal_modeling_signals2, browser_signal_join_count2,
+        browser_signal_recency2, o2));
+
+    EXPECT_EQ("4 5 6", RunExpectString(scope, script, "test", o2));
+    // o1 was already accessed in the previous test.
+    EXPECT_EQ("1 2 3", RunExpectString(scope, script, "test", o1));
+  }
+
+  {
+    // Make a new object that isn't filled.
+    ContextRecyclerScope scope(context_recycler);
+    o1 = v8::Object::New(isolate);
+
+    EXPECT_EQ("undefined undefined undefined",
+              RunExpectString(scope, script, "test", o1));
+
+    // Now fill it in for later but don't access it.
+    EXPECT_TRUE(context_recycler.report_win_lazy_filler()->FillInObject(
+        browser_signal_modeling_signals1, browser_signal_join_count1,
+        browser_signal_recency1, o1));
+  }
+
+  {
+    // Filling in o2 will overwrite the unaccessed value for o1.
+    ContextRecyclerScope scope(context_recycler);
+
+    o2 = v8::Object::New(isolate);
+    EXPECT_TRUE(context_recycler.report_win_lazy_filler()->FillInObject(
+        browser_signal_modeling_signals2, browser_signal_join_count2,
+        browser_signal_recency2, o2));
+
+    EXPECT_EQ("4 5 6", RunExpectString(scope, script, "test", o2));
+    EXPECT_EQ("4 5 6", RunExpectString(scope, script, "test", o1));
+  }
+
+  {
+    // no modeling signals passed results in that field being undefined
+    ContextRecyclerScope scope(context_recycler);
+
+    o1 = v8::Object::New(isolate);
+    EXPECT_TRUE(context_recycler.report_win_lazy_filler()->FillInObject(
+        std::nullopt, browser_signal_join_count1, browser_signal_recency1, o1));
+
+    EXPECT_EQ("undefined 2 3", RunExpectString(scope, script, "test", o1));
+  }
+
+  {
+    // no recency passed results in that field being undefined
+    ContextRecyclerScope scope(context_recycler);
+
+    o1 = v8::Object::New(isolate);
+    EXPECT_TRUE(context_recycler.report_win_lazy_filler()->FillInObject(
+        browser_signal_modeling_signals1, browser_signal_join_count1,
+        std::nullopt, o1));
+
+    EXPECT_EQ("1 2 undefined", RunExpectString(scope, script, "test", o1));
+  }
+}
+
+// Test to ensure that when we access any of the following:
+// - `modelingSignals`
+// - `joinCount`
+// - `recency`
+// that `ShouldBlockSendEncrypted()` will be false.
+TEST_F(ContextRecyclerTest, ReportWinBrowserSignalsLazyFillerCheckAccess) {
+  const char kScript[] = R"(
+    function accessModelingSignals(browserSignals) {
+      return JSON.stringify(browserSignals.modelingSignals);
+    }
+
+    function accessJoinCount(browserSignals) {
+      return JSON.stringify(browserSignals.joinCount);
+    }
+
+    function accessRecency(browserSignals) {
+      return JSON.stringify(browserSignals.recency);
+    }
+
+    function accessNothing(browserSignals) {
+      return "nothing accessed";
+    }
+
+  )";
+
+  v8::Local<v8::UnboundScript> script = Compile(kScript);
+  ASSERT_FALSE(script.IsEmpty());
+
+  const uint16_t browser_signal_modeling_signals1 = 1;
+  const uint8_t browser_signal_join_count1 = 2;
+  const uint8_t browser_signal_recency1 = 3;
+
+  v8::Isolate* isolate = helper_->isolate();
+  ContextRecycler context_recycler(helper_.get());
+
+  v8::Local<v8::Object> o1;
+  context_recycler.AddReportWinBrowserSignalsLazyFiller();
+
+  {
+    // Accessing `modelingSignals` makes `ShouldBlockSendEncrypted()` return
+    // true.
+    ContextRecyclerScope scope(context_recycler);
+
+    o1 = v8::Object::New(isolate);
+    EXPECT_TRUE(context_recycler.report_win_lazy_filler()->FillInObject(
+        browser_signal_modeling_signals1, browser_signal_join_count1,
+        browser_signal_recency1, o1));
+
+    EXPECT_EQ("1", RunExpectString(scope, script, "accessModelingSignals", o1));
+    // Since we accessed one of the fields, this should be true;
+    EXPECT_EQ(
+        context_recycler.report_win_lazy_filler()->ShouldBlockSendEncrypted(),
+        true);
+  }
+
+  {
+    // Accessing `joinCount` makes `ShouldBlockSendEncrypted()` return true.
+    ContextRecyclerScope scope(context_recycler);
+
+    o1 = v8::Object::New(isolate);
+    EXPECT_TRUE(context_recycler.report_win_lazy_filler()->FillInObject(
+        browser_signal_modeling_signals1, browser_signal_join_count1,
+        browser_signal_recency1, o1));
+
+    EXPECT_EQ("2", RunExpectString(scope, script, "accessJoinCount", o1));
+    // Since we accessed one of the fields, this should be true;
+    EXPECT_EQ(
+        context_recycler.report_win_lazy_filler()->ShouldBlockSendEncrypted(),
+        true);
+  }
+
+  {
+    // Accessing `joinCount` makes `ShouldBlockSendEncrypted()` return true.
+    ContextRecyclerScope scope(context_recycler);
+
+    o1 = v8::Object::New(isolate);
+    EXPECT_TRUE(context_recycler.report_win_lazy_filler()->FillInObject(
+        browser_signal_modeling_signals1, browser_signal_join_count1,
+        browser_signal_recency1, o1));
+
+    EXPECT_EQ("3", RunExpectString(scope, script, "accessRecency", o1));
+    // Since we accessed one of the fields, this should be true;
+    EXPECT_EQ(
+        context_recycler.report_win_lazy_filler()->ShouldBlockSendEncrypted(),
+        true);
+  }
+
+  {
+    // Nothing accessed, `ShouldBlockSendEncrypted()` should return false.
+    ContextRecyclerScope scope(context_recycler);
+
+    o1 = v8::Object::New(isolate);
+    EXPECT_TRUE(context_recycler.report_win_lazy_filler()->FillInObject(
+        browser_signal_modeling_signals1, browser_signal_join_count1,
+        browser_signal_recency1, o1));
+
+    EXPECT_EQ("nothing accessed",
+              RunExpectString(scope, script, "accessNothing", o1));
+    // Since we did not access any one of the fields, this should be false;
+    EXPECT_EQ(
+        context_recycler.report_win_lazy_filler()->ShouldBlockSendEncrypted(),
+        false);
   }
 }
 
@@ -2932,10 +3657,7 @@ class ContextRecyclerPrivateAggregationEnabledTest
  public:
   ContextRecyclerPrivateAggregationEnabledTest() {
     scoped_feature_list_.InitWithFeaturesAndParameters(
-        /*enabled_features=*/{{blink::features::kPrivateAggregationApi, {}},
-                              {blink::features::
-                                   kPrivateAggregationApiFilteringIds,
-                               {}}},
+        /*enabled_features=*/{{blink::features::kPrivateAggregationApi, {}}},
         /*disabled_features=*/{});
   }
 
@@ -3728,7 +4450,6 @@ class ContextRecyclerPrivateAggregationExtensionsEnabledTest
         /*enabled_features=*/
         {{blink::features::kPrivateAggregationApi,
           {{"fledge_extensions_enabled", "true"}}},
-         {blink::features::kPrivateAggregationApiFilteringIds, {}},
          {blink::features::
               kPrivateAggregationApiProtectedAudienceAdditionalExtensions,
           {}}},
@@ -5237,159 +5958,8 @@ TEST_F(ContextRecyclerPrivateAggregationOnlyFledgeExtensionsDisabledTest,
   }
 }
 
-class ContextRecyclerPrivateAggregationOnlyFilteringIdsDisabledTest
-    : public ContextRecyclerTest {
- public:
-  ContextRecyclerPrivateAggregationOnlyFilteringIdsDisabledTest() {
-    scoped_feature_list_.InitWithFeaturesAndParameters(
-        /*enabled_features=*/{{blink::features::kPrivateAggregationApi,
-                               {{"fledge_extensions_enabled", "true"}}}},
-        /*disabled_features=*/{
-            blink::features::kPrivateAggregationApiFilteringIds});
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-TEST_F(ContextRecyclerPrivateAggregationOnlyFilteringIdsDisabledTest,
-       PrivateAggregationForEventBindings) {
-  const char kScript[] = R"(
-    function test(args) {
-      // Passing BigInts in directly is complicated so we construct them from
-      // strings.
-      if (typeof args.bucket === "string") {
-        args.bucket = BigInt(args.bucket);
-      }
-      if (args.filteringId && typeof args.filteringId === 'string') {
-        args.filteringId = BigInt(args.filteringId);
-      }
-      privateAggregation.contributeToHistogram(args);
-      privateAggregation.contributeToHistogramOnEvent("reserved.win", args);
-    }
-  )";
-
-  v8::Local<v8::UnboundScript> script = Compile(kScript);
-  ASSERT_FALSE(script.IsEmpty());
-
-  ContextRecycler context_recycler(helper_.get());
-  {
-    ContextRecyclerScope scope(context_recycler);  // Initialize context
-    context_recycler.AddPrivateAggregationBindings(
-        /*private_aggregation_permissions_policy_allowed=*/true,
-        /*reserved_once_allowed=*/true);
-  }
-
-  const auction_worklet::mojom::PrivateAggregationRequestPtr kExpectedRequest =
-      auction_worklet::mojom::PrivateAggregationRequest::New(
-          auction_worklet::mojom::AggregatableReportContribution::
-              NewHistogramContribution(
-                  blink::mojom::AggregatableReportHistogramContribution::New(
-                      /*bucket=*/123, /*value=*/45,
-                      /*filtering_id=*/std::nullopt)),
-          blink::mojom::AggregationServiceMode::kDefault,
-          blink::mojom::DebugModeDetails::New());
-
-  const auction_worklet::mojom::PrivateAggregationRequestPtr
-      kExpectedForEventRequest =
-          auction_worklet::mojom::PrivateAggregationRequest::New(
-              auction_worklet::mojom::AggregatableReportContribution::
-                  NewForEventContribution(
-                      auction_worklet::mojom::
-                          AggregatableReportForEventContribution::New(
-                              auction_worklet::mojom::ForEventSignalBucket::
-                                  NewIdBucket(123),
-                              auction_worklet::mojom::ForEventSignalValue::
-                                  NewIntValue(45),
-                              /*filtering_id=*/std::nullopt,
-                              Reserved(auction_worklet::mojom::
-                                           ReservedEventType::kReservedWin))),
-              blink::mojom::AggregationServiceMode::kDefault,
-              blink::mojom::DebugModeDetails::New());
-
-  // Valid filtering ID ignored
-  {
-    ContextRecyclerScope scope(context_recycler);
-    std::vector<std::string> error_msgs;
-
-    gin::Dictionary dict = gin::Dictionary::CreateEmpty(helper_->isolate());
-    dict.Set("bucket", std::string("123"));
-    dict.Set("value", 45);
-    dict.Set("filteringId", std::string("1"));
-
-    Run(scope, script, "test", error_msgs,
-        gin::ConvertToV8(helper_->isolate(), dict));
-    EXPECT_THAT(error_msgs, ElementsAre());
-
-    EXPECT_THAT(
-        context_recycler.private_aggregation_bindings()
-            ->TakePrivateAggregationRequests(),
-        ElementsAreRequests(kExpectedRequest, kExpectedForEventRequest));
-    EXPECT_TRUE(context_recycler.private_aggregation_bindings()
-                    ->TakePrivateAggregationRequests()
-                    .empty());
-  }
-
-  // Too large filtering ID ignored
-  {
-    ContextRecyclerScope scope(context_recycler);
-    std::vector<std::string> error_msgs;
-
-    gin::Dictionary dict = gin::Dictionary::CreateEmpty(helper_->isolate());
-    dict.Set("bucket", std::string("123"));
-    dict.Set("value", 45);
-    dict.Set("filteringId", std::string("256"));
-
-    Run(scope, script, "test", error_msgs,
-        gin::ConvertToV8(helper_->isolate(), dict));
-    EXPECT_THAT(error_msgs, ElementsAre());
-
-    EXPECT_THAT(
-        context_recycler.private_aggregation_bindings()
-            ->TakePrivateAggregationRequests(),
-        ElementsAreRequests(kExpectedRequest, kExpectedForEventRequest));
-    EXPECT_TRUE(context_recycler.private_aggregation_bindings()
-                    ->TakePrivateAggregationRequests()
-                    .empty());
-  }
-
-  // Invalid filtering ID type ignored
-  {
-    ContextRecyclerScope scope(context_recycler);
-    std::vector<std::string> error_msgs;
-
-    gin::Dictionary dict = gin::Dictionary::CreateEmpty(helper_->isolate());
-    dict.Set("bucket", std::string("123"));
-    dict.Set("value", 45);
-    dict.Set("filteringId", 1);
-
-    Run(scope, script, "test", error_msgs,
-        gin::ConvertToV8(helper_->isolate(), dict));
-    EXPECT_THAT(error_msgs, ElementsAre());
-
-    EXPECT_THAT(
-        context_recycler.private_aggregation_bindings()
-            ->TakePrivateAggregationRequests(),
-        ElementsAreRequests(kExpectedRequest, kExpectedForEventRequest));
-    EXPECT_TRUE(context_recycler.private_aggregation_bindings()
-                    ->TakePrivateAggregationRequests()
-                    .empty());
-  }
-}
-
-class ContextRecyclerAdMacroReportingEnabledTest : public ContextRecyclerTest {
- public:
-  ContextRecyclerAdMacroReportingEnabledTest() {
-    scoped_feature_list_.InitAndEnableFeature(
-        blink::features::kAdAuctionReportingWithMacroApi);
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
 // Exercise RegisterAdMacroBindings, and make sure they reset properly.
-TEST_F(ContextRecyclerAdMacroReportingEnabledTest, RegisterAdMacroBindings) {
+TEST_F(ContextRecyclerTest, RegisterAdMacroBindings) {
   const char kScript[] = R"(
     function test(prefix) {
       registerAdMacro(prefix + "_name", prefix + "_value");

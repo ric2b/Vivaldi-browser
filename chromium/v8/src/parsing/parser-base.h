@@ -1169,7 +1169,9 @@ class ParserBase {
     // ClassBody. Unless the current scope's ScopeType is ScriptScope, the
     // current position is directly or indirectly within one of the productions
     // listed above since they open a new scope.
-    return scope()->scope_type() != SCRIPT_SCOPE;
+    return ((scope()->scope_type() != SCRIPT_SCOPE &&
+             scope()->scope_type() != EVAL_SCOPE) ||
+            scope()->scope_type() == REPL_MODE_SCOPE);
   }
   bool IfNextUsingKeyword(Token::Value token_after_using) {
     // If the token after `using` is `of` or `in`, `using` is an identifier
@@ -1188,20 +1190,18 @@ class ParserBase {
             token_after_using != Token::kOf && token_after_using != Token::kIn);
   }
   bool IfStartsWithUsingKeyword() {
-    return ((peek() == Token::kUsing && IfNextUsingKeyword(PeekAhead())) ||
-            (peek() == Token::kAwait && PeekAhead() == Token::kUsing &&
-             IfNextUsingKeyword(PeekAheadAhead())));
-  }
-  FunctionState* AddOneSuspendPointIfBlockContainsAwaitUsing(
-      Scope* scope, FunctionState* function_state) {
-    if (scope->has_await_using_declaration()) {
-      // Since, we handle async disposal of resources by promise chaining, just
-      // one suspend point is needed at the end of the block that contains at
-      // least one `await using`. This suspend point will be placed in the
-      // `finally` block of rewritten block.
-      function_state->AddSuspend();
-    }
-    return function_state;
+    // ForDeclaration[Yield, Await, Using] : ...
+    //    [+Using] using [no LineTerminator here] ForBinding[?Yield, ?Await,
+    //    ~Pattern]
+    //    [+Using, +Await] await [no LineTerminator here] using [no
+    //    LineTerminator here] ForBinding[?Yield, +Await, ~Pattern]
+    return (
+        (peek() == Token::kUsing && !scanner()->HasLineTerminatorAfterNext() &&
+         IfNextUsingKeyword(PeekAhead())) ||
+        (peek() == Token::kAwait && !scanner()->HasLineTerminatorAfterNext() &&
+         PeekAhead() == Token::kUsing &&
+         !scanner()->HasLineTerminatorAfterNextNext() &&
+         IfNextUsingKeyword(PeekAheadAhead())));
   }
   const PendingCompilationErrorHandler* pending_error_handler() const {
     return pending_error_handler_;
@@ -1245,8 +1245,8 @@ class ParserBase {
   // Returns the receiver variable that we're referencing.
   V8_INLINE void UseThis() {
     Scope* scope = this->scope();
-    if (scope->is_reparsed()) return;
     DeclarationScope* closure_scope = scope->GetClosureScope();
+    if (closure_scope->is_reparsed()) return;
     DeclarationScope* receiver_scope = closure_scope->GetReceiverScope();
     Variable* var = receiver_scope->receiver();
     var->set_is_used();
@@ -3159,7 +3159,7 @@ void ParserBase<Impl>::ParseArguments(
     if (!Check(Token::kComma)) break;
   }
 
-  if (args->length() > Code::kMaxArguments) {
+  if (args->length() + 1 /* receiver */ > Code::kMaxArguments) {
     ReportMessage(MessageTemplate::kTooManyArguments);
     return;
   }
@@ -4001,6 +4001,9 @@ ParserBase<Impl>::ParseMemberWithPresentNewPrefixesExpression() {
   //
   // NewTarget ::
   //   'new' '.' 'target'
+  //
+  // ImportMeta :
+  //    import . meta
 
   // The grammar for new expressions is pretty warped. We can have several 'new'
   // keywords following each other, and then a MemberExpression. When we see '('
@@ -4016,18 +4019,21 @@ ParserBase<Impl>::ParseMemberWithPresentNewPrefixesExpression() {
   // new new foo() means new (new foo())
   // new new foo().bar().baz means (new (new foo()).bar()).baz
   // new super.x means new (super.x)
+  // new import.meta.foo means (new (import.meta.foo)())
   Consume(Token::kNew);
   int new_pos = position();
   ExpressionT result;
 
   CheckStackOverflow();
 
-  if (peek() == Token::kImport && PeekAhead() == Token::kLeftParen) {
-    // TODO(42204365): Peek ahead to see if this is an import source call.
-    // It needs to peek ahead for tokens `import . source (`.
-    impl()->ReportMessageAt(scanner()->peek_location(),
-                            MessageTemplate::kImportCallNotNewExpression);
-    return impl()->FailureExpression();
+  if (peek() == Token::kImport) {
+    result = ParseMemberExpression();
+    if (result->IsImportCallExpression()) {
+      // new import() and new import.source() are never allowed.
+      impl()->ReportMessageAt(scanner()->location(),
+                              MessageTemplate::kImportCallNotNewExpression);
+      return impl()->FailureExpression();
+    }
   } else if (peek() == Token::kPeriod) {
     result = ParseNewTargetExpression();
     return ParseMemberExpressionContinuation(result);
@@ -4370,11 +4376,6 @@ void ParserBase<Impl>::ParseFormalParameterList(FormalParametersT* parameters) {
 
   if (peek() != Token::kRightParen) {
     while (true) {
-      // Add one since we're going to be adding a parameter.
-      if (parameters->arity + 1 > Code::kMaxArguments) {
-        ReportMessage(MessageTemplate::kTooManyParameters);
-        return;
-      }
       parameters->has_rest = Check(Token::kEllipsis);
       ParseFormalParameter(parameters);
 
@@ -4393,6 +4394,11 @@ void ParserBase<Impl>::ParseFormalParameterList(FormalParametersT* parameters) {
         break;
       }
     }
+  }
+
+  if (parameters->arity + 1 /* receiver */ > Code::kMaxArguments) {
+    ReportMessage(MessageTemplate::kTooManyParameters);
+    return;
   }
 
   impl()->DeclareFormalParameters(parameters);
@@ -4416,9 +4422,12 @@ void ParserBase<Impl>::ParseVariableDeclarations(
   parsing_result->descriptor.declaration_pos = peek_position();
   parsing_result->descriptor.initialization_pos = peek_position();
 
+  Scope* target_scope = scope();
+
   switch (peek()) {
     case Token::kVar:
       parsing_result->descriptor.mode = VariableMode::kVar;
+      target_scope = scope()->GetDeclarationScope();
       Consume(Token::kVar);
       break;
     case Token::kConst:
@@ -4432,13 +4441,12 @@ void ParserBase<Impl>::ParseVariableDeclarations(
       parsing_result->descriptor.mode = VariableMode::kLet;
       break;
     case Token::kUsing:
-      // using [no LineTerminator here] [lookahead ≠ await] BindingList[?In,
-      // ?Yield, ?Await, ~Pattern] ;
+      // using [no LineTerminator here] BindingList[?In, ?Yield, ?Await,
+      // ~Pattern] ;
       Consume(Token::kUsing);
       DCHECK(v8_flags.js_explicit_resource_management);
       DCHECK_NE(var_context, kStatement);
       DCHECK(is_using_allowed());
-      DCHECK(peek() != Token::kAwait);
       DCHECK(!scanner()->HasLineTerminatorBeforeNext());
       DCHECK(peek() != Token::kLeftBracket && peek() != Token::kLeftBrace);
       parsing_result->descriptor.mode = VariableMode::kUsing;
@@ -4455,6 +4463,9 @@ void ParserBase<Impl>::ParseVariableDeclarations(
       DCHECK(!scanner()->HasLineTerminatorBeforeNext());
       DCHECK(peek() != Token::kLeftBracket && peek() != Token::kLeftBrace);
       parsing_result->descriptor.mode = VariableMode::kAwaitUsing;
+      if (!target_scope->has_await_using_declaration()) {
+        function_state_->AddSuspend();
+      }
       break;
     default:
       UNREACHABLE();  // by current callers
@@ -4463,9 +4474,6 @@ void ParserBase<Impl>::ParseVariableDeclarations(
 
   VariableDeclarationParsingScope declaration(
       impl(), parsing_result->descriptor.mode, names);
-  Scope* target_scope = IsLexicalVariableMode(parsing_result->descriptor.mode)
-                            ? scope()
-                            : scope()->GetDeclarationScope();
 
   auto declaration_it = target_scope->declarations()->end();
 
@@ -4837,8 +4845,6 @@ void ParserBase<Impl>::ParseFunctionBody(
         ParseStatementList(&inner_body, closing_token);
         if (IsAsyncFunction(kind)) {
           inner_scope->set_end_position(end_position());
-          function_state_ = AddOneSuspendPointIfBlockContainsAwaitUsing(
-              inner_scope, function_state_);
         }
       }
       if (IsDerivedConstructor(kind)) {
@@ -5217,6 +5223,8 @@ typename ParserBase<Impl>::ExpressionT ParserBase<Impl>::ParseClassLiteral(
   Expect(Token::kLeftBrace);
 
   ParseClassLiteralBody(class_info, name, class_token_pos, Token::kRightBrace);
+
+  CheckStrictOctalLiteral(scope()->start_position(), scope()->end_position());
 
   VariableProxy* unresolvable = class_scope->ResolvePrivateNamesPartially();
   if (unresolvable != nullptr) {
@@ -5658,8 +5666,6 @@ void ParserBase<Impl>::ParseStatementList(StatementListT* body,
     if (stat->IsEmptyStatement()) continue;
     body->Add(stat);
   }
-  function_state_ =
-      AddOneSuspendPointIfBlockContainsAwaitUsing(scope(), function_state_);
 }
 
 template <typename Impl>
@@ -5702,8 +5708,7 @@ ParserBase<Impl>::ParseStatementListItem() {
       if (!v8_flags.js_explicit_resource_management) break;
       if (!is_using_allowed()) break;
       if (!(scanner()->HasLineTerminatorAfterNext()) &&
-          PeekAhead() != Token::kAwait && PeekAhead() != Token::kLeftBracket &&
-          PeekAhead() != Token::kLeftBrace) {
+          Token::IsAnyIdentifier(PeekAhead())) {
         return ParseVariableStatement(kStatementListItem, nullptr);
       }
       break;
@@ -5714,8 +5719,6 @@ ParserBase<Impl>::ParseStatementListItem() {
       if (!(scanner()->HasLineTerminatorAfterNext()) &&
           PeekAhead() == Token::kUsing &&
           !(scanner()->HasLineTerminatorAfterNextNext()) &&
-          PeekAheadAhead() != Token::kLeftBracket &&
-          PeekAheadAhead() != Token::kLeftBrace &&
           Token::IsAnyIdentifier(PeekAheadAhead())) {
         return ParseVariableStatement(kStatementListItem, nullptr);
       }
@@ -5873,8 +5876,6 @@ typename ParserBase<Impl>::BlockT ParserBase<Impl>::ParseBlock(
 
     impl()->RecordBlockSourceRange(body, end_pos);
     body->set_scope(scope()->FinalizeBlockScope());
-    function_state_ =
-        AddOneSuspendPointIfBlockContainsAwaitUsing(scope(), function_state_);
   }
 
   body->InitializeStatements(statements, zone());
@@ -6372,8 +6373,6 @@ typename ParserBase<Impl>::StatementT ParserBase<Impl>::ParseSwitchStatement(
     scope()->set_end_position(end_pos);
     impl()->RecordSwitchStatementSourceRange(switch_statement, end_pos);
     Scope* switch_scope = scope()->FinalizeBlockScope();
-    function_state_ =
-        AddOneSuspendPointIfBlockContainsAwaitUsing(scope(), function_state_);
     if (switch_scope != nullptr) {
       return impl()->RewriteSwitchStatement(switch_statement, switch_scope);
     }

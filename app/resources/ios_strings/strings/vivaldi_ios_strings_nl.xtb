@@ -5,9 +5,15 @@
 <translation id="1097355661841455597">We horen graag jouw mening.</translation>
 <translation id="1137850887415122856">Stel Touch ID, Face ID of een toegangscode in om jouw privé-tabs te vergrendelen.</translation>
 <translation id="1310184829257917508">Vraag om links van andere apps in privémodus te openen</translation>
+<translation id="1561609750546413721">Vivaldi Vertalen</translation>
 <translation id="207677936531967364">Nieuwe privétabpagina</translation>
+<translation id="2353953000228441783">Standaard siteweergave</translation>
+<translation id="2394192052244849643">Plakken en zoeken</translation>
 <translation id="2418705169960294134">Nieuw privé-tabblad</translation>
+<translation id="2783161812871838616">Desktopsite opvragen</translation>
 <translation id="2899836479226240291">Je kunt links automatisch openen in Vivaldi door Vivaldi in te stellen als je standaard browser-app.</translation>
+<translation id="3365529507898144230">Opslaan in Foto's</translation>
+<translation id="3434473769478814796">Plakken en gaan</translation>
 <translation id="3463990832590571933">In privé-tabblad openen</translation>
 <translation id="3473652525653758699">Nieuwe privévenster</translation>
 <translation id="3501504415290398157">Gebruik <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> om je privétabs te ontgrendelen.</translation>
@@ -15,14 +21,28 @@
 <translation id="3981599532037327317">${url} in privémodus openen</translation>
 <translation id="398477389655464998">Link naar markering kopiëren</translation>
 <translation id="4026745073321351206">🙄 Een probleem ontdekt?</translation>
+<translation id="4304713468139749426">Wachtwoordbeheer</translation>
+<translation id="473775607612524610">Updaten</translation>
 <translation id="4755216899422789286">URL's in Vivaldi openen</translation>
+<translation id="4802185666270672526">Desktopsite opvragen verbergen</translation>
+<translation id="5217245356412073535">Je kunt de standaard siteweergave wijzigen in desktop via Instellingen &gt; Website-instellingen</translation>
+<translation id="5271549068863921519">Wachtwoord opslaan</translation>
+<translation id="5317780077021120954">Opslaan</translation>
 <translation id="5431239785743546285">Pagina's die je hebt gelezen</translation>
+<translation id="5614553682702429503">Wachtwoord opslaan?</translation>
+<translation id="570209299585559496">Je kunt de standaard siteweergave veranderen in desktop via Instellingen - Website-instellingen</translation>
+<translation id="5962477178930921574">Plakken en zoeken</translation>
 <translation id="6233792867654386826">Opent de ingevoerde URL's in Vivaldi.</translation>
+<translation id="6680416467695217368">Menu aanpassen</translation>
 <translation id="6827597288286078054">Privé zoekopdracht</translation>
+<translation id="6851516051005285358">Desktopsite opvragen</translation>
 <translation id="7307970171564921489">Ontgrendel privétabs met <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
 <translation id="7347289093190902150">Privé openen?</translation>
 <translation id="7549299604720382000">Nieuwe privétab</translation>
+<translation id="755255281989213264">Menu aanpassen</translation>
 <translation id="7920949005883349320">Privacy en beveiliging</translation>
-<translation id="8031932676440435547">Opslaan in Foto's</translation>
+<translation id="7961015016161918242">Nooit</translation>
 <translation id="8326104954595890674">Nieuwe privétab</translation>
+<translation id="8756969031206844760">Wachtwoord updaten?</translation>
+<translation id="9094033019050270033">Wachtwoord updaten</translation>
 </translationbundle>

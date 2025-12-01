@@ -2,7 +2,7 @@
 breadcrumbs:
 - - /chromium-os
   - ChromiumOS
-- - /chromium-os/developer-information-for-chrome-os-devices
+- - /chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices
   - Developer Information for ChromeOS Devices
 page_name: acer-c670-chromebook
 title: Acer C670 Chromebook 11
@@ -20,23 +20,23 @@ on the Chrome Notebook), see the [ChromiumOS Developer
 Guide](/chromium-os/developer-guide).
 
 <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/acer-c670-chromebook/gallery-AcerChromebook11-1-front.jpg"
+src="gallery-AcerChromebook11-1-front.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/acer-c670-chromebook/gallery-AcerChromebook11-2-front-grey.jpg"
+src="gallery-AcerChromebook11-2-front-grey.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/acer-c670-chromebook/gallery-AcerChromebook11-4-left-grey.jpg"
+src="gallery-AcerChromebook11-4-left-grey.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/acer-c670-chromebook/gallery-AcerChromebook11-5-right.jpg"
+src="gallery-AcerChromebook11-5-right.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/acer-c670-chromebook/gallery-AcerChromebook11-6-right-grey.jpg"
+src="gallery-AcerChromebook11-6-right-grey.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/acer-c670-chromebook/gallery-AcerChromebook11-7-side-left.jpg"
+src="gallery-AcerChromebook11-7-side-left.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/acer-c670-chromebook/gallery-AcerChromebook11-8-side-left-grey.jpg"
+src="gallery-AcerChromebook11-8-side-left-grey.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/acer-c670-chromebook/gallery-AcerChromebook11-9-side-right.jpg"
+src="gallery-AcerChromebook11-9-side-right.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/acer-c670-chromebook/gallery-AcerChromebook11-10-side-right-grey.jpg"
+src="gallery-AcerChromebook11-10-side-right-grey.jpg"
 height=150 width=200>
 
 ### Specifications
@@ -52,7 +52,7 @@ height=150 width=200>
     *   HDMI port
     *   1 x USB 2.0
     *   1 x USB 3.0
-    *   [SD slot](http://en.wikipedia.org/wiki/Secure_Digital) (SDXC
+    *   [SD slot](https://en.wikipedia.org/wiki/Secure_Digital) (SDXC
                 compatible)
     *   Headphone/mic combo jack
     *   Camera & mic
@@ -62,7 +62,7 @@ height=150 width=200>
     *   Bluetooth 4.0
     *   USB ports can handle some Ethernet dongles
 *   [Kensington Security
-            Slot](http://en.wikipedia.org/wiki/Kensington_Security_Slot)
+            Slot](https://en.wikipedia.org/wiki/Kensington_Security_Slot)
 *   Linux 3.14
 
 ## Developer Mode
@@ -71,7 +71,7 @@ height=150 width=200>
 cause hardware, software or security issues and may void warranty.**
 
 Details for working with developer mode can be found [on this
-page](/chromium-os/developer-information-for-chrome-os-devices/acer-c720-chromebook).
+page](../acer-c720-chromebook).
 
 ## Firmware
 

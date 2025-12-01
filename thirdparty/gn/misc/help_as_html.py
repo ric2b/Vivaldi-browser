@@ -11,7 +11,7 @@
 # - Convert "|blahblah|" to <code>.
 # - Spit out other similar formats like wiki, markdown, whatever.
 
-import cgi
+import html
 import subprocess
 import sys
 
@@ -34,14 +34,14 @@ def ParseTopLevel(out):
       output_line = ['<li>']
       if not is_option:
         commands.append(command)
-        output_line.append('<a href="#' + cgi.escape(command) + '">')
-      output_line.append(cgi.escape(command))
+        output_line.append('<a href="#' + html.escape(command) + '">')
+      output_line.append(html.escape(command))
       if not is_option:
         output_line.append('</a>')
-      output_line.extend([sep + cgi.escape(rest) + '</li>'])
+      output_line.extend([sep + html.escape(rest) + '</li>'])
       output.append(''.join(output_line))
     else:
-      output.append('<h2>' + cgi.escape(line) + '</h2>')
+      output.append('<h2>' + html.escape(line) + '</h2>')
   return commands, output
 
 
@@ -53,8 +53,8 @@ def ParseCommand(command, out):
     if first_line:
       name, sep, rest = line.partition(':')
       name = name.strip()
-      output.append('<h3><a name="' + cgi.escape(command) + '">' +
-                    cgi.escape(name + sep + rest) + '</a></h3>')
+      output.append('<h3><a name="' + html.escape(command) + '">' +
+                    html.escape(name + sep + rest) + '</a></h3>')
       first_line = False
     else:
       if line.startswith('Example'):
@@ -68,9 +68,9 @@ def ParseCommand(command, out):
         output.append('<p>')
       elif not line.startswith('  ') and line.endswith(':'):
         # Subsection.
-        output.append('<h4>' + cgi.escape(line[:-1]) + '</h4>')
+        output.append('<h4>' + html.escape(line[:-1]) + '</h4>')
       else:
-        output.append(cgi.escape(line))
+        output.append(html.escape(line))
   if got_example:
     output.append('</pre>')
   return output

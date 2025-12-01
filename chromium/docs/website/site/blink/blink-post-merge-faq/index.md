@@ -17,7 +17,7 @@ title: Blink post-merge FAQ
 
 > Chromium git SHA:
 > [70aa692d68ee86d365928edd160c3575fda2b453](https://chromium.googlesource.com/chromium/src/+/70aa692d68ee86d365928edd160c3575fda2b453)
-> [350323](http://crrev.com/350323) Chromium revision:
+> [350323](https://crrev.com/350323) Chromium revision:
 > Chrome version:
 > [47.0.2518.0](https://chromium.googlesource.com/chromium/src/+/70aa692d68ee86d365928edd160c3575fda2b453/chrome/VERSION)
 
@@ -30,7 +30,7 @@ title: Blink post-merge FAQ
 > Chromium git SHA:
 > [b59b6df51a249895fbba24f92b661f744e031546](https://chromium.googlesource.com/chromium/src/+/b59b6df51a249895fbba24f92b661f744e031546)
 
-> Chromium revision: **[350324](http://crrev.com/350324)**
+> Chromium revision: **[350324](https://crrev.com/350324)**
 
 > Chrome version:
 > [47.0.2519.0](https://chromium.googlesource.com/chromium/src/+/341be68a2f3f424685a709aacc683d227f0de7eb)

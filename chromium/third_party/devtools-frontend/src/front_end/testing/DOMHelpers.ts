@@ -21,7 +21,7 @@ interface RenderOptions {
 /**
  * Renders a given element into the DOM. By default it will error if it finds an element already rendered but this can be controlled via the options.
  **/
-export const renderElementIntoDOM = (element: HTMLElement, renderOptions: RenderOptions = {}) => {
+export function renderElementIntoDOM<E extends Element>(element: E, renderOptions: RenderOptions = {}): E {
   const container = document.getElementById(TEST_CONTAINER_ID);
 
   if (!container) {
@@ -33,10 +33,9 @@ export const renderElementIntoDOM = (element: HTMLElement, renderOptions: Render
   if (container.childNodes.length !== 0 && !allowMultipleChildren) {
     throw new Error(`renderElementIntoDOM expects the container to be empty ${container.innerHTML}`);
   }
-
   container.appendChild(element);
   return element;
-};
+}
 
 function removeChildren(node: Node): void {
   while (true) {
@@ -73,9 +72,9 @@ export const resetTestDOM = () => {
   document.body.appendChild(newContainer);
 };
 
-type Constructor<T> = {
-  new (...args: unknown[]): T,
-};
+interface Constructor<T> {
+  new(...args: unknown[]): T;
+}
 
 /**
  * Asserts that all emenents of `nodeList` are at least of type `T`.
@@ -140,6 +139,11 @@ export function dispatchClickEvent<T extends Element>(element: T, options: Mouse
 export function dispatchMouseUpEvent<T extends Element>(element: T, options: MouseEventInit = {}) {
   const clickEvent = new MouseEvent('mouseup', options);
   element.dispatchEvent(clickEvent);
+}
+
+export function dispatchBlurEvent<T extends Element>(element: T, options: FocusEventInit = {}) {
+  const focusEvent = new FocusEvent('blur', options);
+  element.dispatchEvent(focusEvent);
 }
 
 export function dispatchFocusEvent<T extends Element>(element: T, options: FocusEventInit = {}) {
@@ -237,18 +241,19 @@ export async function raf() {
 
 /**
  * It's useful to use innerHTML in the tests to have full confidence in the
- * renderer output, but LitHtml uses comment nodes to split dynamic from
+ * renderer output, but Lit uses comment nodes to split dynamic from
  * static parts of a template, and we don't want our tests full of noise
  * from those.
  */
 export function stripLitHtmlCommentNodes(text: string) {
   /**
-   * LitHtml comments take the form of:
+   * Lit comments take the form of:
    * <!--?lit$1234?--> or:
    * <!--?-->
-   * And this regex matches both.
+   * <!---->
+   * And this regex matches all of them.
    */
-  return text.replaceAll(/<!--\?(lit\$[0-9]+\$)?-->/g, '');
+  return text.replaceAll(/<!--(\?)?(lit\$[0-9]+\$)?-->/g, '');
 }
 
 /**
@@ -260,6 +265,16 @@ export function getCleanTextContentFromElements(el: ShadowRoot|HTMLElement, sele
   return elements.map(element => {
     return element.textContent ? element.textContent.trim().replace(/[ \n]{2,}/g, ' ') : '';
   });
+}
+
+/**
+ * Returns the text content for the first element matching the given `selector` within the provided `el`.
+ * Will error if no element is found matching the selector.
+ */
+export function getCleanTextContentFromSingleElement(el: ShadowRoot|HTMLElement, selector: string): string {
+  const element = el.querySelector(selector);
+  assert.isOk(element, `Could not find element with selector ${selector}`);
+  return element.textContent ? element.textContent.trim().replace(/[ \n]{2,}/g, ' ') : '';
 }
 
 export function assertNodeTextContent(component: NodeText.NodeText.NodeText, expectedContent: string) {

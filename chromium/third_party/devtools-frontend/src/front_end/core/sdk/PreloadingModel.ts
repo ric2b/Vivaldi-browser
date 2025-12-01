@@ -2,20 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import type * as Common from '../common/common.js';
 import type * as ProtocolProxyApi from '../../generated/protocol-proxy-api.js';
-
-import {assertNotNullOrUndefined} from '../platform/platform.js';
 import * as Protocol from '../../generated/protocol.js';
-import {SDKModel} from './SDKModel.js';
-import {Capability, type Target} from './Target.js';
-import {TargetManager} from './TargetManager.js';
+import type * as Common from '../common/common.js';
+import {MapWithDefault} from '../common/MapWithDefault.js';
+import {assertNotNullOrUndefined} from '../platform/platform.js';
+
 import {
   Events as ResourceTreeModelEvents,
   PrimaryPageChangeType,
-  ResourceTreeModel,
   type ResourceTreeFrame,
+  ResourceTreeModel,
 } from './ResourceTreeModel.js';
+import {SDKModel} from './SDKModel.js';
+import {Capability, type Target} from './Target.js';
+import {TargetManager} from './TargetManager.js';
 
 export interface WithId<I, V> {
   id: I;
@@ -104,7 +105,7 @@ export class PreloadingModel extends SDKModel<EventTypes> {
   getPreloadCountsByRuleSetId(): Map<Protocol.Preload.RuleSetId|null, Map<PreloadingStatus, number>> {
     const countsByRuleSetId = new Map<Protocol.Preload.RuleSetId|null, Map<PreloadingStatus, number>>();
 
-    for (const {value} of this.getPreloadingAttempts(null)) {
+    for (const {value} of this.getRepresentativePreloadingAttempts(null)) {
       for (const ruleSetId of [null, ...value.ruleSetIds]) {
         if (countsByRuleSetId.get(ruleSetId) === undefined) {
           countsByRuleSetId.set(ruleSetId, new Map<PreloadingStatus, number>());
@@ -138,20 +139,21 @@ export class PreloadingModel extends SDKModel<EventTypes> {
   //
   // Returns array of pairs of id and reference. Don't save returned references.
   // Returned values may or may not be updated as the time grows.
-  getPreloadingAttempts(ruleSetId: Protocol.Preload.RuleSetId|null): WithId<PreloadingAttemptId, PreloadingAttempt>[] {
+  getRepresentativePreloadingAttempts(ruleSetId: Protocol.Preload.RuleSetId|
+                                      null): WithId<PreloadingAttemptId, PreloadingAttempt>[] {
     const document = this.currentDocument();
     if (document === null) {
       return [];
     }
 
-    return document.preloadingAttempts.getAll(ruleSetId, document.sources);
+    return document.preloadingAttempts.getAllRepresentative(ruleSetId, document.sources);
   }
 
   // Returs preloading attempts of the previousPgae.
   //
   // Returns array of pairs of id and reference. Don't save returned references.
   // Returned values may or may not be updated as the time grows.
-  getPreloadingAttemptsOfPreviousPage(): WithId<PreloadingAttemptId, PreloadingAttempt>[] {
+  getRepresentativePreloadingAttemptsOfPreviousPage(): WithId<PreloadingAttemptId, PreloadingAttempt>[] {
     if (this.loaderIds.length <= 1) {
       return [];
     }
@@ -161,7 +163,33 @@ export class PreloadingModel extends SDKModel<EventTypes> {
       return [];
     }
 
-    return document.preloadingAttempts.getAll(null, document.sources);
+    return document.preloadingAttempts.getAllRepresentative(null, document.sources);
+  }
+
+  // Precondition: `pipelineId` should exists.
+  // Postcondition: The return value is not empty.
+  private getPipelineById(pipelineId: Protocol.Preload.PreloadPipelineId):
+      Map<Protocol.Preload.SpeculationAction, PreloadingAttempt>|null {
+    const document = this.currentDocument();
+    if (document === null) {
+      return null;
+    }
+
+    return document.preloadingAttempts.getPipeline(pipelineId, document.sources);
+  }
+
+  // Returns attemtps that are sit in the same preload pipeline.
+  getPipeline(attempt: PreloadingAttempt): PreloadPipeline {
+    let pipelineNullable = null;
+    if (attempt.pipelineId !== null) {
+      pipelineNullable = this.getPipelineById(attempt.pipelineId);
+    }
+    if (pipelineNullable === null) {
+      const pipeline = new Map();
+      pipeline.set(attempt.action, attempt);
+      return new PreloadPipeline(pipeline);
+    }
+    return new PreloadPipeline(pipelineNullable);
   }
 
   private onPrimaryPageChanged(
@@ -258,6 +286,7 @@ export class PreloadingModel extends SDKModel<EventTypes> {
     const attempt: PrefetchAttemptInternal = {
       action: Protocol.Preload.SpeculationAction.Prefetch,
       key: event.key,
+      pipelineId: event.pipelineId,
       status: convertPreloadingStatus(event.status),
       prefetchStatus: event.prefetchStatus || null,
       requestId: event.requestId,
@@ -272,6 +301,7 @@ export class PreloadingModel extends SDKModel<EventTypes> {
     const attempt: PrerenderAttemptInternal = {
       action: Protocol.Preload.SpeculationAction.Prerender,
       key: event.key,
+      pipelineId: event.pipelineId,
       status: convertPreloadingStatus(event.status),
       prerenderStatus: event.prerenderStatus || null,
       disallowedMojoInterface: event.disallowedMojoInterface || null,
@@ -293,10 +323,10 @@ export const enum Events {
   WARNINGS_UPDATED = 'WarningsUpdated',
 }
 
-export type EventTypes = {
-  [Events.MODEL_UPDATED]: void,
-  [Events.WARNINGS_UPDATED]: Protocol.Preload.PreloadEnabledStateUpdatedEvent,
-};
+export interface EventTypes {
+  [Events.MODEL_UPDATED]: void;
+  [Events.WARNINGS_UPDATED]: Protocol.Preload.PreloadEnabledStateUpdatedEvent;
+}
 
 class PreloadDispatcher implements ProtocolProxyApi.PreloadDispatcher {
   private model: PreloadingModel;
@@ -429,6 +459,7 @@ export type PreloadingAttempt = PrefetchAttempt|PrerenderAttempt;
 export interface PrefetchAttempt {
   action: Protocol.Preload.SpeculationAction.Prefetch;
   key: Protocol.Preload.PreloadingAttemptKey;
+  pipelineId: Protocol.Preload.PreloadPipelineId|null;
   status: PreloadingStatus;
   prefetchStatus: Protocol.Preload.PrefetchStatus|null;
   requestId: Protocol.Network.RequestId;
@@ -439,6 +470,7 @@ export interface PrefetchAttempt {
 export interface PrerenderAttempt {
   action: Protocol.Preload.SpeculationAction.Prerender;
   key: Protocol.Preload.PreloadingAttemptKey;
+  pipelineId: Protocol.Preload.PreloadPipelineId|null;
   status: PreloadingStatus;
   prerenderStatus: Protocol.Preload.PrerenderFinalStatus|null;
   disallowedMojoInterface: string|null;
@@ -452,6 +484,7 @@ export type PreloadingAttemptInternal = PrefetchAttemptInternal|PrerenderAttempt
 export interface PrefetchAttemptInternal {
   action: Protocol.Preload.SpeculationAction.Prefetch;
   key: Protocol.Preload.PreloadingAttemptKey;
+  pipelineId: Protocol.Preload.PreloadPipelineId|null;
   status: PreloadingStatus;
   prefetchStatus: Protocol.Preload.PrefetchStatus|null;
   requestId: Protocol.Network.RequestId;
@@ -460,6 +493,7 @@ export interface PrefetchAttemptInternal {
 export interface PrerenderAttemptInternal {
   action: Protocol.Preload.SpeculationAction.Prerender;
   key: Protocol.Preload.PreloadingAttemptKey;
+  pipelineId: Protocol.Preload.PreloadPipelineId|null;
   status: PreloadingStatus;
   prerenderStatus: Protocol.Preload.PrerenderFinalStatus|null;
   disallowedMojoInterface: string|null;
@@ -493,9 +527,68 @@ function makePreloadingAttemptId(key: Protocol.Preload.PreloadingAttemptKey): Pr
   return `${key.loaderId}:${action}:${key.url}:${targetHint}`;
 }
 
+export class PreloadPipeline {
+  private inner: Map<Protocol.Preload.SpeculationAction, PreloadingAttempt>;
+
+  constructor(inner: Map<Protocol.Preload.SpeculationAction, PreloadingAttempt>) {
+    if (inner.size === 0) {
+      throw new Error('unreachable');
+    }
+
+    this.inner = inner;
+  }
+
+  static newFromAttemptsForTesting(attempts: PreloadingAttempt[]): PreloadPipeline {
+    const inner = new Map();
+    for (const attempt of attempts) {
+      inner.set(attempt.action, attempt);
+    }
+    return new PreloadPipeline(inner);
+  }
+
+  getOriginallyTriggered(): PreloadingAttempt {
+    const attempt = this.getPrerender() || this.getPrefetch();
+    assertNotNullOrUndefined(attempt);
+    return attempt;
+  }
+
+  getPrefetch(): PreloadingAttempt|null {
+    return this.inner.get(Protocol.Preload.SpeculationAction.Prefetch) || null;
+  }
+
+  getPrerender(): PreloadingAttempt|null {
+    return this.inner.get(Protocol.Preload.SpeculationAction.Prerender) || null;
+  }
+
+  // Returns attempts in the order: prefetch < prerender.
+  getAttempts(): PreloadingAttempt[] {
+    const ret = [];
+
+    const prefetch = this.getPrefetch();
+    if (prefetch !== null) {
+      ret.push(prefetch);
+    }
+
+    const prerender = this.getPrerender();
+    if (prerender !== null) {
+      ret.push(prerender);
+    }
+
+    if (ret.length === 0) {
+      throw new Error('unreachable');
+    }
+
+    return ret;
+  }
+}
+
 class PreloadingAttemptRegistry {
   private map: Map<PreloadingAttemptId, PreloadingAttemptInternal> =
       new Map<PreloadingAttemptId, PreloadingAttemptInternal>();
+  private pipelines:
+      MapWithDefault<Protocol.Preload.PreloadPipelineId, Map<Protocol.Preload.SpeculationAction, PreloadingAttemptId>> =
+          new MapWithDefault<
+              Protocol.Preload.PreloadPipelineId, Map<Protocol.Preload.SpeculationAction, PreloadingAttemptId>>();
 
   private enrich(attempt: PreloadingAttemptInternal, source: Protocol.Preload.PreloadingAttemptSource|null):
       PreloadingAttempt {
@@ -513,6 +606,39 @@ class PreloadingAttemptRegistry {
     };
   }
 
+  // Returns true iff the attempt is triggered by a SpecRules, not automatically derived.
+  //
+  // In some cases, browsers automatically triggers preloads. For example, Chrome triggers prefetch
+  // ahead of prerender to prevent multiple fetches in case that the prerender failed due to, e.g.
+  // use of forbidden mojo APIs. Such prefetch and prerender sit in the same preload pipeline.
+  //
+  // We regard them as not representative and only show the representative ones to represent
+  // pipelines.
+  private isAttemptRepresentative(attempt: PreloadingAttempt): boolean {
+    function getSortKey(action: Protocol.Preload.SpeculationAction): number {
+      switch (action) {
+        case Protocol.Preload.SpeculationAction.Prefetch:
+          return 0;
+        case Protocol.Preload.SpeculationAction.Prerender:
+          return 1;
+      }
+    }
+
+    // Attempt with status `NOT_TRIGGERED` is a representative of a pipeline.
+    if (attempt.pipelineId === null) {
+      return true;
+    }
+
+    // Attempt with the strongest action in pipeline is a representative of a pipeline.
+    // Order: prefetch < prerender.
+    const pipeline = this.pipelines.get(attempt.pipelineId);
+    assertNotNullOrUndefined(pipeline);
+    if (pipeline.size === 0) {
+      throw Error('unreachable');
+    }
+    return [...pipeline.keys()].every(action => getSortKey(action) <= getSortKey(attempt.action));
+  }
+
   // Returns reference. Don't save returned values.
   // Returned values may or may not be updated as the time grows.
   getById(id: PreloadingAttemptId, sources: SourceRegistry): PreloadingAttempt|null {
@@ -524,22 +650,59 @@ class PreloadingAttemptRegistry {
     return this.enrich(attempt, sources.getById(id));
   }
 
-  // Returs preloading attempts that triggered by the rule set with `ruleSetId`.
+  // Returns representative preloading attempts that triggered by the rule set with `ruleSetId`.
   // `ruleSetId === null` means "do not filter".
   //
   // Returns reference. Don't save returned values.
   // Returned values may or may not be updated as the time grows.
-  getAll(ruleSetId: Protocol.Preload.RuleSetId|null, sources: SourceRegistry):
+  getAllRepresentative(ruleSetId: Protocol.Preload.RuleSetId|null, sources: SourceRegistry):
       WithId<PreloadingAttemptId, PreloadingAttempt>[] {
     return [...this.map.entries()]
         .map(([id, value]) => ({id, value: this.enrich(value, sources.getById(id))}))
-        .filter(({value}) => !ruleSetId || value.ruleSetIds.includes(ruleSetId));
+        .filter(({value}) => !ruleSetId || value.ruleSetIds.includes(ruleSetId))
+        .filter(({value}) => this.isAttemptRepresentative(value));
+  }
+
+  getPipeline(pipelineId: Protocol.Preload.PreloadPipelineId, sources: SourceRegistry):
+      Map<Protocol.Preload.SpeculationAction, PreloadingAttempt>|null {
+    const pipeline = this.pipelines.get(pipelineId);
+
+    if (pipeline === undefined || pipeline.size === 0) {
+      return null;
+    }
+
+    const map: {[key: PreloadingAttemptId]: PreloadingAttemptInternal} = {};
+    for (const [id, attempt] of this.map.entries()) {
+      map[id] = attempt;
+    }
+    return new Map(pipeline.entries().map(([action, id]) => {
+      const attempt = this.getById(id, sources);
+      assertNotNullOrUndefined(attempt);
+      return [action, attempt];
+    }));
   }
 
   upsert(attempt: PreloadingAttemptInternal): void {
     const id = makePreloadingAttemptId(attempt.key);
 
     this.map.set(id, attempt);
+
+    if (attempt.pipelineId !== null) {
+      this.pipelines.getOrInsertComputed(attempt.pipelineId, () => new Map()).set(attempt.action, id);
+    }
+  }
+
+  private reconstructPipelines(): void {
+    this.pipelines.clear();
+
+    for (const [id, attempt] of this.map.entries()) {
+      if (attempt.pipelineId === null) {
+        continue;
+      }
+
+      const pipeline = this.pipelines.getOrInsertComputed(attempt.pipelineId, () => new Map());
+      pipeline.set(attempt.action, id);
+    }
   }
 
   // Speculation rules emits a CDP event Preload.preloadingAttemptSourcesUpdated
@@ -560,6 +723,7 @@ class PreloadingAttemptRegistry {
           attempt = {
             action: Protocol.Preload.SpeculationAction.Prefetch,
             key,
+            pipelineId: null,
             status: PreloadingStatus.NOT_TRIGGERED,
             prefetchStatus: null,
             // Fill invalid request id.
@@ -570,6 +734,7 @@ class PreloadingAttemptRegistry {
           attempt = {
             action: Protocol.Preload.SpeculationAction.Prerender,
             key,
+            pipelineId: null,
             status: PreloadingStatus.NOT_TRIGGERED,
             prerenderStatus: null,
             disallowedMojoInterface: null,
@@ -588,6 +753,8 @@ class PreloadingAttemptRegistry {
     for (const key of keysToRemove) {
       this.map.delete(key);
     }
+
+    this.reconstructPipelines();
   }
 
   mergePrevious(prev: PreloadingAttemptRegistry): void {
@@ -596,6 +763,8 @@ class PreloadingAttemptRegistry {
     }
 
     this.map = prev.map;
+
+    this.reconstructPipelines();
   }
 }
 

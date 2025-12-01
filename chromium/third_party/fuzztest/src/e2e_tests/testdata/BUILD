@@ -84,19 +84,25 @@ cc_binary(
         "fuzz_tests_for_functional_testing.cc",
         "fuzz_tests_for_microbenchmarking.cc",
         "fuzz_tests_using_googletest.cc",
+        "fuzz_tests_with_proto_inputs.cc",
     ],
     deps = [
         "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/functional:function_ref",
+        "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/time",
+        "@com_google_absl//absl/types:span",
         "@com_google_fuzztest//fuzztest",
         "@com_google_fuzztest//fuzztest:fuzztest_gtest_main",
         "@com_google_fuzztest//fuzztest:googletest_fixture_adapter",
         "@com_google_fuzztest//fuzztest:logging",
         "@com_google_fuzztest//fuzztest:test_protobuf_cc_proto",
         "@com_google_protobuf//:protobuf",
+        "@com_googlesource_code_re2//:re2",
     ],
 )
 
@@ -140,5 +146,25 @@ cc_binary(
     deps = [
         "@com_google_fuzztest//fuzztest",
         "@com_google_fuzztest//fuzztest:fuzztest_gtest_main",
+    ],
+)
+
+cc_binary(
+    name = "fuzz_tests_for_corpus_database_testing",
+    testonly = 1,
+    srcs = ["fuzz_tests_for_corpus_database_testing.cc"],
+    deps = [
+        "@com_google_fuzztest//fuzztest",
+        "@com_google_fuzztest//fuzztest:fuzztest_gtest_main",
+    ],
+)
+
+cc_binary(
+    name = "llvm_fuzzer_with_custom_mutator",
+    testonly = 1,
+    srcs = ["llvm_fuzzer_with_custom_mutator.cc"],
+    deps = [
+        "@com_google_fuzztest//fuzztest:llvm_fuzzer_main",
+        "@com_google_fuzztest//fuzztest:llvm_fuzzer_wrapper",
     ],
 )

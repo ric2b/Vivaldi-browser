@@ -56,13 +56,30 @@ void MockComponentManager::ExpectCallRegisterLanguagePackComponentAndInstall(
 }
 
 void MockComponentManager::InstallMockTranslateKitComponent() {
+  InstallComponent(GetMockLibraryPath());
+}
+
+void MockComponentManager::InstallMockInvalidFunctionPointerLibraryComponent() {
+  InstallComponent(GetMockInvalidFunctionPointerLibraryPath());
+}
+
+void MockComponentManager::InstallMockFailingLibraryComponent() {
+  InstallComponent(GetMockFailingLibraryPath());
+}
+
+void MockComponentManager::InstallEmptyMockComponent() {
+  g_browser_process->local_state()->SetFilePath(
+      prefs::kTranslateKitBinaryPath, package_dir_.AppendASCII("fakefile"));
+}
+
+void MockComponentManager::InstallComponent(base::FilePath library_path) {
+  CHECK(!library_path.empty());
   base::ScopedAllowBlockingForTesting allow_io;
-  const auto mock_library_path = GetMockLibraryPath();
-  const auto binary_path = package_dir_.Append(mock_library_path.BaseName());
+  const auto binary_path = package_dir_.Append(library_path.BaseName());
   if (!base::DirectoryExists(binary_path.DirName())) {
     CHECK(base::CreateDirectory(binary_path.DirName()));
   }
-  CHECK(base::CopyFile(mock_library_path, binary_path));
+  CHECK(base::CopyFile(library_path, binary_path));
   g_browser_process->local_state()->SetFilePath(prefs::kTranslateKitBinaryPath,
                                                 binary_path);
 }
@@ -191,6 +208,46 @@ void TestCanTranslate(Browser* browser,
           sourceLanguage: '%s',
           targetLanguage: '%s',
         });
+    } catch (e) {
+      return e.toString();
+    }
+    })();
+  )",
+                                      sourceLang, targetLang))
+                .ExtractString(),
+            result);
+}
+
+// Tests that the AITranslatorCapabilities.available returns the expected
+// result.
+void TestTranslatorCapabilitiesAvailable(Browser* browser,
+                                         const std::string_view result) {
+  ASSERT_EQ(EvalJs(browser->tab_strip_model()->GetActiveWebContents(),
+                   R"(
+  (async () => {
+    try {
+      return (await ai.translator.capabilities()).available;
+    } catch (e) {
+      return e.toString();
+    }
+    })();
+  )")
+                .ExtractString(),
+            result);
+}
+
+// Tests that the AITranslatorCapabilities.languagePairAvailable() returns the
+// expected result.
+void TestLanguagePairAvailable(Browser* browser,
+                               const std::string_view sourceLang,
+                               const std::string_view targetLang,
+                               const std::string_view result) {
+  ASSERT_EQ(EvalJs(browser->tab_strip_model()->GetActiveWebContents(),
+                   base::StringPrintf(R"(
+  (async () => {
+    try {
+      const capabilities = await ai.translator.capabilities();
+      return capabilities.languagePairAvailable('%s','%s');
     } catch (e) {
       return e.toString();
     }

@@ -110,13 +110,13 @@ namespace {
 class PayloadTypeSuggesterForTests : public PayloadTypeSuggester {
  public:
   PayloadTypeSuggesterForTests() = default;
-  RTCErrorOr<PayloadType> SuggestPayloadType(const std::string& mid,
+  RTCErrorOr<PayloadType> SuggestPayloadType(const std::string& /* mid */,
                                              cricket::Codec codec) override {
     return payload_type_picker_.SuggestMapping(codec, nullptr);
   }
-  RTCError AddLocalMapping(const std::string& mid,
-                           PayloadType payload_type,
-                           const cricket::Codec& codec) override {
+  RTCError AddLocalMapping(const std::string& /* mid */,
+                           PayloadType /* payload_type */,
+                           const cricket::Codec& /* codec */) override {
     return RTCError::OK();
   }
 
@@ -277,6 +277,10 @@ class Call final : public webrtc::Call,
   void SetPayloadTypeSuggester(PayloadTypeSuggester* suggester) override;
 
   Stats GetStats() const override;
+
+  void EnableSendCongestionControlFeedbackAccordingToRfc8888() override;
+  int FeedbackAccordingToRfc8888Count() override;
+  int FeedbackAccordingToTransportCcCount() override;
 
   const FieldTrialsView& trials() const override;
 
@@ -541,9 +545,9 @@ std::unique_ptr<Call> Call::Create(CallConfig config) {
 // Call perf test will use Internal::Call::CreateVideoSendStream() to inject
 // FecController.
 VideoSendStream* Call::CreateVideoSendStream(
-    VideoSendStream::Config config,
-    VideoEncoderConfig encoder_config,
-    std::unique_ptr<FecController> fec_controller) {
+    VideoSendStream::Config /* config */,
+    VideoEncoderConfig /* encoder_config */,
+    std::unique_ptr<FecController> /* fec_controller */) {
   return nullptr;
 }
 
@@ -729,8 +733,7 @@ Call::Call(CallConfig config,
                        absl::bind_front(&PacketRouter::SendCombinedRtcpPacket,
                                         transport_send->packet_router()),
                        absl::bind_front(&PacketRouter::SendRemb,
-                                        transport_send->packet_router()),
-                       /*network_state_estimator=*/nullptr),
+                                        transport_send->packet_router())),
       receive_time_calculator_(
           ReceiveTimeCalculator::CreateFromFieldTrial(env_.field_trials())),
       video_send_delay_stats_(new SendDelayStats(&env_.clock())),
@@ -841,14 +844,6 @@ webrtc::AudioSendStream* Call::CreateAudioSendStream(
              audio_send_ssrcs_.end());
   audio_send_ssrcs_[config.rtp.ssrc] = send_stream;
 
-  // TODO(bugs.webrtc.org/11993): call AssociateSendStream and
-  // UpdateAggregateNetworkState asynchronously on the network thread.
-  for (AudioReceiveStreamImpl* stream : audio_receive_streams_) {
-    if (stream->local_ssrc() == config.rtp.ssrc) {
-      stream->AssociateSendStream(send_stream);
-    }
-  }
-
   UpdateAggregateNetworkState();
 
   return send_stream;
@@ -868,14 +863,6 @@ void Call::DestroyAudioSendStream(webrtc::AudioSendStream* send_stream) {
 
   size_t num_deleted = audio_send_ssrcs_.erase(ssrc);
   RTC_DCHECK_EQ(1, num_deleted);
-
-  // TODO(bugs.webrtc.org/11993): call AssociateSendStream and
-  // UpdateAggregateNetworkState asynchronously on the network thread.
-  for (AudioReceiveStreamImpl* stream : audio_receive_streams_) {
-    if (stream->local_ssrc() == ssrc) {
-      stream->AssociateSendStream(nullptr);
-    }
-  }
 
   UpdateAggregateNetworkState();
 
@@ -901,11 +888,6 @@ webrtc::AudioReceiveStreamInterface* Call::CreateAudioReceiveStream(
   receive_stream->RegisterWithTransport(&audio_receiver_controller_);
 
   ConfigureSync(config.sync_group);
-
-  auto it = audio_send_ssrcs_.find(config.rtp.local_ssrc);
-  if (it != audio_send_ssrcs_.end()) {
-    receive_stream->AssociateSendStream(it->second);
-  }
 
   UpdateAggregateNetworkState();
   return receive_stream;
@@ -1189,6 +1171,19 @@ Call::Stats Call::GetStats() const {
   return stats;
 }
 
+void Call::EnableSendCongestionControlFeedbackAccordingToRfc8888() {
+  receive_side_cc_.EnableSendCongestionControlFeedbackAccordingToRfc8888();
+  transport_send_->EnableCongestionControlFeedbackAccordingToRfc8888();
+}
+
+int Call::FeedbackAccordingToRfc8888Count() {
+  return transport_send_->ReceivedCongestionControlFeedbackCount();
+}
+
+int Call::FeedbackAccordingToTransportCcCount() {
+  return transport_send_->ReceivedTransportCcFeedbackCount();
+}
+
 const FieldTrialsView& Call::trials() const {
   return env_.field_trials();
 }
@@ -1278,13 +1273,7 @@ void Call::UpdateAggregateNetworkState() {
 void Call::OnLocalSsrcUpdated(webrtc::AudioReceiveStreamInterface& stream,
                               uint32_t local_ssrc) {
   RTC_DCHECK_RUN_ON(worker_thread_);
-  webrtc::AudioReceiveStreamImpl& receive_stream =
-      static_cast<webrtc::AudioReceiveStreamImpl&>(stream);
-
-  receive_stream.SetLocalSsrc(local_ssrc);
-  auto it = audio_send_ssrcs_.find(local_ssrc);
-  receive_stream.AssociateSendStream(it != audio_send_ssrcs_.end() ? it->second
-                                                                   : nullptr);
+  static_cast<webrtc::AudioReceiveStreamImpl&>(stream).SetLocalSsrc(local_ssrc);
 }
 
 void Call::OnLocalSsrcUpdated(VideoReceiveStreamInterface& stream,

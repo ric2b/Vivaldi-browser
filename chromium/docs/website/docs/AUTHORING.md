@@ -17,7 +17,7 @@ Binary objects (PDFs, images, etc.) are stored in a
 [Google Cloud Storage](cloud.google.com/storage) bucket, indexed by
 SHA-1 checksums that are committed into this repo. Run
 [//scripts/upload_lobs.py](../scripts/upload_lobs.py) to upload things
-(you must be a contributor be able to run this script).
+(you must be a contributor to be able to run this script).
 
 ## Front matter
 
@@ -122,7 +122,7 @@ If you write `{% subpages collections.all %} you will get a hierarchical
 tree of links to all of the subpages of your page inserted into the doc.
 
 *Note: the syntax for this is clunky and we hope to replace this with a
-proper shortcode like `[TOC]`. Star [crbug.com/1271672](crbug.com/1271672)
+proper shortcode like `[TOC]`. Star [crbug.com/1271672](https://crbug.com/1271672)
 to get updates on this.
 
 ### Custom IDs and classes
@@ -148,13 +148,13 @@ You must use `{:` and `}` as the delimiters around the custom attributes.
 
 ## Known issues
 
-*   [crbug.com/1269867](crbug.com/1269867): We should have an auto-formatter
+*   [crbug.com/1269867](https://crbug.com/1269867): We should have an auto-formatter
     for the Markdown pages.
-*   [crbug.com/1269868](crbug.com/1269868): We should consider using a linter.
-*   [crbug.com/1260460](crbug.com/1260460): We should be automatically
+*   [crbug.com/1269868](https://crbug.com/1269868): We should consider using a linter.
+*   [crbug.com/1260460](https://crbug.com/1260460): We should be automatically
     generating the `page_name` and `breadcrumbs` fields, rather than relying
     on authors to set them.
-*   [crbug.com/1269860](crbug.com/1269860): We need to document the flavor
+*   [crbug.com/1269860](https://crbug.com/1269860): We need to document the flavor
     of Markdown that is supported along with any extensions that are enabled.
-*   [crbug.com/1267094](crbug.com/1267094): We want a better, more WYSIWYG
+*   [crbug.com/1267094](https://crbug.com/1267094): We want a better, more WYSIWYG
     authoring environment.

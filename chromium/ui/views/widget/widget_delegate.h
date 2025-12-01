@@ -32,12 +32,25 @@ class DialogDelegate;
 class NonClientFrameView;
 class View;
 
+using TitleChangedCallback = base::RepeatingCallback<void()>;
+using AccessibleTitleChangedCallback = base::RepeatingCallback<void()>;
+
 // Handles events on Widgets in context-specific ways.
 class VIEWS_EXPORT WidgetDelegate {
  public:
   using ClientViewFactory =
       base::OnceCallback<std::unique_ptr<ClientView>(Widget*)>;
   using OverlayViewFactory = base::OnceCallback<std::unique_ptr<View>()>;
+
+  // NonClientFrameViewFactory is a RepeatingCallback because the
+  // NonClientFrameView is rebuilt on Aura platforms when WindowTreeHost
+  // properties that might affect its appearance change. Rebuilding the entire
+  // NonClientFrameView is a pretty big hammer for that but it's the one we
+  // have.
+  // TODO(b:387350163): Investigate if NonClientFrameView can handle these
+  // changes in a more granular way.
+  using NonClientFrameViewFactory =
+      base::RepeatingCallback<std::unique_ptr<NonClientFrameView>(Widget*)>;
 
   struct Params {
     Params();
@@ -146,6 +159,8 @@ class VIEWS_EXPORT WidgetDelegate {
   // Can be used as an alternative to specifying a custom ClientView with
   // the CanClose() method, or in widget types which do not support a
   // ClientView.
+  //
+  // DEPRECATED. Don't use this. See Widget::MakeCloseSynchronous().
   virtual bool OnCloseRequested(Widget::ClosedReason close_reason);
 
   // Returns the view that should have the focus when the widget is shown.  If
@@ -389,11 +404,15 @@ class VIEWS_EXPORT WidgetDelegate {
   void SetHasWindowSizeControls(bool has_controls);
 
   void RegisterWidgetInitializedCallback(base::OnceClosure callback);
-  void RegisterWindowWillCloseCallback(base::OnceClosure callback);
   void RegisterWindowClosingCallback(base::OnceClosure callback);
   void RegisterDeleteDelegateCallback(base::OnceClosure callback);
 
+  // DEPRECATED. Don't use this. See Widget::MakeCloseSynchronous() for
+  // details.
+  void RegisterWindowWillCloseCallback(base::OnceClosure callback);
+
   void SetClientViewFactory(ClientViewFactory factory);
+  void SetNonClientFrameViewFactory(NonClientFrameViewFactory factory);
   void SetOverlayViewFactory(OverlayViewFactory factory);
 
   // Returns true if the title text should be centered.
@@ -413,6 +432,10 @@ class VIEWS_EXPORT WidgetDelegate {
   virtual bool RotatePaneFocusFromView(views::View* focused_view,
                                        bool forward,
                                        bool enable_wrapping);
+
+  void SetTitleChangedCallback(TitleChangedCallback callback);
+  void SetAccessibleTitleChangedCallback(
+      AccessibleTitleChangedCallback callback);
 
   bool owned_by_widget() const { return owned_by_widget_; }
 
@@ -479,7 +502,11 @@ class VIEWS_EXPORT WidgetDelegate {
   ClosureVector delete_delegate_callbacks_;
 
   ClientViewFactory client_view_factory_;
+  NonClientFrameViewFactory non_client_frame_view_factory_;
   OverlayViewFactory overlay_view_factory_;
+
+  TitleChangedCallback title_changed_callback_;
+  AccessibleTitleChangedCallback accessible_title_changed_callback_;
 
   base::WeakPtrFactory<WidgetDelegate> weak_ptr_factory_{this};
 };

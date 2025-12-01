@@ -9,6 +9,8 @@
 #include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
 #include "ui/events/blink/did_overscroll_params.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace {
 
 // The horizontal distance required to cause the browser to perform a history
@@ -572,10 +574,14 @@ BOOL forceMagicMouse = NO;
     return NO;
   }
 
+  // Vivaldi. Disabled as a part of a workaround for proper swiping inside
+  // google.docs pages without triggering page navigation.
+  if (!vivaldi::IsVivaldiRunning()) {
   // Don't enable history swiping until the renderer has decided to not consume
   // the event with phase NSEventPhaseBegan.
   if (!_firstScrollUnconsumed) {
     return NO;
+  }
   }
 
   // History swiping should be prevented if the renderer hasn't triggered it.

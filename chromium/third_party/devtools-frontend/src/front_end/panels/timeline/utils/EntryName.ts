@@ -4,7 +4,6 @@
 
 import * as Common from '../../../core/common/common.js';
 import * as i18n from '../../../core/i18n/i18n.js';
-import * as Platform from '../../../core/platform/platform.js';
 import * as Trace from '../../../models/trace/trace.js';
 
 import {getEventStyle} from './EntryStyles.js';
@@ -36,6 +35,10 @@ const UIStrings = {
    *@description Text in Timeline Flame Chart Data Provider of the Performance panel
    */
   wsConnectionClosed: 'WebSocket closed',
+  /**
+   *@description Text in Timeline Flame Chart Data Provider of the Performance panel
+   */
+  layoutShift: 'Layout shift',
 };
 
 const str_ = i18n.i18n.registerUIStrings('panels/timeline/utils/EntryName.ts', UIStrings);
@@ -81,7 +84,7 @@ export function nameForEntry(
     const parsedURL = new Common.ParsedURL.ParsedURL(entry.args.data.url);
     const text =
         parsedURL.isValid ? `${parsedURL.displayName} (${parsedURL.host})` : entry.args.data.url || 'Network request';
-    return Platform.StringUtilities.trimEndWithMaxLength(text, 40);
+    return text;
   }
 
   if (Trace.Types.Events.isWebSocketCreate(entry)) {
@@ -98,6 +101,14 @@ export function nameForEntry(
 
   if (Trace.Types.Events.isSyntheticInteraction(entry)) {
     return nameForInteractionEvent(entry);
+  }
+
+  if (Trace.Types.Events.isSyntheticLayoutShift(entry)) {
+    return i18nString(UIStrings.layoutShift);
+  }
+
+  if (Trace.Types.Events.isSyntheticAnimation(entry) && entry.args.data.beginEvent.args.data.displayName) {
+    return entry.args.data.beginEvent.args.data.displayName;
   }
 
   const eventStyleCustomName = getEventStyle(entry.name as Trace.Types.Events.Name)?.title;

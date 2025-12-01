@@ -43,6 +43,12 @@ constexpr CkAttributeType kCkaChromeOsBuiltinProvisioningProfileId =
 constexpr CkAttributeType kCkaChromeOsMigratedFromNss =
     kCkaChromeOsFirstAttribute + 2;
 
+// This attribute contains a custom string that can be set by
+// extensions. This allows extensions to group/find keys based
+// on some external logic.
+constexpr CkAttributeType kCkaChromeOsPlatformKeysTag =
+    kCkaChromeOsFirstAttribute + 3;
+
 }  // namespace pkcs11_custom_attributes
 
 #endif  // SYSTEM_API_CONSTANTS_PKCS11_CUSTOM_ATTRIBUTES_H_

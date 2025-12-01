@@ -32,10 +32,11 @@ namespace {
 std::optional<Error> CheckConfiguration() {
 #if BUILDFLAG(IS_MAC)
   if (!device::BluetoothAdapterFactory::HasSharedInstanceForTesting() &&
-      !base::IsProcessSelfResponsible()) {
+      !base::DoesResponsibleProcessHaveBluetoothMetadata()) {
     FIDO_LOG(EVENT)
-        << "Cannot use Bluetooth because process is not self-responsible. "
-           "Launch from Finder or with `open` instead.";
+        << "Cannot use Bluetooth because the responsible app for the process "
+           "does not have Bluetooth metadata in its Info.plist. Launch from "
+           "Finder or with `open` instead.";
     return SystemError::kNotSelfResponsible;
   }
 #endif
@@ -53,27 +54,24 @@ std::optional<Error> CheckConfiguration() {
 Transaction::~Transaction() = default;
 
 std::unique_ptr<Transaction> Transaction::New(
-    url::Origin origin,
-    base::Value request,
+    RequestInfo request_info,
     std::array<uint8_t, device::cablev2::kQRKeySize> qr_generator_key,
     device::NetworkContextFactory network_context_factory,
     EventCallback event_callback,
     CompletionCallback callback) {
   return std::make_unique<TransactionImpl>(
-      std::move(origin), std::move(request), qr_generator_key,
+      std::move(request_info), qr_generator_key,
       std::move(network_context_factory), std::move(event_callback),
       std::move(callback));
 }
 
 TransactionImpl::TransactionImpl(
-    url::Origin origin,
-    base::Value request,
+    RequestInfo request_info,
     std::array<uint8_t, device::cablev2::kQRKeySize> qr_generator_key,
     device::NetworkContextFactory network_context_factory,
     Transaction::EventCallback event_callback,
     Transaction::CompletionCallback callback)
-    : origin_(std::move(origin)),
-      request_(std::move(request)),
+    : request_info_(std::move(request_info)),
       event_callback_(std::move(event_callback)),
       callback_(std::move(callback)) {
   std::optional<Error> error = CheckConfiguration();
@@ -100,8 +98,8 @@ TransactionImpl::TransactionImpl(
                           weak_ptr_factory_.GetWeakPtr()),
       /*must_support_ctap=*/false);
   dispatcher_ = std::make_unique<RequestDispatcher>(
-      std::move(v1_discovery), std::move(v2_discovery), origin_,
-      std::move(request_),
+      std::move(v1_discovery), std::move(v2_discovery),
+      std::move(request_info_),
       base::BindOnce(&TransactionImpl::OnHaveResponse,
                      weak_ptr_factory_.GetWeakPtr()));
 

@@ -5,19 +5,18 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_CHROME_TYPOGRAPHY_H_
 #define CHROME_BROWSER_UI_VIEWS_CHROME_TYPOGRAPHY_H_
 
-#include "build/chromeos_buildflags.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/font.h"
 #include "ui/views/style/typography.h"
 #include "ui/views/style/typography_provider.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 // gn check complains on Linux Ozone.
 #include "ash/public/cpp/ash_typography.h"  // nogncheck
 #endif
 
 enum ChromeTextContext {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   CHROME_TEXT_CONTEXT_START = ash::ASH_TEXT_CONTEXT_END,
 #else
   CHROME_TEXT_CONTEXT_START = views::style::VIEWS_TEXT_CONTEXT_END,
@@ -85,7 +84,7 @@ enum ChromeTextContext {
 };
 
 enum ChromeTextStyle {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   CHROME_TEXT_STYLE_START = ash::ASH_TEXT_STYLE_END,
 #else
   CHROME_TEXT_STYLE_START = views::style::VIEWS_TEXT_STYLE_END,

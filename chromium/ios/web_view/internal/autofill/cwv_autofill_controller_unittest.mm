@@ -9,15 +9,16 @@
 #import "base/run_loop.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
-#import "components/autofill/core/browser/autofill_test_utils.h"
-#import "components/autofill/core/browser/logging/stub_log_manager.h"
+#import "components/autofill/core/browser/data_manager/test_personal_data_manager.h"
+#import "components/autofill/core/browser/single_field_fillers/autocomplete/mock_autocomplete_history_manager.h"
 #import "components/autofill/core/browser/strike_databases/payments/test_strike_database.h"
-#import "components/autofill/core/browser/test_personal_data_manager.h"
+#import "components/autofill/core/browser/test_utils/autofill_test_utils.h"
 #import "components/autofill/core/common/autofill_prefs.h"
 #import "components/autofill/core/common/form_data.h"
 #import "components/autofill/ios/browser/autofill_java_script_feature.h"
 #import "components/autofill/ios/browser/fake_autofill_agent.h"
 #import "components/autofill/ios/browser/form_suggestion.h"
+#import "components/autofill/ios/browser/test_autofill_client_ios.h"
 #import "components/autofill/ios/form_util/form_activity_params.h"
 #import "components/autofill/ios/form_util/form_activity_tab_helper.h"
 #import "components/autofill/ios/form_util/test_form_activity_tab_helper.h"
@@ -36,6 +37,7 @@
 #import "ios/web/public/test/fakes/fake_web_frames_manager.h"
 #import "ios/web/public/test/fakes/fake_web_state.h"
 #import "ios/web/public/test/web_test.h"
+#import "ios/web_view/internal/autofill/cwv_autofill_controller+testing.h"
 #import "ios/web_view/internal/autofill/cwv_autofill_controller_internal.h"
 #import "ios/web_view/internal/autofill/cwv_autofill_profile_internal.h"
 #import "ios/web_view/internal/autofill/cwv_autofill_suggestion_internal.h"
@@ -49,24 +51,20 @@
 #import "third_party/ocmock/OCMock/OCMock.h"
 #import "third_party/ocmock/gtest_support.h"
 
-using autofill::FormRendererId;
 using autofill::FieldRendererId;
+using autofill::FormRendererId;
 using base::test::ios::kWaitForActionTimeout;
 using base::test::ios::WaitUntilConditionOrTimeout;
 
 namespace ios_web_view {
-
 namespace {
 
-const char kApplicationLocale[] = "en-US";
 NSString* const kTestFormName = @"FormName";
 FormRendererId kTestFormRendererID = FormRendererId(0);
 NSString* const kTestFieldIdentifier = @"FieldIdentifier";
 FieldRendererId kTestFieldRendererID = FieldRendererId(1);
 NSString* const kTestFieldValue = @"FieldValue";
 NSString* const kTestDisplayDescription = @"DisplayDescription";
-
-}  // namespace
 
 class CWVAutofillControllerTest : public web::WebTest {
  protected:
@@ -98,7 +96,7 @@ class CWVAutofillControllerTest : public web::WebTest {
     auto password_manager_client =
         std::make_unique<WebViewPasswordManagerClient>(
             &web_state_, /*sync_service=*/nullptr, &pref_service_,
-            /*identity_manager=*/nullptr, /*log_manager=*/nullptr,
+            /*identity_manager=*/nullptr, /*log_router=*/nullptr,
             /*profile_store=*/nullptr, /*account_store=*/nullptr,
             /*reuse_manager=*/nullptr,
             /*requirements_service=*/nullptr);
@@ -109,19 +107,18 @@ class CWVAutofillControllerTest : public web::WebTest {
         &web_state_, password_controller_, password_manager.get());
     password_manager_client_ = password_manager_client.get();
 
-    auto autofill_client = std::make_unique<autofill::WebViewAutofillClientIOS>(
-        &pref_service_, &personal_data_manager_,
-        /*autocomplete_history_manager=*/nullptr, &web_state_,
-        /*identity_manager=*/nullptr, &strike_database_, &sync_service_,
-        std::make_unique<autofill::StubLogManager>());
+    auto autofill_client = std::make_unique<
+        autofill::WithFakedFromWebState<autofill::WebViewAutofillClientIOS>>(
+        &pref_service_, &personal_data_manager_, &autocomplete_history_manager_,
+        &web_state_, /*bridge=*/nil, /*identity_manager=*/nullptr,
+        &strike_database_, &sync_service_, /*log_router=*/nullptr);
     autofill_controller_ = [[CWVAutofillController alloc]
              initWithWebState:&web_state_
-               autofillClient:std::move(autofill_client)
+        autofillClientForTest:std::move(autofill_client)
                 autofillAgent:autofill_agent_
               passwordManager:std::move(password_manager)
         passwordManagerClient:std::move(password_manager_client)
-           passwordController:password_controller_
-            applicationLocale:kApplicationLocale];
+           passwordController:password_controller_];
     form_activity_tab_helper_ =
         std::make_unique<autofill::TestFormActivityTabHelper>(&web_state_);
   }
@@ -145,6 +142,7 @@ class CWVAutofillControllerTest : public web::WebTest {
   web::FakeWebState web_state_;
   NSString* frame_id_;
   web::FakeWebFramesManager* web_frames_manager_;
+  autofill::MockAutocompleteHistoryManager autocomplete_history_manager_;
   CWVAutofillController* autofill_controller_;
   FakeAutofillAgent* autofill_agent_;
   id password_controller_;
@@ -285,54 +283,54 @@ TEST_F(CWVAutofillControllerTest, AcceptSuggestion) {
 
 // Tests CWVAutofillController delegate focus callback is invoked.
 TEST_F(CWVAutofillControllerTest, FocusCallback) {
-    id delegate = OCMProtocolMock(@protocol(CWVAutofillControllerDelegate));
-    autofill_controller_.delegate = delegate;
+  id delegate = OCMProtocolMock(@protocol(CWVAutofillControllerDelegate));
+  autofill_controller_.delegate = delegate;
 
-    [[delegate expect] autofillController:autofill_controller_
-            didFocusOnFieldWithIdentifier:kTestFieldIdentifier
-                                fieldType:@""
-                                 formName:kTestFormName
-                                  frameID:frame_id_
-                                    value:kTestFieldValue
-                            userInitiated:YES];
+  [[delegate expect] autofillController:autofill_controller_
+          didFocusOnFieldWithIdentifier:kTestFieldIdentifier
+                              fieldType:@""
+                               formName:kTestFormName
+                                frameID:frame_id_
+                                  value:kTestFieldValue
+                          userInitiated:YES];
 
-    autofill::FormActivityParams params;
-    params.form_name = base::SysNSStringToUTF8(kTestFormName);
-    params.form_renderer_id = kTestFormRendererID;
-    params.field_identifier = base::SysNSStringToUTF8(kTestFieldIdentifier);
-    params.field_renderer_id = kTestFieldRendererID;
-    params.value = base::SysNSStringToUTF8(kTestFieldValue);
-    params.frame_id = web::kMainFakeFrameId;
-    params.has_user_gesture = true;
-    params.type = "focus";
-    auto frame = web::FakeWebFrame::CreateMainWebFrame(GURL());
-    form_activity_tab_helper_->FormActivityRegistered(frame.get(), params);
-    [delegate verify];
+  autofill::FormActivityParams params;
+  params.form_name = base::SysNSStringToUTF8(kTestFormName);
+  params.form_renderer_id = kTestFormRendererID;
+  params.field_identifier = base::SysNSStringToUTF8(kTestFieldIdentifier);
+  params.field_renderer_id = kTestFieldRendererID;
+  params.value = base::SysNSStringToUTF8(kTestFieldValue);
+  params.frame_id = web::kMainFakeFrameId;
+  params.has_user_gesture = true;
+  params.type = "focus";
+  auto frame = web::FakeWebFrame::CreateMainWebFrame(GURL());
+  form_activity_tab_helper_->FormActivityRegistered(frame.get(), params);
+  [delegate verify];
 }
 
 // Tests CWVAutofillController delegate input callback is invoked.
 TEST_F(CWVAutofillControllerTest, InputCallback) {
-    id delegate = OCMProtocolMock(@protocol(CWVAutofillControllerDelegate));
-    autofill_controller_.delegate = delegate;
+  id delegate = OCMProtocolMock(@protocol(CWVAutofillControllerDelegate));
+  autofill_controller_.delegate = delegate;
 
-    [[delegate expect] autofillController:autofill_controller_
-            didInputInFieldWithIdentifier:kTestFieldIdentifier
-                                fieldType:@""
-                                 formName:kTestFormName
-                                  frameID:frame_id_
-                                    value:kTestFieldValue
-                            userInitiated:YES];
+  [[delegate expect] autofillController:autofill_controller_
+          didInputInFieldWithIdentifier:kTestFieldIdentifier
+                              fieldType:@""
+                               formName:kTestFormName
+                                frameID:frame_id_
+                                  value:kTestFieldValue
+                          userInitiated:YES];
 
-    autofill::FormActivityParams params;
-    params.form_name = base::SysNSStringToUTF8(kTestFormName);
-    params.field_identifier = base::SysNSStringToUTF8(kTestFieldIdentifier);
-    params.value = base::SysNSStringToUTF8(kTestFieldValue);
-    params.frame_id = web::kMainFakeFrameId;
-    params.type = "input";
-    params.has_user_gesture = true;
-    auto frame = web::FakeWebFrame::CreateMainWebFrame(GURL());
-    form_activity_tab_helper_->FormActivityRegistered(frame.get(), params);
-    [delegate verify];
+  autofill::FormActivityParams params;
+  params.form_name = base::SysNSStringToUTF8(kTestFormName);
+  params.field_identifier = base::SysNSStringToUTF8(kTestFieldIdentifier);
+  params.value = base::SysNSStringToUTF8(kTestFieldValue);
+  params.frame_id = web::kMainFakeFrameId;
+  params.type = "input";
+  params.has_user_gesture = true;
+  auto frame = web::FakeWebFrame::CreateMainWebFrame(GURL());
+  form_activity_tab_helper_->FormActivityRegistered(frame.get(), params);
+  [delegate verify];
 }
 
 // Tests CWVAutofillController delegate input callback is invoked by keyup
@@ -439,8 +437,9 @@ TEST_F(CWVAutofillControllerTest, NotifyUserOfLeak) {
                                 username:@"fake-username"]);
 
   password_manager_client_->NotifyUserCredentialsWereLeaked(
-      leak_type, leak_url, base::SysNSStringToUTF16(@"fake-username"),
-      /* in_account_store = */ false);
+      password_manager::LeakedPasswordDetails(leak_type, leak_url,
+                                              u"fake-username", u"password",
+                                              /* in_account_store = */ false));
 
   [delegate verify];
 }
@@ -529,4 +528,5 @@ TEST_F(CWVAutofillControllerTest, SaveNewAutofillProfile) {
   [delegate verify];
 }
 
+}  // namespace
 }  // namespace ios_web_view

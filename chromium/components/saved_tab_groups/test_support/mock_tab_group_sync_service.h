@@ -8,6 +8,7 @@
 #include "components/saved_tab_groups/delegate/tab_group_sync_delegate.h"
 #include "components/saved_tab_groups/public/tab_group_sync_service.h"
 #include "components/saved_tab_groups/public/types.h"
+#include "components/sync/model/data_type_sync_bridge.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace tab_groups {
@@ -51,12 +52,23 @@ class MockTabGroupSyncService : public TabGroupSyncService {
                const SavedTabGroupTabBuilder&));
   MOCK_METHOD(void, RemoveTab, (const LocalTabGroupID&, const LocalTabID&));
   MOCK_METHOD(void, MoveTab, (const LocalTabGroupID&, const LocalTabID&, int));
-  MOCK_METHOD(void, OnTabSelected, (const LocalTabGroupID&, const LocalTabID&));
+  MOCK_METHOD(void,
+              OnTabSelected,
+              (const std::optional<LocalTabGroupID>&,
+               const LocalTabID&,
+               const std::u16string&));
+  MOCK_METHOD((SelectedTabInfo), GetCurrentlySelectedTabInfo, ());
   MOCK_METHOD(void, SaveGroup, (SavedTabGroup));
   MOCK_METHOD(void, UnsaveGroup, (const LocalTabGroupID&));
   MOCK_METHOD(void,
               MakeTabGroupShared,
-              (const LocalTabGroupID&, std::string_view));
+              (const LocalTabGroupID&,
+               std::string_view,
+               TabGroupSharingCallback));
+  MOCK_METHOD(void,
+              AboutToUnShareTabGroup,
+              (const LocalTabGroupID&, base::OnceClosure));
+  MOCK_METHOD(void, OnTabGroupUnShareComplete, (const LocalTabGroupID&, bool));
 
   MOCK_METHOD(std::vector<SavedTabGroup>, GetAllGroups, (), (const));
   MOCK_METHOD(std::optional<SavedTabGroup>,
@@ -67,7 +79,15 @@ class MockTabGroupSyncService : public TabGroupSyncService {
               GetGroup,
               (const LocalTabGroupID&),
               (const));
+  MOCK_METHOD(std::optional<SavedTabGroup>,
+              GetGroup,
+              (const EitherGroupID&),
+              (const));
   MOCK_METHOD(std::vector<LocalTabGroupID>, GetDeletedGroupIds, (), (const));
+  MOCK_METHOD(std::optional<std::u16string>,
+              GetTitleForPreviouslyExistingSharedTabGroup,
+              (const CollaborationId&),
+              (const));
 
   MOCK_METHOD(void,
               OpenTabGroup,

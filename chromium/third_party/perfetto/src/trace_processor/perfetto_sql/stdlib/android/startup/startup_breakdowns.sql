@@ -50,8 +50,8 @@ SELECT
 CREATE PERFETTO FUNCTION _startup_breakdown_reason(
   name STRING,
   state STRING,
-  io_wait INT,
-  irq_context INT)
+  io_wait LONG,
+  irq_context LONG)
 RETURNS STRING
 AS
 SELECT
@@ -154,16 +154,16 @@ USING
 --
 -- Some helpful events to enables are binder transactions, ART, am and view.
 CREATE PERFETTO TABLE android_startup_opinionated_breakdown(
-  -- Startup id. Alias of `slice.id`
-  startup_id INT,
-  -- Id of relevant slice blocking startup. Alias of `slice.id`.
-  slice_id INT,
-  -- Id of thread_state blocking startup. Alias of `thread_state.id`.
-  thread_state_id INT,
+  -- Startup id.
+  startup_id JOINID(android_startups.startup_id),
+  -- Id of relevant slice blocking startup.
+  slice_id JOINID(slice.id),
+  -- Id of thread_state blocking startup.
+  thread_state_id JOINID(thread_state.id),
   -- Timestamp of an exclusive interval during the app startup with a single latency reason.
-  ts INT,
+  ts TIMESTAMP,
   -- Duration of an exclusive interval during the app startup with a single latency reason.
-  dur INT,
+  dur DURATION,
   -- Cause of delay during an exclusive interval of the app startup.
   reason STRING
 )

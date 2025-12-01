@@ -24,7 +24,7 @@ describe('Metrics: Lantern TTI', () => {
       }),
     });
 
-    assert.deepStrictEqual(
+    assert.deepEqual(
         {
           timing: Math.round(result.timing),
           optimistic: Math.round(result.optimisticEstimate.timeInMs),
@@ -37,8 +37,8 @@ describe('Metrics: Lantern TTI', () => {
         });
     assert.strictEqual(result.optimisticEstimate.nodeTimings.size, 14);
     assert.strictEqual(result.pessimisticEstimate.nodeTimings.size, 31);
-    assert.ok(result.optimisticGraph, 'should have created optimistic graph');
-    assert.ok(result.pessimisticGraph, 'should have created pessimistic graph');
+    assert.isOk(result.optimisticGraph, 'should have created optimistic graph');
+    assert.isOk(result.pessimisticGraph, 'should have created pessimistic graph');
   });
 
   it('should compute predicted value on iframes with substantial layout', async () => {
@@ -51,7 +51,7 @@ describe('Metrics: Lantern TTI', () => {
       }),
     });
 
-    assert.deepStrictEqual(
+    assert.deepEqual(
         {
           timing: Math.round(result.timing),
           optimistic: Math.round(result.optimisticEstimate.timeInMs),
@@ -62,7 +62,7 @@ describe('Metrics: Lantern TTI', () => {
           pessimistic: 2386,
           timing: 2379,
         });
-    assert.ok(result.optimisticGraph, 'should have created optimistic graph');
-    assert.ok(result.pessimisticGraph, 'should have created pessimistic graph');
+    assert.isOk(result.optimisticGraph, 'should have created optimistic graph');
+    assert.isOk(result.pessimisticGraph, 'should have created pessimistic graph');
   });
 });

@@ -144,7 +144,7 @@ CWV_EXPORT
 // Defaults to NO.
 @property(nonatomic, class) BOOL webInspectorEnabled;
 
-// Normally ios/web_view/ CHECKs IsOptedInForAccountStorage() early on. Setting
+// Normally ios/web_view/ CHECKs IsAccountStorageEnabled() early on. Setting
 // this to true will cause the CHECK to be skipped, which potentially fixes
 // crbug.com/347862165.
 @property(nonatomic, class) BOOL skipAccountStorageCheckEnabled;
@@ -245,8 +245,9 @@ CWV_EXPORT
 // occur when the web view is navigating or if the current page content does
 // not allow JavaScript execution (ex: JS disabled or PDF content).
 - (void)evaluateJavaScript:(NSString*)javaScriptString
-         completionHandler:(nullable void (^)(id result,
-                            NSError* __nullable error))completion;
+         completionHandler:
+             (nullable void (^)(id result,
+                                NSError* __nullable error))completion;
 
 // DEPRECATED: Use `evaluateJavaScript:completionHandler` instead. These
 // methods are the same, but `evaluateJavaScript:completionHandler` provides

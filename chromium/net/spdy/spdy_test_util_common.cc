@@ -23,7 +23,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "build/build_config.h"
-#include "net/base/features.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/http_user_agent_settings.h"
 #include "net/base/proxy_delegate.h"
@@ -528,7 +527,9 @@ class FakeSpdySessionClientSocket : public MockClientSocket {
   }
 
   // Return kProtoUnknown to use the pool's default protocol.
-  NextProto GetNegotiatedProtocol() const override { return kProtoUnknown; }
+  NextProto GetNegotiatedProtocol() const override {
+    return NextProto::kProtoUnknown;
+  }
 
   // The functions below are not expected to be called.
 
@@ -611,8 +612,7 @@ void SpdyTestUtil::AddPriorityToHeaderBlock(
     RequestPriority request_priority,
     bool priority_incremental,
     quiche::HttpHeaderBlock* headers) const {
-  if (use_priority_header_ &&
-      base::FeatureList::IsEnabled(net::features::kPriorityHeader)) {
+  if (use_priority_header_) {
     uint8_t urgency = ConvertRequestPriorityToQuicPriority(request_priority);
     bool incremental = priority_incremental;
     quic::HttpStreamPriority priority{urgency, incremental};

@@ -104,6 +104,7 @@ class WebTextCheckClient;
 class WebURL;
 class WebView;
 struct FramePolicy;
+struct Impression;
 struct WebAssociatedURLLoaderOptions;
 struct WebConsoleMessage;
 struct WebIsolatedWorldInfo;
@@ -242,7 +243,7 @@ class BLINK_EXPORT WebLocalFrame : public WebFrame {
 
   // Tests whether the policy-controlled feature is enabled in this frame.
   virtual bool IsFeatureEnabled(
-      const mojom::PermissionsPolicyFeature&) const = 0;
+      const network::mojom::PermissionsPolicyFeature&) const = 0;
 
   // Hierarchy ----------------------------------------------------------
 
@@ -302,6 +303,9 @@ class BLINK_EXPORT WebLocalFrame : public WebFrame {
   // Navigation Ping --------------------------------------------------------
 
   virtual void SendPings(const WebURL& destination_url) = 0;
+
+  virtual void SendAttributionSrc(const std::optional<Impression>&,
+                                  bool did_navigate) = 0;
 
   // Navigation ----------------------------------------------------------
 
@@ -583,7 +587,7 @@ class BLINK_EXPORT WebLocalFrame : public WebFrame {
 
   virtual bool SetEditableSelectionOffsets(int start, int end) = 0;
   virtual bool AddImeTextSpansToExistingText(
-      const WebVector<ui::ImeTextSpan>& ime_text_spans,
+      const std::vector<ui::ImeTextSpan>& ime_text_spans,
       unsigned text_start,
       unsigned text_end) = 0;
   virtual bool ClearImeTextSpansByType(ui::ImeTextSpan::Type type,
@@ -592,7 +596,7 @@ class BLINK_EXPORT WebLocalFrame : public WebFrame {
   virtual bool SetCompositionFromExistingText(
       int composition_start,
       int composition_end,
-      const WebVector<ui::ImeTextSpan>& ime_text_spans) = 0;
+      const std::vector<ui::ImeTextSpan>& ime_text_spans) = 0;
   virtual void ExtendSelectionAndDelete(int before, int after) = 0;
   virtual void ExtendSelectionAndReplace(int before,
                                          int after,
@@ -622,7 +626,7 @@ class BLINK_EXPORT WebLocalFrame : public WebFrame {
   virtual void ReplaceMisspelledRange(const WebString&) = 0;
   virtual void RemoveSpellingMarkers() = 0;
   virtual void RemoveSpellingMarkersUnderWords(
-      const WebVector<WebString>& words) = 0;
+      const std::vector<WebString>& words) = 0;
 
   // Content Settings -------------------------------------------------------
 
@@ -672,7 +676,7 @@ class BLINK_EXPORT WebLocalFrame : public WebFrame {
   // given layout object. If this is called with an empty array, the default
   // behavior will be restored.
   virtual void SetTickmarks(const WebElement& target,
-                            const WebVector<gfx::Rect>& tickmarks) = 0;
+                            const std::vector<gfx::Rect>& tickmarks) = 0;
 
   // Context menu -----------------------------------------------------------
 
@@ -897,7 +901,7 @@ class BLINK_EXPORT WebLocalFrame : public WebFrame {
   // Get the total spool size (the bounding box of all the pages placed after
   // oneanother vertically), when printing for testing.
   virtual gfx::Size SpoolSizeInPixelsForTesting(
-      const WebVector<uint32_t>& pages) = 0;
+      const std::vector<uint32_t>& pages) = 0;
   virtual gfx::Size SpoolSizeInPixelsForTesting(uint32_t page_count) = 0;
 
   // Prints the given pages of the frame into the canvas, with page boundaries
@@ -906,7 +910,7 @@ class BLINK_EXPORT WebLocalFrame : public WebFrame {
   virtual void PrintPagesForTesting(
       cc::PaintCanvas*,
       const gfx::Size& spool_size_in_pixels,
-      const WebVector<uint32_t>* pages = nullptr) = 0;
+      const std::vector<uint32_t>* pages = nullptr) = 0;
 
   // Returns the bounds rect for current selection. If selection is performed
   // on transformed text, the rect will still bound the selection but will

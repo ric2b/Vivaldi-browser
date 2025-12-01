@@ -13,7 +13,7 @@ title: Monday, August 29, 2016
 Updates since last meeting (on Monday, August 22, 2016):
 Scrolling
 - Work on root layer scrolling continues. (szager)
-Scroll Anchoring \[[crbug.com/558575](http://crbug.com/558575)\]
+Scroll Anchoring \[[crbug.com/558575](https://crbug.com/558575)\]
 - Support for SANACLAP (Suppress if Anchor Node Ancestor Changed Layout-
 Affecting Property) landed. Should help reduce the number of hacks
 required to support the feature. \[<http://bit.ly/sanaclap>\] (skobes)
@@ -26,9 +26,9 @@ fixed and we aren't detecting many new ones. Yay. (cbiesinger)
 will require outreach/evangelism. Not nearly as much as previously
 thought though. Microsoft paved the way and did a really good job of
 reaching out to web authors. (cbiesinger)
-CSS Grid Layout \[[crbug.com/79180](http://crbug.com/79180)\]
+CSS Grid Layout \[[crbug.com/79180](https://crbug.com/79180)\]
 - No updates since last week. See tracking bug for status.
-CSS Multi-column (mstensho) \[[crbug.com/334335](http://crbug.com/334335)\]
+CSS Multi-column (mstensho) \[[crbug.com/334335](https://crbug.com/334335)\]
 - Still working on paint layer issues triggered by an investigation into
 incorrect behavior for getClientRects. Issues mostly around writing
 mode and paint layer interaction. Paint layer is a mess when it comes
@@ -39,7 +39,7 @@ preparation for TPAC last week. (ikilpatrick)
 - Plan to spend more time preparing the Worklets and CSS Custom Layout
 specs for TPAC this week. (ikilpatrick)
 - Working on event loop spec. (glebl)
-LayoutNG \[[crbug.com/591099](http://crbug.com/591099)\]
+LayoutNG \[[crbug.com/591099](https://crbug.com/591099)\]
 - Converted every backing fragment and constraint space to physical
 coordinates instead of logical. (ikilpatrick)
 - Might attempt to add initial support for floats this week.

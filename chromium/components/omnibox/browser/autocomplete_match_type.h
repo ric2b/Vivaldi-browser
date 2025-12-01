@@ -103,6 +103,7 @@ struct AutocompleteMatchType {
     BOOKMARK_NICKNAME,  // A bookmark whose nickname
                         // contains the input.
     DIRECT_MATCH,       // A direct match
+    RECENT_TYPED_HISTORY, // Recent searches and typed urls.
     NUM_TYPES,
   };
   // clang-format on

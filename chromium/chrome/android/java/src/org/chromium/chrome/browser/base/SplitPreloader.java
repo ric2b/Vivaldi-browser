@@ -5,24 +5,21 @@
 package org.chromium.chrome.browser.base;
 
 import android.content.Context;
-import android.content.res.Configuration;
 import android.os.SystemClock;
 
 import androidx.annotation.Nullable;
 import androidx.collection.SimpleArrayMap;
 
 import org.chromium.base.BundleUtils;
-import org.chromium.base.ContextUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.base.task.TaskTraits;
-import org.chromium.chrome.browser.language.GlobalAppLocaleController;
 
 /**
- * Handles preloading split Contexts on a background thread. Loading a new isolated split
- * Context can be expensive since the ClassLoader may need to be created. See crbug.com/1150600 for
- * more info.
+ * Handles preloading split Contexts on a background thread. Loading a new isolated split Context
+ * can be expensive since the ClassLoader may need to be created. See crbug.com/1150600 for more
+ * info.
  */
 public class SplitPreloader {
     private final SimpleArrayMap<String, PreloadTask> mPreloadTasks = new SimpleArrayMap<>();
@@ -102,14 +99,7 @@ public class SplitPreloader {
                     // for the preloader to finish, causing a deadlock.
                     context = mPreloadHooks.createIsolatedSplitContext(mName);
                 } else {
-                    context =
-                            BundleUtils.createIsolatedSplitContext(
-                                    ContextUtils.getApplicationContext(), mName);
-                }
-                if (GlobalAppLocaleController.getInstance().isOverridden()) {
-                    Configuration config =
-                            GlobalAppLocaleController.getInstance().getOverrideConfig(context);
-                    context = context.createConfigurationContext(config);
+                    context = BundleUtils.createIsolatedSplitContext(mName);
                 }
                 return context;
             }

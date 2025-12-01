@@ -18,7 +18,7 @@ do a number of things to prevent, identify, and fix Chromium security bugs.
 ## Security fuzzing
 
 We've build fuzzing infrastructure that automatically and continuously security
-["fuzz" test](http://en.wikipedia.org/wiki/Fuzz_testing) Chrome to find new bugs
+["fuzz" test](https://en.wikipedia.org/wiki/Fuzz_testing) Chrome to find new bugs
 and help engineers patch and test fixes.
 [ClusterFuzz](/Home/chromium-security/bugs/using-clusterfuzz), as the system is
 affectionately named, consists of 12000+ cores and fuzzes hundreds of millions
@@ -41,7 +41,7 @@ days](http://googleonlinesecurity.blogspot.com/2010/07/rebooting-responsible-dis
 
 We try to reward awesome security research from external folks in a few ways:
 [Chromium Vulnerability
-Rewards](http://www.chromium.org/Home/chromium-security/vulnerability-rewards-program)is
+Rewards](/Home/chromium-security/vulnerability-rewards-program) is
 our ongoing program to reward security bug reports in Chrome and Chrome OS.
 **Pwnium** is a contest we run semi-regularly for proof-of-concept Chrome
 exploits. Our motivation is simple: we have a big learning opportunity when we

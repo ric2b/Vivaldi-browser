@@ -115,7 +115,7 @@ link leads to a buganizer template attached to the CrOS Documentation component.
 
 * Complete the CrOS Dev Documentation Catalog, listing existing documentation
   resources and topics covered.
-* Gain approval from dev.chromium.org/chromium-os OWNERS.
+* Gain approval from chromium-os/OWNERS.
 
 ## Phase 1: Consolidate
 

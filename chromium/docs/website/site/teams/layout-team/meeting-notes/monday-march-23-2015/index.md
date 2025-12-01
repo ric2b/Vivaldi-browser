@@ -18,7 +18,7 @@ Performance Tracking (benjhayden)
 
 - What further pages should be added? jchaffraix has a list.
 
-Scrolling (skobes) \[[crbug.com/417782](http://crbug.com/417782)\]
+Scrolling (skobes) \[[crbug.com/417782](https://crbug.com/417782)\]
 
 - Fixed a flaky test but turns out it is still flaky on one of the
 
@@ -27,7 +27,7 @@ oilpan bots. Not sure why. Will coordinate with oilpan team to try to
 track down the issue.
 
 Rename Rendering -&gt; Layout (dsinclair)
-\[[crbug.com/450612](http://crbug.com/450612)\]
+\[[crbug.com/450612](https://crbug.com/450612)\]
 
 - Renamed renderer in layout/svg.
 
@@ -47,13 +47,13 @@ prototype.
 
 trickier. Might be a problem that affects more than measure.
 
-Flexbox (cbiesinger) \[[crbug.com/426898](http://crbug.com/426898)\]
+Flexbox (cbiesinger) \[[crbug.com/426898](https://crbug.com/426898)\]
 
 - Continuing on flexbox work. Progress is slower than expected as
 
 updating tests takes a lot of time.
 
-Line Boxes (szager) \[[crbug.com/321237](http://crbug.com/321237)\]
+Line Boxes (szager) \[[crbug.com/321237](https://crbug.com/321237)\]
 
 - Found root cause for a significant chunk of layout test failures,
 
@@ -65,7 +65,7 @@ floating point representation of the width, introducing imprecision.
 
 - Hopeful that this'll be the last code change before landing. (szager)
 
-Isolate core/fetch (japhet) \[[crbug.com/458222](http://crbug.com/458222)\]
+Isolate core/fetch (japhet) \[[crbug.com/458222](https://crbug.com/458222)\]
 
 - Continued quested to isolate fetch directory from the rest of core.
 
@@ -75,7 +75,7 @@ Mostly there.
 
 existing bad includes (down to 7).
 
-Page scale handling (bokan) \[[crbug.com/459591](http://crbug.com/459591)\]
+Page scale handling (bokan) \[[crbug.com/459591](https://crbug.com/459591)\]
 
 - Coordinate transformation cleanup in FrameView.
 

@@ -7,14 +7,18 @@ import './SettingDeprecationWarning.js';
 import type * as Common from '../../../core/common/common.js';
 import * as Host from '../../../core/host/host.js';
 import * as i18n from '../../../core/i18n/i18n.js';
-import * as LitHtml from '../../lit-html/lit-html.js';
+import * as Lit from '../../lit/lit.js';
 import * as VisualLogging from '../../visual_logging/visual_logging.js';
 import * as Buttons from '../buttons/buttons.js';
 import * as Input from '../input/input.js';
 
-import settingCheckboxStyles from './settingCheckbox.css.js';
+import settingCheckboxStylesRaw from './settingCheckbox.css.js';
 
-const {html, Directives: {ifDefined}} = LitHtml;
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const settingCheckboxStyles = new CSSStyleSheet();
+settingCheckboxStyles.replaceSync(settingCheckboxStylesRaw.cssContent);
+
+const {html, Directives: {ifDefined}} = Lit;
 
 const UIStrings = {
   /**
@@ -58,7 +62,7 @@ export class SettingCheckbox extends HTMLElement {
     this.#render();
   }
 
-  icon(): LitHtml.TemplateResult|undefined {
+  icon(): Lit.TemplateResult|undefined {
     if (!this.#setting) {
       return undefined;
     }
@@ -98,20 +102,21 @@ export class SettingCheckbox extends HTMLElement {
 
     const icon = this.icon();
     const title = `${this.#setting.learnMore() ? this.#setting.learnMore()?.tooltip() : ''}`;
-    const reason = this.#setting.disabledReason() ?
+    const disabledReasons = this.#setting.disabledReasons();
+    const reason = disabledReasons.length ?
         html`
       <devtools-button class="disabled-reason" .iconName=${'info'} .variant=${Buttons.Button.Variant.ICON} .size=${
-            Buttons.Button.Size.SMALL} title=${ifDefined(this.#setting.disabledReason())} @click=${
+            Buttons.Button.Size.SMALL} title=${ifDefined(disabledReasons.join('\n'))} @click=${
             onclick}></devtools-button>
     ` :
-        LitHtml.nothing;
-    LitHtml.render(
+        Lit.nothing;
+    Lit.render(
         html`
       <p>
         <label title=${title}>
           <input
             type="checkbox"
-            .checked=${this.#setting.disabledReason() ? false : this.#setting.get()}
+            .checked=${disabledReasons.length ? false : this.#setting.get()}
             ?disabled=${this.#setting.disabled()}
             @change=${this.#checkboxChanged}
             jslog=${VisualLogging.toggle().track({click: true}).context(this.#setting.name)}

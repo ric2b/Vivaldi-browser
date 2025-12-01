@@ -16,11 +16,15 @@
   --issue-indent: 8px;
 }
 
+/* The top most parents need to be larger, as they may include an unhide button. */
+.tree-outline.issues > li {
+  min-height: var(--sys-size-13);
+}
+
 /* Override whitespace behavior for tree items to allow wrapping */
 .issues li {
   white-space: normal;
   align-items: flex-start;
-  min-height: var(--sys-size-13);
 }
 
 /* Hide toggle for tree items which cannot be collapsed */
@@ -29,12 +33,11 @@
 }
 
 .issues li.parent::before {
-  margin-top: 10px;
+  margin-top: 7px;
 }
 
 .issues .affected-resources li.parent::before {
-  margin-top: 3px;
-  margin-right: 0;
+  margin-top: 0;
 }
 
 .issue-category,
@@ -77,7 +80,7 @@
   background-color: unset;
 }
 
-.tree-outline li.issue:not(.expanded):not(.selected):hover .selection {
+.tree-outline li.issue:not(.expanded, .selected):hover .selection {
   background-color: var(--sys-color-state-hover-on-subtle);
 }
 
@@ -90,8 +93,7 @@
 }
 
 p {
-  margin-block-start: 2px;
-  margin-block-end: 2px;
+  margin-block: 2px;
 }
 
 /* Override selected tree item styles for issues to avoid changing width. */
@@ -176,7 +178,7 @@ p {
   border-left: 2px solid var(--issue-color-blue);
 }
 
-.tree-outline .issue-body li:hover:not(:has(span[is="dt-checkbox"])) .selection {
+.tree-outline .issue-body li:hover:not(:has(dt-checkbox)) .selection {
   background-color: unset;
 }
 

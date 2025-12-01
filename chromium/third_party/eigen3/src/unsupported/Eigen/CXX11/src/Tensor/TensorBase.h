@@ -946,6 +946,11 @@ class TensorBase<Derived, ReadOnlyAccessors>
     reverse(const ReverseDimensions& rev) const {
       return TensorReverseOp<const ReverseDimensions, const Derived>(derived(), rev);
     }
+    template <typename Rolls> EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE
+    const TensorRollOp<const Rolls, const Derived>
+    roll(const Rolls& rolls) const {
+      return TensorRollOp<const Rolls, const Derived>(derived(), rolls);
+    }
     template <typename PaddingDimensions> EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE
     const TensorPaddingOp<const PaddingDimensions, const Derived>
     pad(const PaddingDimensions& padding) const {
@@ -1164,6 +1169,17 @@ class TensorBase : public TensorBase<Derived, ReadOnlyAccessors> {
     TensorReverseOp<const ReverseDimensions, Derived>
     reverse(const ReverseDimensions& rev) {
       return TensorReverseOp<const ReverseDimensions, Derived>(derived(), rev);
+    }
+
+    template <typename Rolls> EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE
+    const TensorRollOp<const Rolls, const Derived>
+    roll(const Rolls& roll) const {
+      return TensorRollOp<const Rolls, const Derived>(derived(), roll);
+    }
+    template <typename Rolls> EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE
+    TensorRollOp<const Rolls, Derived>
+    roll(const Rolls& roll) {
+      return TensorRollOp<const Rolls, Derived>(derived(), roll);
     }
 
     template <typename Shuffle> EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE

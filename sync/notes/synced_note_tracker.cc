@@ -14,7 +14,6 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/memory_usage_estimator.h"
 #include "base/uuid.h"
@@ -39,7 +38,7 @@ namespace {
 
 void HashSpecifics(const sync_pb::EntitySpecifics& specifics,
                    std::string* hash) {
-  DCHECK_GT(specifics.ByteSize(), 0);
+  DCHECK_GT(specifics.ByteSizeLong(), 0u);
   *hash =
       base::Base64Encode(base::SHA1HashString(specifics.SerializeAsString()));
 }
@@ -189,7 +188,7 @@ const SyncedNoteTrackerEntity* SyncedNoteTracker::Add(
     int64_t server_version,
     base::Time creation_time,
     const sync_pb::EntitySpecifics& specifics) {
-  DCHECK_GT(specifics.ByteSize(), 0);
+  DCHECK_GT(specifics.ByteSizeLong(), 0u);
   DCHECK(note_node);
   DCHECK(specifics.has_notes());
   DCHECK(note_node->is_permanent_node() ||
@@ -235,7 +234,7 @@ void SyncedNoteTracker::Update(const SyncedNoteTrackerEntity* entity,
                                int64_t server_version,
                                base::Time modification_time,
                                const sync_pb::EntitySpecifics& specifics) {
-  DCHECK_GT(specifics.ByteSize(), 0);
+  DCHECK_GT(specifics.ByteSizeLong(), 0u);
   DCHECK(entity);
   DCHECK(specifics.has_notes());
   DCHECK(specifics.notes().has_unique_position());
@@ -280,7 +279,7 @@ void SyncedNoteTracker::MarkDeleted(const SyncedNoteTrackerEntity* entity,
   // Clear all references to the deleted note node.
   note_node_to_entities_map_.erase(mutable_entity->note_node());
   mutable_entity->clear_note_node();
-  DCHECK_EQ(0, base::ranges::count(ordered_local_tombstones_, entity));
+  DCHECK_EQ(0, std::ranges::count(ordered_local_tombstones_, entity));
   ordered_local_tombstones_.push_back(mutable_entity);
 }
 
@@ -293,8 +292,7 @@ void SyncedNoteTracker::Remove(const SyncedNoteTrackerEntity* entity) {
 
   if (entity->note_node()) {
     DCHECK(!entity->metadata().is_deleted());
-    DCHECK_EQ(0, std::count(ordered_local_tombstones_.begin(),
-                            ordered_local_tombstones_.end(), entity));
+    DCHECK_EQ(0, std::ranges::count(ordered_local_tombstones_, entity));
     note_node_to_entities_map_.erase(entity->note_node());
   } else {
     DCHECK(entity->metadata().is_deleted());
@@ -400,7 +398,7 @@ SyncedNoteTracker::GetEntitiesWithLocalChanges() const {
 
   for (const SyncedNoteTrackerEntity* tombstone_entity :
        ordered_local_tombstones_) {
-    DCHECK_EQ(0, base::ranges::count(ordered_local_changes, tombstone_entity));
+    DCHECK_EQ(0, std::ranges::count(ordered_local_changes, tombstone_entity));
     ordered_local_changes.push_back(tombstone_entity);
   }
   return ordered_local_changes;

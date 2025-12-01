@@ -27,7 +27,7 @@ describeWithEnvironment('NetworkTrackAppender', function() {
 
   describe('appendTrackAtLevel', function() {
     it('creates a flamechart group for the Network track', function() {
-      assert.strictEqual(flameChartData.groups.length, 1);
+      assert.lengthOf(flameChartData.groups, 1);
       assert.strictEqual(flameChartData.groups[0].name, 'Network');
     });
 
@@ -35,8 +35,7 @@ describeWithEnvironment('NetworkTrackAppender', function() {
       const networkRequests = parsedTrace.NetworkRequests.byTime;
       for (let i = 0; i < networkRequests.length; ++i) {
         const event = networkRequests[i];
-        assert.strictEqual(
-            flameChartData.entryStartTimes[i], Trace.Helpers.Timing.microSecondsToMilliseconds(event.ts));
+        assert.strictEqual(flameChartData.entryStartTimes[i], Trace.Helpers.Timing.microToMilli(event.ts));
       }
     });
 
@@ -49,7 +48,7 @@ describeWithEnvironment('NetworkTrackAppender', function() {
           continue;
         }
         const expectedTotalTimeForEvent = event.dur ?
-            Trace.Helpers.Timing.microSecondsToMilliseconds(event.dur) :
+            Trace.Helpers.Timing.microToMilli(event.dur) :
             Timeline.TimelineFlameChartDataProvider.InstantEventVisibleDurationMs;
         assert.strictEqual(flameChartData.entryTotalTimes[i], expectedTotalTimeForEvent);
       }

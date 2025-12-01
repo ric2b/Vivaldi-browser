@@ -39,9 +39,21 @@ def checkOutdir(args):
 
 
 def main(args):
-    # Propagate signals to siso process so that it can run cleanup steps.
-    # Siso will be terminated immediately after the second Ctrl-C.
-    signal.signal(signal.SIGINT, lambda signum, frame: None)
+    # Do not raise KeyboardInterrupt on SIGINT so as to give siso time to run
+    # cleanup tasks. Siso will be terminated immediately after the second
+    # Ctrl-C.
+    original_sigint_handler = signal.getsignal(signal.SIGINT)
+
+    def _ignore(signum, frame):
+        try:
+            # Call the original signal handler.
+            original_sigint_handler(signum, frame)
+        except KeyboardInterrupt:
+            # Do not reraise KeyboardInterrupt so as to not kill siso too early.
+            pass
+
+    signal.signal(signal.SIGINT, _ignore)
+
     if not sys.platform.startswith('win'):
         signal.signal(signal.SIGTERM, lambda signum, frame: None)
 

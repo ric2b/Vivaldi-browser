@@ -5,8 +5,9 @@
 #ifndef COMPONENTS_AUTOFILL_CORE_COMMON_AUTOFILL_PREFS_H_
 #define COMPONENTS_AUTOFILL_CORE_COMMON_AUTOFILL_PREFS_H_
 
+#include <string_view>
+
 #include "build/build_config.h"
-#include "google_apis/gaia/core_account_id.h"
 
 class PrefRegistrySimple;
 class PrefService;
@@ -24,6 +25,12 @@ namespace autofill::prefs {
 // String serving as a seed for ablation studies.
 inline constexpr std::string_view kAutofillAblationSeedPref =
     "autofill.ablation_seed";
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS)
+// Boolean that is true if BNPL on Autofill is enabled.
+inline constexpr char kAutofillBnplEnabled[] = "autofill.bnpl_enabled";
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
+        // BUILDFLAG(IS_CHROMEOS)
 // Boolean that is true if Autofill is enabled and allowed to save credit card
 // data.
 inline constexpr char kAutofillCreditCardEnabled[] =
@@ -146,6 +153,8 @@ inline constexpr char kAutofillUsingVirtualViewStructure[] =
 inline constexpr char kAutofillThirdPartyPasswordManagersAllowed[] =
     "autofill.third_party_password_managers_allowed";
 inline constexpr char kFacilitatedPaymentsPix[] = "facilitated_payments.pix";
+inline constexpr char kFacilitatedPaymentsEwallet[] =
+    "facilitated_payments.ewallet";
 #endif  // BUILDFLAG(IS_ANDROID)
 
 // The maximum value for the
@@ -213,13 +222,6 @@ bool IsPaymentCardBenefitsEnabled(const PrefService* prefs);
 
 void SetPaymentCardBenefits(PrefService* prefs, bool value);
 
-void SetUserOptedInWalletSyncTransport(PrefService* prefs,
-                                       const CoreAccountId& account_id,
-                                       bool opted_in);
-
-bool IsUserOptedInWalletSyncTransport(const PrefService* prefs,
-                                      const CoreAccountId& account_id);
-
 void ClearSyncTransportOptIns(PrefService* prefs);
 
 bool UsesVirtualViewStructureForAutofill(const PrefService* prefs);
@@ -227,6 +229,18 @@ bool UsesVirtualViewStructureForAutofill(const PrefService* prefs);
 void SetFacilitatedPaymentsPix(PrefService* prefs, bool value);
 
 bool IsFacilitatedPaymentsPixEnabled(const PrefService* prefs);
+
+void SetFacilitatedPaymentsEwallet(PrefService* prefs, bool value);
+
+bool IsFacilitatedPaymentsEwalletEnabled(const PrefService* prefs);
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS)
+void SetAutofillBnplEnabled(PrefService* prefs, bool value);
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
+        // BUILDFLAG(IS_CHROMEOS)
+
+bool IsAutofillBnplEnabled(const PrefService* prefs);
 
 }  // namespace autofill::prefs
 

@@ -11,7 +11,7 @@
 
 namespace ash {
 
-QuickInsertCapsLockResult::Shortcut GetPickerShortcutForCapsLock() {
+QuickInsertCapsLockResult::Shortcut GetQuickInsertShortcutForCapsLock() {
   // The Shell may not exist in some tests. In this case, return the shortcut
   // for the default keyboard.
   if (!Shell::HasInstance()) {
@@ -19,7 +19,7 @@ QuickInsertCapsLockResult::Shortcut GetPickerShortcutForCapsLock() {
   }
 
   if (Shell::Get()->keyboard_capability()->HasFunctionKeyOnAnyKeyboard()) {
-    return QuickInsertCapsLockResult::Shortcut::kFnRightAlt;
+    return QuickInsertCapsLockResult::Shortcut::kFnQuickInsert;
   }
 
   switch (Shell::Get()->keyboard_capability()->GetMetaKeyToDisplay()) {

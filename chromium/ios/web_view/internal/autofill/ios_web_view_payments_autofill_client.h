@@ -22,6 +22,7 @@ namespace autofill {
 
 class CreditCardCvcAuthenticator;
 class WebViewAutofillClientIOS;
+class PaymentsDataManager;
 
 namespace payments {
 
@@ -63,8 +64,7 @@ class IOSWebViewPaymentsAutofillClient : public PaymentsAutofillClient {
       payments::PaymentsAutofillClient::PaymentsRpcResult result) override;
   CreditCardCvcAuthenticator& GetCvcAuthenticator() override;
   void OpenPromoCodeOfferDetailsURL(const GURL& url) override;
-
-  void set_bridge(id<CWVAutofillClientIOSBridge> bridge);
+  const PaymentsDataManager& GetPaymentsDataManager() const override;
 
  private:
   const raw_ref<autofill::WebViewAutofillClientIOS> client_;

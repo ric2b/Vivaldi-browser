@@ -2,25 +2,47 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="ca">
 <translation id="1063263220330818888">Cerca Privada</translation>
+<translation id="1097355661841455597">Ens encantaria saber que en penses.</translation>
 <translation id="1137850887415122856">Per bloquejar les teves pestanyes privades, configura Touch ID, Face ID o Passcode.</translation>
 <translation id="1310184829257917508">Demana obrir enllaços d'altres aplicacions en privat</translation>
+<translation id="1561609750546413721">Traductor de Vivaldi</translation>
 <translation id="207677936531967364">Nova pàgina de pestanya privada</translation>
+<translation id="2353953000228441783">Visualització predeterminada dels llocs web</translation>
+<translation id="2394192052244849643">Enganxa i cerca</translation>
 <translation id="2418705169960294134">Nova pestanya privada</translation>
+<translation id="2783161812871838616">Sol·licita el lloc web per a escriptori</translation>
 <translation id="2899836479226240291">Pots obrir enllaços automàticament a Vivaldi fent-lo el teu navegador predeterminat.</translation>
+<translation id="3365529507898144230">Desa a fotos</translation>
+<translation id="3434473769478814796">Enganxa i vés-hi</translation>
 <translation id="3463990832590571933">Obre a una nova pestanya privada</translation>
 <translation id="3473652525653758699">Nova finestra privada</translation>
 <translation id="3501504415290398157">Usa <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> per desbloquejar les teves pestanyes privades.</translation>
 <translation id="3692650606013198282">Obre en una pestanya privada</translation>
 <translation id="3981599532037327317">Obre ${url} en privat</translation>
 <translation id="398477389655464998">Copia l'enllaç al text seleccionat</translation>
+<translation id="4026745073321351206">🙄 Has trobat un problema?</translation>
+<translation id="4304713468139749426">Gestor de contrasenyes</translation>
+<translation id="473775607612524610">Actualitza</translation>
 <translation id="4755216899422789286">Obre els URL a Vivaldi</translation>
+<translation id="4802185666270672526">Amaga l'opció per sol·licitar el lloc web per escriptori</translation>
+<translation id="5217245356412073535">Pots canviar la visualització predeterminada dels llocs web a la visualització per a ordinadors a Ajustos &gt; Ajustos del contingut</translation>
+<translation id="5271549068863921519">Desa la contrasenya</translation>
+<translation id="5317780077021120954">Desa</translation>
 <translation id="5431239785743546285">Pàgines que has llegit</translation>
+<translation id="5614553682702429503">Vols desar la contrasenya?</translation>
+<translation id="570209299585559496">Pots canviar la visualització predeterminada dels llocs web a la visualització per a ordinadors anant als ajustos i, després, als ajustos del contingut</translation>
+<translation id="5962477178930921574">Enganxa i cerca</translation>
 <translation id="6233792867654386826">Obre les URL entrades a Vivaldi.</translation>
+<translation id="6680416467695217368">Personalitza el menú</translation>
 <translation id="6827597288286078054">Cerca Privada</translation>
+<translation id="6851516051005285358">Sol·licita el lloc web per a escriptori</translation>
 <translation id="7307970171564921489">Desbloqueja les pestanyes privades amb <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
 <translation id="7347289093190902150">Obrir en privat?</translation>
 <translation id="7549299604720382000">Nova pestanya privada</translation>
+<translation id="755255281989213264">Personalitza el menú</translation>
 <translation id="7920949005883349320">Privadesa i seguretat</translation>
-<translation id="8031932676440435547">Desa a Fotos</translation>
+<translation id="7961015016161918242">Mai</translation>
 <translation id="8326104954595890674">Nova pestanya privada</translation>
+<translation id="8756969031206844760">Vols actualitzar la contrasenya?</translation>
+<translation id="9094033019050270033">Actualitza la contrasenya</translation>
 </translationbundle>

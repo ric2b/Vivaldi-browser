@@ -11,10 +11,11 @@
 #include "gtest/gtest.h"
 #include "osp/impl/presentation/presentation_utils.h"
 #include "osp/impl/presentation/testing/mock_connection_delegate.h"
+#include "osp/impl/presentation/url_availability_requester.h"
 #include "osp/impl/quic/testing/quic_test_support.h"
-#include "osp/impl/service_listener_impl.h"
 #include "osp/public/message_demuxer.h"
 #include "osp/public/network_service_manager.h"
+#include "osp/public/service_listener.h"
 #include "osp/public/testing/message_demuxer_test_support.h"
 #include "platform/test/fake_clock.h"
 #include "platform/test/fake_task_runner.h"
@@ -27,13 +28,14 @@ using ::testing::NiceMock;
 
 namespace {
 
-const char kTestUrl[] = "https://example.foo";
+constexpr char kTestUrl1[] = "https://example.foo";
+constexpr char kTestUrl2[] = "https://example.bar";
 
-class MockServiceListenerDelegate final : public ServiceListenerImpl::Delegate {
+class MockServiceListenerDelegate final : public ServiceListener::Delegate {
  public:
   ~MockServiceListenerDelegate() override = default;
 
-  ServiceListenerImpl* listener() { return listener_; }
+  ServiceListener* listener() { return listener_; }
 
   MOCK_METHOD1(StartListener, void(const ServiceListener::Config& config));
   MOCK_METHOD1(StartAndSuspendListener,
@@ -80,13 +82,9 @@ class ControllerTest : public ::testing::Test {
       : fake_clock_(Clock::time_point(std::chrono::milliseconds(11111))),
         task_runner_(fake_clock_),
         quic_bridge_(task_runner_, FakeClock::now) {
-    receiver_info1 = {quic_bridge_.kInstanceName,
-                      "lucas-auer",
-                      quic_bridge_.kFingerprint,
-                      quic_bridge_.kAuthToken,
-                      1,
-                      quic_bridge_.kReceiverEndpoint,
-                      {}};
+    receiver_info1 = {quic_bridge_.kInstanceName,     quic_bridge_.kFingerprint,
+                      quic_bridge_.kAuthToken,        1,
+                      quic_bridge_.kReceiverEndpoint, {}};
   }
 
  protected:
@@ -94,8 +92,8 @@ class ControllerTest : public ::testing::Test {
     auto mock_listener_delegate =
         std::make_unique<MockServiceListenerDelegate>();
     mock_listener_delegate_ = mock_listener_delegate.get();
-    auto service_listener = std::make_unique<ServiceListenerImpl>(
-        std::move(mock_listener_delegate));
+    auto service_listener =
+        std::make_unique<ServiceListener>(std::move(mock_listener_delegate));
     service_listener->AddObserver(*quic_bridge_.GetQuicClient());
     quic_bridge_.CreateNetworkServiceManager(std::move(service_listener),
                                              nullptr);
@@ -115,6 +113,8 @@ class ControllerTest : public ::testing::Test {
     availability_watch_ =
         quic_bridge_.GetReceiverDemuxer().SetDefaultMessageTypeWatch(
             msgs::Type::kPresentationUrlAvailabilityRequest, &mock_callback_);
+    controller_->BuildConnection(quic_bridge_.kInstanceName);
+    quic_bridge_.RunTasksUntilIdle();
   }
 
   void TearDown() override {
@@ -298,13 +298,14 @@ class ControllerTest : public ::testing::Test {
   std::unique_ptr<Controller> controller_;
   ServiceInfo receiver_info1;
   MockReceiverObserver mock_receiver_observer_;
-  uint64_t controller_instance_id_{0};
+  uint64_t controller_instance_id_ = 0;
   std::vector<std::unique_ptr<ProtocolConnection>> server_connections_;
   std::vector<std::unique_ptr<ProtocolConnection>> client_connections_;
 };
 
 TEST_F(ControllerTest, ReceiverWatchMoves) {
-  std::vector<std::string> urls{"one fish", "two fish", "red fish", "gnu fish"};
+  std::vector<std::string> urls = {"one fish", "two fish", "red fish",
+                                   "gnu fish"};
   MockReceiverObserver mock_observer;
 
   Controller::ReceiverWatch watch1(controller_.get(), urls, &mock_observer);
@@ -320,7 +321,7 @@ TEST_F(ControllerTest, ReceiverWatchMoves) {
 }
 
 TEST_F(ControllerTest, ConnectRequestMoves) {
-  std::string instance_name{"instance-name1"};
+  std::string instance_name = "instance-name1";
   uint64_t request_id = 7;
 
   Controller::ConnectRequest request1(controller_.get(), instance_name, false,
@@ -339,7 +340,7 @@ TEST_F(ControllerTest, ConnectRequestMoves) {
 TEST_F(ControllerTest, ReceiverAvailable) {
   mock_listener_delegate_->listener()->OnReceiverUpdated({receiver_info1});
   Controller::ReceiverWatch watch =
-      controller_->RegisterReceiverWatch({kTestUrl}, &mock_receiver_observer_);
+      controller_->RegisterReceiverWatch({kTestUrl1}, &mock_receiver_observer_);
 
   msgs::PresentationUrlAvailabilityRequest request;
   ExpectAvailabilityRequest(request);
@@ -351,16 +352,224 @@ TEST_F(ControllerTest, ReceiverAvailable) {
   EXPECT_CALL(mock_receiver_observer_, OnReceiverAvailable(_, _));
   quic_bridge_.RunTasksUntilIdle();
 
+  // `quic_bridge_.RunTasksUntilIdle()` is not used here to test availability is
+  // cached.
   MockReceiverObserver mock_receiver_observer2;
   EXPECT_CALL(mock_receiver_observer2, OnReceiverAvailable(_, _));
   Controller::ReceiverWatch watch2 =
-      controller_->RegisterReceiverWatch({kTestUrl}, &mock_receiver_observer2);
+      controller_->RegisterReceiverWatch({kTestUrl1}, &mock_receiver_observer2);
+}
+
+TEST_F(ControllerTest, ReceiverUnavailable) {
+  mock_listener_delegate_->listener()->OnReceiverUpdated({receiver_info1});
+  Controller::ReceiverWatch watch =
+      controller_->RegisterReceiverWatch({kTestUrl1}, &mock_receiver_observer_);
+
+  msgs::PresentationUrlAvailabilityRequest request;
+  ExpectAvailabilityRequest(request);
+
+  msgs::PresentationUrlAvailabilityResponse response = {
+      .request_id = request.request_id,
+      .url_availabilities = {msgs::UrlAvailability::kUnavailable}};
+  SendAvailabilityResponse(response);
+  EXPECT_CALL(mock_receiver_observer_, OnReceiverAvailable(_, _)).Times(0);
+  EXPECT_CALL(mock_receiver_observer_, OnReceiverUnavailable(_, _));
+  quic_bridge_.RunTasksUntilIdle();
+}
+
+TEST_F(ControllerTest, AvailabilityCacheIsTransient) {
+  mock_listener_delegate_->listener()->OnReceiverUpdated({receiver_info1});
+  Controller::ReceiverWatch watch =
+      controller_->RegisterReceiverWatch({kTestUrl1}, &mock_receiver_observer_);
+
+  msgs::PresentationUrlAvailabilityRequest request;
+  ExpectAvailabilityRequest(request);
+
+  msgs::PresentationUrlAvailabilityResponse response = {
+      .request_id = request.request_id,
+      .url_availabilities = {msgs::UrlAvailability::kUnavailable}};
+  SendAvailabilityResponse(response);
+  EXPECT_CALL(mock_receiver_observer_, OnReceiverAvailable(_, _)).Times(0);
+  EXPECT_CALL(mock_receiver_observer_, OnReceiverUnavailable(_, _));
+  quic_bridge_.RunTasksUntilIdle();
+
+  controller_->availability_requester()->RemoveObserverUrls(
+      {kTestUrl1}, &mock_receiver_observer_);
+  MockReceiverObserver mock_receiver_observer2;
+  EXPECT_CALL(mock_receiver_observer2, OnReceiverAvailable(_, _)).Times(0);
+  EXPECT_CALL(mock_receiver_observer2, OnReceiverUnavailable(_, _)).Times(0);
+  Controller::ReceiverWatch watch2 =
+      controller_->RegisterReceiverWatch({kTestUrl1}, &mock_receiver_observer2);
+}
+
+TEST_F(ControllerTest, AvailabilityPartiallyCachedAnswer) {
+  mock_listener_delegate_->listener()->OnReceiverUpdated({receiver_info1});
+  Controller::ReceiverWatch watch =
+      controller_->RegisterReceiverWatch({kTestUrl1}, &mock_receiver_observer_);
+
+  msgs::PresentationUrlAvailabilityRequest request;
+  ExpectAvailabilityRequest(request);
+
+  msgs::PresentationUrlAvailabilityResponse response = {
+      .request_id = request.request_id,
+      .url_availabilities = {msgs::UrlAvailability::kUnavailable}};
+  SendAvailabilityResponse(response);
+  EXPECT_CALL(mock_receiver_observer_, OnReceiverAvailable(_, _)).Times(0);
+  EXPECT_CALL(mock_receiver_observer_, OnReceiverUnavailable(_, _));
+  quic_bridge_.RunTasksUntilIdle();
+
+  MockReceiverObserver mock_receiver_observer2;
+  EXPECT_CALL(mock_receiver_observer2, OnReceiverAvailable(kTestUrl1, _))
+      .Times(0);
+  EXPECT_CALL(mock_receiver_observer2, OnReceiverUnavailable(kTestUrl1, _));
+  Controller::ReceiverWatch watch2 = controller_->RegisterReceiverWatch(
+      {kTestUrl1, kTestUrl2}, &mock_receiver_observer2);
+  ExpectAvailabilityRequest(request);
+  quic_bridge_.RunTasksUntilIdle();
+
+  msgs::PresentationUrlAvailabilityResponse response2 = {
+      .request_id = request.request_id,
+      .url_availabilities = {msgs::UrlAvailability::kUnavailable}};
+  SendAvailabilityResponse(response2);
+  EXPECT_CALL(mock_receiver_observer2, OnReceiverAvailable(kTestUrl2, _))
+      .Times(0);
+  EXPECT_CALL(mock_receiver_observer2, OnReceiverUnavailable(kTestUrl2, _));
+  quic_bridge_.RunTasksUntilIdle();
+}
+
+TEST_F(ControllerTest, RemoveObserver) {
+  mock_listener_delegate_->listener()->OnReceiverUpdated({receiver_info1});
+  Controller::ReceiverWatch watch =
+      controller_->RegisterReceiverWatch({kTestUrl1}, &mock_receiver_observer_);
+
+  msgs::PresentationUrlAvailabilityRequest request;
+  ExpectAvailabilityRequest(request);
+  uint64_t url1_watch_id = request.watch_id;
+
+  msgs::PresentationUrlAvailabilityResponse response = {
+      .request_id = request.request_id,
+      .url_availabilities = {msgs::UrlAvailability::kAvailable}};
+  SendAvailabilityResponse(response);
+  EXPECT_CALL(mock_receiver_observer_, OnReceiverAvailable(_, _));
+  EXPECT_CALL(mock_receiver_observer_, OnReceiverUnavailable(_, _)).Times(0);
+  quic_bridge_.RunTasksUntilIdle();
+
+  MockReceiverObserver mock_receiver_observer2;
+  EXPECT_CALL(mock_receiver_observer2, OnReceiverAvailable(kTestUrl1, _));
+  Controller::ReceiverWatch watch2 = controller_->RegisterReceiverWatch(
+      {kTestUrl1, kTestUrl2}, &mock_receiver_observer2);
+  ExpectAvailabilityRequest(request);
+  quic_bridge_.RunTasksUntilIdle();
+
+  controller_->availability_requester()->RemoveObserver(
+      &mock_receiver_observer_);
+  msgs::PresentationUrlAvailabilityResponse response2 = {
+      .request_id = request.request_id,
+      .url_availabilities = {msgs::UrlAvailability::kUnavailable}};
+  SendAvailabilityResponse(response2);
+  EXPECT_CALL(mock_receiver_observer2, OnReceiverAvailable(_, _)).Times(0);
+  EXPECT_CALL(mock_receiver_observer2, OnReceiverUnavailable(kTestUrl2, _));
+  quic_bridge_.RunTasksUntilIdle();
+
+  msgs::PresentationUrlAvailabilityEvent event1 = {
+      .watch_id = url1_watch_id,
+      .url_availabilities = {msgs::UrlAvailability::kUnavailable}};
+  SendAvailabilityEvent(event1);
+  EXPECT_CALL(mock_receiver_observer_, OnReceiverUnavailable(_, _)).Times(0);
+  EXPECT_CALL(mock_receiver_observer2, OnReceiverUnavailable(kTestUrl1, _));
+  quic_bridge_.RunTasksUntilIdle();
+
+  controller_->availability_requester()->RemoveObserver(
+      &mock_receiver_observer2);
+  msgs::PresentationUrlAvailabilityEvent event2 = {
+      .watch_id = url1_watch_id,
+      .url_availabilities = {msgs::UrlAvailability::kAvailable}};
+  SendAvailabilityEvent(event2);
+
+  EXPECT_CALL(mock_receiver_observer_, OnReceiverUnavailable(_, _)).Times(0);
+  EXPECT_CALL(mock_receiver_observer2, OnReceiverUnavailable(_, _)).Times(0);
+  quic_bridge_.RunTasksUntilIdle();
+}
+
+TEST_F(ControllerTest, EventUpdate) {
+  mock_listener_delegate_->listener()->OnReceiverUpdated({receiver_info1});
+  Controller::ReceiverWatch watch = controller_->RegisterReceiverWatch(
+      {kTestUrl1, kTestUrl2}, &mock_receiver_observer_);
+
+  msgs::PresentationUrlAvailabilityRequest request;
+  ExpectAvailabilityRequest(request);
+
+  msgs::PresentationUrlAvailabilityResponse response = {
+      .request_id = request.request_id,
+      .url_availabilities = {msgs::UrlAvailability::kAvailable,
+                             msgs::UrlAvailability::kAvailable}};
+  SendAvailabilityResponse(response);
+  EXPECT_CALL(mock_receiver_observer_, OnReceiverAvailable(kTestUrl1, _));
+  EXPECT_CALL(mock_receiver_observer_, OnReceiverAvailable(kTestUrl2, _));
+  EXPECT_CALL(mock_receiver_observer_, OnReceiverUnavailable(_, _)).Times(0);
+  quic_bridge_.RunTasksUntilIdle();
+
+  msgs::PresentationUrlAvailabilityEvent event = {
+      .watch_id = request.watch_id,
+      .url_availabilities = {msgs::UrlAvailability::kAvailable,
+                             msgs::UrlAvailability::kUnavailable}};
+  SendAvailabilityEvent(event);
+  EXPECT_CALL(mock_receiver_observer_, OnReceiverUnavailable(kTestUrl2, _));
+  quic_bridge_.RunTasksUntilIdle();
+}
+
+TEST_F(ControllerTest, RefreshWatches) {
+  mock_listener_delegate_->listener()->OnReceiverUpdated({receiver_info1});
+  Controller::ReceiverWatch watch =
+      controller_->RegisterReceiverWatch({kTestUrl1}, &mock_receiver_observer_);
+
+  msgs::PresentationUrlAvailabilityRequest request;
+  ExpectAvailabilityRequest(request);
+
+  msgs::PresentationUrlAvailabilityResponse response = {
+      .request_id = request.request_id,
+      .url_availabilities = {msgs::UrlAvailability::kUnavailable}};
+  SendAvailabilityResponse(response);
+  EXPECT_CALL(mock_receiver_observer_, OnReceiverAvailable(_, _)).Times(0);
+  EXPECT_CALL(mock_receiver_observer_, OnReceiverUnavailable(_, _));
+  quic_bridge_.RunTasksUntilIdle();
+
+  fake_clock_.Advance(std::chrono::seconds(60));
+  controller_->availability_requester()->RefreshWatches();
+  ExpectAvailabilityRequest(request);
+
+  msgs::PresentationUrlAvailabilityResponse response2 = {
+      .request_id = request.request_id,
+      .url_availabilities = {msgs::UrlAvailability::kAvailable}};
+  SendAvailabilityResponse(response2);
+  EXPECT_CALL(mock_receiver_observer_, OnReceiverAvailable(_, _));
+  EXPECT_CALL(mock_receiver_observer_, OnReceiverUnavailable(_, _)).Times(0);
+  quic_bridge_.RunTasksUntilIdle();
+}
+
+TEST_F(ControllerTest, RemoveAvailabilityObserverInSteps) {
+  mock_listener_delegate_->listener()->OnReceiverUpdated({receiver_info1});
+  Controller::ReceiverWatch watch =
+      controller_->RegisterReceiverWatch({kTestUrl1}, &mock_receiver_observer_);
+
+  msgs::PresentationUrlAvailabilityRequest request;
+  ExpectAvailabilityRequest(request);
+
+  controller_->availability_requester()->RemoveObserverUrls(
+      {kTestUrl1}, &mock_receiver_observer_);
+  msgs::PresentationUrlAvailabilityResponse response = {
+      .request_id = request.request_id,
+      .url_availabilities = {msgs::UrlAvailability::kUnavailable}};
+  SendAvailabilityResponse(response);
+  EXPECT_CALL(mock_receiver_observer_, OnReceiverAvailable(_, _)).Times(0);
+  EXPECT_CALL(mock_receiver_observer_, OnReceiverUnavailable(_, _)).Times(0);
+  quic_bridge_.RunTasksUntilIdle();
 }
 
 TEST_F(ControllerTest, ReceiverWatchCancel) {
   mock_listener_delegate_->listener()->OnReceiverUpdated({receiver_info1});
   Controller::ReceiverWatch watch =
-      controller_->RegisterReceiverWatch({kTestUrl}, &mock_receiver_observer_);
+      controller_->RegisterReceiverWatch({kTestUrl1}, &mock_receiver_observer_);
 
   msgs::PresentationUrlAvailabilityRequest request;
   ExpectAvailabilityRequest(request);
@@ -375,7 +584,7 @@ TEST_F(ControllerTest, ReceiverWatchCancel) {
   MockReceiverObserver mock_receiver_observer2;
   EXPECT_CALL(mock_receiver_observer2, OnReceiverAvailable(_, _));
   Controller::ReceiverWatch watch2 =
-      controller_->RegisterReceiverWatch({kTestUrl}, &mock_receiver_observer2);
+      controller_->RegisterReceiverWatch({kTestUrl1}, &mock_receiver_observer2);
 
   watch.Reset();
   msgs::PresentationUrlAvailabilityEvent event = {

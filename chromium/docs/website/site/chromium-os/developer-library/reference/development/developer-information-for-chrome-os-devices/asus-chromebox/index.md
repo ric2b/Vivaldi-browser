@@ -2,7 +2,7 @@
 breadcrumbs:
 - - /chromium-os
   - ChromiumOS
-- - /chromium-os/developer-information-for-chrome-os-devices
+- - /chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices
   - Developer Information for ChromeOS Devices
 page_name: asus-chromebox
 title: Asus Chromebox
@@ -25,13 +25,13 @@ Guide](/chromium-os/developer-guide).
 *   RAM: 2GB (celeron) or 4GB (i3)
 *   Display: None
 *   Disk: 16GB SSD
-            ([NGFF](http://en.wikipedia.org/wiki/Next_Generation_Form_Factor)
+            ([NGFF](https://en.wikipedia.org/wiki/Next_Generation_Form_Factor)
             M.2 connector)
 *   I/O:
     *   HDMI port
     *   DisplayPort++
     *   4 x USB 3.0
-    *   [SD slot](http://en.wikipedia.org/wiki/Secure_Digital) (SDXC
+    *   [SD slot](https://en.wikipedia.org/wiki/Secure_Digital) (SDXC
                 compatible)
     *   Headphone/mic combo jack
 *   Connectivity:
@@ -40,7 +40,7 @@ Guide](/chromium-os/developer-guide).
     *   Ethernet
     *   [Servo header](/chromium-os/servo): Standard 2x25 / AXK750347G
 *   [Kensington Security
-            Slot](http://en.wikipedia.org/wiki/Kensington_Security_Slot)
+            Slot](https://en.wikipedia.org/wiki/Kensington_Security_Slot)
 
 ## Developer Mode
 

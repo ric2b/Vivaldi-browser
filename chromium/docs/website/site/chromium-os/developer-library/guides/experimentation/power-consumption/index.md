@@ -30,7 +30,7 @@ on OS performance, it's recommended to follow the procedure below.
 </div>
 
 Feature launches and A/B experiments are distinct processes, with different
-requirements. Both the Fast Pair and Nearby Share Background Scanning features
+requirements. Both the Fast Pair and Quick Share Background Scanning features
 used as examples throughout this document wanted a feature launch *and* a power
 consumption experiment. For that reason, the Finch rollout process was
 **shared** for the A/B experiment and the feature launch; i.e. the GCL config we
@@ -44,7 +44,7 @@ The
 provides support for ChromeOS developers who want A/B experimentation. The steps
 below are based on the Data team's [process](http://go/cros-exp-process).
 
-1.  Make a copy of [go/cros-exp-launch-report](http://goto.google.com/cros-exp-launch-report), and fill out the Pre-Consultation
+1.  Make a copy of [go/cros-exp-launch-report](http://go/cros-exp-launch-report), and fill out the Pre-Consultation
     section.
 2.  Optional: Set up an [Office Hours](http://go/cros-exp-oh) appointment with a
     Data team analyst.
@@ -54,15 +54,15 @@ below are based on the Data team's [process](http://go/cros-exp-process).
 References
 
 -   [Fast Pair Power Consumption analysis doc](https://docs.google.com/document/d/1-FZiDcfO4O_Yw8kYCeBiGJCz3MDfxJ9nE5g_Si9waEg/edit?resourcekey=0-ZfqbSr7sL5zYQHDdh_7yxg#heading=h.oec101c7k279)
--   [Nearby Share Background Scanning Power Consumption analysis doc](https://docs.google.com/document/d/1C4TCQJuDdl7K1VDF7SjK5DcFdi9Zr_-RNZrwvuTA6fY/edit#heading=h.oec101c7k279)
+-   [Quick Share Background Scanning Power Consumption analysis doc](https://docs.google.com/document/d/1C4TCQJuDdl7K1VDF7SjK5DcFdi9Zr_-RNZrwvuTA6fY/edit#heading=h.oec101c7k279)
 
 ### Setting up the Finch experiment
 
-Read through [go/finch101](http://goto.google.com/finch101) for a more in depth walkthrough of Finch best
+Read through [go/finch101](http://go/finch101) for a more in depth walkthrough of Finch best
 practices.
 
 There are several steps common to all Finch launches, which can be found at
-[go/finch-best-practices.](http://goto.google.com/finch-best-practices.) An abridged list of these steps is below:
+[go/finch-best-practices.](http://go/finch-best-practices.) An abridged list of these steps is below:
 
 1.  Implement the feature behind a new `DISABLED_BY_DEFAULT`
     [base::Feature](http://go/finch-feature-api) flag.
@@ -96,7 +96,7 @@ References
 -   [Fast Pair Power Consumption GCL #4 (Canary, Dev, Beta, and 10% Stable)](https://source.corp.google.com/piper///depot/google3/googledata/googleclient/chrome/finch/gcl_studies/chrome_os/FastPairPowerConsumption.gcl;bpv=1;bpt=0;rcl=514758593)
 -   [Fast Pair Power Consumption GCL #5 (Canary, Dev, Beta, and 50% Stable)](https://source.corp.google.com/piper///depot/google3/googledata/googleclient/chrome/finch/gcl_studies/chrome_os/FastPairPowerConsumption.gcl;bpv=1;bpt=0;rcl=520721954)
 -   [Fast Pair Power Consumption GCL #6 (launched)](http://google3/googledata/googleclient/chrome/finch/gcl_studies/chrome_os/FastPairPowerConsumption.gcl;rcl=528583637)
--   [Nearby Share Background Scanning Power Consumption GCL](https://source.corp.google.com/piper///depot/google3/googledata/googleclient/chrome/finch/gcl_studies/chrome_os/NearbyShareBackgroundScanningPower.gcl)
+-   [Quick Share Background Scanning Power Consumption GCL](https://source.corp.google.com/piper///depot/google3/googledata/googleclient/chrome/finch/gcl_studies/chrome_os/NearbyShareBackgroundScanningPower.gcl)
 
 ### Evaluating experiments with UMA
 
@@ -162,7 +162,7 @@ your experiment, simply
 
 ### Notes
 
-For Fast Pair and Nearby Share Background Scanning, having a Finch experiment
+For Fast Pair and Quick Share Background Scanning, having a Finch experiment
 helped us confirm our hypothesis (and launch criteria) that there was not a
 large effect on the battery life. This allowed us to make data-driven decisions
 about going to launch.
@@ -170,6 +170,6 @@ about going to launch.
 In addition to an A/B Finch experiment, which is recommended, you can also try a
 local power consumption experiment. This helped us in the past when
 hypothesizing the impact of
-[Nearby Share Background Scanning](https://docs.google.com/document/d/1YLwmEpWw84ryH4md0eBf0ny5jeyKRbOq-kSrOYJmMtU/edit#heading=h.r5jblgdg0a17),
+[Quick Share Background Scanning](https://docs.google.com/document/d/1YLwmEpWw84ryH4md0eBf0ny5jeyKRbOq-kSrOYJmMtU/edit#heading=h.r5jblgdg0a17),
 however we eventually did use an A/B Finch experiment to confirm the local
 results.

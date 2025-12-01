@@ -47,6 +47,7 @@ export class SearchResultsPane extends UI.Widget.VBox {
     this.searchResults = [];
     this.treeElements = [];
     this.treeOutline = new UI.TreeOutline.TreeOutlineInShadow();
+    this.treeOutline.registerRequiredCSS(searchResultsPaneStyles);
     this.treeOutline.hideOverflow();
 
     this.contentElement.appendChild(this.treeOutline.element);
@@ -84,10 +85,6 @@ export class SearchResultsPane extends UI.Widget.VBox {
     }
     this.matchesExpandedCount += searchResult.matchesCount();
     this.treeElements.push(treeElement);
-  }
-  override wasShown(): void {
-    super.wasShown();
-    this.treeOutline.registerCSSFiles([searchResultsPaneStyles]);
   }
 }
 

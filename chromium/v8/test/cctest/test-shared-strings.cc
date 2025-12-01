@@ -351,7 +351,7 @@ class ConcurrentInternalizationThread final
 
   void RunForString(Handle<String> input_string, int counter) override {
     CHECK(input_string->IsShared());
-    Handle<String> interned = factory->InternalizeString(input_string);
+    DirectHandle<String> interned = factory->InternalizeString(input_string);
     CHECK(interned->IsShared());
     CHECK(IsInternalizedString(*interned));
     if (hit_or_miss_ == kTestMiss) {
@@ -369,8 +369,9 @@ class ConcurrentInternalizationThread final
 
 namespace {
 
-std::pair<Handle<String>, MaybeHandle<String>> CreateSharedOneByteString(
-    Isolate* isolate, Factory* factory, int length, bool internalize) {
+std::pair<DirectHandle<String>, MaybeDirectHandle<String>>
+CreateSharedOneByteString(Isolate* isolate, Factory* factory, int length,
+                          bool internalize) {
   char* ascii = new char[length + 1];
   // Don't make single character strings, which will end up deduplicating to
   // an RO string and mess up the string table hit test.
@@ -869,6 +870,7 @@ UNINITIALIZED_TEST(PromotionScavenge) {
 
   v8_flags.stress_concurrent_allocation = false;  // For SealCurrentObjects.
   v8_flags.shared_string_table = true;
+  v8_flags.scavenger_precise_pinning_objects = false;
   i::FlagList::EnforceFlagImplications();
 
   MultiClientIsolateTest test;
@@ -891,8 +893,12 @@ UNINITIALIZED_TEST(PromotionScavenge) {
     CHECK(String::IsInPlaceInternalizable(*one_byte_seq));
     CHECK(heap->InSpace(*one_byte_seq, NEW_SPACE));
 
-    for (int i = 0; i < 2; i++) {
-      heap::InvokeMinorGC(heap);
+    {
+      // CSS prevents moving the string to shared space.
+      DisableConservativeStackScanningScopeForTesting no_stack_scanning(heap);
+      for (int i = 0; i < 2; i++) {
+        heap::InvokeMinorGC(heap);
+      }
     }
 
     // In-place-internalizable strings are promoted into the shared heap when
@@ -911,6 +917,7 @@ UNINITIALIZED_TEST(PromotionScavengeOldToShared) {
   if (v8_flags.stress_concurrent_allocation) return;
 
   v8_flags.shared_string_table = true;
+  v8_flags.scavenger_precise_pinning_objects = false;
   i::FlagList::EnforceFlagImplications();
 
   MultiClientIsolateTest test;
@@ -941,8 +948,12 @@ UNINITIALIZED_TEST(PromotionScavengeOldToShared) {
             MutablePageMetadata::cast(old_object_chunk->Metadata())),
         slot.address()));
 
-    for (int i = 0; i < 2; i++) {
-      heap::InvokeMinorGC(heap);
+    {
+      // CSS prevents moving the string to shared space.
+      DisableConservativeStackScanningScopeForTesting no_stack_scanning(heap);
+      for (int i = 0; i < 2; i++) {
+        heap::InvokeMinorGC(heap);
+      }
     }
 
     // In-place-internalizable strings are promoted into the shared heap when
@@ -1169,7 +1180,7 @@ UNINITIALIZED_TEST(InternalizedSharedStringsTransitionDuringGC) {
     for (int i = 0; i < shared_strings->length(); i++) {
       Handle<String> input_string(Cast<String>(shared_strings->get(i)),
                                   i_isolate);
-      Handle<String> interned = factory->InternalizeString(input_string);
+      DirectHandle<String> interned = factory->InternalizeString(input_string);
       CHECK(input_string->IsShared());
       CHECK(!IsThinString(*input_string));
       CHECK(input_string->HasForwardingIndex(kAcquireLoad));
@@ -1229,7 +1240,8 @@ UNINITIALIZED_TEST(ShareExternalString) {
 namespace {
 
 void CheckExternalStringResource(
-    Handle<String> string, v8::String::ExternalStringResourceBase* resource) {
+    DirectHandle<String> string,
+    v8::String::ExternalStringResourceBase* resource) {
   const bool is_one_byte = string->IsOneByteRepresentation();
   Local<v8::String> api_string = Utils::ToLocal(string);
   v8::String::Encoding encoding;
@@ -1273,8 +1285,8 @@ UNINITIALIZED_TEST(ExternalizeSharedString) {
   CHECK(!one_byte->IsShared());
   CHECK(!two_byte->IsShared());
 
-  Handle<String> shared_one_byte = ShareAndVerify(i_isolate1, one_byte);
-  Handle<String> shared_two_byte = ShareAndVerify(i_isolate1, two_byte);
+  DirectHandle<String> shared_one_byte = ShareAndVerify(i_isolate1, one_byte);
+  DirectHandle<String> shared_two_byte = ShareAndVerify(i_isolate1, two_byte);
 
   OneByteResource* one_byte_res = resource_factory.CreateOneByte(raw_one_byte);
   TwoByteResource* two_byte_res = resource_factory.CreateTwoByte(two_byte_vec);
@@ -1370,8 +1382,8 @@ UNINITIALIZED_TEST(ExternalizeInternalizedString) {
       factory1->NewStringFromAsciiChecked(raw_one_byte));
   factory1->InternalizeString(
       factory1->NewStringFromTwoByte(two_byte_vec).ToHandleChecked());
-  Handle<String> one_byte_intern = factory1->InternalizeString(one_byte);
-  Handle<String> two_byte_intern = factory1->InternalizeString(two_byte);
+  DirectHandle<String> one_byte_intern = factory1->InternalizeString(one_byte);
+  DirectHandle<String> two_byte_intern = factory1->InternalizeString(two_byte);
   if (v8_flags.always_use_string_forwarding_table) {
     i_isolate1->heap()->CollectGarbageShared(
         i_isolate1->main_thread_local_heap(),
@@ -1871,7 +1883,7 @@ void TestConcurrentExternalizationWithDeadStrings(bool share_resources,
     // Patch every third string to empty. The next GC will dispose the external
     // resources.
     if (i % 3 == 0) {
-      input_string.PatchValue(*empty_string);
+      input_string.SetValue(*empty_string);
       shared_strings->set(i, *input_string);
     }
   }
@@ -2036,7 +2048,7 @@ UNINITIALIZED_TEST(SharedStringInGlobalHandle) {
   Factory* factory = i_isolate->factory();
 
   HandleScope handle_scope(i_isolate);
-  Handle<String> shared_string =
+  DirectHandle<String> shared_string =
       factory->NewStringFromAsciiChecked("foobar", AllocationType::kSharedOld);
   CHECK(HeapLayout::InWritableSharedSpace(*shared_string));
   v8::Local<v8::String> lh_shared_string = Utils::ToLocal(shared_string);
@@ -2076,7 +2088,7 @@ class WorkerIsolateThread : public v8::base::Thread {
     {
       v8::Isolate::Scope isolate_scope(client);
       HandleScope handle_scope(i_client);
-      Handle<String> shared_string = factory->NewStringFromAsciiChecked(
+      DirectHandle<String> shared_string = factory->NewStringFromAsciiChecked(
           "foobar", AllocationType::kSharedOld);
       CHECK(HeapLayout::InWritableSharedSpace(*shared_string));
       v8::Local<v8::String> lh_shared_string = Utils::ToLocal(shared_string);
@@ -2416,14 +2428,14 @@ UNINITIALIZED_TEST(SharedObjectRetainedByClientRememberedSet) {
     HandleScope scope(i_isolate);
     const char raw_one_byte[] = "foo";
 
-    Handle<String> live_shared_string =
+    DirectHandle<String> live_shared_string =
         i_isolate->factory()->NewStringFromAsciiChecked(
             raw_one_byte, AllocationType::kSharedOld);
     CHECK(shared_heap->Contains(*live_shared_string));
     live_weak_ref.Reset(isolate, Utils::ToLocal(live_shared_string));
     live_weak_ref.SetWeak();
 
-    Handle<String> dead_shared_string =
+    DirectHandle<String> dead_shared_string =
         i_isolate->factory()->NewStringFromAsciiChecked(
             raw_one_byte, AllocationType::kSharedOld);
     CHECK(shared_heap->Contains(*dead_shared_string));

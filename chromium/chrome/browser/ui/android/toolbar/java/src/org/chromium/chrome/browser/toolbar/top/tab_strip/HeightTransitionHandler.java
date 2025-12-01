@@ -97,6 +97,7 @@ class HeightTransitionHandler {
     private @Nullable BrowserControlsStateProvider.Observer mTransitionFinishedObserver;
 
     private boolean mForceUpdateHeight;
+    private boolean mApplyScrimOverlay;
 
     /**
      * Create the manager for transitions to show / hide the tab strip by updating the strip height.
@@ -289,15 +290,27 @@ class HeightTransitionHandler {
         mForceUpdateHeight = forceUpdateHeight;
     }
 
-    void onTabStripSizeChanged(int width, int topPadding) {
+    void onTabStripSizeChanged(int width, int topPadding, boolean isInDesktopWindow) {
         if (width == mTabStripWidth && topPadding == mTopPadding) return;
         mTabStripWidth = width;
         mTopPadding = topPadding;
+        // The height transition should apply the strip scrim overlay only when its goal is to
+        // update the strip visibility. In a desktop window, the height transition runs solely
+        // to update the strip top padding and it is expected of the fade transition to
+        // control the strip visibility by updating the scrim in this case when applicable.
+        mApplyScrimOverlay = !isInDesktopWindow;
 
-        int oldToken = mOnLayoutToken;
-        mOnLayoutToken = mDeferTransitionTokenHolder.acquireToken();
-        mDeferTransitionTokenHolder.releaseToken(oldToken);
-        mDeferTransitionTokenHolder.releaseToken(mOnLayoutToken);
+        if (isInDesktopWindow) {
+            // In a desktop window, do not block the height transition when transition token is in
+            // use and instead trigger the transition immediately so that the strip top padding is
+            // updated as needed.
+            requestTransition();
+        } else {
+            int oldToken = mOnLayoutToken;
+            mOnLayoutToken = mDeferTransitionTokenHolder.acquireToken();
+            mDeferTransitionTokenHolder.releaseToken(oldToken);
+            mDeferTransitionTokenHolder.releaseToken(mOnLayoutToken);
+        }
     }
 
     private void onTokenUpdate() {
@@ -381,9 +394,11 @@ class HeightTransitionHandler {
                     public void onControlsOffsetChanged(
                             int topOffset,
                             int topControlsMinHeightOffset,
+                            boolean topControlsMinHeightChanged,
                             int bottomOffset,
                             int bottomControlsMinHeightOffset,
-                            boolean needsAnimate,
+                            boolean bottomControlsMinHeightChanged,
+                            boolean requestNewFrame,
                             boolean isVisibilityForced) {
                         updateTabStripHeightImpl();
                     }
@@ -425,12 +440,12 @@ class HeightTransitionHandler {
         // since it is only used for phones.
         // TODO (crbug.com/1517059): Let FindToolbar itself decide how to set the top margin.
         updateViewStubTopMargin(R.id.find_toolbar_tablet_stub, R.id.find_toolbar, topControlHeight);
-        updateViewStubTopMargin(
-                R.id.target_view_stub, R.id.toolbar_drag_drop_target_view, mTabStripHeight);
 
         assert mTabStripTransitionDelegateSupplier.get() != null
                 : "TabStripTransitionDelegate should be available.";
-        mTabStripTransitionDelegateSupplier.get().onHeightChanged(mTabStripHeight);
+        mTabStripTransitionDelegateSupplier
+                .get()
+                .onHeightChanged(mTabStripHeight, mApplyScrimOverlay);
 
         // If top control is already at steady state, notify right away.
         if (isTopControlAtSteadyState()) {
@@ -446,9 +461,11 @@ class HeightTransitionHandler {
                     public void onControlsOffsetChanged(
                             int topOffset,
                             int topControlsMinHeightOffset,
+                            boolean topControlsMinHeightChanged,
                             int bottomOffset,
                             int bottomControlsMinHeightOffset,
-                            boolean needsAnimate,
+                            boolean bottomControlsMinHeightChanged,
+                            boolean requestNewFrame,
                             boolean isVisibilityForced) {
                         if (isTopControlAtSteadyState()) {
                             notifyTransitionFinished(true);

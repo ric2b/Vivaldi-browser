@@ -16,7 +16,6 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/ranges/ranges.h"
 #include "base/strings/utf_string_conversions.h"
 #include "services/screen_ai/public/mojom/screen_ai_service.mojom.h"
 #include "services/strings/grit/services_strings.h"
@@ -30,7 +29,7 @@
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/transform.h"
 
-namespace ranges = base::ranges;
+namespace ranges = std::ranges;
 
 namespace {
 
@@ -586,14 +585,14 @@ ui::AXTreeUpdate VisualAnnotationToAXTreeUpdate(
 
   // Filter out invalid / unrecognized / unused nodes from the update.
   update.nodes.resize(nodes.size());
-  const auto end_node_iter = ranges::copy_if(
+  const auto end_nodes = std::ranges::copy_if(
       nodes, std::ranges::begin(update.nodes),
       [](const ui::AXNodeData& node_data) {
         return node_data.role != ax::mojom::Role::kUnknown &&
                node_data.id != ui::kInvalidAXNodeID;
       });
   update.nodes.resize(
-      std::distance(std::ranges::begin(update.nodes), end_node_iter));
+      std::distance(std::ranges::begin(update.nodes), end_nodes.out));
 
   return update;
 }

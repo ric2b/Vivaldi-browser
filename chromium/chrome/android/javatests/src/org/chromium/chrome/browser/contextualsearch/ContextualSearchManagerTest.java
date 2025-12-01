@@ -37,6 +37,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 
+import org.chromium.base.RequiredCallback;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.ApplicationTestUtils;
 import org.chromium.base.test.util.Batch;
@@ -91,6 +92,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 // TODO(donnd): Create class with limited API to encapsulate the internals of simulations.
 
@@ -237,6 +239,9 @@ public class ContextualSearchManagerTest extends ContextualSearchInstrumentation
     @Test
     @SmallTest
     @Feature({"ContextualSearch"})
+    @DisableIf.Build(
+            sdk_is_greater_than = Build.VERSION_CODES.UPSIDE_DOWN_CAKE,
+            message = "crbug.com/383144566")
     public void testPromotesToTab() throws Exception {
         // -------- SET UP ---------
         // Track Tab creation with this helper.
@@ -306,6 +311,7 @@ public class ContextualSearchManagerTest extends ContextualSearchInstrumentation
     @Test
     @SmallTest
     @Feature({"ContextualSearch"})
+    @DisabledTest(message = "crbug.com/383144566")
     public void testAcceptedPrivacy() throws Exception {
         mPolicy.overrideDecidedStateForTesting(true);
 
@@ -319,6 +325,7 @@ public class ContextualSearchManagerTest extends ContextualSearchInstrumentation
     @Test
     @SmallTest
     @Feature({"ContextualSearch"})
+    @DisableIf.Device(DeviceFormFactor.TABLET) // crbug.com/41485867
     public void testRedirectedExternalNavigationWithUserGesture() throws Exception {
         ExternalNavigationHandler.sAllowIntentsToSelfForTesting = true;
         simulateResolveSearch("intelligence");
@@ -337,26 +344,41 @@ public class ContextualSearchManagerTest extends ContextualSearchInstrumentation
                         new Runnable() {
                             @Override
                             public void run() {
-                                Assert.assertFalse(
-                                        mPanel.getOverlayPanelContent()
-                                                .getInterceptNavigationDelegateForTesting()
-                                                .shouldIgnoreNavigation(
-                                                        navigationHandle,
-                                                        initialUrl,
-                                                        false,
-                                                        false));
+                                AtomicBoolean result = new AtomicBoolean(false);
+                                RequiredCallback<Boolean> resultCallback =
+                                        new RequiredCallback<>(
+                                                (Boolean shouldIgnore) -> {
+                                                    result.set(shouldIgnore);
+                                                });
+                                mPanel.getOverlayPanelContent()
+                                        .getInterceptNavigationDelegateForTesting()
+                                        .shouldIgnoreNavigation(
+                                                navigationHandle,
+                                                initialUrl,
+                                                false,
+                                                false,
+                                                false,
+                                                resultCallback);
                                 Assert.assertEquals(0, mActivityMonitor.getHits());
+                                Assert.assertFalse(result.get());
 
+                                resultCallback =
+                                        new RequiredCallback<>(
+                                                (Boolean shouldIgnore) -> {
+                                                    result.set(shouldIgnore);
+                                                });
                                 navigationHandle.didRedirect(redirectUrl, true);
-                                Assert.assertTrue(
-                                        mPanel.getOverlayPanelContent()
-                                                .getInterceptNavigationDelegateForTesting()
-                                                .shouldIgnoreNavigation(
-                                                        navigationHandle,
-                                                        redirectUrl,
-                                                        false,
-                                                        false));
+                                mPanel.getOverlayPanelContent()
+                                        .getInterceptNavigationDelegateForTesting()
+                                        .shouldIgnoreNavigation(
+                                                navigationHandle,
+                                                redirectUrl,
+                                                false,
+                                                false,
+                                                false,
+                                                resultCallback);
                                 Assert.assertEquals(1, mActivityMonitor.getHits());
+                                Assert.assertTrue(result.get());
                             }
                         });
     }
@@ -397,13 +419,25 @@ public class ContextualSearchManagerTest extends ContextualSearchInstrumentation
                         new Runnable() {
                             @Override
                             public void run() {
-                                Assert.assertTrue(
-                                        mPanel.getOverlayPanelContent()
-                                                .getInterceptNavigationDelegateForTesting()
-                                                .shouldIgnoreNavigation(
-                                                        navigationHandle, url, false, false));
+                                AtomicBoolean result = new AtomicBoolean(false);
+                                RequiredCallback<Boolean> resultCallback =
+                                        new RequiredCallback<>(
+                                                (Boolean shouldIgnore) -> {
+                                                    result.set(shouldIgnore);
+                                                });
+                                mPanel.getOverlayPanelContent()
+                                        .getInterceptNavigationDelegateForTesting()
+                                        .shouldIgnoreNavigation(
+                                                navigationHandle,
+                                                url,
+                                                false,
+                                                false,
+                                                false,
+                                                resultCallback);
+                                Assert.assertTrue(result.get());
                             }
                         });
+
         Assert.assertEquals(hasGesture ? 1 : 0, mActivityMonitor.getHits());
     }
 
@@ -523,7 +557,7 @@ public class ContextualSearchManagerTest extends ContextualSearchInstrumentation
                 });
 
         Assert.assertTrue(imageControl.getThumbnailVisible());
-        Assert.assertEquals(imageControl.getThumbnailUrl(), "http://someimageurl.com/image.png");
+        Assert.assertEquals("http://someimageurl.com/image.png", imageControl.getThumbnailUrl());
 
         ThreadUtils.runOnUiThreadBlocking(() -> imageControl.hideCustomImage(false));
 
@@ -541,6 +575,9 @@ public class ContextualSearchManagerTest extends ContextualSearchInstrumentation
     @Test
     @SmallTest
     @Feature({"ContextualSearch"})
+    @DisableIf.Build(
+            sdk_is_greater_than = Build.VERSION_CODES.S_V2,
+            message = "crbug.com/383144566")
     public void testQuickActionCaptionAndImage() throws Exception {
         CompositorAnimationHandler.setTestingMode(true);
 
@@ -943,7 +980,10 @@ public class ContextualSearchManagerTest extends ContextualSearchInstrumentation
                 () ->
                         activity2
                                 .getCurrentTabModel()
-                                .closeTabs(TabClosureParams.closeAllTabs().build()));
+                                .getTabRemover()
+                                .closeTabs(
+                                        TabClosureParams.closeAllTabs().build(),
+                                        /* allowDialog= */ false));
         ApplicationTestUtils.finishActivity(activity2);
     }
 

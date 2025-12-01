@@ -665,14 +665,13 @@ int64_t av1_highbd_block_error_c(const tran_low_t *coeff,
   int i;
   int64_t error = 0, sqcoeff = 0;
   int shift = 2 * (bd - 8);
-  int rounding = shift > 0 ? 1 << (shift - 1) : 0;
+  int rounding = (1 << shift) >> 1;
 
   for (i = 0; i < block_size; i++) {
     const int64_t diff = coeff[i] - dqcoeff[i];
     error += diff * diff;
     sqcoeff += (int64_t)coeff[i] * (int64_t)coeff[i];
   }
-  assert(error >= 0 && sqcoeff >= 0);
   error = (error + rounding) >> shift;
   sqcoeff = (sqcoeff + rounding) >> shift;
 

@@ -200,9 +200,6 @@ public class MinimizeAppAndCloseTabBackPressHandler implements BackPressHandler,
             // minimizing app and closing tab.
             if (currentTab.canGoBack()) {
                 assert false : "Tab should be navigated back before closing or exiting app";
-                if (BackPressManager.correctTabNavigationOnFallback()) {
-                    return BackPressResult.FAILURE;
-                }
             }
             // At this point we know either the tab will close or the app will minimize.
             NativePage nativePage = currentTab.getNativePage();
@@ -257,6 +254,11 @@ public class MinimizeAppAndCloseTabBackPressHandler implements BackPressHandler,
 
     private void assertBackPressState(
             boolean minimizeApp, boolean shouldCloseTab, Tab currentTab, String caller) {
+        // Vivaldi
+        // NOTE(jarle@vivaldi.com): Ref. VAB-10530. Disable due to crashes observed in debug
+        // builds. Cannot use BuildConfig.IS_VIVALDI here because of a GN dependency issue.
+        if (true) return;
+
         final boolean minimizeAppWithoutClosingTab = minimizeApp && !shouldCloseTab;
 
         // The two experiment arms behave differently only when minimizing app without closing tab.

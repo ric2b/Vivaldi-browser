@@ -12,119 +12,41 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <stdio.h>
-
-#include <cstddef>
 #include <cstdlib>
-#include <string>
-#include <vector>
 
 #include "tensorflow/lite/experimental/litert/c/litert_common.h"
 #include "tensorflow/lite/experimental/litert/c/litert_model.h"
 #include "tensorflow/lite/experimental/litert/c/litert_op_code.h"
-#include "tensorflow/lite/experimental/litert/cc/litert_support.h"
-#include "tensorflow/lite/experimental/litert/core/graph_tools.h"
+#include "tensorflow/lite/experimental/litert/cc/litert_macros.h"
+#include "tensorflow/lite/experimental/litert/cc/litert_model.h"
 #include "tensorflow/lite/experimental/litert/vendors/c/litert_compiler_plugin.h"
+#include "tensorflow/lite/experimental/litert/vendors/examples/example_plugin_common.h"
 
-//
-// Configurations
-//
-
-namespace {
-
-constexpr char kPluginManufacturer[] = "ExampleSocManufacturer";
-constexpr char kPluginSocModel[] = "ExampleSocModel";
-
-}  // namespace
-
-const char* LiteRtPluginSocManufacturer() { return kPluginManufacturer; }
-
-LiteRtParamIndex LiteRtPluginNumSupportedSocModels(
-    LiteRtCompilerPlugin compiler_plugin) {
-  return 1;
-}
-
-LiteRtStatus LiteRtPluginGetSupportedSocModel(
-    LiteRtCompilerPlugin compiler_plugin, LiteRtParamIndex soc_model_idx,
-    const char** soc_model_name) {
-  if (soc_model_idx != 0) {
-    return kLiteRtStatusErrorUnsupported;
-  }
-  *soc_model_name = kPluginSocModel;
-  return kLiteRtStatusOk;
-}
-
-//
-// Compiled Result Definition
-//
-
-struct LiteRtCompiledResultT {
-  std::string byte_code;
-  std::vector<std::string> per_op_data;
-};
-
-LiteRtStatus LiteRtCompiledResultGetByteCode(
-    LiteRtCompiledResult compiled_result, const void** byte_code,
-    size_t* byte_code_size) {
-  *byte_code = compiled_result->byte_code.data();
-  *byte_code_size = compiled_result->byte_code.size();
-  return kLiteRtStatusOk;
-}
-
-LiteRtStatus LiteRtCompiledResultGetCallInfo(
-    LiteRtCompiledResult compiled_result, LiteRtParamIndex call_idx,
-    const void** call_info, size_t* call_info_size) {
-  if (call_idx >= compiled_result->per_op_data.size()) {
-    return kLiteRtStatusErrorIndexOOB;
-  }
-
-  *call_info = compiled_result->per_op_data.at(call_idx).data();
-  *call_info_size = compiled_result->per_op_data.at(call_idx).size();
-
-  return kLiteRtStatusOk;
-}
-
-LiteRtStatus LiteRtCompiledResultGetNumCalls(
-    LiteRtCompiledResult compiled_result, LiteRtParamIndex* num_calls) {
-  *num_calls = compiled_result->per_op_data.size();
-  return kLiteRtStatusOk;
-}
-
-void LiteRtCompiledResultDestroy(LiteRtCompiledResult compiled_result) {
-  delete compiled_result;
-}
-
-//
-// Plugin Definition
-//
+// A simple compiler plugin example that implements everything directly.
+// This plugin matches on mul ops, and emits "byte code" that is simply
+// a string representative of the ops consumed.
 
 // Plugins can hold state.
 struct LiteRtCompilerPluginT {};
 
-LiteRtStatus LiteRtPluginInit(LiteRtCompilerPlugin* compiler_plugin) {
+LiteRtStatus LiteRtCreateCompilerPlugin(LiteRtCompilerPlugin* compiler_plugin) {
   *compiler_plugin = new LiteRtCompilerPluginT;
   return kLiteRtStatusOk;
 }
 
-void LiteRtPluginDestroy(LiteRtCompilerPlugin compiler_plugin) {
+void LiteRtDestroyCompilerPlugin(LiteRtCompilerPlugin compiler_plugin) {
   delete compiler_plugin;
 }
 
-LiteRtStatus LiteRtPluginPartitionModel(LiteRtCompilerPlugin compiler_plugin,
-                                        LiteRtModel model,
-                                        LiteRtOpList selected_ops) {
-  LITERT_ASSIGN_OR_RETURN_STATUS(auto subgraph,
-                                 graph_tools::GetSubgraph(model));
-  LITERT_ASSIGN_OR_RETURN_STATUS(auto ops,
-                                 graph_tools::GetSubgraphOps(subgraph));
-
-  for (auto op : ops) {
-    LiteRtOpCode op_code;
-    LITERT_RETURN_STATUS_IF_NOT_OK(LiteRtGetOpCode(op, &op_code));
-    if (op_code != kLiteRtOpCodeTflMul) {
+LiteRtStatus LiteRtCompilerPluginPartition(LiteRtCompilerPlugin compiler_plugin,
+                                           LiteRtSubgraph subgraph,
+                                           LiteRtOpList selected_ops) {
+  ::litert::Subgraph main_subgraph(subgraph);
+  for (const auto& op : main_subgraph.Ops()) {
+    if (op.Code() != kLiteRtOpCodeTflMul) {
       continue;
     }
-    LITERT_RETURN_STATUS_IF_NOT_OK(LiteRtPushOp(selected_ops, op));
+    LITERT_RETURN_IF_ERROR(LiteRtPushOp(selected_ops, op.Get()));
   }
   return kLiteRtStatusOk;
 }
@@ -134,18 +56,12 @@ namespace {
 LiteRtStatus CompileSinglePartition(LiteRtParamIndex partition_index,
                                     LiteRtSubgraph subgraph,
                                     LiteRtCompiledResultT& result) {
-  LITERT_ASSIGN_OR_RETURN_STATUS(auto ops,
-                                 graph_tools::GetSubgraphOps(subgraph));
-
+  const litert::Subgraph sg(subgraph);
   int num_muls_in_partition = 0;
-  for (auto op : ops) {
-    LiteRtOpCode op_code;
-
-    LITERT_RETURN_STATUS_IF_NOT_OK(LiteRtGetOpCode(op, &op_code));
-    if (op_code != kLiteRtOpCodeTflMul) {
+  for (const auto& op : sg.Ops()) {
+    if (op.Code() != kLiteRtOpCodeTflMul) {
       return kLiteRtStatusErrorUnsupported;
     }
-
     ++num_muls_in_partition;
   }
 
@@ -170,16 +86,14 @@ LiteRtStatus CompileSinglePartition(LiteRtParamIndex partition_index,
 
 }  // namespace
 
-LiteRtStatus LiteRtPluginCompile(LiteRtCompilerPlugin compiler_plugin,
-                                 const char* soc_model,
-                                 LiteRtSubgraphArray partitions,
-                                 LiteRtParamIndex num_partitions,
-                                 LiteRtCompiledResult* compiled_result) {
+LiteRtStatus LiteRtCompilerPluginCompile(
+    LiteRtCompilerPlugin compiler_plugin, const char* soc_model,
+    LiteRtSubgraph* partitions, LiteRtParamIndex num_partitions,
+    LiteRtCompiledResult* compiled_result) {
   LiteRtCompiledResult result = new LiteRtCompiledResultT;
 
   for (auto i = 0; i < num_partitions; ++i) {
-    LITERT_RETURN_STATUS_IF_NOT_OK(
-        CompileSinglePartition(i, partitions[i], *result));
+    LITERT_RETURN_IF_ERROR(CompileSinglePartition(i, partitions[i], *result));
   }
 
   *compiled_result = result;

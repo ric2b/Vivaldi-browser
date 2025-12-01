@@ -11,8 +11,6 @@
 
 #include "app/vivaldi_apptools.h"
 #include "browser/vivaldi_clipboard_utils.h"
-#include "content/browser/browser_plugin/browser_plugin_guest.h"
-#include "content/browser/web_contents/web_contents_impl.h"
 
 namespace input {
 
@@ -301,7 +299,8 @@ void ChildFrameInputHelper::StopFlingingIfNecessary(
 void ChildFrameInputHelper::GestureEventAckHelper(
     const blink::WebGestureEvent& event,
     blink::mojom::InputEventResultSource ack_source,
-    blink::mojom::InputEventResultState ack_result) {
+    blink::mojom::InputEventResultState ack_result,
+    bool is_vivaldi_guest) {
   // Stop flinging if a GSU event with momentum phase is sent to the renderer
   // but not consumed.
   StopFlingingIfNecessary(event, ack_result);
@@ -339,8 +338,8 @@ void ChildFrameInputHelper::GestureEventAckHelper(
           ack_result == blink::mojom::InputEventResultState::kNoConsumerExists;
 // NOTE(espen@vivaldi.com): Seems no longer needed (mac), but kept around for a
 // while.
-//#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-//    if (vivaldi::IsVivaldiRunning()) {
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+      if (vivaldi::IsVivaldiRunning()) {
         // NOTE(espen@vivaldi.com): A begin must never start bubbling events
         // to the root view. It will break elastic scrolling in guestviews.
         // To get here the begin event is sent to the view and dealt with in
@@ -348,10 +347,11 @@ void ChildFrameInputHelper::GestureEventAckHelper(
         // if the event happens at the very end or front of a document so that
         // there us no more to scroll at the start of the sequence.
         // ch132: Removed guest view testing as it seems not to matter anymore.
-        // TODO: Currently disabled as it breaks page navigation (ch132).
-        // is_scroll_sequence_bubbling_ = false;
-//    }
-//#endif // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+        if (is_vivaldi_guest) {
+          is_scroll_sequence_bubbling_ = false;
+        }
+      }
+#endif // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
     }
 
     if (is_scroll_sequence_bubbling_ &&

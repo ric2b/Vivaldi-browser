@@ -169,13 +169,14 @@ class V8_EXPORT_PRIVATE WasmEngine {
   // Synchronously validates the given bytes. Returns whether the bytes
   // represent a valid encoded Wasm module.
   bool SyncValidate(Isolate* isolate, WasmEnabledFeatures enabled,
-                    CompileTimeImports compile_imports, ModuleWireBytes bytes);
+                    CompileTimeImports compile_imports,
+                    base::Vector<const uint8_t> bytes);
 
   // Synchronously compiles the given bytes that represent a translated
   // asm.js module.
   MaybeHandle<AsmWasmData> SyncCompileTranslatedAsmJs(
-      Isolate* isolate, ErrorThrower* thrower, ModuleWireBytes bytes,
-      DirectHandle<Script> script,
+      Isolate* isolate, ErrorThrower* thrower,
+      base::OwnedVector<const uint8_t> bytes, DirectHandle<Script> script,
       base::Vector<const uint8_t> asm_js_offset_table_bytes,
       DirectHandle<HeapNumber> uses_bitset, LanguageMode language_mode);
   Handle<WasmModuleObject> FinalizeTranslatedAsmJs(
@@ -184,11 +185,10 @@ class V8_EXPORT_PRIVATE WasmEngine {
 
   // Synchronously compiles the given bytes that represent an encoded Wasm
   // module.
-  MaybeHandle<WasmModuleObject> SyncCompile(Isolate* isolate,
-                                            WasmEnabledFeatures enabled,
-                                            CompileTimeImports compile_imports,
-                                            ErrorThrower* thrower,
-                                            ModuleWireBytes bytes);
+  MaybeHandle<WasmModuleObject> SyncCompile(
+      Isolate* isolate, WasmEnabledFeatures enabled,
+      CompileTimeImports compile_imports, ErrorThrower* thrower,
+      base::OwnedVector<const uint8_t> bytes);
 
   // Synchronously instantiate the given Wasm module with the given imports.
   // If the module represents an asm.js module, then the supplied {memory}
@@ -200,12 +200,10 @@ class V8_EXPORT_PRIVATE WasmEngine {
 
   // Begin an asynchronous compilation of the given bytes that represent an
   // encoded Wasm module.
-  // The {is_shared} flag indicates if the bytes backing the module could
-  // be shared across threads, i.e. could be concurrently modified.
   void AsyncCompile(Isolate* isolate, WasmEnabledFeatures enabled,
                     CompileTimeImports compile_imports,
                     std::shared_ptr<CompilationResultResolver> resolver,
-                    ModuleWireBytes bytes, bool is_shared,
+                    base::OwnedVector<const uint8_t> bytes,
                     const char* api_method_name_for_errors);
 
   // Begin an asynchronous instantiation of the given Wasm module.
@@ -366,7 +364,7 @@ class V8_EXPORT_PRIVATE WasmEngine {
   // Called by each Isolate to report its live code for a GC cycle. First
   // version reports an externally determined set of live code (might be empty),
   // second version gets live code from the execution stack of that isolate.
-  void ReportLiveCodeForGC(Isolate*, base::Vector<WasmCode*>);
+  void ReportLiveCodeForGC(Isolate*, std::unordered_set<WasmCode*>& live_code);
   void ReportLiveCodeFromStackForGC(Isolate*);
 
   // Add potentially dead code. The occurrence in the set of potentially dead
@@ -391,6 +389,8 @@ class V8_EXPORT_PRIVATE WasmEngine {
 
   TypeCanonicalizer* type_canonicalizer() { return &type_canonicalizer_; }
 
+  void DecodeAllNameSections(CanonicalTypeNamesProvider* target);
+
   compiler::WasmCallDescriptors* call_descriptors() {
     return &call_descriptors_;
   }
@@ -398,6 +398,8 @@ class V8_EXPORT_PRIVATE WasmEngine {
   // Returns an approximation of current off-heap memory used by this engine,
   // excluding code space.
   size_t EstimateCurrentMemoryConsumption() const;
+  // Print the current memory consumption estimate to standard output.
+  void PrintCurrentMemoryConsumptionEstimate() const;
 
   int GetDeoptsExecutedCount() const;
   int IncrementDeoptsExecutedCount();
@@ -409,6 +411,30 @@ class V8_EXPORT_PRIVATE WasmEngine {
   static WasmOrphanedGlobalHandle* NewOrphanedGlobalHandle(
       WasmOrphanedGlobalHandle** pointer);
   static void FreeAllOrphanedGlobalHandles(WasmOrphanedGlobalHandle* start);
+
+  size_t NativeModuleCount() const;
+
+  // Get the address of the static {had_nondeterminism_} flag, for embedding in
+  // generated code.
+  static Address GetNondeterminismAddr() {
+    return reinterpret_cast<Address>(&had_nondeterminism_);
+  }
+
+  // Return {true} if nondeterminism was detected during previous execution.
+  static bool had_nondeterminism() {
+    return had_nondeterminism_.load(std::memory_order_relaxed) != 0;
+  }
+
+  // Set the {had_nondeterminism_} flag.
+  static void set_had_nondeterminism() {
+    had_nondeterminism_.store(1, std::memory_order_relaxed);
+  }
+
+  // Clear the {had_nondeterminism_} flag and return whether nondeterminism was
+  // detected before clearing.
+  static bool clear_nondeterminism() {
+    return had_nondeterminism_.exchange(0, std::memory_order_relaxed) != 0;
+  }
 
  private:
   struct CurrentGCInfo;
@@ -438,6 +464,17 @@ class V8_EXPORT_PRIVATE WasmEngine {
   void EnableCodeLogging(NativeModule*);
   void DisableCodeLogging(NativeModule*);
 
+  // Remember in a global flag whether we saw nondeterminism during execution.
+  // This is used in differential fuzzing.
+  // The address of this global is embedded in generated Liftoff code, and also
+  // some runtime functions update it (notably for growing memory, which can
+  // fail nondeterministically). In non-Liftoff executions, we still get the
+  // latter.
+  // This is typed as {int32_t} to have a deterministic bit pattern (in contrast
+  // to {bool}). A value of `0` means no nondeterminism, everything else
+  // indicates nondeterminism.
+  static std::atomic<int32_t> had_nondeterminism_;
+
   AccountingAllocator allocator_;
 
 #ifdef V8_ENABLE_WASM_GDB_REMOTE_DEBUGGING
@@ -456,7 +493,7 @@ class V8_EXPORT_PRIVATE WasmEngine {
 
   // This mutex protects all information which is mutated concurrently or
   // fields that are initialized lazily on the first access.
-  mutable base::Mutex mutex_;
+  mutable base::SpinningMutex mutex_;
 
   //////////////////////////////////////////////////////////////////////////////
   // Protected by {mutex_}:
@@ -489,12 +526,8 @@ class V8_EXPORT_PRIVATE WasmEngine {
   size_t new_potentially_dead_code_size_ = 0;
   // Set of potentially dead code. This set holds one ref for each code object,
   // until code is detected to be really dead. At that point, the ref count is
-  // decremented and code is moved to the {dead_code} set. If the code is
-  // finally deleted, it is also removed from {dead_code}.
+  // decremented and code is removed from the set.
   std::unordered_set<WasmCode*> potentially_dead_code_;
-  // Code that is not being executed in any isolate any more, but the ref count
-  // did not drop to zero yet.
-  std::unordered_set<WasmCode*> dead_code_;
   int8_t num_code_gcs_triggered_ = 0;
 
   // If an engine-wide GC is currently running, this pointer stores information
@@ -516,6 +549,8 @@ V8_EXPORT_PRIVATE WasmCodeManager* GetWasmCodeManager();
 // Returns a reference to the WasmImportWrapperCache shared by the entire
 // process.
 V8_EXPORT_PRIVATE WasmImportWrapperCache* GetWasmImportWrapperCache();
+
+V8_EXPORT_PRIVATE CanonicalTypeNamesProvider* GetCanonicalTypeNamesProvider();
 
 }  // namespace wasm
 }  // namespace internal

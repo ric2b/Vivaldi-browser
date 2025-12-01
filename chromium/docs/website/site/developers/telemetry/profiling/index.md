@@ -18,7 +18,7 @@ data collection.
 ## Tracing
 
 On all platforms, Telemetry can gather an
-[about:tracing](http://www.chromium.org/developers/how-tos/trace-event-profiling-tool)
+[about:tracing](/developers/how-tos/trace-event-profiling-tool)
 trace for each page in the page_set. To do so, simply pass the --profiler=trace
 flag. For example:
 
@@ -126,7 +126,7 @@ $ tools/perf/run_benchmark --profiler=android-systrace kraken
 ```
 
 The resulting trace file can be opened in Chrome by going to
-[about:tracing](http://www.chromium.org/developers/how-tos/trace-event-profiling-tool)
+[about:tracing](/developers/how-tos/trace-event-profiling-tool)
 and clicking on "Load".
 
 ### Mac
@@ -224,7 +224,7 @@ The dump files will then be fetched in /tmp/{RANDOM}, and then can be opened in
 tools such as [Wireshark](http://www.wireshark.org/).
 
 On android, "tcpdump" binary will be downloaded from [cloud
-storage](http://www.chromium.org/developers/telemetry/upload_to_cloud_storage)
+storage](/developers/telemetry/upload_to_cloud_storage)
 and installed in the device automatically.
 
 ## "Manual" Profiling - Android
@@ -241,7 +241,7 @@ enter. It will then fetch all profile data from the device and print
 instructions on how to open them.
 
 You can also use
-[adb_profile_chrome](http://www.chromium.org/developers/how-tos/trace-event-profiling-tool/recording-tracing-runs)
+[adb_profile_chrome](/developers/how-tos/trace-event-profiling-tool/recording-tracing-runs)
 to record a perf profile from a running browser:
 
 ```none

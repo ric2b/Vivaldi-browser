@@ -18,6 +18,8 @@
 + (void)registerLocalStatePrefs:(PrefRegistrySimple*)registry {
   registry->RegisterBooleanPref(
        vivaldiprefs::kVivaldiShowFullAddressEnabled, NO);
+  registry->RegisterBooleanPref(
+       vivaldiprefs::kVivaldiShowXForSuggestionEnabled, NO);
 }
 
 @end

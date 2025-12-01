@@ -55,4 +55,4 @@ maintain it
 Using these factors you can approximate: priority = severity \* risk \*
 generality \* 1/cost (weighed with appropriate factors).
 
-[Security Severity Guidelines]: https://www.chromium.org/chromium-os/developer-library/guides/bugs/security-severity-guidelines/
+[Security Severity Guidelines]: /chromium-os/developer-library/guides/bugs/security-severity-guidelines/

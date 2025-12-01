@@ -105,6 +105,9 @@ class SystemMemoryPressureEvaluator
   // thread.
   virtual bool GetSystemMemoryStatus(MEMORYSTATUSEX* mem_status);
 
+  // Records histograms about committed memory based on `mem_status`.
+  static void RecordCommitHistograms(const MEMORYSTATUSEX& mem_status);
+
  private:
   // Threshold amounts of available memory that trigger pressure levels. See
   // memory_pressure_monitor.cc for a discussion of reasonable values for these.

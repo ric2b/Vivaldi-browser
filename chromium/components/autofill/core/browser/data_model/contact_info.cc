@@ -14,13 +14,13 @@
 #include "base/notreached.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "components/autofill/core/browser/autofill_data_util.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/autofill_structured_address_component.h"
 #include "components/autofill/core/browser/data_model/autofill_structured_address_name.h"
 #include "components/autofill/core/browser/data_model/autofill_structured_address_utils.h"
 #include "components/autofill/core/browser/data_model/form_group.h"
+#include "components/autofill/core/browser/data_quality/autofill_data_util.h"
 #include "components/autofill/core/browser/field_type_utils.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/common/autofill_features.h"
@@ -28,6 +28,34 @@
 #include "components/autofill/core/common/autofill_regexes.h"
 
 namespace autofill {
+namespace {
+
+// Finalizes the structure of `component` and returns the result of the
+// finalization. If the `component` could not be completed, it is possible
+// that it contains an invalid structure (e.g. first name
+// is not matching the full name). In this case, the function wipes the invalid
+// structure and tries to complete the structure again.
+bool FinalizeNameAddressComponent(AddressComponent* component) {
+  CHECK(component->GetStorageType() == NAME_FULL ||
+        component->GetStorageType() == ALTERNATIVE_FULL_NAME);
+  // Alternative names are not migrated because they were only recently
+  // introduced.
+  if (component->GetStorageType() == NAME_FULL) {
+    component->MigrateLegacyStructure();
+  }
+
+  bool result = component->CompleteFullTree();
+  if (!result) {
+    if (component->GetVerificationStatus() ==
+            VerificationStatus::kUserVerified &&
+        component->WipeInvalidStructure()) {
+      result = component->CompleteFullTree();
+    }
+  }
+  return result;
+}
+
+}  // namespace
 
 NameInfo::NameInfo()
     : name_(std::make_unique<NameFull>()),
@@ -85,12 +113,13 @@ bool NameInfo::IsStructuredNameMergeable(const NameInfo& newer) const {
 }
 
 bool NameInfo::FinalizeAfterImport() {
-  name_->MigrateLegacyStructure();
+  bool result = FinalizeNameAddressComponent(name_.get());
+
   if (base::FeatureList::IsEnabled(
           features::kAutofillSupportPhoneticNameForJP)) {
-    return name_->CompleteFullTree() && alternative_name_->CompleteFullTree();
+    result &= FinalizeNameAddressComponent(alternative_name_.get());
   }
-  return name_->CompleteFullTree();
+  return result;
 }
 
 bool NameInfo::operator==(const NameInfo& other) const {
@@ -106,14 +135,14 @@ bool NameInfo::operator==(const NameInfo& other) const {
 
 std::u16string NameInfo::GetRawInfo(FieldType type) const {
   DCHECK_EQ(FieldTypeGroup::kName, GroupTypeOfFieldType(type));
-  return GetNodeForType(type)->GetValueForType(type);
+  return GetRootForType(type)->GetValueForType(type);
 }
 
 void NameInfo::SetRawInfoWithVerificationStatus(FieldType type,
                                                 const std::u16string& value,
                                                 VerificationStatus status) {
   DCHECK_EQ(FieldTypeGroup::kName, GroupTypeOfFieldType(type));
-  GetNodeForType(type)->SetValueForType(type, value, status);
+  GetRootForType(type)->SetValueForType(type, value, status);
 }
 
 void NameInfo::GetSupportedTypes(FieldTypeSet* supported_types) const {
@@ -124,15 +153,20 @@ void NameInfo::GetSupportedTypes(FieldTypeSet* supported_types) const {
   }
 }
 
-std::u16string NameInfo::GetInfoImpl(const AutofillType& type,
-                                     const std::string& app_locale) const {
+std::u16string NameInfo::GetInfo(FieldType type,
+                                 const std::string& app_locale) const {
+  return GetRawInfo(type);
+}
+
+std::u16string NameInfo::GetInfo(const AutofillType& type,
+                                 const std::string& app_locale) const {
   return GetRawInfo(type.GetStorableType());
 }
 
-bool NameInfo::SetInfoWithVerificationStatusImpl(const AutofillType& type,
-                                                 const std::u16string& value,
-                                                 const std::string& app_locale,
-                                                 VerificationStatus status) {
+bool NameInfo::SetInfoWithVerificationStatus(const AutofillType& type,
+                                             const std::u16string& value,
+                                             const std::string& app_locale,
+                                             VerificationStatus status) {
   if (type.GetStorableType() == NAME_FULL ||
       (type.GetStorableType() == ALTERNATIVE_FULL_NAME &&
        base::FeatureList::IsEnabled(
@@ -142,29 +176,29 @@ bool NameInfo::SetInfoWithVerificationStatusImpl(const AutofillType& type,
     // the end.
     // TODO(crbug.com/40266145): Move this logic to the data model.
     AreStringTokenEquivalent(value,
-                             GetNodeForType(type.GetStorableType())
+                             GetRootForType(type.GetStorableType())
                                  ->GetValueForType(type.GetStorableType()))
-        ? GetNodeForType(type.GetStorableType())
+        ? GetRootForType(type.GetStorableType())
               ->SetValueForType(type.GetStorableType(), value, status)
-        : GetNodeForType(type.GetStorableType())
+        : GetRootForType(type.GetStorableType())
               ->SetValueForTypeAndResetSubstructure(type.GetStorableType(),
                                                     value, status);
     return true;
   }
-  return FormGroup::SetInfoWithVerificationStatusImpl(type, value, app_locale,
-                                                      status);
+  SetRawInfoWithVerificationStatus(type.GetStorableType(), value, status);
+  return true;
 }
 
-VerificationStatus NameInfo::GetVerificationStatusImpl(FieldType type) const {
-  return GetNodeForType(type)->GetVerificationStatusForType(type);
+VerificationStatus NameInfo::GetVerificationStatus(FieldType type) const {
+  return GetRootForType(type)->GetVerificationStatusForType(type);
 }
 
-AddressComponent* NameInfo::GetNodeForType(FieldType field_type) {
+AddressComponent* NameInfo::GetRootForType(FieldType field_type) {
   return const_cast<AddressComponent*>(
-      const_cast<const NameInfo*>(this)->GetNodeForType(field_type));
+      const_cast<const NameInfo*>(this)->GetRootForType(field_type));
 }
 
-const AddressComponent* NameInfo::GetNodeForType(FieldType field_type) const {
+const AddressComponent* NameInfo::GetRootForType(FieldType field_type) const {
   DCHECK_EQ(FieldTypeGroup::kName, GroupTypeOfFieldType(field_type));
   if (IsAlternativeNameType(field_type)) {
     return alternative_name_.get();
@@ -196,6 +230,16 @@ void EmailInfo::GetSupportedTypes(FieldTypeSet* supported_types) const {
   supported_types->insert(EMAIL_ADDRESS);
 }
 
+std::u16string EmailInfo::GetInfo(FieldType type,
+                                  const std::string& app_locale) const {
+  return GetRawInfo(type);
+}
+
+std::u16string EmailInfo::GetInfo(const AutofillType& type,
+                                  const std::string& app_locale) const {
+  return GetRawInfo(type.GetStorableType());
+}
+
 std::u16string EmailInfo::GetRawInfo(FieldType type) const {
   if (type == EMAIL_ADDRESS)
     return email_;
@@ -208,6 +252,18 @@ void EmailInfo::SetRawInfoWithVerificationStatus(FieldType type,
                                                  VerificationStatus status) {
   DCHECK_EQ(EMAIL_ADDRESS, type);
   email_ = value;
+}
+
+bool EmailInfo::SetInfoWithVerificationStatus(const AutofillType& type,
+                                              const std::u16string& value,
+                                              const std::string& app_locale,
+                                              const VerificationStatus status) {
+  SetRawInfoWithVerificationStatus(type.GetStorableType(), value, status);
+  return true;
+}
+
+VerificationStatus EmailInfo::GetVerificationStatus(FieldType type) const {
+  return VerificationStatus::kNoStatus;
 }
 
 CompanyInfo::CompanyInfo() = default;
@@ -225,17 +281,24 @@ void CompanyInfo::GetSupportedTypes(FieldTypeSet* supported_types) const {
   supported_types->insert(COMPANY_NAME);
 }
 
-void CompanyInfo::GetMatchingTypesWithProfileSources(
-    const std::u16string& text,
-    const std::string& app_locale,
-    FieldTypeSet* matching_types,
-    PossibleProfileValueSources* profile_value_sources) const {
+void CompanyInfo::GetMatchingTypes(const std::u16string& text,
+                                   const std::string& app_locale,
+                                   FieldTypeSet* matching_types) const {
   if (IsValid()) {
-    FormGroup::GetMatchingTypesWithProfileSources(
-        text, app_locale, matching_types, profile_value_sources);
+    FormGroup::GetMatchingTypes(text, app_locale, matching_types);
   } else if (text.empty()) {
     matching_types->insert(EMPTY_TYPE);
   }
+}
+
+std::u16string CompanyInfo::GetInfo(FieldType type,
+                                    const std::string& app_locale) const {
+  return GetRawInfo(type);
+}
+
+std::u16string CompanyInfo::GetInfo(const AutofillType& type,
+                                    const std::string& app_locale) const {
+  return GetRawInfo(type.GetStorableType());
 }
 
 std::u16string CompanyInfo::GetRawInfo(FieldType type) const {
@@ -247,6 +310,19 @@ void CompanyInfo::SetRawInfoWithVerificationStatus(FieldType type,
                                                    VerificationStatus status) {
   DCHECK_EQ(COMPANY_NAME, type);
   company_name_ = value;
+}
+
+bool CompanyInfo::SetInfoWithVerificationStatus(
+    const AutofillType& type,
+    const std::u16string& value,
+    const std::string& app_locale,
+    const VerificationStatus status) {
+  SetRawInfoWithVerificationStatus(type.GetStorableType(), value, status);
+  return true;
+}
+
+VerificationStatus CompanyInfo::GetVerificationStatus(FieldType type) const {
+  return VerificationStatus::kNoStatus;
 }
 
 bool CompanyInfo::IsValid() const {

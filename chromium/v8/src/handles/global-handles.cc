@@ -304,7 +304,7 @@ class NodeBase {
     DCHECK_EQ(offsetof(NodeBase, flags_), Internals::kNodeFlagsOffset);
   }
 
-#ifdef ENABLE_HANDLE_ZAPPING
+#ifdef ENABLE_GLOBAL_HANDLE_ZAPPING
   ~NodeBase() {
     ClearFields();
     data_.next_free = nullptr;
@@ -876,7 +876,7 @@ void GlobalHandles::PostGarbageCollectionProcessing(
   if (second_pass_callbacks_.empty()) return;
 
   const bool synchronous_second_pass =
-      v8_flags.optimize_for_size || v8_flags.predictable ||
+      isolate_->MemorySaverModeEnabled() || v8_flags.predictable ||
       isolate_->heap()->IsTearingDown() ||
       (gc_callback_flags &
        (kGCCallbackFlagForced | kGCCallbackFlagCollectAllAvailableGarbage |
@@ -939,7 +939,7 @@ void GlobalHandles::IterateAllYoungRoots(RootVisitor* v) {
 DISABLE_CFI_PERF
 void GlobalHandles::ApplyPersistentHandleVisitor(
     v8::PersistentHandleVisitor* visitor, GlobalHandles::Node* node) {
-  v8::Value* value = ToApi<v8::Value>(node->handle());
+  Address* value = node->handle().location();
   visitor->VisitPersistentHandle(
       reinterpret_cast<v8::Persistent<v8::Value>*>(&value),
       node->wrapper_class_id());

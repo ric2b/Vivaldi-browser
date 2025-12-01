@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "content/browser/media/capture/frame_sink_video_capture_device.h"
 
 #include <array>
@@ -13,7 +18,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/shared_memory_mapping.h"
-#include "build/chromeos_buildflags.h"
 #include "components/viz/common/surfaces/region_capture_bounds.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -588,7 +592,7 @@ TEST_F(FrameSinkVideoCaptureDeviceTest, ShutsDownOnFatalError) {
   auto receiver_ptr = std::make_unique<MockVideoFrameReceiver>();
   auto* receiver = receiver_ptr.get();
   Sequence sequence;
-  EXPECT_CALL(*receiver, OnStarted()).InSequence(sequence);
+  EXPECT_CALL(*receiver, OnStarted()).Times(0);
   EXPECT_CALL(*receiver, OnLog(StrNe(""))).InSequence(sequence);
   EXPECT_CALL(*receiver, OnError(_)).InSequence(sequence);
 

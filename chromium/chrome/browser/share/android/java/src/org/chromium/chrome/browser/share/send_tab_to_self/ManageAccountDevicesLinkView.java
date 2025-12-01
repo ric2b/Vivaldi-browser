@@ -29,8 +29,11 @@ import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.signin.base.AccountInfo;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.identitymanager.IdentityManager;
-import org.chromium.ui.text.NoUnderlineClickableSpan;
+import org.chromium.ui.text.ChromeClickableSpan;
 import org.chromium.ui.text.SpanApplier;
+
+// Vivaldi
+import org.chromium.build.BuildConfig;
 
 /** View containing the sharing account's avatar, email and a link to manage its target devices. */
 class ManageAccountDevicesLinkView extends LinearLayout {
@@ -66,6 +69,8 @@ class ManageAccountDevicesLinkView extends LinearLayout {
     public void setProfile(Profile profile) {
         assert profile != null;
         mHasAccountInfo = true;
+        // Vivaldi
+        if (!BuildConfig.IS_VIVALDI)
         onAccountInfoAvailable(getSharingAccountInfo(profile));
     }
 
@@ -103,7 +108,7 @@ class ManageAccountDevicesLinkView extends LinearLayout {
                             new SpanApplier.SpanInfo(
                                     "<link>",
                                     "</link>",
-                                    new NoUnderlineClickableSpan(
+                                    new ChromeClickableSpan(
                                             getContext(), this::openManageDevicesPageInNewTab)));
             linkView.setText(linkText);
             linkView.setMovementMethod(LinkMovementMethod.getInstance());

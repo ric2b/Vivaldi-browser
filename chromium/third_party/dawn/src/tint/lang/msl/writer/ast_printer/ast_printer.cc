@@ -85,6 +85,7 @@
 #include "src/tint/lang/wgsl/ast/transform/simplify_pointers.h"
 #include "src/tint/lang/wgsl/ast/transform/unshadow.h"
 #include "src/tint/lang/wgsl/ast/transform/vectorize_scalar_matrix_initializers.h"
+#include "src/tint/lang/wgsl/ast/transform/vertex_pulling.h"
 #include "src/tint/lang/wgsl/ast/transform/zero_init_workgroup_memory.h"
 #include "src/tint/lang/wgsl/ast/variable_decl_statement.h"
 #include "src/tint/lang/wgsl/helpers/check_supported_extensions.h"
@@ -161,6 +162,15 @@ SanitizedResult Sanitize(const Program& in, const Options& options) {
     manager.Add<ast::transform::Unshadow>();
 
     manager.Add<ast::transform::PromoteSideEffectsToDecl>();
+
+    // VertexPulling must come before Robustness.
+    if (options.vertex_pulling_config) {
+        ast::transform::VertexPulling::Config config;
+        config.pulling_group = options.vertex_pulling_config->pulling_group;
+        config.vertex_state = options.vertex_pulling_config->vertex_state;
+        manager.Add<ast::transform::VertexPulling>();
+        data.Add<ast::transform::VertexPulling::Config>(std::move(config));
+    }
 
     if (!options.disable_robustness) {
         // Robustness must come after PromoteSideEffectsToDecl
@@ -276,7 +286,8 @@ SanitizedResult Sanitize(const Program& in, const Options& options) {
     return result;
 }
 
-ASTPrinter::ASTPrinter(const Program& program) : builder_(ProgramBuilder::Wrap(program)) {}
+ASTPrinter::ASTPrinter(const Program& program, const Options& options)
+    : builder_(ProgramBuilder::Wrap(program)), options_(options) {}
 
 ASTPrinter::~ASTPrinter() = default;
 
@@ -287,7 +298,6 @@ bool ASTPrinter::Generate() {
                 wgsl::Extension::kChromiumDisableUniformityAnalysis,
                 wgsl::Extension::kChromiumExperimentalFramebufferFetch,
                 wgsl::Extension::kChromiumExperimentalPixelLocal,
-                wgsl::Extension::kChromiumExperimentalSubgroups,
                 wgsl::Extension::kChromiumInternalGraphite,
                 wgsl::Extension::kChromiumInternalRelaxedUniformLayout,
                 wgsl::Extension::kClipDistances,
@@ -1075,6 +1085,9 @@ bool ASTPrinter::EmitTypeInitializer(StringStream& out,
             return true;
         },
         [&](const core::type::Struct*) {
+            if (!EmitType(out, type)) {
+                return false;
+            }
             out << "{";
             terminator = "}";
             return true;
@@ -2327,7 +2340,7 @@ bool ASTPrinter::EmitLoop(const ast::LoopStatement* stmt) {
     Line() << "while(true) {";
     {
         ScopedIndent si(this);
-        Line() << IsolateUB();
+        IsolateUBIfNeeded();
         if (!EmitStatements(stmt->body->statements)) {
             return false;
         }
@@ -2401,7 +2414,7 @@ bool ASTPrinter::EmitForLoop(const ast::ForLoopStatement* stmt) {
             DecrementIndent();
             Line() << "}";
         });
-        Line() << IsolateUB();
+        IsolateUBIfNeeded();
 
         if (stmt->condition) {
             current_buffer_->Append(cond_pre);
@@ -2439,7 +2452,7 @@ bool ASTPrinter::EmitForLoop(const ast::ForLoopStatement* stmt) {
         }
         {
             IncrementIndent();
-            Line() << IsolateUB();
+            IsolateUBIfNeeded();
             DecrementIndent();
             auto emit_continuing = [] { return true; };
             TINT_SCOPED_ASSIGNMENT(emit_continuing_, emit_continuing);
@@ -2474,7 +2487,7 @@ bool ASTPrinter::EmitWhile(const ast::WhileStatement* stmt) {
     if (emit_as_loop) {
         Line() << "while(true) {";
         IncrementIndent();
-        Line() << IsolateUB();
+        IsolateUBIfNeeded();
         TINT_DEFER({
             DecrementIndent();
             Line() << "}";
@@ -2489,7 +2502,7 @@ bool ASTPrinter::EmitWhile(const ast::WhileStatement* stmt) {
         // While can be generated.
         Line() << "while(" << cond_buf.str() << ") {";
         IncrementIndent();
-        Line() << IsolateUB();
+        IsolateUBIfNeeded();
         DecrementIndent();
         if (!EmitStatementsWithIndent(stmt->body->statements)) {
             return false;
@@ -3243,6 +3256,12 @@ bool ASTPrinter::EmitLet(const ast::Let* let) {
     out << ";";
 
     return true;
+}
+
+void ASTPrinter::IsolateUBIfNeeded() {
+    if (!options_.disable_robustness) {
+        Line() << IsolateUB();
+    }
 }
 
 std::string ASTPrinter::IsolateUB() {

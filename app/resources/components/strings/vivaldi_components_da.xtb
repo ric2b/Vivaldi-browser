@@ -12,7 +12,7 @@
           <ph name="PROXIES_TITLE" />
           &gt;
           LAN-indstillinger
-          og fravælg "Brug en proxyserver til dit LAN".</translation>
+          og fravælg “Brug en proxyserver til dit LAN”.</translation>
 <translation id="4932161901409251843">Gå til
           Vivaldi-menuen &gt;
           <ph name="SETTINGS_TITLE" />
@@ -20,7 +20,7 @@
           <ph name="ADVANCED_TITLE" />
           &gt;
           <ph name="PROXIES_TITLE" />
-          og sørg for, at din konfiguration er indstillet til "ingen proxy" eller "direkte".</translation>
+          og sørg for, at din konfiguration er indstillet til “ingen proxy” eller “direkte”.</translation>
 <translation id="5248344925342018662">Du ser en sikker Vivaldi-side</translation>
 <translation id="6690242244468452299">Denne side viser oplysninger om dine nylige nedbrud, hvis du aktiverer nedbrudsrapportering.</translation>
 <translation id="7023871570427738255">Gå til
@@ -28,7 +28,7 @@
         <ph name="SETTINGS_TITLE" />
         &gt;
         <ph name="ADVANCED_TITLE" />,
-        og fravælg "<ph name="NO_PREFETCH_DESCRIPTION" />".
+        og fravælg “<ph name="NO_PREFETCH_DESCRIPTION" />”.
         Hvis det ikke løser problemet, anbefaler vi, at du markerer denne indstilling
         igen for bedre ydeevne.</translation>
 <translation id="7496505986576158197">Vivaldi er muliggjort af <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> open source-projektet og anden <ph name="BEGIN_LINK_OSS" />open source-software<ph name="END_LINK_OSS" />.</translation>

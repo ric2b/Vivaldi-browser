@@ -15,7 +15,7 @@
 #ifndef TENSORFLOW_LITE_EXPERIMENTAL_LITERT_VENDORS_C_LITERT_DISPATCH_API_H_
 #define TENSORFLOW_LITE_EXPERIMENTAL_LITERT_VENDORS_C_LITERT_DISPATCH_API_H_
 
-#include <cstddef>
+#include <stddef.h>
 
 #include "tensorflow/lite/experimental/litert/c/litert_common.h"
 #include "tensorflow/lite/experimental/litert/c/litert_event.h"
@@ -207,7 +207,7 @@ typedef struct LiteRtDispatchGraphInterface {
 
 // FIXME See Vulkan and OpenCL extensions.
 typedef struct LiteRtDispatchApi {
-  LiteRtDispatchApiVersion version;
+  LiteRtApiVersion version;
   LiteRtDispatchInterface* interface;
   LiteRtDispatchAsyncInterface* async_interface;
   LiteRtDispatchGraphInterface* graph_interface;

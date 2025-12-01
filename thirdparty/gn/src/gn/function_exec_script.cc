@@ -27,17 +27,17 @@ namespace {
 bool CheckExecScriptPermissions(const BuildSettings* build_settings,
                                 const FunctionCallNode* function,
                                 Err* err) {
-  const SourceFileSet* whitelist = build_settings->exec_script_whitelist();
-  if (!whitelist)
-    return true;  // No whitelist specified, don't check.
+  const SourceFileSet* allowlist = build_settings->exec_script_allowlist();
+  if (!allowlist)
+    return true;  // No allowlist specified, don't check.
 
   LocationRange function_range = function->GetRange();
   if (!function_range.begin().file())
     return true;  // No file, might be some internal thing, implicitly pass.
 
-  if (whitelist->find(function_range.begin().file()->name()) !=
-      whitelist->end())
-    return true;  // Whitelisted, this is OK.
+  if (allowlist->find(function_range.begin().file()->name()) !=
+      allowlist->end())
+    return true;  // allowlisted, this is OK.
 
   // Disallowed case.
   *err = Err(
@@ -53,7 +53,7 @@ bool CheckExecScriptPermissions(const BuildSettings* build_settings,
       "run to compute the value.\n"
       "\n"
       "The allowed callers of exec_script is maintained in the \"//.gn\" file\n"
-      "if you need to modify the whitelist.");
+      "if you need to modify the allowlist.");
   return false;
 }
 

@@ -10,6 +10,7 @@
 
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
+#include "base/metrics/histogram_functions.h"
 #include "build/buildflag.h"
 #include "content/browser/file_system_access/file_system_access_change_source.h"
 #include "content/browser/file_system_access/file_system_access_directory_handle_impl.h"
@@ -140,7 +141,7 @@ bool RenderFrameHostIsActive(
 
 FileSystemAccessObserverObservation::FileSystemAccessObserverObservation(
     FileSystemAccessObserverHost* host,
-    std::unique_ptr<FileSystemAccessWatcherManager::Observation> observation,
+    std::unique_ptr<FileSystemAccessObservationGroup::Observer> observation,
     mojo::PendingRemote<blink::mojom::FileSystemAccessObserver> remote,
     absl::variant<std::unique_ptr<FileSystemAccessDirectoryHandleImpl>,
                   std::unique_ptr<FileSystemAccessFileHandleImpl>> handle)
@@ -185,10 +186,14 @@ const storage::FileSystemURL& FileSystemAccessObserverObservation::handle_url()
 }
 
 void FileSystemAccessObserverObservation::OnChanges(
-    const std::optional<
-        std::list<FileSystemAccessWatcherManager::Observation::Change>>&
+    const std::optional<std::list<FileSystemAccessObservationGroup::Change>>&
         changes_or_error) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  // We should never receive changes for an observation with
+  // `WatchType::kAllBucketFileSystems`.
+  CHECK(observation_->scope().GetWatchType() !=
+        FileSystemAccessWatchScope::WatchType::kAllBucketFileSystems);
 
   if (received_error_while_in_bf_cache_) {
     return;
@@ -250,6 +255,9 @@ void FileSystemAccessObserverObservation::OnChanges(
             FileSystemAccessPermissionContext::HandleType::kFile;
         break;
     }
+    // TODO(crbug.com/377903461): Don't send a changedHandle for `kDisappeared`
+    // or `kUnknown` events. Renderer side, changedHandle() getter returns null
+    // for these cases.
     blink::mojom::FileSystemAccessEntryPtr changed_entry =
         CreateEntryForUrl(*manager, binding_context, handle_state, change.url,
                           changed_entry_handle_type);
@@ -319,10 +327,6 @@ void FileSystemAccessObserverObservation::OnChanges(
     }
 
     observation_root_disappeared =
-        (observation_->scope().GetWatchType() ==
-             FileSystemAccessWatchScope::WatchType::kDirectoryRecursive ||
-         observation_->scope().GetWatchType() ==
-             FileSystemAccessWatchScope::WatchType::kDirectoryNonRecursive) &&
         mojo_change_type->is_disappeared() &&
         observation_->scope().root_url() == change.url;
 
@@ -375,6 +379,8 @@ void FileSystemAccessObserverObservation::HandleError() {
       handle_base.handle_state();
   FileSystemAccessManagerImpl* manager = handle_base.manager();
   const storage::FileSystemURL& handle_url = handle_base.url();
+  // TODO(crbug.com/377903461): Don't send changedHandle for `kErrored` events.
+  // Renderer side, changedHandle() getter returns null for this case.
   mojo_changes.emplace_back(blink::mojom::FileSystemAccessChange::New(
       blink::mojom::FileSystemAccessChangeMetadata::New(
           CreateEntryForUrl(*manager, binding_context, handle_state, handle_url,

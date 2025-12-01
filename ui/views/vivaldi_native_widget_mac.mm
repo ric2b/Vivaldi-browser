@@ -36,7 +36,7 @@ class VivaldiNativeWidgetMac;
 - (void)stopObserving;
 - (void)onWindowDidChangeScreen:(NSNotification*)notification;
 - (void)onWindowDidResize:(NSNotification*)notification;
-- (void)onWindowDidDeminiaturize:(NSNotification*)notification;
+- (void)onWindowOccusionStateChanged:(NSNotification*)notification;
 - (void)onSetControlButtonsPadding:(NSNotification*)notification;
 @end
 
@@ -184,8 +184,8 @@ bool ScreenHasNotch(NSScreen* screen) {
              object:ns_window];
     [[NSNotificationCenter defaultCenter]
         addObserver:self
-           selector:@selector(onWindowDidDeminiaturize:)
-               name:NSWindowDidDeminiaturizeNotification
+           selector:@selector(onWindowOccusionStateChanged:)
+               name:NSWindowDidChangeOcclusionStateNotification
              object:ns_window];
     [[NSNotificationCenter defaultCenter]
         addObserver:self
@@ -231,7 +231,7 @@ bool ScreenHasNotch(NSScreen* screen) {
   native_widget_->RedrawTrafficLight();
 }
 
-- (void)onWindowDidDeminiaturize:(NSNotification*)notification {
+- (void)onWindowOccusionStateChanged:(NSNotification*)notification {
   native_widget_->RedrawTrafficLight();
 }
 
@@ -387,6 +387,10 @@ void VivaldiNativeWidgetMac::RedrawTrafficLight() {
     return;
 
   NSWindow* window = GetNativeWindow().GetNativeNSWindow();
+  if (!(window.occlusionState & NSWindowOcclusionStateVisible)) {
+    return;
+  }
+
   NSButton* close = [window standardWindowButton:NSWindowCloseButton];
   NSButton* miniaturize =
       [window standardWindowButton:NSWindowMiniaturizeButton];

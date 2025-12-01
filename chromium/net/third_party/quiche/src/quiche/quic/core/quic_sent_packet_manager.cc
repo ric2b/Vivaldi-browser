@@ -137,10 +137,6 @@ void QuicSentPacketManager::SetFromConfig(const QuicConfig& config) {
   }
 
   // Configure congestion control.
-  if (perspective == Perspective::IS_CLIENT &&
-      config.HasClientRequestedIndependentOption(kPRGC, perspective)) {
-    SetSendAlgorithm(kPragueCubic);
-  }
   if (config.HasClientRequestedIndependentOption(kTBBR, perspective)) {
     SetSendAlgorithm(kBBR);
   }
@@ -156,6 +152,13 @@ void QuicSentPacketManager::SetFromConfig(const QuicConfig& config) {
              (GetQuicReloadableFlag(quic_default_to_bbr) &&
               config.HasClientRequestedIndependentOption(kQBIC, perspective))) {
     SetSendAlgorithm(kCubicBytes);
+  }
+  if (perspective == Perspective::IS_CLIENT) {
+    if (config.HasClientRequestedIndependentOption(kPRGC, perspective)) {
+      SetSendAlgorithm(kPragueCubic);
+    } else if (config.HasClientRequestedIndependentOption(kCQBC, perspective)) {
+      SetSendAlgorithm(kCubicBytes);
+    }
   }
 
   // Initial window.
@@ -383,7 +386,6 @@ void QuicSentPacketManager::MaybeInvokeCongestionEvent(
   // is necessary.
   QuicPacketCount newly_acked_ect = 0, newly_acked_ce = 0;
   if (ecn_counts.has_value()) {
-    QUICHE_DCHECK(GetQuicRestartFlag(quic_support_ect1));
     newly_acked_ect = ecn_counts->ect1 - previous_counts.ect1;
     if (newly_acked_ect == 0) {
       newly_acked_ect = ecn_counts->ect0 - previous_counts.ect0;
@@ -573,10 +575,10 @@ void QuicSentPacketManager::RecordOneSpuriousRetransmission(
 }
 
 void QuicSentPacketManager::MarkPacketHandled(QuicPacketNumber packet_number,
-                                              QuicTransmissionInfo* info,
                                               QuicTime ack_receive_time,
                                               QuicTime::Delta ack_delay_time,
-                                              QuicTime receive_timestamp) {
+                                              QuicTime receive_timestamp,
+                                              QuicTransmissionInfo*& info) {
   if (info->has_ack_frequency) {
     for (const auto& frame : info->retransmittable_frames) {
       if (frame.type == ACK_FREQUENCY_FRAME) {
@@ -587,12 +589,17 @@ void QuicSentPacketManager::MarkPacketHandled(QuicPacketNumber packet_number,
   // Try to aggregate acked stream frames if acked packet is not a
   // retransmission.
   if (info->transmission_type == NOT_RETRANSMISSION) {
-    unacked_packets_.MaybeAggregateAckedStreamFrame(*info, ack_delay_time,
-                                                    receive_timestamp);
+    unacked_packets_.MaybeAggregateAckedStreamFrame(
+        packet_number, ack_delay_time, receive_timestamp, info);
   } else {
     unacked_packets_.NotifyAggregatedStreamFrameAcked(ack_delay_time);
+    if (unacked_packets_.update_transmission_info_on_frame_acked()) {
+      QUIC_RELOADABLE_FLAG_COUNT_N(quic_update_transmission_info_on_frame_acked,
+                                   1, 3);
+      info = unacked_packets_.GetMutableTransmissionInfo(packet_number);
+    }
     const bool new_data_acked = unacked_packets_.NotifyFramesAcked(
-        *info, ack_delay_time, receive_timestamp);
+        packet_number, ack_delay_time, receive_timestamp, info);
     if (!new_data_acked && info->transmission_type != NOT_RETRANSMISSION) {
       // Record as a spurious retransmission if this packet is a
       // retransmission and no new data gets acked.
@@ -1451,9 +1458,9 @@ AckResult QuicSentPacketManager::OnAckFrameEnd(
     }
     unacked_packets_.MaybeUpdateLargestAckedOfPacketNumberSpace(
         packet_number_space, acked_packet.packet_number);
-    MarkPacketHandled(acked_packet.packet_number, info, ack_receive_time,
+    MarkPacketHandled(acked_packet.packet_number, ack_receive_time,
                       last_ack_frame_.ack_delay_time,
-                      acked_packet.receive_timestamp);
+                      acked_packet.receive_timestamp, info);
   }
   // Copy raw ECN counts to last_ack_frame_ so it is logged properly. Validated
   // ECN counts are stored in valid_ecn_counts, and the congestion controller
@@ -1461,8 +1468,7 @@ AckResult QuicSentPacketManager::OnAckFrameEnd(
   last_ack_frame_.ecn_counters = ecn_counts;
   // Validate ECN feedback.
   std::optional<QuicEcnCounts> valid_ecn_counts;
-  if (GetQuicRestartFlag(quic_support_ect1)) {
-    QUIC_RESTART_FLAG_COUNT_N(quic_support_ect1, 1, 9);
+  if (ecn_queried_) {
     if (IsEcnFeedbackValid(acked_packet_number_space, ecn_counts,
                            newly_acked_ect0, newly_acked_ect1)) {
       valid_ecn_counts = ecn_counts;

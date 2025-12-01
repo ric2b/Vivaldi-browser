@@ -11,6 +11,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 namespace base {
@@ -71,7 +72,6 @@ void ConstContainerToMutableConversionDisallowed() {
   const std::vector<int> v = {1, 2, 3};
   span<int> span1(v);             // expected-error {{no matching constructor for initialization of 'span<int>'}}
   span<int, 2u> span2({1, 2});    // expected-error {{no matching constructor for initialization of 'span<int, 2U>'}}
-  span<int> span3(make_span(v));  // expected-error {{no matching constructor for initialization of 'span<int>'}}
 }
 
 // A dynamic const container should not be implicitly convertible to a static span.
@@ -97,9 +97,6 @@ void StdSetConversionDisallowed() {
   span<int> span1(set.begin(), 0u);                // expected-error {{no matching constructor for initialization of 'span<int>'}}
   span<int> span2(set.begin(), set.end());         // expected-error {{no matching constructor for initialization of 'span<int>'}}
   span<int> span3(set);                            // expected-error {{no matching constructor for initialization of 'span<int>'}}
-  auto span4 = make_span(set.begin(), 0u);         // expected-error@*:* {{no matching function for call to 'make_span'}}
-  auto span5 = make_span(set.begin(), set.end());  // expected-error@*:* {{no matching function for call to 'make_span'}}
-  auto span6 = make_span(set);                     // expected-error@*:* {{no matching function for call to 'make_span'}}
 }
 
 // Static views of spans with static extent must not exceed the size.
@@ -136,12 +133,12 @@ void SwapWithDifferentExtentsDisallowed() {
 // as_writable_bytes should not be possible for a const container.
 void AsWritableBytesWithConstContainerDisallowed() {
   const std::vector<int> v = {1, 2, 3};
-  span<uint8_t> bytes = as_writable_bytes(make_span(v));  // expected-error {{no matching function for call to 'as_writable_bytes'}}
+  span<uint8_t> bytes = as_writable_bytes(span(v));  // expected-error {{no matching function for call to 'as_writable_bytes'}}
 }
 
 void ConstVectorDeducesAsConstSpan() {
   const std::vector<int> v;
-  span<int> s = make_span(v);  // expected-error-re@*:* {{no viable conversion from 'span<{{.*}}, [...]>' to 'span<int, [...]>'}}
+  span<int> s = span(v);  // expected-error-re@*:* {{no viable conversion from 'span<{{.*}}, [...]>' to 'span<int, [...]>'}}
 }
 
 // A span can only be constructed from a range rvalue when the element type is
@@ -158,22 +155,6 @@ void SpanFromNonConstRvalueRange() {
 
   std::vector<int> vec = {1, 2, 3, 4, 5};
   [[maybe_unused]] auto d = span(std::move(vec));  // expected-error {{no matching conversion}}
-}
-
-// make_span can only be called on a range rvalue when the element type is
-// read-only or the range is a borrowed range.
-void MakeSpanFromNonConstRvalueRange() {
-  std::array<bool, 3> arr = {true, false, true};
-  [[maybe_unused]] auto a = make_span(std::move(arr));  // expected-error {{no matching function for call to 'make_span'}}
-
-  std::string str = "ok";
-  [[maybe_unused]] auto b = make_span(std::move(str));  // expected-error {{no matching function for call to 'make_span'}}
-
-  std::u16string str16 = u"ok";
-  [[maybe_unused]] auto c = make_span(std::move(str16));  // expected-error {{no matching function for call to 'make_span'}}
-
-  std::vector<int> vec = {1, 2, 3, 4, 5};
-  [[maybe_unused]] auto d = make_span(std::move(vec));  // expected-error {{no matching function for call to 'make_span'}}
 }
 
 void Dangling() {
@@ -246,19 +227,18 @@ void NotSizeTSize() {
   // we get assertion failures below where we expect.
   enum Length1 { kSize1 = -1 };
   enum Length2 { kSize2 = -1 };
-  auto s1 = make_span(vector.data(), kSize1);  // expected-error@*:* {{The source type is out of range for the destination type}}
-  span s2(vector.data(), kSize2);              // expected-error@*:* {{The source type is out of range for the destination type}}
+  span s(vector.data(), kSize2);  // expected-error@*:* {{no matching function for call to 'strict_cast'}}
 }
 
 void BadConstConversionsWithStdSpan() {
   int kData[] = {10, 11, 12};
   {
-    base::span<const int, 3u> fixed_base_span(kData);
+    span<const int, 3u> fixed_base_span(kData);
     std::span<int, 3u> s(fixed_base_span);  // expected-error {{no matching constructor}}
   }
   {
     std::span<const int, 3u> fixed_std_span(kData);
-    base::span<int, 3u> s(fixed_std_span);  // expected-error {{no matching constructor}}
+    span<int, 3u> s(fixed_std_span);  // expected-error {{no matching constructor}}
   }
 }
 
@@ -270,22 +250,27 @@ void FromVolatileArrayDisallowed() {
 void FixedSizeCopyTooSmall() {
   const int src[] = {1, 2, 3};
   int dst[2];
-  base::span(dst).copy_from(base::span(src));  // expected-error@*:* {{no matching member function}}
+  span(dst).copy_from(span(src));  // expected-error@*:* {{no matching member function}}
 
-  base::span(dst).copy_from(src);  // expected-error@*:* {{no matching member function}}
+  span(dst).copy_from(src);  // expected-error@*:* {{no matching member function}}
 
-  base::span(dst).copy_prefix_from(src);  // expected-error@*:* {{no matching member function}}
+  span(dst).copy_prefix_from(src);  // expected-error@*:* {{no matching member function}}
 }
 
 void FixedSizeCopyFromNonSpan() {
   int dst[2];
   // The copy_from() template overload is not selected.
-  base::span(dst).copy_from(5);  // expected-error@*:* {{no matching member function for call to 'copy_from'}}
+  span(dst).copy_from(5);  // expected-error@*:* {{no matching member function for call to 'copy_from'}}
 }
 
 void FixedSizeSplitAtOutOfBounds() {
   const int arr[] = {1, 2, 3};
-  base::span(arr).split_at<4u>();  // expected-error@*:* {{no matching member function for call to 'split_at'}}
+  span(arr).split_at<4u>();  // expected-error@*:* {{no matching member function for call to 'split_at'}}
+}
+
+void DerefEmpty() {
+  constexpr span<int, 0> kEmptySpan;
+  [[maybe_unused]] int i = kEmptySpan[0];  // expected-error {{no viable overloaded operator[] for type 'const span<int, 0>'}}
 }
 
 void FromRefLifetimeBoundErrorForIntLiteral() {
@@ -354,22 +339,58 @@ void CompareNotComparable() {
   (void)(span(non_arr) == span(non_arr));  // expected-error@*:* {{invalid operands to binary expression}}
 }
 
+void ByteConversionsFromNonUnique() {
+  // Test that byte span constructions from a type the does not meet
+  // `std::has_unique_object_representations_v<>` fail by default.
+  struct S {
+    float f = 0;
+  };
+  static_assert(!std::has_unique_object_representations_v<S>);
+
+  // `as_[writable_](bytes,chars)()`
+  S arr[] = {{1}, {2}, {3}};
+  span sp(arr);
+  as_bytes(sp);           // expected-error {{no matching function for call}}
+  as_writable_bytes(sp);  // expected-error {{no matching function for call}}
+  as_chars(sp);           // expected-error {{no matching function for call}}
+  as_writable_chars(sp);  // expected-error {{no matching function for call}}
+
+  // `byte_span_from_ref()`
+  const S const_obj;
+  S obj;
+  // Read-only
+  byte_span_from_ref(const_obj);  // expected-error {{no matching function for call}}
+  // Writable
+  byte_span_from_ref(obj);        // expected-error {{no matching function for call}}
+
+  // `as_[writable_]byte_span()`
+  std::vector<S> vec;
+  // Non-borrowed range
+  as_byte_span(std::vector<S>());           // expected-error {{no matching function for call}}
+  // Borrowed range
+  as_byte_span(vec);                        // expected-error {{no matching function for call}}
+  as_writable_byte_span(vec);               // expected-error {{no matching function for call}}
+  // Array
+  as_byte_span(arr);                        // expected-error {{no matching function for call}}
+  as_writable_byte_span(arr);               // expected-error {{no matching function for call}}
+}
+
 void AsStringViewNotBytes() {
   const int arr[] = {1, 2, 3};
-  as_string_view(base::span(arr));  // expected-error@*:* {{no matching function for call to 'as_string_view'}}
+  as_string_view(span(arr));  // expected-error@*:* {{no matching function for call to 'as_string_view'}}
 }
 
 void SpanFromCstrings() {
   static const char with_null[] = { 'a', 'b', '\0' };
-  base::span_from_cstring(with_null);
+  span_from_cstring(with_null);
 
   // Can't call span_from_cstring and friends with a non-null-terminated char
   // array.
   static const char no_null[] = { 'a', 'b' };
-  base::span_from_cstring(no_null);  // expected-error@*:* {{no matching function for call to 'span_from_cstring'}}
-  base::span_with_nul_from_cstring(no_null);  // expected-error@*:* {{no matching function for call to 'span_with_nul_from_cstring'}}
-  base::byte_span_from_cstring(no_null);  // expected-error@*:* {{no matching function for call to 'byte_span_from_cstring'}}
-  base::byte_span_with_nul_from_cstring(no_null);  // expected-error@*:* {{no matching function for call to 'byte_span_with_nul_from_cstring'}}
+  span_from_cstring(no_null);  // expected-error@*:* {{no matching function for call to 'span_from_cstring'}}
+  span_with_nul_from_cstring(no_null);  // expected-error@*:* {{no matching function for call to 'span_with_nul_from_cstring'}}
+  byte_span_from_cstring(no_null);  // expected-error@*:* {{no matching function for call to 'byte_span_from_cstring'}}
+  byte_span_with_nul_from_cstring(no_null);  // expected-error@*:* {{no matching function for call to 'byte_span_with_nul_from_cstring'}}
 }
 
 }  // namespace base

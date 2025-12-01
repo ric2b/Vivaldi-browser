@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "content/browser/speech/soda_speech_recognition_engine_impl.h"
 
 #include <string.h>
@@ -79,6 +84,7 @@ bool SodaSpeechRecognitionEngineImpl::Initialize() {
       media::mojom::RecognizerClientType::kLiveCaption;
   options->skip_continuously_empty_audio = true;
   options->language = config_.language;
+  options->recognition_context = config_.recognition_context;
 
   speech_recognition_context_->BindRecognizer(
       speech_recognition_recognizer_.BindNewPipeAndPassReceiver(),
@@ -102,6 +108,14 @@ void SodaSpeechRecognitionEngineImpl::StartRecognition() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(main_sequence_checker_);
 
   is_start_recognition_ = true;
+}
+
+void SodaSpeechRecognitionEngineImpl::UpdateRecognitionContext(
+    const media::SpeechRecognitionRecognitionContext& recognition_context) {
+  if (speech_recognition_recognizer_.is_bound()) {
+    speech_recognition_recognizer_->UpdateRecognitionContext(
+        recognition_context);
+  }
 }
 
 void SodaSpeechRecognitionEngineImpl::EndRecognition() {
@@ -157,14 +171,16 @@ void SodaSpeechRecognitionEngineImpl::OnSpeechRecognitionRecognitionEvent(
 }
 
 void SodaSpeechRecognitionEngineImpl::OnSpeechRecognitionError() {
-  Abort(media::mojom::SpeechRecognitionErrorCode::kNoSpeech);
+  Abort(media::mojom::SpeechRecognitionErrorCode::kAborted);
 }
 
 void SodaSpeechRecognitionEngineImpl::OnLanguageIdentificationEvent(
     media::mojom::LanguageIdentificationEventPtr event) {}
 
 void SodaSpeechRecognitionEngineImpl::OnSpeechRecognitionStopped() {
-  Abort(media::mojom::SpeechRecognitionErrorCode::kAborted);
+  delegate_->OnSpeechRecognitionEngineResults(
+      std::vector<media::mojom::WebSpeechRecognitionResultPtr>());
+  Abort(media::mojom::SpeechRecognitionErrorCode::kNone);
 }
 
 void SodaSpeechRecognitionEngineImpl::

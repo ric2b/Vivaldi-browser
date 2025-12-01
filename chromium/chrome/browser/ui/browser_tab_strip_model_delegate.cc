@@ -15,7 +15,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/reading_list/reading_list_model_factory.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
-#include "chrome/browser/task_manager/web_contents_tags.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -89,10 +88,12 @@ Browser* BrowserTabStripModelDelegate::CreateNewStripWithTabs(
 
     // Enforce that there is an active tab in the strip at all times by forcing
     // the first web contents to be marked as active.
-    if (i == 0)
+    if (i == 0) {
       item.add_types |= AddTabTypes::ADD_ACTIVE;
+    }
 
-    content::WebContents* const raw_web_contents = item.tab.get()->contents();
+    content::WebContents* const raw_web_contents =
+        item.tab.get()->GetContents();
     new_model->InsertDetachedTabAt(static_cast<int>(i), std::move(item.tab),
                                    item.add_types);
     // Make sure the loading state is updated correctly, otherwise the throbber
@@ -108,9 +109,6 @@ Browser* BrowserTabStripModelDelegate::CreateNewStripWithTabs(
 void BrowserTabStripModelDelegate::WillAddWebContents(
     content::WebContents* contents) {
   TabHelpers::AttachTabHelpers(contents);
-
-  // Make the tab show up in the task manager.
-  task_manager::WebContentsTags::CreateForTabContents(contents);
 }
 
 int BrowserTabStripModelDelegate::GetDragActions() const {
@@ -160,15 +158,17 @@ void BrowserTabStripModelDelegate::MoveTabsToNewWindow(
 void BrowserTabStripModelDelegate::MoveGroupToNewWindow(
     const tab_groups::TabGroupId& group) {
   TabGroupModel* group_model = browser_->tab_strip_model()->group_model();
-  if (!group_model)
+  if (!group_model) {
     return;
+  }
 
   gfx::Range range = group_model->GetTabGroup(group)->ListTabs();
 
   std::vector<int> indices;
   indices.reserve(range.length());
-  for (auto i = range.start(); i < range.end(); ++i)
+  for (auto i = range.start(); i < range.end(); ++i) {
     indices.push_back(i);
+  }
 
   // chrome:: to disambiguate the free function from
   // BrowserTabStripModelDelegate::MoveTabsToNewWindow().
@@ -177,8 +177,9 @@ void BrowserTabStripModelDelegate::MoveGroupToNewWindow(
 
 std::optional<SessionID> BrowserTabStripModelDelegate::CreateHistoricalTab(
     content::WebContents* contents) {
-  if (!BrowserSupportsHistoricalEntries())
+  if (!BrowserSupportsHistoricalEntries()) {
     return std::nullopt;
+  }
 
   sessions::TabRestoreService* service =
       TabRestoreServiceFactory::GetForProfile(browser_->profile());
@@ -194,8 +195,9 @@ std::optional<SessionID> BrowserTabStripModelDelegate::CreateHistoricalTab(
 
 void BrowserTabStripModelDelegate::CreateHistoricalGroup(
     const tab_groups::TabGroupId& group) {
-  if (!BrowserSupportsHistoricalEntries())
+  if (!BrowserSupportsHistoricalEntries()) {
     return;
+  }
 
   sessions::TabRestoreService* service =
       TabRestoreServiceFactory::GetForProfile(browser_->profile());
@@ -259,8 +261,9 @@ void BrowserTabStripModelDelegate::GroupCloseStopped(
     const tab_groups::TabGroupId& group) {
   sessions::TabRestoreService* service =
       TabRestoreServiceFactory::GetForProfile(browser_->profile());
-  if (service)
+  if (service) {
     service->GroupCloseStopped(group);
+  }
 }
 
 bool BrowserTabStripModelDelegate::RunUnloadListenerBeforeClosing(
@@ -280,8 +283,9 @@ bool BrowserTabStripModelDelegate::ShouldDisplayFavicon(
       security_interstitial_tab_helper = security_interstitials::
           SecurityInterstitialTabHelper::FromWebContents(contents);
   if (security_interstitial_tab_helper &&
-      security_interstitial_tab_helper->IsDisplayingInterstitial())
+      security_interstitial_tab_helper->IsDisplayingInterstitial()) {
     return false;
+  }
 
   return browser_->ShouldDisplayFavicon(contents);
 }
@@ -294,8 +298,9 @@ void BrowserTabStripModelDelegate::AddToReadLater(
     content::WebContents* web_contents) {
   ReadingListModel* model =
       ReadingListModelFactory::GetForBrowserContext(browser_->profile());
-  if (!model || !model->loaded())
+  if (!model || !model->loaded()) {
     return;
+  }
 
   chrome::MoveTabToReadLater(browser_, web_contents);
 }
@@ -333,10 +338,9 @@ BrowserTabStripModelDelegate::GetBrowserWindowInterface() {
 void BrowserTabStripModelDelegate::OnGroupsDestruction(
     const std::vector<tab_groups::TabGroupId>& group_ids,
     base::OnceCallback<void()> close_callback,
-    bool is_bulk_operation) {
-  if (is_bulk_operation && tab_groups::IsTabGroupsSaveV2Enabled()) {
-    // If this is a bulk operation, close the groups rather than delete
-    // them to retain the saved group.
+    bool delete_groups) {
+  if (!delete_groups && tab_groups::IsTabGroupsSaveV2Enabled()) {
+    // Close the groups rather than delete them to retain the saved group.
     for (auto group_id : group_ids) {
       tab_groups::SavedTabGroupUtils::RemoveGroupFromTabstrip(browser_,
                                                               group_id);
@@ -344,9 +348,8 @@ void BrowserTabStripModelDelegate::OnGroupsDestruction(
     std::move(close_callback).Run();
   } else {
     tab_groups::SavedTabGroupUtils::MaybeShowSavedTabGroupDeletionDialog(
-        browser_,
-        tab_groups::DeletionDialogController::DialogType::CloseTabAndDelete,
-        group_ids, std::move(close_callback));
+        browser_, tab_groups::GroupDeletionReason::ClosedLastTab, group_ids,
+        std::move(close_callback));
   }
 }
 
@@ -354,9 +357,8 @@ void BrowserTabStripModelDelegate::OnRemovingAllTabsFromGroups(
     const std::vector<tab_groups::TabGroupId>& group_ids,
     base::OnceCallback<void()> callback) {
   tab_groups::SavedTabGroupUtils::MaybeShowSavedTabGroupDeletionDialog(
-      browser_,
-      tab_groups::DeletionDialogController::DialogType::RemoveTabAndDelete,
-      group_ids, std::move(callback));
+      browser_, tab_groups::GroupDeletionReason::UngroupedLastTab, group_ids,
+      std::move(callback));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

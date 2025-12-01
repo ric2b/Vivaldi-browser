@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <algorithm>
 #include <iterator>
 #include <optional>
 #include <string>
@@ -15,13 +16,11 @@
 
 #include "base/check.h"
 #include "base/containers/flat_tree.h"
-#include "base/feature_list.h"
 #include "base/functional/overloaded.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/numerics/checked_math.h"
 #include "base/numerics/clamped_math.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -32,13 +31,11 @@
 #include "components/attribution_reporting/aggregatable_values.h"
 #include "components/attribution_reporting/aggregation_keys.h"
 #include "components/attribution_reporting/constants.h"
-#include "components/attribution_reporting/features.h"
 #include "components/attribution_reporting/filters.h"
 #include "components/attribution_reporting/source_registration_time_config.mojom.h"
 #include "components/attribution_reporting/source_type.mojom-forward.h"
 #include "components/attribution_reporting/suitable_origin.h"
 #include "content/browser/aggregation_service/aggregatable_report.h"
-#include "content/browser/aggregation_service/aggregation_service_features.h"
 #include "content/browser/attribution_reporting/aggregatable_named_budget_pair.h"
 #include "content/browser/attribution_reporting/attribution_info.h"
 #include "content/browser/attribution_reporting/attribution_report.h"
@@ -60,14 +57,6 @@ std::string SerializeTimeRoundedDownToWholeDayInSeconds(base::Time time) {
       attribution_reporting::RoundDownToWholeDaySinceUnixEpoch(time);
   return base::NumberToString(rounded.InMillisecondsSinceUnixEpoch() /
                               base::Time::kMillisecondsPerSecond);
-}
-
-bool IsAggregatableFilteringIdsEnabled() {
-  return base::FeatureList::IsEnabled(
-             attribution_reporting::features::
-                 kAttributionReportingAggregatableFilteringIds) &&
-         base::FeatureList::IsEnabled(
-             kPrivacySandboxAggregationServiceFilteringIds);
 }
 
 }  // namespace
@@ -109,7 +98,6 @@ CreateAggregatableHistogram(
 
   std::vector<blink::mojom::AggregatableReportHistogramContribution>
       contributions;
-  const bool filtering_id_enabled = IsAggregatableFilteringIdsEnabled();
   for (const auto& aggregatable_value : aggregatable_values) {
     if (source_filter_data.Matches(source_type, source_time, trigger_time,
                                    aggregatable_value.filters())) {
@@ -121,14 +109,9 @@ CreateAggregatableHistogram(
           continue;
         }
 
-        std::optional<uint64_t> filtering_id;
-        if (filtering_id_enabled) {
-          filtering_id = value->second.filtering_id();
-        }
-
         contributions.emplace_back(
             key, base::checked_cast<int32_t>(value->second.value()),
-            filtering_id);
+            value->second.filtering_id());
       }
       break;
     }
@@ -209,19 +192,6 @@ std::optional<AggregatableReportRequest> CreateAggregatableReportRequest(
   SetAttributionDestination(
       additional_fields, net::SchemefulSite(attribution_info.context_origin));
 
-  std::optional<size_t> filtering_id_max_bytes;
-  if (IsAggregatableFilteringIdsEnabled()) {
-    filtering_id_max_bytes = aggregatable_data->aggregatable_trigger_config()
-                                 .aggregatable_filtering_id_max_bytes()
-                                 .value();
-  } else {
-    // We clear the filtering ids to avoid hitting `FilteringIdsFitInMaxBytes()`
-    // invalidly in case that filtering ids were unexpectedly set in the db for
-    // some reason like db corruption.
-    for (auto& contribution : contributions) {
-      contribution.filtering_id.reset();
-    }
-  }
   return AggregatableReportRequest::Create(
       AggregationServicePayloadContents(
           AggregationServicePayloadContents::Operation::kHistogram,
@@ -233,14 +203,13 @@ std::optional<AggregatableReportRequest> CreateAggregatableReportRequest(
               : std::nullopt,
           /*max_contributions_allowed=*/
           attribution_reporting::kMaxAggregationKeysPerSource,
-          filtering_id_max_bytes),
+          aggregatable_data->aggregatable_trigger_config()
+              .aggregatable_filtering_id_max_bytes()
+              .value()),
       AggregatableReportSharedInfo(
           report.initial_report_time(), report.external_report_id(),
           report.reporting_origin(), debug_mode, std::move(additional_fields),
-          filtering_id_max_bytes.has_value()
-              ? AttributionReport::AggregatableData::
-                    kVersionWithFlexibleContributionFiltering
-              : AttributionReport::AggregatableData::kVersion,
+          AttributionReport::AggregatableData::kVersion,
           AttributionReport::AggregatableData::kApiIdentifier),
       // The returned request cannot be serialized due to the null `delay_type`.
       /*delay_type=*/std::nullopt);

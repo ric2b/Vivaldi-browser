@@ -79,6 +79,13 @@
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
+  "directMatch": {
+    "channel": "stable",
+    "extension_types": [ "platform_app" ],
+    "allowlist": [
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
+    ]
+  },
   "editcommand": {
     "channel": "stable",
     "extension_types": [ "platform_app" ],
@@ -178,6 +185,14 @@
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
+  "protonvpn": {
+    "channel": "stable",
+    "extension_types": [ "extension", "platform_app" ],
+    "allowlist": [
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C", // Vivaldi
+      "85AEFA346C73596D7164DC4A16DC7F38BD1A0A46"  // ProtonVPN
+    ]
+  },
   "readingListPrivate": {
     "channel": "stable",
     "extension_types": [ "platform_app" ],
@@ -239,7 +254,7 @@
     "extension_types": [ "platform_app", "extension" ],
     "allowlist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C", // Vivaldi
-      "E2F7DC11CCD38036C3420F4755A6AD7363C9034F"  // theme store extension
+      "E2F7DC11CCD38036C3420F4755A6AD7363C9034F" // theme store extension
     ]
   },
   "thumbnails": {

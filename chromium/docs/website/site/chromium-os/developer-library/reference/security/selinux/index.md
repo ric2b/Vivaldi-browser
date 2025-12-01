@@ -1021,8 +1021,7 @@ By looking at the log, the main thinkabout would be:
 crash.corp. Usually it stores data like core dumps and metadata when a program
 has crashed. But some other anomalies (e.g. selinux violation, service death,
 kernel warnings, etc) also take advantage of the existing crash reporting
-mechanism. See [Crash
-Reporter](https://www.chromium.org/chromium-os/packages/crash-reporting/faq#TOC-Crash-Reporter)
+mechanism. See [Crash Reporter](/chromium-os/packages/crash-reporting/faq#TOC-Crash-Reporter)
 to know more about how crash reporting works.
 
 
@@ -1166,11 +1165,11 @@ writing policies.
 
 For Googlers, there's a nice introduction presentation slides how debugging
 SELinux policies to refer to though it's for Android, at
-[go/sepolicy-debug](https://goto.google.com/sepolicy-debug)
+[go/sepolicy-debug](http://go/sepolicy-debug)
 
 [SELinux talk]: https://drive.google.com/file/d/1zT0IH3fg2KoTx0phU78aj6pEscHPIqAq/view
-[File Contexts]: https://www.chromium.org/chromium-os/developer-library/reference/security/selinux/#file-contexts
-[How to read the denials in audit logs]: https://www.chromium.org/chromium-os/developer-library/reference/security/selinux/#how-to-read-the-denials-in-audit-logs
+[File Contexts]: /chromium-os/developer-library/reference/security/selinux/#file-contexts
+[How to read the denials in audit logs]: /chromium-os/developer-library/reference/security/selinux/#how-to-read-the-denials-in-audit-logs
 
 [base/imported/global_macros]: https://source.corp.google.com/chromeos_public/src/platform2/sepolicy/policy/base/imported/global_macros
 [base/imported/te_macros]: https://source.corp.google.com/chromeos_public/src/platform2/sepolicy/policy/base/imported/te_macros

@@ -6,6 +6,7 @@
 
 #import "base/functional/bind.h"
 #import "base/memory/raw_ptr.h"
+#import "base/metrics/user_metrics.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/plus_addresses/features.h"
 #import "components/plus_addresses/metrics/plus_address_metrics.h"
@@ -18,6 +19,26 @@
 #import "ios/chrome/browser/url_loading/model/url_loading_params.h"
 #import "url/gurl.h"
 #import "url/origin.h"
+
+namespace {
+
+using PlusAddressModalCompletionStatus =
+    plus_addresses::metrics::PlusAddressModalCompletionStatus;
+using PlusAddressCreationBottomSheetErrorType =
+    plus_addresses::PlusAddressCreationBottomSheetErrorType;
+
+PlusAddressCreationBottomSheetErrorType GetCreationErrorType(
+    plus_addresses::PlusAddressRequestError request_error) {
+  if (request_error.IsQuotaError()) {
+    return PlusAddressCreationBottomSheetErrorType::kCreateQuota;
+  } else if (request_error.IsTimeoutError()) {
+    return PlusAddressCreationBottomSheetErrorType::kCreateTimeout;
+  } else {
+    return PlusAddressCreationBottomSheetErrorType::kCreateGeneric;
+  }
+}
+
+}  // namespace
 
 enum class PlusAddressAction {
   kPlusAddressActionReserve = 0,
@@ -88,6 +109,7 @@ enum class PlusAddressAction {
         handlePlusAddressResult:maybePlusProfile
                       forAction:PlusAddressAction::kPlusAddressActionConfirm];
   });
+
   _plusAddressService->ConfirmPlusAddress(
       _mainFrameOrigin,
       plus_addresses::PlusAddress(
@@ -131,14 +153,14 @@ enum class PlusAddressAction {
 }
 
 - (BOOL)shouldShowNotice {
-  return !_plusAddressSettingService->GetHasAcceptedNotice() &&
-         base::FeatureList::IsEnabled(
-             plus_addresses::features::kPlusAddressUserOnboardingEnabled);
+  return !_plusAddressSettingService->GetHasAcceptedNotice();
 }
 
 #pragma mark - PlusAddressErrorAlertDelegate
 
 - (void)didAcceptAffiliatedPlusAddressSuggestion {
+  base::RecordAction(
+      base::UserMetricsAction("PlusAddresses.AffiliationErrorFilledExisting"));
   [_delegate runAutofillCallback:_reservedPlusAddress];
   [_consumer dismissBottomSheet];
 }
@@ -148,6 +170,8 @@ enum class PlusAddressAction {
 }
 
 - (void)didSelectTryAgainToConfirm {
+  base::RecordAction(
+      base::UserMetricsAction("PlusAddresses.CreateErrorTryAgainClicked"));
   [_consumer didSelectTryAgainToConfirm];
 }
 
@@ -196,9 +220,10 @@ enum class PlusAddressAction {
                                         *maybePlusProfile->plus_address)];
       } else {
         // If the action failed, notify the error.
-        [self.consumer notifyError:plus_addresses::metrics::
-                                       PlusAddressModalCompletionStatus::
-                                           kReservePlusAddressError];
+        [self.consumer notifyError:PlusAddressModalCompletionStatus::
+                                       kReservePlusAddressError
+               withCreateErrorType:PlusAddressCreationBottomSheetErrorType::
+                                       kNoError];
         if (maybePlusProfile.error().IsQuotaError()) {
           [_delegate displayPlusAddressQuotaErrorAlert:YES];
         } else if (maybePlusProfile.error().IsTimeoutError()) {
@@ -217,21 +242,25 @@ enum class PlusAddressAction {
           // confirmed Plus Address.
           [self runAutofillCallback:confirmedPlusAddress];
         } else {
-          [self.consumer notifyError:plus_addresses::metrics::
-                                         PlusAddressModalCompletionStatus::
-                                             kConfirmPlusAddressError];
+          [self.consumer notifyError:PlusAddressModalCompletionStatus::
+                                         kConfirmPlusAddressError
+                 withCreateErrorType:PlusAddressCreationBottomSheetErrorType::
+                                         kCreateAffiliation];
           _reservedPlusAddress = confirmedPlusAddress;
           // Show affiliation error.
           [_delegate displayPlusAddressAffiliationErrorAlert:*maybePlusProfile];
         }
       } else {
+        plus_addresses::PlusAddressRequestError error =
+            maybePlusProfile.error();
         // If the action failed, notify the error.
         [self.consumer notifyError:plus_addresses::metrics::
                                        PlusAddressModalCompletionStatus::
-                                           kConfirmPlusAddressError];
-        if (maybePlusProfile.error().IsQuotaError()) {
+                                           kConfirmPlusAddressError
+               withCreateErrorType:GetCreationErrorType(error)];
+        if (error.IsQuotaError()) {
           [_delegate displayPlusAddressQuotaErrorAlert:NO];
-        } else if (maybePlusProfile.error().IsTimeoutError()) {
+        } else if (error.IsTimeoutError()) {
           [_delegate displayPlusAddressTimeoutErrorAlert:NO];
         } else {
           [_delegate displayPlusAddressGenericErrorAlert:NO];

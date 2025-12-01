@@ -31,13 +31,15 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+import '../../legacy.js';
+
 import * as Common from '../../../../core/common/common.js';
 import * as i18n from '../../../../core/i18n/i18n.js';
-import * as FormatterActions from '../../../../entrypoints/formatter_worker/FormatterActions.js';  // eslint-disable-line rulesdir/es_modules_import
+import * as FormatterActions from '../../../../entrypoints/formatter_worker/FormatterActions.js';  // eslint-disable-line rulesdir/es-modules-import
 import * as TextUtils from '../../../../models/text_utils/text_utils.js';
 import * as UI from '../../legacy.js';
 
-import resourceSourceFrameStyles from './resourceSourceFrame.css.legacy.js';
+import resourceSourceFrameStyles from './resourceSourceFrame.css.js';
 import {type RevealPosition, SourceFrameImpl, type SourceFrameOptions} from './SourceFrame.js';
 
 const UIStrings = {
@@ -56,12 +58,12 @@ export class ResourceSourceFrame extends SourceFrameImpl {
   constructor(
       resource: TextUtils.ContentProvider.ContentProvider, givenContentType: string, options?: SourceFrameOptions) {
     const isStreamingProvider = TextUtils.ContentProvider.isStreamingContentProvider(resource);
-    /* eslint-disable @typescript-eslint/explicit-function-return-type */
+
     const lazyContent = isStreamingProvider ?
         () => resource.requestStreamingContent().then(TextUtils.StreamingContentData.asContentDataOrError) :
         () => resource.requestContentData();
     super(lazyContent, options);
-    /* eslint-enable @typescript-eslint/explicit-function-return-type */
+
     this.#givenContentType = givenContentType;
     this.resourceInternal = resource;
     if (isStreamingProvider) {
@@ -113,7 +115,7 @@ export class SearchableContainer extends UI.Widget.VBox {
     sourceFrame.setSearchableView(searchableView);
     searchableView.show(this.contentElement);
 
-    const toolbar = new UI.Toolbar.Toolbar('toolbar', this.contentElement);
+    const toolbar = this.contentElement.createChild('devtools-toolbar', 'toolbar');
     void sourceFrame.toolbarItems().then(items => {
       items.map(item => toolbar.appendToolbarItem(item));
     });

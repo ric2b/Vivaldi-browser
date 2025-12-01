@@ -4,6 +4,8 @@
   }
 </style>
 
+<settings-ai-policy-indicator pref="[[enterprisePref_]]">
+</settings-ai-policy-indicator>
 <div class="cr-row first">
   <div class="flex cr-padded-text">
     <div id="tabOrganizationLabel">$i18n{tabOrganizationSettingLabel}</div>
@@ -11,10 +13,11 @@
       $i18n{tabOrganizationSettingSublabelV2}$i18n{sentenceEnd}
       <a href="[[getLearnMoreUrl_(enterprisePref_)]]"
           aria-label="$i18n{tabOrganizationSettingLearnMoreA11y}"
+          aria-description="$i18n{opensInNewTab}"
           on-click="onLearnMoreClick_" target="_blank">
         $i18n{learnMore}
       </a>
-  </div>
+    </div>
   </div>
 </div>
 <div class="settings-columned-section">
@@ -25,6 +28,12 @@
         <cr-icon icon="settings20:auto-tab-group" aria-hidden="true"></cr-icon>
         <div class="secondary">
           $i18n{tabOrganizationSettingWhenOnAutoGroups}
+        </div>
+      </li>
+      <li>
+        <cr-icon icon="settings20:tab" aria-hidden="true"></cr-icon>
+        <div class="secondary">
+          $i18n{tabOrganizationSettingWhenOnImproveFocus}
         </div>
       </li>
     </ul>

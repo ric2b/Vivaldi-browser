@@ -21,14 +21,14 @@ import {
   ConsumerPortResponse,
   GetTraceStatsResponse,
   ReadBuffersResponse,
-} from '../controller/consumer_port_types';
-import {RpcConsumerPort} from '../controller/record_controller_interfaces';
+} from './consumer_port_types';
+import {RpcConsumerPort} from './record_controller_interfaces';
 import {
   browserSupportsPerfettoConfig,
   extractTraceConfig,
   hasSystemDataSourceConfig,
-} from '../core/trace_config_utils';
-import {ITraceStats, TraceConfig} from '../protos';
+} from './trace_config_utils';
+import protos from '../protos';
 
 import {DevToolsSocket} from './devtools_socket';
 import {exists} from '../base/utils';
@@ -147,7 +147,7 @@ export class ChromeTracingController extends RpcConsumerPort {
 
   // TODO(nicomazz): write unit test for this
   extractChromeConfig(
-    perfettoConfig: TraceConfig,
+    perfettoConfig: protos.TraceConfig,
   ): Protocol.Tracing.TraceConfig {
     for (const ds of perfettoConfig.dataSources) {
       if (
@@ -213,7 +213,7 @@ export class ChromeTracingController extends RpcConsumerPort {
   getTraceStats() {
     // If the statistics are not available yet, it is 0.
     const percentFull = this.lastBufferUsageEvent?.percentFull ?? 0;
-    const stats: ITraceStats = {
+    const stats: protos.ITraceStats = {
       bufferStats: [
         {bufferSize: 1000, bytesWritten: Math.round(percentFull * 1000)},
       ],
@@ -280,7 +280,7 @@ export class ChromeTracingController extends RpcConsumerPort {
         bufferUsageReportingInterval: 200,
       };
 
-      const traceConfig = TraceConfig.decode(traceConfigProto);
+      const traceConfig = protos.TraceConfig.decode(traceConfigProto);
       if (browserSupportsPerfettoConfig()) {
         const configEncoded = base64Encode(traceConfigProto);
         await this.api.Tracing.start({

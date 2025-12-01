@@ -77,15 +77,23 @@ fn identity_yuv8_to_rgb8_full_range(image: &image::Image, rgb: &mut rgb::Image) 
 macro_rules! store_rgb_pixel8 {
     ($dst:ident, $rgb_565: ident, $index: ident, $r: ident, $g: ident, $b: ident, $r_offset: ident,
      $g_offset: ident, $b_offset: ident, $rgb_channel_count: ident, $rgb_max_channel_f: ident) => {
+        let r8 = (0.5 + ($r * $rgb_max_channel_f)) as u8;
+        let g8 = (0.5 + ($g * $rgb_max_channel_f)) as u8;
+        let b8 = (0.5 + ($b * $rgb_max_channel_f)) as u8;
         if $rgb_565 {
-            // TODO: Handle rgb565.
+            // References for RGB565 color conversion:
+            // * https://docs.microsoft.com/en-us/windows/win32/directshow/working-with-16-bit-rgb
+            // * https://chromium.googlesource.com/libyuv/libyuv/+/9892d70c965678381d2a70a1c9002d1cf136ee78/source/row_common.cc#2362
+            let r16 = ((r8 >> 3) as u16) << 11;
+            let g16 = ((g8 >> 2) as u16) << 5;
+            let b16 = (b8 >> 3) as u16;
+            let rgb565 = (r16 | g16 | b16).to_le_bytes();
+            $dst[($index * $rgb_channel_count) + $r_offset] = rgb565[0];
+            $dst[($index * $rgb_channel_count) + $r_offset + 1] = rgb565[1];
         } else {
-            $dst[($index * $rgb_channel_count) + $r_offset] =
-                (0.5 + ($r * $rgb_max_channel_f)) as u8;
-            $dst[($index * $rgb_channel_count) + $g_offset] =
-                (0.5 + ($g * $rgb_max_channel_f)) as u8;
-            $dst[($index * $rgb_channel_count) + $b_offset] =
-                (0.5 + ($b * $rgb_max_channel_f)) as u8;
+            $dst[($index * $rgb_channel_count) + $r_offset] = r8;
+            $dst[($index * $rgb_channel_count) + $g_offset] = g8;
+            $dst[($index * $rgb_channel_count) + $b_offset] = b8;
         }
     };
 }
@@ -108,6 +116,7 @@ fn yuv8_to_rgb8_color(
     let b_offset = rgb.format.b_offset();
     let rgb_channel_count = rgb.channel_count() as usize;
     let rgb_565 = rgb.format == rgb::Format::Rgb565;
+    let chroma_shift = image.yuv_format.chroma_shift_x();
     for j in 0..image.height {
         let uv_j = j >> image.yuv_format.chroma_shift_y();
         let y_row = image.row(Plane::Y, j)?;
@@ -115,7 +124,7 @@ fn yuv8_to_rgb8_color(
         let v_row = image.row(Plane::V, uv_j)?;
         let dst = rgb.row_mut(j)?;
         for i in 0..image.width as usize {
-            let uv_i = i >> image.yuv_format.chroma_shift_x();
+            let uv_i = (i >> chroma_shift.0) << chroma_shift.1;
             let y = table_y[y_row[i] as usize];
             let cb = table_uv[u_row[uv_i] as usize];
             let cr = table_uv[v_row[uv_i] as usize];
@@ -161,14 +170,17 @@ fn yuv16_to_rgb16_color(
     let g_offset = rgb.format.g_offset();
     let b_offset = rgb.format.b_offset();
     let rgb_channel_count = rgb.channel_count() as usize;
+    let chroma_shift = image.yuv_format.chroma_shift_x();
     for j in 0..image.height {
         let uv_j = j >> image.yuv_format.chroma_shift_y();
         let y_row = image.row16(Plane::Y, j)?;
         let u_row = image.row16(Plane::U, uv_j)?;
-        let v_row = image.row16(Plane::V, uv_j)?;
+        // If V plane is missing, then the format is P010. In that case, set V
+        // as U plane but starting at offset 1.
+        let v_row = image.row16(Plane::V, uv_j).unwrap_or(&u_row[1..]);
         let dst = rgb.row16_mut(j)?;
         for i in 0..image.width as usize {
-            let uv_i = i >> image.yuv_format.chroma_shift_x();
+            let uv_i = (i >> chroma_shift.0) << chroma_shift.1;
             let y = table_y[min(y_row[i], yuv_max_channel) as usize];
             let cb = table_uv[min(u_row[uv_i], yuv_max_channel) as usize];
             let cr = table_uv[min(v_row[uv_i], yuv_max_channel) as usize];
@@ -205,14 +217,17 @@ fn yuv16_to_rgb8_color(
     let b_offset = rgb.format.b_offset();
     let rgb_channel_count = rgb.channel_count() as usize;
     let rgb_565 = rgb.format == rgb::Format::Rgb565;
+    let chroma_shift = image.yuv_format.chroma_shift_x();
     for j in 0..image.height {
         let uv_j = j >> image.yuv_format.chroma_shift_y();
         let y_row = image.row16(Plane::Y, j)?;
         let u_row = image.row16(Plane::U, uv_j)?;
-        let v_row = image.row16(Plane::V, uv_j)?;
+        // If V plane is missing, then the format is P010. In that case, set V
+        // as U plane but starting at offset 1.
+        let v_row = image.row16(Plane::V, uv_j).unwrap_or(&u_row[1..]);
         let dst = rgb.row_mut(j)?;
         for i in 0..image.width as usize {
-            let uv_i = i >> image.yuv_format.chroma_shift_x();
+            let uv_i = (i >> chroma_shift.0) << chroma_shift.1;
             let y = table_y[min(y_row[i], yuv_max_channel) as usize];
             let cb = table_uv[min(u_row[uv_i], yuv_max_channel) as usize];
             let cr = table_uv[min(v_row[uv_i], yuv_max_channel) as usize];
@@ -257,6 +272,7 @@ fn yuv8_to_rgb16_color(
     let g_offset = rgb.format.g_offset();
     let b_offset = rgb.format.b_offset();
     let rgb_channel_count = rgb.channel_count() as usize;
+    let chroma_shift = image.yuv_format.chroma_shift_x();
     for j in 0..image.height {
         let uv_j = j >> image.yuv_format.chroma_shift_y();
         let y_row = image.row(Plane::Y, j)?;
@@ -264,7 +280,7 @@ fn yuv8_to_rgb16_color(
         let v_row = image.row(Plane::V, uv_j)?;
         let dst = rgb.row16_mut(j)?;
         for i in 0..image.width as usize {
-            let uv_i = i >> image.yuv_format.chroma_shift_x();
+            let uv_i = (i >> chroma_shift.0) << chroma_shift.1;
             let y = table_y[y_row[i] as usize];
             let cb = table_uv[u_row[uv_i] as usize];
             let cr = table_uv[v_row[uv_i] as usize];
@@ -412,7 +428,7 @@ fn yuv8_to_rgb16_monochrome(
     Ok(())
 }
 
-pub fn yuv_to_rgb_fast(image: &image::Image, rgb: &mut rgb::Image) -> AvifResult<()> {
+pub(crate) fn yuv_to_rgb_fast(image: &image::Image, rgb: &mut rgb::Image) -> AvifResult<()> {
     let mode: Mode = image.into();
     match mode {
         Mode::Identity => {
@@ -545,7 +561,7 @@ fn unorm_value(row: PlaneRow, index: usize, max_channel: u16, table: &[f32]) -> 
     table[clamped_pixel(row, index, max_channel) as usize]
 }
 
-pub fn yuv_to_rgb_any(
+pub(crate) fn yuv_to_rgb_any(
     image: &image::Image,
     rgb: &mut rgb::Image,
     alpha_multiply_mode: AlphaMultiplyMode,
@@ -568,6 +584,7 @@ pub fn yuv_to_rgb_any(
     let yuv_max_channel = image.max_channel();
     let rgb_max_channel = rgb.max_channel();
     let rgb_max_channel_f = rgb.max_channel_f();
+    let chroma_shift = image.yuv_format.chroma_shift_x();
     for j in 0..image.height {
         let uv_j = j >> image.yuv_format.chroma_shift_y();
         let y_row = image.row_generic(Plane::Y, j)?;
@@ -582,7 +599,7 @@ pub fn yuv_to_rgb_any(
             if has_color {
                 let u_row = u_row.unwrap();
                 let v_row = v_row.unwrap();
-                let uv_i = i >> image.yuv_format.chroma_shift_x();
+                let uv_i = (i >> chroma_shift.0) << chroma_shift.1;
                 if image.yuv_format == PixelFormat::Yuv444
                     || matches!(
                         chroma_upsampling,

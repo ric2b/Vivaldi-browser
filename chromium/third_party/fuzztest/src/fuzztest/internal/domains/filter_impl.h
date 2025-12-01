@@ -49,10 +49,12 @@ class FilterImpl
     }
   }
 
-  void Mutate(corpus_type& val, absl::BitGenRef prng, bool only_shrink) {
+  void Mutate(corpus_type& val, absl::BitGenRef prng,
+              const domain_implementor::MutationMetadata& metadata,
+              bool only_shrink) {
     corpus_type original_val = val;
     while (true) {
-      inner_.Mutate(val, prng, only_shrink);
+      inner_.Mutate(val, prng, metadata, only_shrink);
       if (RunFilter(val)) return;
       val = original_val;
     }
@@ -76,6 +78,12 @@ class FilterImpl
   }
 
   absl::Status ValidateCorpusValue(const corpus_type& corpus_value) const {
+    if (const auto inner_validate_status =
+            inner_.ValidateCorpusValue(corpus_value);
+        !inner_validate_status.ok()) {
+      return Prefix(inner_validate_status,
+                    "Invalid corpus value for the inner domain in Filter()");
+    }
     if (predicate_(GetValue(corpus_value))) return absl::OkStatus();
     return absl::InvalidArgumentError(
         "Value does not match Filter() predicate.");
@@ -88,7 +96,8 @@ class FilterImpl
     if (!res) {
       ++num_skips_;
       FUZZTEST_INTERNAL_CHECK_PRECONDITION(
-          num_skips_ <= 100 || num_skips_ <= .9 * num_values_,
+          num_skips_ <= 100 || static_cast<double>(num_skips_) <=
+                                   .9 * static_cast<double>(num_values_),
           absl::StrFormat(R"(
 
 [!] Ineffective use of Filter() detected!

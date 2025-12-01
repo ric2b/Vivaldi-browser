@@ -61,6 +61,11 @@
     "dependencies": [ "permission:devtoolsPrivate" ],
     "contexts": [ "privileged_extension" ]
   },
+  "directMatch": {
+    "vivaldi": true,
+    "dependencies": [ "permission:directMatch" ],
+    "contexts": [ "privileged_extension" ]
+  },
   "editcommand": {
     "vivaldi": true,
     "dependencies": [ "permission:editcommand" ],
@@ -131,6 +136,11 @@
     "vivaldi": true,
     "dependencies": [ "permission:prefs" ],
     "contexts": [ "privileged_extension" ]
+  },
+  "protonvpn": {
+    "vivaldi": true,
+    "dependencies": [ "permission:protonvpn" ],
+    "contexts": [ "privileged_extension", "content_script", "unprivileged_extension" ]
   },
   "readingListPrivate": {
     "vivaldi": true,

@@ -16,8 +16,10 @@
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "google_apis/gaia/gaia_auth_util.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "google_apis/gaia/oauth2_mint_token_flow.h"
+#include "google_apis/gaia/token_binding_response_encryption_error.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/test/test_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -34,16 +36,16 @@ using testing::Le;
 using testing::Matcher;
 using testing::Property;
 
-const char kTestClientId[] = "test_client_id";
-const char kTestClientSecret[] = "test_client_secret";
-const char kTestScope[] = "test_scope";
-const char kTestRefreshToken[] = "test_refresh_token";
-const char kTestUserGaiaId[] = "test_gaia_id";
-const char kTestAccessToken[] = "test_access_token";
-const char kTestDeviceId[] = "test_device_id";
-const char kTestVersion[] = "test_version";
-const char kTestChannel[] = "test_channel";
-const char kTestAssertion[] = "test_assertion";
+constexpr char kTestClientId[] = "test_client_id";
+constexpr char kTestClientSecret[] = "test_client_secret";
+constexpr char kTestScope[] = "test_scope";
+constexpr char kTestRefreshToken[] = "test_refresh_token";
+constexpr GaiaId::Literal kTestUserGaiaId("test_gaia_id");
+constexpr char kTestAccessToken[] = "test_access_token";
+constexpr char kTestDeviceId[] = "test_device_id";
+constexpr char kTestVersion[] = "test_version";
+constexpr char kTestChannel[] = "test_channel";
+constexpr char kTestAssertion[] = "test_assertion";
 
 constexpr char kAssertionSentinel[] = "DBSC_CHALLENGE_IF_REQUIRED";
 
@@ -51,12 +53,6 @@ constexpr char kFetchAuthErrorHistogram[] =
     "Signin.OAuth2MintToken.BoundFetchAuthError";
 constexpr char kFetchEncryptionErrorHistogram[] =
     "Signin.OAuth2MintToken.BoundFetchEncryptionError";
-
-// Copy of an enum definition in .cc file.
-enum class EncryptionError {
-  kResponseUnexpectedlyEncrypted = 0,
-  kDecryptionFailed = 1
-};
 
 class MockOAuth2AccessTokenConsumer : public OAuth2AccessTokenConsumer {
  public:
@@ -271,6 +267,10 @@ TEST_F(OAuth2MintAccessTokenFetcherAdapterTest, SuccessWithEncryption) {
   histogram_tester().ExpectUniqueSample(kFetchAuthErrorHistogram,
                                         GoogleServiceAuthError::NONE,
                                         /*expected_bucket_count=*/1);
+  histogram_tester().ExpectUniqueSample(
+      kFetchEncryptionErrorHistogram,
+      TokenBindingResponseEncryptionError::kSuccessfullyDecrypted,
+      /*expected_bucket_count=*/1);
 }
 
 TEST_F(OAuth2MintAccessTokenFetcherAdapterTest, SuccessDecryptorUnused) {
@@ -289,6 +289,10 @@ TEST_F(OAuth2MintAccessTokenFetcherAdapterTest, SuccessDecryptorUnused) {
   histogram_tester().ExpectUniqueSample(kFetchAuthErrorHistogram,
                                         GoogleServiceAuthError::NONE,
                                         /*expected_bucket_count=*/1);
+  histogram_tester().ExpectUniqueSample(
+      kFetchEncryptionErrorHistogram,
+      TokenBindingResponseEncryptionError::kSuccessNoEncryption,
+      /*expected_bucket_count=*/1);
 }
 
 TEST_F(OAuth2MintAccessTokenFetcherAdapterTest, Failure) {
@@ -340,9 +344,10 @@ TEST_F(OAuth2MintAccessTokenFetcherAdapterTest, DecryptionFailure) {
       kFetchAuthErrorHistogram,
       GoogleServiceAuthError::UNEXPECTED_SERVICE_RESPONSE,
       /*expected_bucket_count=*/1);
-  histogram_tester().ExpectUniqueSample(kFetchEncryptionErrorHistogram,
-                                        EncryptionError::kDecryptionFailed,
-                                        /*expected_bucket_count=*/1);
+  histogram_tester().ExpectUniqueSample(
+      kFetchEncryptionErrorHistogram,
+      TokenBindingResponseEncryptionError::kDecryptionFailed,
+      /*expected_bucket_count=*/1);
 }
 
 TEST_F(OAuth2MintAccessTokenFetcherAdapterTest, NoDecryptorFailure) {
@@ -362,7 +367,7 @@ TEST_F(OAuth2MintAccessTokenFetcherAdapterTest, NoDecryptorFailure) {
       /*expected_bucket_count=*/1);
   histogram_tester().ExpectUniqueSample(
       kFetchEncryptionErrorHistogram,
-      EncryptionError::kResponseUnexpectedlyEncrypted,
+      TokenBindingResponseEncryptionError::kResponseUnexpectedlyEncrypted,
       /*expected_bucket_count=*/1);
 }
 

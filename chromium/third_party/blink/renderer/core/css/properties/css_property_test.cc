@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "third_party/blink/renderer/core/css/properties/css_property.h"
 
 #include <cstring>
@@ -470,16 +475,6 @@ TEST_F(CSSPropertyTest, AnchorModeHeight) {
             ComputedValue("max-width", "anchor-size(width, 0px)", context));
   EXPECT_EQ("1px",
             ComputedValue("max-height", "anchor-size(width, 0px)", context));
-}
-
-TEST_F(CSSPropertyTest, InsetAreaDisabled) {
-  ScopedCSSInsetAreaPropertyForTest inset_area_enabled(false);
-  auto* declarations = ParseShorthand("position-area", "center top");
-  ASSERT_TRUE(declarations);
-  ASSERT_EQ(declarations->PropertyCount(), 1u);
-  declarations = ParseShorthand("inset-area", "center top");
-  ASSERT_TRUE(declarations);
-  ASSERT_EQ(declarations->PropertyCount(), 0u);
 }
 
 TEST_F(CSSPropertyTest, AnchorSizeInsetsMarginsDisabled) {

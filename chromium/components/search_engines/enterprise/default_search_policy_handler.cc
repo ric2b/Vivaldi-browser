@@ -208,9 +208,9 @@ void DefaultSearchPolicyHandler::ApplyPolicySettings(const PolicyMap& policies,
   dict.Set(DefaultSearchManager::kLastModified,
            static_cast<double>(base::Time::Now().ToInternalValue()));
   dict.Set(DefaultSearchManager::kUsageCount, 0);
-  dict.Set(DefaultSearchManager::kCreatedByPolicy,
-           static_cast<int>(
-               TemplateURLData::CreatedByPolicy::kDefaultSearchProvider));
+  dict.Set(
+      DefaultSearchManager::kPolicyOrigin,
+      static_cast<int>(TemplateURLData::PolicyOrigin::kDefaultSearchProvider));
 
   // Vivaldi requires a position to be present, even if invalid.
   dict.Set(DefaultSearchManager::kPosition, "");

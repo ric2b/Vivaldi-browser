@@ -31,7 +31,7 @@ Overview
 This API provides rich desktop notifications to Chrome apps and extensions.
 
 Today, Chrome implements an [outdated version of the W3C spec for HTML5 desktop
-notifications](http://www.chromium.org/developers/design-documents/desktop-notifications/api-specification).
+notifications](/developers/design-documents/desktop-notifications/api-specification).
 The functionality proposed here is generally similar, but significantly more
 powerful. We have yet addressed the question whether this API will replace,
 enhance, or remain entirely independent of any Chrome implementation of the W3C

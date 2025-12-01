@@ -124,7 +124,7 @@ KERN-B) and kernel modules will be updated to the matching rootfs partition
 (matching ROOT-B partition). If the kernel crashes early on then a reboot will
 fallback to the A slot kernel and rootfs that is known to be good and
 working. If the [boot is considered
-successful](https://www.chromium.org/chromium-os/chromiumos-design-docs/boot-design#TOC-Rollback-Protection-After-Update)
+successful](/chromium-os/chromiumos-design-docs/boot-design#TOC-Rollback-Protection-After-Update)
 the partition is marked with a successful boot and will be used from the next
 time.
 
@@ -132,8 +132,7 @@ Be aware, however, that after you reboot again, if your boot was not yet marked 
 successful you're back to your old kernel (which can be very confusing... "hey
 where did my new feature go??").
 
-See [disk
-format](https://dev.chromium.org/chromium-os/chromiumos-design-docs/disk-format)
+See [disk format](/chromium-os/chromiumos-design-docs/disk-format)
 for more info on partition layouts, as you may need to use a different
 partition number depending on how you installed your kernel or which
 one you want to replace. The `cgpt` utility can also be used to view a
@@ -216,10 +215,10 @@ slow. There are a couple approaches that can be useful to recover quickly.
 ### Kernel configuration
 
 [Kernel
-configuration](https://www.chromium.org/chromium-os/developer-library/guides/kernel/kernel-configuration/)
+configuration](/chromium-os/developer-library/guides/kernel/kernel-configuration/)
 in ChromiumOS has an extra level of indirection from the normal
 .config file. So do the instructions - [see this page for more
-information](https://www.chromium.org/chromium-os/developer-library/guides/kernel/kernel-configuration/).
+information](/chromium-os/developer-library/guides/kernel/kernel-configuration/).
 
 See also the [cros-kernel eclass documentation].
 
@@ -495,7 +494,7 @@ git checkout m/master -- chromeos
 #### Commit messages & summary lines (CHROMIUM, UPSTREAM, FROMLIST, BACKPORT)
 
 See the [Kernel Design
-page](https://dev.chromium.org/chromium-os/chromiumos-design-docs/chromium-os-kernel)
+page](/chromium-os/chromiumos-design-docs/chromium-os-kernel)
 for some more details.
 
 For changes which cannot be submitted upstream to the official Linux Kernel
@@ -1653,7 +1652,8 @@ If you have a different mail server, please contact the system administrator
 (or check some help docs related to your email service) for the correct
 settings.
 
-**NOTE**: For Googlers, note that [DMARC](http://b/14415867) restrictions
+**NOTE**: For Googlers, note that
+[DMARC](https://issuetracker.google.com/14415867) restrictions
 prevent usage of your @google.com email address. Use http://go/chromium-account
 to obtain an @chromium.org address.
 
@@ -1725,7 +1725,7 @@ cat $OUT
 [crbug.com/468342]: https://crbug.com/468342
 [example CL]: https://crrev.com/c/1325821
 [ftrace]: https://www.kernel.org/doc/Documentation/trace/ftrace.txt
-[go/chromeos-kernel-tips-and-tricks]: https://goto.google.com/chromeos-kernel-tips-and-tricks
+[go/chromeos-kernel-tips-and-tricks]: http://go/chromeos-kernel-tips-and-tricks
 [Heisenbug]: https://en.wikipedia.org/wiki/Heisenbug
 [imap-upload]: https://github.com/rgladwell/imap-upload
 [KASan]: https://www.kernel.org/doc/html/v4.14/dev-tools/kasan.html
@@ -1734,4 +1734,4 @@ cat $OUT
 [trace-cmd man pages]: https://man7.org/linux/man-pages/man1/trace-cmd.1.html
 [LWN trace-cmd HOWTO]: https://lwn.net/Articles/410200/
 [kernel.eclass]: https://chromium.googlesource.com/chromiumos/overlays/chromiumos-overlay/+/HEAD/eclass/cros-kernel.eclass
-[KCSan]: http://issuetracker.google.com/issues/182965087
+[KCSan]: https://issuetracker.google.com/issues/182965087

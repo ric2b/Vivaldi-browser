@@ -107,7 +107,7 @@ list!**
 
 > #### MemoryPressureListener
 
-> Implemented <http://crbug.com/246125> to replace Memory Purger.
+> Implemented <https://crbug.com/246125> to replace Memory Purger.
 
 ### Real-world Data Collection
 
@@ -204,11 +204,11 @@ reference and else. We have some existing leak finding tools like Massif (in
 > #### [Tab Discarder](/chromium-os/chromiumos-design-docs/tab-discarding-and-reloading)
 
 > c.f. [Chrome OS out-of-memory design
-> doc](http://www.chromium.org/chromium-os/chromiumos-design-docs/out-of-memory-handling)
+> doc](/chromium-os/chromiumos-design-docs/out-of-memory-handling)
 
 > #### Memory Purger
 
-> To be removed: discussed in <http://crbug.com/98238>.
+> To be removed: discussed in <https://crbug.com/98238>.
 
 ### [DevTools](https://developers.google.com/chrome-developer-tools/): for Web-application side
 
@@ -225,7 +225,7 @@ view**](https://developers.google.com/chrome-developer-tools/docs/timeline#memor
 > with each other.
 
 > **[JavaScript Object Allocation
-> Tracker](http://www.youtube.com/watch?v=x9Jlu_h_Lyw)**
+> Tracker](https://youtube.com/watch?v=x9Jlu_h_Lyw)**
 
 > Dynamic version of the JS heap profiler that allows you to see JS object
 > allocation in real time.

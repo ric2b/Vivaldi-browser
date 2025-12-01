@@ -20,9 +20,7 @@
 #include "build/build_config.h"
 #include "components/language/core/common/language_util.h"
 #include "components/live_caption/caption_bubble_context.h"
-#include "components/live_caption/pref_names.h"
-#include "components/prefs/pref_change_registrar.h"
-#include "components/prefs/pref_service.h"
+#include "components/live_caption/caption_bubble_settings.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "components/translate/core/browser/translate_ui_languages_manager.h"
@@ -231,7 +229,7 @@ class CaptionBubbleEventObserver : public ui::EventObserver {
 
 namespace captions {
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 DEFINE_UI_CLASS_PROPERTY_KEY(bool, kIsCaptionBubbleKey, false)
 #endif
 
@@ -545,18 +543,17 @@ class CaptionBubbleLabelAXModeObserver : public ui::AXModeObserver {
 };
 #endif
 
-CaptionBubble::CaptionBubble(PrefService* profile_prefs,
+CaptionBubble::CaptionBubble(CaptionBubbleSettings* caption_bubble_settings,
                              const std::string& application_locale,
                              base::OnceClosure destroyed_callback)
     : views::BubbleDialogDelegateView(nullptr,
                                       views::BubbleBorder::TOP_LEFT,
                                       views::BubbleBorder::DIALOG_SHADOW,
                                       true),
-      profile_prefs_(profile_prefs),
+      caption_bubble_settings_(caption_bubble_settings),
       destroyed_callback_(std::move(destroyed_callback)),
       application_locale_(application_locale),
-      is_expanded_(
-          profile_prefs_->GetBoolean(prefs::kLiveCaptionBubbleExpanded)),
+      is_expanded_(caption_bubble_settings_->GetLiveCaptionBubbleExpanded()),
       controls_animation_(this) {
   // Bubbles that use transparent colors should not paint their ClientViews to a
   // layer as doing so could result in visual artifacts.
@@ -571,26 +568,14 @@ CaptionBubble::CaptionBubble(PrefService* profile_prefs,
   controls_animation_.SetSlideDuration(kAnimationDuration);
   controls_animation_.SetTweenType(gfx::Tween::LINEAR);
 
-  pref_change_registrar_ = std::make_unique<PrefChangeRegistrar>();
-  pref_change_registrar_->Init(profile_prefs_);
-  pref_change_registrar_->Add(
-      prefs::kLiveTranslateEnabled,
-      base::BindRepeating(&CaptionBubble::OnLiveTranslateEnabledChanged,
-                          base::Unretained(this)));
-  pref_change_registrar_->Add(
-      prefs::kLiveCaptionLanguageCode,
-      base::BindRepeating(&CaptionBubble::OnLiveCaptionLanguageChanged,
-                          base::Unretained(this)));
-  pref_change_registrar_->Add(
-      prefs::kLiveTranslateTargetLanguageCode,
-      base::BindRepeating(&CaptionBubble::OnLiveTranslateTargetLanguageChanged,
-                          base::Unretained(this)));
+  caption_bubble_settings_->SetObserver(weak_ptr_factory_.GetWeakPtr());
   GetViewAccessibility().SetRole(ax::mojom::Role::kDialog);
 }
 
 CaptionBubble::~CaptionBubble() {
   if (model_)
     model_->RemoveObserver();
+  caption_bubble_settings_->RemoveObserver();
 }
 
 gfx::Rect CaptionBubble::GetBubbleBounds() {
@@ -639,7 +624,7 @@ void CaptionBubble::Init() {
   label->SetBackgroundColor(SK_ColorTRANSPARENT);
   label->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
   label->SetVerticalAlignment(gfx::VerticalAlignment::ALIGN_TOP);
-  label->SetTooltipText(std::u16string());
+  label->SetCustomTooltipText(std::u16string());
   // Render text truncates the end of text that is greater than 10000 chars.
   // While it is unlikely that the text will exceed 10000 chars, it is not
   // impossible, if the speech service sends a very long transcription_result.
@@ -786,12 +771,14 @@ void CaptionBubble::Init() {
     translate::TranslateDownloadManager::GetSupportedLanguages(true,
                                                                &language_codes);
     std::string source_language_code =
-        profile_prefs_->GetString(prefs::kLiveCaptionLanguageCode);
+        caption_bubble_settings_->GetLiveCaptionLanguageCode();
     language::ToTranslateLanguageSynonym(&source_language_code);
+    std::string target_language_code =
+        caption_bubble_settings_->GetLiveTranslateTargetLanguageCode();
+    language::ToTranslateLanguageSynonym(&target_language_code);
     translate_ui_languages_manager_ =
         std::make_unique<translate::TranslateUILanguagesManager>(
-            language_codes, source_language_code,
-            profile_prefs_->GetString(prefs::kLiveTranslateTargetLanguageCode));
+            language_codes, source_language_code, target_language_code);
 
     auto translation_text = std::make_unique<views::Label>();
     translation_text->SetBackgroundColor(SK_ColorTRANSPARENT);
@@ -911,7 +898,7 @@ void CaptionBubble::OnBeforeBubbleWidgetInit(views::Widget::InitParams* params,
   params->z_order = ui::ZOrderLevel::kFloatingWindow;
   params->visible_on_all_workspaces = true;
   params->name = "LiveCaptionWindow";
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   params->init_properties_container.SetProperty(kIsCaptionBubbleKey, true);
 #endif
 }
@@ -959,7 +946,7 @@ void CaptionBubble::OnLiveTranslateEnabledChanged() {
 void CaptionBubble::OnLiveCaptionLanguageChanged() {
   auto_detected_source_language_ = false;
   std::string source_language_code =
-      profile_prefs_->GetString(prefs::kLiveCaptionLanguageCode);
+      caption_bubble_settings_->GetLiveCaptionLanguageCode();
   language::ToTranslateLanguageSynonym(&source_language_code);
   translate_ui_languages_manager_->UpdateSourceLanguage(source_language_code);
   source_language_text_ = GetSourceLanguageName();
@@ -971,7 +958,7 @@ void CaptionBubble::OnLiveCaptionLanguageChanged() {
 
 void CaptionBubble::OnLiveTranslateTargetLanguageChanged() {
   std::string target_language_code =
-      profile_prefs_->GetString(prefs::kLiveTranslateTargetLanguageCode);
+      caption_bubble_settings_->GetLiveTranslateTargetLanguageCode();
   language::ToTranslateLanguageSynonym(&target_language_code);
   translate_ui_languages_manager_->UpdateTargetLanguage(target_language_code);
   target_language_text_ = GetTargetLanguageName();
@@ -1011,13 +998,13 @@ void CaptionBubble::CloseButtonPressed() {
   if (skip_pref_change_on_close_) {
     return;
   }
-  profile_prefs_->SetBoolean(prefs::kLiveCaptionEnabled, false);
+  caption_bubble_settings_->SetLiveCaptionEnabled(false);
 #endif
 }
 
 void CaptionBubble::ExpandOrCollapseButtonPressed() {
   is_expanded_ = !is_expanded_;
-  profile_prefs_->SetBoolean(prefs::kLiveCaptionBubbleExpanded, is_expanded_);
+  caption_bubble_settings_->SetLiveCaptionBubbleExpanded(is_expanded_);
   base::UmaHistogramBoolean("Accessibility.LiveCaption.ExpandBubble",
                             is_expanded_);
 
@@ -1126,7 +1113,7 @@ void CaptionBubble::OnAutoDetectedLanguageChanged() {
   source_language_text_ = GetSourceLanguageName();
 
   std::string live_caption_language_code =
-      profile_prefs_->GetString(prefs::kLiveCaptionLanguageCode);
+      caption_bubble_settings_->GetLiveCaptionLanguageCode();
   language::ToTranslateLanguageSynonym(&live_caption_language_code);
   auto_detected_source_language_ =
       live_caption_language_code != auto_detected_language_code;
@@ -1227,8 +1214,8 @@ void CaptionBubble::ExecuteCommand(int target_language_code_index,
   if (updated) {
     std::string target_language_code = GetTargetLanguageCode();
     language::ToChromeLanguageSynonym(&target_language_code);
-    profile_prefs_->SetString(prefs::kLiveTranslateTargetLanguageCode,
-                              target_language_code);
+    caption_bubble_settings_->SetLiveTranslateTargetLanguageCode(
+        target_language_code);
   }
 }
 
@@ -1368,6 +1355,12 @@ void CaptionBubble::SetTextColor() {
   const auto* const color_provider = GetColorProvider();
   SkColor primary_color =
       color_provider->GetColor(ui::kColorLiveCaptionBubbleForegroundDefault);
+  SkColor header_color =
+      color_provider->GetColor(ui::kColorLiveCaptionBubbleButtonIcon);
+  SkColor language_label_color =
+      color_provider->GetColor(ui::kColorRefPrimary80);
+  SkColor language_label_border_color =
+      color_provider->GetColor(ui::kColorRefSecondary50);
   SkColor icon_disabled_color =
       color_provider->GetColor(ui::kColorLiveCaptionBubbleButtonIconDisabled);
 
@@ -1378,6 +1371,13 @@ void CaptionBubble::SetTextColor() {
   if (caption_style_) {
     ParseNonTransparentRGBACSSColorString(caption_style_->text_color,
                                           &primary_color, color_provider);
+    ParseNonTransparentRGBACSSColorString(caption_style_->text_color,
+                                          &header_color, color_provider);
+    ParseNonTransparentRGBACSSColorString(
+        caption_style_->text_color, &language_label_color, color_provider);
+    ParseNonTransparentRGBACSSColorString(caption_style_->text_color,
+                                          &language_label_border_color,
+                                          color_provider);
   }
 
   label_->SetEnabledColor(primary_color);
@@ -1389,16 +1389,16 @@ void CaptionBubble::SetTextColor() {
 
   if (IsLiveTranslateEnabled() ||
       base::FeatureList::IsEnabled(media::kLiveCaptionMultiLanguage)) {
-    source_language_button_->SetEnabledTextColors(primary_color);
-    target_language_button_->SetEnabledTextColors(primary_color);
+    source_language_button_->SetEnabledTextColors(language_label_color);
+    target_language_button_->SetEnabledTextColors(language_label_color);
 // On macOS whenever the caption bubble is not in main focus the button state
 // is set to disabled. These buttons are never disabled so it is okay to
 // override this state.
 #if BUILDFLAG(IS_MAC)
     source_language_button_->SetTextColor(views::Button::STATE_DISABLED,
-                                          primary_color);
+                                          language_label_color);
     target_language_button_->SetTextColor(views::Button::STATE_DISABLED,
-                                          primary_color);
+                                          language_label_color);
 #endif
 
     // TODO(crbug.com/40259212): The live caption bubble allows users to set
@@ -1407,14 +1407,16 @@ void CaptionBubble::SetTextColor() {
     // equivalent ui::ColorId may not exist. To avoid needing to define around
     // 40 new color ids to account for each combination, we use the deprecated
     // SKColor function.
-    source_language_button_->SetStrokeColorOverrideDeprecated(primary_color);
-    target_language_button_->SetStrokeColorOverrideDeprecated(primary_color);
-    translation_header_text_->SetEnabledColor(primary_color);
+    source_language_button_->SetStrokeColorOverrideDeprecated(
+        language_label_border_color);
+    target_language_button_->SetStrokeColorOverrideDeprecated(
+        language_label_border_color);
+    translation_header_text_->SetEnabledColor(header_color);
     translate_icon_->SetImage(ui::ImageModel::FromVectorIcon(
-        vector_icons::kTranslateIcon, primary_color,
+        vector_icons::kTranslateIcon, header_color,
         kLiveTranslateImageWidthDip));
     translate_arrow_icon_->SetImage(ui::ImageModel::FromVectorIcon(
-        vector_icons::kArrowRightAltIcon, primary_color,
+        vector_icons::kArrowRightAltIcon, header_color,
         kLiveTranslateImageWidthDip));
   }
 
@@ -1455,17 +1457,17 @@ void CaptionBubble::SetTextColor() {
       color_provider->GetColor(ui::kColorLiveCaptionBubbleCheckbox));
 #endif
   views::SetImageFromVectorIconWithColor(
-      back_to_tab_button_, vector_icons::kBackToTabIcon, kButtonDip,
-      primary_color, icon_disabled_color);
+      back_to_tab_button_, vector_icons::kBackToTabChromeRefreshIcon,
+      kButtonDip, header_color, icon_disabled_color);
   views::SetImageFromVectorIconWithColor(
-      close_button_, vector_icons::kCloseRoundedIcon, kButtonDip, primary_color,
+      close_button_, vector_icons::kCloseRoundedIcon, kButtonDip, header_color,
       icon_disabled_color);
   views::SetImageFromVectorIconWithColor(
-      expand_button_, vector_icons::kCaretDownIcon, kButtonDip, primary_color,
+      expand_button_, vector_icons::kCaretDownIcon, kButtonDip, header_color,
       icon_disabled_color);
   views::SetImageFromVectorIconWithColor(collapse_button_,
                                          vector_icons::kCaretUpIcon, kButtonDip,
-                                         primary_color, icon_disabled_color);
+                                         header_color, icon_disabled_color);
 }
 
 void CaptionBubble::SetBackgroundColor() {
@@ -1478,7 +1480,9 @@ void CaptionBubble::SetBackgroundColor() {
     ParseNonTransparentRGBACSSColorString(caption_style_->background_color,
                                           &background_color, color_provider);
   }
+
   set_color(background_color);
+  GetWidget()->SetColorModeOverride(ui::ColorProviderKey::ColorMode::kDark);
 }
 
 void CaptionBubble::OnLanguageChanged() {
@@ -1486,7 +1490,7 @@ void CaptionBubble::OnLanguageChanged() {
 
   // Update label text direction.
   std::string display_language =
-      profile_prefs_->GetBoolean(prefs::kLiveTranslateEnabled) ||
+      caption_bubble_settings_->GetLiveTranslateEnabled() ||
               live_translate_enabled_by_context_
           ? GetTargetLanguageCode()
           : GetSourceLanguageCode();
@@ -1516,7 +1520,7 @@ void CaptionBubble::UpdateLanguageLabelText() {
   }
 
   if ((live_translate_enabled &&
-       (profile_prefs_->GetBoolean(prefs::kLiveTranslateEnabled))) ||
+       caption_bubble_settings_->GetLiveTranslateEnabled()) ||
       live_translate_enabled_by_context_) {
     if (SourceAndTargetLanguageCodeMatch() && auto_detected_source_language_) {
       target_language_button_->SetText(l10n_util::GetStringFUTF16(
@@ -1595,8 +1599,10 @@ void CaptionBubble::UpdateContentSize() {
 
   if (IsLiveTranslateEnabled() ||
       base::FeatureList::IsEnabled(media::kLiveCaptionMultiLanguage)) {
+    source_language_button_->SetMinSize(gfx::Size());
     source_language_button_->SetPreferredSize(
         source_language_button_->CalculatePreferredSize({}));
+    target_language_button_->SetMinSize(gfx::Size());
     target_language_button_->SetPreferredSize(
         target_language_button_->CalculatePreferredSize({}));
   }
@@ -1763,6 +1769,9 @@ void CaptionBubble::SetTargetLanguageForTesting(std::string language_code) {
 
 void CaptionBubble::OnTitleTextChanged() {
   UpdateAccessibleName();
+  if (views::Widget* widget = GetWidget()) {
+    widget->UpdateAccessibleNameForRootView();
+  }
 }
 
 void CaptionBubble::UpdateAccessibleName() {
@@ -1773,8 +1782,6 @@ void CaptionBubble::ShowTranslateOptionsMenu() {
   translation_menu_runner_ = std::make_unique<views::MenuRunner>(
       translation_menu_model_.get(), views::MenuRunner::COMBOBOX);
   const gfx::Rect& screen_bounds = target_language_button_->GetBoundsInScreen();
-  target_language_button_->GetWidget()->SetColorModeOverride(
-      ui::ColorProviderKey::ColorMode::kDark);
   translation_menu_runner_->RunMenuAt(
       target_language_button_->GetWidget(), /*button_controller=*/nullptr,
       screen_bounds, views::MenuAnchorPosition::kTopLeft,
@@ -1806,7 +1813,8 @@ std::u16string CaptionBubble::GetTargetLanguageName() const {
 }
 
 bool CaptionBubble::IsLiveTranslateEnabled() {
-  return media::IsLiveTranslateEnabled() || live_translate_enabled_by_context_;
+  return live_translate_enabled_by_context_ ||
+         caption_bubble_settings_->IsLiveTranslateFeatureEnabled();
 }
 
 BEGIN_METADATA(CaptionBubble)

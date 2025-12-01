@@ -8,6 +8,7 @@
 #include <string>
 #include <utility>
 
+#include "base/feature_list.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
@@ -17,6 +18,7 @@
 #include "components/sharing_message/sharing_sync_preference.h"
 #include "components/sync/invalidations/sync_invalidations_service.h"
 #include "components/sync/service/sync_prefs.h"
+#include "device/fido/features.h"
 
 #include "sync/file_sync/file_store.h"
 #include "sync/file_sync/file_store_factory.h"
@@ -57,15 +59,7 @@ std::string DeviceInfoSyncClientImpl::GetSigninScopedDeviceId() const {
 
 // syncer::DeviceInfoSyncClient:
 bool DeviceInfoSyncClientImpl::GetSendTabToSelfReceivingEnabled() const {
-  // TODO(crbug.com/40210838): Current logic allows to disable receiving tabs
-  // in Ash, while sending is still enabled - this seems to be the best solution
-  // for Lacros-Primary. Once Lacros-Only is the only available option, this
-  // should simply check whether SendTabToSelf datatype is enabled.
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  return !crosapi::browser_util::IsLacrosEnabled();
-#else
   return true;
-#endif
 }
 
 // syncer::DeviceInfoSyncClient:
@@ -99,6 +93,9 @@ DeviceInfoSyncClientImpl::GetInterestedDataTypes() const {
 syncer::DeviceInfo::PhoneAsASecurityKeyInfo::StatusOrInfo
 DeviceInfoSyncClientImpl::GetPhoneAsASecurityKeyInfo() const {
 #if BUILDFLAG(IS_ANDROID)
+  if (!base::FeatureList::IsEnabled(device::kWebAuthnPublishPrelinkingInfo)) {
+    return syncer::DeviceInfo::PhoneAsASecurityKeyInfo::NoSupport();
+  }
   return webauthn::authenticator::GetSyncDataIfRegistered();
 #else
   return syncer::DeviceInfo::PhoneAsASecurityKeyInfo::NoSupport();

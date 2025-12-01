@@ -20,7 +20,7 @@ void InProcessImporterBridge::AddSpeedDial(
 
 void InProcessImporterBridge::AddExtensions(
     const std::vector<std::string>& extensions) {
-  writer_->AddExtensions(extensions, host_);
+  writer_->AddExtensions(extensions);
 }
 
 void InProcessImporterBridge::AddOpenTabs(

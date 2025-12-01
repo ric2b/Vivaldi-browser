@@ -31,6 +31,7 @@
 #else
 #include "rtc_base/openssl_identity.h"
 #endif
+#include "api/field_trials_view.h"
 #include "api/task_queue/pending_task_safety_flag.h"
 #include "rtc_base/ssl_identity.h"
 #include "rtc_base/ssl_stream_adapter.h"
@@ -70,7 +71,8 @@ class OpenSSLStreamAdapter final : public SSLStreamAdapter {
  public:
   OpenSSLStreamAdapter(
       std::unique_ptr<StreamInterface> stream,
-      absl::AnyInvocable<void(SSLHandshakeError)> handshake_error);
+      absl::AnyInvocable<void(SSLHandshakeError)> handshake_error,
+      const webrtc::FieldTrialsView* field_trials = nullptr);
   ~OpenSSLStreamAdapter() override;
 
   void SetIdentity(std::unique_ptr<SSLIdentity> identity) override;
@@ -78,11 +80,9 @@ class OpenSSLStreamAdapter final : public SSLStreamAdapter {
 
   // Default argument is for compatibility
   void SetServerRole(SSLRole role = SSL_SERVER) override;
-  bool SetPeerCertificateDigest(
+  SSLPeerCertificateDigestError SetPeerCertificateDigest(
       absl::string_view digest_alg,
-      const unsigned char* digest_val,
-      size_t digest_len,
-      SSLPeerCertificateDigestError* error = nullptr) override;
+      rtc::ArrayView<const uint8_t> digest_val) override;
 
   std::unique_ptr<SSLCertChain> GetPeerSSLCertChain() const override;
 
@@ -111,13 +111,6 @@ class OpenSSLStreamAdapter final : public SSLStreamAdapter {
   // Key Extractor interface
   bool ExportSrtpKeyingMaterial(
       rtc::ZeroOnFreeBuffer<uint8_t>& keying_material) override;
-  [[deprecated("Use ExportSrtpKeyingMaterial instead")]] bool
-  ExportKeyingMaterial(absl::string_view label,
-                       const uint8_t* context,
-                       size_t context_len,
-                       bool use_context,
-                       uint8_t* result,
-                       size_t result_len) override;
 
   uint16_t GetPeerSignatureAlgorithm() const override;
 
@@ -136,6 +129,9 @@ class OpenSSLStreamAdapter final : public SSLStreamAdapter {
   // Use our timeutils.h source of timing in BoringSSL, allowing us to test
   // using a fake clock.
   static void EnableTimeCallbackForTesting();
+
+  // Return max DTLS SSLProtocolVersion supported by implementation.
+  static SSLProtocolVersion GetMaxSupportedDTLSProtocolVersion();
 
  private:
   enum SSLState {
@@ -248,8 +244,10 @@ class OpenSSLStreamAdapter final : public SSLStreamAdapter {
   // be too aggressive for low bandwidth links.
   int dtls_handshake_timeout_ms_ = 50;
 
-  // Rollout killswitch for disabling session tickets.
-  const bool disable_handshake_ticket_;
+  // 0 == Disabled
+  // 1 == Max
+  // 2 == Enabled (both min and max)
+  const int force_dtls_13_ = 0;
 };
 
 /////////////////////////////////////////////////////////////////////////////

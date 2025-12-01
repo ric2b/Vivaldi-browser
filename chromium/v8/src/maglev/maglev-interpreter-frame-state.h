@@ -857,6 +857,12 @@ class MergePointInterpreterFrameState {
     DCHECK_LE(predecessors_so_far_, predecessor_count_);
   }
 
+  void clear_is_loop() {
+    bitfield_ =
+        kBasicBlockTypeBits::update(bitfield_, BasicBlockType::kDefault);
+    bitfield_ = kIsResumableLoopBit::update(bitfield_, false);
+  }
+
   // Merges a dead loop framestate (e.g. one where the block containing the
   // JumpLoop has been early terminated with a deopt).
   void MergeDeadLoop(const MaglevCompilationUnit& compilation_unit) {
@@ -865,8 +871,7 @@ class MergePointInterpreterFrameState {
     DCHECK(is_unmerged_loop());
     MergeDead(compilation_unit);
     // This means that this is no longer a loop.
-    bitfield_ =
-        kBasicBlockTypeBits::update(bitfield_, BasicBlockType::kDefault);
+    clear_is_loop();
   }
 
   // Returns and clears the known node aspects on this state. Expects to only
@@ -888,9 +893,9 @@ class MergePointInterpreterFrameState {
   bool has_phi() const { return !phis_.is_empty(); }
   Phi::List* phis() { return &phis_; }
 
-  int predecessor_count() const { return predecessor_count_; }
+  uint32_t predecessor_count() const { return predecessor_count_; }
 
-  int predecessors_so_far() const { return predecessors_so_far_; }
+  uint32_t predecessors_so_far() const { return predecessors_so_far_; }
 
   BasicBlock* predecessor_at(int i) const {
     DCHECK_LE(predecessors_so_far_, predecessor_count_);
@@ -941,18 +946,22 @@ class MergePointInterpreterFrameState {
     return is_loop() && predecessors_so_far_ < predecessor_count_;
   }
 
-  bool is_unreachable_loop() const {
+  bool is_unmerged_unreachable_loop() const {
     // If there is only one predecessor, and it's not set, then this is a loop
     // merge with no forward control flow entering it.
-    return is_loop() && !is_resumable_loop() && predecessor_count_ == 1 &&
-           predecessors_so_far_ == 0;
+    return is_unmerged_loop() && !is_resumable_loop() &&
+           predecessor_count_ == 1 && predecessors_so_far_ == 0;
   }
+
+  bool IsUnreachableByForwardEdge() const;
 
   BasicBlockType basic_block_type() const {
     return kBasicBlockTypeBits::decode(bitfield_);
   }
   bool is_resumable_loop() const {
-    return kIsResumableLoopBit::decode(bitfield_);
+    bool res = kIsResumableLoopBit::decode(bitfield_);
+    DCHECK_IMPLIES(res, is_loop());
+    return res;
   }
   bool is_loop_with_peeled_iteration() const {
     return kIsLoopWithPeeledIterationBit::decode(bitfield_);
@@ -1065,8 +1074,8 @@ class MergePointInterpreterFrameState {
 
   int merge_offset_;
 
-  int predecessor_count_;
-  int predecessors_so_far_;
+  uint32_t predecessor_count_;
+  uint32_t predecessors_so_far_;
 
   uint32_t bitfield_;
 

@@ -8,14 +8,22 @@
 #include <variant>
 #include <vector>
 
+#include "base/containers/flat_map.h"
 #include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
+#include "base/scoped_observation.h"
+#include "chrome/browser/bookmarks/bookmark_merged_surface_service_observer.h"
+#include "chrome/browser/bookmarks/bookmark_parent_folder_children.h"
+#include "components/bookmarks/browser/bookmark_model_observer.h"
+#include "components/bookmarks/browser/bookmark_node.h"
 #include "components/bookmarks/browser/bookmark_node_data.h"
 #include "components/keyed_service/core/keyed_service.h"
 
+class PermanentFolderOrderingTracker;
+class Browser;
+
 namespace bookmarks {
 class BookmarkModel;
-class BookmarkNode;
 class ManagedBookmarkService;
 }  // namespace bookmarks
 
@@ -33,13 +41,14 @@ struct BookmarkParentFolder {
     , kTrash // Vivaldi
   };
 
-  static BookmarkParentFolder FromNonPermanentNode(
-      const bookmarks::BookmarkNode* parent_node);
-
   static BookmarkParentFolder BookmarkBarFolder();
   static BookmarkParentFolder OtherFolder();
   static BookmarkParentFolder MobileFolder();
   static BookmarkParentFolder ManagedFolder();
+
+  // `node` must be not null, not root node and it must be a folder.
+  static BookmarkParentFolder FromFolderNode(
+      const bookmarks::BookmarkNode* node);
 
   // Vivaldi
   static BookmarkParentFolder TrashFolder();
@@ -48,6 +57,12 @@ struct BookmarkParentFolder {
 
   BookmarkParentFolder(const BookmarkParentFolder& other);
   BookmarkParentFolder& operator=(const BookmarkParentFolder& other);
+
+  friend bool operator==(const BookmarkParentFolder&,
+                         const BookmarkParentFolder&) = default;
+
+  friend auto operator<=>(const BookmarkParentFolder&,
+                          const BookmarkParentFolder&) = default;
 
   // Returns `true` if `this` hols a non-permanent folder.
   bool HoldsNonPermanentFolder() const;
@@ -76,9 +91,8 @@ struct BookmarkParentFolder {
 // It maintains the order between local and account bookmark children
 // nodes of permanent bookmark nodes.
 // Merged UI surfaces should use this class for bookmark operations.
-// TODO(crbug.com/364594278): This class is under development, it currently only
-// handles `NodeTypeForUuidLookup::kLocalOrSyncableNodes`.
-class BookmarkMergedSurfaceService : public KeyedService {
+class BookmarkMergedSurfaceService : public KeyedService,
+                                     public bookmarks::BookmarkModelObserver {
  public:
   // `model` must not be null and must outlive this object.
   // `managed_bookmark_service` may be null.
@@ -91,11 +105,6 @@ class BookmarkMergedSurfaceService : public KeyedService {
   BookmarkMergedSurfaceService& operator=(const BookmarkMergedSurfaceService&) =
       delete;
 
-  // Returns true if `node` is of equivalent type to permanent `folder`.
-  static bool IsPermanentNodeOfType(
-      const bookmarks::BookmarkNode* node,
-      BookmarkParentFolder::PermanentFolderType folder);
-
   // Returns underlying nodes in `folder`. This is either:
   // - a single bookmark folder node or
   // - two permanent folder nodes representing local and account bookmark nodes
@@ -103,70 +112,159 @@ class BookmarkMergedSurfaceService : public KeyedService {
   std::vector<const bookmarks::BookmarkNode*> GetUnderlyingNodes(
       const BookmarkParentFolder& folder) const;
 
-  // Returns the index of node with respect to its parent.
+  // Returns the index of node with respect to its parent folder.
   // `node` must not be null.
-  // TODO(crbug.com/364594278): When account nodes are supported within this
-  // class, `this` will return the index within `BookmarkParentFolder`.
   size_t GetIndexOf(const bookmarks::BookmarkNode* node) const;
 
+  // `index` must be less than the folder's children count.
   const bookmarks::BookmarkNode* GetNodeAtIndex(
       const BookmarkParentFolder& folder,
       size_t index) const;
 
   bool loaded() const;
 
+  // Note: In case of managed folder, if `managed_permanent_node()` is null,
+  // this will return `0`.
   size_t GetChildrenCount(const BookmarkParentFolder& folder) const;
 
-  // TODO(crbug.com/364594278): This function will need to return a wrapper that
-  // provides access to children as in some cases, child nodes will be a
-  // combination of the two bookmark nodes's children that would be tracked in a
-  // vector of non-owning pointers to child bookmark nodes. The wrapper would
-  // hide the type difference vector of unique/raw pointers.
-  const std::vector<std::unique_ptr<bookmarks::BookmarkNode>>& GetChildren(
+  // `this` must outlive `BookmarkParentFolderChildren`.
+  // Note: In case of managed folder, if `managed_permanent_node()` is null,
+  // this will return empty children.
+  BookmarkParentFolderChildren GetChildren(
+      const BookmarkParentFolder& folder) const;
+
+  // Returns default parent node for new nodes created in `folder`.
+  // In case of permanent folder, this will return the account node if one
+  // exists, otherwise it returns the local/syncable node.
+  // The bookmark model must be loaded prior to calling this function.
+  // Note: `folder` must be not managed, as the user adding nodes to the managed
+  // folder is not allowed.
+  const bookmarks::BookmarkNode* GetDefaultParentForNewNodes(
       const BookmarkParentFolder& folder) const;
 
   // Moves `node` to `new_parent` at position `index`.
-  // Note: If `BookmarkParentFolder` is a permanent bookmark folder, `index` is
-  // expected to be the position across storages. This can result in a move
-  // operation within the local/account storage and within the
-  // `BookmarkPermanentFolderOrderingTracker`.
+  // If `BookmarkParentFolder` is a permanent bookmark folder:
+  // - `index` is expected to be the position across storages.
+  // - The node is moved to the account node in `GetUnderlyingNodes()` if `node`
+  //   is an account node or to the local underlying node if the node is local.
+  // - This can result in a move operation within the local/account storage and
+  //   within the `BookmarkPermanentFolderOrderingTracker`.
+  // Note: There are two possible target indices (index) that result in a no-op.
+  //   This is similar to what `BookmarkModel::Move()` does.
+  // - If the storages of `node` and `new_parent` don't match, the user will be
+  //   asked to confirm their choice first before moving the bookmark. For this,
+  //   a `browser` is needed.
   void Move(const bookmarks::BookmarkNode* node,
             const BookmarkParentFolder& new_parent,
-            size_t index);
+            size_t index,
+            Browser* browser);
 
-  // Inserts a copy of `node` into `new_parent` at `index`.
-  // Note: If `BookmarkParentFolder` is a permanent bookmark folder, `index` is
-  // expected to be the position across storages. This can result in a copy
-  // operation within the local/account storage then a reorder operation within
-  // the `BookmarkPermanentFolderOrderingTracker` to respect the `index`.
-  void Copy(const bookmarks::BookmarkNode* node,
-            const BookmarkParentFolder& new_parent,
-            size_t index);
-
-  // Same as `Copy()` but copies `element`.
-  void CopyBookmarkNodeDataElement(
-      const bookmarks::BookmarkNodeData::Element& element,
+  // Copies nodes in `elements` to be new child nodes of `new_parent` starting
+  // at `index`. If `BookmarkParentFolder` is a permanent bookmark folder,
+  // `index` is expected to be the position across storages. The new nodes will
+  // be child nodes of `GetDefaultParentForNewNodes()` for the given
+  // `new_parent` folder.
+  void AddNodesAsCopiesOfNodeData(
+      const std::vector<bookmarks::BookmarkNodeData::Element>& elements,
       const BookmarkParentFolder& new_parent,
       size_t index);
 
   // Returns true if `parent` is managed.
-  bool IsParentFolderManaged(const BookmarkParentFolder& parent) const;
+  bool IsParentFolderManaged(const BookmarkParentFolder& folder) const;
 
   // Returns true if `parent` is managed.
-  bool IsNodeManaged(const bookmarks::BookmarkNode* parent) const;
+  bool IsNodeManaged(const bookmarks::BookmarkNode* node) const;
 
   bookmarks::BookmarkModel* bookmark_model() { return model_; }
 
- private:
-  // TODO(crbug.com/364594278): This function will be replaced once this class
-  // supports account nodes.
-  const bookmarks::BookmarkNode* PermanentFolderToNode(
-      BookmarkParentFolder::PermanentFolderType folder) const;
+  using ShowMoveStorageDialogCallback =
+      base::RepeatingCallback<void(Browser* browser,
+                                   const bookmarks::BookmarkNode* node,
+                                   const bookmarks::BookmarkNode* target_node,
+                                   size_t index)>;
+  void SetShowMoveStorageDialogCallbackForTesting(
+      ShowMoveStorageDialogCallback show_move_storage_dialog_for_testing);
 
+  void AddObserver(BookmarkMergedSurfaceServiceObserver* observer);
+  void RemoveObserver(BookmarkMergedSurfaceServiceObserver* observer);
+
+  // bookmarks::BookmarkModelObserver:
+  void BookmarkModelLoaded(bool ids_reassigned) override;
+  void OnWillMoveBookmarkNode(const bookmarks::BookmarkNode* old_parent,
+                              size_t old_index,
+                              const bookmarks::BookmarkNode* new_parent,
+                              size_t new_index) override;
+  void BookmarkNodeMoved(const bookmarks::BookmarkNode* old_parent,
+                         size_t old_index,
+                         const bookmarks::BookmarkNode* new_parent,
+                         size_t new_index) override;
+  void BookmarkNodeAdded(const bookmarks::BookmarkNode* parent,
+                         size_t index,
+                         bool added_by_user) override;
+  void OnWillRemoveBookmarks(const bookmarks::BookmarkNode* parent,
+                             size_t old_index,
+                             const bookmarks::BookmarkNode* node,
+                             const base::Location& location) override;
+  void BookmarkNodeRemoved(const bookmarks::BookmarkNode* parent,
+                           size_t old_index,
+                           const bookmarks::BookmarkNode* node,
+                           const std::set<GURL>& no_longer_bookmarked,
+                           const base::Location& location) override;
+  void BookmarkNodeChanged(const bookmarks::BookmarkNode* node) override;
+  void BookmarkNodeFaviconChanged(const bookmarks::BookmarkNode* node) override;
+  void BookmarkNodeChildrenReordered(
+      const bookmarks::BookmarkNode* node) override;
+  void BookmarkAllUserNodesRemoved(const std::set<GURL>& removed_urls,
+                                   const base::Location& location) override;
+
+ private:
   const bookmarks::BookmarkNode* managed_permanent_node() const;
+
+  const PermanentFolderOrderingTracker& GetPermanentFolderOrderingTracker(
+      BookmarkParentFolder::PermanentFolderType folder_type) const;
+
+  PermanentFolderOrderingTracker& GetPermanentFolderOrderingTracker(
+      BookmarkParentFolder::PermanentFolderType folder_type);
+
+  // Helper function for optimization purposes.
+  // Returns `in_storage_index` if node is not tracked in any of
+  // `PermanentFolderOrderingTracker` or it is tracked but the ordering is not
+  // tracked based on `PermanentFolderOrderingTracker::ShouldTrackOrdering()`.
+  // Otherwise, returns `PermanentFolderOrderingTracker::GetIndexOf(node)`.
+  size_t GetIndexAcrossStorage(const bookmarks::BookmarkNode* node,
+                               size_t in_storage_index) const;
 
   const raw_ptr<bookmarks::BookmarkModel> model_;
   const raw_ptr<bookmarks::ManagedBookmarkService> managed_bookmark_service_;
+  const base::flat_map<BookmarkParentFolder::PermanentFolderType,
+                       std::unique_ptr<PermanentFolderOrderingTracker>>
+      permanent_folder_to_tracker_;
+
+  // Used in `GetChildren()` to return empty when managed node is null.
+  const bookmarks::BookmarkNode dummy_empty_node_;
+
+  ShowMoveStorageDialogCallback show_move_storage_dialog_for_testing_;
+
+  // Non-empty in the middle of bookmark node removal.
+  // It is set in `OnWillRemoveBookmarks()` and cleared in
+  // `BookmarkNodeRemoved()`.
+  // - It can contain zero, one or more elements in case of account node removal
+  // based on the account node's children size.
+  // - Otherwise, it contains a single node that is being removed.
+  base::flat_map<size_t, raw_ptr<const bookmarks::BookmarkNode>>
+      cached_index_for_nodes_removal_;
+
+  // Non-empty in the middle of moving a bookmark node.
+  // It is set in `OnWillMoveBookmarkNode()` and cleared in
+  // `BookmarkNodeMoved()`.
+  std::optional<std::pair<size_t, raw_ptr<const bookmarks::BookmarkNode>>>
+      cached_index_for_node_move_;
+
+  base::ObserverList<BookmarkMergedSurfaceServiceObserver> observers_;
+
+  base::ScopedObservation<bookmarks::BookmarkModel,
+                          bookmarks::BookmarkModelObserver>
+      model_observation_{this};
 };
 
 #endif  // CHROME_BROWSER_BOOKMARKS_BOOKMARK_MERGED_SURFACE_SERVICE_H_

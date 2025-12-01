@@ -15,16 +15,15 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 
 import static org.chromium.base.GarbageCollectionTestUtils.canBeGarbageCollected;
 
+import android.app.Activity;
 import android.content.res.ColorStateList;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
@@ -46,31 +45,31 @@ import androidx.core.widget.ImageViewCompat;
 import androidx.test.annotation.UiThreadTest;
 import androidx.test.filters.MediumTest;
 
-import com.google.protobuf.ByteString;
-
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.Token;
+import org.chromium.base.test.BaseActivityTestRule;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.optimization_guide.OptimizationGuideBridge;
-import org.chromium.chrome.browser.optimization_guide.OptimizationGuideBridge.OptimizationGuideCallback;
 import org.chromium.chrome.browser.optimization_guide.OptimizationGuideBridgeFactory;
 import org.chromium.chrome.browser.optimization_guide.OptimizationGuideBridgeFactoryJni;
 import org.chromium.chrome.browser.price_tracking.PriceTrackingFeatures;
@@ -99,17 +98,13 @@ import org.chromium.components.commerce.PriceTracking.ProductPrice;
 import org.chromium.components.commerce.PriceTracking.ProductPriceUpdate;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.embedder_support.util.UrlUtilitiesJni;
-import org.chromium.components.optimization_guide.OptimizationGuideDecision;
-import org.chromium.components.optimization_guide.proto.CommonTypesProto.Any;
-import org.chromium.components.optimization_guide.proto.HintsProto;
-import org.chromium.components.payments.CurrencyFormatter;
-import org.chromium.components.payments.CurrencyFormatterJni;
+import org.chromium.components.payments.ui.CurrencyFormatter;
+import org.chromium.components.payments.ui.CurrencyFormatterJni;
 import org.chromium.components.tab_groups.TabGroupColorId;
 import org.chromium.content_public.browser.BrowserContextHandle;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
-import org.chromium.ui.test.util.BlankUiTestActivityTestCase;
-import org.chromium.url.GURL;
+import org.chromium.ui.test.util.BlankUiTestActivity;
 
 import java.lang.ref.WeakReference;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -121,11 +116,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add(ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE)
-@EnableFeatures(ChromeFeatureList.COMMERCE_PRICE_TRACKING)
+@EnableFeatures(ChromeFeatureList.PRICE_ANNOTATIONS)
 @Batch(Batch.UNIT_TESTS)
-public class TabListViewHolderTest extends BlankUiTestActivityTestCase {
-    @Rule public JniMocker mMocker = new JniMocker();
-
+public class TabListViewHolderTest {
     private static final int TAB1_ID = 456;
     private static final int TAB2_ID = 789;
     private static final String EXPECTED_PRICE_STRING = "$287";
@@ -145,10 +138,6 @@ public class TabListViewHolderTest extends BlankUiTestActivityTestCase {
                     .setBuyableProduct(BUYABLE_PRODUCT)
                     .setProductUpdate(PRODUCT_PRICE_UPDATE)
                     .build();
-    private static final Any ANY_PRICE_TRACKING_DATA =
-            Any.newBuilder()
-                    .setValue(ByteString.copyFrom(PRICE_TRACKING_DATA.toByteArray()))
-                    .build();
 
     private static ProductPrice createProductPrice(long amountMicros, String currencyCode) {
         return ProductPrice.newBuilder()
@@ -158,11 +147,14 @@ public class TabListViewHolderTest extends BlankUiTestActivityTestCase {
     }
 
     private static final String USD_CURRENCY_SYMBOL = "$";
-    private static final String EXPECTED_PRICE = "$5.00";
-    private static final String EXPECTED_PREVIOUS_PRICE = "$10";
-    private static final String EXPECTED_CONTENT_DESCRIPTION =
-            "The price of this item recently dropped from $10 to $5.00";
-    private static final GURL TEST_GURL = new GURL("https://www.google.com");
+
+    @ClassRule
+    public static BaseActivityTestRule<BlankUiTestActivity> sActivityTestRule =
+            new BaseActivityTestRule<>(BlankUiTestActivity.class);
+
+    private static Activity sActivity;
+
+    @Rule public final MockitoRule mMockitoRule = MockitoJUnit.rule();
 
     private ViewGroup mTabGridView;
     private PropertyModel mGridModel;
@@ -246,46 +238,49 @@ public class TabListViewHolderTest extends BlankUiTestActivityTestCase {
     private AtomicInteger mCreateGroupTabId = new AtomicInteger();
     private boolean mShouldReturnBitmap;
 
-    @Override
-    public void setUpTest() throws Exception {
-        super.setUpTest();
-        getActivity().setTheme(R.style.Theme_BrowserUI_DayNight);
+    @BeforeClass
+    public static void setupSuite() {
+        sActivity = sActivityTestRule.launchActivity(null);
+    }
+
+    @Before
+    public void setUp() throws Exception {
+        sActivity.setTheme(R.style.Theme_BrowserUI_DayNight);
         // Note: MockitoRule does not work here due to timing issues with
         // BlankUiTestActivityTestCase.
-        MockitoAnnotations.initMocks(this);
 
-        ViewGroup view = new LinearLayout(getActivity());
+        ViewGroup view = new LinearLayout(sActivity);
         FrameLayout.LayoutParams params =
                 new FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
 
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    getActivity().setContentView(view, params);
+                    sActivity.setContentView(view, params);
 
                     mTabGridView =
                             (ViewGroup)
-                                    getActivity()
+                                    sActivity
                                             .getLayoutInflater()
                                             .inflate(R.layout.tab_grid_card_item, null);
                     mTabStripView =
                             (ViewGroup)
-                                    getActivity()
+                                    sActivity
                                             .getLayoutInflater()
                                             .inflate(R.layout.tab_strip_item, null);
                     mSelectableTabGridView =
                             (ViewGroup)
-                                    getActivity()
+                                    sActivity
                                             .getLayoutInflater()
                                             .inflate(R.layout.tab_grid_card_item, null);
                     mSelectableTabListView =
                             (ViewGroup)
-                                    getActivity()
+                                    sActivity
                                             .getLayoutInflater()
                                             .inflate(R.layout.tab_list_card_item, null);
                     mTabListView =
                             (ViewGroup)
-                                    getActivity()
+                                    sActivity
                                             .getLayoutInflater()
                                             .inflate(R.layout.tab_list_card_item, null);
 
@@ -353,7 +348,7 @@ public class TabListViewHolderTest extends BlankUiTestActivityTestCase {
                             PropertyModelChangeProcessor.create(
                                     mGridModel, mTabListView, TabListViewBinder::bindTab);
                 });
-        mMocker.mock(LevelDBPersistedDataStorageJni.TEST_HOOKS, mLevelDbPersistedTabDataStorage);
+        LevelDBPersistedDataStorageJni.setInstanceForTesting(mLevelDbPersistedTabDataStorage);
         doNothing()
                 .when(mLevelDbPersistedTabDataStorage)
                 .init(any(LevelDBPersistedDataStorage.class), any(BrowserContextHandle.class));
@@ -361,17 +356,16 @@ public class TabListViewHolderTest extends BlankUiTestActivityTestCase {
         LevelDBPersistedDataStorage.setSkipNativeAssertionsForTesting(true);
 
         ProfileManager.setLastUsedProfileForTesting(mProfile);
-        PriceTrackingFeatures.setPriceTrackingEnabledForTesting(false);
+        PriceTrackingFeatures.setPriceAnnotationsEnabledForTesting(false);
 
-        mMocker.mock(UrlUtilitiesJni.TEST_HOOKS, mUrlUtilitiesJniMock);
-        mMocker.mock(CurrencyFormatterJni.TEST_HOOKS, mCurrencyFormatterJniMock);
+        UrlUtilitiesJni.setInstanceForTesting(mUrlUtilitiesJniMock);
+        CurrencyFormatterJni.setInstanceForTesting(mCurrencyFormatterJniMock);
         doReturn(1L)
                 .when(mCurrencyFormatterJniMock)
                 .initCurrencyFormatterAndroid(
                         any(CurrencyFormatter.class), anyString(), anyString());
         doNothing().when(mCurrencyFormatterJniMock).setMaxFractionalDigits(anyLong(), anyInt());
-        mMocker.mock(
-                OptimizationGuideBridgeFactoryJni.TEST_HOOKS,
+        OptimizationGuideBridgeFactoryJni.setInstanceForTesting(
                 mOptimizationGuideBridgeFactoryJniMock);
         doReturn(mOptimizationGuideBridge)
                 .when(mOptimizationGuideBridgeFactoryJniMock)
@@ -464,14 +458,14 @@ public class TabListViewHolderTest extends BlankUiTestActivityTestCase {
         final String title = "Surf the cool webz";
         mGridModel.set(TabProperties.TITLE, title);
         TextView textView = mTabGridView.findViewById(R.id.tab_title);
-        Assert.assertEquals(textView.getText(), title);
+        Assert.assertEquals(title, textView.getText());
 
         mSelectableModel.set(TabProperties.TITLE, title);
         textView = mSelectableTabGridView.findViewById(R.id.tab_title);
-        Assert.assertEquals(textView.getText(), title);
+        Assert.assertEquals(title, textView.getText());
 
         textView = mSelectableTabListView.findViewById(R.id.title);
-        Assert.assertEquals(textView.getText(), title);
+        Assert.assertEquals(title, textView.getText());
     }
 
     @Test
@@ -646,7 +640,13 @@ public class TabListViewHolderTest extends BlankUiTestActivityTestCase {
         Assert.assertNull(gridActionButton.getContentDescription());
 
         String closeTabDescription = "Close tab";
-        mGridModel.set(TabProperties.ACTION_BUTTON_DESCRIPTION_STRING, closeTabDescription);
+        TextResolver actionButtonDescriptionTextResolver =
+                (context) -> {
+                    return closeTabDescription;
+                };
+        mGridModel.set(
+                TabProperties.ACTION_BUTTON_DESCRIPTION_TEXT_RESOLVER,
+                actionButtonDescriptionTextResolver);
 
         Assert.assertEquals(closeTabDescription, listActionButton.getContentDescription());
         Assert.assertEquals(closeTabDescription, gridActionButton.getContentDescription());
@@ -665,7 +665,7 @@ public class TabListViewHolderTest extends BlankUiTestActivityTestCase {
         boolean isSelected = false;
         mGridModel.set(TabProperties.IS_SELECTED, isSelected);
         ColorStateList unselectedColorStateList =
-                TabUiThemeProvider.getActionButtonTintList(getActivity(), isIncognito, isSelected);
+                TabUiThemeProvider.getActionButtonTintList(sActivity, isIncognito, isSelected);
 
         Assert.assertEquals(
                 unselectedColorStateList, ImageViewCompat.getImageTintList(gridActionButton));
@@ -675,7 +675,7 @@ public class TabListViewHolderTest extends BlankUiTestActivityTestCase {
         isSelected = true;
         mGridModel.set(TabProperties.IS_SELECTED, isSelected);
         ColorStateList selectedColorStateList =
-                TabUiThemeProvider.getActionButtonTintList(getActivity(), isIncognito, isSelected);
+                TabUiThemeProvider.getActionButtonTintList(sActivity, isIncognito, isSelected);
         // The listActionButton does not highlight so use unselected always.
         Assert.assertEquals(
                 selectedColorStateList, ImageViewCompat.getImageTintList(gridActionButton));
@@ -742,6 +742,43 @@ public class TabListViewHolderTest extends BlankUiTestActivityTestCase {
         mStripModel.set(TabProperties.IS_SELECTED, false);
         button.performClick();
         Assert.assertFalse(mCloseClicked.get());
+    }
+
+    @Test
+    @MediumTest
+    @UiThreadTest
+    @EnableFeatures(ChromeFeatureList.DATA_SHARING)
+    public void testTabCardLabel() {
+        // Test initially null state.
+        mGridModel.set(TabProperties.TAB_CARD_LABEL_DATA, null);
+
+        assertNull(mTabGridView.findViewById(R.id.tab_card_label));
+        FrameLayout listContainer = mTabListView.findViewById(R.id.before_description_container);
+        assertEquals(0, listContainer.getChildCount());
+
+        TabCardLabelData data =
+                new TabCardLabelData(
+                        TabCardLabelType.ACTIVITY_UPDATE,
+                        context -> "Test label",
+                        /* asyncImageFactory= */ null,
+                        /* contentDescriptionResolver= */ null);
+        mGridModel.set(TabProperties.TAB_CARD_LABEL_DATA, data);
+
+        TabCardLabelView gridLabel = mTabGridView.findViewById(R.id.tab_card_label);
+        assertNotNull(gridLabel);
+        assertEquals(View.VISIBLE, gridLabel.getVisibility());
+        assertEquals(1, listContainer.getChildCount());
+        TabCardLabelView listLabel = (TabCardLabelView) listContainer.getChildAt(0);
+        assertNotNull(listLabel);
+        assertEquals(View.VISIBLE, listLabel.getVisibility());
+
+        mGridModel.set(TabProperties.TAB_CARD_LABEL_DATA, null);
+
+        assertEquals(View.GONE, gridLabel.getVisibility());
+        assertEquals(View.GONE, listLabel.getVisibility());
+
+        TabListViewBinder.onViewRecycled(mGridModel, mTabListView);
+        assertNull(listLabel.getParent());
     }
 
     @Test
@@ -884,7 +921,7 @@ public class TabListViewHolderTest extends BlankUiTestActivityTestCase {
             int expectedVisibility,
             String expectedCurrentPrice,
             String expectedPreviousPrice) {
-        PriceTrackingFeatures.setPriceTrackingEnabledForTesting(true);
+        PriceTrackingFeatures.setPriceAnnotationsEnabledForTesting(true);
         testGridSelected(mTabGridView, mGridModel);
 
         mGridModel.set(TabProperties.SHOPPING_PERSISTED_TAB_DATA_FETCHER, fetcher);
@@ -1030,7 +1067,7 @@ public class TabListViewHolderTest extends BlankUiTestActivityTestCase {
 
         TabGroupColorViewProvider provider =
                 new TabGroupColorViewProvider(
-                        getActivity(),
+                        sActivity,
                         new Token(1L, 2L),
                         /* isIncognito= */ false,
                         TabGroupColorId.BLUE,
@@ -1071,7 +1108,7 @@ public class TabListViewHolderTest extends BlankUiTestActivityTestCase {
 
         TabGroupColorViewProvider provider =
                 new TabGroupColorViewProvider(
-                        getActivity(),
+                        sActivity,
                         new Token(1L, 2L),
                         /* isIncognito= */ false,
                         TabGroupColorId.BLUE,
@@ -1105,9 +1142,9 @@ public class TabListViewHolderTest extends BlankUiTestActivityTestCase {
     public void testTabStripNotificationBubble_toggleHasNotification() {
         ImageView notificationView = mTabStripView.findViewById(R.id.tab_strip_notification_bubble);
 
-        assertEquals(notificationView.getVisibility(), View.GONE);
+        assertEquals(View.GONE, notificationView.getVisibility());
         mStripModel.set(TabProperties.HAS_NOTIFICATION_BUBBLE, true);
-        assertEquals(notificationView.getVisibility(), View.VISIBLE);
+        assertEquals(View.VISIBLE, notificationView.getVisibility());
     }
 
     @Test
@@ -1177,60 +1214,13 @@ public class TabListViewHolderTest extends BlankUiTestActivityTestCase {
         return new BitmapDrawable(resources, image);
     }
 
-    private void mockCurrencyFormatter() {
-        doAnswer(
-                        new Answer<String>() {
-                            @Override
-                            public String answer(InvocationOnMock invocation) {
-                                StringBuilder sb = new StringBuilder();
-                                sb.append(USD_CURRENCY_SYMBOL);
-                                sb.append(invocation.getArguments()[2]);
-                                return sb.toString();
-                            }
-                        })
-                .when(mCurrencyFormatterJniMock)
-                .format(anyLong(), any(CurrencyFormatter.class), anyString());
-    }
-
-    private void mockUrlUtilities() {
-        doAnswer(
-                        new Answer<String>() {
-                            @Override
-                            public String answer(InvocationOnMock invocation) {
-                                return (String) invocation.getArguments()[0];
-                            }
-                        })
-                .when(mUrlUtilitiesJniMock)
-                .escapeQueryParamValue(anyString(), anyBoolean());
-    }
-
-    private void mockOptimizationGuideResponse(
-            @OptimizationGuideDecision int decision, Any metadata) {
-        doAnswer(
-                        new Answer<Void>() {
-                            @Override
-                            public Void answer(InvocationOnMock invocation) {
-                                OptimizationGuideCallback callback =
-                                        (OptimizationGuideCallback) invocation.getArguments()[2];
-                                callback.onOptimizationGuideDecision(decision, metadata);
-                                return null;
-                            }
-                        })
-                .when(mOptimizationGuideBridge)
-                .canApplyOptimization(
-                        any(GURL.class),
-                        any(HintsProto.OptimizationType.class),
-                        any(OptimizationGuideCallback.class));
-    }
-
-    @Override
-    public void tearDownTest() throws Exception {
+    @After
+    public void tearDown() throws Exception {
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     mStripMcp.destroy();
                     mGridMcp.destroy();
                     mSelectableMcp.destroy();
                 });
-        super.tearDownTest();
     }
 }

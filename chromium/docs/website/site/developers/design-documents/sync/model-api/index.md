@@ -19,7 +19,7 @@ Unified Sync and Storage (USS). There is also the deprecated [SyncableService
 API] (aka Directory), which as of early 2022 is still used by several legacy
 data types, but "wrapped into" USS (see [SyncableServiceBasedBridge]).
 
-[SyncableService API]: https://www.chromium.org/developers/design-documents/sync/syncable-service-api
+[SyncableService API]: /developers/design-documents/sync/syncable-service-api
 [SyncableServiceBasedBridge]: https://cs.chromium.org/chromium/src/components/sync/model/syncable_service_based_bridge.h
 
 [TOC]

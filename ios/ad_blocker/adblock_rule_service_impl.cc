@@ -134,6 +134,34 @@ void RuleServiceImpl::SetIncognitoBrowserState(
   content_injection_handler_->SetIncognitoBrowserState(browser_state);
 }
 
+bool RuleServiceImpl::IsPartnerListAllowedDocument(RuleGroup group, GURL url) {
+  const base::Value::List& partner_list_allowed_documents =
+      organized_rules_manager_[static_cast<size_t>(group)]
+          ->partner_list_allowed_documents();
+
+  for (const auto& partner_list_allowed_document :
+       partner_list_allowed_documents) {
+    const std::string& host = partner_list_allowed_document.GetString();
+    if (!url.host().ends_with(host)) {
+      continue;
+    }
+
+    if (url.host().size() == host.size()) {
+      return true;
+    }
+
+    if (url.host().size() > host.size()) {
+      size_t size_diff = url.host().size() - host.size();
+
+      if (url.host().at(size_diff - 1) == '.') {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 bool RuleServiceImpl::IsRuleGroupEnabled(RuleGroup group) const {
   return true;
 }

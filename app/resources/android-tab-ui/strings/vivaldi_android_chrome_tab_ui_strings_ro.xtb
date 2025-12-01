@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ro">
+<translation id="2947471979790858922">Activitatea dumneavoastră în aceste file private va fi eliminată de pe acest dispozitiv</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+        =1 {Puteți găsi filele dumneavoastră închise în Filele Recente din meniul principal Vivaldi. Fila dumneavoastră privată nu va fi disponibilă.}
+        other {Puteți găsi filele dumneavoastră închise în Filele Recente din meniul principal Vivaldi. Cele # file private nu vor fi disponibile.}}</translation>
 <translation id="4871187110787939393">Închideți toate filele private?</translation>
 </translationbundle>

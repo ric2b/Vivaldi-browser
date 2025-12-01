@@ -111,7 +111,7 @@ the JavaScript engine used within Chromium.
 *   [Impl-side
             Painting](/developers/design-documents/impl-side-painting)
 *   [Video Playback and
-            Compositor](http://www.chromium.org/developers/design-documents/video-playback-and-compositor)
+            Compositor](/developers/design-documents/video-playback-and-compositor)
 *   [ANGLE architecture
             presentation](https://docs.google.com/presentation/d/1CucIsdGVDmdTWRUbg68IxLE5jXwCb2y1E9YVhQo0thg/pub?start=false&loop=false)
 
@@ -132,7 +132,7 @@ the JavaScript engine used within Chromium.
 *   [HTTP
             Authentication](/developers/design-documents/http-authentication)
 *   [View network internals tool](/system/errors/NodeNotFound)
-*   [Make the web faster with SPDY](http://www.chromium.org/spdy/) pages
+*   [Make the web faster with SPDY](/spdy/) pages
 *   [Make the web even faster with QUIC](/quic) pages
 *   [Cookie storage and
             retrieval](/developers/design-documents/network-stack/cookiemonster)
@@ -194,7 +194,7 @@ which is the build script generation tool.
             Mirroring](/developers/design-documents/auto-throttled-screen-capture-and-mirroring)
 *   [Browser Window](/developers/design-documents/browser-window)
 *   [Chromium Print
-            Proxy](http://www.chromium.org/developers/design-documents/google-cloud-print-proxy-design):
+            Proxy](/developers/design-documents/google-cloud-print-proxy-design):
             Enables a cloud print service for legacy printers and future
             cloud-aware printers.
 *   [Constrained Popup
@@ -218,7 +218,7 @@ which is the build script generation tool.
             data.
 *   [Geolocation](https://docs.google.com/a/chromium.org/document/pub?id=13rAaY1dG0nrlKpfy7Txlec4U6dsX3PE9aXHkvE37JZo):
             Adding support for [W3C Geolocation
-            API](http://www.w3.org/TR/geolocation-API/) using native WebKit
+            API](https://www.w3.org/TR/geolocation-API/) using native WebKit
             bindings.
 *   [Generic-Sensor](/developers/design-documents/generic-sensor) :
             Access sensor data

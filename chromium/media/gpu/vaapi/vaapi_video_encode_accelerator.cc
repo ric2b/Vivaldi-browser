@@ -24,7 +24,6 @@
 #include "base/memory/shared_memory_mapping.h"
 #include "base/memory/unsafe_shared_memory_region.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/bind_post_task.h"
@@ -155,7 +154,7 @@ VaapiVideoEncodeAccelerator::VaapiVideoEncodeAccelerator()
 
   // The default value of VideoEncoderInfo of VaapiVideoEncodeAccelerator.
   encoder_info_.implementation_name = "VaapiVideoEncodeAccelerator";
-  DCHECK(!encoder_info_.has_trusted_rate_controller);
+  encoder_info_.has_trusted_rate_controller = true;
   DCHECK(encoder_info_.is_hardware_accelerated);
   DCHECK(encoder_info_.supports_native_handle);
   DCHECK(!encoder_info_.supports_simulcast);
@@ -217,7 +216,7 @@ bool VaapiVideoEncodeAccelerator::Initialize(
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
     // TODO(crbug.com/40172317): Remove this restriction.
-    if (!base::ranges::is_sorted(
+    if (!std::ranges::is_sorted(
             config.spatial_layers,
             [](const VideoEncodeAccelerator::Config::SpatialLayer& lhs,
                const VideoEncodeAccelerator::Config::SpatialLayer& rhs) {
@@ -374,6 +373,7 @@ void VaapiVideoEncodeAccelerator::InitializeTask(const Config& config) {
             VaapiWrapper::GetImplementationType() ==
                 VAImplementation::kIntelIHD) {
           encoder_info_.reports_average_qp = false;
+          encoder_info_.has_trusted_rate_controller = false;
         }
       }
       break;
@@ -644,11 +644,11 @@ bool VaapiVideoEncodeAccelerator::CreateSurfacesForGpuMemoryBufferEncoding(
   // ordered from small to larger ones. It cannot contain duplicates.
   // TODO(crbug.com/40172317): Consider supporting multiple layers with the
   // same resolution.
-  CHECK(base::ranges::is_sorted(spatial_layer_resolutions,
-                                [](const gfx::Size& lhs, const gfx::Size& rhs) {
-                                  return lhs.width() < rhs.width() &&
-                                         lhs.height() < rhs.height();
-                                }));
+  CHECK(std::ranges::is_sorted(spatial_layer_resolutions,
+                               [](const gfx::Size& lhs, const gfx::Size& rhs) {
+                                 return lhs.width() < rhs.width() &&
+                                        lhs.height() < rhs.height();
+                               }));
 
   // Create input surfaces.
   TRACE_EVENT1("media,gpu", "VAVEA::ConstructSurfaces", "layers",

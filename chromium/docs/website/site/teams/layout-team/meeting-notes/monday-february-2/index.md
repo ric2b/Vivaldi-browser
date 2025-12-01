@@ -19,22 +19,22 @@ tests have very simple layout though so font-loading is the only
 linux.
 - Added histogram for layout times to collect user data. Might add more
 detailed ones (text layout vs block layout etc) later.
-Rename Rendering -&gt; Layout \[[crbug.com/450612](http://crbug.com/450612)\]
+Rename Rendering -&gt; Layout \[[crbug.com/450612](https://crbug.com/450612)\]
 (dsinclair, bsittler,
 jchaffraix, eae)
 - Moving rendering to layout. Using spreadsheet to coordinate.
 - Moved hit testing last week, moving compositing now (dsinclair)
 First-letter (dsinclair)
 - More Clusterfuzz issues.
-Line Boxes (hartmanng, szager) \[[crbug.com/321237](http://crbug.com/321237)\]
+Line Boxes (hartmanng, szager) \[[crbug.com/321237](https://crbug.com/321237)\]
 - Continuing on float to layout unit conversion. Looks like a few more
 classes will need to move to layout unit.
 - hartmanng and szager to sync up on status and strategy.
-Flexbox (cbiesinger) \[[crbug.com/426898](http://crbug.com/426898)\]
+Flexbox (cbiesinger) \[[crbug.com/426898](https://crbug.com/426898)\]
 - Started working on updating flexbox implementation to match latest
 spec revision.
 - Coordinating with the firefox and IE teams to ensure compatibility.
-Scrolling (skobes) \[[crbug.com/417782](http://crbug.com/417782)\]
+Scrolling (skobes) \[[crbug.com/417782](https://crbug.com/417782)\]
 - Background painting bug has been fixed (yay!)
 - window.scrollTo wired up for root layer scrolling.
 - Working on issues with position: fixed.

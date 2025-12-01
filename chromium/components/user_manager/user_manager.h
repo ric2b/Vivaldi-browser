@@ -16,11 +16,10 @@
 #include "components/user_manager/user_type.h"
 
 class AccountId;
+class PrefRegistrySimple;
 class PrefService;
 
 namespace user_manager {
-
-class MultiUserSignInPolicyController;
 
 namespace internal {
 class ScopedUserManagerImpl;
@@ -35,6 +34,7 @@ enum class UserRemovalReason : int32_t {
   GAIA_REMOVED = 5,
   MISCONFIGURED_USER = 6,
   DEVICE_LOCAL_ACCOUNT_UPDATED = 7,
+  DEMO_ACCOUNT_CLEAN_UP = 8,
 };
 
 // Interface for UserManagerImpl - that provides base implementation for
@@ -72,6 +72,9 @@ class USER_MANAGER_EXPORT UserManager {
 
     // Called when the Profile instance for the user is created.
     virtual void OnUserProfileCreated(const User& user);
+
+    // Called when the Profile instance for the user will be destroyed soon.
+    virtual void OnUserProfileWillBeDestroyed(const User& user);
 
     // Called when the profile image download for the given user fails or
     // user has the default profile image or no porfile image at all.
@@ -161,6 +164,10 @@ class USER_MANAGER_EXPORT UserManager {
     // Display name. Can be set only if the type is kPublicAccount.
     std::optional<std::u16string> display_name;
   };
+
+  // Registers UserManager preferences.
+  static void RegisterPrefs(PrefRegistrySimple* registry);
+  static void RegisterProfilePrefs(PrefRegistrySimple* registry);
 
   // Initializes UserManager instance to this. Normally should be called right
   // after creation so that user_manager::UserManager::Get() doesn't fail.
@@ -358,6 +365,10 @@ class USER_MANAGER_EXPORT UserManager {
   virtual void UpdateUserAccountData(const AccountId& account_id,
                                      const UserAccountData& account_data) = 0;
 
+  // Sets account locale for user with id |account_id|.
+  virtual void UpdateUserAccountLocale(const AccountId& account_id,
+                                       const std::string& locale) = 0;
+
   // Saves user's displayed (non-canonical) email in local state preferences.
   // Ignored If there is no such user.
   virtual void SaveUserDisplayEmail(const AccountId& account_id,
@@ -514,18 +525,14 @@ class USER_MANAGER_EXPORT UserManager {
   virtual bool IsDeviceLocalAccountMarkedForRemoval(
       const AccountId& account_id) const = 0;
 
-  // Sets affiliation status for the user identified with `account_id`
-  // to `is_affiliated`.
-  virtual void SetUserAffiliated(const AccountId& account_id,
-                                 bool is_affiliated) = 0;
+  // Sets policy status for the user identified with `account_id`.
+  virtual void SetUserPolicyStatus(const AccountId& account_id,
+                                   bool is_managed,
+                                   bool is_affiliated) = 0;
 
   // Returns true when the browser has crashed and restarted during the current
   // user's session.
   virtual bool HasBrowserRestarted() const = 0;
-
-  // Returns the instance of multi user sign-in policy controller.
-  virtual MultiUserSignInPolicyController*
-  GetMultiUserSignInPolicyController() = 0;
 
   UserType CalculateUserType(const AccountId& account_id,
                              const User* user,

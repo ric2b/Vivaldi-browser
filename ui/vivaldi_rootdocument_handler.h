@@ -63,7 +63,7 @@ class VivaldiRootDocumentHandlerFactory
   ~VivaldiRootDocumentHandlerFactory() override;
 
   // BrowserContextKeyedServiceFactory:
-  KeyedService* BuildServiceInstanceFor(
+  std::unique_ptr<KeyedService> BuildServiceInstanceForBrowserContext(
       content::BrowserContext* context) const override;
   bool ServiceIsCreatedWithBrowserContext() const override;
   bool ServiceIsNULLWhileTesting() const override;
@@ -80,6 +80,7 @@ class VivaldiRootDocumentHandler : public KeyedService,
 
  public:
   explicit VivaldiRootDocumentHandler(content::BrowserContext*);
+  ~VivaldiRootDocumentHandler() override;
 
   void AddObserver(VivaldiRootDocumentHandlerObserver* observer);
   void RemoveObserver(VivaldiRootDocumentHandlerObserver* observer);
@@ -92,8 +93,6 @@ class VivaldiRootDocumentHandler : public KeyedService,
   }
 
  private:
-  ~VivaldiRootDocumentHandler() override;
-
   // ProfileObserver implementation.
   void OnOffTheRecordProfileCreated(Profile* off_the_record) override;
   void OnProfileWillBeDestroyed(Profile* profile) override;

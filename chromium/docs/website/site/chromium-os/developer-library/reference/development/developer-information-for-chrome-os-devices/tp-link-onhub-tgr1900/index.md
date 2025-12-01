@@ -2,7 +2,7 @@
 breadcrumbs:
 - - /chromium-os
   - ChromiumOS
-- - /chromium-os/developer-information-for-chrome-os-devices
+- - /chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices
   - Developer Information for ChromeOS Devices
 page_name: tp-link-onhub-tgr1900
 title: TP-LINK OnHub TGR1900
@@ -21,15 +21,15 @@ Chrome Notebook), see the [ChromiumOS Developer
 Guide](/chromium-os/developer-guide).
 
 [<img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/tp-link-onhub-tgr1900/tplink_black.png"
+src="tplink_black.png"
 height=200
-width=116>](/chromium-os/developer-information-for-chrome-os-devices/tp-link-onhub-tgr1900/tplink_black.png)
+width=116>](./tplink_black.png)
 <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/tp-link-onhub-tgr1900/tplink_blue.png"
+src="tplink_blue.png"
 height=200 width=116> [<img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/tp-link-onhub-tgr1900/tplink_top.jpg"
+src="tplink_top.jpg"
 height=200
-width=199>](/chromium-os/developer-information-for-chrome-os-devices/tp-link-onhub-tgr1900/tplink_top.jpg)
+width=199>](./tplink_top.jpg)
 
 ### Specifications
 

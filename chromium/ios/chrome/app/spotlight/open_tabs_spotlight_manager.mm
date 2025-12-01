@@ -5,6 +5,7 @@
 #import "ios/chrome/app/spotlight/open_tabs_spotlight_manager.h"
 
 #import <CoreSpotlight/CoreSpotlight.h>
+
 #import <memory>
 #import <queue>
 
@@ -212,7 +213,6 @@ const int kBatchSize = 100;
   }
 
   [self addAllURLsFromWebStateList:webStateList];
-
 }
 
 - (void)browserList:(const BrowserList*)browserList
@@ -233,7 +233,7 @@ const int kBatchSize = 100;
   [self removeAllURLsFromWebStateList:webStateList];
 }
 
-- (void)browserListWillShutdown:(const BrowserList*)browserList {
+- (void)browserListWillShutdown:(BrowserList*)browserList {
   [self shutdownAllObservation];
 }
 

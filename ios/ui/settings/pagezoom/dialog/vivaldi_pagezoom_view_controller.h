@@ -15,8 +15,6 @@
 - (void)resetZoom;
 // Asks the handler to refresh the state
 - (void)refreshState;
-// update global page zoom status
-- (void)updateGlobalZoomSwitch:(UISwitch *)sender;
 @end
 
 

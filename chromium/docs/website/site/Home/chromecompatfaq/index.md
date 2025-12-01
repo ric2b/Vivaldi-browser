@@ -154,7 +154,7 @@ dire since it prevents them from viewing the site.
 
 *   Declare your page's content-type correctly, this can either be in an
             [HTTP
-            header](http://www.w3.org/International/tutorials/tutorial-char-enc/#Slide0270)
+            header](https://www.w3.org/International/tutorials/tutorial-char-enc/#Slide0270)
             or a [Meta tag specified in your
             HTML](http://code.google.com/p/doctype/wiki/MetaCharsetAttribute).
 *   The character set your page uses must be a legal value from the
@@ -172,7 +172,7 @@ dire since it prevents them from viewing the site.
             legacy encoding for some reason, make sure to identify the encoding
             correctly as outlined above. For legacy situations involving Hebrew
             sites use [Logical Hebrew encoding
-            (ISO-8859-8-I)](http://www.w3.org/International/geo/html-tech/tech-bidi.html#ri20030112.21380914).
+            (ISO-8859-8-I)](https://www.w3.org/International/geo/html-tech/tech-bidi.html#ri20030112.21380914).
             We strongly **discourage** the use of Visual Hebrew encoding
             (ISO-8859-8). It has no place on the Web anymore and is a remnant of
             old systems lacking logic for rendering RTL text. It causes many
@@ -235,7 +235,7 @@ is safest not to use them at all.
             instead](http://www.w3schools.com/HTMLDOM/dom_nodes_access.asp).
 *   When diagnosing JavaScript issues, use Google Chrome's [built-in
             JavaScript
-            debugger](http://www.google.com/chrome/intl/en/webmasters-faq.html#jsexec).
+            debugger](https://www.google.com/chrome/intl/en/webmasters-faq.html#jsexec).
 *   Do not use browser-specific (e.g. -moz-\*, -webkit-\*, -ie-\*) css
             selectors such as -moz-center or -webkit-highlight for critical
             visual features of your site, instead use standard CSS.
@@ -252,7 +252,7 @@ problems with Websites. Using them can greatly decrease the amount of effort and
 guesswork that goes into fixing compatibility issues:
 
 1.  Google Chrome has a [variety of built-in
-            tools](http://www.google.com/support/chrome/bin/answer.py?hl=en&answer=95691)
+            tools](https://www.google.com/support/chrome/bin/answer.py?hl=en&answer=95691)
             to help developers track down compatibility and performance issues.
 2.  [Firebug](http://getfirebug.com/) - An excellent Firefox extension
             that can help examining markup, JavaScript and performance issues.
@@ -262,7 +262,7 @@ guesswork that goes into fixing compatibility issues:
 # Additional Resources
 
 1.  [Google Chrome Webmaster
-            FAQ](http://www.google.com/chrome/intl/en/webmasters-faq.html) -
+            FAQ](https://www.google.com/chrome/intl/en/webmasters-faq.html) -
             Contains all the information in this document and loads more.
 2.  [quirksmode](http://www.quirksmode.org/) - Useful Information about
             which features are implemented in which browser.

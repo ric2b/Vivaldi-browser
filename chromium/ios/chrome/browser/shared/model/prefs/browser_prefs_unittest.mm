@@ -105,7 +105,7 @@ TEST_F(BrowserPrefsTest, VerifyProfilePrefsMigration) {
       local_state()->GetInteger(prefs::kAddressBarSettingsNewBadgeShownCount),
       0);
 
-  MigrateObsoleteProfilePrefs(base::FilePath(), pref_service());
+  MigrateObsoleteProfilePrefs(pref_service());
 
   // Verify that the prefs were migrated successfully.
   EXPECT_EQ(pref_service()->GetBoolean(prefs::kBottomOmnibox), false);
@@ -162,8 +162,6 @@ TEST_F(BrowserPrefsTest, VerifyLocalStatePrefsMigration) {
                          list_example.Clone());
   local_state()->SetString(prefs::kIosSafetyCheckManagerPasswordCheckResult,
                            "Example");
-  local_state()->SetString(
-      tab_resumption_prefs::kTabResumptionLastOpenedTabURLPref, "Example");
   local_state()->SetDict(prefs::kIosPreRestoreAccountInfo,
                          dict_example.Clone());
 
@@ -186,19 +184,12 @@ TEST_F(BrowserPrefsTest, VerifyLocalStatePrefsMigration) {
                 prefs::kIosSafetyCheckManagerPasswordCheckResult),
             "Example");
 
-  EXPECT_EQ(pref_service()->GetString(
-                tab_resumption_prefs::kTabResumptionLastOpenedTabURLPref),
-            std::string());
-  EXPECT_EQ(local_state()->GetString(
-                tab_resumption_prefs::kTabResumptionLastOpenedTabURLPref),
-            "Example");
-
   EXPECT_EQ(pref_service()->GetDict(prefs::kIosPreRestoreAccountInfo).size(),
             0ul);
   EXPECT_EQ(local_state()->GetDict(prefs::kIosPreRestoreAccountInfo),
             dict_example);
 
-  MigrateObsoleteProfilePrefs(base::FilePath(), pref_service());
+  MigrateObsoleteProfilePrefs(pref_service());
 
   // Verify that the prefs were migrated successfully.
   EXPECT_EQ(
@@ -219,13 +210,6 @@ TEST_F(BrowserPrefsTest, VerifyLocalStatePrefsMigration) {
   EXPECT_EQ(local_state()->GetString(
                 prefs::kIosSafetyCheckManagerPasswordCheckResult),
             NameForSafetyCheckState(PasswordSafetyCheckState::kDefault));
-
-  EXPECT_EQ(pref_service()->GetString(
-                tab_resumption_prefs::kTabResumptionLastOpenedTabURLPref),
-            "Example");
-  EXPECT_EQ(local_state()->GetString(
-                tab_resumption_prefs::kTabResumptionLastOpenedTabURLPref),
-            std::string());
 
   EXPECT_EQ(pref_service()->GetDict(prefs::kIosPreRestoreAccountInfo),
             dict_example);

@@ -8,6 +8,9 @@
 #import "base/functional/callback_helpers.h"
 #import "base/notimplemented.h"
 #import "base/strings/sys_string_conversions.h"
+#import "ios/chrome/browser/share_kit/model/share_kit_delete_configuration.h"
+#import "ios/chrome/browser/share_kit/model/share_kit_leave_configuration.h"
+#import "ios/chrome/browser/share_kit/model/share_kit_lookup_gaia_id_configuration.h"
 #import "ios/chrome/browser/share_kit/model/share_kit_read_configuration.h"
 #import "ios/chrome/browser/share_kit/model/share_kit_service.h"
 
@@ -20,7 +23,7 @@ DataSharingSDKDelegateIOS::~DataSharingSDKDelegateIOS() = default;
 
 void DataSharingSDKDelegateIOS::Initialize(
     DataSharingNetworkLoader* data_sharing_network_loader) {
-  NOTIMPLEMENTED();
+  // No op.
 }
 
 void DataSharingSDKDelegateIOS::CreateGroup(
@@ -28,7 +31,7 @@ void DataSharingSDKDelegateIOS::CreateGroup(
     base::OnceCallback<
         void(const base::expected<data_sharing_pb::CreateGroupResult,
                                   absl::Status>&)> callback) {
-  NOTIMPLEMENTED();
+  NOTREACHED();
 }
 
 void DataSharingSDKDelegateIOS::ReadGroups(
@@ -36,13 +39,18 @@ void DataSharingSDKDelegateIOS::ReadGroups(
     base::OnceCallback<void(
         const base::expected<data_sharing_pb::ReadGroupsResult, absl::Status>&)>
         callback) {
-  NSMutableArray<NSString*>* ids = [NSMutableArray array];
-  for (auto group_id : params.group_ids()) {
-    NSString* collab_id = base::SysUTF8ToNSString(group_id);
-    [ids addObject:collab_id];
+  NSMutableArray<ShareKitReadGroupParamConfiguration*>* groupsParam =
+      [NSMutableArray array];
+  for (auto group_param : params.group_params()) {
+    ShareKitReadGroupParamConfiguration* param =
+        [[ShareKitReadGroupParamConfiguration alloc] init];
+    param.collabID = base::SysUTF8ToNSString(group_param.group_id());
+    param.consistencyToken =
+        base::SysUTF8ToNSString(group_param.consistency_token());
+    [groupsParam addObject:param];
   }
   ShareKitReadConfiguration* config = [[ShareKitReadConfiguration alloc] init];
-  config.collabIDs = ids;
+  config.groupsParam = groupsParam;
   config.callback = base::CallbackToBlock(std::move(callback));
   share_kit_service_->ReadGroups(config);
 }
@@ -50,25 +58,33 @@ void DataSharingSDKDelegateIOS::ReadGroups(
 void DataSharingSDKDelegateIOS::AddMember(
     const data_sharing_pb::AddMemberParams& params,
     base::OnceCallback<void(const absl::Status&)> callback) {
-  NOTIMPLEMENTED();
+  NOTREACHED();
 }
 
 void DataSharingSDKDelegateIOS::RemoveMember(
     const data_sharing_pb::RemoveMemberParams& params,
     base::OnceCallback<void(const absl::Status&)> callback) {
-  NOTIMPLEMENTED();
+  NOTREACHED();
 }
 
 void DataSharingSDKDelegateIOS::LeaveGroup(
     const data_sharing_pb::LeaveGroupParams& params,
     base::OnceCallback<void(const absl::Status&)> callback) {
-  NOTIMPLEMENTED();
+  ShareKitLeaveConfiguration* config =
+      [[ShareKitLeaveConfiguration alloc] init];
+  config.collabID = base::SysUTF8ToNSString(params.group_id());
+  config.callback = base::CallbackToBlock(std::move(callback));
+  share_kit_service_->LeaveGroup(config);
 }
 
 void DataSharingSDKDelegateIOS::DeleteGroup(
     const data_sharing_pb::DeleteGroupParams& params,
     base::OnceCallback<void(const absl::Status&)> callback) {
-  NOTIMPLEMENTED();
+  ShareKitDeleteConfiguration* config =
+      [[ShareKitDeleteConfiguration alloc] init];
+  config.collabID = base::SysUTF8ToNSString(params.group_id());
+  config.callback = base::CallbackToBlock(std::move(callback));
+  share_kit_service_->DeleteGroup(config);
 }
 
 void DataSharingSDKDelegateIOS::LookupGaiaIdByEmail(
@@ -76,11 +92,15 @@ void DataSharingSDKDelegateIOS::LookupGaiaIdByEmail(
     base::OnceCallback<
         void(const base::expected<data_sharing_pb::LookupGaiaIdByEmailResult,
                                   absl::Status>&)> callback) {
-  NOTIMPLEMENTED();
+  ShareKitLookupGaiaIDConfiguration* config =
+      [[ShareKitLookupGaiaIDConfiguration alloc] init];
+  config.email = base::SysUTF8ToNSString(params.email());
+  config.callback = base::CallbackToBlock(std::move(callback));
+  share_kit_service_->LookupGaiaIdByEmail(config);
 }
 
 void DataSharingSDKDelegateIOS::Shutdown() {
-  NOTIMPLEMENTED();
+  // No op.
 }
 
 void DataSharingSDKDelegateIOS::AddAccessToken(
@@ -88,7 +108,7 @@ void DataSharingSDKDelegateIOS::AddAccessToken(
     base::OnceCallback<
         void(const base::expected<data_sharing_pb::AddAccessTokenResult,
                                   absl::Status>&)> callback) {
-  NOTIMPLEMENTED();
+  NOTREACHED();
 }
 
 }  // namespace data_sharing

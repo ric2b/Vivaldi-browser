@@ -62,6 +62,8 @@ constexpr base::TimeDelta kMaxDelta = base::Seconds(1);
 
 constexpr char kMigrationEnabledUMASuffix[] = "Enabled";
 constexpr char kMigrationMisconfiguredUMASuffix[] = "Misconfigured";
+constexpr char kMigrationFailedUMASuffix[] = "Failed";
+constexpr char kMigrationSuccessDurationUMASuffix[] = "SuccessDuration";
 
 constexpr char kTestFile[] = "test_file.txt";
 
@@ -98,7 +100,6 @@ CloudProvider GetCloudProvider(const std::string& destination) {
 
 }  // namespace
 
-// TODO(b/352539894): Add tests with some files to upload.
 class LocalFilesMigrationManagerTest : public policy::PolicyTest {
  public:
   LocalFilesMigrationManagerTest() {
@@ -282,6 +283,11 @@ IN_PROC_BROWSER_TEST_P(LocalFilesMigrationManagerLocationTest,
           : "OneDrive";
   histogram_tester_.ExpectBucketCount(
       GetUMAName(MigrationDestination(), kMigrationEnabledUMASuffix), true, 1);
+  histogram_tester_.ExpectBucketCount(
+      GetUMAName(MigrationDestination(), kMigrationFailedUMASuffix), false, 1);
+  histogram_tester_.ExpectTotalCount(
+      GetUMAName(MigrationDestination(), kMigrationSuccessDurationUMASuffix),
+      1);
 }
 
 IN_PROC_BROWSER_TEST_P(LocalFilesMigrationManagerLocationTest,
@@ -433,7 +439,29 @@ IN_PROC_BROWSER_TEST_P(LocalFilesMigrationManagerLocationTest,
 }
 
 IN_PROC_BROWSER_TEST_F(LocalFilesMigrationManagerTest,
-                       NoMigrationIfNoDestination) {
+                       MigrationCompleteIfNoDestinationAndEmpty) {
+  EXPECT_CALL(observer_, OnMigrationReset).Times(1);
+  EXPECT_CALL(observer_, OnMigrationSucceeded).Times(1);
+  base::RunLoop run_loop;
+  // Write access will be disallowed.
+  EXPECT_CALL(userdataauth_,
+              SetUserDataStorageWriteEnabled(WithEnabled(false), _))
+      .WillOnce(testing::DoAll(
+          base::test::RunClosure(run_loop.QuitClosure()),
+          ReplyWith(::user_data_auth::SetUserDataStorageWriteEnabledReply())));
+  SetMigrationPolicies(/*local_user_files_allowed=*/false,
+                       /*destination=*/kReadOnly);
+  run_loop.Run();
+
+  histogram_tester_.ExpectBucketCount(
+      "Enterprise.SkyVault.LocalStorage.Enabled", false, 1);
+}
+
+IN_PROC_BROWSER_TEST_F(LocalFilesMigrationManagerTest,
+                       NoMigrationIfNoDestinationAndNonEmpty) {
+  SetUpMyFiles();
+  CreateTestFile(kTestFile, my_files_dir_);
+
   EXPECT_CALL(observer_, OnMigrationReset).Times(1);
   SetMigrationPolicies(/*local_user_files_allowed=*/false,
                        /*destination=*/kReadOnly);

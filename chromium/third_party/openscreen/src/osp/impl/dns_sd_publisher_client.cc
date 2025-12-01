@@ -10,7 +10,7 @@
 #include "discovery/dnssd/public/dns_sd_instance.h"
 #include "discovery/dnssd/public/dns_sd_txt_record.h"
 #include "discovery/public/dns_sd_service_factory.h"
-#include "osp/impl/osp_constants.h"
+#include "osp/public/osp_constants.h"
 #include "osp/public/service_info.h"
 #include "platform/base/macros.h"
 #include "util/osp_logging.h"
@@ -25,7 +25,6 @@ discovery::DnsSdInstance ServiceConfigToDnsSdInstance(
     const ServicePublisher::Config& config) {
   discovery::DnsSdTxtRecord txt;
   const bool did_set_everything =
-      txt.SetValue(kFriendlyNameTxtKey, config.friendly_name).ok() &&
       txt.SetValue(kFingerprint, config.fingerprint).ok() &&
       txt.SetValue(kAuthToken, config.auth_token).ok();
   OSP_CHECK(did_set_everything);
@@ -79,6 +78,14 @@ void DnsSdPublisherClient::ResumePublisher(
   SetState(State::kRunning);
 }
 
+void DnsSdPublisherClient::OnFatalError(const Error& error) {
+  publisher_->OnError(error);
+}
+
+void DnsSdPublisherClient::OnRecoverableError(const Error& error) {
+  publisher_->OnError(error);
+}
+
 void DnsSdPublisherClient::StartPublisherInternal(
     const ServicePublisher::Config& config) {
   OSP_CHECK(!dns_sd_publisher_);
@@ -107,7 +114,7 @@ discovery::DnsSdServicePtr DnsSdPublisherClient::CreateDnsSdServiceInternal(
   // discovery::DnsSdService, e.g. through a ref-counting handle, so that the
   // OSP publisher and the OSP listener don't have to coordinate through an
   // additional object.
-  return CreateDnsSdService(task_runner_, *publisher_, dns_sd_config);
+  return CreateDnsSdService(task_runner_, *this, dns_sd_config);
 }
 
 }  // namespace openscreen::osp

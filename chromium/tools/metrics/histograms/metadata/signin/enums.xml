@@ -150,9 +150,27 @@ chromium-metrics-reviews@google.com.
   <int value="4" label="Consumer, non-well-known domain"/>
   <int value="5" label="Enterprise, google.com"/>
   <int value="6" label="Enterprise, other domain"/>
+  <int value="7" label="Timeout"/>
 </enum>
 
 <!-- LINT.ThenChange(//components/signin/public/identity_manager/account_managed_status_finder.h:AccountManagedStatusFinderOutcome) -->
+
+<!-- LINT.IfChange(AccountManagementTypesSummary) -->
+
+<enum name="AccountManagementTypesSummary">
+  <int value="0" label="No accounts"/>
+  <int value="1" label="No consumer accounts, 1 enterprise account"/>
+  <int value="2" label="No consumer accounts, 2 or more enterprise accounts"/>
+  <int value="3" label="1 consumer account, no enterprise accounts"/>
+  <int value="4" label="1 consumer account, 1 enterprise account"/>
+  <int value="5" label="1 consumer account, 2 or more enterprise accounts"/>
+  <int value="6" label="2 or more consumer accounts, no enterprise accounts"/>
+  <int value="7" label="2 or more consumer accounts, 1 enterprise account"/>
+  <int value="8"
+      label="2 or more consumer accounts, 2 or more enterprise accounts"/>
+</enum>
+
+<!-- LINT.ThenChange(//components/signin/core/browser/account_management_type_metrics_recorder.h:AccountManagementTypesSummary) -->
 
 <enum name="AccountReauthenticationEvent">
   <int value="0" label="STARTED"/>
@@ -216,15 +234,6 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Was deferred"/>
 </enum>
 
-<!-- LINT.IfChange(BoundOAuth2TokenFetchEncryptionError) -->
-
-<enum name="BoundOAuth2TokenFetchEncryptionError">
-  <int value="0" label="Response is unexpectedly encrypted"/>
-  <int value="1" label="Decryption failed"/>
-</enum>
-
-<!-- LINT.ThenChange(//google_apis/gaia/oauth2_mint_access_token_fetcher_adapter.cc:EncryptionError) -->
-
 <enum name="BoundSessionCredentialsCookieRotationGenerateAssertionResult">
   <int value="0" label="Success"/>
   <int value="1" label="Failed to load the key"/>
@@ -243,6 +252,7 @@ chromium-metrics-reviews@google.com.
   <int value="5" label="Challenge unexpected format"/>
   <int value="6" label="Challenge requests limit exceeded"/>
   <int value="7" label="Sign challenge failed"/>
+  <int value="8" label="Challenge session ID mismatch"/>
 </enum>
 
 <enum name="BoundSessionCredentialsSessionRegistrationResult">
@@ -376,6 +386,8 @@ chromium-metrics-reviews@google.com.
 
 <!-- LINT.ThenChange(//components/signin/ios/browser/account_consistency_service.mm:GaiaPage) -->
 
+<!-- LINT.IfChange(GaiaRemoteConsentFlowResult) -->
+
 <enum name="GaiaRemoteConsentFlowResult">
   <int value="0" label="Success"/>
   <int value="1" label="Window was closed"/>
@@ -385,7 +397,12 @@ chromium-metrics-reviews@google.com.
   <int value="5" label="Consent wasn't granted"/>
   <int value="6" label="User navigated away (deprecated 07/23)"/>
   <int value="7" label="Cannot create a window"/>
+  <int value="8" label="Failed to set resolution cookies"/>
 </enum>
+
+<!-- LINT.ThenChange(//chrome/browser/extensions/api/identity/gaia_remote_consent_flow.h:GaiaRemoteConsentFlowResult) -->
+
+<!-- LINT.IfChange(GetAuthTokenResult) -->
 
 <enum name="GetAuthTokenResult">
   <int value="0" label="Success"/>
@@ -419,7 +436,10 @@ chromium-metrics-reviews@google.com.
   <int value="28" label="kInteractivityDenied"/>
   <int value="29" label="kCannotCreateWindow"/>
   <int value="30" label="kBrowserContextShutDown"/>
+  <int value="31" label="kSetRemoteConsentResolutionCookiesFailed"/>
 </enum>
+
+<!-- LINT.ThenChange(//chrome/browser/extensions/api/identity/identity_get_auth_token_error.h:GetAuthTokenResult) -->
 
 <enum name="IdentityConfirmationSnackbarDecision">
   <int value="0" label="Show"/>
@@ -473,14 +493,19 @@ chromium-metrics-reviews@google.com.
   <int value="11" label="Token binding challenge success"/>
 </enum>
 
+<!-- LINT.IfChange(OAuthMultiloginResponseStatus) -->
+
 <enum name="OAuthMultiloginResponseStatus">
-  <int value="0" label="UNKNOWN_STATUS"/>
-  <int value="1" label="OK"/>
-  <int value="2" label="RETRY"/>
-  <int value="3" label="INVALID_INPUT"/>
-  <int value="4" label="INVALID_TOKENS"/>
-  <int value="5" label="ERROR"/>
+  <int value="0" label="kUnknownStatus"/>
+  <int value="1" label="kOk"/>
+  <int value="2" label="kRetry"/>
+  <int value="3" label="kInvalidInput"/>
+  <int value="4" label="kInvalidTokens"/>
+  <int value="5" label="kError"/>
+  <int value="6" label="kRetryWithTokenBindingChallenge"/>
 </enum>
+
+<!-- LINT.ThenChange(//google_apis/gaia/oauth_multilogin_result.h:OAuthMultiloginResponseStatus) -->
 
 <enum name="PAMInitializePrimaryAccountInfoState">
   <int value="0" label="OK: Account info available"/>
@@ -596,7 +621,7 @@ chromium-metrics-reviews@google.com.
   <int value="47" label="Reading list"/>
   <int value="48" label="Reauth info bar"/>
   <int value="49" label="Account consistency service"/>
-  <int value="50" label="Search companion"/>
+  <int value="50" label="(Obsolete) Search companion"/>
   <int value="51" label="Set Up List on iOS only"/>
   <int value="52" label="Password migration warning on Android only"/>
   <int value="53" label="Save to photos iOS"/>
@@ -620,6 +645,7 @@ chromium-metrics-reviews@google.com.
   <int value="71" label="CCT account mismatch notification"/>
   <int value="72" label="Drive file picker iOS"/>
   <int value="73" label="Share group collaboration authentification"/>
+  <int value="74" label="Glic launch button"/>
 </enum>
 
 <enum name="SigninAccountReconcilorState">
@@ -644,6 +670,17 @@ chromium-metrics-reviews@google.com.
   <int value="0" label="Regular gmail account"/>
   <int value="1" label="Managed account"/>
 </enum>
+
+<!-- LINT.IfChange(SigninAddAccountToDeviceResult) -->
+
+<enum name="SigninAddAccountToDeviceResult">
+  <int value="0" label="Success"/>
+  <int value="1" label="Error"/>
+  <int value="2" label="Cancelled by user"/>
+  <int value="3" label="Interrupted"/>
+</enum>
+
+<!-- LINT.ThenChange(//ios/chrome/browser/authentication/ui_bundled/signin/add_account_signin/add_account_signin_manager.h:SigninAddAccountToDeviceResult) -->
 
 <enum name="SigninAndroidAddAccountState">
   <int value="0" label="Requested"/>
@@ -935,7 +972,7 @@ chromium-metrics-reviews@google.com.
     The primary account might be signed out when a profile is being deleted, to
     avoid that deletion of data propagates via sync to other devices.
   </int>
-  <int value="35" label="Signed out while switching to another primary profile">
+  <int value="35" label="Signed out while switching to another primary account">
     In the account menu, the user switched their primary account. As a first
     step, they get signed-out of their previous primary account.
   </int>
@@ -1117,6 +1154,17 @@ chromium-metrics-reviews@google.com.
 </enum>
 
 <!-- LINT.ThenChange(//components/signin/internal/identity_manager/token_binding_helper.h:Error) -->
+
+<!-- LINT.IfChange(TokenBindingResponseEncryptionError) -->
+
+<enum name="TokenBindingResponseEncryptionError">
+  <int value="0" label="Response is unexpectedly encrypted"/>
+  <int value="1" label="Decryption failed"/>
+  <int value="2" label="No error. Response was successfully decrypted"/>
+  <int value="3" label="No error. Response wasn't encrypted"/>
+</enum>
+
+<!-- LINT.ThenChange(//google_apis/gaia/token_binding_response_encryption_error.h:TokenBindingResponseEncryptionError) -->
 
 </enums>
 

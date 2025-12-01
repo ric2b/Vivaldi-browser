@@ -6,7 +6,6 @@ import {assert} from 'chai';
 import type * as puppeteer from 'puppeteer-core';
 
 import {$, getBrowserAndPages, step} from '../../shared/helper.js';
-
 import {
   CONSOLE_MESSAGE_WRAPPER_SELECTOR,
   deleteConsoleMessagesFilter,
@@ -207,7 +206,7 @@ describe('The Console Tab', () => {
 
   it('can apply empty filter', async () => {
     const filter = '';
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
     const expectedMessageFilter: MessageCheck = _ => true;
     await testMessageFilter(filter, expectedMessageFilter);
   });
@@ -341,7 +340,7 @@ describe('The Console Tab', () => {
     const JS_ERROR_PATTERN = /Uncaught \(in promise\) TypeError: Failed to fetch.*/;
     const allMessages = await getConsoleMessages('cors-issue', false, () => waitForConsoleMessagesToBeNonEmpty(6));
     allMessages.sort();
-    assert.strictEqual(allMessages.length, 6);
+    assert.lengthOf(allMessages, 6);
     assert.match(allMessages[0], CORS_DETAILED_ERROR_PATTERN);
     assert.match(allMessages[1], CORS_DETAILED_ERROR_PATTERN);
     assert.match(allMessages[2], NETWORK_ERROR_PATTERN);
@@ -351,7 +350,7 @@ describe('The Console Tab', () => {
 
     await toggleShowCorsErrors();
     const filteredMessages = await getCurrentConsoleMessages();
-    assert.strictEqual(2, filteredMessages.length);
+    assert.lengthOf(filteredMessages, 2);
     for (const message of filteredMessages) {
       assert.match(message, JS_ERROR_PATTERN);
     }

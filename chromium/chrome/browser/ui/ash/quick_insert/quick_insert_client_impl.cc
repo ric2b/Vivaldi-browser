@@ -4,7 +4,9 @@
 
 #include "chrome/browser/ui/ash/quick_insert/quick_insert_client_impl.h"
 
+#include <algorithm>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -23,14 +25,13 @@
 #include "base/check.h"
 #include "base/check_deref.h"
 #include "base/containers/span.h"
+#include "base/containers/to_vector.h"
 #include "base/files/file_enumerator.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/notimplemented.h"
-#include "base/ranges/algorithm.h"
-#include "base/ranges/functional.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ash/app_list/app_list_controller_delegate.h"
 #include "chrome/browser/ash/app_list/search/chrome_search_result.h"
@@ -43,13 +44,16 @@
 #include "chrome/browser/ash/file_manager/fileapi_util.h"
 #include "chrome/browser/ash/input_method/editor_mediator_factory.h"
 #include "chrome/browser/ash/lobster/lobster_service_provider.h"
+#include "chrome/browser/favicon/favicon_service_factory.h"
+#include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/quick_insert/quick_insert_file_suggester.h"
-#include "chrome/browser/ui/ash/quick_insert/quick_insert_link_suggester.h"
 #include "chrome/browser/ui/ash/quick_insert/quick_insert_thumbnail_loader.h"
 #include "chromeos/ash/components/browser_context_helper/browser_context_helper.h"
 #include "chromeos/ash/components/drivefs/mojom/drivefs.mojom.h"
-#include "chromeos/components/editor_menu/public/cpp/preset_text_query.h"
+#include "chromeos/ash/components/editor_menu/public/cpp/editor_context.h"
+#include "chromeos/ash/components/editor_menu/public/cpp/editor_mode.h"
+#include "chromeos/ash/components/editor_menu/public/cpp/preset_text_query.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
@@ -68,16 +72,16 @@
 
 namespace {
 
-// TODO: b/345303965 - Finalize this string.
-constexpr std::u16string_view kAnnouncementViewName = u"Picker";
+constexpr std::u16string_view kAnnouncementViewName = u"Quick Insert";
 
 // Returns an `AppListControllerDelegate` with empty methods. Used only for
 // constructing search engine providers.
 AppListControllerDelegate* GetEmptyAppListControllerDelegate() {
-  class PickerAppListControllerDelegate : public AppListControllerDelegate {
+  class QuickInsertAppListControllerDelegate
+      : public AppListControllerDelegate {
    public:
-    PickerAppListControllerDelegate() = default;
-    ~PickerAppListControllerDelegate() override = default;
+    QuickInsertAppListControllerDelegate() = default;
+    ~QuickInsertAppListControllerDelegate() override = default;
 
     // AppListControllerDelegate overrides:
     void DismissView() override { NOTIMPLEMENTED_LOG_ONCE(); }
@@ -119,33 +123,31 @@ AppListControllerDelegate* GetEmptyAppListControllerDelegate() {
     }
   };
 
-  static base::NoDestructor<PickerAppListControllerDelegate> delegate;
+  static base::NoDestructor<QuickInsertAppListControllerDelegate> delegate;
   return delegate.get();
 }
 
 std::vector<ash::QuickInsertSearchResult>
 CreateSearchResultsForRecentLocalImages(
-    std::vector<PickerFileSuggester::LocalFile> files) {
-  std::vector<ash::QuickInsertSearchResult> results;
-  results.reserve(files.size());
-  for (PickerFileSuggester::LocalFile& file : files) {
-    results.push_back(ash::QuickInsertLocalFileResult(std::move(file.title),
-                                                      std::move(file.path)));
-  }
-  return results;
+    std::vector<QuickInsertFileSuggester::LocalFile> files) {
+  return base::ToVector(files,
+                        [](QuickInsertFileSuggester::LocalFile& file)
+                            -> ash::QuickInsertSearchResult {
+                          return ash::QuickInsertLocalFileResult(
+                              std::move(file.title), std::move(file.path));
+                        });
 }
 
 std::vector<ash::QuickInsertSearchResult>
 CreateSearchResultsForRecentDriveFiles(
-    std::vector<PickerFileSuggester::DriveFile> files) {
-  std::vector<ash::QuickInsertSearchResult> results;
-  results.reserve(files.size());
-  for (PickerFileSuggester::DriveFile& file : files) {
-    results.push_back(ash::QuickInsertDriveFileResult(
-        std::move(file.id), std::move(file.title), std::move(file.url),
-        file.local_path));
-  }
-  return results;
+    std::vector<QuickInsertFileSuggester::DriveFile> files) {
+  return base::ToVector(files,
+                        [](QuickInsertFileSuggester::DriveFile& file)
+                            -> ash::QuickInsertSearchResult {
+                          return ash::QuickInsertDriveFileResult(
+                              std::move(file.id), std::move(file.title),
+                              std::move(file.url), file.local_path);
+                        });
 }
 
 std::unique_ptr<app_list::SearchProvider> CreateDriveSearchProvider(
@@ -164,17 +166,17 @@ std::unique_ptr<app_list::SearchProvider> CreateFileSearchProvider(
 
 std::vector<ash::QuickInsertSearchResult> ConvertSearchResults(
     std::vector<std::unique_ptr<ChromeSearchResult>> results) {
-  std::vector<ash::QuickInsertSearchResult> picker_results;
-  picker_results.reserve(results.size());
+  std::vector<ash::QuickInsertSearchResult> quick_insert_results;
+  quick_insert_results.reserve(results.size());
 
   for (const std::unique_ptr<ChromeSearchResult>& result : results) {
     CHECK(result);
   }
 
-  base::ranges::sort(results, base::ranges::greater(),
-                     [](const std::unique_ptr<ChromeSearchResult>& result) {
-                       return result->relevance();
-                     });
+  std::ranges::sort(results, std::ranges::greater(),
+                    [](const std::unique_ptr<ChromeSearchResult>& result) {
+                      return result->relevance();
+                    });
 
   for (const std::unique_ptr<ChromeSearchResult>& result : results) {
     switch (result->result_type()) {
@@ -186,22 +188,22 @@ std::vector<ash::QuickInsertSearchResult> ConvertSearchResults(
 
         if (std::optional<GURL> result_url = result->url();
             result_url.has_value()) {
-          picker_results.push_back(ash::QuickInsertBrowsingHistoryResult(
+          quick_insert_results.push_back(ash::QuickInsertBrowsingHistoryResult(
               *result_url, result->title(), result->icon().icon,
               result->best_match()));
         } else {
-          picker_results.push_back(ash::QuickInsertTextResult(
+          quick_insert_results.push_back(ash::QuickInsertTextResult(
               result->title(), ash::QuickInsertTextResult::Source::kOmnibox));
         }
         break;
       }
       case ash::AppListSearchResultType::kFileSearch: {
-        picker_results.push_back(ash::QuickInsertLocalFileResult(
+        quick_insert_results.push_back(ash::QuickInsertLocalFileResult(
             result->title(), result->filePath(), result->best_match()));
         break;
       }
       case ash::AppListSearchResultType::kDriveSearch:
-        picker_results.push_back(ash::QuickInsertDriveFileResult(
+        quick_insert_results.push_back(ash::QuickInsertDriveFileResult(
             result->DriveId(), result->title(), *result->url(),
             result->filePath(), result->best_match()));
         break;
@@ -212,7 +214,7 @@ std::vector<ash::QuickInsertSearchResult> ConvertSearchResults(
     }
   }
 
-  return picker_results;
+  return quick_insert_results;
 }
 
 ash::input_method::EditorMediator* GetEditorMediator(Profile* profile) {
@@ -224,40 +226,14 @@ ash::input_method::EditorMediator* GetEditorMediator(Profile* profile) {
       profile);
 }
 
-// TODO: b/326847990 - Remove this once it's moved to mojom traits.
-chromeos::editor_menu::PresetQueryCategory FromMojoPresetQueryCategory(
-    const crosapi::mojom::EditorPanelPresetQueryCategory category) {
-  using EditorPanelPresetQueryCategory =
-      crosapi::mojom::EditorPanelPresetQueryCategory;
-  using PresetQueryCategory = chromeos::editor_menu::PresetQueryCategory;
-
-  switch (category) {
-    case EditorPanelPresetQueryCategory::kUnknown:
-      return PresetQueryCategory::kUnknown;
-    case EditorPanelPresetQueryCategory::kShorten:
-      return PresetQueryCategory::kShorten;
-    case EditorPanelPresetQueryCategory::kElaborate:
-      return PresetQueryCategory::kElaborate;
-    case EditorPanelPresetQueryCategory::kRephrase:
-      return PresetQueryCategory::kRephrase;
-    case EditorPanelPresetQueryCategory::kFormalize:
-      return PresetQueryCategory::kFormalize;
-    case EditorPanelPresetQueryCategory::kEmojify:
-      return PresetQueryCategory::kEmojify;
-    case EditorPanelPresetQueryCategory::kProofread:
-      return PresetQueryCategory::kProofread;
-  }
-}
-
-std::vector<ash::QuickInsertSearchResult> GetEditorResultsFromPanelContext(
-    crosapi::mojom::EditorPanelContextPtr panel_context) {
+std::vector<ash::QuickInsertSearchResult> GetEditorResultsFromEditorContext(
+    const chromeos::editor_menu::EditorContext& editor_context) {
   std::vector<ash::QuickInsertSearchResult> results;
-  for (const crosapi::mojom::EditorPanelPresetTextQueryPtr& query :
-       panel_context->preset_text_queries) {
+  for (const chromeos::editor_menu::PresetTextQuery& query :
+       editor_context.preset_queries) {
     results.push_back(ash::QuickInsertEditorResult(
-        ash::QuickInsertEditorResult::Mode::kRewrite,
-        base::UTF8ToUTF16(query->name),
-        FromMojoPresetQueryCategory(query->category), query->text_query_id));
+        ash::QuickInsertEditorResult::Mode::kRewrite, query.name,
+        query.category, query.text_query_id));
   }
   return results;
 }
@@ -312,6 +288,7 @@ void QuickInsertClientImpl::StartCrosSearch(
     case ash::QuickInsertCategory::kLobsterWithSelectedText:
     case ash::QuickInsertCategory::kEmojisGifs:
     case ash::QuickInsertCategory::kEmojis:
+    case ash::QuickInsertCategory::kGifs:
     case ash::QuickInsertCategory::kClipboard:
     case ash::QuickInsertCategory::kDatesTimes:
     case ash::QuickInsertCategory::kUnitsMaths:
@@ -365,7 +342,7 @@ bool QuickInsertClientImpl::IsEligibleForEditor() {
   }
 
   return editor_mediator->GetEditorMode() !=
-         ash::input_method::EditorMode::kHardBlocked;
+         chromeos::editor_menu::EditorMode::kHardBlocked;
 }
 
 QuickInsertClientImpl::ShowEditorCallback
@@ -378,9 +355,10 @@ QuickInsertClientImpl::CacheEditorContext() {
 
   editor_mediator->CacheContext();
 
-  ash::input_method::EditorMode editor_mode = editor_mediator->GetEditorMode();
-  if (editor_mode == ash::input_method::EditorMode::kSoftBlocked ||
-      editor_mode == ash::input_method::EditorMode::kHardBlocked) {
+  chromeos::editor_menu::EditorMode editor_mode =
+      editor_mediator->GetEditorMode();
+  if (editor_mode == chromeos::editor_menu::EditorMode::kSoftBlocked ||
+      editor_mode == chromeos::editor_menu::EditorMode::kHardBlocked) {
     return {};
   }
 
@@ -389,7 +367,8 @@ QuickInsertClientImpl::CacheEditorContext() {
 }
 
 QuickInsertClientImpl::ShowLobsterCallback
-QuickInsertClientImpl::CacheLobsterContext(bool support_image_insertion) {
+QuickInsertClientImpl::CacheLobsterContext(bool support_image_insertion,
+                                           const gfx::Rect& caret_bounds) {
   if (!ash::features::IsLobsterEnabled()) {
     return base::NullCallback();
   }
@@ -403,8 +382,9 @@ QuickInsertClientImpl::CacheLobsterContext(bool support_image_insertion) {
     return base::NullCallback();
   }
 
-  lobster_trigger_ = lobster_controller->CreateTrigger(
-      ash::LobsterEntryPoint::kPicker, support_image_insertion);
+  lobster_trigger_ =
+      lobster_controller->CreateTrigger(ash::LobsterEntryPoint::kQuickInsert,
+                                        support_image_insertion, caret_bounds);
 
   if (!lobster_trigger_) {
     return base::NullCallback();
@@ -424,15 +404,16 @@ void QuickInsertClientImpl::GetSuggestedEditorResults(
     return;
   }
 
-  ash::input_method::EditorMode editor_mode = editor_mediator->GetEditorMode();
-  if (editor_mode == ash::input_method::EditorMode::kHardBlocked ||
-      editor_mode == ash::input_method::EditorMode::kSoftBlocked) {
+  chromeos::editor_menu::EditorMode editor_mode =
+      editor_mediator->GetEditorMode();
+  if (editor_mode == chromeos::editor_menu::EditorMode::kHardBlocked ||
+      editor_mode == chromeos::editor_menu::EditorMode::kSoftBlocked) {
     std::move(callback).Run({});
     return;
   }
 
   editor_mediator->panel_manager()->GetEditorPanelContext(
-      base::BindOnce(GetEditorResultsFromPanelContext)
+      base::BindOnce(GetEditorResultsFromEditorContext)
           .Then(std::move(callback)));
 }
 
@@ -454,12 +435,6 @@ void QuickInsertClientImpl::GetRecentDriveFileResults(
                      .Then(std::move(callback)));
 }
 
-void QuickInsertClientImpl::GetSuggestedLinkResults(
-    size_t max_results,
-    SuggestedLinksCallback callback) {
-  link_suggester_->GetSuggestedLinks(max_results, std::move(callback));
-}
-
 void QuickInsertClientImpl::FetchFileThumbnail(
     const base::FilePath& path,
     const gfx::Size& size,
@@ -468,12 +443,8 @@ void QuickInsertClientImpl::FetchFileThumbnail(
   thumbnail_loader_->Load(path, size, std::move(callback));
 }
 
-PrefService* QuickInsertClientImpl::GetPrefs() {
-  return profile_ == nullptr ? nullptr : profile_->GetPrefs();
-}
-
 // Forked from `ClipboardHistoryControllerDelegateImpl::Paste`.
-std::optional<ash::PickerWebPasteTarget>
+std::optional<ash::QuickInsertWebPasteTarget>
 QuickInsertClientImpl::GetWebPasteTarget() {
   std::unique_ptr<content::RenderWidgetHostIterator> widgets =
       content::RenderWidgetHost::GetRenderWidgetHosts();
@@ -511,7 +482,7 @@ QuickInsertClientImpl::GetWebPasteTarget() {
       continue;
     }
 
-    return std::make_optional<ash::PickerWebPasteTarget>(
+    return std::make_optional<ash::QuickInsertWebPasteTarget>(
         focused_web_contents->GetLastCommittedURL(),
         // SAFETY: Callers must call this synchronously as per the
         // documentation, so this `base::Unretained` is safe.
@@ -537,6 +508,16 @@ void QuickInsertClientImpl::ActiveUserChanged(user_manager::User* active_user) {
                      weak_factory_.GetWeakPtr(), active_user));
 }
 
+history::HistoryService* QuickInsertClientImpl::GetHistoryService() {
+  return HistoryServiceFactory::GetForProfile(
+      profile_, ServiceAccessType::EXPLICIT_ACCESS);
+}
+
+favicon::FaviconService* QuickInsertClientImpl::GetFaviconService() {
+  return FaviconServiceFactory::GetForProfile(
+      profile_, ServiceAccessType::EXPLICIT_ACCESS);
+}
+
 void QuickInsertClientImpl::SetProfileByUser(const user_manager::User* user) {
   Profile* profile = Profile::FromBrowserContext(
       ash::BrowserContextHelper::Get()->GetBrowserContextByUser(user));
@@ -560,9 +541,8 @@ void QuickInsertClientImpl::SetProfile(Profile* profile) {
 
   ranker_manager_ = std::make_unique<app_list::RankerManager>(profile_);
 
-  file_suggester_ = std::make_unique<PickerFileSuggester>(profile_);
-  link_suggester_ = std::make_unique<PickerLinkSuggester>(profile_);
-  thumbnail_loader_ = std::make_unique<PickerThumbnailLoader>(profile_);
+  file_suggester_ = std::make_unique<QuickInsertFileSuggester>(profile_);
+  thumbnail_loader_ = std::make_unique<QuickInsertThumbnailLoader>(profile_);
 
   if (controller_ != nullptr) {
     controller_->OnClientPrefsSet(profile == nullptr ? nullptr
@@ -589,6 +569,7 @@ QuickInsertClientImpl::CreateSearchProviderForCategory(
     case ash::QuickInsertCategory::kLobsterWithSelectedText:
     case ash::QuickInsertCategory::kEmojisGifs:
     case ash::QuickInsertCategory::kEmojis:
+    case ash::QuickInsertCategory::kGifs:
     case ash::QuickInsertCategory::kClipboard:
     case ash::QuickInsertCategory::kDatesTimes:
     case ash::QuickInsertCategory::kUnitsMaths:

@@ -65,7 +65,8 @@ content::BrowserContext* ContactServiceFactory::GetBrowserContextToUse(
   return GetBrowserContextRedirectedInIncognito(context);
 }
 
-KeyedService* ContactServiceFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+ContactServiceFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
   std::unique_ptr<contact::ContactService> contact_service(
       new contact::ContactService());
@@ -78,7 +79,7 @@ KeyedService* ContactServiceFactory::BuildServiceInstanceFor(
   if (!contact_service->Init(false, param)) {
     return nullptr;
   }
-  return contact_service.release();
+  return contact_service;
 }
 
 bool ContactServiceFactory::ServiceIsNULLWhileTesting() const {

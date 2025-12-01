@@ -26,10 +26,10 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "ui/chromeos/devicetype_utils.h"
-#include "ui/resources/grit/webui_resources.h"
 #include "ui/webui/color_change_listener/color_change_handler.h"
 #include "ui/webui/mojo_web_ui_controller.h"
 #include "ui/webui/resources/cr_components/color_change_listener/color_change_listener.mojom-forward.h"
+#include "ui/webui/resources/grit/webui_resources.h"
 
 namespace ash {
 
@@ -46,8 +46,6 @@ void SetUpWebUIDataSource(content::WebUIDataSource* source,
                           IDR_WEBUI_JS_TEST_LOADER_UTIL_JS);
   source->AddBoolean("isFirmwareUpdateUIV2Enabled",
                      ash::features::IsFirmwareUpdateUIV2Enabled());
-  source->AddBoolean("isUpstreamTrustedReportsFirmwareEnabled",
-                     ash::features::IsUpstreamTrustedReportsFirmwareEnabled());
   source->AddBoolean("IsFlexFirmwareUpdateEnabled",
                      ash::features::IsFlexFirmwareUpdateEnabled());
 }
@@ -62,6 +60,8 @@ void AddFirmwareUpdateAppStrings(content::WebUIDataSource* source) {
       {"nextButton", IDS_FIRMWARE_NEXT_BUTTON_TEXT},
       {"cancelButton", IDS_FIRMWARE_CANCEL_BUTTON_TEXT},
       {"doneButton", IDS_FIRMWARE_DONE_BUTTON_TEXT},
+      {"restartNowButton", IDS_FIRMWARE_RESTART_NOW_BUTTON_TEXT},
+      {"restartLaterButton", IDS_FIRMWARE_RESTART_LATER_BUTTON_TEXT},
       {"numUpdatesText", IDS_FIRMWARE_NUM_AVAILABLE_UPDATES_TEXT},
       {"okButton", IDS_FIRMWARE_OK_BUTTON_TEXT},
       {"updateButton", IDS_FIRMWARE_UPDATE_BUTTON_TEXT},
@@ -116,9 +116,7 @@ FirmwareUpdateAppUI::FirmwareUpdateAppUI(content::WebUI* web_ui)
       "script-src chrome://resources chrome://webui-test 'self';");
   ash::EnableTrustedTypesCSP(source);
 
-  const auto resources = base::make_span(kAshFirmwareUpdateAppResources,
-                                         kAshFirmwareUpdateAppResourcesSize);
-  SetUpWebUIDataSource(source, resources,
+  SetUpWebUIDataSource(source, kAshFirmwareUpdateAppResources,
                        IDR_ASH_FIRMWARE_UPDATE_APP_INDEX_HTML);
 
   AddFirmwareUpdateAppStrings(source);
@@ -135,7 +133,9 @@ void FirmwareUpdateAppUI::BindInterface(
 
 void FirmwareUpdateAppUI::BindInterface(
     mojo::PendingReceiver<firmware_update::mojom::SystemUtils> receiver) {
-  FirmwareUpdateManager::Get()->BindInterface(std::move(receiver));
+  if (FirmwareUpdateManager::IsInitialized()) {
+    FirmwareUpdateManager::Get()->BindInterface(std::move(receiver));
+  }
 }
 
 void FirmwareUpdateAppUI::BindInterface(

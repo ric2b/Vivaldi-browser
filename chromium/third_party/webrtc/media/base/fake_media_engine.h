@@ -498,9 +498,10 @@ class FakeVoiceMediaReceiveChannel
   void SetDefaultRawAudioSink(
       std::unique_ptr<webrtc::AudioSinkInterface> sink) override;
 
+  webrtc::RtcpMode RtcpMode() const override { return recv_rtcp_mode_; }
+  void SetRtcpMode(webrtc::RtcpMode mode) override { recv_rtcp_mode_ = mode; }
   std::vector<webrtc::RtpSource> GetSources(uint32_t ssrc) const override;
   void SetReceiveNackEnabled(bool /* enabled */) override {}
-  void SetRtcpMode(webrtc::RtcpMode /* mode */) override {}
   void SetReceiveNonSenderRttEnabled(bool /* enabled */) override {}
 
  private:
@@ -534,6 +535,7 @@ class FakeVoiceMediaReceiveChannel
   std::map<uint32_t, std::unique_ptr<VoiceChannelAudioSink>> local_sinks_;
   std::unique_ptr<webrtc::AudioSinkInterface> sink_;
   int max_bps_;
+  webrtc::RtcpMode recv_rtcp_mode_ = webrtc::RtcpMode::kCompound;
 };
 
 class FakeVoiceMediaSendChannel
@@ -803,7 +805,6 @@ class FakeVoiceEngine : public VoiceEngineInterface {
  private:
   std::vector<Codec> recv_codecs_;
   std::vector<Codec> send_codecs_;
-  bool fail_create_channel_;
   std::vector<webrtc::RtpHeaderExtensionCapability> header_extensions_;
 
   friend class FakeMediaEngine;
@@ -845,7 +846,6 @@ class FakeVideoEngine : public VideoEngineInterface {
   std::vector<Codec> recv_codecs_;
   bool capture_;
   VideoOptions options_;
-  bool fail_create_channel_;
   std::vector<webrtc::RtpHeaderExtensionCapability> header_extensions_;
 
   friend class FakeMediaEngine;
@@ -861,8 +861,8 @@ class FakeMediaEngine : public CompositeMediaEngine {
   void SetAudioRecvCodecs(const std::vector<Codec>& codecs);
   void SetAudioSendCodecs(const std::vector<Codec>& codecs);
   void SetVideoCodecs(const std::vector<Codec>& codecs);
-
-  void set_fail_create_channel(bool fail);
+  void SetVideoRecvCodecs(const std::vector<Codec>& codecs);
+  void SetVideoSendCodecs(const std::vector<Codec>& codecs);
 
   FakeVoiceEngine* fake_voice_engine() { return voice_; }
   FakeVideoEngine* fake_video_engine() { return video_; }

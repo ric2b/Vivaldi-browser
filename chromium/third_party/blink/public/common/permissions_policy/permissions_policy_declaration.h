@@ -7,10 +7,9 @@
 
 #include <vector>
 
+#include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-forward.h"
 #include "third_party/blink/public/common/common_export.h"
 #include "third_party/blink/public/common/permissions_policy/origin_with_possible_wildcards.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom-forward.h"
-#include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-forward.h"
 #include "url/origin.h"
 
 namespace blink {
@@ -22,9 +21,9 @@ namespace blink {
 struct BLINK_COMMON_EXPORT ParsedPermissionsPolicyDeclaration {
   ParsedPermissionsPolicyDeclaration();
   explicit ParsedPermissionsPolicyDeclaration(
-      mojom::PermissionsPolicyFeature feature);
+      network::mojom::PermissionsPolicyFeature feature);
   ParsedPermissionsPolicyDeclaration(
-      mojom::PermissionsPolicyFeature feature,
+      network::mojom::PermissionsPolicyFeature feature,
       const std::vector<OriginWithPossibleWildcards>& allowed_origins,
       const std::optional<url::Origin>& self_if_matches,
       bool matches_all_origins,
@@ -42,7 +41,7 @@ struct BLINK_COMMON_EXPORT ParsedPermissionsPolicyDeclaration {
   // policy on a document
   bool Contains(const url::Origin& origin) const;
 
-  mojom::PermissionsPolicyFeature feature;
+  network::mojom::PermissionsPolicyFeature feature;
 
   // An list of all the origins/wildcards allowed (none can be opaque).
   std::vector<OriginWithPossibleWildcards> allowed_origins;
@@ -58,11 +57,6 @@ struct BLINK_COMMON_EXPORT ParsedPermissionsPolicyDeclaration {
   bool matches_opaque_src{false};
 
   std::optional<std::string> reporting_endpoint;
-
-  // Indicates that the parsed policy is deprecated.
-  // The feature specified here will be tracked via
-  // Deprecation::CountDeprecation once the document is installed.
-  std::optional<mojom::WebFeature> deprecated_feature;
 };
 
 using ParsedPermissionsPolicy = std::vector<ParsedPermissionsPolicyDeclaration>;

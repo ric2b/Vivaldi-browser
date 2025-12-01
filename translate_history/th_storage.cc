@@ -7,13 +7,21 @@
 
 #include "base/json/json_string_value_serializer.h"
 #include "base/task/thread_pool.h"
-#include "content/public/browser/browser_context.h"
 #include "translate_history/th_codec.h"
 #include "translate_history/th_constants.h"
 #include "translate_history/th_model.h"
 
+#if !BUILDFLAG(IS_IOS)
+#include "content/public/browser/browser_context.h"
+#else
+#include "base/files/file_util.h"
+#include "base/path_service.h"
+#include "ios/chrome/browser/shared/model/paths/paths.h"
+#endif
+
 namespace translate_history {
 
+#if !BUILDFLAG(IS_IOS)
 TH_Storage::TH_Storage(content::BrowserContext* context, TH_Model* model)
     : model_(model),
       backend_task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
@@ -23,6 +31,36 @@ TH_Storage::TH_Storage(content::BrowserContext* context, TH_Model* model)
               backend_task_runner_,
               base::Milliseconds(kSaveDelayMS)),
       weak_factory_(this) {}
+#else
+TH_Storage::TH_Storage(TH_Model* model)
+    : model_(model),
+      backend_task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+           base::TaskShutdownBehavior::BLOCK_SHUTDOWN})),
+      writer_(
+          [] {
+            base::FilePath path;
+            if (base::PathService::Get(ios::DIR_USER_DATA, &path)) {
+              path = path.Append(kTranslateHistoryFileName);
+            }
+            return path;
+          }(),
+          backend_task_runner_,
+          base::Milliseconds(kSaveDelayMS)),
+      weak_factory_(this) {
+
+  // Create the user-data directory if needed (NOT the file).
+  base::FilePath user_data_dir;
+  if (base::PathService::Get(ios::DIR_USER_DATA, &user_data_dir)) {
+    backend_task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce([](const base::FilePath& dir) {
+            base::CreateDirectory(dir);
+        },
+        user_data_dir));
+  }
+}
+#endif
 
 TH_Storage::~TH_Storage() {
   if (writer_.HasPendingWrite())

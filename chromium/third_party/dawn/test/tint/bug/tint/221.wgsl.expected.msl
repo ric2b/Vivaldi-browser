@@ -33,7 +33,7 @@ kernel void tint_symbol(device Buf* tint_symbol_1 [[buffer(0)]]) {
     if ((i >= (*(tint_symbol_1)).count)) {
       break;
     }
-    uint const p_save = i;
+    uint const p_save = min(i, 49u);
     if ((tint_mod(i, 2u) == 0u)) {
       {
         (*(tint_symbol_1)).data[p_save] = ((*(tint_symbol_1)).data[p_save] * 2u);

@@ -22,7 +22,7 @@ to be larger, more complicated tests, and are slower to run. Chrome has several
 kinds of integration tests, most importantly browser tests and end-to-end (E2E)
 tests.
 
-[Browser tests](https://chromium.googlesource.com/website/+/HEAD/site/developers/testing/browser-tests/index.md),
+[Browser tests](/developers/testing/browser-tests),
 unlike unit tests, run inside a browser process instance and are attached to a
 window for rendering. These are most often used for testing UIs, but have other
 uses as well.
@@ -53,7 +53,7 @@ may fail at once, and the tests are both more cumbersome to maintain and less
 informative when they break.
 
 The way to fix this problem is to use
-[fakes](https://www.chromium.org/chromium-os/developer-library/reference/cpp/cpp-patterns/index.md##abstract-base-class-impl-fake). As a bonus, code
+[fakes](/chromium-os/developer-library/reference/cpp/cpp-patterns#abstract-base-class-impl-fake). As a bonus, code
 written in this way tends to be more modular and flexible.
 
 ### Test the API, not the implementation
@@ -114,7 +114,7 @@ CL. All you need to do is click the "DRY RUN" button and wait for the tests to
 finish running. It's best to do this before sending a CL for review, since your
 reviewer will want to know that the tests are passing and see the test coverage.
 
-![](images/gerrit_test_coverage.png)
+![](./gerrit_test_coverage.png)
 
 For each file, Gerrit displays two types of coverage, absolute coverage (|Cov|)
 and incremental coverage (ΔCov). Absolute coverage is based on all lines in the
@@ -130,7 +130,7 @@ Finally, Gerrit color-codes individual lines so that you can see whether they
 have test coverage or not. This makes it easy to decide what tests to write in
 order to increase coverage.
 
-![](images/gerrit_test_coverage_line_by_line.png)
+![](./gerrit_test_coverage_line_by_line.png)
 
 ### Looking at test coverage by directory
 
@@ -162,7 +162,7 @@ There are two ways to set hashtags:
 WARNING: Changing a CL's title after the first upload will not add/remove
 hashtags from the CL. It only works on the very first `git cl upload`.
 
-![](images/gerrit_hashtags.png)
+![](./gerrit_hashtags.png)
 
 ## Common testing patterns
 
@@ -284,7 +284,7 @@ for more details on usage.
 ### RunLoops - Prefer QuitClosure()+Run() to RunUntilIdle()
 
 Another recommended option (per the
-[Chromium style guide](https://www.chromium.org/chromium-os/developer-library/guides/testing/unit-tests))
+[Chromium style guide](/chromium-os/developer-library/guides/testing/unit-tests))
 is to use `base::RunLoop`. A RunLoop will run the message loop asynchronously
 and verify the behavior is expected, or injecting a task runner so tests can
 control where tasks are run. Chromium best practice for these types of tests is
@@ -477,5 +477,5 @@ TEST_P(UniqueTestSuiteName, Flag0Enabled_Test) {
 
 ## Mojo
 
-See [Stubbing Mojo Pipes](https://www.chromium.org/chromium-os/developer-library/reference/cpp/cpp-mojo/#stubbing-mojo-pipes) for pointers on how
-to unit test Mojo calls.
+See [Stubbing Mojo Pipes](/chromium-os/developer-library/reference/cpp/cpp-mojo/#stubbing-mojo-pipes)
+for pointers on how to unit test Mojo calls.

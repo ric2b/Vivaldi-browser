@@ -24,8 +24,8 @@ using testing::StrictMock;
 namespace openscreen::cast {
 namespace {
 
-constexpr Ssrc kSenderSsrc{1};
-constexpr Ssrc kReceiverSsrc{2};
+constexpr Ssrc kSenderSsrc = 1;
+constexpr Ssrc kReceiverSsrc = 2;
 
 }  // namespace
 

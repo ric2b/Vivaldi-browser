@@ -6,6 +6,7 @@ from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
 
+import datetime
 from httplib2 import http
 import json
 import logging
@@ -94,14 +95,28 @@ def _GetAlerts(skia=False):
     return (None, None, None, 'Sheriff "%s" not found.' % sheriff_name,
             http.HTTPStatus.BAD_REQUEST.value)
 
-  masters, internal_only = None, None
+  masters, internal_only, min_timestamp = None, None, None
   if skia:
     host = request.values.get('host', None)
     if not host:
       return (None, None, None,
               'No host found in request to filter anomlies for skia instaces',
               http.HTTPStatus.BAD_REQUEST.value)
-    masters, internal_only = skia_helper.GetMastersAndInternalOnlyForHost(host)
+    masters, is_internal = skia_helper.GetMastersAndIsInternalForHost(host)
+    # If the request is from a internal instance, we should show both external
+    # and internal data; otherwise, we should only show external data.
+    if not is_internal:
+      internal_only = False
+
+    # We did 1 year of backfill for non-press benchmarks and 3 years for press
+    # benchmarks. The backfill started from about June 2023. As a result, we
+    # should ignore those anomalies detected for non-press benchmarks before
+    # 2022/7/1, and those for press benchmarks before 2020/7/1.
+    # In our scenario, we don't have info to filter the anomalies on benchmark.
+    # We will use 2022/7/1 as a cut-off date, as it is not likely to look back
+    # on anomalies 2.5 years ago.
+    min_timestamp = datetime.datetime.strptime('2022-7-1T0:0:0',
+                                               '%Y-%m-%dT%H:%M:%S')
 
   # Cursors are used to fetch paged queries. If none is supplied, then the
   # first 500 alerts will be returned. If a cursor is given, the next
@@ -136,6 +151,7 @@ def _GetAlerts(skia=False):
       count_limit=_MAX_ANOMALIES_TO_COUNT,
       limit=max_anomalies_to_show,
       master_names=masters,
+      min_timestamp=min_timestamp,
       internal_only=internal_only).get_result()
 
   return anomalies, next_cursor, count, None, None
@@ -205,6 +221,21 @@ def GetAnomalyDict(anomaly_entity, bisect_status=None, v2=False, skia=False):
     dct['is_improvement'] = anomaly_entity.is_improvement
     dct['start_revision'] = anomaly_entity.display_start or anomaly_entity.start_revision
     dct['end_revision'] = anomaly_entity.display_end or anomaly_entity.end_revision
+    # the subscription info needed for triaging.
+    subscription_names = anomaly_entity.subscription_names
+    if subscription_names:
+      if len(subscription_names) > 1:
+        logging.warning(
+            "More than one subscription names in anomaly %s. Subs: %s",
+            anomaly_entity.key.id(), subscription_names)
+      dct['subscription_name'] = subscription_names[0]
+
+      subscriptions = anomaly_entity.subscriptions
+      if subscriptions:
+        dct['bug_component'] = subscriptions[0].bug_components[
+            0] if subscriptions[0].bug_components else ''
+        dct['bug_labels'] = subscriptions[0].bug_labels
+        dct['bug_cc_emails'] = subscriptions[0].bug_cc_emails
   else:
     dct['improvement'] = anomaly_entity.is_improvement
     dct['start_revision'] = anomaly_entity.start_revision
@@ -265,7 +296,10 @@ def _GetBisectStatusDict(anomalies):
 
 def SkiaLoadSheriffConfigsHandlerGet():
   try:
+    logging.debug('[SkiaTriage] Load sheriff configs requests.')
     sheriff_config_names = _GetSheriffList()
+    logging.debug('[SkiaTriage] _GetSheriffList returned  %d configs.',
+                  len(sheriff_config_names))
   except sheriff_config_client.InternalServerError as e:
     return make_response(json.dumps({'error': str(e)}))
   return make_response(json.dumps({'sheriff_list': sheriff_config_names}))

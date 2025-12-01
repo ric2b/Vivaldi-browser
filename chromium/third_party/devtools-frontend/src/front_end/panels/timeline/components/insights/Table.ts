@@ -2,14 +2,23 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import type * as Trace from '../../../../models/trace/trace.js';
 import * as ComponentHelpers from '../../../../ui/components/helpers/helpers.js';
-import * as LitHtml from '../../../../ui/lit-html/lit-html.js';
+import * as UI from '../../../../ui/legacy/legacy.js';
+import * as Lit from '../../../../ui/lit/lit.js';
 import type * as Overlays from '../../overlays/overlays.js';
 
-import type {BaseInsightComponent} from './Helpers.js';
-import tableStyles from './table.css.js';
+import type * as BaseInsightComponent from './BaseInsightComponent.js';
+import {EventReferenceClick} from './EventRef.js';
+import tableStylesRaw from './table.css.js';
 
-const {html} = LitHtml;
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const tableStyles = new CSSStyleSheet();
+tableStyles.replaceSync(tableStylesRaw.cssContent);
+
+const {html} = Lit;
+
+type BaseInsightComponent = BaseInsightComponent.BaseInsightComponent<Trace.Insights.Types.InsightModel<{}>>;
 
 /**
  * @fileoverview An interactive table component.
@@ -27,29 +36,27 @@ const {html} = LitHtml;
  *           the current trace bounds to fit the bounds of the row's overlays.
  */
 
-export type TableState = {
-  selectedRowEl: HTMLElement|null,
-  selectionIsSticky: boolean,
-};
+export interface TableState {
+  selectedRowEl: HTMLElement|null;
+  selectionIsSticky: boolean;
+}
 
 export interface TableData {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  insight: BaseInsightComponent<any>;
+  insight: BaseInsightComponent;
   headers: string[];
   rows: TableDataRow[];
 }
 
-export type TableDataRow = {
-  values: Array<string|LitHtml.LitTemplate>,
-  overlays?: Overlays.Overlays.TimelineOverlay[],
-};
+export interface TableDataRow {
+  values: Array<number|string|Lit.LitTemplate>;
+  overlays?: Overlays.Overlays.TimelineOverlay[];
+}
 
 export class Table extends HTMLElement {
 
   readonly #shadow = this.attachShadow({mode: 'open'});
   readonly #boundRender = this.#render.bind(this);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  #insight?: BaseInsightComponent<any>;
+  #insight?: BaseInsightComponent;
   #state?: TableState;
   #headers?: string[];
   #rows?: TableDataRow[];
@@ -68,6 +75,8 @@ export class Table extends HTMLElement {
 
   connectedCallback(): void {
     this.#shadow.adoptedStyleSheets.push(tableStyles);
+    UI.UIUtils.injectCoreStyles(this.#shadow);
+
     void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#boundRender);
   }
 
@@ -103,6 +112,14 @@ export class Table extends HTMLElement {
 
     const index = [...rowEl.parentElement.children].indexOf(rowEl);
     if (index === -1) {
+      return;
+    }
+
+    // If the desired overlays consist of just a single ENTRY_OUTLINE, then
+    // it is more intuitive to just select the target event.
+    const overlays = this.#rows?.[index]?.overlays;
+    if (overlays?.length === 1 && overlays[0].type === 'ENTRY_OUTLINE') {
+      this.dispatchEvent(new EventReferenceClick(overlays[0].entry));
       return;
     }
 
@@ -154,9 +171,9 @@ export class Table extends HTMLElement {
       return;
     }
 
-    LitHtml.render(
+    Lit.render(
         html`<table
-          class=${LitHtml.Directives.classMap({
+          class=${Lit.Directives.classMap({
           interactive: this.#interactive,
         })}
           @mouseleave=${this.#interactive ? this.#onMouseLeave : null}>

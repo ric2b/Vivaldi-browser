@@ -10,6 +10,8 @@
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
+#import "base/notreached.h"
+#import "base/strings/sys_string_conversions.h"
 #import "base/time/time.h"
 #import "components/feed/core/common/pref_names.h"
 #import "components/feed/core/v2/public/ios/notice_card_tracker.h"
@@ -673,6 +675,11 @@ using feed::FeedUserActionType;
   [self recordEngagement:scrollDistance interacted:NO];
 }
 
+- (void)recordFeedHandlingError:(NSString*)action {
+  base::UmaHistogramBoolean(
+      kFeedHandlingErrorPrefix + base::SysNSStringToUTF8(action), YES);
+}
+
 - (void)recordUniformityFlagValue:(BOOL)flag {
   base::UmaHistogramBoolean(kDiscoverUniformityFlag, flag);
 }
@@ -984,8 +991,7 @@ using feed::FeedUserActionType;
       break;
     default:
       // This should never be reached, as dates should never be > 28 days.
-      CHECK(NO);
-      break;
+      NOTREACHED();
   }
   self.prefService->SetInteger(kActivityBucketKey,
                                static_cast<int>(activityBucket));

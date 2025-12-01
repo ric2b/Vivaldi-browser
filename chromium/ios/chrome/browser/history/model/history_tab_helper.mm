@@ -5,6 +5,7 @@
 #import "ios/chrome/browser/history/model/history_tab_helper.h"
 
 #import "base/memory/ptr_util.h"
+#import "base/metrics/histogram_macros.h"
 #import "components/history/core/browser/history_constants.h"
 #import "components/history/core/browser/history_service.h"
 #import "components/keyed_service/core/service_access_type.h"
@@ -49,8 +50,9 @@ HistoryTabHelper::~HistoryTabHelper() {
 void HistoryTabHelper::UpdateHistoryForNavigation(
     const history::HistoryAddPageArgs& add_page_args) {
   history::HistoryService* history_service = GetHistoryService();
-  if (!history_service)
+  if (!history_service) {
     return;
+  }
 
   // Update the previous navigation's end time.
   if (cached_navigation_state_) {
@@ -233,6 +235,8 @@ void HistoryTabHelper::DidFinishNavigation(
 
   // Do not record failed navigation nor 404 to the history (to prevent them
   // from showing up as Most Visited tiles on NTP).
+  UMA_HISTOGRAM_BOOLEAN("History.IsErrorNavigation",
+                        navigation_context->GetError());
   if (navigation_context->GetError()) {
     return;
   }
@@ -302,8 +306,9 @@ void HistoryTabHelper::TitleWasSet(web::WebState* web_state) {
   }
 
   // Protect against pages changing their title too often during page load.
-  if (num_title_changes_ >= history::kMaxTitleChanges)
+  if (num_title_changes_ >= history::kMaxTitleChanges) {
     return;
+  }
 
   // Only store page titles into history if they were set while the page was
   // loading or during a brief span after load is complete. This fixes the case

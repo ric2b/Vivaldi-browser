@@ -21,9 +21,13 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.shared_preferences.SharedPreferencesManager;
 import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.components.browser_ui.widget.BrowserUiListMenuUtils;
+import org.chromium.components.feature_engagement.EventConstants;
+import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.ui.base.Clipboard;
 import org.chromium.ui.listmenu.BasicListMenu;
 import org.chromium.ui.listmenu.ListMenuItemProperties;
@@ -46,9 +50,12 @@ public class ToolbarLongPressMenuHandler {
     }
 
     private PopupWindow mPopupMenu;
+    private final int mAppMenuShadowLength;
     private final int mEdgeToTextDistance;
     private final int mUrlBarMargin;
+    private final int mMenuOmniboxOverlap;
     @NonNull private final Context mContext;
+    @NonNull private final ObservableSupplier<Profile> mProfileSupplier;
     @NonNull private final ObservableSupplier<Boolean> mOmniboxFocusStateSupplier;
     @NonNull private final Supplier<String> mUrlBarTextSupplier;
     @NonNull private final Supplier<ViewRectProvider> mUrlBarViewRectProviderSupplier;
@@ -62,11 +69,13 @@ public class ToolbarLongPressMenuHandler {
      */
     public ToolbarLongPressMenuHandler(
             Context context,
+            ObservableSupplier<Profile> profileSupplier,
             boolean isCustomTab,
             ObservableSupplier<Boolean> omniboxFocusStateSupplier,
             Supplier<String> urlBarTextSupplier,
             Supplier<ViewRectProvider> urlBarViewRectProviderSupplier) {
         mContext = context;
+        mProfileSupplier = profileSupplier;
         mOmniboxFocusStateSupplier = omniboxFocusStateSupplier;
         mUrlBarTextSupplier = urlBarTextSupplier;
         mUrlBarViewRectProviderSupplier = urlBarViewRectProviderSupplier;
@@ -87,6 +96,8 @@ public class ToolbarLongPressMenuHandler {
         }
 
         mSharedPreferencesManager = ChromeSharedPreferences.getInstance();
+        mAppMenuShadowLength =
+                context.getResources().getDimensionPixelSize(R.dimen.app_menu_shadow_length);
 
         // Long press menu layout
         // +----------------------------------+
@@ -105,11 +116,14 @@ public class ToolbarLongPressMenuHandler {
         // ^         ^
         // mEdgeToTextDistance
         mEdgeToTextDistance =
-                context.getResources().getDimensionPixelSize(R.dimen.app_menu_shadow_length)
+                mAppMenuShadowLength
                         + context.getResources()
                                 .getDimensionPixelSize(R.dimen.list_menu_item_horizontal_padding);
         mUrlBarMargin =
                 mContext.getResources().getDimensionPixelSize(R.dimen.url_bar_vertical_margin);
+        mMenuOmniboxOverlap =
+                mContext.getResources()
+                        .getDimensionPixelSize(R.dimen.omnibox_longpress_menu_overlap);
     }
 
     /**
@@ -141,13 +155,23 @@ public class ToolbarLongPressMenuHandler {
         mPopupMenu = UiWidgetFactory.getInstance().createPopupWindow(view.getContext());
         mPopupMenu.setFocusable(true);
         mPopupMenu.setOutsideTouchable(true);
-        mPopupMenu.setWidth(ViewGroup.LayoutParams.WRAP_CONTENT);
+        mPopupMenu.setWidth(listMenu.getMaxItemWidth() + mAppMenuShadowLength * 2);
         mPopupMenu.setHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
         mPopupMenu.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         mPopupMenu.setContentView(menuListView);
+        mPopupMenu.setAnimationStyle(
+                onTop ? R.style.PopupWindowAnimDropdown : R.style.PopupWindowAnimRaiseup);
 
-        int[] location = calculateShowLocation(onTop, listMenu);
+        boolean isRtl =
+                mContext.getResources().getConfiguration().getLayoutDirection()
+                        == View.LAYOUT_DIRECTION_RTL;
+        int[] location = calculateShowLocation(onTop, isRtl, listMenu);
         mPopupMenu.showAtLocation(view, Gravity.NO_GRAVITY, location[0], location[1]);
+
+        // Notify the IPH that the User has interacted with the Bottom Toolbar menu.
+        // This effectively disables the IPH bubble.
+        Tracker tracker = TrackerFactory.getTrackerForProfile(mProfileSupplier.get());
+        tracker.notifyEvent(EventConstants.BOTTOM_TOOLBAR_MENU_TRIGGERED);
     }
 
     @VisibleForTesting
@@ -159,10 +183,10 @@ public class ToolbarLongPressMenuHandler {
                                 ? R.string.toolbar_move_to_the_bottom
                                 : R.string.toolbar_move_to_the_top,
                         MenuItemType.MOVE_ADDRESS_BAR_TO,
-                        /* iconId= */ 0));
+                        /* startIconId= */ 0));
         itemList.add(
                 BrowserUiListMenuUtils.buildMenuListItem(
-                        R.string.toolbar_copy_link, MenuItemType.COPY_LINK, /* iconId= */ 0));
+                        R.string.toolbar_copy_link, MenuItemType.COPY_LINK, /* startIconId= */ 0));
         return itemList;
     }
 
@@ -189,22 +213,27 @@ public class ToolbarLongPressMenuHandler {
     }
 
     @VisibleForTesting
-    int[] calculateShowLocation(boolean onTop, BasicListMenu listMenu) {
+    int[] calculateShowLocation(boolean onTop, boolean isRtl, BasicListMenu listMenu) {
         ViewRectProvider viewRectProvider = mUrlBarViewRectProviderSupplier.get();
-        viewRectProvider.setIncludePadding(true);
-        viewRectProvider.setMarginPx(0, mUrlBarMargin, 0, mUrlBarMargin);
+        viewRectProvider.setInsetPx(0, mUrlBarMargin, 0, mUrlBarMargin);
         Rect urlBarRect = viewRectProvider.getRect();
 
+        int[] menuDimensions = listMenu.getMenuDimensions();
+        int menuWidth = menuDimensions[0];
+        int menuHeight = menuDimensions[1];
         // The menu text should be vertically aligned with the text in the URL bar.
-        int x = urlBarRect.left - mEdgeToTextDistance;
+        int x =
+                isRtl
+                        ? urlBarRect.right - menuWidth + mEdgeToTextDistance
+                        : urlBarRect.left - mEdgeToTextDistance;
         int y;
         if (onTop) {
             // The long press menu will appear below the toolbar.
-            y = urlBarRect.bottom;
+            y = urlBarRect.bottom - mMenuOmniboxOverlap;
         } else {
             // The long press menu will appear above the toolbar.
-            int[] menuDimensions = listMenu.getMenuDimensions();
-            y = urlBarRect.top - menuDimensions[1];
+
+            y = urlBarRect.top - menuHeight + mMenuOmniboxOverlap;
         }
         return new int[] {x, y};
     }

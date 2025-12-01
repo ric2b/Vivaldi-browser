@@ -4,7 +4,9 @@
 
 #import "ios/chrome/credential_provider_extension/ui/passkey_welcome_screen_view_controller.h"
 
+#import "base/test/task_environment.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/chrome/credential_provider_extension/ui/feature_flags.h"
 #import "testing/gtest_mac.h"
 #import "testing/platform_test.h"
 
@@ -20,6 +22,9 @@ class PasskeyWelcomeScreenViewControllerTest : public PlatformTest {
                        delegate:nil
             primaryButtonAction:nil];
   }
+
+ private:
+  base::test::TaskEnvironment task_environment_;
 };
 
 // Tests that the view's content for the `kEnroll` purpose is as expected.
@@ -81,8 +86,11 @@ TEST_F(PasskeyWelcomeScreenViewControllerTest,
   EXPECT_TRUE(controller.navigationItem.titleView);
   EXPECT_NSEQ(controller.bannerName, @"passkey_bootstrapping_banner");
   EXPECT_EQ(controller.bannerSize, BannerImageSizeType::kExtraShort);
-  EXPECT_NSEQ(controller.titleText,
-              @"IDS_IOS_CREDENTIAL_PROVIDER_PASSKEY_BOOTSRAPPING_TITLE");
+  EXPECT_NSEQ(
+      controller.titleText,
+      IsPasskeysM2Enabled()
+          ? @"IDS_IOS_CREDENTIAL_PROVIDER_PASSKEY_BOOTSRAPPING_TITLE"
+          : @"IDS_IOS_CREDENTIAL_PROVIDER_PASSKEY_BOOTSRAPPING_TITLE_M1");
   EXPECT_NSEQ(controller.subtitleText,
               @"IDS_IOS_CREDENTIAL_PROVIDER_PASSKEY_BOOTSRAPPING_SUBTITLE");
   EXPECT_EQ(controller.specificContentView.subviews.count, 0u);

@@ -6,7 +6,7 @@ page_name: perf-keyvals
 title: Perf Keyvals
 ---
 
-# Note perf keyvals described in this page has been deprecated. If your test output perf values, please refer to <http://www.chromium.org/chromium-os/developer-library/guides/testing/perf-data>
+# Note perf keyvals described in this page has been deprecated. If your test output perf values, please refer to <https://www.chromium.org/chromium-os/developer-library/guides/testing/perf-data>
 
 # Currently, autotest uses a special kind of keyval called a “perf keyval” to store performance test data. A perf keyval -- like any keyval in autotest -- is simply a key/value pair, where the key is a string that describes the value. The string key can contain only letters, numbers, periods, dashes, and underscores, as defined in write_keyval() in chromeos/src/third_party/autotest/files/client/common_lib/base_utils.py.
 
@@ -57,7 +57,7 @@ parsing server job results.
     as a new TAPReport object. class TAPReport is defined in the same file.
 
     TAPReport is autotest’s support for generating TAP ([Test Anything
-    Protocol](http://en.wikipedia.org/wiki/Test_Anything_Protocol)) report
+    Protocol](https://en.wikipedia.org/wiki/Test_Anything_Protocol)) report
     files.
 
 ### From output file(s) into the results database

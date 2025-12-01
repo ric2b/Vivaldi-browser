@@ -54,6 +54,14 @@ FakeSystemIdentityManager::FakeSystemIdentityManager(
 
   for (FakeSystemIdentity* fake_identity in fake_identities) {
     [storage_ addFakeIdentity:fake_identity];
+    // Set up capabilities to remove the delay while displaying the history sync
+    // opt-in screen for testing.
+    // TODO(b/327221052): verify if this should be replaced by a handler for
+    // default capabilities.
+    AccountCapabilitiesTestMutator* mutator =
+        GetPendingCapabilitiesMutator(fake_identity);
+    mutator->set_can_show_history_sync_opt_ins_without_minor_mode_restrictions(
+        true);
   }
 }
 
@@ -361,7 +369,7 @@ NSString* FakeSystemIdentityManager::GetCachedHostedDomainForIdentity(
 
 void FakeSystemIdentityManager::FetchCapabilities(
     id<SystemIdentity> identity,
-    const std::set<std::string>& names,
+    const std::vector<std::string>& names,
     FetchCapabilitiesCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK([storage_ containsIdentityWithGaiaID:identity.gaiaID]);
@@ -397,6 +405,14 @@ bool FakeSystemIdentityManager::IsMDMError(id<SystemIdentity> identity,
                                            NSError* error) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return false;
+}
+
+void FakeSystemIdentityManager::FetchTokenAuthURL(
+    id<SystemIdentity> identity,
+    NSURL* target_url,
+    AuthenticatedURLCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  std::move(callback).Run(/*url=*/target_url, /*error=*/nil);
 }
 
 base::WeakPtr<FakeSystemIdentityManager>
@@ -482,7 +498,7 @@ void FakeSystemIdentityManager::GetHostedDomainAsync(
 
 void FakeSystemIdentityManager::FetchCapabilitiesAsync(
     id<SystemIdentity> identity,
-    const std::set<std::string>& names,
+    const std::vector<std::string>& names,
     FetchCapabilitiesCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (![storage_ containsIdentityWithGaiaID:identity.gaiaID]) {

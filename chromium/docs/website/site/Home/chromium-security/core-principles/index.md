@@ -25,8 +25,8 @@ Our goal in designing Chrome’s security architecture was to layer defenses, an
 avoid single points of failure. Chrome’s sandbox architecture represents one of
 the most effective parts of this strategy, but it’s far from the only piece. We
 also employ the best available anti-exploit technologies—including
-[ASLR](http://en.wikipedia.org/wiki/Address_space_layout_randomization),
-[DEP](http://en.wikipedia.org/wiki/Data_Execution_Prevention), [JIT
+[ASLR](https://en.wikipedia.org/wiki/Address_space_layout_randomization),
+[DEP](https://en.wikipedia.org/wiki/Data_Execution_Prevention), [JIT
 hardening](http://www.matasano.com/research/Attacking_Clientside_JIT_Compilers_Paper.pdf#page=24),
 and [SafeSEH](http://msdn.microsoft.com/en-us/library/9a89h429.aspx)—along with
 custom technologies like [Safe
@@ -95,7 +95,7 @@ techniques are employed by everyone. To that end, we work closely with standards
 bodies and other browser makers to raise the bar by collaborating on various
 standards, including [public key
 pinning](http://tools.ietf.org/html/draft-ietf-websec-key-pinning-01), [Content
-Security Policies](http://www.w3.org/TR/CSP/), and [SPDY](/spdy). We also open
+Security Policies](https://www.w3.org/TR/CSP/), and [SPDY](/spdy). We also open
 source or otherwise make our security technologies widely available (e.g.
 [Native Client](/nativeclient) / Pepper, [Open Type
 Sanitizer](https://code.google.com/p/ots/), [application

@@ -25,12 +25,13 @@ source_set("vivaldi_translate") {
     "//components/language/core/language_model",
     "//components/prefs",
     "//components/translate/core/common",
-    "//ios/chrome/app/strings",
     "//ios/chrome/app/strings:ios_strings",
+    "//ios/chrome/app/strings",
     "//ios/chrome/browser/shared/coordinator/chrome_coordinator",
     "//ios/chrome/browser/shared/model/browser",
     "//ios/chrome/common/ui/util",
     "//ui/base",
+    "//vivaldi/ios/translate:ios_translate",
   ]
 
   frameworks = [
@@ -44,6 +45,9 @@ swift_source_set("vivaldi_translate_swift") {
     "vivaldi_translate_content_view_side_panel.swift",
     "vivaldi_translate_content_view.swift",
     "vivaldi_translate_header_view.swift",
+    "vivaldi_translate_history_item.swift",
+    "vivaldi_translate_history_view_representable.swift",
+    "vivaldi_translate_history_view.swift",
     "vivaldi_translate_keyboard_responder.swift",
     "vivaldi_translate_language_item.swift",
     "vivaldi_translate_language_picker_view.swift",

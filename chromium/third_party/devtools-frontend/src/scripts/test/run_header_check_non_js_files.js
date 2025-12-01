@@ -7,10 +7,10 @@
 
 // @ts-check
 
-const readline = require('readline');
-const path = require('path');
 const fs = require('fs');
 const glob = require('glob');
+const path = require('path');
+const readline = require('readline');
 
 const ROOT_DIRECTORY = path.join(__dirname, '..', '..');
 const FRONT_END_DIRECTORY = path.join(ROOT_DIRECTORY, 'front_end');
@@ -53,7 +53,6 @@ const EXEMPTED_FILES = new Set([
   ['front_end', 'panels', 'sources', 'sourcesView.css'],
   ['front_end', 'panels', 'timeline', 'timelinePanel.css'],
   ['front_end', 'ui', 'legacy', 'filter.css'],
-  ['front_end', 'ui', 'legacy', 'inspectorSyntaxHighlight.css'],
   ['front_end', 'ui', 'legacy', 'splitWidget.css'],
   ['front_end', 'ui', 'legacy', 'suggestBox.css'],
   ['front_end', 'ui', 'legacy', 'tabbedPane.css'],

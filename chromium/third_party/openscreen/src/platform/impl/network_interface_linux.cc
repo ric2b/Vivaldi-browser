@@ -200,9 +200,7 @@ std::vector<InterfaceInfo> GetLinkInfo() {
     msg.msg_name = &source_address;
     msg.msg_namelen = sizeof(source_address);
     msg.msg_iov = &iov;
-    msg.msg_iovlen = 1,
-    msg.msg_control = nullptr,
-    msg.msg_controllen = 0,
+    msg.msg_iovlen = 1, msg.msg_control = nullptr, msg.msg_controllen = 0,
     msg.msg_flags = 0;
 
     bool done = false;

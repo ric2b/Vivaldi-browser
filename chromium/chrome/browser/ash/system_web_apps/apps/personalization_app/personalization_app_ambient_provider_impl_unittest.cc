@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ash/system_web_apps/apps/personalization_app/personalization_app_ambient_provider_impl.h"
 
+#include <algorithm>
 #include <memory>
 #include <string_view>
 #include <vector>
@@ -26,7 +27,6 @@
 #include "ash/webui/personalization_app/mojom/personalization_app.mojom.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
-#include "base/ranges/algorithm.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/test_future.h"
@@ -40,6 +40,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_web_ui.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -62,7 +63,7 @@ using ::testing::Pointee;
 
 constexpr char kFakeTestEmail[] = "fakeemail@example.com";
 const AccountId kFakeTestAccountId =
-    AccountId::FromUserEmailGaiaId(kFakeTestEmail, kFakeTestEmail);
+    AccountId::FromUserEmailGaiaId(kFakeTestEmail, GaiaId("1111"));
 
 class TestAmbientObserver
     : public ash::personalization_app::mojom::AmbientObserver {
@@ -194,7 +195,7 @@ class PersonalizationAppAmbientProviderImplTest : public ash::AshTestBase {
                 base::test::TaskEnvironment::TimeSource::MOCK_TIME))),
         profile_manager_(TestingBrowserProcess::GetGlobal()) {
     scoped_feature_list_.InitWithFeatures(
-        personalization_app::GetTimeOfDayEnabledFeatures(), {});
+        personalization_app::GetTimeOfDayFeatures(), {});
   }
   PersonalizationAppAmbientProviderImplTest(
       const PersonalizationAppAmbientProviderImplTest&) = delete;
@@ -971,7 +972,7 @@ TEST_F(PersonalizationAppAmbientProviderImplTest, TestSetSelectedArtAlbum) {
 
   // The fake data has art setting '0' as enabled.
   std::vector<ash::ArtSetting> art_settings = ArtSettings();
-  auto it = base::ranges::find_if(art_settings, &ash::ArtSetting::enabled);
+  auto it = std::ranges::find_if(art_settings, &ash::ArtSetting::enabled);
   EXPECT_NE(it, art_settings.end());
   EXPECT_EQ(it->album_id, "0");
 
@@ -983,7 +984,7 @@ TEST_F(PersonalizationAppAmbientProviderImplTest, TestSetSelectedArtAlbum) {
   SetAlbumSelected(album->id, album->topic_source, album->checked);
 
   art_settings = ArtSettings();
-  EXPECT_TRUE(base::ranges::none_of(art_settings, &ash::ArtSetting::enabled));
+  EXPECT_TRUE(std::ranges::none_of(art_settings, &ash::ArtSetting::enabled));
 
   album = ash::personalization_app::mojom::AmbientModeAlbum::New();
   album->id = '1';
@@ -992,7 +993,7 @@ TEST_F(PersonalizationAppAmbientProviderImplTest, TestSetSelectedArtAlbum) {
   SetAlbumSelected(album->id, album->topic_source, album->checked);
 
   art_settings = ArtSettings();
-  it = base::ranges::find_if(art_settings, &ash::ArtSetting::enabled);
+  it = std::ranges::find_if(art_settings, &ash::ArtSetting::enabled);
   EXPECT_NE(it, art_settings.end());
   EXPECT_EQ(it->album_id, "1");
 }

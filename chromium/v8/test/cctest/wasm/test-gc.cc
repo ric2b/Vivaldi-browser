@@ -73,13 +73,13 @@ class WasmGCTester {
     builder_.AddExport(base::CStrVector(name), fun);
   }
 
-  MaybeHandle<Object> CallExportedFunction(const char* name, int argc,
-                                           Handle<Object> args[]) {
-    Handle<WasmExportedFunction> func =
+  MaybeDirectHandle<Object> CallExportedFunction(
+      const char* name, base::Vector<const DirectHandle<Object>> args) {
+    DirectHandle<WasmExportedFunction> func =
         testing::GetExportedFunction(isolate_, instance_object_, name)
             .ToHandleChecked();
     return Execution::Call(isolate_, func,
-                           isolate_->factory()->undefined_value(), argc, args);
+                           isolate_->factory()->undefined_value(), args);
   }
 
   ModuleTypeIndex DefineStruct(std::initializer_list<F> fields,
@@ -114,8 +114,8 @@ class WasmGCTester {
     ZoneBuffer buffer(&zone_);
     builder_.WriteTo(&buffer);
     MaybeHandle<WasmInstanceObject> maybe_instance =
-        testing::CompileAndInstantiateForTesting(
-            isolate_, &thrower, ModuleWireBytes(buffer.begin(), buffer.end()));
+        testing::CompileAndInstantiateForTesting(isolate_, &thrower,
+                                                 base::VectorOf(buffer));
     if (thrower.error()) FATAL("%s", thrower.error_msg());
     instance_object_ = maybe_instance.ToHandleChecked();
     trusted_instance_data_ =
@@ -191,10 +191,10 @@ class WasmGCTester {
     return true;
   }
 
-  Handle<WasmInstanceObject> instance_object() const {
+  DirectHandle<WasmInstanceObject> instance_object() const {
     return instance_object_;
   }
-  Handle<WasmTrustedInstanceData> trusted_instance_data() const {
+  DirectHandle<WasmTrustedInstanceData> trusted_instance_data() const {
     return trusted_instance_data_;
   }
   Isolate* isolate() const { return isolate_; }
@@ -233,7 +233,7 @@ class WasmGCTester {
     if (isolate_->has_exception()) {
       DirectHandle<String> message =
           ErrorUtils::ToString(isolate_,
-                               handle(isolate_->exception(), isolate_))
+                               direct_handle(isolate_->exception(), isolate_))
               .ToHandleChecked();
       FATAL("%s", message->ToCString().get());
     }
@@ -246,7 +246,8 @@ class WasmGCTester {
     CallFunctionImpl(function_index, sig, packer);
     CHECK(isolate_->has_exception());
     DirectHandle<String> message =
-        ErrorUtils::ToString(isolate_, handle(isolate_->exception(), isolate_))
+        ErrorUtils::ToString(isolate_,
+                             direct_handle(isolate_->exception(), isolate_))
             .ToHandleChecked();
     std::string message_str(message->ToCString().get());
     CHECK_NE(message_str.find(expected), std::string::npos);
@@ -940,7 +941,8 @@ WASM_COMPILED_EXEC_TEST(WasmBasicArray) {
   tester.CheckResult(kImmutable, 42);
   tester.CheckResult(kTestFpArray, static_cast<int32_t>(result_value));
 
-  Handle<Object> h_result = tester.GetResultObject(kAllocate).ToHandleChecked();
+  DirectHandle<Object> h_result =
+      tester.GetResultObject(kAllocate).ToHandleChecked();
   CHECK(IsWasmArray(*h_result));
   CHECK_EQ(2, Cast<WasmArray>(h_result)->length());
 
@@ -948,16 +950,17 @@ WASM_COMPILED_EXEC_TEST(WasmBasicArray) {
   CHECK(IsWasmArray(*h_result));
   CHECK_EQ(2, Cast<WasmArray>(h_result)->length());
 
-  Handle<Object> init_result = tester.GetResultObject(kInit).ToHandleChecked();
+  DirectHandle<Object> init_result =
+      tester.GetResultObject(kInit).ToHandleChecked();
   CHECK(IsWasmArray(*init_result));
   CHECK_EQ(3, Cast<WasmArray>(init_result)->length());
   CHECK_EQ(10, Cast<WasmArray>(init_result)->GetElement(0).to_i32());
   CHECK_EQ(20, Cast<WasmArray>(init_result)->GetElement(1).to_i32());
   CHECK_EQ(30, Cast<WasmArray>(init_result)->GetElement(2).to_i32());
 
-  MaybeHandle<Object> maybe_large_result =
+  MaybeDirectHandle<Object> maybe_large_result =
       tester.GetResultObject(kAllocateLarge);
-  Handle<Object> large_result = maybe_large_result.ToHandleChecked();
+  DirectHandle<Object> large_result = maybe_large_result.ToHandleChecked();
   CHECK(IsWasmArray(*large_result));
   CHECK(Cast<WasmArray>(large_result)->Size() > kMaxRegularHeapObjectSize);
 
@@ -1162,7 +1165,7 @@ WASM_COMPILED_EXEC_TEST(WasmArrayCopy) {
         tester.GetResultObject(kCopyRef, 5).ToHandleChecked();
     CHECK(IsWasmNull(*result5));
     for (int i = 6; i <= 9; i++) {
-      Handle<Object> res =
+      DirectHandle<Object> res =
           tester.GetResultObject(kCopyRef, i).ToHandleChecked();
       CHECK(IsWasmArray(*res));
       CHECK_EQ(Cast<WasmArray>(res)->length(), static_cast<uint32_t>(i));
@@ -1170,12 +1173,12 @@ WASM_COMPILED_EXEC_TEST(WasmArrayCopy) {
   }
   CHECK(IsWasmNull(
       *tester.GetResultObject(kCopyRefOverlapping, 6).ToHandleChecked()));
-  Handle<Object> res0 =
+  DirectHandle<Object> res0 =
       tester.GetResultObject(kCopyRefOverlapping, 0).ToHandleChecked();
   CHECK(IsWasmArray(*res0));
   CHECK_EQ(Cast<WasmArray>(res0)->length(), static_cast<uint32_t>(2));
   for (int i = 2; i <= 5; i++) {
-    Handle<Object> res =
+    DirectHandle<Object> res =
         tester.GetResultObject(kCopyRefOverlapping, i).ToHandleChecked();
     CHECK(IsWasmArray(*res));
     CHECK_EQ(Cast<WasmArray>(res)->length(), static_cast<uint32_t>(i));
@@ -1440,7 +1443,8 @@ WASM_COMPILED_EXEC_TEST(ArrayNewMap) {
       {WASM_ARRAY_NEW(type_index, WASM_I32V(10), WASM_I32V(42)), kExprEnd});
 
   tester.CompileModule();
-  Handle<Object> result = tester.GetResultObject(array_new).ToHandleChecked();
+  DirectHandle<Object> result =
+      tester.GetResultObject(array_new).ToHandleChecked();
   CHECK(IsWasmArray(*result));
   CHECK_EQ(Cast<WasmArray>(result)->map(),
            tester.trusted_instance_data()->managed_object_maps()->get(
@@ -2038,30 +2042,32 @@ WASM_COMPILED_EXEC_TEST(JsAccess) {
   Isolate* isolate = tester.isolate();
   TryCatch try_catch(reinterpret_cast<v8::Isolate*>(isolate));
   for (const char* producer : {"typed_producer", "untyped_producer"}) {
-    MaybeHandle<Object> maybe_result =
-        tester.CallExportedFunction(producer, 0, nullptr);
+    MaybeDirectHandle<Object> maybe_result =
+        tester.CallExportedFunction(producer, {});
     if (maybe_result.is_null()) {
       FATAL("Calling %s failed: %s", producer,
             *v8::String::Utf8Value(reinterpret_cast<v8::Isolate*>(isolate),
                                    try_catch.Message()->Get()));
     }
     {
-      Handle<Object> args[] = {maybe_result.ToHandleChecked()};
-      maybe_result = tester.CallExportedFunction("consumer", 1, args);
+      DirectHandle<Object> args[] = {maybe_result.ToHandleChecked()};
+      maybe_result =
+          tester.CallExportedFunction("consumer", base::VectorOf(args));
     }
     if (maybe_result.is_null()) {
       FATAL("Calling 'consumer' failed: %s",
             *v8::String::Utf8Value(reinterpret_cast<v8::Isolate*>(isolate),
                                    try_catch.Message()->Get()));
     }
-    Handle<Object> result = maybe_result.ToHandleChecked();
+    DirectHandle<Object> result = maybe_result.ToHandleChecked();
     CHECK(IsSmi(*result));
     CHECK_EQ(42, Cast<Smi>(*result).value());
     // Calling {consumer} with any other object (e.g. the Smi we just got as
     // {result}) should trap.
     {
-      Handle<Object> args[] = {result};
-      maybe_result = tester.CallExportedFunction("consumer", 1, args);
+      DirectHandle<Object> args[] = {result};
+      maybe_result =
+          tester.CallExportedFunction("consumer", base::VectorOf(args));
     }
     CHECK(maybe_result.is_null());
     CHECK(try_catch.HasCaught());

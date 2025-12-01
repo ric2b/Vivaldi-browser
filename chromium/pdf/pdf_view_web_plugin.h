@@ -24,6 +24,7 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "pdf/accessibility_structs.h"
 #include "pdf/buildflags.h"
+#include "pdf/loader/result_codes.h"
 #include "pdf/loader/url_loader.h"
 #include "pdf/mojom/pdf.mojom.h"
 #include "pdf/paint_manager.h"
@@ -113,6 +114,7 @@ class PdfViewWebPlugin final : public PDFiumEngineClient,
     kAnnotation = 0,
     kOriginal = 1,
     kEdited = 2,
+    kSearchified = 3,
   };
 
   // Provides services from the plugin's container.
@@ -233,13 +235,13 @@ class PdfViewWebPlugin final : public PDFiumEngineClient,
     virtual void RecordComputedAction(const std::string& action) {}
 
     // Creates an implementation of `PdfAccessibilityDataHandler` catered to the
-    // client.
+    // client. The return value must be non-null.
     virtual std::unique_ptr<PdfAccessibilityDataHandler>
     CreateAccessibilityDataHandler(
         PdfAccessibilityActionHandler* action_handler,
         PdfAccessibilityImageFetcher* image_fetcher,
         blink::WebPluginContainer* plugin_container,
-        bool print_preview);
+        bool print_preview) = 0;
 
 #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
     // Performs OCR on `image` and sends the recognized text to `callback`.
@@ -395,6 +397,7 @@ class PdfViewWebPlugin final : public PDFiumEngineClient,
                           const gfx::PointF& extent) override;
   void GetPdfBytes(uint32_t size_limit, GetPdfBytesCallback callback) override;
   void GetPageText(int32_t page_index, GetPageTextCallback callback) override;
+  void GetMostVisiblePageIndex(GetMostVisiblePageIndexCallback callback) override;
 
   // UrlLoader::Client:
   bool IsValid() const override;
@@ -447,6 +450,11 @@ class PdfViewWebPlugin final : public PDFiumEngineClient,
     return document_load_state_;
   }
 
+  void set_cursor_type_for_testing(ui::mojom::CursorType cursor_type) {
+    cursor_ = cursor_type;
+  }
+  const ui::Cursor& cursor_for_testing() const { return cursor_; }
+
   int GetContentRestrictionsForTesting() const {
     return GetContentRestrictions();
   }
@@ -480,7 +488,7 @@ class PdfViewWebPlugin final : public PDFiumEngineClient,
   // load the URL, and `result` is the result code for the load.
   using LoadUrlCallback =
       base::OnceCallback<void(std::unique_ptr<UrlLoader> loader,
-                              int32_t result)>;
+                              Result result)>;
 
   enum class AccessibilityState {
     kOff = 0,  // Off.
@@ -515,7 +523,7 @@ class PdfViewWebPlugin final : public PDFiumEngineClient,
   void SendSetSmoothScrolling();
 
   // Handles `LoadUrl()` result for the main document.
-  void DidOpen(std::unique_ptr<UrlLoader> loader, int32_t result);
+  void DidOpen(std::unique_ptr<UrlLoader> loader, Result result);
 
   // Updates the scroll position, which is in CSS pixels relative to the
   // top-left corner.
@@ -525,7 +533,7 @@ class PdfViewWebPlugin final : public PDFiumEngineClient,
   void LoadUrl(std::string_view url, LoadUrlCallback callback);
 
   // Handles `Open()` result for `form_loader_`.
-  void DidFormOpen(int32_t result);
+  void DidFormOpen(Result result);
 
   // Sends start/stop loading notifications to the plugin's render frame.
   void DidStartLoading();
@@ -541,6 +549,7 @@ class PdfViewWebPlugin final : public PDFiumEngineClient,
   void HandleGetPasswordCompleteMessage(const base::Value::Dict& message);
   void HandleGetSelectedTextMessage(const base::Value::Dict& message);
   void HandleGetThumbnailMessage(const base::Value::Dict& message);
+  void HandleHighlightTextFragmentsMessage(const base::Value::Dict& message);
   void HandlePrintMessage(const base::Value::Dict& /*message*/);
   void HandleRotateClockwiseMessage(const base::Value::Dict& /*message*/);
   void HandleRotateCounterclockwiseMessage(
@@ -661,7 +670,7 @@ class PdfViewWebPlugin final : public PDFiumEngineClient,
   void LoadAvailablePreviewPage();
 
   // Handles `LoadUrl()` result for a preview page.
-  void DidOpenPreview(std::unique_ptr<UrlLoader> loader, int32_t result);
+  void DidOpenPreview(std::unique_ptr<UrlLoader> loader, Result result);
 
   // Continues loading the next preview page.
   void LoadNextPreviewPage();
@@ -885,10 +894,6 @@ class PdfViewWebPlugin final : public PDFiumEngineClient,
   // Keeps track of which unsupported features have been reported to avoid
   // spamming the metrics if a feature shows up many times per document.
   base::flat_set<std::string> unsupported_features_reported_;
-
-  // Indicates whether the browser has been notified about an unsupported
-  // feature once, which helps prevent the infobar from going up more than once.
-  bool notified_browser_about_unsupported_feature_ = false;
 
   // The metafile in which to save the printed output. Assigned a value only
   // between `PrintBegin()` and `PrintEnd()` calls.

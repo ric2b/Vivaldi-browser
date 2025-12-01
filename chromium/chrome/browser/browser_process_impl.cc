@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "chrome/browser/browser_process_impl.h"
 
 #include <stddef.h>
@@ -24,6 +29,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/notimplemented.h"
 #include "base/notreached.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
@@ -77,7 +83,6 @@
 #include "chrome/browser/printing/print_job_manager.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/resource_coordinator/resource_coordinator_parts.h"
-#include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/shell_integration.h"
 #include "chrome/browser/site_isolation/prefs_observer.h"
 #include "chrome/browser/ssl/secure_origin_prefs_observer.h"
@@ -179,6 +184,7 @@
 #include "components/webauthn/android/webauthn_client_android.h"
 #else
 #include "chrome/browser/devtools/devtools_auto_opener.h"
+#include "chrome/browser/error_reporting/chrome_js_error_report_processor.h"
 #include "chrome/browser/gcm/gcm_product_util.h"
 #include "chrome/browser/hid/hid_system_tray_icon.h"
 #include "chrome/browser/intranet_redirect_detector.h"
@@ -236,10 +242,6 @@
 #include "chrome/browser/ui/profiles/profile_picker.h"
 #endif
 
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
-#include "chrome/browser/error_reporting/chrome_js_error_report_processor.h"  // nogncheck
-#endif
-
 #if BUILDFLAG(ENABLE_CHROME_NOTIFICATIONS)
 #include "chrome/browser/notifications/notification_ui_manager.h"
 #endif
@@ -259,7 +261,13 @@
 
 #if BUILDFLAG(IS_LINUX)
 #include "chrome/browser/browser_features.h"
+#include "components/os_crypt/async/browser/fallback_linux_key_provider.h"
+#include "components/os_crypt/async/browser/freedesktop_secret_key_provider.h"
 #include "components/os_crypt/async/browser/secret_portal_key_provider.h"
+#endif
+
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+#include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #endif
 
 #if BUILDFLAG(IS_WIN) || (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
@@ -474,16 +482,21 @@ void BrowserProcessImpl::StartTearDown() {
   tearing_down_ = true;
   DCHECK(IsShuttingDown());
 
+  features_->Shutdown();
+
+// TODO(https://crbug.com/388906971): fix dead code below.
 #if BUILDFLAG(IS_ANDROID)
   accessibility_prefs_controller_.reset();
 #endif
   metrics_services_manager_.reset();
   intranet_redirect_detector_.reset();
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   if (safe_browsing_service_.get())
     safe_browsing_service()->ShutDown();
+#endif
   network_time_tracker_.reset();
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS)
   // Initial cleanup for ChromeBrowserCloudManagement, shutdown components that
   // depend on profile and notification system. For example, ProfileManager
   // observer and KeyServices observer need to be removed before profiles.
@@ -491,15 +504,13 @@ void BrowserProcessImpl::StartTearDown() {
       browser_policy_connector_->chrome_browser_cloud_management_controller();
   if (cloud_management_controller)
     cloud_management_controller->ShutDown();
-#endif
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
-#if !BUILDFLAG(IS_ANDROID)
   // |hid_system_tray_icon_| and |usb_system_tray_icon_| must be destroyed
   // before |system_notification_helper_| for ChromeOS and |status_tray_| for
   // non-ChromeOS.
   hid_system_tray_icon_.reset();
   usb_system_tray_icon_.reset();
-#endif
 
   system_notification_helper_.reset();
 
@@ -508,7 +519,7 @@ void BrowserProcessImpl::StartTearDown() {
   // before the profiles, since if there are any still showing we will access
   // those things during teardown.
   notification_ui_manager_.reset();
-#endif
+#endif  // BUILDFLAG(ENABLE_CHROME_NOTIFICATIONS)
 
   // Debugger must be cleaned up before ProfileManager.
   remote_debugging_server_.reset();
@@ -520,7 +531,7 @@ void BrowserProcessImpl::StartTearDown() {
   // The Extensions Browser Client needs to teardown some members while the
   // profile manager is still alive.
   extensions_browser_client_->StartTearDown();
-#endif
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS_CORE)
 
   // Need to clear profiles (download managers) before the IO thread.
   {
@@ -538,12 +549,10 @@ void BrowserProcessImpl::StartTearDown() {
     profile_manager_.reset();
   }
 
-#if !BUILDFLAG(IS_ANDROID)
   if (media_router::DualMediaSinkService::HasInstance()) {
     media_router::DualMediaSinkService::GetInstance()
         ->StopObservingPrefChanges();
   }
-#endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   // The `media_file_system_registry_` cannot be reset until the
@@ -554,12 +563,12 @@ void BrowserProcessImpl::StartTearDown() {
   // Valgrind would report a leak on almost every single browser_test.
   // TODO(gbillock): Make this unnecessary.
   storage_monitor::StorageMonitor::Destroy();
-#endif
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 #if BUILDFLAG(ENABLE_CHROME_NOTIFICATIONS)
   if (message_center::MessageCenter::Get())
     message_center::MessageCenter::Shutdown();
-#endif
+#endif  // BUILDFLAG(ENABLE_CHROME_NOTIFICATIONS)
 
   // The policy providers managed by |browser_policy_connector_| need to shut
   // down while the IO and FILE threads are still alive. The monitoring
@@ -593,7 +602,9 @@ void BrowserProcessImpl::StartTearDown() {
   // down.
   application_breadcrumbs_logger_.reset();
 }
+#endif  // !BUILDFLAG(IS_ANDROID)
 
+#if !BUILDFLAG(IS_ANDROID)
 void BrowserProcessImpl::PostDestroyThreads() {
   // With the file_thread_ flushed, we can release any icon resources.
   icon_manager_.reset();
@@ -637,7 +648,7 @@ class RundownTaskCounter :
 
  private:
   friend class base::RefCountedThreadSafe<RundownTaskCounter>;
-  ~RundownTaskCounter() {}
+  ~RundownTaskCounter() = default;
 
   // Decrements the counter and releases the waitable event on transition to
   // zero.
@@ -1133,6 +1144,10 @@ GlobalFeatures* BrowserProcessImpl::GetFeatures() {
   return features_.get();
 }
 
+void BrowserProcessImpl::CreateGlobalFeaturesForTesting() {
+  NOTIMPLEMENTED();
+}
+
 DownloadRequestLimiter* BrowserProcessImpl::download_request_limiter() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!download_request_limiter_.get()) {
@@ -1162,6 +1177,7 @@ StatusTray* BrowserProcessImpl::status_tray() {
   return status_tray_.get();
 }
 
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
 safe_browsing::SafeBrowsingService*
 BrowserProcessImpl::safe_browsing_service() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -1169,6 +1185,7 @@ BrowserProcessImpl::safe_browsing_service() {
     CreateSafeBrowsingService();
   return safe_browsing_service_.get();
 }
+#endif
 
 subresource_filter::RulesetService*
 BrowserProcessImpl::subresource_filter_ruleset_service() {
@@ -1250,7 +1267,7 @@ void BrowserProcessImpl::CreateProfileManager() {
 }
 
 void BrowserProcessImpl::PreCreateThreads() {
-#if BUILDFLAG(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
   // chrome-extension:// URLs are safe to request anywhere, but may only
   // commit (including in iframes) in extension processes.
   ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeIsolatedScheme(
@@ -1303,16 +1320,13 @@ void BrowserProcessImpl::PreMainMessageLoopRun() {
 
   ApplyMetricsReportingPolicy();
 
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
-  ChromeJsErrorReportProcessor::Create();
-#endif
-
 #if BUILDFLAG(ENABLE_PLUGINS)
   content::PluginService::GetInstance()->SetFilter(
       ChromePluginServiceFilter::GetInstance());
 #endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 #if !BUILDFLAG(IS_ANDROID)
+  ChromeJsErrorReportProcessor::Create();
   storage_monitor::StorageMonitor::Create();
 #endif
 
@@ -1388,9 +1402,7 @@ void BrowserProcessImpl::PreMainMessageLoopRun() {
       // one.
       /*precedence=*/15u,
       std::make_unique<os_crypt_async::AppBoundEncryptionProviderWin>(
-          local_state(),
-          base::FeatureList::IsEnabled(
-              features::kUseAppBoundEncryptionProviderForEncryption))));
+          local_state())));
 #endif  // BUILDFLAG(IS_WIN)
 
 #if BUILDFLAG(IS_LINUX)
@@ -1401,6 +1413,21 @@ void BrowserProcessImpl::PreMainMessageLoopRun() {
             local_state(),
             base::FeatureList::IsEnabled(
                 features::kSecretPortalKeyProviderUseForEncryption)));
+  }
+  if (base::FeatureList::IsEnabled(
+          features::kUseFreedesktopSecretKeyProvider)) {
+    // Use a higher priority than the SecretPortalKeyProvider.
+    providers.emplace_back(
+        /*precedence=*/15u,
+        std::make_unique<os_crypt_async::FreedesktopSecretKeyProvider>(
+            base::FeatureList::IsEnabled(
+                features::kUseFreedesktopSecretKeyProviderForEncryption),
+            l10n_util::GetStringUTF8(IDS_PRODUCT_NAME), nullptr));
+    providers.emplace_back(
+        /*precedence=*/5u,
+        std::make_unique<os_crypt_async::FallbackLinuxKeyProvider>(
+            base::FeatureList::IsEnabled(
+                features::kUseFreedesktopSecretKeyProviderForEncryption)));
   }
 #endif  // BUILDFLAG(IS_LINUX)
 
@@ -1474,6 +1501,7 @@ void BrowserProcessImpl::CreateBackgroundPrintingManager() {
 #endif
 }
 
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
 void BrowserProcessImpl::CreateSafeBrowsingService() {
   DCHECK(!safe_browsing_service_);
   // Set this flag to true so that we don't retry indefinitely to
@@ -1493,6 +1521,7 @@ void BrowserProcessImpl::CreateSafeBrowsingService() {
   if (safe_browsing_service_)
     safe_browsing_service_->Initialize();
 }
+#endif
 
 void BrowserProcessImpl::CreateSubresourceFilterRulesetService() {
   DCHECK(!subresource_filter_ruleset_service_);

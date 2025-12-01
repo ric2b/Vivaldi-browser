@@ -26,6 +26,26 @@ export enum VendorCapabilityValueType {
   STRING = 'STRING',
 }
 
+/**
+ * Values matching the types of duplex in a CDD.
+ */
+export enum DuplexType {
+  NO_DUPLEX = 'NO_DUPLEX',
+  LONG_EDGE = 'LONG_EDGE',
+  SHORT_EDGE = 'SHORT_EDGE',
+}
+
+// <if expr="is_chromeos">
+/**
+ * Print quality values matching registered IPP values.
+ */
+export enum QualityIppValue {
+  DRAFT = '3',
+  NORMAL = '4',
+  HIGH = '5',
+}
+// </if>
+
 interface SelectCapability {
   option?: VendorCapabilitySelectOption[];
 }
@@ -128,9 +148,11 @@ export type DpiCapability = {
   option: DpiOption[],
 }&CapabilityWithReset;
 
+// <if expr="is_chromeos">
 interface PinCapability {
   supported?: boolean;
 }
+// </if>
 
 
 /**

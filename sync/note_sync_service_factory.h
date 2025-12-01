@@ -35,7 +35,7 @@ class NoteSyncServiceFactory : public BrowserContextKeyedServiceFactory {
   NoteSyncServiceFactory& operator=(const NoteSyncServiceFactory&) = delete;
 
   // BrowserContextKeyedServiceFactory implementation.
-  KeyedService* BuildServiceInstanceFor(
+  std::unique_ptr<KeyedService> BuildServiceInstanceForBrowserContext(
       content::BrowserContext* profile) const override;
   content::BrowserContext* GetBrowserContextToUse(
       content::BrowserContext* context) const override;

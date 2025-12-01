@@ -124,7 +124,9 @@ code without API changes, but you may see side effects.” This may be due to
 large-scale code refactoring or rewriting, where the goal is to cause no
 behavioral changes (but due to scope of change, side effects are likely), or
 this may encompass changes to current code that fix a bug or implement new
-changes to the spec without changes to the API shape itself.
+changes to the spec without changes to the API shape itself. This may also be
+used for changes which extend an already-exposed API to additional platforms
+(see [conditions](#behavior-change-compat)).
 
 ### Changing feature type
 
@@ -239,15 +241,16 @@ next step.
 
 Once you have a functional and reasonably complete feature implementation
 available as a runtime enabled feature, we recommend (but don't require) that
-you request an [Early Design Review](https://github.com/w3ctag/design-reviews/issues/new?assignees=&labels=Progress%3A+untriaged%2C+Review+type%3A+early+review&template=005-early-design-review.md&title=)
-from the [TAG](https://www.w3.org/2001/tag/) and proceed to
+you [request an Early Design Review
+from the TAG](/blink/launching-features/wide-review/#tag) and proceed to
 the “Dev Trials” stage in ChromeStatus (note also exceptions enumerated
-[here](/blink/guidelines/api-owners/process-exceptions/)). This will generate
+[here](/blink/launching-features/wide-review/#exceptions)). This will generate
 a “Ready for Developer Testing” email that you should send to
 [blink-dev](mailto:blink-dev@chromium.org) to notify the community they can
-try out the feature. At this point, you should consider asking other browser
-vendors and the web developer community for
-[signals on their opinion of the API](https://docs.google.com/document/d/1xkHRXnFS8GDqZi7E0SSbR3a7CZsGScdxPUWBsNgo-oo/edit#heading=h.tgzhprxcmw4u).
+try out the feature. At this point, you should consider asking [other browser
+vendors](/blink/launching-features/wide-review/) and [the web developer
+community](/blink/launching-features/wide-review/web-developers/) for signals on
+their opinion of the API.
 
 This is the main iterating stage of feature development and helps you assess
 product-market-fit early on before you corner yourself (does your API address a
@@ -285,10 +288,11 @@ running an experiment you're not intending to ship as is), you can ask for an
 exception from the API owners.
 
 If you haven't already received [signals on their opinion of the
-API](https://docs.google.com/document/d/1xkHRXnFS8GDqZi7E0SSbR3a7CZsGScdxPUWBsNgo-oo/edit#heading=h.tgzhprxcmw4u)
-from other browser vendors and the web developer community, now is the time to
-pursue getting those signals. You should ask at least a month ahead of sending
-an Intent to Ship, to give reviewers sufficient time for meaningful feedback.
+API](/blink/launching-features/wide-review/) from other browser vendors and the
+[web developer community](/blink/launching-features/wide-review/web-developers/),
+now is the time to pursue getting those signals. You should ask at least a month
+ahead of sending an Intent to Ship, to give reviewers sufficient time for
+meaningful feedback.
 
 You should also work with the documentation team to ensure your features will be
 documented when shipped, and estimate when (in what milestone) you would like to
@@ -309,18 +313,11 @@ Once you have a complete specification:
 
 1. If you have one, ask your spec mentor to [review the
    specification](/blink/spec-mentors/#reviewing-the-specification).
-2. Request a [Specification
-   Review](https://github.com/w3ctag/design-reviews/issues/new?assignees=&labels=Progress%3A+untriaged&template=010-specification-review.md)
-   from the TAG (except in the cases noted
-   [here](/blink/guidelines/api-owners/process-exceptions/)). You should submit
+2. [Request a Specification Review
+   from the TAG](/blink/launching-features/wide-review/#tag) (except in the cases noted
+   [here](/blink/launching-features/wide-review/#exceptions)). You should submit
    this at least a month ahead of sending an Intent to Ship, to give the TAG
    sufficient time for meaningful feedback.
-
-   Note that if the TAG takes several months to review the feature,
-   and during that time the implementations and relevant standards
-   bodies find consensus on the feature, the TAG's review might not
-   be able to influence the design anymore. If that happens, it's best to notify the TAG so
-   that they can close the issue and prioritize other issues.
 
 #### Step 5 (Optional): Origin Trial or other Experiments {:#origin-trials}
 
@@ -363,8 +360,8 @@ for *3 milestones* at a time, and will not be approved unless substantial
 progress is demonstrated in all of these areas:
 * Draft spec (early draft is ok, but must be spec-like and associated with the
   appropriate standardization venue, or WICG)
-* TAG review (see [exceptions](/blink/guidelines/api-owners/process-exceptions/))
-* bit.ly/blink-signals requests
+* TAG review (see [exceptions](/blink/launching-features/wide-review/#exceptions))
+* [signals](/blink/launching-features/wide-review) requests
 * Outreach for feedback from the spec community
 * WPT tests
 
@@ -387,7 +384,7 @@ discuss this option.
 
 By this stage, you need to have a complete specification available that matches
 what you have implemented, and you should have given the TAG and [other
-browser vendors](https://bit.ly/blink-signals) at least a month to
+browser vendors](/blink/launching-features/wide-review) at least a month to
 comment on that specification. If you are a Googler you should get a final spec
 review from your [spec mentor](/blink/spec-mentors), and discuss options for
 moving your spec to a final standardization venue. You should get final signoff
@@ -398,10 +395,9 @@ other than [`Resolution:
 satisfied`](https://github.com/w3ctag/design-reviews/issues?q=is%3Aissue+label%3A%22Resolution%3A+satisfied%22),
 the API Owners should be able to see evidence that you've seriously and
 comprehensively engaged with their comments, and tried to resolve any concerns.
-If the TAG has _not_ commented, then after your I2S is approved, it's courteous
-to post to the review saying that Chromium considers the feature stable, and
-future proposals for changes will be weighed against the compatibility risk of changing a
-shipping feature.
+If the TAG has _not_ commented, [clean up the
+review](/blink/launching-features/wide-review/#slow-tag-review) after your I2S
+is approved.
 
 If your specification is still in an [incubation venue](#incubation-venue) and
 not a working group, propose that the feature migrate to a working group.
@@ -480,9 +476,9 @@ feature ready for developers to try out under a flag, proceed to the next step.
 #### Step 2: Feature Complete behind a flag and implementation refinement {:#existing-standard-dev-trials}
 
 If the TAG has not already reviewed the consensus specification, request a
-[Specification Review](https://github.com/w3ctag/design-reviews/issues/new?assignees=&labels=Progress%3A+untriaged&template=010-specification-review.md)
+[Specification Review](/blink/launching-features/wide-review/#tag)
 (except in the cases noted
-[here](/blink/guidelines/api-owners/process-exceptions/))
+[here](/blink/launching-features/wide-review/#exceptions))
 and proceed to the “Dev Trials” stage in ChromeStatus. This will generate a
 “Ready for Developer Testing” email that you should send to
 [blink-dev](mailto:blink-dev@chromium.org) to notify the community they can
@@ -599,7 +595,7 @@ other engines and to spec editors in order to ensure that the feature is removed
 in a coordinated way. We usually don't want to try to remove a feature from
 Chromium if Gecko and WebKit are going to keep supporting it. Once you have a
 coordinated removal plan, [file standards position
-issues](https://bit.ly/blink-signals) to document the agreement.
+issues](/blink/launching-features/wide-review) to document the agreement.
 
 <a id="deprecation-motivation"></a>
 #### Step 3: Deprecate the feature {:#deprecate}
@@ -764,7 +760,7 @@ The following criteria are worthwhile to consider:
   - Is it possible that existing code relies on the current behavior?
   - What would that coding pattern look like? How likely it is that this
   coding pattern is used in the wild? Our collection of
-  [compat tools](https://www.chromium.org/blink/platform-predictability/compat-tools/)
+  [compat tools](/blink/platform-predictability/compat-tools/)
   can help with such an assessment.
   - Non-user-visible breakage (e.g. breakage in reporting or monetization) is
  still considered functional breakage.
@@ -781,8 +777,14 @@ or "Existing feature implementation" feature types
 for any change with some potential to break sites. Use "Web developer facing code change"
 only for changes deemed very unlikely to break sites, and that change APIs in at most a trivial way.
 
-Another reason for a PSA could be a large-scale refactoring that
-doesn't *intend* to result in behavior changes, but may do so in practice.
+Changes which extend an already exposed API to additional platforms without
+introducing new platform-specific risks may also rely just on a PSA, along with
+updating the chromestatus entry to reflect the new platform support. For example,
+when simply extending an API already exposed on all desktop platforms to also be
+exposed on Android using the same implementation, a PSA is generally sufficient.
+But if the Android implementation has meaningful differences in behavior which
+could result in web compatibility issues, then the full "New feature incubation"
+process should be followed.
 
 The purpose of a PSA is to notify the broader Chromium community about
 the change, and enables folks to test against it and potentially
@@ -851,7 +853,7 @@ For an overview, and explanation of motivations, please see:
 
 *   Video presentation: [Intent to explain: Demystifying the Blink
             shipping process (Chrome Dev Summit
-            2019)](https://www.youtube.com/watch?v=y3EZx_b-7tk&list=PLNYkxOF6rcIDA1uGhqy45bqlul0VcvKMr&index=17)
+            2019)](https://youtube.com/watch?v=y3EZx_b-7tk&list=PLNYkxOF6rcIDA1uGhqy45bqlul0VcvKMr&index=17)
 *   Blog post: [Intent to Explain: Demystifying the Blink Shipping
             Process](https://blog.chromium.org/2019/11/intent-to-explain-demystifying-blink.html)
-*   BlinkOn Talk, 2021: [Risky Business: Launching Faster In Blink](https://www.youtube.com/watch?v=1Z83L6xa1tw)
+*   BlinkOn Talk, 2021: [Risky Business: Launching Faster In Blink](https://youtube.com/watch?v=1Z83L6xa1tw)

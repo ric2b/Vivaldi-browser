@@ -12,7 +12,8 @@
 #include "media/cast/common/rtp_time.h"
 #include "third_party/openscreen/src/cast/streaming/public/encoded_frame.h"
 
-namespace media::cast {
+namespace media {
+namespace cast {
 
 // A combination of metadata and data for one encoded frame.  This can contain
 // audio data or video data or other.
@@ -24,9 +25,8 @@ struct EncodedFrame {
   // Does not modify |dest->data|.
   void CopyMetadataTo(EncodedFrame* dest) const;
 
-  // This frame's dependency relationship with respect to other frames.
-  openscreen::cast::EncodedFrame::Dependency dependency =
-      openscreen::cast::EncodedFrame::Dependency::kUnknown;
+  // If true, the frame is a key frame. Otherwise the frame is dependent.
+  bool is_key_frame = false;
 
   // The label associated with this frame.  Implies an ordering relative to
   // other frames in the same stream.
@@ -61,6 +61,7 @@ struct EncodedFrame {
   base::HeapArray<uint8_t> data;
 };
 
-}  // namespace media::cast
+}  // namespace cast
+}  // namespace media
 
 #endif  // MEDIA_CAST_COMMON_ENCODED_FRAME_H_

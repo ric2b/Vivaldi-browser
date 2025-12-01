@@ -98,8 +98,7 @@ constexpr BackendUsage SelectedBackendToMetric(
       return used ? BackendUsage::kXDGDesktopPortal : BackendUsage::kXDGDesktopPortalFailed;
 
   }
-  NOTREACHED_IN_MIGRATION();
-  return BackendUsage::kDeferFailed;
+  NOTREACHED();
 }
 
 const char* SelectedLinuxBackendToString(
@@ -121,8 +120,7 @@ const char* SelectedLinuxBackendToString(
     case os_crypt::SelectedLinuxBackend::XDG_DESKTOP_PORTAL:
       return "XDG_DESKTOP_PORTAL";
   }
-  NOTREACHED_IN_MIGRATION();
-  return nullptr;
+  NOTREACHED();
 }
 
 }  // namespace

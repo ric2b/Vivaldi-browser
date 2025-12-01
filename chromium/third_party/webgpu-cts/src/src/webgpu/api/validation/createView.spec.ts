@@ -378,6 +378,9 @@ g.test('texture_view_usage')
     if (textureUsage & GPUTextureUsage.STORAGE_BINDING) {
       t.skipIfTextureFormatNotUsableAsStorageTexture(format);
     }
+    if (textureUsage & GPUTextureUsage.RENDER_ATTACHMENT) {
+      t.skipIfColorRenderableNotSupportedForFormat(format);
+    }
   })
   .fn(t => {
     const { format, textureUsage0, textureUsage1, textureViewUsage0, textureViewUsage1 } = t.params;

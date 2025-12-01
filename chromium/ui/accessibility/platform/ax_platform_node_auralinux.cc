@@ -2,15 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/version.h"
 #ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
 #endif
+
+#include "ui/accessibility/platform/ax_platform_node_auralinux.h"
 
 #include <stdint.h>
 
 #include <algorithm>
+#include <array>
 #include <memory>
 #include <optional>
 #include <set>
@@ -24,12 +26,12 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/not_fatal_until.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversion_utils.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/version.h"
 #include "build/build_config.h"
 #include "ui/accessibility/accessibility_features.h"
 #include "ui/accessibility/ax_action_data.h"
@@ -41,7 +43,6 @@
 #include "ui/accessibility/platform/atk_util_auralinux.h"
 #include "ui/accessibility/platform/ax_platform.h"
 #include "ui/accessibility/platform/ax_platform_atk_hyperlink.h"
-#include "ui/accessibility/platform/ax_platform_node_auralinux.h"
 #include "ui/accessibility/platform/ax_platform_node_delegate.h"
 #include "ui/accessibility/platform/ax_platform_text_boundary.h"
 #include "ui/accessibility/platform/child_iterator.h"
@@ -689,7 +690,7 @@ const gchar* GetName(AtkAction* atk_action, gint index) {
   if (html_id.empty()) {
     ATK_AURALINUX_RETURN_STRING(AXPlatformNodeBase::kAriaActionsPrefix);
   }
-  ATK_AURALINUX_RETURN_STRING(AXPlatformNodeBase::kAriaActionsPrefix + "#" +
+  ATK_AURALINUX_RETURN_STRING(AXPlatformNodeBase::kAriaActionsPrefix + "_" +
                               html_id);
 }
 
@@ -2550,6 +2551,11 @@ void AXPlatformNodeAuraLinux::DestroyAtkObjects() {
       SetWeakGPtrToAtkObject(&g_current_focused, nullptr);
     atk_object::Detach(AX_PLATFORM_NODE_AURALINUX(atk_object_.get()));
 
+    // Under some circumstances, menu open and close requests can arrive
+    // in unexpected orders; let's ensure this object is no longer in
+    // the stack of open menus.
+    std::erase(GetActiveMenus(), atk_object_);
+
     g_object_unref(atk_object_);
     atk_object_ = nullptr;
   }
@@ -3467,10 +3473,12 @@ void AXPlatformNodeAuraLinux::OnMenuPopupEnd() {
   // kMenuPopupHide may be called multiple times for the same menu, so only
   // remove it if our parent frame matches the most recently opened menu.
   std::vector<AtkObject*>& active_menus = GetActiveMenus();
-  DCHECK(!active_menus.empty())
-      << "Asymmetrical menupopupend events -- too many";
 
-  active_menus.pop_back();
+  // We don't trust menu show/hide events to arrive in
+  // any sensible order if multiple menus are involved, so ensure we delete
+  // this particular menu from the stack even if it's not topmost.
+  std::erase(active_menus, atk_object);
+
   AtkObject* new_active_item = ComputeActiveTopLevelFrame();
   if (new_active_item != parent_frame) {
     // Newly activated menu has the different AtkWindow as the previous one.
@@ -4116,14 +4124,14 @@ void AXPlatformNodeAuraLinux::NotifyAccessibilityEvent(
 
 std::optional<std::pair<int, int>>
 AXPlatformNodeAuraLinux::GetEmbeddedObjectIndicesForId(int id) {
-  auto iterator = base::ranges::find(hypertext_.hyperlinks, id);
+  auto iterator = std::ranges::find(hypertext_.hyperlinks, id);
   if (iterator == hypertext_.hyperlinks.end())
     return std::nullopt;
   int hyperlink_index = std::distance(hypertext_.hyperlinks.begin(), iterator);
 
   auto offset =
-      base::ranges::find(hypertext_.hyperlink_offset_to_index, hyperlink_index,
-                         &AXLegacyHypertext::OffsetToIndex::value_type::second);
+      std::ranges::find(hypertext_.hyperlink_offset_to_index, hyperlink_index,
+                        &AXLegacyHypertext::OffsetToIndex::value_type::second);
   if (offset == hypertext_.hyperlink_offset_to_index.end())
     return std::nullopt;
 
@@ -4531,7 +4539,12 @@ const gchar* AXPlatformNodeAuraLinux::GetDocumentAttributeValue(
 
 AtkAttributeSet* AXPlatformNodeAuraLinux::GetDocumentAttributes() const {
   AtkAttributeSet* attribute_set = nullptr;
-  const gchar* doc_attributes[] = {"DocType", "MimeType", "Title", "URI"};
+  auto doc_attributes = std::to_array<const gchar*>({
+      "DocType",
+      "MimeType",
+      "Title",
+      "URI",
+  });
   const gchar* value = nullptr;
 
   for (unsigned i = 0; i < G_N_ELEMENTS(doc_attributes); i++) {
@@ -4608,7 +4621,15 @@ int AXPlatformNodeAuraLinux::GetCaretOffset() {
     return -1;
   }
 
-  std::pair<int, int> selection = GetSelectionOffsetsForAtk();
+  std::pair<int, int> selection;
+  if (GetDelegate()->IsWebContent()) {
+    AXSelection unignored_selection = GetDelegate()->GetUnignoredSelection();
+    GetSelectionOffsetsFromTree(&unignored_selection, &selection.first,
+                                &selection.second, /*caret_only*/ true);
+  } else {
+    GetSelectionOffsets(&selection.first, &selection.second);
+  }
+
   return UTF16ToUnicodeOffsetInText(selection.second);
 }
 

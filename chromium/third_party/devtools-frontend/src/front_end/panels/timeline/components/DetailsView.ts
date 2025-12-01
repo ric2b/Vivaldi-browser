@@ -11,7 +11,7 @@ import * as UI from '../../../ui/legacy/legacy.js';
 // *********************************************************************
 // At the moment this file consists of helpers to aid in the rendering
 // of events details in the bottom drawer. In the future, we should use
-// LitHtml for this section, and update this helpers accordingly.
+// Lit for this section, and update this helpers accordingly.
 // *********************************************************************
 
 const UIStrings = {
@@ -78,7 +78,7 @@ export function buildWarningElementsForEvent(
     return warningElements;
   }
   for (const warning of warnings) {
-    const duration = Trace.Helpers.Timing.microSecondsToMilliseconds(Trace.Types.Timing.MicroSeconds(event.dur || 0));
+    const duration = Trace.Helpers.Timing.microToMilli(Trace.Types.Timing.Micro(event.dur || 0));
     const span = document.createElement('span');
     switch (warning) {
       case 'FORCED_REFLOW': {

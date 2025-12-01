@@ -17,7 +17,6 @@
 #include "base/values.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/policy/policy_value_and_status_aggregator.h"
 #include "components/policy/core/common/schema_registry.h"
 #include "content/public/browser/web_ui_data_source.h"
@@ -64,6 +63,7 @@ class PolicyUIHandler : public content::WebUIMessageHandler,
   void HandleGetAppliedTestPolicies(const base::Value::List& args);
   void HandleShouldShowPromotion(const base::Value::List& args);
   void HandleSetBannerDismissed(const base::Value::List& args);
+  void HandleRecordBannerRedirected(const base::Value::List& args);
 #if !BUILDFLAG(IS_CHROMEOS)
   void HandleUploadReport(const base::Value::List& args);
 #endif

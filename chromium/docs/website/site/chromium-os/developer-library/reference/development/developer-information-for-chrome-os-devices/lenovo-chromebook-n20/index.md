@@ -2,7 +2,7 @@
 breadcrumbs:
 - - /chromium-os
   - ChromiumOS
-- - /chromium-os/developer-information-for-chrome-os-devices
+- - /chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices
   - Developer Information for ChromeOS Devices
 page_name: lenovo-chromebook-n20
 title: Lenovo Chromebook N20 & N20P
@@ -19,19 +19,19 @@ developing on ChromiumOS (the open-source version of the software on the Chrome
 Notebook), see the [ChromiumOS Developer Guide](/chromium-os/developer-guide).
 
 <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/lenovo-chromebook-n20/gallery-LenovoChromebookN20p-1-hinge.jpg"
+src="gallery-LenovoChromebookN20p-1-hinge.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/lenovo-chromebook-n20/gallery-LenovoChromebookN20p-2-front.jpg"
+src="gallery-LenovoChromebookN20p-2-front.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/lenovo-chromebook-n20/gallery-LenovoChromebookN20p-3-left.jpg"
+src="gallery-LenovoChromebookN20p-3-left.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/lenovo-chromebook-n20/gallery-LenovoChromebookN20p-4-right.jpg"
+src="gallery-LenovoChromebookN20p-4-right.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/lenovo-chromebook-n20/gallery-LenovoChromebookN20p-5-hinge.jpg"
+src="gallery-LenovoChromebookN20p-5-hinge.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/lenovo-chromebook-n20/gallery-LenovoChromebookN20p-6-side-left.jpg"
+src="gallery-LenovoChromebookN20p-6-side-left.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/lenovo-chromebook-n20/gallery-LenovoChromebookN20p-7-side-right.jpg"
+src="gallery-LenovoChromebookN20p-7-side-right.jpg"
 height=150 width=200>
 
 ### Specifications
@@ -46,7 +46,7 @@ height=150 width=200>
     *   HDMI miniport
     *   1 x USB 2.0
     *   1 x USB 3.0
-    *   [SD slot](http://en.wikipedia.org/wiki/Secure_Digital) (SDXC
+    *   [SD slot](https://en.wikipedia.org/wiki/Secure_Digital) (SDXC
                 compatible)
     *   Headphone/mic combo jack
     *   Camera & mic
@@ -56,7 +56,7 @@ height=150 width=200>
     *   Bluetooth 4.0
     *   USB ports can handle some Ethernet dongles
 *   no [Kensington Security
-            Slot](http://en.wikipedia.org/wiki/Kensington_Security_Slot)
+            Slot](https://en.wikipedia.org/wiki/Kensington_Security_Slot)
 *   Linux 3.10
 
 ## Developer Mode
@@ -65,7 +65,7 @@ height=150 width=200>
 cause hardware, software or security issues and may void warranty.**
 
 Details for working with developer mode can be found [on this
-page](/chromium-os/developer-information-for-chrome-os-devices/acer-c720-chromebook).
+page](../acer-c720-chromebook).
 
 ## Firmware
 
@@ -96,7 +96,7 @@ Fine. If you **must** risk breaking it for good, at least do it the right way.
             directions are a simple fallback.
 *   First, acquire the necessary tools:
     *   A small Phillips head screw driver
-    *   A [spudger](http://en.wikipedia.org/wiki/Spudger)
+    *   A [spudger](https://en.wikipedia.org/wiki/Spudger)
 *   Close the laptop and flip it over so the bottom is facing up
     *   Remove the 8 screws (two are under the rubber feet near the
                 hinge)

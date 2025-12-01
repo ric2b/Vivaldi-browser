@@ -45,7 +45,7 @@ import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
-import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
+import org.chromium.components.browser_ui.widget.scrim.ScrimManager;
 import org.chromium.components.browser_ui.widget.scrim.ScrimProperties;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.test.util.DOMUtils;
@@ -179,19 +179,20 @@ public class TabbedNavigationBarColorControllerTest {
 
         ChromeTabbedActivity activity = mActivityTestRule.getActivity();
         View rootView = activity.findViewById(R.id.tab_switcher_view_holder_stub);
-        ScrimCoordinator scrimCoordinator =
-                activity.getRootUiCoordinatorForTesting().getScrimCoordinatorForTesting();
+        ScrimManager scrimManager = activity.getRootUiCoordinatorForTesting().getScrimManager();
 
-        ThreadUtils.runOnUiThreadBlocking(
-                () -> {
-                    PropertyModel propertyModel =
-                            new PropertyModel.Builder(ScrimProperties.ALL_KEYS)
-                                    .with(ScrimProperties.ANCHOR_VIEW, rootView)
-                                    .with(ScrimProperties.AFFECTS_NAVIGATION_BAR, true)
-                                    .build();
-                    scrimCoordinator.showScrim(propertyModel);
-                    scrimCoordinator.forceAnimationToFinish();
-                });
+        PropertyModel outerPropertyModel =
+                ThreadUtils.runOnUiThreadBlocking(
+                        () -> {
+                            PropertyModel propertyModel =
+                                    new PropertyModel.Builder(ScrimProperties.ALL_KEYS)
+                                            .with(ScrimProperties.ANCHOR_VIEW, rootView)
+                                            .with(ScrimProperties.AFFECTS_NAVIGATION_BAR, true)
+                                            .build();
+                            scrimManager.showScrim(propertyModel);
+                            scrimManager.forceAnimationToFinish(propertyModel);
+                            return propertyModel;
+                        });
 
         double regularBrightness = ColorUtils.calculateLuminance(mRegularNavigationColor);
         @ColorInt int withScrim = mWindow.getNavigationBarColor();
@@ -199,7 +200,10 @@ public class TabbedNavigationBarColorControllerTest {
                 mActivityTestRule.getActivity().getActivityTab().getBackgroundColor(), withScrim);
         assertTrue(regularBrightness > ColorUtils.calculateLuminance(withScrim));
 
-        ThreadUtils.runOnUiThreadBlocking(() -> scrimCoordinator.hideScrim(false, 0));
+        ThreadUtils.runOnUiThreadBlocking(
+                () ->
+                        scrimManager.hideScrim(
+                                outerPropertyModel, /* animate= */ false, /* duration= */ 0));
         assertEquals(
                 mActivityTestRule.getActivity().getActivityTab().getBackgroundColor(),
                 mWindow.getNavigationBarColor());

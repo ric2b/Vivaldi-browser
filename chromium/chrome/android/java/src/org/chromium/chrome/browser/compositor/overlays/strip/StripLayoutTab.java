@@ -142,12 +142,13 @@ public class StripLayoutTab extends StripLayoutView {
     private static final int CLOSE_BUTTON_WIDTH_DP = 24;
 
     // Strip Tab Offset Constants
-    private static final float TOP_MARGIN_DP = 0.f; // Vivaldi
+    protected static final float TOP_MARGIN_DP = 0.f; // Vivaldi
     private static final float FOLIO_CONTENT_OFFSET_Y = 8.f;
     protected static final float FOLIO_FOOT_LENGTH_DP = 16.f;
 
     // Visibility Constants.
     private static final float FAVICON_WIDTH = 16.f;
+    private static final float FAVICON_PADDING = 26.f;
     protected static final float MIN_WIDTH = FAVICON_WIDTH + (FOLIO_FOOT_LENGTH_DP * 2);
 
     // Divider Constants
@@ -168,12 +169,12 @@ public class StripLayoutTab extends StripLayoutView {
 
     private boolean mIsDying;
     private boolean mIsClosed;
-    private boolean mIsReordering;
     private boolean mIsDraggedOffStrip;
     private boolean mCanShowCloseButton = true;
     private boolean mFolioAttached = true;
     private boolean mStartDividerVisible;
     private boolean mEndDividerVisible;
+    private boolean mForceHideEndDivider;
     private float mBottomMargin;
     private float mContainerOpacity;
 
@@ -238,7 +239,8 @@ public class StripLayoutTab extends StripLayoutView {
                         /* width= */ 0,
                         /* height= */ 0,
                         clickHandler,
-                        R.drawable.btn_tab_close_normal);
+                        R.drawable.btn_tab_close_normal,
+                        0f);
         mCloseButton.setTintResources(
                 R.color.default_icon_color_tint_list,
                 R.color.default_icon_color_tint_list,
@@ -280,8 +282,7 @@ public class StripLayoutTab extends StripLayoutView {
                 apsBackgroundIncognitoPressedTint);
 
         mCloseButton.setIncognito(incognito);
-        mCloseButton.setBounds(getCloseRect());
-        mCloseButton.setClickSlop(0.f);
+        resetCloseRect();
 
         // Vivaldi
         mAlpha = 1.f;
@@ -363,15 +364,6 @@ public class StripLayoutTab extends StripLayoutView {
     }
 
     /**
-     * Marks if we are currently reordering this tab.
-     *
-     * @param isReordering Whether the tab is reordering.
-     */
-    public void setIsReordering(boolean isReordering) {
-        mIsReordering = isReordering;
-    }
-
-    /**
      * Marks if the tab has been dragged off the strip for drag and drop.
      *
      * @param isDraggedOffStrip Whether the tab is dragged off the strip.
@@ -395,7 +387,7 @@ public class StripLayoutTab extends StripLayoutView {
         mFolioAttached = folioAttached;
     }
 
-    boolean getFolioAttached() {
+    public boolean getFolioAttached() {
         return mFolioAttached;
     }
 
@@ -499,8 +491,8 @@ public class StripLayoutTab extends StripLayoutView {
         //  color and only re-determine when the color could have changed (i.e. on selection).
         if (foreground || mTabModelSelector.isIncognitoBrandedModelSelected()
                 || ColorUtils.inNightMode(mContext)) { // Vivaldi
-            return TabUiThemeUtil.getTabStripContainerColor(
-                    mContext, isIncognito(), foreground, mIsReordering, mIsPlaceholder, hovered);
+        return TabUiThemeUtil.getTabStripContainerColor(
+                mContext, isIncognito(), foreground, mIsPlaceholder, hovered);
         } // Vivaldi
 
         // Note(david@vivaldi.com): When we have a background tab we calculate the contrast here and
@@ -568,6 +560,16 @@ public class StripLayoutTab extends StripLayoutView {
      */
     public boolean isEndDividerVisible() {
         return mEndDividerVisible;
+    }
+
+    /** Sets if the end divider will be forced hidden for group reorder. */
+    public void setForceHideEndDivider(boolean forceHide) {
+        mForceHideEndDivider = forceHide;
+    }
+
+    /** Returns {@code true} if the end divider will be forced hidden for group reorder. */
+    boolean shouldForceHideEndDivider() {
+        return mForceHideEndDivider;
     }
 
     @Override
@@ -708,6 +710,20 @@ public class StripLayoutTab extends StripLayoutView {
     }
 
     /**
+     * @return The padding between the start of a tab and its favicon.
+     */
+    public float getFaviconPadding() {
+        return FAVICON_PADDING;
+    }
+
+    /**
+     * @return The size of the tab favicon.
+     */
+    public float getFaviconSize() {
+        return FAVICON_WIDTH;
+    }
+
+    /**
      * @param show Whether or not the close button is allowed to be shown.
      * @param animate Whether or not to animate the close button showing/hiding.
      */
@@ -743,6 +759,13 @@ public class StripLayoutTab extends StripLayoutView {
     public void setHeight(float height) {
         super.setHeight(height);
         resetCloseRect();
+    }
+
+    @Override
+    public void setTouchTargetInsets(Float left, Float top, Float right, Float bottom) {
+        super.setTouchTargetInsets(left, top, right, bottom);
+        // The vertical insets of the close button should match that of the parent tab.
+        mCloseButton.setTouchTargetInsets(null, top, null, bottom);
     }
 
     /**
@@ -815,8 +838,10 @@ public class StripLayoutTab extends StripLayoutView {
 
     /**
      * This is used to help calculate the tab's position and is not used for rendering.
+     *
      * @return The vertical offset of the tab.
      */
+    @Override
     public float getOffsetY() {
         return mTabOffsetY;
     }

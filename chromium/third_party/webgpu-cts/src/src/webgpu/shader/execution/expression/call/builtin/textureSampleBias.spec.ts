@@ -37,6 +37,10 @@ import {
 
 export const g = makeTestGroup(TextureTestMixin(WGSLTextureSampleTest));
 
+// See comment "Issues with textureSampleBias" in texture_utils.ts
+// 3 was chosen because it shows errors on M1 Mac
+const kMinBlocksForTextureSampleBias = 3;
+
 g.test('sampled_2d_coords')
   .specURL('https://www.w3.org/TR/WGSL/#texturesamplebias')
   .desc(
@@ -76,8 +80,12 @@ Parameters:
     const { format, samplePoints, modeU, modeV, filt: minFilter, offset } = t.params;
     skipIfNeedsFilteringAndIsUnfilterable(t, minFilter, format);
 
-    // We want at least 4 blocks or something wide enough for 3 mip levels.
-    const [width, height] = chooseTextureSize({ minSize: 8, minBlocks: 4, format });
+    // We want at least something wide enough for 3 mip levels with more than 1 pixel at the smallest level
+    const [width, height] = chooseTextureSize({
+      minSize: 8,
+      minBlocks: kMinBlocksForTextureSampleBias,
+      format,
+    });
 
     const descriptor: GPUTextureDescriptor = {
       format,
@@ -314,8 +322,12 @@ Parameters:
     const { format, samplePoints, A, modeU, modeV, filt: minFilter, offset } = t.params;
     skipIfNeedsFilteringAndIsUnfilterable(t, minFilter, format);
 
-    // We want at least 4 blocks or something wide enough for 3 mip levels.
-    const [width, height] = chooseTextureSize({ minSize: 8, minBlocks: 4, format });
+    // We want at least something wide enough for 3 mip levels with more than 1 pixel at the smallest level
+    const [width, height] = chooseTextureSize({
+      minSize: 8,
+      minBlocks: kMinBlocksForTextureSampleBias,
+      format,
+    });
     const depthOrArrayLayers = 4;
 
     const descriptor: GPUTextureDescriptor = {

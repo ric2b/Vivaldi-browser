@@ -20,6 +20,9 @@ namespace media {
 // A container for information about effects that might be applied to a frame.
 struct EffectInfo {
   bool enabled;
+  bool operator==(const EffectInfo& other) const {
+    return enabled == other.enabled;
+  }
 };
 
 // NOTE: When adding new VideoFrameMetadata fields, please ensure you update the
@@ -180,10 +183,6 @@ struct MEDIA_EXPORT VideoFrameMetadata {
   // Whether this frame was decoded in a power efficient way.
   bool power_efficient = false;
 
-  // Implemented only for single texture backed frames, true means the origin of
-  // the texture is top left and false means bottom left.
-  bool texture_origin_is_top_left = true;
-
   // CompositorFrameMetadata variables associated with this frame. Used for
   // remote debugging.
   // TODO(crbug.com/40571471): Use a customized dictionary value instead of
@@ -229,11 +228,12 @@ struct MEDIA_EXPORT VideoFrameMetadata {
   // information.
   std::optional<int> maximum_composition_delay_in_frames;
 
-  // Identifies a BeginFrameArgs (along with the source_id).
+  // Identifies a BeginFrameArgs
   // See comments in components/viz/common/frame_sinks/begin_frame_args.h.
   //
   // Only set for video frames produced by the frame sink video capturer.
   std::optional<uint64_t> frame_sequence;
+  std::optional<uint64_t> source_id;
 
   // Information about any background blur effect applied to the frame.
   std::optional<EffectInfo> background_blur;

@@ -15,9 +15,12 @@ limitations under the License.
 #include "tensorflow/lite/toco/tflite/export.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <initializer_list>
+#include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -162,7 +165,7 @@ class ExportTest : public ::testing::Test {
     }
   }
 
-  tensorflow::Status ExportAndReturnStatus(const ExportParams& params) {
+  absl::Status ExportAndReturnStatus(const ExportParams& params) {
     std::string result;
     return Export(input_model_, &result, params);
   }

@@ -29,7 +29,6 @@
 #include "chrome/browser/ui/webui/ash/settings/pages/device/inputs_section.h"
 #include "chrome/browser/ui/webui/ash/settings/pages/printing/printing_section.h"
 #include "chrome/browser/ui/webui/ash/settings/search/search_tag_registry.h"
-#include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/common/webui_url_constants.h"
@@ -48,6 +47,7 @@
 #include "ui/events/ash/keyboard_capability.h"
 #include "ui/events/ash/keyboard_layout_util.h"
 #include "ui/events/devices/device_data_manager.h"
+#include "ui/webui/webui_util.h"
 
 namespace ash::settings {
 
@@ -487,18 +487,6 @@ base::span<const SearchConcept> GetStylusSearchConcepts() {
        {.setting = mojom::Setting::kStylusNoteTakingApp},
        {IDS_OS_SETTINGS_TAG_STYLUS_NOTE_APP_ALT1,
         IDS_OS_SETTINGS_TAG_STYLUS_NOTE_APP_ALT2, SearchConcept::kAltTagEnd}},
-      {IDS_OS_SETTINGS_TAG_STYLUS_LOCK_SCREEN_LATEST_NOTE,
-       mojom::kStylusSubpagePath,
-       mojom::SearchResultIcon::kStylus,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kStylusLatestNoteOnLockScreen}},
-      {IDS_OS_SETTINGS_TAG_STYLUS_LOCK_SCREEN_NOTES,
-       mojom::kStylusSubpagePath,
-       mojom::SearchResultIcon::kStylus,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kStylusNoteTakingFromLockScreen}},
       {IDS_OS_SETTINGS_TAG_STYLUS_SHELF_TOOLS,
        mojom::kStylusSubpagePath,
        mojom::SearchResultIcon::kStylus,
@@ -697,6 +685,10 @@ bool IsExcludeDisplayInMirrorModeEnabled() {
   return display::features::IsExcludeDisplayInMirrorModeEnabled();
 }
 
+bool IsOpsDisplayScaleFactorEnabled() {
+  return display::features::IsOpsDisplayScaleFactorEnabled();
+}
+
 bool IsShowForceRespectUiGainsToggleEnabled() {
   // No need to show the toggle if UI gains is not going to be ignored.
   if (!base::FeatureList::IsEnabled(media::kIgnoreUiGains)) {
@@ -710,9 +702,6 @@ bool IsShowSpatialAudioToggleEnabled() {
 }
 
 void AddDeviceKeyboardStrings(content::WebUIDataSource* html_source) {
-  const bool kIsRevampEnabled =
-      ash::features::IsOsSettingsRevampWayfindingEnabled();
-
   webui::LocalizedString keyboard_strings[] = {
       {"builtInKeyboardName", IDS_SETTINGS_BUILT_IN_KEYBOARD_NAME},
       {"f11KeyLabel", IDS_SETTINGS_F11_KEY_LABEL},
@@ -773,14 +762,13 @@ void AddDeviceKeyboardStrings(content::WebUIDataSource* html_source) {
       {"splitModifierKeyboardSendInvertedFunctionKeysDescription",
        IDS_SETTINGS_KEYBOARD_SEND_INVERTED_FUNCTION_KEYS_DESCRIPTION},
       {"keyboardShowInputSettings",
-       kIsRevampEnabled ? IDS_OS_SETTINGS_REVAMP_KEYBOARD_SHOW_INPUT_SETTINGS
-                        : IDS_SETTINGS_KEYBOARD_SHOW_INPUT_SETTINGS},
+       IDS_OS_SETTINGS_KEYBOARD_SHOW_INPUT_SETTINGS},
+      {"keyboardShowA11yKeyboardSettings",
+       IDS_OS_SETTINGS_KEYBOARD_SHOW_A11Y_KEYBOARD_SETTINGS},
       // TODO(crbug.com/1097328): Remove this string, as it is unused.
       {"keyboardShowLanguageAndInput",
        IDS_SETTINGS_KEYBOARD_SHOW_LANGUAGE_AND_INPUT},
-      {"keyboardTitle", kIsRevampEnabled
-                            ? IDS_OS_SETTINGS_REVAMP_KEYBOARD_AND_INPUTS_TITLE
-                            : IDS_SETTINGS_KEYBOARD_TITLE},
+      {"keyboardTitle", IDS_OS_SETTINGS_KEYBOARD_AND_INPUTS_TITLE},
       {"keyRepeatDelay", IDS_SETTINGS_KEYBOARD_AUTO_REPEAT_DELAY},
       {"keyRepeatDelayLong", IDS_SETTINGS_KEYBOARD_AUTO_REPEAT_DELAY_LONG},
       {"keyRepeatDelayShort", IDS_SETTINGS_KEYBOARD_AUTO_REPEAT_DELAY_SHORT},
@@ -790,6 +778,10 @@ void AddDeviceKeyboardStrings(content::WebUIDataSource* html_source) {
       {"remapKeyboardKeysRowLabel", IDS_SETTINGS_KEYBOARD_REMAP_KEYS_ROW_LABEL},
       {"remapKeyboardKeysDescription",
        IDS_SETTINGS_KEYBOARD_REMAP_KEYS_DESCRIPTION},
+      {"keyboardShortcutRowDescription",
+       IDS_SETTINGS_PER_DEVICE_KEYBOARD_SHORTCUT_ROW_DESCRIPTION},
+      {"keyboardActionRowDescription",
+       IDS_SETTINGS_PER_DEVICE_KEYBOARD_ACTION_ROW_DESCRIPTION},
       {"showShortcutCustomizationApp",
        IDS_SETTINGS_KEYBOARD_SHOW_SHORTCUT_VIEWER},
       {"viewAndCustomizeKeyboardShortcut",
@@ -831,7 +823,7 @@ void AddDeviceKeyboardStrings(content::WebUIDataSource* html_source) {
   };
   html_source->AddLocalizedStrings(keyboard_strings);
 
-  html_source->AddLocalizedString("perDeviceKeyboardKeyRightAlt",
+  html_source->AddLocalizedString("perDeviceKeyboardKeyQuickInsert",
                                   IDS_KEYBOARD_QUICK_INSERT_LABEL);
 
   html_source->AddBoolean("enableModifierSplit",
@@ -929,12 +921,6 @@ void AddDeviceStylusStrings(content::WebUIDataSource* html_source) {
       {"stylusFindMoreAppsSecondary",
        IDS_SETTINGS_STYLUS_FIND_MORE_APPS_SECONDARY},
       {"stylusNoteTakingApp", IDS_SETTINGS_STYLUS_NOTE_TAKING_APP_LABEL},
-      {"stylusNoteTakingAppEnabledOnLockScreen",
-       IDS_SETTINGS_STYLUS_NOTE_TAKING_APP_LOCK_SCREEN_CHECKBOX},
-      {"stylusNoteTakingAppKeepsLastNoteOnLockScreen",
-       IDS_SETTINGS_STYLUS_NOTE_TAKING_APP_KEEP_LATEST_NOTE},
-      {"stylusNoteTakingAppLockScreenSettingsHeader",
-       IDS_SETTINGS_STYLUS_LOCK_SCREEN_NOTES_TITLE},
       {"stylusNoteTakingAppNoneAvailable",
        IDS_SETTINGS_STYLUS_NOTE_TAKING_APP_NONE_AVAILABLE},
       {"stylusNoteTakingAppWaitingForAndroid",
@@ -1039,42 +1025,17 @@ DeviceSection::DeviceSection(Profile* profile,
                              PrefService* pref_service)
     : OsSettingsSection(profile, search_tag_registry),
       inputs_subsection_(
-          ash::features::IsOsSettingsRevampWayfindingEnabled()
-              ? std::make_optional<InputsSection>(
-                    profile,
-                    search_tag_registry,
-                    pref_service,
-                    chromeos::features::IsOrcaEnabled()
-                        ? input_method::EditorMediatorFactory::GetInstance()
-                              ->GetForProfile(profile)
-                        : nullptr)
-              : std::nullopt),
-      power_subsection_(
-          !ash::features::IsOsSettingsRevampWayfindingEnabled()
-              ? std::make_optional<PowerSection>(profile,
-                                                 search_tag_registry,
-                                                 pref_service)
-              : std::nullopt),
-      printing_subsection_(
-          ash::features::IsOsSettingsRevampWayfindingEnabled()
-              ? std::make_optional<PrintingSection>(profile,
-                                                    search_tag_registry,
-                                                    printers_manager)
-              : std::nullopt),
-      storage_subsection_(
-          !ash::features::IsOsSettingsRevampWayfindingEnabled()
-              ? std::make_optional<StorageSection>(profile, search_tag_registry)
-              : std::nullopt) {
+          profile,
+          search_tag_registry,
+          pref_service,
+          chromeos::features::IsOrcaEnabled()
+              ? input_method::EditorMediatorFactory::GetInstance()
+                    ->GetForProfile(profile)
+              : nullptr),
+      printing_subsection_(profile, search_tag_registry, printers_manager) {
   CHECK(profile);
   CHECK(search_tag_registry);
   CHECK(pref_service);
-  if (ash::features::IsOsSettingsRevampWayfindingEnabled()) {
-    CHECK(inputs_subsection_);
-    CHECK(printing_subsection_);
-  } else {
-    CHECK(power_subsection_);
-    CHECK(storage_subsection_);
-  }
 
   SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
   updater.AddSearchTags(GetDeviceSearchConcepts());
@@ -1128,16 +1089,11 @@ DeviceSection::~DeviceSection() {
 }
 
 void DeviceSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
-  const bool kIsRevampEnabled =
-      ash::features::IsOsSettingsRevampWayfindingEnabled();
-
   webui::LocalizedString kDeviceStrings[] = {
       {"devicePageTitle", IDS_SETTINGS_DEVICE_TITLE},
-      {"touchpadScrollLabel",
-       kIsRevampEnabled ? IDS_OS_SETTINGS_REVAMP_TOUCHPAD_REVERSE_SCROLL_LABEL
-                        : IDS_OS_SETTINGS_TOUCHPAD_REVERSE_SCROLL_LABEL},
+      {"touchpadScrollLabel", IDS_OS_SETTINGS_TOUCHPAD_REVERSE_SCROLL_LABEL},
       {"touchpadScrollDescription",
-       IDS_OS_SETTINGS_REVAMP_TOUCHPAD_REVERSE_SCROLL_DESCRIPTION},
+       IDS_OS_SETTINGS_TOUCHPAD_REVERSE_SCROLL_DESCRIPTION},
       {"deviceMenuItemDescriptionKeyboard",
        IDS_OS_SETTINGS_DEVICE_MENU_ITEM_DESCRIPTION_KEYBOARD},
       {"deviceMenuItemDescriptionMouse",
@@ -1182,13 +1138,8 @@ void DeviceSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   AddDeviceDisplayStrings(html_source);
   AddDeviceAudioStrings(html_source);
 
-  if (kIsRevampEnabled) {
-    inputs_subsection_->AddLoadTimeData(html_source);
-    printing_subsection_->AddLoadTimeData(html_source);
-  } else {
-    power_subsection_->AddLoadTimeData(html_source);
-    storage_subsection_->AddLoadTimeData(html_source);
-  }
+  inputs_subsection_.AddLoadTimeData(html_source);
+  printing_subsection_.AddLoadTimeData(html_source);
 }
 
 void DeviceSection::AddHandlers(content::WebUI* web_ui) {
@@ -1197,13 +1148,8 @@ void DeviceSection::AddHandlers(content::WebUI* web_ui) {
   web_ui->AddMessageHandler(std::make_unique<PointerHandler>());
   web_ui->AddMessageHandler(std::make_unique<StylusHandler>());
 
-  if (ash::features::IsOsSettingsRevampWayfindingEnabled()) {
-    inputs_subsection_->AddHandlers(web_ui);
-    printing_subsection_->AddHandlers(web_ui);
-  } else {
-    power_subsection_->AddHandlers(web_ui);
-    storage_subsection_->AddHandlers(web_ui);
-  }
+  inputs_subsection_.AddHandlers(web_ui);
+  printing_subsection_.AddHandlers(web_ui);
 }
 
 int DeviceSection::GetSectionNameMessageId() const {
@@ -1254,9 +1200,6 @@ bool DeviceSection::LogMetric(mojom::Setting setting,
 }
 
 void DeviceSection::RegisterHierarchy(HierarchyGenerator* generator) const {
-  const bool kIsRevampEnabled =
-      ash::features::IsOsSettingsRevampWayfindingEnabled();
-
   // Pointers.
   generator->RegisterTopLevelSubpage(
       IDS_SETTINGS_MOUSE_AND_TOUCHPAD_TITLE, mojom::Subpage::kPointers,
@@ -1287,9 +1230,7 @@ void DeviceSection::RegisterHierarchy(HierarchyGenerator* generator) const {
         mojom::Setting::kTouchpadSimulateRightClick, mojom::Subpage::kPointers);
   }
 
-  const int kKeyboardTitleStringID =
-      kIsRevampEnabled ? IDS_OS_SETTINGS_REVAMP_KEYBOARD_AND_INPUTS_TITLE
-                       : IDS_SETTINGS_KEYBOARD_TITLE;
+  const int kKeyboardTitleStringID = IDS_OS_SETTINGS_KEYBOARD_AND_INPUTS_TITLE;
   if (base::FeatureList::IsEnabled(ash::features::kInputDeviceSettingsSplit)) {
     // Per-device Keyboard.
     generator->RegisterTopLevelSubpage(kKeyboardTitleStringID,
@@ -1391,15 +1332,13 @@ void DeviceSection::RegisterHierarchy(HierarchyGenerator* generator) const {
   static constexpr mojom::Setting kStylusSettings[] = {
       mojom::Setting::kStylusToolsInShelf,
       mojom::Setting::kStylusNoteTakingApp,
-      mojom::Setting::kStylusNoteTakingFromLockScreen,
-      mojom::Setting::kStylusLatestNoteOnLockScreen,
   };
   RegisterNestedSettingBulk(mojom::Subpage::kStylus, kStylusSettings,
                             generator);
 
   // Display.
   generator->RegisterTopLevelSubpage(
-      IDS_SETTINGS_DISPLAY_TITLE, mojom::Subpage::kDisplay,
+      IDS_OS_SETTINGS_DISPLAY_TITLE, mojom::Subpage::kDisplay,
       mojom::SearchResultIcon::kDisplay,
       mojom::SearchResultDefaultRank::kMedium, mojom::kDisplaySubpagePath);
   static constexpr mojom::Setting kDisplaySettings[] = {
@@ -1419,19 +1358,11 @@ void DeviceSection::RegisterHierarchy(HierarchyGenerator* generator) const {
   RegisterNestedSettingBulk(mojom::Subpage::kDisplay, kDisplaySettings,
                             generator);
 
-  if (ash::features::IsOsSettingsRevampWayfindingEnabled()) {
-    // Inputs.
-    inputs_subsection_->RegisterHierarchy(generator);
+  // Inputs.
+  inputs_subsection_.RegisterHierarchy(generator);
 
-    // Printing.
-    printing_subsection_->RegisterHierarchy(generator);
-  } else {
-    // Power.
-    power_subsection_->RegisterHierarchy(generator);
-
-    // Storage.
-    storage_subsection_->RegisterHierarchy(generator);
-  }
+  // Printing.
+  printing_subsection_.RegisterHierarchy(generator);
 
   // Audio.
   generator->RegisterTopLevelSubpage(
@@ -1660,11 +1591,6 @@ void DeviceSection::UpdateStylusSearchTags() {
 
 void DeviceSection::AddDevicePointersStrings(
     content::WebUIDataSource* html_source) {
-  const bool kIsRevampEnabled =
-      ash::features::IsOsSettingsRevampWayfindingEnabled();
-  const bool kIsAllowMouseScrollSettingsEnabled =
-      features::IsAllowScrollSettingsEnabled();
-
   webui::LocalizedString kPointersStrings[] = {
       {"allGraphicsTabletsDisconnectedA11yLabel",
        IDS_SETTINGS_PER_DEVICE_ALL_GRAPHICS_TABLETS_DISCONNECTED_A11Y_LABEL},
@@ -1686,10 +1612,9 @@ void DeviceSection::AddDevicePointersStrings(
       {"touchpadTitle", IDS_SETTINGS_TOUCHPAD_TITLE},
       {"mouseAndTouchpadTitle", IDS_SETTINGS_MOUSE_AND_TOUCHPAD_TITLE},
       {"touchpadTapToClickEnabledLabel",
-       kIsRevampEnabled ? IDS_OS_SETTINGS_REVAMP_TOUCHPAD_TAP_TO_CLICK_LABEL
-                        : IDS_SETTINGS_TOUCHPAD_TAP_TO_CLICK_ENABLED_LABEL},
+       IDS_OS_SETTINGS_TOUCHPAD_TAP_TO_CLICK_LABEL},
       {"touchpadTapToClickDescription",
-       IDS_OS_SETTINGS_REVAMP_TOUCHPAD_TAP_TO_CLICK_DESCRIPTION},
+       IDS_OS_SETTINGS_TOUCHPAD_TAP_TO_CLICK_DESCRIPTION},
       {"touchpadSpeed", IDS_SETTINGS_TOUCHPAD_SPEED_LABEL},
       {"pointerSlow", IDS_SETTINGS_POINTER_SPEED_SLOW_LABEL},
       {"pointerFast", IDS_SETTINGS_POINTER_SPEED_FAST_LABEL},
@@ -1705,17 +1630,12 @@ void DeviceSection::AddDevicePointersStrings(
       {"primaryMouseButtonLeft", IDS_SETTINGS_PRIMARY_MOUSE_BUTTON_LEFT_LABEL},
       {"primaryMouseButtonRight",
        IDS_SETTINGS_PRIMARY_MOUSE_BUTTON_RIGHT_LABEL},
-      {"mouseReverseScrollLabel",
-       (kIsRevampEnabled || kIsAllowMouseScrollSettingsEnabled)
-           ? IDS_OS_SETTINGS_REVAMP_MOUSE_REVERSE_SCROLL_LABEL
-           : IDS_SETTINGS_MOUSE_REVERSE_SCROLL_LABEL},
+      {"mouseReverseScrollLabel", IDS_OS_SETTINGS_MOUSE_REVERSE_SCROLL_LABEL},
       {"mouseReverseScrollDescription",
-       IDS_OS_SETTINGS_REVAMP_MOUSE_REVERSE_SCROLL_DESCRIPTION},
-      {"mouseAccelerationLabel",
-       kIsRevampEnabled ? IDS_OS_SETTINGS_REVAMP_MOUSE_ACCELERATION_LABEL
-                        : IDS_SETTINGS_MOUSE_ACCELERATION_LABEL},
+       IDS_OS_SETTINGS_MOUSE_REVERSE_SCROLL_DESCRIPTION},
+      {"mouseAccelerationLabel", IDS_OS_SETTINGS_MOUSE_ACCELERATION_LABEL},
       {"mouseAccelerationDescription",
-       IDS_OS_SETTINGS_REVAMP_MOUSE_ACCELERATION_DESCRIPTION},
+       IDS_OS_SETTINGS_MOUSE_ACCELERATION_DESCRIPTION},
       {"cursorAccelerationLabel", IDS_SETTINGS_CURSOR_ACCELERATION_LABEL},
       {"mouseScrollAccelerationLabel",
        IDS_SETTINGS_MOUSE_SCROLL_ACCELERATION_LABEL},
@@ -1724,10 +1644,9 @@ void DeviceSection::AddDevicePointersStrings(
       {"pointingStickAccelerationLabel",
        IDS_SETTINGS_POINTING_STICK_ACCELERATION_LABEL},
       {"touchpadAccelerationLabel",
-       kIsRevampEnabled ? IDS_OS_SETTINGS_REVAMP_TOUCHPAD_ACCELERATION_LABEL
-                        : IDS_SETTINGS_TOUCHPAD_ACCELERATION_LABEL},
+       IDS_OS_SETTINGS_TOUCHPAD_ACCELERATION_LABEL},
       {"touchpadAccelerationDescription",
-       IDS_OS_SETTINGS_REVAMP_TOUCHPAD_ACCELERATION_DESCRIPTION},
+       IDS_OS_SETTINGS_TOUCHPAD_ACCELERATION_DESCRIPTION},
       {"touchpadHapticClickSensitivityLabel",
        IDS_SETTINGS_TOUCHPAD_HAPTIC_CLICK_SENSITIVITY_LABEL},
       {"touchpadHapticFeedbackTitle",
@@ -1845,9 +1764,6 @@ void DeviceSection::AddCustomizeButtonsPageStrings(
 
 void DeviceSection::AddDeviceDisplayStrings(
     content::WebUIDataSource* html_source) const {
-  const bool kIsRevampEnabled =
-      ash::features::IsOsSettingsRevampWayfindingEnabled();
-
   webui::LocalizedString kDisplayStrings[] = {
       {"displayAmbientColorTitle", IDS_SETTINGS_DISPLAY_AMBIENT_COLOR_TITLE},
       {"displayAmbientColorSubtitle",
@@ -1895,15 +1811,12 @@ void DeviceSection::AddDeviceDisplayStrings(
       {"displayOverscanInstructions",
        IDS_SETTINGS_DISPLAY_OVERSCAN_INSTRUCTIONS},
       {"displayOverscanPageText", IDS_SETTINGS_DISPLAY_OVERSCAN_TEXT},
-      {"displayOverscanPageTitle",
-       kIsRevampEnabled ? IDS_OS_SETTINGS_REVAMP_DISPLAY_BOUNDARIES_TITLE
-                        : IDS_SETTINGS_DISPLAY_OVERSCAN_TITLE},
+      {"displayOverscanPageTitle", IDS_OS_SETTINGS_DISPLAY_BOUNDARIES_TITLE},
       {"displayOverscanPosition", IDS_SETTINGS_DISPLAY_OVERSCAN_POSITION},
       {"displayOverscanResize", IDS_SETTINGS_DISPLAY_OVERSCAN_RESIZE},
       {"displayOverscanReset", IDS_SETTINGS_DISPLAY_OVERSCAN_RESET},
       {"displayOverscanSubtitle",
-       kIsRevampEnabled ? IDS_OS_SETTINGS_REVAMP_DISPLAY_BOUNDARIES_DESCRIPTION
-                        : IDS_SETTINGS_DISPLAY_OVERSCAN_SUBTITLE},
+       IDS_OS_SETTINGS_DISPLAY_BOUNDARIES_DESCRIPTION},
       {"displayPositionDown", IDS_SETTINGS_DISPLAY_LAYOUT_DONW_A11Y_LABEL},
       {"displayPositionDownAndLeft",
        IDS_SETTINGS_DISPLAY_LAYOUT_DONW_AND_LEFT_A11Y_LABEL},
@@ -1921,12 +1834,8 @@ void DeviceSection::AddDeviceDisplayStrings(
       {"displayRefreshRateMenuItem",
        IDS_SETTINGS_DISPLAY_REFRESH_RATE_MENU_ITEM},
       {"displayRefreshRateSublabel",
-       kIsRevampEnabled
-           ? IDS_OS_SETTINGS_REVAMP_DISPLAY_REFRESH_RATE_DESCRIPTION
-           : IDS_SETTINGS_DISPLAY_REFRESH_RATE_SUBLABEL},
-      {"displayRefreshRateTitle",
-       kIsRevampEnabled ? IDS_OS_SETTINGS_REVAMP_DISPLAY_REFRESH_RATE_TITLE
-                        : IDS_SETTINGS_DISPLAY_REFRESH_RATE_TITLE},
+       IDS_OS_SETTINGS_DISPLAY_REFRESH_RATE_DESCRIPTION},
+      {"displayRefreshRateTitle", IDS_OS_SETTINGS_DISPLAY_REFRESH_RATE_TITLE},
       {"displayResolutionInterlacedMenuItem",
        IDS_SETTINGS_DISPLAY_RESOLUTION_INTERLACED_MENU_ITEM},
       {"displayResolutionMenuItem", IDS_SETTINGS_DISPLAY_RESOLUTION_MENU_ITEM},
@@ -1945,8 +1854,7 @@ void DeviceSection::AddDeviceDisplayStrings(
        IDS_SETTINGS_DISPLAY_SHINY_PERFORMANCE_LABEL},
       {"displaySizeSliderMaxLabel", IDS_SETTINGS_DISPLAY_ZOOM_SLIDER_MAXIMUM},
       {"displaySizeSliderMinLabel", IDS_SETTINGS_DISPLAY_ZOOM_SLIDER_MINIMUM},
-      {"displayTitle", kIsRevampEnabled ? IDS_OS_SETTINGS_REVAMP_DISPLAY_TITLE
-                                        : IDS_SETTINGS_DISPLAY_TITLE},
+      {"displayTitle", IDS_OS_SETTINGS_DISPLAY_TITLE},
       {"displayTouchCalibrationText",
        IDS_SETTINGS_DISPLAY_TOUCH_CALIBRATION_TEXT},
       {"displayTouchCalibrationTitle",
@@ -1962,12 +1870,8 @@ void DeviceSection::AddDeviceDisplayStrings(
        IDS_SETTINGS_DISPLAY_ZOOM_LOGICAL_RESOLUTION_TEXT},
       {"displayZoomNativeLogicalResolutionNativeText",
        IDS_SETTINGS_DISPLAY_ZOOM_LOGICAL_RESOLUTION_NATIVE_TEXT},
-      {"displayZoomLabel", kIsRevampEnabled
-                               ? IDS_OS_SETTINGS_REVAMP_DISPLAY_ZOOM_LABEL
-                               : IDS_SETTINGS_DISPLAY_ZOOM_TITLE},
-      {"displayZoomDescription",
-       kIsRevampEnabled ? IDS_OS_SETTINGS_REVAMP_DISPLAY_ZOOM_DESCRIPTION
-                        : IDS_SETTINGS_DISPLAY_ZOOM_SUBLABEL},
+      {"displayZoomLabel", IDS_OS_SETTINGS_DISPLAY_ZOOM_LABEL},
+      {"displayZoomDescription", IDS_OS_SETTINGS_DISPLAY_ZOOM_DESCRIPTION},
       {"displayZoomValue", IDS_SETTINGS_DISPLAY_ZOOM_VALUE},
   };
   html_source->AddLocalizedStrings(kDisplayStrings);
@@ -1991,9 +1895,6 @@ void DeviceSection::AddDeviceDisplayStrings(
 
   html_source->AddBoolean("enableForceRespectUiGainsToggle",
                           IsShowForceRespectUiGainsToggleEnabled());
-
-  html_source->AddBoolean("enableAudioHfpMicSRToggle",
-                          features::IsAudioHFPMicSRToggleEnabled());
 
   html_source->AddBoolean("enableSpatialAudioToggle",
                           IsShowSpatialAudioToggleEnabled());
@@ -2023,6 +1924,9 @@ void DeviceSection::AddDeviceDisplayStrings(
 
   html_source->AddBoolean("excludeDisplayInMirrorModeEnabled",
                           IsExcludeDisplayInMirrorModeEnabled());
+
+  html_source->AddBoolean("opsDisplayScaleFactorEnabled",
+                          IsOpsDisplayScaleFactorEnabled());
 }
 
 }  // namespace ash::settings

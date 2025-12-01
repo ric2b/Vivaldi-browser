@@ -125,28 +125,6 @@
     <issue
         id="WrongCommentType"
         message="This block comment looks like it was intended to be a javadoc comment"
-        errorLine1="     * @return Display.Modes supported by this Display."
-        errorLine2="       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="../../ui/android/java/src/org/chromium/ui/display/DisplayAndroid.java"
-            line="210"
-            column="8"/>
-    </issue>
-
-    <issue
-        id="WrongCommentType"
-        message="This block comment looks like it was intended to be a javadoc comment"
-        errorLine1="     * @return Current Display.Mode for the display."
-        errorLine2="       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="../../ui/android/java/src/org/chromium/ui/display/DisplayAndroid.java"
-            line="217"
-            column="8"/>
-    </issue>
-
-    <issue
-        id="WrongCommentType"
-        message="This block comment looks like it was intended to be a javadoc comment"
         errorLine1="     * @return whether the observerMap was changed as a result of the call."
         errorLine2="       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
@@ -1253,17 +1231,6 @@
             file="../../content/public/android/java/src/org/chromium/content/common/SurfaceWrapper.java"
             line="81"
             column="29"/>
-    </issue>
-
-    <issue
-        id="NewApi"
-        message="Call requires API level 27 (current min is 26): `setNavigationBarScrimFraction`"
-        errorLine1="                        controller.setNavigationBarScrimFraction(scrimFraction);"
-        errorLine2="                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="../../chrome/android/java/src/org/chromium/chrome/browser/tabbed_mode/TabbedRootUiCoordinator.java"
-            line="797"
-            column="36"/>
     </issue>
 
     <issue

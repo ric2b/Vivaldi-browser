@@ -2,7 +2,7 @@
 breadcrumbs:
 - - /chromium-os
   - ChromiumOS
-- - /chromium-os/developer-information-for-chrome-os-devices
+- - /chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices
   - Developer Information for ChromeOS Devices
 page_name: lg-chromebase-22cv241-w
 title: LG Chromebase 22CV241-W
@@ -19,29 +19,29 @@ developing on ChromiumOS (the open-source version of the software on the Chrome
 Notebook), see the [ChromiumOS Developer Guide](/chromium-os/developer-guide).
 
 <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/lg-chromebase-22cv241-w/gallery-LG-1-F-101_White_Monitor_from-Sandbox.jpg"
+src="gallery-LG-1-F-101_White_Monitor_from-Sandbox.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/lg-chromebase-22cv241-w/gallery-LG-2-F-101_Black_Monitor_from-Sandbox.jpg"
+src="gallery-LG-2-F-101_Black_Monitor_from-Sandbox.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/lg-chromebase-22cv241-w/gallery-LG-3-B-113_White_Monitor_from-Sandbox.jpg"
+src="gallery-LG-3-B-113_White_Monitor_from-Sandbox.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/lg-chromebase-22cv241-w/gallery-LG-4-B-113_Black_Monitor_from-Sandbox.jpg"
+src="gallery-LG-4-B-113_Black_Monitor_from-Sandbox.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/lg-chromebase-22cv241-w/gallery-LG-5-B-102F_White_Monitor_from-Sandbox.jpg"
+src="gallery-LG-5-B-102F_White_Monitor_from-Sandbox.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/lg-chromebase-22cv241-w/gallery-LG-6-B-102F_Black_Monitor_from-Sandbox.jpg"
+src="gallery-LG-6-B-102F_Black_Monitor_from-Sandbox.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/lg-chromebase-22cv241-w/gallery-LG-7-S-103_White_Monitor_from-Sandbox.jpg"
+src="gallery-LG-7-S-103_White_Monitor_from-Sandbox.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/lg-chromebase-22cv241-w/gallery-LG-8-S-103_Black_Monitor_from-Sandbox.jpg"
+src="gallery-LG-8-S-103_Black_Monitor_from-Sandbox.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/lg-chromebase-22cv241-w/gallery-LG-9-S-102_White_Monitor_from-Sandbox.jpg"
+src="gallery-LG-9-S-102_White_Monitor_from-Sandbox.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/lg-chromebase-22cv241-w/gallery-LG-10-S-102_Black_Monitor_from-Sandbox.jpg"
+src="gallery-LG-10-S-102_Black_Monitor_from-Sandbox.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/lg-chromebase-22cv241-w/gallery-LG-11-S-101_White_Monitor_from-Sandbox.jpg"
+src="gallery-LG-11-S-101_White_Monitor_from-Sandbox.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/lg-chromebase-22cv241-w/gallery-LG-12-S-101_Black_Monitor_from-Sandbox.jpg"
+src="gallery-LG-12-S-101_Black_Monitor_from-Sandbox.jpg"
 height=150 width=200>
 
 ### Specifications
@@ -63,7 +63,7 @@ height=150 width=200>
     *   Bluetooth 4.0
     *   100/1000 Ethernet
 *   [Kensington Security
-            Slot](http://en.wikipedia.org/wiki/Kensington_Security_Slot)
+            Slot](https://en.wikipedia.org/wiki/Kensington_Security_Slot)
 *   Linux 3.8
 
 ## Developer Mode
@@ -72,7 +72,7 @@ height=150 width=200>
 cause hardware, software or security issues and may void warranty.**
 
 Details for working with developer mode can be found [on this
-page](/chromium-os/developer-information-for-chrome-os-devices/acer-c720-chromebook).
+page](../acer-c720-chromebook).
 
 ## Firmware
 
@@ -100,7 +100,7 @@ Fine. If you **must** risk breaking it for good, at least do it the right way.
 *   First, acquire the necessary tools:
     *   A small Phillips head screw driver
     *   A large Philips head screw driver
-    *   A [spudger](http://en.wikipedia.org/wiki/Spudger)
+    *   A [spudger](https://en.wikipedia.org/wiki/Spudger)
 *   Place the computer screen down on a flat surface
 *   Pop the plastic cap with the cable holder off the back by pulling
             from the top

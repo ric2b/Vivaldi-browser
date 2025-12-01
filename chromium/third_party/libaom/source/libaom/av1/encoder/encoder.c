@@ -1049,129 +1049,115 @@ AV1_PRIMARY *av1_create_primary_compressor(
     }
   }
 
-#define BFP(BT, SDF, SDAF, VF, SVF, SVAF, SDX4DF, SDX3DF, JSDAF, JSVAF) \
-  ppi->fn_ptr[BT].sdf = SDF;                                            \
-  ppi->fn_ptr[BT].sdaf = SDAF;                                          \
-  ppi->fn_ptr[BT].vf = VF;                                              \
-  ppi->fn_ptr[BT].svf = SVF;                                            \
-  ppi->fn_ptr[BT].svaf = SVAF;                                          \
-  ppi->fn_ptr[BT].sdx4df = SDX4DF;                                      \
-  ppi->fn_ptr[BT].jsdaf = JSDAF;                                        \
-  ppi->fn_ptr[BT].jsvaf = JSVAF;                                        \
+#define BFP(BT, SDF, SDAF, VF, SVF, SVAF, SDX4DF, SDX3DF) \
+  ppi->fn_ptr[BT].sdf = SDF;                              \
+  ppi->fn_ptr[BT].sdaf = SDAF;                            \
+  ppi->fn_ptr[BT].vf = VF;                                \
+  ppi->fn_ptr[BT].svf = SVF;                              \
+  ppi->fn_ptr[BT].svaf = SVAF;                            \
+  ppi->fn_ptr[BT].sdx4df = SDX4DF;                        \
   ppi->fn_ptr[BT].sdx3df = SDX3DF;
 
 // Realtime mode doesn't use 4x rectangular blocks.
 #if !CONFIG_REALTIME_ONLY
-  BFP(BLOCK_4X16, aom_sad4x16, aom_sad4x16_avg, aom_variance4x16,
+  // sdaf (used in compound prediction, get_mvpred_compound_sad()) is unused
+  // for 4xN and Nx4 blocks.
+  BFP(BLOCK_4X16, aom_sad4x16, /*SDAF=*/NULL, aom_variance4x16,
       aom_sub_pixel_variance4x16, aom_sub_pixel_avg_variance4x16,
-      aom_sad4x16x4d, aom_sad4x16x3d, aom_dist_wtd_sad4x16_avg,
-      aom_dist_wtd_sub_pixel_avg_variance4x16)
+      aom_sad4x16x4d, aom_sad4x16x3d)
 
-  BFP(BLOCK_16X4, aom_sad16x4, aom_sad16x4_avg, aom_variance16x4,
+  // sdaf (used in compound prediction, get_mvpred_compound_sad()) is unused
+  // for 4xN and Nx4 blocks.
+  BFP(BLOCK_16X4, aom_sad16x4, /*SDAF=*/NULL, aom_variance16x4,
       aom_sub_pixel_variance16x4, aom_sub_pixel_avg_variance16x4,
-      aom_sad16x4x4d, aom_sad16x4x3d, aom_dist_wtd_sad16x4_avg,
-      aom_dist_wtd_sub_pixel_avg_variance16x4)
+      aom_sad16x4x4d, aom_sad16x4x3d)
 
   BFP(BLOCK_8X32, aom_sad8x32, aom_sad8x32_avg, aom_variance8x32,
       aom_sub_pixel_variance8x32, aom_sub_pixel_avg_variance8x32,
-      aom_sad8x32x4d, aom_sad8x32x3d, aom_dist_wtd_sad8x32_avg,
-      aom_dist_wtd_sub_pixel_avg_variance8x32)
+      aom_sad8x32x4d, aom_sad8x32x3d)
 
   BFP(BLOCK_32X8, aom_sad32x8, aom_sad32x8_avg, aom_variance32x8,
       aom_sub_pixel_variance32x8, aom_sub_pixel_avg_variance32x8,
-      aom_sad32x8x4d, aom_sad32x8x3d, aom_dist_wtd_sad32x8_avg,
-      aom_dist_wtd_sub_pixel_avg_variance32x8)
+      aom_sad32x8x4d, aom_sad32x8x3d)
 
   BFP(BLOCK_16X64, aom_sad16x64, aom_sad16x64_avg, aom_variance16x64,
       aom_sub_pixel_variance16x64, aom_sub_pixel_avg_variance16x64,
-      aom_sad16x64x4d, aom_sad16x64x3d, aom_dist_wtd_sad16x64_avg,
-      aom_dist_wtd_sub_pixel_avg_variance16x64)
+      aom_sad16x64x4d, aom_sad16x64x3d)
 
   BFP(BLOCK_64X16, aom_sad64x16, aom_sad64x16_avg, aom_variance64x16,
       aom_sub_pixel_variance64x16, aom_sub_pixel_avg_variance64x16,
-      aom_sad64x16x4d, aom_sad64x16x3d, aom_dist_wtd_sad64x16_avg,
-      aom_dist_wtd_sub_pixel_avg_variance64x16)
+      aom_sad64x16x4d, aom_sad64x16x3d)
 #endif  // !CONFIG_REALTIME_ONLY
 
   BFP(BLOCK_128X128, aom_sad128x128, aom_sad128x128_avg, aom_variance128x128,
       aom_sub_pixel_variance128x128, aom_sub_pixel_avg_variance128x128,
-      aom_sad128x128x4d, aom_sad128x128x3d, aom_dist_wtd_sad128x128_avg,
-      aom_dist_wtd_sub_pixel_avg_variance128x128)
+      aom_sad128x128x4d, aom_sad128x128x3d)
 
   BFP(BLOCK_128X64, aom_sad128x64, aom_sad128x64_avg, aom_variance128x64,
       aom_sub_pixel_variance128x64, aom_sub_pixel_avg_variance128x64,
-      aom_sad128x64x4d, aom_sad128x64x3d, aom_dist_wtd_sad128x64_avg,
-      aom_dist_wtd_sub_pixel_avg_variance128x64)
+      aom_sad128x64x4d, aom_sad128x64x3d)
 
   BFP(BLOCK_64X128, aom_sad64x128, aom_sad64x128_avg, aom_variance64x128,
       aom_sub_pixel_variance64x128, aom_sub_pixel_avg_variance64x128,
-      aom_sad64x128x4d, aom_sad64x128x3d, aom_dist_wtd_sad64x128_avg,
-      aom_dist_wtd_sub_pixel_avg_variance64x128)
+      aom_sad64x128x4d, aom_sad64x128x3d)
 
   BFP(BLOCK_32X16, aom_sad32x16, aom_sad32x16_avg, aom_variance32x16,
       aom_sub_pixel_variance32x16, aom_sub_pixel_avg_variance32x16,
-      aom_sad32x16x4d, aom_sad32x16x3d, aom_dist_wtd_sad32x16_avg,
-      aom_dist_wtd_sub_pixel_avg_variance32x16)
+      aom_sad32x16x4d, aom_sad32x16x3d)
 
   BFP(BLOCK_16X32, aom_sad16x32, aom_sad16x32_avg, aom_variance16x32,
       aom_sub_pixel_variance16x32, aom_sub_pixel_avg_variance16x32,
-      aom_sad16x32x4d, aom_sad16x32x3d, aom_dist_wtd_sad16x32_avg,
-      aom_dist_wtd_sub_pixel_avg_variance16x32)
+      aom_sad16x32x4d, aom_sad16x32x3d)
 
   BFP(BLOCK_64X32, aom_sad64x32, aom_sad64x32_avg, aom_variance64x32,
       aom_sub_pixel_variance64x32, aom_sub_pixel_avg_variance64x32,
-      aom_sad64x32x4d, aom_sad64x32x3d, aom_dist_wtd_sad64x32_avg,
-      aom_dist_wtd_sub_pixel_avg_variance64x32)
+      aom_sad64x32x4d, aom_sad64x32x3d)
 
   BFP(BLOCK_32X64, aom_sad32x64, aom_sad32x64_avg, aom_variance32x64,
       aom_sub_pixel_variance32x64, aom_sub_pixel_avg_variance32x64,
-      aom_sad32x64x4d, aom_sad32x64x3d, aom_dist_wtd_sad32x64_avg,
-      aom_dist_wtd_sub_pixel_avg_variance32x64)
+      aom_sad32x64x4d, aom_sad32x64x3d)
 
   BFP(BLOCK_32X32, aom_sad32x32, aom_sad32x32_avg, aom_variance32x32,
       aom_sub_pixel_variance32x32, aom_sub_pixel_avg_variance32x32,
-      aom_sad32x32x4d, aom_sad32x32x3d, aom_dist_wtd_sad32x32_avg,
-      aom_dist_wtd_sub_pixel_avg_variance32x32)
+      aom_sad32x32x4d, aom_sad32x32x3d)
 
   BFP(BLOCK_64X64, aom_sad64x64, aom_sad64x64_avg, aom_variance64x64,
       aom_sub_pixel_variance64x64, aom_sub_pixel_avg_variance64x64,
-      aom_sad64x64x4d, aom_sad64x64x3d, aom_dist_wtd_sad64x64_avg,
-      aom_dist_wtd_sub_pixel_avg_variance64x64)
+      aom_sad64x64x4d, aom_sad64x64x3d)
 
   BFP(BLOCK_16X16, aom_sad16x16, aom_sad16x16_avg, aom_variance16x16,
       aom_sub_pixel_variance16x16, aom_sub_pixel_avg_variance16x16,
-      aom_sad16x16x4d, aom_sad16x16x3d, aom_dist_wtd_sad16x16_avg,
-      aom_dist_wtd_sub_pixel_avg_variance16x16)
+      aom_sad16x16x4d, aom_sad16x16x3d)
 
   BFP(BLOCK_16X8, aom_sad16x8, aom_sad16x8_avg, aom_variance16x8,
       aom_sub_pixel_variance16x8, aom_sub_pixel_avg_variance16x8,
-      aom_sad16x8x4d, aom_sad16x8x3d, aom_dist_wtd_sad16x8_avg,
-      aom_dist_wtd_sub_pixel_avg_variance16x8)
+      aom_sad16x8x4d, aom_sad16x8x3d)
 
   BFP(BLOCK_8X16, aom_sad8x16, aom_sad8x16_avg, aom_variance8x16,
       aom_sub_pixel_variance8x16, aom_sub_pixel_avg_variance8x16,
-      aom_sad8x16x4d, aom_sad8x16x3d, aom_dist_wtd_sad8x16_avg,
-      aom_dist_wtd_sub_pixel_avg_variance8x16)
+      aom_sad8x16x4d, aom_sad8x16x3d)
 
   BFP(BLOCK_8X8, aom_sad8x8, aom_sad8x8_avg, aom_variance8x8,
       aom_sub_pixel_variance8x8, aom_sub_pixel_avg_variance8x8, aom_sad8x8x4d,
-      aom_sad8x8x3d, aom_dist_wtd_sad8x8_avg,
-      aom_dist_wtd_sub_pixel_avg_variance8x8)
+      aom_sad8x8x3d)
 
-  BFP(BLOCK_8X4, aom_sad8x4, aom_sad8x4_avg, aom_variance8x4,
+  // sdaf (used in compound prediction, get_mvpred_compound_sad()) is unused
+  // for 4xN and Nx4 blocks.
+  BFP(BLOCK_8X4, aom_sad8x4, /*SDAF=*/NULL, aom_variance8x4,
       aom_sub_pixel_variance8x4, aom_sub_pixel_avg_variance8x4, aom_sad8x4x4d,
-      aom_sad8x4x3d, aom_dist_wtd_sad8x4_avg,
-      aom_dist_wtd_sub_pixel_avg_variance8x4)
+      aom_sad8x4x3d)
 
-  BFP(BLOCK_4X8, aom_sad4x8, aom_sad4x8_avg, aom_variance4x8,
+  // sdaf (used in compound prediction, get_mvpred_compound_sad()) is unused
+  // for 4xN and Nx4 blocks.
+  BFP(BLOCK_4X8, aom_sad4x8, /*SDAF=*/NULL, aom_variance4x8,
       aom_sub_pixel_variance4x8, aom_sub_pixel_avg_variance4x8, aom_sad4x8x4d,
-      aom_sad4x8x3d, aom_dist_wtd_sad4x8_avg,
-      aom_dist_wtd_sub_pixel_avg_variance4x8)
+      aom_sad4x8x3d)
 
-  BFP(BLOCK_4X4, aom_sad4x4, aom_sad4x4_avg, aom_variance4x4,
+  // sdaf (used in compound prediction, get_mvpred_compound_sad()) is unused
+  // for 4xN and Nx4 blocks.
+  BFP(BLOCK_4X4, aom_sad4x4, /*SDAF=*/NULL, aom_variance4x4,
       aom_sub_pixel_variance4x4, aom_sub_pixel_avg_variance4x4, aom_sad4x4x4d,
-      aom_sad4x4x3d, aom_dist_wtd_sad4x4_avg,
-      aom_dist_wtd_sub_pixel_avg_variance4x4)
+      aom_sad4x4x3d)
 
 #if !CONFIG_REALTIME_ONLY
 #define OBFP(BT, OSDF, OVF, OSVF) \
@@ -2647,7 +2633,7 @@ static int encode_without_recode(AV1_COMP *cpi) {
 
   av1_set_quantizer(cm, q_cfg->qm_minlevel, q_cfg->qm_maxlevel, q,
                     q_cfg->enable_chroma_deltaq, q_cfg->enable_hdr_deltaq,
-                    cpi->oxcf.mode == ALLINTRA);
+                    cpi->oxcf.mode == ALLINTRA, cpi->oxcf.tune_cfg.tuning);
   av1_set_speed_features_qindex_dependent(cpi, cpi->oxcf.speed);
   av1_init_quantizer(&cpi->enc_quant_dequant_params, &cm->quant_params,
                      cm->seq_params->bit_depth);
@@ -2662,7 +2648,7 @@ static int encode_without_recode(AV1_COMP *cpi) {
     if (av1_encodedframe_overshoot_cbr(cpi, &q)) {
       av1_set_quantizer(cm, q_cfg->qm_minlevel, q_cfg->qm_maxlevel, q,
                         q_cfg->enable_chroma_deltaq, q_cfg->enable_hdr_deltaq,
-                        cpi->oxcf.mode == ALLINTRA);
+                        cpi->oxcf.mode == ALLINTRA, cpi->oxcf.tune_cfg.tuning);
       av1_set_speed_features_qindex_dependent(cpi, cpi->oxcf.speed);
       av1_init_quantizer(&cpi->enc_quant_dequant_params, &cm->quant_params,
                          cm->seq_params->bit_depth);
@@ -2967,7 +2953,7 @@ static int encode_with_recode_loop(AV1_COMP *cpi, size_t *size, uint8_t *dest,
 
     av1_set_quantizer(cm, q_cfg->qm_minlevel, q_cfg->qm_maxlevel, q,
                       q_cfg->enable_chroma_deltaq, q_cfg->enable_hdr_deltaq,
-                      oxcf->mode == ALLINTRA);
+                      oxcf->mode == ALLINTRA, oxcf->tune_cfg.tuning);
     av1_set_speed_features_qindex_dependent(cpi, oxcf->speed);
     av1_init_quantizer(&cpi->enc_quant_dequant_params, &cm->quant_params,
                        cm->seq_params->bit_depth);
@@ -3396,7 +3382,8 @@ static int encode_with_and_without_superres(AV1_COMP *cpi, size_t *size,
 
     // Note: Both use common rdmult based on base qindex of fullres.
     const int64_t rdmult = av1_compute_rd_mult_based_on_qindex(
-        bit_depth, update_type, cm->quant_params.base_qindex);
+        bit_depth, update_type, cm->quant_params.base_qindex,
+        cpi->oxcf.tune_cfg.tuning);
 
     // Find the best rdcost among all superres denoms.
     int best_denom = -1;
@@ -3460,7 +3447,8 @@ static int encode_with_and_without_superres(AV1_COMP *cpi, size_t *size,
 
     // Note: Both use common rdmult based on base qindex of fullres.
     const int64_t rdmult = av1_compute_rd_mult_based_on_qindex(
-        bit_depth, update_type, cm->quant_params.base_qindex);
+        bit_depth, update_type, cm->quant_params.base_qindex,
+        cpi->oxcf.tune_cfg.tuning);
     proj_rdcost1 =
         RDCOST_DBL_WITH_NATIVE_BD_DIST(rdmult, rate1, sse1, bit_depth);
     const double proj_rdcost2 =
@@ -5425,7 +5413,8 @@ aom_fixed_buf_t *av1_get_global_headers(AV1_PRIMARY *ppi) {
 
   if (av1_write_obu_header(&ppi->level_params, &ppi->cpi->frame_header_count,
                            OBU_SEQUENCE_HEADER,
-                           ppi->seq_params.has_nonzero_operating_point_idc, 0,
+                           ppi->seq_params.has_nonzero_operating_point_idc,
+                           /*is_layer_specific_obu=*/false, 0,
                            &header_buf[0]) != obu_header_size) {
     return NULL;
   }

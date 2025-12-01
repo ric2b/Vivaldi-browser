@@ -5,12 +5,17 @@
 package org.chromium.chrome.browser.page_info;
 
 import android.app.Activity;
+import android.view.Gravity;
 
+import androidx.annotation.GravityInt;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import org.chromium.base.supplier.Supplier;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider.ControlsPosition;
 import org.chromium.chrome.browser.ephemeraltab.EphemeralTabCoordinator;
+import org.chromium.chrome.browser.fullscreen.BrowserControlsManagerSupplier;
 import org.chromium.chrome.browser.merchant_viewer.PageInfoStoreInfoController.StoreInfoActionHandler;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.profiles.ProfileManager;
@@ -23,8 +28,8 @@ import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 
 // Vivaldi
-import android.view.View;
 import androidx.appcompat.app.AppCompatActivity;
+import org.chromium.components.page_info.PageInfoContainer;
 import org.vivaldi.browser.adblock.VivaldiTrackerBlockerPopup;
 
 /** Helper class showing page info dialog for Clank. */
@@ -71,6 +76,17 @@ public class ChromePageInfo {
         WebContents webContents = tab.getWebContents();
         if (webContents == null || !ProfileManager.isInitialized()) return;
 
+        BrowserControlsStateProvider stateProvider =
+                BrowserControlsManagerSupplier.getValueOrNullFrom(
+                        webContents.getTopLevelNativeWindow());
+        @GravityInt int dialogPosition = Gravity.TOP;
+        if (stateProvider != null) {
+            dialogPosition =
+                    stateProvider.getControlsPosition() == ControlsPosition.BOTTOM
+                            ? Gravity.BOTTOM
+                            : Gravity.TOP;
+        }
+
         Activity activity = TabUtils.getActivity(tab);
         PageInfoController.show(
                 activity,
@@ -87,10 +103,11 @@ public class ChromePageInfo {
                         pageInfoHighlight,
                         mTabCreator),
                 pageInfoHighlight,
+                dialogPosition,
                 ChromePageInfo::dismissPopup); // Vivaldi
 
         // Vivaldi - Combined Site prefs and Tracker blocker popup
-        View pageInfoContainer = PageInfoController.getPageInfoContainer();
+        PageInfoContainer pageInfoContainer = PageInfoController.getPageInfoContainer();
         if (mTrackerBlockerPopup == null) mTrackerBlockerPopup = new VivaldiTrackerBlockerPopup();
         mTrackerBlockerPopup.setCurrentTab(tab);
         mTrackerBlockerPopup.setSitePrefsContainer(pageInfoContainer);
@@ -109,4 +126,5 @@ public class ChromePageInfo {
     public static VivaldiTrackerBlockerPopup getPopupInstance() {
         return mTrackerBlockerPopup;
     }
+    // End Vivaldi
 }

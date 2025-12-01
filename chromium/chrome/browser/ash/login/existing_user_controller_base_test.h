@@ -12,6 +12,7 @@
 #include "components/account_id/account_id.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "content/public/test/browser_task_environment.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace ash {
@@ -20,14 +21,14 @@ class AuthEventsRecorder;
 
 namespace {
 
-const char kFirstSAMLUserId[] = "12345";
+const GaiaId::Literal kFirstSAMLUserId("12345");
 const char kFirstSAMLUserEmail[] = "bob@corp.example.com";
-const char kSecondSAMLUserId[] = "67891";
+const GaiaId::Literal kSecondSAMLUserId("67891");
 const char kSecondSAMLUserEmail[] = "alice@corp.example.com";
 
-const char kFirstGaiaUserId[] = "88888";
+const GaiaId::Literal kFirstGaiaUserId("88888");
 const char kFirstGaiaUserEmail[] = "bob@gaia.example.com";
-const char kSecondGaiaUserId[] = "88884";
+const GaiaId::Literal kSecondGaiaUserId("88884");
 const char kSecondGaiaUserEmail[] = "alice@gaia.example.com";
 
 }  // namespace

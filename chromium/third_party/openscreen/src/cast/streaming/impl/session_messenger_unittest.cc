@@ -129,9 +129,9 @@ class SessionMessengerTest : public ::testing::Test {
 };
 
 TEST_F(SessionMessengerTest, RpcMessaging) {
-  static const std::vector<uint8_t> kSenderMessage{1, 2, 3, 4, 5};
-  static const std::vector<uint8_t> kSenderMessageTwo{11, 12, 13};
-  static const std::vector<uint8_t> kReceiverResponse{6, 7, 8, 9};
+  static const std::vector<uint8_t> kSenderMessage = {1, 2, 3, 4, 5};
+  static const std::vector<uint8_t> kSenderMessageTwo = {11, 12, 13};
+  static const std::vector<uint8_t> kReceiverResponse = {6, 7, 8, 9};
   ASSERT_TRUE(
       sender_messenger_
           ->SendOutboundMessage(SenderMessage{SenderMessage::Type::kRpc, 123,

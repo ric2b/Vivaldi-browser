@@ -27,16 +27,13 @@ class RenderFrameHost;
 
 // There are two different kinds of fullscreen mode - "tab fullscreen" and
 // "browser fullscreen". "Tab fullscreen" refers to a renderer-initiated
-// fullscreen mode (eg: from a Flash plugin or via the JS fullscreen API),
+// fullscreen mode (eg: from an extension or via the JS fullscreen API),
 // whereas "browser fullscreen" refers to the user putting the browser itself
 // into fullscreen mode from the UI. The difference is that tab fullscreen has
 // implications for how the contents of the tab render (eg: a video element may
 // grow to consume the whole tab), whereas browser fullscreen mode doesn't.
 // Therefore if a user forces an exit from tab fullscreen, we need to notify the
 // tab so it can stop rendering in its fullscreen mode.
-//
-// For Flash, FullscreenController will auto-accept all permission requests for
-// fullscreen, since the assumption is that the plugin handles this for us.
 //
 // FullscreenWithinTab Note:
 // All fullscreen widgets are displayed within the tab contents area, and
@@ -76,14 +73,16 @@ class FullscreenController : public ExclusiveAccessControllerBase {
   // transition.
   bool IsFullscreenForBrowser() const;
 
-  void ToggleBrowserFullscreenMode();
+  // Toggle in or out of browser fullscreen mode. Certain windows will block
+  // `user_initiated` requests; see `CanUserEnterFullscreen()` for details.
+  void ToggleBrowserFullscreenMode(bool user_initiated);
 
   // Extension API implementation uses this method to toggle fullscreen mode.
   // The extension's name is displayed in the full screen bubble UI to attribute
   // the cause of the full screen state change.
   void ToggleBrowserFullscreenModeWithExtension(const GURL& extension_url);
 
-  // Tab/HTML/Flash Fullscreen /////////////////////////////////////////////////
+  // Tab/HTML/Extension Fullscreen /////////////////////////////////////////////
 
   // Returns true if the browser window has/will fullscreen because of
   // tab-initiated fullscreen. The window may still be transitioning, and
@@ -187,7 +186,8 @@ class FullscreenController : public ExclusiveAccessControllerBase {
 
   void ToggleFullscreenModeInternal(FullscreenInternalOption option,
                                     content::RenderFrameHost* requesting_frame,
-                                    const int64_t display_id);
+                                    const int64_t display_id,
+                                    bool user_initiated);
   void EnterFullscreenModeInternal(FullscreenInternalOption option,
                                    content::RenderFrameHost* requesting_frame,
                                    int64_t display_id);

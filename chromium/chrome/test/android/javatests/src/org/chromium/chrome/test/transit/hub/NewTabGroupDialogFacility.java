@@ -20,18 +20,23 @@ import android.view.View;
 import android.widget.EditText;
 
 import androidx.annotation.Nullable;
+import androidx.test.espresso.Espresso;
 
 import org.hamcrest.Matcher;
 
 import org.chromium.base.test.transit.Elements;
 import org.chromium.base.test.transit.Facility;
+import org.chromium.base.test.transit.Transition;
 import org.chromium.base.test.transit.ViewElement;
 import org.chromium.base.test.transit.ViewSpec;
+import org.chromium.chrome.browser.tabmodel.TabGroupColorUtils;
+import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tasks.tab_management.ColorPickerUtils;
 import org.chromium.chrome.test.R;
+import org.chromium.chrome.test.transit.SoftKeyboardFacility;
 import org.chromium.chrome.test.transit.tabmodel.TabGroupUtil;
+import org.chromium.chrome.test.util.TabBinningUtil;
 import org.chromium.components.tab_groups.TabGroupColorId;
-import org.chromium.ui.test.transit.SoftKeyboardElement;
 
 import java.util.List;
 
@@ -53,53 +58,59 @@ public class NewTabGroupDialogFacility extends Facility<TabSwitcherStation> {
     private final List<Integer> mTabIdsToGroup;
     private final String mTitle;
     private final @Nullable @TabGroupColorId Integer mSelectedColor;
+    private final SoftKeyboardFacility mSoftKeyboard;
     private ViewSpec mTitleInputSpec;
+    private ViewElement mDialog;
 
     /** Constructor. Expects no particular title or selected color. */
-    public NewTabGroupDialogFacility(List<Integer> tabIdsToGroup) {
+    public NewTabGroupDialogFacility(
+            List<Integer> tabIdsToGroup, SoftKeyboardFacility softKeyboard) {
         this(
                 tabIdsToGroup,
                 TabGroupUtil.getNumberOfTabsString(tabIdsToGroup.size()),
-                /* selectedColor= */ null);
+                /* selectedColor= */ null,
+                softKeyboard);
     }
 
     /** Constructor. Expects a specific title and selected color. */
     public NewTabGroupDialogFacility(
             List<Integer> tabIdsToGroup,
             String title,
-            @Nullable @TabGroupColorId Integer selectedColor) {
+            @Nullable @TabGroupColorId Integer selectedColor,
+            SoftKeyboardFacility softKeyboard) {
         mTabIdsToGroup = tabIdsToGroup;
         mTitle = title;
         mSelectedColor = selectedColor;
+        mSoftKeyboard = softKeyboard;
     }
 
     @Override
     public void declareElements(Elements.Builder elements) {
-        elements.declareView(DIALOG);
+        mDialog = elements.declareView(DIALOG, ViewElement.displayingAtLeastOption(80));
         elements.declareView(DIALOG_TITLE);
 
         String inputElementId = "Tab group title input showing " + mTitle;
         mTitleInputSpec = viewSpec(allOf(TITLE_INPUT_MATCHER, withText(mTitle)));
         elements.declareView(mTitleInputSpec, ViewElement.elementIdOption(inputElementId));
 
-        // TODO(crbug.com/345489175): Partially cut off in android_30_google_apis_x86.textpb
+        // TODO(crbug.com/346377124): Partially cut off in android_30_google_apis_x86.textpb
         elements.declareView(COLOR_PICKER_CONTAINER, ViewElement.displayingAtLeastOption(50));
-        @TabGroupColorId List<Integer> colors = ColorPickerUtils.getTabGroupColorIdList();
-        for (@TabGroupColorId Integer color : colors) {
+        @TabGroupColorId List<Integer> colors = TabGroupColorUtils.getTabGroupColorIdList();
+        // Only the first 5 colors are displayed reliably when the soft keyboard opens.
+        for (int i = 0; i < 5; i++) {
+            @TabGroupColorId Integer color = colors.get(i);
             if (mSelectedColor != null) {
                 elements.declareView(
                         colorPickerIconSpec(color, color.equals(mSelectedColor)),
-                        ViewElement.unscopedOption());
+                        ViewElement.newOptions().unscoped().displayingAtLeast(60).build());
             } else {
                 elements.declareView(
                         colorPickerIconSpec(color, /* selected= */ null),
-                        ViewElement.unscopedOption());
+                        ViewElement.newOptions().unscoped().displayingAtLeast(60).build());
             }
         }
 
         elements.declareView(DONE_BUTTON);
-
-        elements.declareElement(new SoftKeyboardElement(mHostStation.getActivityElement()));
     }
 
     private ViewSpec colorPickerIconSpec(
@@ -121,9 +132,16 @@ public class NewTabGroupDialogFacility extends Facility<TabSwitcherStation> {
 
     /** Input a new tab group name. */
     public NewTabGroupDialogFacility inputName(String newTabGroupName) {
+        // An empty name causes warning text to show up which could push the color picker container
+        // out of view for small screen devices, so dismiss the keyboard.
+        if (newTabGroupName.isEmpty()) {
+            ensureSoftKeyboardClosed();
+        }
+
         return mHostStation.swapFacilitySync(
                 this,
-                new NewTabGroupDialogFacility(mTabIdsToGroup, newTabGroupName, mSelectedColor),
+                new NewTabGroupDialogFacility(
+                        mTabIdsToGroup, newTabGroupName, mSelectedColor, mSoftKeyboard),
                 () -> mTitleInputSpec.perform(replaceText(newTabGroupName)));
     }
 
@@ -131,13 +149,60 @@ public class NewTabGroupDialogFacility extends Facility<TabSwitcherStation> {
     public NewTabGroupDialogFacility pickColor(@TabGroupColorId int newColor) {
         return mHostStation.swapFacilitySync(
                 this,
-                new NewTabGroupDialogFacility(mTabIdsToGroup, mTitle, newColor),
+                new NewTabGroupDialogFacility(mTabIdsToGroup, mTitle, newColor, mSoftKeyboard),
                 colorPickerIconSpec(newColor, /* selected= */ false)::click);
     }
 
     /** Press "Done" to confirm the tab group name and color. */
     public TabSwitcherGroupCardFacility pressDone() {
+        ensureSoftKeyboardClosed();
+
+        // The reason we can pass an expected card index is because the tab group has already been
+        // created.
+        TabModel currentModel = mHostStation.getTabModelSelectorSupplier().get().getCurrentModel();
+        int expectedCardIndex = TabBinningUtil.getBinIndex(currentModel, mTabIdsToGroup);
         return mHostStation.swapFacilitySync(
-                this, new TabSwitcherGroupCardFacility(mTabIdsToGroup, mTitle), DONE_BUTTON::click);
+                this,
+                new TabSwitcherGroupCardFacility(expectedCardIndex, mTabIdsToGroup, mTitle),
+                DONE_BUTTON::click);
+    }
+
+    /** Press "Done" to confirm the tab group name and color, but no-op from an invalid title. */
+    public NewTabGroupDialogFacility pressDoneWithInvalidTitle() {
+        ensureSoftKeyboardClosed();
+
+        return mHostStation.swapFacilitySync(
+                this,
+                new NewTabGroupDialogFacility(
+                        mTabIdsToGroup, mTitle, mSelectedColor, mSoftKeyboard),
+                Transition.newOptions().withPossiblyAlreadyFulfilled().build(),
+                DONE_BUTTON::click);
+    }
+
+    /** Press the system backpress to confirm the tab group name and color. */
+    public TabSwitcherGroupCardFacility pressBack() {
+        ensureSoftKeyboardClosed();
+
+        // The reason we can pass an expected card index is because the tab group has already been
+        // created.
+        TabModel currentModel = mHostStation.getTabModelSelectorSupplier().get().getCurrentModel();
+        int expectedCardIndex = TabBinningUtil.getBinIndex(currentModel, mTabIdsToGroup);
+        return mHostStation.swapFacilitySync(
+                this,
+                new TabSwitcherGroupCardFacility(expectedCardIndex, mTabIdsToGroup, mTitle),
+                () -> {
+                    Espresso.pressBack();
+                });
+    }
+
+    private void ensureSoftKeyboardClosed() {
+        if (mSoftKeyboard.getPhase() == Phase.ACTIVE) {
+            mSoftKeyboard.close(mDialog);
+        } else if (mSoftKeyboard.getPhase() == Phase.FINISHED) {
+            // Do nothing as the soft keyboard has already been closed
+        } else {
+            throw new IllegalArgumentException(
+                    "SoftKeyboardFacility is in phase " + mSoftKeyboard.getPhase());
+        }
     }
 }

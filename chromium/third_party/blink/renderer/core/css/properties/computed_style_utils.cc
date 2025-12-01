@@ -751,7 +751,8 @@ CSSValue* ComputedStyleUtils::MinWidthOrMinHeightAuto(
 CSSValue* ComputedStyleUtils::ValueForPositionOffset(
     const ComputedStyle& style,
     const CSSProperty& property,
-    const LayoutObject* layout_object) {
+    const LayoutObject* layout_object,
+    CSSValuePhase value_phase) {
   std::pair<const Length*, const Length*> positions;
   bool is_horizontal_property;
   switch (property.PropertyID()) {
@@ -785,7 +786,8 @@ CSSValue* ComputedStyleUtils::ValueForPositionOffset(
     return ZoomAdjustedPixelValueForLength(offset, style);
   }
 
-  if (box && box->IsOutOfFlowPositioned()) {
+  if (value_phase == CSSValuePhase::kResolvedValue && box &&
+      box->IsOutOfFlowPositioned()) {
     // LayoutBox::OutOfFlowInsetsForGetComputedStyle() are relative to the
     // container's writing direction. Convert it to physical.
     const PhysicalBoxStrut& insets =
@@ -811,7 +813,8 @@ CSSValue* ComputedStyleUtils::ValueForPositionOffset(
     return ZoomAdjustedPixelValue(inset, style);
   }
 
-  if ((offset.IsPercent() || offset.IsCalculated()) && box &&
+  if (value_phase == CSSValuePhase::kResolvedValue &&
+      (offset.IsPercent() || offset.IsCalculated()) && box &&
       box->IsPositioned()) {
     LayoutUnit containing_block_size;
     if (box->IsStickyPositioned()) {
@@ -839,7 +842,8 @@ CSSValue* ComputedStyleUtils::ValueForPositionOffset(
                                   style);
   }
 
-  if (offset.IsAuto() && layout_object && layout_object->IsRelPositioned()) {
+  if (value_phase == CSSValuePhase::kResolvedValue && offset.IsAuto() &&
+      layout_object && layout_object->IsRelPositioned()) {
     UseCounter::Count(layout_object->GetDocument(),
                       WebFeature::kAutoRelativeUsedOffset);
     // If e.g. left is auto and right is not auto, then left's computed value
@@ -1425,7 +1429,9 @@ CSSValue* ComputedStyleUtils::ValueForFontFeatureSettings(
   for (wtf_size_t i = 0; i < feature_settings->size(); ++i) {
     const FontFeature& feature = feature_settings->at(i);
     auto* feature_value = MakeGarbageCollected<cssvalue::CSSFontFeatureValue>(
-        feature.TagString(), feature.Value());
+        feature.TagString(),
+        CSSNumericLiteralValue::Create(feature.Value(),
+                                       CSSPrimitiveValue::UnitType::kNumber));
     list->Append(*feature_value);
   }
   return list;
@@ -1813,13 +1819,11 @@ void AddValuesForNamedGridLinesAtIndex(OrderedNamedLinesCollector& collector,
 }
 
 CSSValue* ComputedStyleUtils::ValueForGridAutoTrackList(
-    GridTrackSizingDirection track_direction,
+    const NGGridTrackList& auto_track_list,
     const LayoutObject* layout_object,
     const ComputedStyle& style) {
   CSSValueList* list = CSSValueList::CreateSpaceSeparated();
-  const NGGridTrackList& auto_track_list = track_direction == kForColumns
-                                               ? style.GridAutoColumns()
-                                               : style.GridAutoRows();
+
   if (auto_track_list.RepeaterCount() == 1) {
     for (wtf_size_t i = 0; i < auto_track_list.RepeatSize(0); ++i) {
       list->Append(*SpecifiedValueForGridTrackSize(
@@ -1899,9 +1903,7 @@ void PopulateAutoRepeater(CSSValueList* list,
 
   const bool is_subgrid = track_list.IsSubgriddedAxis();
   CSSValueList* repeated_values;
-  wtf_size_t repeat_size = is_subgrid
-                               ? track_list.LineNameIndicesCount(repeater_index)
-                               : track_list.RepeatSize(repeater_index);
+  wtf_size_t repeat_size = track_list.RepeatSize(repeater_index);
 
   repeated_values = MakeGarbageCollected<cssvalue::CSSGridAutoRepeatValue>(
       repeat_type == NGGridTrackRepeater::RepeatType::kAutoFill
@@ -1951,12 +1953,12 @@ wtf_size_t PopulateIntegerRepeater(CSSValueList* list,
   const bool is_subgrid = track_list.IsSubgriddedAxis();
   CSSValueList* repeated_values;
   wtf_size_t number_of_repetitions = track_list.RepeatCount(repeater_index, 0);
-  wtf_size_t repeat_size = is_subgrid
-                               ? track_list.LineNameIndicesCount(repeater_index)
-                               : track_list.RepeatSize(repeater_index);
+  wtf_size_t repeat_size = track_list.RepeatSize(repeater_index);
 
   repeated_values = MakeGarbageCollected<cssvalue::CSSGridIntegerRepeatValue>(
-      number_of_repetitions);
+      CSSNumericLiteralValue::Create(number_of_repetitions,
+                                     CSSPrimitiveValue::UnitType::kNumber),
+      /*extra_clamp=*/std::nullopt);
 
   // Line names for integer repeats get expanded and interspersed with
   // non-repeaters in the track list.
@@ -2304,11 +2306,19 @@ CSSValue* ComputedStyleUtils::ValueForTextDecorationSkipInk(
 CSSValue* ComputedStyleUtils::TouchActionFlagsToCSSValue(
     TouchAction touch_action) {
   CSSValueList* list = CSSValueList::CreateSpaceSeparated();
-  if (touch_action == TouchAction::kAuto) {
+  // Until handwriting is a web exposed feature, the combination of
+  // non-handwriting bits should result in values of auto / manipulation in the
+  // exposed CSS value.
+  // TODO(crbug.com/382525574): Launch or clean up kHandwriting.
+  touch_action &= ~TouchAction::kInternalHandwriting;
+
+  if (touch_action ==
+      (TouchAction::kAuto & ~TouchAction::kInternalHandwriting)) {
     list->Append(*CSSIdentifierValue::Create(CSSValueID::kAuto));
   } else if (touch_action == TouchAction::kNone) {
     list->Append(*CSSIdentifierValue::Create(CSSValueID::kNone));
-  } else if (touch_action == TouchAction::kManipulation) {
+  } else if (touch_action == (TouchAction::kManipulation &
+                              ~TouchAction::kInternalHandwriting)) {
     list->Append(*CSSIdentifierValue::Create(CSSValueID::kManipulation));
   } else {
     if ((touch_action & TouchAction::kPanX) == TouchAction::kPanX) {
@@ -2513,11 +2523,10 @@ CSSValue* ComputedStyleUtils::ValueForAnimationPlayStateList(
       &ValueForAnimationPlayState);
 }
 
-namespace {
-
-CSSValue* ValueForAnimationRange(const std::optional<TimelineOffset>& offset,
-                                 const ComputedStyle& style,
-                                 const Length& default_offset) {
+CSSValue* ComputedStyleUtils::ValueForAnimationRange(
+    const std::optional<TimelineOffset>& offset,
+    const ComputedStyle& style,
+    const Length& default_offset) {
   if (!offset.has_value()) {
     return MakeGarbageCollected<CSSIdentifierValue>(CSSValueID::kNormal);
   }
@@ -2532,40 +2541,79 @@ CSSValue* ValueForAnimationRange(const std::optional<TimelineOffset>& offset,
   return list;
 }
 
-}  // namespace
-
-CSSValue* ComputedStyleUtils::ValueForAnimationRangeStart(
-    const std::optional<TimelineOffset>& offset,
-    const ComputedStyle& style) {
-  return ValueForAnimationRange(offset, style, Length::Percent(0.0));
+CSSValue* ComputedStyleUtils::ValueForAnimationRangeList(
+    const Vector<std::optional<TimelineOffset>>& range_list,
+    const CSSAnimationData* animation_data,
+    const ComputedStyle& style,
+    const Length& default_offset) {
+  return CreateAnimationValueList(range_list, &ValueForAnimationRange, style,
+                                  default_offset);
 }
 
 CSSValue* ComputedStyleUtils::ValueForAnimationRangeStartList(
     const CSSAnimationData* animation_data,
     const ComputedStyle& style) {
-  return CreateAnimationValueList(
+  return ValueForAnimationRangeList(
       animation_data
           ? animation_data->RangeStartList()
           : Vector<std::optional<TimelineOffset>>{CSSAnimationData::
                                                       InitialRangeStart()},
-      &ValueForAnimationRangeStart, style);
-}
-
-CSSValue* ComputedStyleUtils::ValueForAnimationRangeEnd(
-    const std::optional<TimelineOffset>& offset,
-    const ComputedStyle& style) {
-  return ValueForAnimationRange(offset, style, Length::Percent(100.0));
+      animation_data, style, Length::Percent(0.0));
 }
 
 CSSValue* ComputedStyleUtils::ValueForAnimationRangeEndList(
     const CSSAnimationData* animation_data,
     const ComputedStyle& style) {
-  return CreateAnimationValueList(
+  return ValueForAnimationRangeList(
       animation_data
           ? animation_data->RangeEndList()
           : Vector<std::optional<TimelineOffset>>{CSSAnimationData::
                                                       InitialRangeEnd()},
-      &ValueForAnimationRangeEnd, style);
+      animation_data, style, Length::Percent(100.0));
+}
+
+CSSValue* ComputedStyleUtils::ValueForAnimationTriggerRangeStartList(
+    const CSSAnimationData* animation_data,
+    const ComputedStyle& style) {
+  return ValueForAnimationRangeList(
+      animation_data
+          ? animation_data->TriggerRangeStartList()
+          : Vector<std::optional<
+                TimelineOffset>>{CSSAnimationData::InitialTriggerRangeStart()},
+      animation_data, style, Length::Percent(0.0));
+}
+
+CSSValue* ComputedStyleUtils::ValueForAnimationTriggerRangeEndList(
+    const CSSAnimationData* animation_data,
+    const ComputedStyle& style) {
+  return ValueForAnimationRangeList(
+      animation_data
+          ? animation_data->TriggerRangeEndList()
+          : Vector<std::optional<TimelineOffset>>{CSSAnimationData::
+                                                      InitialTriggerRangeEnd()},
+      animation_data, style, Length::Percent(100.0));
+}
+
+CSSValue* ComputedStyleUtils::ValueForAnimationTriggerExitRangeStartList(
+    const CSSAnimationData* animation_data,
+    const ComputedStyle& style) {
+  return ValueForAnimationRangeList(
+      animation_data ? animation_data->TriggerExitRangeStartList()
+                     : Vector<std::optional<
+                           TimelineOffset>>{CSSAnimationData::
+                                                InitialTriggerExitRangeStart()},
+      animation_data, style, Length::Percent(0.0));
+}
+
+CSSValue* ComputedStyleUtils::ValueForAnimationTriggerExitRangeEndList(
+    const CSSAnimationData* animation_data,
+    const ComputedStyle& style) {
+  return ValueForAnimationRangeList(
+      animation_data ? animation_data->TriggerExitRangeEndList()
+                     : Vector<std::optional<
+                           TimelineOffset>>{CSSAnimationData::
+                                                InitialTriggerExitRangeEnd()},
+      animation_data, style, Length::Percent(100.0));
 }
 
 CSSValue* ComputedStyleUtils::ValueForAnimationTimingFunction(
@@ -2610,7 +2658,9 @@ CSSValue* ComputedStyleUtils::ValueForAnimationTimingFunction(
       // Canonical form of step timing function is step(n, type) or step(n) even
       // if initially parsed as step-start or step-end.
       return MakeGarbageCollected<cssvalue::CSSStepsTimingFunctionValue>(
-          steps, position);
+          CSSNumericLiteralValue::Create(
+              steps, CSSNumericLiteralValue::UnitType::kNumber),
+          position);
     }
 
     default:
@@ -2712,6 +2762,30 @@ CSSValue* ComputedStyleUtils::SingleValueForTimelineShorthand(
     list->Append(*ValueForTimelineInset(inset.value(), style));
   }
   return list;
+}
+
+CSSValue* ComputedStyleUtils::ValueForAnimationTriggerType(
+    const EAnimationTriggerType trigger_type) {
+  return CSSIdentifierValue::Create(PlatformEnumToCSSValueID(trigger_type));
+}
+
+CSSValue* ComputedStyleUtils::ValueForAnimationTriggerTypeList(
+    const CSSAnimationData* animation_data) {
+  return CreateAnimationValueList(
+      animation_data
+          ? animation_data->TriggerTypeList()
+          : Vector<
+                EAnimationTriggerType>{CSSAnimationData::InitialTriggerType()},
+      &ValueForAnimationTriggerType);
+}
+
+CSSValue* ComputedStyleUtils::ValueForAnimationTriggerTimelineList(
+    const CSSAnimationData* animation_data) {
+  return CreateAnimationValueList(
+      animation_data
+          ? animation_data->TriggerTimelineList()
+          : Vector<StyleTimeline>{CSSAnimationData::InitialTriggerTimeline()},
+      &ValueForAnimationTimeline);
 }
 
 CSSValueList* ComputedStyleUtils::ValuesForBorderRadiusCorner(
@@ -3385,6 +3459,20 @@ const CSSValue* GetGapDecorationPropertyValue(const StyleColor& value,
                                                       value_phase);
 }
 
+template <>
+const CSSValue* GetGapDecorationPropertyValue(const int& value,
+                                              const ComputedStyle& style,
+                                              CSSValuePhase value_phase) {
+  return ZoomAdjustedPixelValue(value, style);
+}
+
+template <>
+const CSSValue* GetGapDecorationPropertyValue(const EBorderStyle& value,
+                                              const ComputedStyle& style,
+                                              CSSValuePhase value_phase) {
+  return CSSIdentifierValue::Create(value);
+}
+
 template <typename T>
 void PopulateNonRepeaterGapData(CSSValueList* list,
                                 const GapData<T>& gap_data,
@@ -3448,7 +3536,6 @@ const CSSValue* ValueForGapDecorationPropertyDataList(
   }
   return list;
 }
-
 }  // namespace
 
 const CSSValue* ComputedStyleUtils::ValueForGapDecorationColorDataList(
@@ -3456,6 +3543,22 @@ const CSSValue* ComputedStyleUtils::ValueForGapDecorationColorDataList(
     const ComputedStyle& style,
     CSSValuePhase value_phase) {
   return ValueForGapDecorationPropertyDataList(gap_color_list, style,
+                                               value_phase);
+}
+
+const CSSValue* ComputedStyleUtils::ValueForGapDecorationWidthDataList(
+    const GapDataList<int>& gap_width_list,
+    const ComputedStyle& style,
+    CSSValuePhase value_phase) {
+  return ValueForGapDecorationPropertyDataList(gap_width_list, style,
+                                               value_phase);
+}
+
+const CSSValue* ComputedStyleUtils::ValueForGapDecorationStyleDataList(
+    const GapDataList<EBorderStyle>& gap_style_list,
+    const ComputedStyle& style,
+    CSSValuePhase value_phase) {
+  return ValueForGapDecorationPropertyDataList(gap_style_list, style,
                                                value_phase);
 }
 
@@ -3974,9 +4077,8 @@ CSSValuePair* ComputedStyleUtils::ValuesForInlineBlockShorthand(
       shorthand.properties()[1]->CSSValueFromComputedStyle(
           style, layout_object, allow_visited_style, value_phase);
   // Both properties must be specified.
-  if (!start_value || !end_value) {
-    return nullptr;
-  }
+  CHECK(start_value);
+  CHECK(end_value);
 
   auto* pair = MakeGarbageCollected<CSSValuePair>(
       start_value, end_value, CSSValuePair::kDropIdenticalValues);
@@ -4008,6 +4110,24 @@ static CSSValue* ExpandNoneLigaturesValue() {
   list->Append(*CSSIdentifierValue::Create(CSSValueID::kNoHistoricalLigatures));
   list->Append(*CSSIdentifierValue::Create(CSSValueID::kNoContextual));
   return list;
+}
+
+CSSValue* ComputedStyleUtils::ValuesForInterestTargetDelayShorthand(
+    const ComputedStyle& style,
+    const LayoutObject* layout_object,
+    bool allow_visited_style,
+    CSSValuePhase value_phase) {
+  const CSSValue* show_delay =
+      interestTargetDelayShorthand().properties()[0]->CSSValueFromComputedStyle(
+          style, layout_object, allow_visited_style, value_phase);
+  const CSSValue* hide_delay =
+      interestTargetDelayShorthand().properties()[1]->CSSValueFromComputedStyle(
+          style, layout_object, allow_visited_style, value_phase);
+  // Both properties must be specified.
+  CHECK(show_delay);
+  CHECK(hide_delay);
+  return MakeGarbageCollected<CSSValuePair>(show_delay, hide_delay,
+                                            CSSValuePair::kDropIdenticalValues);
 }
 
 CSSValue* ComputedStyleUtils::ValuesForFontVariantProperty(
@@ -4387,17 +4507,8 @@ CSSValue* ComputedStyleUtils::ValueForPositionTryFallbacks(
   CSSValueList* fallback_list = CSSValueList::CreateCommaSeparated();
   for (const PositionTryFallback& fallback : fallbacks.GetFallbacks()) {
     if (!fallback.GetPositionArea().IsNone()) {
-      if (RuntimeEnabledFeatures::CSSPositionAreaValueEnabled()) {
-        // <position-area>
-        fallback_list->Append(
-            *ValueForPositionArea(fallback.GetPositionArea()));
-      } else {
-        // position-area( <position-area> )
-        auto* function =
-            MakeGarbageCollected<CSSFunctionValue>(CSSValueID::kPositionArea);
-        function->Append(*ValueForPositionArea(fallback.GetPositionArea()));
-        fallback_list->Append(*function);
-      }
+      // <position-area>
+      fallback_list->Append(*ValueForPositionArea(fallback.GetPositionArea()));
       continue;
     }
     // [<dashed-ident> || <try-tactic>]

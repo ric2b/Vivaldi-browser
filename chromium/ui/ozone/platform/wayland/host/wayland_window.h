@@ -34,18 +34,11 @@
 #include "ui/ozone/platform/wayland/common/wayland_object.h"
 #include "ui/ozone/platform/wayland/host/wayland_output.h"
 #include "ui/ozone/platform/wayland/host/wayland_surface.h"
-#include "ui/ozone/platform/wayland/host/wayland_zaura_surface.h"
 #include "ui/platform_window/extensions/wayland_extension.h"
 #include "ui/platform_window/platform_window.h"
 #include "ui/platform_window/platform_window_delegate.h"
 #include "ui/platform_window/platform_window_init_properties.h"
 #include "ui/platform_window/wm/wm_drag_handler.h"
-
-#if BUILDFLAG(IS_LINUX)
-#include "ui/ozone/platform/wayland/host/wayland_async_cursor.h"
-#endif
-
-struct zwp_keyboard_shortcuts_inhibitor_v1;
 
 namespace wl {
 
@@ -57,6 +50,7 @@ namespace ui {
 
 class BitmapCursor;
 class OSExchangeData;
+class WaylandAsyncCursor;
 class WaylandBubble;
 class WaylandConnection;
 class WaylandSubsurface;
@@ -72,8 +66,7 @@ class WaylandWindow : public PlatformWindow,
                       public PlatformEventDispatcher,
                       public WmDragHandler,
                       public WaylandExtension,
-                      public EventTarget,
-                      public WaylandZAuraSurface::Delegate {
+                      public EventTarget {
  public:
   WaylandWindow(const WaylandWindow&) = delete;
   WaylandWindow& operator=(const WaylandWindow&) = delete;
@@ -100,9 +93,6 @@ class WaylandWindow : public PlatformWindow,
   // the currently entered output(s).
   void OnEnteredOutputScaleChanged();
 
-  // Propagates the buffer scale of the next commit to exo.
-  virtual void PropagateBufferScale(float new_scale) = 0;
-
   // Returns a WeakPtr to the implementation instance.
   virtual base::WeakPtr<WaylandWindow> AsWeakPtr() = 0;
 
@@ -113,8 +103,6 @@ class WaylandWindow : public PlatformWindow,
   const WidgetSubsurfaceSet& wayland_subsurfaces() const {
     return wayland_subsurfaces_;
   }
-  WaylandZAuraSurface* GetZAuraSurface();
-
   base::LinkedList<WaylandSubsurface>* subsurface_stack_committed() {
     return &subsurface_stack_committed_;
   }
@@ -253,10 +241,6 @@ class WaylandWindow : public PlatformWindow,
   std::unique_ptr<EventTargetIterator> GetChildIterator() const override;
   EventTargeter* GetEventTargeter() override;
 
-  // WaylandZAuraSurface::Delegate:
-  void OcclusionStateChanged(
-      PlatformWindowOcclusionState occlusion_state) override;
-
   // Handles the configuration events coming from the shell objects.
   // The width and height come in DIP of the output that the surface is
   // currently bound to.
@@ -271,14 +255,8 @@ class WaylandWindow : public PlatformWindow,
     bool is_fullscreen = false;
     bool is_activated = false;
     bool is_minimized = false;
-    bool is_snapped_primary = false;
-    bool is_snapped_secondary = false;
-    bool is_floated = false;
-    bool is_pip = false;
     bool is_suspended = false;
-#if BUILDFLAG(IS_LINUX)
     WindowTiledEdges tiled_edges;
-#endif
 
     // Dumps the values of the states into a string.
     std::string ToString() const;
@@ -288,6 +266,9 @@ class WaylandWindow : public PlatformWindow,
   virtual void HandleToplevelConfigure(int32_t width,
                                        int32_t height,
                                        const WindowStates& window_states);
+  // TODO(crbug.com/374244479): Linux/Wayland doesn't support configure events
+  // with origin changes as clients are not shared with their onscreen
+  // coordinates. Remove this and fix tests that rely on origin changes.
   virtual void HandleToplevelConfigureWithOrigin(
       int32_t x,
       int32_t y,
@@ -304,16 +285,6 @@ class WaylandWindow : public PlatformWindow,
   // Called by shell surfaces to indicate that this window can start submitting
   // frames. Updating state based on configure is handled separately to this.
   void OnSurfaceConfigureEvent();
-
-  // Sets the raster scale to be applied on the next configure.
-  void SetPendingRasterScale(float scale) {
-    pending_configure_state_.raster_scale = scale;
-  }
-
-  // Sets the raster scale to be applied on the next configure.
-  void SetPendingOcclusionState(PlatformWindowOcclusionState occlusion_state) {
-    pending_configure_state_.occlusion_state = occlusion_state;
-  }
 
   // See comments on the member variable for an explanation of this.
   const PlatformWindowDelegate::State& applied_state() const {
@@ -392,16 +363,6 @@ class WaylandWindow : public PlatformWindow,
   virtual WaylandPopup* AsWaylandPopup();
   virtual WaylandToplevelWindow* AsWaylandToplevelWindow();
 
-  // Returns true if the window's bounds is in screen coordinates.
-  virtual bool IsScreenCoordinatesEnabled() const;
-
-  // Returns true if this window's configure state supports the minimized state.
-  virtual bool SupportsConfigureMinimizedState() const;
-
-  // Returns true if this window's configure state supports the pinned
-  // fullscreen and trusted pinned states.
-  virtual bool SupportsConfigurePinnedState() const;
-
   scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner() {
     return ui_task_runner_;
   }
@@ -428,9 +389,6 @@ class WaylandWindow : public PlatformWindow,
 
   WaylandConnection* connection() { return connection_; }
   const WaylandConnection* connection() const { return connection_; }
-  zaura_surface* aura_surface() {
-    return aura_surface_ ? aura_surface_.get() : nullptr;
-  }
   const std::vector<raw_ptr<WaylandBubble>>& child_bubbles() {
     return child_bubbles_;
   }
@@ -521,14 +479,16 @@ class WaylandWindow : public PlatformWindow,
     return !in_flight_requests_.empty();
   }
 
+  // When surface roles are destroyed with in-flight requests, these serials
+  // become invalid. Clear them so we do not get "wrong configure serial" error.
+  void ClearInFlightRequestsSerial();
+
   // PendingConfigureState describes the content of a configure sent from the
   // wayland server.
   struct PendingConfigureState {
     std::optional<PlatformWindowState> window_state;
     std::optional<gfx::Rect> bounds_dip;
     std::optional<gfx::Size> size_px;
-    std::optional<float> raster_scale;
-    std::optional<PlatformWindowOcclusionState> occlusion_state;
   };
 
   // This holds the requested state for the next configure from the server.
@@ -572,10 +532,8 @@ class WaylandWindow : public PlatformWindow,
 
   void UpdateCursorShape(scoped_refptr<BitmapCursor> cursor);
 
-#if BUILDFLAG(IS_LINUX)
   void OnCursorLoaded(scoped_refptr<WaylandAsyncCursor> cursor,
                       scoped_refptr<BitmapCursor> bitmap_cursor);
-#endif
 
   // StateRequest describes a State that we are applying to the window, and the
   // metadata about that State, such as what serial number to use for ack (if it
@@ -642,15 +600,8 @@ class WaylandWindow : public PlatformWindow,
   // the subsurface arrangement are played back by WaylandFrameManager.
   base::LinkedList<WaylandSubsurface> subsurface_stack_committed_;
 
-  wl::Object<zaura_surface> aura_surface_;
-
-#if BUILDFLAG(IS_LINUX)
   // The current asynchronously loaded cursor (Linux specific).
   scoped_refptr<WaylandAsyncCursor> async_cursor_;
-#else
-  // The current cursor bitmap (immutable).
-  scoped_refptr<BitmapCursor> cursor_;
-#endif
 
   bool has_touch_focus_ = false;
 
@@ -746,11 +697,6 @@ class WaylandWindow : public PlatformWindow,
   WmDragHandler::DragFinishedCallback drag_finished_callback_;
 
   base::OnceClosure drag_loop_quit_closure_;
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  wl::Object<zwp_keyboard_shortcuts_inhibitor_v1>
-      permanent_keyboard_shortcuts_inhibitor_;
-#endif
 
 #if DCHECK_IS_ON()
   bool disable_null_target_dcheck_for_test_ = false;

@@ -17,7 +17,6 @@
 #include <thread>
 #include <vector>
 
-#include "absl/base/thread_annotations.h"
 #include "cast/standalone_sender/streaming_video_encoder.h"
 #include "cast/streaming/public/constants.h"
 #include "cast/streaming/public/frame_id.h"

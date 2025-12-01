@@ -7,8 +7,8 @@ package org.chromium.components.collaboration.messaging;
 import androidx.annotation.NonNull;
 
 import org.chromium.base.Callback;
-import org.chromium.components.collaboration.messaging.EitherId.EitherGroupId;
-import org.chromium.components.collaboration.messaging.EitherId.EitherTabId;
+import org.chromium.components.tab_group_sync.EitherId.EitherGroupId;
+import org.chromium.components.tab_group_sync.EitherId.EitherTabId;
 
 import java.util.List;
 import java.util.Optional;
@@ -118,4 +118,21 @@ public interface MessagingBackendService {
      */
     @NonNull
     List<ActivityLogItem> getActivityLog(ActivityLogQueryParams params);
+
+    /**
+     * Clears all dirty messages associated with a collaboration. Doesn't apply to instant messages.
+     *
+     * @param collaborationId The associated collaboration ID.
+     */
+    void clearDirtyTabMessagesForGroup(String collaborationId);
+
+    /**
+     * Clears a given persistent message. Internally clears out the specified dirty bit from the DB
+     * for the message.
+     *
+     * @param messageId The ID of the messasge.
+     * @param type The message type to clear. Pass Optional.empty() to clear out all message types.
+     */
+    void clearPersistentMessage(
+            String messageId, Optional</* @PersistentNotificationType */ Integer> type);
 }

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import type * as Platform from '../../core/platform/platform.js';
+import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import {createTarget} from '../../testing/EnvironmentHelpers.js';
 import {describeWithMockConnection} from '../../testing/MockConnection.js';
@@ -12,8 +12,10 @@ import * as Workspace from '../workspace/workspace.js';
 
 import * as Bindings from './bindings.js';
 
+const {urlString} = Platform.DevToolsPath;
+
 describeWithMockConnection('DefaultScriptMapping', () => {
-  const url = 'file:///tmp/example.js' as Platform.DevToolsPath.UrlString;
+  const url = urlString`file:///tmp/example.js`;
   let target: SDK.Target.Target;
   let backend: MockProtocolBackend;
   let defaultScriptMapping: Bindings.DefaultScriptMapping.DefaultScriptMapping;
@@ -88,7 +90,7 @@ describeWithMockConnection('DefaultScriptMapping', () => {
       assert.exists(uiSourceCode);
 
       const rawLocations = defaultScriptMapping.uiLocationToRawLocations(uiSourceCode, 0, 1);
-      assert.strictEqual(rawLocations.length, 1);
+      assert.lengthOf(rawLocations, 1);
       assert.strictEqual(rawLocations[0].lineNumber, 3);
       assert.strictEqual(rawLocations[0].columnNumber, 9);
     });
@@ -100,7 +102,7 @@ describeWithMockConnection('DefaultScriptMapping', () => {
       assert.exists(uiSourceCode);
 
       const rawLocations = defaultScriptMapping.uiLocationToRawLocations(uiSourceCode, 1, 2);
-      assert.strictEqual(rawLocations.length, 1);
+      assert.lengthOf(rawLocations, 1);
       assert.strictEqual(rawLocations[0].lineNumber, 4);
       assert.strictEqual(rawLocations[0].columnNumber, 2);
     });
@@ -112,7 +114,7 @@ describeWithMockConnection('DefaultScriptMapping', () => {
       assert.exists(uiSourceCode);
 
       const rawLocations = defaultScriptMapping.uiLocationToRawLocations(uiSourceCode, 4, 2);
-      assert.strictEqual(rawLocations.length, 1);
+      assert.lengthOf(rawLocations, 1);
       assert.strictEqual(rawLocations[0].lineNumber, 4);
       assert.strictEqual(rawLocations[0].columnNumber, 2);
     });

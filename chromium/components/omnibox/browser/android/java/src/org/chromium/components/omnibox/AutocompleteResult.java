@@ -5,8 +5,6 @@
 package org.chromium.components.omnibox;
 
 import androidx.annotation.IntDef;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import com.google.protobuf.InvalidProtocolBufferException;
@@ -15,6 +13,8 @@ import org.jni_zero.CalledByNative;
 import org.jni_zero.NativeMethods;
 
 import org.chromium.build.annotations.MockedInTests;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.components.omnibox.GroupsProto.GroupsInfo;
 
 import java.lang.annotation.Retention;
@@ -24,10 +24,13 @@ import java.util.Collections;
 import java.util.List;
 
 // Vivaldi
+import androidx.annotation.NonNull;
+
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 
 /** AutocompleteResult encompasses and manages autocomplete results. */
 @MockedInTests
+@NullMarked
 public class AutocompleteResult {
     @IntDef({
         VerificationPoint.INVALID,
@@ -55,8 +58,8 @@ public class AutocompleteResult {
     /** A special value indicating that action has no particular index associated. */
     public static final int NO_SUGGESTION_INDEX = -1;
 
-    private final @NonNull GroupsInfo mGroupsInfo;
-    private final @NonNull List<AutocompleteMatch> mSuggestions;
+    private final GroupsInfo mGroupsInfo;
+    private final List<AutocompleteMatch> mSuggestions;
     private final boolean mIsFromCachedResult;
     private long mNativeAutocompleteResult;
 
@@ -121,8 +124,8 @@ public class AutocompleteResult {
     @CalledByNative
     static AutocompleteResult fromNative(
             long nativeAutocompleteResult,
-            @NonNull AutocompleteMatch[] suggestions,
-            @NonNull byte[] groupDefinitions) {
+            AutocompleteMatch[] suggestions,
+            byte[] groupDefinitions) {
         GroupsInfo groupsInfo = null;
 
         try {
@@ -136,7 +139,7 @@ public class AutocompleteResult {
         return result;
     }
 
-    private void updateMatches(@NonNull AutocompleteMatch[] suggestions) {
+    private void updateMatches(AutocompleteMatch[] suggestions) {
         mSuggestions.clear();
         Collections.addAll(mSuggestions, suggestions);
     }
@@ -147,8 +150,7 @@ public class AutocompleteResult {
         mNativeAutocompleteResult = 0;
     }
 
-    /** @return List of Omnibox Suggestions. */
-    @NonNull
+    /** Returns the list of Omnibox Suggestions. */
     public List<AutocompleteMatch> getSuggestionsList() {
         if(ChromeSharedPreferences.getInstance().readBoolean( // Vivaldi Ref. VAB-9121
                 "reverse_search_suggestion", false)) {
@@ -158,8 +160,7 @@ public class AutocompleteResult {
         return mSuggestions;
     }
 
-    /** @return GroupsInfo structure, describing everything that's known about Suggestion Groups. */
-    @NonNull
+    /** Returns the GroupsInfo structure, describing what's known about Suggestion Groups. */
     public GroupsInfo getGroupsInfo() {
         return mGroupsInfo;
     }
@@ -224,7 +225,7 @@ public class AutocompleteResult {
     }
 
     /** Serialize AutocompleteResult to a protocol buffer message. */
-    public @Nullable AutocompleteProto.AutocompleteResultProto serialize() {
+    public AutocompleteProto.AutocompleteResultProto serialize() {
         var builder = AutocompleteProto.AutocompleteResultProto.newBuilder();
         builder.setGroups(mGroupsInfo);
         for (var match : mSuggestions) {

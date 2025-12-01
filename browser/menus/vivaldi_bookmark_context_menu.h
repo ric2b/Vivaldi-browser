@@ -27,6 +27,7 @@ namespace vivaldi {
 struct BookmarkMenuContainer;
 }
 
+struct BookmarkParentFolder;
 class Browser;
 class Profile;
 
@@ -44,7 +45,10 @@ void ExecuteBookmarkMenuCommand(Browser* browser,
                                 int64_t bookmark_id,
                                 int mouse_event_flags);
 void HandleHoverUrl(Browser* browser, const std::string& url);
-void HandleOpenMenu(Browser* browser, int64_t id);
+const bookmarks::BookmarkNode* GetNodeByFolder(bookmarks::BookmarkModel* model,
+    const BookmarkParentFolder& folder);
+void HandleOpenMenu(bookmarks::BookmarkModel* model,
+                    const BookmarkParentFolder& folder);
 const bookmarks::BookmarkNode* GetNodeByPosition(
     bookmarks::BookmarkModel* model,
     const gfx::Point& screen_point,
@@ -58,15 +62,15 @@ void SortBookmarkNodes(const bookmarks::BookmarkNode* parent,
                        std::vector<bookmarks::BookmarkNode*>& nodes);
 void AddExtraBookmarkMenuItems(Profile* profile,
                                views::MenuItemView* menu,
-                               unsigned int* menu_index,
+                               size_t menu_index,
                                const bookmarks::BookmarkNode* parent,
                                bool on_top);
-void AddSeparator(views::MenuItemView* menu, unsigned int* menu_index);
+void AddSeparator(views::MenuItemView* menu, size_t menu_index);
 bool AddIfSeparator(const bookmarks::BookmarkNode* node,
                     views::MenuItemView* menu,
-                    unsigned int* menu_index);
+                    size_t menu_index);
 views::MenuItemView* AddMenuItem(views::MenuItemView* menu,
-                                 unsigned int* menu_index,
+                                 size_t/*unsigned int*/* menu_index,
                                  int id,
                                  const std::u16string& label,
                                  const ui::ImageModel& icon,

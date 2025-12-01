@@ -10,8 +10,8 @@ import {assertDeepEquals, assertEquals, assertTrue} from 'chrome://webui-test/ch
 import {waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 
 import {baseSetup, initElement, teardownElement} from './personalization_app_test_utils.js';
-import {TestPersonalizationStore} from './test_personalization_store.js';
-import {TestUserProvider} from './test_user_interface_provider.js';
+import type {TestPersonalizationStore} from './test_personalization_store.js';
+import type {TestUserProvider} from './test_user_interface_provider.js';
 
 suite('AvatarListElementTest', function() {
   let avatarListElement: AvatarListElement|null;
@@ -54,10 +54,9 @@ suite('AvatarListElementTest', function() {
         testUserProvider.defaultUserImages;
     avatarListElement = initElement(AvatarListElement);
 
-    const image =
-        avatarListElement.shadowRoot!.querySelector(
-            `div[data-id="${testUserProvider.defaultUserImages[0]!.index}"]`) as
-        HTMLDivElement;
+    const image = avatarListElement.shadowRoot!.querySelector<HTMLElement>(
+        `div[data-id="${testUserProvider.defaultUserImages[0]!.index}"]`);
+    assertTrue(!!image);
 
     image.click();
     const index = await testUserProvider.whenCalled('selectDefaultImage');

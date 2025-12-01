@@ -58,6 +58,7 @@ export class HotkeyContext implements m.ClassComponent<HotkeyContextAttrs> {
         if (checkHotkey(hotkey, e)) {
           e.preventDefault();
           callback();
+          m.redraw();
         }
       });
     }

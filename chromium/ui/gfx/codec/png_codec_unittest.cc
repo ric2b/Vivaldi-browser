@@ -2,11 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "ui/gfx/codec/png_codec.h"
 
 #include <stddef.h>
 #include <stdint.h>
 
+#include <algorithm>
 #include <cmath>
 #include <iomanip>
 #include <optional>
@@ -18,7 +24,6 @@
 #include "base/logging.h"
 #include "base/notreached.h"
 #include "base/path_service.h"
-#include "base/ranges/algorithm.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "skia/buildflags.h"
@@ -308,10 +313,10 @@ bool ImageExactlyEqualsSkBitmap(const ImageSpec& a, const SkBitmap& b) {
 // actually asked to decode these types of images by Chrome.
 std::optional<std::vector<uint8_t>> EncodeImage(
     base::span<const uint8_t> input,
-    const int width,
-    const int height,
+    int width,
+    int height,
     ColorType output_color_type,
-    const int interlace_type = PNG_INTERLACE_NONE,
+    int interlace_type = PNG_INTERLACE_NONE,
     std::optional<base::span<const png_color>> palette = std::nullopt,
     std::optional<base::span<const uint8_t>> palette_alpha = std::nullopt) {
   std::vector<uint8_t> output;
@@ -346,8 +351,9 @@ std::optional<std::vector<uint8_t>> EncodeImage(
     return std::nullopt;
   }
 
-  std::vector<png_bytep> row_pointers(height);
-  for (int y = 0; y < height; ++y) {
+  const auto rows = static_cast<size_t>(height);
+  std::vector<png_bytep> row_pointers(rows);
+  for (size_t y = 0; y < rows; ++y) {
     row_pointers[y] = const_cast<uint8_t*>(&input[y * input_rowbytes]);
   }
 
@@ -821,7 +827,7 @@ TEST_P(PNGCodecTest, DecodeCorrupted) {
 
   // Try decompressing a truncated version.
   output = PNGCodec::Decode(
-      base::span(compressed.value()).subspan(0, compressed.value().size() / 2),
+      base::span(compressed.value()).first(compressed.value().size() / 2),
       PNGCodec::FORMAT_RGBA);
   ASSERT_FALSE(output);
 
@@ -883,14 +889,19 @@ TEST_P(PNGCodecTest, DecodeGamma) {
 
   struct SourceFile {
     double gamma;
-    uint8_t corrected;
+    uint8_t min;
+    uint8_t max;
     std::string filename;
   };
-
   const SourceFile kSourceFiles[] = {
-      {1.0, 188, "checkerboard.gamma1dot0.png"},
-      {1.8, 146, "checkerboard.gamma1dot8.png"},
-      {2.2, 129, "checkerboard.gamma2dot2.png"},
+      {1.0, 188, 188, "checkerboard.gamma1dot0.png"},
+      {1.8, 146, 146, "checkerboard.gamma1dot8.png"},
+
+      // This testcase allows both 128 and 129 to reflect that `SkPngRustCodec`
+      // matches the behavior of `blink::PNGImageDecoder` for PNGs with `gAMA`
+      // chunk set to 1/2.2 and with no other color-profile-related chunks.  See
+      // https://crbug.com/388025081 for more details.
+      {2.2, 128, 129, "checkerboard.gamma2dot2.png"},
   };
 
   for (const auto& sf : kSourceFiles) {
@@ -906,7 +917,10 @@ TEST_P(PNGCodecTest, DecodeGamma) {
     ASSERT_TRUE(output);
     ASSERT_GT(output->output.size(), 0u);
 
-    EXPECT_EQ(output->output[0], sf.corrected) << "gamma: " << sf.gamma;
+    // TODO(https://crbug.com/363052758): Go back to equality-based comparisons
+    // when the `base::Feature` is removed.
+    EXPECT_LE(sf.min, output->output[0]) << "gamma: " << sf.gamma;
+    EXPECT_LE(output->output[0], sf.max) << "gamma: " << sf.gamma;
   }
 }
 
@@ -933,10 +947,11 @@ TEST_P(PNGCodecTest, EncodeBGRASkBitmapStridePadded) {
   // Encode the bitmap.
   std::optional<std::vector<uint8_t>> encoded = PNGCodec::EncodeBGRASkBitmap(
       original_bitmap, /*discard_transparency=*/false);
+  ASSERT_TRUE(encoded);
 
   // Decode the encoded string.
   SkBitmap decoded_bitmap = PNGCodec::Decode(encoded.value());
-  EXPECT_FALSE(decoded_bitmap.isNull());
+  ASSERT_FALSE(decoded_bitmap.isNull());
 
   // Compare the original bitmap and the output bitmap. We use ColorsClose
   // as SkBitmaps are considered to be pre-multiplied, the unpremultiplication
@@ -962,10 +977,11 @@ TEST_P(PNGCodecTest, EncodeBGRASkBitmap) {
   // Encode the bitmap.
   std::optional<std::vector<uint8_t>> encoded = PNGCodec::EncodeBGRASkBitmap(
       original_bitmap, /*discard_transparency=*/false);
+  ASSERT_TRUE(encoded);
 
   // Decode the encoded string.
   SkBitmap decoded_bitmap = PNGCodec::Decode(encoded.value());
-  EXPECT_FALSE(decoded_bitmap.isNull());
+  ASSERT_FALSE(decoded_bitmap.isNull());
 
   // Compare the original bitmap and the output bitmap. We use ColorsClose
   // as SkBitmaps are considered to be pre-multiplied, the unpremultiplication
@@ -991,10 +1007,11 @@ TEST_P(PNGCodecTest, EncodeBGRASkBitmapDiscardTransparency) {
   // Encode the bitmap.
   std::optional<std::vector<uint8_t>> encoded = PNGCodec::EncodeBGRASkBitmap(
       original_bitmap, /*discard_transparency=*/true);
+  ASSERT_TRUE(encoded);
 
   // Decode the encoded string.
   SkBitmap decoded_bitmap = PNGCodec::Decode(encoded.value());
-  EXPECT_FALSE(decoded_bitmap.isNull());
+  ASSERT_FALSE(decoded_bitmap.isNull());
 
   // Compare the original bitmap and the output bitmap. We need to
   // unpremultiply original_pixel, as the decoded bitmap doesn't have an alpha
@@ -1045,11 +1062,11 @@ TEST_P(PNGCodecTest, EncodeWithComment) {
   const uint8_t kExpected3[] =
       "\x00\x00\x00\x18tEXthave some\x00spaces in both\x8d\x69\x34\x2d";
 
-  EXPECT_NE(base::ranges::search(encoded.value(), kExpected1),
+  EXPECT_NE(std::ranges::search(encoded.value(), kExpected1).begin(),
             encoded.value().end());
-  EXPECT_NE(base::ranges::search(encoded.value(), kExpected2),
+  EXPECT_NE(std::ranges::search(encoded.value(), kExpected2).begin(),
             encoded.value().end());
-  EXPECT_NE(base::ranges::search(encoded.value(), kExpected3),
+  EXPECT_NE(std::ranges::search(encoded.value(), kExpected3).begin(),
             encoded.value().end());
 }
 

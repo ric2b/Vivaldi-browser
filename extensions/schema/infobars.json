@@ -85,6 +85,18 @@
             "description": "The click action for this button. This must be the same as defined in the |InfoBarButton| type for this button."
           }
         ]
+      },
+      {
+        "name": "showInfobar",
+        "type": "function",
+        "description": "Invokes an infobar in the specified tab.",
+        "parameters": [
+          {
+            "name": "tabId",
+            "type": "integer",
+            "description": "The tabId of the tab where the infobar will appear."
+          }
+        ]
       }
     ],
     "events": [

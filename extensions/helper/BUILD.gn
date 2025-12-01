@@ -32,5 +32,7 @@ static_library("helper") {
     "vivaldi_init_helpers.h",
     "vivaldi_panel_helper.cc",
     "vivaldi_panel_helper.h",
+    "vivaldi_tab_utils.cc",
+    "vivaldi_tab_utils.h",
   ]
 }

@@ -32,7 +32,7 @@ use to you, in any case.
 ### Quickstart
 
 A quick reminder of the steps to perform in your chroot set up per [Chromium OS
-Developer Guide](http://www.chromium.org/chromium-os/developer-guide):
+Developer Guide](/chromium-os/developer-guide):
 
 1.  Enter chroot: **$REPO/chromite/bin/cros_sdk**
 2.  Set up boards to test on: **~/trunk/src/scripts/setup_board
@@ -60,7 +60,7 @@ The following assumptions are made with these instructions:
 *   You are familiar with the build environment from a developer
             perspective. You know how to start branches, amend commits, upload
             commits, end branches, etc. See the [Chromium OS Developer
-            Guide](http://www.chromium.org/chromium-os/developer-guide).
+            Guide](/chromium-os/developer-guide).
 
 ### Brief Background
 
@@ -217,8 +217,7 @@ emerge it onto your chroot and test it there as well.
 
 You probably want to run at least the suite:smoke tests for each board, which
 you can do by following the tips at
-<https://www.chromium.org/chromium-os/testing> (Googlers may
-also use the tips at [goto/cros-test](http://goto/cros_test)). In particular,
+<https://www.chromium.org/chromium-os/testing>. In particular,
 you can use [trybot](/chromium-os/build/local-trybot-documentation) to determine
 what effect your upgrade will have on the greenness of the waterfall.
 
@@ -292,7 +291,7 @@ src/third_party/chromiumos-overlay/profiles/default/linux/package.mask/
 directory:
 
 ```none
-# Copyright <year> The ChromiumOS Authors.
+# Copyright <year> The ChromiumOS Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file
 # TODO(username): Masked for testing!

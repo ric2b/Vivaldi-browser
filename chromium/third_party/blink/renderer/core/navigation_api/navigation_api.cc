@@ -159,8 +159,8 @@ void NavigationApi::InitializeForNewWindow(
     WebFrameLoadType load_type,
     CommitReason commit_reason,
     NavigationApi* previous,
-    const WebVector<WebHistoryItem>& back_entries,
-    const WebVector<WebHistoryItem>& forward_entries,
+    const std::vector<WebHistoryItem>& back_entries,
+    const std::vector<WebHistoryItem>& forward_entries,
     HistoryItem* previous_entry) {
   CHECK(entries_.empty());
 
@@ -910,8 +910,8 @@ void NavigationApi::InformAboutCanceledNavigation(
   // upcoming_traverse_api_method_trackers_.
   if (!upcoming_traverse_api_method_trackers_.empty() && window_->GetFrame() &&
       !window_->GetFrame()->IsAttached()) {
-    HeapVector<Member<NavigationApiMethodTracker>> traversals;
-    CopyValuesToVector(upcoming_traverse_api_method_trackers_, traversals);
+    HeapVector<Member<NavigationApiMethodTracker>> traversals(
+        upcoming_traverse_api_method_trackers_.Values());
     for (auto& traversal : traversals) {
       TraverseCancelled(
           traversal->GetKey(),

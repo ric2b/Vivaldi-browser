@@ -15,6 +15,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
+#include "base/uuid.h"
 #include "components/saved_tab_groups/public/saved_tab_group.h"
 #include "components/saved_tab_groups/public/saved_tab_group_tab.h"
 #include "components/saved_tab_groups/public/types.h"
@@ -22,6 +23,7 @@
 #include "components/tab_groups/tab_group_color.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tab_groups/tab_group_visual_data.h"
+#include "google_apis/gaia/gaia_id.h"
 
 namespace tab_groups {
 
@@ -94,7 +96,12 @@ class SavedTabGroupModel {
   // the collaboration_id on the group. It is up to callers to ensure the
   // updated group is retrieved from the service before use.
   void MakeTabGroupSharedForTesting(const LocalTabGroupID& local_group_id,
-                                    std::string collaboration_id);
+                                    CollaborationId collaboration_id);
+
+  // Mark whether the tab group identified by `local_group_id` is transitioning
+  // to a saved group.
+  void SetIsTransitioningToSaved(const LocalTabGroupID& local_group_id,
+                                 bool is_transitioning_to_saved);
 
   // Pin SavedTabGroup if it's unpinned. Unpin SavedTabGroup if it's pinned.
   void TogglePinState(base::Uuid id);
@@ -143,15 +150,17 @@ class SavedTabGroupModel {
                                  const base::Uuid& tab_id);
 
   // Similar to above but the group with `group_id` must exist. Notifies
-  // observers that the tab was removed from sync. If
-  // `prevent_group_destruction_for_testing` is set to true, then the group will
-  // not be removed as a result of calling this method on the last tab in the
-  // group. This should only be used for testing, since there are no cases where
-  // the group should live after the tab is deleted, except during a race
-  // condition in sync.
+  // observers that the tab was removed from sync. `removed_by` is the user who
+  // removed the tab group (may be empty, e.g. if unknown), populated for shared
+  // tab groups only. If `prevent_group_destruction_for_testing` is set to true,
+  // then the group will not be removed as a result of calling this method on
+  // the last tab in the group. This should only be used for testing, since
+  // there are no cases where the group should live after the tab is deleted,
+  // except during a race condition in sync.
   void RemoveTabFromGroupFromSync(
       const base::Uuid& group_id,
       const base::Uuid& tab_id,
+      GaiaId removed_by = GaiaId(),
       bool prevent_group_destruction_for_testing = false);
 
   // Moves a saved tab from its current position to `index` in the specified
@@ -169,7 +178,8 @@ class SavedTabGroupModel {
       std::optional<size_t> position,
       std::optional<std::string> creator_cache_guid,
       std::optional<std::string> last_updater_cache_guid,
-      base::Time update_time);
+      base::Time update_time,
+      const GaiaId& updated_by);
   const SavedTabGroupTab* MergeRemoteTab(const SavedTabGroupTab& remote_tab);
 
   // Changes the index of a given tab group by id. The new index provided is the
@@ -195,6 +205,13 @@ class SavedTabGroupModel {
       const LocalTabGroupID& group_id,
       const std::optional<LocalTabID>& tab_id);
 
+  // Updates the shared attribution for a given group. This method does not
+  // notify observers as this method should be called together with other
+  // changes which would notify observers anyway.
+  void UpdateSharedAttribution(const LocalTabGroupID& group_id,
+                               const std::optional<LocalTabID>& tab_id,
+                               GaiaId updated_by);
+
   // Loads the model from the storage. `tabs` must have a corresponding group in
   // `groups`.
   void LoadStoredEntries(std::vector<SavedTabGroup> groups,
@@ -212,6 +229,22 @@ class SavedTabGroupModel {
 
   // One time migration of saved tab groups from v1 to v2.
   void MigrateTabGroupSavesUIUpdate();
+
+  // Start transitioning a shared tab group to a saved group. `shared_group_id`
+  // is the ID of the shared group.
+  // TODO(crbug.com/396143520): Rename this method to
+  // StartTransitioningToShared().
+  void MarkTransitionedToShared(const base::Uuid& shared_group_id);
+
+  // Mark that a tab group has completed transitioning to another group.
+  // `originating_group_id` is the ID of the originating tab group.
+  void MarkTransitionCompleted(const base::Uuid& originating_group_id);
+
+  // Called to notify of the sync bridge state changes, e.g. whether initial
+  // merge or disable sync are in progress. Invoked only for shared tab group
+  // bridge.
+  void OnSyncBridgeUpdateTypeChanged(
+      SyncBridgeUpdateType sync_bridge_update_type);
 
  private:
   // Returns mutable group containing tab with ID `saved_tab_guid`, otherwise
@@ -237,6 +270,21 @@ class SavedTabGroupModel {
   SavedTabGroup RemoveImpl(size_t index);
   void UpdateVisualDataImpl(int index,
                             const tab_groups::TabGroupVisualData* visual_data);
+
+  // Pending NTP related operations. Pending NTP is a placeholder NTP
+  // automatically created when a group from sync reaches zero-tabs state to
+  // make it easier for UI to handle since UI today doesn't support zero-tab tab
+  // groups in any platform. Zero-tab state is a valid transient state since
+  // concurrent tab additions and removals are common in shared tab groups. A
+  // pending NTP exists locally in the model and the UI, but not synced. Any
+  // incoming / outgoing navigations or tab additions will commit this tab to
+  // sync. There can only be one maximum pending NTP in a group and it will be
+  // the only tab in the group.
+  void CreatePendingNtp(SavedTabGroup& group);
+  void StartSyncingPendingNtpIfAny(SavedTabGroup& group);
+  void MergePendingNtpWithIncomingTabIfAny(SavedTabGroup& group,
+                                           const base::Uuid& tab_id);
+  SavedTabGroupTab* FindPendingNtpInGroup(SavedTabGroup& group);
 
   // Obsevers of the model.
   base::ObserverList<SavedTabGroupModelObserver>::Unchecked observers_;

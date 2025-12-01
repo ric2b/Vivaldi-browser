@@ -55,7 +55,8 @@ VivaldiIOSTranslateService::VivaldiIOSTranslateService()
           nullptr,
           base::BindOnce(&ApplicationContext::GetNetworkConnectionTracker,
               base::Unretained(GetApplicationContext()))), weak_factory_(this) {
-  resource_request_allowed_notifier_.Init(this, true /* leaky */);
+  resource_request_allowed_notifier_.Init(
+      this, true /* leaky */, false /* wait_for_eula */);
 }
 
 VivaldiIOSTranslateService::~VivaldiIOSTranslateService() {}

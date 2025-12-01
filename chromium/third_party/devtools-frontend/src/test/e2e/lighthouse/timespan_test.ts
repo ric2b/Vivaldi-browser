@@ -6,7 +6,6 @@ import {assert} from 'chai';
 
 import {expectError} from '../../conductor/events.js';
 import {$textContent, getBrowserAndPages} from '../../shared/helper.js';
-
 import {
   clickStartButton,
   endTimespan,
@@ -91,14 +90,14 @@ describe('Timespan', function() {
     assert.strictEqual(devicePixelRatio, 1);
 
     const {auditResults, erroredAudits, failedAudits} = getAuditsBreakdown(lhr);
-    assert.strictEqual(auditResults.length, 44);
-    assert.deepStrictEqual(erroredAudits, []);
-    assert.deepStrictEqual(failedAudits.map(audit => audit.id), []);
+    assert.lengthOf(auditResults, 44);
+    assert.deepEqual(erroredAudits, []);
+    assert.deepEqual(failedAudits.map(audit => audit.id), []);
 
     // Ensure the timespan captured the user interaction.
     const interactionAudit = lhr.audits['interaction-to-next-paint'];
-    assert.ok(interactionAudit.score);
-    assert.ok(interactionAudit.numericValue);
+    assert.isOk(interactionAudit.score);
+    assert.isOk(interactionAudit.numericValue);
     assert.strictEqual(interactionAudit.scoreDisplayMode, 'numeric');
 
     // Trace was collected in timespan mode.

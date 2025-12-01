@@ -345,6 +345,7 @@ component("core") {
     "//third_party/blink/renderer/core/animation",
     "//third_party/blink/renderer/core/exported",
     "//third_party/blink/renderer/core/probe",
+    "//third_party/blink/renderer/core/sanitizer:generated",
     "//third_party/blink/renderer/core/url_pattern",
     "//third_party/blink/renderer/core/xml:xpath_generated",
     "//third_party/blink/renderer/platform",
@@ -525,14 +526,14 @@ source_set("testing") {
     "fetch/testing/internals_fetch.h",
     "fetch/testing/worker_internals_fetch.cc",
     "fetch/testing/worker_internals_fetch.h",
+    "frame/csp/test_util.cc",
+    "frame/csp/test_util.h",
     "html/forms/mock_file_chooser.h",
     "streams/test_underlying_source.h",
     "testing/callback_function_test.cc",
     "testing/callback_function_test.h",
     "testing/color_scheme_helper.cc",
     "testing/color_scheme_helper.h",
-    "testing/death_aware_script_wrappable.cc",
-    "testing/death_aware_script_wrappable.h",
     "testing/dictionary_test.cc",
     "testing/dictionary_test.h",
     "testing/dummy_modulator.cc",
@@ -578,6 +579,7 @@ source_set("testing") {
     "testing/mock_hyphenation.h",
     "testing/mock_policy_container_host.cc",
     "testing/mock_policy_container_host.h",
+    "testing/nadc_attribute_test.h",
     "testing/null_execution_context.cc",
     "testing/null_execution_context.h",
     "testing/origin_trials_test.cc",
@@ -1513,7 +1515,9 @@ source_set("unit_tests") {
     "//third_party/blink/renderer/core",
     "//third_party/blink/renderer/core:testing",
     "//third_party/blink/renderer/core:unit_test_support",
+    "//third_party/blink/renderer/core/sanitizer:unit_test_support",
     "//third_party/blink/renderer/platform:test_support",
+    "//third_party/fuzztest",
     "//ui/accessibility:ax_base",
     "//ui/base/cursor",
     "//ui/base/cursor/mojom:cursor_type_blink",
@@ -1747,6 +1751,28 @@ fuzzer_test("css_parser_proto_fuzzer") {
     "//third_party/libprotobuf-mutator",
   ]
   dict = "//third_party/blink/renderer/core/css/css.dict"
+}
+
+test("css_parser_fuzzer") {
+  sources = [ "css/parser/css_parser_fuzzer.cc" ]
+  deps = [
+    ":core",
+    "//third_party/blink/renderer/platform:blink_fuzzer_test_support",
+    "//third_party/fuzztest:fuzztest_gtest_main",
+  ]
+  fuzztests = [ "CssParser.ParseSheetFuzzer" ]
+}
+
+test("inspector_ghost_rules_fuzzer") {
+  sources = [ "inspector/inspector_ghost_rules_fuzzer.cc" ]
+  deps = [
+    ":core",
+    ":testing",
+    ":unit_test_support",
+    "//third_party/blink/renderer/platform:blink_fuzzer_test_support",
+    "//third_party/fuzztest:fuzztest_gtest_main",
+  ]
+  fuzztests = [ "InspectorGhostRules.PopulateFuzzer" ]
 }
 
 proto_library("css_proto") {

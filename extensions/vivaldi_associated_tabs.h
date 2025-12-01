@@ -12,6 +12,7 @@ namespace content {
 }
 
 namespace vivaldi {
+void HandleDetachedTab(int tab_id);
 void HandleAssociatedTabs(TabStripModel* tab_strip_model,
                           const TabStripModelChange& change);
 

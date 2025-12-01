@@ -4,7 +4,7 @@ URL: https://www.example.com/metadata,
      https://www.example.com/parser
 Version: 1.0.12
 Date: 2020-12-03
-License: Apache, 2.0 and MIT
+License: Apache-2.0, MIT
 License File: LICENSE
 Security Critical: yes
 Shipped: yes
@@ -26,7 +26,7 @@ Short Name: metadata-test-valid-again
 URL: https://www.example.com/metadata
 Version: 1.0.12
 Date: 2020-12-03
-License: Apache, 2.0 and MIT
+License: MIT
 License File: LICENSE
 Security Critical: yes
 Shipped: yes
@@ -38,7 +38,7 @@ Short Name: metadata-test-valid-again
 URL: https://www.example.com/metadata
 Version: 1.0.12
 Date: 2020-12-03
-License: Apache, 2.0 and MIT
+License: Apache-2.0
 License File: LICENSE
 Security Critical: yes
 Shipped in Chromium: yes

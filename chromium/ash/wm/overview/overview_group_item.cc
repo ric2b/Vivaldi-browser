@@ -131,8 +131,6 @@ void OverviewGroupItem::DestroyMirrorsForDragging() {
 }
 
 aura::Window* OverviewGroupItem::GetWindow() {
-  // TODO(michelefan): `GetWindow()` will be replaced by `GetWindows()` in a
-  // follow-up cl.
   CHECK_LE(overview_items_.size(), 2u);
   return overview_items_.empty() ? nullptr : overview_items_[0]->GetWindow();
 }
@@ -358,8 +356,6 @@ void OverviewGroupItem::UpdateRoundedCornersAndShadow() {
 }
 
 float OverviewGroupItem::GetOpacity() const {
-  // TODO(michelefan): This is a temporary placeholder value. The opacity
-  // settings will be handled in a separate task.
   return 1.f;
 }
 
@@ -524,8 +520,8 @@ void OverviewGroupItem::OnOverviewItemWindowDestroying(
   // We use 2-step removal to ensure that the `overview_item` gets removed from
   // the vector before been destroyed so that all the overview items in
   // `overview_items_` are valid.
-  auto iter = base::ranges::find_if(overview_items_,
-                                    base::MatchesUniquePtr(overview_item));
+  auto iter = std::ranges::find_if(overview_items_,
+                                   base::MatchesUniquePtr(overview_item));
   auto to_be_removed = std::move(*iter);
   overview_items_.erase(iter);
   to_be_removed.reset();

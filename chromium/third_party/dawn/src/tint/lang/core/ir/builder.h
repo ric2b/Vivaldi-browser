@@ -211,11 +211,14 @@ class Builder {
         cb();
     }
 
-    /// Calls @p cb with the builder inserting after @p val
-    /// @param val the insertion point for new instructions
-    /// @param cb the function to call with the builder inserting new instructions after @p val
+    /// Calls @p cb with the builder inserting at the first block position after @p val. This means
+    /// if a `FunctionParam` or `BlockParam` are provided, the callback will insert into the _next_
+    /// block seen after the parameters.
+    /// @param val the value used to determine which block to insert into
+    /// @param cb the function to call with the builder inserting new instructions in the first
+    /// block position after @p val
     template <typename FUNCTION>
-    void InsertAfter(ir::Value* val, FUNCTION&& cb) {
+    void InsertInBlockAfter(ir::Value* val, FUNCTION&& cb) {
         tint::Switch(
             val,
             [&](core::ir::InstructionResult* result) {
@@ -1149,6 +1152,23 @@ class Builder {
     /// Creates a builtin call instruction with an existing instruction result
     /// @param result the instruction result to use
     /// @param func the builtin function to call
+    /// @param explicit_params the explicit params
+    /// @param args the call arguments
+    /// @returns the instruction
+    template <typename KLASS, typename FUNC, typename... ARGS>
+    tint::traits::EnableIf<tint::traits::IsTypeOrDerived<KLASS, ir::BuiltinCall>, KLASS*>
+    CallExplicitWithResult(ir::InstructionResult* result,
+                           FUNC func,
+                           VectorRef<const core::type::Type*> explicit_params,
+                           ARGS&&... args) {
+        auto* inst = ir.CreateInstruction<KLASS>(result, func, Values(std::forward<ARGS>(args)...));
+        inst->SetExplicitTemplateParams(explicit_params);
+        return Append(inst);
+    }
+
+    /// Creates a builtin call instruction with an existing instruction result
+    /// @param result the instruction result to use
+    /// @param func the builtin function to call
     /// @param args the call arguments
     /// @returns the instruction
     template <typename KLASS, typename FUNC, typename... ARGS>
@@ -1156,6 +1176,22 @@ class Builder {
     CallWithResult(ir::InstructionResult* result, FUNC func, ARGS&&... args) {
         return Append(
             ir.CreateInstruction<KLASS>(result, func, Values(std::forward<ARGS>(args)...)));
+    }
+
+    /// Creates a builtin call instruction
+    /// @param type the return type of the call
+    /// @param func the builtin function to call
+    /// @param explicit_params the explicit parameters
+    /// @param args the call arguments
+    /// @returns the instruction
+    template <typename KLASS, typename FUNC, typename... ARGS>
+    tint::traits::EnableIf<tint::traits::IsTypeOrDerived<KLASS, ir::BuiltinCall>, KLASS*>
+    CallExplicit(const core::type::Type* type,
+                 FUNC func,
+                 VectorRef<const core::type::Type*> explicit_params,
+                 ARGS&&... args) {
+        return CallExplicitWithResult<KLASS>(InstructionResult(type), func, explicit_params,
+                                             Values(std::forward<ARGS>(args)...));
     }
 
     /// Creates a builtin call instruction
@@ -1222,6 +1258,14 @@ class Builder {
     template <typename VAL>
     ir::Convert* Convert(const core::type::Type* to, VAL&& val) {
         return ConvertWithResult(InstructionResult(to), Value(std::forward<VAL>(val)));
+    }
+
+    /// Adds a call to convert if destination type is different then the value's type
+    /// @param to the type converted to
+    /// @param val the value to be converted
+    /// @returns either result of the conversion or original value
+    ir::Value* InsertConvertIfNeeded(const core::type::Type* to, ir::Value* val) {
+        return val->Type()->Equals(*to) ? val : Convert(to, val)->Result(0);
     }
 
     /// Creates a value constructor instruction with an existing instruction result
@@ -1417,8 +1461,26 @@ class Builder {
     /// Creates a new `let` declaration, with an unassigned value
     /// @param type the let type
     /// @returns the instruction
-    ir::Let* Let(const type::Type* type) {
+    ir::Let* Let(const core::type::Type* type) {
         auto* let = ir.CreateInstruction<ir::Let>(InstructionResult(type), nullptr);
+        Append(let);
+        return let;
+    }
+
+    /// Creates a new `let` declaration
+    /// @param value the value
+    /// @returns the instruction
+    template <
+        typename VALUE,
+        typename = std::enable_if_t<
+            !traits::IsTypeOrDerived<std::remove_pointer_t<std::decay_t<VALUE>>, core::type::Type>>>
+    ir::Let* Let(VALUE&& value) {
+        auto* val = Value(std::forward<VALUE>(value));
+        if (DAWN_UNLIKELY(!val)) {
+            TINT_ASSERT(val);
+            return nullptr;
+        }
+        auto* let = ir.CreateInstruction<ir::Let>(InstructionResult(val->Type()), val);
         Append(let);
         return let;
     }
@@ -1749,7 +1811,10 @@ class Builder {
     /// @param name the override name
     /// @param value the override value
     /// @returns the instruction
-    template <typename VALUE>
+    template <
+        typename VALUE,
+        typename = std::enable_if_t<
+            !traits::IsTypeOrDerived<std::remove_pointer_t<std::decay_t<VALUE>>, core::type::Type>>>
     ir::Override* Override(std::string_view name, VALUE&& value) {
         auto* val = Value(std::forward<VALUE>(value));
         if (DAWN_UNLIKELY(!val)) {
@@ -1762,10 +1827,52 @@ class Builder {
         return override;
     }
 
+    /// Creates a new `override` declaration
+    /// @param src the source
+    /// @param name the override name
+    /// @param value the override value
+    /// @returns the instruction
+    template <
+        typename VALUE,
+        typename = std::enable_if_t<
+            !traits::IsTypeOrDerived<std::remove_pointer_t<std::decay_t<VALUE>>, core::type::Type>>>
+    ir::Override* Override(Source src, std::string_view name, VALUE&& value) {
+        auto* val = Value(std::forward<VALUE>(value));
+        if (DAWN_UNLIKELY(!val)) {
+            TINT_ASSERT(val);
+            return nullptr;
+        }
+        auto* override = Append(ir.CreateInstruction<ir::Override>(InstructionResult(val->Type())));
+        override->SetInitializer(val);
+        ir.SetName(override->Result(0), name);
+        ir.SetSource(override, src);
+        return override;
+    }
+
+    /// Creates a new `override` declaration, with an unassigned value
+    /// @param name the override name
+    /// @param type the override type
+    /// @returns the instruction
+    ir::Override* Override(std::string_view name, const core::type::Type* type) {
+        return Override(Source{}, name, type);
+    }
+
+    /// Creates a new `override` declaration, with an unassigned value
+    /// @param name the override name
+    /// @param type the override type
+    /// @returns the instruction
+    ir::Override* Override(Source src, std::string_view name, const core::type::Type* type) {
+        auto* override = ir.CreateInstruction<ir::Override>(InstructionResult(type));
+        ir.SetName(override->Result(0), name);
+        ir.SetSource(override, src);
+        Append(override);
+        return override;
+    }
+
     /// Creates a new `override` declaration, with an unassigned value
     /// @param type the override type
     /// @returns the instruction
-    ir::Override* Override(const type::Type* type) {
+    ir::Override* Override(const core::type::Type* type) {
         auto* override = ir.CreateInstruction<ir::Override>(InstructionResult(type));
         Append(override);
         return override;

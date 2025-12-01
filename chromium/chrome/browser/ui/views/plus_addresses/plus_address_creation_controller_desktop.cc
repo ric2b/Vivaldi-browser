@@ -19,6 +19,7 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/views/plus_addresses/plus_address_creation_dialog_delegate.h"
+#include "components/autofill/content/browser/content_autofill_client.h"
 #include "components/constrained_window/constrained_window_views.h"
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/plus_addresses/features.h"
@@ -82,6 +83,7 @@ PlusAddressCreationControllerDesktop::GetPlusAddressSettingService() {
 
 void PlusAddressCreationControllerDesktop::OfferCreation(
     const url::Origin& main_frame_origin,
+    bool is_manual_fallback,
     PlusAddressCallback callback) {
   if (dialog_delegate_) {
     return;
@@ -278,11 +280,10 @@ void PlusAddressCreationControllerDesktop::OnPlusAddressConfirmed(
 
 void PlusAddressCreationControllerDesktop::TriggerUserPerceptionSurvey(
     hats::SurveyType survey_type) {
-  PlusAddressService* plus_address_service = GetPlusAddressService();
-  if (!plus_address_service) {
-    return;
+  if (autofill::ContentAutofillClient* autofill_client =
+          autofill::ContentAutofillClient::FromWebContents(&GetWebContents())) {
+    autofill_client->TriggerPlusAddressUserPerceptionSurvey(survey_type);
   }
-  plus_address_service->TriggerUserPerceptionSurvey(survey_type);
 }
 
 bool PlusAddressCreationControllerDesktop::ShouldShowNotice() const {
@@ -291,9 +292,7 @@ bool PlusAddressCreationControllerDesktop::ShouldShowNotice() const {
       const_cast<PlusAddressCreationControllerDesktop*>(this)
           ->GetPlusAddressSettingService();
 
-  return setting_service && !setting_service->GetHasAcceptedNotice() &&
-         base::FeatureList::IsEnabled(
-             features::kPlusAddressUserOnboardingEnabled);
+  return setting_service && !setting_service->GetHasAcceptedNotice();
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(PlusAddressCreationControllerDesktop);

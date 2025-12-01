@@ -119,4 +119,4 @@ output. Use `perf help report` to see the various options for reporting data.
 
 ## Bugs?
 
-File it: <http://crbug.com/new>, cc: sonnyrao.
+File it: <https://crbug.com/new>, cc: sonnyrao.

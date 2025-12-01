@@ -37,7 +37,6 @@
 #include "base/run_loop.h"
 #include "components/account_id/account_id.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/base/test/ui_controls.h"
 #include "ui/compositor/layer.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/geometry/rect.h"
@@ -441,6 +440,28 @@ void LoginScreenTestApi::SubmitPassword(const AccountId& account_id,
 }
 
 // static
+void LoginScreenTestApi::SubmitPin(const AccountId& account_id,
+                                   const std::string& pin) {
+  ASSERT_TRUE(FocusUser(account_id));
+  LoginBigUserView* big_user_view = GetBigUserView(account_id);
+  ASSERT_TRUE(big_user_view);
+  ASSERT_TRUE(big_user_view->IsAuthEnabled());
+  LoginAuthUserView::TestApi auth_test(big_user_view->auth_user());
+  LoginPinView::TestApi pin_pad_api{auth_test.pin_view()};
+  ASSERT_EQ(account_id,
+            auth_test.user_view()->current_user().basic_user_info.account_id);
+  ASSERT_TRUE(auth_test.HasAuthMethod(LoginAuthUserView::AUTH_PIN));
+
+  for (char c : pin) {
+    EXPECT_GE(c, '0');
+    EXPECT_LE(c, '9');
+    pin_pad_api.ClickOnDigit(c - '0');
+  }
+  auto event_generator = MakeAshEventGenerator();
+  event_generator->PressKey(ui::KeyboardCode::VKEY_RETURN, 0);
+}
+
+// static
 std::u16string LoginScreenTestApi::GetChallengeResponseLabel(
     const AccountId& account_id) {
   if (GetFocusedUser() != account_id) {
@@ -560,28 +581,9 @@ bool LoginScreenTestApi::ClickOsInstallButton() {
 
 // static
 bool LoginScreenTestApi::PressAccelerator(const ui::Accelerator& accelerator) {
-  // TODO(https://crbug.com/1321609): Migrate to SendAcceleratorNatively.
+  // TODO(https://crbug.com/262257946): Migrate to EventGenerator.
   LockScreen::TestApi lock_screen_test(LockScreen::Get());
   return lock_screen_test.contents_view()->AcceleratorPressed(accelerator);
-}
-
-// static
-bool LoginScreenTestApi::SendAcceleratorNatively(
-    const ui::Accelerator& accelerator) {
-  gfx::NativeWindow login_window = gfx::NativeWindow();
-  if (LockScreen::HasInstance()) {
-    login_window = LockScreen::Get()->widget()->GetNativeWindow();
-  } else {
-    login_window =
-        LoginScreen::Get()->GetLoginWindowWidget()->GetNativeWindow();
-  }
-  if (!login_window) {
-    return false;
-  }
-  return ui_controls::SendKeyPress(
-      login_window, accelerator.key_code(), accelerator.IsCtrlDown(),
-      accelerator.IsShiftDown(), accelerator.IsAltDown(),
-      accelerator.IsCmdDown());
 }
 
 // static

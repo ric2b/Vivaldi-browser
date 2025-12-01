@@ -31,10 +31,10 @@ import org.mockito.junit.MockitoRule;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
-import org.chromium.base.CollectionUtil;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Batch;
-import org.chromium.base.test.util.JniMocker;
+import org.chromium.base.test.util.Features;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.password_manager.PasswordCheckupClientHelper.PasswordCheckBackendException;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.safety_check.SafetyCheckSettingsFragment;
@@ -55,6 +55,7 @@ import org.chromium.ui.modaldialog.ModalDialogProperties;
 import org.chromium.ui.modelutil.PropertyModel;
 
 import java.lang.ref.WeakReference;
+import java.util.Set;
 
 /** Tests for password manager helper methods. */
 @RunWith(BaseRobolectricTestRunner.class)
@@ -65,8 +66,6 @@ public class PasswordCheckupLauncherTest {
     private static final String TEST_NO_EMAIL_ADDRESS = null;
 
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
-
-    @Rule public JniMocker mJniMocker = new JniMocker();
 
     @Spy private Context mContext = RuntimeEnvironment.application.getApplicationContext();
 
@@ -103,8 +102,8 @@ public class PasswordCheckupLauncherTest {
 
     @Before
     public void setUp() throws PasswordCheckBackendException {
-        mJniMocker.mock(UserPrefsJni.TEST_HOOKS, mMockUserPrefsJni);
-        mJniMocker.mock(PasswordManagerUtilBridgeJni.TEST_HOOKS, mMockPasswordManagerUtilBridgeJni);
+        UserPrefsJni.setInstanceForTesting(mMockUserPrefsJni);
+        PasswordManagerUtilBridgeJni.setInstanceForTesting(mMockPasswordManagerUtilBridgeJni);
         when(mMockPasswordManagerUtilBridgeJni.areMinUpmRequirementsMet()).thenReturn(true);
 
         when(mProfile.getOriginalProfile()).thenReturn(mProfile);
@@ -143,8 +142,7 @@ public class PasswordCheckupLauncherTest {
     @Test
     public void testLaunchCheckupOnDeviceShowsPasswordCheckupForAccount()
             throws PendingIntent.CanceledException {
-        when(mMockSyncService.getSelectedTypes())
-                .thenReturn(CollectionUtil.newHashSet(UserSelectableType.PASSWORDS));
+        when(mMockSyncService.getSelectedTypes()).thenReturn(Set.of(UserSelectableType.PASSWORDS));
         when(mMockPasswordManagerUtilBridgeJni.shouldUseUpmWiring(mMockSyncService, mPrefService))
                 .thenReturn(true);
 
@@ -171,8 +169,7 @@ public class PasswordCheckupLauncherTest {
             throws PendingIntent.CanceledException {
         // Local checkup will be launched from the leak detection dialog if the leaked credential is
         // stored only in the local store, even though the user is syncing passwords.
-        when(mMockSyncService.getSelectedTypes())
-                .thenReturn(CollectionUtil.newHashSet(UserSelectableType.PASSWORDS));
+        when(mMockSyncService.getSelectedTypes()).thenReturn(Set.of(UserSelectableType.PASSWORDS));
         when(mMockPasswordManagerUtilBridgeJni.shouldUseUpmWiring(mMockSyncService, mPrefService))
                 .thenReturn(true);
 
@@ -203,10 +200,10 @@ public class PasswordCheckupLauncherTest {
     }
 
     @Test
+    @Features.DisableFeatures(ChromeFeatureList.SAFETY_HUB)
     public void testLaunchSafetyCheckOpensSafetyCheckInChromeSettings()
             throws PendingIntent.CanceledException {
-        when(mMockSyncService.getSelectedTypes())
-                .thenReturn(CollectionUtil.newHashSet(UserSelectableType.PASSWORDS));
+        when(mMockSyncService.getSelectedTypes()).thenReturn(Set.of(UserSelectableType.PASSWORDS));
         when(mMockPasswordManagerUtilBridgeJni.shouldUseUpmWiring(mMockSyncService, mPrefService))
                 .thenReturn(true);
 

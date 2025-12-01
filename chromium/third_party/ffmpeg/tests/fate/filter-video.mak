@@ -2,8 +2,8 @@
 VIDEO_FILTER = $(call ALLYES, $(1:%=%_FILTER) $(2) FILE_PROTOCOL IMAGE2_DEMUXER PGMYUV_DECODER RAWVIDEO_ENCODER NUT_MUXER MD5_PROTOCOL)
 
 FATE_FILTER_SAMPLES-$(call FILTERDEMDECENCMUX, PERMS OWDENOISE TRIM SCALE, SMJPEG, MJPEG, RAWVIDEO, RAWVIDEO, PIPE_PROTOCOL) += fate-filter-owdenoise-sample
-fate-filter-owdenoise-sample: CMD = ffmpeg -auto_conversion_filters -idct simple -i $(TARGET_SAMPLES)/smjpeg/scenwin.mjpg -vf "trim=duration=0.5,perms=random,owdenoise=10:20:20:enable=not(between(t\,0.2\,1.2))" -an -f rawvideo -color_range mpeg -
-fate-filter-owdenoise-sample: REF = $(SAMPLES)/filter-reference/owdenoise-scenwin.raw
+fate-filter-owdenoise-sample: CMD = ffmpeg -auto_conversion_filters -idct simple -i $(TARGET_SAMPLES)/smjpeg/scenwin.mjpg -vf "trim=duration=0.5,perms=random,owdenoise=10:20:20:enable=not(between(t\,0.2\,1.2))" -an -f rawvideo -
+fate-filter-owdenoise-sample: REF = $(SAMPLES)/filter-reference/owdenoise-scenwin-jpeg.raw
 fate-filter-owdenoise-sample: CMP_TARGET = 1
 fate-filter-owdenoise-sample: FUZZ = 3539
 fate-filter-owdenoise-sample: CMP = oneoff
@@ -100,6 +100,18 @@ fate-filter-pal100bars: CMD = framecrc -lavfi pal100bars=rate=5:duration=1 -pix_
 FATE_FILTER-$(call FILTERFRAMECRC, RGBTESTSRC) += fate-filter-rgbtestsrc
 fate-filter-rgbtestsrc: CMD = framecrc -lavfi rgbtestsrc=rate=5:duration=1 -pix_fmt rgb24
 
+FATE_FILTER-$(call FILTERFRAMECRC, RGBTESTSRC) += fate-filter-rgbtestsrc-rgba
+fate-filter-rgbtestsrc-rgba: CMD = framecrc -lavfi rgbtestsrc=rate=5:duration=1 -pix_fmt rgba
+
+FATE_FILTER-$(call FILTERFRAMECRC, RGBTESTSRC) += fate-filter-rgbtestsrc-gbrp
+fate-filter-rgbtestsrc-gbrp: CMD = framecrc -lavfi rgbtestsrc=rate=5:duration=1 -pix_fmt gbrp
+
+FATE_FILTER-$(call FILTERFRAMECRC, RGBTESTSRC SCALE) += fate-filter-rgbtestsrc-gbrp12
+fate-filter-rgbtestsrc-gbrp12: CMD = framecrc -lavfi rgbtestsrc=rate=5:duration=1,format=gbrp12,scale -pix_fmt gbrp12le
+
+FATE_FILTER-$(call FILTERFRAMECRC, RGBTESTSRC) += fate-filter-rgbtestsrc-x2rgb10le
+fate-filter-rgbtestsrc-x2rgb10le: CMD = framecrc -lavfi rgbtestsrc=rate=5:duration=1 -pix_fmt x2rgb10le
+
 FATE_FILTER-$(call FILTERFRAMECRC, SMPTEBARS) += fate-filter-smptebars
 fate-filter-smptebars: CMD = framecrc -lavfi smptebars=rate=5:duration=1 -pix_fmt yuv420p
 
@@ -115,17 +127,26 @@ fate-filter-yuvtestsrc-yuv444p12: CMD = framecrc -lavfi yuvtestsrc=rate=5:durati
 FATE_FILTER-$(call FILTERFRAMECRC, YUVTESTSRC) += fate-filter-yuvtestsrc-ayuv
 fate-filter-yuvtestsrc-ayuv: CMD = framecrc -lavfi yuvtestsrc=rate=5:duration=1 -pix_fmt ayuv
 
+FATE_FILTER-$(call FILTERFRAMECRC, YUVTESTSRC SCALE) += fate-filter-yuvtestsrc-ayuv64
+fate-filter-yuvtestsrc-ayuv64: CMD = framecrc -lavfi yuvtestsrc=rate=5:duration=1,format=ayuv64,scale -pix_fmt ayuv64le
+
 FATE_FILTER-$(call FILTERFRAMECRC, YUVTESTSRC) += fate-filter-yuvtestsrc-vuya
 fate-filter-yuvtestsrc-vuya: CMD = framecrc -lavfi yuvtestsrc=rate=5:duration=1 -pix_fmt vuya
 
 FATE_FILTER-$(call FILTERFRAMECRC, YUVTESTSRC) += fate-filter-yuvtestsrc-vyu444
 fate-filter-yuvtestsrc-vyu444: CMD = framecrc -lavfi yuvtestsrc=rate=5:duration=1 -pix_fmt vyu444
 
+FATE_FILTER-$(call FILTERFRAMECRC, YUVTESTSRC) += fate-filter-yuvtestsrc-v30xle
+fate-filter-yuvtestsrc-v30xle: CMD = framecrc -lavfi yuvtestsrc=rate=5:duration=1 -pix_fmt v30xle
+
 FATE_FILTER-$(call FILTERFRAMECRC, YUVTESTSRC) += fate-filter-yuvtestsrc-xv30le
 fate-filter-yuvtestsrc-xv30le: CMD = framecrc -lavfi yuvtestsrc=rate=5:duration=1 -pix_fmt xv30le
 
 FATE_FILTER-$(call FILTERFRAMECRC, YUVTESTSRC SCALE) += fate-filter-yuvtestsrc-xv36
 fate-filter-yuvtestsrc-xv36: CMD = framecrc -lavfi yuvtestsrc=rate=5:duration=1,format=xv36,scale -pix_fmt xv36le
+
+FATE_FILTER-$(call FILTERFRAMECRC, YUVTESTSRC SCALE) += fate-filter-yuvtestsrc-xv48
+fate-filter-yuvtestsrc-xv48: CMD = framecrc -lavfi yuvtestsrc=rate=5:duration=1,format=xv48,scale -pix_fmt xv48le
 
 FATE_FILTER-$(call FILTERFRAMECRC, TESTSRC FORMAT CONCAT SCALE, LAVFI_INDEV FILE_PROTOCOL) += fate-filter-lavd-scalenorm
 fate-filter-lavd-scalenorm: tests/data/filtergraphs/scalenorm
@@ -585,7 +606,7 @@ ifneq (,$(RUNNING_PIXFMTS_TESTS))
 endif
 
 FATE_FILTER_PIXDESC-$(call VIDEO_FILTER, SCALE FORMAT PIXDESCTEST) += $(addprefix fate-filter-pixdesc-, $(PIXFMTS))
-fate-filter-pixdesc-%: CMD = video_filter "scale,format=$(@:fate-filter-pixdesc-%=%),pixdesctest" -pix_fmt $(@:fate-filter-pixdesc-%=%)
+fate-filter-pixdesc-%: CMD = pixdesc
 
 fate-filter-pixdesc: $(FATE_FILTER_PIXDESC-yes)
 FATE_FILTER_VSYNTH-yes += $(FATE_FILTER_PIXDESC-yes)

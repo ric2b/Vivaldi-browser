@@ -47,14 +47,14 @@ static void f32_raddexpminusmax(
   size_t buffer_index = 0;
   for (auto _ : state) {
     state.PauseTiming();
-    float x_max = nanf("");
+    float x_max;
     rmax(elements * sizeof(float), x.data(), &x_max, /*params=*/nullptr);
     if (++buffer_index == num_buffers) {
       buffer_index = 0;
     }
     state.ResumeTiming();
 
-    float y_sum = nanf("");
+    float y_sum;
     raddexpminusmax(elements * sizeof(float), x.data(), &y_sum, x_max);
   }
 
@@ -214,5 +214,5 @@ static void CharacteristicArguments(benchmark::internal::Benchmark* b) {
 #endif  // XNN_ARCH_X86 || XNN_ARCH_X86_64
 
 #ifndef XNNPACK_BENCHMARK_NO_MAIN
-BENCHMARK_MAIN();
+XNN_BENCHMARK_MAIN();
 #endif

@@ -10,7 +10,6 @@
 
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
-#include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "omnibox_service.h"
 
 namespace vivaldi_omnibox {
@@ -20,9 +19,19 @@ using vivaldi_omnibox::OmniboxServiceFactory;
 
 // static
 OmniboxServiceFactory::OmniboxServiceFactory()
-    : BrowserContextKeyedServiceFactory(
-          "OmniboxService",
-          BrowserContextDependencyManager::GetInstance()) {}
+    : ProfileKeyedServiceFactory(
+          "OmniboxServiceFactory",
+          ProfileSelections::Builder()
+              //`kOwnInstance`: Always returns itself, both Original and
+              // OTR profiles.
+              .WithRegular(ProfileSelection::kOwnInstance)
+              // We need both regular and incognito because the guest profile
+              // start as regular and swiches to ignognito before loading our
+              // ui.
+              .WithGuest(ProfileSelection::kOwnInstance)
+              // No service for system profile.
+              .WithSystem(ProfileSelection::kNone)
+              .Build()) {}
 
 OmniboxServiceFactory::~OmniboxServiceFactory() {}
 
@@ -34,7 +43,8 @@ OmniboxService* OmniboxServiceFactory::GetForProfile(Profile* profile) {
 
 // static
 OmniboxServiceFactory* OmniboxServiceFactory::GetInstance() {
-  return base::Singleton<OmniboxServiceFactory>::get();
+  static base::NoDestructor<OmniboxServiceFactory> instance;
+  return instance.get();
 }
 
 // static
@@ -43,18 +53,20 @@ void OmniboxServiceFactory::ShutdownForProfile(Profile* profile) {
   factory->BrowserContextDestroyed(profile);
 }
 
-KeyedService* OmniboxServiceFactory::BuildServiceInstanceFor(
+
+bool OmniboxServiceFactory::ServiceIsCreatedWithBrowserContext() const {
+  return true;
+}
+
+std::unique_ptr<KeyedService>
+OmniboxServiceFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
   Profile* profile = Profile::FromBrowserContext(context);
 
-  OmniboxService* omnibox_service = new OmniboxService(profile);
+  std::unique_ptr<OmniboxService> omnibox_service =
+      std::make_unique<OmniboxService>(profile);
 
   return omnibox_service;
-}
-
-content::BrowserContext* OmniboxServiceFactory::GetBrowserContextToUse(
-    content::BrowserContext* context) const {
-  return GetBrowserContextRedirectedInIncognito(context);
 }
 
 }  // namespace vivaldi_omnibox

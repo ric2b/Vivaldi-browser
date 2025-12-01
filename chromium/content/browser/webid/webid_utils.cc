@@ -314,6 +314,10 @@ std::string GetConsoleErrorMessageFromResult(
     case FederatedAuthRequestResult::kTypeNotMatching: {
       return "The requested IdP type did not match the registered IdP.";
     }
+    case FederatedAuthRequestResult::kUiDismissedNoEmbargo: {
+      return "Prompt dismissed. API exponential cool down not "
+             "triggered.";
+    }
     case FederatedAuthRequestResult::kError: {
       return "Error retrieving a token.";
     }
@@ -393,13 +397,6 @@ std::string GetDisconnectConsoleErrorMessage(
   }
 }
 
-FedCmIdpSigninStatusMode GetIdpSigninStatusMode(RenderFrameHost& host,
-                                                const url::Origin& idp_origin) {
-  // TODO(crbug.com/40283354): Remove this function in favor of
-  // GetFedCmIdpSigninStatusFlag.
-  return GetFedCmIdpSigninStatusFlag();
-}
-
 std::string FormatUrlForDisplay(const GURL& url) {
   // We do not use url_formatter::FormatUrlForSecurityDisplay() directly because
   // our UI intentionally shows only the eTLD+1, as it makes for a shorter text
@@ -468,6 +465,19 @@ FederatedAuthRequestPageData* GetPageData(Page& page) {
 
 int GetNewSessionID() {
   return base::RandInt(1, 1 << 30);
+}
+
+FedCmRequesterFrameType ComputeRequesterFrameType(const RenderFrameHost& rfh,
+                                                  const url::Origin& requester,
+                                                  const url::Origin& embedder) {
+  // Since FedCM methods are not supported in FencedFrames, we can know whether
+  // this is a main frame by calling GetParent().
+  if (!rfh.GetParent()) {
+    return FedCmRequesterFrameType::kMainFrame;
+  }
+  return IsSameSite(requester, embedder)
+             ? FedCmRequesterFrameType::kSameSiteIframe
+             : FedCmRequesterFrameType::kCrossSiteIframe;
 }
 
 }  // namespace content::webid

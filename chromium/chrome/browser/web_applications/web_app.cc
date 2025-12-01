@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "chrome/browser/web_applications/web_app.h"
 
 #include <array>
@@ -38,6 +33,7 @@
 #include "chrome/browser/web_applications/web_app_chromeos_data.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
+#include "chrome/browser/web_applications/web_app_management_type.h"
 #include "chrome/browser/web_applications/web_app_proto_utils.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
 #include "components/sync/base/time.h"
@@ -227,7 +223,8 @@ base::Value OsStatesDebugValue(
 
 base::Value::Dict ImageResourceDebugDict(
     const blink::Manifest::ImageResource& icon) {
-  const char* const kPurposeStrings[] = {"Any", "Monochrome", "Maskable"};
+  const auto kPurposeStrings =
+      std::to_array<const char*>({"Any", "Monochrome", "Maskable"});
 
   base::Value::Dict root;
   root.Set("src", icon.src.spec());
@@ -306,6 +303,24 @@ base::Value OptTabStripToDebugValue(
   return base::Value(std::move(result));
 }
 
+base::Value RelatedApplicationsToDebugValue(
+    const std::vector<blink::Manifest::RelatedApplication>&
+        related_applications) {
+  base::Value::List related_applications_json;
+  for (const auto& related_application : related_applications) {
+    base::Value::Dict related_application_json;
+    related_application_json.Set("platform",
+                                 related_application.platform.value());
+    if (related_application.url.is_valid()) {
+      related_application_json.Set("url", related_application.url.spec());
+    }
+    if (related_application.id.has_value()) {
+      related_application_json.Set("id", related_application.id.value());
+    }
+    related_applications_json.Append(std::move(related_application_json));
+  }
+  return base::Value(std::move(related_applications_json));
+}
 }  // namespace
 
 WebApp::WebApp(const webapps::AppId& app_id)
@@ -454,18 +469,18 @@ void WebApp::SetStartUrl(const GURL& start_url) {
 }
 
 void WebApp::SetScope(const GURL& scope) {
-  // TODO(crbug.com/339718933): Remove this after shortcut apps are fully
-  // removed.
+  GURL scope_for_app = scope;
+  // If the given scope is empty, populate the scope from the `start_url_`.
   if (scope.is_empty()) {
-    scope_ = scope;
-    return;
+    CHECK(start_url_.is_valid());
+    scope_for_app = start_url_.GetWithoutFilename();
   }
-  CHECK(scope.is_valid());
+  CHECK(scope_for_app.is_valid());
   // Ensure that the scope can never include queries or fragments, as per spec.
   GURL::Replacements scope_replacements;
   scope_replacements.ClearRef();
   scope_replacements.ClearQuery();
-  scope_ = scope.ReplaceComponents(scope_replacements);
+  scope_ = scope_for_app.ReplaceComponents(scope_replacements);
 }
 
 void WebApp::SetThemeColor(std::optional<SkColor> theme_color) {
@@ -573,10 +588,6 @@ void WebApp::SetAllowedLaunchProtocols(
 void WebApp::SetDisallowedLaunchProtocols(
     base::flat_set<std::string> disallowed_launch_protocols) {
   disallowed_launch_protocols_ = std::move(disallowed_launch_protocols);
-}
-
-void WebApp::SetUrlHandlers(apps::UrlHandlers url_handlers) {
-  url_handlers_ = std::move(url_handlers);
 }
 
 void WebApp::SetScopeExtensions(
@@ -762,6 +773,15 @@ void WebApp::SetIsDiyApp(bool is_diy_app) {
   is_diy_app_ = is_diy_app;
 }
 
+void WebApp::SetWasShortcutApp(bool was_shortcut_app) {
+  was_shortcut_app_ = was_shortcut_app;
+}
+
+void WebApp::SetRelatedApplications(
+    std::vector<blink::Manifest::RelatedApplication> related_applications) {
+  related_applications_ = std::move(related_applications);
+}
+
 void WebApp::AddPlaceholderInfoToManagementExternalConfigMap(
     WebAppManagement::Type type,
     bool is_placeholder) {
@@ -917,7 +937,6 @@ bool WebApp::operator==(const WebApp& other) const {
         app.protocol_handlers_,
         app.allowed_launch_protocols_,
         app.disallowed_launch_protocols_,
-        app.url_handlers_,
         app.scope_extensions_,
         app.validated_scope_extensions_,
         app.lock_screen_start_url_,
@@ -952,7 +971,9 @@ bool WebApp::operator==(const WebApp& other) const {
         app.generated_icon_fix_,
         app.supported_links_offer_ignore_count_,
         app.supported_links_offer_dismiss_count_,
-        app.is_diy_app_
+        app.is_diy_app_,
+        app.was_shortcut_app_,
+        app.related_applications_
         // clang-format on
     );
   };
@@ -1063,8 +1084,10 @@ base::Value WebApp::AsDebugValueWithOnlyPlatformAgnosticFields() const {
 
   if (launch_handler_) {
     base::Value::Dict launch_handler_json;
-    launch_handler_json.Set("client_mode",
-                            base::ToString(launch_handler_->client_mode));
+    launch_handler_json.Set(
+        "client_mode", base::ToString(launch_handler_->parsed_client_mode()));
+    launch_handler_json.Set("client_mode_valid_and_specified",
+                            launch_handler_->client_mode_valid_and_specified());
     root.Set("launch_handler", std::move(launch_handler_json));
   } else {
     root.Set("launch_handler", base::Value());
@@ -1133,8 +1156,6 @@ base::Value WebApp::AsDebugValueWithOnlyPlatformAgnosticFields() const {
 
   root.Set("manifest_id", manifest_id_.spec());
 
-  root.Set("url_handlers", ConvertDebugValueList(url_handlers_));
-
   root.Set("scope_extensions", ConvertDebugValueList(scope_extensions_));
 
   root.Set("scope_extensions_validated",
@@ -1166,6 +1187,11 @@ base::Value WebApp::AsDebugValueWithOnlyPlatformAgnosticFields() const {
            supported_links_offer_dismiss_count_);
 
   root.Set("is_diy_app", is_diy_app_);
+
+  root.Set("was_shortcut_app", was_shortcut_app_);
+
+  root.Set("related_applications",
+           RelatedApplicationsToDebugValue(related_applications_));
 
   return base::Value(std::move(root));
 }

@@ -9,8 +9,8 @@ title: 'Sheriff Details: Chromium'
 ---
 
 This page has been moved under [Chromium Trunk
-Sheriffing](http://goto.google.com/chrome-trunk-sheriffing) and [Chrome
-Sheriffing How-To](http://goto.google.com/chrome-sheriffing-how-to).
+Sheriffing](http://go/chrome-trunk-sheriffing) and [Chrome
+Sheriffing How-To](http://go/chrome-sheriffing-how-to).
 
 Contacting Sheriffs
 

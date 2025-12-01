@@ -6,10 +6,6 @@
 
 #include <memory>
 
-#include "ash/components/arc/arc_features.h"
-#include "ash/components/arc/arc_prefs.h"
-#include "ash/components/arc/arc_util.h"
-#include "ash/components/arc/session/arc_vm_data_migration_status.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/shell.h"
@@ -57,6 +53,10 @@
 #include "chromeos/ash/components/install_attributes/install_attributes.h"
 #include "chromeos/ash/components/login/integrity/misconfigured_user_cleaner.h"
 #include "chromeos/ash/components/osauth/public/auth_hub.h"
+#include "chromeos/ash/experiences/arc/arc_features.h"
+#include "chromeos/ash/experiences/arc/arc_prefs.h"
+#include "chromeos/ash/experiences/arc/arc_util.h"
+#include "chromeos/ash/experiences/arc/session/arc_vm_data_migration_status.h"
 #include "components/account_id/account_id.h"
 #include "components/account_manager_core/chromeos/account_manager.h"
 #include "components/prefs/pref_service.h"
@@ -126,8 +126,9 @@ void UpsertStubUserToAccountManager(Profile* user_profile,
 
   DCHECK(account_manager->IsInitialized());
 
-  const ::account_manager::AccountKey account_key{
-      user->GetAccountId().GetGaiaId(), account_manager::AccountType::kGaia};
+  const ::account_manager::AccountKey account_key =
+      ::account_manager::AccountKey::FromGaiaId(
+          user->GetAccountId().GetGaiaId());
 
   account_manager->UpsertAccount(
       account_key, /*raw_email=*/user->GetDisplayEmail(),
@@ -191,8 +192,9 @@ void StartUserSession(user_manager::UserManager* user_manager,
     auto* demo_session = DemoSession::Get();
     // In demo session, delay starting user session until the demo
     // session resources have been loaded.
-    if (demo_session && demo_session->started() && demo_session->components() &&
-        !demo_session->components()->resources_component_loaded()) {
+    if (demo_session &&
+        (!demo_session->components() ||
+         !demo_session->components()->resources_component_loaded())) {
       demo_session->EnsureResourcesLoaded(base::BindOnce(
           &StartUserSession, user_manager, user_profile, login_user_id));
       LOG(WARNING) << "Delay demo user session start until demo "
@@ -241,8 +243,7 @@ void StartUserSession(user_manager::UserManager* user_manager,
     AppListClientImpl::GetInstance()->UpdateProfile();
   }
 
-  if (base::FeatureList::IsEnabled(features::kEolWarningNotifications) &&
-      !user_profile->GetProfilePolicyConnector()->IsManaged()) {
+  if (!user_profile->GetProfilePolicyConnector()->IsManaged()) {
     UserSessionManager::GetInstance()->CheckEolInfo(user_profile);
   }
 
@@ -373,8 +374,7 @@ void ChromeSessionManager::RegisterPrefs(PrefRegistrySimple* registry) {
 
 void ChromeSessionManager::OnUserManagerCreated(
     user_manager::UserManager* user_manager) {
-  user_manager_ = user_manager;
-  user_manager_observation_.Observe(user_manager_);
+  SessionManager::OnUserManagerCreated(user_manager);
 
   // Record the stored session length for enrolled device.
   if (ash::InstallAttributes::Get()->IsEnterpriseManaged()) {
@@ -412,7 +412,7 @@ void ChromeSessionManager::Initialize(
   }
 
   if (base::FeatureList::IsEnabled(arc::kEnableArcVmDataMigration) &&
-      MaybeStartArcVmDataMigration(user_manager_, profile)) {
+      MaybeStartArcVmDataMigration(user_manager(), profile)) {
     return;
   }
 
@@ -446,7 +446,7 @@ void ChromeSessionManager::Initialize(
     StartLoginOobeSession();
   } else {
     VLOG(1) << "Starting Chrome with a user session.";
-    StartUserSession(user_manager_, profile, login_account_id.GetUserEmail());
+    StartUserSession(user_manager(), profile, login_account_id.GetUserEmail());
   }
 }
 
@@ -459,7 +459,7 @@ void ChromeSessionManager::Shutdown() {
         session_length_limiter_->GetSessionDuration();
     if (!session_length.is_zero()) {
       enterprise_user_session_metrics::StoreSessionLength(
-          user_manager_->GetActiveUser()->GetType(), session_length);
+          user_manager()->GetActiveUser()->GetType(), session_length);
     }
   }
   session_length_limiter_.reset();
@@ -470,7 +470,7 @@ void ChromeSessionManager::SessionStarted() {
   SetSessionState(session_manager::SessionState::ACTIVE);
 
   // Notifies UserManager so that it can update login state.
-  user_manager_->OnSessionStarted();
+  user_manager()->OnSessionStarted();
 }
 
 void ChromeSessionManager::NotifyUserLoggedIn(const AccountId& user_account_id,
@@ -482,8 +482,8 @@ void ChromeSessionManager::NotifyUserLoggedIn(const AccountId& user_account_id,
   session_manager::SessionManager::NotifyUserLoggedIn(
       user_account_id, user_id_hash, browser_restart, is_child);
 
-  if (user_manager_->GetLoggedInUsers().size() == 1) {
-    InitFeaturesSessionType(user_manager_->GetPrimaryUser());
+  if (user_manager()->GetLoggedInUsers().size() == 1) {
+    InitFeaturesSessionType(user_manager()->GetPrimaryUser());
   }
 
   // Initialize the session length limiter and start it only if
@@ -496,12 +496,12 @@ void ChromeSessionManager::NotifyUserLoggedIn(const AccountId& user_account_id,
 
 void ChromeSessionManager::OnUsersSignInConstraintsChanged() {
   const user_manager::UserList& logged_in_users =
-      user_manager_->GetLoggedInUsers();
+      user_manager()->GetLoggedInUsers();
   for (user_manager::User* user : logged_in_users) {
     if (user->IsDeviceLocalAccount()) {
       continue;
     }
-    if (!user_manager_->IsUserAllowed(*user)) {
+    if (!user_manager()->IsUserAllowed(*user)) {
       SYSLOG(ERROR)
           << "The current user is not allowed, terminating the session.";
       chrome::AttemptUserExit();

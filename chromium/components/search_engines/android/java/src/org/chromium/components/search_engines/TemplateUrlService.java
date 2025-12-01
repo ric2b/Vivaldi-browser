@@ -4,8 +4,6 @@
 
 package org.chromium.components.search_engines;
 
-import androidx.annotation.Nullable;
-
 import org.jni_zero.CalledByNative;
 import org.jni_zero.NativeMethods;
 
@@ -13,6 +11,8 @@ import org.chromium.base.ObserverList;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.url.GURL;
 
 import java.util.ArrayList;
@@ -28,6 +28,7 @@ import java.util.List;
  * See components/search_engines/template_url_service.h for more details.
  */
 @SuppressWarnings("EnumOrdinal") // Vivaldi
+@NullMarked
 public class TemplateUrlService {
     public enum DefaultSearchType {
         DEFAULT_SEARCH_MAIN,
@@ -40,8 +41,8 @@ public class TemplateUrlService {
     }
 
     public static class PostParams {
-        public String contentType;
-        public byte[] postContent;
+        public String contentType = "";
+        public byte[] postContent = {};
     }
 
     /** This listener will be notified when template url service is done loading. */
@@ -292,11 +293,7 @@ public class TemplateUrlService {
      *              {@code query} inserted as the search parameter.
      */
     public String getUrlForSearchQuery(String query) {
-        return getUrlForSearchQuery(query, null, DefaultSearchType.DEFAULT_SEARCH_MAIN);
-    }
-
-    public String getUrlForSearchQuery(String query, PostParams postParams, DefaultSearchType type) {
-        return getUrlForSearchQuery(query, null, postParams, type);
+        return getUrlForSearchQuery(query, null);
     }
 
     /**
@@ -308,17 +305,13 @@ public class TemplateUrlService {
      * @return      A {@link String} that contains the url of the default search engine with
      *              {@code query} inserted as the search parameter.
      */
-    public String getUrlForSearchQuery(String query, List<String> searchParams) {
-        return getUrlForSearchQuery(query, searchParams, null, DefaultSearchType.DEFAULT_SEARCH_MAIN);
-    }
-
-    public String getUrlForSearchQuery(String query, List<String> searchParams, PostParams postParams, DefaultSearchType type) {
+    public String getUrlForSearchQuery(String query, @Nullable List<String> searchParams) {
         return TemplateUrlServiceJni.get()
                 .getUrlForSearchQuery(
                         mNativeTemplateUrlServiceAndroid,
                         TemplateUrlService.this,
                         query,
-                        searchParams == null ? null : searchParams.toArray(new String[0]), postParams, type.ordinal());
+                        searchParams == null ? null : searchParams.toArray(new String[0]));
     }
 
     /**
@@ -364,7 +357,10 @@ public class TemplateUrlService {
      *              search and prefetch parameters conditionally set.
      */
     public GURL getUrlForContextualSearchQuery(
-            String query, String alternateTerm, boolean shouldPrefetch, String protocolVersion) {
+            String query,
+            @Nullable String alternateTerm,
+            boolean shouldPrefetch,
+            String protocolVersion) {
         return TemplateUrlServiceJni.get()
                 .getUrlForContextualSearchQuery(
                         mNativeTemplateUrlServiceAndroid,
@@ -420,14 +416,14 @@ public class TemplateUrlService {
             String name,
             String keyword,
             String searchUrl,
-            String suggestUrl,
-            String faviconUrl,
-            String newTabUrl,
-            String imageUrl,
-            String imageUrlPostParams,
-            String imageTranslateUrl,
-            String imageTranslateSourceLanguageParamKey,
-            String imageTranslateTargetLanguageParamKey) {
+            @Nullable String suggestUrl,
+            @Nullable String faviconUrl,
+            @Nullable String newTabUrl,
+            @Nullable String imageUrl,
+            @Nullable String imageUrlPostParams,
+            @Nullable String imageTranslateUrl,
+            @Nullable String imageTranslateSourceLanguageParamKey,
+            @Nullable String imageTranslateTargetLanguageParamKey) {
         return TemplateUrlServiceJni.get()
                 .setPlayAPISearchEngine(
                         mNativeTemplateUrlServiceAndroid,
@@ -466,16 +462,6 @@ public class TemplateUrlService {
                         mNativeTemplateUrlServiceAndroid, TemplateUrlService.this);
     }
 
-    /**
-     * Whether the device is from an EEA country. This is consistent with countries which are
-     * eligible for the EEA default search engine choice prompt. "Default country: or "country at
-     * install" are used for SearchEngineChoiceCountry. It might be different than what LocaleUtils
-     * returns.
-     */
-    public boolean isEeaChoiceCountry() {
-        return TemplateUrlServiceJni.get().isEeaChoiceCountry(mNativeTemplateUrlServiceAndroid);
-    }
-
     @NativeMethods
     public interface Natives {
         void load(long nativeTemplateUrlServiceAndroid, TemplateUrlService caller);
@@ -508,9 +494,7 @@ public class TemplateUrlService {
                 long nativeTemplateUrlServiceAndroid,
                 TemplateUrlService caller,
                 String query,
-                String[] searchParams,
-                PostParams postParams,
-                int type);
+                String @Nullable [] searchParams);
 
         String getSearchQueryForUrl(
                 long nativeTemplateUrlServiceAndroid, TemplateUrlService caller, GURL url);
@@ -522,7 +506,7 @@ public class TemplateUrlService {
                 long nativeTemplateUrlServiceAndroid,
                 TemplateUrlService caller,
                 String query,
-                String alternateTerm,
+                @Nullable String alternateTerm,
                 boolean shouldPrefetch,
                 String protocolVersion);
 
@@ -544,14 +528,14 @@ public class TemplateUrlService {
                 String name,
                 String keyword,
                 String searchUrl,
-                String suggestUrl,
-                String faviconUrl,
-                String newTabUrl,
-                String imageUrl,
-                String imageUrlPostParams,
-                String imageTranslateUrl,
-                String imageTranslateSourceLanguageParamKey,
-                String imageTranslateTargetLanguageParamKey);
+                @Nullable String suggestUrl,
+                @Nullable String faviconUrl,
+                @Nullable String newTabUrl,
+                @Nullable String imageUrl,
+                @Nullable String imageUrlPostParams,
+                @Nullable String imageTranslateUrl,
+                @Nullable String imageTranslateSourceLanguageParamKey,
+                @Nullable String imageTranslateTargetLanguageParamKey);
 
         void getTemplateUrls(
                 long nativeTemplateUrlServiceAndroid,
@@ -564,14 +548,16 @@ public class TemplateUrlService {
         String[] getImageUrlAndPostContent(
                 long nativeTemplateUrlServiceAndroid, TemplateUrlService caller);
 
-        boolean isEeaChoiceCountry(long nativeTemplateUrlServiceAndroid);
-
+        // Vivaldi Start
         void vivaldiSetDefaultOverride(long nativeTemplateUrlServiceAndroid,
                 TemplateUrlService caller, String selectedKeyword);
         void vivaldiResetDefaultOverride(long nativeTemplateUrlServiceAndroid,
                 TemplateUrlService caller);
         TemplateUrl vivaldiGetDefaultSearchEngine(long nativeTemplateUrlServiceAndroid,
                                                   TemplateUrlService caller, int type);
+        TemplateUrl vivaldiGetSearchEngineForHost(long nativeTemplateUrlServiceAndroid,
+                                                  TemplateUrlService caller, String host);
+        // End Vivladi
     }
 
     public void vivaldiSetSearchEngineOverride(String selectedKeyword) {
@@ -592,11 +578,10 @@ public class TemplateUrlService {
                 mNativeTemplateUrlServiceAndroid, TemplateUrlService.this, type.ordinal());
     }
 
-    @CalledByNative
-    private static void PopulatePostParams(
-            PostParams postParams, String contentType, byte[] postContent) {
-        postParams.contentType = contentType;
-        postParams.postContent = postContent;
+    public @Nullable TemplateUrl vivaldiGetSearchEngineForHost(String host) {
+        if (!isLoaded()) return null;
+        return TemplateUrlServiceJni.get().vivaldiGetSearchEngineForHost(
+                mNativeTemplateUrlServiceAndroid, TemplateUrlService.this, host);
     }
     // End Vivaldi
 }

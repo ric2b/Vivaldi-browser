@@ -14,6 +14,7 @@
 #include <dawn/native/DawnNative.h>
 #include <dawn/webgpu_cpp.h>
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
@@ -21,11 +22,11 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/unsafe_shared_memory_region.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_timeouts.h"
+#include "base/win/scoped_handle.h"
 #include "cc/test/pixel_comparator.h"
 #include "cc/test/pixel_test_utils.h"
 #include "components/viz/common/resources/shared_image_format.h"
@@ -1223,9 +1224,9 @@ void D3DImageBackingFactoryTest::RunCreateSharedImageFromHandleTest(
   ASSERT_EQ(hr, S_OK);
 
   gfx::GpuMemoryBufferHandle gpu_memory_buffer_handle;
-  gpu_memory_buffer_handle.dxgi_handle.Set(shared_handle);
-  gpu_memory_buffer_handle.dxgi_token = gfx::DXGIHandleToken();
   gpu_memory_buffer_handle.type = gfx::DXGI_SHARED_HANDLE;
+  gpu_memory_buffer_handle.set_dxgi_handle(
+      gfx::DXGIHandle(base::win::ScopedHandle(shared_handle)));
 
   // Clone before moving the handle in CreateSharedImage.
   auto dup_handle = gpu_memory_buffer_handle.Clone();
@@ -1547,9 +1548,8 @@ D3DImageBackingFactoryTest::CreateVideoImage(const gfx::Size& size,
   if (use_factory) {
     gfx::GpuMemoryBufferHandle gmb_handle;
     gmb_handle.type = gfx::DXGI_SHARED_HANDLE;
-    gmb_handle.dxgi_handle = std::move(shared_handle);
-    DCHECK(gmb_handle.dxgi_handle.IsValid());
-    gmb_handle.dxgi_token = gfx::DXGIHandleToken();
+    gmb_handle.set_dxgi_handle(gfx::DXGIHandle(std::move(shared_handle)));
+    DCHECK(gmb_handle.dxgi_handle().IsValid());
 
     shared_image_backing = shared_image_factory_->CreateSharedImage(
         mailbox, viz::MultiPlaneFormat::kNV12, size, gfx::ColorSpace(),
@@ -1858,8 +1858,8 @@ void D3DImageBackingFactoryTest::RunCreateFromSharedMemoryMultiplanarTest(
 
   gfx::GpuMemoryBufferHandle shm_gmb_handle;
   shm_gmb_handle.type = gfx::SHARED_MEMORY_BUFFER;
-  shm_gmb_handle.region = shm_region.Duplicate();
-  DCHECK(shm_gmb_handle.region.IsValid());
+  shm_gmb_handle.set_region(shm_region.Duplicate());
+  DCHECK(shm_gmb_handle.region().IsValid());
   shm_gmb_handle.stride = size.width();
 
   // CompoundImageBacking wrapping D3DImageBacking is required for shared
@@ -2050,11 +2050,9 @@ void D3DImageBackingFactoryTest::RunMultiplanarUploadAndReadback(
     size_t plane_offset = 0;
     for (int plane = 0; plane < format.NumberOfPlanes(); ++plane) {
       gfx::Size plane_size = format.GetPlaneSize(plane, size);
-      auto info =
-          SkImageInfo::Make(gfx::SizeToSkISize(plane_size),
-                            viz::ToClosestSkColorType(
-                                /*gpu_compositing=*/true, format, plane),
-                            alpha_type, color_space.ToSkColorSpace());
+      auto info = SkImageInfo::Make(gfx::SizeToSkISize(plane_size),
+                                    viz::ToClosestSkColorType(format, plane),
+                                    alpha_type, color_space.ToSkColorSpace());
       DCHECK_LE(info.computeMinByteSize() + plane_offset, kDataSize);
       pixmaps.emplace_back(info, buffer.data() + plane_offset,
                            info.minRowBytes());
@@ -2215,6 +2213,54 @@ TEST_F(D3DImageBackingFactoryTest, CanProduceDCompTextureOverlay) {
   ASSERT_HRESULT_SUCCEEDED(visual_content.As(&dcomp_texture))
       << "Overlay image visual content is a DComp texture";
   ASSERT_TRUE(dcomp_texture);
+}
+
+TEST_F(D3DImageBackingFactoryTest, CanProduceVideoForExternalDevice) {
+  constexpr gfx::Size size(32, 32);
+  constexpr SkAlphaType alpha_type = kPremul_SkAlphaType;
+  constexpr gfx::ColorSpace color_space;
+  constexpr gpu::SharedImageUsageSet usage =
+      gpu::SHARED_IMAGE_USAGE_RASTER_READ |
+      gpu::SHARED_IMAGE_USAGE_DISPLAY_READ;
+  constexpr auto format = viz::SinglePlaneFormat::kBGRA_8888;
+  const gpu::Mailbox mailbox = gpu::Mailbox::Generate();
+
+  auto owned_backing = shared_image_factory_->CreateSharedImage(
+      mailbox, format, kNullSurfaceHandle, size, color_space,
+      kTopLeft_GrSurfaceOrigin, alpha_type, usage, "TestLabel",
+      /*is_thread_safe=*/false);
+  ASSERT_NE(owned_backing, nullptr);
+
+  std::unique_ptr<SharedImageRepresentationFactoryRef> shared_image_ref =
+      shared_image_manager_.Register(std::move(owned_backing),
+                                     memory_type_tracker_.get());
+  ASSERT_TRUE(shared_image_ref);
+
+  Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device;
+  UINT creation_flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+  static const D3D_FEATURE_LEVEL feature_levels[] = {
+      D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1,
+      D3D_FEATURE_LEVEL_10_0, D3D_FEATURE_LEVEL_9_3,  D3D_FEATURE_LEVEL_9_2,
+      D3D_FEATURE_LEVEL_9_1};
+  HRESULT hr =
+      D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, 0, creation_flags,
+                        feature_levels, std::size(feature_levels),
+                        D3D11_SDK_VERSION, &d3d11_device, nullptr, nullptr);
+  if (FAILED(hr)) {
+    hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, 0, creation_flags,
+                           feature_levels, std::size(feature_levels),
+                           D3D11_SDK_VERSION, &d3d11_device, nullptr, nullptr);
+  }
+  if (FAILED(hr)) {
+    GTEST_SKIP()
+        << " cannot produce a d3d video representation on this platform";
+  }
+
+  auto representation = shared_image_manager_.ProduceVideo(
+      d3d11_device, mailbox, memory_type_tracker_.get());
+  EXPECT_NE(representation, nullptr);
+  auto read_access = representation->BeginScopedReadAccess();
+  EXPECT_NE(read_access->GetD3D11Texture(), nullptr);
 }
 
 class D3DImageBackingFactoryBufferTest : public D3DImageBackingFactoryTestBase {

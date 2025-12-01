@@ -7,14 +7,13 @@
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> encerrou a conexão inesperadamente.</translation>
 <translation id="1161325031994447685">Conectar-se à rede Wi-Fi novamente</translation>
 <translation id="1175364870820465910">Im&amp;primir...</translation>
-<translation id="132390688737681464">Salvar e preencher endereços</translation>
 <translation id="1375198122581997741">Sobre a Versão</translation>
 <translation id="139305205187523129">Nenhum dado foi enviado por <ph name="HOST_NAME" />.</translation>
 <translation id="1555191101192706055">Os invasores no site que você tentou visitar podem induzi-lo a instalar software prejudicial que afeta a maneira como você navega — por exemplo, alterando sua página inicial ou exibindo anúncios extras nos sites que você visita.</translation>
 <translation id="1559528461873125649">Arquivo ou diretório não encontrado</translation>
 <translation id="1640244768702815859">Tente <ph name="BEGIN_LINK" />visitar a página inicial do site<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Protocolo não suportado</translation>
-<translation id="1662550410081243962">Salvar e preencher as formas de pagamento</translation>
+<translation id="1662550410081243962">Salvar e preencher os métodos de pagamento</translation>
 <translation id="1710259589646384581">Sistema Operacional</translation>
 <translation id="1728677426644403582">Você está vendo o código-fonte de uma página da Web</translation>
 <translation id="1734878702283171397">Tente entrar em contato com o administrador do sistema.</translation>
@@ -52,6 +51,7 @@
 <translation id="2991571918955627853">Você não pode visitar <ph name="SITE" /> agora, porque o site usa HSTS. Erros de rede e ataques são geralmente temporários. Esta página provavelmente funcionará mais tarde.</translation>
 <translation id="3005723025932146533">Mostrar cópia salva</translation>
 <translation id="301521992641321250">Bloqueada automaticamente</translation>
+<translation id="3037605927509011580">Ah, não!</translation>
 <translation id="3041612393474885105">Informações do Certificado</translation>
 <translation id="3109728660330352905">Você não tem autorização para ver esta página.</translation>
 <translation id="31207688938192855"><ph name="BEGIN_LINK" />Tente executar o Diagnóstico de Conectividade<ph name="END_LINK" />.</translation>
@@ -64,7 +64,6 @@
 <translation id="3234666976984236645">Sempre detectar conteúdo importante neste site</translation>
 <translation id="3308738399950580893">anúncios</translation>
 <translation id="3384522979010096022">Sua organização não permite que você visualize este site</translation>
-<translation id="3387261909427947069">Formas de pagamento</translation>
 <translation id="3422472998109090673">No momento, não é possível acessar <ph name="HOST_NAME" />.</translation>
 <translation id="3427092606871434483">Permitir (padrão)</translation>
 <translation id="3447661539832366887">O proprietário deste equipamento desativou o jogo do dinossauro.</translation>
@@ -125,7 +124,6 @@
 <translation id="5386426401304769735">A cadeia de certificados desse site contém um certificado assinado usando SHA-1.</translation>
 <translation id="5452270690849572955">Não foi possível encontrar esta página em <ph name="HOST_NAME" /></translation>
 <translation id="5457113250005438886">Inválido</translation>
-<translation id="5490432419156082418">Endereços e mais</translation>
 <translation id="5492298309214877701">Este site na intranet da empresa, organização ou escola tem o mesmo URL de um website externo.
     <ph name="LINE_BREAK" />
     Tente entrar em contato com o administrador do sistema.</translation>
@@ -171,7 +169,6 @@
 <translation id="7111012039238467737">(Válido)</translation>
 <translation id="7113310725918019676">Permitir <ph name="BLOCKED_TYPE" /> de <ph name="DOMAIN" /></translation>
 <translation id="7126644664682723998">Colar e pesquisar</translation>
-<translation id="7179323680825933600">Salvar e preencher as formas de pagamento</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> não adere aos padrões de segurança.</translation>
 <translation id="7219179957768738017">A conexão usa a <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Mostrar notificações</translation>
@@ -223,11 +220,12 @@
 <translation id="9062620674789239642">Talvez ele tenha sido movido, editado ou excluído.</translation>
 <translation id="9069693763241529744">Bloqueada por uma extensão</translation>
 <translation id="9073799351042754113">Você escolheu desativar os avisos de segurança para este site.</translation>
+<translation id="9168814207360376865">Permitir que os sites verifiquem se você tem formas de pagamento salvas</translation>
 <translation id="9169664750068251925">Sempre bloquear neste site</translation>
 <translation id="9180553614777056266">Bloqueador de Anúncios</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> usa um protocolo incompatível.</translation>
 <translation id="936602727769022409">Você pode perder o acesso à sua Conta do Google. O Vivaldi recomenda que sua senha seja alterada agora. Solicitaremos que você faça login.</translation>
 <translation id="969892804517981540">Versão Oficial</translation>
-<translation id="984275831282074731">Formas de pagamento</translation>
+<translation id="984275831282074731">Métodos de pagamento</translation>
 <translation id="988159990683914416">Versão de Desenvolvimento</translation>
 </translationbundle>

@@ -12,14 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {assertTrue} from '../base/logging';
+import {assertUnreachable} from '../base/logging';
 import {Time, time, TimeSpan} from '../base/time';
 import {HighPrecisionTimeSpan} from '../base/high_precision_time_span';
-import {Area} from '../public/selection';
 import {raf} from './raf_scheduler';
 import {HighPrecisionTime} from '../base/high_precision_time';
-import {Timeline} from '../public/timeline';
-import {timestampFormat, TimestampFormat} from './timestamp_format';
+import {DurationPrecision, Timeline, TimestampFormat} from '../public/timeline';
+import {
+  durationPrecision,
+  setDurationPrecision,
+  setTimestampFormat,
+  timestampFormat,
+} from './timestamp_format';
 import {TraceInfo} from '../public/trace_info';
 
 const MIN_DURATION = 10;
@@ -40,13 +44,21 @@ export class TimelineImpl implements Timeline {
   private _hoveredUtid?: number;
   private _hoveredPid?: number;
 
+  // This is used to mark the timeline of the area that is currently being
+  // selected.
+  //
+  // TODO(stevegolton): This shouldn't really be in the global timeline state,
+  // it's really only a concept of the viewer page and should be moved there
+  // instead.
+  selectedSpan?: {start: time; end: time};
+
   get highlightedSliceId() {
     return this._highlightedSliceId;
   }
 
   set highlightedSliceId(x) {
     this._highlightedSliceId = x;
-    raf.scheduleFullRedraw();
+    raf.scheduleCanvasRedraw();
   }
 
   get hoveredNoteTimestamp() {
@@ -55,7 +67,7 @@ export class TimelineImpl implements Timeline {
 
   set hoveredNoteTimestamp(x) {
     this._hoveredNoteTimestamp = x;
-    raf.scheduleFullRedraw();
+    raf.scheduleCanvasRedraw();
   }
 
   get hoveredUtid() {
@@ -64,7 +76,7 @@ export class TimelineImpl implements Timeline {
 
   set hoveredUtid(x) {
     this._hoveredUtid = x;
-    raf.scheduleFullRedraw();
+    raf.scheduleCanvasRedraw();
   }
 
   get hoveredPid() {
@@ -73,11 +85,8 @@ export class TimelineImpl implements Timeline {
 
   set hoveredPid(x) {
     this._hoveredPid = x;
-    raf.scheduleFullRedraw();
+    raf.scheduleCanvasRedraw();
   }
-
-  // This is used to calculate the tracks within a Y range for area selection.
-  private _selectedArea?: Area;
 
   constructor(private readonly traceInfo: TraceInfo) {
     this._visibleWindow = HighPrecisionTimeSpan.fromTime(
@@ -95,7 +104,7 @@ export class TimelineImpl implements Timeline {
       .scale(ratio, centerPoint, MIN_DURATION)
       .fitWithin(this.traceInfo.start, this.traceInfo.end);
 
-    raf.scheduleRedraw();
+    raf.scheduleCanvasRedraw();
   }
 
   panVisibleWindow(delta: number) {
@@ -103,7 +112,7 @@ export class TimelineImpl implements Timeline {
       .translate(delta)
       .fitWithin(this.traceInfo.start, this.traceInfo.end);
 
-    raf.scheduleRedraw();
+    raf.scheduleCanvasRedraw();
   }
 
   // Given a timestamp, if |ts| is not currently in view move the view to
@@ -120,29 +129,6 @@ export class TimelineImpl implements Timeline {
     this.updateVisibleTimeHP(newWindow);
   }
 
-  // Set the highlight box to draw
-  selectArea(
-    start: time,
-    end: time,
-    tracks = this._selectedArea ? this._selectedArea.trackUris : [],
-  ) {
-    assertTrue(
-      end >= start,
-      `Impossible select area: start [${start}] >= end [${end}]`,
-    );
-    this._selectedArea = {start, end, trackUris: tracks};
-    raf.scheduleFullRedraw();
-  }
-
-  deselectArea() {
-    this._selectedArea = undefined;
-    raf.scheduleRedraw();
-  }
-
-  get selectedArea(): Area | undefined {
-    return this._selectedArea;
-  }
-
   // Set visible window using an integer time span
   updateVisibleTime(ts: TimeSpan) {
     this.updateVisibleTimeHP(HighPrecisionTimeSpan.fromTime(ts.start, ts.end));
@@ -154,13 +140,31 @@ export class TimelineImpl implements Timeline {
     this.updateVisibleTime(new TimeSpan(start, end));
   }
 
+  moveStart(delta: number) {
+    this.updateVisibleTimeHP(
+      new HighPrecisionTimeSpan(
+        this._visibleWindow.start.addNumber(delta),
+        this.visibleWindow.duration - delta,
+      ),
+    );
+  }
+
+  moveEnd(delta: number) {
+    this.updateVisibleTimeHP(
+      new HighPrecisionTimeSpan(
+        this._visibleWindow.start,
+        this.visibleWindow.duration + delta,
+      ),
+    );
+  }
+
   // Set visible window using a high precision time span
   updateVisibleTimeHP(ts: HighPrecisionTimeSpan) {
     this._visibleWindow = ts
       .clampDuration(MIN_DURATION)
       .fitWithin(this.traceInfo.start, this.traceInfo.end);
 
-    raf.scheduleRedraw();
+    raf.scheduleCanvasRedraw();
   }
 
   // Get the bounds of the visible window as a high-precision time span
@@ -174,7 +178,7 @@ export class TimelineImpl implements Timeline {
 
   set hoverCursorTimestamp(t: time | undefined) {
     this._hoverCursorTimestamp = t;
-    raf.scheduleRedraw();
+    raf.scheduleCanvasRedraw();
   }
 
   // Offset between t=0 and the configured time domain.
@@ -183,7 +187,7 @@ export class TimelineImpl implements Timeline {
     switch (fmt) {
       case TimestampFormat.Timecode:
       case TimestampFormat.Seconds:
-      case TimestampFormat.Milliseoncds:
+      case TimestampFormat.Milliseconds:
       case TimestampFormat.Microseconds:
         return this.traceInfo.start;
       case TimestampFormat.TraceNs:
@@ -194,13 +198,28 @@ export class TimelineImpl implements Timeline {
       case TimestampFormat.TraceTz:
         return this.traceInfo.traceTzOffset;
       default:
-        const x: never = fmt;
-        throw new Error(`Unsupported format ${x}`);
+        assertUnreachable(fmt);
     }
   }
 
   // Convert absolute time to domain time.
   toDomainTime(ts: time): time {
     return Time.sub(ts, this.timestampOffset());
+  }
+
+  get timestampFormat() {
+    return timestampFormat();
+  }
+
+  set timestampFormat(format: TimestampFormat) {
+    setTimestampFormat(format);
+  }
+
+  get durationPrecision() {
+    return durationPrecision();
+  }
+
+  set durationPrecision(precision: DurationPrecision) {
+    setDurationPrecision(precision);
   }
 }

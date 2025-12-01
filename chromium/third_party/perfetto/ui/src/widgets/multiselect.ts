@@ -18,11 +18,10 @@ import {Button} from './button';
 import {Checkbox} from './checkbox';
 import {EmptyState} from './empty_state';
 import {Popup, PopupPosition} from './popup';
-import {scheduleFullRedraw} from './raf';
 import {TextInput} from './text_input';
 import {Intent} from './common';
 
-export interface Option {
+export interface MultiSelectOption {
   // The ID is used to indentify this option, and is used in callbacks.
   id: string;
   // This is the name displayed and used for searching.
@@ -37,7 +36,7 @@ export interface MultiSelectDiff {
 }
 
 export interface MultiSelectAttrs {
-  options: Option[];
+  options: MultiSelectOption[];
   onChange?: (diffs: MultiSelectDiff[]) => void;
   repeatCheckedItemsAtTop?: boolean;
   showNumSelected?: boolean;
@@ -78,7 +77,10 @@ export class MultiSelect implements m.ClassComponent<MultiSelectAttrs> {
     );
   }
 
-  private renderListOfItems(attrs: MultiSelectAttrs, options: Option[]) {
+  private renderListOfItems(
+    attrs: MultiSelectAttrs,
+    options: MultiSelectOption[],
+  ) {
     const {repeatCheckedItemsAtTop, onChange = () => {}} = attrs;
     const allChecked = options.every(({checked}) => checked);
     const anyChecked = options.some(({checked}) => checked);
@@ -110,7 +112,6 @@ export class MultiSelect implements m.ClassComponent<MultiSelectAttrs> {
                       .filter(({checked}) => checked)
                       .map(({id}) => ({id, checked: false}));
                     onChange(diffs);
-                    scheduleFullRedraw();
                   },
                   disabled: !anyChecked,
                 }),
@@ -138,7 +139,6 @@ export class MultiSelect implements m.ClassComponent<MultiSelectAttrs> {
                     .filter(({checked}) => !checked)
                     .map(({id}) => ({id, checked: true}));
                   onChange(diffs);
-                  scheduleFullRedraw();
                 },
                 disabled: allChecked,
               }),
@@ -151,7 +151,6 @@ export class MultiSelect implements m.ClassComponent<MultiSelectAttrs> {
                     .filter(({checked}) => checked)
                     .map(({id}) => ({id, checked: false}));
                   onChange(diffs);
-                  scheduleFullRedraw();
                 },
                 disabled: !anyChecked,
               }),
@@ -170,7 +169,6 @@ export class MultiSelect implements m.ClassComponent<MultiSelectAttrs> {
         oninput: (event: Event) => {
           const eventTarget = event.target as HTMLTextAreaElement;
           this.searchText = eventTarget.value;
-          scheduleFullRedraw();
         },
         value: this.searchText,
         placeholder: 'Filter options...',
@@ -185,7 +183,6 @@ export class MultiSelect implements m.ClassComponent<MultiSelectAttrs> {
       return m(Button, {
         onclick: () => {
           this.searchText = '';
-          scheduleFullRedraw();
         },
         label: '',
         icon: 'close',
@@ -195,7 +192,7 @@ export class MultiSelect implements m.ClassComponent<MultiSelectAttrs> {
     }
   }
 
-  private renderOptions(attrs: MultiSelectAttrs, options: Option[]) {
+  private renderOptions(attrs: MultiSelectAttrs, options: MultiSelectOption[]) {
     const {onChange = () => {}} = attrs;
 
     return options.map((item) => {
@@ -207,7 +204,6 @@ export class MultiSelect implements m.ClassComponent<MultiSelectAttrs> {
         className: 'pf-multiselect-item',
         onchange: () => {
           onChange([{id, checked: !checked}]);
-          scheduleFullRedraw();
         },
       });
     });

@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rules_cc//cc:defs.bzl", "cc_proto_library")
-load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
+load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
 
 licenses(["notice"])
 
@@ -57,7 +57,6 @@ cc_test(
     srcs = [
         "leveldb_data_set_test.cc",
     ],
-    shard_count = 8,
     deps = [
         ":data_manager",
         ":leveldb_data_set_test_cc_proto",

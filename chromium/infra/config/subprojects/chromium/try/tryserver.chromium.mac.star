@@ -23,8 +23,11 @@ try_.defaults.set(
     execution_timeout = try_.DEFAULT_EXECUTION_TIMEOUT,
     orchestrator_cores = 2,
     orchestrator_siso_remote_jobs = siso.remote_jobs.HIGH_JOBS_FOR_CQ,
+    reclient_enabled = False,
     service_account = try_.DEFAULT_SERVICE_ACCOUNT,
     siso_enabled = True,
+    # Fast deps may make builds slower.
+    siso_experiments = ["no-fast-deps"],
     siso_project = siso.project.DEFAULT_UNTRUSTED,
 )
 
@@ -222,6 +225,24 @@ try_.builder(
 )
 
 try_.builder(
+    name = "mac-libfuzzer-asan-rel",
+    # TODO(crbug.com/41492669): Can delete this description when it's
+    # automatically generated.
+    description_html = "Trybot of {}.".format(linkify_builder("ci", "Libfuzzer Upload Mac ASan")),
+    executable = "recipe:chromium/fuzz",
+    mirrors = ["ci/Libfuzzer Upload Mac ASan"],
+    gn_args = gn_args.config(
+        configs = [
+            "ci/Libfuzzer Upload Mac ASan",
+            "dcheck_always_on",
+            "no_symbols",
+            "skip_generate_fuzzer_owners",
+        ],
+    ),
+    contact_team_email = "chrome-deet-core@google.com",
+)
+
+try_.builder(
     name = "mac-lsan-fyi-rel",
     mirrors = [
         "ci/mac-lsan-fyi-rel",
@@ -236,6 +257,15 @@ try_.builder(
         "ci/mac-ubsan-fyi-rel",
     ],
     gn_args = "ci/mac-ubsan-fyi-rel",
+)
+
+try_.builder(
+    name = "mac-vm",
+    mirrors = ["ci/mac-vm"],
+    gn_args = "ci/mac-vm",
+    builderless = True,
+    cpu = cpu.ARM64,
+    contact_team_email = "bling-engprod@google.com",
 )
 
 try_.builder(
@@ -306,10 +336,7 @@ try_.orchestrator_builder(
     contact_team_email = "bling-engprod@google.com",
     main_list_view = "try",
     tryjob = try_.job(
-        # TODO (crbug.com/338209817): move out of
-        # experimental CQ after confirming it's consistently
-        # green and fast.
-        experiment_percentage = 100,
+        experiment_percentage = 75,
     ),
 )
 
@@ -336,10 +363,8 @@ try_.builder(
     ],
     gn_args = gn_args.config(
         configs = [
+            "ci/Mac Builder",
             "release_try_builder",
-            "remoteexec",
-            "mac",
-            "x64",
         ],
     ),
     builderless = False,
@@ -535,7 +560,6 @@ ios_builder(
     builderless = True,
     cpu = cpu.ARM64,
     execution_timeout = 4 * time.hour,
-    xcode = xcode.x15betabots,
 )
 
 ios_builder(
@@ -562,13 +586,6 @@ ios_builder(
     mirrors = ["ci/ios-fieldtrial-rel"],
     gn_args = "ci/ios-fieldtrial-rel",
     builderless = True,
-    cpu = cpu.ARM64,
-)
-
-ios_builder(
-    name = "ios-m1-simulator",
-    mirrors = ["ci/ios-m1-simulator"],
-    gn_args = "ci/ios-m1-simulator",
     cpu = cpu.ARM64,
 )
 
@@ -715,7 +732,7 @@ ios_builder(
     mirrors = ["ci/ios17-sdk-simulator"],
     gn_args = "ci/ios17-sdk-simulator",
     cpu = cpu.ARM64,
-    xcode = xcode.x16_2betabots,
+    xcode = xcode.x16betabots,
 )
 
 ios_builder(

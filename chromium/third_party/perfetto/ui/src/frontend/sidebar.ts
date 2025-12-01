@@ -14,7 +14,7 @@
 
 import m from 'mithril';
 import {getCurrentChannel} from '../core/channels';
-import {TRACE_SUFFIX} from '../common/constants';
+import {TRACE_SUFFIX} from '../public/trace';
 import {
   disableMetatracingAndGetTrace,
   enableMetatracing,
@@ -26,7 +26,7 @@ import {raf} from '../core/raf_scheduler';
 import {SCM_REVISION, VERSION} from '../gen/perfetto_version';
 import {showModal} from '../widgets/modal';
 import {Animation} from './animation';
-import {downloadData, downloadUrl} from './download_utils';
+import {downloadData, downloadUrl} from '../base/download_utils';
 import {globals} from './globals';
 import {toggleHelp} from './help_modal';
 import {shareTrace} from './trace_share_utils';
@@ -121,19 +121,12 @@ function downloadTrace(trace: TraceImpl) {
   downloadUrl(fileName, url);
 }
 
-function highPrecisionTimersAvailable(): boolean {
-  // High precision timers are available either when the page is cross-origin
-  // isolated or when the trace processor is a standalone binary.
-  return (
-    window.crossOriginIsolated ||
-    AppImpl.instance.trace?.engine.mode === 'HTTP_RPC'
-  );
-}
-
 function recordMetatrace(engine: Engine) {
   AppImpl.instance.analytics.logEvent('Trace Actions', 'Record metatrace');
 
-  if (!highPrecisionTimersAvailable()) {
+  const highPrecisionTimersAvailable =
+    window.crossOriginIsolated || engine.mode === 'HTTP_RPC';
+  if (!highPrecisionTimersAvailable) {
     const PROMPT = `High-precision timers are not available to WASM trace processor yet.
 
 Modern browsers restrict high-precision timers to cross-origin-isolated pages.
@@ -356,8 +349,8 @@ export class Sidebar implements m.ClassComponent<OptionalTraceImplAttrs> {
   private _asyncJobPending = new Set<string>();
   private _sectionExpanded = new Map<string, boolean>();
 
-  constructor() {
-    registerMenuItems();
+  constructor({attrs}: m.CVnode<OptionalTraceImplAttrs>) {
+    registerMenuItems(attrs.trace);
   }
 
   view({attrs}: m.CVnode<OptionalTraceImplAttrs>) {
@@ -428,7 +421,6 @@ export class Sidebar implements m.ClassComponent<OptionalTraceImplAttrs> {
         {
           onclick: () => {
             this._sectionExpanded.set(sectionId, !expanded);
-            raf.scheduleFullRedraw();
           },
         },
         m('h1', {title: section.title}, section.title),
@@ -520,7 +512,6 @@ export class Sidebar implements m.ClassComponent<OptionalTraceImplAttrs> {
         return; // Don't queue up another action if not yet finished.
       }
       this._asyncJobPending.add(itemId);
-      raf.scheduleFullRedraw();
       res.finally(() => {
         this._asyncJobPending.delete(itemId);
         raf.scheduleFullRedraw();
@@ -537,12 +528,11 @@ export class Sidebar implements m.ClassComponent<OptionalTraceImplAttrs> {
 let globalItemsRegistered = false;
 const traceItemsRegistered = new WeakSet<TraceImpl>();
 
-function registerMenuItems() {
+function registerMenuItems(trace: TraceImpl | undefined) {
   if (!globalItemsRegistered) {
     globalItemsRegistered = true;
     registerGlobalSidebarEntries();
   }
-  const trace = AppImpl.instance.trace;
   if (trace !== undefined && !traceItemsRegistered.has(trace)) {
     traceItemsRegistered.add(trace);
     registerTraceMenuItems(trace);
@@ -553,13 +543,6 @@ function registerGlobalSidebarEntries() {
   const app = AppImpl.instance;
   // TODO(primiano): The Open file / Open with legacy entries are registered by
   // the 'perfetto.CoreCommands' plugins. Make things consistent.
-  app.sidebar.addMenuItem({
-    section: 'navigation',
-    text: 'Record new trace',
-    href: '#!/record',
-    icon: 'fiber_smart_record',
-    sortOrder: 2,
-  });
   app.sidebar.addMenuItem({
     section: 'support',
     text: 'Keyboard shortcuts',

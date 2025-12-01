@@ -2,14 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
+#include <algorithm>
 
-#include "third_party/blink/renderer/core/layout/physical_box_fragment.h"
-
-#include "base/ranges/algorithm.h"
 #include "third_party/blink/renderer/core/dom/document_lifecycle.h"
 #include "third_party/blink/renderer/core/html/shadow/shadow_element_utils.h"
 #include "third_party/blink/renderer/core/layout/block_node.h"
@@ -501,8 +495,7 @@ base::span<PhysicalOofPositionedNode>
 PhysicalFragment::OutOfFlowPositionedDescendants() const {
   if (!HasOutOfFlowPositionedDescendants())
     return base::span<PhysicalOofPositionedNode>();
-  return {oof_data_->OofPositionedDescendants().data(),
-          oof_data_->OofPositionedDescendants().size()};
+  return oof_data_->OofPositionedDescendants();
 }
 
 const FragmentedOofData* PhysicalFragment::GetFragmentedOofData() const {
@@ -558,11 +551,11 @@ PhysicalFragment::OofData* PhysicalFragment::OofDataFromBuilder(
     }
   }
 
-  if (const LogicalAnchorQuery* anchor_query = builder->AnchorQuery()) {
+  if (builder->anchor_query_) {
     if (!oof_data) {
       oof_data = MakeGarbageCollected<OofData>();
     }
-    oof_data->AnchorQuery().SetFromLogical(*anchor_query, converter);
+    oof_data->SetAnchorQuery(builder->anchor_query_);
   }
 
   return oof_data;
@@ -808,7 +801,7 @@ void PhysicalFragment::TraceAfterDispatch(Visitor* visitor) const {
 base::span<const PhysicalFragmentLink> PhysicalFragment::Children() const {
   if (Type() == kFragmentBox)
     return static_cast<const PhysicalBoxFragment*>(this)->Children();
-  return base::make_span(static_cast<PhysicalFragmentLink*>(nullptr), 0u);
+  return {};
 }
 
 PhysicalFragment::PostLayoutChildLinkList PhysicalFragment::PostLayoutChildren()
@@ -844,7 +837,7 @@ void PhysicalFragment::AddOutlineRectsForNormalChildren(
       // Don't add |Children()|. If |this| has |FragmentItems|, children are
       // either line box, which we already handled in items, or OOF, which we
       // should ignore.
-      DCHECK(base::ranges::all_of(
+      DCHECK(std::ranges::all_of(
           PostLayoutChildren(), [](const PhysicalFragmentLink& child) {
             return child->IsLineBox() || child->IsOutOfFlowPositioned();
           }));
@@ -1036,7 +1029,14 @@ bool PhysicalFragment::DependsOnPercentageBlockSize(
 
 void PhysicalFragment::OofData::Trace(Visitor* visitor) const {
   visitor->Trace(oof_positioned_descendants_);
-  PhysicalAnchorQuery::Trace(visitor);
+  visitor->Trace(anchor_query_);
+}
+
+PhysicalAnchorQuery& PhysicalFragment::OofData::EnsureAnchorQuery() {
+  if (!anchor_query_) {
+    anchor_query_ = MakeGarbageCollected<PhysicalAnchorQuery>();
+  }
+  return *anchor_query_;
 }
 
 std::ostream& operator<<(std::ostream& out, const PhysicalFragment& fragment) {

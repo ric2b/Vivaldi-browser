@@ -30,14 +30,14 @@ number which are specific to our project. Here you can dive down into them.
             daemon for debugging issues
 *   chromeos-dev: set of packages used in developer images and available
             by running
-            [dev_install](/chromium-os/how-tos-and-troubleshooting/install-software-on-base-images)
+            [dev_install](/chromium-os/developer-library/guides/device/install-software-on-base-images)
             in release images
 *   [crash-reporter](/chromium-os/packages/crash-reporting): crash
             processing program/uploader
 *   [crosh](https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/crosh/):
             interactive shell for running low level commands, running ssh,
             etc...
-*   [dev_install](/chromium-os/how-tos-and-troubleshooting/install-software-on-base-images):
+*   [dev_install](/chromium-os/developer-library/guides/device/install-software-on-base-images):
             install dev packages into a base (release) image
 *   [gmerge](/chromium-os/how-tos-and-troubleshooting/using-the-dev-server):
             installing packages live onto your device
@@ -106,7 +106,7 @@ number which are specific to our project. Here you can dive down into them.
 
 *   chaps:
 *   chromeos-ca-certificates: certificates from [certificate
-            authorities](http://en.wikipedia.org/wiki/Certificate_authority)
+            authorities](https://en.wikipedia.org/wiki/Certificate_authority)
             that the browser in ChromeOS will trust (i.e. https://)
 *   chromeos-cryptohome: manager for per-user encrypted home storage
 *   chromeos-minijail:

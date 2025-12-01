@@ -12,19 +12,19 @@ Development Style Guide](/developers/web-development-style-guide). Note that mos
 WebUI code is using TypeScript, and any new additions must use TypeScript.
 
 A general explanation of how WebUI works, including the interaction between
-C++ and TypeScript code, can be found in the [WebUI Explainer](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/webui_explainer.md).
+C++ and TypeScript code, can be found in the [WebUI Explainer](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/webui/webui_explainer.md).
 
 Shared, cross-platform resources can be found in [ui/webui/resources](https://source.chromium.org/chromium/chromium/src/+/main:ui/webui/resources/).
 
 A detailed example of how to create a WebUI in can be found at
-[Creating WebUI interfaces in chrome](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/webui_in_chrome.md).
+[Creating WebUI interfaces in chrome](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/webui/webui_in_chrome.md).
 
 If you need additional information on how to set up the BUILD.gn file to build
 your WebUI, there is detailed information and additional examples for BUILD
-files specifically at [WebUI Build Configurations](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/webui_build_configuration.md).
+files specifically at [WebUI Build Configurations](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/webui/webui_build_configuration.md).
 
 If you need additional information on how to share TS/HTML/CSS code between
-multiple (2+) WebUI surfaces, see [Sharing Code in WebUI](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/webui_code_sharing.md).
+multiple (2+) WebUI surfaces, see [Sharing Code in WebUI](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/webui/webui_code_sharing.md).
 
 ### Debug vs User-Facing UIs
 Before adding a new WebUI, the first question to consider is whether you are

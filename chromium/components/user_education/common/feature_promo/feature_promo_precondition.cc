@@ -5,16 +5,23 @@
 #include "components/user_education/common/feature_promo/feature_promo_precondition.h"
 
 #include "base/check.h"
+#include "base/functional/callback_forward.h"
 #include "components/user_education/common/feature_promo/feature_promo_result.h"
 
 namespace user_education {
 
+FeaturePromoPrecondition::ComputedData::ComputedData() = default;
+FeaturePromoPrecondition::ComputedData::ComputedData(ComputedData&&) noexcept =
+    default;
+FeaturePromoPrecondition::ComputedData&
+FeaturePromoPrecondition::ComputedData::operator=(ComputedData&&) noexcept =
+    default;
+FeaturePromoPrecondition::ComputedData::~ComputedData() = default;
+
 FeaturePromoPreconditionBase::FeaturePromoPreconditionBase(
     Identifier identifier,
-    FeaturePromoResult::Failure failure,
     std::string description)
     : identifier_(identifier),
-      failure_(failure),
       description_(std::move(description)) {}
 
 FeaturePromoPreconditionBase::~FeaturePromoPreconditionBase() = default;
@@ -24,42 +31,60 @@ FeaturePromoPreconditionBase::GetIdentifier() const {
   return identifier_;
 }
 
-FeaturePromoResult::Failure FeaturePromoPreconditionBase::GetFailure() const {
-  return failure_;
-}
-
 const std::string& FeaturePromoPreconditionBase::GetDescription() const {
   return description_;
 }
 
+void FeaturePromoPreconditionBase::ExtractCachedData(
+    internal::PreconditionData::Collection& to_add_to) {
+  for (auto& [id, data] : data_) {
+    const auto result = to_add_to.emplace(id, std::move(data));
+    CHECK(result.second) << "Two different providers for precondition data: "
+                         << id;
+  }
+  data_.clear();
+}
+
 CachingFeaturePromoPrecondition::CachingFeaturePromoPrecondition(
     Identifier identifier,
-    FeaturePromoResult::Failure failure,
     std::string description,
-    bool initial_state)
-    : FeaturePromoPreconditionBase(identifier, failure, std::move(description)),
-      is_allowed_(initial_state) {}
+    FeaturePromoResult initial_state)
+    : FeaturePromoPreconditionBase(identifier, std::move(description)),
+      check_result_(initial_state) {}
 
 CachingFeaturePromoPrecondition::~CachingFeaturePromoPrecondition() = default;
 
-bool CachingFeaturePromoPrecondition::IsAllowed() const {
-  return is_allowed_;
+FeaturePromoResult CachingFeaturePromoPrecondition::CheckPrecondition(
+    ComputedData&) const {
+  return check_result_;
 }
 
 CallbackFeaturePromoPrecondition::CallbackFeaturePromoPrecondition(
     Identifier identifier,
-    FeaturePromoResult::Failure failure,
     std::string description,
-    base::RepeatingCallback<bool()> is_allowed_callback)
-    : FeaturePromoPreconditionBase(identifier, failure, std::move(description)),
-      is_allowed_callback_(std::move(is_allowed_callback)) {
-  CHECK(!is_allowed_callback_.is_null());
+    SimpleCallback check_result_callback)
+    : FeaturePromoPreconditionBase(identifier, std::move(description)),
+      check_result_callback_(
+          base::BindRepeating([](const SimpleCallback& callback,
+                                 ComputedData& data) { return callback.Run(); },
+                              std::move(check_result_callback))) {
+  CHECK(!check_result_callback_.is_null());
+}
+
+CallbackFeaturePromoPrecondition::CallbackFeaturePromoPrecondition(
+    Identifier identifier,
+    std::string description,
+    CallbackWithData check_result_callback)
+    : FeaturePromoPreconditionBase(identifier, std::move(description)),
+      check_result_callback_(std::move(check_result_callback)) {
+  CHECK(!check_result_callback_.is_null());
 }
 
 CallbackFeaturePromoPrecondition::~CallbackFeaturePromoPrecondition() = default;
 
-bool CallbackFeaturePromoPrecondition::IsAllowed() const {
-  return is_allowed_callback_.Run();
+FeaturePromoResult CallbackFeaturePromoPrecondition::CheckPrecondition(
+    ComputedData& data) const {
+  return check_result_callback_.Run(data);
 }
 
 ForwardingFeaturePromoPrecondition::ForwardingFeaturePromoPrecondition(
@@ -74,17 +99,13 @@ ForwardingFeaturePromoPrecondition::GetIdentifier() const {
   return source_->GetIdentifier();
 }
 
-FeaturePromoResult::Failure ForwardingFeaturePromoPrecondition::GetFailure()
-    const {
-  return source_->GetFailure();
-}
-
 const std::string& ForwardingFeaturePromoPrecondition::GetDescription() const {
   return source_->GetDescription();
 }
 
-bool ForwardingFeaturePromoPrecondition::IsAllowed() const {
-  return source_->IsAllowed();
+FeaturePromoResult ForwardingFeaturePromoPrecondition::CheckPrecondition(
+    ComputedData& data) const {
+  return source_->CheckPrecondition(data);
 }
 
 FeaturePromoPreconditionList::FeaturePromoPreconditionList(
@@ -94,11 +115,12 @@ FeaturePromoPreconditionList& FeaturePromoPreconditionList::operator=(
 FeaturePromoPreconditionList::~FeaturePromoPreconditionList() = default;
 
 FeaturePromoPreconditionList::CheckResult
-FeaturePromoPreconditionList::CheckPreconditions() const {
+FeaturePromoPreconditionList::CheckPreconditions(
+    ComputedData& computed_data) const {
   for (const auto& precondition : preconditions_) {
-    if (!precondition->IsAllowed()) {
-      return CheckResult(precondition->GetFailure(),
-                         precondition->GetIdentifier());
+    const auto result = precondition->CheckPrecondition(computed_data);
+    if (!result) {
+      return CheckResult(result, precondition->GetIdentifier());
     }
   }
   return CheckResult(FeaturePromoResult::Success(), {});
@@ -115,6 +137,13 @@ void FeaturePromoPreconditionList::AddPrecondition(
   CHECK(precondition);
   // TODO(dfried): Maybe check for duplicate IDs in DCHECK mode?
   preconditions_.emplace_back(std::move(precondition));
+}
+
+void FeaturePromoPreconditionList::ExtractCachedData(
+    internal::PreconditionData::Collection& to_add_to) {
+  for (auto& precondition : preconditions_) {
+    precondition->ExtractCachedData(to_add_to);
+  }
 }
 
 }  // namespace user_education

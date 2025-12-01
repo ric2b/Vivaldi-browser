@@ -2,13 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "chrome/browser/metrics/process_memory_metrics_emitter.h"
 
+#include <array>
 #include <set>
 #include <string>
 #include <string_view>
@@ -25,6 +21,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/process/process_metrics.h"
+#include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/trace_event/memory_dump_request_args.h"
@@ -1029,6 +1026,12 @@ void EmitProcessUmaAndUkm(const GlobalMemoryDump::ProcessDump& pmd,
   MEMORY_METRICS_HISTOGRAM_MB(std::string(kMemoryHistogramPrefix) +
                                   process_name + ".PrivateSwapFootprint",
                               pmd.os_dump().private_footprint_swap_kb / kKiB);
+  // We expect counts to be capped at ~65k on most systems, as this is the
+  // default maximum in the kernel.
+  base::UmaHistogramCounts100000(
+      base::StrCat({std::string(kMemoryHistogramPrefix), process_name,
+                    ".MappingsCount"}),
+      pmd.os_dump().mappings_count);
 #endif
 
   if (record_uma) {
@@ -1043,11 +1046,11 @@ void EmitSummedGpuMemory(const GlobalMemoryDump::ProcessDump& pmd,
                          Memory_Experimental* builder,
                          bool record_uma) {
   // Combine several categories together to sum up Chrome-reported gpu memory.
-  static const char* gpu_categories[] = {
+  static auto gpu_categories = std::to_array<const char*>({
       "gpu/gl",
       "gpu/shared_images",
       "skia/gpu_resources",
-  };
+  });
   Metric synthetic_metric = {nullptr,
                              "GpuMemory",
                              MetricSize::kLarge,
@@ -1283,7 +1286,7 @@ void ProcessMemoryMetricsEmitter::MarkServiceRequestsInProgress() {
   get_process_urls_in_progress_ = true;
 }
 
-ProcessMemoryMetricsEmitter::~ProcessMemoryMetricsEmitter() {}
+ProcessMemoryMetricsEmitter::~ProcessMemoryMetricsEmitter() = default;
 
 void ProcessMemoryMetricsEmitter::ReceivedMemoryDump(
     bool success,
@@ -1347,7 +1350,7 @@ int ProcessMemoryMetricsEmitter::GetNumberOfExtensions(base::ProcessId pid) {
   }
 
   const extensions::Extension* extension =
-      process_map->GetEnabledExtensionByProcessID(rph->GetID());
+      process_map->GetEnabledExtensionByProcessID(rph->GetDeprecatedID());
   // Only include this extension if it's not a hosted app.
   return (extension && !extension->is_hosted_app()) ? 1 : 0;
 #else

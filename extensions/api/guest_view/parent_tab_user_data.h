@@ -17,11 +17,19 @@ class ParentTabUserData
   static std::optional<int> GetParentTabId(content::WebContents* contents);
   static bool ShouldSync(content::WebContents* contents);
 
+  // IsWebPanel decision is based on <webview> parent_tab_id argument!
+  static bool IsWebPanel(content::WebContents* contents);
+
   std::optional<int> GetParentTabId() const { return parent_tab_id_; }
   void SetParentTabId(int tab_id) { parent_tab_id_ = tab_id; }
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 
  private:
+  // This value is taken from the <webview> parent_tab_id argument.
+  // Regular tabs don't have parent_tab_id set.
+  // In case of the web-widgets, it is equal to the tab_id which contains the
+  // widget.
+  // In case of the web-panels, it is equal to 0.
   std::optional<int> parent_tab_id_;
 };
 

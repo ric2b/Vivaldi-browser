@@ -50,7 +50,10 @@ class URLLoaderContextForTests : public URLLoaderContext {
   mojom::CookieAccessObserver* GetCookieAccessObserver() const override;
   mojom::TrustTokenAccessObserver* GetTrustTokenAccessObserver() const override;
   mojom::CrossOriginEmbedderPolicyReporter* GetCoepReporter() const override;
+  mojom::DocumentIsolationPolicyReporter* GetDipReporter() const override;
   mojom::DevToolsObserver* GetDevToolsObserver() const override;
+  mojom::DeviceBoundSessionAccessObserver* GetDeviceBoundSessionAccessObserver()
+      const override;
   mojom::NetworkContextClient* GetNetworkContextClient() const override;
   mojom::TrustedURLLoaderHeaderClient* GetUrlLoaderHeaderClient()
       const override;

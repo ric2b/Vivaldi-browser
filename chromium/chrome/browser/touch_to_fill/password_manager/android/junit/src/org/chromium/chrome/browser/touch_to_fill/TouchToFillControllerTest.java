@@ -65,7 +65,6 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.TaskTraits;
 import org.chromium.base.task.test.ShadowPostTask;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.password_manager.GetLoginMatchType;
 import org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.FaviconOrFallback;
 import org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.ItemType;
@@ -141,7 +140,6 @@ public class TouchToFillControllerTest {
             Bitmap.createBitmap(/* width= */ 1, /* height= */ 1, Bitmap.Config.ARGB_8888);
 
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
-    @Rule public JniMocker mJniMocker = new JniMocker();
     @Mock private TouchToFillComponent.Delegate mMockDelegate;
     @Mock private LargeIconBridge mMockIconBridge;
     @Mock private BottomSheetFocusHelper mMockFocusHelper;
@@ -187,7 +185,7 @@ public class TouchToFillControllerTest {
                 Collections.emptyList(),
                 Arrays.asList(ANA, CARL),
                 /* showMorePasskeys= */ false,
-                /* submitCredential= */ true,
+                /* triggerSubmission= */ true,
                 /* managePasskeysHidesPasswords= */ false,
                 /* showHybridPasskeyOption= */ false);
         ListModel<MVCListAdapter.ListItem> itemList = mModel.get(SHEET_ITEMS);
@@ -226,7 +224,7 @@ public class TouchToFillControllerTest {
                 Collections.emptyList(),
                 Arrays.asList(ANA),
                 /* showMorePasskeys= */ false,
-                /* submitCredential= */ false,
+                /* triggerSubmission= */ false,
                 /* managePasskeysHidesPasswords= */ false,
                 /* showHybridPasskeyOption= */ false);
         ListModel<MVCListAdapter.ListItem> itemList = mModel.get(SHEET_ITEMS);
@@ -257,7 +255,7 @@ public class TouchToFillControllerTest {
                 Arrays.asList(DINO),
                 Collections.emptyList(),
                 /* showMorePasskeys= */ false,
-                /* submitCredential= */ false,
+                /* triggerSubmission= */ false,
                 /* managePasskeysHidesPasswords= */ false,
                 /* showHybridPasskeyOption= */ false);
         ListModel<MVCListAdapter.ListItem> itemList = mModel.get(SHEET_ITEMS);
@@ -287,7 +285,7 @@ public class TouchToFillControllerTest {
                 Arrays.asList(DINO),
                 Arrays.asList(ANA),
                 /* showMorePasskeys= */ false,
-                /* submitCredential= */ false,
+                /* triggerSubmission= */ false,
                 /* managePasskeysHidesPasswords= */ false,
                 /* showHybridPasskeyOption= */ false);
         ListModel<MVCListAdapter.ListItem> itemList = mModel.get(SHEET_ITEMS);
@@ -320,7 +318,7 @@ public class TouchToFillControllerTest {
                 Collections.emptyList(),
                 Arrays.asList(ANA),
                 /* showMorePasskeys= */ false,
-                /* submitCredential= */ true,
+                /* triggerSubmission= */ true,
                 /* managePasskeysHidesPasswords= */ false,
                 /* showHybridPasskeyOption= */ false);
         ListModel<MVCListAdapter.ListItem> itemList = mModel.get(SHEET_ITEMS);
@@ -352,7 +350,7 @@ public class TouchToFillControllerTest {
                 Collections.emptyList(),
                 Arrays.asList(ANA, CARL, BOB),
                 /* showMorePasskeys= */ false,
-                /* submitCredential= */ false,
+                /* triggerSubmission= */ false,
                 /* managePasskeysHidesPasswords= */ false,
                 /* showHybridPasskeyOption= */ false);
         ListModel<MVCListAdapter.ListItem> itemList = mModel.get(SHEET_ITEMS);
@@ -404,7 +402,7 @@ public class TouchToFillControllerTest {
                 Collections.emptyList(),
                 Arrays.asList(sharedCredentials),
                 /* showMorePasskeys= */ false,
-                /* submitCredential= */ true,
+                /* triggerSubmission= */ true,
                 /* managePasskeysHidesPasswords= */ false,
                 /* showHybridPasskeyOption= */ false);
         ListModel<MVCListAdapter.ListItem> itemList = mModel.get(SHEET_ITEMS);
@@ -479,7 +477,7 @@ public class TouchToFillControllerTest {
                 Collections.emptyList(),
                 Arrays.asList(sharedCredential1, sharedCredential2),
                 /* showMorePasskeys= */ false,
-                /* submitCredential= */ true,
+                /* triggerSubmission= */ true,
                 /* managePasskeysHidesPasswords= */ false,
                 /* showHybridPasskeyOption= */ false);
         ListModel<MVCListAdapter.ListItem> itemList = mModel.get(SHEET_ITEMS);
@@ -509,7 +507,7 @@ public class TouchToFillControllerTest {
                 Collections.emptyList(),
                 Collections.singletonList(CARL),
                 /* showMorePasskeys= */ false,
-                /* submitCredential= */ false,
+                /* triggerSubmission= */ false,
                 /* managePasskeysHidesPasswords= */ false,
                 /* showHybridPasskeyOption= */ false);
         ListModel<MVCListAdapter.ListItem> itemList = mModel.get(SHEET_ITEMS);
@@ -546,7 +544,7 @@ public class TouchToFillControllerTest {
                 Collections.emptyList(),
                 Arrays.asList(ANA, BOB),
                 /* showMorePasskeys= */ false,
-                /* submitCredential= */ false,
+                /* triggerSubmission= */ false,
                 /* managePasskeysHidesPasswords= */ false,
                 /* showHybridPasskeyOption= */ false);
         assertThat(mModel.get(SHEET_ITEMS).size(), is(4)); // Header + 2 Credentials + Footer.
@@ -568,7 +566,7 @@ public class TouchToFillControllerTest {
                 Collections.emptyList(),
                 Collections.singletonList(ANA),
                 /* showMorePasskeys= */ false,
-                /* submitCredential= */ false,
+                /* triggerSubmission= */ false,
                 /* managePasskeysHidesPasswords= */ false,
                 /* showHybridPasskeyOption= */ false);
         ListModel<MVCListAdapter.ListItem> itemList = mModel.get(SHEET_ITEMS);
@@ -584,7 +582,7 @@ public class TouchToFillControllerTest {
                 Collections.emptyList(),
                 Collections.singletonList(BOB),
                 /* showMorePasskeys= */ false,
-                /* submitCredential= */ false,
+                /* triggerSubmission= */ false,
                 /* managePasskeysHidesPasswords= */ false,
                 /* showHybridPasskeyOption= */ false);
         itemList = mModel.get(SHEET_ITEMS);
@@ -602,7 +600,7 @@ public class TouchToFillControllerTest {
                 Collections.emptyList(),
                 Arrays.asList(ANA, CARL, BOB),
                 /* showMorePasskeys= */ false,
-                /* submitCredential= */ false,
+                /* triggerSubmission= */ false,
                 /* managePasskeysHidesPasswords= */ false,
                 /* showHybridPasskeyOption= */ false);
         assertThat(mModel.get(VISIBLE), is(true));
@@ -616,7 +614,7 @@ public class TouchToFillControllerTest {
                 Collections.emptyList(),
                 Arrays.asList(ANA),
                 /* showMorePasskeys= */ false,
-                /* submitCredential= */ false,
+                /* triggerSubmission= */ false,
                 /* managePasskeysHidesPasswords= */ false,
                 /* showHybridPasskeyOption= */ false);
         assertThat(mModel.get(VISIBLE), is(true));
@@ -639,7 +637,7 @@ public class TouchToFillControllerTest {
                 Collections.emptyList(),
                 Arrays.asList(ANA, CARL),
                 /* showMorePasskeys= */ false,
-                /* submitCredential= */ false,
+                /* triggerSubmission= */ false,
                 /* managePasskeysHidesPasswords= */ false,
                 /* showHybridPasskeyOption= */ false);
         assertThat(mModel.get(VISIBLE), is(true));
@@ -662,7 +660,7 @@ public class TouchToFillControllerTest {
                 Collections.emptyList(),
                 Arrays.asList(ANA, CARL),
                 /* showMorePasskeys= */ false,
-                /* submitCredential= */ false,
+                /* triggerSubmission= */ false,
                 /* managePasskeysHidesPasswords= */ false,
                 /* showHybridPasskeyOption= */ false);
         mMediator.onDismissed(BottomSheetController.StateChangeReason.BACK_PRESS);
@@ -683,7 +681,7 @@ public class TouchToFillControllerTest {
                 Collections.emptyList(),
                 Arrays.asList(ANA, CARL, BOB),
                 /* showMorePasskeys= */ false,
-                /* submitCredential= */ false,
+                /* triggerSubmission= */ false,
                 /* managePasskeysHidesPasswords= */ false,
                 /* showHybridPasskeyOption= */ false);
         ListModel<MVCListAdapter.ListItem> itemList = mModel.get(SHEET_ITEMS);
@@ -702,7 +700,7 @@ public class TouchToFillControllerTest {
                 Arrays.asList(DINO),
                 Collections.emptyList(),
                 /* showMorePasskeys= */ false,
-                /* submitCredential= */ false,
+                /* triggerSubmission= */ false,
                 /* managePasskeysHidesPasswords= */ true,
                 /* showHybridPasskeyOption= */ false);
         ListModel<MVCListAdapter.ListItem> itemList = mModel.get(SHEET_ITEMS);
@@ -720,7 +718,7 @@ public class TouchToFillControllerTest {
                 Arrays.asList(DINO),
                 Arrays.asList(ANA),
                 /* showMorePasskeys= */ false,
-                /* submitCredential= */ false,
+                /* triggerSubmission= */ false,
                 /* managePasskeysHidesPasswords= */ true,
                 /* showHybridPasskeyOption= */ false);
         ListModel<MVCListAdapter.ListItem> itemList = mModel.get(SHEET_ITEMS);
@@ -739,7 +737,7 @@ public class TouchToFillControllerTest {
                 Arrays.asList(DINO),
                 Arrays.asList(ANA),
                 /* showMorePasskeys= */ false,
-                /* submitCredential= */ false,
+                /* triggerSubmission= */ false,
                 /* managePasskeysHidesPasswords= */ true,
                 /* showHybridPasskeyOption= */ false);
 
@@ -754,7 +752,7 @@ public class TouchToFillControllerTest {
                 Collections.emptyList(),
                 Arrays.asList(ANA, CARL, BOB),
                 /* showMorePasskeys= */ false,
-                /* submitCredential= */ false,
+                /* triggerSubmission= */ false,
                 /* managePasskeysHidesPasswords= */ false,
                 /* showHybridPasskeyOption= */ true);
         ListModel<MVCListAdapter.ListItem> itemList = mModel.get(SHEET_ITEMS);
@@ -769,7 +767,7 @@ public class TouchToFillControllerTest {
                 Collections.emptyList(),
                 Arrays.asList(ANA, CARL, BOB),
                 /* showMorePasskeys= */ false,
-                /* submitCredential= */ false,
+                /* triggerSubmission= */ false,
                 /* managePasskeysHidesPasswords= */ false,
                 /* showHybridPasskeyOption= */ true);
         ListModel<MVCListAdapter.ListItem> itemList = mModel.get(SHEET_ITEMS);
@@ -788,7 +786,7 @@ public class TouchToFillControllerTest {
                 Collections.emptyList(),
                 Arrays.asList(ANA),
                 /* showMorePasskeys= */ true,
-                /* submitCredential= */ false,
+                /* triggerSubmission= */ false,
                 /* managePasskeysHidesPasswords= */ false,
                 /* showHybridPasskeyOption= */ true);
         ListModel<MVCListAdapter.ListItem> itemList = mModel.get(SHEET_ITEMS);
@@ -813,7 +811,7 @@ public class TouchToFillControllerTest {
                 Arrays.asList(DINO),
                 Arrays.asList(ANA),
                 /* showMorePasskeys= */ true,
-                /* submitCredential= */ false,
+                /* triggerSubmission= */ false,
                 /* managePasskeysHidesPasswords= */ false,
                 /* showHybridPasskeyOption= */ true);
         ListModel<MVCListAdapter.ListItem> itemList = mModel.get(SHEET_ITEMS);
@@ -839,7 +837,7 @@ public class TouchToFillControllerTest {
                 Collections.emptyList(),
                 Arrays.asList(ANA),
                 /* showMorePasskeys= */ true,
-                /* submitCredential= */ false,
+                /* triggerSubmission= */ false,
                 /* managePasskeysHidesPasswords= */ false,
                 /* showHybridPasskeyOption= */ true);
         ListModel<MVCListAdapter.ListItem> itemList = mModel.get(SHEET_ITEMS);
@@ -855,11 +853,6 @@ public class TouchToFillControllerTest {
 
         private void answerWithBitmap() {
             mCallback.onResult(mBitmapFromImageFetcher);
-            mCallback = null;
-        }
-
-        private void answerWithNull() {
-            mCallback.onResult(null);
             mCallback = null;
         }
 

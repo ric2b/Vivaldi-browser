@@ -682,6 +682,8 @@ EXPORTS
 
     ; GL_ARB_sync
 
+    ; GL_ARM_rgba8
+
     ; GL_ARM_shader_framebuffer_fetch
 
     ; GL_ARM_shader_framebuffer_fetch_depth_stencil
@@ -707,6 +709,8 @@ EXPORTS
     ; GL_EXT_EGL_image_storage
     glEGLImageTargetTexStorageEXT
     glEGLImageTargetTextureStorageEXT
+
+    ; GL_EXT_EGL_image_storage_compression
 
     ; GL_EXT_YUV_target
 
@@ -997,6 +1001,10 @@ EXPORTS
     glTexStorage2DEXT
     glTexStorage3DEXT
 
+    ; GL_EXT_texture_storage_compression
+    glTexStorageAttribs2DEXT
+    glTexStorageAttribs3DEXT
+
     ; GL_EXT_texture_type_2_10_10_10_REV
 
     ; GL_EXT_unpack_subimage
@@ -1081,6 +1089,9 @@ EXPORTS
     ; GL_OES_EGL_image_external
 
     ; GL_OES_EGL_image_external_essl3
+
+    ; GL_OES_blend_subtract
+    glBlendEquationOES
 
     ; GL_OES_compressed_ETC1_RGB8_texture
 
@@ -1174,6 +1185,8 @@ EXPORTS
     ; GL_OES_query_matrix
     glQueryMatrixxOES
 
+    ; GL_OES_required_internalformat
+
     ; GL_OES_rgb8_rgba8
 
     ; GL_OES_sample_shading
@@ -1238,6 +1251,8 @@ EXPORTS
     ; GL_OES_texture_half_float
 
     ; GL_OES_texture_half_float_linear
+
+    ; GL_OES_texture_mirrored_repeat
 
     ; GL_OES_texture_npot
 
@@ -1357,6 +1372,10 @@ EXPORTS
     EGL_CreateDeviceANGLE
     EGL_ReleaseDeviceANGLE
 
+    ; EGL_ANGLE_device_vulkan
+    EGL_LockVulkanQueueANGLE
+    EGL_UnlockVulkanQueueANGLE
+
     ; EGL_ANGLE_external_context_and_surface
     EGL_AcquireExternalContextANGLE
     EGL_ReleaseExternalContextANGLE
@@ -1421,6 +1440,9 @@ EXPORTS
     EGL_CreatePlatformPixmapSurfaceEXT
     EGL_CreatePlatformWindowSurfaceEXT
     EGL_GetPlatformDisplayEXT
+
+    ; EGL_EXT_surface_compression
+    EGL_QuerySupportedCompressionRatesEXT
 
     ; EGL_KHR_debug
     EGL_DebugMessageControlKHR

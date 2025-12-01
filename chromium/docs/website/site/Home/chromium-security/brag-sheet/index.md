@@ -84,11 +84,11 @@ title: Security Brag Sheet
             technologies](/developers/design-documents/software-updates-courgette)
             to do so.
 *   We have a [Vulnerability Rewards
-            Program](http://www.chromium.org/Home/chromium-security/vulnerability-rewards-program)
+            Program](/Home/chromium-security/vulnerability-rewards-program)
             to encourage third-party researchers to report vulnerabilities they
             discover.
 *   We work with the security community and have a [Security Hall of
-            Fame](http://www.chromium.org/Home/chromium-security/hall-of-fame)
+            Fame](/Home/chromium-security/hall-of-fame)
             to acknowledge third-parties that materially contribute to improving
             our security.
 *   We have the [successful Pwnium
@@ -99,7 +99,7 @@ title: Security Brag Sheet
 ### Advanced Anti- Phishing and Malware defenses
 
 *   We [warn
-            you](http://www.google.com/support/chrome/bin/answer.py?answer=99020&hl=en)
+            you](https://www.google.com/support/chrome/bin/answer.py?answer=99020&hl=en)
             when you're about to visit a website we've previously identify as a
             malware or phishing site.
 *   We keep the user better informed against phishing and similar

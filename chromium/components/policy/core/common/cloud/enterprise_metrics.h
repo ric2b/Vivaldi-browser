@@ -157,8 +157,10 @@ enum MetricEnrollment {
   // A registration certificate could not be fetched from the PCA due to
   // attestation not being available.
   kMetricEnrollmentRegistrationCertificateFetchNotAvailable = 68,
+  // Enrollment failed: Organization unit enrollment limit exceeded.
+  kMetricEnrollmentOrgUnitEnrollmentLimitExceeded = 69,
   // Max value for use with enumeration histogram UMA functions.
-  kMaxValue = kMetricEnrollmentRegistrationCertificateFetchNotAvailable
+  kMaxValue = kMetricEnrollmentOrgUnitEnrollmentLimitExceeded
 };
 
 // Events related to policy refresh.
@@ -215,6 +217,14 @@ enum class PolicyDeviceIdValidity {
   kMissing = 2,
   kInvalid = 3,
   kMaxValue = kInvalid,  // Must be the last.
+};
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class PolicyPromotionBannerAction {
+  kBannerDismissed = 0,
+  kBannerRedirected = 1,
+  kMaxValue = kBannerRedirected,  // Must be the last.
 };
 
 // Names for the UMA counters. They are shared from here since the events
@@ -420,6 +430,9 @@ inline constexpr char kUMAStateDeterminationOnFlex[] =
     "Enterprise.StateDetermination.OnFlex";
 inline constexpr char kUMAStateDeterminationOwnershipStatus[] =
     "Enterprise.StateDetermination.OwnershipStatus";
+inline constexpr char
+    kUMAStateDeterminationOwnershipStatusDuringEnrollmentRecovery[] =
+        "Enterprise.StateDetermination.OwnershipStatusDuringEnrollmentRecovery";
 inline constexpr char kUMAStateDeterminationPsmReportedAvailableState[] =
     "Enterprise.StateDetermination.PsmReportedAvailableState";
 inline constexpr char kUMAStateDeterminationPsmRlweOprfRequestDmStatusCode[] =
@@ -470,6 +483,11 @@ inline constexpr char kUMASuffixQueryRequest[] = ".QueryRequest";
 inline constexpr char kUMASuffixStateKeysRetrieval[] = ".StateKeysRetrieval";
 inline constexpr char kUMASuffixStateRequest[] = ".StateRequest";
 
+// Histograms for the promotion banner on chrome://policy
+inline constexpr char kUMAPolicyBannerDisplayed[] =
+    "Enterprise.PolicyPromotionBannerDisplayed";
+inline constexpr char kUMAPolicyBannerAction[] =
+    "Enterprise.PolicyPromotionBannerAction";
 }  // namespace policy
 
 #endif  // COMPONENTS_POLICY_CORE_COMMON_CLOUD_ENTERPRISE_METRICS_H_

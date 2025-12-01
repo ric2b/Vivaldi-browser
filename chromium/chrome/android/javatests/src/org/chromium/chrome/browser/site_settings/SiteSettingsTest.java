@@ -84,7 +84,6 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.HistogramWatcher;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.UserActionTester;
 import org.chromium.chrome.browser.FederatedIdentityTestUtils;
@@ -182,8 +181,6 @@ public class SiteSettingsTest {
                     .build();
 
     @Mock private SettingsNavigation mSettingsNavigation;
-
-    @Rule public JniMocker mocker = new JniMocker();
 
     private PermissionUpdateWaiter mPermissionUpdateWaiter;
 
@@ -1238,24 +1235,11 @@ public class SiteSettingsTest {
         settingsActivity.finish();
     }
 
-    /** Test that showing the Site Settings menu does not contain the "Anti-abuse" row. */
-    @Test
-    @SmallTest
-    @Feature({"Preferences"})
-    @DisableFeatures(ChromeFeatureList.PRIVATE_STATE_TOKENS)
-    public void testSiteSettingsMenuWithPrivateStateTokensDisabled() {
-        final SettingsActivity settingsActivity = SiteSettingsTestUtils.startSiteSettingsMenu("");
-        SiteSettings websitePreferences = (SiteSettings) settingsActivity.getMainFragment();
-        assertNull(websitePreferences.findPreference("anti_abuse"));
-        settingsActivity.finish();
-    }
-
     /** Test that showing the Site Settings menu contains the "Anti-abuse" row. */
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures(ChromeFeatureList.PRIVATE_STATE_TOKENS)
-    public void testSiteSettingsMenuWithPrivateStateTokensEnabled() {
+    public void testSiteSettingsMenuForAntiAbuse() {
         final SettingsActivity settingsActivity = SiteSettingsTestUtils.startSiteSettingsMenu("");
         SiteSettings websitePreferences = (SiteSettings) settingsActivity.getMainFragment();
         assertNotNull(websitePreferences.findPreference("anti_abuse"));
@@ -1272,7 +1256,7 @@ public class SiteSettingsTest {
     public void testOnlyExpectedPreferencesShown() {
         // If you add a category in the SiteSettings UI, please update this total AND add a test for
         // it below, named "testOnlyExpectedPreferences<Category>".
-        Assert.assertEquals(33, SiteSettingsCategory.Type.NUM_ENTRIES);
+        Assert.assertEquals(34, SiteSettingsCategory.Type.NUM_ENTRIES);
     }
 
     @Test
@@ -1299,7 +1283,6 @@ public class SiteSettingsTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures(ChromeFeatureList.PRIVATE_STATE_TOKENS)
     public void testOnlyExpectedPreferencesAntiAbuse() {
         testExpectedPreferences(
                 SiteSettingsCategory.Type.ANTI_ABUSE,
@@ -1742,6 +1725,16 @@ public class SiteSettingsTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
+    public void testOnlyExpctedPreferencesJavascriptOptimizer() {
+        testExpectedPreferences(
+                SiteSettingsCategory.Type.JAVASCRIPT_OPTIMIZER,
+                BINARY_TOGGLE_WITH_EXCEPTION_AND_INFO_TEXT,
+                BINARY_TOGGLE_WITH_EXCEPTION_AND_INFO_TEXT);
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Preferences"})
     public void testOnlyExpectedPreferencesHandTracking() {
         testExpectedPreferences(
                 SiteSettingsCategory.Type.HAND_TRACKING, BINARY_TOGGLE, BINARY_TOGGLE);
@@ -1921,6 +1914,7 @@ public class SiteSettingsTest {
     @SmallTest
     @Feature({"Preferences"})
     @CommandLineFlags.Add(ContentSwitches.USE_FAKE_DEVICE_FOR_MEDIA_STREAM)
+    @DisableIf.Device(DeviceFormFactor.TABLET) // crbug.com/41490094
     public void testCameraBlocked() throws Exception {
         new TwoStatePermissionTestCase(
                         "Camera",
@@ -1945,6 +1939,7 @@ public class SiteSettingsTest {
     @SmallTest
     @Feature({"Preferences"})
     @CommandLineFlags.Add({ContentSwitches.USE_FAKE_DEVICE_FOR_MEDIA_STREAM})
+    @DisableIf.Device(DeviceFormFactor.TABLET) // crbug.com/41490094
     public void testCameraNotBlocked() throws Exception {
         new TwoStatePermissionTestCase(
                         "Camera",
@@ -1992,6 +1987,7 @@ public class SiteSettingsTest {
     @SmallTest
     @Feature({"Preferences"})
     @CommandLineFlags.Add({ContentSwitches.USE_FAKE_DEVICE_FOR_MEDIA_STREAM})
+    @DisableIf.Device(DeviceFormFactor.TABLET) // crbug.com/41490094
     public void testMicNotBlocked() throws Exception {
         new TwoStatePermissionTestCase(
                         "Mic",
@@ -2361,6 +2357,34 @@ public class SiteSettingsTest {
                         SiteSettingsCategory.Type.FEDERATED_IDENTITY_API,
                         ContentSettingsType.FEDERATED_IDENTITY_API,
                         false)
+                .withExpectedPrefKeys(SingleCategorySettings.ADD_EXCEPTION_KEY)
+                .run();
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Preferences"})
+    public void testAllowJavascriptOptimizer() {
+        new TwoStatePermissionTestCase(
+                        "JavascriptOptimizer",
+                        SiteSettingsCategory.Type.JAVASCRIPT_OPTIMIZER,
+                        ContentSettingsType.JAVASCRIPT_OPTIMIZER,
+                        true)
+                .withExpectedPrefKeysAtStart(SingleCategorySettings.INFO_TEXT_KEY)
+                .withExpectedPrefKeys(SingleCategorySettings.ADD_EXCEPTION_KEY)
+                .run();
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Preferences"})
+    public void testBlockJavascriptOptimizer() {
+        new TwoStatePermissionTestCase(
+                        "JavascriptOptimizer",
+                        SiteSettingsCategory.Type.JAVASCRIPT_OPTIMIZER,
+                        ContentSettingsType.JAVASCRIPT_OPTIMIZER,
+                        false)
+                .withExpectedPrefKeysAtStart(SingleCategorySettings.INFO_TEXT_KEY)
                 .withExpectedPrefKeys(SingleCategorySettings.ADD_EXCEPTION_KEY)
                 .run();
     }
@@ -2964,6 +2988,11 @@ public class SiteSettingsTest {
         /** Set extra expected pref keys for category settings screen. */
         PermissionTestCase withExpectedPrefKeys(String expectedPrefKeys) {
             mExpectedPreferenceKeys.add(expectedPrefKeys);
+            return this;
+        }
+
+        PermissionTestCase withExpectedPrefKeysAtStart(String expectedPrefKeys) {
+            mExpectedPreferenceKeys.add(0, expectedPrefKeys);
             return this;
         }
 

@@ -24,7 +24,6 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "components/ip_protection/common/masked_domain_list_manager.h"
 #include "components/privacy_sandbox/masked_domain_list/masked_domain_list.pb.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -355,6 +354,18 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
     return metrics_updater_.get();
   }
 
+  // For tests to clear the metrics updater to avoid time out due to its poor
+  // interaction with TaskEnvironment::FastForward*() methods with long delays.
+  void ResetMetricsUpdaterForTesting();
+
+  void disable_exclusive_cookie_database_locking_for_testing() {
+    exclusive_cookie_database_locking_ = false;
+  }
+
+  bool exclusive_cookie_database_locking() const {
+    return exclusive_cookie_database_locking_;
+  }
+
   static NetworkService* GetNetworkServiceForTesting();
 
  private:
@@ -503,6 +514,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
 #endif  // BUILDFLAG(IS_LINUX)
 
   std::unique_ptr<network::tpcd::metadata::Manager> tpcd_metadata_manager_;
+
+  bool exclusive_cookie_database_locking_ = true;
 
   base::WeakPtrFactory<NetworkService> weak_factory_{this};
 };

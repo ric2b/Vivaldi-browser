@@ -60,9 +60,9 @@ class WorkerMainScriptLoaderTest : public testing::Test {
     // Implements WorkerMainScriptLoaderClient.
     void DidReceiveDataWorkerMainScript(base::span<const char> data) override {
       if (!data_)
-        data_ = SharedBuffer::Create(data.data(), data.size());
+        data_ = SharedBuffer::Create(data);
       else
-        data_->Append(data.data(), data.size());
+        data_->Append(data);
     }
     void OnFinishedLoadingWorkerMainScript() override { finished_ = true; }
     void OnFailedLoadingWorkerMainScript() override { failed_ = true; }
@@ -100,8 +100,6 @@ class WorkerMainScriptLoaderTest : public testing::Test {
                         const std::optional<GURL>&) override {}
     void SetPriority(net::RequestPriority priority,
                      int32_t intra_priority_value) override {}
-    void PauseReadingBodyFromNet() override {}
-    void ResumeReadingBodyFromNet() override {}
 
    private:
     mojo::Receiver<network::mojom::URLLoader> receiver_;

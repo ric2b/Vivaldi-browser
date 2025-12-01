@@ -4,7 +4,7 @@
 
 import 'chrome://os-settings/lazy_load.js';
 
-import {SettingsMultideviceTaskContinuationDisabledLinkElement} from 'chrome://os-settings/lazy_load.js';
+import type {SettingsMultideviceTaskContinuationDisabledLinkElement} from 'chrome://os-settings/lazy_load.js';
 import {Router, routes} from 'chrome://os-settings/os_settings.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {assertNotEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
@@ -54,7 +54,6 @@ suite('<settings-multidevice-task-continuation-disabled-link>', () => {
     chromeSyncLink.click();
 
     await advancedSyncOpenedPromise;
-    assertNotEquals(Router.getInstance().currentRoute, routes.OS_SYNC);
-    assertNotEquals(Router.getInstance().currentRoute, routes.SYNC_ADVANCED);
+    assertNotEquals(Router.getInstance().currentRoute, routes.OS_SYNC_CONTROLS);
   });
 });

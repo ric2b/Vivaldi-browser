@@ -77,7 +77,7 @@ const UIStrings = {
   /**
    *@description Text for Context Menu entry
    */
-  showRequestsWithThisCookie: 'Show Requests With This Cookie',
+  showRequestsWithThisCookie: 'Show requests with this cookie',
   /**
    *@description Text for Context Menu entry
    */
@@ -130,6 +130,7 @@ export class CookiesTable extends UI.Widget.VBox {
       refreshCallback?: (() => void), selectedCallback?: (() => void),
       deleteCallback?: ((arg0: SDK.Cookie.Cookie, arg1: () => void) => void)) {
     super();
+    this.registerRequiredCSS(cookiesTableStyles);
 
     this.element.classList.add('cookies-table');
 
@@ -304,10 +305,6 @@ export class CookiesTable extends UI.Widget.VBox {
     this.cookieToBlockedReasons = null;
 
     this.cookieToExemptionReason = null;
-  }
-
-  override wasShown(): void {
-    this.registerCSSFiles([cookiesTableStyles]);
   }
 
   setCookies(

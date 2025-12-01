@@ -19,7 +19,6 @@ import {Monitor} from '../base/monitor';
 import {Button, ButtonBar} from './button';
 import {EmptyState} from './empty_state';
 import {Popup, PopupPosition} from './popup';
-import {scheduleFullRedraw} from './raf';
 import {Select} from './select';
 import {Spinner} from './spinner';
 import {TagInput} from './tag_input';
@@ -248,7 +247,8 @@ export class Flamegraph implements m.ClassComponent<FlamegraphAttrs> {
       m(
         '.canvas-container[ref=canvas-container]',
         {
-          onscroll: () => scheduleFullRedraw(),
+          // This will trigger auto redraws
+          onscroll: () => {},
         },
         m(
           Popup,
@@ -271,7 +271,6 @@ export class Flamegraph implements m.ClassComponent<FlamegraphAttrs> {
         m(`canvas[ref=canvas]`, {
           style: `height:${canvasHeight}px; width:100%`,
           onmousemove: ({offsetX, offsetY}: MouseEvent) => {
-            scheduleFullRedraw();
             this.hoveredX = offsetX;
             this.hoveredY = offsetY;
             if (this.tooltipPos?.state === 'CLICK') {
@@ -309,7 +308,6 @@ export class Flamegraph implements m.ClassComponent<FlamegraphAttrs> {
             ) {
               this.tooltipPos = undefined;
             }
-            scheduleFullRedraw();
           },
           onclick: ({offsetX, offsetY}: MouseEvent) => {
             const renderNode = this.renderNodes?.find((n) =>
@@ -334,7 +332,6 @@ export class Flamegraph implements m.ClassComponent<FlamegraphAttrs> {
                 state: 'CLICK',
               };
             }
-            scheduleFullRedraw();
           },
           ondblclick: ({offsetX, offsetY}: MouseEvent) => {
             const renderNode = this.renderNodes?.find((n) =>
@@ -346,7 +343,6 @@ export class Flamegraph implements m.ClassComponent<FlamegraphAttrs> {
               return;
             }
             this.zoomRegion = renderNode?.source;
-            scheduleFullRedraw();
           },
         }),
       ),
@@ -513,7 +509,6 @@ export class Flamegraph implements m.ClassComponent<FlamegraphAttrs> {
               ...self.attrs.state,
               selectedMetricName: el.value,
             });
-            scheduleFullRedraw();
           },
         },
         attrs.metrics.map((x) => {
@@ -528,12 +523,10 @@ export class Flamegraph implements m.ClassComponent<FlamegraphAttrs> {
             value: this.rawFilterText,
             onChange: (value: string) => {
               self.rawFilterText = value;
-              scheduleFullRedraw();
             },
             onTagAdd: (tag: string) => {
               self.rawFilterText = '';
               self.attrs.onStateChange(updateState(self.attrs.state, tag));
-              scheduleFullRedraw();
             },
             onTagRemove(index: number) {
               if (index === self.attrs.state.filters.length) {
@@ -549,7 +542,6 @@ export class Flamegraph implements m.ClassComponent<FlamegraphAttrs> {
                   filters,
                 });
               }
-              scheduleFullRedraw();
             },
             onfocus() {
               self.filterFocus = true;
@@ -572,7 +564,6 @@ export class Flamegraph implements m.ClassComponent<FlamegraphAttrs> {
             ...this.attrs.state,
             view: {kind: num === 0 ? 'TOP_DOWN' : 'BOTTOM_UP'},
           });
-          scheduleFullRedraw();
         },
         disabled: this.attrs.state.view.kind === 'PIVOT',
       }),
@@ -621,7 +612,6 @@ export class Flamegraph implements m.ClassComponent<FlamegraphAttrs> {
     const filterButtonClick = (state: FlamegraphState) => {
       this.attrs.onStateChange(state);
       this.tooltipPos = undefined;
-      scheduleFullRedraw();
     };
 
     const percent = displayPercentage(
@@ -677,7 +667,6 @@ export class Flamegraph implements m.ClassComponent<FlamegraphAttrs> {
           label: 'Zoom',
           onclick: () => {
             this.zoomRegion = node.source;
-            scheduleFullRedraw();
           },
         }),
         m(Button, {
@@ -729,7 +718,7 @@ export class Flamegraph implements m.ClassComponent<FlamegraphAttrs> {
           onclick: () => {
             filterButtonClick({
               ...this.attrs.state,
-              view: {kind: 'PIVOT', pivot: name},
+              view: {kind: 'PIVOT', pivot: `^${name}$`},
             });
           },
         }),
@@ -938,35 +927,36 @@ function displayPercentage(size: number, totalSize: number): string {
 
 function updateState(state: FlamegraphState, filter: string): FlamegraphState {
   const lwr = filter.toLowerCase();
-  if (lwr.startsWith('ss: ') || lwr.startsWith('show stack: ')) {
+  const splitFilterFn = (f: string) => f.substring(f.indexOf(':') + 1).trim();
+  if (lwr.startsWith('ss:') || lwr.startsWith('show stack:')) {
     return addFilter(state, {
       kind: 'SHOW_STACK',
-      filter: filter.split(': ', 2)[1],
+      filter: splitFilterFn(filter),
     });
-  } else if (lwr.startsWith('hs: ') || lwr.startsWith('hide stack: ')) {
+  } else if (lwr.startsWith('hs:') || lwr.startsWith('hide stack:')) {
     return addFilter(state, {
       kind: 'HIDE_STACK',
-      filter: filter.split(': ', 2)[1],
+      filter: splitFilterFn(filter),
     });
-  } else if (lwr.startsWith('sff: ') || lwr.startsWith('show from frame: ')) {
+  } else if (lwr.startsWith('sff:') || lwr.startsWith('show from frame:')) {
     return addFilter(state, {
       kind: 'SHOW_FROM_FRAME',
-      filter: filter.split(': ', 2)[1],
+      filter: splitFilterFn(filter),
     });
-  } else if (lwr.startsWith('hf: ') || lwr.startsWith('hide frame: ')) {
+  } else if (lwr.startsWith('hf:') || lwr.startsWith('hide frame:')) {
     return addFilter(state, {
       kind: 'HIDE_FRAME',
-      filter: filter.split(': ', 2)[1],
+      filter: splitFilterFn(filter),
     });
-  } else if (lwr.startsWith('p:') || lwr.startsWith('pivot: ')) {
+  } else if (lwr.startsWith('p:') || lwr.startsWith('pivot:')) {
     return {
       ...state,
-      view: {kind: 'PIVOT', pivot: filter.split(': ', 2)[1]},
+      view: {kind: 'PIVOT', pivot: splitFilterFn(filter)},
     };
   }
   return addFilter(state, {
     kind: 'SHOW_STACK',
-    filter: filter.split(': ', 2)[1],
+    filter: filter.trim(),
   });
 }
 

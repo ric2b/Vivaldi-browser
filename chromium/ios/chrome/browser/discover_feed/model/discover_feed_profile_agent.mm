@@ -26,6 +26,10 @@
 #import "ios/chrome/browser/signin/model/authentication_service.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
 
+#if defined(VIVALDI_BUILD)
+#import "components/search_engines/prepopulated_engines.h"
+#endif // End Vivaldi
+
 namespace {
 
 // Returns whether the default search engine is the Google Search Engine.

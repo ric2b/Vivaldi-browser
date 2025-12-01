@@ -253,9 +253,10 @@ ExtensionActionUtilFactory::ExtensionActionUtilFactory()
 
 ExtensionActionUtilFactory::~ExtensionActionUtilFactory() {}
 
-KeyedService* ExtensionActionUtilFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+ExtensionActionUtilFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* profile) const {
-  return new ExtensionActionUtil(static_cast<Profile*>(profile));
+  return std::make_unique<ExtensionActionUtil>(static_cast<Profile*>(profile));
 }
 
 bool ExtensionActionUtilFactory::ServiceIsNULLWhileTesting() const {
@@ -609,7 +610,7 @@ void ExtensionActionUtil::RemoveGlobalError(
     VivaldiExtensionDisabledGlobalError* error) {
   for (auto& err : errors_) {
     if (error == err.get()) {
-      errors_.erase(base::ranges::find(errors_, err));
+      errors_.erase(std::ranges::find(errors_, err));
       return;
     }
   }

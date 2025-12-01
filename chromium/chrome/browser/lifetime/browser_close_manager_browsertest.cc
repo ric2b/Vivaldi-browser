@@ -16,6 +16,7 @@
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -27,6 +28,7 @@
 #include "chrome/browser/download/download_core_service.h"
 #include "chrome/browser/download/download_core_service_factory.h"
 #include "chrome/browser/download/download_prefs.h"
+#include "chrome/browser/glic/glic_pref_names.h"
 #include "chrome/browser/lifetime/application_lifetime_desktop.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
@@ -42,6 +44,7 @@
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/buildflags.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -182,7 +185,7 @@ class TestBrowserCloseManager : public BrowserCloseManager {
   }
 
  protected:
-  ~TestBrowserCloseManager() override {}
+  ~TestBrowserCloseManager() override = default;
 
   void ConfirmCloseWithPendingDownloads(
       int download_count,
@@ -214,7 +217,7 @@ class TestDownloadManagerDelegate : public ChromeDownloadManagerDelegate {
       : ChromeDownloadManagerDelegate(profile) {
     GetDownloadIdReceiverCallback().Run(download::DownloadItem::kInvalidId + 1);
   }
-  ~TestDownloadManagerDelegate() override {}
+  ~TestDownloadManagerDelegate() override = default;
 
   bool DetermineDownloadTarget(
       download::DownloadItem* item,
@@ -621,16 +624,9 @@ IN_PROC_BROWSER_TEST_F(BrowserCloseManagerBrowserTest,
   EXPECT_TRUE(BrowserList::GetInstance()->empty());
 }
 
-// Flaky on Windows 7 (dbg) trybot, see https://crbug.com/751081.
-#if BUILDFLAG(IS_WIN) && !defined(NDEBUG)
-#define MAYBE_TestAddWindowDuringShutdown DISABLED_TestAddWindowDuringShutdown
-#else
-#define MAYBE_TestAddWindowDuringShutdown TestAddWindowDuringShutdown
-#endif
-
 // Test that a window created during shutdown is closed.
 IN_PROC_BROWSER_TEST_F(BrowserCloseManagerBrowserTest,
-                       MAYBE_TestAddWindowDuringShutdown) {
+                       TestAddWindowDuringShutdown) {
   ASSERT_NO_FATAL_FAILURE(ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browsers_[0], embedded_test_server()->GetURL("/beforeunload.html"))));
   PrepareForDialog(browsers_[0]);
@@ -832,14 +828,8 @@ IN_PROC_BROWSER_TEST_F(BrowserCloseManagerBrowserTest,
       browser2->tab_strip_model()->GetWebContentsAt(1)->GetLastCommittedURL());
 }
 
-// TODO(crbug.com/40921700): This test is failing on Linux.
-#if BUILDFLAG(IS_LINUX)
-#define MAYBE_TestCloseTabDuringShutdown DISABLED_TestCloseTabDuringShutdown
-#else
-#define MAYBE_TestCloseTabDuringShutdown TestCloseTabDuringShutdown
-#endif  // BUILDFLAG(IS_LINUX)
 IN_PROC_BROWSER_TEST_F(BrowserCloseManagerBrowserTest,
-                       MAYBE_TestCloseTabDuringShutdown) {
+                       TestCloseTabDuringShutdown) {
   ASSERT_NO_FATAL_FAILURE(ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browsers_[0], embedded_test_server()->GetURL("/beforeunload.html"))));
   PrepareForDialog(browsers_[0]);
@@ -1188,7 +1178,7 @@ IN_PROC_BROWSER_TEST_F(BrowserCloseManagerBrowserTest,
 class BrowserCloseManagerWithBackgroundModeBrowserTest
     : public BrowserCloseManagerBrowserTest {
  public:
-  BrowserCloseManagerWithBackgroundModeBrowserTest() {}
+  BrowserCloseManagerWithBackgroundModeBrowserTest() = default;
 
   BrowserCloseManagerWithBackgroundModeBrowserTest(
       const BrowserCloseManagerWithBackgroundModeBrowserTest&) = delete;
@@ -1279,3 +1269,44 @@ IN_PROC_BROWSER_TEST_F(
 }
 
 #endif  // BUILDFLAG(ENABLE_BACKGROUND_MODE)
+
+#if BUILDFLAG(ENABLE_GLIC)
+
+class BrowserCloseManagerWithGlicBrowserTest
+    : public BrowserCloseManagerBrowserTest {
+ public:
+  BrowserCloseManagerWithGlicBrowserTest() = default;
+
+  BrowserCloseManagerWithGlicBrowserTest(
+      const BrowserCloseManagerWithGlicBrowserTest&) = delete;
+  BrowserCloseManagerWithGlicBrowserTest& operator=(
+      const BrowserCloseManagerWithGlicBrowserTest&) = delete;
+
+  void SetUp() override {
+    feature_list_.InitWithFeatures(
+        {features::kGlic, features::kTabstripComboButton}, {});
+    BrowserCloseManagerBrowserTest::SetUp();
+  }
+
+  void SetUpOnMainThread() override {
+    BrowserCloseManagerBrowserTest::SetUpOnMainThread();
+    g_browser_process->local_state()->SetBoolean(
+        glic::prefs::kGlicLauncherEnabled, true);
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+// Check that closing the last browser window doesn't crash when glic is
+// enabled. Regression test for crbug.com/390203045.
+IN_PROC_BROWSER_TEST_F(BrowserCloseManagerWithGlicBrowserTest,
+                       CloseSingleBrowserWindowWithGlic) {
+  TestBrowserCloseManager::AttemptClose(
+      TestBrowserCloseManager::NO_USER_CHOICE);
+  WaitForAllBrowsersToClose();
+  EXPECT_TRUE(browser_shutdown::IsTryingToQuit());
+  EXPECT_TRUE(BrowserList::GetInstance()->empty());
+}
+
+#endif  // BUILDFLAG(ENABLE_GLIC)

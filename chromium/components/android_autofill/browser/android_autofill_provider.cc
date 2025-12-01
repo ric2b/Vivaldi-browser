@@ -72,14 +72,17 @@ std::unique_ptr<PasswordForm> ParseToPasswordForm(
   // The driver id is irrelevant here because it would only be used by password
   // manager logic that handles the `PasswordForm` returned by the parser.
   // Therefore we pass a dummy a value.
-  parser.set_predictions(password_manager::ConvertToFormPredictions(
+  parser.set_server_predictions(password_manager::ConvertToFormPredictions(
       /*driver_id=*/0, form_data, autofill_predictions));
   // On Chrome, the parser can use stored usernames to identify a filled
   // username field by the value it contains. Since we do not have access to
   // credentials, we leave it empty.
+  // UKM source id is required for recording metrics for parsing with the
+  // clientside TFLite model, and TFLite is not available on WebView.
   return parser.Parse(form_data,
                       password_manager::FormDataParser::Mode::kFilling,
-                      /*stored_usernames=*/{});
+                      /*stored_usernames=*/{},
+                      /*ukm_source_id=*/std::nullopt);
 }
 
 // Returns whether we should attempt to cache provider responses for this form.
@@ -108,6 +111,8 @@ WebAuthnCredManDelegate* GetCredManDelegate(AutofillManager* manager) {
 }
 
 bool AllowCredManOnField(const FormFieldData& field) {
+  // TODO(crbug.com/380405846): Carefully clean up this check when the feature
+  // is launched such that it doesn't accidentally get launched for WebView.
   if (!base::FeatureList::IsEnabled(
           features::kAutofillVirtualViewStructureAndroid)) {
     return false;
@@ -392,7 +397,7 @@ void AndroidAutofillProvider::OnShowBottomSheetResult(
   }
 }
 
-void AndroidAutofillProvider::OnTextFieldDidChange(
+void AndroidAutofillProvider::OnTextFieldValueChanged(
     AndroidAutofillManager* manager,
     const FormData& form,
     const FormFieldData& field,
@@ -419,7 +424,7 @@ void AndroidAutofillProvider::OnTextFieldDidScroll(
   bridge_->OnTextFieldDidScroll(field_info);
 }
 
-void AndroidAutofillProvider::OnSelectControlDidChange(
+void AndroidAutofillProvider::OnSelectControlSelectionChanged(
     AndroidAutofillManager* manager,
     const FormData& form,
     const FormFieldData& field) {
@@ -647,10 +652,10 @@ bool AndroidAutofillProvider::ShowCredManSheet(
   CHECK_EQ(credman_sheet_status_, CredManBottomSheetLifecycle::kNotShown);
   if (WebAuthnCredManDelegate* delegate = GetCredManDelegate(rfh)) {
     credman_sheet_status_ = CredManBottomSheetLifecycle::kIsShowing;
-    delegate->SetRequestCompletionCallback(
-        base::BindRepeating(&AndroidAutofillProvider::OnCredManUiClosed,
-                            weak_ptr_factory_.GetWeakPtr(), std::move(form_id),
-                            std::move(field_to_focus)));
+    delegate->SetRequestCompletionCallback(base::BindRepeating(
+        &AndroidAutofillProvider::OnCredManUiClosed,
+        weak_ptr_factory_.GetWeakPtr(), std::move(form_id),
+        std::move(field_to_focus), delegate->HasPasskeys()));
     delegate->TriggerCredManUi(RequestPasswords(false));
     return true;
   }
@@ -776,9 +781,9 @@ void AndroidAutofillProvider::MaybeSendPrefillRequest(
   bridge_->SendPrefillRequest(*cached_data_->cached_form);
 }
 
-base::flat_map<FieldGlobalId, AutofillType>
+base::flat_map<FieldGlobalId, FieldType>
 AndroidAutofillProvider::PasswordParserOverrides::ToFieldTypeMap() const {
-  base::flat_map<FieldGlobalId, AutofillType> result;
+  base::flat_map<FieldGlobalId, FieldType> result;
   if (username_field_id) {
     result.emplace(*username_field_id, FieldType::USERNAME);
   }
@@ -838,6 +843,7 @@ AndroidAutofillProvider::CachedData::~CachedData() = default;
 void AndroidAutofillProvider::OnCredManUiClosed(
     FormGlobalId form_id,
     std::optional<FieldInfo> field_to_focus,
+    WebAuthnCredManDelegate::State has_passkeys,
     bool success) {
   credman_sheet_status_ = CredManBottomSheetLifecycle::kClosed;
   if (keyboard_suppressor_) {
@@ -847,6 +853,8 @@ void AndroidAutofillProvider::OnCredManUiClosed(
     // TODO: crbug.com/332471454 - Open the keyboard.
     bridge_->OnFocusChanged(field_to_focus);
   }
+  base::UmaHistogramEnumeration(
+      "Autofill.ConditionalPasskeysFlow.PasskeysState", has_passkeys);
 }
 
 }  // namespace autofill

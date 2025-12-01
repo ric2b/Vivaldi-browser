@@ -155,6 +155,7 @@ enum class RenderPassClosureReason
     GLReadPixels,
     IndexRangeReadback,
     VertexArrayStreaming,
+    VertexArrayLineLoop,
 
     InvalidEnum,
     EnumCount = InvalidEnum,
@@ -217,7 +218,7 @@ class ClearValuesArray final
     gl::AttachmentsMask mEnabled;
 };
 
-void GenerateCaps(const wgpu::Device &device,
+void GenerateCaps(const wgpu::Limits &limitWgpu,
                   gl::Caps *glCaps,
                   gl::TextureCapsMap *glTextureCapsMap,
                   gl::Extensions *glExtensions,
@@ -274,7 +275,7 @@ wgpu::FrontFace GetFrontFace(GLenum frontFace);
 wgpu::CullMode GetCullMode(gl::CullFaceMode mode, bool cullFaceEnabled);
 wgpu::ColorWriteMask GetColorWriteMask(bool r, bool g, bool b, bool a);
 
-wgpu::CompareFunction getCompareFunc(const GLenum glCompareFunc);
+wgpu::CompareFunction GetCompareFunc(const GLenum glCompareFunc, bool testEnabled);
 wgpu::StencilOperation getStencilOp(const GLenum glStencilOp);
 
 uint32_t GetFirstIndexForDrawCall(gl::DrawElementsType indexType, const void *indices);
@@ -286,6 +287,7 @@ constexpr uint32_t kReservedPerStageDefaultUniformSlotCount = 0;
 }  // namespace rx
 
 #define ANGLE_WGPU_WRAPPER_OBJECTS_X(PROC) \
+    PROC(BindGroup)                        \
     PROC(Buffer)                           \
     PROC(RenderPipeline)
 

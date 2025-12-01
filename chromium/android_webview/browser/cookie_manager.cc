@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include "android_webview/browser/cookie_manager.h"
 
 #include <stdint.h>
@@ -15,6 +20,7 @@
 #include "android_webview/browser/aw_browser_context_store.h"
 #include "android_webview/browser/aw_client_hints_controller_delegate.h"
 #include "android_webview/browser/aw_cookie_access_policy.h"
+#include "android_webview/common/aw_features.h"
 #include "android_webview/common/aw_switches.h"
 #include "base/android/build_info.h"
 #include "base/android/callback_android.h"
@@ -23,6 +29,7 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/command_line.h"
 #include "base/containers/circular_deque.h"
+#include "base/feature_list.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
@@ -89,6 +96,8 @@ void MaybeRunCookieCallback(base::OnceCallback<void(bool)> callback,
 }
 
 const char kSecureCookieHistogramName[] = "Android.WebView.SecureCookieAction";
+const char kPartitionedCookiesAreExcludedHistogramName[] =
+    "Android.WebView.PartitionedCookiesExcluded";
 
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
@@ -456,11 +465,10 @@ jboolean CookieManager::GetShouldAcceptCookies(
 void CookieManager::SetCookie(JNIEnv* env,
                               const JavaParamRef<jobject>& obj,
                               const JavaParamRef<jstring>& url,
-                              const JavaParamRef<jstring>& value,
+                              std::string& cookie_value,
                               const JavaParamRef<jobject>& java_callback) {
   DCHECK(java_callback) << "Unexpected null Java callback";
   GURL host(ConvertJavaStringToUTF16(env, url));
-  std::string cookie_value(ConvertJavaStringToUTF8(env, value));
   base::OnceCallback<void(bool)> callback =
       base::BindOnce(&base::android::RunBooleanCallbackAndroid,
                      ScopedJavaGlobalRef<jobject>(java_callback));
@@ -473,9 +481,9 @@ void CookieManager::SetCookie(JNIEnv* env,
 void CookieManager::SetCookieSync(JNIEnv* env,
                                   const JavaParamRef<jobject>& obj,
                                   const JavaParamRef<jstring>& url,
-                                  const JavaParamRef<jstring>& value) {
+                                  std::string& value) {
   GURL host(ConvertJavaStringToUTF16(env, url));
-  std::string cookie_value(ConvertJavaStringToUTF8(env, value));
+  std::string cookie_value(value);
 
   ExecCookieTaskSync(base::BindOnce(&CookieManager::SetCookieHelper,
                                     base::Unretained(this), host,
@@ -526,10 +534,9 @@ void CookieManager::SetCookieHelper(const GURL& host,
   }
 }
 
-ScopedJavaLocalRef<jstring> CookieManager::GetCookie(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj,
-    const JavaParamRef<jstring>& url) {
+std::string CookieManager::GetCookie(JNIEnv* env,
+                                     const JavaParamRef<jobject>& obj,
+                                     const JavaParamRef<jstring>& url) {
   GURL host(ConvertJavaStringToUTF16(env, url));
 
   net::CookieList cookie_list;
@@ -537,8 +544,7 @@ ScopedJavaLocalRef<jstring> CookieManager::GetCookie(
                                     base::Unretained(this), host,
                                     &cookie_list));
 
-  return base::android::ConvertUTF8ToJavaString(
-      env, net::CanonicalCookie::BuildCookieLine(cookie_list));
+  return net::CanonicalCookie::BuildCookieLine(cookie_list);
 }
 
 ScopedJavaLocalRef<jobjectArray> CookieManager::GetCookieInfo(
@@ -584,6 +590,19 @@ void CookieManager::GetCookieListAsyncHelper(const GURL& host,
             net::CookiePartitionKey::AncestorChainBit::kSameSite)),
         base::BindOnce(&CookieManager::GetCookieListCompleted,
                        base::Unretained(this), std::move(complete), result));
+  }
+
+  if (base::FeatureList::IsEnabled(
+          features::kWebViewPartitionedCookiesExcluded)) {
+    // We only want to execute this for metrics so we offload this work to later
+    // so that we don't block the sync get cookies operation on this call.
+    // This won't be looking at the same state as the initial GetCookie call
+    // but we are okay with that because Android developers are likely going
+    // to try call this after the cookie they care about has been set.
+    cookie_store_task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&CookieManager::RecordExcludedPartitionedCookies,
+                       base::Unretained(this), host));
   }
 }
 
@@ -790,6 +809,32 @@ void CookieManager::ClearClientHintsCachedPerOriginMapIfNeeded() {
     GetContext()->GetPrefService()->SetDict(
         prefs::kClientHintsCachedPerOriginMap, base::Value::Dict());
     should_clear_client_hints_cached_per_origin_map_ = false;
+  }
+}
+
+void CookieManager::RecordExcludedPartitionedCookies(const GURL& host) {
+  auto record_cookies_excluded_callback =
+      base::BindOnce([](std::optional<bool> are_excluded) {
+        if (are_excluded.has_value()) {
+          base::UmaHistogramBoolean(kPartitionedCookiesAreExcludedHistogramName,
+                                    *are_excluded);
+        }
+      });
+
+  net::CookiePartitionKey cpk = net::CookiePartitionKey::FromWire(
+      net::SchemefulSite(host),
+      net::CookiePartitionKey::AncestorChainBit::kSameSite);
+
+  if (GetMojoCookieManager()) {
+    GetMojoCookieManager()->SiteHasCookieInOtherPartition(
+        net::SchemefulSite(host),
+        std::optional<net::CookiePartitionKey>(net::CookiePartitionKey(cpk)),
+        std::move(record_cookies_excluded_callback));
+  } else {
+    std::optional<bool> cookies_excluded =
+        GetCookieStore()->SiteHasCookieInOtherPartition(
+            net::SchemefulSite(host), cpk);
+    std::move(record_cookies_excluded_callback).Run(cookies_excluded);
   }
 }
 

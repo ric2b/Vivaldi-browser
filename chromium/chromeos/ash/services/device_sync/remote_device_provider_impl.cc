@@ -4,12 +4,13 @@
 
 #include "chromeos/ash/services/device_sync/remote_device_provider_impl.h"
 
+#include <algorithm>
+
 #include "ash/constants/ash_features.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/ranges/algorithm.h"
 #include "chromeos/ash/components/multidevice/logging/logging.h"
 #include "chromeos/ash/components/multidevice/secure_message_delegate_impl.h"
 #include "chromeos/ash/services/device_sync/remote_device_loader.h"
@@ -49,11 +50,9 @@ RemoteDeviceProviderImpl::RemoteDeviceProviderImpl(
     : v2_device_manager_(v2_device_manager),
       user_email_(user_email),
       user_private_key_(user_private_key) {
-  if (features::ShouldUseV2DeviceSync()) {
-    DCHECK(v2_device_manager_);
-    v2_device_manager_->AddObserver(this);
-    LoadV2RemoteDevices();
-  }
+  DCHECK(v2_device_manager_);
+  v2_device_manager_->AddObserver(this);
+  LoadV2RemoteDevices();
 }
 
 RemoteDeviceProviderImpl::~RemoteDeviceProviderImpl() {
@@ -63,8 +62,6 @@ RemoteDeviceProviderImpl::~RemoteDeviceProviderImpl() {
 
 void RemoteDeviceProviderImpl::OnDeviceSyncFinished(
     const CryptAuthDeviceSyncResult& device_sync_result) {
-  DCHECK(features::ShouldUseV2DeviceSync());
-
   if (device_sync_result.IsSuccess() &&
       device_sync_result.did_device_registry_change()) {
     LoadV2RemoteDevices();

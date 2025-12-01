@@ -74,7 +74,7 @@ in the registry.
 
 All of these policies can be configured as strings that contain a JSON value.
 Any JSON editor should able to edit and validate the JSON string, including some
-[online editors](http://google.com/search?q=json%20editor).
+[online editors](https://google.com/search?q=json%20editor).
 
 JSON can contain simple values:
 
@@ -229,7 +229,7 @@ should see your policies listed in that page and their corresponding values.
 
 *   If the policy is present and its value is shown too but it doesn't
             seem to work then this might be a new bug. Please file a new report
-            at [crbug.com](http://crbug.com) with the Enterprise template.
+            at [crbug.com](https://crbug.com) with the Enterprise template.
 *   If the policy is present but the value is invalid then there is a
             problem in the JSON configuration.
 *   If the policy is not present then it wasn't found by Chrome.
@@ -241,5 +241,5 @@ only loads those policies on machines that are enrolled to an AD domain.
 It's generally a good idea to validate your JSON string to make sure it doesn't
 have any invalid constructs; a common source of errors is trailing commas at the
 end of a list or a dictionary, which is not supported in JSON. Use an [online
-JSON validator](http://google.com/search?q=json%20validator) (like
+JSON validator](https://google.com/search?q=json%20validator) (like
 [JSONLint](http://jsonlint.com/)) to make sure your JSON string is valid.

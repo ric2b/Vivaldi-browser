@@ -14,7 +14,7 @@
 #include "cc/animation/animation_host.h"
 #include "cc/layers/tile_display_layer_impl.h"
 #include "cc/trees/layer_tree_frame_sink.h"
-#include "cc/trees/layer_tree_host_impl.h"
+#include "cc/trees/layer_tree_host_impl_client.h"
 #include "components/viz/common/resources/returned_resource.h"
 #include "components/viz/common/resources/transferable_resource.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
@@ -22,7 +22,9 @@
 #include "services/viz/public/mojom/compositing/layer_context.mojom.h"
 
 namespace cc {
+class LayerTreeHostImpl;
 class RenderingStatsInstrumentation;
+class TaskRunnerProvider;
 }  // namespace cc
 
 namespace viz {
@@ -58,9 +60,8 @@ class LayerContextImpl : public cc::LayerTreeHostImplClient,
   void NotifyReadyToDraw() override;
   void SetNeedsRedrawOnImplThread() override;
   void SetNeedsOneBeginImplFrameOnImplThread() override;
-  void SetNeedsUpdateDisplayTreeOnImplThread() override;
   void SetNeedsPrepareTilesOnImplThread() override;
-  void SetNeedsCommitOnImplThread() override;
+  void SetNeedsCommitOnImplThread(bool urgent) override;
   void SetVideoNeedsBeginFrames(bool needs_begin_frames) override;
   void SetDeferBeginMainFrameFromImpl(bool defer_begin_main_frame) override;
   bool IsInsideDraw() override;
@@ -88,7 +89,7 @@ class LayerContextImpl : public cc::LayerTreeHostImplClient,
       cc::ElementListType element_list_type) override;
   void NotifyPaintWorkletStateChange(
       cc::Scheduler::PaintWorkletState state) override;
-  void NotifyThroughputTrackerResults(
+  void NotifyCompositorMetricsTrackerResults(
       cc::CustomTrackerResults results) override;
   bool IsInSynchronousComposite() const override;
   void FrameSinksToThrottleUpdated(
@@ -110,9 +111,6 @@ class LayerContextImpl : public cc::LayerTreeHostImplClient,
                              bool hit_test_data_changed) override;
   void DidNotProduceFrame(const BeginFrameAck& ack,
                           cc::FrameSkippedReason reason) override;
-  void DidAllocateSharedBitmap(base::ReadOnlySharedMemoryRegion region,
-                               const SharedBitmapId& id) override;
-  void DidDeleteSharedBitmap(const SharedBitmapId& id) override;
 
   // cc::TileDisplayLayerImpl::Client:
   void DidAppendQuadsWithResources(
@@ -135,6 +133,8 @@ class LayerContextImpl : public cc::LayerTreeHostImplClient,
   const std::unique_ptr<cc::TaskRunnerProvider> task_runner_provider_;
   const std::unique_ptr<cc::RenderingStatsInstrumentation> rendering_stats_;
   const std::unique_ptr<cc::LayerTreeHostImpl> host_impl_;
+
+  BeginFrameArgs last_begin_frame_args_;
 
   std::vector<TransferableResource> next_frame_resources_;
 

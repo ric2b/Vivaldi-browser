@@ -22,7 +22,6 @@
 #include "android_webview/browser/aw_contents_io_thread_client.h"
 #include "android_webview/browser/aw_cookie_access_policy.h"
 #include "android_webview/browser/aw_devtools_manager_delegate.h"
-#include "android_webview/browser/aw_enterprise_helper.h"
 #include "android_webview/browser/aw_feature_list_creator.h"
 #include "android_webview/browser/aw_http_auth_handler.h"
 #include "android_webview/browser/aw_settings.h"
@@ -112,7 +111,6 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "net/android/network_library.h"
 #include "net/cookies/site_for_cookies.h"
-#include "net/dns/public/secure_dns_mode.h"
 #include "net/http/http_util.h"
 #include "net/net_buildflags.h"
 #include "net/ssl/ssl_cert_request_info.h"
@@ -190,10 +188,6 @@ class XrwNavigationThrottle : public content::NavigationThrottle {
 base::WeakPtr<AsyncCheckTracker> GetAsyncCheckTracker(
     const base::RepeatingCallback<content::WebContents*()>& wc_getter,
     content::FrameTreeNodeId frame_tree_node_id) {
-  if (!base::FeatureList::IsEnabled(
-          safe_browsing::kSafeBrowsingAsyncRealTimeCheck)) {
-    return nullptr;
-  }
   content::WebContents* web_contents = wc_getter.Run();
   // Check whether current frame is a pre-rendered frame. WebView does not
   // support NoStatePrefetch, so we do not check for that.
@@ -286,29 +280,6 @@ void AwContentBrowserClient::OnNetworkServiceCreated(
   network_service->SetUpHttpAuth(network::mojom::HttpAuthStaticParams::New());
   network_service->ConfigureHttpAuthPrefs(
       AwBrowserProcess::GetInstance()->CreateHttpAuthDynamicParams());
-
-  if (base::FeatureList::IsEnabled(features::kWebViewAsyncDns)) {
-    enterprise::GetEnterpriseState(
-        base::BindOnce([](enterprise::EnterpriseState state) {
-          switch (state) {
-            case enterprise::EnterpriseState::kUnknown:
-              // If we cannot be certain about the enterprise state, we should
-              // not enable the AsyncDNS resolver, but fall back on the system
-              // resolver.
-            case enterprise::EnterpriseState::kEnterpriseOwned:
-              // On enterprise owned devices, we should use the system resolver
-              // to make sure that we respect any network settings implemented
-              // by the device owner.
-              return;
-            case enterprise::EnterpriseState::kNotOwned:
-              content::GetNetworkService()->ConfigureStubHostResolver(
-                  /*insecure_dns_client_enabled=*/true,
-                  net::SecureDnsMode::kAutomatic, net::DnsOverHttpsConfig(),
-                  /*additional_dns_types_enabled=*/true);
-              break;
-          }
-        }));
-  }
 }
 
 void AwContentBrowserClient::ConfigureNetworkContextParams(
@@ -364,7 +335,7 @@ void AwContentBrowserClient::RenderProcessWillLaunch(
   // per-view access checks, and access is granted by default (see
   // AwSettings.mAllowContentUrlAccess).
   content::ChildProcessSecurityPolicy::GetInstance()->GrantRequestScheme(
-      host->GetID(), url::kContentScheme);
+      host->GetDeprecatedID(), url::kContentScheme);
 }
 
 bool AwContentBrowserClient::IsExplicitNavigation(
@@ -607,8 +578,9 @@ void AwContentBrowserClient::GetAdditionalMappedFilesForChildProcess(
   }
 }
 
-void AwContentBrowserClient::OverrideWebkitPrefs(
+void AwContentBrowserClient::OverrideWebPreferences(
     content::WebContents* web_contents,
+    content::SiteInstance& main_frame_site,
     blink::web_pref::WebPreferences* web_prefs) {
   AwSettings* aw_settings = AwSettings::FromWebContents(web_contents);
   if (aw_settings) {
@@ -724,7 +696,8 @@ AwContentBrowserClient::CreateURLLoaderThrottles(
       /* hash_realtime_service */ nullptr,
       /* hash_realtime_selection */
       hash_real_time_selection,
-      /* async_check_tracker */ async_check_tracker));
+      /* async_check_tracker */ async_check_tracker,
+      /*referring_app_info=*/std::nullopt));
 
   if (request.destination == network::mojom::RequestDestination::kDocument) {
     const bool is_load_url =
@@ -772,7 +745,7 @@ AwContentBrowserClient::CreateURLLoaderThrottlesForKeepAlive(
       /* hash_realtime_service */ nullptr,
       /* hash_realtime_selection */
       hash_real_time_selection,
-      /* async_check_tracker */ nullptr));
+      /* async_check_tracker */ nullptr, /*referring_app_info=*/std::nullopt));
 
   return result;
 }
@@ -896,6 +869,7 @@ AwContentBrowserClient::CreateLoginDelegate(
     const GURL& url,
     scoped_refptr<net::HttpResponseHeaders> response_headers,
     bool first_auth_attempt,
+    content::GuestPageHolder* guest,
     LoginAuthRequiredCallback auth_required_callback) {
   return std::make_unique<AwHttpAuthHandler>(auth_info, web_contents,
                                              first_auth_attempt,
@@ -1033,6 +1007,14 @@ size_t AwContentBrowserClient::GetMaxRendererProcessCountOverride() {
 
 bool AwContentBrowserClient::ShouldDisableSiteIsolation(
     content::SiteIsolationMode site_isolation_mode) {
+  // Since AW does not yet support OOPIFs, we must return true here to disable
+  // features that may trigger OOPIFs, such as origin isolation.
+  //
+  // Adding OOPIF support for AW is tracked by https://crbug.com/806404.
+  return true;
+}
+
+bool AwContentBrowserClient::ShouldDisableOriginIsolation() {
   // Since AW does not yet support OOPIFs, we must return true here to disable
   // features that may trigger OOPIFs, such as origin isolation.
   //
@@ -1289,8 +1271,7 @@ bool AwContentBrowserClient::HasErrorPage(int http_status_code) {
 
 bool AwContentBrowserClient::SuppressDifferentOriginSubframeJSDialogs(
     content::BrowserContext* browser_context) {
-  return base::FeatureList::IsEnabled(
-      features::kWebViewSuppressDifferentOriginSubframeJSDialogs);
+  return false;
 }
 
 bool AwContentBrowserClient::ShouldPreconnectNavigation(

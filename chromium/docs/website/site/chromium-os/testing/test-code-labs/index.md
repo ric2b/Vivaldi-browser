@@ -9,8 +9,8 @@ title: Test Code Labs
 ---
 
 *   [Autotest Client
-            Tests](/chromium-os/testing/test-code-labs/autotest-client-tests)
+            Tests](/chromium-os/developer-library/training/codelabs/autotest-client-tests)
 *   [Codelab for server side
-            test](/chromium-os/testing/test-code-labs/server-side-test)
+            test](/chromium-os/developer-library/training/codelabs/server-side-test)
 *   [Dynamic Suite
-            Codelab](/chromium-os/testing/test-code-labs/dynamic-suite-codelab)
+            Codelab](/chromium-os/developer-library/training/codelabs/dynamic-suite-codelab)

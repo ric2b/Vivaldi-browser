@@ -92,7 +92,7 @@ enum {
   kAccessibilityAutoclickMovementThreshold = 100032,
   kAccessibilityAutoclickRevertToLeftClick = 100033,
   kAccessibilityAutoclickStabilizePosition = 100034,
-  kAccessibilityCursorColor = 100035,
+  // kAccessibilityCursorColor = 100035, // (no longer synced)
   kAccessibilityEnhancedNetworkVoicesInSelectToSpeakAllowed = 100036,
   kAccessibilityFloatingMenuPosition = 100037,
   // kAccessibilityGreyscaleAmount = 100038,  // deprecated
@@ -258,7 +258,7 @@ enum {
   kDynamicColorColorScheme = 100196,
   kDynamicColorSeedColor = 100197,
   kLongPressDiacritics = 100198,
-  kSidePanelCompanionEntryPinnedToToolbar = 100199,
+  // kSidePanelCompanionEntryPinnedToToolbar = 100199, Deprecated 11/2024.
   kAccessibilityColorCorrectionEnabled = 100200,
   kAccessibilityColorVisionCorrectionAmount = 100201,
   kAccessibilityColorVisionCorrectionType = 100202,
@@ -342,7 +342,7 @@ enum {
   kKeyboardDefaultSplitModifierSettings = 100279,
   kDisplayAmbientLightSensorLastEnabled = 100280,
   kAccessibilityMainNodeAnnotationsEnabled = 100281,
-  kSyncableVersionedWallpaperInfo = 100282,
+  // kSyncableVersionedWallpaperInfo = 100282, (deprecated)
   kFocusModeSelectedTask = 100283,
   kFocusModeSoundSection = 100284,
   kAccessibilityFaceGazeActionsEnabled = 100285,
@@ -371,10 +371,18 @@ enum {
   kDesktopToiOSNtpPromoAppearanceTimestamps = 100308,
   kDesktopToiOSNtpPromoDismissed = 100309,
   kPrivacySandboxFakeNoticePromptShownTimeSync = 100310,
-  kAccessibilityBounceKeysDelay = 100311,
-  kAccessibilitySlowKeysDelay = 100312,
+  kAccessibilityBounceKeysDelayMs = 100311,
+  kAccessibilitySlowKeysDelayMs = 100312,
   kAccessibilityFaceGazePrecisionClick = 100313,
   kAccessibilityFaceGazePrecisionClickSpeedFactor = 100314,
+  kOfficeFilesAlwaysMoveToDriveSyncable = 100315,
+  kOfficeFilesAlwaysMoveToOneDriveSyncable = 100316,
+  kOfficeMoveConfirmationShownForDriveSyncable = 100317,
+  kOfficeMoveConfirmationShownForOneDriveSyncable = 100318,
+  kOfficeMoveConfirmationShownForLocalToDriveSyncable = 100319,
+  kOfficeMoveConfirmationShownForLocalToOneDriveSyncable = 100320,
+  kOfficeMoveConfirmationShownForCloudToDriveSyncable = 100321,
+  kOfficeMoveConfirmationShownForCloudToOneDriveSyncable = 100322,
   // See components/sync_preferences/README.md about adding new entries here.
   // vvvvv IMPORTANT! vvvvv
   // Note to the reviewer: IT IS YOUR RESPONSIBILITY to ensure that new syncable
@@ -527,10 +535,6 @@ constexpr auto kChromeSyncablePrefsAllowlist = base::MakeFixedFlatMap<
      {syncable_prefs_ids::kShowForwardButton, syncer::PREFERENCES,
       sync_preferences::PrefSensitivity::kNone,
       sync_preferences::MergeBehavior::kNone}},
-    {prefs::kSidePanelCompanionEntryPinnedToToolbar,
-     {syncable_prefs_ids::kSidePanelCompanionEntryPinnedToToolbar,
-      syncer::PREFERENCES, sync_preferences::PrefSensitivity::kNone,
-      sync_preferences::MergeBehavior::kNone}},
     {prefs::kPinnedActions,
      {syncable_prefs_ids::kPinnedActions, syncer::PREFERENCES,
       sync_preferences::PrefSensitivity::kNone,
@@ -595,9 +599,9 @@ constexpr auto kChromeSyncablePrefsAllowlist = base::MakeFixedFlatMap<
      {syncable_prefs_ids::kAccessibilityAutoclickStabilizePosition,
       syncer::OS_PREFERENCES, sync_preferences::PrefSensitivity::kNone,
       sync_preferences::MergeBehavior::kNone}},
-    {ash::prefs::kAccessibilityBounceKeysDelay,
-     {syncable_prefs_ids::kAccessibilityBounceKeysDelay, syncer::OS_PREFERENCES,
-      sync_preferences::PrefSensitivity::kNone,
+    {ash::prefs::kAccessibilityBounceKeysDelayMs,
+     {syncable_prefs_ids::kAccessibilityBounceKeysDelayMs,
+      syncer::OS_PREFERENCES, sync_preferences::PrefSensitivity::kNone,
       sync_preferences::MergeBehavior::kNone}},
     {ash::prefs::kAccessibilityColorCorrectionEnabled,
      {syncable_prefs_ids::kAccessibilityColorCorrectionEnabled,
@@ -610,10 +614,6 @@ constexpr auto kChromeSyncablePrefsAllowlist = base::MakeFixedFlatMap<
     {ash::prefs::kAccessibilityColorVisionCorrectionType,
      {syncable_prefs_ids::kAccessibilityColorVisionCorrectionType,
       syncer::OS_PREFERENCES, sync_preferences::PrefSensitivity::kNone,
-      sync_preferences::MergeBehavior::kNone}},
-    {ash::prefs::kAccessibilityCursorColor,
-     {syncable_prefs_ids::kAccessibilityCursorColor, syncer::OS_PREFERENCES,
-      sync_preferences::PrefSensitivity::kNone,
       sync_preferences::MergeBehavior::kNone}},
     {ash::prefs::kAccessibilityEnhancedNetworkVoicesInSelectToSpeakAllowed,
      {syncable_prefs_ids::
@@ -676,8 +676,8 @@ constexpr auto kChromeSyncablePrefsAllowlist = base::MakeFixedFlatMap<
      {syncable_prefs_ids::kAccessibilitySelectToSpeakWordHighlight,
       syncer::OS_PREFERENCES, sync_preferences::PrefSensitivity::kNone,
       sync_preferences::MergeBehavior::kNone}},
-    {ash::prefs::kAccessibilitySlowKeysDelay,
-     {syncable_prefs_ids::kAccessibilitySlowKeysDelay, syncer::OS_PREFERENCES,
+    {ash::prefs::kAccessibilitySlowKeysDelayMs,
+     {syncable_prefs_ids::kAccessibilitySlowKeysDelayMs, syncer::OS_PREFERENCES,
       sync_preferences::PrefSensitivity::kNone,
       sync_preferences::MergeBehavior::kNone}},
     {ash::prefs::kAccessibilitySwitchAccessAutoScanEnabled,
@@ -831,6 +831,40 @@ constexpr auto kChromeSyncablePrefsAllowlist = base::MakeFixedFlatMap<
     {ash::prefs::kNaturalScroll,
      {syncable_prefs_ids::kNaturalScroll, syncer::OS_PRIORITY_PREFERENCES,
       sync_preferences::PrefSensitivity::kNone,
+      sync_preferences::MergeBehavior::kNone}},
+    {prefs::kOfficeFilesAlwaysMoveToDriveSyncable,
+     {syncable_prefs_ids::kOfficeFilesAlwaysMoveToDriveSyncable,
+      syncer::OS_PREFERENCES, sync_preferences::PrefSensitivity::kNone,
+      sync_preferences::MergeBehavior::kNone}},
+    {prefs::kOfficeFilesAlwaysMoveToOneDriveSyncable,
+     {syncable_prefs_ids::kOfficeFilesAlwaysMoveToOneDriveSyncable,
+      syncer::OS_PREFERENCES, sync_preferences::PrefSensitivity::kNone,
+      sync_preferences::MergeBehavior::kNone}},
+    {prefs::kOfficeMoveConfirmationShownForDriveSyncable,
+     {syncable_prefs_ids::kOfficeMoveConfirmationShownForDriveSyncable,
+      syncer::OS_PREFERENCES, sync_preferences::PrefSensitivity::kNone,
+      sync_preferences::MergeBehavior::kNone}},
+    {prefs::kOfficeMoveConfirmationShownForOneDriveSyncable,
+     {syncable_prefs_ids::kOfficeMoveConfirmationShownForOneDriveSyncable,
+      syncer::OS_PREFERENCES, sync_preferences::PrefSensitivity::kNone,
+      sync_preferences::MergeBehavior::kNone}},
+    {prefs::kOfficeMoveConfirmationShownForLocalToDriveSyncable,
+     {syncable_prefs_ids::kOfficeMoveConfirmationShownForLocalToDriveSyncable,
+      syncer::OS_PREFERENCES, sync_preferences::PrefSensitivity::kNone,
+      sync_preferences::MergeBehavior::kNone}},
+    {prefs::kOfficeMoveConfirmationShownForLocalToOneDriveSyncable,
+     {syncable_prefs_ids::
+          kOfficeMoveConfirmationShownForLocalToOneDriveSyncable,
+      syncer::OS_PREFERENCES, sync_preferences::PrefSensitivity::kNone,
+      sync_preferences::MergeBehavior::kNone}},
+    {prefs::kOfficeMoveConfirmationShownForCloudToDriveSyncable,
+     {syncable_prefs_ids::kOfficeMoveConfirmationShownForCloudToDriveSyncable,
+      syncer::OS_PREFERENCES, sync_preferences::PrefSensitivity::kNone,
+      sync_preferences::MergeBehavior::kNone}},
+    {prefs::kOfficeMoveConfirmationShownForCloudToOneDriveSyncable,
+     {syncable_prefs_ids::
+          kOfficeMoveConfirmationShownForCloudToOneDriveSyncable,
+      syncer::OS_PREFERENCES, sync_preferences::PrefSensitivity::kNone,
       sync_preferences::MergeBehavior::kNone}},
     {ash::prefs::kOobeMarketingOptInChoice,
      {syncable_prefs_ids::kOobeMarketingOptInChoice, syncer::OS_PREFERENCES,
@@ -1228,10 +1262,6 @@ constexpr auto kChromeSyncablePrefsAllowlist = base::MakeFixedFlatMap<
       sync_preferences::MergeBehavior::kNone}},
     {ash::prefs::kKeyboardAmbientLightSensorLastEnabled,
      {syncable_prefs_ids::kKeyboardAmbientLightSensorLastEnabled,
-      syncer::OS_PREFERENCES, sync_preferences::PrefSensitivity::kNone,
-      sync_preferences::MergeBehavior::kNone}},
-    {ash::prefs::kSyncableVersionedWallpaperInfo,
-     {syncable_prefs_ids::kSyncableVersionedWallpaperInfo,
       syncer::OS_PREFERENCES, sync_preferences::PrefSensitivity::kNone,
       sync_preferences::MergeBehavior::kNone}},
     {prefs::kShelfMallAppPinRolls,
@@ -1640,9 +1670,9 @@ std::map<std::string_view, sync_preferences::SyncablePrefMetadata>
 ChromeSyncablePrefsDatabase::GetAllSyncablePrefsForTest() const {
   std::map<std::string_view, sync_preferences::SyncablePrefMetadata>
       syncable_prefs;
-  base::ranges::copy(kChromeSyncablePrefsAllowlist,
-                     std::inserter(syncable_prefs, syncable_prefs.end()));
-  base::ranges::move(
+  std::ranges::copy(kChromeSyncablePrefsAllowlist,
+                    std::inserter(syncable_prefs, syncable_prefs.end()));
+  std::ranges::move(
       common_syncable_prefs_database_.GetAllSyncablePrefsForTest(),  // IN-TEST
       std::inserter(syncable_prefs, syncable_prefs.end()));
   return syncable_prefs;

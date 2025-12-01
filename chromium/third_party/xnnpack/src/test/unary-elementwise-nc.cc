@@ -19,10 +19,11 @@
 #include <gtest/gtest.h>
 #include "xnnpack.h"
 #include "xnnpack/buffer.h"
+#include "xnnpack/datatype.h"
 #include "xnnpack/log.h"
 #include "xnnpack/math.h"
-#include "xnnpack/operator.h"
 #include "xnnpack/operator-utils.h"
+#include "xnnpack/operator.h"
 #include "replicable_random_device.h"
 #include "unary-ops.h"
 
@@ -130,16 +131,15 @@ struct Param {
   RunMode run_mode;
 };
 
-// These template parameters only exist to allow us to instantiate a subset of
-// the test suite at a time. We only want to try to run the quantized tests for
-// datatypes that are actually quantized.
-template <bool InputQuantized = false, bool OutputQuantized = false>
-class UnaryNCTestT : public testing::TestWithParam<Param> {
+class UnaryNCTest : public testing::TestWithParam<Param> {
  public:
   xnnpack::ReplicableRandomDevice rng_;
 
   template <typename In, typename Out>
   void RunUnaryTest(const UnaryOpTestParams& test_params, const Param& param) {
+    if (::testing::Test::IsSkipped()) {
+      return;
+    }
     ASSERT_EQ(xnn_status_success, xnn_initialize(/*allocator=*/nullptr));
 
     const xnn_unary_operator unary_op = param.unary_operator;
@@ -149,11 +149,13 @@ class UnaryNCTestT : public testing::TestWithParam<Param> {
     const UnaryOpInfo* op_info = GetUnaryOpInfo(unary_op);
     const xnn_unary_params op_params = op_info->DefaultParams();
     xnn_quantization_params input_quantization =
-        InputQuantized ? test_params.input_quantization
-                       : op_info->InputQuantizationParams(input_datatype);
+        xnnpack::is_quantized<In>::value
+            ? test_params.input_quantization
+            : op_info->InputQuantizationParams(input_datatype);
     xnn_quantization_params output_quantization =
-        OutputQuantized ? test_params.output_quantization
-                        : op_info->OutputQuantizationParams(output_datatype);
+        xnnpack::is_quantized<Out>::value
+            ? test_params.output_quantization
+            : op_info->OutputQuantizationParams(output_datatype);
     op_info->InputQuantizationParams(input_datatype);
 
     Interval domain = op_info->Domain(input_datatype);
@@ -171,13 +173,9 @@ class UnaryNCTestT : public testing::TestWithParam<Param> {
     xnnpack::Buffer<Out> output_ref(batch_size * channels);
     for (size_t iteration = 0; iteration < iterations; iteration++) {
       for (size_t i = 0; i < batch_size; i++) {
-        FillRandom(rng_, input.data() + i * input_stride, channels, domain,
+        FillRandom(rng_, input.data() + i * input_stride,
+                   channels + XNN_EXTRA_BYTES / sizeof(In), domain,
                    input_quantization);
-
-        // Compute reference results.
-        UnaryReferenceImpl(input.data() + i * input_stride, channels,
-                           output_ref.data() + i * channels, *op_info,
-                           input_quantization, output_quantization, op_params);
       }
 
       if (param.run_mode == RunMode::kEager) {
@@ -222,10 +220,22 @@ class UnaryNCTestT : public testing::TestWithParam<Param> {
 
       // Verify results.
       for (size_t i = 0; i < batch_size; i++) {
+        // Compute reference results.
+        UnaryReferenceImpl(input.data() + i * input_stride, channels,
+                           output_ref.data() + i * channels, *op_info,
+                           input_quantization, output_quantization, op_params);
+
         for (size_t c = 0; c < channels; c++) {
+          const float x = input[i * input_stride + c];
           const float y = output[i * output_stride + c];
           const float y_ref = output_ref[i * channels + c];
-          ASSERT_NEAR(y, y_ref, op_info->Tolerance(y_ref, output_datatype));
+          ASSERT_NEAR(y, y_ref, op_info->Tolerance(y_ref, output_datatype))
+              << "x = " << x
+              << ", y = " << y
+              << ", input1 zero point = " << input_quantization.zero_point
+              << ", input1 scale = " << input_quantization.scale
+              << ", output zero point = " << output_quantization.zero_point
+              << ", output scale = " << output_quantization.scale;
         }
       }
     }
@@ -237,6 +247,9 @@ class UnaryNCTestT : public testing::TestWithParam<Param> {
       case xnn_datatype_fp16:
         RunUnaryTest<In, xnn_float16>(test_params, param);
         break;
+      case xnn_datatype_bf16:
+        RunUnaryTest<In, xnn_bfloat16>(test_params, param);
+        break;
       case xnn_datatype_fp32:
         RunUnaryTest<In, float>(test_params, param);
         break;
@@ -244,10 +257,10 @@ class UnaryNCTestT : public testing::TestWithParam<Param> {
         RunUnaryTest<In, int32_t>(test_params, param);
         break;
       case xnn_datatype_quint8:
-        RunUnaryTest<In, uint8_t>(test_params, param);
+        RunUnaryTest<In, xnnpack::quantized<uint8_t>>(test_params, param);
         break;
       case xnn_datatype_qint8:
-        RunUnaryTest<In, int8_t>(test_params, param);
+        RunUnaryTest<In, xnnpack::quantized<int8_t>>(test_params, param);
         break;
       default:
         XNN_UNREACHABLE;
@@ -259,6 +272,9 @@ class UnaryNCTestT : public testing::TestWithParam<Param> {
       case xnn_datatype_fp16:
         RunUnaryTest<xnn_float16>(test_params, param);
         break;
+      case xnn_datatype_bf16:
+        RunUnaryTest<xnn_bfloat16>(test_params, param);
+        break;
       case xnn_datatype_fp32:
         RunUnaryTest<float>(test_params, param);
         break;
@@ -266,10 +282,10 @@ class UnaryNCTestT : public testing::TestWithParam<Param> {
         RunUnaryTest<int32_t>(test_params, param);
         break;
       case xnn_datatype_quint8:
-        RunUnaryTest<uint8_t>(test_params, param);
+        RunUnaryTest<xnnpack::quantized<uint8_t>>(test_params, param);
         break;
       case xnn_datatype_qint8:
-        RunUnaryTest<int8_t>(test_params, param);
+        RunUnaryTest<xnnpack::quantized<int8_t>>(test_params, param);
         break;
       default:
         XNN_UNREACHABLE;
@@ -277,11 +293,8 @@ class UnaryNCTestT : public testing::TestWithParam<Param> {
   }
 };
 
-using UnaryNCTest = UnaryNCTestT<>;
-using UnaryNCTest_InputQuantized =
-    UnaryNCTestT</*InputQuantized=*/true, /*OutputQuantized=*/false>;
-using UnaryNCTest_OutputQuantized =
-    UnaryNCTestT</*InputQuantized=*/false, /*OutputQuantized=*/true>;
+using UnaryNCTest_InputQuantized = UnaryNCTest;
+using UnaryNCTest_OutputQuantized = UnaryNCTest;
 
 TEST_P(UnaryNCTest, UnitBatch) {
   for (size_t c = 0; c < 100; c += 15) {
@@ -364,11 +377,24 @@ xnn_unary_operator all_unary_ops[] = {
     xnn_unary_square_root,
     xnn_unary_reciprocal_square_root,
     xnn_unary_tanh,
+    xnn_unary_cube_root,
+    xnn_unary_cosine,
+    xnn_unary_sine,
+    xnn_unary_count_leading_zeros,
+    xnn_unary_bitwise_not,
+    xnn_unary_popcount,
+    xnn_unary_sign,
 };
 
 xnn_datatype all_datatypes[] = {
-    xnn_datatype_quint8, xnn_datatype_qint8, xnn_datatype_fp16,
-    xnn_datatype_fp32,   xnn_datatype_int32,
+    xnn_datatype_quint8,
+    xnn_datatype_qint8,
+#ifndef XNN_EXCLUDE_F16_TESTS
+    xnn_datatype_fp16,
+#endif
+    xnn_datatype_bf16,
+    xnn_datatype_fp32,
+    xnn_datatype_int32,
 };
 
 xnn_datatype quantized_datatypes[] = {
@@ -377,7 +403,10 @@ xnn_datatype quantized_datatypes[] = {
 };
 
 xnn_datatype unquantized_datatypes[] = {
+#ifndef XNN_EXCLUDE_F16_TESTS
     xnn_datatype_fp16,
+#endif
+    xnn_datatype_bf16,
     xnn_datatype_fp32,
     xnn_datatype_int32,
 };

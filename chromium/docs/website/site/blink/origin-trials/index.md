@@ -10,7 +10,7 @@ Origin trials are an approach to enable safe experimentation with web platform
 features. For more, see <https://github.com/GoogleChrome/OriginTrials>.
 
 Googlers should also refer to the internal documentation at
-[go/origin-trials](http://goto.google.com/origin-trials).
+[go/origin-trials](http://go/origin-trials).
 
 <div class="two-column-container">
 <div class="column">

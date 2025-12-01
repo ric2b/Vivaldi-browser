@@ -9,7 +9,9 @@
 #include "chrome/browser/ai/ai_context_bound_object.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "components/optimization_guide/core/optimization_guide_model_executor.h"
-#include "third_party/blink/public/mojom/ai/ai_assistant.mojom-forward.h"
+#include "third_party/blink/public/mojom/ai/ai_language_model.mojom-forward.h"
+
+class AIManager;
 
 // A base class for tasks which create an on-device session.
 class CreateOnDeviceSessionTask
@@ -17,6 +19,7 @@ class CreateOnDeviceSessionTask
       public optimization_guide::OnDeviceModelAvailabilityObserver {
  public:
   CreateOnDeviceSessionTask(
+      AIContextBoundObjectSet& context_bound_object_set,
       content::BrowserContext* browser_context,
       optimization_guide::ModelBasedCapabilityKey feature);
   ~CreateOnDeviceSessionTask() override;
@@ -67,13 +70,11 @@ class CreateOnDeviceSessionTask
     // The task is cancelled before finishing.
     kCancelled,
   };
+
   friend base::StateTransitions<State>;
   friend std::ostream& operator<<(std::ostream& os, State state);
 
   void SetState(State state);
-
-  // `AIContextBoundObject` implementation.
-  void SetDeletionCallback(base::OnceClosure deletion_callback) override;
 
   // optimization_guide::OnDeviceModelAvailabilityObserver
   void OnDeviceModelAvailabilityChanged(
@@ -92,25 +93,28 @@ class CreateOnDeviceSessionTask
   const raw_ptr<content::BrowserContext> browser_context_;
   const optimization_guide::ModelBasedCapabilityKey feature_;
   State state_ = CreateOnDeviceSessionTask::State::kNotStarted;
-  base::OnceClosure deletion_callback_;
 };
 
-// Implementation of the `CreateOnDeviceSessionTask` base class for AIAssistant.
-class CreateAssistantOnDeviceSessionTask : public CreateOnDeviceSessionTask {
+// Implementation of the `CreateOnDeviceSessionTask` base class for
+// `AILanguageModel`.
+class CreateLanguageModelOnDeviceSessionTask
+    : public CreateOnDeviceSessionTask {
  public:
-  CreateAssistantOnDeviceSessionTask(
+  CreateLanguageModelOnDeviceSessionTask(
+      AIManager& ai_manager,
+      AIContextBoundObjectSet& context_bound_object_set,
       content::BrowserContext* browser_context,
-      const blink::mojom::AIAssistantSamplingParamsPtr& sampling_params,
+      const blink::mojom::AILanguageModelSamplingParamsPtr& sampling_params,
       base::OnceCallback<
           void(std::unique_ptr<
                optimization_guide::OptimizationGuideModelExecutor::Session>)>
           completion_callback);
-  ~CreateAssistantOnDeviceSessionTask() override;
+  ~CreateLanguageModelOnDeviceSessionTask() override;
 
-  CreateAssistantOnDeviceSessionTask(
-      const CreateAssistantOnDeviceSessionTask&) = delete;
-  CreateAssistantOnDeviceSessionTask& operator=(
-      const CreateAssistantOnDeviceSessionTask&) = delete;
+  CreateLanguageModelOnDeviceSessionTask(
+      const CreateLanguageModelOnDeviceSessionTask&) = delete;
+  CreateLanguageModelOnDeviceSessionTask& operator=(
+      const CreateLanguageModelOnDeviceSessionTask&) = delete;
 
  protected:
   // `CreateOnDeviceSessionTask` implementation.

@@ -31,7 +31,6 @@
 import * as Common from '../../../../core/common/common.js';
 import * as i18n from '../../../../core/i18n/i18n.js';
 import * as Platform from '../../../../core/platform/platform.js';
-import * as Root from '../../../../core/root/root.js';
 import * as Trace from '../../../../models/trace/trace.js';
 import * as VisualLogging from '../../../../ui/visual_logging/visual_logging.js';
 import * as Buttons from '../../../components/buttons/buttons.js';
@@ -40,7 +39,7 @@ import * as ThemeSupport from '../../theme_support/theme_support.js';
 
 import {drawExpansionArrow, drawIcon, horizontalLine} from './CanvasHelper.js';
 import {ChartViewport, type ChartViewportDelegate} from './ChartViewport.js';
-import flameChartStyles from './flameChart.css.legacy.js';
+import flameChartStyles from './flameChart.css.js';
 import {DEFAULT_FONT_SIZE, getFontFamilyForCanvas} from './Font.js';
 import {type Calculator, TimelineGrid} from './TimelineGrid.js';
 
@@ -98,7 +97,7 @@ const UIStrings = {
   /**
    *@description Shown in the context menu when right clicking on a track header to enable the user to enter the track configuration mode.
    */
-  enterTrackConfigurationMode: 'Configure tracks…',
+  enterTrackConfigurationMode: 'Configure tracks',
   /**
    *@description Shown in the context menu when right clicking on a track header to allow the user to exit track configuration mode.
    */
@@ -264,6 +263,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
   private chartViewport: ChartViewport;
   private dataProvider: FlameChartDataProvider;
   private candyStripePattern: CanvasPattern|null;
+  private candyStripePatternGray: CanvasPattern|null;
   private contextMenu?: UI.ContextMenu.ContextMenu;
   private viewportElement: HTMLElement;
   private canvas: HTMLCanvasElement;
@@ -281,14 +281,13 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
   private textPadding: number;
   private highlightedMarkerIndex: number;
   /**
-   * Represents the index of the entry that the user's mouse cursor is over.
-   * Note that this is updated as the user moves their cursor: they do not have
-   * to click for this to be updated.
+   * The index of the entry that's hovered (typically), or focused because of searchResult or other reasons.focused via searchResults, or focused by other means.
+   * Updated as the cursor moves. Meanwhile `selectedEntryIndex` is the entry that's been clicked.
    **/
   private highlightedEntryIndex: number;
   /**
    * Represents the index of the entry that is selected. For an entry to be
-   * selected, it has to be clicked by the user.
+   * selected, it has to be clicked by the user (generally).
    **/
   private selectedEntryIndex: number;
   private rawTimelineDataLength: number;
@@ -312,18 +311,19 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
   private rawTimelineData?: FlameChartTimelineData|null;
   private forceDecorationCache?: boolean[]|null;
   private entryColorsCache?: string[]|null;
-  private entryIndicesToNotDim?: number[]|null;
   private colorDimmingCache = new Map<string, string>();
   private totalTime?: number;
   private lastPopoverState: PopoverState;
+
+  private dimIndicies?: Uint8Array|null;
+  /** When true, all undimmed entries are outlined. When an array, only those indices are outlined (if not dimmed). */
+  private dimShouldOutlineUndimmedEntries: boolean|Uint8Array = false;
 
   #tooltipPopoverYAdjustment: number = 0;
 
   #font: string;
   #groupTreeRoot?: GroupTreeNode|null;
   #searchResultEntryIndex: number|null = null;
-  #searchResultHighlightElements: HTMLElement[] = [];
-  #searchResultEntries: number[]|null = null;
   #inTrackConfigEditMode: boolean = false;
   #linkSelectionAnnotationIsInProgress: boolean = false;
 
@@ -364,8 +364,8 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
     this.dataProvider = dataProvider;
 
     this.viewportElement = this.chartViewport.viewportElement;
-    this.canvas = (this.viewportElement.createChild('canvas', 'fill') as HTMLCanvasElement);
-    this.candyStripePattern = null;
+    this.canvas = this.viewportElement.createChild('canvas', 'fill');
+    this.candyStripePattern = this.candyStripePatternGray = null;
 
     this.canvas.tabIndex = 0;
     UI.ARIAUtils.setLabel(this.canvas, i18nString(UIStrings.flameChart));
@@ -496,24 +496,66 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
   }
 
   #shouldDimEvent(entryIndex: number): boolean {
-    // If a search is active, that enables a mode where we dim all events that do not match the search results.
-    // Otherwise the events to not dim are defined by the last call to `enableDimming`.
-    const entriesToNotDim = this.#searchResultEntries ?? this.entryIndicesToNotDim;
-    if (!entriesToNotDim) {
+    if (this.dimIndicies) {
+      return this.dimIndicies[entryIndex] !== 0;
+    }
+
+    return false;
+  }
+
+  /**
+   * Returns true only if dimming is active, but not for this specific entry.
+   * Also checks `dimShouldOutlineUndimmedEntries`.
+   */
+  #shouldOutlineEvent(entryIndex: number): boolean {
+    if (!this.isDimming() || this.#shouldDimEvent(entryIndex)) {
       return false;
     }
 
-    return !entriesToNotDim.includes(entryIndex);
+    if (ArrayBuffer.isView(this.dimShouldOutlineUndimmedEntries)) {
+      return this.dimShouldOutlineUndimmedEntries[entryIndex] !== 0;
+    }
+
+    return this.dimShouldOutlineUndimmedEntries;
   }
 
-  enableDimming(entryIndicesToNotDim: number[]): void {
-    this.entryIndicesToNotDim = entryIndicesToNotDim;
+  /**
+   * Returns a contiguous boolean array for quick lookup during drawing.
+   */
+  #createTypedIndexArray(indices: number[], inclusive: boolean): Uint8Array {
+    const typedIndices = new Uint8Array(this.rawTimelineDataLength);
+
+    if (inclusive) {
+      for (const index of indices) {
+        typedIndices[index] = 1;
+      }
+    } else {
+      typedIndices.fill(1);
+      for (const index of indices) {
+        typedIndices[index] = 0;
+      }
+    }
+
+    return typedIndices;
+  }
+
+  enableDimming(entryIndices: number[], inclusive: boolean, outline: boolean|number[]): void {
+    this.dimIndicies = this.#createTypedIndexArray(entryIndices, inclusive);
+    this.dimShouldOutlineUndimmedEntries =
+        Array.isArray(outline) ? this.#createTypedIndexArray(outline, true) : outline;
+
     this.draw();
   }
 
   disableDimming(): void {
-    this.entryIndicesToNotDim = null;
+    this.dimIndicies = null;
+    this.dimShouldOutlineUndimmedEntries = false;
+
     this.draw();
+  }
+
+  isDimming(): boolean {
+    return Boolean(this.dimIndicies);
   }
 
   #transformColor(entryIndex: number, color: string): string {
@@ -552,37 +594,6 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
     this.dispatchEventToListeners(Events.ENTRY_HOVERED, entryIndex);
   }
 
-  highlightAllEntries(entries: number[]): void {
-    // To avoid too many highlights when the search regex matches too many entries,
-    // for example, when user only types in "e" as the search query,
-    // We only highlight the search results when the number of matches is less than or equal to 200.
-    // TODO: current behavior is a bit jank, esp. with dimming treatment always being applied.
-    //       Can we lift this restriction - maybe by adding a stroke in canvas, which should be faster?
-    const MAX_HIGHLIGHTED_SEARCH_ELEMENTS: number = 200;
-    for (const entry of entries.slice(0, MAX_HIGHLIGHTED_SEARCH_ELEMENTS)) {
-      const searchElement = this.viewportElement.createChild('div', 'flame-chart-search-element');
-      this.#searchResultHighlightElements.push(searchElement);
-      searchElement.id = entry.toString();
-      this.updateElementPosition(searchElement, entry);
-    }
-
-    if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.TIMELINE_DIM_UNRELATED_EVENTS)) {
-      this.#searchResultEntries = entries;
-      // Must redraw for the dimming treatment (#searchResultEntries overrides entryIndicesToNotDim).
-      this.draw();
-    }
-  }
-
-  removeSearchResultHighlights(): void {
-    for (const element of this.#searchResultHighlightElements) {
-      element.remove();
-    }
-    this.#searchResultHighlightElements = [];
-    this.#searchResultEntries = null;
-    // Must redraw for the dimming treatment (to turn it off / revert back to entryIndicesToNotDim).
-    this.draw();
-  }
-
   hideHighlight(): void {
     if (this.#searchResultEntryIndex === null) {
       this.popoverElement.removeChildren();
@@ -600,7 +611,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
     this.dispatchEventToListeners(Events.ENTRY_HOVERED, -1);
   }
 
-  private createCandyStripePattern(): CanvasPattern {
+  private createCandyStripePattern(color: string): CanvasPattern {
     // Set the candy stripe pattern to 17px so it repeats well.
     const size = 17;
     const candyStripeCanvas = document.createElement('canvas');
@@ -613,7 +624,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
     ctx.rotate(Math.PI * 0.25);
     ctx.translate(-size * 0.5, -size * 0.5);
 
-    ctx.fillStyle = 'rgba(255, 0, 0, 0.8)';
+    ctx.fillStyle = color;
     for (let x = -size; x < size * 2; x += 3) {
       ctx.fillRect(x, -size, 1, size * 3);
     }
@@ -739,11 +750,11 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
       return;
     }
 
-    const timeMilliSeconds = Trace.Types.Timing.MilliSeconds(this.chartViewport.pixelToTime(mouseEvent.offsetX));
+    const timeMilliSeconds = Trace.Types.Timing.Milli(this.chartViewport.pixelToTime(mouseEvent.offsetX));
 
     this.dispatchEventToListeners(Events.MOUSE_MOVE, {
       mouseEvent,
-      timeInMicroSeconds: Trace.Helpers.Timing.millisecondsToMicroseconds(timeMilliSeconds),
+      timeInMicroSeconds: Trace.Helpers.Timing.milliToMicro(timeMilliSeconds),
     });
 
     // Check if the mouse is hovering any group's header area
@@ -767,8 +778,13 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
         this.viewportElement.style.cursor = 'pointer';
         return;
       case HoverType.INSIDE_TRACK:
+      case HoverType.OUTSIDE_TRACKS:
         this.updateHighlight();
         return;
+      case HoverType.ERROR:
+        return;
+      default:
+        Platform.assertNever(hoverType, `Invalid hovering type: ${hoverType}`);
     }
   }
 
@@ -791,7 +807,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
         iconTooltip = `Move ${displayName} track down`;
         break;
       case HoverType.TRACK_CONFIG_HIDE_BUTTON:
-        if (this.groupIsLastVisibleTopLevel(group)) {
+        if (this.groupIsLastVisibleTopLevel(groupIndex)) {
           iconTooltip = 'Can not hide the last top level track';
         } else {
           iconTooltip = `Hide ${displayName} track`;
@@ -804,7 +820,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
         return null;
     }
     const element = document.createElement('div');
-    element.createChild('span', 'timeline-info-title').textContent = iconTooltip;
+    element.createChild('span', 'popoverinfo-title').textContent = iconTooltip;
 
     return element;
   }
@@ -863,26 +879,35 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
         isMouseOverRevealChildrenArrow === this.lastPopoverState.hiddenEntriesPopover) {
       return this.updatePopoverOffset();
     }
-    this.popoverElement.removeChildren();
     const data = this.timelineData();
     if (!data) {
       return;
     }
     const group = data.groups.at(this.selectedGroupIndex);
     // If the mouse is hovering over the hidden descendants arrow, get an element that shows how many children are hidden, otherwise an element with the event name and length
-    const entryInfo = (isMouseOverRevealChildrenArrow && group) ?
-        this.dataProvider.prepareHighlightedHiddenEntriesArrowInfo &&
-            this.dataProvider.prepareHighlightedHiddenEntriesArrowInfo(entryIndex) :
-        entryIndex !== null && this.dataProvider.prepareHighlightedEntryInfo(entryIndex);
-    if (entryInfo) {
-      this.popoverElement.appendChild(entryInfo);
-      this.updatePopoverOffset();
+    const popoverElement = (isMouseOverRevealChildrenArrow && group) ?
+        this.dataProvider.preparePopoverForCollapsedArrow?.(entryIndex) :
+        entryIndex !== null && this.dataProvider.preparePopoverElement(entryIndex);
+    if (popoverElement) {
+      this.updatePopoverContents(popoverElement);
     }
     this.lastPopoverState = {
       entryIndex,
       groupIndex: -1,
       hiddenEntriesPopover: isMouseOverRevealChildrenArrow,
     };
+  }
+
+  updatePopoverContents(popoverElement: Element): void {
+    this.popoverElement.removeChildren();
+    this.popoverElement.appendChild(popoverElement);
+    this.updatePopoverOffset();
+    this.lastPopoverState.entryIndex = -1;
+  }
+
+  updateMouseOffset(mouseX: number, mouseY: number): void {
+    this.lastMouseOffsetX = mouseX;
+    this.lastMouseOffsetY = mouseY;
   }
 
   #updatePopoverForGroup(groupIndex: number): void {
@@ -1016,42 +1041,45 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
 
     // If any button is clicked, we should handle the action only and ignore others.
     const {groupIndex, hoverType} = this.coordinatesToGroupIndexAndHoverType(mouseEvent.offsetX, mouseEvent.offsetY);
-    if (groupIndex >= 0) {
-      switch (hoverType) {
-        case HoverType.TRACK_CONFIG_UP_BUTTON:
-          this.moveGroupUp(groupIndex);
-          return;
-        case HoverType.TRACK_CONFIG_DOWN_BUTTON:
-          this.moveGroupDown(groupIndex);
-          return;
-        case HoverType.TRACK_CONFIG_HIDE_BUTTON:
-          if (this.groupIsLastVisibleTopLevel(this.rawTimelineData?.groups[groupIndex])) {
-            // If this is the last visible top-level group, we will not allow you hiding the track.
-            return;
-          }
-          this.hideGroup(groupIndex);
-          return;
-        case HoverType.TRACK_CONFIG_SHOW_BUTTON:
-          this.showGroup(groupIndex);
-          return;
-        case HoverType.INSIDE_TRACK_HEADER:
-          this.#selectGroup(groupIndex);
-          this.toggleGroupExpand(groupIndex);
-          return;
-        case HoverType.INSIDE_TRACK: {
-          this.#selectGroup(groupIndex);
-
-          const timelineData = this.timelineData();
-          if (mouseEvent.shiftKey && this.highlightedEntryIndex !== -1 && timelineData) {
-            const start = timelineData.entryStartTimes[this.highlightedEntryIndex];
-            const end = start + timelineData.entryTotalTimes[this.highlightedEntryIndex];
-            this.chartViewport.setRangeSelection(start, end);
-          } else {
-            this.chartViewport.onClick(mouseEvent);
-            this.dispatchEventToListeners(Events.ENTRY_INVOKED, this.highlightedEntryIndex);
-          }
+    // There could be a special case, when there is no group and all entries are appended directly, for example the
+    // Memory panel.
+    // In this case, the |groupIndex| will be -1, and |groups| should be empty.
+    // All the functions here can handle the -1 groupIndex properly, so we don't need to add extra check here.
+    switch (hoverType) {
+      case HoverType.TRACK_CONFIG_UP_BUTTON:
+        this.moveGroupUp(groupIndex);
+        return;
+      case HoverType.TRACK_CONFIG_DOWN_BUTTON:
+        this.moveGroupDown(groupIndex);
+        return;
+      case HoverType.TRACK_CONFIG_HIDE_BUTTON:
+        if (this.groupIsLastVisibleTopLevel(groupIndex)) {
+          // If this is the last visible top-level group, we will not allow you hiding the track.
           return;
         }
+        this.hideGroup(groupIndex);
+        return;
+      case HoverType.TRACK_CONFIG_SHOW_BUTTON:
+        this.showGroup(groupIndex);
+        return;
+      case HoverType.INSIDE_TRACK_HEADER:
+        this.#selectGroup(groupIndex);
+        this.toggleGroupExpand(groupIndex);
+        return;
+      case HoverType.INSIDE_TRACK:
+      case HoverType.OUTSIDE_TRACKS: {
+        this.#selectGroup(groupIndex);
+
+        const timelineData = this.timelineData();
+        if (mouseEvent.shiftKey && this.highlightedEntryIndex !== -1 && timelineData) {
+          const start = timelineData.entryStartTimes[this.highlightedEntryIndex];
+          const end = start + timelineData.entryTotalTimes[this.highlightedEntryIndex];
+          this.chartViewport.setRangeSelection(start, end);
+        } else {
+          this.chartViewport.onClick(mouseEvent);
+          this.dispatchEventToListeners(Events.ENTRY_INVOKED, this.highlightedEntryIndex);
+        }
+        return;
       }
     }
   }
@@ -1321,7 +1349,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
       return;
     }
 
-    this.contextMenu = new UI.ContextMenu.ContextMenu(event, {useSoftMenu: true});
+    this.contextMenu = new UI.ContextMenu.ContextMenu(event);
     const label = i18nString(UIStrings.enterTrackConfigurationMode);
     this.contextMenu.defaultSection().appendItem(label, () => {
       this.#enterEditMode();
@@ -1335,7 +1363,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
     if (this.#inTrackConfigEditMode === false) {
       return;
     }
-    this.contextMenu = new UI.ContextMenu.ContextMenu(event, {useSoftMenu: true});
+    this.contextMenu = new UI.ContextMenu.ContextMenu(event);
     const label = i18nString(UIStrings.exitTrackConfigurationMode);
     this.contextMenu.defaultSection().appendItem(label, () => {
       this.#exitEditMode();
@@ -1412,35 +1440,29 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
     // |highlightedEntryIndex| might be correct, but to make the code easier
     // to maintain, let's use |selectedEntryIndex|.
     this.contextMenu = this.dataProvider.customizedContextMenu?.(event, this.selectedEntryIndex, groupIndex) ??
-        new UI.ContextMenu.ContextMenu(event, {useSoftMenu: true});
+        new UI.ContextMenu.ContextMenu(event);
 
-    if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.TIMELINE_ANNOTATIONS)) {
-      const annotationSection = this.contextMenu.section('annotations');
+    // Generate context menu entries for annotations.
+    const annotationSection = this.contextMenu.section('annotations');
+    annotationSection.appendItem(i18nString(UIStrings.labelEntry), () => {
+      this.dispatchEventToListeners(
+          Events.ENTRY_LABEL_ANNOTATION_ADDED, {entryIndex: this.selectedEntryIndex, withLinkCreationButton: false});
+    }, {
+      jslogContext: 'timeline.annotations.create-entry-label',
+    });
 
-      const labelEntryAnnotationOption = annotationSection.appendItem(i18nString(UIStrings.labelEntry), () => {
-        this.dispatchEventToListeners(
-            Events.ENTRY_LABEL_ANNOTATION_ADDED, {entryIndex: this.selectedEntryIndex, withLinkCreationButton: false});
-      }, {
-        jslogContext: 'timeline.annotations.create-entry-label',
-      });
+    annotationSection.appendItem(i18nString(UIStrings.linkEntries), () => {
+      this.dispatchEventToListeners(Events.ENTRIES_LINK_ANNOTATION_CREATED, {entryFromIndex: this.selectedEntryIndex});
+    }, {
+      jslogContext: 'timeline.annotations.create-entries-link',
+    });
 
-      labelEntryAnnotationOption.setShortcut('Double Click');
-
-      const linkEntriesAnnotationOption = annotationSection.appendItem(i18nString(UIStrings.linkEntries), () => {
-        this.dispatchEventToListeners(
-            Events.ENTRIES_LINK_ANNOTATION_CREATED, {entryFromIndex: this.selectedEntryIndex});
-      }, {
-        jslogContext: 'timeline.annotations.create-entries-link',
-      });
-      linkEntriesAnnotationOption.setShortcut('Double Click');
-
-      annotationSection.appendItem(i18nString(UIStrings.deleteAnnotations), () => {
-        this.dataProvider.deleteAnnotationsForEntry?.(this.selectedEntryIndex);
-      }, {
-        disabled: !this.dataProvider.entryHasAnnotations?.(this.selectedEntryIndex),
-        jslogContext: 'timeline.annotations.delete-entry-annotations',
-      });
-    }
+    annotationSection.appendItem(i18nString(UIStrings.deleteAnnotations), () => {
+      this.dataProvider.deleteAnnotationsForEntry?.(this.selectedEntryIndex);
+    }, {
+      disabled: !this.dataProvider.entryHasAnnotations?.(this.selectedEntryIndex),
+      jslogContext: 'timeline.annotations.delete-entry-annotations',
+    });
 
     void this.contextMenu.show();
   }
@@ -1539,7 +1561,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
     const groupTop = groupOffsets[trackIndex];
     const nextOffset = groupOffsets[trackIndex + 1];
 
-    const {colorBuckets, titleIndices} = this.getDrawableData(context, timelineData);
+    const {drawBatches, titleIndices} = this.getDrawBatches(context, timelineData);
 
     const entryIndexIsInTrack = (index: number): boolean => {
       const barWidth = Math.min(this.#eventBarWidth(timelineData, index), canvasWidth);
@@ -1547,10 +1569,10 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
           barWidth > minWidth;
     };
     let allFilteredIndexes: number[] = [];
-    for (const [color, {indexes}] of colorBuckets) {
+    for (const [{color, outline}, {indexes}] of drawBatches) {
       const filteredIndexes = indexes.filter(entryIndexIsInTrack);
       allFilteredIndexes = [...allFilteredIndexes, ...filteredIndexes];
-      this.#drawGenericEvents(context, timelineData, color, filteredIndexes);
+      this.#drawBatchEvents(context, timelineData, color, filteredIndexes, outline);
     }
     const filteredTitleIndices = titleIndices.filter(entryIndexIsInTrack);
     this.drawEventTitles(context, timelineData, filteredTitleIndices, canvasWidth);
@@ -1643,7 +1665,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
     // even at maximum zoom. We hedge our bets that the user probably doesn't
     // care for such a tiny event, at least not by default. Better to take them
     // to an event that is slightly more prominent in the UI.
-    const minDurationOfFirstEntry = Trace.Types.Timing.MilliSeconds(1);
+    const minDurationOfFirstEntry = Trace.Types.Timing.Milli(1);
     let firstEntryIndex = this.timelineLevels[startLevelInGroup].find((i => {
       const duration = timelineData.entryTotalTimes[i];
       return !Number.isNaN(duration) && duration >= minDurationOfFirstEntry;
@@ -2102,6 +2124,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
 
     this.viewportElement.appendChild(div);
     this.#inTrackConfigEditMode = true;
+    this.dispatchEventToListeners(Events.TRACKS_REORDER_STATE_CHANGED, true);
     this.updateLevelPositions();
     this.draw();
   }
@@ -2116,6 +2139,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
   #exitEditMode(): void {
     this.#removeEditModeButton();
     this.#inTrackConfigEditMode = false;
+    this.dispatchEventToListeners(Events.TRACKS_REORDER_STATE_CHANGED, false);
     this.updateLevelPositions();
     this.draw();
   }
@@ -2171,7 +2195,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
     context.translate(0, -top);
     context.font = this.#font;
 
-    const {markerIndices, colorBuckets, titleIndices} = this.getDrawableData(context, timelineData);
+    const {markerIndices, drawBatches, titleIndices} = this.getDrawBatches(context, timelineData);
 
     const groups = this.rawTimelineData?.groups || [];
     const trackIndex = groups.findIndex(g => g.name.includes('Main'));
@@ -2187,22 +2211,27 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
           barWidth > 10;
     };
     let wideEntryExists: boolean = false;
-    for (const [color, {indexes}] of colorBuckets) {
+    for (const [{color, outline}, {indexes}] of drawBatches) {
       if (!wideEntryExists) {
         wideEntryExists = indexes.some(entryIndexIsInTrack);
       }
-      this.#drawGenericEvents(context, timelineData, color, indexes);
+      this.#drawBatchEvents(context, timelineData, color, indexes, outline);
     }
     this.dispatchEventToListeners(Events.CHART_PLAYABLE_STATE_CHANGED, wideEntryExists);
 
-    this.#drawCustomSymbols(context, timelineData);
-    this.drawMarkers(context, timelineData, markerIndices);
+    if (!this.#inTrackConfigEditMode) {
+      // In configuration mode, we do not render the actual flame chart, so we
+      // can skip checking for any custom symbols on any tracks.
+      this.#drawCustomSymbols(context, timelineData);
+      // Markers get in the way of the UI for editing, so hide them in edit mode.
+      this.drawMarkers(context, timelineData, markerIndices);
+    }
 
     this.drawEventTitles(context, timelineData, titleIndices, canvasWidth);
 
     // If there is a `forceDecoration` function, it will be called in `drawEventTitles`, which will overwrite the
     // default decorations, so we need to call this function after the `drawEventTitles`.
-    const allIndexes = Array.from(colorBuckets.values()).map(x => x.indexes).flat();
+    const allIndexes = Array.from(drawBatches.values()).map(x => x.indexes).flat();
     this.#drawDecorations(context, timelineData, allIndexes);
     context.restore();
 
@@ -2223,7 +2252,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
       const hasNextNavStartTime = navStartTimes.length > navStartTimeIndex + 1;
       if (hasNextNavStartTime) {
         const nextNavStartTime = navStartTimes[navStartTimeIndex + 1];
-        const nextNavStartTimeStartTimestamp = Trace.Helpers.Timing.microSecondsToMilliseconds(nextNavStartTime.ts);
+        const nextNavStartTimeStartTimestamp = Trace.Helpers.Timing.microToMilli(nextNavStartTime.ts);
         if (time > nextNavStartTimeStartTimestamp) {
           navStartTimeIndex++;
         }
@@ -2232,7 +2261,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
       // Adjust the time by the nearest nav start marker's value.
       const nearestMarker = navStartTimes[navStartTimeIndex];
       if (nearestMarker) {
-        const nearestMarkerStartTime = Trace.Helpers.Timing.microSecondsToMilliseconds(nearestMarker.ts);
+        const nearestMarkerStartTime = Trace.Helpers.Timing.microToMilli(nearestMarker.ts);
         time -= nearestMarkerStartTime - this.zeroTime();
       }
 
@@ -2250,9 +2279,6 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
     if (this.#searchResultEntryIndex !== null) {
       this.showPopoverForSearchResult(this.#searchResultEntryIndex);
     }
-    for (const element of this.#searchResultHighlightElements) {
-      this.updateElementPosition(element, Number(element.id));
-    }
     this.updateMarkerHighlight();
   }
 
@@ -2261,8 +2287,9 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
    * in the timeline like the Main Thread flamechart and the timings track.
    * Drawn on a color by color basis to minimize the amount of times context.style is switched.
    */
-  #drawGenericEvents(
-      context: CanvasRenderingContext2D, timelineData: FlameChartTimelineData, color: string, indexes: number[]): void {
+  #drawBatchEvents(
+      context: CanvasRenderingContext2D, timelineData: FlameChartTimelineData, color: string, indexes: number[],
+      outline: boolean): void {
     context.save();
     context.beginPath();
     for (let i = 0; i < indexes.length; ++i) {
@@ -2273,8 +2300,18 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
         continue;
       }
 
+      // Doesn't draw a rect, just adds the rect into the current path
       this.#drawEventRect(context, timelineData, entryIndex);
     }
+
+    // In some scenarios we want to draw outlines around events for added visual contrast.
+    if (outline) {
+      // This near-black works best in both light- and dark-mode. Color mix with the rect's bg so it's a good contrast, but still has the base flavor.
+      const nearBlack = ThemeSupport.ThemeSupport.instance().getComputedValue('--ref-palette-neutral10');
+      context.strokeStyle = `color-mix(in srgb, ${color}, ${nearBlack} 60%)`;
+      context.stroke();
+    }
+
     context.fillStyle = color;
     context.fill();
     context.restore();
@@ -2306,13 +2343,17 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
       for (const decoration of decorationsForEvent) {
         switch (decoration.type) {
           case FlameChartDecorationType.CANDY: {
-            const candyStripeStartTime = Trace.Helpers.Timing.microSecondsToMilliseconds(decoration.startAtTime);
+            const candyStripeStartTime = Trace.Helpers.Timing.microToMilli(decoration.startAtTime);
             if (duration < candyStripeStartTime) {
               // If the duration of the event is less than the start time to draw the candy stripes, then we have no stripes to draw.
               continue;
             }
-            if (!this.candyStripePattern) {
-              this.candyStripePattern = this.createCandyStripePattern();
+            if (!this.candyStripePattern || !this.candyStripePatternGray) {
+              const red = 'rgba(255, 0, 0, 0.8)';
+              this.candyStripePattern = this.createCandyStripePattern(red);
+              const parsedColor = Common.Color.parse(red);
+              const dimmed = parsedColor?.asLegacyColor().grayscale().asString() ?? 'lightgrey';
+              this.candyStripePatternGray = this.createCandyStripePattern(dimmed);
             }
 
             context.save();
@@ -2322,15 +2363,15 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
             const barXStart = this.timeToPositionClipped(entryStartTime + candyStripeStartTime);
 
             // If a custom end time was passed in, that is when we stop striping, else we stripe until the very end of the entry.
-            const stripingEndTime = decoration.endAtTime ?
-                Trace.Helpers.Timing.microSecondsToMilliseconds(decoration.endAtTime) :
-                entryStartTime + duration;
+            const stripingEndTime = decoration.endAtTime ? Trace.Helpers.Timing.microToMilli(decoration.endAtTime) :
+                                                           entryStartTime + duration;
             const barXEnd = this.timeToPositionClipped(stripingEndTime);
             this.#drawEventRect(context, timelineData, entryIndex, {
               startX: barXStart,
               width: barXEnd - barXStart,
             });
-            context.fillStyle = this.candyStripePattern;
+            context.fillStyle =
+                this.#shouldDimEvent(entryIndex) ? this.candyStripePatternGray : this.candyStripePattern;
             context.fill();
             context.restore();
             break;
@@ -2340,7 +2381,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
             if (typeof decoration.customEndTime !== 'undefined') {
               // The user can pass a customEndTime to tell us where the event's box ends and therefore where we should
               // draw the triangle. So therefore we calculate the width by taking the end time off the start time.
-              const endTimeMilli = Trace.Helpers.Timing.microSecondsToMilliseconds(decoration.customEndTime);
+              const endTimeMilli = Trace.Helpers.Timing.microToMilli(decoration.customEndTime);
               endTimePixels = this.timeToPositionClipped(endTimeMilli);
               barWidth = endTimePixels - barX;
             }
@@ -2350,7 +2391,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
               // The user can pass a customStartTime to tell us where the event's box start and therefore where we
               // should draw the triangle. So therefore we calculate the width by taking the end time off the start
               // time.
-              const startTimeMilli = Trace.Helpers.Timing.microSecondsToMilliseconds(decoration.customStartTime);
+              const startTimeMilli = Trace.Helpers.Timing.microToMilli(decoration.customStartTime);
               const startTimePixels = this.timeToPositionClipped(startTimeMilli);
               triangleWidth = Math.min(endTimePixels - startTimePixels, 8);
             }
@@ -2359,7 +2400,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
             context.rect(barX, barY, barWidth, barHeight);
             context.clip();
             context.beginPath();
-            context.fillStyle = 'red';
+            context.fillStyle = this.#transformColor(entryIndex, 'red');
             context.moveTo(barX + barWidth - triangleWidth, barY);
             context.lineTo(barX + barWidth, barY);
             context.lineTo(barX + barWidth, barY + triangleHeight);
@@ -2473,13 +2514,17 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
   /**
    * Preprocess the data to be drawn to speed the rendering time.
    * Especifically:
-   *  - Groups events into color buckets.
+   *  - Groups events into draw batches - same color + same outline - to help drawing performance
+   *    by reducing how often `context.fillStyle` is changed.
    *  - Discards non visible events.
    *  - Gathers marker events (LCP, FCP, DCL, etc.).
    *  - Gathers event titles that should be rendered.
    */
-  private getDrawableData(context: CanvasRenderingContext2D, timelineData: FlameChartTimelineData):
-      {colorBuckets: Map<string, {indexes: number[]}>, titleIndices: number[], markerIndices: number[]} {
+  private getDrawBatches(context: CanvasRenderingContext2D, timelineData: FlameChartTimelineData): {
+    drawBatches: Map<{color: string, outline: boolean}, {indexes: number[]}>,
+    titleIndices: number[],
+    markerIndices: number[],
+  } {
     // These are the event indexes of events that we are drawing onto the timeline that:
     // 1) have text within them
     // 2) are visually wide enough in pixels to make it worth rendering the text.
@@ -2498,12 +2543,28 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
     const minTextWidth = 2 * textPadding + UI.UIUtils.measureTextWidth(context, '…');
     const minTextWidthDuration = this.chartViewport.pixelToTimeOffset(minTextWidth);
 
-    // As we parse each event, we bucket them into groups based on the color we
-    // will render them with. The key of this map will be a color, and all
-    // events stored in the `indexes` array for that color will be painted as
-    // such. This way, when rendering events, we can render them based on
-    // color, and ensure the minimum amount of changes to context.fillStyle.
-    const colorBuckets = new Map<string, {indexes: number[]}>();
+    // As we parse each event, we bucket them into batches based on the color and
+    // whether they should be outlined. The key of this map is an object, so the
+    // following helps for dedupings keys to use within a Map.
+    interface BatchKey {
+      color: string;
+      outline: boolean;
+    }
+    const keysByColorWithOutline = new Map<string, BatchKey>();
+    const keysByColorWithNoOutline = new Map<string, BatchKey>();
+    const getOrMakeKey = (color: string, outline: boolean): BatchKey => {
+      const map = outline ? keysByColorWithOutline : keysByColorWithNoOutline;
+      const key = map.get(color);
+      if (key) {
+        return key;
+      }
+
+      const newKey = {color, outline};
+      map.set(color, newKey);
+      return newKey;
+    };
+
+    const drawBatches = new Map<BatchKey, {indexes: number[]}>();
     for (let level = 0; level < this.dataProvider.maxStackDepth(); ++level) {
       // Since tracks can be reordered the |visibleLevelOffsets| is not necessarily sorted, so we need to check all levels.
       // Note that to check if a level is off the top of the screen, we can't
@@ -2563,16 +2624,19 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
 
         if (this.entryColorsCache) {
           const color = this.getColorForEntry(entryIndex);
-          let bucket = colorBuckets.get(color);
-          if (!bucket) {
-            bucket = {indexes: []};
-            colorBuckets.set(color, bucket);
+          const outline = this.#shouldOutlineEvent(entryIndex);
+          const key = getOrMakeKey(color, outline);
+          let batch = drawBatches.get(key);
+          if (!batch) {
+            batch = {indexes: []};
+            drawBatches.set(key, batch);
           }
-          bucket.indexes.push(entryIndex);
+          batch.indexes.push(entryIndex);
         }
       }
     }
-    return {colorBuckets, titleIndices, markerIndices};
+
+    return {drawBatches, titleIndices, markerIndices};
   }
 
   /**
@@ -2662,9 +2726,9 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
     // When it is normal mode, there are no icons to the left of a track.
     // When it is in edit mode, there are three icons to customize the groups.
     const iconsWidth = this.#inTrackConfigEditMode ? EDIT_MODE_TOTAL_ICON_WIDTH : 0;
-    this.forEachGroupInViewport((offset, index, group) => {
+    this.forEachGroupInViewport((offset, groupIndex, group) => {
       context.font = this.#font;
-      if (this.isGroupCollapsible(index) && !group.expanded || group.style.shareHeaderLine) {
+      if (this.isGroupCollapsible(groupIndex) && !group.expanded || group.style.shareHeaderLine) {
         // In edit mode, we draw an extra rectangle for the save icon.
         const labelBackgroundWidth = this.labelWidthForGroup(context, group);
         const parsedColor = Common.Color.parse(group.style.backgroundColor);
@@ -2710,7 +2774,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
           // If this is the last visible top-level group, we will disable the hide action.
           drawIcon(
               context, HIDE_ICON_LEFT, offset, EDIT_ICON_WIDTH, group.hidden ? showIconPath : hideIconPath,
-              this.groupIsLastVisibleTopLevel(group) ? '--sys-color-state-disabled' : iconColor);
+              this.groupIsLastVisibleTopLevel(groupIndex) ? '--sys-color-state-disabled' : iconColor);
         }
       }
     });
@@ -2811,6 +2875,12 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
       const entryTotalTime = entryTotalTimes[entryIndex];
       const level = entryLevels[entryIndex];
 
+      // Skip if the group for this event has been hidden.
+      const group = this.dataProvider.groupForEvent?.(entryIndex);
+      if (group?.hidden) {
+        continue;
+      }
+
       const unclippedXStart = this.chartViewport.timeToPosition(entryStartTime);
       const unclippedXEnd = this.chartViewport.timeToPosition(entryStartTime + entryTotalTime);
 
@@ -2877,13 +2947,14 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
       }
       const unclippedBarX = this.chartViewport.timeToPosition(entryStartTime);
       if (this.dataProvider.decorateEntry(
-              entryIndex, context, text, barX, barY, barWidth, barHeight, unclippedBarX, timeToPixel)) {
+              entryIndex, context, text, barX, barY, barWidth, barHeight, unclippedBarX, timeToPixel,
+              color => this.#transformColor(entryIndex, color))) {
         continue;
       }
       if (!text || !text.length) {
         continue;
       }
-      context.fillStyle = this.dataProvider.textColor(entryIndex);
+      context.fillStyle = this.#transformColor(entryIndex, this.dataProvider.textColor(entryIndex));
       context.fillText(text, barX + textPadding, barY + barHeight - this.textBaseline);
     }
 
@@ -3051,7 +3122,8 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
           context.fillStyle = color;
           context.fillRect(barX, y, barWidth, groupBarHeight - 1);
           this.dataProvider.decorateEntry(
-              entryIndex, context, '', barX, y, barWidth, groupBarHeight, unclippedBarX, timeToPixel);
+              entryIndex, context, '', barX, y, barWidth, groupBarHeight, unclippedBarX, timeToPixel,
+              color => this.#transformColor(entryIndex, color));
           continue;
         }
         range.append(new Common.SegmentedRange.Segment(barX, endBarX, color));
@@ -3292,7 +3364,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
       this.rawTimelineData = null;
       this.forceDecorationCache = null;
       this.entryColorsCache = null;
-      this.entryIndicesToNotDim = null;
+      this.dimIndicies = null;
       this.colorDimmingCache.clear();
       this.rawTimelineDataLength = 0;
       this.#groupTreeRoot = null;
@@ -3673,10 +3745,11 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
     return style.height !== style.itemsHeight;
   }
 
-  groupIsLastVisibleTopLevel(group?: Group): boolean {
-    if (!group) {
+  groupIsLastVisibleTopLevel(groupIndex: number): boolean {
+    if (groupIndex < 0 || !this.rawTimelineData) {
       return true;
     }
+    const group = this.rawTimelineData.groups[groupIndex];
     const visibleTopLevelGroupNumber =
         this.#groupTreeRoot?.children.filter(track => !this.rawTimelineData?.groups[track.index].hidden).length;
     return visibleTopLevelGroupNumber === 1 && group.style.nestingLevel === 0 && !group.hidden;
@@ -3724,7 +3797,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
   }
 
   /**
-   * Update position of an Element. By default, the element is treated as a full entry and it's dimentions are set to the full entry width/length/height.
+   * Update position of an Element. By default, the element is treated as a full entry and it's dimensions are set to the full entry width/length/height.
    * If isDecoration parameter is set to true, the element will be positioned on the right side of the entry and have a square shape where width == height of the entry.
    */
   private updateElementPosition(element: Element|null, entryIndex: number, isDecoration?: boolean): void {
@@ -3775,7 +3848,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
     const barHeight = this.levelHeight(entryLevel);
     const style = (element as HTMLElement).style;
 
-    // TODO(paulirish): make these changes within a coordinator.write callback.
+    // TODO(paulirish): make these changes within a RenderCoordinator.write callback.
     // Currently these (plus the scrollOffset() right above) trigger layout thrashing.
     if (isDecoration) {
       style.top = barY + 'px';
@@ -3903,7 +3976,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
     this.rawTimelineData = null;
     this.rawTimelineDataLength = 0;
     this.#groupTreeRoot = null;
-    this.entryIndicesToNotDim = null;
+    this.dimIndicies = null;
     this.colorDimmingCache.clear();
     this.highlightedMarkerIndex = -1;
     this.highlightedEntryIndex = -1;
@@ -3927,20 +4000,20 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
     return this.dataProvider.formatValue(value - this.zeroTime(), precision);
   }
 
-  maximumBoundary(): Trace.Types.Timing.MilliSeconds {
-    return Trace.Types.Timing.MilliSeconds(this.chartViewport.windowRightTime());
+  maximumBoundary(): Trace.Types.Timing.Milli {
+    return Trace.Types.Timing.Milli(this.chartViewport.windowRightTime());
   }
 
-  minimumBoundary(): Trace.Types.Timing.MilliSeconds {
-    return Trace.Types.Timing.MilliSeconds(this.chartViewport.windowLeftTime());
+  minimumBoundary(): Trace.Types.Timing.Milli {
+    return Trace.Types.Timing.Milli(this.chartViewport.windowLeftTime());
   }
 
-  zeroTime(): Trace.Types.Timing.MilliSeconds {
-    return Trace.Types.Timing.MilliSeconds(this.dataProvider.minimumBoundary());
+  zeroTime(): Trace.Types.Timing.Milli {
+    return Trace.Types.Timing.Milli(this.dataProvider.minimumBoundary());
   }
 
-  boundarySpan(): Trace.Types.Timing.MilliSeconds {
-    return Trace.Types.Timing.MilliSeconds(this.maximumBoundary() - this.minimumBoundary());
+  boundarySpan(): Trace.Types.Timing.Milli {
+    return Trace.Types.Timing.Milli(this.maximumBoundary() - this.minimumBoundary());
   }
 }
 
@@ -3983,13 +4056,13 @@ export type FlameChartDecoration = {
   // We often only want to highlight problem parts of events, so this time sets
   // the minimum time at which the candystriping will start. If you want to
   // candystripe the entire event, set this to 0.
-  startAtTime: Trace.Types.Timing.MicroSeconds,
+  startAtTime: Trace.Types.Timing.Micro,
   // Optionally set the end time for the striping. If this is not provided, the entire entry will be striped.
-  endAtTime?: Trace.Types.Timing.MicroSeconds,
+  endAtTime?: Trace.Types.Timing.Micro,
 }|{
   type: FlameChartDecorationType.WARNING_TRIANGLE,
-  customStartTime?: Trace.Types.Timing.MicroSeconds,
-  customEndTime?: Trace.Types.Timing.MicroSeconds,
+  customStartTime?: Trace.Types.Timing.Micro,
+  customEndTime?: Trace.Types.Timing.Micro,
 }|{
   type: FlameChartDecorationType.HIDDEN_DESCENDANTS_ARROW,
 };
@@ -4072,13 +4145,13 @@ export class FlameChartTimelineData {
 
 export interface DataProviderSearchResult {
   index: number;
-  startTimeMilli: Trace.Types.Timing.MilliSeconds;
+  startTimeMilli: Trace.Types.Timing.Milli;
   provider: 'main'|'network'|'other';
 }
 
 export interface DataProviderSearchResult {
   index: number;
-  startTimeMilli: Trace.Types.Timing.MilliSeconds;
+  startTimeMilli: Trace.Types.Timing.Milli;
   provider: 'main'|'network'|'other';
 }
 
@@ -4093,9 +4166,9 @@ export interface FlameChartDataProvider {
 
   timelineData(rebuild?: boolean): FlameChartTimelineData|null;
 
-  prepareHighlightedEntryInfo(entryIndex: number): Element|null;
+  preparePopoverElement(entryIndex: number): Element|null;
 
-  prepareHighlightedHiddenEntriesArrowInfo?(entryIndex: number): Element|null;
+  preparePopoverForCollapsedArrow?(entryIndex: number): Element|null;
 
   canJumpToEntry(entryIndex: number): boolean;
 
@@ -4107,7 +4180,8 @@ export interface FlameChartDataProvider {
 
   decorateEntry(
       entryIndex: number, context: CanvasRenderingContext2D, text: string|null, barX: number, barY: number,
-      barWidth: number, barHeight: number, unclippedBarX: number, timeToPixelRatio: number): boolean;
+      barWidth: number, barHeight: number, unclippedBarX: number, timeToPixelRatio: number,
+      transformColor?: (color: string) => string): boolean;
 
   forceDecoration(entryIndex: number): boolean;
 
@@ -4129,13 +4203,11 @@ export interface FlameChartDataProvider {
   customizedContextMenu?
       (event: MouseEvent, eventIndex: number, groupIndex: number): UI.ContextMenu.ContextMenu|undefined;
 
-  search?(visibleWindow: Trace.Types.Timing.TraceWindowMicroSeconds, filter?: Trace.Extras.TraceFilter.TraceFilter):
+  search?(visibleWindow: Trace.Types.Timing.TraceWindowMicro, filter?: Trace.Extras.TraceFilter.TraceFilter):
       DataProviderSearchResult[];
 
   // The following three functions are used for the flame chart entry customization.
   modifyTree?(action: FilterAction, entryIndex: number): void;
-
-  getAIEventNodeTreeFromEntryIndex?(entryIndex: number): Trace.Helpers.TreeHelpers.AINode|null;
 
   entryHasAnnotations?(entryIndex: number): boolean;
 
@@ -4177,6 +4249,12 @@ export const enum Events {
   // Emmited when entries link annotation is added through a shotcut or a context menu.
   ENTRIES_LINK_ANNOTATION_CREATED = 'EntriesLinkAnnotationCreated',
   /**
+   * Emmited when the user enters or exits 'reorder tracks' view.
+   * If the event value is 'true', the 'reorder tracks' state was entered,
+   * if it's false, the reorder state was exited.
+   */
+  TRACKS_REORDER_STATE_CHANGED = 'TracksReorderStateChange',
+  /**
    * Emitted when an event is selected via keyboard navigation using the arrow
    * keys.
    *
@@ -4199,19 +4277,20 @@ export const enum Events {
   MOUSE_MOVE = 'MouseMove',
 }
 
-export type EventTypes = {
+export interface EventTypes {
   [Events.ENTRY_LABEL_ANNOTATION_ADDED]: {
     entryIndex: number,
     withLinkCreationButton: boolean,
-  },
+  };
   [Events.ENTRIES_LINK_ANNOTATION_CREATED]: {
     entryFromIndex: number,
-  },
-  [Events.CANVAS_FOCUSED]: number|void,
-  [Events.ENTRY_INVOKED]: number,
-  [Events.ENTRY_SELECTED]: number,
-  [Events.ENTRY_HOVERED]: number,
-  [Events.CHART_PLAYABLE_STATE_CHANGED]: boolean,
+  };
+  [Events.TRACKS_REORDER_STATE_CHANGED]: boolean;
+  [Events.CANVAS_FOCUSED]: number|void;
+  [Events.ENTRY_INVOKED]: number;
+  [Events.ENTRY_SELECTED]: number;
+  [Events.ENTRY_HOVERED]: number;
+  [Events.CHART_PLAYABLE_STATE_CHANGED]: boolean;
   [Events.LATEST_DRAW_DIMENSIONS]: {
     chart: {
       widthPixels: number,
@@ -4219,13 +4298,13 @@ export type EventTypes = {
       scrollOffsetPixels: number,
       allGroupsCollapsed: boolean,
     },
-    traceWindow: Trace.Types.Timing.TraceWindowMicroSeconds,
-  },
+    traceWindow: Trace.Types.Timing.TraceWindowMicro,
+  };
   [Events.MOUSE_MOVE]: {
     mouseEvent: MouseEvent,
-    timeInMicroSeconds: Trace.Types.Timing.MicroSeconds,
-  },
-};
+    timeInMicroSeconds: Trace.Types.Timing.Micro,
+  };
+}
 
 export interface Group {
   name: Common.UIString.LocalizedString;

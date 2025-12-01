@@ -12,9 +12,10 @@ import org.chromium.base.Callback;
 import org.chromium.base.ObserverList.RewindableIterator;
 import org.chromium.base.UserData;
 import org.chromium.base.supplier.ObservableSupplier;
-import org.chromium.cc.input.BrowserControlsOffsetTagsInfo;
+import org.chromium.cc.input.BrowserControlsOffsetTagModifications;
 import org.chromium.cc.input.BrowserControlsState;
 import org.chromium.cc.input.OffsetTag;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsOffsetTagsInfo;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.components.browser_ui.util.BrowserControlsVisibilityDelegate;
 import org.chromium.content_public.browser.NavigationHandle;
@@ -32,13 +33,11 @@ public class TabBrowserControlsConstraintsHelper implements UserData {
     private long mNativeTabBrowserControlsConstraintsHelper; // Lazily initialized in |update|
     private BrowserControlsVisibilityDelegate mVisibilityDelegate;
 
-    private @BrowserControlsState int mPreviousConstraints;
-
-    // This OffsetTag is used in:
+    // These OffsetTags are used in:
     //   - Browser, to tag the layers that move with top controls to be moved by viz.
     //   - Renderer, to tag the corresponding scroll offset in the compositor frame's metadata.
     // When visibility of the browser controls are forced by the browser, this token will be null.
-    private BrowserControlsOffsetTagsInfo mOffsetTags;
+    private BrowserControlsOffsetTagsInfo mOffsetTagsInfo;
 
     public static void createForTab(Tab tab) {
         tab.getUserDataHost()
@@ -104,13 +103,9 @@ public class TabBrowserControlsConstraintsHelper implements UserData {
 
     /** Constructor */
     private TabBrowserControlsConstraintsHelper(Tab tab) {
-        mOffsetTags = new BrowserControlsOffsetTagsInfo(null, null);
+        mOffsetTagsInfo = new BrowserControlsOffsetTagsInfo(null, null, null);
         mTab = (TabImpl) tab;
-        mConstraintsChangedCallback =
-                (constraints) -> {
-                    updateEnabledState();
-                    mPreviousConstraints = constraints;
-                };
+        mConstraintsChangedCallback = unused_constraints -> updateEnabledState();
         mTab.addObserver(
                 new EmptyTabObserver() {
                     @Override
@@ -179,6 +174,11 @@ public class TabBrowserControlsConstraintsHelper implements UserData {
 
     @Override
     public void destroy() {
+        if (mVisibilityDelegate != null) {
+            mVisibilityDelegate.removeObserver(mConstraintsChangedCallback);
+            mVisibilityDelegate = null;
+        }
+
         if (mNativeTabBrowserControlsConstraintsHelper != 0) {
             TabBrowserControlsConstraintsHelperJni.get()
                     .onDestroyed(
@@ -202,10 +202,6 @@ public class TabBrowserControlsConstraintsHelper implements UserData {
         return state == BrowserControlsState.HIDDEN || state == BrowserControlsState.SHOWN;
     }
 
-    private boolean wasPreviousStateForced() {
-        return isStateForced(mPreviousConstraints);
-    }
-
     private void updateEnabledState() {
         if (mTab.isFrozen()) return;
         update(BrowserControlsState.BOTH, getConstraints() != BrowserControlsState.HIDDEN);
@@ -213,26 +209,26 @@ public class TabBrowserControlsConstraintsHelper implements UserData {
 
     /** Unregister all OffsetTags (for now, only the top controls have an OffsetTag.) */
     private void unregisterOffsetTags() {
-        updateOffsetTags(new BrowserControlsOffsetTagsInfo(null, null), getConstraints());
+        updateOffsetTags(new BrowserControlsOffsetTagsInfo(null, null, null), getConstraints());
     }
 
     private void updateOffsetTags(
             BrowserControlsOffsetTagsInfo newOffsetTags, @BrowserControlsState int constraints) {
-        if (newOffsetTags == mOffsetTags) {
+        if (newOffsetTags == mOffsetTagsInfo) {
             return;
         }
 
-        // Relies on BrowserControlsManager to set the toolbar hairline height in
-        // newOffsetTags.
+        // Relies on BrowserControlsManager and BottomControlsMediator to set the heights of the
+        // top/bottom controls and their shadows.
         RewindableIterator<TabObserver> observers = mTab.getTabObservers();
         while (observers.hasNext()) {
             observers
                     .next()
                     .onBrowserControlsConstraintsChanged(
-                            mTab, mOffsetTags, newOffsetTags, constraints);
+                            mTab, mOffsetTagsInfo, newOffsetTags, constraints);
         }
 
-        mOffsetTags = newOffsetTags;
+        mOffsetTagsInfo = newOffsetTags;
     }
 
     private void generateOffsetTags(@BrowserControlsState int constraints) {
@@ -241,19 +237,29 @@ public class TabBrowserControlsConstraintsHelper implements UserData {
         }
 
         boolean isNewStateForced = isStateForced(constraints);
-        if (!mOffsetTags.hasTags() && !isNewStateForced) {
+        if (!mOffsetTagsInfo.hasTags() && !isNewStateForced) {
+            OffsetTag topControlsOffsetTag = null;
+            OffsetTag bottomControlsOffsetTag = null;
+
             if (ChromeFeatureList.sBcivZeroBrowserFrames.isEnabled()) {
                 // Create 2 tags so the top controls can move separately from other views so that
                 // renderer+viz can correctly control the visibility of the toolbar hairline without
                 // additional browser frames.
-                updateOffsetTags(new BrowserControlsOffsetTagsInfo(), constraints);
-            } else {
-                updateOffsetTags(
-                        new BrowserControlsOffsetTagsInfo(OffsetTag.createRandom(), null),
-                        constraints);
+                topControlsOffsetTag = OffsetTag.createRandom();
             }
-        } else if (mOffsetTags.hasTags() && isNewStateForced) {
-            updateOffsetTags(new BrowserControlsOffsetTagsInfo(null, null), constraints);
+
+            if (ChromeFeatureList.sBcivBottomControls.isEnabled()) {
+                bottomControlsOffsetTag = OffsetTag.createRandom();
+            }
+
+            updateOffsetTags(
+                    new BrowserControlsOffsetTagsInfo(
+                            topControlsOffsetTag,
+                            OffsetTag.createRandom(),
+                            bottomControlsOffsetTag),
+                    constraints);
+        } else if (mOffsetTagsInfo.hasTags() && isNewStateForced) {
+            updateOffsetTags(new BrowserControlsOffsetTagsInfo(null, null, null), constraints);
         }
     }
 
@@ -292,6 +298,11 @@ public class TabBrowserControlsConstraintsHelper implements UserData {
                             .init(TabBrowserControlsConstraintsHelper.this);
         }
 
+        BrowserControlsOffsetTagModifications offsetTagModifications =
+                new BrowserControlsOffsetTagModifications(
+                        mOffsetTagsInfo.getTags(),
+                        mOffsetTagsInfo.getTopControlsAdditionalHeight(),
+                        mOffsetTagsInfo.getBottomControlsAdditionalHeight());
         TabBrowserControlsConstraintsHelperJni.get()
                 .updateState(
                         mNativeTabBrowserControlsConstraintsHelper,
@@ -300,7 +311,7 @@ public class TabBrowserControlsConstraintsHelper implements UserData {
                         constraints,
                         current,
                         animate,
-                        mOffsetTags);
+                        offsetTagModifications);
     }
 
     private @BrowserControlsState int getConstraints() {
@@ -326,6 +337,6 @@ public class TabBrowserControlsConstraintsHelper implements UserData {
                 int contraints,
                 int current,
                 boolean animate,
-                BrowserControlsOffsetTagsInfo offsetTagsInfo);
+                BrowserControlsOffsetTagModifications offsetTagsInfo);
     }
 }

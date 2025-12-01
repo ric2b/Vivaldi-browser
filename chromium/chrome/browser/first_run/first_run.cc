@@ -4,6 +4,7 @@
 
 #include "chrome/browser/first_run/first_run.h"
 
+#include <algorithm>
 #include <memory>
 #include <tuple>
 #include <utility>
@@ -18,7 +19,6 @@
 #include "base/no_destructor.h"
 #include "base/one_shot_event.h"
 #include "base/path_service.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -82,12 +82,10 @@ base::Time g_cached_sentinel_creation_time;
 // ImportEnded() is called asynchronously. Thus we have to handle both cases.
 class ImportEndedObserver : public importer::ImporterProgressObserver {
  public:
-  ImportEndedObserver() : ended_(false) {}
+  ImportEndedObserver() = default;
 
   ImportEndedObserver(const ImportEndedObserver&) = delete;
   ImportEndedObserver& operator=(const ImportEndedObserver&) = delete;
-
-  ~ImportEndedObserver() override {}
 
   // importer::ImporterProgressObserver:
   void ImportStarted() override {}
@@ -109,7 +107,7 @@ class ImportEndedObserver : public importer::ImporterProgressObserver {
 
  private:
   // Set if the import has ended.
-  bool ended_;
+  bool ended_ = false;
 
   base::OnceClosure callback_for_import_end_;
 };
@@ -185,7 +183,7 @@ void ConvertStringVectorToGURLVector(
     const std::vector<std::string>& src,
     std::vector<GURL>* ret) {
   ret->resize(src.size());
-  base::ranges::transform(src, ret->begin(), &UrlFromString);
+  std::ranges::transform(src, ret->begin(), &UrlFromString);
 }
 
 base::FilePath& GetInitialPrefsPathForTesting() {

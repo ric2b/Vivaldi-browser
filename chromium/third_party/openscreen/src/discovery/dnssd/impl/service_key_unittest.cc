@@ -6,7 +6,6 @@
 
 #include <unordered_map>
 
-#include "absl/hash/hash.h"
 #include "discovery/dnssd/testing/fake_dns_record_factory.h"
 #include "gtest/gtest.h"
 
@@ -31,26 +30,6 @@ TEST(DnsSdServiceKeyTest, TestServiceKeyEquals) {
   key2 = ServiceKey("_service._udp", "domain2");
   EXPECT_TRUE(key1 == key2);
   EXPECT_FALSE(key1 != key2);
-}
-
-TEST(DnsSdServiceKeyTest, ServiceKeyInMap) {
-  ServiceKey ptr{"_service._udp", "domain"};
-  ServiceKey ptr2{"_service._udp", "domain"};
-  ServiceKey ptr3{"_service2._udp", "domain"};
-  ServiceKey ptr4{"_service._udp", "domain2"};
-  std::unordered_map<ServiceKey, int32_t, absl::Hash<ServiceKey>> map;
-  map[ptr] = 1;
-  map[ptr2] = 2;
-  EXPECT_EQ(map[ptr], 2);
-
-  map[ptr3] = 3;
-  EXPECT_EQ(map[ptr], 2);
-  EXPECT_EQ(map[ptr3], 3);
-
-  map[ptr4] = 4;
-  EXPECT_EQ(map[ptr], 2);
-  EXPECT_EQ(map[ptr3], 3);
-  EXPECT_EQ(map[ptr4], 4);
 }
 
 TEST(DnsSdServiceKeyTest, CreateFromRecordTest) {

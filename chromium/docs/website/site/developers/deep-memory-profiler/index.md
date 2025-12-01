@@ -165,7 +165,7 @@ chrome.memoryBenchmarking.heapProfilerDump("browser" or "renderer", "some reason
 You can use a Telemetry profiler to drive chrome and, if running on android, to
 also fetch the files from the device. It utilizes the above Memory Benchmarking
 V8 API internally. See [Telemetry
-instructions](http://www.chromium.org/developers/telemetry/profiling#TOC-Memory-Profiling---Linux-Android).
+instructions](/developers/telemetry/profiling#TOC-Memory-Profiling---Linux-Android).
 
 ### Phase 4: Get the dumps
 
@@ -259,7 +259,7 @@ Assuming /opt/google/chrome on device as /home/self/chromeos/chroot/build/x86-ge
 Given a specific component listed in the graph above, sue the following command
 to
 
-## ```none
+```none
 # HEAP_FILE => TCMalloc .heap file
 # COMPONENT => One of the components displayed in the graph.
 # POLICY => the json file used to generate the graph.
@@ -579,4 +579,4 @@ It classifies memory blocks based on their type_info.
 
 ## Cases
 
-*   <http://crrev.com/166963>
+*   <https://crrev.com/166963>

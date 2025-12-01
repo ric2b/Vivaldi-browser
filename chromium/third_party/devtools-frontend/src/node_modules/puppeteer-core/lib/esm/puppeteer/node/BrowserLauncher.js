@@ -36,11 +36,14 @@ export class BrowserLauncher {
         return this.#browser;
     }
     async launch(options = {}) {
-        const { dumpio = false, env = process.env, handleSIGINT = true, handleSIGTERM = true, handleSIGHUP = true, acceptInsecureCerts = false, defaultViewport = DEFAULT_VIEWPORT, slowMo = 0, timeout = 30000, waitForInitialPage = true, protocolTimeout, } = options;
+        const { dumpio = false, env = process.env, handleSIGINT = true, handleSIGTERM = true, handleSIGHUP = true, acceptInsecureCerts = false, defaultViewport = DEFAULT_VIEWPORT, downloadBehavior, slowMo = 0, timeout = 30000, waitForInitialPage = true, protocolTimeout, } = options;
         let { protocol } = options;
         // Default to 'webDriverBiDi' for Firefox.
         if (this.#browser === 'firefox' && protocol === undefined) {
             protocol = 'webDriverBiDi';
+        }
+        if (this.#browser === 'firefox' && protocol === 'cdp') {
+            throw new Error('Connecting to Firefox using CDP is no longer supported');
         }
         const launchArgs = await this.computeLaunchArguments({
             ...options,
@@ -56,11 +59,9 @@ export class BrowserLauncher {
             });
         };
         if (this.#browser === 'firefox' &&
-            protocol !== 'webDriverBiDi' &&
-            this.puppeteer.configuration.logLevel === 'warn') {
-            console.warn(`Chrome DevTools Protocol (CDP) support for Firefox is deprecated in Puppeteer ` +
-                `and it will be eventually removed. ` +
-                `Use WebDriver BiDi instead (see https://pptr.dev/webdriver-bidi#get-started).`);
+            protocol === 'webDriverBiDi' &&
+            usePipe) {
+            throw new Error('Pipe connections are not supported wtih Firefox and WebDriver BiDi');
         }
         const browserProcess = launch({
             executablePath: launchArgs.executablePath,
@@ -115,7 +116,7 @@ export class BrowserLauncher {
                     });
                 }
                 else {
-                    browser = await CdpBrowser._create(this.browser, cdpConnection, [], acceptInsecureCerts, defaultViewport, browserProcess.nodeProcess, browserCloseCallback, options.targetFilter);
+                    browser = await CdpBrowser._create(cdpConnection, [], acceptInsecureCerts, defaultViewport, downloadBehavior, browserProcess.nodeProcess, browserCloseCallback, options.targetFilter);
                 }
             }
         }
@@ -225,10 +226,10 @@ export class BrowserLauncher {
     /**
      * @internal
      */
-    resolveExecutablePath(headless) {
+    resolveExecutablePath(headless, validatePath = true) {
         let executablePath = this.puppeteer.configuration.executablePath;
         if (executablePath) {
-            if (!existsSync(executablePath)) {
+            if (validatePath && !existsSync(executablePath)) {
                 throw new Error(`Tried to find the browser at the configured path (${executablePath}), but no executable was found.`);
             }
             return executablePath;
@@ -245,12 +246,13 @@ export class BrowserLauncher {
             }
             return InstalledBrowser.CHROME;
         }
+        const browserType = puppeteerBrowserToInstalledBrowser(this.browser, headless);
         executablePath = computeExecutablePath({
             cacheDir: this.puppeteer.defaultDownloadPath,
-            browser: puppeteerBrowserToInstalledBrowser(this.browser, headless),
+            browser: browserType,
             buildId: this.puppeteer.browserVersion,
         });
-        if (!existsSync(executablePath)) {
+        if (validatePath && !existsSync(executablePath)) {
             const configVersion = this.puppeteer.configuration?.[this.browser]?.version;
             if (configVersion) {
                 throw new Error(`Tried to find the browser at the configured path (${executablePath}) for version ${configVersion}, but no executable was found.`);
@@ -258,7 +260,7 @@ export class BrowserLauncher {
             switch (this.browser) {
                 case 'chrome':
                     throw new Error(`Could not find Chrome (ver. ${this.puppeteer.browserVersion}). This can occur if either\n` +
-                        ' 1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or\n' +
+                        ` 1. you did not perform an installation before running the script (e.g. \`npx puppeteer browsers install ${browserType}\`) or\n` +
                         ` 2. your cache path is incorrectly configured (which is: ${this.puppeteer.configuration.cacheDirectory}).\n` +
                         'For (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.');
                 case 'firefox':

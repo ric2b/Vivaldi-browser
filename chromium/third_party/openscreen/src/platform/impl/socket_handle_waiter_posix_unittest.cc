@@ -49,9 +49,9 @@ class TestingSocketHandleWaiter : public SocketHandleWaiter {
 TEST(SocketHandleWaiterTest, BubblesUpAwaitSocketsReadableErrors) {
   MockSubscriber subscriber;
   TestingSocketHandleWaiter waiter;
-  SocketHandle handle0{0};
-  SocketHandle handle1{1};
-  SocketHandle handle2{2};
+  SocketHandle handle0(0);
+  SocketHandle handle1(1);
+  SocketHandle handle2(2);
   const SocketHandle& handle0_ref = handle0;
   const SocketHandle& handle1_ref = handle1;
   const SocketHandle& handle2_ref = handle2;
@@ -70,10 +70,10 @@ TEST(SocketHandleWaiterTest, WatchedSocketsReturnedToCorrectSubscribers) {
   MockSubscriber subscriber;
   MockSubscriber subscriber2;
   TestingSocketHandleWaiter waiter;
-  SocketHandle handle0{0};
-  SocketHandle handle1{1};
-  SocketHandle handle2{2};
-  SocketHandle handle3{3};
+  SocketHandle handle0(0);
+  SocketHandle handle1(1);
+  SocketHandle handle2(2);
+  SocketHandle handle3(3);
   const SocketHandle& handle0_ref = handle0;
   const SocketHandle& handle1_ref = handle1;
   const SocketHandle& handle2_ref = handle2;

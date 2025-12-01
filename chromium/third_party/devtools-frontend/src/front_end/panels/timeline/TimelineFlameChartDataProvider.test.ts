@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import type * as Platform from '../../core/platform/platform.js';
+import * as Platform from '../../core/platform/platform.js';
 import * as Trace from '../../models/trace/trace.js';
 import {describeWithEnvironment} from '../../testing/EnvironmentHelpers.js';
 import {setupIgnoreListManagerEnvironment} from '../../testing/TraceHelpers.js';
@@ -10,6 +10,8 @@ import {TraceLoader} from '../../testing/TraceLoader.js';
 import * as PerfUi from '../../ui/legacy/components/perf_ui/perf_ui.js';
 
 import * as Timeline from './timeline.js';
+
+const {urlString} = Platform.DevToolsPath;
 
 describeWithEnvironment('TimelineFlameChartDataProvider', function() {
   describe('groupTreeEvents', function() {
@@ -27,12 +29,6 @@ describeWithEnvironment('TimelineFlameChartDataProvider', function() {
         ...parsedTrace.UserTimings.timestampEvents,
         ...parsedTrace.UserTimings.performanceMarks,
         ...parsedTrace.UserTimings.performanceMeasures,
-        ...parsedTrace.PageLoadMetrics.allMarkerEvents.toSorted((m1, m2) => {
-          // These get sorted based on the metric so we have to replicate
-          // that for this assertion.
-          return Timeline.TimingsTrackAppender.SORT_ORDER_PAGE_LOAD_MARKERS[m1.name] -
-              Timeline.TimingsTrackAppender.SORT_ORDER_PAGE_LOAD_MARKERS[m2.name];
-        }),
       ].sort((a, b) => a.ts - b.ts);
       assert.deepEqual(groupTreeEvents, allTimingEvents);
     });
@@ -46,7 +42,7 @@ describeWithEnvironment('TimelineFlameChartDataProvider', function() {
         assert.fail('Could not find Timings track flame chart group');
       }
       const groupTreeEvents = dataProvider.groupTreeEvents(timingsTrackGroup);
-      assert.strictEqual(groupTreeEvents?.length, 12);
+      assert.strictEqual(groupTreeEvents?.length, 6);
       const allEventsAreSync = groupTreeEvents?.every(event => !Trace.Types.Events.isPhaseAsync(event.ph));
       assert.isTrue(allEventsAreSync);
     });
@@ -172,10 +168,10 @@ describeWithEnvironment('TimelineFlameChartDataProvider', function() {
 
       const eventCountBeforeIgnoreList = dataProvider.timelineData().entryStartTimes.length;
 
-      const SCRIPT_TO_IGNORE =
-          'https://unpkg.com/react@18.2.0/umd/react.development.js' as Platform.DevToolsPath.UrlString;
+      const SCRIPT_TO_IGNORE = urlString`https://unpkg.com/react@18.2.0/umd/react.development.js`;
       // Clear the data provider cache and add the React script to the ignore list.
       dataProvider.reset();
+      dataProvider.setModel(parsedTrace);
       ignoreListManager.ignoreListURL(SCRIPT_TO_IGNORE);
 
       const eventCountAfterIgnoreList = dataProvider.timelineData().entryStartTimes.length;
@@ -185,6 +181,7 @@ describeWithEnvironment('TimelineFlameChartDataProvider', function() {
 
       // Clear the data provider cache and unignore the script again
       dataProvider.reset();
+      dataProvider.setModel(parsedTrace);
       ignoreListManager.unIgnoreListURL(SCRIPT_TO_IGNORE);
       // Ensure that now we have un-ignored the URL that we get the full set of events again.
       assert.strictEqual(dataProvider.timelineData().entryStartTimes.length, eventCountBeforeIgnoreList);
@@ -214,7 +211,7 @@ describeWithEnvironment('TimelineFlameChartDataProvider', function() {
     const filter = new Timeline.TimelineFilters.TimelineRegExp(/Evaluate script/);
     const results = dataProvider.search(bounds, filter);
     assert.lengthOf(results, 12);
-    assert.deepEqual(results[0], {index: 153, startTimeMilli: 122411041.395, provider: 'main'});
+    assert.deepEqual(results[0], {index: 147, startTimeMilli: 122411041.395, provider: 'main'});
   });
 
   it('delete annotations associated with an event', async function() {

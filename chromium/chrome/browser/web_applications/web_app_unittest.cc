@@ -29,16 +29,17 @@
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
+#include "chrome/browser/web_applications/web_app_management_type.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/web_package/signed_web_bundles/ecdsa_p256_public_key.h"
 #include "components/web_package/signed_web_bundles/ecdsa_p256_sha256_signature.h"
 #include "components/web_package/signed_web_bundles/signed_web_bundle_signature_stack_entry.h"
+#include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/permissions_policy/origin_with_possible_wildcards.h"
 #include "third_party/blink/public/common/permissions_policy/permissions_policy_declaration.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -90,7 +91,7 @@ void SetContentsOrDie(const base::FilePath& filepath,
 std::string SerializeValueToJsonOrDie(const base::Value& value) {
   std::string contents;
   CHECK(base::JSONWriter::WriteWithOptions(
-      value, base::JSONWriter::Options::OPTIONS_PRETTY_PRINT, &contents));
+      value, base::JSONWriter::OPTIONS_PRETTY_PRINT, &contents));
   return contents;
 }
 
@@ -474,17 +475,17 @@ TEST(WebAppTest, PermissionsPolicyDebugValue) {
   WebApp app{GenerateAppId(/*manifest_id_path=*/std::nullopt,
                            GURL("https://example.com"))};
   app.SetPermissionsPolicy({
-      {blink::mojom::PermissionsPolicyFeature::kGyroscope,
+      {network::mojom::PermissionsPolicyFeature::kGyroscope,
        /*allowed_origins=*/{},
        /*self_if_matches=*/std::nullopt,
        /*matches_all_origins=*/false,
        /*matches_opaque_src=*/true},
-      {blink::mojom::PermissionsPolicyFeature::kGeolocation,
+      {network::mojom::PermissionsPolicyFeature::kGeolocation,
        /*allowed_origins=*/{},
        /*self_if_matches=*/std::nullopt,
        /*matches_all_origins=*/true,
        /*matches_opaque_src=*/false},
-      {blink::mojom::PermissionsPolicyFeature::kGamepad,
+      {network::mojom::PermissionsPolicyFeature::kGamepad,
        {*blink::OriginWithPossibleWildcards::FromOriginAndWildcardsForTest(
             url::Origin::Create(GURL("https://example.com")),
             /*has_subdomain_wildcard=*/false),

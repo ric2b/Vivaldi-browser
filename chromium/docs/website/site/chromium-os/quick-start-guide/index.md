@@ -37,7 +37,7 @@ You should have
             depot_tools](/developers/how-tos/install-depot-tools). This step is
             required so that you can use the repo command to get/sync the source
             code.
-3.  You must also [tweak your sudoers configuration](http://www.chromium.org/chromium-os/tips-and-tricks-for-chromium-os-developers#TOC-Making-sudo-a-little-more-permissive). This is required for using cros_sdk.
+3.  You must also [tweak your sudoers configuration](/chromium-os/tips-and-tricks-for-chromium-os-developers#TOC-Making-sudo-a-little-more-permissive). This is required for using cros_sdk.
 4.  **NOTE**: Do not run any of the commands listed in this document as
             root – the commands themselves will run sudo to get root access when
             needed.
@@ -55,7 +55,7 @@ repo sync
 ```
 
 Build Chromium OS ([full
-version](http://www.chromium.org/chromium-os/developer-guide#TOC-Building-Chromium-OS))
+version](/chromium-os/developer-guide#TOC-Building-Chromium-OS))
 
 At this point, you’ll have to know the `${BOARD}` you would like to build on. If
 you don't have a specific target in mind, amd64-generic is a good starter board
@@ -89,7 +89,7 @@ This will prompt you for which usb device you’d like to use. (Note that
 auto-mounting of USB devices should be turned off as it may corrupt the disk
 image while it's being written.)
 
-## Install Chromium OS on your Device ([full version](http://www.chromium.org/chromium-os/developer-guide#TOC-Installing-Chromium-OS-on-your-Device))
+## Install Chromium OS on your Device ([full version](/chromium-os/developer-guide#TOC-Installing-Chromium-OS-on-your-Device))
 
 Now you’re ready to install this image on your device. You’ll need to setup your
 device to boot from USB.
@@ -97,11 +97,11 @@ device to boot from USB.
 *   On a non-chromebook, set your system to boot from a usb drive using
             instructions specific to your device.
 *   On a chromebook, [enter developer-mode for your specific type of
-            hardware](/chromium-os/developer-information-for-chrome-os-devices).
+            hardware](/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices).
             For Samsung / Acer devices, you can now boot from your usb image
             using Ctrl+U on the developer mode screen. For the CR-48, you’ll
             have to follow the instructions to [build a recovery
-            image](/chromium-os/developer-information-for-chrome-os-devices/cr-48-chrome-notebook-developer-information)
+            image](/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/cr-48-chrome-notebook-developer-information)
             and install from it using those same instructions.
 
 With that done, hit Ctrl+Alt+Back (F2). At the prompt type chronos and install

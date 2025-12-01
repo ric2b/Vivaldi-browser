@@ -4,11 +4,11 @@
 
 #include "chrome/browser/share/share_ranking.h"
 
+#include <algorithm>
 #include <vector>
 
 #include "base/containers/to_vector.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
@@ -99,8 +99,8 @@ std::string LowestShown(const std::vector<std::string>& ranking,
 void SwapRankingElement(std::vector<std::string>& ranking,
                         const std::string& from,
                         const std::string& to) {
-  auto from_loc = base::ranges::find(ranking, from);
-  auto to_loc = base::ranges::find(ranking, to);
+  auto from_loc = std::ranges::find(ranking, from);
+  auto to_loc = std::ranges::find(ranking, to);
 
   CHECK(from_loc != ranking.end());
   CHECK(to_loc != ranking.end());
@@ -113,7 +113,7 @@ std::vector<std::string> ReplaceUnavailableEntries(
     const std::vector<std::string>& ranking,
     const std::vector<std::string>& available) {
   std::vector<std::string> result;
-  base::ranges::transform(
+  std::ranges::transform(
       ranking, std::back_inserter(result), [&](const std::string& e) {
         return RankingContains(available, e) ? e : std::string();
       });
@@ -146,9 +146,9 @@ void FillGaps(std::vector<std::string>& ranking,
 
   for (size_t i = 0; i < length && !candidates.empty(); ++i) {
     std::string& candidate = candidates.front();
-    if (ranking[i] == "" && candidate != "") {
+    if (ranking[i].empty() && !candidate.empty()) {
       ranking[i] = std::move(candidate);
-      candidates = candidates.subspan(1);
+      candidates = candidates.subspan<1>();
     }
   }
 }
@@ -187,12 +187,12 @@ std::vector<std::string> MaybeUpdateRankingFromHistory(
     return all_share_history.count(key) > 0 ? all_share_history.at(key) : 0;
   };
 
-  if (highest_unshown_recent != "" &&
+  if (!highest_unshown_recent.empty() &&
       recent_count_for(highest_unshown_recent) >
           recent_count_for(lowest_shown_recent) * DAMPENING) {
     SwapRankingElement(new_ranking, lowest_shown_recent,
                        highest_unshown_recent);
-  } else if (highest_unshown_all != "" &&
+  } else if (!highest_unshown_all.empty() &&
              all_count_for(highest_unshown_all) >
                  all_count_for(lowest_shown_all) * DAMPENING) {
     SwapRankingElement(new_ranking, lowest_shown_all, highest_unshown_all);

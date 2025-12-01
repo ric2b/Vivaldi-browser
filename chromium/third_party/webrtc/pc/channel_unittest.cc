@@ -13,13 +13,22 @@
 #include <stddef.h>
 
 #include <cstdint>
+#include <memory>
+#include <optional>
 #include <string>
-#include <type_traits>
+#include <utility>
+#include <vector>
 
 #include "absl/functional/any_invocable.h"
 #include "api/array_view.h"
 #include "api/audio_options.h"
+#include "api/crypto/crypto_options.h"
+#include "api/jsep.h"
+#include "api/rtp_headers.h"
 #include "api/rtp_parameters.h"
+#include "api/rtp_transceiver_direction.h"
+#include "api/scoped_refptr.h"
+#include "api/sequence_checker.h"
 #include "api/task_queue/pending_task_safety_flag.h"
 #include "media/base/codec.h"
 #include "media/base/fake_media_engine.h"
@@ -27,23 +36,31 @@
 #include "media/base/media_channel.h"
 #include "media/base/media_constants.h"
 #include "media/base/rid_description.h"
+#include "media/base/stream_params.h"
 #include "p2p/base/candidate_pair_interface.h"
-#include "p2p/base/dtls_transport_internal.h"
-#include "p2p/base/fake_dtls_transport.h"
 #include "p2p/base/fake_packet_transport.h"
 #include "p2p/base/ice_transport_internal.h"
 #include "p2p/base/p2p_constants.h"
 #include "p2p/base/packet_transport_internal.h"
+#include "p2p/dtls/dtls_transport_internal.h"
+#include "p2p/dtls/fake_dtls_transport.h"
 #include "pc/dtls_srtp_transport.h"
 #include "pc/jsep_transport.h"
 #include "pc/rtp_transport.h"
+#include "pc/rtp_transport_internal.h"
+#include "pc/session_description.h"
 #include "rtc_base/arraysize.h"
 #include "rtc_base/buffer.h"
 #include "rtc_base/byte_order.h"
 #include "rtc_base/checks.h"
+#include "rtc_base/network_route.h"
 #include "rtc_base/rtc_certificate.h"
+#include "rtc_base/socket.h"
 #include "rtc_base/ssl_identity.h"
 #include "rtc_base/task_queue_for_test.h"
+#include "rtc_base/third_party/sigslot/sigslot.h"
+#include "rtc_base/thread.h"
+#include "rtc_base/unique_id_generator.h"
 #include "test/gmock.h"
 #include "test/gtest.h"
 #include "test/scoped_key_value_config.h"
@@ -77,7 +94,6 @@ const uint32_t kSsrc4 = 0x4444;
 const int kAudioPts[] = {0, 8};
 const int kVideoPts[] = {97, 99};
 enum class NetworkIsWorker { Yes, No };
-
 
 template <class ChannelT,
           class MediaSendChannelT,
@@ -688,6 +704,37 @@ class ChannelTest : public ::testing::Test, public sigslot::has_slots<> {
     EXPECT_TRUE(channel2_->SetLocalContent(&content, SdpType::kOffer, err));
     content.set_rtcp_mux(false);
     EXPECT_TRUE(channel2_->SetRemoteContent(&content, SdpType::kAnswer, err));
+  }
+
+  // Test that SetLocalContent and SetRemoteContent properly set RTCP
+  // reduced_size.
+  void TestSetContentsRtcpReducedSize() {
+    CreateChannels(0, 0);
+    typename T::Content content;
+    CreateContent(0, kPcmuCodec, kH264Codec, &content);
+    // Both sides agree on reduced size.
+    content.set_rtcp_reduced_size(true);
+    std::string err;
+    // The RTCP mode is a send property and should be configured based on
+    // the remote content and not the local content.
+    EXPECT_TRUE(channel1_->SetLocalContent(&content, SdpType::kOffer, err));
+    EXPECT_EQ(media_receive_channel1_impl()->RtcpMode(),
+              webrtc::RtcpMode::kCompound);
+    EXPECT_TRUE(channel1_->SetRemoteContent(&content, SdpType::kAnswer, err));
+    EXPECT_EQ(media_receive_channel1_impl()->RtcpMode(),
+              webrtc::RtcpMode::kReducedSize);
+    // Only initiator supports reduced size.
+    EXPECT_TRUE(channel2_->SetLocalContent(&content, SdpType::kOffer, err));
+    EXPECT_EQ(media_receive_channel2_impl()->RtcpMode(),
+              webrtc::RtcpMode::kCompound);
+    content.set_rtcp_reduced_size(false);
+    EXPECT_TRUE(channel2_->SetRemoteContent(&content, SdpType::kAnswer, err));
+    EXPECT_EQ(media_receive_channel2_impl()->RtcpMode(),
+              webrtc::RtcpMode::kCompound);
+    // Peer renegotiates without reduced size.
+    EXPECT_TRUE(channel1_->SetRemoteContent(&content, SdpType::kAnswer, err));
+    EXPECT_EQ(media_receive_channel1_impl()->RtcpMode(),
+              webrtc::RtcpMode::kCompound);
   }
 
   // Test that SetLocalContent and SetRemoteContent properly
@@ -1729,6 +1776,10 @@ TEST_F(VoiceChannelSingleThreadTest, TestSetContentsRtcpMuxWithPrAnswer) {
   Base::TestSetContentsRtcpMux();
 }
 
+TEST_F(VoiceChannelSingleThreadTest, TestSetContentsRtcpReducedSize) {
+  Base::TestSetContentsRtcpReducedSize();
+}
+
 TEST_F(VoiceChannelSingleThreadTest, TestChangeStreamParamsInContent) {
   Base::TestChangeStreamParamsInContent();
 }
@@ -1864,6 +1915,10 @@ TEST_F(VoiceChannelDoubleThreadTest, TestSetContentsRtcpMux) {
 
 TEST_F(VoiceChannelDoubleThreadTest, TestSetContentsRtcpMuxWithPrAnswer) {
   Base::TestSetContentsRtcpMux();
+}
+
+TEST_F(VoiceChannelDoubleThreadTest, TestSetContentsRtcpReducedSize) {
+  Base::TestSetContentsRtcpReducedSize();
 }
 
 TEST_F(VoiceChannelDoubleThreadTest, TestChangeStreamParamsInContent) {

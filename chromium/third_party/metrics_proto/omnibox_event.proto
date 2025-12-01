@@ -315,9 +315,17 @@ message OmniboxEventProto {
     // URLs amongst the user's synced sessions.
     CROSS_DEVICE_TAB = 28;
 
+    // Suggestions from policy configured search aggregator keywords.
+    ENTERPRISE_SEARCH_AGGREGATOR = 29;
+
+    // Suggestions from extensions that have permission to use the omnibox api
+    // without requiring keyword mode.
+    UNSCOPED_EXTENSION = 30;
+
     // Vivaldi
-    BOOKMARK_NICKNAME = 29;
-    DIRECT_MATCH = 30;
+    BOOKMARK_NICKNAME = 31;
+    DIRECT_MATCH = 32;
+    RECENT_TYPED_HISTORY = 33;
   }
 
   // The result set displayed on the completion popup
@@ -423,6 +431,7 @@ message OmniboxEventProto {
       // Vivaldi
       BOOKMARK_NICKNAME = 50;
       DIRECT_MATCH = 51;
+      RECENT_TYPED_HISTORY = 52;
     }
 
     optional ResultType result_type = 2;

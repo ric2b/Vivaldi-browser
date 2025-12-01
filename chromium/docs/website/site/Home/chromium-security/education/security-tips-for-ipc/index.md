@@ -17,9 +17,9 @@ title: Security Tips for IPC
 too](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/security/integer-semantics.md).**
 
 Chrome's[inter-process communication
-(IPC)](http://www.chromium.org/developers/design-documents/inter-process-communication)
+(IPC)](/developers/design-documents/inter-process-communication)
 layer is the communication channel supporting our [multi-process
-architecture](http://www.chromium.org/developers/design-documents/multi-process-architecture).
+architecture](/developers/design-documents/multi-process-architecture).
 Security bugs in IPC can have [nasty
 consequences](http://blog.chromium.org/2012/05/tale-of-two-pwnies-part-1.html),
 but sticking to these tips should help you avoid most pitfalls. Questions,
@@ -53,7 +53,7 @@ would apply to user input. These messages are untrustworthy input.
 
 If you're handling filenames or paths derived from untrustworthy input, make
 sure to avoid [directory traversal
-attacks](http://en.wikipedia.org/wiki/Directory_traversal_attack) by sanitizing
+attacks](https://en.wikipedia.org/wiki/Directory_traversal_attack) by sanitizing
 (e.g. by using a FilePath rather than a string, because FilePath implicitly
 checks for ".." traversal sequences and other unanticipated platform behavior)
 and ensuring the resulting path is within your base directory.
@@ -123,7 +123,7 @@ policy; and then the browser should pass the descriptor to the renderer.**
 ## Be aware of the subtleties of integer types.
 
 First read about the scary security implications of[ integer arithmetic.
-](http://en.wikipedia.org/wiki/Integer_overflow)Adhere to these best practices:
+](https://en.wikipedia.org/wiki/Integer_overflow)Adhere to these best practices:
 
 *   **Use unsigned types for values that shouldn't be negative or where
             defined overflow behavior is required.**
@@ -167,7 +167,7 @@ one of the other more exotic C++ integer types like off_t.
 
 **In particular, don't leak addresses/pointers over the IPC channel, either
 explicitly or accidentally. (Don't defeat our
-[ASLR](http://en.wikipedia.org/wiki/Address_space_layout_randomization)!) Worse:
+[ASLR](https://en.wikipedia.org/wiki/Address_space_layout_randomization)!) Worse:
 sending pointers over the IPC is almost certainly a sign of something very wrong
 and could easily lead to memory corruption.**
 

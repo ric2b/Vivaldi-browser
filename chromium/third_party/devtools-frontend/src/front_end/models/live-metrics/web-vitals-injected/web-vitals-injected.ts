@@ -77,11 +77,11 @@ function sendEventToDevTools(event: Spec.WebVitalsEvent): void {
   window[Spec.EVENT_BINDING_NAME](payload);
 }
 
-const nodeList: Node[] = [];
+const nodeList: WeakRef<Node>[] = [];
 
 function establishNodeIndex(node: Node): number {
   const index = nodeList.length;
-  nodeList.push(node);
+  nodeList.push(new WeakRef(node));
   return index;
 }
 
@@ -95,7 +95,7 @@ function establishNodeIndex(node: Node): number {
  * for the specified index.
  */
 window.getNodeForIndex = (index: number): Node|undefined => {
-  return nodeList[index];
+  return nodeList[index].deref();
 };
 
 function limitScripts(loafs: Spec.PerformanceLongAnimationFrameTimingJSON[]):
@@ -135,7 +135,7 @@ function initialize(): void {
   });
 
   onLCP(metric => {
-    const event: Spec.LCPChangeEvent = {
+    const event: Spec.LcpChangeEvent = {
       name: 'LCP',
       value: metric.value,
       phases: {
@@ -154,7 +154,7 @@ function initialize(): void {
   }, {reportAllChanges: true});
 
   onCLS(metric => {
-    const event: Spec.CLSChangeEvent = {
+    const event: Spec.ClsChangeEvent = {
       name: 'CLS',
       value: metric.value,
       clusterShiftIds: metric.entries.map(Spec.getUniqueLayoutShiftId),
@@ -163,7 +163,14 @@ function initialize(): void {
   }, {reportAllChanges: true});
 
   onINP(metric => {
-    const event: Spec.INPChangeEvent = {
+    // TODO(b/376777343): Remove this line when `interactionTargetElement` is removed from web-vitals.js
+    // The `metric` emitted in this callback is stored within web-vitals.js closures.
+    // This can lead to `interactionTargetElement` persisting in memory after it has been removed.
+    // We don't use `interactionTargetElement` here, and `onEachInteraction` will interaction
+    // elements separately so it is safe to remove here and prevent memory leaks.
+    metric.attribution.interactionTargetElement = undefined;
+
+    const event: Spec.InpChangeEvent = {
       name: 'INP',
       value: metric.value,
       phases: {

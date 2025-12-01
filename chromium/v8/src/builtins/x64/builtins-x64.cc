@@ -1122,7 +1122,7 @@ void Builtins::Generate_InterpreterEntryTrampoline(
       masm, shared_function_info, kInterpreterBytecodeArrayRegister,
       kScratchRegister, &is_baseline, &compile_lazy);
 
-#ifdef V8_ENABLE_LEAPTIERING
+#ifdef V8_ENABLE_SANDBOX
   // Validate the parameter count. This protects against an attacker swapping
   // the bytecode (or the dispatch handle) such that the parameter count of the
   // dispatch entry doesn't match the one of the BytecodeArray.
@@ -1130,12 +1130,13 @@ void Builtins::Generate_InterpreterEntryTrampoline(
   // if we could store the BytecodeArray directly in the dispatch entry and
   // load it from there. Then we can easily guarantee that the parameter count
   // of the entry matches the parameter count of the bytecode.
+  static_assert(V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE_BOOL);
   Register dispatch_handle = kJavaScriptCallDispatchHandleRegister;
   __ LoadParameterCountFromJSDispatchTable(r8, dispatch_handle);
   __ cmpw(r8, FieldOperand(kInterpreterBytecodeArrayRegister,
                            BytecodeArray::kParameterSizeOffset));
   __ SbxCheck(equal, AbortReason::kJSSignatureMismatch);
-#endif  // V8_ENABLE_LEAPTIERING
+#endif  // V8_ENABLE_SANDBOX
 
   Label push_stack_frame;
   Register feedback_vector = rbx;
@@ -1143,11 +1144,13 @@ void Builtins::Generate_InterpreterEntryTrampoline(
                         Label::kNear);
 
 #ifndef V8_JITLESS
+#ifndef V8_ENABLE_LEAPTIERING
   // If feedback vector is valid, check for optimized code and update invocation
   // count.
   Label flags_need_processing;
   __ CheckFeedbackVectorFlagsAndJumpIfNeedsProcessing(
       feedback_vector, CodeKind::INTERPRETED_FUNCTION, &flags_need_processing);
+#endif  // !V8_ENABLE_LEAPTIERING
 
   ResetFeedbackVectorOsrUrgency(masm, feedback_vector, kScratchRegister);
 
@@ -1316,12 +1319,15 @@ void Builtins::Generate_InterpreterEntryTrampoline(
   __ int3();  // Should not return.
 
 #ifndef V8_JITLESS
+#ifndef V8_ENABLE_LEAPTIERING
   __ bind(&flags_need_processing);
   __ OptimizeCodeOrTailCallOptimizedCodeSlot(feedback_vector, closure,
                                              JumpMode::kJump);
+#endif  // !V8_ENABLE_LEAPTIERING
 
   __ bind(&is_baseline);
   {
+#ifndef V8_ENABLE_LEAPTIERING
     // Load the feedback vector from the closure.
     TaggedRegister feedback_cell(feedback_vector);
     __ LoadTaggedField(feedback_cell,
@@ -1339,7 +1345,6 @@ void Builtins::Generate_InterpreterEntryTrampoline(
     __ CheckFeedbackVectorFlagsAndJumpIfNeedsProcessing(
         feedback_vector, CodeKind::BASELINE, &flags_need_processing);
 
-#ifndef V8_ENABLE_LEAPTIERING
     // TODO(olivf, 42204201): This fastcase is difficult to support with the
     // sandbox as it requires getting write access to the dispatch table. See
     // `JSFunction::UpdateCode`. We might want to remove it for all
@@ -1352,9 +1357,10 @@ void Builtins::Generate_InterpreterEntryTrampoline(
         rcx, closure, kInterpreterBytecodeArrayRegister,
         WriteBarrierDescriptor::SlotAddressRegister());
     __ JumpCodeObject(rcx, kJSEntrypointTag);
-#endif  // V8_ENABLE_LEAPTIERING
 
     __ bind(&install_baseline_code);
+#endif  // !V8_ENABLE_LEAPTIERING
+
     __ GenerateTailCallToReturnedCode(Runtime::kInstallBaselineCode);
   }
 #endif  // !V8_JITLESS
@@ -1830,7 +1836,7 @@ static void Generate_InterpreterEnterBytecode(MacroAssembler* masm) {
                   times_system_pointer_size, 0));
 
   // Jump to the interpreter entry, and call kJavaScriptCallCodeStartRegister.
-  __ jmp(rbx);
+  __ jmp(rbx, /*notrack=*/true);
 }
 
 void Builtins::Generate_InterpreterEnterAtNextBytecode(MacroAssembler* masm) {
@@ -1914,10 +1920,12 @@ void Builtins::Generate_BaselineOutOfLinePrologue(MacroAssembler* masm) {
                      FieldOperand(feedback_cell, FeedbackCell::kValueOffset));
   __ AssertFeedbackVector(feedback_vector, kScratchRegister);
 
+#ifndef V8_ENABLE_LEAPTIERING
   // Check the tiering state.
   Label flags_need_processing;
   __ CheckFeedbackVectorFlagsAndJumpIfNeedsProcessing(
       feedback_vector, CodeKind::BASELINE, &flags_need_processing);
+#endif  // !V8_ENABLE_LEAPTIERING
 
   ResetFeedbackVectorOsrUrgency(masm, feedback_vector, kScratchRegister);
 
@@ -1985,6 +1993,7 @@ void Builtins::Generate_BaselineOutOfLinePrologue(MacroAssembler* masm) {
   __ LoadRoot(kInterpreterAccumulatorRegister, RootIndex::kUndefinedValue);
   __ Ret();
 
+#ifndef V8_ENABLE_LEAPTIERING
   __ bind(&flags_need_processing);
   {
     ASM_CODE_COMMENT_STRING(masm, "Optimized marker check");
@@ -1997,6 +2006,7 @@ void Builtins::Generate_BaselineOutOfLinePrologue(MacroAssembler* masm) {
                                                JumpMode::kPushAndReturn);
     __ Trap();
   }
+#endif  //! V8_ENABLE_LEAPTIERING
 
   __ bind(&call_stack_guard);
   {
@@ -2653,7 +2663,7 @@ void Builtins::Generate_CallFunction(MacroAssembler* masm,
   __ movzxwq(
       rbx, FieldOperand(rdx, SharedFunctionInfo::kFormalParameterCountOffset));
   __ InvokeFunctionCode(rdi, no_reg, rbx, rax, InvokeType::kJump);
-#endif
+#endif  // V8_ENABLE_LEAPTIERING
 }
 
 namespace {
@@ -2959,7 +2969,8 @@ enum class OsrSourceTier {
 };
 
 void OnStackReplacement(MacroAssembler* masm, OsrSourceTier source,
-                        Register maybe_target_code) {
+                        Register maybe_target_code,
+                        Register expected_param_count) {
   Label jump_to_optimized_code;
   {
     // If maybe_target_code is not null, no need to call into runtime. A
@@ -2972,7 +2983,11 @@ void OnStackReplacement(MacroAssembler* masm, OsrSourceTier source,
 
   {
     FrameScope scope(masm, StackFrame::INTERNAL);
+    // Preserve arguments
+    __ Push(expected_param_count);
     __ CallRuntime(Runtime::kCompileOptimizedOSR);
+    DCHECK_EQ(maybe_target_code, rax);
+    __ Pop(expected_param_count);
   }
 
   // If the code object is null, just return to the caller.
@@ -2981,7 +2996,6 @@ void OnStackReplacement(MacroAssembler* masm, OsrSourceTier source,
   __ ret(0);
 
   __ bind(&jump_to_optimized_code);
-  DCHECK_EQ(maybe_target_code, rax);  // Already in the right spot.
 
   if (source == OsrSourceTier::kMaglev) {
     // Maglev doesn't enter OSR'd code itself, since OSR depends on the
@@ -2990,6 +3004,9 @@ void OnStackReplacement(MacroAssembler* masm, OsrSourceTier source,
     __ ret(0);
     return;
   }
+
+  const Register scratch(rcx);
+  CHECK(!AreAliased(maybe_target_code, expected_param_count, scratch));
 
   // OSR entry tracing.
   {
@@ -3002,9 +3019,12 @@ void OnStackReplacement(MacroAssembler* masm, OsrSourceTier source,
 
     {
       FrameScope scope(masm, StackFrame::INTERNAL);
-      __ Push(rax);  // Preserve the code object.
+      // Preserve arguments
+      __ Push(maybe_target_code);
+      __ Push(expected_param_count);
       __ CallRuntime(Runtime::kLogOrTraceOptimizedOSREntry, 0);
-      __ Pop(rax);
+      __ Pop(expected_param_count);
+      __ Pop(maybe_target_code);
     }
 
     __ bind(&next);
@@ -3016,50 +3036,51 @@ void OnStackReplacement(MacroAssembler* masm, OsrSourceTier source,
     __ leave();
   }
 
-  // Load deoptimization data from the code object.
-  const Register deopt_data(rbx);
+  // Check the target has a matching parameter count. This ensures that the OSR
+  // code will correctly tear down our frame when leaving.
+  __ movzxwq(scratch,
+             FieldOperand(maybe_target_code, Code::kParameterCountOffset));
+  __ SmiUntag(expected_param_count);
+  __ cmpq(scratch, expected_param_count);
+  __ SbxCheck(Condition::equal, AbortReason::kOsrUnexpectedStackSize);
+
   __ LoadProtectedPointerField(
-      deopt_data,
-      FieldOperand(rax, Code::kDeoptimizationDataOrInterpreterDataOffset));
+      scratch, FieldOperand(maybe_target_code,
+                            Code::kDeoptimizationDataOrInterpreterDataOffset));
 
   // Load the OSR entrypoint offset from the deoptimization data.
   __ SmiUntagField(
-      rbx,
-      FieldOperand(deopt_data, TrustedFixedArray::OffsetOfElementAt(
-                                   DeoptimizationData::kOsrPcOffsetIndex)));
+      scratch,
+      FieldOperand(scratch, TrustedFixedArray::OffsetOfElementAt(
+                                DeoptimizationData::kOsrPcOffsetIndex)));
 
-  __ LoadCodeInstructionStart(rax, rax, kJSEntrypointTag);
+  __ LoadCodeInstructionStart(maybe_target_code, maybe_target_code,
+                              kJSEntrypointTag);
 
   // Compute the target address = code_entry + osr_offset
-  __ addq(rax, rbx);
+  __ addq(maybe_target_code, scratch);
 
-  Generate_OSREntry(masm, rax);
+  Generate_OSREntry(masm, maybe_target_code);
 }
 
 }  // namespace
 
 void Builtins::Generate_InterpreterOnStackReplacement(MacroAssembler* masm) {
   using D = OnStackReplacementDescriptor;
-  static_assert(D::kParameterCount == 1);
+  static_assert(D::kParameterCount == 2);
   OnStackReplacement(masm, OsrSourceTier::kInterpreter,
-                     D::MaybeTargetCodeRegister());
+                     D::MaybeTargetCodeRegister(),
+                     D::ExpectedParameterCountRegister());
 }
 
 void Builtins::Generate_BaselineOnStackReplacement(MacroAssembler* masm) {
   using D = OnStackReplacementDescriptor;
-  static_assert(D::kParameterCount == 1);
+  static_assert(D::kParameterCount == 2);
   __ movq(kContextRegister,
           MemOperand(rbp, BaselineFrameConstants::kContextOffset));
   OnStackReplacement(masm, OsrSourceTier::kBaseline,
-                     D::MaybeTargetCodeRegister());
-}
-
-void Builtins::Generate_MaglevOnStackReplacement(MacroAssembler* masm) {
-  using D =
-      i::CallInterfaceDescriptorFor<Builtin::kMaglevOnStackReplacement>::type;
-  static_assert(D::kParameterCount == 1);
-  OnStackReplacement(masm, OsrSourceTier::kMaglev,
-                     D::MaybeTargetCodeRegister());
+                     D::MaybeTargetCodeRegister(),
+                     D::ExpectedParameterCountRegister());
 }
 
 #ifdef V8_ENABLE_MAGLEV
@@ -3595,6 +3616,10 @@ void SwitchToAllocatedStack(MacroAssembler* masm, Register wasm_instance,
   // the parent frame.
   __ movq(original_fp, rbp);
   LoadTargetJumpBuffer(masm, target_continuation, wasm::JumpBuffer::Suspended);
+  // Return address slot. The builtin itself returns by switching to the parent
+  // jump buffer and does not actually use this slot, but it is read by the
+  // profiler.
+  __ Push(Immediate(kNullAddress));
   // Push the loaded rbp. We know it is null, because there is no frame yet,
   // so we could also push 0 directly. In any case we need to push it, because
   // this marks the base of the stack segment for the stack frame iterator.
@@ -3823,7 +3848,12 @@ void JSToWasmWrapperHelper(MacroAssembler* masm, wasm::Promise mode) {
             0);
   }
 
-  __ CallWasmCodePointer(call_target);
+  // We do the call without a signature check here, since the wrapper loaded the
+  // signature from the same trusted object as the call target to set up the
+  // stack layout. We could add a signature hash and pass it through to verify
+  // it here, but an attacker that could corrupt the signature could also
+  // corrupt that signature hash (which is outside of the sandbox).
+  __ CallWasmCodePointerNoSignatureCheck(call_target);
 
   __ movq(
       thread_in_wasm_flag_addr,
@@ -3935,6 +3965,20 @@ void Builtins::Generate_WasmTrapHandlerLandingPad(MacroAssembler* masm) {
       kWasmTrapHandlerFaultAddressRegister,
       Immediate(WasmFrameConstants::kProtectedInstructionReturnAddressOffset));
   __ pushq(kWasmTrapHandlerFaultAddressRegister);
+#ifdef V8_ENABLE_CET_SHADOW_STACK
+  // This landing pad pushes kWasmTrapHandlerFaultAddressRegister to the stack
+  // as a return address, allowing `Isolate::UnwindAndFindHandler` to locate it.
+  // However, this creates a mismatch in the return address count between the
+  // shadow stack and the real stack. To resolve this, we push a dummy value
+  // onto the shadow stack to maintain the correct count. This should be used
+  // only for unwinding, not for returning.
+  Label push_dummy_on_shadow_stack;
+  __ call(&push_dummy_on_shadow_stack);
+  __ Trap();  // Unreachable.
+  __ bind(&push_dummy_on_shadow_stack);
+  // Remove the return address pushed onto the real stack.
+  __ addq(rsp, Immediate(kSystemPointerSize));
+#endif  // V8_ENABLE_CET_SHADOW_STACK
   __ TailCallBuiltin(Builtin::kWasmTrapHandlerThrowTrap);
 }
 
@@ -5143,15 +5187,11 @@ void Builtins::Generate_DeoptimizationEntry_Lazy(MacroAssembler* masm) {
   Generate_DeoptimizationEntry(masm, DeoptimizeKind::kLazy);
 }
 
-namespace {
-
-// Restarts execution either at the current or next (in execution order)
-// bytecode. If there is baseline code on the shared function info, converts an
+// If there is baseline code on the shared function info, converts an
 // interpreter frame into a baseline frame and continues execution in baseline
 // code. Otherwise execution continues with bytecode.
-void Generate_BaselineOrInterpreterEntry(MacroAssembler* masm,
-                                         bool next_bytecode,
-                                         bool is_osr = false) {
+void Builtins::Generate_InterpreterOnStackReplacement_ToBaseline(
+    MacroAssembler* masm) {
   Label start;
   __ bind(&start);
 
@@ -5166,9 +5206,7 @@ void Generate_BaselineOrInterpreterEntry(MacroAssembler* masm,
       shared_function_info,
       FieldOperand(closure, JSFunction::kSharedFunctionInfoOffset));
 
-  if (is_osr) {
-    ResetSharedFunctionInfoAge(masm, shared_function_info);
-  }
+  ResetSharedFunctionInfoAge(masm, shared_function_info);
 
   __ LoadTrustedPointerField(
       code_obj,
@@ -5176,26 +5214,10 @@ void Generate_BaselineOrInterpreterEntry(MacroAssembler* masm,
                    SharedFunctionInfo::kTrustedFunctionDataOffset),
       kUnknownIndirectPointerTag, kScratchRegister);
 
-  // Check if we have baseline code. For OSR entry it is safe to assume we
-  // always have baseline code.
-  if (!is_osr) {
-    Label start_with_baseline;
-    __ IsObjectType(code_obj, CODE_TYPE, kScratchRegister);
-    __ j(equal, &start_with_baseline);
-
-    // Start with bytecode as there is no baseline code.
-    Builtin builtin = next_bytecode ? Builtin::kInterpreterEnterAtNextBytecode
-                                    : Builtin::kInterpreterEnterAtBytecode;
-    __ TailCallBuiltin(builtin);
-
-    // Start with baseline code.
-    __ bind(&start_with_baseline);
-  } else if (v8_flags.debug_code) {
+  // For OSR entry it is safe to assume we always have baseline code.
+  if (v8_flags.debug_code) {
     __ IsObjectType(code_obj, CODE_TYPE, kScratchRegister);
     __ Assert(equal, AbortReason::kExpectedBaselineData);
-  }
-
-  if (v8_flags.debug_code) {
     AssertCodeIsBaseline(masm, code_obj, r11);
   }
 
@@ -5231,34 +5253,13 @@ void Generate_BaselineOrInterpreterEntry(MacroAssembler* masm,
   feedback_vector = no_reg;
 
   // Compute baseline pc for bytecode offset.
-  ExternalReference get_baseline_pc_extref;
-  if (next_bytecode || is_osr) {
-    get_baseline_pc_extref =
-        ExternalReference::baseline_pc_for_next_executed_bytecode();
-  } else {
-    get_baseline_pc_extref =
-        ExternalReference::baseline_pc_for_bytecode_offset();
-  }
   Register get_baseline_pc = r11;
-  __ LoadAddress(get_baseline_pc, get_baseline_pc_extref);
-
-  // If the code deoptimizes during the implicit function entry stack interrupt
-  // check, it will have a bailout ID of kFunctionEntryBytecodeOffset, which is
-  // not a valid bytecode offset.
-  // TODO(pthier): Investigate if it is feasible to handle this special case
-  // in TurboFan instead of here.
-  Label valid_bytecode_offset, function_entry_bytecode;
-  if (!is_osr) {
-    __ cmpq(kInterpreterBytecodeOffsetRegister,
-            Immediate(BytecodeArray::kHeaderSize - kHeapObjectTag +
-                      kFunctionEntryBytecodeOffset));
-    __ j(equal, &function_entry_bytecode);
-  }
+  __ LoadAddress(get_baseline_pc,
+                 ExternalReference::baseline_pc_for_next_executed_bytecode());
 
   __ subq(kInterpreterBytecodeOffsetRegister,
           Immediate(BytecodeArray::kHeaderSize - kHeapObjectTag));
 
-  __ bind(&valid_bytecode_offset);
   // Get bytecode array from the stack frame.
   __ movq(kInterpreterBytecodeArrayRegister,
           MemOperand(rbp, InterpreterFrameConstants::kBytecodeArrayFromFp));
@@ -5275,24 +5276,8 @@ void Generate_BaselineOrInterpreterEntry(MacroAssembler* masm,
   __ addq(code_obj, kReturnRegister0);
   __ popq(kInterpreterAccumulatorRegister);
 
-  if (is_osr) {
-    Generate_OSREntry(masm, code_obj);
-  } else {
-    __ jmp(code_obj);
-  }
+  Generate_OSREntry(masm, code_obj);
   __ Trap();  // Unreachable.
-
-  if (!is_osr) {
-    __ bind(&function_entry_bytecode);
-    // If the bytecode offset is kFunctionEntryOffset, get the start address of
-    // the first bytecode.
-    __ Move(kInterpreterBytecodeOffsetRegister, 0);
-    if (next_bytecode) {
-      __ LoadAddress(get_baseline_pc,
-                     ExternalReference::baseline_pc_for_bytecode_offset());
-    }
-    __ jmp(&valid_bytecode_offset);
-  }
 
   __ bind(&install_baseline_code);
   {
@@ -5304,31 +5289,6 @@ void Generate_BaselineOrInterpreterEntry(MacroAssembler* masm,
   }
   // Retry from the start after installing baseline code.
   __ jmp(&start);
-}
-
-}  // namespace
-
-void Builtins::Generate_BaselineOrInterpreterEnterAtBytecode(
-    MacroAssembler* masm) {
-  Generate_CallToAdaptShadowStackForDeopt(masm, true);
-  masm->isolate()->heap()->SetDeoptPCOffsetAfterAdaptShadowStack(
-      masm->pc_offset());
-
-  Generate_BaselineOrInterpreterEntry(masm, false);
-}
-
-void Builtins::Generate_BaselineOrInterpreterEnterAtNextBytecode(
-    MacroAssembler* masm) {
-  Generate_CallToAdaptShadowStackForDeopt(masm, true);
-  masm->isolate()->heap()->SetDeoptPCOffsetAfterAdaptShadowStack(
-      masm->pc_offset());
-
-  Generate_BaselineOrInterpreterEntry(masm, true);
-}
-
-void Builtins::Generate_InterpreterOnStackReplacement_ToBaseline(
-    MacroAssembler* masm) {
-  Generate_BaselineOrInterpreterEntry(masm, false, true);
 }
 
 void Builtins::Generate_RestartFrameTrampoline(MacroAssembler* masm) {

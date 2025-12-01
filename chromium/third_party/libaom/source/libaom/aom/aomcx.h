@@ -731,7 +731,7 @@ enum aome_enc_control_id {
    * control sets the minimum level of flatness from which the matrices
    * are determined.
    *
-   * By default, the encoder sets this minimum at level 5 (4 in allintra
+   * By default, the encoder sets this minimum at level 5 (4 in all intra
    * mode).
    */
   AV1E_SET_QM_MIN = 64,
@@ -743,7 +743,7 @@ enum aome_enc_control_id {
    * As quantisation levels increase, the matrices get flatter. This
    * control sets the maximum level of flatness possible.
    *
-   * By default, the encoder sets this maximum at level 9 (10 in allintra
+   * By default, the encoder sets this maximum at level 9 (10 in all intra
    * mode)
    */
   AV1E_SET_QM_MAX = 65,
@@ -1133,6 +1133,8 @@ enum aome_enc_control_id {
    * - 2 = use modulation for local test
    * - 3 = use modulation for key frame perceptual quality optimization
    * - 4 = use modulation for user rating based perceptual quality optimization
+   * - 5 = use modulation for HDR video
+   * - 6 = use modulation for all intra using Variance Boost
    */
   AV1E_SET_DELTAQ_MODE = 107,
 
@@ -1670,8 +1672,13 @@ typedef enum {
  * Setting the tuning option to AOM_TUNE_SSIMULACRA2 causes the following
  * options to be set (expressed as command-line options):
  *   * --enable-qm=1
+ *   * --qm-min=2
+ *   * --qm-max=10
  *   * --sharpness=7
+ *   * --dist-metric=qm-psnr
  *   * --enable-cdef=3
+ *   * --enable-chroma-deltaq=1
+ *   * --deltaq-mode=6
  */
 typedef enum {
   AOM_TUNE_PSNR = 0,

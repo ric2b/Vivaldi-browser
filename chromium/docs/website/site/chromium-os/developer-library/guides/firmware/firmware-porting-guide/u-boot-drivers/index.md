@@ -90,8 +90,7 @@ codec.
 </tr>
 </table>
 
-*[back to
-top](/chromium-os/firmware-porting-guide/u-boot-drivers#TOC-Board-Configuration)*
+*[back to top](#TOC-Board-Configuration)*
 
 ## Clock
 
@@ -132,8 +131,7 @@ functionality. Important clock functions to implement include the following:
 *</tr>*
 *</table>*
 
-*[back to
-top](/chromium-os/firmware-porting-guide/u-boot-drivers#TOC-Board-Configuration)*
+*[back to top](#TOC-Board-Configuration)*
 
 ## Ethernet
 
@@ -214,8 +212,7 @@ about the device and fills in the `ueth_data` structure.
 </tr>
 </table>
 
-*[back to
-top](/chromium-os/firmware-porting-guide/u-boot-drivers#TOC-Board-Configuration)*
+*[back to top](#TOC-Board-Configuration)*
 
 ## GPIO
 
@@ -311,7 +308,7 @@ example, custom AP functions are required to specify the following:
 *   **Drive strength** is defined in a chip-specific function.
 *   **Pinmux** selects which function a pin has (for example, MMC, LCD,
             GPIO) and what is controlling the pin. The [pinmux
-            module](/chromium-os/firmware-porting-guide/u-boot-drivers#TOC-Pinmux)
+            module](#TOC-Pinmux)
             typically handles this function.
 *   **Pullup and pulldown** functionality is defined in a chip-specific
             function so that there are no floating lines.
@@ -343,8 +340,7 @@ able to accept both numbers and names for GPIO pins, as defined in gpio.h.
 *</tr>*
 *</table>*
 
-*[back to
-top](/chromium-os/firmware-porting-guide/u-boot-drivers#TOC-Board-Configuration)*
+*[back to top](#TOC-Board-Configuration)*
 
 ## Inter-Integrated Circuit Communication (I2C)
 
@@ -445,8 +441,7 @@ read and write data.
 </tr>
 </table>
 
-*[back to
-top](/chromium-os/firmware-porting-guide/u-boot-drivers#TOC-Board-Configuration)*
+*[back to top](#TOC-Board-Configuration)*
 
 ## Keyboard
 
@@ -584,8 +579,7 @@ configuration file.
 </tr>
 </table>
 
-*[back to
-top](/chromium-os/firmware-porting-guide/u-boot-drivers#TOC-Board-Configuration)*
+*[back to top](#TOC-Board-Configuration)*
 
 ## LCD/Video
 
@@ -718,8 +712,7 @@ U-Boot.
 *</tr>*
 *</table>*
 
-*[back to
-top](/chromium-os/firmware-porting-guide/u-boot-drivers#TOC-Board-Configuration)*
+*[back to top](#TOC-Board-Configuration)*
 
 ## NAND
 
@@ -749,8 +742,7 @@ drivers, which provide a high-level interface to the underlying NAND flash.
 </tr>
 </table>
 
-*[back to
-top](/chromium-os/firmware-porting-guide/u-boot-drivers#TOC-Board-Configuration)*
+*[back to top](#TOC-Board-Configuration)*
 
 ## Pin Multiplexing
 
@@ -797,8 +789,7 @@ boot time and can be initialized later by the kernel.
 </tr>
 </table>
 
-*[back to
-top](/chromium-os/firmware-porting-guide/u-boot-drivers#TOC-Board-Configuration)*
+*[back to top](#TOC-Board-Configuration)*
 
 ## Power
 
@@ -846,8 +837,7 @@ such as the display and eMMC. It also checks the battery if needed.
 <table>
 </table>
 
-*[back to
-top](/chromium-os/firmware-porting-guide/u-boot-drivers#TOC-Board-Configuration)*
+*[back to top](#TOC-Board-Configuration)*
 
 ## Pulse Width Modulation (PWM)
 
@@ -890,8 +880,7 @@ to implement include the following:
 *</tr>*
 *</table>*
 
-*[back to
-top](/chromium-os/firmware-porting-guide/u-boot-drivers#TOC-Board-Configuration)*
+*[back to top](#TOC-Board-Configuration)*
 
 ## SDMMC and eMMC
 
@@ -963,8 +952,7 @@ Key values to set in struct mmc include the following:
 *</tr>*
 *</table>*
 
-*[back to
-top](/chromium-os/firmware-porting-guide/u-boot-drivers#TOC-Board-Configuration)*
+*[back to top](#TOC-Board-Configuration)*
 
 ## SPI
 
@@ -1033,8 +1021,7 @@ the `spi_release_bus()` function.
 </tr>
 </table>
 
-*[ back to
-top](/chromium-os/firmware-porting-guide/u-boot-drivers#TOC-Board-Configuration)*
+*[back to top](#TOC-Board-Configuration)*
 
 ## SPI Flash
 
@@ -1099,8 +1086,7 @@ functions defined in spi_flash_internal.h.
 </tr>
 </table>
 
-[*back to
-top*](/chromium-os/firmware-porting-guide/u-boot-drivers#TOC-Board-Configuration)
+*[back to top](#TOC-Board-Configuration)*
 
 ## Thermal Management Unit (TMU)
 
@@ -1138,8 +1124,7 @@ To implement this driver, you have two tasks:
 </tr>
 </table>
 
-*[back to
-top](/chromium-os/firmware-porting-guide/u-boot-drivers#TOC-Board-Configuration)*
+*[back to top](#TOC-Board-Configuration)*
 
 ## Timer
 
@@ -1225,8 +1210,7 @@ benchmarking.
 *</tr>*
 *</table>*
 
-*[back to
-top](/chromium-os/firmware-porting-guide/u-boot-drivers#TOC-Board-Configuration)*
+*[back to top](#TOC-Board-Configuration)*
 
 ## Trusted Platform Module (TPM)
 
@@ -1271,8 +1255,7 @@ int tis_sendrecv(const uint8_t *sendbuf, size_t send_size, uint8_t *recvbu
 </tr>
 </table>
 
-[*back to
-top*](/chromium-os/firmware-porting-guide/u-boot-drivers#TOC-Board-Configuration)
+*[back to top](#TOC-Board-Configuration)*
 
 ## UART
 
@@ -1321,8 +1304,7 @@ gd-&gt;flags |= GD_FLG_SILENT;
 *</tr>*
 *</table>*
 
-*[back to
-top](/chromium-os/firmware-porting-guide/u-boot-drivers#TOC-Board-Configuration)*
+*[back to top](#TOC-Board-Configuration)*
 
 ## USB Host
 
@@ -1434,8 +1416,7 @@ different aspects of USB, including the following:
 *</tr>*
 *</table>*
 
-*[back to
-top](/chromium-os/firmware-porting-guide/u-boot-drivers#TOC-Board-Configuration)*
+*[back to top](#TOC-Board-Configuration)*
 
 ## Other sections in *U-Boot Porting Guide*
 

@@ -23,6 +23,7 @@
 #include <wayland-client-core.h>
 #include <wayland-client-protocol.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -38,7 +39,6 @@
 #include "base/memory/shared_memory_mapper.h"
 #include "base/memory/unsafe_shared_memory_region.h"
 #include "base/posix/eintr_wrapper.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -1567,7 +1567,7 @@ std::unique_ptr<ClientBase::Buffer> ClientBase::CreateBuffer(
         return nullptr;
       }
 
-      base::span<uint8_t> mapped_span = base::make_span(mapped_data, length);
+      base::span<uint8_t> mapped_span(mapped_data, length);
       buffer->shared_memory_mapping = MemfdMemoryMapping(mapped_span);
       buffer->shm_pool.reset(
           wl_shm_create_pool(globals_.shm.get(), memfd, length));
@@ -1909,7 +1909,7 @@ std::unique_ptr<ClientBase::Buffer> ClientBase::CreateDrmBuffer(
 
 ClientBase::Buffer* ClientBase::DequeueBuffer() {
   auto buffer_it =
-      base::ranges::find_if_not(buffers_, &ClientBase::Buffer::busy);
+      std::ranges::find_if_not(buffers_, &ClientBase::Buffer::busy);
   if (buffer_it == buffers_.end())
     return nullptr;
 

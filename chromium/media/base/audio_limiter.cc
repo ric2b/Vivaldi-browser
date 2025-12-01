@@ -4,9 +4,10 @@
 
 #include "media/base/audio_limiter.h"
 
+#include <algorithm>
+
 #include "base/containers/span_reader.h"
 #include "base/functional/bind.h"
-#include "base/ranges/algorithm.h"
 #include "base/time/time.h"
 #include "media/base/audio_timestamp_helper.h"
 
@@ -102,7 +103,7 @@ void AudioLimiter::FeedInput(const AudioBus& input, int num_frames) {
   // Sanitize the input, removing unusual values. This is a destructive
   // operation which changes the nature of the audio signal, but it avoids
   // undefined behavior.
-  base::ranges::for_each(interleaved_input, [](float& sample) {
+  std::ranges::for_each(interleaved_input, [](float& sample) {
     if (std::isnan(sample) || std::isinf(sample)) {
       sample = 0.0f;
     }
@@ -111,8 +112,8 @@ void AudioLimiter::FeedInput(const AudioBus& input, int num_frames) {
   delayed_interleaved_input_.reserve(delayed_interleaved_input_.size() +
                                      interleaved_input.size());
 
-  base::ranges::copy(interleaved_input,
-                     std::back_inserter(delayed_interleaved_input_));
+  std::ranges::copy(interleaved_input,
+                    std::back_inserter(delayed_interleaved_input_));
 
   base::SpanReader<float> input_reader(interleaved_input);
 
@@ -215,31 +216,27 @@ void AudioLimiter::WriteLimitedFrameToOutput() {
   CHECK(!output_channels.empty());
   CHECK(!output_channels[0].empty());
 
+  const auto copy_float_to_channel = [](float src, base::span<uint8_t>& ch) {
+    auto [dest, remainder] = ch.split_at<sizeof(float)>();
+    dest.copy_from(base::byte_span_from_ref(base::allow_nonunique_obj, src));
+    ch = remainder;
+  };
+
   if (smoothed_gain_ < 1.0) {
     // Apply gain reduction.
     for (int ch = 0; ch < channels_; ++ch) {
-      auto [dest, remainder] = output_channels[ch].split_at<4>();
-
       const float adjusted_sample = static_cast<float>(
           static_cast<double>(delayed_interleaved_input_.front()) *
           smoothed_gain_);
+      copy_float_to_channel(adjusted_sample, output_channels[ch]);
       delayed_interleaved_input_.pop_front();
-
-      dest.copy_from(base::byte_span_from_ref(adjusted_sample));
-
-      output_channels[ch] = remainder;
     }
   } else {
     // Passthrough.
     for (int ch = 0; ch < channels_; ++ch) {
-      auto [dest, remainder] = output_channels[ch].split_at<4>();
-
-      dest.copy_from(
-          base::byte_span_from_ref(delayed_interleaved_input_.front()));
-
+      copy_float_to_channel(delayed_interleaved_input_.front(),
+                            output_channels[ch]);
       delayed_interleaved_input_.pop_front();
-
-      output_channels[ch] = remainder;
     }
   }
 

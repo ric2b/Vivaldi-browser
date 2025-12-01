@@ -1,3 +1,6 @@
+#include "xla/stream_executor/generic_memory_allocation.h"
+#include "xla/stream_executor/generic_memory_allocator.h"
+#include "xla/stream_executor/memory_allocator.h"
 /* Copyright 2017 The OpenXLA Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +23,10 @@ limitations under the License.
 #define XLA_BACKENDS_INTERPRETER_EXECUTOR_H_
 
 #include <cstdint>
+#include <cstring>
 #include <memory>
+#include <optional>
+#include <variant>
 
 #include "absl/functional/any_invocable.h"
 #include "absl/status/status.h"
@@ -138,10 +144,27 @@ class XlaInterpreterExecutor : public StreamExecutorCommon {
       std::optional<std::variant<StreamPriority, int>> priority) override {
     return std::make_unique<InterpreterStream>(this);
   }
+  absl::StatusOr<std::unique_ptr<MemoryAllocator>> CreateMemoryAllocator(
+      MemoryType type) override {
+    if (type == MemoryType::kHost) {
+      return std::make_unique<GenericMemoryAllocator>(
+          [](uint64_t size)
+              -> absl::StatusOr<std::unique_ptr<MemoryAllocation>> {
+            void *ptr = new char[size];
+            return std::make_unique<GenericMemoryAllocation>(
+                ptr, size, [](void *location, uint64_t size) {
+                  delete[] static_cast<char *>(location);
+                });
+          });
+    }
+    return absl::UnimplementedError(
+        absl::StrFormat("Unsupported memory type %d", type));
+  }
 
  private:
-  // The device ordinal value that this executor was initialized with; recorded
-  // for use in getting device metadata. Immutable post-initialization.
+  // The device ordinal value that this executor was initialized with;
+  // recorded for use in getting device metadata. Immutable
+  // post-initialization.
   int device_ordinal_;
 };
 

@@ -34,7 +34,11 @@ group("front_end") {
 }
 
 copy_to_gen("integration_test_runner-gen") {
-  sources = [ "integration_test_runner.html" ]
+  sources = [
+    "application_tokens.css",
+    "design_system_tokens.css",
+    "integration_test_runner.html",
+  ]
 }
 
 group("integration_test_runner") {
@@ -143,6 +147,7 @@ group("unittests") {
     "models/workspace:unittests",
     "models/workspace_diff:unittests",
     "panels/accessibility:unittests",
+    "panels/ai_assistance:unittests",
     "panels/animation:unittests",
     "panels/application:unittests",
     "panels/application/components:unittests",
@@ -159,7 +164,6 @@ group("unittests") {
     "panels/elements:unittests",
     "panels/emulation:unittests",
     "panels/explain:unittests",
-    "panels/freestyler:unittests",
     "panels/issues:unittests",
     "panels/layer_viewer:unittests",
     "panels/layers:unittests",
@@ -172,7 +176,6 @@ group("unittests") {
     "panels/network/components:unittests",
     "panels/performance_monitor:unittests",
     "panels/protocol_monitor:unittests",
-    "panels/protocol_monitor/components:unittests",
     "panels/recorder:unittests",
     "panels/recorder/components:unittests",
     "panels/recorder/converters:unittests",
@@ -201,6 +204,7 @@ group("unittests") {
     "panels/utils:unittests",
     "panels/web_audio:unittests",
     "panels/webauthn:unittests",
+    "panels/whats_new:unittests",
     "services/trace_bounds:unittests",
     "testing",
     "third_party/chromium/client-variations:unittests",
@@ -210,7 +214,6 @@ group("unittests") {
     "ui/components/cards:unittests",
     "ui/components/chrome_link:unittests",
     "ui/components/code_highlighter:unittests",
-    "ui/components/data_grid:unittests",
     "ui/components/dialogs:unittests",
     "ui/components/diff_view:unittests",
     "ui/components/expandable_list:unittests",
@@ -233,7 +236,6 @@ group("unittests") {
     "ui/components/text_editor:unittests",
     "ui/components/text_prompt:unittests",
     "ui/components/tree_outline:unittests",
-    "ui/components/two_states_counter:unittests",
     "ui/legacy:copy_stylesheets_for_server",
     "ui/legacy:unittests",
     "ui/legacy/components/color_picker:unittests",
@@ -245,7 +247,7 @@ group("unittests") {
     "ui/legacy/components/source_frame:unittests",
     "ui/legacy/components/utils:unittests",
     "ui/legacy/theme_support:unittests",
-    "ui/lit-html:unittests",
+    "ui/lit:unittests",
     "ui/visual_logging:unittests",
   ]
 }

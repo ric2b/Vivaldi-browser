@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import '../../ui/legacy/legacy.js';
+
 import type * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as SDK from '../../core/sdk/sdk.js';
@@ -34,17 +36,20 @@ export class WebAudioView extends UI.ThrottledWidget.ThrottledWidget implements
   private readonly summaryBarContainer: HTMLElement;
   constructor() {
     super(true, 1000);
+    this.registerRequiredCSS(webAudioStyles);
     this.element.setAttribute('jslog', `${VisualLogging.panel('web-audio').track({resize: true})}`);
     this.element.classList.add('web-audio-drawer');
 
     // Creates the toolbar.
     const toolbarContainer = this.contentElement.createChild('div', 'web-audio-toolbar-container vbox');
+    toolbarContainer.role = 'toolbar';
     this.contextSelector = new AudioContextSelector();
-    const toolbar = new UI.Toolbar.Toolbar('web-audio-toolbar', toolbarContainer);
-    toolbar.appendToolbarItem(UI.Toolbar.Toolbar.createActionButtonForId('components.collect-garbage'));
+    const toolbar = toolbarContainer.createChild('devtools-toolbar', 'web-audio-toolbar');
+    toolbar.role = 'presentation';
+    toolbar.appendToolbarItem(UI.Toolbar.Toolbar.createActionButton('components.collect-garbage'));
     toolbar.appendSeparator();
     toolbar.appendToolbarItem(this.contextSelector.toolbarItem());
-    toolbar.element.setAttribute('jslog', `${VisualLogging.toolbar()}`);
+    toolbar.setAttribute('jslog', `${VisualLogging.toolbar()}`);
 
     // Create content container
     this.contentContainer = this.contentElement.createChild('div', 'web-audio-content-container vbox flex-auto');
@@ -82,7 +87,6 @@ export class WebAudioView extends UI.ThrottledWidget.ThrottledWidget implements
 
   override wasShown(): void {
     super.wasShown();
-    this.registerCSSFiles([webAudioStyles]);
     for (const model of SDK.TargetManager.TargetManager.instance().models(WebAudioModel)) {
       this.addEventListeners(model);
     }

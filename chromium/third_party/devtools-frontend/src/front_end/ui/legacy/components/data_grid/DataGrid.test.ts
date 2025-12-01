@@ -4,12 +4,11 @@
 
 import {renderElementIntoDOM} from '../../../../testing/DOMHelpers.js';
 import {describeWithEnvironment} from '../../../../testing/EnvironmentHelpers.js';
-import * as LitHtml from '../../../../ui/lit-html/lit-html.js';
+import {html, render} from '../../../../ui/lit/lit.js';
 import * as UI from '../../legacy.js';
 
 import * as DataGrid from './data_grid.js';
 
-const {render, html} = LitHtml;
 const widgetRef = UI.Widget.widgetRef;
 
 describeWithEnvironment('DataGrid', () => {
@@ -20,13 +19,11 @@ describeWithEnvironment('DataGrid', () => {
     let widget!: DataGrid.DataGrid.DataGridWidget<unknown>;
 
     const dataGridOptions: DataGrid.DataGrid.DataGridWidgetOptions<unknown> = {
-      implParams: {
-        displayName: 'testGrid',
-        columns: [{
-          id: 'test',
-          sortable: false,
-        }],
-      },
+      displayName: 'testGrid',
+      columns: [{
+        id: 'test',
+        sortable: false,
+      }],
       nodes: [new DataGrid.DataGrid.DataGridNode({test: 'testNode'})],
       markAsRoot: true,
     };
@@ -34,6 +31,7 @@ describeWithEnvironment('DataGrid', () => {
     // clang-format off
         render(
             html`
+        <!-- @ts-ignore -->
         <devtools-data-grid-widget
             .options=${dataGridOptions}
             ${widgetRef(DataGrid.DataGrid.DataGridWidget, e => { widget = e; })}
@@ -42,10 +40,8 @@ describeWithEnvironment('DataGrid', () => {
         container, {host: this});
     // clang-format on
 
-    await new Promise(resolve => setTimeout(resolve, 0));
-
     assert.exists(widget);
     // There is a single test row
-    assert.strictEqual(widget.dataGrid.rootNode().children.length, 1);
+    assert.lengthOf(widget.dataGrid.rootNode().children, 1);
   });
 });

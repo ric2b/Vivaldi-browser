@@ -19,9 +19,7 @@ class ObjectVisitorForwarder final
   explicit ObjectVisitorForwarder(Isolate* isolate, ObjectVisitor* visitor)
       : HeapVisitor(isolate), visitor_(visitor) {}
   explicit ObjectVisitorForwarder(LocalIsolate* isolate, ObjectVisitor* visitor)
-      : HeapVisitor(PtrComprCageBase(isolate->cage_base()),
-                    PtrComprCageBase(isolate->code_cage_base())),
-        visitor_(visitor) {}
+      : HeapVisitor(isolate), visitor_(visitor) {}
 
   static constexpr bool ShouldVisitMapPointer() { return false; }
   static constexpr bool ShouldUseUncheckedCast() { return true; }
@@ -107,6 +105,11 @@ class ObjectVisitorForwarder final
 
   void VisitProtectedPointer(Tagged<TrustedObject> host,
                              ProtectedPointerSlot slot) override {
+    visitor_->VisitProtectedPointer(host, slot);
+  }
+
+  void VisitProtectedPointer(Tagged<TrustedObject> host,
+                             ProtectedMaybeObjectSlot slot) override {
     visitor_->VisitProtectedPointer(host, slot);
   }
 

@@ -9,11 +9,11 @@ title: Windows Quick Start
 This tutorial is meant as an expedited way to get Chromium-based browsers
 deployed and configured on a Windows network, by deploying an MSI and applying
 group policy. For further configuration, please reference the other
-documentation at <http://www.chromium.org/administrators>.
+documentation at <https://www.chromium.org/administrators>.
 **1. Download the MSI.**
 
 Download the [Google Chrome
-MSI](http://www.google.com/chrome/eula.html?msi=true).
+MSI](https://www.google.com/chrome/eula.html?msi=true).
 **2. Download the ADM / ADMX template.**
 You can download the ADM template or ADMX template
 [here](/administrators/policy-templates).

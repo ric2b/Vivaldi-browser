@@ -11,7 +11,7 @@
 #include "base/containers/span.h"
 #include "pdf/buildflags.h"
 #include "third_party/ink/src/ink/geometry/mesh.h"
-#include "third_party/ink/src/ink/geometry/modeled_shape.h"
+#include "third_party/ink/src/ink/geometry/partitioned_mesh.h"
 #include "third_party/ink/src/ink/geometry/point.h"
 #include "third_party/pdfium/public/fpdfview.h"
 
@@ -21,11 +21,15 @@ namespace chrome_pdf {
 
 struct ReadV2InkPathResult {
   FPDF_PAGEOBJECT page_object;
-  ink::ModeledShape shape;
+  ink::PartitionedMesh shape;
 };
 
+// Returns whether the given `page` contains a "V2" path created by Ink.
+// Returns false if `page` is null.
+bool PageContainsV2InkPath(FPDF_PAGE page);
+
 // For the given `page`, iterate through all page objects and import "V2" paths
-// created by Ink as ink::ModeledShapes. For each shape, also return its
+// created by Ink as ink::PartitionedMeshs. For each shape, also return its
 // associated page object. The shapes do not have outlines and are only suitable
 // for use with ink::Intersects().
 //

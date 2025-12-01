@@ -1922,10 +1922,14 @@ def DoPresubmitChecks(change,
         1 if presubmit checks failed or 0 otherwise.
     """
     with setup_environ({'PYTHONDONTWRITEBYTECODE': '1'}):
-        if committing:
-            sys.stdout.write('Running presubmit commit checks ...\n')
-        else:
-            sys.stdout.write('Running presubmit upload checks ...\n')
+        running_msg = 'Running presubmit '
+        running_msg += 'commit ' if committing else 'upload '
+        running_msg += 'checks '
+        if branch := scm.GIT.GetBranch(change.RepositoryRoot()):
+            running_msg += f'on branch {branch} '
+        running_msg += '...\n'
+        sys.stdout.write(running_msg)
+
         start_time = time_time()
         presubmit_files = ListRelevantPresubmitFiles(
             change.AbsoluteLocalPaths() + change.AbsoluteLocalSubmodules(),

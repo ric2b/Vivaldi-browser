@@ -4,6 +4,7 @@
 """Definitions of builders in the tryserver.chromium.android builder group."""
 
 load("//lib/branches.star", "branches")
+load("//lib/builder_config.star", "builder_config")
 load("//lib/builders.star", "os", "siso")
 load("//lib/try.star", "try_")
 load("//lib/consoles.star", "consoles")
@@ -76,6 +77,10 @@ try_.builder(
     mirrors = [
         "ci/android-desktop-x64-compile-rel",
     ],
+    builder_config_settings = builder_config.try_settings(
+        include_all_triggered_testers = True,
+        is_compile_only = True,
+    ),
     gn_args = gn_args.config(
         configs = [
             "ci/android-desktop-x64-compile-rel",
@@ -83,11 +88,7 @@ try_.builder(
         ],
     ),
     builderless = False,
-    tryjob = try_.job(
-        # TODO: b/350582436 - Remove after confirming bot pool can handle load
-        # and checking CQ cycle time impact.
-        experiment_percentage = 50,
-    ),
+    tryjob = try_.job(),
 )
 
 try_.builder(
@@ -121,6 +122,20 @@ try_.builder(
     mirrors = [
         "ci/android-desktop-x64-compile-rel",
         "ci/android-desktop-x64-rel-14-tests",
+    ],
+    gn_args = gn_args.config(
+        configs = [
+            "ci/android-desktop-x64-compile-rel",
+            "release_try_builder",
+        ],
+    ),
+)
+
+try_.builder(
+    name = "android-desktop-15-x64-rel",
+    mirrors = [
+        "ci/android-desktop-x64-compile-rel",
+        "ci/android-desktop-x64-rel-15-tests",
     ],
     gn_args = gn_args.config(
         configs = [

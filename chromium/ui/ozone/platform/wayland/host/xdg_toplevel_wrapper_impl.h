@@ -28,11 +28,8 @@ class XDGToplevelWrapperImpl : public ShellToplevelWrapper {
 
   // ShellToplevelWrapper overrides:
   bool Initialize() override;
-  bool IsSupportedOnAuraToplevel(uint32_t version) const override;
-  void SetCanMaximize(bool can_maximize) override;
   void SetMaximized() override;
   void UnSetMaximized() override;
-  void SetCanFullscreen(bool can_fullscreen) override;
   void SetFullscreen(WaylandOutput* wayland_output) override;
   void UnSetFullscreen() override;
   void SetMinimized() override;
@@ -46,30 +43,7 @@ class XDGToplevelWrapperImpl : public ShellToplevelWrapper {
   void SetMaxSize(int32_t width, int32_t height) override;
   void SetAppId(const std::string& app_id) override;
   void SetDecoration(DecorationMode decoration) override;
-  void Lock(WaylandOrientationLockType lock_type) override;
-  void Unlock() override;
-  void RequestWindowBounds(const gfx::Rect& bounds,
-                           int64_t display_id) override;
   void SetSystemModal(bool modal) override;
-  bool SupportsScreenCoordinates() const override;
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  void EnableScreenCoordinates() override;
-#endif
-  void SetFloatToLocation(
-      WaylandFloatStartLocation float_start_location) override;
-  void UnSetFloat() override;
-  void SetZOrder(ZOrderLevel z_order) override;
-  bool SupportsActivation() override;
-  void Activate() override;
-  void Deactivate() override;
-  void SetScaleFactor(float scale_factor) override;
-  void CommitSnap(WaylandWindowSnapDirection snap_direction,
-                  float snap_ratio) override;
-  void ShowSnapPreview(WaylandWindowSnapDirection snap_direction,
-                       bool allow_haptic_feedback) override;
-  void SetPersistable(bool persistable) const override;
-  void SetShape(std::unique_ptr<ShapeRects> shape_rects) override;
-  void AckRotateFocus(uint32_t serial, uint32_t handled) override;
   void SetIcon(const gfx::ImageSkia& icon) override;
 
   XDGToplevelWrapperImpl* AsXDGToplevelWrapper() override;
@@ -98,35 +72,6 @@ class XDGToplevelWrapperImpl : public ShellToplevelWrapper {
                                     zxdg_toplevel_decoration_v1* decoration,
                                     uint32_t mode);
 
-  // zaura_toplevel_listener callbacks:
-  static void OnAuraToplevelConfigure(void* data,
-                                      zaura_toplevel* aura_toplevel,
-                                      int32_t x,
-                                      int32_t y,
-                                      int32_t width,
-                                      int32_t height,
-                                      wl_array* states);
-  static void OnOriginChange(void* data,
-                             zaura_toplevel* aura_toplevel,
-                             int32_t x,
-                             int32_t y);
-
-  static void OnConfigureRasterScale(void* data,
-                                     struct zaura_toplevel* zaura_toplevel,
-                                     uint32_t scale_as_uint);
-
-  static void OnConfigureOcclusionState(void* data,
-                                        struct zaura_toplevel* zaura_toplevel,
-                                        uint32_t mode);
-  static void OnRotateFocus(void* data,
-                            zaura_toplevel* aura_toplevel,
-                            uint32_t serial,
-                            uint32_t direction,
-                            uint32_t restart);
-  static void OnOverviewChange(void* data,
-                               zaura_toplevel* aura_toplevel,
-                               uint32_t in_overview_as_uint);
-
   // Send request to wayland compositor to enable a requested decoration mode.
   void SetTopLevelDecorationMode(DecorationMode requested_mode);
 
@@ -145,8 +90,6 @@ class XDGToplevelWrapperImpl : public ShellToplevelWrapper {
 
   // XDG Shell Stable object.
   wl::Object<xdg_toplevel> xdg_toplevel_;
-  // Aura shell toplevel addons.
-  wl::Object<zaura_toplevel> aura_toplevel_;
 
   wl::Object<zxdg_toplevel_decoration_v1> zxdg_toplevel_decoration_;
 

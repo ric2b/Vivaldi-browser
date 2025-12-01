@@ -13,13 +13,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <algorithm>
 #include <initializer_list>
+#include <map>
 #include <memory>
 #include <optional>
-#include <ostream>
 #include <string>
-#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -27,15 +25,25 @@
 #include "api/audio/audio_device.h"
 #include "api/audio/audio_processing_statistics.h"
 #include "api/candidate.h"
+#include "api/data_channel_interface.h"
 #include "api/dtls_transport_interface.h"
+#include "api/environment/environment.h"
+#include "api/environment/environment_factory.h"
+#include "api/make_ref_counted.h"
 #include "api/media_stream_interface.h"
 #include "api/media_stream_track.h"
+#include "api/media_types.h"
+#include "api/ref_count.h"
 #include "api/rtp_parameters.h"
 #include "api/rtp_transceiver_direction.h"
+#include "api/scoped_refptr.h"
 #include "api/stats/attribute.h"
 #include "api/stats/rtc_stats.h"
+#include "api/stats/rtc_stats_collector_callback.h"
 #include "api/stats/rtc_stats_report.h"
 #include "api/stats/rtcstats_objects.h"
+#include "api/test/rtc_error_matchers.h"
+#include "api/transport/enums.h"
 #include "api/units/time_delta.h"
 #include "api/units/timestamp.h"
 #include "api/video/recordable_encoded_frame.h"
@@ -45,15 +53,20 @@
 #include "api/video/video_source_interface.h"
 #include "api/video/video_timing.h"
 #include "api/video_codecs/scalability_mode.h"
+#include "call/call.h"
 #include "common_video/include/quality_limitation_reason.h"
 #include "media/base/media_channel.h"
+#include "media/base/stream_params.h"
 #include "modules/rtp_rtcp/include/report_block_data.h"
-#include "modules/rtp_rtcp/include/rtp_rtcp_defines.h"
+#include "modules/rtp_rtcp/source/rtcp_packet/report_block.h"
 #include "p2p/base/connection_info.h"
 #include "p2p/base/ice_transport_internal.h"
 #include "p2p/base/p2p_constants.h"
 #include "p2p/base/port.h"
+#include "p2p/base/transport_description.h"
 #include "pc/media_stream.h"
+#include "pc/peer_connection_internal.h"
+#include "pc/sctp_data_channel.h"
 #include "pc/stream_collection.h"
 #include "pc/test/fake_data_channel_controller.h"
 #include "pc/test/fake_peer_connection_for_stats.h"
@@ -61,10 +74,10 @@
 #include "pc/test/mock_rtp_receiver_internal.h"
 #include "pc/test/mock_rtp_sender_internal.h"
 #include "pc/test/rtc_stats_obtainer.h"
+#include "pc/transport_stats.h"
 #include "rtc_base/checks.h"
 #include "rtc_base/fake_clock.h"
 #include "rtc_base/fake_ssl_identity.h"
-#include "rtc_base/gunit.h"
 #include "rtc_base/network_constants.h"
 #include "rtc_base/ref_counted_object.h"
 #include "rtc_base/rtc_certificate.h"
@@ -75,69 +88,17 @@
 #include "rtc_base/string_encode.h"
 #include "rtc_base/strings/json.h"
 #include "rtc_base/synchronization/mutex.h"
+#include "rtc_base/thread.h"
 #include "rtc_base/time_utils.h"
 #include "test/gmock.h"
 #include "test/gtest.h"
+#include "test/wait_until.h"
 
 using ::testing::_;
-using ::testing::AtLeast;
 using ::testing::Invoke;
 using ::testing::Return;
 
 namespace webrtc {
-
-// These are used by gtest code, such as if `EXPECT_EQ` fails.
-void PrintTo(const RTCCertificateStats& stats, ::std::ostream* os) {
-  *os << stats.ToJson();
-}
-
-void PrintTo(const RTCCodecStats& stats, ::std::ostream* os) {
-  *os << stats.ToJson();
-}
-
-void PrintTo(const RTCDataChannelStats& stats, ::std::ostream* os) {
-  *os << stats.ToJson();
-}
-
-void PrintTo(const RTCIceCandidatePairStats& stats, ::std::ostream* os) {
-  *os << stats.ToJson();
-}
-
-void PrintTo(const RTCLocalIceCandidateStats& stats, ::std::ostream* os) {
-  *os << stats.ToJson();
-}
-
-void PrintTo(const RTCRemoteIceCandidateStats& stats, ::std::ostream* os) {
-  *os << stats.ToJson();
-}
-
-void PrintTo(const RTCPeerConnectionStats& stats, ::std::ostream* os) {
-  *os << stats.ToJson();
-}
-
-void PrintTo(const RTCInboundRtpStreamStats& stats, ::std::ostream* os) {
-  *os << stats.ToJson();
-}
-
-void PrintTo(const RTCOutboundRtpStreamStats& stats, ::std::ostream* os) {
-  *os << stats.ToJson();
-}
-
-void PrintTo(const RTCRemoteInboundRtpStreamStats& stats, ::std::ostream* os) {
-  *os << stats.ToJson();
-}
-
-void PrintTo(const RTCAudioSourceStats& stats, ::std::ostream* os) {
-  *os << stats.ToJson();
-}
-
-void PrintTo(const RTCVideoSourceStats& stats, ::std::ostream* os) {
-  *os << stats.ToJson();
-}
-
-void PrintTo(const RTCTransportStats& stats, ::std::ostream* os) {
-  *os << stats.ToJson();
-}
 
 namespace {
 
@@ -644,7 +605,11 @@ class RTCStatsCollectorWrapper {
  private:
   rtc::scoped_refptr<const RTCStatsReport> WaitForReport(
       rtc::scoped_refptr<RTCStatsObtainer> callback) {
-    EXPECT_TRUE_WAIT(callback->report() != nullptr, kGetStatsReportTimeoutMs);
+    EXPECT_THAT(
+        WaitUntil(
+            [&] { return callback->report() != nullptr; }, ::testing::IsTrue(),
+            {.timeout = webrtc::TimeDelta::Millis(kGetStatsReportTimeoutMs)}),
+        IsRtcOk());
     int64_t after = rtc::TimeUTCMicros();
     for (const RTCStats& stats : *callback->report()) {
       if (stats.type() == RTCRemoteInboundRtpStreamStats::kType ||
@@ -923,7 +888,11 @@ class RTCStatsCollectorTest : public ::testing::Test {
 TEST_F(RTCStatsCollectorTest, SingleCallback) {
   rtc::scoped_refptr<const RTCStatsReport> result;
   stats_->stats_collector()->GetStatsReport(RTCStatsObtainer::Create(&result));
-  EXPECT_TRUE_WAIT(result != nullptr, kGetStatsReportTimeoutMs);
+  EXPECT_THAT(
+      WaitUntil(
+          [&] { return result != nullptr; }, ::testing::IsTrue(),
+          {.timeout = webrtc::TimeDelta::Millis(kGetStatsReportTimeoutMs)}),
+      IsRtcOk());
 }
 
 TEST_F(RTCStatsCollectorTest, MultipleCallbacks) {
@@ -931,9 +900,21 @@ TEST_F(RTCStatsCollectorTest, MultipleCallbacks) {
   stats_->stats_collector()->GetStatsReport(RTCStatsObtainer::Create(&a));
   stats_->stats_collector()->GetStatsReport(RTCStatsObtainer::Create(&b));
   stats_->stats_collector()->GetStatsReport(RTCStatsObtainer::Create(&c));
-  EXPECT_TRUE_WAIT(a != nullptr, kGetStatsReportTimeoutMs);
-  EXPECT_TRUE_WAIT(b != nullptr, kGetStatsReportTimeoutMs);
-  EXPECT_TRUE_WAIT(c != nullptr, kGetStatsReportTimeoutMs);
+  EXPECT_THAT(
+      WaitUntil(
+          [&] { return a != nullptr; }, ::testing::IsTrue(),
+          {.timeout = webrtc::TimeDelta::Millis(kGetStatsReportTimeoutMs)}),
+      IsRtcOk());
+  EXPECT_THAT(
+      WaitUntil(
+          [&] { return b != nullptr; }, ::testing::IsTrue(),
+          {.timeout = webrtc::TimeDelta::Millis(kGetStatsReportTimeoutMs)}),
+      IsRtcOk());
+  EXPECT_THAT(
+      WaitUntil(
+          [&] { return c != nullptr; }, ::testing::IsTrue(),
+          {.timeout = webrtc::TimeDelta::Millis(kGetStatsReportTimeoutMs)}),
+      IsRtcOk());
 
   EXPECT_EQ(a.get(), b.get());
   EXPECT_EQ(b.get(), c.get());
@@ -962,9 +943,21 @@ TEST_F(RTCStatsCollectorTest, MultipleCallbacksWithInvalidatedCacheInBetween) {
   // Cache is invalidated after 50 ms.
   fake_clock_.AdvanceTime(TimeDelta::Millis(51));
   stats_->stats_collector()->GetStatsReport(RTCStatsObtainer::Create(&c));
-  EXPECT_TRUE_WAIT(a != nullptr, kGetStatsReportTimeoutMs);
-  EXPECT_TRUE_WAIT(b != nullptr, kGetStatsReportTimeoutMs);
-  EXPECT_TRUE_WAIT(c != nullptr, kGetStatsReportTimeoutMs);
+  EXPECT_THAT(
+      WaitUntil(
+          [&] { return a != nullptr; }, ::testing::IsTrue(),
+          {.timeout = webrtc::TimeDelta::Millis(kGetStatsReportTimeoutMs)}),
+      IsRtcOk());
+  EXPECT_THAT(
+      WaitUntil(
+          [&] { return b != nullptr; }, ::testing::IsTrue(),
+          {.timeout = webrtc::TimeDelta::Millis(kGetStatsReportTimeoutMs)}),
+      IsRtcOk());
+  EXPECT_THAT(
+      WaitUntil(
+          [&] { return c != nullptr; }, ::testing::IsTrue(),
+          {.timeout = webrtc::TimeDelta::Millis(kGetStatsReportTimeoutMs)}),
+      IsRtcOk());
   EXPECT_EQ(a.get(), b.get());
   // The act of doing `AdvanceTime` processes all messages. If this was not the
   // case we might not require `c` to be fresher than `b`.
@@ -1831,29 +1824,29 @@ TEST_F(RTCStatsCollectorTest, CollectRTCIceCandidateStats) {
   a_transport_channel_stats.ice_transport_stats.connection_infos.push_back(
       cricket::ConnectionInfo());
   a_transport_channel_stats.ice_transport_stats.connection_infos[0]
-      .local_candidate = *a_local_host.get();
+      .local_candidate = *a_local_host;
   a_transport_channel_stats.ice_transport_stats.connection_infos[0]
-      .remote_candidate = *a_remote_srflx.get();
+      .remote_candidate = *a_remote_srflx;
   a_transport_channel_stats.ice_transport_stats.connection_infos.push_back(
       cricket::ConnectionInfo());
   a_transport_channel_stats.ice_transport_stats.connection_infos[1]
-      .local_candidate = *a_local_prflx.get();
+      .local_candidate = *a_local_prflx;
   a_transport_channel_stats.ice_transport_stats.connection_infos[1]
-      .remote_candidate = *a_remote_relay.get();
+      .remote_candidate = *a_remote_relay;
   a_transport_channel_stats.ice_transport_stats.connection_infos.push_back(
       cricket::ConnectionInfo());
   a_transport_channel_stats.ice_transport_stats.connection_infos[2]
-      .local_candidate = *a_local_relay.get();
+      .local_candidate = *a_local_relay;
   a_transport_channel_stats.ice_transport_stats.connection_infos[2]
-      .remote_candidate = *a_remote_relay.get();
+      .remote_candidate = *a_remote_relay;
   a_transport_channel_stats.ice_transport_stats.connection_infos.push_back(
       cricket::ConnectionInfo());
   a_transport_channel_stats.ice_transport_stats.connection_infos[3]
-      .local_candidate = *a_local_relay_prflx.get();
+      .local_candidate = *a_local_relay_prflx;
   a_transport_channel_stats.ice_transport_stats.connection_infos[3]
-      .remote_candidate = *a_remote_relay.get();
+      .remote_candidate = *a_remote_relay;
   a_transport_channel_stats.ice_transport_stats.candidate_stats_list.push_back(
-      cricket::CandidateStats(*a_local_host_not_paired.get()));
+      cricket::CandidateStats(*a_local_host_not_paired));
 
   pc_->AddVoiceChannel("audio", "a");
   pc_->SetTransportStats("a", a_transport_channel_stats);
@@ -1862,9 +1855,9 @@ TEST_F(RTCStatsCollectorTest, CollectRTCIceCandidateStats) {
   b_transport_channel_stats.ice_transport_stats.connection_infos.push_back(
       cricket::ConnectionInfo());
   b_transport_channel_stats.ice_transport_stats.connection_infos[0]
-      .local_candidate = *b_local.get();
+      .local_candidate = *b_local;
   b_transport_channel_stats.ice_transport_stats.connection_infos[0]
-      .remote_candidate = *b_remote.get();
+      .remote_candidate = *b_remote;
 
   pc_->AddVideoChannel("video", "b");
   pc_->SetTransportStats("b", b_transport_channel_stats);
@@ -1925,8 +1918,8 @@ TEST_F(RTCStatsCollectorTest, CollectRTCIceCandidatePairStats) {
 
   cricket::ConnectionInfo connection_info;
   connection_info.best_connection = false;
-  connection_info.local_candidate = *local_candidate.get();
-  connection_info.remote_candidate = *remote_candidate.get();
+  connection_info.local_candidate = *local_candidate;
+  connection_info.remote_candidate = *remote_candidate;
   connection_info.writable = true;
   connection_info.sent_discarded_packets = 3;
   connection_info.sent_total_packets = 10;
@@ -2764,8 +2757,8 @@ TEST_F(RTCStatsCollectorTest, CollectRTCTransportStats) {
 
   cricket::ConnectionInfo rtp_connection_info;
   rtp_connection_info.best_connection = false;
-  rtp_connection_info.local_candidate = *rtp_local_candidate.get();
-  rtp_connection_info.remote_candidate = *rtp_remote_candidate.get();
+  rtp_connection_info.local_candidate = *rtp_local_candidate;
+  rtp_connection_info.remote_candidate = *rtp_remote_candidate;
   rtp_connection_info.sent_total_bytes = 42;
   rtp_connection_info.recv_total_bytes = 1337;
   rtp_connection_info.sent_total_packets = 3;
@@ -2810,8 +2803,8 @@ TEST_F(RTCStatsCollectorTest, CollectRTCTransportStats) {
 
   cricket::ConnectionInfo rtcp_connection_info;
   rtcp_connection_info.best_connection = false;
-  rtcp_connection_info.local_candidate = *rtcp_local_candidate.get();
-  rtcp_connection_info.remote_candidate = *rtcp_remote_candidate.get();
+  rtcp_connection_info.local_candidate = *rtcp_local_candidate;
+  rtcp_connection_info.remote_candidate = *rtcp_remote_candidate;
   rtcp_connection_info.sent_total_bytes = 1337;
   rtcp_connection_info.recv_total_bytes = 42;
   rtcp_connection_info.sent_total_packets = 3;
@@ -2936,8 +2929,8 @@ TEST_F(RTCStatsCollectorTest, CollectRTCTransportStatsWithCrypto) {
 
   cricket::ConnectionInfo rtp_connection_info;
   rtp_connection_info.best_connection = false;
-  rtp_connection_info.local_candidate = *rtp_local_candidate.get();
-  rtp_connection_info.remote_candidate = *rtp_remote_candidate.get();
+  rtp_connection_info.local_candidate = *rtp_local_candidate;
+  rtp_connection_info.remote_candidate = *rtp_remote_candidate;
   cricket::TransportChannelStats rtp_transport_channel_stats;
   rtp_transport_channel_stats.component = cricket::ICE_CANDIDATE_COMPONENT_RTP;
   rtp_transport_channel_stats.ice_transport_stats.connection_infos.push_back(
@@ -3742,13 +3735,21 @@ TEST_F(RTCStatsCollectorTest, DoNotCrashWhenGetStatsCalledDuringCallback) {
   auto callback2 = rtc::make_ref_counted<RecursiveCallback>(stats_.get());
   stats_->stats_collector()->GetStatsReport(callback1);
   stats_->stats_collector()->GetStatsReport(callback2);
-  EXPECT_TRUE_WAIT(callback1->called(), kGetStatsReportTimeoutMs);
-  EXPECT_TRUE_WAIT(callback2->called(), kGetStatsReportTimeoutMs);
+  EXPECT_THAT(
+      WaitUntil(
+          [&] { return callback1->called(); }, ::testing::IsTrue(),
+          {.timeout = webrtc::TimeDelta::Millis(kGetStatsReportTimeoutMs)}),
+      IsRtcOk());
+  EXPECT_THAT(
+      WaitUntil(
+          [&] { return callback2->called(); }, ::testing::IsTrue(),
+          {.timeout = webrtc::TimeDelta::Millis(kGetStatsReportTimeoutMs)}),
+      IsRtcOk());
 }
 
 class RTCTestStats : public RTCStats {
  public:
-  WEBRTC_RTCSTATS_DECL();
+  WEBRTC_RTCSTATS_DECL(RTCTestStats);
 
   RTCTestStats(const std::string& id, Timestamp timestamp)
       : RTCStats(id, timestamp) {}
@@ -3795,7 +3796,11 @@ class FakeRTCStatsCollector : public RTCStatsCollector,
 
   void VerifyThreadUsageAndResultsMerging() {
     GetStatsReport(rtc::scoped_refptr<RTCStatsCollectorCallback>(this));
-    EXPECT_TRUE_WAIT(HasVerifiedResults(), kGetStatsReportTimeoutMs);
+    EXPECT_THAT(
+        WaitUntil(
+            [&] { return HasVerifiedResults(); }, ::testing::IsTrue(),
+            {.timeout = webrtc::TimeDelta::Millis(kGetStatsReportTimeoutMs)}),
+        IsRtcOk());
   }
 
   bool HasVerifiedResults() {

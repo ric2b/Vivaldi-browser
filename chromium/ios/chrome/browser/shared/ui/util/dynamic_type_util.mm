@@ -11,6 +11,10 @@
 #import "app/vivaldi_apptools.h"
 // End Vivaldi
 
+UIContentSizeCategory LocationBarSteadyViewMaxSizeCategory() {
+  return UIContentSizeCategoryAccessibilityExtraLarge;
+}
+
 UIFont* LocationBarSteadyViewFont(UIContentSizeCategory currentCategory) {
 
   if (vivaldi::IsVivaldiRunning())
@@ -21,5 +25,5 @@ UIFont* LocationBarSteadyViewFont(UIContentSizeCategory currentCategory) {
 
   return PreferredFontForTextStyleWithMaxCategory(
       UIFontTextStyleBody, currentCategory,
-      UIContentSizeCategoryAccessibilityExtraLarge);
+      LocationBarSteadyViewMaxSizeCategory());
 }

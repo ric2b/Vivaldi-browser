@@ -28,4 +28,14 @@
   return l10n_util::GetPluralNSStringF(messageID, numberInt);
 }
 
+// Vivaldi
++ (NSString*)formatStringForMessageID:(MessageID)messageID
+                             argument:(NSString*)argumentA
+                             argument:(NSString*)argumentB {
+  return l10n_util::GetNSStringF(messageID,
+                                 base::SysNSStringToUTF16(argumentA),
+                                 base::SysNSStringToUTF16(argumentB));
+}
+// End Vivaldi
+
 @end

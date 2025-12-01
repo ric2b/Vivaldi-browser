@@ -376,6 +376,13 @@
 #define EIGEN_ARCH_MIPS 0
 #endif
 
+/// \internal EIGEN_ARCH_LOONGARCH64 set to 1 if the architecture is LOONGARCH64
+#if defined(__loongarch64)
+#define EIGEN_ARCH_LOONGARCH64 1
+#else
+#define EIGEN_ARCH_LOONGARCH64 0
+#endif
+
 /// \internal EIGEN_ARCH_SPARC set to 1 if the architecture is SPARC
 #if defined(__sparc__) || defined(__sparc)
 #define EIGEN_ARCH_SPARC 1
@@ -1083,14 +1090,7 @@ EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE constexpr void ignore_unused_variable(cons
 #define EIGEN_USING_STD(FUNC) using std::FUNC;
 #endif
 
-#if EIGEN_COMP_MSVC_STRICT && EIGEN_COMP_NVCC
-// Wwhen compiling with NVCC, using the base operator is necessary,
-//   otherwise we get duplicate definition errors
-// For later MSVC versions, we require explicit operator= definition, otherwise we get
-//   use of implicitly deleted operator errors.
-// (cf Bugs 920, 1000, 1324, 2291)
-#define EIGEN_INHERIT_ASSIGNMENT_EQUAL_OPERATOR(Derived) using Base::operator=;
-#elif EIGEN_COMP_CLANG  // workaround clang bug (see http://forum.kde.org/viewtopic.php?f=74&t=102653)
+#if EIGEN_COMP_CLANG  // workaround clang bug (see http://forum.kde.org/viewtopic.php?f=74&t=102653)
 #define EIGEN_INHERIT_ASSIGNMENT_EQUAL_OPERATOR(Derived)                                           \
   using Base::operator=;                                                                           \
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Derived& operator=(const Derived& other) {                 \

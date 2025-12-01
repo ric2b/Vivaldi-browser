@@ -22,6 +22,7 @@
 #include "components/policy/core/common/policy_switches.h"
 #include "components/policy/proto/cloud_policy.pb.h"
 #include "google_apis/gaia/fake_gaia.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace policy {
@@ -40,7 +41,7 @@ constexpr char kTestSessionLSIDCookie[] = "fake-session-LSID-cookie";
 // which cannot be enterprise domain. See kNonManagedDomainPatterns in
 // browser_policy_connector.cc.
 constexpr char kAccountId[] = "user@example.com";
-constexpr char kAccountGaiaId[] = "user-example-com-test-gaia-id";
+constexpr GaiaId::Literal kAccountGaiaId("user-example-com-test-gaia-id");
 }  // namespace
 
 LoginPolicyTestBase::LoginPolicyTestBase()

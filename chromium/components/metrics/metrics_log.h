@@ -19,7 +19,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_base.h"
 #include "base/time/time.h"
-#include "build/chromeos_buildflags.h"
 #include "components/metrics/metrics_reporting_default_state.h"
 #include "third_party/metrics_proto/chrome_user_metrics_extension.pb.h"
 #include "third_party/metrics_proto/system_profile.pb.h"
@@ -48,7 +47,7 @@ enum UkmLogSourceType {
 // Holds optional metadata associated with a log to be stored.
 struct LogMetadata {
   LogMetadata();
-  LogMetadata(std::optional<base::HistogramBase::Count> samples_count,
+  LogMetadata(std::optional<base::HistogramBase::Count32> samples_count,
               std::optional<uint64_t> user_id,
               std::optional<UkmLogSourceType> log_source_type);
   LogMetadata(const LogMetadata& other);
@@ -56,10 +55,10 @@ struct LogMetadata {
 
   // Adds |sample_count| to |samples_count|. If |samples_count| is empty, then
   // |sample_count| will populate |samples_count|.
-  void AddSampleCount(base::HistogramBase::Count sample_count);
+  void AddSampleCount(base::HistogramBase::Count32 sample_count);
 
   // The total number of samples in this log if applicable.
-  std::optional<base::HistogramBase::Count> samples_count;
+  std::optional<base::HistogramBase::Count32> samples_count;
 
   // User id associated with the log.
   std::optional<uint64_t> user_id;
@@ -144,6 +143,15 @@ class MetricsLog {
       const std::string& package_name,
       SystemProfileProto* system_profile);
 
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+  // Increments the global foreground/background ID. Must be called on the main
+  // thread.
+  static void IncrementFgBgId();
+
+  // Clears/unsets the log's `fg_bg_id` system profile field.
+  void ClearFgBgId();
+#endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+
   // Assign a unique finalized record id to this log.
   void AssignFinalizedRecordId(PrefService* local_state);
 
@@ -177,14 +185,11 @@ class MetricsLog {
   void RecordPreviousSessionData(DelegatingProvider* delegating_provider,
                                  PrefService* local_state);
 
-  // Populates the log with data about the current session. The uptimes are used
-  // to populate the log with info about how long Chrome has been running.
+  // Populates the log with data about the current session.
   // |delegating_provider| forwards the call to provide data to registered
   // MetricsProviders. |local_state| is used to schedule a write because a side
   // effect of providing some data is updating Local State prefs.
-  void RecordCurrentSessionData(base::TimeDelta incremental_uptime,
-                                base::TimeDelta uptime,
-                                DelegatingProvider* delegating_provider,
+  void RecordCurrentSessionData(DelegatingProvider* delegating_provider,
                                 PrefService* local_state);
 
   // Returns the current time using |network_clock_| if non-null (falls back to
@@ -208,7 +213,7 @@ class MetricsLog {
       std::optional<ChromeUserMetricsExtension::RealLocalTime> close_time,
       std::string* encoded_log);
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   // Assigns a user ID to the log. This should be called immediately after
   // consotruction if it should be applied.
   void SetUserId(const std::string& user_id);
@@ -238,13 +243,6 @@ class MetricsLog {
   // Write the default state of the enable metrics checkbox.
   void WriteMetricsEnableDefault(EnableMetricsDefault metrics_default,
                                  SystemProfileProto* system_profile);
-
-  // Within the stability group, write attributes that need to be updated asap
-  // and can't be delayed until the user decides to restart chromium.
-  // Delaying these stats would bias metrics away from happy long lived
-  // chromium processes (ones that don't crash, and keep on running).
-  void WriteRealtimeStabilityAttributes(base::TimeDelta incremental_uptime,
-                                        base::TimeDelta uptime);
 
   // closed_ is true when record has been packed up for sending, and should
   // no longer be written to.  It is only used for sanity checking.

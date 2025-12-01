@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "components/omnibox/browser/builtin_provider.h"
 
 #include <stddef.h>
@@ -19,6 +24,9 @@
 #include "third_party/metrics_proto/omnibox_focus_type.pb.h"
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
 #include "url/url_constants.h"
+
+// Vivaldi
+#include "app/vivaldi_constants.h"
 
 const int BuiltinProvider::kRelevance = 860;
 
@@ -52,22 +60,27 @@ void BuiltinProvider::DoBuiltinAutocompletion(const std::u16string& text) {
   const std::u16string embedderAbout = base::StrCat(
       {base::UTF8ToUTF16(client_->GetEmbedderRepresentationOfAboutScheme()),
        url::kStandardSchemeSeparator16});
+  const std::u16string embedderAboutVivaldi =
+      base::StrCat({base::UTF8ToUTF16(std::string(vivaldi::kVivaldiUIScheme)),
+                    url::kStandardSchemeSeparator16});
 
   const int kUrl = ACMatchClassification::URL;
   const int kMatch = kUrl | ACMatchClassification::MATCH;
 
   bool starting_about = base::StartsWith(embedderAbout, text,
                                          base::CompareCase::INSENSITIVE_ASCII);
-  if (starting_about ||
+  bool starting_about_vivaldi = base::StartsWith(
+      embedderAboutVivaldi, text, base::CompareCase::INSENSITIVE_ASCII);
+  if (starting_about || starting_about_vivaldi ||
       base::StartsWith(kAbout, text, base::CompareCase::INSENSITIVE_ASCII)) {
     // Highlight the input portion matching |embedderAbout|; or if the user
     // has input "about:" (with optional slashes), highlight the whole
     // |embedderAbout|.
     TermMatches style_matches;
-    if (starting_about)
+    if (starting_about || starting_about_vivaldi)
       style_matches.emplace_back(0, 0, text.length());
     else if (text.length() > kAboutSchemeLength)
-      style_matches.emplace_back(0, 0, embedderAbout.length());
+      style_matches.emplace_back(0, 0, embedderAboutVivaldi.length());
     ACMatchClassifications styles =
         ClassifyTermMatches(style_matches, std::string::npos, kMatch, kUrl);
     // Include some common builtin URLs as the user types the scheme.
@@ -80,9 +93,9 @@ void BuiltinProvider::DoBuiltinAutocompletion(const std::u16string& text) {
     GURL url = url_formatter::FixupURL(base::UTF16ToUTF8(text), std::string());
     const bool text_ends_with_slash =
         base::EndsWith(text, u"/", base::CompareCase::SENSITIVE);
-    // BuiltinProvider doesn't know how to suggest valid ?query or #fragment
     // extensions to builtin URLs.
-    if (url.SchemeIs(client_->GetEmbedderRepresentationOfAboutScheme()) &&
+    if ((url.SchemeIs(client_->GetEmbedderRepresentationOfAboutScheme()) ||
+         url.SchemeIs(vivaldi::kVivaldiUIScheme)) &&
         url.has_host() && !url.has_query() && !url.has_ref()) {
       // Suggest about:blank for substrings, taking URL fixup into account.
       // Chrome does not support trailing slashes or paths for about:blank.
@@ -104,13 +117,14 @@ void BuiltinProvider::DoBuiltinAutocompletion(const std::u16string& text) {
       // Include the path for sub-pages (e.g. "chrome://settings/browser").
       std::u16string host_and_path = base::UTF8ToUTF16(url.host() + url.path());
       base::TrimString(host_and_path, u"/", &host_and_path);
-      size_t match_length = embedderAbout.length() + host_and_path.length();
+      size_t match_length =
+          embedderAboutVivaldi.length() + host_and_path.length();
       for (Builtins::const_iterator i(builtins_.begin());
            (i != builtins_.end()) && (matches_.size() < provider_max_matches_);
            ++i) {
         if (base::StartsWith(*i, host_and_path,
                              base::CompareCase::INSENSITIVE_ASCII)) {
-          std::u16string match_string = embedderAbout + *i;
+          std::u16string match_string = embedderAboutVivaldi + *i;
           TermMatches style_matches = {{0, 0, match_length}};
           ACMatchClassifications styles = ClassifyTermMatches(
               style_matches, match_string.length(), kMatch, kUrl);

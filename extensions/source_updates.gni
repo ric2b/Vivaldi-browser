@@ -63,3 +63,10 @@ update_target("//extensions/browser:browser_sources") {
     "//vivaldi/prefs:prefs_files_generator",
   ]
 }
+
+update_target("//extensions/common:common") {
+  sources += [
+    "//vivaldi/extensions/permissions/vivaldi_extension_permission_injections.cc",
+    "//vivaldi/extensions/permissions/vivaldi_extension_permission_injections.h",
+  ]
+}

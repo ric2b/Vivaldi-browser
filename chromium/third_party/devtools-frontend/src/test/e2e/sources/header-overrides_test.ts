@@ -15,7 +15,6 @@ import {
   waitFor,
   waitForFunction,
 } from '../../shared/helper.js';
-
 import {openSoftContextMenuAndClickOnItem} from '../helpers/context-menu-helpers.js';
 import {
   getTextFromHeadersRow,
@@ -113,7 +112,7 @@ describe('The Overrides Panel', function() {
 
     const responseHeaderSection = await waitFor(RESPONSE_HEADERS_SELECTOR);
     const row = await waitFor(HEADER_ROW_SELECTOR, responseHeaderSection);
-    assert.deepStrictEqual(await getTextFromHeadersRow(row), ['aaa:', 'bbb']);
+    assert.deepEqual(await getTextFromHeadersRow(row), ['aaa:', 'bbb']);
   });
 
   // Skip until flake is fixed
@@ -143,7 +142,7 @@ describe('The Overrides Panel', function() {
 
     const responseHeaderSection = await waitFor(RESPONSE_HEADERS_SELECTOR);
     const row = await waitFor('.row.header-overridden.header-editable', responseHeaderSection);
-    assert.deepStrictEqual(await getTextFromHeadersRow(row), ['foo:', 'bar']);
+    assert.deepEqual(await getTextFromHeadersRow(row), ['foo:', 'bar']);
     await click('[title="Reveal header override definitions"]');
     assert.isTrue(await editorTabHasPurpleDot());
     assert.isTrue(await fileTreeEntryIsSelectedAndHasPurpleDot());

@@ -130,7 +130,7 @@ angle::Result RenderbufferVk::setStorageImpl(const gl::Context *context,
     ANGLE_TRY(mImage->initExternal(
         contextVk, gl::TextureType::_2D, extents, format.getIntendedFormatID(), textureFormatID,
         imageSamples, usage, createFlags, vk::ImageLayout::Undefined, nullptr, gl::LevelIndex(0), 1,
-        1, robustInit, false, vk::YcbcrConversionDesc{}));
+        1, robustInit, false, vk::YcbcrConversionDesc{}, nullptr));
 
     VkMemoryPropertyFlags flags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
     ANGLE_TRY(contextVk->initImageAllocation(mImage, false, renderer->getMemoryProperties(), flags,
@@ -207,25 +207,6 @@ angle::Result RenderbufferVk::setStorageEGLImageTarget(const gl::Context *contex
                                                                      : egl::ImageColorspace::Linear;
         ASSERT(mImage != nullptr);
         mImageViews.updateEglImageColorspace(*mImage, imageColorspace);
-    }
-
-    // Transfer the image to this queue if needed
-    if (mImage->isQueueFamilyChangeNeccesary(contextVk->getDeviceQueueIndex()))
-    {
-        vk::OutsideRenderPassCommandBuffer *commandBuffer;
-        vk::CommandBufferAccess access;
-        access.onExternalAcquireRelease(mImage);
-        ANGLE_TRY(contextVk->getOutsideRenderPassCommandBuffer(access, &commandBuffer));
-
-        const vk::Format &vkFormat =
-            renderer->getFormat(image->getFormat().info->sizedInternalFormat);
-        const angle::Format &textureFormat = vkFormat.getActualRenderableImageFormat();
-        VkImageAspectFlags aspect          = vk::GetFormatAspectFlags(textureFormat);
-
-        mImage->changeLayoutAndQueue(contextVk, aspect, vk::ImageLayout::ColorWrite,
-                                     contextVk->getDeviceQueueIndex(), commandBuffer);
-
-        ANGLE_TRY(contextVk->onEGLImageQueueChange());
     }
 
     mRenderTarget.init(mImage, &mImageViews, nullptr, nullptr, mImageSiblingSerial,
@@ -402,8 +383,8 @@ angle::Result RenderbufferVk::getRenderbufferImage(const gl::Context *context,
 
 angle::Result RenderbufferVk::ensureImageInitialized(const gl::Context *context)
 {
-    ANGLE_TRY(setStorage(context, mState.getFormat().info->internalFormat, mState.getWidth(),
-                         mState.getHeight()));
+    ANGLE_TRY(setStorageImpl(context, mState.getSamples(), mState.getFormat().info->internalFormat,
+                             mState.getWidth(), mState.getHeight(), mState.getMultisamplingMode()));
 
     return mImage->flushAllStagedUpdates(vk::GetImpl(context));
 }

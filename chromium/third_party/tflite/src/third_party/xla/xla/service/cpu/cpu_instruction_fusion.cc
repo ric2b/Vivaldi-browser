@@ -15,6 +15,13 @@ limitations under the License.
 
 #include "xla/service/cpu/cpu_instruction_fusion.h"
 
+#include <cstdint>
+
+#include "absl/algorithm/container.h"
+#include "absl/log/log.h"
+#include "xla/hlo/ir/hlo_casting_utils.h"
+#include "xla/hlo/ir/hlo_instruction.h"
+#include "xla/hlo/ir/hlo_instructions.h"
 #include "xla/hlo/ir/hlo_opcode.h"
 #include "xla/service/fusion_node_indexing_evaluation.h"
 #include "xla/service/instruction_fusion.h"
@@ -76,6 +83,15 @@ FusionDecision CpuInstructionFusion::ShouldFuse(HloInstruction* consumer,
           << consumer->ToString();
 
   constexpr int kFusionThresholdBytes = 16 * 1024;
+  // When we fuse a concatenate we don't take the fast path of simple memcpy /
+  // for-loop; instead we currently emit a tree mapping the input to output idx
+  // with a depth of log2(#args), this can have a large overhead for large
+  // number of arguments.
+  constexpr int64_t kMaxConcatenateArguments = 8;
+
+  if (IsLargeConstant(producer)) {
+    return FusionDecision::Forbid("Don't fuse large constants.");
+  }
 
   if (CanBeOutputFused(producer, consumer)) {
     VLOG(2) << "Fusion OK: Can create output fusion.";
@@ -89,6 +105,13 @@ FusionDecision CpuInstructionFusion::ShouldFuse(HloInstruction* consumer,
 
   if (!CanBeLoopFused(*producer)) {
     return FusionDecision::Forbid("Producer is not loop-fusible.");
+  }
+
+  if ((producer->opcode() == HloOpcode::kConcatenate &&
+       producer->operand_count() > kMaxConcatenateArguments) ||
+      (consumer->opcode() == HloOpcode::kConcatenate &&
+       consumer->operand_count() > kMaxConcatenateArguments)) {
+    return FusionDecision::Forbid("Concatenate fusion is inefficient.");
   }
 
   // Cost condition: not fuse (simple, expensive producers) and (consumers who
@@ -214,6 +237,13 @@ HloInstruction* CpuInstructionFusion::FuseInstruction(
       InstructionFusion::FuseInstruction(fusion_instruction, producer);
   evaluation->second.UpdateEvaluationCache(new_producer, indexing_users);
   return new_producer;
+}
+
+bool CpuInstructionFusion::IsLargeConstant(
+    const HloInstruction* constant) const {
+  return constant->IsConstant() &&
+         Cast<HloConstantInstruction>(constant)->literal().size_bytes() >
+             GetLargeConstantThresholdBytes();
 }
 }  // namespace cpu
 }  // namespace xla

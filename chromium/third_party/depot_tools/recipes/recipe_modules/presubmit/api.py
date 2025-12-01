@@ -81,18 +81,31 @@ class PresubmitApi(recipe_api.RecipeApi):
         # TODO(unowned): Consider either:
         #  - extracting user name & email address from the issue, or
         #  - using a dedicated and clearly nonexistent name/email address
-        self.m.git('-c',
-                   'user.email=commit-bot@chromium.org',
-                   '-c',
-                   'user.name=The Commit Bot',
-                   '-c',
-                   'diff.ignoreSubmodules=all',
-                   'commit',
-                   '-a',
-                   '-m',
-                   'Committed patch',
-                   name='commit-git-patch',
-                   infra_step=False)
+        step_result = self.m.git(
+            '-c',
+            'user.email=commit-bot@chromium.org',
+            '-c',
+            'user.name=The Commit Bot',
+            '-c',
+            'diff.ignoreSubmodules=all',
+            'commit',
+            '-a',
+            '-m',
+            'Committed patch',
+            name='commit-git-patch',
+            raise_on_failure=False,
+            stdout=self.m.raw_io.output_text('stdout',
+                                             add_output_log='on_failure'),
+            infra_step=False,
+        )
+        if step_result.retcode:
+          failure_md_lines = ['Failed to apply patch.']
+          if step_result.stdout:
+            failure_md_lines += step_result.stdout.splitlines() + ['']
+            if 'nothing to commit' in step_result.stdout:
+              failure_md_lines.append(
+                  'Was an identical diff already submitted elsewhere?')
+          raise self.m.step.StepFailure('<br/>'.join(failure_md_lines))
 
     if self._runhooks:
       with self.m.context(cwd=self.m.path.checkout_dir):

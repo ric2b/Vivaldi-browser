@@ -15,7 +15,6 @@
 #include "base/location.h"
 #include "base/notreached.h"
 #include "base/task/sequenced_task_runner.h"
-#include "chromeos/ash/components/standalone_browser/standalone_browser_features.h"
 #include "chromeos/ash/services/ime/constants.h"
 #include "chromeos/ash/services/ime/decoder/decoder_engine.h"
 #include "chromeos/ash/services/ime/decoder/system_engine.h"
@@ -162,7 +161,6 @@ bool ImeService::IsFeatureEnabled(const char* feature_name) {
       &features::kAssistMultiWord,
       &features::kAutocorrectParamsTuning,
       &features::kFirstPartyVietnameseInput,
-      &ash::standalone_browser::features::kLacrosOnly,
       &features::kSystemJapanesePhysicalTyping,
       &features::kImeDownloaderExperiment,
       &features::kImeDownloaderUpdate,
@@ -171,9 +169,7 @@ bool ImeService::IsFeatureEnabled(const char* feature_name) {
       &features::kImeUsEnglishModelUpdate,
       &features::kImeFstDecoderParamsUpdate,
       &features::kAutocorrectByDefault,
-      &features::kAutocorrectUseReplaceSurroundingText,
       &features::kInputMethodKoreanRightAltKeyDownFix,
-      &features::kImeKoreanModeSwitchDebug,
       &features::kImeSwitchCheckConnectionStatus};
 
   // Use consistent feature flag names as in CrOS base::Feature::name and always
@@ -182,15 +178,6 @@ bool ImeService::IsFeatureEnabled(const char* feature_name) {
     if (strcmp(feature_name, feature->name) == 0) {
       return base::FeatureList::IsEnabled(*feature);
     }
-  }
-
-  // For backwards-compatibility, check for the "LacrosSupport" flag, which was
-  // replaced by LacrosOnly.
-  // TODO(b/290714161): Remove this once the shared library no longer uses
-  // LacrosSupport.
-  if (strcmp(feature_name, "LacrosSupport") == 0) {
-    return base::FeatureList::IsEnabled(
-        ash::standalone_browser::features::kLacrosOnly);
   }
 
   return false;

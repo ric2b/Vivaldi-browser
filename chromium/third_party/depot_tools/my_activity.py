@@ -356,7 +356,10 @@ class MyActivity(object):
         url = url + '?' + query_data
         _, body = http.request(url)
         self.show_progress()
-        content = json.loads(body)
+        try:
+          content = json.loads(body)
+        except json.JSONDecodeError:
+          content = None
         if not content:
             logging.error('Unable to parse %s response from monorail.', project)
             return []

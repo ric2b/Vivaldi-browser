@@ -231,11 +231,6 @@ BASE_FEATURE(kV8SlowHistogramsNoTurbofan,
              "V8SlowHistogramsNoTurbofan",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Enable 16GB heap reservation for Oilpan.
-BASE_FEATURE(kV8CppGCEnableLargerCage,
-             "V8CppGCEnableLargerCage",
-             kFeatureDefaultStateControlledByV8);
-
 BASE_FEATURE(kV8DelayMemoryReducer,
              "V8DelayMemoryReducer",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -330,11 +325,6 @@ BASE_FEATURE(kWebAssemblyDeopt,
 // and call_ref inlining, which has already launched above). Not user visible.
 BASE_FEATURE(kWebAssemblyInliningCallIndirect,
              "WebAssemblyInliningCallIndirect",
-             kFeatureDefaultStateControlledByV8);
-
-// Enable WebAssembly code flushing.
-BASE_FEATURE(kWebAssemblyLiftoffCodeFlushing,
-             ("WebAssemblyLiftoffCodeFlushing"),
              kFeatureDefaultStateControlledByV8);
 
 // Enable support for multiple memories according to the multi-memory proposal:

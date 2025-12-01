@@ -16,21 +16,21 @@
 namespace openscreen::cast {
 
 // Constants used for testing.
-extern const IPAddress kAddressV4;
-extern const IPAddress kAddressV6;
-constexpr uint16_t kPort = 80;
-extern const IPEndpoint kEndpointV4;
-extern const IPEndpoint kEndpointV6;
-constexpr char kTestUniqueId[] = "1234";
-constexpr char kFriendlyName[] = "Friendly Name 123";
-constexpr char kModelName[] = "Openscreen";
-constexpr char kInstanceId[] = "Openscreen-1234";
-constexpr uint8_t kTestVersion = 5;
-constexpr char kCapabilitiesString[] = "3";
-constexpr char kCapabilitiesStringLong[] = "000003";
-constexpr uint64_t kCapabilitiesParsed = 0x03;
-constexpr uint8_t kStatus = 0x01;
-constexpr ReceiverStatus kStatusParsed = ReceiverStatus::kBusy;
+inline constexpr IPAddress kAddressV4 = {192, 168, 0, 0};
+inline constexpr IPAddress kAddressV6 = {1, 2, 3, 4, 5, 6, 7, 8};
+inline constexpr uint16_t kPort = 80;
+inline constexpr IPEndpoint kEndpointV4 = {kAddressV4, kPort};
+inline constexpr IPEndpoint kEndpointV6 = {kAddressV6, kPort};
+inline constexpr char kTestUniqueId[] = "1234";
+inline constexpr char kFriendlyName[] = "Friendly Name 123";
+inline constexpr char kModelName[] = "Openscreen";
+inline constexpr char kInstanceId[] = "Openscreen-1234";
+inline constexpr uint8_t kTestVersion = 5;
+inline constexpr char kCapabilitiesString[] = "3";
+inline constexpr char kCapabilitiesStringLong[] = "000003";
+inline constexpr uint64_t kCapabilitiesParsed = 0x03;
+inline constexpr uint8_t kStatus = 0x01;
+inline constexpr ReceiverStatus kStatusParsed = ReceiverStatus::kBusy;
 
 discovery::DnsSdTxtRecord CreateValidTxt();
 

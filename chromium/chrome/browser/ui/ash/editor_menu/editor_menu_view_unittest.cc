@@ -8,11 +8,12 @@
 
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/ui/ash/editor_menu/editor_menu_chip_view.h"
+#include "chrome/browser/ui/ash/editor_menu/editor_menu_strings.h"
 #include "chrome/browser/ui/ash/editor_menu/editor_menu_textfield_view.h"
 #include "chrome/browser/ui/ash/editor_menu/editor_menu_view.h"
 #include "chrome/browser/ui/ash/editor_menu/editor_menu_view_delegate.h"
 #include "chrome/test/views/chrome_views_test_base.h"
-#include "chromeos/components/editor_menu/public/cpp/preset_text_query.h"
+#include "chromeos/ash/components/editor_menu/public/cpp/preset_text_query.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -70,18 +71,7 @@ std::u16string_view GetChipLabel(const views::View* chip) {
 using EditorMenuViewTest = ChromeViewsTestBase;
 
 class EditorMenuViewI18nEnabledTest : public EditorMenuViewTest {
- public:
-  void SetUp() override {
-    feature_list_.InitWithFeatures(
-        /*enabled_features=*/{chromeos::features::kOrca,
-                              chromeos::features::kFeatureManagementOrca,
-                              chromeos::features::kOrcaUseL10nStrings},
-        /*disabled_features=*/{});
-    EditorMenuViewTest::SetUp();
-  }
 
- private:
-  base::test::ScopedFeatureList feature_list_;
 };
 
 TEST_F(EditorMenuViewTest, CreatesChips) {
@@ -266,6 +256,33 @@ TEST_F(EditorMenuViewTest, DisablesMenu) {
       editor_menu_view->textfield_for_testing()->arrow_button()->GetEnabled());
 }
 
+TEST_F(EditorMenuViewTest, UpdatesFreeformPlaceholderWhenSwitchingCardTab) {
+  NiceMock<MockEditorMenuViewDelegate> delegate;
+  const PresetTextQueries queries = {
+      PresetTextQuery("ID1", u"Rephrase", PresetQueryCategory::kRephrase),
+      PresetTextQuery("ID2", u"Emojify", PresetQueryCategory::kEmojify)};
+
+  std::unique_ptr<views::Widget> editor_menu_widget =
+      EditorMenuView::CreateWidget(TextAndImageMode::kEditorWriteAndLobster,
+                                   queries, gfx::Rect(200, 300, 400, 200),
+                                   &delegate);
+  editor_menu_widget->Show();
+  auto* editor_menu_view =
+      views::AsViewClass<EditorMenuView>(editor_menu_widget->GetContentsView());
+
+  editor_menu_view->TabSelectedAt(0);
+  EXPECT_EQ(editor_menu_view->textfield_for_testing()
+                ->textfield()
+                ->GetPlaceholderText(),
+            GetEditorMenuFreeformPromptInputFieldPlaceholderForHelpMeWrite());
+
+  editor_menu_view->TabSelectedAt(1);
+  EXPECT_EQ(editor_menu_view->textfield_for_testing()
+                ->textfield()
+                ->GetPlaceholderText(),
+            GetEditorMenuFreeformPromptInputFieldPlaceholderForLobster());
+}
+
 TEST_F(EditorMenuViewTest, AccessibleProperties) {
   NiceMock<MockEditorMenuViewDelegate> delegate;
   const PresetTextQueries queries = {
@@ -285,7 +302,7 @@ TEST_F(EditorMenuViewTest, AccessibleProperties) {
   editor_menu_view->GetViewAccessibility().GetAccessibleNodeData(&data);
   EXPECT_EQ(ax::mojom::Role::kDialog, data.role);
   EXPECT_EQ(data.GetString16Attribute(ax::mojom::StringAttribute::kName),
-            u"Rewrite");
+            u"Refine");
 
   // Write Editor Mode
   editor_menu_widget =

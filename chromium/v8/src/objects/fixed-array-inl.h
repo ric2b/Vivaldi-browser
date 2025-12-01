@@ -548,7 +548,11 @@ uint64_t FixedDoubleArray::get_representation(int index) {
 Handle<Object> FixedDoubleArray::get(Tagged<FixedDoubleArray> array, int index,
                                      Isolate* isolate) {
   if (array->is_the_hole(index)) {
-    return ReadOnlyRoots(isolate).the_hole_value_handle();
+    return isolate->factory()->the_hole_value();
+#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+  } else if (array->is_undefined(index)) {
+    return isolate->factory()->undefined_value();
+#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
   } else {
     return isolate->factory()->NewNumber(array->get_scalar(index));
   }
@@ -556,11 +560,26 @@ Handle<Object> FixedDoubleArray::get(Tagged<FixedDoubleArray> array, int index,
 
 void FixedDoubleArray::set(int index, double value) {
   if (std::isnan(value)) {
+#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+    DCHECK(!IsUndefinedNan(value));
+#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
     value = std::numeric_limits<double>::quiet_NaN();
   }
   values()[index].set_value(value);
   DCHECK(!is_the_hole(index));
 }
+
+#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+void FixedDoubleArray::set_undefined(int index) {
+  values()[index].set_value(UndefinedNan());
+  DCHECK(!is_the_hole(index));
+  DCHECK(is_undefined(index));
+}
+
+bool FixedDoubleArray::is_undefined(int index) {
+  return get_representation(index) == kUndefinedNanInt64;
+}
+#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
 
 void FixedDoubleArray::set_the_hole(Isolate* isolate, int index) {
   set_the_hole(index);
@@ -594,9 +613,9 @@ void FixedDoubleArray::FillWithHoles(int from, int to) {
 
 // static
 template <class IsolateT>
-Handle<WeakFixedArray> WeakFixedArray::New(IsolateT* isolate, int capacity,
-                                           AllocationType allocation,
-                                           MaybeHandle<Object> initial_value) {
+Handle<WeakFixedArray> WeakFixedArray::New(
+    IsolateT* isolate, int capacity, AllocationType allocation,
+    MaybeDirectHandle<Object> initial_value) {
   CHECK_LE(static_cast<unsigned>(capacity), kMaxCapacity);
 
   if (V8_UNLIKELY(capacity == 0)) {
@@ -625,6 +644,21 @@ Handle<TrustedWeakFixedArray> TrustedWeakFixedArray::New(IsolateT* isolate,
 
   std::optional<DisallowGarbageCollection> no_gc;
   Handle<TrustedWeakFixedArray> result = Cast<TrustedWeakFixedArray>(
+      Allocate(isolate, capacity, &no_gc, AllocationType::kTrusted));
+  MemsetTagged((*result)->RawFieldOfFirstElement(), Smi::zero(), capacity);
+  return result;
+}
+
+template <class IsolateT>
+Handle<ProtectedWeakFixedArray> ProtectedWeakFixedArray::New(IsolateT* isolate,
+                                                             int capacity) {
+  if (V8_UNLIKELY(static_cast<unsigned>(capacity) >
+                  TrustedFixedArray::kMaxLength)) {
+    FATAL("Fatal JavaScript invalid size error %d (see crbug.com/1201626)",
+          capacity);
+  }
+  std::optional<DisallowGarbageCollection> no_gc;
+  Handle<ProtectedWeakFixedArray> result = Cast<ProtectedWeakFixedArray>(
       Allocate(isolate, capacity, &no_gc, AllocationType::kTrusted));
   MemsetTagged((*result)->RawFieldOfFirstElement(), Smi::zero(), capacity);
   return result;
@@ -775,7 +809,7 @@ void TrustedByteArray::set_int(int offset, uint32_t value) {
 template <typename Base>
 template <typename... MoreArgs>
 // static
-Handle<FixedAddressArrayBase<Base>> FixedAddressArrayBase<Base>::New(
+DirectHandle<FixedAddressArrayBase<Base>> FixedAddressArrayBase<Base>::New(
     Isolate* isolate, int length, MoreArgs&&... more_args) {
   return Cast<FixedAddressArrayBase>(
       Underlying::New(isolate, length, std::forward<MoreArgs>(more_args)...));
@@ -859,8 +893,8 @@ Handle<PodArray<T>> PodArray<T>::New(LocalIsolate* isolate, int length,
 
 // static
 template <class T>
-Handle<TrustedPodArray<T>> TrustedPodArray<T>::New(Isolate* isolate,
-                                                   int length) {
+DirectHandle<TrustedPodArray<T>> TrustedPodArray<T>::New(Isolate* isolate,
+                                                         int length) {
   int byte_length;
   CHECK(!base::bits::SignedMulOverflow32(length, sizeof(T), &byte_length));
   return Cast<TrustedPodArray<T>>(
@@ -869,8 +903,8 @@ Handle<TrustedPodArray<T>> TrustedPodArray<T>::New(Isolate* isolate,
 
 // static
 template <class T>
-Handle<TrustedPodArray<T>> TrustedPodArray<T>::New(LocalIsolate* isolate,
-                                                   int length) {
+DirectHandle<TrustedPodArray<T>> TrustedPodArray<T>::New(LocalIsolate* isolate,
+                                                         int length) {
   int byte_length;
   CHECK(!base::bits::SignedMulOverflow32(length, sizeof(T), &byte_length));
   return Cast<TrustedPodArray<T>>(

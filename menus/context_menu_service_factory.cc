@@ -54,11 +54,12 @@ content::BrowserContext* ContextMenuServiceFactory::GetBrowserContextToUse(
   return GetBrowserContextRedirectedInIncognito(context);
 }
 
-KeyedService* ContextMenuServiceFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+ContextMenuServiceFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
   std::unique_ptr<Menu_Model> service(
       new Menu_Model(context, Menu_Model::kContextMenu));
-  return service.release();
+  return service;
 }
 
 bool ContextMenuServiceFactory::ServiceIsNULLWhileTesting() const {

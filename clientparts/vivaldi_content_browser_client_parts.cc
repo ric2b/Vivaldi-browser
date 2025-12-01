@@ -64,8 +64,9 @@ void VivaldiContentBrowserClientParts::BrowserURLHandlerCreated(
   }
 }
 
-void VivaldiContentBrowserClientParts::OverrideWebkitPrefs(
+void VivaldiContentBrowserClientParts::OverrideWebPreferences(
     content::WebContents* web_contents,
+    content::SiteInstance& main_frame_site,
     blink::web_pref::WebPreferences* web_prefs) {
 #if !BUILDFLAG(IS_ANDROID)
   if (!vivaldi::IsVivaldiRunning())

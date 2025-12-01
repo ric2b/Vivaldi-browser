@@ -55,7 +55,7 @@
 <translation id="1243477406442346359">Blau cian clar</translation>
 <translation id="1246424317317450637">Negreta</translation>
 <translation id="1251750620252348585">Capçalera del nivell 6 següent</translation>
-<translation id="1264956950255940376">Parpellejar amb l'ull esquerre</translation>
+<translation id="1264956950255940376">Entretanca l'ull esquerre</translation>
 <translation id="1268366246392928616">No hi ha cap expressió matemàtica anterior</translation>
 <translation id="1275718070701477396">Seleccionada</translation>
 <translation id="1284576163386164372">Pots consultar els tutorials sempre que vulguis. Per fer-ho, obre els menús fent-hi doble toc amb quatre dits. Després, activa el tutorial a la secció ChromeVox.</translation>
@@ -131,7 +131,6 @@
 <translation id="1722567105086139392">Enllaç</translation>
 <translation id="1727806147743597030">peu</translation>
 <translation id="1730447754326314349">Et donem la benvinguda al tutorial de ChromeVox. Per sortir-ne en qualsevol moment, prem la tecla d'escapada, situada a l'extrem superior esquerre del teclat. Per desactivar ChromeVox, mantén premudes les tecles de control i d'alternativa, i prem Z. Quan estiguis a punt, fes servir la barra espaiadora per anar a la lliçó següent.</translation>
-<translation id="1735957571918073979">Parpellejar amb tots dos ulls</translation>
 <translation id="174268867904053074">Gràfic següent</translation>
 <translation id="1756785467854861272">Magenta fosc</translation>
 <translation id="1758693804775271377">Fes lliscar un dit cap a l'esquerra o la dreta per navegar per les lliçons d'aquest tema</translation>
@@ -242,6 +241,7 @@
 <translation id="2556326187583116255">Toca amb 2 dits per aturar qualsevol entrada de veu en curs</translation>
 <translation id="2573256689920773241">Navegació bàsica</translation>
 <translation id="257674075312929031">Grup</translation>
+<translation id="2577127557293415225">Tanca breument els ulls</translation>
 <translation id="2582407057977008361">A part</translation>
 <translation id="2592212930811759050">Fes doble toc per començar a editar</translation>
 <translation id="2598495320872286378">Error gramatical</translation>
@@ -845,6 +845,7 @@
 <translation id="6385591741672306837">columna</translation>
 <translation id="6387719785439924554">complement</translation>
 <translation id="6393014464788431702">Desactiva tots els filtres de l'esdeveniment</translation>
+<translation id="6406989068857078334">La velocitat del ratolí s'ha reduït. <ph name="GESTURE" /> de nou per fer clic.</translation>
 <translation id="6411569524720229058">Tardor</translation>
 <translation id="6417265370957905582">Assistent de Google</translation>
 <translation id="641759969622533235">{COUNT,plural, =1{dos punts}other{# dos punts}}</translation>
@@ -922,7 +923,7 @@
 <translation id="7041173719775863268">Final de la selecció</translation>
 <translation id="7043850226734279132">Caqui fosc</translation>
 <translation id="7051308646573997571">Corall</translation>
-<translation id="7062635574500127092">Verd blavós</translation>
+<translation id="7062635574500127092">Xarxet</translation>
 <translation id="7086377898680121060">augmenta la brillantor</translation>
 <translation id="7088743565397416204">Fes doble toc per activar l'element destacat</translation>
 <translation id="7088960765736518739">Accés amb interruptors</translation>
@@ -1023,7 +1024,7 @@
 <translation id="7701040980221191251">Cap</translation>
 <translation id="7701196182766842984">autolst</translation>
 <translation id="7714340021005120797">No hi ha cap quadre combinat més</translation>
-<translation id="7715455358521357192">Parpellejar amb l'ull dret</translation>
+<translation id="7715455358521357192">Entretanca l'ull dret</translation>
 <translation id="7724603315864178912">Retalla</translation>
 <translation id="7731785449856576010">No hi ha cap widget multimèdia més</translation>
 <translation id="7735498529470878067">L'exploració tàctil et pot ajudar a fer-te una idea ràpida del que hi ha a la pantalla.</translation>
@@ -1099,6 +1100,7 @@
 <translation id="8205922869661890178">Obre la pàgina de registres per a desenvolupadors</translation>
 <translation id="8212109599554677485">Canvia l'estil de pantalla a paral·lel</translation>
 <translation id="8215202828671303819">Selecció múltiple</translation>
+<translation id="822316432305106615">Inicia el clic de precisió</translation>
 <translation id="8249864170673238087"><ph name="COLOR" />, <ph name="OPACITY_PERCENTAGE" />% d'opacitat.</translation>
 <translation id="8261506727792406068">Suprimeix</translation>
 <translation id="826825447994856889">Introducció</translation>

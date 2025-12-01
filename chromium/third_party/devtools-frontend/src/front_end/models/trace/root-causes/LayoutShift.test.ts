@@ -78,7 +78,7 @@ describeWithMockConnection('LayoutShift root causes', () => {
         shift.args = {
           frame: 'frame-id-123',
         };
-        shift.name = 'LayoutShift';
+        shift.name = Trace.Types.Events.Name.SYNTHETIC_LAYOUT_SHIFT;
       }
 
       const clusters = [{events: shifts}] as unknown as Trace.Types.Events.SyntheticLayoutShiftCluster[];
@@ -266,19 +266,19 @@ describeWithMockConnection('LayoutShift root causes', () => {
            });
 
            // Test the nodes from the LI events are assinged as the potential root causes to layout shifts correctly.
-           assert.strictEqual(shiftCausesNodeIds[0].length, 1);
+           assert.lengthOf(shiftCausesNodeIds[0], 1);
            assert.strictEqual(shiftCausesNodeIds[0][0], resizeEventsNodeIds[0]);
 
-           assert.strictEqual(shiftCausesNodeIds[1].length, 1);
+           assert.lengthOf(shiftCausesNodeIds[1], 1);
            assert.strictEqual(shiftCausesNodeIds[1][0], resizeEventsNodeIds[0]);
 
-           assert.strictEqual(shiftCausesNodeIds[2].length, 1);
+           assert.lengthOf(shiftCausesNodeIds[2], 1);
            assert.strictEqual(shiftCausesNodeIds[2][0], resizeEventsNodeIds[1]);
 
-           assert.strictEqual(shiftCausesNodeIds[3].length, 1);
+           assert.lengthOf(shiftCausesNodeIds[3], 1);
            assert.strictEqual(shiftCausesNodeIds[3][0], resizeEventsNodeIds[1]);
 
-           assert.strictEqual(shiftCausesNodeIds[4].length, 1);
+           assert.lengthOf(shiftCausesNodeIds[4], 1);
            assert.strictEqual(shiftCausesNodeIds[4][0], resizeEventsNodeIds[2]);
          });
 
@@ -294,7 +294,6 @@ describeWithMockConnection('LayoutShift root causes', () => {
         const authoredDimensions = rootCause?.unsizedMedia[0].authoredDimensions;
         if (!authoredDimensions) {
           assert.fail('Expected defined authored dimensions');
-          return;
         }
         // Assert inline styles are preferred.
         assert.strictEqual(authoredDimensions.height, '20px');
@@ -314,7 +313,6 @@ describeWithMockConnection('LayoutShift root causes', () => {
         const authoredDimensions = rootCause?.unsizedMedia[0].authoredDimensions;
         if (!authoredDimensions) {
           assert.fail('Expected defined authored dimensions');
-          return;
         }
         // Assert matched CSS rules styles are preferred.
         assert.strictEqual(authoredDimensions.height, '30px');
@@ -332,7 +330,6 @@ describeWithMockConnection('LayoutShift root causes', () => {
         const computedDimensions = rootCause?.unsizedMedia[0].computedDimensions;
         if (!computedDimensions) {
           assert.fail('Expected defined computed dimensions');
-          return;
         }
         // Assert correct computed styles are set.
         assert.strictEqual(computedDimensions.height, height);
@@ -414,7 +411,7 @@ describeWithMockConnection('LayoutShift root causes', () => {
           shift.args = {
             frame: 'frame-id-123',
           };
-          shift.name = 'LayoutShift';
+          shift.name = Trace.Types.Events.Name.SYNTHETIC_LAYOUT_SHIFT;
         }
 
         const clusters = [{events: shifts}] as unknown as Trace.Types.Events.SyntheticLayoutShiftCluster[];
@@ -436,10 +433,10 @@ describeWithMockConnection('LayoutShift root causes', () => {
            });
 
            // Test the nodes from the LI events are assinged as the potential root causes to layout shifts correctly.
-           assert.strictEqual(shiftCausesNodeIds[0].length, 1);
+           assert.lengthOf(shiftCausesNodeIds[0], 1);
            assert.strictEqual(shiftCausesNodeIds[0][0], iframesNodeIds[0]);
 
-           assert.strictEqual(shiftCausesNodeIds[4].length, 1);
+           assert.lengthOf(shiftCausesNodeIds[4], 1);
            assert.strictEqual(shiftCausesNodeIds[4][0], iframesNodeIds[1]);
          });
 
@@ -467,8 +464,8 @@ describeWithMockConnection('LayoutShift root causes', () => {
       // that correspond to font changes.
       const fontRequests = [
         {
-          dur: Trace.Types.Timing.MicroSeconds(2),
-          ts: Trace.Types.Timing.MicroSeconds(0),
+          dur: Trace.Types.Timing.Micro(2),
+          ts: Trace.Types.Timing.Micro(0),
           args: {
             data: {
               url: fontSource,
@@ -477,8 +474,8 @@ describeWithMockConnection('LayoutShift root causes', () => {
           },
         },
         {
-          dur: Trace.Types.Timing.MicroSeconds(30),
-          ts: Trace.Types.Timing.MicroSeconds(0),
+          dur: Trace.Types.Timing.Micro(30),
+          ts: Trace.Types.Timing.Micro(0),
           args: {
             data: {
               url: fontSource,
@@ -510,8 +507,8 @@ describeWithMockConnection('LayoutShift root causes', () => {
 
       it('ignores requests for fonts whose font-display property is "optional"', async () => {
         const optionalFontRequests = [{
-                                       dur: Trace.Types.Timing.MicroSeconds(2),
-                                       ts: Trace.Types.Timing.MicroSeconds(0),
+                                       dur: Trace.Types.Timing.Micro(2),
+                                       ts: Trace.Types.Timing.Micro(0),
                                        args: {
                                          data: {
                                            url: fontSource,
@@ -528,16 +525,16 @@ describeWithMockConnection('LayoutShift root causes', () => {
         });
 
         // Test no font request is marked as potential layout shift root causes
-        assert.strictEqual(shiftCausesNodeIds[0].length, 0);
-        assert.strictEqual(shiftCausesNodeIds[1].length, 0);
-        assert.strictEqual(shiftCausesNodeIds[2].length, 0);
-        assert.strictEqual(shiftCausesNodeIds[3].length, 0);
+        assert.lengthOf(shiftCausesNodeIds[0], 0);
+        assert.lengthOf(shiftCausesNodeIds[1], 0);
+        assert.lengthOf(shiftCausesNodeIds[2], 0);
+        assert.lengthOf(shiftCausesNodeIds[3], 0);
       });
       it('ignores requests for fonts that lie outside the fixed time window from ending at the "font change" layout invalidation event',
          async () => {
            const optionalFontRequests = [{
-                                          dur: Trace.Types.Timing.MicroSeconds(2),
-                                          ts: Trace.Types.Timing.MicroSeconds(85),
+                                          dur: Trace.Types.Timing.Micro(2),
+                                          ts: Trace.Types.Timing.Micro(85),
                                           args: {
                                             data: {
                                               url: fontSource,
@@ -554,18 +551,18 @@ describeWithMockConnection('LayoutShift root causes', () => {
            });
 
            // Test no font request is marked as potential layout shift root causes
-           assert.strictEqual(shiftCausesNodeIds[0].length, 0);
-           assert.strictEqual(shiftCausesNodeIds[1].length, 0);
-           assert.strictEqual(shiftCausesNodeIds[2].length, 0);
-           assert.strictEqual(shiftCausesNodeIds[3].length, 0);
+           assert.lengthOf(shiftCausesNodeIds[0], 0);
+           assert.lengthOf(shiftCausesNodeIds[1], 0);
+           assert.lengthOf(shiftCausesNodeIds[2], 0);
+           assert.lengthOf(shiftCausesNodeIds[3], 0);
          });
     });
 
     describe('Render blocking request', () => {
       const RenderBlockingRequest = [
         {
-          dur: Trace.Types.Timing.MicroSeconds(2),
-          ts: Trace.Types.Timing.MicroSeconds(0),
+          dur: Trace.Types.Timing.Micro(2),
+          ts: Trace.Types.Timing.Micro(0),
           args: {
             data: {
               url: renderBlockSource,
@@ -575,8 +572,8 @@ describeWithMockConnection('LayoutShift root causes', () => {
           },
         },
         {
-          dur: Trace.Types.Timing.MicroSeconds(30),
-          ts: Trace.Types.Timing.MicroSeconds(0),
+          dur: Trace.Types.Timing.Micro(30),
+          ts: Trace.Types.Timing.Micro(0),
           args: {
             data: {
               url: renderBlockSource,

@@ -15,7 +15,6 @@ namespace adapter {
 
 namespace {
 
-using spdy::SpdyGoAwayIR;
 using spdy::SpdyPingIR;
 using spdy::SpdyPriorityIR;
 using spdy::SpdyWindowUpdateIR;
@@ -61,10 +60,9 @@ void OgHttp2Adapter::SubmitShutdownNotice() {
 void OgHttp2Adapter::SubmitGoAway(Http2StreamId last_accepted_stream_id,
                                   Http2ErrorCode error_code,
                                   absl::string_view opaque_data) {
-  session_->EnqueueFrame(std::make_unique<SpdyGoAwayIR>(
-      last_accepted_stream_id, TranslateErrorCode(error_code),
-      std::string(opaque_data)));
+  session_->SubmitGoAway(last_accepted_stream_id, error_code, opaque_data);
 }
+
 void OgHttp2Adapter::SubmitWindowUpdate(Http2StreamId stream_id,
                                         int window_increment) {
   session_->EnqueueFrame(
@@ -141,20 +139,15 @@ void OgHttp2Adapter::SubmitRst(Http2StreamId stream_id,
       stream_id, TranslateErrorCode(error_code)));
 }
 
-int32_t OgHttp2Adapter::SubmitRequest(
-    absl::Span<const Header> headers,
-    std::unique_ptr<DataFrameSource> data_source, bool end_stream,
-    void* user_data) {
-  return session_->SubmitRequest(headers, std::move(data_source), end_stream,
-                                 user_data);
+int32_t OgHttp2Adapter::SubmitRequest(absl::Span<const Header> headers,
+                                      bool end_stream, void* user_data) {
+  return session_->SubmitRequest(headers, end_stream, user_data);
 }
 
 int OgHttp2Adapter::SubmitResponse(Http2StreamId stream_id,
                                    absl::Span<const Header> headers,
-                                   std::unique_ptr<DataFrameSource> data_source,
                                    bool end_stream) {
-  return session_->SubmitResponse(stream_id, headers, std::move(data_source),
-                                  end_stream);
+  return session_->SubmitResponse(stream_id, headers, end_stream);
 }
 
 int OgHttp2Adapter::SubmitTrailer(Http2StreamId stream_id,

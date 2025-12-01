@@ -22,8 +22,8 @@ using FramePacketId = uint16_t;
 
 // A special FramePacketId value meant to represent "all packets lost" in Cast
 // RTCP Feedback messages.
-constexpr FramePacketId kAllPacketsLost = 0xffff;
-constexpr FramePacketId kMaxAllowedFramePacketId = kAllPacketsLost - 1;
+inline constexpr FramePacketId kAllPacketsLost = 0xffff;
+inline constexpr FramePacketId kMaxAllowedFramePacketId = kAllPacketsLost - 1;
 
 // The maximum size of any RTP or RTCP packet, in bytes. The calculation below
 // is: Standard Ethernet MTU bytes minus IP header bytes minus UDP header bytes.
@@ -36,8 +36,8 @@ constexpr FramePacketId kMaxAllowedFramePacketId = kAllPacketsLost - 1;
 // calculations. Note that MTU is dynamic, depending on the path the packets
 // take between two endpoints (the 1500 here is just a commonly-used value for
 // LAN Ethernet).
-constexpr int kMaxRtpPacketSizeForIpv4UdpOnEthernet = 1500 - 20 - 8;
-constexpr int kMaxRtpPacketSizeForIpv6UdpOnEthernet = 1500 - 40 - 8;
+inline constexpr int kMaxRtpPacketSizeForIpv4UdpOnEthernet = 1500 - 20 - 8;
+inline constexpr int kMaxRtpPacketSizeForIpv6UdpOnEthernet = 1500 - 40 - 8;
 
 // The Cast RTP packet header:
 //
@@ -63,15 +63,15 @@ constexpr int kMaxRtpPacketSizeForIpv6UdpOnEthernet = 1500 - 40 - 8;
 
 // The minimum-possible valid size of a Cast RTP packet (i.e., no optional
 // fields, extensions, nor payload).
-constexpr int kRtpPacketMinValidSize = 18;
+inline constexpr int kRtpPacketMinValidSize = 18;
 
 // All Cast RTP packets must carry the version 2 flag, not use padding, not use
 // RTP extensions, and have zero CSRCs.
-constexpr uint8_t kRtpRequiredFirstByte = 0b10000000;
+inline constexpr uint8_t kRtpRequiredFirstByte = 0b10000000;
 
 // Bitmasks to isolate fields within byte 2 of the Cast RTP header.
-constexpr uint8_t kRtpMarkerBitMask = 0b10000000;
-constexpr uint8_t kRtpPayloadTypeMask = 0b01111111;
+inline constexpr uint8_t kRtpMarkerBitMask = 0b10000000;
+inline constexpr uint8_t kRtpPayloadTypeMask = 0b01111111;
 
 // Describes the content being transported over RTP streams. These are Cast
 // Streaming specific assignments, within the "dynamic" range provided by
@@ -121,9 +121,9 @@ RtpPayloadType GetPayloadType(VideoCodec codec, bool use_android_rtp_hack);
 bool IsRtpPayloadType(uint8_t raw_byte);
 
 // Bitmasks to isolate fields within byte 12 of the Cast RTP header.
-constexpr uint8_t kRtpKeyFrameBitMask = 0b10000000;
-constexpr uint8_t kRtpHasReferenceFrameIdBitMask = 0b01000000;
-constexpr uint8_t kRtpExtensionCountMask = 0b00111111;
+inline constexpr uint8_t kRtpKeyFrameBitMask = 0b10000000;
+inline constexpr uint8_t kRtpHasReferenceFrameIdBitMask = 0b01000000;
+inline constexpr uint8_t kRtpExtensionCountMask = 0b00111111;
 
 // Cast extensions. This implementation supports only the Adaptive Latency
 // extension, and ignores all others:
@@ -136,8 +136,8 @@ constexpr uint8_t kRtpExtensionCountMask = 0b00111111;
 //
 // The Adaptive Latency extension permits changing the fixed end-to-end playout
 // delay of a single RTP stream.
-constexpr uint8_t kAdaptiveLatencyRtpExtensionType = 1;
-constexpr int kNumExtensionDataSizeFieldBits = 10;
+inline constexpr uint8_t kAdaptiveLatencyRtpExtensionType = 1;
+inline constexpr int kNumExtensionDataSizeFieldBits = 10;
 
 // RTCP Common Header:
 //
@@ -146,10 +146,10 @@ constexpr int kNumExtensionDataSizeFieldBits = 10;
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 // |V=2|P|RC/Subtyp|  Packet Type  |            Length             |
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-constexpr int kRtcpCommonHeaderSize = 4;
+inline constexpr int kRtcpCommonHeaderSize = 4;
 // All RTCP packets must carry the version 2 flag and not use padding.
-constexpr uint8_t kRtcpRequiredVersionAndPaddingBits = 0b100;
-constexpr int kRtcpReportCountFieldNumBits = 5;
+inline constexpr uint8_t kRtcpRequiredVersionAndPaddingBits = 0b100;
+inline constexpr int kRtcpReportCountFieldNumBits = 5;
 
 // https://www.iana.org/assignments/rtp-parameters/rtp-parameters.xhtml
 enum class RtcpPacketType : uint8_t {
@@ -195,7 +195,7 @@ enum class RtcpSubtype : uint8_t {
 // |                     Sender's Octet Count                      |
 // +=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+
 //        ...Followed by zero or more "Report Blocks"...
-constexpr int kRtcpSenderReportSize = 24;
+inline constexpr int kRtcpSenderReportSize = 24;
 
 // RTCP Receiver Report:
 //
@@ -205,7 +205,7 @@ constexpr int kRtcpSenderReportSize = 24;
 // |                       SSRC of Receiver                        |
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 //        ...Followed by zero or more "Report Blocks"...
-constexpr int kRtcpReceiverReportSize = 4;
+inline constexpr int kRtcpReceiverReportSize = 4;
 
 // RTCP Report Block. For Cast Streaming, zero or one of these accompanies a
 // Sender or Receiver Report, which is different than the RTCP spec (which
@@ -226,8 +226,8 @@ constexpr int kRtcpReceiverReportSize = 4;
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 // |     Delay since last Sender Report (1/65536 sec timebase)     |
 // +=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+
-constexpr int kRtcpReportBlockSize = 24;
-constexpr int kRtcpCumulativePacketsFieldNumBits = 24;
+inline constexpr int kRtcpReportBlockSize = 24;
+inline constexpr int kRtcpCumulativePacketsFieldNumBits = 24;
 
 // Cast Feedback Message:
 //
@@ -242,8 +242,8 @@ constexpr int kRtcpCumulativePacketsFieldNumBits = 24;
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 // | CkPt Frame ID | # Loss Fields | Current Playout Delay (msec)  |
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-constexpr int kRtcpFeedbackHeaderSize = 16;
-constexpr uint32_t kRtcpCastIdentifierWord =
+inline constexpr int kRtcpFeedbackHeaderSize = 16;
+inline constexpr uint32_t kRtcpCastIdentifierWord =
     (uint32_t{'C'} << 24) | (uint32_t{'A'} << 16) | (uint32_t{'S'} << 8) |
     uint32_t{'T'};
 //
@@ -265,7 +265,7 @@ constexpr uint32_t kRtcpCastIdentifierWord =
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 // | w/in Frame ID | Lost Frame Packet ID          | PID BitVector |
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-constexpr int kRtcpFeedbackLossFieldSize = 4;
+inline constexpr int kRtcpFeedbackLossFieldSize = 4;
 //
 // "Within Frame ID" is a truncated-to-8-bits frame ID field and, when
 // bit-expanded should always be interpreted to represent a value greater than
@@ -285,12 +285,12 @@ constexpr int kRtcpFeedbackLossFieldSize = 4;
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 // |Feedback Count | # BVectOctets | ACK BitVect (2 to 254 bytes)...
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ → zero-padded to word boundary
-constexpr int kRtcpFeedbackAckHeaderSize = 6;
-constexpr uint32_t kRtcpCst2IdentifierWord =
+inline constexpr int kRtcpFeedbackAckHeaderSize = 6;
+inline constexpr uint32_t kRtcpCst2IdentifierWord =
     (uint32_t{'C'} << 24) | (uint32_t{'S'} << 16) | (uint32_t{'T'} << 8) |
     uint32_t{'2'};
-constexpr int kRtcpMinAckBitVectorOctets = 2;
-constexpr int kRtcpMaxAckBitVectorOctets = 254;
+inline constexpr int kRtcpMinAckBitVectorOctets = 2;
+inline constexpr int kRtcpMaxAckBitVectorOctets = 254;
 //
 // "Feedback Count" is a wrap-around counter indicating the number of Cast
 // Feedbacks that have been sent before this one. "# Bit Vector Octets"
@@ -315,7 +315,7 @@ constexpr int kRtcpMaxAckBitVectorOctets = 254;
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 // |                     SSRC of Report Author                     |
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-constexpr int kRtcpExtendedReportHeaderSize = 4;
+inline constexpr int kRtcpExtendedReportHeaderSize = 4;
 //
 // ...followed by zero or more Blocks:
 //
@@ -327,7 +327,7 @@ constexpr int kRtcpExtendedReportHeaderSize = 4;
 // |           ..."Block Length" words of report data...           |
 // +                                                               +
 // +                                                               +
-constexpr int kRtcpExtendedReportBlockHeaderSize = 4;
+inline constexpr int kRtcpExtendedReportBlockHeaderSize = 4;
 //
 // Cast Streaming only uses Receiver Reference Time Reports:
 // https://tools.ietf.org/html/rfc3611#section-4.4. So, the entire block would
@@ -341,8 +341,8 @@ constexpr int kRtcpExtendedReportBlockHeaderSize = 4;
 // |                         NTP Timestamp                         |
 // |                                                               |
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-constexpr uint8_t kRtcpReceiverReferenceTimeReportBlockType = 4;
-constexpr int kRtcpReceiverReferenceTimeReportBlockSize = 8;
+inline constexpr uint8_t kRtcpReceiverReferenceTimeReportBlockType = 4;
+inline constexpr int kRtcpReceiverReferenceTimeReportBlockSize = 8;
 
 // Cast Picture Loss Indicator Message:
 //
@@ -353,7 +353,7 @@ constexpr int kRtcpReceiverReferenceTimeReportBlockSize = 8;
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 // |                        SSRC of Sender                         |
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-constexpr int kRtcpPictureLossIndicatorHeaderSize = 8;
+inline constexpr int kRtcpPictureLossIndicatorHeaderSize = 8;
 
 // The Cast Receiver RTCP frame log message is an application specific
 // extension that contains receiver side statistics about the Receiver Session.
@@ -366,7 +366,7 @@ constexpr int kRtcpPictureLossIndicatorHeaderSize = 8;
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 // | Event Count   |                 Event Timestamp               |
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-constexpr int kRtcpReceiverFrameLogMessageHeaderSize = 8;
+inline constexpr int kRtcpReceiverFrameLogMessageHeaderSize = 8;
 //
 // Followed by a list of zero or more event blocks:
 //
@@ -375,7 +375,7 @@ constexpr int kRtcpReceiverFrameLogMessageHeaderSize = 8;
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 // | Delay Delta or Packet ID      | Type  | Event Timestamp       |
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-constexpr int kRtcpReceiverFrameLogMessageBlockSize = 4;
+inline constexpr int kRtcpReceiverFrameLogMessageBlockSize = 4;
 
 }  // namespace openscreen::cast
 

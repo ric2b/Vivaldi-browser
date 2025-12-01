@@ -38,7 +38,7 @@ using testing::Test;
 
 class MockGLES2InterfaceWithSyncTokenSupport : public viz::TestGLES2Interface {
  public:
-  MOCK_METHOD1(GenSyncTokenCHROMIUM, void(GLbyte*));
+  MOCK_METHOD1(GenUnverifiedSyncTokenCHROMIUM, void(GLbyte*));
   MOCK_METHOD1(WaitSyncTokenCHROMIUM, void(const GLbyte*));
 };
 
@@ -58,11 +58,10 @@ scoped_refptr<StaticBitmapImage> CreateBitmap() {
 
   return AcceleratedStaticBitmapImage::CreateFromCanvasSharedImage(
       std::move(client_si), GenTestSyncToken(100), 0,
-      SkImageInfo::MakeN32Premul(100, 100), GL_TEXTURE_2D, true,
+      SkImageInfo::MakeN32Premul(100, 100),
       SharedGpuContext::ContextProviderWrapper(),
       base::PlatformThread::CurrentRef(),
-      base::MakeRefCounted<base::NullTaskRunner>(), base::DoNothing(),
-      /*supports_display_compositing=*/true, /*is_overlay_candidate=*/true);
+      base::MakeRefCounted<base::NullTaskRunner>(), base::DoNothing());
 }
 
 class AcceleratedStaticBitmapImageTest : public Test {
@@ -104,14 +103,15 @@ TEST_F(AcceleratedStaticBitmapImageTest, CopyToTextureSynchronization) {
 
   // Anterior synchronization. Wait on the sync token for the mailbox on the
   // dest context.
-  EXPECT_CALL(destination_gl, WaitSyncTokenCHROMIUM(Pointee(SyncTokenMatcher(
-                                  bitmap->GetMailboxHolder().sync_token))))
+  EXPECT_CALL(
+      destination_gl,
+      WaitSyncTokenCHROMIUM(Pointee(SyncTokenMatcher(bitmap->GetSyncToken()))))
       .Times(testing::Between(1, 2));
 
   // Posterior synchronization. Generate a sync token on the destination context
   // to ensure mailbox is destroyed after the copy.
   const gpu::SyncToken sync_token2 = GenTestSyncToken(2);
-  EXPECT_CALL(destination_gl, GenSyncTokenCHROMIUM(_))
+  EXPECT_CALL(destination_gl, GenUnverifiedSyncTokenCHROMIUM(_))
       .WillOnce(SetArrayArgument<0>(
           sync_token2.GetConstData(),
           sync_token2.GetConstData() + sizeof(gpu::SyncToken)));
@@ -127,7 +127,7 @@ TEST_F(AcceleratedStaticBitmapImageTest, CopyToTextureSynchronization) {
   testing::Mock::VerifyAndClearExpectations(&destination_gl);
 
   // Final wait is postponed until destruction.
-  EXPECT_EQ(bitmap->GetMailboxHolder().sync_token, sync_token2);
+  EXPECT_EQ(bitmap->GetSyncToken(), sync_token2);
 }
 
 }  // namespace

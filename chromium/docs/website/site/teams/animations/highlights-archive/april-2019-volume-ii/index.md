@@ -60,7 +60,7 @@ title: April 2019, Volume II
 
 <td><td>Web Animations - Moar Interop</td></td>
 
-<td><td>Kevin (kevers@) has been hard at work fixing bugs in our Web Animations implementation - over 50% of the <a href="http://crbug.com/772407">known WPT failures</a> are now fixed! This sprint has seen a focus on timing issues, with plenty of nasty floating-point boundary case bugs to squish!</td></td>
+<td><td>Kevin (kevers@) has been hard at work fixing bugs in our Web Animations implementation - over 50% of the <a href="https://crbug.com/772407">known WPT failures</a> are now fixed! This sprint has seen a focus on timing issues, with plenty of nasty floating-point boundary case bugs to squish!</td></td>
 
 <td></tr></td>
 <td></table></td>
@@ -69,7 +69,7 @@ title: April 2019, Volume II
 
 <td>Scroll Snap - supporting AMP</td>
 
-<td>AMP team are excited to use scroll snap for their image carousel, but need paginated behavior. We previously implemented the <a href="https://developer.mozilla.org/en-US/docs/Web/CSS/scroll-snap-stop">scroll-snap-stop</a> feature to enable this. This sprint they <a href="http://crbug.com/823998#c15">reported a bug</a> where they were able to 'break' the snapping and cause their content to go flying! Majid leapt into action: <a href="https://drive.google.com/file/d/1Jlb1IlQ66-JbCi1lBn-L0zhDBoiZF_Qb/view">reproducing</a>, diagnosing, and <a href="https://chromium-review.googlesource.com/c/chromium/src/+/1572286">fixing</a> the bug. This should clear the way for AMP to roll out scroll snap, and we are excitedly <a href="https://www.chromestatus.com/metrics/css/timeline/popularity/499">watching our metrics</a>.</td>
+<td>AMP team are excited to use scroll snap for their image carousel, but need paginated behavior. We previously implemented the <a href="https://developer.mozilla.org/en-US/docs/Web/CSS/scroll-snap-stop">scroll-snap-stop</a> feature to enable this. This sprint they <a href="https://crbug.com/823998#c15">reported a bug</a> where they were able to 'break' the snapping and cause their content to go flying! Majid leapt into action: <a href="https://drive.google.com/file/d/1Jlb1IlQ66-JbCi1lBn-L0zhDBoiZF_Qb/view">reproducing</a>, diagnosing, and <a href="https://chromium-review.googlesource.com/c/chromium/src/+/1572286">fixing</a> the bug. This should clear the way for AMP to roll out scroll snap, and we are excitedly <a href="https://www.chromestatus.com/metrics/css/timeline/popularity/499">watching our metrics</a>.</td>
 
 </tr>
 </table>

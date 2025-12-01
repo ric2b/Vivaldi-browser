@@ -54,6 +54,10 @@ class OrganizedRulesManager : public RuleManager::Observer {
 
   bool IsApplyingRules() const;
 
+  const base::Value::List& partner_list_allowed_documents() {
+    return partner_list_allowed_documents_;
+  }
+
   RuleService::IndexBuildResult build_result() const { return build_result_; }
 
  private:
@@ -95,6 +99,8 @@ class OrganizedRulesManager : public RuleManager::Observer {
 
   std::map<uint32_t, scoped_refptr<CompiledRules>> compiled_rules_;
   base::Value exception_rule_;
+
+  base::Value::List partner_list_allowed_documents_;
 
   std::string organized_rules_checksum_;
 

@@ -20,7 +20,7 @@
 
 namespace ash {
 
-void ApplyPickerPseudoFocusToView(views::View* view) {
+void ApplyQuickInsertPseudoFocusToView(views::View* view) {
   if (view == nullptr) {
     return;
   }
@@ -36,8 +36,9 @@ void ApplyPickerPseudoFocusToView(views::View* view) {
     return;
   }
 
-  // PickerSearchBarTextfield has special pseudo focus appearance.
-  if (auto* textfield = views::AsViewClass<PickerSearchBarTextfield>(view)) {
+  // QuickInsertSearchBarTextfield has special pseudo focus appearance.
+  if (auto* textfield =
+          views::AsViewClass<QuickInsertSearchBarTextfield>(view)) {
     textfield->SetShouldShowFocusIndicator(true);
     return;
   }
@@ -52,7 +53,7 @@ void ApplyPickerPseudoFocusToView(views::View* view) {
   }
 }
 
-void RemovePickerPseudoFocusFromView(views::View* view) {
+void RemoveQuickInsertPseudoFocusFromView(views::View* view) {
   if (view == nullptr) {
     return;
   }
@@ -68,8 +69,9 @@ void RemovePickerPseudoFocusFromView(views::View* view) {
     return;
   }
 
-  // PickerSearchBarTextfield has special pseudo focus appearance.
-  if (auto* textfield = views::AsViewClass<PickerSearchBarTextfield>(view)) {
+  // QuickInsertSearchBarTextfield has special pseudo focus appearance.
+  if (auto* textfield =
+          views::AsViewClass<QuickInsertSearchBarTextfield>(view)) {
     textfield->SetShouldShowFocusIndicator(false);
     return;
   }
@@ -84,13 +86,13 @@ void RemovePickerPseudoFocusFromView(views::View* view) {
   }
 }
 
-bool DoPickerPseudoFocusedActionOnView(views::View* view) {
+bool DoQuickInsertPseudoFocusedActionOnView(views::View* view) {
   if (view == nullptr) {
     return false;
   }
 
-  // PickerSearchBarTextfield has no pseudo focus action.
-  if (views::IsViewClass<PickerSearchBarTextfield>(view)) {
+  // QuickInsertSearchBarTextfield has no pseudo focus action.
+  if (views::IsViewClass<QuickInsertSearchBarTextfield>(view)) {
     return true;
   }
 
@@ -113,15 +115,15 @@ bool DoPickerPseudoFocusedActionOnView(views::View* view) {
   return key_event.handled();
 }
 
-views::View* GetNextPickerPseudoFocusableView(
+views::View* GetNextQuickInsertPseudoFocusableView(
     views::View* view,
-    PickerPseudoFocusDirection direction,
+    QuickInsertPseudoFocusDirection direction,
     bool should_loop) {
   return view == nullptr || view->GetFocusManager() == nullptr
              ? nullptr
              : view->GetFocusManager()->GetNextFocusableView(
                    view, view->GetWidget(),
-                   direction == PickerPseudoFocusDirection::kBackward,
+                   direction == QuickInsertPseudoFocusDirection::kBackward,
                    !should_loop);
 }
 

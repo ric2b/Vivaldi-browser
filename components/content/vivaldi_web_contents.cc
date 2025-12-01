@@ -152,11 +152,6 @@ void WebContentsImpl::SetResumePending(bool resume) {
   is_resume_pending_ = resume;
 }
 
-void WebContentsImpl::SetJavaScriptDialogManager(
-    JavaScriptDialogManager* dialog_manager) {
-  dialog_manager_ = dialog_manager;
-}
-
 // Loop through all web contents and check if it cointains the point.
 // Returns true if the point is only contained by the UI content.
 bool WebContentsImpl::IsVivaldiUI(const gfx::Point& point) {

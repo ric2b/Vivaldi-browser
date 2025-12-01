@@ -12,8 +12,10 @@
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/web_applications/app_service/publisher_helper.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
+#include "chrome/browser/web_applications/proto/web_app_install_state.pb.h"
 #include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app.h"
+#include "chrome/browser/web_applications/web_app_filter.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
@@ -68,8 +70,8 @@ std::optional<std::string> GetInstanceAppIdForWebContents(
     }
 
     std::optional<webapps::AppId> app_id =
-        provider->registrar_unsafe().FindAppWithUrlInScope(
-            tab->GetVisibleURL());
+        provider->registrar_unsafe().FindBestAppWithUrlInScope(
+            tab->GetVisibleURL(), web_app::WebAppFilter::OpensInBrowserTab());
     if (app_id) {
       const web_app::WebApp* web_app =
           provider->registrar_unsafe().GetAppById(*app_id);

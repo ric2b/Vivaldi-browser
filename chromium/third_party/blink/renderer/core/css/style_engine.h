@@ -48,6 +48,7 @@
 #include "third_party/blink/renderer/core/css/invalidation/style_invalidator.h"
 #include "third_party/blink/renderer/core/css/layout_tree_rebuild_root.h"
 #include "third_party/blink/renderer/core/css/pending_sheet_type.h"
+#include "third_party/blink/renderer/core/css/resolver/match_request.h"
 #include "third_party/blink/renderer/core/css/rule_feature_set.h"
 #include "third_party/blink/renderer/core/css/style_image_cache.h"
 #include "third_party/blink/renderer/core/css/style_invalidation_root.h"
@@ -117,6 +118,7 @@ struct LogicalSize;
 enum InvalidationScope { kInvalidateCurrentScope, kInvalidateAllScopes };
 
 using StyleSheetKey = AtomicString;
+using UnorderedTreeScopeSet = HeapHashSet<Member<TreeScope>>;
 
 // The StyleEngine class manages style-related state for the document. There is
 // a 1-1 relationship of Document to StyleEngine. The document calls the
@@ -226,8 +228,8 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
     return injected_author_style_sheets_;
   }
 
-  CSSStyleSheet* InspectorStyleSheet() const {
-    return inspector_style_sheet_.Get();
+  const HeapVector<Member<CSSStyleSheet>>& InspectorStyleSheets() const {
+    return inspector_style_sheet_list_;
   }
 
   void AddTextTrack(TextTrack*);
@@ -242,6 +244,18 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   Element* EnsureVTTOriginatingElement();
 
   const ActiveStyleSheetVector ActiveStyleSheetsForInspector();
+
+  // All ShadowRoots in the Document.
+  const UnorderedTreeScopeSet& GetActiveTreeScopes() const {
+    DCHECK_EQ(
+        active_tree_scopes_.end(),
+        std::find_if(active_tree_scopes_.begin(), active_tree_scopes_.end(),
+                     [&, this](const Member<TreeScope>& tree_scope) {
+                       return tree_scope.Get() == document_.Get();
+                     }))
+        << "Document must not appear in active_tree_scopes_";
+    return active_tree_scopes_;
+  }
 
   bool NeedsActiveStyleUpdate() const;
   void SetNeedsActiveStyleUpdate(TreeScope&);
@@ -271,7 +285,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
                    WebCssOrigin = WebCssOrigin::kAuthor);
   void RemoveInjectedSheet(const StyleSheetKey&,
                            WebCssOrigin = WebCssOrigin::kAuthor);
-  CSSStyleSheet& EnsureInspectorStyleSheet();
+  CSSStyleSheet& CreateInspectorStyleSheet();
   RuleSet* WatchedSelectorsRuleSet() {
     DCHECK(global_rule_set_);
     return global_rule_set_->WatchedSelectorsRuleSet();
@@ -300,6 +314,11 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   };
 
   RuleSet* RuleSetForSheet(CSSStyleSheet&);
+  // See StyleSheetContents::CreateUnconnectedRuleSet.
+  //
+  // Note that this can return nullptr when the associated media query
+  // does not match.
+  RuleSet* CreateUnconnectedRuleSet(CSSStyleSheet&);
   void MediaQueryAffectingValueChanged(MediaValueChange change);
   void UpdateActiveStyle();
 
@@ -569,12 +588,15 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void ApplyVisionDeficiencyStyle(
       ComputedStyleBuilder& layout_view_style_builder);
 
-  void CollectMatchingUserRules(ElementRuleCollector&) const;
+  void CollectMatchingUserRules(ElementRuleCollector&);
 
   void PropertyRegistryChanged();
 
   void EnvironmentVariableChanged();
   void InvalidateEnvDependentStylesIfNeeded();
+
+  bool HasComplexSafaAreaConstraints();
+  void SetNeedsToUpdateComplexSafeAreaConstraints();
 
   void MarkAllElementsForStyleRecalc(const StyleChangeReasonForTracing& reason);
   void MarkViewportStyleDirty();
@@ -598,7 +620,10 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void InvalidatePositionTryStyles();
 
   void MarkLastSuccessfulPositionFallbackDirtyForElement(Element& element) {
-    last_successful_option_dirty_set_.insert(&element);
+    anchored_element_dirty_set_.insert(&element);
+  }
+  void MarkForDefaultAnchorScrollShift(Element& element) {
+    anchored_element_dirty_set_.insert(&element);
   }
 
   StyleRuleKeyframes* KeyframeStylesForAnimation(
@@ -749,7 +774,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   }
 
   // Returns true if marked dirty for layout
-  bool UpdateLastSuccessfulPositionFallbacks();
+  bool UpdateLastSuccessfulPositionFallbacksAndAnchorScrollShift();
 
   void RevisitActiveStyleSheetsForInspector();
 
@@ -785,8 +810,6 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void RevisitStyleRulesForInspector(
       const RuleFeatureSet& features,
       const HeapVector<Member<StyleRuleBase>>& rules);
-
-  typedef HeapHashSet<Member<TreeScope>> UnorderedTreeScopeSet;
 
   bool MediaQueryAffectingValueChanged(const ActiveStyleSheetVector&,
                                        MediaValueChange);
@@ -963,7 +986,8 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   // continue.
   int pending_parser_blocking_stylesheets_{0};
 
-  Member<CSSStyleSheet> inspector_style_sheet_;
+  // Stylesheets inserted by DevTools.
+  HeapVector<Member<CSSStyleSheet>> inspector_style_sheet_list_;
 
   Member<DocumentStyleSheetCollection> document_style_sheet_collection_;
 
@@ -1033,6 +1057,15 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   // True if some data backing env() has changed.
   bool is_env_dirty_{false};
 
+  // True if the document has elements referencing env(safe-area-inset-bottom)
+  bool has_complex_safe_area_constraints_{false};
+
+  // True if |has_complex_safe_area_constraints_| should be recomputed.
+  // This is set to true during style cascade when an element references
+  // env(safe-area-inset-bottom), and remains true as long as there are
+  // elements in the document with complex safe area constraints.
+  bool needs_to_update_complex_safe_area_constraints_{false};
+
   VisionDeficiency vision_deficiency_{VisionDeficiency::kNoVisionDeficiency};
   Member<ReferenceFilterOperation> vision_deficiency_filter_;
 
@@ -1061,6 +1094,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
       injected_author_style_sheets_;
 
   ActiveStyleSheetVector active_user_style_sheets_;
+  HeapVector<RuleSetGroup> user_rule_set_groups_;
 
   using KeyframesRuleMap =
       HeapHashMap<AtomicString, Member<StyleRuleKeyframes>>;
@@ -1168,7 +1202,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   // Elements which had their computed position-try-fallbacks changed since last
   // time resize observers were considered. May need to have their last
   // successful option invalidated.
-  HeapHashSet<Member<Element>> last_successful_option_dirty_set_;
+  HeapHashSet<Member<Element>> anchored_element_dirty_set_;
 
   // Names of @position-try rules which were added, removed, or modified since
   // last time resize observers were considered. Anchored elements with a last

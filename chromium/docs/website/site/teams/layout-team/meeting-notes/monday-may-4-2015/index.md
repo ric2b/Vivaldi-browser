@@ -16,7 +16,7 @@ Performance Tracking (benjhayden)
 
 - Layout Analyzer powered by UMA.
 
-Scrolling (skobes) \[[crbug.com/417782](http://crbug.com/417782)\]
+Scrolling (skobes) \[[crbug.com/417782](https://crbug.com/417782)\]
 
 - Improved unite tests for scrolling.
 
@@ -24,7 +24,7 @@ Scrolling (skobes) \[[crbug.com/417782](http://crbug.com/417782)\]
 
 - Removed m_viewportLayoutObject from FrameView.
 
-Line Boxes (szager) \[[crbug.com/321237](http://crbug.com/321237)\]
+Line Boxes (szager) \[[crbug.com/321237](https://crbug.com/321237)\]
 
 - Performance data looks a lot better, some micro benchmarks still show
 
@@ -32,14 +32,14 @@ a slight regression but within error margin. Plan is to try to land
 
 this week.
 
-Flexbox (cbiesinger) \[[crbug.com/426898](http://crbug.com/426898)\]
+Flexbox (cbiesinger) \[[crbug.com/426898](https://crbug.com/426898)\]
 
 - Discussions around absolut positioning within flexbox.
 
 - Updated handling of min-width/min-height.
 
 List marker refactoring (dsinclair)
-\[[crbug.com/370461](http://crbug.com/370461)\]
+\[[crbug.com/370461](https://crbug.com/370461)\]
 
 - Found solution for subtree modification problem, CL up for review.
 
@@ -62,7 +62,7 @@ LayoutObject to LayoutBox and made it private. (pilgrim)
 remain. Yay! (dsinclair)
 
 Region-based multi-column support (mstensho)
-\[[crbug.com/334335](http://crbug.com/334335)\]
+\[[crbug.com/334335](https://crbug.com/334335)\]
 
 - All known fuzzers fixed.
 

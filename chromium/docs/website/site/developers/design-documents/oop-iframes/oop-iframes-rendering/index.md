@@ -25,7 +25,7 @@ iframe (OOPIF) elements.
 
 This is in support of the main OOPIF design work, for which a higher level
 description can be found at
-<http://www.chromium.org/developers/design-documents/oop-iframes>.
+<https://www.chromium.org/developers/design-documents/oop-iframes>.
 
 ### A very brief primer on Blink rendering and painting
 
@@ -129,7 +129,7 @@ ownership of the texture via the glConsumeTextureCHROMIUM GPU command buffer API
 on the same mailbox.
 
 Most of this information, and much much more, can be found at
-<http://www.chromium.org/developers/design-documents/gpu-accelerated-compositing-in-chrome>.
+<https://www.chromium.org/developers/design-documents/gpu-accelerated-compositing-in-chrome>.
 
 ### The Übercompositor
 
@@ -215,7 +215,7 @@ src="/developers/design-documents/oop-iframes/oop-iframes-rendering/rendering%20
 
 Relevant changes to the representation of pages and frames in the browser
 process are described at
-<http://www.chromium.org/developers/design-documents/oop-iframes>.
+<https://www.chromium.org/developers/design-documents/oop-iframes>.
 
 IPC messages must be routed from the subframe renderer to the top-level frame
 renderer to notify it of changed texture buffers or compositor frames. Also, IPC
@@ -289,7 +289,7 @@ top-level renderer process must not be able to read the pixels that are drawn
 within the frame. The ability to do this would allow a compromised renderer
 process access to cross-site content, which is contrary to [the goals of the
 site isolation
-project](http://www.chromium.org/developers/design-documents/site-isolation).
+project](/developers/design-documents/site-isolation).
 
 We don’t believe this to be a feasible goal without the availability of
 ubercompositor. It would be very difficult, given the performance constraints of

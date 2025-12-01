@@ -22,7 +22,6 @@
 #include "chrome/browser/ash/account_manager/account_apps_availability.h"
 #include "chrome/browser/ash/account_manager/account_apps_availability_factory.h"
 #include "chrome/browser/ash/account_manager/account_manager_util.h"
-#include "chrome/browser/ash/crosapi/browser_util.h"
 #include "chrome/browser/ash/login/quick_unlock/quick_unlock_utils.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process.h"
@@ -39,7 +38,6 @@
 #include "chrome/browser/ui/webui/settings/people_handler.h"
 #include "chrome/browser/ui/webui/settings/profile_info_handler.h"
 #include "chrome/browser/ui/webui/settings/shared_settings_localized_strings_provider.h"
-#include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/branded_strings.h"
@@ -58,16 +56,17 @@
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/chromeos/devicetype_utils.h"
 #include "ui/chromeos/resources/grit/ui_chromeos_resources.h"
+#include "ui/webui/webui_util.h"
 
 namespace ash::settings {
 
 namespace mojom {
-using ::chromeos::settings::mojom::kMyAccountsSubpagePath;
 using ::chromeos::settings::mojom::kPeopleSectionPath;
 using ::chromeos::settings::mojom::Section;
 using ::chromeos::settings::mojom::Setting;
@@ -78,18 +77,14 @@ namespace {
 
 base::span<const SearchConcept> GetPeopleSearchConcepts() {
   static constexpr auto tags = std::to_array<SearchConcept>({
-      {IDS_OS_SETTINGS_TAG_PEOPLE_ACCOUNTS,
-       mojom::kPeopleSectionPath,
-       mojom::SearchResultIcon::kAvatar,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSubpage,
-       {.subpage = mojom::Subpage::kMyAccounts}},
       {IDS_OS_SETTINGS_TAG_PEOPLE_V2,
        mojom::kPeopleSectionPath,
        mojom::SearchResultIcon::kAvatar,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSection,
-       {.section = mojom::Section::kPeople}},
+       {.section = mojom::Section::kPeople},
+       {IDS_OS_SETTINGS_TAG_PEOPLE_ACCOUNTS, IDS_OS_SETTINGS_TAG_PEOPLE,
+        SearchConcept::kAltTagEnd}},
       {IDS_OS_SETTINGS_TAG_PEOPLE_ACCOUNTS_ADD_V2,
        mojom::kPeopleSectionPath,
        mojom::SearchResultIcon::kAvatar,
@@ -175,16 +170,6 @@ void AddAccountManagerPageStrings(content::WebUIDataSource* html_source,
        IDS_SETTINGS_ACCOUNT_MANAGER_CHILD_DESCRIPTION_V2},
       {"accountManagerSecondaryAccountsDisabledText",
        IDS_SETTINGS_ACCOUNT_MANAGER_SECONDARY_ACCOUNTS_DISABLED_TEXT_V2},
-      {"removeLacrosAccountDialogTitle",
-       IDS_SETTINGS_ACCOUNT_MANAGER_REMOVE_LACROS_ACCOUNT_DIALOG_TITLE},
-      {"removeLacrosAccountDialogBody",
-       IDS_SETTINGS_ACCOUNT_MANAGER_REMOVE_LACROS_ACCOUNT_DIALOG_BODY},
-      {"removeLacrosAccountDialogRemove",
-       IDS_SETTINGS_ACCOUNT_MANAGER_REMOVE_LACROS_ACCOUNT_DIALOG_REMOVE},
-      {"removeLacrosAccountDialogCancel",
-       IDS_SETTINGS_ACCOUNT_MANAGER_REMOVE_LACROS_ACCOUNT_DIALOG_CANCEL},
-      {"accountNotUsedInArcLabel",
-       IDS_SETTINGS_ACCOUNT_MANAGER_NOT_USED_IN_ARC_LABEL},
       {"accountNotAllowedInArcLabel",
        IDS_SETTINGS_ACCOUNT_MANAGER_NOT_ALLOWED_IN_ARC_LABEL},
       {"accountUseInArcButtonLabel",
@@ -193,17 +178,8 @@ void AddAccountManagerPageStrings(content::WebUIDataSource* html_source,
        IDS_SETTINGS_ACCOUNT_MANAGER_STOP_USING_IN_ARC_BUTTON_LABEL},
   };
   html_source->AddLocalizedStrings(kLocalizedStrings);
-
-  if (AccountAppsAvailability::IsArcAccountRestrictionsEnabled()) {
-    html_source->AddString("accountListDescription",
-                           l10n_util::GetStringFUTF16(
-                               IDS_SETTINGS_ACCOUNT_MANAGER_LIST_DESCRIPTION_V2,
-                               ui::GetChromeOSDeviceName()));
-  } else {
-    html_source->AddLocalizedString(
-        "accountListDescription",
-        IDS_SETTINGS_ACCOUNT_MANAGER_LIST_DESCRIPTION);
-  }
+  html_source->AddLocalizedString(
+      "accountListDescription", IDS_SETTINGS_ACCOUNT_MANAGER_LIST_DESCRIPTION);
 
   user_manager::User* user = ProfileHelper::Get()->GetUserByProfile(profile);
   DCHECK(user);
@@ -225,11 +201,6 @@ void AddAccountManagerPageStrings(content::WebUIDataSource* html_source,
       "accountManagerDescription",
       l10n_util::GetStringFUTF16(IDS_SETTINGS_ACCOUNT_MANAGER_DESCRIPTION_V2,
                                  ui::GetChromeOSDeviceName()));
-  html_source->AddBoolean("lacrosEnabled",
-                          crosapi::browser_util::IsLacrosEnabled());
-  html_source->AddBoolean(
-      "arcAccountRestrictionsEnabled",
-      AccountAppsAvailability::IsArcAccountRestrictionsEnabled());
 }
 
 void AddLockScreenPageStrings(content::WebUIDataSource* html_source,
@@ -269,7 +240,7 @@ void AddLockScreenPageStrings(content::WebUIDataSource* html_source,
       {"lockScreenOptionsLock", IDS_SETTINGS_PEOPLE_LOCK_SCREEN_OPTIONS_LOCK},
       {"lockScreenOptionsLoginLock",
        IDS_SETTINGS_PEOPLE_LOCK_SCREEN_OPTIONS_LOGIN_LOCK},
-      {"lockScreenRemovePinButton",
+      {"lockScreenRemoveButton",
        IDS_SETTINGS_PEOPLE_LOCK_SCREEN_REMOVE_PIN_BUTTON},
       {"lockScreenPasswordLabel",
        IDS_SETTINGS_PEOPLE_LOCK_SCREEN_PASSWORD_LABEL},
@@ -307,6 +278,8 @@ void AddLockScreenPageStrings(content::WebUIDataSource* html_source,
        IDS_OS_SETTINGS_PEOPLE_SET_LOCAL_PASSWORD_DIALOG_INTERNAL_ERROR},
       {"showPassword", IDS_AUTH_SETUP_SHOW_PASSWORD},
       {"hidePassword", IDS_AUTH_SETUP_HIDE_PASSWORD},
+      {"showPin", IDS_AUTH_SETUP_SHOW_PIN},
+      {"hidePin", IDS_AUTH_SETUP_HIDE_PIN},
       {"setLocalPasswordPlaceholder",
        IDS_AUTH_SETUP_SET_LOCAL_PASSWORD_PLACEHOLDER},
       {"setLocalPasswordConfirmPlaceholder",
@@ -328,9 +301,6 @@ void AddLockScreenPageStrings(content::WebUIDataSource* html_source,
   html_source->AddBoolean(
       "lockScreenHideSensitiveNotificationsSupported",
       ash::features::IsLockScreenHideSensitiveNotificationsSupported());
-  html_source->AddBoolean("changePasswordFactorSetupEnabled",
-                          ash::features::IsChangePasswordFactorSetupEnabled());
-
   html_source->AddString(
       "lockScreenSwitchLocalPasswordDescription",
       l10n_util::GetStringFUTF16(
@@ -428,21 +398,14 @@ void AddSetupPinDialogStrings(content::WebUIDataSource* html_source) {
 }
 
 void AddUsersStrings(content::WebUIDataSource* html_source) {
-  const bool kIsRevampEnabled =
-      ash::features::IsOsSettingsRevampWayfindingEnabled();
-
   webui::LocalizedString kLocalizedStrings[] = {
       {"usersModifiedByOwnerLabel", IDS_SETTINGS_USERS_MODIFIED_BY_OWNER_LABEL},
-      {"guestBrowsingLabel",
-       kIsRevampEnabled ? IDS_OS_SETTINGS_REVAMP_USERS_GUEST_BROWSING_LABEL
-                        : IDS_SETTINGS_USERS_GUEST_BROWSING_LABEL},
+      {"guestBrowsingLabel", IDS_OS_SETTINGS_USERS_GUEST_BROWSING_LABEL},
       {"settingsManagedLabel", IDS_SETTINGS_USERS_MANAGED_LABEL},
       {"showOnSigninLabel", IDS_SETTINGS_USERS_SHOW_ON_SIGNIN_LABEL},
-      {"restrictSigninLabel",
-       kIsRevampEnabled ? IDS_OS_SETTINGS_REVAMP_USERS_RESTRICT_SIGNIN_LABEL
-                        : IDS_SETTINGS_USERS_RESTRICT_SIGNIN_LABEL},
+      {"restrictSigninLabel", IDS_OS_SETTINGS_USERS_RESTRICT_SIGNIN_LABEL},
       {"restrictSigninDescription",
-       IDS_OS_SETTINGS_REVAMP_USERS_RESTRICT_SIGNIN_DESCRIPTION},
+       IDS_OS_SETTINGS_USERS_RESTRICT_SIGNIN_DESCRIPTION},
       {"deviceOwnerLabel", IDS_SETTINGS_USERS_DEVICE_OWNER_LABEL},
       {"removeUserTooltip", IDS_SETTINGS_USERS_REMOVE_USER_TOOLTIP},
       {"userRemovedMessage", IDS_SETTINGS_USERS_USER_REMOVED_MESSAGE},
@@ -495,7 +458,7 @@ bool IsSameAccount(const ::account_manager::AccountKey& account_key,
   switch (account_key.account_type()) {
     case account_manager::AccountType::kGaia:
       return account_id.GetAccountType() == AccountType::GOOGLE &&
-             account_id.GetGaiaId() == account_key.id();
+             account_id.GetGaiaId() == GaiaId(account_key.id());
     case account_manager::AccountType::kActiveDirectory:
       return account_id.GetAccountType() == AccountType::ACTIVE_DIRECTORY &&
              account_id.GetObjGuid() == account_key.id();
@@ -509,10 +472,6 @@ PeopleSection::PeopleSection(Profile* profile,
                              signin::IdentityManager* identity_manager,
                              PrefService* pref_service)
     : OsSettingsSection(profile, search_tag_registry),
-      sync_subsection_(
-          !ash::features::IsOsSettingsRevampWayfindingEnabled()
-              ? std::make_optional<SyncSection>(profile, search_tag_registry)
-              : std::nullopt),
       identity_manager_(identity_manager),
       pref_service_(pref_service),
       auth_performer_(UserDataAuthClient::Get()),
@@ -521,10 +480,6 @@ PeopleSection::PeopleSection(Profile* profile,
   auto* user = BrowserContextHelper::Get()->GetUserByBrowserContext(profile);
   if (IsGuestModeActive(user)) {
     return;
-  }
-
-  if (!ash::features::IsOsSettingsRevampWayfindingEnabled()) {
-    CHECK(sync_subsection_);
   }
 
   SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
@@ -612,12 +567,6 @@ void PeopleSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   AddGraduationStrings(html_source, profile());
 
   ::settings::AddPasswordPromptDialogStrings(html_source);
-
-  // `sync_subsection_` is initialized only if the feature revamp wayfinding is
-  // disabled.
-  if (sync_subsection_) {
-    sync_subsection_->AddLoadTimeData(html_source);
-  }
 }
 
 void PeopleSection::AddHandlers(content::WebUI* web_ui) {
@@ -641,12 +590,6 @@ void PeopleSection::AddHandlers(content::WebUI* web_ui) {
       ShouldShowParentalControlSettings(profile())) {
     web_ui->AddMessageHandler(
         std::make_unique<ParentalControlsHandler>(profile()));
-  }
-
-  // `sync_subsection_` is initialized only if the feature revamp wayfinding is
-  // disabled.
-  if (sync_subsection_) {
-    sync_subsection_->AddHandlers(web_ui);
   }
 }
 
@@ -680,38 +623,14 @@ bool PeopleSection::LogMetric(mojom::Setting setting,
 }
 
 void PeopleSection::RegisterHierarchy(HierarchyGenerator* generator) const {
+  generator->RegisterTopLevelSetting(mojom::Setting::kAddAccount);
+  generator->RegisterTopLevelSetting(mojom::Setting::kRemoveAccount);
   generator->RegisterTopLevelSetting(mojom::Setting::kSetUpParentalControls);
   generator->RegisterTopLevelSetting(mojom::Setting::kGraduation);
-
-  generator->RegisterTopLevelSubpage(
-      IDS_SETTINGS_ACCOUNT_MANAGER_PAGE_TITLE, mojom::Subpage::kMyAccounts,
-      mojom::SearchResultIcon::kAvatar, mojom::SearchResultDefaultRank::kMedium,
-      mojom::kMyAccountsSubpagePath);
-
-  // My accounts.
-  if (ash::features::IsOsSettingsRevampWayfindingEnabled()) {
-    // Accounts settings are up-leveled to the top level page if the revamp
-    // wayfind is enabled.
-    generator->RegisterTopLevelSetting(mojom::Setting::kAddAccount);
-    generator->RegisterTopLevelSetting(mojom::Setting::kRemoveAccount);
-  } else {
-    static constexpr mojom::Setting kMyAccountsSettings[] = {
-        mojom::Setting::kAddAccount,
-        mojom::Setting::kRemoveAccount,
-    };
-    RegisterNestedSettingBulk(mojom::Subpage::kMyAccounts, kMyAccountsSettings,
-                              generator);
-  }
 
   // Smart Lock -- main setting is on multidevice page, but is mirrored here
   generator->RegisterNestedAltSetting(mojom::Setting::kSmartLockOnOff,
                                       mojom::Subpage::kSecurityAndSignInV2);
-
-  // `sync_subsection_` is initialized only if the feature revamp wayfinding is
-  // disabled.
-  if (sync_subsection_) {
-    sync_subsection_->RegisterHierarchy(generator);
-  }
 }
 
 void PeopleSection::FetchAccounts() {

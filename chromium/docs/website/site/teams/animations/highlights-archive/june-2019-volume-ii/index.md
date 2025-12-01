@@ -31,7 +31,7 @@ title: June 2019, Volume II
 
 <td>Gmail, possessed?</td>
 
-<td>A spooky bug floated our way this sprint as users began reporting that their gmail and twitter pages were <a href="https://bugs.chromium.org/p/chromium/issues/detail?id=962346">scrolling without any user input</a>! After initial analysis from the input team (great work by bokan@!) identified it as a BlinkGenPropertyTrees-related Animations bug, Rob (flackr@) spent days teasing out first a reproduction, then a diagnosis (surprise, <a href="http://crbug.com/962346">it was complicated</a>), and finally landing <a href="https://chromium-review.googlesource.com/c/chromium/src/+/1256422">a fix</a> that took care of this ghostly occurrence. Who you gonna call? Rob Flack, apparently.</td>
+<td>A spooky bug floated our way this sprint as users began reporting that their gmail and twitter pages were <a href="https://bugs.chromium.org/p/chromium/issues/detail?id=962346">scrolling without any user input</a>! After initial analysis from the input team (great work by bokan@!) identified it as a BlinkGenPropertyTrees-related Animations bug, Rob (flackr@) spent days teasing out first a reproduction, then a diagnosis (surprise, <a href="https://crbug.com/962346">it was complicated</a>), and finally landing <a href="https://chromium-review.googlesource.com/c/chromium/src/+/1256422">a fix</a> that took care of this ghostly occurrence. Who you gonna call? Rob Flack, apparently.</td>
 
 <td><table></td>
 <td><tr></td>
@@ -77,7 +77,7 @@ title: June 2019, Volume II
 
 <td>Better Beziers</td>
 
-<td>Sometimes, you just have to get down into the weeds to improve browser interop. This sprint Kevin (kevers@) did exactly that as he tackled the hairy problem of bezier curves - namely, why does Chromium's implementation produce different values than other browsers? Details of Kevin's explorations could probably fill a small maths textbook, but in the end he was able to <a href="https://chromium-review.googlesource.com/c/chromium/src/+/1643973">land a new approach for Bezier estimation</a> that took half the time of the old method, made Chromium pass almost 20 previously-failing WPT tests, fix two Chrome bugs (issues <a href="http://crbug.com/591607">591607</a> and <a href="http://crbug.com/827560">827560</a>), and exposed a <a href="https://github.com/w3c/csswg-drafts/issues/4046">hole in the spec</a>. We think Monsieur Bézier would have been proud. </td>
+<td>Sometimes, you just have to get down into the weeds to improve browser interop. This sprint Kevin (kevers@) did exactly that as he tackled the hairy problem of bezier curves - namely, why does Chromium's implementation produce different values than other browsers? Details of Kevin's explorations could probably fill a small maths textbook, but in the end he was able to <a href="https://chromium-review.googlesource.com/c/chromium/src/+/1643973">land a new approach for Bezier estimation</a> that took half the time of the old method, made Chromium pass almost 20 previously-failing WPT tests, fix two Chrome bugs (issues <a href="https://crbug.com/591607">591607</a> and <a href="https://crbug.com/827560">827560</a>), and exposed a <a href="https://github.com/w3c/csswg-drafts/issues/4046">hole in the spec</a>. We think Monsieur Bézier would have been proud. </td>
 
 </tr>
 </table>

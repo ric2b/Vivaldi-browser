@@ -34,8 +34,6 @@ class PolicyRecommendationRestorerTest : public NoSessionAshTestBase {
             /*managed_prefs=*/base::MakeRefCounted<TestingPrefStore>(),
             /*supervised_user_prefs=*/base::MakeRefCounted<TestingPrefStore>(),
             /*extension_prefs=*/base::MakeRefCounted<TestingPrefStore>(),
-            /*standalone_browser_prefs=*/
-            base::MakeRefCounted<TestingPrefStore>(),
             /*user_prefs=*/base::MakeRefCounted<TestingPrefStore>(),
             recommended_prefs_,
             base::MakeRefCounted<user_prefs::PrefRegistrySyncable>(),
@@ -44,7 +42,7 @@ class PolicyRecommendationRestorerTest : public NoSessionAshTestBase {
 
   // NoSessionAshTestBase override:
   void SetUp() override {
-    TestSessionControllerClient::DisableAutomaticallyProvideSigninPref();
+    set_create_signin_pref_service(false);
     NoSessionAshTestBase::SetUp();
 
     // Register sigin prefs but not connected to pref service yet. This allows

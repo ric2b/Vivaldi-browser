@@ -21,7 +21,7 @@ you're just curious how it works), you've found the right place.
 
 You can help improve the extension docs for Google Chrome in a couple of ways:
 
-*   [File a bug](http://crbug.com/) about each doc
+*   [File a bug](https://crbug.com/) about each doc
             mistake/omission/improvement
     *   If possible, tell us the exact text you'd like to see
 *   Fix the doc yourself

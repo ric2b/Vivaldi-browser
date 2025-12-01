@@ -7,11 +7,13 @@
 
 #include <string>
 
-#include "services/webnn/public/mojom/webnn_context_provider.mojom.h"
+#include "services/webnn/public/mojom/webnn_error.mojom.h"
 
 namespace webnn {
 
 // Bad messages Mojo errors.
+inline constexpr char kBadMessageInvalidPendingConstant[] =
+    "Invalid constant buffer from renderer.";
 inline constexpr char kBadMessageInvalidGraph[] =
     "Invalid graph from renderer.";
 inline constexpr char kBadMessageInvalidTensor[] =

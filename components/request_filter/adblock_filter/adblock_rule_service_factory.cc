@@ -38,16 +38,23 @@ content::BrowserContext* RuleServiceFactory::GetBrowserContextToUse(
   return GetBrowserContextRedirectedInIncognito(context);
 }
 
-KeyedService* RuleServiceFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+RuleServiceFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
   PrefService* pref_service = g_browser_process->local_state();
+  // Test browser-process does not have prefs.
+  if (!pref_service)
+    return nullptr;
+
   std::string locale =
       pref_service->HasPrefPath(language::prefs::kApplicationLocale)
           ? pref_service->GetString(language::prefs::kApplicationLocale)
           : g_browser_process->GetApplicationLocale();
 
-  RuleServiceImpl* rule_service = new RuleServiceImpl(
-      context, base::BindRepeating(&CompileFlatRules), locale);
+  std::unique_ptr<RuleServiceImpl> rule_service =
+      std::make_unique<RuleServiceImpl>(
+          context, Profile::FromBrowserContext(context)->GetPrefs(),
+          base::BindRepeating(&CompileFlatRules), locale);
   // Avoid actually loading the service during unit tests.
   if (vivaldi::IsVivaldiRunning())
     rule_service->Load();

@@ -52,6 +52,8 @@ namespace centipede {
 
 namespace {
 
+using ::testing::HasSubstr;
+
 // A mock for CentipedeCallbacks.
 class CentipedeMock : public CentipedeCallbacks {
  public:
@@ -195,8 +197,8 @@ TEST(Centipede, ReadFirstCorpusDir) {
     CentipedeMock mock_2(env);
     MockFactory factory_2(mock_2);
     CentipedeMain(env, factory_2);
-    // Should observe all inputs in corpus_dir.
-    EXPECT_EQ(mock_2.num_inputs_, 512);
+    // Should observe all inputs in corpus_dir, plus the dummy seed input {0}.
+    EXPECT_EQ(mock_2.num_inputs_, 513);
   }
 }
 
@@ -626,14 +628,6 @@ TEST(Centipede, FunctionFilter) {
   }
 }
 
-TEST(Centipede, SkipsFuzzingWhenNoFuzzIfNoConfigIsSet) {
-  TempDir tmp_dir{test_info_->name(), "no_config"};
-  setenv("CENTIPEDE_NO_FUZZ_IF_NO_CONFIG", "true", /*replace=*/1);
-  auto observed_no_config = RunWithFunctionFilter("", tmp_dir);
-  EXPECT_TRUE(observed_no_config.empty());
-  unsetenv("CENTIPEDE_NO_FUZZ_IF_NO_CONFIG");
-}
-
 namespace {
 
 struct Crash {
@@ -730,7 +724,7 @@ TEST(Centipede, ExtraBinaries) {
 
   // Verify that we see the expected crashes.
   // The "crashes" dir must contain 3 crashy inputs, one for each binary.
-  auto crashes_dir_path = WorkDir{env}.CrashReproducerDirPath();
+  auto crashes_dir_path = WorkDir{env}.CrashReproducerDirPaths().MyShard();
   ASSERT_TRUE(std::filesystem::exists(crashes_dir_path))
       << VV(crashes_dir_path);
   EXPECT_THAT(crashes_dir_path,
@@ -742,7 +736,7 @@ TEST(Centipede, ExtraBinaries) {
   // Verify that we see the expected crash metadata.
   // The "crash-metadata" dir must contain 3 crash metadata files, one for each
   // crashy input.
-  auto crash_metadata_dir_path = WorkDir{env}.CrashMetadataDirPath();
+  auto crash_metadata_dir_path = WorkDir{env}.CrashMetadataDirPaths().MyShard();
   ASSERT_TRUE(std::filesystem::exists(crash_metadata_dir_path))
       << VV(crash_metadata_dir_path);
   EXPECT_THAT(crash_metadata_dir_path,
@@ -855,10 +849,10 @@ TEST(Centipede, UndetectedCrashingInput) {
     // the batch that were executing during the session. We simply verify the
     // number of saved inputs matches the number of executed inputs.
     const auto crashing_input_hash = Hash(mock.crashing_input());
-    const auto crashes_dir_path = std::filesystem::path(temp_dir.path())
-                                      .append("crashes")
-                                      .append("crashing_batch-")
-                                      .concat(crashing_input_hash);
+    const auto crashes_dir_path =
+        std::filesystem::path{
+            WorkDir{env}.CrashReproducerDirPaths().MyShard()} /
+        absl::StrCat("crashing_batch-", crashing_input_hash);
     EXPECT_TRUE(std::filesystem::exists(crashes_dir_path)) << crashes_dir_path;
     std::vector<std::string> found_crash_file_names;
     for (auto const &dir_ent :
@@ -906,7 +900,20 @@ TEST(Centipede, GetsSerializedTargetConfig) {
   env.binary =
       GetDataDependencyFilepath("centipede/testing/fuzz_target_with_config");
   CentipedeDefaultCallbacks callbacks(env);
-  EXPECT_EQ(callbacks.GetSerializedTargetConfig(), "fake serialized config");
+  const auto serialized_config = callbacks.GetSerializedTargetConfig();
+  ASSERT_TRUE(serialized_config.ok());
+  EXPECT_EQ(*serialized_config, "fake serialized config");
+}
+
+TEST(Centipede, GetSerializedTargetConfigProducesFailure) {
+  Environment env;
+  env.binary = absl::StrCat(
+      GetDataDependencyFilepath("centipede/testing/fuzz_target_with_config")
+          .c_str(),
+      " --simulate_failure");
+  CentipedeDefaultCallbacks callbacks(env);
+  const auto serialized_config = callbacks.GetSerializedTargetConfig();
+  EXPECT_FALSE(serialized_config.ok());
 }
 
 TEST(Centipede, CleansUpMetadataAfterStartup) {
@@ -971,6 +978,19 @@ TEST(Centipede, RunsExecuteCallbackInTheCurrentThreadWhenFuzzingWithOneThread) {
   MockFactory factory(callbacks);
   EXPECT_EQ(CentipedeMain(env, factory), EXIT_SUCCESS);
   EXPECT_TRUE(callbacks.thread_check_passed());
+}
+
+TEST(Centipede, DetectsStackOverflow) {
+  Environment env;
+  env.binary = GetDataDependencyFilepath("centipede/testing/test_fuzz_target");
+  env.stack_limit_kb = 64;
+  CentipedeDefaultCallbacks callbacks(env);
+  BatchResult batch_result;
+  const std::vector<ByteArray> inputs = {ByteArray{'s', 't', 'k'}};
+
+  ASSERT_FALSE(callbacks.Execute(env.binary, inputs, batch_result));
+  EXPECT_THAT(batch_result.log(), HasSubstr("Stack limit exceeded"));
+  EXPECT_EQ(batch_result.failure_description(), "stack-limit-exceeded");
 }
 
 }  // namespace centipede

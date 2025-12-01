@@ -2,7 +2,7 @@
 breadcrumbs:
 - - /chromium-os
   - ChromiumOS
-- - /chromium-os/developer-information-for-chrome-os-devices
+- - /chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices
   - Developer Information for ChromeOS Devices
 page_name: cr-48-chrome-notebook-developer-information
 title: Cr-48 Chrome Notebook Developer Information
@@ -13,7 +13,7 @@ title: Cr-48 Chrome Notebook Developer Information
 ## Introduction
 
 This page contains information about the [Cr-48 Chrome
-Notebook](http://www.google.com/chromeos/pilot-program-cr48.html) that is
+Notebook](https://www.google.com/chromeos/pilot-program-cr48.html) that is
 interesting and/or useful to software developers. For general information about
 getting started with developing on ChromiumOS (the open-source version of the
 software on the Chrome Notebook), see the [ChromiumOS Developer
@@ -70,16 +70,16 @@ Entering Developer mode is easy:
 Here are some pictures that might help:
 
 [<img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/cr-48-chrome-notebook-developer-information/Mario_DevSwitchTape.png"
+src="Mario_DevSwitchTape.png"
 height=225
-width=400>](/chromium-os/developer-information-for-chrome-os-devices/cr-48-chrome-notebook-developer-information/Mario_DevSwitchTape.png)
+width=400>](./Mario_DevSwitchTape.png)
 
 **Image 1: Location of Developer Switch**
 
 [<img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/cr-48-chrome-notebook-developer-information/Mario_DevSwitchOn.png"
+src="Mario_DevSwitchOn.png"
 height=225
-width=400>](/chromium-os/developer-information-for-chrome-os-devices/cr-48-chrome-notebook-developer-information/Mario_DevSwitchOn.png)
+width=400>](./Mario_DevSwitchOn.png)
 
 **Image 2: Developer Switch in "Developer Mode" position.**
 
@@ -112,7 +112,7 @@ will be bootable. If you haven't modified the original kernel or rootfs
 partitions in any way, you should have no problems. If you've made changes to
 the kernel partitions, the Cr-48 will refuse to boot that kernel and will
 display a recovery screen. You'll have to [create a recovery USB
-drive](http://www.google.com/chromeos/recovery) to restore your Cr-48 to the
+drive](https://www.google.com/chromeos/recovery) to restore your Cr-48 to the
 factory condition. If you've made changes to the rootfs partition but not the
 kernel, the Cr-48 **may** appear to boot normally, but may later suddenly reboot
 and/or display the recovery screen. This happens because the kernel verifies the
@@ -138,7 +138,7 @@ the recovery mode button.
 On the bottom of the Cr-48, directly below the ESC key, there is a tiny pinhole:
 
 [<img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/cr-48-chrome-notebook-developer-information/cr48_recovery_button.jpg">](/chromium-os/developer-information-for-chrome-os-devices/cr-48-chrome-notebook-developer-information/cr48_recovery_button.jpg)
+src="cr48_recovery_button.jpg">](./cr48_recovery_button.jpg)
 
 If you stick a paperclip into this hole, you'll feel it press a button. To force
 recovery mode, turn the Cr-48 off, press this button, and while keeping it
@@ -146,7 +146,7 @@ pressed, turn the Cr-48 on again. This sometimes requires three hands or a bit
 of contortion, but you'll know it worked when you see the recovery screen
 instead of booting normally.
 There is little use for this button other than booting a [recovery USB
-drive](http://www.google.com/chromeos/recovery). In developer mode you can run
+drive](https://www.google.com/chromeos/recovery). In developer mode you can run
 your own scripts from the recovery USB drive, but in developer mode you can
 trigger recovery mode by just pressing SPACE at boot. Still, there it is.
 
@@ -181,7 +181,7 @@ enough to make a chroot and that you're currently in the chroot.
 You'll need to get a "recovery kernel" for your ChromeOS Notebook in order to
 follow these instructions. You can download the an officially-signed Recovery
 Kernel for the [Cr-48
-Chromebook](/chromium-os/developer-information-for-chrome-os-devices/cr-48-chrome-notebook-developer-information)
+Chromebook](/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/cr-48-chrome-notebook-developer-information)
 (AKA Mario) by running the steps below from inside the chroot:
 
 ```none
@@ -376,7 +376,7 @@ directly to a USB drive, without making any modifications to it.
 ## How to install a different OS on your SSD
 
 There's an example of configuring a Cr-48 to dual-boot ChromeOS and Ubuntu
-[here](/chromium-os/developer-information-for-chrome-os-devices/cr-48-chrome-notebook-developer-information/how-to-boot-ubuntu-on-a-cr-48).
+[here](/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/cr-48-chrome-notebook-developer-information/how-to-boot-ubuntu-on-a-cr-48).
 
 ## Troubleshooting
 
@@ -397,7 +397,7 @@ it again. You might be able to workaround it by doing:
 ## Firmware
 
 See the [H2C firmware
-page](/chromium-os/developer-information-for-chrome-os-devices/h2c-firmware) for
+page](/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/h2c-firmware) for
 more details.
 
 ## What's inside?
@@ -411,12 +411,12 @@ familiar with this process.**
 Here is a rundown of the parts that are not soldered down:
 
 *   Power supply: 19.5V <img alt="image"
-            src="/chromium-os/developer-information-for-chrome-os-devices/direct-current.svg"
-            height=5> ([DC](http://en.wikipedia.org/wiki/Direct_current)) 2.05A
+            src="/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/direct-current.svg"
+            height=5> ([DC](https://en.wikipedia.org/wiki/Direct_current)) 2.05A
             <img alt="image"
-            src="/chromium-os/developer-information-for-chrome-os-devices/center-positive-polarity.svg"
+            src="/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/center-positive-polarity.svg"
             height=12> ([positive polarity
-            tip](http://en.wikipedia.org/wiki/Polarity_symbols))
+            tip](https://en.wikipedia.org/wiki/Polarity_symbols))
 *   SSD: 16GiB mSATA
 *   RAM: one slot for 204-Pin DDR3 SO-DIMM laptop memory
 
@@ -428,13 +428,13 @@ to see what the inside looks like, gaze upon this (click for a high res
 version):
 
 [<img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/cr-48-chrome-notebook-developer-information/mario-bottom-guts.jpg"
+src="mario-bottom-guts.jpg"
 height=231
-width=320>](/chromium-os/developer-information-for-chrome-os-devices/cr-48-chrome-notebook-developer-information/mario-bottom-guts.jpg)
+width=320>](./mario-bottom-guts.jpg)
 [<img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/cr-48-chrome-notebook-developer-information/mario-top-guts.jpg"
+src="mario-top-guts.jpg"
 height=102
-width=320>](/chromium-os/developer-information-for-chrome-os-devices/cr-48-chrome-notebook-developer-information/mario-top-guts.jpg)
+width=320>](./mario-top-guts.jpg)
 
 However, we acknowledge that some people like to tinker. So here's a quick guide
 to taking it apart:

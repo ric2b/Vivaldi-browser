@@ -14,15 +14,14 @@
 
 import m from 'mithril';
 import {time, Time} from '../../base/time';
-import {colorForFtrace} from '../../public/lib/colorizer';
 import {DetailsShell} from '../../widgets/details_shell';
 import {
   MultiSelectDiff,
-  Option as MultiSelectOption,
+  MultiSelectOption,
   PopupMultiSelect,
 } from '../../widgets/multiselect';
 import {PopupPosition} from '../../widgets/popup';
-import {Timestamp} from '../../frontend/widgets/timestamp';
+import {Timestamp} from '../../components/widgets/timestamp';
 import {FtraceFilter, FtraceStat} from './common';
 import {Engine} from '../../trace_processor/engine';
 import {LONG, NUM, STR, STR_NULL} from '../../trace_processor/query_result';
@@ -32,6 +31,7 @@ import {Button} from '../../widgets/button';
 import {VirtualTable, VirtualTableRow} from '../../widgets/virtual_table';
 import {Store} from '../../base/store';
 import {Trace} from '../../public/trace';
+import {materialColorScheme} from '../../components/colorizer';
 
 const ROW_H = 20;
 
@@ -174,7 +174,6 @@ export class FtraceExplorer implements m.ClassComponent<FtraceExplorerAttrs> {
         this.pagination.count,
         attrs.filterStore.state,
       );
-      attrs.trace.scheduleFullRedraw();
     });
   }
 
@@ -186,7 +185,7 @@ export class FtraceExplorer implements m.ClassComponent<FtraceExplorerAttrs> {
     return this.data.events.map((event) => {
       const {ts, name, cpu, process, args, id} = event;
       const timestamp = m(Timestamp, {ts});
-      const color = colorForFtrace(name).base.cssString;
+      const color = materialColorScheme(name).base.cssString;
 
       return {
         id,

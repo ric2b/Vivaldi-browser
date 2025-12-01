@@ -26,6 +26,7 @@ limitations under the License.
 
 #include "absl/base/thread_annotations.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/numeric/int128.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -42,14 +43,15 @@ limitations under the License.
 #include "xla/stream_executor/event_based_timer.h"
 #include "xla/stream_executor/fft.h"
 #include "xla/stream_executor/gpu/gpu_executor.h"
-#include "xla/stream_executor/gpu/gpu_kernel.h"
 #include "xla/stream_executor/kernel.h"
 #include "xla/stream_executor/kernel_spec.h"
 #include "xla/stream_executor/memory_allocation.h"
+#include "xla/stream_executor/memory_allocator.h"
 #include "xla/stream_executor/module_spec.h"
 #include "xla/stream_executor/platform.h"
 #include "xla/stream_executor/rocm/rocm_context.h"
 #include "xla/stream_executor/rocm/rocm_event.h"
+#include "xla/stream_executor/rocm/rocm_kernel.h"
 #include "xla/stream_executor/stream.h"
 #include "xla/stream_executor/stream_executor.h"
 
@@ -96,7 +98,6 @@ class RocmExecutor : public GpuExecutor {
   absl::Status SynchronousMemcpy(void* host_dst,
                                  const DeviceMemoryBase& gpu_src,
                                  uint64_t size) override;
-  absl::Status TrimGraphMemory() override;
   void DeallocateStream(Stream* stream) override;
   absl::Status EnablePeerAccessTo(StreamExecutor* other) override;
   bool CanEnablePeerAccessTo(StreamExecutor* other) override;
@@ -106,9 +107,6 @@ class RocmExecutor : public GpuExecutor {
       const override {
     return RocmExecutor::CreateDeviceDescription(device_ordinal());
   }
-  void* UnifiedMemoryAllocate(uint64_t size) override;
-
-  void UnifiedMemoryDeallocate(void* location) override;
   absl::StatusOr<std::unique_ptr<MemoryAllocation>> HostMemoryAllocate(
       uint64_t size) override;
   void HostMemoryDeallocate(void* location) override;
@@ -127,7 +125,16 @@ class RocmExecutor : public GpuExecutor {
   static absl::StatusOr<std::unique_ptr<DeviceDescription>>
   CreateDeviceDescription(int device_ordinal);
 
+  // Returns a RocmKernel pointer for a given Kernel, if the kernel is
+  // associated with this executor. Otherwise a NotFound error is returned.
+  absl::StatusOr<const RocmKernel*> GetRocmKernel(const Kernel* kernel);
+  absl::StatusOr<std::unique_ptr<MemoryAllocator>> CreateMemoryAllocator(
+      MemoryType type) override;
+
  private:
+  // Initializes Blas interfaces
+  absl::Status InitBlas();
+
   // Loads a module in HSACO format.
   absl::StatusOr<ModuleHandle> LoadModuleFromHsaco(const char* hsaco)
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(in_memory_modules_mu_);
@@ -183,6 +190,11 @@ class RocmExecutor : public GpuExecutor {
   // Lookup map for alive streams, from raw stream pointers.
   absl::flat_hash_map<void*, Stream*> alive_gpu_streams_
       ABSL_GUARDED_BY(alive_gpu_streams_mu_);
+
+  // Set of loaded kernels. This contains all kernels loaded by this executor,
+  // including in-process kernels.
+  absl::flat_hash_set<const Kernel*> loaded_kernels_
+      ABSL_GUARDED_BY(in_memory_modules_mu_);
 
   // GPU ISA version for device_.
   int version_;

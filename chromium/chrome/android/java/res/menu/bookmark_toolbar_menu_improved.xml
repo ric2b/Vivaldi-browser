@@ -11,7 +11,7 @@ found in the LICENSE file.
         <item android:id="@+id/normal_options_submenu"
               android:icon="@drawable/ic_filter_list_24dp"
               android:title="@string/sort_submenu"
-              app:showAsAction="ifRoom">
+              app:showAsAction="never">
             <menu>
                 <!-- Groups with unique ids used to show a divider. -->
                 <group android:id="@+id/sort_opts"
@@ -43,7 +43,7 @@ found in the LICENSE file.
             android:icon="@drawable/material_ic_edit_24dp"
             android:title="@string/edit_folder"
             android:visible="false"
-            app:showAsAction="ifRoom"
+            app:showAsAction="always"
             app:iconTint="@color/default_icon_color_secondary_tint_list" />
         <item
             android:id="@+id/create_new_folder_menu_id"
@@ -99,7 +99,7 @@ found in the LICENSE file.
             android:id="@+id/close_menu_id"
             android:icon="@drawable/material_ic_close_24dp"
             android:title="@string/bookmark_toolbar_close"
-            app:showAsAction="never"
+            app:showAsAction="always"
             app:iconTint="@color/default_icon_color_secondary_tint_list" />
     </group>
     <group

@@ -59,6 +59,10 @@ FaceGazeTestUtils::Config& FaceGazeTestUtils::Config::Default() {
   use_velocity_threshold_ = false;
   dialog_accepted_ = true;
 
+  // For simplicity, allow tests to recognize gestures instantly rather than
+  // requiring a valid duration.
+  use_gesture_duration_ = false;
+
   return *this;
 }
 
@@ -91,14 +95,10 @@ FaceGazeTestUtils::Config& FaceGazeTestUtils::Config::WithDialogAccepted(
   return *this;
 }
 
-FaceGazeTestUtils::Config& FaceGazeTestUtils::Config::WithGesturesToMacros(
-    const base::flat_map<FaceGazeGesture, MacroName>& gestures_to_macros) {
-  gestures_to_macros_ = std::move(gestures_to_macros);
-  return *this;
-}
-
-FaceGazeTestUtils::Config& FaceGazeTestUtils::Config::WithGestureConfidences(
+FaceGazeTestUtils::Config& FaceGazeTestUtils::Config::WithBindings(
+    const base::flat_map<FaceGazeGesture, MacroName>& gestures_to_macros,
     const base::flat_map<FaceGazeGesture, int>& gesture_confidences) {
+  gestures_to_macros_ = std::move(gestures_to_macros);
   gesture_confidences_ = std::move(gesture_confidences);
   return *this;
 }
@@ -421,6 +421,7 @@ void FaceGazeTestUtils::ConfigureFaceGaze(const Config& config) {
   SetCursorAcceleration(config.use_cursor_acceleration());
   SetLandmarkWeights(config.use_landmark_weights());
   SetVelocityThreshold(config.use_velocity_threshold());
+  SetGestureDuration(config.use_gesture_duration());
 
   // By default the cursor is placed at the center of the screen. To
   // initialize FaceGaze, move the cursor somewhere, then move it to the
@@ -510,6 +511,12 @@ void FaceGazeTestUtils::SetGestureRepeatDelayMs(int delay) {
   std::string script = base::StringPrintf(
       "faceGazeTestSupport.setGestureRepeatDelayMs(%d);", delay);
   ExecuteAccessibilityCommonScript(script);
+}
+
+void FaceGazeTestUtils::SetGestureDuration(bool use_duration) {
+  std::string true_script = "faceGazeTestSupport.setGestureDuration(true);";
+  std::string false_script = "faceGazeTestSupport.setGestureDuration(false);";
+  ExecuteAccessibilityCommonScript(use_duration ? true_script : false_script);
 }
 
 }  // namespace ash

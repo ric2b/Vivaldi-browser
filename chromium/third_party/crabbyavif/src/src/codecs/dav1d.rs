@@ -56,6 +56,15 @@ impl Decoder for Dav1d {
         settings.n_threads = i32::try_from(config.max_threads).unwrap_or(1);
         settings.operating_point = config.operating_point as i32;
         settings.all_layers = if config.all_layers { 1 } else { 0 };
+        // Set a maximum frame size limit to avoid OOM'ing fuzzers. In 32-bit builds, if
+        // frame_size_limit > 8192 * 8192, dav1d reduces frame_size_limit to 8192 * 8192 and logs
+        // a message, so we set frame_size_limit to at most 8192 * 8192 to avoid the dav1d_log
+        // message.
+        settings.frame_size_limit = if cfg!(target_pointer_width = "32") {
+            std::cmp::min(config.image_size_limit, 8192 * 8192)
+        } else {
+            config.image_size_limit
+        };
 
         let mut dec = MaybeUninit::uninit();
         let ret = unsafe { dav1d_open(dec.as_mut_ptr(), (&settings) as *const _) };

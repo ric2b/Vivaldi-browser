@@ -52,14 +52,14 @@ even more important to Chromium OS:
 ## Solution: Encryption
 
 Since Chromium OS is built on Linux, we can leverage existing solutions for
-[encrypting](http://en.wikipedia.org/wiki/Disk_encryption_theory) the user's
+[encrypting](https://en.wikipedia.org/wiki/Disk_encryption_theory) the user's
 data at the underlying operating system level and make sure it is automatic and
 mandatory. Given the available implementation choices, many possible approaches
 were considered (see [Appendix
 B](/chromium-os/chromiumos-design-docs/protecting-cached-user-data#Appendix_D_Designs_considered)
 for details). Of those approaches, we chose a solution that provides file
 system-level encryption of [home
-directories](http://en.wikipedia.org/wiki/Home_directory) for each user on a
+directories](https://en.wikipedia.org/wiki/Home_directory) for each user on a
 device.
 
 Encrypting each user's home directory means that all of the data stored and
@@ -164,14 +164,14 @@ concatenated with the user's passphrase. The first 128 bits of the digest are
 used as the user's "weak password hash."
 
 Often, user passwords will only contain anywhere from [18 bits to 30 bits of
-entropy](http://en.wikipedia.org/wiki/Password_strength#Human-generated_passwords)
+entropy](https://en.wikipedia.org/wiki/Password_strength#Human-generated_passwords)
 starting at 8 characters in length. Spreading that entropy over a hash and
 halving it is not really that great. At the very least, adding a salt means that
 it will be quite costly to precompute a dictionary of hashes, but that still
 isn't perfect if an attacker has the time and access to the local salt in order
 to attempt to brute force the local password. There are two other useful options
 that can be pursued to help dissuade offline attacks. The first is that [key
-strengthening](http://en.wikipedia.org/wiki/Key_strengthening) can be used to
+strengthening](https://en.wikipedia.org/wiki/Key_strengthening) can be used to
 increase the amount of time it takes to calculate a hash from a dictionary-based
 brute force attack that uses repeated passes through a cryptographic hash. The
 other option is to make use of a TPM device when it is present, such as in
@@ -482,7 +482,7 @@ Many threats are not dealt with through this design:
             suspended or logged in and screen locking is disabled.
 *   An attacker will be able to dump all RAM from a suspended machine
             using a [cold boot
-            attack](http://en.wikipedia.org/wiki/Cold_boot_attack) exposing any
+            attack](https://en.wikipedia.org/wiki/Cold_boot_attack) exposing any
             credentials in memory and the disk encryption key schedule until
             that can be fixed.
 *   An attacker who steals a running machine with screen locking will be

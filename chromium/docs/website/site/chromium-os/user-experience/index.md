@@ -6,4 +6,4 @@ page_name: user-experience
 title: User Experience
 ---
 
-Please visit <http://chromium.org/user-experience> for more information
+Please visit <https://www.chromium.org/user-experience> for more information

@@ -1,9 +1,8 @@
 # Copyright 2024 The Chromium Authors
 # Use of this source code is governed by a BSD - style license that can be
 # found in the LICENSE file.
-import("//build/config/chromeos/ui_mode.gni")
 
-assert(is_chromeos_ash)
+assert(is_chromeos)
 
 source_set("session_api") {
   sources = [
@@ -29,6 +28,7 @@ source_set("session_api") {
   ]
 
   deps = [
+    "//ash/constants",
     "//base",
     "//chromeos/ash/components/boca/proto",
     "//components/signin/public/identity_manager",
@@ -55,6 +55,7 @@ source_set("unit_tests") {
 
   deps = [
     ":session_api",
+    "//ash/constants",
     "//base",
     "//base/test:test_support",
     "//chromeos/ash/components/boca/proto",

@@ -78,8 +78,10 @@ struct cross_impl<Derived, OtherDerived, 2> {
  * spanned by the two vectors.
  *
  * \note With complex numbers, the cross product is implemented as
- * \f$ (\mathbf{a}+i\mathbf{b}) \times (\mathbf{c}+i\mathbf{d}) = (\mathbf{a} \times \mathbf{c} - \mathbf{b} \times
- * \mathbf{d}) - i(\mathbf{a} \times \mathbf{d} + \mathbf{b} \times \mathbf{c})\f$
+ * \f[ (\mathbf{a}+i\mathbf{b}) \times (\mathbf{c}+i\mathbf{d}) = (\mathbf{a} \times \mathbf{c} - \mathbf{b} \times
+ * \mathbf{d}) - i(\mathbf{a} \times \mathbf{d} + \mathbf{b} \times \mathbf{c}).\f]
+ * This definition preserves the orthogonality condition that \f$\mathbf{u} \cdot (\mathbf{u} \times \mathbf{v}) =
+ * \mathbf{v} \cdot (\mathbf{u} \times \mathbf{v}) = 0\f$.
  *
  * \sa MatrixBase::cross3()
  */

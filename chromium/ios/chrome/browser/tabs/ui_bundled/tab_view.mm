@@ -141,9 +141,9 @@ UIImage* DefaultFaviconImage() {
   if ((self = [super initWithFrame:CGRectZero])) {
     [self setOpaque:NO];
     [self createCommonViews];
-
-    if (!emptyView)
+    if (!emptyView) {
       [self createButtonsAndLabel];
+    }
 
     // -setSelected only calls -updateStyleForSelected if the selected state
     // changes.  `isSelected` defaults to NO, so if `selected` is also NO,
@@ -191,8 +191,9 @@ UIImage* DefaultFaviconImage() {
 }
 
 - (void)setTitle:(NSString*)title {
-  if ([_titleLabel.text isEqualToString:title])
+  if ([_titleLabel.text isEqualToString:title]) {
     return;
+  }
   _titleLabel.text = title;
   [_closeButton setAccessibilityValue:title];
 }
@@ -206,8 +207,9 @@ UIImage* DefaultFaviconImage() {
   if (IsVivaldiRunning() && !favicon) {
     favicon = [UIImage imageNamed:vNTPSDFallbackFavicon];
   } else {
-  if (!favicon)
+  if (!favicon) {
     favicon = DefaultFaviconImage();
+  }
   } // End Vivaldi
 
   [_faviconView setImage:favicon];
@@ -432,12 +434,14 @@ UIImage* DefaultFaviconImage() {
   } // End Vivaldi
 
   if (selected) {
-    if (_pointerInteraction)
+    if (_pointerInteraction) {
       [self removeInteraction:_pointerInteraction];
+    }
   } else {
-    if (!_pointerInteraction)
+    if (!_pointerInteraction) {
       _pointerInteraction =
           [[UIPointerInteraction alloc] initWithDelegate:self];
+    }
     [self addInteraction:_pointerInteraction];
   }
 

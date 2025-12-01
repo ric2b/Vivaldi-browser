@@ -35,6 +35,7 @@ export class CSSOverviewPanel extends UI.Panel.Panel implements SDK.TargetManage
 
   constructor(controller: OverviewController) {
     super('css-overview');
+    this.registerRequiredCSS(cssOverviewStyles);
 
     this.element.classList.add('css-overview-panel');
 
@@ -199,9 +200,5 @@ export class CSSOverviewPanel extends UI.Panel.Panel implements SDK.TargetManage
 
   #overviewCompleted(): void {
     this.#renderOverviewCompletedView();
-  }
-  override wasShown(): void {
-    super.wasShown();
-    this.registerCSSFiles([cssOverviewStyles]);
   }
 }

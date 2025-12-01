@@ -39,7 +39,7 @@ void CosmeticFilter::Create(
   mojo::MakeSelfOwnedReceiver(std::move(cosmetic_filter), std::move(receiver));
 }
 
-CosmeticFilter::CosmeticFilter(int process_id, int frame_id)
+CosmeticFilter::CosmeticFilter(content::ChildProcessId process_id, int frame_id)
     : process_id_(process_id), frame_id_(frame_id) {}
 
 CosmeticFilter::~CosmeticFilter() = default;
@@ -53,7 +53,7 @@ void CosmeticFilter::ShouldAllowWebRTC(const ::GURL& document_url,
                                        const std::vector<::GURL>& ice_servers,
                                        ShouldAllowWebRTCCallback callback) {
   content::RenderFrameHost* frame =
-      content::RenderFrameHost::FromID(process_id_, frame_id_);
+      content::RenderFrameHost::FromID(process_id_.value(), frame_id_);
   if (ice_servers.empty() || !frame || !document_url.SchemeIsHTTPOrHTTPS()) {
     std::move(callback).Run(true);
     return;

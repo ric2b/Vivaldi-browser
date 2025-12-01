@@ -14,13 +14,15 @@
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
+#include "components/datasource/vivaldi_data_url_utils.h"
+
+#include "components/signature/vivaldi_signature.h"
 #include "net/base/load_flags.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/simple_url_loader.h"
-#include "components/datasource/vivaldi_data_url_utils.h"
-#include "components/signature/vivaldi_signature.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 #if !BUILDFLAG(IS_IOS)
 #include "chrome/browser/profiles/profile.h"
@@ -35,6 +37,15 @@
 #endif
 
 namespace direct_match {
+const std::set<std::string> blocker_extension_ids{
+    "cfhdojbkjhnklbpkdaibdccddilifddb",  // Adblock Plus
+    "cjpalhdlnbpafiamejdnhcphjbkeiagm",  // uBlock Origin
+    "bgnkhhnnamicmpeenaelnjfhikgbkllg",  // AGuard Plus
+    "bkdgflcldnnnapblkhphbgpggdiikppg",  // DDG
+    "mlomiejdfkolichcflejclcbmpeaniij",  // Ghostery
+    "ddkjiahejlhfcafbddmgiahcphecmpfh",  // uBlock Lite
+    "pkehgijcmpdhfbdbbnkijodmdjhbjlgp"   // Privacy Badger
+};
 
 namespace {
 const std::string kDirectMatchImageDirectory = "VivaldiDirectMatchIcons";
@@ -70,8 +81,7 @@ void WriteIconFileThread(base::FilePath image_path,
                          std::unique_ptr<std::string> response_body) {
   if (!base::WriteFile(image_path, *response_body)) {
     LOG(ERROR) << "Failed to write to " << image_path.value() << " "
-               << response_body->size()
-               << " bytes";
+               << response_body->size() << " bytes";
   }
 }
 
@@ -98,8 +108,12 @@ DirectMatchService::Observer::~Observer() = default;
 
 #if BUILDFLAG(IS_IOS)
 void DirectMatchService::Load(
-    const scoped_refptr<network::SharedURLLoaderFactory>& url_loader_factory) {
+    const scoped_refptr<network::SharedURLLoaderFactory>& url_loader_factory,
+    PrefService* prefs) {
+  prefs_ = prefs;
+
   int dir_key = ios::DIR_USER_DATA;
+
   // Use the determined directory key to get the user data directory.
   if (!base::PathService::Get(dir_key, &user_data_dir_)) {
     user_data_dir_ = base::FilePath();
@@ -107,25 +121,24 @@ void DirectMatchService::Load(
   user_data_dir_ = user_data_dir_.AppendASCII(kDirectMatchImageDirectory);
   url_loader_factory_ = url_loader_factory;
   base::ThreadPool::PostTask(
-       FROM_HERE, {base::MayBlock()},
-       base::BindOnce(base::IgnoreResult(&base::CreateDirectory),
-                      user_data_dir_));
+      FROM_HERE, {base::MayBlock()},
+      base::BindOnce(base::IgnoreResult(&base::CreateDirectory),
+                     user_data_dir_));
+  DirectMatchService::LoadHiddenProviders();
   DirectMatchService::RunDirectMatchDownload();
 }
 #else
 void DirectMatchService::Load(Profile* profile) {
-  if (!profile) {
-    return;
-  }
+  prefs_ = profile->GetPrefs();
   user_data_dir_ = base::FilePath(profile->GetPath().Append(
       vivaldi_image_store::kDirectMatchImageDirectory));
 #if BUILDFLAG(IS_ANDROID)
-    int dir_key = chrome::DIR_USER_DATA;
-    // Use the determined directory key to get the user data directory.
-    if (!base::PathService::Get(dir_key, &user_data_dir_)) {
-        user_data_dir_ = base::FilePath();
-    }
-    user_data_dir_ = user_data_dir_.AppendASCII(kDirectMatchImageDirectory);
+  int dir_key = chrome::DIR_USER_DATA;
+  // Use the determined directory key to get the user data directory.
+  if (!base::PathService::Get(dir_key, &user_data_dir_)) {
+    user_data_dir_ = base::FilePath();
+  }
+  user_data_dir_ = user_data_dir_.AppendASCII(kDirectMatchImageDirectory);
 #endif
   url_loader_factory_ = profile->GetDefaultStoragePartition()
                             ->GetURLLoaderFactoryForBrowserProcess();
@@ -133,8 +146,10 @@ void DirectMatchService::Load(Profile* profile) {
       FROM_HERE, {base::MayBlock()},
       base::BindOnce(base::IgnoreResult(&base::CreateDirectory),
                      user_data_dir_));
+  DirectMatchService::LoadHiddenProviders();
   DirectMatchService::RunDirectMatchDownload();
 }
+
 #endif
 
 void DirectMatchService::AddObserver(Observer* observer) {
@@ -192,12 +207,20 @@ void DirectMatchService::RunDirectMatchDownload() {
   }
 }
 
+void DirectMatchService::LoadHiddenProviders() {
+  auto& hidden_dm_partners = prefs_->GetList(
+      vivaldiprefs::kAddressBarSearchHiddenDirectMatchProviders);
+  for (const auto& item : hidden_dm_partners) {
+    if (item.is_int()) {
+      hidden_direct_matches_.insert(item.GetInt());
+    }
+  }
+}
+
 void DirectMatchService::OnDirectMatchDownloadDone(
     const size_t loader_idx,
     std::unique_ptr<std::string> response_body) {
-
   if (!response_body || response_body->empty()) {
-
     report_backoff_.InformOfRequest(false);
     base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE,
@@ -219,7 +242,7 @@ void DirectMatchService::OnDirectMatchDownloadDone(
   absl::optional<base::Value> json =
       base::JSONReader::Read(*response_body, base::JSON_ALLOW_TRAILING_COMMAS |
                                                  base::JSON_ALLOW_COMMENTS);
- if (!json) {
+  if (!json) {
     LOG(ERROR) << "Invalid Direct Match list JSON";
 
     return;
@@ -255,6 +278,8 @@ void DirectMatchService::OnDirectMatchDownloadDone(
     }
 
     DirectMatchService::DirectMatchUnit data(unit);
+    int id = block.GetDict().FindInt("id").value_or(0);
+    data.id = std::move(id);
     direct_match_units_.push_back(std::move(data));
   }
   LOG(INFO) << "Downloaded Direct Match list from server.";
@@ -369,7 +394,7 @@ void DirectMatchService::RemoveUnusedIcons(
   // Notify observers that all icons are available.
   for (Observer& observer : observers_) {
     observer.OnFinishedDownloadingDirectMatchUnitsIcon();
-   }
+  }
 }
 
 /* static */
@@ -388,8 +413,8 @@ std::string DirectMatchService::GetIconPath(std::string image_url) {
   if (!base::PathService::Get(dir_key, &iconPath)) {
     iconPath = base::FilePath();
   }
-  iconPath = iconPath.AppendASCII(kDirectMatchImageDirectory)
-                     .AppendASCII(image_name);
+  iconPath =
+      iconPath.AppendASCII(kDirectMatchImageDirectory).AppendASCII(image_name);
   return iconPath.AsUTF8Unsafe();
 #else
   std::string data_url = vivaldi_data_url_utils::MakeUrl(
@@ -400,7 +425,7 @@ std::string DirectMatchService::GetIconPath(std::string image_url) {
 
 std::vector<const DirectMatchService::DirectMatchUnit*>
 DirectMatchService::GetMatchingUnits(
-  std::function<bool(const DirectMatchUnit&)> predicate) const {
+    std::function<bool(const DirectMatchUnit&)> predicate) const {
   std::vector<const DirectMatchService::DirectMatchUnit*> matching_units;
   for (const auto& unit : direct_match_units_) {
     if (predicate(unit)) {
@@ -416,14 +441,20 @@ DirectMatchService::GetMatchingUnits(
 }
 
 std::pair<DirectMatchService::DirectMatchUnit*, bool>
-DirectMatchService::GetDirectMatch(
-    std::string query) {
+DirectMatchService::GetDirectMatch(std::string query) {
   std::u16string lowercase_query =
       base::i18n::FoldCase(base::UTF8ToUTF16(query));
   DirectMatchService::DirectMatchUnit* candidate = nullptr;
   bool candidate_allowed_to_be_default_match = false;
 
   for (auto& unit : direct_match_units_) {
+    // Tracker blocker extension is installed
+    if (!unit.blocker_safe && installed_blocker_extension_ids_.size() > 0)
+      continue;
+
+    if (hidden_direct_matches_.count(unit.id) > 0)
+      continue;
+
     if (!unit.display_locations.address_bar)
       continue;
     bool has_banned_word =
@@ -436,17 +467,17 @@ DirectMatchService::GetDirectMatch(
       continue;
     }
 
-    auto updateCandidate =
-        [&candidate, &unit, &query, &candidate_allowed_to_be_default_match]() {
+    auto updateCandidate = [&candidate, &unit, &query,
+                            &candidate_allowed_to_be_default_match]() {
       bool unit_allowed_to_be_default_match =
           // VAB-10348 fuzzy match can not be default
-          base::StartsWith(unit.name,
-                          query,
-                          base::CompareCase::INSENSITIVE_ASCII) &&
+          base::StartsWith(unit.name, query,
+                           base::CompareCase::INSENSITIVE_ASCII) &&
           // VB-111392 Allow match shorter than match_offset
           query.length() >= unit.match_offset;
-      if (!candidate || (!candidate_allowed_to_be_default_match &&
-            unit_allowed_to_be_default_match) ||
+      if (!candidate ||
+          (!candidate_allowed_to_be_default_match &&
+           unit_allowed_to_be_default_match) ||
           // Example: typing 'ali' should match on AliExpress with match_offset
           // 3 instead of Alibaba with match_offset 4.
           candidate->match_offset > unit.match_offset) {
@@ -469,7 +500,8 @@ DirectMatchService::GetDirectMatch(
     } else {
       for (base::Value& alternative_name : unit.alternative_names) {
         std::u16string lowercase_alternative_name =
-            base::i18n::FoldCase(base::UTF8ToUTF16(alternative_name.GetString()))
+            base::i18n::FoldCase(
+                base::UTF8ToUTF16(alternative_name.GetString()))
                 .substr(0, match_len);
         // Return unit if distance is ok on alternative name.
         if (qwerty_weighted_distance_.QwertyWeightedDamerauLevenshtein(
@@ -480,23 +512,60 @@ DirectMatchService::GetDirectMatch(
       }
     }
   }
-  return { candidate, candidate_allowed_to_be_default_match };
+  return {candidate, candidate_allowed_to_be_default_match};
+}
+
+void DirectMatchService::ResetHiddenDirectMatch() {
+  base::Value::List hidden_dm;
+  prefs_->SetList(vivaldiprefs::kAddressBarSearchHiddenDirectMatchProviders,
+                  std::move(hidden_dm));
+  hidden_direct_matches_.clear();
+}
+
+bool DirectMatchService::HideDirectMatchFromOmnibox(std::string url) {
+  GURL hide_url(url);
+
+  for (auto& unit : direct_match_units_) {
+    GURL redirect_url(unit.redirect_url);
+    if (redirect_url == hide_url) {
+      hidden_direct_matches_.insert(unit.id);
+      base::Value::List hidden_dm;
+      for (auto id : hidden_direct_matches_)
+        hidden_dm.Append(id);
+
+      prefs_->SetList(vivaldiprefs::kAddressBarSearchHiddenDirectMatchProviders,
+                      std::move(hidden_dm));
+      return true;
+    }
+  }
+  return false;
 }
 
 std::vector<const DirectMatchService::DirectMatchUnit*>
 DirectMatchService::GetDirectMatchesForCategory(size_t category_id) const {
   return GetMatchingUnits([category_id](const DirectMatchUnit& unit) {
-    return unit.display_locations.sd_dialog && unit.category == category_id;
+    return unit.display_locations.sd_dialog && unit.category == category_id &&
+           unit.category != kInvalidCategory;
   });
 }
 
 std::vector<const DirectMatchService::DirectMatchUnit*>
 DirectMatchService::GetPopularSites() const {
-
   std::vector<const DirectMatchService::DirectMatchUnit*> matching_units;
   return GetMatchingUnits([](const DirectMatchUnit& unit) {
-    return unit.display_locations.sd_dialog;
+    return unit.display_locations.sd_dialog &&
+           unit.category != kInvalidCategory;
   });
+}
+
+void DirectMatchService::OnExtensionUnloaded(std::string id) {
+  installed_blocker_extension_ids_.erase(id);
+}
+
+void DirectMatchService::OnExtensionReady(std::string id) {
+  if (blocker_extension_ids.count(id) > 0) {
+    installed_blocker_extension_ids_.insert(id);
+  }
 }
 
 /**
@@ -548,8 +617,10 @@ DirectMatchService::DirectMatchUnit::DirectMatchUnit(base::Value::Dict* unit) {
     } else if (key == "blocked_names") {
       blocked_names = std::move(value.GetList());
     } else if (key == "category") {
-      category = static_cast<size_t>(value.GetInt());
-    }  else if (key == "position") {
+      if (value.GetInt() && value.GetInt() > 0) {
+        category = static_cast<size_t>(value.GetInt());
+      }
+    } else if (key == "position") {
       position = static_cast<size_t>(value.GetInt());
     } else if (key == "display_locations") {
       if (auto* display_dict = value.GetIfDict()) {
@@ -561,6 +632,8 @@ DirectMatchService::DirectMatchUnit::DirectMatchUnit(base::Value::Dict* unit) {
           display_locations.sd_dialog = *sd_dialog_value;
         }
       }
+    } else if (key == "blocker_safe") {
+      blocker_safe = value.GetBool();
     }
   }
 }

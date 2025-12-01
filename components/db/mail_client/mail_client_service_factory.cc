@@ -65,7 +65,8 @@ content::BrowserContext* MailClientServiceFactory::GetBrowserContextToUse(
   return GetBrowserContextRedirectedInIncognito(context);
 }
 
-KeyedService* MailClientServiceFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+MailClientServiceFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
   std::unique_ptr<MailClientService> mail_client_service(
       new MailClientService());
@@ -77,7 +78,7 @@ KeyedService* MailClientServiceFactory::BuildServiceInstanceFor(
   if (!mail_client_service->Init(false, param)) {
     return nullptr;
   }
-  return mail_client_service.release();
+  return mail_client_service;
 }
 
 bool MailClientServiceFactory::ServiceIsNULLWhileTesting() const {

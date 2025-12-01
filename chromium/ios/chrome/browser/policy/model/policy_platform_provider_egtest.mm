@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#import "ios/testing/earl_grey/earl_grey_test.h"
-
 #import <memory>
 
 #import "base/json/json_string_value_serializer.h"
@@ -19,6 +17,7 @@
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
 #import "ios/testing/earl_grey/app_launch_configuration.h"
+#import "ios/testing/earl_grey/earl_grey_test.h"
 #import "ui/base/l10n/l10n_util.h"
 
 namespace {
@@ -93,7 +92,7 @@ AppLaunchConfiguration GenerateAppLaunchConfiguration(std::string policy_data,
       GetPlatformPolicy(policy::key::kDefaultSearchProviderName);
   GREYAssertTrue(searchValue && searchValue->is_string(),
                  @"searchValue was not of type string");
-  GREYAssertEqual(searchValue->GetString(), "Test",
+  GREYAssertEqual(searchValue->GetString(), std::string{"Test"},
                   @"searchValue had an unexpected value");
 
   std::unique_ptr<base::Value> suggestValue =
@@ -120,7 +119,7 @@ AppLaunchConfiguration GenerateAppLaunchConfiguration(std::string policy_data,
       GetPlatformPolicy("NotARegisteredPolicy");
   GREYAssertTrue(unknownValue && unknownValue->is_string(),
                  @"unknownValue was not of type string");
-  GREYAssertEqual(unknownValue->GetString(), "Unknown",
+  GREYAssertEqual(unknownValue->GetString(), std::string{"Unknown"},
                   @"unknownValue had an unexpected value");
 }
 

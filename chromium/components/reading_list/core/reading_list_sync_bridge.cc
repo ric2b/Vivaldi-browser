@@ -7,6 +7,7 @@
 #include <set>
 #include <utility>
 
+#include "base/auto_reset.h"
 #include "base/check_op.h"
 #include "base/functional/bind.h"
 #include "base/memory/scoped_refptr.h"
@@ -359,7 +360,7 @@ void ReadingListSyncBridge::ApplyDisableSyncChanges(
 
 bool ReadingListSyncBridge::IsEntityDataValid(
     const syncer::EntityData& entity_data) const {
-  CHECK(entity_data.specifics.ByteSize() != 0);
+  CHECK(entity_data.specifics.ByteSizeLong() != 0);
 
   return ReadingListEntry::IsSpecificsValid(
       entity_data.specifics.reading_list());

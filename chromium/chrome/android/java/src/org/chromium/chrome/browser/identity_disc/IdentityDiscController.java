@@ -19,6 +19,7 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.NativeInitObserver;
 import org.chromium.chrome.browser.ntp.NewTabPage;
@@ -26,19 +27,22 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.MainSettings;
 import org.chromium.chrome.browser.settings.SettingsNavigationFactory;
 import org.chromium.chrome.browser.signin.SigninAndHistorySyncActivityLauncherImpl;
-import org.chromium.chrome.browser.signin.SyncConsentActivityLauncherImpl;
 import org.chromium.chrome.browser.signin.services.DisplayableProfileData;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.services.ProfileDataCache;
 import org.chromium.chrome.browser.signin.services.SigninManager;
+import org.chromium.chrome.browser.sync.SyncServiceFactory;
+import org.chromium.chrome.browser.sync.settings.SyncSettingsUtils;
+import org.chromium.chrome.browser.sync.settings.SyncSettingsUtils.SyncError;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.toolbar.ButtonData;
 import org.chromium.chrome.browser.toolbar.ButtonData.ButtonSpec;
 import org.chromium.chrome.browser.toolbar.ButtonDataImpl;
 import org.chromium.chrome.browser.toolbar.ButtonDataProvider;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant;
-import org.chromium.chrome.browser.ui.signin.BottomSheetSigninAndHistorySyncCoordinator;
-import org.chromium.chrome.browser.ui.signin.SigninUtils;
+import org.chromium.chrome.browser.ui.signin.BottomSheetSigninAndHistorySyncConfig;
+import org.chromium.chrome.browser.ui.signin.BottomSheetSigninAndHistorySyncConfig.NoAccountSigninMode;
+import org.chromium.chrome.browser.ui.signin.BottomSheetSigninAndHistorySyncConfig.WithAccountSigninMode;
 import org.chromium.chrome.browser.ui.signin.account_picker.AccountPickerBottomSheetStrings;
 import org.chromium.chrome.browser.ui.signin.history_sync.HistorySyncConfig;
 import org.chromium.chrome.browser.user_education.IphCommandBuilder;
@@ -52,6 +56,7 @@ import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.identitymanager.IdentityManager;
 import org.chromium.components.signin.identitymanager.PrimaryAccountChangeEvent;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
+import org.chromium.components.sync.SyncService;
 
 /**
  * Handles displaying IdentityDisc on toolbar depending on several conditions (user sign-in state,
@@ -61,15 +66,20 @@ public class IdentityDiscController
         implements NativeInitObserver,
                 ProfileDataCache.Observer,
                 IdentityManager.Observer,
+                SyncService.SyncStateChangedListener,
                 ButtonDataProvider {
     // Context is used for fetching resources and launching preferences page.
     private final Context mContext;
     private ActivityLifecycleDispatcher mActivityLifecycleDispatcher;
     private final ObservableSupplier<Profile> mProfileSupplier;
     private final Callback<Profile> mProfileSupplierObserver = this::setProfile;
+    private Profile mProfile;
 
     // We observe IdentityManager to receive primary account state change notifications.
     private IdentityManager mIdentityManager;
+
+    // SyncService is observed to update mIdentityError.
+    private SyncService mSyncService;
 
     // ProfileDataCache facilitates retrieving profile picture.
     private ProfileDataCache mProfileDataCache;
@@ -79,6 +89,8 @@ public class IdentityDiscController
     private boolean mNativeIsInitialized;
 
     private boolean mIsTabNtp;
+
+    private @SyncError int mIdentityError = SyncError.NO_ERROR;
 
     /**
      * @param context The Context for retrieving resources, launching preference activity, etc.
@@ -109,7 +121,7 @@ public class IdentityDiscController
                         /* isEnabled= */ true,
                         AdaptiveToolbarButtonVariant.UNKNOWN,
                         /* tooltipTextResId= */ Resources.ID_NULL,
-                        /* showHoverHighlight= */ true);
+                        /* showHoverhighlight= */ true);
     }
 
     /** Registers itself to observe sign-in and sync status events. */
@@ -273,8 +285,41 @@ public class IdentityDiscController
             mIdentityManager = null;
         }
 
+        if (mSyncService != null) {
+            mSyncService.removeSyncStateChangedListener(this);
+            mSyncService = null;
+        }
+
         if (mNativeIsInitialized) {
             mProfileSupplier.removeObserver(mProfileSupplierObserver);
+            mProfile = null;
+        }
+    }
+
+    /** {@link SyncService.SyncStateChangedListener} implementation. */
+    @Override
+    public void syncStateChanged() {
+        if (mProfile == null) {
+            return;
+        }
+
+        @SyncError int error = SyncSettingsUtils.getIdentityError(mProfile);
+        if (error == mIdentityError
+                || !ChromeFeatureList.isEnabled(ChromeFeatureList.UNO_PHASE_2_FOLLOW_UP)) {
+            // Nothing changed.
+            return;
+        }
+        mIdentityError = error;
+
+        CoreAccountInfo coreAccountInfo = getSignedInAccountInfo();
+        if (coreAccountInfo != null) {
+            ensureProfileDataCache();
+            mProfileDataCache.setBadge(
+                    coreAccountInfo.getEmail(),
+                    mIdentityError == SyncError.NO_ERROR
+                            ? null
+                            : ProfileDataCache.createToolbarIdentityDiscBadgeConfig(
+                                    mContext, R.drawable.ic_error_badge_14dp));
         }
     }
 
@@ -308,28 +353,35 @@ public class IdentityDiscController
      * mIdentityManager is updated with the profile, as set to null if profile is off-the-record.
      */
     private void setProfile(Profile profile) {
+        mProfile = profile;
+
+        if (mSyncService != null) {
+            mSyncService.removeSyncStateChangedListener(this);
+        }
+
         if (mIdentityManager != null) {
             mIdentityManager.removeObserver(this);
         }
 
         if (profile.isOffTheRecord()) {
             mIdentityManager = null;
+            mSyncService = null;
         } else {
             mIdentityManager = IdentityServicesProvider.get().getIdentityManager(profile);
             mIdentityManager.addObserver(this);
+
+            mSyncService = SyncServiceFactory.getForProfile(profile);
+            if (mSyncService != null) {
+                mSyncService.addSyncStateChangedListener(this);
+            }
+
             notifyObservers(true);
         }
     }
 
     private String getContentDescription(@Nullable String email) {
         if (email == null) {
-            if (SigninUtils.shouldShowNewSigninFlow()) {
-                return mContext.getString(
-                        R.string.accessibility_toolbar_btn_signed_out_identity_disc);
-            } else {
-                return mContext.getString(
-                        R.string.accessibility_toolbar_btn_signed_out_with_sync_identity_disc);
-            }
+            return mContext.getString(R.string.accessibility_toolbar_btn_signed_out_identity_disc);
         }
 
         DisplayableProfileData profileData = mProfileDataCache.getProfileDataOrDefault(email);
@@ -356,38 +408,33 @@ public class IdentityDiscController
         }
         recordIdentityDiscUsed();
 
+        Profile originalProfile = mProfileSupplier.get().getOriginalProfile();
         SigninManager signinManager =
-                IdentityServicesProvider.get()
-                        .getSigninManager(mProfileSupplier.get().getOriginalProfile());
+                IdentityServicesProvider.get().getSigninManager(originalProfile);
         if (getSignedInAccountInfo() == null && !signinManager.isSigninDisabledByPolicy()) {
-            if (SigninUtils.shouldShowNewSigninFlow()) {
-                AccountPickerBottomSheetStrings bottomSheetStrings =
-                        new AccountPickerBottomSheetStrings.Builder(
-                                        R.string.signin_account_picker_bottom_sheet_title)
-                                .setSubtitleStringId(
-                                        R.string
-                                                .signin_account_picker_bottom_sheet_benefits_subtitle)
-                                .build();
-                @Nullable
-                Intent intent =
-                        SigninAndHistorySyncActivityLauncherImpl.get()
-                                .createBottomSheetSigninIntentOrShowError(
-                                        mContext,
-                                        mProfileSupplier.get().getOriginalProfile(),
-                                        bottomSheetStrings,
-                                        BottomSheetSigninAndHistorySyncCoordinator
-                                                .NoAccountSigninMode.BOTTOM_SHEET,
-                                        BottomSheetSigninAndHistorySyncCoordinator
-                                                .WithAccountSigninMode.DEFAULT_ACCOUNT_BOTTOM_SHEET,
-                                        HistorySyncConfig.OptInMode.OPTIONAL,
-                                        SigninAccessPoint.NTP_SIGNED_OUT_ICON,
-                                        /* selectedCoreAccountId= */ null);
-                if (intent != null) {
-                    mContext.startActivity(intent);
-                }
-            } else {
-                SyncConsentActivityLauncherImpl.get()
-                        .launchActivityIfAllowed(mContext, SigninAccessPoint.NTP_SIGNED_OUT_ICON);
+            AccountPickerBottomSheetStrings bottomSheetStrings =
+                    new AccountPickerBottomSheetStrings.Builder(
+                                    R.string.signin_account_picker_bottom_sheet_title)
+                            .setSubtitleStringId(
+                                    R.string.signin_account_picker_bottom_sheet_benefits_subtitle)
+                            .build();
+            BottomSheetSigninAndHistorySyncConfig config =
+                    new BottomSheetSigninAndHistorySyncConfig.Builder(
+                                    bottomSheetStrings,
+                                    NoAccountSigninMode.BOTTOM_SHEET,
+                                    WithAccountSigninMode.DEFAULT_ACCOUNT_BOTTOM_SHEET,
+                                    HistorySyncConfig.OptInMode.OPTIONAL)
+                            .build();
+            @Nullable
+            Intent intent =
+                    SigninAndHistorySyncActivityLauncherImpl.get()
+                            .createBottomSheetSigninIntentOrShowError(
+                                    mContext,
+                                    originalProfile,
+                                    config,
+                                    SigninAccessPoint.NTP_SIGNED_OUT_ICON);
+            if (intent != null) {
+                mContext.startActivity(intent);
             }
         } else {
             SettingsNavigation settingsNavigation =

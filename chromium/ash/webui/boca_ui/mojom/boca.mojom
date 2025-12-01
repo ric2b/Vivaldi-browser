@@ -7,6 +7,7 @@ module ash.boca.mojom;
 import "chromeos/services/network_config/public/mojom/network_types.mojom";
 import "url/mojom/url.mojom";
 import "mojo/public/mojom/base/time.mojom";
+import "mojo/public/mojom/base/values.mojom";
 
 // Refer ///depot/google3/google/internal/chrome/cros/edu/schooltools/v1/
 // For detailed type definition.
@@ -41,13 +42,40 @@ struct Course {
   string id;
   // Course name.
   string name;
+  // Course section.
+  string section;
+};
+
+// The assignment material type.
+enum MaterialType {
+  kUnknown,
+  kSharedDriveFile,
+  kYoutubeVideo,
+  kLink,
+  kForm,
+};
+
+// Represents a material attached to a course assignment.
+struct Material {
+  string title;
+  MaterialType type;
+};
+
+// Represents a course assignment.
+struct Assignment {
+  string title;
+  // Absolute link to this assignment for students to open.
+  url.mojom.Url url;
+  mojo_base.mojom.JSTime last_update_time;
+  // Assignment materials.
+  array<Material> materials;
 };
 
 // Represents a browser window.
 struct Window {
   // User-customized window name.
   string? name;
-  // Tabs within browser window. Tabs are ordererd using non-increasing order
+  // Tabs within browser window. Tabs are ordered using non-increasing order
   // for tab's last access timestamp.
   array<TabInfo> tab_list;
 };
@@ -119,6 +147,19 @@ enum JoinMethod {
   kAccessCode = 1,
 };
 
+enum BocaValidPref {
+  // Default navigation rule setting.
+  kNavigationSetting = 0,
+  // Default caption enablement setting.
+  kCaptionEnablementSetting = 1,
+};
+
+struct Session {
+ Config config;
+ array<IdentifiedActivity> activities;
+
+};
+
 struct StudentActivity {
   // If the current student status is active.
   bool is_active;
@@ -131,6 +172,8 @@ struct StudentActivity {
   // TODO(b/365191878): Remove this after refactoring existing schema to support
   // multi-group.
   JoinMethod join_method;
+  // A string-format code to connect to student's device.
+  string? view_screen_session_code;
 };
 
 struct IdentifiedActivity{
@@ -146,7 +189,12 @@ enum GetSessionError{
 
 union SessionResult {
  GetSessionError error;
- Config config;
+ Session session;
+};
+
+union ConfigResult{
+  GetSessionError error;
+  Config config;
 };
 
 enum UpdateSessionError{
@@ -165,8 +213,18 @@ enum SubmitAccessCodeError {
   kInvalid,
 };
 
+enum ViewStudentScreenError {
+  kHTTPError,
+};
+
+enum EndViewScreenSessionError {
+  kHTTPError,
+};
+
 // Implemented by browser process for page chrome-untrusted://boca-app/
 interface PageHandler {
+  // Performs authentication and sets the credential in the webview.
+  AuthenticateWebview() => (bool success);
   // Fetches a list of browser windows and tabs in it. Windows are ordered using
   // non-increasing order for most recent tab's last access timestamp.
   GetWindowsTabsList() => (array<Window> window_list);
@@ -176,6 +234,8 @@ interface PageHandler {
   // course. Must be called on a course_id received from the most recent
   // ListCourses call.
   ListStudents(string course_id) => (array<Identity> students);
+  // Fetch a list of assignments for the courses.
+  ListAssignments(string course_id) => (array<Assignment> assignments);
   // Create a session with `config`.
   CreateSession(Config config) => (bool success);
   // Retrieves the current session.
@@ -194,6 +254,16 @@ interface PageHandler {
   SetFloatMode(bool isFloatMode)=> (bool success);
   // Submit access code to join a current class session.
   SubmitAccessCode(string access_code) => (SubmitAccessCodeError? error);
+  // Requests to view screen of a given student.
+  ViewStudentScreen(string id) => (ViewStudentScreenError? error);
+  // Sets the state of the view screen session as inactive for a given student.
+  EndViewScreenSession(string id) => (EndViewScreenSessionError? error);
+  // Get the value of a boca specific user pref.
+  GetUserPref(BocaValidPref pref)
+    => (mojo_base.mojom.Value value);
+  // Set the value of a boca specific user pref.
+  SetUserPref(BocaValidPref pref, mojo_base.mojom.Value value)
+    => ();
 };
 
 // Implemented by renderer process
@@ -201,7 +271,7 @@ interface Page {
   // Notifies when student activities updated.
   OnStudentActivityUpdated(array<IdentifiedActivity> activities);
   // Notifies when session config updated.
-  OnSessionConfigUpdated(SessionResult config);
+  OnSessionConfigUpdated(ConfigResult config);
   // Notifies when active networks updated.
   OnActiveNetworkStateChanged(array<NetworkInfo> active_networks);
 };

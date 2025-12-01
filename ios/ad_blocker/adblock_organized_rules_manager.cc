@@ -287,6 +287,12 @@ void OrganizedRulesManager::OnOrganizedRulesLoaded(
           group_, std::move(*scriptlet_rules));
 
     content_rule_list_provider_->ApplyLoadedRules();
+    base::Value::List* partner_list_allowed_documents =
+        std::move(non_ios_rules_and_metadata->GetDict().FindList(
+            rules_json::kPartnerListAllowedDocuments));
+    CHECK(partner_list_allowed_documents);
+    partner_list_allowed_documents_ =
+        std::move(*partner_list_allowed_documents);
   } else {
     organized_rules_checksum_.clear();
   }
@@ -302,10 +308,11 @@ void OrganizedRulesManager::OnOrganizedRulesLoaded(
 
 bool OrganizedRulesManager::CheckOrganizedRules(
     base::Value* non_ios_rules_and_metadata) {
-  if (!non_ios_rules_and_metadata) {
+
+  if (!non_ios_rules_and_metadata ||
+      !non_ios_rules_and_metadata->is_dict()) {
     return false;
   }
-  DCHECK(non_ios_rules_and_metadata->is_dict());
 
   // Older versions of the files contained all the rules and were systematically
   // used to reload rules on startup. If we get one of those old versions, we
@@ -324,18 +331,21 @@ bool OrganizedRulesManager::CheckOrganizedRules(
 
   base::Value::Dict* list_checksums =
       metadata->FindDict(rules_json::kListChecksums);
-  DCHECK(list_checksums);
+
+  if (!list_checksums) {
+    return false;
+  }
 
   size_t valid_count = 0;
   for (const auto& [rule_source_id, rule_source] : rule_sources_) {
     if (!rule_source.rules_list_checksum.empty()) {
       std::string string_id = base::NumberToString(rule_source.core.id());
-      ++valid_count;
       auto* compiled_checksum = list_checksums->Find(string_id);
       if (!compiled_checksum ||
           compiled_checksum->GetString() != rule_source.rules_list_checksum) {
         return false;
       }
+      ++valid_count;
     }
   }
 
@@ -350,7 +360,10 @@ bool OrganizedRulesManager::CheckOrganizedRules(
   }
 
   if (exceptions_checksum) {
-    DCHECK(exception_rule_.is_dict());
+    if (!exception_rule_.is_dict()) {
+      return false;
+    }
+
     std::string serialized_exception;
     if (!JSONStringValueSerializer(&serialized_exception)
              .Serialize(exception_rule_))
@@ -415,6 +428,12 @@ void OrganizedRulesManager::OnOrganizedRulesReady(base::Value rules) {
             if (self && !checksum.empty()) {
               self->organized_rules_checksum_ = checksum;
               self->organized_rules_changed_callback_.Run(build_result);
+              base::Value::List* partner_list_allowed_documents =
+                  std::move(non_ios_rules.GetDict().FindList(
+                      rules_json::kPartnerListAllowedDocuments));
+              CHECK(partner_list_allowed_documents);
+              self->partner_list_allowed_documents_ =
+                  std::move(*partner_list_allowed_documents);
             }
           },
           weak_factory_.GetWeakPtr(), build_result_));

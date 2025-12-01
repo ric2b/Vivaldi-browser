@@ -24,8 +24,8 @@ import java.util.List;
 import java.util.Objects;
 
 // Vivaldi
+import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
-
 import org.vivaldi.browser.common.VivaldiBookmarkUtils;
 // End Vivaldi
 
@@ -94,8 +94,12 @@ public class ImprovedBookmarkRowCoordinator {
                 mBookmarkModel.areAccountBookmarkFoldersActive()
                         && !bookmarkItem.isAccountBookmark();
         propertyModel.set(ImprovedBookmarkRowProperties.IS_LOCAL_BOOKMARK, isLocalBookmark);
+        // Vivaldi ref. AUTO-235.
+        if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD)
+            propertyModel.set(ImprovedBookmarkRowProperties.DESCRIPTION_VISIBLE, false);
+        else
         propertyModel.set(ImprovedBookmarkRowProperties.DESCRIPTION_VISIBLE, !isFolder);
-        // Vivaldi - We show desription with bookmark count in second line for folders
+        // Vivaldi - We show description with bookmark count in second line for folders.
         if (ChromeApplicationImpl.isVivaldi() && isFolder) {
             String description = BookmarkUtils.getFolderDescriptionText(
                     bookmarkId, mBookmarkModel, mContext.getResources());

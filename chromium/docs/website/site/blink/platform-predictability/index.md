@@ -38,7 +38,7 @@ For details see:
 *   [BlinkOn 6: Web Platform
             Predictability](https://docs.google.com/presentation/d/1umK4QkfCvzicHVJKLNo2yDRyWSqQEamavW9QVFmugNY/edit)
             talk
-            ([video](https://www.youtube.com/watch?v=ipfPyM-Kwyk&feature=youtu.be))
+            ([video](https://youtube.com/watch?v=ipfPyM-Kwyk&feature=youtu.be))
 *   [Predictability mailing
             list](https://groups.google.com/a/chromium.org/forum/#!forum/platform-predictability)
 *   [Ecosystem Infrastructure team
@@ -126,7 +126,7 @@ For details see:
 *   [Webcompat.com](http://webcompat.com/)
 *   [BlinkOn5: Interoperability Case
             Studies](https://docs.google.com/presentation/d/1pOZ8ppcxEsJ6N8KfnfrI0EXwPEvHwg3BHyxzXXw8lRE)
-            ([video](https://www.youtube.com/watch?v=a3-zFbwsoEs))
+            ([video](https://youtube.com/watch?v=a3-zFbwsoEs))
 *   [W3C Web Platform Incubation Community
             Group](https://www.w3.org/community/wicg/)
 *   [The elastic band of

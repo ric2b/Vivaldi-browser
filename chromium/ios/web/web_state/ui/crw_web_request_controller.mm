@@ -46,7 +46,7 @@ enum class BackForwardNavigationType {
   SLOW_FORWARD = 3,
   BACK_FORWARD_NAVIGATION_TYPE_COUNT
 };
-}
+}  // namespace
 
 @interface CRWWebRequestController ()
 
@@ -57,6 +57,10 @@ enum class BackForwardNavigationType {
 
 // Returns The WKNavigationDelegate handler class from delegate.
 @property(nonatomic, readonly) CRWWKNavigationHandler* navigationHandler;
+
+// The URL for the currently loading securitu scoped resource. Non-null only
+// between starting to load a security scoped file URL and the load completion.
+@property(nonatomic, strong) NSURL* securityScopedResourceURL;
 
 @end
 
@@ -263,8 +267,8 @@ enum class BackForwardNavigationType {
             rendererInitiated:(BOOL)rendererInitiated {
   // Transfer time is registered so that further transitions within the time
   // envelope are not also registered as links.
-  [_delegate
-      userInteractionStateForWebViewHandler:self] -> ResetLastTransferTime();
+  [_delegate userInteractionStateForWebViewHandler:self]
+      ->ResetLastTransferTime();
 
   // Add or update pending item before any WebStateObserver callbacks.
   // See https://crbug.com/842151 for a scenario where this is important.
@@ -339,13 +343,20 @@ enum class BackForwardNavigationType {
                  context:(nullable const web::NavigationContextImpl*)context {
   DCHECK_EQ(web::WKNavigationState::FINISHED,
             self.navigationHandler.navigationState);
+
+  if (self.securityScopedResourceURL) {
+    [self.securityScopedResourceURL stopAccessingSecurityScopedResource];
+    self.securityScopedResourceURL = nil;
+  }
+
   // Placeholder and restore session URLs are implementation details so should
   // not notify WebStateObservers. If `context` is nullptr, don't skip
   // placeholder URLs because this may be the only opportunity to update
   // `isLoading` for native view reload.
 
-  if (context && context->IsLoadingErrorPage())
+  if (context && context->IsLoadingErrorPage()) {
     return;
+  }
 
   if (!loadSuccess) {
     // WebStateObserver callbacks will be called for load failure after
@@ -392,10 +403,11 @@ enum class BackForwardNavigationType {
 
 // Returns the current transition type.
 - (ui::PageTransition)currentTransition {
-  if (self.currentNavItem)
+  if (self.currentNavItem) {
     return self.currentNavItem->GetTransitionType();
-  else
+  } else {
     return ui::PageTransitionFromInt(0);
+  }
 }
 
 // Returns the referrer for current navigation item. May be empty.
@@ -483,10 +495,10 @@ enum class BackForwardNavigationType {
       web::GetWebClient()->IsAppSpecificURL(virtualURL)) {
     // file:// URL navigations are allowed for app-specific URLs, which
     // already have elevated privileges.
+    self.securityScopedResourceURL = request.URL;
     [request.URL startAccessingSecurityScopedResource];
     navigation = [self.webView loadFileRequest:request
                        allowingReadAccessToURL:request.URL];
-    [request.URL stopAccessingSecurityScopedResource];
   } else {
     navigation = [self.webView loadRequest:request];
   }
@@ -624,6 +636,14 @@ enum class BackForwardNavigationType {
   return list.currentItem == item ||
          [list.forwardList indexOfObject:item] != NSNotFound ||
          [list.backList indexOfObject:item] != NSNotFound;
+}
+
+- (void)close {
+  if (self.securityScopedResourceURL) {
+    [self.securityScopedResourceURL stopAccessingSecurityScopedResource];
+    self.securityScopedResourceURL = nil;
+  }
+  [super close];
 }
 
 #pragma mark - Private properties

@@ -57,7 +57,7 @@ public class ScrollDelegate {
     /**
      * @return The current scroll offset.
      */
-    float getScrollOffset() {
+    public float getScrollOffset() {
         return mScrollOffset;
     }
 
@@ -67,7 +67,7 @@ public class ScrollDelegate {
      * @param scrollOffset The new scroll offset.
      * @return The difference between the new and old scroll offsets, accounting for RTL.
      */
-    float setScrollOffset(float scrollOffset) {
+    public float setScrollOffset(float scrollOffset) {
         float oldScrollOffset = mScrollOffset;
         mScrollOffset = MathUtils.clamp(scrollOffset, mMinScrollOffset, 0);
 
@@ -170,7 +170,7 @@ public class ScrollDelegate {
      *
      * @param newStartMargin The new reorder start margin.
      */
-    void setReorderStartMargin(float newStartMargin) {
+    public void setReorderStartMargin(float newStartMargin) {
         float delta = newStartMargin - mReorderStartMargin;
         mReorderStartMargin = newStartMargin;
 
@@ -183,7 +183,7 @@ public class ScrollDelegate {
         setScrollOffset(mScrollOffset - delta);
     }
 
-    float getReorderStartMargin() {
+    public float getReorderStartMargin() {
         return mReorderStartMargin;
     }
 
@@ -191,7 +191,7 @@ public class ScrollDelegate {
      * Returns whether we are still visually scrolling the tab strip or not. This does not account
      * for the reorder auto-scroll.
      */
-    boolean isFinished() {
+    public boolean isFinished() {
         return mScroller.isFinished();
     }
 
@@ -317,5 +317,11 @@ public class ScrollDelegate {
      */
     StackScroller getScrollerForTesting() {
         return mScroller;
+    }
+
+    // Abort scroll animation and set offset.
+    void finishScrollForTesting() {
+        mScroller.abortAnimation();
+        setScrollOffset(mScroller.getFinalX());
     }
 }

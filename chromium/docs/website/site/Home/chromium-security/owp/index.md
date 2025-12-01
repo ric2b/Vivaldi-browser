@@ -19,7 +19,7 @@ standards bodies to get them in front of as many developers as possible.
 
 ### Content Security Policy
 
-We've shipped [Content Security Policy Level 2](http://www.w3.org/TR/CSP2/) as
+We've shipped [Content Security Policy Level 2](https://www.w3.org/TR/CSP2/) as
 of Chrome 42, and we're starting to put together the vision for the next
 iteration of the standard. You can follow along at
 <https://github.com/w3c/webappsec-csp>. Firefox has support for most of CSP2 as
@@ -27,21 +27,21 @@ well.
 
 ### Subresource Integrity
 
-We've shipped [Subresource Integrity](http://www.w3.org/TR/SRI/) as of Chrome
+We've shipped [Subresource Integrity](https://www.w3.org/TR/SRI/) as of Chrome
 46. This feature should also be shipping in Firefox ~43, which is exciting to
 see.
 
 ### Upgrade Insecure Requests
 
 We've shipped [Upgrade Insecure
-Requests](http://www.w3.org/TR/upgrade-insecure-requests/) as of Chrome 44. This
+Requests](https://www.w3.org/TR/upgrade-insecure-requests/) as of Chrome 44. This
 feature should also be shipping in Firefox 42, which will give us a fairly broad
 base of support.
 
 ### Mixed Content
 
 We've been steadily tightening our [Mixed
-Content](http://www.w3.org/TR/mixed-content/) blocking over the last ~18 months.
+Content](https://www.w3.org/TR/mixed-content/) blocking over the last ~18 months.
 The specification has broad approval from other vendors, who are generally
 aligning with Chrome's behavior over time.
 

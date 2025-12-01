@@ -8,7 +8,6 @@ from typing import List, Optional
 
 import datetime
 import logging
-import six
 import urllib.parse as encoder
 
 from dashboard.models import graph_data
@@ -137,8 +136,7 @@ def GetSkiaUrlsForAlertGroup(alert_group_id: str,
       host = repo_map['internal_host'] if internal_only else repo_map[
           'public_host']
       if host:
-        urls.add('%s: %s/_/alertgroup?group_id=%s' %
-                 (label, host, alert_group_id))
+        urls.add('%s: %s/u/?anomalyGroupID=%s' % (label, host, alert_group_id))
 
   return list(urls)
 
@@ -148,19 +146,19 @@ def GetSkiaUrlForAnomaly(anomaly: graph_data.anomaly.Anomaly) -> str:
   if repo_map:
     host = repo_map['internal_host'] if anomaly.internal_only else repo_map[
           'public_host']
-    return '%s/_/anomaly?key=%s' % (host, six.ensure_str(anomaly.key.urlsafe()))
+    return '%s/u/?anomalyIDs=%s' % (host, anomaly.key.integer_id())
 
   return ''
 
 
-def GetMastersAndInternalOnlyForHost(host: str):
+def GetMastersAndIsInternalForHost(host: str):
   for repo_map in REPOSITORY_HOST_MAPPING:
     if repo_map.get('public_host') == host:
       return repo_map.get('masters', []), False
     if repo_map.get('internal_host') == host:
       return repo_map.get('masters', []), True
 
-  return [], True
+  return [], False
 
 
 def _GetRepoMapForMaster(master: str):

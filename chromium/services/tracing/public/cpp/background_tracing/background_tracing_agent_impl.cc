@@ -51,6 +51,8 @@ void BackgroundTracingAgentImpl::ClearUMACallback(
 bool BackgroundTracingAgentImpl::DoEmitNamedTrigger(
     const std::string& trigger_name,
     std::optional<int32_t> value) {
+  TRACE_EVENT_INSTANT("latency", "NamedTrigger",
+                      base::trace_event::TriggerFlow(trigger_name, value));
   client_->OnTriggerBackgroundTrace(
       tracing::mojom::BackgroundTracingRule::New(trigger_name), value);
   return true;
@@ -58,21 +60,23 @@ bool BackgroundTracingAgentImpl::DoEmitNamedTrigger(
 
 void BackgroundTracingAgentImpl::OnHistogramChanged(
     const std::string& rule_id,
-    base::Histogram::Sample histogram_lower_value,
-    base::Histogram::Sample histogram_upper_value,
+    base::Histogram::Sample32 histogram_lower_value,
+    base::Histogram::Sample32 histogram_upper_value,
     const char* histogram_name,
     uint64_t name_hash,
-    base::Histogram::Sample actual_value) {
+    base::Histogram::Sample32 actual_value) {
   if (actual_value < histogram_lower_value ||
       actual_value > histogram_upper_value) {
     return;
   }
-  TRACE_EVENT("toplevel", "HistogramSampleTrigger",
+  TRACE_EVENT("toplevel,latency", "HistogramSampleTrigger",
               [&](perfetto::EventContext ctx) {
                 perfetto::protos::pbzero::ChromeHistogramSample* new_sample =
                     ctx.event()->set_chrome_histogram_sample();
                 new_sample->set_name_hash(name_hash);
                 new_sample->set_sample(actual_value);
+                base::trace_event::TriggerFlow(histogram_name,
+                                               actual_value)(ctx);
               });
 
   client_->OnTriggerBackgroundTrace(

@@ -228,13 +228,26 @@ bool ReplaceFile(const FilePath& from_path,
     return true;
   File::Error move_error = File::OSErrorToFileError(GetLastError());
 
-  // Try the full-blown replace if the move fails, as ReplaceFile will only
-  // succeed when |to_path| does exist. When writing to a network share, we may
-  // not be able to change the ACLs. Ignore ACL errors then
-  // (REPLACEFILE_IGNORE_MERGE_ERRORS).
-  if (::ReplaceFile(ToWCharT(&to_path.value()), ToWCharT(&from_path.value()),
-                    NULL, REPLACEFILE_IGNORE_MERGE_ERRORS, NULL, NULL)) {
-    return true;
+  // ReplaceFile will fail with ERROR_UNABLE_TO_REMOVE_REPLACED when it is
+  // racing with another process (e.g., git fsmonitor--deamon). Repeatedly retry
+  // after a short delay for up to half a second in an attempt to win the race.
+  for (int i = 0; i < 11; ++i) {
+    if (i != 0) {
+      ::Sleep(/*dwMilliseconds=*/50);
+    }
+    // Try the full-blown replace if the move fails, as ReplaceFile will only
+    // succeed when |to_path| does exist. When writing to a network share, we
+    // may not be able to change the ACLs. Ignore ACL errors then
+    // (REPLACEFILE_IGNORE_MERGE_ERRORS).
+    if (::ReplaceFile(ToWCharT(&to_path.value()), ToWCharT(&from_path.value()),
+                      NULL, REPLACEFILE_IGNORE_MERGE_ERRORS, NULL, NULL)) {
+      return true;
+    }
+    if (::GetLastError() != ERROR_UNABLE_TO_REMOVE_REPLACED) {
+      // Do not retry if replacement failed for any reason other than this one,
+      // as it's possible that one or the other file has been modified.
+      break;
+    }
   }
   // In the case of FILE_ERROR_NOT_FOUND from ReplaceFile, it is likely that
   // |to_path| does not exist. In this case, the more relevant error comes

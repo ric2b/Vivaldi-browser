@@ -17,9 +17,8 @@
 #include "base/types/pass_key.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
-#include "components/autofill/core/browser/data_model/profile_value_source.h"
 #include "components/autofill/core/browser/field_types.h"
-#include "components/autofill/core/browser/filling_product.h"
+#include "components/autofill/core/browser/filling/filling_product.h"
 #include "components/autofill/core/browser/form_parsing/regex_patterns.h"
 #include "components/autofill/core/browser/heuristic_source.h"
 #include "components/autofill/core/browser/metrics/log_event.h"
@@ -90,6 +89,11 @@ class AutofillField : public FormFieldData {
   server_predictions() const {
     return server_predictions_;
   }
+  bool HasServerPredictionsWithAutofillAiType() const;
+
+  // Returns the first server prediction value of `FieldTypeGroup::kAutofillAi`
+  // group or `FieldType::NO_SERVER_DATA` in case none is found.
+  FieldType GetAutofillAiServerTypePredictions() const;
   const std::vector<
       AutofillQueryResponse::FormSuggestion::FieldSuggestion::FieldPrediction>&
   experimental_server_predictions() const {
@@ -120,26 +124,6 @@ class AutofillField : public FormFieldData {
     possible_types_ = possible_types;
   }
 
-  // Adds a profile `identifier` for `type` as a possible profile value source.
-  // If `type` is not an address type the call will be a noop.
-  PossibleProfileValueSources* possible_profile_value_sources() {
-    return &possible_profile_value_sources_;
-  }
-
-  void set_possible_profile_value_sources(
-      PossibleProfileValueSources possible_profile_value_sources) {
-    possible_profile_value_sources_ = std::move(possible_profile_value_sources);
-  }
-
-  std::optional<ProfileValueSource> assumed_profile_value_source() const {
-    return assumed_profile_value_source_;
-  }
-
-  void set_assumed_profile_value_source(
-      std::optional<ProfileValueSource> value_source) {
-    assumed_profile_value_source_ = value_source;
-  }
-
   void SetHtmlType(HtmlFieldType type, HtmlFieldMode mode);
 
   void set_previously_autofilled(bool previously_autofilled) {
@@ -162,11 +146,10 @@ class AutofillField : public FormFieldData {
   // As the |type| is expected to depend on |ComputedType|, the value will be
   // reset to |ComputedType| if some internal value change (e.g. on call to
   // (|set_heuristic_type|).
-  // |SetTypeTo| cannot be called with
-  // type.GetStoreableType() == NO_SERVER_DATA.
+  // |SetTypeTo| cannot be called with type.GetStorableType() == NO_SERVER_DATA.
   void SetTypeTo(const AutofillType& type);
 
-  // This function returns |ComputedType| unless the value has been overriden
+  // This function returns |ComputedType| unless the value has been overridden
   // by |SetTypeTo|.
   // (i.e. overall_type_ != NO_SERVER_DATA ? overall_type_ : ComputedType())
   AutofillType Type() const;
@@ -256,7 +239,7 @@ class AutofillField : public FormFieldData {
   //     it is FormFieldData::selected_text().
   //
   // The motivation behind (1) is that unchanged values usually carry little
-  // value for importing. The exception are <select> feilds, which often have
+  // value for importing. The exception are <select> fields, which often have
   // a correct default value, so we consider them for import even if their value
   // didn't change.
   // TODO: crbug.com/40137859 - Consider making an exception for also for
@@ -301,12 +284,11 @@ class AutofillField : public FormFieldData {
     return value_identified_as_potentially_sensitive_;
   }
 
-  void set_field_is_eligible_for_prediction_improvements(
-      std::optional<bool> eligibily) {
-    field_is_eligible_for_prediction_improvements_ = eligibily;
+  void set_field_is_eligible_for_autofill_ai(std::optional<bool> eligibility) {
+    field_is_eligible_for_autofill_ai_ = eligibility;
   }
-  std::optional<bool> field_is_eligible_for_prediction_improvements() const {
-    return field_is_eligible_for_prediction_improvements_;
+  std::optional<bool> field_is_eligible_for_autofill_ai() const {
+    return field_is_eligible_for_autofill_ai_;
   }
 
   void set_credit_card_number_offset(size_t position) {
@@ -482,25 +464,8 @@ class AutofillField : public FormFieldData {
   HtmlFieldMode html_mode_ = HtmlFieldMode::kNone;
 
   // The set of possible types for this field. It is normally only populated on
-  // submission time together with the `possible_profile_value_sources_`.
+  // submission time.
   FieldTypeSet possible_types_;
-
-  // An Autofill profile is a source for a filled value when the field's value
-  // is contained in the profile stored as a specific type. It does not mean
-  // that the value was actually filled from this Autofill profile. It is
-  // normally only populated on submission time along with the
-  // `possible_types_`. It contains the address related information that is
-  // contained in `possible_types_` with the additional information in which
-  // profile the matching type was detected.
-  PossibleProfileValueSources possible_profile_value_sources_;
-
-  // Holds the assumed profile and type of the `value` found in this field.
-  // The assumed source may be derived by using the
-  // `possible_profile_value_sources_` or the `autofill_source_profile_guid_`.
-  // There are no strong guarantees regarding the consistency between those
-  // different fields. The `nullopt` state indicates that no assumed value
-  // source was identified yet.
-  std::optional<ProfileValueSource> assumed_profile_value_source_;
 
   // The field's initial value. By default, it's the same as the field's
   // `value()`, but FormStructure::RetrieveFromCache() may override it.
@@ -524,10 +489,10 @@ class AutofillField : public FormFieldData {
   // sensitive, it just means that is wasn't identified as such yet.
   bool value_identified_as_potentially_sensitive_ = false;
 
-  // Indicates if the field was determined to be eligable for prediction
+  // Indicates if the field was determined to be eligible for prediction
   // improvements. The `nullopt` state implies that the eligibility has not been
   // determined yet.
-  std::optional<bool> field_is_eligible_for_prediction_improvements_;
+  std::optional<bool> field_is_eligible_for_autofill_ai_;
 
   // Used to hold the position of the first digit to be copied as a substring
   // from credit card number.
@@ -593,7 +558,6 @@ class AutofillField : public FormFieldData {
   // Note: `is_autofilled` is true for autocompleted fields. So `is_autofilled`
   // is not a sufficient condition for `autofill_source_profile_guid_` to have a
   // value. This is not tracked for fields filled with field by field filling.
-  // TODO(crbug.com/364937539): Use AutofillField::ProfileValueSource instead.
   std::optional<std::string> autofill_source_profile_guid_;
 
   // Denotes the type that was used to fill the field in its last autofill
@@ -601,7 +565,6 @@ class AutofillField : public FormFieldData {
   // Autofill might fallback to filling a classified field with a different type
   // than the classified one, based on country-specific rules.
   // This is not tracked for fields filled with field by field filling.
-  // TODO(crbug.com/364937539): Use AutofillField::ProfileValueSource instead.
   std::optional<FieldType> autofilled_type_;
 
   // Denotes the product last responsible for filling the field. If the field is

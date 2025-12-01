@@ -16,6 +16,7 @@
 #include "base/test/mock_callback.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "build/buildflag.h"
 #include "components/attribution_reporting/source_registration_time_config.mojom.h"
 #include "components/attribution_reporting/suitable_origin.h"
 #include "content/browser/attribution_reporting/aggregatable_debug_report.h"
@@ -44,6 +45,10 @@
 #include "third_party/blink/public/mojom/aggregation_service/aggregatable_report.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
+
+#if BUILDFLAG(IS_ANDROID)
+#include "base/android/application_status_listener.h"
+#endif
 
 namespace content {
 
@@ -534,6 +539,8 @@ TEST_F(AttributionReportNetworkSenderTest,
     EXPECT_TRUE(test_url_loader_factory_.SimulateResponseForPendingRequest(
         kEventLevelReportUrl, ""));
     // kOk = 0.
+    histograms.ExpectUniqueSample(
+        "Conversions.FirstBatch.HttpResponseOrNetErrorCode", net::HTTP_OK, 1);
     histograms.ExpectUniqueSample(kStatusMetric, 0, 1);
     histograms.ExpectUniqueSample(kErrorCodeMetric, net::HTTP_OK, 1);
     histograms.ExpectTotalCount(kReportSizeMetric, 1);
@@ -550,6 +557,9 @@ TEST_F(AttributionReportNetworkSenderTest,
         GURL(kEventLevelReportUrl), completion_status,
         network::mojom::URLResponseHead::New(), ""));
     // kInternalError = 1.
+    histograms.ExpectUniqueSample(
+        "Conversions.FirstBatch.HttpResponseOrNetErrorCode", net::ERR_FAILED,
+        1);
     histograms.ExpectUniqueSample(kStatusMetric, 1, 1);
     histograms.ExpectUniqueSample(kErrorCodeMetric, net::ERR_FAILED, 1);
     histograms.ExpectTotalCount(kReportSizeMetric, 1);
@@ -563,6 +573,9 @@ TEST_F(AttributionReportNetworkSenderTest,
     EXPECT_TRUE(test_url_loader_factory_.SimulateResponseForPendingRequest(
         kEventLevelReportUrl, "", net::HTTP_UNAUTHORIZED));
     // kExternalError = 2.
+    histograms.ExpectUniqueSample(
+        "Conversions.FirstBatch.HttpResponseOrNetErrorCode",
+        net::HTTP_UNAUTHORIZED, 1);
     histograms.ExpectUniqueSample(kStatusMetric, 2, 1);
     histograms.ExpectUniqueSample(kErrorCodeMetric, net::HTTP_UNAUTHORIZED, 1);
     histograms.ExpectTotalCount(kReportSizeMetric, 1);
@@ -663,8 +676,8 @@ TEST_F(AttributionReportNetworkSenderTest,
   const auto verify_histogram = [](base::HistogramTester& histograms,
                                    std::string_view suffix,
                                    bool has_trigger_context_id,
-                                   base::HistogramBase::Sample sample,
-                                   base::HistogramBase::Count count) {
+                                   base::HistogramBase::Sample32 sample,
+                                   base::HistogramBase::Count32 count) {
     histograms.ExpectUniqueSample(base::StrCat({"Conversions.", suffix}),
                                   sample, count);
     if (has_trigger_context_id) {
@@ -699,6 +712,8 @@ TEST_F(AttributionReportNetworkSenderTest,
       EXPECT_TRUE(test_url_loader_factory_.SimulateResponseForPendingRequest(
           kAggregatableReportUrl, ""));
       // kOk = 0.
+      histograms.ExpectUniqueSample(
+          "Conversions.FirstBatch.HttpResponseOrNetErrorCode", net::HTTP_OK, 1);
       verify_histogram(histograms, kStatusMetric, has_trigger_context_id, 0, 1);
       verify_histogram(histograms, kErrorCodeMetric, has_trigger_context_id,
                        net::HTTP_OK, 1);
@@ -715,6 +730,9 @@ TEST_F(AttributionReportNetworkSenderTest,
       EXPECT_TRUE(test_url_loader_factory_.SimulateResponseForPendingRequest(
           GURL(kAggregatableReportUrl), completion_status,
           network::mojom::URLResponseHead::New(), ""));
+      histograms.ExpectUniqueSample(
+          "Conversions.FirstBatch.HttpResponseOrNetErrorCode", net::ERR_FAILED,
+          1);
       // kInternalError = 1.
       verify_histogram(histograms, kStatusMetric, has_trigger_context_id, 1, 1);
       verify_histogram(histograms, kErrorCodeMetric, has_trigger_context_id,
@@ -730,6 +748,9 @@ TEST_F(AttributionReportNetworkSenderTest,
       EXPECT_TRUE(test_url_loader_factory_.SimulateResponseForPendingRequest(
           kAggregatableReportUrl, "", net::HTTP_UNAUTHORIZED));
       // kExternalError = 2.
+      histograms.ExpectUniqueSample(
+          "Conversions.FirstBatch.HttpResponseOrNetErrorCode",
+          net::HTTP_UNAUTHORIZED, 1);
       verify_histogram(histograms, kStatusMetric, has_trigger_context_id, 2, 1);
       verify_histogram(histograms, kErrorCodeMetric, has_trigger_context_id,
                        net::HTTP_UNAUTHORIZED, 1);
@@ -826,6 +847,82 @@ TEST_F(AttributionReportNetworkSenderTest,
         "Conversions.DebugReport.ReportRetrySucceedAggregatable", true, 1);
   }
 }
+
+#if BUILDFLAG(IS_ANDROID)
+TEST_F(AttributionReportNetworkSenderTest,
+       AndroidApplicationStatus_ReportResponseCodes) {
+  const struct {
+    base::android::ApplicationState app_state;
+    const char* metric;
+  } kTestCases[] = {
+      {
+          base::android::APPLICATION_STATE_HAS_RUNNING_ACTIVITIES,
+          "Conversions.HttpResponseOrNetErrorCode.AppRunning",
+      },
+      {
+          base::android::APPLICATION_STATE_HAS_PAUSED_ACTIVITIES,
+          "Conversions.HttpResponseOrNetErrorCode.AppPaused",
+      },
+      {
+          base::android::APPLICATION_STATE_HAS_STOPPED_ACTIVITIES,
+          "Conversions.HttpResponseOrNetErrorCode.AppBackgrounded",
+      },
+      {
+          base::android::APPLICATION_STATE_HAS_DESTROYED_ACTIVITIES,
+          "Conversions.HttpResponseOrNetErrorCode.AppDestroyed",
+      },
+      {
+          base::android::APPLICATION_STATE_UNKNOWN,
+          "Conversions.HttpResponseOrNetErrorCode.AppStateUnknown",
+      },
+  };
+
+  for (const auto& test_case : kTestCases) {
+    // Trigger a state change signal for the desired state.
+    base::android::ApplicationStatusListener::NotifyApplicationStateChange(
+        test_case.app_state);
+    base::RunLoop().Quit();
+
+    // All OK
+    {
+      base::HistogramTester histograms;
+      auto report = DefaultEventLevelReport();
+      network_sender_->SendReport(report, /*is_debug_report=*/false,
+                                  base::DoNothing());
+      EXPECT_TRUE(test_url_loader_factory_.SimulateResponseForPendingRequest(
+          kEventLevelReportUrl, ""));
+      // kOk = 0.
+      histograms.ExpectUniqueSample(test_case.metric, net::HTTP_OK, 1);
+    }
+
+    // Internal error
+    {
+      base::HistogramTester histograms;
+      auto report = DefaultEventLevelReport();
+      network_sender_->SendReport(report, /*is_debug_report=*/false,
+                                  base::DoNothing());
+      network::URLLoaderCompletionStatus completion_status(net::ERR_FAILED);
+      EXPECT_TRUE(test_url_loader_factory_.SimulateResponseForPendingRequest(
+          GURL(kEventLevelReportUrl), completion_status,
+          network::mojom::URLResponseHead::New(), ""));
+      // kInternalError = 1.
+      histograms.ExpectUniqueSample(test_case.metric, net::ERR_FAILED, 1);
+    }
+    // External error
+    {
+      base::HistogramTester histograms;
+      auto report = DefaultEventLevelReport();
+      network_sender_->SendReport(report, /*is_debug_report=*/false,
+                                  base::DoNothing());
+      EXPECT_TRUE(test_url_loader_factory_.SimulateResponseForPendingRequest(
+          kEventLevelReportUrl, "", net::HTTP_UNAUTHORIZED));
+      // kExternalError = 2.
+      histograms.ExpectUniqueSample(test_case.metric, net::HTTP_UNAUTHORIZED,
+                                    1);
+    }
+  }
+}
+#endif
 
 TEST_F(AttributionReportNetworkSenderTest,
        ErrorReportSent_ReportBodySetCorrectly) {
@@ -978,8 +1075,8 @@ TEST_F(AttributionReportNetworkSenderTest,
   const auto verify_histogram = [](base::HistogramTester& histograms,
                                    std::string_view suffix,
                                    bool has_trigger_context_id,
-                                   base::HistogramBase::Sample sample,
-                                   base::HistogramBase::Count count) {
+                                   base::HistogramBase::Sample32 sample,
+                                   base::HistogramBase::Count32 count) {
     histograms.ExpectUniqueSample(base::StrCat({"Conversions.", suffix}),
                                   sample, count);
     if (has_trigger_context_id) {

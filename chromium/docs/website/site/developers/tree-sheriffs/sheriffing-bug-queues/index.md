@@ -9,6 +9,6 @@ title: Sheriffing Bug Queues
 ---
 
 This file has moved to [Chrome Sheriffing How
-To](http://goto.google.com/chrome-sheriffing-how-to) and information on
+To](http://go/chrome-sheriffing-how-to) and information on
 Sheriff-O-Matics to [Chrome Sheriffing
-Tooling](http://goto.google.com/chrome-sheriffing-tooling).
+Tooling](http://go/chrome-sheriffing-tooling).

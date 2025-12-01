@@ -35,7 +35,6 @@ using ::chromeos::settings::mojom::kEditDictionarySubpagePath;
 using ::chromeos::settings::mojom::kInputMethodOptionsSubpagePath;
 using ::chromeos::settings::mojom::kInputSubpagePath;
 using ::chromeos::settings::mojom::kJapaneseManageUserDictionarySubpagePath;
-using ::chromeos::settings::mojom::kLanguagesAndInputSectionPath;
 using ::chromeos::settings::mojom::Section;
 using ::chromeos::settings::mojom::Setting;
 using ::chromeos::settings::mojom::Subpage;
@@ -190,8 +189,6 @@ void AddInputMethodOptionsLoadTimeData(
        IDS_SETTINGS_INPUT_METHOD_OPTIONS_JAPANESE_NUMBER_OF_SUGGESTIONS},
       {"inputMethodOptionsJapaneseDisablePersonalizedSuggestions",
        IDS_SETTINGS_INPUT_METHOD_OPTIONS_JAPANESE_DISABLE_PERSONALIZED_SUGGESTIONS},
-      {"inputMethodOptionsJapaneseAutomaticallySendStatisticsToGoogle",
-       IDS_SETTINGS_INPUT_METHOD_OPTIONS_JAPANESE_SEND_STATISTICS_TO_GOOGLE},
       {"inputMethodOptionsEnableDoubleSpacePeriod",
        IDS_SETTINGS_INPUT_METHOD_OPTIONS_ENABLE_DOUBLE_SPACE_PERIOD},
       {"inputMethodOptionsEnableGestureTyping",
@@ -345,9 +342,6 @@ void AddInputMethodOptionsLoadTimeData(
       base::FeatureList::IsEnabled(features::kAssistMultiWord) &&
           is_physical_keyboard_predictive_writing_allowed);
   html_source->AddBoolean(
-      "allowAutocorrectToggle",
-      base::FeatureList::IsEnabled(features::kAutocorrectToggle));
-  html_source->AddBoolean(
       "autocorrectEnableByDefault",
       base::FeatureList::IsEnabled(features::kAutocorrectByDefault));
   html_source->AddBoolean(
@@ -426,13 +420,8 @@ InputsSection::InputsSection(Profile* profile,
 InputsSection::~InputsSection() = default;
 
 void InputsSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
-  const bool kIsRevampEnabled =
-      ash::features::IsOsSettingsRevampWayfindingEnabled();
-
   webui::LocalizedString kLocalizedStrings[] = {
-      {"inputPageTitle", kIsRevampEnabled
-                             ? IDS_OS_SETTINGS_LANGUAGES_INPUT_PAGE_TITLE
-                             : IDS_OS_SETTINGS_LANGUAGES_INPUT_PAGE_TITLE_V2},
+      {"inputPageTitle", IDS_OS_SETTINGS_LANGUAGES_INPUT_PAGE_TITLE},
       {"inputMethodEnabled", IDS_SETTINGS_LANGUAGES_INPUT_METHOD_ENABLED},
       {"inputMethodsManagedbyPolicy",
        IDS_SETTINGS_LANGUAGES_INPUT_METHODS_MANAGED_BY_POLICY},
@@ -486,6 +475,24 @@ void InputsSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       {"editDictionaryLabel", IDS_OS_SETTINGS_LANGUAGES_EDIT_DICTIONARY_LABEL},
       {"japaneseManageUserDictionaryLabel",
        IDS_OS_SETTINGS_LANGUAGES_JAPANESE_MANAGE_USER_DICTIONARY_LABEL},
+      {"japaneseDictionaryAddDictionary",
+       IDS_OS_SETTINGS_LANGUAGES_JAPANESE_DICTIONARY_ADD_DICTIONARY},
+      {"japaneseDictionaryCategory",
+       IDS_OS_SETTINGS_LANGUAGES_JAPANESE_DICTIONARY_CATEGORY},
+      {"japaneseDictionaryComment",
+       IDS_OS_SETTINGS_LANGUAGES_JAPANESE_DICTIONARY_COMMENT},
+      {"japaneseDictionaryExport",
+       IDS_OS_SETTINGS_LANGUAGES_JAPANESE_DICTIONARY_EXPORT},
+      {"japaneseDictionaryImport",
+       IDS_OS_SETTINGS_LANGUAGES_JAPANESE_DICTIONARY_IMPORT},
+      {"japaneseDictionaryName",
+       IDS_OS_SETTINGS_LANGUAGES_JAPANESE_DICTIONARY_NAME},
+      {"japaneseDictionaryNewEntry",
+       IDS_OS_SETTINGS_LANGUAGES_JAPANESE_DICTIONARY_NEW_ENTRY},
+      {"japaneseDictionaryReading",
+       IDS_OS_SETTINGS_LANGUAGES_JAPANESE_DICTIONARY_READING},
+      {"japaneseDictionaryWord",
+       IDS_OS_SETTINGS_LANGUAGES_JAPANESE_DICTIONARY_WORD},
       {"editDictionaryDescription",
        IDS_OS_SETTINGS_LANGUAGES_EDIT_DICTIONARY_DESCRIPTION},
       {"addDictionaryWordButtonLabel",
@@ -526,8 +533,8 @@ void InputsSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   html_source->AddBoolean(
       "languagePacksInSettingsEnabled",
       base::FeatureList::IsEnabled(features::kLanguagePacksInSettings));
-  html_source->AddBoolean("isShortcutCustomizationEnabled",
-                          ::features::IsShortcutCustomizationEnabled());
+  // TODO(b/290861003): Update the settings code and remove this.
+  html_source->AddBoolean("isShortcutCustomizationEnabled", true);
 
   AddInputMethodOptionsLoadTimeData(
       html_source,
@@ -549,13 +556,10 @@ int InputsSection::GetSectionNameMessageId() const {
 }
 
 mojom::Section InputsSection::GetSection() const {
-  // Note: This is a subsection that exists under the Device section when the
-  // OsSettingsRevampWayfinding feature is enabled, else under the Languages
-  // section. This is not a top-level section and does not have a respective
-  // declaration in chromeos::settings::mojom::Section.
-  return ash::features::IsOsSettingsRevampWayfindingEnabled()
-             ? mojom::Section::kDevice
-             : mojom::Section::kLanguagesAndInput;
+  // Note: This is a subsection that exists under the Device section. This is
+  // not a top-level section and does not have a respective declaration in
+  // chromeos::settings::mojom::Section.
+  return mojom::Section::kDevice;
 }
 
 mojom::SearchResultIcon InputsSection::GetSectionIcon() const {
@@ -563,9 +567,7 @@ mojom::SearchResultIcon InputsSection::GetSectionIcon() const {
 }
 
 const char* InputsSection::GetSectionPath() const {
-  return ash::features::IsOsSettingsRevampWayfindingEnabled()
-             ? mojom::kDeviceSectionPath
-             : mojom::kLanguagesAndInputSectionPath;
+  return mojom::kDeviceSectionPath;
 }
 
 bool InputsSection::LogMetric(mojom::Setting setting,
@@ -576,7 +578,7 @@ bool InputsSection::LogMetric(mojom::Setting setting,
 
 void InputsSection::RegisterHierarchy(HierarchyGenerator* generator) const {
   generator->RegisterTopLevelSubpage(
-      IDS_OS_SETTINGS_LANGUAGES_INPUT_PAGE_TITLE_V2, mojom::Subpage::kInput,
+      IDS_OS_SETTINGS_LANGUAGES_INPUT_PAGE_TITLE, mojom::Subpage::kInput,
       mojom::SearchResultIcon::kLanguage,
       mojom::SearchResultDefaultRank::kMedium, mojom::kInputSubpagePath);
   static constexpr mojom::Setting kInputSubpageSettings[] = {

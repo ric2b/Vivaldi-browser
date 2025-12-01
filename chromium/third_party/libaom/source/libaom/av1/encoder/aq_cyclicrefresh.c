@@ -645,7 +645,7 @@ void av1_cyclic_refresh_setup(AV1_COMP *const cpi) {
         qindex2, cm->seq_params->bit_depth,
         cpi->ppi->gf_group.update_type[cpi->gf_frame_index], layer_depth,
         boost_index, frame_type, cpi->oxcf.q_cfg.use_fixed_qp_offsets,
-        is_stat_consumption_stage(cpi));
+        is_stat_consumption_stage(cpi), cpi->oxcf.tune_cfg.tuning);
 
     av1_set_segdata(seg, CR_SEGMENT_ID_BOOST1, SEG_LVL_ALT_Q, qindex_delta);
 

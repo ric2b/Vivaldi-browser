@@ -7,8 +7,6 @@
 
 #include <stdint.h>
 
-#include <vector>
-
 #include "base/memory/scoped_refptr.h"
 #include "media/base/encoder_status.h"
 #include "media/base/media_export.h"
@@ -20,18 +18,19 @@
 
 namespace base {
 class TimeDelta;
-}
+}  // namespace base
 
-namespace gpu {
-struct Capabilities;
-namespace raster {
+namespace gpu::raster {
 class RasterInterface;
-}  // namespace raster
-}  // namespace gpu
+}  // namespace gpu::raster
 
 namespace libyuv {
 struct YuvConstants;
-}
+}  // namespace libyuv
+
+namespace viz {
+class SharedImageFormat;
+}  // namespace viz
 
 namespace media {
 
@@ -175,7 +174,6 @@ MEDIA_EXPORT void ConvertToMemoryMappedFrameAsync(
 MEDIA_EXPORT scoped_refptr<VideoFrame> ReadbackTextureBackedFrameToMemorySync(
     VideoFrame& txt_frame,
     gpu::raster::RasterInterface* ri,
-    const gpu::Capabilities& caps,
     VideoFramePool* pool = nullptr);
 
 // Synchronously reads a single plane. |src_rect| is relative to the plane,
@@ -186,8 +184,7 @@ MEDIA_EXPORT bool ReadbackTexturePlaneToMemorySync(
     gfx::Rect& src_rect,
     uint8_t* dest_pixels,
     size_t dest_stride,
-    gpu::raster::RasterInterface* ri,
-    const gpu::Capabilities& caps);
+    gpu::raster::RasterInterface* ri);
 
 // Converts a frame with I420A format into I420 by dropping alpha channel.
 MEDIA_EXPORT scoped_refptr<VideoFrame> WrapAsI420VideoFrame(
@@ -231,9 +228,9 @@ MEDIA_EXPORT scoped_refptr<VideoFrame> CreateFromSkImage(
     base::TimeDelta timestamp,
     bool force_opaque = false);
 
-// Utility to convert a media pixel format to SkYUVAInfo.
-MEDIA_EXPORT std::tuple<SkYUVAInfo::PlaneConfig, SkYUVAInfo::Subsampling>
-VideoPixelFormatToSkiaValues(VideoPixelFormat video_format);
+// Utility to convert a SharedImageFormat to SkYUVAInfo.
+SkYUVAInfo::PlaneConfig ToSkYUVAPlaneConfig(viz::SharedImageFormat format);
+SkYUVAInfo::Subsampling ToSkYUVASubsampling(viz::SharedImageFormat format);
 
 // Returns the libyuv RGB conversion matrix for a given skia YUV color space.
 // If `output_argb_matrix` is true a ARGB matrix will be provided, if false a

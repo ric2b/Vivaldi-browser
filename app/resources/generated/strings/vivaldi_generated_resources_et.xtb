@@ -279,6 +279,7 @@
 <translation id="5582839680698949063">Põhimenüü</translation>
 <translation id="5614553682702429503">Kas salvestada parool?</translation>
 <translation id="5623842676595125836">Logikirje</translation>
+<translation id="5624959475330585145">Enne ebaturvaliste ühenduste kasutamist küsitakse</translation>
 <translation id="5638309510554459422">Laiendusi ja kujundusi leiad <ph name="BEGIN_LINK" />Chrome’i veebipoest<ph name="END_LINK" /></translation>
 <translation id="5677928146339483299">Blokeeritud</translation>
 <translation id="5707185214361380026">Laienduse laadimine järgmisest asukohast ebaõnnestus:</translation>
@@ -468,6 +469,7 @@ Hoia oma võtmefaili kindlas kohas. Seda läheb vaja laienduse uute versioonide 
 <translation id="9218430445555521422">Määra vaikekäitlejaks</translation>
 <translation id="93766956588638423">Paranda laiendus</translation>
 <translation id="961012016278832836">Microsoft Edge’i pärandversioon</translation>
+<translation id="961856697154696964">Sirvimisandmete kustutamine</translation>
 <translation id="994289308992179865">&amp;Korratakse</translation>
 <translation id="998747458861718449">I&amp;nspekteeri</translation>
 </translationbundle>

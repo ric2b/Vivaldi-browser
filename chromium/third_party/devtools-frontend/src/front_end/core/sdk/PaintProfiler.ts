@@ -31,8 +31,8 @@
 import type * as ProtocolProxyApi from '../../generated/protocol-proxy-api.js';
 import type * as Protocol from '../../generated/protocol.js';
 
-import {Capability, type Target} from './Target.js';
 import {SDKModel} from './SDKModel.js';
+import {Capability, type Target} from './Target.js';
 
 export class PaintProfilerModel extends SDKModel<void> {
   readonly layerTreeAgent: ProtocolProxyApi.LayerTreeApi;
@@ -117,9 +117,9 @@ export class PaintProfilerLogItem {
 SDKModel.register(PaintProfilerModel, {capabilities: Capability.DOM, autostart: false});
 
 export type RawPaintProfilerLogItemParamValue = string|{[key: string]: RawPaintProfilerLogItemParamValue};
-export type RawPaintProfilerLogItemParams = {
-  [key: string]: RawPaintProfilerLogItemParamValue,
-};
+export interface RawPaintProfilerLogItemParams {
+  [key: string]: RawPaintProfilerLogItemParamValue;
+}
 
 export interface SnapshotWithRect {
   rect: Protocol.DOM.Rect;

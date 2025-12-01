@@ -9,7 +9,6 @@
 
 #include "base/memory/scoped_refptr.h"
 #include "components/endpoint_fetcher/endpoint_fetcher.h"
-#include "components/search_engines/template_url_service.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/sync/base/data_type.h"
 #include "components/sync/base/user_selectable_type.h"
@@ -38,11 +37,6 @@ class AccountChecker {
 
   virtual bool IsSignedIn();
 
-  // Returns whether bookmarks is currently syncing. This will return true in
-  // cases where sync is still initializing, but the sync feature itself is
-  // enabled.
-  virtual bool IsSyncingBookmarks();
-
   // Check whether a specific sync entity is enabled by the user. This means
   // the user has chosen to sync the provided model type and does not
   // necessarily mean sync is active.
@@ -51,8 +45,6 @@ class AccountChecker {
   virtual bool IsAnonymizedUrlDataCollectionEnabled();
 
   virtual bool IsSubjectToParentalControls();
-
-  virtual bool IsDefaultSearchEngineGoogle();
 
   // Whether a user is allowed to use model execution features.
   virtual bool CanUseModelExecutionFeatures();
@@ -76,8 +68,7 @@ class AccountChecker {
       PrefService* pref_service,
       signin::IdentityManager* identity_manager,
       syncer::SyncService* sync_service,
-      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-      TemplateURLService* template_url_service);
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
 
   // Fetch users' pref from server on whether to receive price tracking emails.
   void FetchPriceEmailPref();
@@ -132,8 +123,6 @@ class AccountChecker {
   raw_ptr<syncer::SyncService> sync_service_;
 
   const scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
-
-  raw_ptr<TemplateURLService> template_url_service_;
 
   std::unique_ptr<PrefChangeRegistrar> pref_change_registrar_;
 

@@ -172,7 +172,7 @@ export class ObjectPropertiesSection extends UI.TreeOutline.TreeOutlineInShadow 
     }
 
     objectPropertiesSectionMap.set(this.element, this);
-    this.registerCSSFiles([objectValueStyles, objectPropertiesSectionStyles]);
+    this.registerRequiredCSS(objectValueStyles, objectPropertiesSectionStyles);
     this.rootElement().childrenListElement.classList.add('source-code', 'object-properties-section');
   }
 
@@ -192,10 +192,7 @@ export class ObjectPropertiesSection extends UI.TreeOutline.TreeOutlineInShadow 
       readOnly?: boolean): ObjectPropertiesSection {
     const titleElement = document.createElement('span');
     titleElement.classList.add('source-code');
-    const shadowRoot = UI.UIUtils.createShadowRootWithCoreStyles(titleElement, {
-      cssFile: [objectValueStyles],
-      delegatesFocus: undefined,
-    });
+    const shadowRoot = UI.UIUtils.createShadowRootWithCoreStyles(titleElement, {cssFile: objectValueStyles});
     const propertyValue =
         ObjectPropertiesSection.createPropertyValue(object, /* wasThrown */ false, /* showPreview */ true);
     shadowRoot.appendChild(propertyValue.element);
@@ -608,7 +605,7 @@ export class ObjectPropertiesSectionsTreeOutline extends UI.TreeOutline.TreeOutl
   private readonly editable: boolean;
   constructor(options?: TreeOutlineOptions|null) {
     super();
-    this.registerCSSFiles([objectValueStyles, objectPropertiesSectionStyles]);
+    this.registerRequiredCSS(objectValueStyles, objectPropertiesSectionStyles);
     this.editable = !(options && options.readOnly);
     this.contentElement.classList.add('source-code');
     this.contentElement.classList.add('object-properties-section');
@@ -1176,7 +1173,7 @@ export class ObjectPropertyTreeElement extends UI.TreeOutline.TreeElement {
     if (this.prompt || !treeOutline || !treeOutline.editable || this.readOnly) {
       return;
     }
-    this.editableDiv = (this.rowContainer.createChild('span', 'editable-div') as HTMLElement);
+    this.editableDiv = this.rowContainer.createChild('span', 'editable-div');
 
     if (this.property.value) {
       let text: string|(string | undefined) = this.property.value.description;

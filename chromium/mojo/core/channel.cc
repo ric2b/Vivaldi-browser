@@ -12,6 +12,7 @@
 #include <stddef.h>
 #include <string.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <limits>
 #include <utility>
@@ -25,7 +26,6 @@
 #include "base/numerics/safe_math.h"
 #include "base/process/current_process.h"
 #include "base/process/process_handle.h"
-#include "base/ranges/algorithm.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "base/trace_event/typed_macros.h"
@@ -302,7 +302,7 @@ Channel::MessagePtr Channel::Message::CreateRawForFuzzing(
   message->size_ = data.size();
   if (data.size()) {
     message->data_ = MakeAlignedBuffer(data.size());
-    base::ranges::copy(data, message->data_.get());
+    std::ranges::copy(data, message->data_.get());
   }
   return base::WrapUnique<Channel::Message>(message.release());
 }
@@ -944,8 +944,8 @@ bool Channel::OnReadComplete(size_t bytes_read, size_t* next_read_size_hint) {
     }
 
     DispatchResult result =
-        TryDispatchMessage(base::make_span(read_buffer_->occupied_bytes(),
-                                           read_buffer_->num_occupied_bytes()),
+        TryDispatchMessage(base::span(read_buffer_->occupied_bytes(),
+                                      read_buffer_->num_occupied_bytes()),
                            next_read_size_hint);
     if (result == DispatchResult::kOK) {
       if (ShouldRecordSubsampledHistograms()) {
@@ -1153,6 +1153,13 @@ MOJO_SYSTEM_IMPL_EXPORT void Channel::OfferChannelUpgrade() {
   NOTREACHED();
 }
 #endif
+
+void Channel::RecordSentMessageMetrics(size_t payload_size) {
+  if (ShouldRecordSubsampledHistograms()) {
+    UMA_HISTOGRAM_COUNTS_100000("Mojo.Channel.WriteMessageSize", payload_size);
+    LogHistogramForIPCMetrics(MessageType::kSent);
+  }
+}
 
 bool Channel::ShouldRecordSubsampledHistograms() {
   base::AutoLock hold(lock_);

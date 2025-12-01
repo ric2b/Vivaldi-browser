@@ -9,6 +9,7 @@
 
 #include "net/disk_cache/simple/simple_synchronous_entry.h"
 
+#include <algorithm>
 #include <cstring>
 #include <functional>
 #include <limits>
@@ -26,7 +27,6 @@
 #include "base/metrics/histogram_macros_local.h"
 #include "base/numerics/checked_math.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/ranges/algorithm.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/timer/elapsed_timer.h"
 #include "crypto/secure_hash.h"
@@ -246,15 +246,15 @@ int GetSimpleCacheTrailerPrefetchSize(int hint_size) {
   return kSimpleCacheTrailerPrefetchSpeculativeBytes.Get();
 }
 
-SimpleEntryStat::SimpleEntryStat(base::Time last_used,
-                                 base::Time last_modified,
-                                 const int32_t data_size[],
-                                 const int32_t sparse_data_size)
+SimpleEntryStat::SimpleEntryStat(
+    base::Time last_used,
+    base::Time last_modified,
+    const std::array<int32_t, kSimpleEntryStreamCount>& data_size,
+    const int32_t sparse_data_size)
     : last_used_(last_used),
       last_modified_(last_modified),
-      sparse_data_size_(sparse_data_size) {
-  memcpy(data_size_, data_size, sizeof(data_size_));
-}
+      data_size_(data_size),
+      sparse_data_size_(sparse_data_size) {}
 
 // These size methods all assume the presence of the SHA256 on stream zero,
 // since this version of the cache always writes it. In the read case, it may
@@ -585,7 +585,7 @@ int SimpleSynchronousEntry::DeleteEntrySetFiles(
     std::unique_ptr<UnboundBackendFileOperations> unbound_file_operations) {
   auto file_operations = unbound_file_operations->Bind(
       base::SequencedTaskRunner::GetCurrentDefault());
-  const size_t did_delete_count = base::ranges::count_if(
+  const size_t did_delete_count = std::ranges::count_if(
       *key_hashes, [&path, &file_operations](const uint64_t& key_hash) {
         return SimpleSynchronousEntry::DeleteFilesForEntryHash(
             path, key_hash, file_operations.get());
@@ -777,7 +777,7 @@ void SimpleSynchronousEntry::ReadSparseData(const SparseRequest& in_entry_op,
   char* buf = out_buf->data();
   int read_so_far = 0;
 
-  if (!sparse_file_open()) {
+  if (!sparse_file_open() || !buf_len) {
     *out_result = 0;
     return;
   }
@@ -1419,8 +1419,7 @@ bool SimpleSynchronousEntry::CheckHeaderAndKey(base::File* file,
   }
 
   const char* key_data = header_data.data() + sizeof(*header);
-  base::span<const char> key_span =
-      base::make_span(key_data, header->key_length);
+  base::span key_span(key_data, header->key_length);
   if (base::PersistentHash(base::as_bytes(key_span)) != header->key_hash) {
     RecordSyncOpenResult(cache_type_, OPEN_ENTRY_KEY_HASH_MISMATCH);
     return false;
@@ -1443,7 +1442,7 @@ bool SimpleSynchronousEntry::CheckHeaderAndKey(base::File* file,
 int SimpleSynchronousEntry::InitializeForOpen(
     BackendFileOperations* file_operations,
     SimpleEntryStat* out_entry_stat,
-    SimpleStreamPrefetchData stream_prefetch_data[2]) {
+    std::array<SimpleStreamPrefetchData, 2>& stream_prefetch_data) {
   DCHECK(!initialized_);
   if (!OpenFiles(file_operations, out_entry_stat)) {
     DLOG(WARNING) << "Could not open platform files for entry.";
@@ -1583,7 +1582,7 @@ int SimpleSynchronousEntry::ReadAndValidateStream0AndMaybe1(
     BackendFileOperations* file_operations,
     int file_size,
     SimpleEntryStat* out_entry_stat,
-    SimpleStreamPrefetchData stream_prefetch_data[2]) {
+    std::array<SimpleStreamPrefetchData, 2>& stream_prefetch_data) {
   SimpleFileTracker::FileHandle file =
       file_tracker_->Acquire(file_operations, this, SubFileForFileIndex(0));
   if (!file.IsOK())

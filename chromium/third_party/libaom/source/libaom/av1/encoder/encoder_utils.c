@@ -828,10 +828,14 @@ BLOCK_SIZE av1_select_sb_size(const AV1EncoderConfig *const oxcf, int width,
   if (oxcf->q_cfg.deltaq_mode == DELTA_Q_USER_RATING_BASED) return BLOCK_64X64;
 #endif
   // Force 64x64 superblock size to increase resolution in perceptual
-  // AQ mode.
+  // AQ and user rating based modes.
   if (oxcf->mode == ALLINTRA &&
       (oxcf->q_cfg.deltaq_mode == DELTA_Q_PERCEPTUAL_AI ||
        oxcf->q_cfg.deltaq_mode == DELTA_Q_USER_RATING_BASED)) {
+    return BLOCK_64X64;
+  }
+  // Variance Boost only supports 64x64 superblocks.
+  if (oxcf->q_cfg.deltaq_mode == DELTA_Q_VARIANCE_BOOST) {
     return BLOCK_64X64;
   }
   assert(oxcf->tool_cfg.superblock_size == AOM_SUPERBLOCK_SIZE_DYNAMIC);
@@ -1128,7 +1132,7 @@ void av1_determine_sc_tools_with_encoding(AV1_COMP *cpi, const int q_orig) {
     av1_set_quantizer(cm, q_cfg->qm_minlevel, q_cfg->qm_maxlevel,
                       q_for_screen_content_quick_run,
                       q_cfg->enable_chroma_deltaq, q_cfg->enable_hdr_deltaq,
-                      oxcf->mode == ALLINTRA);
+                      oxcf->mode == ALLINTRA, oxcf->tune_cfg.tuning);
     av1_set_speed_features_qindex_dependent(cpi, oxcf->speed);
     av1_init_quantizer(&cpi->enc_quant_dequant_params, &cm->quant_params,
                        cm->seq_params->bit_depth);

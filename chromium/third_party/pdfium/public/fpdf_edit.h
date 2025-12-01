@@ -261,6 +261,22 @@ FPDFPageObj_HasTransparency(FPDF_PAGEOBJECT page_object);
 FPDF_EXPORT int FPDF_CALLCONV FPDFPageObj_GetType(FPDF_PAGEOBJECT page_object);
 
 // Experimental API.
+// Gets active state for |page_object| within page.
+//
+//   page_object - handle to a page object.
+//   active      - pointer to variable that will receive if the page object is
+//                 active. This is a required parameter. Not filled if FALSE
+//                 is returned.
+//
+// For page objects where |active| is filled with FALSE, the |page_object| is
+// treated as if it wasn't in the document even though it is still held
+// internally.
+//
+// Returns TRUE if the operation succeeded, FALSE if it failed.
+FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV
+FPDFPageObj_GetIsActive(FPDF_PAGEOBJECT page_object, FPDF_BOOL* active);
+
+// Experimental API.
 // Sets if |page_object| is active within page.
 //
 //   page_object - handle to a page object.
@@ -825,6 +841,31 @@ FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV
 FPDFImageObj_GetImagePixelSize(FPDF_PAGEOBJECT image_object,
                                unsigned int* width,
                                unsigned int* height);
+
+// Experimental API.
+// Get ICC profile decoded data of |image_object|. If the |image_object| is not
+// an image object or if it does not have an image, then the return value will
+// be false. It also returns false if the |image_object| has no ICC profile.
+// |buffer| is only modified if ICC profile exists and |buflen| is longer than
+// the length of the ICC profile decoded data.
+//
+//   image_object - handle to an image object; must not be NULL.
+//   page         - handle to the page containing |image_object|; must not be
+//                  NULL. Required for retrieving the image's colorspace.
+//   buffer       - Buffer to receive ICC profile data; may be NULL if querying
+//                  required size via |out_buflen|.
+//   buflen       - Length of the buffer in bytes. Ignored if |buffer| is NULL.
+//   out_buflen   - Pointer to receive the ICC profile data size in bytes; must
+//                  not be NULL. Will be set if this API returns true.
+//
+// Returns true if |out_buflen| is not null and an ICC profile exists for the
+// given |image_object|.
+FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV
+FPDFImageObj_GetIccProfileDataDecoded(FPDF_PAGEOBJECT image_object,
+                                      FPDF_PAGE page,
+                                      uint8_t* buffer,
+                                      size_t buflen,
+                                      size_t* out_buflen);
 
 // Create a new path object at an initial position.
 //

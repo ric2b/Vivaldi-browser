@@ -31,6 +31,9 @@
 #include "extensions/common/url_pattern_set.h"
 #include "url/url_constants.h"
 
+// Vivaldi:
+#include "extensions/permissions/vivaldi_extension_permission_injections.h"
+
 using extensions::mojom::APIPermissionID;
 
 namespace extensions {
@@ -465,6 +468,9 @@ bool PermissionsParser::Parse(Extension* extension, std::u16string* error) {
 }
 
 void PermissionsParser::Finalize(Extension* extension) {
+  // Vivaldi: for specific extensions we enrich the required permission set.
+  VivaldiHandlePermissionInjections(this, extension);
+
   ManifestHandler::AddExtensionInitialRequiredPermissions(
       extension, &initial_required_permissions_->manifest_permissions);
 

@@ -2,12 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as LitHtml from '../../../ui/lit-html/lit-html.js';
+import {html, render} from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
-import elementsPanelLinkStyles from './elementsPanelLink.css.js';
+import elementsPanelLinkStylesRaw from './elementsPanelLink.css.js';
 
-const {html} = LitHtml;
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const elementsPanelLinkStyles = new CSSStyleSheet();
+elementsPanelLinkStyles.replaceSync(elementsPanelLinkStylesRaw.cssContent);
 
 export interface ElementsPanelLinkData {
   onElementRevealIconClick: (event?: Event) => void;
@@ -38,7 +40,7 @@ export class ElementsPanelLink extends HTMLElement {
 
   #render(): void {
     // clang-format off
-      LitHtml.render(html`
+    render(html`
       <span
         class="element-reveal-icon"
         jslog=${VisualLogging.link('elements-panel').track({click: true})}

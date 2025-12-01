@@ -26,15 +26,12 @@ void OnChangeNodeUsing(content::GlobalRenderFrameHostId id,
       frame_node->SetIsHoldingWebLock(is_using);
       return;
 
-    // TODO(crbug.com/40634530): Rename
-    // FrameNodeImpl::SetIsHoldingIndexedDBLock() to
-    // SetIsHoldingIndexedDBConnections().
-    case blink::mojom::ObservedFeatureType::kIndexedDBConnection:
-      frame_node->SetIsHoldingIndexedDBLock(is_using);
+    case blink::mojom::ObservedFeatureType::kBlockingIndexedDBLock:
+      frame_node->SetIsHoldingBlockingIndexedDBLock(is_using);
       return;
   }
 
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 }  // namespace

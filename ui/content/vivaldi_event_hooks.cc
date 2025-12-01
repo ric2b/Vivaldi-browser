@@ -4,7 +4,10 @@
 
 #include "app/vivaldi_apptools.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
-#include "content/browser/web_contents/web_contents_impl.h"
+
+namespace content {
+class WebContents;
+}
 
 VivaldiEventHooks* VivaldiEventHooks::instance_ = nullptr;
 

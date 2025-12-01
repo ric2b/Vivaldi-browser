@@ -122,6 +122,12 @@ chromium-metrics-reviews@google.com.
   <int value="10" label="Visual extraction failed"/>
 </enum>
 
+<enum name="IntelligentScanVerdict">
+  <int value="0" label="Unspecified"/>
+  <int value="1" label="Intelligent scan verdict safe"/>
+  <int value="2" label="Scam experiment verdict 1"/>
+</enum>
+
 <!-- LINT.IfChange(SafeBrowsingVerifyAppsEnabledResult) -->
 
 <enum name="SafeBrowsingVerifyAppsEnabledResult">
@@ -129,6 +135,7 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Disabled"/>
   <int value="2" label="Request timed out"/>
   <int value="3" label="Request failed"/>
+  <int value="4" label="Already enabled"/>
 </enum>
 
 <!-- LINT.ThenChange(//components/safe_browsing/android/safe_browsing_api_handler_util.h:VerifyAppsEnabledResult) -->
@@ -159,6 +166,7 @@ chromium-metrics-reviews@google.com.
   <int value="16" label="CHROME_UI_PAGE"/>
   <int value="17" label="(Obsolete) NOT_ALLOWED_BY_POLICY"/>
   <int value="18" label="MATCH_HC_ALLOWLIST"/>
+  <int value="19" label="ALLOWLIST_MATCH_METRIC"/>
 </enum>
 
 <enum name="SBClientDownloadCheckDownloadStats">

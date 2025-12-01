@@ -1,0 +1,54 @@
+# Copyright (c) 2024 Vivaldi Technologies AS. All rights reserved
+
+import("//build/config/apple/swift_source_set.gni")
+
+source_set("search_engine_change_prompt") {
+  sources = [
+    "vivaldi_search_engine_change_prompt_coordinator.h",
+    "vivaldi_search_engine_change_prompt_coordinator.mm",
+    "vivaldi_search_engine_change_prompt_mediator.h",
+    "vivaldi_search_engine_change_prompt_mediator.mm",
+    "vivaldi_search_engine_change_prompt_view_consumer.h",
+  ]
+
+  deps = [
+    ":search_engine_change_prompt_swift",
+    "//base:i18n",
+    "//base",
+    "//components/search_engines",
+    "//ios/chrome/app/application_delegate:app_state",
+    "//ios/chrome/app/profile",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/browser/favicon/model",
+    "//ios/chrome/browser/shared/coordinator/chrome_coordinator",
+    "//ios/chrome/browser/shared/model/browser",
+    "//ios/chrome/browser/ui/device_orientation",
+    "//ios/chrome/common/ui/util",
+    "//ui/base",
+    "//vivaldi/ios/ui/helpers",
+    "resources:assets",
+  ]
+
+  frameworks = [
+    "UIKit.framework",
+  ]
+}
+
+swift_source_set("search_engine_change_prompt_swift") {
+  bridge_header = "vivaldi_search_engine_change_prompt_swift_bridge.h"
+  sources = [
+    "vivaldi_search_engine_change_prompt_view_provider.swift",
+    "vivaldi_search_engine_change_prompt_helper.swift",
+    "vivaldi_search_engine_change_prompt_view_state.swift",
+    "vivaldi_search_engine_change_prompt_view.swift",
+  ]
+
+  deps = [
+    "//vivaldi/ios/ui/helpers:helpers_swift",
+  ]
+
+  frameworks = [
+    "UIKit.framework",
+    "SwiftUI.framework",
+  ]
+}

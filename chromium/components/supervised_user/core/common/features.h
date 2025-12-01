@@ -12,10 +12,15 @@
 
 namespace supervised_user {
 
-// Experiment to enable kid-friendly content feed.
-BASE_DECLARE_FEATURE(kKidFriendlyContentFeed);
-
 BASE_DECLARE_FEATURE(kLocalWebApprovals);
+
+#if BUILDFLAG(IS_IOS)
+extern const base::FeatureParam<int> kLocalWebApprovalBottomSheetLoadTimeoutMs;
+#endif
+
+// Whether the Pacp widget can process a url payload as part of the local
+// approval request.
+BASE_DECLARE_FEATURE(kLocalWebApprovalsWidgetSupportsUrlPayload);
 
 // Applies the updated extension approval flow, which can skip parent-approvals
 // on extension installations.
@@ -59,40 +64,21 @@ BASE_DECLARE_FEATURE(kCustomProfileStringsForSupervisedUsers);
 BASE_DECLARE_FEATURE(kShowKiteForSupervisedUsers);
 #endif
 
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-// This hides the following guest mode entry points for supervised users:
-//
-// * In the Profile menu for supervised profiles
-// * In the Profile picker, if there are one or more supervised profiles
-BASE_DECLARE_FEATURE(kHideGuestModeForSupervisedUsers);
-#endif
-
 // Force enable SafeSearch for a supervised profile with an
 // unauthenticated (e.g. signed out of the content area) account.
 BASE_DECLARE_FEATURE(kForceSafeSearchForUnauthenticatedSupervisedUsers);
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+// Uses supervised user strings on the signout dialog.
+BASE_DECLARE_FEATURE(kEnableSupervisedUserVersionSignOutDialog);
+
 // Force re-authentication when an unauthenticated supervised user tries to
 // access YouTube, so that content restrictions can be applied.
 BASE_DECLARE_FEATURE(kForceSupervisedUserReauthenticationForYouTube);
 
-// Force re-authentication when an unauthenticated supervised user tries to
-// access a blocked site, allowing the user to ask for parent's approval.
-BASE_DECLARE_FEATURE(kForceSupervisedUserReauthenticationForBlockedSites);
-
-// Specifies if we should close the sign-in tabs that can be opened from
-// the re-authentication interstitial.
-BASE_DECLARE_FEATURE(kCloseSignTabsFromReauthenticationInterstitial);
-
-// Shows the subframe re-authentication interstitial for unauthenticated
-// supervised users when they try to access:
-// * Embedded YouTube videos if re-auth is forced for YouTube.
-// * Blocked sites in subframes if re-auth is forced for blocked sites.
-//
-// This flag is only effective if the flag
-// `kForceSupervisedUserReauthenticationForYouTube` or
-// `kForceSupervisedUserReauthenticationForBlockedSites` is enabled.
-BASE_DECLARE_FEATURE(kAllowSupervisedUserReauthenticationForSubframes);
+// Specifies if infrastructure-related YouTube endpoints should be still
+// reachable even if parental controls related restrict YouTube access.
+BASE_DECLARE_FEATURE(kExemptYouTubeInfrastructureFromBlocking);
 #endif
 
 // Fallback to sending un-credentialed filtering requests for supervised users
@@ -112,30 +98,11 @@ BASE_DECLARE_FEATURE(
     kReplaceSupervisionSystemCapabilitiesWithAccountCapabilitiesOnIOS);
 #endif
 
-// Updates the ListFamilyMembers service to fetch family account info for
-// accounts with the relevant capability rather than just for supervised
-// accounts.
-BASE_DECLARE_FEATURE(kFetchListFamilyMembersWithCapability);
-
-// Uses `prefs::kFamilyLinkUserMemberRole` to populate the family member role
-// for feedback if it is available.
-BASE_DECLARE_FEATURE(kUseFamilyMemberRolePrefsForFeedback);
-
-// Alters the behavior of the supervised_user::SupervisedUserNavigationThrottle
-// so that the decision whether to proceed or cancel is made when the response
-// is ready to be rendered, rather than before the request (or any redirect) is
-// issued.
-BASE_DECLARE_FEATURE(kClassifyUrlOnProcessResponseEvent);
-
 // Returns whether local parent approvals on Family Link user's device are
 // enabled.
 // Local web approvals are only available when refreshed version of web
 // filter interstitial is enabled.
 bool IsLocalWebApprovalsEnabled();
-
-// Returns whether the experiment to display a kid-friendly content stream on
-// the New Tab page has been enabled.
-bool IsKidFriendlyContentFeedAvailable();
 
 }  // namespace supervised_user
 

@@ -6,12 +6,16 @@
 
 namespace enterprise_connectors {
 
-BASE_FEATURE(kResumableUploadEnabled,
-             "ResumableUploadEnabled",
+BASE_FEATURE(kStopRegisterFcmEnabled,
+             "StopRegisterFcmEnabled",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-bool IsResumableUploadEnabled() {
-  return base::FeatureList::IsEnabled(kResumableUploadEnabled);
+BASE_FEATURE(kEnableAsyncUploadAfterVerdict,
+             "EnableAsyncUploadAfterVerdict",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+bool IsStopRegisterFcmEnabled() {
+  return base::FeatureList::IsEnabled(kStopRegisterFcmEnabled);
 }
 
 }  // namespace enterprise_connectors

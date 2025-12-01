@@ -62,7 +62,7 @@ title: June 2021 - New features, stability fixes, Interop fixes and more!
     is not the dominant factor of dropped animation frames.</td></td>
 
     <td><td>We are seeing memory regression and this is tracked by <a
-    href="http://crbug.com/1210221">crbug.com/1210221</a>.</td></td>
+    href="https://crbug.com/1210221">crbug.com/1210221</a>.</td></td>
 
 <td><td>Moreover, this feature is now experimental, which means one can enable it by enabling “Experimental Web Platform features” in chrome://flags.</td></td>
 
@@ -86,13 +86,13 @@ title: June 2021 - New features, stability fixes, Interop fixes and more!
     <td><td>There are lots of follow-on work including:</td></td>
 
         <td><td><a
-        href="http://crbug.com/1213217">crbug.com/1213217</a></td></td>
+        href="https://crbug.com/1213217">crbug.com/1213217</a></td></td>
 
         <td><td><a
-        href="http://crbug.com/1213248">crbug.com/1213248</a></td></td>
+        href="https://crbug.com/1213248">crbug.com/1213248</a></td></td>
 
         <td><td><a
-        href="http://crbug.com/1213252">crbug.com/1213252</a></td></td>
+        href="https://crbug.com/1213252">crbug.com/1213252</a></td></td>
 
         <td><td>Enable only on Android-S</td></td>
 
@@ -139,7 +139,7 @@ title: June 2021 - New features, stability fixes, Interop fixes and more!
 
 <td><td><img alt="image" src="https://lh6.googleusercontent.com/UFQIE4kr5dmWZAXVGBKCYupnAMRfM5mnJOZzxQV5hNium6j1f8EZNgiiYpTU3ANfDA86IdaiwzE6A5ROxhkidFQSZ6c_41ESS9MmG-4TaIUx6Qva4YSktkMXi7RzNesE_lsQ6kTVaw" height=40 width=283></td></td>
 
-<td><td>mustaq@ fixed a fake activation issue as a suspect for <a href="http://crbug.com/1201355">a navigation problem</a>.</td></td>
+<td><td>mustaq@ fixed a fake activation issue as a suspect for <a href="https://crbug.com/1201355">a navigation problem</a>.</td></td>
 
     <td><td>UMA investigation revealed <a
     href="https://bugs.chromium.org/p/chromium/issues/detail?id=1082258#c7">&lt;0.005%</a>
@@ -193,10 +193,10 @@ title: June 2021 - New features, stability fixes, Interop fixes and more!
     <td><td>skobes@ used that for two recent top-controls regressions</td></td>
 
         <td><td><a
-        href="http://crbug.com/1167400">crbug.com/1167400</a></td></td>
+        href="https://crbug.com/1167400">crbug.com/1167400</a></td></td>
 
         <td><td><a
-        href="http://crbug.com/1207888">crbug.com/1207888</a></td></td>
+        href="https://crbug.com/1207888">crbug.com/1207888</a></td></td>
 
 <td><td>AtomicString for PointerEvent type</td></td>
 

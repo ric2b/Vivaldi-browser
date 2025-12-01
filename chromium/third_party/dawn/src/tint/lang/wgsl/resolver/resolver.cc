@@ -105,10 +105,10 @@
 #include "src/tint/lang/wgsl/sem/value_conversion.h"
 #include "src/tint/lang/wgsl/sem/variable.h"
 #include "src/tint/lang/wgsl/sem/while_statement.h"
-#include "src/tint/utils/constants/internal_limits.h"
 #include "src/tint/utils/containers/reverse.h"
 #include "src/tint/utils/containers/transform.h"
 #include "src/tint/utils/containers/vector.h"
+#include "src/tint/utils/internal_limits.h"
 #include "src/tint/utils/macros/compiler.h"
 #include "src/tint/utils/macros/defer.h"
 #include "src/tint/utils/macros/scoped_assignment.h"
@@ -2491,6 +2491,14 @@ sem::Call* Resolver::BuiltinCall(const ast::CallExpression* expr,
                 return nullptr;
             }
             break;
+        case wgsl::BuiltinFn::kSubgroupShuffle:
+        case wgsl::BuiltinFn::kSubgroupShuffleUp:
+        case wgsl::BuiltinFn::kSubgroupShuffleDown:
+        case wgsl::BuiltinFn::kSubgroupShuffleXor:
+            if (!validator_.SubgroupShuffleFunction(fn, call)) {
+                return nullptr;
+            }
+            break;
 
         case wgsl::BuiltinFn::kQuadBroadcast:
             if (!validator_.QuadBroadcast(call)) {
@@ -2713,6 +2721,12 @@ core::type::Type* Resolver::BuiltinType(core::BuiltinType builtin_ty,
         case core::BuiltinType::kSamplerComparison:
             return check_no_tmpl_args(
                 b.create<core::type::Sampler>(core::type::SamplerKind::kComparisonSampler));
+        case core::BuiltinType::kSubgroupMatrixLeft:
+            return SubgroupMatrix(ident, core::SubgroupMatrixKind::kLeft);
+        case core::BuiltinType::kSubgroupMatrixRight:
+            return SubgroupMatrix(ident, core::SubgroupMatrixKind::kRight);
+        case core::BuiltinType::kSubgroupMatrixResult:
+            return SubgroupMatrix(ident, core::SubgroupMatrixKind::kResult);
         case core::BuiltinType::kTexture1D:
             return SampledTexture(ident, core::type::TextureDimension::k1d);
         case core::BuiltinType::kTexture2D:
@@ -3081,6 +3095,45 @@ core::type::InputAttachment* Resolver::InputAttachment(const ast::Identifier* id
 
     auto* out = b.create<core::type::InputAttachment>(ty_expr);
     return validator_.InputAttachment(out, ident->source) ? out : nullptr;
+}
+
+core::type::SubgroupMatrix* Resolver::SubgroupMatrix(const ast::Identifier* ident,
+                                                     core::SubgroupMatrixKind kind) {
+    auto* tmpl_ident = TemplatedIdentifier(ident, 3);
+    if (DAWN_UNLIKELY(!tmpl_ident)) {
+        return nullptr;
+    }
+
+    auto* ty_expr = sem_.GetType(tmpl_ident->arguments[0]);
+    if (DAWN_UNLIKELY(!ty_expr)) {
+        return nullptr;
+    }
+
+    auto get_dim = [&](const ast::Expression* arg,
+                       const char* dim) -> const core::constant::Value* {
+        const auto* cols_sem = Materialize(sem_.GetVal(arg));
+        if (!cols_sem) {
+            return nullptr;
+        }
+        if (!cols_sem->ConstantValue() || cols_sem->ConstantValue()->ValueAs<AInt>() < 1) {
+            AddError(arg->source) << "subgroup matrix " << dim
+                                  << " count must be a constant positive integer";
+            return nullptr;
+        }
+        return cols_sem->ConstantValue();
+    };
+    auto* cols = get_dim(tmpl_ident->arguments[1], "column");
+    if (!cols) {
+        return nullptr;
+    }
+    auto* rows = get_dim(tmpl_ident->arguments[2], "row");
+    if (!rows) {
+        return nullptr;
+    }
+
+    auto* out = b.create<core::type::SubgroupMatrix>(kind, ty_expr, cols->ValueAs<uint32_t>(),
+                                                     rows->ValueAs<uint32_t>());
+    return validator_.SubgroupMatrix(out, ident->source) ? out : nullptr;
 }
 
 core::type::Vector* Resolver::PackedVec3T(const ast::Identifier* ident) {

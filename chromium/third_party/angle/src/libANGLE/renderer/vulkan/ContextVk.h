@@ -477,9 +477,10 @@ class ContextVk : public ContextImpl, public vk::Context, public MultisampleText
 
     angle::Result onIndexBufferChange(const vk::BufferHelper *currentIndexBuffer);
 
-    angle::Result flushImpl(const vk::Semaphore *semaphore,
-                            const vk::SharedExternalFence *externalFence,
-                            RenderPassClosureReason renderPassClosureReason);
+    angle::Result flushAndSubmitCommands(const vk::Semaphore *semaphore,
+                                         const vk::SharedExternalFence *externalFence,
+                                         RenderPassClosureReason renderPassClosureReason);
+
     angle::Result finishImpl(RenderPassClosureReason renderPassClosureReason);
 
     void addWaitSemaphore(VkSemaphore semaphore, VkPipelineStageFlags stageMask);
@@ -596,13 +597,7 @@ class ContextVk : public ContextImpl, public vk::Context, public MultisampleText
         mRenderPassCommands->fragmentShadingRateImageRead(image);
     }
 
-    void finalizeImageLayout(const vk::ImageHelper *image, UniqueSerial imageSiblingSerial)
-    {
-        if (mRenderPassCommands->started())
-        {
-            mRenderPassCommands->finalizeImageLayout(this, image, imageSiblingSerial);
-        }
-    }
+    void finalizeImageLayout(vk::ImageHelper *image, UniqueSerial imageSiblingSerial);
 
     angle::Result getOutsideRenderPassCommandBuffer(
         const vk::CommandBufferAccess &access,
@@ -631,14 +626,7 @@ class ContextVk : public ContextImpl, public vk::Context, public MultisampleText
     }
     angle::Result submitStagedTextureUpdates()
     {
-        // Staged updates are recorded in outside RP cammand buffer, submit them.
-        return flushOutsideRenderPassCommands();
-    }
-
-    angle::Result onEGLImageQueueChange()
-    {
-        // Flush the barrier inserted to change the queue and layout of an EGL image.  Another
-        // thread may start using this image without issuing a sync object.
+        // Staged updates are recorded in outside RP command buffer, submit them.
         return flushOutsideRenderPassCommands();
     }
 
@@ -718,7 +706,7 @@ class ContextVk : public ContextImpl, public vk::Context, public MultisampleText
     // Either issue a submission or defer it when a sync object is initialized.  If deferred, a
     // submission will have to be incurred during client wait.
     angle::Result onSyncObjectInit(vk::SyncHelper *syncHelper, SyncFenceScope scope);
-    // Called when a sync object is waited on while its submission was deffered in onSyncObjectInit.
+    // Called when a sync object is waited on while its submission was deferred in onSyncObjectInit.
     // It's a no-op if this context doesn't have a pending submission.  Note that due to
     // mHasDeferredFlush being set, flushing the render pass leads to a submission automatically.
     angle::Result flushCommandsAndEndRenderPassIfDeferredSyncInit(RenderPassClosureReason reason);
@@ -780,7 +768,7 @@ class ContextVk : public ContextImpl, public vk::Context, public MultisampleText
                                          uint32_t memoryTypeIndex,
                                          BufferUsageType usageType)
     {
-        return mShareGroupVk->getDefaultBufferPool(mRenderer, size, memoryTypeIndex, usageType);
+        return mShareGroupVk->getDefaultBufferPool(size, memoryTypeIndex, usageType);
     }
 
     angle::Result allocateStreamedVertexBuffer(size_t attribIndex,
@@ -900,6 +888,10 @@ class ContextVk : public ContextImpl, public vk::Context, public MultisampleText
     void addToPendingImageGarbage(vk::ResourceUse use, VkDeviceSize size);
 
     bool hasExcessPendingGarbage() const;
+
+    angle::Result onFramebufferBoundary(const gl::Context *contextGL);
+
+    uint32_t getCurrentFrameCount() const { return mShareGroupVk->getCurrentFrameCount(); }
 
   private:
     // Dirty bits.
@@ -1169,7 +1161,7 @@ class ContextVk : public ContextImpl, public vk::Context, public MultisampleText
                         float farPlane);
     void updateFrontFace();
     void updateDepthRange(float nearPlane, float farPlane);
-    void updateMissingOutputsMask();
+    void updateMissingAttachments();
     void updateSampleMaskWithRasterizationSamples(const uint32_t rasterizationSamples);
     void updateAlphaToCoverageWithRasterizationSamples(const uint32_t rasterizationSamples);
     void updateFrameBufferFetchSamples(const uint32_t prevSamples, const uint32_t curSamples);
@@ -1346,6 +1338,7 @@ class ContextVk : public ContextImpl, public vk::Context, public MultisampleText
     angle::Result submitCommands(const vk::Semaphore *signalSemaphore,
                                  const vk::SharedExternalFence *externalFence,
                                  Submit submission);
+    angle::Result flushImpl(const gl::Context *context);
 
     angle::Result synchronizeCpuGpuTime();
     angle::Result traceGpuEventImpl(vk::OutsideRenderPassCommandBuffer *commandBuffer,
@@ -1526,6 +1519,7 @@ class ContextVk : public ContextImpl, public vk::Context, public MultisampleText
     DirtyBits mNewGraphicsCommandBufferDirtyBits;
     DirtyBits mNewComputeCommandBufferDirtyBits;
     DirtyBits mDynamicStateDirtyBits;
+    DirtyBits mPersistentGraphicsDirtyBits;
     static constexpr DirtyBits kColorAccessChangeDirtyBits{DIRTY_BIT_COLOR_ACCESS};
     static constexpr DirtyBits kDepthStencilAccessChangeDirtyBits{
         DIRTY_BIT_READ_ONLY_DEPTH_FEEDBACK_LOOP_MODE, DIRTY_BIT_DEPTH_STENCIL_ACCESS};
@@ -1799,7 +1793,7 @@ ANGLE_INLINE bool UseLineRaster(const ContextVk *contextVk, gl::PrimitiveMode mo
     return gl::IsLineMode(mode);
 }
 
-uint32_t GetDriverUniformSize(vk::Context *context, PipelineType pipelineType);
+uint32_t GetDriverUniformSize(vk::ErrorContext *context, PipelineType pipelineType);
 }  // namespace rx
 
 // Generate a perf warning, and insert an event marker in the command buffer.

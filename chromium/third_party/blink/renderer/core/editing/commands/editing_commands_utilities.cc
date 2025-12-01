@@ -30,7 +30,6 @@
 #include "third_party/blink/renderer/core/editing/commands/editing_commands_utilities.h"
 
 #include "third_party/blink/public/web/web_local_frame_client.h"
-#include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/text.h"
 #include "third_party/blink/renderer/core/editing/commands/selection_for_undo_step.h"
 #include "third_party/blink/renderer/core/editing/commands/typing_command.h"
@@ -524,7 +523,7 @@ VisibleSelection SelectionForParagraphIteration(
 
 const String& NonBreakingSpaceString() {
   DEFINE_STATIC_LOCAL(String, non_breaking_space_string,
-                      (&kNoBreakSpaceCharacter, 1u));
+                      (base::span_from_ref(kNoBreakSpaceCharacter)));
   return non_breaking_space_string;
 }
 

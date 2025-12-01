@@ -48,6 +48,7 @@
   self.mediator.browser = self.browser;
   self.mediator.consumer = self.viewProvider;
   self.viewProvider.settingsStateConsumer = self.mediator;
+  [self observeResetDomainSettingsButtonTapEvent];
 
   // Add Done button
   UIBarButtonItem* doneItem =
@@ -74,6 +75,17 @@
   [self stop];
   [self.baseNavigationController dismissViewControllerAnimated:YES
                                                     completion:nil];
+}
+
+- (void)observeResetDomainSettingsButtonTapEvent {
+  __weak __typeof(self) weakSelf = self;
+  [self.viewProvider observeResetDomainSettingsButtonTapEvent:^{
+    [weakSelf handleResetDomainSettingsButtonTap];
+  }];
+}
+
+- (void)handleResetDomainSettingsButtonTap {
+  [self.mediator resetUsersDomainZoomPref];
 }
 
 @end

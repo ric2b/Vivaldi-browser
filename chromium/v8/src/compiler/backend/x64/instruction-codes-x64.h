@@ -160,7 +160,8 @@ namespace compiler {
   V(SSEFloat32Min)                                   \
   V(SSEFloat64Min)                                   \
   V(SSEFloat64ToFloat32)                             \
-  V(SSEFloat64ToFloat16)                             \
+  V(SSEFloat64ToFloat16RawBits)                      \
+  V(SSEFloat16RawBitsToFloat64)                      \
   V(SSEFloat64ToInt32)                               \
   V(SSEFloat64ToUint32)                              \
   V(SSEFloat32ToInt64)                               \

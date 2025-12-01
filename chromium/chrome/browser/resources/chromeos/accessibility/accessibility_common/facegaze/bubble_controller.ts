@@ -2,21 +2,31 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {KeyPressMacro} from '/common/action_fulfillment/macros/key_press_macro.js';
-import {Macro, ToggleDirection} from '/common/action_fulfillment/macros/macro.js';
+import type {KeyPressMacro} from '/common/action_fulfillment/macros/key_press_macro.js';
+import type {Macro} from '/common/action_fulfillment/macros/macro.js';
+import {ToggleDirection} from '/common/action_fulfillment/macros/macro.js';
 import {MacroName} from '/common/action_fulfillment/macros/macro_names.js';
 import {TestImportManager} from '/common/testing/test_import_manager.js';
 
 import {FacialGesture} from './facial_gestures.js';
 
+interface State {
+  paused: FacialGesture|undefined;
+  scrollMode: FacialGesture|undefined;
+  longClick: FacialGesture|undefined;
+  dictation: FacialGesture|undefined;
+  heldMacros: string[];
+  precision: FacialGesture|undefined;
+}
+
 /** Handles setting the text content of the FaceGaze bubble UI. */
 export class BubbleController {
   private resetBubbleTimeoutId_: number|undefined;
   private baseText_: string[] = [];
-  private getStateGesture_: () => BubbleController.GetStateGestureResult;
+  private getState_: () => State;
 
-  constructor(getStateGesture: () => BubbleController.GetStateGestureResult) {
-    this.getStateGesture_ = getStateGesture;
+  constructor(getState: () => State) {
+    this.getState_ = getState;
   }
 
   updateBubble(text: string): void {
@@ -45,11 +55,20 @@ export class BubbleController {
       scrollMode,
       longClick,
       dictation,
-      heldActions,
-    } = this.getStateGesture_();
+      heldMacros,
+      precision,
+    } = this.getState_();
 
-    if (heldActions) {
-      heldActions.forEach((displayText) => {this.baseText_.push(displayText)});
+    if (heldMacros) {
+      heldMacros.forEach((displayText) => {
+        this.baseText_.push(displayText);
+      });
+    }
+
+    if (precision) {
+      this.baseText_.push(chrome.i18n.getMessage(
+          'facegaze_state_precision_active',
+          BubbleController.getDisplayTextForGesture_(precision)));
     }
 
     if (paused) {
@@ -74,10 +93,16 @@ export class BubbleController {
         this.baseText_.join(', '), /*isWarning=*/ this.baseText_.length > 0);
   }
 
-  static getDisplayText(gesture: FacialGesture, macro: Macro): string {
+  static getDisplayText(gesture: FacialGesture, macro: Macro): string
+      |undefined {
+    if (macro.getName() === MacroName.TOGGLE_PRECISION_CLICK &&
+        macro.getToggleDirection() === ToggleDirection.OFF) {
+      return undefined;
+    }
+
     return chrome.i18n.getMessage('facegaze_display_text', [
       BubbleController.getDisplayTextForMacro_(macro),
-      BubbleController.getDisplayTextForGesture_(gesture)
+      BubbleController.getDisplayTextForGesture_(gesture),
     ]);
   }
 
@@ -130,6 +155,11 @@ export class BubbleController {
         return macro.getToggleDirection() === ToggleDirection.ON ?
             chrome.i18n.getMessage('facegaze_macro_text_toggle_facegaze_on') :
             chrome.i18n.getMessage('facegaze_macro_text_toggle_facegaze_off');
+      case MacroName.TOGGLE_PRECISION_CLICK:
+        // This method is only called on TOGGLE_PRECISION_CLICK if the toggle
+        // direction is `ToggleDirection.ON`.
+        return chrome.i18n.getMessage(
+            'facegaze_macro_text_toggle_precision_on');
       case MacroName.TOGGLE_SCROLL_MODE:
         return macro.getToggleDirection() === ToggleDirection.ON ?
             chrome.i18n.getMessage(
@@ -243,14 +273,6 @@ export class BubbleController {
 
 export namespace BubbleController {
   export const RESET_BUBBLE_TIMEOUT_MS = 2500;
-
-  export interface GetStateGestureResult {
-    paused: FacialGesture|undefined;
-    scrollMode: FacialGesture|undefined;
-    longClick: FacialGesture|undefined;
-    dictation: FacialGesture|undefined;
-    heldActions: string[];
-  }
 }
 
 TestImportManager.exportForTesting(BubbleController);

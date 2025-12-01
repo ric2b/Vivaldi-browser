@@ -88,7 +88,7 @@ IN_PROC_BROWSER_TEST_F(SanitizeUIBrowserTest, PRE_SanitizeCheckPreferences) {
   // Startup page settings.
   const GURL urls[] = {GURL(foo_url), GURL(bar_url)};
   SessionStartupPref startup_pref(SessionStartupPref::URLS);
-  startup_pref.urls.assign(urls, urls + std::size(urls));
+  startup_pref.urls.assign(std::begin(urls), std::end(urls));
   SessionStartupPref::SetStartupPref(prefs, startup_pref);
 
   // NTP settings.
@@ -148,7 +148,8 @@ IN_PROC_BROWSER_TEST_F(SanitizeUIBrowserTest, SanitizeCheckPreferences) {
   const GURL urls[] = {GURL(foo_url), GURL(bar_url)};
   SessionStartupPref startup_pref = SessionStartupPref::GetStartupPref(prefs);
   EXPECT_EQ(SessionStartupPref::GetDefaultStartupType(), startup_pref.type);
-  EXPECT_EQ(std::vector<GURL>(urls, urls + std::size(urls)), startup_pref.urls);
+  EXPECT_EQ(std::vector<GURL>(std::begin(urls), std::end(urls)),
+            startup_pref.urls);
 
   // Check NTP settings for expected defaults.
   auto* ntp_custom_background_service =

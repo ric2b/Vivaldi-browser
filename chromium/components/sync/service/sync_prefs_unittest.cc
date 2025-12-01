@@ -10,7 +10,6 @@
 #include "base/base64.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
-#include "build/chromeos_buildflags.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_value_map.h"
 #include "components/prefs/testing_pref_service.h"
@@ -23,6 +22,7 @@
 #include "components/sync/base/user_selectable_type.h"
 #include "components/sync/protocol/nigori_specifics.pb.h"
 #include "components/sync/service/glue/sync_transport_data_prefs.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -40,7 +40,7 @@ constexpr char kObsoleteAutofillWalletImportEnabled[] =
     "autofill.wallet_import_enabled";
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-constexpr char kGaiaId[] = "gaia-id";
+constexpr GaiaId::Literal kGaiaId("gaia-id");
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 
 class SyncPrefsTest : public testing::Test {
@@ -58,7 +58,7 @@ class SyncPrefsTest : public testing::Test {
     pref_service_.registry()->RegisterBooleanPref(
         ::prefs::kExplicitBrowserSignin, false);
     sync_prefs_ = std::make_unique<SyncPrefs>(&pref_service_);
-    gaia_id_hash_ = signin::GaiaIdHash::FromGaiaId("account_gaia");
+    gaia_id_hash_ = signin::GaiaIdHash::FromGaiaId(GaiaId("account_gaia"));
   }
 
   base::test::SingleThreadTaskEnvironment task_environment_;
@@ -68,7 +68,7 @@ class SyncPrefsTest : public testing::Test {
 };
 
 TEST_F(SyncPrefsTest, EncryptionBootstrapTokenPerAccountSignedOut) {
-  auto gaia_id_hash_empty = signin::GaiaIdHash::FromGaiaId("");
+  auto gaia_id_hash_empty = signin::GaiaIdHash::FromGaiaId(GaiaId());
   EXPECT_TRUE(
       sync_prefs_->GetEncryptionBootstrapTokenForAccount(gaia_id_hash_empty)
           .empty());
@@ -80,7 +80,8 @@ TEST_F(SyncPrefsTest, EncryptionBootstrapTokenPerAccount) {
   sync_prefs_->SetEncryptionBootstrapTokenForAccount("token", gaia_id_hash_);
   EXPECT_EQ("token",
             sync_prefs_->GetEncryptionBootstrapTokenForAccount(gaia_id_hash_));
-  auto gaia_id_hash_2 = signin::GaiaIdHash::FromGaiaId("account_gaia_2");
+  auto gaia_id_hash_2 =
+      signin::GaiaIdHash::FromGaiaId(GaiaId("account_gaia_2"));
   EXPECT_TRUE(sync_prefs_->GetEncryptionBootstrapTokenForAccount(gaia_id_hash_2)
                   .empty());
   sync_prefs_->SetEncryptionBootstrapTokenForAccount("token2", gaia_id_hash_2);
@@ -96,7 +97,8 @@ TEST_F(SyncPrefsTest, ClearEncryptionBootstrapTokenPerAccount) {
   sync_prefs_->SetEncryptionBootstrapTokenForAccount("token", gaia_id_hash_);
   EXPECT_EQ("token",
             sync_prefs_->GetEncryptionBootstrapTokenForAccount(gaia_id_hash_));
-  auto gaia_id_hash_2 = signin::GaiaIdHash::FromGaiaId("account_gaia_2");
+  auto gaia_id_hash_2 =
+      signin::GaiaIdHash::FromGaiaId(GaiaId("account_gaia_2"));
   EXPECT_TRUE(sync_prefs_->GetEncryptionBootstrapTokenForAccount(gaia_id_hash_2)
                   .empty());
   sync_prefs_->SetEncryptionBootstrapTokenForAccount("token2", gaia_id_hash_2);
@@ -458,10 +460,9 @@ TEST_F(SyncPrefsTest,
   base::test::ScopedFeatureList features;
   features.InitWithFeatures(
       /*enabled_features=*/{kSyncEnableBookmarksInTransportMode,
-#if !BUILDFLAG(IS_IOS)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
                             kReadingListEnableSyncTransportModeUponSignIn,
-#endif  // !BUILDFLAG(IS_IOS)
-                            kSyncEnableContactInfoDataTypeInTransportMode,
+#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
                             kEnablePreferencesAccountStorage,
                             kSyncEnableExtensionsInTransportMode},
       /*disabled_features=*/{kReplaceSyncPromosWithSignInPromos});
@@ -492,10 +493,9 @@ TEST_F(SyncPrefsTest,
   features.InitWithFeatures(
       /*enabled_features=*/{kSyncEnableBookmarksInTransportMode,
                             kReplaceSyncPromosWithSignInPromos,
-#if !BUILDFLAG(IS_IOS)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
                             kReadingListEnableSyncTransportModeUponSignIn,
-#endif  // !BUILDFLAG(IS_IOS)
-                            kSyncEnableContactInfoDataTypeInTransportMode,
+#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
                             kEnablePreferencesAccountStorage,
                             kSyncEnableExtensionsInTransportMode},
       /*disabled_features=*/{});
@@ -528,9 +528,7 @@ class SyncPrefsExplicitBrowserSigninTest : public SyncPrefsTest {
  public:
   SyncPrefsExplicitBrowserSigninTest() {
     scoped_feature_list_.InitWithFeatures(
-        /*enabled_features=*/{syncer::
-                                  kSyncEnableContactInfoDataTypeInTransportMode,
-                              kSyncEnableExtensionsInTransportMode,
+        /*enabled_features=*/{kSyncEnableExtensionsInTransportMode,
                               switches::kExplicitBrowserSigninUIOnDesktop},
         /*disabled_features=*/{});
   }
@@ -587,7 +585,7 @@ TEST_F(SyncPrefsTest, SetSelectedTypesForAccountInTransportMode) {
       Difference(default_selected_types, {UserSelectableType::kPayments}));
   // Other accounts should be unnafected.
   EXPECT_EQ(sync_prefs_->GetSelectedTypesForAccount(
-                signin::GaiaIdHash::FromGaiaId("account_gaia_2")),
+                signin::GaiaIdHash::FromGaiaId(GaiaId("account_gaia_2"))),
             default_selected_types);
 }
 
@@ -623,7 +621,8 @@ TEST_F(SyncPrefsTest, KeepAccountSettingsPrefsOnlyForUsers) {
   const UserSelectableTypeSet default_selected_types =
       sync_prefs_->GetSelectedTypesForAccount(gaia_id_hash_);
 
-  auto gaia_id_hash_2 = signin::GaiaIdHash::FromGaiaId("account_gaia_2");
+  auto gaia_id_hash_2 =
+      signin::GaiaIdHash::FromGaiaId(GaiaId("account_gaia_2"));
 
   // Change one of the default values for example kPasswords for account 1.
   sync_prefs_->SetSelectedTypeForAccount(UserSelectableType::kPasswords, false,
@@ -792,7 +791,8 @@ TEST_F(SyncPrefsTest, GetNumberOfAccountsWithPasswordsSelected) {
 
   EXPECT_EQ(sync_prefs_->GetNumberOfAccountsWithPasswordsSelected(), 1);
 
-  const auto other_gaia_id_hash = signin::GaiaIdHash::FromGaiaId("other");
+  const auto other_gaia_id_hash =
+      signin::GaiaIdHash::FromGaiaId(GaiaId("other"));
   sync_prefs_->SetSelectedTypeForAccount(UserSelectableType::kPasswords, true,
                                          other_gaia_id_hash);
 
@@ -856,18 +856,15 @@ class SyncPrefsMigrationTest : public testing::Test {
     // in transport mode.
     feature_list_.InitWithFeatures(
         /*enabled_features=*/{kSyncEnableBookmarksInTransportMode,
-#if !BUILDFLAG(IS_IOS)
-                              kReadingListEnableSyncTransportModeUponSignIn,
-#endif  // !BUILDFLAG(IS_IOS)
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+                              kReadingListEnableSyncTransportModeUponSignIn,
                               switches::kExplicitBrowserSigninUIOnDesktop,
-#endif
-                              kSyncEnableContactInfoDataTypeInTransportMode,
+#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
                               kEnablePreferencesAccountStorage},
         /*disabled_features=*/{});
 
     SyncPrefs::RegisterProfilePrefs(pref_service_.registry());
-    gaia_id_hash_ = signin::GaiaIdHash::FromGaiaId("account_gaia");
+    gaia_id_hash_ = signin::GaiaIdHash::FromGaiaId(GaiaId("account_gaia"));
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
     // Pref is registered in signin internal `PrimaryAccountManager`.
     pref_service_.registry()->RegisterBooleanPref(
@@ -995,7 +992,8 @@ TEST_F(SyncPrefsMigrationTest,
        DoNotMigratePasswordsToPerAccountPrefIfSyncEverythingEnabled) {
   base::test::ScopedFeatureList feature_list(
       switches::kExplicitBrowserSigninUIOnDesktop);
-  pref_service_.SetString(::prefs::kGoogleServicesLastSyncingGaiaId, kGaiaId);
+  pref_service_.SetString(::prefs::kGoogleServicesLastSyncingGaiaId,
+                          kGaiaId.ToString());
   ASSERT_TRUE(
       pref_service_.GetBoolean(prefs::internal::kSyncKeepEverythingSynced));
   ASSERT_FALSE(pref_service_.GetBoolean(kGlobalPasswordsPref));
@@ -1016,7 +1014,8 @@ TEST_F(SyncPrefsMigrationTest,
        DoNotMigratePasswordsToPerAccountPrefIfPasswordsEnabled) {
   base::test::ScopedFeatureList feature_list(
       switches::kExplicitBrowserSigninUIOnDesktop);
-  pref_service_.SetString(::prefs::kGoogleServicesLastSyncingGaiaId, kGaiaId);
+  pref_service_.SetString(::prefs::kGoogleServicesLastSyncingGaiaId,
+                          kGaiaId.ToString());
   pref_service_.SetBoolean(prefs::internal::kSyncKeepEverythingSynced, false);
   pref_service_.SetBoolean(kGlobalPasswordsPref, true);
   ASSERT_TRUE(
@@ -1037,7 +1036,8 @@ TEST_F(SyncPrefsMigrationTest,
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndDisableFeature(
       switches::kExplicitBrowserSigninUIOnDesktop);
-  pref_service_.SetString(::prefs::kGoogleServicesLastSyncingGaiaId, kGaiaId);
+  pref_service_.SetString(::prefs::kGoogleServicesLastSyncingGaiaId,
+                          kGaiaId.ToString());
   pref_service_.SetBoolean(prefs::internal::kSyncKeepEverythingSynced, false);
   ASSERT_FALSE(pref_service_.GetBoolean(kGlobalPasswordsPref));
   ASSERT_TRUE(
@@ -1056,7 +1056,8 @@ TEST_F(SyncPrefsMigrationTest,
 TEST_F(SyncPrefsMigrationTest, MigratePasswordsToPerAccountPrefRunsOnce) {
   base::test::ScopedFeatureList feature_list(
       switches::kExplicitBrowserSigninUIOnDesktop);
-  pref_service_.SetString(::prefs::kGoogleServicesLastSyncingGaiaId, kGaiaId);
+  pref_service_.SetString(::prefs::kGoogleServicesLastSyncingGaiaId,
+                          kGaiaId.ToString());
   pref_service_.SetBoolean(prefs::internal::kSyncKeepEverythingSynced, false);
   ASSERT_FALSE(pref_service_.GetBoolean(kGlobalPasswordsPref));
   ASSERT_TRUE(
@@ -1087,7 +1088,8 @@ TEST_F(SyncPrefsMigrationTest, MigratePasswordsToPerAccountPrefRunsOnce) {
 TEST_F(SyncPrefsMigrationTest, MigrateAddressesToPerAccountPref) {
   base::test::ScopedFeatureList feature_list(
       switches::kExplicitBrowserSigninUIOnDesktop);
-  pref_service_.SetString(::prefs::kGoogleServicesLastSyncingGaiaId, kGaiaId);
+  pref_service_.SetString(::prefs::kGoogleServicesLastSyncingGaiaId,
+                          kGaiaId.ToString());
   pref_service_.SetBoolean(prefs::internal::kSyncKeepEverythingSynced, false);
   ASSERT_FALSE(pref_service_.GetBoolean(kGlobalAutofillPref));
   ASSERT_TRUE(
@@ -1111,7 +1113,7 @@ TEST_F(SyncPrefsMigrationTest, NoPassphraseMigrationForSignoutUsers) {
       pref_service_.GetString(prefs::internal::kSyncEncryptionBootstrapToken)
           .empty());
 
-  auto gaia_id_hash_empty = signin::GaiaIdHash::FromGaiaId("");
+  auto gaia_id_hash_empty = signin::GaiaIdHash::FromGaiaId(GaiaId());
   prefs.MaybeMigrateCustomPassphrasePref(gaia_id_hash_empty);
   EXPECT_TRUE(
       pref_service_.GetString(prefs::internal::kSyncEncryptionBootstrapToken)
@@ -1131,7 +1133,7 @@ TEST_F(SyncPrefsMigrationTest, PassphraseMigrationDone) {
   EXPECT_EQ(prefs.GetEncryptionBootstrapTokenForAccount(gaia_id_hash_),
             "token");
   signin::GaiaIdHash gaia_id_hash_2 =
-      signin::GaiaIdHash::FromGaiaId("account_gaia_2");
+      signin::GaiaIdHash::FromGaiaId(GaiaId("account_gaia_2"));
   EXPECT_TRUE(
       prefs.GetEncryptionBootstrapTokenForAccount(gaia_id_hash_2).empty());
 }

@@ -110,7 +110,6 @@ inline constexpr char kAuthenticateAuthFactorCompletedSignal[] =
     "AuthenticateAuthFactorCompleted";
 inline constexpr char kMountStartedSignal[] = "MountStarted";
 inline constexpr char kMountCompletedSignal[] = "MountCompleted";
-inline constexpr char kEvictedKeyRestoredSignal[] = "EvictedKeyRestored";
 inline constexpr char kAuthFactorAddedl[] = "AuthFactorAdded";
 inline constexpr char kAuthFactorRemoved[] = "AuthFactorRemoved";
 inline constexpr char kAuthFactorUpdted[] = "AuthFactorUpdated";

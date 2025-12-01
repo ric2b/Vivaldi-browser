@@ -28,7 +28,7 @@ the manifest format, and some change the behavior of existing APIs.
             list of related
             bugs](http://code.google.com/p/chromium/issues/list?q=TaskForce%3DBackgroundPagesMustDie).
 *   Split out host permissions and API permissions into separate fields
-            ([crbug.com/62898](http://crbug.com/62898))
+            ([crbug.com/62898](https://crbug.com/62898))
     *   We might want to design for extensibility in these fields, for
                 example to allow things like adding an optional
                 "why"/"justification" field for each permission.
@@ -46,7 +46,7 @@ the manifest format, and some change the behavior of existing APIs.
     *   turn on javascript strict mode
                 (<https://developer.mozilla.org/en/JavaScript/Strict_mode>)
     *   turn on CSP
-                (<http://www.w3.org/Security/wiki/Content_Security_Policy>)
+                (<https://www.w3.org/Security/wiki/Content_Security_Policy>)
     *   If a content script injects a &lt;script&gt; tag into the DOM,
                 only allow it if the src is an https url
 *   Split permissions into read and write (Context: captureVisibleTab
@@ -76,13 +76,13 @@ the manifest format, and some change the behavior of existing APIs.
             change. But in a few cases, ports are silently allowed for backward
             compatibility. Fixing this would be the breaking change.
 *   Change chrome://favicon/ to a new scheme chrome-favicon:// (this was
-            the root of a security bug, <http://crbug.com/83010>)
+            the root of a security bug, <https://crbug.com/83010>)
     *   We should just make this a separate top-level API permission. We
                 don't need or want authenticated access to these origins - we
                 just want the icons.
     *   Some work on this is in-progress: crbug.com/172375
 *   Allow better URL pattern matching (to differentiate between path,
-            query and fragments): <http://crbug.com/84024>
+            query and fragments): <https://crbug.com/84024>
 *   Change the manifest format in any ways needed to let us use [JSON
             Schema](http://json-schema.org/) for parsing it.
     *   Note: we already have an internal C++ implementation of JSON

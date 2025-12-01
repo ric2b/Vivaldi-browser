@@ -783,6 +783,10 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      */
     abstract getDefaultTimeout(): number;
     /**
+     * Maximum navigation time in milliseconds.
+     */
+    abstract getDefaultNavigationTimeout(): number;
+    /**
      * Creates a locator for the provided selector. See {@link Locator} for
      * details and supported actions.
      *
@@ -906,7 +910,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * const aHandle = await page.evaluateHandle(() => document.body);
      * const resultHandle = await page.evaluateHandle(
      *   body => body.innerHTML,
-     *   aHandle
+     *   aHandle,
      * );
      * console.log(await resultHandle.jsonValue());
      * await resultHandle.dispose();
@@ -920,7 +924,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      *
      * ```ts
      * const button = await page.evaluateHandle(() =>
-     *   document.querySelector('button')
+     *   document.querySelector('button'),
      * );
      * // can call `click` because `button` is an `ElementHandle`
      * await button.click();
@@ -993,7 +997,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * // as `value` is not on `Element`
      * const searchValue = await page.$eval(
      *   '#search',
-     *   (el: HTMLInputElement) => el.value
+     *   (el: HTMLInputElement) => el.value,
      * );
      * ```
      *
@@ -1008,7 +1012,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * // or if you want to be more explicit, provide it as the generic type.
      * const searchValue = await page.$eval<string>(
      *   '#search',
-     *   (el: HTMLInputElement) => el.value
+     *   (el: HTMLInputElement) => el.value,
      * );
      * ```
      *
@@ -1078,7 +1082,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      *
      * ```ts
      * const allInputValues = await page.$$eval('input', elements =>
-     *   elements.map(e => e.textContent)
+     *   elements.map(e => e.textContent),
      * );
      * ```
      *
@@ -1107,17 +1111,30 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      */
     $$eval<Selector extends string, Params extends unknown[], Func extends EvaluateFuncWith<Array<NodeFor<Selector>>, Params> = EvaluateFuncWith<Array<NodeFor<Selector>>, Params>>(selector: Selector, pageFunction: Func | string, ...args: Params): Promise<Awaited<ReturnType<Func>>>;
     /**
-     * If no URLs are specified, this method returns cookies for the current page
-     * URL. If URLs are specified, only cookies for those URLs are returned.
+     * If no URLs are specified, this method returns cookies for the
+     * current page URL. If URLs are specified, only cookies for those
+     * URLs are returned.
+     *
+     * @deprecated Page-level cookie API is deprecated. Use
+     * {@link Browser.cookies} or {@link BrowserContext.cookies} instead.
      */
     abstract cookies(...urls: string[]): Promise<Cookie[]>;
+    /**
+     * @deprecated Page-level cookie API is deprecated. Use
+     * {@link Browser.deleteCookie} or {@link BrowserContext.deleteCookie}
+     * instead.
+     */
     abstract deleteCookie(...cookies: DeleteCookiesRequest[]): Promise<void>;
     /**
      * @example
      *
-     * ```ts
+     *```ts
      * await page.setCookie(cookieObject1, cookieObject2);
-     * ```
+     *```
+     *
+     * @deprecated Page-level cookie API is deprecated. Use
+     * {@link Browser.setCookie} or {@link BrowserContext.setCookie}
+     * instead.
      */
     abstract setCookie(...cookies: CookieParam[]): Promise<void>;
     /**
@@ -1170,7 +1187,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      *   const page = await browser.newPage();
      *   page.on('console', msg => console.log(msg.text()));
      *   await page.exposeFunction('md5', text =>
-     *     crypto.createHash('md5').update(text).digest('hex')
+     *     crypto.createHash('md5').update(text).digest('hex'),
      *   );
      *   await page.evaluate(async () => {
      *     // use window.md5 to compute hashes
@@ -1370,10 +1387,10 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      *
      * ```ts
      * const firstRequest = await page.waitForRequest(
-     *   'https://example.com/resource'
+     *   'https://example.com/resource',
      * );
      * const finalRequest = await page.waitForRequest(
-     *   request => request.url() === 'https://example.com'
+     *   request => request.url() === 'https://example.com',
      * );
      * return finalRequest.response()?.ok();
      * ```
@@ -1394,11 +1411,11 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      *
      * ```ts
      * const firstResponse = await page.waitForResponse(
-     *   'https://example.com/resource'
+     *   'https://example.com/resource',
      * );
      * const finalResponse = await page.waitForResponse(
      *   response =>
-     *     response.url() === 'https://example.com' && response.status() === 200
+     *     response.url() === 'https://example.com' && response.status() === 200,
      * );
      * const finalResponse = await page.waitForResponse(async response => {
      *   return (await response.text()).includes('<html>');
@@ -1545,11 +1562,11 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      *   {name: 'prefers-color-scheme', value: 'dark'},
      * ]);
      * await page.evaluate(
-     *   () => matchMedia('(prefers-color-scheme: dark)').matches
+     *   () => matchMedia('(prefers-color-scheme: dark)').matches,
      * );
      * // → true
      * await page.evaluate(
-     *   () => matchMedia('(prefers-color-scheme: light)').matches
+     *   () => matchMedia('(prefers-color-scheme: light)').matches,
      * );
      * // → false
      *
@@ -1557,11 +1574,11 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      *   {name: 'prefers-reduced-motion', value: 'reduce'},
      * ]);
      * await page.evaluate(
-     *   () => matchMedia('(prefers-reduced-motion: reduce)').matches
+     *   () => matchMedia('(prefers-reduced-motion: reduce)').matches,
      * );
      * // → true
      * await page.evaluate(
-     *   () => matchMedia('(prefers-reduced-motion: no-preference)').matches
+     *   () => matchMedia('(prefers-reduced-motion: no-preference)').matches,
      * );
      * // → false
      *
@@ -1570,19 +1587,19 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      *   {name: 'prefers-reduced-motion', value: 'reduce'},
      * ]);
      * await page.evaluate(
-     *   () => matchMedia('(prefers-color-scheme: dark)').matches
+     *   () => matchMedia('(prefers-color-scheme: dark)').matches,
      * );
      * // → true
      * await page.evaluate(
-     *   () => matchMedia('(prefers-color-scheme: light)').matches
+     *   () => matchMedia('(prefers-color-scheme: light)').matches,
      * );
      * // → false
      * await page.evaluate(
-     *   () => matchMedia('(prefers-reduced-motion: reduce)').matches
+     *   () => matchMedia('(prefers-reduced-motion: reduce)').matches,
      * );
      * // → true
      * await page.evaluate(
-     *   () => matchMedia('(prefers-reduced-motion: no-preference)').matches
+     *   () => matchMedia('(prefers-reduced-motion: no-preference)').matches,
      * );
      * // → false
      *
@@ -1648,6 +1665,9 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      *   await page.emulateVisionDeficiency('blurredVision');
      *   await page.screenshot({path: 'blurred-vision.png'});
      *
+     *   await page.emulateVisionDeficiency('reducedContrast');
+     *   await page.screenshot({path: 'reduced-contrast.png'});
+     *
      *   await browser.close();
      * })();
      * ```
@@ -1688,8 +1708,8 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      *
      * This is either the viewport set with the previous {@link Page.setViewport}
      * call or the default viewport set via
-     * {@link BrowserConnectOptions.defaultViewport |
-     * BrowserConnectOptions.defaultViewport}.
+     * {@link ConnectOptions.defaultViewport |
+     * ConnectOptions.defaultViewport}.
      */
     abstract viewport(): Viewport | null;
     /**
@@ -2199,7 +2219,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * await page.waitForFunction(
      *   selector => !!document.querySelector(selector),
      *   {},
-     *   selector
+     *   selector,
      * );
      * ```
      *
@@ -2211,7 +2231,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      * await page.waitForFunction(
      *   async username => {
      *     const githubResponse = await fetch(
-     *       `https://api.github.com/users/${username}`
+     *       `https://api.github.com/users/${username}`,
      *     );
      *     const githubUser = await githubResponse.json();
      *     // show the avatar
@@ -2222,7 +2242,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      *     img.remove();
      *   },
      *   {},
-     *   username
+     *   username,
      * );
      * ```
      *
@@ -2250,7 +2270,7 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      *   page.click('#connect-bluetooth'),
      * ]);
      * await devicePrompt.select(
-     *   await devicePrompt.waitForDevice(({name}) => name.includes('My Device'))
+     *   await devicePrompt.waitForDevice(({name}) => name.includes('My Device')),
      * );
      * ```
      */

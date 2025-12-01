@@ -12,6 +12,7 @@
 #include "components/ad_blocker/adblock_known_sources_handler.h"
 #include "components/ad_blocker/adblock_rule_manager_impl.h"
 #include "components/ad_blocker/adblock_rule_source_handler.h"
+#include "components/prefs/pref_service.h"
 #include "components/request_filter/adblock_filter/adblock_cosmetic_filter.h"
 #include "components/request_filter/adblock_filter/adblock_request_filter.h"
 #include "components/request_filter/adblock_filter/adblock_rules_index.h"
@@ -22,14 +23,26 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/storage_partition.h"
 
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
+
 namespace adblock_filter {
 RuleServiceImpl::RuleServiceImpl(
     content::BrowserContext* context,
+    PrefService* prefs,
     RuleSourceHandler::RulesCompiler rules_compiler,
     std::string locale)
     : context_(context),
+      prefs_(prefs),
       rules_compiler_(std::move(rules_compiler)),
-      locale_(std::move(locale)) {}
+      locale_(std::move(locale)) {
+  pref_change_registrar_.Init(prefs_);
+
+  // Unretained is ok, since we own the registrar and it owns the callback.
+  pref_change_registrar_.Add(
+      vivaldiprefs::kPrivacyAdBlockerEnableDocumentBlocking,
+      base::BindRepeating(&RuleServiceImpl::OnEnableDocumentBlockingChanged,
+                          base::Unretained(this)));
+}
 RuleServiceImpl::~RuleServiceImpl() {}
 
 void RuleServiceImpl::AddObserver(RuleService::Observer* observer) {
@@ -54,6 +67,16 @@ void RuleServiceImpl::Load() {
       base::BindOnce(&RuleServiceImpl::OnStateLoaded, base::Unretained(this)));
 }
 
+RulesIndex* RuleServiceImpl::GetRuleIndex(RuleGroup group) {
+  std::optional<RulesIndexManager>& index_manager = index_managers_[static_cast<size_t>(group)];
+
+  if (!index_manager) {
+    return nullptr;
+  }
+
+  return index_manager->rules_index();
+}
+
 bool RuleServiceImpl::IsLoaded() const {
   return is_loaded_;
 }
@@ -72,6 +95,9 @@ void RuleServiceImpl::AddRequestFilter(RuleGroup group) {
   request_filters_[static_cast<size_t>(group)] = request_filter.get();
   vivaldi::RequestFilterManagerFactory::GetForBrowserContext(context_)
       ->AddFilter(std::move(request_filter));
+  request_filters_[static_cast<size_t>(group)]->set_allow_blocking_documents(
+      prefs_->GetBoolean(
+          vivaldiprefs::kPrivacyAdBlockerEnableDocumentBlocking));
 }
 
 bool RuleServiceImpl::IsRuleGroupEnabled(RuleGroup group) const {
@@ -116,6 +142,7 @@ void RuleServiceImpl::OnStateLoaded(
       load_result.blocked_reporting_start,
       std::move(load_result.blocked_domains_counters),
       std::move(load_result.blocked_for_origin_counters),
+      this,
       base::BindRepeating(&RuleServiceStorage::ScheduleSave,
                           base::Unretained(&state_store_.value())));
 
@@ -150,12 +177,7 @@ void RuleServiceImpl::OnStateLoaded(
     }
   }
 
-  std::array<RulesIndexManager*, kRuleGroupCount> index_manager_ptrs;
-  for (size_t i = 0; i < kRuleGroupCount; i++) {
-    if (index_managers_[i])
-      index_manager_ptrs[i] = &(index_managers_[i].value());
-  }
-  content_injection_provider_.emplace(context_, index_manager_ptrs,
+  content_injection_provider_.emplace(context_, this,
                                       &(resources_.value()));
 
   known_sources_handler_.emplace(
@@ -221,6 +243,16 @@ void RuleServiceImpl::OnRulesIndexLoaded(RuleGroup group) {
   }
 }
 
+void RuleServiceImpl::OnEnableDocumentBlockingChanged() {
+  for (auto group : {RuleGroup::kTrackingRules, RuleGroup::kAdBlockingRules}) {
+    if (request_filters_[static_cast<size_t>(group)]) {
+      request_filters_[static_cast<size_t>(group)]
+          ->set_allow_blocking_documents(prefs_->GetBoolean(
+              vivaldiprefs::kPrivacyAdBlockerEnableDocumentBlocking));
+    }
+  }
+}
+
 void RuleServiceImpl::InitializeCosmeticFilter(CosmeticFilter* filter) {
   std::array<base::WeakPtr<RulesIndexManager>, kRuleGroupCount>
       weak_index_managers;
@@ -241,19 +273,21 @@ bool RuleServiceImpl::IsApplyingIosRules(RuleGroup group) {
 bool RuleServiceImpl::HasDocumentActivationForRuleSource(
     adblock_filter::RuleGroup group,
     content::WebContents* web_contents,
-    uint32_t rule_source_id) {
-  auto *tab_helper = GetStateAndLogs()->GetTabHelper(web_contents);
+    base::Uuid preset_id) {
+  auto* tab_helper = GetStateAndLogs()->GetTabHelper(web_contents);
 
   // Tab helper can be null when page is still loading.
   if (!tab_helper)
     return false;
 
   auto& activations = tab_helper->GetTabActivations(group);
-  auto rule_activation = activations.find(adblock_filter::RequestFilterRule::kWholeDocument);
+  auto rule_activation =
+      activations.find(adblock_filter::RequestFilterRule::kWholeDocument);
   if (rule_activation != activations.end()) {
     auto& rule_data = rule_activation->second.rule_data;
     if (rule_data) {
-      if (rule_data->rule_source_id == rule_source_id)
+      if (known_sources_handler_->GetPresetIdForSourceId(
+              group, rule_data->rule_source_id) == preset_id)
         return true;
     }
   }

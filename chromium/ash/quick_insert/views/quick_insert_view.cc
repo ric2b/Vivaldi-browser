@@ -22,6 +22,7 @@
 #include "ash/quick_insert/model/quick_insert_search_results_section.h"
 #include "ash/quick_insert/quick_insert_category.h"
 #include "ash/quick_insert/quick_insert_search_result.h"
+#include "ash/quick_insert/resources/grit/quick_insert_resources.h"
 #include "ash/quick_insert/views/quick_insert_emoji_bar_view.h"
 #include "ash/quick_insert/views/quick_insert_item_with_submenu_view.h"
 #include "ash/quick_insert/views/quick_insert_key_event_handler.h"
@@ -50,7 +51,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/branding_buildflags.h"
-#include "chromeos/ash/grit/ash_resources.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/aura/window.h"
 #include "ui/base/accelerators/accelerator.h"
@@ -86,7 +86,7 @@
 namespace ash {
 namespace {
 
-constexpr int kVerticalPaddingBetweenPickerContainers = 8;
+constexpr int kVerticalPaddingBetweenQuickInsertContainers = 8;
 
 // Padding to separate the Quick Insert window from the screen edge.
 constexpr gfx::Insets kPaddingFromScreenEdge(16);
@@ -109,7 +109,7 @@ std::unique_ptr<views::BubbleBorder> CreateBorder() {
 // screen coordinates.
 gfx::Rect GetQuickInsertViewBoundsWithoutSelectedText(
     const gfx::Rect& anchor_bounds,
-    PickerLayoutType layout_type,
+    QuickInsertLayoutType layout_type,
     const gfx::Size& quick_insert_view_size,
     int quick_insert_view_search_field_vertical_offset) {
   gfx::Rect screen_work_area = display::Screen::GetScreen()
@@ -127,14 +127,14 @@ gfx::Rect GetQuickInsertViewBoundsWithoutSelectedText(
         0, -quick_insert_view_search_field_vertical_offset);
   } else {
     switch (layout_type) {
-      case PickerLayoutType::kMainResultsBelowSearchField:
+      case QuickInsertLayoutType::kMainResultsBelowSearchField:
         // Try to place Quick Insert at the right edge of the screen, below
         // the anchor.
         quick_insert_view_bounds.set_origin(
             {screen_work_area.right() - quick_insert_view_size.width(),
              anchor_bounds.bottom()});
         break;
-      case PickerLayoutType::kMainResultsAboveSearchField:
+      case QuickInsertLayoutType::kMainResultsAboveSearchField:
         // Try to place Quick Insert at the right edge of the screen, above
         // the anchor.
         quick_insert_view_bounds.set_origin(
@@ -158,7 +158,7 @@ gfx::Rect GetQuickInsertViewBoundsWithoutSelectedText(
 // and returned bounds should be in screen coordinates.
 gfx::Rect GetQuickInsertViewBoundsWithSelectedText(
     const gfx::Rect& anchor_bounds,
-    PickerLayoutType layout_type,
+    QuickInsertLayoutType layout_type,
     const gfx::Size& quick_insert_view_size) {
   gfx::Rect screen_work_area = display::Screen::GetScreen()
                                    ->GetDisplayMatching(anchor_bounds)
@@ -166,12 +166,12 @@ gfx::Rect GetQuickInsertViewBoundsWithSelectedText(
   screen_work_area.Inset(kPaddingFromScreenEdge);
   gfx::Rect quick_insert_view_bounds(quick_insert_view_size);
   switch (layout_type) {
-    case PickerLayoutType::kMainResultsBelowSearchField:
+    case QuickInsertLayoutType::kMainResultsBelowSearchField:
       // Left aligned below the anchor.
       quick_insert_view_bounds.set_origin(
           gfx::Point(anchor_bounds.x(), anchor_bounds.bottom()));
       break;
-    case PickerLayoutType::kMainResultsAboveSearchField:
+    case QuickInsertLayoutType::kMainResultsAboveSearchField:
       // Left aligned above the anchor.
       quick_insert_view_bounds.set_origin(
           gfx::Point(anchor_bounds.x(),
@@ -189,6 +189,8 @@ QuickInsertCategory GetCategoryForMoreResults(QuickInsertSectionType type) {
     case QuickInsertSectionType::kNone:
     case QuickInsertSectionType::kContentEditor:
     case QuickInsertSectionType::kExamples:
+    case QuickInsertSectionType::kFeaturedGifs:
+    case QuickInsertSectionType::kSearchedGifs:
       NOTREACHED();
     case QuickInsertSectionType::kClipboard:
       return QuickInsertCategory::kClipboard;
@@ -201,19 +203,19 @@ QuickInsertCategory GetCategoryForMoreResults(QuickInsertSectionType type) {
   }
 }
 
-std::u16string GetSearchFieldPlaceholderText(PickerModeType mode,
+std::u16string GetSearchFieldPlaceholderText(QuickInsertModeType mode,
                                              bool is_editor_available) {
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   switch (mode) {
-    case PickerModeType::kUnfocused:
+    case QuickInsertModeType::kUnfocused:
       return l10n_util::GetStringUTF16(
           IDS_PICKER_SEARCH_FIELD_NO_FOCUS_PLACEHOLDER_TEXT);
-    case PickerModeType::kNoSelection:
+    case QuickInsertModeType::kNoSelection:
       return l10n_util::GetStringUTF16(
           is_editor_available
               ? IDS_PICKER_SEARCH_FIELD_NO_SELECTION_WITH_EDITOR_PLACEHOLDER_TEXT
               : IDS_PICKER_SEARCH_FIELD_NO_SELECTION_PLACEHOLDER_TEXT);
-    case PickerModeType::kHasSelection:
+    case QuickInsertModeType::kHasSelection:
       return l10n_util::GetStringUTF16(
           is_editor_available
               ? IDS_PICKER_SEARCH_FIELD_HAS_SELECTION_WITH_EDITOR_PLACEHOLDER_TEXT
@@ -251,16 +253,15 @@ std::u16string GetNoResultsFoundDescription(QuickInsertCategory category) {
     case QuickInsertCategory::kEmojisGifs:
     case QuickInsertCategory::kEmojis:
       NOTREACHED();
+    case QuickInsertCategory::kGifs:
+      // TODO: b/345303965 - Add finalized strings for GIFs.
+      return l10n_util::GetStringUTF16(IDS_PICKER_NO_RESULTS_TEXT);
   }
 }
 
 ui::ImageModel GetNoResultsFoundIllustration() {
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   return ui::ResourceBundle::GetSharedInstance().GetThemedLottieImageNamed(
-      IDR_PICKER_NO_RESULTS_ILLUSTRATION);
-#else
-  return {};
-#endif
+      IDR_QUICK_INSERT_NO_RESULTS_ILLUSTRATION);
 }
 
 bool IsEditorAvailable(
@@ -275,8 +276,8 @@ bool IsEditorAvailable(
 
 QuickInsertView::QuickInsertView(QuickInsertViewDelegate* delegate,
                                  const gfx::Rect& anchor_bounds,
-                                 PickerLayoutType layout_type,
-                                 PickerPositionType position_type,
+                                 QuickInsertLayoutType layout_type,
+                                 QuickInsertPositionType position_type,
                                  const base::TimeTicks trigger_event_timestamp)
     : performance_metrics_(trigger_event_timestamp), delegate_(delegate) {
   SetShowCloseButton(false);
@@ -286,7 +287,7 @@ QuickInsertView::QuickInsertView(QuickInsertViewDelegate* delegate,
   // QuickInsertView manually calls GetDesiredWidgetBounds to adjust the Widget
   // bounds to realign the search field with the caret position. Move this logic
   // to a standalone class.
-  if (position_type == PickerPositionType::kNearAnchor) {
+  if (position_type == QuickInsertPositionType::kNearAnchor) {
     set_desired_bounds_delegate(base::BindRepeating(
         &QuickInsertView::GetTargetBounds, base::Unretained(this),
         anchor_bounds, layout_type));
@@ -295,7 +296,7 @@ QuickInsertView::QuickInsertView(QuickInsertViewDelegate* delegate,
   SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::LayoutOrientation::kVertical,
       /*inside_border_insets=*/gfx::Insets(),
-      /*between_child_spacing=*/kVerticalPaddingBetweenPickerContainers));
+      /*between_child_spacing=*/kVerticalPaddingBetweenQuickInsertContainers));
 
   AddMainContainerView(layout_type);
   if (base::Contains(delegate_->GetAvailableCategories(),
@@ -404,7 +405,7 @@ void QuickInsertView::OnZeroStateViewHeightChanged() {
   SetWidgetBoundsNeedsUpdate();
 }
 
-PickerCapsLockPosition QuickInsertView::GetCapsLockPosition() {
+QuickInsertCapsLockPosition QuickInsertView::GetCapsLockPosition() {
   return delegate_->GetCapsLockPosition();
 }
 
@@ -451,23 +452,30 @@ void QuickInsertView::SelectMoreResults(QuickInsertSectionType type) {
                           search_field_view_->GetQueryText());
 }
 
-void QuickInsertView::ToggleGifs() {
-  if (base::FeatureList::IsEnabled(ash::features::kPickerGifs)) {
-    // TODO: b/368442959 - Search and display GIF results.
+void QuickInsertView::ToggleGifs(bool is_checked) {
+  if (base::FeatureList::IsEnabled(features::kPickerGifs)) {
+    is_gif_toggle_checked_ = is_checked;
+    if (is_gif_toggle_checked_) {
+      SelectCategoryWithQuery(QuickInsertCategory::kGifs,
+                              search_field_view_->GetQueryText());
+    } else {
+      ResetSelectedCategory(/*reset_query=*/false);
+    }
   } else {
     ShowEmojiPicker(ui::EmojiPickerCategory::kGifs);
   }
 }
 
 void QuickInsertView::ShowEmojiPicker(ui::EmojiPickerCategory category) {
-  PickerSessionMetrics& session_metrics = delegate_->GetSessionMetrics();
+  QuickInsertSessionMetrics& session_metrics = delegate_->GetSessionMetrics();
   session_metrics.SetSelectedCategory(QuickInsertCategory::kEmojisGifs);
 
   if (auto* widget = GetWidget()) {
     widget->CloseWithReason(views::Widget::ClosedReason::kLostFocus);
   }
 
-  session_metrics.SetOutcome(PickerSessionMetrics::SessionOutcome::kRedirected);
+  session_metrics.SetOutcome(
+      QuickInsertSessionMetrics::SessionOutcome::kRedirected);
   delegate_->ShowEmojiPicker(category, search_field_view_->GetQueryText());
 }
 
@@ -478,7 +486,7 @@ bool QuickInsertView::DoPseudoFocusedAction() {
     return false;
   }
 
-  if (auto* submenu_view = views::AsViewClass<PickerItemWithSubmenuView>(
+  if (auto* submenu_view = views::AsViewClass<QuickInsertItemWithSubmenuView>(
           GetPseudoFocusedView())) {
     submenu_view->ShowSubmenu();
     SetPseudoFocusedView(submenu_controller_.GetSubmenuView()->GetTopItem());
@@ -487,7 +495,7 @@ bool QuickInsertView::DoPseudoFocusedAction() {
 
   return GetPseudoFocusedView() == nullptr
              ? false
-             : DoPickerPseudoFocusedActionOnView(GetPseudoFocusedView());
+             : DoQuickInsertPseudoFocusedActionOnView(GetPseudoFocusedView());
 }
 
 bool QuickInsertView::MovePseudoFocusUp() {
@@ -495,7 +503,7 @@ bool QuickInsertView::MovePseudoFocusUp() {
           active_item_container_->GetItemAbove(GetPseudoFocusedView())) {
     SetPseudoFocusedView(item_above);
   } else {
-    AdvanceActiveItemContainer(PickerPseudoFocusDirection::kBackward);
+    AdvanceActiveItemContainer(QuickInsertPseudoFocusDirection::kBackward);
   }
   return true;
 }
@@ -505,7 +513,7 @@ bool QuickInsertView::MovePseudoFocusDown() {
           active_item_container_->GetItemBelow(GetPseudoFocusedView())) {
     SetPseudoFocusedView(item_below);
   } else {
-    AdvanceActiveItemContainer(PickerPseudoFocusDirection::kForward);
+    AdvanceActiveItemContainer(QuickInsertPseudoFocusDirection::kForward);
   }
   return true;
 }
@@ -539,8 +547,8 @@ bool QuickInsertView::MovePseudoFocusLeft() {
 
 bool QuickInsertView::MovePseudoFocusRight() {
   views::View* pseudo_focused_view = GetPseudoFocusedView();
-  if (views::IsViewClass<PickerItemWithSubmenuView>(pseudo_focused_view)) {
-    views::AsViewClass<PickerItemWithSubmenuView>(pseudo_focused_view)
+  if (views::IsViewClass<QuickInsertItemWithSubmenuView>(pseudo_focused_view)) {
+    views::AsViewClass<QuickInsertItemWithSubmenuView>(pseudo_focused_view)
         ->ShowSubmenu();
     SetPseudoFocusedView(submenu_controller_.GetSubmenuView()->GetTopItem());
     return true;
@@ -565,14 +573,15 @@ bool QuickInsertView::MovePseudoFocusRight() {
   return false;
 }
 
-bool QuickInsertView::AdvancePseudoFocus(PickerPseudoFocusDirection direction) {
+bool QuickInsertView::AdvancePseudoFocus(
+    QuickInsertPseudoFocusDirection direction) {
   if (preview_controller_.IsBubbleVisible()) {
     preview_controller_.CloseBubble();
   }
   if (GetPseudoFocusedView() == nullptr) {
     return false;
   }
-  SetPseudoFocusedView(GetNextPickerPseudoFocusableView(
+  SetPseudoFocusedView(GetNextQuickInsertPseudoFocusableView(
       GetPseudoFocusedView(), direction, /*should_loop=*/true));
   return true;
 }
@@ -583,13 +592,13 @@ void QuickInsertView::OnPreviewBubbleVisibilityChanged(bool visible) {
     // If the cursor hides on Esc, the preview bubble is closed due to its
     // OnMouseExit event handler, before QuickInsertView has a chance to handle
     // the Esc key.
-    widget->GetNativeWindow()->SetProperty(ash::kShowCursorOnKeypress, visible);
+    widget->GetNativeWindow()->SetProperty(kShowCursorOnKeypress, visible);
   }
 }
 
 gfx::Rect QuickInsertView::GetTargetBounds(const gfx::Rect& anchor_bounds,
-                                           PickerLayoutType layout_type) {
-  return delegate_->GetMode() == PickerModeType::kHasSelection
+                                           QuickInsertLayoutType layout_type) {
+  return delegate_->GetMode() == QuickInsertModeType::kHasSelection
              ? GetQuickInsertViewBoundsWithSelectedText(anchor_bounds,
                                                         layout_type, size())
              : GetQuickInsertViewBoundsWithoutSelectedText(
@@ -608,11 +617,13 @@ void QuickInsertView::UpdateActivePage() {
   std::u16string_view query =
       base::TrimWhitespace(search_field_view_->GetQueryText(), base::TRIM_ALL);
 
-  if (query == last_query_ && selected_category_ == last_selected_category_) {
+  if (query == last_query_ && selected_category_ == last_selected_category_ &&
+      is_gif_toggle_checked_ == last_is_gif_toggle_checked_) {
     return;
   }
   last_query_ = std::u16string(query);
   last_selected_category_ = selected_category_;
+  last_is_gif_toggle_checked_ = is_gif_toggle_checked_;
 
   delegate_->GetSessionMetrics().UpdateSearchQuery(query);
 
@@ -675,7 +686,7 @@ void QuickInsertView::OnClearResultsTimerFired() {
 
   search_results_view_->ClearSearchResults();
   performance_metrics_.MarkSearchResultsUpdated(
-      PickerPerformanceMetrics::SearchResultsUpdate::kClear);
+      QuickInsertPerformanceMetrics::SearchResultsUpdate::kClear);
 }
 
 void QuickInsertView::PublishSearchResults(
@@ -697,7 +708,7 @@ void QuickInsertView::PublishSearchResults(
         l10n_util::GetStringUTF16(IDS_PICKER_NO_RESULTS_TEXT));
     if (no_results_found_shown) {
       performance_metrics_.MarkSearchResultsUpdated(
-          PickerPerformanceMetrics::SearchResultsUpdate::kNoResultsFound);
+          QuickInsertPerformanceMetrics::SearchResultsUpdate::kNoResultsFound);
     } else {
       CHECK(!clear_stale_results)
           << "Stale results were cleared when no results were found, but the "
@@ -711,11 +722,11 @@ void QuickInsertView::PublishSearchResults(
     search_results_view_->AppendSearchResults(std::move(result));
   }
 
-  PickerPerformanceMetrics::SearchResultsUpdate update;
+  QuickInsertPerformanceMetrics::SearchResultsUpdate update;
   if (clear_stale_results) {
-    update = PickerPerformanceMetrics::SearchResultsUpdate::kReplace;
+    update = QuickInsertPerformanceMetrics::SearchResultsUpdate::kReplace;
   } else {
-    update = PickerPerformanceMetrics::SearchResultsUpdate::kAppend;
+    update = QuickInsertPerformanceMetrics::SearchResultsUpdate::kAppend;
   }
   performance_metrics_.MarkSearchResultsUpdated(update);
 }
@@ -726,7 +737,7 @@ void QuickInsertView::SelectCategory(QuickInsertCategory category) {
 
 void QuickInsertView::SelectCategoryWithQuery(QuickInsertCategory category,
                                               std::u16string_view query) {
-  PickerSessionMetrics& session_metrics = delegate_->GetSessionMetrics();
+  QuickInsertSessionMetrics& session_metrics = delegate_->GetSessionMetrics();
   session_metrics.SetSelectedCategory(category);
   selected_category_ = category;
 
@@ -739,7 +750,7 @@ void QuickInsertView::SelectCategoryWithQuery(QuickInsertCategory category,
       widget->CloseWithReason(views::Widget::ClosedReason::kLostFocus);
     }
     session_metrics.SetOutcome(
-        PickerSessionMetrics::SessionOutcome::kRedirected);
+        QuickInsertSessionMetrics::SessionOutcome::kRedirected);
     delegate_->ShowEmojiPicker(ui::EmojiPickerCategory::kEmojis, query);
     return;
   }
@@ -754,7 +765,7 @@ void QuickInsertView::SelectCategoryWithQuery(QuickInsertCategory category,
     }
     CHECK(query.empty());
     session_metrics.SetOutcome(
-        PickerSessionMetrics::SessionOutcome::kRedirected);
+        QuickInsertSessionMetrics::SessionOutcome::kRedirected);
     delegate_->ShowEditor(/*preset_query_id*/ std::nullopt,
                           /*freeform_text=*/std::nullopt);
     return;
@@ -766,15 +777,16 @@ void QuickInsertView::SelectCategoryWithQuery(QuickInsertCategory category,
       widget->CloseWithReason(views::Widget::ClosedReason::kLostFocus);
     }
     session_metrics.SetOutcome(
-        PickerSessionMetrics::SessionOutcome::kRedirected);
+        QuickInsertSessionMetrics::SessionOutcome::kRedirected);
     delegate_->ShowLobster(/*query=*/std::nullopt);
     return;
   }
 
   search_field_view_->SetPlaceholderText(
       GetSearchFieldPlaceholderTextForQuickInsertCategory(category));
-  search_field_view_->SetBackButtonVisible(true);
-  SetEmojiBarVisibleIfEnabled(false);
+  search_field_view_->SetBackButtonVisible(category !=
+                                           QuickInsertCategory::kGifs);
+  SetEmojiBarVisibleIfEnabled(category == QuickInsertCategory::kGifs);
   UpdateSearchQueryAndActivePage(std::u16string(query));
 }
 
@@ -793,9 +805,9 @@ void QuickInsertView::PublishCategoryResults(
                                         GetNoResultsFoundDescription(category));
 }
 
-void QuickInsertView::AddMainContainerView(PickerLayoutType layout_type) {
+void QuickInsertView::AddMainContainerView(QuickInsertLayoutType layout_type) {
   main_container_view_ =
-      AddChildView(std::make_unique<PickerMainContainerView>());
+      AddChildView(std::make_unique<QuickInsertMainContainerView>());
 
   // `base::Unretained` is safe here because this class owns
   // `main_container_view_`, which owns `search_field_view_`.
@@ -814,7 +826,7 @@ void QuickInsertView::AddMainContainerView(PickerLayoutType layout_type) {
   main_container_view_->AddContentsView(layout_type);
 
   zero_state_view_ =
-      main_container_view_->AddPage(std::make_unique<PickerZeroStateView>(
+      main_container_view_->AddPage(std::make_unique<QuickInsertZeroStateView>(
           this, delegate_->GetAvailableCategories(), kQuickInsertViewWidth,
           delegate_->GetAssetFetcher(), &submenu_controller_,
           &preview_controller_));
@@ -822,10 +834,8 @@ void QuickInsertView::AddMainContainerView(PickerLayoutType layout_type) {
       std::make_unique<QuickInsertSearchResultsView>(
           this, kQuickInsertViewWidth, delegate_->GetAssetFetcher(),
           &submenu_controller_, &preview_controller_));
-  if (base::FeatureList::IsEnabled(ash::features::kPickerGrid)) {
-    category_results_view_->SetLocalFileResultStyle(
-        QuickInsertSearchResultsView::LocalFileResultStyle::kGrid);
-  }
+  category_results_view_->SetLocalFileResultStyle(
+      QuickInsertSearchResultsView::LocalFileResultStyle::kGrid);
   search_results_view_ = main_container_view_->AddPage(
       std::make_unique<QuickInsertSearchResultsView>(
           this, kQuickInsertViewWidth, delegate_->GetAssetFetcher(),
@@ -836,13 +846,13 @@ void QuickInsertView::AddMainContainerView(PickerLayoutType layout_type) {
 
 void QuickInsertView::AddEmojiBarView() {
   emoji_bar_view_ =
-      AddChildViewAt(std::make_unique<PickerEmojiBarView>(
+      AddChildViewAt(std::make_unique<QuickInsertEmojiBarView>(
                          this, kQuickInsertViewWidth,
                          /*is_gifs_enabled*/ delegate_->IsGifsEnabled()),
                      0);
 }
 
-void QuickInsertView::SetActivePage(PickerPageView* page_view) {
+void QuickInsertView::SetActivePage(QuickInsertPageView* page_view) {
   main_container_view_->SetActivePage(page_view);
   SetPseudoFocusedView(nullptr);
   active_item_container_ = page_view;
@@ -859,7 +869,7 @@ void QuickInsertView::SetEmojiBarVisibleIfEnabled(bool visible) {
 }
 
 void QuickInsertView::AdvanceActiveItemContainer(
-    PickerPseudoFocusDirection direction) {
+    QuickInsertPseudoFocusDirection direction) {
   if (active_item_container_ == submenu_controller_.GetSubmenuView()) {
     // Just keep the submenu as the active item container.
   } else if (emoji_bar_view_ == nullptr ||
@@ -868,7 +878,7 @@ void QuickInsertView::AdvanceActiveItemContainer(
   } else {
     active_item_container_ = emoji_bar_view_;
   }
-  SetPseudoFocusedView(direction == PickerPseudoFocusDirection::kForward
+  SetPseudoFocusedView(direction == QuickInsertPseudoFocusDirection::kForward
                            ? active_item_container_->GetTopItem()
                            : active_item_container_->GetBottomItem());
 }
@@ -894,7 +904,7 @@ void QuickInsertView::SetPseudoFocusedView(views::View* view) {
     }
   }
 
-  RemovePickerPseudoFocusFromView(pseudo_focused_view_tracker_.view());
+  RemoveQuickInsertPseudoFocusFromView(pseudo_focused_view_tracker_.view());
 
   pseudo_focused_view_tracker_.SetView(view);
   // base::Unretained() is safe here because this class owns
@@ -904,21 +914,29 @@ void QuickInsertView::SetPseudoFocusedView(views::View* view) {
 
   search_field_view_->SetTextfieldActiveDescendant(view);
   view->ScrollViewToVisible();
-  ApplyPickerPseudoFocusToView(view);
+  ApplyQuickInsertPseudoFocusToView(view);
 }
 
 views::View* QuickInsertView::GetPseudoFocusedView() {
   return pseudo_focused_view_tracker_.view();
 }
 
-void QuickInsertView::OnSearchBackButtonPressed() {
+void QuickInsertView::ResetSelectedCategory(bool reset_query) {
   search_field_view_->SetPlaceholderText(GetSearchFieldPlaceholderText(
       delegate_->GetMode(),
       IsEditorAvailable(delegate_->GetAvailableCategories())));
   search_field_view_->SetBackButtonVisible(false);
   SetEmojiBarVisibleIfEnabled(true);
   selected_category_ = std::nullopt;
-  UpdateSearchQueryAndActivePage(u"");
+  if (reset_query) {
+    UpdateSearchQueryAndActivePage(u"");
+  } else {
+    UpdateActivePage();
+  }
+}
+
+void QuickInsertView::OnSearchBackButtonPressed() {
+  ResetSelectedCategory(/*reset_query=*/true);
   CHECK_EQ(main_container_view_->active_page(), zero_state_view_)
       << "UpdateSearchQueryAndActivePage did not set active page to zero state "
          "view";

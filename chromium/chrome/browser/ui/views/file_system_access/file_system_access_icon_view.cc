@@ -4,10 +4,10 @@
 
 #include "chrome/browser/ui/views/file_system_access/file_system_access_icon_view.h"
 
+#include <algorithm>
 #include <iterator>
 
 #include "base/feature_list.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/file_system_access/chrome_file_system_access_permission_context.h"
@@ -27,8 +27,8 @@ namespace {
 std::vector<base::FilePath> GetPaths(
     const std::vector<content::PathInfo>& path_infos) {
   std::vector<base::FilePath> result;
-  base::ranges::transform(path_infos, std::back_inserter(result),
-                          &content::PathInfo::path);
+  std::ranges::transform(path_infos, std::back_inserter(result),
+                         &content::PathInfo::path);
   return result;
 }
 
@@ -69,8 +69,9 @@ void FileSystemAccessIconView::UpdateImpl() {
 
   SetVisible(has_write_access_ || show_read_indicator);
 
-  if (has_write_access_ != had_write_access)
+  if (has_write_access_ != had_write_access) {
     UpdateIconImage();
+  }
 
   GetViewAccessibility().SetName(
       has_write_access_ ? l10n_util::GetStringUTF16(
@@ -80,8 +81,9 @@ void FileSystemAccessIconView::UpdateImpl() {
 
   // If icon isn't visible, a bubble shouldn't be shown either. Close it if
   // it was still open.
-  if (!GetVisible())
+  if (!GetVisible()) {
     FileSystemAccessUsageBubbleView::CloseCurrentBubble();
+  }
 }
 
 void FileSystemAccessIconView::OnExecuting(ExecuteSource execute_source) {
@@ -111,8 +113,8 @@ void FileSystemAccessIconView::OnExecuting(ExecuteSource execute_source) {
 }
 
 const gfx::VectorIcon& FileSystemAccessIconView::GetVectorIcon() const {
-    return has_write_access_ ? kFileSaveChromeRefreshIcon
-                             : vector_icons::kInsertDriveFileOutlineIcon;
+  return has_write_access_ ? kFileSaveChromeRefreshIcon
+                           : vector_icons::kInsertDriveFileOutlineIcon;
 }
 
 BEGIN_METADATA(FileSystemAccessIconView)

@@ -11,3 +11,14 @@ NSString* vGetLinkURL = @"getLinkURL";
 NSString* vGetImageTitleAndURL = @"getImageTitleAndURL";
 NSString* vURLPlaceholderText = @"https://";
 NSString* vSetNoteContent = @"setNoteContent";
+NSString* vOpenLinkEditor = @"openLinkEditor";
+NSString* vLinkEditorUrlField = @"url";
+NSString* vDictMessageCommandField = @"command";
+
+// Hyperlink editor actions, must match definitions in
+// vivapp/src/mobile/markdown/MarkdownConstants.js
+NSString* vActionAddLink = @"add_link";
+NSString* vActionRemoveLink = @"remove_link";
+NSString* vActionUpdateLink = @"update_link";
+
+NSString* vCurrentMarkdownFormat = @"currentMarkdownFormat";

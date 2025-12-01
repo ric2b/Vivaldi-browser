@@ -21,6 +21,14 @@ It is expected that there are still some places lurking in the code which will
 not function properly on big-endian architectures. Bugs and/or patches are
 welcome, however providing this support is **not** a priority at this time.
 
+### Compilers supported
+
+PDFium aims to be compliant with the [Chromium policy](https://chromium.googlesource.com/chromium/src/+/main/docs/toolchain_support.md#existing-toolchain-support).
+
+Currently this means Clang. Former MSVC users should consider using clang-cl
+if needed. Community-contributed patches for gcc will be allowed. No MSVC
+patches will be taken.
+
 #### Google employees
 
 Run: `download_from_google_storage --config` and follow the

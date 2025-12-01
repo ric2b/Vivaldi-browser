@@ -15,15 +15,10 @@
 import {Time} from '../base/time';
 import {featureFlags} from './feature_flags';
 import {FlowDirection, Flow} from './flow_types';
-import {asSliceSqlId} from '../trace_processor/sql_utils/core_types';
+import {asSliceSqlId} from '../components/sql_utils/core_types';
 import {LONG, NUM, STR_NULL} from '../trace_processor/query_result';
-import {
-  ACTUAL_FRAMES_SLICE_TRACK_KIND,
-  SLICE_TRACK_KIND,
-} from '../public/track_kinds';
 import {TrackDescriptor, TrackManager} from '../public/track';
 import {AreaSelection, Selection, SelectionManager} from '../public/selection';
-import {raf} from './raf_scheduler';
 import {Engine} from '../trace_processor/engine';
 
 const SHOW_INDIRECT_PRECEDING_FLOWS_FLAG = featureFlags.register({
@@ -83,7 +78,7 @@ export class FlowManager {
     );`);
   }
 
-  async queryFlowEvents(query: string, callback: (flows: Flow[]) => void) {
+  async queryFlowEvents(query: string): Promise<Flow[]> {
     const result = await this.engine.query(query);
     const flows: Flow[] = [];
 
@@ -309,7 +304,13 @@ export class FlowManager {
       }
     }
 
-    callback(flows);
+    // Fill in the track uris if available
+    flows.forEach((flow) => {
+      flow.begin.trackUri = trackIdToTrack.get(flow.begin.trackId)?.uri;
+      flow.end.trackUri = trackIdToTrack.get(flow.end.trackId)?.uri;
+    });
+
+    return flows;
   }
 
   sliceSelected(sliceId: number) {
@@ -360,20 +361,20 @@ export class FlowManager {
     left join process process_out on process_out.upid = thread_out.upid
     left join process process_in on process_in.upid = thread_in.upid
     `;
-    this.queryFlowEvents(query, (flows: Flow[]) =>
-      this.setConnectedFlows(flows),
-    );
+    this.queryFlowEvents(query).then((flows) => this.setConnectedFlows(flows));
   }
 
   private areaSelected(area: AreaSelection) {
     const trackIds: number[] = [];
 
     for (const trackInfo of area.tracks) {
-      const kind = trackInfo?.tags?.kind;
-      if (
-        kind === SLICE_TRACK_KIND ||
-        kind === ACTUAL_FRAMES_SLICE_TRACK_KIND
-      ) {
+      // Flows are only applicable for tracks whose slices derive from the
+      // 'slice' root table.
+      //
+      // TODO(stevegolton): We can remove this check entirely once flows are
+      // made more generic.
+      const rootTableName = trackInfo.track.rootTableName;
+      if (rootTableName === 'slice') {
         if (trackInfo?.tags?.trackIds) {
           for (const trackId of trackInfo.tags.trackIds) {
             trackIds.push(trackId);
@@ -423,9 +424,7 @@ export class FlowManager {
       (t2.track_id in ${tracks}
         and (t2.ts <= ${endNs} and t2.ts >= ${startNs}))
     `;
-    this.queryFlowEvents(query, (flows: Flow[]) =>
-      this.setSelectedFlows(flows),
-    );
+    this.queryFlowEvents(query).then((flows) => this.setSelectedFlows(flows));
   }
 
   private setConnectedFlows(connectedFlows: Flow[]) {
@@ -446,12 +445,10 @@ export class FlowManager {
         }
       }
     }
-    raf.scheduleFullRedraw();
   }
 
   private setSelectedFlows(selectedFlows: Flow[]) {
     this._selectedFlows = selectedFlows;
-    raf.scheduleFullRedraw();
   }
 
   updateFlows(selection: Selection) {
@@ -464,9 +461,11 @@ export class FlowManager {
       return;
     }
 
-    // TODO(b/155483804): This is a hack as annotation slices don't contain
-    // flows. We should tidy this up when fixing this bug.
-    if (selection.kind === 'track_event' && selection.tableName === 'slice') {
+    if (
+      selection.kind === 'track_event' &&
+      this.trackMgr.getTrack(selection.trackUri)?.track.rootTableName ===
+        'slice'
+    ) {
       this.sliceSelected(selection.eventId);
     } else {
       this.setConnectedFlows([]);
@@ -509,7 +508,6 @@ export class FlowManager {
       );
       this._focusedFlowIdRight = nextFlowId;
     }
-    raf.scheduleFullRedraw();
   }
 
   // Select the slice connected to the flow in focus
@@ -561,7 +559,6 @@ export class FlowManager {
 
   setCategoryVisible(name: string, value: boolean) {
     this._visibleCategories.set(name, value);
-    raf.scheduleFullRedraw();
   }
 }
 

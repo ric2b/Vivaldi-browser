@@ -37,7 +37,7 @@ Reproducing a failure locally is the most desirable option, both in terms of
 speed and ease of debugging. If the failure only occurs on a specific OS you
 don't have access to or if the failure only reproduces on a specific bot you may
 need to access that bot directly. Information on accessing a trybot remotely
-[can be found here](https://goto.google.com/chrome-trybot-remote-access)
+[can be found here](http://go/chrome-trybot-remote-access)
 (Internal-only).
 
 You can find the name of the trybot the test is failing on by looking at the

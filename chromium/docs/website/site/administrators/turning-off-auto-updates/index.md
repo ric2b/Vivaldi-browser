@@ -42,7 +42,7 @@ More information about Google Update's group policy support is
 **Turning off Auto-Updates on Mac**
 
 More information about turning off auto-updates on a Mac network is
-[here](http://www.google.com/support/installer/bin/answer.py?hl=en&answer=147176&ctx=go).
+[here](https://www.google.com/support/installer/bin/answer.py?hl=en&answer=147176&ctx=go).
 
 **Turning off Auto-Updates on Linux**
 
@@ -93,14 +93,14 @@ reasonable number of minutes between update checks (greater than "0").
 **Q: How would I update my users without turning auto-update back on?**
 
 A: You can deploy the latest MSI, which is available
-[here](http://www.google.com/chrome/eula.html?msi=true).
+[here](https://www.google.com/chrome/eula.html?msi=true).
 
 **Q: I need auto-updates off so I can test new versions of Google Chrome /
 Chromium before everyone else gets them. What do you suggest I do?**
 
 A: Turn off auto-updates via the steps above, and push the group policy to your
 network. Then download the latest MSI
-[here](http://www.google.com/chrome/eula.html?msi=true). Deploy it on your test
+[here](https://www.google.com/chrome/eula.html?msi=true). Deploy it on your test
 machines, and do your verification. Once it is certified, deploy that same MSI
 on the rest of your network. And watch for updates on
 <https://chromereleases.googleblog.com> for new versions of the MSI to test and

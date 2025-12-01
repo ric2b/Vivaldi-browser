@@ -17,12 +17,11 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/ash/file_manager/fileapi_util.h"
 #include "chrome/browser/web_applications/test/web_app_test_utils.h"
 #include "chrome/browser/web_applications/web_app.h"
-#include "components/arc/intent_helper/intent_constants.h"
-#include "components/arc/intent_helper/intent_filter.h"
+#include "chromeos/ash/experiences/arc/intent_helper/intent_constants.h"
+#include "chromeos/ash/experiences/arc/intent_helper/intent_filter.h"
 #include "components/services/app_service/public/cpp/file_handler.h"
 #include "components/services/app_service/public/cpp/intent.h"
 #include "components/services/app_service/public/cpp/intent_filter.h"
@@ -36,17 +35,14 @@
 #include "url/gurl.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
-#include "chromeos/crosapi/mojom/app_service_types.mojom.h"
-#endif
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "ash/components/arc/mojom/intent_common.mojom.h"
-#include "ash/components/arc/mojom/intent_helper.mojom.h"
 #include "base/strings/strcat.h"
 #include "chrome/browser/ash/file_manager/path_util.h"
 #include "chrome/browser/ash/fusebox/fusebox_server.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
+#include "chromeos/ash/experiences/arc/mojom/intent_common.mojom.h"
+#include "chromeos/ash/experiences/arc/mojom/intent_helper.mojom.h"
+#include "chromeos/crosapi/mojom/app_service_types.mojom.h"
 #include "content/public/test/browser_task_environment.h"
 #include "extensions/common/extension.h"
 #include "net/base/filename_util.h"
@@ -58,7 +54,7 @@
 #include "url/url_constants.h"
 
 class TestingProfile;
-#endif
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 using apps::Condition;
 using apps::ConditionType;
@@ -68,7 +64,7 @@ using apps::PatternMatchType;
 
 class IntentUtilsTest : public testing::Test {
  protected:
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   arc::mojom::IntentInfoPtr CreateArcIntent() {
     arc::mojom::IntentInfoPtr arc_intent = arc::mojom::IntentInfo::New();
     arc_intent->action = "android.intent.action.PROCESS_TEXT";
@@ -140,10 +136,10 @@ class IntentUtilsTest : public testing::Test {
 
     return true;
   }
-#endif
+#endif  // BUILDFLAG(IS_CHROMEOS)
 };
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 TEST_F(IntentUtilsTest, CreateIntentForActivity) {
   const std::string& activity_name = "com.android.vending.AssetBrowserActivity";
   const std::string& start_type = "initialStart";
@@ -232,7 +228,7 @@ TEST_F(IntentUtilsTest, CreateShareIntentFromText) {
   EXPECT_EQ(intent_str,
             apps_util::CreateLaunchIntent("com.android.vending", intent));
 }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 TEST_F(IntentUtilsTest, CreateNoteTakingFilter) {
   IntentFilterPtr filter = apps_util::CreateNoteTakingFilter();
@@ -327,7 +323,7 @@ TEST_F(IntentUtilsTest, CreateIntentFiltersForChromeApp_FileHandlers) {
   EXPECT_EQ(file_cond2.condition_values[1]->value, "txt");
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 TEST_F(IntentUtilsTest, CreateIntentFiltersForChromeApp_NoteTaking) {
   const std::string note_action_handler =
       extensions::api::app_runtime::ToString(
@@ -358,9 +354,7 @@ TEST_F(IntentUtilsTest, CreateIntentFiltersForChromeApp_NoteTaking) {
   apps::IntentPtr intent = apps_util::CreateCreateNoteIntent();
   EXPECT_TRUE(intent->MatchFilter(filter));
 }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
-#if BUILDFLAG(IS_CHROMEOS)
 TEST_F(IntentUtilsTest, CreateIntentFiltersForExtension_FileHandlers) {
   // Foo extension provides file_browser_handlers for html and anything.
   extensions::ExtensionBuilder foo_ext("Foo");
@@ -491,9 +485,6 @@ TEST_F(IntentUtilsForExtensionsTest,
   EXPECT_EQ(file_cond.condition_values[1]->value, ".csv");
 }
 
-#endif  // BUILDFLAG(IS_CHROMEOS)
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
 // Converting an Arc Intent filter for a URL view intent filter should add a
 // condition covering every possible path.
 TEST_F(IntentUtilsTest, ConvertArcIntentFilter_AddsMissingPath) {
@@ -505,7 +496,7 @@ TEST_F(IntentUtilsTest, ConvertArcIntentFilter_AddsMissingPath) {
   std::vector<arc::IntentFilter::AuthorityEntry> authorities1;
   authorities1.emplace_back(kHost, 0);
   std::vector<arc::IntentFilter::PatternMatcher> patterns;
-  patterns.emplace_back(kPath, arc::mojom::PatternType::PATTERN_PREFIX);
+  patterns.emplace_back(kPath, arc::PatternType::kPrefix);
 
   arc::IntentFilter filter_with_path(kPackageName, {arc::kIntentActionView},
                                      std::move(authorities1),
@@ -537,10 +528,10 @@ TEST_F(IntentUtilsTest, ConvertArcIntentFilter_InvalidPath) {
   std::vector<arc::IntentFilter::AuthorityEntry> authorities1;
   authorities1.emplace_back(kHost, 0);
   std::vector<arc::IntentFilter::PatternMatcher> patterns1;
-  int invalid_pattern_type =
-      static_cast<int>(arc::mojom::PatternType::kMaxValue) + 1;
-  patterns1.emplace_back(
-      kPath, static_cast<arc::mojom::PatternType>(invalid_pattern_type));
+  constexpr arc::PatternType kInvalidPatternType =
+      static_cast<arc::PatternType>(5);
+  ASSERT_FALSE(arc::IsKnownPatternType(kInvalidPatternType));
+  patterns1.emplace_back(kPath, kInvalidPatternType);
 
   arc::IntentFilter filter_with_only_invalid_path(
       kPackageName, {arc::kIntentActionView}, std::move(authorities1),
@@ -555,9 +546,8 @@ TEST_F(IntentUtilsTest, ConvertArcIntentFilter_InvalidPath) {
   std::vector<arc::IntentFilter::AuthorityEntry> authorities2;
   authorities2.emplace_back(kHost, 0);
   std::vector<arc::IntentFilter::PatternMatcher> patterns2;
-  patterns2.emplace_back(
-      kPath, static_cast<arc::mojom::PatternType>(invalid_pattern_type));
-  patterns2.emplace_back(kPath, arc::mojom::PatternType::PATTERN_PREFIX);
+  patterns2.emplace_back(kPath, kInvalidPatternType);
+  patterns2.emplace_back(kPath, arc::PatternType::kPrefix);
   arc::IntentFilter filter_with_some_valid_path(
       kPackageName, {arc::kIntentActionView}, std::move(authorities2),
       std::move(patterns2), {kScheme}, {});
@@ -568,7 +558,7 @@ TEST_F(IntentUtilsTest, ConvertArcIntentFilter_InvalidPath) {
   std::vector<arc::IntentFilter::AuthorityEntry> authorities3;
   authorities3.emplace_back(kHost, 0);
   std::vector<arc::IntentFilter::PatternMatcher> patterns3;
-  patterns3.emplace_back(kPath, arc::mojom::PatternType::PATTERN_PREFIX);
+  patterns3.emplace_back(kPath, arc::PatternType::kPrefix);
   arc::IntentFilter filter_with_valid_path(
       kPackageName, {arc::kIntentActionView}, std::move(authorities3),
       std::move(patterns3), {kScheme}, {});
@@ -589,11 +579,10 @@ TEST_F(IntentUtilsTest, ConvertArcIntentFilter_ConvertsSimpleGlobToPrefix) {
 
   std::vector<arc::IntentFilter::PatternMatcher> patterns;
 
-  patterns.emplace_back("/foo.*", arc::mojom::PatternType::PATTERN_SIMPLE_GLOB);
-  patterns.emplace_back(".*", arc::mojom::PatternType::PATTERN_SIMPLE_GLOB);
-  patterns.emplace_back("/foo/.*/bar",
-                        arc::mojom::PatternType::PATTERN_SIMPLE_GLOB);
-  patterns.emplace_back("/..*", arc::mojom::PatternType::PATTERN_SIMPLE_GLOB);
+  patterns.emplace_back("/foo.*", arc::PatternType::kSimpleGlob);
+  patterns.emplace_back(".*", arc::PatternType::kSimpleGlob);
+  patterns.emplace_back("/foo/.*/bar", arc::PatternType::kSimpleGlob);
+  patterns.emplace_back("/..*", arc::PatternType::kSimpleGlob);
 
   arc::IntentFilter filter_with_path(kPackageName, {arc::kIntentActionView},
                                      std::move(authorities),
@@ -633,7 +622,7 @@ TEST_F(IntentUtilsTest, ConvertArcIntentFilter_DeduplicatesHosts) {
   authorities.emplace_back(kHost1, 0);
 
   std::vector<arc::IntentFilter::PatternMatcher> patterns;
-  patterns.emplace_back(kPath, arc::mojom::PatternType::PATTERN_PREFIX);
+  patterns.emplace_back(kPath, arc::PatternType::kPrefix);
 
   arc::IntentFilter arc_filter(kPackageName, {arc::kIntentActionView},
                                std::move(authorities), std::move(patterns),
@@ -662,7 +651,7 @@ TEST_F(IntentUtilsTest, ConvertArcIntentFilter_WildcardHostPatternMatchType) {
   authorities.emplace_back(kHostWildcard, 0);
   authorities.emplace_back(kHostNoWildcard, 0);
   std::vector<arc::IntentFilter::PatternMatcher> patterns;
-  patterns.emplace_back(kPath, arc::mojom::PatternType::PATTERN_PREFIX);
+  patterns.emplace_back(kPath, arc::PatternType::kPrefix);
 
   arc::IntentFilter arc_filter(kPackageName, {arc::kIntentActionView},
                                std::move(authorities), std::move(patterns),
@@ -720,7 +709,7 @@ TEST_F(IntentUtilsTest,
   authorities.emplace_back("*", 0);
 
   std::vector<arc::IntentFilter::PatternMatcher> patterns;
-  patterns.emplace_back(kPath, arc::mojom::PatternType::PATTERN_SIMPLE_GLOB);
+  patterns.emplace_back(kPath, arc::PatternType::kSimpleGlob);
   arc::IntentFilter arc_filter(kPackageName, {arc::kIntentActionView},
                                std::move(authorities), std::move(patterns),
                                {kScheme}, {kMimeType});
@@ -752,7 +741,7 @@ TEST_F(IntentUtilsTest,
   authorities.emplace_back("*", 0);
 
   std::vector<arc::IntentFilter::PatternMatcher> patterns;
-  patterns.emplace_back(kPath, arc::mojom::PatternType::PATTERN_SIMPLE_GLOB);
+  patterns.emplace_back(kPath, arc::PatternType::kSimpleGlob);
   arc::IntentFilter arc_filter(kPackageName, {arc::kIntentActionView},
                                std::move(authorities), std::move(patterns),
                                {kScheme}, {kMimeType});
@@ -769,25 +758,19 @@ TEST_F(IntentUtilsTest, ConvertValidFilePathsToFileExtensions) {
 
   // Invalid paths.
   patterns.emplace_back("something/something.mp4",
-                        arc::mojom::PatternType::PATTERN_SIMPLE_GLOB);
-  patterns.emplace_back(".*\\.\\\a.mp3",
-                        arc::mojom::PatternType::PATTERN_SIMPLE_GLOB);
-  patterns.emplace_back(".*\\.none",
-                        arc::mojom::PatternType::PATTERN_ADVANCED_GLOB);
-  patterns.emplace_back(".*\\.xyz", arc::mojom::PatternType::PATTERN_LITERAL);
-  patterns.emplace_back("hello.txt",
-                        arc::mojom::PatternType::PATTERN_SIMPLE_GLOB);
-  patterns.emplace_back(".*\\.abc", arc::mojom::PatternType::PATTERN_SUFFIX);
+                        arc::PatternType::kSimpleGlob);
+  patterns.emplace_back(".*\\.\\\a.mp3", arc::PatternType::kSimpleGlob);
+  patterns.emplace_back(".*\\.none", arc::PatternType::kAdvancedGlob);
+  patterns.emplace_back(".*\\.xyz", arc::PatternType::kLiteral);
+  patterns.emplace_back("hello.txt", arc::PatternType::kSimpleGlob);
+  patterns.emplace_back(".*\\.abc", arc::PatternType::kSuffix);
 
   // Valid paths.
-  patterns.emplace_back(".*\\..*\\.jpg",
-                        arc::mojom::PatternType::PATTERN_SIMPLE_GLOB);
-  patterns.emplace_back(".*\\..*\\..*\\.png",
-                        arc::mojom::PatternType::PATTERN_SIMPLE_GLOB);
+  patterns.emplace_back(".*\\..*\\.jpg", arc::PatternType::kSimpleGlob);
+  patterns.emplace_back(".*\\..*\\..*\\.png", arc::PatternType::kSimpleGlob);
   patterns.emplace_back(".*\\..*\\..*\\..*\\..*\\.tar.gz",
-                        arc::mojom::PatternType::PATTERN_SIMPLE_GLOB);
-  patterns.emplace_back(".*\\..*\\.my-file",
-                        arc::mojom::PatternType::PATTERN_SIMPLE_GLOB);
+                        arc::PatternType::kSimpleGlob);
+  patterns.emplace_back(".*\\..*\\.my-file", arc::PatternType::kSimpleGlob);
 
   apps::IntentFilterPtr app_service_filter =
       apps_util::CreateIntentFilterForArc(arc::IntentFilter(
@@ -804,7 +787,7 @@ TEST_F(IntentUtilsTest, ConvertValidFilePathsToFileExtensions) {
   apps::ConditionValues& result_extensions =
       app_service_filter->conditions[1]->condition_values;
   auto found_extension = [&result_extensions](const std::string extension) {
-    return base::ranges::any_of(
+    return std::ranges::any_of(
         result_extensions,
         [extension](std::unique_ptr<apps::ConditionValue>& condition_value) {
           return condition_value->value == extension;
@@ -842,9 +825,7 @@ TEST_F(IntentUtilsTest, ConvertArcIntentFilter_ReturnskFile) {
     }
   }
 }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
-#if BUILDFLAG(IS_CHROMEOS)
 TEST_F(IntentUtilsTest, CrosapiIntentConversion) {
   apps::IntentPtr original_intent = std::make_unique<apps::Intent>(
       apps_util::kIntentActionView, GURL("www.google.com"));
@@ -887,9 +868,7 @@ TEST_F(IntentUtilsTest, CrosapiIntentConversion) {
       apps_util::CreateAppServiceIntentFromCrosapi(crosapi_intent, nullptr);
   EXPECT_EQ(*original_intent, *converted_intent);
 }
-#endif  // BUILDFLAG(IS_CHROMEOS)
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
 class IntentUtilsFileTest : public ::testing::Test {
  public:
   void SetUp() override {
@@ -1047,4 +1026,4 @@ TEST_F(IntentUtilsFileTest, CrosapiIntentToAppService) {
       ToGURL(base::FilePath(storage::kExternalDir).Append(mount_name_local_),
              path));
 }
-#endif
+#endif  // BUILDFLAG(IS_CHROMEOS)

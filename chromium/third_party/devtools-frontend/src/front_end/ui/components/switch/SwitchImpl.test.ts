@@ -4,7 +4,6 @@
 
 import {renderElementIntoDOM} from '../../../testing/DOMHelpers.js';
 
-// eslint-disable-next-line rulesdir/es_modules_import
 import * as Switch from './switch.js';
 
 describe('Switch', () => {

@@ -31,8 +31,7 @@ AutocompleteMatch NicknameMatchToAutocompleteMatch(
     int bookmark_count,
     AutocompleteProvider* provider,
     const AutocompleteSchemeClassifier& scheme_classifier,
-    const AutocompleteInput& input,
-    const std::u16string& fixed_up_input_text) {
+    const AutocompleteInput& input) {
   const std::u16string title = titled_url_match.node->GetTitledUrlNodeTitle();
   const std::u16string nickname =
       titled_url_match.node->GetTitledUrlNodeNickName();
@@ -47,6 +46,7 @@ AutocompleteMatch NicknameMatchToAutocompleteMatch(
   match.RecordAdditionalInfo("Title", title);
   match.RecordAdditionalInfo("URL", url.spec());
   match.RecordAdditionalInfo("Nickname", nickname);
+  match.nickname = nickname;
 
   bool match_in_scheme = false;
   bool match_in_subdomain = false;
@@ -58,7 +58,6 @@ AutocompleteMatch NicknameMatchToAutocompleteMatch(
       match_in_subdomain);
   const std::u16string formatted_url = url_formatter::FormatUrl(
       url, format_types, base::UnescapeRule::SPACES, nullptr, nullptr, nullptr);
-
   // Display the nickname.
   match.contents = formatted_url;
 
@@ -79,9 +78,9 @@ AutocompleteMatch NicknameMatchToAutocompleteMatch(
       ACMatchClassification::MATCH | ACMatchClassification::URL,
       ACMatchClassification::URL);
 
-  match.description = nickname;
+  match.fill_into_edit = nickname;
 
-  base::TrimWhitespace(match.description, base::TRIM_LEADING,
+  base::TrimWhitespace(nickname, base::TRIM_LEADING,
                        &match.description);
   auto description_terms = FindTermMatches(input.text(), match.description);
   match.description_class = ClassifyTermMatches(
@@ -89,16 +88,15 @@ AutocompleteMatch NicknameMatchToAutocompleteMatch(
       ACMatchClassification::MATCH, ACMatchClassification::NONE);
 
   size_t inline_autocomplete_offset = URLPrefix::GetInlineAutocompleteOffset(
-      input.text(), fixed_up_input_text, false, nickname);
-  match.fill_into_edit = nickname;
+      input.text(), input.text(), false, nickname);
 
-  if (match.TryRichAutocompletion(match.contents, match.description, input)) {
-    // If rich autocompletion applies, we skip trying the alternatives below.
-  } else if (inline_autocomplete_offset != std::u16string::npos) {
-    match.inline_autocompletion =
-        match.fill_into_edit.substr(inline_autocomplete_offset);
-    match.SetAllowedToBeDefault(input);
+
+  // If rich autocompletion applies, we skip trying the alternatives below.
+  if (!match.TryRichAutocompletion(match.contents, match.description, input) &&
+      inline_autocomplete_offset != std::u16string::npos) {
+    match.inline_autocompletion = nickname.substr(inline_autocomplete_offset);
   }
+  match.allowed_to_be_default_match = true;
 
   return match;
 }

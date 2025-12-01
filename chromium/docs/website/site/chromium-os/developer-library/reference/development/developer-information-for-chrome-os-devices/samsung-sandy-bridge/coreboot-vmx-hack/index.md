@@ -2,9 +2,9 @@
 breadcrumbs:
 - - /chromium-os
   - ChromiumOS
-- - /chromium-os/developer-information-for-chrome-os-devices
+- - /chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices
   - Developer Information for ChromeOS Devices
-- - /chromium-os/developer-information-for-chrome-os-devices/samsung-sandy-bridge
+- - /chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/samsung-sandy-bridge
   - Samsung Series 5 550 Chromebook and Series 3 Chromebox
 page_name: coreboot-vmx-hack
 title: Hacking VMX Support Into Coreboot (lumpy & stumpy)
@@ -29,7 +29,7 @@ This document attempts to guide you through the process of binary patching your
 BIOS. This way VMX support won't be disabled while it is loaded. Instead, the
 kernel itself will take care of enabling/disabling it. This way you can leverage
 that hardware functionality to use KVM or other such technologies. The [Virtual
-Machine](/chromium-os/developer-information-for-chrome-os-devices/running-virtual-machines-on-your-chromebook)
+Machine](/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/running-virtual-machines-on-your-chromebook)
 explains more.
 
 If you're still here, and you have a lumpy or stumpy device, and you want to
@@ -40,7 +40,7 @@ from being disabled at boot, then let's get into it.
 
 Make sure your device is in dev mode already and you can get a root shell. See
 the [Samsung Series 5 550 Chromebook and Series 3
-Chromebox](/chromium-os/developer-information-for-chrome-os-devices/samsung-sandy-bridge)
+Chromebox](/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/samsung-sandy-bridge)
 page for details on how to do this.
 
 You should also see what version of firmware you're running. All the example
@@ -211,7 +211,7 @@ the lumpy -- don't run it on battery).
 
 The details of each step below can be found in the [Samsung Series 5 550
 Chromebook and Series 3
-Chromebox](/chromium-os/developer-information-for-chrome-os-devices/samsung-sandy-bridge)
+Chromebox](/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/samsung-sandy-bridge)
 page. Consult that as you go.
 
 ### Hardware Preparation
@@ -263,7 +263,7 @@ $ sudo flashrom -w bios.bin
 ### Check VMX Support
 
 Now follow the normal [Virtual
-Machine](/chromium-os/developer-information-for-chrome-os-devices/running-virtual-machines-on-your-chromebook)
+Machine](/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/running-virtual-machines-on-your-chromebook)
 document. You should be able to use kvm and other fun things on your device now.
 
 Note that if the initial reboot worked, you actually have to power off the

@@ -4,24 +4,35 @@
 
 #include "components/performance_manager/freezing/freezing_policy.h"
 
+#include <algorithm>
 #include <set>
+#include <string>
 #include <vector>
 
 #include "base/check.h"
 #include "base/containers/contains.h"
+#include "base/containers/enum_set.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
+#include "base/memory/weak_ptr.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/timer/timer.h"
 #include "components/performance_manager/graph/page_node_impl.h"
 #include "components/performance_manager/public/features.h"
+#include "components/performance_manager/public/graph/graph.h"
 #include "components/performance_manager/public/graph/node_attached_data.h"
 #include "components/performance_manager/public/graph/node_data_describer_registry.h"
 #include "components/performance_manager/public/resource_attribution/origin_in_browsing_instance_context.h"
 #include "components/performance_manager/public/resource_attribution/resource_contexts.h"
 #include "components/performance_manager/public/resource_attribution/resource_types.h"
+#include "services/metrics/public/cpp/metrics_utils.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
+#include "url/gurl.h"
 
 namespace performance_manager {
 
@@ -50,7 +61,7 @@ struct PageFreezingState
   int num_freeze_votes = 0;
 
   // Reasons not to freeze the page.
-  std::vector<CannotFreezeReason> cannot_freeze_reasons;
+  CannotFreezeReasonSet cannot_freeze_reasons;
 
   // Timer to remove `CannotFreezeReason::kRecentlyVisible`.
   base::OneShotTimer recently_visible_timer;
@@ -106,9 +117,12 @@ bool IsPageCapturingDisplay(const PageNode* page_node) {
 
 }  // namespace
 
-FreezingPolicy::FreezingPolicy(std::unique_ptr<freezing::Discarder> discarder)
+FreezingPolicy::FreezingPolicy(
+    std::unique_ptr<freezing::Discarder> discarder,
+    std::unique_ptr<freezing::OptOutChecker> opt_out_checker)
     : freezer_(std::make_unique<Freezer>()),
       discarder_(std::move(discarder)),
+      opt_out_checker_(std::move(opt_out_checker)),
       cpu_proportion_tracker_(
           /*context_filter=*/base::NullCallback(),
           /*cpu_proportion_type=*/resource_attribution::CPUProportionTracker::
@@ -271,6 +285,8 @@ void FreezingPolicy::UpdateFrozenState(
   bool eligible_for_freezing_on_battery_saver = false;
   bool all_pages_have_freeze_vote = true;
 
+  const double high_cpu_proportion = features::kFreezingHighCPUProportion.Get();
+
   for (const PageNode* visited_page : connected_pages) {
     auto& page_freezing_state = PageFreezingState::FromPage(visited_page);
 
@@ -283,7 +299,9 @@ void FreezingPolicy::UpdateFrozenState(
       CHECK(it != browsing_instances_.end());
       const BrowsingInstanceState& browsing_instance_state = it->second;
 
-      if (browsing_instance_state.cpu_intensive_in_background &&
+      if (browsing_instance_state
+                  .highest_cpu_any_interval_without_cannot_freeze_reason >=
+              high_cpu_proportion &&
           is_battery_saver_active_ &&
           // Note: Feature state is checked last so that only clients that
           // have a browsing instance that is CPU intensive in background
@@ -327,9 +345,10 @@ void FreezingPolicy::OnCannotFreezeReasonChange(const PageNode* page_node,
                                                 CannotFreezeReason reason) {
   auto& page_freezing_state = PageFreezingState::FromPage(page_node);
   if (add) {
-    DCHECK(!base::Contains(page_freezing_state.cannot_freeze_reasons, reason));
-    page_freezing_state.cannot_freeze_reasons.push_back(reason);
-    if (page_freezing_state.cannot_freeze_reasons.size() == 1U) {
+    DCHECK(!page_freezing_state.cannot_freeze_reasons.Has(reason));
+    const bool was_empty = page_freezing_state.cannot_freeze_reasons.empty();
+    page_freezing_state.cannot_freeze_reasons.Put(reason);
+    if (was_empty) {
       // Track that the browsing instance had a `CannotFreezeReason`, so that
       // the next CPU measurement for it can be ignored (this bit is sticky and
       // won't be reset if the `CannotFreezeReason` is removed before the next
@@ -337,15 +356,14 @@ void FreezingPolicy::OnCannotFreezeReasonChange(const PageNode* page_node,
       for (auto browsing_instance_id : GetBrowsingInstances(page_node)) {
         auto it = browsing_instances_.find(browsing_instance_id);
         CHECK(it != browsing_instances_.end());
-        it->second.had_cannot_freeze_reason_since_last_cpu_measurement = true;
+        it->second.cannot_freeze_reasons_since_last_cpu_measurement.Put(reason);
       }
 
       UpdateFrozenState(page_node);
     }
   } else {
-    size_t num_removed =
-        std::erase(page_freezing_state.cannot_freeze_reasons, reason);
-    CHECK_EQ(num_removed, 1U);
+    DCHECK(page_freezing_state.cannot_freeze_reasons.Has(reason));
+    page_freezing_state.cannot_freeze_reasons.Remove(reason);
     if (page_freezing_state.cannot_freeze_reasons.empty()) {
       UpdateFrozenState(page_node);
     }
@@ -353,21 +371,24 @@ void FreezingPolicy::OnCannotFreezeReasonChange(const PageNode* page_node,
 }
 
 //  static
-bool FreezingPolicy::HasCannotFreezeReason(
+CannotFreezeReasonSet FreezingPolicy::GetCannotFreezeReasons(
     const BrowsingInstanceState& browsing_instance_state) {
+  CannotFreezeReasonSet reasons;
   for (const PageNode* page : browsing_instance_state.pages) {
     const auto& page_freezing_state = PageFreezingState::FromPage(page);
-    if (!page_freezing_state.cannot_freeze_reasons.empty()) {
-      return true;
-    }
+    reasons.PutAll(page_freezing_state.cannot_freeze_reasons);
   }
-  return false;
+  return reasons;
 }
 
 void FreezingPolicy::OnPassedToGraph(Graph* graph) {
   graph->AddPageNodeObserver(this);
   graph->AddFrameNodeObserver(this);
   graph->GetNodeDataDescriberRegistry()->RegisterDescriber(this, "Freezing");
+  if (opt_out_checker_) {
+    opt_out_checker_->SetOptOutPolicyChangedCallback(base::BindRepeating(
+        &FreezingPolicy::OnOptOutPolicyChanged, weak_factory_.GetWeakPtr()));
+  }
 }
 
 void FreezingPolicy::OnTakenFromGraph(Graph* graph) {
@@ -383,19 +404,31 @@ void FreezingPolicy::OnPageNodeAdded(const PageNode* page_node) {
       this);
 
   if (page_node->IsVisible()) {
-    page_freezing_state.cannot_freeze_reasons.push_back(
-        CannotFreezeReason::kVisible);
+    page_freezing_state.cannot_freeze_reasons.Put(CannotFreezeReason::kVisible);
   }
 
   if (page_node->IsAudible()) {
-    page_freezing_state.cannot_freeze_reasons.push_back(
-        CannotFreezeReason::kAudible);
+    page_freezing_state.cannot_freeze_reasons.Put(CannotFreezeReason::kAudible);
   }
 
+  if (opt_out_checker_ &&
+      opt_out_checker_->IsPageOptedOutOfFreezing(
+          page_node->GetBrowserContextID(), page_node->GetMainFrameUrl())) {
+    page_freezing_state.cannot_freeze_reasons.Put(
+        CannotFreezeReason::kOptedOut);
+  }
+
+  DCHECK(!page_node->HasFreezingOriginTrialOptOut());
+  DCHECK(!page_node->UsesWebRTC());
+  DCHECK(!page_node->GetNotificationPermissionStatus().has_value());
   DCHECK(!page_node->IsHoldingWebLock());
-  DCHECK(!page_node->IsHoldingIndexedDBLock());
+  DCHECK(!page_node->IsHoldingBlockingIndexedDBLock());
+  DCHECK_EQ(page_node->GetLoadingState(),
+            PageNode::LoadingState::kLoadingNotStarted);
   DCHECK(!IsPageConnectedToUSBDevice(page_node));
   DCHECK(!IsPageConnectedToBluetoothDevice(page_node));
+  DCHECK(!IsPageConnectedToHidDevice(page_node));
+  DCHECK(!IsPageConnectedToSerialPort(page_node));
   DCHECK(!IsPageCapturingVideo(page_node));
   DCHECK(!IsPageCapturingAudio(page_node));
   DCHECK(!IsPageBeingMirrored(page_node));
@@ -477,9 +510,11 @@ void FreezingPolicy::OnPageLifecycleStateChanged(const PageNode* page_node) {
   }
 }
 
-void FreezingPolicy::OnPageIsHoldingWebLockChanged(const PageNode* page_node) {
-  OnCannotFreezeReasonChange(page_node, /*add=*/page_node->IsHoldingWebLock(),
-                             CannotFreezeReason::kHoldingWebLock);
+void FreezingPolicy::OnPageHasFreezingOriginTrialOptOutChanged(
+    const PageNode* page_node) {
+  OnCannotFreezeReasonChange(page_node,
+                             /*add=*/page_node->HasFreezingOriginTrialOptOut(),
+                             CannotFreezeReason::kFreezingOriginTrialOptOut);
 }
 
 void FreezingPolicy::OnPageUsesWebRTCChanged(const PageNode* page_node) {
@@ -487,11 +522,50 @@ void FreezingPolicy::OnPageUsesWebRTCChanged(const PageNode* page_node) {
                              CannotFreezeReason::kWebRTC);
 }
 
-void FreezingPolicy::OnPageIsHoldingIndexedDBLockChanged(
+void FreezingPolicy::OnPageNotificationPermissionStatusChange(
+    const PageNode* page_node,
+    std::optional<blink::mojom::PermissionStatus> previous_status) {
+  const bool had_notification_permission =
+      previous_status.value_or(blink::mojom::PermissionStatus::DENIED) ==
+      blink::mojom::PermissionStatus::GRANTED;
+  const auto new_status = page_node->GetNotificationPermissionStatus();
+  const bool has_notification_permission =
+      new_status.value_or(blink::mojom::PermissionStatus::DENIED) ==
+      blink::mojom::PermissionStatus::GRANTED;
+
+  if (had_notification_permission == has_notification_permission) {
+    return;
+  }
+
+  OnCannotFreezeReasonChange(page_node, /*add=*/has_notification_permission,
+                             CannotFreezeReason::kNotificationPermission);
+}
+
+void FreezingPolicy::OnPageIsHoldingWebLockChanged(const PageNode* page_node) {
+  OnCannotFreezeReasonChange(page_node, /*add=*/page_node->IsHoldingWebLock(),
+                             CannotFreezeReason::kHoldingWebLock);
+}
+
+void FreezingPolicy::OnMainFrameUrlChanged(const PageNode* page_node) {
+  const bool was_opted_out =
+      PageFreezingState::FromPage(page_node).cannot_freeze_reasons.Has(
+          CannotFreezeReason::kOptedOut);
+  const bool is_opted_out =
+      opt_out_checker_ &&
+      opt_out_checker_->IsPageOptedOutOfFreezing(
+          page_node->GetBrowserContextID(), page_node->GetMainFrameUrl());
+  if (was_opted_out != is_opted_out) {
+    OnCannotFreezeReasonChange(page_node, /*add=*/is_opted_out,
+                               CannotFreezeReason::kOptedOut);
+  }
+}
+
+void FreezingPolicy::OnPageIsHoldingBlockingIndexedDBLockChanged(
     const PageNode* page_node) {
-  OnCannotFreezeReasonChange(page_node,
-                             /*add=*/page_node->IsHoldingIndexedDBLock(),
-                             CannotFreezeReason::kHoldingIndexedDBLock);
+  OnCannotFreezeReasonChange(
+      page_node,
+      /*add=*/page_node->IsHoldingBlockingIndexedDBLock(),
+      CannotFreezeReason::kHoldingBlockingIndexedDBLock);
 }
 
 void FreezingPolicy::OnLoadingStateChanged(
@@ -543,7 +617,12 @@ void FreezingPolicy::OnFrameNodeAdded(const FrameNode* frame_node) {
   UpdateFrozenState(frame_node->GetPageNode());
 }
 
-void FreezingPolicy::OnBeforeFrameNodeRemoved(const FrameNode* frame_node) {
+void FreezingPolicy::OnFrameNodeRemoved(
+    const FrameNode* frame_node,
+    const FrameNode* previous_parent_frame_node,
+    const PageNode* previous_page_node,
+    const ProcessNode* previous_process_node,
+    const FrameNode* previous_parent_or_outer_document_or_embedder) {
   if (!frame_node->IsMainFrame()) {
     return;
   }
@@ -552,10 +631,10 @@ void FreezingPolicy::OnBeforeFrameNodeRemoved(const FrameNode* frame_node) {
   // instance (in other words, the set of browsing instances associated with the
   // removed frame's page doesn't change).
   for (const FrameNode* other_frame_node :
-       frame_node->GetPageNode()->GetMainFrameNodes()) {
-    if (other_frame_node != frame_node &&
-        other_frame_node->GetBrowsingInstanceId() ==
-            frame_node->GetBrowsingInstanceId()) {
+       previous_page_node->GetMainFrameNodes()) {
+    CHECK_NE(other_frame_node, frame_node);
+    if (other_frame_node->GetBrowsingInstanceId() ==
+        frame_node->GetBrowsingInstanceId()) {
       return;
     }
   }
@@ -563,13 +642,13 @@ void FreezingPolicy::OnBeforeFrameNodeRemoved(const FrameNode* frame_node) {
   // Disassociate the frame's page from the frame's browsing instance.
   auto it = browsing_instances_.find(frame_node->GetBrowsingInstanceId());
   CHECK(it != browsing_instances_.end());
-  size_t num_pages_removed = it->second.pages.erase(frame_node->GetPageNode());
+  size_t num_pages_removed = it->second.pages.erase(previous_page_node);
   CHECK_EQ(num_pages_removed, 1U);
 
   // Update frozen state for pages connected to the frame's page, if it still
   // contains at least one frame.
-  if (frame_node->GetPageNode()->GetMainFrameNode()) {
-    UpdateFrozenState(frame_node->GetPageNode());
+  if (!previous_page_node->GetMainFrameNodes().empty()) {
+    UpdateFrozenState(previous_page_node);
   }
 
   // If pages remain in the deleted frame's browsing instance, update their
@@ -671,20 +750,16 @@ base::Value::Dict FreezingPolicy::DescribePageNodeData(
   // Present `CannotFreezeReason`s for other pages in browsing instances
   // associated with this page. They affect freezing for this page.
   {
-    base::flat_set<CannotFreezeReason> cannot_freeze_reasons_other_pages;
+    CannotFreezeReasonSet cannot_freeze_reasons_other_pages;
     for (auto browsing_instance : GetBrowsingInstances(node)) {
       auto browsing_instance_it = browsing_instances_.find(browsing_instance);
       CHECK(browsing_instance_it != browsing_instances_.end());
       for (const PageNode* other_page_node :
            browsing_instance_it->second.pages) {
-        if (other_page_node == node) {
-          continue;
-        }
-
-        auto& other_page_freezing_state =
-            PageFreezingState::FromPage(other_page_node);
-        for (auto reason : other_page_freezing_state.cannot_freeze_reasons) {
-          cannot_freeze_reasons_other_pages.insert(reason);
+        if (other_page_node != node) {
+          cannot_freeze_reasons_other_pages.PutAll(
+              PageFreezingState::FromPage(other_page_node)
+                  .cannot_freeze_reasons);
         }
       }
     }
@@ -814,10 +889,6 @@ void FreezingPolicy::UpdateFrozenStateOnCPUMeasurement(
       cpu_proportion_map = cpu_proportion_tracker_.StartNextInterval(
           base::TimeTicks::Now(), results);
   for (const auto& [context, cpu_proportion] : cpu_proportion_map) {
-    if (cpu_proportion < high_cpu_proportion) {
-      continue;
-    }
-
     // This cast is valid because the query only targets contexts of type
     // `OriginInBrowsingInstanceContext` (verified by CHECK inside `AsContext`).
     const auto& origin_in_browsing_instance_context =
@@ -829,30 +900,197 @@ void FreezingPolicy::UpdateFrozenStateOnCPUMeasurement(
       continue;
     }
 
-    if (browsing_instance_it->second.cpu_intensive_in_background) {
-      // Already known to be CPU-intensive in background.
+    BrowsingInstanceState& state = browsing_instance_it->second;
+    state.highest_cpu_current_interval = std::max(
+        state.highest_cpu_current_interval.value_or(0), cpu_proportion);
+
+    if (!state.cannot_freeze_reasons_since_last_cpu_measurement.empty()) {
+      // Ignore CPU measurement while having a `CannotFreezeReason` (it's
+      // acceptable to use a lot of CPU while playing audio, running a
+      // videoconference call...).
       continue;
     }
 
-    if (browsing_instance_it->second
-            .had_cannot_freeze_reason_since_last_cpu_measurement) {
-      // CPU-intensive in background while having a `CannotFreezeReason` isn't
-      // recorded (it's acceptable to use a lot of CPU while playing audio,
-      // running a videoconference call...).
+    if (state.highest_cpu_any_interval_without_cannot_freeze_reason >
+        cpu_proportion) {
+      // Ignore CPU measurement without a `CannotFreezeReason` if it's not the
+      // highest one.
       continue;
     }
 
-    browsing_instance_it->second.cpu_intensive_in_background = true;
-    UpdateFrozenState(*browsing_instance_it->second.pages.begin());
+    // Store the new highest CPU measurement without a `CannotFreezeReason`.
+    state.highest_cpu_any_interval_without_cannot_freeze_reason =
+        cpu_proportion;
+
+    // If the CPU measurement is above the threshold for high CPU usage, update
+    // the frozen state.
+    if (cpu_proportion >= high_cpu_proportion) {
+      UpdateFrozenState(*state.pages.begin());
+    }
   }
 
-  // Update `had_cannot_freeze_reason_since_last_cpu_measurement` for all
-  // browsing instances.
-  for (auto& [_, browsing_instance_state] : browsing_instances_) {
-    browsing_instance_state
-        .had_cannot_freeze_reason_since_last_cpu_measurement =
-        HasCannotFreezeReason(browsing_instance_state);
+  // Report UKM for all pages.
+  RecordFreezingEligibilityUKM();
+
+  // Reset state for the next interval for all browsing instances.
+  for (auto& [_, state] : browsing_instances_) {
+    state.cannot_freeze_reasons_since_last_cpu_measurement =
+        GetCannotFreezeReasons(state);
+    state.highest_cpu_current_interval.reset();
   }
+}
+
+void FreezingPolicy::OnOptOutPolicyChanged(
+    std::string_view browser_context_id) {
+  CHECK(opt_out_checker_);
+  // Check all pages  with the given `browser_context_id` to see if they're
+  // opted out of freezing by the new policy.
+  for (const PageNode* page_node : GetOwningGraph()->GetAllPageNodes()) {
+    if (page_node->GetBrowserContextID() != browser_context_id) {
+      continue;
+    }
+    const bool was_opted_out =
+        PageFreezingState::FromPage(page_node).cannot_freeze_reasons.Has(
+            CannotFreezeReason::kOptedOut);
+    const bool is_opted_out = opt_out_checker_->IsPageOptedOutOfFreezing(
+        browser_context_id, page_node->GetMainFrameUrl());
+    if (was_opted_out != is_opted_out) {
+      OnCannotFreezeReasonChange(page_node, /*add=*/is_opted_out,
+                                 CannotFreezeReason::kOptedOut);
+    }
+  }
+}
+
+void FreezingPolicy::RecordFreezingEligibilityUKM() {
+  if (!base::FeatureList::IsEnabled(features::kRecordFreezingEligibilityUKM)) {
+    return;
+  }
+
+  // This function is about to potentially emit many UKM events (roughly 1 per
+  // existing page). If this is done too often, the UKM recorder system itself
+  // will start subsampling those UKM events. Thus, it's better to subsample the
+  // event emission code itself to increase the proportion of emitted events
+  // that are actually recorded.
+  if (!metrics_subsampler_.ShouldSample(0.01)) {
+    return;
+  }
+
+  base::flat_set<raw_ptr<const PageNode>> visited_pages;
+
+  for (auto* page : GetOwningGraph()->GetAllPageNodes()) {
+    if (visited_pages.contains(page)) {
+      // The page is part of a group of connected pages for which the UKM event
+      // was already emitted.
+      continue;
+    }
+
+    std::optional<double> highest_cpu_current_interval;
+    double highest_cpu_any_interval_without_cannot_freeze_reason = 0.0;
+    CannotFreezeReasonSet cannot_freeze_reasons;
+    const auto connected_pages = GetConnectedPages(page);
+
+    for (auto& connected_page : connected_pages) {
+      for (auto browsing_instance_id : GetBrowsingInstances(connected_page)) {
+        auto it = browsing_instances_.find(browsing_instance_id);
+        CHECK(it != browsing_instances_.end());
+        auto& state = it->second;
+
+        if (state.highest_cpu_current_interval.has_value()) {
+          highest_cpu_current_interval =
+              std::max(highest_cpu_current_interval.value_or(0),
+                       state.highest_cpu_current_interval.value());
+        }
+
+        highest_cpu_any_interval_without_cannot_freeze_reason = std::max(
+            highest_cpu_any_interval_without_cannot_freeze_reason,
+            state.highest_cpu_any_interval_without_cannot_freeze_reason);
+        cannot_freeze_reasons.PutAll(
+            state.cannot_freeze_reasons_since_last_cpu_measurement);
+      }
+    }
+
+    // Record the UKM event if there was a CPU measurement for this group of
+    // connected pages.
+    if (highest_cpu_current_interval.has_value()) {
+      for (auto& connected_page : connected_pages) {
+        RecordFreezingEligibilityUKMForPage(
+            connected_page->GetUkmSourceID(),
+            highest_cpu_current_interval.value(),
+            highest_cpu_any_interval_without_cannot_freeze_reason,
+            cannot_freeze_reasons);
+      }
+    }
+
+    visited_pages.insert(connected_pages.begin(), connected_pages.end());
+  }
+}
+
+void FreezingPolicy::RecordFreezingEligibilityUKMForPage(
+    ukm::SourceId source_id,
+    double highest_cpu_current_interval,
+    double highest_cpu_any_interval_without_cannot_freeze_reason,
+    CannotFreezeReasonSet cannot_freeze_reasons) {
+  RecordFreezingEligibilityUKMForPageStatic(
+      source_id, highest_cpu_current_interval,
+      highest_cpu_any_interval_without_cannot_freeze_reason,
+      cannot_freeze_reasons);
+}
+
+void FreezingPolicy::RecordFreezingEligibilityUKMForPageStatic(
+    ukm::SourceId source_id,
+    double highest_cpu_current_interval,
+    double highest_cpu_any_interval_without_cannot_freeze_reason,
+    CannotFreezeReasonSet cannot_freeze_reasons) {
+  auto ukm = ukm::builders::PerformanceManager_FreezingEligibility(source_id);
+
+  // The bucketing has this effect:
+  //  0      = 0
+  //  1      = 1
+  //  2-3    = 2
+  //  4-7    = 4
+  //  8-15   = 8
+  //  16-31  = 16
+  //  32-63  = 32
+  //  64-127 = 64
+  //  ...
+  //
+  // This precision is sufficient for exploring the coverage of thresholds
+  // between 2% and 25% as we plan to do.
+  ukm.SetHighestCPUCurrentInterval(ukm::GetExponentialBucketMinForUserTiming(
+      highest_cpu_current_interval * 100));
+  ukm.SetHighestCPUAnyIntervalWithoutOptOut(
+      ukm::GetExponentialBucketMinForUserTiming(
+          highest_cpu_any_interval_without_cannot_freeze_reason * 100));
+
+  ukm.SetVisible(cannot_freeze_reasons.Has(CannotFreezeReason::kVisible));
+  ukm.SetRecentlyVisible(
+      cannot_freeze_reasons.Has(CannotFreezeReason::kRecentlyVisible));
+  ukm.SetAudible(cannot_freeze_reasons.Has(CannotFreezeReason::kAudible));
+  ukm.SetRecentlyAudible(
+      cannot_freeze_reasons.Has(CannotFreezeReason::kRecentlyAudible));
+  ukm.SetOriginTrialOptOut(cannot_freeze_reasons.Has(
+      CannotFreezeReason::kFreezingOriginTrialOptOut));
+  ukm.SetHoldingWebLock(
+      cannot_freeze_reasons.Has(CannotFreezeReason::kHoldingWebLock));
+  ukm.SetHoldingBlockingIndexedDBLock(cannot_freeze_reasons.Has(
+      CannotFreezeReason::kHoldingBlockingIndexedDBLock));
+  ukm.SetConnectedToDevice(cannot_freeze_reasons.HasAny(
+      {CannotFreezeReason::kConnectedToUsbDevice,
+       CannotFreezeReason::kConnectedToBluetoothDevice,
+       CannotFreezeReason::kConnectedToHidDevice,
+       CannotFreezeReason::kConnectedToSerialPort}));
+  ukm.SetCapturing(cannot_freeze_reasons.HasAny(
+      {CannotFreezeReason::kCapturingAudio, CannotFreezeReason::kCapturingVideo,
+       CannotFreezeReason::kCapturingWindow,
+       CannotFreezeReason::kCapturingDisplay}));
+  ukm.SetBeingMirrored(
+      cannot_freeze_reasons.Has(CannotFreezeReason::kBeingMirrored));
+  ukm.SetWebRTC(cannot_freeze_reasons.Has(CannotFreezeReason::kWebRTC));
+  ukm.SetLoading(cannot_freeze_reasons.Has(CannotFreezeReason::kLoading));
+  ukm.SetNotificationPermission(
+      cannot_freeze_reasons.Has(CannotFreezeReason::kNotificationPermission));
+
+  ukm.Record(ukm::UkmRecorder::Get());
 }
 
 }  // namespace performance_manager

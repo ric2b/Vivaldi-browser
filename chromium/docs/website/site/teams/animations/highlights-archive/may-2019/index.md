@@ -37,11 +37,11 @@ title: May 2019
 
 <td><td>Code Health</td></td>
 
-<td><td>Rob (flackr@) has been focused on improving the composited animations code in the new <a href="http://crbug.com/836884">post-BGPT world</a>. This sprint he landed a series of patches (<a href="https://chromium-review.googlesource.com/c/chromium/src/+/1611762">1</a>, <a href="https://chromium-review.googlesource.com/c/chromium/src/+/1609672">2</a>, <a href="https://chromium-review.googlesource.com/c/chromium/src/+/1610304">3</a>, <a href="https://chromium-review.googlesource.com/c/chromium/src/+/1461341">4</a>) to eliminate animation specific ElementId tracking in LayerTree. This simplification makes the architecture easier to understand, improves CPU usage and reduces memory usage - a triple win!</td></td>
+<td><td>Rob (flackr@) has been focused on improving the composited animations code in the new <a href="https://crbug.com/836884">post-BGPT world</a>. This sprint he landed a series of patches (<a href="https://chromium-review.googlesource.com/c/chromium/src/+/1611762">1</a>, <a href="https://chromium-review.googlesource.com/c/chromium/src/+/1609672">2</a>, <a href="https://chromium-review.googlesource.com/c/chromium/src/+/1610304">3</a>, <a href="https://chromium-review.googlesource.com/c/chromium/src/+/1461341">4</a>) to eliminate animation specific ElementId tracking in LayerTree. This simplification makes the architecture easier to understand, improves CPU usage and reduces memory usage - a triple win!</td></td>
 
 <td><td>Scroll Snap</td></td>
 
-<td><td>Scroll Snap is continuing to gain traction, with AirBnB being the latest partner to <a href="http://crbug.com/920482#c9">start using the feature</a> and Firefox <a href="https://bugzilla.mozilla.org/show_bug.cgi?id=1312165#c6">continuing to implement</a> the new spec. On our side we have shifted into supporting the product: Majid (majidvp@) has been busy triaging bugs, addressing partner requests, and polishing the code.</td></td>
+<td><td>Scroll Snap is continuing to gain traction, with AirBnB being the latest partner to <a href="https://crbug.com/920482#c9">start using the feature</a> and Firefox <a href="https://bugzilla.mozilla.org/show_bug.cgi?id=1312165#c6">continuing to implement</a> the new spec. On our side we have shifted into supporting the product: Majid (majidvp@) has been busy triaging bugs, addressing partner requests, and polishing the code.</td></td>
 
 <td></tr></td>
 <td><tr></td>

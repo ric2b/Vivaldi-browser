@@ -65,6 +65,11 @@ using ::fuzztest::internal::TestProtobufWithRequired;
 using ::fuzztest::internal::TestSubProtobuf;
 using ::google::protobuf::FieldDescriptor;
 
+bool print_target_run_message_once = []() {
+  fputs("FuzzTest functional test target run\n", stderr);
+  return true;
+}();
+
 void PassesWithPositiveInput(int x) {
   if (x <= 0) std::abort();
 }
@@ -439,12 +444,24 @@ bool IsParent(const FieldDescriptor* field) {
   return absl::StrContains(field->name(), "parent");
 }
 
+bool IsParent1(const FieldDescriptor* field) {
+  return absl::StrContains(field->name(), "parent1");
+}
+
 void FailsIfCantInitializeProto(const TestProtobufWithRecursion& proto) {}
 FUZZ_TEST(MySuite, FailsIfCantInitializeProto)
     .WithDomains(Arbitrary<TestProtobufWithRecursion>()
                      .WithOptionalFieldsAlwaysSet()
                      .WithFieldsUnset(IsChildId)
                      .WithFieldUnset("id"));
+
+void FailIfRequiredRecursiveFieldsAreUnset(
+    const TestProtobufWithRecursion& proto) {
+  if (proto.has_child() && !proto.child().has_parent1()) std::abort();
+}
+FUZZ_TEST(MySuite, FailIfRequiredRecursiveFieldsAreUnset)
+    .WithDomains(
+        Arbitrary<TestProtobufWithRecursion>().WithFieldsAlwaysSet(IsParent1));
 
 void InitializesRecursiveProtoIfInfiniteRecursivePolicyIsOverwritten(
     const TestProtobufWithRecursion& proto) {}
@@ -547,7 +564,7 @@ FUZZ_TEST(MySuite, FailsWhenOneofFieldDoesntHaveOneofValue)
     .WithDomains(Arbitrary<TestProtobuf>()
                      .WithOneofAlwaysSet("oneof_field")
                      .WithFieldUnset("oneof_u32")
-                     .WithInt64Field("oneof_i64", fuzztest::Just(1l)));
+                     .WithInt64Field("oneof_i64", fuzztest::Just(int64_t{1})));
 
 void FailsIfProtobufEnumEqualsLabel4(TestProtobuf::Enum e) {
   if (e == TestProtobuf::Enum::TestProtobuf_Enum_Label4) {
@@ -757,12 +774,17 @@ FUZZ_TEST_F(AlternateSignalStackFixture,
 
 void DetectRegressionAndCoverageInputs(const std::string& input) {
   if (absl::StartsWith(input, "regression")) {
-    std::cout << "regression input detected: " << input << std::endl;
+    std::cerr << "regression input detected: " << input << std::endl;
   }
   if (absl::StartsWith(input, "coverage")) {
-    std::cout << "coverage input detected: " << input << std::endl;
+    std::cerr << "coverage input detected: " << input << std::endl;
+    // Sleep for the first coverage input for depleting the replay time budget.
+    static bool first_input = true;
+    if (first_input) {
+      first_input = false;
+      absl::SleepFor(absl::Seconds(2));
+    }
   }
-  absl::SleepFor(absl::Seconds(0.1));
 }
 FUZZ_TEST(MySuite, DetectRegressionAndCoverageInputs);
 

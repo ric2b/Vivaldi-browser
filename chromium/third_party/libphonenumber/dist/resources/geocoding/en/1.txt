@@ -2125,6 +2125,7 @@
 122592|Baton Rouge, LA
 1226|Ontario
 1226663|London, ON
+1227|Maryland
 1228|Mississippi
 1228206|Gulfport, MS
 1228207|Biloxi, MS
@@ -2333,6 +2334,7 @@
 1231995|Traverse City, MI
 1234|Ohio
 1234678|Akron, OH
+1235|Missouri
 1236|British Columbia
 1239|Florida
 1239200|Naples, FL
@@ -4853,34 +4855,62 @@
 1304983|Morgantown, WV
 1304984|Charleston, WV
 1304986|Mannington, WV
-1305|Florida
+1305200|Florida
+1305201|Florida
+1305202|Florida
+1305203|Florida
+1305204|Florida
+1305205|Florida
+1305206|Florida
 1305207|Miami, FL
+1305208|Florida
+130521|Florida
 130522|Miami, FL
+1305224|Florida
+1305230|Florida
 1305231|Hialeah, FL
 1305232|Miami, FL
 1305233|Miami, FL
 1305234|Miami, FL
 1305235|Miami, FL
+1305236|Florida
+1305237|Florida
 1305238|Miami, FL
+1305239|Florida
+1305240|Florida
+1305241|Florida
 1305242|Homestead, FL
 1305243|Miami, FL
+1305244|Florida
 1305245|Homestead, FL
 1305246|Homestead, FL
 1305247|Homestead, FL
 1305248|Homestead, FL
 1305249|Miami, FL
 130525|Miami, FL
+1305250|Florida
 1305257|Homestead, FL
 1305258|Homestead, FL
 130526|Miami, FL
+1305268|Florida
 130527|Miami, FL
+1305272|Florida
+1305276|Florida
+1305277|Florida
+130528|Florida
 1305285|Miami, FL
 1305289|Marathon, FL
+1305290|Florida
+1305291|Florida
 1305292|Key West, FL
 1305293|Key West, FL
 1305294|Key West, FL
 1305295|Key West, FL
 1305296|Key West, FL
+1305297|Florida
+1305298|Florida
+1305299|Florida
+13053|Florida
 1305324|Miami, FL
 1305325|Miami, FL
 1305326|Miami, FL
@@ -4898,6 +4928,7 @@
 130538|Miami, FL
 1305392|Miami, FL
 1305397|Miami Beach, FL
+13054|Florida
 1305400|Miami, FL
 1305406|Doral, FL
 1305408|Miami, FL
@@ -4912,6 +4943,7 @@
 1305460|Coral Gables, FL
 1305480|Miami, FL
 1305485|Miami, FL
+13055|Florida
 1305512|Hialeah, FL
 1305513|Doral, FL
 1305525|Miami, FL
@@ -4938,6 +4970,7 @@
 1305595|Miami, FL
 1305596|Miami, FL
 1305598|Miami, FL
+13056|Florida
 1305603|Miami, FL
 1305604|Miami Beach, FL
 130563|Miami, FL
@@ -4964,12 +4997,14 @@
 1305695|Miami Beach, FL
 1305696|Miami, FL
 1305698|Hialeah, FL
+13057|Florida
 1305718|Doral, FL
 1305743|Marathon, FL
 1305745|Summerland Key, FL
 130575|Miami, FL
 1305770|Miami, FL
 1305789|Miami, FL
+13058|Florida
 1305809|Key West, FL
 1305817|Hialeah, FL
 1305818|Hialeah, FL
@@ -4993,6 +5028,7 @@
 1305893|North Miami, FL
 1305895|North Miami, FL
 1305899|North Miami, FL
+13059|Florida
 1305913|Miami, FL
 1305953|Opa-locka, FL
 1305960|Miami, FL
@@ -6966,6 +7002,7 @@
 1325947|San Angelo, TX
 1325949|San Angelo, TX
 1326|Ohio
+1329|New York
 1330|Ohio
 1330220|Brunswick, OH
 1330225|Brunswick, OH
@@ -7572,7 +7609,12 @@
 1339|Massachusetts
 1340200|Chtamstths, VI
 1340203|Chtamstths, VI
+1340204|Chtamstths, VI
+1340205|Chtamstths, VI
+1340206|St. Croix, VI
+1340207|Chtamstths, VI
 1340208|St. Croix, VI
+1340209|Chtamstths, VI
 1340423|Chtamstths, VI
 134044|Chtamstths, VI
 1340725|Chtamstths, VI
@@ -7627,6 +7669,7 @@
 1347843|Bronx, NY
 1347862|Bronx, NY
 1347915|Brooklyn, NY
+1350|California
 1351|Massachusetts
 1352|Florida
 1352205|Lady Lake, FL
@@ -7765,6 +7808,7 @@
 1352872|Gainesville, FL
 1352873|Ocala, FL
 1352955|Gainesville, FL
+1354|Quebec
 1360|Washington State
 1360210|Camas, WA
 1360213|Vancouver, WA
@@ -8101,11 +8145,14 @@
 1361992|Corpus Christi, TX
 1361993|Corpus Christi, TX
 1361994|Corpus Christi, TX
+1363|New York
 1364|Kentucky
 1365|Ontario
 1367|Quebec
 1368|Alberta
+1369|California
 1380|Ohio
+1382|Ontario
 1385|Utah
 1386|Florida
 1386218|Orange City, FL
@@ -10958,6 +11005,7 @@
 1425899|Kirkland, WA
 1425957|Bellevue, WA
 1425990|Bellevue, WA
+1428|New Brunswick
 1430|Texas
 1431|Manitoba
 1432|Texas
@@ -11499,6 +11547,7 @@
 1469916|Dallas, TX
 1469952|McKinney, TX
 1470|Georgia
+1472|North Carolina
 1474|Saskatchewan
 1475|Connecticut
 1478|Georgia
@@ -14831,6 +14880,7 @@
 1541998|Junction City, OR
 1548|Ontario
 1551|New Jersey
+1557|Missouri
 1559|California
 155922|Fresno, CA
 1559230|Fresno, CA
@@ -18838,6 +18888,7 @@
 1641932|Albia, IA
 1641939|Eldora, IA
 1641985|Riceville, IA
+1645|Florida
 1646|New York
 1646237|New York, NY
 1646336|New York, NY
@@ -19332,6 +19383,7 @@
 1682622|Mansfield, TX
 1682647|Fort Worth, TX
 1682885|Fort Worth, TX
+1683|Ontario
 1689|Florida
 1701|North Dakota
 1701221|Bismarck, ND
@@ -22268,6 +22320,7 @@
 1727943|Tarpon Springs, FL
 1727944|Tarpon Springs, FL
 1727945|Tarpon Springs, FL
+1730|Illinois
 1731|Tennessee
 1731235|Greenfield, TN
 1731253|Tiptonville, TN
@@ -22713,8 +22766,10 @@
 1740984|Beverly, OH
 1740992|Pomeroy, OH
 1740998|Frankfort, OH
+1742|Ontario
 1743|North Carolina
 1747|California
+1753|Ontario
 1754|Florida
 1757|Virginia
 1757220|Williamsburg, VA
@@ -24758,6 +24813,7 @@
 1807854|Geraldton, ON
 1807876|Longlac, ON
 1807887|Nipigon, ON
+1807933|Kaministiquia, ON
 1807934|Ignace, ON
 1807937|Oxdrift, ON
 1807939|Thunder Bay, ON
@@ -26334,6 +26390,7 @@
 1832826|Houston, TX
 1832912|Houston, TX
 1832934|Magnolia, TX
+1835|Pennsylvania
 1838|New York
 1839|South Carolina
 1840|California
@@ -27946,6 +28003,7 @@
 1873|Quebec
 1876957|Negril
 1878|Pennsylvania
+1879|Newfoundland and Labrador
 1901|Tennessee
 1901213|Memphis, TN
 1901226|Memphis, TN
@@ -32272,6 +32330,7 @@
 1980343|Charlotte, NC
 1980487|Shelby, NC
 1980819|Charlotte, NC
+1983|Colorado
 1984|North Carolina
 1985|Louisiana
 1985223|Houma, LA

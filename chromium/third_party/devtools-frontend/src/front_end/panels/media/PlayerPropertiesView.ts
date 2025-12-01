@@ -136,9 +136,9 @@ const str_ = i18n.i18n.registerUIStrings('panels/media/PlayerPropertiesView.ts',
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 const i18nLazyString = i18n.i18n.getLazilyComputedLocalizedString.bind(undefined, str_);
 
-type TabData = {
-  [x: string]: string|object,
-};
+interface TabData {
+  [x: string]: string|object;
+}
 
 // Keep this enum in sync with panels/media/base/media_log_properties.h
 export const enum PlayerPropertyKeys {
@@ -195,7 +195,7 @@ export class PropertyRenderer extends UI.Widget.VBox {
     }
     try {
       propvalue = JSON.parse(propvalue) as string;
-    } catch (err) {
+    } catch {
       // TODO(tmathmeyer) typecheck the type of propvalue against
       // something defined or sourced from the c++ definitions.
       // Do nothing, some strings just stay strings!
@@ -477,6 +477,7 @@ export class PlayerPropertiesView extends UI.Widget.VBox {
 
   constructor() {
     super();
+    this.registerRequiredCSS(playerPropertiesViewStyles);
 
     this.element.setAttribute('jslog', `${VisualLogging.pane('properties')}`);
 
@@ -667,9 +668,5 @@ export class PlayerPropertiesView extends UI.Widget.VBox {
 
     const textTrackManager = new TextTrackManager(this);
     this.attributeMap.set(PlayerPropertyKeys.TEXT_TRACKS, textTrackManager);
-  }
-  override wasShown(): void {
-    super.wasShown();
-    this.registerCSSFiles([playerPropertiesViewStyles]);
   }
 }

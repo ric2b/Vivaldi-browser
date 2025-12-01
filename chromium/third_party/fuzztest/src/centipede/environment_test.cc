@@ -18,6 +18,9 @@
 #include <string_view>
 
 #include "gtest/gtest.h"
+#include "absl/log/check.h"
+#include "absl/time/time.h"
+#include "./fuzztest/internal/configuration.h"
 
 namespace centipede {
 
@@ -50,6 +53,156 @@ TEST(Environment, UpdateForExperiment) {
   Experiment(9, true, 10, "E10", "use_cmp_features=true:path_level=10:");
   Experiment(10, true, 20, "E11", "use_cmp_features=true:path_level=20:");
   Experiment(11, true, 30, "E12", "use_cmp_features=true:path_level=30:");
+}
+
+TEST(Environment, UpdatesNumberOfShardsAndThreadsFromTargetConfigJobs) {
+  Environment env{.total_shards = 20, .my_shard_index = 10, .num_threads = 5};
+  fuzztest::internal::Configuration config{.jobs = 10};
+  env.UpdateWithTargetConfig(config);
+  EXPECT_EQ(env.j, 10);
+  EXPECT_EQ(env.total_shards, 10);
+  EXPECT_EQ(env.my_shard_index, 0);
+  EXPECT_EQ(env.num_threads, 10);
+}
+
+TEST(Environment, DiesOnInconsistentJAndTargetConfigJobs) {
+  Environment env{.j = 10};
+  fuzztest::internal::Configuration config{.jobs = 20};
+  EXPECT_DEATH(env.UpdateWithTargetConfig(config),
+               "Value for --j is inconsistent with the value for jobs in the "
+               "target binary");
+}
+
+TEST(Environment, UpdatesTimeoutPerBatchFromTimeoutPerInputAndBatchSize) {
+  Environment env{
+      .batch_size = 1000, .timeout_per_input = 100, .timeout_per_batch = 0};
+  env.UpdateTimeoutPerBatchIfEqualTo(0);
+  EXPECT_GT(env.timeout_per_batch, 0);
+
+  env.timeout_per_batch = 123;
+  env.UpdateTimeoutPerBatchIfEqualTo(0);
+  EXPECT_EQ(env.timeout_per_batch, 123);
+}
+
+TEST(Environment,
+     UpdatesTimeoutPerInputFromFiniteTargetConfigTimeLimitPerInput) {
+  Environment env{.timeout_per_input =
+                      Environment::Default().timeout_per_input};
+  fuzztest::internal::Configuration config{.time_limit_per_input =
+                                               absl::Seconds(456)};
+  env.UpdateWithTargetConfig(config);
+  EXPECT_EQ(env.timeout_per_input, 456);
+}
+
+TEST(Environment,
+     UpdatesTimeoutPerInputFromInfiniteTargetConfigTimeLimitPerInput) {
+  Environment env{.timeout_per_input =
+                      Environment::Default().timeout_per_input};
+  fuzztest::internal::Configuration config{.time_limit_per_input =
+                                               absl::InfiniteDuration()};
+  env.UpdateWithTargetConfig(config);
+  EXPECT_EQ(env.timeout_per_input, 0);
+}
+
+TEST(Environment,
+     DiesOnInconsistentTimeoutPerInputAndTargetConfigTimeLimitPerInput) {
+  Environment env{.timeout_per_input = 123};
+  fuzztest::internal::Configuration config{.time_limit_per_input =
+                                               absl::Seconds(456)};
+  EXPECT_DEATH(
+      env.UpdateWithTargetConfig(config),
+      "Value for --timeout_per_input is inconsistent with the value for "
+      "time_limit_per_input in the target binary");
+}
+
+TEST(Environment,
+     UpdatesTimeoutPerBatchFromFiniteTargetConfigTimeLimitPerInput) {
+  Environment env{.timeout_per_input =
+                      Environment::Default().timeout_per_input};
+  env.UpdateTimeoutPerBatchIfEqualTo(Environment::Default().timeout_per_batch);
+  const size_t autocomputed_timeout_per_batch = env.timeout_per_batch;
+  fuzztest::internal::Configuration config{.time_limit_per_input =
+                                               absl::Seconds(456)};
+  env.UpdateWithTargetConfig(config);
+  EXPECT_NE(env.timeout_per_batch, autocomputed_timeout_per_batch);
+}
+
+TEST(Environment,
+     UpdatesTimeoutPerBatchFromInfiniteTargetConfigTimeLimitPerInput) {
+  Environment env{.timeout_per_input =
+                      Environment::Default().timeout_per_input};
+  env.UpdateTimeoutPerBatchIfEqualTo(Environment::Default().timeout_per_batch);
+  fuzztest::internal::Configuration config{.time_limit_per_input =
+                                               absl::InfiniteDuration()};
+  env.UpdateWithTargetConfig(config);
+  EXPECT_EQ(env.timeout_per_batch, 0);
+}
+
+TEST(Environment, UpdatesTimeoutPerBatchFromTargetConfigTimeLimit) {
+  Environment env;
+  fuzztest::internal::Configuration config{
+      .time_limit = absl::Seconds(123),
+      .time_budget_type = fuzztest::internal::TimeBudgetType::kPerTest,
+  };
+  CHECK(config.GetTimeLimitPerTest() == absl::Seconds(123));
+  env.UpdateWithTargetConfig(config);
+  EXPECT_EQ(env.timeout_per_batch, 123)
+      << "`timeout_per_batch` should be set to the test time limit when it was "
+         "previously unset";
+
+  env.timeout_per_batch = 456;
+  env.UpdateWithTargetConfig(config);
+  EXPECT_EQ(env.timeout_per_batch, 123)
+      << "`timeout_per_batch` should be set to test time limit when it is "
+         "shorter than the previous value";
+
+  env.timeout_per_batch = 56;
+  env.UpdateWithTargetConfig(config);
+  EXPECT_EQ(env.timeout_per_batch, 56)
+      << "`timeout_per_batch` should not be updated with the test time limit "
+         "when it is longer than the previous value";
+}
+
+TEST(Environment, UpdatesRssLimitMbFromTargetConfigRssLimit) {
+  Environment env{.rss_limit_mb = Environment::Default().rss_limit_mb};
+  fuzztest::internal::Configuration config{.rss_limit =
+                                               5UL * 1024 * 1024 * 1024};
+  env.UpdateWithTargetConfig(config);
+  EXPECT_EQ(env.rss_limit_mb, 5 * 1024);
+}
+
+TEST(Environment, DiesOnInconsistentRssLimitMbAndTargetConfigRssLimit) {
+  Environment env{.rss_limit_mb = 123};
+  fuzztest::internal::Configuration config{.rss_limit =
+                                               5UL * 1024 * 1024 * 1024};
+  EXPECT_DEATH(
+      env.UpdateWithTargetConfig(config),
+      "Value for --rss_limit_mb is inconsistent with the value for rss_limit "
+      "in the target binary");
+}
+
+TEST(Environment, UpdatesStackLimitKbFromTargetConfigStackLimit) {
+  Environment env{.stack_limit_kb = Environment::Default().stack_limit_kb};
+  fuzztest::internal::Configuration config{.stack_limit = 5UL * 1024};
+  env.UpdateWithTargetConfig(config);
+  EXPECT_EQ(env.stack_limit_kb, 5);
+}
+
+TEST(Environment, DiesOnInconsistentStackLimitKbAndTargetConfigStackLimit) {
+  Environment env{.stack_limit_kb = 123};
+  fuzztest::internal::Configuration config{.stack_limit = 5UL * 1024};
+  EXPECT_DEATH(env.UpdateWithTargetConfig(config),
+               "Value for --stack_limit_kb is inconsistent with the value for "
+               "stack_limit in the target binary");
+}
+
+TEST(Environment, UpdatesReplayOnlyConfiguration) {
+  Environment env;
+  fuzztest::internal::Configuration config;
+  config.only_replay = true;
+  env.UpdateWithTargetConfig(config);
+  EXPECT_TRUE(env.load_shards_only);
+  EXPECT_FALSE(env.populate_binary_info);
 }
 
 }  // namespace centipede

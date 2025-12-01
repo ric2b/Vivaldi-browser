@@ -32,7 +32,8 @@ VivaldiAccountManagerFactory::VivaldiAccountManagerFactory()
 
 VivaldiAccountManagerFactory::~VivaldiAccountManagerFactory() {}
 
-KeyedService* VivaldiAccountManagerFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+VivaldiAccountManagerFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
   Profile* profile = Profile::FromBrowserContext(context);
   auto url_loader_factory = profile->GetDefaultStoragePartition()
@@ -40,7 +41,7 @@ KeyedService* VivaldiAccountManagerFactory::BuildServiceInstanceFor(
   auto password_store = ProfilePasswordStoreFactory::GetForProfile(
       profile, ServiceAccessType::IMPLICIT_ACCESS);
 
-  return new VivaldiAccountManager(
+  return std::make_unique<VivaldiAccountManager>(
       profile->GetPrefs(), g_browser_process->local_state(),
       std::move(url_loader_factory), std::move(password_store));
 }

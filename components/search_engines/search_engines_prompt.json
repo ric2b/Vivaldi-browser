@@ -18,5 +18,15 @@
   "prompt_if_domain": [
     "google.com",
     "bing.com"
-  ]
+  ],
+  // Exclude list to NOT show command prompt if default search engine is type or domain
+  "exclude_list": {
+    "domain": [
+      "yandex.ru",
+      "yandex.com.tr"
+    ],
+    "type": [
+      "SEARCH_ENGINE_YANDEX"
+    ]
+  }
 }

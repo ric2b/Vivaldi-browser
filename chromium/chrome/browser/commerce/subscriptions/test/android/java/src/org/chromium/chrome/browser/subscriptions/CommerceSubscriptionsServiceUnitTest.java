@@ -20,7 +20,6 @@ import androidx.test.filters.SmallTest;
 
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
@@ -29,11 +28,10 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.robolectric.annotation.Config;
 
-import org.chromium.base.FeatureList;
+import org.chromium.base.FeatureOverrides;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.shared_preferences.SharedPreferencesManager;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.commerce.ShoppingServiceFactory;
 import org.chromium.chrome.browser.commerce.ShoppingServiceFactoryJni;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -48,7 +46,9 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.components.browser_ui.notifications.BaseNotificationManagerProxyFactory;
 import org.chromium.components.browser_ui.notifications.MockNotificationManagerProxy;
+import org.chromium.components.browser_ui.notifications.NotificationProxyUtils;
 import org.chromium.components.commerce.core.CommerceFeatureUtils;
 import org.chromium.components.commerce.core.CommerceFeatureUtilsJni;
 import org.chromium.components.commerce.core.ShoppingService;
@@ -62,8 +62,6 @@ import java.util.concurrent.TimeUnit;
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
 public class CommerceSubscriptionsServiceUnitTest {
-
-    @Rule public JniMocker mJniMocker = new JniMocker();
 
     @Mock private ShoppingService mShoppingService;
     @Mock TabModelSelector mTabModelSelector;
@@ -82,16 +80,15 @@ public class CommerceSubscriptionsServiceUnitTest {
     private SharedPreferencesManager mSharedPreferencesManager;
     private MockNotificationManagerProxy mMockNotificationManager;
     private PriceDropNotificationManager mPriceDropNotificationManager;
-    private FeatureList.TestValues mTestValues;
 
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
 
-        mJniMocker.mock(CommerceFeatureUtilsJni.TEST_HOOKS, mCommerceFeatureUtilsJniMock);
+        CommerceFeatureUtilsJni.setInstanceForTesting(mCommerceFeatureUtilsJniMock);
         doReturn(true).when(mCommerceFeatureUtilsJniMock).isShoppingListEligible(anyLong());
 
-        mJniMocker.mock(ShoppingServiceFactoryJni.TEST_HOOKS, mShoppingServiceFactoryJniMock);
+        ShoppingServiceFactoryJni.setInstanceForTesting(mShoppingServiceFactoryJniMock);
         doReturn(mShoppingService).when(mShoppingServiceFactoryJniMock).getForProfile(any());
 
         doNothing().when(mActivityLifecycleDispatcher).register(any());
@@ -103,15 +100,13 @@ public class CommerceSubscriptionsServiceUnitTest {
                                 CommerceSubscriptionsServiceConfig.getStaleTabLowerBoundSeconds()));
         PriceTrackingFeatures.setIsSignedInAndSyncEnabledForTesting(true);
 
-        mTestValues = new FeatureList.TestValues();
-        mTestValues.addFeatureFlagOverride(ChromeFeatureList.COMMERCE_PRICE_TRACKING, true);
-        FeatureList.setTestValues(mTestValues);
+        FeatureOverrides.enable(ChromeFeatureList.PRICE_ANNOTATIONS);
 
         mMockNotificationManager = new MockNotificationManagerProxy();
-        mMockNotificationManager.setNotificationsEnabled(false);
-        PriceDropNotificationManagerImpl.setNotificationManagerForTesting(mMockNotificationManager);
+        NotificationProxyUtils.setNotificationEnabledForTest(false);
+        BaseNotificationManagerProxyFactory.setInstanceForTesting(mMockNotificationManager);
 
-        mJniMocker.mock(UserPrefsJni.TEST_HOOKS, mUserPrefsJni);
+        UserPrefsJni.setInstanceForTesting(mUserPrefsJni);
         ProfileManager.setLastUsedProfileForTesting(mProfile);
         when(mUserPrefsJni.get(mProfile)).thenReturn(mPrefService);
 
@@ -122,7 +117,7 @@ public class CommerceSubscriptionsServiceUnitTest {
 
     @After
     public void tearDown() {
-        PriceDropNotificationManagerImpl.setNotificationManagerForTesting(null);
+        NotificationProxyUtils.setNotificationEnabledForTest(null);
     }
 
     @Test

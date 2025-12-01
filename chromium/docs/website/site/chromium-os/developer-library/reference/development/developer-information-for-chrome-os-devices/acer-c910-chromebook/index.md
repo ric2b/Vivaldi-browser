@@ -2,7 +2,7 @@
 breadcrumbs:
 - - /chromium-os
   - ChromiumOS
-- - /chromium-os/developer-information-for-chrome-os-devices
+- - /chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices
   - Developer Information for ChromeOS Devices
 page_name: acer-c910-chromebook
 title: Acer C910 Chromebook 15
@@ -20,19 +20,19 @@ on the Chrome Notebook), see the [ChromiumOS Developer
 Guide](/chromium-os/developer-guide).
 
 <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/acer-c910-chromebook/chromebook_0001s_0000_Acer-Chromebook-15-01-front.jpg"
+src="chromebook_0001s_0000_Acer-Chromebook-15-01-front.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/acer-c910-chromebook/chromebook_0001s_0001_Acer-Chromebook-15-02-left.jpg"
+src="chromebook_0001s_0001_Acer-Chromebook-15-02-left.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/acer-c910-chromebook/chromebook_0001s_0002_Acer-Chromebook-15-03-right.jpg"
+src="chromebook_0001s_0002_Acer-Chromebook-15-03-right.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/acer-c910-chromebook/chromebook_0001s_0003_Acer-Chromebook-15-04-side-left.jpg"
+src="chromebook_0001s_0003_Acer-Chromebook-15-04-side-left.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/acer-c910-chromebook/chromebook_0001s_0004_Acer-Chromebook-15-05-side-right.jpg"
+src="chromebook_0001s_0004_Acer-Chromebook-15-05-side-right.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/acer-c910-chromebook/chromebook_0001s_0005_Acer-Chromebook-15-06-group-black.jpg"
+src="chromebook_0001s_0005_Acer-Chromebook-15-06-group-black.jpg"
 height=150 width=200> <img alt="image"
-src="/chromium-os/developer-information-for-chrome-os-devices/acer-c910-chromebook/chromebook_0001s_0006_Acer-Chromebook-15-07-group-white.jpg"
+src="chromebook_0001s_0006_Acer-Chromebook-15-07-group-white.jpg"
 height=150 width=200>
 
 ### Specifications
@@ -48,7 +48,7 @@ height=150 width=200>
     *   HDMI port
     *   1 x USB 2.0
     *   1 x USB 3.0
-    *   [SD slot](http://en.wikipedia.org/wiki/Secure_Digital) (SDXC
+    *   [SD slot](https://en.wikipedia.org/wiki/Secure_Digital) (SDXC
                 compatible)
     *   Headphone/mic combo jack
     *   Camera & mic
@@ -58,7 +58,7 @@ height=150 width=200>
     *   Bluetooth 4.0
     *   USB ports can handle some Ethernet dongles
 *   [Kensington Security
-            Slot](http://en.wikipedia.org/wiki/Kensington_Security_Slot)
+            Slot](https://en.wikipedia.org/wiki/Kensington_Security_Slot)
 *   Linux 3.14
 
 ## Developer Mode
@@ -67,7 +67,7 @@ height=150 width=200>
 cause hardware, software or security issues and may void warranty.**
 
 Details for working with developer mode can be found [on this
-page](/chromium-os/developer-information-for-chrome-os-devices/acer-c720-chromebook).
+page](../acer-c720-chromebook).
 
 ## Firmware
 

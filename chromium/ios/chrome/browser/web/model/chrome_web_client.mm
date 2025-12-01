@@ -33,7 +33,7 @@
 #import "components/translate/ios/browser/translate_java_script_feature.h"
 #import "components/version_info/version_info.h"
 #import "ios/chrome/browser/autofill/model/bottom_sheet/autofill_bottom_sheet_java_script_feature.h"
-#import "ios/chrome/browser/browser_container/edit_menu_tab_helper.h"
+#import "ios/chrome/browser/browser_container/model/edit_menu_tab_helper.h"
 #import "ios/chrome/browser/content_settings/model/host_content_settings_map_factory.h"
 #import "ios/chrome/browser/flags/chrome_switches.h"
 #import "ios/chrome/browser/follow/model/follow_java_script_feature.h"
@@ -289,13 +289,15 @@ std::string ChromeWebClient::GetUserAgent(web::UserAgentType type) const {
       command_line->HasSwitch(switches::kUserAgent)) {
     std::string user_agent =
         command_line->GetSwitchValueASCII(switches::kUserAgent);
-    if (net::HttpUtil::IsValidHeaderValue(user_agent))
+    if (net::HttpUtil::IsValidHeaderValue(user_agent)) {
       return user_agent;
+    }
     LOG(WARNING) << "Ignored invalid value for flag --" << switches::kUserAgent;
   }
 
-  if (type == web::UserAgentType::DESKTOP)
+  if (type == web::UserAgentType::DESKTOP) {
     return web::BuildDesktopUserAgent(GetDesktopProduct());
+  }
   return web::BuildMobileUserAgent(GetMobileProduct());
 }
 

@@ -15,7 +15,7 @@ tree, start by following the
 [New & Upgrade Package Process](/chromium-os/developer-library/guides/portage/package-upgrade-process/)
 guide (short version: use `cros_portage_upgrade` to pull the package from
 upstream). For new cros-workon packages, see
-[Adding a New Package](/chromium-os/how-tos-and-troubleshooting/add-a-new-package).
+[Adding a New Package](/chromium-os/developer-library/guides/portage/add-a-new-package).
 Once the package is in place, add it as a dependency to the
 [virtual/target-chromium-os-sdk](https://chromium.googlesource.com/chromiumos/overlays/chromiumos-overlay/+/HEAD/virtual/target-chromium-os-sdk/target-chromium-os-sdk-9999.ebuild)
 ebuild to be automatically installed as part of the SDK.

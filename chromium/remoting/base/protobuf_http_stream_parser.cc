@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "remoting/base/protobuf_http_stream_parser.h"
 
 #include <string.h>
@@ -84,11 +89,12 @@ void ProtobufHttpStreamParser::ParseStreamIfAvailable() {
     }
   }
 
-  if (bytes_consumed == 0) {
+  if (bytes_consumed <= 0) {
     return;
   }
   base::span<const uint8_t> bytes_not_consumed =
-      read_buffer_->span_before_offset().subspan(bytes_consumed);
+      read_buffer_->span_before_offset().subspan(
+          static_cast<size_t>(bytes_consumed));
   read_buffer_->everything().copy_prefix_from(bytes_not_consumed);
   read_buffer_->set_offset(bytes_not_consumed.size());
 }

@@ -19,7 +19,7 @@ to NaCl module developers.
 ### Chrome
 
 Chrome is a
-[multi-process](http://www.chromium.org/developers/design-documents/multi-process-architecture)
+[multi-process](/developers/design-documents/multi-process-architecture)
 browser. It uses multiple processes to provide increased security comparing to
 other single-process browsers like Firefox.
 The main process is called "browser". It runs the UI (including the
@@ -32,7 +32,7 @@ the bitmap for displaying the page. It runs in a sandbox (known as Chrome or
 outer sandbox) and has limited access permissions. It cannot open files or
 network connections and can only respond to communication requests by the
 browser. Communication is done via a combination of
-[IPC](http://www.chromium.org/developers/design-documents/inter-process-communication)
+[IPC](/developers/design-documents/inter-process-communication)
 techniques. Using sandboxed renderers ensures that if one tab misbehaves or
 crashes, the rest of the tabs and the browser are isolated. It also limits the
 ability of malicious software running in one tab from accessing activity in
@@ -40,22 +40,22 @@ another tab or interacting with the rest of the system.
 
 ### Plugins
 
-[Plugins](http://en.wikipedia.org/wiki/Plug-in_%28computing%29) are external
+[Plugins](https://en.wikipedia.org/wiki/Plug-in_%28computing%29) are external
 binaries that add new capabilities to a web browser and are loaded when content
 of the type they declare is embedded into a page. They either come bundled with
 the browser or get downloaded and installed by the user. The most common plugins
-are [Adobe Flash](http://en.wikipedia.org/wiki/Adobe_flash), [Adobe
-Reader](http://en.wikipedia.org/wiki/Acrobat_reader) and
-[Java](http://en.wikipedia.org/wiki/Java_plugin).
+are [Adobe Flash](https://en.wikipedia.org/wiki/Adobe_flash), [Adobe
+Reader](https://en.wikipedia.org/wiki/Acrobat_reader) and
+[Java](https://en.wikipedia.org/wiki/Java_plugin).
 In general, existing plugins cannot be sandboxed like the render process because
 they rely on file system and network access as well as use of native fonts.
 Therefore, Chrome supports [out of process
-plugins](http://www.chromium.org/developers/design-documents/plugin-architecture)
+plugins](/developers/design-documents/plugin-architecture)
 that run in a separate process with full privileges (i.e. no sandbox) and
 communicate with the renderer and browser via
-[IPC](http://www.chromium.org/developers/design-documents/inter-process-communication).
+[IPC](/developers/design-documents/inter-process-communication).
 Chrome also supports [in process
-plugins](http://www.chromium.org/developers/design-documents/plugin-architecture).
+plugins](/developers/design-documents/plugin-architecture).
 They run within a render process and can use faster direct access for
 communication. They have also been used as an integration mechanism for adding
 new statically linked functionality to the browser.
@@ -66,7 +66,7 @@ new statically linked functionality to the browser.
 framework used by plugins for exchanging data with the browser. It is
 implemented by Chrome, Firefox and most other web browsers, excluding MS
 Internet Explorer, which stopped supporting it in favor of
-[ActiveX](http://en.wikipedia.org/wiki/ActiveX_control).
+[ActiveX](https://en.wikipedia.org/wiki/ActiveX_control).
 Contrary to other single-process browsers, Chrome
 [supports](http://code.google.com/chrome/extensions/npapi.html) NPAPI plugins
 out of process.
@@ -112,14 +112,14 @@ while running in a secure environment with restricted access to the host.
 [Native Client SDK](http://gonacl.com) is a software development kit for
 creating Native Client executables (abbreviated as nexe) from scratch or from
 the existing platform-specific web-based native applications. It consists of a
-[GNU](http://en.wikipedia.org/wiki/GNU_Project)-based toolchain with customized
-versions of [gcc](http://en.wikipedia.org/wiki/GNU_Compiler_Collection),
-[binutils](http://en.wikipedia.org/wiki/Binutils) and
-[gdb](http://en.wikipedia.org/wiki/Gdb) (32-bit x86 only), precompiled API
+[GNU](https://en.wikipedia.org/wiki/GNU_Project)-based toolchain with customized
+versions of [gcc](https://en.wikipedia.org/wiki/GNU_Compiler_Collection),
+[binutils](https://en.wikipedia.org/wiki/Binutils) and
+[gdb](https://en.wikipedia.org/wiki/Gdb) (32-bit x86 only), precompiled API
 libraries and various examples and how-tos. The two usage models include porting
 desktop apps and extending web apps with fast native code.
 [Naclports](http://code.google.com/p/naclports/) is a collection of ports of
-various open-sourced projects (like [zlib](http://en.wikipedia.org/wiki/zlib))
+various open-sourced projects (like [zlib](https://en.wikipedia.org/wiki/zlib))
 to Native Client for gradual up-streaming. It is still in early stages of
 development and is intended to be modeled after
 [Macports](http://www.macports.org/).
@@ -131,10 +131,10 @@ element](https://developer.mozilla.org/en/Gecko_Plugin_API_Reference/Plug-in_Bas
 with “application/x-nacl-srpc” type.
 NaCl includes a "service runtime" subsystem that provides a reduced system call
 interface and resource abstractions to isolate nexes from the host. It provides
-a [POSIX](http://en.wikipedia.org/wiki/Posix)-like environment for nexe
+a [POSIX](https://en.wikipedia.org/wiki/Posix)-like environment for nexe
 execution and is used by nexes to communicate with each other and the browser.
 The nexes are run using a loader program, sel_ldr (secure
-[ELF](http://en.wikipedia.org/wiki/Executable_and_Linkable_Format) loader),
+[ELF](https://en.wikipedia.org/wiki/Executable_and_Linkable_Format) loader),
 which is launched as a separate process. The sel_ldr process communicates with
 the NaCl plugin via [SRPC](/system/errors/NodeNotFound) over IMC \[citation
 needed\].
@@ -182,11 +182,11 @@ the untrusted nexes running within it.
 
 Chrome
 
-<http://www.chromium.org/developers/design-documents/multi-process-architecture>
+<https://www.chromium.org/developers/design-documents/multi-process-architecture>
 
-<http://www.chromium.org/developers/design-documents/inter-process-communication>
+<https://www.chromium.org/developers/design-documents/inter-process-communication>
 
-<http://www.chromium.org/developers/design-documents/plugin-architecture>
+<https://www.chromium.org/developers/design-documents/plugin-architecture>
 
 <http://code.google.com/chrome/extensions/npapi.html>
 
@@ -212,7 +212,7 @@ NaCl
 
 <http://code.google.com/p/naclports/>
 
-<http://www.chromium.org/nativeclient/simple-rpc>
+<https://www.chromium.org/nativeclient/simple-rpc>
 
 [Native Client integration with Chrome](/system/errors/NodeNotFound)
 

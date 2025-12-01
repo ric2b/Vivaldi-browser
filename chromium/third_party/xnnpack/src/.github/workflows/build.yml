@@ -118,7 +118,7 @@ jobs:
         run: ctest --output-on-failure --parallel $(nproc)
         working-directory: ${{ github.workspace }}/build/linux/riscv64
   cmake-linux-riscv64-rvv:
-    runs-on: ubuntu-22.04-8core
+    runs-on: ubuntu-22.04-16core
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -128,8 +128,8 @@ jobs:
         run: sudo apt install ninja-build
       - name: Download and Install riscv64 cross-toolchain tarball
         run: |
-          wget -nv https://github.com/riscv-collab/riscv-gnu-toolchain/releases/download/2024.04.12/riscv64-glibc-ubuntu-22.04-llvm-nightly-2024.04.12-nightly.tar.gz
-          tar zxf riscv64-glibc-ubuntu-22.04-llvm-nightly-2024.04.12-nightly.tar.gz
+          wget -nv https://github.com/riscv-collab/riscv-gnu-toolchain/releases/download/2024.09.03/riscv64-glibc-ubuntu-22.04-llvm-nightly-2024.09.03-nightly.tar.gz
+          tar xzf riscv64-glibc-ubuntu-22.04-llvm-nightly-2024.09.03-nightly.tar.gz
         working-directory: ${{ github.workspace }}
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
@@ -380,7 +380,7 @@ jobs:
     env:
       CC: gcc-9
       CXX: g++-9
-      BAZEL_DEFINES: --define=xnn_enable_avxvnni=false --define=xnn_enable_avxvnniint8=false --define=xnn_enable_avx512amx=false --define=xnn_enable_avx512fp16=false
+      BAZEL_DEFINES: --define=xnn_enable_avxvnni=false --define=xnn_enable_avx256vnni=false --define=xnn_enable_avxvnniint8=false --define=xnn_enable_avx512amx=false --define=xnn_enable_avx512fp16=false
     steps:
       - uses: actions/checkout@v4
       - name: Update apt
@@ -416,7 +416,7 @@ jobs:
         with:
           path: "/home/runner/.cache/bazel"
           key: ${{ github.job }}-${{ github.sha }}
-  bazel-linux-aarch64:
+  bazel-linux-aarch64-clang18:
     runs-on: arm-ubuntu-arm-22.04-4core
     timeout-minutes: 60
     steps:
@@ -448,6 +448,61 @@ jobs:
         env:
           CC: clang-18
           CXX: clang++-18
+        run: |
+          # We only test the KleidiAI integration for now.
+          bazel test \
+            --test_output=all \
+            --test_filter=*QP8* \
+            test:qp8_f32_qc4w_gemm_minmax_test \
+            test:fully_connected_nc_test \
+            test:fully_connected_test
+        working-directory: ${{ github.workspace }}
+      - name: Compress disk cache
+        # Bazel's `--disk-cache` currently grows without bounds, so we remove files
+        # that haven't been accessed in 7+ days manually.
+        if: ${{ inputs.update-caches }}
+        run: find $HOME/.cache/bazel -type f -atime +7 -delete
+      - name: Save bazel cache
+        if: ${{ inputs.update-caches }}
+        uses: actions/cache/save@v4
+        with:
+          path: "/home/runner/.cache/bazel"
+          key: ${{ github.job }}-${{ github.sha }}
+  bazel-linux-aarch64-gcc13:
+    # This ensures we have solid test coverage for _Float16
+    runs-on: arm-ubuntu-arm-22.04-4core
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add repository ppa:ubuntu-toolchain-r/test for gcc-13 and g++-13
+        working-directory: ${{ github.workspace }}
+        run: |
+          sudo add-apt-repository ppa:ubuntu-toolchain-r/test
+          sudo apt update
+      - name: Install gcc-13 (cached)
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: gcc-13 g++-13
+          version: 1.0
+      - name: Restore bazel cache
+        uses: actions/cache/restore@v4
+        with:
+          path: "/home/runner/.cache/bazel"
+          key: ${{ github.job }}
+          restore-keys: |
+            ${{ github.job }}-
+      - name: Build tests
+        env:
+          CC: gcc-13
+          CXX: g++-13
+        run: |
+            bazel build test:all
+        working-directory: ${{ github.workspace }}
+      - name: Run tests
+        if: ${{ inputs.run-tests }}
+        env:
+          CC: gcc-13
+          CXX: g++-13
         run: |
           # We only test the KleidiAI integration for now.
           bazel test \

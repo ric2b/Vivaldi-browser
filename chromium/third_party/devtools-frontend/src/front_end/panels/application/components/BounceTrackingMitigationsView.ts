@@ -3,20 +3,24 @@
 // found in the LICENSE file.
 
 import '../../../ui/components/report_view/report_view.js';
+import '../../../ui/legacy/components/data_grid/data_grid.js';
 
 import * as i18n from '../../../core/i18n/i18n.js';
 import type * as Platform from '../../../core/platform/platform.js';
 import * as SDK from '../../../core/sdk/sdk.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
 import * as ChromeLink from '../../../ui/components/chrome_link/chrome_link.js';
-import * as DataGrid from '../../../ui/components/data_grid/data_grid.js';
 import * as LegacyWrapper from '../../../ui/components/legacy_wrapper/legacy_wrapper.js';
-import * as LitHtml from '../../../ui/lit-html/lit-html.js';
+import * as Lit from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
-import bounceTrackingMitigationsViewStyles from './bounceTrackingMitigationsView.css.js';
+import bounceTrackingMitigationsViewStylesRaw from './bounceTrackingMitigationsView.css.js';
 
-const {html} = LitHtml;
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const bounceTrackingMitigationsViewStyles = new CSSStyleSheet();
+bounceTrackingMitigationsViewStyles.replaceSync(bounceTrackingMitigationsViewStylesRaw.cssContent);
+
+const {html} = Lit;
 
 const UIStrings = {
   /**
@@ -89,7 +93,7 @@ export class BounceTrackingMitigationsView extends LegacyWrapper.LegacyWrapper.W
 
   async #render(): Promise<void> {
     // clang-format off
-    LitHtml.render(html`
+    Lit.render(html`
       <devtools-report .data=${{reportTitle: i18nString(UIStrings.bounceTrackingMitigationsTitle)}}
                        jslog=${VisualLogging.pane('bounce-tracking-mitigations')}>
         ${await this.#renderMainFrameInformation()}
@@ -98,7 +102,7 @@ export class BounceTrackingMitigationsView extends LegacyWrapper.LegacyWrapper.W
     // clang-format on
   }
 
-  async #renderMainFrameInformation(): Promise<LitHtml.TemplateResult> {
+  async #renderMainFrameInformation(): Promise<Lit.TemplateResult> {
     if (!this.#checkedFeature) {
       await this.#checkFeatureState();
     }
@@ -124,7 +128,7 @@ export class BounceTrackingMitigationsView extends LegacyWrapper.LegacyWrapper.W
       <devtools-report-section>
         ${this.#renderForceRunButton()}
       </devtools-report-section>
-        ${this.#renderDeletedSitesOrNoSitesMessage()}
+      ${this.#renderDeletedSitesOrNoSitesMessage()}
       <devtools-report-divider>
       </devtools-report-divider>
       <devtools-report-section>
@@ -137,7 +141,7 @@ export class BounceTrackingMitigationsView extends LegacyWrapper.LegacyWrapper.W
     // clang-format on
   }
 
-  #renderForceRunButton(): LitHtml.TemplateResult {
+  #renderForceRunButton(): Lit.TemplateResult {
     const isMitigationRunning = (this.#screenStatus === ScreenStatusType.RUNNING);
 
     // clang-format off
@@ -158,7 +162,7 @@ export class BounceTrackingMitigationsView extends LegacyWrapper.LegacyWrapper.W
     // clang-format on
   }
 
-  #renderDeletedSitesOrNoSitesMessage(): LitHtml.TemplateResult {
+  #renderDeletedSitesOrNoSitesMessage(): Lit.TemplateResult {
     if (!this.#seenButtonClick) {
       return html``;
     }
@@ -176,29 +180,20 @@ export class BounceTrackingMitigationsView extends LegacyWrapper.LegacyWrapper.W
       // clang-format on
     }
 
-    const gridData: DataGrid.DataGridController.DataGridControllerData = {
-      columns: [
-        {
-          id: 'sites',
-          title: i18nString(UIStrings.stateDeletedFor),
-          widthWeighting: 10,
-          hideable: false,
-          visible: true,
-          sortable: true,
-        },
-      ],
-      rows: this.#buildRowsFromDeletedSites(),
-      initialSort: {
-        columnId: 'sites',
-        direction: DataGrid.DataGridUtils.SortDirection.ASC,
-      },
-    };
-
     // clang-format off
     return html`
       <devtools-report-section>
-        <devtools-data-grid-controller .data=${gridData}>
-        </devtools-data-grid-controller>
+        <devtools-data-grid striped inline>
+          <table>
+            <tr>
+              <th id="sites" weight="10" sortable>
+                ${i18nString(UIStrings.stateDeletedFor)}
+              </th>
+            </tr>
+            ${this.#trackingSites.map(site => html`
+              <tr><td>${site}</td></tr>`)}
+          </table>
+        </devtools-data-grid>
       </devtools-report-section>
     `;
     // clang-format on
@@ -227,15 +222,6 @@ export class BounceTrackingMitigationsView extends LegacyWrapper.LegacyWrapper.W
   #renderMitigationsResult(): void {
     this.#screenStatus = ScreenStatusType.RESULT;
     void this.#render();
-  }
-
-  #buildRowsFromDeletedSites(): DataGrid.DataGridUtils.Row[] {
-    const trackingSites = this.#trackingSites;
-    return trackingSites.map(site => ({
-                               cells: [
-                                 {columnId: 'sites', value: site},
-                               ],
-                             }));
   }
 
   async #checkFeatureState(): Promise<void> {

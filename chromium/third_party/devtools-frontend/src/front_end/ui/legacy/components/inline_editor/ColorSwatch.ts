@@ -5,12 +5,16 @@
 import type * as Common from '../../../../core/common/common.js';
 import * as i18n from '../../../../core/i18n/i18n.js';
 import * as ColorPicker from '../../../legacy/components/color_picker/color_picker.js';
-import * as LitHtml from '../../../lit-html/lit-html.js';
+import * as Lit from '../../../lit/lit.js';
 import * as VisualLogging from '../../../visual_logging/visual_logging.js';
 
-import colorSwatchStyles from './colorSwatch.css.js';
+import colorSwatchStylesRaw from './colorSwatch.css.js';
 
-const {html} = LitHtml;
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const colorSwatchStyles = new CSSStyleSheet();
+colorSwatchStyles.replaceSync(colorSwatchStylesRaw.cssContent);
+
+const {html} = Lit;
 
 const UIStrings = {
   /**
@@ -95,7 +99,7 @@ export class ColorSwatch extends HTMLElement {
   renderColor(color: Common.Color.Color): void {
     this.color = color;
 
-    const colorSwatchClasses = LitHtml.Directives.classMap({
+    const colorSwatchClasses = Lit.Directives.classMap({
       'color-swatch': true,
       readonly: this.readonly,
     });
@@ -106,9 +110,9 @@ export class ColorSwatch extends HTMLElement {
     // free to append any content to replace what is being shown here.
     // Note also that whitespace between nodes is removed on purpose to avoid pushing these elements apart. Do not
     // re-format the HTML code.
-    LitHtml.render(
+    Lit.render(
       html`<span class=${colorSwatchClasses} title=${this.tooltip}><span class="color-swatch-inner"
-        style="background-color: ${this.getText()};"
+        style="background-color: ${color.asString()};"
         jslog=${VisualLogging.showStyleEditor('color').track({click: true})}
         @click=${this.onClick}
         @mousedown=${this.consume}

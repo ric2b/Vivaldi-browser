@@ -12,7 +12,7 @@ title: Handling a failing test
 
 **File a bug:**
 
-At [crbug.com](http://crbug.com) and leave as much context about the problem in
+At [crbug.com](https://crbug.com) and leave as much context about the problem in
 the bug report. At least make sure to include the following in the bug report:
 
 *   **Copy+paste the relevant parts of the log into the bug report** --
@@ -31,7 +31,7 @@ the bug report. At least make sure to include the following in the bug report:
 *   Handy shortlink for filing this type of bug:
             <http://bit.ly/disabled-test-tracker>
 
-[An example bug](http://crbug.com/130358) (Comment #0 demonstrates how to file
+[An example bug](https://crbug.com/130358) (Comment #0 demonstrates how to file
 the tracker, comment #1 shows the CL to disable the test)
 
 The document outlining the disabled tests process is
@@ -48,7 +48,7 @@ TEST(ExampleTest, CrashingTest) {
 becomes
 
 ```none
-// Crashes on all platforms.  <http://crbug.com/1234>
+// Crashes on all platforms.  <https://crbug.com/1234>
 TEST(ExampleTest, DISABLED_CrashingTest) {
 ```
 
@@ -56,7 +56,7 @@ If the test is crashing/timing out on a proper subset of the major platforms
 (some, but not all), use an #ifdef to only disable the test for those platforms.
 
 ```none
-// Crashes on Mac/Win only.  <http://crbug.com/2345>
+// Crashes on Mac/Win only.  <https://crbug.com/2345>
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
 #define MAYBE_CrashingTest DISABLED_CrashingTest
 #else

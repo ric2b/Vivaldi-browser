@@ -4,6 +4,7 @@
 
 #include "media/capture/video/win/video_capture_device_mf_win.h"
 
+#include <d3d11.h>
 #include <d3d11_4.h>
 #include <ks.h>
 #include <ksmedia.h>
@@ -13,7 +14,6 @@
 #include <wincodec.h>
 #include <wrl/implements.h>
 
-#include <d3d11.h>
 #include <memory>
 #include <optional>
 #include <thread>
@@ -25,7 +25,6 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
-#include "base/memory/raw_ptr_exclusion.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/stringprintf.h"
@@ -250,15 +249,18 @@ class ScopedBufferLock {
     if (FAILED(buffer_.As(&buffer_2d_2)))
       return false;
     BYTE* data_start;
-    return SUCCEEDED(buffer_2d_2->Lock2DSize(MF2DBuffer_LockFlags_Read, &data_,
+    return SUCCEEDED(buffer_2d_2->Lock2DSize(MF2DBuffer_LockFlags_Read,
+                                             &data_.AsEphemeralRawAddr(),
                                              &pitch_, &data_start, &length_));
   }
 
-  bool Lock2D() { return SUCCEEDED(buffer_2d_->Lock2D(&data_, &pitch_)); }
+  bool Lock2D() {
+    return SUCCEEDED(buffer_2d_->Lock2D(&data_.AsEphemeralRawAddr(), &pitch_));
+  }
 
   void LockSlow() {
     DWORD max_length = 0;
-    buffer_->Lock(&data_, &max_length, &length_);
+    buffer_->Lock(&data_.AsEphemeralRawAddr(), &max_length, &length_);
   }
 
   ~ScopedBufferLock() {
@@ -277,9 +279,7 @@ class ScopedBufferLock {
  private:
   ComPtr<IMFMediaBuffer> buffer_;
   ComPtr<IMF2DBuffer> buffer_2d_;
-  // This field is not a raw_ptr<> because it was filtered by the rewriter for:
-  // #addr-of
-  RAW_PTR_EXCLUSION BYTE* data_ = nullptr;
+  raw_ptr<BYTE> data_ = nullptr;
   DWORD length_ = 0;
   LONG pitch_ = 0;
 };
@@ -739,14 +739,16 @@ class DXGIHandlePrivateData
           IUnknown> {
  public:
   explicit DXGIHandlePrivateData(base::win::ScopedHandle texture_handle)
-      : texture_handle_(std::move(texture_handle)) {}
+      : handle_(std::move(texture_handle)) {}
 
-  gfx::DXGIHandleToken GetDXGIToken() { return dxgi_token_; }
-  HANDLE GetTextureHandle() { return texture_handle_.get(); }
+  const gfx::DXGIHandleToken& GetDXGIToken() { return handle_.token(); }
+  HANDLE GetTextureHandle() { return handle_.buffer_handle(); }
+
+  gfx::DXGIHandle CloneHandle() { return handle_.Clone(); }
 
  private:
-  gfx::DXGIHandleToken dxgi_token_;
-  const base::win::ScopedHandle texture_handle_;
+  gfx::DXGIHandle handle_;
+
   ~DXGIHandlePrivateData() override = default;
 };
 
@@ -1831,31 +1833,15 @@ void VideoCaptureDeviceMFWin::GetPhotoState(GetPhotoStateCallback callback) {
   }
 
   if (extended_camera_controller_) {
-    ComPtr<IMFExtendedCameraControl> extended_camera_control;
-    // KSPROPERTY_CAMERACONTROL_EXTENDED_BACKGROUNDSEGMENTATION is supported in
-    // Windows 10 version 20H2. It was updated in Windows 11 version 22H2 to
-    // support optional shallow focus capability (according to
-    // https://docs.microsoft.com/en-us/windows-hardware/drivers/stream/ksproperty-cameracontrol-extended-backgroundsegmentation)
-    // but that support is not needed here.
-    hr = extended_camera_controller_->GetExtendedCameraControl(
-        MF_CAPTURE_ENGINE_MEDIASOURCE,
-        KSPROPERTY_CAMERACONTROL_EXTENDED_BACKGROUNDSEGMENTATION,
-        &extended_camera_control);
-    DLOG_IF_FAILED_WITH_HRESULT(
-        "Failed to retrieve IMFExtendedCameraControl for background "
-        "segmentation",
-        hr);
-    if (SUCCEEDED(hr) && (extended_camera_control->GetCapabilities() &
-                          KSCAMERA_EXTENDEDPROP_BACKGROUNDSEGMENTATION_BLUR)) {
+    if (auto blur_state = GetBackgroundBlurState()) {
       photo_capabilities->supported_background_blur_modes = {
           mojom::BackgroundBlurMode::OFF, mojom::BackgroundBlurMode::BLUR};
       photo_capabilities->background_blur_mode =
-          (extended_camera_control->GetFlags() &
-           KSCAMERA_EXTENDEDPROP_BACKGROUNDSEGMENTATION_BLUR)
-              ? mojom::BackgroundBlurMode::BLUR
-              : mojom::BackgroundBlurMode::OFF;
+          blur_state->enabled ? mojom::BackgroundBlurMode::BLUR
+                              : mojom::BackgroundBlurMode::OFF;
     }
 
+    ComPtr<IMFExtendedCameraControl> extended_camera_control;
     hr = extended_camera_controller_->GetExtendedCameraControl(
         MF_CAPTURE_ENGINE_MEDIASOURCE,
         KSPROPERTY_CAMERACONTROL_EXTENDED_DIGITALWINDOW,
@@ -2292,12 +2278,13 @@ HRESULT VideoCaptureDeviceMFWin::DeliverTextureToClient(
   }
 
   auto gmb_handle = capture_buffer.handle_provider->GetGpuMemoryBufferHandle();
-  if (!gmb_handle.dxgi_handle.IsValid()) {
+  if (!gmb_handle.dxgi_handle().IsValid()) {
     // If the device is removed and GMB tracker fails to recreate it,
     // an empty gmb handle may be returned here.
     return MF_E_UNEXPECTED;
   }
-  hr = CopyTextureToGpuMemoryBuffer(texture, gmb_handle.dxgi_handle.Get());
+  hr = CopyTextureToGpuMemoryBuffer(texture,
+                                    gmb_handle.dxgi_handle().buffer_handle());
 
   if (FAILED(hr)) {
     LOG(ERROR) << "Failed to copy camera device texture to output texture: "
@@ -2338,6 +2325,7 @@ HRESULT VideoCaptureDeviceMFWin::DeliverTextureToClient(
 
   VideoFrameMetadata frame_metadata;
   frame_metadata.transformation = VideoTransformation(frame_rotation);
+  frame_metadata.background_blur = GetBackgroundBlurState();
 
   client_->OnIncomingCapturedBufferExt(
       std::move(capture_buffer),
@@ -2395,17 +2383,13 @@ HRESULT VideoCaptureDeviceMFWin::DeliverExternalBufferToClient(
     }
   }
 
+  VideoFrameMetadata frame_metadata;
+  frame_metadata.background_blur = GetBackgroundBlurState();
+
   // Set reused |token| and |share_handle| to gmb handle.
   gfx::GpuMemoryBufferHandle gmb_handle;
   gmb_handle.type = gfx::GpuMemoryBufferType::DXGI_SHARED_HANDLE;
-  HANDLE texture_handle_duplicated = nullptr;
-  CHECK(::DuplicateHandle(GetCurrentProcess(), private_data->GetTextureHandle(),
-                          GetCurrentProcess(), &texture_handle_duplicated, 0,
-                          FALSE, DUPLICATE_SAME_ACCESS))
-      << "failed to reuse handle.";
-
-  gmb_handle.dxgi_handle.Set(texture_handle_duplicated);
-  gmb_handle.dxgi_token = private_data->GetDXGIToken();
+  gmb_handle.set_dxgi_handle(private_data->CloneHandle());
 
   media::CapturedExternalVideoBuffer external_buffer =
       media::CapturedExternalVideoBuffer(
@@ -2417,8 +2401,8 @@ HRESULT VideoCaptureDeviceMFWin::DeliverExternalBufferToClient(
           gfx::ColorSpace());
   client_->OnIncomingCapturedExternalBuffer(
       std::move(external_buffer), reference_time, timestamp,
-      MaybeForwardCaptureBeginTime(capture_begin_time),
-      gfx::Rect(texture_size));
+      MaybeForwardCaptureBeginTime(capture_begin_time), gfx::Rect(texture_size),
+      frame_metadata);
   return hr;
 }
 
@@ -2483,7 +2467,8 @@ void VideoCaptureDeviceMFWin::OnIncomingCapturedDataInternal() {
         locked_buffer.data(), locked_buffer.length(),
         selected_video_capability_->supported_format, color_space_,
         camera_rotation_.value(), false /* flip_y */, reference_time, timestamp,
-        MaybeForwardCaptureBeginTime(capture_begin_time));
+        MaybeForwardCaptureBeginTime(capture_begin_time),
+        /*metadata=*/std::nullopt);
   }
 
   while (!video_stream_take_photo_callbacks_.empty()) {
@@ -2780,6 +2765,38 @@ void VideoCaptureDeviceMFWin::OnCameraInUseReport(bool in_use,
   if (activity_monitor_) {
     activity_monitor_->Stop();
   }
+}
+
+std::optional<media::EffectInfo>
+VideoCaptureDeviceMFWin::GetBackgroundBlurState() {
+  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("video_and_image_capture"),
+               "VideoCaptureDeviceMFWin::GetBackgroundBlurState");
+  if (!extended_camera_controller_) {
+    return std::nullopt;
+  }
+
+  ComPtr<IMFExtendedCameraControl> extended_camera_control;
+  // KSPROPERTY_CAMERACONTROL_EXTENDED_BACKGROUNDSEGMENTATION is supported in
+  // Windows 10 version 20H2. It was updated in Windows 11 version 22H2 to
+  // support optional shallow focus capability (according to
+  // https://docs.microsoft.com/en-us/windows-hardware/drivers/stream/ksproperty-cameracontrol-extended-backgroundsegmentation)
+  // but that support is not needed here.
+  HRESULT hr = extended_camera_controller_->GetExtendedCameraControl(
+      MF_CAPTURE_ENGINE_MEDIASOURCE,
+      KSPROPERTY_CAMERACONTROL_EXTENDED_BACKGROUNDSEGMENTATION,
+      &extended_camera_control);
+  DLOG_IF_FAILED_WITH_HRESULT(
+      "Failed to retrieve IMFExtendedCameraControl for background "
+      "segmentation",
+      hr);
+  if (FAILED(hr) || !(extended_camera_control->GetCapabilities() &
+                      KSCAMERA_EXTENDEDPROP_BACKGROUNDSEGMENTATION_BLUR)) {
+    return std::nullopt;
+  }
+
+  return EffectInfo{.enabled =
+                        !!(extended_camera_control->GetFlags() &
+                           KSCAMERA_EXTENDEDPROP_BACKGROUNDSEGMENTATION_BLUR)};
 }
 
 bool CreateMFSensorActivityMonitor(

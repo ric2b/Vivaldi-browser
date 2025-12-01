@@ -26,11 +26,12 @@ SELECT
   freq_1, idle_1,
   freq_2, idle_2,
   freq_3, idle_3,
-  lut4.curve_value as cpu4_curve,
-  lut5.curve_value as cpu5_curve,
-  lut6.curve_value as cpu6_curve,
-  lut7.curve_value as cpu7_curve,
+  cpu4_curve,
+  cpu5_curve,
+  cpu6_curve,
+  cpu7_curve,
   l3_hit_count, l3_miss_count,
+  suspended,
   no_static,
   MIN(
     no_static,
@@ -41,19 +42,23 @@ SELECT
   ) as all_cpu_deep_idle
 FROM _w_independent_cpus_calc as base
 -- _use_devfreq_for_calc short circuits this table if devfreq isn't needed
-JOIN _use_devfreq_for_calc
-LEFT JOIN _filtered_curves_1d lut4 ON
-  base.freq_4 = lut4.freq_khz AND
-  base.idle_4 = lut4.idle
-LEFT JOIN _filtered_curves_1d lut5 ON
-  base.freq_5 = lut5.freq_khz AND
-  base.idle_5 = lut5.idle
-LEFT JOIN _filtered_curves_1d lut6 ON
-  base.freq_6 = lut6.freq_khz AND
-  base.idle_6 = lut6.idle
-LEFT JOIN _filtered_curves_1d lut7 ON
-  base.freq_7 = lut7.freq_khz AND
-  base.idle_7 = lut7.idle;
+JOIN _use_devfreq_for_calc;
+
+-- Get nominal devfreq_dsu counter, OR use a dummy one for Pixel 9 VM traces
+-- The VM doesn't have a DSU, so the placeholder value of FMin is put in. The
+-- DSU frequency is a prerequisite for power estimation on Pixel 9.
+CREATE PERFETTO TABLE _dsu_frequency AS
+SELECT * from linux_devfreq_dsu_counter
+UNION ALL
+SELECT
+ 0 as id,
+ trace_start() as ts,
+ trace_end() - trace_start() as dur,
+ 610000 as dsu_freq
+-- Only add this for traces from a VM on Pixel 9 where DSU values aren't present
+WHERE (SELECT str_value FROM metadata WHERE name = 'android_guest_soc_model')
+  IN (SELECT device FROM _use_devfreq)
+  AND (SELECT COUNT(*) FROM linux_devfreq_dsu_counter) = 0;
 
 CREATE PERFETTO TABLE _w_dsu_dependence AS
 SELECT
@@ -73,6 +78,7 @@ SELECT
   c.cpu7_curve,
   c.l3_hit_count,
   c.l3_miss_count,
+  c.suspended,
   c.no_static,
   c.all_cpu_deep_idle,
   d.dsu_freq as dependent_freq,
@@ -80,10 +86,10 @@ SELECT
 FROM _interval_intersect!(
   (
     _ii_subquery!(_cpu_curves),
-    _ii_subquery!(linux_devfreq_dsu_counter)
+    _ii_subquery!(_dsu_frequency)
   ),
   ()
 ) ii
 JOIN _cpu_curves AS c ON c._auto_id = id_0
-JOIN linux_devfreq_dsu_counter AS d on d._auto_id = id_1;
+JOIN _dsu_frequency AS d on d._auto_id = id_1;
 

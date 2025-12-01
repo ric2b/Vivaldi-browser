@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/functional/callback.h"
+#include "base/memory/weak_ptr.h"
 #include "base/values.h"
 #include "components/sync/base/data_type.h"
 #include "components/sync/base/sync_stop_metadata_fate.h"
@@ -30,17 +31,18 @@ class DataTypeControllerDelegate {
   using StartCallback =
       base::OnceCallback<void(std::unique_ptr<DataTypeActivationResponse>)>;
 
-  virtual ~DataTypeControllerDelegate() = default;
+  DataTypeControllerDelegate();
+  virtual ~DataTypeControllerDelegate();
 
   // Gathers additional information needed before the processor can be
   // connected to a sync worker. Once the metadata has been loaded, the info
-  // is collected and given to |callback|.
+  // is collected and given to `callback`.
   virtual void OnSyncStarting(const DataTypeActivationRequest& request,
                               StartCallback callback) = 0;
 
   // Indicates that we no longer want to do any sync-related things for this
   // data type. Severs all ties to the sync thread, and depending on
-  // |metadata_fate|, might delete all local sync metadata.
+  // `metadata_fate`, might delete all local sync metadata.
   virtual void OnSyncStopping(SyncStopMetadataFate metadata_fate) = 0;
 
   // Returns whether this data type has any unsynced changes, i.e. any local
@@ -49,11 +51,11 @@ class DataTypeControllerDelegate {
   // state, this should typically return "false".
   virtual void HasUnsyncedData(base::OnceCallback<void(bool)> callback) = 0;
 
-  // Returns a Value::List representing all nodes for the type to |callback|.
+  // Returns a Value::List representing all nodes for the type to `callback`.
   // Used for populating nodes in Sync Node Browser of chrome://sync-internals.
   virtual void GetAllNodesForDebugging(AllNodesCallback callback) = 0;
 
-  // Returns TypeEntitiesCount for the type to |callback|.
+  // Returns TypeEntitiesCount for the type to `callback`.
   // Used for updating data type counts in chrome://sync-internals.
   virtual void GetTypeEntitiesCountForDebugging(
       base::OnceCallback<void(const TypeEntitiesCount&)> callback) const = 0;
@@ -67,6 +69,14 @@ class DataTypeControllerDelegate {
 
   // Simulates model error from the bridge.
   virtual void ReportBridgeErrorForTest() = 0;
+
+  // Returns a WeakPtr of this object.
+  base::WeakPtr<DataTypeControllerDelegate> GetWeakPtr();
+
+ private:
+  // Must be the last member variable. See WeakPtrFactory documentation for
+  // details.
+  base::WeakPtrFactory<DataTypeControllerDelegate> weak_factory_{this};
 };
 
 }  // namespace syncer

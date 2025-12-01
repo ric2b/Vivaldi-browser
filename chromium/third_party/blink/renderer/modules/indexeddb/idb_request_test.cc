@@ -23,6 +23,11 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "third_party/blink/renderer/modules/indexeddb/idb_request.h"
 
 #include <memory>
@@ -337,7 +342,7 @@ class IDBRequestTest : public testing::Test {
     auto* execution_context = scope.GetExecutionContext();
 
     db_ = MakeGarbageCollected<IDBDatabase>(
-        execution_context, mojo::NullAssociatedReceiver(), mojo::NullRemote(),
+        execution_context, mojo::NullAssociatedReceiver(),
         mock_database.BindNewEndpointAndPassDedicatedRemote(), /*priority=*/0);
 
     IDBTransaction::TransactionMojoRemote transaction_remote(execution_context);
@@ -664,7 +669,7 @@ TEST_F(IDBRequestTest, ConnectionsAfterStopping) {
     auto* request = MakeGarbageCollected<IDBOpenDBRequest>(
         scope.GetScriptState(), mojo::NullAssociatedReceiver(),
         std::move(transaction_remote), kTransactionId, kVersion,
-        IDBRequest::AsyncTraceState(), mojo::NullRemote());
+        IDBRequest::AsyncTraceState());
     EXPECT_EQ(request->readyState(), V8IDBRequestReadyState::Enum::kPending);
     std::unique_ptr<IDBFactoryClient> factory_client =
         request->CreateFactoryClient();
@@ -692,7 +697,7 @@ TEST_F(IDBRequestTest, ConnectionsAfterStopping) {
     auto* request = MakeGarbageCollected<IDBOpenDBRequest>(
         scope.GetScriptState(), mojo::NullAssociatedReceiver(),
         std::move(transaction_remote), kTransactionId, kVersion,
-        IDBRequest::AsyncTraceState(), mojo::NullRemote());
+        IDBRequest::AsyncTraceState());
     EXPECT_EQ(request->readyState(), V8IDBRequestReadyState::Enum::kPending);
     std::unique_ptr<IDBFactoryClient> factory_client =
         request->CreateFactoryClient();

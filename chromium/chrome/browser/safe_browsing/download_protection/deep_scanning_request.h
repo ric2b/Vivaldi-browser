@@ -140,13 +140,6 @@ class DeepScanningRequest : public download::DownloadItem::Observer {
   // notifying |download_service_|.
   void FinishRequest(DownloadCheckResult result);
 
-  // Called to attempt to show the modal dialog for scan failure. Returns
-  // whether the dialog was successfully shown.
-  bool MaybeShowDeepScanFailureModalDialog(base::OnceClosure accept_callback,
-                                           base::OnceClosure cancel_callback,
-                                           base::OnceClosure close_callback,
-                                           base::OnceClosure open_now_callback);
-
   // Called to verify if `result` is considered as a failure and the scan should
   // end early.
   bool ShouldTerminateEarly(BinaryUploadService::Result result);
@@ -187,7 +180,7 @@ class DeepScanningRequest : public download::DownloadItem::Observer {
   bool ReportOnlyScan();
 
   // Acknowledge the request's handling to the service provider.
-  void AcknowledgeRequest(EventResult event_result);
+  void AcknowledgeRequest(enterprise_connectors::EventResult event_result);
 
   bool IsEnterpriseTriggered() const;
   bool IsConsumerTriggered() const;
@@ -264,7 +257,8 @@ class DeepScanningRequest : public download::DownloadItem::Observer {
 
   // Cached callbacks to report scanning results until the final `event_result_`
   // is known. The callbacks in this list should be called in FinishRequest.
-  base::OnceCallbackList<void(EventResult result)> report_callbacks_;
+  base::OnceCallbackList<void(enterprise_connectors::EventResult result)>
+      report_callbacks_;
 
   // The request tokens of all the requests that make up the user action
   // represented by this ContentAnalysisDelegate instance.

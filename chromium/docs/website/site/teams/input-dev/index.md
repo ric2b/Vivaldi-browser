@@ -60,10 +60,10 @@ updates make sure to join their public mailing lists as well.
 **Presentations & Talks**
 
 *   [Overscroll
-            Customization](https://www.youtube.com/watch?v=sp1R-0dd7qg&t=18m54s)
+            Customization](https://youtube.com/watch?v=sp1R-0dd7qg&t=18m54s)
             lightning talk
 *   [Scroll into
-            text](https://www.youtube.com/watch?v=sp1R-0dd7qg&t=15m50s)
+            text](https://youtube.com/watch?v=sp1R-0dd7qg&t=15m50s)
             lightning talk
 *   [Event Delegation to
             Workers](https://docs.google.com/presentation/d/1BCEbLCg-o_Ko65byel5QGnO7Cwf5aPZPjqnnMNbbA5E/edit#slide=id.g5636de1525_0_0)
@@ -79,7 +79,7 @@ updates make sure to join their public mailing lists as well.
             Scroller](https://docs.google.com/presentation/d/1nfM4jjQt9pijIThK8KSwavdZtWgifDjo6odHNg-ThvM/)
 *   Extensible Scrolling - BlinkOn 3 (Nov 2014):
             [slides](https://docs.google.com/a/chromium.org/presentation/d/1P5LYe-jqC0mSFJoBDz8gfJZMDwj6aGeFYLx_AD6LHVU/edit#slide=id.p),
-            [video](https://www.youtube.com/watch?v=L8aTuoQWI8A)
+            [video](https://youtube.com/watch?v=L8aTuoQWI8A)
 *   [Smooth to the touch: chromium's challenges in input on
             mobile](https://docs.google.com/a/chromium.org/presentation/d/1VYfCKye4TM-QiR_hiLvwYxhci_xc5YcA4oZxtrp2qes/edit#slide=id.p)
             - BlinkOn 2 (May 2014)
@@ -100,8 +100,7 @@ updates make sure to join their public mailing lists as well.
             tradeoff](https://docs.google.com/a/chromium.org/document/d/1aOQRw76C0enLBd0mCG_-IM6bso7DxXwvqTiRWgNdTn8/edit)
 *   [Chromium throttled async touchmove
             scrolling](https://docs.google.com/a/chromium.org/document/d/1sfUup3nsJG3zJTf0YR0s2C5vgFTYEmfEqZs01VVj8tE/edit)
-*   [Gesture
-            Recognition](http://www.chromium.org/developers/design-documents/aura/gesture-recognizer)
+*   [Gesture Recognition](/developers/design-documents/aura/gesture-recognizer)
 *   [Vsync-aligned buffered
             input](https://docs.google.com/document/d/1L2JTgYMksmXgujKxxhyV45xL8jNhbCh60NQHoueKyS4/edit?usp=sharing)
 *   [Touchpad and Wheel

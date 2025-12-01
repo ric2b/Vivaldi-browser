@@ -42,9 +42,12 @@ class MockConnectRequestCallback final : public ConnectRequestCallback {
  public:
   ~MockConnectRequestCallback() override = default;
 
-  MOCK_METHOD2(OnConnectSucceed,
-               void(uint64_t request_id, uint64_t instance_id));
-  MOCK_METHOD1(OnConnectFailed, void(uint64_t request_id));
+  MOCK_METHOD3(OnConnectSucceed,
+               void(uint64_t request_id,
+                    std::string_view instance_name,
+                    uint64_t instance_id));
+  MOCK_METHOD2(OnConnectFailed,
+               void(uint64_t request_id, std::string_view instance_name));
 };
 
 }  // namespace
@@ -68,7 +71,7 @@ class ConnectionTest : public ::testing::Test {
   }
 
   std::vector<uint8_t> MakeEchoResponse(const std::vector<uint8_t>& data) {
-    std::vector<uint8_t> response{13, 14, 15};
+    std::vector<uint8_t> response = {13, 14, 15};
     response.insert(response.end(), data.begin(), data.end());
     return response;
   }
@@ -83,8 +86,8 @@ class ConnectionTest : public ::testing::Test {
 };
 
 TEST_F(ConnectionTest, ConnectAndSend) {
-  const std::string id{"deadbeef01234"};
-  const std::string url{"https://example.com/receiver.html"};
+  const std::string id = "deadbeef01234";
+  const std::string url = "https://example.com/receiver.html";
   const uint64_t connection_id = 13;
   MockConnectionDelegate mock_controller_delegate;
   MockConnectionDelegate mock_receiver_delegate;
@@ -134,11 +137,12 @@ TEST_F(ConnectionTest, ConnectAndSend) {
   quic_bridge_.GetQuicClient()->Connect(quic_bridge_.kInstanceName, request,
                                         &mock_connect_request_callback);
   EXPECT_TRUE(request);
-  EXPECT_CALL(mock_connect_request_callback, OnConnectSucceed(_, _))
-      .WillOnce(Invoke(
-          [&controller_stream](uint64_t request_id, uint64_t instance_id) {
-            controller_stream = CreateClientProtocolConnection(instance_id);
-          }));
+  EXPECT_CALL(mock_connect_request_callback, OnConnectSucceed(_, _, _))
+      .WillOnce(Invoke([&controller_stream](uint64_t request_id,
+                                            std::string_view instance_name,
+                                            uint64_t instance_id) {
+        controller_stream = CreateClientProtocolConnection(instance_id);
+      }));
 
   EXPECT_CALL(quic_bridge_.mock_server_observer(), OnIncomingConnectionMock(_))
       .WillOnce(testing::WithArgs<0>(testing::Invoke(
@@ -185,7 +189,7 @@ TEST_F(ConnectionTest, ConnectAndSend) {
       OnStringMessage(static_cast<std::string_view>(expected_response)));
   quic_bridge_.RunTasksUntilIdle();
 
-  std::vector<uint8_t> data{0, 3, 2, 4, 4, 6, 1};
+  std::vector<uint8_t> data = {0, 3, 2, 4, 4, 6, 1};
   const std::vector<uint8_t> expected_data = data;
   const std::vector<uint8_t> expected_response_data =
       MakeEchoResponse(expected_data);

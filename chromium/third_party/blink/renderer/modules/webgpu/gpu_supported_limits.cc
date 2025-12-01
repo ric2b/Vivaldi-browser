@@ -6,12 +6,13 @@
 
 #include <algorithm>
 
-#include "base/notreached.h"
 #include "base/numerics/checked_math.h"
 #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-blink.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_union_undefined_unsignedlonglongenforcerange.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_extent_3d_dict.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 
 #define SUPPORTED_LIMITS(X)                    \
@@ -46,7 +47,11 @@
   X(maxComputeWorkgroupSizeX)                  \
   X(maxComputeWorkgroupSizeY)                  \
   X(maxComputeWorkgroupSizeZ)                  \
-  X(maxComputeWorkgroupsPerDimension)
+  X(maxComputeWorkgroupsPerDimension)          \
+  X(maxStorageBuffersInFragmentStage)          \
+  X(maxStorageTexturesInFragmentStage)         \
+  X(maxStorageBuffersInVertexStage)            \
+  X(maxStorageTexturesInVertexStage)
 
 namespace blink {
 
@@ -67,20 +72,7 @@ constexpr uint64_t UndefinedLimitValue<uint64_t>() {
 
 GPUSupportedLimits::GPUSupportedLimits(const wgpu::SupportedLimits& limits)
     : limits_(limits.limits) {
-  for (auto* chain = limits.nextInChain; chain; chain = chain->nextInChain) {
-    switch (chain->sType) {
-      case (wgpu::SType::DawnExperimentalSubgroupLimits): {
-        auto* t = static_cast<wgpu::DawnExperimentalSubgroupLimits*>(
-            limits.nextInChain);
-        subgroup_limits_ = *t;
-        subgroup_limits_.nextInChain = nullptr;
-        subgroup_limits_initialized_ = true;
-        break;
-      }
-      default:
-        NOTREACHED();
-    }
-  }
+  DCHECK_EQ(limits.nextInChain, nullptr);
 }
 
 // static
@@ -92,26 +84,35 @@ void GPUSupportedLimits::MakeUndefined(wgpu::RequiredLimits* out) {
 }
 
 // static
-bool GPUSupportedLimits::Populate(wgpu::RequiredLimits* out,
-                                  const Vector<std::pair<String, uint64_t>>& in,
-                                  ScriptPromiseResolverBase* resolver) {
+bool GPUSupportedLimits::Populate(
+    wgpu::RequiredLimits* out,
+    const HeapVector<
+        std::pair<String,
+                  Member<V8UnionUndefinedOrUnsignedLongLongEnforceRange>>>& in,
+    ScriptPromiseResolverBase* resolver) {
   // TODO(crbug.com/dawn/685): This loop is O(n^2) if the developer
   // passes all of the limits. It could be O(n) with a mapping of
   // String -> wgpu::Limits::*member.
   for (const auto& [limitName, limitRawValue] : in) {
     if (limitName == "maxInterStageShaderComponents") {
-      UseCounter::Count(
+      UseCounter::CountDeprecation(
           resolver->GetExecutionContext(),
           WebFeature::kMaxInterStageShaderComponentsRequiredLimit);
     }
 #define X(name)                                                               \
   if (limitName == #name) {                                                   \
     using T = decltype(wgpu::Limits::name);                                   \
-    base::CheckedNumeric<T> value{limitRawValue};                             \
+    if (limitRawValue->IsUndefined()) {                                       \
+      continue;                                                               \
+    }                                                                         \
+    uint64_t limitRawIntegerValue =                                           \
+        limitRawValue->GetAsUnsignedLongLongEnforceRange();                   \
+    base::CheckedNumeric<T> value{limitRawIntegerValue};                      \
     if (!value.IsValid() || value.ValueOrDie() == UndefinedLimitValue<T>()) { \
       resolver->RejectWithDOMException(                                       \
           DOMExceptionCode::kOperationError,                                  \
-          "Required " #name " limit (" + String::Number(limitRawValue) +      \
+          "Required " #name " limit (" +                                      \
+              String::Number(limitRawIntegerValue) +                          \
               ") exceeds the maximum representable value for its type.");     \
       return false;                                                           \
     }                                                                         \
@@ -120,10 +121,19 @@ bool GPUSupportedLimits::Populate(wgpu::RequiredLimits* out,
   }
     SUPPORTED_LIMITS(X)
 #undef X
-    resolver->RejectWithDOMException(
-        DOMExceptionCode::kOperationError,
-        "The limit \"" + limitName + "\" is not recognized.");
-    return false;
+    if (limitRawValue->IsUndefined()) {
+      auto* console_message = MakeGarbageCollected<ConsoleMessage>(
+          mojom::blink::ConsoleMessageSource::kRendering,
+          mojom::blink::ConsoleMessageLevel::kWarning,
+          "The limit \"" + limitName + "\" is not recognized.");
+      resolver->GetExecutionContext()->AddConsoleMessage(console_message);
+    } else {
+      resolver->RejectWithDOMException(
+          DOMExceptionCode::kOperationError,
+          "The limit \"" + limitName +
+              "\" with a non-undefined value is not recognized.");
+      return false;
+    }
   }
   return true;
 }
@@ -134,21 +144,5 @@ bool GPUSupportedLimits::Populate(wgpu::RequiredLimits* out,
   }
 SUPPORTED_LIMITS(X)
 #undef X
-
-unsigned GPUSupportedLimits::minSubgroupSize() const {
-  // Return the undefined limits value if subgroup limits is not acquired.
-  if (!subgroup_limits_initialized_) {
-    return UndefinedLimitValue<unsigned>();
-  }
-  return subgroup_limits_.minSubgroupSize;
-}
-
-unsigned GPUSupportedLimits::maxSubgroupSize() const {
-  // Return the undefined limits value if subgroup limits is not acquired.
-  if (!subgroup_limits_initialized_) {
-    return UndefinedLimitValue<unsigned>();
-  }
-  return subgroup_limits_.maxSubgroupSize;
-}
 
 }  // namespace blink

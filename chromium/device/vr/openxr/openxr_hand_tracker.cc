@@ -2,27 +2,57 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "device/vr/openxr/openxr_hand_tracker.h"
 
 #include <optional>
 #include <vector>
 
+#include "base/command_line.h"
 #include "base/containers/flat_set.h"
 #include "base/no_destructor.h"
+#include "base/strings/string_util.h"
 #include "device/vr/openxr/openxr_extension_helper.h"
 #include "device/vr/openxr/openxr_hand_utils.h"
 #include "device/vr/openxr/openxr_interaction_profiles.h"
 #include "device/vr/openxr/openxr_util.h"
+#include "device/vr/public/cpp/switches.h"
 #include "device/vr/public/mojom/xr_hand_tracking_data.mojom.h"
 #include "device/vr/public/mojom/xr_session.mojom-shared.h"
 #include "third_party/openxr/src/include/openxr/openxr.h"
 
 namespace device {
+
+OpenXrHandTracker::AnonymizationStrategy
+OpenXrHandTracker::GetAnonymizationStrategy() {
+  auto* command_line = base::CommandLine::ForCurrentProcess();
+  if (!command_line->HasSwitch(switches::kWebXrHandAnonymizationStrategy)) {
+    return OpenXrHandTracker::AnonymizationStrategy::kDefault;
+  }
+
+  const auto& strategy_str = command_line->GetSwitchValueASCII(
+      switches::kWebXrHandAnonymizationStrategy);
+
+  if (base::CompareCaseInsensitiveASCII(
+          strategy_str, switches::kWebXrHandAnonymizationStrategyRuntime) ==
+      0) {
+    return OpenXrHandTracker::AnonymizationStrategy::kRuntime;
+  }
+
+  if (base::CompareCaseInsensitiveASCII(
+          strategy_str, switches::kWebXrHandAnonymizationStrategyFallback) ==
+      0) {
+    return OpenXrHandTracker::AnonymizationStrategy::kFallback;
+  }
+
+  if (base::CompareCaseInsensitiveASCII(
+          strategy_str, switches::kWebXrHandAnonymizationStrategyNone) == 0) {
+    return OpenXrHandTracker::AnonymizationStrategy::kNone;
+  }
+
+  // Use the default strategy for unknown values.
+  return OpenXrHandTracker::AnonymizationStrategy::kDefault;
+}
+
 OpenXrHandTracker::OpenXrHandTracker(
     const OpenXrExtensionHelper& extension_helper,
     XrSession session,
@@ -32,9 +62,10 @@ OpenXrHandTracker::OpenXrHandTracker(
       type_(type),
       mesh_scale_enabled_(
           extension_helper_->ExtensionEnumeration()->ExtensionSupported(
-              XR_FB_HAND_TRACKING_MESH_EXTENSION_NAME)) {
-  locations_.jointCount = std::extent<decltype(joint_locations_buffer_)>::value;
-  locations_.jointLocations = joint_locations_buffer_;
+              XR_FB_HAND_TRACKING_MESH_EXTENSION_NAME)),
+      anonymization_strategy_(GetAnonymizationStrategy()) {
+  locations_.jointCount = joint_locations_buffer_.size();
+  locations_.jointLocations = joint_locations_buffer_.data();
 
   // This is only used if mesh_scale_enabled_ is true, but it doesn't hurt to
   // initialize it anyway.
@@ -52,6 +83,17 @@ OpenXrHandTracker::~OpenXrHandTracker() {
   }
 }
 
+bool OpenXrHandTracker::UseRuntimeAnonymization() const {
+  return anonymization_strategy_ == AnonymizationStrategy::kDefault ||
+         anonymization_strategy_ == AnonymizationStrategy::kRuntime;
+}
+
+bool OpenXrHandTracker::NeedsFallbackAnonymization() const {
+  return anonymization_strategy_ == AnonymizationStrategy::kFallback ||
+         (anonymization_strategy_ == AnonymizationStrategy::kDefault &&
+          !mesh_scale_enabled_);
+}
+
 XrResult OpenXrHandTracker::Update(XrSpace base_space,
                                    XrTime predicted_display_time) {
   // Lazy init hand tracking as we only need it if the app requests it.
@@ -64,7 +106,7 @@ XrResult OpenXrHandTracker::Update(XrSpace base_space,
   locate_info.time = predicted_display_time;
 
   void** next = &locations_.next;
-  if (mesh_scale_enabled_) {
+  if (mesh_scale_enabled_ && UseRuntimeAnonymization()) {
     *next = &mesh_scale_;
     next = &mesh_scale_.next;
   }
@@ -82,6 +124,14 @@ XrResult OpenXrHandTracker::Update(XrSpace base_space,
 
 mojom::XRHandTrackingDataPtr OpenXrHandTracker::GetHandTrackingData() const {
   if (!IsDataValid()) {
+    return nullptr;
+  }
+
+  // If the anonymization strategy is required to force runtime anonymization
+  // and mesh scale isn't enabled, then we can't anonymize the data and must
+  // return nullptr.
+  if (anonymization_strategy_ == AnonymizationStrategy::kRuntime &&
+      !mesh_scale_enabled_) {
     return nullptr;
   }
 
@@ -108,9 +158,11 @@ mojom::XRHandTrackingDataPtr OpenXrHandTracker::GetHandTrackingData() const {
     hand_tracking_data->hand_joint_data.push_back(std::move(joint_data));
   }
 
-  if (!mesh_scale_enabled_ &&
-      !AnonymizeHand({hand_tracking_data->hand_joint_data.data(),
-                      hand_tracking_data->hand_joint_data.size()})) {
+  // If we need to perform fallback anonymization and it fails, then return
+  // nullptr. Otherwise, further anonymization is either not needed or
+  // succeeded and we can return the data.
+  if (NeedsFallbackAnonymization() &&
+      !AnonymizeHand(base::span(hand_tracking_data->hand_joint_data))) {
     return nullptr;
   }
 
@@ -173,7 +225,7 @@ bool OpenXrHandTrackerFactory::IsEnabled(
   // supported and at least one of our other required extensions is supported.
   return extension_enum->ExtensionSupported(
              XR_EXT_HAND_TRACKING_EXTENSION_NAME) &&
-         base::ranges::any_of(
+         std::ranges::any_of(
              GetRequestedExtensions(),
              [&extension_enum](std::string_view extension) {
                return strcmp(extension.data(),

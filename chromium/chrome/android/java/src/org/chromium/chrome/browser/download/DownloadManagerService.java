@@ -21,6 +21,7 @@ import android.util.Pair;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
+import androidx.browser.customtabs.CustomTabsIntent;
 
 import org.jni_zero.CalledByNative;
 import org.jni_zero.JniType;
@@ -34,13 +35,13 @@ import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
 import org.chromium.base.ResettersForTesting;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.shared_preferences.SharedPreferencesManager;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.download.DownloadManagerBridge.DownloadEnqueueRequest;
 import org.chromium.chrome.browser.download.DownloadManagerBridge.DownloadEnqueueResponse;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.incognito.IncognitoUtils;
 import org.chromium.chrome.browser.media.MediaViewerUtils;
 import org.chromium.chrome.browser.preferences.Pref;
@@ -49,7 +50,6 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileKey;
 import org.chromium.chrome.browser.profiles.ProfileKeyUtil;
 import org.chromium.chrome.browser.profiles.ProfileManager;
-import org.chromium.components.browser_ui.util.ConversionUtils;
 import org.chromium.components.download.DownloadCollectionBridge;
 import org.chromium.components.download.DownloadState;
 import org.chromium.components.external_intents.ExternalNavigationHandler;
@@ -134,7 +134,6 @@ public class DownloadManagerService implements DownloadServiceDelegate, ProfileM
     private long mNativeDownloadManagerService;
     // Flag to track if we need to post a task to update download notifications.
     private boolean mIsUiUpdateScheduled;
-    private int mAutoResumptionLimit = -1;
     private DownloadManagerRequestInterceptor mDownloadManagerRequestInterceptor;
 
     // Whether any ChromeActivity is launched.
@@ -173,16 +172,6 @@ public class DownloadManagerService implements DownloadServiceDelegate, ProfileM
             mDownloadStatus = downloadStatus;
             mIsAutoResumable = false;
             mIsUpdated = true;
-        }
-
-        DownloadProgress(DownloadProgress progress) {
-            mStartTimeInMillis = progress.mStartTimeInMillis;
-            mCanDownloadWhileMetered = progress.mCanDownloadWhileMetered;
-            mDownloadItem = progress.mDownloadItem;
-            mDownloadStatus = progress.mDownloadStatus;
-            mIsAutoResumable = progress.mIsAutoResumable;
-            mIsUpdated = progress.mIsUpdated;
-            mIsSupportedMimeType = progress.mIsSupportedMimeType;
         }
     }
 
@@ -706,13 +695,19 @@ public class DownloadManagerService implements DownloadServiceDelegate, ProfileM
 
             // Redirect the user to an internal media viewer.  The file path is necessary to show
             // the real file path to the user instead of a content:// download ID.
-            return MediaViewerUtils.getMediaViewerIntent(
-                    fileUri,
-                    contentUri,
-                    mimeType,
-                    /* allowExternalAppHandlers= */ !isAutomotive,
-                    /* allowShareAction= */ !isAutomotive,
-                    ContextUtils.getApplicationContext());
+            Intent intent =
+                    MediaViewerUtils.getMediaViewerIntent(
+                            fileUri,
+                            contentUri,
+                            mimeType,
+                            /* allowExternalAppHandlers= */ !isAutomotive,
+                            /* allowShareAction= */ !isAutomotive,
+                            ContextUtils.getApplicationContext());
+
+            intent.putExtra(
+                    CustomTabsIntent.EXTRA_ENABLE_EPHEMERAL_BROWSING,
+                    ChromeFeatureList.sCCTEphemeralMediaViewerExperiment.isEnabled());
+            return intent;
         }
         return MediaViewerUtils.createViewIntentForUri(contentUri, mimeType, originalUrl, referrer);
     }
@@ -1062,20 +1057,6 @@ public class DownloadManagerService implements DownloadServiceDelegate, ProfileM
             Tracker tracker = TrackerFactory.getTrackerForProfile(profile);
             tracker.notifyEvent(EventConstants.DOWNLOAD_COMPLETED);
         }
-    }
-
-    /**
-     * Helper method to record the bytes wasted metrics when a download completes.
-     * @param name Histogram name
-     * @param bytesWasted Bytes wasted during download.
-     */
-    private void recordBytesWasted(String name, long bytesWasted) {
-        RecordHistogram.recordCustomCountHistogram(
-                name,
-                (int) ConversionUtils.bytesToKilobytes(bytesWasted),
-                1,
-                ConversionUtils.KILOBYTES_PER_GIGABYTE,
-                50);
     }
 
     /**
@@ -1579,14 +1560,6 @@ public class DownloadManagerService implements DownloadServiceDelegate, ProfileM
         editor.apply();
     }
 
-    // Deprecated after new download backend.
-    int getAutoResumptionLimit() {
-        if (mAutoResumptionLimit < 0) {
-            mAutoResumptionLimit = DownloadManagerServiceJni.get().getAutoResumptionLimit();
-        }
-        return mAutoResumptionLimit;
-    }
-
     /**
      * Creates an interrupted download in native code to be used by instrumentation tests.
      * @param url URL of the download.
@@ -1628,8 +1601,6 @@ public class DownloadManagerService implements DownloadServiceDelegate, ProfileM
     @NativeMethods
     interface Natives {
         boolean isSupportedMimeType(@JniType("std::string") String mimeType);
-
-        int getAutoResumptionLimit();
 
         long init(DownloadManagerService caller, boolean isProfileAdded);
 

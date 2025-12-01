@@ -34,7 +34,7 @@ describeWithEnvironment('RendererHandler', function() {
     assert.strictEqual(renderers.processes.size, 4);
 
     const pids = [...renderers.processes].map(([pid]) => pid);
-    assert.deepStrictEqual(
+    assert.deepEqual(
         pids,
         [
           MAIN_FRAME_PID,   // Main frame process: localhost:5000
@@ -60,7 +60,7 @@ describeWithEnvironment('RendererHandler', function() {
     // Assert on whether it has correctly detected a given process to be on the
     // main frame or in a subframe.
     const isOnMainFrame = [...renderers.processes].map(([, process]) => process.isOnMainFrame);
-    assert.deepStrictEqual(
+    assert.deepEqual(
         isOnMainFrame,
         [
           true,   // Main frame process: localhost:5000
@@ -838,7 +838,7 @@ describeWithEnvironment('RendererHandler', function() {
 
       const data = await handleEvents(traceEvents);
 
-      assert.strictEqual(data.allTraceEntries.length, 7);
+      assert.lengthOf(data.allTraceEntries, 7);
       assert.strictEqual(data.processes.size, 1);
       const [process] = data.processes.values();
       assert.strictEqual(process.threads.size, 1);
@@ -849,7 +849,7 @@ describeWithEnvironment('RendererHandler', function() {
         return;
       }
       const allNodes = getAllNodes(thread.tree?.roots);
-      assert.strictEqual(allNodes.length, 5);
+      assert.lengthOf(allNodes, 5);
       if (!thread.tree) {
         return;
       }
@@ -877,7 +877,7 @@ describeWithEnvironment('RendererHandler', function() {
 
       const data = await handleEvents(traceEvents);
 
-      assert.strictEqual(data.allTraceEntries.length, 6);
+      assert.lengthOf(data.allTraceEntries, 6);
       assert.strictEqual(data.processes.size, 1);
       const [process] = data.processes.values();
       assert.strictEqual(process.threads.size, 1);
@@ -888,7 +888,7 @@ describeWithEnvironment('RendererHandler', function() {
         return;
       }
       const allNodes = getAllNodes(thread.tree?.roots);
-      assert.strictEqual(allNodes.length, 4);
+      assert.lengthOf(allNodes, 4);
       if (!thread.tree) {
         return;
       }
@@ -998,5 +998,24 @@ describeWithEnvironment('RendererHandler', function() {
       // Ensure that the URL was set properly based on the AuctionWorklets metadata event.
       assert.isTrue(process?.url?.includes('fledge-demo.glitch.me'));
     }
+  });
+  describe('ThirdParty', () => {
+    it('correctly creates entities (simple)', async function() {
+      const {Renderer} = await handleEventsFromTraceFile(this, 'load-simple.json.gz');
+      const entities = Array.from(Renderer.entityMappings.eventsByEntity.keys()).map(entity => entity.name);
+      const expectedEntities = ['localhost', 'Google Fonts'];
+      assert.deepEqual(entities, expectedEntities);
+    });
+    it('correctly creates entities', async function() {
+      const {Renderer} = await handleEventsFromTraceFile(this, 'lantern/paul/trace.json.gz');
+      const entityNames = [...Renderer.entityMappings.eventsByEntity.keys()].map(entity => entity.name);
+      assert.deepEqual([...new Set(entityNames)], [
+        'paulirish.com',
+        'Google Tag Manager',
+        'Google Fonts',
+        'Disqus',
+        'Google Analytics',
+      ]);
+    });
   });
 });

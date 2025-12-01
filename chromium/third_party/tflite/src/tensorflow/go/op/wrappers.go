@@ -1363,7 +1363,7 @@ func AsStringFill(value string) AsStringAttr {
 // Supports many numeric types and boolean.
 //
 // For Unicode, see the
-// [https://www.tensorflow.org/tutorials/representation/unicode](Working with Unicode text)
+// [https://www.tensorflow.org/text/guide/unicode](Working with Unicode text)
 // tutorial.
 //
 // Examples:
@@ -20737,7 +20737,7 @@ func IdentityReaderV2(scope *Scope, optional ...IdentityReaderV2Attr) (reader_ha
 //
 // where
 //
-// \\(gamma(a, x) = \\int_{0}^{x} t^{a-1} exp(-t) dt\\)
+// \\(gamma(a, x) = \int_{0}^{x} t^{a-1} exp(-t) dt\\)
 //
 // is the lower incomplete Gamma function.
 //

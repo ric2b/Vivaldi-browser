@@ -126,7 +126,6 @@ class DisplayChangeObserverPanelRadiiTest
   void SetUp() override {
     display_manager_ = std::make_unique<DisplayManager>(/*screen=*/nullptr);
     default_display_mode_ = MakeDisplayMode(1920, 1080, true, 60);
-    scoped_feature_list_.InitAndEnableFeature(features::kRoundedDisplay);
 
     ui::DeviceDataManager::CreateInstance();
     DisplayChangeObserverTestBase::SetUp();
@@ -348,7 +347,7 @@ TEST_P(DisplayChangeObserverTest, FindDeviceScaleFactor) {
 
   std::set<std::tuple<float, int, int>> dup_check;
 
-  for (auto& entry : display_configs) {
+  for (auto& entry : lcd_display_configs) {
     std::tuple<float, int, int> key{entry.diagonal_size,
                                     entry.resolution.width(),
                                     entry.resolution.height()};
@@ -694,6 +693,49 @@ TEST_P(DisplayChangeObserverTest, DisplayModeNativeCalculation) {
   }
 }
 
+TEST_P(DisplayChangeObserverTest, OPSDisplayScaleFactor) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kOpsDisplayScaleFactor);
+  // Since the only way to set the physical size of FakeDisplaySnapshot is to
+  // use dpi, these are the calculated dpis for some common displays from 50 in
+  // to 110 in.
+  struct OpsTestParam {
+    gfx::Size resolution;
+    float dpi;
+    float expected_scale_factor;
+  };
+  const OpsTestParam testing_params[] = {
+      {k4K_UHD, 80.11f, 2.0f},         // 55"
+      {k4K_UHD, 67.78f, 1.6f},         // 65"
+      {k4K_UHD, 58.74f, kDsf_1_333},   // 75"
+      {k4K_UHD, 51.23f, 1.25f},        // 86"
+      {k4K_UHD, 40.05f, 1.0f},         // 110"
+      {k4K_WUHD, 60.4f, 1.6f},         // 92"
+      {k4K_WUHD, 52.92f, kDsf_1_333},  // 105"
+      {k8k_UHD, 160.21f, kDsf_2_666},  // 55"
+      {k8k_UHD, 135.56f, kDsf_2_666},  // 65"
+      {k8k_UHD, 80.11f, 2.0f},         // 110"
+  };
+  ui::DeviceDataManager::CreateInstance();
+  DisplayManager manager(nullptr);
+  DisplayChangeObserver observer(&manager);
+  for (const OpsTestParam param : testing_params) {
+    const auto snapshot = FakeDisplaySnapshot::Builder()
+                              .SetId(10)
+                              .SetType(DISPLAY_CONNECTION_TYPE_HDMI)
+                              .SetNativeMode(param.resolution)
+                              .SetCurrentMode(param.resolution)
+                              .SetDPI(param.dpi)
+                              .Build();
+
+    const ManagedDisplayInfo managed_display_info = CreateManagedDisplayInfo(
+        &observer, snapshot.get(), snapshot->current_mode());
+
+    EXPECT_EQ(managed_display_info.GetEffectiveDeviceScaleFactor(),
+              param.expected_scale_factor);
+  }
+}
+
 INSTANTIATE_TEST_SUITE_P(All,
                          DisplayChangeObserverTest,
                          ::testing::Values(false, true));
@@ -712,7 +754,7 @@ auto CreateDisplay = [](const ManagedDisplayInfo& managed_display_info) {
 
 TEST_F(DisplayResolutionTest, CheckEffectiveResolutionUMAIndex) {
   std::map<int, gfx::Size> logical_resolutions;
-  for (const auto& display_config : display_configs) {
+  for (const auto& display_config : lcd_display_configs) {
     gfx::Size size = display_config.resolution;
     if (size.width() < size.height())
       size = gfx::Size(size.height(), size.width());
@@ -770,7 +812,7 @@ TEST_F(DisplayResolutionTest, CheckEffectiveResolutionUMAIndex) {
   }
 
 #if 0
-  // Enable this code to re-generate the "EffectiveResolution" in enums.xml.
+  //  Enable this code to re-generate the "EffectiveResolution" in enums.xml.
   for (auto pair : logical_resolutions) {
     std::cout << "  <int value=\"" << pair.first << "\" label=\""
                << pair.second.width() << " x " << pair.second.height()
@@ -778,11 +820,11 @@ TEST_F(DisplayResolutionTest, CheckEffectiveResolutionUMAIndex) {
   }
 #endif
 
-  // With the current set of display configs and zoom levels, there are only 322
+  // With the current set of display configs and zoom levels, there are only 340
   // possible effective resolutions for internal displays in chromebooks. Update
   // this value when adding a new display config, and re-generate the
   // EffectiveResolution value in enum.xml.
-  EXPECT_EQ(logical_resolutions.size(), 322ul);
+  EXPECT_EQ(logical_resolutions.size(), 340ul);
 }
 
 // Make sure that when display zoom is applied, the effective device scale
@@ -790,7 +832,7 @@ TEST_F(DisplayResolutionTest, CheckEffectiveResolutionUMAIndex) {
 // width / logical with) is close enough (<kDeviceScaleFactorErrorTolerance).
 TEST_F(DisplayResolutionTest, DisplayZoom) {
   // For internal displays
-  for (auto& config : display_configs) {
+  for (auto& config : lcd_display_configs) {
     const float dpi = ComputeDpi(config.diagonal_size, config.resolution);
     const auto snapshot = FakeDisplaySnapshot::Builder()
                               .SetId(10)
@@ -814,7 +856,7 @@ TEST_F(DisplayResolutionTest, DisplayZoom) {
       managed_display_info.set_zoom_factor(zoom);
       const Display display = CreateDisplay(managed_display_info);
 
-      // Emulate how lacros computes the scale factor.
+      // Emulate how arc computes the scale factor.
       const float scale_factor = config.resolution.width() /
                                  static_cast<float>(display.size().width());
       EXPECT_NEAR(scale_factor, display.device_scale_factor(),
@@ -845,7 +887,7 @@ TEST_F(DisplayResolutionTest, DisplayZoom) {
       managed_display_info.set_zoom_factor(zoom);
       const Display display = CreateDisplay(managed_display_info);
 
-      // Emulate how lacros computes the scale factor.
+      // Emulate how arc computes the scale factor.
       const float scale_factor =
           size.width() / static_cast<float>(display.size().width());
       EXPECT_NEAR(scale_factor, display.device_scale_factor(),

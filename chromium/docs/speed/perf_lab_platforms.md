@@ -29,8 +29,6 @@
 ### Mac
 
  * [mac-intel-perf](https://ci.chromium.org/p/chrome/builders/ci/mac-intel-perf): Mac Mini 8,1, Core i7 3.2 GHz.
- * [mac-laptop_high_end-perf](https://ci.chromium.org/p/chrome/builders/ci/mac-laptop_high_end-perf): MacBook Pro, Core i7 2.8 GHz, 16GB RAM, 256GB SSD, Radeon 55.
- * [mac-laptop_low_end-perf](https://ci.chromium.org/p/chrome/builders/ci/mac-laptop_low_end-perf): MacBook Air, Core i5 1.8 GHz, 8GB RAM, 128GB SSD, HD Graphics.
  * [mac-m1-pro-perf](https://ci.chromium.org/p/chrome/builders/ci/mac-m1-pro-perf): Mac M1 PRO 2020.
  * [mac-m1_mini_2020-no-brp-perf](https://ci.chromium.org/p/chrome/builders/ci/mac-m1_mini_2020-no-brp-perf): Mac M1 Mini 2020 with BRP disabled.
  * [mac-m1_mini_2020-perf](https://ci.chromium.org/p/chrome/builders/ci/mac-m1_mini_2020-perf): Mac M1 Mini 2020.
@@ -43,6 +41,7 @@
  * [win-10_amd_laptop-perf](https://ci.chromium.org/p/chrome/builders/ci/win-10_amd_laptop-perf): Windows 10 Laptop with AMD chipset..
  * [win-10_laptop_low_end-perf](https://ci.chromium.org/p/chrome/builders/ci/win-10_laptop_low_end-perf): Low end windows 10 HP laptops. HD Graphics 5500, x86-64-i3-5005U, SSD, 4GB RAM..
  * [win-11-perf](https://ci.chromium.org/p/chrome/builders/ci/win-11-perf): Windows Dell PowerEdge R350.
+ * [win-11_laptop_low_end-perf](https://ci.chromium.org/p/chrome/builders/ci/win-11_laptop_low_end-perf): Low end windows 11 laptops.SSD, 4GB RAM..
 
 ## Pinpoint-Only Platforms
 
@@ -58,11 +57,6 @@
 ### Linux
 
  * linux-perf-pgo: Ubuntu-18.04, 8 core, NVIDIA Quadro P400.
-
-### Mac
-
- * mac-laptop_high_end-perf-pgo: MacBook Pro, Core i7 2.8 GHz, 16GB RAM, 256GB SSD, Radeon 55.
- * mac-laptop_low_end-perf-pgo: MacBook Air, Core i5 1.8 GHz, 8GB RAM, 128GB SSD, HD Graphics.
 
 ### Win
 
@@ -89,4 +83,6 @@
 ### Win
 
  * [win-10_laptop_low_end-perf_HP-Candidate](https://ci.chromium.org/p/chrome/builders/ci/win-10_laptop_low_end-perf_HP-Candidate): HP 15-BS121NR Laptop Candidate.
+ * [win-arm64-snapdragon-elite-perf](https://ci.chromium.org/p/chrome/builders/ci/win-arm64-snapdragon-elite-perf): Windows Dell Snapdragon Elite.
+ * [win-arm64-snapdragon-plus-perf](https://ci.chromium.org/p/chrome/builders/ci/win-arm64-snapdragon-plus-perf): Windows Dell Snapdragon Plus.
 

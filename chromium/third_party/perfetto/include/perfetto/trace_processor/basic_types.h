@@ -148,13 +148,17 @@ struct PERFETTO_EXPORT_COMPONENT Config {
   SortingMode sorting_mode = SortingMode::kDefaultHeuristics;
 
   // When set to false, this option makes the trace processor not include ftrace
-  // events in the raw table; this makes converting events back to the systrace
-  // text format impossible. On the other hand, it also saves ~50% of memory
-  // usage of trace processor. For reference, Studio intends to use this option.
+  // events in the ftrace_event table; this makes converting events back to the
+  // systrace text format impossible. On the other hand, it also saves ~50% of
+  // memory usage of trace processor. For reference, Studio intends to use this
+  // option.
   //
-  // Note: "generic" ftrace events will be parsed into the raw table even if
-  // this flag is false and all other events which parse into the raw table are
-  // unaffected by this flag.
+  // Note: "generic" ftrace events will be parsed into the ftrace_event table
+  // even if this flag is false.
+  //
+  // Note: this option should really be named
+  // `ingest_ftrace_in_ftrace_event_table` as the use of the `raw` table is
+  // deprecated.
   bool ingest_ftrace_in_raw_table = true;
 
   // Indicates the event which should be used as a marker to drop ftrace data in
@@ -300,6 +304,64 @@ struct SqlPackage {
   // when creating TraceProcessor) is true. Otherwise, this option will throw an
   // error.
   bool allow_override = false;
+};
+
+// The file format of the output returned from the trace summary functions.
+enum class TraceSummaryOutputFormat : uint8_t {
+  // Indicates that the ouput is `TraceSummary` encoded as a binary protobuf.
+  kBinaryProto,
+  // Indicates that the ouput is `TraceSummary` encoded as a text protobuf.
+  kTextProto,
+};
+
+// A struct wrapping the bytes of a `TraceSummarySpec` instance.
+struct TraceSummarySpecBytes {
+  // The pointer to the contents of `TraceSummarySpec`
+  const uint8_t* ptr;
+
+  // The number of bytes of the `TraceSummarySpec.
+  size_t size;
+
+  // The format of the data located at the pointer above.
+  enum class Format : uint8_t {
+    // Indicates that the spec is `TraceSummarySpec` encoded as a binary
+    // protobuf.
+    kBinaryProto,
+    // Indicates that the spec is `TraceSummarySpec` encoded as a text
+    // protobuf.
+    kTextProto,
+  };
+  Format format;
+};
+
+// A struct wrapping the bytes of a `StructuredQuery` instance.
+struct StructuredQueryBytes {
+  // The pointer to the contents of `StructuredQuery`
+  const uint8_t* ptr;
+
+  // The number of bytes of the `StructuredQuery.
+  size_t size;
+
+  // The format of the data located at the pointer above.
+  enum class Format : uint8_t {
+    // Indicates that the spec is `StructuredQuery` encoded as a binary
+    // protobuf.
+    kBinaryProto,
+    // Indicates that the spec is `StructuredQuery` encoded as a text
+    // protobuf.
+    kTextProto,
+  };
+  Format format;
+};
+
+// Experimental. Not considered part of Trace Processor API and shouldn't be
+// used.
+struct AnalyzedStructuredQuery {
+  std::string sql;
+  // Modules referenced by sql
+  std::vector<std::string> modules;
+  // Preambles referenced by sql
+  std::vector<std::string> preambles;
 };
 
 // Deprecated. Please use `RegisterSqlPackage` and `SqlPackage` instead.

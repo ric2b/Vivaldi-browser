@@ -13,6 +13,7 @@
 #include "chrome/browser/extensions/pref_transformer_interface.h"
 #include "chrome/browser/prefetch/pref_names.h"
 #include "chrome/browser/preloading/preloading_prefs.h"
+#include "chrome/common/pref_names.h"
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/embedder_support/pref_names.h"
@@ -25,7 +26,7 @@
 #include "components/translate/core/browser/translate_pref_names.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
-#include "chrome/browser/chromeos/extensions/controlled_pref_mapping.h"
+#include "ash/constants/ash_pref_names.h"
 #endif
 
 using extensions::mojom::APIPermissionID;
@@ -84,6 +85,8 @@ const PrefMappingEntry kMappings[] = {
      APIPermissionID::kPrivacy, APIPermissionID::kPrivacy},
     {"webRTCIPHandlingPolicy", prefs::kWebRTCIPHandlingPolicy,
      APIPermissionID::kPrivacy, APIPermissionID::kPrivacy},
+    {"webRTCIPHandlingUrl", prefs::kWebRTCIPHandlingUrl,
+     APIPermissionID::kPrivacy, APIPermissionID::kPrivacy},
     {"webRTCUDPPortRange", prefs::kWebRTCUDPPortRange,
      APIPermissionID::kPrivacy, APIPermissionID::kPrivacy},
     {"relatedWebsiteSetsEnabled",
@@ -100,49 +103,49 @@ const PrefMappingEntry kMappings[] = {
 // If a new extension-controlled pref of this type is added, it should be added
 // to both lists.
 #if BUILDFLAG(IS_CHROMEOS)
-    {"autoclick", chromeos::prefs::kAccessibilityAutoclickEnabled,
+    {"autoclick", ash::prefs::kAccessibilityAutoclickEnabled,
      APIPermissionID::kAccessibilityFeaturesRead,
      APIPermissionID::kAccessibilityFeaturesModify},
-    {"caretHighlight", chromeos::prefs::kAccessibilityCaretHighlightEnabled,
+    {"caretHighlight", ash::prefs::kAccessibilityCaretHighlightEnabled,
      APIPermissionID::kAccessibilityFeaturesRead,
      APIPermissionID::kAccessibilityFeaturesModify},
-    {"cursorColor", chromeos::prefs::kAccessibilityCursorColorEnabled,
+    {"cursorColor", ash::prefs::kAccessibilityCursorColorEnabled,
      APIPermissionID::kAccessibilityFeaturesRead,
      APIPermissionID::kAccessibilityFeaturesModify},
-    {"cursorHighlight", chromeos::prefs::kAccessibilityCursorHighlightEnabled,
+    {"cursorHighlight", ash::prefs::kAccessibilityCursorHighlightEnabled,
      APIPermissionID::kAccessibilityFeaturesRead,
      APIPermissionID::kAccessibilityFeaturesModify},
-    {"dictation", chromeos::prefs::kAccessibilityDictationEnabled,
+    {"dictation", ash::prefs::kAccessibilityDictationEnabled,
      APIPermissionID::kAccessibilityFeaturesRead,
      APIPermissionID::kAccessibilityFeaturesModify},
-    {"dockedMagnifier", chromeos::prefs::kDockedMagnifierEnabled,
+    {"dockedMagnifier", ash::prefs::kDockedMagnifierEnabled,
      APIPermissionID::kAccessibilityFeaturesRead,
      APIPermissionID::kAccessibilityFeaturesModify},
-    {"focusHighlight", chromeos::prefs::kAccessibilityFocusHighlightEnabled,
+    {"focusHighlight", ash::prefs::kAccessibilityFocusHighlightEnabled,
      APIPermissionID::kAccessibilityFeaturesRead,
      APIPermissionID::kAccessibilityFeaturesModify},
-    {"highContrast", chromeos::prefs::kAccessibilityHighContrastEnabled,
+    {"highContrast", ash::prefs::kAccessibilityHighContrastEnabled,
      APIPermissionID::kAccessibilityFeaturesRead,
      APIPermissionID::kAccessibilityFeaturesModify},
-    {"largeCursor", chromeos::prefs::kAccessibilityLargeCursorEnabled,
+    {"largeCursor", ash::prefs::kAccessibilityLargeCursorEnabled,
      APIPermissionID::kAccessibilityFeaturesRead,
      APIPermissionID::kAccessibilityFeaturesModify},
-    {"screenMagnifier", chromeos::prefs::kAccessibilityScreenMagnifierEnabled,
+    {"screenMagnifier", ash::prefs::kAccessibilityScreenMagnifierEnabled,
      APIPermissionID::kAccessibilityFeaturesRead,
      APIPermissionID::kAccessibilityFeaturesModify},
-    {"selectToSpeak", chromeos::prefs::kAccessibilitySelectToSpeakEnabled,
+    {"selectToSpeak", ash::prefs::kAccessibilitySelectToSpeakEnabled,
      APIPermissionID::kAccessibilityFeaturesRead,
      APIPermissionID::kAccessibilityFeaturesModify},
-    {"spokenFeedback", chromeos::prefs::kAccessibilitySpokenFeedbackEnabled,
+    {"spokenFeedback", ash::prefs::kAccessibilitySpokenFeedbackEnabled,
      APIPermissionID::kAccessibilityFeaturesRead,
      APIPermissionID::kAccessibilityFeaturesModify},
-    {"stickyKeys", chromeos::prefs::kAccessibilityStickyKeysEnabled,
+    {"stickyKeys", ash::prefs::kAccessibilityStickyKeysEnabled,
      APIPermissionID::kAccessibilityFeaturesRead,
      APIPermissionID::kAccessibilityFeaturesModify},
-    {"switchAccess", chromeos::prefs::kAccessibilitySwitchAccessEnabled,
+    {"switchAccess", ash::prefs::kAccessibilitySwitchAccessEnabled,
      APIPermissionID::kAccessibilityFeaturesRead,
      APIPermissionID::kAccessibilityFeaturesModify},
-    {"virtualKeyboard", chromeos::prefs::kAccessibilityVirtualKeyboardEnabled,
+    {"virtualKeyboard", ash::prefs::kAccessibilityVirtualKeyboardEnabled,
      APIPermissionID::kAccessibilityFeaturesRead,
      APIPermissionID::kAccessibilityFeaturesModify},
 #endif

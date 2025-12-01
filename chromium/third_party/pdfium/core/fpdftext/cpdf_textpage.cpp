@@ -290,15 +290,18 @@ CFX_FloatRect GetLooseBounds(const CPDF_TextPage::CharInfo& charinfo) {
     int ascent = charinfo.text_object()->GetFont()->GetTypeAscent();
     int descent = charinfo.text_object()->GetFont()->GetTypeDescent();
     if (ascent != descent) {
-      float width = charinfo.matrix().a *
-                    charinfo.text_object()->GetCharWidth(charinfo.char_code());
-      float font_scale = charinfo.matrix().a * font_size / (ascent - descent);
+      float width = charinfo.text_object()->GetCharWidth(charinfo.char_code());
+      float font_scale = font_size / (ascent - descent);
 
-      float left = charinfo.origin().x;
-      float right = charinfo.origin().x + (is_vert_writing ? -width : width);
-      float bottom = charinfo.origin().y + descent * font_scale;
-      float top = charinfo.origin().y + ascent * font_scale;
-      return CFX_FloatRect(left, bottom, right, top);
+      CFX_Matrix inverse_matrix = charinfo.matrix().GetInverse();
+      CFX_PointF original_origin = inverse_matrix.Transform(charinfo.origin());
+
+      float left = original_origin.x;
+      float right = original_origin.x + (is_vert_writing ? -width : width);
+      float bottom = original_origin.y + descent * font_scale;
+      float top = original_origin.y + ascent * font_scale;
+      CFX_FloatRect char_box(left, bottom, right, top);
+      return charinfo.matrix().TransformRect(char_box);
     }
   }
 
@@ -981,6 +984,7 @@ void CPDF_TextPage::ProcessMarkedContent(const TransformedTextObject& obj) {
 
     CFX_FloatRect char_box(rect);
     char_box.Translate(k * step, 0);
+    m_TempTextBuf.AppendChar(wChar);
     m_TempCharList.push_back(
         CharInfo(CharType::kPiece, font->CharCodeFromUnicode(wChar), wChar,
                  pTextObj->GetPos(), char_box, matrix, pTextObj));
@@ -1289,7 +1293,7 @@ bool CPDF_TextPage::ProcessGenerateCharacter(GenerateCharacter type,
       m_TempTextBuf.AppendChar(0xfffe);
       return true;
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 void CPDF_TextPage::ProcessTextObjectItems(CPDF_TextObject* text_object,
@@ -1304,7 +1308,7 @@ void CPDF_TextPage::ProcessTextObjectItems(CPDF_TextObject* text_object,
   for (size_t i = 0; i < nItems; ++i) {
     CPDF_TextObject::Item item = text_object->GetItemInfo(i);
     if (item.m_CharCode == 0xffffffff) {
-      WideString str = m_TempTextBuf.MakeString();
+      WideStringView str = m_TempTextBuf.AsStringView();
       if (str.IsEmpty()) {
         str = m_TextBuf.AsStringView();
       }
@@ -1367,7 +1371,7 @@ void CPDF_TextPage::ProcessTextObjectItems(CPDF_TextObject* text_object,
 
     bool add_unicode = true;
     const int count = std::min(fxcrt::CollectionSize<int>(m_TempCharList), 7);
-    constexpr float kTextCharRatioGapDelta = 0.07f;
+    static constexpr float kTextCharRatioGapDelta = 0.07f;
     float threshold = charinfo.matrix().TransformXDistance(
         kTextCharRatioGapDelta * text_object->GetFontSize());
     for (int n = fxcrt::CollectionSize<int>(m_TempCharList);
@@ -1389,7 +1393,7 @@ void CPDF_TextPage::ProcessTextObjectItems(CPDF_TextObject* text_object,
         m_TempCharList.push_back(charinfo);
       }
     } else if (i == 0) {
-      WideString str = m_TempTextBuf.MakeString();
+      WideStringView str = m_TempTextBuf.AsStringView();
       if (!str.IsEmpty() && str.Back() == L' ') {
         m_TempTextBuf.Delete(m_TempTextBuf.GetLength() - 1, 1);
         m_TempCharList.pop_back();

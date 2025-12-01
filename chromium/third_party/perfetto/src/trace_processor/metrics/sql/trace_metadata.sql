@@ -23,6 +23,9 @@ SELECT TraceMetadata(
   'android_build_fingerprint', (
     SELECT str_value FROM metadata WHERE name = 'android_build_fingerprint'
   ),
+  'android_device_manufacturer', (
+    SELECT str_value FROM metadata WHERE name = 'android_device_manufacturer'
+  ),
   'statsd_triggering_subscription_id', (
     SELECT int_value FROM metadata
     WHERE name = 'statsd_triggering_subscription_id'
@@ -39,6 +42,10 @@ SELECT TraceMetadata(
     SELECT RepeatedField(slice.name)
     FROM track JOIN slice ON track.id = slice.track_id
     WHERE track.name = 'Trace Triggers'
+  ),
+  'trace_causal_trigger', (
+      SELECT str_value FROM metadata
+      WHERE name = 'trace_trigger'
   ),
   'trace_config_pbtxt', (
     SELECT str_value FROM metadata

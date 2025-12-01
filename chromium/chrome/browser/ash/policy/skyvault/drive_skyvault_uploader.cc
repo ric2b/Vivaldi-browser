@@ -77,7 +77,6 @@ void DriveSkyvaultUploader::Run() {
     return;
   }
 
-  // TODO(aidazolic): Handle different errors.
   if (!profile_) {
     LOG(ERROR) << "No profile";
     OnEndCopy(MigrationUploadError::kUnexpectedError);
@@ -104,18 +103,19 @@ void DriveSkyvaultUploader::Run() {
     return;
   }
 
+  // Observe Drive updates.
+  drive::DriveIntegrationService::Observer::Observe(drive_integration_service_);
+
   if (drive::util::GetDriveConnectionStatus(profile_) !=
       drive::util::ConnectionStatus::kConnected) {
-    LOG(ERROR) << "No connection to Drive";
-    OnEndCopy(MigrationUploadError::kServiceUnavailable);
+    LOG(ERROR) << "Waiting for connection to Drive";
+    waiting_for_connection_ = true;
     return;
   }
 
   // Observe IO tasks updates.
   io_task_controller_observer_.Observe(io_task_controller_);
 
-  // Observe Drive updates.
-  drive::DriveIntegrationService::Observer::Observe(drive_integration_service_);
   drivefs::DriveFsHost::Observer::Observe(
       drive_integration_service_->GetDriveFsHost());
 
@@ -247,7 +247,6 @@ void DriveSkyvaultUploader::OnEndCopy(
 
 void DriveSkyvaultUploader::OnEndUpload() {
   observed_relative_drive_path_.clear();
-  // TODO(b/343879839): Error UMA.
   SkyVaultDeleteErrorHistogram(UploadTrigger::kMigration,
                                CloudProvider::kGoogleDrive,
                                error_ == MigrationUploadError::kDeleteFailed);
@@ -417,6 +416,15 @@ void DriveSkyvaultUploader::OnError(const drivefs::mojom::DriveError& error) {
 
 void DriveSkyvaultUploader::OnDriveConnectionStatusChanged(
     drive::util::ConnectionStatus status) {
+  if (waiting_for_connection_) {
+    if (status == drive::util::ConnectionStatus::kConnected) {
+      LOG(ERROR) << "Reconnected to Drive";
+      waiting_for_connection_ = false;
+      drive::DriveIntegrationService::Observer::Reset();
+      Run();
+    }
+    return;
+  }
   if (status != drive::util::ConnectionStatus::kConnected) {
     LOG(ERROR) << "Lost connection to Drive during upload";
     OnEndCopy(MigrationUploadError::kServiceUnavailable);

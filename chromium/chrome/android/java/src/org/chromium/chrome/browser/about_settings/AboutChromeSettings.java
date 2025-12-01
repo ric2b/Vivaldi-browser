@@ -74,6 +74,11 @@ public class AboutChromeSettings extends PreferenceFragmentCompat
         p = findPreference(PREF_LEGAL_INFORMATION);
         int currentYear = Calendar.getInstance().get(Calendar.YEAR);
         p.setSummary(getString(R.string.legal_information_summary, currentYear));
+
+        // Vivaldi
+        if (BuildConfig.IS_VIVALDI) {
+            VivaldiUtils.setVivaldiLayoutToPreference(getPreferenceScreen());
+        }
     }
 
     @Override

@@ -173,6 +173,7 @@ class V8_EXPORT_PRIVATE MacroAssembler
   void Cvttss2ui(Register dst, Operand src, Label* fail = nullptr);
   void Cvttss2ui(Register dst, XMMRegister src, Label* fail = nullptr);
   void Cvtpd2ph(XMMRegister dst, XMMRegister src, Register tmp);
+  void Cvtph2pd(XMMRegister dst, XMMRegister src);
 
   // cvtsi2sd and cvtsi2ss instructions only write to the low 64/32-bit of dst
   // register, which hinders register renaming and makes dependence chains
@@ -411,8 +412,7 @@ class V8_EXPORT_PRIVATE MacroAssembler
       xorl(dst, dst);
       // The following shorter sequence for uint8 causes performance
       // regressions:
-      // xorl(dst, dst); movb(dst,
-      // Immediate(static_cast<uint32_t>(x)));
+      // xorl(dst, dst); movb(dst, Immediate(static_cast<uint32_t>(x)));
     } else if (is_uint32(x)) {
       movl(dst, Immediate(static_cast<uint32_t>(x)));
     } else if (is_int32(x)) {
@@ -536,10 +536,16 @@ class V8_EXPORT_PRIVATE MacroAssembler
   void CallJSFunction(Register function_object, uint16_t argument_count);
   void JumpJSFunction(Register function_object,
                       JumpMode jump_mode = JumpMode::kJump);
-  void ResolveWasmCodePointer(Register target);
-  void CallWasmCodePointer(Register target,
+#ifdef V8_ENABLE_LEAPTIERING
+  void CallJSDispatchEntry(JSDispatchHandle dispatch_handle,
+                           uint16_t argument_count);
+#endif
+#ifdef V8_ENABLE_WEBASSEMBLY
+  void CallWasmCodePointer(Register target, uint64_t signature_hash,
                            CallJumpMode call_jump_mode = CallJumpMode::kCall);
+  void CallWasmCodePointerNoSignatureCheck(Register target);
   void LoadWasmCodePointer(Register dst, Operand src);
+#endif
 
   void Jump(Address destination, RelocInfo::Mode rmode);
   void Jump(Address destination, RelocInfo::Mode rmode, Condition cc);
@@ -549,6 +555,8 @@ class V8_EXPORT_PRIVATE MacroAssembler
   void Jump(Handle<Code> code_object, RelocInfo::Mode rmode);
   void Jump(Handle<Code> code_object, RelocInfo::Mode rmode, Condition cc);
 
+  // TODO(olivf, 42204201) Rename this to AssertNotDeoptimized once
+  // non-leaptiering is removed from the codebase.
   void BailoutIfDeoptimized(Register scratch);
   void CallForDeoptimization(Builtin target, int deopt_id, Label* exit,
                              DeoptimizeKind kind, Label* ret,
@@ -779,7 +787,8 @@ class V8_EXPORT_PRIVATE MacroAssembler
   // Loads a field containing off-heap pointer and does necessary decoding
   // if sandboxed external pointers are enabled.
   void LoadExternalPointerField(Register destination, Operand field_operand,
-                                ExternalPointerTag tag, Register scratch,
+                                ExternalPointerTagRange tag_range,
+                                Register scratch,
                                 IsolateRootLocation isolateRootLocation =
                                     IsolateRootLocation::kInRootRegister);
 
@@ -839,6 +848,8 @@ class V8_EXPORT_PRIVATE MacroAssembler
 #ifdef V8_ENABLE_LEAPTIERING
   void LoadEntrypointFromJSDispatchTable(Register destination,
                                          Register dispatch_handle);
+  void LoadEntrypointFromJSDispatchTable(Register destination,
+                                         JSDispatchHandle dispatch_handle);
   void LoadParameterCountFromJSDispatchTable(Register destination,
                                              Register dispatch_handle);
   void LoadEntrypointAndParameterCountFromJSDispatchTable(
@@ -1057,6 +1068,7 @@ class V8_EXPORT_PRIVATE MacroAssembler
                                            Register slot_address);
   void GenerateTailCallToReturnedCode(Runtime::FunctionId function_id,
                                       JumpMode jump_mode = JumpMode::kJump);
+#ifndef V8_ENABLE_LEAPTIERING
   Condition CheckFeedbackVectorFlagsNeedsProcessing(Register feedback_vector,
                                                     CodeKind current_code_kind);
   void CheckFeedbackVectorFlagsAndJumpIfNeedsProcessing(
@@ -1071,6 +1083,7 @@ class V8_EXPORT_PRIVATE MacroAssembler
     OptimizeCodeOrTailCallOptimizedCodeSlot(
         feedback_vector, kJSFunctionRegister, JumpMode::kJump);
   }
+#endif  // !V8_ENABLE_LEAPTIERING
 
   // Abort execution if argument is not a Constructor, enabled via --debug-code.
   void AssertConstructor(Register object) NOOP_UNLESS_DEBUG_CODE;

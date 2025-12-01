@@ -36,6 +36,7 @@
 #include "components/user_manager/known_user.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/test/browser_test.h"
+#include "google_apis/gaia/gaia_id.h"
 
 namespace ash {
 namespace {
@@ -47,7 +48,7 @@ const base::FilePath::CharType kRefreshTokenToDeviceIdMapFile[] =
 
 char kSecondUserEmail[] = "second_user@gmail.com";
 char kSecondUserPassword[] = "password";
-char kSecondUserGaiaId[] = "4321";
+constexpr GaiaId::Literal kSecondUserGaiaId("4321");
 char kSecondUserRefreshToken1[] = "refresh_token_second_user_1";
 char kSecondUserRefreshToken2[] = "refresh_token_second_user_2";
 
@@ -116,7 +117,7 @@ class DeviceIDTest : public OobeBaseTest,
   void SignInOnline(const std::string& user_id,
                     const std::string& password,
                     const std::string& refresh_token,
-                    const std::string& gaia_id) {
+                    const GaiaId& gaia_id) {
     cryptohome_mixin_.ApplyAuthConfigIfUserExists(
         AccountId::FromUserEmail(user_id),
         test::UserAuthConfig::Create(test::kDefaultAuthSetup));

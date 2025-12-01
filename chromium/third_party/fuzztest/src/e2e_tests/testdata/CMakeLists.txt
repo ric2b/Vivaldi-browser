@@ -22,17 +22,23 @@ add_executable(
   fuzz_tests_for_functional_testing.cc
   fuzz_tests_for_microbenchmarking.cc
   fuzz_tests_using_googletest.cc
+  fuzz_tests_with_proto_inputs.cc
 )
 target_link_libraries(
   fuzz_tests_for_functional_testing.stripped
   PUBLIC
   protobuf::libprotobuf
   test_protobuf
+  absl::check
   absl::algorithm_container
+  absl::flat_hash_map
+  absl::flat_hash_set
   absl::function_ref
+  absl::span
   absl::str_format
   absl::strings
   absl::time
+  re2::re2
   fuzztest_googletest_fixture_adapter
   fuzztest_logging
 )
@@ -93,6 +99,33 @@ add_executable(
 link_fuzztest(unit_test_and_fuzz_tests.stripped)
 set_target_properties(
   unit_test_and_fuzz_tests.stripped
+  PROPERTIES RUNTIME_OUTPUT_DIRECTORY
+  "${CMAKE_BINARY_DIR}/_main/e2e_tests/testdata"
+)
+
+add_executable(
+  fuzz_tests_for_corpus_database_testing.stripped
+  fuzz_tests_for_corpus_database_testing.cc
+)
+link_fuzztest(fuzz_tests_for_corpus_database_testing.stripped)
+set_target_properties(
+  fuzz_tests_for_corpus_database_testing.stripped
+  PROPERTIES RUNTIME_OUTPUT_DIRECTORY
+  "${CMAKE_BINARY_DIR}/_main/e2e_tests/testdata"
+)
+
+add_executable(
+  llvm_fuzzer_with_custom_mutator.stripped
+  llvm_fuzzer_with_custom_mutator.cc
+)
+target_link_libraries(
+  llvm_fuzzer_with_custom_mutator.stripped
+  PRIVATE
+  fuzztest::llvm_fuzzer_main
+  fuzztest::llvm_fuzzer_wrapper
+)
+set_target_properties(
+  llvm_fuzzer_with_custom_mutator.stripped
   PROPERTIES RUNTIME_OUTPUT_DIRECTORY
   "${CMAKE_BINARY_DIR}/_main/e2e_tests/testdata"
 )

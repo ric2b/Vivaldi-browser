@@ -34,9 +34,10 @@ NoteSyncServiceFactory::NoteSyncServiceFactory()
 
 NoteSyncServiceFactory::~NoteSyncServiceFactory() {}
 
-KeyedService* NoteSyncServiceFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+NoteSyncServiceFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
-  return new sync_notes::NoteSyncService(
+  return std::make_unique<sync_notes::NoteSyncService>(
       SyncedFileStoreFactory::GetForBrowserContext(context),
       syncer::WipeModelUponSyncDisabledBehavior::kNever);
 }

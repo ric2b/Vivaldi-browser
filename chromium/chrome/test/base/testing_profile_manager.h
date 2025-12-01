@@ -64,6 +64,15 @@ class TestingProfileManager : public ProfileObserver {
       const base::FilePath& profiles_path = base::FilePath(),
       std::unique_ptr<ProfileManager> profile_manager = nullptr);
 
+#if BUILDFLAG(IS_CHROMEOS)
+  using OnProfileCreatedCallback =
+      base::RepeatingCallback<void(const std::string&, Profile*)>;
+  void set_on_profile_created_callback(OnProfileCreatedCallback callback) {
+    callback_ = callback;
+  }
+  OnProfileCreatedCallback callback_;
+#endif
+
   // Creates a new TestingProfile whose data lives in a directory related to
   // profile_name, which is a non-user-visible key for the test environment.
   // |prefs| is the PrefService used by the profile. If it is NULL, the profile
@@ -86,7 +95,6 @@ class TestingProfileManager : public ProfileObserver {
       bool is_main_profile = false,
       scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory =
           nullptr);
-
   // Small helpers for creating testing profiles. Just forward to above.
   TestingProfile* CreateTestingProfile(
       const std::string& name,
@@ -101,11 +109,13 @@ class TestingProfileManager : public ProfileObserver {
           nullptr);
 
   // Creates a new guest TestingProfile whose data lives in the guest profile
-  // test environment directory, as specified by the profile manager.
-  // This profile will not be added to the ProfileAttributesStorage. This will
-  // register the TestingProfile with the profile subsystem as well.
-  // The subsystem owns the Profile and returns a weak pointer.
-  TestingProfile* CreateGuestProfile();
+  // test environment directory, as specified by the profile manager. If the
+  // builder is given, it will be used to create a guest profile.  This profile
+  // will not be added to the ProfileAttributesStorage. This will register the
+  // TestingProfile with the profile subsystem as well.  The subsystem owns the
+  // Profile and returns a weak pointer.
+  TestingProfile* CreateGuestProfile(
+      std::optional<TestingProfile::Builder> builder = std::nullopt);
 
 #if !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_ANDROID)
   // Creates a new system TestingProfile whose data lives in the system profile

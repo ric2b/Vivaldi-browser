@@ -7,6 +7,7 @@
 #include "components/content_injection/content_injection_service_factory.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_content.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
+#include "components/request_filter/adblock_filter/adblock_rule_service_impl.h"
 #include "components/request_filter/adblock_filter/adblock_rules_index.h"
 #include "components/request_filter/adblock_filter/utils.h"
 #include "content/public/browser/render_frame_host.h"
@@ -30,11 +31,9 @@ bool IsOriginWanted(RuleService* service, RuleGroup group, url::Origin origin) {
 
 ContentInjectionProvider::ContentInjectionProvider(
     content::BrowserContext* context,
-    std::array<RulesIndexManager*, kRuleGroupCount> index_managers,
+    RuleServiceImpl* rule_service,
     Resources* resources)
-    : context_(context),
-      index_managers_(index_managers),
-      resources_(resources) {
+    : context_(context), rule_service_(rule_service), resources_(resources) {
   if (resources_->loaded())
     BuildStaticContent();
   else
@@ -65,17 +64,14 @@ ContentInjectionProvider::GetInjectionsForFrame(
     if (!service->IsRuleGroupEnabled(group))
       continue;
 
-    auto* index_manager = index_managers_[static_cast<size_t>(group)];
-
-    if (!index_manager || !index_manager->rules_index()) {
+    RulesIndex* rule_index = rule_service_->GetRuleIndex(group);
+    if (!rule_index) {
       continue;
     }
 
     RulesIndex::ActivationResults activations =
-        index_manager->rules_index()->GetActivationsForFrame(
-            base::BindRepeating(&IsOriginWanted, service,
-                                index_manager->group()),
-            frame, url);
+        rule_index->GetActivationsForFrame(
+            base::BindRepeating(&IsOriginWanted, service, group), frame, url);
 
     if (activations[flat::ActivationType_DOCUMENT].GetDecision().value_or(
             flat::Decision_MODIFY) == flat::Decision_PASS ||
@@ -87,12 +83,12 @@ ContentInjectionProvider::GetInjectionsForFrame(
     RulesIndex::InjectionData injection_data;
     if (activations[flat::ActivationType_GENERIC_HIDE].GetDecision().value_or(
             flat::Decision_MODIFY) == flat::Decision_PASS) {
-      injection_data = index_manager->rules_index()->GetInjectionDataForOrigin(
-          document_origin, true);
+      injection_data =
+          rule_index->GetInjectionDataForOrigin(document_origin, true);
     } else {
-      injection_data = index_manager->rules_index()->GetInjectionDataForOrigin(
-          document_origin, false);
-      stylesheet += index_manager->rules_index()->GetDefaultStylesheet();
+      injection_data =
+          rule_index->GetInjectionDataForOrigin(document_origin, false);
+      stylesheet += rule_index->GetDefaultStylesheet();
     }
     stylesheet += injection_data.stylesheet;
 

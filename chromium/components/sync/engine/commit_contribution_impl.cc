@@ -158,7 +158,7 @@ SyncerError CommitContributionImpl::ProcessCommitResponse(
   bool has_transient_error_commits = false;
 
   for (size_t i = 0; i < commit_requests_.size(); ++i) {
-    // Fill |success_response_list| or |error_response_list|.
+    // Fill `success_response_list` or `error_response_list`.
     const sync_pb::CommitResponse_EntryResponse& entry_response =
         response.commit().entryresponse(entries_start_index_ + i);
     if (entry_response.response_type() == sync_pb::CommitResponse::SUCCESS) {
@@ -169,7 +169,7 @@ SyncerError CommitContributionImpl::ProcessCommitResponse(
           BuildFailedCommitResponseData(*commit_requests_[i], entry_response));
     }
 
-    // Update |status| and mark the presence of specific errors (e.g.
+    // Update `status` and mark the presence of specific errors (e.g.
     // conflicting commits).
     switch (entry_response.response_type()) {
       case sync_pb::CommitResponse::SUCCESS:
@@ -203,7 +203,7 @@ SyncerError CommitContributionImpl::ProcessCommitResponse(
       .Run(success_response_list, error_response_list);
 
   // Commit was successfully processed. We do not want to call both
-  // |on_commit_response_callback_| and |on_full_commit_failure_callback_|.
+  // `on_commit_response_callback_` and `on_full_commit_failure_callback_`.
   on_full_commit_failure_callback_.Reset();
 
   // Let the scheduler know about the failures.
@@ -255,9 +255,11 @@ void CommitContributionImpl::PopulateCommitProto(
   commit_proto->set_deleted(entity_data.is_deleted());
   commit_proto->set_name(entity_data.name);
   commit_proto->set_mtime(TimeToProtoTime(entity_data.modification_time));
-  if (!entity_data.collaboration_id.empty()) {
+  if (entity_data.collaboration_metadata.has_value()) {
+    // Only the collaboration ID is needed for the commit. Other fields are
+    // populated by the server.
     commit_proto->mutable_collaboration()->set_collaboration_id(
-        entity_data.collaboration_id);
+        entity_data.collaboration_metadata->collaboration_id());
   }
 
   if (entity_data.is_deleted()) {

@@ -2,7 +2,7 @@
 breadcrumbs:
 - - /chromium-os
   - ChromiumOS
-- - /chromium-os/developer-information-for-chrome-os-devices
+- - /chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices
   - Developer Information for ChromeOS Devices
 page_name: acer-c720-chromebook
 title: Acer C720 & C720P & C740 Chromebook
@@ -29,12 +29,12 @@ Guide](/chromium-os/developer-guide).
 *   RAM: 2GiB or 4GiB DDR3 (Not upgradeable)
 *   Display: 11.6" TN 1366x768. 220 nits.
 *   Disk: 16GB SSD
-            ([NGFF](http://en.wikipedia.org/wiki/Next_Generation_Form_Factor)
+            ([NGFF](https://en.wikipedia.org/wiki/Next_Generation_Form_Factor)
             M.2 connector)
 *   I/O:
     *   HDMI port
     *   1 x USB 2, 1 x USB 3
-    *   [SD slot](http://en.wikipedia.org/wiki/Secure_Digital) (SDXC
+    *   [SD slot](https://en.wikipedia.org/wiki/Secure_Digital) (SDXC
                 compatible)
     *   Headphone/mic combo jack
     *   Camera & mic
@@ -45,7 +45,7 @@ Guide](/chromium-os/developer-guide).
     *   USB ports can handle some Ethernet dongles
     *   [Servo header](/chromium-os/servo): Standard 2x25 / AXK750347G
 *   [Kensington Security
-            Slot](http://en.wikipedia.org/wiki/Kensington_Security_Slot)
+            Slot](https://en.wikipedia.org/wiki/Kensington_Security_Slot)
 
 ## Developer Mode
 
@@ -193,10 +193,10 @@ troubles, please seek assistance first from an authorized center. Be advised
 that disassembly might void warranties or other obligations, so please consult
 any and all paperwork your received first. If you just want to see what the
 inside looks like, gaze upon this ([high-res
-version](/chromium-os/developer-information-for-chrome-os-devices/acer-c720-chromebook/c720-chromebook-innards.png)):
+version](./c720-chromebook-innards.png)):
 
 <img alt="c720 innards"
-src="/chromium-os/developer-information-for-chrome-os-devices/acer-c720-chromebook/c720-chromebook-annotated-innards.png">
+src="c720-chromebook-annotated-innards.png">
 
 1.  CPU
 2.  RAM

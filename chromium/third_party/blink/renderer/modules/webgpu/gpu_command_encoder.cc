@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "third_party/blink/renderer/modules/webgpu/gpu_command_encoder.h"
 
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_command_buffer_descriptor.h"
@@ -88,10 +93,10 @@ std::string ValidateColorAttachmentsDepthSlice(
 // wgpu::kQuerySetIndexUndefined (0xFFFF'FFFF). Blink must make sure that an
 // actual value of 0xFFFF'FFFF coming in from JS is not treated as
 // wgpu::kQuerySetIndexUndefined, so it injects an error in that case.
-template <typename GPUTimestampWrites, typename TimestampWrites>
+template <typename GPUTimestampWrites>
 std::string ValidateAndConvertTimestampWrites(
     const GPUTimestampWrites* webgpu_desc,
-    TimestampWrites* dawn_desc,
+    wgpu::PassTimestampWrites* dawn_desc,
     const char* desc_type,
     const char* desc_label) {
   DCHECK(webgpu_desc);
@@ -268,7 +273,7 @@ GPURenderPassEncoder* GPUCommandEncoder::beginRenderPass(
     dawn_desc.occlusionQuerySet = AsDawnType(descriptor->occlusionQuerySet());
   }
 
-  wgpu::RenderPassTimestampWrites timestampWrites = {};
+  wgpu::PassTimestampWrites timestampWrites = {};
   if (descriptor->hasTimestampWrites()) {
     GPURenderPassTimestampWrites* timestamp_writes =
         descriptor->timestampWrites();
@@ -302,7 +307,7 @@ GPUComputePassEncoder* GPUCommandEncoder::beginComputePass(
     dawn_desc.label = label.c_str();
   }
 
-  wgpu::ComputePassTimestampWrites timestampWrites = {};
+  wgpu::PassTimestampWrites timestampWrites = {};
   if (descriptor->hasTimestampWrites()) {
     GPUComputePassTimestampWrites* timestamp_writes =
         descriptor->timestampWrites();

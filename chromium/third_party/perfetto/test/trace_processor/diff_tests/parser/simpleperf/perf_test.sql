@@ -8,7 +8,6 @@ WITH
   counter_delta AS (
     SELECT
       id,
-      type,
       ts,
       track_id,
       IIF(lag_value IS NULL, value, value - lag_value) AS delta,
@@ -16,7 +15,7 @@ WITH
     FROM counter_delta_base
   )
 SELECT
-  CAST(SUM(c.delta) AS INTEGER) AS event_count,
+  cast_int!(SUM(c.delta)) AS event_count,
   thread.name AS command,
   pid,
   tid,

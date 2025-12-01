@@ -20,9 +20,9 @@ def generate_icon_path_map(output_filename, engine_keywords):
     for engine_keyword in engine_keywords:
       resource_name = search_engine_icons_utils.keyword_to_resource_name(
           engine_keyword)
-      utils_file.write('\t\t{')
-      utils_file.write(f'u"{engine_keyword}", "chrome://theme/{resource_name}"')
-      utils_file.write('},\n')
+      #utils_file.write('\t\t{')
+      #utils_file.write(f'u"{engine_keyword}", "chrome://theme/{resource_name}"')
+      #utils_file.write('},\n')
 
     # Add Google to the map
     utils_file.write('\t\t{u"google.com",\n')
@@ -47,9 +47,9 @@ def generate_icon_resource_id_map(output_filename, engine_keywords):
     for engine_keyword in engine_keywords:
       resource_name = search_engine_icons_utils.keyword_to_resource_name(
           engine_keyword)
-      utils_file.write('\t\t{')
-      utils_file.write(f'u"{engine_keyword}", {resource_name}')
-      utils_file.write('},\n')
+      #utils_file.write('\t\t{')
+      #utils_file.write(f'u"{engine_keyword}", {resource_name}')
+      #utils_file.write('},\n')
 
     # Add Google to the map
     utils_file.write('\t\t{u"google.com",\n')

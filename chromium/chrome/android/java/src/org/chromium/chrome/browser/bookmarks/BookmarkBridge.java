@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser.bookmarks;
 
 import android.text.TextUtils;
-import android.util.Pair;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -21,6 +20,8 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.ObserverList;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.base.supplier.Supplier;
+import org.chromium.chrome.browser.partnerbookmarks.PartnerBookmark;
 import org.chromium.chrome.browser.partnerbookmarks.PartnerBookmarksShim;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.components.bookmarks.BookmarkId;
@@ -44,9 +45,13 @@ class BookmarkBridge {
     private final ObserverList<BookmarkModelObserver> mObservers = new ObserverList<>();
 
     private long mNativeBookmarkBridge;
-    private boolean mIsDestroyed;
+    private Profile mProfile;
     private boolean mIsDoingExtensiveChanges;
     private boolean mIsNativeBookmarkModelLoaded;
+
+    private boolean mPartnerBookmarkIteratorInitialized;
+    private Supplier<PartnerBookmark.BookmarkIterator> mPartnerBookmarkIteratorSupplier =
+            () -> null;
 
     // Lazily set pseudo-constants. These should never change at runtime. Used to avoid crossing
     // JNI to fetch information.
@@ -77,30 +82,35 @@ class BookmarkBridge {
     }
 
     @CalledByNative
-    static BookmarkModel createBookmarkModel(long nativeBookmarkBridge) {
-        return new BookmarkModel(nativeBookmarkBridge);
+    static BookmarkModel createBookmarkModel(long nativeBookmarkBridge, Profile profile) {
+        return new BookmarkModel(nativeBookmarkBridge, profile);
     }
 
-    BookmarkBridge(long nativeBookmarkBridge) {
+    BookmarkBridge(long nativeBookmarkBridge, Profile profile) {
         mNativeBookmarkBridge = nativeBookmarkBridge;
+        mProfile = profile;
         mIsDoingExtensiveChanges =
                 BookmarkBridgeJni.get().isDoingExtensiveChanges(mNativeBookmarkBridge);
     }
 
     /** Destroys this instance so no further calls can be executed. */
     void destroy() {
-        mIsDestroyed = true;
         if (mNativeBookmarkBridge != 0) {
             BookmarkBridgeJni.get().destroy(mNativeBookmarkBridge);
             mNativeBookmarkBridge = 0;
             mIsNativeBookmarkModelLoaded = false;
         }
+        if (mPartnerBookmarkIteratorSupplier != null) {
+            mPartnerBookmarkIteratorSupplier = null;
+        }
         mObservers.clear();
     }
 
-    /** Returns whether the bridge has been destroyed. */
-    private boolean isDestroyed() {
-        return mIsDestroyed;
+    /** Sets a pre-configured runnable which loads the parter bookmarks shim. */
+    public void setPartnerBookmarkIteratorSupplier(
+            @NonNull Supplier<PartnerBookmark.BookmarkIterator> partnerBookmarkIteratorSupplier) {
+        mPartnerBookmarkIteratorInitialized = true;
+        mPartnerBookmarkIteratorSupplier = partnerBookmarkIteratorSupplier;
     }
 
     /** Returns the most recently added BookmarkId */
@@ -179,9 +189,15 @@ class BookmarkBridge {
                     public void bookmarkModelChanged() {}
                 });
 
-        // Start reading as a fail-safe measure to avoid waiting forever if the caller forgets to
-        // call kickOffReading().
-        PartnerBookmarksShim.kickOffReading(ContextUtils.getApplicationContext());
+        assert mPartnerBookmarkIteratorInitialized;
+        if (mPartnerBookmarkIteratorSupplier != null) {
+            // Start reading as a fail-safe measure to avoid waiting forever if the caller forgets
+            // to call kickOffReading().
+            PartnerBookmarksShim.kickOffReading(
+                    ContextUtils.getApplicationContext(),
+                    mProfile,
+                    mPartnerBookmarkIteratorSupplier.get());
+        }
         return false;
     }
 
@@ -937,7 +953,8 @@ class BookmarkBridge {
     }
 
     @CalledByNative
-    private void bookmarkNodeMoved(
+    @VisibleForTesting
+    void bookmarkNodeMoved(
             BookmarkItem oldParent, int oldIndex, BookmarkItem newParent, int newIndex) {
         if (mIsDoingExtensiveChanges) return;
 
@@ -949,7 +966,8 @@ class BookmarkBridge {
     }
 
     @CalledByNative
-    private void bookmarkNodeAdded(BookmarkItem parent, int index) {
+    @VisibleForTesting
+    void bookmarkNodeAdded(BookmarkItem parent, int index) {
         if (mIsDoingExtensiveChanges) return;
 
         for (BookmarkModelObserver observer : mObservers) {
@@ -958,7 +976,8 @@ class BookmarkBridge {
     }
 
     @CalledByNative
-    private void bookmarkNodeRemoved(BookmarkItem parent, int oldIndex, BookmarkItem node) {
+    @VisibleForTesting
+    void bookmarkNodeRemoved(BookmarkItem parent, int oldIndex, BookmarkItem node) {
         for (BookmarkModelObserver observer : mObservers) {
             observer.bookmarkNodeRemoved(parent, oldIndex, node, mIsDoingExtensiveChanges);
         }
@@ -972,7 +991,8 @@ class BookmarkBridge {
     }
 
     @CalledByNative
-    private void bookmarkNodeChanged(BookmarkItem node) {
+    @VisibleForTesting
+    void bookmarkNodeChanged(BookmarkItem node) {
         if (mIsDoingExtensiveChanges) return;
 
         for (BookmarkModelObserver observer : mObservers) {
@@ -990,12 +1010,14 @@ class BookmarkBridge {
     }
 
     @CalledByNative
-    private void extensiveBookmarkChangesBeginning() {
+    @VisibleForTesting
+    void extensiveBookmarkChangesBeginning() {
         mIsDoingExtensiveChanges = true;
     }
 
     @CalledByNative
-    private void extensiveBookmarkChangesEnded() {
+    @VisibleForTesting
+    void extensiveBookmarkChangesEnded() {
         mIsDoingExtensiveChanges = false;
         bookmarkModelChanged();
     }
@@ -1072,14 +1094,6 @@ class BookmarkBridge {
         BookmarkUtils.clearLastUsedPrefs();
     }
 
-    private static List<Pair<Integer, Integer>> createPairsList(int[] left, int[] right) {
-        List<Pair<Integer, Integer>> pairList = new ArrayList<>();
-        for (int i = 0; i < left.length; i++) {
-            pairList.add(new Pair<>(left[i], right[i]));
-        }
-        return pairList;
-    }
-
     /**
      * Vivaldi
      * Checks if current tab URL is already added tol folder given
@@ -1088,6 +1102,7 @@ class BookmarkBridge {
         return BookmarkBridgeJni.get().isURLAddedToFolder(
                 mNativeBookmarkBridge, BookmarkBridge.this, folderId, url);
     }
+    // End Vivaldi
 
     @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
     @NativeMethods

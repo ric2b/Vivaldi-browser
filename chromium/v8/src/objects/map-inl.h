@@ -184,7 +184,7 @@ void Map::GeneralizeIfCanHaveTransitionableFastElementsKind(
   }
 }
 
-Handle<Map> Map::Normalize(Isolate* isolate, Handle<Map> fast_map,
+Handle<Map> Map::Normalize(Isolate* isolate, DirectHandle<Map> fast_map,
                            PropertyNormalizationMode mode, const char* reason) {
   const bool kUseCache = true;
   return Normalize(isolate, fast_map, fast_map->elements_kind(), {}, mode,
@@ -357,21 +357,10 @@ int Map::GetInObjectPropertyOffset(int index) const {
   return (GetInObjectPropertiesStartInWords() + index) * kTaggedSize;
 }
 
-Handle<Map> Map::AddMissingTransitionsForTesting(
-    Isolate* isolate, Handle<Map> split_map,
+DirectHandle<Map> Map::AddMissingTransitionsForTesting(
+    Isolate* isolate, DirectHandle<Map> split_map,
     DirectHandle<DescriptorArray> descriptors) {
   return AddMissingTransitions(isolate, split_map, descriptors);
-}
-
-InstanceType Map::instance_type() const {
-  // TODO(solanes, v8:7790, v8:11353, v8:11945): Make this and the setter
-  // non-atomic when TSAN sees the map's store synchronization.
-  return static_cast<InstanceType>(
-      RELAXED_READ_UINT16_FIELD(*this, kInstanceTypeOffset));
-}
-
-void Map::set_instance_type(InstanceType value) {
-  RELAXED_WRITE_UINT16_FIELD(*this, kInstanceTypeOffset, value);
 }
 
 int Map::UnusedPropertyFields() const {
@@ -731,11 +720,11 @@ bool Map::CanTransition() const {
 }
 
 bool IsBooleanMap(Tagged<Map> map) {
-  return map == map->GetReadOnlyRoots().boolean_map();
+  return map == GetReadOnlyRoots().boolean_map();
 }
 
 bool IsNullOrUndefinedMap(Tagged<Map> map) {
-  auto roots = map->GetReadOnlyRoots();
+  auto roots = GetReadOnlyRoots();
   return map == roots.null_map() || map == roots.undefined_map();
 }
 
@@ -808,7 +797,7 @@ DEF_GETTER(Map, GetBackPointer, Tagged<HeapObject>) {
   if (TryGetBackPointer(cage_base, &back_pointer)) {
     return back_pointer;
   }
-  return GetReadOnlyRoots(cage_base).undefined_value();
+  return GetReadOnlyRoots().undefined_value();
 }
 
 bool Map::TryGetBackPointer(PtrComprCageBase cage_base,
@@ -993,7 +982,7 @@ void Map::SetConstructor(Tagged<Object> constructor, WriteBarrierMode mode) {
   set_constructor_or_back_pointer(constructor, mode);
 }
 
-Handle<Map> Map::CopyInitialMap(Isolate* isolate, Handle<Map> map) {
+Handle<Map> Map::CopyInitialMap(Isolate* isolate, DirectHandle<Map> map) {
   return CopyInitialMap(isolate, map, map->instance_size(),
                         map->GetInObjectProperties(),
                         map->UnusedPropertyFields());

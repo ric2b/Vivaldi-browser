@@ -50,6 +50,10 @@ bool IsComponentExtensionAllowlisted(const std::string& extension_id) {
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 #endif  // BUILDFLAG(IS_CHROMEOS)
       extension_misc::kReadingModeGDocsHelperExtensionId,
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC)
+      extension_misc::kTTSEngineExtensionId,
+      extension_misc::kComponentUpdaterTTSEngineExtensionId,
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC)
   });
 
   if (kAllowed.contains(extension_id)) {
@@ -81,7 +85,11 @@ bool IsComponentExtensionAllowlisted(int manifest_resource_id) {
     case IDR_HANGOUT_SERVICES_MANIFEST_V3:
 #endif
     case IDR_NETWORK_SPEECH_SYNTHESIS_MANIFEST:
+    case IDR_NETWORK_SPEECH_SYNTHESIS_MANIFEST_MV3:
     case IDR_READING_MODE_GDOCS_HELPER_MANIFEST:
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC)
+    case IDR_TTS_ENGINE_MANIFEST:
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC)
     case IDR_WEBSTORE_MANIFEST:
 
 #if BUILDFLAG(IS_CHROMEOS)

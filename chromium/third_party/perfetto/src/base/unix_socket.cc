@@ -23,6 +23,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include "perfetto/base/compiler.h"
+#include "perfetto/ext/base/android_utils.h"
 #include "perfetto/ext/base/string_utils.h"
 
 #if PERFETTO_BUILDFLAG(PERFETTO_OS_WIN)
@@ -64,6 +65,10 @@
 #include "src/base/vm_sockets.h"
 #endif
 
+#if PERFETTO_BUILDFLAG(PERFETTO_OS_QNX)
+#include <sys/time.h>
+#endif
+
 namespace perfetto {
 namespace base {
 
@@ -86,6 +91,15 @@ using CBufLenType = socklen_t;
 #if PERFETTO_BUILDFLAG(PERFETTO_OS_LINUX) || \
     PERFETTO_BUILDFLAG(PERFETTO_OS_ANDROID)
 constexpr char kVsockNamePrefix[] = "vsock://";
+#endif
+
+#if PERFETTO_BUILDFLAG(PERFETTO_OS_ANDROID)
+bool IsQNXHypervisor() {
+  static bool is_qnx_hypervisor = [] {
+    return base::GetAndroidProp("ro.traced.hypervisor") == "qnx";
+  }();
+  return is_qnx_hypervisor;
+}
 #endif
 
 // A wrapper around variable-size sockaddr structs.
@@ -222,6 +236,13 @@ SockaddrAny MakeSockAddr(SockFamily family, const std::string& socket_name) {
       addr.svm_family = AF_VSOCK;
       addr.svm_cid = *base::StringToUInt32(parts[0]);
       addr.svm_port = *base::StringToUInt32(parts[1]);
+#if PERFETTO_BUILDFLAG(PERFETTO_OS_ANDROID)
+      if (IsQNXHypervisor()) {
+        // VM-to-VM VSOCK communication in QNX requires messages to be
+        // routed through the host.
+        addr.svm_flags = VMADDR_FLAG_TO_HOST;
+      }
+#endif
       SockaddrAny res(&addr, sizeof(addr));
       return res;
 #else
@@ -341,8 +362,9 @@ UnixSocketRaw::UnixSocketRaw(ScopedSocketHandle fd,
   setsockopt(*fd_, SOL_SOCKET, SO_NOSIGPIPE, &no_sigpipe, sizeof(no_sigpipe));
 #endif
 
-  if (family == SockFamily::kInet || family == SockFamily::kInet6 ||
-      family == SockFamily::kVsock) {
+// QNX doesn't support setting SO_REUSEADDR option when using vsocks.
+#if !PERFETTO_BUILDFLAG(PERFETTO_OS_QNX)
+  if (family == SockFamily::kVsock) {
     int flag = 1;
     // The reinterpret_cast<const char*> is needed for Windows, where the 4th
     // arg is a const char* (on other POSIX system is a const void*).
@@ -350,9 +372,15 @@ UnixSocketRaw::UnixSocketRaw(ScopedSocketHandle fd,
                                reinterpret_cast<const char*>(&flag),
                                sizeof(flag)));
   }
+#endif
 
   if (family == SockFamily::kInet || family == SockFamily::kInet6) {
     int flag = 1;
+    // The reinterpret_cast<const char*> is needed for Windows, where the 4th
+    // arg is a const char* (on other POSIX system is a const void*).
+    PERFETTO_CHECK(!setsockopt(*fd_, SOL_SOCKET, SO_REUSEADDR,
+                               reinterpret_cast<const char*>(&flag),
+                               sizeof(flag)));
     // Disable Nagle's algorithm, optimize for low-latency.
     // See https://github.com/google/perfetto/issues/70.
     setsockopt(*fd_, IPPROTO_TCP, TCP_NODELAY,
@@ -456,6 +484,25 @@ bool UnixSocketRaw::Connect(const std::string& socket_name) {
   bool continue_async = WSAGetLastError() == WSAEWOULDBLOCK;
 #else
   bool continue_async = errno == EINPROGRESS;
+#if PERFETTO_BUILDFLAG(PERFETTO_OS_QNX)
+  // QNX doesn't support the SO_ERROR socket option for vsock.
+  // Therefore block the connect call by polling the socket
+  // until it is writable.
+  bool is_blocking_call = family_ == SockFamily::kVsock;
+#elif PERFETTO_BUILDFLAG(PERFETTO_OS_ANDROID)
+  // VM-to-VM communication in QNX needs to go through the host.
+  // Therefore the connect call should be handled as if it is
+  // hypervisor-to-VM.
+  bool is_blocking_call = family_ == SockFamily::kVsock && IsQNXHypervisor();
+#else
+  bool is_blocking_call = false;
+#endif
+  if (is_blocking_call && res < 0 && continue_async) {
+    pollfd pfd{*fd_, POLLOUT, 0};
+    if (PERFETTO_EINTR(poll(&pfd, 1 /*nfds*/, 3000 /*timeout*/)) <= 0)
+      return false;
+    return (pfd.revents & POLLOUT) != 0;
+  }
 #endif
   if (res && !continue_async)
     return false;
@@ -670,6 +717,13 @@ bool UnixSocketRaw::SetTxTimeout(uint32_t timeout_ms) {
   timeout.tv_usec = static_cast<decltype(timeout.tv_usec)>(
       (timeout_ms - (timeout_sec * 1000)) * 1000);
 #endif
+#if PERFETTO_BUILDFLAG(PERFETTO_OS_QNX)
+  if (family() == SockFamily::kVsock) {
+      // QNX doesn't support SO_SNDTIMEO for vsocks.
+      return true;
+  }
+#endif
+
   return setsockopt(*fd_, SOL_SOCKET, SO_SNDTIMEO,
                     reinterpret_cast<const char*>(&timeout),
                     sizeof(timeout)) == 0;
@@ -727,7 +781,7 @@ std::string UnixSocketRaw::GetSockAddr() const {
                           PERFETTO_BUILDFLAG(PERFETTO_OS_ANDROID))
   if (stg.ss_family == AF_VSOCK) {
     auto* saddr = reinterpret_cast<struct sockaddr_vm*>(&stg);
-    base::StackString<255> addr_and_port("%s%d:%d", kVsockNamePrefix,
+    base::StackString<255> addr_and_port("%s%u:%u", kVsockNamePrefix,
                                          saddr->svm_cid, saddr->svm_port);
     return addr_and_port.ToStdString();
   }
@@ -917,7 +971,12 @@ void UnixSocket::ReadPeerCredentialsPosix() {
     return;
   PERFETTO_CHECK(peer_cred_mode_ != SockPeerCredMode::kIgnore);
 
-#if PERFETTO_BUILDFLAG(PERFETTO_OS_LINUX) || \
+#if PERFETTO_BUILDFLAG(PERFETTO_OS_QNX)
+  int fd = sock_raw_.fd();
+  int res = getpeereid(fd, &peer_uid_, nullptr);
+  PERFETTO_CHECK(res == 0);
+  // There is no pid when obtaining peer credentials for QNX
+#elif PERFETTO_BUILDFLAG(PERFETTO_OS_LINUX) || \
     PERFETTO_BUILDFLAG(PERFETTO_OS_ANDROID)
   struct ucred user_cred;
   socklen_t len = sizeof(user_cred);
@@ -1027,11 +1086,22 @@ void UnixSocket::OnEvent() {
 
   if (state_ == State::kConnecting) {
     PERFETTO_DCHECK(sock_raw_);
-    int sock_err = EINVAL;
-    socklen_t err_len = sizeof(sock_err);
-    int res =
-        getsockopt(sock_raw_.fd(), SOL_SOCKET, SO_ERROR, &sock_err, &err_len);
-
+    int res = 0, sock_err = 0;
+    bool is_error_opt_supported = true;
+#if PERFETTO_BUILDFLAG(PERFETTO_OS_QNX)
+    // QNX doesn't support the SO_ERROR socket option for vsock.
+    // Since, we make the connect call blocking, it is fine to skip
+    // the error check and simply continue with the connection flow.
+    if (sock_raw_.family() == SockFamily::kVsock) {
+      is_error_opt_supported = false;
+    }
+#endif
+    if (is_error_opt_supported) {
+      sock_err = EINVAL;
+      socklen_t err_len = sizeof(sock_err);
+      res =
+          getsockopt(sock_raw_.fd(), SOL_SOCKET, SO_ERROR, &sock_err, &err_len);
+    }
     if (res == 0 && sock_err == EINPROGRESS)
       return;  // Not connected yet, just a spurious FD watch wakeup.
     if (res == 0 && sock_err == 0) {

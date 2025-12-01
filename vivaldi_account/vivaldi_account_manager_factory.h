@@ -27,7 +27,7 @@ class VivaldiAccountManagerFactory : public BrowserContextKeyedServiceFactory {
       delete;
 
   // BrowserContextKeyedBaseFactory methods:
-  KeyedService* BuildServiceInstanceFor(
+  std::unique_ptr<KeyedService> BuildServiceInstanceForBrowserContext(
       content::BrowserContext* context) const override;
 };
 

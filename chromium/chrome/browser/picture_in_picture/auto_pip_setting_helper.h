@@ -54,22 +54,28 @@ class AutoPipSettingHelper {
 
   // Notify us that the user has closed the window.  This will cause the embargo
   // to be updated if needed.
-  void OnUserClosedWindow();
+  void OnUserClosedWindow(std::string histogram_name_for_autopip_reason);
 
   // Create an AutoPipSettingOverlayView that should be used as the overlay view
   // when the content setting is ASK.  This view will call back to us, so we
   // should outlive it.  Will return nullptr if no UI is needed, and will
   // optionally call `close_pip_cb_` if AutoPiP is blocked.
+  //
+  // `histogram_name_for_autopip_reason` is the histogram name for the automatic
+  // enter picture in picture reason. Used for recording metrics.
   std::unique_ptr<AutoPipSettingOverlayView> CreateOverlayViewIfNeeded(
       base::OnceClosure close_pip_cb,
+      std::string histogram_name_for_autopip_reason,
       views::View* anchor_view,
       views::BubbleBorder::Arrow arrow);
 
   // Called by the AutoPictureInPictureTabHelper when automatic
   // picture-in-picture has been preemptively blocked. Used to record associated
   // `Media.AutoPictureInPicture.PromptResultV2` metrics.
-  void OnAutoPipBlockedByPermission();
-  void OnAutoPipBlockedByIncognito();
+  void OnAutoPipBlockedByPermission(
+      std::string histogram_name_for_autopip_reason);
+  void OnAutoPipBlockedByIncognito(
+      std::string histogram_name_for_autopip_reason);
 
  private:
   // These values are persisted to logs. Entries should not be renumbered and
@@ -118,14 +124,26 @@ class AutoPipSettingHelper {
   // Notify us that the user has interacted with the content settings UI that's
   // displayed in the pip window.  `close_pip_cb` will be called if the result
   // is 'block'.
+  //
+  // `histogram_name_for_autopip_reason` is used for recording tab helper
+  // related metrics.
   void OnUiResult(base::OnceClosure close_pip_cb,
+                  std::string histogram_name_for_autopip_reason,
                   AutoPipSettingView::UiResult result);
 
   // Return a new ResultCb, and invalidate any previous ones.
-  ResultCb CreateResultCb(base::OnceClosure close_pip_cb);
+  ResultCb CreateResultCb(base::OnceClosure close_pip_cb,
+                          std::string histogram_name_for_autopip_reason);
 
   // Record metrics for the result of the prompt.
-  void RecordResult(PromptResult result);
+  //
+  // Records the various prompt results and the prompt results for each of the
+  // reasons for entering auto picture in picture: video conferencing or media
+  // playback.
+  //
+  // If `metric_name` is empty, the prompt result will not be recorded for auto
+  // picture in picture reasons.
+  void RecordResult(PromptResult result, std::string metric_name);
 
   GURL origin_;
   const raw_ptr<HostContentSettingsMap> settings_map_ = nullptr;

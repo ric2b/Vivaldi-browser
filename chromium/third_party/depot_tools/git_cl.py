@@ -58,6 +58,7 @@ import git_new_branch
 import google_java_format
 import metrics
 import metrics_utils
+import metrics_xml_format
 import newauth
 import owners_client
 import owners_finder
@@ -692,9 +693,17 @@ def _ComputeFormatDiffLineRanges(files, upstream_commit, expand=0):
                 diff_start = match[1]
                 diff_count = 1
 
+            # if the original lines were removed without replacements,
+            # the diff count is 0. Then, no formatting is necessary.
+            if diff_count == 0:
+                continue
+
             diff_start = int(diff_start)
             diff_count = int(diff_count)
-            diff_end = diff_start + diff_count + expand
+            # diff_count contains the diff_start line, and the line numbers
+            # given to formatter args are inclusive. For example, in
+            # google-java-format "--lines 5:10" includes 5th-10th lines.
+            diff_end = diff_start + diff_count - 1 + expand
             diff_start = max(prev_end + 1, diff_start - expand)
             if diff_start <= diff_end:
                 prev_end = diff_end
@@ -2178,7 +2187,10 @@ class Changelist(object):
 
         change_desc = self._GetDescriptionForUpload(options, git_diff_args,
                                                     files)
-        if not options.bypass_hooks:
+
+        # For options.squash, RunHook is called once for each branch in
+        # PrepareChange().
+        if not options.bypass_hooks and not options.squash:
             hook_results = self.RunHook(committing=False,
                                         may_prompt=not options.force,
                                         verbose=options.verbose,
@@ -3888,17 +3900,23 @@ def CMDcreds_check(parser, args):
 
     if newauth.Enabled():
         cl = Changelist()
+        host = cl.GetGerritHost()
+        print(f'Using Gerrit host: {host!r}')
         git_auth.Configure(os.getcwd(), cl)
         # Perform some advisory checks
         email = scm.GIT.GetConfig(os.getcwd(), 'user.email') or ''
-        if not gerrit_util.ShouldUseSSO(cl.GetGerritHost(), email):
-            a = gerrit_util.LuciAuthAuthenticator()
+        print(f'Using email (configured in Git): {email!r}')
+        if gerrit_util.ShouldUseSSO(host, email):
+            print('Detected that we should be using SSO.')
+        else:
+            print('Detected that we should be using git-credential-luci.')
+            a = gerrit_util.GitCredsAuthenticator()
             try:
                 a.luci_auth.get_access_token()
-            except auth.LoginRequiredError as e:
-                print('NOTE: You are not logged in with luci-auth.')
+            except auth.GitLoginRequiredError as e:
+                print('NOTE: You are not logged in with git-credential-luci.')
                 print(
-                    'You may not be able to perform some actions without logging in.'
+                    'You will not be able to perform many actions without logging in.'
                 )
                 print('If you wish to log in, run:')
                 print('   ' + e.login_command)
@@ -4550,13 +4568,9 @@ def _create_commit_message(orig_message, bug=None):
 def CMDcherry_pick(parser, args):
     """Upload a chain of cherry picks to Gerrit.
 
-    This must be run inside the git repo you're trying to make changes to.
+    This should either be run inside the git repo you're trying to make changes
+    to or "--host" should be provided.
     """
-    if gclient_utils.IsEnvCog():
-        print('cherry-pick command is not supported in non-git environment',
-              file=sys.stderr)
-        return 1
-
     parser.add_option('--branch', help='Gerrit branch, e.g. refs/heads/main')
     parser.add_option('--bug',
                       help='Bug to add to the description of each change.')
@@ -4564,16 +4578,36 @@ def CMDcherry_pick(parser, args):
                       type='int',
                       help='The parent change of the first cherry-pick CL, '
                       'i.e. the start of the CL chain.')
+    parser.add_option('--host',
+                      default=None,
+                      help='Gerrit host, needed in case the command is used in '
+                      'a non-git environment.')
     options, args = parser.parse_args(args)
+
+    host = None
+    if options.host:
+        try:
+            host = urllib.parse.urlparse(host).hostname
+        except ValueError as e:
+            print(f'Unable to parse host: {host}. Error: {e}', file=sys.stderr)
+            return 1
+    else:
+        try:
+            host = Changelist().GetGerritHost()
+        except subprocess2.CalledProcessError:
+            pass
+
+    if not host:
+        print('Unable to determine host. cherry-pick command is not supported\n'
+              'in non-git environment without "--host" provided',
+              file=sys.stderr)
+        return 1
 
     if not options.branch:
         parser.error('Branch is required.')
     if not args:
         parser.error('No revisions to cherry pick.')
 
-    # TODO(b/341792235): Consider using GetCommitMessage after b/362567930 is
-    # fixed so this command can be run outside of a git workspace.
-    host = Changelist().GetGerritHost()
     change_ids_to_message = {}
     change_ids_to_commit = {}
 
@@ -4583,16 +4617,20 @@ def CMDcherry_pick(parser, args):
         # unique. Gerrit will error with "Multiple changes found" if we use a
         # non-unique ID. Instead, query Gerrit with the hash and verify it
         # corresponds to a unique CL.
-        changes = gerrit_util.QueryChanges(host, [('commit', commit)])
+        changes = gerrit_util.QueryChanges(
+            host=host,
+            params=[('commit', commit)],
+            o_params=['CURRENT_REVISION', 'CURRENT_COMMIT'],
+        )
         if not changes:
             raise RuntimeError(f'No changes found for {commit}.')
         if len(changes) > 1:
             raise RuntimeError(f'Multiple changes found for {commit}.')
 
-        change_id = changes[0]['id']
+        change = changes[0]
+        change_id = change['id']
+        message = change['revisions'][commit]['commit']['message']
         change_ids_to_commit[change_id] = commit
-
-        message = git_common.run('show', '-s', '--format=%B', commit).strip()
         change_ids_to_message[change_id] = message
 
     print(f'Creating chain of {len(change_ids_to_message)} cherry pick(s)...')
@@ -5672,7 +5710,8 @@ def CMDsplit(parser, args):
                       '--description',
                       dest='description_file',
                       help='A text file containing a CL description in which '
-                      '$directory will be replaced by each CL\'s directory.')
+                      '$directory will be replaced by each CL\'s directory. '
+                      'Mandatory except in dry runs.')
     parser.add_option('-c',
                       '--comment',
                       dest='comment_file',
@@ -5711,20 +5750,26 @@ def CMDsplit(parser, args):
         help='Disables automatic sending of the changes to the CQ '
         'after approval. Note that auto-submit only works for '
         'repos that have the Auto-Submit label enabled.')
-    parser.add_option('--max-depth',
-                      type='int',
-                      default=0,
-                      help='The max depth to look for OWNERS files. Useful for '
-                      'controlling the granularity of the split CLs, e.g. '
-                      '--max-depth=1 will only split by top-level '
-                      'directory. Specifying a value less than 1 means no '
-                      'limit on max depth.')
+    parser.add_option(
+        '--max-depth',
+        type='int',
+        default=0,
+        help='The max depth to look for OWNERS files. '
+        'Controls the granularity of CL splitting by limiting the depth at '
+        'which the script searches for OWNERS files. '
+        'e.g. let\'s consider file a/b/c/d/e.cc. Without this flag, the '
+        'OWNERS file in a/b/c/d/ would be used. '
+        'With --max-depth=2, the OWNERS file in a/b/ would be used. '
+        'If the OWNERS file is missing in this folder, the first OWNERS file '
+        'found in parents is used. '
+        'Lower values of --max-depth result in fewer, larger CLs. Higher values '
+        'produce more, smaller CLs.')
     parser.add_option('--topic',
                       default=None,
                       help='Topic to specify when uploading')
     options, _ = parser.parse_args(args)
 
-    if not options.description_file:
+    if not options.description_file and not options.dry_run:
         parser.error('No --description flag specified.')
 
     def WrappedCMDupload(args):
@@ -6759,7 +6804,7 @@ def _RunMojomFormat(opts, paths, top_dir, upstream_commit):
     return ret
 
 
-def _FormatXml(opts, paths, top_dir, upstream_commit):
+def _RunMetricsXMLFormat(opts, paths, top_dir, upstream_commit):
     # Skip the metrics formatting from the global presubmit hook. These files
     # have a separate presubmit hook that issues an error if the files need
     # formatting, whereas the top-level presubmit script merely issues a
@@ -6770,14 +6815,11 @@ def _FormatXml(opts, paths, top_dir, upstream_commit):
 
     return_value = 0
     for path in paths:
-        xml_dir = GetMetricsDir(path)
-        if not xml_dir:
+        pretty_print_tool = metrics_xml_format.FindMetricsXMLFormatterTool(path)
+        if not pretty_print_tool:
             continue
 
-        tool_dir = os.path.join(top_dir, xml_dir.replace('/', os.path.sep))
-        pretty_print_tool = os.path.join(tool_dir, 'pretty_print.py')
         cmd = [shutil.which('vpython3'), pretty_print_tool, '--non-interactive']
-
         # If the XML file is histograms.xml or enums.xml, add the xml path
         # to the command as histograms/pretty_print.py now needs a relative
         # path argument after splitting the histograms into multiple
@@ -6786,13 +6828,10 @@ def _FormatXml(opts, paths, top_dir, upstream_commit):
         # tools/metrics/histogrmas, pretty-print should be run with an
         # additional relative path argument, like: $ python pretty_print.py
         # metadata/UMA/histograms.xml $ python pretty_print.py enums.xml
-        if xml_dir == 'tools/metrics/histograms':
-            if os.path.basename(path) not in ('histograms.xml', 'enums.xml',
-                                              'histogram_suffixes_list.xml'):
-                # Skip this XML file if it's not one of the known types.
-                continue
-            cmd.append(path.replace('/', os.path.sep))
-
+        metricsDir = metrics_xml_format.GetMetricsDir(top_dir, path)
+        histogramsDir = os.path.join(top_dir, 'tools', 'metrics', 'histograms')
+        if metricsDir == histogramsDir:
+            cmd.append(path)
         if opts.dry_run or opts.diff:
             cmd.append('--diff')
 
@@ -6802,6 +6841,24 @@ def _FormatXml(opts, paths, top_dir, upstream_commit):
         if opts.dry_run and stdout:
             return_value = 2  # Not formatted.
     return return_value
+
+
+def _RunLUCICfgFormat(opts, paths, top_dir, upstream_commit):
+    depot_tools_path = os.path.dirname(os.path.abspath(__file__))
+    lucicfg = os.path.join(depot_tools_path, 'lucicfg')
+    if sys.platform == 'win32':
+        lucicfg += '.bat'
+
+    cmd = [lucicfg, 'fmt']
+    if opts.dry_run:
+        cmd.append('--dry-run')
+    cmd.extend(paths)
+
+    ret = subprocess2.call(cmd)
+    if opts.dry_run and ret != 0:
+        return 2
+
+    return ret
 
 
 def MatchingFileType(file_name, extensions):
@@ -6890,6 +6947,10 @@ def CMDformat(parser, args):
                       action='store_true',
                       help='Disable auto-formatting of .java')
 
+    parser.add_option('--lucicfg',
+                      action='store_true',
+                      help='Enables formatting of .star files.')
+
     opts, files = parser.parse_args(args)
 
     # Normalize files against the current path, so paths relative to the
@@ -6929,7 +6990,7 @@ def CMDformat(parser, args):
 
     formatters = [
         (GN_EXTS, _RunGnFormat),
-        (['.xml'], _FormatXml),
+        (['.xml'], _RunMetricsXMLFormat),
     ]
     if not opts.no_java:
         formatters += [(['.java'], _RunGoogleJavaFormat)]
@@ -6943,6 +7004,8 @@ def CMDformat(parser, args):
         formatters += [(['.py'], _RunYapf)]
     if opts.mojom:
         formatters += [(['.mojom'], _RunMojomFormat)]
+    if opts.lucicfg:
+        formatters += [(['.star'], _RunLUCICfgFormat)]
 
     top_dir = settings.GetRoot()
     return_value = 0
@@ -6954,19 +7017,6 @@ def CMDformat(parser, args):
         return_value = return_value or ret
 
     return return_value
-
-
-def GetMetricsDir(diff_xml):
-    metrics_xml_dirs = [
-        'tools/metrics/actions',
-        'tools/metrics/histograms',
-        'tools/metrics/structured',
-        'tools/metrics/ukm',
-    ]
-    for xml_dir in metrics_xml_dirs:
-        if diff_xml.startswith(xml_dir):
-            return xml_dir
-    return None
 
 
 @subcommand.usage('<codereview url or issue id>')

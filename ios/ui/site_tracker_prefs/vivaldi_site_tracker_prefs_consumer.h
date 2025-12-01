@@ -5,7 +5,7 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/ui/page_info/page_info_site_security_description.h"
+#import "ios/chrome/browser/page_info/ui_bundled/page_info_site_security_description.h"
 #import "ios/ui/ad_tracker_blocker/vivaldi_atb_setting_type.h"
 
 // A protocol implemented by consumers to handle changes in Site and Tracker
@@ -13,6 +13,8 @@
 @protocol VivaldiSiteTrackerPrefsConsumer
 - (void)setActiveWebStateDomain:(NSString*)domain;
 - (void)setActiveWebStateFavicon:(UIImage*)favicon;
+- (void)setAdsExceptionEnabled:(BOOL)enabled
+                       message:(NSString*)message;
 - (void)setBlockingLevelForDomain:(ATBSettingType)setting;
 - (void)setGlobalBlockingLevel:(ATBSettingType)setting;
 - (void)setRulesGroupApplying:(BOOL)applying;

@@ -413,7 +413,7 @@ void HeaderChecker::CheckInclude(
   // For all targets containing this file, we require that at least one be
   // a direct or public dependency of the current target, and either (1) the
   // header is public within the target, or (2) there is a friend definition
-  // whitelisting the includor.
+  // allowlisting the includor.
   //
   // If there is more than one target containing this header, we may encounter
   // some error cases before finding a good one. This error stores the previous
@@ -472,7 +472,7 @@ void HeaderChecker::CheckInclude(
     } else if (to_target->allow_circular_includes_from().find(
                    from_target->label()) !=
                to_target->allow_circular_includes_from().end()) {
-      // Not a dependency, but this include is whitelisted from the destination.
+      // Not a dependency, but this include is allowlisted from the destination.
       found_dependency = true;
       last_error = Err();
       break;

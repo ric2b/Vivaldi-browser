@@ -38,7 +38,7 @@ import {flush, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/pol
 
 import {assertExists, cast, castExists} from '../assert_extras.js';
 import {DeepLinkingMixin} from '../common/deep_linking_mixin.js';
-import {isDisplayBrightnessControlInSettingsEnabled, isRevampWayfindingEnabled} from '../common/load_time_booleans.js';
+import {isDisplayBrightnessControlInSettingsEnabled} from '../common/load_time_booleans.js';
 import {RouteObserverMixin} from '../common/route_observer_mixin.js';
 import type {DropdownMenuOptionList} from '../controls/settings_dropdown_menu.js';
 import type {SettingsSliderElement} from '../controls/settings_slider.js';
@@ -113,14 +113,6 @@ export class SettingsDisplayElement extends SettingsDisplayElementBase {
 
   static get properties() {
     return {
-      isRevampWayfindingEnabled_: {
-        type: Boolean,
-        value: () => {
-          return isRevampWayfindingEnabled();
-        },
-        readOnly: true,
-      },
-
       selectedModePref_: {
         type: Object,
         value() {
@@ -217,6 +209,13 @@ export class SettingsDisplayElement extends SettingsDisplayElementBase {
         type: Boolean,
         value() {
           return loadTimeData.getBoolean('excludeDisplayInMirrorModeEnabled');
+        },
+      },
+
+      opsDisplayScaleFactorEnabled_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean('opsDisplayScaleFactorEnabled');
         },
       },
 
@@ -336,13 +335,13 @@ export class SettingsDisplayElement extends SettingsDisplayElementBase {
   private invalidDisplayId_: string;
   private isAmbientLightSensorEnabled_: boolean;
   private isDisplayPerformanceEnabled_: boolean;
-  private readonly isRevampWayfindingEnabled_: boolean;
   private isTabletMode_: boolean;
   private listAllDisplayModes_: boolean;
   private logicalResolutionText_: string;
   private mirroringExcludedId_: string;
   private modeToParentModeMap_: Map<number, number>;
   private modeValues_: number[];
+  private opsDisplayScaleFactorEnabled_: boolean;
   private parentModeToRefreshRateMap_: Map<number, DropdownMenuOptionList>;
   private pendingSettingId_: Setting|null;
   private refreshRateList_: DropdownMenuOptionList;
@@ -1177,7 +1176,8 @@ export class SettingsDisplayElement extends SettingsDisplayElementBase {
    */
   private updateLogicalResolutionText_(zoomFactor: number): void {
     assertExists(this.selectedDisplay);
-    if (!this.selectedDisplay.isInternal) {
+    if (!this.selectedDisplay.isInternal &&
+        !this.opsDisplayScaleFactorEnabled_) {
       this.logicalResolutionText_ = '';
       return;
     }

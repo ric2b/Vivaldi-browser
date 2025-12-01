@@ -20,4 +20,4 @@ These threefold purposes apply to sheriffs:
     *   *NEW* Release builders
 
 For more information on how to be a ChromeOS Sheriff, see [ChromeOS Sheriffing
-Guide](https://goto.google.com/cros-sheriff-ref).
+Guide](http://go/cros-sheriff-ref).

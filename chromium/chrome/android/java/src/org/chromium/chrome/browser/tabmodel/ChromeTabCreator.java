@@ -41,7 +41,6 @@ import org.chromium.chrome.browser.tab.TabState;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.content_public.browser.LoadUrlParams;
-import org.chromium.content_public.browser.Visibility;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.base.WindowAndroid;
@@ -366,7 +365,9 @@ public class ChromeTabCreator extends TabCreator {
                 // foreground and for high-end devices.
                 TraceEvent.end("ChromeTabCreator.loadUrlWithSpareTab");
 
-                tab = WarmupManager.getInstance().takeSpareTab(getProfile(), type);
+                tab =
+                        WarmupManager.getInstance()
+                                .takeSpareTab(getProfile(), !openInForeground, type);
                 assert tab != null;
 
                 // Reparent the tab to its parent, updating the DelegateFactory and NativeWindow.
@@ -378,11 +379,7 @@ public class ChromeTabCreator extends TabCreator {
                                         mNativeWindow,
                                         createDefaultTabDelegateFactory()),
                                 null);
-                // Set tab to visible before loading the url. This will ensure metrics are recorded
-                // correctly with spare tab.
-                if (openInForeground) {
-                    tab.getWebContents().updateWebContentsVisibility(Visibility.VISIBLE);
-                }
+                RedirectHandlerTabHelper.updateIntentInTab(tab, intent);
                 tab.loadUrl(loadUrlParams);
                 TraceEvent.end("ChromeTabCreator.loadUrlWithSpareTab");
             } else {
@@ -395,13 +392,9 @@ public class ChromeTabCreator extends TabCreator {
                                 .setDelegateFactory(delegateFactory)
                                 .setInitiallyHidden(!openInForeground)
                                 .build();
+                RedirectHandlerTabHelper.updateIntentInTab(tab, intent);
                 tab.loadUrl(loadUrlParams);
                 TraceEvent.end("ChromeTabCreator.loadUrl");
-            }
-            // When tab reparenting the |intent| is the reparenting intent, not the intent that
-            // created the tab.
-            if (type != TabLaunchType.FROM_REPARENTING) {
-                RedirectHandlerTabHelper.updateIntentInTab(tab, intent);
             }
             if (intent != null && intent.hasExtra(ServiceTabLauncher.LAUNCH_REQUEST_ID_EXTRA)) {
                 ServiceTabLauncher.onWebContentsForRequestAvailable(
@@ -566,7 +559,11 @@ public class ChromeTabCreator extends TabCreator {
                                 i,
                                 intent);
                 TabAssociatedApp.from(newTab).setAppId(appId);
-                mTabModel.closeTabs(TabClosureParams.closeTab(tab).allowUndo(false).build());
+                mTabModel
+                        .getTabRemover()
+                        .closeTabs(
+                                TabClosureParams.closeTab(tab).allowUndo(false).build(),
+                                /* allowDialog= */ false);
                 return newTab;
             }
         }
@@ -674,6 +671,7 @@ public class ChromeTabCreator extends TabCreator {
                 break;
             case TabLaunchType.FROM_LONGPRESS_BACKGROUND:
             case TabLaunchType.FROM_LONGPRESS_BACKGROUND_IN_GROUP:
+            case TabLaunchType.FROM_COLLABORATION_BACKGROUND_IN_GROUP:
             case TabLaunchType.FROM_RECENT_TABS:
             case TabLaunchType.FROM_RECENT_TABS_FOREGROUND:
                 // On low end devices tabs are backgrounded in a frozen state, so we set the

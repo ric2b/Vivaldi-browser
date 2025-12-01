@@ -15,6 +15,7 @@
 #include "src/film_grain.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>

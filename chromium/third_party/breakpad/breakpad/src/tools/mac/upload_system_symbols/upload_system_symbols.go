@@ -113,6 +113,7 @@ var (
 		regexp.MustCompile(`\.a$`),
 		regexp.MustCompile(`\.dat$`),
 	}
+	maxFileCreateTries = 10
 )
 
 func main() {
@@ -224,6 +225,34 @@ func manglePath(path string) string {
 		}
 	}
 	return builder.String()
+}
+
+// createSymbolFile creates a writable file in `base` with a name derived from
+// `original_path`. It ensures that multiple threads can't simultaneously create
+// the same file for two `original_paths` that map to the same mangled name.
+// Returns the filename, the file, and an error if creating the file failed.
+func createSymbolFile(base string, original_path string, arch string) (filename string, f *os.File, err error) {
+	mangled := manglePath(original_path)
+	counter := 0
+	filebase := path.Join(base, mangled)
+	for {
+		var symfile string
+		if counter == 0 {
+			symfile = fmt.Sprintf("%s_%s.sym", filebase, arch)
+		} else {
+			symfile = fmt.Sprintf("%s_%s_%d.sym", filebase, arch, counter)
+		}
+		f, err := os.OpenFile(symfile, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+		if err == nil {
+			return symfile, f, nil
+		}
+		if os.IsExist(err) && counter < maxFileCreateTries {
+			counter++
+			continue
+		}
+		return "", nil, err
+	}
+
 }
 
 type WorkerPool struct {
@@ -359,9 +388,7 @@ func (dq *DumpQueue) worker() {
 	dumpSyms := path.Join(*breakpadTools, "dump_syms")
 
 	for req := range dq.queue {
-		filebase := path.Join(dq.dumpPath, manglePath(req.path))
-		symfile := fmt.Sprintf("%s_%s.sym", filebase, req.arch)
-		f, err := os.Create(symfile)
+		symfile, f, err := createSymbolFile(dq.dumpPath, req.path, req.arch)
 		if err != nil {
 			log.Fatalf("Error creating symbol file: %v", err)
 		}

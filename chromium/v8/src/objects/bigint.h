@@ -183,21 +183,22 @@ V8_OBJECT class BigInt : public BigIntBase {
   // Implementation of the Spec methods, see:
   // https://tc39.github.io/proposal-bigint/#sec-numeric-types
   // Sections 1.1.1 through 1.1.19.
-  static Handle<BigInt> UnaryMinus(Isolate* isolate, Handle<BigInt> x);
-  static MaybeHandle<BigInt> BitwiseNot(Isolate* isolate,
-                                        DirectHandle<BigInt> x);
-  static MaybeHandle<BigInt> Exponentiate(Isolate* isolate, Handle<BigInt> base,
-                                          DirectHandle<BigInt> exponent);
-  static MaybeHandle<BigInt> Multiply(Isolate* isolate, Handle<BigInt> x,
-                                      Handle<BigInt> y);
-  static MaybeHandle<BigInt> Divide(Isolate* isolate, Handle<BigInt> x,
+  static Handle<BigInt> UnaryMinus(Isolate* isolate, DirectHandle<BigInt> x);
+  static MaybeDirectHandle<BigInt> BitwiseNot(Isolate* isolate,
+                                              DirectHandle<BigInt> x);
+  static MaybeDirectHandle<BigInt> Exponentiate(Isolate* isolate,
+                                                DirectHandle<BigInt> base,
+                                                DirectHandle<BigInt> exponent);
+  static MaybeHandle<BigInt> Multiply(Isolate* isolate, DirectHandle<BigInt> x,
+                                      DirectHandle<BigInt> y);
+  static MaybeHandle<BigInt> Divide(Isolate* isolate, DirectHandle<BigInt> x,
                                     DirectHandle<BigInt> y);
-  static MaybeHandle<BigInt> Remainder(Isolate* isolate, Handle<BigInt> x,
+  static MaybeHandle<BigInt> Remainder(Isolate* isolate, DirectHandle<BigInt> x,
                                        DirectHandle<BigInt> y);
-  static MaybeHandle<BigInt> Add(Isolate* isolate, Handle<BigInt> x,
-                                 Handle<BigInt> y);
-  static MaybeHandle<BigInt> Subtract(Isolate* isolate, Handle<BigInt> x,
-                                      Handle<BigInt> y);
+  static MaybeHandle<BigInt> Add(Isolate* isolate, DirectHandle<BigInt> x,
+                                 DirectHandle<BigInt> y);
+  static MaybeHandle<BigInt> Subtract(Isolate* isolate, DirectHandle<BigInt> x,
+                                      DirectHandle<BigInt> y);
   // More convenient version of "bool LessThan(x, y)".
   static ComparisonResult CompareToBigInt(DirectHandle<BigInt> x,
                                           DirectHandle<BigInt> y);
@@ -218,28 +219,29 @@ V8_OBJECT class BigInt : public BigIntBase {
   bool IsNegative() const { return sign(); }
 
   static Maybe<bool> EqualToString(Isolate* isolate, DirectHandle<BigInt> x,
-                                   Handle<String> y);
-  static bool EqualToNumber(DirectHandle<BigInt> x, Handle<Object> y);
+                                   DirectHandle<String> y);
+  static bool EqualToNumber(DirectHandle<BigInt> x, DirectHandle<Object> y);
   static Maybe<ComparisonResult> CompareToString(Isolate* isolate,
                                                  DirectHandle<BigInt> x,
-                                                 Handle<String> y);
+                                                 DirectHandle<String> y);
   static ComparisonResult CompareToNumber(DirectHandle<BigInt> x,
                                           DirectHandle<Object> y);
   // Exposed for tests, do not call directly. Use CompareToNumber() instead.
   V8_EXPORT_PRIVATE static ComparisonResult CompareToDouble(
       DirectHandle<BigInt> x, double y);
 
-  static Handle<BigInt> AsIntN(Isolate* isolate, uint64_t n, Handle<BigInt> x);
-  static MaybeHandle<BigInt> AsUintN(Isolate* isolate, uint64_t n,
-                                     Handle<BigInt> x);
+  static DirectHandle<BigInt> AsIntN(Isolate* isolate, uint64_t n,
+                                     DirectHandle<BigInt> x);
+  static MaybeDirectHandle<BigInt> AsUintN(Isolate* isolate, uint64_t n,
+                                           DirectHandle<BigInt> x);
 
   V8_EXPORT_PRIVATE static Handle<BigInt> FromInt64(Isolate* isolate,
                                                     int64_t n);
   V8_EXPORT_PRIVATE static Handle<BigInt> FromUint64(Isolate* isolate,
                                                      uint64_t n);
-  static MaybeHandle<BigInt> FromWords64(Isolate* isolate, int sign_bit,
-                                         uint32_t words64_count,
-                                         const uint64_t* words);
+  static MaybeDirectHandle<BigInt> FromWords64(Isolate* isolate, int sign_bit,
+                                               uint32_t words64_count,
+                                               const uint64_t* words);
   V8_EXPORT_PRIVATE int64_t AsInt64(bool* lossless = nullptr);
   uint64_t AsUint64(bool* lossless = nullptr);
   uint32_t Words64Count();
@@ -258,21 +260,25 @@ V8_OBJECT class BigInt : public BigIntBase {
   // Like the above, but adapted for the needs of producing error messages:
   // doesn't care about termination requests, and returns a default string
   // for inputs beyond a relatively low upper bound.
-  static Handle<String> NoSideEffectsToString(Isolate* isolate,
-                                              DirectHandle<BigInt> bigint);
+  static DirectHandle<String> NoSideEffectsToString(
+      Isolate* isolate, DirectHandle<BigInt> bigint);
 
   // "The Number value for x", see:
   // https://tc39.github.io/ecma262/#sec-ecmascript-language-types-number-type
   // Returns a Smi or HeapNumber.
-  static Handle<Number> ToNumber(Isolate* isolate, DirectHandle<BigInt> x);
+  static DirectHandle<Number> ToNumber(Isolate* isolate,
+                                       DirectHandle<BigInt> x);
 
   // ECMAScript's NumberToBigInt
   V8_EXPORT_PRIVATE static MaybeHandle<BigInt> FromNumber(
-      Isolate* isolate, Handle<Object> number);
+      Isolate* isolate, DirectHandle<Object> number);
 
   // ECMAScript's ToBigInt (throws for Number input)
-  V8_EXPORT_PRIVATE static MaybeHandle<BigInt> FromObject(Isolate* isolate,
-                                                          Handle<Object> obj);
+  template <template <typename> typename HandleType>
+    requires(std::is_convertible_v<HandleType<Object>, DirectHandle<Object>>)
+  EXPORT_TEMPLATE_DECLARE(V8_EXPORT_PRIVATE) static
+      typename HandleType<BigInt>::MaybeType
+      FromObject(Isolate* isolate, HandleType<Object> obj);
 
   class BodyDescriptor;
 

@@ -16,6 +16,7 @@
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_tab_helper.h"
+#include "chrome/browser/web_applications/web_app_utils.h"
 #include "components/services/app_service/public/cpp/preferred_apps_list.h"
 #include "components/webapps/browser/banners/app_banner_manager.h"
 #include "components/webapps/browser/banners/installable_web_app_check_result.h"
@@ -35,9 +36,11 @@ using IdSet = std::set<webapps::AppId>;
 // normal browser window.
 void EmitUkmMetricsForTab(tabs::TabInterface* tab) {
   BrowserWindowInterface* browser = tab->GetBrowserWindowInterface();
+  CHECK(browser);
   Profile* profile = browser->GetProfile();
   auto* web_app_helper =
       web_app::WebAppTabHelper::FromWebContents(tab->GetContents());
+  CHECK(web_app_helper);
   std::optional<webapps::AppId> app_id = web_app_helper->app_id();
   CHECK(app_id);
 
@@ -69,7 +72,7 @@ void EmitUkmMetricsForTab(tabs::TabInterface* tab) {
 #endif
   interaction.promotable = !registrar.IsDiyApp(*app_id);
 
-  if (tab->IsInForeground() && browser->IsActive()) {
+  if (tab->IsActivated() && browser->IsActive()) {
     interaction.foreground_duration = base::Seconds(kTimerIntervalInSeconds);
   } else {
     interaction.background_duration = base::Seconds(kTimerIntervalInSeconds);
@@ -82,8 +85,12 @@ void EmitUkmMetricsForTab(tabs::TabInterface* tab) {
 // Checks whether metrics should be emitted. If so, updates `emitted_ids` and
 // emits metrics.
 void MaybeEmitUkmMetricsForTab(tabs::TabInterface* tab, IdSet& emitted_ids) {
+  CHECK(tab->GetContents());
   auto* web_app_helper =
       web_app::WebAppTabHelper::FromWebContents(tab->GetContents());
+  if (!web_app_helper) {
+    return;
+  }
   std::optional<webapps::AppId> app_id = web_app_helper->app_id();
 
   // A tab in an app window doesn't necessarily have to be in-scope of that
@@ -184,6 +191,9 @@ void SamplingMetricsProvider::EmitMetrics() {
 
   IdSet emitted_ukm_ids;
   for (BrowserWindowInterface* browser : GetAllBrowserWindowInterfaces()) {
+    if (!AreWebAppsEnabled(browser->GetProfile())) {
+      continue;
+    }
     // If this is a standalone app window.
     if (browser->GetAppBrowserController()) {
       // A browser may be being closed due to empty tabs. See
@@ -216,7 +226,7 @@ void SamplingMetricsProvider::EmitMetrics() {
         std::optional<webapps::AppId> app_id = web_app_helper->app_id();
         if (app_id) {
           ++tabbed_pwas_count;
-          if (tab->IsInForeground() && browser->IsActive()) {
+          if (tab->IsActivated() && browser->IsActive()) {
             tabbed_pwas_in_active_use = true;
           }
 

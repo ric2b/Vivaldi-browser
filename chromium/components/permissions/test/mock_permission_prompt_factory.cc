@@ -4,11 +4,12 @@
 
 #include "components/permissions/test/mock_permission_prompt_factory.h"
 
+#include <algorithm>
+
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/memory/ptr_util.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "components/permissions/permission_request_manager.h"
 #include "components/permissions/request_type.h"
@@ -25,11 +26,15 @@ MockPermissionPromptFactory::MockPermissionPromptFactory(
       manager_(manager) {
   manager->set_view_factory_for_testing(base::BindRepeating(
       &MockPermissionPromptFactory::Create, base::Unretained(this)));
+  observation_.Observe(manager_);
 }
 
 MockPermissionPromptFactory::~MockPermissionPromptFactory() {
-  manager_->set_view_factory_for_testing(
-      base::BindRepeating(&MockPermissionPromptFactory::DoNotCreate));
+  // The manager may have been destroyed before the test destroyed us.
+  if (manager_) {
+    manager_->set_view_factory_for_testing(
+        base::BindRepeating(&MockPermissionPromptFactory::DoNotCreate));
+  }
   for (permissions::MockPermissionPrompt* prompt : prompts_) {
     prompt->factory_ = nullptr;
   }
@@ -93,6 +98,11 @@ void MockPermissionPromptFactory::WaitForPermissionBubble() {
   show_bubble_quit_closure_ = base::RepeatingClosure();
 }
 
+void MockPermissionPromptFactory::OnPermissionRequestManagerDestructed() {
+  observation_.Reset();
+  manager_ = nullptr;
+}
+
 // static
 std::unique_ptr<PermissionPrompt> MockPermissionPromptFactory::DoNotCreate(
     content::WebContents* web_contents,
@@ -101,7 +111,7 @@ std::unique_ptr<PermissionPrompt> MockPermissionPromptFactory::DoNotCreate(
 }
 
 void MockPermissionPromptFactory::HideView(MockPermissionPrompt* prompt) {
-  auto it = base::ranges::find(prompts_, prompt);
+  auto it = std::ranges::find(prompts_, prompt);
   if (it != prompts_.end())
     prompts_.erase(it);
 }

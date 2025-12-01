@@ -43,7 +43,8 @@ class UnionToBlobResolverFunction final
 
 // static
 ClipboardItem* ClipboardItem::Create(
-    const HeapVector<std::pair<String, ScriptPromise<V8UnionBlobOrString>>>&
+    const HeapVector<
+        std::pair<String, MemberScriptPromise<V8UnionBlobOrString>>>&
         representations,
     ExceptionState& exception_state) {
   // Check that incoming dictionary isn't empty. If it is, it's possible that
@@ -57,7 +58,8 @@ ClipboardItem* ClipboardItem::Create(
 }
 
 ClipboardItem::ClipboardItem(
-    const HeapVector<std::pair<String, ScriptPromise<V8UnionBlobOrString>>>&
+    const HeapVector<
+        std::pair<String, MemberScriptPromise<V8UnionBlobOrString>>>&
         representations) {
   for (const auto& representation : representations) {
     String web_custom_format =
@@ -104,7 +106,7 @@ ScriptPromise<Blob> ClipboardItem::getType(
     ExceptionState& exception_state) const {
   for (const auto& item : representations_) {
     if (type == item.first) {
-      return item.second.Then(
+      return item.second.Unwrap().Then(
           script_state,
           MakeGarbageCollected<UnionToBlobResolverFunction>(type));
     }

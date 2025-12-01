@@ -191,14 +191,6 @@ void RecordEmptyGroupsMetricsOnGroupAddedLocally(const SavedTabGroup& group,
 
   base::UmaHistogramBoolean("TabGroups.Sync.AddedGroupIsEmptyLocally",
                             group.saved_tabs().empty());
-  if (group.saved_tabs().empty()) {
-    // This seems like it may be happening in production, unexpectedly; it
-    // should still be rare, so add a diagnostic dump to find out if anyone is
-    // adding empty groups, so we can see if we need to support it properly or
-    // if this should become a CHECK. In the latter case we'll need to update
-    // the many tests which do add empty groups.
-    base::debug::DumpWithoutCrashing();
-  }
 }
 
 void RecordEmptyGroupsMetricsOnGroupAddedFromSync(const SavedTabGroup& group,
@@ -249,5 +241,22 @@ void RecordEmptyGroupsMetricsOnTabAddedFromSync(const SavedTabGroup& group,
                             group.saved_tabs().empty());
 }
 
+void RecordSharedGroupTitleSanitization(
+    bool use_url_as_title,
+    TitleSanitizationType title_sanitization_type) {
+  std::string histogram;
+  switch (title_sanitization_type) {
+    case TitleSanitizationType::kAddTab:
+      histogram = "TabGroups.Shared.UseUrlForTitle.AddTab";
+      break;
+    case TitleSanitizationType::kNavigateTab:
+      histogram = "TabGroups.Shared.UseUrlForTitle.NavigateTab";
+      break;
+    case TitleSanitizationType::kShareTabGroup:
+      histogram = "TabGroups.Shared.UseUrlForTitle.ShareTabGroup";
+      break;
+  }
+  base::UmaHistogramBoolean(histogram, use_url_as_title);
+}
 }  // namespace stats
 }  // namespace tab_groups

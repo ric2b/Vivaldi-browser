@@ -108,8 +108,7 @@ class ProfileWriter : public base::RefCountedThreadSafe<ProfileWriter> {
   virtual void AddSpeedDial(
       const std::vector<ImportedSpeedDialEntry>& speeddial);
 
-  virtual void AddExtensions(const std::vector<std::string>& extensions,
-                             base::WeakPtr<ExternalProcessImporterHost> host);
+  virtual void AddExtensions(const std::vector<std::string>& extensions);
 
   virtual void AddOpenTabs(
       const std::vector<ImportedTabEntry>& tabs);

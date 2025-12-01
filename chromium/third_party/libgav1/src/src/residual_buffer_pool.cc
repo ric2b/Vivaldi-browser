@@ -14,6 +14,7 @@
 
 #include "src/residual_buffer_pool.h"
 
+#include <memory>
 #include <mutex>  // NOLINT (unapproved c++11 header)
 #include <utility>
 

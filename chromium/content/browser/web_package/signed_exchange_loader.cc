@@ -26,8 +26,8 @@
 #include "net/url_request/redirect_util.h"
 #include "services/network/public/cpp/constants.h"
 #include "services/network/public/cpp/data_pipe_to_source_stream.h"
-#include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
+#include "services/network/public/cpp/loading_params.h"
 #include "services/network/public/cpp/record_ontransfersizeupdate_utils.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/source_stream_to_data_pipe.h"
@@ -205,14 +205,6 @@ void SignedExchangeLoader::SetPriority(net::RequestPriority priority,
   url_loader_->SetPriority(priority, intra_priority_value);
 }
 
-void SignedExchangeLoader::PauseReadingBodyFromNet() {
-  url_loader_->PauseReadingBodyFromNet();
-}
-
-void SignedExchangeLoader::ResumeReadingBodyFromNet() {
-  url_loader_->ResumeReadingBodyFromNet();
-}
-
 void SignedExchangeLoader::ConnectToClient(
     mojo::PendingRemote<network::mojom::URLLoaderClient> client) {
   DCHECK(pending_client_receiver_.is_valid());
@@ -305,8 +297,7 @@ void SignedExchangeLoader::OnHTTPExchangeFound(
   options.struct_size = sizeof(MojoCreateDataPipeOptions);
   options.flags = MOJO_CREATE_DATA_PIPE_FLAG_NONE;
   options.element_num_bytes = 1;
-  options.capacity_num_bytes =
-      network::features::GetDataPipeDefaultAllocationSize();
+  options.capacity_num_bytes = network::GetDataPipeDefaultAllocationSize();
   if (mojo::CreateDataPipe(&options, producer_handle, consumer_handle) !=
       MOJO_RESULT_OK) {
     forwarding_client_->OnComplete(

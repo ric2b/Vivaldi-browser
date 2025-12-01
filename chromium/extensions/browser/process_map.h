@@ -100,6 +100,10 @@ class ProcessMap : public KeyedService {
   bool Contains(const ExtensionId& extension_id, int process_id) const;
   bool Contains(int process_id) const;
 
+  // Returns true if an extension with the given `extension_id` has any
+  // associated tracked process.
+  bool ExtensionHasProcess(const ExtensionId& extension_id) const;
+
   // Returns a pointer to an enabled extension running in `process_id` or
   // nullptr.
   const Extension* GetEnabledExtensionByProcessID(int process_id) const;
@@ -183,8 +187,6 @@ class ProcessMap : public KeyedService {
   //
   // Anyhow, the expected behaviour is:
   //   - For hosted app processes, this will be `kPrivilegedWebPage`.
-  //   - For processes of platform apps running on lock screen, this will be
-  //     `kLockscreenExtension`.
   //   - For other extension processes, this will be `kPrivilegedExtension`.
   //   - For WebUI processes, this will be `kWebUi`.
   //   - For chrome-untrusted:// URLs, this will be a `kUntrustedWebUi`.
@@ -200,18 +202,10 @@ class ProcessMap : public KeyedService {
       int process_id,
       const GURL* url) const;
 
-  void set_is_lock_screen_context(bool is_lock_screen_context) {
-    is_lock_screen_context_ = is_lock_screen_context;
-  }
-
  private:
   using ProcessId = int;
 
   base::flat_map<ProcessId, ExtensionId> items_;
-
-  // Whether the process map belongs to the browser context used on Chrome OS
-  // lock screen.
-  bool is_lock_screen_context_ = false;
 
   raw_ptr<content::BrowserContext> browser_context_;
 };

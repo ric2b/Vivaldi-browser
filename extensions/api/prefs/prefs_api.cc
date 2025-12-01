@@ -169,9 +169,11 @@ VivaldiPrefsApiNotificationFactory::VivaldiPrefsApiNotificationFactory()
 
 VivaldiPrefsApiNotificationFactory::~VivaldiPrefsApiNotificationFactory() {}
 
-KeyedService* VivaldiPrefsApiNotificationFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+VivaldiPrefsApiNotificationFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* profile) const {
-  return new VivaldiPrefsApiNotification(static_cast<Profile*>(profile));
+  return std::make_unique<VivaldiPrefsApiNotification>(
+      static_cast<Profile*>(profile));
 }
 
 bool VivaldiPrefsApiNotificationFactory::ServiceIsNULLWhileTesting() const {

@@ -23,7 +23,6 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.base.test.util.Features;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.omaha.UpdateStatusProvider;
@@ -57,7 +56,6 @@ public class SafetyHubHatsHelperUnitTest {
             NotificationPermissions.create(EXAMPLE_URL, "*", 3);
     private static final String HATS_SURVEY_TRIGGER_ID = "safety_hub_android_organic_survey";
 
-    @Rule public JniMocker mJniMocker = new JniMocker();
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
 
     @Mock private SafetyHubHatsBridge.Natives mSafetyHubHatsBridgeNatives;
@@ -82,22 +80,21 @@ public class SafetyHubHatsHelperUnitTest {
     public void setUp() throws Exception {
         MockitoAnnotations.initMocks(this);
 
-        mJniMocker.mock(UserPrefsJni.TEST_HOOKS, mUserPrefsNativeMock);
+        UserPrefsJni.setInstanceForTesting(mUserPrefsNativeMock);
         doReturn(mPrefServiceMock).when(mUserPrefsNativeMock).get(mProfile);
         mockPasswordCounts(0, 0, 0);
 
         SafetyHubFetchServiceFactory.setSafetyHubFetchServiceForTesting(mSafetyHubFetchService);
         mockUpdateStatus(UpdateStatusProvider.UpdateState.NONE);
 
-        mJniMocker.mock(UnusedSitePermissionsBridgeJni.TEST_HOOKS, mUnusedPermissionsNativeMock);
+        UnusedSitePermissionsBridgeJni.setInstanceForTesting(mUnusedPermissionsNativeMock);
         mockUnusedSitePermissions(false);
 
-        mJniMocker.mock(
-                NotificationPermissionReviewBridgeJni.TEST_HOOKS,
+        NotificationPermissionReviewBridgeJni.setInstanceForTesting(
                 mNotificationPermissionReviewNativeMock);
         mockNotificationPermission(false);
 
-        mJniMocker.mock(SafeBrowsingBridgeJni.TEST_HOOKS, mSafeBrowsingBridgeNativeMock);
+        SafeBrowsingBridgeJni.setInstanceForTesting(mSafeBrowsingBridgeNativeMock);
         mockSafeBrowsing(SafeBrowsingState.STANDARD_PROTECTION);
 
         mSafetyHubHatsHelper = new SafetyHubHatsHelper(mProfile);

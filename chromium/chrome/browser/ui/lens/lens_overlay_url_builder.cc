@@ -27,7 +27,7 @@ namespace {
 inline constexpr char kTextQueryParameterKey[] = "q";
 
 // Query parameter for denoting a search companion request.
-inline constexpr char kSearchCompanionParameterKey[] = "gsc";
+inline constexpr char kChromeSidePanelParameterKey[] = "gsc";
 
 // Query parameter for the search session id.
 inline constexpr char kSearchSessionIdParameterKey[] = "gsessionid";
@@ -42,6 +42,7 @@ inline constexpr char kModeParameterKey[] = "udm";
 inline constexpr char kToolbeltModeParameterKey[] = "tbm";
 
 // Query parameter values for the mode.
+inline constexpr char kShoppingModeParameterValue[] = "28";
 inline constexpr char kUnimodalModeParameterValue[] = "26";
 inline constexpr char kMultimodalModeParameterValue[] = "24";
 
@@ -122,6 +123,16 @@ GURL AppendUrlParamsFromMap(
   return url_with_params;
 }
 
+std::string CompressAndEncode(const std::string& serialized_proto) {
+  std::string compressed_proto;
+  compression::GzipCompress(serialized_proto, &compressed_proto);
+  std::string stickiness_signal_value;
+  base::Base64UrlEncode(compressed_proto,
+                        base::Base64UrlEncodePolicy::OMIT_PADDING,
+                        &stickiness_signal_value);
+  return stickiness_signal_value;
+}
+
 }  // namespace
 
 void AppendTranslateParamsToMap(std::map<std::string, std::string>& params,
@@ -143,21 +154,28 @@ void AppendTranslateParamsToMap(std::map<std::string, std::string>& params,
 
   std::string serialized_proto;
   stickiness_signals.SerializeToString(&serialized_proto);
-  std::string compressed_proto;
-  compression::GzipCompress(serialized_proto, &compressed_proto);
-  std::string stickiness_signal_value;
-  base::Base64UrlEncode(compressed_proto,
-                        base::Base64UrlEncodePolicy::OMIT_PADDING,
-                        &stickiness_signal_value);
+  params[kSrpStickinessSignalKey] = CompressAndEncode(serialized_proto);
+}
 
-  params[kSrpStickinessSignalKey] = stickiness_signal_value;
+void AppendStickinessSignalForFormula(
+    std::map<std::string, std::string>& params,
+    const std::string& formula) {
+  lens::StickinessSignals stickiness_signals;
+  stickiness_signals.set_id_namespace(lens::StickinessSignals::EDUCATION_INPUT);
+  stickiness_signals.mutable_education_input_extension()
+      ->mutable_math_solver_query()
+      ->set_math_input_equation(formula);
+
+  std::string serialized_proto;
+  stickiness_signals.SerializeToString(&serialized_proto);
+  params[kSrpStickinessSignalKey] = CompressAndEncode(serialized_proto);
 }
 
 GURL AppendCommonSearchParametersToURL(const GURL& url_to_modify,
                                        bool use_dark_mode) {
   GURL new_url = url_to_modify;
   new_url = net::AppendOrReplaceQueryParameter(
-      new_url, kSearchCompanionParameterKey,
+      new_url, kChromeSidePanelParameterKey,
       lens::features::GetLensOverlayGscQueryParamValue());
   new_url = net::AppendOrReplaceQueryParameter(
       new_url, kLanguageCodeParameterKey,
@@ -330,7 +348,7 @@ const std::string GetLensModeParameterValue(const GURL& url) {
 bool HasCommonSearchQueryParameters(const GURL& url) {
   // Needed to prevent memory leaks even though we do not use the output.
   std::string temp_output_string;
-  return net::GetValueForKeyInQuery(url, kSearchCompanionParameterKey,
+  return net::GetValueForKeyInQuery(url, kChromeSidePanelParameterKey,
                                     &temp_output_string) &&
          net::GetValueForKeyInQuery(url, kLanguageCodeParameterKey,
                                     &temp_output_string) &&
@@ -345,6 +363,13 @@ bool IsValidSearchResultsUrl(const GURL& url) {
          net::registry_controlled_domains::SameDomainOrHost(
              results_url, url,
              net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
+}
+
+bool ShouldOpenSearchURLInNewTab(const GURL& url) {
+  std::string param_value;
+  net::GetValueForKeyInQuery(url, kModeParameterKey, &param_value);
+  return IsValidSearchResultsUrl(url) &&
+         param_value == kShoppingModeParameterValue;
 }
 
 GURL GetSearchResultsUrlFromRedirectUrl(const GURL& url) {
@@ -386,6 +411,13 @@ GURL RemoveIgnoredSearchURLParameters(const GURL& url) {
   return processed_url;
 }
 
+GURL RemoveSidePanelURLParameters(const GURL& url) {
+  GURL processed_url = url;
+  processed_url = net::AppendOrReplaceQueryParameter(
+      processed_url, kChromeSidePanelParameterKey, std::nullopt);
+  return processed_url;
+}
+
 GURL BuildTranslateLanguagesURL(std::string country, std::string language) {
   GURL url = GURL(lens::features::GetLensOverlayTranslateEndpointURL());
   url =
@@ -401,7 +433,8 @@ bool IsLensTextSelectionType(
     lens::LensOverlaySelectionType lens_selection_type) {
   return lens_selection_type == lens::SELECT_TEXT_HIGHLIGHT ||
          lens_selection_type == lens::SELECT_TRANSLATED_TEXT ||
-         lens_selection_type == lens::TRANSLATE_CHIP;
+         lens_selection_type == lens::TRANSLATE_CHIP ||
+         lens_selection_type == lens::SYMBOLIC_MATH_OBJECT;
 }
 
 }  // namespace lens

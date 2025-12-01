@@ -72,10 +72,7 @@ class CookieControlsIconViewUnitTest
       public testing::WithParamInterface<CookieBlocking3pcdStatus> {
  protected:
   CookieControlsIconViewUnitTest()
-      : a11y_counter_(views::AXEventManager::Get()) {
-    feature_list_.InitAndDisableFeature(
-        privacy_sandbox::kTrackingProtection3pcdUx);
-  }
+      : a11y_counter_(views::AXEventManager::Get()) {}
 
   void SetUp() override {
     TestWithBrowserView::SetUp();
@@ -166,7 +163,7 @@ TEST_P(CookieControlsIconViewUnitTest,
             In3pcd() ? TrackingProtectionLabel() : BlockedLabel());
   EXPECT_EQ(LabelText(), In3pcd() ? SiteNotWorkingLabel() : BlockedLabel());
 // TODO(crbug.com/40064612): Fix screenreader tests on ChromeOS and Mac.
-#if !OS_MAC && !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !OS_MAC && !BUILDFLAG(IS_CHROMEOS)
   EXPECT_EQ(a11y_counter_.GetCount(ax::mojom::Event::kAlert), 1);
 #endif
   ExecuteIcon();
@@ -269,7 +266,7 @@ TEST_P(CookieControlsIconViewUnitTest, HidingIconDoesNotRetriggerA11yReadOut) {
             In3pcd() ? TrackingProtectionLabel() : BlockedLabel());
   EXPECT_EQ(LabelText(), In3pcd() ? SiteNotWorkingLabel() : BlockedLabel());
 // TODO(crbug.com/40064612): Fix screenreader tests on ChromeOS and Mac.
-#if !OS_MAC && !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !OS_MAC && !BUILDFLAG(IS_CHROMEOS)
   EXPECT_EQ(a11y_counter_.GetCount(ax::mojom::Event::kAlert), 1);
 #endif
 
@@ -285,7 +282,7 @@ TEST_P(CookieControlsIconViewUnitTest, HidingIconDoesNotRetriggerA11yReadOut) {
             In3pcd() ? TrackingProtectionLabel() : BlockedLabel());
   EXPECT_EQ(LabelText(), In3pcd() ? SiteNotWorkingLabel() : BlockedLabel());
   // We don't read out the label again when the icon becomes hidden.
-#if !OS_MAC && !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !OS_MAC && !BUILDFLAG(IS_CHROMEOS)
   EXPECT_EQ(a11y_counter_.GetCount(ax::mojom::Event::kAlert), 1);
 #endif
   // Verify no metrics are recorded when icon is hidden.
@@ -315,7 +312,7 @@ TEST_P(CookieControlsIconViewUnitTest, IconHiddenWhenIconVisibleIsFalse) {
   EXPECT_FALSE(LabelShown());
   EXPECT_EQ(TooltipText(), u"");
   EXPECT_EQ(LabelText(), u"");
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
   EXPECT_EQ(a11y_counter_.GetCount(ax::mojom::Event::kAlert), 0);
 #endif
   EXPECT_EQ(user_actions_.GetActionCount(kUMAIconShown), 0);

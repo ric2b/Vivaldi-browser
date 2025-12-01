@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "base/check.h"
@@ -57,13 +58,13 @@ UserSessionActivityReporterDelegate::QueryIdleStatus() const {
 bool UserSessionActivityReporterDelegate::IsUserActive(
     const ash::power::ml::IdleEventNotifier::ActivityData& activity_data)
     const {
-  // Calculate local time of day because that's how
-  // `activity_data.last_activity_time_of_day` is calculated.
-  const base::TimeDelta local_time_of_day_now =
-      base::Time::Now() - base::Time::Now().LocalMidnight();
+  // Calculate current time the same way
+  // activity_data.last_activity_time_of_day` is calculated.
+  const base::Time time_now = base::Time::Now();
+  const base::TimeDelta local_time = time_now - time_now.LocalMidnight();
 
   const base::TimeDelta time_since_last_activity =
-      local_time_of_day_now - activity_data.last_activity_time_of_day;
+      local_time - activity_data.last_activity_time_of_day;
 
   return (time_since_last_activity < kActiveIdleStateCollectionFrequency) ||
          activity_data.is_video_playing;
@@ -95,7 +96,8 @@ void UserSessionActivityReporterDelegate::ReportSessionActivity() {
 
 void UserSessionActivityReporterDelegate::SetSessionStartEvent(
     reporting::SessionStartEvent::Reason reason,
-    const user_manager::User* user) {
+    const user_manager::User* user,
+    const std::string& session_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CHECK(user);
 
@@ -104,30 +106,32 @@ void UserSessionActivityReporterDelegate::SetSessionStartEvent(
   Reset();
 
   session_activity_.mutable_session_start()->set_reason(reason);
-
   session_activity_.mutable_session_start()->set_timestamp_micro(
       GetUtcTimeMicrosecondsSinceEpoch());
+  session_activity_.set_session_id(session_id);
 
   SetUser(&session_activity_, user);
 }
 
 void UserSessionActivityReporterDelegate::SetSessionEndEvent(
     reporting::SessionEndEvent::Reason reason,
-    const user_manager::User* user) {
+    const user_manager::User* user,
+    const std::string& session_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CHECK(user);
 
   session_activity_.mutable_session_end()->set_reason(reason);
-
   session_activity_.mutable_session_end()->set_timestamp_micro(
       GetUtcTimeMicrosecondsSinceEpoch());
+  session_activity_.set_session_id(session_id);
 
   SetUser(&session_activity_, user);
 }
 
 void UserSessionActivityReporterDelegate::AddActiveIdleState(
     bool user_is_active,
-    const user_manager::User* user) {
+    const user_manager::User* user,
+    const std::string& session_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CHECK(user);
 
@@ -141,6 +145,7 @@ void UserSessionActivityReporterDelegate::AddActiveIdleState(
   }
 
   session_activity_.mutable_active_idle_states()->Add(std::move(state));
+  session_activity_.set_session_id(session_id);
 
   SetUser(&session_activity_, user);
 }
@@ -171,10 +176,12 @@ void UserSessionActivityReporterDelegate::SetUser(
 
   if (user->IsAffiliated()) {
     record->mutable_affiliated_user()->set_user_email(std::move(email));
-  } else {
-    const std::string& unique_id =
-        reporter_helper_->GetUniqueUserIdForThisDevice(std::move(email));
-    record->mutable_unaffiliated_user()->set_user_id(std::move(unique_id));
+  } else if (const auto unique_id =
+                 reporter_helper_->GetUniqueUserIdForThisDevice(
+                     std::move(email));
+             unique_id.has_value()) {
+    record->mutable_unaffiliated_user()->set_user_id_num(
+        std::move(unique_id.value()));
   }
 }
 

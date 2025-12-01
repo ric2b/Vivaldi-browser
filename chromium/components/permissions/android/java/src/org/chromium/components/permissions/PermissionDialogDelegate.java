@@ -60,6 +60,9 @@ public class PermissionDialogDelegate {
     /** The {@link ContentSettingsType}s requested in this dialog. */
     private int[] mContentSettingsTypes;
 
+    // Prompt(screen) variant we want to display on the dialog.
+    private @EmbeddedPromptVariant int mEmbeddedPromptVariant;
+
     /**
      * Defines a (potentially empty) list of ranges represented as pairs of <startIndex, endIndex>,
      * which shall be used by the UI to format the specified ranges as bold text.
@@ -106,6 +109,18 @@ public class PermissionDialogDelegate {
         return mShowPositiveNonEphemeralAsFirstButton;
     }
 
+    public @EmbeddedPromptVariant int getEmbeddedPromptVariant() {
+        return mEmbeddedPromptVariant;
+    }
+
+    public void setEmbeddedPromptVariant(@EmbeddedPromptVariant int variant) {
+        mEmbeddedPromptVariant = variant;
+    }
+
+    public boolean isEmbeddedPromptVariant() {
+        return mEmbeddedPromptVariant != EmbeddedPromptVariant.UNINITIALIZED;
+    }
+
     public void onAccept() {
         assert mNativeDelegatePtr != 0;
         PermissionDialogDelegateJni.get().accept(mNativeDelegatePtr, PermissionDialogDelegate.this);
@@ -117,9 +132,9 @@ public class PermissionDialogDelegate {
                 .acceptThisTime(mNativeDelegatePtr, PermissionDialogDelegate.this);
     }
 
-    public void onCancel() {
+    public void onDeny() {
         assert mNativeDelegatePtr != 0;
-        PermissionDialogDelegateJni.get().cancel(mNativeDelegatePtr, PermissionDialogDelegate.this);
+        PermissionDialogDelegateJni.get().deny(mNativeDelegatePtr, PermissionDialogDelegate.this);
     }
 
     public void onDismiss(@DismissalType int dismissalType) {
@@ -128,11 +143,36 @@ public class PermissionDialogDelegate {
                 .dismissed(mNativeDelegatePtr, PermissionDialogDelegate.this, dismissalType);
     }
 
+    public void onAcknowledge() {
+        assert mNativeDelegatePtr != 0;
+        PermissionDialogDelegateJni.get()
+                .acknowledge(mNativeDelegatePtr, PermissionDialogDelegate.this);
+    }
+
+    public void onSystemPermissionResolved(boolean accepted) {
+        assert mNativeDelegatePtr != 0;
+        PermissionDialogDelegateJni.get()
+                .systemPermissionResolved(
+                        mNativeDelegatePtr, PermissionDialogDelegate.this, accepted);
+    }
+
     public void destroy() {
         assert mNativeDelegatePtr != 0;
         PermissionDialogDelegateJni.get()
                 .destroy(mNativeDelegatePtr, PermissionDialogDelegate.this);
         mNativeDelegatePtr = 0;
+    }
+
+    public void onSystemSettingsShown() {
+        assert mNativeDelegatePtr != 0;
+        PermissionDialogDelegateJni.get()
+                .systemSettingsShown(mNativeDelegatePtr, PermissionDialogDelegate.this);
+    }
+
+    public void onResume() {
+        assert mNativeDelegatePtr != 0;
+        PermissionDialogDelegateJni.get()
+                .resumed(mNativeDelegatePtr, PermissionDialogDelegate.this);
     }
 
     public void setDialogController(PermissionDialogController controller) {
@@ -144,7 +184,6 @@ public class PermissionDialogDelegate {
         return PermissionDialogDelegateJni.get().getRequestTypeEnumSize();
     }
 
-    /** Called from C++ by |nativeDelegatePtr| to destroy the dialog. */
     @CalledByNative
     private void dismissFromNative() {
         assert mDialogController != null;
@@ -154,13 +193,19 @@ public class PermissionDialogDelegate {
     @CalledByNative
     private void updateIcon(Bitmap icon) {
         assert mDialogController != null;
-        mDialogController.updateIcon(icon);
+        mDialogController.updateIcon(this, icon);
     }
 
     @CalledByNative
     private int getIconSizeInPx() {
         assert mDialogController != null;
-        return mDialogController.getIconSizeInPx();
+        return mDialogController.getIconSizeInPx(this);
+    }
+
+    @CalledByNative
+    private void notifyPermissionAllowed() {
+        assert mDialogController != null;
+        mDialogController.notifyPermissionAllowed(this);
     }
 
     /**
@@ -189,7 +234,8 @@ public class PermissionDialogDelegate {
             String positiveButtonText,
             String negativeButtonText,
             String positiveEphemeralButtonText,
-            boolean showPositiveNonEphemeralAsFirstButton) {
+            boolean showPositiveNonEphemeralAsFirstButton,
+            @EmbeddedPromptVariant int variant) {
         assert (boldedRanges.length % 2 == 0); // Contains a list of offset and length values
 
         return new PermissionDialogDelegate(
@@ -202,10 +248,10 @@ public class PermissionDialogDelegate {
                 positiveButtonText,
                 negativeButtonText,
                 positiveEphemeralButtonText,
-                showPositiveNonEphemeralAsFirstButton);
+                showPositiveNonEphemeralAsFirstButton,
+                variant);
     }
 
-    /** Upon construction, this class takes ownership of the passed in native delegate. */
     private PermissionDialogDelegate(
             long nativeDelegatePtr,
             WindowAndroid window,
@@ -216,7 +262,8 @@ public class PermissionDialogDelegate {
             String positiveButtonText,
             String negativeButtonText,
             String positiveEphemeralButtonText,
-            boolean showPositiveNonEphemeralAsFirstButton) {
+            boolean showPositiveNonEphemeralAsFirstButton,
+            @EmbeddedPromptVariant int variant) {
         mNativeDelegatePtr = nativeDelegatePtr;
         mWindow = window;
         mContentSettingsTypes = contentSettingsTypes;
@@ -229,6 +276,36 @@ public class PermissionDialogDelegate {
         mNegativeButtonText = negativeButtonText;
         mPositiveEphemeralButtonText = positiveEphemeralButtonText;
         mShowPositiveNonEphemeralAsFirstButton = showPositiveNonEphemeralAsFirstButton;
+        mEmbeddedPromptVariant = variant;
+    }
+
+    /** Called by native code to update the current permission dialog with new screen. */
+    @CalledByNative
+    void updateDialog(
+            int[] contentSettingsTypes,
+            int iconId,
+            String message,
+            int[] boldedRanges,
+            String positiveButtonText,
+            String negativeButtonText,
+            String positiveEphemeralButtonText,
+            boolean showPositiveNonEphemeralAsFirstButton,
+            @EmbeddedPromptVariant int variant) {
+        mContentSettingsTypes = contentSettingsTypes;
+        mMessageText = message;
+        mDrawableId = iconId;
+        mBoldedRanges.clear();
+        for (int i = 0; i + 1 < boldedRanges.length; i += 2) {
+            mBoldedRanges.add(new Pair(boldedRanges[i], boldedRanges[i + 1]));
+        }
+        mPositiveButtonText = positiveButtonText;
+        mNegativeButtonText = negativeButtonText;
+        mPositiveEphemeralButtonText = positiveEphemeralButtonText;
+        mShowPositiveNonEphemeralAsFirstButton = showPositiveNonEphemeralAsFirstButton;
+        mEmbeddedPromptVariant = variant;
+
+        assert mDialogController != null;
+        mDialogController.updateDialog(this);
     }
 
     @NativeMethods
@@ -237,14 +314,26 @@ public class PermissionDialogDelegate {
 
         void acceptThisTime(long nativePermissionDialogDelegate, PermissionDialogDelegate caller);
 
-        void cancel(long nativePermissionDialogDelegate, PermissionDialogDelegate caller);
+        void acknowledge(long nativePermissionDialogDelegate, PermissionDialogDelegate caller);
+
+        void deny(long nativePermissionDialogDelegate, PermissionDialogDelegate caller);
 
         void dismissed(
                 long nativePermissionDialogDelegate,
                 PermissionDialogDelegate caller,
                 @DismissalType int dismissalType);
 
+        void resumed(long nativePermissionDialogDelegate, PermissionDialogDelegate caller);
+
         void destroy(long nativePermissionDialogDelegate, PermissionDialogDelegate caller);
+
+        void systemPermissionResolved(
+                long nativePermissionDialogDelegate,
+                PermissionDialogDelegate caller,
+                boolean accept);
+
+        void systemSettingsShown(
+                long nativePermissionDialogDelegate, PermissionDialogDelegate caller);
 
         int getRequestTypeEnumSize();
     }

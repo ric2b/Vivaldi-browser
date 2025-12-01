@@ -9,6 +9,7 @@
 
 #include "include/gpu/graphite/TextureInfo.h"
 #include "include/private/base/SkTemplates.h"
+#include "src/core/SkTraceEvent.h"
 #include "src/gpu/SkSLToBackend.h"
 #include "src/gpu/Swizzle.h"
 #include "src/gpu/graphite/Attribute.h"
@@ -246,8 +247,11 @@ static wgpu::BlendOperation blend_equation_to_dawn_blend_op(skgpu::BlendEquation
 }
 
 struct AsyncPipelineCreationBase {
+    AsyncPipelineCreationBase(const UniqueKey& key) : fKey(key) {}
+
     wgpu::RenderPipeline fRenderPipeline;
     bool fFinished = false;
+    UniqueKey fKey; // for logging the wait to resolve a Pipeline future in dawnRenderPipeline
 #if SK_HISTOGRAMS_ENABLED
     // We need these three for the Graphite.PipelineCreationTimes.* histograms (cf.
     // log_pipeline_creation)
@@ -304,9 +308,13 @@ void log_pipeline_creation(const AsyncPipelineCreationBase* apcb) {
 
 #if defined(__EMSCRIPTEN__)
 // For wasm, we don't use async compilation.
-struct DawnGraphicsPipeline::AsyncPipelineCreation : public AsyncPipelineCreationBase {};
+struct DawnGraphicsPipeline::AsyncPipelineCreation : public AsyncPipelineCreationBase {
+    AsyncPipelineCreation(const UniqueKey& key) : AsyncPipelineCreationBase(key) {}
+};
 #else
 struct DawnGraphicsPipeline::AsyncPipelineCreation : public AsyncPipelineCreationBase {
+    AsyncPipelineCreation(const UniqueKey& key) : AsyncPipelineCreationBase(key) {}
+
     wgpu::Future fFuture;
 };
 #endif
@@ -316,9 +324,11 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(
         const DawnSharedContext* sharedContext,
         DawnResourceProvider* resourceProvider,
         const RuntimeEffectDictionary* runtimeDict,
+        const UniqueKey& pipelineKey,
         const GraphicsPipelineDesc& pipelineDesc,
         const RenderPassDesc& renderPassDesc,
-        SkEnumBitMask<PipelineCreationFlags> pipelineCreationFlags) {
+        SkEnumBitMask<PipelineCreationFlags> pipelineCreationFlags,
+        uint32_t compilationID) {
     const DawnCaps& caps = *static_cast<const DawnCaps*>(sharedContext->caps());
     const auto& device = sharedContext->device();
 
@@ -439,6 +449,8 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(
     // noop fragment shader, if fragment shader is null.
     fragment.module = hasFragmentSkSL ? std::move(fsModule) : sharedContext->noopFragment();
     fragment.entryPoint = "main";
+    fragment.constantCount = 0;
+    fragment.constants = nullptr;
     fragment.targetCount = 1;
     fragment.targets = &colorTarget;
     descriptor.fragment = &fragment;
@@ -592,7 +604,11 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(
             layout.attributes = vertexAttributes.data();
         } else {
             layout.arrayStride = 0;
+#if defined(__EMSCRIPTEN__)
             layout.stepMode = wgpu::VertexStepMode::VertexBufferNotUsed;
+#else
+            layout.stepMode = wgpu::VertexStepMode::Undefined;
+#endif
             layout.attributeCount = 0;
             layout.attributes = nullptr;
         }
@@ -612,7 +628,11 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(
             layout.attributes = instanceAttributes.data();
         } else {
             layout.arrayStride = 0;
+#if defined(__EMSCRIPTEN__)
             layout.stepMode = wgpu::VertexStepMode::VertexBufferNotUsed;
+#else
+            layout.stepMode = wgpu::VertexStepMode::Undefined;
+#endif
             layout.attributeCount = 0;
             layout.attributes = nullptr;
         }
@@ -652,7 +672,7 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(
     // For Dawn, we want Precompilation to happen synchronously
     const bool useAsync = caps.useAsyncPipelineCreation() && !forPrecompilation;
 
-    auto asyncCreation = std::make_unique<AsyncPipelineCreation>();
+    auto asyncCreation = std::make_unique<AsyncPipelineCreation>(pipelineKey);
 #if SK_HISTOGRAMS_ENABLED
     asyncCreation->fStartTime = skgpu::StdSteadyClock::now();
     asyncCreation->fFromPrecompile = forPrecompilation;
@@ -701,7 +721,8 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(
         log_pipeline_creation(asyncCreation.get());
     }
 
-    PipelineInfo pipelineInfo{*shaderInfo, pipelineCreationFlags};
+    PipelineInfo pipelineInfo{ *shaderInfo, pipelineCreationFlags,
+                               pipelineKey.hash(), compilationID };
 #if defined(GPU_TEST_UTILS)
     pipelineInfo.fNativeVertexShader = std::move(vsCode);
     pipelineInfo.fNativeFragmentShader = std::move(fsCode);
@@ -754,6 +775,15 @@ const wgpu::RenderPipeline& DawnGraphicsPipeline::dawnRenderPipeline() const {
     // We shouldn't use CreateRenderPipelineAsync in wasm.
     SKGPU_LOG_F("CreateRenderPipelineAsync shouldn't be used in WASM");
 #else
+
+#if defined(SK_PIPELINE_LIFETIME_LOGGING)
+    TRACE_EVENT_INSTANT2("skia.gpu",
+                         TRACE_STR_STATIC("WaitBeginN"),
+                         TRACE_EVENT_SCOPE_THREAD,
+                         "key", fAsyncPipelineCreation->fKey.hash(),
+                         "compilationID", this->getPipelineInfo().fCompilationID);
+#endif
+
     wgpu::FutureWaitInfo waitInfo{};
     waitInfo.future = fAsyncPipelineCreation->fFuture;
     const auto& instance = static_cast<const DawnSharedContext*>(sharedContext())
@@ -765,6 +795,15 @@ const wgpu::RenderPipeline& DawnGraphicsPipeline::dawnRenderPipeline() const {
             instance.WaitAny(1, &waitInfo, /*timeoutNS=*/std::numeric_limits<uint64_t>::max());
     SkASSERT(status == wgpu::WaitStatus::Success);
     SkASSERT(waitInfo.completed);
+
+#if defined(SK_PIPELINE_LIFETIME_LOGGING)
+    TRACE_EVENT_INSTANT2("skia.gpu",
+                         TRACE_STR_STATIC("WaitEndN"),
+                         TRACE_EVENT_SCOPE_THREAD,
+                         "key", fAsyncPipelineCreation->fKey.hash(),
+                         "compilationID", this->getPipelineInfo().fCompilationID);
+#endif
+
 #endif
 
     return fAsyncPipelineCreation->fRenderPipeline;

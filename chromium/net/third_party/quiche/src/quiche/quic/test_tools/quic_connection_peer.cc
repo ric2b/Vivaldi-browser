@@ -11,6 +11,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/types/variant.h"
 #include "quiche/quic/core/congestion_control/send_algorithm_interface.h"
+#include "quiche/quic/core/quic_connection.h"
 #include "quiche/quic/core/quic_connection_alarms.h"
 #include "quiche/quic/core/quic_packet_writer.h"
 #include "quiche/quic/core/quic_received_packet_manager.h"
@@ -596,16 +597,20 @@ bool QuicConnectionPeer::TestLastReceivedPacketInfoDefaults() {
 // static
 void QuicConnectionPeer::DisableEcnCodepointValidation(
     QuicConnection* connection) {
-  // disable_ecn_codepoint_validation_ doesn't work correctly if the flag
-  // isn't set; all tests that don't set the flag should hit this bug.
-  QUIC_BUG_IF(quic_bug_518619343_03, !GetQuicRestartFlag(quic_support_ect1))
-      << "Test disables ECN validation without setting quic_support_ect1";
   connection->disable_ecn_codepoint_validation_ = true;
+  QuicSentPacketManagerPeer::SetEcnQueried(GetSentPacketManager(connection),
+                                           true);
 }
 
 // static
 void QuicConnectionPeer::OnForwardProgressMade(QuicConnection* connection) {
   connection->OnForwardProgressMade();
+}
+
+// static
+bool QuicConnectionPeer::CanReceiveAckFrequencyFrames(
+    QuicConnection* connection) {
+  return connection->can_receive_ack_frequency_immediate_ack_;
 }
 
 }  // namespace test

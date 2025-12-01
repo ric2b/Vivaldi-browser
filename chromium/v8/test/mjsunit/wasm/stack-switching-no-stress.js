@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Flags: --allow-natives-syntax --experimental-wasm-jspi
+// Flags: --allow-natives-syntax --wasm-staging
 // Flags: --no-stress-wasm-stack-switching
 
 // --stress-wasm-stack-switching affects the behavior of the JSPI tests below,
@@ -46,7 +46,7 @@ d8.file.execute("test/mjsunit/wasm/wasm-module-builder.js");
         }});
   // export1 (promising)
   let wrapper = WebAssembly.promising(instance.exports.export1);
-  assertThrowsAsync(wrapper(), WebAssembly.RuntimeError,
+  assertThrowsAsync(wrapper(), WebAssembly.SuspendError,
       /trying to suspend JS frames/);
 })();
 

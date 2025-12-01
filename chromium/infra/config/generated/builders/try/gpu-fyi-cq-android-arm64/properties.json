@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Android FYI Release (Pixel 6)",
-              "project": "chromium-m132"
+              "project": "chromium-m134"
             },
             "builder_spec": {
               "builder_group": "chromium.gpu.fyi",
@@ -22,7 +22,7 @@
                 "apply_configs": [
                   "download_xr_test_apks"
                 ],
-                "config": "android",
+                "config": "arm64_builder_rel_mb",
                 "target_platform": "android"
               },
               "legacy_gclient_config": {
@@ -34,7 +34,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "GPU FYI Android arm64 Builder",
-                "project": "chromium-m132"
+                "project": "chromium-m134"
               },
               "run_tests_serially": true
             }
@@ -43,7 +43,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "GPU FYI Android arm64 Builder",
-              "project": "chromium-m132"
+              "project": "chromium-m134"
             },
             "builder_spec": {
               "builder_group": "chromium.gpu.fyi",
@@ -55,7 +55,7 @@
                 "apply_configs": [
                   "download_xr_test_apks"
                 ],
-                "config": "android",
+                "config": "arm64_builder_rel_mb",
                 "target_platform": "android"
               },
               "legacy_gclient_config": {
@@ -72,14 +72,14 @@
         {
           "bucket": "ci",
           "builder": "GPU FYI Android arm64 Builder",
-          "project": "chromium-m132"
+          "project": "chromium-m134"
         }
       ],
       "builder_ids_in_scope_for_testing": [
         {
           "bucket": "ci",
           "builder": "Android FYI Release (Pixel 6)",
-          "project": "chromium-m132"
+          "project": "chromium-m134"
         }
       ],
       "retry_failed_shards": false,
@@ -89,11 +89,6 @@
   "$build/flakiness": {
     "check_for_flakiness": true,
     "check_for_flakiness_with_resultdb": true
-  },
-  "$build/reclient": {
-    "instance": "rbe-chromium-untrusted",
-    "metrics_project": "chromium-reclient-metrics",
-    "scandeps_server": true
   },
   "$build/siso": {
     "configs": [

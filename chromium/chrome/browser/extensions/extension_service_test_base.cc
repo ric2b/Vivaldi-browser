@@ -3,17 +3,18 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/extensions/extension_service_test_base.h"
-#include "base/memory/raw_ptr.h"
 
 #include <utility>
 
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/to_string.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
@@ -52,6 +53,7 @@
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/pref_names.h"
+#include "extensions/common/extension_features.h"
 #include "extensions/common/extensions_client.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -265,6 +267,9 @@ ExtensionServiceTestBase::ExtensionServiceTestBase(
       std::vector<
           raw_ptr<policy::ConfigurationPolicyProvider, VectorExperimental>>{
           &policy_provider_});
+  // Allow unpacked extensions without developer mode for testing.
+  feature_list_.InitAndDisableFeature(
+      extensions_features::kExtensionDisableUnsupportedDeveloper);
 }
 
 ExtensionServiceTestBase::~ExtensionServiceTestBase() {
@@ -341,7 +346,7 @@ testing::AssertionResult ExtensionServiceTestBase::ValidateBooleanPref(
     bool expected_val) {
   std::string msg =
       base::StringPrintf("while checking: %s %s == %s", extension_id.c_str(),
-                         pref_path.c_str(), expected_val ? "true" : "false");
+                         pref_path.c_str(), base::ToString(expected_val));
 
   PrefService* prefs = profile()->GetPrefs();
   const base::Value::Dict& dict = prefs->GetDict(pref_names::kExtensions);

@@ -98,7 +98,7 @@ def _default_args():
                 "UNICODE",
                 "_UNICODE",
                 "_CRT_RAND_S",
-                "_WIN32_WINNT=0x0602",  # Override bazel default to Windows 8
+                "_WIN32_WINNT=0x0A00",  # Override bazel default to Windows 10
             ],
             "//conditions:default": [],
         }),
@@ -124,6 +124,7 @@ def _default_args():
             "@v8//bazel/config:is_clang": [
                 "-Wno-invalid-offsetof",
                 "-Wno-deprecated-this-capture",
+                "-Wno-deprecated-declarations",
                 "-std=c++20",
             ],
             "@v8//bazel/config:is_gcc": [
@@ -176,7 +177,7 @@ def _default_args():
                 "Advapi32.lib",
             ],
             "@v8//bazel/config:is_macos": ["-pthread"],
-            "//conditions:default": ["-Wl,--no-as-needed -ldl -pthread"],
+            "//conditions:default": ["-Wl,--no-as-needed -ldl -latomic -pthread"],
         }) + select({
             ":should_add_rdynamic": ["-rdynamic"],
             "//conditions:default": [],
@@ -316,7 +317,11 @@ def v8_library(
 # split the set of outputs by using OutputGroupInfo, that way we do not need to
 # run the torque generator twice.
 def _torque_files_impl(ctx):
-    v8root = "."
+    # Allow building V8 as a dependency: workspace_root points to external/v8
+    # when building V8 from a different repository and empty otherwise.
+    v8root = ctx.label.workspace_root
+    if v8root == "":
+        v8root = "."
 
     # Arguments
     args = []
@@ -495,6 +500,7 @@ def v8_mksnapshot(name, args, suffix = ""):
         suffix = suffix,
         target_os = select({
             "@v8//bazel/config:is_macos": "mac",
+            "@v8//bazel/config:is_windows": "win",
             "//conditions:default": "",
         }),
     )
@@ -506,6 +512,7 @@ def v8_mksnapshot(name, args, suffix = ""):
         suffix = suffix,
         target_os = select({
             "@v8//bazel/config:is_macos": "mac",
+            "@v8//bazel/config:is_windows": "win",
             "//conditions:default": "",
         }),
     )
@@ -565,6 +572,7 @@ def build_config_content(cpu, icu):
         ("leaptiering", "true"),
         ("lite_mode", "false"),
         ("local_off_stack_check", "false"),
+        ("lower_limits_mode", "false"),
         ("memory_corruption_api", "false"),
         ("mips_arch_variant", '""'),
         ("mips_use_msa", "false"),

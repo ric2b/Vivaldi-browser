@@ -299,7 +299,7 @@ The top level unique name marker is part of the Python config format and must be
 Pending implementation: new_chrome [crbug.com/212678](https://crbug.com/212678)
 
 \*If there are other events you would like to have available please [file a
-bug](http://goto.google.com/chromeos-lab-bug).
+bug](http://go/chromeos-lab-bug).
 
 #### Options for *suite* line
 
@@ -337,7 +337,7 @@ those. When in doubt ask chromeos-lab-infrastructure@google.com.
 
 Suites can also be run as a step in the buildbot waterfall. This assumes you are
 running your builds via cbuildbot, if you are not please [file a
-bug](http://goto.google.com/chromeos-lab-bug) with your need and the Lab team
+bug](http://go/chromeos-lab-bug) with your need and the Lab team
 can look at how to best direct you.
 
 **\*Note** when running the HW_Test step you are blocking your waterfall on
@@ -345,7 +345,7 @@ actual hardware tests. If you do not want your builders to block on this
 consider using Suite Scheduler as described above.
 
 **\*Note if your build client is not on the master2 vlan you will need to [file
-a bug](http://goto.google.com/chromeos-lab-bug) with the Chrome OS lab team so a
+a bug](http://go/chromeos-lab-bug) with the Chrome OS lab team so a
 proxy connection can be set up.**
 
 Adding a HW_Test step to your cbuildbot config is as easy as editing

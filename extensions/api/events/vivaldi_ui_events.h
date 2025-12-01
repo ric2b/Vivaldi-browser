@@ -27,7 +27,8 @@ class VivaldiUIEvents : public VivaldiEventHooks {
       SessionID::id_type window_id,
       content::BrowserContext* browser_context,
       const input::NativeWebKeyboardEvent& event,
-      bool is_auto_repeat);
+      bool is_auto_repeat,
+      bool forced_browser_priority);
 
   // Helper for sending simple mouse change states. To be used by JS to detect
   // if a mouse change happens when it should not. JS will not receive this by a

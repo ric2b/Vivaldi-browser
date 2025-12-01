@@ -19,6 +19,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "tensorflow/lite/experimental/litert/c/litert_any.h"
 #include "tensorflow/lite/experimental/litert/c/litert_common.h"
 #include "tensorflow/lite/experimental/litert/c/litert_event.h"
 #include "tensorflow/lite/experimental/litert/c/litert_model.h"
@@ -33,20 +34,10 @@ extern "C" {
 // Basic Execution API
 // /////////////////////////////////////////////////////////////////////////////
 
-#define LITERT_DISPATCH_API_VERSION_MAJOR 0
-#define LITERT_DISPATCH_API_VERSION_MINOR 1
-#define LITERT_DISPATCH_API_VERSION_PATCH 0
-
 LITERT_DEFINE_HANDLE(LiteRtDispatchDeviceContext);
 LITERT_DEFINE_HANDLE(LiteRtDispatchInvocationContext);
 
 typedef uint64_t LiteRtTensorBufferHandle;
-
-typedef struct LiteRtDispatchApiVersion {
-  int major;
-  int minor;
-  int patch;
-} LiteRtDispatchApiVersion;
 
 typedef enum LiteRtDispatchCapabilities {
   kLiteRtDispatchCapabilitiesNone = 0,
@@ -79,7 +70,7 @@ LiteRtStatus LiteRtDispatchInitialize(const LiteRtDispatchOption* options,
                                       int num_options);
 
 // Return the version of the Dispatch API runtime.
-LiteRtStatus LiteRtDispatchGetApiVersion(LiteRtDispatchApiVersion* api_version);
+LiteRtStatus LiteRtDispatchGetApiVersion(LiteRtApiVersion* api_version);
 
 // Return the vendor id of the Dispatch API runtime.
 //

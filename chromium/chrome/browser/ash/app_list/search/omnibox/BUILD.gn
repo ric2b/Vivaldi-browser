@@ -4,7 +4,7 @@
 
 import("//build/config/chromeos/ui_mode.gni")
 
-assert(is_chromeos_ash)
+assert(is_chromeos)
 
 static_library("omnibox") {
   sources = [
@@ -38,7 +38,6 @@ static_library("omnibox") {
     "//chrome/browser/profiles:profile",
     "//chrome/browser/search_engines",
     "//chromeos/ash/components/string_matching",
-    "//chromeos/crosapi/cpp",
     "//chromeos/crosapi/mojom",
     "//components/bookmarks/browser",
     "//components/favicon/core",

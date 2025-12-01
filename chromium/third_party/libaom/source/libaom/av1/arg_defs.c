@@ -284,8 +284,8 @@ const av1_codec_arg_definitions_t g_av1_codec_arg_defs = {
   .sharpness =
       ARG_DEF(NULL, "sharpness", 1,
               "Bias towards block sharpness in rate-distortion optimization of "
-              "transform coefficients and (in allintra mode only) reduce block "
-              "edge filtering for better sharpness (0..7), default is 0"),
+              "transform coefficients and (in all intra mode only) reduce "
+              "block edge filtering for better sharpness (0..7), default is 0"),
   .static_thresh =
       ARG_DEF(NULL, "static-thresh", 1, "Motion detection threshold"),
   .auto_altref =
@@ -464,10 +464,10 @@ const av1_codec_arg_definitions_t g_av1_codec_arg_defs = {
               "Enable quantisation matrices (0: false (default), 1: true)"),
   .qm_min = ARG_DEF(
       NULL, "qm-min", 1,
-      "Min quant matrix flatness (0..15), default is 5 (4 for allintra mode)"),
-  .qm_max = ARG_DEF(
-      NULL, "qm-max", 1,
-      "Max quant matrix flatness (0..15), default is 9 (10 for allintra mode)"),
+      "Min quant matrix flatness (0..15), default is 5 (4 for all intra mode)"),
+  .qm_max = ARG_DEF(NULL, "qm-max", 1,
+                    "Max quant matrix flatness (0..15), default is 9 (10 for "
+                    "all intra mode)"),
   .reduced_tx_type_set = ARG_DEF(NULL, "reduced-tx-type-set", 1,
                                  "Use reduced set of transform types"),
   .use_intra_dct_only =
@@ -552,8 +552,8 @@ const av1_codec_arg_definitions_t g_av1_codec_arg_defs = {
       ARG_DEF(NULL, "deltaq-mode", 1,
               "Delta qindex mode (0: off, 1: deltaq objective (default), "
               "2: deltaq placeholder, 3: key frame visual quality, 4: user "
-              "rating based visual quality optimization); "
-              "requires --enable-tpl-model=1"),
+              "rating based visual quality optimization, 5: HDR video, 6: "
+              "Variance Boost all intra); requires --enable-tpl-model=1"),
   .deltaq_strength = ARG_DEF(NULL, "deltaq-strength", 1,
                              "Deltaq strength for"
                              " --deltaq-mode=4 (%)"),
@@ -674,10 +674,10 @@ const av1_codec_arg_definitions_t g_av1_codec_arg_defs = {
       "frames (default), 2: Disable loopfilter for non-reference frames, 3: "
       "Disable loopfilter for frames with low motion)"),
 
-  .auto_intra_tools_off = ARG_DEF(
-      NULL, "auto-intra-tools-off", 1,
-      "Automatically turn off several intra coding tools for allintra mode; "
-      "only in effect if --deltaq-mode=3"),
+  .auto_intra_tools_off =
+      ARG_DEF(NULL, "auto-intra-tools-off", 1,
+              "Automatically turn off several intra coding tools for all intra "
+              "mode; only in effect if --deltaq-mode=3"),
 
   .two_pass_input =
       ARG_DEF(NULL, "two-pass-input", 1,

@@ -20,10 +20,12 @@ module.exports = {
     meta: {
         type: "problem",
 
+        defaultOptions: [{ checkLoops: "allExceptWhileTrue" }],
+
         docs: {
             description: "Disallow constant expressions in conditions",
             recommended: true,
-            url: "https://eslint.org/docs/rules/no-constant-condition"
+            url: "https://eslint.org/docs/latest/rules/no-constant-condition"
         },
 
         schema: [
@@ -31,8 +33,7 @@ module.exports = {
                 type: "object",
                 properties: {
                     checkLoops: {
-                        type: "boolean",
-                        default: true
+                        enum: ["all", "allExceptWhileTrue", "none", true, false]
                     }
                 },
                 additionalProperties: false
@@ -45,9 +46,15 @@ module.exports = {
     },
 
     create(context) {
-        const options = context.options[0] || {},
-            checkLoops = options.checkLoops !== false,
-            loopSetStack = [];
+        const loopSetStack = [];
+        const sourceCode = context.sourceCode;
+        let [{ checkLoops }] = context.options;
+
+        if (checkLoops === true) {
+            checkLoops = "all";
+        } else if (checkLoops === false) {
+            checkLoops = "none";
+        }
 
         let loopsInCurrentScope = new Set();
 
@@ -62,7 +69,7 @@ module.exports = {
          * @private
          */
         function trackConstantConditionLoop(node) {
-            if (node.test && isConstant(context.getScope(), node.test, true)) {
+            if (node.test && isConstant(sourceCode.getScope(node), node.test, true)) {
                 loopsInCurrentScope.add(node);
             }
         }
@@ -87,7 +94,7 @@ module.exports = {
          * @private
          */
         function reportIfConstant(node) {
-            if (node.test && isConstant(context.getScope(), node.test, true)) {
+            if (node.test && isConstant(sourceCode.getScope(node), node.test, true)) {
                 context.report({ node: node.test, messageId: "unexpected" });
             }
         }
@@ -119,7 +126,7 @@ module.exports = {
          * @private
          */
         function checkLoop(node) {
-            if (checkLoops) {
+            if (checkLoops === "all" || checkLoops === "allExceptWhileTrue") {
                 trackConstantConditionLoop(node);
             }
         }
@@ -131,7 +138,13 @@ module.exports = {
         return {
             ConditionalExpression: reportIfConstant,
             IfStatement: reportIfConstant,
-            WhileStatement: checkLoop,
+            WhileStatement(node) {
+                if (node.test.type === "Literal" && node.test.value === true && checkLoops === "allExceptWhileTrue") {
+                    return;
+                }
+
+                checkLoop(node);
+            },
             "WhileStatement:exit": checkConstantConditionLoopInSet,
             DoWhileStatement: checkLoop,
             "DoWhileStatement:exit": checkConstantConditionLoopInSet,

@@ -121,7 +121,7 @@ both web developers and users. Your feature must satisfy the following:
                 with a flag, then you should implement one for the origin trial.
 *   Have UMA metrics to track feature usage
     *   You should record usage with
-                [UseCounter](https://cs.chromium.org/chromium/src/third_party/blink/renderer/core/frame/use_counter.h),
+                [UseCounter](https://cs.chromium.org/chromium/src/third_party/blink/renderer/platform/instrumentation/use_counter.h),
                 as that can be automatically monitored by the origin trials
                 infrastructure.
     *   The feature must have a corresponding entry in the enum
@@ -165,7 +165,7 @@ Running an origin trial requires the following:
             ([see
             above](/blink/origin-trials/running-an-origin-trial#is-feature-ready)).
 *   Review
-            [go/ChromeLaunchProcess](https://goto.google.com/ChromeLaunchProcess)
+            [go/ChromeLaunchProcess](http://go/ChromeLaunchProcess)
             and determine what launch approvals you require.
 *   Integrate with the origin trials framework ([see
             below](/blink/origin-trials/running-an-origin-trial#integrate-feature)).
@@ -181,7 +181,7 @@ Running an origin trial requires the following:
                 tested even before beta (if possible).
     *   If feasible, this could include doing your own testing within
                 the developer's environment (any of test/staging/production).
-    *   For an example, see [crbug.com/709211](http://crbug.com/709211).
+    *   For an example, see [crbug.com/709211](https://crbug.com/709211).
 *   Publish a blog post on
             [developers.google.com/web/updates](http://developers.google.com/web/updates)
             about the feature when it lands beta.
@@ -195,7 +195,7 @@ Running an origin trial requires the following:
             to "Origin trial".
 *   You can review the developer registrations for your feature (and
             renewals) by following the instructions in the [feature author
-            guide](https://goto.google.com/running-an-origin-trial).
+            guide](http://go/running-an-origin-trial).
     *   In particular, be aware of any registrations that expect
                 &gt;10,000 page views per day to be using the feature
 
@@ -231,7 +231,7 @@ Recommended process:
 *   Notify the OT team with the final link to the blog post.
     *   The link will be updated in the developer console and recorded
                 in
-                [go/origin-trials-feature-pipeline](http://goto.google.com/origin-trials-feature-pipeline/).
+                [go/origin-trials-feature-pipeline](http://go/origin-trials-feature-pipeline/).
 *   Notify the OT team when the trial is ready for registration.
     *   OT team will activate the trial to make it available to the
                 public.
@@ -240,7 +240,7 @@ Recommended process:
 
 Origin trials can run for up to 6 milestones (~24 weeks), and can be extended
 under certain conditions.
-See [here](https://www.chromium.org/blink/launching-features/#step-3-optional-origin-trial)
+See [here](/blink/launching-features/#step-3-optional-origin-trial)
 for more details.
 
 ## What is the process to extend an origin trial?
@@ -281,7 +281,7 @@ this generally means starting a new origin trial, to follow the previous trial.
 
 In order to be eligible for an extension, you must demonstrate substantial
 progress towards meeting the bar for shipping the feature.
-See [here](https://www.chromium.org/blink/launching-features/#step-3-optional-origin-trial)
+See [here](/blink/launching-features/#step-3-optional-origin-trial)
 for more details.
 
 

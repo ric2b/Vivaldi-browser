@@ -44,6 +44,9 @@ class GpuControlListTest : public testing::Test,
     return rt;
   }
 
+  GpuControlList::GLType GetGLType(const std::string& gl_renderer) {
+    return GpuControlList::ProcessANGLEGLRenderer(gl_renderer);
+  }
   bool is_angle() const { return GetParam(); }
 
  protected:
@@ -227,6 +230,22 @@ TEST_P(GpuControlListTest, TestGroup) {
   features = control_list->MakeDecision(GpuControlList::kOsLinux,
                                         "3.13.2-1-generic", gpu_info, 2);
   EXPECT_SINGLE_FEATURE(features, TEST_FEATURE_1);
+}
+
+TEST_P(GpuControlListTest, AngleVulkan) {
+  EXPECT_EQ(GpuControlList::kGLTypeANGLE_VULKAN,
+            GetGLType("ANGLE (ARM, Vulkan 1.3.247 (Mali-G52 (0x74021000)), "
+                      "Mali G52-44.1.0)"));
+
+  EXPECT_EQ(
+      GpuControlList::kGLTypeANGLE_VULKAN,
+      GetGLType("ANGLE (Intel, Vulkan 1.3.289 (Intel(R) Graphics (ADL GT2) "
+                "(0x00004626)), Intel open-source Mesa driver-24.2.0)"));
+
+  EXPECT_EQ(GpuControlList::kGLTypeANGLE_GLES,
+            GetGLType("ANGLE (ARM, Mali-G52, OpenGL ES 3.1 vxxxxx)"));
+
+  EXPECT_EQ(GpuControlList::kGLTypeGLES, GetGLType("Mali-G52"));
 }
 
 }  // namespace gpu

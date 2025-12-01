@@ -89,7 +89,7 @@ class Types {
     Handle<i::Hole> the_hole_value = isolate->factory()->the_hole_value();
 
     SmiConstant = Type::Constant(js_heap_broker(), smi, zone);
-    Signed32Constant = Type::Constant(js_heap_broker(), signed32, zone);
+    Signed32Constant = Type::Constant(signed32->value(), zone);
     ObjectConstant1 = Type::Constant(js_heap_broker(), object1, zone);
     ObjectConstant2 = Type::Constant(js_heap_broker(), object2, zone);
     ArrayConstant = Type::Constant(js_heap_broker(), array, zone);
@@ -165,6 +165,8 @@ class Types {
   DirectHandleVector<i::Object>
       integers;  // "Integer" values used for range limits.
 
+  Type Constant(double value) { return Type::Constant(value, zone_); }
+
   Type Constant(Handle<i::Object> value) {
     return Type::Constant(js_heap_broker(), value, zone_);
   }
@@ -208,6 +210,9 @@ class Types {
       }
       case 1: {  // constant
         int i = rng_->NextInt(static_cast<int>(values.size()));
+        if (IsHeapNumber(*values[i])) {
+          return Type::Constant(Cast<HeapNumber>(*values[i])->value(), zone_);
+        }
         return Type::Constant(js_heap_broker(), values[i], zone_);
       }
       case 2: {  // range
@@ -235,16 +240,20 @@ class Types {
   JSHeapBroker* js_heap_broker() { return &js_heap_broker_; }
 
   template <typename T>
-  Handle<T> CanonicalHandle(Tagged<T> object) {
+  IndirectHandle<T> CanonicalHandle(Tagged<T> object) {
     return js_heap_broker_.CanonicalPersistentHandle(object);
   }
   template <typename T>
-  Handle<T> CanonicalHandle(T object) {
+  IndirectHandle<T> CanonicalHandle(T object) {
     static_assert(kTaggedCanConvertToRawObjects);
     return CanonicalHandle(Tagged<T>(object));
   }
   template <typename T>
-  Handle<T> CanonicalHandle(Handle<T> handle) {
+  IndirectHandle<T> CanonicalHandle(IndirectHandle<T> handle) {
+    return CanonicalHandle(*handle);
+  }
+  template <typename T>
+  IndirectHandle<T> CanonicalHandle(DirectHandle<T> handle) {
     return CanonicalHandle(*handle);
   }
 

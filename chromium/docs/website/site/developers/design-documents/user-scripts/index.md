@@ -31,7 +31,7 @@ Chromium is the **@match** attribute. Here are some examples of its use:
 
 // @match http://\*.google.com/\*
 
-// @match http://www.google.com/\*
+// @match https://www.google.com/\*
 
 // ==/UserScript==
 

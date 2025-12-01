@@ -210,7 +210,7 @@ base::CancelableTaskTracker::TaskId MailClientService::DeleteMessages(
 
 base::CancelableTaskTracker::TaskId MailClientService::UpdateMessage(
     MessageRow message,
-    MessageCallback callback,
+    StatusCallback callback,
     base::CancelableTaskTracker* tracker) {
   return tracker->PostTaskAndReplyWithResult(
       backend_task_runner_.get(), FROM_HERE,
@@ -287,6 +287,19 @@ base::CancelableTaskTracker::TaskId MailClientService::DeleteMailSearchDB(
       backend_task_runner_.get(), FROM_HERE,
       base::BindOnce(&MailClientBackend::DeleteMailSearchDB,
                      mail_client_backend_),
+      base::BindOnce(std::move(callback)));
+}
+
+base::CancelableTaskTracker::TaskId MailClientService::CheckDBHealth(
+    StatusCallback callback,
+    base::CancelableTaskTracker* tracker) {
+  DCHECK(backend_task_runner_)
+      << "MailClient service being called after cleanup";
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  return tracker->PostTaskAndReplyWithResult(
+      backend_task_runner_.get(), FROM_HERE,
+      base::BindOnce(&MailClientBackend::CheckDBHealth, mail_client_backend_),
       base::BindOnce(std::move(callback)));
 }
 

@@ -59,7 +59,7 @@ InstallerState::InstallerState(Level level)
   set_level(level);
 }
 
-InstallerState::~InstallerState() {}
+InstallerState::~InstallerState() = default;
 
 void InstallerState::Initialize(const base::CommandLine& command_line,
                                 const InitialPreferences& prefs,

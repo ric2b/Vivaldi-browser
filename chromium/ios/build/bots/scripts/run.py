@@ -7,15 +7,16 @@
 
 Sample usage:
   ./run.py \
-  -a src/xcodebuild/Release-iphoneos/base_unittests.app \
+  -a /path/to/Release-iphoneos/base_unittests.app \
   -o /tmp/out \
-  -p iPhone 5s \
+  -p "iPhone 5s" \
   -v 9.3 \
-  -b 9b46
+  -b 9b46 \
+  -i /path/to/Release-iphoneos/iossim
 
-  Installs base_unittests.app in an iPhone 5s simulator running iOS 9.3 under
-  Xcode build version 9b46, runs it, and captures all test data in /tmp/out.
-  """
+Installs base_unittests.app in an iPhone 5s simulator running iOS 9.3 under
+Xcode build version 9b46, runs it, and captures all test data in /tmp/out.
+"""
 
 import argparse
 import json
@@ -109,8 +110,8 @@ class Runner():
     self.parse_args(args)
 
     try:
-      with measures.time_consumption(
-          'mac_toolchain', 'Download and Install', 'Xcode and Runtime'):
+      with measures.time_consumption('mac_toolchain', 'Download and Install',
+                                     'Xcode and Runtime'):
         install_success, is_legacy_xcode = xcode.install_xcode(
             self.args.mac_toolchain_cmd, self.args.xcode_build_version,
             self.args.xcode_path, self.args.runtime_cache_prefix,

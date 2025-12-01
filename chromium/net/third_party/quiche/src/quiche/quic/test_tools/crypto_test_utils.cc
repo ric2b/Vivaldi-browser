@@ -814,8 +814,10 @@ CryptoHandshakeMessage CreateCHLO(
     size_t value_len = value.length();
     if (value_len > 0 && value[0] == '#') {
       // This is ascii encoded hex.
-      std::string hex_value =
-          absl::HexStringToBytes(absl::string_view(&value[1]));
+      std::string hex_value;
+      QUICHE_CHECK(
+          absl::HexStringToBytes(absl::string_view(&value[1]), &hex_value));
+
       msg.SetStringPiece(quic_tag, hex_value);
       continue;
     }
@@ -863,7 +865,7 @@ std::string GenerateClientNonceHex(const QuicClock* clock,
   std::unique_ptr<CryptoHandshakeMessage> msg =
       crypto_config->AddConfig(primary_config, clock->WallNow());
   absl::string_view orbit;
-  QUICHE_CHECK(msg->GetStringPiece(kORBT, &orbit));
+  QUICHE_CHECK(msg->GetStringPiece(kOBIT, &orbit));
   std::string nonce;
   CryptoUtils::GenerateNonce(clock->WallNow(), QuicRandom::GetInstance(), orbit,
                              &nonce);

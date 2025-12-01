@@ -89,8 +89,7 @@ describeWithEnvironment('TimelineMiniMap', function() {
       throw new Error('The MiniMap unexpectedly did not create any breadcrumbs');
     }
 
-    assert.strictEqual(
-        TimelineComponents.Breadcrumbs.flattenBreadcrumbs(minimap.breadcrumbs.initialBreadcrumb).length, 1);
+    assert.lengthOf(TimelineComponents.Breadcrumbs.flattenBreadcrumbs(minimap.breadcrumbs.initialBreadcrumb), 1);
     assert.deepEqual(minimap.breadcrumbs.initialBreadcrumb, {window: parsedTrace.Meta.traceBounds, child: null});
   });
   it('stores breadcrumbs to be serialized', async function() {
@@ -106,7 +105,7 @@ describeWithEnvironment('TimelineMiniMap', function() {
     const entireTraceBounds = parsedTrace.Meta.traceBounds;
     const newBounds = {
       ...entireTraceBounds,
-      min: Trace.Types.Timing.MicroSeconds((entireTraceBounds.max + entireTraceBounds.min) / 2),
+      min: Trace.Types.Timing.Micro((entireTraceBounds.max + entireTraceBounds.min) / 2),
     };
     minimap.breadcrumbs?.add(newBounds);
     const serializableModifications = Timeline.ModificationsManager.ModificationsManager.activeManager()?.toJSON();

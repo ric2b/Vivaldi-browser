@@ -13,21 +13,24 @@
 #include "base/memory/structured_shared_memory.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
+#include "base/types/pass_key.h"
+#include "third_party/blink/public/common/performance/performance_scenario_observer.h"
 
 namespace blink::performance_scenarios {
 
 namespace {
 
 // Global pointers to the shared memory mappings.
-scoped_refptr<RefCountedScenarioMapping>& MappingPtrForScope(Scope scope) {
+scoped_refptr<RefCountedScenarioMapping>& MappingPtrForScope(
+    ScenarioScope scope) {
   static base::NoDestructor<scoped_refptr<RefCountedScenarioMapping>>
       current_process_mapping;
   static base::NoDestructor<scoped_refptr<RefCountedScenarioMapping>>
       global_mapping;
   switch (scope) {
-    case Scope::kCurrentProcess:
+    case ScenarioScope::kCurrentProcess:
       return *current_process_mapping;
-    case Scope::kGlobal:
+    case ScenarioScope::kGlobal:
       return *global_mapping;
   }
   NOTREACHED();
@@ -50,7 +53,7 @@ const ScenarioState& GetScenarioStateFromMapping(
 // processes.
 
 ScopedReadOnlyScenarioMemory::ScopedReadOnlyScenarioMemory(
-    Scope scope,
+    ScenarioScope scope,
     base::ReadOnlySharedMemoryRegion region)
     : scope_(scope) {
   using SharedScenarioState = base::StructuredSharedMemory<ScenarioState>;
@@ -61,25 +64,32 @@ ScopedReadOnlyScenarioMemory::ScopedReadOnlyScenarioMemory(
         base::MakeRefCounted<RefCountedScenarioMapping>(
             std::move(mapping.value()));
   }
+
+  // The ObserverList must be created after mapping the memory, because it reads
+  // the scenario state in its constructor.
+  PerformanceScenarioObserverList::CreateForScope(
+      base::PassKey<ScopedReadOnlyScenarioMemory>(), scope_);
 }
 
 ScopedReadOnlyScenarioMemory::~ScopedReadOnlyScenarioMemory() {
+  PerformanceScenarioObserverList::DestroyForScope(
+      base::PassKey<ScopedReadOnlyScenarioMemory>(), scope_);
   MappingPtrForScope(scope_).reset();
 }
 
 // static
 scoped_refptr<RefCountedScenarioMapping>
-ScopedReadOnlyScenarioMemory::GetMappingForTesting(Scope scope) {
+ScopedReadOnlyScenarioMemory::GetMappingForTesting(ScenarioScope scope) {
   return MappingPtrForScope(scope);
 }
 
-SharedAtomicRef<LoadingScenario> GetLoadingScenario(Scope scope) {
+SharedAtomicRef<LoadingScenario> GetLoadingScenario(ScenarioScope scope) {
   scoped_refptr<RefCountedScenarioMapping> mapping = MappingPtrForScope(scope);
   return SharedAtomicRef<LoadingScenario>(
       mapping, GetScenarioStateFromMapping(mapping.get()).loading);
 }
 
-SharedAtomicRef<InputScenario> GetInputScenario(Scope scope) {
+SharedAtomicRef<InputScenario> GetInputScenario(ScenarioScope scope) {
   scoped_refptr<RefCountedScenarioMapping> mapping = MappingPtrForScope(scope);
   return SharedAtomicRef<InputScenario>(
       mapping, GetScenarioStateFromMapping(mapping.get()).input);

@@ -5,6 +5,8 @@
 #include <climits>
 #include <cstdint>
 
+#include "src/sandbox/js-dispatch-table.h"
+
 #if V8_TARGET_ARCH_X64
 
 #include <optional>
@@ -187,7 +189,7 @@ Operand MacroAssembler::RootAsOperand(RootIndex index) {
 
 void MacroAssembler::LoadTaggedRoot(Register destination, RootIndex index) {
   static_assert(!CanBeImmediate(RootIndex::kUndefinedValue) ||
-                std::is_same<Tagged_t, uint32_t>::value);
+                std::is_same_v<Tagged_t, uint32_t>);
   if (CanBeImmediate(index)) {
     mov_tagged(destination,
                Immediate(static_cast<uint32_t>(ReadOnlyRootPtr(index))));
@@ -453,7 +455,7 @@ void MacroAssembler::RecordWriteField(Register object, int offset,
   DCHECK(IsAligned(offset, kTaggedSize));
 
   leaq(slot_address, FieldOperand(object, offset));
-  if (v8_flags.debug_code) {
+  if (v8_flags.slow_debug_code) {
     ASM_CODE_COMMENT_STRING(this, "Debug check slot_address");
     Label ok;
     testb(slot_address, Immediate(kTaggedSize - 1));
@@ -469,7 +471,7 @@ void MacroAssembler::RecordWriteField(Register object, int offset,
 
   // Clobber clobbered input registers when running with the debug-code flag
   // turned on to provoke errors.
-  if (v8_flags.debug_code) {
+  if (v8_flags.slow_debug_code) {
     ASM_CODE_COMMENT_STRING(this, "Zap scratch registers");
     Move(value, kZapValue, RelocInfo::NO_INFO);
     Move(slot_address, kZapValue, RelocInfo::NO_INFO);
@@ -514,12 +516,13 @@ void MacroAssembler::StoreSandboxedPointerField(Operand dst_field_operand,
 }
 
 void MacroAssembler::LoadExternalPointerField(
-    Register destination, Operand field_operand, ExternalPointerTag tag,
-    Register scratch, IsolateRootLocation isolateRootLocation) {
+    Register destination, Operand field_operand,
+    ExternalPointerTagRange tag_range, Register scratch,
+    IsolateRootLocation isolateRootLocation) {
   DCHECK(!AreAliased(destination, scratch));
 #ifdef V8_ENABLE_SANDBOX
-  DCHECK_NE(tag, kExternalPointerNullTag);
-  DCHECK(!IsSharedExternalPointerType(tag));
+  DCHECK(!tag_range.IsEmpty());
+  DCHECK(!IsSharedExternalPointerType(tag_range));
   DCHECK(!field_operand.AddressUsesRegister(scratch));
   if (isolateRootLocation == IsolateRootLocation::kInRootRegister) {
     DCHECK(root_array_available_);
@@ -539,8 +542,26 @@ void MacroAssembler::LoadExternalPointerField(
   shrq(destination, Immediate(kExternalPointerIndexShift));
   static_assert(kExternalPointerTableEntrySize == 8);
   movq(destination, Operand(scratch, destination, times_8, 0));
-  movq(scratch, Immediate64(~tag));
-  andq(destination, scratch);
+
+  // We don't expect to see empty fields here. If this is ever needed, consider
+  // using an dedicated empty value entry for those tags instead (i.e. an entry
+  // with the right tag and nullptr payload).
+  DCHECK(!ExternalPointerCanBeEmpty(tag_range));
+
+  if (tag_range.Size() == 1) {
+    // The common and simple case: we expect exactly one tag.
+    movq(scratch, destination);
+    shrq(scratch, Immediate(kExternalPointerTagShift));
+    andl(scratch, Immediate(kExternalPointerShiftedTagMask));
+    cmpl(scratch, Immediate(tag_range.first));
+    SbxCheck(equal, AbortReason::kExternalPointerTagMismatch);
+    movq(scratch, Immediate64(kExternalPointerPayloadMask));
+    andq(destination, scratch);
+  } else {
+    // Not currently supported. Implement once needed.
+    DCHECK_NE(tag_range, kAnyExternalPointerTagRange);
+    UNREACHABLE();
+  }
 #else
   movq(destination, field_operand);
 #endif  // V8_ENABLE_SANDBOX
@@ -678,6 +699,22 @@ void MacroAssembler::LoadEntrypointFromJSDispatchTable(
   shll(destination, Immediate(kJSDispatchTableEntrySizeLog2));
   movq(destination, Operand(kScratchRegister, destination, times_1,
                             JSDispatchEntry::kEntrypointOffset));
+}
+
+void MacroAssembler::LoadEntrypointFromJSDispatchTable(
+    Register destination, JSDispatchHandle dispatch_handle) {
+  DCHECK(!AreAliased(destination, kScratchRegister));
+  LoadAddress(kScratchRegister, ExternalReference::js_dispatch_table_address());
+  // WARNING: This offset calculation is only safe if we have already stored a
+  // RelocInfo for the dispatch handle, e.g. in CallJSDispatchEntry, (thus
+  // keeping the dispatch entry alive) _and_ because the entrypoints are not
+  // compatible (thus meaning that the offset calculation is not invalidated by
+  // a compaction).
+  // TODO(leszeks): Make this less of a footgun.
+  static_assert(!JSDispatchTable::kSupportsCompaction);
+  int offset = JSDispatchTable::OffsetOfEntry(dispatch_handle) +
+               JSDispatchEntry::kEntrypointOffset;
+  movq(destination, Operand(kScratchRegister, offset));
 }
 
 void MacroAssembler::LoadParameterCountFromJSDispatchTable(
@@ -887,7 +924,7 @@ void MacroAssembler::RecordWrite(Register object, Register slot_address,
     return;
   }
 
-  if (v8_flags.debug_code) {
+  if (v8_flags.slow_debug_code) {
     ASM_CODE_COMMENT_STRING(this, "Debug check slot_address");
     Label ok;
     if (slot.contains_indirect_pointer()) {
@@ -973,7 +1010,7 @@ void MacroAssembler::RecordWrite(Register object, Register slot_address,
 
   // Clobber clobbered registers when running with the debug-code flag
   // turned on to provoke errors.
-  if (v8_flags.debug_code) {
+  if (v8_flags.slow_debug_code) {
     ASM_CODE_COMMENT_STRING(this, "Zap scratch registers");
     Move(slot_address, kZapValue, RelocInfo::NO_INFO);
     Move(value, kZapValue, RelocInfo::NO_INFO);
@@ -1019,13 +1056,12 @@ void MacroAssembler::AlignStackPointer() {
 void MacroAssembler::Abort(AbortReason reason) {
   ASM_CODE_COMMENT(this);
   if (v8_flags.code_comments) {
-    const char* msg = GetAbortReason(reason);
-    RecordComment("Abort message: ");
-    RecordComment(msg);
+    RecordComment("Abort message:", SourceLocation{});
+    RecordComment(GetAbortReason(reason), SourceLocation{});
   }
 
-  // Avoid emitting call to builtin if requested.
-  if (trap_on_abort()) {
+  // Without debug code, save the code size and just trap.
+  if (!v8_flags.debug_code) {
     int3();
     return;
   }
@@ -1243,6 +1279,8 @@ void MacroAssembler::ReplaceClosureCodeWithOptimizedCode(
 #endif  // V8_ENABLE_LEAPTIERING
 }
 
+#ifndef V8_ENABLE_LEAPTIERING
+
 // Read off the flags in the feedback vector and check if there
 // is optimized code or a tiering state that needs to be processed.
 Condition MacroAssembler::CheckFeedbackVectorFlagsNeedsProcessing(
@@ -1269,20 +1307,6 @@ void MacroAssembler::OptimizeCodeOrTailCallOptimizedCodeSlot(
   ASM_CODE_COMMENT(this);
   DCHECK(!AreAliased(feedback_vector, closure));
 
-#ifdef V8_ENABLE_LEAPTIERING
-  // In the leaptiering case, we don't load optimized code from the feedback
-  // vector so only need to call CompileOptimized or FunctionLogNextExecution
-  // here. See also CheckFeedbackVectorFlagsNeedsProcessing above.
-  Label needs_logging;
-  testw(FieldOperand(feedback_vector, FeedbackVector::kFlagsOffset),
-        Immediate(FeedbackVector::kFlagsTieringStateIsAnyRequested));
-  j(zero, &needs_logging);
-
-  GenerateTailCallToReturnedCode(Runtime::kCompileOptimized, jump_mode);
-
-  bind(&needs_logging);
-  GenerateTailCallToReturnedCode(Runtime::kFunctionLogNextExecution, jump_mode);
-#else
   Label maybe_has_optimized_code, maybe_needs_logging;
   // Check if optimized code is available.
   testw(FieldOperand(feedback_vector, FeedbackVector::kFlagsOffset),
@@ -1305,8 +1329,9 @@ void MacroAssembler::OptimizeCodeOrTailCallOptimizedCodeSlot(
   TailCallOptimizedCodeSlot(this, optimized_code_entry, closure, r9,
                             WriteBarrierDescriptor::SlotAddressRegister(),
                             jump_mode);
-#endif  // V8_ENABLE_LEAPTIERING
 }
+
+#endif  // !V8_ENABLE_LEAPTIERING
 
 int MacroAssembler::RequiredStackSizeForCallerSaved(SaveFPRegsMode fp_mode,
                                                     Register exclusion) const {
@@ -1686,9 +1711,19 @@ void MacroAssembler::Cvttsd2siq(Register dst, Operand src) {
   }
 }
 
+void MacroAssembler::Cvtph2pd(XMMRegister dst, XMMRegister src) {
+  ASM_CODE_COMMENT(this);
+  CpuFeatureScope f16c_scope(this, F16C);
+  CpuFeatureScope avx_scope(this, AVX);
+
+  vcvtph2ps(dst, src);
+  Cvtss2sd(dst, dst);
+}
+
 void MacroAssembler::Cvtpd2ph(XMMRegister dst, XMMRegister src, Register tmp) {
   ASM_CODE_COMMENT(this);
   CpuFeatureScope f16c_scope(this, F16C);
+  CpuFeatureScope avx_scope(this, AVX);
   Register tmp2 = kScratchRegister;
   DCHECK_NE(tmp, tmp2);
   DCHECK_NE(dst, src);
@@ -3262,7 +3297,7 @@ void MacroAssembler::JumpCodeObject(Register code_object, CodeEntrypointTag tag,
 
 void MacroAssembler::CallJSFunction(Register function_object,
                                     uint16_t argument_count) {
-#if V8_ENABLE_LEAPTIERING
+#ifdef V8_ENABLE_LEAPTIERING
   static_assert(kJavaScriptCallCodeStartRegister == rcx, "ABI mismatch");
   static_assert(kJavaScriptCallDispatchHandleRegister == r15, "ABI mismatch");
   movl(r15, FieldOperand(function_object, JSFunction::kDispatchHandleOffset));
@@ -3271,80 +3306,118 @@ void MacroAssembler::CallJSFunction(Register function_object,
   cmpl(rbx, Immediate(argument_count));
   SbxCheck(less_equal, AbortReason::kJSSignatureMismatch);
   call(rcx);
-#elif V8_ENABLE_SANDBOX
-  // When the sandbox is enabled, we can directly fetch the entrypoint pointer
-  // from the code pointer table instead of going through the Code object. In
-  // this way, we avoid one memory load on this code path.
-  LoadCodeEntrypointViaCodePointer(
-      rcx, FieldOperand(function_object, JSFunction::kCodeOffset),
-      kJSEntrypointTag);
-  call(rcx);
 #else
+  CHECK(!V8_ENABLE_SANDBOX_BOOL);
   LoadTaggedField(rcx, FieldOperand(function_object, JSFunction::kCodeOffset));
   CallCodeObject(rcx, kJSEntrypointTag);
 #endif
 }
 
-void MacroAssembler::JumpJSFunction(Register function_object,
-                                    JumpMode jump_mode) {
 #if V8_ENABLE_LEAPTIERING
+void MacroAssembler::CallJSDispatchEntry(JSDispatchHandle dispatch_handle,
+                                         uint16_t argument_count) {
   static_assert(kJavaScriptCallCodeStartRegister == rcx, "ABI mismatch");
   static_assert(kJavaScriptCallDispatchHandleRegister == r15, "ABI mismatch");
-  movl(r15, FieldOperand(function_object, JSFunction::kDispatchHandleOffset));
-  LoadEntrypointFromJSDispatchTable(rcx, r15);
-  DCHECK_EQ(jump_mode, JumpMode::kJump);
-  jmp(rcx);
+  movl(kJavaScriptCallDispatchHandleRegister,
+       Immediate(dispatch_handle.value(), RelocInfo::JS_DISPATCH_HANDLE));
+  // WARNING: This entrypoint load is only safe because we are storing a
+  // RelocInfo for the dispatch handle in the movl above (thus keeping the
+  // dispatch entry alive) _and_ because the entrypoints are not compactable
+  // (thus meaning that the calculation in the entrypoint load is not
+  // invalidated by a compaction).
+  // TODO(leszeks): Make this less of a footgun.
+  static_assert(!JSDispatchTable::kSupportsCompaction);
+  LoadEntrypointFromJSDispatchTable(rcx, dispatch_handle);
+  CHECK_EQ(argument_count,
+           IsolateGroup::current()->js_dispatch_table()->GetParameterCount(
+               dispatch_handle));
+  call(rcx);
+}
+#endif
+
+void MacroAssembler::JumpJSFunction(Register function_object,
+                                    JumpMode jump_mode) {
+  CHECK(!V8_ENABLE_SANDBOX_BOOL);
+#ifdef V8_ENABLE_LEAPTIERING
   // This implementation is not currently used because callers usually need
   // to load both entry point and parameter count and then do something with
   // the latter before the actual call.
-  // TODO(ishell): remove the above code once it's clear it's not needed.
   UNREACHABLE();
-#elif V8_ENABLE_SANDBOX
-  // When the sandbox is enabled, we can directly fetch the entrypoint pointer
-  // from the code pointer table instead of going through the Code object. In
-  // this way, we avoid one memory load on this code path.
-  LoadCodeEntrypointViaCodePointer(
-      rcx, FieldOperand(function_object, JSFunction::kCodeOffset),
-      kJSEntrypointTag);
-  DCHECK_EQ(jump_mode, JumpMode::kJump);
-  jmp(rcx);
 #else
   LoadTaggedField(rcx, FieldOperand(function_object, JSFunction::kCodeOffset));
   JumpCodeObject(rcx, kJSEntrypointTag, jump_mode);
 #endif
 }
 
-void MacroAssembler::ResolveWasmCodePointer(Register target) {
-#ifdef V8_ENABLE_WASM_CODE_POINTER_TABLE
-  ExternalReference global_jump_table =
-      ExternalReference::wasm_code_pointer_table();
-  Move(kScratchRegister, global_jump_table);
+#ifdef V8_ENABLE_WEBASSEMBLY
+
+void MacroAssembler::CallWasmCodePointer(Register target,
+                                         uint64_t signature_hash,
+                                         CallJumpMode call_jump_mode) {
+  ASM_CODE_COMMENT(this);
+  Move(kScratchRegister, ExternalReference::wasm_code_pointer_table());
+
+#ifdef V8_ENABLE_SANDBOX
+  static_assert(sizeof(wasm::WasmCodePointerTableEntry) == 16);
+  // Check that using a 32-bit shift is valid for any valid code pointer.
+  static_assert(wasm::WasmCodePointerTable::kMaxWasmCodePointers <=
+                (kMaxInt >> 4));
+  shll(target, Immediate(4));
+  // Add `target` and `kScratchRegister` early to free `kScratchRegister` again.
+  addq(target, kScratchRegister);
+
+  Operand signature_hash_op{target,
+                            wasm::WasmCodePointerTable::kOffsetOfSignatureHash};
+  if (is_int32(signature_hash)) {
+    // cmpq sign-extends the 32-bit immediate.
+    cmpq(signature_hash_op, Immediate(static_cast<int32_t>(signature_hash)));
+  } else {
+    Move(kScratchRegister, signature_hash);
+    cmpq(kScratchRegister, signature_hash_op);
+  }
+  Label fail, ok;
+  j(Condition::kNotEqual, &fail, Label::Distance::kNear);
+  jmp(&ok, Label::Distance::kNear);
+
+  bind(&fail);
+  Abort(AbortReason::kWasmSignatureMismatch);
+
+  bind(&ok);
+  Operand target_op{target, 0};
+#else
   static_assert(sizeof(wasm::WasmCodePointerTableEntry) == 8);
-  movq(target, Operand(kScratchRegister, target, ScaleFactor::times_8, 0));
+  Operand target_op{kScratchRegister, target, ScaleFactor::times_8, 0};
+#endif
+
+  if (call_jump_mode == CallJumpMode::kTailCall) {
+    jmp(target_op);
+  } else {
+    call(target_op);
+  }
+}
+
+void MacroAssembler::CallWasmCodePointerNoSignatureCheck(Register target) {
+  Move(kScratchRegister, ExternalReference::wasm_code_pointer_table());
+
+#ifdef V8_ENABLE_SANDBOX
+  static_assert(sizeof(wasm::WasmCodePointerTableEntry) == 16);
+  // Check that using a 32-bit shift is valid for any valid code pointer.
+  static_assert(wasm::WasmCodePointerTable::kMaxWasmCodePointers <=
+                (kMaxInt >> 4));
+  shll(target, Immediate(4));
+  call(Operand(kScratchRegister, target, ScaleFactor::times_1, 0));
+#else
+  static_assert(sizeof(wasm::WasmCodePointerTableEntry) == 8);
+  call(Operand(kScratchRegister, target, ScaleFactor::times_8, 0));
 #endif
 }
 
-void MacroAssembler::CallWasmCodePointer(Register target,
-                                         CallJumpMode call_jump_mode) {
-  ResolveWasmCodePointer(target);
-  if (call_jump_mode == CallJumpMode::kTailCall) {
-    jmp(target);
-  } else {
-    call(target);
-  }
+void MacroAssembler::LoadWasmCodePointer(Register dst, Operand src) {
+  static_assert(sizeof(WasmCodePointer) == 4);
+  movl(dst, src);
 }
 
-void MacroAssembler::LoadWasmCodePointer(Register dst, Operand src) {
-  if constexpr (V8_ENABLE_WASM_CODE_POINTER_TABLE_BOOL) {
-    static_assert(!V8_ENABLE_WASM_CODE_POINTER_TABLE_BOOL ||
-                  sizeof(WasmCodePointer) == 4);
-    movl(dst, src);
-  } else {
-    static_assert(V8_ENABLE_WASM_CODE_POINTER_TABLE_BOOL ||
-                  sizeof(WasmCodePointer) == 8);
-    movq(dst, src);
-  }
-}
+#endif
 
 void MacroAssembler::PextrdPreSse41(Register dst, XMMRegister src,
                                     uint8_t imm8) {
@@ -3695,14 +3768,15 @@ void MacroAssembler::CmpInstanceTypeRange(Register map,
 }
 
 void MacroAssembler::TestCodeIsMarkedForDeoptimization(Register code) {
-  const int kByte4Offset = 3 * kByteSize;
-  const int kByte4OffsetInBits = kByte4Offset * 8;
+  const int kByteWithDeoptBitOffset = 0 * kByteSize;
+  const int kByteWithDeoptBitOffsetInBits = kByteWithDeoptBitOffset * 8;
   static_assert(V8_TARGET_LITTLE_ENDIAN == 1);
   static_assert(FIELD_SIZE(Code::kFlagsOffset) * kBitsPerByte == 32);
-  static_assert(Code::kMarkedForDeoptimizationBit > kByte4OffsetInBits);
-  testb(
-      FieldOperand(code, Code::kFlagsOffset + kByte4Offset),
-      Immediate(1 << (Code::kMarkedForDeoptimizationBit - kByte4OffsetInBits)));
+  static_assert(Code::kMarkedForDeoptimizationBit >
+                kByteWithDeoptBitOffsetInBits);
+  testb(FieldOperand(code, Code::kFlagsOffset + kByteWithDeoptBitOffset),
+        Immediate(1 << (Code::kMarkedForDeoptimizationBit -
+                        kByteWithDeoptBitOffsetInBits)));
 }
 
 void MacroAssembler::TestCodeIsTurbofanned(Register code) {
@@ -3740,7 +3814,7 @@ void MacroAssembler::AssertSmi(Operand object) {
 }
 
 void MacroAssembler::AssertZeroExtended(Register int32_register) {
-  if (!v8_flags.debug_code) return;
+  if (!v8_flags.slow_debug_code) return;
   ASM_CODE_COMMENT(this);
   DCHECK_NE(int32_register, kScratchRegister);
   movl(kScratchRegister, Immediate(kMaxUInt32));  // zero-extended
@@ -3749,7 +3823,7 @@ void MacroAssembler::AssertZeroExtended(Register int32_register) {
 }
 
 void MacroAssembler::AssertSignedBitOfSmiIsZero(Register smi_register) {
-  if (!v8_flags.debug_code) return;
+  if (!v8_flags.slow_debug_code) return;
   ASM_CODE_COMMENT(this);
   DCHECK(COMPRESS_POINTERS_BOOL);
   testl(smi_register, Immediate(int32_t{0x10000000}));
@@ -4572,10 +4646,10 @@ void MacroAssembler::CheckPageFlag(Register object, Register scratch, int mask,
   DCHECK(cc == zero || cc == not_zero);
   MemoryChunkHeaderFromObject(object, scratch);
   if (mask < (1 << kBitsPerByte)) {
-    testb(Operand(scratch, MemoryChunkLayout::kFlagsOffset),
+    testb(Operand(scratch, MemoryChunk::FlagsOffset()),
           Immediate(static_cast<uint8_t>(mask)));
   } else {
-    testl(Operand(scratch, MemoryChunkLayout::kFlagsOffset), Immediate(mask));
+    testl(Operand(scratch, MemoryChunk::FlagsOffset()), Immediate(mask));
   }
   j(cc, condition_met, condition_met_distance);
 }
@@ -4605,25 +4679,26 @@ void MacroAssembler::CheckMarkBit(Register object, Register scratch0,
   // Computing cell.
   MemoryChunkHeaderFromObject(object, scratch0);
 #ifdef V8_ENABLE_SANDBOX
-  movl(scratch0, Operand(scratch0, MemoryChunkLayout::kMetadataIndexOffset));
-  andl(scratch0, Immediate(MemoryChunk::kMetadataPointerTableSizeMask));
+  movl(scratch0, Operand(scratch0, MemoryChunk::MetadataIndexOffset()));
+  andl(scratch0,
+       Immediate(MemoryChunkConstants::kMetadataPointerTableSizeMask));
   shll(scratch0, Immediate(kSystemPointerSizeLog2));
   LoadAddress(scratch1,
               ExternalReference::memory_chunk_metadata_table_address());
   movq(scratch0, Operand(scratch1, scratch0, times_1, 0));
 #else   // !V8_ENABLE_SANDBOX
-  movq(scratch0, Operand(scratch0, MemoryChunkLayout::kMetadataOffset));
+  movq(scratch0, Operand(scratch0, MemoryChunk::MetadataOffset()));
 #endif  // !V8_ENABLE_SANDBOX
-  if (v8_flags.debug_code) {
+  if (v8_flags.slow_debug_code) {
     Push(object);
-    movq(scratch1, Operand(scratch0, MemoryChunkLayout::kAreaStartOffset));
+    movq(scratch1, Operand(scratch0, MemoryChunkMetadata::AreaStartOffset()));
     MemoryChunkHeaderFromObject(scratch1, scratch1);
     MemoryChunkHeaderFromObject(object, object);
     cmpq(object, scratch1);
     Check(equal, AbortReason::kMetadataAreaStartDoesNotMatch);
     Pop(object);
   }
-  addq(scratch0, Immediate(MemoryChunkLayout::kMarkingBitmapOffset));
+  addq(scratch0, Immediate(MutablePageMetadata::MarkingBitmapOffset()));
 
   movq(scratch1, object);
   andq(scratch1, Immediate(MemoryChunk::GetAlignmentMaskForAssembler()));
@@ -4657,12 +4732,22 @@ void MacroAssembler::ComputeCodeStartAddress(Register dst) {
 //       the flags in the referenced {Code} object;
 //    2. test kMarkedForDeoptimizationBit in those flags; and
 //    3. if it is not zero then it jumps to the builtin.
+//
+// Note: With leaptiering we simply assert the code is not deoptimized.
 void MacroAssembler::BailoutIfDeoptimized(Register scratch) {
   int offset = InstructionStream::kCodeOffset - InstructionStream::kHeaderSize;
-  LoadProtectedPointerField(scratch,
-                            Operand(kJavaScriptCallCodeStartRegister, offset));
-  TestCodeIsMarkedForDeoptimization(scratch);
+  if (v8_flags.debug_code || !V8_ENABLE_LEAPTIERING_BOOL) {
+    LoadProtectedPointerField(
+        scratch, Operand(kJavaScriptCallCodeStartRegister, offset));
+    TestCodeIsMarkedForDeoptimization(scratch);
+  }
+#ifdef V8_ENABLE_LEAPTIERING
+  if (v8_flags.debug_code) {
+    Assert(zero, AbortReason::kInvalidDeoptimizedCode);
+  }
+#else
   TailCallBuiltin(Builtin::kCompileLazyDeoptimizedCode, not_zero);
+#endif
 }
 
 void MacroAssembler::CallForDeoptimization(Builtin target, int, Label* exit,

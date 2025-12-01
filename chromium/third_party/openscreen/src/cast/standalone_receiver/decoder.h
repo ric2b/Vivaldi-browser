@@ -37,7 +37,6 @@ class Decoder {
   // Interface for receiving decoded frames and/or errors.
   class Client {
    public:
-
     virtual void OnFrameDecoded(FrameId frame_id, const AVFrame& frame) = 0;
     virtual void OnDecodeError(FrameId frame_id,
                                const std::string& message) = 0;

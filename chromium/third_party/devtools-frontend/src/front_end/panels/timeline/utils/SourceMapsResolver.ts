@@ -10,11 +10,13 @@ import * as SourceMapScopes from '../../../models/source_map_scopes/source_map_s
 import * as Trace from '../../../models/trace/trace.js';
 import * as Workspace from '../../../models/workspace/workspace.js';
 
-type ResolvedCodeLocationData = {
-  name: string|null,
-  devtoolsLocation: Workspace.UISourceCode.UILocation|null,
-  script: SDK.Script.Script|null,
-};
+import type * as EntityMapper from './EntityMapper.js';
+
+interface ResolvedCodeLocationData {
+  name: string|null;
+  devtoolsLocation: Workspace.UISourceCode.UILocation|null;
+  script: SDK.Script.Script|null;
+}
 export class SourceMappingsUpdated extends Event {
   static readonly eventName = 'sourcemappingsupdated';
 
@@ -26,15 +28,12 @@ export class SourceMappingsUpdated extends Event {
   }
 }
 
-// Resolved code location data is keyed based on
-// ProcessID=>ThreadID=> Call frame key.
 // The code location key is created as a concatenation of its fields.
-export const resolvedCodeLocationDataNames:
-    Map<Trace.Types.Events.ProcessID, Map<Trace.Types.Events.ThreadID, Map<string, ResolvedCodeLocationData|null>>> =
-        new Map();
+export const resolvedCodeLocationDataNames: Map<string, ResolvedCodeLocationData|null> = new Map();
 
 export class SourceMapsResolver extends EventTarget {
   #parsedTrace: Trace.Handlers.Types.ParsedTrace;
+  #entityMapper: EntityMapper.EntityMapper|null = null;
 
   #isResolving = false;
 
@@ -45,9 +44,10 @@ export class SourceMapsResolver extends EventTarget {
   // those workers too.
   #debuggerModelsToListen = new Set<SDK.DebuggerModel.DebuggerModel>();
 
-  constructor(parsedTrace: Trace.Handlers.Types.ParsedTrace) {
+  constructor(parsedTrace: Trace.Handlers.Types.ParsedTrace, entityMapper?: EntityMapper.EntityMapper) {
     super();
     this.#parsedTrace = parsedTrace;
+    this.#entityMapper = entityMapper ?? null;
   }
 
   static clearResolvedNodeNames(): void {
@@ -68,7 +68,14 @@ export class SourceMapsResolver extends EventTarget {
    * (f.e. if an app is bundled). Thus, beyond a URL we can use code
    * location data like line and column numbers to obtain the specific
    * authored code according to the source mappings.
+   *
+   * TODO(andoli): This can return incorrect scripts if the target page has been reloaded since the trace.
    */
+  static resolvedCodeLocationForCallFrame(callFrame: Protocol.Runtime.CallFrame): ResolvedCodeLocationData|null {
+    const codeLocationKey = this.keyForCodeLocation(callFrame as Protocol.Runtime.CallFrame);
+    return resolvedCodeLocationDataNames.get(codeLocationKey) ?? null;
+  }
+
   static resolvedCodeLocationForEntry(entry: Trace.Types.Events.Event): ResolvedCodeLocationData|null {
     let callFrame = null;
     if (Trace.Types.Events.isProfileCall(entry)) {
@@ -80,8 +87,7 @@ export class SourceMapsResolver extends EventTarget {
       }
       callFrame = stackTrace[0];
     }
-    const codeLocationKey = this.keyForCodeLocation(callFrame as Protocol.Runtime.CallFrame);
-    return resolvedCodeLocationDataNames.get(entry.pid)?.get(entry.tid)?.get(codeLocationKey) ?? null;
+    return SourceMapsResolver.resolvedCodeLocationForCallFrame(callFrame as Protocol.Runtime.CallFrame);
   }
 
   static resolvedURLForEntry(parsedTrace: Trace.Handlers.Types.ParsedTrace, entry: Trace.Types.Events.Event):
@@ -93,23 +99,17 @@ export class SourceMapsResolver extends EventTarget {
     }
     // If no source mapping was found for an entry's URL, then default
     // to the URL value contained in the event itself, if any.
-    const url = Trace.Extras.URLForEntry.getNonResolved(parsedTrace, entry);
+    const url = Trace.Handlers.Helpers.getNonResolvedURL(entry, parsedTrace);
     if (url) {
       return Workspace.Workspace.WorkspaceImpl.instance().uiSourceCodeForURL(url)?.url() ?? url;
     }
     return null;
   }
 
-  static storeResolvedNodeDataForEntry(
-      pid: Trace.Types.Events.ProcessID, tid: Trace.Types.Events.ThreadID, callFrame: Protocol.Runtime.CallFrame,
-      resolvedCodeLocationData: ResolvedCodeLocationData): void {
-    const resolvedForPid = resolvedCodeLocationDataNames.get(pid) ||
-        new Map<Trace.Types.Events.ThreadID, Map<string, ResolvedCodeLocationData|null>>();
-    const resolvedForTid = resolvedForPid.get(tid) || new Map<string, ResolvedCodeLocationData|null>();
+  static storeResolvedCodeDataForCallFrame(
+      callFrame: Protocol.Runtime.CallFrame, resolvedCodeLocationData: ResolvedCodeLocationData): void {
     const keyForCallFrame = this.keyForCodeLocation(callFrame);
-    resolvedForTid.set(keyForCallFrame, resolvedCodeLocationData);
-    resolvedForPid.set(tid, resolvedForTid);
-    resolvedCodeLocationDataNames.set(pid, resolvedForPid);
+    resolvedCodeLocationDataNames.set(keyForCallFrame, resolvedCodeLocationData);
   }
 
   async install(): Promise<void> {
@@ -165,7 +165,7 @@ export class SourceMapsResolver extends EventTarget {
     // is attach. If not, we do not notify the flamechart that mappings
     // were updated, since that would trigger a rerender.
     let updatedMappings = false;
-    for (const [pid, threadsInProcess] of this.#parsedTrace.Samples.profilesInProcess) {
+    for (const [, threadsInProcess] of this.#parsedTrace.Samples.profilesInProcess) {
       for (const [tid, threadProfile] of threadsInProcess) {
         const nodes = threadProfile.parsedProfile.nodes() ?? [];
         const target = this.#targetForThread(tid);
@@ -187,9 +187,13 @@ export class SourceMapsResolver extends EventTarget {
               await Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance().rawLocationToUILocation(
                   location);
           updatedMappings ||= Boolean(uiLocation);
+          if (uiLocation?.uiSourceCode.url() && this.#entityMapper) {
+            // Update mappings for the related events of the entity.
+            this.#entityMapper.updateSourceMapEntities(node.callFrame, uiLocation.uiSourceCode.url());
+          }
 
-          SourceMapsResolver.storeResolvedNodeDataForEntry(
-              pid, tid, node.callFrame, {name: resolvedFunctionName, devtoolsLocation: uiLocation, script});
+          SourceMapsResolver.storeResolvedCodeDataForCallFrame(
+              node.callFrame, {name: resolvedFunctionName, devtoolsLocation: uiLocation, script});
         }
       }
     }

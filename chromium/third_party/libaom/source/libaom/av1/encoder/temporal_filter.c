@@ -66,12 +66,12 @@ static inline void get_log_var_4x4sub_blk(
   const int y_offset = mb_row * mb_height * src_stride + mb_col * mb_width;
   const uint8_t *src_buf = frame_to_filter->y_buffer + y_offset;
 
+  aom_variance_fn_t vf = cpi->ppi->fn_ptr[BLOCK_4X4].vf;
   for (int i = 0; i < mb_height; i += MI_SIZE) {
     for (int j = 0; j < mb_width; j += MI_SIZE) {
       // Calculate the 4x4 sub-block variance.
       const int var = av1_calc_normalized_variance(
-          cpi->ppi->fn_ptr[BLOCK_4X4].vf, src_buf + (i * src_stride) + j,
-          src_stride, is_hbd);
+          vf, src_buf + (i * src_stride) + j, src_stride, is_hbd);
 
       // Record min and max for over-arching block
       var_min = AOMMIN(var_min, var);
@@ -128,6 +128,8 @@ static int get_q(const AV1_COMP *cpi) {
  *                                    4 sub-blocks
  * \param[out]  subblock_mses         Pointer to the search errors (MSE) for
  *                                    4 sub-blocks
+ * \param[out]  is_dc_diff_large      Pointer to the value that tells if the DC
+ *                                    difference is large for the block
  *
  * \remark Nothing will be returned. Results are saved in subblock_mvs and
  *         subblock_mses
@@ -138,7 +140,7 @@ static void tf_motion_search(AV1_COMP *cpi, MACROBLOCK *mb,
                              const BLOCK_SIZE block_size, const int mb_row,
                              const int mb_col, MV *ref_mv,
                              bool allow_me_for_sub_blks, MV *subblock_mvs,
-                             int *subblock_mses) {
+                             int *subblock_mses, int *is_dc_diff_large) {
   // Frame information
   const int min_frame_size = AOMMIN(cpi->common.width, cpi->common.height);
 
@@ -182,6 +184,7 @@ static void tf_motion_search(AV1_COMP *cpi, MACROBLOCK *mb,
   mbd->plane[0].pre[0].buf = ref_frame->y_buffer + y_offset;
   mbd->plane[0].pre[0].stride = y_stride;
   mbd->plane[0].pre[0].width = ref_width;
+  *is_dc_diff_large = 0;
 
   const SEARCH_METHODS search_method = NSTEP;
   const search_site_config *search_site_cfg =
@@ -245,6 +248,7 @@ static void tf_motion_search(AV1_COMP *cpi, MACROBLOCK *mb,
     block_mse = DIVIDE_AND_ROUND(error, mb_pels);
     block_mv = best_mv.as_mv;
     *ref_mv = best_mv.as_mv;
+    *is_dc_diff_large = 50 * error < sse;
 
     if (allow_me_for_sub_blks) {
       // On 4 sub-blocks.
@@ -883,7 +887,9 @@ void av1_tf_do_filtering_row(AV1_COMP *cpi, ThreadData *td, int mb_row) {
   uint8_t *pred = tf_data->pred;
 
   // Factor to control the filering strength.
-  const int filter_strength = cpi->oxcf.algo_cfg.arnr_strength;
+  int filter_strength = cpi->oxcf.algo_cfg.arnr_strength;
+  const GF_GROUP *gf_group = &cpi->ppi->gf_group;
+  const FRAME_TYPE frame_type = gf_group->frame_type[cpi->gf_frame_index];
 
   // Do filtering.
   FRAME_DIFF *diff = &td->tf_data.diff;
@@ -924,6 +930,8 @@ void av1_tf_do_filtering_row(AV1_COMP *cpi, ThreadData *td, int mb_row) {
       // Motion search.
       MV subblock_mvs[4] = { kZeroMv, kZeroMv, kZeroMv, kZeroMv };
       int subblock_mses[4] = { INT_MAX, INT_MAX, INT_MAX, INT_MAX };
+      int is_dc_diff_large = 0;
+
       if (frame ==
           filter_frame_idx) {  // Frame to be filtered.
                                // Change ref_mv sign for following frames.
@@ -932,8 +940,12 @@ void av1_tf_do_filtering_row(AV1_COMP *cpi, ThreadData *td, int mb_row) {
       } else {  // Other reference frames.
         tf_motion_search(cpi, mb, frame_to_filter, frames[frame], block_size,
                          mb_row, mb_col, &ref_mv, allow_me_for_sub_blks,
-                         subblock_mvs, subblock_mses);
+                         subblock_mvs, subblock_mses, &is_dc_diff_large);
       }
+
+      if (cpi->oxcf.kf_cfg.enable_keyframe_filtering == 1 &&
+          frame_type == KEY_FRAME && is_dc_diff_large)
+        filter_strength = AOMMIN(filter_strength, 1);
 
       // Perform weighted averaging.
       if (frame == filter_frame_idx) {  // Frame to be filtered.

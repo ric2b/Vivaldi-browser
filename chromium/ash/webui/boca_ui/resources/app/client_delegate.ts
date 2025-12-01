@@ -2,10 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {Config, ControlledTab as ControlledTabMojom, Course, IdentifiedActivity as Activity, Identity as IdentityMojom, NetworkInfo as NetworkInfoMojom, PageHandlerRemote, TabInfo, Window} from '../mojom/boca.mojom-webui.js';
+import type {Value} from '//resources/mojo/mojo/public/mojom/base/values.mojom-webui.js'
 
-import {CaptionConfig, ClientApiDelegate, ControlledTab, IdentifiedActivity, Identity, NetworkInfo, OnTaskConfig, SessionConfig, SubmitAccessCodeResult} from './boca_app.js';
+import {Assignment as AssignmentMojom, Config, ControlledTab as ControlledTabMojom, Course, IdentifiedActivity as Activity, Identity as IdentityMojom, Material as MaterialMojom, NetworkInfo as NetworkInfoMojom, PageHandlerRemote, TabInfo, Window} from '../mojom/boca.mojom-webui.js';
 
+import {BocaValidPref, CaptionConfig, ClientApiDelegate, ControlledTab, IdentifiedActivity, Identity, NetworkInfo, OnTaskConfig, SessionConfig, SubmitAccessCodeResult} from './boca_app.js';
 
 const MICRO_SECS_IN_MINUTES: bigint = 60000000n;
 
@@ -24,7 +25,10 @@ export function getStudentActivityMojomToUI(activities: Activity[]):
                                                undefined,
           isCaptionEnabled: item.activity.isCaptionEnabled,
           isHandRaised: item.activity.isHandRaised,
-          joinMethod: item.activity.joinMethod.valueOf()
+          joinMethod: item.activity.joinMethod.valueOf(),
+          viewScreenSessionCode: item.activity.viewScreenSessionCode ?
+              item.activity.viewScreenSessionCode :
+              undefined,
         }
     }
   })
@@ -37,9 +41,7 @@ export function getSessionConfigMojomToUI(session: Config|
   return {
   sessionDurationInMinutes:
     Number(session.sessionDuration.microseconds / MICRO_SECS_IN_MINUTES),
-        sessionStartTime: session.sessionStartTime?.msec ?
-        new Date(session.sessionStartTime.msec) :
-        undefined,
+        sessionStartTime: session.sessionStartTime || undefined,
         teacher: session.teacher ? {
           id: session.teacher.id,
           name: session.teacher.name,
@@ -98,6 +100,9 @@ export class ClientDelegateFactory {
   private clientDelegateImpl: ClientApiDelegate;
   constructor(pageHandler: PageHandlerRemote) {
     this.clientDelegateImpl = {
+      authenticateWebview: async () => {
+        return (await pageHandler.authenticateWebview()).success;
+      },
       getWindowsTabsList: async () => {
         const result = await pageHandler.getWindowsTabsList();
         return result.windowList.map((window: Window) => {
@@ -119,8 +124,7 @@ export class ClientDelegateFactory {
           return {
             id: course.id,
             name: course.name,
-            // TODO(b/356706279): Add section data.
-            section: '',
+            section: course.section,
           };
         });
       },
@@ -132,6 +136,19 @@ export class ClientDelegateFactory {
             name: student.name,
             email: student.email,
             photoUrl: student.photoUrl ? student.photoUrl.url : undefined,
+          };
+        });
+      },
+      getAssignmentList: async (id: string) => {
+        const result = await pageHandler.listAssignments(id);
+        return result.assignments.map((assignment: AssignmentMojom) => {
+          return {
+            title: assignment.title,
+            url: assignment.url.url,
+            lastUpdateTime: assignment.lastUpdateTime,
+            materials: assignment.materials.map((material: MaterialMojom) => {
+              return {title: material.title, type: material.type.valueOf()};
+            }),
           };
         });
       },
@@ -173,14 +190,14 @@ export class ClientDelegateFactory {
       },
       getSession: async () => {
         const result = (await pageHandler.getSession()).result;
-        if (!result.config) {
+        if (!result.session) {
           return null;
         }
         return {
-          sessionConfig: getSessionConfigMojomToUI(result.config) as
+          sessionConfig: getSessionConfigMojomToUI(result.session.config) as
               SessionConfig,
-          // TODO(b/365191878): Fill in user activity.
-          activity: []
+          activity: getStudentActivityMojomToUI(result.session.activities) as
+              IdentifiedActivity[]
         };
       },
       endSession: async () => {
@@ -224,6 +241,20 @@ export class ClientDelegateFactory {
           return SubmitAccessCodeResult.SUCCESS;
         }
         return SubmitAccessCodeResult.INVALID_CODE;
+      },
+      viewStudentScreen: async (id: string) => {
+        const result = await pageHandler.viewStudentScreen(id);
+        return !resultHasError(result);
+      },
+      endViewScreenSession: async (id: string) => {
+        const result = await pageHandler.endViewScreenSession(id);
+        return !resultHasError(result);
+      },
+      getUserPref: async (pref: BocaValidPref) => {
+        return (await pageHandler.getUserPref(pref.valueOf())).value;
+      },
+      setUserPref: async (pref: BocaValidPref, value: Value) => {
+        await pageHandler.setUserPref(pref.valueOf(), value);
       }
     };
   }

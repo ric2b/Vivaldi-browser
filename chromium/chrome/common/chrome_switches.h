@@ -150,6 +150,7 @@ extern const char kOnTheFlyMhtmlHashComputation[];
 extern const char kOpenInNewWindow[];
 extern const char kPackExtension[];
 extern const char kPackExtensionKey[];
+extern const char kPasswordChangeUrl[];
 extern const char kPreCrashpadCrashTest[];
 extern const char kPredictionServiceMockLikelihood[];
 extern const char kPreinstalledWebAppsDir[];
@@ -165,7 +166,6 @@ extern const char kProxyServer[];
 extern const char kRemoteDebuggingTargets[];
 extern const char kRestart[];
 extern const char kRestoreLastSession[];
-extern const char kSavePageAsMHTML[];
 extern const char kScreenCaptureAudioDefaultUnchecked[];
 extern const char kSilentDebuggerExtensionAPI[];
 extern const char kSilentLaunch[];
@@ -226,10 +226,8 @@ extern const char kCroshCommand[];
 extern const char kDisableLoggingRedirect[];
 extern const char kDisableLoginScreenApps[];
 extern const char kShortMergeSessionTimeoutForTest[];
-extern const char kSchedulerConfiguration[];
-extern const char kSchedulerConfigurationConservative[];
-extern const char kSchedulerConfigurationPerformance[];
-extern const char kSchedulerConfigurationDefault[];
+#else
+extern const char kSavePageAsMHTML[];
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_CHROMEOS_ASH)
@@ -281,6 +279,13 @@ extern const char kAllowNaClSocketAPI[];
 extern const char kEnableNewAppMenuIcon[];
 extern const char kGuest[];
 extern const char kForceNtpMobilePromo[];
+#endif
+
+#if BUILDFLAG(ENABLE_GLIC)
+extern const char kGlicGuestURL[];
+extern const char kCSPOverride[];
+extern const char kGlicAlwaysOpenFre[];
+extern const char kGlicFreURL[];
 #endif
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)

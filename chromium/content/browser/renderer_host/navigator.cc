@@ -8,6 +8,7 @@
 
 #include "base/check_op.h"
 #include "base/debug/dump_without_crashing.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/strings/strcat.h"
@@ -402,7 +403,7 @@ bool Navigator::CheckWebUIRendererDoesNotDisplayNormalURL(
     // TODO(nasko): Convert to CHECK() once it is confirmed this is not
     // violated in reality.
     if (!ChildProcessSecurityPolicyImpl::GetInstance()->HasWebUIBindings(
-            render_frame_host->GetProcess()->GetID())) {
+            render_frame_host->GetProcess()->GetDeprecatedID())) {
       base::debug::DumpWithoutCrashing();
     }
 
@@ -421,10 +422,8 @@ bool Navigator::CheckWebUIRendererDoesNotDisplayNormalURL(
       // process, it should be terminated, otherwise it is a bug in the
       // navigation logic and the browser process should be terminated to avoid
       // exposing users to security issues.
-      if (is_renderer_initiated_check)
-        return false;
-
-      CHECK(false);
+      CHECK(is_renderer_initiated_check);
+      return false;
     }
   }
 
@@ -706,17 +705,17 @@ void Navigator::DidNavigate(
   }
   render_frame_host->set_last_committed_frame_entry(frame_entry);
 
-  // If the history length and/or offset changed, update other renderers in the
+  // If the history length and/or index changed, update other renderers in the
   // FrameTree.
   if (old_entry_count != controller_.GetEntryCount() ||
       details.previous_entry_index !=
           controller_.GetLastCommittedEntryIndex()) {
-    int history_offset = controller_.GetLastCommittedEntryIndex();
+    int history_index = controller_.GetLastCommittedEntryIndex();
     int history_count = controller_.GetEntryCount();
     frame_tree.root()->render_manager()->ExecutePageBroadcastMethod(
-        [history_offset, history_count](RenderViewHostImpl* rvh) {
+        [history_index, history_count](RenderViewHostImpl* rvh) {
           if (auto& broadcast = rvh->GetAssociatedPageBroadcast()) {
-            broadcast->SetHistoryOffsetAndLength(history_offset, history_count);
+            broadcast->SetHistoryIndexAndLength(history_index, history_count);
           }
         },
         site_instance->group());
@@ -835,6 +834,8 @@ void Navigator::Navigate(std::unique_ptr<NavigationRequest> request,
   //  the appropriate long-term solution. Please remove this condition once the
   //  final fix is implemented.
   if (controller_.GetBrowserContext()->ShutdownStarted()) {
+    request->set_navigation_discard_reason(
+        NavigationDiscardReason::kNeverStarted);
     return;
   }
 
@@ -933,7 +934,7 @@ void Navigator::Navigate(std::unique_ptr<NavigationRequest> request,
   // is not needed then NavigationRequest::BeginNavigation should be directly
   // called instead.
   if (should_dispatch_beforeunload) {
-    frame_tree_node->navigation_request()->SetWaitingForRendererResponse();
+    frame_tree_node->navigation_request()->WillStartBeforeUnload();
     frame_tree_node->current_frame_host()->DispatchBeforeUnload(
         RenderFrameHostImpl::BeforeUnloadType::BROWSER_INITIATED_NAVIGATION,
         reload_type != ReloadType::NONE);
@@ -1024,7 +1025,8 @@ void Navigator::RequestOpenURL(
   params.source_site_instance = current_site_instance;
 
   params.source_render_frame_id = render_frame_host->GetRoutingID();
-  params.source_render_process_id = render_frame_host->GetProcess()->GetID();
+  params.source_render_process_id =
+      render_frame_host->GetProcess()->GetDeprecatedID();
 
   if (render_frame_host->web_ui()) {
     // Note that we hide the referrer for Web UI pages. We don't really want
@@ -1109,6 +1111,10 @@ void Navigator::NavigateFromFrameProxy(
     return;
   }
 
+  if (!will_navigate_from_frame_proxy_callback_for_testing_.is_null()) {
+    will_navigate_from_frame_proxy_callback_for_testing_.Run();
+  }
+
   controller_.NavigateFromFrameProxy(
       render_frame_host, url, initiator_frame_token, initiator_process_id,
       initiator_origin, initiator_base_url, is_renderer_initiated,
@@ -1122,9 +1128,16 @@ void Navigator::NavigateFromFrameProxy(
       storage_access_api_status, embedder_shared_storage_context);
 }
 
+void Navigator::SetWillNavigateFromFrameProxyCallbackForTesting(
+    const base::RepeatingClosure& callback) {
+  will_navigate_from_frame_proxy_callback_for_testing_ = callback;
+}
+
 void Navigator::BeforeUnloadCompleted(FrameTreeNode* frame_tree_node,
                                       bool proceed,
-                                      const base::TimeTicks& proceed_time) {
+                                      const base::TimeTicks& proceed_time,
+                                      bool for_legacy,
+                                      bool showed_dialog) {
   DCHECK(frame_tree_node);
 
   NavigationRequest* navigation_request = frame_tree_node->navigation_request();
@@ -1158,7 +1171,8 @@ void Navigator::BeforeUnloadCompleted(FrameTreeNode* frame_tree_node,
 
   // Update the navigation start: it should be when it was determined that the
   // navigation will proceed.
-  navigation_request->set_navigation_start_time(proceed_time);
+  navigation_request->UpdateNavigationStartTime(proceed_time, for_legacy,
+                                                showed_dialog);
 
   DCHECK_EQ(NavigationRequest::WAITING_FOR_RENDERER_RESPONSE,
             navigation_request->state());
@@ -1262,7 +1276,7 @@ void Navigator::OnBeginNavigation(
       frame_tree_node->current_frame_host()->ShouldDispatchBeforeUnload(
           true /* check_subframes_only */);
   if (should_dispatch_beforeunload) {
-    frame_tree_node->navigation_request()->SetWaitingForRendererResponse();
+    frame_tree_node->navigation_request()->WillStartBeforeUnload();
     frame_tree_node->current_frame_host()->DispatchBeforeUnload(
         RenderFrameHostImpl::BeforeUnloadType::RENDERER_INITIATED_NAVIGATION,
         NavigationTypeUtils::IsReload(

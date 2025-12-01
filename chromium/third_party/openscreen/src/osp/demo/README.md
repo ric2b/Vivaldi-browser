@@ -15,9 +15,7 @@ line options affect the behavior.  The command line options are:
 
  - `-v` enables verbose logging.
  - Specifying `friendly_name` puts the demo in receiver mode and sets its name
-   to `friendly_name`.  Currently, `friendly_name` won't appear in any of the
-   controller-side output related to this screen though.  If no friendly name is
-   given, the demo runs as a controller.
+   to `friendly_name`.  If no friendly name is given, the demo runs as a controller.
 
 ## Log output
 
@@ -36,10 +34,13 @@ Then `cat` them in separate terminals while the demo is running.
 
 ## Listener commands
 
- - `avail <url>`: Begin listening for receivers that support the presentation of
-   `url`.
- - `start <url> <instance_id>`: Start a presentation of `url` on the receiver
-   specified by the ID `instance_id`.  `instance_id` will be printed in the output
+ - `connect <instance_name>`: Build a connection to receiver named `instance_name`.
+   All connectable receivers are discovered by discovery module and printed in the
+   output log.
+ - `avail <url>`: Begin listening for all connected receivers that support the
+   presentation of `url`.
+ - `start <url> <instance_name>`: Start a presentation of `url` on the receiver
+   specified by the `instance_name`.  `instance_name` will be printed in the output
    log once `avail` has been run.  The demo only supports starting one
    presentation at a time.
  - `msg <string>`: Sends a string message on the open presentation connection.

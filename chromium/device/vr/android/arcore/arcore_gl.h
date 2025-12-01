@@ -217,7 +217,7 @@ class ArCoreGl : public mojom::XRFrameDataProvider,
                     mojom::XRFrameDataPtr frame_data,
                     mojom::XRFrameDataProvider::GetFrameDataCallback callback);
 
-  bool InitializeGl(gfx::AcceleratedWidget drawing_widget);
+  bool InitializeGl();
   void InitializeArCompositor(const scoped_refptr<base::SingleThreadTaskRunner>&
                                   main_thread_task_runner,
                               gpu::SurfaceHandle surface_handle,
@@ -279,7 +279,6 @@ class ArCoreGl : public mojom::XRFrameDataProvider,
   // Where possible, we should use the ArCompositor to integrate with viz,
   // rather than our own custom compositing logic.
   std::unique_ptr<ArCompositorFrameSink> ar_compositor_;
-  const bool use_ar_compositor_;
 
   // This class uses the same overall presentation state logic
   // as GvrGraphicsDelegate, with some difference due to drawing
@@ -380,12 +379,6 @@ class ArCoreGl : public mojom::XRFrameDataProvider,
   // by the task runner would lead to inconsistent state on session shutdown.
   // See https://crbug.com/1065572.
   base::OnceClosure pending_getframedata_;
-
-  mojom::VRStageParametersPtr stage_parameters_;
-  uint32_t stage_parameters_id_;
-
-  // Currently estimated floor height.
-  std::optional<float> floor_height_estimate_;
 
   // Touch-related data.
   // Android will report touch events via MotionEvent - see XrImmersiveOverlay

@@ -25,6 +25,7 @@
 #include "xnnpack/subgraph.h"
 #include "convolution-test-helpers.h"
 #include "replicable_random_device.h"
+#include "runtime-flags.h"
 
 namespace xnnpack {
 
@@ -199,7 +200,6 @@ TEST_F(ConvolutionTestQC8, define)
   ASSERT_EQ(subgraph->num_nodes, 1);
   const struct xnn_node* node = &subgraph->nodes[0];
   ASSERT_EQ(node->type, xnn_node_type_convolution_2d);
-  ASSERT_EQ(node->compute_type, xnn_compute_type_qc8);
   ASSERT_EQ(node->params.convolution_2d.input_padding_top, input_padding_top);
   ASSERT_EQ(node->params.convolution_2d.input_padding_right, input_padding_right);
   ASSERT_EQ(node->params.convolution_2d.input_padding_bottom, input_padding_bottom);
@@ -272,7 +272,6 @@ TEST_F(ConvolutionTestQD8F16QC8W, define)
   ASSERT_EQ(subgraph->num_nodes, 1);
   const struct xnn_node* node = &subgraph->nodes[0];
   ASSERT_EQ(node->type, xnn_node_type_convolution_2d);
-  ASSERT_EQ(node->compute_type, xnn_compute_type_qd8_to_fp16);
   ASSERT_EQ(node->activation.output_min, output_min);
   ASSERT_EQ(node->activation.output_max, output_max);
   ASSERT_EQ(node->num_inputs, 3);
@@ -384,7 +383,7 @@ TEST_F(ConvolutionTestQD8F16QC8W, internally_allocated_dynamic_quantization_para
       kernel_width, subsampling_height, subsampling_width, dilation_height, dilation_width, groups,
       group_input_channels, group_output_channels, output_min, output_max, dq_quantized_id, kernel_id, bias_id, output_id,
       /*flags=*/0));
-  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, /*flags=*/0, &runtime));
+  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, xnn_test_runtime_flags(), &runtime));
   ASSERT_NE(nullptr, runtime);
   std::unique_ptr<xnn_runtime, decltype(&xnn_delete_runtime)> auto_runtime(runtime, xnn_delete_runtime);
   std::array<xnn_external_value, 2> external = {
@@ -442,7 +441,6 @@ TEST_F(ConvolutionTestQD8F32QC8W, define)
   ASSERT_EQ(subgraph->num_nodes, 1);
   const struct xnn_node* node = &subgraph->nodes[0];
   ASSERT_EQ(node->type, xnn_node_type_convolution_2d);
-  ASSERT_EQ(node->compute_type, xnn_compute_type_qd8_to_fp32);
   ASSERT_EQ(node->activation.output_min, output_min);
   ASSERT_EQ(node->activation.output_max, output_max);
   ASSERT_EQ(node->num_inputs, 3);
@@ -457,6 +455,7 @@ TEST_F(ConvolutionTestQD8F32QC8W, define)
 
 TEST_F(ConvolutionTestQD8F32QC8W, internally_allocated_dynamic_quantization_parameters)
 {
+  ASSERT_EQ(xnn_status_success, xnn_initialize(/*allocator=*/nullptr));
   xnn_subgraph_t subgraph = nullptr;
   ASSERT_EQ(xnn_status_success, xnn_create_subgraph(/*external_value_ids=*/4, /*flags=*/0, &subgraph));
   std::unique_ptr<xnn_subgraph, decltype(&xnn_delete_subgraph)> auto_subgraph(subgraph, xnn_delete_subgraph);
@@ -556,7 +555,7 @@ TEST_F(ConvolutionTestQD8F32QC8W, internally_allocated_dynamic_quantization_para
       kernel_width, subsampling_height, subsampling_width, dilation_height, dilation_width, groups,
       group_input_channels, group_output_channels, output_min, output_max, dq_quantized_id, kernel_id, bias_id, output_id,
       /*flags=*/0));
-  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, /*flags=*/0, &runtime));
+  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, xnn_test_runtime_flags(), &runtime));
   ASSERT_NE(nullptr, runtime);
   std::unique_ptr<xnn_runtime, decltype(&xnn_delete_runtime)> auto_runtime(runtime, xnn_delete_runtime);
   std::array<xnn_external_value, 2> external = {
@@ -612,7 +611,6 @@ TEST_F(ConvolutionTestQS8, define)
   ASSERT_EQ(subgraph->num_nodes, 1);
   const struct xnn_node* node = &subgraph->nodes[0];
   ASSERT_EQ(node->type, xnn_node_type_convolution_2d);
-  ASSERT_EQ(node->compute_type, xnn_compute_type_qs8);
   ASSERT_EQ(node->params.convolution_2d.input_padding_top, input_padding_top);
   ASSERT_EQ(node->params.convolution_2d.input_padding_right, input_padding_right);
   ASSERT_EQ(node->params.convolution_2d.input_padding_bottom, input_padding_bottom);
@@ -682,7 +680,6 @@ TEST_F(ConvolutionTestQU8, define)
   ASSERT_EQ(subgraph->num_nodes, 1);
   const struct xnn_node* node = &subgraph->nodes[0];
   ASSERT_EQ(node->type, xnn_node_type_convolution_2d);
-  ASSERT_EQ(node->compute_type, xnn_compute_type_qu8);
   ASSERT_EQ(node->params.convolution_2d.input_padding_top, input_padding_top);
   ASSERT_EQ(node->params.convolution_2d.input_padding_right, input_padding_right);
   ASSERT_EQ(node->params.convolution_2d.input_padding_bottom, input_padding_bottom);
@@ -753,7 +750,6 @@ TEST_F(ConvolutionTestF16, define)
   ASSERT_EQ(subgraph->num_nodes, 1);
   const struct xnn_node* node = &subgraph->nodes[0];
   ASSERT_EQ(node->type, xnn_node_type_convolution_2d);
-  ASSERT_EQ(node->compute_type, xnn_compute_type_fp16);
   ASSERT_EQ(node->params.convolution_2d.input_padding_top, input_padding_top);
   ASSERT_EQ(node->params.convolution_2d.input_padding_right, input_padding_right);
   ASSERT_EQ(node->params.convolution_2d.input_padding_bottom, input_padding_bottom);
@@ -824,7 +820,6 @@ TEST_F(ConvolutionTestF32, define)
   ASSERT_EQ(subgraph->num_nodes, 1);
   const struct xnn_node* node = &subgraph->nodes[0];
   ASSERT_EQ(node->type, xnn_node_type_convolution_2d);
-  ASSERT_EQ(node->compute_type, xnn_compute_type_fp32);
   ASSERT_EQ(node->params.convolution_2d.input_padding_top, input_padding_top);
   ASSERT_EQ(node->params.convolution_2d.input_padding_right, input_padding_right);
   ASSERT_EQ(node->params.convolution_2d.input_padding_bottom, input_padding_bottom);
@@ -985,7 +980,7 @@ TEST_F(ConvolutionTestQC8, matches_operator_api)
       /*flags=*/0));
 
   xnn_runtime_t runtime = nullptr;
-  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, /*flags=*/0, &runtime));
+  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, xnn_test_runtime_flags(), &runtime));
   ASSERT_NE(nullptr, runtime);
   std::unique_ptr<xnn_runtime, decltype(&xnn_delete_runtime)> auto_runtime(runtime, xnn_delete_runtime);
   std::array<xnn_external_value, 2> external = {
@@ -1119,7 +1114,7 @@ TEST_F(ConvolutionTestQS8, matches_operator_api)
       /*flags=*/0));
 
   xnn_runtime_t runtime = nullptr;
-  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, /*flags=*/0, &runtime));
+  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, xnn_test_runtime_flags(), &runtime));
   ASSERT_NE(nullptr, runtime);
   std::unique_ptr<xnn_runtime, decltype(&xnn_delete_runtime)> auto_runtime(runtime, xnn_delete_runtime);
   std::array<xnn_external_value, 2> external = {
@@ -1256,7 +1251,7 @@ TEST_F(ConvolutionTestQU8, matches_operator_api)
       /*flags=*/0));
 
   xnn_runtime_t runtime = nullptr;
-  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, /*flags=*/0, &runtime));
+  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, xnn_test_runtime_flags(), &runtime));
   ASSERT_NE(nullptr, runtime);
   std::unique_ptr<xnn_runtime, decltype(&xnn_delete_runtime)> auto_runtime(runtime, xnn_delete_runtime);
   std::array<xnn_external_value, 2> external = {
@@ -1348,7 +1343,7 @@ TEST_F(ConvolutionTestF16, matches_operator_api)
       /*flags=*/0));
 
   xnn_runtime_t runtime = nullptr;
-  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, /*flags=*/0, &runtime));
+  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, xnn_test_runtime_flags(), &runtime));
   ASSERT_NE(nullptr, runtime);
   std::unique_ptr<xnn_runtime, decltype(&xnn_delete_runtime)> auto_runtime(runtime, xnn_delete_runtime);
   std::array<xnn_external_value, 2> external = {
@@ -1440,7 +1435,7 @@ TEST_F(ConvolutionTestF32, matches_operator_api)
       /*flags=*/0));
 
   xnn_runtime_t runtime = nullptr;
-  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, /*flags=*/0, &runtime));
+  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, xnn_test_runtime_flags(), &runtime));
   ASSERT_NE(nullptr, runtime);
   std::unique_ptr<xnn_runtime, decltype(&xnn_delete_runtime)> auto_runtime(runtime, xnn_delete_runtime);
   std::array<xnn_external_value, 2> external = {
@@ -1534,7 +1529,7 @@ TEST_F(ConvolutionTestF32, transient_indirection_buffer)
       /*flags=*/XNN_FLAG_TRANSIENT_INDIRECTION_BUFFER));
 
   xnn_runtime_t runtime = nullptr;
-  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, /*flags=*/0, &runtime));
+  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, xnn_test_runtime_flags(), &runtime));
   ASSERT_NE(nullptr, runtime);
   std::unique_ptr<xnn_runtime, decltype(&xnn_delete_runtime)> auto_runtime(runtime, xnn_delete_runtime);
   std::array<xnn_external_value, 2> external = {
@@ -1590,8 +1585,11 @@ TEST_F(ConvolutionTestF32, reshape_output)
       group_input_channels, group_output_channels, output_min, output_max, input_id, filter_id, bias_id, output_id,
       /*flags=*/0));
 
+  std::generate(input.begin(), input.end(), [&]() { return f32dist(rng); });
+  std::generate(filter.begin(), filter.end(), [&]() { return f32dist(rng); });
+  std::generate(bias.begin(), bias.end(), [&]() { return f32dist(rng); });
   xnn_runtime_t runtime = nullptr;
-  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, /*flags=*/0, &runtime));
+  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, xnn_test_runtime_flags(), &runtime));
   ASSERT_NE(nullptr, runtime);
   std::unique_ptr<xnn_runtime, decltype(&xnn_delete_runtime)> auto_runtime(runtime, xnn_delete_runtime);
   std::array<xnn_external_value, 2> external = {

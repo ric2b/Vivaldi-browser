@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 import * as Host from '../../../core/host/host.js';
-import type * as Platform from '../../../core/platform/platform.js';
+import * as Platform from '../../../core/platform/platform.js';
 import * as Workspace from '../../../models/workspace/workspace.js';
 import {
   getContextMenuForElement,
@@ -25,11 +25,11 @@ import {
   recordedMetricsContain,
   resetRecordedMetrics,
 } from '../../../testing/UserMetricsHelpers.js';
-import * as Coordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
+import * as RenderCoordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
 
 import * as SourcesComponents from './components.js';
 
-const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
+const {urlString} = Platform.DevToolsPath;
 
 describe('HeadersView', () => {
   const commitWorkingCopySpy = sinon.spy();
@@ -83,7 +83,7 @@ describe('HeadersView', () => {
     };
     renderElementIntoDOM(editor);
     assert.isNotNull(editor.shadowRoot);
-    await coordinator.done();
+    await RenderCoordinator.done();
     return editor;
   }
 
@@ -112,7 +112,7 @@ describe('HeadersView', () => {
       }
     ]`;
     const {uiSourceCode, project} = createFileSystemUISourceCode({
-      url: 'file:///path/to/overrides/example.html' as Platform.DevToolsPath.UrlString,
+      url: urlString`file:///path/to/overrides/example.html`,
       mimeType: 'text/html',
       content: headers,
     });
@@ -121,11 +121,11 @@ describe('HeadersView', () => {
 
     const editorWrapper = new SourcesComponents.HeadersView.HeadersView(uiSourceCode);
     await uiSourceCode.requestContentData();
-    await coordinator.done();
+    await RenderCoordinator.done();
     const editor = editorWrapper.getComponent();
     renderElementIntoDOM(editor);
     assert.isNotNull(editor.shadowRoot);
-    await coordinator.done();
+    await RenderCoordinator.done();
     workspace.removeProject(project);
     return editor;
   }
@@ -135,7 +135,7 @@ describe('HeadersView', () => {
     editable.innerText = value;
     dispatchInputEvent(editable, {inputType: 'insertText', data: value, bubbles: true, composed: true});
     dispatchFocusOutEvent(editable, {bubbles: true});
-    await coordinator.done();
+    await RenderCoordinator.done();
     assert.isTrue(recordedMetricsContain(
         Host.InspectorFrontendHostAPI.EnumeratedHistogram.ActionTaken,
         Host.UserMetrics.Action.HeaderOverrideHeadersFileEdited));
@@ -146,7 +146,7 @@ describe('HeadersView', () => {
     const button = rowElements[rowIndex].querySelector(selector);
     assert.instanceOf(button, HTMLElement);
     button.click();
-    await coordinator.done();
+    await RenderCoordinator.done();
   }
 
   function getRowContent(shadowRoot: ShadowRoot): string[] {
@@ -193,7 +193,7 @@ describe('HeadersView', () => {
     };
     renderElementIntoDOM(editor);
     assert.isNotNull(editor.shadowRoot);
-    await coordinator.done();
+    await RenderCoordinator.done();
 
     const errorHeader = editor.shadowRoot.querySelector('.error-header');
     assert.strictEqual(errorHeader?.textContent, 'Error when parsing \'.headers\'.');
@@ -243,7 +243,7 @@ describe('HeadersView', () => {
     assert.deepEqual(getSingleRowContent(editor.shadowRoot, 1), 'server:DevTools Unit Test Server');
 
     const editables = editor.shadowRoot.querySelectorAll('.editable');
-    assert.strictEqual(editables.length, 8);
+    assert.lengthOf(editables, 8);
     const headerValue = editables[2] as HTMLElement;
     headerValue.focus();
     headerValue.innerText = 'discard_me';
@@ -253,7 +253,7 @@ describe('HeadersView', () => {
       key: 'Escape',
       bubbles: true,
     });
-    await coordinator.done();
+    await RenderCoordinator.done();
     assert.deepEqual(getSingleRowContent(editor.shadowRoot, 1), 'server:DevTools Unit Test Server');
 
     const headerName = editables[1] as HTMLElement;
@@ -265,7 +265,7 @@ describe('HeadersView', () => {
       key: 'Escape',
       bubbles: true,
     });
-    await coordinator.done();
+    await RenderCoordinator.done();
     assert.deepEqual(getSingleRowContent(editor.shadowRoot, 1), 'server:DevTools Unit Test Server');
   });
 
@@ -303,7 +303,7 @@ describe('HeadersView', () => {
     const editor = await renderEditor();
     assert.isNotNull(editor.shadowRoot);
     const editables = editor.shadowRoot.querySelectorAll('.editable');
-    assert.strictEqual(editables.length, 8);
+    assert.lengthOf(editables, 8);
 
     const lastHeaderName = editables[6] as HTMLSpanElement;
     const lastHeaderValue = editables[7] as HTMLSpanElement;
@@ -328,7 +328,7 @@ describe('HeadersView', () => {
     const editor = await renderEditor();
     assert.isNotNull(editor.shadowRoot);
     const editables = editor.shadowRoot.querySelectorAll('.editable');
-    assert.strictEqual(editables.length, 8);
+    assert.lengthOf(editables, 8);
 
     const applyTo = editables[5] as HTMLSpanElement;
     assert.strictEqual(applyTo.innerHTML, '*.jpg');
@@ -355,7 +355,7 @@ describe('HeadersView', () => {
     ]);
 
     const editables = editor.shadowRoot.querySelectorAll('.editable');
-    assert.strictEqual(editables.length, 8);
+    assert.lengthOf(editables, 8);
 
     const headerName = editables[1] as HTMLSpanElement;
     assert.strictEqual(headerName.innerHTML, 'server');
@@ -365,7 +365,7 @@ describe('HeadersView', () => {
     assert.strictEqual(headerName.innerHTML, '');
 
     dispatchFocusOutEvent(headerName, {bubbles: true});
-    await coordinator.done();
+    await RenderCoordinator.done();
 
     rows = getRowContent(editor.shadowRoot);
     assert.deepEqual(rows, [
@@ -382,7 +382,7 @@ describe('HeadersView', () => {
 
   it('allows adding headers', async () => {
     const editor = await renderEditorWithinWrapper();
-    await coordinator.done();
+    await RenderCoordinator.done();
     assert.isNotNull(editor.shadowRoot);
 
     let rows = getRowContent(editor.shadowRoot);
@@ -426,7 +426,7 @@ describe('HeadersView', () => {
 
   it('allows adding "ApplyTo"-blocks', async () => {
     const editor = await renderEditorWithinWrapper();
-    await coordinator.done();
+    await RenderCoordinator.done();
     assert.isNotNull(editor.shadowRoot);
 
     let rows = getRowContent(editor.shadowRoot);
@@ -441,7 +441,7 @@ describe('HeadersView', () => {
     const button = editor.shadowRoot.querySelector('.add-block');
     assert.instanceOf(button, HTMLElement);
     button.click();
-    await coordinator.done();
+    await RenderCoordinator.done();
 
     rows = getRowContent(editor.shadowRoot);
     assert.deepEqual(rows, [
@@ -476,7 +476,7 @@ describe('HeadersView', () => {
 
   it('allows removing headers', async () => {
     const editor = await renderEditorWithinWrapper();
-    await coordinator.done();
+    await RenderCoordinator.done();
     assert.isNotNull(editor.shadowRoot);
 
     let rows = getRowContent(editor.shadowRoot);
@@ -520,7 +520,7 @@ describe('HeadersView', () => {
 
   it('allows removing "ApplyTo"-blocks', async () => {
     const editor = await renderEditorWithinWrapper();
-    await coordinator.done();
+    await RenderCoordinator.done();
     assert.isNotNull(editor.shadowRoot);
 
     let rows = getRowContent(editor.shadowRoot);
@@ -548,7 +548,7 @@ describe('HeadersView', () => {
     const editor = await renderEditor();
     assert.isNotNull(editor.shadowRoot);
     const editables = editor.shadowRoot.querySelectorAll('.editable');
-    assert.strictEqual(editables.length, 8);
+    assert.lengthOf(editables, 8);
     assert.deepEqual(getSingleRowContent(editor.shadowRoot, 2), 'access-control-allow-origin:*');
 
     const headerValue = editables[4] as HTMLSpanElement;
@@ -557,7 +557,7 @@ describe('HeadersView', () => {
     dt.setData('text/plain', 'foo\nbar');
     dt.setData('text/html', 'This is <b>bold</b>');
     dispatchPasteEvent(headerValue, {clipboardData: dt, bubbles: true});
-    await coordinator.done();
+    await RenderCoordinator.done();
     assert.deepEqual(getSingleRowContent(editor.shadowRoot, 2), 'access-control-allow-origin:foo bar');
     assert.isTrue(recordedMetricsContain(
         Host.InspectorFrontendHostAPI.EnumeratedHistogram.ActionTaken,

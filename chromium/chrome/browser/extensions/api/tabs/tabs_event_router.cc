@@ -41,6 +41,7 @@
 #include "components/extensions/vivaldi_panel_utils.h"
 #include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
+#include "chrome/browser/web_applications/web_app_tab_helper.h"
 #include "extensions/api/guest_view/parent_tab_user_data.h"
 #include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/vivaldi_associated_tabs.h"
@@ -187,8 +188,9 @@ void TabsEventRouter::TabEntry::NavigationEntryCommitted(
   Profile* profile =
       Profile::FromBrowserContext(web_contents()->GetBrowserContext());
   auto ignoreLinkRouting = web_contents()->GetIgnoreLinkRouting();
-  auto* provider = web_app::WebAppProvider::GetForLocalAppsUnchecked(profile);
-  bool is_in_pwa = provider->ui_manager().IsInAppWindow(web_contents());
+  web_app::WebAppTabHelper* tab_helper =
+      web_app::WebAppTabHelper::FromWebContents(web_contents());
+  bool is_in_pwa = tab_helper && tab_helper->is_in_app_window();
 
   if (::vivaldi::IsVivaldiRunning() &&
     extensions::IsWorkspacesEnabled(web_contents()) &&

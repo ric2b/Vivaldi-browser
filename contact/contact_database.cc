@@ -54,26 +54,26 @@ sql::InitStatus LogMigrationFailure(int from_version) {
 }  // namespace
 
 ContactDatabase::ContactDatabase()
-    : db_({// Note that we don't set exclusive locking here. That's done by
+    : db_(sql::DatabaseOptions()
+           // Note that we don't set exclusive locking here. That's done by
            // BeginExclusiveMode below which is called later (we have to be in
            // shared mode to start out for the in-memory backend to read the
            // data).
            // TODO(1153459) Remove this dependency on normal locking mode.
-           .exclusive_locking = false,
+           .set_exclusive_locking(false)
            // Set the database page size to something a little larger to give us
            // better performance (we're typically seek rather than bandwidth
            // limited). Must be a power of 2 and a max of 65536.
-           .page_size = 4096,
+           .set_page_size(4096)
            // Set the cache size. The page size, plus a little extra, times this
            // value, tells us how much memory the cache will use maximum.
            // 1000 * 4kB = 4MB
-           .cache_size = 1000}) {}
+           .set_cache_size(1000),
+          "Contact") {}
 
 ContactDatabase::~ContactDatabase() {}
 
 sql::InitStatus ContactDatabase::Init(const base::FilePath& contact_db_name) {
-  db_.set_histogram_tag("Contact");
-
   // Note that we don't set exclusive locking here. That's done by
   // BeginExclusiveMode below which is called later (we have to be in shared
   // mode to start out for the in-memory backend to read the data).

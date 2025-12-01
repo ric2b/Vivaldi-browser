@@ -16,7 +16,6 @@
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
-#include "chrome/browser/win/uninstallation_via_os_settings.h"
 
 namespace web_app {
 
@@ -52,8 +51,6 @@ void UninstallationViaOsSettingsSubManager::Configure(
     base::OnceClosure configure_done) {
   DCHECK(!desired_state.has_uninstall_registration());
 
-  // TODO(crbug.com/340951801): Migrate `IsInstallState` call to using an enum
-  // on the protobuf.
   bool should_register =
       IsOsUninstallationSupported() &&
       provider_->registrar_unsafe().GetInstallState(app_id) ==

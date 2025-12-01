@@ -103,6 +103,7 @@ class VivaldiInstallDialog {
   std::wstring btn_tos_accept_update_str_;
   std::wstring btn_simple_mode_str_;
   std::wstring btn_advanced_mode_str_;
+  std::wstring select_folder_str_;
 
   base::FilePath last_standalone_folder_;
   bool is_upgrade_ = false;

@@ -18,7 +18,7 @@
 
 namespace openscreen {
 
-constexpr char kUnknownEnumError[] = "Enum value not in array";
+inline constexpr char kUnknownEnumError[] = "Enum value not in array";
 
 template <typename Enum, size_t Size>
 using EnumNameTable = std::array<std::pair<const char*, Enum>, Size>;

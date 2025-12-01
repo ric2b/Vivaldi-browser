@@ -3,18 +3,13 @@
 // found in the LICENSE file.
 
 import {describeWithEnvironment} from '../../../testing/EnvironmentHelpers.js';
-import {createContextForNavigation, getFirstOrError, getInsightOrError} from '../../../testing/InsightHelpers.js';
-import {TraceLoader} from '../../../testing/TraceLoader.js';
+import {
+  createContextForNavigation,
+  getFirstOrError,
+  getInsightOrError,
+  processTrace,
+} from '../../../testing/InsightHelpers.js';
 import * as Trace from '../trace.js';
-
-export async function processTrace(testContext: Mocha.Suite|Mocha.Context|null, traceFile: string) {
-  const {parsedTrace, insights} = await TraceLoader.traceEngine(testContext, traceFile);
-  if (!insights) {
-    throw new Error('No insights');
-  }
-
-  return {data: parsedTrace, insights};
-}
 
 describeWithEnvironment('Viewport', function() {
   it('detects mobile optimized viewport', async () => {
@@ -22,7 +17,7 @@ describeWithEnvironment('Viewport', function() {
     const insight =
         getInsightOrError('Viewport', insights, getFirstOrError(data.Meta.navigationsByNavigationId.values()));
 
-    assert.strictEqual(insight.mobileOptimized, true);
+    assert.isTrue(insight.mobileOptimized);
   });
 
   it('detects mobile unoptimized viewport', async () => {
@@ -37,6 +32,6 @@ describeWithEnvironment('Viewport', function() {
     }
 
     const insight = Trace.Insights.Models.Viewport.generateInsight(data, context);
-    assert.strictEqual(insight.mobileOptimized, false);
+    assert.isFalse(insight.mobileOptimized);
   });
 });

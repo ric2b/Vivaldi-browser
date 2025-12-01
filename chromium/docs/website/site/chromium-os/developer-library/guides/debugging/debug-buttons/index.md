@@ -248,5 +248,5 @@ Next boot stage     | `Ctrl + X`
 [firmware menu UI]: #firmware-menu-interface
 [EC debug mode]: #ec-debug-mode
 [smart battery]: http://sbs-forum.org/specs/sbdat110.pdf
-[device-specific developer information]: https://www.chromium.org/chromium-os/developer-information-for-chrome-os-devices
+[device-specific developer information]: /chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices
 [boot firmware screen]: /chromium-os/developer-library/guides/device/developer-mode/

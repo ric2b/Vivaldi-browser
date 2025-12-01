@@ -65,6 +65,11 @@ void JavaScriptDialogHelper::RunJavaScriptDialog(
   request_info.Set(guest_view::kUrl,
                    render_frame_host->GetLastCommittedURL().spec());
 
+  // note(ondrej@vivaldi): VB-112989
+  request_info.Set(
+      webview::kOrigin,
+      render_frame_host->GetMainFrame()->GetLastCommittedOrigin().Serialize());
+
   WebViewPermissionHelper* web_view_permission_helper =
       web_view_guest_->web_view_permission_helper();
   web_view_permission_helper->RequestPermission(
@@ -105,17 +110,7 @@ bool JavaScriptDialogHelper::HandleJavaScriptDialog(
 
 void JavaScriptDialogHelper::CancelDialogs(content::WebContents* web_contents,
                                            bool reset_state) {
-  if (vivaldi::IsVivaldiRunning()) {
-    // VB-104649 Call full implementation to cancel dialog
-    content::JavaScriptDialogManager* tab_dialog_manager =
-        javascript_dialogs::TabModalDialogManager::FromWebContents(
-            web_contents);
-    if (tab_dialog_manager) {
-      tab_dialog_manager->CancelDialogs(web_contents, reset_state);
-      return;
-    }
-  }
-// Calling the callback will resume the renderer.
+  // Calling the callback will resume the renderer.
   if (dialog_callback_) {
     std::move(dialog_callback_).Run(false, std::u16string());
     dialog_callback_.Reset();
@@ -124,6 +119,8 @@ void JavaScriptDialogHelper::CancelDialogs(content::WebContents* web_contents,
 
 void JavaScriptDialogHelper::OnPermissionResponse(bool allow,
     const std::string& user_input) {
+  if (!dialog_callback_) // The dialog could have been canceled.
+    return;
   bool allowed_and_attached = allow && web_view_guest_->attached();
   std::move(dialog_callback_).Run(allowed_and_attached,
                           base::UTF8ToUTF16(user_input));

@@ -87,8 +87,9 @@ static int32_t GetVP9FrameBuffer(void* user_priv,
   DCHECK(user_priv);
   DCHECK(fb);
   FrameBufferPool* pool = static_cast<FrameBufferPool*>(user_priv);
-  fb->data = pool->GetFrameBuffer(min_size, &fb->priv);
-  fb->size = min_size;
+  auto buffer = pool->GetFrameBuffer(min_size, &fb->priv);
+  fb->data = buffer.data();
+  fb->size = buffer.size();
   return fb->data ? 0 : VPX_CODEC_MEM_ERROR;
 }
 
@@ -419,7 +420,7 @@ VpxVideoDecoder::AlphaDecodeStatus VpxVideoDecoder::DecodeAlphaPlane(
     const struct vpx_image** vpx_image_alpha,
     const DecoderBuffer* buffer) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (!vpx_codec_alpha_ || !buffer->has_side_data() ||
+  if (!vpx_codec_alpha_ || !buffer->side_data() ||
       buffer->side_data()->alpha_data.size() < 8) {
     return kAlphaPlaneProcessed;
   }
@@ -550,12 +551,15 @@ bool VpxVideoDecoder::CopyVpxImageToVideoFrame(
     if (vpx_image_alpha) {
       size_t alpha_plane_size =
           vpx_image_alpha->stride[VPX_PLANE_Y] * vpx_image_alpha->d_h;
-      uint8_t* alpha_plane = memory_pool_->AllocateAlphaPlaneForFrameBuffer(
+      auto alpha_plane = memory_pool_->AllocateAlphaPlaneForFrameBuffer(
           alpha_plane_size, vpx_image->fb_priv);
-      if (!alpha_plane)  // In case of OOM, abort copy.
+      if (alpha_plane.empty()) {
+        // In case of OOM, abort copy.
         return false;
+      }
       libyuv::CopyPlane(vpx_image_alpha->planes[VPX_PLANE_Y],
-                        vpx_image_alpha->stride[VPX_PLANE_Y], alpha_plane,
+                        vpx_image_alpha->stride[VPX_PLANE_Y],
+                        alpha_plane.data(),
                         vpx_image_alpha->stride[VPX_PLANE_Y],
                         vpx_image_alpha->d_w, vpx_image_alpha->d_h);
       *video_frame = VideoFrame::WrapExternalYuvaData(
@@ -563,7 +567,7 @@ bool VpxVideoDecoder::CopyVpxImageToVideoFrame(
           vpx_image->stride[VPX_PLANE_Y], vpx_image->stride[VPX_PLANE_U],
           vpx_image->stride[VPX_PLANE_V], vpx_image_alpha->stride[VPX_PLANE_Y],
           vpx_image->planes[VPX_PLANE_Y], vpx_image->planes[VPX_PLANE_U],
-          vpx_image->planes[VPX_PLANE_V], alpha_plane, kNoTimestamp);
+          vpx_image->planes[VPX_PLANE_V], alpha_plane.data(), kNoTimestamp);
     } else {
       *video_frame = VideoFrame::WrapExternalYuvData(
           codec_format, coded_size, gfx::Rect(visible_size), natural_size,

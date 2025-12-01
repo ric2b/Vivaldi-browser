@@ -1,16 +1,16 @@
-/* Copyright (c) 2018, Google Inc.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
- * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
- * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
- * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. */
+// Copyright 2018 The BoringSSL Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #ifndef OPENSSL_HEADER_SHA_INTERNAL_H
 #define OPENSSL_HEADER_SHA_INTERNAL_H
@@ -33,18 +33,14 @@ extern "C" {
 #define SHA512_ASM_NOHW
 
 #define SHA1_ASM_HW
-OPENSSL_INLINE int sha1_hw_capable(void) {
-  return CRYPTO_is_ARMv8_SHA1_capable();
-}
+inline int sha1_hw_capable(void) { return CRYPTO_is_ARMv8_SHA1_capable(); }
 
 #define SHA1_ASM_NEON
 void sha1_block_data_order_neon(uint32_t state[5], const uint8_t *data,
                                 size_t num);
 
 #define SHA256_ASM_HW
-OPENSSL_INLINE int sha256_hw_capable(void) {
-  return CRYPTO_is_ARMv8_SHA256_capable();
-}
+inline int sha256_hw_capable(void) { return CRYPTO_is_ARMv8_SHA256_capable(); }
 
 #define SHA256_ASM_NEON
 void sha256_block_data_order_neon(uint32_t state[8], const uint8_t *data,
@@ -62,19 +58,13 @@ void sha512_block_data_order_neon(uint64_t state[8], const uint8_t *data,
 #define SHA512_ASM_NOHW
 
 #define SHA1_ASM_HW
-OPENSSL_INLINE int sha1_hw_capable(void) {
-  return CRYPTO_is_ARMv8_SHA1_capable();
-}
+inline int sha1_hw_capable(void) { return CRYPTO_is_ARMv8_SHA1_capable(); }
 
 #define SHA256_ASM_HW
-OPENSSL_INLINE int sha256_hw_capable(void) {
-  return CRYPTO_is_ARMv8_SHA256_capable();
-}
+inline int sha256_hw_capable(void) { return CRYPTO_is_ARMv8_SHA256_capable(); }
 
 #define SHA512_ASM_HW
-OPENSSL_INLINE int sha512_hw_capable(void) {
-  return CRYPTO_is_ARMv8_SHA512_capable();
-}
+inline int sha512_hw_capable(void) { return CRYPTO_is_ARMv8_SHA512_capable(); }
 
 #elif !defined(OPENSSL_NO_ASM) && defined(OPENSSL_X86)
 
@@ -83,7 +73,7 @@ OPENSSL_INLINE int sha512_hw_capable(void) {
 #define SHA512_ASM_NOHW
 
 #define SHA1_ASM_SSSE3
-OPENSSL_INLINE int sha1_ssse3_capable(void) {
+inline int sha1_ssse3_capable(void) {
   // TODO(davidben): Do we need to check the FXSR bit? The Intel manual does not
   // say to.
   return CRYPTO_is_SSSE3_capable() && CRYPTO_is_FXSR_capable();
@@ -92,7 +82,7 @@ void sha1_block_data_order_ssse3(uint32_t state[5], const uint8_t *data,
                                  size_t num);
 
 #define SHA1_ASM_AVX
-OPENSSL_INLINE int sha1_avx_capable(void) {
+inline int sha1_avx_capable(void) {
   // Pre-Zen AMD CPUs had slow SHLD/SHRD; Zen added the SHA extension; see the
   // discussion in sha1-586.pl.
   //
@@ -106,7 +96,7 @@ void sha1_block_data_order_avx(uint32_t state[5], const uint8_t *data,
                                size_t num);
 
 #define SHA256_ASM_SSSE3
-OPENSSL_INLINE int sha256_ssse3_capable(void) {
+inline int sha256_ssse3_capable(void) {
   // TODO(davidben): Do we need to check the FXSR bit? The Intel manual does not
   // say to.
   return CRYPTO_is_SSSE3_capable() && CRYPTO_is_FXSR_capable();
@@ -115,7 +105,7 @@ void sha256_block_data_order_ssse3(uint32_t state[8], const uint8_t *data,
                                    size_t num);
 
 #define SHA256_ASM_AVX
-OPENSSL_INLINE int sha256_avx_capable(void) {
+inline int sha256_avx_capable(void) {
   // Pre-Zen AMD CPUs had slow SHLD/SHRD; Zen added the SHA extension; see the
   // discussion in sha1-586.pl.
   //
@@ -129,7 +119,7 @@ void sha256_block_data_order_avx(uint32_t state[8], const uint8_t *data,
                                  size_t num);
 
 #define SHA512_ASM_SSSE3
-OPENSSL_INLINE int sha512_ssse3_capable(void) {
+inline int sha512_ssse3_capable(void) {
   // TODO(davidben): Do we need to check the FXSR bit? The Intel manual does not
   // say to.
   return CRYPTO_is_SSSE3_capable() && CRYPTO_is_FXSR_capable();
@@ -144,12 +134,12 @@ void sha512_block_data_order_ssse3(uint64_t state[8], const uint8_t *data,
 #define SHA512_ASM_NOHW
 
 #define SHA1_ASM_HW
-OPENSSL_INLINE int sha1_hw_capable(void) {
+inline int sha1_hw_capable(void) {
   return CRYPTO_is_x86_SHA_capable() && CRYPTO_is_SSSE3_capable();
 }
 
 #define SHA1_ASM_AVX2
-OPENSSL_INLINE int sha1_avx2_capable(void) {
+inline int sha1_avx2_capable(void) {
   return CRYPTO_is_AVX2_capable() && CRYPTO_is_BMI2_capable() &&
          CRYPTO_is_BMI1_capable();
 }
@@ -157,7 +147,7 @@ void sha1_block_data_order_avx2(uint32_t state[5], const uint8_t *data,
                                 size_t num);
 
 #define SHA1_ASM_AVX
-OPENSSL_INLINE int sha1_avx_capable(void) {
+inline int sha1_avx_capable(void) {
   // Pre-Zen AMD CPUs had slow SHLD/SHRD; Zen added the SHA extension; see the
   // discussion in sha1-586.pl.
   return CRYPTO_is_AVX_capable() && CRYPTO_is_intel_cpu();
@@ -166,20 +156,18 @@ void sha1_block_data_order_avx(uint32_t state[5], const uint8_t *data,
                                size_t num);
 
 #define SHA1_ASM_SSSE3
-OPENSSL_INLINE int sha1_ssse3_capable(void) {
-  return CRYPTO_is_SSSE3_capable();
-}
+inline int sha1_ssse3_capable(void) { return CRYPTO_is_SSSE3_capable(); }
 void sha1_block_data_order_ssse3(uint32_t state[5], const uint8_t *data,
                                  size_t num);
 
 #define SHA256_ASM_HW
-OPENSSL_INLINE int sha256_hw_capable(void) {
+inline int sha256_hw_capable(void) {
   // Note that the original assembly did not check SSSE3.
   return CRYPTO_is_x86_SHA_capable() && CRYPTO_is_SSSE3_capable();
 }
 
 #define SHA256_ASM_AVX
-OPENSSL_INLINE int sha256_avx_capable(void) {
+inline int sha256_avx_capable(void) {
   // Pre-Zen AMD CPUs had slow SHLD/SHRD; Zen added the SHA extension; see the
   // discussion in sha1-586.pl.
   return CRYPTO_is_AVX_capable() && CRYPTO_is_intel_cpu();
@@ -188,18 +176,12 @@ void sha256_block_data_order_avx(uint32_t state[8], const uint8_t *data,
                                  size_t num);
 
 #define SHA256_ASM_SSSE3
-OPENSSL_INLINE int sha256_ssse3_capable(void) {
-  return CRYPTO_is_SSSE3_capable();
-}
+inline int sha256_ssse3_capable(void) { return CRYPTO_is_SSSE3_capable(); }
 void sha256_block_data_order_ssse3(uint32_t state[8], const uint8_t *data,
                                    size_t num);
 
 #define SHA512_ASM_AVX
-OPENSSL_INLINE int sha512_avx_capable(void) {
-  // Pre-Zen AMD CPUs had slow SHLD/SHRD; Zen added the SHA extension; see the
-  // discussion in sha1-586.pl.
-  return CRYPTO_is_AVX_capable() && CRYPTO_is_intel_cpu();
-}
+inline int sha512_avx_capable(void) { return CRYPTO_is_AVX_capable(); }
 void sha512_block_data_order_avx(uint64_t state[8], const uint8_t *data,
                                  size_t num);
 

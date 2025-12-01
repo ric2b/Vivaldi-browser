@@ -48,7 +48,6 @@ import org.chromium.base.task.PostTask;
 import org.chromium.base.task.test.BackgroundShadowAsyncTask;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.CallbackHelper;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.blink.mojom.DisplayMode;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.ShortcutHelper;
@@ -88,11 +87,10 @@ import java.util.Map;
         shadows = {ShadowUrlUtilities.class, BackgroundShadowAsyncTask.class})
 @LooperMode(LooperMode.Mode.LEGACY)
 public class WebApkUpdateManagerUnitTest {
-    @Mock private Activity mActivityMock;
+    @Mock public Activity mActivityMock;
+    @Mock public ActivityLifecycleDispatcher mLifecycleDispatcher;
 
     @Rule public FakeTimeTestRule mClockRule = new FakeTimeTestRule();
-
-    @Rule public JniMocker mJniMocker = new JniMocker();
 
     private static final String WEBAPK_PACKAGE_NAME = "org.chromium.webapk.test_package";
     private static final String UNBOUND_WEBAPK_PACKAGE_NAME = "com.webapk.test_package";
@@ -235,7 +233,10 @@ public class WebApkUpdateManagerUnitTest {
 
         public TestWebApkUpdateManager(
                 Activity activity, boolean nameUpdatesEnabled, boolean iconUpdatesEnabled) {
-            this(activity, buildMockTabProvider(), Mockito.mock(ActivityLifecycleDispatcher.class));
+            super(
+                    activity,
+                    buildMockTabProvider(),
+                    Mockito.mock(ActivityLifecycleDispatcher.class));
             mNameUpdatesEnabled = nameUpdatesEnabled;
             mIconUpdatesEnabled = iconUpdatesEnabled;
         }
@@ -245,13 +246,6 @@ public class WebApkUpdateManagerUnitTest {
             ActivityTabProvider tabProvider = Mockito.mock(ActivityTabProvider.class);
             Mockito.when(tabProvider.get()).thenReturn(mockTab);
             return tabProvider;
-        }
-
-        private TestWebApkUpdateManager(
-                Activity activity,
-                ActivityTabProvider tabProvider,
-                ActivityLifecycleDispatcher activityLifecycleDispatcher) {
-            super(activity, tabProvider, activityLifecycleDispatcher);
         }
 
         /** Returns whether the is-update-needed check has been triggered. */
@@ -744,7 +738,7 @@ public class WebApkUpdateManagerUnitTest {
         PathUtils.setPrivateDataDirectorySuffix("chrome");
         PostTask.setPrenativeThreadPoolExecutorForTesting(new RoboExecutorService());
 
-        mJniMocker.mock(WebApkUpdateManagerJni.TEST_HOOKS, new TestWebApkUpdateManagerJni());
+        WebApkUpdateManagerJni.setInstanceForTesting(new TestWebApkUpdateManagerJni());
 
         WebappRegistry.refreshSharedPrefsForTesting();
         registerWebApk(

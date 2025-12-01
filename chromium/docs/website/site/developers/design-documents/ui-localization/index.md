@@ -82,28 +82,35 @@ If you're developing for Mac, also see notes on [how to add strings for Chrome o
 
 ## Add an Android/Java string
 
-1.  Check whether the string you need already exists. If you find a
-    matching string, read the description to see how it's intended to be
-    used, and leverage it if you can. Otherwise, continue.
-2.  Add the string to the grd file in the Java folder (e.g.
+### Use the string that already exists
+
+First, check whether the string you need already exists. If you find a matching
+string, read the description to see how it's intended to be used, and leverage
+it if you can. (See the next section otherwise.) If the string is only used in
+C++ now, you may have to add `formatter_data="android_java"` to the message
+attribute.
+
+### Add a new string
+
+1.  Add the string to the grd file in the Java folder (e.g.
     `content/public/android/java/strings/android_content_strings.grd`).
     Strings should be named in all caps with the prefix `IDS_`. For
     example: `IDS_MY_STRING`.
     *   See tips on [writing better user-facing strings](/user-experience/ui-strings).
-3.  Include
+2.  Include
     [screenshots](/developers/design-documents/ui-localization#add-a-screenshot),
     [meanings](/developers/design-documents/ui-localization#use-message-meanings-to-disambiguate-strings),
     and
     [descriptions](/developers/design-documents/ui-localization#write-good-descriptions)
     for all strings. This is crucial for high-quality translations.
-4.  At build time, an Android-style strings.xml file will be generated
+3.  At build time, an Android-style strings.xml file will be generated
     in the out directory.
-5.  You can reference these strings in Java code using the standard
+4.  You can reference these strings in Java code using the standard
     `R.string.my_string` syntax, or in Android layouts using
     `@string/my_string`. Note: the name is lowercase and the `IDS_` prefix
     is stripped.
-6.  Deal with [special characters](https://developer.android.com/guide/topics/resources/string-resource#FormattingAndStyling).
-7.  Deal with message placeholder content. Example:
+5.  Deal with [special characters](https://developer.android.com/guide/topics/resources/string-resource#FormattingAndStyling).
+6.  Deal with message placeholder content. Example:
 
     ```
     Hey <ph name="USER">%1$s<ex></ex></ph>, you have <ph name="NUMBER"><ex>10</ex>$2</ph> messages.

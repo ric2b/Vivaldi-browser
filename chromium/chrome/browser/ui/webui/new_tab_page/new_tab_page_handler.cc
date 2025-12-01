@@ -26,7 +26,6 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -34,7 +33,11 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/new_tab_page/feature_promo_helper/new_tab_page_feature_promo_helper.h"
+#include "chrome/browser/new_tab_page/microsoft_auth/microsoft_auth_service.h"
+#include "chrome/browser/new_tab_page/microsoft_auth/microsoft_auth_service_factory.h"
+#include "chrome/browser/new_tab_page/modules/modules_constants.h"
 #include "chrome/browser/new_tab_page/modules/new_tab_page_modules.h"
+#include "chrome/browser/new_tab_page/new_tab_page_util.h"
 #include "chrome/browser/new_tab_page/promos/promo_service_factory.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -53,10 +56,12 @@
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/hats/hats_service.h"
 #include "chrome/browser/ui/hats/hats_service_factory.h"
+#include "chrome/browser/ui/tabs/public/tab_features.h"
 #include "chrome/browser/ui/views/side_panel/customize_chrome/customize_chrome_utils.h"
 #include "chrome/browser/ui/views/side_panel/customize_chrome/side_panel_controller_views.h"
 #include "chrome/browser/ui/webui/new_tab_page/ntp_pref_names.h"
 #include "chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome_section.h"
+#include "chrome/browser/ui/webui/webui_embedding_context.h"
 #include "chrome/browser/ui/webui/webui_util_desktop.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
@@ -342,12 +347,14 @@ new_tab_page::mojom::PromoPtr MakePromo(const PromoData& data) {
   // PromoService to base::Value. The middle-slot promo part is then reencoded
   // from base::Value to a JSON string stored in |data.middle_slot_json|.
   auto middle_slot = base::JSONReader::Read(data.middle_slot_json);
-  if (!middle_slot.has_value())
+  if (!middle_slot.has_value()) {
     return nullptr;
+  }
 
   base::Value::Dict& middle_slot_dict = middle_slot->GetDict();
-  if (middle_slot_dict.FindBoolByDottedPath("hidden").value_or(false))
+  if (middle_slot_dict.FindBoolByDottedPath("hidden").value_or(false)) {
     return nullptr;
+  }
 
   auto promo = new_tab_page::mojom::Promo::New();
   promo->id = data.promo_id;
@@ -474,9 +481,7 @@ NewTabPageHandler::NewTabPageHandler(
     std::unique_ptr<NewTabPageFeaturePromoHelper>
         customize_chrome_feature_promo_helper,
     const base::Time& ntp_navigation_start_time,
-    const std::vector<std::pair<const std::string, int>>* module_id_names,
-    customize_chrome::SidePanelController*
-        customize_chrome_side_panel_controller)
+    const std::vector<ntp::ModuleIdDetail>* module_id_details)
     : SettingsEnabledObserver(
           optimization_guide::UserVisibleFeatureKey::kWallpaperSearch),
       ntp_background_service_(
@@ -491,15 +496,17 @@ NewTabPageHandler::NewTabPageHandler(
       web_contents_(web_contents),
       feature_promo_helper_(std::move(customize_chrome_feature_promo_helper)),
       ntp_navigation_start_time_(ntp_navigation_start_time),
-      module_id_names_(module_id_names),
+      module_id_details_(module_id_details),
       logger_(profile,
               GURL(chrome::kChromeUINewTabPageURL),
               ntp_navigation_start_time),
       promo_service_(PromoServiceFactory::GetForProfile(profile)),
       interaction_module_id_trigger_dict_(
           MakeModuleInteractionTriggerIdDictionary()),
-      customize_chrome_side_panel_controller_(
-          customize_chrome_side_panel_controller),
+      tab_changed_subscription_(webui::RegisterTabInterfaceChanged(
+          web_contents,
+          base::BindRepeating(&NewTabPageHandler::OnTabInterfaceChanged,
+                              base::Unretained(this)))),
       page_{std::move(pending_page)},
       receiver_{this, std::move(pending_page_handler)} {
   CHECK(ntp_background_service_);
@@ -523,6 +530,12 @@ NewTabPageHandler::NewTabPageHandler(
           ->AddModelExecutionSettingsEnabledObserver(this);
     }
   }
+
+  microsoft_auth_service_ = MicrosoftAuthServiceFactory::GetForProfile(profile);
+  if (microsoft_auth_service_) {
+    microsoft_auth_service_->AddObserver(this);
+  }
+
   if (base::FeatureList::IsEnabled(
           ntp_features::kNtpBackgroundImageErrorDetection)) {
     ntp_custom_background_service_->VerifyCustomBackgroundImageURL();
@@ -539,18 +552,17 @@ NewTabPageHandler::NewTabPageHandler(
       prefs::kNtpDisabledModules,
       base::BindRepeating(&NewTabPageHandler::UpdateDisabledModules,
                           base::Unretained(this)));
+  pref_change_registrar_.Add(
+      prefs::kNtpHiddenModules,
+      base::BindRepeating(&NewTabPageHandler::UpdateDisabledModules,
+                          base::Unretained(this)));
 
   pref_change_registrar_.Add(
       prefs::kSeedColorChangeCount,
       base::BindRepeating(&NewTabPageHandler::MaybeShowWebstoreToast,
                           base::Unretained(this)));
 
-  page_->SetCustomizeChromeSidePanelVisibility(
-      customize_chrome_side_panel_controller_->IsCustomizeChromeEntryShowing());
-  customize_chrome_side_panel_controller_->SetEntryChangedCallback(
-      base::BindRepeating(
-          &NewTabPageHandler::NotifyCustomizeChromeSidePanelVisibilityChanged,
-          weak_ptr_factory_.GetWeakPtr()));
+  OnTabInterfaceChanged();
 }
 
 NewTabPageHandler::~NewTabPageHandler() {
@@ -563,15 +575,15 @@ NewTabPageHandler::~NewTabPageHandler() {
         ->RemoveModelExecutionSettingsEnabledObserver(this);
     optimization_guide_keyed_service_ = nullptr;
   }
-}
-
-void NewTabPageHandler::TabWillDelete() {
-  customize_chrome_side_panel_controller_ = nullptr;
+  if (microsoft_auth_service_) {
+    microsoft_auth_service_->RemoveObserver(this);
+  }
 }
 
 // static
 void NewTabPageHandler::RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterListPref(prefs::kNtpDisabledModules);
+  registry->RegisterListPref(prefs::kNtpHiddenModules);
   registry->RegisterListPref(prefs::kNtpModulesOrder);
   registry->RegisterBooleanPref(prefs::kNtpModulesVisible, true);
   registry->RegisterIntegerPref(prefs::kNtpCustomizeChromeButtonOpenCount, 0);
@@ -689,8 +701,9 @@ void NewTabPageHandler::GetDoodle(GetDoodleCallback callback) {
 void NewTabPageHandler::ChooseLocalCustomBackground(
     ChooseLocalCustomBackgroundCallback callback) {
   // Early return if the select file dialog is already active.
-  if (select_file_dialog_)
+  if (select_file_dialog_) {
     return;
+  }
 
   select_file_dialog_ = ui::SelectFileDialog::Create(
       this, std::make_unique<ChromeSelectFilePolicy>(web_contents_));
@@ -751,8 +764,9 @@ void NewTabPageHandler::SetModuleDisabled(const std::string& module_id,
   base::Value::List& list = update.Get();
   base::Value module_id_value(module_id);
   if (disabled) {
-    if (!base::Contains(list, module_id_value))
+    if (!base::Contains(list, module_id_value)) {
       list.Append(std::move(module_id_value));
+    }
   } else {
     list.EraseValue(module_id_value);
   }
@@ -762,16 +776,24 @@ void NewTabPageHandler::SetModuleDisabled(const std::string& module_id,
 }
 
 void NewTabPageHandler::UpdateDisabledModules() {
-  std::vector<std::string> module_ids;
+  std::set<std::string> module_ids_set;
   // If the module visibility is managed by policy we either disable all modules
   // (if invisible) or no modules (if visible).
   if (!profile_->GetPrefs()->IsManagedPreference(prefs::kNtpModulesVisible)) {
-    const auto& module_ids_value =
+    const auto& disabled_module_ids_value =
         profile_->GetPrefs()->GetList(prefs::kNtpDisabledModules);
-    for (const auto& id : module_ids_value) {
-      module_ids.push_back(id.GetString());
+    for (const auto& id : disabled_module_ids_value) {
+      module_ids_set.insert(id.GetString());
+    }
+
+    const auto& hidden_module_ids_value =
+        profile_->GetPrefs()->GetList(prefs::kNtpHiddenModules);
+    for (const auto& id : hidden_module_ids_value) {
+      module_ids_set.insert(id.GetString());
     }
   }
+  std::vector<std::string> module_ids(module_ids_set.begin(),
+                                      module_ids_set.end());
   page_->SetDisabledModules(
       !profile_->GetPrefs()->GetBoolean(prefs::kNtpModulesVisible),
       std::move(module_ids));
@@ -837,10 +859,11 @@ void NewTabPageHandler::OnModuleUsed(const std::string& module_id) {
 
 void NewTabPageHandler::GetModulesIdNames(GetModulesIdNamesCallback callback) {
   std::vector<new_tab_page::mojom::ModuleIdNamePtr> modules_details;
-  for (const auto& id_name_pair : *module_id_names_) {
+  for (const auto& module_id_detail : *module_id_details_) {
     auto module_id_name = new_tab_page::mojom::ModuleIdName::New();
-    module_id_name->id = id_name_pair.first;
-    module_id_name->name = l10n_util::GetStringUTF8(id_name_pair.second);
+    module_id_name->id = module_id_detail.id_;
+    module_id_name->name =
+        l10n_util::GetStringUTF8(module_id_detail.name_message_id_);
     modules_details.push_back(std::move(module_id_name));
   }
 
@@ -870,18 +893,25 @@ void NewTabPageHandler::GetModulesOrder(GetModulesOrderCallback callback) {
   }
 
   // Second, append Finch order for modules _not_ ordered by drag&drop.
-  base::ranges::copy_if(ntp_features::GetModulesOrder(),
-                        std::back_inserter(module_ids),
-                        [&module_ids](const std::string& id) {
-                          return !base::Contains(module_ids, id);
-                        });
+  std::ranges::copy_if(ntp_features::GetModulesOrder(),
+                       std::back_inserter(module_ids),
+                       [&module_ids](const std::string& id) {
+                         return !base::Contains(module_ids, id);
+                       });
 
   std::move(callback).Run(std::move(module_ids));
+}
+
+void NewTabPageHandler::UpdateModulesLoadable() {
+  if (!microsoft_auth_service_ || SyncMicrosoftModulesWithAuth()) {
+    page_->SetModulesLoadable();
+  }
 }
 
 void NewTabPageHandler::SetCustomizeChromeSidePanelVisible(
     bool visible,
     new_tab_page::mojom::CustomizeChromeSection section_mojo) {
+  CHECK(customize_chrome_side_panel_controller_);
   if (!visible) {
     customize_chrome_side_panel_controller_->CloseSidePanel();
     return;
@@ -1125,6 +1155,11 @@ void NewTabPageHandler::OnPromoLinkClicked() {
   LogEvent(NTP_MIDDLE_SLOT_PROMO_LINK_CLICKED);
 }
 
+void NewTabPageHandler::SetCustomizeChromeSidePanelControllerForTesting(
+    customize_chrome::SidePanelController* side_panel_controller) {
+  SetCustomizeChromeSidePanelController(side_panel_controller);
+}
+
 void NewTabPageHandler::OnNativeThemeUpdated(ui::NativeTheme* observed_theme) {
   OnThemeChanged();
 }
@@ -1261,6 +1296,10 @@ void NewTabPageHandler::OnChangeInFeatureCurrentlyEnabledState(
   page_->SetWallpaperSearchButtonVisibility(is_now_enabled);
 }
 
+void NewTabPageHandler::OnAuthStateUpdated() {
+  UpdateModulesLoadable();
+}
+
 void NewTabPageHandler::FileSelected(const ui::SelectedFileInfo& file,
                                      int index) {
   DCHECK(choose_local_custom_background_callback_);
@@ -1275,8 +1314,9 @@ void NewTabPageHandler::FileSelected(const ui::SelectedFileInfo& file,
   LogEvent(NTP_CUSTOMIZE_LOCAL_IMAGE_DONE);
   LogEvent(NTP_BACKGROUND_UPLOAD_DONE);
 
-  if (choose_local_custom_background_callback_)
+  if (choose_local_custom_background_callback_) {
     std::move(choose_local_custom_background_callback_).Run(true);
+  }
 }
 
 void NewTabPageHandler::FileSelectionCanceled() {
@@ -1286,8 +1326,28 @@ void NewTabPageHandler::FileSelectionCanceled() {
   // with the event.
   LogEvent(NTP_CUSTOMIZE_LOCAL_IMAGE_CANCEL);
   LogEvent(NTP_BACKGROUND_UPLOAD_CANCEL);
-  if (choose_local_custom_background_callback_)
+  if (choose_local_custom_background_callback_) {
     std::move(choose_local_custom_background_callback_).Run(false);
+  }
+}
+
+void NewTabPageHandler::OnTabInterfaceChanged() {
+  tabs::TabInterface* tab_interface =
+      webui::GetTabInterface(web_contents_.get());
+  if (!tab_interface) {
+    // TODO(crbug.com/378475391): NTP should always load into a WebContents
+    // owned by a TabModel. Remove this once NTP loading has been restricted to
+    // browser tabs only.
+    LOG(ERROR) << "NewTabPage loaded into a non-browser-tab context";
+
+    // Reset any composed tab features here.
+    SetCustomizeChromeSidePanelController(nullptr);
+    return;
+  }
+
+  SetCustomizeChromeSidePanelController(
+      tab_interface->GetTabFeatures()
+          ->customize_chrome_side_panel_controller());
 }
 
 void NewTabPageHandler::OnLogoAvailable(
@@ -1316,8 +1376,7 @@ void NewTabPageHandler::OnLogoAvailable(
           logo->metadata.type, logo->dark_encoded_image->as_string(),
           logo->metadata.dark_mime_type, logo->metadata.dark_animated_url,
           logo->metadata.dark_width_px, logo->metadata.dark_height_px,
-          logo->metadata.dark_background_color,
-          logo->metadata.dark_log_url,
+          logo->metadata.dark_background_color, logo->metadata.dark_log_url,
           logo->metadata.dark_cta_log_url);
     }
     if (logo->metadata.on_click_url.is_valid()) {
@@ -1627,4 +1686,76 @@ void NewTabPageHandler::OnUndoDismissMobilePromo() {
                               appearance_count);
   profile_->GetPrefs()->SetBoolean(promos_prefs::kDesktopToiOSNtpPromoDismissed,
                                    false);
+}
+
+void NewTabPageHandler::SetCustomizeChromeSidePanelController(
+    customize_chrome::SidePanelController* side_panel_controller) {
+  customize_chrome_side_panel_controller_ = side_panel_controller;
+
+  if (customize_chrome_side_panel_controller_) {
+    page_->SetCustomizeChromeSidePanelVisibility(
+        customize_chrome_side_panel_controller_
+            ->IsCustomizeChromeEntryShowing());
+    customize_chrome_side_panel_controller_->SetEntryChangedCallback(
+        base::BindRepeating(
+            &NewTabPageHandler::NotifyCustomizeChromeSidePanelVisibilityChanged,
+            weak_ptr_factory_.GetWeakPtr()));
+  } else {
+    page_->SetCustomizeChromeSidePanelVisibility(false);
+  }
+}
+
+void NewTabPageHandler::SetModuleHidden(const std::string& module_id,
+                                        bool hidden) {
+  ScopedListPrefUpdate update(profile_->GetPrefs(), prefs::kNtpHiddenModules);
+  base::Value::List& list = update.Get();
+  base::Value module_id_value(module_id);
+  if (hidden) {
+    if (!base::Contains(list, module_id_value)) {
+      list.Append(std::move(module_id_value));
+    }
+  } else {
+    list.EraseValue(module_id_value);
+  }
+}
+
+bool NewTabPageHandler::SyncMicrosoftModulesWithAuth() {
+  new_tab_page::mojom::AuthState state =
+      microsoft_auth_service_->GetAuthState();
+
+  const std::vector<std::string> auth_dependent_modules(
+      ntp_modules::kMicrosoftAuthDependentModuleIds.begin(),
+      ntp_modules::kMicrosoftAuthDependentModuleIds.end());
+  const std::string auth_id = ntp_modules::kMicrosoftAuthenticationModuleId;
+  std::vector<std::string> enabled_modules;
+  std::vector<std::string> disabled_modules;
+  switch (state) {
+    case new_tab_page::mojom::AuthState::kNone:
+      break;
+    case new_tab_page::mojom::AuthState::kError:
+      enabled_modules.push_back(auth_id);
+      disabled_modules = auth_dependent_modules;
+      break;
+    case new_tab_page::mojom::AuthState::kSuccess:
+      enabled_modules = auth_dependent_modules;
+      disabled_modules.push_back(auth_id);
+      break;
+    default:
+      NOTREACHED();
+  }
+
+  for (const auto& module_id : enabled_modules) {
+    SetModuleHidden(module_id, false);
+  }
+  for (const auto& module_id : disabled_modules) {
+    SetModuleHidden(module_id, true);
+  }
+
+  return state != new_tab_page::mojom::AuthState::kNone;
+}
+
+void NewTabPageHandler::ConnectToParentDocument(
+    mojo::PendingRemote<new_tab_page::mojom::MicrosoftAuthUntrustedDocument>
+        child_untrusted_document_remote) {
+  page_->ConnectToParentDocument(std::move(child_untrusted_document_remote));
 }

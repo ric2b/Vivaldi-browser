@@ -2,9 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import '../../ui/components/cards/cards.js';
+
 import * as i18n from '../../core/i18n/i18n.js';
 import type * as Platform from '../../core/platform/platform.js';
-import * as Cards from '../../ui/components/cards/cards.js';
+import * as IconButton from '../../ui/components/icon_button/icon_button.js';
 import * as UI from '../../ui/legacy/legacy.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
@@ -49,6 +51,7 @@ export class WorkspaceSettingsTab extends UI.Widget.VBox {
 
   constructor() {
     super();
+    this.registerRequiredCSS(workspaceSettingsTabStyles);
 
     this.element.setAttribute('jslog', `${VisualLogging.pane('workspace')}`);
 
@@ -67,12 +70,9 @@ export class WorkspaceSettingsTab extends UI.Widget.VBox {
     mappingsAreInferredInfo.classList.add('mappings-info');
     UI.UIUtils.createTextChild(mappingsAreInferredInfo, i18nString(UIStrings.mappingsAreInferredAutomatically));
 
-    const card = new Cards.Card.Card();
-    this.containerElement.appendChild(card);
-    card.data = {
-      heading: i18nString(UIStrings.workspace),
-      content: [folderExcludePatternInput, mappingsAreInferredInfo],
-    };
+    const card = this.containerElement.createChild('devtools-card');
+    card.heading = i18nString(UIStrings.workspace);
+    card.append(folderExcludePatternInput, mappingsAreInferredInfo);
 
     this.elementByPath = new Map();
     this.mappingViewByPath = new Map();
@@ -88,11 +88,6 @@ export class WorkspaceSettingsTab extends UI.Widget.VBox {
         {jslogContext: 'sources.add-folder-to-workspace'});
     addButton.classList.add('add-folder');
     this.#addButtonContainer.appendChild(addButton);
-  }
-
-  override wasShown(): void {
-    super.wasShown();
-    this.registerCSSFiles([workspaceSettingsTabStyles]);
   }
 
   private createFolderExcludePatternInput(): HTMLElement {
@@ -114,7 +109,7 @@ export class WorkspaceSettingsTab extends UI.Widget.VBox {
       let regex;
       try {
         regex = new RegExp(value);
-      } catch (e) {
+      } catch {
       }
       const valid = Boolean(regex);
       return {valid, errorMessage: undefined};
@@ -136,17 +131,16 @@ export class WorkspaceSettingsTab extends UI.Widget.VBox {
     const removeButton = UI.UIUtils.createTextButton(
         i18nString(UIStrings.remove), this.removeFileSystemClicked.bind(this, fileSystem),
         {jslogContext: 'settings.remove-file-system'});
+    removeButton.slot = 'heading-suffix';
+    const folderIcon = IconButton.Icon.create('folder');
+    folderIcon.slot = 'heading-prefix';
 
     const mappingViewContainer = document.createElement('div');
     mappingViewContainer.classList.add('mapping-view-container');
-    const fileSystemExcludeCard = new Cards.Card.Card();
+    const fileSystemExcludeCard = document.createElement('devtools-card');
+    fileSystemExcludeCard.heading = filename;
+    fileSystemExcludeCard.append(folderIcon, removeButton, mappingViewContainer);
     this.containerElement.insertBefore(fileSystemExcludeCard, this.#addButtonContainer);
-    fileSystemExcludeCard.data = {
-      heading: filename,
-      headingIconName: 'folder',
-      headingSuffix: removeButton,
-      content: [mappingViewContainer],
-    };
     const mappingView = new EditFileSystemView(fileSystem.path());
     this.mappingViewByPath.set(fileSystem.path(), mappingView);
     mappingView.element.classList.add('file-system-mapping-view');
@@ -159,7 +153,8 @@ export class WorkspaceSettingsTab extends UI.Widget.VBox {
   private getFilename(fileSystem: PlatformFileSystem): string {
     const fileSystemPath = fileSystem.path();
     const lastIndexOfSlash = fileSystemPath.lastIndexOf('/');
-    return fileSystemPath.substr(lastIndexOfSlash + 1);
+    const lastPathComponent = fileSystemPath.substr(lastIndexOfSlash + 1);
+    return decodeURIComponent(lastPathComponent);
   }
 
   private removeFileSystemClicked(fileSystem: PlatformFileSystem): void {

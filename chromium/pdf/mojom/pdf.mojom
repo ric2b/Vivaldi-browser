@@ -38,17 +38,22 @@ interface PdfListener {
   // Get the text contained on the given page of the PDF. `page_index` should be
   // the range [0, # of pages).
   GetPageText(int32 page_index) => (mojo_base.mojom.String16 text);
+
+  // Returns the index of the most visible page. If no page is visible,
+  // returns nullopt.
+  GetMostVisiblePageIndex() => (uint32? page_index);
 };
 
 // Browser-side interface used by PDF renderers.
 interface PdfHost {
   SetListener(pending_remote<PdfListener> client);
 
+  // Invoked when document load is completed successfully. Will not be invoked
+  // if the load fails.
+  OnDocumentLoadComplete();
+
   // Updates the content restrictions, i.e. to disable print/copy.
   UpdateContentRestrictions(int32 restrictions);
-
-  // The currently displayed PDF has an unsupported feature.
-  HasUnsupportedFeature();
 
   // Brings up SaveAs... dialog to save specified URL.
   SaveUrlAs(url.mojom.Url url, network.mojom.ReferrerPolicy policy);
@@ -63,10 +68,7 @@ interface PdfHost {
   // Notifies the embedder know the plugin can handle save commands internally.
   SetPluginCanSave(bool can_save);
 
-  // Notifies that PDF searchifier has switched between busy or not busy.
-  // A busy state is when it has some queued pages to process or is processing a
-  // page at the moment. It comes out of this state either when all tasks are
-  // completed or canceled.
+  // Notifies that PDF searchifier has started processing pages.
   [EnableIf=enable_screen_ai_service]
-  OnSearchifyStateChange(bool busy);
+  OnSearchifyStarted();
 };

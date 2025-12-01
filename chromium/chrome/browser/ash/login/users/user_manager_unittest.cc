@@ -48,6 +48,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/known_user.h"
 #include "components/user_manager/scoped_user_manager.h"
+#include "components/user_manager/test_helper.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager_impl.h"
 #include "components/user_manager/user_manager_pref_names.h"
@@ -56,6 +57,7 @@
 #include "content/public/test/browser_task_environment.h"
 #include "extensions/common/features/feature_session_type.h"
 #include "extensions/common/mojom/feature_session_type.mojom.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -72,11 +74,11 @@ AccountId CreateDeviceLocalAccountId(const std::string& account_id,
 constexpr char kDeviceLocalAccountId[] = "device_local_account";
 
 const AccountId kOwnerAccountId =
-    AccountId::FromUserEmailGaiaId("owner@example.com", "1234567890");
+    AccountId::FromUserEmailGaiaId("owner@example.com", GaiaId("1234567890"));
 const AccountId kAccountId0 =
-    AccountId::FromUserEmailGaiaId("user0@example.com", "0123456789");
+    AccountId::FromUserEmailGaiaId("user0@example.com", GaiaId("0123456789"));
 const AccountId kAccountId1 =
-    AccountId::FromUserEmailGaiaId("user1@example.com", "9012345678");
+    AccountId::FromUserEmailGaiaId("user1@example.com", GaiaId("9012345678"));
 const AccountId kKioskAccountId =
     CreateDeviceLocalAccountId(kDeviceLocalAccountId,
                                policy::DeviceLocalAccountType::kKioskApp);
@@ -269,7 +271,8 @@ class UserManagerTest : public testing::Test {
         user_manager::prefs::kDeviceLocalAccountsWithSavedData,
         base::Value(base::Value::List().Append(email)));
     user_manager::KnownUser(local_state_->Get())
-        .SaveKnownUser(AccountId::FromUserEmailGaiaId(email, "fake_gaia_id"));
+        .SaveKnownUser(
+            AccountId::FromUserEmailGaiaId(email, GaiaId("fake_gaia_id")));
   }
 
   size_t GetArcKioskAccountsWithSavedDataCount() {
@@ -512,8 +515,15 @@ TEST_F(UserManagerTest, RemoveUser) {
                               false /* browser_restart */,
                               false /* is_child */);
 
+  // Recreate the user manager to log out all accounts.
+  ResetUserManager();
+
   // Create non-owner account  and login in.
   user_manager_->UserLoggedIn(kAccountId0, kAccountId0.GetUserEmail(),
+                              false /* browser_restart */,
+                              false /* is_child */);
+  // Log-in owner account.
+  user_manager_->UserLoggedIn(kOwnerAccountId, kOwnerAccountId.GetUserEmail(),
                               false /* browser_restart */,
                               false /* is_child */);
 

@@ -705,7 +705,8 @@ void VivaldiUIEvents::SendKeyboardShortcutEvent(
     SessionID::id_type window_id,
     content::BrowserContext* browser_context,
     const input::NativeWebKeyboardEvent& event,
-    bool is_auto_repeat) {
+    bool is_auto_repeat,
+    bool forced_browser_priority) {
   // We don't allow AltGr keyboard shortcuts
   if (event.GetModifiers() & blink::WebInputEvent::kAltGrKey)
     return;
@@ -732,7 +733,7 @@ void VivaldiUIEvents::SendKeyboardShortcutEvent(
     ::vivaldi::BroadcastEvent(tabs_private::OnKeyboardShortcut::kEventName,
                               tabs_private::OnKeyboardShortcut::Create(
                                   window_id, shortcut_text, is_auto_repeat,
-                                  event.from_devtools),
+                                  event.from_devtools, forced_browser_priority),
                               browser_context);
   }
 }

@@ -2,7 +2,6 @@
 
 #import "ios/ui/notes/note_home_view_controller.h"
 
-#import "app/vivaldi_apptools.h"
 #import "base/apple/foundation_util.h"
 #import "base/ios/ios_util.h"
 #import "base/numerics/safe_conversions.h"
@@ -11,12 +10,17 @@
 #import "components/prefs/pref_service.h"
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/app/tests_hook.h"
+#import "ios/chrome/browser/authentication/ui_bundled/cells/signin_promo_view_configurator.h"
+#import "ios/chrome/browser/authentication/ui_bundled/cells/table_view_signin_promo_item.h"
 #import "ios/chrome/browser/default_browser/model/utils.h"
 #import "ios/chrome/browser/drag_and_drop/model/drag_item_util.h"
 #import "ios/chrome/browser/drag_and_drop/model/table_view_url_drag_drop_handler.h"
 #import "ios/chrome/browser/incognito_reauth/ui_bundled/incognito_reauth_scene_agent.h"
 #import "ios/chrome/browser/keyboard/ui_bundled/UIKeyCommand+Chrome.h"
+#import "ios/chrome/browser/menu/ui_bundled/browser_action_factory.h"
+#import "ios/chrome/browser/menu/ui_bundled/menu_histograms.h"
 #import "ios/chrome/browser/policy/model/policy_util.h"
+#import "ios/chrome/browser/settings/ui_bundled/settings_navigation_controller.h"
 #import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
 #import "ios/chrome/browser/shared/coordinator/alert/alert_coordinator.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
@@ -33,13 +37,8 @@
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
 #import "ios/chrome/browser/shared/ui/util/rtl_geometry.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
-#import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_configurator.h"
-#import "ios/chrome/browser/ui/authentication/cells/table_view_signin_promo_item.h"
-#import "ios/chrome/browser/ui/menu/browser_action_factory.h"
-#import "ios/chrome/browser/ui/menu/menu_histograms.h"
-#import "ios/chrome/browser/ui/settings/settings_navigation_controller.h"
-#import "ios/chrome/browser/ui/sharing/sharing_coordinator.h"
-#import "ios/chrome/browser/ui/sharing/sharing_params.h"
+#import "ios/chrome/browser/sharing/ui_bundled/sharing_coordinator.h"
+#import "ios/chrome/browser/sharing/ui_bundled/sharing_params.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_params.h"
 #import "ios/chrome/browser/window_activities/model/window_activity_helpers.h"
@@ -49,6 +48,7 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/notes/notes_factory.h"
 #import "ios/panel/panel_constants.h"
+#import "ios/ui/context_menu/vivaldi_context_menu_constants.h"
 #import "ios/ui/custom_views/vivaldi_search_bar_view.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
@@ -781,7 +781,7 @@ const int kRowsHiddenByNavigationBar = 3;
     return;
   }
 
-  NOTREACHED_IN_MIGRATION();
+  NOTREACHED();
 }
 
 - (void)handleMoveNode:(const vivaldi::NoteNode*)node
@@ -1172,8 +1172,7 @@ const int kRowsHiddenByNavigationBar = 3;
     return nodeItem.noteNode;
   }
 
-  NOTREACHED_IN_MIGRATION();
-  return nullptr;
+  NOTREACHED();
 }
 
 - (BOOL)hasItemAtIndexPath:(NSIndexPath*)indexPath {
@@ -1352,8 +1351,7 @@ const int kRowsHiddenByNavigationBar = 3;
     case NotesContextBarBeginSelection:
       // This must never happen, as the leading button is disabled at this
       // point.
-      NOTREACHED_IN_MIGRATION();
-      break;
+      NOTREACHED();
     case NotesContextBarSingleNoteSelection:
     case NotesContextBarMultipleNoteSelection:
     case NotesContextBarSingleFolderSelection:
@@ -1368,7 +1366,7 @@ const int kRowsHiddenByNavigationBar = 3;
       break;
     case NotesContextBarNone:
     default:
-      NOTREACHED_IN_MIGRATION();
+      NOTREACHED();
   }
 }
 
@@ -1413,8 +1411,7 @@ const int kRowsHiddenByNavigationBar = 3;
     case NotesContextBarBeginSelection:
     case NotesContextBarNone:
       // Center button is disabled in these states.
-      NOTREACHED_IN_MIGRATION();
-      break;
+      NOTREACHED();
   }
 
   [self.actionSheetCoordinator start];
@@ -2350,6 +2347,27 @@ const int kRowsHiddenByNavigationBar = 3;
         }];
         [menuElements addObject:editAction];
 
+        // Rename title action block
+        UIImage* renameImage = [UIImage imageNamed:vMenuEdit];
+        NSString* renameLabel =
+            l10n_util::GetNSString(IDS_VIVALDI_NOTE_CONTEXT_MENU_RENAME);
+        UIAction* renameTitleAction =
+            [UIAction actionWithTitle:renameLabel
+                                image:renameImage
+                           identifier:nil
+                              handler:^(UIAction *action) {
+            NoteHomeViewController* innerStrongSelf = weakSelf;
+            if (!innerStrongSelf)
+              return;
+            const vivaldi::NoteNode* nodeFromId =
+                note_utils_ios::FindNodeById(innerStrongSelf.notes, nodeId);
+            if (nodeFromId) {
+              [innerStrongSelf showRenameTitleAlertForNode:nodeFromId];
+            }
+        }];
+        [menuElements addObject:renameTitleAction];
+
+      // Share action block
         [menuElements
             addObject:[actionFactory actionToShareWithBlock:^{
               NoteHomeViewController* innerStrongSelf = weakSelf;
@@ -2365,6 +2383,7 @@ const int kRowsHiddenByNavigationBar = 3;
               }
             }]];
 
+        // Delete Action Block
         UIAction* deleteAction = [actionFactory actionToDeleteWithBlock:^{
           NoteHomeViewController* innerStrongSelf = weakSelf;
           if (!innerStrongSelf)
@@ -2378,11 +2397,12 @@ const int kRowsHiddenByNavigationBar = 3;
         }];
         [menuElements addObject:deleteAction];
 
-        // Disable Edit and Delete if the node cannot be edited.
-        if (!canEditNode) {
-          editAction.attributes = UIMenuElementAttributesDisabled;
-          deleteAction.attributes = UIMenuElementAttributesDisabled;
-        }
+      // Disable Edit, Rename Title, and Delete if the node cannot be edited.
+      if (!canEditNode) {
+        editAction.attributes = UIMenuElementAttributesDisabled;
+        renameTitleAction.attributes = UIMenuElementAttributesDisabled;
+        deleteAction.attributes = UIMenuElementAttributesDisabled;
+      }
 
         return [UIMenu menuWithTitle:@"" children:menuElements];
       };
@@ -2451,6 +2471,54 @@ const int kRowsHiddenByNavigationBar = 3;
       [UIContextMenuConfiguration configurationWithIdentifier:nil
                                               previewProvider:nil
                                                actionProvider:actionProvider];
+}
+
+// Displays an alert controller with a text field to rename a note's title
+- (void)showRenameTitleAlertForNode:(const NoteNode*)node {
+  if (!node || !node->is_note())
+    return;
+
+  NSString* currentTitle = note_utils_ios::TitleForNoteNode(node);
+
+  UIAlertController* alertController =
+    [UIAlertController
+      alertControllerWithTitle:GetNSString(IDS_VIVALDI_NOTE_CONTEXT_MENU_RENAME)
+                       message:nil
+                preferredStyle:UIAlertControllerStyleAlert];
+
+  [alertController
+    addTextFieldWithConfigurationHandler:^(UITextField* textField) {
+      textField.placeholder =
+          GetNSString(IDS_VIVALDI_NOTE_CONTEXT_MENU_RENAME_PLACEHOLDER);
+    textField.text = currentTitle;
+    textField.clearButtonMode = UITextFieldViewModeWhileEditing;
+    textField.autocapitalizationType = UITextAutocapitalizationTypeSentences;
+  }];
+
+  UIAlertAction* cancelAction =
+      [UIAlertAction actionWithTitle:GetNSString(IDS_CANCEL)
+                               style:UIAlertActionStyleCancel
+                             handler:nil];
+  __weak NoteHomeViewController* weakSelf = self;
+  UIAlertAction* renameAction =
+    [UIAlertAction actionWithTitle:GetNSString(IDS_OK)
+                             style:UIAlertActionStyleDefault
+                           handler:^(UIAlertAction* action) {
+    NoteHomeViewController* strongSelf = weakSelf;
+    if (!strongSelf)
+      return;
+    UITextField* titleField = alertController.textFields.firstObject;
+    NSString* newTitle = titleField.text;
+    // Update the note's title in the data model
+    if (newTitle.length > 0) {
+      strongSelf.sharedState.
+        notesModel->SetTitle(node,base::SysNSStringToUTF16(newTitle));
+      [strongSelf refreshContents];
+    }
+  }];
+  [alertController addAction:cancelAction];
+  [alertController addAction:renameAction];
+  [self presentViewController:alertController animated:YES completion:nil];
 }
 
 #pragma mark UIAdaptivePresentationControllerDelegate

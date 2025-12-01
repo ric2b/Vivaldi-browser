@@ -5,14 +5,13 @@
 import * as i18n from '../../../../core/i18n/i18n.js';
 import type {CLSCulpritsInsightModel} from '../../../../models/trace/insights/CLSCulprits.js';
 import * as Trace from '../../../../models/trace/trace.js';
-import * as LitHtml from '../../../../ui/lit-html/lit-html.js';
+import * as Lit from '../../../../ui/lit/lit.js';
 import type * as Overlays from '../../overlays/overlays.js';
 
+import {BaseInsightComponent} from './BaseInsightComponent.js';
 import {EventReferenceClick} from './EventRef.js';
-import {BaseInsightComponent, shouldRenderForCategory} from './Helpers.js';
-import {Category} from './types.js';
 
-const {html} = LitHtml;
+const {html} = Lit;
 
 const UIStrings = {
   /**
@@ -48,13 +47,20 @@ const UIStrings = {
    * @description Text for a culprit type of Unsized images.
    */
   unsizedImages: 'Unsized Images',
+  /**
+   * @description Text status when there were no layout shifts detected.
+   */
+  noLayoutShifts: 'No layout shifts',
+  /**
+   * @description Text status when there no layout shifts culprits/root causes were found.
+   */
+  noCulprits: 'Could not detect any layout shift culprits',
 };
 const str_ = i18n.i18n.registerUIStrings('panels/timeline/components/insights/CLSCulprits.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
 export class CLSCulprits extends BaseInsightComponent<CLSCulpritsInsightModel> {
-  static override readonly litTagName = LitHtml.literal`devtools-performance-cls-culprits`;
-  override insightCategory: Category = Category.CLS;
+  static override readonly litTagName = Lit.StaticHtml.literal`devtools-performance-cls-culprits`;
   override internalName: string = 'cls-culprits';
 
   override createOverlays(): Overlays.Overlays.TimelineOverlay[] {
@@ -65,8 +71,8 @@ export class CLSCulprits extends BaseInsightComponent<CLSCulpritsInsightModel> {
       return [];
     }
 
-    const range = Trace.Types.Timing.MicroSeconds(worstCluster.dur ?? 0);
-    const max = Trace.Types.Timing.MicroSeconds(worstCluster.ts + range);
+    const range = Trace.Types.Timing.Micro(worstCluster.dur ?? 0);
+    const max = Trace.Types.Timing.Micro(worstCluster.ts + range);
 
     const label = html`<div>${i18nString(UIStrings.worstLayoutShiftCluster)}</div>`;
     return [{
@@ -86,7 +92,8 @@ export class CLSCulprits extends BaseInsightComponent<CLSCulpritsInsightModel> {
   getTopCulprits(
       cluster: Trace.Types.Events.SyntheticLayoutShiftCluster,
       culpritsByShift:
-          Map<Trace.Types.Events.LayoutShift, Trace.Insights.Models.CLSCulprits.LayoutShiftRootCausesData>): string[] {
+          Map<Trace.Types.Events.SyntheticLayoutShift, Trace.Insights.Models.CLSCulprits.LayoutShiftRootCausesData>):
+      string[] {
     const MAX_TOP_CULPRITS = 3;
     const causes: Array<string> = [];
     if (causes.length === MAX_TOP_CULPRITS) {
@@ -127,60 +134,41 @@ export class CLSCulprits extends BaseInsightComponent<CLSCulpritsInsightModel> {
     this.dispatchEvent(new EventReferenceClick(event));
   }
 
-  #render(culprits: Array<string>, worstCluster: Trace.Types.Events.SyntheticLayoutShiftCluster): LitHtml.LitTemplate {
-    if (!this.model) {
-      return LitHtml.nothing;
+  override renderContent(): Lit.LitTemplate {
+    if (!this.model || !this.bounds) {
+      return Lit.nothing;
     }
 
-    const ts = Trace.Types.Timing.MicroSeconds(worstCluster.ts - (this.data.parsedTrace?.Meta.traceBounds.min ?? 0));
+    if (!this.model.clusters.length || !this.model.worstCluster) {
+      return html`<div class="insight-section">${i18nString(UIStrings.noLayoutShifts)}</div>`;
+    }
+
+    const worstCluster = this.model.worstCluster;
+    const culpritsByShift = this.model.shifts;
+
+    // TODO: getTopCulprits needs to move to model.
+    const culprits = this.getTopCulprits(worstCluster, culpritsByShift);
+    if (culprits.length === 0) {
+      return html`<div class="insight-section">${i18nString(UIStrings.noCulprits)}</div>`;
+    }
+
+    const ts = Trace.Types.Timing.Micro(worstCluster.ts - this.bounds.min);
     const clusterTs = i18n.TimeUtilities.formatMicroSecondsTime(ts);
 
-    // TODO(crbug.com/369102516): use Table for hover/click ux.
     // clang-format off
     return html`
-        <div class="insights">
-            <devtools-performance-sidebar-insight .data=${{
-              title: this.model.title,
-              description: this.model.description,
-              internalName: this.internalName,
-              expanded: this.isActive(),
-            }}
-            @insighttoggleclick=${this.onSidebarClick}>
-                <div slot="insight-content" class="insight-section">
-                  <span class="worst-cluster">${i18nString(UIStrings.worstCluster)}: <button type="button" class="timeline-link" @click=${() => this.#clickEvent(worstCluster)}>${i18nString(UIStrings.layoutShiftCluster, {PH1: clusterTs})}</button></span>
-                    <p>${i18nString(UIStrings.topCulprits)}:</p>
-                        ${culprits.map(culprit => {
-                          return html `
-                            <li>${culprit}</li>
-                          `;
-                        })}
-                </div>
-            </devtools-performance-sidebar-insight>
-        </div>`;
-              // clang-format on
-  }
-
-  override render(): void {
-    if (!this.model) {
-      return;
-    }
-
-    const culpritsByShift = this.model.shifts;
-    const clusters = this.model.clusters ?? [];
-    if (!clusters.length || !this.model.worstCluster) {
-      return;
-    }
-
-    const causes = this.getTopCulprits(this.model.worstCluster, culpritsByShift);
-
-    const hasCulprits = causes.length > 0;
-
-    const matchesCategory = shouldRenderForCategory({
-      activeCategory: this.data.activeCategory,
-      insightCategory: this.insightCategory,
-    });
-    const output = hasCulprits && matchesCategory ? this.#render(causes, this.model.worstCluster) : LitHtml.nothing;
-    LitHtml.render(output, this.shadow, {host: this});
+      <div class="insight-section">
+        <span class="worst-cluster">${i18nString(UIStrings.worstCluster)}: <button type="button" class="timeline-link" @click=${() => this.#clickEvent(worstCluster)}>${i18nString(UIStrings.layoutShiftCluster, {PH1: clusterTs})}</button></span>
+          <p class="list-title">${i18nString(UIStrings.topCulprits)}:</p>
+          <ul class="worst-culprits">
+            ${culprits.map(culprit => {
+              return html `
+                <li>${culprit}</li>
+              `;
+            })}
+          </ul>
+      </div>`;
+    // clang-format on
   }
 }
 

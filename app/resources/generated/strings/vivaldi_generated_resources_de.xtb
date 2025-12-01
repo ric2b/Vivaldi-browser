@@ -279,6 +279,7 @@
 <translation id="5582839680698949063">Hauptmenü</translation>
 <translation id="5614553682702429503">Passwort speichern?</translation>
 <translation id="5623842676595125836">Protokoll</translation>
+<translation id="5624959475330585145">Vor der Nutzung unsicherer Verbindungen nachfragen</translation>
 <translation id="5638309510554459422">Im <ph name="BEGIN_LINK" />Chrome Web Store<ph name="END_LINK" /> nach Erweiterungen und Designs suchen</translation>
 <translation id="5677928146339483299">Blockiert</translation>
 <translation id="5707185214361380026">Fehler beim Laden der Erweiterung aus:</translation>
@@ -342,7 +343,7 @@
 <translation id="6686817083349815241">Passwort speichern</translation>
 <translation id="6691936601825168937">&amp;Vor</translation>
 <translation id="6786747875388722282">Erweiterungen</translation>
-<translation id="6787839852456839824">Tastenkombinationen</translation>
+<translation id="6787839852456839824">Tastaturbefehle</translation>
 <translation id="6798954102094737107">Plug-in: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Änderungen beibehalten</translation>
 <translation id="6824564591481349393">E-Mail-Adr&amp;esse kopieren</translation>
@@ -468,6 +469,7 @@ Speichern Sie Ihre Schlüsseldatei an einem sicheren Ort. Sie benötigen die Dat
 <translation id="9218430445555521422">Als Standard festlegen</translation>
 <translation id="93766956588638423">Erweiterung reparieren</translation>
 <translation id="961012016278832836">Microsoft Edge Legacy</translation>
+<translation id="961856697154696964">Browserdaten löschen</translation>
 <translation id="994289308992179865">&amp;Schleife</translation>
 <translation id="998747458861718449">Untersuchen</translation>
 </translationbundle>

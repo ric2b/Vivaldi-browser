@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "components/update_client/background_downloader_win.h"
 
 #include <windows.h>
@@ -29,14 +24,10 @@ constexpr char kTestDownloadContent[] = "Hello, World!";
 }  // namespace
 
 class BackgroundDownloaderWinTest : public testing::Test {
- public:
-  BackgroundDownloaderWinTest() = default;
-  ~BackgroundDownloaderWinTest() override = default;
-
+ protected:
   // Overrides from testing::Test
   void TearDown() override;
 
- protected:
   base::test::TaskEnvironment task_environment_;
   scoped_refptr<BackgroundDownloader> downloader_ =
       base::MakeRefCounted<BackgroundDownloader>(nullptr);

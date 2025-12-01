@@ -59,7 +59,7 @@ in bmpblk.
 
 ## Fallback screen
 
-![fallback screen](images/fallback_screen.jpg)
+![fallback screen](./fallback_screen.jpg)
 
 ### Fallback message
 
@@ -99,4 +99,4 @@ the [zero-touch enrollment] on your device. See [b/181316942] for details.
 
 [bmpblk/boards.yaml]: https://chromium.googlesource.com/chromiumos/platform/bmpblk/+/HEAD/boards.yaml
 [zero-touch enrollment]: https://support.google.com/chrome/a/answer/10130175
-[b/181316942]: http://issuetracker.google.com/issues/181316942
+[b/181316942]: https://issuetracker.google.com/issues/181316942

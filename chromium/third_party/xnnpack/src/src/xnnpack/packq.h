@@ -12,7 +12,6 @@
 
 #include "xnnpack/common.h"
 #include "xnnpack/config-types.h"
-#include "xnnpack/config.h"
 #include "xnnpack/math.h"
 
 #ifdef __cplusplus
@@ -23,10 +22,9 @@ extern "C" {
 // `kai_run_lhs_quant_pack_qai8dxp_f32` as a reference scalar implementation.
 
 inline static size_t k_roundedup(size_t k, size_t kr, size_t sr) {
-  // Since we pack a float and int32 value at the end of the row,
-  // we must make sure that k is a multiple of 4 for memory alignment.
-  size_t kr_sr_roundedup4 = round_up(kr * sr, 4);
-  return round_up(k, kr_sr_roundedup4);
+  // Round up k to be a multiple of 32.
+  size_t kai_k_multiple_of = 32;
+  return round_up(k, kai_k_multiple_of);
 }
 
 inline static size_t lhs_packed_stride(size_t k, size_t mr_packed, size_t kr,
@@ -58,13 +56,11 @@ XNN_INLINE static size_t xnn_x8_packq_f32qp8_packed_size(size_t m, size_t k,
   return num_rows * lhs_packed_stride(k, mr_packed, kr, sr);
 }
 
-XNN_INLINE static size_t xnn_x8_packq_f32qp8_gemm_packed_size(size_t m,
-                                                              size_t k) {
-  const struct xnn_gemm_config* gemm_config =
-      xnn_init_qp8_f32_qc4w_gemm_config();
-  assert(gemm_config != NULL);
-
-  const uint32_t mr_packed = m == 1 ? 1 : gemm_config->mr_packed;
+XNN_INLINE static size_t xnn_x8_packq_f32qp8_gemm_packed_size(
+    const struct xnn_gemm_config* gemm_config, size_t m, size_t k) {
+  const uint32_t mr_packed = m == 1                   ? 1
+                             : gemm_config->mr_packed ? gemm_config->mr_packed
+                                                      : gemm_config->mr;
   const uint32_t kr = UINT32_C(1) << gemm_config->log2_kr;
   const uint32_t sr = UINT32_C(1) << gemm_config->log2_sr;
 

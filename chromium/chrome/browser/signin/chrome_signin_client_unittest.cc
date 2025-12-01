@@ -28,6 +28,7 @@
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -390,7 +391,7 @@ struct MetricsAccessPointHistogramNamesParam {
 // Expected values for each access point group.
 const MetricsAccessPointHistogramNamesParam params_per_access_point_group[] = {
     // Expecting 'PreUnoWebSignin'.
-    {.access_point = signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN,
+    {.access_point = signin_metrics::AccessPoint::kWebSignin,
      .extensions_signin_histogram_name =
          "Signin.Extensions.OnSignin.PreUnoWebSignin",
      .extensions_sync_histogram_name =
@@ -406,8 +407,7 @@ const MetricsAccessPointHistogramNamesParam params_per_access_point_group[] = {
      .suffix_test_name = "AccessPointGroup_PreUnoWebSignin"},
 
     // Expecting 'UnoSigninBubble'.
-    {.access_point = signin_metrics::AccessPoint::
-         ACCESS_POINT_CHROME_SIGNIN_INTERCEPT_BUBBLE,
+    {.access_point = signin_metrics::AccessPoint::kChromeSigninInterceptBubble,
      .extensions_signin_histogram_name =
          "Signin.Extensions.OnSignin.UnoSigninBubble",
      .extensions_sync_histogram_name =
@@ -423,7 +423,7 @@ const MetricsAccessPointHistogramNamesParam params_per_access_point_group[] = {
      .suffix_test_name = "AccessPointGroup_UnoSigninBubble"},
 
     // Expecting 'ProfileCreation'.
-    {.access_point = signin_metrics::AccessPoint::ACCESS_POINT_USER_MANAGER,
+    {.access_point = signin_metrics::AccessPoint::kUserManager,
      .extensions_signin_histogram_name =
          "Signin.Extensions.OnSignin.ProfileCreation",
      .extensions_sync_histogram_name =
@@ -439,8 +439,7 @@ const MetricsAccessPointHistogramNamesParam params_per_access_point_group[] = {
      .suffix_test_name = "AccessPointGroup_ProfileCreation"},
 
     // Expecting 'ProfileMenu'.
-    {.access_point =
-         signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN,
+    {.access_point = signin_metrics::AccessPoint::kAvatarBubbleSignIn,
      .extensions_signin_histogram_name =
          "Signin.Extensions.OnSignin.ProfileMenu",
      .extensions_sync_histogram_name = "Signin.Extensions.OnSync.ProfileMenu",
@@ -455,7 +454,7 @@ const MetricsAccessPointHistogramNamesParam params_per_access_point_group[] = {
      .suffix_test_name = "AccessPointGroup_ProfileMenu"},
 
     // Expecting 'Other'.
-    {.access_point = signin_metrics::AccessPoint::ACCESS_POINT_EXTENSIONS,
+    {.access_point = signin_metrics::AccessPoint::kExtensions,
      .extensions_signin_histogram_name = "Signin.Extensions.OnSignin.Other",
      .extensions_sync_histogram_name = "Signin.Extensions.OnSync.Other",
      .all_bookmarks_signin_histogram_name =
@@ -542,7 +541,7 @@ TEST_P(ChromeSigninClientMetricsTest, ExentsionsAndBookmarkCount) {
 
   CoreAccountInfo account;
   account.email = "example@example.com";
-  account.gaia = "gaia_example";
+  account.gaia = GaiaId("gaia_example");
   ASSERT_FALSE(account.IsEmpty());
 
   signin::ConsentLevel consent_level = std::get<0>(GetParam());
@@ -671,7 +670,7 @@ TEST_F(ChromeSigninClientMetricsTest,
 
   CoreAccountInfo account;
   account.email = "example@example.com";
-  account.gaia = "gaia_example";
+  account.gaia = GaiaId("gaia_example");
   ASSERT_FALSE(account.IsEmpty());
 
   // State goes from no account to an account with `kSync` set.
@@ -681,7 +680,7 @@ TEST_F(ChromeSigninClientMetricsTest,
       /*current_state=*/
       signin::PrimaryAccountChangeEvent::State(account,
                                                signin::ConsentLevel::kSync),
-      signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN};
+      signin_metrics::AccessPoint::kWebSignin};
   // Both Signin and Sync event are being set.
   ASSERT_EQ(event_details.GetEventTypeFor(signin::ConsentLevel::kSignin),
             signin::PrimaryAccountChangeEvent::Type::kSet);
@@ -767,7 +766,7 @@ TEST_F(ChromeSigninClientMetricsTest,
   signin::PrimaryAccountChangeEvent event_details{
       /*previous_state=*/signin::PrimaryAccountChangeEvent::State(),
       /*current_state=*/signin::PrimaryAccountChangeEvent::State(),
-      signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN};
+      signin_metrics::AccessPoint::kWebSignin};
   ASSERT_EQ(event_details.GetEventTypeFor(signin::ConsentLevel::kSignin),
             signin::PrimaryAccountChangeEvent::Type::kNone);
   ASSERT_EQ(event_details.GetEventTypeFor(signin::ConsentLevel::kSync),
@@ -796,7 +795,7 @@ TEST_F(ChromeSigninClientMetricsTest,
 
   CoreAccountInfo account;
   account.email = "example@example.com";
-  account.gaia = "gaia_example";
+  account.gaia = GaiaId("gaia_example");
   ASSERT_FALSE(account.IsEmpty());
 
   // Simulating revoking Signin consent.
@@ -837,7 +836,7 @@ TEST_F(ChromeSigninClientMetricsTest,
 
   CoreAccountInfo account;
   account.email = "example@example.com";
-  account.gaia = "gaia_example";
+  account.gaia = GaiaId("gaia_example");
   ASSERT_FALSE(account.IsEmpty());
 
   // Simulating signing in update.
@@ -846,7 +845,7 @@ TEST_F(ChromeSigninClientMetricsTest,
       /*current_state=*/
       signin::PrimaryAccountChangeEvent::State(account,
                                                signin::ConsentLevel::kSignin),
-      signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN};
+      signin_metrics::AccessPoint::kWebSignin};
   ASSERT_EQ(event_details.GetEventTypeFor(signin::ConsentLevel::kSignin),
             signin::PrimaryAccountChangeEvent::Type::kSet);
   ASSERT_EQ(event_details.GetEventTypeFor(signin::ConsentLevel::kSync),

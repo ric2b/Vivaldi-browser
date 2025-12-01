@@ -115,8 +115,8 @@ int GetSkewFromAngle(int angle) {
 
 int FTPosToCBoxInt(FT_Pos pos) {
   // Boundary values to avoid integer overflow when multiplied by 1000.
-  constexpr FT_Pos kMinCBox = -2147483;
-  constexpr FT_Pos kMaxCBox = 2147483;
+  static constexpr FT_Pos kMinCBox = -2147483;
+  static constexpr FT_Pos kMaxCBox = 2147483;
   return static_cast<int>(std::clamp(pos, kMinCBox, kMaxCBox));
 }
 
@@ -282,7 +282,7 @@ fxge::FontEncoding ToFontEncoding(uint32_t ft_encoding) {
     case FT_ENCODING_WANSUNG:
       return fxge::FontEncoding::kWansung;
   }
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 }  // namespace

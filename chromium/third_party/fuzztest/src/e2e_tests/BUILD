@@ -18,6 +18,22 @@ package(default_visibility = ["//visibility:private"])
 
 licenses(["notice"])
 
+cc_library(
+    name = "test_binary_util",
+    testonly = 1,
+    srcs = ["test_binary_util.cc"],
+    hdrs = ["test_binary_util.h"],
+    deps = [
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:string_view",
+        "@com_google_absl//absl/time",
+        "@com_google_fuzztest//fuzztest:flag_name",
+        "@com_google_fuzztest//fuzztest:subprocess",
+    ],
+)
+
 # Can be run with or without `--config=fuzztest`. When running without, the
 # fuzzing mode tests are skipped.
 cc_test(
@@ -31,6 +47,7 @@ cc_test(
         "@com_google_fuzztest//e2e_tests/testdata:dynamically_registered_fuzz_tests.stripped",
         "@com_google_fuzztest//e2e_tests/testdata:fuzz_tests_for_functional_testing.stripped",
         "@com_google_fuzztest//e2e_tests/testdata:fuzz_tests_with_invalid_seeds.stripped",
+        "@com_google_fuzztest//e2e_tests/testdata:llvm_fuzzer_with_custom_mutator.stripped",
         "@com_google_fuzztest//e2e_tests/testdata:unit_test_and_fuzz_tests.stripped",
     ],
     defines = select({
@@ -38,11 +55,17 @@ cc_test(
         "//conditions:default": [],
     }),
     shard_count = 50,
+    tags = [
+        # Don't cache the results.
+        "external",
+    ],
     deps = [
+        ":test_binary_util",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/time",
+        "@com_google_fuzztest//centipede:weak_sancov_stubs",
         "@com_google_fuzztest//domain_tests:domain_testing",
         "@com_google_fuzztest//fuzztest:io",
         "@com_google_fuzztest//fuzztest:logging",
@@ -71,5 +94,40 @@ cc_binary(
         "@com_google_fuzztest//fuzztest:logging",
         "@com_google_fuzztest//fuzztest:subprocess",
         "@com_googlesource_code_re2//:re2",
+    ],
+)
+
+# Must be run with `--config=fuzztest-experimental --config=asan`.
+cc_test(
+    name = "corpus_database_test",
+    size = "large",
+    srcs = ["corpus_database_test.cc"],
+    data = [
+        "@com_google_fuzztest//centipede:centipede_uninstrumented",
+        "@com_google_fuzztest//e2e_tests/testdata:fuzz_tests_for_corpus_database_testing.stripped",
+    ],
+    local_defines = select({
+        "@com_google_fuzztest//fuzztest:use_centipede": ["FUZZTEST_USE_CENTIPEDE"],
+        "//conditions:default": [],
+    }),
+    tags = [
+        # Don't cache the results.
+        "external",
+        # Don't include in wildcard expansions (:..., :all).
+        "manual",
+    ],
+    deps = [
+        ":test_binary_util",
+        "@com_google_absl//absl/base:no_destructor",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/time",
+        "@com_google_fuzztest//centipede:weak_sancov_stubs",
+        "@com_google_fuzztest//fuzztest:io",
+        "@com_google_fuzztest//fuzztest:logging",
+        "@com_google_fuzztest//fuzztest:subprocess",
+        "@com_google_googletest//:gtest_main",
     ],
 )

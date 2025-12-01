@@ -8,8 +8,8 @@
 
 namespace adblock_filter {
 namespace {
-constexpr int kIntermediateRepresentationVersionNumber = 1;
-constexpr int kOrganizedRulesVersionNumber = 1;
+constexpr int kIntermediateRepresentationVersionNumber = 2;
+constexpr int kOrganizedRulesVersionNumber = 2;
 }  // namespace
 
 int GetIntermediateRepresentationVersionNumber() {

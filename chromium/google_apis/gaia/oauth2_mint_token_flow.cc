@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <optional>
 #include <set>
 #include <string>
@@ -17,7 +18,6 @@
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/escape.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -146,7 +146,7 @@ RemoteConsentResolutionData& RemoteConsentResolutionData::operator=(
 bool RemoteConsentResolutionData::operator==(
     const RemoteConsentResolutionData& rhs) const {
   return url == rhs.url &&
-         base::ranges::equal(cookies, rhs.cookies, &AreCookiesEqual);
+         std::ranges::equal(cookies, rhs.cookies, &AreCookiesEqual);
 }
 
 OAuth2MintTokenFlow::Parameters::Parameters() = default;
@@ -162,7 +162,7 @@ OAuth2MintTokenFlow::Parameters::CreateForExtensionFlow(
     std::string_view version,
     std::string_view channel,
     std::string_view device_id,
-    std::string_view selected_user_id,
+    const GaiaId& selected_user_id,
     std::string_view consent_result) {
   Parameters parameters;
   parameters.extension_id = extension_id;
@@ -292,10 +292,11 @@ std::string OAuth2MintTokenFlow::CreateApiCallBody() {
         base::EscapeUrlEncodedData(parameters_.device_id, true).c_str()));
   }
   if (!parameters_.selected_user_id.empty()) {
-    body.append(base::StringPrintf(
-        kOAuth2IssueTokenBodyFormatSelectedUserIdAddendum,
-        base::EscapeUrlEncodedData(parameters_.selected_user_id, true)
-            .c_str()));
+    body.append(
+        base::StringPrintf(kOAuth2IssueTokenBodyFormatSelectedUserIdAddendum,
+                           base::EscapeUrlEncodedData(
+                               parameters_.selected_user_id.ToString(), true)
+                               .c_str()));
   }
   if (!parameters_.consent_result.empty()) {
     body.append(base::StringPrintf(

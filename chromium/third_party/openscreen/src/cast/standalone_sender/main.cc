@@ -107,7 +107,7 @@ int StandaloneSenderMain(int argc, char* argv[]) {
   // between all Open Screen executables. If it is a platform feature
   // being exposed, consider if it applies to the standalone receiver,
   // standalone sender, osp demo, and test_main argument options.
-  const struct option kArgumentOptions[] = {
+  const get_opt::option kArgumentOptions[] = {
       {"max-bitrate", required_argument, nullptr, 'm'},
       {"no-looping", no_argument, nullptr, 'n'},
       {"developer-certificate", required_argument, nullptr, 'd'},
@@ -132,10 +132,11 @@ int StandaloneSenderMain(int argc, char* argv[]) {
                            nullptr)) != -1) {
     switch (ch) {
       case 'm':
-        max_bitrate = atoi(optarg);
+        max_bitrate = atoi(get_opt::optarg);
         if (max_bitrate < kMinRequiredBitrate) {
-          OSP_LOG_ERROR << "Invalid --max-bitrate specified: " << optarg
-                        << " is less than " << kMinRequiredBitrate;
+          OSP_LOG_ERROR << "Invalid --max-bitrate specified: "
+                        << get_opt::optarg << " is less than "
+                        << kMinRequiredBitrate;
           LogUsage(argv[0]);
           return 1;
         }
@@ -144,7 +145,7 @@ int StandaloneSenderMain(int argc, char* argv[]) {
         should_loop_video = false;
         break;
       case 'd':
-        developer_certificate_path = optarg;
+        developer_certificate_path = get_opt::optarg;
         break;
       case 'a':
         use_android_rtp_hack = true;
@@ -162,14 +163,14 @@ int StandaloneSenderMain(int argc, char* argv[]) {
         LogUsage(argv[0]);
         return 1;
       case 'c':
-        auto specified_codec = StringToVideoCodec(optarg);
+        auto specified_codec = StringToVideoCodec(get_opt::optarg);
         if (specified_codec.is_value() &&
             (specified_codec.value() == VideoCodec::kVp8 ||
              specified_codec.value() == VideoCodec::kVp9 ||
              specified_codec.value() == VideoCodec::kAv1)) {
           codec = specified_codec.value();
         } else {
-          OSP_LOG_ERROR << "Invalid --codec specified: " << optarg
+          OSP_LOG_ERROR << "Invalid --codec specified: " << get_opt::optarg
                         << " is not one of: vp8, vp9, av1.";
           LogUsage(argv[0]);
           return 1;
@@ -183,12 +184,12 @@ int StandaloneSenderMain(int argc, char* argv[]) {
   // The second to last command line argument must be one of: 1) the network
   // interface name or 2) a specific IP address (port is optional). The last
   // argument must be the path to the file.
-  if (optind != (argc - 2)) {
+  if (get_opt::optind != (argc - 2)) {
     LogUsage(argv[0]);
     return 1;
   }
-  const char* const iface_or_endpoint = argv[optind++];
-  const char* const path = argv[optind];
+  const char* const iface_or_endpoint = argv[get_opt::optind++];
+  const char* const path = argv[get_opt::optind];
 
   std::unique_ptr<TrustStore> cast_trust_store;
   if (!developer_certificate_path.empty()) {

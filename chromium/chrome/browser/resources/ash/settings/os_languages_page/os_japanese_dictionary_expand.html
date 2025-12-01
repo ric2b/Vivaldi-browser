@@ -19,10 +19,25 @@
     label="Dictionary name"
     type="text"
     on-change="saveName_"></cr-input>
-    <cr-icon-button class="delete-icon"
-      iron-icon="cr:delete"
-      on-click="deleteDictionary_"
-      title="DeleteDictionary"></cr-icon-button>
+    <div>
+      <cr-icon-button class="delete-icon"
+        iron-icon="cr:delete"
+        on-click="deleteDictionary_"
+        title="DeleteDictionary"></cr-icon-button>
+      <cr-button on-click="importDictionary_">
+        <span>
+          $i18n{japaneseDictionaryImport}
+        </span>
+      </cr-button>
+      <cr-button on-click="exportDictionary_">
+        <span>
+          $i18n{japaneseDictionaryExport}
+        </span>
+      </cr-button>
+    </div>
+    <!-- hidden element used by importDictionary_ to trigger file upload. -->
+    <input id="selectFileDialog"
+      type="file" on-change="handleFileSelectChange_" hidden>
   </div>
   <template is="dom-repeat" items="[[dict.entries]]" as="entry">
     <os-japanese-dictionary-entry-row
@@ -31,8 +46,9 @@
     </os-japanese-dictionary-entry-row>
   </template>
   <template is="dom-if" if="[[shouldShowAddButton_(dict.entries.length)]]">
-    <cr-icon-button iron-icon="cr:add" on-click="addEntry_"
-      title="AddEntry">
-    </cr-icon-button>
+    <cr-button on-click="addEntry_">
+      <iron-icon slot="prefix-icon" icon="cr:add"></iron-icon>
+        $i18n{japaneseDictionaryNewEntry}
+    </cr-button>
   </template>
 </iron-collapse>

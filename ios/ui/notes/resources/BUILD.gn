@@ -57,5 +57,9 @@ bundle_data_xcassets("notes_assets") {
     # markdown_h4_button
     "NotesAssets.xcassets/markdown_h4_button.imageset/Contents.json",
     "NotesAssets.xcassets/markdown_h4_button.imageset/markdown_h4_button.pdf",
+
+    # markdown_bis_button
+    "NotesAssets.xcassets/markdown_bis_button.imageset/Contents.json",
+    "NotesAssets.xcassets/markdown_bis_button.imageset/markdown_bis_button.svg",
   ]
 }

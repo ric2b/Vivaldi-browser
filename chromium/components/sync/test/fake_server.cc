@@ -92,7 +92,7 @@ void VerifyNoProgressMarkerExistsInResponseForFullUpdateType(
   }
 }
 
-// Returns a hash representing |entities| including each entity's ID and
+// Returns a hash representing `entities` including each entity's ID and
 // version, in a way that the order of the entities is irrelevant.
 uint64_t ComputeEntitiesHash(const std::vector<sync_pb::SyncEntity>& entities) {
   // Make sure to pick a token that will be consistent across clients when
@@ -228,6 +228,9 @@ net::HttpStatusCode FakeServer::HandleParsedCommand(
   switch (message.message_contents()) {
     case sync_pb::ClientToServerMessage::GET_UPDATES:
       last_getupdates_message_ = message;
+      for (Observer& observer : observers_) {
+        observer.OnWillGetUpdates(message);
+      }
       break;
     case sync_pb::ClientToServerMessage::COMMIT:
       last_commit_message_ = message;

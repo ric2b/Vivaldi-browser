@@ -9,6 +9,7 @@
 
 #include <ntstatus.h>
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
@@ -20,7 +21,6 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/path_service.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/escape.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -30,6 +30,7 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "base/win/current_module.h"
+#include "base/win/ntsecapi_shim.h"
 #include "base/win/registry.h"
 #include "base/win/scoped_com_initializer.h"
 #include "base/win/scoped_handle.h"
@@ -479,7 +480,7 @@ HRESULT MakeUsernameForAccount(const base::Value::Dict& result,
 
   // Determine if the email is a consumer domain (gmail.com or googlemail.com).
   std::wstring email = GetDictString(result, kKeyEmail);
-  base::ranges::transform(email, email.begin(), ::tolower);
+  std::ranges::transform(email, email.begin(), ::tolower);
   std::wstring::size_type consumer_domain_pos = email.find(L"@gmail.com");
   if (consumer_domain_pos == std::wstring::npos)
     consumer_domain_pos = email.find(L"@googlemail.com");
@@ -791,9 +792,9 @@ void GetUserConfigsIfStale(const std::wstring& sid,
 
 }  // namespace
 
-CGaiaCredentialBase::UIProcessInfo::UIProcessInfo() {}
+CGaiaCredentialBase::UIProcessInfo::UIProcessInfo() = default;
 
-CGaiaCredentialBase::UIProcessInfo::~UIProcessInfo() {}
+CGaiaCredentialBase::UIProcessInfo::~UIProcessInfo() = default;
 
 // static
 bool CGaiaCredentialBase::IsCloudAssociationEnabled() {
@@ -928,9 +929,9 @@ HRESULT CGaiaCredentialBase::OnDllUnregisterServer() {
   return S_OK;
 }
 
-CGaiaCredentialBase::CGaiaCredentialBase() {}
+CGaiaCredentialBase::CGaiaCredentialBase() = default;
 
-CGaiaCredentialBase::~CGaiaCredentialBase() {}
+CGaiaCredentialBase::~CGaiaCredentialBase() = default;
 
 bool CGaiaCredentialBase::AreCredentialsValid() const {
   return CanAttemptWindowsLogon() &&
@@ -1373,21 +1374,8 @@ HRESULT CGaiaCredentialBase::GetFieldState(
       hr = S_OK;
       break;
     case FID_PROVIDER_LOGO:
-      *pcpfs = ::IsWindows8OrGreater() ? CPFS_HIDDEN : CPFS_DISPLAY_IN_BOTH;
-      *pcpfis = CPFIS_NONE;
-      hr = S_OK;
-      break;
     case FID_PROVIDER_LABEL:
-      *pcpfs = ::IsWindows8OrGreater() ? CPFS_HIDDEN
-                                       : CPFS_DISPLAY_IN_DESELECTED_TILE;
-      *pcpfis = CPFIS_NONE;
-      hr = S_OK;
-      break;
     case FID_CURRENT_PASSWORD_FIELD:
-      *pcpfs = CPFS_HIDDEN;
-      *pcpfis = CPFIS_NONE;
-      hr = S_OK;
-      break;
     case FID_FORGOT_PASSWORD_LINK:
       *pcpfs = CPFS_HIDDEN;
       *pcpfis = CPFIS_NONE;

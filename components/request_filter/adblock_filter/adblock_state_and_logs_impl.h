@@ -23,11 +23,14 @@ class WebContents;
 }  // namespace content
 
 namespace adblock_filter {
+class RuleServiceImpl;
+
 class StateAndLogsImpl : public StateAndLogs {
  public:
   StateAndLogsImpl(base::Time reporting_start,
                    CounterGroup blocked_domains,
                    CounterGroup blocked_for_origin,
+                   RuleServiceImpl* rules_service,
                    base::RepeatingClosure schedule_save);
   ~StateAndLogsImpl() override;
   StateAndLogsImpl(const StateAndLogsImpl&) = delete;
@@ -44,9 +47,9 @@ class StateAndLogsImpl : public StateAndLogs {
   void SetFrameBlockState(RuleGroup group, content::RenderFrameHost* frame);
   void ResetFrameBlockState(RuleGroup group, content::RenderFrameHost* frame);
 
-  void LogTabActivations(RuleGroup group,
-                         content::RenderFrameHost* frame,
-                         const RulesIndex::ActivationResults& activations);
+  void ReportTabActivations(RuleGroup group,
+                            content::RenderFrameHost* frame,
+                            const RulesIndex::ActivationResults& activations);
 
   void OnUrlBlocked(RuleGroup group,
                     url::Origin origin,
@@ -54,6 +57,8 @@ class StateAndLogsImpl : public StateAndLogs {
                     content::RenderFrameHost* frame);
   void OnTabRemoved(content::WebContents* contents);
   void OnAllowAttributionChanged(content::WebContents* contents);
+  void ComputeMissingActivationsForNavigation(RuleGroup group,
+                                              content::RenderFrameHost* frame);
 
   void ArmAdAttribution(content::RenderFrameHost* frame);
 
@@ -80,10 +85,13 @@ class StateAndLogsImpl : public StateAndLogs {
   bool WasFrameBlocked(RuleGroup group,
                        content::RenderFrameHost* frame) const override;
   TabStateAndLogs* GetTabHelper(content::WebContents* contents) const override;
+  void CreateTabHelper(content::WebContents* contents) override;
+
   void AddObserver(Observer* observer) override;
   void RemoveObserver(Observer* observer) override;
 
  private:
+  bool IsOriginWanted(RuleGroup group, url::Origin origin);
   void PrepareNewNotifications();
   void SendNotifications();
   void AddToCounter(CounterGroup& counter_group,
@@ -105,6 +113,7 @@ class StateAndLogsImpl : public StateAndLogs {
   base::OneShotTimer next_notification_timer_;
   base::RepeatingClosure schedule_save_;
 
+  raw_ptr<RuleServiceImpl> rules_service_;
   base::ObserverList<Observer> observers_;
   base::WeakPtrFactory<StateAndLogsImpl> weak_factory_;
 };

@@ -18,9 +18,13 @@ bool FixedArrayBase::IsCowArray() const {
   return map() == GetReadOnlyRoots().fixed_cow_array_map();
 }
 
-Handle<FixedArray> FixedArray::SetAndGrow(Isolate* isolate,
-                                          Handle<FixedArray> array, int index,
-                                          DirectHandle<Object> value) {
+template <template <typename> typename HandleType>
+  requires(
+      std::is_convertible_v<HandleType<FixedArray>, DirectHandle<FixedArray>>)
+HandleType<FixedArray> FixedArray::SetAndGrow(Isolate* isolate,
+                                              HandleType<FixedArray> array,
+                                              int index,
+                                              DirectHandle<Object> value) {
   int len = array->length();
   if (index >= len) {
     int new_capacity = FixedArray::NewCapacityForIndex(index, len);
@@ -34,20 +38,36 @@ Handle<FixedArray> FixedArray::SetAndGrow(Isolate* isolate,
   return array;
 }
 
+template DirectHandle<FixedArray> FixedArray::SetAndGrow(
+    Isolate* isolate, DirectHandle<FixedArray> array, int index,
+    DirectHandle<Object> value);
+template IndirectHandle<FixedArray> FixedArray::SetAndGrow(
+    Isolate* isolate, IndirectHandle<FixedArray> array, int index,
+    DirectHandle<Object> value);
+
 void FixedArray::RightTrim(Isolate* isolate, int new_capacity) {
   DCHECK_NE(map(), ReadOnlyRoots{isolate}.fixed_cow_array_map());
   Super::RightTrim(isolate, new_capacity);
 }
 
-Handle<FixedArray> FixedArray::RightTrimOrEmpty(Isolate* isolate,
-                                                Handle<FixedArray> array,
-                                                int new_length) {
+template <template <typename> typename HandleType>
+  requires(
+      std::is_convertible_v<HandleType<FixedArray>, DirectHandle<FixedArray>>)
+HandleType<FixedArray> FixedArray::RightTrimOrEmpty(
+    Isolate* isolate, HandleType<FixedArray> array, int new_length) {
   if (new_length == 0) {
-    return ReadOnlyRoots{isolate}.empty_fixed_array_handle();
+    return isolate->factory()->empty_fixed_array();
   }
   array->RightTrim(isolate, new_length);
   return array;
 }
+
+template EXPORT_TEMPLATE_DEFINE(V8_EXPORT_PRIVATE)
+    DirectHandle<FixedArray> FixedArray::RightTrimOrEmpty(
+        Isolate* isolate, DirectHandle<FixedArray> array, int new_length);
+template EXPORT_TEMPLATE_DEFINE(V8_EXPORT_PRIVATE)
+    IndirectHandle<FixedArray> FixedArray::RightTrimOrEmpty(
+        Isolate* isolate, IndirectHandle<FixedArray> array, int new_length);
 
 // static
 Handle<ArrayList> ArrayList::Add(Isolate* isolate, Handle<ArrayList> array,
@@ -96,13 +116,14 @@ Handle<ArrayList> ArrayList::Add(Isolate* isolate, Handle<ArrayList> array,
 }
 
 // static
-Handle<FixedArray> ArrayList::ToFixedArray(Isolate* isolate,
-                                           DirectHandle<ArrayList> array,
-                                           AllocationType allocation) {
+DirectHandle<FixedArray> ArrayList::ToFixedArray(Isolate* isolate,
+                                                 DirectHandle<ArrayList> array,
+                                                 AllocationType allocation) {
   int length = array->length();
   if (length == 0) return isolate->factory()->empty_fixed_array();
 
-  Handle<FixedArray> result = FixedArray::New(isolate, length, allocation);
+  DirectHandle<FixedArray> result =
+      FixedArray::New(isolate, length, allocation);
   DisallowGarbageCollection no_gc;
   WriteBarrierMode mode = result->GetWriteBarrierMode(no_gc);
   ObjectSlot dst_slot(result->RawFieldOfElementAt(0));

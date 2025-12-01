@@ -40,6 +40,21 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Has conflict"/>
 </enum>
 
+<!-- LINT.IfChange(ClassifyUrlThrottleFinalStatus) -->
+
+<enum name="ClassifyUrlThrottleFinalStatus">
+  <int value="0" label="Allowed">
+    The navigation is allowed as a result of aggregating filtering results from
+    SupervisedUserURLFilter
+  </int>
+  <int value="1" label="Blocked">
+    The navigation is denied as a result of aggregating filtering results from
+    SupervisedUserURLFilter, and an interstitial is scheduled.
+  </int>
+</enum>
+
+<!-- LINT.ThenChange(//chrome/browser/supervised_user/classify_url_navigation_throttle.h:ClassifyUrlThrottleFinalStatus) -->
+
 <!-- LINT.IfChange(ClassifyUrlThrottleStatus) -->
 
 <enum name="ClassifyUrlThrottleStatus">
@@ -146,6 +161,8 @@ chromium-metrics-reviews@google.com.
   </int>
 </enum>
 
+<!-- LINT.IfChange(FamilyLinkUserLocalWebApprovalResult) -->
+
 <enum name="FamilyLinkUserLocalWebApprovalResult">
   <summary>
     The result of local web approval request. Reported by the browser once
@@ -161,8 +178,13 @@ chromium-metrics-reviews@google.com.
     Request was canceled at any point (before, during or after parent
     verification).
   </int>
-  <int value="3" label="Error">An error occured during the request flow.</int>
+  <int value="3" label="Error">
+    An error occured during the request flows, including malformed requests and
+    server-client connection errors.
+  </int>
 </enum>
+
+<!-- LINT.ThenChange(//components/supervised_user/core/common/supervised_user_constants.h:LocalApprovalResult) -->
 
 <enum name="FamilyLinkUserLogSegment">
   <summary>
@@ -190,6 +212,8 @@ chromium-metrics-reviews@google.com.
   </int>
 </enum>
 
+<!-- LINT.IfChange(FamilyLinkUserParentAccessWidgetError) -->
+
 <enum name="FamilyLinkUserParentAccessWidgetError">
   <summary>
     Error that occurs in the parent access widget. ChromeOS only.
@@ -213,6 +237,8 @@ chromium-metrics-reviews@google.com.
     ParentAccessHandler::OnParentAccessCallback.
   </int>
 </enum>
+
+<!-- LINT.ThenChange(//components/supervised_user/core/common/supervised_user_constants.h:ParentAccessWidgetError) -->
 
 <enum name="FamilyLinkUserParentAccessWidgetShowDialogError">
   <summary>
@@ -463,6 +489,8 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Favicon Unavailable"/>
 </enum>
 
+<!-- LINT.IfChange(top_level_filtering_result) -->
+
 <enum name="SupervisedUserFilterTopLevelResult">
   <int value="0" label="ALLOWED">
     Records sites that have been allowed explicitly through the allowlist; when
@@ -481,6 +509,8 @@ chromium-metrics-reviews@google.com.
     turned on
   </int>
 </enum>
+
+<!-- LINT.ThenChange(//components/supervised_user/core/common/supervised_user_constants.h:top_level_filtering_result) -->
 
 <!-- LINT.IfChange(SupervisedUserImplicitParentApprovalGrantEntryPoint) -->
 

@@ -11,7 +11,6 @@
 #include "base/auto_reset.h"
 #include "base/containers/adapters.h"
 #include "base/metrics/histogram.h"
-#include "base/ranges/algorithm.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/typed_macros.h"
 #include "cc/base/histograms.h"
@@ -31,6 +30,7 @@
 #include "components/viz/common/quads/frame_deadline.h"
 #include "components/viz/common/quads/offset_tag.h"
 #include "components/viz/common/quads/solid_color_draw_quad.h"
+#include "components/viz/common/resources/resource_id.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -159,7 +159,7 @@ void LayerTreeImpl::RequestCopyOfOutput(
     std::unique_ptr<viz::CopyOutputRequest> request) {
   if (request->has_source()) {
     const base::UnguessableToken& source = request->source();
-    auto it = base::ranges::find_if(
+    auto it = std::ranges::find_if(
         copy_requests_for_next_frame_,
         [&source](const std::unique_ptr<viz::CopyOutputRequest>& x) {
           return x->has_source() && x->source() == source;
@@ -557,8 +557,8 @@ void LayerTreeImpl::GenerateCompositorFrame(
   for (const auto& pass : out_frame.render_pass_list) {
     total_quad_count += pass->quad_list.size();
     for (const auto* quad : pass->quad_list) {
-      for (viz::ResourceId resource_id : quad->resources) {
-        out_resource_ids.insert(resource_id);
+      if (quad->resource_id != viz::kInvalidResourceId) {
+        out_resource_ids.insert(quad->resource_id);
       }
     }
   }

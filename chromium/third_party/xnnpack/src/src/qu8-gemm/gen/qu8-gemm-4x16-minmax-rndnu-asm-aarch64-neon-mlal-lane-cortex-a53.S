@@ -24,7 +24,8 @@
 
 # params structure is 20 bytes
 #  struct {
-#    uint8_t kernel_zero_point[4];
+#    uint8_t kernel_zero_point;
+#    uint8_t padding[3];
 #    int32_t right_pre_shift;
 #    int32_t multiplier;
 #    int32_t right_post_shift;
@@ -70,7 +71,8 @@ BEGIN_FUNCTION xnn_qu8_gemm_minmax_rndnu_ukernel_4x16__asm_aarch64_neon_mlal_lan
         ADD         x7,  x9, x7             // c3 = c2 + cm_stride
         CSEL        x4, x13, x4, LO         //   a3 = a2
         CSEL        x7,  x9, x7, LO         //   c3 = c2
-        LD1R        {v7.4s}, [x11], 4           // kernel_zero_point
+        LD1R        {v7.16b}, [x11]              // kernel_zero_point
+        ADD         x11, x11, 4                  // Skip padding
 
         .p2align    3
 0:
@@ -524,7 +526,6 @@ BEGIN_FUNCTION xnn_qu8_gemm_minmax_rndnu_ukernel_4x16__asm_aarch64_neon_mlal_lan
         SRSHL       v29.4s, v29.4s, v6.4s
         SRSHL       v30.4s, v30.4s, v6.4s
         SRSHL       v31.4s, v31.4s, v6.4s
-
         SQXTN       v16.4h, v16.4s
         SQXTN       v17.4h, v17.4s
         SQXTN       v18.4h, v18.4s
@@ -534,7 +535,6 @@ BEGIN_FUNCTION xnn_qu8_gemm_minmax_rndnu_ukernel_4x16__asm_aarch64_neon_mlal_lan
         SQXTN       v26.4h, v26.4s
         SQXTN       v27.4h, v27.4s
         LD1R        {v6.8h}, [x11], 2       // add bias
-
         SQXTN2      v16.8h, v20.4s
         SQXTN2      v17.8h, v21.4s
         SQXTN2      v18.8h, v22.4s
@@ -543,7 +543,6 @@ BEGIN_FUNCTION xnn_qu8_gemm_minmax_rndnu_ukernel_4x16__asm_aarch64_neon_mlal_lan
         SQXTN2      v25.8h, v29.4s
         SQXTN2      v26.8h, v30.4s
         SQXTN2      v27.8h, v31.4s
-
         SQADD       v16.8h, v16.8h, v6.8h
         SQADD       v17.8h, v17.8h, v6.8h
         SQADD       v18.8h, v18.8h, v6.8h

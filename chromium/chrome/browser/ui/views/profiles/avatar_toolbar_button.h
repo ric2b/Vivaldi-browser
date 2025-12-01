@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_PROFILES_AVATAR_TOOLBAR_BUTTON_H_
 #define CHROME_BROWSER_UI_VIEWS_PROFILES_AVATAR_TOOLBAR_BUTTON_H_
 
+#include "base/auto_reset.h"
 #include "base/callback_list.h"
 #include "base/functional/callback_forward.h"
 #include "base/gtest_prod_util.h"
@@ -22,6 +23,7 @@ class AvatarToolbarButtonDelegate;
 class Browser;
 class BrowserView;
 struct AccountInfo;
+class GaiaId;
 
 // Enum used for testing. It allows overriding different delay values based on
 // their usage in the `AvatarToolbarButton` through helper testing functions.
@@ -92,7 +94,7 @@ class AvatarToolbarButton : public ToolbarButton {
       const AccountInfo& account_info);
 
   // Attempts showing the In-Produce-Help for web sign out.
-  void MaybeShowWebSignoutIPH(const std::string& gaia_id);
+  void MaybeShowWebSignoutIPH(const GaiaId& gaia_id);
 
   // Returns true if a text is set and is visible.
   bool IsLabelPresentAndVisible() const;
@@ -110,7 +112,6 @@ class AvatarToolbarButton : public ToolbarButton {
   bool ShouldPaintBorder() const override;
   bool ShouldBlendHighlightColor() const override;
   void AddedToWidget() override;
-  void PaintButtonContents(gfx::Canvas* canvas) override;
 
   void ButtonPressed(bool is_source_accelerator = false);
 

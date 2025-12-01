@@ -71,7 +71,7 @@ function translate(blockId, text) {
 
 var req = new XMLHttpRequest();
 
-req.open("POST", "http://www.google.com/sometranslateservice", false);
+req.open("POST", "https://www.google.com/sometranslateservice", false);
 
 req.onreadystatechange = function() {
 

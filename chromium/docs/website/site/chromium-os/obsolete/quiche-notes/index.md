@@ -280,5 +280,4 @@ process to the who system)
 
 OOBE:
 
-How to [force
-OOBE](http://www.chromium.org/chromium-os/force-out-of-box-experience-oobe).
+How to [force OOBE](/chromium-os/force-out-of-box-experience-oobe).

@@ -11,13 +11,13 @@
 #include <utility>
 #include <vector>
 
-#include "base/auto_reset.h"
 #include "base/check_op.h"
 #include "base/containers/adapters.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/ranges.h"
+#include "base/task/common/task_annotator.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/typed_macros.h"
@@ -998,7 +998,9 @@ void SurfaceAggregator::EmitSurfaceContent(
 
     CopyQuadsToPass(resolved_frame, resolved_pass, copy_pass.get(),
                     resolved_frame.device_scale_factor(), gfx::Transform(), {},
-                    dest_root_target_clip_rect, MaskFilterInfoExt());
+                    dest_root_target_clip_rect, MaskFilterInfoExt(),
+                    surface_quad->override_child_filter_quality,
+                    surface_quad->override_child_dynamic_range_limit);
 
     SetRenderPassDamageRect(copy_pass.get(), resolved_pass);
 
@@ -1031,8 +1033,8 @@ void SurfaceAggregator::EmitSurfaceContent(
       features::kAllowForceMergeRenderPassWithRequireOverlayQuads);
   const bool force_merge_pass =
       allow_forced_merge_pass && !merge_pass && pass_is_mergeable &&
-      base::ranges::any_of(dest_pass_list_->back()->quad_list,
-                           &OverlayCandidate::RequiresOverlay);
+      std::ranges::any_of(dest_pass_list_->back()->quad_list,
+                          &OverlayCandidate::RequiresOverlay);
 
   if (merge_pass || force_merge_pass) {
     // Compute a clip rect in |dest_pass| coordinate space to ensure merged
@@ -1048,7 +1050,9 @@ void SurfaceAggregator::EmitSurfaceContent(
     CopyQuadsToPass(resolved_frame, resolved_root_pass, dest_pass,
                     resolved_frame.device_scale_factor(), combined_transform,
                     surface_quad_clip, dest_root_target_clip_rect,
-                    mask_filter_info);
+                    mask_filter_info,
+                    surface_quad->override_child_filter_quality,
+                    surface_quad->override_child_dynamic_range_limit);
   } else {
     auto* shared_quad_state = CopyAndScaleSharedQuadState(
         surface_quad_sqs, embedder_client_namespace_id,
@@ -1370,7 +1374,10 @@ void SurfaceAggregator::CopyQuadsToPass(
     const gfx::Transform& target_transform,
     const std::optional<gfx::Rect> clip_rect,
     const std::optional<gfx::Rect> dest_root_target_clip_rect,
-    const MaskFilterInfoExt& parent_mask_filter_info_ext) {
+    const MaskFilterInfoExt& parent_mask_filter_info_ext,
+    std::optional<cc::PaintFlags::FilterQuality> override_filter_quality,
+    std::optional<cc::PaintFlags::DynamicRangeLimitMixture>
+        override_dynamic_range_limit) {
   const CompositorRenderPass& source_pass = resolved_pass.render_pass();
   const QuadList& source_quad_list = source_pass.quad_list;
   const SharedQuadState* last_copied_source_shared_quad_state = nullptr;
@@ -1515,12 +1522,20 @@ void SurfaceAggregator::CopyQuadsToPass(
                                    SkColors::kBlack, false);
         } else {
           dest_quad = dest_pass->CopyFromAndAppendDrawQuad(quad);
+          if (override_filter_quality.has_value()) {
+            static_cast<TextureDrawQuad*>(dest_quad)->nearest_neighbor =
+                override_filter_quality == cc::PaintFlags::FilterQuality::kNone;
+          }
+          if (override_dynamic_range_limit.has_value()) {
+            static_cast<TextureDrawQuad*>(dest_quad)->dynamic_range_limit =
+                override_dynamic_range_limit.value();
+          }
         }
       } else {
         dest_quad = dest_pass->CopyFromAndAppendDrawQuad(quad);
       }
       if (dest_quad) {
-        dest_quad->resources = quad_data.remapped_resources;
+        dest_quad->resource_id = quad_data.remapped_resource_id;
       }
     }
   }
@@ -1616,7 +1631,7 @@ void SurfaceAggregator::CopyPasses(ResolvedFrameData& resolved_frame) {
                     apply_surface_transform_to_root_pass ? surface_transform
                                                          : gfx::Transform(),
                     {}, /*dest_root_target_clip_rect*/ root_output_rect,
-                    MaskFilterInfoExt());
+                    MaskFilterInfoExt(), std::nullopt, std::nullopt);
 
     SetRenderPassDamageRect(copy_pass.get(), resolved_pass);
 
@@ -1850,6 +1865,9 @@ gfx::Rect SurfaceAggregator::PrewalkRenderPass(
             .aggregation()
             .prevent_merge = true;
       }
+#else
+      // Ignore -Wunused-private-field warning.
+      (void)prevent_merging_surfaces_to_root_pass_;
 #endif
     } else if (auto* render_pass_quad =
                    quad->DynamicCast<CompositorRenderPassDrawQuad>()) {
@@ -2217,6 +2235,7 @@ AggregatedFrame SurfaceAggregator::Aggregate(
       "viz,benchmark,graphics.pipeline", "Graphics.Pipeline",
       perfetto::Flow::Global(display_trace_id_),
       [this](perfetto::EventContext ctx) {
+        base::TaskAnnotator::EmitTaskTimingDetails(ctx);
         auto* event = ctx.event<perfetto::protos::pbzero::ChromeTrackEvent>();
         auto* data = event->set_chrome_graphics_pipeline();
         data->set_step(perfetto::protos::pbzero::ChromeGraphicsPipeline::

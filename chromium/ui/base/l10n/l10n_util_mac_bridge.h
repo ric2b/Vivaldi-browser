@@ -26,6 +26,13 @@ typedef int MessageID;
                                number:(NSInteger)number
     NS_SWIFT_NAME(pluralString(messageId:number:));
 
+// Vivaldi
++ (NSString*)formatStringForMessageID:(MessageID)messageID
+                             argument:(NSString*)argumentA
+                             argument:(NSString*)argumentB
+    NS_SWIFT_NAME(formatString(messageId:argumentA:argumentB:));
+// End Vivaldi
+
 @end
 
 #endif  // UI_BASE_L10N_L10N_UTIL_MAC_BRIDGE_H_

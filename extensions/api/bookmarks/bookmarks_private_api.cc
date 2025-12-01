@@ -317,7 +317,8 @@ BookmarksPrivateExportFunction::RunOnReady() {
 void BookmarksPrivateExportFunction::FileSelected(
     const ui::SelectedFileInfo& path,
     int index) {
-  bookmark_html_writer::WriteBookmarks(GetProfile(), path.file_path, nullptr);
+  bookmark_html_writer::WriteBookmarks(GetProfile(), path.file_path,
+                                       base::DoNothing());
   select_file_dialog_.reset();
   Release();  // Balanced in BookmarkManagerPrivateIOFunction::SelectFile()
 }

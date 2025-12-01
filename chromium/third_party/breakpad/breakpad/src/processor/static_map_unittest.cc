@@ -30,17 +30,18 @@
 //
 // Author: Siyang Xie (lambxsy@google.com)
 
-#include <cstdint>
 #ifdef HAVE_CONFIG_H
 #include <config.h>  // Must come first
 #endif
 
-#include <climits>
+#include "processor/static_map-inl.h"
+
+#include <limits.h>
+#include <stdint.h>
+
 #include <map>
 
 #include "breakpad_googletest_includes.h"
-#include "processor/static_map-inl.h"
-
 
 typedef int ValueType;
 typedef int KeyType;

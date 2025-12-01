@@ -104,23 +104,23 @@ void HashTableBase::SetNumberOfDeletedElements(int nod) {
 
 // static
 template <typename Derived, typename Shape>
-Handle<Map> HashTable<Derived, Shape>::GetMap(ReadOnlyRoots roots) {
-  return roots.hash_table_map_handle();
+DirectHandle<Map> HashTable<Derived, Shape>::GetMap(RootsTable& roots) {
+  return roots.hash_table_map();
 }
 
 // static
-Handle<Map> NameToIndexHashTable::GetMap(ReadOnlyRoots roots) {
-  return roots.name_to_index_hash_table_map_handle();
+DirectHandle<Map> NameToIndexHashTable::GetMap(RootsTable& roots) {
+  return roots.name_to_index_hash_table_map();
 }
 
 // static
-Handle<Map> RegisteredSymbolTable::GetMap(ReadOnlyRoots roots) {
-  return roots.registered_symbol_table_map_handle();
+DirectHandle<Map> RegisteredSymbolTable::GetMap(RootsTable& roots) {
+  return roots.registered_symbol_table_map();
 }
 
 // static
-Handle<Map> EphemeronHashTable::GetMap(ReadOnlyRoots roots) {
-  return roots.ephemeron_hash_table_map_handle();
+Handle<Map> EphemeronHashTable::GetMap(RootsTable& roots) {
+  return roots.ephemeron_hash_table_map();
 }
 
 template <typename Derived, typename Shape>
@@ -243,19 +243,20 @@ void HashTable<Derived, Shape>::SetCapacity(int capacity) {
   set(kCapacityIndex, Smi::FromInt(capacity));
 }
 
-bool ObjectHashSet::Has(Isolate* isolate, Handle<Object> key, int32_t hash) {
+bool ObjectHashSet::Has(Isolate* isolate, DirectHandle<Object> key,
+                        int32_t hash) {
   return FindEntry(isolate, ReadOnlyRoots(isolate), key, hash).is_found();
 }
 
-bool ObjectHashSet::Has(Isolate* isolate, Handle<Object> key) {
+bool ObjectHashSet::Has(Isolate* isolate, DirectHandle<Object> key) {
   Tagged<Object> hash = Object::GetHash(*key);
   if (!IsSmi(hash)) return false;
   return FindEntry(isolate, ReadOnlyRoots(isolate), key, Smi::ToInt(hash))
       .is_found();
 }
 
-bool ObjectHashTableShape::IsMatch(DirectHandle<Object> key,
-                                   Tagged<Object> other) {
+bool ObjectHashTableShapeBase::IsMatch(DirectHandle<Object> key,
+                                       Tagged<Object> other) {
   return Object::SameValue(*key, other);
 }
 
@@ -288,20 +289,20 @@ uint32_t NameToIndexShape::Hash(ReadOnlyRoots roots, DirectHandle<Name> key) {
   return key->hash();
 }
 
-uint32_t ObjectHashTableShape::Hash(ReadOnlyRoots roots,
-                                    DirectHandle<Object> key) {
+uint32_t ObjectHashTableShapeBase::Hash(ReadOnlyRoots roots,
+                                        DirectHandle<Object> key) {
   return Smi::ToInt(Object::GetHash(*key));
 }
 
-uint32_t ObjectHashTableShape::HashForObject(ReadOnlyRoots roots,
-                                             Tagged<Object> other) {
+uint32_t ObjectHashTableShapeBase::HashForObject(ReadOnlyRoots roots,
+                                                 Tagged<Object> other) {
   return Smi::ToInt(Object::GetHash(other));
 }
 
 template <typename IsolateT>
 Handle<NameToIndexHashTable> NameToIndexHashTable::Add(
     IsolateT* isolate, Handle<NameToIndexHashTable> table,
-    IndirectHandle<Name> key, int32_t index) {
+    DirectHandle<Name> key, int32_t index) {
   DCHECK_GE(index, 0);
   // Validate that the key is absent.
   SLOW_DCHECK(table->FindEntry(isolate, key).is_not_found());

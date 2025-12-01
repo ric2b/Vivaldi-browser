@@ -171,6 +171,100 @@ My commit message is my best friend. It is my life.
                                              'Ix'),
             'Header.\n\nBug: v8\nChange-Id: Ix\nN=t\nT=z')
 
+    def testAddFooterChangeIdWithMultilineFooters(self):
+        add_change_id = lambda lines: git_footers.add_footer_change_id(
+            '\n'.join(lines), 'Ixxx')
+
+        self.assertEqual(
+            add_change_id([
+                'header',
+                '',
+                '',
+                'BUG: yy',
+                'Test: hello ',
+                '  world',
+            ]),
+            '\n'.join([
+                'header',
+                '',
+                '',
+                'BUG: yy',
+                'Test: hello ',
+                '  world',
+                'Change-Id: Ixxx',
+            ]),
+        )
+
+        self.assertEqual(
+            add_change_id([
+                'header',
+                '',
+                '',
+                'BUG: yy',
+                'Yeah: hello ',
+                '  world',
+            ]),
+            '\n'.join([
+                'header',
+                '',
+                '',
+                'BUG: yy',
+                'Change-Id: Ixxx',
+                'Yeah: hello ',
+                '  world',
+            ]),
+        )
+
+        self.assertEqual(
+            add_change_id([
+                'header',
+                '',
+                '',
+                'Something: ',
+                '   looks great',
+                'BUG: yy',
+                'Test: hello ',
+                '  world',
+            ]),
+            '\n'.join([
+                'header',
+                '',
+                '',
+                'Something: ',
+                '   looks great',
+                'BUG: yy',
+                'Test: hello ',
+                '  world',
+                'Change-Id: Ixxx',
+            ]),
+        )
+
+        self.assertEqual(
+            add_change_id([
+                'header',
+                '',
+                '',
+                'Something: ',
+                'BUG: yy',
+                'Something: ',
+                '   looks great',
+                'Test: hello ',
+                '  world',
+            ]),
+            '\n'.join([
+                'header',
+                '',
+                '',
+                'Something: ',
+                'BUG: yy',
+                'Something: ',
+                '   looks great',
+                'Test: hello ',
+                '  world',
+                'Change-Id: Ixxx',
+            ]),
+        )
+
     def testAddFooter(self):
         with self.assertRaises(ValueError):
             git_footers.add_footer('', 'Invalid Footer', 'Value')
@@ -207,31 +301,6 @@ My commit message is my best friend. It is my life.
                                    'value',
                                    after_keys=['Some']),
             'Top\n\nSome: footer\nKey: value\nOther: footer')
-
-        self.assertEqual(
-            git_footers.add_footer('Top\n\nSome: footer\nOther: footer',
-                                   'Key',
-                                   'value',
-                                   before_keys=['Other']),
-            'Top\n\nSome: footer\nKey: value\nOther: footer')
-
-        self.assertEqual(
-            git_footers.add_footer(
-                'Top\n\nSome: footer\nOther: footer\nFinal: footer',
-                'Key',
-                'value',
-                after_keys=['Some'],
-                before_keys=['Final']),
-            'Top\n\nSome: footer\nKey: value\nOther: footer\nFinal: footer')
-
-        self.assertEqual(
-            git_footers.add_footer(
-                'Top\n\nSome: footer\nOther: footer\nFinal: footer',
-                'Key',
-                'value',
-                after_keys=['Other'],
-                before_keys=['Some']),
-            'Top\n\nSome: footer\nOther: footer\nKey: value\nFinal: footer')
 
     def testRemoveFooter(self):
         self.assertEqual(git_footers.remove_footer('message', 'Key'), 'message')

@@ -29,7 +29,6 @@
 //  THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import {createChild, Overlay, type Bounds, type ResetData} from './common.js';
-
 import {buildPath, emptyBounds, type PathBounds} from './highlight_common.js';
 
 interface Path {
@@ -159,7 +158,7 @@ const MAX_CHILD_ELEMENTS_THRESHOLD = 300;
  * bottomCornerTaller: |  L   |_____
  *                     |______|__E__|
  */
-// eslint-disable-next-line @typescript-eslint/naming-convention
+
 export const LabelTypes = {
   topCorner: 'top-corner',
   aboveElement: 'above-element',

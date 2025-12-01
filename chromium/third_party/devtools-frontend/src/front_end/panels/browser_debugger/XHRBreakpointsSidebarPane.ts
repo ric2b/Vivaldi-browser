@@ -80,6 +80,7 @@ export class XHRBreakpointsSidebarPane extends UI.Widget.VBox implements UI.Cont
 
   private constructor() {
     super(true);
+    this.registerRequiredCSS(xhrBreakpointsSidebarPaneStyles);
 
     this.#breakpoints = new UI.ListModel.ListModel();
     this.#list = new UI.ListControl.ListControl(this.#breakpoints, this, UI.ListControl.ListMode.NonViewport);
@@ -183,7 +184,7 @@ export class XHRBreakpointsSidebarPane extends UI.Widget.VBox implements UI.Cont
   createElementForItem(item: string): Element {
     const listItemElement = document.createElement('div');
     UI.ARIAUtils.markAsListitem(listItemElement);
-    const element = listItemElement.createChild('div', 'breakpoint-entry') as HTMLElement;
+    const element = listItemElement.createChild('div', 'breakpoint-entry');
     containerToBreakpointEntry.set(listItemElement, element);
     const enabled = SDK.DOMDebuggerModel.DOMDebuggerManager.instance().xhrBreakpoints().get(item) || false;
     UI.ARIAUtils.markAsCheckbox(element);
@@ -192,7 +193,7 @@ export class XHRBreakpointsSidebarPane extends UI.Widget.VBox implements UI.Cont
 
     const title = item ? i18nString(UIStrings.urlContainsS, {PH1: item}) : i18nString(UIStrings.anyXhrOrFetch);
     const label = UI.UIUtils.CheckboxLabel.create(title, enabled, undefined, undefined, /* small */ true);
-    UI.ARIAUtils.markAsHidden(label);
+    UI.ARIAUtils.setHidden(label, true);
     UI.ARIAUtils.setLabel(element, title);
     element.appendChild(label);
     label.checkboxElement.addEventListener('click', this.checkboxClicked.bind(this, item, enabled), false);
@@ -372,7 +373,7 @@ export class XHRBreakpointsSidebarPane extends UI.Widget.VBox implements UI.Cont
     this.update();
   }
 
-  private update(): void {
+  update(): void {
     const isEmpty = this.#breakpoints.length === 0;
     this.#list.element.classList.toggle('hidden', isEmpty);
     this.#emptyElement.classList.toggle('hidden', !isEmpty);
@@ -402,9 +403,5 @@ export class XHRBreakpointsSidebarPane extends UI.Widget.VBox implements UI.Cont
     for (const url of breakpoints.keys()) {
       this.setBreakpoint(url);
     }
-  }
-  override wasShown(): void {
-    super.wasShown();
-    this.registerCSSFiles([xhrBreakpointsSidebarPaneStyles]);
   }
 }

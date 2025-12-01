@@ -64,8 +64,9 @@ version_info::Channel GetChannel() {
     NSBundle* bundle = base::apple::OuterBundle();
 
     // Only Keystone-enabled build can have a channel.
-    if (![bundle objectForInfoDictionaryKey:@"KSProductID"])
+    if (![bundle objectForInfoDictionaryKey:@"KSProductID"]) {
       return;
+    }
 
     NSString* channel = [bundle objectForInfoDictionaryKey:@"KSChannelID"];
     if (!channel) {

@@ -17,14 +17,6 @@ if (chrome_root_store_cert_management_ui) {
     public_deps = [ "//mojo/public/mojom/base" ]
 
     webui_module_path = "chrome://resources/cr_components/certificate_manager/"
-
-    enabled_features = []
-    if (is_win || is_mac) {
-      enabled_features += [ "native_cert_management" ]
-    }
-    if (is_win || is_mac || is_linux) {
-      enabled_features += [ "enable_provisioned_client_certs" ]
-    }
   }
 }
 
@@ -66,13 +58,13 @@ build_webui("build") {
       "local_certs_section_v2.ts",
     ]
     non_web_component_files += [
-      "certificates_v2_browser_proxy.ts",
       "certificate_confirmation_dialog.html.ts",
       "certificate_confirmation_dialog.ts",
       "certificate_info_dialog.html.ts",
       "certificate_info_dialog.ts",
       "certificate_password_dialog.html.ts",
       "certificate_password_dialog.ts",
+      "certificates_v2_browser_proxy.ts",
       "navigation_v2.ts",
     ]
 
@@ -95,7 +87,10 @@ build_webui("build") {
 
   ts_out_dir =
       "$root_gen_dir/ui/webui/resources/tsc/cr_components/certificate_manager"
-  ts_definitions = [ "//tools/typescript/definitions/chrome_send.d.ts" ]
+  ts_definitions = [
+    "//tools/typescript/definitions/chrome_send.d.ts",
+    "//tools/typescript/definitions/metrics_private.d.ts",
+  ]
   ts_composite = true
   ts_deps = [
     "//third_party/lit/v3_0:build_ts",

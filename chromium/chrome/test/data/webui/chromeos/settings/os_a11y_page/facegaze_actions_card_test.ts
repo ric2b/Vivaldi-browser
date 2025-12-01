@@ -5,12 +5,15 @@
 import 'chrome://os-settings/lazy_load.js';
 
 import {getDeepActiveElement} from '//resources/js/util.js';
-import {AddDialogPage, AssignedKeyCombo, FACEGAZE_COMMAND_PAIR_ADDED_EVENT_NAME, FaceGazeActionsCardElement, FaceGazeAddActionDialogElement, FaceGazeCommandPair, KeyCombination} from 'chrome://os-settings/lazy_load.js';
-import {CrButtonElement, CrIconButtonElement, CrSettingsPrefs, Router, routes, SettingsPrefsElement, SettingsToggleButtonElement} from 'chrome://os-settings/os_settings.js';
+import type {FaceGazeAddActionDialogElement, KeyCombination} from 'chrome://os-settings/lazy_load.js';
+import {AddDialogPage, AssignedKeyCombo, FACEGAZE_COMMAND_PAIR_ADDED_EVENT_NAME, FaceGazeActionsCardElement, FaceGazeCommandPair} from 'chrome://os-settings/lazy_load.js';
+import type {CrButtonElement, CrIconButtonElement, SettingsPrefsElement, SettingsToggleButtonElement} from 'chrome://os-settings/os_settings.js';
+import {CrSettingsPrefs, Router, routes} from 'chrome://os-settings/os_settings.js';
 import {FacialGesture} from 'chrome://resources/ash/common/accessibility/facial_gestures.js';
 import {MacroName} from 'chrome://resources/ash/common/accessibility/macro_names.js';
 import {assert} from 'chrome://resources/js/assert.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import type {DomRepeat} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {assertEquals, assertFalse, assertNull, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 import {isVisible} from 'chrome://webui-test/test_util.js';
@@ -39,18 +42,18 @@ suite('<facegaze-actions-card>', () => {
   }
 
   function assertActionSettingsRow(commandPair: FaceGazeCommandPair):
-      HTMLDivElement {
-    const domRepeat =
-        faceGazeActionsCard.shadowRoot!.querySelector('dom-repeat');
+      HTMLElement {
+    const domRepeat = faceGazeActionsCard.shadowRoot!.querySelector<DomRepeat>(
+        '#faceGazeActionsCommandPairs');
     assertTrue(!!domRepeat);
     const settingsRows =
-        faceGazeActionsCard.shadowRoot!.querySelectorAll<HTMLDivElement>(
-            '.settings-box');
+        faceGazeActionsCard.shadowRoot!.querySelectorAll<HTMLElement>(
+            '.command-pair');
     const row =
         Array.from(settingsRows.values())
             .find(
                 (row) => domRepeat.itemForElement(row)!.equals(commandPair)) as
-        HTMLDivElement;
+        HTMLElement;
     assertTrue(!!row);
     return row;
   }
@@ -148,8 +151,8 @@ suite('<facegaze-actions-card>', () => {
 
   test('actions enabled button syncs to pref', async () => {
     await initPage();
-    assertTrue(faceGazeActionsCard.prefs.settings.a11y.face_gaze.actions_enabled
-                   .value);
+    assertTrue(faceGazeActionsCard.prefs.settings.a11y.face_gaze
+                   .actions_enabled_sentinel.value);
 
     const button = faceGazeActionsCard.shadowRoot!
                        .querySelector<SettingsToggleButtonElement>(
@@ -163,7 +166,7 @@ suite('<facegaze-actions-card>', () => {
 
     assertFalse(button.checked);
     assertFalse(faceGazeActionsCard.prefs.settings.a11y.face_gaze
-                    .actions_enabled.value);
+                    .actions_enabled_sentinel.value);
   });
 
   test('actions disables controls if feature is disabled', async () => {
@@ -321,7 +324,7 @@ suite('<facegaze-actions-card>', () => {
     assertTrue(!!alert);
     assertEquals(
         alert!.innerText,
-        'Assigned gesture Blink both eyes to Left-click the mouse');
+        'Assigned gesture Briefly close both eyes to Left-click the mouse');
 
     const addButton = getAddButton();
     assertFalse(addButton.disabled);
@@ -571,6 +574,27 @@ suite('<facegaze-actions-card>', () => {
     const commandPairs = faceGazeActionsCard.get('commandPairs_');
     assertEquals(2, commandPairs.length);
   });
+
+  test(
+      'actions does not change UI when gesture threshold chip is clicked',
+      async () => {
+        await initPage();
+
+        const commandPair = new FaceGazeCommandPair(
+            MacroName.MOUSE_CLICK_LEFT, FacialGesture.EYES_BLINK);
+        await openAddDialogAndFireCommandPairAddedEvent(commandPair);
+        assertTrue(isGestureToMacroPrefSet(commandPair));
+        const actionRow = assertActionSettingsRow(commandPair);
+
+        const gestureChip = actionRow.querySelector('cros-chip');
+        assertTrue(!!gestureChip);
+        await openDialogAndFireCommandPairAddedEvent(gestureChip, commandPair);
+        assertTrue(isGestureToMacroPrefSet(commandPair));
+        assertActionSettingsRow(commandPair);
+
+        const commandPairs = faceGazeActionsCard.get('commandPairs_');
+        assertEquals(1, commandPairs.length);
+      });
 
   test('actions update prefs based on removed command pair', async () => {
     await initPage();

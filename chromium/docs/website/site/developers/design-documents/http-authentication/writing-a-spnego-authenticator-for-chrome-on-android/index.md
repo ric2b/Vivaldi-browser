@@ -162,7 +162,7 @@ authentication](/administrators/policy-list-3#HTTPAuthentication). In particular
 to enable SPNEGO authentication the
 [AuthServerWhitelist](/administrators/policy-list-3#AuthServerWhitelist) must
 not be empty, and the
-[AuthAndroidNegotiateAccountType](http://www.chromium.org/administrators/policy-list-3#AuthAndroidNegotiateAccountType)
+[AuthAndroidNegotiateAccountType](/administrators/policy-list-3#AuthAndroidNegotiateAccountType)
 must match the account type provided by the SPNEGO authenticator.
 
 To simplify testing of SPNEGO authentication Chrome on Android supports command

@@ -30,12 +30,13 @@ SyncedFileStoreFactory::SyncedFileStoreFactory()
 
 SyncedFileStoreFactory::~SyncedFileStoreFactory() {}
 
-KeyedService* SyncedFileStoreFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+SyncedFileStoreFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
   auto synced_file_store =
       std::make_unique<file_sync::SyncedFileStoreImpl>(context->GetPath());
   synced_file_store->Load();
-  return synced_file_store.release();
+  return synced_file_store;
 }
 
 content::BrowserContext* SyncedFileStoreFactory::GetBrowserContextToUse(

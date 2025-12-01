@@ -23,6 +23,7 @@ limitations under the License.
 #include "mlir/IR/Visitors.h"
 #include "mlir/Pass/Pass.h"
 #include "xla/python/ifrt/ir/constants.h"
+#include "xla/python/ifrt/ir/transforms/passes.h"
 
 namespace xla {
 namespace ifrt {
@@ -44,15 +45,16 @@ void IfrtRemoveIfrtAttrsPass::runOnOperation() {
   module_op->removeAttr(kIfrtLocalViewAttrName);
   module_op.walk([&](mlir::func::FuncOp func_op) {
     // Remove from function attributes.
-    for (auto attribute_name : {kIfrtDevicesAttrName, kIfrtShardingAttrName}) {
+    for (auto attribute_name : {kIfrtDevicesAttrName, kIfrtMemoryKindAttrName,
+                                kIfrtShardingAttrName}) {
       func_op->removeAttr(attribute_name);
     }
 
     // Remove from argument attributes.
     for (int i = 0; i < func_op.getNumArguments(); ++i) {
       mlir::NamedAttrList arg_attrs = func_op.getArgAttrDict(i);
-      for (auto attribute_name :
-           {kIfrtDevicesAttrName, kIfrtShardingAttrName}) {
+      for (auto attribute_name : {kIfrtDevicesAttrName, kIfrtMemoryKindAttrName,
+                                  kIfrtShardingAttrName}) {
         arg_attrs.erase(attribute_name);
       }
       func_op.setArgAttrs(i, arg_attrs);
@@ -60,8 +62,8 @@ void IfrtRemoveIfrtAttrsPass::runOnOperation() {
     // Remove from result attributes.
     for (int i = 0; i < func_op.getNumResults(); ++i) {
       mlir::NamedAttrList res_attrs = func_op.getResultAttrDict(i);
-      for (auto attribute_name :
-           {kIfrtDevicesAttrName, kIfrtShardingAttrName}) {
+      for (auto attribute_name : {kIfrtDevicesAttrName, kIfrtMemoryKindAttrName,
+                                  kIfrtShardingAttrName}) {
         res_attrs.erase(attribute_name);
       }
       func_op.setResultAttrs(i, res_attrs);

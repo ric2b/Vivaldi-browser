@@ -127,7 +127,7 @@ class FieldValidationTest(unittest.TestCase):
         expect = self._test_on_field(fields.LICENSE)
         expect("", None, "treat empty string as None")
         expect("LICENSE-1", ["LICENSE-1"], "return as a list")
-        expect("LGPL v2 and BSD", ["LGPL v2", "BSD"], "return as a list")
+        expect("LGPL v2, BSD", ["LGPL v2", "BSD"], "return as a list")
 
     def test_license_file(self):
         # TODO(b/321154076): Consider excluding files that doesn't exist on

@@ -7,7 +7,6 @@
 <translation id="1158211211994409885">Spletno mesto <ph name="HOST_NAME" /> je nepričakovano prekinilo povezavo.</translation>
 <translation id="1161325031994447685">znova vzpostavite povezavo z omrežjem Wi-Fi</translation>
 <translation id="1175364870820465910">&amp;Natisni...</translation>
-<translation id="132390688737681464">Shrani in izpolni naslove</translation>
 <translation id="1375198122581997741">O različici</translation>
 <translation id="139305205187523129">Spletno mesto <ph name="HOST_NAME" /> ni poslalo nobenih podatkov.</translation>
 <translation id="1555191101192706055">Napadalci na spletno mesto, ki ste ga poskušali obiskati, vas lahko zavedejo, da namestite škodljivo programsko opremo, ki vpliva na vaš način brskanja – na primer s spremembo vaše domače strani ali prikazovanjem dodatnih oglasov na spletnih mestih, ki jih obiščete.</translation>
@@ -52,6 +51,7 @@
 <translation id="2991571918955627853">Spletnega mesta <ph name="SITE" /> trenutno ni mogoče obiskati, saj uporablja protokol HSTS. Napake omrežja in napadi na omrežje so običajno začasni, zato bo ta stran verjetno delovala pozneje.</translation>
 <translation id="3005723025932146533">Pokaži shranjeno kopijo</translation>
 <translation id="301521992641321250">Samodejno blokirano</translation>
+<translation id="3037605927509011580">Joj, šment!</translation>
 <translation id="3041612393474885105">Podatki o certifikatu</translation>
 <translation id="3109728660330352905">Nimate dovoljenja za ogled te strani.</translation>
 <translation id="31207688938192855"><ph name="BEGIN_LINK" />Poskušajte zagnati orodje Diagnostika povezljivosti<ph name="END_LINK" />.</translation>
@@ -64,7 +64,6 @@
 <translation id="3234666976984236645">Vedno zaznaj pomembno vsebino na tem spletnem mestu</translation>
 <translation id="3308738399950580893">oglasi</translation>
 <translation id="3384522979010096022">Vaša organizacija vam ne dovoli ogleda tega spletnega mesta</translation>
-<translation id="3387261909427947069">Načini plačila</translation>
 <translation id="3422472998109090673">Spletno mesto <ph name="HOST_NAME" /> trenutno ni dosegljivo.</translation>
 <translation id="3427092606871434483">Dovoli (privzeto)</translation>
 <translation id="3447661539832366887">Lastnik te naprave je izklopil to zastarelo igro.</translation>
@@ -125,7 +124,6 @@
 <translation id="5386426401304769735">Veriga certifikata za to spletno mesto vsebuje certifikat, podpisan z algoritmom SHA-1.</translation>
 <translation id="5452270690849572955">Te strani spletnega mesta <ph name="HOST_NAME" /> ni mogoče najti</translation>
 <translation id="5457113250005438886">Neveljavno</translation>
-<translation id="5490432419156082418">Naslovi in drugo</translation>
 <translation id="5492298309214877701">To spletno mesto v intranetu podjetja, organizacije ali šole ima enak URL kot zunanje spletno mesto.
     <ph name="LINE_BREAK" />
     Poskusite se obrniti na skrbnika sistema.</translation>
@@ -171,7 +169,6 @@
 <translation id="7111012039238467737">(Veljavno)</translation>
 <translation id="7113310725918019676">Dovoli <ph name="BLOCKED_TYPE" /> od <ph name="DOMAIN" /></translation>
 <translation id="7126644664682723998">Prilepi in poišči</translation>
-<translation id="7179323680825933600">Shrani in izpolni načine plačila</translation>
 <translation id="7210863904660874423">Spletno mesto <ph name="HOST_NAME" /> ne upošteva varnostnih standardov.</translation>
 <translation id="7219179957768738017">Povezava uporablja <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Prikaži obvestila</translation>
@@ -223,6 +220,7 @@
 <translation id="9062620674789239642">Morda je premaknjena, urejana ali izbrisana.</translation>
 <translation id="9069693763241529744">Blokirano z razširitvijo</translation>
 <translation id="9073799351042754113">Izbrali ste izklop varnostnih opozoril za to spletno mesto.</translation>
+<translation id="9168814207360376865">Dovolite spletnim mestom da preverijo, ali imate shranjena plačilna sredstva</translation>
 <translation id="9169664750068251925">Vedno blokiraj na tem spletnem mestu</translation>
 <translation id="9180553614777056266">Blokator oglasov</translation>
 <translation id="9183425211371246419">Spletno mesto <ph name="HOST_NAME" /> uporablja nepodprt protokol.</translation>

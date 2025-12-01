@@ -8,12 +8,16 @@ import './ValueInterpreterSettings.js';
 
 import * as i18n from '../../../core/i18n/i18n.js';
 import * as Platform from '../../../core/platform/platform.js';
-import * as LitHtml from '../../../ui/lit-html/lit-html.js';
+import * as Lit from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
-import linearMemoryValueInterpreterStyles from './linearMemoryValueInterpreter.css.js';
+import linearMemoryValueInterpreterStylesRaw from './linearMemoryValueInterpreter.css.js';
 import {Endianness, type ValueType, type ValueTypeMode} from './ValueInterpreterDisplayUtils.js';
 import type {TypeToggleEvent} from './ValueInterpreterSettings.js';
+
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const linearMemoryValueInterpreterStyles = new CSSStyleSheet();
+linearMemoryValueInterpreterStyles.replaceSync(linearMemoryValueInterpreterStylesRaw.cssContent);
 
 const UIStrings = {
   /**
@@ -30,7 +34,7 @@ const str_ =
     i18n.i18n.registerUIStrings('panels/linear_memory_inspector/components/LinearMemoryValueInterpreter.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
-const {render, html} = LitHtml;
+const {render, html} = Lit;
 
 export class EndiannessChangedEvent extends Event {
   static readonly eventName = 'endiannesschanged';
@@ -128,13 +132,13 @@ export class LinearMemoryValueInterpreter extends HTMLElement {
     this.dispatchEvent(new EndiannessChangedEvent(endianness));
   }
 
-  #renderEndiannessSetting(): LitHtml.TemplateResult {
+  #renderEndiannessSetting(): Lit.TemplateResult {
     const onEnumSettingChange = this.#onEndiannessChange.bind(this);
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
     return html`
     <label data-endianness-setting="true" title=${i18nString(UIStrings.changeEndianness)}>
-      <select class="chrome-select"
+      <select
         jslog=${VisualLogging.dropDown('linear-memory-inspector.endianess').track({change: true})}
         style="border: none; background-color: transparent; cursor: pointer;"
         data-endianness="true" @change=${onEnumSettingChange}>

@@ -33,9 +33,12 @@ void ChromePrefetchManager::StartPrefetchFromCCT(
     const GURL& prefetch_url,
     bool use_prefetch_proxy,
     const std::optional<url::Origin>& referring_origin) {
-  CHECK(
-      base::FeatureList::IsEnabled(chrome::android::kCCTNavigationalPrefetch));
-
+  if (!base::FeatureList::IsEnabled(
+          chrome::android::kCCTNavigationalPrefetch) ||
+      !base::FeatureList::IsEnabled(
+          features::kPrefetchBrowserInitiatedTriggers)) {
+    return;
+  }
   auto* preloading_data =
       content::PreloadingData::GetOrCreateForWebContents(&GetWebContents());
 
@@ -63,17 +66,20 @@ void ChromePrefetchManager::StartPrefetchFromCCT(
 
   // TODO(crbug.com/40288091): Specify appropriate referrer value that comes
   // from CCT.
-  GetWebContents().StartPrefetch(prefetch_url, use_prefetch_proxy,
-                                 blink::mojom::Referrer(), referring_origin,
-                                 preloading_attempt->GetWeakPtr(),
-                                 holdback_status_override);
+  std::unique_ptr<content::PrefetchHandle> prefetch_handle =
+      GetWebContents().StartPrefetch(prefetch_url, use_prefetch_proxy,
+                                     blink::mojom::Referrer(), referring_origin,
+                                     preloading_attempt->GetWeakPtr(),
+                                     holdback_status_override);
+  // TODO(crbug.com/40288091): Clean up staled handles. Please see
+  // crrev.com/c/5534282/comment/cea1fdce_ada24c2b/ for more discussions,
+  if (prefetch_handle) {
+    all_prefetches_.push_back(std::move(prefetch_handle));
+  }
 }
 #endif  // BUILDFLAG(IS_ANDROID)
 
 ChromePrefetchManager::ChromePrefetchManager(content::WebContents* web_contents)
-    : content::WebContentsUserData<ChromePrefetchManager>(*web_contents) {
-  CHECK(base::FeatureList::IsEnabled(
-      features::kPrefetchBrowserInitiatedTriggers));
-}
+    : content::WebContentsUserData<ChromePrefetchManager>(*web_contents) {}
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(ChromePrefetchManager);

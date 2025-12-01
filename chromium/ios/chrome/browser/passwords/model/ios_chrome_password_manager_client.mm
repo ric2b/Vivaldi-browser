@@ -62,12 +62,11 @@ IOSChromePasswordManagerClient::IOSChromePasswordManagerClient(
           GetLocalStatePrefs(),
           SyncServiceFactory::GetForProfileIfExists(bridge_.profile)),
       credentials_filter_(this),
+      log_router_(
+          ios::PasswordManagerLogRouterFactory::GetForProfile(bridge_.profile)),
       helper_(this) {
   saving_passwords_enabled_.Init(
       password_manager::prefs::kCredentialsEnableService, GetPrefs());
-  log_manager_ = autofill::LogManager::Create(
-      ios::PasswordManagerLogRouterFactory::GetForProfile(bridge_.profile),
-      base::RepeatingClosure());
 }
 
 IOSChromePasswordManagerClient::~IOSChromePasswordManagerClient() = default;
@@ -188,6 +187,11 @@ IOSChromePasswordManagerClient::GetPasswordReuseManager() const {
   return IOSChromePasswordReuseManagerFactory::GetForProfile(bridge_.profile);
 }
 
+password_manager::PasswordChangeServiceInterface*
+IOSChromePasswordManagerClient::GetPasswordChangeService() const {
+  return nullptr;
+}
+
 void IOSChromePasswordManagerClient::NotifyUserAutoSignin(
     std::vector<std::unique_ptr<password_manager::PasswordForm>> local_forms,
     const url::Origin& origin) {
@@ -211,18 +215,19 @@ void IOSChromePasswordManagerClient::NotifySuccessfulLoginWithExistingPassword(
                                       SuccessfulLoginUsingExistingPassword];
 }
 
+bool IOSChromePasswordManagerClient::IsPasswordChangeOngoing() {
+  return false;
+}
+
 void IOSChromePasswordManagerClient::NotifyStorePasswordCalled() {
   helper_.NotifyStorePasswordCalled();
 }
 
 void IOSChromePasswordManagerClient::NotifyUserCredentialsWereLeaked(
-    password_manager::CredentialLeakType leak_type,
-    const GURL& origin,
-    const std::u16string& username,
-    bool in_account_store) {
-  [bridge_ showPasswordBreachForLeakType:leak_type
-                                     URL:origin
-                                username:username];
+    password_manager::LeakedPasswordDetails details) {
+  [bridge_ showPasswordBreachForLeakType:details.leak_type
+                                     URL:details.origin
+                                username:details.username];
 }
 
 void IOSChromePasswordManagerClient::NotifyKeychainError() {}
@@ -263,7 +268,11 @@ IOSChromePasswordManagerClient::GetStoreResultFilter() const {
   return &credentials_filter_;
 }
 
-autofill::LogManager* IOSChromePasswordManagerClient::GetLogManager() {
+autofill::LogManager* IOSChromePasswordManagerClient::GetCurrentLogManager() {
+  if (!log_manager_ && log_router_ && log_router_->HasReceivers()) {
+    log_manager_ =
+        autofill::LogManager::Create(log_router_, base::RepeatingClosure());
+  }
   return log_manager_.get();
 }
 
@@ -292,8 +301,7 @@ IOSChromePasswordManagerClient::GetURLLoaderFactory() {
 
 password_manager::PasswordRequirementsService*
 IOSChromePasswordManagerClient::GetPasswordRequirementsService() {
-  return IOSPasswordRequirementsServiceFactory::GetForProfile(
-      bridge_.profile, ServiceAccessType::EXPLICIT_ACCESS);
+  return IOSPasswordRequirementsServiceFactory::GetForProfile(bridge_.profile);
 }
 
 void IOSChromePasswordManagerClient::UpdateFormManagers() {

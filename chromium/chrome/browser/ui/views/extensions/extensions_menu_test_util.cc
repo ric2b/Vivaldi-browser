@@ -3,11 +3,12 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/views/extensions/extensions_menu_test_util.h"
+
+#include <algorithm>
+
 #include "base/containers/flat_set.h"
 #include "base/memory/raw_ptr.h"
-
 #include "base/numerics/safe_conversions.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/extensions/extension_action_view_controller.h"
@@ -48,35 +49,19 @@ ExtensionsMenuTestUtil::ExtensionsMenuTestUtil(Browser* browser)
   extensions_container_ = BrowserView::GetBrowserViewForBrowser(browser_)
                               ->toolbar()
                               ->extensions_container();
-
-  std::unique_ptr<views::BubbleDialogDelegate> bubble_dialog;
-  if (base::FeatureList::IsEnabled(
-          extensions_features::kExtensionsMenuAccessControl)) {
-    bubble_dialog =
-        extensions_container_->GetExtensionsMenuCoordinatorForTesting()
-            ->CreateExtensionsMenuBubbleDialogDelegateForTesting(
-                extensions_container_->GetExtensionsButton(),
-                extensions_container_);
-  } else {
-    bubble_dialog = std::make_unique<ExtensionsMenuView>(
-        extensions_container_->GetExtensionsButton(), browser_,
-        extensions_container_);
-    menu_view_ = views::AsViewClass<ExtensionsMenuView>(
-        bubble_dialog->GetContentsView());
-
-    menu_view_->View::AddObserver(this);
-  }
-
-  views::BubbleDialogDelegate::CreateBubble(std::move(bubble_dialog));
 }
 
 ExtensionsMenuTestUtil::~ExtensionsMenuTestUtil() {
-  if (!menu_view_) {
+  if (!IsExtensionsMenuShowing()) {
     return;
   }
 
-  // Close the menu if when we own the menu view.
-  menu_view_->GetWidget()->CloseNow();
+  if (base::FeatureList::IsEnabled(
+          extensions_features::kExtensionsMenuAccessControl)) {
+    extensions_container_->GetExtensionsMenuCoordinatorForTesting()->Hide();
+  } else {
+    menu_view_->GetWidget()->CloseNow();
+  }
 }
 
 void ExtensionsMenuTestUtil::OnViewIsDeleting(views::View* observed_view) {
@@ -106,6 +91,8 @@ gfx::Image ExtensionsMenuTestUtil::GetIcon(const extensions::ExtensionId& id) {
 }
 
 void ExtensionsMenuTestUtil::Press(const extensions::ExtensionId& id) {
+  OpenExtensionsMenu();
+
   ExtensionMenuItemView* view = GetMenuItemViewForId(id);
   DCHECK(view);
   ExtensionsMenuButton* primary_button =
@@ -166,6 +153,40 @@ gfx::Size ExtensionsMenuTestUtil::GetMaxAvailableSizeToFitBubbleOnScreen(
       views::BubbleFrameView::PreferredArrowAdjustment::kMirror);
 }
 
+void ExtensionsMenuTestUtil::OpenExtensionsMenu() {
+  if (IsExtensionsMenuShowing()) {
+    return;
+  }
+
+  std::unique_ptr<views::BubbleDialogDelegate> bubble_dialog;
+  if (base::FeatureList::IsEnabled(
+          extensions_features::kExtensionsMenuAccessControl)) {
+    bubble_dialog =
+        extensions_container_->GetExtensionsMenuCoordinatorForTesting()
+            ->CreateExtensionsMenuBubbleDialogDelegateForTesting(
+                extensions_container_->GetExtensionsButton(),
+                extensions_container_);
+  } else {
+    bubble_dialog = std::make_unique<ExtensionsMenuView>(
+        extensions_container_->GetExtensionsButton(), browser_,
+        extensions_container_);
+    menu_view_ = views::AsViewClass<ExtensionsMenuView>(
+        bubble_dialog->GetContentsView());
+
+    menu_view_->View::AddObserver(this);
+  }
+
+  views::BubbleDialogDelegate::CreateBubble(std::move(bubble_dialog));
+}
+
+bool ExtensionsMenuTestUtil::IsExtensionsMenuShowing() {
+  return base::FeatureList::IsEnabled(
+             extensions_features::kExtensionsMenuAccessControl)
+             ? extensions_container_->GetExtensionsMenuCoordinatorForTesting()
+                   ->IsShowing()
+             : menu_view_;
+}
+
 ExtensionMenuItemView* ExtensionsMenuTestUtil::GetMenuItemViewForId(
     const extensions::ExtensionId& id) {
   base::flat_set<raw_ptr<ExtensionMenuItemView, CtnExperimental>> menu_items;
@@ -184,7 +205,7 @@ ExtensionMenuItemView* ExtensionsMenuTestUtil::GetMenuItemViewForId(
   }
 
   auto iter =
-      base::ranges::find(menu_items, id, [](ExtensionMenuItemView* view) {
+      std::ranges::find(menu_items, id, [](ExtensionMenuItemView* view) {
         return view->view_controller()->GetId();
       });
   return (iter == menu_items.end()) ? nullptr : *iter;

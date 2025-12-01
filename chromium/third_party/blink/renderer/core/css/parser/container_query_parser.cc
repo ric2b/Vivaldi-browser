@@ -114,8 +114,8 @@ class StateFeatureSet : public MediaQueryParser::FeatureSet {
             feature == media_feature_names::kStuckMediaFeature) ||
            (RuntimeEnabledFeatures::CSSSnapContainerQueriesEnabled() &&
             feature == media_feature_names::kSnappedMediaFeature) ||
-           (RuntimeEnabledFeatures::CSSOverflowContainerQueriesEnabled() &&
-            feature == media_feature_names::kOverflowingMediaFeature);
+           (RuntimeEnabledFeatures::CSSScrollableContainerQueriesEnabled() &&
+            feature == media_feature_names::kScrollableMediaFeature);
   }
   bool IsAllowedWithoutValue(const AtomicString& feature,
                              const ExecutionContext*) const override {
@@ -227,6 +227,29 @@ const MediaQueryExpNode* ContainerQueryParser::ConsumeContainerCondition(
         return this->ConsumeQueryInParens(stream);
       },
       stream);
+}
+
+// <if-test> = style( <style-query> )
+// <style-query>     = not <style-in-parens>
+//                   | <style-in-parens> [ [ and <style-in-parens> ]* | [ or
+//                   <style-in-parens> ]* ] | <style-feature>
+// <style-in-parens> = ( <style-query> )
+//                   | ( <style-feature> )
+//                   | <general-enclosed>
+const MediaQueryExpNode* ContainerQueryParser::ConsumeIfTest(
+    CSSParserTokenStream& stream) {
+  if (stream.Peek().GetType() == kFunctionToken &&
+      stream.Peek().FunctionId() == CSSValueID::kStyle) {
+    CSSParserTokenStream::RestoringBlockGuard guard(stream);
+    stream.ConsumeWhitespace();
+    if (const MediaQueryExpNode* query =
+            ConsumeFeatureQuery(stream, StyleFeatureSet())) {
+      guard.Release();
+      stream.ConsumeWhitespace();
+      return MediaQueryExpNode::Function(query, AtomicString("style"));
+    }
+  }
+  return nullptr;
 }
 
 const MediaQueryExpNode* ContainerQueryParser::ConsumeFeatureQuery(

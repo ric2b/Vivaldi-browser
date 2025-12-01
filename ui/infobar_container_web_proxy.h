@@ -20,7 +20,9 @@ will proxy itself to the web ui side.
 */
 class ConfirmInfoBarWebProxy : public infobars::InfoBar {
  public:
-  ConfirmInfoBarWebProxy(std::unique_ptr<infobars::InfoBarDelegate> delegate);
+  ConfirmInfoBarWebProxy(std::unique_ptr<infobars::InfoBarDelegate> delegate,
+                         const std::u16string shared_tab_name,
+                         const std::u16string capturer_name);
   ~ConfirmInfoBarWebProxy() override;
 
   ConfirmInfoBarDelegate* GetDelegate();
@@ -33,6 +35,12 @@ class ConfirmInfoBarWebProxy : public infobars::InfoBar {
  private:
   raw_ptr<Profile> profile_ = nullptr;
   int tab_id_ = 0;
+
+  std::u16string GetMessageText() const;
+
+  // Copied here to be able to use in UI presenting the capture state.
+  std::u16string shared_tab_name_;
+  std::u16string capturer_name_;
 };
 
 /*

@@ -24,7 +24,8 @@ void FrameInjectionHelper::Create(
   mojo::MakeSelfOwnedReceiver(std::move(frame_helper), std::move(receiver));
 }
 
-FrameInjectionHelper::FrameInjectionHelper(int process_id, int frame_id)
+FrameInjectionHelper::FrameInjectionHelper(content::ChildProcessId process_id,
+                                           int frame_id)
     : process_id_(process_id), frame_id_(frame_id) {}
 
 FrameInjectionHelper::~FrameInjectionHelper() = default;
@@ -32,7 +33,7 @@ FrameInjectionHelper::~FrameInjectionHelper() = default;
 void FrameInjectionHelper::GetInjections(const ::GURL& url,
                                          GetInjectionsCallback callback) {
   content::RenderFrameHost* frame =
-      content::RenderFrameHost::FromID(process_id_, frame_id_);
+      content::RenderFrameHost::FromID(process_id_.value(), frame_id_);
   if (!frame) {
     std::move(callback).Run(mojom::InjectionsForFrame::New());
     return;

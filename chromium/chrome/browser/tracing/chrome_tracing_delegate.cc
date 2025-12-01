@@ -51,10 +51,14 @@
 #include "chromeos/lacros/crosapi_pref_observer.h"
 #endif
 
+#if BUILDFLAG(IS_WIN)
+#include "base/task/thread_pool.h"
+#include "chrome/installer/util/system_tracing_util.h"
+#endif
+
 namespace {
 
 using tracing::BackgroundTracingSetupMode;
-using tracing::BackgroundTracingState;
 using tracing::BackgroundTracingStateManager;
 
 bool IsBackgroundTracingCommandLine() {
@@ -147,7 +151,7 @@ void ChromeTracingDelegate::OnBrowserAdded(Browser* browser) {
 }
 #endif  // BUILDFLAG(IS_ANDROID)
 
-bool ChromeTracingDelegate::IsActionAllowed(
+bool ChromeTracingDelegate::IsRecordingAllowed(
     bool requires_anonymized_data) const {
   // If the background tracing is specified on the command-line, we allow
   // any scenario to be traced and uploaded.
@@ -165,32 +169,47 @@ bool ChromeTracingDelegate::IsActionAllowed(
   return true;
 }
 
-bool ChromeTracingDelegate::OnBackgroundTracingActive(
-    bool requires_anonymized_data) {
-  BackgroundTracingStateManager& state =
-      BackgroundTracingStateManager::GetInstance();
-
-  if (!IsActionAllowed(requires_anonymized_data)) {
-    return false;
-  }
-
-  state.OnTracingStarted();
-  return true;
-}
-
-void ChromeTracingDelegate::OnBackgroundTracingIdle() {
-  BackgroundTracingStateManager& state =
-      BackgroundTracingStateManager::GetInstance();
-  state.OnTracingStopped();
-}
-
-bool ChromeTracingDelegate::CanFinalizeTrace(bool requires_anonymized_data) {
-  return IsActionAllowed(requires_anonymized_data);
-}
-
 bool ChromeTracingDelegate::ShouldSaveUnuploadedTrace() const {
   return true;
 }
+
+#if BUILDFLAG(IS_WIN)
+void ChromeTracingDelegate::GetSystemTracingState(
+    base::OnceCallback<void(bool service_supported, bool service_enabled)>
+        on_tracing_state) {
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock{}},
+      base::BindOnce([]() -> std::pair<bool, bool> {
+        return {installer::IsSystemTracingServiceSupported(),
+                installer::IsSystemTracingServiceRegistered()};
+      }),
+      base::BindOnce(
+          [](base::OnceCallback<void(bool service_supported,
+                                     bool service_enabled)> on_tracing_state,
+             std::pair<bool, bool> state) {
+            std::move(on_tracing_state).Run(state.first, state.second);
+          },
+          std::move(on_tracing_state)));
+}
+
+void ChromeTracingDelegate::EnableSystemTracing(
+    base::OnceCallback<void(bool success)> on_complete) {
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock{}}, base::BindOnce([]() {
+        return installer::ElevateAndRegisterSystemTracingService();
+      }),
+      std::move(on_complete));
+}
+
+void ChromeTracingDelegate::DisableSystemTracing(
+    base::OnceCallback<void(bool success)> on_complete) {
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock{}}, base::BindOnce([]() {
+        return installer::ElevateAndDeregisterSystemTracingService();
+      }),
+      std::move(on_complete));
+}
+#endif  // BUILDFLAG(IS_WIN)
 
 bool ChromeTracingDelegate::IsSystemWideTracingEnabled() {
 #if BUILDFLAG(IS_CHROMEOS_ASH)

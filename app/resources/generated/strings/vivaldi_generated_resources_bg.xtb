@@ -68,7 +68,7 @@
 <translation id="2148892889047469596">Прехвърляне на раздела</translation>
 <translation id="2150139952286079145">Търсене на назначение</translation>
 <translation id="215753907730220065">Изход от цял екран</translation>
-<translation id="2158475082070321257">Копирай препратката от осветения текст</translation>
+<translation id="2158475082070321257">Копирай препратката от засветения текст</translation>
 <translation id="2177950615300672361">Частен раздел: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Модул в Native Client: <ph name="NEXE_NAME" /></translation>
 <translation id="2218515861914035131">Постави като текст</translation>
@@ -181,7 +181,7 @@
 <translation id="3943582379552582368">&amp;Назад</translation>
 <translation id="3948116654032448504">Потърси &amp;картината чрез <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3979395879372752341">Добавено ново разширение (<ph name="EXTENSION_NAME" />)</translation>
-<translation id="398477389655464998">Копирай препратката от осветения текст</translation>
+<translation id="398477389655464998">Копирай препратката от засветения текст</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">Добави в речник&amp;а</translation>
 <translation id="4058793769387728514">Провери документа</translation>
@@ -279,6 +279,7 @@
 <translation id="5582839680698949063">Основно меню</translation>
 <translation id="5614553682702429503">Записване на паролата?</translation>
 <translation id="5623842676595125836">Дневник</translation>
+<translation id="5624959475330585145">Питай преди ползване на незащитени съединения</translation>
 <translation id="5638309510554459422">Намерете разширения и теми в <ph name="BEGIN_LINK" />магазина на Chrome<ph name="END_LINK" /></translation>
 <translation id="5677928146339483299">Блокирани</translation>
 <translation id="5707185214361380026">Провалено зареждане на разширение от:</translation>
@@ -468,6 +469,7 @@
 <translation id="9218430445555521422">Задай като водещ</translation>
 <translation id="93766956588638423">Поправи разширението</translation>
 <translation id="961012016278832836">Edge на Microsoft наследен</translation>
+<translation id="961856697154696964">Изчистване на данните на сърфиране</translation>
 <translation id="994289308992179865">&amp;Пускай многократно</translation>
 <translation id="998747458861718449">О&amp;бследвай</translation>
 </translationbundle>

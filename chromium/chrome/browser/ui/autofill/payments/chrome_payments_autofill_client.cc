@@ -20,17 +20,20 @@
 #include "chrome/browser/ui/autofill/payments/credit_card_scanner_controller.h"
 #include "chrome/browser/ui/autofill/payments/iban_bubble_controller_impl.h"
 #include "chrome/browser/ui/autofill/payments/mandatory_reauth_bubble_controller_impl.h"
-#include "chrome/browser/ui/autofill/payments/view_factory.h"
+#include "chrome/browser/ui/autofill/payments/payments_view_factory.h"
 #include "chrome/browser/ui/autofill/payments/virtual_card_enroll_bubble_controller_impl.h"
 #include "chrome/browser/ui/autofill/risk_util.h"
 #include "components/autofill/content/browser/content_autofill_client.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
+#include "components/autofill/core/browser/data_manager/payments/payments_data_manager.h"
+#include "components/autofill/core/browser/data_manager/personal_data_manager.h"
 #include "components/autofill/core/browser/data_model/autofill_offer_data.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
-#include "components/autofill/core/browser/merchant_promo_code_manager.h"
+#include "components/autofill/core/browser/integrators/touch_to_fill_delegate.h"
 #include "components/autofill/core/browser/metrics/payments/risk_data_metrics.h"
 #include "components/autofill/core/browser/payments/autofill_error_dialog_context.h"
 #include "components/autofill/core/browser/payments/autofill_offer_manager.h"
+#include "components/autofill/core/browser/payments/bnpl_manager.h"
 #include "components/autofill/core/browser/payments/card_unmask_challenge_option.h"
 #include "components/autofill/core/browser/payments/credit_card_cvc_authenticator.h"
 #include "components/autofill/core/browser/payments/credit_card_otp_authenticator.h"
@@ -43,16 +46,18 @@
 #include "components/autofill/core/browser/payments/payments_autofill_client.h"
 #include "components/autofill/core/browser/payments/payments_network_interface.h"
 #include "components/autofill/core/browser/payments/virtual_card_enrollment_manager.h"
-#include "components/autofill/core/browser/personal_data_manager.h"
+#include "components/autofill/core/browser/single_field_fillers/payments/merchant_promo_code_manager.h"
+#include "components/autofill/core/browser/suggestions/suggestion.h"
 #include "components/autofill/core/browser/ui/payments/autofill_error_dialog_controller_impl.h"
 #include "components/autofill/core/browser/ui/payments/autofill_progress_dialog_controller_impl.h"
+#include "components/autofill/core/browser/ui/payments/bnpl_tos_controller_impl.h"
+#include "components/autofill/core/browser/ui/payments/bnpl_tos_view.h"
 #include "components/autofill/core/browser/ui/payments/bubble_show_options.h"
 #include "components/autofill/core/browser/ui/payments/card_unmask_authentication_selection_dialog_controller_impl.h"
 #include "components/autofill/core/browser/ui/payments/card_unmask_otp_input_dialog_controller_impl.h"
 #include "components/autofill/core/browser/ui/payments/card_unmask_prompt_controller_impl.h"
 #include "components/autofill/core/browser/ui/payments/card_unmask_prompt_view.h"
-#include "components/autofill/core/browser/ui/suggestion.h"
-#include "components/autofill/core/browser/ui/touch_to_fill_delegate.h"
+#include "components/autofill/core/browser/ui/payments/save_and_fill_dialog_controller_impl.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
@@ -389,8 +394,6 @@ void ChromePaymentsAutofillClient::CreditCardUploadCompleted(
   }
   if (SaveCardBubbleControllerImpl* controller =
           SaveCardBubbleControllerImpl::FromWebContents(web_contents())) {
-// TODO(crbug.com/372209715): Extract out of GOOGLE_CHROME_BRANDING buildflag.
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
     // Only attempt to show the iOS payment promo if the card was successfully
     // uploaded and there is no VCN enroll flow callback, and still fallback to
     // normal confirmation bubble if showing the promo fails.
@@ -401,8 +404,6 @@ void ChromePaymentsAutofillClient::CreditCardUploadCompleted(
       base::OnceClosure promo_not_shown_callback =
           controller->GetShowConfirmationForCardSuccessfullySavedCallback();
 
-      Profile* profile =
-          Profile::FromBrowserContext(web_contents()->GetBrowserContext());
       Browser* browser = chrome::FindBrowserWithTab(web_contents());
 
       if (!browser) {
@@ -410,17 +411,12 @@ void ChromePaymentsAutofillClient::CreditCardUploadCompleted(
         return;
       }
 
-      BrowserView* browser_view =
-          BrowserView::GetBrowserViewForBrowser(browser);
-
       ios_promos_utils::MaybeOverrideCardConfirmationBubbleWithIOSPaymentPromo(
-          profile, browser_view->toolbar_button_provider(),
-          std::move(promo_will_show_callback),
+          browser, std::move(promo_will_show_callback),
           std::move(promo_not_shown_callback));
 
       return;
     }
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
     controller->ShowConfirmationBubbleView(
         card_saved, std::move(on_confirmation_closed_callback));
@@ -481,8 +477,12 @@ void ChromePaymentsAutofillClient::VirtualCardEnrollCompleted(
 void ChromePaymentsAutofillClient::OnCardDataAvailable(
     const FilledCardInformationBubbleOptions& options) {
 #if BUILDFLAG(IS_ANDROID)
+  // Note that currently the snackbar is displayed only for virtual cards or
+  // cards enrolled in card info retrieval.
   client_->GetAutofillSnackbarController()->Show(
-      AutofillSnackbarType::kVirtualCard,
+      options.filled_card.record_type() == CreditCard::RecordType::kVirtualCard
+          ? AutofillSnackbarType::kVirtualCard
+          : AutofillSnackbarType::kCardInfoRetrieval,
       base::BindOnce(
           [](base::WeakPtr<content::WebContents> contents) {
             if (!contents) {
@@ -508,17 +508,14 @@ void ChromePaymentsAutofillClient::ConfirmSaveIbanLocally(
     bool should_show_prompt,
     SaveIbanPromptCallback callback) {
 #if BUILDFLAG(IS_ANDROID)
-  if (base::FeatureList::IsEnabled(features::kAutofillEnableLocalIban)) {
-    // For new IBANs, the save IBAN prompt is shown in a bottom sheet.
-    if (auto* bridge = GetOrCreateAutofillSaveIbanBottomSheetBridge()) {
-      auto save_iban_delegate = std::make_unique<AutofillSaveIbanDelegate>(
-          std::move(callback), web_contents());
-      AutofillSaveIbanUiInfo ui_info =
-          AutofillSaveIbanUiInfo::CreateForLocalSave(
-              iban.GetIdentifierStringForAutofillDisplay(
-                  /*is_value_masked=*/false));
-      bridge->RequestShowContent(ui_info, std::move(save_iban_delegate));
-    }
+  // For new IBANs, the save IBAN prompt is shown in a bottom sheet.
+  if (auto* bridge = GetOrCreateAutofillSaveIbanBottomSheetBridge()) {
+    auto save_iban_delegate = std::make_unique<AutofillSaveIbanDelegate>(
+        std::move(callback), web_contents());
+    AutofillSaveIbanUiInfo ui_info = AutofillSaveIbanUiInfo::CreateForLocalSave(
+        iban.GetIdentifierStringForAutofillDisplay(
+            /*is_value_masked=*/false));
+    bridge->RequestShowContent(ui_info, std::move(save_iban_delegate));
   }
 #else
   // Do lazy initialization of IbanBubbleControllerImpl.
@@ -534,19 +531,16 @@ void ChromePaymentsAutofillClient::ConfirmUploadIbanToCloud(
     bool should_show_prompt,
     SaveIbanPromptCallback callback) {
 #if BUILDFLAG(IS_ANDROID)
-  if (base::FeatureList::IsEnabled(features::kAutofillEnableServerIban)) {
-    AutofillSaveIbanUiInfo ui_info =
-        AutofillSaveIbanUiInfo::CreateForUploadSave(
-            iban.GetIdentifierStringForAutofillDisplay(
-                /*is_value_masked=*/false),
-            legal_message_lines);
+  AutofillSaveIbanUiInfo ui_info = AutofillSaveIbanUiInfo::CreateForUploadSave(
+      iban.GetIdentifierStringForAutofillDisplay(
+          /*is_value_masked=*/false),
+      legal_message_lines);
 
-    // Upload a new IBAN to the server via a Bottom Sheet.
-    if (auto* bridge = GetOrCreateAutofillSaveIbanBottomSheetBridge()) {
-      bridge->RequestShowContent(ui_info,
-                                 std::make_unique<AutofillSaveIbanDelegate>(
-                                     std::move(callback), web_contents()));
-    }
+  // Upload a new IBAN to the server via a Bottom Sheet.
+  if (auto* bridge = GetOrCreateAutofillSaveIbanBottomSheetBridge()) {
+    bridge->RequestShowContent(
+        ui_info, std::make_unique<AutofillSaveIbanDelegate>(std::move(callback),
+                                                            web_contents()));
   }
 #else
   // Do lazy initialization of IbanBubbleControllerImpl.
@@ -624,7 +618,7 @@ ChromePaymentsAutofillClient::GetPaymentsNetworkInterface() {
         Profile::FromBrowserContext(web_contents()->GetBrowserContext())
             ->GetURLLoaderFactory(),
         client_->GetIdentityManager(),
-        &client_->GetPersonalDataManager()->payments_data_manager(),
+        &client_->GetPersonalDataManager().payments_data_manager(),
         Profile::FromBrowserContext(web_contents()->GetBrowserContext())
             ->IsOffTheRecord());
   }
@@ -725,13 +719,24 @@ void ChromePaymentsAutofillClient::OnUnmaskVerificationResult(
 #endif  // BUILDFLAG(IS_ANDROID)
 }
 
+void ChromePaymentsAutofillClient::ShowBnplTos() {
+  if (!bnpl_tos_controller_) {
+    bnpl_tos_controller_ = std::make_unique<BnplTosControllerImpl>();
+  }
+#if !BUILDFLAG(IS_ANDROID)
+  bnpl_tos_controller_->Show(base::BindOnce(&CreateAndShowBnplTos,
+                                            bnpl_tos_controller_->GetWeakPtr(),
+                                            base::Unretained(web_contents())));
+#endif
+}
+
 VirtualCardEnrollmentManager*
 ChromePaymentsAutofillClient::GetVirtualCardEnrollmentManager() {
   if (!virtual_card_enrollment_manager_) {
     virtual_card_enrollment_manager_ =
         std::make_unique<VirtualCardEnrollmentManager>(
-            client_->GetPersonalDataManager(), GetPaymentsNetworkInterface(),
-            &client_.get());
+            &client_->GetPersonalDataManager().payments_data_manager(),
+            GetPaymentsNetworkInterface(), &client_.get());
   }
 
   return virtual_card_enrollment_manager_.get();
@@ -817,7 +822,7 @@ void ChromePaymentsAutofillClient::UpdateOfferNotification(
   const CreditCard* card = offer.GetEligibleInstrumentIds().empty()
                                ? nullptr
                                : client_->GetPersonalDataManager()
-                                     ->payments_data_manager()
+                                     .payments_data_manager()
                                      .GetCreditCardByInstrumentId(
                                          offer.GetEligibleInstrumentIds()[0]);
 
@@ -944,6 +949,33 @@ ChromePaymentsAutofillClient::GetOrCreatePaymentsMandatoryReauthManager() {
   return payments_mandatory_reauth_manager_.get();
 }
 
+payments::BnplManager* ChromePaymentsAutofillClient::GetPaymentsBnplManager() {
+  if (!bnpl_manager_) {
+    bnpl_manager_ = std::make_unique<payments::BnplManager>(this);
+  }
+
+  return bnpl_manager_.get();
+}
+
+const PaymentsDataManager&
+ChromePaymentsAutofillClient::GetPaymentsDataManager() const {
+  return client_->GetPersonalDataManager().payments_data_manager();
+}
+
+void ChromePaymentsAutofillClient::ShowCreditCardSaveAndFillDialog() {
+#if !BUILDFLAG(IS_ANDROID)
+  if (!save_and_fill_dialog_controller_) {
+    save_and_fill_dialog_controller_ =
+        std::make_unique<SaveAndFillDialogControllerImpl>();
+  }
+  save_and_fill_dialog_controller_->ShowDialog(base::BindOnce(
+      &CreateAndShowSaveAndFillDialog,
+      save_and_fill_dialog_controller_->GetWeakPtr(), web_contents()));
+#else
+  NOTIMPLEMENTED();
+#endif  // !BUILDFLAG(IS_ANDROID)
+}
+
 #if BUILDFLAG(IS_ANDROID)
 AutofillMessageController&
 ChromePaymentsAutofillClient::GetAutofillMessageController() {
@@ -984,7 +1016,7 @@ void ChromePaymentsAutofillClient::SetAutofillMessageControllerForTesting(
 
 std::u16string ChromePaymentsAutofillClient::GetAccountHolderName() const {
   if (!web_contents()) {
-    return nullptr;
+    return std::u16string();
   }
   Profile* profile =
       Profile::FromBrowserContext(web_contents()->GetBrowserContext());

@@ -457,6 +457,17 @@ class VulkanPerformanceCounterTest_SingleBuffer : public VulkanPerformanceCounte
     }
 };
 
+class VulkanPerformanceCounterTest_Prerotation : public VulkanPerformanceCounterTest
+{
+  protected:
+    VulkanPerformanceCounterTest_Prerotation() : VulkanPerformanceCounterTest()
+    {
+        // Make sure the window is non-square to correctly test prerotation
+        setWindowWidth(32);
+        setWindowHeight(64);
+    }
+};
+
 void VulkanPerformanceCounterTest::maskedFramebufferFetchDraw(const GLColor &clearColor,
                                                               GLBuffer &buffer)
 {
@@ -1936,6 +1947,7 @@ TEST_P(VulkanPerformanceCounterTest_ES31, MultisampleDepthStencilResolve)
 
     ASSERT_GL_NO_ERROR();
 }
+
 // Ensures a read-only depth-stencil feedback loop works in a single RenderPass.
 TEST_P(VulkanPerformanceCounterTest, ReadOnlyDepthStencilFeedbackLoopUsesSingleRenderPass)
 {
@@ -2052,6 +2064,7 @@ TEST_P(VulkanPerformanceCounterTest, ClearColorBufferAndReadOnlyDepthStencilUses
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthTexture, 0);
     ASSERT_GL_FRAMEBUFFER_COMPLETE(GL_FRAMEBUFFER);
     glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_ALWAYS);
     glDepthMask(GL_TRUE);
     glUseProgram(redProgram);
     glDrawArrays(GL_TRIANGLES, 0, 6);
@@ -2074,6 +2087,7 @@ TEST_P(VulkanPerformanceCounterTest, ClearColorBufferAndReadOnlyDepthStencilUses
     // Now set up the read-only feedback loop.
     glDepthMask(GL_FALSE);
     glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
     glBindTexture(GL_TEXTURE_2D, depthTexture);
     glUseProgram(texProgram);
     glDrawArrays(GL_TRIANGLES, 0, 6);
@@ -2101,6 +2115,143 @@ TEST_P(VulkanPerformanceCounterTest, ClearColorBufferAndReadOnlyDepthStencilUses
     glDepthMask(GL_TRUE);
     glDrawArrays(GL_TRIANGLES, 0, 6);
     ASSERT_GL_NO_ERROR();
+}
+
+// Similar scenario as in ClearColorBufferAndReadOnlyDepthStencilUsesSingleRenderPass based on
+// Manhattan, but involving queries that end up marking a render pass for closure.  This results in
+// the switch to read-only depth/stencil mode to flush the render pass twice.
+TEST_P(VulkanPerformanceCounterTest,
+       QueryThenClearColorBufferAndReadOnlyDepthStencilUsesSingleRenderPass)
+{
+    ANGLE_SKIP_TEST_IF(!IsGLExtensionEnabled(kPerfMonitorExtensionName));
+
+    constexpr GLsizei kSize = 4;
+
+    ANGLE_GL_PROGRAM(redProgram, essl1_shaders::vs::Simple(), essl1_shaders::fs::Red());
+    ANGLE_GL_PROGRAM(texProgram, essl1_shaders::vs::Texture2D(), essl1_shaders::fs::Texture2D());
+
+    setupQuadVertexBuffer(0.5f, 1.0f);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+    glEnableVertexAttribArray(0);
+
+    // Set up a depth texture and framebuffer.
+    GLTexture depthTexture;
+    glBindTexture(GL_TEXTURE_2D, depthTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT16, kSize, kSize, 0, GL_DEPTH_COMPONENT,
+                 GL_UNSIGNED_INT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+    GLFramebuffer fbo;
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthTexture, 0);
+    ASSERT_GL_FRAMEBUFFER_COMPLETE(GL_FRAMEBUFFER);
+    ASSERT_GL_NO_ERROR();
+
+    // Issue a draw call that writes to the depth image.  At the same time, end a query after the
+    // draw call.  The end of query can mark the render pass for closure.
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_ALWAYS);
+    glDepthMask(GL_TRUE);
+    glUseProgram(redProgram);
+    GLQuery query;
+    glBeginQuery(GL_ANY_SAMPLES_PASSED, query);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glEndQuery(GL_ANY_SAMPLES_PASSED);
+    ASSERT_GL_NO_ERROR();
+
+    // Add a color texture to the FBO.  This changes the render pass such that glClear isn't
+    // translated to vkCmdClearAttachments (which it would, if the color attachment was added
+    // earlier).
+    GLTexture colorTexture;
+    glBindTexture(GL_TEXTURE_2D, colorTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, kSize, kSize, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTexture, 0);
+    ASSERT_GL_FRAMEBUFFER_COMPLETE(GL_FRAMEBUFFER);
+
+    // Expect rpCount+1, depth(Clears+0, Loads+1, LoadNones+0, Stores+1, StoreNones+0),
+    angle::VulkanPerfCounters expected;
+    setExpectedCountersForDepthOps(getPerfCounters(), 1, 0, 0, 0, 1, 0, &expected);
+
+    // First clear the color buffer.  This leads to a deferred clear.
+    glClearColor(0, 0, 0, 0);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    // Now set up the read-only feedback loop and issue a draw call.  The clear and draw should be
+    // done in the same render pass.
+    glDepthMask(GL_FALSE);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+    glBindTexture(GL_TEXTURE_2D, depthTexture);
+    glUseProgram(texProgram);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    ASSERT_GL_NO_ERROR();
+
+    EXPECT_EQ(expected.renderPasses, getPerfCounters().renderPasses);
+    EXPECT_DEPTH_OP_COUNTERS(getPerfCounters(), expected);
+}
+
+// Make sure depth/stencil clears followed by a switch to read-only mode still lets the color clears
+// use loadOp=CLEAR optimally.
+TEST_P(VulkanPerformanceCounterTest, SwitchToReadOnlyDepthStencilLeavesOtherAspectsOptimal)
+{
+    ANGLE_SKIP_TEST_IF(!IsGLExtensionEnabled(kPerfMonitorExtensionName));
+
+    constexpr GLsizei kSize = 4;
+
+    ANGLE_GL_PROGRAM(texProgram, essl1_shaders::vs::Texture2D(), essl1_shaders::fs::Texture2D());
+
+    setupQuadVertexBuffer(0.5f, 1.0f);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+    glEnableVertexAttribArray(0);
+
+    // Set up a framebuffer.
+    GLFramebuffer fbo;
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+    GLTexture depthTexture;
+    glBindTexture(GL_TEXTURE_2D, depthTexture);
+    glTexStorage2D(GL_TEXTURE_2D, 2, GL_DEPTH24_STENCIL8, kSize * 2, kSize * 2);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 1);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, depthTexture,
+                           1);
+
+    GLTexture colorTexture;
+    glBindTexture(GL_TEXTURE_2D, colorTexture);
+    glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, kSize, kSize);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTexture, 0);
+    ASSERT_GL_FRAMEBUFFER_COMPLETE(GL_FRAMEBUFFER);
+    ASSERT_GL_NO_ERROR();
+
+    // Expect rpCount+1, color(Clears+1, Loads+0, LoadNones+0, Stores+1, StoreNones+0)
+    // depth(Clears+0, Loads+1, LoadNones+0, Stores+0, StoreNones+1),
+    // stencil(Clears+1, Loads+0, LoadNones+0, Stores+1, StoreNones+0)
+    angle::VulkanPerfCounters expected;
+    setExpectedCountersForColorOps(getPerfCounters(), 0, 1, 0, 0, 1, 0, &expected);
+    setExpectedCountersForDepthOps(getPerfCounters(), 1, 0, 1, 0, 0, 1, &expected);
+    setExpectedCountersForStencilOps(getPerfCounters(), 1, 0, 0, 1, 0, &expected);
+
+    // Clear all aspects.
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+    // Then issue a draw call where the depth aspect is in feedback loop.  Depth should be cleared
+    // before the render pass, but the color and stencil clears should still be optimized as loadOp.
+    glDepthMask(GL_FALSE);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+    glBindTexture(GL_TEXTURE_2D, depthTexture);
+    glUseProgram(texProgram);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    ASSERT_GL_NO_ERROR();
+
+    glFinish();
+
+    EXPECT_EQ(expected.renderPasses, getPerfCounters().renderPasses);
+    EXPECT_COLOR_OP_COUNTERS(getPerfCounters(), expected);
+    EXPECT_DEPTH_OP_COUNTERS(getPerfCounters(), expected);
+    EXPECT_STENCIL_OP_COUNTERS(getPerfCounters(), expected);
 }
 
 // Ensures an actual depth feedback loop (i.e, render and sample from same texture which is
@@ -5551,7 +5702,7 @@ void main()
     }
 
     ASSERT_GL_NO_ERROR();
-    if (getPerfCounters().descriptorSetCacheTotalSize > 0)
+    if (isFeatureEnabled(Feature::DescriptorSetCache))
     {
         EXPECT_GT(expectedShaderResourcesCacheMisses, 0u);
     }
@@ -5568,7 +5719,7 @@ void main()
 
     EXPECT_EQ(expectedData, actualData);
 
-    if (getPerfCounters().descriptorSetCacheTotalSize > 0)
+    if (isFeatureEnabled(Feature::DescriptorSetCache))
     {
         // Check for unnecessary descriptor set allocations.
         uint64_t actualShaderResourcesCacheMisses =
@@ -6106,8 +6257,8 @@ TEST_P(VulkanPerformanceCounterTest, UniformUpdatesHitDescriptorSetCache)
     ASSERT_GL_NO_ERROR();
 
     uint64_t expectedCacheMisses = getPerfCounters().uniformsAndXfbDescriptorSetCacheMisses;
-    GLint expectedAllocations    = getPerfCounters().descriptorSetAllocations;
-    if (getPerfCounters().descriptorSetCacheTotalSize > 0)
+    GLint allocationsBefore      = getPerfCounters().descriptorSetAllocations;
+    if (isFeatureEnabled(Feature::DescriptorSetCache))
     {
         EXPECT_GT(expectedCacheMisses, 0u);
     }
@@ -6126,7 +6277,7 @@ TEST_P(VulkanPerformanceCounterTest, UniformUpdatesHitDescriptorSetCache)
 
     ASSERT_GL_NO_ERROR();
 
-    if (getPerfCounters().descriptorSetCacheTotalSize > 0)
+    if (isFeatureEnabled(Feature::DescriptorSetCache))
     {
         uint64_t actualCacheMisses = getPerfCounters().uniformsAndXfbDescriptorSetCacheMisses;
         EXPECT_EQ(expectedCacheMisses, actualCacheMisses);
@@ -6134,9 +6285,12 @@ TEST_P(VulkanPerformanceCounterTest, UniformUpdatesHitDescriptorSetCache)
     else
     {
         // If cache is disabled, we still expect descriptorSets to be reused instead of keep
-        // allocating new descriptorSets.
-        GLint actualAllocations = getPerfCounters().descriptorSetAllocations;
-        EXPECT_EQ(expectedAllocations, actualAllocations);
+        // allocating new descriptorSets. The underline reuse logic is implementation detail (as of
+        // now it will not reuse util the pool is full), but we expect it will not increasing for
+        // every iteration.
+        GLint descriptorSetAllocationsIncrease =
+            getPerfCounters().descriptorSetAllocations - allocationsBefore;
+        EXPECT_GE(kIterations - 1, descriptorSetAllocationsIncrease);
     }
 }
 
@@ -7291,7 +7445,7 @@ TEST_P(VulkanPerformanceCounterTest, TextureDescriptorsAreShared)
     ASSERT_GL_NO_ERROR();
 
     GLuint expectedCacheMisses = getPerfCounters().textureDescriptorSetCacheMisses;
-    if (getPerfCounters().descriptorSetCacheTotalSize > 0)
+    if (isFeatureEnabled(Feature::DescriptorSetCache))
     {
         EXPECT_GT(expectedCacheMisses, 0u);
     }
@@ -7305,7 +7459,7 @@ TEST_P(VulkanPerformanceCounterTest, TextureDescriptorsAreShared)
 
     ASSERT_GL_NO_ERROR();
 
-    if (getPerfCounters().descriptorSetCacheTotalSize > 0)
+    if (isFeatureEnabled(Feature::DescriptorSetCache))
     {
         GLuint actualCacheMisses = getPerfCounters().textureDescriptorSetCacheMisses;
         EXPECT_EQ(expectedCacheMisses, actualCacheMisses);
@@ -7362,7 +7516,7 @@ void main() {
 
     GLuint expectedCacheMisses = getPerfCounters().shaderResourcesDescriptorSetCacheMisses;
     GLuint totalAllocationsAtFirstProgram = getPerfCounters().descriptorSetAllocations;
-    if (getPerfCounters().descriptorSetCacheTotalSize > 0)
+    if (isFeatureEnabled(Feature::DescriptorSetCache))
     {
         EXPECT_GT(expectedCacheMisses, 0u);
     }
@@ -7376,7 +7530,7 @@ void main() {
 
     ASSERT_GL_NO_ERROR();
 
-    if (getPerfCounters().descriptorSetCacheTotalSize > 0)
+    if (isFeatureEnabled(Feature::DescriptorSetCache))
     {
         GLuint actualCacheMisses = getPerfCounters().shaderResourcesDescriptorSetCacheMisses;
         EXPECT_EQ(expectedCacheMisses, actualCacheMisses);
@@ -7710,13 +7864,13 @@ TEST_P(VulkanPerformanceCounterTest, Source2DAndRepeatedlyRespecifyTarget2DWithS
             descriptorSetAllocationsBefore = getPerfCounters().descriptorSetAllocations;
         }
     }
-    GLint descriptorSetAllocationsIncrease =
+    size_t descriptorSetAllocationsIncrease =
         getPerfCounters().descriptorSetAllocations - descriptorSetAllocationsBefore;
     GLint textureDescriptorSetCacheTotalSizeIncrease =
         getPerfCounters().textureDescriptorSetCacheTotalSize -
         textureDescriptorSetCacheTotalSizeBefore;
 
-    if (getPerfCounters().descriptorSetCacheTotalSize > 0)
+    if (isFeatureEnabled(Feature::DescriptorSetCache))
     {
         // We don't expect descriptorSet cache to keep growing
         EXPECT_EQ(1, textureDescriptorSetCacheTotalSizeIncrease);
@@ -7724,8 +7878,10 @@ TEST_P(VulkanPerformanceCounterTest, Source2DAndRepeatedlyRespecifyTarget2DWithS
     else
     {
         // Because we call EXPECT_PIXEL_NEAR which will wait for draw to finish, we don't expect
-        // descriptorSet allocation to keep growing
-        EXPECT_EQ(1, descriptorSetAllocationsIncrease);
+        // descriptorSet allocation to keep growing. The underline reuse logic is implementation
+        // detail (as of now it will not reuse util the pool is full), but we expect it will not
+        // increasing for every iteration.
+        EXPECT_GE(kMaxLoop - 1, descriptorSetAllocationsIncrease);
     }
     // Clean up
     eglDestroyImageKHR(window->getDisplay(), image);
@@ -8230,12 +8386,9 @@ TEST_P(VulkanPerformanceCounterTest,
     ASSERT_GL_NO_ERROR();
 }
 
-class VulkanPerformanceCounterTest_AsyncCQ : public VulkanPerformanceCounterTest
-{};
-
-// Tests that submitting the outside command buffer during flushing staged updates and
-// "asyncCommandQueue" enabled, properly updates old command buffer with the new one.
-TEST_P(VulkanPerformanceCounterTest_AsyncCQ, SubmittingOutsideCommandBufferAssertIsOpen)
+// Regression test for a bug where submitting the outside command buffer during flushing staged
+// updates did not properly update the command buffer state.
+TEST_P(VulkanPerformanceCounterTest, SubmittingOutsideCommandBufferAssertIsOpen)
 {
     // If VK_EXT_host_image_copy is used, uploads will all be done on the CPU and there would be no
     // submissions.
@@ -8250,10 +8403,9 @@ TEST_P(VulkanPerformanceCounterTest_AsyncCQ, SubmittingOutsideCommandBufferAsser
     ASSERT_NE(-1, textureLoc);
     glUniform1i(textureLoc, 0);
 
-    // This loop shouls update texture with multiple staged updates. When kMaxBufferToImageCopySize
+    // This loop should update texture with multiple staged updates. When kMaxBufferToImageCopySize
     // threshold reached, outside command buffer will be submitted in the middle of staged updates
-    // flushing. If "asyncCommandQueue" enabled and bug present, old command buffer will not be
-    // replaced by a new one, casing "ASSERT(mIsOpen)" or UB in release.
+    // flushing.
     constexpr GLsizei kMaxOutsideRPCommandsSubmitCount = 10;
     constexpr GLsizei kTexDim                          = 1024;
     constexpr GLint kMaxSubOffset                      = 10;
@@ -8283,6 +8435,43 @@ TEST_P(VulkanPerformanceCounterTest_AsyncCQ, SubmittingOutsideCommandBufferAsser
     EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::green);
 }
 
+// Verifies that clear followed by eglSwapBuffers() on multisampled FBO does not result
+// extra resolve pass, if the surface is double-buffered and when the egl swap behavior
+// is EGL_BUFFER_DESTROYED
+TEST_P(VulkanPerformanceCounterTest_MSAA, SwapAfterClearOnMultisampledFBOShouldNotResolve)
+{
+    // Skip test if
+    // 1) the EGL Surface is single-buffered or
+    // 2) the EGL_SWAP_BEHAVIOR is EGL_BUFFER_PRESERVED
+    EGLint renderBufferType;
+    eglQuerySurface(getEGLWindow()->getDisplay(), getEGLWindow()->getSurface(), EGL_RENDER_BUFFER,
+                    &renderBufferType);
+    EGLint swapBehavior;
+    eglQuerySurface(getEGLWindow()->getDisplay(), getEGLWindow()->getSurface(), EGL_SWAP_BEHAVIOR,
+                    &swapBehavior);
+    ANGLE_SKIP_TEST_IF(
+        !(renderBufferType == EGL_BACK_BUFFER && swapBehavior == EGL_BUFFER_DESTROYED));
+
+    uint32_t expectedResolvesSubpass = getPerfCounters().swapchainResolveInSubpass;
+    uint32_t expectedResolvesOutside = getPerfCounters().swapchainResolveOutsideSubpass;
+    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    swapBuffers();
+    EXPECT_EQ(getPerfCounters().swapchainResolveInSubpass, expectedResolvesSubpass);
+    EXPECT_EQ(getPerfCounters().swapchainResolveOutsideSubpass, expectedResolvesOutside);
+}
+
+// Test that swapchain does not get necessary recreation with 90 or 270 emulated pre-rotation
+TEST_P(VulkanPerformanceCounterTest_Prerotation, swapchainCreateCounterTest)
+{
+    uint64_t expectedSwapchainCreateCounter = getPerfCounters().swapchainCreate;
+    for (uint32_t i = 0; i < 10; ++i)
+    {
+        swapBuffers();
+    }
+    EXPECT_EQ(getPerfCounters().swapchainCreate, expectedSwapchainCreateCounter);
+}
+
 GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(VulkanPerformanceCounterTest);
 ANGLE_INSTANTIATE_TEST(
     VulkanPerformanceCounterTest,
@@ -8308,12 +8497,15 @@ ANGLE_INSTANTIATE_TEST(VulkanPerformanceCounterTest_MSAA,
                        ES3_VULKAN().enable(Feature::EmulatedPrerotation180),
                        ES3_VULKAN().enable(Feature::EmulatedPrerotation270));
 
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(VulkanPerformanceCounterTest_Prerotation);
+ANGLE_INSTANTIATE_TEST(
+    VulkanPerformanceCounterTest_Prerotation,
+    ES3_VULKAN().enable(Feature::PerFrameWindowSizeQuery),
+    ES3_VULKAN().enable(Feature::EmulatedPrerotation90).enable(Feature::PerFrameWindowSizeQuery),
+    ES3_VULKAN().enable(Feature::EmulatedPrerotation180).enable(Feature::PerFrameWindowSizeQuery),
+    ES3_VULKAN().enable(Feature::EmulatedPrerotation270).enable(Feature::PerFrameWindowSizeQuery));
+
 GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(VulkanPerformanceCounterTest_SingleBuffer);
 ANGLE_INSTANTIATE_TEST(VulkanPerformanceCounterTest_SingleBuffer, ES3_VULKAN());
-
-GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(VulkanPerformanceCounterTest_AsyncCQ);
-ANGLE_INSTANTIATE_TEST(VulkanPerformanceCounterTest_AsyncCQ,
-                       ES3_VULKAN(),
-                       ES3_VULKAN().enable(Feature::AsyncCommandQueue));
 
 }  // anonymous namespace

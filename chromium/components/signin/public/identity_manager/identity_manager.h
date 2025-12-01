@@ -14,7 +14,6 @@
 #include "base/scoped_observation.h"
 #include "base/scoped_observation_traits.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "components/account_manager_core/account.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/signin/internal/identity_manager/primary_account_manager.h"
@@ -207,7 +206,9 @@ class IdentityManager : public KeyedService,
                                      const std::string& oauth_consumer_name,
                                      const ScopeSet& scopes,
                                      AccessTokenFetcher::TokenCallback callback,
-                                     AccessTokenFetcher::Mode mode);
+                                     AccessTokenFetcher::Mode mode,
+                                     AccessTokenFetcher::Source token_source =
+                                         AccessTokenFetcher::Source::kProfile);
 
   // Creates an AccessTokenFetcher given the passed-in information, allowing
   // to specify a custom |url_loader_factory| as well.
@@ -245,6 +246,11 @@ class IdentityManager : public KeyedService,
 
   // Returns true if a refresh token exists for |account_id|.
   bool HasAccountWithRefreshToken(const CoreAccountId& account_id) const;
+
+#if BUILDFLAG(IS_IOS)
+  bool HasAccountWithRefreshTokenOnDevice(
+      const CoreAccountId& account_id) const;
+#endif
 
   // Returns true if all refresh tokens have been loaded from disk.
   bool AreRefreshTokensLoaded() const;
@@ -286,7 +292,7 @@ class IdentityManager : public KeyedService,
   AccountInfo FindExtendedAccountInfoByEmailAddress(
       const std::string& email_address) const;
   // The same as `FindExtendedAccountInfo()` but finds an account by gaia ID.
-  AccountInfo FindExtendedAccountInfoByGaiaId(const std::string& gaia_id) const;
+  AccountInfo FindExtendedAccountInfoByGaiaId(const GaiaId& gaia_id) const;
 
   // Provides the information of all accounts that are present in the Gaia
   // cookie in the cookie jar, ordered by their order in the cookie.
@@ -314,7 +320,9 @@ class IdentityManager : public KeyedService,
   DeviceAccountsSynchronizer* GetDeviceAccountsSynchronizer();
 
 #if BUILDFLAG(IS_IOS)
-  // Gets all accounts on the device, including the ones from other profiles.
+  // Gets all accounts on the device, including the ones from other profiles, in
+  // the order provided by the system (usually the order in which the accounts
+  // were added).
   [[nodiscard]] std::vector<AccountInfo> GetAccountsOnDevice();
 #endif
 
@@ -417,7 +425,7 @@ class IdentityManager : public KeyedService,
   void OnNetworkInitialized();
 
   // Picks the correct account_id for account with the given gaia id and email.
-  CoreAccountId PickAccountIdForAccount(const std::string& gaia,
+  CoreAccountId PickAccountIdForAccount(const GaiaId& gaia,
                                         const std::string& email) const;
 
   // Methods used only by embedder-level factory classes.
@@ -447,7 +455,12 @@ class IdentityManager : public KeyedService,
 
 #if BUILDFLAG(IS_ANDROID)
   // Get the reference on the java IdentityManager.
-  base::android::ScopedJavaLocalRef<jobject> GetJavaObject();
+  base::android::ScopedJavaLocalRef<jobject> GetJavaObject() const;
+
+  // Get the reference on the java IdentityManager.
+  static IdentityManager* FromJavaObject(
+      JNIEnv* env,
+      const base::android::JavaRef<jobject>& j_identity_manager);
 
   // Provide the reference on the java IdentityMutator.
   base::android::ScopedJavaLocalRef<jobject> GetIdentityMutatorJavaObject();
@@ -547,7 +560,7 @@ class IdentityManager : public KeyedService,
       IdentityManager* identity_manager,
       const CoreAccountId& account_id,
       const std::string& email,
-      const std::string& gaia,
+      const GaiaId& gaia,
       const std::string& hosted_domain,
       const std::string& full_name,
       const std::string& given_name,
@@ -557,7 +570,7 @@ class IdentityManager : public KeyedService,
 #if BUILDFLAG(IS_CHROMEOS)
   friend account_manager::AccountManagerFacade* GetAccountManagerFacade(
       IdentityManager* identity_manager);
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
   // Temporary access to getters (e.g. GetTokenService()).
   // TODO(crbug.com/40619310): Remove this friendship by
@@ -653,6 +666,10 @@ class IdentityManager : public KeyedService,
                           const GoogleServiceAuthError& auth_error,
                           signin_metrics::SourceForRefreshTokenOperation
                               token_operation_source) override;
+#if BUILDFLAG(IS_IOS)
+  void OnAccountsOnDeviceChanged() override;
+  void OnAccountOnDeviceUpdated(const AccountInfo& account_info) override;
+#endif
 
   // GaiaCookieManagerService callbacks:
   void OnGaiaAccountsInCookieUpdated(
@@ -752,5 +769,23 @@ struct ScopedObservationTraits<signin::IdentityManager,
 };
 
 }  // namespace base
+
+#if BUILDFLAG(IS_ANDROID)
+namespace jni_zero {
+template <>
+inline signin::IdentityManager* FromJniType<signin::IdentityManager*>(
+    JNIEnv* env,
+    const JavaRef<jobject>& j_identity_manager) {
+  return signin::IdentityManager::FromJavaObject(env, j_identity_manager);
+}
+
+template <>
+inline ScopedJavaLocalRef<jobject> ToJniType(
+    JNIEnv* env,
+    signin::IdentityManager* identity_manager) {
+  return identity_manager ? identity_manager->GetJavaObject() : nullptr;
+}
+}  // namespace jni_zero
+#endif
 
 #endif  // COMPONENTS_SIGNIN_PUBLIC_IDENTITY_MANAGER_IDENTITY_MANAGER_H_

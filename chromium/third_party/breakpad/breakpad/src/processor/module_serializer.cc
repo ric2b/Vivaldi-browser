@@ -38,8 +38,9 @@
 
 #include "processor/module_serializer.h"
 
-#include <cstdint>
-#include <cstring>
+#include <stdint.h>
+#include <string.h>
+
 #include <map>
 #include <string>
 

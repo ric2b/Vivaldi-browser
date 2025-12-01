@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -19,7 +20,6 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/not_fatal_until.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/google/core/common/google_util.h"
@@ -254,16 +254,13 @@ TemplateUrlServiceAndroid::GetUrlForSearchQuery(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     const JavaParamRef<jstring>& jquery,
-    const JavaParamRef<jobjectArray>& jsearch_params,
-    const base::android::JavaParamRef<jobject>& post_params,
-    jint type) {
+    const JavaParamRef<jobjectArray>& jsearch_params) {
   const TemplateURL* default_provider =
-      template_url_service_->GetDefaultSearchProvider(TemplateURLService::DefaultSearchType(type));
+      template_url_service_->GetDefaultSearchProvider();
 
   std::u16string query(base::android::ConvertJavaStringToUTF16(env, jquery));
 
   std::string url;
-  TemplateURLRef::PostContent post_content;
   if (default_provider &&
       default_provider->url_ref().SupportsReplacement(
           template_url_service_->search_terms_data()) &&
@@ -278,15 +275,9 @@ TemplateUrlServiceAndroid::GetUrlForSearchQuery(
     TemplateURLRef::SearchTermsArgs args(query);
     args.additional_query_params = std::move(additional_params);
     url = default_provider->url_ref().ReplaceSearchTerms(
-        args, template_url_service_->search_terms_data(), &post_content);
+        args, template_url_service_->search_terms_data());
   }
 
-  if (post_params) {
-    Java_TemplateUrlService_PopulatePostParams(
-        env, post_params,
-        base::android::ConvertUTF8ToJavaString(env, post_content.first),
-        base::android::ToJavaByteArray(env, post_content.second));
-  }
   return base::android::ConvertUTF8ToJavaString(env, url);
 }
 
@@ -430,7 +421,7 @@ jboolean TemplateUrlServiceAndroid::SetPlayAPISearchEngine(
       template_url_service_->GetTemplateURLs();
   TemplateURL* existing_play_api_turl = nullptr;
   auto found =
-      base::ranges::find_if(template_urls, &TemplateURL::created_from_play_api);
+      std::ranges::find_if(template_urls, &TemplateURL::created_from_play_api);
   if (found != template_urls.cend()) {
     // Migrate old Play API database entries that were incorrectly marked as
     // safe_for_autoreplace() before M89.
@@ -490,7 +481,7 @@ void TemplateUrlServiceAndroid::GetTemplateUrls(
   // Clean up duplication between a Play API template URL and a corresponding
   // prepopulated template URL.
   auto play_api_it =
-      base::ranges::find_if(template_urls, &TemplateURL::created_from_play_api);
+      std::ranges::find_if(template_urls, &TemplateURL::created_from_play_api);
   TemplateURL* play_api_turl =
       play_api_it != template_urls.end() ? *play_api_it : nullptr;
 
@@ -554,10 +545,7 @@ TemplateUrlServiceAndroid::GetImageUrlAndPostContent(
   return base::android::ToJavaArrayOfStrings(env, output);
 }
 
-jboolean TemplateUrlServiceAndroid::IsEeaChoiceCountry(JNIEnv* env) {
-  return template_url_service_->IsEeaChoiceCountry();
-}
-
+// Vivaldi
 void TemplateUrlServiceAndroid::VivaldiSetDefaultOverride(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj,
@@ -586,5 +574,19 @@ TemplateUrlServiceAndroid::VivaldiGetDefaultSearchEngine(
     return base::android::ScopedJavaLocalRef<jobject>(env, nullptr);
   }
   return CreateTemplateUrlAndroid(env, default_search_provider);
+}
+
+base::android::ScopedJavaLocalRef<jobject>
+TemplateUrlServiceAndroid::VivaldiGetSearchEngineForHost(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jstring>& jhost) {
+  std::string host = base::android::ConvertJavaStringToUTF8(jhost);
+  const TemplateURL* search_provider =
+      template_url_service_->GetTemplateURLForHost(host);
+  if (search_provider == nullptr) {
+    return base::android::ScopedJavaLocalRef<jobject>(env, nullptr);
+  }
+  return CreateTemplateUrlAndroid(env, search_provider);
 }
 // End Vivaldi

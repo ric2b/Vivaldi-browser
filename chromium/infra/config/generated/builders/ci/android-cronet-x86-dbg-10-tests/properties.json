@@ -7,7 +7,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "android-cronet-x86-dbg",
-              "project": "chromium-m132"
+              "project": "chromium-m134"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-android-archive",
@@ -22,7 +22,7 @@
                   "mb"
                 ],
                 "build_config": "Debug",
-                "config": "android",
+                "config": "x86_builder",
                 "target_bits": 32,
                 "target_platform": "android"
               },
@@ -38,7 +38,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "android-cronet-x86-dbg-10-tests",
-              "project": "chromium-m132"
+              "project": "chromium-m134"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-android-archive",
@@ -53,7 +53,7 @@
                   "mb"
                 ],
                 "build_config": "Debug",
-                "config": "android",
+                "config": "x86_builder",
                 "target_bits": 32,
                 "target_platform": "android"
               },
@@ -66,7 +66,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "android-cronet-x86-dbg",
-                "project": "chromium-m132"
+                "project": "chromium-m134"
               }
             }
           }
@@ -76,7 +76,7 @@
         {
           "bucket": "ci",
           "builder": "android-cronet-x86-dbg-10-tests",
-          "project": "chromium-m132"
+          "project": "chromium-m134"
         }
       ],
       "mirroring_builder_group_and_names": [

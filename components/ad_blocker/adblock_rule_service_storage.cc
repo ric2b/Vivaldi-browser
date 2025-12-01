@@ -239,6 +239,17 @@ std::set<std::string> LoadStringSetFromList(base::Value::List& list) {
   return string_set;
 }
 
+std::set<base::Uuid> LoadUuidSetFromList(base::Value::List& list) {
+  std::set<base::Uuid> uuid_set;
+  for (auto& item : list) {
+    if (!item.is_string())
+      continue;
+    uuid_set.insert(base::Uuid::ParseLowercase(item.GetString()));
+  }
+
+  return uuid_set;
+}
+
 std::vector<KnownRuleSource> LoadKnownSources(base::Value::List& sources_list) {
   std::vector<KnownRuleSource> known_sources;
 
@@ -258,7 +269,7 @@ std::vector<KnownRuleSource> LoadKnownSources(base::Value::List& sources_list) {
 
     std::string* preset_id = source_dict.FindString(kPresetIdKey);
     if (preset_id)
-      known_sources.back().preset_id = std::move(*preset_id);
+      known_sources.back().preset_id = base::Uuid::ParseLowercase(*preset_id);
   }
 
   return known_sources;
@@ -312,7 +323,7 @@ void LoadRulesGroup(RuleGroup group,
       rule_group_dict.FindList(kDeletedPresetsKey);
   if (deleted_presets_list)
     load_result.deleted_presets[static_cast<size_t>(group)] =
-        LoadStringSetFromList(*deleted_presets_list);
+        LoadUuidSetFromList(*deleted_presets_list);
 
   base::Value* blocked_domains_counters =
       rule_group_dict.Find(kBlockedDomainsCountersKey);
@@ -434,6 +445,15 @@ base::Value SerializeStringSetToList(const std::set<std::string>& string_set) {
   return list;
 }
 
+base::Value SerializeUuidSetToList(const std::set<base::Uuid>& uuid_set) {
+  base::Value list(base::Value::Type::LIST);
+  for (const auto& item : uuid_set) {
+    list.GetList().Append(item.AsLowercaseString());
+  }
+
+  return list;
+}
+
 base::Value::List SerializeKnownSourcesList(
     const KnownRuleSources& rule_sources) {
   base::Value::List sources_list;
@@ -442,8 +462,8 @@ base::Value::List SerializeKnownSourcesList(
       continue;
 
     base::Value::Dict source = SerializeRuleCore(rule_source.core);
-    if (!rule_source.preset_id.empty())
-      source.Set(kPresetIdKey, rule_source.preset_id);
+    if (rule_source.preset_id.is_valid())
+      source.Set(kPresetIdKey, rule_source.preset_id.AsLowercaseString());
     sources_list.Append(std::move(source));
   }
 
@@ -470,7 +490,7 @@ base::Value::Dict SerializeRuleGroup(RuleService* service, RuleGroup group) {
                      service->GetKnownSourcesHandler()->GetSources(group)));
   rule_group.Set(
       kDeletedPresetsKey,
-      SerializeStringSetToList(
+      SerializeUuidSetToList(
           service->GetKnownSourcesHandler()->GetDeletedPresets(group)));
   rule_group.Set(kIndexChecksum, service->GetRulesIndexChecksum(group));
 

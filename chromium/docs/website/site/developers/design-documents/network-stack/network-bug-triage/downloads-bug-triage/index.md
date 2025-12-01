@@ -22,7 +22,7 @@ Triagers should
 
 1.  Attempt to reproduce and set the correct Status for [untriaged and
             unconfirmed
-            bugs](http://crbug.com/?q=cr-ui-browser%3Ddownloads+status%3Auntriaged%2Cunconfirmed+-blocking%3A96604+-needs%3Dfeedback&colspec=ID+Summary+Modified).
+            bugs](https://crbug.com/?q=cr-ui-browser%3Ddownloads+status%3Auntriaged%2Cunconfirmed+-blocking%3A96604+-needs%3Dfeedback&colspec=ID+Summary+Modified).
             (That search ignores Needs-Feedback and External bugs.)
     *   Engage with users as they report bugs to get all the information
                 we need for eventual resolution.
@@ -30,7 +30,7 @@ Triagers should
                 and explain why this feature is unlikely to be implemented.
     *   Crash reports frequently do not contain crash ids. Send
                 reporters to [Reporting a Crash
-                Bug](http://www.chromium.org/for-testers/bug-reporting-guidelines/reporting-crash-bug)
+                Bug](/for-testers/bug-reporting-guidelines/reporting-crash-bug)
                 and set Needs-Feedback.
     *   [Providing Network Details for bug
                 reports](/for-testers/providing-network-details)
@@ -57,9 +57,9 @@ Triagers should
                     Point reporters to
                     [ShellMenuView](http://www.nirsoft.net/utils/shell_menu_view.html)
 2.  Categorize [uncategorized
-            bugs](http://crbug.com?q=cr-ui-browser%3Ddownloads+-blocking%3A68191+-blocking%3A68195+-blocking%3A68196+-blocking%3A68197+-blocking%3A68198+-blocking%3A68200+-blocking%3A68201+-blocking%3A68204+-blocking%3A68206+-blocking%3A68208+-blocking%3A68209+-blocking%3A68276+-blocking%3A68356+-blocking%3A68358+-blocking%3A68359+-blocking%3A68361+-blocking%3A69298+-blocking%3A78147+-blocking%3A78148+-blocking%3A96604+-blocking%3A133971+-blocking%3A133960&colspec=ID+Summary+Modified)
+            bugs](https://crbug.com?q=cr-ui-browser%3Ddownloads+-blocking%3A68191+-blocking%3A68195+-blocking%3A68196+-blocking%3A68197+-blocking%3A68198+-blocking%3A68200+-blocking%3A68201+-blocking%3A68204+-blocking%3A68206+-blocking%3A68208+-blocking%3A68209+-blocking%3A68276+-blocking%3A68356+-blocking%3A68358+-blocking%3A68359+-blocking%3A68361+-blocking%3A69298+-blocking%3A78147+-blocking%3A78148+-blocking%3A96604+-blocking%3A133971+-blocking%3A133960&colspec=ID+Summary+Modified)
             by adding them to the "Blocked on" list of one of [these category
-            bugs](http://crbug.com/?q=Cr-Ui-Browser%3DDownloads+blocking%3A133960&colspec=ID+Summary).
+            bugs](https://crbug.com/?q=Cr-Ui-Browser%3DDownloads+blocking%3A133960&colspec=ID+Summary).
 3.  Sweep
             [needs=feedback](https://code.google.com/p/chromium/issues/list?can=2&q=cr-ui-browser=downloads%20needs=feedback&sort=modified&colspec=ID%20Status%20Owner%20Summary%20Modified):
             if feedback has been provided, remove needs-feedback and continue

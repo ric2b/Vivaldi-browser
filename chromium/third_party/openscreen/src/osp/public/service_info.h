@@ -19,8 +19,7 @@ struct ServiceInfo {
   bool operator==(const ServiceInfo& other) const;
   bool operator!=(const ServiceInfo& other) const;
 
-  bool Update(const std::string& friendly_name,
-              const std::string& fingerprint,
+  bool Update(const std::string& fingerprint,
               const std::string& auth_token,
               NetworkInterfaceIndex network_interface_index,
               const IPEndpoint& v4_endpoint,
@@ -30,9 +29,6 @@ struct ServiceInfo {
 
   // Unique name identifying the Open Screen service.
   std::string instance_name;
-
-  // User visible name of the Open Screen service in UTF-8.
-  std::string friendly_name;
 
   // Agent fingerprint.
   std::string fingerprint;

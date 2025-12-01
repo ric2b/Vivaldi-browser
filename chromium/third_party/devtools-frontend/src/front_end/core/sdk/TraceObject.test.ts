@@ -15,7 +15,7 @@ describe('TraceObject', () => {
         ph: Trace.Types.Events.Phase.COMPLETE,
         pid: Trace.Types.Events.ProcessID(1),
         tid: Trace.Types.Events.ThreadID(4),
-        ts: Trace.Types.Timing.MicroSeconds(5e7),
+        ts: Trace.Types.Timing.Micro(5e7),
         args: {
           data: {frame: '0xA'},
         },
@@ -24,7 +24,7 @@ describe('TraceObject', () => {
       const traceEvents = [event];
       const traceObj = new SDK.TraceObject.TraceObject(traceEvents);
       assert.deepEqual(traceObj.traceEvents, traceEvents);
-      assert.isTrue(traceObj instanceof SDK.TraceObject.TraceObject);
+      assert.instanceOf(traceObj, SDK.TraceObject.TraceObject);
     });
   });
 });

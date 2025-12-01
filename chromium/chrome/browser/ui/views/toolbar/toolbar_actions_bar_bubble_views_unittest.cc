@@ -41,12 +41,14 @@ const char16_t kExtraViewText[] = u"Learn";
 }  // namespace
 
 class ToolbarActionsBarBubbleViewsTest : public ChromeViewsTestBase {
- protected:
-  ToolbarActionsBarBubbleViewsTest() {}
+ public:
   ToolbarActionsBarBubbleViewsTest(const ToolbarActionsBarBubbleViewsTest&) =
       delete;
   ToolbarActionsBarBubbleViewsTest& operator=(
       const ToolbarActionsBarBubbleViewsTest&) = delete;
+
+ protected:
+  ToolbarActionsBarBubbleViewsTest() = default;
   ~ToolbarActionsBarBubbleViewsTest() override = default;
 
   void TearDown() override {
@@ -164,8 +166,9 @@ TEST_F(ToolbarActionsBarBubbleViewsTest,
   EXPECT_TRUE(bubble()->GetCancelButton());
   EXPECT_EQ(bubble()->GetCancelButton()->GetText(), kDismissButtonText);
   EXPECT_TRUE(bubble()->learn_more_button());
-  EXPECT_EQ(bubble()->learn_more_button()->GetTooltipText(gfx::Point(0, 0)),
-            kExtraViewText);
+  EXPECT_EQ(
+      bubble()->learn_more_button()->GetRenderedTooltipText(gfx::Point(0, 0)),
+      kExtraViewText);
   EXPECT_FALSE(bubble()->item_list());
 
   CloseBubble();
@@ -329,7 +332,8 @@ TEST_F(ToolbarActionsBarBubbleViewsTest, TestCreateExtraViewLinkedTextOnly) {
   const views::View* const extra_view = bubble()->GetExtraView();
   ASSERT_TRUE(extra_view);
   ASSERT_EQ(std::string(extra_view->GetClassName()), "ImageButton");
-  EXPECT_EQ(extra_view->GetTooltipText(gfx::Point(0, 0)), kExtraViewText);
+  EXPECT_EQ(extra_view->GetRenderedTooltipText(gfx::Point(0, 0)),
+            kExtraViewText);
   CloseBubble();
 }
 

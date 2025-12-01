@@ -6,6 +6,7 @@
 #define V8_BUILTINS_BUILTINS_H_
 
 #include "src/base/flags.h"
+#include "src/base/vector.h"
 #include "src/builtins/builtins-definitions.h"
 #include "src/common/globals.h"
 #include "src/objects/type-hints.h"
@@ -56,6 +57,20 @@ enum class Builtin : int32_t {
       FirstFromVarArgs(BUILTIN_LIST_BYTECODE_HANDLERS(EXTRACT_NAME) 0)
 #undef EXTRACT_NAME
 };
+enum class TieringBuiltin : int32_t {
+#define DEF_ENUM(Name, ...) k##Name = static_cast<int32_t>(Builtin::k##Name),
+  BUILTIN_LIST_BASE_TIERING(DEF_ENUM)
+#undef DEF_ENUM
+};
+V8_INLINE bool IsValidTieringBuiltin(TieringBuiltin builtin) {
+#define CASE(Name, ...)                     \
+  if (builtin == TieringBuiltin::k##Name) { \
+    return true;                            \
+  }
+  BUILTIN_LIST_BASE_TIERING(CASE)
+#undef CASE
+  return false;
+}
 
 V8_INLINE constexpr bool operator<(Builtin a, Builtin b) {
   using type = typename std::underlying_type<Builtin>::type;
@@ -109,20 +124,6 @@ class Builtins {
   static constexpr bool kBytecodeHandlersAreSortedLast =
       kLastBytecodeHandlerPlusOne == kBuiltinCount;
   static_assert(kBytecodeHandlersAreSortedLast);
-
-#ifdef V8_ENABLE_WEBASSEMBLY
-  // The list of builtins that can be called indirectly from Wasm and need an
-  // entry in the WasmCodePointerTable.
-  static constexpr Builtin kWasmIndirectlyCallableBuiltins[] = {
-      Builtin::kWasmToJsWrapperInvalidSig, Builtin::kWasmToJsWrapperAsm};
-  static constexpr size_t kNumWasmIndirectlyCallableBuiltins =
-      arraysize(kWasmIndirectlyCallableBuiltins);
-  using WasmBuiltinHandleArray =
-      wasm::WasmCodePointerTable::Handle[kNumWasmIndirectlyCallableBuiltins];
-  // TODO(sroettger): this can be consteval, but the gcc bot doesn't support it.
-  template <Builtin builtin>
-  static constexpr size_t WasmBuiltinHandleArrayIndex();
-#endif
 
   static constexpr bool IsBuiltinId(Builtin builtin) {
     return builtin != Builtin::kNoBuiltinId;
@@ -215,7 +216,7 @@ class Builtins {
   // values is pushed to the stack to match the target builtin expectations.
   // In case the builtin does not require arguments adaptation it returns
   // kDontAdaptArgumentsSentinel.
-  static constexpr inline int GetFormalParameterCount(Builtin builtin);
+  static inline int GetFormalParameterCount(Builtin builtin);
 
   // Checks that the formal parameter count specified in CPP macro matches
   // the value set in SharedFunctionInfo.
@@ -239,13 +240,6 @@ class Builtins {
   // builtin_entry_table, initialized earlier via {InitializeIsolateDataTables}.
   static inline Address EntryOf(Builtin builtin, Isolate* isolate);
 
-#ifdef V8_ENABLE_WEBASSEMBLY
-  // Returns a handle to the WasmCodePointerTable entry for a given builtin.
-  template <Builtin builtin>
-  static inline wasm::WasmCodePointerTable::Handle WasmBuiltinHandleOf(
-      Isolate* isolate);
-#endif
-
   V8_EXPORT_PRIVATE static Kind KindOf(Builtin builtin);
   static const char* KindNameOf(Builtin builtin);
 
@@ -260,7 +254,8 @@ class Builtins {
 
   // As above, but safe to access off the main thread since the check is done
   // by handle location. Similar to Heap::IsRootHandle.
-  bool IsBuiltinHandle(Handle<HeapObject> maybe_code, Builtin* index) const;
+  bool IsBuiltinHandle(IndirectHandle<HeapObject> maybe_code,
+                       Builtin* index) const;
 
   // True, iff the given builtin contains no isolate-specific code and can be
   // embedded into the binary.
@@ -291,8 +286,10 @@ class Builtins {
 
   V8_WARN_UNUSED_RESULT static MaybeHandle<Object> InvokeApiFunction(
       Isolate* isolate, bool is_construct,
-      Handle<FunctionTemplateInfo> function, Handle<Object> receiver, int argc,
-      Handle<Object> args[], Handle<HeapObject> new_target);
+      DirectHandle<FunctionTemplateInfo> function,
+      DirectHandle<Object> receiver,
+      base::Vector<const DirectHandle<Object>> args,
+      DirectHandle<HeapObject> new_target);
 
   static void Generate_Adaptor(MacroAssembler* masm, int formal_parameter_count,
                                Address builtin_address);
@@ -303,7 +300,7 @@ class Builtins {
 
   static bool AllowDynamicFunction(Isolate* isolate,
                                    DirectHandle<JSFunction> target,
-                                   Handle<JSObject> target_global_proxy);
+                                   DirectHandle<JSObject> target_global_proxy);
 
   // Creates a copy of InterpreterEntryTrampolineForProfiling in the code space.
   static Handle<Code> CreateInterpreterEntryTrampolineForProfiling(
@@ -452,9 +449,7 @@ V8_INLINE constexpr bool IsBaselineTrampolineBuiltin(Builtin builtin_id) {
   // InstructionStream object is not a builtin.
   return builtin_id != Builtin::kNoBuiltinId &&
          (builtin_id == Builtin::kBaselineOutOfLinePrologue ||
-          builtin_id == Builtin::kBaselineOutOfLinePrologueDeopt ||
-          builtin_id == Builtin::kBaselineOrInterpreterEnterAtBytecode ||
-          builtin_id == Builtin::kBaselineOrInterpreterEnterAtNextBytecode);
+          builtin_id == Builtin::kBaselineOutOfLinePrologueDeopt);
 }
 
 Builtin ExampleBuiltinForTorqueFunctionPointerType(

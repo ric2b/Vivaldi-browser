@@ -11,7 +11,6 @@ import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.graphics.Bitmap;
 import android.media.AudioManager;
-import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.support.v4.media.MediaMetadataCompat;
@@ -371,17 +370,16 @@ public class MediaNotificationController {
     /**
      * Finishes starting the service on O+.
      *
-     * If startForegroundService() was called, the app MUST call startForeground on the created
+     * <p>If startForegroundService() was called, the app MUST call startForeground on the created
      * service no matter what or it will crash.
      *
      * @param service the {@link Service} on which {@link Context#startForegroundService()} has been
-     *         called.
+     *     called.
      * @param notification a minimal version of the notification associated with the service.
      * @return true if {@link Service#startForeground()} was called.
      */
     public static boolean finishStartingForegroundServiceOnO(
             Service service, NotificationWrapper notification) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false;
         try {
             ForegroundServiceUtils.getInstance()
                     .startForeground(
@@ -778,8 +776,7 @@ public class MediaNotificationController {
         if (mMediaNotificationInfo.supportsSwipeAway() && mMediaNotificationInfo.isPaused) {
             ForegroundServiceUtils.getInstance()
                     .stopForeground(mService, Service.STOP_FOREGROUND_DETACH);
-            BaseNotificationManagerProxy manager =
-                    BaseNotificationManagerProxyFactory.create(getContext());
+            BaseNotificationManagerProxy manager = BaseNotificationManagerProxyFactory.create();
             manager.notify(notification);
         } else if (!finishedForegroundingService) {
             // We did not foreground the service and update the notification above, so we should do
@@ -795,8 +792,7 @@ public class MediaNotificationController {
                                 notification.getNotification(),
                                 ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
             } catch (RuntimeException e) {
-                BaseNotificationManagerProxy manager =
-                        BaseNotificationManagerProxyFactory.create(getContext());
+                BaseNotificationManagerProxy manager = BaseNotificationManagerProxyFactory.create();
                 manager.notify(notification);
             }
         }

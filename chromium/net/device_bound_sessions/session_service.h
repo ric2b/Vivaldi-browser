@@ -8,11 +8,14 @@
 #include <memory>
 
 #include "base/functional/callback_forward.h"
+#include "base/functional/callback_helpers.h"
 #include "net/base/net_export.h"
 #include "net/device_bound_sessions/registration_fetcher_param.h"
 #include "net/device_bound_sessions/session.h"
+#include "net/device_bound_sessions/session_access.h"
 #include "net/device_bound_sessions/session_challenge_param.h"
 #include "net/device_bound_sessions/session_key.h"
+#include "net/log/net_log_with_source.h"
 
 namespace net {
 class IsolationInfo;
@@ -27,7 +30,7 @@ namespace net::device_bound_sessions {
 class NET_EXPORT SessionService {
  public:
   using RefreshCompleteCallback = base::OnceClosure;
-  using OnAccessCallback = base::RepeatingCallback<void(const SessionKey&)>;
+  using OnAccessCallback = base::RepeatingCallback<void(const SessionAccess&)>;
 
   // Returns nullptr if unexportable key provider is not supported by the
   // platform or the device.
@@ -46,10 +49,16 @@ class NET_EXPORT SessionService {
   // Isolation info to be used for registration request, this should be the
   // same as was used for the response with the Sec-Session-Registration
   // header.
+  // `net_log` is the log corresponding to the request receiving the
+  // Sec-Session-Registration header.
+  // 'original_request_initiator` was the initiator for the request that
+  // received the Sec-Session-Registration header.
   virtual void RegisterBoundSession(
       OnAccessCallback on_access_callback,
       RegistrationFetcherParam registration_params,
-      const IsolationInfo& isolation_info) = 0;
+      const IsolationInfo& isolation_info,
+      const NetLogWithSource& net_log,
+      const std::optional<url::Origin>& original_request_initiator) = 0;
 
   // Check if a request should be deferred due to the session cookie being
   // missing. This should only be called once the request has the correct
@@ -79,6 +88,33 @@ class NET_EXPORT SessionService {
       OnAccessCallback on_access_callback,
       const GURL& request_url,
       const SessionChallengeParam& param) = 0;
+
+  // Get all sessions. If sessions have not yet been loaded from disk,
+  // defer until completely initialized.
+  virtual void GetAllSessionsAsync(
+      base::OnceCallback<void(const std::vector<SessionKey>&)> callback) = 0;
+
+  // Delete the session on `site` with `id`, notifying
+  // `per_request_callback` about any deletions.
+  virtual void DeleteSessionAndNotify(
+      const SchemefulSite& site,
+      const Session::Id& id,
+      SessionService::OnAccessCallback per_request_callback) = 0;
+
+  // Delete all sessions that match the filtering arguments. See
+  // `device_bound_sessions.mojom` for details on the filtering logic.
+  virtual void DeleteAllSessions(
+      std::optional<base::Time> created_after_time,
+      std::optional<base::Time> created_before_time,
+      base::RepeatingCallback<bool(const net::SchemefulSite&)> site_matcher,
+      base::OnceClosure completion_callback) = 0;
+
+  // Add an observer for session changes that include `url`. `callback`
+  // will only be notified until the destruction of the returned
+  // `ScopedClosureRunner`.
+  virtual base::ScopedClosureRunner AddObserver(
+      const GURL& url,
+      base::RepeatingCallback<void(const SessionAccess&)> callback) = 0;
 
  protected:
   SessionService() = default;

@@ -71,7 +71,7 @@ class BackForwardCacheMetricsTestMatcher {
   void ExpectRestored(base::Location location);
 
   void ExpectNotRestored(
-      std::vector<BackForwardCacheMetrics::NotRestoredReason> not_restored,
+      BackForwardCacheCanStoreDocumentResult::NotRestoredReasons not_restored,
       std::vector<blink::scheduler::WebSchedulerTrackedFeature> block_listed,
       const std::vector<ShouldSwapBrowsingInstance>& not_swapped,
       const std::vector<BackForwardCache::DisabledReason>&
@@ -96,7 +96,7 @@ class BackForwardCacheMetricsTestMatcher {
   template <typename T>
   void ExpectBucketCount(std::string_view name,
                          T sample,
-                         base::HistogramBase::Count expected_count) {
+                         base::HistogramBase::Count32 expected_count) {
     histogram_tester().ExpectBucketCount(name, sample, expected_count);
   }
 
@@ -113,11 +113,11 @@ class BackForwardCacheMetricsTestMatcher {
   // tests that it occurred.
   void ExpectOutcome(
       BackForwardCacheMetrics::HistoryNavigationOutcome outcome,
-      std::vector<BackForwardCacheMetrics::NotRestoredReason> not_restored,
+      BackForwardCacheCanStoreDocumentResult::NotRestoredReasons not_restored,
       base::Location location);
 
   void ExpectReasons(
-      std::vector<BackForwardCacheMetrics::NotRestoredReason> not_restored,
+      BackForwardCacheCanStoreDocumentResult::NotRestoredReasons not_restored,
       std::vector<blink::scheduler::WebSchedulerTrackedFeature> block_listed,
       const std::vector<ShouldSwapBrowsingInstance>& not_swapped,
       const std::vector<BackForwardCache::DisabledReason>&
@@ -126,7 +126,7 @@ class BackForwardCacheMetricsTestMatcher {
       base::Location location);
 
   void ExpectNotRestoredReasons(
-      std::vector<BackForwardCacheMetrics::NotRestoredReason> reasons,
+      BackForwardCacheCanStoreDocumentResult::NotRestoredReasons reasons,
       base::Location location);
 
   void ExpectBlocklistedFeatures(
@@ -154,6 +154,7 @@ class BackForwardCacheMetricsTestMatcher {
 
   std::vector<UkmMetrics> expected_ukm_outcomes_;
   std::vector<UkmMetrics> expected_ukm_not_restored_reasons_;
+  std::vector<UkmMetrics> expected_ukm_not_restored_reasons2_;
 
   // Indicates whether metrics for all sites regardless of the domains are
   // checked or not.

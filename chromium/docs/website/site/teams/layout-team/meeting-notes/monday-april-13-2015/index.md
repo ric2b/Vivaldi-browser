@@ -23,7 +23,7 @@ inline-block are order-dependant)
 - Experimenting with data-mining traces
 
 First letter refactoring (dsinclair)
-\[[crbug.com/391288](http://crbug.com/391288)\]
+\[[crbug.com/391288](https://crbug.com/391288)\]
 
 - Fixed bug where a block and an inline both used first-letter.
 
@@ -39,7 +39,7 @@ Measure API (jchaffraix)
 
 - Working on proposal/brainstorming document for layout refactoring.
 
-Flexbox (cbiesinger) \[[crbug.com/426898](http://crbug.com/426898)\]
+Flexbox (cbiesinger) \[[crbug.com/426898](https://crbug.com/426898)\]
 
 - Added check to ensure that min-size cannot be negative.
 
@@ -47,7 +47,7 @@ Flexbox (cbiesinger) \[[crbug.com/426898](http://crbug.com/426898)\]
 
 - Working on positioning of position: absolute elements.
 
-Line Boxes (szager) \[[crbug.com/321237](http://crbug.com/321237)\]
+Line Boxes (szager) \[[crbug.com/321237](https://crbug.com/321237)\]
 
 - Eliminating wrapper classes helped improve performance but there is
 
@@ -63,11 +63,11 @@ Doing most text metric in floats and converting at the boundary
 
 between the block and inline trees might make sense.
 
-Isolate core/fetch (japhet) \[[crbug.com/458222](http://crbug.com/458222)\]
+Isolate core/fetch (japhet) \[[crbug.com/458222](https://crbug.com/458222)\]
 
 - Continuing work to isolate core/fetch from the rest of core.
 
-RenderObject cleanup (pilgrim) \[[crbug.com/436473](http://crbug.com/436473)\]
+RenderObject cleanup (pilgrim) \[[crbug.com/436473](https://crbug.com/436473)\]
 
 - Continuing to pull things out of RenderObject.
 

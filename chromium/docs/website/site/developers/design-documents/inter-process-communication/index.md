@@ -268,7 +268,7 @@ this means that the synchronous message reply can be processed out-of-order.
 Synchronous messages are sent the same way normal messages are, with output
 parameters being given to the constructor. For example:
 ```cpp
-const GURL input_param("http://www.google.com/");
+const GURL input_param("https://www.google.com/");
 std::string result;
 content::RenderThread::Get()-&gt;Send(new MyMessage(input_param, &result));
 printf("The result is %s\\n", result.c_str());

@@ -6,8 +6,8 @@ import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import type * as Workspace from '../../models/workspace/workspace.js';
 import type * as CodeMirror from '../../third_party/codemirror.next/codemirror.next.js';
-import * as UI from '../../ui/legacy/legacy.js';
 import * as TextEditor from '../../ui/components/text_editor/text_editor.js';
+import * as UI from '../../ui/legacy/legacy.js';
 import * as Snippets from '../snippets/snippets.js';
 
 import {Plugin} from './Plugin.js';
@@ -31,7 +31,7 @@ export class SnippetsPlugin extends Plugin {
   }
 
   override rightToolbarItems(): UI.Toolbar.ToolbarItem[] {
-    const runSnippet = UI.Toolbar.Toolbar.createActionButtonForId('debugger.run-snippet');
+    const runSnippet = UI.Toolbar.Toolbar.createActionButton('debugger.run-snippet');
     runSnippet.setText(Host.Platform.isMac() ? i18nString(UIStrings.enter) : i18nString(UIStrings.ctrlenter));
     runSnippet.setReducedFocusRing();
 

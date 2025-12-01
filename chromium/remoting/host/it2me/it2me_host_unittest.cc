@@ -12,19 +12,24 @@
 
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
+#include "base/functional/callback_forward.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "components/policy/policy_constants.h"
 #include "net/base/network_change_notifier.h"
 #include "remoting/base/auto_thread_task_runner.h"
+#include "remoting/base/oauth_token_getter.h"
+#include "remoting/base/oauth_token_getter_proxy.h"
+#include "remoting/base/passthrough_oauth_token_getter.h"
 #include "remoting/base/session_policies.h"
 #include "remoting/host/chromeos/chromeos_enterprise_params.h"
 #include "remoting/host/chromeos/features.h"
@@ -33,10 +38,12 @@
 #include "remoting/host/host_event_reporter.h"
 #include "remoting/host/it2me/it2me_confirmation_dialog.h"
 #include "remoting/host/policy_watcher.h"
+#include "remoting/host/register_support_host_request.h"
 #include "remoting/host/xmpp_register_support_host_request.h"
 #include "remoting/protocol/errors.h"
 #include "remoting/protocol/transport_context.h"
 #include "remoting/signaling/fake_signal_strategy.h"
+#include "remoting/signaling/remoting_log_to_server.h"
 #include "remoting/signaling/xmpp_log_to_server.h"
 #include "services/network/test/test_shared_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -60,7 +67,9 @@ namespace {
 typedef protocol::ValidatingAuthenticator::Result ValidationResult;
 typedef It2MeConfirmationDialog::Result DialogResult;
 
-const char kTestUserName[] = "ficticious_user@gmail.com";
+constexpr char kTestSupportId[] = "1234567";
+constexpr char kTestHostUsername[] = "helpee@gmail.com";
+const char kTestClientUsername[] = "ficticious_user@gmail.com";
 const char kTestClientJid[] = "ficticious_user@gmail.com/jid_resource";
 const char kTestClientJid2[] = "ficticious_user_2@gmail.com/jid_resource";
 const char kTestClientUsernameNoJid[] = "completely_ficticious_user@gmail.com";
@@ -83,12 +92,25 @@ class HostEventReporterStub : public HostEventReporter {
   ~HostEventReporterStub() override = default;
 };
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+class FakeRegisterSupportHostRequest : public RegisterSupportHostRequest {
+ public:
+  void StartRequest(SignalStrategy* signal_strategy,
+                    scoped_refptr<RsaKeyPair> key_pair,
+                    const std::string& authorized_helper,
+                    std::optional<ChromeOsEnterpriseParams> params,
+                    RegisterCallback callback) override {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(callback), kTestSupportId,
+                                  base::TimeDelta(), ErrorCode::OK));
+  }
+};
+
+#if BUILDFLAG(IS_CHROMEOS)
 std::unique_ptr<HostEventReporter> CreateHostEventReporterStub(
     scoped_refptr<HostStatusMonitor>) {
   return std::make_unique<HostEventReporterStub>();
 }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 }  // namespace
 
@@ -183,7 +205,7 @@ class FakeIt2MeDialogFactory : public It2MeConfirmationDialogFactory {
 FakeIt2MeDialogFactory::FakeIt2MeDialogFactory()
     : It2MeConfirmationDialogFactory(
           It2MeConfirmationDialog::DialogStyle::kConsumer),
-      remote_user_email_(kTestUserName) {}
+      remote_user_email_(kTestClientUsername) {}
 
 FakeIt2MeDialogFactory::~FakeIt2MeDialogFactory() = default;
 
@@ -236,7 +258,15 @@ class It2MeHostTest : public testing::Test, public It2MeHost::Observer {
   ChromotingHost* GetHost() { return it2me_host_->host_.get(); }
 
   const SessionPolicies& get_local_session_policies() const {
-    return it2me_host_->local_session_policies_provider_.get_local_policies();
+    return it2me_host_->local_session_policies_provider_->get_local_policies();
+  }
+
+  bool is_using_corp_session_authz() const {
+    return it2me_host_->use_corp_session_authz_;
+  }
+
+  bool has_corp_host_status_logger() const {
+    return it2me_host_->corp_host_status_logger_.get() != nullptr;
   }
 
   // Configuration values used by StartHost();
@@ -264,13 +294,18 @@ class It2MeHostTest : public testing::Test, public It2MeHost::Observer {
 
   scoped_refptr<It2MeHost> it2me_host_;
 
+  PassthroughOAuthTokenGetter token_getter_;
+
+  bool use_corp_session_authz_ = false;
+
+  std::string stored_access_code_;
+
  private:
   void StartupHostStateHelper(const base::RepeatingClosure& quit_closure);
 
   base::test::TaskEnvironment task_environment_;
 
   std::unique_ptr<base::RunLoop> run_loop_;
-  std::unique_ptr<FakeSignalStrategy> fake_bot_signal_strategy_;
 
   std::unique_ptr<net::NetworkChangeNotifier> network_change_notifier_;
 
@@ -293,7 +328,7 @@ void It2MeHostTest::SetUp() {
   base::GetLinuxDistro();
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   test_url_loader_factory_ = new network::TestSharedURLLoaderFactory();
 #endif
 
@@ -308,8 +343,6 @@ void It2MeHostTest::SetUp() {
       test_url_loader_factory_);
   network_task_runner_ = host_context_->network_task_runner();
   ui_task_runner_ = host_context_->ui_task_runner();
-  fake_bot_signal_strategy_ =
-      std::make_unique<FakeSignalStrategy>(SignalingAddress("fake_bot_jid"));
 }
 
 void It2MeHostTest::TearDown() {
@@ -349,12 +382,8 @@ void It2MeHostTest::SetPolicies(
 
 void It2MeHostTest::StartupHostStateHelper(
     const base::RepeatingClosure& quit_closure) {
-  if (last_host_state_ == It2MeHostState::kRequestedAccessCode) {
-    network_task_runner_->PostTask(
-        FROM_HERE,
-        base::BindOnce(&It2MeHost::SetStateForTesting, it2me_host_.get(),
-                       It2MeHostState::kReceivedAccessCode, ErrorCode::OK));
-  } else if (last_host_state_ != It2MeHostState::kStarting) {
+  if (last_host_state_ != It2MeHostState::kStarting &&
+      last_host_state_ != It2MeHostState::kRequestedAccessCode) {
     quit_closure.Run();
     return;
   }
@@ -378,7 +407,6 @@ void It2MeHostTest::StartHost() {
 
   auto fake_signal_strategy =
       std::make_unique<FakeSignalStrategy>(SignalingAddress("fake_local_jid"));
-  fake_bot_signal_strategy_->ConnectTo(fake_signal_strategy.get());
 
   it2me_host_ = new It2MeHost();
   if (enterprise_params_.has_value()) {
@@ -390,27 +418,35 @@ void It2MeHostTest::StartHost() {
     it2me_host_->set_authorized_helper(*authorized_helper_);
   }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   it2me_host_->SetHostEventReporterFactoryForTesting(
       base::BindRepeating(CreateHostEventReporterStub));
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
   auto create_connection_context = base::BindOnce(
       [](std::unique_ptr<SignalStrategy> signal_strategy,
-         ChromotingHostContext* host_context) {
+         base::WeakPtr<OAuthTokenGetter> token_getter,
+         bool use_corp_session_authz, ChromotingHostContext* host_context) {
         auto context = std::make_unique<It2MeHost::DeferredConnectContext>();
+        context->use_corp_session_authz = use_corp_session_authz;
         context->register_request =
-            std::make_unique<XmppRegisterSupportHostRequest>("fake_bot_jid");
-        context->log_to_server = std::make_unique<XmppLogToServer>(
-            ServerLogEntry::IT2ME, signal_strategy.get(), "fake_bot_jid",
-            host_context->network_task_runner());
+            std::make_unique<FakeRegisterSupportHostRequest>();
+        context->log_to_server = std::make_unique<RemotingLogToServer>(
+            ServerLogEntry::IT2ME,
+            std::make_unique<OAuthTokenGetterProxy>(token_getter),
+            host_context->url_loader_factory());
+        context->signaling_token_getter =
+            std::make_unique<OAuthTokenGetterProxy>(token_getter);
+        context->api_token_getter =
+            std::make_unique<OAuthTokenGetterProxy>(token_getter);
         context->signal_strategy = std::move(signal_strategy);
         return context;
       },
-      std::move(fake_signal_strategy));
+      std::move(fake_signal_strategy), token_getter_.GetWeakPtr(),
+      use_corp_session_authz_);
   it2me_host_->Connect(host_context_->Copy(), policies_->Clone(),
                        std::move(dialog_factory), weak_factory_.GetWeakPtr(),
-                       std::move(create_connection_context), kTestUserName,
+                       std::move(create_connection_context), kTestHostUsername,
                        ice_config);
 
   base::RunLoop run_loop;
@@ -453,7 +489,9 @@ void It2MeHostTest::RunValidationCallback(const std::string& remote_jid) {
 void It2MeHostTest::OnClientAuthenticated(const std::string& client_username) {}
 
 void It2MeHostTest::OnStoreAccessCode(const std::string& access_code,
-                                      base::TimeDelta access_code_lifetime) {}
+                                      base::TimeDelta access_code_lifetime) {
+  stored_access_code_ = access_code;
+}
 
 void It2MeHostTest::OnNatPoliciesChanged(bool nat_traversal_enabled,
                                          bool relay_connections_allowed) {
@@ -496,6 +534,8 @@ void ReceiveIceConfig(protocol::IceConfig* ice_config,
 TEST_F(It2MeHostTest, StartAndStop) {
   StartHost();
   ASSERT_EQ(It2MeHostState::kReceivedAccessCode, last_host_state_);
+  // The first 7 digits of the access code are the support ID.
+  ASSERT_TRUE(stored_access_code_.starts_with(kTestSupportId));
 
   ShutdownHost();
   ASSERT_EQ(It2MeHostState::kDisconnected, last_host_state_);
@@ -786,7 +826,7 @@ TEST_F(It2MeHostTest, ConnectionValidationClientDomainListPolicyNoMatch) {
 }
 
 TEST_F(It2MeHostTest, AuthorizedHelperCanConnect) {
-  authorized_helper_ = kTestUserName;
+  authorized_helper_ = kTestClientUsername;
   StartHost();
   RunValidationCallback(kTestClientJid);
   ASSERT_EQ(ValidationResult::SUCCESS, validation_result_);
@@ -796,7 +836,7 @@ TEST_F(It2MeHostTest, AuthorizedHelperCanConnect) {
 }
 
 TEST_F(It2MeHostTest, UnauthorizedHelperIsRejected) {
-  authorized_helper_ = kTestUserName;
+  authorized_helper_ = kTestClientUsername;
   StartHost();
   RunValidationCallback(kTestClientJid2);
   ASSERT_EQ(ValidationResult::ERROR_UNAUTHORIZED_ACCOUNT, validation_result_);
@@ -885,9 +925,32 @@ TEST_F(It2MeHostTest, UriForwardingDisallowedByDefault) {
   EXPECT_FALSE(*get_local_session_policies().allow_uri_forwarding);
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+TEST_F(It2MeHostTest, StartHost_UseCorpSessionAuthz) {
+  use_corp_session_authz_ = true;
+  StartHost();
+  ASSERT_EQ(last_host_state_, It2MeHostState::kReceivedAccessCode);
+  // No shared secret after the support ID.
+  ASSERT_EQ(stored_access_code_, kTestSupportId);
+  ASSERT_TRUE(is_using_corp_session_authz());
+  ASSERT_TRUE(has_corp_host_status_logger());
+}
+
+TEST_F(It2MeHostTest, StartHost_DoesNotUseCorpSessionAuthz) {
+  use_corp_session_authz_ = false;
+  StartHost();
+  ASSERT_EQ(last_host_state_, It2MeHostState::kReceivedAccessCode);
+  // The access code includes the shared secret so it is longer than the support
+  // ID.
+  ASSERT_GT(stored_access_code_.length(), strlen(kTestSupportId));
+  ASSERT_FALSE(is_using_corp_session_authz());
+  ASSERT_FALSE(has_corp_host_status_logger());
+}
+
+#if BUILDFLAG(IS_CHROMEOS)
 TEST_F(It2MeHostTest, ConnectRespectsSuppressDialogsParameter) {
-  StartHost(ChromeOsEnterpriseParams{.suppress_user_dialogs = true});
+  ChromeOsEnterpriseParams params;
+  params.suppress_user_dialogs = true;
+  StartHost(std::move(params));
 
   EXPECT_FALSE(dialog_factory_->dialog_created());
   EXPECT_FALSE(
@@ -895,14 +958,18 @@ TEST_F(It2MeHostTest, ConnectRespectsSuppressDialogsParameter) {
 }
 
 TEST_F(It2MeHostTest, ConnectRespectsSuppressNotificationsParameter) {
-  StartHost(ChromeOsEnterpriseParams{.suppress_notifications = true});
+  ChromeOsEnterpriseParams params;
+  params.suppress_notifications = true;
+  StartHost(std::move(params));
 
   EXPECT_FALSE(dialog_factory_->dialog_created());
   EXPECT_FALSE(GetHost()->desktop_environment_options().enable_notifications());
 }
 
 TEST_F(It2MeHostTest, ConnectRespectsTerminateUponInputParameter) {
-  StartHost(ChromeOsEnterpriseParams{.terminate_upon_input = true});
+  ChromeOsEnterpriseParams params;
+  params.terminate_upon_input = true;
+  StartHost(std::move(params));
 
   EXPECT_TRUE(GetHost()->desktop_environment_options().terminate_upon_input());
 }
@@ -914,7 +981,9 @@ TEST_F(It2MeHostTest, TerminateUponInputDefaultsToFalse) {
 }
 
 TEST_F(It2MeHostTest, ConnectRespectsEnableCurtainingParameter) {
-  StartHost(ChromeOsEnterpriseParams{.curtain_local_user_session = true});
+  ChromeOsEnterpriseParams params;
+  params.curtain_local_user_session = true;
+  StartHost(std::move(params));
 
   EXPECT_TRUE(*get_local_session_policies().curtain_required);
 }
@@ -929,7 +998,9 @@ TEST_F(It2MeHostTest, AllowEnterpriseFileTransferWithPolicyEnabled) {
   SetPolicies({{policy::key::kRemoteAccessHostAllowEnterpriseFileTransfer,
                 base::Value(true)}});
 
-  StartHost(ChromeOsEnterpriseParams{.allow_file_transfer = true});
+  ChromeOsEnterpriseParams params;
+  params.allow_file_transfer = true;
+  StartHost(std::move(params));
 
   EXPECT_TRUE(*get_local_session_policies().allow_file_transfer);
 }
@@ -938,7 +1009,9 @@ TEST_F(It2MeHostTest, AllowEnterpriseFileTransferWithPolicyDisabled) {
   SetPolicies({{policy::key::kRemoteAccessHostAllowEnterpriseFileTransfer,
                 base::Value(false)}});
 
-  StartHost(ChromeOsEnterpriseParams{.allow_file_transfer = true});
+  ChromeOsEnterpriseParams params;
+  params.allow_file_transfer = true;
+  StartHost(std::move(params));
 
   EXPECT_FALSE(*get_local_session_policies().allow_file_transfer);
 }
@@ -956,7 +1029,9 @@ TEST_F(It2MeHostTest,
 TEST_F(It2MeHostTest, AllowEnterpriseFileTransferWithPolicyNotSet) {
   SetPolicies({});
 
-  StartHost(ChromeOsEnterpriseParams{.allow_file_transfer = true});
+  ChromeOsEnterpriseParams params;
+  params.allow_file_transfer = true;
+  StartHost(std::move(params));
 
   EXPECT_FALSE(*get_local_session_policies().allow_file_transfer);
 }
@@ -1013,6 +1088,20 @@ TEST_F(
 
   StartHost(/*enterprise_params=*/std::nullopt);
   ASSERT_EQ(It2MeHostState::kReceivedAccessCode, last_host_state_);
+}
+
+TEST_F(It2MeHostTest, EnterpriseSessionsShouldNotDisconnectOnPolicyChange) {
+  StartHost(ChromeOsEnterpriseParams());
+  const It2MeHostState initial_state = last_host_state_;
+  ASSERT_EQ(initial_state, It2MeHostState::kReceivedAccessCode);
+
+  SetPolicies({{policy::key::kRemoteAccessHostFirewallTraversal,
+                base::Value(!last_nat_traversal_enabled_value_)}});
+
+  // Using RunUntilIdle is frowned upon, but there is no other way to check a
+  // change does *not* happen.
+  base::RunLoop().RunUntilIdle();
+  ASSERT_EQ(last_host_state_, initial_state);
 }
 #endif
 

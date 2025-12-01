@@ -14,7 +14,6 @@
 #include "base/functional/callback.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
-#include "base/ranges/algorithm.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/traced_value.h"
 #include "cc/animation/animation.h"
@@ -446,9 +445,10 @@ void AnimationHost::PushPropertiesToImplThread(AnimationHost* host_impl) {
 
   // The pending info list is cleared in LayerTreeHostImpl::CommitComplete
   // and should be empty when pushing properties.
-  DCHECK(host_impl->pending_throughput_tracker_infos_.Read(*host_impl).empty());
-  host_impl->pending_throughput_tracker_infos_.Write(*host_impl) =
-      TakePendingThroughputTrackerInfos();
+  DCHECK(host_impl->pending_compositor_metrics_tracker_infos_.Read(*host_impl)
+             .empty());
+  host_impl->pending_compositor_metrics_tracker_infos_.Write(*host_impl) =
+      TakePendingCompositorMetricsTrackerInfos();
 }
 
 const ElementAnimations* AnimationHost::GetElementAnimationsForElementId(
@@ -841,7 +841,7 @@ void AnimationHost::AddToTicking(scoped_refptr<Animation> animation) {
 
 void AnimationHost::RemoveFromTicking(scoped_refptr<Animation> animation) {
   auto to_erase =
-      base::ranges::find(ticking_animations_.Write(*this), animation);
+      std::ranges::find(ticking_animations_.Write(*this), animation);
   if (to_erase != ticking_animations_.Write(*this).end()) {
     ticking_animations_.Write(*this).erase(to_erase);
   }
@@ -866,7 +866,7 @@ void AnimationHost::SetLayerTreeMutator(
 WorkletAnimation* AnimationHost::FindWorkletAnimation(WorkletAnimationId id) {
   // TODO(majidvp): Use a map to make lookup O(1)
   auto animation =
-      base::ranges::find_if(ticking_animations_.Read(*this), [id](auto& it) {
+      std::ranges::find_if(ticking_animations_.Read(*this), [id](auto& it) {
         return it->IsWorkletAnimation() &&
                ToWorkletAnimation(it.get())->worklet_animation_id() == id;
       });
@@ -926,24 +926,25 @@ bool AnimationHost::HasNativePropertyAnimation() const {
   return false;
 }
 
-AnimationHost::PendingThroughputTrackerInfos
-AnimationHost::TakePendingThroughputTrackerInfos() {
-  PendingThroughputTrackerInfos infos =
-      std::move(pending_throughput_tracker_infos_.Write(*this));
-  pending_throughput_tracker_infos_.Write(*this) = {};
+AnimationHost::PendingCompositorMetricsTrackerInfos
+AnimationHost::TakePendingCompositorMetricsTrackerInfos() {
+  PendingCompositorMetricsTrackerInfos infos =
+      std::move(pending_compositor_metrics_tracker_infos_.Write(*this));
+  pending_compositor_metrics_tracker_infos_.Write(*this) = {};
   return infos;
 }
 
-void AnimationHost::StartThroughputTracking(
+void AnimationHost::StartCompositorMetricsTracking(
     TrackedAnimationSequenceId sequence_id) {
-  pending_throughput_tracker_infos_.Write(*this).push_back({sequence_id, true});
+  pending_compositor_metrics_tracker_infos_.Write(*this).push_back(
+      {sequence_id, true});
   SetNeedsPushProperties();
 }
 
-void AnimationHost::StopThroughputTracking(
-    TrackedAnimationSequenceId sequnece_id) {
-  pending_throughput_tracker_infos_.Write(*this).push_back(
-      {sequnece_id, false});
+void AnimationHost::StopCompositorMetricsTracking(
+    TrackedAnimationSequenceId sequence_id) {
+  pending_compositor_metrics_tracker_infos_.Write(*this).push_back(
+      {sequence_id, false});
   SetNeedsPushProperties();
 }
 

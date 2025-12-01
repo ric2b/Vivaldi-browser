@@ -10,6 +10,7 @@
 
 #include "chrome/browser/ai/ai_context_bound_object.h"
 #include "components/optimization_guide/core/optimization_guide_model_executor.h"
+#include "components/optimization_guide/proto/features/writing_assistance_api.pb.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
@@ -21,17 +22,17 @@
 class AIWriter : public AIContextBoundObject, public blink::mojom::AIWriter {
  public:
   AIWriter(
+      AIContextBoundObjectSet& context_bound_object_set,
       std::unique_ptr<
           optimization_guide::OptimizationGuideModelExecutor::Session> session,
       blink::mojom::AIWriterCreateOptionsPtr options,
       mojo::PendingReceiver<blink::mojom::AIWriter> receiver);
   AIWriter(const AIWriter&) = delete;
   AIWriter& operator=(const AIWriter&) = delete;
-
   ~AIWriter() override;
 
-  // `AIContextBoundObject` implementation.
-  void SetDeletionCallback(base::OnceClosure deletion_callback) override;
+  static std::unique_ptr<optimization_guide::proto::WritingAssistanceApiOptions>
+  ToProtoOptions(const blink::mojom::AIWriterCreateOptionsPtr& options);
 
   // `blink::mojom::AIWriter` implementation.
   void Write(const std::string& input,

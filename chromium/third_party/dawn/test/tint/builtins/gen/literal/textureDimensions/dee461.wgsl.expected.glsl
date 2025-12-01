@@ -1,9 +1,12 @@
+//
+// fragment_main
+//
 #version 310 es
 precision highp float;
 precision highp int;
 
 layout(binding = 0, std430)
-buffer prevent_dce_block_1_ssbo {
+buffer f_prevent_dce_block_ssbo {
   uvec2 inner;
 } v;
 layout(binding = 0, rgba8_snorm) uniform highp writeonly image2D arg_0;
@@ -14,6 +17,9 @@ uvec2 textureDimensions_dee461() {
 void main() {
   v.inner = textureDimensions_dee461();
 }
+//
+// compute_main
+//
 #version 310 es
 
 layout(binding = 0, std430)

@@ -28,6 +28,9 @@ BASE_FEATURE(kWallpaperSearchSettingsVisibility,
              base::FEATURE_DISABLED_BY_DEFAULT);
 BASE_FEATURE(kHistorySearchSettingsVisibility,
              "HistorySearchSettingsVisibility",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kPasswordChangeSubmission,
+             "PasswordChangeSubmissionSettingsVisibility",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 const base::FeatureParam<std::string> kPerformanceClassListForHistorySearch(
@@ -57,21 +60,9 @@ BASE_FEATURE(kModelExecutionCapabilityDisable,
              "ModelExecutionCapabilityDisable",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kModelAdaptationCompose,
-             "ModelAdaptationCompose",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kOnDeviceModelTestFeature,
              "OnDeviceModelTestFeature",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kModelAdaptationHistorySearch,
-             "ModelAdaptationHistorySearch",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kModelAdaptationSummarize,
-             "ModelAdaptationHistorySearch",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsGraduatedFeature(UserVisibleFeatureKey feature) {
   bool is_graduated = false;
@@ -89,6 +80,8 @@ bool IsGraduatedFeature(UserVisibleFeatureKey feature) {
     case UserVisibleFeatureKey::kHistorySearch:
       // History search is currently planned to always be opt-in.
       is_graduated = false;
+      break;
+    case UserVisibleFeatureKey::kPasswordChangeSubmission:
       break;
   }
   DCHECK(!is_graduated ||
@@ -110,33 +103,39 @@ const base::Feature* GetFeatureToUseToCheckSettingsVisibility(
       return &kWallpaperSearchSettingsVisibility;
     case UserVisibleFeatureKey::kHistorySearch:
       return &kHistorySearchSettingsVisibility;
+    case UserVisibleFeatureKey::kPasswordChangeSubmission:
+      return &kPasswordChangeSubmission;
   }
 }
 
 base::flat_set<UserVisibleFeatureKey> GetAllowedFeaturesForUnsignedUser() {
   std::vector<UserVisibleFeatureKey> allowed_features;
-  for (auto key : kAllUserVisibleFeatureKeys) {
+  for (UserVisibleFeatureKey key : kAllUserVisibleFeatureKeys) {
     const auto* feature = GetFeatureToUseToCheckSettingsVisibility(key);
+    // The kHistorySearch feature launched with this param set true,
+    // but for other features it defaults to false.
+    bool default_value = key == UserVisibleFeatureKey::kHistorySearch;
     if (GetFieldTrialParamByFeatureAsBool(*feature, "allow_unsigned_user",
-                                          false)) {
+                                          default_value)) {
       allowed_features.push_back(key);
     }
   }
   return allowed_features;
 }
 
-bool ShouldEnableFeatureWhenMainToggleOn(UserVisibleFeatureKey feature) {
+bool ShouldEnableFeatureWhenMainToggleOn(UserVisibleFeatureKey feature_key) {
   const auto* visibility_feature =
-      GetFeatureToUseToCheckSettingsVisibility(feature);
+      GetFeatureToUseToCheckSettingsVisibility(feature_key);
+  // The kHistorySearch feature launched with this param set false,
+  // but for other features it defaults to true.
+  bool default_value = feature_key != UserVisibleFeatureKey::kHistorySearch;
   return (GetFieldTrialParamByFeatureAsBool(
-      *visibility_feature, "enable_feature_when_main_toggle_on", true));
+      *visibility_feature, "enable_feature_when_main_toggle_on",
+      default_value));
 }
 
-// LINT.IfChange(IsOnDeviceModelEnabled)
-//
 // To enable on-device execution for a feature, update this to return a
-// non-null target. `GetOnDeviceFeatureRecentlyUsedPref` must also be updated to
-// return a valid pref for each on-device feature.
+// non-null target.
 std::optional<proto::OptimizationTarget> GetOptimizationTargetForCapability(
     ModelBasedCapabilityKey feature_key) {
   switch (feature_key) {
@@ -159,16 +158,24 @@ std::optional<proto::OptimizationTarget> GetOptimizationTargetForCapability(
     case ModelBasedCapabilityKey::kHistoryQueryIntent:
       return proto::
           OPTIMIZATION_TARGET_MODEL_EXECUTION_FEATURE_HISTORY_QUERY_INTENT;
+    case ModelBasedCapabilityKey::kScamDetection:
+      return proto::OPTIMIZATION_TARGET_MODEL_EXECUTION_FEATURE_SCAM_DETECTION;
+    case ModelBasedCapabilityKey::kPermissionsAi:
+      return proto::OPTIMIZATION_TARGET_MODEL_EXECUTION_FEATURE_PERMISSIONS_AI;
+    case ModelBasedCapabilityKey::kWritingAssistanceApi:
+      return proto::
+          OPTIMIZATION_TARGET_MODEL_EXECUTION_FEATURE_WRITING_ASSISTANCE_API;
     // The below capabilities never support on-device execution.
     case ModelBasedCapabilityKey::kFormsAnnotations:
+    case ModelBasedCapabilityKey::kFormsClassifications:
     case ModelBasedCapabilityKey::kFormsPredictions:
     case ModelBasedCapabilityKey::kTabOrganization:
     case ModelBasedCapabilityKey::kWallpaperSearch:
     case ModelBasedCapabilityKey::kTextSafety:
     case ModelBasedCapabilityKey::kBlingPrototyping:
+    case ModelBasedCapabilityKey::kPasswordChangeSubmission:
       return std::nullopt;
   }
 }
-// LINT.ThenChange(//components/optimization_guide/core/model_execution/model_execution_prefs.cc:GetOnDeviceFeatureRecentlyUsedPref)
 
 }  // namespace optimization_guide::features::internal

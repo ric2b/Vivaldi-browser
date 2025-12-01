@@ -18,6 +18,11 @@ BASE_FEATURE(kWebXrHandInput,
              "WebXRHandInput",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// Enables rendering to WebXR sessions with the WebGPU API.
+BASE_FEATURE(kWebXrWebGpuBinding,
+             "WebXRWebGPUBinding",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Enables access to experimental WebXR features.
 BASE_FEATURE(kWebXrIncubations,
              "WebXRIncubations",
@@ -51,12 +56,6 @@ BASE_FEATURE(kWebXrSharedBuffers,
              "WebXrSharedBuffers",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Controls what texture target is used for importing AHardwareBuffers from
-// SharedBuffers to local context.
-BASE_FEATURE(kUseTargetTexture2DForSharedBuffers,
-             "UseTargetTexture2DForSharedBuffers",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 #endif
 
 #if BUILDFLAG(ENABLE_OPENXR)
@@ -87,6 +86,12 @@ BASE_FEATURE(kOpenXRSharedImages,
 BASE_FEATURE(kAllowOpenXrWithImmersiveFeature,
              "AllowOpenXrWithImmersiveFeature",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+#if BUILDFLAG(IS_ANDROID)
+BASE_FEATURE(kOpenXrAndroidSmoothDepth,
+             "OpenXrAndroidSmoothDepth",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
 
 // Helper for enabling a feature if either the base flag is enabled or if the
 // device has an immersive feature that we will allow to override the default

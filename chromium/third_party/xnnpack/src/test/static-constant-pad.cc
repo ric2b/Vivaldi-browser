@@ -5,7 +5,6 @@
 
 #include <algorithm>  // For std::generate, std::shuffle.
 #include <array>      // For std::array.
-#include <cmath>
 #include <cstddef>  // For size_t.
 #include <cstdint>
 #include <memory>  // For std::unique_ptr.
@@ -15,13 +14,14 @@
 
 #include <gtest/gtest.h>
 #include "xnnpack.h"
+#include "xnnpack/buffer.h"
 #include "xnnpack/math.h"
 #include "xnnpack/node-type.h"
 #include "xnnpack/operator.h"
 #include "xnnpack/requantization.h"
 #include "xnnpack/subgraph.h"
-#include "replicable_random_device.h"
 #include "subgraph-unary-tester.h"
+#include "runtime-flags.h"
 
 using StaticConstantPadTestInt8 = UnaryTest<int8_t>;
 using StaticConstantPadTestUint8 = UnaryTest<uint8_t>;
@@ -67,7 +67,6 @@ TEST_F(StaticConstantPadTestInt8, define)
   ASSERT_EQ(subgraph->num_nodes, 1);
   const struct xnn_node* node = &subgraph->nodes[0];
   ASSERT_EQ(node->type, xnn_node_type_static_constant_pad);
-  ASSERT_EQ(node->compute_type, xnn_compute_type_qs8);
   for (size_t i = 0; i < dims.size(); i++) {
     ASSERT_EQ(node->params.static_pad.pre_paddings[i], pre_paddings[i]);
     ASSERT_EQ(node->params.static_pad.post_paddings[i], post_paddings[i]);
@@ -119,7 +118,6 @@ TEST_F(StaticConstantPadTestUint8, define)
   ASSERT_EQ(subgraph->num_nodes, 1);
   const struct xnn_node* node = &subgraph->nodes[0];
   ASSERT_EQ(node->type, xnn_node_type_static_constant_pad);
-  ASSERT_EQ(node->compute_type, xnn_compute_type_qu8);
   for (size_t i = 0; i < dims.size(); i++) {
     ASSERT_EQ(node->params.static_pad.pre_paddings[i], pre_paddings[i]);
     ASSERT_EQ(node->params.static_pad.post_paddings[i], post_paddings[i]);
@@ -142,7 +140,7 @@ TEST_F(StaticConstantPadTestF16, define)
     xnn_float16 padding_value;
     uint16_t padding_value_as_bits;
   };
-  padding_value = f32dist(rng);
+  padding_value = static_cast<xnn_float16>(f32dist(rng));
 
   ASSERT_EQ(xnn_status_success, xnn_initialize(/*allocator=*/nullptr));
 
@@ -172,7 +170,6 @@ TEST_F(StaticConstantPadTestF16, define)
   ASSERT_EQ(subgraph->num_nodes, 1);
   const struct xnn_node* node = &subgraph->nodes[0];
   ASSERT_EQ(node->type, xnn_node_type_static_constant_pad);
-  ASSERT_EQ(node->compute_type, xnn_compute_type_fp16);
   for (size_t i = 0; i < dims.size(); i++) {
     ASSERT_EQ(node->params.static_pad.pre_paddings[i], pre_paddings[i]);
     ASSERT_EQ(node->params.static_pad.post_paddings[i], post_paddings[i]);
@@ -222,7 +219,6 @@ TEST_F(StaticConstantPadTestF32, define)
   ASSERT_EQ(subgraph->num_nodes, 1);
   const struct xnn_node* node = &subgraph->nodes[0];
   ASSERT_EQ(node->type, xnn_node_type_static_constant_pad);
-  ASSERT_EQ(node->compute_type, xnn_compute_type_fp32);
   for (size_t i = 0; i < dims.size(); i++) {
     ASSERT_EQ(node->params.static_pad.pre_paddings[i], pre_paddings[i]);
     ASSERT_EQ(node->params.static_pad.post_paddings[i], post_paddings[i]);
@@ -299,7 +295,7 @@ TEST_F(StaticConstantPadTestInt8, matches_operator_api)
       subgraph, pre_paddings.data(), post_paddings.data(), padding_value, input_id, output_id, /*flags=*/0));
 
   xnn_runtime_t runtime = nullptr;
-  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, /*flags=*/0, &runtime));
+  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, xnn_test_runtime_flags(), &runtime));
   ASSERT_NE(nullptr, runtime);
   std::unique_ptr<xnn_runtime, decltype(&xnn_delete_runtime)> auto_runtime(runtime, xnn_delete_runtime);
   std::array<xnn_external_value, 2> external = {
@@ -374,7 +370,7 @@ TEST_F(StaticConstantPadTestUint8, matches_operator_api)
       subgraph, pre_paddings.data(), post_paddings.data(), padding_value, input_id, output_id, /*flags=*/0));
 
   xnn_runtime_t runtime = nullptr;
-  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, /*flags=*/0, &runtime));
+  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, xnn_test_runtime_flags(), &runtime));
   ASSERT_NE(nullptr, runtime);
   std::unique_ptr<xnn_runtime, decltype(&xnn_delete_runtime)> auto_runtime(runtime, xnn_delete_runtime);
   std::array<xnn_external_value, 2> external = {
@@ -392,7 +388,7 @@ TEST_F(StaticConstantPadTestF16, matches_operator_api)
   std::fill(pre_paddings.begin(), pre_paddings.begin() + dims.size(), dim_dist(rng));
   std::fill(post_paddings.begin(), post_paddings.begin() + dims.size(), dim_dist(rng));
   float padding_value = f32dist(rng);
-  xnn_float16 padding_value_half = padding_value;
+  xnn_float16 padding_value_half = static_cast<xnn_float16>(padding_value);
   std::vector<size_t> output_dims = dims;
   for (size_t i = 0; i < dims.size(); i++) {
     output_dims[i] = pre_paddings[i] + output_dims[i] + post_paddings[i];
@@ -447,7 +443,7 @@ TEST_F(StaticConstantPadTestF16, matches_operator_api)
       subgraph, pre_paddings.data(), post_paddings.data(), padding_value, input_id, output_id, /*flags=*/0));
 
   xnn_runtime_t runtime = nullptr;
-  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, /*flags=*/0, &runtime));
+  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, xnn_test_runtime_flags(), &runtime));
   ASSERT_NE(nullptr, runtime);
   std::unique_ptr<xnn_runtime, decltype(&xnn_delete_runtime)> auto_runtime(runtime, xnn_delete_runtime);
   std::array<xnn_external_value, 2> external = {
@@ -520,7 +516,7 @@ TEST_F(StaticConstantPadTestF32, matches_operator_api)
       subgraph, pre_paddings.data(), post_paddings.data(), padding_value, input_id, output_id, /*flags=*/0));
 
   xnn_runtime_t runtime = nullptr;
-  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, /*flags=*/0, &runtime));
+  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, xnn_test_runtime_flags(), &runtime));
   ASSERT_NE(nullptr, runtime);
   std::unique_ptr<xnn_runtime, decltype(&xnn_delete_runtime)> auto_runtime(runtime, xnn_delete_runtime);
   std::array<xnn_external_value, 2> external = {
@@ -574,7 +570,7 @@ TEST_F(StaticConstantPadTestF32, reshape_output)
       subgraph, pre_paddings.data(), post_paddings.data(), padding_value, input_id, output_id, /*flags=*/0));
 
   xnn_runtime_t runtime = nullptr;
-  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, /*flags=*/0, &runtime));
+  ASSERT_EQ(xnn_status_success, xnn_create_runtime_v3(subgraph, nullptr, nullptr, xnn_test_runtime_flags(), &runtime));
   ASSERT_NE(nullptr, runtime);
   std::unique_ptr<xnn_runtime, decltype(&xnn_delete_runtime)> auto_runtime(runtime, xnn_delete_runtime);
   std::array<xnn_external_value, 2> external = {

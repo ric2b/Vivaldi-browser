@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ash/file_manager/app_service_file_tasks.h"
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -18,7 +19,6 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/logging.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
@@ -92,8 +92,6 @@ TaskType GetTaskType(apps::AppType app_type) {
       return TASK_TYPE_WEB_APP;
     case apps::AppType::kChromeApp:
     case apps::AppType::kExtension:
-    case apps::AppType::kStandaloneBrowserChromeApp:
-    case apps::AppType::kStandaloneBrowserExtension:
       // Chrome apps and Extensions both get called file_handler, even though
       // extensions really have file_browser_handler. It doesn't matter anymore
       // because both are executed through App Service, which can tell the
@@ -106,8 +104,6 @@ TaskType GetTaskType(apps::AppType app_type) {
     case apps::AppType::kPluginVm:
       return TASK_TYPE_PLUGIN_VM_APP;
     case apps::AppType::kUnknown:
-    case apps::AppType::kBuiltIn:
-    case apps::AppType::kStandaloneBrowser:
     case apps::AppType::kRemote:
     case apps::AppType::kBorealis:
       return TASK_TYPE_UNKNOWN;
@@ -256,8 +252,6 @@ void FindAppServiceTasks(Profile* profile,
       apps::AppType::kSystemWeb,
       apps::AppType::kChromeApp,
       apps::AppType::kExtension,
-      apps::AppType::kStandaloneBrowserChromeApp,
-      apps::AppType::kStandaloneBrowserExtension,
       apps::AppType::kBruschetta,
       apps::AppType::kCrostini,
       apps::AppType::kPluginVm,

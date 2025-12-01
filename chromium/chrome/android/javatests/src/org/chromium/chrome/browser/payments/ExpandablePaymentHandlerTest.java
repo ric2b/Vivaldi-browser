@@ -49,8 +49,8 @@ import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.R;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetTestSupport;
 import org.chromium.components.embedder_support.util.UrlConstants;
-import org.chromium.components.payments.InputProtector;
-import org.chromium.components.payments.test_support.FakeClock;
+import org.chromium.components.payments.ui.InputProtector;
+import org.chromium.components.payments.ui.test_support.FakeClock;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
@@ -402,7 +402,7 @@ public class ExpandablePaymentHandlerTest {
                 };
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    paymentHandler.getWebContentsForTest().addObserver(observer);
+                    observer.observe(paymentHandler.getWebContentsForTest());
                 });
 
         DOMUtils.waitForNonZeroNodeBounds(paymentHandler.getWebContentsForTest(), "confirmButton");
@@ -425,7 +425,7 @@ public class ExpandablePaymentHandlerTest {
 
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
-                    paymentHandler.getWebContentsForTest().removeObserver(observer);
+                    observer.observe(null);
                     paymentHandler.hide();
                 });
         waitForUiClosed();

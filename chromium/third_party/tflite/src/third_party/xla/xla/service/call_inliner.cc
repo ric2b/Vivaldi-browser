@@ -35,6 +35,7 @@ limitations under the License.
 #include "xla/service/call_graph.h"
 #include "xla/service/hlo_domain_isolator.h"
 #include "xla/service/spmd/shardy/constants.h"
+#include "xla/side_effect_util.h"
 #include "xla/status_macros.h"
 #include "xla/util.h"
 #include "xla/xla_data.pb.h"
@@ -79,6 +80,13 @@ class SubcomputationInsertionVisitor : public DfsHloVisitorWithDefault {
           new_control_predecessor->AddControlDependencyTo(new_hlo_pointer));
     }
 
+    // The newly inlined instructions should honor the control predecessors of
+    // the previous call instruction.
+    for (HloInstruction* control_predecessor : call_->control_predecessors()) {
+      TF_RETURN_IF_ERROR(control_predecessor->AddControlDependencyTo(
+          /*instruction=*/new_hlo_pointer));
+    }
+
     return absl::OkStatus();
   }
 
@@ -97,7 +105,15 @@ class SubcomputationInsertionVisitor : public DfsHloVisitorWithDefault {
     TF_ASSIGN_OR_RETURN(HloInstruction * new_root, Resolve(root));
     VLOG(1) << "Replacing all uses of " << call_->ToString()
             << " with new root " << new_root->ToString();
-    return outer_->ReplaceInstruction(call_, new_root);
+    // We must relay the control dependencies from this call instruction to the
+    // successors too after inlining. The will now depend on the newly inlined
+    // root.
+    return outer_
+        ->ReplaceInstruction(
+            /*old_instruction=*/call_, /*new_instruction=*/new_root,
+            /*preserve_sharding=*/false, /*relay_control_dependency=*/true,
+            /*remove_unused_operands=*/true)
+        .status();
   }
 
   CallInliner::InlinedInstructionMap ConsumeInstructionMap() {
@@ -148,8 +164,8 @@ class SubcomputationInsertionVisitor : public DfsHloVisitorWithDefault {
 bool InlineUnderShardy(HloInstruction* instruction) {
   return !(instruction->GetModule()->config().use_shardy_partitioner() &&
            (absl::StrContains(instruction->to_apply()->name(), "shmap_body") ||
-            absl::StartsWith(instruction->to_apply()->name(),
-                             sdy::kManualComputationBodyFuncName.str())));
+            absl::StrContains(instruction->to_apply()->name(),
+                              sdy::kManualComputationBodyFuncName.str())));
 }
 
 bool InlineComposites(
@@ -158,6 +174,19 @@ bool InlineComposites(
   return !instruction->is_composite() ||
          !composites_to_preserve.contains(
              instruction->frontend_attributes().map().at("composite.name"));
+}
+
+bool InlineStreamAnnotation(HloInstruction* instruction) {
+  if (instruction->GetModule()
+          ->config()
+          .debug_options()
+          .xla_gpu_experimental_stream_annotation()) {
+    if (instruction->frontend_attributes().map().contains(
+            kXlaStreamAnnotationAttr)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 }  // namespace
@@ -213,7 +242,8 @@ bool CallInliner::IsInlineableCallOp(HloInstruction* instruction) const {
          !instruction->has_backend_config() &&
          !instruction->parent()->IsAsyncComputation() &&
          InlineUnderShardy(instruction) &&
-         InlineComposites(instruction, composites_to_preserve_);
+         InlineComposites(instruction, composites_to_preserve_) &&
+         InlineStreamAnnotation(instruction);
 }
 
 absl::StatusOr<bool> CallInliner::Run(

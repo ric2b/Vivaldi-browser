@@ -4,10 +4,12 @@
 
 #include "components/session_manager/core/session_manager.h"
 
+#include "base/check.h"
 #include "base/containers/contains.h"
 #include "base/logging.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "components/session_manager/core/session.h"
 #include "components/session_manager/core/session_manager_observer.h"
 #include "components/user_manager/user_manager.h"
 
@@ -51,15 +53,19 @@ void SessionManager::CreateSession(const AccountId& user_account_id,
 
 void SessionManager::CreateSessionForRestart(const AccountId& user_account_id,
                                              const std::string& user_id_hash) {
-  auto* user_manager = user_manager::UserManager::Get();
-  if (!user_manager)
-    return;
-  const user_manager::User* user = user_manager->FindUser(user_account_id);
+  CHECK(user_manager_);
+  const user_manager::User* user = user_manager_->FindUser(user_account_id);
   // Tests do not always create users.
   const bool is_child =
       user && user->GetType() == user_manager::UserType::kChild;
   CreateSessionInternal(user_account_id, user_id_hash,
                         true /* browser_restart */, is_child);
+}
+
+void SessionManager::OnUserManagerCreated(
+    user_manager::UserManager* user_manager) {
+  user_manager_ = user_manager;
+  user_manager_observation_.Observe(user_manager_);
 }
 
 bool SessionManager::IsSessionStarted() const {
@@ -81,7 +87,9 @@ void SessionManager::SessionStarted() {
 
 bool SessionManager::HasSessionForAccountId(
     const AccountId& user_account_id) const {
-  return base::Contains(sessions_, user_account_id, &Session::user_account_id);
+  return base::Contains(sessions_, user_account_id, [](const auto& session) {
+    return session->account_id();
+  });
 }
 
 bool SessionManager::IsInSecondaryLoginScreen() const {
@@ -125,14 +133,14 @@ void SessionManager::NotifyUserLoggedIn(const AccountId& user_account_id,
                                         const std::string& user_id_hash,
                                         bool browser_restart,
                                         bool is_child) {
-  auto* user_manager = user_manager::UserManager::Get();
-  if (!user_manager)
-    return;
-  user_manager->UserLoggedIn(user_account_id, user_id_hash, browser_restart,
-                             is_child);
+  CHECK(user_manager_);
+  user_manager_->UserLoggedIn(user_account_id, user_id_hash, browser_restart,
+                              is_child);
 }
 
 void SessionManager::HandleUserSessionStartUpTaskCompleted() {
+  // This method must not be called twice.
+  CHECK(!user_session_start_up_task_completed_);
   user_session_start_up_task_completed_ = true;
   for (auto& observer : observers_) {
     observer.OnUserSessionStartUpTaskCompleted();
@@ -149,7 +157,7 @@ void SessionManager::CreateSessionInternal(const AccountId& user_account_id,
                                            bool browser_restart,
                                            bool is_child) {
   DCHECK(!HasSessionForAccountId(user_account_id));
-  sessions_.push_back({next_id_++, user_account_id});
+  sessions_.push_back(std::make_unique<Session>(next_id_++, user_account_id));
   NotifyUserLoggedIn(user_account_id, user_id_hash, browser_restart, is_child);
 }
 

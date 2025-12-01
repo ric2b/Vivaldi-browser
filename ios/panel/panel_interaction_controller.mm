@@ -11,6 +11,8 @@
 #import "ios/chrome/browser/history/ui_bundled/history_coordinator_delegate.h"
 #import "ios/chrome/browser/history/ui_bundled/history_coordinator.h"
 #import "ios/chrome/browser/history/ui_bundled/history_table_view_controller.h"
+#import "ios/chrome/browser/reading_list/ui_bundled/reading_list_coordinator_delegate.h"
+#import "ios/chrome/browser/reading_list/ui_bundled/reading_list_coordinator.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
@@ -18,9 +20,7 @@
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_navigation_controller.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
-#import "ios/chrome/browser/ui/reading_list/reading_list_coordinator_delegate.h"
-#import "ios/chrome/browser/ui/reading_list/reading_list_coordinator.h"
-#import "ios/chrome/browser/ui/toolbar/public/toolbar_type.h"
+#import "ios/chrome/browser/toolbar/ui_bundled//public/toolbar_type.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_params.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -342,6 +342,17 @@ enum class PresentedState {
       }
     }];
   }
+}
+
+- (BOOL)isPresenting {
+  return self.currentPresentedState != PresentedState::NONE;
+}
+
+- (BOOL)hasPresentedModalViewController {
+  return (_noteInteractionController &&
+          [_noteInteractionController isEditorPresented]) ||
+         (_translateCoordinator &&
+          [_translateCoordinator isEditorPresented]);
 }
 
 /// Returns true if device is iPad and multitasking UI has

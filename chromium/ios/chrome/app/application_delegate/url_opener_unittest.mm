@@ -28,13 +28,6 @@
 #import "third_party/ocmock/OCMock/OCMock.h"
 #import "third_party/ocmock/gtest_support.h"
 
-// URLOpenerTest is parameterized on this enum to test with
-// enabled and disabled kExternalFilesLoadedInWebState feature flag.
-enum class ExternalFilesLoadedInWebStateFeature {
-  Disabled = 0,
-  Enabled,
-};
-
 #pragma mark - stubs and test fakes
 
 @interface StubStartupInformation : NSObject <StartupInformation>
@@ -45,6 +38,7 @@ enum class ExternalFilesLoadedInWebStateFeature {
 @synthesize appLaunchTime = _appLaunchTime;
 @synthesize didFinishLaunchingTime = _didFinishLaunchingTime;
 @synthesize firstSceneConnectionTime = _firstSceneConnectionTime;
+@synthesize isTerminating = _isTerminating;
 
 - (FirstUserActionRecorder*)firstUserActionRecorder {
   return nil;
@@ -170,9 +164,12 @@ TEST_F(URLOpenerTest, HandleOpenURL) {
           URLOpenerParams* urlOpenerParams = [[URLOpenerParams alloc]
               initWithUIOpenURLContext:(id)context];  //< Unsafe cast intended.
 
-          ChromeAppStartupParameters* params =
-              [ChromeAppStartupParameters startupParametersWithURL:testUrl
-                                                 sourceApplication:nil];
+          ChromeAppStartupParameters* params = [ChromeAppStartupParameters
+              startupParametersWithURL:testUrl
+                     sourceApplication:nil
+                       applicationMode:ApplicationModeForTabOpening::
+                                           UNDETERMINED
+                  forceApplicationMode:NO];
 
           // Action.
           BOOL result = [URLOpener openURL:urlOpenerParams
@@ -186,11 +183,12 @@ TEST_F(URLOpenerTest, HandleOpenURL) {
           // Tests.
           EXPECT_EQ(isValid, result);
           if (!applicationIsActive) {
-            if (result)
+            if (result) {
               EXPECT_EQ([params externalURL],
                         connectionInformation.startupParameters.externalURL);
-            else
+            } else {
               EXPECT_EQ(nil, connectionInformation.startupParameters);
+            }
           } else if (result) {
             if ([params completeURL].SchemeIsFile()) {
               // External file:// URL will be loaded by WebState, which expects

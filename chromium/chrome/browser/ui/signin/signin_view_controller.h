@@ -13,7 +13,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/ui/signin/signin_modal_dialog.h"
 #include "chrome/browser/ui/webui/signin/signin_utils.h"
 #include "chrome/common/url_constants.h"
@@ -22,7 +21,7 @@
 #include "components/sync/base/data_type.h"
 #include "url/gurl.h"
 
-#if BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
 #include "chrome/browser/ui/webui/signin/signin_email_confirmation_dialog.h"
 #endif
 
@@ -46,13 +45,8 @@ namespace signin_metrics {
 enum class AccessPoint;
 enum class PromoAction;
 enum class Reason;
-enum class ReauthAccessPoint;
 enum class SourceForRefreshTokenOperation;
 }  // namespace signin_metrics
-
-namespace signin {
-enum class ReauthResult;
-}
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
 namespace {
@@ -67,12 +61,6 @@ class NewTabWebContentsObserver;
 // Chrome OS has its own sign-in flow and doesn't use DICE.
 class SigninViewController {
  public:
-  // Handle that will stop ongoing reauths upon destruction.
-  class ReauthAbortHandle {
-   public:
-    virtual ~ReauthAbortHandle() = default;
-  };
-
   explicit SigninViewController(Browser* browser);
 
   SigninViewController(const SigninViewController&) = delete;
@@ -130,11 +118,12 @@ class SigninViewController {
   // signed in on the web only.
   // This opens/reuses a new tab page and opens a modal dialog.
   // Note: This should  only be called if the dialog is not already showing.
-  void MaybeShowChromeSigninDialogForExtensions(std::string_view extension_name,
-                                                base::OnceClosure on_complete);
+  void MaybeShowChromeSigninDialogForExtensions(
+      const std::u16string& extension_name_for_display,
+      base::OnceClosure on_complete);
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
-#if BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
   // Shows the modal profile customization dialog as a browser-modal dialog on
   // top of the |browser_|'s window.
   void ShowModalProfileCustomizationDialog(
@@ -146,22 +135,7 @@ class SigninViewController {
       const std::string& last_email,
       const std::string& email,
       SigninEmailConfirmationDialog::Callback callback);
-
-  // Shows the reauth prompt for |account_id| as either:
-  // - a tab-modal dialog on top of the currently active tab, or
-  // - a new tab
-  // |account_id| should be signed into the content area. Otherwise, the method
-  // fails with |kAccountNotSignedIn| error.
-  // |access_point| indicates a call site of this method.
-  // Calls |reauth_callback| on completion of the reauth flow, or on error. The
-  // callback may be called synchronously. The user may also ignore the reauth
-  // indefinitely.
-  // Returns a handle that aborts the ongoing reauth on destruction.
-  virtual std::unique_ptr<ReauthAbortHandle> ShowReauthPrompt(
-      const CoreAccountId& account_id,
-      signin_metrics::ReauthAccessPoint access_point,
-      base::OnceCallback<void(signin::ReauthResult)> reauth_callback);
-#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
   // Shows the modal sync confirmation dialog as a browser-modal dialog on top
   // of the |browser_|'s window.
@@ -227,8 +201,8 @@ class SigninViewController {
                            CreateLocalProfile);
   FRIEND_TEST_ALL_PREFIXES(ProfilePickerCreationFlowBrowserTest,
                            CancelLocalProfileCreation);
+  friend class ChromeSignoutConfirmationWebUIPromptPixelTest;
   friend class login_ui_test_utils::SigninViewControllerTestUtil;
-  friend class SigninReauthViewControllerBrowserTest;
   friend class SigninInterceptFirstRunExperienceDialogBrowserTest;
   friend class SyncConfirmationUIDialogPixelTest;
 
@@ -253,11 +227,15 @@ class SigninViewController {
       syncer::DataTypeSet unsynced_datatypes);
 
   void ShowChromeSigninDialogForExtensions(
-      std::string_view extension_name,
+      const std::u16string& extension_name_for_display,
       base::OnceClosure on_complete,
       const AccountInfo& account_info_for_promos,
       content::WebContents* contents);
 
+  // Shows the WebUI version of the signout confirmation prompt for testing with
+  // the given `prompt_variant`. Should only be used for pixel tests.
+  void ShowSignoutConfirmationPromptForTesting(
+      ChromeSignoutConfirmationPromptVariant prompt_variant);
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
   // Returns the web contents of the modal dialog.

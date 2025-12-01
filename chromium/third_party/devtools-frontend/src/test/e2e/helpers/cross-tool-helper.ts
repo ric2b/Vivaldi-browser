@@ -60,6 +60,11 @@ export async function reloadDevTools(options?: DevToolsFrontendReloadOptions&{
   removeBackendState?: boolean,
 }) {
   const {frontend, target} = getBrowserAndPages();
+  await frontend.evaluate(() => {
+    // Prevent the Performance panel shortcuts dialog, that is automatically shown the first
+    // time the performance panel is opened, from opening in tests.
+    localStorage.setItem('hide-shortcuts-dialog-for-test', 'true');
+  });
   const enableExperiments = options?.enableExperiments || [];
   const disableExperiments = options?.disableExperiments || [];
   if (enableExperiments.length || disableExperiments.length) {
@@ -82,7 +87,6 @@ export async function reloadDevTools(options?: DevToolsFrontendReloadOptions&{
   await waitFor(`.panel.${selectedPanel}`);
   const expectClosedPanels = options?.expectClosedPanels;
   const newFilterBar = enableExperiments.includes('network-panel-filter-bar-redesign');
-  const timelineLegacyLandingPage = disableExperiments.includes('timeline-observations');
   const dockable = options?.canDock;
   const panelImpression = selectedPanel === 'elements' ? veImpressionForElementsPanel({dockable}) :
       selectedPanel === 'animations'                   ? veImpressionForAnimationsPanel() :
@@ -90,7 +94,7 @@ export async function reloadDevTools(options?: DevToolsFrontendReloadOptions&{
       selectedPanel === 'layers'                       ? veImpressionForLayersPanel() :
       selectedPanel === 'network'                      ? veImpressionForNetworkPanel({newFilterBar}) :
       selectedPanel === 'console'                      ? veImpressionForConsolePanel() :
-      selectedPanel === 'timeline'                     ? veImpressionForPerformancePanel({timelineLegacyLandingPage}) :
+      selectedPanel === 'timeline'                     ? veImpressionForPerformancePanel() :
       selectedPanel === 'sources'                      ? veImpressionForSourcesPanel() :
       selectedPanel === 'animations'                   ? veImpressionForSourcesPanel() :
       selectedPanel === 'changes'                      ? veImpressionForChangesPanel() :

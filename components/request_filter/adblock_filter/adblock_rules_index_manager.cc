@@ -55,7 +55,7 @@ std::string GetRuleBufferFromFile(const base::FilePath& buffer_path,
   buffer_contents.erase(0, version_header.size());
 
   auto buffer =
-      base::make_span(reinterpret_cast<const uint8_t*>(buffer_contents.data()),
+      base::span(reinterpret_cast<const uint8_t*>(buffer_contents.data()),
                       buffer_contents.size());
 
   // Copy of the default values taken by the flatbuffers::Verifier constructor

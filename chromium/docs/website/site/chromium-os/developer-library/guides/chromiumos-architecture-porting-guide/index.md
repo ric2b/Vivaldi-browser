@@ -31,7 +31,7 @@ For example, your architecture must already be supported by (at least):
             [uClibc](http://www.uclibc.org/))
 *   [Linux kernel](http://kernel.org/)
     *   Must have
-                [CONFIG_MMU=y](http://en.wikipedia.org/wiki/Memory_management_unit)
+                [CONFIG_MMU=y](https://en.wikipedia.org/wiki/Memory_management_unit)
                 (if you don't know what this means, then you most likely have
                 one, and can thus disregard)
 

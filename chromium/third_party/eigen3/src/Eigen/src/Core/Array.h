@@ -102,8 +102,13 @@ class Array : public PlainObjectBase<Array<Scalar_, Rows_, Cols_, Options_, MaxR
     return Base::_set(other);
   }
 
-  /** This is a special case of the templated operator=. Its purpose is to
-   * prevent a default operator= from hiding the templated operator=.
+  /**
+   * \brief Assigns arrays to each other.
+   *
+   * \note This is a special case of the templated operator=. Its purpose is
+   * to prevent a default operator= from hiding the templated operator=.
+   *
+   * \callgraph
    */
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Array& operator=(const Array& other) { return Base::_set(other); }
 
@@ -117,16 +122,13 @@ class Array : public PlainObjectBase<Array<Scalar_, Rows_, Cols_, Options_, MaxR
    *
    * \sa resize(Index,Index)
    */
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE Array() : Base() { EIGEN_INITIALIZE_COEFFS_IF_THAT_OPTION_IS_ENABLED }
-
-#ifndef EIGEN_PARSED_BY_DOXYGEN
-  // FIXME is it still needed ??
-  /** \internal */
-  EIGEN_DEVICE_FUNC Array(internal::constructor_without_unaligned_array_assert)
-      : Base(internal::constructor_without_unaligned_array_assert()){EIGEN_INITIALIZE_COEFFS_IF_THAT_OPTION_IS_ENABLED}
+#ifdef EIGEN_INITIALIZE_COEFFS
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE constexpr Array() : Base() { EIGEN_INITIALIZE_COEFFS_IF_THAT_OPTION_IS_ENABLED }
+#else
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE constexpr Array() = default;
 #endif
-
-        EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE constexpr Array(Array && other) = default;
+  /** \brief Move constructor */
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE constexpr Array(Array&&) = default;
   EIGEN_DEVICE_FUNC Array& operator=(Array&& other) EIGEN_NOEXCEPT_IF(std::is_nothrow_move_assignable<Scalar>::value) {
     Base::operator=(std::move(other));
     return *this;
@@ -230,7 +232,7 @@ class Array : public PlainObjectBase<Array<Scalar_, Rows_, Cols_, Options_, MaxR
   }
 
   /** Copy constructor */
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE constexpr Array(const Array& other) = default;
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE constexpr Array(const Array&) = default;
 
  private:
   struct PrivateType {};

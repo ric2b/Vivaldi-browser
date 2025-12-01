@@ -3,61 +3,58 @@
 // found in the LICENSE file.
 
 import * as IconButton from '../../../components/icon_button/icon_button.js';
-import * as LitHtml from '../../../lit-html/lit-html.js';
+import {html, render} from '../../../lit/lit.js';
 import * as VisualLogging from '../../../visual_logging/visual_logging.js';
 import * as UI from '../../legacy.js';
 
 import bezierSwatchStyles from './bezierSwatch.css.js';
 import type {CSSShadowModel} from './CSSShadowEditor.js';
-import cssShadowSwatchStyles from './cssShadowSwatch.css.js';
+import cssShadowSwatchStylesRaw from './cssShadowSwatch.css.js';
 
-const {html} = LitHtml;
+// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
+const cssShadowSwatchStyles = new CSSStyleSheet();
+cssShadowSwatchStyles.replaceSync(cssShadowSwatchStylesRaw.cssContent);
 
-export class BezierSwatch extends HTMLSpanElement {
-  private readonly iconElementInternal: IconButton.Icon.Icon;
-  private textElement: HTMLElement;
+export class BezierSwatch extends HTMLElement {
+  readonly #icon: IconButton.Icon.Icon;
+  readonly #text: HTMLSpanElement;
 
   constructor() {
     super();
-    const root = UI.UIUtils.createShadowRootWithCoreStyles(this, {
-      cssFile: [bezierSwatchStyles],
-      delegatesFocus: undefined,
-    });
-    this.iconElementInternal = IconButton.Icon.create('bezier-curve-filled', 'bezier-swatch-icon');
-    this.iconElementInternal.setAttribute('jslog', `${VisualLogging.showStyleEditor('bezier')}`);
-    root.appendChild(this.iconElementInternal);
-    this.textElement = this.createChild('span');
+    const root = UI.UIUtils.createShadowRootWithCoreStyles(this, {cssFile: bezierSwatchStyles});
+    this.#icon = IconButton.Icon.create('bezier-curve-filled', 'bezier-swatch-icon');
+    this.#icon.setAttribute('jslog', `${VisualLogging.showStyleEditor('bezier')}`);
+    root.appendChild(this.#icon);
+    this.#text = document.createElement('span');
     root.createChild('slot');
   }
 
   static create(): BezierSwatch {
-    let constructor: (() => Element)|((() => Element) | null) = BezierSwatch.constructorInternal;
-    if (!constructor) {
-      constructor = UI.UIUtils.registerCustomElement('span', 'bezier-swatch', BezierSwatch);
-      BezierSwatch.constructorInternal = constructor;
-    }
-
-    return constructor() as BezierSwatch;
+    return document.createElement('devtools-bezier-swatch');
   }
 
   bezierText(): string {
-    return this.textElement.textContent || '';
+    return this.#text.textContent || '';
   }
 
   setBezierText(text: string): void {
-    this.textElement.textContent = text;
+    if (!this.#text.parentElement) {
+      this.append(this.#text);
+    }
+
+    this.#text.textContent = text;
   }
 
   hideText(hide: boolean): void {
-    this.textElement.hidden = hide;
+    this.#text.hidden = hide;
   }
 
-  iconElement(): HTMLSpanElement {
-    return this.iconElementInternal;
+  iconElement(): IconButton.Icon.Icon {
+    return this.#icon;
   }
-
-  private static constructorInternal: (() => Element)|null = null;
 }
+
+customElements.define('devtools-bezier-swatch', BezierSwatch);
 
 export class CSSShadowSwatch extends HTMLElement {
   readonly #shadow = this.attachShadow({mode: 'open'});
@@ -71,7 +68,7 @@ export class CSSShadowSwatch extends HTMLElement {
       cssShadowSwatchStyles,
     ];
 
-    LitHtml.render(
+    render(
         html`<devtools-icon name="shadow" class="shadow-swatch-icon"></devtools-icon><slot></slot>`, this.#shadow,
         {host: this});
 
@@ -82,7 +79,7 @@ export class CSSShadowSwatch extends HTMLElement {
     return this.#model;
   }
 
-  iconElement(): HTMLSpanElement {
+  iconElement(): IconButton.Icon.Icon {
     return this.#icon;
   }
 }
@@ -91,6 +88,7 @@ customElements.define('css-shadow-swatch', CSSShadowSwatch);
 
 declare global {
   interface HTMLElementTagNameMap {
+    'devtools-bezier-swatch': BezierSwatch;
     'css-shadow-swatch': CSSShadowSwatch;
   }
 }

@@ -300,9 +300,9 @@ directive to see what the actual directory is.
 
 ### How to use the chroot's ClangD Language Server
 
-You can leverage IDE-like functionality in your editor by
-following [this guide](./chroot-clangd-guide.md) to
-use the `clangd` already installed in the chroot.
+You can leverage IDE-like functionality in your editor by following
+[this guide](/chromium-os/developer-library/guides/ides/chroot-clangd-guide)
+to use the `clangd` already installed in the chroot.
 
 ### How to use the chroot's rust-analyzer Language Server
 
@@ -440,7 +440,7 @@ repo download -b test-branch 344778
 
 
 [ChromiumOS Developer Guide]: /chromium-os/developer-library/guides/development/developer-guide/
-[ChromiumOS Developer FAQ]: https://dev.chromium.org/chromium-os/how-tos-and-troubleshooting/developer-faq
+[ChromiumOS Developer FAQ]: /chromium-os/developer-library/reference/development/developer-faq
 [repo\_bash\_completion]: https://chromium.googlesource.com/chromiumos/platform/dev-util/+/HEAD/host/repo_bash_completion
 [repo Manifest format docs]: https://gerrit.googlesource.com/git-repo/+/HEAD/docs/manifest-format.md
 [installed depot\_tools]: https://commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools_tutorial.html#_setting_up

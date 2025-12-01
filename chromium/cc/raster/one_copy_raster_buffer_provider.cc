@@ -46,44 +46,10 @@ const int kMaxBytesPerCopyOperation = 1024 * 1024 * 4;
 
 }  // namespace
 
-// Subclass for InUsePoolResource that holds ownership of a one-copy backing
-// and does cleanup of the backing when destroyed.
-class OneCopyRasterBufferProvider::OneCopyGpuBacking
-    : public ResourcePool::GpuBacking {
- public:
-  ~OneCopyGpuBacking() override {
-    if (!shared_image) {
-      return;
-    }
-    auto* sii = worker_context_provider->SharedImageInterface();
-    if (returned_sync_token.HasData())
-      sii->DestroySharedImage(returned_sync_token, std::move(shared_image));
-    else if (mailbox_sync_token.HasData())
-      sii->DestroySharedImage(mailbox_sync_token, std::move(shared_image));
-  }
-
-  void OnMemoryDump(
-      base::trace_event::ProcessMemoryDump* pmd,
-      const base::trace_event::MemoryAllocatorDumpGuid& buffer_dump_guid,
-      uint64_t tracing_process_id,
-      int importance) const override {
-    if (!shared_image) {
-      return;
-    }
-
-    auto tracing_guid = shared_image->GetGUIDForTracing();
-    pmd->CreateSharedGlobalAllocatorDump(tracing_guid);
-    pmd->AddOwnershipEdge(buffer_dump_guid, tracing_guid, importance);
-  }
-
-  // The context used to clean up the mailbox
-  raw_ptr<viz::RasterContextProvider> worker_context_provider = nullptr;
-};
-
 OneCopyRasterBufferProvider::RasterBufferImpl::RasterBufferImpl(
     OneCopyRasterBufferProvider* client,
     const ResourcePool::InUsePoolResource& in_use_resource,
-    OneCopyGpuBacking* backing,
+    ResourcePool::GpuBacking* backing,
     uint64_t previous_content_id)
     : client_(client),
       backing_(backing),
@@ -106,9 +72,9 @@ OneCopyRasterBufferProvider::RasterBufferImpl::~RasterBufferImpl() {
   }
   backing_->shared_image = std::move(shared_image_);
   if (should_destroy_shared_image_ && backing_->shared_image) {
-    backing_->worker_context_provider->SharedImageInterface()
-        ->DestroySharedImage(before_raster_sync_token_,
-                             std::move(backing_->shared_image));
+    backing_->shared_image->UpdateDestructionSyncToken(
+        before_raster_sync_token_);
+    backing_->shared_image.reset();
   }
 }
 
@@ -181,13 +147,11 @@ OneCopyRasterBufferProvider::AcquireBufferForRaster(
     bool depends_on_hardware_accelerated_jpeg_candidates,
     bool depends_on_hardware_accelerated_webp_candidates) {
   if (!resource.gpu_backing()) {
-    auto backing = std::make_unique<OneCopyGpuBacking>();
-    backing->worker_context_provider = worker_context_provider_;
+    auto backing = std::make_unique<ResourcePool::GpuBacking>();
     backing->overlay_candidate = tile_overlay_candidate_;
     resource.set_gpu_backing(std::move(backing));
   }
-  OneCopyGpuBacking* backing =
-      static_cast<OneCopyGpuBacking*>(resource.gpu_backing());
+  ResourcePool::GpuBacking* backing = resource.gpu_backing();
   // TODO(danakj): If resource_content_id != 0, we only need to copy/upload
   // the dirty rect.
   return std::make_unique<RasterBufferImpl>(this, resource, backing,
@@ -342,7 +306,7 @@ bool OneCopyRasterBufferProvider::PlaybackToStagingBuffer(
     auto* sii = worker_context_provider_->SharedImageInterface();
     staging_buffer->client_shared_image = sii->CreateSharedImage(
         {format, staging_buffer->size, dst_color_space,
-         gpu::SHARED_IMAGE_USAGE_CPU_WRITE, "OneCopyRasterStaging"},
+         gpu::SHARED_IMAGE_USAGE_CPU_WRITE_ONLY, "OneCopyRasterStaging"},
         gpu::kNullSurfaceHandle, gfx::BufferUsage::GPU_READ_CPU_READ_WRITE);
     if (!staging_buffer->client_shared_image) {
       LOG(ERROR) << "Creation of StagingBuffer's SharedImage failed.";
@@ -360,8 +324,7 @@ bool OneCopyRasterBufferProvider::PlaybackToStagingBuffer(
   RasterBufferProvider::PlaybackToMemory(
       mapping->GetMemoryForPlane(0).data(), format, staging_buffer->size,
       mapping->Stride(0), raster_source, raster_full_rect, playback_rect,
-      transform, dst_color_space,
-      /*gpu_compositing=*/true, playback_settings);
+      transform, dst_color_space, playback_settings);
 
   staging_buffer->content_id = new_content_id;
 

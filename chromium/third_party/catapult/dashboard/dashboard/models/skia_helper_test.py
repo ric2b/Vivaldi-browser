@@ -12,6 +12,8 @@ import datetime
 from unittest import mock
 
 from dashboard.common import testing_common
+from dashboard.common import utils
+from dashboard.models import anomaly
 from dashboard.models import skia_helper
 
 MOCK_MAPPING = [{
@@ -28,6 +30,23 @@ MOCK_MAPPING = [{
 
 
 class SkiaHelper(testing_common.TestCase):
+
+  def setUp(self):
+    super().setUp()
+    testing_common.SetIsInternalUser('internal@chromium.org', True)
+    self.SetCurrentUser('internal@chromium.org', is_admin=True)
+
+  def _AddTests(self):
+    """Adds sample TestMetadata entities and returns their keys."""
+    testing_common.AddTests(['master_a'], ['bot'], {'benchmark': {'test': {},}})
+    testing_common.AddTests(['master_b'], ['bot'], {'benchmark': {'test': {},}})
+
+  def _AddAnomaly(self, test_key, internal_only):
+    """Adds a group of Anomaly entities to the datastore."""
+    anomaly_key = anomaly.Anomaly(
+        test=test_key, internal_only=internal_only).put()
+    return anomaly_key.get()
+
   # pylint: disable=line-too-long
   @mock.patch('dashboard.models.skia_helper.REPOSITORY_HOST_MAPPING',
               MOCK_MAPPING)
@@ -154,7 +173,7 @@ class SkiaHelper(testing_common.TestCase):
         internal_only=True,
         masters=['master_a'],
     )
-    expected_url = 'label_1: https://a.corp/_/alertgroup?group_id=abc'
+    expected_url = 'label_1: https://a.corp/u/?anomalyGroupID=abc'
     self.assertEqual(urls[0], expected_url)
 
   @mock.patch('dashboard.models.skia_helper.REPOSITORY_HOST_MAPPING',
@@ -165,7 +184,7 @@ class SkiaHelper(testing_common.TestCase):
         internal_only=False,
         masters=['master_a'],
     )
-    expected_url = 'label_1: https://a.com/_/alertgroup?group_id=abc'
+    expected_url = 'label_1: https://a.com/u/?anomalyGroupID=abc'
     self.assertEqual(urls[0], expected_url)
 
   @mock.patch('dashboard.models.skia_helper.REPOSITORY_HOST_MAPPING',
@@ -176,7 +195,7 @@ class SkiaHelper(testing_common.TestCase):
         internal_only=True,
         masters=['master_a'],
     )
-    expected_url = 'label_1: https://a.corp/_/alertgroup?group_id='
+    expected_url = 'label_1: https://a.corp/u/?anomalyGroupID='
     self.assertEqual(urls[0], expected_url)
 
   @mock.patch('dashboard.models.skia_helper.REPOSITORY_HOST_MAPPING',
@@ -198,7 +217,7 @@ class SkiaHelper(testing_common.TestCase):
         masters=['master_a', 'master_b'],
     )
     self.assertEqual(len(urls), 1)
-    expected_url = 'label_1: https://a.corp/_/alertgroup?group_id='
+    expected_url = 'label_1: https://a.corp/u/?anomalyGroupID='
     self.assertEqual(urls[0], expected_url)
 
   @mock.patch('dashboard.models.skia_helper.REPOSITORY_HOST_MAPPING',
@@ -211,8 +230,8 @@ class SkiaHelper(testing_common.TestCase):
     )
     self.assertEqual(len(urls), 2)
     expected = [
-        'label_1: https://a.com/_/alertgroup?group_id=',
-        'label_2: https://b.com/_/alertgroup?group_id='
+        'label_1: https://a.com/u/?anomalyGroupID=',
+        'label_2: https://b.com/u/?anomalyGroupID='
     ]
     self.assertEqual(sorted(urls), expected)
 
@@ -228,27 +247,56 @@ class SkiaHelper(testing_common.TestCase):
 
   @mock.patch('dashboard.models.skia_helper.REPOSITORY_HOST_MAPPING',
               MOCK_MAPPING)
-  def testGetMastersAndInternalOnlyForHost_FoundExt(self):
-    masters, is_internal = skia_helper.GetMastersAndInternalOnlyForHost(
+  def testGetMastersAndIsInternalForHost_FoundExt(self):
+    masters, is_internal = skia_helper.GetMastersAndIsInternalForHost(
         host='https://b.com')
     self.assertEqual(masters, ['master_c'])
     self.assertEqual(is_internal, False)
 
   @mock.patch('dashboard.models.skia_helper.REPOSITORY_HOST_MAPPING',
               MOCK_MAPPING)
-  def testGetMastersAndInternalOnlyForHost_FoundInt(self):
-    masters, is_internal = skia_helper.GetMastersAndInternalOnlyForHost(
+  def testGetMastersAndIsInternalForHost_FoundInt(self):
+    masters, is_internal = skia_helper.GetMastersAndIsInternalForHost(
         host='https://a.corp')
     self.assertEqual(masters, ['master_a', 'master_b'])
     self.assertEqual(is_internal, True)
 
   @mock.patch('dashboard.models.skia_helper.REPOSITORY_HOST_MAPPING',
               MOCK_MAPPING)
-  def testGetMastersAndInternalOnlyForHost_NotFound(self):
-    masters, is_internal = skia_helper.GetMastersAndInternalOnlyForHost(
+  def testGetMastersAndIsInternalForHost_NotFound(self):
+    masters, is_internal = skia_helper.GetMastersAndIsInternalForHost(
         host='blah')
     self.assertEqual(masters, [])
-    self.assertEqual(is_internal, True)
+    self.assertEqual(is_internal, False)
+
+  @mock.patch('dashboard.models.skia_helper.REPOSITORY_HOST_MAPPING',
+              MOCK_MAPPING)
+  def testGetSkiaUrlForAnomaly_External(self):
+    a = self._AddAnomaly(
+        test_key=utils.TestKey('master_a/bot/benchmark/test'),
+        internal_only=False)
+    url = skia_helper.GetSkiaUrlForAnomaly(anomaly=a)
+    self.assertEqual(url, 'https://a.com/u/?anomalyIDs=%s' % a.key.integer_id())
+
+  @mock.patch('dashboard.models.skia_helper.REPOSITORY_HOST_MAPPING',
+              MOCK_MAPPING)
+  def testGetSkiaUrlForAnomaly_Internal(self):
+    a = self._AddAnomaly(
+        test_key=utils.TestKey('master_b/bot/benchmark/test'),
+        internal_only=True)
+    url = skia_helper.GetSkiaUrlForAnomaly(anomaly=a)
+    self.assertEqual(url,
+                     'https://a.corp/u/?anomalyIDs=%s' % a.key.integer_id())
+
+  @mock.patch('dashboard.models.skia_helper.REPOSITORY_HOST_MAPPING',
+              MOCK_MAPPING)
+  def testGetSkiaUrlForAnomaly_InvalidMaster(self):
+    a = self._AddAnomaly(
+        test_key=utils.TestKey('master_x/bot/benchmark/test'),
+        internal_only=False)
+    url = skia_helper.GetSkiaUrlForAnomaly(anomaly=a)
+    self.assertEqual(url, '')
+
 
 if __name__ == '__main__':
   unittest.main()

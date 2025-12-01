@@ -37,8 +37,7 @@ import org.robolectric.annotation.Implements;
 import org.robolectric.annotation.LooperMode;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.util.Features.EnableFeatures;
-import org.chromium.base.test.util.JniMocker;
+import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridge;
@@ -48,6 +47,7 @@ import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.embedder_support.util.UrlUtilitiesJni;
 import org.chromium.components.omnibox.OmniboxFeatureList;
+import org.chromium.components.omnibox.OmniboxFeatures;
 import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.content_public.browser.BrowserContextHandle;
 import org.chromium.content_public.browser.WebContents;
@@ -67,7 +67,6 @@ public class GeolocationHeaderUnitTest {
     private static final String ENCODED_PROTO_LOCATION = "CAEQDBiAtRgqCg3AiBkMFYAx3Vw9AECcRg==";
     private static int sRefreshLastKnownLocation;
 
-    public @Rule JniMocker mocker = new JniMocker();
     public @Rule MockitoRule mMockitoRule = MockitoJUnit.rule();
 
     @Mock UrlUtilities.Natives mUrlUtilitiesJniMock;
@@ -82,8 +81,8 @@ public class GeolocationHeaderUnitTest {
 
     @Before
     public void setUp() {
-        mocker.mock(UrlUtilitiesJni.TEST_HOOKS, mUrlUtilitiesJniMock);
-        mocker.mock(WebsitePreferenceBridgeJni.TEST_HOOKS, mWebsitePreferenceBridgeJniMock);
+        UrlUtilitiesJni.setInstanceForTesting(mUrlUtilitiesJniMock);
+        WebsitePreferenceBridgeJni.setInstanceForTesting(mWebsitePreferenceBridgeJniMock);
         GeolocationTracker.setLocationAgeForTesting(null);
         GeolocationHeader.setAppPermissionGrantedForTesting(true);
         when(mTab.isIncognito()).thenReturn(false);
@@ -135,6 +134,7 @@ public class GeolocationHeaderUnitTest {
 
     @Test
     @Config(shadows = {ShadowGeolocationTracker.class})
+    @DisableFeatures(OmniboxFeatureList.USE_FUSED_LOCATION_PROVIDER)
     public void testPrimeLocationForGeoHeader() {
         GeolocationHeader.primeLocationForGeoHeaderIfEnabled(mProfileMock, mTemplateUrlServiceMock);
         assertEquals(1, sRefreshLastKnownLocation);
@@ -160,7 +160,6 @@ public class GeolocationHeaderUnitTest {
     }
 
     @Test
-    @EnableFeatures(OmniboxFeatureList.USE_FUSED_LOCATION_PROVIDER)
     @Config(shadows = {ShadowGeolocationTracker.class, ShadowLocationServices.class})
     public void testFusedLocationProvider() {
         GeolocationHeader.primeLocationForGeoHeaderIfEnabled(mProfileMock, mTemplateUrlServiceMock);
@@ -171,10 +170,15 @@ public class GeolocationHeaderUnitTest {
                         eq(null));
 
         LocationRequest actualRequest = mLocationRequestCaptor.getValue();
-        assertEquals(GeolocationHeader.REFRESH_LOCATION_AGE, actualRequest.getMaxUpdateAgeMillis());
         assertEquals(
-                GeolocationHeader.LOCATION_REQUEST_UPDATE_INTERVAL,
+                OmniboxFeatures.sGeolocationRequestMaxLocationAge.getValue(),
+                actualRequest.getMaxUpdateAgeMillis());
+        assertEquals(
+                OmniboxFeatures.sGeolocationRequestUpdateInterval.getValue(),
                 actualRequest.getMinUpdateIntervalMillis());
+        assertEquals(
+                OmniboxFeatures.sGeolocationRequestPriority.getValue(),
+                actualRequest.getPriority());
         assertEquals(Granularity.GRANULARITY_PERMISSION_LEVEL, actualRequest.getGranularity());
 
         Location mockLocation = generateMockLocation("network", LOCATION_TIME);

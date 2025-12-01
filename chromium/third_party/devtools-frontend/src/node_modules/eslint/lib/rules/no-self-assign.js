@@ -129,10 +129,12 @@ module.exports = {
     meta: {
         type: "problem",
 
+        defaultOptions: [{ props: true }],
+
         docs: {
             description: "Disallow assignments where both sides are exactly the same",
             recommended: true,
-            url: "https://eslint.org/docs/rules/no-self-assign"
+            url: "https://eslint.org/docs/latest/rules/no-self-assign"
         },
 
         schema: [
@@ -140,8 +142,7 @@ module.exports = {
                 type: "object",
                 properties: {
                     props: {
-                        type: "boolean",
-                        default: true
+                        type: "boolean"
                     }
                 },
                 additionalProperties: false
@@ -154,8 +155,8 @@ module.exports = {
     },
 
     create(context) {
-        const sourceCode = context.getSourceCode();
-        const [{ props = true } = {}] = context.options;
+        const sourceCode = context.sourceCode;
+        const [{ props }] = context.options;
 
         /**
          * Reports a given node as self assignments.

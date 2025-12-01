@@ -133,10 +133,11 @@ WebUIContentsWrapper::~WebUIContentsWrapper() {
 }
 
 void WebUIContentsWrapper::ResizeDueToAutoResize(content::WebContents* source,
-                                                  const gfx::Size& new_size) {
+                                                 const gfx::Size& new_size) {
   DCHECK_EQ(web_contents(), source);
-  if (host_)
+  if (host_) {
     host_->ResizeDueToAutoResize(source, new_size);
+  }
 }
 
 content::KeyboardEventProcessingResult
@@ -208,9 +209,9 @@ void WebUIContentsWrapper::DraggableRegionsChanged(
     content::WebContents* contents) {
   // Persist regions to allow support transfer between hosts.
   draggable_regions_.emplace();
-  base::ranges::transform(regions,
-                          std::back_inserter(draggable_regions_.value()),
-                          &blink::mojom::DraggableRegionPtr::Clone);
+  std::ranges::transform(regions,
+                         std::back_inserter(draggable_regions_.value()),
+                         &blink::mojom::DraggableRegionPtr::Clone);
   if (host_) {
     host_->DraggableRegionsChanged(regions, contents);
   }
@@ -268,20 +269,23 @@ void WebUIContentsWrapper::ShowUI() {
 }
 
 void WebUIContentsWrapper::CloseUI() {
-  if (host_)
+  if (host_) {
     host_->CloseUI();
+  }
 }
 
 void WebUIContentsWrapper::ShowContextMenu(
     gfx::Point point,
     std::unique_ptr<ui::MenuModel> menu_model) {
-  if (host_)
+  if (host_) {
     host_->ShowCustomContextMenu(point, std::move(menu_model));
+  }
 }
 
 void WebUIContentsWrapper::HideContextMenu() {
-  if (host_)
+  if (host_) {
     host_->HideCustomContextMenu();
+  }
 }
 
 base::WeakPtr<WebUIContentsWrapper::Host> WebUIContentsWrapper::GetHost() {

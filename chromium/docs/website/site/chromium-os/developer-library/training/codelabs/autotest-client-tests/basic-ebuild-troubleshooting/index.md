@@ -34,11 +34,11 @@ cros build-image --board=${BOARD} --no-enable-rootfs-verification dev
 <td>References:</td>
 
 <td> \[1\] <a
-href="http://www.chromium.org/chromium-os/testing/autotest-user-doc">Autotest
+href="https://www.chromium.org/chromium-os/testing/autotest-user-doc">Autotest
 ebuild documentation</a></td>
 
 <td> \[2\]<a
-href="http://www.chromium.org/chromium-os/developer-guide/chromite-shell-quick-start">
+href="https://www.chromium.org/chromium-os/developer-guide/chromite-shell-quick-start">
 Chromite documentation</a></td>
 
 <td>From within the chroot, try running the a new test through run_remote_tests,

@@ -11,6 +11,7 @@
 
 #include <stdio.h>
 
+#include <algorithm>
 #include <map>
 #include <optional>
 #include <string>
@@ -34,7 +35,6 @@
 #include "base/notreached.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/task/single_thread_task_executor.h"
@@ -567,7 +567,7 @@ void KSAdminApp::DoUpdateApp(UpdaterScope scope) {
       app_id, GetInstallDataIndexFromAppArgs(app_id),
       HasSwitch(kCommandUserInitiated) ? UpdateService::Priority::kForeground
                                        : UpdateService::Priority::kBackground,
-      UpdateService::PolicySameVersionUpdate::kNotAllowed,
+      UpdateService::PolicySameVersionUpdate::kNotAllowed, /*language=*/{},
       base::BindRepeating([](const UpdateService::UpdateState& update_state) {
         if (update_state.state == UpdateService::UpdateState::State::kUpdated) {
           printf("Finished updating (errors=%d reboot=%s)\n", 0, "YES");
@@ -602,7 +602,7 @@ void KSAdminApp::DoListAppUpdate(UpdaterScope scope) {
       app_id,
       HasSwitch(kCommandUserInitiated) ? UpdateService::Priority::kForeground
                                        : UpdateService::Priority::kBackground,
-      UpdateService::PolicySameVersionUpdate::kNotAllowed,
+      UpdateService::PolicySameVersionUpdate::kNotAllowed, /*language=*/{},
       base::BindRepeating(
           [](scoped_refptr<UpdateCheckResult> update_check_result,
              const UpdateService::UpdateState& update_state) {
@@ -706,7 +706,7 @@ void KSAdminApp::DoPrintTag(UpdaterScope scope) {
         int exit_code = 0;
 
         std::vector<updater::UpdateService::AppState>::const_iterator it =
-            base::ranges::find_if(
+            std::ranges::find_if(
                 states,
                 [&app_id](const updater::UpdateService::AppState& state) {
                   return base::EqualsCaseInsensitiveASCII(state.app_id, app_id);

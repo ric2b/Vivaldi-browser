@@ -310,13 +310,13 @@ crate_universe_dependencies()
 http_archive(
     name = "cxxbridge_cmd",
     build_file = "//bazel/external/cxxbridge_cmd:BUILD.bazel.skia",
-    sha256 = "1e3d98437a33d422ba30975d549f754d50300404096f17f5037abce2d91e3cfa",
-    strip_prefix = "cxxbridge-cmd-1.0.128",
+    sha256 = "4717c9c806a9e07fdcb34c84965a414ea40fafe57667187052cf1eb7f5e8a8a9",
+    strip_prefix = "cxxbridge-cmd-1.0.135",
     type = "tar.gz",
     urls = gcs_mirror_url(
         ext = ".tar.gz",
-        sha256 = "1e3d98437a33d422ba30975d549f754d50300404096f17f5037abce2d91e3cfa",
-        url = "https://crates.io/api/v1/crates/cxxbridge-cmd/1.0.128/download",
+        sha256 = "4717c9c806a9e07fdcb34c84965a414ea40fafe57667187052cf1eb7f5e8a8a9",
+        url = "https://crates.io/api/v1/crates/cxxbridge-cmd/1.0.135/download",
     ),
 )
 
@@ -340,13 +340,13 @@ cxxbridge_cmd_deps()
 http_archive(
     name = "cxx",
     build_file = "//bazel/external/cxx:BUILD.bazel.skia",
-    sha256 = "54ccead7d199d584d139148b04b4a368d1ec7556a1d9ea2548febb1b9d49f9a4",
-    strip_prefix = "cxx-1.0.128",
+    sha256 = "4d44ff199ff93242c3afe480ab588d544dd08d72e92885e152ffebc670f076ad",
+    strip_prefix = "cxx-1.0.135",
     type = "tar.gz",
     urls = gcs_mirror_url(
         ext = ".tar.gz",
-        sha256 = "54ccead7d199d584d139148b04b4a368d1ec7556a1d9ea2548febb1b9d49f9a4",
-        url = "https://crates.io/api/v1/crates/cxx/1.0.128/download",
+        sha256 = "4d44ff199ff93242c3afe480ab588d544dd08d72e92885e152ffebc670f076ad",
+        url = "https://crates.io/api/v1/crates/cxx/1.0.135/download",
     ),
 )
 
@@ -396,32 +396,12 @@ icu4x_deps()
 # to support `//experimental/rust_png` code.
 crates_repository(
     name = "rust_png",
-    annotations = {
-        "png": [crate.annotation(
-            patch_args = ["-p6"],
-            # Patches from https://crrev.com/c/5922033:
-            # New public API for `png` crate: `fn next_frame_info`.
-            #
-            # TODO(lukasza, kjlubick): Remove this whole annotation once a new
-            # version of `png` is released on crates.io (presumably including
-            # the already merged PRs).
-            patches = [
-                "@//experimental/rust_png/patches:0101-Add-test-coverage-for-PolledAfterEndOfImage-error.patch",
-                "@//experimental/rust_png/patches:0102-Add-test-showing-next_frame-after-next_row-is-tempor.patch",
-                "@//experimental/rust_png/patches:0103-Call-finish_decoding-after-last-next_row.patch",
-                "@//experimental/rust_png/patches:0104-Simplify-how-Reader-tracks-how-many-frames-remain-to.patch",
-                "@//experimental/rust_png/patches:0105-Fix-a-subset-of-issues-identified-by-cargo-clippy.patch",
-                "@//experimental/rust_png/patches:0106-Avoid-infinite-loop-when-retrying-after-earlier-fata.patch",
-                "@//experimental/rust_png/patches:0107-New-API-Reader.next_frame_control-for-advancing-to-t.patch",
-            ],
-        )],
-    },
     cargo_lockfile = "//experimental/rust_png/ffi:Cargo.lock",
     packages = {
         "png": crate.spec(
             # Note: for additional performance gains `features = ["unstable"]`
             # can be enabled, but this requires the nightly, unstable `rustc`.
-            version = "0.17",
+            version = "0.17.15",
         ),
     },
 )
@@ -482,6 +462,7 @@ local_repository(
 # @spirv_tools - https://skia.googlesource.com/external/github.com/KhronosGroup/SPIRV-Tools.git
 #
 # @dawn - //bazel/external/dawn:BUILD.bazel
+# @delaunator - //bazel/external/delaunator:BUILD.bazel
 # @dng_sdk - //bazel/external/dng_sdk:BUILD.bazel
 # @expat - //bazel/external/expat:BUILD.bazel
 # @freetype - //bazel/external/freetype:BUILD.bazel
@@ -691,7 +672,7 @@ load(
 # Pulls the gcr.io/skia-public/debugger-app-base container.
 container_pull(
     name = "debugger-app-base",
-    digest = "sha256:931df19ec3352eb10475a9795a6ff571e513a85c3323f2e419e2621e3c088d6c",
+    digest = "sha256:e9a6ea69ff3d616e5757891be54a232902b65f790d69655dab25048abacbd84d",
     registry = "gcr.io",
     repository = "skia-public/debugger-app-base",
 )
@@ -699,7 +680,7 @@ container_pull(
 # Pulls the gcr.io/skia-public/jsfiddle-base container.
 container_pull(
     name = "jsfiddle-base",
-    digest = "sha256:034839b9814bde95bfe002eb6e3f5a9bcf8a88ca2a7cfce8a348cc4e86854463",
+    digest = "sha256:fb2d48f7af982ed974832b6eef330985af8f640f5168188bbea3986543d4af90",
     registry = "gcr.io",
     repository = "skia-public/jsfiddle-base",
 )
@@ -707,7 +688,7 @@ container_pull(
 # Pulls the gcr.io/skia-public/shaders-base container.
 container_pull(
     name = "shaders-base",
-    digest = "sha256:99b73d05cdae7c1c0e5eee3ec34f13b1438ffd3bd58d08e9937db98797cde30c",
+    digest = "sha256:9481c3eb25d23889071ead9351254cc96b295c5290794cb4a13298134d1c5b57",
     registry = "gcr.io",
     repository = "skia-public/shaders-base",
 )
@@ -715,7 +696,7 @@ container_pull(
 # Pulls the gcr.io/skia-public/skottie-base container.
 container_pull(
     name = "skottie-base",
-    digest = "sha256:a049ff55ff145ba585cc32fb348a613a8cfb357046c2b56c6d95344410ea4f77",
+    digest = "sha256:c83c11cec8f5a07475604f9e51780b41c86e2eff641469dcdb7fc56274a12059",
     registry = "gcr.io",
     repository = "skia-public/skottie-base",
 )

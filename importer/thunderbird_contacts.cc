@@ -73,7 +73,7 @@ ContactRows CombineContacts(const std::vector<ImportedContact>& contact_rows) {
 
 void ImportContacts(const base::FilePath file,
                     std::vector<ImportedContact>& contacts) {
-  sql::Database db;
+  sql::Database db("Importer");
   if (!db.Open(file)) {
     return;
   }

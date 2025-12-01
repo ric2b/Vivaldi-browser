@@ -11,7 +11,6 @@
 #include "chrome/browser/autocomplete/chrome_autocomplete_provider_client.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/omnibox_service_observer.h"
-#include "omnibox_service.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 
 namespace vivaldi_omnibox {
@@ -29,11 +28,25 @@ void OmniboxService::Shutdown() {
   controller_.reset();
 }
 
-void OmniboxService::StartSearch(std::u16string input_text) {
-  auto page_classification = ::metrics::OmniboxEventProto::INVALID_SPEC;
+void OmniboxService::StartSearch(
+        std::u16string input_text,
+        OmniboxPrivateInput input,
+        metrics::OmniboxEventProto::PageClassification page_classification) {
   AutocompleteInput autocomplete_input(
       input_text, page_classification,
       ChromeAutocompleteSchemeClassifier(profile_));
+  autocomplete_input.set_prevent_inline_autocomplete(
+      input.prevent_inline_autocomplete);
+  autocomplete_input.set_focus_type(input.focus_type);
+  autocomplete_input.from_search_field = input.from_search_field;
+  autocomplete_input.search_engine_guid = input.search_engine_guid;
+
+  if (input.clear_state_before_searching) {
+    controller_->RemoveObserver(this);
+    controller_->Stop(true /* clear_result */);
+    controller_->AddObserver(this);
+  }
+
   controller_->Start(autocomplete_input);
 }
 

@@ -6,6 +6,7 @@
 
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/strings/stringprintf.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
 #include "chrome/browser/browser_process.h"
@@ -411,8 +412,12 @@ void HttpsUpgradesInterceptor::MaybeCreateLoader(
       std::move(callback));
   network::mojom::NetworkContext* network_context =
       profile->GetDefaultStoragePartition()->GetNetworkContext();
+
+  CHECK(tentative_resource_request.trusted_params);
   network_context->IsHSTSActiveForHost(
       tentative_resource_request.url.host(),
+      tentative_resource_request.trusted_params->isolation_info
+          .IsMainFrameRequest(),
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
           std::move(query_complete_callback),
           /*is_hsts_active_for_host=*/false));
@@ -614,6 +619,14 @@ void HttpsUpgradesInterceptor::MaybeCreateLoaderOnHstsQueryCompleted(
         NavigationRequestSecurityLevel::kInsecure);
     std::move(callback).Run({});
     return;
+  }
+
+  if (state &&
+      state->IsHttpsEnforcedForUrl(tentative_resource_request.url,
+                                   storage_partition) &&
+      !MustDisableSiteEngagementHeuristic(profile)) {
+    RecordNavigationRequestSecurityLevel(
+        NavigationRequestSecurityLevel::kHttpsEnforcedOnHostname);
   }
 
   // If the request URL is in the set of URLs that HttpsUpgradesInterceptor has

@@ -480,7 +480,7 @@ New screen for diagnostic tools device created post 2020.
 
 ##### Menu UI Screen State Diagram
 
-![Diagram](images/menu_ui_screen_state_diagram.png)
+![Diagram](./menu_ui_screen_state_diagram.png)
 
 ## General Procedure
 
@@ -1093,13 +1093,13 @@ of the chromeOS along with dmesg output.
 
 [Boot from your USB disk]: /chromium-os/developer-library/guides/development/developer-guide/#boot-from-your-usb-disk
 [Chromebox pinhole example]: https://storage.googleapis.com/support-kms-prod/SNP_A5E29551DE747AFC2885B00F04E711DFD82C_6010520_en_v0
-[ChromeOS Firmware Concepts]: https://dev.chromium.org/chromium-os/firmware-porting-guide/2-concepts
+[ChromeOS Firmware Concepts]: /chromium-os/firmware-porting-guide/2-concepts
 [chromeos-hwid repository]: https://chrome-internal.googlesource.com/chromeos/chromeos-hwid/
 [Case Closed Debugging]: https://chromium.googlesource.com/chromiumos/platform/ec/+/cr50_stab/docs/case_closed_debugging_cr50.md
 [Configuring Automounting]: https://help.ubuntu.com/community/Mount/USB#Configuring_Automounting
 [data_fmap_expect_p.txt]: https://chromium.googlesource.com/chromiumos/platform/vboot_reference/+/HEAD/tests/futility/data_fmap_expect_p.txt
 [developer-guide]: /chromium-os/developer-library/guides/development/developer-guide/
-[Disk format]: https://www.chromium.org/chromium-os/chromiumos-design-docs/disk-format
+[Disk format]: /chromium-os/chromiumos-design-docs/disk-format
 [EC documentation]: https://chromium.googlesource.com/chromiumos/platform/ec/+/HEAD/README.md
 [FAFT]: https://chromium.googlesource.com/chromiumos/third_party/autotest/+/HEAD/docs/faft-how-to-run-doc.md
 [firmware_LockedME]: https://chromium.googlesource.com/chromiumos/third_party/autotest/+/HEAD/client/site_tests/firmware_LockedME/control

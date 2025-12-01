@@ -7,7 +7,6 @@
 
 #include "src/sandbox/code-pointer-table.h"
 #include "src/sandbox/cppheap-pointer-table.h"
-#include "src/sandbox/external-buffer-table.h"
 #include "src/sandbox/external-pointer-table.h"
 #include "src/sandbox/indirect-pointer-tag.h"
 #include "src/sandbox/js-dispatch-table.h"
@@ -17,6 +16,7 @@ namespace v8 {
 namespace internal {
 
 class Isolate;
+class TrustedPointerPublishingScope;
 
 // A reference to an Isolate that only exposes the sandbox-related parts of an
 // isolate, in particular the various pointer tables. Can be used off-thread
@@ -32,18 +32,11 @@ class V8_EXPORT_PRIVATE IsolateForSandbox final {
 
 #ifdef V8_ENABLE_SANDBOX
   inline ExternalPointerTable& GetExternalPointerTableFor(
-      ExternalPointerTag tag);
+      ExternalPointerTagRange tag_range);
   inline ExternalPointerTable::Space* GetExternalPointerTableSpaceFor(
-      ExternalPointerTag tag, Address host);
-
-  inline ExternalBufferTable& GetExternalBufferTableFor(ExternalBufferTag tag);
-  inline ExternalBufferTable::Space* GetExternalBufferTableSpaceFor(
-      ExternalBufferTag tag, Address host);
+      ExternalPointerTagRange tag_range, Address host);
 
   inline CodePointerTable::Space* GetCodePointerTableSpaceFor(
-      Address owning_slot);
-
-  inline JSDispatchTable::Space* GetJSDispatchTableSpaceFor(
       Address owning_slot);
 
   inline TrustedPointerTable& GetTrustedPointerTableFor(IndirectPointerTag tag);
@@ -54,6 +47,11 @@ class V8_EXPORT_PRIVATE IsolateForSandbox final {
   // shared space.
   inline ExternalPointerTag GetExternalPointerTableTagFor(
       Tagged<HeapObject> witness, ExternalPointerHandle handle);
+
+  // There can be only one publishing scope at a time.
+  inline TrustedPointerPublishingScope* GetTrustedPointerPublishingScope();
+  inline void SetTrustedPointerPublishingScope(
+      TrustedPointerPublishingScope* scope);
 #endif  // V8_ENABLE_SANDBOX
 
  private:
@@ -69,9 +67,9 @@ class V8_EXPORT_PRIVATE IsolateForPointerCompression final {
 
 #ifdef V8_COMPRESS_POINTERS
   inline ExternalPointerTable& GetExternalPointerTableFor(
-      ExternalPointerTag tag);
+      ExternalPointerTagRange tag_range);
   inline ExternalPointerTable::Space* GetExternalPointerTableSpaceFor(
-      ExternalPointerTag tag, Address host);
+      ExternalPointerTagRange tag_range, Address host);
 
   inline CppHeapPointerTable& GetCppHeapPointerTable();
   inline CppHeapPointerTable::Space* GetCppHeapPointerTableSpace();

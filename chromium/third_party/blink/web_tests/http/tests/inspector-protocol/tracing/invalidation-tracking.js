@@ -9,6 +9,7 @@
   let scheduleStyleInvalidationTracking;
   let styleRecalcInvalidationTracking;
   let styleInvalidatorInvalidationTracking;
+  let styleResolverResolveStyle;
   let layoutInvalidationTracking;
   let layout;
 
@@ -35,6 +36,8 @@
         'StyleRecalcInvalidationTracking', Phase.INSTANT);
     styleInvalidatorInvalidationTracking = tracingHelper.findEvents(
         'StyleInvalidatorInvalidationTracking', Phase.INSTANT)[0];
+    styleResolverResolveStyle = tracingHelper.findEvents(
+        'StyleResolver::ResolveStyle', Phase.INSTANT);
     layoutInvalidationTracking = tracingHelper.findEvents(
         'LayoutInvalidationTracking', Phase.INSTANT)[0];
     layout = tracingHelper.findEvents(
@@ -58,8 +61,14 @@
   testRunner.log('LayoutInvalidationTracking');
   tracingHelper.logEventShape(layoutInvalidationTracking);
 
+  testRunner.log('Number of StyleResolver::ResolveStyle events:');
+  testRunner.log(styleResolverResolveStyle.length);
+
+  // styleRecalcInvalidationTracking[0] was logged during initial insertion of
+  // nodes into the tree at page load and thus has no stack trace.
+  // Use styleRecalcInvalidationTracking[1] for testing instead.
   testRunner.log('Style recalc initiator:');
-  testRunner.log(styleRecalcInvalidationTracking[0].args?.data?.stackTrace[0].functionName);
+  testRunner.log(styleRecalcInvalidationTracking[1].args?.data?.stackTrace[0].functionName);
 
   testRunner.log('Layout initiator:');
   testRunner.log(layout.args?.beginData?.stackTrace[0].functionName);

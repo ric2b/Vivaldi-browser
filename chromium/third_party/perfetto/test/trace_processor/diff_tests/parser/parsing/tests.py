@@ -618,6 +618,102 @@ class Parsing(TestSuite):
         101000004,"test2","producer2",4
         """))
 
+  def test_triggers_packets_clone_snapshot_trigger_packet(self):
+    return DiffTestBlueprint(
+        trace=TextProto(r"""
+      packet {
+        clone_snapshot_trigger {
+          trigger_name: "test1"
+          trusted_producer_uid: 3
+          producer_name: "producer1"
+        }
+        timestamp: 101000002
+      }
+      """),
+        query=Path('triggers_packets_test.sql'),
+        out=Csv("""
+      "ts","name","string_value","int_value"
+      101000002,"test1","producer1",3
+      """))
+
+  def test_trigger_metadata_test_clone_snapshot_trigger_packet(self):
+    return DiffTestBlueprint(
+        trace=TextProto(r"""
+    packet {
+      clone_snapshot_trigger {
+        trigger_name: "test1"
+        trusted_producer_uid: 3
+        producer_name: "producer1"
+      }
+      timestamp: 101000002
+    }
+    """),
+        query=Path('trigger_metadata_test.sql'),
+        out=Csv("""
+      "str_value"
+      "test1"
+      """))
+
+  def test_trigger_metadata_trigger_packet(self):
+    return DiffTestBlueprint(
+        trace=TextProto(r"""
+        packet {
+          trigger {
+            trigger_name: "test1"
+            trusted_producer_uid: 1
+            producer_name: "producer1"
+          }
+          timestamp: 101000002
+        }
+        packet {
+          trigger {
+            trigger_name: "test2"
+            trusted_producer_uid: 2
+            producer_name: "producer2"
+          }
+          timestamp: 101000001
+        }
+        """),
+        query=Path('trigger_metadata_test.sql'),
+        out=Csv("""
+      "str_value"
+      "test2"
+      """))
+
+  def test_trigger_metadata_trigger_packet_and_clone_snapshot_packet(self):
+    return DiffTestBlueprint(
+        trace=TextProto(r"""
+      packet {
+        trigger {
+          trigger_name: "test1"
+          trusted_producer_uid: 1
+          producer_name: "producer1"
+        }
+        timestamp: 101000004
+      }
+      packet {
+        trigger {
+          trigger_name: "test2"
+          trusted_producer_uid: 2
+          producer_name: "producer2"
+        }
+        timestamp: 101000002
+      }
+      packet {
+        clone_snapshot_trigger {
+          trigger_name: "testClone"
+          trusted_producer_uid: 3
+          producer_name: "producer3"
+        }
+        timestamp: 101000003
+      }
+      """),
+        query=Path('trigger_metadata_test.sql'),
+        out=Csv("""
+    "str_value"
+    "testClone"
+    """))
+
   def test_chrome_metadata(self):
     return DiffTestBlueprint(
         trace=TextProto(r"""
@@ -662,9 +758,21 @@ class Parsing(TestSuite):
         }
         """),
         query="""
-        SELECT * FROM metadata;
+        SELECT id, name, key_type, int_value, str_value FROM metadata;
         """,
-        out=Path('chrome_metadata.out'))
+        out=Csv('''
+          "id","name","key_type","int_value","str_value"
+          0,"trace_uuid","single","[NULL]","00000000-0000-0000-7f42-b235fa358661"
+          1,"trace_time_clock_id","single",6,"[NULL]"
+          2,"cr-a-playstore_version_code","single",101,"[NULL]"
+          3,"cr-a-enabled_categories","single","[NULL]","cat1,cat2,cat3"
+          4,"cr-a-field_trial_hashes","single","[NULL]","{ name: 123, group: 456 } { name: 789, group: 120 } "
+          5,"cr-background_tracing_metadata","single","[NULL]","CgUlDsAbXx2RziSz"
+          6,"cr-scenario_name_hash","single",3005533841,"[NULL]"
+          7,"cr-triggered_rule_name_hash","single",1595654158,"[NULL]"
+          8,"trace_size_bytes","single",95,"[NULL]"
+          9,"trace_type","single","[NULL]","proto"
+        '''))
 
   def test_chrome_metadata_multiple(self):
     return DiffTestBlueprint(
@@ -713,20 +821,20 @@ class Parsing(TestSuite):
         }
         """),
         query="""
-        SELECT * FROM metadata;
+        SELECT id, name, key_type, int_value, str_value FROM metadata;
         """,
         out=Csv("""
-        "id","type","name","key_type","int_value","str_value"
-        0,"metadata","trace_uuid","single","[NULL]","00000000-0000-0000-0de8-df55233147f0"
-        1,"metadata","trace_time_clock_id","single",6,"[NULL]"
-        2,"metadata","cr-a-playstore_version_code","single",101,"[NULL]"
-        3,"metadata","cr-a-enabled_categories","single","[NULL]","cat1,cat2,cat3"
-        4,"metadata","cr-a-field_trial_hashes","single","[NULL]","{ name: 123, group: 456 } { name: 789, group: 120 } "
-        5,"metadata","cr-b-playstore_version_code","single",102,"[NULL]"
-        6,"metadata","cr-b-enabled_categories","single","[NULL]","cat3,cat4,cat5"
-        7,"metadata","cr-b-field_trial_hashes","single","[NULL]","{ name: 1234, group: 5678 } { name: 9012, group: 3456 } "
-        8,"metadata","trace_size_bytes","single",110,"[NULL]"
-        9,"metadata","trace_type","single","[NULL]","proto"
+        "id","name","key_type","int_value","str_value"
+        0,"trace_uuid","single","[NULL]","00000000-0000-0000-0de8-df55233147f0"
+        1,"trace_time_clock_id","single",6,"[NULL]"
+        2,"cr-a-playstore_version_code","single",101,"[NULL]"
+        3,"cr-a-enabled_categories","single","[NULL]","cat1,cat2,cat3"
+        4,"cr-a-field_trial_hashes","single","[NULL]","{ name: 123, group: 456 } { name: 789, group: 120 } "
+        5,"cr-b-playstore_version_code","single",102,"[NULL]"
+        6,"cr-b-enabled_categories","single","[NULL]","cat3,cat4,cat5"
+        7,"cr-b-field_trial_hashes","single","[NULL]","{ name: 1234, group: 5678 } { name: 9012, group: 3456 } "
+        8,"trace_size_bytes","single",110,"[NULL]"
+        9,"trace_type","single","[NULL]","proto"
         """))
 
   # CPU info
@@ -1569,4 +1677,77 @@ class Parsing(TestSuite):
         5230422048874,0,1306,"[NULL]"
         5230422153284,0,1306,"[NULL]"
         5230425693562,0,10,1
+        """))
+
+  # Kernel idle tasks created by /sbin/init should be filtered.
+  def test_task_newtask_swapper_by_init(self):
+    return DiffTestBlueprint(
+        trace=TextProto(r"""
+        packet {
+          first_packet_on_sequence: true
+          ftrace_events {
+            cpu: 1
+            event {
+              timestamp: 1000000
+              pid: 0
+              task_newtask {
+                pid: 1
+                comm: "swapper/0"
+                clone_flags: 8389376
+                oom_score_adj: 0
+              }
+            }
+            event {
+              timestamp: 1000000
+              pid: 0
+              task_newtask {
+                pid: 2
+                comm: "swapper/0"
+                clone_flags: 8390400
+                oom_score_adj: 0
+              }
+            }
+            event {
+              timestamp: 17000000
+              pid: 1
+              task_newtask {
+                pid: 0
+                comm: "swapper/0"
+                clone_flags: 256
+                oom_score_adj: 0
+              }
+            }
+            event {
+              timestamp: 17000000
+              pid: 1
+              task_newtask {
+                pid: 0
+                comm: "swapper/0"
+                clone_flags: 256
+                oom_score_adj: 0
+              }
+            }
+            event {
+              timestamp: 17000000
+              pid: 1
+              task_newtask {
+                pid: 0
+                comm: "swapper/0"
+                clone_flags: 256
+                oom_score_adj: 0
+              }
+            }
+          }
+          trusted_uid: 9999
+          trusted_packet_sequence_id: 2
+          trusted_pid: 521
+          previous_packet_dropped: true
+        }
+        """),
+        query="""
+        SELECT utid, tid, name from thread where tid = 0
+        """,
+        out=Csv("""
+        "utid","tid","name"
+        0,0,"swapper"
         """))

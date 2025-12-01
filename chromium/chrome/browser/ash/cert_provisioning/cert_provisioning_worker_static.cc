@@ -14,6 +14,7 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/no_destructor.h"
+#include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -73,7 +74,7 @@ constexpr base::TimeDelta kDownloadCertRequestMaxDelay = base::Hours(8);
 const net::BackoffEntry::Policy kDownloadCertBackoffPolicy{
     /*num_errors_to_ignore=*/0,
     /*initial_delay_ms=*/
-    base::checked_cast<int>(kDownloadCertRequestInitialDelay.InMilliseconds()),
+    kDownloadCertRequestInitialDelay.InMilliseconds(),
     /*multiply_factor=*/4,
     /*jitter_factor=*/0.10,
     /*maximum_backoff_ms=*/kDownloadCertRequestMaxDelay.InMilliseconds(),
@@ -84,7 +85,7 @@ const net::BackoffEntry::Policy kDownloadCertBackoffPolicy{
 const net::BackoffEntry::Policy kBackoffPolicy{
     /*num_errors_to_ignore=*/0,
     /*initial_delay_ms=*/
-    base::checked_cast<int>(base::Seconds(30).InMilliseconds()),
+    base::Seconds(30).InMilliseconds(),
     /*multiply_factor=*/2.0,
     /*jitter_factor=*/0.15,
     /*maximum_backoff_ms=*/base::Hours(12).InMilliseconds(),
@@ -152,7 +153,7 @@ int GetStateOrderedIndex(CertProvisioningWorkerState state) {
     case CertProvisioningWorkerState::kProofOfPossessionInstructionReceived:
     case CertProvisioningWorkerState::kImportCertificateInstructionReceived:
       // These states are not used in the "static" flow.
-      CHECK(false);
+      NOTREACHED();
   }
   return res;
 }
@@ -229,6 +230,12 @@ bool CertProvisioningWorkerStatic::IsWorkerMarkedForReset() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   return is_schedueled_for_reset_;
+}
+
+const std::string& CertProvisioningWorkerStatic::GetProcessId() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  return process_id_;
 }
 
 const CertProfile& CertProvisioningWorkerStatic::GetCertProfile() const {
@@ -326,8 +333,7 @@ void CertProvisioningWorkerStatic::DoStep() {
     case CertProvisioningWorkerState::kProofOfPossessionInstructionReceived:
     case CertProvisioningWorkerState::kImportCertificateInstructionReceived:
       // These states are not used in the "static" flow.
-      CHECK(false);
-      return;
+      NOTREACHED();
   }
   NOTREACHED() << " " << static_cast<uint>(state_);
 }
@@ -1055,8 +1061,7 @@ void CertProvisioningWorkerStatic::HandleSerialization() {
     case CertProvisioningWorkerState::kProofOfPossessionInstructionReceived:
     case CertProvisioningWorkerState::kImportCertificateInstructionReceived:
       // These states are not used in the "static" flow.
-      CHECK(false);
-      break;
+      NOTREACHED();
   }
 }
 

@@ -740,7 +740,7 @@ std::optional<syncer::ModelError> PasswordSyncBridge::MergeFullSyncData(
   metrics_util::LogPasswordSyncState(
       metrics_util::PasswordSyncState::kSyncingOk);
   if (password_store_sync_->IsAccountStore()) {
-    int password_count = base::ranges::count_if(
+    int password_count = std::ranges::count_if(
         entity_data,
         [](const std::unique_ptr<syncer::EntityChange>& entity_change) {
           return !entity_change->data()
@@ -753,10 +753,6 @@ std::optional<syncer::ModelError> PasswordSyncBridge::MergeFullSyncData(
     metrics_util::
         LogDownloadedBlocklistedEntriesCountFromAccountStoreAfterUnlock(
             entity_data.size() - password_count);
-  } else {
-    base::UmaHistogramCustomCounts(
-        "PasswordManager.ProfileStore.TotalAccountsBeforeInitialSync",
-        key_to_local_specifics_map.size(), 0, 1000, 100);
   }
 
   sync_enabled_or_disabled_cb_.Run();
@@ -1009,10 +1005,12 @@ void PasswordSyncBridge::ApplyDisableSyncChanges(
   CHECK(password_store_sync_);
   switch (wipe_model_upon_sync_disabled_behavior_) {
     case syncer::WipeModelUponSyncDisabledBehavior::kNever:
+#if !(BUILDFLAG(IS_ANDROID) && defined(VIVALDI_BUILD))
       CHECK(!password_store_sync_->IsAccountStore());
       // The actual model data should NOT be wiped. Only wipe the metadata.
       password_store_sync_->GetMetadataStore()->DeleteAllSyncMetadata(
           syncer::PASSWORDS);
+#endif // IS_ANDROID && !VIVALDI_BUILD
       sync_enabled_or_disabled_cb_.Run();
       return;
     case syncer::WipeModelUponSyncDisabledBehavior::kOnceIfTrackingMetadata:

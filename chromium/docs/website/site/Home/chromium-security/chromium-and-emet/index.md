@@ -40,7 +40,7 @@ Mitigation Experience Toolkit (EMET) and Chromium compiled on Windows using
 Visual Studio 2013.
 
 One specific issue we have encountered with Chromium compiled using VS 2013
-relates to [tail-call optimizations](http://en.wikipedia.org/wiki/Tail_call) in
+relates to [tail-call optimizations](https://en.wikipedia.org/wiki/Tail_call) in
 wrapper functions for Windows APIs. By using jmp to enter the Windows API call
 from the wrapper, the Visual Studio compiler avoids an additional call/ret pair,
 and the API would return directly into the wrapper function’s caller rather than

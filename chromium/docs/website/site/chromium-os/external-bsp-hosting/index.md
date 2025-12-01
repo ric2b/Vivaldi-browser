@@ -46,7 +46,7 @@ Local manifest files can have any name as long as they are of the .xml
 extension. Their format is the same as normal manifest files, and can be viewed
 [here](https://gerrit.googlesource.com/git-repo/+/HEAD/docs/manifest-format.txt).
 A simple example manifest file for pulling
-<http://github.com/chromiumos/foo.git> on branch “branchname” into
+<https://github.com/chromiumos/foo.git> on branch “branchname” into
 src/private-overlays/overlay-foo-private:
 
 File: ${HOME}/chromiumos/.repo/local_manifests/foo.xml
@@ -67,7 +67,7 @@ File: ${HOME}/chromiumos/.repo/local_manifests/foo.xml
 This section is meant as a quick-start guide for the basics of setting up a BSP
 within an overlay, but doesn't fully cover creating the overlay itself. The
 basics of setting up an overlay can be found in the [Board Porting
-guide](/chromium-os/how-tos-and-troubleshooting/chromiumos-board-porting-guide).
+guide](/chromium-os/developer-library/guides/chromiumos-board-porting-guide).
 Even with board and BSP code hosted in an external repository, the board name
 still has to be added to the cros-board.eclass file. Also, for brevity,
 copyright headers have been left out of these sample templates, but should be
@@ -76,7 +76,7 @@ added in all ebuild files in whatever format is correct for your organization.
 make.conf
 
 > This file contains several [key
-> settings](/chromium-os/how-tos-and-troubleshooting/chromiumos-board-porting-guide#TOC-make.conf:-Global-Build-Settings)
+> settings](/chromium-os/developer-library/guides/chromiumos-board-porting-guide#TOC-make.conf:-Global-Build-Settings)
 > for kernel configurations, such as the architecture, config, and tune. The key
 > fields are:
 
@@ -86,7 +86,7 @@ make.conf
 > *   CHROMEOS_KERNEL_SPLITCONFIG - the kernel splitconfig to use.
               Splitconfigs can be used instead of a full config. For details on
               splitconfigs, see
-              [here](/chromium-os/how-tos-and-troubleshooting/kernel-configuration).
+              [here](/chromium-os/developer-library/guides/kernel/kernel-configuration).
 > *   MARCH_TUNE - The common set of compiler flags used to optimize for
               your processor.
 > *   CFLAGS, CXXFLAGS - The compiler flags to use when building the

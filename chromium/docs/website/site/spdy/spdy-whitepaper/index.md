@@ -79,8 +79,8 @@ session layer:
             (SST) -- a protocol which invents "structured streams": lightweight,
             independent streams to be carried over a common transport. It
             replaces TCP or runs on top of UDP.
-*   [MUX](http://www.w3.org/Protocols/MUX/) and
-            [SMUX](http://www.w3.org/TR/WD-mux) -- intermediate-layer protocols
+*   [MUX](https://www.w3.org/Protocols/MUX/) and
+            [SMUX](https://www.w3.org/TR/WD-mux) -- intermediate-layer protocols
             (in between the transport and application layers) that provide
             multiplexing of streams. They were proposed years ago at the same
             time as HTTP/1.1.

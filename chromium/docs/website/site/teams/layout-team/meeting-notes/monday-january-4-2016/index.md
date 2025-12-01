@@ -19,19 +19,19 @@ start the OKR process and will schedule a team-wide OKR meeting in a
 week or two. In the mean time please try to summarize and score your Q4
 OKRs and start thinking about what you want to work on in Q1 and beyond.
 Updates since last meeting (on Monday, November 30th):
-Scrolling (skobes, szager) \[[crbug.com/417782](http://crbug.com/417782)\]
+Scrolling (skobes, szager) \[[crbug.com/417782](https://crbug.com/417782)\]
 - Landed fix for smooth scrolling target updates. (skobes)
 - Sizing main graphics layer for root layer scrolling. (skobes)
 - Updated scroll anchoring design doc and plan start to implementing
 it this week. (skobes)
 - Ready to turn onm smooth scrolling! Patch is ready and plan is to flip
 the switch this week (skobes)
-CSS Flexbox (cbiesinger) \[[crbug.com/426898](http://crbug.com/426898)\]
+CSS Flexbox (cbiesinger) \[[crbug.com/426898](https://crbug.com/426898)\]
 - No updates since last meeting, cbiesinger still out -
 CSS Grid Layout (svillar, jfernandez, rego, javif)
-\[[crbug.com/79180](http://crbug.com/79180)\]
+\[[crbug.com/79180](https://crbug.com/79180)\]
 - No update since last meeting.
-CSS Multi-column (mstensho) \[[crbug.com/334335](http://crbug.com/334335)\]
+CSS Multi-column (mstensho) \[[crbug.com/334335](https://crbug.com/334335)\]
 - Managed to add support for printing. Involved solving the nested mult
 column use case which was tricky. Once that was in place printing
 support wasn't too much work.
@@ -43,14 +43,14 @@ basic stuff for that.
 - Also this week updating the CSS custom paint API.
 - Intent to implement for custom paint this week or next.
 Add API for layout (leviw, pilgrim, ojan)
-\[[crbug.com/495288](http://crbug.com/495288)\]
+\[[crbug.com/495288](https://crbug.com/495288)\]
 - Finishing up line layout text this week, part of the line layout api.
 - Final patches to implement box which will be ready for review shortly.
-CSS Containment (leviw) \[[crbug.com/312978](http://crbug.com/312978)\]
+CSS Containment (leviw) \[[crbug.com/312978](https://crbug.com/312978)\]
 - Plan to send Intent to Implement this week.
 - Have pending spec patch that needs to be upstreamed.
 Intersection Observer (szager, mpb)
-\[[crbug.com/540528](http://crbug.com/540528)\]
+\[[crbug.com/540528](https://crbug.com/540528)\]
 - Trying to land Intersection Observer patch, not having much success.
 (szager)
 Text (eae, drott, kojii)

@@ -25,7 +25,7 @@ constexpr uint16_t kDefaultCastServicePort = 8010;
 constexpr int kCastUniqueIdLength = 6;
 
 constexpr int kDefaultMaxBacklogSize = 64;
-const TlsListenOptions kDefaultListenOptions{kDefaultMaxBacklogSize};
+constexpr TlsListenOptions kDefaultListenOptions = {kDefaultMaxBacklogSize};
 
 IPEndpoint DetermineEndpoint(const InterfaceInfo& interface) {
   const IPAddress address = interface.GetIpAddressV4()

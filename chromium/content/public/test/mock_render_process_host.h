@@ -21,7 +21,6 @@
 #include "base/metrics/persistent_memory_allocator.h"
 #include "base/observer_list.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_process_host_factory.h"
@@ -100,6 +99,7 @@ class MockRenderProcessHost : public RenderProcessHost {
   bool IsForGuestsOnly() override;
   bool IsJitDisabled() override;
   bool AreV8OptimizationsDisabled() override;
+  bool DisallowV8FeatureFlagOverrides() override;
   bool IsPdf() override;
   void OnMediaStreamAdded() override;
   void OnMediaStreamRemoved() override;
@@ -118,7 +118,8 @@ class MockRenderProcessHost : public RenderProcessHost {
   bool FastShutdownStarted() override;
   const base::Process& GetProcess() override;
   bool IsReady() override;
-  int GetID() const override;
+  ChildProcessId GetID() const override;
+  int GetDeprecatedID() const override;
   base::SafeRef<RenderProcessHost> GetSafeRef() const override;
   bool IsInitializedAndNotDead() override;
   bool IsDeletingSoon() override;
@@ -163,7 +164,7 @@ class MockRenderProcessHost : public RenderProcessHost {
   std::unique_ptr<base::PersistentMemoryAllocator> TakeMetricsAllocator()
       override;
   const base::TimeTicks& GetLastInitTime() override;
-  base::Process::Priority GetPriority() override;
+  base::Process::Priority GetPriority() const override;
   size_t GetWorkerRefCount() const;
   std::string GetKeepAliveDurations() const override;
   size_t GetShutdownDelayRefCount() const override;
@@ -181,6 +182,7 @@ class MockRenderProcessHost : public RenderProcessHost {
   void DecrementWorkerRefCount() override;
   void IncrementPendingReuseRefCount() override;
   void DecrementPendingReuseRefCount() override;
+  int GetPendingReuseRefCountForTesting() const override;
   bool AreRefCountsDisabled() override;
   mojom::Renderer* GetRendererInterface() override;
 
@@ -202,6 +204,7 @@ class MockRenderProcessHost : public RenderProcessHost {
       const network::CrossOriginEmbedderPolicy&,
       mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>,
       const network::DocumentIsolationPolicy& document_isolation_policy,
+      mojo::PendingRemote<network::mojom::DocumentIsolationPolicyReporter>,
       const storage::BucketLocator& bucket,
       mojo::PendingReceiver<blink::mojom::CacheStorage> receiver) override;
   void BindFileSystemManager(
@@ -279,7 +282,7 @@ class MockRenderProcessHost : public RenderProcessHost {
   std::string GetInfoForBrowserContextDestructionCrashReporting() override;
   void WriteIntoTrace(perfetto::TracedProto<TraceProto> proto) const override;
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   void ReinitializeLogging(uint32_t logging_dest,
                            base::ScopedFD log_file_descriptor) override;
 #endif
@@ -324,7 +327,7 @@ class MockRenderProcessHost : public RenderProcessHost {
   // Stores IPC messages that would have been sent to the renderer.
   IPC::TestSink sink_;
   int bad_msg_count_;
-  int id_;
+  ChildProcessId id_;
   bool has_connection_;
   raw_ptr<BrowserContext, DanglingUntriaged> browser_context_;
   base::ObserverList<RenderProcessHostObserver> observers_;
@@ -344,6 +347,7 @@ class MockRenderProcessHost : public RenderProcessHost {
   bool is_unused_;
   bool is_ready_ = false;
   base::Process process;
+  int pending_view_count_;
   int worker_ref_count_;
   int pending_reuse_ref_count_;
   int foreground_service_worker_count_;

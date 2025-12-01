@@ -580,6 +580,9 @@ struct StructTraits<autofill::mojom::PasswordAndMetadataDataView,
   static bool uses_account_store(const autofill::PasswordAndMetadata& r) {
     return r.uses_account_store;
   }
+  static bool is_grouped_affiliation(const autofill::PasswordAndMetadata& r) {
+    return r.is_grouped_affiliation;
+  }
 
   static bool Read(autofill::mojom::PasswordAndMetadataDataView data,
                    autofill::PasswordAndMetadata* out);
@@ -629,6 +632,11 @@ struct StructTraits<autofill::mojom::PasswordFormFillDataDataView,
   static std::vector<autofill::FieldRendererId> suggestion_banned_fields(
       const autofill::PasswordFormFillData& r) {
     return r.suggestion_banned_fields;
+  }
+
+  static bool notify_browser_of_successful_filling(
+      const autofill::PasswordFormFillData& r) {
+    return r.notify_browser_of_successful_filling;
   }
 
   static bool Read(autofill::mojom::PasswordFormFillDataDataView data,
@@ -690,9 +698,9 @@ struct StructTraits<autofill::mojom::PasswordGenerationUIDataDataView,
     return r.form_data;
   }
 
-  static bool input_field_empty(
+  static bool generation_rejected(
       const autofill::password_generation::PasswordGenerationUIData& r) {
-    return r.input_field_empty;
+    return r.generation_rejected;
   }
 
   static bool Read(

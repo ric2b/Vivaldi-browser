@@ -868,12 +868,11 @@ reason such as when the code is only for unit test support.
 [platform.eclass]: https://source.chromium.org/chromiumos/chromiumos/codesearch/+/main:src/third_party/chromiumos-overlay/eclass/platform.eclass
 [UNIX _abstract_ sockets]: https://man7.org/linux/man-pages/man7/unix.7.html
 [security.SandboxedServices]: https://chromium.googlesource.com/chromiumos/platform/tast-tests/+/HEAD/src/go.chromium.org/tast-tests/cros/local/bundles/cros/security/sandboxed_services.go
-
-[SELinux]: https://www.chromium.org/chromium-os/developer-library/reference/security/selinux
+[SELinux]: /chromium-os/developer-library/reference/security/selinux
 [libchrome]: /chromium-os/developer-library/guides/infrastructure/libchrome/
 [libbrillo]: https://chromium.googlesource.com/chromiumos/platform2/+/HEAD/libbrillo
 [shell command-injection bugs]: https://en.wikipedia.org/wiki/Code_injection#Shell_injection
-[ChromeOS user accounts README]: https://www.chromium.org/chromium-os/developer-library/reference/build/account-management
+[ChromeOS user accounts README]: /chromium-os/developer-library/reference/build/account-management
 [Linux capabilities]: https://man7.org/linux/man-pages/man7/capabilities.7.html
 [capability.h]: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/include/uapi/linux/capability.h
 [`cap_from_text(3)`]: https://man7.org/linux/man-pages/man3/cap_from_text.3.html

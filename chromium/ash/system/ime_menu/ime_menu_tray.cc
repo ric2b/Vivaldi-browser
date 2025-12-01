@@ -55,6 +55,7 @@
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/range/range.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
@@ -396,6 +397,9 @@ ImeMenuTray::ImeMenuTray(Shelf* shelf)
   // Show the tray even if virtual keyboard is shown. (Other tray buttons will
   // be hidden).
   set_show_with_virtual_keyboard(true);
+
+  GetViewAccessibility().SetName(
+      l10n_util::GetStringUTF16(IDS_ASH_IME_MENU_ACCESSIBLE_NAME));
 }
 
 ImeMenuTray::~ImeMenuTray() {
@@ -488,10 +492,6 @@ void ImeMenuTray::OnThemeChanged() {
   UpdateTrayLabel();
 }
 
-std::u16string ImeMenuTray::GetAccessibleNameForTray() {
-  return l10n_util::GetStringUTF16(IDS_ASH_IME_MENU_ACCESSIBLE_NAME);
-}
-
 void ImeMenuTray::HandleLocaleChange() {
   if (image_view_) {
     image_view_->SetTooltipText(
@@ -499,7 +499,8 @@ void ImeMenuTray::HandleLocaleChange() {
   }
 
   if (label_) {
-    label_->SetTooltipText(l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_IME));
+    label_->SetCustomTooltipText(
+        l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_IME));
   }
 }
 
@@ -652,7 +653,8 @@ void ImeMenuTray::CreateLabel() {
   label_ = new ImeMenuLabel();
   SetupLabelForTray(label_);
   label_->SetElideBehavior(gfx::TRUNCATE);
-  label_->SetTooltipText(l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_IME));
+  label_->SetCustomTooltipText(
+      l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_IME));
   tray_container()->AddChildView(label_.get());
 }
 

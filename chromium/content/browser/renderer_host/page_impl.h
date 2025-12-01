@@ -33,12 +33,12 @@
 #include "url/gurl.h"
 
 namespace cc {
-struct BrowserControlsOffsetTagsInfo;
+struct BrowserControlsOffsetTagModifications;
 }  // namespace cc
 
-namespace input {
+namespace viz {
 class PeakGpuMemoryTracker;
-}  // namespace input
+}  // namespace viz
 
 namespace content {
 
@@ -191,7 +191,8 @@ class CONTENT_EXPORT PageImpl : public Page {
       cc::BrowserControlsState constraints,
       cc::BrowserControlsState current,
       bool animate,
-      const std::optional<cc::BrowserControlsOffsetTagsInfo>& offset_tags_info);
+      const std::optional<cc::BrowserControlsOffsetTagModifications>&
+          offset_tag_modifications);
 
   float GetPageScaleFactor() const;
 
@@ -424,7 +425,7 @@ class CONTENT_EXPORT PageImpl : public Page {
   // Created by NavigationRequest; ownership is maintained until the frame has
   // stopped loading, or we navigate away from the page before it finishes
   // loading.
-  std::unique_ptr<input::PeakGpuMemoryTracker> loading_memory_tracker_;
+  std::unique_ptr<viz::PeakGpuMemoryTracker> loading_memory_tracker_;
 
   // Whether the page is overriding the user agent or not.
   bool is_overriding_user_agent_ = false;

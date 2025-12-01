@@ -300,7 +300,7 @@ resources:
     *   <http://lwn.net/Articles/414016/>
 *   Useful video
 
-    *   <http://www.youtube.com/watch?v=LSHo3weGFCU>
+    *   <https://youtube.com/watch?v=LSHo3weGFCU>
 *   device-tree discuss mailing list
     *   <https://lists.ozlabs.org/listinfo/devicetree-discuss>
 *   Motivation paper

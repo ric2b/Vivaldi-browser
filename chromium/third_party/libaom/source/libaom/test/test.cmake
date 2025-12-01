@@ -203,7 +203,6 @@ if(NOT BUILD_SHARED_LIBS)
               "${AOM_ROOT}/test/avg_test.cc"
               "${AOM_ROOT}/test/blend_a64_mask_1d_test.cc"
               "${AOM_ROOT}/test/blend_a64_mask_test.cc"
-              "${AOM_ROOT}/test/comp_avg_pred_test.cc"
               "${AOM_ROOT}/test/comp_mask_pred_test.cc"
               "${AOM_ROOT}/test/disflow_test.cc"
               "${AOM_ROOT}/test/encodemb_test.cc"
@@ -386,6 +385,11 @@ if(NOT BUILD_SHARED_LIBS)
                      "${AOM_ROOT}/test/warp_filter_test_util.h"
                      "${AOM_ROOT}/test/wiener_test.cc")
   endif()
+endif()
+
+if(ENABLE_EXAMPLES)
+  list(APPEND AOM_UNIT_TEST_ENCODER_SOURCES
+              "${AOM_ROOT}/test/multilayer_metadata_test.cc")
 endif()
 
 if(CONFIG_AV1_ENCODER AND ENABLE_TESTS)

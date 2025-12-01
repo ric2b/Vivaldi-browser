@@ -14,6 +14,7 @@
 #import "base/strings/sys_string_conversions.h"
 #import "components/lens/lens_url_utils.h"
 #import "ios/chrome/browser/context_menu/ui_bundled/context_menu_configuration_provider.h"
+#import "ios/chrome/browser/lens_overlay/coordinator/lens_overlay_availability.h"
 #import "ios/chrome/browser/lens_overlay/coordinator/lens_result_page_mediator_delegate.h"
 #import "ios/chrome/browser/lens_overlay/ui/lens_overlay_error_handler.h"
 #import "ios/chrome/browser/lens_overlay/ui/lens_result_page_consumer.h"
@@ -24,6 +25,7 @@
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/snackbar_util.h"
 #import "ios/chrome/browser/tabs/model/tab_helper_util.h"
+#import "ios/chrome/browser/web/model/blocked_popup_tab_helper.h"
 #import "ios/chrome/browser/web/model/web_navigation_util.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/web/public/navigation/navigation_context.h"
@@ -412,15 +414,36 @@ inline constexpr char kDarkModeParameterDarkValue[] = "1";
   NOTREACHED(kLensOverlayNotFatalUntil);
 }
 
-#pragma mark CRWWebStateDelegate with _browserWebStateDelegate
-
 - (web::WebState*)webState:(web::WebState*)webState
     createNewWebStateForURL:(const GURL&)URL
                   openerURL:(const GURL&)openerURL
             initiatedByUser:(BOOL)initiatedByUser {
-  return _browserWebStateDelegate->CreateNewWebState(webState, URL, openerURL,
-                                                     initiatedByUser);
+  // Check if requested web state is a popup and block it if necessary.
+  if (!initiatedByUser) {
+    auto* helper = BlockedPopupTabHelper::GetOrCreateForWebState(webState);
+    if (helper->ShouldBlockPopup(openerURL)) {
+      // It's possible for a page to inject a popup into a window created via
+      // window.open before its initial load is committed.  Rather than relying
+      // on the last committed or pending NavigationItem's referrer policy, just
+      // use ReferrerPolicyDefault.
+      // TODO(crbug.com/41317904): Update this to a more appropriate referrer
+      // policy once referrer policies are correctly recorded in
+      // NavigationItems.
+      web::Referrer referrer(openerURL, web::ReferrerPolicyDefault);
+      helper->HandlePopup(URL, referrer);
+      return nullptr;
+    }
+  }
+  // Open the URL in a new tab.
+  [self.delegate lensResultPageOpenURLInNewTabRequsted:URL];
+  [self.delegate
+       lensResultPageMediator:self
+      didOpenNewTabFromSource:lens::LensOverlayNewTabSource::kWebNavigation];
+
+  return nullptr;
 }
+
+#pragma mark CRWWebStateDelegate with _browserWebStateDelegate
 
 - (web::WebState*)webState:(web::WebState*)webState
          openURLWithParams:(const web::WebState::OpenURLParams&)params {
@@ -521,6 +544,10 @@ inline constexpr char kDarkModeParameterDarkValue[] = "1";
 
 /// Activates the web state with the given `URL`.
 - (void)activateWebStateWithURL:(GURL)URL {
+  if (IsLensOverlaySameTabNavigationEnabled()) {
+    [self.delegate respondToTabWillChange];
+  }
+
   if (WebStateList* webStateList = _webStateList.get()) {
     int index = webStateList->GetIndexOfWebStateWithURL(URL);
     if (index != WebStateList::kInvalidIndex) {

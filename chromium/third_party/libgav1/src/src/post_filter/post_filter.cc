@@ -15,6 +15,7 @@
 #include "src/post_filter.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cassert>
 #include <cstddef>

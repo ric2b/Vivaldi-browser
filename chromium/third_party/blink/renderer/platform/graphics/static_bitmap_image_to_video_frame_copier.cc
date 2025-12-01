@@ -49,8 +49,9 @@ void StaticBitmapImageToVideoFrameCopier::Convert(
         context_provider_wrapper,
     FrameReadyCallback callback) {
   can_discard_alpha_ = can_discard_alpha;
-  if (!image)
+  if (!image || !image->IsValid()) {
     return;
+  }
 
   const auto size = image->Size();
   if (!media::VideoFrame::IsValidSize(size, gfx::Rect(size), size)) {
@@ -87,21 +88,17 @@ void StaticBitmapImageToVideoFrameCopier::Convert(
     return;
   }
 
-  auto* context_provider = context_provider_wrapper->ContextProvider();
-  if (!context_provider) {
-    DLOG(ERROR) << "Context lost, skipping frame";
-    return;
-  }
+  auto& context_provider = context_provider_wrapper->ContextProvider();
 
   // Readback to YUV is only used when result is opaque.
   const bool result_is_opaque =
       image->CurrentFrameKnownToBeOpaque() || can_discard_alpha_;
 
   const bool supports_yuv_readback =
-      context_provider->GetCapabilities().supports_yuv_readback;
+      context_provider.GetCapabilities().supports_yuv_readback;
   // If supports_rgb_to_yuv_conversion is true, supports_yuv_readback must also
   // be.
-  CHECK(!context_provider->GetCapabilities().supports_rgb_to_yuv_conversion ||
+  CHECK(!context_provider.GetCapabilities().supports_rgb_to_yuv_conversion ||
         supports_yuv_readback);
 
   // Try async reading if image is texture backed.
@@ -126,10 +123,10 @@ void StaticBitmapImageToVideoFrameCopier::Convert(
         return;
       }
     }
-    ReadYUVPixelsAsync(image, context_provider,
+    ReadYUVPixelsAsync(image, &context_provider,
                        std::move(split_callback.second));
   } else {
-    ReadARGBPixelsAsync(image, context_provider, std::move(callback));
+    ReadARGBPixelsAsync(image, &context_provider, std::move(callback));
   }
 
   TRACE_EVENT1("blink", "StaticBitmapImageToVideoFrameCopier::Convert",
@@ -199,12 +196,12 @@ void StaticBitmapImageToVideoFrameCopier::ReadARGBPixelsAsync(
                                      : kBottomLeft_GrSurfaceOrigin;
 
   gfx::Point src_point;
-  gpu::MailboxHolder mailbox_holder = image->GetMailboxHolder();
+  auto shared_image = image->GetSharedImage();
   DCHECK(context_provider->RasterInterface());
   context_provider->RasterInterface()->WaitSyncTokenCHROMIUM(
-      mailbox_holder.sync_token.GetConstData());
+      image->GetSyncToken().GetConstData());
   context_provider->RasterInterface()->ReadbackARGBPixelsAsync(
-      mailbox_holder.mailbox, mailbox_holder.texture_target, image_origin,
+      shared_image->mailbox(), shared_image->GetTextureTarget(), image_origin,
       image_size, src_point, info,
       temp_argb_frame->stride(media::VideoFrame::Plane::kARGB),
       temp_argb_frame->GetWritableVisibleData(media::VideoFrame::Plane::kARGB),
@@ -232,11 +229,11 @@ void StaticBitmapImageToVideoFrameCopier::ReadYUVPixelsAsync(
     return;
   }
 
-  gpu::MailboxHolder mailbox_holder = image->GetMailboxHolder();
+  auto shared_image = image->GetSharedImage();
   context_provider->RasterInterface()->WaitSyncTokenCHROMIUM(
-      mailbox_holder.sync_token.GetConstData());
+      image->GetSyncToken().GetConstData());
   context_provider->RasterInterface()->ReadbackYUVPixelsAsync(
-      mailbox_holder.mailbox, mailbox_holder.texture_target, image_size,
+      shared_image->mailbox(), shared_image->GetTextureTarget(), image_size,
       gfx::Rect(image_size), !image->IsOriginTopLeft(),
       output_frame->stride(media::VideoFrame::Plane::kY),
       output_frame->GetWritableVisibleData(media::VideoFrame::Plane::kY),

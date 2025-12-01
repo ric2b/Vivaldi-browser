@@ -46,9 +46,6 @@ _ANDROID_SETTINGS = android_browser_backend_settings.ANDROID_BACKEND_SETTINGS
 # re-installing the browser on subsequent benchmark runs.
 _android_browser_installed = False
 
-# See https://crbug.com/373822787 for how this value was calculated.
-_ANDROID_64_BLOCK_COUNT_THRESHOLD = 2200000000
-
 _EXE_EXT = '.exe' if sys.platform == 'win32' else ''
 _THIS_DIR = os.path.dirname(__file__)
 _ROOT_DIR = f'{_THIS_DIR}/../..'
@@ -88,8 +85,6 @@ class OptionsNamespace(argparse.Namespace):
     # The following are bot-specific args.
     isolated_script_test_output: Optional[str]
     isolated_script_test_perf_output: Optional[str]
-    # TODO(wnwen): Remove this when no longer needed.
-    suffix: str
 
 
 def parse_args():
@@ -112,7 +107,7 @@ def parse_args():
                         help='Whether to keep temp files')
     parser.add_argument('--android-browser',
                         help='The type of android browser to test, e.g. '
-                        'android-trichrome-bundle.')
+                        'android-trichrome-chrome-google-bundle.')
     parser.add_argument(
         '--android-device-path',
         help='The device path to pull profiles from. By '
@@ -197,9 +192,6 @@ def parse_args():
 
     if args.isolated_script_test_output:
         args.outputdir = os.path.dirname(args.isolated_script_test_output)
-        args.suffix = '.profraw'
-    else:
-        args.suffix = '.profdata'
 
     _LOGGER.info(f"Output directory: {args.outputdir}")
     _LOGGER.info(f"Profile directory: {args.profiledir}")
@@ -220,22 +212,8 @@ def run_profdata_merge(output_path, input_files, args: OptionsNamespace):
 
     else:
         extra_args = []
-    filtered_input_files = []
-    for f in input_files:
-        size_in_bytes = os.path.getsize(f)
-        if size_in_bytes <= 1 * 1024 * 1024:
-            # A valid profile on android is usually 108MB, and typically 2-3 of
-            # those are produced, so this would be less than 0.5% ignored. These
-            # small ones need to be ignored since otherwise they fail the merge.
-            _LOGGER.warning(f'Skipping due to size={size_in_bytes} <1MB: {f}')
-        else:
-            filtered_input_files.append(f)
 
-    if not filtered_input_files:
-        raise MergeError('No valid profraw/profdata file after filter.')
-
-    cmd = [_PROFDATA, 'merge', '-o', output_path
-           ] + extra_args + filtered_input_files
+    cmd = [_PROFDATA, 'merge', '-o', output_path] + extra_args + input_files
     _LOGGER.debug(f"Running command: {' '.join(cmd)}")
 
     proc = subprocess.run(cmd, check=True, capture_output=True, text=True)
@@ -282,7 +260,7 @@ def run_benchmark(benchmark_args: List[str], args: OptionsNamespace):
         shutil.rmtree(profraw_path)
     os.makedirs(profraw_path, exist_ok=True)
 
-    profdata_path = f'{args.profiledir}/{name}{args.suffix}'
+    profdata_path = f'{args.profiledir}/{name}.profdata'
     _LOGGER.debug(f"profdata path: {profdata_path}")
     if os.path.exists(profdata_path):
         _LOGGER.debug(f"Removing existing profdata file: {profdata_path}")
@@ -305,6 +283,12 @@ def run_benchmark(benchmark_args: List[str], args: OptionsNamespace):
         # to produce valid profdata. Fail fast and rely on repeats to get a
         # valid profdata.
         '--max-failures=0',
+        # Disabling spare renderer features when profiling prevent dumping
+        # profile data too early during benchmarks which would result in
+        # incomplete profraw files. See https://crbug.com/366235732.
+        '--extra-browser-args='
+        '"--disable-features=SpareRendererForSitePerProcess,'
+        'AndroidWarmUpSpareRendererWithTimeout"',
     ] + ['-v'] * args.verbose + ['-q'] * args.quiet
 
     if args.android_browser:
@@ -435,7 +419,7 @@ def run_benchmarks(benchmarks: List[List[str]], args: OptionsNamespace):
 
 def merge_profdata(profile_output_path: str, args: OptionsNamespace):
     _LOGGER.info(f"Merging all profdata files into: {profile_output_path}")
-    profdata_files = glob.glob(f'{args.profiledir}/*{args.suffix}')
+    profdata_files = glob.glob(f'{args.profiledir}/*.profdata')
     _LOGGER.debug(f"Found {len(profdata_files)} profdata files")
     if not profdata_files:
         raise RuntimeError(f'No profdata files found in {args.profiledir}')
@@ -521,22 +505,11 @@ def main():
                         'runs.')
 
     if not args.skip_profdata:
-        profile_output_path = f'{args.outputdir}/profile{args.suffix}'
+        # Bots run a separate merge step (merge_results.py) that expects profraw
+        # files instead of profdata files.
+        suffix = ".profraw" if args.isolated_script_test_output else ".profdata"
+        profile_output_path = f'{args.outputdir}/profile{suffix}'
         merge_profdata(profile_output_path, args)
-        if ('64' in str(args.android_browser)
-                and args.isolated_script_test_output):
-            # We are on the arm64 bot, where we want to avoid perf regressions.
-            max_internal_block_count = get_max_internal_block_count(
-                profile_output_path)
-            _LOGGER.info(
-                f'Maximum internal block count: {max_internal_block_count}')
-            assert max_internal_block_count is not None, 'Failed to get ' \
-                'max internal block count from profdata.'
-            # TODO(crbug.com/373822787): Remove this when no longer needed.
-            if max_internal_block_count < _ANDROID_64_BLOCK_COUNT_THRESHOLD:
-                raise MergeError(
-                    f"max_internal_block_count={max_internal_block_count} is "
-                    f"lower than {_ANDROID_64_BLOCK_COUNT_THRESHOLD}.")
 
     if not args.keep_temps:
         _LOGGER.info('Cleaning up %s, use --keep-temps to keep it.',

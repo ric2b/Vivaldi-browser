@@ -177,5 +177,5 @@ Simulate the effects of colorblindness:
             developers](https://docs.google.com/document/d/1RamP4-HJ7GAJY3yv2ju2cK50K9GhOsydJN6KIO81das/pub)
 
 If you are a Googler, you can access the folder of Google-internal Enamel
-documents at [go/enamel-folder](https://goto.google.com/enamel-folder) (using
+documents at [go/enamel-folder](http://go/enamel-folder) (using
 your corp account).

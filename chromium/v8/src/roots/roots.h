@@ -161,6 +161,7 @@ class RootVisitor;
   V(Map, trusted_weak_fixed_array_map, TrustedWeakFixedArrayMap)               \
   V(Map, trusted_byte_array_map, TrustedByteArrayMap)                          \
   V(Map, protected_fixed_array_map, ProtectedFixedArrayMap)                    \
+  V(Map, protected_weak_fixed_array_map, ProtectedWeakFixedArrayMap)           \
   V(Map, interpreter_data_map, InterpreterDataMap)                             \
   V(Map, shared_function_info_wrapper_map, SharedFunctionInfoWrapperMap)       \
   V(Map, trusted_foreign_map, TrustedForeignMap)                               \
@@ -229,6 +230,7 @@ class RootVisitor;
   V(WeakFixedArray, empty_weak_fixed_array, EmptyWeakFixedArray)               \
   V(WeakArrayList, empty_weak_array_list, EmptyWeakArrayList)                  \
   V(Cell, invalid_prototype_validity_cell, InvalidPrototypeValidityCell)       \
+  V(FeedbackCell, many_closures_cell, ManyClosuresCell)                        \
   STRONG_READ_ONLY_HEAP_NUMBER_ROOT_LIST(V)                                    \
   /* Table of strings of one-byte single characters */                         \
   V(FixedArray, single_character_string_table, SingleCharacterStringTable)     \
@@ -256,7 +258,10 @@ class RootVisitor;
   V(TrustedFixedArray, empty_trusted_fixed_array, EmptyTrustedFixedArray) \
   V(TrustedWeakFixedArray, empty_trusted_weak_fixed_array,                \
     EmptyTrustedWeakFixedArray)                                           \
-  V(ProtectedFixedArray, empty_protected_fixed_array, EmptyProtectedFixedArray)
+  V(ProtectedFixedArray, empty_protected_fixed_array,                     \
+    EmptyProtectedFixedArray)                                             \
+  V(ProtectedWeakFixedArray, empty_protected_weak_fixed_array,            \
+    EmptyProtectedWeakFixedArray)
 
 #define BUILTINS_WITH_SFI_LIST_GENERATOR(APPLY, V)                             \
   APPLY(V, ProxyRevoke, proxy_revoke)                                          \
@@ -323,7 +328,6 @@ class RootVisitor;
   V(Map, message_object_map, JSMessageObjectMap)                               \
   /* Canonical empty values */                                                 \
   V(Script, empty_script, EmptyScript)                                         \
-  V(FeedbackCell, many_closures_cell, ManyClosuresCell)                        \
   /* Protectors */                                                             \
   V(PropertyCell, array_constructor_protector, ArrayConstructorProtector)      \
   V(PropertyCell, no_elements_protector, NoElementsProtector)                  \
@@ -333,6 +337,7 @@ class RootVisitor;
     NoUndetectableObjectsProtector)                                            \
   V(PropertyCell, is_concat_spreadable_protector, IsConcatSpreadableProtector) \
   V(PropertyCell, array_species_protector, ArraySpeciesProtector)              \
+  V(PropertyCell, typed_array_length_protector, TypedArrayLengthProtector)     \
   V(PropertyCell, typed_array_species_protector, TypedArraySpeciesProtector)   \
   V(PropertyCell, promise_species_protector, PromiseSpeciesProtector)          \
   V(PropertyCell, regexp_species_protector, RegExpSpeciesProtector)            \
@@ -552,6 +557,10 @@ static_assert(RootIndex::kFirstNameForProtector <=
 NAME_FOR_PROTECTOR_ROOT_LIST(FOR_PROTECTOR_CHECK)
 #undef FOR_PROTECTOR_CHECK
 
+#define ROOT_TYPE_FWD_DECL(Type, name, CamelName) class Type;
+ROOT_LIST(ROOT_TYPE_FWD_DECL)
+#undef ROOT_TYPE_FWD_DECL
+
 // Represents a storage of V8 heap roots.
 class RootsTable {
  public:
@@ -565,6 +574,17 @@ class RootsTable {
 
   template <typename T>
   bool IsRootHandle(IndirectHandle<T> handle, RootIndex* index) const;
+
+  // Returns heap number with identical value if it already exists or the empty
+  // handle otherwise.
+  IndirectHandle<HeapNumber> FindHeapNumber(double value);
+
+#define ROOT_ACCESSOR(Type, name, CamelName) \
+  V8_INLINE IndirectHandle<Type> name();
+  ROOT_LIST(ROOT_ACCESSOR)
+#undef ROOT_ACCESSOR
+
+  V8_INLINE IndirectHandle<Object> handle_at(RootIndex root_index);
 
   Address const& operator[](RootIndex root_index) const {
     size_t index = static_cast<size_t>(root_index);
@@ -676,9 +696,7 @@ class RootsTable {
   friend class RootsSerializer;
 };
 
-#define ROOT_TYPE_FWD_DECL(Type, name, CamelName) class Type;
-READ_ONLY_ROOT_LIST(ROOT_TYPE_FWD_DECL)
-#undef ROOT_TYPE_FWD_DECL
+inline ReadOnlyRoots GetReadOnlyRoots();
 
 class ReadOnlyRoots {
  public:
@@ -693,10 +711,9 @@ class ReadOnlyRoots {
   // map-word instead of a tagged heap pointer.
   MapWord one_pointer_filler_map_word();
 
-#define ROOT_ACCESSOR(Type, name, CamelName)       \
-  V8_INLINE Tagged<Type> name() const;             \
-  V8_INLINE Tagged<Type> unchecked_##name() const; \
-  V8_INLINE IndirectHandle<Type> name##_handle() const;
+#define ROOT_ACCESSOR(Type, name, CamelName) \
+  V8_INLINE Tagged<Type> name() const;       \
+  V8_INLINE Tagged<Type> unchecked_##name() const;
 
   READ_ONLY_ROOT_LIST(ROOT_ACCESSOR)
 #undef ROOT_ACCESSOR
@@ -708,17 +725,11 @@ class ReadOnlyRoots {
 #endif
 
   V8_INLINE Tagged<Boolean> boolean_value(bool value) const;
-  V8_INLINE IndirectHandle<Boolean> boolean_value_handle(bool value) const;
-
-  // Returns heap number with identical value if it already exists or the empty
-  // handle otherwise.
-  IndirectHandle<HeapNumber> FindHeapNumber(double value);
 
   V8_INLINE Address address_at(RootIndex root_index) const;
   V8_INLINE Tagged<Object> object_at(RootIndex root_index) const;
-  V8_INLINE IndirectHandle<Object> handle_at(RootIndex root_index) const;
 
-  // Check if a slot is initialized yet. Should only be neccessary for code
+  // Check if a slot is initialized yet. Should only be necessary for code
   // running during snapshot creation.
   V8_INLINE bool is_initialized(RootIndex root_index) const;
 
@@ -745,13 +756,12 @@ class ReadOnlyRoots {
   V8_INLINE explicit ReadOnlyRoots(Address* ro_roots)
       : read_only_roots_(ro_roots) {}
 
-  V8_INLINE Address* GetLocation(RootIndex root_index) const;
-
   Address* read_only_roots_;
 
   friend class ReadOnlyHeap;
   friend class DeserializerAllocator;
   friend class ReadOnlyHeapImageDeserializer;
+  friend ReadOnlyRoots GetReadOnlyRoots();
 };
 
 }  // namespace internal

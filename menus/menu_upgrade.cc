@@ -55,6 +55,34 @@ std::unique_ptr<base::Value> MenuUpgrade::Run(
       deleted_.push_back(s);
     }
   }
+  // Make a list of actions we no longer use. All candidates not present in the
+  // menu file's saved expired list will be tested for. We write all entries in
+  // the candidate list to the saved expired list at the end of this function
+  // so future updates with no changes to the candidate list will not slow down
+  // the upgrade speed (except for the setup code below).
+  // TODO: Look into a C++ based upgrade system as we have in JS.
+  std::vector<std::string> candidates = {
+    // Add commands here if needed. Once added it can not be removed.
+    "COMMAND_OPEN_NEW_OR_REOPEN_LAST_CLOSED_WINDOW"
+  };
+  expired_.clear();
+  // The expired list we read from file contains all actions we have tested for.
+  base::Value* expired = profile_control->GetDict().Find("expired");
+  if (expired && expired->is_list()) {
+    const auto& list = expired->GetList();
+    for (int i = candidates.size() - 1; i >= 0; i--) {
+      bool match = false;
+      for (int j = list.size() - 1; j >= 0 && !match; j--) {
+        match = candidates[i] == list[j].GetString();
+      }
+      if (!match) {
+        expired_.push_back(candidates[i]);
+      }
+    }
+  } else {
+    expired_ = candidates;
+  }
+
   // Add new elements in the profile based tree.
   for (const auto& top_node : bundled_root->GetList()) {
     if (const base::Value::Dict* top_dict = top_node.GetIfDict()) {
@@ -107,12 +135,20 @@ std::unique_ptr<base::Value> MenuUpgrade::Run(
   }
   deleted = profile_control->GetDict().Find("deleted");
   if (deleted && deleted->is_list()) {
-     base::Value deleted_list(base::Value::Type::LIST);
-     for (const auto& elm : deleted_) {
+    base::Value deleted_list(base::Value::Type::LIST);
+    for (const auto& elm : deleted_) {
       deleted_list.GetList().Append(elm);
     }
     profile_control->GetDict().Set("deleted", std::move(deleted_list));
   }
+
+  // Write all candidates to the expired list. This will ensure we do not
+  // spend time testing for those (for each menu item) in future updates.
+  base::Value  expired_list(base::Value::Type::LIST);
+  for (const auto& elm : candidates) {
+    expired_list.GetList().Append(elm);
+  }
+  profile_control->GetDict().Set("expired", std::move(expired_list));
 
   return profile_root;
 }
@@ -232,6 +268,20 @@ bool MenuUpgrade::RemoveFromProfile(const base::Value::Dict& profile_dict,
   const std::string* guid = profile_dict.FindString("guid");
   if (!guid) {
     return false;
+  }
+
+  // Remove any actions we do not to use anymore. If a user has added this
+  // action to a menu from Settings it will have a unique guid we have no
+  // knowledge about. So we erase by action name.
+  if (expired_.size()) {
+    const std::string* action = profile_dict.FindString("action");
+    if (action) {
+      for (int i = expired_.size() - 1; i >= 0; i--) {
+        if (expired_[i] == *action) {
+          return Remove(profile_dict, parent_guid, profile_list);
+        }
+      }
+    }
   }
 
   int origin = profile_dict.FindInt("origin").value_or(Menu_Node::BUNDLE);

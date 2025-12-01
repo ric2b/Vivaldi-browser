@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "chrome/services/printing/pdf_nup_converter.h"
 
 #include <string>
@@ -51,7 +56,7 @@ void RunCallbackWithConversionResult(Callback callback,
 
 PdfNupConverter::PdfNupConverter() = default;
 
-PdfNupConverter::~PdfNupConverter() {}
+PdfNupConverter::~PdfNupConverter() = default;
 
 void PdfNupConverter::NupPageConvert(
     uint32_t pages_per_sheet,

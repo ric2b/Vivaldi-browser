@@ -11,7 +11,6 @@
 #include <string>
 #include <utility>
 
-#include "base/auto_reset.h"
 #include "base/command_line.h"
 #include "base/containers/flat_set.h"
 #include "base/feature_list.h"
@@ -246,7 +245,8 @@ void PrepareDragForDownload(const DropData& drop_data,
 // Returns the ClipboardFormatType to store file system files.
 const ui::ClipboardFormatType& GetFileSystemFileFormatType() {
   static base::NoDestructor<ui::ClipboardFormatType> format(
-      ui::ClipboardFormatType::GetType("chromium/x-file-system-files"));
+      ui::ClipboardFormatType::CustomPlatformType(
+          "chromium/x-file-system-files"));
   return *format;
 }
 
@@ -353,7 +353,8 @@ blink::DragOperationsMask ConvertToDragOperationsMask(int drag_op) {
 }
 
 GlobalRoutingID GetRenderViewHostID(RenderViewHost* rvh) {
-  return GlobalRoutingID(rvh->GetProcess()->GetID(), rvh->GetRoutingID());
+  return GlobalRoutingID(rvh->GetProcess()->GetDeprecatedID(),
+                         rvh->GetRoutingID());
 }
 
 // Returns the host window for |window|, or nullpr if it has no host window.
@@ -718,7 +719,7 @@ void WebContentsViewAura::SetDelegateForTesting(
 void WebContentsViewAura::PrepareDropData(
     DropData* drop_data,
     const ui::OSExchangeData& data) const {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   // TODO(b/256022714): Using `IsRendererTainted()` breaks the Files app. Always
   // setting this to false is currently believed to be safe-ish because ChromeOS
   // separates URL and filename metadata and does not implement the DownloadURL
@@ -787,8 +788,8 @@ void WebContentsViewAura::PrepareDropData(
     if (std::optional<std::vector<ui::FileInfo>> virtual_filenames =
             data.GetVirtualFilenames();
         virtual_filenames.has_value()) {
-      base::ranges::move(virtual_filenames.value(),
-                         std::back_inserter(drop_data->filenames));
+      std::ranges::move(virtual_filenames.value(),
+                        std::back_inserter(drop_data->filenames));
     }
   }
 #endif
@@ -1259,8 +1260,8 @@ gfx::Size WebContentsViewAura::GetMinimumSize() const {
   return gfx::Size();
 }
 
-gfx::Size WebContentsViewAura::GetMaximumSize() const {
-  return gfx::Size();
+std::optional<gfx::Size> WebContentsViewAura::GetMaximumSize() const {
+  return std::nullopt;
 }
 
 void WebContentsViewAura::OnBoundsChanged(const gfx::Rect& old_bounds,
@@ -1887,7 +1888,6 @@ void WebContentsViewAura::ShowPopupMenu(
     RenderFrameHost* render_frame_host,
     mojo::PendingRemote<blink::mojom::PopupMenuClient> popup_client,
     const gfx::Rect& bounds,
-    int item_height,
     double item_font_size,
     int selected_item,
     std::vector<blink::mojom::MenuItemPtr> menu_items,

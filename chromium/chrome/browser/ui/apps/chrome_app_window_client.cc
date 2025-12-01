@@ -10,7 +10,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/devtools_agent_host.h"
@@ -70,10 +69,11 @@ void ChromeAppWindowClient::OpenDevToolsWindow(
 
   DevToolsWindow* devtools_window =
       DevToolsWindow::FindDevToolsWindow(agent.get());
-  if (devtools_window)
+  if (devtools_window) {
     devtools_window->SetLoadCompletedCallback(std::move(callback));
-  else
+  } else {
     std::move(callback).Run();
+  }
 }
 
 bool ChromeAppWindowClient::IsCurrentChannelOlderThanDev() {

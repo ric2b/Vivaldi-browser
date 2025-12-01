@@ -158,7 +158,7 @@
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 #include "base/linux_util.h"
-#include "remoting/host/audio_capturer_linux.h"
+#include "remoting/host/linux/audio_capturer_linux.h"
 #include "remoting/host/linux/certificate_watcher.h"
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 
@@ -1838,7 +1838,7 @@ void HostProcess::StartHost() {
     // externally, we don't want to apply this policy for non-Corp machines.
     desktop_environment_options_.set_enable_user_interface(
         enable_user_interface_);
-    corp_host_status_logger_ = std::make_unique<CorpHostStatusLogger>(
+    corp_host_status_logger_ = CorpHostStatusLogger::CreateForRemoteAccess(
         context_->url_loader_factory(), &local_session_policies_provider_,
         service_account_email_, oauth_refresh_token_);
     corp_host_status_logger_->StartObserving(*session_manager);
@@ -1846,6 +1846,14 @@ void HostProcess::StartHost() {
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
   desktop_environment_options_.set_enable_remote_webauthn(is_corp_host_);
+#endif
+#if BUILDFLAG(IS_WIN)
+  // Set a default value for whether to allow the dxgi capturer. This value can
+  // be explicitly disallowed by the client when session options are applied.
+  // The desktop process will check whether DXGI is supported in the session
+  // it is capturing before attempting to use it.
+  desktop_environment_options_.desktop_capture_options()
+      ->set_allow_directx_capturer(true);
 #endif
 
   host_ = std::make_unique<ChromotingHost>(

@@ -50,7 +50,7 @@ Illustrative factors for application rejection may include:
 -   where the corresponding CA owner has ever been:
     -   determined to have acted in an untrustworthy manner or created unnecessary ecosystem risk, or
     -   associated with a certificate that was previously distrusted by Chrome or any other public root program.
--   has an incident history that does not convey the [factors](https://www.chromium.org/Home/chromium-security/root-ca-policy/#7-responding-to-incidents:~:text=7.%20Responding%20to%20Incidents) significant to Chrome.
+-   has an incident history that does not convey the [factors](/Home/chromium-security/root-ca-policy/#7-responding-to-incidents:~:text=7.%20Responding%20to%20Incidents) significant to Chrome.
 -   completion of a CCADB root inclusion public discussion that casts doubt over the CA owners security, honesty or reliability.
 -   discovery of false or misleading information provided by the CA owner.
 -   significant delays in response from the CA owner when seeking additional or clarifying information.

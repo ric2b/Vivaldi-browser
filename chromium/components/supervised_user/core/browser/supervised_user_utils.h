@@ -5,14 +5,20 @@
 #ifndef COMPONENTS_SUPERVISED_USER_CORE_BROWSER_SUPERVISED_USER_UTILS_H_
 #define COMPONENTS_SUPERVISED_USER_CORE_BROWSER_SUPERVISED_USER_UTILS_H_
 
+#include <optional>
 #include <string>
 #include <vector>
 
+#include "base/base64.h"
 #include "base/memory/raw_ref.h"
 #include "components/safe_search_api/url_checker.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/supervised_user/core/browser/family_link_user_log_record.h"
 #include "components/supervised_user/core/browser/proto/families_common.pb.h"
+#include "components/supervised_user/core/browser/proto/parent_access_callback.pb.h"
+#include "components/supervised_user/core/common/supervised_user_constants.h"
+#include "third_party/abseil-cpp/absl/types/variant.h"
+#include "url/gurl.h"
 
 class GURL;
 class PrefService;
@@ -52,6 +58,44 @@ enum class LocallyParentApprovedExtensionsMigrationState : int {
   kComplete = 1,
 };
 
+// Wrapper for the different outcomes: holds either an error or a valid
+// parsed PACP callback result that can be returned by the PACP widget.
+class ParentAccessCallbackParsedResult {
+ public:
+  explicit ParentAccessCallbackParsedResult(ParentAccessWidgetError error);
+  explicit ParentAccessCallbackParsedResult(
+      kids::platform::parentaccess::client::proto::ParentAccessCallback
+          callback);
+
+  ParentAccessCallbackParsedResult() = delete;
+  ParentAccessCallbackParsedResult(ParentAccessCallbackParsedResult&) = delete;
+  ParentAccessCallbackParsedResult& operator=(
+      const ParentAccessCallbackParsedResult&) = delete;
+  ~ParentAccessCallbackParsedResult();
+
+  std::optional<ParentAccessWidgetError> GetError() const;
+  std::optional<
+      kids::platform::parentaccess::client::proto::ParentAccessCallback>
+  GetCallback() const;
+
+  // Decodes and parses the the base64 result provided by the PACP widget.
+  static ParentAccessCallbackParsedResult ParseParentAccessCallbackResult(
+      const std::string& encoded_parent_access_callback_proto,
+      base::Base64DecodePolicy decoding_policy =
+          base::Base64DecodePolicy::kStrict);
+
+ private:
+  absl::variant<
+      kids::platform::parentaccess::client::proto::ParentAccessCallback,
+      ParentAccessWidgetError>
+      result_;
+};
+
+// Extracts a parent approval result from a url query parameter returned by the
+// PACP widget, if the provided url must contain a `result=` query param.
+// If not such query param value exists the method returns an empty optional.
+std::optional<std::string> MaybeGetPacpResultFromUrl(const GURL& url);
+
 // Converts FamilyRole enum to string format.
 std::string FamilyRoleToString(kidsmanagement::FamilyRole role);
 
@@ -82,6 +126,22 @@ class UrlFormatter {
   const raw_ref<const SupervisedUserURLFilter> supervised_user_url_filter_;
   const FilteringBehaviorReason filtering_behavior_reason_;
 };
+
+// Returns the URL of the PACP widget for the iOS local web approval flow.
+// `locale` is the display language (go/bcp47).
+// TODO(crbug.com/394051451): Pass the blocked url and blocking reason.
+GURL GetParentAccessURLForIOS(const std::string& locale);
+
+// Returns the URL of the PACP widget for the Desktop local web approval flow.
+// `locale` is the display language (go/bcp47).
+// `blocked_url` is the url subject to approval that is shown in the PACP
+// widget.
+// `filtering_reason` is the reason for blocking the url, which is reflected
+// in the subtitle of the PACP widget.
+GURL GetParentAccessURLForDesktop(
+    const std::string& locale,
+    const GURL& blocked_url,
+    const supervised_user::FilteringBehaviorReason& filtering_reason);
 
 }  // namespace supervised_user
 

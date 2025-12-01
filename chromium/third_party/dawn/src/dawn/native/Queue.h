@@ -73,9 +73,7 @@ class QueueBase : public ApiObjectBase, public ExecutionQueueBase {
 
     // Dawn API
     void APISubmit(uint32_t commandCount, CommandBufferBase* const* commands);
-    void APIOnSubmittedWorkDone(WGPUQueueWorkDoneCallback callback, void* userdata);
-    Future APIOnSubmittedWorkDoneF(const QueueWorkDoneCallbackInfo& callbackInfo);
-    Future APIOnSubmittedWorkDone2(const WGPUQueueWorkDoneCallbackInfo2& callbackInfo);
+    Future APIOnSubmittedWorkDone(const WGPUQueueWorkDoneCallbackInfo& callbackInfo);
     void APIWriteBuffer(BufferBase* buffer, uint64_t bufferOffset, const void* data, size_t size);
     void APIWriteTexture(const ImageCopyTexture* destination,
                          const void* data,
@@ -143,7 +141,7 @@ class QueueBase : public ApiObjectBase, public ExecutionQueueBase {
                                                      const CopyTextureForBrowserOptions* options);
 
     MaybeError ValidateSubmit(uint32_t commandCount, CommandBufferBase* const* commands) const;
-    MaybeError ValidateOnSubmittedWorkDone(wgpu::QueueWorkDoneStatus* status) const;
+    MaybeError ValidateOnSubmittedWorkDone() const;
     MaybeError ValidateWriteTexture(const ImageCopyTexture* destination,
                                     size_t dataSize,
                                     const TextureDataLayout& dataLayout,

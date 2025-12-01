@@ -472,32 +472,19 @@ class PlainObjectBase : public internal::dense_xpr_base<Derived>::type
   // Prevent user from trying to instantiate PlainObjectBase objects
   // by making all its constructor protected. See bug 1074.
  protected:
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE constexpr PlainObjectBase() : m_storage() {
-    //       EIGEN_INITIALIZE_COEFFS_IF_THAT_OPTION_IS_ENABLED
-  }
-
-#ifndef EIGEN_PARSED_BY_DOXYGEN
-  // FIXME is it still needed ?
-  /** \internal */
-  EIGEN_DEVICE_FUNC constexpr explicit PlainObjectBase(internal::constructor_without_unaligned_array_assert)
-      : m_storage(internal::constructor_without_unaligned_array_assert()) {
-    // EIGEN_INITIALIZE_COEFFS_IF_THAT_OPTION_IS_ENABLED
-  }
-#endif
-
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE constexpr PlainObjectBase(PlainObjectBase&& other) = default;
-
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE constexpr PlainObjectBase() = default;
+  /** \brief Move constructor */
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE constexpr PlainObjectBase(PlainObjectBase&&) = default;
+  /** \brief Move assignment operator */
   EIGEN_DEVICE_FUNC constexpr PlainObjectBase& operator=(PlainObjectBase&& other) EIGEN_NOEXCEPT {
     m_storage = std::move(other.m_storage);
     return *this;
   }
 
   /** Copy constructor */
-  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE constexpr PlainObjectBase(const PlainObjectBase& other) = default;
+  EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE constexpr PlainObjectBase(const PlainObjectBase&) = default;
   EIGEN_DEVICE_FUNC EIGEN_STRONG_INLINE PlainObjectBase(Index size, Index rows, Index cols)
-      : m_storage(size, rows, cols) {
-    //       EIGEN_INITIALIZE_COEFFS_IF_THAT_OPTION_IS_ENABLED
-  }
+      : m_storage(size, rows, cols) {}
 
   /** \brief Construct a row of column vector with fixed size from an arbitrary number of coefficients.
    *
@@ -538,7 +525,10 @@ class PlainObjectBase : public internal::dense_xpr_base<Derived>::type
       eigen_assert(list_size == static_cast<size_t>(RowsAtCompileTime) || RowsAtCompileTime == Dynamic);
       resize(list_size, ColsAtCompileTime);
       if (list.begin()->begin() != nullptr) {
-        std::copy(list.begin()->begin(), list.begin()->end(), m_storage.data());
+        Index index = 0;
+        for (const Scalar& e : *list.begin()) {
+          coeffRef(index++) = e;
+        }
       }
     } else {
       eigen_assert(list.size() == static_cast<size_t>(RowsAtCompileTime) || RowsAtCompileTime == Dynamic);

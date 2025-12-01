@@ -579,7 +579,7 @@ bool MdnsQuerier::ShouldAnswerRecordBeProcessed(const MdnsRecord& answer) {
   // required because records which are already stored may either have been
   // received in an additional records section, or are associated with a query
   // which is no longer active.
-  std::vector<DnsType> types{answer.dns_type()};
+  std::vector<DnsType> types = {answer.dns_type()};
   if (answer.dns_type() == DnsType::kNSEC) {
     const auto& nsec_rdata = absl::get<NsecRecordRdata>(answer.rdata());
     types = nsec_rdata.types();

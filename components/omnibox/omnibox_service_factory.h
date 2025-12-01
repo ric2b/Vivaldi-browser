@@ -9,8 +9,8 @@
 #ifndef COMPONENTS_OMNIBOX_OMNIBOX_SERVICE_FACTORY_H_
 #define COMPONENTS_OMNIBOX_OMNIBOX_SERVICE_FACTORY_H_
 
-#include "base/memory/singleton.h"
-#include "components/keyed_service/content/browser_context_keyed_service_factory.h"
+#include "base/no_destructor.h"
+#include "chrome/browser/profiles/profile_keyed_service_factory.h"
 
 class Profile;
 
@@ -20,7 +20,7 @@ class OmniboxService;
 
 // Singleton that owns all OmniboxServices and associates them with
 // Profiles.
-class OmniboxServiceFactory : public BrowserContextKeyedServiceFactory {
+class OmniboxServiceFactory : public ProfileKeyedServiceFactory {
  public:
   static OmniboxService* GetForProfile(Profile* profile);
 
@@ -29,16 +29,16 @@ class OmniboxServiceFactory : public BrowserContextKeyedServiceFactory {
   static void ShutdownForProfile(Profile* profile);
 
  private:
-  friend struct base::DefaultSingletonTraits<OmniboxServiceFactory>;
+  friend base::NoDestructor<OmniboxServiceFactory>;
 
   OmniboxServiceFactory();
   ~OmniboxServiceFactory() override;
 
-  // BrowserContextKeyedServiceFactory:
-  KeyedService* BuildServiceInstanceFor(
+  // ProfileKeyedServiceFactory:
+  std::unique_ptr<KeyedService> BuildServiceInstanceForBrowserContext(
       content::BrowserContext* context) const override;
-  content::BrowserContext* GetBrowserContextToUse(
-      content::BrowserContext* context) const override;
+  bool ServiceIsCreatedWithBrowserContext() const override;
+
 };
 
 }  // namespace vivaldi_omnibox

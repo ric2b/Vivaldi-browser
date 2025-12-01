@@ -5,7 +5,6 @@
 #include "chrome/browser/sync/local_or_syncable_bookmark_sync_service_factory.h"
 
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/undo/bookmark_undo_service_factory.h"
 #include "components/sync/model/wipe_model_upon_sync_disabled_behavior.h"
 #include "components/sync_bookmarks/bookmark_sync_service.h"
 
@@ -42,21 +41,20 @@ LocalOrSyncableBookmarkSyncServiceFactory::
               // Ash Internals.
               .WithAshInternals(ProfileSelection::kRedirectedToOriginal)
               .Build()) {
-  DependsOn(BookmarkUndoServiceFactory::GetInstance());
   DependsOn(SyncedFileStoreFactory::GetInstance());
 }
 
 LocalOrSyncableBookmarkSyncServiceFactory::
     ~LocalOrSyncableBookmarkSyncServiceFactory() = default;
 
-KeyedService*
-LocalOrSyncableBookmarkSyncServiceFactory::BuildServiceInstanceFor(
-    content::BrowserContext* context) const {
-  Profile* profile = Profile::FromBrowserContext(context);
-  auto* sync_service = new sync_bookmarks::BookmarkSyncService(
-      BookmarkUndoServiceFactory::GetForProfileIfExists(profile),
+std::unique_ptr<KeyedService> LocalOrSyncableBookmarkSyncServiceFactory::
+    BuildServiceInstanceForBrowserContext(
+        content::BrowserContext* context) const {
+  /* Vivaldi */ auto sync_service = std::make_unique<sync_bookmarks::BookmarkSyncService>(
       syncer::WipeModelUponSyncDisabledBehavior::kNever);
-  sync_service->SetVivaldiSyncedFileStore(
-      SyncedFileStoreFactory::GetForBrowserContext(context));
+
+  sync_service->SetVivaldiSyncedFileStore( // Vivaldi
+      SyncedFileStoreFactory::GetForBrowserContext(context)); // Vivaldi
+
   return sync_service;
 }

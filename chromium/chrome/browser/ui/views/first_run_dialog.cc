@@ -9,7 +9,6 @@
 #include "base/functional/bind.h"
 #include "base/run_loop.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/first_run/first_run_dialog.h"
 #include "chrome/browser/headless/headless_mode_util.h"
@@ -39,14 +38,16 @@ void ShowFirstRunDialog() {
   // Don't show first run dialog when running in headless mode since this
   // would effectively block the UI because there is no one to interact with
   // the dialog.
-  if (headless::IsHeadlessMode())
+  if (headless::IsHeadlessMode()) {
     return;
+  }
 
 #if BUILDFLAG(IS_MAC)
-  if (base::FeatureList::IsEnabled(features::kViewsFirstRunDialog))
+  if (base::FeatureList::IsEnabled(features::kViewsFirstRunDialog)) {
     ShowFirstRunDialogViews();
-  else
+  } else {
     ShowFirstRunDialogCocoa();
+  }
 #else
   ShowFirstRunDialogViews();
 #endif
@@ -68,7 +69,7 @@ void FirstRunDialog::Show(base::RepeatingClosure learn_more_callback,
                           base::RepeatingClosure quit_runloop) {
   FirstRunDialog* dialog = new FirstRunDialog(std::move(learn_more_callback),
                                               std::move(quit_runloop));
-  views::DialogDelegate::CreateDialogWidget(dialog, NULL, NULL)->Show();
+  views::DialogDelegate::CreateDialogWidget(dialog, nullptr, nullptr)->Show();
 }
 
 FirstRunDialog::FirstRunDialog(base::RepeatingClosure learn_more_callback,
@@ -98,14 +99,14 @@ FirstRunDialog::FirstRunDialog(base::RepeatingClosure learn_more_callback,
   report_crashes_->SetChecked(true);
 }
 
-FirstRunDialog::~FirstRunDialog() {
-}
+FirstRunDialog::~FirstRunDialog() = default;
 
 void FirstRunDialog::Done() {
   CHECK(!quit_runloop_.is_null());
 
   if (!closed_through_accept_button_) {
-    ChangeMetricsReportingState(false);
+    ChangeMetricsReportingState(
+        false, ChangeMetricsReportingStateCalledFrom::kUiFirstRun);
   }
 
   quit_runloop_.Run();
@@ -115,10 +116,13 @@ bool FirstRunDialog::Accept() {
   GetWidget()->Hide();
   closed_through_accept_button_ = true;
 
-  ChangeMetricsReportingState(report_crashes_->GetChecked());
+  ChangeMetricsReportingState(
+      report_crashes_->GetChecked(),
+      ChangeMetricsReportingStateCalledFrom::kUiFirstRun);
 
-  if (make_default_->GetChecked())
+  if (make_default_->GetChecked()) {
     shell_integration::SetAsDefaultBrowser();
+  }
 
   Done();
   return true;

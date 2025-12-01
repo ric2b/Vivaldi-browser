@@ -692,10 +692,9 @@ IN_PROC_BROWSER_TEST_P(
   EXPECT_FALSE(AreAllTracksLive(method2_).value.GetBool());
 }
 
-// TODO(crbug.com/40071631): re-enable once the bug is fixed.
 IN_PROC_BROWSER_TEST_P(
     InteractionBetweenGetAllScreensMediaAndGetDisplayMediaTest,
-    DISABLED_UserStoppingGetDisplayMediaDoesNotStopGetAllScreensMedia) {
+    UserStoppingGetDisplayMediaDoesNotStopGetAllScreensMedia) {
   SetScreens(/*screen_count=*/1u);
   EXPECT_CALL(mock_multi_capture_service_,
               IsMultiCaptureAllowed(testing::_, testing::_))
@@ -970,7 +969,7 @@ class MultiScreenCaptureInIsolatedWebAppBrowserTest
         web_app::ManifestBuilder().SetName("app-3.0.4").SetVersion("3.0.4");
     if (IsPermissionPolicySet()) {
       manifest_builder.AddPermissionsPolicy(
-          blink::mojom::PermissionsPolicyFeature::kAllScreensCapture,
+          network::mojom::PermissionsPolicyFeature::kAllScreensCapture,
           /*self=*/true, /*origins=*/{});
     }
     auto builder = web_app::IsolatedWebAppBuilder(std::move(manifest_builder));

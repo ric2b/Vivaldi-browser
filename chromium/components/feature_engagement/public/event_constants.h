@@ -114,6 +114,9 @@ extern const char kDefaultBrowserPromoShown[];
 // The user tapped Remind Me Later on a default browser promo.
 extern const char kDefaultBrowserPromoRemindMeLater[];
 
+// The non-modal default browser promo from omnibox paste was triggered.
+extern const char kNonModalDefaultBrowserPromoUrlPasteTrigger[];
+
 // The Password Manager widget promo was triggered.
 extern const char kPasswordManagerWidgetPromoTriggered[];
 
@@ -277,6 +280,12 @@ extern const char kHomeCustomizationMenuUsed[];
 
 // The user has tapped on the lens overlay entrypoint.
 extern const char kLensOverlayEntrypointUsed[];
+
+// The user has scheduled a tab reminder.
+extern const char kIOSTabReminderScheduled[];
+
+// The Reminder Notifications Overflow Menu Bubble IPH was triggered.
+extern const char kIOSReminderNotificationsOverflowMenuBubbleIPHTrigger[];
 
 #endif  // BUILDFLAG(IS_IOS)
 

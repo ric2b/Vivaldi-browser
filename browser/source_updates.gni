@@ -75,6 +75,8 @@ update_target("//chrome/browser:browser") {
       "//vivaldi/browser/android/prefs/vivaldi_preferences_bridge.h",
       "//vivaldi/browser/android/prefs/vivaldi_preferences_bridge.cc",
       "//vivaldi/browser/android/prefs/vivaldi_relaunch_utils.cc",
+      "//vivaldi/browser/android/prompts/search_engine_prompt_bridge.cc",
+      "//vivaldi/browser/android/prompts/search_engine_prompt_bridge.h",
       # TODO CHR 124: Check if we can only use the Chromium implementation for the future.
       #"//vivaldi/browser/android/autofill/autofill_provider_android.cc",
       #"//vivaldi/browser/android/autofill/autofill_provider_android.h",

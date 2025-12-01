@@ -35,7 +35,7 @@ How to write a design:
 
 ### Familiarize Yourself with Coding Best Practices
 
-Review style guides outlined in [Writing Code](https://www.chromium.org/chromium-os/developer-library/reference/cpp/intro/) -- this is
+Review style guides outlined in [Writing Code](/chromium-os/developer-library/reference/cpp/intro/) -- this is
 more of an ongoing process in order to review these resources and improving your
 skills.
 
@@ -208,7 +208,7 @@ TEST_F(RetroactivePairingDetectorTest,
 }
 ```
 
-Note: see [Debugging tips and tricks](https://www.chromium.org/chromium-os/developer-library/guides/debugging/debugging/) to learn some methods
+Note: see [Debugging tips and tricks](/chromium-os/developer-library/guides/debugging/debugging/) to learn some methods
 available to debug a regression.
 
 ### Don’t close bugs whose outcome is uncertain

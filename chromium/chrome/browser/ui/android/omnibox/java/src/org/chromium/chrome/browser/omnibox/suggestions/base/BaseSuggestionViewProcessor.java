@@ -38,6 +38,13 @@ import org.chromium.url.GURL;
 import java.util.List;
 import java.util.Optional;
 
+// Vivaldi
+import org.vivaldi.browser.preferences.VivaldiPreferences;
+
+import org.chromium.build.BuildConfig;
+
+import java.util.Arrays;
+
 /** A class that handles base properties and model for most suggestions. */
 public abstract class BaseSuggestionViewProcessor implements SuggestionProcessor {
     protected final @NonNull Context mContext;
@@ -150,7 +157,7 @@ public abstract class BaseSuggestionViewProcessor implements SuggestionProcessor
         Runnable action;
         if (suggestion.hasTabMatch() || suggestion.getType() == OmniboxSuggestionType.OPEN_TAB) {
             // Hub doesn't have refine icons for switch-to-tab.
-            if (input.getPageClassification().getAsInt() == PageClassification.ANDROID_HUB_VALUE) {
+            if (input.getPageClassification() == PageClassification.ANDROID_HUB_VALUE) {
                 return;
             }
             icon = R.drawable.switch_to_tab;
@@ -175,6 +182,26 @@ public abstract class BaseSuggestionViewProcessor implements SuggestionProcessor
                         mSuggestionHost.onRefineSuggestion(suggestion);
                     };
         }
+        // Vivaldi VAB-10524
+        if (BuildConfig.IS_VIVALDI && suggestion.isDeletable() &&
+                VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                "address_bar_delete_direct_match", false)) {
+            setActionButtons(
+                    model,
+                    Arrays.asList(
+                            new Action(
+                                    OmniboxDrawableState.forSmallIcon(mContext, icon, true),
+                                    iconString,
+                                    action),
+                            new Action(
+                                    OmniboxDrawableState.forSmallIcon(
+                                            mContext, R.drawable.ic_clear_black_24, true),
+                                    OmniboxResourceProvider.getString(
+                                            mContext, R.string.omnibox_confirm_delete),
+                                    () -> mSuggestionHost.onDeleteMatch(suggestion,
+                                            suggestion.getDisplayText()))));
+            return;
+        } // End Vivaldi
         setActionButtons(
                 model,
                 List.of(

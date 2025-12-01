@@ -7,6 +7,7 @@ package org.chromium.base.test.transit;
 import androidx.annotation.Nullable;
 
 import org.chromium.base.Log;
+import org.chromium.base.ThreadUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -123,7 +124,11 @@ public abstract class Transition {
         if (mTrigger != null) {
             Log.i(TAG, "%s: will run trigger", toDebugString());
             try {
-                mTrigger.triggerTransition();
+                if (mOptions.mRunTriggerOnUiThread) {
+                    ThreadUtils.runOnUiThread(mTrigger::triggerTransition);
+                } else {
+                    mTrigger.triggerTransition();
+                }
                 Log.i(TAG, "%s: finished running trigger", toDebugString());
             } catch (Throwable e) {
                 throw TravelException.newTravelException(
@@ -139,7 +144,9 @@ public abstract class Transition {
         // prints the state of all conditions. The timeout can be reduced when explicitly looking
         // for flakiness due to tight timeouts.
         try {
-            mConditionWaiter.waitFor(toDebugString());
+            mConditionWaiter.waitFor();
+        } catch (TravelException e) {
+            throw e;
         } catch (Throwable e) {
             throw newTransitionException(e);
         }
@@ -210,6 +217,11 @@ public abstract class Transition {
         return builder.build();
     }
 
+    /** Convenience method equivalent to newOptions().withRunTriggerOnUiThread().build(). */
+    public static TransitionOptions runTriggerOnUiThreadOption() {
+        return newOptions().withRunTriggerOnUiThread().build();
+    }
+
     /** Options to configure the Transition. */
     public static class TransitionOptions {
 
@@ -218,6 +230,7 @@ public abstract class Transition {
         long mTimeoutMs;
         int mTries = 1;
         boolean mPossiblyAlreadyFulfilled;
+        boolean mRunTriggerOnUiThread;
 
         private TransitionOptions() {}
 
@@ -259,6 +272,12 @@ public abstract class Transition {
             /** The Transition's Conditions might already be all fulfilled before the Trigger. */
             public Builder withPossiblyAlreadyFulfilled() {
                 mPossiblyAlreadyFulfilled = true;
+                return this;
+            }
+
+            /** Run the {@link Trigger} on the UI Thread. */
+            public Builder withRunTriggerOnUiThread() {
+                mRunTriggerOnUiThread = true;
                 return this;
             }
         }

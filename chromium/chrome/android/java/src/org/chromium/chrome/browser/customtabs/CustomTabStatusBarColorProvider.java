@@ -10,21 +10,16 @@ import static org.chromium.chrome.browser.ui.system.StatusBarColorController.UND
 import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.customtabs.features.toolbar.CustomTabToolbarColorController;
 import org.chromium.chrome.browser.customtabs.features.toolbar.CustomTabToolbarColorController.ToolbarColorType;
-import org.chromium.chrome.browser.dependency_injection.ActivityScope;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.ui.system.StatusBarColorController;
 
-import javax.inject.Inject;
-
 /** Manages the status bar color for a CustomTabActivity. */
-@ActivityScope
 public class CustomTabStatusBarColorProvider {
     private final BrowserServicesIntentDataProvider mIntentDataProvider;
     private final StatusBarColorController mStatusBarColorController;
 
     private boolean mUseTabThemeColor;
 
-    @Inject
     public CustomTabStatusBarColorProvider(
             BrowserServicesIntentDataProvider intentDataProvider,
             StatusBarColorController statusBarColorController) {

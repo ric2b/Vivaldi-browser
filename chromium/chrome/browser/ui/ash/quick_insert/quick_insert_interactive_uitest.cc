@@ -6,14 +6,19 @@
 #include <vector>
 
 #include "ash/ash_element_identifiers.h"
+#include "ash/constants/ash_features.h"
 #include "ash/quick_insert/quick_insert_controller.h"
 #include "ash/quick_insert/views/quick_insert_emoji_item_view.h"
+#include "ash/quick_insert/views/quick_insert_gif_view.h"
 #include "ash/quick_insert/views/quick_insert_image_item_row_view.h"
 #include "ash/quick_insert/views/quick_insert_image_item_view.h"
 #include "ash/quick_insert/views/quick_insert_list_item_view.h"
 #include "ash/shell.h"
 #include "base/files/file_util.h"
+#include "base/json/json_string_value_serializer.h"
 #include "base/strings/string_util.h"
+#include "base/test/scoped_feature_list.h"
+#include "base/test/values_test_util.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time_override.h"
 #include "chrome/browser/ash/file_manager/path_util.h"
@@ -24,6 +29,7 @@
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/test/history_service_test_util.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/url_loader_interceptor.h"
 #include "extensions/browser/browsertest_util.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/base/interaction/state_observer.h"
@@ -113,9 +119,6 @@ class QuickInsertInteractiveUiTest : public InteractiveAshTest {
   };
 
   QuickInsertInteractiveUiTest() {
-    feature_list_.InitWithFeatures(
-        /*enabled_features=*/{ash::features::kPickerGrid},
-        /*disabled_features=*/{});
     ash::QuickInsertController::DisableFeatureTourForTesting();
   }
 
@@ -162,9 +165,6 @@ class QuickInsertInteractiveUiTest : public InteractiveAshTest {
           return false;
         }));
   }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
 };
 
 // Searches for 'thumbs up', checks the top emoji result is '👍', and inserts it
@@ -194,7 +194,8 @@ IN_PROC_BROWSER_TEST_F(QuickInsertInteractiveUiTest, SearchAndInsertEmoji) {
                   /*transition_only_on_event=*/true),
       NameDescendantViewByProperty(
           ash::kQuickInsertEmojiBarElementId, kFirstEmojiResultName,
-          &ash::PickerEmojiItemView::GetTextForTesting, kExpectedFirstEmoji),
+          &ash::QuickInsertEmojiItemView::GetTextForTesting,
+          kExpectedFirstEmoji),
       PressButton(kFirstEmojiResultName),
       WaitForHide(ash::kQuickInsertElementId),
       InContext(browser_context,
@@ -229,7 +230,8 @@ IN_PROC_BROWSER_TEST_F(QuickInsertInteractiveUiTest, SearchAndInsertSymbol) {
                   /*transition_only_on_event=*/true),
       NameDescendantViewByProperty(
           ash::kQuickInsertEmojiBarElementId, kFirstSymbolResultName,
-          &ash::PickerEmojiItemView::GetTextForTesting, kExpectedFirstSymbol),
+          &ash::QuickInsertEmojiItemView::GetTextForTesting,
+          kExpectedFirstSymbol),
       PressButton(kFirstSymbolResultName),
       WaitForHide(ash::kQuickInsertElementId),
       InContext(browser_context,
@@ -264,7 +266,8 @@ IN_PROC_BROWSER_TEST_F(QuickInsertInteractiveUiTest, SearchAndInsertEmoticon) {
                   /*transition_only_on_event=*/true),
       NameDescendantViewByProperty(
           ash::kQuickInsertEmojiBarElementId, kFirstEmoticonResultName,
-          &ash::PickerEmojiItemView::GetTextForTesting, kExpectedFirstEmoticon),
+          &ash::QuickInsertEmojiItemView::GetTextForTesting,
+          kExpectedFirstEmoticon),
       PressButton(kFirstEmoticonResultName),
       WaitForHide(ash::kQuickInsertElementId),
       InContext(browser_context,
@@ -297,7 +300,19 @@ IN_PROC_BROWSER_TEST_F(QuickInsertInteractiveUiTest,
       WaitForShow(ash::kEmojiPickerElementId));
 }
 
-IN_PROC_BROWSER_TEST_F(QuickInsertInteractiveUiTest, SearchGifs) {
+class QuickInsertWithGifsDisabledInteractiveUiTest
+    : public QuickInsertInteractiveUiTest {
+ public:
+  QuickInsertWithGifsDisabledInteractiveUiTest() {
+    feature_list_.InitAndDisableFeature(ash::features::kPickerGifs);
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(QuickInsertWithGifsDisabledInteractiveUiTest,
+                       SearchGifs) {
   ASSERT_TRUE(CreateBrowserWindow(
       GURL("data:text/html,<input type=\"text\" autofocus/>")));
   const ui::ElementContext browser_context =
@@ -320,6 +335,197 @@ IN_PROC_BROWSER_TEST_F(QuickInsertInteractiveUiTest, SearchGifs) {
       PressButton(ash::kQuickInsertGifElementId),
       WaitForHide(ash::kQuickInsertElementId),
       WaitForShow(ash::kEmojiPickerElementId));
+}
+
+// Intercepts network requests to Tenor and respond with fake GIFs.
+// This must be deleted while there's a SingleThreadTaskRunner.
+class FakeTenorServer {
+ public:
+  FakeTenorServer()
+      :  // This class outlives `url_loader_interceptor_`.
+        url_loader_interceptor_(std::make_unique<content::URLLoaderInterceptor>(
+            base::BindRepeating(&FakeTenorServer::MaybeInterceptRequest,
+                                base::Unretained(this)))) {}
+
+  bool MaybeInterceptRequest(
+      content::URLLoaderInterceptor::RequestParams* params) {
+    GURL url = params->url_request.url;
+    // tenor.googleapis.com hosts the API endpoints for Tenor.
+    if (url.DomainIs("tenor.googleapis.com")) {
+      if (url.path_piece().ends_with("/search") ||
+          url.path_piece().ends_with("/featured")) {
+        return HandleSearchOrFeatured(params);
+      }
+      return false;
+    }
+
+    // media.tenor.com hosts the actual GIFs and preview images themselves.
+    if (url.DomainIs("media.tenor.com")) {
+      content::URLLoaderInterceptor::WriteResponse(
+          "chrome/test/data/google/logo.gif", params->client.get());
+      return true;
+    }
+
+    return false;
+  }
+
+ private:
+  bool HandleSearchOrFeatured(
+      content::URLLoaderInterceptor::RequestParams* params) {
+    // Build up a fake set of GIFs
+    base::Value::List results;
+    for (int i = 0; i < 10; ++i) {
+      results.Append(base::test::ParseJson(R"json({
+          "id": "0",
+          "content_description": "Google logo",
+          "media_formats": {
+            "gif": {
+              "dims": [276, 110],
+              "url": "https://media.tenor.com/full.gif"
+            },
+            "tinygif": {
+              "dims": [276, 110],
+              "url": "https://media.tenor.com/full.gif"
+            },
+            "tinygifpreview": {
+              "url": "https://media.tenor.com/full.gif"
+            }
+          }
+        })json"));
+    }
+
+    constexpr std::string_view headers =
+        "HTTP/1.1 200 OK\nContent-Type: text/json\n\n";
+    content::URLLoaderInterceptor::WriteResponse(
+        headers,
+        *base::WriteJson(
+            base::Value::Dict().Set("results", std::move(results))),
+        params->client.get());
+    return true;
+  }
+
+  std::unique_ptr<content::URLLoaderInterceptor> url_loader_interceptor_;
+};
+
+class QuickInsertWithGifsEnabledInteractiveUiTest
+    : public QuickInsertInteractiveUiTest {
+ public:
+  QuickInsertWithGifsEnabledInteractiveUiTest()
+      : feature_list_(ash::features::kPickerGifs) {}
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(QuickInsertWithGifsEnabledInteractiveUiTest,
+                       SearchGifs) {
+  FakeTenorServer fake_tenor_server;
+  // TODO: b/360229206 - Use a contenteditable input field so the file can be
+  // inserted.
+  ASSERT_TRUE(CreateBrowserWindow(
+      GURL("data:text/html,<input type=\"text\" autofocus/>")));
+  const ui::ElementContext browser_context =
+      chrome::FindLastActive()->window()->GetElementContext();
+  views::Textfield* quick_insert_search_field = nullptr;
+  constexpr std::string_view kGifName = "Gif";
+
+  RunTestSequence(
+      InContext(browser_context, Steps(InstrumentTab(kWebContentsElementId),
+                                       WaitForWebInputFieldFocus())),
+      Do([]() { TogglePickerByAccelerator(); }),
+      AfterShow(ash::kQuickInsertSearchFieldTextfieldElementId,
+                [&quick_insert_search_field](ui::TrackedElement* el) {
+                  quick_insert_search_field = AsView<views::Textfield>(el);
+                }),
+      ObserveState(kSearchFieldFocusedState,
+                   std::ref(quick_insert_search_field)),
+      WaitForState(kSearchFieldFocusedState, true),
+      EnterText(ash::kQuickInsertSearchFieldTextfieldElementId, u"happy"),
+      WaitForShow(ash::kQuickInsertSearchResultsPageElementId),
+      WaitForShow(ash::kQuickInsertGifElementId),
+      PressButton(ash::kQuickInsertGifElementId),
+      WaitForShow(ash::kQuickInsertSearchResultsImageItemElementId),
+      NameDescendantViewByType<ash::QuickInsertGifView>(
+          ash::kQuickInsertSearchResultsImageItemElementId, kGifName, 0),
+      CheckView(kGifName,
+                [](ash::QuickInsertGifView* view) {
+                  return !view->GetImageBounds().IsEmpty();
+                }),
+      PressButton(ash::kQuickInsertSearchResultsImageItemElementId),
+      WaitForHide(ash::kQuickInsertElementId));
+}
+
+IN_PROC_BROWSER_TEST_F(QuickInsertWithGifsEnabledInteractiveUiTest,
+                       FeatureGifs) {
+  FakeTenorServer fake_tenor_server;
+  // TODO: b/360229206 - Use a contenteditable input field so the file can be
+  // inserted.
+  ASSERT_TRUE(CreateBrowserWindow(
+      GURL("data:text/html,<input type=\"text\" autofocus/>")));
+  const ui::ElementContext browser_context =
+      chrome::FindLastActive()->window()->GetElementContext();
+  views::Textfield* quick_insert_search_field = nullptr;
+  constexpr std::string_view kGifName = "Gif";
+
+  RunTestSequence(
+      InContext(browser_context, Steps(InstrumentTab(kWebContentsElementId),
+                                       WaitForWebInputFieldFocus())),
+      Do([]() { TogglePickerByAccelerator(); }),
+      AfterShow(ash::kQuickInsertSearchFieldTextfieldElementId,
+                [&quick_insert_search_field](ui::TrackedElement* el) {
+                  quick_insert_search_field = AsView<views::Textfield>(el);
+                }),
+      WaitForShow(ash::kQuickInsertGifElementId),
+      PressButton(ash::kQuickInsertGifElementId),
+      WaitForShow(ash::kQuickInsertSearchResultsPageElementId),
+      WaitForShow(ash::kQuickInsertSearchResultsImageItemElementId),
+      NameDescendantViewByType<ash::QuickInsertGifView>(
+          ash::kQuickInsertSearchResultsImageItemElementId, kGifName, 0),
+      CheckView(kGifName,
+                [](ash::QuickInsertGifView* view) {
+                  return !view->GetImageBounds().IsEmpty();
+                }),
+      PressButton(ash::kQuickInsertSearchResultsImageItemElementId),
+      WaitForHide(ash::kQuickInsertElementId));
+}
+
+IN_PROC_BROWSER_TEST_F(QuickInsertWithGifsEnabledInteractiveUiTest,
+                       ToggleGifs) {
+  AddUrlToHistory(GetActiveUserProfile(), GURL("https://foo.com/history"));
+  FakeTenorServer fake_tenor_server;
+  // TODO: b/360229206 - Use a contenteditable input field so the file can be
+  // inserted.
+  ASSERT_TRUE(CreateBrowserWindow(
+      GURL("data:text/html,<input type=\"text\" autofocus/>")));
+  const ui::ElementContext browser_context =
+      chrome::FindLastActive()->window()->GetElementContext();
+  views::Textfield* quick_insert_search_field = nullptr;
+
+  RunTestSequence(
+      InContext(browser_context, Steps(InstrumentTab(kWebContentsElementId),
+                                       WaitForWebInputFieldFocus())),
+      Do([]() { TogglePickerByAccelerator(); }),
+      AfterShow(ash::kQuickInsertSearchFieldTextfieldElementId,
+                [&quick_insert_search_field](ui::TrackedElement* el) {
+                  quick_insert_search_field = AsView<views::Textfield>(el);
+                }),
+      ObserveState(kSearchFieldFocusedState,
+                   std::ref(quick_insert_search_field)),
+      WaitForState(kSearchFieldFocusedState, true),
+      // Turn on GIFs
+      WaitForShow(ash::kQuickInsertGifElementId),
+      PressButton(ash::kQuickInsertGifElementId),
+      EnterText(ash::kQuickInsertSearchFieldTextfieldElementId, u"foo.com"),
+      WaitForShow(ash::kQuickInsertSearchResultsPageElementId),
+      WaitForShow(ash::kQuickInsertSearchResultsImageItemElementId),
+      // Turn off GIFs
+      WaitForShow(ash::kQuickInsertGifElementId),
+      PressButton(ash::kQuickInsertGifElementId),
+      WaitForShow(ash::kQuickInsertSearchResultsListItemElementId),
+      NameDescendantViewByProperty(
+          ash::kQuickInsertSearchResultsPageElementId, "HistoryResult",
+          &ash::QuickInsertListItemView::GetPrimaryTextForTesting,
+          u"foo.com/history"));
 }
 
 IN_PROC_BROWSER_TEST_F(QuickInsertInteractiveUiTest, SearchBrowsingHistory) {
@@ -577,12 +783,12 @@ IN_PROC_BROWSER_TEST_F(QuickInsertInteractiveUiTest,
       WaitForState(kSearchFieldFocusedState, true),
       WaitForShow(ash::kQuickInsertSearchResultsImageRowElementId),
       WaitForViewProperty(ash::kQuickInsertSearchResultsImageRowElementId,
-                          ash::PickerImageItemRowView, Items, SizeIs(3)),
-      NameDescendantViewByType<ash::PickerImageItemView>(
+                          ash::QuickInsertImageItemRowView, Items, SizeIs(3)),
+      NameDescendantViewByType<ash::QuickInsertImageItemView>(
           ash::kQuickInsertElementId, kFile1Name, 0),
-      NameDescendantViewByType<ash::PickerImageItemView>(
+      NameDescendantViewByType<ash::QuickInsertImageItemView>(
           ash::kQuickInsertElementId, kFile2Name, 1),
-      NameDescendantViewByType<ash::PickerImageItemView>(
+      NameDescendantViewByType<ash::QuickInsertImageItemView>(
           ash::kQuickInsertElementId, kFile3Name, 2),
       CheckViewProperty(kFile1Name, &views::View::GetAccessibleName,
                         u"Insert test1.png"),
@@ -620,9 +826,9 @@ IN_PROC_BROWSER_TEST_F(QuickInsertInteractiveUiTest,
           ash::kQuickInsertElementId, kItem1Name, 0),
       NameDescendantViewByType<ash::QuickInsertListItemView>(
           ash::kQuickInsertElementId, kItem2Name, 1),
-      NameDescendantViewByType<ash::PickerEmojiItemView>(
+      NameDescendantViewByType<ash::QuickInsertEmojiItemView>(
           ash::kQuickInsertElementId, kEmoji1Name, 0),
-      NameDescendantViewByType<ash::PickerEmojiItemView>(
+      NameDescendantViewByType<ash::QuickInsertEmojiItemView>(
           ash::kQuickInsertElementId, kEmoji2Name, 1),
       // The first item should be selected by default.
       CheckViewProperty(kItem1Name, &ash::QuickInsertItemView::GetItemState,

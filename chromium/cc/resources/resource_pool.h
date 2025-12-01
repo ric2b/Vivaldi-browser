@@ -25,11 +25,10 @@
 #include "cc/cc_export.h"
 #include "components/viz/common/resources/resource_id.h"
 #include "components/viz/common/resources/resource_sizes.h"
-#include "components/viz/common/resources/shared_bitmap.h"
 #include "components/viz/common/resources/shared_image_format.h"
 #include "components/viz/common/resources/transferable_resource.h"
+#include "gpu/command_buffer/client/shared_image_interface.h"
 #include "gpu/command_buffer/common/sync_token.h"
-#include "third_party/khronos/GLES2/gl2.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/gpu_memory_buffer.h"
@@ -58,24 +57,11 @@ class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider {
   // Max delay before an evicted resource is flushed.
   static constexpr base::TimeDelta kDefaultMaxFlushDelay = base::Seconds(1);
 
-  // A base class to hold ownership of gpu backed PoolResources. Allows the
-  // client to define destruction semantics.
+  // A class to hold ownership of gpu backed PoolResources.
   class CC_EXPORT GpuBacking {
    public:
     GpuBacking();
-    virtual ~GpuBacking();
-
-    // Dumps information about the memory backing the GpuBacking to |pmd|.
-    // The memory usage is attributed to |buffer_dump_guid|.
-    // |tracing_process_id| uniquely identifies the process owning the memory.
-    // |importance| is relevant only for the cases of co-ownership, the memory
-    // gets attributed to the owner with the highest importance.
-    // Called on the compositor thread.
-    virtual void OnMemoryDump(
-        base::trace_event::ProcessMemoryDump* pmd,
-        const base::trace_event::MemoryAllocatorDumpGuid& buffer_dump_guid,
-        uint64_t tracing_process_id,
-        int importance) const = 0;
+    ~GpuBacking();
 
     scoped_refptr<gpu::ClientSharedImage> shared_image;
     gpu::SyncToken mailbox_sync_token;
@@ -96,30 +82,16 @@ class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider {
     bool is_using_raw_draw = false;
   };
 
-  // A base class to hold ownership of software backed PoolResources. Allows the
-  // client to define destruction semantics.
+  // A class to hold ownership of software backed PoolResources.
   class CC_EXPORT SoftwareBacking {
    public:
     SoftwareBacking();
     virtual ~SoftwareBacking();
 
-    // Dumps information about the memory backing the SoftwareBacking to |pmd|.
-    // The memory usage is attributed to |buffer_dump_guid|.
-    // |tracing_process_id| uniquely identifies the process owning the memory.
-    // |importance| is relevant only for the cases of co-ownership, the memory
-    // gets attributed to the owner with the highest importance.
-    // Called on the compositor thread.
-    virtual void OnMemoryDump(
-        base::trace_event::ProcessMemoryDump* pmd,
-        const base::trace_event::MemoryAllocatorDumpGuid& buffer_dump_guid,
-        uint64_t tracing_process_id,
-        int importance) const = 0;
-
-    // Mailbox
-    viz::SharedBitmapId shared_bitmap_id;
 
     scoped_refptr<gpu::ClientSharedImage> shared_image;
     gpu::SyncToken mailbox_sync_token;
+    scoped_refptr<gpu::SharedImageInterface> shared_image_interface;
   };
 
   // Scoped move-only object returned when getting a resource from the pool.
@@ -227,7 +199,7 @@ class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider {
       const std::string& debug_name = std::string());
 
   // Tries to acquire the resource with |previous_content_id| for us in partial
-  // raster. If successful, this function will retun the invalidated rect which
+  // raster. If successful, this function will return the invalidated rect which
   // must be re-rastered in |total_invalidated_rect|.
   InUsePoolResource TryAcquireResourceForPartialRaster(
       uint64_t new_content_id,
@@ -371,7 +343,7 @@ class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider {
       // to kBusy or kUnused depends on if the resource is exported.
       kInUse,
 
-      // The resource has been expored (sent) to viz process for compositing.
+      // The resource has been exported (sent) to viz process for compositing.
       // When the resource is returned from the viz, the state will be changed
       // to kUnused.
       kBusy,

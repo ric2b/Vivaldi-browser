@@ -54,10 +54,6 @@ class TestExtensionsBrowserClient : public ExtensionsBrowserClient {
     extension_cache_ = std::move(extension_cache);
   }
 
-  void set_lock_screen_context(content::BrowserContext* context) {
-    lock_screen_context_ = context;
-  }
-
   // Sets a factory to respond to calls of the CreateUpdateClient method.
   void SetUpdateClientFactory(
       base::RepeatingCallback<update_client::UpdateClient*(void)> factory);
@@ -90,6 +86,7 @@ class TestExtensionsBrowserClient : public ExtensionsBrowserClient {
   bool AreExtensionsDisabledForContext(
       content::BrowserContext* context) override;
 #if BUILDFLAG(IS_CHROMEOS)
+  bool IsActiveContext(content::BrowserContext* browser_context) const override;
   std::string GetUserIdHashFromContext(
       content::BrowserContext* context) override;
 #endif
@@ -164,7 +161,6 @@ class TestExtensionsBrowserClient : public ExtensionsBrowserClient {
   KioskDelegate* GetKioskDelegate() override;
   scoped_refptr<update_client::UpdateClient> CreateUpdateClient(
       content::BrowserContext* context) override;
-  bool IsLockScreenContext(content::BrowserContext* context) override;
   std::string GetApplicationLocale() override;
 
   ExtensionSystemProvider* extension_system_factory() {
@@ -181,8 +177,6 @@ class TestExtensionsBrowserClient : public ExtensionsBrowserClient {
   raw_ptr<content::BrowserContext> main_context_ = nullptr;
   // Not owned.
   raw_ptr<content::BrowserContext> incognito_context_ = nullptr;
-  // Not owned.
-  raw_ptr<content::BrowserContext> lock_screen_context_ = nullptr;
 
   // Not owned.
   raw_ptr<ProcessManagerDelegate> process_manager_delegate_ = nullptr;

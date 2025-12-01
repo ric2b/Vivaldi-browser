@@ -135,11 +135,11 @@ title: March 2021 - Fixit week, New features, Testing, Interop, Metrics and more
 
     <td><td>Marked in TestExpectations:</td></td>
 
-        <td><td>For <a href="http://crbug.com/893480">crbug.com/893480</a> the
+        <td><td>For <a href="https://crbug.com/893480">crbug.com/893480</a> the
         remaining 8 tests in Test Expectations need implementation keyUp/keyDown
         as it allows for multiple keys pressed at once</td></td>
 
-        <td><td>For <a href="http://crbug.com/1140611">crbug.com/1140611</a>
+        <td><td>For <a href="https://crbug.com/1140611">crbug.com/1140611</a>
         there’s “Element click intercepted error” thrown from test driver (2
         tests)</td></td>
 
@@ -318,7 +318,7 @@ title: March 2021 - Fixit week, New features, Testing, Interop, Metrics and more
 
 <td><td>Overscroll-behavior propagation</td></td>
 
-<td><td>xidachen@ made some progress towards fixing this <a href="http://crbug.com/954423">bug</a>, which includes</td></td>
+<td><td>xidachen@ made some progress towards fixing this <a href="https://crbug.com/954423">bug</a>, which includes</td></td>
 
     <td><td>Found ~15 google internal sites that might break by the incoming
     fix</td></td>

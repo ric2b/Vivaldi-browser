@@ -7,7 +7,7 @@
 
 #include <memory>
 
-#include "chrome/browser/ash/system_web_apps/types/system_web_app_delegate.h"
+#include "chromeos/ash/experiences/system_web_apps/types/system_web_app_delegate.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace web_app {
@@ -22,7 +22,10 @@ class SanitizeSystemAppDelegate : public ash::SystemWebAppDelegate {
   std::unique_ptr<web_app::WebAppInstallInfo> GetWebAppInfo() const override;
   bool ShouldCaptureNavigations() const override;
   bool ShouldAllowResize() const override;
+  bool ShouldAllowMaximize() const override;
   bool ShouldShowInLauncher() const override;
+  bool ShouldAllowScriptsToCloseWindows() const override;
+  bool ShouldShowInSearchAndShelf() const override;
   gfx::Rect GetDefaultBounds(Browser* browser) const override;
 };
 

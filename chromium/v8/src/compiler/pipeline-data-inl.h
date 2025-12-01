@@ -122,7 +122,7 @@ class TFPipelineData {
         allocator_(wasm_engine->allocator()),
         info_(info),
         debug_name_(info_->GetDebugName()),
-        may_have_unverifiable_graph_(v8_flags.turboshaft_wasm),
+        may_have_unverifiable_graph_(true),
         zone_stats_(zone_stats),
         pipeline_statistics_(pipeline_statistics),
         graph_zone_(zone_stats_, kGraphZoneName, kCompressGraphZone),
@@ -304,11 +304,11 @@ class TFPipelineData {
   JSOperatorBuilder* javascript() const { return javascript_; }
   JSGraph* jsgraph() const { return jsgraph_; }
   MachineGraph* mcgraph() const { return mcgraph_; }
-  Handle<NativeContext> native_context() const {
-    return handle(info()->native_context(), isolate());
+  DirectHandle<NativeContext> native_context() const {
+    return direct_handle(info()->native_context(), isolate());
   }
-  Handle<JSGlobalObject> global_object() const {
-    return handle(info()->global_object(), isolate());
+  DirectHandle<JSGlobalObject> global_object() const {
+    return direct_handle(info()->global_object(), isolate());
   }
 
   JSHeapBroker* broker() const { return broker_.get(); }

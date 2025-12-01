@@ -65,11 +65,11 @@ cros_chrome_make --install
 `And use the following instead (the binary specified in the file command is the
 one you want to copy over):`
 
-`` ```none
+```none
 (gdb) set debug-file-directory /build/x86-alex/tmp/portage/chromeos-base/chromeos-chrome-9999/image/usr/lib/debug
 (gdb) file /build/x86-alex/tmp/portage/chromeos-base/chromeos-chrome-9999/image/opt/google/chrome/chrome
 (gdb) target remote 12.34.56.78:1234
-``` ``
+```
 
 The program is now paused and you have control over it from your host machine.
 To start execution:

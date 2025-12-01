@@ -124,6 +124,9 @@ class ASH_PUBLIC_EXPORT CaptureModeDelegate {
   // Returns whether screen capture is allowed by an enterprise policy.
   virtual bool IsCaptureAllowedByPolicy() const = 0;
 
+  // Returns whether search is allowed by the browser enterprise policy.
+  virtual bool IsSearchAllowedByPolicy() const = 0;
+
   // Called when a video capture for |window| and |bounds| area is started, so
   // that Data Leak Prevention can start observing the area.
   // |on_area_restricted_callback| will be called when the area becomes
@@ -165,10 +168,6 @@ class ASH_PUBLIC_EXPORT CaptureModeDelegate {
 
   // Gets the DriveFS mount point. Returns true if the Drive is mounted false
   // otherwise.
-  // TODO(michelefan): Now we have both CaptureModeDelegate and ProjectorClient
-  // expose the GetDriveFsMountPointPath. Add the APIs in ShellDelegate which is
-  // implemented by ChromeShellDelegate in chrome and TestShellDelegate in
-  // ash_unittests to reduce the duplication.
   virtual bool GetDriveFsMountPointPath(base::FilePath* path) const = 0;
 
   // Returns the absolute path for the user's Android Play files.
@@ -179,6 +178,9 @@ class ASH_PUBLIC_EXPORT CaptureModeDelegate {
 
   // Gets the OneDrive mount point. Returns empty if OneDrive is not mounted.
   virtual base::FilePath GetOneDriveMountPointPath() const = 0;
+
+  // Gets the OneDrive virtual path indicating that files should be saved there.
+  virtual base::FilePath GetOneDriveVirtualPath() const = 0;
 
   // Returns the path to save files if policy set by admin.
   virtual PolicyCapturePath GetPolicyCapturePath() const = 0;
@@ -230,7 +232,8 @@ class ASH_PUBLIC_EXPORT CaptureModeDelegate {
   virtual void FinalizeSavedFile(
       base::OnceCallback<void(bool, const base::FilePath&)> callback,
       const base::FilePath& path,
-      const gfx::Image& thumbnail) = 0;
+      const gfx::Image& thumbnail,
+      bool for_video) = 0;
 
   // Returns a temporary location where a file with the capture should be saved
   // instead of `path`, if needed, e.g. to be uploaded to cloud later.
@@ -251,7 +254,8 @@ class ASH_PUBLIC_EXPORT CaptureModeDelegate {
   // when the response is fetched.
   virtual void SendRegionSearch(const SkBitmap& image,
                                 const gfx::Rect& region,
-                                OnSearchUrlFetchedCallback callback) = 0;
+                                OnSearchUrlFetchedCallback search_callback,
+                                OnTextDetectionComplete text_callback) = 0;
 
   // Sends the captured `image`, `region`, and search box `text` to the backend.
   // Invokes `callback` when the response is fetched.
@@ -260,6 +264,13 @@ class ASH_PUBLIC_EXPORT CaptureModeDelegate {
       const gfx::Rect& region,
       const std::string& text,
       ash::OnSearchUrlFetchedCallback callback) = 0;
+
+  // Returns true if the network is currently in an offline or unknown state.
+  virtual bool IsNetworkConnectionOffline() const = 0;
+
+  // Deletes the remote file under `path` and calls `callback` with result.
+  virtual void DeleteRemoteFile(const base::FilePath& path,
+                                base::OnceCallback<void(bool)> callback) = 0;
 };
 
 }  // namespace ash

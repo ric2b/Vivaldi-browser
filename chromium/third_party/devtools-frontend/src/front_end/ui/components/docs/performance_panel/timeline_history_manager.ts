@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import * as Root from '../../../../core/root/root.js';
 import * as Trace from '../../../../models/trace/trace.js';
 import * as Timeline from '../../../../panels/timeline/timeline.js';
 import * as FrontendHelpers from '../../../../testing/EnvironmentHelpers.js';
@@ -12,8 +11,6 @@ import * as ComponentSetup from '../../helpers/helpers.js';
 
 await FrontendHelpers.initializeGlobalVars();
 await ComponentSetup.ComponentServerSetup.setup();
-
-Root.Runtime.experiments.setEnabled(Root.Runtime.ExperimentName.TIMELINE_OBSERVATIONS, true);
 
 UI.ActionRegistration.registerActionExtension({
   actionId: 'timeline.show-history',
@@ -26,7 +23,8 @@ UI.ActionRegistration.registerActionExtension({
   },
 });
 
-const {parsedTrace: parsedTrace1} = await TraceLoader.TraceLoader.traceEngine(null, 'multiple-navigations.json.gz');
+const {parsedTrace: parsedTrace1, metadata: metadata1} =
+    await TraceLoader.TraceLoader.traceEngine(null, 'multiple-navigations.json.gz');
 TraceLoader.TraceLoader.initTraceBoundsManager(parsedTrace1);
 
 new Timeline.TimelineHistoryManager.TimelineHistoryManager().addRecording({
@@ -36,10 +34,11 @@ new Timeline.TimelineHistoryManager.TimelineHistoryManager().addRecording({
   },
   filmStripForPreview: Trace.Extras.FilmStrip.fromParsedTrace(parsedTrace1),
   parsedTrace: parsedTrace1,
-  startTime: null,
+  metadata: metadata1,
 });
 
-const {parsedTrace: parsedTrace2} = await TraceLoader.TraceLoader.traceEngine(null, 'web-dev.json.gz');
+const {parsedTrace: parsedTrace2, metadata: metadata2} =
+    await TraceLoader.TraceLoader.traceEngine(null, 'web-dev.json.gz');
 TraceLoader.TraceLoader.initTraceBoundsManager(parsedTrace2);
 const container = document.querySelector('.container');
 if (!container) {
@@ -53,6 +52,6 @@ new Timeline.TimelineHistoryManager.TimelineHistoryManager().addRecording({
   },
   filmStripForPreview: Trace.Extras.FilmStrip.fromParsedTrace(parsedTrace2),
   parsedTrace: parsedTrace2,
-  startTime: null,
+  metadata: metadata2,
 });
 await Timeline.TimelineHistoryManager.DropDown.show([0, 1], 1, container);

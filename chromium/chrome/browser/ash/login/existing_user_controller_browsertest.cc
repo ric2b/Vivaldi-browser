@@ -7,7 +7,6 @@
 #include <string>
 #include <vector>
 
-#include "ash/components/arc/test/arc_util_test_support.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/login_screen_test_api.h"
@@ -71,6 +70,7 @@
 #include "chromeos/ash/components/settings/cros_settings.h"
 #include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "chromeos/ash/components/settings/cros_settings_provider.h"
+#include "chromeos/ash/experiences/arc/test/arc_util_test_support.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "components/account_id/account_id.h"
@@ -96,6 +96,7 @@
 #include "components/user_manager/user_type.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
+#include "google_apis/gaia/gaia_id.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -115,11 +116,11 @@ using ::testing::Return;
 const char kObjectGuid[] = "12345";
 const char kAdUsername[] = "test_user@ad-domain.com";
 const char kNewUser[] = "new_test_user@gmail.com";
-const char kNewGaiaID[] = "11111";
+const GaiaId::Literal kNewGaiaID("11111");
 const char kExistingUser[] = "existing_test_user@gmail.com";
-const char kExistingGaiaID[] = "22222";
+const GaiaId::Literal kExistingGaiaID("22222");
 const char kManagedUser[] = "user@example.com";
-const char kManagedGaiaID[] = "33333";
+const GaiaId::Literal kManagedGaiaID("33333");
 const char kManager[] = "admin@example.com";
 const char kManagedDomain[] = "example.com";
 
@@ -845,7 +846,7 @@ class ExistingUserControllerAuthFailureTest : public OobeBaseTest {
  protected:
   FakeGaiaMixin fake_gaia_{&mixin_host_};
   const LoginManagerMixin::TestUserInfo test_user_{
-      AccountId::FromUserEmailGaiaId("user@gmail.com", "user")};
+      AccountId::FromUserEmailGaiaId("user@gmail.com", GaiaId("user"))};
   LoginManagerMixin login_manager_{&mixin_host_, {test_user_}};
 };
 

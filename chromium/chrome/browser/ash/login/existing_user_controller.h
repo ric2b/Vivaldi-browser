@@ -42,6 +42,7 @@ namespace ash {
 class CrosSettings;
 class KioskAppId;
 class OAuth2TokenInitializer;
+class DemoLoginController;
 enum class SigninError;
 
 namespace login {
@@ -146,6 +147,12 @@ class ExistingUserController : public HttpAuthDialog::Observer,
   // Calls login() on previously-used `login_performer_`.
   void LoginAuthenticated(std::unique_ptr<UserContext> user_context);
 
+  // Retrieve public session auto-login policy and update the
+  // timer.
+  void ConfigureAutoLogin();
+
+  DemoLoginController* GetDemoLoginControllerForTest();
+
  private:
   friend class ExistingUserControllerTest;
   friend class ExistingUserControllerAutoLoginTest;
@@ -160,9 +167,6 @@ class ExistingUserController : public HttpAuthDialog::Observer,
   void LoginAsGuest();
   void LoginAsPublicSession(const UserContext& user_context);
   void LoginAsKioskApp(KioskAppId kiosk_app_id);
-  // Retrieve public session auto-login policy and update the
-  // timer.
-  void ConfigureAutoLogin();
 
   // Trigger public session auto-login.
   void OnPublicSessionAutoLoginTimerFire();
@@ -361,6 +365,9 @@ class ExistingUserController : public HttpAuthDialog::Observer,
 
   // The source of PIN salts. Used to retrieve PIN during TransformPinKey.
   std::unique_ptr<quick_unlock::PinSaltStorage> pin_salt_storage_;
+
+  // Manage auto login for demo mode.
+  std::unique_ptr<ash::DemoLoginController> demo_login_controller_;
 
   base::ScopedObservation<user_manager::UserManager,
                           user_manager::UserManager::Observer>

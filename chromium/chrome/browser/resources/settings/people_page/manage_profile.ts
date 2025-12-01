@@ -11,7 +11,6 @@ import 'chrome://resources/cr_elements/cr_input/cr_input.js';
 import 'chrome://resources/cr_elements/cr_toggle/cr_toggle.js';
 import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 import 'chrome://resources/cr_components/theme_color_picker/theme_color_picker.js';
-import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
 import '../settings_shared.css.js';
 import 'chrome://resources/cr_elements/cr_profile_avatar_selector/cr_profile_avatar_selector.js';
 
@@ -89,6 +88,14 @@ export class SettingsManageProfileElement extends
        * True if the profile shortcuts feature is enabled.
        */
       isProfileShortcutSettingVisible_: Boolean,
+
+      hasEnterpriseLabel_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean('hasEnterpriseLabel');
+        },
+      },
+
 
       /**
        * TODO(dpapad): Move this back to the HTML file when the Polymer2 version

@@ -39,7 +39,6 @@
 #include "chrome/test/base/testing_profile.h"
 #include "components/image_fetcher/core/mock_image_decoder.h"
 #include "components/optimization_guide/core/model_execution/feature_keys.h"
-#include "components/optimization_guide/core/model_quality/feature_type_map.h"
 #include "components/optimization_guide/core/model_quality/model_quality_log_entry.h"
 #include "components/optimization_guide/core/model_quality/test_model_quality_logs_uploader_service.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
@@ -158,7 +157,6 @@ class WallpaperSearchHandlerTest : public testing::Test {
       : profile_(
             MakeTestingProfile(test_url_loader_factory_.GetSafeWeakWrapper(),
                                &local_state_)),
-        logs_uploader_(&local_state_),
         mock_optimization_guide_keyed_service_(
             static_cast<MockOptimizationGuideKeyedService*>(
                 OptimizationGuideKeyedServiceFactory::GetForProfile(
@@ -180,6 +178,12 @@ class WallpaperSearchHandlerTest : public testing::Test {
                               optimization_guide::features::
                                   kOptimizationGuideModelExecution},
         /*disabled_features=*/{});
+
+    auto logs_uploader = std::make_unique<
+        optimization_guide::TestModelQualityLogsUploaderService>(&local_state_);
+    mock_optimization_guide_keyed_service_
+        ->SetModelQualityLogsUploaderServiceForTesting(
+            std::move(logs_uploader));
   }
 
   void TearDown() override {
@@ -260,11 +264,18 @@ class WallpaperSearchHandlerTest : public testing::Test {
   }
 
   std::unique_ptr<ModelQualityLogEntry> ModelQuality() {
-    return std::make_unique<ModelQualityLogEntry>(logs_uploader_.GetWeakPtr());
+    return std::make_unique<ModelQualityLogEntry>(
+        mock_optimization_guide_keyed_service_
+            ->GetModelQualityLogsUploaderService()
+            ->GetWeakPtr());
   }
 
   const std::vector<std::unique_ptr<LogAiDataRequest>>& uploaded_logs() {
-    return logs_uploader_.uploaded_logs();
+    return static_cast<
+               optimization_guide::TestModelQualityLogsUploaderService*>(
+               mock_optimization_guide_keyed_service_
+                   ->GetModelQualityLogsUploaderService())
+        ->uploaded_logs();
   }
 
   base::HistogramTester& histogram_tester() { return histogram_tester_; }
@@ -300,7 +311,6 @@ class WallpaperSearchHandlerTest : public testing::Test {
   TestingPrefServiceSimple local_state_;
   std::unique_ptr<TestingProfile> profile_;
   base::test::ScopedFeatureList feature_list_;
-  optimization_guide::TestModelQualityLogsUploaderService logs_uploader_;
   raw_ptr<MockOptimizationGuideKeyedService>
       mock_optimization_guide_keyed_service_;
   image_fetcher::MockImageDecoder mock_image_decoder_;

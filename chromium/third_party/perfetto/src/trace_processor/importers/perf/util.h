@@ -17,11 +17,29 @@
 #ifndef SRC_TRACE_PROCESSOR_IMPORTERS_PERF_UTIL_H_
 #define SRC_TRACE_PROCESSOR_IMPORTERS_PERF_UTIL_H_
 
-#include <cstdint>
+#include <cstddef>
+#include <type_traits>
+
 namespace perfetto::trace_processor::perf_importer {
 
-inline bool SafeAdd(uint64_t a, uint64_t b, uint64_t* result) {
-  return !__builtin_add_overflow(a, b, result);
+template <typename A,
+          typename Res,
+          typename = std::enable_if_t<std::is_integral<A>::value &&
+                                      std::is_integral<Res>::value>>
+bool SafeCast(A a, Res* res) {
+  *res = static_cast<Res>(a);
+
+  // Was the value clamped?
+  if (static_cast<A>(*res) != a) {
+    return false;
+  }
+
+  // Did the sign change?
+  if ((a < 0) != (*res < 0)) {
+    return false;
+  }
+
+  return true;
 }
 
 }  // namespace perfetto::trace_processor::perf_importer

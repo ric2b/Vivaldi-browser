@@ -26,7 +26,7 @@ happening in the browser on a per-frame basis.
 Prerequisites:
 
     [Get set up to record
-    traces](http://www.chromium.org/developers/how-tos/trace-event-profiling-tool/recording-tracing-runs);
+    traces](/developers/how-tos/trace-event-profiling-tool/recording-tracing-runs);
     recommended to use adb_profile_chrome.py from
     <https://github.com/johnmccutchan/adb_trace> (also in Chrome’s source tree
     under src/tools/perf/)
@@ -163,7 +163,7 @@ Lots of stuff on the screen. Let’s try to make sense of it.
 
 Before even touching the Frame Viewer, let’s examine some standard trace events
 as a refresher. There’s more detail in [this
-document](http://www.chromium.org/developers/how-tos/trace-event-profiling-tool/trace-event-reading)
+document](/developers/how-tos/trace-event-profiling-tool/trace-event-reading)
 about trace events and how to read them, but it’s a bit stale. Below is an
 updated, shortened recap.
 

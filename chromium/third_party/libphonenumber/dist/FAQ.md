@@ -45,12 +45,6 @@ Some examples:
     alpha character is not converted and the resulting number is invalid, e.g.
     with `+1 412 535 c000`.
 
-Other examples, in reports:
-
-*   [#328](http://github.com/google/libphonenumber/issues/328)
-*   [#1001](http://github.com/google/libphonenumber/issues/1001)
-*   [#1199](http://github.com/google/libphonenumber/issues/1199)
-*   [#1813](http://github.com/google/libphonenumber/issues/1813)
 
 ### <a href="#prefix_not_removed">Why wasn't the national prefix removed when parsing?</a>
 
@@ -210,7 +204,7 @@ Therefore, clients should be aware that there is possibility of false positives 
 
 ### <a href="#operator_specific_numbers">What about numbers that are only valid for a set of subscribers?</a>
 
-There are some numbers that only work for the subcribers of certain operators
+There are some numbers that only work for the subscribers of certain operators
 for special operator-specific services. These differ from carrierSpecific since
 they're not shortcodes. We don't support these numbers due to their limited use
 scope, few examples (only the [area code 700](https://en.wikipedia.org/wiki/Area_code_700)
@@ -367,20 +361,9 @@ right thing if the phone number object is as intended.
 
 @Mexico,
 Mexico used to have such additional prefixes (1, 02, 045, ...) for dialling
-mobile numbers internatioanlly, fixed-line to mobile nationally.. As these
-dialling patterns were deprecated, we have continued to maintain mobile and
+mobile numbers internationally, fixed-line to mobile nationally.. As these
+dialling patterns were deprecated, we removed them but still maintain mobile and
 fixed-line ranges at higher level, returning type as [`FIXED_LINE_OR_MOBILE`](#fixed_line_or_mobile)
-
-### <a href="#mx_legacy_formats">Why Mexico (MX) numbers in older dialling formats are accepted as valid ones?</a>
-Though library has stopped supporting below older dialling codes in the canonical
-form and formatting results, we are lenient in parsing the number, i.e removing
-all older codes.
-- 1 -> in E.164 international diallings
-- 01, 02, 044 and 045 -> for local/national diallings
-
-This is because we found the older dialling codes supported even after deprecation
-period, so we decided to support them for longer time. However, we will stop this as
-part of [this issue](https://issuetracker.google.com/issues/205606725). More details there.
 
 ### <a name="#unsupported_regions">Why are Bouvet Island (BV), Pitcairn Island (PN), Antarctica (AQ) etc. not supported?</a>
 

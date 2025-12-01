@@ -51,6 +51,7 @@ export class TimelineMiniMap extends
 
   constructor() {
     super();
+    this.registerRequiredCSS(miniMapStyles);
     this.element.classList.add('timeline-minimap');
     this.#breadcrumbsUI = new TimelineComponents.BreadcrumbsUI.BreadcrumbsUI();
     this.element.prepend(this.#breadcrumbsUI);
@@ -104,8 +105,8 @@ export class TimelineMiniMap extends
 
     TraceBounds.TraceBounds.BoundsManager.instance().setTimelineVisibleWindow(
         Trace.Helpers.Timing.traceWindowFromMilliSeconds(
-            Trace.Types.Timing.MilliSeconds(left),
-            Trace.Types.Timing.MilliSeconds(right),
+            Trace.Types.Timing.Milli(left),
+            Trace.Types.Timing.Milli(right),
             ),
         {
           shouldAnimate: true,
@@ -140,7 +141,7 @@ export class TimelineMiniMap extends
     }
   }
 
-  #updateMiniMapBoundsToFitNewWindow(newWindow: Trace.Types.Timing.TraceWindowMicroSeconds): void {
+  #updateMiniMapBoundsToFitNewWindow(newWindow: Trace.Types.Timing.TraceWindowMicro): void {
     if (!this.breadcrumbs) {
       return;
     }
@@ -187,8 +188,8 @@ export class TimelineMiniMap extends
     // this case we change them to be the min and max values of the minimap
     // bounds.
     const breadcrumbTimes = {
-      startTime: Trace.Types.Timing.MilliSeconds(Math.max(startTime, bounds.min)),
-      endTime: Trace.Types.Timing.MilliSeconds(Math.min(endTime, bounds.max)),
+      startTime: Trace.Types.Timing.Milli(Math.max(startTime, bounds.min)),
+      endTime: Trace.Types.Timing.Milli(Math.min(endTime, bounds.max)),
     };
 
     const newVisibleTraceWindow =
@@ -202,7 +203,7 @@ export class TimelineMiniMap extends
     };
   }
 
-  highlightBounds(bounds: Trace.Types.Timing.TraceWindowMicroSeconds, withBracket: boolean = false): void {
+  highlightBounds(bounds: Trace.Types.Timing.TraceWindowMicro, withBracket: boolean = false): void {
     this.#overviewComponent.highlightBounds(bounds, withBracket);
   }
   clearBoundsHighlight(): void {
@@ -229,32 +230,21 @@ export class TimelineMiniMap extends
     };
   }
 
-  override wasShown(): void {
-    super.wasShown();
-    this.registerCSSFiles([miniMapStyles]);
-  }
-
   reset(): void {
     this.#data = null;
     this.#overviewComponent.reset();
   }
 
   #setMarkers(parsedTrace: Trace.Handlers.Types.ParsedTrace): void {
-    const markers = new Map<number, Element>();
+    const markers = new Map<number, HTMLDivElement>();
 
-    const {Meta, PageLoadMetrics} = parsedTrace;
+    const {Meta} = parsedTrace;
 
-    // Add markers for navigation start times.
+    // Only add markers for navigation start times.
     const navStartEvents = Meta.mainFrameNavigations;
-    const minTimeInMilliseconds = Trace.Helpers.Timing.microSecondsToMilliseconds(Meta.traceBounds.min);
+    const minTimeInMilliseconds = Trace.Helpers.Timing.microToMilli(Meta.traceBounds.min);
 
     for (const event of navStartEvents) {
-      const {startTime} = Trace.Helpers.Timing.eventTimingsMilliSeconds(event);
-      markers.set(startTime, TimelineUIUtils.createEventDivider(event, minTimeInMilliseconds));
-    }
-
-    // Now add markers for the page load events
-    for (const event of PageLoadMetrics.allMarkerEvents) {
       const {startTime} = Trace.Helpers.Timing.eventTimingsMilliSeconds(event);
       markers.set(startTime, TimelineUIUtils.createEventDivider(event, minTimeInMilliseconds));
     }

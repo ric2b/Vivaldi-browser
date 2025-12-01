@@ -53,7 +53,7 @@ template <typename T>
 CallDescriptor* GetWasmCallDescriptor(Zone* zone, const Signature<T>* fsig,
                                       WasmCallKind call_kind,
                                       bool need_frame_state) {
-  // The extra here is to accomodate the instance object as first parameter
+  // The extra here is to accommodate the instance object as first parameter
   // and, when specified, the additional callable.
   bool extra_callable_param =
       call_kind == kWasmImportWrapper || call_kind == kWasmCapiFunction;
@@ -71,13 +71,22 @@ CallDescriptor* GetWasmCallDescriptor(Zone* zone, const Signature<T>* fsig,
   LinkageLocation target_loc = LinkageLocation::ForAnyRegister(target_type);
 
   CallDescriptor::Kind descriptor_kind;
-  if (call_kind == kWasmFunction) {
-    descriptor_kind = CallDescriptor::kCallWasmFunction;
-  } else if (call_kind == kWasmImportWrapper) {
-    descriptor_kind = CallDescriptor::kCallWasmImportWrapper;
-  } else {
-    DCHECK_EQ(call_kind, kWasmCapiFunction);
-    descriptor_kind = CallDescriptor::kCallWasmCapiFunction;
+  uint64_t signature_hash = kInvalidWasmSignatureHash;
+
+  switch (call_kind) {
+    case kWasmFunction:
+      descriptor_kind = CallDescriptor::kCallWasmFunction;
+      break;
+    case kWasmIndirectFunction:
+      descriptor_kind = CallDescriptor::kCallWasmFunctionIndirect;
+      signature_hash = wasm::SignatureHasher::Hash(fsig);
+      break;
+    case kWasmImportWrapper:
+      descriptor_kind = CallDescriptor::kCallWasmImportWrapper;
+      break;
+    case kWasmCapiFunction:
+      descriptor_kind = CallDescriptor::kCallWasmCapiFunction;
+      break;
   }
 
   CallDescriptor::Flags flags = need_frame_state
@@ -97,7 +106,8 @@ CallDescriptor* GetWasmCallDescriptor(Zone* zone, const Signature<T>* fsig,
       "wasm-call",                        // debug name
       StackArgumentOrder::kDefault,       // order of the arguments in the stack
       RegList{},                          // allocatable registers
-      return_slots);                      // return slot count
+      return_slots,                       // return slot count
+      signature_hash);
 }
 
 template EXPORT_TEMPLATE_DEFINE(V8_EXPORT_PRIVATE)

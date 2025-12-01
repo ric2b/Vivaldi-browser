@@ -34,7 +34,7 @@ test -e /usr/include/asm || sudo ln -s /usr/include/asm-generic /usr/include/asm
 
 To build the PNaCl toolchain, you will need to check out the entire native
 client project [with
-git](http://www.chromium.org/nativeclient/how-tos/how-to-use-git-svn-with-native-client).
+git](/nativeclient/how-tos/how-to-use-git-svn-with-native-client).
 After that:
 
 ```none

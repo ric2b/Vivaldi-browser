@@ -418,7 +418,7 @@ CHROMEOS_KERNEL_ARCH="x86_64"
 One of the strengths of the Gentoo distribution is that you can easily control
 general feature availability in your builds by changing your USE settings. For
 example, if you don't want audio, you can disable alsa & oss. Or if you don't
-want [LDAP](http://en.wikipedia.org/wiki/LDAP), you can disable that. All of the
+want [LDAP](https://en.wikipedia.org/wiki/LDAP), you can disable that. All of the
 ebuild files (the package scripts used to build/install code) have logic to
 check each setting that is optional so you don't have to.
 
@@ -458,7 +458,7 @@ of it.
 
 While picking out flags to use, keep in mind that ChromiumOS uses
 [LLVM/Clang](https://clang.llvm.org/) for its compiler suite. It also uses the
-[gold linker](http://en.wikipedia.org/wiki/Gold_(linker)). So see the respective
+[gold linker](https://en.wikipedia.org/wiki/Gold_(linker)). So see the respective
 documentation.
 
 #### BOARD_COMPILER_FLAGS

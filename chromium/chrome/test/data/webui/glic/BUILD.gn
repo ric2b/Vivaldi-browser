@@ -1,0 +1,53 @@
+# Copyright 2025 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//tools/grit/preprocess_if_expr.gni")
+import("//tools/typescript/ts_library.gni")
+
+out_dir = "$target_gen_dir/glic"
+
+group("generate_test_files") {
+  data_deps = [
+    ":build_ts",
+    ":move_html",
+    ":test_client_api_deps",
+    ":test_client_external_files",
+  ]
+}
+
+ts_library("build_ts") {
+  out_dir = out_dir
+  in_files = [
+    "api_test.ts",
+    "api_boot.ts",
+    "test_client/test_client.ts",
+  ]
+  deps = [ "//chrome/browser/resources/glic:build_ts" ]
+
+  path_mappings =
+      [ "/glic/glic_api/*|" + rebase_path(
+            "$root_gen_dir/chrome/browser/resources/glic/tsc/glic_api/*",
+            target_gen_dir) ]
+}
+
+# Copy deps of the test client over to out_dir.
+preprocess_if_expr("move_html") {
+  in_files = [
+    "test.html",
+    "test_client/index.html",
+  ]
+  out_folder = out_dir
+}
+
+copy("test_client_external_files") {
+  sources = [ "//content/test/data/media/bear-opus.ogg" ]
+  outputs = [ "$out_dir/test_client/{{source_file_part}}" ]
+}
+
+copy("test_client_api_deps") {
+  sources =
+      [ "$root_gen_dir/chrome/browser/resources/glic/tsc/glic_api/glic_api.js" ]
+  outputs = [ "$out_dir/glic_api/{{source_file_part}}" ]
+  deps = [ "//chrome/browser/resources/glic:build_ts" ]
+}

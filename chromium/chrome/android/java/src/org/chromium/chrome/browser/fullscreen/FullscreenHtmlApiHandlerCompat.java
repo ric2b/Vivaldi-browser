@@ -20,6 +20,10 @@ import org.chromium.base.Log;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.components.embedder_support.view.ContentView;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+import org.vivaldi.browser.oem_extensions.mahindra.OemMahindraSystemBarManager;
+
 public class FullscreenHtmlApiHandlerCompat extends FullscreenHtmlApiHandlerBase
         implements View.OnApplyWindowInsetsListener {
 
@@ -78,6 +82,13 @@ public class FullscreenHtmlApiHandlerCompat extends FullscreenHtmlApiHandlerBase
         assert !(showNavigationBar && showStatusBar)
                 : "Cannot enter fullscreen with both status and navigation bars visible!";
 
+        // Vivaldi
+        if (BuildConfig.IS_OEM_MAHINDRA_BUILD) {
+            OemMahindraSystemBarManager.hideSystemBars(mActivity.getWindow(),
+                    OemMahindraSystemBarManager.StatusBarState.BOTTOM_BAR);
+            return;
+        }
+
         WindowInsetsControllerCompat windowInsetsController = getWindowInsetsController();
 
         windowInsetsController.setSystemBarsBehavior(
@@ -94,6 +105,13 @@ public class FullscreenHtmlApiHandlerCompat extends FullscreenHtmlApiHandlerBase
 
     @Override
     void showSystemBars(View contentView) {
+        // Vivaldi
+        if (BuildConfig.IS_OEM_MAHINDRA_BUILD) {
+            OemMahindraSystemBarManager.showSystemBars(mActivity.getWindow(),
+                    OemMahindraSystemBarManager.StatusBarState.BOTTOM_BAR);
+            return;
+        }
+
         WindowInsetsControllerCompat windowInsetsController = getWindowInsetsController();
 
         windowInsetsController.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_DEFAULT);

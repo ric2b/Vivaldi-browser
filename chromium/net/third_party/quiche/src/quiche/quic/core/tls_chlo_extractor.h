@@ -13,12 +13,12 @@
 #include "absl/types/span.h"
 #include "openssl/ssl.h"
 #include "quiche/quic/core/frames/quic_ack_frequency_frame.h"
+#include "quiche/quic/core/frames/quic_immediate_ack_frame.h"
 #include "quiche/quic/core/frames/quic_reset_stream_at_frame.h"
 #include "quiche/quic/core/quic_framer.h"
 #include "quiche/quic/core/quic_packets.h"
 #include "quiche/quic/core/quic_stream_sequencer.h"
 #include "quiche/quic/core/quic_types.h"
-#include "quiche/quic/platform/api/quic_export.h"
 
 namespace quic {
 
@@ -56,6 +56,9 @@ class QUICHE_EXPORT TlsChloExtractor
   }
   const std::vector<uint16_t>& cert_compression_algos() const {
     return cert_compression_algos_;
+  }
+  absl::Span<const uint8_t> transport_params() const {
+    return transport_params_;
   }
   absl::Span<const uint8_t> client_hello_bytes() const {
     return client_hello_bytes_;
@@ -181,6 +184,9 @@ class QUICHE_EXPORT TlsChloExtractor
   bool OnAckFrequencyFrame(const QuicAckFrequencyFrame& /*frame*/) override {
     return true;
   }
+  bool OnImmediateAckFrame(const QuicImmediateAckFrame& /*frame*/) override {
+    return true;
+  }
   bool OnResetStreamAtFrame(const QuicResetStreamAtFrame& /*frame*/) override {
     return true;
   }
@@ -282,6 +288,9 @@ class QUICHE_EXPORT TlsChloExtractor
   // If set, contains the TLS alert that caused an unrecoverable error, which is
   // an AlertDescription value defined in go/rfc/8446#appendix-B.2.
   std::optional<uint8_t> tls_alert_;
+  // QUIC Transport Parameters, if present in the CHLO.
+  // Not populated for draft29.
+  std::vector<uint8_t> transport_params_;
   // Exact TLS message bytes.
   std::vector<uint8_t> client_hello_bytes_;
 };

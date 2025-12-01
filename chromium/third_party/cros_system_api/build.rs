@@ -143,7 +143,12 @@ const PROTOS_TO_GENERATE: &[(&str, &str)] = &[
         "resource_manager",
         "system_api/dbus/resource_manager/resource_manager.proto",
     ),
+    ("launch", "system_api/dbus/vm_launch/launch.proto"),
     ("rpc", "system_api/dbus/cryptohome/rpc.proto"),
+    (
+        "seneschal_service",
+        "system_api/dbus/seneschal/seneschal_service.proto",
+    ),
     (
         "shadercached",
         "system_api/dbus/shadercached/shadercached.proto",
@@ -155,11 +160,15 @@ const PROTOS_TO_GENERATE: &[(&str, &str)] = &[
     ),
     (
         "vhost_user_starter",
-        "system_api/dbus/vhost_user_starter/vhost_user_starter.proto"
+        "system_api/dbus/vhost_user_starter/vhost_user_starter.proto",
     ),
     (
         "vm_memory_management",
         "system_api/non_standard_ipc/vm_memory_management/vm_memory_management.proto",
+    ),
+    (
+        "vm_plugin_dispatcher",
+        "system_api/dbus/vm_plugin_dispatcher/vm_plugin_dispatcher.proto",
     ),
     ("vtpm_interface", "vtpm/vtpm_interface.proto"),
     (

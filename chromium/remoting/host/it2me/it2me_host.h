@@ -12,9 +12,9 @@
 
 #include "base/functional/callback_forward.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
-#include "build/chromeos_buildflags.h"
 #include "remoting/base/local_session_policies_provider.h"
 #include "remoting/host/chromeos/chromeos_enterprise_params.h"
 #include "remoting/host/host_status_observer.h"
@@ -31,6 +31,7 @@ namespace remoting {
 
 class ChromotingHost;
 class ChromotingHostContext;
+class CorpHostStatusLogger;
 class DesktopEnvironmentFactory;
 class FtlSignalingConnector;
 class HostEventLogger;
@@ -76,6 +77,9 @@ class It2MeHost : public base::RefCountedThreadSafe<It2MeHost>,
     bool use_ftl_signaling = false;
     // Only set when FTL signaling is being used.
     std::string ftl_device_id;
+
+    // Use corp SessionAuthz auth instead of shared secret auth.
+    bool use_corp_session_authz = false;
   };
 
   using CreateDeferredConnectContext =
@@ -156,7 +160,7 @@ class It2MeHost : public base::RefCountedThreadSafe<It2MeHost>,
   protocol::ValidatingAuthenticator::ValidationCallback
   GetValidationCallbackForTesting();
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   void SetHostEventReporterFactoryForTesting(HostEventReporterFactory factory);
 #endif
 
@@ -237,18 +241,27 @@ class It2MeHost : public base::RefCountedThreadSafe<It2MeHost>,
   std::optional<ReconnectParams> reconnect_params_;
 
   std::string support_id_;
+
+  // This is empty if shared secret auth is not supported.
   std::string host_secret_;
+
   std::string ftl_device_id_;
   scoped_refptr<RsaKeyPair> host_key_pair_;
   std::unique_ptr<RegisterSupportHostRequest> register_request_;
   std::unique_ptr<HostStatusLogger> host_status_logger_;
   std::unique_ptr<DesktopEnvironmentFactory> desktop_environment_factory_;
   std::unique_ptr<HostEventLogger> host_event_logger_;
-  LocalSessionPoliciesProvider local_session_policies_provider_;
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+  std::unique_ptr<LocalSessionPoliciesProvider>
+      local_session_policies_provider_;
+#if BUILDFLAG(IS_CHROMEOS)
   std::unique_ptr<HostEventReporter> host_event_reporter_;
   HostEventReporterFactory host_event_reporter_factory_;
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
+  bool use_corp_session_authz_ = false;
+
+  // Only set if |use_corp_session_authz_| is true.
+  std::unique_ptr<CorpHostStatusLogger> corp_host_status_logger_;
 
   std::unique_ptr<ChromotingHost> host_;
   int failed_login_attempts_ = 0;

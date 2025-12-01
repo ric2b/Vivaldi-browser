@@ -18,21 +18,20 @@
 #include <stdio.h>
 
 #include <cstdint>
-#include <string>
-#include <unordered_map>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
+#include "third_party/qairt/latest/include/QNN/HTP/QnnHtpGraph.h"
 #include "third_party/qairt/latest/include/QNN/QnnCommon.h"
 #include "third_party/qairt/latest/include/QNN/QnnGraph.h"
 #include "third_party/qairt/latest/include/QNN/QnnTypes.h"
 #include "tensorflow/lite/experimental/litert/c/litert_common.h"
 #include "tensorflow/lite/experimental/litert/c/litert_logging.h"
 #include "tensorflow/lite/experimental/litert/c/litert_model.h"
-#include "tensorflow/lite/experimental/litert/c/litert_support.h"
-#include "tensorflow/lite/experimental/litert/cc/litert_support.h"
-#include "tensorflow/lite/experimental/litert/core/graph_tools.h"
+#include "tensorflow/lite/experimental/litert/cc/litert_element_type.h"
+#include "tensorflow/lite/experimental/litert/cc/litert_macros.h"
+#include "tensorflow/lite/experimental/litert/cc/litert_model.h"
 #include "tensorflow/lite/experimental/litert/vendors/qualcomm/common.h"
 #include "tensorflow/lite/experimental/litert/vendors/qualcomm/compiler/IR/qnn_tensor.h"
 #include "tensorflow/lite/experimental/litert/vendors/qualcomm/qnn_manager.h"
@@ -40,9 +39,37 @@
 namespace litert::qnn {
 
 // Get empty configurations for graph building.
+inline absl::Span<const QnnGraph_Config_t*> GetFp32GraphConfigs() {
+  static QnnHtpGraph_CustomConfig_t htp_graph_config =
+      QNN_HTP_GRAPH_CUSTOM_CONFIG_INIT;
+  htp_graph_config.option = QNN_HTP_GRAPH_CONFIG_OPTION_PRECISION;
+  htp_graph_config.precision = QNN_PRECISION_FLOAT16;
+
+  static QnnGraph_Config_t graph_config = QNN_GRAPH_CONFIG_INIT;
+  graph_config.option = QNN_GRAPH_CONFIG_OPTION_CUSTOM;
+  graph_config.customConfig = &htp_graph_config;
+
+  static const QnnGraph_Config_t* configs[2] = {&graph_config, nullptr};
+  return absl::MakeSpan(configs);
+}
+
 inline absl::Span<const QnnGraph_Config_t*> GetDefaultGraphConfigs() {
   static const QnnGraph_Config_t* configs[] = {nullptr};
   return absl::MakeSpan(configs);
+}
+
+absl::Span<const QnnGraph_Config_t*> GraphMapper::PickGraphConfigHeuristic() {
+  for (const auto& input : subgraph_.Inputs()) {
+    if (input.ElementType() == ElementType::Float32) {
+      return GetFp32GraphConfigs();
+    }
+  }
+  for (const auto& output : subgraph_.Outputs()) {
+    if (output.ElementType() == ElementType::Float32) {
+      return GetFp32GraphConfigs();
+    }
+  }
+  return GetDefaultGraphConfigs();
 }
 
 LiteRtStatus GraphMapper::AssignTensorName(Qnn_Tensor_t& qnn_tensor) {
@@ -54,20 +81,6 @@ LiteRtStatus GraphMapper::AssignTensorName(Qnn_Tensor_t& qnn_tensor) {
   return kLiteRtStatusOk;
 }
 
-LiteRtSubgraph GraphMapper::Subgraph() { return subgraph_; }
-
-absl::Span<LiteRtTensor> GraphMapper::LiteRtSubgraphInputs() {
-  return litert_subgraph_inputs_;
-}
-
-absl::Span<LiteRtTensor> GraphMapper::LiteRtSubgraphOutputs() {
-  return litert_subgraph_outputs_;
-}
-
-absl::Span<LiteRtOp> GraphMapper::LiteRtSubgraphOps() {
-  return litert_subgraph_ops_;
-}
-
 absl::flat_hash_map<LiteRtTensor, uint32_t>& GraphMapper::CurrentScope() {
   return current_scope_;
 }
@@ -77,9 +90,17 @@ LiteRtStatus GraphMapper::LookupInScope(LiteRtTensor litert_tensor,
   // If we go in topological order, this should never happen. TODO: add
   // "internal error" status code.
   const auto qnn_id = CurrentScope().find(litert_tensor);
-  LITERT_ENSURE(qnn_id != CurrentScope().end(), kLiteRtStatusErrorNotFound,
-                "Couldn't find tensor in current_scope.");
-
+  // when qnn_id is not found, the tensor is a constant tensor thats not been
+  // added qnn graph.
+  if (qnn_id == CurrentScope().end()) {
+    LITERT_LOG(LITERT_INFO, "Adding constant tensor %s to qnn graph",
+               qnn_tensor.v2.name);
+    LITERT_RETURN_IF_ERROR(LegalizeAndRegister(litert_tensor, qnn_tensor));
+    LITERT_RETURN_IF_ERROR(PushToScope(litert_tensor, qnn_tensor));
+    // }
+    return kLiteRtStatusOk;
+  }
+  LITERT_LOG(LITERT_INFO, "Found tensor %d in current_scope.", qnn_id->second);
   ResetTensor(qnn_tensor);
   qnn_tensor.v2.id = qnn_id->second;
 
@@ -99,54 +120,40 @@ Qnn_GraphHandle_t& GraphMapper::QnnGraph() { return qnn_graph_; }
 LiteRtStatus GraphMapper::LegalizeAndRegister(LiteRtTensor litert_tensor,
                                               Qnn_Tensor_t& qnn_tensor) {
   litert::Tensor tensor(litert_tensor);
-  LITERT_RETURN_STATUS_IF_NOT_OK(LegalizeTensor(tensor, qnn_tensor));
-  LITERT_RETURN_STATUS_IF_NOT_OK(AssignTensorName(qnn_tensor));
+  LITERT_RETURN_IF_ERROR(LegalizeTensor(tensor, qnn_tensor));
+  LITERT_RETURN_IF_ERROR(AssignTensorName(qnn_tensor));
+
+  // Set tensor as graph output if it is used by other Ops.
+  if (graph_outpus_.contains(litert_tensor)) {
+    LITERT_LOG(LITERT_INFO, "Setting tensor %d as Graph output",
+               qnn_tensor.v2.id);
+    qnn_tensor.v2.type = QNN_TENSOR_TYPE_APP_READ;
+  }
+
   LITERT_RETURN_STATUS_IF_QNN_NOT_OK(
       qnn_.Api()->tensorCreateGraphTensor(QnnGraph(), &qnn_tensor));
 
   LITERT_LOG(LITERT_INFO, "Legalized and registered tensor %d",
              qnn_tensor.v2.id);
 
-  return kLiteRtStatusOk;
-}
-
-LiteRtStatus GraphMapper::ParseLiteRtSubgraph() {
-  LITERT_ASSIGN_OR_RETURN_STATUS(auto inputs,
-                                 graph_tools::GetSubgraphInputs(Subgraph()));
-  litert_subgraph_inputs_ =
-      absl::MakeSpan(const_cast<LiteRtTensor*>(inputs.data()), inputs.size());
-
-  LITERT_ASSIGN_OR_RETURN_STATUS(auto outputs,
-                                 graph_tools::GetSubgraphOutputs(Subgraph()));
-  litert_subgraph_outputs_ =
-      absl::MakeSpan(const_cast<LiteRtTensor*>(outputs.data()), outputs.size());
-
-  LITERT_ASSIGN_OR_RETURN_STATUS(auto ops,
-                                 graph_tools::GetSubgraphOps(Subgraph()));
-  litert_subgraph_ops_ =
-      absl::MakeSpan(const_cast<LiteRtOp*>(ops.data()), ops.size());
+  for (int i = 0; i < qnn_tensor.v2.rank; ++i) {
+    LITERT_LOG(LITERT_INFO, "qnn_tensor dim[%d] = %d", i,
+               qnn_tensor.v2.dimensions[i]);
+  }
 
   return kLiteRtStatusOk;
 }
 
 LiteRtStatus GraphMapper::IsLiteRtSubgraphSupported() {
-  LITERT_ENSURE_SUPPORTED(
-      LiteRtSubgraphInputs().size() < 4,
-      "Only subgraphs with less than 4 inputs currently supported.");
-
-  LITERT_ENSURE_SUPPORTED(LiteRtSubgraphOutputs().size() == 1,
-                          "Only subgraphs with 1 output currently supported.");
-
-  LITERT_ENSURE_SUPPORTED(LiteRtSubgraphOps().size() == 1,
-                          "Only subgraphs with 1 op currently supported.");
-
+  // For now, we assume all LiteRt subgraphs are supported.
+  // TODO: b/381133565: Implement or remove this function.
   return kLiteRtStatusOk;
 }
 
 LiteRtStatus GraphMapper::InitQnnGraph(absl::string_view qnn_graph_name) {
   LITERT_RETURN_STATUS_IF_QNN_NOT_OK(
       qnn_.Api()->graphCreate(context_handle_, qnn_graph_name.data(),
-                              GetDefaultGraphConfigs().data(), &QnnGraph()));
+                              PickGraphConfigHeuristic().data(), &QnnGraph()));
   return kLiteRtStatusOk;
 }
 

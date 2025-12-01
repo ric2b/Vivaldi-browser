@@ -36,7 +36,7 @@ M75](https://crbug.com/836884))
 
 [BlinkOn 3.0
 Presentation](https://docs.google.com/presentation/d/1zpGlx75eTNILTGf3s_F6cQP03OGaN2-HACsZwEobMqY/edit?usp=sharing),
-[video](https://www.youtube.com/watch?v=5Xv2A7aqJ9Y) (start here to find out
+[video](https://youtube.com/watch?v=5Xv2A7aqJ9Y) (start here to find out
 more about the project)
 
 [BlinkOn 4

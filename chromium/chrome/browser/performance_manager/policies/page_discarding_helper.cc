@@ -11,6 +11,7 @@
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/feature_list.h"
+#include "base/functional/callback.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sequence_checker.h"
 #include "base/time/time.h"
@@ -38,6 +39,14 @@ using performance_manager::mechanism::PageDiscarder;
 namespace performance_manager {
 namespace policies {
 namespace {
+
+BASE_FEATURE(kIgnoreDiscardAttemptMarker,
+             "IgnoreDiscardAttemptMarker",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kSkipDiscardsDrivenByStaleSignal,
+             "SkipDiscardDrivenByStaleSignal",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // NodeAttachedData used to indicate that there's already been an attempt to
 // discard a PageNode.
@@ -142,13 +151,18 @@ void PageDiscardingHelper::DiscardMultiplePages(
     base::TimeDelta minimum_time_in_background) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
+  if (reclaim_target) {
+    if (base::FeatureList::IsEnabled(kSkipDiscardsDrivenByStaleSignal)) {
+      reclaim_target =
+          unnecessary_discard_monitor_.CorrectReclaimTarget(*reclaim_target);
+    }
+
+    unnecessary_discard_monitor_.OnReclaimTargetBegin(*reclaim_target);
+  }
+
   LOG(WARNING) << "Discarding multiple pages with target (kb): "
                << (reclaim_target ? reclaim_target->target_kb : 0)
                << ", discard_protected_tabs: " << discard_protected_tabs;
-
-  if (reclaim_target) {
-    unnecessary_discard_monitor_.OnReclaimTargetBegin(*reclaim_target);
-  }
 
   // Ensures running post_discard_cb on early return.
   absl::Cleanup run_post_discard_cb_on_return = [&post_discard_cb] {
@@ -280,15 +294,23 @@ void PageDiscardingHelper::ImmediatelyDiscardMultiplePages(
 void PageDiscardingHelper::SetNoDiscardPatternsForProfile(
     const std::string& browser_context_id,
     const std::vector<std::string>& patterns) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   std::unique_ptr<url_matcher::URLMatcher>& entry =
       profiles_no_discard_patterns_[browser_context_id];
   entry = std::make_unique<url_matcher::URLMatcher>();
-  url_matcher::util::AddAllowFilters(entry.get(), patterns);
+  url_matcher::util::AddAllowFiltersWithLimit(entry.get(), patterns);
+  if (opt_out_policy_changed_callback_) {
+    opt_out_policy_changed_callback_.Run(browser_context_id);
+  }
 }
 
 void PageDiscardingHelper::ClearNoDiscardPatternsForProfile(
     const std::string& browser_context_id) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   profiles_no_discard_patterns_.erase(browser_context_id);
+  if (opt_out_policy_changed_callback_) {
+    opt_out_policy_changed_callback_.Run(browser_context_id);
+  }
 }
 
 void PageDiscardingHelper::SetMockDiscarderForTesting(
@@ -308,8 +330,15 @@ void PageDiscardingHelper::RemovesDiscardAttemptMarkerForTesting(
   DiscardAttemptMarker::Destroy(PageNodeImpl::FromNode(page_node));
 }
 
+void PageDiscardingHelper::SetOptOutPolicyChangedCallback(
+    base::RepeatingCallback<void(std::string_view)> callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  opt_out_policy_changed_callback_ = std::move(callback);
+}
+
 void PageDiscardingHelper::OnPassedToGraph(Graph* graph) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  graph->AddPageNodeObserver(this);
   graph->GetNodeDataDescriberRegistry()->RegisterDescriber(this,
                                                            kDescriberName);
 }
@@ -317,6 +346,7 @@ void PageDiscardingHelper::OnPassedToGraph(Graph* graph) {
 void PageDiscardingHelper::OnTakenFromGraph(Graph* graph) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   graph->GetNodeDataDescriberRegistry()->UnregisterDescriber(this);
+  graph->RemovePageNodeObserver(this);
 }
 
 const PageLiveStateDecorator::Data*
@@ -335,7 +365,8 @@ CanDiscardResult PageDiscardingHelper::CanDiscard(
   }
 
   // Don't discard tabs for which discarding has already been attempted.
-  if (DiscardAttemptMarker::Get(PageNodeImpl::FromNode(page_node))) {
+  if (DiscardAttemptMarker::Get(PageNodeImpl::FromNode(page_node)) &&
+      !base::FeatureList::IsEnabled(kIgnoreDiscardAttemptMarker)) {
     return CanDiscardResult::kDisallowed;
   }
 
@@ -472,7 +503,11 @@ CanDiscardResult PageDiscardingHelper::CanDiscard(
       return CanDiscardResult::kProtected;
     }
 #if !BUILDFLAG(IS_CHROMEOS)
-    // TODO(sebmarchand): Skip this check if the Entreprise memory limit is set.
+    // TODO(crbug.com/391179510): This check validates the assumption that the
+    // WasDiscarded() property is not set correctly. If that assumption holds,
+    // remove all code that depends on it as discussed on the bug.
+    CHECK(!live_state_data->WasDiscarded(), base::NotFatalUntil::M136);
+
     if (live_state_data->WasDiscarded()) {
       return CanDiscardResult::kProtected;
     }
@@ -494,14 +529,23 @@ CanDiscardResult PageDiscardingHelper::CanDiscard(
 bool PageDiscardingHelper::IsPageOptedOutOfDiscarding(
     const std::string& browser_context_id,
     const GURL& url) const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   auto it = profiles_no_discard_patterns_.find(browser_context_id);
   if (it == profiles_no_discard_patterns_.end()) {
-    // There's can be narrow window between profile creation and when prefs are
+    // There can be a narrow window between profile creation and when prefs are
     // read, which is when `profiles_no_discard_patterns_` is populated. During
     // that time assume that a page might be opted out of discarding.
     return true;
   }
   return !it->second->MatchURL(url).empty();
+}
+
+void PageDiscardingHelper::OnMainFrameDocumentChanged(
+    const PageNode* page_node) {
+  // When activated a discarded tab will re-navigate, instantiating a new
+  // document. Ensure the DiscardAttemptMarker is cleared in these cases to
+  // ensure a given tab remains eligible for discarding.
+  DiscardAttemptMarker::Destroy(PageNodeImpl::FromNode(page_node));
 }
 
 base::Value::Dict PageDiscardingHelper::DescribePageNodeData(

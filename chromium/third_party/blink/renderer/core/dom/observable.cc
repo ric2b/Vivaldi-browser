@@ -672,7 +672,7 @@ class OperatorFromPromiseSubscribeDelegate final
       : promise_(promise) {}
 
   void OnSubscribe(Subscriber* subscriber, ScriptState* script_state) override {
-    promise_.React(
+    promise_.Unwrap().Then(
         script_state,
         MakeGarbageCollected<ObservablePromiseResolverFunction>(
             subscriber,
@@ -719,7 +719,7 @@ class OperatorFromPromiseSubscribeDelegate final
     ResolveType type_;
   };
 
-  ScriptPromise<IDLAny> promise_;
+  MemberScriptPromise<IDLAny> promise_;
 };
 
 // This is the subscribe delegate for the `catch()` operator. It allows one to
@@ -1655,15 +1655,6 @@ class OperatorFromAsyncIterableSubscribeDelegate final
         return;
       }
 
-      // This happens if `ScriptIterator::FromIterable()`, which runs script,
-      // aborts the subscription. In that case, we respect the abort and leave
-      // the iterator alone.
-      if (subscriber_->signal()->aborted()) {
-        return;
-      }
-
-      abort_algorithm_handle_ = subscriber->signal()->AddAlgorithm(this);
-
       // Note that it's possible for `iterator_.IsNull()` to be true here, and
       // we have to handle it appropriately. Here's why:
       //
@@ -1682,11 +1673,19 @@ class OperatorFromAsyncIterableSubscribeDelegate final
         // The object failed to convert to an async or sync iterable.
         v8::Local<v8::Value> type_error = V8ThrowException::CreateTypeError(
             script_state->GetIsolate(), "Object must be iterable");
-        ClearAbortAlgorithm();
         subscriber->error(script_state,
                           ScriptValue(script_state->GetIsolate(), type_error));
         return;
       }
+
+      // This happens if `ScriptIterator::FromIterable()`, which runs script,
+      // aborts the subscription. In that case, we respect the abort and leave
+      // the iterator alone.
+      if (subscriber_->signal()->aborted()) {
+        return;
+      }
+
+      abort_algorithm_handle_ = subscriber->signal()->AddAlgorithm(this);
 
       // "Run |nextAlgorithm| given |subscriber| and |iteratorRecord|."
       GetNextValue(subscriber, script_state);
@@ -1713,6 +1712,7 @@ class OperatorFromAsyncIterableSubscribeDelegate final
           execution_context, PassThroughException(script_state->GetIsolate()));
 
       // "If |nextRecord| is a throw completion:"
+      ScriptPromise<IDLAny> next_promise;
       if (try_catch.HasCaught()) {
         // Assert: |iteratorRecord|'s [[Done]] is true.
         CHECK(is_done_because_exception_was_thrown);
@@ -1723,12 +1723,12 @@ class OperatorFromAsyncIterableSubscribeDelegate final
             script_state_, try_catch.Exception(),
             ExceptionContext(v8::ExceptionContext::kOperation, "Observable",
                              "from"));
-        next_promise_ =
+        next_promise =
             ScriptPromise<IDLAny>::Reject(script_state, try_catch.Exception());
       } else {
         // "Otherwise, if |nextRecord| is normal completion, then set
         // |nextPromise| to a promise resolved with |nextRecord|'s [[Value]].
-        next_promise_ = ToResolvedPromise<IDLAny>(
+        next_promise = ToResolvedPromise<IDLAny>(
             script_state, iterator_.GetValue().ToLocalChecked());
       }
 
@@ -1736,7 +1736,7 @@ class OperatorFromAsyncIterableSubscribeDelegate final
       //
       // See continued documentation in
       // `AsyncIteratorNextResolverFunction::Call()`.
-      next_promise_.React(
+      next_promise.Then(
           script_state,
           MakeGarbageCollected<AsyncIteratorNextResolverFunction>(
               this, subscriber,
@@ -1744,6 +1744,7 @@ class OperatorFromAsyncIterableSubscribeDelegate final
           MakeGarbageCollected<AsyncIteratorNextResolverFunction>(
               this, subscriber,
               AsyncIteratorNextResolverFunction::ResolveType::kReject));
+      next_promise_ = next_promise;
     }
 
     void ClearAbortAlgorithm() {
@@ -1811,7 +1812,7 @@ class OperatorFromAsyncIterableSubscribeDelegate final
     //
     // [1]:
     // https://wicg.github.io/observable/#observable-convert-to-an-observable.
-    ScriptPromise<IDLAny> next_promise_;
+    MemberScriptPromise<IDLAny> next_promise_;
   };
 
   class AsyncIteratorNextResolverFunction final
@@ -1985,6 +1986,28 @@ class OperatorFromIterableSubscribeDelegate final
         return;
       }
 
+      // This happens if the `@@iterator` implementation is undefined or null.
+      // When `ScriptIterator::FromIterable()` encounters this, instead of
+      // throwing as ECMAScript's `GetIterator()` [1] calls for, it silently
+      // returns a null iterator to give embedders a chance to override the
+      // behavior. We do not want to override the behavior in this case, so we
+      // throw, which is called for in the Observable spec [2].
+      //
+      // [1]: https://tc39.es/ecma262/#sec-getiterator.
+      // [2]: http://wicg.github.io/observable/#from-iterable-conversion
+      if (iterator_.IsNull()) {
+        v8::Local<v8::Value> type_error = V8ThrowException::CreateTypeError(
+            script_state->GetIsolate(),
+            "@@iterator must not be undefined or null");
+        ApplyContextToException(
+            script_state_, type_error,
+            ExceptionContext(v8::ExceptionContext::kOperation, "Observable",
+                             "subscribe"));
+        subscriber->error(script_state,
+                          ScriptValue(script_state->GetIsolate(), type_error));
+        return;
+      }
+
       // This happens if `ScriptIterator::FromIterable()`, which runs script,
       // aborts the subscription. In that case, we respect the abort and leave
       // the iterator alone.
@@ -1994,17 +2017,14 @@ class OperatorFromIterableSubscribeDelegate final
 
       abort_algorithm_handle_ = subscriber->signal()->AddAlgorithm(this);
 
-      if (!iterator_.IsNull()) {
-        while (
-            iterator_.Next(execution_context, PassThroughException(isolate))) {
-          CHECK(!try_catch.HasCaught());
+      while (iterator_.Next(execution_context, PassThroughException(isolate))) {
+        CHECK(!try_catch.HasCaught());
 
-          v8::Local<v8::Value> value = iterator_.GetValue().ToLocalChecked();
-          subscriber->next(ScriptValue(isolate, value));
+        v8::Local<v8::Value> value = iterator_.GetValue().ToLocalChecked();
+        subscriber->next(ScriptValue(isolate, value));
 
-          if (subscriber->signal()->aborted()) {
-            break;
-          }
+        if (subscriber->signal()->aborted()) {
+          break;
         }
       }
 

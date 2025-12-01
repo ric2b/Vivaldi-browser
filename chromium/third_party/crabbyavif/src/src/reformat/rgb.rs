@@ -36,7 +36,7 @@ pub enum Format {
 }
 
 impl Format {
-    pub fn offsets(&self) -> [usize; 4] {
+    pub(crate) fn offsets(&self) -> [usize; 4] {
         match self {
             Format::Rgb => [0, 1, 2, 0],
             Format::Rgba => [0, 1, 2, 3],
@@ -64,7 +64,7 @@ impl Format {
         self.offsets()[3]
     }
 
-    pub fn has_alpha(&self) -> bool {
+    pub(crate) fn has_alpha(&self) -> bool {
         !matches!(self, Format::Rgb | Format::Bgr | Format::Rgb565)
     }
 }
@@ -81,11 +81,14 @@ pub enum ChromaUpsampling {
 }
 
 impl ChromaUpsampling {
-    pub fn nearest_neighbor_filter_allowed(&self) -> bool {
+    #[cfg(feature = "libyuv")]
+    pub(crate) fn nearest_neighbor_filter_allowed(&self) -> bool {
         // TODO: this function has to return different values based on whether libyuv is used.
         !matches!(self, Self::Bilinear | Self::BestQuality)
     }
-    pub fn bilinear_or_better_filter_allowed(&self) -> bool {
+
+    #[cfg(feature = "libyuv")]
+    pub(crate) fn bilinear_or_better_filter_allowed(&self) -> bool {
         // TODO: this function has to return different values based on whether libyuv is used.
         !matches!(self, Self::Nearest | Self::Fastest)
     }
@@ -126,11 +129,11 @@ pub enum AlphaMultiplyMode {
 }
 
 impl Image {
-    pub fn max_channel(&self) -> u16 {
+    pub(crate) fn max_channel(&self) -> u16 {
         ((1i32 << self.depth) - 1) as u16
     }
 
-    pub fn max_channel_f(&self) -> f32 {
+    pub(crate) fn max_channel_f(&self) -> f32 {
         self.max_channel() as f32
     }
 
@@ -150,7 +153,7 @@ impl Image {
         }
     }
 
-    pub fn pixels(&mut self) -> *mut u8 {
+    pub(crate) fn pixels(&mut self) -> *mut u8 {
         if self.pixels.is_none() {
             return std::ptr::null_mut();
         }
@@ -205,7 +208,7 @@ impl Image {
         Ok(())
     }
 
-    pub fn depth_valid(&self) -> bool {
+    pub(crate) fn depth_valid(&self) -> bool {
         match (self.format, self.is_float, self.depth) {
             (Format::Rgb565, false, 8) => true,
             (Format::Rgb565, _, _) => false,
@@ -222,7 +225,7 @@ impl Image {
         }
     }
 
-    pub fn channel_size(&self) -> u32 {
+    pub(crate) fn channel_size(&self) -> u32 {
         match self.depth {
             8 => 1,
             10 | 12 | 16 => 2,
@@ -230,15 +233,16 @@ impl Image {
         }
     }
 
-    pub fn channel_count(&self) -> u32 {
+    pub(crate) fn channel_count(&self) -> u32 {
         match self.format {
             Format::Rgba | Format::Bgra | Format::Argb | Format::Abgr => 4,
-            Format::Rgb | Format::Bgr | Format::Rgb565 => 3,
+            Format::Rgb | Format::Bgr => 3,
+            Format::Rgb565 => 2,
             Format::Rgba1010102 => 0, // This is never used.
         }
     }
 
-    pub fn pixel_size(&self) -> u32 {
+    pub(crate) fn pixel_size(&self) -> u32 {
         match self.format {
             Format::Rgba | Format::Bgra | Format::Argb | Format::Abgr => self.channel_size() * 4,
             Format::Rgb | Format::Bgr => self.channel_size() * 3,
@@ -271,7 +275,7 @@ impl Image {
     }
 
     pub fn convert_from_yuv(&mut self, image: &image::Image) -> AvifResult<()> {
-        if !image.has_plane(Plane::Y) || !image.depth_valid() {
+        if !image.has_plane(Plane::Y) || !image.depth_valid() || !self.depth_valid() {
             return Err(AvifError::ReformatFailed);
         }
         if matches!(
@@ -338,8 +342,9 @@ impl Image {
         }
         if matches!(
             image.yuv_format,
-            PixelFormat::AndroidP010 | PixelFormat::AndroidNv12 | PixelFormat::AndroidNv21
-        ) {
+            PixelFormat::AndroidNv12 | PixelFormat::AndroidNv21
+        ) | matches!(self.format, Format::Rgba1010102)
+        {
             // These conversions are only supported via libyuv.
             // TODO: b/362984605 - Handle alpha channel for these formats.
             if converted_with_libyuv {
@@ -575,7 +580,7 @@ mod tests {
         image.allocate_planes(Category::Alpha)?;
         let yuva_planes = &yuv_params.planes;
         for plane in ALL_PLANES {
-            let plane_index = plane.to_usize();
+            let plane_index = plane.as_usize();
             if yuva_planes[plane_index].is_empty() {
                 continue;
             }

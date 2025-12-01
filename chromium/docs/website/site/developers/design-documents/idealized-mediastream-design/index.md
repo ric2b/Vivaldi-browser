@@ -30,7 +30,7 @@ specification has evolved from being focused around
 media to remote endpoints and &lt;audio&gt; and &lt;video&gt; tags for local
 playback, to a spec where streaming media can have multiple different endpoints,
 including the above as well as
-[recording](http://www.w3.org/TR/mediastream-recording/) and
+[recording](https://www.w3.org/TR/mediastream-recording/) and
 [WebAudio](https://dvcs.w3.org/hg/audio/raw-file/tip/webaudio/specification.html)
 and possibly more in the future.
 
@@ -49,13 +49,12 @@ This document assumes familiarity with the
 [MediaStream](http://dev.w3.org/2011/webrtc/editor/getusermedia.html) and
 [PeerConnection](http://dev.w3.org/2011/webrtc/editor/webrtc.html) HTML5
 specifications, with Chrome's [multi-process
-architecture](http://www.chromium.org/developers/design-documents/multi-process-architecture),
-its [Content](http://www.chromium.org/developers/content-module),
-[Blink](http://www.chromium.org/blink) and
-[Media](http://www.chromium.org/audio-video) layers, as well as common
-[abstractions](http://www.chromium.org/developers/coding-style/important-abstractions-and-data-structures)
+architecture](/developers/design-documents/multi-process-architecture),
+its [Content](/developers/content-module), Blink](/blink) and
+[Media](/audio-video) layers, as well as common
+[abstractions](/developers/coding-style/important-abstractions-and-data-structures)
 and approaches to
-[threading](http://www.chromium.org/developers/design-documents/threading).
+[threading](/developers/design-documents/threading).
 
 # Objectives
 
@@ -135,7 +134,7 @@ In the Content and Blink layers, there will be local sink implementations, i.e.
 recipients of the audio and video media from a MediaStreamTrack, for
 &lt;audio&gt; and &lt;video&gt; tags, [WebAudio
 ](https://dvcs.w3.org/hg/audio/raw-file/tip/webaudio/specification.html)and
-[recording](http://www.w3.org/TR/mediastream-recording/).
+[recording](https://www.w3.org/TR/mediastream-recording/).
 
 ### Remote-Destined Sinks
 
@@ -374,7 +373,7 @@ control over where to place the NetEQ. Two examples are:
     want to have no decoding done on the data whatsoever, and therefore skip the
     NetEQ.
 
-    [Recording](http://www.w3.org/TR/mediastream-recording/) audio. Since
+    [Recording](https://www.w3.org/TR/mediastream-recording/) audio. Since
     recording does not have the same near-real-time demands as does a
     &lt;video&gt; tag showing a live video/audio chat with a remote peer, it can
     afford to let more audio data buffer up in the NetEQ before it starts

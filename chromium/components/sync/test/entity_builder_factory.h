@@ -41,6 +41,9 @@ class EntityBuilderFactory {
   BookmarkEntityBuilder NewBookmarkEntityBuilder(
       const std::string& title,
       const base::Uuid& uuid = base::Uuid::GenerateRandomV4());
+  BookmarkEntityBuilder NewBookmarkEntityBuilder(
+      const std::u16string& title,
+      const base::Uuid& uuid = base::Uuid::GenerateRandomV4());
 
   NotesEntityBuilder NewNotesEntityBuilder(const std::string& title,
                                            const GURL& url,

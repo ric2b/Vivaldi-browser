@@ -29,7 +29,7 @@ CHROMIUM_VIVALDI_RESOURCE_LIST = [
     },
   ],
   [
-    "//components/version_ui/resources:resources",
+    "//components/webui/version/resources:resources",
     "//vivaldi/app/resources/components_resources/vivaldi_about.grd",
     {
       have_strings_flag = false
@@ -146,7 +146,7 @@ if(!is_ios) {
       },
     ],
     [
-      "//ui/resources:webui_resources_grd",
+      "//ui/webui/resources:resources",
       "//vivaldi/app/resources/webui_resources/vivaldi_webui_resources.grd",
       {
         have_strings_flag = false
@@ -281,7 +281,6 @@ IOS_VIVALDI_RESOURCE_LIST = [
       vivaldi_translation_dir_setting = "strings"
       vivaldi_file_prefix="vivaldi_ios_strings_"
       add_mobile_locales = true
-      extra_locale=["af"]
     },
   ],
   [

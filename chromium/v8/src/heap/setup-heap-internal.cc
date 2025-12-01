@@ -65,10 +65,10 @@ namespace internal {
 
 namespace {
 
-Handle<SharedFunctionInfo> CreateSharedFunctionInfo(
+DirectHandle<SharedFunctionInfo> CreateSharedFunctionInfo(
     Isolate* isolate, Builtin builtin, int len,
     FunctionKind kind = FunctionKind::kNormalFunction) {
-  Handle<SharedFunctionInfo> shared =
+  DirectHandle<SharedFunctionInfo> shared =
       isolate->factory()->NewSharedFunctionInfoForBuiltin(
           isolate->factory()->empty_string(), builtin, len, kAdapt, kind);
   return shared;
@@ -227,6 +227,8 @@ bool Heap::CreateMutableHeapObjects() {
   {  // Map allocation
     ALLOCATE_MAP(JS_MESSAGE_OBJECT_TYPE, JSMessageObject::kHeaderSize,
                  message_object)
+    message_object_map()->set_is_extensible(false);
+
     ALLOCATE_MAP(JS_EXTERNAL_OBJECT_TYPE, JSExternalObject::kHeaderSize,
                  external)
     external_map()->set_is_extensible(false);
@@ -492,6 +494,8 @@ bool Heap::CreateEarlyReadOnlyMapsAndObjects() {
                          weak_fixed_array);
     ALLOCATE_PARTIAL_MAP(TRUSTED_WEAK_FIXED_ARRAY_TYPE, kVariableSizeSentinel,
                          trusted_weak_fixed_array);
+    ALLOCATE_PARTIAL_MAP(PROTECTED_WEAK_FIXED_ARRAY_TYPE, kVariableSizeSentinel,
+                         protected_weak_fixed_array);
     ALLOCATE_PARTIAL_MAP(WEAK_ARRAY_LIST_TYPE, kVariableSizeSentinel,
                          weak_array_list);
     ALLOCATE_PARTIAL_MAP(FIXED_ARRAY_TYPE, kVariableSizeSentinel,
@@ -547,7 +551,7 @@ bool Heap::CreateEarlyReadOnlyMapsAndObjects() {
   DCHECK(!HeapLayout::InYoungGeneration(roots.undefined_value()));
   {
     AllocationResult allocation =
-        Allocate(roots.hole_map_handle(), AllocationType::kReadOnly);
+        Allocate(roots_table().hole_map(), AllocationType::kReadOnly);
     if (!allocation.To(&obj)) return false;
   }
   set_the_hole_value(Cast<Hole>(obj));
@@ -558,7 +562,7 @@ bool Heap::CreateEarlyReadOnlyMapsAndObjects() {
   // Allocate the empty enum cache.
   {
     AllocationResult allocation =
-        Allocate(roots.enum_cache_map_handle(), AllocationType::kReadOnly);
+        Allocate(roots_table().enum_cache_map(), AllocationType::kReadOnly);
     if (!allocation.To(&obj)) return false;
   }
   set_empty_enum_cache(Cast<EnumCache>(obj));
@@ -585,6 +589,7 @@ bool Heap::CreateEarlyReadOnlyMapsAndObjects() {
   FinalizePartialMap(roots.weak_fixed_array_map());
   FinalizePartialMap(roots.weak_array_list_map());
   FinalizePartialMap(roots.trusted_weak_fixed_array_map());
+  FinalizePartialMap(roots.protected_weak_fixed_array_map());
   FinalizePartialMap(roots.fixed_cow_array_map());
   FinalizePartialMap(roots.descriptor_array_map());
   FinalizePartialMap(roots.undefined_map());
@@ -834,7 +839,7 @@ bool Heap::CreateLateReadOnlyJSReceiverMaps() {
     Descriptor length_descriptor = Descriptor::DataField(
         factory->length_string(), JSSharedArray::kLengthFieldIndex,
         ALL_ATTRIBUTES_MASK, PropertyConstness::kConst, Representation::Smi(),
-        MaybeObjectHandle(FieldType::Any(isolate())));
+        MaybeObjectDirectHandle(FieldType::Any(isolate())));
     descriptors->Set(InternalIndex(0), &length_descriptor);
     shared_array_map->InitializeDescriptors(isolate(), *descriptors);
     set_js_shared_array_map(shared_array_map);
@@ -948,7 +953,7 @@ bool Heap::CreateImportantReadOnlyObjects() {
               VariableAllocationInfo::NONE);
     DCHECK_EQ(ScopeInfo::FunctionVariableBits::decode(flags),
               VariableAllocationInfo::NONE);
-    Cast<ScopeInfo>(obj)->set_flags(flags);
+    Cast<ScopeInfo>(obj)->set_flags(flags, kRelaxedStore);
     Cast<ScopeInfo>(obj)->set_context_local_count(0);
     Cast<ScopeInfo>(obj)->set_parameter_count(0);
     Cast<ScopeInfo>(obj)->set_position_info_start(0);
@@ -1029,7 +1034,7 @@ bool Heap::CreateReadOnlyObjects() {
   {
     // Empty array boilerplate description
     AllocationResult alloc =
-        Allocate(roots.array_boilerplate_description_map_handle(),
+        Allocate(roots_table().array_boilerplate_description_map(),
                  AllocationType::kReadOnly);
     if (!alloc.To(&obj)) return false;
 
@@ -1089,16 +1094,17 @@ bool Heap::CreateReadOnlyObjects() {
 
   // Initialize the null_value.
   Oddball::Initialize(isolate(), factory->null_value(), "null",
-                      handle(Smi::zero(), isolate()), "object", Oddball::kNull);
+                      direct_handle(Smi::zero(), isolate()), "object",
+                      Oddball::kNull);
 
   // Initialize the true_value.
   Oddball::Initialize(isolate(), factory->true_value(), "true",
-                      handle(Smi::FromInt(1), isolate()), "boolean",
+                      direct_handle(Smi::FromInt(1), isolate()), "boolean",
                       Oddball::kTrue);
 
   // Initialize the false_value.
   Oddball::Initialize(isolate(), factory->false_value(), "false",
-                      handle(Smi::zero(), isolate()), "boolean",
+                      direct_handle(Smi::zero(), isolate()), "boolean",
                       Oddball::kFalse);
 
   // Initialize the_hole_value.
@@ -1239,6 +1245,11 @@ bool Heap::CreateReadOnlyObjects() {
       ScopeInfo::CreateForShadowRealmNativeContext(isolate());
   set_shadow_realm_scope_info(*shadow_realm_scope_info);
 
+  // Allocate FeedbackCell for builtins.
+  DirectHandle<FeedbackCell> many_closures_cell =
+      factory->NewManyClosuresCell(AllocationType::kReadOnly);
+  set_many_closures_cell(*many_closures_cell);
+
   // Initialize the wasm null_value.
 
 #ifdef V8_ENABLE_WEBASSEMBLY
@@ -1284,14 +1295,15 @@ bool Heap::CreateReadOnlyObjects() {
 
   // Finally, allocate the wasm-null object.
   {
-    Tagged<HeapObject> obj;
-    CHECK(AllocateRaw(WasmNull::kSize, AllocationType::kReadOnly).To(&obj));
+    Tagged<HeapObject> wasm_null_obj;
+    CHECK(AllocateRaw(WasmNull::kSize, AllocationType::kReadOnly)
+              .To(&wasm_null_obj));
     // No need to initialize the payload since it's either empty or unmapped.
     CHECK_IMPLIES(!(V8_STATIC_ROOTS_BOOL || V8_STATIC_ROOTS_GENERATION_BOOL),
                   WasmNull::kSize == sizeof(Tagged_t));
-    obj->set_map_after_allocation(isolate(), roots.wasm_null_map(),
-                                  SKIP_WRITE_BARRIER);
-    set_wasm_null(Cast<WasmNull>(obj));
+    wasm_null_obj->set_map_after_allocation(isolate(), roots.wasm_null_map(),
+                                            SKIP_WRITE_BARRIER);
+    set_wasm_null(Cast<WasmNull>(wasm_null_obj));
     if (V8_STATIC_ROOTS_BOOL || V8_STATIC_ROOTS_GENERATION_BOOL) {
       CHECK_EQ(read_only_space_->top() % kLargestPossibleOSPageSize, 0);
     }
@@ -1341,11 +1353,6 @@ void Heap::CreateInitialMutableObjects() {
       RegExpResultsCache::kRegExpResultsCacheSize, AllocationType::kOld));
   set_regexp_match_global_atom_cache(*factory->NewFixedArray(
       RegExpResultsCache_MatchGlobalAtom::kSize, AllocationType::kOld));
-
-  // Allocate FeedbackCell for builtins.
-  DirectHandle<FeedbackCell> many_closures_cell =
-      factory->NewManyClosuresCell();
-  set_many_closures_cell(*many_closures_cell);
 
   set_detached_contexts(roots.empty_weak_array_list());
 
@@ -1399,6 +1406,7 @@ void Heap::CreateInitialMutableObjects() {
   set_string_length_protector(*factory->NewProtector());
   set_string_wrapper_to_primitive_protector(*factory->NewProtector());
   set_number_string_not_regexp_like_protector(*factory->NewProtector());
+  set_typed_array_length_protector(*factory->NewProtector());
   set_typed_array_species_protector(*factory->NewProtector());
 
   set_serialized_objects(roots.empty_fixed_array());
@@ -1478,7 +1486,7 @@ void Heap::CreateInitialMutableObjects() {
 
     info = CreateSharedFunctionInfo(
         isolate_, Builtin::kAsyncIteratorPrototypeAsyncDisposeResolveClosure,
-        1);
+        0);
     set_async_iterator_prototype_async_dispose_resolve_closure_shared_fun(
         *info);
   }
@@ -1638,6 +1646,8 @@ void Heap::CreateInitialMutableObjects() {
     set_empty_trusted_weak_fixed_array(
         *TrustedWeakFixedArray::New(isolate_, 0));
     set_empty_protected_fixed_array(*ProtectedFixedArray::New(isolate_, 0));
+    set_empty_protected_weak_fixed_array(
+        *ProtectedWeakFixedArray::New(isolate_, 0));
   }
 }
 

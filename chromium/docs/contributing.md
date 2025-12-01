@@ -212,6 +212,20 @@ To put this into an example, let‘s say you have a commit for feature A
 and this is in the process of being reviewed on Gerrit.  Now let’s say
 you want to start more work based on it before it lands on main.
 
+Gerrit has the concept of a “relation chain”. For our example above, we want to
+create a relation chain where the feature A change is the parent of the feature
+B change. Once we create the relation chain, the Gerrit review view for change B
+will show the diff vs. change A, rather than vs. the main branch.
+
+To create a relation chain, upload a change that has an upstream branch
+associated with the parent CL. The steps to do so are slightly different when
+you own the parent change vs. when someone else owns the parent change.
+
+#### When you own the parent change
+
+Using the example of features A and B above, if you own the change for feature A
+and you want to upload a dependent change for feature B:
+
 ```
 git checkout featureA
 git checkout -b featureB
@@ -222,10 +236,33 @@ git commit
 git cl upload
 ```
 
-In Gerrit, there would then be a “relation chain” shown where the
-feature A change is the parent of the feature B change.  If A
-introduces a new file which B changes, the review for B will only show
-the diff from A.
+#### When someone else owns the parent change
+
+If someone else owns the change for feature A:
+
+```
+# First, open the change for feature A in Gerrit -> "Download patch" -> copy and
+# run "Branch" command. Then, starting from the branch that command created:
+git cl patch --force <parent-CL-number>
+git checkout -b featureB
+git branch --set-upstream-to change-<parent-CL-number>
+# ... edit some files
+# ... git add ...
+git commit
+git cl upload
+```
+
+Note that, after running `git cl patch --force <parent-CL-number>`, if you
+upload changes from branch `change-<parent-CL-number>`, you will upload a new
+patchset to the original author's change.
+
+If the other author uploads a new patchset to the change your change depends on,
+you can update your local copy of their change by running:
+
+```
+git checkout change-<parent-CL-number>
+git fetch origin [sha hash for latest patchset] && git reset --hard FETCH_HEAD
+```
 
 ## Code review {#code-review}
 
@@ -283,16 +320,22 @@ Reviewers expect to review code that compiles and passes tests. If you have
 access, now is a good time to run your change through the [automated
 tests](#running-automated-tests).
 
-Click **Add Reviewers** in the left column (if you don't see this link, make
-sure you are logged in). In the **Reviewers** field, enter a comma-separated
-list of the reviewers you picked.
+Click the big blue **Start Review** button near the top of the page. (If you are
+not signed in, the button will instead say "Sign In", so click it to sign in.)
+An in-page dialog will appear, and there will be a **Reviewers** field in which
+you can specify reviewers for the change. To the right of the field, in the
+upper-right of the in-page dialog, will be a link titled "Suggest Owners" which,
+when clicked, will suggest owners relevant to your change. Unless you have a
+specific reason not to, it is recommended to click it and rely on its suggestion
+of owners.
 
 In the same dialog, you can include an optional message to your reviewers. This
-space can be used for specific questions or instructions. Once you're done,
-make sure to click **Start Review**, which notifies the requested reviewers that
-they should review your change.
+space can be used for specific questions or instructions. Once you're done, make
+sure to click **Send and Start Review**, which notifies the requested reviewers
+that they should review your change.
 
-**IMPORTANT: UNTIL YOU SEND THE REVIEW REQUEST, NO ONE WILL LOOK AT THE REVIEW**
+**⚠️ Be sure to click the "Send and Start Review" button as NO ONE WILL LOOK AT
+YOUR CHANGE UNTIL YOU DO SO ⚠️**
 
 ### Review process
 

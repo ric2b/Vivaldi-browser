@@ -9,6 +9,7 @@ const queryParamsObject = new URLSearchParams(location.search);
 let runtimePlatform = '';
 
 let runtimeInstance: Runtime|undefined;
+let isNode: boolean|undefined;
 
 export function getRemoteBase(location: string = self.location.toString()): {
   base: string,
@@ -30,6 +31,11 @@ export function getRemoteBase(location: string = self.location.toString()): {
 
 export function getPathName(): string {
   return window.location.pathname;
+}
+
+export function isNodeEntry(pathname: string): boolean {
+  const nodeEntryPoints = ['node_app', 'js_app'];
+  return nodeEntryPoints.some(component => pathname.includes(component));
 }
 
 export class Runtime {
@@ -59,19 +65,11 @@ export class Runtime {
     queryParamsObject.set(name, value);
   }
 
-  static experimentsSetting(): {
-    [x: string]: boolean,
-  } {
-    try {
-      return Platform.StringUtilities.toKebabCaseKeys(
-          JSON.parse(self.localStorage && self.localStorage['experiments'] ? self.localStorage['experiments'] : '{}') as
-          {
-            [x: string]: boolean,
-          });
-    } catch (e) {
-      console.error('Failed to parse localStorage[\'experiments\']');
-      return {};
+  static isNode(): boolean {
+    if (isNode === undefined) {
+      isNode = isNodeEntry(getPathName());
     }
+    return isNode;
   }
 
   static setPlatform(platform: string): void {
@@ -117,18 +115,12 @@ export interface Option {
 }
 
 export class ExperimentsSupport {
-  #experiments: Experiment[];
-  #experimentNames: Set<string>;
-  #enabledTransiently: Set<string>;
-  readonly #enabledByDefault: Set<string>;
-  readonly #serverEnabled: Set<string>;
-  constructor() {
-    this.#experiments = [];
-    this.#experimentNames = new Set();
-    this.#enabledTransiently = new Set();
-    this.#enabledByDefault = new Set();
-    this.#serverEnabled = new Set();
-  }
+  #experiments: Experiment[] = [];
+  readonly #experimentNames = new Set<string>();
+  readonly #enabledTransiently = new Set<string>();
+  readonly #enabledByDefault = new Set<string>();
+  readonly #serverEnabled = new Set<string>();
+  readonly #storage = new ExperimentStorage();
 
   allConfigurableExperiments(): Experiment[] {
     const result = [];
@@ -138,13 +130,6 @@ export class ExperimentsSupport {
       }
     }
     return result;
-  }
-
-  private setExperimentsSetting(value: Object): void {
-    if (!self.localStorage) {
-      return;
-    }
-    self.localStorage['experiments'] = JSON.stringify(value);
   }
 
   register(
@@ -164,7 +149,7 @@ export class ExperimentsSupport {
     this.checkExperiment(experimentName);
     // Check for explicitly disabled #experiments first - the code could call setEnable(false) on the experiment enabled
     // by default and we should respect that.
-    if (Runtime.experimentsSetting()[experimentName] === false) {
+    if (this.#storage.get(experimentName) === false) {
       return false;
     }
     if (this.#enabledTransiently.has(experimentName) || this.#enabledByDefault.has(experimentName)) {
@@ -174,14 +159,12 @@ export class ExperimentsSupport {
       return true;
     }
 
-    return Boolean(Runtime.experimentsSetting()[experimentName]);
+    return Boolean(this.#storage.get(experimentName));
   }
 
   setEnabled(experimentName: string, enabled: boolean): void {
     this.checkExperiment(experimentName);
-    const experimentsSetting = Runtime.experimentsSetting();
-    experimentsSetting[experimentName] = enabled;
-    this.setExperimentsSetting(experimentsSetting);
+    this.#storage.set(experimentName, enabled);
   }
 
   enableExperimentsTransiently(experimentNames: string[]): void {
@@ -224,25 +207,57 @@ export class ExperimentsSupport {
   }
 
   cleanUpStaleExperiments(): void {
-    const experimentsSetting = Runtime.experimentsSetting();
-    const cleanedUpExperimentSetting: {
-      [x: string]: boolean,
-    } = {};
-    for (const {name: experimentName} of this.#experiments) {
-      if (experimentsSetting.hasOwnProperty(experimentName)) {
-        const isEnabled = experimentsSetting[experimentName];
-        if (isEnabled || this.#enabledByDefault.has(experimentName)) {
-          cleanedUpExperimentSetting[experimentName] = isEnabled;
-        }
-      }
-    }
-    this.setExperimentsSetting(cleanedUpExperimentSetting);
+    this.#storage.cleanUpStaleExperiments(this.#experimentNames);
   }
 
   private checkExperiment(experimentName: string): void {
     if (!this.#experimentNames.has(experimentName)) {
       throw new Error(`Unknown experiment '${experimentName}'`);
     }
+  }
+}
+
+/** Manages the 'experiments' dictionary in self.localStorage */
+class ExperimentStorage {
+  readonly #experiments: Record<string, boolean|undefined> = {};
+
+  constructor() {
+    try {
+      const storedExperiments = self.localStorage?.getItem('experiments');
+      if (storedExperiments) {
+        this.#experiments = JSON.parse(storedExperiments);
+      }
+    } catch {
+      console.error('Failed to parse localStorage[\'experiments\']');
+    }
+  }
+
+  /**
+   * Experiments are stored with a tri-state:
+   *   - true: Explicitly enabled.
+   *   - false: Explicitly disabled.
+   *   - undefined: Disabled.
+   */
+  get(experimentName: string): boolean|undefined {
+    return this.#experiments[experimentName];
+  }
+
+  set(experimentName: string, enabled: boolean): void {
+    this.#experiments[experimentName] = enabled;
+    this.#syncToLocalStorage();
+  }
+
+  cleanUpStaleExperiments(validExperiments: Set<string>): void {
+    for (const [key] of Object.entries(this.#experiments)) {
+      if (!validExperiments.has(key)) {
+        delete this.#experiments[key];
+      }
+    }
+    this.#syncToLocalStorage();
+  }
+
+  #syncToLocalStorage(): void {
+    self.localStorage?.setItem('experiments', JSON.stringify(this.#experiments));
   }
 }
 
@@ -293,17 +308,21 @@ export const enum ExperimentName {
   NETWORK_PANEL_FILTER_BAR_REDESIGN = 'network-panel-filter-bar-redesign',
   AUTOFILL_VIEW = 'autofill-view',
   TIMELINE_SHOW_POST_MESSAGE_EVENTS = 'timeline-show-postmessage-events',
-  TIMELINE_ANNOTATIONS = 'perf-panel-annotations',
-  TIMELINE_INSIGHTS = 'timeline-rpp-sidebar',
   TIMELINE_DEBUG_MODE = 'timeline-debug-mode',
-  TIMELINE_OBSERVATIONS = 'timeline-observations',
   TIMELINE_ENHANCED_TRACES = 'timeline-enhanced-traces',
   TIMELINE_SERVER_TIMINGS = 'timeline-server-timings',
   FLOATING_ENTRY_POINTS_FOR_AI_ASSISTANCE = 'floating-entry-points-for-ai-assistance',
   TIMELINE_EXPERIMENTAL_INSIGHTS = 'timeline-experimental-insights',
   TIMELINE_DIM_UNRELATED_EVENTS = 'timeline-dim-unrelated-events',
   TIMELINE_ALTERNATIVE_NAVIGATION = 'timeline-alternative-navigation',
+  TIMELINE_THIRD_PARTY_DEPENDENCIES = 'timeline-third-party-dependencies',
   // when adding to this enum, you'll need to also add to REGISTERED_EXPERIMENTS in EnvironmentHelpers.ts
+}
+
+export enum GenAiEnterprisePolicyValue {
+  ALLOW = 0,
+  ALLOW_WITHOUT_LOGGING = 1,
+  DISABLE = 2,
 }
 
 export interface AidaAvailability {
@@ -312,6 +331,7 @@ export interface AidaAvailability {
   blockedByEnterprisePolicy: boolean;
   blockedByGeo: boolean;
   disallowLogging: boolean;
+  enterprisePolicyValue: number;
 }
 
 export interface HostConfigConsoleInsights {
@@ -355,6 +375,10 @@ export interface HostConfigAiAssistanceFileAgent {
   userTier: string;
 }
 
+export interface HostConfigImprovedWorkspaces {
+  enabled: boolean;
+}
+
 export interface HostConfigVeLogging {
   enabled: boolean;
   testing: boolean;
@@ -367,6 +391,17 @@ export interface HostConfigPrivacyUI {
 export interface HostConfigEnableOriginBoundCookies {
   portBindingEnabled: boolean;
   schemeBindingEnabled: boolean;
+}
+
+export interface HostConfigAnimationStylesInStylesTab {
+  enabled: boolean;
+}
+
+export interface HostConfigThirdPartyCookieControls {
+  thirdPartyCookieRestrictionEnabled: boolean;
+  thirdPartyCookieMetadataEnabled: boolean;
+  thirdPartyCookieHeuristicsEnabled: boolean;
+  managedBlockThirdPartyCookies: string|boolean;
 }
 
 // We use `RecursivePartial` here to enforce that DevTools code is able to
@@ -383,6 +418,7 @@ export type HostConfig = Platform.TypeScriptUtilities.RecursivePartial<{
   devToolsAiAssistanceNetworkAgent: HostConfigAiAssistanceNetworkAgent,
   devToolsAiAssistanceFileAgent: HostConfigAiAssistanceFileAgent,
   devToolsAiAssistancePerformanceAgent: HostConfigAiAssistancePerformanceAgent,
+  devToolsImprovedWorkspaces: HostConfigImprovedWorkspaces,
   devToolsVeLogging: HostConfigVeLogging,
   devToolsPrivacyUI: HostConfigPrivacyUI,
   /**
@@ -391,6 +427,8 @@ export type HostConfig = Platform.TypeScriptUtilities.RecursivePartial<{
    */
   isOffTheRecord: boolean,
   devToolsEnableOriginBoundCookies: HostConfigEnableOriginBoundCookies,
+  devToolsAnimationStylesInStylesTab: HostConfigAnimationStylesInStylesTab,
+  thirdPartyCookieControls: HostConfigThirdPartyCookieControls,
 }>;
 
 /**

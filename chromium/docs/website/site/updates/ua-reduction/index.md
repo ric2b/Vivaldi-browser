@@ -52,7 +52,7 @@ Chrome 101 population while we evaluate stability.
 May 16, 2022: Phase 4 rollout was increased to a larger percentage of the Chrome
 101 population while we evaluate stability.
 
-May 6, 2022: ["Phase 4"](https://www.chromium.org/updates/ua-reduction/#sample-ua-strings-phase-4)
+May 6, 2022: ["Phase 4"](/updates/ua-reduction/#sample-ua-strings-phase-4)
 began rolling out to a small percentage of the Chrome 101 stable population while we evaluate
 stability.
 
@@ -544,7 +544,7 @@ Javascript API.
 - Public support: [Sandbox-Dev-Support-Repo](https://github.com/GoogleChromeLabs/privacy-sandbox-dev-support/discussions)
 
 ### Proposed Timeline
-- Full [UA-Reduction proposed rollout plan](https://www.chromium.org/updates/ua-reduction/)
+- Full [UA-Reduction proposed rollout plan](/updates/ua-reduction/)
 - Key Dates (As of Mar 15th, 2023) ([schedule](https://chromiumdash.appspot.com/schedule))
   - Chrome 100 release (Mar 29th, 2022) (**Deployed**)
     - User Agent Reduction Deprecation Trial launches for instances where a site may need more migration time.

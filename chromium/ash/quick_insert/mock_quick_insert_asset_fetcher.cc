@@ -10,19 +10,27 @@
 
 namespace ash {
 
-MockPickerAssetFetcher::MockPickerAssetFetcher() = default;
+MockQuickInsertAssetFetcher::MockQuickInsertAssetFetcher() = default;
 
-MockPickerAssetFetcher::~MockPickerAssetFetcher() = default;
+MockQuickInsertAssetFetcher::~MockQuickInsertAssetFetcher() = default;
 
-void MockPickerAssetFetcher::FetchGifFromUrl(
+std::unique_ptr<network::SimpleURLLoader>
+MockQuickInsertAssetFetcher::FetchGifFromUrl(
     const GURL& url,
-    PickerGifFetchedCallback callback) {}
+    size_t rank,
+    QuickInsertGifFetchedCallback callback) {
+  return nullptr;
+}
 
-void MockPickerAssetFetcher::FetchGifPreviewImageFromUrl(
+std::unique_ptr<network::SimpleURLLoader>
+MockQuickInsertAssetFetcher::FetchGifPreviewImageFromUrl(
     const GURL& url,
-    PickerImageFetchedCallback callback) {}
+    size_t rank,
+    QuickInsertImageFetchedCallback callback) {
+  return nullptr;
+}
 
-void MockPickerAssetFetcher::FetchFileThumbnail(
+void MockQuickInsertAssetFetcher::FetchFileThumbnail(
     const base::FilePath& path,
     const gfx::Size& size,
     FetchFileThumbnailCallback callback) {}

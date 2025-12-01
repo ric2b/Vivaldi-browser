@@ -141,22 +141,34 @@ export class OriginalScopeBuilder {
     this.#names = names;
   }
 
-  start(line: number, column: number, kind: string, name?: string, variables?: string[]): this {
+  start(
+      line: number, column: number,
+      options?: {name?: string, kind?: string, isStackFrame?: boolean, variables?: string[]}): this {
     if (this.#encodedScope !== '') {
       this.#encodedScope += ',';
     }
 
     const lineDiff = line - this.#lastLine;
     this.#lastLine = line;
-    const flags = (name !== undefined ? 0x1 : 0x0);
+    let flags = 0;
+    const nameIdxAndKindIdx: number[] = [];
 
-    this.#encodedScope += encodeVlqList([lineDiff, column, this.#encodeKind(kind), flags]);
-
-    if (name !== undefined) {
-      this.#encodedScope += encodeVlq(this.#nameIdx(name));
+    if (options?.name) {
+      flags |= SDK.SourceMapScopes.EncodedOriginalScopeFlag.HAS_NAME;
+      nameIdxAndKindIdx.push(this.#nameIdx(options.name));
     }
-    if (variables !== undefined) {
-      this.#encodedScope += encodeVlqList(variables.map(variable => this.#nameIdx(variable)));
+    if (options?.kind) {
+      flags |= SDK.SourceMapScopes.EncodedOriginalScopeFlag.HAS_KIND;
+      nameIdxAndKindIdx.push(this.#encodeKind(options?.kind));
+    }
+    if (options?.isStackFrame) {
+      flags |= SDK.SourceMapScopes.EncodedOriginalScopeFlag.IS_STACK_FRAME;
+    }
+
+    this.#encodedScope += encodeVlqList([lineDiff, column, flags, ...nameIdxAndKindIdx]);
+
+    if (options?.variables) {
+      this.#encodedScope += encodeVlqList(options.variables.map(variable => this.#nameIdx(variable)));
     }
 
     return this;
@@ -218,7 +230,8 @@ export class GeneratedRangeBuilder {
   }
 
   start(line: number, column: number, options?: {
-    isFunctionScope?: boolean,
+    isStackFrame?: boolean,
+    isHidden?: boolean,
     definition?: {sourceIdx: number, scopeIdx: number},
     callsite?: {sourceIdx: number, line: number, column: number},
     bindings?: (string|undefined|{line: number, column: number, name: string|undefined}[])[],
@@ -239,8 +252,11 @@ export class GeneratedRangeBuilder {
     if (options?.callsite) {
       flags |= SDK.SourceMapScopes.EncodedGeneratedRangeFlag.HAS_CALLSITE;
     }
-    if (options?.isFunctionScope) {
-      flags |= SDK.SourceMapScopes.EncodedGeneratedRangeFlag.IS_FUNCTION_SCOPE;
+    if (options?.isStackFrame) {
+      flags |= SDK.SourceMapScopes.EncodedGeneratedRangeFlag.IS_STACK_FRAME;
+    }
+    if (options?.isHidden) {
+      flags |= SDK.SourceMapScopes.EncodedGeneratedRangeFlag.IS_HIDDEN;
     }
     this.#encodedRange += encodeVlq(flags);
 

@@ -5,6 +5,7 @@
 #include "net/test/embedded_test_server/create_websocket_handler.h"
 
 #include "base/base64.h"
+#include "base/functional/bind.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/string_util.h"
 #include "base/test/bind.h"
@@ -22,6 +23,14 @@ namespace net::test_server {
 
 namespace {
 
+// Helper function to strip the query part of the URL
+std::string_view StripQuery(std::string_view url) {
+  const size_t query_position = url.find('?');
+  return (query_position == std::string_view::npos)
+             ? url
+             : url.substr(0, query_position);
+}
+
 std::unique_ptr<HttpResponse> MakeErrorResponse(HttpStatusCode code,
                                                 std::string_view content) {
   auto error_response = std::make_unique<BasicHttpResponse>();
@@ -35,11 +44,14 @@ std::unique_ptr<HttpResponse> MakeErrorResponse(HttpStatusCode code,
 EmbeddedTestServer::UpgradeResultOrHttpResponse HandleWebSocketUpgrade(
     std::string_view handle_path,
     WebSocketHandlerCreator websocket_handler_creator,
+    EmbeddedTestServer* server,
     const HttpRequest& request,
     HttpConnection* connection) {
   DVLOG(3) << "Handling WebSocket upgrade for path: " << handle_path;
 
-  if (request.relative_url != handle_path) {
+  std::string_view request_path = StripQuery(request.relative_url);
+
+  if (request_path != handle_path) {
     return UpgradeResult::kNotHandled;
   }
 
@@ -86,7 +98,7 @@ EmbeddedTestServer::UpgradeResultOrHttpResponse HandleWebSocketUpgrade(
   auto tokens =
       base::SplitStringPiece(connection_header->second, ",",
                              base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
-  if (!base::ranges::any_of(tokens, [](std::string_view token) {
+  if (!std::ranges::any_of(tokens, [](std::string_view token) {
         return base::EqualsCaseInsensitiveASCII(token, "Upgrade");
       })) {
     DVLOG(1) << "Connection header does not contain 'Upgrade'. Tokens: "
@@ -125,7 +137,7 @@ EmbeddedTestServer::UpgradeResultOrHttpResponse HandleWebSocketUpgrade(
   CHECK(socket);
 
   auto websocket_connection = base::MakeRefCounted<WebSocketConnection>(
-      std::move(socket), sec_websocket_key_iter->second);
+      std::move(socket), sec_websocket_key_iter->second, server);
 
   auto handler = websocket_handler_creator.Run(websocket_connection);
   handler->OnHandshake(request);
@@ -138,9 +150,14 @@ EmbeddedTestServer::UpgradeResultOrHttpResponse HandleWebSocketUpgrade(
 
 EmbeddedTestServer::HandleUpgradeRequestCallback CreateWebSocketHandler(
     std::string_view handle_path,
-    WebSocketHandlerCreator websocket_handler_creator) {
+    WebSocketHandlerCreator websocket_handler_creator,
+    EmbeddedTestServer* server) {
+  // Note: The callback registered in ControllableHttpResponse will not be
+  // called after the server has been destroyed. This guarantees that the
+  // EmbeddedTestServer pointer remains valid for the lifetime of the
+  // ControllableHttpResponse instance.
   return base::BindRepeating(&HandleWebSocketUpgrade, handle_path,
-                             websocket_handler_creator);
+                             websocket_handler_creator, server);
 }
 
 }  // namespace net::test_server

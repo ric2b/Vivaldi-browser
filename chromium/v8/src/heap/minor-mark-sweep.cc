@@ -218,9 +218,8 @@ void YoungGenerationRememberedSetsMarkingWorklist::MarkingItem::
     DeleteRememberedSets() {
   DCHECK(IsAcquired());
   if (slots_type_ == SlotsType::kRegularSlots) {
-    if (slot_set_) SlotSet::Delete(slot_set_, chunk_->buckets());
-    if (background_slot_set_)
-      SlotSet::Delete(background_slot_set_, chunk_->buckets());
+    if (slot_set_) SlotSet::Delete(slot_set_);
+    if (background_slot_set_) SlotSet::Delete(background_slot_set_);
   } else {
     DCHECK_EQ(slots_type_, SlotsType::kTypedSlots);
     DCHECK_NULL(background_slot_set_);
@@ -232,9 +231,8 @@ void YoungGenerationRememberedSetsMarkingWorklist::MarkingItem::
 void YoungGenerationRememberedSetsMarkingWorklist::MarkingItem::
     DeleteSetsOnTearDown() {
   if (slots_type_ == SlotsType::kRegularSlots) {
-    if (slot_set_) SlotSet::Delete(slot_set_, chunk_->buckets());
-    if (background_slot_set_)
-      SlotSet::Delete(background_slot_set_, chunk_->buckets());
+    if (slot_set_) SlotSet::Delete(slot_set_);
+    if (background_slot_set_) SlotSet::Delete(background_slot_set_);
 
   } else {
     DCHECK_EQ(slots_type_, SlotsType::kTypedSlots);
@@ -900,7 +898,7 @@ void MinorMarkSweepCollector::EvacuateExternalPointerReferences(
     return KEEP_SLOT;
   };
   auto slot_count = slots->Iterate<BasicSlotSet::AccessMode::NON_ATOMIC>(
-      p->ChunkAddress(), 0, p->buckets(), callback,
+      p->ChunkAddress(), 0, p->BucketsInSlotSet(), callback,
       BasicSlotSet::EmptyBucketMode::FREE_EMPTY_BUCKETS);
   DCHECK(slot_count);
   USE(slot_count);
@@ -1033,7 +1031,7 @@ bool MinorMarkSweepCollector::SweepNewLargeSpace() {
     }
     chunk->ClearFlagNonExecutable(MemoryChunk::TO_PAGE);
     chunk->SetFlagNonExecutable(MemoryChunk::FROM_PAGE);
-    current->ProgressBar().ResetIfEnabled();
+    current->marking_progress_tracker().ResetIfEnabled();
     EvacuateExternalPointerReferences(current);
     old_lo_space->PromoteNewLargeObject(current);
     has_promoted_pages = true;

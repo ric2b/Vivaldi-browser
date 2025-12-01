@@ -81,7 +81,7 @@ public class SyncErrorNotifier implements SyncService.SyncStateChangedListener {
 
     private static SyncErrorNotifier buildForProfile(Profile profile) {
         return new SyncErrorNotifier(
-                BaseNotificationManagerProxyFactory.create(ContextUtils.getApplicationContext()),
+                BaseNotificationManagerProxyFactory.create(),
                 SyncServiceFactory.getForProfile(profile),
                 TrustedVaultClient.get());
     }
@@ -216,7 +216,7 @@ public class SyncErrorNotifier implements SyncService.SyncStateChangedListener {
                         .setContentIntent(pendingIntent)
                         .setContentTitle(getString(title))
                         .setContentText(getString(textBody))
-                        .setSmallIcon(R.drawable.ic_chrome)
+                        .setSmallIcon(R.drawable.vivaldi_default_browser_icon) // Vivaldi
                         .setTicker(getString(textBody))
                         .setLocalOnly(true)
                         .setGroup(NotificationConstants.GROUP_SYNC)

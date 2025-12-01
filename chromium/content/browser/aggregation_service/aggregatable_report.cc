@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <algorithm>
 #include <array>
 #include <bit>
 #include <limits>
@@ -24,13 +25,11 @@
 #include "base/containers/adapters.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/span.h"
-#include "base/feature_list.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/notreached.h"
 #include "base/numerics/byte_conversions.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
@@ -40,7 +39,6 @@
 #include "components/aggregation_service/parsing_utils.h"
 #include "components/cbor/values.h"
 #include "components/cbor/writer.h"
-#include "content/browser/aggregation_service/aggregation_service_features.h"
 #include "content/browser/aggregation_service/proto/aggregatable_report.pb.h"
 #include "content/browser/aggregation_service/public_key.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
@@ -187,33 +185,27 @@ std::array<uint8_t, 16u> U128ToBigEndian(absl::uint128 integer) {
 void AppendEncodedContributionToCborArray(
     cbor::Value::ArrayValue& array,
     const blink::mojom::AggregatableReportHistogramContribution& contribution,
-    std::optional<size_t> filtering_id_max_bytes) {
+    size_t filtering_id_max_bytes) {
   cbor::Value::MapValue map;
   map.emplace("bucket", U128ToBigEndian(contribution.bucket));
   map.emplace("value", base::U32ToBigEndian(contribution.value));
 
-  // Only include filtering ID in the format if max bytes is non-null.
-  if (filtering_id_max_bytes.has_value()) {
-    uint64_t filtering_id = contribution.filtering_id.value_or(0);
-    CHECK_LE(static_cast<size_t>(std::bit_width(filtering_id)),
-             kBitsPerByte * filtering_id_max_bytes.value());
+  uint64_t filtering_id = contribution.filtering_id.value_or(0);
+  CHECK_LE(static_cast<size_t>(std::bit_width(filtering_id)),
+           kBitsPerByte * filtering_id_max_bytes);
 
-    static_assert(
-        AggregationServicePayloadContents::kMaximumFilteringIdMaxBytes == 8);
-    std::array<uint8_t, 8u> encoded_id;
-    encoded_id.fill(0);
-    base::make_span(encoded_id).copy_from(base::U64ToBigEndian(filtering_id));
+  static_assert(
+      AggregationServicePayloadContents::kMaximumFilteringIdMaxBytes == 8);
+  std::array<uint8_t, 8u> encoded_id;
+  encoded_id.fill(0);
+  base::span(encoded_id).copy_from(base::U64ToBigEndian(filtering_id));
 
-    // Note that the payload will have a length dependent on the choice of
-    // `filtering_id_max_bytes` here. APIs using this field should ensure that
-    // this value is not dependent on cross-site data (or only allow it to vary
-    // in debug mode).
-    map.emplace("id",
-                base::span(encoded_id)
-                    .last(static_cast<size_t>(filtering_id_max_bytes.value())));
-  } else {
-    CHECK(!contribution.filtering_id.has_value());
-  }
+  // Note that the payload will have a length dependent on the choice of
+  // `filtering_id_max_bytes` here. APIs using this field should ensure that
+  // this value is not dependent on cross-site data (or only allow it to vary in
+  // debug mode).
+  map.emplace("id", base::span(encoded_id).last(filtering_id_max_bytes));
+
   array.emplace_back(std::move(map));
 }
 
@@ -273,7 +265,7 @@ constexpr std::optional<size_t> ComputeCborArrayOverheadLen(
 // `AggregatableReport::AggregationServicePayload` for the format's definition.
 constexpr std::optional<size_t> ComputeTeeBasedPayloadLengthInBytes(
     size_t num_contributions,
-    std::optional<size_t> filtering_id_max_bytes) {
+    size_t filtering_id_max_bytes) {
   constexpr base::CheckedNumeric<size_t> kPayloadLenBeforeArray{
       1                                           // map(2)
       + 1 + std::string_view("operation").size()  // text(9)
@@ -298,10 +290,8 @@ constexpr std::optional<size_t> ComputeTeeBasedPayloadLengthInBytes(
   static_assert(kContributionLenWithoutId.ValueOrDie() == 36);
 
   const base::CheckedNumeric<size_t> filtering_id_len =
-      !filtering_id_max_bytes.has_value()
-          ? 0
-          : 1 + std::string_view("id").size()           // text(2)
-                + 1 + size_t{*filtering_id_max_bytes};  // bytes(_)
+      1 + std::string_view("id").size()      // text(2)
+      + 1 + size_t{filtering_id_max_bytes};  // bytes(_)
 
   const base::CheckedNumeric<size_t> payload_len =
       kPayloadLenBeforeArray + *array_overhead_len +
@@ -364,7 +354,8 @@ ConvertPayloadContentsFromProto(
           ? contributions.size()
           : base::saturated_cast<size_t>(proto.max_contributions_allowed());
 
-  std::optional<size_t> filtering_id_max_bytes;
+  // Default used for reports saved without this feature.
+  size_t filtering_id_max_bytes = 1u;
   if (proto.has_filtering_id_max_bytes()) {
     filtering_id_max_bytes = proto.filtering_id_max_bytes();
   }
@@ -493,10 +484,7 @@ void ConvertPayloadContentsToProto(
   out->set_max_contributions_allowed(
       payload_contents.max_contributions_allowed);
 
-  if (payload_contents.filtering_id_max_bytes.has_value()) {
-    out->set_filtering_id_max_bytes(
-        payload_contents.filtering_id_max_bytes.value());
-  }
+  out->set_filtering_id_max_bytes(payload_contents.filtering_id_max_bytes);
 }
 
 void ConvertSharedInfoToProto(const AggregatableReportSharedInfo& shared_info,
@@ -553,28 +541,18 @@ proto::AggregatableReportRequest ConvertReportRequestToProto(
   return request_proto;
 }
 
-// Note that null filtering IDs are considered to 'fit in' to all max bytes and
-// only null filtering IDs are considered to 'fit in' to a null max bytes.
+// Note that null filtering IDs are considered to 'fit in' to all max bytes.
 bool FilteringIdsFitInMaxBytes(
     std::vector<blink::mojom::AggregatableReportHistogramContribution>
         contributions,
-    std::optional<size_t> filtering_id_max_bytes) {
-  if (!filtering_id_max_bytes.has_value()) {
-    return base::ranges::none_of(
-        contributions,
-        [&](const blink::mojom::AggregatableReportHistogramContribution&
-                contribution) {
-          return contribution.filtering_id.has_value();
-        });
-  }
-
-  return base::ranges::none_of(
+    size_t filtering_id_max_bytes) {
+  return std::ranges::none_of(
       contributions,
       [&](const blink::mojom::AggregatableReportHistogramContribution&
               contribution) {
         return static_cast<size_t>(
                    std::bit_width(contribution.filtering_id.value_or(0))) >
-               kBitsPerByte * filtering_id_max_bytes.value();
+               kBitsPerByte * filtering_id_max_bytes;
       });
 }
 
@@ -595,7 +573,7 @@ AggregationServicePayloadContents::AggregationServicePayloadContents(
     blink::mojom::AggregationServiceMode aggregation_mode,
     std::optional<url::Origin> aggregation_coordinator_origin,
     base::StrictNumeric<size_t> max_contributions_allowed,
-    std::optional<size_t> filtering_id_max_bytes)
+    size_t filtering_id_max_bytes)
     : operation(operation),
       contributions(std::move(contributions)),
       aggregation_mode(aggregation_mode),
@@ -669,7 +647,7 @@ std::string AggregatableReportSharedInfo::SerializeAsJson() const {
     value.Set("debug_mode", "enabled");
   }
 
-  CHECK(base::ranges::none_of(additional_fields, [&value](const auto& e) {
+  CHECK(std::ranges::none_of(additional_fields, [&value](const auto& e) {
     return value.contains(e.first);
   })) << "Additional fields in shared_info cannot duplicate existing fields";
 
@@ -734,8 +712,8 @@ AggregatableReportRequest::CreateInternal(
     return std::nullopt;
   }
 
-  if (!base::ranges::all_of(processing_urls,
-                            network::IsUrlPotentiallyTrustworthy)) {
+  if (!std::ranges::all_of(processing_urls,
+                           network::IsUrlPotentiallyTrustworthy)) {
     DVLOG(1) << "Not all processing URLs are potentially trustworthy";
     return std::nullopt;
   }
@@ -747,7 +725,7 @@ AggregatableReportRequest::CreateInternal(
     return std::nullopt;
   }
 
-  if (base::ranges::any_of(
+  if (std::ranges::any_of(
           payload_contents.contributions,
           [](const blink::mojom::AggregatableReportHistogramContribution&
                  contribution) { return contribution.value < 0; })) {
@@ -779,38 +757,27 @@ AggregatableReportRequest::CreateInternal(
     return std::nullopt;
   }
 
-  if (base::FeatureList::IsEnabled(
-          kPrivacySandboxAggregationServiceFilteringIds)) {
-    if (payload_contents.filtering_id_max_bytes.has_value() &&
-        (*payload_contents.filtering_id_max_bytes <= 0 ||
-         *payload_contents.filtering_id_max_bytes >
-             AggregationServicePayloadContents::kMaximumFilteringIdMaxBytes)) {
-      DVLOG(1) << "Value of filtering_id_max_bytes is out of range";
-      return std::nullopt;
-    }
+  if (payload_contents.filtering_id_max_bytes <= 0 ||
+      payload_contents.filtering_id_max_bytes >
+          AggregationServicePayloadContents::kMaximumFilteringIdMaxBytes) {
+    DVLOG(1) << "Value of filtering_id_max_bytes is out of range";
+    return std::nullopt;
+  }
 
     if (!FilteringIdsFitInMaxBytes(payload_contents.contributions,
                                    payload_contents.filtering_id_max_bytes)) {
       DVLOG(1) << "Filtering ID does not fit in filtering_id_max_bytes";
       return std::nullopt;
     }
-  } else {
-    // Ignore any values provided if the feature is disabled.
-    payload_contents.filtering_id_max_bytes.reset();
-    base::ranges::for_each(
-        payload_contents.contributions,
-        [](blink::mojom::AggregatableReportHistogramContribution&
-               contribution) { contribution.filtering_id.reset(); });
-  }
 
   // Ensure the ordering of urls is deterministic. This is required for
   // AggregatableReport construction later.
-  base::ranges::sort(processing_urls);
+    std::ranges::sort(processing_urls);
 
-  return AggregatableReportRequest(
-      std::move(processing_urls), std::move(payload_contents),
-      std::move(shared_info), delay_type, std::move(reporting_path), debug_key,
-      std::move(additional_fields), failed_send_attempts);
+    return AggregatableReportRequest(
+        std::move(processing_urls), std::move(payload_contents),
+        std::move(shared_info), delay_type, std::move(reporting_path),
+        debug_key, std::move(additional_fields), failed_send_attempts);
 }
 
 AggregatableReportRequest::AggregatableReportRequest(
@@ -939,7 +906,7 @@ AggregatableReport::Provider::CreateFromRequestAndPublicKeys(
   // The urls must be sorted so we can ensure the ordering (and assignment of
   // DpfKey parties for the `kExperimentalPoplar` aggregation mode) is
   // deterministic.
-  CHECK(base::ranges::is_sorted(report_request.processing_urls()));
+  CHECK(std::ranges::is_sorted(report_request.processing_urls()));
 
   std::vector<std::vector<uint8_t>> unencrypted_payloads;
 
@@ -989,7 +956,7 @@ AggregatableReport::Provider::CreateFromRequestAndPublicKeys(
   std::string authenticated_info_str =
       base::StrCat({kDomainSeparationPrefix, encoded_shared_info});
   base::span<const uint8_t> authenticated_info =
-      base::as_bytes(base::make_span(authenticated_info_str));
+      base::as_byte_span(authenticated_info_str);
 
   std::vector<AggregatableReport::AggregationServicePayload> encrypted_payloads;
   CHECK_EQ(unencrypted_payloads.size(), num_processing_urls);
@@ -1104,7 +1071,7 @@ AggregatableReport::SerializeTeeBasedPayloadForTesting(
 std::optional<size_t>
 AggregatableReport::ComputeTeeBasedPayloadLengthInBytesForTesting(
     size_t num_contributions,
-    std::optional<size_t> filtering_id_max_bytes) {
+    size_t filtering_id_max_bytes) {
   return ComputeTeeBasedPayloadLengthInBytes(num_contributions,
                                              filtering_id_max_bytes);
 }
@@ -1141,7 +1108,7 @@ std::vector<uint8_t> EncryptAggregatableReportPayloadWithHpke(
                  EVP_HPKE_CTX_max_overhead(sender_context.get()));
 
   base::span<uint8_t> ciphertext =
-      base::make_span(payload).subspan(encapsulated_shared_secret_len);
+      base::span(payload).subspan(encapsulated_shared_secret_len);
   size_t ciphertext_len;
 
   if (!EVP_HPKE_CTX_seal(

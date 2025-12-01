@@ -284,6 +284,12 @@ void WindowAndroid::SetModalDialogManagerForTesting(
       env, GetJavaObject(), java_modal_dialog_manager);
 }
 
+void WindowAndroid::ShowToast(const std::string text) {
+  JNIEnv* env = AttachCurrentThread();
+  ui::Java_WindowAndroid_showToast(
+      env, GetJavaObject(), base::android::ConvertUTF8ToJavaString(env, text));
+}
+
 void WindowAndroid::SetWideColorEnabled(bool enabled) {
   JNIEnv* env = AttachCurrentThread();
   Java_WindowAndroid_setWideColorEnabled(env, GetJavaObject(), enabled);
@@ -312,7 +318,8 @@ display::Display WindowAndroid::GetDisplayWithWindowColorSpace() {
   display::Display display =
       display::Screen::GetScreen()->GetDisplayNearestWindow(this);
   DisplayAndroidManager::DoUpdateDisplay(
-      &display, display.GetSizeInPixel(), display.device_scale_factor(),
+      &display, display.label(), display.bounds(), display.work_area(),
+      display.GetSizeInPixel(), display.device_scale_factor(),
       display.RotationAsDegree(), display.color_depth(),
       display.depth_per_component(), window_is_wide_color_gamut_,
       display.GetColorSpaces().SupportsHDR(),

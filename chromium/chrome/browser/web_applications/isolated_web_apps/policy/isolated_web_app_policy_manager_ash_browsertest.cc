@@ -116,6 +116,10 @@ class IsolatedWebAppPolicyManagerAshBrowserTestBase
     }
     scoped_feature_list_.InitWithFeatures(enabled_features,
                                           /*disabled_features=*/{});
+  }
+
+  void SetUpOnMainThread() override {
+    ash::LoginManagerTest::SetUpOnMainThread();
     AddInitialBundles();
   }
 
@@ -255,7 +259,7 @@ class IsolatedWebAppPolicyManagerAshBrowserTestBase
       base::Version pinned_version = kPinnedVersion) {
     SetIWAForceInstallPolicy(base::Value::List().Append(
         update_server_mixin_.CreateForceInstallPolicyEntry(
-            kWebBundleId1, /*update_channels=*/std::nullopt, pinned_version)));
+            kWebBundleId1, /*update_channel=*/std::nullopt, pinned_version)));
   }
 
   void SetPolicyWithBetaChannelApp(
@@ -371,9 +375,10 @@ IN_PROC_BROWSER_TEST_P(IsolatedWebAppPolicyManagerAshBrowserTest,
   WebAppTestInstallObserver observer(profile);
   observer.BeginListeningAndWait({kAppId1});
 
-  ASSERT_TRUE(
-      WebAppProvider::GetForTest(profile)->registrar_unsafe().IsInstalled(
-          kAppId1));
+  ASSERT_EQ(
+      WebAppProvider::GetForTest(profile)->registrar_unsafe().GetInstallState(
+          kAppId1),
+      proto::InstallState::INSTALLED_WITH_OS_INTEGRATION);
   EXPECT_EQ(GetIsolatedWebAppVersion(kAppId1).GetString(), "7.0.6");
 }
 
@@ -398,7 +403,8 @@ IN_PROC_BROWSER_TEST_P(IsolatedWebAppPolicyManagerAshBrowserTest,
     WebAppTestInstallObserver observer(profile);
     observer.BeginListeningAndWait({kAppId1});
 
-    EXPECT_TRUE(provider->registrar_unsafe().IsInstalled(kAppId1));
+    EXPECT_EQ(provider->registrar_unsafe().GetInstallState(kAppId1),
+              proto::InstallState::INSTALLED_WITH_OS_INTEGRATION);
   }
 
   // Set the policy with 2 IWAs and wait for the IWA to be installed.
@@ -408,7 +414,8 @@ IN_PROC_BROWSER_TEST_P(IsolatedWebAppPolicyManagerAshBrowserTest,
     WebAppTestInstallObserver observer2(profile);
     observer2.BeginListeningAndWait({kAppId2});
 
-    EXPECT_TRUE(provider->registrar_unsafe().IsInstalled(kAppId2));
+    EXPECT_EQ(provider->registrar_unsafe().GetInstallState(kAppId2),
+              proto::InstallState::INSTALLED_WITH_OS_INTEGRATION);
   }
 }
 IN_PROC_BROWSER_TEST_P(IsolatedWebAppPolicyManagerAshBrowserTest,
@@ -456,9 +463,10 @@ IN_PROC_BROWSER_TEST_P(IsolatedWebAppPolicyManagerAshBrowserTest,
   WebAppTestInstallObserver observer(profile);
   observer.BeginListeningAndWait({kAppId1});
 
-  ASSERT_TRUE(
-      WebAppProvider::GetForTest(profile)->registrar_unsafe().IsInstalled(
-          kAppId1));
+  ASSERT_EQ(
+      WebAppProvider::GetForTest(profile)->registrar_unsafe().GetInstallState(
+          kAppId1),
+      proto::InstallState::INSTALLED_WITH_OS_INTEGRATION);
   EXPECT_EQ(GetIsolatedWebAppVersion(kAppId1), kPinnedVersion);
 }
 
@@ -482,8 +490,10 @@ IN_PROC_BROWSER_TEST_P(IsolatedWebAppPolicyManagerAshBrowserTest,
     SetPolicyWithTwoApps();
     install_observer.Wait();
 
-    EXPECT_TRUE(provider->registrar_unsafe().IsInstalled(kAppId1));
-    EXPECT_TRUE(provider->registrar_unsafe().IsInstalled(kAppId2));
+    EXPECT_EQ(provider->registrar_unsafe().GetInstallState(kAppId1),
+              proto::InstallState::INSTALLED_WITH_OS_INTEGRATION);
+    EXPECT_EQ(provider->registrar_unsafe().GetInstallState(kAppId2),
+              proto::InstallState::INSTALLED_WITH_OS_INTEGRATION);
   }
 
   // Set the policy with 1 IWA and wait for the unnecessary IWA to be
@@ -507,8 +517,9 @@ IN_PROC_BROWSER_TEST_P(IsolatedWebAppPolicyManagerAshBrowserTest,
     EXPECT_TRUE(uninstall_browsing_data_future.Wait());
     EXPECT_EQ(uninstall_observer.Wait(), kAppId2);
 
-    EXPECT_TRUE(provider->registrar_unsafe().IsInstalled(kAppId1));
-    EXPECT_FALSE(provider->registrar_unsafe().IsInstalled(kAppId2));
+    EXPECT_EQ(provider->registrar_unsafe().GetInstallState(kAppId1),
+              proto::InstallState::INSTALLED_WITH_OS_INTEGRATION);
+    EXPECT_FALSE(provider->registrar_unsafe().IsInRegistrar(kAppId2));
   }
 
   // Set the policy with 2 IWAs and wait for the second IWA to be re-installed.
@@ -519,8 +530,10 @@ IN_PROC_BROWSER_TEST_P(IsolatedWebAppPolicyManagerAshBrowserTest,
     SetPolicyWithTwoApps();
     install_observer.Wait();
 
-    EXPECT_TRUE(provider->registrar_unsafe().IsInstalled(kAppId1));
-    EXPECT_TRUE(provider->registrar_unsafe().IsInstalled(kAppId2));
+    EXPECT_EQ(provider->registrar_unsafe().GetInstallState(kAppId1),
+              proto::InstallState::INSTALLED_WITH_OS_INTEGRATION);
+    EXPECT_EQ(provider->registrar_unsafe().GetInstallState(kAppId2),
+              proto::InstallState::INSTALLED_WITH_OS_INTEGRATION);
   }
 }
 
@@ -568,9 +581,10 @@ IN_PROC_BROWSER_TEST_P(IsolatedWebAppDevToolsTestWithPolicy,
     SetPolicyWithOneApp();
     install_observer.Wait();
 
-    EXPECT_TRUE(WebAppProvider::GetForTest(GetProfileForTest())
-                    ->registrar_unsafe()
-                    .IsInstalled(kAppId1));
+    EXPECT_EQ(WebAppProvider::GetForTest(GetProfileForTest())
+                  ->registrar_unsafe()
+                  .GetInstallState(kAppId1),
+              proto::InstallState::INSTALLED_WITH_OS_INTEGRATION);
   }
 
   SetDevToolsAvailability();
@@ -702,7 +716,8 @@ IN_PROC_BROWSER_TEST_P(CleanupOrphanedBundlesTest,
   SetPolicyWithOneApp();
   ASSERT_TRUE(future.Wait());
 
-  EXPECT_FALSE(provider->registrar_unsafe().IsInstalled(kAppId1));
+  EXPECT_NE(provider->registrar_unsafe().GetInstallState(kAppId1),
+            proto::InstallState::INSTALLED_WITH_OS_INTEGRATION);
 
   // Wait until the cleanup is done.
   command_manager.AwaitAllCommandsCompleteForTesting();

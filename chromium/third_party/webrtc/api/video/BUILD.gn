@@ -69,6 +69,7 @@ rtc_library("video_frame") {
     "..:video_track_source_constraints",
     "../../rtc_base:checks",
     "../../rtc_base:refcount",
+    "../../rtc_base:safe_conversions",
     "../../rtc_base:timeutils",
     "../../rtc_base/memory:aligned_malloc",
     "../../rtc_base/system:rtc_export",
@@ -101,6 +102,7 @@ rtc_library("video_frame_i010") {
     "..:scoped_refptr",
     "../../rtc_base:checks",
     "../../rtc_base:refcount",
+    "../../rtc_base:safe_conversions",
     "../../rtc_base/memory:aligned_malloc",
     "../../rtc_base/system:rtc_export",
     "//third_party/libyuv",
@@ -142,6 +144,11 @@ rtc_source_set("resolution") {
   deps = [ "../../rtc_base/system:rtc_export" ]
 }
 
+rtc_source_set("corruption_detection_filter_settings") {
+  visibility = [ "*" ]
+  public = [ "corruption_detection_filter_settings.h" ]
+}
+
 rtc_library("encoded_image") {
   visibility = [ "*" ]
   sources = [
@@ -149,6 +156,7 @@ rtc_library("encoded_image") {
     "encoded_image.h",
   ]
   deps = [
+    ":corruption_detection_filter_settings",
     ":video_codec_constants",
     ":video_frame",
     ":video_frame_type",

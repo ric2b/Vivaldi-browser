@@ -10,7 +10,6 @@
 #include "components/services/on_device_translation/public/mojom/on_device_translation_service.mojom.h"
 #include "components/services/on_device_translation/public/mojom/translator.mojom.h"
 #include "components/services/on_device_translation/translate_kit_client.h"
-#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 
 namespace on_device_translation {
@@ -74,16 +73,18 @@ void OnDeviceTranslationService::SetServiceConfig(
 void OnDeviceTranslationService::CreateTranslator(
     const std::string& source_lang,
     const std::string& target_lang,
+    mojo::PendingReceiver<on_device_translation::mojom::Translator> receiver,
     CreateTranslatorCallback create_translator_callback) {
-  auto* translator = client_->GetTranslator(source_lang, target_lang);
-  if (!translator) {
-    std::move(create_translator_callback).Run(mojo::NullRemote());
+  auto maybe_translator = client_->GetTranslator(source_lang, target_lang);
+  if (!maybe_translator.has_value()) {
+    std::move(create_translator_callback).Run(maybe_translator.error());
     return;
   }
-  mojo::PendingRemote<mojom::Translator> pending_remote;
-  translators_.Add(std::make_unique<TranslateKitTranslator>(translator),
-                   pending_remote.InitWithNewPipeAndPassReceiver());
-  std::move(create_translator_callback).Run(std::move(pending_remote));
+  translators_.Add(
+      std::make_unique<TranslateKitTranslator>(maybe_translator.value()),
+      std::move(receiver));
+  std::move(create_translator_callback)
+      .Run(mojom::CreateTranslatorResult::kSuccess);
 }
 
 void OnDeviceTranslationService::CanTranslate(

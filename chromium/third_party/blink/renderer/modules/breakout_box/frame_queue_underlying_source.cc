@@ -24,10 +24,6 @@
 
 namespace blink {
 
-BASE_FEATURE(kBreakoutBoxEnqueueInSeparateTask,
-             "BreakoutBoxEnqueueInSeparateTask",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kBreakoutBoxPreferCaptureTimestampInVideoFrames,
              "BreakoutBoxPreferCaptureTimestampInVideoFrames",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -116,8 +112,7 @@ ScriptPromise<IDLUndefined> FrameQueueUnderlyingSource<NativeFrameType>::Pull(
 
 template <typename NativeFrameType>
 ScriptPromise<IDLUndefined> FrameQueueUnderlyingSource<NativeFrameType>::Start(
-    ScriptState* script_state,
-    ExceptionState& exception_state) {
+    ScriptState* script_state) {
   DCHECK(realm_task_runner_->RunsTasksInCurrentSequence());
   if (is_closed_) {
     // This was intended to be closed before Start() was called.
@@ -126,8 +121,9 @@ ScriptPromise<IDLUndefined> FrameQueueUnderlyingSource<NativeFrameType>::Start(
     if (!StartFrameDelivery()) {
       // There is only one way in which this can fail for now. Perhaps
       // implementations should return their own failure messages.
-      exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
-                                        "Invalid track");
+      V8ThrowDOMException::Throw(script_state->GetIsolate(),
+                                 DOMExceptionCode::kInvalidStateError,
+                                 "Invalid track");
       return EmptyPromise();
     }
   }
@@ -323,20 +319,16 @@ void FrameQueueUnderlyingSource<
     media::VideoFrame::ID frame_id = MustUseMonitor()
                                          ? GetFrameId(media_frame.value())
                                          : media::VideoFrame::ID();
-    if (base::FeatureList::IsEnabled(kBreakoutBoxEnqueueInSeparateTask)) {
-      // It has been observed that if the time between JS read() operations
-      // is longer than the time between new frames, other tasks get delayed
-      // and the page freezes. Enqueuing in a separate task avoids this problem.
-      // See https://crbug.com/1490501
-      realm_task_runner_->PostTask(
-          FROM_HERE,
-          WTF::BindOnce(
-              &FrameQueueUnderlyingSource::EnqueueBlinkFrame,
-              WrapPersistent(this),
-              WrapPersistent(MakeBlinkFrame(std::move(media_frame.value())))));
-    } else {
-      Controller()->Enqueue(MakeBlinkFrame(std::move(media_frame.value())));
-    }
+    // It has been observed that if the time between JS read() operations
+    // is longer than the time between new frames, other tasks get delayed
+    // and the page freezes. Enqueuing in a separate task avoids this problem.
+    // See https://crbug.com/1490501
+    realm_task_runner_->PostTask(
+        FROM_HERE,
+        WTF::BindOnce(
+            &FrameQueueUnderlyingSource::EnqueueBlinkFrame,
+            WrapPersistent(this),
+            WrapPersistent(MakeBlinkFrame(std::move(media_frame.value())))));
     // Update the monitor after creating the Blink VideoFrame to avoid
     // temporarily removing the frame from the monitor.
     MaybeMonitorPopFrameId(frame_id);

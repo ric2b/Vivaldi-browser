@@ -248,7 +248,7 @@ TEST(DnsSdConversionLayerTest, GetDnsRecordsAAAANotPresent) {
 
 TEST(DnsSdConversionLayerTest, GetDnsRecordsTxt) {
   DnsSdTxtRecord txt;
-  std::vector<uint8_t> value{'v', 'a', 'l', 'u', 'e'};
+  std::vector<uint8_t> value = {'v', 'a', 'l', 'u', 'e'};
   txt.SetValue("name", value);
   txt.SetFlag("boolean", true);
   DnsSdInstanceEndpoint instance_endpoint(

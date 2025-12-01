@@ -9,18 +9,19 @@
 
 #include "media/gpu/av1_decoder.h"
 
+#include <algorithm>
 #include <bitset>
 #include <utility>
 
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/ranges/algorithm.h"
 #include "media/base/limits.h"
 #include "media/base/media_switches.h"
 #include "media/gpu/av1_picture.h"
 #include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
 #include "third_party/libgav1/src/src/decoder_state.h"
 #include "third_party/libgav1/src/src/gav1/status_code.h"
+#include "third_party/libgav1/src/src/utils/common.h"
 #include "third_party/libgav1/src/src/utils/constants.h"
 #include "ui/gfx/hdr_metadata.h"
 
@@ -216,15 +217,14 @@ void AV1Decoder::SetStream(int32_t id, const DecoderBuffer& decoder_buffer) {
     decrypt_config_ = decoder_buffer.decrypt_config()->Clone();
   else
     decrypt_config_.reset();
-  if (decoder_buffer.has_side_data() &&
-      decoder_buffer.side_data()->secure_handle) {
+  if (decoder_buffer.side_data() && decoder_buffer.side_data()->secure_handle) {
     secure_handle_ = decoder_buffer.side_data()->secure_handle;
   } else {
     secure_handle_ = 0;
   }
 
   const AV1Accelerator::Status status = accelerator_->SetStream(
-      base::make_span(stream_.get(), stream_size_), decrypt_config_.get());
+      base::span(stream_.get(), stream_size_), decrypt_config_.get());
   if (status != AV1Accelerator::Status::kOk) {
     on_error_ = true;
     return;
@@ -540,7 +540,7 @@ void AV1Decoder::ClearReferenceFrames() {
   ref_frames_.fill(nullptr);
   // If AV1Decoder has decided to clear the reference frames, then ObuParser
   // must have also decided to do so.
-  DCHECK_EQ(base::ranges::count(state_->reference_frame, nullptr),
+  DCHECK_EQ(std::ranges::count(state_->reference_frame, nullptr),
             static_cast<int>(state_->reference_frame.size()));
 }
 
@@ -594,7 +594,7 @@ AV1Decoder::AV1Accelerator::Status AV1Decoder::DecodeAndOutputPicture(
   }
   const AV1Accelerator::Status status = accelerator_->SubmitDecode(
       *pic, *current_sequence_header_, ref_frames_, tile_buffers,
-      base::make_span(stream_.get(), stream_size_));
+      base::span(stream_.get(), stream_size_));
   if (status != AV1Accelerator::Status::kOk) {
     if (status == AV1Accelerator::Status::kTryAgain)
       pending_pic_ = std::move(pic);

@@ -36,7 +36,7 @@
 <translation id="1254593899333212300">Direktna veza sa internetom</translation>
 <translation id="1272293450992660632">PIN-ovi se ne podudaraju.</translation>
 <translation id="1280820357415527819">Traže se mobilne mreže</translation>
-<translation id="1293556467332435079">Datoteke</translation>
+<translation id="1293556467332435079">Fajlovi</translation>
 <translation id="1297922636971898492">Google disk trenutno nije dostupan. Otpremanje će se automatski ponovo pokrenuti kada Google disk postane dostupan.</translation>
 <translation id="1306130176943817227">Brisanje nije uspelo. Stavka se koristi.</translation>
 <translation id="1307931752636661898">Prikaz Linux datoteka nije uspeo</translation>
@@ -73,6 +73,7 @@
 <translation id="1577977504532381335">Pregledajte smernice administratora</translation>
 <translation id="158849752021629804">Potrebna je matična mreža</translation>
 <translation id="1589128298353575783"><ph name="NUMBER_OF_PB" /> PB</translation>
+<translation id="1601786938618212857">Poštanski broj</translation>
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="162175252992296058">portugalski sa američkom internacionalnom tastaturom</translation>
 <translation id="1629521517399325891">Korisnički sertifikat nije dostupan za potvrdu identiteta mreže.</translation>
@@ -394,7 +395,6 @@
 <translation id="4179621117429069925">Ova stavka je u otpadu</translation>
 <translation id="4186579485882418952">Omogući oflajn</translation>
 <translation id="4193154014135846272">Google dokument</translation>
-<translation id="4197674956721858839">Izbor za dodavanje u zip datoteku</translation>
 <translation id="4202378258276439759">španski (Latinska Amerika)</translation>
 <translation id="4202977638116331303">gruzijski</translation>
 <translation id="421017592316736757">Morate da budete na mreži da biste pristupili ovoj datoteci.</translation>

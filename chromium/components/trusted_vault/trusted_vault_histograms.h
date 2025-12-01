@@ -25,7 +25,7 @@ enum class TrustedVaultHintDegradedRecoverabilityChangedReasonForUMA {
 // numeric values should never be reused.
 // LINT.IfChange(TrustedVaultDeviceRegistrationState)
 enum class TrustedVaultDeviceRegistrationStateForUMA {
-  kAlreadyRegisteredV0 = 0,
+  kAlreadyRegisteredV0 = 0,  // Used only on iOS.
   kLocalKeysAreStale = 1,
   kThrottledClientSide = 2,
   kAttemptingRegistrationWithNewKeyPair = 3,
@@ -95,7 +95,7 @@ enum class TrustedVaultDownloadKeysStatusForUMA {
   kNetworkError = 15,
   kMaxValue = kNetworkError
 };
-// LINT.ThenChange(/tools/metrics/histograms/metadata/sync/enums.xml:TrustedVaultDownloadKeysStatus)
+// LINT.ThenChange(/tools/metrics/histograms/metadata/trusted_vault/enums.xml:TrustedVaultDownloadKeysStatus)
 
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
@@ -118,7 +118,7 @@ void RecordTrustedVaultHintDegradedRecoverabilityChangedReason(
 // TODO(crbug.com/369980730): this is used in internals, replace usages with the
 // version below and delete this one.
 void RecordTrustedVaultDeviceRegistrationState(
-  TrustedVaultDeviceRegistrationStateForUMA registration_state);
+    TrustedVaultDeviceRegistrationStateForUMA registration_state);
 
 void RecordTrustedVaultDeviceRegistrationState(
     SecurityDomainId security_domain_id,
@@ -147,12 +147,14 @@ void RecordRecoveryKeyStoreURLFetchResponse(
     int net_error);
 
 // Records the outcome of trying to download keys from the server.
-// |also_log_with_v1_suffix| allows the caller to determine whether the local
-// device's registration is a V1 registration (that is, more reliable), which
-// causes a second histogram to be logged as well.
 void RecordTrustedVaultDownloadKeysStatus(
-    TrustedVaultDownloadKeysStatusForUMA status,
-    bool also_log_with_v1_suffix);
+    SecurityDomainId security_domain_id,
+    TrustedVaultDownloadKeysStatusForUMA status);
+
+// TODO(crbug.com/369980730): replace usages with the version above (in
+// downstream) and delete this one.
+void RecordTrustedVaultDownloadKeysStatus(
+    TrustedVaultDownloadKeysStatusForUMA status);
 
 void RecordTrustedVaultFileReadStatus(SecurityDomainId security_domain_id,
                                       TrustedVaultFileReadStatusForUMA status);

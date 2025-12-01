@@ -3,14 +3,15 @@
 // found in the LICENSE file.
 
 #ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
 #endif
 
 #include "extensions/common/url_pattern.h"
 
 #include <stddef.h>
 
+#include <array>
 #include <ostream>
 #include <string_view>
 
@@ -35,7 +36,7 @@ namespace {
 
 // TODO(aa): What about more obscure schemes like javascript: ?
 // Note: keep this array in sync with kValidSchemeMasks.
-const char* const kValidSchemes[] = {
+constexpr std::array kValidSchemes = {
     url::kHttpScheme,          url::kHttpsScheme,
     url::kFileScheme,          url::kFtpScheme,
     content::kChromeUIScheme,  extensions::kExtensionScheme,
@@ -45,7 +46,7 @@ const char* const kValidSchemes[] = {
     vivaldi::kVivaldiUIScheme,
 };
 
-const int kValidSchemeMasks[] = {
+constexpr std::array kValidSchemeMasks = {
     URLPattern::SCHEME_HTTP,
     URLPattern::SCHEME_HTTPS,
     URLPattern::SCHEME_FILE,
@@ -74,16 +75,16 @@ const char kParseErrorInvalidPort[] = "Invalid port.";
 const char kParseErrorInvalidHost[] = "Invalid host.";
 
 // Message explaining each URLPattern::ParseResult.
-const char* const kParseResultMessages[] = {
-  kParseSuccess,
-  kParseErrorMissingSchemeSeparator,
-  kParseErrorInvalidScheme,
-  kParseErrorWrongSchemeType,
-  kParseErrorEmptyHost,
-  kParseErrorInvalidHostWildcard,
-  kParseErrorEmptyPath,
-  kParseErrorInvalidPort,
-  kParseErrorInvalidHost,
+constexpr std::array kParseResultMessages = {
+    kParseSuccess,
+    kParseErrorMissingSchemeSeparator,
+    kParseErrorInvalidScheme,
+    kParseErrorWrongSchemeType,
+    kParseErrorEmptyHost,
+    kParseErrorInvalidHostWildcard,
+    kParseErrorEmptyPath,
+    kParseErrorInvalidPort,
+    kParseErrorInvalidHost,
 };
 
 static_assert(static_cast<int>(URLPattern::ParseResult::kNumParseResults) ==
@@ -196,18 +197,6 @@ URLPattern::~URLPattern() = default;
 URLPattern& URLPattern::operator=(const URLPattern& other) = default;
 
 URLPattern& URLPattern::operator=(URLPattern&& other) = default;
-
-bool URLPattern::operator<(const URLPattern& other) const {
-  return GetAsString() < other.GetAsString();
-}
-
-bool URLPattern::operator>(const URLPattern& other) const {
-  return GetAsString() > other.GetAsString();
-}
-
-bool URLPattern::operator==(const URLPattern& other) const {
-  return GetAsString() == other.GetAsString();
-}
 
 std::ostream& operator<<(std::ostream& out, const URLPattern& url_pattern) {
   return out << '"' << url_pattern.GetAsString() << '"';

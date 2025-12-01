@@ -25,7 +25,7 @@
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/global_routing_id.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom-shared.h"
+#include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-shared.h"
 
 namespace content {
 
@@ -54,7 +54,7 @@ std::optional<AttributionSuitableContext> AttributionSuitableContext::Create(
   }
 
   if (!initiator_frame->IsFeatureEnabled(
-          blink::mojom::PermissionsPolicyFeature::kAttributionReporting)) {
+          network::mojom::PermissionsPolicyFeature::kAttributionReporting)) {
     return std::nullopt;
   }
   RenderFrameHostImpl* initiator_root_frame =
@@ -130,7 +130,9 @@ bool AttributionSuitableContext::operator==(
   const auto tie = [](const AttributionSuitableContext& c) {
     // We don't check the `attribution_data_host_manager_` property since we'd
     // consider two contexts equal even if the manager is no longer available.
-    return std::make_tuple(c.context_origin(), c.last_input_event(),
+    // We also don't check the `last_input_event_` property which is time
+    // sensitive.
+    return std::make_tuple(c.context_origin(),
                            c.is_nested_within_fenced_frame(),
                            c.last_navigation_id(), c.root_render_frame_id());
   };

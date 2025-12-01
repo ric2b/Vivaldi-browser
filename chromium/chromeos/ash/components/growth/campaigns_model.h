@@ -40,7 +40,8 @@ enum class Slot {
   kNudge = 2,
   kNotification = 3,
   kOobePerkDiscovery = 4,
-  kMaxValue = kOobePerkDiscovery
+  kDemoModeSignInExperience = 5,
+  kMaxValue = kDemoModeSignInExperience
 };
 
 // These values are deserialized from Growth Campaign, so entries should not
@@ -61,7 +62,13 @@ enum class BuiltInImage {
   kSparkV2 = 4,
   kG1Notification = 5,
   kMall = 6,
-  kMaxValue = kMall
+  kPrintJobsIcon = 7,
+  kGoogleDocsIcon = 8,
+  kYouTubeIcon = 9,
+  kPlayStoreIcon = 10,
+  kRNotification = 11,
+  kMallAppIcon = 12,
+  kMaxValue = kMallAppIcon,
 };
 
 // Supported window anchor element.

@@ -343,7 +343,7 @@ bool ChromeUsbDelegate::HasDevicePermission(
     is_usb_unrestricted =
         frame &&
         frame->IsFeatureEnabled(
-            blink::mojom::PermissionsPolicyFeature::kUsbUnrestricted) &&
+            network::mojom::PermissionsPolicyFeature::kUsbUnrestricted) &&
         content::HasIsolatedContextCapability(frame);
   }
 
@@ -410,9 +410,7 @@ bool ChromeUsbDelegate::IsServiceWorkerAllowedForOrigin(
     const url::Origin& origin) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   // WebUSB is only available on extension service workers for now.
-  if (base::FeatureList::IsEnabled(
-          features::kEnableWebUsbOnExtensionServiceWorker) &&
-      origin.scheme() == extensions::kExtensionScheme) {
+  if (origin.scheme() == extensions::kExtensionScheme) {
     return true;
   }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
@@ -425,9 +423,7 @@ void ChromeUsbDelegate::IncrementConnectionCount(
 // Don't track connection when the feature isn't enabled or the connection
 // isn't made by an extension origin.
 #if !BUILDFLAG(IS_ANDROID)
-  if (!base::FeatureList::IsEnabled(
-          features::kEnableWebUsbOnExtensionServiceWorker) ||
-      origin.scheme() != extensions::kExtensionScheme) {
+  if (origin.scheme() != extensions::kExtensionScheme) {
     return;
   }
 
@@ -445,9 +441,7 @@ void ChromeUsbDelegate::DecrementConnectionCount(
   // Don't track connection when the feature isn't enabled or the connection
   // isn't made by an extension origin.
 #if !BUILDFLAG(IS_ANDROID)
-  if (!base::FeatureList::IsEnabled(
-          features::kEnableWebUsbOnExtensionServiceWorker) ||
-      origin.scheme() != extensions::kExtensionScheme) {
+  if (origin.scheme() != extensions::kExtensionScheme) {
     return;
   }
   auto* usb_connection_tracker =

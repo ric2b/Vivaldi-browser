@@ -2,31 +2,24 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <algorithm>
 #include <memory>
 
 #include "discovery/dnssd/public/dns_sd_publisher.h"
 #include "osp/impl/dns_sd_publisher_client.h"
-#include "osp/impl/service_publisher_impl.h"
 #include "osp/public/service_publisher.h"
 #include "osp/public/service_publisher_factory.h"
+#include "platform/api/task_runner.h"
 
-namespace openscreen {
-
-class TaskRunner;
-
-namespace osp {
+namespace openscreen::osp {
 
 // static
 std::unique_ptr<ServicePublisher> ServicePublisherFactory::Create(
     const ServicePublisher::Config& config,
     TaskRunner& task_runner) {
   auto dns_sd_client = std::make_unique<DnsSdPublisherClient>(task_runner);
-  auto publisher_impl =
-      std::make_unique<ServicePublisherImpl>(std::move(dns_sd_client));
-  publisher_impl->SetConfig(config);
-  return publisher_impl;
+  auto publisher = std::make_unique<ServicePublisher>(std::move(dns_sd_client));
+  publisher->SetConfig(config);
+  return publisher;
 }
 
-}  // namespace osp
-}  // namespace openscreen
+}  // namespace openscreen::osp

@@ -133,7 +133,7 @@ export class NetworkTrackAppender implements TrackAppender {
       }
     }
     return this.relayoutEntriesWithinBounds(
-        events, Trace.Types.Timing.MilliSeconds(-Infinity), Trace.Types.Timing.MilliSeconds(Infinity));
+        events, Trace.Types.Timing.Milli(-Infinity), Trace.Types.Timing.Milli(Infinity));
   }
 
   /**
@@ -145,9 +145,9 @@ export class NetworkTrackAppender implements TrackAppender {
   #appendEventAtLevel(event: Trace.Types.Events.Event, level: number): number {
     const index = this.#flameChartData.entryLevels.length;
     this.#flameChartData.entryLevels[index] = level;
-    this.#flameChartData.entryStartTimes[index] = Trace.Helpers.Timing.microSecondsToMilliseconds(event.ts);
-    const dur = event.dur || Trace.Helpers.Timing.millisecondsToMicroseconds(InstantEventVisibleDurationMs);
-    this.#flameChartData.entryTotalTimes[index] = Trace.Helpers.Timing.microSecondsToMilliseconds(dur);
+    this.#flameChartData.entryStartTimes[index] = Trace.Helpers.Timing.microToMilli(event.ts);
+    const dur = event.dur || Trace.Helpers.Timing.milliToMicro(InstantEventVisibleDurationMs);
+    this.#flameChartData.entryTotalTimes[index] = Trace.Helpers.Timing.microToMilli(dur);
     return level;
   }
 
@@ -159,8 +159,7 @@ export class NetworkTrackAppender implements TrackAppender {
    * @returns the number of levels used by this track
    */
   relayoutEntriesWithinBounds(
-      events: NetworkTrackEvent[], minTime: Trace.Types.Timing.MilliSeconds,
-      maxTime: Trace.Types.Timing.MilliSeconds): number {
+      events: NetworkTrackEvent[], minTime: Trace.Types.Timing.Milli, maxTime: Trace.Types.Timing.Milli): number {
     if (!this.#flameChartData || events.length === 0) {
       return 0;
     }
@@ -169,9 +168,8 @@ export class NetworkTrackAppender implements TrackAppender {
     let maxLevel = 0;
     for (let i = 0; i < events.length; ++i) {
       const event = events[i];
-      const beginTime = Trace.Helpers.Timing.microSecondsToMilliseconds(event.ts);
-      const dur =
-          event.dur ? Trace.Helpers.Timing.microSecondsToMilliseconds(event.dur) : InstantEventVisibleDurationMs;
+      const beginTime = Trace.Helpers.Timing.microToMilli(event.ts);
+      const dur = event.dur ? Trace.Helpers.Timing.microToMilli(event.dur) : InstantEventVisibleDurationMs;
       const endTime = beginTime + dur;
       const isBetweenTimes = beginTime < maxTime && endTime > minTime;
       // Exclude events outside the the specified timebounds

@@ -8,6 +8,7 @@
 #endif
 #include "chrome/browser/media/webrtc/native_desktop_media_list.h"
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -18,7 +19,6 @@
 #include "base/message_loop/message_pump_type.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/numerics/checked_math.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_restrictions.h"
@@ -103,7 +103,7 @@ std::optional<size_t> GetFrameHash(webrtc::DesktopFrame* frame) {
     return std::nullopt;
   }
 
-  return base::FastHash(base::make_span(frame->data(), data_size));
+  return base::FastHash(base::span(frame->data(), data_size));
 }
 
 gfx::ImageSkia ScaleDesktopFrame(std::unique_ptr<webrtc::DesktopFrame> frame,
@@ -620,7 +620,7 @@ NativeDesktopMediaList::Worker::MergeAndSortWindowSources(
   for (HWND window : z_ordered_windows) {
     for (const auto* source_container : source_containers) {
       auto source_it =
-          base::ranges::find(*source_container, window, id_hwnd_projection);
+          std::ranges::find(*source_container, window, id_hwnd_projection);
       if (source_it != source_container->end()) {
         sorted_sources.push_back(*source_it);
         break;
@@ -773,6 +773,7 @@ void NativeDesktopMediaList::Worker::ShowDelegatedList() {
 }
 
 void NativeDesktopMediaList::Worker::OnSelection() {
+  VLOG(1) << "NDMLW::OnSelection";
   delegated_source_list_has_selection_ = true;
   content::GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE,
@@ -781,6 +782,7 @@ void NativeDesktopMediaList::Worker::OnSelection() {
 }
 
 void NativeDesktopMediaList::Worker::OnCancelled() {
+  VLOG(1) << "NDMLW::OnCancelled";
   content::GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE,
       base::BindOnce(&NativeDesktopMediaList::OnDelegatedSourceListDismissed,
@@ -788,6 +790,7 @@ void NativeDesktopMediaList::Worker::OnCancelled() {
 }
 
 void NativeDesktopMediaList::Worker::OnError() {
+  VLOG(1) << "NDMLW::OnError";
   content::GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE,
       base::BindOnce(&NativeDesktopMediaList::OnDelegatedSourceListDismissed,

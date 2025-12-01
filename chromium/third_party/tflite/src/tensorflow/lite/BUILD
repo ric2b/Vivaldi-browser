@@ -50,20 +50,6 @@ config_setting(
     },
 )
 
-config_setting(
-    name = "mips",
-    values = {
-        "cpu": "mips",
-    },
-)
-
-config_setting(
-    name = "mips64",
-    values = {
-        "cpu": "mips64",
-    },
-)
-
 # Without "cpu":"k8", when building with --copt=-DTF_LITE_STATIC_MEMORY, we get
 # the following error:
 # Multiple matches are not allowed unless one is unambiguously more specialized.
@@ -128,6 +114,7 @@ filegroup(
         ":tflite_internal_cc_3p_api_deps_src",
         "//tensorflow/compiler/mlir/lite:tflite_internal_cc_3p_api_deps_src",
         "//tensorflow/compiler/mlir/lite/core/api:tflite_internal_cc_3p_api_deps_src",
+        "//tensorflow/compiler/mlir/lite/core/c:tflite_internal_cc_3p_api_deps_src",
         "//tensorflow/compiler/mlir/lite/schema:tflite_internal_cc_3p_api_deps_src",
         "//tensorflow/lite/core:macros.h",
         "//tensorflow/lite/core/acceleration/configuration/c:tflite_internal_cc_3p_api_deps_src",
@@ -201,7 +188,9 @@ STABLE_FRAMEWORK_LIB_IMPL_HDRS = [
 
 exports_files(
     [hdr for hdr in FRAMEWORK_LIB_HDRS if hdr[0] != "/"],
-    visibility = ["//tensorflow/lite/core/shims:__subpackages__"],
+    visibility = [
+        "//tensorflow/lite/core/shims:__subpackages__",
+    ] + tflite_internal_cc_3p_api_deps_src_all_visibility_allowlist(),
 )
 
 cc_library(
@@ -310,6 +299,8 @@ cc_test(
         ":simple_planner",
         "//tensorflow/core:tflite_portable_logging",
         "//tensorflow/lite/core/c:common",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
         "@com_google_googletest//:gtest_main",
     ],
 )

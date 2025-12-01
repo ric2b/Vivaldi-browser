@@ -214,8 +214,7 @@ P2 - Consolidate transform interpolation between blink and cc. 0.5
 *End of quarter result: Feasibility investigated + prototype attempted, but
 sidelined in favour of AnimationWorklet work.*
 
-P2 - Refactor code around [p](goog_624119910)[er-property
-cc::Animations](http://crbug.com/900241). 0.3
+P2 - Refactor code around [per-property cc::Animations](https://crbug.com/900241). 0.3
 
 **Smooth scrolling on all (i.e. incl/ low end) devices** 0.82
 

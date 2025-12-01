@@ -4,13 +4,13 @@
 
 #include "media/formats/hls/tags.h"
 
+#include <algorithm>
 #include <array>
 #include <optional>
 #include <string_view>
 #include <utility>
 
 #include "base/location.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "media/base/media_serializers.h"
 #include "media/formats/hls/items.h"
@@ -95,11 +95,9 @@ OkTestResult<T> OkTest(std::optional<std::string> content,
                                       SourceString::CreateForTesting(*source))
                     : TagItem::CreateEmpty(ToTagName(T::kName), 1);
   auto result = T::Parse(tag, variable_dict, sub_buffer);
-  if (!result.has_value()) {
-    CHECK(false) << from.ToString() << "\n"
-                 << MediaSerializeForTesting(std::move(result).error());
-    NOTREACHED();
-  }
+  CHECK(result.has_value())
+      << from.ToString() << "\n"
+      << MediaSerializeForTesting(std::move(result).error());
   return OkTestResult<T>{.tag = std::move(result).value(),
                          .source = std::move(source)};
 }
@@ -1156,7 +1154,7 @@ TEST(HlsTagsTest, ParseXStreamInfTag) {
   EXPECT_DOUBLE_EQ(result.tag.score.value(), 12.2);
   ASSERT_TRUE(result.tag.codecs.has_value());
   EXPECT_TRUE(
-      base::ranges::equal(result.tag.codecs.value(), std::array{"foo", "bar"}));
+      std::ranges::equal(result.tag.codecs.value(), std::array{"foo", "bar"}));
   EXPECT_EQ(result.tag.resolution, std::nullopt);
   EXPECT_EQ(result.tag.frame_rate, std::nullopt);
 
@@ -1234,7 +1232,7 @@ TEST(HlsTagsTest, ParseXStreamInfTag) {
   EXPECT_EQ(result.tag.score, std::nullopt);
   ASSERT_TRUE(result.tag.codecs.has_value());
   EXPECT_TRUE(
-      base::ranges::equal(result.tag.codecs.value(), std::array{"bar", "baz"}));
+      std::ranges::equal(result.tag.codecs.value(), std::array{"bar", "baz"}));
   EXPECT_EQ(result.tag.resolution, std::nullopt);
 
   // "RESOLUTION" must be a valid decimal-resolution

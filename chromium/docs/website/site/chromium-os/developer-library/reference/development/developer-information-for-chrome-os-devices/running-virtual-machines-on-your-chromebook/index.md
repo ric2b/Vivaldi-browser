@@ -2,7 +2,7 @@
 breadcrumbs:
 - - /chromium-os
   - ChromiumOS
-- - /chromium-os/developer-information-for-chrome-os-devices
+- - /chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices
   - Developer Information for ChromeOS Devices
 page_name: running-virtual-machines-on-your-chromebook
 title: Running virtual machines on your Chromebook
@@ -53,11 +53,11 @@ Be aware that on earlier ChromeOS devices, the firmware contained bugs such
 that they locked VMX support during power on. It's known to affect:
 
 *   [Series 5
-            Chromebook](/chromium-os/developer-information-for-chrome-os-devices/samsung-series-5-chromebook)
+            Chromebook](/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/samsung-series-5-chromebook)
 *   \*[Samsung Series 5
-            550](/chromium-os/developer-information-for-chrome-os-devices/samsung-sandy-bridge)
+            550](/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/samsung-sandy-bridge)
 *   \*[Samsung Series 3
-            Chromebox](/chromium-os/developer-information-for-chrome-os-devices/samsung-sandy-bridge)
+            Chromebox](/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/samsung-sandy-bridge)
 
 For devices marked with a \*, you might be able to restore support by hacking
 the firmware. Please see the respective device pages for more details.

@@ -6,11 +6,11 @@
 
 #include <utility>
 
-#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_controller.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_ink_drop_util.h"
+#include "chrome/common/chrome_features.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
@@ -26,7 +26,7 @@ using std::make_unique;
 
 namespace {
 constexpr int kTabstripComboButtonCornerRadius = 10;
-constexpr int kTabstripComboButtonFlatCornerRadius = 4;
+constexpr int kTabstripComboButtonFlatCornerRadius = 0;
 
 class ControlButtonHighlightPathGenerator
     : public views::HighlightPathGenerator {
@@ -59,7 +59,6 @@ class ControlButtonHighlightPathGenerator
 
 const int TabStripControlButton::kIconSize = 16;
 const gfx::Size TabStripControlButton::kButtonSize{28, 28};
-const gfx::VectorIcon kEmptyIcon;
 
 TabStripControlButton::TabStripControlButton(
     TabStripController* tab_strip_controller,
@@ -82,7 +81,7 @@ TabStripControlButton::TabStripControlButton(
     Edge animated_flat_edge)
     : TabStripControlButton(tab_strip_controller,
                             std::move(callback),
-                            kEmptyIcon,
+                            gfx::VectorIcon::EmptyIcon(),
                             text,
                             fixed_flat_edge,
                             animated_flat_edge) {}

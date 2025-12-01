@@ -28,10 +28,10 @@ constexpr double kTtlFractions[] = {0.80, 0.85, 0.90, 0.95, 1.00};
 constexpr int kIntervalIncreaseFactor = 2;
 
 // The interval between the first two queries must be at least one second.
-constexpr std::chrono::seconds kMinimumQueryInterval{1};
+constexpr std::chrono::seconds kMinimumQueryInterval(1);
 
 // The querier may cap the question refresh interval to a maximum of 60 minutes.
-constexpr std::chrono::minutes kMaximumQueryInterval{60};
+constexpr std::chrono::minutes kMaximumQueryInterval(60);
 
 // RFC 6762 Section 10.1
 // https://tools.ietf.org/html/rfc6762#section-10.1
@@ -55,7 +55,7 @@ bool IsNegativeResponseForType(const MdnsRecord& record, DnsType dns_type) {
 // RFC 6762 Section 10.1
 // https://tools.ietf.org/html/rfc6762#section-10.1
 // In case of a goodbye record, the querier should set TTL to 1 second
-constexpr std::chrono::seconds kGoodbyeRecordTtl{1};
+constexpr std::chrono::seconds kGoodbyeRecordTtl(1);
 
 }  // namespace
 

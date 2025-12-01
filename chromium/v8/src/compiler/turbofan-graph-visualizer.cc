@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <optional>
+#include <regex>
 #include <sstream>
 #include <string>
 
@@ -69,19 +70,28 @@ std::ostream& operator<<(std::ostream& out, const NodeOriginAsJSON& asJSON) {
 
 void JsonPrintBytecodeSource(std::ostream& os, int source_id,
                              std::unique_ptr<char[]> function_name,
-                             DirectHandle<BytecodeArray> bytecode_array) {
+                             DirectHandle<BytecodeArray> bytecode_array,
+                             Tagged<FeedbackVector> feedback_vector) {
   os << "\"" << source_id << "\" : {";
   os << "\"sourceId\": " << source_id;
   os << ", \"functionName\": \"" << function_name.get() << "\"";
   os << ", \"bytecodeSource\": ";
   bytecode_array->PrintJson(os);
-  os << "}";
+  os << ", \"feedbackVector\": \"";
+  if (!feedback_vector.is_null()) {
+    std::stringstream stream;
+    FeedbackVector::Print(feedback_vector, stream);
+    std::regex newlines_re("\n+");
+    os << std::regex_replace(stream.str(), newlines_re, "\\n");
+  }
+  os << "\"}";
 }
 
 void JsonPrintFunctionSource(std::ostream& os, int source_id,
                              std::unique_ptr<char[]> function_name,
-                             Handle<Script> script, Isolate* isolate,
-                             Handle<SharedFunctionInfo> shared, bool with_key) {
+                             DirectHandle<Script> script, Isolate* isolate,
+                             DirectHandle<SharedFunctionInfo> shared,
+                             bool with_key) {
   if (with_key) os << "\"" << source_id << "\" : ";
 
   os << "{ ";
@@ -172,7 +182,8 @@ void JsonPrintAllBytecodeSources(std::ostream& os,
   os << "\"bytecodeSources\" : {";
 
   JsonPrintBytecodeSource(os, -1, info->shared_info()->DebugNameCStr(),
-                          info->bytecode_array());
+                          info->bytecode_array(),
+                          info->closure()->feedback_vector());
 
   const auto& inlined = info->inlined_functions();
   SourceIdAssigner id_assigner(info->inlined_functions().size());
@@ -186,6 +197,8 @@ void JsonPrintAllBytecodeSources(std::ostream& os,
 #endif  // V8_ENABLE_WEBASSEMBLY
     os << ", ";
     const int source_id = id_assigner.GetIdFor(shared_info);
+    // TODO(nicohartmann): We could print some feedback for the inlined
+    // functions, too.
     JsonPrintBytecodeSource(os, source_id, shared_info->DebugNameCStr(),
                             inlined[id].bytecode_array);
   }
@@ -197,11 +210,11 @@ void JsonPrintAllSourceWithPositions(std::ostream& os,
                                      OptimizedCompilationInfo* info,
                                      Isolate* isolate) {
   os << "\"sources\" : {";
-  Handle<Script> script =
+  DirectHandle<Script> script =
       (info->shared_info().is_null() ||
        info->shared_info()->script() == Tagged<Object>())
-          ? Handle<Script>()
-          : handle(Cast<Script>(info->shared_info()->script()), isolate);
+          ? DirectHandle<Script>()
+          : direct_handle(Cast<Script>(info->shared_info()->script()), isolate);
   JsonPrintFunctionSource(os, -1,
                           info->shared_info().is_null()
                               ? std::unique_ptr<char[]>(new char[1]{0})
@@ -213,9 +226,10 @@ void JsonPrintAllSourceWithPositions(std::ostream& os,
     os << ", ";
     Handle<SharedFunctionInfo> shared = inlined[id].shared_info;
     const int source_id = id_assigner.GetIdFor(shared);
-    JsonPrintFunctionSource(os, source_id, shared->DebugNameCStr(),
-                            handle(Cast<Script>(shared->script()), isolate),
-                            isolate, shared, true);
+    JsonPrintFunctionSource(
+        os, source_id, shared->DebugNameCStr(),
+        direct_handle(Cast<Script>(shared->script()), isolate), isolate, shared,
+        true);
   }
   os << "}, ";
   os << "\"inlinings\" : {";

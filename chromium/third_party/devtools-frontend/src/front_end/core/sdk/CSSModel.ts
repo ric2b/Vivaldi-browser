@@ -339,35 +339,54 @@ export class CSSModel extends SDKModel<EventTypes> {
     this.dispatchEventToListeners(Events.ModelWasEnabled);
   }
 
-  async getMatchedStyles(nodeId: Protocol.DOM.NodeId): Promise<CSSMatchedStyles|null> {
-    const response = await this.agent.invoke_getMatchedStylesForNode({nodeId});
-
+  async getAnimatedStylesForNode(nodeId: Protocol.DOM.NodeId):
+      Promise<Protocol.CSS.GetAnimatedStylesForNodeResponse|null> {
+    const response = await this.agent.invoke_getAnimatedStylesForNode({nodeId});
     if (response.getError()) {
       return null;
     }
 
+    return response;
+  }
+
+  async getMatchedStyles(nodeId: Protocol.DOM.NodeId): Promise<CSSMatchedStyles|null> {
     const node = this.#domModel.nodeForId(nodeId);
     if (!node) {
       return null;
     }
 
-    return await CSSMatchedStyles.create({
+    const shouldGetAnimatedStyles =
+        Common.Settings.Settings.instance().getHostConfig().devToolsAnimationStylesInStylesTab?.enabled;
+    const [matchedStylesResponse, animatedStylesResponse] = await Promise.all([
+      this.agent.invoke_getMatchedStylesForNode({nodeId}),
+      shouldGetAnimatedStyles ? this.agent.invoke_getAnimatedStylesForNode({nodeId}) : undefined,
+    ]);
+
+    if (matchedStylesResponse.getError()) {
+      return null;
+    }
+
+    const payload = {
       cssModel: this,
       node: (node as DOMNode),
-      inlinePayload: response.inlineStyle || null,
-      attributesPayload: response.attributesStyle || null,
-      matchedPayload: response.matchedCSSRules || [],
-      pseudoPayload: response.pseudoElements || [],
-      inheritedPayload: response.inherited || [],
-      inheritedPseudoPayload: response.inheritedPseudoElements || [],
-      animationsPayload: response.cssKeyframesRules || [],
-      parentLayoutNodeId: response.parentLayoutNodeId,
-      positionTryRules: response.cssPositionTryRules || [],
-      propertyRules: response.cssPropertyRules ?? [],
-      cssPropertyRegistrations: response.cssPropertyRegistrations ?? [],
-      fontPaletteValuesRule: response.cssFontPaletteValuesRule,
-      activePositionFallbackIndex: response.activePositionFallbackIndex ?? -1,
-    });
+      inlinePayload: matchedStylesResponse.inlineStyle || null,
+      attributesPayload: matchedStylesResponse.attributesStyle || null,
+      matchedPayload: matchedStylesResponse.matchedCSSRules || [],
+      pseudoPayload: matchedStylesResponse.pseudoElements || [],
+      inheritedPayload: matchedStylesResponse.inherited || [],
+      inheritedPseudoPayload: matchedStylesResponse.inheritedPseudoElements || [],
+      animationsPayload: matchedStylesResponse.cssKeyframesRules || [],
+      parentLayoutNodeId: matchedStylesResponse.parentLayoutNodeId,
+      positionTryRules: matchedStylesResponse.cssPositionTryRules || [],
+      propertyRules: matchedStylesResponse.cssPropertyRules ?? [],
+      cssPropertyRegistrations: matchedStylesResponse.cssPropertyRegistrations ?? [],
+      fontPaletteValuesRule: matchedStylesResponse.cssFontPaletteValuesRule,
+      activePositionFallbackIndex: matchedStylesResponse.activePositionFallbackIndex ?? -1,
+      animationStylesPayload: animatedStylesResponse?.animationStyles || [],
+      inheritedAnimatedPayload: animatedStylesResponse?.inherited || [],
+      transitionsStylePayload: animatedStylesResponse?.transitionsStyle || null,
+    };
+    return await CSSMatchedStyles.create(payload);
   }
 
   async getClassNames(styleSheetId: Protocol.CSS.StyleSheetId): Promise<string[]> {
@@ -927,17 +946,17 @@ export interface ComputedStyleUpdatedEvent {
   nodeId: Protocol.DOM.NodeId;
 }
 
-export type EventTypes = {
-  [Events.FontsUpdated]: void,
-  [Events.MediaQueryResultChanged]: void,
-  [Events.ModelWasEnabled]: void,
-  [Events.ModelDisposed]: CSSModel,
-  [Events.PseudoStateForced]: PseudoStateForcedEvent,
-  [Events.StyleSheetAdded]: CSSStyleSheetHeader,
-  [Events.StyleSheetChanged]: StyleSheetChangedEvent,
-  [Events.StyleSheetRemoved]: CSSStyleSheetHeader,
-  [Events.ComputedStyleUpdated]: ComputedStyleUpdatedEvent,
-};
+export interface EventTypes {
+  [Events.FontsUpdated]: void;
+  [Events.MediaQueryResultChanged]: void;
+  [Events.ModelWasEnabled]: void;
+  [Events.ModelDisposed]: CSSModel;
+  [Events.PseudoStateForced]: PseudoStateForcedEvent;
+  [Events.StyleSheetAdded]: CSSStyleSheetHeader;
+  [Events.StyleSheetChanged]: StyleSheetChangedEvent;
+  [Events.StyleSheetRemoved]: CSSStyleSheetHeader;
+  [Events.ComputedStyleUpdated]: ComputedStyleUpdatedEvent;
+}
 
 const PseudoStateMarker = 'pseudo-state-marker';
 
@@ -1076,9 +1095,9 @@ export const enum CSSPropertyTrackerEvents {
   TRACKED_CSS_PROPERTIES_UPDATED = 'TrackedCSSPropertiesUpdated',
 }
 
-export type CSSPropertyTrackerEventTypes = {
-  [CSSPropertyTrackerEvents.TRACKED_CSS_PROPERTIES_UPDATED]: (DOMNode|null)[],
-};
+export interface CSSPropertyTrackerEventTypes {
+  [CSSPropertyTrackerEvents.TRACKED_CSS_PROPERTIES_UPDATED]: (DOMNode|null)[];
+}
 
 SDKModel.register(CSSModel, {capabilities: Capability.DOM, autostart: true});
 export interface ContrastInfo {

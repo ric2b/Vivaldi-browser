@@ -4,10 +4,11 @@
 
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_model_listener.h"
 
+#include <algorithm>
+
 #include "base/check.h"
 #include "base/containers/contains.h"
 #include "base/memory/raw_ptr.h"
-#include "base/ranges/algorithm.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/tabs/public/tab_interface.h"
@@ -187,7 +188,17 @@ void SavedTabGroupModelListener::OnTabStripModelChanged(
 
       return;
     }
-    case TabStripModelChange::kSelectionOnly:
+    case TabStripModelChange::kSelectionOnly: {
+      if (selection.active_tab_changed()) {
+        CHECK(selection.new_tab)
+            << "Selection change detected but no new tab was selected.";
+        service_->OnTabSelected(
+            /*group_id=*/selection.new_tab->GetGroup(),
+            /*tab_id=*/selection.new_tab->GetHandle().raw_value(),
+            /*tab_title=*/selection.new_tab->GetContents()->GetTitle());
+      }
+      return;
+    }
     case TabStripModelChange::kInserted:
     case TabStripModelChange::kReplaced:
     case TabStripModelChange::kRemoved: {
@@ -274,12 +285,14 @@ void SavedTabGroupModelListener::DisconnectLocalTabGroup(
 
 void SavedTabGroupModelListener::RemoveLocalGroupFromSync(
     tab_groups::TabGroupId local_group_id) {
-  if (!base::Contains(local_tab_group_listeners_, local_group_id)) {
-    return;
+  if (base::Contains(local_tab_group_listeners_, local_group_id)) {
+    // Prevent further observations for `local_group_id` as we attempt to close
+    // the tab group.
+    DisconnectLocalTabGroup(local_group_id, ClosingSource::kDeletedFromSync);
   }
 
-  local_tab_group_listeners_.at(local_group_id).GroupRemovedFromSync();
-  DisconnectLocalTabGroup(local_group_id, ClosingSource::kDeletedFromSync);
+  SavedTabGroupUtils::RemoveGroupFromTabstrip(/*browser=*/nullptr,
+                                              local_group_id);
 }
 
 void SavedTabGroupModelListener::UpdateLocalGroupFromSync(

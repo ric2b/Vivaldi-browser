@@ -15,7 +15,7 @@ Jochen Eisinger &lt;jochen@chromium.org&gt;
 ## Objective
 
 > Provide the functionality of the application modal cookie prompt with
-> something non-modal. <http://crbug.com/38199>
+> something non-modal. <https://crbug.com/38199>
 
 ## Background
 

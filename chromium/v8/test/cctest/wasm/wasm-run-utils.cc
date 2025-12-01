@@ -13,10 +13,10 @@
 #include "src/wasm/baseline/liftoff-compiler.h"
 #include "src/wasm/code-space-access.h"
 #include "src/wasm/compilation-environment-inl.h"
-#include "src/wasm/graph-builder-interface.h"
 #include "src/wasm/leb-helper.h"
 #include "src/wasm/module-compiler.h"
 #include "src/wasm/module-instantiate.h"
+#include "src/wasm/wasm-code-pointer-table-inl.h"
 #include "src/wasm/wasm-engine.h"
 #include "src/wasm/wasm-import-wrapper-cache.h"
 #include "src/wasm/wasm-objects-inl.h"
@@ -104,7 +104,7 @@ TestingModuleBuilder::TestingModuleBuilder(
 
     ImportedFunctionEntry(trusted_instance_data_, maybe_import_index)
         .SetCompiledWasmToJs(isolate_, callable, import_wrapper,
-                             resolved.suspend(), sig);
+                             resolved.suspend(), sig, sig_index);
   }
 }
 
@@ -230,10 +230,8 @@ void TestingModuleBuilder::InitializeWrapperCache() {
       static_cast<int>(test_module_->types.size()));
   for (uint32_t index = 0; index < test_module_->types.size(); index++) {
     // TODO(14616): Support shared types.
-    CreateMapForType(
-        isolate_, test_module_.get(), ModuleTypeIndex{index},
-        handle(instance_object_->trusted_data(isolate()), isolate()),
-        instance_object_, maps);
+    CreateMapForType(isolate_, test_module_.get(), ModuleTypeIndex{index},
+                     maps);
   }
   trusted_instance_data_->set_managed_object_maps(*maps);
 }
@@ -259,6 +257,22 @@ void TestingModuleBuilder::AddIndirectFunctionTable(
   table.has_maximum_size = true;
   table.type = table_type;
 
+  DirectHandle<HeapObject> value =
+      table.type.use_wasm_null()
+          ? Cast<HeapObject>(isolate_->factory()->wasm_null())
+          : Cast<HeapObject>(isolate_->factory()->null_value());
+  CanonicalValueType canonical_type = test_module_->canonical_type(table.type);
+  DirectHandle<WasmTableObject> table_obj = WasmTableObject::New(
+      isolate_,
+      direct_handle(instance_object_->trusted_data(isolate_), isolate_),
+      table.type, canonical_type, table.initial_size, table.has_maximum_size,
+      table.maximum_size, value,
+      // TODO(clemensb): Make this configurable.
+      wasm::AddressType::kI32);
+  DirectHandle<WasmDispatchTable> dispatch_table(
+      table_obj->trusted_dispatch_table(isolate_), isolate_);
+  WasmDispatchTable::AddUse(isolate_, dispatch_table, trusted_instance_data_,
+                            table_index);
   {
     // Allocate the dispatch table.
     DirectHandle<ProtectedFixedArray> old_dispatch_tables{
@@ -266,45 +280,51 @@ void TestingModuleBuilder::AddIndirectFunctionTable(
     DCHECK_EQ(table_index, old_dispatch_tables->length());
     DirectHandle<ProtectedFixedArray> new_dispatch_tables =
         isolate_->factory()->NewProtectedFixedArray(table_index + 1);
-    DirectHandle<WasmDispatchTable> new_dispatch_table =
-        WasmDispatchTable::New(isolate_, table.initial_size);
     for (int i = 0; i < old_dispatch_tables->length(); ++i) {
       new_dispatch_tables->set(i, old_dispatch_tables->get(i));
     }
-    new_dispatch_tables->set(table_index, *new_dispatch_table);
+    new_dispatch_tables->set(table_index, *dispatch_table);
     if (table_index == 0) {
-      trusted_instance_data_->set_dispatch_table0(*new_dispatch_table);
+      trusted_instance_data_->set_dispatch_table0(*dispatch_table);
     }
     trusted_instance_data_->set_dispatch_tables(*new_dispatch_tables);
   }
 
-  WasmTrustedInstanceData::EnsureMinimumDispatchTableSize(
-      isolate_, trusted_instance_data_, table_index, table_size);
-  DirectHandle<WasmTableObject> table_obj = WasmTableObject::New(
-      isolate_, handle(instance_object_->trusted_data(isolate_), isolate_),
-      table.type, table.initial_size, table.has_maximum_size,
-      table.maximum_size,
-      IsSubtypeOf(table.type, kWasmExternRef, test_module_.get())
-          ? Handle<HeapObject>{isolate_->factory()->null_value()}
-          : Handle<HeapObject>{isolate_->factory()->wasm_null()},
-      // TODO(clemensb): Make this configurable.
-      wasm::AddressType::kI32);
-
-  WasmTableObject::AddUse(isolate_, table_obj, instance_object_, table_index);
-
   if (function_indexes) {
+    WasmCodeRefScope code_ref_scope;
     for (uint32_t i = 0; i < table_size; ++i) {
-      WasmFunction& function = test_module_->functions[function_indexes[i]];
+      uint32_t function_index = function_indexes[i];
+      WasmFunction& function = test_module_->functions[function_index];
       CanonicalTypeIndex sig_id =
           test_module_->canonical_sig_id(function.sig_index);
       FunctionTargetAndImplicitArg entry(isolate_, trusted_instance_data_,
                                          function.func_index);
-      trusted_instance_data_->dispatch_table(table_index)
-          ->Set(i, *entry.implicit_arg(), entry.call_target(), sig_id,
+      if (function_index < test_module_->num_imported_functions &&
+          trusted_instance_data_->dispatch_table_for_imports()->IsAWrapper(
+              function_index)) {
+        uint64_t signature_hash = SignatureHasher::Hash(function.sig);
+        trusted_instance_data_->dispatch_table(table_index)
+            ->SetForWrapper(
+                i, *entry.implicit_arg(),
+                wasm::GetProcessWideWasmCodePointerTable()->GetEntrypoint(
+                    entry.call_target(), signature_hash),
+                sig_id, signature_hash,
 #if V8_ENABLE_DRUMBRAKE
                 function.func_index,
 #endif  // !V8_ENABLE_DRUMBRAKE
-                nullptr, IsAWrapper::kMaybe, WasmDispatchTable::kNewEntry);
+                wasm::GetWasmImportWrapperCache()->FindWrapper(
+                    entry.call_target()),
+                WasmDispatchTable::kNewEntry);
+      } else {
+        trusted_instance_data_->dispatch_table(table_index)
+            ->SetForNonWrapper(i, *entry.implicit_arg(), entry.call_target(),
+                               sig_id,
+#if V8_ENABLE_DRUMBRAKE
+                               function.func_index,
+#endif  // !V8_ENABLE_DRUMBRAKE
+                               WasmDispatchTable::kNewEntry);
+      }
+
       WasmTableObject::SetFunctionTablePlaceholder(
           isolate_, table_obj, i, trusted_instance_data_, function_indexes[i]);
     }
@@ -513,13 +533,13 @@ void WasmFunctionCompiler::Build(base::Vector<const uint8_t> bytes) {
   std::optional<WasmCompilationResult> result;
   if (builder_->test_execution_tier() ==
       TestExecutionTier::kLiftoffForFuzzing) {
-    result.emplace(ExecuteLiftoffCompilation(
-        &env, func_body,
-        LiftoffOptions{}
-            .set_func_index(function_->func_index)
-            .set_for_debugging(kForDebugging)
-            .set_max_steps(builder_->max_steps_ptr())
-            .set_nondeterminism(builder_->non_determinism_ptr())));
+    result.emplace(
+        ExecuteLiftoffCompilation(&env, func_body,
+                                  LiftoffOptions{}
+                                      .set_func_index(function_->func_index)
+                                      .set_for_debugging(kForDebugging)
+                                      .set_max_steps(builder_->max_steps_ptr())
+                                      .set_detect_nondeterminism(true)));
   } else {
     WasmCompilationUnit unit(function_->func_index, builder_->execution_tier(),
                              for_debugging);
@@ -552,15 +572,16 @@ WasmFunctionCompiler::WasmFunctionCompiler(Zone* zone, const FunctionSig* sig,
 
 WasmFunctionCompiler::~WasmFunctionCompiler() = default;
 
-/* static */
-FunctionSig* WasmRunnerBase::CreateSig(Zone* zone, MachineType return_type,
+FunctionSig* WasmRunnerBase::CreateSig(MachineType return_type,
                                        base::Vector<MachineType> param_types) {
   int return_count = return_type.IsNone() ? 0 : 1;
   int param_count = param_types.length();
 
+  Zone& zone = builder_.SignatureZone();
+
   // Allocate storage array in zone.
   ValueType* sig_types =
-      zone->AllocateArray<ValueType>(return_count + param_count);
+      zone.AllocateArray<ValueType>(return_count + param_count);
 
   // Convert machine types to local types, and check that there are no
   // MachineType::None()'s in the parameters.
@@ -570,7 +591,7 @@ FunctionSig* WasmRunnerBase::CreateSig(Zone* zone, MachineType return_type,
     CHECK_NE(MachineType::None(), param);
     sig_types[idx++] = ValueType::For(param);
   }
-  return zone->New<FunctionSig>(return_count, param_count, sig_types);
+  return zone.New<FunctionSig>(return_count, param_count, sig_types);
 }
 
 }  // namespace wasm

@@ -37,9 +37,6 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
-#include "extensions/browser/app_window/app_window.h"
-#include "extensions/browser/app_window/app_window_registry.h"
-#include "extensions/browser/app_window/native_app_window.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_system_provider.h"
 #include "extensions/browser/extensions_browser_client.h"
@@ -57,6 +54,12 @@
 #include "ui/message_center/public/cpp/notification_delegate.h"
 #include "ui/message_center/public/cpp/notifier_id.h"
 #include "url/gurl.h"
+
+#if BUILDFLAG(ENABLE_PLATFORM_APPS)
+#include "extensions/browser/app_window/app_window.h"
+#include "extensions/browser/app_window/app_window_registry.h"
+#include "extensions/browser/app_window/native_app_window.h"
+#endif  // BUILDFLAG(ENABLE_PLATFORM_APPS)
 
 using message_center::NotifierId;
 
@@ -173,6 +176,7 @@ bool NotificationBitmapToGfxImage(
 // returns false.
 bool ShouldShowOverCurrentFullscreenWindow(Profile* profile,
                                            const GURL& origin) {
+#if BUILDFLAG(ENABLE_PLATFORM_APPS)
   DCHECK(profile);
   ExtensionId extension_id =
       ExtensionNotificationHandler::GetExtensionId(origin);
@@ -183,6 +187,7 @@ bool ShouldShowOverCurrentFullscreenWindow(Profile* profile,
     if (window->IsFullscreen() && window->GetBaseWindow()->IsActive())
       return true;
   }
+#endif  // BUILDFLAG(ENABLE_PLATFORM_APPS)
   return false;
 }
 
@@ -195,11 +200,9 @@ bool NotificationsApiFunction::IsNotificationsApiAvailable() {
   return extension()->is_platform_app() || extension()->is_extension();
 }
 
-NotificationsApiFunction::NotificationsApiFunction() {
-}
+NotificationsApiFunction::NotificationsApiFunction() = default;
 
-NotificationsApiFunction::~NotificationsApiFunction() {
-}
+NotificationsApiFunction::~NotificationsApiFunction() = default;
 
 bool NotificationsApiFunction::CreateNotification(
     const std::string& id,
@@ -565,11 +568,9 @@ NotificationsApiFunction::MapApiTemplateTypeToType(
   }
 }
 
-NotificationsCreateFunction::NotificationsCreateFunction() {
-}
+NotificationsCreateFunction::NotificationsCreateFunction() = default;
 
-NotificationsCreateFunction::~NotificationsCreateFunction() {
-}
+NotificationsCreateFunction::~NotificationsCreateFunction() = default;
 
 ExtensionFunction::ResponseAction
 NotificationsCreateFunction::RunNotificationsApi() {
@@ -599,11 +600,9 @@ NotificationsCreateFunction::RunNotificationsApi() {
   return RespondNow(WithArguments(notification_id));
 }
 
-NotificationsUpdateFunction::NotificationsUpdateFunction() {
-}
+NotificationsUpdateFunction::NotificationsUpdateFunction() = default;
 
-NotificationsUpdateFunction::~NotificationsUpdateFunction() {
-}
+NotificationsUpdateFunction::~NotificationsUpdateFunction() = default;
 
 ExtensionFunction::ResponseAction
 NotificationsUpdateFunction::RunNotificationsApi() {
@@ -640,11 +639,9 @@ NotificationsUpdateFunction::RunNotificationsApi() {
   return RespondNow(WithArguments(true));
 }
 
-NotificationsClearFunction::NotificationsClearFunction() {
-}
+NotificationsClearFunction::NotificationsClearFunction() = default;
 
-NotificationsClearFunction::~NotificationsClearFunction() {
-}
+NotificationsClearFunction::~NotificationsClearFunction() = default;
 
 ExtensionFunction::ResponseAction
 NotificationsClearFunction::RunNotificationsApi() {
@@ -657,9 +654,9 @@ NotificationsClearFunction::RunNotificationsApi() {
   return RespondNow(WithArguments(cancel_result));
 }
 
-NotificationsGetAllFunction::NotificationsGetAllFunction() {}
+NotificationsGetAllFunction::NotificationsGetAllFunction() = default;
 
-NotificationsGetAllFunction::~NotificationsGetAllFunction() {}
+NotificationsGetAllFunction::~NotificationsGetAllFunction() = default;
 
 ExtensionFunction::ResponseAction
 NotificationsGetAllFunction::RunNotificationsApi() {
@@ -676,10 +673,10 @@ NotificationsGetAllFunction::RunNotificationsApi() {
 }
 
 NotificationsGetPermissionLevelFunction::
-NotificationsGetPermissionLevelFunction() {}
+    NotificationsGetPermissionLevelFunction() = default;
 
 NotificationsGetPermissionLevelFunction::
-~NotificationsGetPermissionLevelFunction() {}
+    ~NotificationsGetPermissionLevelFunction() = default;
 
 bool NotificationsGetPermissionLevelFunction::CanRunWhileDisabled() const {
   return true;

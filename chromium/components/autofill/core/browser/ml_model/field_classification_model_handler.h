@@ -13,7 +13,6 @@
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/ml_model/field_classification_model_encoder.h"
-#include "components/autofill/core/browser/ml_model/field_classification_model_executor.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/optimization_guide/core/model_handler.h"
 #include "components/optimization_guide/core/optimization_guide_model_provider.h"
@@ -72,9 +71,10 @@ class FieldClassificationModelHandler
       const FieldClassificationModelEncoder::ModelOutput& output) const;
 
   // Given the confidences returned by the ML model, returns the most likely
-  // type. This is currently just the argmax of `model_output`, mapped to the
-  // corresponding FieldType.
-  FieldType GetMostLikelyType(const std::vector<float>& model_output) const;
+  // type and the confidence in it. This is currently just the argmax of
+  // `model_output`, mapped to the corresponding FieldType.
+  std::pair<FieldType, float> GetMostLikelyType(
+      const std::vector<float>& model_output) const;
 
   // Returns true if the `output` allows to return predictions for `form`.
   bool ShouldEmitPredictions(

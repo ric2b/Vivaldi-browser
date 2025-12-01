@@ -55,7 +55,7 @@ namespace {
 constexpr Ssrc kSenderSsrc = 1;
 constexpr Ssrc kReceiverSsrc = 2;
 constexpr int kRtpTimebase = 48000;
-constexpr milliseconds kTargetPlayoutDelay{100};
+constexpr milliseconds kTargetPlayoutDelay(100);
 constexpr auto kAesKey =
     std::array<uint8_t, 16>{{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
                              0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f}};
@@ -63,7 +63,7 @@ constexpr auto kCastIvMask =
     std::array<uint8_t, 16>{{0xf0, 0xe0, 0xd0, 0xc0, 0xb0, 0xa0, 0x90, 0x80,
                              0x70, 0x60, 0x50, 0x40, 0x30, 0x20, 0x10, 0x00}};
 
-constexpr milliseconds kTargetPlayoutDelayChange{800};
+constexpr milliseconds kTargetPlayoutDelayChange(800);
 // Additional configuration for the Sender.
 constexpr RtpPayloadType kRtpPayloadType = RtpPayloadType::kVideoVp8;
 constexpr int kMaxRtpPacketSize = 64;

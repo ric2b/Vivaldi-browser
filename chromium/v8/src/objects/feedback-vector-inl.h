@@ -18,6 +18,7 @@
 #include "src/objects/tagged.h"
 #include "src/roots/roots-inl.h"
 #include "src/torque/runtime-macro-shims.h"
+#include "src/torque/runtime-support.h"
 
 // Has to be the last include (doesn't have include guards):
 #include "src/objects/object-macros.h"
@@ -57,24 +58,20 @@ void FeedbackMetadata::set(int index, int32_t value) {
   WriteField<int32_t>(offset, value);
 }
 
+#ifndef V8_ENABLE_LEAPTIERING
 // static
 constexpr uint32_t FeedbackVector::FlagMaskForNeedsProcessingCheckFrom(
     CodeKind code_kind) {
   DCHECK(CodeKindCanTierUp(code_kind));
-  // TODO(olivf): investigate whether we can drop
-  // kFlagsTieringStateIsAnyRequested here as well when leaptiering is enabled.
   uint32_t flag_mask = FeedbackVector::kFlagsTieringStateIsAnyRequested |
-                       FeedbackVector::kFlagsLogNextExecution;
-  // When leaptiering is enabled, we don't load optimized code from the
-  // FeedbackVector, so we don't check for these flags.
-#ifndef V8_ENABLE_LEAPTIERING
-  flag_mask |= FeedbackVector::kFlagsMaybeHasTurbofanCode;
+                       FeedbackVector::kFlagsLogNextExecution |
+                       FeedbackVector::kFlagsMaybeHasTurbofanCode;
   if (code_kind != CodeKind::MAGLEV) {
     flag_mask |= FeedbackVector::kFlagsMaybeHasMaglevCode;
   }
-#endif  // !V8_ENABLE_LEAPTIERING
   return flag_mask;
 }
+#endif  // !V8_ENABLE_LEAPTIERING
 
 bool FeedbackMetadata::is_empty() const {
   DCHECK_IMPLIES(slot_count() == 0, create_closure_slot_count() == 0);
@@ -188,18 +185,6 @@ void FeedbackVector::set_maybe_has_optimized_osr_code(bool value,
   }
 }
 
-TieringState FeedbackVector::tiering_state() const {
-  return TieringStateBits::decode(flags());
-}
-
-bool FeedbackVector::log_next_execution() const {
-  return LogNextExecutionBit::decode(flags());
-}
-
-void FeedbackVector::set_log_next_execution(bool value) {
-  set_flags(LogNextExecutionBit::update(flags(), value));
-}
-
 bool FeedbackVector::interrupt_budget_reset_by_ic_change() const {
   return InterruptBudgetResetByIcChangeBit::decode(flags());
 }
@@ -218,7 +203,29 @@ void FeedbackVector::set_was_once_deoptimized() {
                                      kRelaxedStore);
 }
 
-#ifndef V8_ENABLE_LEAPTIERING
+#ifdef V8_ENABLE_LEAPTIERING
+
+bool FeedbackVector::tiering_in_progress() const {
+  return TieringInProgressBit::decode(flags());
+}
+
+#else
+
+TieringState FeedbackVector::tiering_state() const {
+  return TieringStateBits::decode(flags());
+}
+
+void FeedbackVector::reset_tiering_state() {
+  set_tiering_state(TieringState::kNone);
+}
+
+bool FeedbackVector::log_next_execution() const {
+  return LogNextExecutionBit::decode(flags());
+}
+
+void FeedbackVector::set_log_next_execution(bool value) {
+  set_flags(LogNextExecutionBit::update(flags(), value));
+}
 
 Tagged<Code> FeedbackVector::optimized_code(IsolateForSandbox isolate) const {
   Tagged<MaybeObject> slot = maybe_optimized_code();
@@ -263,7 +270,7 @@ void FeedbackVector::set_maybe_has_turbofan_code(bool value) {
   set_flags(MaybeHasTurbofanCodeBit::update(flags(), value));
 }
 
-#endif  // !V8_ENABLE_LEAPTIERING
+#endif  // V8_ENABLE_LEAPTIERING
 
 std::optional<Tagged<Code>> FeedbackVector::GetOptimizedOsrCode(
     Isolate* isolate, FeedbackSlot slot) {
@@ -319,10 +326,10 @@ Tagged<MaybeObject> FeedbackVector::Get(PtrComprCageBase cage_base,
   return value;
 }
 
-Handle<FeedbackCell> FeedbackVector::GetClosureFeedbackCell(Isolate* isolate,
-                                                            int index) const {
+DirectHandle<FeedbackCell> FeedbackVector::GetClosureFeedbackCell(
+    Isolate* isolate, int index) const {
   DCHECK_GE(index, 0);
-  return handle(closure_feedback_cell_array()->get(index), isolate);
+  return direct_handle(closure_feedback_cell_array()->get(index), isolate);
 }
 
 Tagged<FeedbackCell> FeedbackVector::closure_feedback_cell(int index) const {
@@ -449,16 +456,16 @@ ForInHint ForInHintFromFeedback(ForInFeedback type_feedback) {
   UNREACHABLE();
 }
 
-Handle<Symbol> FeedbackVector::UninitializedSentinel(Isolate* isolate) {
-  return ReadOnlyRoots(isolate).uninitialized_symbol_handle();
+DirectHandle<Symbol> FeedbackVector::UninitializedSentinel(Isolate* isolate) {
+  return isolate->factory()->uninitialized_symbol();
 }
 
 Handle<Symbol> FeedbackVector::MegamorphicSentinel(Isolate* isolate) {
-  return ReadOnlyRoots(isolate).megamorphic_symbol_handle();
+  return isolate->factory()->megamorphic_symbol();
 }
 
-Handle<Symbol> FeedbackVector::MegaDOMSentinel(Isolate* isolate) {
-  return ReadOnlyRoots(isolate).mega_dom_symbol_handle();
+DirectHandle<Symbol> FeedbackVector::MegaDOMSentinel(Isolate* isolate) {
+  return isolate->factory()->mega_dom_symbol();
 }
 
 Tagged<Symbol> FeedbackVector::RawUninitializedSentinel(Isolate* isolate) {
@@ -514,7 +521,8 @@ Tagged<MaybeObject> FeedbackNexus::MegaDOMSentinel() const {
   return *FeedbackVector::MegaDOMSentinel(config()->isolate());
 }
 
-Tagged<MaybeObject> FeedbackNexus::FromHandle(MaybeObjectHandle slot) const {
+Tagged<MaybeObject> FeedbackNexus::FromHandle(
+    MaybeObjectDirectHandle slot) const {
   return slot.is_null() ? ClearedValue(config()->isolate()) : *slot;
 }
 
@@ -576,7 +584,7 @@ void FeedbackNexus::IterateMapsWithUnclearedHandler(F function) const {
   // TODO(370727490): Make the FeedbackIterator GC safe (e.g. look up
   // map/handler in the feedback array on-demand).
   for (FeedbackIterator it(this); !it.done(); it.Advance()) {
-    Handle<Map> map = config()->NewHandle(it.map());
+    DirectHandle<Map> map = config()->NewHandle(it.map());
     if (!it.handler().IsCleared()) {
       function(map);
     }

@@ -4,8 +4,9 @@
 
 import 'chrome://os-settings/lazy_load.js';
 
-import {SettingsKeyboardAndTextInputPageElement} from 'chrome://os-settings/lazy_load.js';
-import {CrLinkRowElement, CrSettingsPrefs, Router, routes, SettingsPrefsElement, SettingsSliderElement, SettingsToggleButtonElement} from 'chrome://os-settings/os_settings.js';
+import type {SettingsKeyboardAndTextInputPageElement} from 'chrome://os-settings/lazy_load.js';
+import type {CrLinkRowElement, SettingsPrefsElement, SettingsSliderElement, SettingsToggleButtonElement} from 'chrome://os-settings/os_settings.js';
+import {CrSettingsPrefs, Router, routes} from 'chrome://os-settings/os_settings.js';
 import {assert} from 'chrome://resources/js/assert.js';
 import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
@@ -355,5 +356,25 @@ suite('<settings-keyboard-and-text-input-page>', () => {
       assertFalse(isVisible(disabledTooltipIcon));
       assertTrue(toggle.checked);
     });
+  });
+
+  // With the feature flag disabled, verify the keyboard settings page still
+  // loads properly. This is tested separately from filter_keys_test.ts since
+  // some prefs wouldn't have been registered in this case.
+  test('Filter keys feature disabled shows no filter keys rows', async () => {
+    loadTimeData.overrideValues({
+      isAccessibilityBounceKeysEnabled: false,
+      isAccessibilitySlowKeysEnabled: false,
+    });
+    await initPage();
+
+    assertFalse(!!page.shadowRoot!.querySelector<SettingsToggleButtonElement>(
+        '#slowKeysToggle'));
+    assertFalse(!!page.shadowRoot!.querySelector<SettingsSliderElement>(
+        '#slowKeysDelaySlider'));
+    assertFalse(!!page.shadowRoot!.querySelector<SettingsToggleButtonElement>(
+        '#bounceKeysToggle'));
+    assertFalse(!!page.shadowRoot!.querySelector<SettingsSliderElement>(
+        '#bounceKeysDelaySlider'));
   });
 });

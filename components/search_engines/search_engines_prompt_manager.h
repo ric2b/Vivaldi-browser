@@ -31,6 +31,7 @@ class SearchEnginesPromptManager {
       TemplateURLService* template_url_service,
       adblock_filter::RuleService* rule_service) const;
   void MarkCurrentPromptAsSeen(PrefService* prefs) const;
+  void IgnoreCurrentPromptVersion(PrefService* prefs) const;
 
   int GetCurrentVersion() const;
   int GetSearchEnginesDataVersionRequired() const;
@@ -38,6 +39,9 @@ class SearchEnginesPromptManager {
  private:
   bool ShouldPromptForTypeOrURL(const SearchEngineType& type,
                                 const GURL& url) const;
+  bool IsInExcludeList(const SearchEngineType& type, const GURL& url) const;
+
+  bool IsQuarantined(PrefService* prefs) const;
 
   std::unique_ptr<ParsedSearchEnginesPrompt> prompt_;
 };

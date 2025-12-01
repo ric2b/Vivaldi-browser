@@ -21,18 +21,37 @@ message IdMapItem {
   uint32 range = 3;
 }
 
-// The options for configuring a directory to be shared
-// with the VM through virtio-fs. The flags respondes to
-// the --cfg parameter for "crosvm device fs" command.
+// The options for configuring a directory to be shared with the VM through
+// virtio-fs. The flags respondes to the --cfg parameter for "crosvm device fs"
+// command. For detailed information for each option, refer to the following
+// code: chromiumos/src/platform/crosvm/devices/src/virtio/fs/config.rs
 message VhostUserVirtioFsConfig {
+  // Indicates whether the VM can cache the contents of the shared directory.
+  // Valid value is either (never, auto, always).
   string cache = 1;
+  // How long the VM should consider file attributes and directory entries to be
+  // valid(seconds).
   uint32 timeout = 2;
+  // Controls whether security.* xattrs (except for security.selinux) are
+  // re-written.
   bool rewrite_security_xattrs = 3;
+  // Whether to use case-insensitive lookups for directory entries (ASCII only).
   bool ascii_casefold = 4;
+  // Enables writeback caching This is safe to set true only when the VM has
+  // exclusive access to the files in a directory.
   bool writeback = 5;
+  // Whether to enable support for POSIX ACLs.
   bool posix_acl = 6;
+  // How long the FUSE client can cache negative lookup results(seconds).
   uint32 negative_timeout = 7;
+  // UIDs which are privileged to perform quota-related operations.
   repeated uint32 privileged_quota_uids = 8;
+  // Number of times guest can call FS_IOC_SETPERMISSION ioctl. Set to 0 if not
+  // used. See go/remove-mount-passthrough-fuse for the number.
+  uint32 max_dynamic_perm = 9;
+  // Number of times guest can call FS_IOC_SETPATHXATTR ioctl. Set to 0 if not
+  // used. See go/remove-mount-passthrough-fuse for the number.
+  uint32 max_dynamic_xattr = 10;
 }
 
 // Encodes all information excepting socket-fd to start a vhost-user

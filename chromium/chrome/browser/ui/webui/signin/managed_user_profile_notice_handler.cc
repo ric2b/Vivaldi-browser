@@ -7,11 +7,11 @@
 #include <string>
 #include <vector>
 
+#include "base/containers/fixed_flat_map.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/enterprise/util/managed_browser_utils.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
@@ -28,7 +28,6 @@
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/webui/management/management_ui_handler.h"
 #include "chrome/browser/ui/webui/signin/signin_utils.h"
-#include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -36,6 +35,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/base/signin_pref_names.h"
 #include "components/signin/public/identity_manager/account_info.h"
+#include "components/signin/public/identity_manager/signin_constants.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_contents.h"
 #include "google_apis/gaia/gaia_auth_util.h"
@@ -45,11 +45,14 @@
 #include "ui/gfx/image/image.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/strings/grit/ui_strings.h"
+#include "ui/webui/webui_util.h"
 
 #if !BUILDFLAG(IS_CHROMEOS)
 #include "base/feature_list.h"
 #include "chrome/browser/enterprise/profile_management/profile_management_features.h"
 #endif
+
+using signin::constants::kNoHostedDomainFound;
 
 namespace {
 const int kAvatarSize = 100;
@@ -69,8 +72,9 @@ bool UseMultiscreen() {
 std::string GetManagedAccountTitle(ProfileAttributesEntry* entry,
                                    const std::string& account_domain_name) {
   DCHECK(entry);
-  if (entry->GetHostedDomain() == kNoHostedDomainFound)
+  if (entry->GetHostedDomain() == kNoHostedDomainFound) {
     return std::string();
+  }
   const std::string domain_name = entry->GetHostedDomain().empty()
                                       ? account_domain_name
                                       : entry->GetHostedDomain();
@@ -80,10 +84,10 @@ std::string GetManagedAccountTitle(ProfileAttributesEntry* entry,
 }
 
 std::string GetManagedDeviceTitle() {
-  std::optional<std::string> device_manager =
-      chrome::GetDeviceManagerIdentity();
-  if (!device_manager)
+  std::optional<std::string> device_manager = GetDeviceManagerIdentity();
+  if (!device_manager) {
     return std::string();
+  }
   if (device_manager->empty()) {
     return l10n_util::GetStringUTF8(
         IDS_ENTERPRISE_PROFILE_WELCOME_DEVICE_MANAGED);
@@ -133,7 +137,8 @@ ManagedUserProfileNoticeHandler::ManagedUserProfileNoticeHandler(
            signin::SigninChoiceOperationRetryCallback) {
           std::move(callback).Run(choice);
           std::move(done).Run(
-              signin::SigninChoiceOperationResult::SIGNIN_SILENT_SUCCESS);
+              signin::SigninChoiceOperationResult::SIGNIN_SILENT_SUCCESS,
+              signin::SigninChoiceErrorType::kNoError);
         },
         std::move(std::get<signin::SigninChoiceCallback>(
             create_param->process_user_choice_callback)));
@@ -188,8 +193,9 @@ void ManagedUserProfileNoticeHandler::OnProfileHostedDomainChanged(
 }
 
 void ManagedUserProfileNoticeHandler::OnBrowserRemoved(Browser* browser) {
-  if (browser_ == browser)
+  if (browser_ == browser) {
     browser_ = nullptr;
+  }
 }
 
 void ManagedUserProfileNoticeHandler::OnExtendedAccountInfoUpdated(
@@ -228,8 +234,9 @@ void ManagedUserProfileNoticeHandler::HandleInitializedWithSize(
     const base::Value::List& args) {
   AllowJavascript();
 
-  if (browser_)
+  if (browser_) {
     signin::SetInitializedModalHeight(browser_, web_ui(), args);
+  }
 }
 
 void ManagedUserProfileNoticeHandler::HandleProceed(
@@ -337,8 +344,9 @@ void ManagedUserProfileNoticeHandler::OnLongProcessingTime() {
 void ManagedUserProfileNoticeHandler::UpdateProfileInfo(
     const base::FilePath& profile_path) {
   DCHECK(IsJavascriptAllowed());
-  if (profile_path != profile_path_)
+  if (profile_path != profile_path_) {
     return;
+  }
   FireWebUIListener("on-profile-info-changed", GetProfileInfoValue());
 }
 
@@ -354,9 +362,8 @@ std::string ManagedUserProfileNoticeHandler::GetManagedAccountTitleWithEmail(
 
 #if !BUILDFLAG(IS_CHROMEOS)
   std::optional<std::string> account_manager =
-      chrome::GetAccountManagerIdentity(profile);
-  std::optional<std::string> device_manager =
-      chrome::GetDeviceManagerIdentity();
+      GetAccountManagerIdentity(profile);
+  std::optional<std::string> device_manager = GetDeviceManagerIdentity();
 
   if (!signin_util::IsProfileSeparationEnforcedByProfile(
           profile, base::UTF16ToUTF8(email))) {
@@ -560,7 +567,8 @@ void ManagedUserProfileNoticeHandler::CallProceedCallbackForTesting(
 }
 
 void ManagedUserProfileNoticeHandler::OnUserChoiceHandled(
-    signin::SigninChoiceOperationResult result) {
+    signin::SigninChoiceOperationResult result,
+    signin::SigninChoiceErrorType error_type) {
   if (!UseMultiscreen() && done_callback_) {
     DisallowJavascript();
     std::move(done_callback_).Run();
@@ -585,8 +593,7 @@ void ManagedUserProfileNoticeHandler::OnUserChoiceHandled(
       break;
 
     case signin::SigninChoiceOperationResult::SIGNIN_ERROR:
-      FireWebUIListener("on-state-changed",
-                        ManagedUserProfileNoticeHandler::State::kError);
+      FireErrorEvent(error_type);
       break;
 
     case signin::SigninChoiceOperationResult::SIGNIN_CONFIRM_SUCCESS:
@@ -594,4 +601,28 @@ void ManagedUserProfileNoticeHandler::OnUserChoiceHandled(
                         ManagedUserProfileNoticeHandler::State::kSuccess);
       break;
   }
+}
+
+void ManagedUserProfileNoticeHandler::FireErrorEvent(
+    signin::SigninChoiceErrorType error) {
+  std::string dialog_title, dialog_subtitle;
+  std::optional<std::string> device_manager = GetDeviceManagerIdentity();
+
+  switch (error) {
+    case signin::SigninChoiceErrorType::kSigninDisabled:
+      dialog_title = l10n_util::GetStringUTF8(
+          IDS_ENTERPRISE_OIDC_WELCOME_ERROR_NO_SIGNIN_TITLE);
+      dialog_subtitle = l10n_util::GetStringUTF8(
+          IDS_ENTERPRISE_OIDC_WELCOME_ERROR_NO_SIGNIN_SUBTITLE);
+      break;
+    case signin::SigninChoiceErrorType::kNoError:
+    case signin::SigninChoiceErrorType::kUnknown:
+      dialog_title =
+          l10n_util::GetStringUTF8(IDS_ENTERPRISE_OIDC_WELCOME_ERROR_TITLE);
+      dialog_subtitle =
+          l10n_util::GetStringUTF8(IDS_ENTERPRISE_OIDC_WELCOME_ERROR_SUBTITLE);
+      break;
+  }
+
+  FireWebUIListener("on-state-changed-to-error", dialog_title, dialog_subtitle);
 }

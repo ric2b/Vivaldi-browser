@@ -61,15 +61,18 @@
   // legacy (where cookies that don't have a specific same-site access policy
   // and not secure will not be included), and legacy mode.
   cookieAccessSemantics = net::CookieAccessSemantics::UNKNOWN;
+  net::CookieScopeSemantics cookieScopeSemantics =
+      net::CookieScopeSemantics::UNKNOWN;
 
-  net::CookieAccessParams params = {cookieAccessSemantics,
+  net::CookieAccessParams params = {cookieAccessSemantics, cookieScopeSemantics,
                                     delegate_treats_url_as_trustworthy};
   for (NSHTTPCookie* cookie in self.cookies) {
     std::unique_ptr<net::CanonicalCookie> canonical_cookie =
         net::CanonicalCookieFromSystemCookie(cookie, base::Time());
     if (canonical_cookie->IncludeForRequestURL(gURL, options, params)
-            .status.IsInclude())
+            .status.IsInclude()) {
       [result addObject:cookie];
+    }
   }
   return [result copy];
 }
@@ -101,8 +104,9 @@
 - (void)getCookiesForTask:(NSURLSessionTask*)task
         completionHandler:(void (^)(NSArray<NSHTTPCookie*>* _Nullable cookies))
                               completionHandler {
-  if (completionHandler)
+  if (completionHandler) {
     completionHandler([self cookiesForURL:task.currentRequest.URL]);
+  }
 }
 
 #pragma mark - NSHTTPCookieStorage Properties

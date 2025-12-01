@@ -10,17 +10,19 @@
 #include "base/functional/callback.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "components/autofill/core/browser/autofill_client.h"
-#include "components/autofill/core/browser/autofill_test_utils.h"
-#include "components/autofill/core/browser/merchant_promo_code_manager.h"
+#include "components/autofill/core/browser/data_manager/personal_data_manager.h"
+#include "components/autofill/core/browser/foundations/autofill_client.h"
+#include "components/autofill/core/browser/integrators/touch_to_fill_delegate.h"
 #include "components/autofill/core/browser/payments/autofill_offer_manager.h"
+#include "components/autofill/core/browser/payments/bnpl_manager.h"
 #include "components/autofill/core/browser/payments/credit_card_cvc_authenticator.h"
 #include "components/autofill/core/browser/payments/credit_card_otp_authenticator.h"
 #include "components/autofill/core/browser/payments/mandatory_reauth_manager.h"
 #include "components/autofill/core/browser/payments/test/mock_payments_window_manager.h"
 #include "components/autofill/core/browser/payments/virtual_card_enrollment_manager.h"
-#include "components/autofill/core/browser/ui/suggestion.h"
-#include "components/autofill/core/browser/ui/touch_to_fill_delegate.h"
+#include "components/autofill/core/browser/single_field_fillers/payments/merchant_promo_code_manager.h"
+#include "components/autofill/core/browser/suggestions/suggestion.h"
+#include "components/autofill/core/browser/test_utils/autofill_test_utils.h"
 
 #if BUILDFLAG(IS_ANDROID)
 #include "base/android/build_info.h"
@@ -39,7 +41,9 @@
 namespace autofill::payments {
 
 TestPaymentsAutofillClient::TestPaymentsAutofillClient(AutofillClient* client)
-    : client_(CHECK_DEREF(client)) {}
+    : client_(CHECK_DEREF(client)),
+      mock_merchant_promo_code_manager_(
+          &client_->GetPersonalDataManager().payments_data_manager()) {}
 
 TestPaymentsAutofillClient::~TestPaymentsAutofillClient() = default;
 
@@ -110,7 +114,7 @@ void TestPaymentsAutofillClient::ConfirmExpirationDateFixFlow(
 }
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 
-TestPaymentsNetworkInterface*
+PaymentsNetworkInterface*
 TestPaymentsAutofillClient::GetPaymentsNetworkInterface() {
   return payments_network_interface_.get();
 }
@@ -119,6 +123,7 @@ void TestPaymentsAutofillClient::ShowAutofillProgressDialog(
     AutofillProgressDialogType autofill_progress_dialog_type,
     base::OnceClosure cancel_callback) {
   autofill_progress_dialog_shown_ = true;
+  autofill_progress_dialog_type_ = autofill_progress_dialog_type;
 }
 
 void TestPaymentsAutofillClient::CloseAutofillProgressDialog(
@@ -154,8 +159,8 @@ TestPaymentsAutofillClient::GetVirtualCardEnrollmentManager() {
   if (!virtual_card_enrollment_manager_) {
     virtual_card_enrollment_manager_ =
         std::make_unique<VirtualCardEnrollmentManager>(
-            client_->GetPersonalDataManager(), GetPaymentsNetworkInterface(),
-            &*client_);
+            &client_->GetPersonalDataManager().payments_data_manager(),
+            GetPaymentsNetworkInterface(), &client_.get());
   }
 
   return virtual_card_enrollment_manager_.get();
@@ -193,10 +198,18 @@ void TestPaymentsAutofillClient::ShowMandatoryReauthOptInPrompt(
   mandatory_reauth_opt_in_prompt_was_shown_ = true;
 }
 
+BnplManager* TestPaymentsAutofillClient::GetPaymentsBnplManager() {
+  if (!bnpl_manager_) {
+    bnpl_manager_ = std::make_unique<BnplManager>(this);
+  }
+
+  return bnpl_manager_.get();
+}
+
 MockIbanManager* TestPaymentsAutofillClient::GetIbanManager() {
   if (!mock_iban_manager_) {
     mock_iban_manager_ = std::make_unique<testing::NiceMock<MockIbanManager>>(
-        client_->GetPersonalDataManager());
+        &client_->GetPersonalDataManager().payments_data_manager());
   }
   return mock_iban_manager_.get();
 }
@@ -247,6 +260,11 @@ TestPaymentsAutofillClient::GetOrCreatePaymentsMandatoryReauthManager() {
   return mock_payments_mandatory_reauth_manager_.get();
 }
 
+const PaymentsDataManager& TestPaymentsAutofillClient::GetPaymentsDataManager()
+    const {
+  return client_->GetPersonalDataManager().payments_data_manager();
+}
+
 bool TestPaymentsAutofillClient::GetMandatoryReauthOptInPromptWasShown() {
   return mandatory_reauth_opt_in_prompt_was_shown_;
 }
@@ -263,6 +281,14 @@ void TestPaymentsAutofillClient::set_virtual_card_enrollment_manager(
 void TestPaymentsAutofillClient::set_otp_authenticator(
     std::unique_ptr<CreditCardOtpAuthenticator> authenticator) {
   otp_authenticator_ = std::move(authenticator);
+}
+
+void TestPaymentsAutofillClient::ShowUnmaskAuthenticatorSelectionDialog(
+    const std::vector<CardUnmaskChallengeOption>& challenge_options,
+    base::OnceCallback<void(const std::string&)>
+        confirm_unmask_challenge_option_callback,
+    base::OnceClosure cancel_unmasking_closure) {
+  unmask_authenticator_selection_dialog_shown_ = true;
 }
 
 #if BUILDFLAG(IS_ANDROID)

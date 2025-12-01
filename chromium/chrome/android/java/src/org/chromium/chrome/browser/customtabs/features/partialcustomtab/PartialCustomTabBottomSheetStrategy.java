@@ -16,6 +16,7 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.content.res.Configuration;
+import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Handler;
@@ -290,7 +291,7 @@ public class PartialCustomTabBottomSheetStrategy extends PartialCustomTabBaseStr
 
         mStatus = HeightStatus.TRANSITION;
         if (autoResize) mMoveStartY = window.getAttributes().y;
-        mTabAnimator.start(attrs.y, end, targetStatus, autoResize);
+        mTabAnimator.start(attrs.y, end, targetStatus);
     }
 
     @Override
@@ -324,7 +325,7 @@ public class PartialCustomTabBottomSheetStrategy extends PartialCustomTabBaseStr
         assert !isFullHeight() : "initialHeightInPortraitMode() is used in portrait mode only";
         return MathUtils.clamp(
                 mUnclampedInitialHeight,
-                mDisplayHeight - mStatusbarHeight,
+                mDisplayHeight - mStatusBarHeight,
                 (int) (mDisplayHeight * MINIMAL_HEIGHT_RATIO));
     }
 
@@ -408,20 +409,17 @@ public class PartialCustomTabBottomSheetStrategy extends PartialCustomTabBaseStr
     }
 
     @Override
-    public void setScrimFraction(float scrimFraction) {
-        @ColorInt int scrimColor = mActivity.getColor(R.color.default_scrim_color);
-
+    public void setScrimColor(@ColorInt int scrimColor) {
         // Drag handle view is not part of CoordinatorLayout. As the root UI scrim changes, the
         // handle view color needs updating to match it. This is a better way than running PCCT's
-        // own scrim coordinator since it can apply shape-aware scrim to the handle view that has
+        // own scrim component since it can apply shape-aware scrim to the handle view that has
         // the rounded corner.
-        getDragBarBackground()
-                .setColor(ColorUtils.overlayColor(mToolbarColor, scrimColor, scrimFraction));
+        getDragBarBackground().setColor(ColorUtils.overlayColor(mToolbarColor, scrimColor));
 
         ImageView handle = mActivity.findViewById(R.id.drag_handle);
-        @ColorInt int handleColor = mActivity.getColor(R.color.drag_handlebar_color_baseline);
-        if (scrimFraction > 0.f) {
-            handle.setColorFilter(ColorUtils.overlayColor(handleColor, scrimColor, scrimFraction));
+        if (Color.alpha(scrimColor) != 0) {
+            @ColorInt int handleColor = mActivity.getColor(R.color.drag_handlebar_color_baseline);
+            handle.setColorFilter(ColorUtils.overlayColor(handleColor, scrimColor));
         } else {
             handle.clearColorFilter();
         }
@@ -794,7 +792,7 @@ public class PartialCustomTabBottomSheetStrategy extends PartialCustomTabBaseStr
     @VisibleForTesting
     @Px
     int getFullyExpandedY() {
-        return mStatusbarHeight;
+        return mStatusBarHeight;
     }
 
     @Override
@@ -984,7 +982,6 @@ public class PartialCustomTabBottomSheetStrategy extends PartialCustomTabBaseStr
     private static class TabAnimator {
         private final ValueAnimator mAnimator;
         private @HeightStatus int mTargetStatus;
-        private boolean mAutoResize;
 
         private TabAnimator(
                 ValueAnimator.AnimatorUpdateListener listener,
@@ -1006,19 +1003,14 @@ public class PartialCustomTabBottomSheetStrategy extends PartialCustomTabBaseStr
             mAnimator.setDuration(animTime);
         }
 
-        private void start(int startY, int endY, int targetStatus, boolean autoResize) {
+        private void start(int startY, int endY, int targetStatus) {
             mTargetStatus = targetStatus;
-            mAutoResize = autoResize;
             mAnimator.setIntValues(startY, endY);
             mAnimator.start();
         }
 
         private @HeightStatus int getTargetStatus() {
             return mTargetStatus;
-        }
-
-        private boolean wasAutoResized() {
-            return mAutoResize;
         }
 
         private void cancel() {

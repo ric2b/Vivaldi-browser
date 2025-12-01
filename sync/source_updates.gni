@@ -36,15 +36,16 @@ update_target("//components/sync_sessions:sync_sessions") {
     "//vivaldi/sync/glue/vivaldi_synced_tab_delegate.cc",
     "//vivaldi/sync/vivaldi_session_sync_prefs.cc",
   ]
-  if (!is_ios) {
-    sources += [
-      "//vivaldi/sync/vivaldi_sync_sessions_router_tab_helper.cc",
-    ]
-  }
 }
 
 
 if (!is_ios) {
+  update_target("//chrome/browser/sync:sync") {
+    sources += [
+      "//vivaldi/sync/vivaldi_sync_sessions_router_tab_helper.cc",
+    ]
+  }
+
   update_target("//chrome/browser:browser") {
     sources += [
       "//vivaldi/sync/file_sync/file_store_factory.cc",

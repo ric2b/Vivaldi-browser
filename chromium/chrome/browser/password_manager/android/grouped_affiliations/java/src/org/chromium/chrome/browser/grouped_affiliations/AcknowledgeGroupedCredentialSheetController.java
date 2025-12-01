@@ -4,11 +4,15 @@
 
 package org.chromium.chrome.browser.grouped_affiliations;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import android.content.Context;
 import android.view.LayoutInflater;
 import android.view.View;
 
 import org.chromium.base.Callback;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetObserver;
 import org.chromium.components.browser_ui.bottomsheet.EmptyBottomSheetObserver;
@@ -17,11 +21,12 @@ import org.chromium.components.browser_ui.bottomsheet.EmptyBottomSheetObserver;
  * Controller, which displays the acknowledgement bottom sheet before filling credential that were
  * originally saved for another web site or app grouped with current site.
  */
+@NullMarked
 public class AcknowledgeGroupedCredentialSheetController {
     private final Context mContext;
     private final BottomSheetController mBottomSheetController;
-    private final Callback<Boolean> mOnSheetDismissed;
-    private AcknowledgeGroupedCredentialSheetView mView;
+    private final Callback<Integer> mOnSheetDismissed;
+    private @Nullable AcknowledgeGroupedCredentialSheetView mView;
     private final BottomSheetObserver mBottomSheetObserver =
             new EmptyBottomSheetObserver() {
                 @Override
@@ -30,7 +35,7 @@ public class AcknowledgeGroupedCredentialSheetController {
                     if (mBottomSheetController.getCurrentSheetContent() != null
                             && mBottomSheetController.getCurrentSheetContent() == mView) {
                         mBottomSheetController.removeObserver(mBottomSheetObserver);
-                        onDismissed(false);
+                        onDismissed(DismissReason.IGNORE);
                     }
                 }
             };
@@ -38,39 +43,48 @@ public class AcknowledgeGroupedCredentialSheetController {
     public AcknowledgeGroupedCredentialSheetController(
             Context context,
             BottomSheetController bottomSheetController,
-            Callback<Boolean> onSheetDismissed) {
+            Callback<Integer> onSheetDismissed) {
         mContext = context;
         mBottomSheetController = bottomSheetController;
         mOnSheetDismissed = onSheetDismissed;
     }
 
-    public void show(String currentOrigin, String credentialOrigin) {
+    public void show(String currentHostname, String credentialHostname) {
         mBottomSheetController.addObserver(mBottomSheetObserver);
         mBottomSheetController.requestShowContent(
-                createView(currentOrigin, credentialOrigin), true);
+                createView(currentHostname, credentialHostname), true);
     }
 
     public void dismiss() {
+        assumeNonNull(mView);
         mBottomSheetController.hideContent(mView, true);
     }
 
-    public void onDismissed(boolean accepted) {
-        mOnSheetDismissed.onResult(accepted);
+    public void onDismissed(@DismissReason int dismissReason) {
+        mOnSheetDismissed.onResult(dismissReason);
     }
 
-    public void onClick(boolean accepted) {
-        onDismissed(accepted);
+    /**
+     * The order of calls is important here. `onDismissed` should be called first to pass the
+     * correct dismiss reason to the bridge. `dismiss` will also end up triggering `onDismissed`
+     * eventually, but with a wrong dismiss reason. The second call will be swallowed in the Java
+     * side of the bridge and have no real impact.
+     *
+     * @param dismissReason reflects the button clicked on the sheet.
+     */
+    public void onClick(@DismissReason int dismissReason) {
+        onDismissed(dismissReason);
         dismiss();
     }
 
     private AcknowledgeGroupedCredentialSheetView createView(
-            String currentOrigin, String credentialOrigin) {
+            String currentHostname, String credentialHostname) {
         View contentView =
                 LayoutInflater.from(mContext)
                         .inflate(R.layout.acknowledge_grouped_credential_sheet_content, null);
         mView =
                 new AcknowledgeGroupedCredentialSheetView(
-                        contentView, currentOrigin, credentialOrigin, this::onClick);
+                        contentView, currentHostname, credentialHostname, this::onClick);
         return mView;
     }
 }

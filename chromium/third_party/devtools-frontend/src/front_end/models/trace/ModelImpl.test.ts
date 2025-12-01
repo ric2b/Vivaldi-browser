@@ -17,8 +17,8 @@ describeWithEnvironment('TraceModel', function() {
     });
 
     await TraceLoader.rawEvents(this, 'basic.json.gz').then(events => model.parse(events));
-    assert.ok(events.includes('PROGRESS_UPDATE'));
-    assert.ok(events.includes('COMPLETE'));
+    assert.isOk(events.includes('PROGRESS_UPDATE'));
+    assert.isOk(events.includes('COMPLETE'));
   });
 
   it('supports parsing a generic trace that has no browser specific details', async function() {
@@ -113,9 +113,9 @@ describeWithEnvironment('TraceModel', function() {
 
     const initialBreadcrumb = {
       window: {
-        max: 0 as Trace.Types.Timing.MicroSeconds,
-        min: 10 as Trace.Types.Timing.MicroSeconds,
-        range: 10 as Trace.Types.Timing.MicroSeconds,
+        max: 0 as Trace.Types.Timing.Micro,
+        min: 10 as Trace.Types.Timing.Micro,
+        range: 10 as Trace.Types.Timing.Micro,
       },
       child: null,
     };
@@ -135,9 +135,9 @@ describeWithEnvironment('TraceModel', function() {
       labelledTimeRanges: [
         {
           bounds: {
-            min: Trace.Types.Timing.MicroSeconds(0),
-            max: Trace.Types.Timing.MicroSeconds(10),
-            range: Trace.Types.Timing.MicroSeconds(10),
+            min: Trace.Types.Timing.Micro(0),
+            max: Trace.Types.Timing.Micro(10),
+            range: Trace.Types.Timing.Micro(10),
           },
           label: 'range label',
         },

@@ -8,7 +8,7 @@
 #include <memory>
 
 #include "cc/trees/render_frame_metadata.h"
-#include "components/input/peak_gpu_memory_tracker.h"
+#include "components/viz/common/resources/peak_gpu_memory_tracker.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/mojom/input/input_event_result.mojom-shared.h"
 #include "ui/gfx/delegated_ink_point.h"
@@ -19,15 +19,15 @@ class RenderWidgetHostViewInput;
 class RenderInputRouterIterator;
 class RenderWidgetHostInputEventRouter;
 class TouchEmulator;
+class StylusInterface;
 
 class COMPONENT_EXPORT(INPUT) RenderInputRouterDelegate {
  public:
   virtual ~RenderInputRouterDelegate() = default;
 
   virtual RenderWidgetHostViewInput* GetPointerLockView() = 0;
-  // TODO(b/331419617): Use a new FrameMetadataBase class instead of
-  // RenderFrameMetadata.
-  virtual const cc::RenderFrameMetadata& GetLastRenderFrameMetadata() = 0;
+
+  virtual std::optional<bool> IsDelegatedInkHovering() = 0;
 
   virtual std::unique_ptr<RenderInputRouterIterator>
   GetEmbeddedRenderInputRouters() = 0;
@@ -50,8 +50,8 @@ class COMPONENT_EXPORT(INPUT) RenderInputRouterDelegate {
 
   virtual bool PreHandleGestureEvent(const blink::WebGestureEvent& event) = 0;
 
-  virtual void NotifyObserversOfInputEvent(
-      const blink::WebInputEvent& event) = 0;
+  virtual void NotifyObserversOfInputEvent(const blink::WebInputEvent& event,
+                                           bool dispatched_to_renderer) = 0;
   virtual void NotifyObserversOfInputEventAcks(
       blink::mojom::InputEventResultSource ack_source,
       blink::mojom::InputEventResultState ack_result,
@@ -62,8 +62,8 @@ class COMPONENT_EXPORT(INPUT) RenderInputRouterDelegate {
   // creation of a TouchEmulator.
   virtual TouchEmulator* GetTouchEmulator(bool create_if_necessary) = 0;
 
-  virtual std::unique_ptr<input::PeakGpuMemoryTracker> MakePeakGpuMemoryTracker(
-      input::PeakGpuMemoryTracker::Usage usage) = 0;
+  virtual std::unique_ptr<viz::PeakGpuMemoryTracker> MakePeakGpuMemoryTracker(
+      viz::PeakGpuMemoryTracker::Usage usage) = 0;
 
   // Called upon event ack receipt from the renderer.
   virtual void OnWheelEventAck(
@@ -83,14 +83,26 @@ class COMPONENT_EXPORT(INPUT) RenderInputRouterDelegate {
   // Called when an invalid input event source is sent from the renderer.
   virtual void OnInvalidInputEventSource() = 0;
 
-  // TODO(b/345483526): Cleanup BrowserPrioritizeNativeWork,
-  // BrowserDeferUIThreadTasks experiments.
-  virtual void NotifyUISchedulerOfGestureEventUpdate(
-      blink::WebInputEvent::Type gesture_event) = 0;
-
   // Notifies when an input event is ignored, see `IsIgnoringWebInputEvents`
   // above.
   virtual void OnInputIgnored(const blink::WebInputEvent& event) = 0;
+
+  virtual StylusInterface* GetStylusInterface() = 0;
+
+  // Returns whether the RenderInputRouter is hidden or not.
+  virtual bool IsHidden() const = 0;
+
+  // Returns whether this render process is blocked. If true, input events
+  // should not be sent to it, nor other timely signs of life should be
+  // expected.
+  virtual bool IsRendererProcessBlocked() = 0;
+
+  // Called by |RenderInputRouter::input_event_ack_timeout_| when an input event
+  // timed out without getting an ack from the renderer.
+  virtual void OnInputEventAckTimeout() = 0;
+
+  // Notifies the delegate that RenderInputRouter is responsive.
+  virtual void RendererIsResponsive() = 0;
 };
 
 }  // namespace input

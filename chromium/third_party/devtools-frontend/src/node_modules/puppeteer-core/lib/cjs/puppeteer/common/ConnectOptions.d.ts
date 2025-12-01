@@ -6,11 +6,15 @@
 import type { Session } from 'chromium-bidi/lib/cjs/protocol/protocol.js';
 import type { IsPageTargetCallback, TargetFilterCallback } from '../api/Browser.js';
 import type { ConnectionTransport } from './ConnectionTransport.js';
+import type { DownloadBehavior } from './DownloadBehavior.js';
 import type { Viewport } from './Viewport.js';
 /**
  * @public
  */
 export type ProtocolType = 'cdp' | 'webDriverBiDi';
+/**
+ * @public
+ */
 export type SupportedWebDriverCapability = Exclude<Session.CapabilityRequest, 'unhandledPromptBehavior' | 'acceptInsecureCerts'>;
 /**
  * WebDriver BiDi capabilities that are not set by Puppeteer itself.
@@ -26,7 +30,7 @@ export interface SupportedWebDriverCapabilities {
  * connecting to an existing browser instance.
  * @public
  */
-export interface BrowserConnectOptions {
+export interface ConnectOptions {
     /**
      * Whether to ignore HTTPS errors during navigation.
      * @defaultValue `false`
@@ -38,6 +42,10 @@ export interface BrowserConnectOptions {
      * @defaultValue '\{width: 800, height: 600\}'
      */
     defaultViewport?: Viewport | null;
+    /**
+     * Sets the download behavior for the context.
+     */
+    downloadBehavior?: DownloadBehavior;
     /**
      * Slows down Puppeteer operations by the specified amount of milliseconds to
      * aid debugging.
@@ -69,11 +77,6 @@ export interface BrowserConnectOptions {
      * @defaultValue `180_000`
      */
     protocolTimeout?: number;
-}
-/**
- * @public
- */
-export interface ConnectOptions extends BrowserConnectOptions {
     browserWSEndpoint?: string;
     browserURL?: string;
     transport?: ConnectionTransport;

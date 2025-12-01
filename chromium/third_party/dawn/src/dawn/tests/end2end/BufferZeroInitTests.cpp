@@ -418,7 +418,7 @@ class BufferZeroInitTest : public DawnTest {
         constexpr wgpu::TextureFormat kColorAttachmentFormat = wgpu::TextureFormat::RGBA8Unorm;
         constexpr wgpu::Color kClearColorGreen = {0.f, 1.f, 0.f, 1.f};
 
-        // As long as the comptue shader is executed once, the pixel color of outImage will be set
+        // As long as the compute shader is executed once, the pixel color of outImage will be set
         // to red.
         const char* computeShader = R"(
             @group(0) @binding(0) var outImage : texture_storage_2d<rgba8unorm, write>;
@@ -915,6 +915,10 @@ TEST_P(BufferZeroInitTest, CopyBufferToTexture) {
 // Test that the code path of CopyTextureToBuffer clears the destination buffer correctly when it is
 // the first use of the buffer and the texture is a 2D non-array texture.
 TEST_P(BufferZeroInitTest, Copy2DTextureToBuffer) {
+    // TODO(crbug.com/388318201): investigate
+    DAWN_SUPPRESS_TEST_IF(IsCompatibilityMode() &&
+                          HasToggleEnabled("gl_force_es_31_and_no_extensions"));
+
     constexpr wgpu::Extent3D kTextureSize = {64u, 8u, 1u};
 
     // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 4 OpenGLES
@@ -954,6 +958,10 @@ TEST_P(BufferZeroInitTest, Copy2DTextureToBuffer) {
 // Test that the code path of CopyTextureToBuffer clears the destination buffer correctly when it is
 // the first use of the buffer and the texture is a 2D array texture.
 TEST_P(BufferZeroInitTest, Copy2DArrayTextureToBuffer) {
+    // TODO(crbug.com/388318201): investigate
+    DAWN_SUPPRESS_TEST_IF(IsCompatibilityMode() &&
+                          HasToggleEnabled("gl_force_es_31_and_no_extensions"));
+
     constexpr wgpu::Extent3D kTextureSize = {64u, 4u, 3u};
 
     // bytesPerRow == texelBlockSizeInBytes * copySize.width && rowsPerImage == copySize.height &&
@@ -1245,10 +1253,6 @@ TEST_P(BufferZeroInitTest, SetIndexBuffer) {
 // Test the buffer will be lazily initialized correctly when its first use is an indirect buffer for
 // DrawIndirect.
 TEST_P(BufferZeroInitTest, IndirectBufferForDrawIndirect) {
-    // TODO(crbug.com/dawn/1292): Some Intel OpenGL drivers don't seem to like
-    // the offset= that Tint/GLSL produces.
-    DAWN_SUPPRESS_TEST_IF(IsIntel() && IsOpenGL() && IsLinux());
-
     // Bind the whole buffer as an indirect buffer.
     {
         constexpr uint64_t kOffset = 0u;
@@ -1265,10 +1269,6 @@ TEST_P(BufferZeroInitTest, IndirectBufferForDrawIndirect) {
 // Test the buffer will be lazily initialized correctly when its first use is an indirect buffer for
 // DrawIndexedIndirect.
 TEST_P(BufferZeroInitTest, IndirectBufferForDrawIndexedIndirect) {
-    // TODO(crbug.com/dawn/1292): Some Intel OpenGL drivers don't seem to like
-    // the offset= that Tint/GLSL produces.
-    DAWN_SUPPRESS_TEST_IF(IsIntel() && IsOpenGL() && IsLinux());
-
     // Bind the whole buffer as an indirect buffer.
     {
         constexpr uint64_t kOffset = 0u;

@@ -7,9 +7,9 @@
 
 #import <UIKit/UIKit.h>
 
+#import "ios/chrome/browser/scoped_ui_blocker/ui_bundled/ui_blocker_target.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_activation_level.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state_observer.h"
-#import "ios/chrome/browser/ui/scoped_ui_blocker/ui_blocker_target.h"
 #import "ios/chrome/browser/window_activities/model/window_activity_helpers.h"
 
 @class AppState;
@@ -103,6 +103,12 @@
 // sign-in prompt UI.
 @property(nonatomic, assign) BOOL signinInProgress;
 
+// Accessibility identifier of the window.
+@property(nonatomic, assign, readonly) NSString* windowAccessibilityIdentifier;
+
+// Root view controller's view.
+@property(nonatomic, assign, readonly) UIView* rootView;
+
 // Adds an observer to this scene state. The observers will be notified about
 // scene state changes per SceneStateObserver protocol.
 - (void)addObserver:(id<SceneStateObserver>)observer;
@@ -129,6 +135,13 @@
 // of all other windows.
 - (void)setRootViewController:(UIViewController*)rootViewController
             makeKeyAndVisible:(BOOL)makeKeyAndVisible;
+
+// Shows and positions rootViewController in front of all others window.
+- (void)setRootViewControllerKeyAndVisible;
+
+// Sets the User Interface Style of the window.
+- (void)setWindowUserInterfaceStyle:
+    (UIUserInterfaceStyle)windowUserInterfaceStyle;
 
 @end
 

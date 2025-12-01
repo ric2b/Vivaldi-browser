@@ -4,9 +4,10 @@
 
 #include "chrome/browser/ui/views/omnibox/omnibox_suggestion_button_row_view.h"
 
+#include <algorithm>
+
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
-#include "base/ranges/algorithm.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/omnibox/omnibox_theme.h"
@@ -81,8 +82,9 @@ class OmniboxSuggestionRowChip : public views::MdTextButton {
   ~OmniboxSuggestionRowChip() override = default;
 
   void SetThemeState(OmniboxPartState theme_state) {
-    if (theme_state_ == theme_state)
+    if (theme_state_ == theme_state) {
       return;
+    }
     theme_state_ = theme_state;
     OnThemeChanged();
   }
@@ -103,8 +105,7 @@ class OmniboxSuggestionRowChip : public views::MdTextButton {
     const auto* const color_provider = GetColorProvider();
     const SkColor color =
         color_provider->GetColor(kColorOmniboxResultsChipBackground);
-    SetBackground(
-        views::CreateRoundedRectBackground(color, GetCornerRadiusValue()));
+    SetBackground(views::CreateRoundedRectBackground(color, GetCornerRadii()));
   }
 
  private:
@@ -164,13 +165,14 @@ class OmniboxSuggestionRowButton : public views::MdTextButton {
   ~OmniboxSuggestionRowButton() override = default;
 
   void SetThemeState(OmniboxPartState theme_state) {
-    if (theme_state_ == theme_state)
+    if (theme_state_ == theme_state) {
       return;
+    }
     theme_state_ = theme_state;
     OnThemeChanged();
   }
 
-  OmniboxPopupSelection selection() { return selection_; }
+  OmniboxPopupSelection selection() const { return selection_; }
 
   void OnThemeChanged() override {
     MdTextButton::OnThemeChanged();
@@ -206,8 +208,8 @@ class OmniboxSuggestionRowButton : public views::MdTextButton {
         color_provider->GetColor(GetOmniboxBackgroundColorId(theme_state_));
     SetBackground(CreateBackgroundFromPainter(
         views::Painter::CreateRoundRectWith1PxBorderPainter(
-            fill_color, stroke_color, GetCornerRadiusValue(),
-            SkBlendMode::kSrcOver, /*antialias=*/true,
+            fill_color, stroke_color, GetCornerRadii(), SkBlendMode::kSrcOver,
+            /*antialias=*/true,
             /*should_border_scale=*/true)));
   }
 
@@ -261,8 +263,9 @@ void OmniboxSuggestionButtonRowView::BuildViews() {
   RemoveAllChildViews();
 
   // Skip remaining code that depends on `match()`.
-  if (!HasMatch())
+  if (!HasMatch()) {
     return;
+  }
 
   // For all of these buttons, the visibility is set from `UpdateFromModel()`.
   // The Keyword and Pedal buttons also get their text from there, since the
@@ -303,7 +306,7 @@ OmniboxSuggestionButtonRowView::~OmniboxSuggestionButtonRowView() = default;
 void OmniboxSuggestionButtonRowView::Layout(PassKey) {
   LayoutSuperclass<View>(this);
 
-  auto bounds = GetLocalBounds();
+  const auto bounds = GetLocalBounds();
   SkPath path;
   path.addRect(RectToSkRect(bounds), SkPathDirection::kCW, 0);
   SetClipPath(path);
@@ -363,9 +366,9 @@ void OmniboxSuggestionButtonRowView::UpdateFromModel() {
     }
   }
 
-  bool is_any_child_visible =
+  const bool is_any_child_visible =
       embeddings_chip_->GetVisible() || keyword_button_->GetVisible() ||
-      base::ranges::any_of(action_buttons_, [](const auto& action_button) {
+      std::ranges::any_of(action_buttons_, [](const auto& action_button) {
         return action_button->GetVisible();
       });
   SetVisible(is_any_child_visible);
@@ -389,26 +392,29 @@ void OmniboxSuggestionButtonRowView::SelectionStateChanged() {
 
 void OmniboxSuggestionButtonRowView::SetThemeState(
     OmniboxPartState theme_state) {
-  if (embeddings_chip_)
+  if (embeddings_chip_) {
     embeddings_chip_->SetThemeState(theme_state);
-  if (keyword_button_)
+  }
+  if (keyword_button_) {
     keyword_button_->SetThemeState(theme_state);
+  }
   for (const auto& action_button : action_buttons_) {
     action_button->SetThemeState(theme_state);
   }
 }
 
 views::Button* OmniboxSuggestionButtonRowView::GetActiveButton() const {
-  if (!HasMatch())
+  if (!HasMatch()) {
     return nullptr;
+  }
 
   std::vector<OmniboxSuggestionRowButton*> buttons{keyword_button_};
   buttons.insert(buttons.end(), action_buttons_.begin(), action_buttons_.end());
 
   // Find the button that matches model selection.
   auto selected_button =
-      base::ranges::find(buttons, popup_view_->GetSelection(),
-                         &OmniboxSuggestionRowButton::selection);
+      std::ranges::find(buttons, popup_view_->GetSelection(),
+                        &OmniboxSuggestionRowButton::selection);
   return selected_button == buttons.end() ? nullptr : *selected_button;
 }
 

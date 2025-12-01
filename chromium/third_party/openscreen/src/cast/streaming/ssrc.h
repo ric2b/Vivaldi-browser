@@ -16,7 +16,7 @@ namespace openscreen::cast {
 using Ssrc = uint32_t;
 
 // The "not set" or "null" value for the Ssrc type.
-constexpr Ssrc kNullSsrc{0};
+inline constexpr Ssrc kNullSsrc = 0;
 
 // Computes a new SSRC that will be used to uniquely identify an RTP stream. The
 // `higher_priority` argument, if true, will generate an SSRC that causes the

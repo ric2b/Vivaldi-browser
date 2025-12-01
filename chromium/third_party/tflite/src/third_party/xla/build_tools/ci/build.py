@@ -87,7 +87,7 @@ def _write_to_sponge_config(key, value) -> None:
 
 class BuildType(enum.Enum):
   """Enum representing all types of builds."""
-  CPU_X86 = enum.auto()
+  CPU_X86_SELF_HOSTED = enum.auto()
   CPU_ARM64 = enum.auto()
   GPU = enum.auto()
   GPU_CONTINUOUS = enum.auto()
@@ -157,10 +157,12 @@ class Build:
   def commands(self) -> List[List[str]]:
     """Returns list of commands for a build."""
     cmds = []
-    cmds.append([
-        f"{_KOKORO_ARTIFACTS_DIR}/github/xla/.kokoro/generate_index_html.sh",
-        "index.html",
-    ])
+
+    if "self_hosted" not in self.type_.name.lower():
+      cmds.append([
+          f"{_KOKORO_ARTIFACTS_DIR}/github/xla/.kokoro/generate_index_html.sh",
+          "index.html",
+      ])
     if self.repo != "openxla/xla":
       _, repo_name = self.repo.split("/")
 
@@ -234,7 +236,7 @@ def _tag_filters_for_compute_capability(
     compute_capability: int,
 ) -> Tuple[str, ...]:
   tag_filters = (f"requires-gpu-sm{compute_capability}-only",)
-  for cc in (60, 70, 80, 90):
+  for cc in (60, 70, 80, 90, 100):
     if compute_capability >= cc:
       tag_filters += (f"requires-gpu-sm{cc}",)
     else:
@@ -245,8 +247,12 @@ def _tag_filters_for_compute_capability(
 
 
 _DEFAULT_IMAGE = "gcr.io/tensorflow-sigs/build:latest-python3.11"
+_ML_BUILD_IMAGE = (
+    "us-central1-docker.pkg.dev/tensorflow-sigs/tensorflow/ml-build:latest"
+)
 
 _ARM64_JAX_MULTI_PYTHON_IMAGE = "us-central1-docker.pkg.dev/tensorflow-sigs/tensorflow/build-arm64:jax-latest-multi-python"
+_ML_BUILD_ARM64_IMAGE = "us-central1-docker.pkg.dev/tensorflow-sigs/tensorflow/ml-build-arm64:latest"
 
 
 def nvidia_gpu_build_with_compute_capability(
@@ -256,14 +262,14 @@ def nvidia_gpu_build_with_compute_capability(
   return Build(
       type_=type_,
       repo="openxla/xla",
-      image_url=_DEFAULT_IMAGE,
+      image_url=_ML_BUILD_IMAGE,
       target_patterns=_XLA_DEFAULT_TARGET_PATTERNS,
       configs=configs,
       test_tag_filters=("-no_oss", "requires-gpu-nvidia", "gpu", "-rocm-only")
       + extra_gpu_tags,
       build_tag_filters=("-no_oss", "requires-gpu-nvidia", "gpu", "-rocm-only"),
       options={
-          "run_under": "//tools/ci_build/gpu_build:parallel_gpu_execute",
+          "run_under": "//build_tools/ci:parallel_gpu_execute",
           "repo_env": f"TF_CUDA_COMPUTE_CAPABILITIES={compute_capability/10}",
           "@cuda_driver//:enable_forward_compatibility": "true",
           **_DEFAULT_BAZEL_OPTIONS,
@@ -278,10 +284,10 @@ cpu_x86_tag_filter = (
     "-requires-gpu-nvidia",
     "-requires-gpu-amd",
 )
-_CPU_X86_BUILD = Build(
-    type_=BuildType.CPU_X86,
+_CPU_X86_SELF_HOSTED_BUILD = Build(
+    type_=BuildType.CPU_X86_SELF_HOSTED,
     repo="openxla/xla",
-    image_url=_DEFAULT_IMAGE,
+    image_url=None,
     configs=("warnings", "nonccl", "rbe_linux_cpu"),
     target_patterns=_XLA_DEFAULT_TARGET_PATTERNS,
     build_tag_filters=cpu_x86_tag_filter,
@@ -299,8 +305,8 @@ cpu_arm_tag_filter = (
 _CPU_ARM64_BUILD = Build(
     type_=BuildType.CPU_ARM64,
     repo="openxla/xla",
-    image_url=_ARM64_JAX_MULTI_PYTHON_IMAGE,
-    configs=("warnings", "rbe_cross_compile_linux_arm64_xla", "nonccl"),
+    image_url=_ML_BUILD_ARM64_IMAGE,
+    configs=("warnings", "rbe_cross_compile_linux_arm64", "nonccl"),
     target_patterns=_XLA_DEFAULT_TARGET_PATTERNS,
     options={**_DEFAULT_BAZEL_OPTIONS, "build_tests_only": True},
     build_tag_filters=cpu_arm_tag_filter,
@@ -400,7 +406,7 @@ _JAX_GPU_BUILD = Build(
 _TENSORFLOW_CPU_BUILD = Build(
     type_=BuildType.TENSORFLOW_CPU,
     repo="tensorflow/tensorflow",
-    image_url=_DEFAULT_IMAGE,
+    image_url=_ML_BUILD_IMAGE,
     configs=(
         "release_cpu_linux",
         "rbe_linux_cpu",
@@ -424,7 +430,7 @@ _TENSORFLOW_CPU_BUILD = Build(
 _TENSORFLOW_GPU_BUILD = Build(
     type_=BuildType.TENSORFLOW_GPU,
     repo="tensorflow/tensorflow",
-    image_url=_DEFAULT_IMAGE,
+    image_url=_ML_BUILD_IMAGE,
     configs=(
         "release_gpu_linux",
         "rbe_linux_cuda",
@@ -449,16 +455,15 @@ _TENSORFLOW_GPU_BUILD = Build(
 
 _KOKORO_JOB_NAME_TO_BUILD_MAP = {
     "tensorflow/xla/linux/arm64/build_cpu": _CPU_ARM64_BUILD,
-    "tensorflow/xla/linux/cpu/build_cpu": _CPU_X86_BUILD,
     "tensorflow/xla/linux/gpu/build_gpu": _GPU_BUILD,
     "tensorflow/xla/linux/github_continuous/arm64/build_cpu": _CPU_ARM64_BUILD,
     "tensorflow/xla/linux/github_continuous/build_gpu": _GPU_BUILD,
-    "tensorflow/xla/linux/github_continuous/build_cpu": _CPU_X86_BUILD,
     "tensorflow/xla/macos/github_continuous/cpu_py39_full": _MACOS_X86_BUILD,
     "tensorflow/xla/jax/cpu/build_cpu": _JAX_CPU_BUILD,
     "tensorflow/xla/jax/gpu/build_gpu": _JAX_GPU_BUILD,
     "tensorflow/xla/tensorflow/cpu/build_cpu": _TENSORFLOW_CPU_BUILD,
     "tensorflow/xla/tensorflow/gpu/build_gpu": _TENSORFLOW_GPU_BUILD,
+    "xla-linux-x86-cpu": _CPU_X86_SELF_HOSTED_BUILD,
 }
 
 
@@ -484,7 +489,8 @@ def main():
     return
 
   build = _KOKORO_JOB_NAME_TO_BUILD_MAP[kokoro_job_name]
-
+  logging.info("build.type_: %s", build.type_)
+  logging.info("build.commands(): %s", build.commands())
   for cmd in build.commands():
     sh(cmd)
 

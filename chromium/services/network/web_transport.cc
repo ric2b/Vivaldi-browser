@@ -9,7 +9,6 @@
 
 #include "services/network/web_transport.h"
 
-#include "base/auto_reset.h"
 #include "base/containers/span.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
@@ -568,6 +567,10 @@ void WebTransport::Close(mojom::WebTransportCloseInfoPtr close_info) {
   transport_->Close(close_info_to_pass);
 }
 
+void WebTransport::CloseIfNonceMatches(base::UnguessableToken nonce) {
+  transport_->CloseIfNonceMatches(nonce);
+}
+
 void WebTransport::OnConnected(
     scoped_refptr<net::HttpResponseHeaders> response_headers) {
   if (torn_down_ || closing_) {
@@ -733,7 +736,7 @@ void WebTransport::OnDatagramReceived(std::string_view datagram) {
     return;
   }
 
-  client_->OnDatagramReceived(base::make_span(
+  client_->OnDatagramReceived(base::span(
       reinterpret_cast<const uint8_t*>(datagram.data()), datagram.size()));
 }
 

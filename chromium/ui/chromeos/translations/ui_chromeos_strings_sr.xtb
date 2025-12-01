@@ -36,7 +36,7 @@
 <translation id="1254593899333212300">Директна веза са интернетом</translation>
 <translation id="1272293450992660632">PIN-ови се не подударају.</translation>
 <translation id="1280820357415527819">Траже се мобилне мреже</translation>
-<translation id="1293556467332435079">Датотеке</translation>
+<translation id="1293556467332435079">Фајлови</translation>
 <translation id="1297922636971898492">Google диск тренутно није доступан. Отпремање ће се аутоматски поново покренути када Google диск постане доступан.</translation>
 <translation id="1306130176943817227">Брисање није успело. Ставка се користи.</translation>
 <translation id="1307931752636661898">Приказ Linux датотека није успео</translation>
@@ -73,6 +73,7 @@
 <translation id="1577977504532381335">Прегледајте смернице администратора</translation>
 <translation id="158849752021629804">Потребна је матична мрежа</translation>
 <translation id="1589128298353575783"><ph name="NUMBER_OF_PB" /> PB</translation>
+<translation id="1601786938618212857">Поштански број</translation>
 <translation id="1620510694547887537">Камера</translation>
 <translation id="162175252992296058">португалски са америчком интернационалном тастатуром</translation>
 <translation id="1629521517399325891">Кориснички сертификат није доступан за потврду идентитета мреже.</translation>
@@ -394,7 +395,6 @@
 <translation id="4179621117429069925">Ова ставка је у отпаду</translation>
 <translation id="4186579485882418952">Омогући офлајн</translation>
 <translation id="4193154014135846272">Google документ</translation>
-<translation id="4197674956721858839">Избор за додавање у zip датотеку</translation>
 <translation id="4202378258276439759">шпански (Латинска Америка)</translation>
 <translation id="4202977638116331303">грузијски</translation>
 <translation id="421017592316736757">Морате да будете на мрежи да бисте приступили овој датотеци.</translation>

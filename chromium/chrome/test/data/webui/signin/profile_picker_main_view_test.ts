@@ -9,7 +9,7 @@ import {loadTimeData, ManageProfilesBrowserProxyImpl, NavigationMixin, Routes} f
 import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
 import {CrLitElement} from 'chrome://resources/lit/v3_0/lit.rollup.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
-import {microtasksFinished} from 'chrome://webui-test/test_util.js';
+import {isVisible, microtasksFinished} from 'chrome://webui-test/test_util.js';
 
 import {TestManageProfilesBrowserProxy} from './test_manage_profiles_browser_proxy.js';
 
@@ -59,7 +59,9 @@ function generateProfilesList(n: number): ProfileState[] {
              gaiaName: sync ? `User${i}` : '',
              userName: sync ? `User${i}@gmail.com` : '',
              avatarIcon: `AvatarUrl-${i}`,
-             avatarBadge: i % 4 === 0 ? `cr:domain` : ``,
+             avatarBadge: i % 4 === 0 ? 'cr:domain' : '',
+             profileCardButtonLabel: '',
+             hasEnterpriseLabel: false,
            }));
 }
 
@@ -146,19 +148,21 @@ suite('ProfilePickerMainViewTest', function() {
     assertEquals(navigationElement.route, Routes.MAIN);
     await browserProxy.whenCalled('initializeMainView');
     // Hidden while profiles list is not yet defined.
-    assertTrue(mainViewElement.$.profilesContainer.hidden);
+    assertTrue(mainViewElement.$.profilesWrapper.hidden);
     assertTrue(mainViewElement.$.askOnStartup.hidden);
     const profiles = generateProfilesList(6);
     await simulateProfilesListChanged(profiles);
     // Profiles list defined.
-    assertTrue(!mainViewElement.$.profilesContainer.hidden);
+    assertTrue(!mainViewElement.$.profilesWrapper.hidden);
     assertTrue(!mainViewElement.$.askOnStartup.hidden);
     assertTrue(mainViewElement.$.askOnStartup.checked);
     // Verify profile card.
     await verifyProfileCard(
         profiles, mainViewElement.shadowRoot!.querySelectorAll('profile-card'));
     // Browse as guest.
-    assertTrue(!!mainViewElement.$.browseAsGuestButton);
+    assertTrue(isVisible(mainViewElement.$.browseAsGuestButton));
+    // Add profile
+    assertTrue(isVisible(mainViewElement.$.addProfile));
     mainViewElement.$.browseAsGuestButton.click();
     await browserProxy.whenCalled('launchGuestProfile');
     // Ask when chrome opens.
@@ -175,6 +179,34 @@ suite('ProfilePickerMainViewTest', function() {
     profiles.splice(3, 1);
     await verifyProfileCard(
         profiles, mainViewElement.shadowRoot!.querySelectorAll('profile-card'));
+  });
+
+  test('EditLocalProfileNameDisabledForWorkProfile', async function() {
+    await browserProxy.whenCalled('initializeMainView');
+    const profiles = Array({
+      profilePath: `profilePath`,
+      localProfileName: `Work Profile`,
+      isSyncing: true,
+      needsSignin: false,
+      gaiaName: `User`,
+      userName: `User@example.com`,
+      avatarIcon: `AvatarUrl`,
+      avatarBadge: 'cr:domain',
+      profileCardButtonLabel: '',
+      hasEnterpriseLabel: true,
+    });
+    await simulateProfilesListChanged(profiles);
+
+    // Verify that the input field is disabled.
+    const localProfileName =
+        mainViewElement.shadowRoot!.querySelector('profile-card')!.$.nameInput;
+    assertEquals(localProfileName.value, profiles[0]!.localProfileName);
+    assertTrue(localProfileName.disabled);
+    // Verify that the hover line is hidden.
+    const hoverUnderline =
+        mainViewElement.shadowRoot!.querySelector('profile-card')!.shadowRoot!
+            .querySelector<HTMLElement>('#hoverUnderline');
+    assertTrue(!!hoverUnderline && hoverUnderline?.hidden);
   });
 
   test('EditLocalProfileName', async function() {
@@ -205,10 +237,10 @@ suite('ProfilePickerMainViewTest', function() {
       isGuestModeEnabled: false,
     });
     resetTest();
-    assertEquals(mainViewElement.$.browseAsGuestButton.style.display, 'none');
+    assertFalse(isVisible(mainViewElement.$.browseAsGuestButton));
     await browserProxy.whenCalled('initializeMainView');
     await simulateProfilesListChanged(generateProfilesList(2));
-    assertEquals(mainViewElement.$.browseAsGuestButton.style.display, 'none');
+    assertFalse(isVisible(mainViewElement.$.browseAsGuestButton));
   });
 
   test('ProfileCreationNotAllowed', async function() {
@@ -216,22 +248,21 @@ suite('ProfilePickerMainViewTest', function() {
       isProfileCreationAllowed: false,
     });
     resetTest();
-    const addProfile =
-        mainViewElement.shadowRoot!.querySelector<HTMLElement>('#addProfile')!;
-    assertEquals(addProfile.style.display, 'none');
+    const addProfileButton = mainViewElement.$.addProfile;
+    assertFalse(isVisible(addProfileButton));
     await browserProxy.whenCalled('initializeMainView');
     await simulateProfilesListChanged(generateProfilesList(2));
     navigationElement.reset();
-    assertEquals(addProfile.style.display, 'none');
-    addProfile.click();
+    assertFalse(isVisible(addProfileButton));
+    addProfileButton.click();
     await microtasksFinished();
-    assertTrue(!navigationElement.changeCalled);
+    assertFalse(navigationElement.changeCalled);
   });
 
   test('AskOnStartupSingleToMultipleProfiles', async function() {
     await browserProxy.whenCalled('initializeMainView');
     // Hidden while profiles list is not yet defined.
-    assertTrue(mainViewElement.$.profilesContainer.hidden);
+    assertTrue(mainViewElement.$.profilesWrapper.hidden);
     assertTrue(mainViewElement.$.askOnStartup.hidden);
     let profiles = generateProfilesList(1);
     await simulateProfilesListChanged(profiles);
@@ -255,7 +286,7 @@ suite('ProfilePickerMainViewTest', function() {
   test('AskOnStartupMultipleToSingleProfile', async function() {
     await browserProxy.whenCalled('initializeMainView');
     // Hidden while profiles list is not yet defined.
-    assertTrue(mainViewElement.$.profilesContainer.hidden);
+    assertTrue(mainViewElement.$.profilesWrapper.hidden);
     assertTrue(mainViewElement.$.askOnStartup.hidden);
     const profiles = generateProfilesList(2);
     await simulateProfilesListChanged(profiles);
@@ -277,7 +308,7 @@ suite('ProfilePickerMainViewTest', function() {
 
     await browserProxy.whenCalled('initializeMainView');
     // Hidden while profiles list is not yet defined.
-    assertTrue(mainViewElement.$.profilesContainer.hidden);
+    assertTrue(mainViewElement.$.profilesWrapper.hidden);
     assertTrue(mainViewElement.$.askOnStartup.hidden);
     const profiles = generateProfilesList(2);
     await simulateProfilesListChanged(profiles);
@@ -298,6 +329,46 @@ suite('ProfilePickerMainViewTest', function() {
     await simulateProfilesListChanged(profiles);
     await verifyProfileCard(
         profiles, mainViewElement.shadowRoot!.querySelectorAll('profile-card'));
+  });
+
+  test('LearnMoreClickedInFooterText', async function() {
+    loadTimeData.overrideValues({isGlicVersion: true});
+    resetTest();
+
+    await browserProxy.whenCalled('initializeMainView');
+    await simulateProfilesListChanged(generateProfilesList(2));
+
+    const footerText =
+        mainViewElement.shadowRoot!.querySelector('#footer-text')!;
+    assertTrue(isVisible(footerText));
+
+    const learnMoreLink =
+        mainViewElement.shadowRoot!.querySelector<HTMLElement>(
+            '.learn-more-link')!;
+    assertTrue(isVisible(learnMoreLink));
+
+    learnMoreLink.click();
+    await browserProxy.whenCalled('onLearnMoreClicked');
+  });
+
+  test('LearnMoreClickedWithNoProfiles', async function() {
+    loadTimeData.overrideValues({isGlicVersion: true});
+    resetTest();
+
+    await browserProxy.whenCalled('initializeMainView');
+    await simulateProfilesListChanged(generateProfilesList(0));
+
+    const footerText =
+        mainViewElement.shadowRoot!.querySelector('#footer-text')!;
+    assertFalse(isVisible(footerText));
+
+    const learnMoreLink =
+        mainViewElement.shadowRoot!.querySelector<HTMLElement>(
+            '.learn-more-link')!;
+    assertTrue(isVisible(learnMoreLink));
+
+    learnMoreLink.click();
+    await browserProxy.whenCalled('onLearnMoreClicked');
   });
 });
 

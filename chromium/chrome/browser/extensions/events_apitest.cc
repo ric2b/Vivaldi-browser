@@ -42,7 +42,7 @@ namespace extensions {
 
 namespace {
 
-using ContextType = ExtensionBrowserTest::ContextType;
+using ContextType = extensions::browser_test_util::ContextType;
 
 IN_PROC_BROWSER_TEST_F(ExtensionApiTest, Events) {
   ASSERT_TRUE(RunExtensionTest("events")) << message_;
@@ -323,7 +323,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, DispatchEventDuringShutdown) {
 
 class EventsApiTest : public ExtensionApiTest {
  public:
-  EventsApiTest() {}
+  EventsApiTest() = default;
 
   EventsApiTest(const EventsApiTest&) = delete;
   EventsApiTest& operator=(const EventsApiTest&) = delete;
@@ -935,11 +935,19 @@ INSTANTIATE_TEST_SUITE_P(EventPage,
 
 using ServiceWorkerEventAckBrowserTest = EventDispatchingApiTest;
 
+// TODO(crbug.com/383086263): Flaky on Mac and Windows.
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#define MAYBE_RendererProcessGoesAway_ClearsUnackedEventData \
+  DISABLED_RendererProcessGoesAway_ClearsUnackedEventData
+#else
+#define MAYBE_RendererProcessGoesAway_ClearsUnackedEventData \
+  RendererProcessGoesAway_ClearsUnackedEventData
+#endif
 // Tests that when a renderer process is no longer available that we clear any
 // unacked events from EventAckData for that render process. Otherwise we would
 // leak these unacked events and never remove them.
 IN_PROC_BROWSER_TEST_F(ServiceWorkerEventAckBrowserTest,
-                       RendererProcessGoesAway_ClearsUnackedEventData) {
+                       MAYBE_RendererProcessGoesAway_ClearsUnackedEventData) {
   // TODO(crbug.com/331358155): This currently tests
   // EventRouter::RenderProcessExited(), but it does not test the case of
   // EventRouter::RenderProcessHostDestroyed(). It can be simulated with a
@@ -949,8 +957,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerEventAckBrowserTest,
   ASSERT_TRUE(embedded_test_server()->Start());
   ExtensionTestMessageListener extension_oninstall_listener_fired(
       "installed listener fired");
-  const Extension* extension =
-      LoadExtension(test_data_dir_.AppendASCII("events/memory"));
+  const Extension* extension = LoadExtension(
+      test_data_dir_.AppendASCII("events/listener_spins_forever"));
   ASSERT_TRUE(extension);
   ASSERT_TRUE(extension_oninstall_listener_fired.WaitUntilSatisfied());
   ASSERT_TRUE(content::CheckServiceWorkerIsRunning(
@@ -967,26 +975,27 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerEventAckBrowserTest,
 
   // Confirm the `EventInfo` for the above event is still unacked.
   EventRouter* event_router = EventRouter::Get(profile());
-  EventAckData::EventInfo* unacked_event_info =
-      // 1 is inferred since the extension has two listeners and the above
-      // navigation should be the second event encountered.
-      event_router->event_ack_data()->GetUnackedEventForTesting(/*event_id=*/1);
-  ASSERT_TRUE(unacked_event_info);
-  content::RenderProcessHost* worker_render_process_host =
-      content::RenderProcessHost::FromID(unacked_event_info->render_process_id);
-  ASSERT_TRUE(worker_render_process_host);
-  ASSERT_EQ(unacked_event_info->render_process_id,
-            worker_render_process_host->GetID());
+  // 1 is inferred since the extension has two listeners and the above
+  // navigation should be the second event encountered.
+  EXPECT_TRUE(event_router->event_ack_data()->HasUnackedEventForTesting(
+      /*event_id=*/1));
 
   // Terminate worker's RenderProcessHost which triggers the cleanup logic.
+  std::vector<WorkerId> service_workers =
+      ProcessManager::Get(profile())->GetServiceWorkersForExtension(
+          extension->id());
+  ASSERT_EQ(1u, service_workers.size());
+  content::RenderProcessHost* extension_process =
+      content::RenderProcessHost::FromID(service_workers[0].render_process_id);
+  ASSERT_TRUE(extension_process);
   content::RenderProcessHostWatcher process_exit_observer(
-      worker_render_process_host,
+      extension_process,
       content::RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
-  worker_render_process_host->Shutdown(content::RESULT_CODE_KILLED);
+  extension_process->Shutdown(content::RESULT_CODE_KILLED);
   process_exit_observer.Wait();
 
   // Confirm we no longer have the `EventInfo` for the unacked event.
-  EXPECT_FALSE(event_router->event_ack_data()->GetUnackedEventForTesting(
+  EXPECT_FALSE(event_router->event_ack_data()->HasUnackedEventForTesting(
       /*event_id=*/1));
 }
 

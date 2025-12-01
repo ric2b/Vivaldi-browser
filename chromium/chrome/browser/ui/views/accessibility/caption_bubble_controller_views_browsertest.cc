@@ -12,7 +12,6 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_mock_time_message_loop_task_runner.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -23,9 +22,9 @@
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/live_caption/caption_util.h"
+#include "components/live_caption/live_caption_bubble_settings.h"
 #include "components/live_caption/pref_names.h"
 #include "components/live_caption/views/caption_bubble.h"
-#include "components/prefs/pref_service.h"
 #include "components/soda/soda_installer.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/test/browser_test.h"
@@ -70,10 +69,19 @@ class CaptionBubbleControllerViewsTest : public InProcessBrowserTest {
   CaptionBubbleControllerViewsTest& operator=(
       const CaptionBubbleControllerViewsTest&) = delete;
 
+  // InProcessBrowserTest:
+  void TearDownOnMainThread() override {
+    controller_.reset();
+    caption_bubble_settings_.reset();
+    InProcessBrowserTest::TearDownOnMainThread();
+  }
+
   CaptionBubbleControllerViews* GetController() {
     if (!controller_) {
+      caption_bubble_settings_ = std::make_unique<LiveCaptionBubbleSettings>(
+          browser()->profile()->GetPrefs());
       controller_ = std::make_unique<CaptionBubbleControllerViews>(
-          browser()->profile()->GetPrefs(), "en-US" /* application_locale */);
+          caption_bubble_settings_.get(), "en-US" /* application_locale */);
     }
     return controller_.get();
   }
@@ -234,7 +242,7 @@ class CaptionBubbleControllerViewsTest : public InProcessBrowserTest {
     // passing by side effect of the AccessibilityChecker's checks. The full
     // analysis can be found in the bug.
     if (auto* label = GetLabel()) {
-      label->GetTooltipText(gfx::Point());
+      label->GetRenderedTooltipText(gfx::Point());
     }
 
     return OnPartialTranscription(text, GetCaptionBubbleContext());
@@ -251,7 +259,7 @@ class CaptionBubbleControllerViewsTest : public InProcessBrowserTest {
     // passing by side effect of the AccessibilityChecker's checks. The full
     // analysis can be found in the bug.
     if (auto* label = GetLabel()) {
-      label->GetTooltipText(gfx::Point());
+      label->GetRenderedTooltipText(gfx::Point());
     }
 
     return OnFinalTranscription(text, GetCaptionBubbleContext());
@@ -345,6 +353,7 @@ class CaptionBubbleControllerViewsTest : public InProcessBrowserTest {
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
+  std::unique_ptr<LiveCaptionBubbleSettings> caption_bubble_settings_;
   std::unique_ptr<CaptionBubbleControllerViews> controller_;
   std::unique_ptr<CaptionBubbleContext> caption_bubble_context_;
 };
@@ -544,7 +553,7 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
   EXPECT_FALSE(IsWidgetVisible());
 }
 
-// TODO(crbug.com/40119836): Renable this test once it is passing. Tab
+// TODO(crbug.com/40119836): Re-enable this test once it is passing. Tab
 // traversal works in app but doesn't work in tests right now.
 IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
                        DISABLED_FocusableInTabOrder) {
@@ -556,7 +565,7 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
   // The widget must be active for the key presses to be handled.
   GetCaptionWidget()->Activate();
 
-#if defined(USE_AURA) && !BUILDFLAG(IS_CHROMEOS_ASH)
+#if defined(USE_AURA) && !BUILDFLAG(IS_CHROMEOS)
   // Check the native widget has focus.
   aura::client::FocusClient* focus_client =
       aura::client::GetFocusClient(GetCaptionWidget()->GetNativeView());
@@ -739,6 +748,8 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
 
   SkColor default_color = browser()->window()->GetColorProvider()->GetColor(
       ui::kColorLiveCaptionBubbleForegroundDefault);
+  SkColor language_label_color =
+      browser()->window()->GetColorProvider()->GetColor(ui::kColorRefPrimary80);
   ui::CaptionStyle caption_style;
 
   GetController()->UpdateCaptionStyle(std::nullopt);
@@ -748,8 +759,8 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
   EXPECT_EQ(default_color, GetLabel()->GetEnabledColor());
   EXPECT_EQ(default_color, GetTitle()->GetEnabledColor());
   EXPECT_EQ(default_color, GetErrorText()->GetEnabledColor());
-  EXPECT_EQ(default_color, GetSourceLanguageLabel()->GetEnabledColor());
-  EXPECT_EQ(default_color, GetTargetLanguageLabel()->GetEnabledColor());
+  EXPECT_EQ(language_label_color, GetSourceLanguageLabel()->GetEnabledColor());
+  EXPECT_EQ(language_label_color, GetTargetLanguageLabel()->GetEnabledColor());
 
   // Set the text color to red.
   caption_style.text_color = "rgba(255,0,0,1)";
@@ -766,8 +777,8 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
   EXPECT_EQ(default_color, GetLabel()->GetEnabledColor());
   EXPECT_EQ(default_color, GetTitle()->GetEnabledColor());
   EXPECT_EQ(default_color, GetErrorText()->GetEnabledColor());
-  EXPECT_EQ(default_color, GetSourceLanguageLabel()->GetEnabledColor());
-  EXPECT_EQ(default_color, GetTargetLanguageLabel()->GetEnabledColor());
+  EXPECT_EQ(language_label_color, GetSourceLanguageLabel()->GetEnabledColor());
+  EXPECT_EQ(language_label_color, GetTargetLanguageLabel()->GetEnabledColor());
 
   // Set the text color to blue !important with 0.5 opacity.
   caption_style.text_color = "rgba(0,0,255,0.5) !important";
@@ -795,8 +806,8 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
   EXPECT_EQ(default_color, GetLabel()->GetEnabledColor());
   EXPECT_EQ(default_color, GetTitle()->GetEnabledColor());
   EXPECT_EQ(default_color, GetErrorText()->GetEnabledColor());
-  EXPECT_EQ(default_color, GetSourceLanguageLabel()->GetEnabledColor());
-  EXPECT_EQ(default_color, GetTargetLanguageLabel()->GetEnabledColor());
+  EXPECT_EQ(language_label_color, GetSourceLanguageLabel()->GetEnabledColor());
+  EXPECT_EQ(language_label_color, GetTargetLanguageLabel()->GetEnabledColor());
 
   // Set the text color to green with spaces between the commas.
   caption_style.text_color = "rgba(0, 255, 0, 1)";
@@ -813,8 +824,8 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
   EXPECT_EQ(default_color, GetLabel()->GetEnabledColor());
   EXPECT_EQ(default_color, GetTitle()->GetEnabledColor());
   EXPECT_EQ(default_color, GetErrorText()->GetEnabledColor());
-  EXPECT_EQ(default_color, GetSourceLanguageLabel()->GetEnabledColor());
-  EXPECT_EQ(default_color, GetTargetLanguageLabel()->GetEnabledColor());
+  EXPECT_EQ(language_label_color, GetSourceLanguageLabel()->GetEnabledColor());
+  EXPECT_EQ(language_label_color, GetTargetLanguageLabel()->GetEnabledColor());
 }
 
 IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
@@ -1080,6 +1091,16 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest, AccessibleProperties) {
   EXPECT_EQ(data.GetString16Attribute(ax::mojom::StringAttribute::kName),
             l10n_util::GetStringUTF16(IDS_LIVE_CAPTION_BUBBLE_TITLE));
 
+  ui::AXNodeData root_view_data;
+  GetBubble()
+      ->GetWidget()
+      ->GetRootView()
+      ->GetViewAccessibility()
+      .GetAccessibleNodeData(&root_view_data);
+  EXPECT_EQ(
+      root_view_data.GetString16Attribute(ax::mojom::StringAttribute::kName),
+      GetBubble()->GetAccessibleWindowTitle());
+
   GetBubble()->SetTitleTextForTesting(u"Sample Accessible Name");
 
   data = ui::AXNodeData();
@@ -1088,6 +1109,19 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest, AccessibleProperties) {
             u"Sample Accessible Name");
   EXPECT_EQ(GetBubble()->GetViewAccessibility().GetCachedName(),
             u"Sample Accessible Name");
+
+  root_view_data = ui::AXNodeData();
+  GetBubble()
+      ->GetWidget()
+      ->GetRootView()
+      ->GetViewAccessibility()
+      .GetAccessibleNodeData(&root_view_data);
+  EXPECT_EQ(
+      root_view_data.GetString16Attribute(ax::mojom::StringAttribute::kName),
+      u"Sample Accessible Name");
+  EXPECT_EQ(
+      root_view_data.GetString16Attribute(ax::mojom::StringAttribute::kName),
+      GetBubble()->GetAccessibleWindowTitle());
 }
 
 IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest, NonAsciiCharacter) {
@@ -1450,7 +1484,7 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest, TranslateSynonyms) {
                        prefs::kLiveTranslateTargetLanguageCode));
 }
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
                        DownloadProgressLabel) {
   speech::SodaInstaller::GetInstance()->NeverDownloadSodaForTesting();
@@ -1494,6 +1528,6 @@ IN_PROC_BROWSER_TEST_F(CaptionBubbleControllerViewsTest,
   ASSERT_EQ(u"Downloading French language pack\x2026 12%",
             GetDownloadProgressLabel()->GetText());
 }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
 }  // namespace captions

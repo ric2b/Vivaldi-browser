@@ -5,15 +5,16 @@
 import 'chrome://personalization/strings.m.js';
 import 'chrome://webui-test/chromeos/mojo_webui_test_support.js';
 
-import {BeginSearchSeaPenThumbnailsAction, SeaPenActionName, SeaPenHistoryPromptSelectedEvent, SeaPenInputQueryElement, SeaPenRecentImageDeleteEvent, SeaPenRouterElement, SeaPenSampleSelectedEvent, SeaPenSuggestionsElement} from 'chrome://personalization/js/personalization_app.js';
-import {CrButtonElement} from 'chrome://resources/ash/common/cr_elements/cr_button/cr_button.js';
-import {CrTextareaElement} from 'chrome://resources/ash/common/cr_elements/cr_textarea/cr_textarea.js';
+import type {BeginSearchSeaPenThumbnailsAction} from 'chrome://personalization/js/personalization_app.js';
+import {SeaPenActionName, SeaPenHistoryPromptSelectedEvent, SeaPenInputQueryElement, SeaPenRecentImageDeleteEvent, SeaPenRouterElement, SeaPenSampleSelectedEvent, SeaPenSuggestionsElement} from 'chrome://personalization/js/personalization_app.js';
+import type {CrButtonElement} from 'chrome://resources/ash/common/cr_elements/cr_button/cr_button.js';
+import type {CrTextareaElement} from 'chrome://resources/ash/common/cr_elements/cr_textarea/cr_textarea.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {assert} from 'chrome://webui-test/chai.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
-import {TestPersonalizationStore} from 'test_personalization_store.js';
-import {TestSeaPenProvider} from 'test_sea_pen_interface_provider.js';
+import type {TestPersonalizationStore} from 'test_personalization_store.js';
+import type {TestSeaPenProvider} from 'test_sea_pen_interface_provider.js';
 
 import {baseSetup, getActiveElement, initElement, teardownElement} from './personalization_app_test_utils.js';
 
@@ -157,7 +158,7 @@ suite('SeaPenInputQueryElementTest', function() {
 
     seaPenSuggestions =
         seaPenInputQueryElement.shadowRoot!.querySelector<HTMLElement>(
-            SeaPenSuggestionsElement.is) as HTMLElement;
+            SeaPenSuggestionsElement.is);
     assertFalse(!!seaPenSuggestions, 'suggestions element should be hidden');
   });
 
@@ -425,6 +426,35 @@ suite('SeaPenInputQueryElementTest', function() {
 
     // These suggestions should not be the same as the first set of suggestions.
     assert.notSameOrderedMembers(originalSuggestions, getSuggestions());
+  });
+
+  test('searching using empty text input works like inspire me', async () => {
+    seaPenInputQueryElement = initElement(SeaPenInputQueryElement);
+    await waitAfterNextRender(seaPenInputQueryElement);
+    const textValue = '  ';
+    await setTextInputValue(textValue);
+    const inputElement =
+        seaPenInputQueryElement.shadowRoot?.querySelector<CrTextareaElement>(
+            '#queryInput');
+    assertEquals(
+        textValue, inputElement!.value, 'input should show empty spaces');
+
+    personalizationStore.expectAction(
+        SeaPenActionName.BEGIN_SEARCH_SEA_PEN_THUMBNAILS);
+    const searchButton =
+        seaPenInputQueryElement.shadowRoot!.querySelector<HTMLElement>(
+            '#searchButton');
+
+    searchButton!.click();
+    await waitAfterNextRender(seaPenInputQueryElement);
+
+    assertTrue(!!inputElement?.value.trim(), 'input should show text');
+    const action = await personalizationStore.waitForAction(
+                       SeaPenActionName.BEGIN_SEARCH_SEA_PEN_THUMBNAILS) as
+        BeginSearchSeaPenThumbnailsAction;
+    assertEquals(
+        inputElement?.value, action.query.textQuery,
+        'search query should match input value');
   });
 
   test('inspires me', async () => {

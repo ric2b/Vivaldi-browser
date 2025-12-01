@@ -153,6 +153,23 @@ constexpr int kPanelWorkAreaSpacing = 10;
 // available).
 constexpr int kPanelButtonSpacing = 10;
 
+// The ID for the nudge anchored to the Sunfish button in the launcher.
+inline constexpr char kSunfishLauncherNudgeId[] = "kSunfishLauncherNudge";
+
+// The nudge will not be shown if it already been shown 3 times, or if 24
+// hours have not yet passed since it was last shown.
+constexpr int kSunfishNudgeMaxShownCount = 3;
+inline constexpr base::TimeDelta kSunfishNudgeTimeBetweenShown =
+    base::Hours(24);
+
+// The minimum and maximum region glow blur amount.
+inline constexpr float kRegionGlowAnimationMinBlurDp = 16.0f;
+inline constexpr float kRegionGlowAnimationMaxBlurDp = 32.0f;
+
+// The minimum and maximum glow outset from the edge of the capture region.
+inline constexpr int kRegionGlowMinOutsetDp = 0;
+inline constexpr int kRegionGlowMaxOutsetDp = 6;
+
 }  // namespace ash::capture_mode
 
 #endif  // ASH_CAPTURE_MODE_CAPTURE_MODE_CONSTANTS_H_

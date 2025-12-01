@@ -122,10 +122,10 @@ can be type-mapped to a `.mojom` enum using an `EnumTrait<>`.
     #include "mojo/public/cpp/bindings/enum_traits.h"
 
     template <>
-    class EnumTraits<CakeFlavors, mojom::CakeFlavors> {
+    class EnumTraits<mojom::CakeFlavors, CakeFlavors> {
       public:
         static mojom::CakeFlavors ToMojom(CakeFlavors);
-        static bool FromMojom(mojom::CakeFlavors input, CakeFlavors output);
+        static bool FromMojom(mojom::CakeFlavors input, CakeFlavors *output);
     };
     ```
 
@@ -147,12 +147,12 @@ can be type-mapped to a `.mojom` enum using an `EnumTrait<>`.
           }
 
           // Failure to convert should never occur.
-          NOTREACHED_NORETURN();
+          NOTREACHED();
         }
 
     // static
     EnumTraits<mojom::CakeFlavors, CakeFlavors>::
-      FromMojom(mojo::CakeFlavors input, CakeFlavors output) {
+      FromMojom(mojo::CakeFlavors input, CakeFlavors *output) {
           switch (input) {
             case mojom::CakeFlavors::kVanilla:
               *output = CakeFlavors::kVanilla;

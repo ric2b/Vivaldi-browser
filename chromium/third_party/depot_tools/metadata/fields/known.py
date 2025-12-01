@@ -19,6 +19,7 @@ import metadata.fields.custom.date
 import metadata.fields.custom.license
 import metadata.fields.custom.license_file
 import metadata.fields.custom.local_modifications
+import metadata.fields.custom.mitigated
 import metadata.fields.custom.url
 import metadata.fields.custom.version
 import metadata.fields.custom.revision
@@ -46,6 +47,7 @@ VERSION = metadata.fields.custom.version.VersionField()
 REVISION = metadata.fields.custom.revision.RevisionField()
 LOCAL_MODIFICATIONS = metadata.fields.custom.local_modifications.LocalModificationsField(
 )
+MITIGATED = metadata.fields.custom.mitigated.MitigatedField()
 
 ALL_FIELDS = (
     NAME,
@@ -61,6 +63,7 @@ ALL_FIELDS = (
     SHIPPED_IN_CHROMIUM,
     LICENSE_ANDROID_COMPATIBLE,
     CPE_PREFIX,
+    MITIGATED,
     DESCRIPTION,
     LOCAL_MODIFICATIONS,
 )

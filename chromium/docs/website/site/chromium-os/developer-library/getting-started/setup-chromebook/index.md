@@ -18,10 +18,10 @@ ChromiumOS on Linux.
 ### Download the test image
 
 The
-[cros flash](https://www.chromium.org/chromium-os/developer-library/reference/tools/cros-flash)
+[cros flash](/chromium-os/developer-library/reference/tools/cros-flash)
 tool supports downloading ChromiumOS images built regularly and stored in Google
 Storage. The
-[xbuddy](https://www.chromium.org/chromium-os/developer-library/reference/tools/xbuddy/)
+[xbuddy](/chromium-os/developer-library/reference/tools/xbuddy/)
 URL format allows specifying images by board, version, and image type. The
 default xbuddy format downloads the latest test image for the specified board.
 You can determine your board by navigating to chrome://version on your
@@ -60,7 +60,7 @@ $ cros flash usb:// ./chromiumos_test_image.bin
 Note: If cros flash can’t automagically find your USB drive, you may need to use
 a different USB drive. If you must use that given USB drive, troubleshoot using
 the
-[`cros flash` documentation](https://www.chromium.org/chromium-os/developer-library/reference/tools/cros-flash/#known-problems-and-fixes).
+[`cros flash` documentation](/chromium-os/developer-library/reference/tools/cros-flash/#known-problems-and-fixes).
 
 Note: If you need to flash a different test image to the same USB drive later,
 simply run cros flash ... as before; no extra steps are necessary.
@@ -91,7 +91,7 @@ for more information and how to request an exception to get past this.
 
 In order to flash your chromebook from the USB drive, the Chromebook needs to be
 in
-[developer mode](https://www.chromium.org/chromium-os/developer-library/guides/device/developer-mode/).
+[developer mode](/chromium-os/developer-library/guides/device/developer-mode/).
 
 ![Developer Mode](developer-mode.png)
 
@@ -498,7 +498,7 @@ but this type of setup is against Google policy. Wireguard should not be used.
 ### Optional: Make the drive writable
 
 Note: This step is automatically performed for you when you
-[deploy Chrome to your test Chromebook](developing.md#deploying-chrome).
+[deploy Chrome to your test Chromebook](/chromium-os/developer-library/getting-started/deploy-chromium).
 However, you may need to explicitly use this step if, for example, you're
 debugging a crash on Chrome binary directly from Goldeneye
 ([link](https://docs.google.com/document/d/1QRrh3ipnW9PWI9bJzqK_y_A_pOfA7otAoKM5rV1mYFo/edit#heading=h.c0uts5ftkk58)),
@@ -516,7 +516,10 @@ $ reboot ; exit
 ```
 
 This removes rootfs verification and makes the drive writeable.
-master
+
+
+### Optional: Enable runtime argument passing
+
 **You only need to follow this section if you wish to enable verbose logging or
 pass a runtime flag to Chrome. The drive must be writeable to follow this
 section.**
@@ -531,8 +534,7 @@ $ restart ui
 
 The most common reason you’ll want to edit `/etc/chrome_dev.conf` is to pass the
 flags that enable logs. See the
-[Logging]([logging.md](https://www.chromium.org/chromium-os/developer-library/guides/logging/logging/))
-documentation.
+[Logging documentation](/chromium-os/developer-library/guides/logging/logging/).
 
 ### Optional: Ensure your firmware is up-to-date
 
@@ -549,7 +551,7 @@ $ chromeos-firmwareupdate --mode=autoupdate
 $ reboot
 ```
 
-#### Optional: Configure a SSH config file
+### Optional: Configure a SSH config file
 
 To make logging into your Chromebook over `ssh` easier, you can specify the
 connection details in `~/.ssh/config` (create the directory and file if it
@@ -564,7 +566,7 @@ Host eve
 
 Then you can use `$ ssh eve` instead of `$ ssh -p 2233 root@192.168.0.1`.
 
-#### Optional: Setup SSH key authentication
+### Optional: Setup SSH key authentication
 
 All ChromeOS test images have the same SSH public key set up for authentication,
 so if you download the

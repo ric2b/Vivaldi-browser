@@ -4,8 +4,9 @@
 
 #include "components/autofill/core/browser/form_structure_rationalizer.h"
 
+#include <algorithm>
+
 #include "base/containers/contains.h"
-#include "base/ranges/algorithm.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_parsing/autofill_parsing_utils.h"
 #include "components/autofill/core/browser/form_parsing/credit_card_field_parser.h"
@@ -482,9 +483,7 @@ void FormStructureRationalizer::RationalizeCreditCardFieldPredictions(
       case CREDIT_CARD_VERIFICATION_CODE: {
         bool is_standalone_cvc_field = !cc_name_found && !cc_num_found &&
                                        !cc_date_found && !email_address_found;
-        if (base::FeatureList::IsEnabled(
-                features::kAutofillParseVcnCardOnFileStandaloneCvcFields) &&
-            is_standalone_cvc_field) {
+        if (is_standalone_cvc_field) {
           // If there aren't any other credit card fields and no email address
           // field, than we presume this is a credit card saved on file of a
           // merchant webpage.
@@ -601,14 +600,14 @@ void FormStructureRationalizer::RationalizeCreditCardNumberOffsets(
         std::ranges::all_of(group.first(group.size() - 1), [](const auto& f) {
           return f->ComputedType().GetStorableType() == CREDIT_CARD_NUMBER;
         }));
-    size_t last = group.size() - 1;
-    return group[0]->max_length() <= kMaxGroupElementLength &&
-           group[last]->ComputedType().GetStorableType() ==
+    return group.front()->max_length() <= kMaxGroupElementLength &&
+           group.back()->ComputedType().GetStorableType() ==
                CREDIT_CARD_NUMBER &&
-           group[last]->renderer_form_id() == group[0]->renderer_form_id() &&
-           group[last]->IsFocusable() == group[0]->IsFocusable() &&
-           (last == 0 ||
-            group[last - 1]->max_length() == group[0]->max_length());
+           group.front()->renderer_form_id() ==
+               group.back()->renderer_form_id() &&
+           group.front()->IsFocusable() == group.back()->IsFocusable() &&
+           (group.size() == 1 || group.front()->max_length() ==
+                                     group[group.size() - 2]->max_length());
   };
 
   // `has_reasonable_length({f, f + N + 1})` is true iff
@@ -621,18 +620,16 @@ void FormStructureRationalizer::RationalizeCreditCardNumberOffsets(
     DCHECK(!group.empty());
     DCHECK(std::ranges::all_of(
         group.first(group.size() - 1), [group](const auto& f) {
-          return f->max_length() == group[0]->max_length();
+          return f->max_length() == group.front()->max_length();
         }));
-    size_t size = group.size();
-    size_t last = group.size() - 1;
-    bool last_is_overflow = group[last]->max_length() > kMaxGroupElementLength;
-    size_t length =
-        group[0]->max_length() * (size - 1) + group[last]->max_length();
+    bool last_is_overflow = group.back()->max_length() > kMaxGroupElementLength;
+    size_t length = group.front()->max_length() * (group.size() - 1) +
+                    group.back()->max_length();
     size_t length_without_overflow =
-        length - last_is_overflow * group[last]->max_length();
+        length - last_is_overflow * group.back()->max_length();
     return length >= kMinValidCardNumberSize &&
            length_without_overflow <= kMaxValidCardNumberSize &&
-           size >= 2 + last_is_overflow;
+           group.size() >= 2 + last_is_overflow;
   };
 
   // Returns the end (exclusive) of the credit card number field group starting
@@ -731,11 +728,6 @@ void FormStructureRationalizer::RationalizeBetweenStreetFields(
 
 void FormStructureRationalizer::RationalizePhoneNumberTrunkTypes(
     LogManager* log_manager) {
-  if (!base::FeatureList::IsEnabled(
-          features::kAutofillEnableSupportForPhoneNumberTrunkTypes)) {
-    return;
-  }
-
   // Changes the `field`'s type to `new_type` if it isn't `new_type` already.
   // If the type is changed, logs to `log_manager`.
   auto change_type_and_log =

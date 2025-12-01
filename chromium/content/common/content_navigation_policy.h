@@ -11,22 +11,6 @@
 #include <array>
 #include <string>
 
-namespace features {
-
-// The BackForwardCache_NoMemoryLimit_Trial feature flag's sole purpose is to
-// make it possible to get a group for "all devices except when BackForwardCache
-// feature is specifically disabled due to non-memory-control reasons". This is
-// done by querying the flag if and only if the device satisifes one of the
-// following:
-// 1) The device does not have enough memory for BackForwardCache, or
-// 2) The device has enough memory and the BackForwardCache feature is enabled.
-// With that, we will include the devices that don't have enough memory while
-// avoiding activating the BackForwardCache experiment, and won’t include
-// devices that do have enough memory but have the BackForwardCache flag
-// disabled.
-CONTENT_EXPORT BASE_DECLARE_FEATURE(kBackForwardCache_NoMemoryLimit_Trial);
-}  // namespace features
-
 namespace content {
 
 // Returns whether the BackForwardCache is enabled or not according to the
@@ -108,6 +92,11 @@ CONTENT_EXPORT bool ShouldQueueNavigationsWhenPendingCommitRFHExists();
 // Returns true if data: URL subframes should be put in a separate SiteInstance
 // in the SiteInstanceGroup of the initiator.
 CONTENT_EXPORT bool ShouldCreateSiteInstanceForDataUrls();
+
+// Returns true if non-isolated sites should be put in a default
+// SiteInstanceGroup in separate SiteInstances, rather than sharing a default
+// SiteInstance.
+CONTENT_EXPORT bool ShouldUseDefaultSiteInstanceGroup();
 }  // namespace content
 
 #endif  // CONTENT_COMMON_CONTENT_NAVIGATION_POLICY_H_

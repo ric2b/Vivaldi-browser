@@ -62,7 +62,7 @@ TSAN_OPTIONS (the amount of memory reserved for the stacks is proportional to
 **Note:** --no-sandbox is essential if you're running Chrome or tests that
 invoke Chrome (browser_tests, content_browsertests etc.).
 
-**Note 2:** due to <http://crbug.com/341805> you may need to run Chrome with
+**Note 2:** due to <https://crbug.com/341805> you may need to run Chrome with
 --disable-gpu or use xvfb-run.
 
 **Note 3:** running the test multiple times in a row (--gtest_repeat=5) may

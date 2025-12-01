@@ -30,9 +30,8 @@ using serde_json_lenient::ContextPointer;
 
 const char kSecurityJsonParsingTime[] = "Security.JSONParser.ParsingTime";
 
-ContextPointer& ListAppendList(ContextPointer& ctx, size_t reserve) {
+ContextPointer& ListAppendList(ContextPointer& ctx) {
   auto& value = reinterpret_cast<base::Value&>(ctx);
-  value.GetList().reserve(reserve);
   value.GetList().Append(base::Value::List());
   return reinterpret_cast<ContextPointer&>(value.GetList().back());
 }
@@ -54,22 +53,18 @@ void ListAppendValue(ContextPointer& ctx, T v) {
   value.GetList().Append(As{v});
 }
 
-ContextPointer& DictSetList(ContextPointer& ctx,
-                            rust::Str key,
-                            size_t reserve) {
+ContextPointer& DictSetList(ContextPointer& ctx, rust::Str key) {
   auto& dict = reinterpret_cast<base::Value&>(ctx).GetDict();
-  base::Value::List list;
-  list.reserve(reserve);
-  dict.Set(base::RustStrToStringView(key), std::move(list));
-  return reinterpret_cast<ContextPointer&>(
-      *dict.Find(base::RustStrToStringView(key)));
+  base::Value* value =
+      dict.Set(base::RustStrToStringView(key), base::Value::List());
+  return reinterpret_cast<ContextPointer&>(*value);
 }
 
 ContextPointer& DictSetDict(ContextPointer& ctx, rust::Str key) {
   auto& dict = reinterpret_cast<base::Value&>(ctx).GetDict();
-  dict.Set(base::RustStrToStringView(key), base::Value(base::Value::Dict()));
-  return reinterpret_cast<ContextPointer&>(
-      *dict.Find(base::RustStrToStringView(key)));
+  base::Value* value =
+      dict.Set(base::RustStrToStringView(key), base::Value::Dict());
+  return reinterpret_cast<ContextPointer&>(*value);
 }
 
 void DictSetNone(ContextPointer& ctx, rust::Str key) {

@@ -10,7 +10,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/test/views/chrome_views_test_base.h"
@@ -28,7 +27,7 @@
 #include "ui/views/controls/image_view.h"
 #include "ui/views/widget/widget_utils.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if defined(USE_AURA)
 #include "ui/aura/window.h"
 #endif
 
@@ -79,10 +78,12 @@ class TestIconLabelBubbleView : public IconLabelBubbleView {
   State state() const {
     const double kOpenFraction = double{kOpenTimeMS} / kAnimationDurationMS;
     double state = static_cast<double>(value_) / kNumberOfSteps;
-    if (state < kOpenFraction)
+    if (state < kOpenFraction) {
       return GROWING;
-    if (state > (1.0 - kOpenFraction))
+    }
+    if (state > (1.0 - kOpenFraction)) {
       return SHRINKING;
+    }
     return STEADY;
   }
 
@@ -220,8 +221,9 @@ class IconLabelBubbleViewTest : public IconLabelBubbleViewTestBase {
         break;
       }
       case TestIconLabelBubbleView::State::STEADY: {
-        if (steady_reached_)
+        if (steady_reached_) {
           EXPECT_EQ(previous_width_, width());
+        }
         EXPECT_EQ(initial_image_x_, GetImageContainerBounds().x());
         EXPECT_LT(GetImageContainerBounds().right(), width());
         EXPECT_TRUE(IsLabelVisible());
@@ -231,10 +233,12 @@ class IconLabelBubbleViewTest : public IconLabelBubbleViewTestBase {
         break;
       }
       case TestIconLabelBubbleView::State::SHRINKING: {
-        if (shrinking_reached_)
+        if (shrinking_reached_) {
           EXPECT_LE(width(), previous_width_);
-        if (minimum_size_reached_)
+        }
+        if (minimum_size_reached_) {
           EXPECT_EQ(previous_width_, width());
+        }
 
         EXPECT_GE(GetImageContainerBounds().x(), 0);
         if (width() <= initial_image_x_ + kImageSize) {
@@ -249,8 +253,9 @@ class IconLabelBubbleViewTest : public IconLabelBubbleViewTestBase {
           EXPECT_LT(GetLabelBounds().right(), width());
         }
         shrinking_reached_ = true;
-        if (width() == kImageSize)
+        if (width() == kImageSize) {
           minimum_size_reached_ = true;
+        }
         break;
       }
     }

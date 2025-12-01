@@ -88,7 +88,7 @@ Open
 ## Interpretation of the plot. A case study.
 
 Let's profile
-[Octane's](http://www.google.com/url?sa=D&q=http%3A%2F%2Foctane-benchmark.googlecode.com)
+[Octane's](https://www.google.com/url?sa=D&q=http%3A%2F%2Foctane-benchmark.googlecode.com)
 pdfjs benchmark. Due to the nature of the benchmark, having many accesses to
 typed arrays, we expect a considerable amount of time being spent in external
 callbacks (which implement typed arrays).

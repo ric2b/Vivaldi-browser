@@ -33,8 +33,8 @@ The plan is fairly straight forward:
 Individual projects, of course, may put in place extensive tests in their own
 repository that further help to ensure that a new revision of GRIT does not
 break them. For example, when the revision of GRIT used is changed in the
-[Chromium project](http://www.chromium.org/), the change would normally pass
+[Chromium project](/), the change would normally pass
 through that project's [try
-servers](http://www.chromium.org/developers/testing/try-server-usage) or [commit
+servers](/developers/testing/try-server-usage) or [commit
 queue](/developers/testing/commit-queue) which would help catch any new behavior
 of GRIT breaking the project's test suite.

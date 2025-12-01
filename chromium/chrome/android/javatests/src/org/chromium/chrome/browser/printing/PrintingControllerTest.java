@@ -4,6 +4,9 @@
 
 package org.chromium.chrome.browser.printing;
 
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
 import android.os.CancellationSignal;
 import android.os.ParcelFileDescriptor;
 import android.print.PageRange;
@@ -27,9 +30,13 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.TestFileUtil;
 import org.chromium.base.test.util.UrlUtils;
+import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tabmodel.TabClosureParams;
+import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
+import org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.printing.PrintDocumentAdapterWrapper.LayoutResultCallbackWrapper;
@@ -227,8 +234,14 @@ public class PrintingControllerTest {
                 () -> {
                     printingController.setPendingPrint(
                             new TabPrinter(currentTab), mockPrintManagerDelegate, -1, -1);
-                    TabModelUtils.closeCurrentTab(
-                            mActivityTestRule.getActivity().getCurrentTabModel());
+                    TabModel currentModel = mActivityTestRule.getActivity().getCurrentTabModel();
+                    Tab tab = TabModelUtils.getCurrentTab(currentModel);
+                    Assert.assertNotNull(tab);
+                    currentModel
+                            .getTabRemover()
+                            .closeTabs(
+                                    TabClosureParams.closeTab(tab).allowUndo(false).build(),
+                                    /* allowDialog= */ false);
                     Assert.assertFalse(
                             "currentTab should be closed already.", currentTab.isInitialized());
                     printingController.startPendingPrint();
@@ -273,8 +286,15 @@ public class PrintingControllerTest {
             ThreadUtils.runOnUiThreadBlocking(
                     () -> {
                         // Close tab.
-                        TabModelUtils.closeCurrentTab(
-                                mActivityTestRule.getActivity().getCurrentTabModel());
+                        TabModel currentModel =
+                                mActivityTestRule.getActivity().getCurrentTabModel();
+                        Tab tab = TabModelUtils.getCurrentTab(currentModel);
+                        Assert.assertNotNull(tab);
+                        currentModel
+                                .getTabRemover()
+                                .closeTabs(
+                                        TabClosureParams.closeTab(tab).allowUndo(false).build(),
+                                        /* allowDialog= */ false);
                         Assert.assertFalse(
                                 "currentTab should be closed already.", currentTab.isInitialized());
 
@@ -375,6 +395,29 @@ public class PrintingControllerTest {
         // Calling pdfWritingDone() with |pageCount| = 0 before onWrite() was called. It shouldn't
         // crash.
         ThreadUtils.runOnUiThreadBlocking(() -> controller.pdfWritingDone(0));
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Printing"})
+    public void testTabPrinterCanPrintHiddenTab() {
+        mActivityTestRule.startMainActivityWithURL(URL);
+        ChromeTabbedActivity cta = mActivityTestRule.getActivity();
+
+        // ensure two tabs are open.
+        TabUiTestHelper.createTabs(cta, false, 2);
+
+        Tab hiddenTab = cta.getCurrentTabModel().getTabAt(0);
+        Tab currentTab = cta.getCurrentTabModel().getTabAt(1);
+
+        // hidden (background) tab should not be allowed to print.
+        assertTrue("hiddenTab should be hidden.", hiddenTab.isHidden());
+        assertFalse(
+                "hiddenTab should not be allowed to print.", new TabPrinter(hiddenTab).canPrint());
+
+        // current tab should be allowed to print.
+        assertFalse("currentTab should not be hidden.", currentTab.isHidden());
+        assertTrue("currentTab should be allowed to print.", new TabPrinter(currentTab).canPrint());
     }
 
     private PrintingControllerImpl createControllerOnUiThread() {

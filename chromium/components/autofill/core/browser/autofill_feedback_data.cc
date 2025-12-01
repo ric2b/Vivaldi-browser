@@ -5,7 +5,7 @@
 #include "components/autofill/core/browser/autofill_feedback_data.h"
 
 #include "components/autofill/core/browser/autofill_field.h"
-#include "components/autofill/core/browser/browser_autofill_manager.h"
+#include "components/autofill/core/browser/foundations/browser_autofill_manager.h"
 #include "components/autofill/core/browser/metrics/log_event.h"
 #include "components/autofill/core/common/autofill_clock.h"
 
@@ -24,12 +24,14 @@ std::string FillDataTypeToStr(FillDataType type) {
       return "AutofillProfile";
     case FillDataType::kCreditCard:
       return "CreditCard";
-    case FillDataType::kSingleFieldFormFillerAutocomplete:
-      return "SingleFieldFormFillerAutocomplete";
-    case FillDataType::kSingleFieldFormFillerIban:
-      return "SingleFieldFormFillerIban";
-    case FillDataType::kSingleFieldFormFillerPromoCode:
-      return "SingleFieldFormFillerPromoCode";
+    case FillDataType::kSingleFieldFillerAutocomplete:
+      return "SingleFieldFillerAutocomplete";
+    case FillDataType::kSingleFieldFillerIban:
+      return "SingleFieldFillerIban";
+    case FillDataType::kSingleFieldFillerPromoCode:
+      return "SingleFieldFillerPromoCode";
+    case FillDataType::kAutofillAi:
+      return "AutofillAi";
   }
 }
 

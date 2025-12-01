@@ -280,7 +280,7 @@ class MatrixBase : public DenseBase<Derived> {
    * \sa isApprox(), operator!= */
   template <typename OtherDerived>
   EIGEN_DEVICE_FUNC inline bool operator==(const MatrixBase<OtherDerived>& other) const {
-    return cwiseEqual(other).all();
+    return (this->rows() == other.rows()) && (this->cols() == other.cols()) && cwiseEqual(other).all();
   }
 
   /** \returns true if at least one pair of coefficients of \c *this and \a other are not exactly equal to each other.
@@ -289,7 +289,7 @@ class MatrixBase : public DenseBase<Derived> {
    * \sa isApprox(), operator== */
   template <typename OtherDerived>
   EIGEN_DEVICE_FUNC inline bool operator!=(const MatrixBase<OtherDerived>& other) const {
-    return cwiseNotEqual(other).any();
+    return !(*this == other);
   }
 
   NoAlias<Derived, Eigen::MatrixBase> EIGEN_DEVICE_FUNC noalias();

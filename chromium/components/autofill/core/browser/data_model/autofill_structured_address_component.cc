@@ -12,7 +12,6 @@
 #include "base/containers/to_vector.h"
 #include "base/feature_list.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -97,12 +96,6 @@ AddressComponent::~AddressComponent() = default;
 
 FieldType AddressComponent::GetStorageType() const {
   return storage_type_;
-}
-
-FieldType AddressComponent::GetFallbackType(FieldType field_type) const {
-  CHECK(IsSupportedType(field_type));
-  // TODO(crbug.com/40275657): Add logic for i18n fallback types.
-  return field_type;
 }
 
 std::string AddressComponent::GetStorageTypeName() const {
@@ -212,6 +205,12 @@ const std::u16string& AddressComponent::GetValue() const {
   if (value_.has_value())
     return value_.value();
   return base::EmptyString16();
+}
+
+std::u16string AddressComponent::GetValueForComparison(
+    const std::u16string& value,
+    const AddressComponent& other) const {
+  return NormalizeValue(value);
 }
 
 std::optional<std::u16string> AddressComponent::GetCanonicalizedValue() const {
@@ -454,12 +453,6 @@ VerificationStatus AddressComponent::GetVerificationStatusForType(
   const AddressComponent* node_for_type = GetNodeForType(field_type);
   return node_for_type ? node_for_type->GetVerificationStatus()
                        : VerificationStatus::kNoStatus;
-}
-
-FieldType AddressComponent::GetFallbackTypeForType(FieldType field_type) const {
-  const AddressComponent* node_for_type = GetNodeForType(field_type);
-  return node_for_type ? node_for_type->GetFallbackType(field_type)
-                       : field_type;
 }
 
 bool AddressComponent::UnsetValueForTypeIfSupported(FieldType field_type) {
@@ -880,9 +873,13 @@ int AddressComponent::
             ->MaximumNumberOfAssignedAddressComponentsOnNodeToLeafPaths());
   }
 
-  // Only count non-empty nodes.
-  if (!GetValue().empty())
+  // Only count non-empty nodes, unless they were user verified.
+  if (!GetValue().empty() ||
+      (base::FeatureList::IsEnabled(
+           features::kAutofillSupportPhoneticNameForJP) &&
+       GetVerificationStatus() == VerificationStatus::kUserVerified)) {
     ++result;
+  }
 
   return result;
 }
@@ -955,7 +952,6 @@ bool AddressComponent::IsMergeableWithComponent(
       GetValueForComparison(newer_component);
   const std::u16string newer_comparison_value =
       newer_component.GetValueForComparison(*this);
-
   // If both components are the same, there is nothing to do.
   if (SameAs(newer_component))
     return true;
@@ -1546,12 +1542,6 @@ std::u16string AddressComponent::GetNormalizedValue() const {
 std::u16string AddressComponent::GetValueForComparison(
     const AddressComponent& other) const {
   return GetValueForComparison(GetValue(), other);
-}
-
-std::u16string AddressComponent::GetValueForComparison(
-    const std::u16string& value,
-    const AddressComponent& other) const {
-  return NormalizeValue(value);
 }
 
 }  // namespace autofill

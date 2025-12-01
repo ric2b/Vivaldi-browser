@@ -181,13 +181,13 @@ class ThreadSafeStack {
   ThreadSafeStack() = default;
 
   void Push(T t) {
-    v8::base::LockGuard<v8::base::Mutex> lock(&mutex_);
+    v8::base::SpinningMutexGuard lock(&mutex_);
     vector_.push_back(std::move(t));
     is_empty_.store(false, std::memory_order_relaxed);
   }
 
   std::optional<T> Pop() {
-    v8::base::LockGuard<v8::base::Mutex> lock(&mutex_);
+    v8::base::SpinningMutexGuard lock(&mutex_);
     if (vector_.empty()) {
       is_empty_.store(true, std::memory_order_relaxed);
       return std::nullopt;
@@ -200,7 +200,7 @@ class ThreadSafeStack {
 
   template <typename It>
   void Insert(It begin, It end) {
-    v8::base::LockGuard<v8::base::Mutex> lock(&mutex_);
+    v8::base::SpinningMutexGuard lock(&mutex_);
     vector_.insert(vector_.end(), begin, end);
     is_empty_.store(false, std::memory_order_relaxed);
   }
@@ -208,7 +208,7 @@ class ThreadSafeStack {
   bool IsEmpty() const { return is_empty_.load(std::memory_order_relaxed); }
 
  private:
-  mutable v8::base::Mutex mutex_;
+  mutable v8::base::SpinningMutex mutex_;
   std::vector<T> vector_;
   std::atomic<bool> is_empty_{true};
 };
@@ -538,7 +538,7 @@ class SweepFinalizer final {
           largest_consecutive_block_ = std::max(
               LargePage::From(page)->PayloadSize(), largest_consecutive_block_);
         }
-        BasePage::Destroy(page, free_memory_handling_);
+        BasePage::Destroy(page);
         return;
       }
 
@@ -572,7 +572,7 @@ class SweepFinalizer final {
     // Merge freelist with finalizers.
     if (!page_state->unfinalized_free_list.empty()) {
       std::unique_ptr<FreeHandlerBase> handler =
-          (free_memory_handling_ == FreeMemoryHandling::kDiscardWherePossible)
+          free_memory_handling_ == FreeMemoryHandling::kDiscardWherePossible
               ? std::unique_ptr<FreeHandlerBase>(new DiscardingFreeHandler(
                     *platform_->GetPageAllocator(), space_freelist, *page))
               : std::unique_ptr<FreeHandlerBase>(new RegularFreeHandler(
@@ -707,7 +707,7 @@ class MutatorThreadSweeper final : private HeapVisitor<MutatorThreadSweeper> {
       page.ResetDiscardedMemory();
     }
     const auto result =
-        (free_memory_handling_ == FreeMemoryHandling::kDiscardWherePossible)
+        free_memory_handling_ == FreeMemoryHandling::kDiscardWherePossible
             ? SweepNormalPage<
                   InlinedFinalizationBuilder<DiscardingFreeHandler>>(
                   &page, *platform_->GetPageAllocator(), sticky_bits_)
@@ -715,7 +715,7 @@ class MutatorThreadSweeper final : private HeapVisitor<MutatorThreadSweeper> {
                   &page, *platform_->GetPageAllocator(), sticky_bits_);
     if (result.is_empty &&
         empty_page_handling_ == EmptyPageHandling::kDestroy) {
-      NormalPage::Destroy(&page, free_memory_handling_);
+      NormalPage::Destroy(&page);
       (*unused_destroyed_normal_pages_)++;
     } else {
       if (space_) {
@@ -1322,8 +1322,9 @@ class Sweeper::SweeperImpl final {
     notify_done_pending_ = false;
     stats_collector_->NotifySweepingCompleted(config_.sweeping_type);
     if (config_.free_memory_handling ==
-        FreeMemoryHandling::kDiscardWherePossible)
-      heap_.heap()->page_backend()->DiscardPooledPages();
+        FreeMemoryHandling::kDiscardWherePossible) {
+      heap_.heap()->page_backend()->ReleasePooledPages();
+    }
   }
 
   void WaitForConcurrentSweepingForTesting() {

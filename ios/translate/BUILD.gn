@@ -2,6 +2,10 @@
 
 source_set("ios_translate") {
   sources = [
+    "vivaldi_ios_th_service_bridge.h",
+    "vivaldi_ios_th_service_bridge.mm",
+    "vivaldi_ios_th_service_factory.h",
+    "vivaldi_ios_th_service_factory.mm",
     "vivaldi_ios_translate_client.h",
     "vivaldi_ios_translate_client.mm",
     "vivaldi_ios_translate_server_request.h",
@@ -12,5 +16,8 @@ source_set("ios_translate") {
   deps = [
     "//base",
     "//components/infobars/core",
+    "//ios/chrome/browser/shared/model/profile",
+    "//ios/chrome/browser/shared/model/profile:profile_keyed_service_factory",
+    "//vivaldi/translate_history",
   ]
 }

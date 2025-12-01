@@ -1,4 +1,4 @@
-    <style include="cr-shared-style cr-hidden-style settings-shared iron-flex">
+    <style include="cr-shared-style cr-hidden-style settings-shared">
       .content-settings-header,
       .radio-group {
         padding: 0 var(--cr-section-padding);
@@ -41,7 +41,7 @@
             label="$i18n{clearBrowsingData}"
             sub-label="$i18n{clearBrowsingDataDescription}"
             on-click="onClearBrowsingDataClick_"></cr-link-row>
-        <template is="dom-if" if="[[isPrivacyGuideAvailable]]">
+        <!-- template is="dom-if" if="[[isPrivacyGuideAvailable]]">
           <cr-link-row id="privacyGuideLinkRow" class="hr"
               start-icon="privacy20:signpost"
               label="$i18n{privacyGuideLabel}"
@@ -49,28 +49,17 @@
               on-click="onPrivacyGuideClick_"
               role-description="$i18n{subpageArrowRoleDescription}">
           </cr-link-row>
-        </template>
-        <template is="dom-if" if="[[is3pcdRedesignEnabled_]]">
-          <cr-link-row id="trackingProtectionLinkRow"
-              start-icon="settings:visibility-off"
-              class="hr" label="$i18n{trackingProtectionLinkRowLabel}"
-              sub-label="$i18n{trackingProtectionLinkRowSubLabel}"
-              on-click="onTrackingProtectionClick_"
-              role-description="$i18n{subpageArrowRoleDescription}">
-          </cr-link-row>
-        </template>
-        <template is="dom-if" if="[[!is3pcdRedesignEnabled_]]">
-          <cr-link-row id="thirdPartyCookiesLinkRow"
-              start-icon="privacy:cookie"
-              class="hr" label="$i18n{thirdPartyCookiesLinkRowLabel}"
-              sub-label="[[computeThirdPartyCookiesSublabel_(
-                  prefs.profile.cookie_controls_mode.*,
-                  prefs.tracking_protection.block_all_3pc_toggle_enabled.*
-                  )]]"
-              on-click="onCookiesClick_"
-              role-description="$i18n{subpageArrowRoleDescription}">
-          </cr-link-row>
-        </template>
+        </!--template -->
+        <cr-link-row id="thirdPartyCookiesLinkRow"
+            start-icon="privacy:cookie"
+            class="hr" label="$i18n{thirdPartyCookiesLinkRowLabel}"
+            sub-label="[[computeThirdPartyCookiesSublabel_(
+                prefs.profile.cookie_controls_mode.*,
+                prefs.tracking_protection.block_all_3pc_toggle_enabled.*
+                )]]"
+            on-click="onCookiesClick_"
+            role-description="$i18n{subpageArrowRoleDescription}">
+        </cr-link-row>
         <!-- template is="dom-if" if=
             "[[shouldShowAdPrivacy_(
                 isPrivacySandboxRestricted_,
@@ -178,7 +167,7 @@
         </settings-subpage>
       </template>
 
-      <template is="dom-if" if="[[enableSafetyHub_]]">
+      <template is="dom-if" if="[[shouldShowSafetyHub_]]">
         <template is="dom-if" route-path="/safetyCheck">
           <!-- TODO(crbug.com/40267370): Make the page searchable.-->
           <settings-subpage id="safetyHub" page-title="$i18n{safetyHub}"
@@ -401,35 +390,18 @@
           </category-setting-exceptions>
         </settings-subpage>
       </template>
-      <template is="dom-if" if="[[is3pcdRedesignEnabled_]]">
-        <template is="dom-if" route-path="/trackingProtection">
-          <settings-subpage id="trackingProtection"
-              page-title="$i18n{trackingProtectionPageTitle}"
-              learn-more-url="$i18n{trackingProtectionHelpCenterURL}"
-              search-label="$i18n{siteSettingsAllSitesSearch}"
-              search-term="{{searchFilter_}}"
-              associated-control="[[$$('#trackingProtectionLinkRow')]]">
-            <settings-cookies-page prefs="{{prefs}}"
-                focus-config="[[focusConfig_]]"
-                search-term="[[searchFilter_]]">
-            </settings-cookies-page>
-          </settings-subpage>
-        </template>
-      </template>
-      <template is="dom-if" if="[[!is3pcdRedesignEnabled_]]">
-        <template is="dom-if" route-path="/cookies">
-          <settings-subpage id="cookies"
-              page-title="$i18n{thirdPartyCookiesPageTitle}"
-              learn-more-url="$i18n{cookiesSettingsHelpCenterURL}"
-              search-label="$i18n{siteSettingsAllSitesSearch}"
-              search-term="{{searchFilter_}}"
-              associated-control="[[$$('#thirdPartyCookiesLinkRow')]]">
-            <settings-cookies-page prefs="{{prefs}}"
-                focus-config="[[focusConfig_]]"
-                search-term="[[searchFilter_]]">
-            </settings-cookies-page>
-          </settings-subpage>
-        </template>
+      <template is="dom-if" route-path="/cookies">
+        <settings-subpage id="cookies"
+            page-title="$i18n{thirdPartyCookiesPageTitle}"
+            learn-more-url="$i18n{cookiesSettingsHelpCenterURL}"
+            search-label="$i18n{siteSettingsAllSitesSearch}"
+            search-term="{{searchFilter_}}"
+            associated-control="[[$$('#thirdPartyCookiesLinkRow')]]">
+          <settings-cookies-page prefs="{{prefs}}"
+              focus-config="[[focusConfig_]]"
+              search-term="[[searchFilter_]]">
+          </settings-cookies-page>
+        </settings-subpage>
       </template>
       <template is="dom-if" route-path="/content/images" no-search>
         <settings-subpage page-title="$i18n{siteSettingsCategoryImages}"
@@ -680,12 +652,10 @@
           </category-setting-exceptions>
         </settings-subpage>
       </template>
-      <template is="dom-if" if="[[privateStateTokensEnabled_]]">
-        <template is="dom-if" route-path="/content/autoVerify" no-search>
-          <settings-subpage page-title="$i18n{siteSettingsAntiAbuse}">
-            <settings-anti-abuse-page></settings-anti-abuse-page>
-          </settings-subpage>
-        </template>
+      <template is="dom-if" route-path="/content/autoVerify" no-search>
+        <settings-subpage page-title="$i18n{siteSettingsAntiAbuse}">
+          <settings-anti-abuse-page></settings-anti-abuse-page>
+        </settings-subpage>
       </template>
       <template is="dom-if" route-path="/content/microphone" no-search>
         <settings-subpage page-title="$i18n{siteSettingsCategoryMicrophone}"
@@ -743,7 +713,7 @@
             search-term="{{searchFilter_}}">
           <div id="notificationRadioGroup" class="radio-group">
             <template is="dom-if" if="[[showNotificationPermissionsReview_]]">
-              <template is="dom-if" if="[[enableSafetyHub_]]">
+              <template is="dom-if" if="[[shouldShowSafetyHub_]]">
                 <h2>$i18n{safetyHub}</h2>
                 <settings-safety-hub-module id="safetyHubEntryPoint"
                     header="[[notificationPermissionsReviewHeader_]]"
@@ -754,10 +724,6 @@
                     $i18n{safetyHubEntryPointButtonLabel}
                   </cr-button>
                 </settings-safety-hub-module>
-              </template>
-              <template is="dom-if" if="[[!enableSafetyHub_]]">
-                <review-notification-permissions>
-                </review-notification-permissions>
               </template>
             </template>
             <h2>$i18n{siteSettingsDefaultBehavior}</h2>
@@ -1391,16 +1357,19 @@
           </settings-subpage>
        </template>
       </template>
-      <template is="dom-if" if="[[enableSmartCardReadersContentSetting_]]">
-        <template is="dom-if" route-path="/content/smartCardReaders" no-search>
-          <settings-subpage page-title="$i18n{siteSettingsSmartCardReaders}"
-              search-label="$i18n{siteSettingsAllSitesSearch}"
-              search-term="{{searchFilter_}}">
-            <settings-smart-card-readers-page filter="[[searchFilter_]]">
-            </settings-smart-card-readers-page>
-          </settings-subpage>
-       </template>
-      </template>
+      <if expr="is_chromeos">
+        <template is="dom-if" if="[[enableSmartCardReadersContentSetting_]]">
+          <template is="dom-if"
+                route-path="/content/smartCardReaders" no-search>
+            <settings-subpage page-title="$i18n{siteSettingsSmartCardReaders}"
+                search-label="$i18n{siteSettingsAllSitesSearch}"
+                search-term="{{searchFilter_}}">
+              <settings-smart-card-readers-page filter="[[searchFilter_]]">
+              </settings-smart-card-readers-page>
+            </settings-subpage>
+        </template>
+        </template>
+      </if>
       <template is="dom-if" if="[[enableAutomaticFullscreenContentSetting_]]">
         <template is="dom-if" route-path="/content/automaticFullScreen"
             no-search>
@@ -1422,7 +1391,7 @@
           </settings-subpage>
         </template>
       </template>
-      <template is="dom-if" if="[[enableKeyboardAndPointerLockPrompt_]]">
+      <template is="dom-if" if="[[enableKeyboardLockPrompt_]]">
         <template is="dom-if" route-path="/content/keyboardLock" no-search>
           <settings-subpage page-title="$i18n{siteSettingsKeyboardLock}"
               search-label="$i18n{siteSettingsAllSitesSearch}"
@@ -1444,31 +1413,6 @@
                     "$i18n{siteSettingsKeyboardLockAllowedExceptions}"
                 block-header=
                     "$i18n{siteSettingsKeyboardLockBlockedExceptions}"
-                search-filter="[[searchFilter_]]">
-            </category-setting-exceptions>
-          </settings-subpage>
-        </template>
-        <template is="dom-if" route-path="/content/pointerLock" no-search>
-          <settings-subpage page-title="$i18n{siteSettingsPointerLock}"
-              search-label="$i18n{siteSettingsAllSitesSearch}"
-              search-term="{{searchFilter_}}">
-            <div class="content-settings-header secondary">
-              $i18n{siteSettingsPointerLockDescription}
-            </div>
-            <settings-category-default-radio-group
-                category="[[contentSettingsTypesEnum_.POINTER_LOCK]]"
-                allow-option-label=
-                    "$i18n{siteSettingsPointerLockAllowed}"
-                allow-option-icon="settings20:pointer-lock"
-                block-option-label="$i18n{siteSettingsPointerLockBlocked}"
-                block-option-icon="settings20:pointer-lock-off">
-            </settings-category-default-radio-group>
-            <category-setting-exceptions
-                category="[[contentSettingsTypesEnum_.POINTER_LOCK]]"
-                allow-header=
-                    "$i18n{siteSettingsPointerLockAllowedExceptions}"
-                block-header=
-                    "$i18n{siteSettingsPointerLockBlockedExceptions}"
                 search-filter="[[searchFilter_]]">
             </category-setting-exceptions>
           </settings-subpage>

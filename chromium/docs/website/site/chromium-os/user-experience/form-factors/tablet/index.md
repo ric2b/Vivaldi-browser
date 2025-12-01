@@ -25,7 +25,7 @@ src="/chromium-os/user-experience/form-factors/tablet/Tablet.png">](/chromium-os
 *   Contextual actions triggered via dwell.
 *   Zooming UI for multiple tabs
 *   Tabs presented along the side of the screen (see [Side
-            tabs](http://www.chromium.org/chromium-os/user-experience/window-ui))
+            tabs](/chromium-os/user-experience/window-ui))
 *   Creating multiple browsers on screen using a launcher
 
 ## UI Concepts

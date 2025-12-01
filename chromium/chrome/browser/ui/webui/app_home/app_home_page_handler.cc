@@ -184,7 +184,12 @@ void AppHomePageHandler::LaunchAppInternal(
   apps::LaunchContainer launch_container;
 
   web_app::WebAppRegistrar& registrar = web_app_provider_->registrar_unsafe();
-  if (registrar.IsInstalled(app_id) && !IsYoutubeExtension(app_id)) {
+  if (registrar.IsInstallState(
+          app_id,
+          {web_app::proto::InstallState::SUGGESTED_FROM_ANOTHER_DEVICE,
+           web_app::proto::InstallState::INSTALLED_WITHOUT_OS_INTEGRATION,
+           web_app::proto::InstallState::INSTALLED_WITH_OS_INTEGRATION}) &&
+      !IsYoutubeExtension(app_id)) {
     type = extensions::Manifest::Type::TYPE_HOSTED_APP;
     full_launch_url = registrar.GetAppStartUrl(app_id);
     launch_container = web_app::ConvertDisplayModeToAppLaunchContainer(
@@ -347,9 +352,20 @@ app_home::mojom::AppInfoPtr AppHomePageHandler::CreateAppInfoPtrFromWebApp(
 
   app_info->icon_url = apps::AppIconSource::GetIconURL(app_id, kWebAppIconSize);
 
-  bool is_locally_installed = registrar.IsInstallState(
-      app_id, {web_app::proto::INSTALLED_WITHOUT_OS_INTEGRATION,
-               web_app::proto::INSTALLED_WITH_OS_INTEGRATION});
+  bool is_locally_installed;
+  if (registrar.GetInstallState(app_id) == std::nullopt) {
+    is_locally_installed = false;
+  } else {
+    switch (registrar.GetInstallState(app_id).value()) {
+      case web_app::proto::SUGGESTED_FROM_ANOTHER_DEVICE:
+        is_locally_installed = false;
+        break;
+      case web_app::proto::INSTALLED_WITH_OS_INTEGRATION:
+      case web_app::proto::INSTALLED_WITHOUT_OS_INTEGRATION:
+        is_locally_installed = true;
+        break;
+    }
+  }
 
   const auto login_mode = registrar.GetAppRunOnOsLoginMode(app_id);
   // Only show the Run on OS Login menu item for locally installed web apps
@@ -654,7 +670,11 @@ void AppHomePageHandler::UninstallApp(const std::string& app_id) {
     return;
   }
 
-  if (web_app_provider_->registrar_unsafe().IsInstalled(app_id) &&
+  if (web_app_provider_->registrar_unsafe().IsInstallState(
+          app_id,
+          {web_app::proto::InstallState::SUGGESTED_FROM_ANOTHER_DEVICE,
+           web_app::proto::InstallState::INSTALLED_WITHOUT_OS_INTEGRATION,
+           web_app::proto::InstallState::INSTALLED_WITH_OS_INTEGRATION}) &&
       !IsYoutubeExtension(app_id)) {
     UninstallWebApp(app_id);
     return;
@@ -668,7 +688,11 @@ void AppHomePageHandler::UninstallApp(const std::string& app_id) {
 }
 
 void AppHomePageHandler::ShowAppSettings(const std::string& app_id) {
-  if (web_app_provider_->registrar_unsafe().IsInstalled(app_id) &&
+  if (web_app_provider_->registrar_unsafe().IsInstallState(
+          app_id,
+          {web_app::proto::InstallState::SUGGESTED_FROM_ANOTHER_DEVICE,
+           web_app::proto::InstallState::INSTALLED_WITHOUT_OS_INTEGRATION,
+           web_app::proto::InstallState::INSTALLED_WITH_OS_INTEGRATION}) &&
       !IsYoutubeExtension(app_id)) {
     ShowWebAppSettings(app_id);
     return;
@@ -688,7 +712,11 @@ void AppHomePageHandler::ShowAppSettings(const std::string& app_id) {
 
 void AppHomePageHandler::CreateAppShortcut(const std::string& app_id,
                                            CreateAppShortcutCallback callback) {
-  if (web_app_provider_->registrar_unsafe().IsInstalled(app_id) &&
+  if (web_app_provider_->registrar_unsafe().IsInstallState(
+          app_id,
+          {web_app::proto::InstallState::SUGGESTED_FROM_ANOTHER_DEVICE,
+           web_app::proto::InstallState::INSTALLED_WITHOUT_OS_INTEGRATION,
+           web_app::proto::InstallState::INSTALLED_WITH_OS_INTEGRATION}) &&
       !IsYoutubeExtension(app_id)) {
     CreateWebAppShortcut(app_id, std::move(callback));
     return;

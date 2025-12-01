@@ -19,8 +19,10 @@
 
 namespace openscreen::cast {
 
-const char kMirroringDisplayName[] = "Chrome Mirroring";
-const char kRemotingRpcNamespace[] = "urn:x-cast:com.google.cast.remoting";
+namespace {
+constexpr char kMirroringDisplayName[] = "Chrome Mirroring";
+constexpr char kRemotingRpcNamespace[] = "urn:x-cast:com.google.cast.remoting";
+}  // namespace
 
 MirroringApplication::MirroringApplication(TaskRunner& task_runner,
                                            const IPAddress& interface_address,

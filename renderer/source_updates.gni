@@ -28,6 +28,7 @@ update_template_instance("//third_party/blink/renderer/core:core") {
   ]
   public_deps += [
     "//vivaldi/renderer/mojo:frame_host_service_blink",
+    "//vivaldi/renderer/mojo:encrypted_media_access_blink",
     "//vivaldi/components/request_filter/adblock_filter/mojom:mojom_blink",
   ]
   cflags = [
@@ -39,4 +40,16 @@ update_template_instance("//third_party/blink/renderer/modules/mediastream:media
   sources += [
     "//vivaldi/renderer/blink/vivaldi_web_media_player_ms.cc",
   ]
+}
+
+if (!is_android) {
+  update_template_instance("//third_party/blink/renderer/modules:modules") {
+    sources += [
+      "//vivaldi/renderer/blink/vivaldi_encrypted_media_access.cc",
+      "//vivaldi/renderer/blink/vivaldi_encrypted_media_access.h",
+    ]
+    public_deps += [
+      "//vivaldi/renderer/mojo:encrypted_media_access",
+    ]
+  }
 }

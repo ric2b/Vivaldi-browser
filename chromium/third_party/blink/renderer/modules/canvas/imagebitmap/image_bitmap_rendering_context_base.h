@@ -9,6 +9,7 @@
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context_factory.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
+#include "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
 #include "ui/gfx/geometry/point_f.h"
 
 namespace cc {
@@ -41,10 +42,19 @@ class MODULES_EXPORT ImageBitmapRenderingContextBase
   scoped_refptr<StaticBitmapImage> GetImage(FlushReason) final;
 
   void SetUV(const gfx::PointF& left_top, const gfx::PointF& right_bottom);
+
+  SkAlphaType GetAlphaType() const override { return kPremul_SkAlphaType; }
+  SkColorType GetSkColorType() const override {
+    return viz::ToClosestSkColorType(GetSharedImageFormat());
+  }
+  viz::SharedImageFormat GetSharedImageFormat() const override {
+    return GetN32FormatForCanvas();
+  }
+  gfx::ColorSpace GetColorSpace() const override {
+    return gfx::ColorSpace::CreateSRGB();
+  }
   bool IsComposited() const final { return true; }
   bool PushFrame() override;
-  bool IsOriginTopLeft() const override;
-  void SetFilterQuality(cc::PaintFlags::FilterQuality) override;
 
   cc::Layer* CcLayer() const final;
   // TODO(junov): handle lost contexts when content is GPU-backed

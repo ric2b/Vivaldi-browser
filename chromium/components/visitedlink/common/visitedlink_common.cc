@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "components/visitedlink/common/visitedlink_common.h"
 
 #include <string.h>  // for memset()
@@ -98,8 +103,7 @@ bool VisitedLinkCommon::IsVisited(Fingerprint fingerprint) const {
     if (cur_hash == first_hash) {
       // Wrapped around and didn't find an empty space, this means we're in an
       // infinite loop because AddFingerprint didn't do its job resizing.
-      NOTREACHED_IN_MIGRATION();
-      return false;
+      NOTREACHED();
     }
   }
 }

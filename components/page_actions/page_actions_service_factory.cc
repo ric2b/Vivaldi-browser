@@ -44,9 +44,10 @@ content::BrowserContext* ServiceFactory::GetBrowserContextToUse(
   return GetBrowserContextRedirectedInIncognito(context);
 }
 
-KeyedService* ServiceFactory::BuildServiceInstanceFor(
+std::unique_ptr<KeyedService>
+ServiceFactory::BuildServiceInstanceForBrowserContext(
     content::BrowserContext* context) const {
-  ServiceImpl* service = new ServiceImpl(context);
+  std::unique_ptr<ServiceImpl> service = std::make_unique<ServiceImpl>(context);
   service->Load();
   return service;
 }

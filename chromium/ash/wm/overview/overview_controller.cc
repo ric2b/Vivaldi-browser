@@ -4,6 +4,7 @@
 
 #include "ash/wm/overview/overview_controller.h"
 
+#include <algorithm>
 #include <utility>
 #include <vector>
 
@@ -32,7 +33,6 @@
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/ranges/algorithm.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
 #include "chromeos/constants/chromeos_features.h"
@@ -362,8 +362,9 @@ void OverviewController::ToggleOverview(OverviewEnterExitType type) {
   };
   std::vector<raw_ptr<aura::Window, VectorExperimental>> hide_windows(
       windows.size());
-  auto end = base::ranges::copy_if(windows, hide_windows.begin(),
-                                   should_hide_for_overview);
+  auto end = std::ranges::copy_if(windows, hide_windows.begin(),
+                                  should_hide_for_overview)
+                 .out;
   hide_windows.resize(end - hide_windows.begin());
   std::erase_if(windows, window_util::ShouldExcludeForOverview);
   // Overview windows will handle showing their transient related windows, so if
@@ -408,10 +409,12 @@ void OverviewController::ToggleOverview(OverviewEnterExitType type) {
       // place, and those widgets will fade out of overview.
       std::vector<raw_ptr<aura::Window, VectorExperimental>>
           windows_to_minimize(windows.size());
-      auto it = base::ranges::copy_if(
-          windows, windows_to_minimize.begin(), [](aura::Window* window) {
-            return !WindowState::Get(window)->IsMinimized();
-          });
+      auto it = std::ranges::copy_if(
+                    windows, windows_to_minimize.begin(),
+                    [](aura::Window* window) {
+                      return !WindowState::Get(window)->IsMinimized();
+                    })
+                    .out;
       windows_to_minimize.resize(
           std::distance(windows_to_minimize.begin(), it));
       window_util::MinimizeAndHideWithoutAnimation(windows_to_minimize);

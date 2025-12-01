@@ -1,16 +1,16 @@
-/* Copyright (c) 2024, Google Inc.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
- * SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
- * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
- * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. */
+// Copyright 2024 The BoringSSL Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include <gtest/gtest.h>
 
@@ -120,15 +120,15 @@ TEST(VectorTest, VectorContainingVectors) {
 
 TEST(VectorTest, NotDefaultConstructible) {
   struct NotDefaultConstructible {
-    explicit NotDefaultConstructible(size_t n) { array.Init(n); }
+    explicit NotDefaultConstructible(size_t n) { BSSL_CHECK(array.Init(n)); }
     Array<int> array;
   };
 
   Vector<NotDefaultConstructible> vec;
-  vec.Push(NotDefaultConstructible(0));
-  vec.Push(NotDefaultConstructible(1));
-  vec.Push(NotDefaultConstructible(2));
-  vec.Push(NotDefaultConstructible(3));
+  ASSERT_TRUE(vec.Push(NotDefaultConstructible(0)));
+  ASSERT_TRUE(vec.Push(NotDefaultConstructible(1)));
+  ASSERT_TRUE(vec.Push(NotDefaultConstructible(2)));
+  ASSERT_TRUE(vec.Push(NotDefaultConstructible(3)));
   EXPECT_EQ(vec.size(), 4u);
   EXPECT_EQ(0u, vec[0].array.size());
   EXPECT_EQ(1u, vec[1].array.size());
@@ -166,18 +166,18 @@ TEST(InplaceVector, Basic) {
   EXPECT_EQ(3, *iter);
   iter++;
   EXPECT_EQ(iter, vec.end());
-  EXPECT_EQ(MakeConstSpan(vec), MakeConstSpan(data3));
+  EXPECT_EQ(Span(vec), Span(data3));
 
   InplaceVector<int, 4> vec2 = vec;
-  EXPECT_EQ(MakeConstSpan(vec), MakeConstSpan(vec2));
+  EXPECT_EQ(Span(vec), Span(vec2));
 
   InplaceVector<int, 4> vec3;
   vec3 = vec;
-  EXPECT_EQ(MakeConstSpan(vec), MakeConstSpan(vec2));
+  EXPECT_EQ(Span(vec), Span(vec2));
 
   int data4[] = {1, 2, 3, 4};
   ASSERT_TRUE(vec.TryCopyFrom(data4));
-  EXPECT_EQ(MakeConstSpan(vec), MakeConstSpan(data4));
+  EXPECT_EQ(Span(vec), Span(data4));
 
   int data5[] = {1, 2, 3, 4, 5};
   EXPECT_FALSE(vec.TryCopyFrom(data5));
@@ -185,7 +185,7 @@ TEST(InplaceVector, Basic) {
 
   // Shrink the vector.
   ASSERT_TRUE(vec.TryResize(3));
-  EXPECT_EQ(MakeConstSpan(vec), MakeConstSpan(data3));
+  EXPECT_EQ(Span(vec), Span(data3));
 
   // Enlarge it again. The new value should have been value-initialized.
   ASSERT_TRUE(vec.TryResize(4));
@@ -196,17 +196,17 @@ TEST(InplaceVector, Basic) {
   vec.CopyFrom(data4);
   const auto *ptr = &vec;
   vec = *ptr;
-  EXPECT_EQ(MakeConstSpan(vec), MakeConstSpan(data4));
+  EXPECT_EQ(Span(vec), Span(data4));
 }
 
 TEST(InplaceVectorTest, ComplexType) {
   InplaceVector<std::vector<int>, 4> vec_of_vecs;
   const std::vector<int> data[] = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
   vec_of_vecs.CopyFrom(data);
-  EXPECT_EQ(MakeConstSpan(vec_of_vecs), MakeConstSpan(data));
+  EXPECT_EQ(Span(vec_of_vecs), Span(data));
 
   vec_of_vecs.Resize(2);
-  EXPECT_EQ(MakeConstSpan(vec_of_vecs), MakeConstSpan(data, 2));
+  EXPECT_EQ(Span(vec_of_vecs), Span(data, 2));
 
   vec_of_vecs.Resize(4);
   EXPECT_EQ(4u, vec_of_vecs.size());
@@ -599,6 +599,15 @@ TEST(DTLSMessageBitmapTest, Basic) {
   expect_bitmap(bitmap2, {{0, 1}, {2, 3}, {9 - 2, 9}, {27 - 4, 27 - 2}});
   bitmap2.MarkRange(0, 50);
   expect_bitmap(bitmap2, {});
+
+  // MarkRange inputs may be "out of bounds". The bitmap has conceptually
+  // infinitely many marked bits past where it was initialized.
+  ASSERT_TRUE(bitmap.Init(10));
+  expect_bitmap(bitmap, {{0, 10}});
+  bitmap.MarkRange(5, SIZE_MAX);
+  expect_bitmap(bitmap, {{0, 5}});
+  bitmap.MarkRange(0, SIZE_MAX);
+  expect_bitmap(bitmap, {});
 }
 
 TEST(MRUQueueTest, Basic) {
@@ -845,11 +854,11 @@ TEST(SSLAEADContextTest, Lengths) {
     SCOPED_TRACE(SSL_CIPHER_standard_name(cipher));
 
     const uint8_t kZeros[EVP_AEAD_MAX_KEY_LENGTH] = {0};
-    UniquePtr<SSLAEADContext> aead = SSLAEADContext::Create(
-        evp_aead_seal, cipher_test.version, cipher,
-        MakeConstSpan(kZeros).first(cipher_test.enc_key_len),
-        MakeConstSpan(kZeros).first(cipher_test.mac_key_len),
-        MakeConstSpan(kZeros).first(cipher_test.fixed_iv_len));
+    UniquePtr<SSLAEADContext> aead =
+        SSLAEADContext::Create(evp_aead_seal, cipher_test.version, cipher,
+                               Span(kZeros).first(cipher_test.enc_key_len),
+                               Span(kZeros).first(cipher_test.mac_key_len),
+                               Span(kZeros).first(cipher_test.fixed_iv_len));
     ASSERT_TRUE(aead);
 
     for (const auto &t : cipher_test.length_tests) {

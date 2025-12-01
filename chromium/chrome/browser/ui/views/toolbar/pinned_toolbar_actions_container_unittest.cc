@@ -99,16 +99,16 @@ class PinnedToolbarActionsContainerTest : public TestWithBrowserView {
     auto* container =
         browser_view()->toolbar()->pinned_toolbar_actions_container();
     if (should_be_popped_out) {
-      ASSERT_NE(base::ranges::find(container->popped_out_buttons_, id,
-                                   [](PinnedActionToolbarButton* button) {
-                                     return button->GetActionId();
-                                   }),
+      ASSERT_NE(std::ranges::find(container->popped_out_buttons_, id,
+                                  [](PinnedActionToolbarButton* button) {
+                                    return button->GetActionId();
+                                  }),
                 container->popped_out_buttons_.end());
     } else {
-      ASSERT_EQ(base::ranges::find(container->popped_out_buttons_, id,
-                                   [](PinnedActionToolbarButton* button) {
-                                     return button->GetActionId();
-                                   }),
+      ASSERT_EQ(std::ranges::find(container->popped_out_buttons_, id,
+                                  [](PinnedActionToolbarButton* button) {
+                                    return button->GetActionId();
+                                  }),
                 container->popped_out_buttons_.end());
     }
   }
@@ -117,16 +117,16 @@ class PinnedToolbarActionsContainerTest : public TestWithBrowserView {
     auto* container =
         browser_view()->toolbar()->pinned_toolbar_actions_container();
     if (should_be_pinned) {
-      ASSERT_NE(base::ranges::find(container->pinned_buttons_, id,
-                                   [](PinnedActionToolbarButton* button) {
-                                     return button->GetActionId();
-                                   }),
+      ASSERT_NE(std::ranges::find(container->pinned_buttons_, id,
+                                  [](PinnedActionToolbarButton* button) {
+                                    return button->GetActionId();
+                                  }),
                 container->pinned_buttons_.end());
     } else {
-      ASSERT_EQ(base::ranges::find(container->pinned_buttons_, id,
-                                   [](PinnedActionToolbarButton* button) {
-                                     return button->GetActionId();
-                                   }),
+      ASSERT_EQ(std::ranges::find(container->pinned_buttons_, id,
+                                  [](PinnedActionToolbarButton* button) {
+                                    return button->GetActionId();
+                                  }),
                 container->pinned_buttons_.end());
     }
   }
@@ -608,9 +608,9 @@ TEST_F(PinnedToolbarActionsContainerTest, ActiveActionSkipsExecution) {
   EXPECT_FALSE(pinned_button->ShouldSkipExecutionForTesting());
 
   pinned_button->SetIsActionShowingBubble(true);
-  ui::MouseEvent press_event(ui::EventType::kMousePressed, gfx::Point(), gfx::Point(),
-                             ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON,
-                             0);
+  ui::MouseEvent press_event(ui::EventType::kMousePressed, gfx::Point(),
+                             gfx::Point(), ui::EventTimeForNow(),
+                             ui::EF_LEFT_MOUSE_BUTTON, 0);
   ui::MouseEvent release_event(ui::EventType::kMouseReleased, gfx::Point(),
                                gfx::Point(), ui::EventTimeForNow(),
                                ui::EF_LEFT_MOUSE_BUTTON, 0);

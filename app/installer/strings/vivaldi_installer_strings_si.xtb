@@ -4,6 +4,7 @@
 <translation id="1089894737218087497">ස්වාධීනව ස්ථාපනය කරන්න</translation>
 <translation id="1682285232070778125">විවාල්ඩි පෙරනිමි අතිරික්සුව කරන්න</translation>
 <translation id="1974060860693918893">වැඩිදුර</translation>
+<translation id="2053560788696003312">Vivaldi හට Windows 10 හෝ ඊට ඉහළ අනුවාදයක් අවශ්‍ය වේ.</translation>
 <translation id="2134216661302048561">විවාල්ඩි ස්ථාපකය විවාල්ඩි අතිරික්සුව ස්ථාපනය අවසන් කර නැත. ඔබට දැන් පිටවීමට වුවමනාද?</translation>
 <translation id="2286454467119466181">සරල</translation>
 <translation id="237789874664518125">ප්‍රකාශන හිමිකම <ph name="YEAR" /> Vivaldi Technologies AS. සියළුම හිමිකම් ඇවිරිණි. &lt;a&gt;රහස්‍යතා ප්‍රතිපත්තිය&lt;/a&gt;</translation>
@@ -23,6 +24,9 @@
 <translation id="5247376421371319618">පිළිගෙන යාවත්කාල කරන්න</translation>
 <translation id="5302048478445481009">භාෂාව</translation>
 <translation id="694714344624446243">විවාල්ඩි ස්ථාපකය</translation>
+<translation id="7467493612551448880">ඔබ ස්ථාපනය කරන Vivaldi අනුවාදය ඔබ ධාවනය කරන Windows අනුවාදයට ගැලපෙන පරිදි ප්‍රශස්තිකරණය කර නොමැත.
+
+Windows on Arm අනුවාදය බාගත කිරීමට vivaldi.com/download වෙත පිවිසෙන්න.</translation>
 <translation id="7658239707568436148">අවලංගු කරන්න</translation>
 <translation id="8773751185824654197">සටහන: ධාවනය වන විවාල්ඩි අතිරික්සුවක් යාවත්කාල කරන්නේ නම් එය වසා දමා නැවත දියත් කෙරේ</translation>
 <translation id="933060950687965486">ස්ථාපන වර්ගය</translation>

@@ -14,8 +14,14 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <map>
+#include <memory>
 #include <optional>
+#include <string>
+#include <vector>
 
+#include "api/stats/attribute.h"
+#include "api/units/timestamp.h"
 #include "rtc_base/checks.h"
 #include "rtc_base/strings/json.h"
 #include "stats/test/rtc_test_stats.h"
@@ -42,7 +48,7 @@ double GetExpectedError(const double expected_value) {
 
 class RTCChildStats : public RTCStats {
  public:
-  WEBRTC_RTCSTATS_DECL();
+  WEBRTC_RTCSTATS_DECL(RTCChildStats);
 
   RTCChildStats(const std::string& id, Timestamp timestamp)
       : RTCStats(id, timestamp) {}
@@ -57,7 +63,7 @@ WEBRTC_RTCSTATS_IMPL(RTCChildStats,
 
 class RTCGrandChildStats : public RTCChildStats {
  public:
-  WEBRTC_RTCSTATS_DECL();
+  WEBRTC_RTCSTATS_DECL(RTCGrandChildStats);
 
   RTCGrandChildStats(const std::string& id, Timestamp timestamp)
       : RTCChildStats(id, timestamp) {}
@@ -476,6 +482,12 @@ TEST(RTCStatsTest, AttributeToString) {
   stats.m_map_string_double->emplace("bar", 0.25);
   EXPECT_EQ("{\"bar\":0.25,\"foo\":0.5}",
             stats.GetAttribute(stats.m_map_string_double).ToString());
+}
+
+TEST(RTCStatsTest, SetTimestamp) {
+  RTCTestStats test_stats("testId", Timestamp::Micros(123));
+  test_stats.set_timestamp(Timestamp::Micros(321));
+  EXPECT_EQ(test_stats.timestamp(), Timestamp::Micros(321));
 }
 
 // Death tests.

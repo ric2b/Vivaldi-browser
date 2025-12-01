@@ -1354,7 +1354,7 @@ ask questions.
 
 * [libFuzzer - a library for coverage-guided fuzz testing.](https://llvm.org/docs/LibFuzzer.html)
 
-* [Fault injection through unexpected input data (aka Fuzz Testing)](https://goto.google.com/fuzzing)
+* [Fault injection through unexpected input data (aka Fuzz Testing)](http://go/fuzzing)
 
 * [Getting Started with libFuzzer in Chromium](https://chromium.googlesource.com/chromium/src/+/HEAD/testing/libfuzzer/getting_started.md)
 

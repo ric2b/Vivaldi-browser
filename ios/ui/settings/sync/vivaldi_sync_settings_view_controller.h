@@ -6,7 +6,7 @@
 #import <UIKit/UIKit.h>
 
 #import "components/sync/base/user_selectable_type.h"
-#import "ios/chrome/browser/ui/settings/settings_root_table_view_controller.h"
+#import "ios/chrome/browser/settings/ui_bundled/settings_root_table_view_controller.h"
 #import "ios/ui/settings/sync/vivaldi_sync_settings_consumer.h"
 #import "ios/ui/settings/sync/vivaldi_sync_settings_view_controller_model_delegate.h"
 #import "ios/ui/settings/sync/vivaldi_sync_settings_view_controller_service_delegate.h"

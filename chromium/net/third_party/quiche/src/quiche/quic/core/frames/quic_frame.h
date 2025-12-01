@@ -18,6 +18,7 @@
 #include "quiche/quic/core/frames/quic_crypto_frame.h"
 #include "quiche/quic/core/frames/quic_goaway_frame.h"
 #include "quiche/quic/core/frames/quic_handshake_done_frame.h"
+#include "quiche/quic/core/frames/quic_immediate_ack_frame.h"
 #include "quiche/quic/core/frames/quic_max_streams_frame.h"
 #include "quiche/quic/core/frames/quic_message_frame.h"
 #include "quiche/quic/core/frames/quic_mtu_discovery_frame.h"
@@ -65,6 +66,7 @@ struct QUICHE_EXPORT QuicFrame {
   explicit QuicFrame(QuicStopSendingFrame frame);
   explicit QuicFrame(QuicPathChallengeFrame frame);
   explicit QuicFrame(QuicPathResponseFrame frame);
+  explicit QuicFrame(QuicImmediateAckFrame immediate_ack_frame);
 
   explicit QuicFrame(QuicAckFrame* frame);
   explicit QuicFrame(QuicRstStreamFrame* frame);
@@ -99,6 +101,7 @@ struct QUICHE_EXPORT QuicFrame {
     QuicStopSendingFrame stop_sending_frame;
     QuicPathChallengeFrame path_challenge_frame;
     QuicPathResponseFrame path_response_frame;
+    QuicImmediateAckFrame immediate_ack_frame;
 
     // Out of line frames.
     struct {
@@ -145,6 +148,9 @@ QUICHE_EXPORT void DeleteFrame(QuicFrame* frame);
 // Deletes all the QuicStreamFrames for the specified |stream_id|.
 QUICHE_EXPORT void RemoveFramesForStream(QuicFrames* frames,
                                          QuicStreamId stream_id);
+
+// Returns true if |frames| contains at least one message frame.
+QUICHE_EXPORT bool HasMessageFrame(const QuicFrames& frames);
 
 // Returns true if |type| is a retransmittable control frame.
 QUICHE_EXPORT bool IsControlFrame(QuicFrameType type);

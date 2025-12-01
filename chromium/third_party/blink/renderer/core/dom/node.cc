@@ -65,7 +65,6 @@
 #include "third_party/blink/renderer/core/dom/layout_tree_builder_traversal.h"
 #include "third_party/blink/renderer/core/dom/mutation_observer_registration.h"
 #include "third_party/blink/renderer/core/dom/node_cloning_data.h"
-#include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/node_lists_node_data.h"
 #include "third_party/blink/renderer/core/dom/node_rare_data.h"
 #include "third_party/blink/renderer/core/dom/node_traversal.h"
@@ -364,6 +363,15 @@ NodeRareData& Node::CreateRareData() {
   return *data_;
 }
 
+void Node::MaybeAddNodeInsertedTraceEvent() {
+  DEVTOOLS_TIMELINE_TRACE_EVENT_INSTANT_WITH_CATEGORIES(
+      TRACE_DISABLED_BY_DEFAULT("devtools.timeline.invalidationTracking"),
+      "StyleRecalcInvalidationTracking",
+      inspector_style_recalc_invalidation_tracking_event::Data, this,
+      kLocalStyleChange,
+      StyleChangeReasonForTracing::Create(style_change_reason::kNodeInserted));
+}
+
 Node* Node::ToNode() {
   return this;
 }
@@ -391,8 +399,9 @@ Node* Node::PseudoAwarePreviousSibling() const {
 
   // Note the [[fallthrough]] attributes, the order of the cases matters and
   // corresponds to the ordering of pseudo elements in a traversal:
-  // ::scroll-marker-group(before), ::marker, ::scroll-marker, ::check,
-  // ::before, non-pseudo Elements, ::after, ::select-arrow,
+  // ::scroll-marker-group(before), ::marker, ::scroll-marker,
+  // ::scroll-button(), ::checkmark,
+  // ::before, non-pseudo Elements, ::after, ::picker-icon,
   // ::scroll-marker-group(after), ::view-transition. The fallthroughs ensure
   // this ordering by checking for each kind of node in-turn.
   switch (GetPseudoId()) {
@@ -402,18 +411,12 @@ Node* Node::PseudoAwarePreviousSibling() const {
         return previous;
       }
       [[fallthrough]];
-    case kPseudoIdScrollNextButton:
-      if (Node* next =
-              parent->GetPseudoElement(kPseudoIdScrollMarkerGroupAfter)) {
-        return next;
-      }
-      [[fallthrough]];
     case kPseudoIdScrollMarkerGroupAfter:
-      if (Node* next = parent->GetPseudoElement(kPseudoIdSelectArrow)) {
+      if (Node* next = parent->GetPseudoElement(kPseudoIdPickerIcon)) {
         return next;
       }
       [[fallthrough]];
-    case kPseudoIdSelectArrow:
+    case kPseudoIdPickerIcon:
       if (Node* next = parent->GetPseudoElement(kPseudoIdAfter)) {
         return next;
       }
@@ -427,16 +430,54 @@ Node* Node::PseudoAwarePreviousSibling() const {
         return previous;
       [[fallthrough]];
     case kPseudoIdBefore:
-      if (Node* previous = parent->GetPseudoElement(kPseudoIdCheck)) {
+      if (Node* previous = parent->GetPseudoElement(kPseudoIdCheckMark)) {
         return previous;
       }
       [[fallthrough]];
-    case kPseudoIdCheck:
+    case kPseudoIdCheckMark:
+      if (Node* previous =
+              parent->GetPseudoElement(kPseudoIdScrollButtonBlockEnd)) {
+        return previous;
+      }
+      [[fallthrough]];
+    case kPseudoIdScrollButtonBlockEnd:
+      if (Node* previous =
+              parent->GetPseudoElement(kPseudoIdScrollButtonInlineEnd)) {
+        return previous;
+      }
+      [[fallthrough]];
+    case kPseudoIdScrollButtonInlineEnd:
+      if (Node* previous =
+              parent->GetPseudoElement(kPseudoIdScrollButtonInlineStart)) {
+        return previous;
+      }
+      [[fallthrough]];
+    case kPseudoIdScrollButtonInlineStart:
+      if (Node* previous =
+              parent->GetPseudoElement(kPseudoIdScrollButtonBlockStart)) {
+        return previous;
+      }
+      [[fallthrough]];
+    case kPseudoIdScrollButtonBlockStart:
       if (Node* previous = parent->GetPseudoElement(kPseudoIdScrollMarker)) {
         return previous;
       }
       [[fallthrough]];
     case kPseudoIdScrollMarker:
+      if (const ColumnPseudoElementsVector* columns =
+              parent->GetColumnPseudoElements();
+          columns && !columns->empty()) {
+        return columns->back();
+      }
+      [[fallthrough]];
+    case kPseudoIdColumn:
+      if (auto* column = DynamicTo<ColumnPseudoElement>(this)) {
+        const ColumnPseudoElementsVector* columns =
+            parent->GetColumnPseudoElements();
+        if (column->Index() > 0) {
+          return columns->at(column->Index() - 1u);
+        }
+      }
       if (Node* previous = parent->GetPseudoElement(kPseudoIdMarker)) {
         return previous;
       }
@@ -448,11 +489,6 @@ Node* Node::PseudoAwarePreviousSibling() const {
       }
       [[fallthrough]];
     case kPseudoIdScrollMarkerGroupBefore:
-      if (Node* next = parent->GetPseudoElement(kPseudoIdScrollPrevButton)) {
-        return next;
-      }
-      [[fallthrough]];
-    case kPseudoIdScrollPrevButton:
       return nullptr;
     // The pseudos of the view transition subtree have a known structure and
     // cannot create other pseudos so these are handled separately of the above
@@ -493,28 +529,60 @@ Node* Node::PseudoAwareNextSibling() const {
 
   // See comments in PseudoAwarePreviousSibling.
   switch (GetPseudoId()) {
-    case kPseudoIdScrollPrevButton:
-      if (Node* next =
-              parent->GetPseudoElement(kPseudoIdScrollMarkerGroupBefore)) {
-        return next;
-      }
-      [[fallthrough]];
     case kPseudoIdScrollMarkerGroupBefore:
       if (Node* next = parent->GetPseudoElement(kPseudoIdMarker)) {
         return next;
       }
       [[fallthrough]];
     case kPseudoIdMarker:
+      if (const ColumnPseudoElementsVector* columns =
+              parent->GetColumnPseudoElements();
+          columns && !columns->empty()) {
+        return columns->front();
+      }
+      [[fallthrough]];
+    case kPseudoIdColumn:
+      if (auto* column = DynamicTo<ColumnPseudoElement>(this)) {
+        const ColumnPseudoElementsVector* columns =
+            parent->GetColumnPseudoElements();
+        if (column->Index() + 1u < columns->size()) {
+          return columns->at(column->Index() + 1u);
+        }
+      }
       if (Node* next = parent->GetPseudoElement(kPseudoIdScrollMarker)) {
         return next;
       }
       [[fallthrough]];
     case kPseudoIdScrollMarker:
-      if (Node* next = parent->GetPseudoElement(kPseudoIdCheck)) {
+      if (Node* next =
+              parent->GetPseudoElement(kPseudoIdScrollButtonBlockStart)) {
         return next;
       }
       [[fallthrough]];
-    case kPseudoIdCheck:
+    case kPseudoIdScrollButtonBlockStart:
+      if (Node* next =
+              parent->GetPseudoElement(kPseudoIdScrollButtonInlineStart)) {
+        return next;
+      }
+      [[fallthrough]];
+    case kPseudoIdScrollButtonInlineStart:
+      if (Node* next =
+              parent->GetPseudoElement(kPseudoIdScrollButtonInlineEnd)) {
+        return next;
+      }
+      [[fallthrough]];
+    case kPseudoIdScrollButtonInlineEnd:
+      if (Node* next =
+              parent->GetPseudoElement(kPseudoIdScrollButtonBlockEnd)) {
+        return next;
+      }
+      [[fallthrough]];
+    case kPseudoIdScrollButtonBlockEnd:
+      if (Node* next = parent->GetPseudoElement(kPseudoIdCheckMark)) {
+        return next;
+      }
+      [[fallthrough]];
+    case kPseudoIdCheckMark:
       if (Node* next = parent->GetPseudoElement(kPseudoIdBefore))
         return next;
       [[fallthrough]];
@@ -527,22 +595,17 @@ Node* Node::PseudoAwareNextSibling() const {
         return next;
       [[fallthrough]];
     case kPseudoIdAfter:
-      if (Node* next = parent->GetPseudoElement(kPseudoIdSelectArrow)) {
+      if (Node* next = parent->GetPseudoElement(kPseudoIdPickerIcon)) {
         return next;
       }
       [[fallthrough]];
-    case kPseudoIdSelectArrow:
+    case kPseudoIdPickerIcon:
       if (Node* next =
               parent->GetPseudoElement(kPseudoIdScrollMarkerGroupAfter)) {
         return next;
       }
       [[fallthrough]];
     case kPseudoIdScrollMarkerGroupAfter:
-      if (Node* next = parent->GetPseudoElement(kPseudoIdScrollNextButton)) {
-        return next;
-      }
-      [[fallthrough]];
-    case kPseudoIdScrollNextButton:
       if (Node* next = parent->GetPseudoElement(kPseudoIdViewTransition)) {
         return next;
       }
@@ -605,21 +668,40 @@ Node* Node::PseudoAwareFirstChild() const {
       return current_element->GetPseudoElement(kPseudoIdViewTransitionNew,
                                                name);
     }
-    if (Node* first =
-            current_element->GetPseudoElement(kPseudoIdScrollPrevButton)) {
-      return first;
-    }
     if (Node* first = current_element->GetPseudoElement(
             kPseudoIdScrollMarkerGroupBefore)) {
       return first;
     }
     if (Node* first = current_element->GetPseudoElement(kPseudoIdMarker))
       return first;
+    if (const ColumnPseudoElementsVector* columns =
+            current_element->GetColumnPseudoElements();
+        columns && !columns->empty()) {
+      if (Node* first = columns->front()) {
+        return first;
+      }
+    }
     if (Node* first =
             current_element->GetPseudoElement(kPseudoIdScrollMarker)) {
       return first;
     }
-    if (Node* first = current_element->GetPseudoElement(kPseudoIdCheck)) {
+    if (Node* first = current_element->GetPseudoElement(
+            kPseudoIdScrollButtonBlockStart)) {
+      return first;
+    }
+    if (Node* first = current_element->GetPseudoElement(
+            kPseudoIdScrollButtonInlineStart)) {
+      return first;
+    }
+    if (Node* first =
+            current_element->GetPseudoElement(kPseudoIdScrollButtonInlineEnd)) {
+      return first;
+    }
+    if (Node* first =
+            current_element->GetPseudoElement(kPseudoIdScrollButtonBlockEnd)) {
+      return first;
+    }
+    if (Node* first = current_element->GetPseudoElement(kPseudoIdCheckMark)) {
       return first;
     }
     if (Node* first = current_element->GetPseudoElement(kPseudoIdBefore))
@@ -629,15 +711,11 @@ Node* Node::PseudoAwareFirstChild() const {
     if (Node* first = current_element->GetPseudoElement(kPseudoIdAfter)) {
       return first;
     }
-    if (Node* first = current_element->GetPseudoElement(kPseudoIdSelectArrow)) {
+    if (Node* first = current_element->GetPseudoElement(kPseudoIdPickerIcon)) {
       return first;
     }
     if (Node* first = current_element->GetPseudoElement(
             kPseudoIdScrollMarkerGroupAfter)) {
-      return first;
-    }
-    if (Node* first =
-            current_element->GetPseudoElement(kPseudoIdScrollNextButton)) {
       return first;
     }
     return current_element->GetPseudoElement(kPseudoIdViewTransition);
@@ -679,15 +757,11 @@ Node* Node::PseudoAwareLastChild() const {
             current_element->GetPseudoElement(kPseudoIdViewTransition)) {
       return last;
     }
-    if (Node* last =
-            current_element->GetPseudoElement(kPseudoIdScrollNextButton)) {
-      return last;
-    }
     if (Node* last = current_element->GetPseudoElement(
             kPseudoIdScrollMarkerGroupAfter)) {
       return last;
     }
-    if (Node* last = current_element->GetPseudoElement(kPseudoIdSelectArrow)) {
+    if (Node* last = current_element->GetPseudoElement(kPseudoIdPickerIcon)) {
       return last;
     }
     if (Node* last = current_element->GetPseudoElement(kPseudoIdAfter))
@@ -696,20 +770,39 @@ Node* Node::PseudoAwareLastChild() const {
       return last;
     if (Node* last = current_element->GetPseudoElement(kPseudoIdBefore))
       return last;
-    if (Node* last = current_element->GetPseudoElement(kPseudoIdCheck)) {
+    if (Node* last = current_element->GetPseudoElement(kPseudoIdCheckMark)) {
+      return last;
+    }
+    if (Node* last =
+            current_element->GetPseudoElement(kPseudoIdScrollButtonBlockEnd)) {
+      return last;
+    }
+    if (Node* last =
+            current_element->GetPseudoElement(kPseudoIdScrollButtonInlineEnd)) {
+      return last;
+    }
+    if (Node* last = current_element->GetPseudoElement(
+            kPseudoIdScrollButtonInlineStart)) {
+      return last;
+    }
+    if (Node* last = current_element->GetPseudoElement(
+            kPseudoIdScrollButtonBlockStart)) {
       return last;
     }
     if (Node* last = current_element->GetPseudoElement(kPseudoIdScrollMarker)) {
       return last;
     }
+    if (const ColumnPseudoElementsVector* columns =
+            current_element->GetColumnPseudoElements();
+        columns && !columns->empty()) {
+      if (Node* last = columns->back()) {
+        return last;
+      }
+    }
     if (Node* last = current_element->GetPseudoElement(kPseudoIdMarker)) {
       return last;
     }
-    if (Node* last = current_element->GetPseudoElement(
-            kPseudoIdScrollMarkerGroupBefore)) {
-      return last;
-    }
-    return current_element->GetPseudoElement(kPseudoIdScrollPrevButton);
+    return current_element->GetPseudoElement(kPseudoIdScrollMarkerGroupBefore);
   }
 
   return lastChild();
@@ -748,9 +841,9 @@ Node* Node::insertBefore(Node* new_child, Node* ref_child) {
   return insertBefore(new_child, ref_child, ASSERT_NO_EXCEPTION);
 }
 
-Node* Node::moveBefore(Node* new_child,
-                       Node* ref_child,
-                       ExceptionState& exception_state) {
+void Node::moveBefore(Node* new_child,
+                      Node* ref_child,
+                      ExceptionState& exception_state) {
   DCHECK(new_child);
 
   // Only perform a state-preserving atomic move if the new parent and the child
@@ -760,19 +853,20 @@ Node* Node::moveBefore(Node* new_child,
   // `Node::DidNotifySubtreeInsertionsToDocument()`), and no script is permitted
   // to run during atomic moves.
   const bool perform_state_preserving_atomic_move =
-      // "If either parent or node are not connected, then..."
-      isConnected() && new_child->isConnected() &&
+      // "If any of the following conditions are true"
+      // " - parent is connected and node is not connected; or"
+      // " - parent is not connected and node is connected,"
+      // "then..."
+      isConnected() == new_child->isConnected() &&
       // "If parent’s shadow-including root is not the same as node’s
       // shadow-including root, then..."
-      GetDocument() == new_child->GetDocument() &&
+      ShadowIncludingRoot() == new_child->ShadowIncludingRoot() &&
       // "If node is not an Element or a CharacterData node, then ..."
-      (new_child->IsElementNode() || new_child->IsCharacterDataNode()) &&
-      // "If parent is not an Element or DocumentFragment node, then throw a
-      // "HierarchyRequestError" DOMException."
-      (IsElementNode() || IsDocumentFragment());
-  // These two conditions below are caught by `EnsurePreInsertionValidity()`
+      (new_child->IsElementNode() || new_child->IsCharacterDataNode());
+  // These three conditions below are caught by `EnsurePreInsertionValidity()`
   // that gets invoked in `insertBefore()`:
   //
+  // "If parent is not a Document, DocumentFragment, or Element node, then...
   // "If node is a host-including inclusive ancestor of parent, then...
   // "If child is non-null and its parent is not parent, then..."
 
@@ -782,7 +876,7 @@ Node* Node::moveBefore(Node* new_child,
         DOMExceptionCode::kHierarchyRequestError,
         "State-preserving atomic move cannot be performed on nodes "
         "participating in an invalid hierarchy.");
-    return nullptr;
+    return;
   }
 
   // No script can run synchronously during the move. That means it is
@@ -796,14 +890,15 @@ Node* Node::moveBefore(Node* new_child,
 
   ContainerNode* old_parent = new_child->parentNode();
 
-  Node* return_node = insertBefore(new_child, ref_child, exception_state);
+  insertBefore(new_child, ref_child, exception_state);
   GetDocument().SetStatePreservingAtomicMoveInProgress(false);
-  new_child->MovedFrom(*old_parent);
 
-  // We don't need to conditionally return `nullptr` if `exception_state` had an
-  // exception. `insertBefore()` already handles this for us, so we can just
-  // unconditionally return its value.
-  return return_node;
+  if (exception_state.HadException()) {
+    return;
+  }
+
+  DCHECK(old_parent);
+  new_child->MovedFrom(*old_parent);
 }
 
 Node* Node::replaceChild(Node* new_child,
@@ -932,55 +1027,12 @@ static Node* NodeOrStringToNode(
 // and script into text nodes via NodeOrStringToNode.
 // Returns nullptr if an exception was thrown.
 // static
-Node* Node::ConvertNodeUnionsIntoNode(
-    const ContainerNode* parent,
-    const HeapVector<Member<V8UnionNodeOrStringOrTrustedScript>>& node_unions,
-    Document& document,
-    const char* property_name,
-    ExceptionState& exception_state) {
-  DCHECK(!RuntimeEnabledFeatures::SkipTemporaryDocumentFragmentEnabled());
-
-  bool needs_check = IsA<HTMLScriptElement>(parent) &&
-                     document.GetExecutionContext() &&
-                     document.GetExecutionContext()->RequireTrustedTypes();
-  VectorOf<Node> nodes;
-  for (const auto& node_union : node_unions) {
-    Node* node = NodeOrStringToNode(node_union, document, needs_check,
-                                    property_name, exception_state);
-    if (exception_state.HadException()) {
-      return nullptr;
-    }
-    if (node) {
-      nodes.push_back(node);
-    }
-  }
-
-  if (nodes.size() == 1u) {
-    return nodes[0];
-  }
-
-  Node* fragment = DocumentFragment::Create(document);
-  for (const auto& node : nodes) {
-    fragment->appendChild(node, exception_state);
-    if (exception_state.HadException()) {
-      return nullptr;
-    }
-  }
-  return fragment;
-}
-
-// Converts |node_unions| from bindings into actual Nodes by converting strings
-// and script into text nodes via NodeOrStringToNode.
-// Returns nullptr if an exception was thrown.
-// static
 VectorOf<Node> Node::ConvertNodeUnionsIntoNodes(
     const ContainerNode* parent,
     const HeapVector<Member<V8UnionNodeOrStringOrTrustedScript>>& node_unions,
     Document& document,
     const char* property_name,
     ExceptionState& exception_state) {
-  DCHECK(RuntimeEnabledFeatures::SkipTemporaryDocumentFragmentEnabled());
-
   bool needs_check = IsA<HTMLScriptElement>(parent) &&
                      document.GetExecutionContext() &&
                      document.GetExecutionContext()->RequireTrustedTypes();
@@ -1069,20 +1121,13 @@ void Node::prepend(
     return;
   }
 
-  if (RuntimeEnabledFeatures::SkipTemporaryDocumentFragmentEnabled()) {
-    VectorOf<Node> node_vector = ConvertNodeUnionsIntoNodes(
-        this_node, nodes, GetDocument(), "prepend", exception_state);
-    if (exception_state.HadException()) {
-      return;
-    }
-    this_node->InsertBefore(node_vector, this_node->firstChild(),
-                            exception_state);
-  } else {
-    if (Node* node = ConvertNodeUnionsIntoNode(this_node, nodes, GetDocument(),
-                                               "prepend", exception_state)) {
-      this_node->InsertBefore(node, this_node->firstChild(), exception_state);
-    }
+  VectorOf<Node> node_vector = ConvertNodeUnionsIntoNodes(
+      this_node, nodes, GetDocument(), "prepend", exception_state);
+  if (exception_state.HadException()) {
+    return;
   }
+  this_node->InsertBefore(node_vector, this_node->firstChild(),
+                          exception_state);
 }
 
 void Node::append(
@@ -1096,19 +1141,12 @@ void Node::append(
     return;
   }
 
-  if (RuntimeEnabledFeatures::SkipTemporaryDocumentFragmentEnabled()) {
-    VectorOf<Node> node_vector = ConvertNodeUnionsIntoNodes(
-        this_node, nodes, GetDocument(), "append", exception_state);
-    if (exception_state.HadException()) {
-      return;
-    }
-    this_node->AppendChildren(node_vector, exception_state);
-  } else {
-    if (Node* node = ConvertNodeUnionsIntoNode(this_node, nodes, GetDocument(),
-                                               "append", exception_state)) {
-      this_node->AppendChild(node, exception_state);
-    }
+  VectorOf<Node> node_vector = ConvertNodeUnionsIntoNodes(
+      this_node, nodes, GetDocument(), "append", exception_state);
+  if (exception_state.HadException()) {
+    return;
   }
+  this_node->AppendChildren(node_vector, exception_state);
 }
 
 void Node::before(
@@ -1118,27 +1156,16 @@ void Node::before(
   if (!parent)
     return;
   Node* viable_previous_sibling = FindViablePreviousSibling(*this, nodes);
-  if (RuntimeEnabledFeatures::SkipTemporaryDocumentFragmentEnabled()) {
-    VectorOf<Node> node_vector = ConvertNodeUnionsIntoNodes(
-        parent, nodes, GetDocument(), "before", exception_state);
-    if (exception_state.HadException()) {
-      return;
-    }
-    parent->InsertBefore(node_vector,
-                         viable_previous_sibling
-                             ? viable_previous_sibling->nextSibling()
-                             : parent->firstChild(),
-                         exception_state);
-  } else {
-    if (Node* node = ConvertNodeUnionsIntoNode(parent, nodes, GetDocument(),
-                                               "before", exception_state)) {
-      parent->InsertBefore(node,
-                           viable_previous_sibling
-                               ? viable_previous_sibling->nextSibling()
-                               : parent->firstChild(),
-                           exception_state);
-    }
+  VectorOf<Node> node_vector = ConvertNodeUnionsIntoNodes(
+      parent, nodes, GetDocument(), "before", exception_state);
+  if (exception_state.HadException()) {
+    return;
   }
+  parent->InsertBefore(node_vector,
+                       viable_previous_sibling
+                           ? viable_previous_sibling->nextSibling()
+                           : parent->firstChild(),
+                       exception_state);
 }
 
 void Node::after(
@@ -1148,19 +1175,12 @@ void Node::after(
   if (!parent)
     return;
   Node* viable_next_sibling = FindViableNextSibling(*this, nodes);
-  if (RuntimeEnabledFeatures::SkipTemporaryDocumentFragmentEnabled()) {
-    VectorOf<Node> node_vector = ConvertNodeUnionsIntoNodes(
-        parent, nodes, GetDocument(), "after", exception_state);
-    if (exception_state.HadException()) {
-      return;
-    }
-    parent->InsertBefore(node_vector, viable_next_sibling, exception_state);
-  } else {
-    if (Node* node = ConvertNodeUnionsIntoNode(parent, nodes, GetDocument(),
-                                               "after", exception_state)) {
-      parent->InsertBefore(node, viable_next_sibling, exception_state);
-    }
+  VectorOf<Node> node_vector = ConvertNodeUnionsIntoNodes(
+      parent, nodes, GetDocument(), "after", exception_state);
+  if (exception_state.HadException()) {
+    return;
   }
+  parent->InsertBefore(node_vector, viable_next_sibling, exception_state);
 }
 
 void Node::replaceWith(
@@ -1170,28 +1190,15 @@ void Node::replaceWith(
   if (!parent)
     return;
   Node* viable_next_sibling = FindViableNextSibling(*this, nodes);
-  if (RuntimeEnabledFeatures::SkipTemporaryDocumentFragmentEnabled()) {
-    VectorOf<Node> node_vector = ConvertNodeUnionsIntoNodes(
-        parent, nodes, GetDocument(), "replaceWith", exception_state);
-    if (exception_state.HadException()) {
-      return;
-    }
-    if (parent == parentNode()) {
-      parent->ReplaceChild(node_vector, this, exception_state);
-    } else {
-      parent->InsertBefore(node_vector, viable_next_sibling, exception_state);
-    }
+  VectorOf<Node> node_vector = ConvertNodeUnionsIntoNodes(
+      parent, nodes, GetDocument(), "replaceWith", exception_state);
+  if (exception_state.HadException()) {
+    return;
+  }
+  if (parent == parentNode()) {
+    parent->ReplaceChild(node_vector, this, exception_state);
   } else {
-    Node* node = ConvertNodeUnionsIntoNode(parent, nodes, GetDocument(),
-                                           "replaceWith", exception_state);
-    if (exception_state.HadException()) {
-      return;
-    }
-    if (parent == parentNode()) {
-      parent->ReplaceChild(node, this, exception_state);
-    } else {
-      parent->InsertBefore(node, viable_next_sibling, exception_state);
-    }
+    parent->InsertBefore(node_vector, viable_next_sibling, exception_state);
   }
 }
 
@@ -1207,20 +1214,12 @@ void Node::replaceChildren(
     return;
   }
 
-  if (RuntimeEnabledFeatures::SkipTemporaryDocumentFragmentEnabled()) {
-    VectorOf<Node> nodes = ConvertNodeUnionsIntoNodes(
-        this_node, node_unions, GetDocument(), "replace", exception_state);
-    if (exception_state.HadException()) {
-      return;
-    }
-    this_node->ReplaceChildren(nodes, exception_state);
-  } else {
-    Node* node = ConvertNodeUnionsIntoNode(
-        this_node, node_unions, GetDocument(), "replace", exception_state);
-    if (!exception_state.HadException()) {
-      this_node->ReplaceChildren(node, exception_state);
-    }
+  VectorOf<Node> nodes = ConvertNodeUnionsIntoNodes(
+      this_node, node_unions, GetDocument(), "replace", exception_state);
+  if (exception_state.HadException()) {
+    return;
   }
+  this_node->ReplaceChildren(nodes, exception_state);
 }
 
 void Node::remove(ExceptionState& exception_state) {
@@ -1645,6 +1644,10 @@ unsigned Node::NodeIndex() const {
 }
 
 NodeListsNodeData* Node::NodeLists() {
+  return data_ ? data_->NodeLists() : nullptr;
+}
+
+const NodeListsNodeData* Node::NodeLists() const {
   return data_ ? data_->NodeLists() : nullptr;
 }
 
@@ -2716,11 +2719,18 @@ static void AppendMarkedTree(const String& base_indent,
         AppendMarkedTree(indent_string, pseudo, marked_node1, marked_label1,
                          marked_node2, marked_label2, builder);
       }
+      if (const ColumnPseudoElementsVector* column_pseudo_elements =
+              element->GetColumnPseudoElements()) {
+        for (const ColumnPseudoElement* pseudo : *column_pseudo_elements) {
+          AppendMarkedTree(indent_string, pseudo, marked_node1, marked_label1,
+                           marked_node2, marked_label2, builder);
+        }
+      }
       if (Element* pseudo = element->GetPseudoElement(kPseudoIdScrollMarker)) {
         AppendMarkedTree(indent_string, pseudo, marked_node1, marked_label1,
                          marked_node2, marked_label2, builder);
       }
-      if (Element* pseudo = element->GetPseudoElement(kPseudoIdCheck)) {
+      if (Element* pseudo = element->GetPseudoElement(kPseudoIdCheckMark)) {
         AppendMarkedTree(indent_string, pseudo, marked_node1, marked_label1,
                          marked_node2, marked_label2, builder);
       }
@@ -2730,7 +2740,7 @@ static void AppendMarkedTree(const String& base_indent,
       if (Element* pseudo = element->GetPseudoElement(kPseudoIdAfter))
         AppendMarkedTree(indent_string, pseudo, marked_node1, marked_label1,
                          marked_node2, marked_label2, builder);
-      if (Element* pseudo = element->GetPseudoElement(kPseudoIdSelectArrow)) {
+      if (Element* pseudo = element->GetPseudoElement(kPseudoIdPickerIcon)) {
         AppendMarkedTree(indent_string, pseudo, marked_node1, marked_label1,
                          marked_node2, marked_label2, builder);
       }

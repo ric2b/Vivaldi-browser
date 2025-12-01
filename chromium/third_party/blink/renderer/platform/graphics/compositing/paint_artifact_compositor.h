@@ -231,8 +231,6 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
   void ShowDebugData();
 #endif
 
-  void ForAllContentLayersForTesting(
-      base::FunctionRef<void(ContentLayerClientImpl*)> func) const;
   // Returns the ith ContentLayerClientImpl for testing.
   ContentLayerClientImpl* ContentLayerClientForTesting(wtf_size_t i) const;
 
@@ -341,7 +339,6 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
   class Layerizer;
 
   struct ScrollTranslationInfo {
-    gfx::Rect scrolling_contents_cull_rect;
     bool is_composited = false;
     bool force_main_thread_repaint = false;
   };

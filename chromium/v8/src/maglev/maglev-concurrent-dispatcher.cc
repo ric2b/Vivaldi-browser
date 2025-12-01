@@ -4,6 +4,7 @@
 
 #include "src/maglev/maglev-concurrent-dispatcher.h"
 
+#include "src/base/fpu.h"
 #include "src/codegen/compiler.h"
 #include "src/compiler/compilation-dependencies.h"
 #include "src/compiler/js-heap-broker.h"
@@ -267,6 +268,8 @@ class MaglevConcurrentDispatcher::JobTask final : public v8::JobTask {
       return;
     }
     TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("v8.compile"), "V8.MaglevTask");
+    base::FlushDenormalsScope flush_denormals_scope(
+        isolate()->flush_denormals());
     LocalIsolate local_isolate(isolate(), ThreadKind::kBackground);
     DCHECK(local_isolate.heap()->IsParked());
 
@@ -408,7 +411,9 @@ void MaglevConcurrentDispatcher::AwaitCompileJobs() {
 void MaglevConcurrentDispatcher::Flush(BlockingBehavior behavior) {
   while (!incoming_queue_.IsEmpty()) {
     std::unique_ptr<MaglevCompilationJob> job;
-    incoming_queue_.Dequeue(&job);
+    if (incoming_queue_.Dequeue(&job)) {
+      Compiler::DisposeMaglevCompilationJob(job.get(), isolate_);
+    }
   }
   while (!destruction_queue_.IsEmpty()) {
     std::unique_ptr<MaglevCompilationJob> job;
@@ -419,7 +424,9 @@ void MaglevConcurrentDispatcher::Flush(BlockingBehavior behavior) {
   }
   while (!outgoing_queue_.IsEmpty()) {
     std::unique_ptr<MaglevCompilationJob> job;
-    outgoing_queue_.Dequeue(&job);
+    if (outgoing_queue_.Dequeue(&job)) {
+      Compiler::DisposeMaglevCompilationJob(job.get(), isolate_);
+    }
   }
 }
 

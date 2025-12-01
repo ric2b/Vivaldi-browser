@@ -6,6 +6,7 @@
 
 #include "base/trace_event/trace_event.h"
 #include "components/input/render_widget_host_input_event_router.h"
+#include "components/viz/service/gl/gpu_service_impl.h"
 #include "ui/events/blink/web_input_event_traits.h"
 #include "ui/events/gesture_detection/gesture_provider_config_helper.h"
 
@@ -16,20 +17,43 @@ RenderInputRouterSupportAndroid::~RenderInputRouterSupportAndroid() = default;
 RenderInputRouterSupportAndroid::RenderInputRouterSupportAndroid(
     input::RenderInputRouter* rir,
     RenderInputRouterSupportBase::Delegate* delegate,
-    const FrameSinkId& frame_sink_id)
+    const FrameSinkId& frame_sink_id,
+    GpuServiceImpl* gpu_service)
     : RenderInputRouterSupportBase(rir, delegate, frame_sink_id),
       gesture_provider_(ui::GetGestureProviderConfig(
                             ui::GestureProviderConfigType::CURRENT_PLATFORM,
                             base::SingleThreadTaskRunner::GetCurrentDefault()),
-                        this) {
+                        this),
+      gpu_service_(gpu_service) {
+  CHECK(gpu_service_);
   input_helper_ = std::make_unique<input::AndroidInputHelper>(this, this);
   UpdateFrameSinkIdRegistration();
 }
 
 bool RenderInputRouterSupportAndroid::OnTouchEvent(
-    const ui::MotionEventAndroid& event) {
-  // TODO(366000885): Make touch selection controller input event observer.
-  NOTREACHED();
+    const ui::MotionEventAndroid& event,
+    bool emit_histograms) {
+  if (emit_histograms) {
+    input_helper_->RecordToolTypeForActionDown(event);
+    input_helper_->ComputeEventLatencyOSTouchHistograms(event);
+  }
+
+  ui::FilteredGestureProvider::TouchHandlingResult result =
+      gesture_provider_.OnTouchEvent(event);
+  if (!result.succeeded) {
+    return false;
+  }
+
+  blink::WebTouchEvent web_event = ui::CreateWebTouchEventFromMotionEvent(
+      event, result.moved_beyond_slop_region /* may_cause_scrolling */,
+      false /* hovering */);
+  if (web_event.GetType() == blink::WebInputEvent::Type::kUndefined) {
+    return false;
+  }
+
+  input_helper_->RouteOrForwardTouchEvent(web_event);
+
+  return true;
 }
 
 bool RenderInputRouterSupportAndroid::ShouldRouteEvents() const {
@@ -49,7 +73,11 @@ void RenderInputRouterSupportAndroid::SendGestureEvent(
     const blink::WebGestureEvent& event) {
   // TODO(365985685): Refactor OverscrollController to work with input on Viz.
   // TODO(366000885): Make touch selection controller input event observer.
-  NOTREACHED();
+
+  if (event.GetType() == blink::WebInputEvent::Type::kUndefined) {
+    return;
+  }
+  input_helper_->RouteOrForwardGestureEvent(event);
 }
 
 ui::FilteredGestureProvider&
@@ -67,8 +95,8 @@ void RenderInputRouterSupportAndroid::ProcessAckedTouchEvent(
 
 void RenderInputRouterSupportAndroid::DidOverscroll(
     const ui::DidOverscrollParams& params) {
-  // TODO(365985685): Refactor OverscrollController to work with input on Viz.
-  NOTREACHED();
+  // The implementation on Browser side informs SyncCompositor and
+  // OverscrollController, and both of those are unaffected by InputVizard.
 }
 
 FrameSinkId RenderInputRouterSupportAndroid::GetRootFrameSinkId() {
@@ -90,16 +118,30 @@ bool RenderInputRouterSupportAndroid::TransformPointToCoordSpaceForView(
 
 void RenderInputRouterSupportAndroid::TransformPointToRootSurface(
     gfx::PointF* point) {
-  // TODO(365995153): Add BrowserControl's top control height to
-  // CompositorFrameMetaData.
-  NOTREACHED();
+  auto* metadata = delegate()->GetLastActivatedFrameMetadata(GetFrameSinkId());
+  // Adjust the point's y-coordinate to account for the height of the top
+  // controls bar. In general, Viz should have the updated top controls height
+  // when transform is called and if it isn't updated, the toolbar isn't visible
+  // and thus the |point| is already "transformed".
+  if (metadata) {
+    *point +=
+        gfx::Vector2d(0, metadata->top_controls_visible_height.value_or(0.f));
+  }
 }
 
 blink::mojom::InputEventResultState
 RenderInputRouterSupportAndroid::FilterInputEvent(
     const blink::WebInputEvent& input_event) {
-  // TODO(365985685): Refactor OverscrollController to work with input on Viz.
-  NOTREACHED();
+  // On Viz side here we do not need a call to
+  // `GestureListenerManager::FilterInputEvent` which happens on Browser. This
+  // is used on Browser for offering input to embedders, and the only user is
+  // Webview which is not affected by InputVizard.
+
+  if (input_event.GetType() == blink::WebInputEvent::Type::kTouchStart) {
+    gpu_service_->WakeUpGpu();
+  }
+
+  return blink::mojom::InputEventResultState::kNotConsumed;
 }
 
 void RenderInputRouterSupportAndroid::GestureEventAck(
@@ -107,7 +149,15 @@ void RenderInputRouterSupportAndroid::GestureEventAck(
     blink::mojom::InputEventResultSource ack_source,
     blink::mojom::InputEventResultState ack_result) {
   // TODO(365985685): Refactor OverscrollController to work with input on Viz.
-  NOTREACHED();
+
+  // Stop flinging if a GSU event with momentum phase is sent to the renderer
+  // but not consumed.
+  StopFlingingIfNecessary(event, ack_result);
+}
+
+base::WeakPtr<RenderInputRouterSupportAndroid>
+RenderInputRouterSupportAndroid::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
 }
 
 }  // namespace viz

@@ -37,7 +37,6 @@
 #include "chrome/browser/renderer_preferences_util.h"
 #include "chrome/browser/send_tab_to_self/receiving_ui_handler_registry.h"
 #include "chrome/browser/themes/theme_service.h"
-#include "chrome/browser/ui/autofill/add_new_address_bubble_controller.h"
 #include "chrome/browser/ui/autofill/autofill_bubble_handler.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "chrome/browser/ui/autofill/save_address_bubble_controller.h"
@@ -255,6 +254,10 @@ class VivaldiBrowserWindow::InterfaceHelper final
 
   void ExitFullscreen() override { window_->SetFullscreen(false); }
 
+  bool CanUserEnterFullscreen() const override {
+    return window_->GetCanResizeFromWebAPI().value_or(true);
+  }
+
   bool CanUserExitFullscreen() const override { return true; }
 
   void UpdateExclusiveAccessBubble(
@@ -317,13 +320,12 @@ class VivaldiBrowserWindow::InterfaceHelper final
         web_contents, controller, is_user_gesture);
   }
 
-  autofill::AutofillBubbleBase* ShowSaveAutofillPredictionImprovementsBubble(
+  autofill::AutofillBubbleBase* ShowSaveAutofillAiDataBubble(
       content::WebContents* web_contents,
-      autofill::SaveAutofillPredictionImprovementsController* controller)
+      autofill_ai::SaveAutofillAiDataController* controller)
       override {
-    return GetAutofillBubbleHandler()
-        ->ShowSaveAutofillPredictionImprovementsBubble(web_contents,
-                                                       controller);
+    return GetAutofillBubbleHandler()->ShowSaveAutofillAiDataBubble(
+        web_contents, controller);
   }
 
   autofill::AutofillBubbleBase* ShowSaveAddressProfileBubble(
@@ -334,19 +336,22 @@ class VivaldiBrowserWindow::InterfaceHelper final
         web_contents, std::move(controller), is_user_gesture);
   }
 
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+  autofill::AutofillBubbleBase* ShowAddressSignInPromo(
+      content::WebContents* web_contents,
+      const autofill::AutofillProfile& autofill_profile) override {
+    // This relies on kImprovedSigninUIOnDesktop, currently disabled. Returning
+    // false might propegate problems. Leave for now. 134 intake VB-113625
+    return GetAutofillBubbleHandler()->ShowAddressSignInPromo(
+        web_contents, autofill_profile);
+  }
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
+
   autofill::AutofillBubbleBase* ShowUpdateAddressProfileBubble(
       content::WebContents* web_contents,
       std::unique_ptr<autofill::UpdateAddressBubbleController> controller,
       bool is_user_gesture) override {
     return GetAutofillBubbleHandler()->ShowUpdateAddressProfileBubble(
-        web_contents, std::move(controller), is_user_gesture);
-  }
-
-  autofill::AutofillBubbleBase* ShowAddNewAddressProfileBubble(
-      content::WebContents* web_contents,
-      std::unique_ptr<autofill::AddNewAddressBubbleController> controller,
-      bool is_user_gesture) override {
-    return GetAutofillBubbleHandler()->ShowAddNewAddressProfileBubble(
         web_contents, std::move(controller), is_user_gesture);
   }
 
@@ -609,14 +614,14 @@ std::unique_ptr<content::WebContents> CreateBrowserWebContents(
 
   content::WebContents::CreateParams create_params(profile,
                                                    site_instance.get());
-  int extension_process_id = site_instance->GetProcess()->GetID();
+  int extension_process_id = site_instance->GetProcess()->GetID().value();
   if (creator_frame) {
     Profile* creatorprofile = Profile::FromBrowserContext(
         creator_frame->GetSiteInstance()->GetBrowserContext());
 
     if (!creatorprofile->IsOffTheRecord()) {
       create_params.opener_render_process_id =
-          creator_frame->GetProcess()->GetID();
+          creator_frame->GetProcess()->GetID().value();
       create_params.opener_render_frame_id = creator_frame->GetRoutingID();
 
       // All windows for the same profile should share the same process.
@@ -1741,7 +1746,7 @@ bool VivaldiBrowserWindow::HandleKeyboardEvent(
 #endif  // BUILDFLAG(IS_MAC)
 
   extensions::VivaldiUIEvents::SendKeyboardShortcutEvent(
-      id(), browser_->profile(), event, is_auto_repeat);
+      id(), browser_->profile(), event, is_auto_repeat, false);
 
   if (!widget_)
     return false;
@@ -2522,6 +2527,13 @@ PageActionIconView* VivaldiToolbarButtonProvider::GetPageActionIconView(
   return static_cast<PageActionIconView*>(window_->GetWebView());
 }
 
+page_actions::PageActionView* VivaldiToolbarButtonProvider::GetPageActionView(
+    actions::ActionId action_id) {
+  // TODO(crbug.com/386376455): Return the appropriate view once web apps
+  // support the new Page Actions framework.
+  return nullptr;
+}
+
 AppMenuButton* VivaldiToolbarButtonProvider::GetAppMenuButton() {
   return nullptr;
 }
@@ -2539,7 +2551,7 @@ VivaldiToolbarButtonProvider::GetAsAccessiblePaneView() {
 }
 
 views::View* VivaldiToolbarButtonProvider::GetAnchorView(
-    std::optional<PageActionIconType> type) {
+    std::optional<actions::ActionId> type) {
   // Return the webview.
   return window_->GetWebView();
 }

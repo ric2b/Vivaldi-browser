@@ -53,6 +53,8 @@ class ExceptionState;
 
 template <typename IDLResolvedType>
 class ScriptPromise;
+template <typename IDLResolvedType>
+class MemberScriptPromise;
 
 // Defined here rather than in native_value_traits_impl.h to avoid a circular
 // dependency.
@@ -147,6 +149,11 @@ class CORE_EXPORT ThenCallable : public ScriptFunction {
           // return anything (no chaining).
           static_cast<Derived*>(this)->React(script_state,
                                              std::move(blink_value));
+        } else if constexpr (std::is_same_v<IDLAny, ThenReturnType>) {
+          // Promise resolves with a value, and is chaining any. Just pass down
+          // the ScriptValue that is returned.
+          return_value = static_cast<Derived*>(this)->React(
+              script_state, std::move(blink_value));
         } else {
           // Promise resolves with a value, and is chaining.
           return_value = ScriptValue(
@@ -173,10 +180,13 @@ class CORE_EXPORT ThenCallable : public ScriptFunction {
 };
 
 // ScriptPromise is the class for representing Promise values in C++
-// world. ScriptPromise holds a Promise. Holding a `ScriptPromise`
-// is rarely needed — typically you hold a `ScriptPromiseResolver` when creating
-// a Promise and passing it *to* JavaScript — but is necessary when
-// holding a promise received *from* JavaScript. If a promise is exposed as an
+// world. ScriptPromise holds a Promise. ScriptPromise is STACK_ALLOCATED, and
+// thus cannot be stored. Typically you hold a `ScriptPromiseResolver` when
+// creating a Promise and passing it *to* JavaScript. When receiving a promise
+// *from* JavaScript, ScriptPromise is sufficient if the promise is
+// only transiently handled. However, if the promise needs to be stored for
+// later use, ScriptPromise must be converted to a MemberScriptPromise
+// (which is handled automatically via operator). If a promise is exposed as an
 // attribute in IDL and you need to return the same promise on multiple
 // invocations, use ScriptPromiseProperty.
 //
@@ -185,7 +195,7 @@ class CORE_EXPORT ThenCallable : public ScriptFunction {
 // use promises for critical use such as releasing a resource.
 template <typename IDLResolvedType>
 class ScriptPromise {
-  DISALLOW_NEW();
+  STACK_ALLOCATED();
 
  public:
   ScriptPromise() = default;
@@ -243,13 +253,8 @@ class ScriptPromise {
     return ScriptPromise<IDLResolvedType>(isolate, resolver->GetPromise());
   }
 
-  v8::Local<v8::Promise> V8Promise() const {
-    return IsEmpty() ? v8::Local<v8::Promise>()
-                     : promise_.Get(ScriptState::ForCurrentRealm(isolate_));
-  }
-
+  v8::Local<v8::Promise> V8Promise() const { return promise_.Get(isolate_); }
   bool IsEmpty() const { return promise_.IsEmpty(); }
-  void Clear() { promise_.Reset(); }
 
   // Marks this promise as handled to avoid reporting unhandled rejections.
   void MarkAsHandled() {
@@ -272,116 +277,55 @@ class ScriptPromise {
     return !operator==(value);
   }
 
-  void Trace(Visitor* visitor) const { visitor->Trace(promise_); }
-
-  template <typename ReturnPromiseResolveType = IDLResolvedType,
-            typename ResolveClass>
-  ScriptPromise<ReturnPromiseResolveType> Then(
-      ScriptState* script_state,
-      ThenCallable<IDLResolvedType, ResolveClass, ReturnPromiseResolveType>*
-          on_fulfilled) const {
-    if (IsEmpty()) {
-      return ScriptPromise<ReturnPromiseResolveType>();
-    }
-    v8::Local<v8::Promise> v8_promise =
-        V8Promise()
-            ->Then(script_state->GetContext(),
-                   on_fulfilled->ToV8Function(script_state))
-            .FromMaybe(v8::Local<v8::Promise>());
-    return ScriptPromise<ReturnPromiseResolveType>::FromV8Promise(
-        script_state->GetIsolate(), v8_promise);
-  }
-
-  template <typename ReturnPromiseResolveType = IDLResolvedType,
-            typename ReturnPromiseRejectType = IDLUndefined,
+  template <typename ResolveReactType,
+            typename RejectReactType = IDLUndefined,
             typename ResolveClass,
-            typename RejectClass>
+            typename RejectClass = void,
+            typename ReturnPromiseResolveType = std::conditional_t<
+                std::is_same_v<ResolveReactType, IDLPromise<IDLResolvedType>>,
+                IDLResolvedType,
+                ResolveReactType>>
   ScriptPromise<ReturnPromiseResolveType> Then(
       ScriptState* script_state,
-      ThenCallable<IDLResolvedType, ResolveClass, ReturnPromiseResolveType>*
+      ThenCallable<IDLResolvedType, ResolveClass, ResolveReactType>*
           on_fulfilled,
-      ThenCallable<IDLAny, RejectClass, ReturnPromiseRejectType>* on_rejected)
-      const {
+      ThenCallable<IDLAny, RejectClass, RejectReactType>* on_rejected =
+          nullptr) const {
     if (IsEmpty()) {
       return ScriptPromise<ReturnPromiseResolveType>();
     }
-    on_fulfilled->SetTypingFailureCallable(on_rejected);
-    v8::Local<v8::Promise> v8_promise =
-        V8Promise()
-            ->Then(script_state->GetContext(),
-                   on_fulfilled->ToV8Function(script_state),
-                   on_rejected->ToV8Function(script_state))
-            .FromMaybe(v8::Local<v8::Promise>());
-    return ScriptPromise<ReturnPromiseResolveType>::FromV8Promise(
-        script_state->GetIsolate(), v8_promise);
-  }
-
-  // For chaining promises in ThenCallable<>::React().
-  template <typename ReturnPromiseResolveType, typename ResolveClass>
-  ScriptPromise<ReturnPromiseResolveType> Then(
-      ScriptState* script_state,
-      ThenCallable<IDLResolvedType,
-                   ResolveClass,
-                   IDLPromise<ReturnPromiseResolveType>>* on_fulfilled) const {
-    if (IsEmpty()) {
-      return ScriptPromise<ReturnPromiseResolveType>();
-    }
-    v8::Local<v8::Promise> v8_promise =
-        V8Promise()
-            ->Then(script_state->GetContext(),
-                   on_fulfilled->ToV8Function(script_state))
-            .FromMaybe(v8::Local<v8::Promise>());
-    return ScriptPromise<ReturnPromiseResolveType>::FromV8Promise(
-        script_state->GetIsolate(), v8_promise);
-  }
-
-  template <typename ResolveClass>
-  void React(ScriptState* script_state,
-             ThenCallable<IDLResolvedType, ResolveClass, IDLUndefined>*
-                 on_fulfilled) const {
-    if (IsEmpty()) {
-      return;
-    }
-    std::ignore = V8Promise()->Then(script_state->GetContext(),
-                                    on_fulfilled->ToV8Function(script_state));
-  }
-
-  template <typename ResolveClass, typename RejectClass>
-  void React(
-      ScriptState* script_state,
-      ThenCallable<IDLResolvedType, ResolveClass, IDLUndefined>* on_fulfilled,
-      ThenCallable<IDLAny, RejectClass, IDLUndefined>* on_rejected) const {
-    if (IsEmpty()) {
-      return;
-    }
-    on_fulfilled->SetTypingFailureCallable(on_rejected);
-    std::ignore = V8Promise()->Then(script_state->GetContext(),
-                                    on_fulfilled->ToV8Function(script_state),
-                                    on_rejected->ToV8Function(script_state));
-  }
-
-  template <typename ResolveClass, typename RejectClass>
-  void ReactNoTypeChecks(
-      ScriptState* script_state,
-      ThenCallable<IDLAny, ResolveClass, IDLUndefined>* on_fulfilled,
-      ThenCallable<IDLAny, RejectClass, IDLUndefined>* on_rejected) const {
-    if (IsEmpty()) {
-      return;
-    }
-    std::ignore = V8Promise()->Then(script_state->GetContext(),
-                                    on_fulfilled->ToV8Function(script_state),
-                                    on_rejected->ToV8Function(script_state));
-  }
-
-  template <typename RejectClass>
-  void Catch(
-      ScriptState* script_state,
-      ThenCallable<IDLAny, RejectClass, IDLUndefined>* on_rejected) const {
-    if (IsEmpty()) {
-      return;
-    }
-    std::ignore = V8Promise()->Catch(script_state->GetContext(),
+    v8::MaybeLocal<v8::Promise> v8_promise;
+    if constexpr (std::is_void_v<RejectClass>) {
+      v8_promise = V8Promise()->Then(script_state->GetContext(),
+                                     on_fulfilled->ToV8Function(script_state));
+    } else {
+      on_fulfilled->SetTypingFailureCallable(on_rejected);
+      v8_promise = V8Promise()->Then(script_state->GetContext(),
+                                     on_fulfilled->ToV8Function(script_state),
                                      on_rejected->ToV8Function(script_state));
+    }
+    return ScriptPromise<ReturnPromiseResolveType>::FromV8Promise(
+        script_state->GetIsolate(),
+        v8_promise.FromMaybe(v8::Local<v8::Promise>()));
+  }
+
+  template <typename RejectReactType, typename RejectClass>
+  ScriptPromise<IDLResolvedType> Catch(
+      ScriptState* script_state,
+      ThenCallable<IDLAny, RejectClass, RejectReactType>* on_rejected) const {
+    if (IsEmpty()) {
+      return ScriptPromise<IDLResolvedType>();
+    }
+    auto v8_promise = V8Promise()->Catch(
+        script_state->GetContext(), on_rejected->ToV8Function(script_state));
+    return ScriptPromise<IDLResolvedType>::FromV8Promise(
+        script_state->GetIsolate(),
+        v8_promise.FromMaybe(v8::Local<v8::Promise>()));
+  }
+
+  // NOLINTNEXTLINE(google-explicit-constructor)
+  operator MemberScriptPromise<IDLResolvedType>() const {
+    return MemberScriptPromise<IDLResolvedType>(isolate_, V8Promise());
   }
 
  private:
@@ -391,7 +335,38 @@ class ScriptPromise {
   ScriptPromise(v8::Isolate* isolate, v8::Local<v8::Promise> promise)
       : isolate_(isolate), promise_(isolate, promise) {}
 
-  v8::Isolate* isolate_ = nullptr;
+  v8::Isolate* isolate_;
+  TraceWrapperV8Reference<v8::Promise> promise_;
+};
+
+// A helper for storing a ScriptPromise, which is STACK_ALLOCATED. Must be
+// converted back to ScriptPromise (via Unwrap()) in order to perform a Then().
+template <typename IDLResolvedType>
+class MemberScriptPromise {
+  DISALLOW_NEW();
+
+ public:
+  MemberScriptPromise() = default;
+  MemberScriptPromise(v8::Isolate* isolate, v8::Local<v8::Promise> promise)
+      : isolate_(isolate), promise_(isolate, promise) {}
+
+  ScriptPromise<IDLResolvedType> Unwrap() const {
+    if (IsEmpty()) {
+      return ScriptPromise<IDLResolvedType>();
+    }
+    return ScriptPromise<IDLResolvedType>::FromV8Promise(
+        isolate_, promise_.Get(ScriptState::ForCurrentRealm(isolate_)));
+  }
+
+  // NOLINTNEXTLINE(google-explicit-constructor)
+  operator ScriptPromise<IDLResolvedType>() const { return Unwrap(); }
+
+  bool IsEmpty() const { return promise_.IsEmpty(); }
+  void Clear() { promise_.Reset(); }
+  void Trace(Visitor* visitor) const { visitor->Trace(promise_); }
+
+ private:
+  v8::Isolate* isolate_;
   WorldSafeV8Reference<v8::Promise> promise_;
 };
 
@@ -442,8 +417,8 @@ class EmptyPromise {
 namespace WTF {
 
 template <typename T>
-struct VectorTraits<blink::ScriptPromise<T>>
-    : VectorTraitsBase<blink::ScriptPromise<T>> {
+struct VectorTraits<blink::MemberScriptPromise<T>>
+    : VectorTraitsBase<blink::MemberScriptPromise<T>> {
   STATIC_ONLY(VectorTraits);
   static constexpr bool kCanClearUnusedSlotsWithMemset = true;
 };

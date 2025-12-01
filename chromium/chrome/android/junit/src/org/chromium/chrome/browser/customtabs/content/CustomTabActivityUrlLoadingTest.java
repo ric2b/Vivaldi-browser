@@ -33,13 +33,14 @@ import org.robolectric.annotation.Implements;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Features;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.content.WebContentsFactory;
 import org.chromium.chrome.browser.content.WebContentsFactoryJni;
 import org.chromium.chrome.browser.customtabs.CustomTabAuthUrlHeuristics;
 import org.chromium.chrome.browser.customtabs.CustomTabAuthUrlHeuristicsJni;
 import org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.preloading.PreloadingDataBridge;
+import org.chromium.chrome.browser.preloading.PreloadingDataBridgeJni;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.embedder_support.util.UrlUtilities;
@@ -77,18 +78,18 @@ public class CustomTabActivityUrlLoadingTest {
     private CustomTabActivityNavigationController mNavigationController;
     private CustomTabIntentHandler mIntentHandler;
 
-    @Rule public JniMocker mocker = new JniMocker();
-
     @Mock UrlUtilities.Natives mUrlUtilitiesJniMock;
     @Mock CustomTabAuthUrlHeuristics.Natives mCustomTabAuthUrlHeuristicsJniMock;
     @Mock WebContentsFactory.Natives mWebContentsFactoryJni;
+    @Mock PreloadingDataBridge.Natives mPreloadingDataBridgeMock;
 
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
-        mocker.mock(UrlUtilitiesJni.TEST_HOOKS, mUrlUtilitiesJniMock);
-        mocker.mock(CustomTabAuthUrlHeuristicsJni.TEST_HOOKS, mCustomTabAuthUrlHeuristicsJniMock);
-        mocker.mock(WebContentsFactoryJni.TEST_HOOKS, mWebContentsFactoryJni);
+        UrlUtilitiesJni.setInstanceForTesting(mUrlUtilitiesJniMock);
+        CustomTabAuthUrlHeuristicsJni.setInstanceForTesting(mCustomTabAuthUrlHeuristicsJniMock);
+        WebContentsFactoryJni.setInstanceForTesting(mWebContentsFactoryJni);
+        PreloadingDataBridgeJni.setInstanceForTesting(mPreloadingDataBridgeMock);
 
         when(env.profileProvider.getOriginalProfile()).thenReturn(mProfile);
         when(env.profileProvider.getOffTheRecordProfile(eq(true))).thenReturn(mIncognitoProfile);

@@ -84,7 +84,7 @@ class ExtensionActionUtilFactory : public BrowserContextKeyedServiceFactory {
   ~ExtensionActionUtilFactory() override;
 
   // BrowserContextKeyedServiceFactory:
-  KeyedService* BuildServiceInstanceFor(
+  std::unique_ptr<KeyedService> BuildServiceInstanceForBrowserContext(
       content::BrowserContext* context) const override;
   bool ServiceIsCreatedWithBrowserContext() const override;
   bool ServiceIsNULLWhileTesting() const override;
@@ -105,6 +105,8 @@ class ExtensionActionUtil
                              const gfx::Image& image);
 
   explicit ExtensionActionUtil(Profile*);
+
+  ~ExtensionActionUtil() override;
 
   void FillInfoForTabId(vivaldi::extension_action_utils::ExtensionInfo* info,
                         ExtensionAction* action,
@@ -128,8 +130,6 @@ class ExtensionActionUtil
   }
 
  private:
-  ~ExtensionActionUtil() override;
-
   // KeyedService implementation.
   void Shutdown() override;
 

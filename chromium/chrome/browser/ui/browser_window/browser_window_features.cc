@@ -12,8 +12,10 @@
 #include "base/no_destructor.h"
 #include "chrome/browser/collaboration/collaboration_service_factory.h"
 #include "chrome/browser/commerce/shopping_service_factory.h"
+#include "chrome/browser/download/bubble/download_bubble_prefs.h"
 #include "chrome/browser/extensions/manifest_v2_experiment_manager.h"
 #include "chrome/browser/extensions/mv2_experiment_stage.h"
+#include "chrome/browser/lens/region_search/lens_region_search_controller.h"
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -23,7 +25,9 @@
 #include "chrome/browser/ui/extensions/mv2_disabled_dialog_controller.h"
 #include "chrome/browser/ui/lens/lens_overlay_entry_point_controller.h"
 #include "chrome/browser/ui/performance_controls/memory_saver_opt_in_iph_controller.h"
+#include "chrome/browser/ui/tabs/glic_nudge_controller.h"
 #include "chrome/browser/ui/tabs/organization/tab_declutter_controller.h"
+#include "chrome/browser/ui/tabs/saved_tab_groups/most_recent_update_store.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/session_service_tab_group_sync_observer.h"
 #include "chrome/browser/ui/toasts/toast_controller.h"
@@ -32,12 +36,15 @@
 #include "chrome/browser/ui/toolbar/chrome_labs/chrome_labs_utils.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/data_sharing/data_sharing_open_group_helper.h"
+#include "chrome/browser/ui/views/download/bubble/download_toolbar_ui_controller.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/media_router/cast_browser_controller.h"
 #include "chrome/browser/ui/views/send_tab_to_self/send_tab_to_self_toolbar_bubble_controller.h"
 #include "chrome/browser/ui/views/side_panel/extensions/extension_side_panel_manager.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_coordinator.h"
 #include "chrome/browser/ui/views/toolbar/chrome_labs/chrome_labs_coordinator.h"
+#include "chrome/common/chrome_features.h"
 #include "components/collaboration/public/collaboration_service.h"
 #include "components/commerce/core/commerce_feature_list.h"
 #include "components/commerce/core/feature_utils.h"
@@ -45,6 +52,11 @@
 #include "components/lens/lens_features.h"
 #include "components/profile_metrics/browser_profile_type.h"
 #include "components/saved_tab_groups/public/features.h"
+
+#if BUILDFLAG(ENABLE_GLIC)
+#include "chrome/browser/glic/glic_enabling.h"
+#include "chrome/browser/glic/glic_iph_controller.h"
+#endif
 
 #include "app/vivaldi_apptools.h"
 #include "ui/vivaldi_side_panel_coordinator.h"
@@ -104,11 +116,16 @@ void BrowserWindowFeatures::Init(BrowserWindowInterface* browser) {
 
     if (browser->GetProfile()->IsRegularProfile() &&
         tab_groups::IsTabGroupsSaveV2Enabled() &&
-        browser->GetTabStripModel()->SupportsTabGroups()) {
+        browser->GetTabStripModel()->SupportsTabGroups() &&
+        tab_groups::SavedTabGroupUtils::GetServiceForProfile(
+            browser->GetProfile())) {
       session_service_tab_group_sync_observer_ =
           std::make_unique<tab_groups::SessionServiceTabGroupSyncObserver>(
               browser->GetProfile(), browser->GetTabStripModel(),
               browser->GetSessionID());
+
+      most_recent_update_store_ =
+          std::make_unique<tab_groups::MostRecentUpdateStore>(browser);
     }
 
     if (features::IsTabstripDeclutterEnabled() &&
@@ -117,6 +134,15 @@ void BrowserWindowFeatures::Init(BrowserWindowInterface* browser) {
       tab_declutter_controller_ =
           std::make_unique<tabs::TabDeclutterController>(browser);
     }
+
+#if BUILDFLAG(ENABLE_GLIC)
+    if (GlicEnabling::IsProfileEligible(browser->GetProfile())) {
+      DCHECK(features::IsTabstripComboButtonEnabled());
+      glic_nudge_controller_ =
+          std::make_unique<tabs::GlicNudgeController>(browser);
+      glic_iph_controller_ = std::make_unique<glic::GlicIphController>(browser);
+    }
+#endif  // BUILDFLAG(ENABLE_GLIC)
 
     if (vivaldi::IsVivaldiRunning()) {
       CHECK(!side_panel_coordinator_);
@@ -130,6 +156,8 @@ void BrowserWindowFeatures::Init(BrowserWindowInterface* browser) {
   // logic for code shared by both normal and non-normal windows.
   lens_overlay_entry_point_controller_ =
       std::make_unique<lens::LensOverlayEntryPointController>();
+  lens_region_search_controller_ =
+      std::make_unique<lens::LensRegionSearchController>();
 
   tab_strip_model_ = browser->GetTabStripModel();
 }
@@ -147,14 +175,23 @@ void BrowserWindowFeatures::InitPostWindowConstruction(Browser* browser) {
     send_tab_to_self_toolbar_bubble_controller_ = std::make_unique<
         send_tab_to_self::SendTabToSelfToolbarBubbleController>(browser);
 
-    // TODO(b/350508658): Ideally, we don't pass in a reference to browser as
-    // per the guidance in the comment above. However, currently, we need
-    // browser to properly determine if the lens overlay is enabled.
+    // TODO(crbug.com/350508658): Ideally, we don't pass in a reference to
+    // browser as per the guidance in the comment above. However, currently,
+    // we need browser to properly determine if the lens overlay is enabled.
     // Cannot be in Init since needs to listen to the fullscreen controller
-    // which is initialized after Init.
+    // and location bar view which are initialized after Init.
     if (lens::features::IsLensOverlayEnabled()) {
+      views::View* location_bar = nullptr;
+      // TODO(crbug.com/360163254): We should really be using
+      // Browser::GetBrowserView, which always returns a non-null BrowserView
+      // in production, but this crashes during unittests using
+      // BrowserWithTestWindowTest; these should eventually be refactored.
+      if (BrowserView* browser_view =
+              BrowserView::GetBrowserViewForBrowser(browser)) {
+        location_bar = browser_view->GetLocationBarView();
+      }
       lens_overlay_entry_point_controller_->Initialize(
-          browser, browser->command_controller());
+          browser, browser->command_controller(), location_bar);
     }
 
     auto* experiment_manager =
@@ -220,13 +257,22 @@ void BrowserWindowFeatures::InitPostBrowserViewConstruction(
 
     if (media_router::MediaRouterEnabled(browser_view->browser()->profile())) {
       cast_browser_controller_ =
-          std::make_unique<media_router::CastBrowserController>(browser_view->browser());
+          std::make_unique<media_router::CastBrowserController>(
+              browser_view->browser());
     }
+  }
+
+  if (download::IsDownloadBubbleEnabled() &&
+      features::IsToolbarPinningEnabled() &&
+      base::FeatureList::IsEnabled(features::kPinnableDownloadsButton)) {
+    download_toolbar_ui_controller_ =
+        std::make_unique<DownloadToolbarUIController>(browser_view);
   }
 }
 
 void BrowserWindowFeatures::TearDownPreBrowserViewDestruction() {
   memory_saver_opt_in_iph_controller_.reset();
+  lens_overlay_entry_point_controller_.reset();
 
   // TODO(crbug.com/346148093): This logic should not be gated behind a
   // conditional.

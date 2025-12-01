@@ -48,8 +48,9 @@ cc_library(
         "//tensorflow/core/platform:stringpiece",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:check",
-        "@local_tsl//tsl/platform:env",
-        "@local_tsl//tsl/platform:errors",
+        "@com_google_absl//absl/status",
+        "@local_xla//xla/tsl/platform:env",
+        "@local_xla//xla/tsl/platform:errors",
     ],
 )
 

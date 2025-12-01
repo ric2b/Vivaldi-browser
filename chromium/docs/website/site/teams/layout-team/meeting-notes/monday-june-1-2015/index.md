@@ -22,7 +22,7 @@ layout performance.
 
 - Interaction records.
 
-Scrolling (skobes) \[[crbug.com/417782](http://crbug.com/417782)\]
+Scrolling (skobes) \[[crbug.com/417782](https://crbug.com/417782)\]
 
 - Figured out a way to run the WebFrameTest unit tests with booth root
 
@@ -34,11 +34,11 @@ regressions.
 
 factor cause the FrameView to be a different size.
 
-Line Boxes (szager) \[[crbug.com/321237](http://crbug.com/321237)\]
+Line Boxes (szager) \[[crbug.com/321237](https://crbug.com/321237)\]
 
 - Landed over the weekend, re-baselines almost done. Yay!
 
-Flexbox (cbiesinger) \[[crbug.com/426898](http://crbug.com/426898)\]
+Flexbox (cbiesinger) \[[crbug.com/426898](https://crbug.com/426898)\]
 
 - Updated min-size handling to match latest version of spec.
 
@@ -47,11 +47,11 @@ Flexbox (cbiesinger) \[[crbug.com/426898](http://crbug.com/426898)\]
 ensure compatibility across browsers.
 
 Menu list refactoring (dsinclair)
-\[[crbug.com/370462](http://crbug.com/370462)\]
+\[[crbug.com/370462](https://crbug.com/370462)\]
 
 - Done!
 
-Fullscreen (dsinclair) \[[crbug.com/370459](http://crbug.com/370459)\]
+Fullscreen (dsinclair) \[[crbug.com/370459](https://crbug.com/370459)\]
 
 - Landed fix to persist plugins over re-attach. Subsequently reverted
 
@@ -64,7 +64,7 @@ Misc Warden (dsinclair, pilgrim)
 - Containing work to slim-dopwn LayoutObject. (pilgrim)
 
 Region-based multi-column support (mstensho)
-\[[crbug.com/334335](http://crbug.com/334335)\]
+\[[crbug.com/334335](https://crbug.com/334335)\]
 
 - Will start to delete the old multicol code this week. It's no longer
 
@@ -100,7 +100,7 @@ Importing Test Suites
 
 - Imported HTML tests. (tkent)
 
-Removing DeprecatedPaintLayer \[[crbug.com/260898](http://crbug.com/260898)\]
+Removing DeprecatedPaintLayer \[[crbug.com/260898](https://crbug.com/260898)\]
 (chadarmstrong)
 
 - Started looking at moving hit testing from DeprecatedPaintLayer to
@@ -109,7 +109,7 @@ Box model object.
 
 - jchaffraix helping chadarmstrong get up to speed.
 
-Add API for layout \[[crbug.com/495288](http://crbug.com/495288)\] (leviw)
+Add API for layout \[[crbug.com/495288](https://crbug.com/495288)\] (leviw)
 
 - Meeting last where where the plans for the grand layout refactoring
 
@@ -123,7 +123,7 @@ https://www.chromium.org/blink/layout-team/meeting-notes/may-28-2015
 
 https://docs.google.com/document/d/1qc5Ni-TfCyvTi6DWBQQ_S_MWJlViJ-ikMEr1FSL0hRc
 
-Multipart images \[[crbug.com/308999](http://crbug.com/308999)\] (japhet)
+Multipart images \[[crbug.com/308999](https://crbug.com/308999)\] (japhet)
 
 - Implemented support for multipart image documents.
 

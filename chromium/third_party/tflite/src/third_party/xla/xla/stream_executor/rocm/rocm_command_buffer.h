@@ -19,18 +19,22 @@ limitations under the License.
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <type_traits>
 #include <vector>
 
 #include "absl/functional/any_invocable.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
 #include "rocm/include/hip/hip_runtime.h"
 #include "xla/stream_executor/command_buffer.h"
 #include "xla/stream_executor/device_memory.h"
 #include "xla/stream_executor/gpu/gpu_command_buffer.h"
-#include "xla/stream_executor/gpu/gpu_executor.h"
+#include "xla/stream_executor/gpu/scoped_gpu_graph_exec.h"
+#include "xla/stream_executor/gpu/scoped_update_mode.h"
 #include "xla/stream_executor/kernel.h"
 #include "xla/stream_executor/launch_dim.h"
+#include "xla/stream_executor/stream_executor.h"
 
 namespace stream_executor::gpu {
 
@@ -39,13 +43,16 @@ class RocmCommandBuffer : public GpuCommandBuffer {
  public:
   // Creates a new ROCm command buffer and the underlying HIP graph.
   static absl::StatusOr<std::unique_ptr<RocmCommandBuffer>> Create(
-      Mode mode, GpuExecutor* parent);
+      Mode mode, StreamExecutor* parent);
+
+  ~RocmCommandBuffer() override;
 
  private:
-  RocmCommandBuffer(Mode mode, GpuExecutor* parent, hipGraph_t graph,
+  RocmCommandBuffer(Mode mode, StreamExecutor* parent, hipGraph_t graph,
                     bool is_owned_graph)
-      : GpuCommandBuffer(mode, parent, graph, is_owned_graph),
-        parent_(parent) {}
+      : GpuCommandBuffer(mode, parent),
+        graph_(graph),
+        is_owned_graph_(is_owned_graph) {}
 
   absl::Status LaunchSetIfConditionKernel(
       ExecutionScopeId execution_scope_id,
@@ -68,8 +75,9 @@ class RocmCommandBuffer : public GpuCommandBuffer {
       ExecutionScopeId execution_scope_id, GraphConditionalHandle conditional,
       DeviceMemory<bool> predicate) override;
 
-  std::unique_ptr<GpuCommandBuffer> CreateNestedCommandBuffer(
-      hipGraph_t graph) override;
+  absl::StatusOr<ConditionalNodeResult> CreateConditionalNode(
+      const Dependencies& dependencies, GraphConditionalHandle conditional,
+      ConditionType type) override;
 
   absl::StatusOr<GraphNodeHandle> CreateMemsetNode(
       const Dependencies& dependencies, DeviceMemoryBase destination,
@@ -112,7 +120,6 @@ class RocmCommandBuffer : public GpuCommandBuffer {
                      absl::AnyInvocable<absl::Status()> function) override;
 
   absl::Status SetNodeExecutionEnabled(GraphNodeHandle node_handle,
-                                       CommandBuffer& root_command_buffer,
                                        bool enabled) override;
 
   absl::Status LaunchGraph(Stream* stream) override;
@@ -123,7 +130,28 @@ class RocmCommandBuffer : public GpuCommandBuffer {
 
   absl::StatusOr<GraphConditionalHandle> CreateConditionalHandle() override;
 
-  GpuExecutor* parent_;
+  absl::Status WriteGraphToDotFile(absl::string_view path) override;
+
+  absl::Status InstantiateGraph() override;
+
+  using ScopedRocmGraphExec = ScopedGraphExec<hipGraphExec_t>;
+  std::unique_ptr<ScopedUpdateMode> ActivateUpdateMode(
+      GpuCommandBuffer* nested_cmd_buffer) override;
+
+  absl::Status CheckCanBeUpdated() override;
+
+  absl::StatusOr<std::vector<GraphNodeHandle>> GetNodeDependencies(
+      GraphNodeHandle node) override;
+
+  static_assert(std::is_pointer_v<hipGraph_t>, "hipGraph_t must be a pointer");
+  static_assert(std::is_pointer_v<hipGraphExec_t>,
+                "hipGraphExec_t must be a pointer");
+
+  hipGraph_t graph_ = nullptr;  // owned if `is_owned_graph_`
+  bool is_owned_graph_ = true;  // ownership of `graph_`
+
+  hipGraphExec_t exec_ = nullptr;    // owned if `is_owned_graph_exec_`
+  bool is_owned_graph_exec_ = true;  // ownership of `is_owned_graph_exec_`
 };
 
 }  // namespace stream_executor::gpu

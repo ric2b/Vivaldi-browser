@@ -87,7 +87,7 @@ permissions section. For example:
     ...
     "permissions": [
         "web_progress",
-        "http://www.google.com/"
+        "https://www.google.com/"
     ],
     ...
 }
@@ -96,7 +96,7 @@ chrome.webRequest.onBeforeRequest.addListener(
     function(object details) { ... }, null, ["requestHeaders"]);
 // This is allowed.
 chrome.webRequest.onBeforeRequest.addListener(
-    function(object details) { ... }, {urls: ["http://www.google.com/foo*bar"]},
+    function(object details) { ... }, {urls: ["https://www.google.com/foo*bar"]},
     ["requestHeaders"]);
 // This is allowed too, since it doesn’t request any extra information.
 chrome.webRequest.onBeforeRequest.addListener(
@@ -158,46 +158,46 @@ is made.
 
     *   **"blocking"**
 
-**#### onBeforeSendHeaders**
+#### onBeforeSendHeaders
 
-**```none
+```none
 chrome.webRequest.onBeforeSendHeaders.addListener(
     function(object details) { ... }, RequestFilter filter,
     array of string extraInfoSpec); 
-```**
+```
 
-**Fires when an HTTP request is about to occur. This may occur after a TCP connection is made to the server, but before any HTTP data is sent. The HTTP request headers are available at this point.**
+Fires when an HTTP request is about to occur. This may occur after a TCP connection is made to the server, but before any HTTP data is sent. The HTTP request headers are available at this point.
 
-****Parameters****
+**Parameters**
 
-*****details (object)*****
+***details (object)***
 
-> *****requestId (integer)*****
+> ***requestId (integer)***
 
 > > **The ID of the request. Request IDs are unique within a browser session. As
 > > a result, they could be used to relate different events of the same
 > > request.**
 
-> *****url (string)*****
+> ***url (string)***
 
-> *****timeStamp (Date)*****
+> ***timeStamp (Date)***
 
 > > **The time when the browser was about to make the request.**
 
-*****filter (optional RequestFilter)*****
+***filter (optional RequestFilter)***
 
 > **Please refer to RequestFilter in the Types section for detailed
 > explanation.**
 
-*****extraInfoSpec (optional array of string)*****
+***extraInfoSpec (optional array of string)***
 
 > **Extra information that needs to be passed into the callback function. Each
 > element of extraInfoSpec requires a corresponding string property being added
 > to the details object. Array elements can be:**
 
-    *   ****"requestLine"****
-    *   ****"requestHeaders"****
-    *   ****"blocking"****
+    *   **"requestLine"**
+    *   **"requestHeaders"**
+    *   **"blocking"**
 
 #### onSendHeaders
 

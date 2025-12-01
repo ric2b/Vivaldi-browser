@@ -19,17 +19,16 @@ class Profile;
 
 namespace web_app {
 
+class ComputedAppSizeWithOrigin;
 class WithAppResources;
 
-struct GetIsolatedWebAppSizeJobResult {
-  url::Origin iwa_origin;
-  int64_t app_size;
-};
-
+// Calculates the total on-disk storage size for a give installed isolated web
+// app, including both the web app's web platform storage as well as Chrome's
+// internal storage of things like icons etc., including bundle size.
 class GetIsolatedWebAppSizeJob {
  public:
   using ResultCallback =
-      base::OnceCallback<void(std::optional<GetIsolatedWebAppSizeJobResult>)>;
+      base::OnceCallback<void(std::optional<ComputedAppSizeWithOrigin> result)>;
 
   GetIsolatedWebAppSizeJob(Profile* profile,
                            const webapps::AppId& app_id,
@@ -41,13 +40,15 @@ class GetIsolatedWebAppSizeJob {
 
  private:
   void StoragePartitionSizeFetched(int64_t size);
-  void MaybeCompleteCommand();
+  void MaybeComputeBundleSize();
+  void OnBundleSizeComputed(std::optional<int64_t> bundle_size);
+  void CompleteJobWithError();
 
   const webapps::AppId app_id_;
   url::Origin iwa_origin_;
   int pending_task_count_ = 0;
-  int64_t browsing_data_size_ = 0u;
-  raw_ptr<Profile> profile_ = nullptr;
+  uint64_t browsing_data_size_ = 0u;
+  const raw_ptr<Profile> profile_;
   raw_ptr<WithAppResources> lock_with_app_resources_ = nullptr;
   const raw_ref<base::Value::Dict> debug_value_;
   ResultCallback result_callback_;

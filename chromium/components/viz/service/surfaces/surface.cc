@@ -16,7 +16,6 @@
 #include "base/containers/contains.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/ranges/algorithm.h"
 #include "base/time/tick_clock.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/traced_value.h"
@@ -366,6 +365,10 @@ void Surface::OnActivationDependencyResolved(
   blocking_allocation_groups_.erase(group);
   if (!activation_dependencies_.empty())
     return;
+
+  TRACE_EVENT_NESTABLE_ASYNC_END0("viz", "SurfaceQueuedPending",
+                                  TRACE_ID_LOCAL(this));
+
   // All blockers have been cleared. The surface can be activated now.
   ActivatePendingFrame();
 }
@@ -881,8 +884,8 @@ void Surface::TakeLatencyInfoFromFrame(
     frame->metadata.latency_info.swap(*latency_info);
     return;
   }
-  base::ranges::copy(frame->metadata.latency_info,
-                     std::back_inserter(*latency_info));
+  std::ranges::copy(frame->metadata.latency_info,
+                    std::back_inserter(*latency_info));
   frame->metadata.latency_info.clear();
   if (!ui::LatencyInfo::Verify(*latency_info,
                                "Surface::TakeLatencyInfoFromFrame")) {

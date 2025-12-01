@@ -24,7 +24,7 @@ namespace internal {
   IF_WASM(V, JS_TO_WASM_BUILTIN_CONTINUATION_FRAME, 4) \
   IF_WASM(V, WASM_INLINED_INTO_JS_FRAME, 3)            \
   IF_WASM(V, LIFTOFF_FRAME, 3)                         \
-  V(INLINED_EXTRA_ARGUMENTS, 2)
+  V(INLINED_EXTRA_ARGUMENTS, 3)
 
 #define TRANSLATION_OPCODE_LIST(V)    \
   TRANSLATION_JS_FRAME_OPCODE_LIST(V) \
@@ -37,6 +37,7 @@ namespace internal {
   V(BOOL_REGISTER, 1)                 \
   V(BOOL_STACK_SLOT, 1)               \
   V(CAPTURED_OBJECT, 1)               \
+  V(STRING_CONCAT, 0)                 \
   V(DOUBLE_REGISTER, 1)               \
   V(DOUBLE_STACK_SLOT, 1)             \
   V(SIMD128_STACK_SLOT, 1)            \

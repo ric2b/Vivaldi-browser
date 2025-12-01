@@ -13,19 +13,19 @@
 #include "ash/webui/boca_ui/provider/classroom_page_handler_impl.h"
 #include "ash/webui/boca_ui/provider/network_info_provider.h"
 #include "ash/webui/boca_ui/provider/tab_info_collector.h"
+#include "ash/webui/boca_ui/webview_auth_handler.h"
 #include "base/functional/callback_forward.h"
 #include "chromeos/ash/components/boca/boca_session_manager.h"
 #include "chromeos/ash/components/boca/proto/roster.pb.h"
 #include "chromeos/ash/components/boca/proto/session.pb.h"
 #include "chromeos/ash/components/boca/session_api/session_client_impl.h"
+#include "chromeos/ash/components/boca/spotlight/spotlight_service.h"
 #include "components/account_id/account_id.h"
 #include "content/public/browser/web_ui.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 
 namespace ash::boca {
-
-class BocaUI;
 
 class BocaAppHandler : public mojom::PageHandler,
                        public mojom::Page,
@@ -34,12 +34,12 @@ class BocaAppHandler : public mojom::PageHandler,
   using ActivityInterceptorCallback =
       base::OnceCallback<void(std::vector<mojom::IdentifiedActivityPtr>)>;
   using SessionConfigInterceptorCallback =
-      base::OnceCallback<void(mojom::SessionResultPtr)>;
+      base::OnceCallback<void(mojom::ConfigResultPtr)>;
   BocaAppHandler(
-      BocaUI* boca_ui,
       mojo::PendingReceiver<mojom::PageHandler> receiver,
       mojo::PendingRemote<mojom::Page> remote,
       content::WebUI* webui,
+      std::unique_ptr<WebviewAuthHandler> auth_handler,
       std::unique_ptr<ClassroomPageHandlerImpl> classroom_client_impl,
       SessionClientImpl* session_client_impl,
       bool is_producer);
@@ -54,10 +54,13 @@ class BocaAppHandler : public mojom::PageHandler,
                                              SetFloatModeCallback callback);
 
   // mojom::PageHandler:
+  void AuthenticateWebview(AuthenticateWebviewCallback callback) override;
   void GetWindowsTabsList(GetWindowsTabsListCallback callback) override;
   void ListCourses(ListCoursesCallback callback) override;
   void ListStudents(const std::string& course_id,
                     ListStudentsCallback callback) override;
+  void ListAssignments(const std::string& course_id,
+                       ListAssignmentsCallback callback) override;
   void CreateSession(mojom::ConfigPtr config,
                      CreateSessionCallback callback) override;
   void GetSession(GetSessionCallback callback) override;
@@ -73,10 +76,20 @@ class BocaAppHandler : public mojom::PageHandler,
   void SubmitAccessCode(const std::string& access_code,
                         SubmitAccessCodeCallback callback) override;
 
+  void ViewStudentScreen(const std::string& id,
+                         ViewStudentScreenCallback callback) override;
+  void EndViewScreenSession(const std::string& id,
+                            EndViewScreenSessionCallback callback) override;
+  void GetUserPref(mojom::BocaValidPref pref,
+                   GetUserPrefCallback callback) override;
+  void SetUserPref(mojom::BocaValidPref pref,
+                   base::Value value,
+                   SetUserPrefCallback callback) override;
+
   // mojom::Page:
   void OnStudentActivityUpdated(
       std::vector<mojom::IdentifiedActivityPtr> activities) override;
-  void OnSessionConfigUpdated(mojom::SessionResultPtr config) override;
+  void OnSessionConfigUpdated(mojom::ConfigResultPtr config) override;
   void OnActiveNetworkStateChanged(
       std::vector<mojom::NetworkInfoPtr> active_networks) override;
 
@@ -96,6 +109,8 @@ class BocaAppHandler : public mojom::PageHandler,
 
   void NotifyLocalCaptionConfigUpdate(mojom::CaptionConfigPtr config);
 
+  void SetSpotlightService(SpotlightService* spotlight_service);
+
   // For testing.
   // Mojo service binding is not invoked in unit test. So we manually override
   // a interceptor for testing.
@@ -103,6 +118,13 @@ class BocaAppHandler : public mojom::PageHandler,
       ActivityInterceptorCallback callback);
   void SetSessionConfigInterceptorCallbackForTesting(
       SessionConfigInterceptorCallback callback);
+  void SetSpotlightServiceForTesting(std::unique_ptr<SpotlightService> service);
+  WebviewAuthHandler* GetWebviewAuthHandlerForTesting() {
+    return auth_handler_.get();
+  }
+  void SetPrefForTesting(PrefService* pref_service) {
+    pref_service_ = pref_service;
+  }
 
  private:
   void UpdateSessionConfig();
@@ -124,8 +146,9 @@ class BocaAppHandler : public mojom::PageHandler,
   SEQUENCE_CHECKER(sequence_checker_);
   const bool is_producer_;
   TabInfoCollector tab_info_collector_;
+  std::unique_ptr<WebviewAuthHandler> auth_handler_;
   std::unique_ptr<ClassroomPageHandlerImpl> class_room_page_handler_;
-  // Lastest config is not always the same as the instance maintained in
+  // Latest config is not always the same as the instance maintained in
   // boca_session_manager as it contains the async config that hasn't been
   // committed yet. OnTask and caption config use the same server endpoint. We
   // keep track of pending config to avoid override in race.
@@ -138,9 +161,10 @@ class BocaAppHandler : public mojom::PageHandler,
   mojo::Remote<boca::mojom::Page> remote_;
   ActivityInterceptorCallback test_activity_callback_;
   SessionConfigInterceptorCallback test_config_callback_;
+  raw_ptr<SpotlightService> spotlight_service_;
   raw_ptr<SessionClientImpl> session_client_impl_;
   raw_ptr<content::WebUI> web_ui_;
-  raw_ptr<BocaUI> boca_ui_;  // Owns |this|.
+  raw_ptr<PrefService> pref_service_;
   base::WeakPtrFactory<BocaAppHandler> weak_ptr_factory_{this};
 };
 

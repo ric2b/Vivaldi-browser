@@ -9,8 +9,8 @@ title: GRIT
 ---
 
 GRIT is the internationalization tool used by the
-[Chromium](http://www.chromium.org/) projects (the foundation for the [Google
-Chrome](http://www.google.com/chrome) browser) and for several internal projects
+[Chromium](/) projects (the foundation for the [Google
+Chrome](https://www.google.com/chrome) browser) and for several internal projects
 at Google.
 
 GRIT is designed to be flexible and extensible enough to use for various

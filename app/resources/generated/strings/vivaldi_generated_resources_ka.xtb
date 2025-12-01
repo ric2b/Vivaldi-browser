@@ -279,6 +279,7 @@
 <translation id="5582839680698949063">მთავარი მენიუ</translation>
 <translation id="5614553682702429503">შევინახო პაროლი?</translation>
 <translation id="5623842676595125836">ჟურნალი</translation>
+<translation id="5624959475330585145">კითხვა დაუცველი კავშირის გამოყენებამდე</translation>
 <translation id="5638309510554459422">იპოვეთ გაფართოებები და თემები <ph name="BEGIN_LINK" />Chrome Web Store<ph name="END_LINK" />-ში</translation>
 <translation id="5677928146339483299">დაბლოკილია</translation>
 <translation id="5707185214361380026">შეცდომა გაფართოების ჩატვირთვისას ბმულიდან:</translation>
@@ -468,6 +469,7 @@
 <translation id="9218430445555521422">ნაგულისხმებად დაყენება</translation>
 <translation id="93766956588638423">გაფართოების შეკეთება</translation>
 <translation id="961012016278832836">Microsoft Edge მოძველებული</translation>
+<translation id="961856697154696964">ბრაუზერის მონაცემების წაშლა</translation>
 <translation id="994289308992179865">&amp;მარყუჟი</translation>
 <translation id="998747458861718449">&amp;ინსპექტირება</translation>
 </translationbundle>

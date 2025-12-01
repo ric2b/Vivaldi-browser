@@ -10,9 +10,11 @@
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "chrome/browser/extensions/account_extension_tracker.h"
 #include "chrome/browser/extensions/extension_sync_util.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/platform_util.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/signin_ui_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_navigator.h"
@@ -71,8 +73,9 @@ views::View* AnchorViewForBrowser(const ExtensionInstalledBubbleModel* model,
     ExtensionsToolbarContainer* const container =
         browser_view->toolbar_button_provider()
             ->GetExtensionsToolbarContainer();
-    if (container)
+    if (container) {
       reference_view = container->GetViewForId(model->extension_id());
+    }
   } else if (model->anchor_to_omnibox()) {
     reference_view = browser_view->GetLocationBarView()->location_icon_view();
   }
@@ -95,8 +98,7 @@ std::unique_ptr<views::View> CreateSigninPromoView(
           : IDS_EXTENSION_INSTALLED_DICE_PROMO_SYNC_MESSAGE;
 
   return std::make_unique<BubbleSignInPromoView>(
-      profile, delegate,
-      signin_metrics::AccessPoint::ACCESS_POINT_EXTENSION_INSTALL_BUBBLE,
+      profile, delegate, signin_metrics::AccessPoint::kExtensionInstallBubble,
       promo_message_id, ui::ButtonStyle::kProminent);
 }
 #endif
@@ -205,8 +207,9 @@ void ExtensionInstalledBubbleView::Init() {
       views::BoxLayout::CrossAxisAlignment::kStart);
   SetLayoutManager(std::move(layout));
 
-  if (model_->show_how_to_use())
+  if (model_->show_how_to_use()) {
     AddChildView(CreateLabel(model_->GetHowToUseText()));
+  }
 
   if (model_->show_key_binding()) {
     auto* manage_shortcut = AddChildView(std::make_unique<views::Link>(
@@ -227,11 +230,13 @@ void ExtensionInstalledBubbleView::OnSignIn(const AccountInfo& account) {
   if (extensions::sync_util::IsExtensionsExplicitSigninEnabled()) {
     signin_ui_util::SignInFromSingleAccountPromo(
         browser_->profile(), account,
-        signin_metrics::AccessPoint::ACCESS_POINT_EXTENSION_INSTALL_BUBBLE);
+        signin_metrics::AccessPoint::kExtensionInstallBubble);
+    extensions::AccountExtensionTracker::Get(browser_->profile())
+        ->OnSignInInitiatedFromExtensionPromo(model_->extension_id());
   } else {
     signin_ui_util::EnableSyncFromSingleAccountPromo(
         browser_->profile(), account,
-        signin_metrics::AccessPoint::ACCESS_POINT_EXTENSION_INSTALL_BUBBLE);
+        signin_metrics::AccessPoint::kExtensionInstallBubble);
   }
   GetWidget()->Close();
 }

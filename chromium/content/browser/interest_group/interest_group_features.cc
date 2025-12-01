@@ -40,11 +40,11 @@ BASE_FEATURE(kEnableBandASampleDebugReports,
 // Enable parsing triggered updates from B&A response.
 BASE_FEATURE(kEnableBandATriggeredUpdates,
              "EnableBandATriggeredUpdates",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Enable parsing ad auction response headers for an iframe navigation request.
-BASE_FEATURE(kEnableIFrameAdAuctionHeaders,
-             "EnableIFrameAdAuctionHeaders",
+// Enable response authorization using the Ad-Auction-Result-Nonce header.
+BASE_FEATURE(kFledgeBiddingAndAuctionNonceSupport,
+             "FledgeBiddingAndAuctionNonceSupport",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enable the user agent header in auction requests to be overridden.
@@ -61,9 +61,28 @@ BASE_FEATURE(kFledgeFacilitatedTestingSignalsHeaders,
              "FledgeFacilitatedTestingSignalsHeaders",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Enable prefetching B&A keys on the first joinAdInterestGroup call.
-BASE_FEATURE(kFledgePrefetchBandAKeys,
-             "FledgePrefetchBandAKeys",
+// Provides a configurable limit on the number of
+// `selectableBuyerAndSellerReportingIds` for which the browser fetches k-anon
+// keys. If the `SelectableBuyerAndSellerReportingIdsFetchedFromKAnonLimit` is
+// negative, no limit is enforced.
+BASE_FEATURE(kFledgeLimitSelectableBuyerAndSellerReportingIdsFetchedFromKAnon,
+             "FledgeLimitSelectableBuyerAndSellerReportingIdsFetchedFromKAnon",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE_PARAM(
+    int,
+    kFledgeSelectableBuyerAndSellerReportingIdsFetchedFromKAnonLimit,
+    &kFledgeLimitSelectableBuyerAndSellerReportingIdsFetchedFromKAnon,
+    "SelectableBuyerAndSellerReportingIdsFetchedFromKAnonLimit",
+    -1);
+
+// Turning on kFledgeQueryKAnonymity loads k-anonymity status at interest group
+// join and update time. kFledgeQueryKAnonymity is enabled by default. It may
+// be reasonable to disable kFledgeQueryKAnonymity on clients on which
+// k-anonymity is not enforced (see related features kFledgeConsiderKAnonymity
+// and kFledgeEnforceKAnonymity in third_party/blink/public/common/features.h),
+// as k-anonymity status isn't used in those auctions.
+BASE_FEATURE(kFledgeQueryKAnonymity,
+             "FledgeQueryKAnonymity",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables starting worklet processes at auction start time in anticipation

@@ -40,6 +40,7 @@ class DirectMatchProvider : public AutocompleteProvider {
   // leave the previous matches for this provider unchanged, otherwise perform
   // a complete search for |input| across all direct match
   void Start(const AutocompleteInput& input, bool minimal_changes) override;
+  void DeleteMatch(const AutocompleteMatch& match) override;
 
  private:
   ~DirectMatchProvider() override;

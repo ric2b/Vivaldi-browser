@@ -83,6 +83,7 @@ void QuicReceivedPacketManager::RecordPacketReceived(
     ack_frame_.received_packet_times.clear();
   }
   ack_frame_updated_ = true;
+  ack_now_ = false;
 
   // Whether |packet_number| is received out of order.
   bool packet_reordered = false;
@@ -124,6 +125,13 @@ void QuicReceivedPacketManager::RecordPacketReceived(
     }
   }
 
+  if (GetQuicReloadableFlag(quic_ack_ce_immediately)) {
+    if (ecn == ECN_CE && !last_packet_was_ce_marked_) {
+      QUIC_RELOADABLE_FLAG_COUNT_N(quic_ack_ce_immediately, 1, 2);
+      changed_to_ce_marked_ = true;
+    }
+    last_packet_was_ce_marked_ = ecn == ECN_CE;
+  }
   if (ecn != ECN_NOT_ECT) {
     if (!ack_frame_.ecn_counters.has_value()) {
       ack_frame_.ecn_counters = QuicEcnCounts();
@@ -282,12 +290,28 @@ void QuicReceivedPacketManager::MaybeUpdateAckTimeout(
     return;
   }
 
+  if (ack_now_) {
+    // An IMMEDIATE_ACK frame arrived. Send an ack immediately.
+    QUIC_RELOADABLE_FLAG_COUNT_N(quic_receive_ack_frequency, 2, 2);
+    ack_timeout_ = now;
+    return;
+  }
+
   if (!ignore_order_ && was_last_packet_missing_ &&
       last_sent_largest_acked_.IsInitialized() &&
       last_received_packet_number < last_sent_largest_acked_) {
     // Only ack immediately if an ACK frame was sent with a larger largest acked
     // than the newly received packet number.
     ack_timeout_ = now;
+    return;
+  }
+
+  if (changed_to_ce_marked_) {
+    // changed_to_ce_marked_ is always false if quic_ack_ce_immediately is
+    // false, so there's no need to check the feature flag here.
+    ack_timeout_ = now;
+    changed_to_ce_marked_ = false;
+    QUIC_RELOADABLE_FLAG_COUNT_N(quic_ack_ce_immediately, 2, 2);
     return;
   }
 

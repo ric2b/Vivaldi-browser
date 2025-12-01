@@ -18,7 +18,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
@@ -104,8 +103,9 @@ class EnableViaDialogFlow : public ExtensionEnableFlowDelegate {
   void ExtensionEnableFlowFinished() override {
     const Extension* extension =
         registry_->enabled_extensions().GetByID(extension_id_);
-    if (!extension)
+    if (!extension) {
       return;
+    }
     std::move(callback_).Run();
     delete this;
   }
@@ -122,8 +122,9 @@ class EnableViaDialogFlow : public ExtensionEnableFlowDelegate {
 
 const Extension* GetExtension(Profile* profile,
                               const apps::AppLaunchParams& params) {
-  if (params.app_id.empty())
+  if (params.app_id.empty()) {
     return nullptr;
+  }
   ExtensionRegistry* registry = ExtensionRegistry::Get(profile);
   return registry->GetExtensionById(
       params.app_id, ExtensionRegistry::ENABLED | ExtensionRegistry::DISABLED |
@@ -132,11 +133,13 @@ const Extension* GetExtension(Profile* profile,
 
 bool IsAllowedToOverrideURL(const extensions::Extension* extension,
                             const GURL& override_url) {
-  if (extension->web_extent().MatchesURL(override_url))
+  if (extension->web_extent().MatchesURL(override_url)) {
     return true;
+  }
 
-  if (override_url.DeprecatedGetOriginAsURL() == extension->url())
+  if (override_url.DeprecatedGetOriginAsURL() == extension->url()) {
     return true;
+  }
 
   return false;
 }
@@ -174,15 +177,17 @@ ui::mojom::WindowShowState DetermineWindowShowState(
     Profile* profile,
     apps::LaunchContainer container,
     const Extension* extension) {
-  if (!extension || container != apps::LaunchContainer::kLaunchContainerWindow)
+  if (!extension ||
+      container != apps::LaunchContainer::kLaunchContainerWindow) {
     return ui::mojom::WindowShowState::kDefault;
+  }
 
   if (IsRunningInForcedAppMode()) {
     return ui::mojom::WindowShowState::kFullscreen;
   }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  // In ash, LAUNCH_TYPE_FULLSCREEN launches in a maximized app window and
+#if BUILDFLAG(IS_CHROMEOS)
+  // In ChromeOS, LAUNCH_TYPE_FULLSCREEN launches in a maximized app window and
   // LAUNCH_TYPE_WINDOW launches in a default app window.
   extensions::LaunchType launch_type =
       extensions::GetLaunchType(ExtensionPrefs::Get(profile), extension);
@@ -231,8 +236,9 @@ WebContents* OpenApplicationTab(Profile* profile,
       extensions::GetLaunchType(ExtensionPrefs::Get(profile), extension);
 
   int add_type = AddTabTypes::ADD_ACTIVE;
-  if (launch_type == extensions::LAUNCH_TYPE_PINNED)
+  if (launch_type == extensions::LAUNCH_TYPE_PINNED) {
     add_type |= AddTabTypes::ADD_PINNED;
+  }
 
   ui::PageTransition transition = ui::PAGE_TRANSITION_AUTO_BOOKMARK;
   NavigateParams params(browser, url, transition);
@@ -273,9 +279,9 @@ WebContents* OpenApplicationTab(Profile* profile,
     contents = params.navigated_or_inserted_contents;
   }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  // In ash, LAUNCH_FULLSCREEN launches in the OpenApplicationWindow function
-  // i.e. it should not reach here.
+#if BUILDFLAG(IS_CHROMEOS)
+  // In ChromeOS, LAUNCH_FULLSCREEN launches in the OpenApplicationWindow
+  // function i.e. it should not reach here.
   DCHECK(launch_type != extensions::LAUNCH_TYPE_FULLSCREEN);
 #else
   // TODO(skerner):  If we are already in full screen mode, and the user set the
@@ -284,9 +290,9 @@ WebContents* OpenApplicationTab(Profile* profile,
   // this case?
   if (launch_type == extensions::LAUNCH_TYPE_FULLSCREEN &&
       !browser->window()->IsFullscreen()) {
-    chrome::ToggleFullscreenMode(browser);
+    chrome::ToggleFullscreenMode(browser, /*user_initiated=*/false);
   }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
   return contents;
 }
 
@@ -374,12 +380,6 @@ WebContents* OpenEnabledApplication(Profile* profile,
   if (!extension) {
     return nullptr;
   }
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  if (!profile->IsMainProfile()) {
-    return nullptr;
-  }
-#endif
 
   if (extensions::WebFileHandlers::SupportsWebFileHandlers(*extension)) {
     // If the extension supports Web File Handlers, File Handlers are required.
@@ -526,8 +526,9 @@ WebContents* OpenApplicationWindow(Profile* profile,
 void OpenApplicationWithReenablePrompt(Profile* profile,
                                        apps::AppLaunchParams&& params) {
   const Extension* extension = GetExtension(profile, params);
-  if (!extension)
+  if (!extension) {
     return;
+  }
 
   ExtensionService* service =
       extensions::ExtensionSystem::Get(profile)->extension_service();
@@ -590,28 +591,3 @@ void LaunchAppWithCallback(
 
   std::move(callback).Run(app_browser, container);
 }
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-bool ShowBrowserForProfile(Profile* profile,
-                           const apps::AppLaunchParams& params) {
-  Browser* browser = chrome::FindTabbedBrowser(
-      profile, /*match_original_profiles=*/false, params.display_id);
-  if (browser) {
-    // For existing browser, ensure its window is shown and activated.
-    browser->window()->Show();
-    browser->window()->Activate();
-    return true;
-  }
-
-  // No browser for this profile, need to open a new one.
-  if (Browser::GetCreationStatusForProfile(profile) ==
-      Browser::CreationStatus::kOk) {
-    browser = Browser::Create(
-        Browser::CreateParams(Browser::TYPE_NORMAL, profile, true));
-    browser->window()->Show();
-    return true;
-  }
-
-  return false;
-}
-#endif

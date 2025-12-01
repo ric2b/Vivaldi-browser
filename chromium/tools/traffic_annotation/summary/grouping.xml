@@ -211,7 +211,6 @@ after discussions on the right group.
       <annotation id="download_bubble_retry_download"/>
       <annotation id="quick_answers_loader"/>
       <annotation id="chrome_search_suggest_service"/>
-      <annotation id="cryptauth_get_my_devices"/>
       <annotation id="chrome_commerce_price_email_pref_fetcher"/>
       <annotation id="chrome_commerce_price_email_pref_sender"/>
       <annotation id="receive_messages_express"/>
@@ -298,7 +297,6 @@ after discussions on the right group.
       <annotation id="remoting_corp_session_authz_generate_host_token"/>
       <annotation id="remoting_corp_session_authz_verify_session_token"/>
       <annotation id="remoting_corp_session_reauthorize_host"/>
-      <annotation id="chromeos_picker_gif_media_fetcher"/>
       <annotation id="birch_calendar_provider"/>
       <annotation id="recovery_key_store_fetch"/>
       <annotation id="enterprise_logo_fetcher"/>
@@ -358,6 +356,16 @@ after discussions on the right group.
       <annotation id="chromeos_scanner"/>
       <annotation id="lens_overlay_languages"/>
       <annotation id="demo_login_controller_account_clean_up"/>
+      <annotation id="chromeos_quick_insert_gif_media_fetcher"/>
+      <annotation id="chromeos_feedback_report_hpke_public_key_fetch_for_variations"/>
+      <annotation id="shared_storage_worklet_host"/>
+      <annotation id="webauthn_challenge_fetch"/>
+      <annotation id="chromeos_capture_mode"/>
+      <annotation id="outlook_calendar_page_handler"/>
+      <annotation id="omnibox_search_aggregator_suggest"/>
+      <annotation id="microsoft_files_page_handler"/>
+      <annotation id="outlook_calendar_event_attachment"/>
+      <annotation id="ip_protection_service_get_issuer_token"/>
     </sender>
   </group>
   <group name="Admin Features" hidden="true">
@@ -609,11 +617,8 @@ after discussions on the right group.
       <annotation id="backdrop_collection_names_download"/>
       <annotation id="backdrop_next_image_download"/>
       <annotation id="drive_service"/>
-      <annotation id="nux_ntp_background_preview"/>
       <annotation id="popular_sites_fetch"/>
       <annotation id="promo_service"/>
-      <annotation id="chrome_cart_discounts_lookup"/>
-      <annotation id="chrome_cart_get_discounted_link"/>
     </sender>
     <sender name="Speech Recognition">
       <annotation id="speech_recognition_downstream"/>

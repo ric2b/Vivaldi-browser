@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "gpu/ipc/service/gpu_watchdog_thread.h"
 
 #include <memory>
@@ -34,6 +39,10 @@
 #include "gpu/config/gpu_crash_keys.h"
 #include "gpu/config/gpu_switches.h"
 #include "gpu/ipc/common/result_codes.h"
+
+#if BUILDFLAG(IS_WIN)
+#include <windows.h>
+#endif
 
 namespace gpu {
 
@@ -176,11 +185,6 @@ void GpuWatchdogThread::OnBackgrounded() {
   // thread is not invalidated soon enough.
   InProgress();
 
-  {
-    base::AutoLock lock(skip_lock_);
-    skip_for_backgrounded_ = true;
-  }
-
   task_runner()->PostTask(
       FROM_HERE,
       base::BindOnce(&GpuWatchdogThread::StopWatchdogTimeoutTask,
@@ -189,11 +193,6 @@ void GpuWatchdogThread::OnBackgrounded() {
 
 // Android Chrome goes to the foreground. Called from the gpu io thread.
 void GpuWatchdogThread::OnForegrounded() {
-  {
-    base::AutoLock lock(skip_lock_);
-    skip_for_backgrounded_ = false;
-  }
-
   task_runner()->PostTask(
       FROM_HERE,
       base::BindOnce(&GpuWatchdogThread::RestartWatchdogTimeoutTask,
@@ -235,14 +234,6 @@ void GpuWatchdogThread::PauseWatchdog() {
   // thread is not invalidated soon enough.
   InProgress();
 
-  // From the crash report, |skip_for_pause_| along is not enough to prevent
-  // GpuWatchdog kill after pause. If InProgress() along can prevent GpuWatchdog
-  // kill, we might not need |skip_for_pause_|.
-  {
-    base::AutoLock lock(skip_lock_);
-    skip_for_pause_ = true;
-  }
-
   task_runner()->PostTask(
       FROM_HERE, base::BindOnce(&GpuWatchdogThread::StopWatchdogTimeoutTask,
                                 base::Unretained(this), kGeneralGpuFlow));
@@ -251,10 +242,6 @@ void GpuWatchdogThread::PauseWatchdog() {
 // Called from the watched gpu thread.
 void GpuWatchdogThread::ResumeWatchdog() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(watched_thread_sequence_checker_);
-  {
-    base::AutoLock lock(skip_lock_);
-    skip_for_pause_ = false;
-  }
 
   task_runner()->PostTask(
       FROM_HERE, base::BindOnce(&GpuWatchdogThread::RestartWatchdogTimeoutTask,
@@ -512,14 +499,6 @@ void GpuWatchdogThread::OnWatchdogTimeout() {
   no_gpu_hang = no_gpu_hang || watched_thread_needs_more_time ||
                 ContinueOnNonHostX11ServerTty();
 
-  // Keep holding the lock until the end of this function so
-  // DeliberatelyTerminateToRecoverFromHang() has the correct crash signature
-  // if the kill is triggered before paused or backgrounded.
-  base::AutoLock lock(skip_lock_);
-  if (skip_for_pause_ || skip_for_backgrounded_) {
-    no_gpu_hang = true;
-  }
-
   // No gpu hang. Continue with another OnWatchdogTimeout task.
   if (no_gpu_hang) {
     ContinueWithNextWatchdogTimeoutTask();
@@ -670,7 +649,6 @@ void GpuWatchdogThread::DeliberatelyTerminateToRecoverFromHang() {
   base::debug::Alias(&in_power_suspension_);
   base::debug::Alias(&in_gpu_process_teardown_);
   base::debug::Alias(&is_backgrounded_);
-  base::debug::Alias(&skip_for_pause_);
   base::debug::Alias(&last_on_watchdog_timeout_timeticks_);
   base::TimeDelta timeticks_elapses =
       function_begin_timeticks - last_on_watchdog_timeout_timeticks_;
@@ -837,7 +815,7 @@ void GpuWatchdogThread::UpdateActiveTTY() {
   last_active_tty_ = active_tty_;
 
   active_tty_ = -1;
-  char tty_string[8] = {0};
+  char tty_string[8] = {};
   if (tty_file_ && !fseek(tty_file_.get(), 0, SEEK_SET) &&
       fread(tty_string, 1, 7, tty_file_.get())) {
     int tty_number;

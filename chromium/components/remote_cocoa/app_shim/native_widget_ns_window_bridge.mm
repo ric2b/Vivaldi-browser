@@ -12,6 +12,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
 
@@ -25,7 +26,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #import "components/remote_cocoa/app_shim/NSToolbar+Private.h"
@@ -52,6 +52,7 @@
 #include "ui/base/hit_test.h"
 #include "ui/base/mojom/ui_base_types.mojom-shared.h"
 #include "ui/base/ui_base_switches.h"
+#include "ui/color/color_provider_key.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/events/cocoa/cocoa_event_utils.h"
@@ -225,8 +226,18 @@ NSComparisonResult SubviewSorter(__kindof NSView* lhs,
                                  void* rank_as_void) {
   DCHECK_NE(lhs, rhs);
 
-  if ([lhs isKindOfClass:[ViewsCompositorSuperview class]])
+  // Put `NSVisualEffectView` before `ViewsCompositorSuperview` otherwise when
+  // using `NSVisualEffectView` for `vibrancy` it will hide content displayed by
+  // the compositor.
+  if ([lhs isKindOfClass:[NSVisualEffectView class]]) {
     return NSOrderedAscending;
+  }
+  if ([lhs isKindOfClass:[ViewsCompositorSuperview class]]) {
+    if ([rhs isKindOfClass:[NSVisualEffectView class]]) {
+      return NSOrderedDescending;
+    }
+    return NSOrderedAscending;
+  }
 
   const RankMap* rank = static_cast<const RankMap*>(rank_as_void);
   auto left_rank = rank->find(lhs);
@@ -864,7 +875,9 @@ void NativeWidgetNSWindowBridge::SetVisibilityState(
 
   if (new_state == WindowVisibilityState::kShowAndActivateWindow) {
     [window_ makeKeyAndOrderFront:nil];
-    [NSApp activateIgnoringOtherApps:YES];
+    if (![window_ activationIndependence]) {
+      [NSApp activateIgnoringOtherApps:YES];
+    }
   } else if (new_state == WindowVisibilityState::kShowInactive && !parent_ &&
              ![window_ isMiniaturized]) {
     if ([[NSApp mainWindow] screen] == [window_ screen] ||
@@ -1128,6 +1141,15 @@ void NativeWidgetNSWindowBridge::SetAllowScreenshots(bool allow) {
     region.reset(CGRegionCreateWithRect(frame));
   }
   CGSSetWindowCaptureExcludeShape(connection_id, window_id, region.get());
+}
+
+void NativeWidgetNSWindowBridge::SetColorMode(
+    ui::ColorProviderKey::ColorMode color_mode) {
+  NSAppearance* appearance =
+      color_mode == ui::ColorProviderKey::ColorMode::kLight
+          ? [NSAppearance appearanceNamed:NSAppearanceNameAqua]
+          : [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
+  [window_ setAppearance:appearance];
 }
 
 void NativeWidgetNSWindowBridge::OnWindowWillClose() {
@@ -1625,6 +1647,16 @@ void NativeWidgetNSWindowBridge::SetWindowLevel(int32_t level) {
   [window_ setCollectionBehavior:behavior];
 }
 
+void NativeWidgetNSWindowBridge::SetActivationIndependence(bool independence) {
+  for (NSWindow* window = window_; window; window = window.parentWindow) {
+    // This cast may fail, and if so, the message send to the nil pointer will
+    // (intentionally) silently fail.
+    NativeWidgetMacNSWindow* nwm_window =
+        base::apple::ObjCCast<NativeWidgetMacNSWindow>(window);
+    [nwm_window setActivationIndependence:independence];
+  }
+}
+
 void NativeWidgetNSWindowBridge::SetAspectRatio(
     const gfx::SizeF& aspect_ratio,
     const gfx::Size& excluded_margin) {
@@ -1717,7 +1749,7 @@ void NativeWidgetNSWindowBridge::RedispatchKeyEvent(
 
 void NativeWidgetNSWindowBridge::RemoveChildWindow(
     NativeWidgetNSWindowBridge* child) {
-  auto location = base::ranges::find(child_windows_, child);
+  auto location = std::ranges::find(child_windows_, child);
   DCHECK(location != child_windows_.end());
   child_windows_.erase(location);
 

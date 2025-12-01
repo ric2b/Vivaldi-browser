@@ -2,6 +2,7 @@
 
 import sys, os
 import argparse
+import subprocess
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
                             "..", "..", "chromium", "tools", "grit")))
@@ -145,6 +146,8 @@ def main():
 
     for _, node in sorted(node_list.items()):
       write_message(f, options, node, options.locale, have_variants = (len(message_map[node.attrs["name"]]) > 1))
+
+  subprocess.check_call(["msgfmt", "--check-format", "-o", "/dev/null",  options.output_file])
 
 if __name__ == "__main__":
   main()

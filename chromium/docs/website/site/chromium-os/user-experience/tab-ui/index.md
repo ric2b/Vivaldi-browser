@@ -10,8 +10,7 @@ title: Pinned Tabs
 
 ****UI under development. Designs are subject to change.****
 
-**### ****<img alt="image"
-src="/chromium-os/user-experience/tab-ui/tab_stripspng">******
+<img alt="image" src="tab_strips.png">
 
 **Many users of existing browsers keep their 'primary' tabs to the left of their
 tab-strip. This allows easy access to commonly used applications that users keep

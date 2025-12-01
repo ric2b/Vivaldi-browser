@@ -49,14 +49,15 @@ import org.chromium.base.Callback;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.HistogramWatcher;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.base.test.util.UserActionTester;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.content.WebContentsFactory;
 import org.chromium.chrome.browser.firstrun.FirstRunStatus;
 import org.chromium.chrome.browser.flags.ActivityType;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.metrics.UmaActivityObserver;
 import org.chromium.chrome.browser.omnibox.LocationBarCoordinator;
 import org.chromium.chrome.browser.omnibox.UrlBarCoordinator;
@@ -180,7 +181,6 @@ public class SearchActivityUnitTest {
     }
 
     public @Rule MockitoRule mMockitoRule = MockitoJUnit.rule();
-    public @Rule JniMocker mJniMocker = new JniMocker();
     private @Mock TestSearchActivityUtils mUtils;
     private @Mock TemplateUrlService mTemplateUrlSvc;
     private @Mock Profile mProfile;
@@ -211,7 +211,7 @@ public class SearchActivityUnitTest {
         // Many of the scenarios could be tested by simply applying a test instance of the
         // TemplateUrlService to TemplateUrlServiceFactory#setInstanceForTesting.
         // Some scenarios however require Factory to return null, which isn't currently possible.
-        mJniMocker.mock(TemplateUrlServiceFactoryJni.TEST_HOOKS, mTemplateUrlFactoryJni);
+        TemplateUrlServiceFactoryJni.setInstanceForTesting(mTemplateUrlFactoryJni);
         doReturn(mTemplateUrlSvc).when(mTemplateUrlFactoryJni).getTemplateUrlService(any());
 
         mProfileSupplier = mActivity.getProfileSupplierForTesting();
@@ -805,6 +805,7 @@ public class SearchActivityUnitTest {
     }
 
     @Test
+    @DisableFeatures(OmniboxFeatureList.ANDROID_HUB_SEARCH)
     public void finishNativeInitialization_resumeActivityAfterSearchEnginePromoCleared() {
         doNothing().when(mActivity).finishDeferredInitialization();
 
@@ -965,7 +966,7 @@ public class SearchActivityUnitTest {
 
     @Test
     public void onResumeWithNative_fromCustomTabs_withoutPackage() {
-        SearchActivity.SEARCH_IN_CCT_APPLY_REFERRER_ID.setForTesting(true);
+        ChromeFeatureList.sSearchinCctApplyReferrerId.setForTesting(true);
         mActivity.onNewIntent(buildTestServiceIntent(IntentOrigin.CUSTOM_TAB));
 
         try (var watcher =
@@ -981,7 +982,7 @@ public class SearchActivityUnitTest {
 
     @Test
     public void onResumeWithNative_fromCustomTabs_withPackage() {
-        SearchActivity.SEARCH_IN_CCT_APPLY_REFERRER_ID.setForTesting(true);
+        ChromeFeatureList.sSearchinCctApplyReferrerId.setForTesting(true);
         mActivity.onNewIntent(
                 newIntentBuilder(IntentOrigin.CUSTOM_TAB, TEST_URL)
                         .setReferrer(TEST_REFERRER)
@@ -1001,7 +1002,7 @@ public class SearchActivityUnitTest {
 
     @Test
     public void onResumeWithNative_fromCustomTabs_propagationDisabled() {
-        SearchActivity.SEARCH_IN_CCT_APPLY_REFERRER_ID.setForTesting(false);
+        ChromeFeatureList.sSearchinCctApplyReferrerId.setForTesting(false);
         mActivity.onNewIntent(buildTestServiceIntent(IntentOrigin.CUSTOM_TAB));
 
         try (var watcher =
@@ -1099,6 +1100,7 @@ public class SearchActivityUnitTest {
     @Test
     public void onTopResumedActivityChanged_clearOmniboxFocusIfNotActive() {
         doNothing().when(mActivity).super_onTopResumedActivityChanged(anyBoolean());
+        mActivity.handleNewIntent(buildTestServiceIntent(IntentOrigin.SEARCH_WIDGET), false);
         mActivity.onTopResumedActivityChanged(false);
         verify(mLocationBar).clearOmniboxFocus();
         verify(mActivity).super_onTopResumedActivityChanged(false);
@@ -1107,8 +1109,30 @@ public class SearchActivityUnitTest {
     @Test
     public void onTopResumedActivityChanged_requestOmniboxFocusIfActive() {
         doNothing().when(mActivity).super_onTopResumedActivityChanged(anyBoolean());
+        mActivity.handleNewIntent(buildTestServiceIntent(IntentOrigin.SEARCH_WIDGET), false);
         mActivity.onTopResumedActivityChanged(true);
         verify(mLocationBar).requestOmniboxFocus();
         verify(mActivity).super_onTopResumedActivityChanged(true);
+    }
+
+    @Test
+    public void onTopResumedActivityChanged_finishActivityFocusLostHubSearch() {
+        LocationBarCoordinator locationBarCoordinator = mock(LocationBarCoordinator.class);
+        StatusCoordinator statusCoordinator = mock(StatusCoordinator.class);
+        doReturn(statusCoordinator).when(locationBarCoordinator).getStatusCoordinator();
+        mActivity.setLocationBarCoordinatorForTesting(locationBarCoordinator);
+
+        doNothing().when(mActivity).super_onTopResumedActivityChanged(anyBoolean());
+        var histograms =
+                HistogramWatcher.newBuilder()
+                        .expectIntRecord(
+                                SearchActivity.HISTOGRAM_SESSION_TERMINATION_REASON
+                                        + HISTOGRAM_SUFFIX_HUB,
+                                TerminationReason.ACTIVITY_FOCUS_LOST)
+                        .build();
+
+        mActivity.handleNewIntent(buildTestServiceIntent(IntentOrigin.HUB), false);
+        mActivity.onTopResumedActivityChanged(false);
+        histograms.assertExpected();
     }
 }

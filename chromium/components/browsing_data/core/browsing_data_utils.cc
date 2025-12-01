@@ -178,8 +178,8 @@ std::u16string GetCounterTextFromResult(
                   ? IDS_DEL_PASSWORDS_COUNTER_SYNCED
                   : IDS_DEL_PASSWORDS_COUNTER,
               profile_passwords),
-          {CreateDomainExamples(profile_passwords,
-                                password_result->domain_examples())},
+          CreateDomainExamples(profile_passwords,
+                               password_result->domain_examples()),
           nullptr));
     }
 
@@ -188,8 +188,8 @@ std::u16string GetCounterTextFromResult(
           l10n_util::GetPluralStringFUTF16(
               IDS_DEL_ACCOUNT_PASSWORDS_COUNTER,
               password_result->account_passwords()),
-          {CreateDomainExamples(password_result->account_passwords(),
-                                password_result->account_domain_examples())},
+          CreateDomainExamples(password_result->account_passwords(),
+                               password_result->account_domain_examples()),
           nullptr));
     }
 
@@ -204,7 +204,7 @@ std::u16string GetCounterTextFromResult(
             IDS_DEL_PASSWORDS_AND_SIGNIN_DATA_COUNTER_COMBINATION, parts[0],
             parts[1]);
       default:
-        NOTREACHED_IN_MIGRATION();
+        NOTREACHED();
     }
   }
 
@@ -225,7 +225,7 @@ std::u16string GetCounterTextFromResult(
 
   if (pref_name == prefs::kDeleteBrowsingHistoryBasic) {
     // The basic tab doesn't show history counter results.
-    NOTREACHED_IN_MIGRATION();
+    NOTREACHED();
   }
 
   if (pref_name == prefs::kDeleteBrowsingHistory) {
@@ -277,7 +277,7 @@ std::u16string GetCounterTextFromResult(
               IDS_DEL_AUTOFILL_COUNTER_SUGGESTIONS_SHORT, num_suggestions));
           break;
         default:
-          NOTREACHED_IN_MIGRATION();
+          NOTREACHED();
       }
     }
 
@@ -315,7 +315,7 @@ std::u16string GetCounterTextFromResult(
                 displayed_strings[2]);
         break;
       default:
-        NOTREACHED_IN_MIGRATION();
+        NOTREACHED();
     }
 
     AutofillCounter::ResultInt num_user_annotations =
@@ -332,8 +332,7 @@ std::u16string GetCounterTextFromResult(
     }
   }
 
-  NOTREACHED_IN_MIGRATION();
-  return std::u16string();
+  NOTREACHED();
 }
 
 const char* GetTimePeriodPreferenceName(
@@ -396,8 +395,7 @@ bool GetDeletionPreferenceFromDataType(
       *out_pref = prefs::kCloseTabs;
       return true;
   }
-  NOTREACHED_IN_MIGRATION();
-  return false;
+  NOTREACHED();
 }
 
 std::optional<BrowsingDataType> GetDataTypeFromDeletionPreference(

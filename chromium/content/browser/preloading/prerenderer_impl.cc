@@ -96,8 +96,8 @@ void PrerendererImpl::ProcessCandidatesForPrerender(
     }
   }
 
-  base::ranges::stable_sort(prerender_candidates, std::less<>(),
-                            [](const auto& p) { return p.second->url; });
+  std::ranges::stable_sort(prerender_candidates, std::less<>(),
+                           [](const auto& p) { return p.second->url; });
   std::vector<std::pair<size_t, blink::mojom::SpeculationCandidatePtr>>
       candidates_to_start;
 
@@ -129,12 +129,12 @@ void PrerendererImpl::ProcessCandidatesForPrerender(
       url = std::min(candidate_it->second->url, started_it->url);
 
     // Select the ranges from both that match the URL in question.
-    auto equal_prerender_end = base::ranges::find_if(
+    auto equal_prerender_end = std::ranges::find_if(
         started_it, started_prerenders_.end(),
         [&](const auto& started) { return started.url != url; });
     base::span<PrerenderInfo> matching_prerenders(started_it,
                                                   equal_prerender_end);
-    auto equal_candidate_end = base::ranges::find_if(
+    auto equal_candidate_end = std::ranges::find_if(
         candidate_it, prerender_candidates.end(),
         [&](const auto& candidate) { return candidate.second->url != url; });
     base::span<std::pair<size_t, blink::mojom::SpeculationCandidatePtr>>
@@ -158,7 +158,7 @@ void PrerendererImpl::ProcessCandidatesForPrerender(
     // For now, start the first candidate for a URL only if there are no
     // matching prerenders. We could be cleverer in the future.
     if (matching_prerenders.empty()) {
-      CHECK_GT(matching_candidates.size(), 0u);
+      CHECK(!matching_candidates.empty());
       candidates_to_start.push_back(std::move(matching_candidates[0]));
     }
 
@@ -167,11 +167,29 @@ void PrerendererImpl::ProcessCandidatesForPrerender(
     started_it = equal_prerender_end;
   }
 
+  std::vector<GURL> urls;
+  for (auto ftn_id : removed_prerender_rules) {
+    if (PrerenderHost* prerender_host =
+            registry_->FindNonReservedHostById(ftn_id)) {
+      urls.push_back(prerender_host->GetInitialUrl());
+    }
+  }
   std::set<FrameTreeNodeId> canceled_prerender_rules_set =
       registry_->CancelHosts(
           removed_prerender_rules,
           PrerenderCancellationReason(
               PrerenderFinalStatus::kSpeculationRuleRemoved));
+  if (base::FeatureList::IsEnabled(
+          features::kPrerender2FallbackPrefetchSpecRules)) {
+    WebContents* web_contents =
+        WebContents::FromRenderFrameHost(&render_frame_host_.get());
+    auto* prefetch_document_manager =
+        content::PrefetchDocumentManager::GetOrCreateForCurrentDocument(
+            web_contents->GetPrimaryMainFrame());
+    for (const auto& url : urls) {
+      prefetch_document_manager->ResetPrefetchAheadOfPrerenderIfExist(url);
+    }
+  }
 
   // Canceled prerenders by kSpeculationRuleRemoved should have already been
   // removed from `started_prerenders_` via `OnCancel`.
@@ -183,8 +201,8 @@ void PrerendererImpl::ProcessCandidatesForPrerender(
 
   // Actually start the candidates in their original order once the diffing is
   // done.
-  base::ranges::sort(candidates_to_start, std::less<>(),
-                     [](const auto& p) { return p.first; });
+  std::ranges::sort(candidates_to_start, std::less<>(),
+                    [](const auto& p) { return p.first; });
   for (const auto& [_, candidate] : candidates_to_start) {
     PreloadingTriggerType trigger_type =
         PreloadingTriggerTypeFromSpeculationInjectionType(
@@ -239,7 +257,7 @@ bool PrerendererImpl::MaybePrerender(
 
   auto& rfhi = static_cast<RenderFrameHostImpl&>(render_frame_host_.get());
 
-  auto [begin, end] = base::ranges::equal_range(
+  auto [begin, end] = std::ranges::equal_range(
       started_prerenders_.begin(), started_prerenders_.end(), candidate->url,
       std::less<>(), &PrerenderInfo::url);
   // cannot currently start a second prerender with the same URL
@@ -269,12 +287,11 @@ bool PrerendererImpl::MaybePrerender(
             url::Origin::Create(candidate->url).Serialize().c_str()));
   }
 
-  std::optional<net::HttpNoVarySearchData> no_vary_search_expected;
+  std::optional<net::HttpNoVarySearchData> no_vary_search_hint;
   if (base::FeatureList::IsEnabled(blink::features::kPrerender2NoVarySearch) &&
       candidate->no_vary_search_hint) {
-    no_vary_search_expected =
-        no_vary_search::ParseHttpNoVarySearchDataFromMojom(
-            candidate->no_vary_search_hint);
+    no_vary_search_hint = no_vary_search::ParseHttpNoVarySearchDataFromMojom(
+        candidate->no_vary_search_hint);
   }
 
   PrerenderAttributes attributes(
@@ -283,9 +300,8 @@ bool PrerendererImpl::MaybePrerender(
           candidate->injection_type),
       /*embedder_histogram_suffix=*/"",
       candidate->target_browsing_context_name_hint,
-      Referrer{*candidate->referrer}, candidate->eagerness,
-      no_vary_search_expected, &rfhi, web_contents->GetWeakPtr(),
-      ui::PAGE_TRANSITION_LINK,
+      Referrer{*candidate->referrer}, candidate->eagerness, no_vary_search_hint,
+      &rfhi, web_contents->GetWeakPtr(), ui::PAGE_TRANSITION_LINK,
       /*should_warm_up_compositor=*/false,
       /*should_prepare_paint_tree=*/false,
       /*url_match_predicate=*/{},
@@ -350,9 +366,9 @@ bool PrerendererImpl::MaybePrerender(
   // `started_prerenders_` may be modified through this cancellation. Therefore,
   // it is needed to re-calculate the right place here on `started_prerenders_`
   // for new candidates.
-  end = base::ranges::upper_bound(started_prerenders_.begin(),
-                                  started_prerenders_.end(), candidate->url,
-                                  std::less<>(), &PrerenderInfo::url);
+  end = std::ranges::upper_bound(started_prerenders_.begin(),
+                                 started_prerenders_.end(), candidate->url,
+                                 std::less<>(), &PrerenderInfo::url);
 
   started_prerenders_.insert(end, {.injection_type = candidate->injection_type,
                                    .eagerness = candidate->eagerness,
@@ -363,7 +379,7 @@ bool PrerendererImpl::MaybePrerender(
 }
 
 bool PrerendererImpl::ShouldWaitForPrerenderResult(const GURL& url) {
-  auto [begin, end] = base::ranges::equal_range(
+  auto [begin, end] = std::ranges::equal_range(
       started_prerenders_.begin(), started_prerenders_.end(), url,
       std::less<>(), &PrerenderInfo::url);
   for (auto it = begin; it != end; ++it) {

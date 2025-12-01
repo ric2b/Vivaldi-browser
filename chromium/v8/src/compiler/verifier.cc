@@ -502,8 +502,16 @@ void Verifier::Visitor::Check(Node* node, const AllNodes& all) {
       CHECK_EQ(0, effect_count);
       CHECK_EQ(0, control_count);
       CHECK_EQ(3, value_count);
-      // The condition must be a Boolean.
-      CheckValueInputIs(node, 0, Type::Boolean());
+      switch (SelectParametersOf(node->op()).semantics()) {
+        case BranchSemantics::kJS:
+        case BranchSemantics::kUnspecified:
+          // The condition must be a Boolean.
+          CheckValueInputIs(node, 0, Type::Boolean());
+          break;
+        case BranchSemantics::kMachine:
+          CheckValueInputIs(node, 0, Type::Machine());
+          break;
+      }
       CheckTypeIs(node, Type::Any());
       break;
     }
@@ -1163,6 +1171,14 @@ void Verifier::Visitor::Check(Node* node, const AllNodes& all) {
       CheckValueInputIs(node, 0, Type::Number());
       CheckTypeIs(node, Type::Unsigned32());
       break;
+    case IrOpcode::kNumberToFloat16RawBits:
+      CheckValueInputIs(node, 0, Type::Number());
+      CheckTypeIs(node, Type::Number());
+      break;
+    case IrOpcode::kFloat16RawBitsToNumber:
+      CheckValueInputIs(node, 0, Type::Number());
+      CheckTypeIs(node, Type::Number());
+      break;
     case IrOpcode::kIntegral32OrMinusZeroToBigInt:
       CheckValueInputIs(node, 0, Type::Integral32OrMinusZero());
       CheckTypeIs(node, Type::BigInt());
@@ -1241,6 +1257,10 @@ void Verifier::Visitor::Check(Node* node, const AllNodes& all) {
     case IrOpcode::kStringWrapperLength:
       CheckValueInputIs(node, 0, Type::StringWrapper());
       CheckTypeIs(node, TypeCache::Get()->kStringLengthType);
+      break;
+    case IrOpcode::kTypedArrayLength:
+      CheckValueInputIs(node, 0, Type::Object());
+      CheckTypeIs(node, TypeCache::Get()->kJSTypedArrayLengthType);
       break;
     case IrOpcode::kStringToLowerCaseIntl:
     case IrOpcode::kStringToUpperCaseIntl:
@@ -1367,6 +1387,10 @@ void Verifier::Visitor::Check(Node* node, const AllNodes& all) {
       CheckTypeIs(node, Type::Internal());
       break;
     case IrOpcode::kTransitionElementsKind:
+      CheckValueInputIs(node, 0, Type::Any());
+      CheckNotTyped(node);
+      break;
+    case IrOpcode::kTransitionElementsKindOrCheckMap:
       CheckValueInputIs(node, 0, Type::Any());
       CheckNotTyped(node);
       break;
@@ -1540,6 +1564,10 @@ void Verifier::Visitor::Check(Node* node, const AllNodes& all) {
     case IrOpcode::kCheckNumber:
       CheckValueInputIs(node, 0, Type::Any());
       CheckTypeIs(node, Type::Number());
+      break;
+    case IrOpcode::kCheckNumberFitsInt32:
+      CheckValueInputIs(node, 0, Type::Any());
+      CheckTypeIs(node, Type::Signed32());
       break;
     case IrOpcode::kCheckReceiver:
       CheckValueInputIs(node, 0, Type::Any());
@@ -1921,7 +1949,8 @@ void Verifier::Visitor::Check(Node* node, const AllNodes& all) {
     case IrOpcode::kRoundUint64ToFloat64:
     case IrOpcode::kRoundUint64ToFloat32:
     case IrOpcode::kTruncateFloat64ToFloat32:
-    case IrOpcode::kTruncateFloat64ToFloat16:
+    case IrOpcode::kChangeFloat16RawBitsToFloat64:
+    case IrOpcode::kTruncateFloat64ToFloat16RawBits:
     case IrOpcode::kTruncateFloat64ToWord32:
     case IrOpcode::kBitcastFloat32ToInt32:
     case IrOpcode::kBitcastFloat64ToInt64:

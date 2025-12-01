@@ -17,12 +17,47 @@ import re
 import os
 from typing import Dict, List
 
+ALLOWED_PREFIXES = {
+    'android': ['heap_graph', 'memory'],
+    'counters': ['counter'],
+    'chrome/util': ['cr'],
+    'intervals': ['interval'],
+    'graphs': ['graph'],
+    'slices': ['slice', 'thread_slice', 'process_slice'],
+    'linux': ['cpu', 'memory'],
+    'stacks': ['cpu_profiling'],
+}
+
+# Allows for nonstandard object names.
+OBJECT_NAME_ALLOWLIST = {
+    'graphs/partition.sql': ['tree_structural_partition_by_group'],
+}
+
+COLUMN_TYPES = [
+    # Standard types
+    'LONG',
+    'DOUBLE',
+    'STRING',
+    'BOOL',
+    'BYTES',
+
+    # Special types
+    'TIMESTAMP',
+    'DURATION',
+    'ID',
+    'JOINID',
+    'ARGSETID'
+]
+
+MACRO_ARG_TYPES = ['TABLEORSUBQUERY', 'EXPR', 'COLUMNNAME']
+
 NAME = r'[a-zA-Z_\d\{\}]+'
 ANY_WORDS = r'[^\s].*'
 ANY_NON_QUOTE = r'[^\']*.*'
-TYPE = r'[a-zA-Z]+'
+TYPE = r'[_a-zA-Z\(\)\.]+'
 SQL = r'[\s\S]*?'
 WS = r'\s*'
+
 COMMENT = r' --[^\n]*\n'
 COMMENTS = rf'(?:{COMMENT})*'
 ARG = rf'{COMMENTS} {NAME} {TYPE}'
@@ -105,24 +140,6 @@ PATTERN_BY_KIND = {
     ObjKind.table_function: CREATE_TABLE_FUNCTION_PATTERN,
     ObjKind.macro: CREATE_MACRO_PATTERN,
     ObjKind.include: INCLUDE_PATTERN
-}
-
-ALLOWED_PREFIXES = {
-    'android': ['heap_graph', 'memory'],
-    'counters': ['counter'],
-    'chrome/util': ['cr'],
-    'intervals': ['interval'],
-    'graphs': ['graph'],
-    'slices': ['slice'],
-    'linux': ['cpu', 'memory'],
-    'stacks': ['cpu_profiling'],
-}
-
-# Allows for nonstandard object names.
-OBJECT_NAME_ALLOWLIST = {
-    'graphs/partition.sql': ['tree_structural_partition_by_group'],
-    'slices/with_context.sql': ['process_slice', 'thread_slice'],
-    'slices/cpu_time.sql': ['thread_slice_cpu_time', 'thread_slice_cpu_cycles']
 }
 
 
@@ -214,7 +231,7 @@ def check_banned_drop(sql: str) -> List[str]:
   errors = []
   for _, matches in match_pattern(DROP_TABLE_VIEW_PATTERN, sql).items():
     sql_type = matches[0]
-    name = matches[2]
+    name = matches[1]
     errors.append(f"Dropping object {sql_type} '{name}' is banned.")
   return errors
 

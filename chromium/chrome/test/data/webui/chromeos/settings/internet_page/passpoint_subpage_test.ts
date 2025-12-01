@@ -4,11 +4,11 @@
 
 import 'chrome://os-settings/lazy_load.js';
 
-import {SettingsPasspointSubpageElement} from 'chrome://os-settings/lazy_load.js';
-import {CrLinkRowElement, Router, routes} from 'chrome://os-settings/os_settings.js';
+import type {SettingsPasspointSubpageElement} from 'chrome://os-settings/lazy_load.js';
+import {Router, routes} from 'chrome://os-settings/os_settings.js';
 import {assert} from 'chrome://resources/ash/common/assert.js';
 import {MojoConnectivityProvider} from 'chrome://resources/ash/common/connectivity/mojo_connectivity_provider.js';
-import {PasspointSubscription} from 'chrome://resources/ash/common/connectivity/passpoint.mojom-webui.js';
+import type {PasspointSubscription} from 'chrome://resources/ash/common/connectivity/passpoint.mojom-webui.js';
 import {MojoInterfaceProviderImpl} from 'chrome://resources/ash/common/network/mojo_interface_provider.js';
 import {OncMojo} from 'chrome://resources/ash/common/network/onc_mojo.js';
 import {AppType} from 'chrome://resources/cr_components/app_management/app_management.mojom-webui.js';
@@ -58,25 +58,25 @@ suite('PasspointSubpage', () => {
 
   function getListItems(id: string) {
     const div =
-        passpointSubpage_.shadowRoot!.querySelector<HTMLDivElement>(`#${id}`);
+        passpointSubpage_.shadowRoot!.querySelector<HTMLElement>(`#${id}`);
     assertTrue(!!div);
     return div!.querySelectorAll('div.list-item');
   }
 
-  function getExpirationDateItem(): HTMLDivElement|null {
-    return passpointSubpage_.shadowRoot!.querySelector<HTMLDivElement>(
+  function getExpirationDateItem(): HTMLElement|null {
+    return passpointSubpage_.shadowRoot!.querySelector<HTMLElement>(
         '#passpointExpirationDate');
   }
 
   function getSourceText(): string {
-    const div = passpointSubpage_.shadowRoot!.querySelector<HTMLDivElement>(
+    const div = passpointSubpage_.shadowRoot!.querySelector<HTMLElement>(
         '#passpointSourceText');
     assertTrue(!!div);
     return div!.textContent!.trim();
   }
 
   function getCertificateName(): string {
-    const div = passpointSubpage_.shadowRoot!.querySelector<HTMLDivElement>(
+    const div = passpointSubpage_.shadowRoot!.querySelector<HTMLElement>(
         '#passpointCertificateName');
     assertTrue(!!div);
     return div!.textContent!.trim();
@@ -291,7 +291,7 @@ suite('PasspointSubpage', () => {
     networkConfigApi_.addNetworksForTest([wifi]);
     await init(sub);
 
-    const elem = passpointSubpage_.shadowRoot!.querySelector<HTMLDivElement>(
+    const elem = passpointSubpage_.shadowRoot!.querySelector<HTMLElement>(
         '#passpointNetworksList');
     assertNull(elem);
   });
@@ -319,7 +319,7 @@ suite('PasspointSubpage', () => {
 
     const list = getListItems('passpointNetworksList');
     assertEquals(2, list.length);
-    const row = list[0]!.querySelector<CrLinkRowElement>('cr-link-row');
+    const row = list[0]!.querySelector('cr-link-row');
     assertTrue(!!row);
 
     const showDetailPromise = eventToPromise('show-detail', window);

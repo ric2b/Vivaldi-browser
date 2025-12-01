@@ -4,6 +4,8 @@
  */
 "use strict";
 
+const astUtils = require("./utils/ast-utils");
+
 //------------------------------------------------------------------------------
 // Helpers
 //------------------------------------------------------------------------------
@@ -140,13 +142,16 @@ module.exports = {
         docs: {
             description: "Disallow unnecessary constructors",
             recommended: false,
-            url: "https://eslint.org/docs/rules/no-useless-constructor"
+            url: "https://eslint.org/docs/latest/rules/no-useless-constructor"
         },
+
+        hasSuggestions: true,
 
         schema: [],
 
         messages: {
-            noUselessConstructor: "Useless constructor."
+            noUselessConstructor: "Useless constructor.",
+            removeConstructor: "Remove the constructor."
         }
     },
 
@@ -177,7 +182,18 @@ module.exports = {
             if (superClass ? isRedundantSuperCall(body, ctorParams) : (body.length === 0)) {
                 context.report({
                     node,
-                    messageId: "noUselessConstructor"
+                    messageId: "noUselessConstructor",
+                    suggest: [
+                        {
+                            messageId: "removeConstructor",
+                            *fix(fixer) {
+                                const nextToken = context.sourceCode.getTokenAfter(node);
+                                const addSemiColon = nextToken.type === "Punctuator" && nextToken.value === "[" && astUtils.needsPrecedingSemicolon(context.sourceCode, node);
+
+                                yield fixer.replaceText(node, addSemiColon ? ";" : "");
+                            }
+                        }
+                    ]
                 });
             }
         }

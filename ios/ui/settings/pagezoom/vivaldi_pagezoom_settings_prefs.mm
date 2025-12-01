@@ -15,8 +15,6 @@
 + (void)registerBrowserStatePrefs:(user_prefs::PrefRegistrySyncable*)registry {
   // Setting default to 100% zoom
   registry->RegisterIntegerPref(vivaldiprefs::kVivaldiPageZoomLevel, 100);
-  // Turn off zoom by default
-  registry->RegisterBooleanPref(vivaldiprefs::kGlobalPageZoomEnabled, NO);
 }
 
 #pragma mark - GETTERS
@@ -26,23 +24,12 @@
   return prefService->GetInteger(vivaldiprefs::kVivaldiPageZoomLevel);
 }
 
-/// Returns page zoom enabled status
-+ (BOOL)getGlobalPageZoomEnabledWithPrefService:(PrefService*)prefService {
-  return prefService->GetBoolean(vivaldiprefs::kGlobalPageZoomEnabled);
-}
-
 #pragma mark - SETTERS
 
 /// Sets page zoom level
 + (void)setPageZoomLevelWithPrefService:(int)level
                          inPrefServices:(PrefService*)prefService {
   prefService->SetInteger(vivaldiprefs::kVivaldiPageZoomLevel, level);
-}
-
-/// Sets page zoom enabled status
-+ (void)setGlobalPageZoomEnabledWithPrefService:(BOOL)enabled
-                                 inPrefServices:(PrefService*)prefService {
-  prefService->SetBoolean(vivaldiprefs::kGlobalPageZoomEnabled, enabled);
 }
 
 @end

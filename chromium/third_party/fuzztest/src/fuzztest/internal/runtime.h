@@ -63,10 +63,11 @@ namespace internal {
 class FuzzTestFuzzer {
  public:
   virtual ~FuzzTestFuzzer() = default;
-  virtual void RunInUnitTestMode(const Configuration& configuration) = 0;
-  // Returns fuzzing mode's exit code. Zero indicates success.
-  virtual int RunInFuzzingMode(int* argc, char*** argv,
-                               const Configuration& configuration) = 0;
+  // Returns ture if no error were detected by the FuzzTest, false otherwise.
+  virtual bool RunInUnitTestMode(const Configuration& configuration) = 0;
+  // Returns ture if no error were detected by the FuzzTest, false otherwise.
+  virtual bool RunInFuzzingMode(int* argc, char*** argv,
+                                const Configuration& configuration) = 0;
 };
 
 class FuzzTest;
@@ -175,11 +176,7 @@ class Runtime {
     UntypedDomain& domain;
   };
 
-  void SetCurrentTest(const FuzzTest* test,
-                      const Configuration* configuration) {
-    current_test_ = test;
-    current_configuration_ = configuration;
-  }
+  void SetCurrentTest(const FuzzTest* test, const Configuration* configuration);
   void OnTestIterationStart(const absl::Time& start_time) {
     current_iteration_start_time_ = start_time;
     test_iteration_started_ = true;
@@ -242,6 +239,9 @@ class Runtime {
   RunMode run_mode_ = RunMode::kUnitTest;
   std::atomic<bool> watchdog_thread_started = false;
 
+  absl::Time creation_time_ = absl::Now();
+  size_t test_counter_ = 0;
+
   bool reporter_enabled_ = false;
   Args* current_args_ = nullptr;
   const FuzzTest* current_test_ = nullptr;
@@ -280,11 +280,11 @@ class FuzzTestFuzzerImpl : public FuzzTestFuzzer {
 
  private:
   // TODO(fniksic): Refactor to reduce code complexity and improve readability.
-  void RunInUnitTestMode(const Configuration& configuration) override;
+  bool RunInUnitTestMode(const Configuration& configuration) override;
 
   // TODO(fniksic): Refactor to reduce code complexity and improve readability.
-  int RunInFuzzingMode(int* argc, char*** argv,
-                       const Configuration& configuration) override;
+  bool RunInFuzzingMode(int* argc, char*** argv,
+                        const Configuration& configuration) override;
 
   // Use the standard PRNG instead of absl::BitGen because Abseil doesn't
   // guarantee seed stability
@@ -312,7 +312,8 @@ class FuzzTestFuzzerImpl : public FuzzTestFuzzer {
 
   absl::StatusOr<corpus_type> TryParse(absl::string_view data);
 
-  void MutateValue(Input& input, absl::BitGenRef prng);
+  void MutateValue(Input& input, absl::BitGenRef prng,
+                   const domain_implementor::MutationMetadata& metadata);
 
   void UpdateCorpusDistribution();
 
@@ -390,10 +391,11 @@ class FuzzTestFuzzerImpl : public FuzzTestFuzzer {
 
 size_t GetStackLimitFromEnvOrConfiguration(const Configuration& configuration);
 
-// A reproduction command template will include this placeholder. This
-// placeholder then will be replaced by the proper test filter when creating the
-// final reproduction command from the template.
+// A reproduction command template will include these placeholders. These
+// placeholders then will be replaced by the proper test filter when creating
+// the final reproduction command from the template.
 static constexpr absl::string_view kTestFilterPlaceholder = "$TEST_FILTER";
+static constexpr absl::string_view kExtraArgsPlaceholder = "$EXTRA_ARGS";
 
 }  // namespace internal
 }  // namespace fuzztest

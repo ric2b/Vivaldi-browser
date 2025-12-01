@@ -482,18 +482,11 @@ If you're comfortable using [gsutil], this step is a bit easier.
 However, it can be easy to typo the command, so double check things before
 actually uploading files.
 
-Remember: only use `project-private` ACLs here and never `public-read`.
-
 ```sh
-$ gsutil cp -n -a project-private <local filename> gs://chromeos-localmirror-private/distfiles/<remote filename>
+$ gsutil cp -n <local filename> gs://chromeos-localmirror-private/distfiles/<remote filename>
 ```
 
-If you've already uploaded the file and forgot to set the ACLs, you can recover
-with the `acl` subcommand.
-
-```sh
-$ gsutil acl set project-private gs://chromeos-localmirror-private/distfiles/<remote filename>
-```
+The default ACLs are fine, so don't try to change them.
 
 #### Verify usability
 
@@ -583,7 +576,7 @@ this remains a non-issue.
 [BSD license]: https://en.wikipedia.org/wiki/BSD_licenses
 [bugs]: /chromium-os/developer-library/guides/bugs/reporting-bugs/
 [Contact]: /chromium-os/developer-library/guides/who-do-i-notify/contact/
-[CPFE]: https://goto.google.com/cpfe
+[CPFE]: http://go/cpfe
 [cros-cpfe]: https://chromium.googlesource.com/chromiumos/overlays/chromiumos-overlay/+/HEAD/eclass/cros-cpfe.eclass
 [Custom Artifacts]: #custom-artifacts
 [Custom Naming]: #custom-naming

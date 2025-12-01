@@ -16,6 +16,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/with_feature_override.h"
 #include "build/build_config.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/chrome_signin_pref_names.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
@@ -485,9 +486,10 @@ IN_PROC_BROWSER_TEST_F(PasswordBubbleInteractiveUiTest, LeakPromptHidesBubble) {
   ASSERT_NE(password_bubble, nullptr);
   views::test::WidgetVisibleWaiter(password_bubble).Wait();
 
-  GetController()->OnCredentialLeak(
+  GetController()->OnCredentialLeak(password_manager::LeakedPasswordDetails(
       password_manager::CredentialLeakFlags::kPasswordSaved,
-      GURL("https://example.com"), std::u16string(u"Eve"));
+      GURL("https://example.com"), std::u16string(u"Eve"),
+      std::u16string(u"password"), /*in_account_store=*/false));
   views::test::WidgetDestroyedWaiter(password_bubble).Wait();
 }
 

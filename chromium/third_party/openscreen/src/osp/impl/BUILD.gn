@@ -27,9 +27,7 @@ if (!is_win) {
       "dns_sd_service_publisher_factory.cc",
       "dns_sd_watcher_client.cc",
       "dns_sd_watcher_client.h",
-      "message_demuxer.cc",
       "network_service_manager.cc",
-      "osp_constants.h",
       "presentation/presentation_connection.cc",
       "presentation/presentation_controller.cc",
       "presentation/presentation_id.cc",
@@ -41,12 +39,6 @@ if (!is_win) {
       "presentation/url_availability_requester.h",
       "protocol_connection_client_factory.cc",
       "protocol_connection_server_factory.cc",
-      "receiver_list.cc",
-      "receiver_list.h",
-      "service_listener_impl.cc",
-      "service_listener_impl.h",
-      "service_publisher_impl.cc",
-      "service_publisher_impl.h",
     ]
     configs = [ ":impl_internal_config" ]
     public_deps = [

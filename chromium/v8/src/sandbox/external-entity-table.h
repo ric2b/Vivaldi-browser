@@ -16,8 +16,6 @@
 #include "src/common/globals.h"
 #include "src/common/segmented-table.h"
 
-#ifdef V8_COMPRESS_POINTERS
-
 namespace v8 {
 namespace internal {
 
@@ -113,7 +111,7 @@ class V8_EXPORT_PRIVATE ExternalEntityTable
 
     // Similar to `num_segments()` but also locks the mutex.
     uint32_t NumSegmentsForTesting() {
-      base::MutexGuard guard(&mutex_);
+      base::SpinningMutexGuard guard(&mutex_);
       return num_segments();
     }
 
@@ -145,7 +143,7 @@ class V8_EXPORT_PRIVATE ExternalEntityTable
     bool is_internal_read_only_space_ = false;
 
     // Mutex guarding access to the segments_ set.
-    base::Mutex mutex_;
+    base::SpinningMutex mutex_;
   };
 
   // A Space that supports black allocations.
@@ -284,7 +282,5 @@ class V8_EXPORT_PRIVATE ExternalEntityTable
 
 }  // namespace internal
 }  // namespace v8
-
-#endif  // V8_COMPRESS_POINTERS
 
 #endif  // V8_SANDBOX_EXTERNAL_ENTITY_TABLE_H_

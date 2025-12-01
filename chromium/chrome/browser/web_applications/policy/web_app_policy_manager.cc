@@ -4,6 +4,7 @@
 
 #include "chrome/browser/web_applications/policy/web_app_policy_manager.h"
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <string>
@@ -21,7 +22,6 @@
 #include "base/functional/callback_helpers.h"
 #include "base/functional/concurrent_closures.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/syslog_logging.h"
 #include "base/values.h"
@@ -39,6 +39,7 @@
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_install_utils.h"
+#include "chrome/browser/web_applications/web_app_management_type.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
@@ -138,19 +139,11 @@ void WebAppPolicyManager::Start(
 
   policy_settings_and_force_installs_applied_ =
       std::move(policy_settings_and_force_installs_applied);
-  // When Lacros is enabled, don't run PWA-specific logic in Ash.
-  // TODO(crbug.com/40792561): Consider factoring out logic that should only run
-  // in Ash into a separate class. This way, when running in Ash, we won't need
-  // to construct a WebAppPolicyManager.
-  bool enable_pwa_support = true;
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  enable_pwa_support = !IsWebAppsCrosapiEnabled();
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   content::GetUIThreadTaskRunner({base::TaskPriority::BEST_EFFORT})
       ->PostTask(FROM_HERE,
                  base::BindOnce(
                      &WebAppPolicyManager::InitChangeRegistrarAndRefreshPolicy,
-                     weak_ptr_factory_.GetWeakPtr(), enable_pwa_support));
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void WebAppPolicyManager::Shutdown() {
@@ -164,7 +157,7 @@ void WebAppPolicyManager::ReinstallPlaceholderAppIfNecessary(
       pref_service_->GetList(prefs::kWebAppInstallForceList);
   const auto& web_apps_list = web_apps;
 
-  const auto it = base::ranges::find(
+  const auto it = std::ranges::find(
       web_apps_list, url.spec(), [](const base::Value& entry) {
         return CHECK_DEREF(entry.GetDict().FindString(kUrlKey));
       });
@@ -210,34 +203,26 @@ void WebAppPolicyManager::RegisterProfilePrefs(
   registry->RegisterListPref(prefs::kWebAppSettings);
 }
 
-void WebAppPolicyManager::InitChangeRegistrarAndRefreshPolicy(
-    bool enable_pwa_support) {
+void WebAppPolicyManager::InitChangeRegistrarAndRefreshPolicy() {
   pref_change_registrar_.Init(pref_service_);
-  if (enable_pwa_support) {
-    pref_change_registrar_.Add(
-        prefs::kWebAppInstallForceList,
-        base::BindRepeating(&WebAppPolicyManager::RefreshPolicyInstalledApps,
-                            weak_ptr_factory_.GetWeakPtr(),
-                            /*allow_close_and_relaunch=*/false));
-      pref_change_registrar_.Add(
-          prefs::kWebAppSettings,
-          base::BindRepeating(&WebAppPolicyManager::RefreshPolicySettings,
-                              weak_ptr_factory_.GetWeakPtr()));
+  pref_change_registrar_.Add(
+      prefs::kWebAppInstallForceList,
+      base::BindRepeating(&WebAppPolicyManager::RefreshPolicyInstalledApps,
+                          weak_ptr_factory_.GetWeakPtr(),
+                          /*allow_close_and_relaunch=*/false));
+  pref_change_registrar_.Add(
+      prefs::kWebAppSettings,
+      base::BindRepeating(&WebAppPolicyManager::RefreshPolicySettings,
+                          weak_ptr_factory_.GetWeakPtr()));
 
-      RefreshPolicySettings();
+  RefreshPolicySettings();
 #if BUILDFLAG(IS_CHROMEOS)
-    RefreshPolicyInstalledApps(
-        /*allow_close_and_relaunch=*/base::FeatureList::IsEnabled(
-            features::kForcedAppRelaunchOnPlaceholderUpdate));
+  RefreshPolicyInstalledApps(
+      /*allow_close_and_relaunch=*/base::FeatureList::IsEnabled(
+          features::kForcedAppRelaunchOnPlaceholderUpdate));
 #else
-    RefreshPolicyInstalledApps(/*allow_close_and_relaunch=*/false);
+  RefreshPolicyInstalledApps(/*allow_close_and_relaunch=*/false);
 #endif
-
-  } else {
-    if (policy_settings_and_force_installs_applied_) {
-      std::move(policy_settings_and_force_installs_applied_).Run();
-    }
-  }
   ObserveDisabledSystemFeaturesPolicy();
 }
 
@@ -387,8 +372,8 @@ void WebAppPolicyManager::ParsePolicySettings() {
   default_settings_ = WebAppPolicyManager::WebAppSetting();
 
   // Read default policy, if provided.
-  const auto it = base::ranges::find(
-      web_apps_list, kWildcard, [](const base::Value& entry) {
+  const auto it =
+      std::ranges::find(web_apps_list, kWildcard, [](const base::Value& entry) {
         return CHECK_DEREF(entry.GetDict().FindString(kManifestId));
       });
 
@@ -475,8 +460,8 @@ void WebAppPolicyManager::ApplyForceOSUnregistrationPolicySettings(
 
     const webapps::AppId& app_id =
         web_app::GenerateAppIdFromManifestId(manifest_id);
-    if (!provider_->registrar_unsafe().IsInstallState(
-            app_id, {proto::INSTALLED_WITH_OS_INTEGRATION})) {
+    if (provider_->registrar_unsafe().GetInstallState(app_id) !=
+        proto::INSTALLED_WITH_OS_INTEGRATION) {
       continue;
     }
 
@@ -502,8 +487,7 @@ WebAppPolicyManager::ParseInstallPolicyEntry(const base::Value::Dict& entry) {
   const std::string* fallback_app_name = entry.FindString(kFallbackAppNameKey);
   const base::Value::List* uninstall_and_replace =
       entry.FindList(kUninstallAndReplaceKey);
-  const std::optional<bool> install_as_shortcut =
-      entry.FindBool(kInstallAsShortcut);
+  const std::optional<bool> install_as_diy = entry.FindBool(kInstallAsShortcut);
 
   DCHECK(!default_launch_container ||
          (*default_launch_container == kDefaultLaunchContainerWindowValue) ||
@@ -551,7 +535,9 @@ WebAppPolicyManager::ParseInstallPolicyEntry(const base::Value::Dict& entry) {
     }
   }
 
-  install_options.install_as_shortcut = install_as_shortcut.value_or(false);
+  // Shortcut apps no longer exist in the web applications system and are
+  // treated as DIY apps now.
+  install_options.install_as_diy = install_as_diy.value_or(false);
 
   const std::string* custom_name = entry.FindString(kCustomNameKey);
   if (custom_name) {
@@ -796,6 +782,10 @@ void WebAppPolicyManager::ObserveDisabledSystemFeaturesPolicy() {
         base::BindRepeating(&WebAppPolicyManager::OnDisableListPolicyChanged,
                             weak_ptr_factory_.GetWeakPtr()));
   }
+  pref_change_registrar_.Add(
+      ash::prefs::kClassManagementToolsAvailabilitySetting,
+      base::BindRepeating(&WebAppPolicyManager::OnDisableModePolicyChanged,
+                          weak_ptr_factory_.GetWeakPtr()));
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   // Make sure we get the right disabled mode in case it was changed before
   // policy registration.

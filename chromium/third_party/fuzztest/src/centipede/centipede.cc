@@ -80,7 +80,6 @@
 #include "./centipede/control_flow.h"
 #include "./centipede/corpus_io.h"
 #include "./centipede/coverage.h"
-#include "./centipede/early_exit.h"
 #include "./centipede/environment.h"
 #include "./centipede/feature.h"
 #include "./centipede/feature_set.h"
@@ -89,6 +88,7 @@
 #include "./centipede/rusage_profiler.h"
 #include "./centipede/rusage_stats.h"
 #include "./centipede/stats.h"
+#include "./centipede/stop.h"
 #include "./centipede/util.h"
 #include "./centipede/workdir.h"
 #include "./common/blob_file.h"
@@ -119,8 +119,13 @@ Centipede::Centipede(const Environment &env, CentipedeCallbacks &user_callbacks,
       stats_(stats),
       input_filter_path_(std::filesystem::path(TemporaryLocalDirPath())
                              .append("filter-input")),
-      input_filter_cmd_(env_.input_filter, {input_filter_path_}, {/*env*/},
-                        "/dev/null", "/dev/null"),
+      input_filter_cmd_{[&] {
+        Command::Options cmd_options;
+        cmd_options.args = {input_filter_path_};
+        cmd_options.stdout_file = "/dev/null";
+        cmd_options.stderr_file = "/dev/null";
+        return Command{env_.input_filter, std::move(cmd_options)};
+      }()},
       rusage_profiler_(
           /*scope=*/perf::RUsageScope::ThisProcess(),
           /*metrics=*/env.DumpRUsageTelemetryInThisShard()
@@ -136,7 +141,7 @@ Centipede::Centipede(const Environment &env, CentipedeCallbacks &user_callbacks,
 
 void Centipede::CorpusToFiles(const Environment &env, std::string_view dir) {
   std::vector<std::string> sharded_corpus_files;
-  CHECK_OK(RemoteGlobMatch(WorkDir{env}.CorpusFiles().AllShardsGlob(),
+  CHECK_OK(RemoteGlobMatch(WorkDir{env}.CorpusFilePaths().AllShardsGlob(),
                            sharded_corpus_files));
   ExportCorpus(sharded_corpus_files, dir);
 }
@@ -158,16 +163,16 @@ void Centipede::CorpusFromFiles(const Environment &env, std::string_view dir) {
   // Iterate over all shards.
   size_t inputs_added = 0;
   size_t inputs_ignored = 0;
-  const auto corpus_files = WorkDir{env}.CorpusFiles();
+  const auto corpus_file_paths = WorkDir{env}.CorpusFilePaths();
   for (size_t shard = 0; shard < env.total_shards; shard++) {
-    const std::string corpus_path = corpus_files.ShardPath(shard);
+    const std::string corpus_file_path = corpus_file_paths.Shard(shard);
     size_t num_shard_bytes = 0;
     // Read the shard (if it exists), collect input hashes from it.
     absl::flat_hash_set<std::string> existing_hashes;
-    if (RemotePathExists(corpus_path)) {
+    if (RemotePathExists(corpus_file_path)) {
       auto reader = DefaultBlobFileReaderFactory();
       // May fail to open if file doesn't exist.
-      reader->Open(corpus_path).IgnoreError();
+      reader->Open(corpus_file_path).IgnoreError();
       ByteSpan blob;
       while (reader->Read(blob).ok()) {
         existing_hashes.insert(Hash(blob));
@@ -175,8 +180,8 @@ void Centipede::CorpusFromFiles(const Environment &env, std::string_view dir) {
     }
     // Add inputs to the current shard, if the shard doesn't have them already.
     auto appender = DefaultBlobFileWriterFactory(env.riegeli);
-    CHECK_OK(appender->Open(corpus_path, "a"))
-        << "Failed to open corpus file: " << corpus_path;
+    CHECK_OK(appender->Open(corpus_file_path, "a"))
+        << "Failed to open corpus file: " << corpus_file_path;
     ByteArray shard_data;
     for (const auto &path : sharded_paths[shard]) {
       std::string input;
@@ -377,14 +382,14 @@ bool Centipede::RunBatch(
   }
   if (!success && env_.exit_on_crash) {
     LOG(INFO) << "--exit_on_crash is enabled; exiting soon";
-    RequestEarlyExit(EXIT_FAILURE);
+    RequestEarlyStop(EXIT_FAILURE);
     return false;
   }
   CHECK_EQ(batch_result.results().size(), input_vec.size());
   num_runs_ += input_vec.size();
   bool batch_gained_new_coverage = false;
   for (size_t i = 0; i < input_vec.size(); i++) {
-    if (EarlyExitRequested()) break;
+    if (ShouldStop()) break;
     FeatureVec &fv = batch_result.results()[i].mutable_features();
     bool function_filter_passed = function_filter_.filter(fv);
     bool input_gained_new_coverage = fs_.PruneFeaturesAndCountUnseen(fv) != 0;
@@ -429,7 +434,7 @@ void Centipede::LoadShard(const Environment &load_env, size_t shard_index,
   std::vector<ByteArray> inputs_to_rerun;
   auto input_features_callback = [&](ByteArray input,
                                      FeatureVec input_features) {
-    if (EarlyExitRequested()) return;
+    if (ShouldStop()) return;
     if (input_features.empty()) {
       if (rerun) {
         inputs_to_rerun.emplace_back(std::move(input));
@@ -455,8 +460,8 @@ void Centipede::LoadShard(const Environment &load_env, size_t shard_index,
   // See serialize_shard_loads on why we may want to serialize shard loads.
   // TODO(kcc): remove serialize_shard_loads when LoadShards() uses less RAM.
   const WorkDir wd{load_env};
-  const std::string corpus_path = wd.CorpusFiles().ShardPath(shard_index);
-  const std::string features_path = wd.FeaturesFiles().ShardPath(shard_index);
+  const std::string corpus_path = wd.CorpusFilePaths().Shard(shard_index);
+  const std::string features_path = wd.FeaturesFilePaths().Shard(shard_index);
   if (env_.serialize_shard_loads) {
     ABSL_CONST_INIT static absl::Mutex load_shard_mu{absl::kConstInit};
     absl::MutexLock lock(&load_shard_mu);
@@ -490,7 +495,7 @@ void Centipede::LoadAllShardsInRandomOrder(const Environment &load_env,
 
 void Centipede::Rerun(std::vector<ByteArray> &to_rerun) {
   if (to_rerun.empty()) return;
-  auto features_file_path = wd_.FeaturesFiles().ShardPath(env_.my_shard_index);
+  auto features_file_path = wd_.FeaturesFilePaths().Shard(env_.my_shard_index);
   auto features_file = DefaultBlobFileWriterFactory(env_.riegeli);
   CHECK_OK(features_file->Open(features_file_path, "a"));
 
@@ -498,7 +503,7 @@ void Centipede::Rerun(std::vector<ByteArray> &to_rerun) {
   // Re-run all inputs for which we don't know their features.
   // Run in batches of at most env_.batch_size inputs each.
   while (!to_rerun.empty()) {
-    if (EarlyExitRequested()) break;
+    if (ShouldStop()) break;
     size_t batch_size = std::min(to_rerun.size(), env_.batch_size);
     std::vector<ByteArray> batch(to_rerun.end() - batch_size, to_rerun.end());
     to_rerun.resize(to_rerun.size() - batch_size);
@@ -554,17 +559,21 @@ void Centipede::GenerateSourceBasedCoverageReport(
     merge_arguments.push_back(raw_profile);
   }
 
-  Command merge_command("llvm-profdata", merge_arguments);
+  Command::Options merge_cmd_options;
+  merge_cmd_options.args = std::move(merge_arguments);
+  Command merge_command{"llvm-profdata", std::move(merge_cmd_options)};
   if (merge_command.Execute() != EXIT_SUCCESS) {
     LOG(ERROR) << "Failed to run command " << merge_command.ToString();
     return;
   }
 
-  Command generate_report_command(
-      "llvm-cov",
-      {"show", "-format=html", absl::StrCat("-output-dir=", report_path),
-       absl::StrCat("-instr-profile=", indexed_profile_path),
-       env_.clang_coverage_binary});
+  Command::Options generate_report_cmd_options;
+  generate_report_cmd_options.args = {
+      "show", "-format=html", absl::StrCat("-output-dir=", report_path),
+      absl::StrCat("-instr-profile=", indexed_profile_path),
+      env_.clang_coverage_binary};
+  Command generate_report_command{"llvm-cov",
+                                  std::move(generate_report_cmd_options)};
   if (generate_report_command.Execute() != EXIT_SUCCESS) {
     LOG(ERROR) << "Failed to run command "
                << generate_report_command.ToString();
@@ -636,7 +645,7 @@ void Centipede::MergeFromOtherCorpus(std::string_view merge_from_dir,
   if (new_corpus_size > initial_corpus_size) {
     auto appender = DefaultBlobFileWriterFactory(env_.riegeli);
     CHECK_OK(
-        appender->Open(wd_.CorpusFiles().ShardPath(env_.my_shard_index), "a"));
+        appender->Open(wd_.CorpusFilePaths().Shard(env_.my_shard_index), "a"));
     for (size_t idx = initial_corpus_size; idx < new_corpus_size; ++idx) {
       CHECK_OK(appender->Write(corpus_.Get(idx)));
     }
@@ -655,7 +664,7 @@ void Centipede::ReloadAllShardsAndWriteDistilledCorpus() {
 
   // Save the distilled corpus to a file in workdir and possibly to a hashed
   // file in the first corpus dir passed in `--corpus_dir`.
-  const auto distill_to_path = wd_.DistilledCorpusFiles().MyShardPath();
+  const auto distill_to_path = wd_.DistilledCorpusFilePaths().MyShard();
   LOG(INFO) << "Distilling: shard: " << env_.my_shard_index
             << " output: " << distill_to_path << " "
             << " distilled size: " << corpus_.NumActive();
@@ -716,17 +725,16 @@ void Centipede::FuzzingLoop() {
     MergeFromOtherCorpus(env_.merge_from, env_.my_shard_index);
   }
 
-  auto corpus_path = wd_.CorpusFiles().ShardPath(env_.my_shard_index);
+  if (env_.load_shards_only) return;
+
+  auto corpus_path = wd_.CorpusFilePaths().Shard(env_.my_shard_index);
   auto corpus_file = DefaultBlobFileWriterFactory(env_.riegeli);
   CHECK_OK(corpus_file->Open(corpus_path, "a"));
-  auto features_path = wd_.FeaturesFiles().ShardPath(env_.my_shard_index);
+  auto features_path = wd_.FeaturesFilePaths().Shard(env_.my_shard_index);
   auto features_file = DefaultBlobFileWriterFactory(env_.riegeli);
   CHECK_OK(features_file->Open(features_path, "a"));
 
-  // Load seed corpus when there is no external corpus loaded.
-  if (corpus_.NumTotal() == 0) {
-    LoadSeedInputs(corpus_file.get(), features_file.get());
-  }
+  LoadSeedInputs(corpus_file.get(), features_file.get());
 
   UpdateAndMaybeLogStats("init-done", 0);
 
@@ -749,7 +757,7 @@ void Centipede::FuzzingLoop() {
   size_t new_runs = 0;
   size_t corpus_size_at_last_prune = corpus_.NumActive();
   for (size_t batch_index = 0; batch_index < number_of_batches; batch_index++) {
-    if (EarlyExitRequested()) break;
+    if (ShouldStop()) break;
     CHECK_LT(new_runs, env_.num_runs);
     auto remaining_runs = env_.num_runs - new_runs;
     auto batch_size = std::min(env_.batch_size, remaining_runs);
@@ -761,7 +769,7 @@ void Centipede::FuzzingLoop() {
                                       ? corpus_.WeightedRandom(rng_())
                                       : corpus_.UniformRandom(rng_());
       mutation_inputs.push_back(
-          {.data = corpus_record.data, .metadata = &corpus_record.metadata});
+          MutationInputRef{corpus_record.data, &corpus_record.metadata});
     }
 
     user_callbacks_.Mutate(mutation_inputs, batch_size, mutants);
@@ -810,7 +818,9 @@ void Centipede::ReportCrash(std::string_view binary,
                             const std::vector<ByteArray> &input_vec,
                             const BatchResult &batch_result) {
   CHECK_EQ(input_vec.size(), batch_result.results().size());
-  if (EarlyExitRequested()) return;
+  // Skip reporting only if RequestEarlyStop is called with a failure exit code.
+  // Still report if time runs out.
+  if (ShouldStop() && ExitCode() != 0) return;
 
   if (++num_crashes_ > env_.max_num_crash_reports) return;
 
@@ -868,15 +878,15 @@ void Centipede::ReportCrash(std::string_view binary,
   LOG(INFO) << log_prefix
             << "Executing inputs one-by-one, trying to find the reproducer";
   for (auto input_idx : input_idxs_to_try) {
-    if (EarlyExitRequested()) return;
+    if (ShouldStop()) return;
     const auto &one_input = input_vec[input_idx];
     BatchResult one_input_batch_result;
     if (!user_callbacks_.Execute(binary, {one_input}, one_input_batch_result)) {
       auto hash = Hash(one_input);
-      auto crash_dir = wd_.CrashReproducerDirPath();
+      auto crash_dir = wd_.CrashReproducerDirPaths().MyShard();
       CHECK_OK(RemoteMkdir(crash_dir));
       std::string input_file_path = std::filesystem::path(crash_dir) / hash;
-      auto crash_metadata_dir = wd_.CrashMetadataDirPath();
+      auto crash_metadata_dir = wd_.CrashMetadataDirPaths().MyShard();
       CHECK_OK(RemoteMkdir(crash_metadata_dir));
       std::string crash_metadata_file_path =
           std::filesystem::path(crash_metadata_dir) / hash;
@@ -910,7 +920,7 @@ void Centipede::ReportCrash(std::string_view binary,
   //  shard-like corpus file instead.
   const auto &suspect_input = input_vec[suspect_input_idx];
   auto suspect_hash = Hash(suspect_input);
-  auto crash_dir = wd_.CrashReproducerDirPath();
+  auto crash_dir = wd_.CrashReproducerDirPaths().MyShard();
   CHECK_OK(RemoteMkdir(crash_dir));
   std::string crashing_batch_name =
       absl::StrCat("crashing_batch-", suspect_hash);
@@ -924,7 +934,7 @@ void Centipede::ReportCrash(std::string_view binary,
         absl::StrFormat("input-%010d-%s", i, hash));
     CHECK_OK(RemoteFileSetContents(file_path, one_input));
   }
-  auto crash_metadata_dir = wd_.CrashMetadataDirPath();
+  auto crash_metadata_dir = wd_.CrashMetadataDirPaths().MyShard();
   CHECK_OK(RemoteMkdir(crash_metadata_dir));
   std::string crash_metadata_file_path =
       std::filesystem::path(crash_metadata_dir) / crashing_batch_name;

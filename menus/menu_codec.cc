@@ -104,6 +104,7 @@ bool MenuCodec::Decode(Menu_Node* root,
                                          ? menu.GetDict().FindString("version")
                                          : &force_version;
         const base::Value* deleted_list = menu.GetDict().Find("deleted");
+        const base::Value* expired_list =  menu.GetDict().Find("expired");
         if (format) {
           control->format = *format;
         }
@@ -113,6 +114,11 @@ bool MenuCodec::Decode(Menu_Node* root,
         if (deleted_list && deleted_list->is_list()) {
           for (const auto& deleted : deleted_list->GetList()) {
             control->deleted.push_back(deleted.GetString());
+          }
+        }
+        if (expired_list && expired_list->is_list()) {
+          for (const auto& expired : expired_list->GetList()) {
+            control->expired.push_back(expired.GetString());
           }
         }
       } else {
@@ -293,10 +299,15 @@ base::Value MenuCodec::Encode(Menu_Model* model) {
     for (const auto& deleted : control->deleted) {
       deleted_list.GetList().Append(deleted);
     }
+    base::Value expired_list(base::Value::Type::LIST);
+    for (const auto& expired : control->expired) {
+      expired_list.GetList().Append(expired);
+    }
     dict.GetDict().Set("type", base::Value("control"));
     dict.GetDict().Set("deleted", base::Value(std::move(deleted_list)));
     dict.GetDict().Set("format", base::Value(control->format));
     dict.GetDict().Set("version", base::Value(control->version));
+    dict.GetDict().Set("expired", base::Value(std::move(expired_list)));
     list.GetList().Append(base::Value(std::move(dict)));
   }
 

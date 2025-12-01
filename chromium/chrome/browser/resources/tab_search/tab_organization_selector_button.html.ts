@@ -11,7 +11,7 @@ export function getHtml(this: TabOrganizationSelectorButtonElement) {
   return html`
 <!--_html_template_start_-->
 <cr-button id="button" ?disabled="${this.disabled}"
-    aria-label="${this.heading}">
+    aria-label="${this.getAriaLabel_()}">
   <div id="buttonContent">
     <div id="iconTextRow">
       <div id="prefixIcon">

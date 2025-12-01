@@ -21,10 +21,12 @@ If you want more information about debugging chrome, see
 First, let's make sure you are ready to start debugging crashes. Prior to doing
 this codelab, you should have completed the following sections:
 [Hardware](/chromium-os/developer-library/getting-started/hardware-requirements),
-[Chromebook Setup](/chrome/chromeos/system_services_team/dev_instructions/g3doc/setup_chromebook.md),
+[Chromebook Setup](/chromium-os/developer-library/getting-started/setup-chromebook),
 [Checkout Chromium](/chromium-os/developer-library/getting-started/checkout-chromium),
 and
-[Building, deploying and testing](/chrome/chromeos/system_services_team/dev_instructions/g3doc/developing.md).
+[Building Chromium](/chromium-os/developer-library/getting-started/build-chromium),
+[Deploying Chromium](/chromium-os/developer-library/getting-started/deploy-chromium), and
+[Testing Chromium](/chromium-os/developer-library/getting-started/test-chromium).
 Once you have done all that, you're ready to start at step 1!
 
 ## 1. Creating a crash
@@ -46,7 +48,7 @@ CHECK into our code and then navigate to the page which runs that code.
     ```
 
     For more information on checking out a new branch, see
-    [Development workflow with Git](/chrome/chromeos/system_services_team/dev_instructions/g3doc/git_chromium_workflow.md)
+    [Development workflow with Git](/chromium-os/developer-library/guides/development/git-and-gerrit-intro).
 
 2.  Using whatever editor you prefer, navigate to
     `chrome/browser/ui/webui/settings/ash/fast_pair_saved_devices_handler.cc`
@@ -70,8 +72,8 @@ navigate to the Saved Devices page which is described in the next section!
 
 Next we will build and deploy your binary without symbols and hit the crash.
 
-1.  Build and deploy your `crash-debugging` branch using the instructions in the
-    [Building, deploying and testing](/chrome/chromeos/system_services_team/dev_instructions/g3doc/developing.md).
+1.  Build and deploy your `crash-debugging` branch using the instructions in
+    [Deploying Chromium](/chromium-os/developer-library/getting-started/deploy-chromium).
 2.  Log in on your test Chromebook (also referred to as DUT or Device Under
     Test).
 3.  Navigate to the Settings Page -> Bluetooth -> Devices saved to my account
@@ -89,7 +91,7 @@ Option A: on your DUT, open your chrome browser and navigate to
 `file:///var/log/chrome/chrome.PREVIOUS`.
 
 Option B: ssh into your DUT using the
-[directions here](/chrome/chromeos/system_services_team/dev_instructions/g3doc/developing.md#step-0-set-up-your-chromebook-and-verify-that-you-can-ssh-to-it)
+[directions here](/chromium-os/developer-library/getting-started/setup-chromebook/#ssh-into-your-chromebook)
 and view the same log using:
 
 ```

@@ -5,7 +5,9 @@
 package org.chromium.chrome.browser.tasks.tab_management;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -19,17 +21,15 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.util.Features.EnableFeatures;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.tabmodel.TabCreator;
 import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabGroupModelFilterProvider;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.tabmodel.TabRemover;
 
 /** Unit test for {@link CloseAllTabsHelper}. */
 @RunWith(BaseRobolectricTestRunner.class)
-@EnableFeatures(ChromeFeatureList.GTS_CLOSE_TAB_ANIMATION_KILL_SWITCH)
 public class CloseAllTabsHelperUnitTest {
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
 
@@ -40,6 +40,8 @@ public class CloseAllTabsHelperUnitTest {
     @Mock private TabGroupModelFilter mIncognitoTabGroupModelFilter;
     @Mock private TabModel mRegularTabModel;
     @Mock private TabModel mIncognitoTabModel;
+    @Mock private TabRemover mRegularTabRemover;
+    @Mock private TabRemover mIncognitoTabRemover;
 
     @Before
     public void setUp() {
@@ -51,14 +53,16 @@ public class CloseAllTabsHelperUnitTest {
                 .thenReturn(mIncognitoTabGroupModelFilter);
         when(mTabModelSelector.getModel(false)).thenReturn(mRegularTabModel);
         when(mTabModelSelector.getModel(true)).thenReturn(mIncognitoTabModel);
+        when(mRegularTabModel.getTabRemover()).thenReturn(mRegularTabRemover);
+        when(mIncognitoTabModel.getTabRemover()).thenReturn(mIncognitoTabRemover);
     }
 
     @Test
     public void testCloseAllTabsHidingTabGroups() {
         CloseAllTabsHelper.closeAllTabsHidingTabGroups(mTabModelSelector, mRegularTabCreator);
 
-        verify(mRegularTabGroupModelFilter).closeTabs(argThat(params -> params.isAllTabs));
-        verify(mIncognitoTabGroupModelFilter).closeTabs(argThat(params -> params.isAllTabs));
+        verify(mRegularTabRemover).closeTabs(argThat(params -> params.isAllTabs), eq(false));
+        verify(mIncognitoTabRemover).closeTabs(argThat(params -> params.isAllTabs), eq(false));
     }
 
     @Test
@@ -68,8 +72,8 @@ public class CloseAllTabsHelperUnitTest {
                         mTabModelSelector, mRegularTabCreator, /* isIncognitoOnly= */ false);
         r.run();
 
-        verify(mRegularTabGroupModelFilter).closeTabs(argThat(params -> params.isAllTabs));
-        verify(mIncognitoTabGroupModelFilter).closeTabs(argThat(params -> params.isAllTabs));
+        verify(mRegularTabRemover).closeTabs(argThat(params -> params.isAllTabs), eq(false));
+        verify(mIncognitoTabRemover).closeTabs(argThat(params -> params.isAllTabs), eq(false));
     }
 
     @Test
@@ -79,9 +83,8 @@ public class CloseAllTabsHelperUnitTest {
                         mTabModelSelector, mRegularTabCreator, /* isIncognitoOnly= */ true);
         r.run();
 
-        verify(mIncognitoTabModel).closeTabs(argThat(params -> params.isAllTabs));
+        verify(mIncognitoTabRemover).closeTabs(argThat(params -> params.isAllTabs), eq(false));
 
-        verify(mRegularTabGroupModelFilter, never()).closeTabs(any());
-        verify(mIncognitoTabGroupModelFilter, never()).closeTabs(any());
+        verify(mRegularTabRemover, never()).closeTabs(any(), anyBoolean());
     }
 }

@@ -19,6 +19,7 @@
 #include "components/prefs/pref_change_registrar.h"
 #include "components/safe_browsing/core/browser/db/v4_protocol_manager_util.h"
 #include "components/safe_browsing/core/browser/realtime/url_lookup_service_base.h"
+#include "components/safe_browsing/core/browser/referring_app_info.h"
 #include "components/safe_browsing/core/common/proto/csd.pb.h"
 #include "components/safe_browsing/core/common/proto/realtimeapi.pb.h"
 #include "url/gurl.h"
@@ -52,6 +53,9 @@ class RealTimeUrlLookupService : public RealTimeUrlLookupServiceBase {
   using ClientConfiguredForTokenFetchesCallback =
       base::RepeatingCallback<bool(bool user_has_enabled_enhanced_protection)>;
 
+  // Set the URL used for lookups in tests.
+  static void OverrideUrlForTesting(const GURL& url);
+
   // |cache_manager|, |sync_service|, and |pref_service| may be null in tests.
   // |token_fetcher| may also be null, but in that case the passed-in
   // |client_token_config_callback| should return false to ensure that access
@@ -68,6 +72,8 @@ class RealTimeUrlLookupService : public RealTimeUrlLookupServiceBase {
       bool is_off_the_record,
       base::RepeatingCallback<variations::VariationsService*()>
           variations_service_getter,
+      base::RepeatingCallback<base::Time()>
+          min_allowed_timestamp_for_referrer_chains_getter,
       ReferrerChainProvider* referrer_chain_provider,
       WebUIDelegate* delegate);
 
@@ -110,7 +116,8 @@ class RealTimeUrlLookupService : public RealTimeUrlLookupServiceBase {
       const GURL& url,
       RTLookupResponseCallback response_callback,
       scoped_refptr<base::SequencedTaskRunner> callback_task_runner,
-      SessionID tab_id) override;
+      SessionID tab_id,
+      std::optional<internal::ReferringAppInfo> referring_app_info) override;
   std::optional<std::string> GetDMTokenString() const override;
   bool ShouldIncludeCredentials() const override;
   void OnResponseUnauthorized(const std::string& invalid_access_token) override;
@@ -121,9 +128,6 @@ class RealTimeUrlLookupService : public RealTimeUrlLookupServiceBase {
                                            bool was_first_request,
                                            bool sent_with_token) override;
 
-  // Called when prefs that affect real time URL lookup are changed.
-  void OnPrefChanged();
-
   // Called when the access token is obtained from |token_fetcher_|.
   void OnGetAccessToken(
       const GURL& url,
@@ -131,14 +135,11 @@ class RealTimeUrlLookupService : public RealTimeUrlLookupServiceBase {
       scoped_refptr<base::SequencedTaskRunner> callback_task_runner,
       base::TimeTicks get_token_start_time,
       SessionID tab_id,
+      std::optional<internal::ReferringAppInfo> referring_app_info,
       const std::string& access_token);
 
   // Unowned object used for getting preference settings.
   raw_ptr<PrefService> pref_service_;
-
-  // Observes changes to kSafeBrowsingEnhanced and
-  // kUrlKeyedAnonymizedDataCollectionEnabled;
-  PrefChangeRegistrar pref_change_registrar_;
 
   // The token fetcher used for getting access token.
   std::unique_ptr<SafeBrowsingTokenFetcher> token_fetcher_;
@@ -151,14 +152,14 @@ class RealTimeUrlLookupService : public RealTimeUrlLookupServiceBase {
   // |url_lookup_service| is an off the record profile.
   bool is_off_the_record_;
 
-  // The time that real time URL lookup is enabled. Not set if it is already
-  // enabled at startup.
-  std::optional<base::Time> url_lookup_enabled_timestamp_ = std::nullopt;
-
   // Callback used to fetch the variations service to check whether real-time
   // checks can be enabled in a given location.
   base::RepeatingCallback<variations::VariationsService*()>
       variations_service_getter_;
+
+  // Callback used to fetch the minimum allowed timestamp for referrer chains.
+  base::RepeatingCallback<base::Time()>
+      min_allowed_timestamp_for_referrer_chains_getter_;
 
   // Bypasses the check for probability when sending Protego sample pings.
   // Only for unit tests.

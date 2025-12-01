@@ -102,7 +102,9 @@ class PhysicalDeviceBase : public RefCounted {
 
     virtual bool SupportsExternalImages() const = 0;
 
-    virtual bool SupportsFeatureLevel(FeatureLevel featureLevel) const = 0;
+    // `instance` is an optional parameter used to log warnings but may be null.
+    virtual bool SupportsFeatureLevel(wgpu::FeatureLevel featureLevel,
+                                      InstanceBase* instance) const = 0;
 
     // Backend-specific force-setting and defaulting device toggles
     virtual void SetupBackendAdapterToggles(dawn::platform::Platform* platform,
@@ -122,7 +124,7 @@ class PhysicalDeviceBase : public RefCounted {
     // caller.
     virtual void PopulateBackendFormatCapabilities(
         wgpu::TextureFormat format,
-        UnpackedPtr<FormatCapabilities>& capabilities) const;
+        UnpackedPtr<DawnFormatCapabilities>& capabilities) const;
 
     virtual ResultOrError<PhysicalDeviceSurfaceCapabilities> GetSurfaceCapabilities(
         InstanceBase* instance,

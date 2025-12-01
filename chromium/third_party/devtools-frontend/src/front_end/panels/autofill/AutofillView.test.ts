@@ -6,17 +6,15 @@ import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
 import * as AutofillManager from '../../models/autofill_manager/autofill_manager.js';
-import {assertGridContents, getBodyRowByAriaIndex, getDataGrid} from '../../testing/DataGridHelpers.js';
+import {assertGridContents} from '../../testing/DataGridHelpers.js';
 import {renderElementIntoDOM} from '../../testing/DOMHelpers.js';
 import {createTarget, stubNoopSettings} from '../../testing/EnvironmentHelpers.js';
 import {describeWithMockConnection} from '../../testing/MockConnection.js';
 import {getMainFrame, navigate} from '../../testing/ResourceTreeHelpers.js';
-import * as Coordinator from '../../ui/components/render_coordinator/render_coordinator.js';
+import * as RenderCoordinator from '../../ui/components/render_coordinator/render_coordinator.js';
 import * as UI from '../../ui/legacy/legacy.js';
 
 import * as Autofill from './autofill.js';
-
-const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
 
 const addressFormFilledEvent = {
   addressUi: {
@@ -112,23 +110,26 @@ describeWithMockConnection('AutofillView', () => {
 
   const renderAutofillView = async () => {
     const view = new Autofill.AutofillView.AutofillView();
+    view.style.display = 'block';
+    view.style.width = '640px';
+    view.style.height = '480px';
     renderElementIntoDOM(view);
     await view.render();
-    await coordinator.done();
+    await RenderCoordinator.done({waitForWork: true});
     return view;
   };
 
   const assertViewShowsEventData = (view: Autofill.AutofillView.AutofillView) => {
     const addressSpans = view.shadowRoot!.querySelectorAll('.address span');
     const addressText = [...addressSpans].map(div => div.textContent);
-    assert.deepStrictEqual(
+    assert.deepEqual(
         addressText, ['Crocodile', ' Middle ', 'Dundee', 'Uluru ToursOutback Road 1Bundaberg Queensland ', '12345']);
-    const expectedHeaders = ['Form field', 'Predicted autofill value', 'Value', 'filledFieldIndex'];
+    const expectedHeaders = ['Form field', 'Predicted autofill value', 'Value'];
     const expectedRows = [
-      ['#input1 (text)', 'First name \nheur', '"Crocodile"', ''],
-      ['input2 (text)', 'Last name \nheur', '"Dundee"', ''],
-      ['#input3 (text)', 'Country \nheur', '"Australia"', ''],
-      ['#input4 (text)', 'Zip code \nattr', '"12345"', ''],
+      ['#input1 (text)', 'First name \nheur', '"Crocodile"'],
+      ['input2 (text)', 'Last name \nheur', '"Dundee"'],
+      ['#input3 (text)', 'Country \nheur', '"Australia"'],
+      ['#input4 (text)', 'Zip code \nattr', '"12345"'],
     ];
     assertGridContents(view, expectedHeaders, expectedRows);
   };
@@ -140,12 +141,12 @@ describeWithMockConnection('AutofillView', () => {
     assert.strictEqual(placeholderText, expectedPlaceholder);
 
     autofillModel.addressFormFilled(addressFormFilledEvent);
-    await coordinator.done({waitForWork: true});
+    await RenderCoordinator.done({waitForWork: true});
     assertViewShowsEventData(view);
 
     navigate(getMainFrame(target));
 
-    await coordinator.done();
+    await RenderCoordinator.done();
     placeholderText = view.shadowRoot!.querySelector('.placeholder div')!.textContent!.trim();
     assert.strictEqual(placeholderText, expectedPlaceholder);
   });
@@ -156,7 +157,7 @@ describeWithMockConnection('AutofillView', () => {
     const view = await renderAutofillView();
     assert.isNotNull(view.shadowRoot);
     assertViewShowsEventData(view);
-    await coordinator.done();
+    await RenderCoordinator.done();
   });
 
   it('auto-open can be turned off/on', async () => {
@@ -183,7 +184,7 @@ describeWithMockConnection('AutofillView', () => {
 
     autofillModel.addressFormFilled(addressFormFilledEvent);
     assert.isTrue(showViewStub.calledOnceWithExactly('autofill-view'));
-    await coordinator.done();
+    await RenderCoordinator.done();
   });
 
   it('showing test addresses in autofill menu can be turned off/on', async () => {
@@ -206,7 +207,7 @@ describeWithMockConnection('AutofillView', () => {
     checkbox.dispatchEvent(event);
     assert.isTrue(setAddressSpy.calledOnce);
 
-    await coordinator.done();
+    await RenderCoordinator.done();
   });
 
   it('highlights corresponding grid row when hovering over address span', async () => {
@@ -221,21 +222,21 @@ describeWithMockConnection('AutofillView', () => {
     const crocodileSpan = addressSpans[0];
     assert.strictEqual(crocodileSpan.textContent, 'Crocodile');
     assert.isFalse(crocodileSpan.classList.contains('highlighted'));
-    const grid = getDataGrid(view);
+    const grid = view.shadowRoot!.querySelector('devtools-data-grid')!;
     assert.isNotNull(grid.shadowRoot);
-    const firstGridRow = getBodyRowByAriaIndex(grid.shadowRoot, 1);
+    const firstGridRow = grid.shadowRoot!.querySelector('tbody tr[jslog]')!;
     let styles = firstGridRow.getAttribute('style') || '';
     assert.strictEqual(styles.replace(/\s/g, ''), monospaceStyles);
 
     crocodileSpan.dispatchEvent(new MouseEvent('mouseenter'));
-    await coordinator.done({waitForWork: true});
+    await RenderCoordinator.done({waitForWork: true});
     assert.isTrue(crocodileSpan.classList.contains('highlighted'));
     styles = firstGridRow.getAttribute('style') || '';
     assert.strictEqual(
         styles.replace(/\s/g, ''), monospaceStyles + 'background-color:var(--sys-color-state-hover-on-subtle);');
 
     crocodileSpan.dispatchEvent(new MouseEvent('mouseleave'));
-    await coordinator.done({waitForWork: true});
+    await RenderCoordinator.done({waitForWork: true});
     assert.isFalse(crocodileSpan.classList.contains('highlighted'));
     styles = firstGridRow.getAttribute('style') || '';
     assert.strictEqual(styles.replace(/\s/g, ''), monospaceStyles);
@@ -267,11 +268,11 @@ describeWithMockConnection('AutofillView', () => {
     const zipCodeSpan = addressSpans[4];
     assert.strictEqual(zipCodeSpan.textContent, '12345');
     assert.isFalse(zipCodeSpan.classList.contains('highlighted'));
-    const grid = getDataGrid(view);
+    const grid = view.shadowRoot!.querySelector('devtools-data-grid')!;
     assert.isNotNull(grid.shadowRoot);
-    const fourthGridRow = getBodyRowByAriaIndex(grid.shadowRoot, 4);
+    const fourthGridRow = grid.shadowRoot!.querySelector('tbody tr[jslog]:nth-child(5)')!;
     fourthGridRow.dispatchEvent(new MouseEvent('mouseenter'));
-    await coordinator.done({waitForWork: true});
+    await RenderCoordinator.done({waitForWork: true});
     assert.isTrue(zipCodeSpan.classList.contains('highlighted'));
     assert.isTrue(overlaySpy.calledOnce);
     const deferredNode =
@@ -280,7 +281,7 @@ describeWithMockConnection('AutofillView', () => {
     assert.isTrue(hideOverlaySpy.notCalled);
 
     fourthGridRow.dispatchEvent(new MouseEvent('mouseleave'));
-    await coordinator.done({waitForWork: true});
+    await RenderCoordinator.done({waitForWork: true});
     assert.isFalse(zipCodeSpan.classList.contains('highlighted'));
     assert.isTrue(hideOverlaySpy.calledOnce);
     getFrameStub.restore();

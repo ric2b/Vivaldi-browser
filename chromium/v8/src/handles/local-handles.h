@@ -6,7 +6,7 @@
 #define V8_HANDLES_LOCAL_HANDLES_H_
 
 #include "include/v8-internal.h"
-#include "src/base/functional.h"
+#include "src/base/hashing.h"
 #include "src/base/macros.h"
 #include "src/handles/handles.h"
 #include "src/heap/local-heap.h"
@@ -34,7 +34,7 @@ class LocalHandles {
   V8_EXPORT_PRIVATE Address* AddBlock();
   V8_EXPORT_PRIVATE void RemoveUnusedBlocks();
 
-#ifdef ENABLE_HANDLE_ZAPPING
+#ifdef ENABLE_LOCAL_HANDLE_ZAPPING
   V8_EXPORT_PRIVATE static void ZapRange(Address* start, Address* end);
 #endif
 
@@ -54,9 +54,8 @@ class V8_NODISCARD LocalHandleScope {
   // closes the scope (which is done by the scope's destructor anyway)
   // and returns its parameter. This will be cleaned up after direct
   // handles ship.
-  template <typename T, template <typename> typename HandleType,
-            typename = std::enable_if_t<
-                std::is_convertible_v<HandleType<T>, DirectHandle<T>>>>
+  template <typename T, template <typename> typename HandleType>
+    requires(std::is_convertible_v<HandleType<T>, DirectHandle<T>>)
   HandleType<T> CloseAndEscape(HandleType<T> handle_value);
 
   V8_INLINE static Address* GetHandle(LocalHeap* local_heap, Address value);

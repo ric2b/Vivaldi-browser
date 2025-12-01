@@ -53,7 +53,7 @@ struct TaskRunnerDeleter {
         TaskRunnerDeleter(task_runner));  // NOLINT
   }
 
-  TaskRunner* task_runner_{nullptr};
+  TaskRunner* task_runner_ = nullptr;
 };
 
 }  // namespace openscreen

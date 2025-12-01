@@ -333,7 +333,8 @@ std::optional<FX_RECT> CFX_Font::GetGlyphBBox(uint32_t glyph_index) {
     }
     return result;
   }
-  constexpr int kFlag = FT_LOAD_NO_SCALE | FT_LOAD_IGNORE_GLOBAL_ADVANCE_WIDTH;
+  static constexpr int kFlag =
+      FT_LOAD_NO_SCALE | FT_LOAD_IGNORE_GLOBAL_ADVANCE_WIDTH;
   if (FT_Load_Glyph(m_Face->GetRec(), glyph_index, kFlag) != 0)
     return std::nullopt;
   int em = m_Face->GetUnitsPerEm();
@@ -369,7 +370,8 @@ bool CFX_Font::IsFixedWidth() const {
 #if defined(PDF_USE_SKIA)
 bool CFX_Font::IsSubstFontBold() const {
   CFX_SubstFont* subst_font = GetSubstFont();
-  return subst_font && subst_font->GetOriginalWeight() >= FXFONT_FW_BOLD;
+  return subst_font &&
+         subst_font->GetOriginalWeight() >= pdfium::kFontWeightBold;
 }
 #endif
 

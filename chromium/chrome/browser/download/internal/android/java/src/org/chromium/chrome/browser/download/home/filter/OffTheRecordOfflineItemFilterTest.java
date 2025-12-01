@@ -17,9 +17,7 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 import org.robolectric.annotation.Config;
 
-import org.chromium.base.CollectionUtil;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.profiles.OtrProfileId;
 import org.chromium.chrome.browser.profiles.OtrProfileIdJni;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -27,12 +25,12 @@ import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.components.offline_items_collection.OfflineItem;
 
 import java.util.Collection;
+import java.util.Set;
 
 /** Unit tests for the TypeOfflineItemFilter class. */
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
 public class OffTheRecordOfflineItemFilterTest {
-    @Rule public JniMocker mMocker = new JniMocker();
 
     @Mock private OtrProfileId.Natives mOtrProfileIdNatives;
 
@@ -47,7 +45,7 @@ public class OffTheRecordOfflineItemFilterTest {
     @Before
     public void setup() {
         ProfileManager.setLastUsedProfileForTesting(mRegularProfile);
-        mMocker.mock(OtrProfileIdJni.TEST_HOOKS, mOtrProfileIdNatives);
+        OtrProfileIdJni.setInstanceForTesting(mOtrProfileIdNatives);
         when(mRegularProfile.hasOffTheRecordProfile(any())).thenReturn(true);
     }
 
@@ -55,22 +53,22 @@ public class OffTheRecordOfflineItemFilterTest {
     public void testPassthrough() {
         OfflineItem item1 = buildItem(OtrProfileId.getPrimaryOtrProfileId());
         OfflineItem item2 = buildItem(null);
-        Collection<OfflineItem> sourceItems = CollectionUtil.newHashSet(item1, item2);
+        Collection<OfflineItem> sourceItems = Set.of(item1, item2);
         when(mSource.getItems()).thenReturn(sourceItems);
 
         OffTheRecordOfflineItemFilter filter = new OffTheRecordOfflineItemFilter(true, mSource);
-        Assert.assertEquals(CollectionUtil.newHashSet(item1, item2), filter.getItems());
+        Assert.assertEquals(Set.of(item1, item2), filter.getItems());
     }
 
     @Test
     public void testFiltersOutItems() {
         OfflineItem item1 = buildItem(OtrProfileId.getPrimaryOtrProfileId());
         OfflineItem item2 = buildItem(null);
-        Collection<OfflineItem> sourceItems = CollectionUtil.newHashSet(item1, item2);
+        Collection<OfflineItem> sourceItems = Set.of(item1, item2);
         when(mSource.getItems()).thenReturn(sourceItems);
 
         OffTheRecordOfflineItemFilter filter = new OffTheRecordOfflineItemFilter(false, mSource);
-        Assert.assertEquals(CollectionUtil.newHashSet(item2), filter.getItems());
+        Assert.assertEquals(Set.of(item2), filter.getItems());
     }
 
     @Test
@@ -78,11 +76,11 @@ public class OffTheRecordOfflineItemFilterTest {
         OfflineItem item1 = buildItem(OtrProfileId.getPrimaryOtrProfileId());
         OfflineItem item2 = buildItem(null);
         OfflineItem item3 = buildItem(new OtrProfileId("profile::CCT-Test"));
-        Collection<OfflineItem> sourceItems = CollectionUtil.newHashSet(item1, item2, item3);
+        Collection<OfflineItem> sourceItems = Set.of(item1, item2, item3);
         when(mSource.getItems()).thenReturn(sourceItems);
 
         OffTheRecordOfflineItemFilter filter = new OffTheRecordOfflineItemFilter(true, mSource);
-        Assert.assertEquals(CollectionUtil.newHashSet(item1, item2), filter.getItems());
+        Assert.assertEquals(Set.of(item1, item2), filter.getItems());
     }
 
     private static OfflineItem buildItem(OtrProfileId otrProfileId) {

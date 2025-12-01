@@ -63,7 +63,7 @@ std::vector<v8::Local<v8::Value>> HeapProfiler::GetDetachedJSWrapperObjects() {
     if (!wrapper.GetCppHeapWrappable(isolate(), kAnyCppHeapPointer)) continue;
 
     v8::Local<v8::Value> data(
-        Utils::ToLocal(handle(Cast<JSObject>(obj), isolate())));
+        Utils::ToLocal(direct_handle(Cast<JSObject>(obj), isolate())));
     v8::EmbedderGraph::Node::Detachedness detachedness =
         GetDetachedness(data, 0);
 
@@ -279,7 +279,7 @@ void HeapProfilerNativeMoveListener::ObjectMoveEvent(Address from, Address to,
 
 void HeapProfiler::ObjectMoveEvent(Address from, Address to, int size,
                                    bool is_native_object) {
-  base::MutexGuard guard(&profiler_mutex_);
+  base::SpinningMutexGuard guard(&profiler_mutex_);
   bool known_object = ids_->MoveObject(from, to, size);
   if (!known_object && allocation_tracker_ && !is_native_object) {
     allocation_tracker_->address_to_trace()->MoveObject(from, to, size);
@@ -297,16 +297,16 @@ void HeapProfiler::UpdateObjectSizeEvent(Address addr, int size) {
   ids_->UpdateObjectSize(addr, size);
 }
 
-Handle<HeapObject> HeapProfiler::FindHeapObjectById(SnapshotObjectId id) {
+DirectHandle<HeapObject> HeapProfiler::FindHeapObjectById(SnapshotObjectId id) {
   CombinedHeapObjectIterator iterator(heap(),
                                       HeapObjectIterator::kFilterUnreachable);
   // Make sure that the object with the given id is still reachable.
   for (Tagged<HeapObject> obj = iterator.Next(); !obj.is_null();
        obj = iterator.Next()) {
     if (ids_->FindEntry(obj.address()) == id)
-      return Handle<HeapObject>(obj, isolate());
+      return DirectHandle<HeapObject>(obj, isolate());
   }
-  return Handle<HeapObject>();
+  return DirectHandle<HeapObject>();
 }
 
 void HeapProfiler::ClearHeapObjectMap() {
@@ -366,7 +366,7 @@ void HeapProfiler::QueryObjects(DirectHandle<Context> context,
           IsJSExternalObject(heap_obj, cage_base))
         continue;
       v8::Local<v8::Object> v8_obj(
-          Utils::ToLocal(handle(Cast<JSObject>(heap_obj), isolate())));
+          Utils::ToLocal(direct_handle(Cast<JSObject>(heap_obj), isolate())));
       if (!predicate->Filter(v8_obj)) continue;
       objects->emplace_back(reinterpret_cast<v8::Isolate*>(isolate()), v8_obj);
     }

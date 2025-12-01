@@ -26,7 +26,7 @@ purchase.*
 *   for a simpler approach to API keys, see
             <http://go/chrome-api-key-setup>
 *   if you need a new API enabled in chrome, use
-            <http://b/new?component=165132>
+            <https://issuetracker.google.com/new?component=165132>
 
 **How-to:**
 

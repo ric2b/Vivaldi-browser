@@ -149,7 +149,7 @@ bool IsLazyWebUILoadingEnabled() {
         ash::prefs::kLoginScreenWebUILazyLoading);
   }
 
-  return base::FeatureList::IsEnabled(features::kEnableLazyLoginWebUILoading);
+  return true;
 }
 
 void UpdatePinAuthAvailability(const AccountId& account_id) {
@@ -926,6 +926,7 @@ void LoginDisplayHostMojo::ShowDialog() {
   EnsureOobeDialogLoaded();
   ObserveOobeUI();
   dialog_->Show();
+  Shell::UpdateAccessibilityForStatusAreaWidget();
 }
 
 void LoginDisplayHostMojo::ShowFullScreen() {
@@ -944,6 +945,8 @@ void LoginDisplayHostMojo::HideDialog() {
   // with hidden error screens).
   StopObservingOobeUI();
   dialog_->Hide();
+  Shell::UpdateAccessibilityForStatusAreaWidget();
+
   // Hide the current screen of the `WizardController` to force `Show()` to be
   // called on the first screen when the dialog reopens.
   GetWizardController()->HideCurrentScreen();

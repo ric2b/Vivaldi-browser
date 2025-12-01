@@ -13,10 +13,6 @@
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 namespace {
 const CGFloat textStackSpacing = 4.0;
 const UIEdgeInsets textStackPadding = UIEdgeInsetsMake(12, 52, 12, 8);
@@ -141,9 +137,18 @@ const CGFloat kNoteCellHorizonalInset = 17.0;
 #pragma mark: SETTERS
 
 - (void)configureNoteWithTitle:(NSString*)title
-                     createdAt:(NSDate*)createdAt {
+                     createdAt:(NSDate*)createdAt
+                    modifiedAt:(NSDate*)modifiedAt {
   self.titleLabel.text = title;
-  self.createdLabel.text = [self.formatter stringFromDate:createdAt];
+  if ([createdAt isEqualToDate:modifiedAt]) {
+    self.createdLabel.text = [self.formatter stringFromDate:createdAt];
+  } else {
+    NSString* modifiedMarker =
+        l10n_util::GetNSString(IDS_VIVALDI_NOTE_ROW_MODIFIED);
+    self.createdLabel.text =
+        [NSString stringWithFormat:@"%@ %@",
+            [self.formatter stringFromDate:createdAt], modifiedMarker];
+  }
 }
 
 @end

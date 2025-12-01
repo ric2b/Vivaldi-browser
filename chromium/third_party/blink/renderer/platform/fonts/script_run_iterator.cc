@@ -14,7 +14,7 @@
 #include "base/containers/contains.h"
 #include "base/logging.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/text/icu_error.h"
 #include "third_party/blink/renderer/platform/wtf/text/character_names.h"
 #include "third_party/blink/renderer/platform/wtf/threading.h"
@@ -47,7 +47,7 @@ inline bool IsHanScript(UScriptCode script) {
 
 inline UScriptCode FirstHanScript(
     const ScriptRunIterator::UScriptCodeList& list) {
-  const auto result = base::ranges::find_if(list, IsHanScript);
+  const auto result = std::ranges::find_if(list, IsHanScript);
   if (result != list.end())
     return *result;
   return USCRIPT_INVALID_CODE;
@@ -472,6 +472,21 @@ bool ScriptRunIterator::Fetch(wtf_size_t* pos, UChar32* ch) {
   }
 
   U16_NEXT(text_, ahead_pos_, length_, ahead_character_);
+
+  if (!next_set_->empty() && next_set_->front() != USCRIPT_COMMON &&
+      U_GET_GC_MASK(ahead_character_) & U_GC_M_MASK &&
+      RuntimeEnabledFeatures::ScriptRunIteratorCombiningMarksEnabled())
+      [[unlikely]] {
+    // A combining mark--whatever its Script property value--should inherit the
+    // script property value of its base character.
+    // https://www.unicode.org/reports/tr24/#Nonspacing_Marks
+    // `USCRIPT_COMMON` could try looking for more context, but the script of
+    // the combining mark may be still useful, and is backward compatible.
+    // https://www.unicode.org/reports/tr24/#Common
+    *ahead_set_ = *next_set_;
+    return true;
+  }
+
   script_data_->GetScripts(ahead_character_, *ahead_set_);
   if (ahead_set_->empty()) {
     // No scripts for this character. This has already been logged, so

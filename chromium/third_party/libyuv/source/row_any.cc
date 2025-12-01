@@ -967,6 +967,9 @@ ANY21PT(MergeUVRow_16_Any_NEON, MergeUVRow_16_NEON, uint16_t, 2, 7)
     memcpy(dst_ptr + n * BPP, vout, r * BPP);                            \
   }
 
+#ifdef HAS_COPYROW_AVX512BW
+ANY11(CopyRow_Any_AVX512BW, CopyRow_AVX512BW, 0, 1, 1, 127)
+#endif
 #ifdef HAS_COPYROW_AVX
 ANY11(CopyRow_Any_AVX, CopyRow_AVX, 0, 1, 1, 63)
 #endif
@@ -1777,6 +1780,43 @@ ANY11C(DivideRow_16_Any_NEON, DivideRow_16_NEON, 2, 2, uint16_t, uint16_t, 15)
 #endif
 #undef ANY11C
 
+// Any 1 to 1 with parameter and shorts.  BPP measures in shorts.
+#define ANY11SB(NAMEANY, ANY_SIMD, SBPP, BPP, STYPE, DTYPE, MASK)         \
+  void NAMEANY(const STYPE* src_ptr, DTYPE* dst_ptr, int scale, int bias, \
+               int width) {                                               \
+    SIMD_ALIGNED(STYPE vin[64]);                                          \
+    SIMD_ALIGNED(DTYPE vout[64]);                                         \
+    memset(vin, 0, sizeof(vin)); /* for msan */                           \
+    int r = width & MASK;                                                 \
+    int n = width & ~MASK;                                                \
+    if (n > 0) {                                                          \
+      ANY_SIMD(src_ptr, dst_ptr, scale, bias, n);                         \
+    }                                                                     \
+    memcpy(vin, src_ptr + n, r * SBPP);                                   \
+    ANY_SIMD(vin, vout, scale, bias, MASK + 1);                           \
+    memcpy(dst_ptr + n, vout, r * BPP);                                   \
+  }
+
+#ifdef HAS_CONVERT8TO8ROW_NEON
+ANY11SB(Convert8To8Row_Any_NEON,
+        Convert8To8Row_NEON,
+        1,
+        1,
+        uint8_t,
+        uint8_t,
+        31)
+#endif
+#ifdef HAS_CONVERT8TO8ROW_AVX2
+ANY11SB(Convert8To8Row_Any_AVX2,
+        Convert8To8Row_AVX2,
+        1,
+        1,
+        uint8_t,
+        uint8_t,
+        31)
+#endif
+#undef ANY11B
+
 // Any 1 to 1 with parameter and shorts to byte.  BPP measures in shorts.
 #define ANY11P16(NAMEANY, ANY_SIMD, ST, T, SBPP, BPP, MASK)             \
   void NAMEANY(const ST* src_ptr, T* dst_ptr, float param, int width) { \
@@ -1810,14 +1850,7 @@ ANY11P16(HalfFloat1Row_Any_F16C,
          15)
 #endif
 #ifdef HAS_HALFFLOATROW_NEON
-ANY11P16(HalfFloatRow_Any_NEON, HalfFloatRow_NEON, uint16_t, uint16_t, 2, 2, 7)
-ANY11P16(HalfFloat1Row_Any_NEON,
-         HalfFloat1Row_NEON,
-         uint16_t,
-         uint16_t,
-         2,
-         2,
-         7)
+ANY11P16(HalfFloatRow_Any_NEON, HalfFloatRow_NEON, uint16_t, uint16_t, 2, 2, 15)
 #endif
 #ifdef HAS_HALFFLOATROW_MSA
 ANY11P16(HalfFloatRow_Any_MSA, HalfFloatRow_MSA, uint16_t, uint16_t, 2, 2, 31)
@@ -2122,11 +2155,13 @@ ANY12(UYVYToUV422Row_Any_SSE2, UYVYToUV422Row_SSE2, 1, 4, 1, 15)
 #endif
 #ifdef HAS_YUY2TOUV422ROW_NEON
 ANY12(ARGBToUV444Row_Any_NEON, ARGBToUV444Row_NEON, 0, 4, 0, 7)
+ANY12(ARGBToUVJ444Row_Any_NEON, ARGBToUVJ444Row_NEON, 0, 4, 0, 7)
 ANY12(YUY2ToUV422Row_Any_NEON, YUY2ToUV422Row_NEON, 1, 4, 1, 15)
 ANY12(UYVYToUV422Row_Any_NEON, UYVYToUV422Row_NEON, 1, 4, 1, 15)
 #endif
 #ifdef HAS_ARGBTOUV444ROW_NEON_I8MM
 ANY12(ARGBToUV444Row_Any_NEON_I8MM, ARGBToUV444Row_NEON_I8MM, 0, 4, 0, 7)
+ANY12(ARGBToUVJ444Row_Any_NEON_I8MM, ARGBToUVJ444Row_NEON_I8MM, 0, 4, 0, 7)
 #endif
 #ifdef HAS_YUY2TOUV422ROW_MSA
 ANY12(ARGBToUV444Row_Any_MSA, ARGBToUV444Row_MSA, 0, 4, 0, 15)
@@ -2193,6 +2228,12 @@ ANY12PT(SplitUVRow_16_Any_NEON, SplitUVRow_16_NEON, uint16_t, 2, 7)
 
 #ifdef HAS_SPLITRGBROW_SSSE3
 ANY13(SplitRGBRow_Any_SSSE3, SplitRGBRow_SSSE3, 3, 15)
+#endif
+#ifdef HAS_SPLITRGBROW_SSE41
+ANY13(SplitRGBRow_Any_SSE41, SplitRGBRow_SSE41, 3, 15)
+#endif
+#ifdef HAS_SPLITRGBROW_AVX2
+ANY13(SplitRGBRow_Any_AVX2, SplitRGBRow_AVX2, 3, 31)
 #endif
 #ifdef HAS_SPLITRGBROW_NEON
 ANY13(SplitRGBRow_Any_NEON, SplitRGBRow_NEON, 3, 15)

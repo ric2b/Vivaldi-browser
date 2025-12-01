@@ -31,7 +31,7 @@ width=600>](/chromium-os/user-experience/window-management/Overview.png)
 This model is largely based on Peter Jin Hong & Elin Pedersen's G.L.I.D.E. Tab
 Navigation (
 [mocks](http://www.flickr.com/photos/peterheads/sets/72157620266552714/show/with/3651412293/)
-| [video](http://www.youtube.com/watch?v=kTXvNdiP-rE) ). We present tabs in a
+| [video](https://youtube.com/watch?v=kTXvNdiP-rE) ). We present tabs in a
 venetian blind arrangement, ensuring visibility of the top left of every page,
 and using perspective to compress the most useful portions of the page into the
 available strips. Favicons are presented as an alternative visual aid.

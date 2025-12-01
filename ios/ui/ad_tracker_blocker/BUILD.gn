@@ -15,15 +15,15 @@ source_set("vivaldi_ad_tracker_blocker") {
   ]
 
   deps = [
-    "//ui/base",
-    "//base",
     "//base:i18n",
+    "//base",
     "//ios/chrome/app/strings",
-    "//ios/chrome/browser/ui/page_info",
+    "//ios/chrome/browser/page_info/ui_bundled",
     "//ios/chrome/common/ui/util",
+    "//ui/base",
     "//vivaldi/ios/ui/ad_tracker_blocker/cells",
-    "//vivaldi/ios/ui/ad_tracker_blocker/settings",
     "//vivaldi/ios/ui/ad_tracker_blocker/manager",
+    "//vivaldi/ios/ui/ad_tracker_blocker/settings",
     "//vivaldi/ios/ui/site_tracker_prefs",
     "resources:assets",
   ]

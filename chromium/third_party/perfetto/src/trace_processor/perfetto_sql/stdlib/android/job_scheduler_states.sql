@@ -15,46 +15,8 @@
 
 INCLUDE PERFETTO MODULE counters.intervals;
 INCLUDE PERFETTO MODULE android.battery.charging_states;
+INCLUDE PERFETTO MODULE android.screen_state;
 INCLUDE PERFETTO MODULE intervals.intersect;
-
-CREATE PERFETTO TABLE _screen_states AS
-SELECT
-  id,
-  ts,
-  dur,
-  screen_state
-FROM (
-  WITH _screen_state_span AS (
-  SELECT *
-  FROM counter_leading_intervals!((
-    SELECT counter.id, ts, 0 AS track_id, value
-    FROM counter
-    JOIN counter_track ON counter_track.id = counter.track_id
-    WHERE name = 'ScreenState'
-  ))) SELECT
-    id,
-    ts,
-    dur,
-    CASE value
-      WHEN 1 THEN 'Screen off'
-      WHEN 2 THEN 'Screen on'
-      WHEN 3 THEN 'Always-on display (doze)'
-      ELSE 'Unknown'
-      END AS screen_state
-    FROM _screen_state_span
-    WHERE dur > 0
-    -- Either the above select statement is populated or the
-    -- select statement after the union is populated but not both.
-    UNION
-     -- When the trace does not have a slice in the screen state track then
-    -- we will assume that the screen state for the entire trace is Unknown.
-    -- This ensures that we still have job data even if the screen state is
-    -- not known. The following statement will only ever return a single row.
-    SELECT 1, TRACE_START() as ts, TRACE_DUR() as dur, 'Unknown'
-    WHERE NOT EXISTS (
-      SELECT * FROM _screen_state_span
-    ) AND TRACE_DUR() > 0
-);
 
 CREATE PERFETTO TABLE _job_states AS
 SELECT
@@ -182,11 +144,11 @@ SELECT
   c.charging_state,
   s.screen_state
 FROM _interval_intersect!(
-  (android_charging_states, _screen_states),
+  (android_charging_states, android_screen_state),
   ()
 ) ii
 JOIN android_charging_states c ON c.id = ii.id_0
-JOIN _screen_states s ON s.id = ii.id_1;
+JOIN android_screen_state s ON s.id = ii.id_1;
 
 -- This table returns constraint changes that a
 -- job will go through in a single trace.
@@ -200,27 +162,27 @@ JOIN _screen_states s ON s.id = ii.id_1;
 -- for how tables in this module differ from `android_job_scheduler_events`
 -- table in the `android.job_scheduler` module and how to populate this table.
 CREATE PERFETTO TABLE android_job_scheduler_states(
-  -- Unique identifier for row.
-  id INT,
+  -- Unique identifier for job scheduler state.
+  id ID,
   -- Timestamp of job state slice.
-  ts INT,
+  ts TIMESTAMP,
   -- Duration of job state slice.
-  dur INT,
+  dur DURATION,
   -- Id of the slice.
-  slice_id INT,
+  slice_id JOINID(slice.id),
   -- Name of the job (as named by the app).
   job_name STRING,
   -- Uid associated with job.
-  uid INT,
+  uid LONG,
   -- Id of job (assigned by app for T- builds and system generated in U+
   -- builds).
-  job_id INT,
+  job_id LONG,
   -- Package that the job belongs (ex: associated app).
   package_name STRING,
   -- Namespace of job.
   job_namespace STRING,
   -- Priority at which JobScheduler ran the job.
-  effective_priority INT,
+  effective_priority LONG,
   -- True if app requested job should run when the device battery is not low.
   has_battery_not_low_constraint BOOL,
   -- True if app requested job should run when the device is charging.
@@ -244,9 +206,9 @@ CREATE PERFETTO TABLE android_job_scheduler_states(
   -- The job is run as an expedited job.
   is_running_as_expedited_job BOOL,
   -- Number of previous attempts at running job.
-  num_previous_attempts INT,
+  num_previous_attempts TIMESTAMP,
   -- The requested priority at which the job should run.
-  requested_priority INT,
+  requested_priority LONG,
   -- The job's standby bucket (one of: Active, Working Set, Frequent, Rare,
   -- Never, Restricted, Exempt).
   standby_bucket STRING,
@@ -260,12 +222,12 @@ CREATE PERFETTO TABLE android_job_scheduler_states(
   is_running_as_user_initiated_job BOOL,
   -- Deadline that job has requested and valid if has_deadline_constraint is
   -- true.
-  deadline_ms INT,
+  deadline_ms LONG,
   -- The latency in ms between when a job is scheduled and when it actually
   -- starts.
-  job_start_latency_ms INT,
+  job_start_latency_ms LONG,
   -- Number of uncompleted job work items.
-  num_uncompleted_work_items INT,
+  num_uncompleted_work_items LONG,
   -- Process state of the process responsible for running the job.
   proc_state STRING,
   -- Internal stop reason for a job.
@@ -334,20 +296,20 @@ FROM _job_started;
 -- `ATOM_SCHEDULED_JOB_STATE_CHANGED` is available in a trace.
 CREATE PERFETTO TABLE android_job_scheduler_with_screen_charging_states(
   -- Timestamp of job.
-  ts INT,
+  ts TIMESTAMP,
   -- Duration of slice in ns.
-  dur INT,
+  dur DURATION,
   -- Id of the slice.
-  slice_id INT,
+  slice_id JOINID(slice.id),
   -- Name of the job (as named by the app).
   job_name STRING,
   -- Id of job (assigned by app for T- builds and system generated in U+
   -- builds).
-  job_id INT,
+  job_id LONG,
   -- Uid associated with job.
-  uid INT,
+  uid LONG,
   -- Duration of entire job in ns.
-  job_dur INT,
+  job_dur DURATION,
   -- Package that the job belongs (ex: associated app).
   package_name STRING,
   -- Namespace of job.
@@ -359,7 +321,7 @@ CREATE PERFETTO TABLE android_job_scheduler_with_screen_charging_states(
   -- (doze), Unknown).
   screen_state STRING,
   -- Priority at which JobScheduler ran the job.
-  effective_priority INT,
+  effective_priority LONG,
   -- True if app requested job should run when the device battery is not low.
   has_battery_not_low_constraint BOOL,
   -- True if app requested job should run when the device is charging.
@@ -383,9 +345,9 @@ CREATE PERFETTO TABLE android_job_scheduler_with_screen_charging_states(
   -- The job is run as an expedited job.
   is_running_as_expedited_job BOOL,
   -- Number of previous attempts at running job.
-  num_previous_attempts INT,
+  num_previous_attempts TIMESTAMP,
   -- The requested priority at which the job should run.
-  requested_priority INT,
+  requested_priority LONG,
   -- The job's standby bucket (one of: Active, Working Set, Frequent, Rare,
   -- Never, Restricted, Exempt).
   standby_bucket STRING,
@@ -399,12 +361,12 @@ CREATE PERFETTO TABLE android_job_scheduler_with_screen_charging_states(
   is_running_as_user_initiated_job BOOL,
   -- Deadline that job has requested and valid if has_deadline_constraint is
   -- true.
-  deadline_ms INT,
+  deadline_ms LONG,
   -- The latency in ms between when a job is scheduled and when it actually
   -- starts.
-  job_start_latency_ms INT,
+  job_start_latency_ms LONG,
   -- Number of uncompleted job work items.
-  num_uncompleted_work_items INT,
+  num_uncompleted_work_items LONG,
   -- Process state of the process responsible for running the job.
   proc_state STRING,
   -- Internal stop reason for a job.

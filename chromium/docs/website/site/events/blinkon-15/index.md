@@ -18,7 +18,7 @@ your device.
 
 ## Recordings and Presentations
 
-*   [YouTube Playlist](https://www.youtube.com/playlist?list=PL9ioqAuyl6UL_1DiG1tPRHbGJlGQ_gQJW)
+*   [YouTube Playlist](https://youtube.com/playlist?list=PL9ioqAuyl6UL_1DiG1tPRHbGJlGQ_gQJW)
 *   [Breakout Talks](https://docs.google.com/spreadsheets/d/1x2MXoLaYENQg7WKHWspzwAuttDB38T5pc74ZHRYEKgo/edit#gid=0)
 *   [Lightning Talks](https://docs.google.com/spreadsheets/d/1pNTdc5CfJ_86FhKhThr-L0E6ptxVA8VuG-Y1LDkbaME/edit#gid=0)
 
@@ -64,7 +64,7 @@ We continue to shift our BlinkOn events to more fairly distribute the burden of
 meeting at challenging times. Next time we will prioritize the EMEA region. We
 apologize this timing is not convenient for everyone, and to make this event as
 accessible as possible, we'll publish all publicly available talks on our
-[BlinkOn YouTube channel](https://www.youtube.com/user/blinkontalks) and within
+[BlinkOn YouTube channel](https://youtube.com/user/blinkontalks) and within
 the event under "Recordings" as soon as we are able. We hope that you understand
 our decision and will join us live, or enjoy recordings on our BlinkOn Channel
 when they become available.
@@ -88,7 +88,7 @@ BlinkOn 15 lightning talks and loading your talks into our sheet!
 
 ## Schedule
 
-## **<img alt="image" src="http://www.google.com/chart?chc=sites&cht=d&chdp=sites&chl=%5B%5BGoogle+Gadget'%3D20'f%5Cv'a%5C%3D0'10'%3D475'0'dim'%5Cbox1'b%5CF6F6F6'fC%5CF6F6F6'eC%5C0'sk'%5C%5B%22Include+gadget+(iframe)%22'%5D'a%5CV%5C%3D12'f%5C%5DV%5Cta%5C%3D10'%3D0'%3D476'%3D697'dim'%5C%3D10'%3D10'%3D476'%3D697'vdim'%5Cbox1'b%5Cva%5CF6F6F6'fC%5CC8C8C8'eC%5C'a%5C%5Do%5CLauto'f%5C&sig=fLkW1Kkvb6mVxNQcAOw6Rge97c8" height=700 width=475>**
+## **<img alt="image" src="https://www.google.com/chart?chc=sites&cht=d&chdp=sites&chl=%5B%5BGoogle+Gadget'%3D20'f%5Cv'a%5C%3D0'10'%3D475'0'dim'%5Cbox1'b%5CF6F6F6'fC%5CF6F6F6'eC%5C0'sk'%5C%5B%22Include+gadget+(iframe)%22'%5D'a%5CV%5C%3D12'f%5C%5DV%5Cta%5C%3D10'%3D0'%3D476'%3D697'dim'%5C%3D10'%3D10'%3D476'%3D697'vdim'%5Cbox1'b%5Cva%5CF6F6F6'fC%5CC8C8C8'eC%5C'a%5C%5Do%5CLauto'f%5C&sig=fLkW1Kkvb6mVxNQcAOw6Rge97c8" height=700 width=475>**
 
 ## **Code of Conduct**
 

@@ -10,7 +10,6 @@
 #include <string>
 #include <utility>
 
-#include "ash/components/arc/arc_util.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/notifier_catalogs.h"
@@ -42,6 +41,7 @@
 #include "chromeos/ash/components/dbus/concierge/concierge_client.h"
 #include "chromeos/ash/components/disks/disk.h"
 #include "chromeos/ash/components/disks/disk_mount_manager.h"
+#include "chromeos/ash/experiences/arc/arc_util.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/vector_icons/vector_icons.h"
@@ -1262,13 +1262,13 @@ void CrosUsbDetector::OnUsbDeviceDetachFinished(
     const std::string& vm_name,
     const std::string& guid,
     base::OnceCallback<void(bool success)> callback,
-    std::optional<vm_tools::concierge::DetachUsbDeviceResponse> response) {
+    std::optional<vm_tools::concierge::SuccessFailureResponse> response) {
   bool success = true;
   if (!response) {
     LOG(ERROR) << "Failed to detach USB device, empty dbus response";
     success = false;
   } else if (!response->success()) {
-    LOG(ERROR) << "Failed to detach USB device, " << response->reason();
+    LOG(ERROR) << "Failed to detach USB device, " << response->failure_reason();
     success = false;
   }
 

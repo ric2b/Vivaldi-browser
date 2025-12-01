@@ -118,6 +118,7 @@ describeWithEnvironment('TraceProcessor', function() {
           Renderer: Trace.Handlers.ModelHandlers.Renderer,
           Samples: Trace.Handlers.ModelHandlers.Samples,
           AuctionWorklets: Trace.Handlers.ModelHandlers.AuctionWorklets,
+          NetworkRequests: Trace.Handlers.ModelHandlers.NetworkRequests,
         },
         Trace.Types.Configuration.defaults());
 
@@ -253,7 +254,7 @@ describeWithEnvironment('TraceProcessor', function() {
       }
 
       assert.strictEqual(processor.insights.size, 1);
-      assert.deepStrictEqual([...processor.insights.keys()], [Trace.Types.Events.NO_NAVIGATION]);
+      assert.deepEqual([...processor.insights.keys()], [Trace.Types.Events.NO_NAVIGATION]);
     });
 
     it('captures errors thrown by insights', async function() {
@@ -277,8 +278,8 @@ describeWithEnvironment('TraceProcessor', function() {
       }
 
       const insights = Array.from(processor.insights.values());
-      assert.strictEqual(insights.length, 2);
-      assert(insights[1].model.RenderBlocking instanceof Error, 'RenderBlocking did not throw an error');
+      assert.lengthOf(insights, 2);
+      assert.instanceOf(insights[1].model.RenderBlocking, Error, 'RenderBlocking did not throw an error');
       assert.strictEqual(insights[1].model.RenderBlocking.message, 'forced error');
     });
 
@@ -293,7 +294,7 @@ describeWithEnvironment('TraceProcessor', function() {
         throw new Error('No insights');
       }
 
-      assert.deepStrictEqual([...processor.insights.keys()], [
+      assert.deepEqual([...processor.insights.keys()], [
         Trace.Types.Events.NO_NAVIGATION,
         '0BCFC23BC7D7BEDC9F93E912DCCEC1DA',
       ]);
@@ -312,7 +313,7 @@ describeWithEnvironment('TraceProcessor', function() {
         throw new Error('No insights');
       }
 
-      assert.deepStrictEqual([...processor.insights.keys()], [
+      assert.deepEqual([...processor.insights.keys()], [
         Trace.Types.Events.NO_NAVIGATION,
         '0BCFC23BC7D7BEDC9F93E912DCCEC1DA',
       ]);
@@ -325,8 +326,8 @@ describeWithEnvironment('TraceProcessor', function() {
         throw new Error('RenderBlocking threw an error');
       }
 
-      assert.strictEqual(insights[0].model.RenderBlocking.renderBlockingRequests.length, 0);
-      assert.strictEqual(insights[1].model.RenderBlocking.renderBlockingRequests.length, 2);
+      assert.lengthOf(insights[0].model.RenderBlocking.renderBlockingRequests, 0);
+      assert.lengthOf(insights[1].model.RenderBlocking.renderBlockingRequests, 2);
     });
 
     it('returns insights for multiple navigations', async function() {
@@ -338,7 +339,7 @@ describeWithEnvironment('TraceProcessor', function() {
         throw new Error('No insights');
       }
 
-      assert.deepStrictEqual([...processor.insights.keys()], [
+      assert.deepEqual([...processor.insights.keys()], [
         Trace.Types.Events.NO_NAVIGATION,
         '83ACBFD389F1F66EF79CEDB4076EB44A',
         '70BCD304FD2C098BA2513488AB0FF3F2',
@@ -359,10 +360,76 @@ describeWithEnvironment('TraceProcessor', function() {
         throw new Error('RenderBlocking threw an error');
       }
 
-      assert.strictEqual(insights[0].model.RenderBlocking.renderBlockingRequests.length, 0);
-      assert.strictEqual(insights[1].model.RenderBlocking.renderBlockingRequests.length, 0);
-      assert.strictEqual(insights[2].model.RenderBlocking.renderBlockingRequests.length, 0);
-      assert.strictEqual(insights[3].model.RenderBlocking.renderBlockingRequests.length, 1);
+      assert.lengthOf(insights[0].model.RenderBlocking.renderBlockingRequests, 0);
+      assert.lengthOf(insights[1].model.RenderBlocking.renderBlockingRequests, 0);
+      assert.lengthOf(insights[2].model.RenderBlocking.renderBlockingRequests, 0);
+      assert.lengthOf(insights[3].model.RenderBlocking.renderBlockingRequests, 1);
+    });
+
+    it('sorts insights by estimated savings and field data', async function() {
+      const getInsightOrder = async (includeMetadata: boolean) => {
+        const processor = Trace.Processor.TraceProcessor.createWithAllHandlers();
+        const file = await TraceLoader.rawEvents(this, 'image-delivery.json.gz');
+
+        let metadata;
+        if (includeMetadata) {
+          metadata = await TraceLoader.metadata(this, 'image-delivery.json.gz');
+        }
+
+        await processor.parse(file, {isFreshRecording: true, isCPUProfile: false, metadata});
+        if (!processor.insights) {
+          throw new Error('No insights');
+        }
+
+        const insightSet = Array.from(processor.insights.values()).at(-1);
+        if (!insightSet) {
+          throw new Error('No insight set');
+        }
+
+        // It's been sorted already ... but let's add some fake estimated savings and re-sort to
+        // better test the sorting.
+        insightSet.model.CLSCulprits.metricSavings = {CLS: 0.07};
+        processor.sortInsightSet(processor.insights, insightSet, metadata ?? null);
+
+        return Object.keys(insightSet.model);
+      };
+
+      const orderWithoutMetadata = await getInsightOrder(false);
+      assert.deepEqual(orderWithoutMetadata, [
+        'CLSCulprits',
+        'Viewport',
+        'InteractionToNextPaint',
+        'LCPPhases',
+        'LCPDiscovery',
+        'RenderBlocking',
+        'ImageDelivery',
+        'DocumentLatency',
+        'FontDisplay',
+        'DOMSize',
+        'ThirdParties',
+        'SlowCSSSelector',
+        'LongCriticalNetworkTree',
+        'ForcedReflow',
+      ]);
+
+      const orderWithMetadata = await getInsightOrder(true);
+      // Viewport is first, before CLSCulprits, since the field data produces a higher weight for INP than for CLS.
+      assert.deepEqual(orderWithMetadata, [
+        'Viewport',
+        'CLSCulprits',
+        'InteractionToNextPaint',
+        'LCPPhases',
+        'LCPDiscovery',
+        'RenderBlocking',
+        'ImageDelivery',
+        'DocumentLatency',
+        'FontDisplay',
+        'DOMSize',
+        'ThirdParties',
+        'SlowCSSSelector',
+        'LongCriticalNetworkTree',
+        'ForcedReflow',
+      ]);
     });
   });
 });

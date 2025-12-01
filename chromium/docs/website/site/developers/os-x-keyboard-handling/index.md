@@ -19,7 +19,7 @@ The central principles behind all design decisions are
             Chromium itself (with the exception of a few reserved shortcuts)
     1.  The javascript events send for key presses should be similar to
                 what Safari sends (this is not true yet, [bug
-                25249](http://crbug.com/25249))
+                25249](https://crbug.com/25249))
 3.  The events that end up being handled by Chromium should behave like
             keyboard events normally behave on OS X
     1.  Key equivalents should blink the menu item they activate

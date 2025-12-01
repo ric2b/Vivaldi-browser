@@ -40,12 +40,15 @@ class ConnectCallback final : public ConnectRequestCallback {
   ConnectCallback() = default;
   ~ConnectCallback() override = default;
 
-  void OnConnectSucceed(uint64_t request_id, uint64_t instance_id) override {
+  void OnConnectSucceed(uint64_t request_id,
+                        std::string_view instance_name,
+                        uint64_t instance_id) override {
     OSP_CHECK(!failed_ && !instance_id_);
     instance_id_ = instance_id;
   }
 
-  void OnConnectFailed(uint64_t request_id) override {
+  void OnConnectFailed(uint64_t request_id,
+                       std::string_view instance_name) override {
     OSP_CHECK(!failed_ && !instance_id_);
     failed_ = true;
   }

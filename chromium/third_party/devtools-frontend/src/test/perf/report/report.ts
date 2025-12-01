@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 import * as fs from 'fs';
-import {join} from 'path';  // eslint-disable-line rulesdir/es_modules_import
+import {join} from 'path';
 
 import * as ts from '../../conductor/test_config.js';
 

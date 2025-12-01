@@ -7,13 +7,13 @@ import * as Trace from '../../models/trace/trace.js';
 
 // We could add a `type` field here to distinguish them, but it is not needed
 // as we use the existence of "event" or "bounds" to do that.
-export type EventSelection = {
-  event: Trace.Types.Events.Event,
-};
+export interface EventSelection {
+  event: Trace.Types.Events.Event;
+}
 
-export type TimeRangeSelection = {
-  bounds: Trace.Types.Timing.TraceWindowMicroSeconds,
-};
+export interface TimeRangeSelection {
+  bounds: Trace.Types.Timing.TraceWindowMicro;
+}
 
 export type TimelineSelection = EventSelection|TimeRangeSelection;
 
@@ -24,14 +24,14 @@ export function selectionFromEvent(event: Trace.Types.Events.Event): EventSelect
 }
 
 export function selectionFromRangeMicroSeconds(
-    min: Trace.Types.Timing.MicroSeconds, max: Trace.Types.Timing.MicroSeconds): TimeRangeSelection {
+    min: Trace.Types.Timing.Micro, max: Trace.Types.Timing.Micro): TimeRangeSelection {
   return {
     bounds: Trace.Helpers.Timing.traceWindowFromMicroSeconds(min, max),
   };
 }
 
 export function selectionFromRangeMilliSeconds(
-    min: Trace.Types.Timing.MilliSeconds, max: Trace.Types.Timing.MilliSeconds): TimeRangeSelection {
+    min: Trace.Types.Timing.Milli, max: Trace.Types.Timing.Milli): TimeRangeSelection {
   return {
     bounds: Trace.Helpers.Timing.traceWindowFromMilliSeconds(min, max),
   };
@@ -45,7 +45,7 @@ export function selectionIsRange(selection: TimelineSelection|null): selection i
   return Boolean(selection && 'bounds' in selection);
 }
 
-export function rangeForSelection(selection: TimelineSelection): Trace.Types.Timing.TraceWindowMicroSeconds {
+export function rangeForSelection(selection: TimelineSelection): Trace.Types.Timing.TraceWindowMicro {
   if (selectionIsRange(selection)) {
     return selection.bounds;
   }

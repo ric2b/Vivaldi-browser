@@ -11,7 +11,7 @@
 namespace openscreen {
 
 // This value is taken from absl::Hash implementation.
-constexpr uint64_t kDefaultSeed = UINT64_C(0xc3a5c85c97cb3127);
+inline constexpr uint64_t kDefaultSeed = UINT64_C(0xc3a5c85c97cb3127);
 
 // Computes the aggregate hash of the provided hashable objects.
 // Seed must initially use a large prime between 2^63 and 2^64 as a starting
@@ -30,7 +30,7 @@ uint64_t ComputeAggregateHash(uint64_t original_seed, const T&... objs) {
   };
 
   uint64_t result = original_seed;
-  std::vector<uint64_t> hashes{std::hash<T>()(objs)...};
+  std::vector<uint64_t> hashes = {std::hash<T>()(objs)...};
   for (uint64_t hash : hashes) {
     result = hash_combiner(result, hash);
   }

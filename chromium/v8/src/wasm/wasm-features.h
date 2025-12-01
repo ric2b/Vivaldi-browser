@@ -76,10 +76,10 @@ class WasmEnabledFeatures : public base::EnumSet<WasmEnabledFeature> {
   static inline constexpr WasmEnabledFeatures ForAsmjs() { return {}; }
   // Retuns optional features that are enabled by flags, plus features that are
   // not enabled by a flag and are always on.
-  static WasmEnabledFeatures FromFlags();
+  static V8_EXPORT_PRIVATE WasmEnabledFeatures FromFlags();
   static V8_EXPORT_PRIVATE WasmEnabledFeatures FromIsolate(Isolate*);
   static V8_EXPORT_PRIVATE WasmEnabledFeatures
-  FromContext(Isolate*, Handle<NativeContext>);
+  FromContext(Isolate*, DirectHandle<NativeContext>);
 };
 
 // Set of detected features. This includes features that have a flag plus
@@ -135,6 +135,8 @@ enum class CompileTimeImport {
   kStringConstants,
   kTextEncoder,
   kTextDecoder,
+  // Not really an import, but needs the same handling as compile-time imports.
+  kDisableDenormalFloats,
 };
 
 inline std::ostream& operator<<(std::ostream& os, CompileTimeImport imp) {

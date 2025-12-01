@@ -106,10 +106,6 @@ BASE_FEATURE(kOptGuideEnableXNNPACKDelegateWithTFLite,
              "OptGuideEnableXNNPACKDelegateWithTFLite",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kOptimizationHintsComponent,
-             "OptimizationHintsComponent",
-             base::FEATURE_DISABLED_BY_DEFAULT);  // Vivaldi
-
 // Killswitch for fetching on search results from a remote Optimization Guide
 // Service.
 BASE_FEATURE(kOptimizationGuideFetchingForSRP,
@@ -165,9 +161,10 @@ BASE_FEATURE(kTextSafetyClassifier,
              "TextSafetyClassifier",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Whether the text safety remote fallback should be used.
-BASE_FEATURE(kTextSafetyRemoteFallback,
-             "TextSafetyRemoteFallback",
+// Whether to scan the full text when running the language detection in the text
+// safety classifier.
+BASE_FEATURE(kTextSafetyScanLanguageDetection,
+             "TextSafetyScanLanguageDetection",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Whether the on-device model validation checks are enabled.
@@ -175,19 +172,45 @@ BASE_FEATURE(kOnDeviceModelValidation,
              "OnDeviceModelValidation",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-#if !BUILDFLAG(IS_ANDROID)
+// Whether performance class should be fetched each startup or just after a
+// version update.
+BASE_FEATURE(kOnDeviceModelFetchPerformanceClassEveryStartup,
+             "OnDeviceModelFetchPerformanceClassEveryStartup",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Enable the "Synapse" refreshed AI settings page.
 BASE_FEATURE(kAiSettingsPageRefresh,
              "AiSettingsPageRefresh",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi keep disabled
 
 const base::FeatureParam<bool> kShowAiSettingsForTesting{
     &kAiSettingsPageRefresh, "show_ai_settings_for_testing", false};
-#endif
+
+// Enable AI settings page integration with Privacy Guide.
+BASE_FEATURE(kPrivacyGuideAiSettings,
+             "PrivacyGuideAiSettings",
+             base::FEATURE_DISABLED_BY_DEFAULT);  // Vivaldi keep disabled
+
+BASE_FEATURE(kAiSettingsPageEnterpriseDisabledUi,
+             "AiSettingsPageEnterpriseDisabledUi",
+             base::FEATURE_DISABLED_BY_DEFAULT);  // Vivaldi keep disabled
+
+BASE_FEATURE(kOnDeviceModelPerformanceParams,
+             "OnDeviceModelPerformanceParams",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 const base::FeatureParam<std::string> kPerformanceClassListForOnDeviceModel{
-    &kOptimizationGuideOnDeviceModel,
+    &kOnDeviceModelPerformanceParams,
     "compatible_on_device_performance_classes", "5,6"};
+
+const base::FeatureParam<std::string>
+    kLowTierPerformanceClassListForOnDeviceModel{
+        &kOnDeviceModelPerformanceParams,
+        "compatible_low_tier_on_device_performance_classes", ""};
+
+BASE_FEATURE(kOptimizationGuideIconView,
+             "OptimizationGuideIconView",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // The default value here is a bit of a guess.
 // TODO(crbug.com/40163041): This should be tuned once metrics are available.
@@ -575,12 +598,6 @@ bool TFLiteXNNPACKDelegateEnabled() {
   return base::FeatureList::IsEnabled(kOptGuideEnableXNNPACKDelegateWithTFLite);
 }
 
-bool ShouldCheckFailedComponentVersionPref() {
-  return GetFieldTrialParamByFeatureAsBool(
-      kOptimizationHintsComponent, "check_failed_component_version_pref",
-      false);
-}
-
 std::map<proto::OptimizationTarget, std::set<int64_t>>
 GetPredictionModelVersionsInKillSwitch() {
   if (!base::FeatureList::IsEnabled(
@@ -737,12 +754,16 @@ base::TimeDelta GetOnDeviceModelRetentionTime() {
       base::Days(30));
 }
 
+int GetDiskSpaceRequiredInMbForOnDeviceModelInstall() {
+  return base::GetFieldTrialParamByFeatureAsInt(
+      kOptimizationGuideOnDeviceModel,
+      "on_device_model_free_space_mb_required_to_install", 20 * 1024);
+}
+
 bool IsFreeDiskSpaceSufficientForOnDeviceModelInstall(
     int64_t free_disk_space_bytes) {
-  return base::GetFieldTrialParamByFeatureAsInt(
-             kOptimizationGuideOnDeviceModel,
-             "on_device_model_free_space_mb_required_to_install",
-             20 * 1024) <= free_disk_space_bytes / (1024 * 1024);
+  return GetDiskSpaceRequiredInMbForOnDeviceModelInstall() <=
+         free_disk_space_bytes / (1024 * 1024);
 }
 
 bool IsFreeDiskSpaceTooLowForOnDeviceModelInstall(
@@ -764,23 +785,12 @@ bool ShouldUseTextSafetyClassifierModel() {
   return base::FeatureList::IsEnabled(kTextSafetyClassifier);
 }
 
-uint32_t GetOnDeviceModelTextSafetyTokenInterval() {
-  static const base::FeatureParam<int32_t>
-      kOnDeviceModelTextSafetyTokenInterval{
-          &kTextSafetyClassifier, "on_device_text_safety_token_interval", 10};
-  return static_cast<uint32_t>(kOnDeviceModelTextSafetyTokenInterval.Get());
-}
-
 double GetOnDeviceModelLanguageDetectionMinimumReliability() {
   static const base::FeatureParam<double>
       kOnDeviceModelLanguageDetectionMinimumReliability{
           &kTextSafetyClassifier,
           "on_device_language_detection_minimum_reliability", 0.8};
   return kOnDeviceModelLanguageDetectionMinimumReliability.Get();
-}
-
-bool ShouldUseTextSafetyRemoteFallbackForEligibleFeatures() {
-  return base::FeatureList::IsEnabled(kTextSafetyRemoteFallback);
 }
 
 int GetOnDeviceModelNumRepeats() {
@@ -870,6 +880,29 @@ int GetOnDeviceModelValidationAttemptCount() {
   static const base::FeatureParam<int> kParam{
       &kOnDeviceModelValidation, "on_device_model_validation_attempt_count", 3};
   return kParam.Get();
+}
+
+bool ShouldEnableOptimizationGuideIconView() {
+  if (vivaldi::IsVivaldiRunning())
+    return false;
+
+  return base::FeatureList::IsEnabled(kOptimizationGuideIconView);
+}
+
+bool IsAiSettingsPageRefreshEnabled() {
+  if (vivaldi::IsVivaldiRunning())
+    return false;
+
+  return base::FeatureList::IsEnabled(kAiSettingsPageRefresh) ||
+         base::FeatureList::IsEnabled(kPrivacyGuideAiSettings) ||
+         base::FeatureList::IsEnabled(kAiSettingsPageEnterpriseDisabledUi);
+}
+
+bool IsPrivacyGuideAiSettingsEnabled() {
+  if (vivaldi::IsVivaldiRunning())
+    return false;
+
+  return base::FeatureList::IsEnabled(kPrivacyGuideAiSettings);
 }
 
 }  // namespace features

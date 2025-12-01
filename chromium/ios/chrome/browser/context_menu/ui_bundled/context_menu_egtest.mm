@@ -13,10 +13,10 @@
 #import "components/strings/grit/components_strings.h"
 #import "components/url_formatter/url_formatter.h"
 #import "ios/chrome/browser/context_menu/ui_bundled/constants.h"
+#import "ios/chrome/browser/fullscreen/ui_bundled/test/fullscreen_app_interface.h"
 #import "ios/chrome/browser/metrics/model/metrics_app_interface.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/tabs/model/inactive_tabs/features.h"
-#import "ios/chrome/browser/ui/fullscreen/test/fullscreen_app_interface.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_actions.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
@@ -318,15 +318,15 @@ void RelaunchAppWithInactiveTabs2WeeksEnabled() {
 }
 
 - (void)setUpHistogramTester {
-  GREYAssertNil([MetricsAppInterface setupHistogramTester],
-                @"Failed to set up histogram tester.");
+  chrome_test_util::GREYAssertErrorNil(
+      [MetricsAppInterface setupHistogramTester]);
   _setUpHistogramTesterCalled = true;
 }
 
 - (void)tearDownHelper {
   if (_setUpHistogramTesterCalled) {
-    GREYAssertNil([MetricsAppInterface releaseHistogramTester],
-                  @"Failed to release histogram tester.");
+    chrome_test_util::GREYAssertErrorNil(
+        [MetricsAppInterface releaseHistogramTester]);
   }
   [super tearDownHelper];
 }
@@ -600,8 +600,9 @@ void RelaunchAppWithInactiveTabs2WeeksEnabled() {
 // Checks that "open in new window" shows up on a long press of a url link
 // and that it actually opens in a new window.
 - (void)testOpenLinkInNewWindow {
-  if (![ChromeEarlGrey areMultipleWindowsSupported])
+  if (![ChromeEarlGrey areMultipleWindowsSupported]) {
     EARL_GREY_TEST_DISABLED(@"Multiple windows can't be opened.");
+  }
 
   // Loads url in first window.
   const GURL initialURL = self.testServer->GetURL(kInitialPageUrl);
@@ -629,8 +630,9 @@ void RelaunchAppWithInactiveTabs2WeeksEnabled() {
 // and that it actually opens in a new window, and that when the link is in an
 // incognito webstate, the newly opened webstate is also incognito.
 - (void)testOpenIncognitoLinkInNewWindow {
-  if (![ChromeEarlGrey areMultipleWindowsSupported])
+  if (![ChromeEarlGrey areMultipleWindowsSupported]) {
     EARL_GREY_TEST_DISABLED(@"Multiple windows can't be opened.");
+  }
 
   [ChromeEarlGrey openNewIncognitoTab];
 

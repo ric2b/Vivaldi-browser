@@ -132,13 +132,14 @@ absl::Status CombineAllGathers(absl::Span<HloInstruction* const> to_combine,
   }
 
   // Create combined all-gather op with a tuple result.
-  HloInstruction* combined;
-  combined = computation.AddInstruction(HloInstruction::CreateAllGather(
-      ShapeUtil::MakeTupleShape(output_shapes), operands, most_frequent_dim,
-      to_combine.front()->device_list(),
-      /*constrain_layout=*/false, to_combine.front()->channel_id(),
-      Cast<HloAllGatherInstruction>(to_combine.front())
-          ->use_global_device_ids()));
+  HloInstruction* combined =
+      computation.AddInstruction(HloInstruction::CreateAllGather(
+          ShapeUtil::MakeTupleShape(output_shapes), operands, most_frequent_dim,
+          to_combine.front()->device_list(),
+          /*constrain_layout=*/false, to_combine.front()->channel_id(),
+          Cast<HloAllGatherInstruction>(to_combine.front())
+              ->use_global_device_ids()));
+  combined->set_metadata(to_combine.front()->metadata());
 
   // We have to propagate the sharding manually because Domain instructions are
   // not guaranteed to preserve it for side effecting instructions.
@@ -207,11 +208,13 @@ AllGatherCombiner::CombineKey(const HloInstruction* instruction,
 AllGatherCombiner::AllGatherCombiner(int64_t combine_threshold_in_bytes,
                                      int64_t combine_threshold_count,
                                      bool combine_by_dim,
-                                     bool combine_different_dtypes)
+                                     bool combine_different_dtypes,
+                                     bool combine_while_loops)
     : combine_threshold_in_bytes_(combine_threshold_in_bytes),
       combine_threshold_count_(combine_threshold_count),
       combine_by_dim_(combine_by_dim),
-      combine_different_dtypes_(combine_different_dtypes) {}
+      combine_different_dtypes_(combine_different_dtypes),
+      combine_while_loops_(combine_while_loops) {}
 
 absl::StatusOr<bool> AllGatherCombiner::RunWithKeyCombiner(
     HloModule* module,
@@ -237,6 +240,12 @@ absl::StatusOr<bool> AllGatherCombiner::RunWithKeyCombiner(
   bool changed = false;
   for (HloComputation* computation :
        module->MakeNonfusionComputations(execution_threads)) {
+    if (!combine_while_loops_ && computation->IsWhileBodyComputation()) {
+      VLOG(2) << "Skipping this computation because the computation is a while "
+                 "loop body: "
+              << computation->ToString();
+      continue;
+    }
     TF_ASSIGN_OR_RETURN(auto domain_map, HloDomainMap::Create(computation, ""));
 
     auto key_fn = [&](const HloInstruction* instruction) {

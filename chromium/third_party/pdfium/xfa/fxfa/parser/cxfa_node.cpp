@@ -1275,7 +1275,7 @@ CXFA_Node* CXFA_Node::CreateSamePacketNode(XFA_Element eType) {
 }
 
 CXFA_Node* CXFA_Node::CloneTemplateToForm(bool bRecursive) {
-  DCHECK_EQ(m_ePacket, XFA_PacketType::Template);
+  CHECK_EQ(m_ePacket, XFA_PacketType::Template);
   CXFA_Node* pClone =
       m_pDocument->CreateNode(XFA_PacketType::Form, m_elementType);
   if (!pClone)
@@ -2918,7 +2918,7 @@ CXFA_Node::CreateChildUIAndValueNodesIfNeeded() {
       widget_type = XFA_FFWidgetType::kTextEdit;
     }
   } else {
-    NOTREACHED_NORETURN();
+    NOTREACHED();
   }
 
   if (!pUIChild) {
@@ -2933,7 +2933,7 @@ CXFA_Node::CreateChildUIAndValueNodesIfNeeded() {
 }
 
 XFA_FFWidgetType CXFA_Node::GetDefaultFFWidgetType() const {
-  NOTREACHED_NORETURN();
+  NOTREACHED();
 }
 
 CXFA_Node* CXFA_Node::CreateUINodeIfNeeded(CXFA_Ui* ui, XFA_Element type) {
@@ -2978,7 +2978,7 @@ CXFA_Node* CXFA_Node::GetUIChildNode() {
   } else if (type == XFA_Element::ExclGroup) {
     ff_widget_type_ = XFA_FFWidgetType::kExclGroup;
   } else {
-    NOTREACHED_NORETURN();
+    NOTREACHED();
   }
   return ui_ ? ui_->GetFirstChild() : nullptr;
 }
@@ -3706,7 +3706,7 @@ std::optional<float> CXFA_Node::FindSplitPos(CXFA_FFDocView* pDocView,
           fStartOffset += (fHeight - fTextHeight + fSpaceAbove);
           break;
         default:
-          NOTREACHED_NORETURN();
+          NOTREACHED();
       }
     }
     if (fStartOffset < 0.1f)
@@ -3931,10 +3931,12 @@ RetainPtr<CFGAS_GEFont> CXFA_Node::GetFGASFont(CXFA_FFDoc* doc) {
   uint32_t dwFontStyle = 0;
   CXFA_Font* font = GetFontIfExists();
   if (font) {
-    if (font->IsBold())
-      dwFontStyle |= FXFONT_FORCE_BOLD;
-    if (font->IsItalic())
-      dwFontStyle |= FXFONT_ITALIC;
+    if (font->IsBold()) {
+      dwFontStyle |= pdfium::kFontStyleForceBold;
+    }
+    if (font->IsItalic()) {
+      dwFontStyle |= pdfium::kFontStyleItalic;
+    }
 
     wsFontName = font->GetTypeface();
   }
@@ -5090,7 +5092,7 @@ void CXFA_Node::SetToXML(const WideString& value) {
       ToXMLText(GetXMLMappingNode())->SetText(value);
       break;
     default:
-      NOTREACHED_NORETURN();
+      NOTREACHED();
   }
 }
 

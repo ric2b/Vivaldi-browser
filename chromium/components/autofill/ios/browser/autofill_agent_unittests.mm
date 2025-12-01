@@ -18,13 +18,13 @@
 #import "base/test/ios/wait_util.h"
 #import "base/test/test_timeouts.h"
 #import "base/values.h"
-#import "components/autofill/core/browser/autofill_test_utils.h"
 #import "components/autofill/core/browser/data_model/credit_card.h"
-#import "components/autofill/core/browser/filling_product.h"
-#import "components/autofill/core/browser/test_autofill_client.h"
+#import "components/autofill/core/browser/filling/filling_product.h"
+#import "components/autofill/core/browser/foundations/test_autofill_client.h"
+#import "components/autofill/core/browser/suggestions/suggestion.h"
+#import "components/autofill/core/browser/suggestions/suggestion_type.h"
+#import "components/autofill/core/browser/test_utils/autofill_test_utils.h"
 #import "components/autofill/core/browser/ui/mock_autofill_suggestion_delegate.h"
-#import "components/autofill/core/browser/ui/suggestion.h"
-#import "components/autofill/core/browser/ui/suggestion_type.h"
 #import "components/autofill/core/common/autofill_features.h"
 #import "components/autofill/core/common/autofill_payments_features.h"
 #import "components/autofill/core/common/autofill_prefs.h"
@@ -39,6 +39,7 @@
 #import "components/autofill/ios/browser/autofill_util.h"
 #import "components/autofill/ios/browser/mock_password_autofill_agent_delegate.h"
 #import "components/autofill/ios/browser/password_autofill_agent.h"
+#import "components/autofill/ios/browser/test_autofill_client_ios.h"
 #import "components/autofill/ios/common/field_data_manager_factory_ios.h"
 #import "components/autofill/ios/form_util/form_handlers_java_script_feature.h"
 #import "components/autofill/ios/form_util/form_util_java_script_feature.h"
@@ -108,6 +109,10 @@ class AutofillAgentTests : public web::WebTest {
   AutofillAgentTests(const AutofillAgentTests&) = delete;
   AutofillAgentTests& operator=(const AutofillAgentTests&) = delete;
 
+  // This *should* be true so that the tests mimic production code behavior, but
+  // one legacy test crashes if we pass a non-nil AutofillAgent.
+  virtual bool should_set_autofill_driver_ios_bridge() const { return true; }
+
   void AddWebFrame(std::unique_ptr<web::WebFrame> frame) {
     fake_web_frames_manager_->AddWebFrame(std::move(frame));
   }
@@ -155,18 +160,22 @@ class AutofillAgentTests : public web::WebTest {
     autofill_agent_ =
         [[AutofillAgent alloc] initWithPrefService:prefs_.get()
                                           webState:&fake_web_state_];
+
+    client_ = std::make_unique<autofill::TestAutofillClientIOS>(
+        &fake_web_state_,
+        should_set_autofill_driver_ios_bridge() ? autofill_agent_ : nil);
   }
 
   std::unique_ptr<web::FakeWebFrame> CreateMainWebFrame() {
     std::unique_ptr<web::FakeWebFrame> frame =
-        web::FakeWebFrame::CreateMainWebFrame(GURL());
+        web::FakeWebFrame::CreateMainWebFrame();
     frame->set_browser_state(GetBrowserState());
     return frame;
   }
 
   std::unique_ptr<web::FakeWebFrame> CreateChildWebFrame() {
     std::unique_ptr<web::FakeWebFrame> frame =
-        web::FakeWebFrame::CreateChildWebFrame(GURL());
+        web::FakeWebFrame::CreateChildWebFrame();
     frame->set_browser_state(GetBrowserState());
     return frame;
   }
@@ -177,7 +186,7 @@ class AutofillAgentTests : public web::WebTest {
   std::unique_ptr<PrefService> prefs_;
   // The client_ needs to outlive the fake_web_state_, which owns the
   // frames.
-  autofill::TestAutofillClient client_;
+  std::unique_ptr<autofill::TestAutofillClientIOS> client_;
   web::FakeWebState fake_web_state_;
   raw_ptr<web::FakeWebFrame> fake_main_frame_ = nullptr;
   raw_ptr<web::FakeWebFramesManager> fake_web_frames_manager_ = nullptr;
@@ -190,10 +199,6 @@ class AutofillAgentTests : public web::WebTest {
 // not autofilled are skipped. Tests logic based on renderer ids usage.
 TEST_F(AutofillAgentTests,
        OnFormDataFilledTestWithFrameMessagingUsingRendererIDs) {
-  std::string locale("en");
-  AutofillDriverIOSFactory::CreateForWebState(&fake_web_state_, &client_, nil,
-                                              locale);
-
   std::vector<autofill::FormFieldData::FillData> fill_data;
   autofill::FormFieldData field;
   field.set_form_control_type(autofill::FormControlType::kInputText);
@@ -244,10 +249,6 @@ TEST_F(AutofillAgentTests,
 // Tests that `fillSpecificFormField` in `autofill_agent_` dispatches the
 // correct javascript call to the autofill controller.
 TEST_F(AutofillAgentTests, FillSpecificFormField) {
-  std::string locale("en");
-  AutofillDriverIOSFactory::CreateForWebState(&fake_web_state_, &client_, nil,
-                                              locale);
-
   autofill::FormFieldData field;
   field.set_form_control_type(autofill::FormControlType::kInputText);
   field.set_label(u"Card number");
@@ -272,9 +273,6 @@ TEST_F(AutofillAgentTests, FillSpecificFormField) {
 // successfully.
 TEST_F(AutofillAgentTests,
        FillSpecificFormField_UpdateWithResults_WhenSuccess) {
-  AutofillDriverIOSFactory::CreateForWebState(&fake_web_state_, &client_, nil,
-                                              "en");
-
   std::vector<autofill::FormFieldData::FillData> fields =
       MinimalFormFieldDataForFilling();
   const std::u16string& field_value = fields[0].value;
@@ -311,9 +309,6 @@ TEST_F(AutofillAgentTests,
 // failed.
 TEST_F(AutofillAgentTests,
        FillSpecificFormField_UpdateWithResults_WhenFailure) {
-  AutofillDriverIOSFactory::CreateForWebState(&fake_web_state_, &client_, nil,
-                                              "en");
-
   std::vector<autofill::FormFieldData::FillData> fields =
       MinimalFormFieldDataForFilling();
   const std::u16string& field_value = fields[0].value;
@@ -347,10 +342,6 @@ TEST_F(AutofillAgentTests,
 // Tests that `ApplyFieldAction` in `AutofillDriverIOS` dispatches the
 // correct javascript call to the autofill controller.
 TEST_F(AutofillAgentTests, DriverFillSpecificFormField) {
-  std::string locale("en");
-  AutofillDriverIOSFactory::CreateForWebState(&fake_web_state_, &client_,
-                                              autofill_agent_, locale);
-
   autofill::FormFieldData field;
   field.set_form_control_type(autofill::FormControlType::kInputText);
   field.set_label(u"Card number");
@@ -378,10 +369,6 @@ TEST_F(AutofillAgentTests, DriverFillSpecificFormField) {
 // Tests that `ApplyFieldAction` with `ActionPersistence::kPreview`in
 // `AutofillDriverIOS` does not dispatch a JS call.
 TEST_F(AutofillAgentTests, DriverPreviewSpecificFormField) {
-  std::string locale("en");
-  AutofillDriverIOSFactory::CreateForWebState(&fake_web_state_, &client_,
-                                              autofill_agent_, locale);
-
   autofill::FormFieldData field;
   field.set_form_control_type(autofill::FormControlType::kInputText);
   field.set_label(u"Card number");
@@ -421,7 +408,8 @@ TEST_F(AutofillAgentTests,
                                                   fieldType:@"text"
                                                        type:@"focus"
                                                  typedValue:@""
-                                                    frameID:@"frameID"];
+                                                    frameID:@"frameID"
+                                               onlyPassword:NO];
   [autofill_agent_ checkIfSuggestionsAvailableForForm:form_query
                                        hasUserGesture:NO
                                              webState:&fake_web_state_
@@ -469,7 +457,8 @@ TEST_F(AutofillAgentTests, onSuggestionsReady_ShowAccountCards) {
                                                   fieldType:@"text"
                                                        type:@"focus"
                                                  typedValue:@""
-                                                    frameID:@"frameID"];
+                                                    frameID:@"frameID"
+                                               onlyPassword:NO];
   [autofill_agent_ retrieveSuggestionsForForm:form_query
                                      webState:&fake_web_state_
                             completionHandler:completionHandler];
@@ -809,7 +798,8 @@ TEST_F(AutofillAgentTests, onSuggestionsReady_ClearForm) {
                                                   fieldType:@"text"
                                                        type:@"focus"
                                                  typedValue:@""
-                                                    frameID:@"frameID"];
+                                                    frameID:@"frameID"
+                                               onlyPassword:NO];
   [autofill_agent_ retrieveSuggestionsForForm:form_query
                                      webState:&fake_web_state_
                             completionHandler:completionHandler];
@@ -867,7 +857,8 @@ TEST_F(AutofillAgentTests, onSuggestionsReady_ClearFormWithGPay) {
                                                   fieldType:@"text"
                                                        type:@"focus"
                                                  typedValue:@""
-                                                    frameID:@"frameID"];
+                                                    frameID:@"frameID"
+                                               onlyPassword:NO];
   [autofill_agent_ retrieveSuggestionsForForm:form_query
                                      webState:&fake_web_state_
                             completionHandler:completionHandler];
@@ -893,12 +884,17 @@ TEST_F(AutofillAgentTests, onSuggestionsReady_ClearFormWithGPay) {
 class AutofillAgentTestFrameInitializationOrderFrames
     : public AutofillAgentTests {
  public:
+  // If we do pass `autofill_agent_` to `client_` (which would then pass it on
+  // to the AutofillDriverIOS objects), then the test fixture crashes during
+  // destruction.
+  //
+  // TODO(crbug.com/40100455): Understand what happens at destruction and fix
+  // this. Then eliminate should_set_autofill_driver_ios_bridge().
+  bool should_set_autofill_driver_ios_bridge() const override { return false; }
+
   void SetUp() override {
     AutofillAgentTests::SetUp();
     RemoveWebFrame(fake_main_frame_->GetFrameId());
-    ASSERT_FALSE(AutofillDriverIOSFactory::FromWebState(&fake_web_state_));
-    AutofillDriverIOSFactory::CreateForWebState(&fake_web_state_, &client_, nil,
-                                                "en");
   }
 };
 
@@ -911,7 +907,6 @@ TEST_F(AutofillAgentTestFrameInitializationOrderFrames,
   AddWebFrame(std::move(main_frame_unique));
   AutofillDriverIOS* main_frame_driver =
       AutofillDriverIOS::FromWebStateAndWebFrame(&fake_web_state_, main_frame);
-  EXPECT_TRUE(main_frame_driver->IsInAnyMainFrame());
   auto iframe_unique = CreateChildWebFrame();
   iframe_unique->set_call_java_script_function_callback(base::BindRepeating(^{
     EXPECT_TRUE(main_frame_driver->is_processed());
@@ -920,7 +915,6 @@ TEST_F(AutofillAgentTestFrameInitializationOrderFrames,
   AddWebFrame(std::move(iframe_unique));
   AutofillDriverIOS* iframe_driver =
       AutofillDriverIOS::FromWebStateAndWebFrame(&fake_web_state_, iframe);
-  EXPECT_FALSE(iframe_driver->IsInAnyMainFrame());
   EXPECT_FALSE(main_frame_driver->is_processed());
   EXPECT_FALSE(iframe_driver->is_processed());
   fake_web_state_.SetLoading(false);
@@ -1021,10 +1015,6 @@ TEST_F(AutofillAgentTestFrameInitializationOrderFrames,
 TEST_F(AutofillAgentTests, FillData_UpdateWithResults) {
   auto test_recorder = std::make_unique<ukm::TestAutoSetUkmRecorder>();
 
-  std::string locale("en");
-  AutofillDriverIOSFactory::CreateForWebState(&fake_web_state_, &client_, nil,
-                                              locale);
-
   std::vector<autofill::FormFieldData::FillData> fields =
       MinimalFormFieldDataForFilling();
   const std::u16string& field_value = fields[0].value;
@@ -1071,9 +1061,6 @@ TEST_F(AutofillAgentTests, FillData_UpdateWithResults) {
 // Tests that if there is an unknown field id in the results, the agent isn't
 // notified.
 TEST_F(AutofillAgentTests, FillData_UnknowFieldIdInResults) {
-  AutofillDriverIOSFactory::CreateForWebState(&fake_web_state_, &client_, nil,
-                                              "en");
-
   std::vector<autofill::FormFieldData::FillData> fields =
       MinimalFormFieldDataForFilling();
   const FieldRendererId unknown_field_id = FieldRendererId(101);
@@ -1101,9 +1088,6 @@ TEST_F(AutofillAgentTests, FillData_UnknowFieldIdInResults) {
 
 // Tests selecting an autocomplete suggestion.
 TEST_F(AutofillAgentTests, DidSelectSuggestion_AutocompleteEntry) {
-  AutofillDriverIOSFactory::CreateForWebState(&fake_web_state_, &client_, nil,
-                                              /*locale=*/"en");
-
   FormRendererId form_id(1);
   FieldRendererId field1_id(2);
   const std::u16string field1_value = u"test-value";
@@ -1152,9 +1136,6 @@ TEST_F(AutofillAgentTests, DidSelectSuggestion_AutocompleteEntry) {
 }
 
 TEST_F(AutofillAgentTests, DidSelectSuggestion_ClearFormEntry) {
-  AutofillDriverIOSFactory::CreateForWebState(&fake_web_state_, &client_, nil,
-                                              /*locale=*/"en");
-
   FormRendererId form_id(1);
   FieldRendererId field1_id(2);
   FieldRendererId field2_id(3);

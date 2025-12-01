@@ -216,11 +216,9 @@ your target boards to test. If your package is added to the host (chroot),
 you'll need to `emerge` it onto your chroot and test it there as well.
 
 You probably want to run at least the `suite:smoke` tests for each board,
-which you can do by following the tips
-[here](https://dev.chromium.org/chromium-os/testing)
-(Googlers may also use the tips at goto/cros-test). In particular, you
-can use [trybot] to determine what effect your upgrade will have on the
-greenness of the waterfall.
+which you can do by following the tips [here](/chromium-os/testing).
+In particular, you can use [trybot] to determine what effect your upgrade will
+have on the greenness of the waterfall.
 
 One common cause of failure is that upstream has introduced new default
 [USE flags]. For example, if the upstream ebuild was set to `-foo` before
@@ -491,6 +489,6 @@ cros_portage_upgrade --local-only [args]
 [re-applying a patch]: #Re_applying-a-patch-after-upgrade
 [upgrading to unstable versions]: #Upgrading-to-unstable-version
 [the ChromeOS development mailing list]: /chromium-os/developer-library/guides/who-do-i-notify/contact/
-[trybot]: https://www.chromium.org/chromium-os/build/local-trybot-documentation
+[trybot]: /chromium-os/build/local-trybot-documentation
 [USE flags]: /chromium-os/developer-library/guides/portage/ebuild-faq/
 [eclasses]: https://wiki.gentoo.org/wiki/Eclass

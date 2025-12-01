@@ -46,8 +46,7 @@ page](/chromium-os/getting-started-with-platform2).
 We follow the various Google style guides for Chromium OS projects. For third
 party projects, you should follow the style that project has decided on.
 
-*   [C++](http://www.chromium.org/developers/coding-style) - Chromium
-            C++ Style Guide
+*   [C++](/developers/coding-style) - Chromium C++ Style Guide
 *   [Python](/chromium-os/developer-library/reference/style-guides/python)
              - Chromium OS Python Style Guide (a superset of the Google Python
              Style Guide)

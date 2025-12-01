@@ -214,6 +214,8 @@ class VivaldiPrivateTabObserver
   // Overridden from vivaldi_content::TabActivationDelegate:
   void ActivateTab(content::WebContents* contents) override;
 
+  virtual void OnJavascriptDialogClosed(bool success) override;
+
   void SetContentsMimeType(std::string mimetype) {
     contents_mime_type_ = mimetype;
   }

@@ -30,6 +30,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.chrome.R;
@@ -46,6 +47,8 @@ import org.chromium.components.signin.test.util.TestAccounts;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.modelutil.PropertyModel;
 
+import java.util.concurrent.TimeoutException;
+
 /** Tests for the {@link MismatchNotificationController} */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add(ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE)
@@ -61,6 +64,8 @@ public class MismatchNotificationControllerTest {
     private MismatchNotificationController mMismatchNotificationController;
 
     private int mCloseType;
+
+    private CallbackHelper mCloseCallbackHelper = new CallbackHelper();
 
     @Before
     public void setUp() {
@@ -222,7 +227,7 @@ public class MismatchNotificationControllerTest {
 
     @Test
     @MediumTest
-    public void testDismissalByClosingCct() {
+    public void testDismissalByClosingCct() throws TimeoutException {
         ThreadUtils.runOnUiThreadBlocking(
                 () ->
                         mMismatchNotificationController.showSignedOutMessage(
@@ -232,8 +237,9 @@ public class MismatchNotificationControllerTest {
         // Verify that the message is displayed.
         onView(withText(titleRes)).check(matches(isDisplayed()));
 
-        // Tab close button
+        // Tab close button, and wait till the callback updates the result.
         onView(withId(R.id.close_button)).perform(click());
+        mCloseCallbackHelper.waitForOnly();
 
         assertEquals(
                 "Closing CCT should result in TIMED_OUT",
@@ -243,7 +249,7 @@ public class MismatchNotificationControllerTest {
 
     @Test
     @MediumTest
-    public void testDismissalByClosingCct_whileStackedBehind() {
+    public void testDismissalByClosingCct_whileStackedBehind() throws TimeoutException {
         // Display a message UI of high priority that won't let the sign-in message be visible.
         ThreadUtils.runOnUiThreadBlocking(this::showHighPriorityMessage);
 
@@ -264,6 +270,7 @@ public class MismatchNotificationControllerTest {
 
         // Tap close button
         onView(withId(R.id.close_button)).perform(click());
+        mCloseCallbackHelper.waitForOnly();
 
         assertEquals(
                 "Message that was never visible should result in UNKNOWN",
@@ -273,7 +280,7 @@ public class MismatchNotificationControllerTest {
 
     @Test
     @MediumTest
-    public void testDismissalByClosingCct_whileStackedBehind2() {
+    public void testDismissalByClosingCct_whileStackedBehind2() throws TimeoutException {
         ThreadUtils.runOnUiThreadBlocking(
                 () ->
                         mMismatchNotificationController.showSignedOutMessage(
@@ -295,6 +302,7 @@ public class MismatchNotificationControllerTest {
 
         // Tap close button
         onView(withId(R.id.close_button)).perform(click());
+        mCloseCallbackHelper.waitForOnly();
 
         assertEquals(
                 "Message that was visible should result in TIMED_OUT",
@@ -304,6 +312,7 @@ public class MismatchNotificationControllerTest {
 
     private void onClose(int closeType) {
         mCloseType = closeType;
+        mCloseCallbackHelper.notifyCalled();
     }
 
     private void showHighPriorityMessage() {

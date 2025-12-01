@@ -11,7 +11,6 @@
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/time/time.h"
-#include "build/build_config.h"
 
 namespace url {
 class Origin;
@@ -20,6 +19,8 @@ class Origin;
 namespace network::features {
 
 COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kBlockAcceptClientHints);
+// Note: Do not use BASE_DECLARE_FEATURE_PARAM macro as this is called only once
+// per process to construct a static local instance.
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::FeatureParam<std::string> kBlockAcceptClientHintsBlockedSite;
 COMPONENT_EXPORT(NETWORK_CPP)
@@ -46,56 +47,14 @@ BASE_DECLARE_FEATURE(kSplitAuthCacheByNetworkIsolationKey);
 COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kDnsOverHttpsUpgrade);
 COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kMaskedDomainList);
 COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::FeatureParam<int> kMaskedDomainListExperimentGroup;
-COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::FeatureParam<std::string>
-    kMaskedDomainListExperimentalVersion;
+BASE_DECLARE_FEATURE_PARAM(std::string, kMaskedDomainListExperimentalVersion);
 COMPONENT_EXPORT(NETWORK_CPP)
 BASE_DECLARE_FEATURE(kMdnsResponderGeneratedNameListing);
 
 COMPONENT_EXPORT(NETWORK_CPP)
 BASE_DECLARE_FEATURE(kOpaqueResponseBlockingErrorsForAllFetches);
 
-COMPONENT_EXPORT(NETWORK_CPP)
-BASE_DECLARE_FEATURE(kAttributionReportingCrossAppWeb);
-
-// Both flags need to be checked for required PST components as they are being
-// used in different experiments.
-//
-// kFledgePst is the original flag used in the OT and respects
-// the TrustTrialOriginTrialSpec. It will be deprecated in favor of
-// kPrivateStateTokens when the experiment is over.
-COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kPrivateStateTokens);
-COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kFledgePst);
-
-enum class TrustTokenOriginTrialSpec {
-  // See the .cc file for definitions.
-  kAllOperationsRequireOriginTrial,
-  kOnlyIssuanceRequiresOriginTrial,
-  kOriginTrialNotRequired,
-};
-COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::FeatureParam<TrustTokenOriginTrialSpec>
-    kTrustTokenOperationsRequiringOriginTrial;
-COMPONENT_EXPORT(NETWORK_CPP)
-
 COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kAcceptCHFrame);
-
-enum class DataPipeAllocationSize {
-  kDefaultSizeOnly,
-  kLargerSizeIfPossible,
-};
-
-COMPONENT_EXPORT(NETWORK_CPP)
-extern uint32_t GetDataPipeDefaultAllocationSize(
-    DataPipeAllocationSize = DataPipeAllocationSize::kDefaultSizeOnly);
-
-// The maximal number of bytes consumed in a loading task. When there are more
-// bytes in the data pipe, they will be consumed in following tasks. Setting too
-// small of a number will generate many tasks but setting a too large of a
-// number will lead to thread janks. This value was optimized via Finch:
-// see crbug.com/1041006.
-inline constexpr size_t kMaxNumConsumedBytesInTask = 1024 * 1024;
 
 COMPONENT_EXPORT(NETWORK_CPP)
 BASE_DECLARE_FEATURE(kCorsNonWildcardRequestHeadersSupport);
@@ -104,41 +63,21 @@ COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kOmitCorsClientCert);
 
 COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kPervasivePayloadsList);
 
-COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::FeatureParam<std::string>
-    kCacheTransparencyPervasivePayloads;
-
 COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kReduceAcceptLanguage);
 COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::FeatureParam<base::TimeDelta>
-    kReduceAcceptLanguageCacheDuration;
+BASE_DECLARE_FEATURE_PARAM(base::TimeDelta, kReduceAcceptLanguageCacheDuration);
 
 COMPONENT_EXPORT(NETWORK_CPP)
 BASE_DECLARE_FEATURE(kPrivateNetworkAccessPreflightShortTimeout);
 
 COMPONENT_EXPORT(NETWORK_CPP)
-BASE_DECLARE_FEATURE(kLocalNetworkAccessAllowPotentiallyTrustworthySameOrigin);
-
-COMPONENT_EXPORT(NETWORK_CPP)
 BASE_DECLARE_FEATURE(kPrivateNetworkAccessPermissionPrompt);
-
-COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::FeatureParam<bool> kPrefetchDNSWithURLAllAnchorElements;
-
-COMPONENT_EXPORT(NETWORK_CPP)
-BASE_DECLARE_FEATURE(kAccessControlAllowMethodsInCORSPreflightSpecConformant);
 
 // If enabled, then the network service will parse the Cookie-Indices header.
 // This does not currently control changing cache behavior according to the
 // value of this header.
 COMPONENT_EXPORT(NETWORK_CPP)
 BASE_DECLARE_FEATURE(kCookieIndicesHeader);
-
-// Enables UMA to track received GetCookiesString IPCs. This feature is enabled
-// by default, it is just here to allow some tests to disable it. These tests
-// make use of TaskEnvironment::FastForward with very long delays (days) which
-// interacts poorly with this metric that is recorded every 30s.
-COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kGetCookiesStringUma);
 
 COMPONENT_EXPORT(NETWORK_CPP)
 BASE_DECLARE_FEATURE(kCompressionDictionaryTransportBackend);
@@ -166,13 +105,13 @@ BASE_DECLARE_FEATURE(kReduceTransferSizeUpdatedIPC);
 COMPONENT_EXPORT(NETWORK_CPP)
 BASE_DECLARE_FEATURE(kSkipTpcdMitigationsForAds);
 COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::FeatureParam<bool> kSkipTpcdMitigationsForAdsHeuristics;
+BASE_DECLARE_FEATURE_PARAM(bool, kSkipTpcdMitigationsForAdsHeuristics);
 COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::FeatureParam<bool> kSkipTpcdMitigationsForAdsMetadata;
+BASE_DECLARE_FEATURE_PARAM(bool, kSkipTpcdMitigationsForAdsMetadata);
 COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::FeatureParam<bool> kSkipTpcdMitigationsForAdsTrial;
+BASE_DECLARE_FEATURE_PARAM(bool, kSkipTpcdMitigationsForAdsTrial);
 COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::FeatureParam<bool> kSkipTpcdMitigationsForAdsTopLevelTrial;
+BASE_DECLARE_FEATURE_PARAM(bool, kSkipTpcdMitigationsForAdsTopLevelTrial);
 
 COMPONENT_EXPORT(NETWORK_CPP)
 BASE_DECLARE_FEATURE(kAvoidResourceRequestCopies);
@@ -183,13 +122,6 @@ COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kDocumentIsolationPolicy);
 // kNetworkContextPrefetchUseCache, below.
 COMPONENT_EXPORT(NETWORK_CPP)
 BASE_DECLARE_FEATURE(kNetworkContextPrefetch);
-
-COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::FeatureParam<int> kNetworkContextPrefetchMaxLoaders;
-
-COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::FeatureParam<base::TimeDelta>
-    kNetworkContextPrefetchEraseGraceTime;
 
 COMPONENT_EXPORT(NETWORK_CPP)
 BASE_DECLARE_FEATURE(kNetworkContextPrefetchUseMatches);
@@ -206,10 +138,17 @@ COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kStorageAccessHeaders);
 // Enables the Storage Access Headers Origin Trial.
 COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kStorageAccessHeadersTrial);
 
-#if BUILDFLAG(IS_WIN)
+// Should SRI-compliant HTTP Message Signatures be enforced?
+// https://wicg.github.io/signature-based-sri/
 COMPONENT_EXPORT(NETWORK_CPP)
-BASE_DECLARE_FEATURE(kEnableLockCookieDatabaseByDefault);
-#endif  // BUILDFLAG(IS_WIN)
+BASE_DECLARE_FEATURE(kSRIMessageSignatureEnforcement);
+
+COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kCreateURLLoaderPipeAsync);
+
+// Should Ad-Auction-Registration-Eligible be sent on requests made with
+// attributionsrc, and should Ad-Auction-Register-Event responses on those
+// requests be processed?
+COMPONENT_EXPORT(NETWORK_CPP) BASE_DECLARE_FEATURE(kAdAuctionEventRegistration);
 
 }  // namespace network::features
 

@@ -44,8 +44,8 @@ void UserRemoteCommandsServiceBase::
       core_, base::DefaultClock::GetInstance(), PolicyInvalidationScope::kUser);
   invalidator_->Initialize(
       invalidation_provider->GetInvalidationServiceOrListener(
-          std::string(GetRemoteCommandsInvalidationProjectNumber(
-              PolicyInvalidationScope::kUser))));
+          GetRemoteCommandsInvalidationProjectNumber(
+              PolicyInvalidationScope::kUser)));
 }
 
 void UserRemoteCommandsServiceBase::OnPolicyRefreshed(bool success) {}
@@ -58,10 +58,6 @@ void UserRemoteCommandsServiceBase::Shutdown() {
     // `RemoteCommandsInvalidator` to `ProfileInvalidationProvider`.
     invalidator_.reset();
   }
-}
-
-std::string_view UserRemoteCommandsServiceBase::name() const {
-  return "UserRemoteCommandsServiceBase";
 }
 
 }  // namespace policy

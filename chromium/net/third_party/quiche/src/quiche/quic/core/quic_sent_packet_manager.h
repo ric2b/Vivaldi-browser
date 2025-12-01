@@ -412,8 +412,14 @@ class QUICHE_EXPORT QuicSentPacketManager {
 
   // Wrapper for SendAlgorithmInterface functions, since these functions are
   // not const.
-  bool EnableECT0() { return send_algorithm_->EnableECT0(); }
-  bool EnableECT1() { return send_algorithm_->EnableECT1(); }
+  bool EnableECT0() {
+    ecn_queried_ = send_algorithm_->EnableECT0();
+    return ecn_queried_;
+  }
+  bool EnableECT1() {
+    ecn_queried_ = send_algorithm_->EnableECT1();
+    return ecn_queried_;
+  }
 
   void SetSessionNotifier(SessionNotifierInterface* session_notifier) {
     unacked_packets_.SetSessionNotifier(session_notifier);
@@ -545,10 +551,14 @@ class QUICHE_EXPORT QuicSentPacketManager {
 
   // Removes the retransmittability and in flight properties from the packet at
   // |info| due to receipt by the peer.
+  // Note: The function may cause the QuicTransmissionInfo for |packet_number|
+  // to move, in that case, |info| will be updated to point to the new
+  // QuicTransmissionInfo when the function returns.
   void MarkPacketHandled(QuicPacketNumber packet_number,
-                         QuicTransmissionInfo* info, QuicTime ack_receive_time,
+                         QuicTime ack_receive_time,
                          QuicTime::Delta ack_delay_time,
-                         QuicTime receive_timestamp);
+                         QuicTime receive_timestamp,
+                         QuicTransmissionInfo*& info);
 
   // Request that |packet_number| be retransmitted after the other pending
   // retransmissions.  Does not add it to the retransmissions if it's already
@@ -736,6 +746,11 @@ class QUICHE_EXPORT QuicSentPacketManager {
   QuicEcnCounts peer_ack_ecn_counts_[NUM_PACKET_NUMBER_SPACES];
 
   std::optional<QuicTime::Delta> deferred_send_alarm_delay_;
+
+  // If true, QuicConnection has called EnableECT0() or EnableECT1(). This is
+  // used to prevent the execution of ECN-specific code unless flag-protected
+  // code has explicitly enabled it.
+  bool ecn_queried_ = false;
 };
 
 }  // namespace quic

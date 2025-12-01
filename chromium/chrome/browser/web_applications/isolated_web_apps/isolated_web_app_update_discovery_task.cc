@@ -26,9 +26,9 @@
 #include "base/types/expected.h"
 #include "base/types/expected_macros.h"
 #include "base/version.h"
+#include "chrome/browser/web_applications/isolated_web_apps/commands/isolated_web_app_install_command_helper.h"
+#include "chrome/browser/web_applications/isolated_web_apps/commands/isolated_web_app_prepare_and_store_update_command.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_downloader.h"
-#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_install_command_helper.h"
-#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_prepare_and_store_update_command.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_source.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_url_info.h"
 #include "chrome/browser/web_applications/isolated_web_apps/update_manifest/update_manifest.h"
@@ -105,19 +105,21 @@ constexpr auto kWebBundleDownloadTrafficAnnotation =
 IwaUpdateDiscoveryTaskParams::IwaUpdateDiscoveryTaskParams(
     const GURL& update_manifest_url,
     const UpdateChannel& update_channel,
+    bool allow_downgrades,
+    const std::optional<base::Version>& pinned_version,
     const IsolatedWebAppUrlInfo& url_info,
     bool dev_mode)
     : update_manifest_url_(update_manifest_url),
       update_channel_(update_channel),
+      allow_downgrades_(allow_downgrades),
+      pinned_version_(pinned_version),
       url_info_(url_info),
       dev_mode_(dev_mode) {}
 
 IwaUpdateDiscoveryTaskParams::IwaUpdateDiscoveryTaskParams(
-    IwaUpdateDiscoveryTaskParams&& other)
-    : update_manifest_url_(std::move(other.update_manifest_url_)),
-      update_channel_(std::move(other.update_channel_)),
-      url_info_(std::move(other.url_info_)),
-      dev_mode_(other.dev_mode_) {}
+    IwaUpdateDiscoveryTaskParams&& other) = default;
+
+IwaUpdateDiscoveryTaskParams::~IwaUpdateDiscoveryTaskParams() = default;
 
 // static
 std::string IsolatedWebAppUpdateDiscoveryTask::SuccessToString(
@@ -162,19 +164,28 @@ IsolatedWebAppUpdateDiscoveryTask::IsolatedWebAppUpdateDiscoveryTask(
     IwaUpdateDiscoveryTaskParams task_params,
     WebAppCommandScheduler& command_scheduler,
     WebAppRegistrar& registrar,
-    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory)
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+    std::unique_ptr<ScopedKeepAlive> optional_keep_alive,
+    std::unique_ptr<ScopedProfileKeepAlive> optional_profile_keep_alive)
     : task_params_(std::move(task_params)),
       command_scheduler_(command_scheduler),
       registrar_(registrar),
-      url_loader_factory_(std::move(url_loader_factory)) {
+      url_loader_factory_(std::move(url_loader_factory)),
+      optional_keep_alive_(std::move(optional_keep_alive)),
+      optional_profile_keep_alive_(std::move(optional_profile_keep_alive)) {
   CHECK(url_loader_factory_);
   debug_log_ =
       base::Value::Dict()
           .Set("bundle_id", task_params_.url_info().web_bundle_id().id())
           .Set("update_channel", task_params_.update_channel().ToString())
+          .Set("allow_downgrades", task_params_.allow_downgrades())
           .Set("app_id", task_params_.url_info().app_id())
           .Set("update_manifest_url",
                task_params_.update_manifest_url().spec());
+  if (task_params_.pinned_version()) {
+    debug_log_.Set("pinned_version",
+                   task_params_.pinned_version()->GetString());
+  }
 }
 
 IsolatedWebAppUpdateDiscoveryTask::~IsolatedWebAppUpdateDiscoveryTask() =
@@ -212,9 +223,13 @@ void IsolatedWebAppUpdateDiscoveryTask::OnUpdateManifestFetched(
                      }
                    });
 
-  std::optional<UpdateManifest::VersionEntry> latest_version_entry =
-      update_manifest.GetLatestVersion(task_params_.update_channel());
-  if (!latest_version_entry.has_value()) {
+  std::optional<UpdateManifest::VersionEntry> version_entry =
+      task_params_.pinned_version()
+          ? update_manifest.GetVersion(task_params_.pinned_version().value(),
+                                       task_params_.update_channel())
+          : update_manifest.GetLatestVersion(task_params_.update_channel());
+
+  if (!version_entry.has_value()) {
     FailWith(Error::kUpdateManifestNoApplicableVersion);
     return;
   }
@@ -231,10 +246,10 @@ void IsolatedWebAppUpdateDiscoveryTask::OnUpdateManifestFetched(
       }));
 
   debug_log_.Set(
-      "latest_version",
+      "version_entry",
       base::Value::Dict()
-          .Set("version", latest_version_entry->version().GetString())
-          .Set("src", latest_version_entry->src().spec())
+          .Set("version", version_entry->version().GetString())
+          .Set("src", version_entry->src().spec())
           .Set("update_channel", task_params_.update_channel().ToString()));
 
   ASSIGN_OR_RETURN(
@@ -272,8 +287,7 @@ void IsolatedWebAppUpdateDiscoveryTask::OnUpdateManifestFetched(
     }
   }
 
-  if (pending_update &&
-      pending_update->version == latest_version_entry->version() &&
+  if (pending_update && pending_update->version == version_entry->version() &&
       !pending_info_overwrite_allowed_by_key_rotation) {
     // If we already have a pending update for this version, stop. However,
     // we do allow overwriting a pending update with a different pending
@@ -288,25 +302,25 @@ void IsolatedWebAppUpdateDiscoveryTask::OnUpdateManifestFetched(
   // now and when we schedule the
   // `IsolatedWebAppUpdatePrepareAndStoreCommand`. This is not an issue, as
   // `IsolatedWebAppUpdatePrepareAndStoreCommand` will re-check that the new
-  // version is indeed newer than the currently installed version.
-  if (currently_installed_version > latest_version_entry->version() ||
-      (currently_installed_version == latest_version_entry->version() &&
-       !same_version_update_allowed_by_key_rotation)) {
-    // Never downgrade apps for now.
+  // version can be applied.
+  if (ShouldPreventVersionChange(version_entry->version(),
+                                 currently_installed_version,
+                                 task_params_.allow_downgrades(),
+                                 same_version_update_allowed_by_key_rotation)) {
     SucceedWith(Success::kNoUpdateFound);
     return;
   }
 
   bundle_downloader_ = IsolatedWebAppDownloader::Create(url_loader_factory_);
   if (!rotated_key) {
-    CreateTempFile(std::move(*latest_version_entry));
+    CreateTempFile(std::move(*version_entry));
     return;
   }
   bundle_downloader_->DownloadInitialBytes(
-      latest_version_entry->src(), kWebBundleDownloadTrafficAnnotation,
+      version_entry->src(), kWebBundleDownloadTrafficAnnotation,
       base::BindOnce(
           &IsolatedWebAppUpdateDiscoveryTask::CheckIntegrityBundleForRotatedKey,
-          weak_factory_.GetWeakPtr(), std::move(*latest_version_entry),
+          weak_factory_.GetWeakPtr(), std::move(*version_entry),
           std::move(*rotated_key)));
 }
 
@@ -371,16 +385,15 @@ void IsolatedWebAppUpdateDiscoveryTask::OnWebBundleDownloaded(
           ? IsolatedWebAppUpdatePrepareAndStoreCommand::UpdateInfo(
                 IwaSourceBundleDevModeWithFileOp(
                     bundle_.path(), IwaSourceBundleDevFileOp::kMove),
-                expected_version)
+                expected_version, task_params_.allow_downgrades())
           : IsolatedWebAppUpdatePrepareAndStoreCommand::UpdateInfo(
                 IwaSourceBundleProdModeWithFileOp(
                     bundle_.path(), IwaSourceBundleProdFileOp::kMove),
-                expected_version);
+                expected_version, task_params_.allow_downgrades());
 
   command_scheduler_->PrepareAndStoreIsolatedWebAppUpdate(
-      update_info, task_params_.url_info(),
-      /*optional_keep_alive=*/nullptr,
-      /*optional_profile_keep_alive=*/nullptr,
+      update_info, task_params_.url_info(), std::move(optional_keep_alive_),
+      std::move(optional_profile_keep_alive_),
       base::BindOnce(&IsolatedWebAppUpdateDiscoveryTask::OnUpdateDryRunDone,
                      weak_factory_.GetWeakPtr()));
 }

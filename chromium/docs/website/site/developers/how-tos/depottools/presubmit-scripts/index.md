@@ -63,7 +63,7 @@ reason, but they're not perfect.
 
 If you have trouble with a presubmit script, it's preferable to *fix it,* rather
 than simply bypassing it. See [depot_tools: sending
-patches](http://www.chromium.org/developers/how-tos/depottools#TOC-Sending-patches)
+patches](/developers/how-tos/depottools#TOC-Sending-patches)
 for how to contribute.
 
 If you're not sure which presubmit check is generating results you can request

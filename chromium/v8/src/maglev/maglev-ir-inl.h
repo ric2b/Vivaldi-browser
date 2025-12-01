@@ -7,6 +7,7 @@
 
 #include "src/interpreter/bytecode-register.h"
 #include "src/maglev/maglev-ir.h"
+#include "src/sandbox/js-dispatch-table-inl.h"
 
 namespace v8 {
 namespace internal {
@@ -107,17 +108,17 @@ void DeepForVirtualObject(VirtualObject* vobject,
         UNREACHABLE();
       case Opcode::kInlinedAllocation: {
         InlinedAllocation* alloc = value->Cast<InlinedAllocation>();
-        VirtualObject* vobject = virtual_objects.FindAllocatedWith(alloc);
-        CHECK_NOT_NULL(vobject);
+        VirtualObject* inner_vobject = virtual_objects.FindAllocatedWith(alloc);
+        CHECK_NOT_NULL(inner_vobject);
         // Check if it has escaped.
         if (alloc->HasBeenAnalysed() && alloc->HasBeenElided()) {
           input_location++;  // Reserved for the inlined allocation.
-          DeepForVirtualObject<mode>(vobject, input_location, virtual_objects,
-                                     f);
+          DeepForVirtualObject<mode>(inner_vobject, input_location,
+                                     virtual_objects, f);
         } else {
           f(alloc, input_location);
           input_location +=
-              vobject->InputLocationSizeNeeded(virtual_objects) + 1;
+              inner_vobject->InputLocationSizeNeeded(virtual_objects) + 1;
         }
         break;
       }
@@ -293,6 +294,32 @@ inline void UseFixed(Input& input, DoubleRegister reg) {
   input.SetUnallocated(compiler::UnallocatedOperand::FIXED_FP_REGISTER,
                        reg.code(), kNoVreg);
   input.node()->SetHint(input.operand());
+}
+
+CallKnownJSFunction::CallKnownJSFunction(
+    uint64_t bitfield,
+#ifdef V8_ENABLE_LEAPTIERING
+    JSDispatchHandle dispatch_handle,
+#endif
+    compiler::SharedFunctionInfoRef shared_function_info, ValueNode* closure,
+    ValueNode* context, ValueNode* receiver, ValueNode* new_target)
+    : Base(bitfield),
+#ifdef V8_ENABLE_LEAPTIERING
+      dispatch_handle_(dispatch_handle),
+#endif
+      shared_function_info_(shared_function_info),
+      expected_parameter_count_(
+#ifdef V8_ENABLE_LEAPTIERING
+          IsolateGroup::current()->js_dispatch_table()->GetParameterCount(
+              dispatch_handle)
+#else
+          shared_function_info.internal_formal_parameter_count_with_receiver()
+#endif
+      ) {
+  set_input(kClosureIndex, closure);
+  set_input(kContextIndex, context);
+  set_input(kReceiverIndex, receiver);
+  set_input(kNewTargetIndex, new_target);
 }
 
 }  // namespace maglev

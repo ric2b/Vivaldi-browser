@@ -14,6 +14,7 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/no_destructor.h"
+#include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -69,7 +70,7 @@ constexpr base::TimeDelta kMaximumFetchInstructionDelay = base::Hours(8);
 const net::BackoffEntry::Policy kBackoffPolicy{
     /*num_errors_to_ignore=*/0,
     /*initial_delay_ms=*/
-    base::checked_cast<int>(base::Seconds(30).InMilliseconds()),
+    base::Seconds(30).InMilliseconds(),
     /*multiply_factor=*/2.0,
     /*jitter_factor=*/0.15,
     /*maximum_backoff_ms=*/base::Hours(12).InMilliseconds(),
@@ -82,7 +83,7 @@ const net::BackoffEntry::Policy kBackoffPolicy{
 const net::BackoffEntry::Policy kFetchInstructionBackoffPolicy{
     /*num_errors_to_ignore=*/0,
     /*initial_delay_ms=*/
-    base::checked_cast<int>(base::Seconds(30).InMilliseconds()),
+    base::Seconds(30).InMilliseconds(),
     /*multiply_factor=*/4.0,
     /*jitter_factor=*/0.10,
     /*maximum_backoff_ms=*/kMaximumFetchInstructionDelay.InMilliseconds(),
@@ -167,13 +168,11 @@ bool IsStateTransitionAllowed(CertProvisioningWorkerState prev_state,
     case CertProvisioningWorkerState::kFailed:
     case CertProvisioningWorkerState::kCanceled:
       // These are final state, so they should already be handled above.
-      CHECK(false);
-      return false;
+      NOTREACHED();
     case CertProvisioningWorkerState::kStartCsrResponseReceived:
     case CertProvisioningWorkerState::kFinishCsrResponseReceived:
       // Not used in "dynamic" flow.
-      CHECK(false);
-      return false;
+      NOTREACHED();
   }
 }
 
@@ -223,6 +222,12 @@ bool CertProvisioningWorkerDynamic::IsWorkerMarkedForReset() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   return is_schedueled_for_reset_;
+}
+
+const std::string& CertProvisioningWorkerDynamic::GetProcessId() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  return process_id_;
 }
 
 const CertProfile& CertProvisioningWorkerDynamic::GetCertProfile() const {
@@ -325,8 +330,7 @@ void CertProvisioningWorkerDynamic::DoStep() {
     case CertProvisioningWorkerState::kStartCsrResponseReceived:
     case CertProvisioningWorkerState::kFinishCsrResponseReceived:
       // Not used in "dynamic" flow.
-      CHECK(false);
-      return;
+      NOTREACHED();
   }
   NOTREACHED() << " " << static_cast<uint>(state_);
 }
@@ -994,7 +998,17 @@ void CertProvisioningWorkerDynamic::ProcessResponseErrors(
   fetch_instruction_backoff_.InformOfRequest(true);
 
   if (backend_error.error() == em::CertProvBackendError::INCONSISTENT_DATA ||
-      backend_error.error() == em::CertProvBackendError::PROFILE_NOT_FOUND) {
+      backend_error.error() == em::CertProvBackendError::PROFILE_NOT_FOUND ||
+      backend_error.error() ==
+          em::CertProvBackendError::IMMEDIATE_RETRY_ERROR_0 ||
+      backend_error.error() ==
+          em::CertProvBackendError::IMMEDIATE_RETRY_ERROR_1 ||
+      backend_error.error() ==
+          em::CertProvBackendError::IMMEDIATE_RETRY_ERROR_2 ||
+      backend_error.error() ==
+          em::CertProvBackendError::IMMEDIATE_RETRY_ERROR_3 ||
+      backend_error.error() ==
+          em::CertProvBackendError::IMMEDIATE_RETRY_ERROR_4) {
     // Report both INCONSISTENT_DATA and PROFILE_NOT_FOUND as
     // kInconsistentDataError because both mean that the locally-cached policy
     // does not match the server's database.
@@ -1193,7 +1207,7 @@ void CertProvisioningWorkerDynamic::HandleSerialization() {
     case CertProvisioningWorkerState::kStartCsrResponseReceived:
     case CertProvisioningWorkerState::kFinishCsrResponseReceived:
       // Not used in "dynamic" flow.
-      CHECK(false);
+      NOTREACHED();
   }
 }
 

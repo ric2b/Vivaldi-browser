@@ -6,6 +6,7 @@
 
 #include <linux/input-event-codes.h>
 
+#include <algorithm>
 #include <memory>
 
 #include "ash/constants/ash_features.h"
@@ -15,7 +16,6 @@
 #include "base/containers/contains.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_file.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/test/scoped_feature_list.h"
@@ -24,6 +24,7 @@
 #include "ui/events/ash/mojom/meta_key.mojom-shared.h"
 #include "ui/events/ash/mojom/modifier_key.mojom-shared.h"
 #include "ui/events/ash/mojom/modifier_key.mojom.h"
+#include "ui/events/ash/top_row_action_keys.h"
 #include "ui/events/devices/device_data_manager.h"
 #include "ui/events/devices/device_data_manager_test_api.h"
 #include "ui/events/devices/input_device.h"
@@ -765,8 +766,8 @@ TEST_P(ModifierKeyTest, TestGetModifierKeys) {
       kDeviceId1, capabilities, device_type, top_row_layout);
   auto modifier_keys = keyboard_capability_->GetModifierKeys(test_keyboard);
 
-  base::ranges::sort(expected_modifier_keys);
-  base::ranges::sort(modifier_keys);
+  std::ranges::sort(expected_modifier_keys);
+  std::ranges::sort(modifier_keys);
   EXPECT_EQ(expected_modifier_keys, modifier_keys);
 }
 
@@ -782,12 +783,12 @@ TEST_P(KeyboardCapabilityTest, TestGetModifierKeysForSplitModifierKeyboard) {
   auto modifier_keys = keyboard_capability_->GetModifierKeys(test_keyboard);
 
   std::vector<mojom::ModifierKey> expected_modifier_keys = {
-      mojom::ModifierKey::kBackspace, mojom::ModifierKey::kControl,
-      mojom::ModifierKey::kMeta,      mojom::ModifierKey::kEscape,
-      mojom::ModifierKey::kAlt,       mojom::ModifierKey::kFunction,
-      mojom::ModifierKey::kRightAlt};
-  base::ranges::sort(expected_modifier_keys);
-  base::ranges::sort(modifier_keys);
+      mojom::ModifierKey::kBackspace,  mojom::ModifierKey::kControl,
+      mojom::ModifierKey::kMeta,       mojom::ModifierKey::kEscape,
+      mojom::ModifierKey::kAlt,        mojom::ModifierKey::kFunction,
+      mojom::ModifierKey::kQuickInsert};
+  std::ranges::sort(expected_modifier_keys);
+  std::ranges::sort(modifier_keys);
   EXPECT_EQ(expected_modifier_keys, modifier_keys);
 }
 
@@ -804,8 +805,8 @@ TEST_P(KeyboardCapabilityTest, TestGetModifierKeysForEveKeyboard) {
       mojom::ModifierKey::kBackspace, mojom::ModifierKey::kControl,
       mojom::ModifierKey::kMeta,      mojom::ModifierKey::kEscape,
       mojom::ModifierKey::kAlt,       mojom::ModifierKey::kAssistant};
-  base::ranges::sort(expected_modifier_keys);
-  base::ranges::sort(modifier_keys);
+  std::ranges::sort(expected_modifier_keys);
+  std::ranges::sort(modifier_keys);
   EXPECT_EQ(expected_modifier_keys, modifier_keys);
 }
 
@@ -1288,6 +1289,7 @@ class TopRowLayoutCustomTest
       case TopRowActionKey::kAllApplications:
       case TopRowActionKey::kEmojiPicker:
       case TopRowActionKey::kDictation:
+      case TopRowActionKey::kDoNotDisturb:
       case TopRowActionKey::kUnknown:
       case TopRowActionKey::kNone:
         return 0;

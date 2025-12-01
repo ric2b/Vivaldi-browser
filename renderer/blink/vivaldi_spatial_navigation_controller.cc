@@ -8,7 +8,6 @@
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
-#include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/event_type_names.h"
 #include "third_party/blink/renderer/core/events/keyboard_event.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
@@ -169,8 +168,12 @@ void VivaldiSpatialNavigationController::HideIndicator() {
     return;
   }
   blink::Node* indicator_node = indicator;
+
   const blink::ComputedStyle* style =
-      indicator_node->GetComputedStyleForElementOrLayoutObject();
+      indicator_node->IsElementNode()
+          ? blink::To<blink::Element>(indicator_node)->GetComputedStyle()
+          : nullptr;
+
   if (style) {
     blink::ComputedStyleBuilder builder(*style);
     builder.SetVisibility(blink::EVisibility::kHidden);
@@ -307,7 +310,7 @@ void VivaldiSpatialNavigationController::FocusElement(blink::Element* element) {
   // TODO: Currently radio buttons will steal arrows and shift+arrow when focused.
   //       Revisit this when we get spatnav mode underway and get more control
   //       over keyboard input events.
-  if(!element->IsKeyboardFocusable() && !vivaldi::IsRadioButton(element)) {
+  if(!element->IsKeyboardFocusableSlow() && !vivaldi::IsRadioButton(element)) {
     vivaldi::HoverElement(element);
     element->Focus();
   } else {
@@ -590,7 +593,7 @@ void VivaldiSpatialNavigationController::UpdateIndicator(bool resize,
 
   const blink::ComputedStyle* indicator_style =
       indicator_node->IsElementNode()
-          ? indicator_node->GetComputedStyleForElementOrLayoutObject()
+          ? blink::To<blink::Element>(indicator_node)->GetComputedStyle()
           : nullptr;
   if (!indicator_style) {
     return;
@@ -605,8 +608,12 @@ void VivaldiSpatialNavigationController::UpdateIndicator(bool resize,
   // is set to fixed.
   while (container_node->parentElement()) {
     blink::PhysicalRect cnr = container_node->BoundingBox();
-    if (container_node->GetComputedStyleForElementOrLayoutObject()
-            ->GetPosition() == blink::EPosition::kFixed) {
+    const blink::ComputedStyle* container_node_style =
+      indicator_node->IsElementNode()
+          ? blink::To<blink::Element>(container_node)->GetComputedStyle()
+          : nullptr;
+    if (container_node_style &&
+        container_node_style->GetPosition() == blink::EPosition::kFixed) {
       xoffset -= cnr.X().ToDouble() * effective_zoom;
       yoffset -= cnr.Y().ToDouble() * effective_zoom;
     }
@@ -626,19 +633,17 @@ void VivaldiSpatialNavigationController::UpdateIndicator(bool resize,
     }
   }
 
-
-  blink::ComputedStyleBuilder builder(
-      *(indicator_node->GetComputedStyleForElementOrLayoutObject()));
+  blink::ComputedStyleBuilder builder(*indicator_style);
 
   // When updating because of scrolling we already have the right size,
   // so we use this to skip some work.
   if (!resize) {
     blink::WebElement web_element = current_quad_->GetWebElement();
     gfx::Rect wr = web_element.BoundsInWidget();
-    builder.SetWidth(blink::Length::Fixed(wr.width() - 4));
-    builder.SetHeight(blink::Length::Fixed(wr.height() - 4));
-    builder.SetLeft(blink::Length::Fixed(static_cast<int>(xoffset + wr.x() + 2)));
-    builder.SetTop(blink::Length::Fixed(static_cast<int>(yoffset + wr.y() + 2)));
+     builder.SetWidth(blink::Length::Fixed(wr.width() - 4));
+     builder.SetHeight(blink::Length::Fixed(wr.height() - 4));
+     builder.SetLeft(blink::Length::Fixed(static_cast<int>(xoffset + wr.x() + 2)));
+     builder.SetTop(blink::Length::Fixed(static_cast<int>(yoffset + wr.y() + 2)));
 
     if (new_rect) {
       new_rect->setX(wr.x());
@@ -655,11 +660,13 @@ void VivaldiSpatialNavigationController::UpdateIndicator(bool resize,
         wr = img_rect;
       }
     }
+
     builder.SetWidth(blink::Length::Fixed(wr.width() - 4));
     builder.SetHeight(blink::Length::Fixed(wr.height() - 4));
     builder.SetLeft(
         blink::Length::Fixed(static_cast<int>(xoffset + (int)wr.x() + 2)));
     builder.SetTop(blink::Length::Fixed(static_cast<int>(yoffset + wr.y() + 2)));
+
     if (new_rect) {
       new_rect->setX(wr.x());
       new_rect->setY(wr.y());

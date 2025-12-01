@@ -2,20 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/* eslint-disable rulesdir/es_modules_import */
-
 import {
   describeWithEnvironment,
   setupActionRegistry,
 } from '../../testing/EnvironmentHelpers.js';
-import * as Coordinator from '../../ui/components/render_coordinator/render_coordinator.js';
+import * as RenderCoordinator from '../../ui/components/render_coordinator/render_coordinator.js';
 
 import * as Components from './components/components.js';
 import * as Models from './models/models.js';
 import {RecorderActions} from './recorder-actions/recorder-actions.js';
 import {RecorderController} from './recorder.js';
-
-const coordinator = Coordinator.RenderCoordinator.RenderCoordinator.instance();
 
 describeWithEnvironment('RecorderController', () => {
   setupActionRegistry();
@@ -39,7 +35,7 @@ describeWithEnvironment('RecorderController', () => {
     controller.setCurrentPageForTesting(RecorderController.Pages.RECORDING_PAGE);
     controller.setCurrentRecordingForTesting(recording);
     controller.connectedCallback();
-    await coordinator.done();
+    await RenderCoordinator.done();
     return controller;
   }
 
@@ -52,12 +48,12 @@ describeWithEnvironment('RecorderController', () => {
           RecorderController.Pages.CREATE_RECORDING_PAGE,
       );
       controller.connectedCallback();
-      await coordinator.done();
+      await RenderCoordinator.done();
 
       const createRecordingView = controller.shadowRoot?.querySelector(
           'devtools-create-recording-view',
       );
-      assert.ok(createRecordingView);
+      assert.isOk(createRecordingView);
       createRecordingView?.dispatchEvent(
           new Components.CreateRecordingView.RecordingCancelledEvent(),
       );
@@ -74,9 +70,9 @@ describeWithEnvironment('RecorderController', () => {
       const recordingView = controller.shadowRoot?.querySelector(
           'devtools-recording-view',
       );
-      assert.ok(recordingView);
+      assert.isOk(recordingView);
       recordingView?.dispatchEvent(event);
-      await coordinator.done();
+      await RenderCoordinator.done();
     }
 
     beforeEach(() => {
@@ -100,7 +96,7 @@ describeWithEnvironment('RecorderController', () => {
       );
 
       const flow = controller.getUserFlow();
-      assert.deepStrictEqual(flow, {
+      assert.deepEqual(flow, {
         title: 'test',
         steps: [
           {
@@ -133,7 +129,7 @@ describeWithEnvironment('RecorderController', () => {
       );
 
       const flow = controller.getUserFlow();
-      assert.deepStrictEqual(flow, {
+      assert.deepEqual(flow, {
         title: 'test',
         steps: [
           {
@@ -161,7 +157,7 @@ describeWithEnvironment('RecorderController', () => {
       );
 
       const flow = controller.getUserFlow();
-      assert.deepStrictEqual(flow, {
+      assert.deepEqual(flow, {
         title: 'test',
         steps: [
           {
@@ -186,7 +182,7 @@ describeWithEnvironment('RecorderController', () => {
       );
 
       const flow = controller.getUserFlow();
-      assert.deepStrictEqual(flow, {title: 'test', steps: []});
+      assert.deepEqual(flow, {title: 'test', steps: []});
     });
 
     it('should adding a new step before a step with a breakpoint update the breakpoint indexes correctly', async () => {

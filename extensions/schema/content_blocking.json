@@ -21,6 +21,12 @@
         "enum": [ "process_list", "exempt_list" ]
       },
       {
+        "id": "PresetKind",
+        "description": "Which rough category a given preset list falls in",
+        "type": "string",
+        "enum": [ "ads", "trackers", "partners", "annoyances", "cookie_notices", "other", "regional" ]
+      },
+      {
         "id": "FetchResult",
         "description": "The result of a fetch operation on a rule source.",
         "type": "string",
@@ -169,6 +175,13 @@
           },
           "rules_info": {
             "$ref": "RulesInfo"
+          },
+          "preset_id": {
+            "type": "string"
+          },
+          "preset_kind": {
+            "optional": true,
+            "$ref": "PresetKind"
           },
           "removable": {
             "type": "boolean"

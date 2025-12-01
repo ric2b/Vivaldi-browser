@@ -18,6 +18,25 @@ Array: [
 				nodeId: number
 				nodeName: string
 				reason: string
+				subtree: boolean
+			}
+		}
+		cat: string
+		name: string
+		ph: string
+		pid: number
+		s: string
+		tid: number
+		ts: number
+	}
+	{
+		args: {
+			data: {
+				extraData: string
+				frame: string
+				nodeId: number
+				nodeName: string
+				reason: string
 				stackTrace: [
 					{
 						columnNumber: number
@@ -88,6 +107,8 @@ Object: {
 	tid: number
 	ts: number
 }
+Number of StyleResolver::ResolveStyle events:
+11
 Style recalc initiator:
 forceLayout
 Layout initiator:

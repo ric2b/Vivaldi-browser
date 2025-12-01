@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import '../../ui/legacy/legacy.js';
+
 import type * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
@@ -41,6 +43,14 @@ const UIStrings = {
    * total. Resources are files related to the webpage.
    */
   resources: '{n, plural, =1 {# resource} other {# resources}}',
+  /**
+   * @description Nnumber of resource(s) match
+   */
+  numberOfResourceMatch: '{n, plural, =1 {# resource matches} other {# resources match}}',
+  /**
+   * @description No resource matches
+   */
+  noResourceMatches: 'No resource matches',
 };
 const str_ = i18n.i18n.registerUIStrings('panels/developer_resources/DeveloperResourcesView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -68,12 +78,15 @@ export class DeveloperResourcesView extends UI.ThrottledWidget.ThrottledWidget {
 
   constructor() {
     super(true);
+    this.registerRequiredCSS(developerResourcesViewStyles);
 
     this.element.setAttribute('jslog', `${VisualLogging.panel('developer-resources').track({resize: true})}`);
 
     const toolbarContainer = this.contentElement.createChild('div', 'developer-resource-view-toolbar-container');
     toolbarContainer.setAttribute('jslog', `${VisualLogging.toolbar()}`);
-    const toolbar = new UI.Toolbar.Toolbar('developer-resource-view-toolbar', toolbarContainer);
+    toolbarContainer.role = 'toolbar';
+    const toolbar = toolbarContainer.createChild('devtools-toolbar', 'developer-resource-view-toolbar');
+    toolbar.role = 'presentation';
 
     this.textFilterRegExp = null;
     this.filterInput = new UI.Toolbar.ToolbarFilter(i18nString(UIStrings.filterByText), 1);
@@ -87,7 +100,7 @@ export class DeveloperResourcesView extends UI.ThrottledWidget.ThrottledWidget {
     toolbar.appendToolbarItem(loadThroughTargetCheckbox);
 
     this.coverageResultsElement = this.contentElement.createChild('div', 'developer-resource-view-results');
-    this.listView = new DeveloperResourcesListView(this.isVisible.bind(this));
+    this.listView = new DeveloperResourcesListView();
     this.listView.show(this.coverageResultsElement);
     this.statusToolbarElement = this.contentElement.createChild('div', 'developer-resource-view-toolbar-summary');
     this.statusMessageElement = this.statusToolbarElement.createChild('div', 'developer-resource-view-message');
@@ -100,7 +113,7 @@ export class DeveloperResourcesView extends UI.ThrottledWidget.ThrottledWidget {
   override async doUpdate(): Promise<void> {
     const selectedItem = this.listView.selectedItem();
     this.listView.reset();
-    this.listView.update(this.loader.getScopedResourcesLoaded().values());
+    this.listView.items = this.loader.getScopedResourcesLoaded().values();
     if (selectedItem) {
       this.listView.select(selectedItem);
     }
@@ -127,11 +140,6 @@ export class DeveloperResourcesView extends UI.ThrottledWidget.ThrottledWidget {
     }
   }
 
-  private isVisible(item: SDK.PageResourceLoader.PageResource): boolean {
-    return !this.textFilterRegExp || this.textFilterRegExp.test(item.url) ||
-        this.textFilterRegExp.test(item.errorMessage || '');
-  }
-
   private onFilterChanged(): void {
     if (!this.listView) {
       return;
@@ -139,12 +147,22 @@ export class DeveloperResourcesView extends UI.ThrottledWidget.ThrottledWidget {
 
     const text = this.filterInput.value();
     this.textFilterRegExp = text ? Platform.StringUtilities.createPlainTextSearchRegex(text, 'i') : null;
-    this.listView.updateFilterAndHighlight(this.textFilterRegExp);
+    if (this.textFilterRegExp) {
+      this.listView.updateFilterAndHighlight([
+        {key: 'url,error-message', regex: this.textFilterRegExp, negative: false},
+      ]);
+    } else {
+      this.listView.updateFilterAndHighlight([]);
+    }
     this.updateStats();
-  }
 
-  override wasShown(): void {
-    super.wasShown();
-    this.registerCSSFiles([developerResourcesViewStyles]);
+    const numberOfResourceMatch = this.listView.getNumberOfVisibleItems();
+    let resourceMatch = '';
+    if (numberOfResourceMatch === 0) {
+      resourceMatch = i18nString(UIStrings.noResourceMatches);
+    } else {
+      resourceMatch = i18nString(UIStrings.numberOfResourceMatch, {n: numberOfResourceMatch});
+    }
+    UI.ARIAUtils.alert(resourceMatch);
   }
 }

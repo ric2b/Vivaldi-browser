@@ -207,7 +207,7 @@ Some undocumented methods:
 ### Why not use htpdate?
 
 CrOS used [htpdate] in the past to get the time via [HTTP HEAD requests] to
-<http://www.google.com/> to get the [HTTP Date header]. We switched to tlsdate
+<https://www.google.com/> to get the [HTTP Date header]. We switched to tlsdate
 with R25 (circa Oct 2012). We ran into a couple of issues:
 
 *   htpdate connections are insecure

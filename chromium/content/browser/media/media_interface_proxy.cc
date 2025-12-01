@@ -18,7 +18,6 @@
 #include "base/time/time.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "content/browser/media/cdm_storage_common.h"
 #include "content/browser/renderer_host/render_frame_host_delegate.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
@@ -51,7 +50,6 @@
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
 #include "content/browser/media/cdm_storage_manager.h"
-#include "content/browser/media/media_license_manager.h"
 #include "media/base/key_system_names.h"
 #include "media/mojo/mojom/cdm_service.mojom.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
@@ -206,6 +204,10 @@ class FrameInterfaceFactoryImpl : public media::mojom::FrameInterfaceFactory,
   void GetCdmOrigin(GetCdmOriginCallback callback) override {
     return std::move(callback).Run(
         render_frame_host_->GetLastCommittedOrigin());
+  }
+
+  void GetPageUkmSourceId(GetPageUkmSourceIdCallback callback) override {
+    return std::move(callback).Run(render_frame_host_->GetPageUkmSourceId());
   }
 
   void BindEmbedderReceiver(mojo::GenericPendingReceiver receiver) override {
@@ -392,7 +394,7 @@ void MediaInterfaceProxy::CreateMediaPlayerRenderer(
   media::MojoRendererService::Create(
       nullptr,
       std::make_unique<MediaPlayerRenderer>(
-          render_frame_host().GetProcess()->GetID(),
+          render_frame_host().GetProcess()->GetDeprecatedID(),
           render_frame_host().GetRoutingID(),
           WebContents::FromRenderFrameHost(&render_frame_host()),
           std::move(renderer_extension_receiver),
@@ -438,13 +440,7 @@ void MediaInterfaceProxy::CreateCdm(const media::CdmConfig& cdm_config,
 
   // Handle `use_hw_secure_codecs` cases first.
 #if BUILDFLAG(USE_CHROMEOS_PROTECTED_MEDIA)
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  bool enable_cdm_factory_daemon =
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kLacrosUseChromeosProtectedMedia);
-#else   // BUILDFLAG(IS_CHROMEOS_LACROS)
   bool enable_cdm_factory_daemon = true;
-#endif  // else BUILDFLAG(IS_CHROMEOS_LACROS)
 #if defined(ARCH_CPU_ARM_FAMILY)
   if (!base::FeatureList::IsEnabled(media::kEnableArmHwdrm)) {
     enable_cdm_factory_daemon = false;
@@ -586,8 +582,10 @@ media::mojom::CdmFactory* MediaInterfaceProxy::GetCdmFactory(
   auto cdm_info = CdmRegistryImpl::GetInstance()->GetCdmInfo(
       key_system, CdmInfo::Robustness::kSoftwareSecure);
   if (!cdm_info) {
-    NOTREACHED() << "No valid CdmInfo for " << key_system;
+    DLOG(ERROR) << "No valid CdmInfo for " << key_system;
+    return nullptr;
   }
+
   if (cdm_info->path.empty()) {
     NOTREACHED() << "CDM path for " << key_system << " is empty";
   }

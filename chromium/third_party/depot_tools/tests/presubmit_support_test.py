@@ -98,19 +98,69 @@ class ProvidedDiffChangeTest(fake_repos.FakeReposTestBase):
         self._test('somewhere/else', ['not a top level file!'],
                    ['still not a top level file!'])
 
-    def test_old_contents_of_bad_diff_raises_runtimeerror(self):
-        diff = """
-diff --git a/foo b/foo
-new file mode 100644
-index 0000000..9daeafb
---- /dev/null
-+++ b/foo
-@@ -0,0 +1 @@
-+add
-"""
-        change = self._create_change(diff)
-        with self.assertRaises(RuntimeError):
-            change._affected_files[0].OldContents()
+
+class TestGenerateDiff(fake_repos.FakeReposTestBase):
+    """ Tests for --generate_diff.
+
+    The option is used to generate diffs of given files against the upstream
+    server as base.
+    """
+    FAKE_REPOS_CLASS = ProvidedDiffChangeFakeRepo
+
+    def setUp(self):
+        super().setUp()
+        self.repo = os.path.join(self.FAKE_REPOS.git_base, 'repo_1')
+        self.parser = mock.Mock()
+        self.parser.error.side_effect = SystemExit
+
+    def test_with_diff_file(self):
+        """Tests that only either --generate_diff or --diff_file is allowed."""
+        options = mock.Mock(root=self.repo,
+                            all_files=False,
+                            generate_diff=True,
+                            description='description',
+                            files=None,
+                            diff_file="patch.diff")
+        with self.assertRaises(SystemExit):
+            presubmit_support._parse_change(self.parser, options)
+
+        self.parser.error.assert_called_once_with(
+            '<diff_file> cannot be specified when <generate_diff> is set.', )
+
+    @mock.patch('presubmit_diff.create_diffs')
+    def test_with_all_files(self, create_diffs):
+        """Ensures --generate_diff is noop if --all_files is specified."""
+        options = mock.Mock(root=self.repo,
+                            all_files=True,
+                            generate_diff=True,
+                            description='description',
+                            files=None,
+                            source_controlled_only=False,
+                            diff_file=None)
+        changes = presubmit_support._parse_change(self.parser, options)
+        self.assertEqual(changes.AllFiles(),
+                         ['added', 'somewhere/else', 'to_be_modified'])
+        create_diffs.assert_not_called()
+
+    @mock.patch('presubmit_diff.fetch_content')
+    def test_with_files(self, fetch_content):
+        """Tests --generate_diff with files, which should call create_diffs()."""
+        # fetch_content would return the old content of a given file.
+        # In this test case, the mocked file is a newly added file.
+        # hence, empty content.
+        fetch_content.side_effect = ['']
+        options = mock.Mock(root=self.repo,
+                            all_files=False,
+                            gerrit_url='https://chromium.googlesource.com',
+                            generate_diff=True,
+                            description='description',
+                            files=['added'],
+                            source_controlled_only=False,
+                            diff_file=None)
+        change = presubmit_support._parse_change(self.parser, options)
+        affected_files = change.AffectedFiles()
+        self.assertEqual(len(affected_files), 1)
+        self.assertEqual(affected_files[0].LocalPath(), 'added')
 
 
 class TestParseDiff(unittest.TestCase):

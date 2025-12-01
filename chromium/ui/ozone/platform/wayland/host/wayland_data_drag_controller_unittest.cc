@@ -8,11 +8,10 @@
 #pragma allow_unsafe_buffers
 #endif
 
-#include "ui/ozone/platform/wayland/host/wayland_data_drag_controller.h"
-
 #include <linux/input.h>
 #include <wayland-server.h>
 
+#include <array>
 #include <memory>
 #include <string>
 #include <vector>
@@ -24,7 +23,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/test/bind.h"
-#include "build/chromeos_buildflags.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/clipboard/clipboard_constants.h"
 #include "ui/base/clipboard/clipboard_format_type.h"
@@ -42,6 +40,7 @@
 #include "ui/ozone/platform/wayland/host/wayland_cursor_position.h"
 #include "ui/ozone/platform/wayland/host/wayland_data_device.h"
 #include "ui/ozone/platform/wayland/host/wayland_data_device_manager.h"
+#include "ui/ozone/platform/wayland/host/wayland_data_drag_controller.h"
 #include "ui/ozone/platform/wayland/host/wayland_data_offer.h"
 #include "ui/ozone/platform/wayland/host/wayland_data_source.h"
 #include "ui/ozone/platform/wayland/host/wayland_serial_tracker.h"
@@ -330,8 +329,8 @@ TEST_P(WaylandDataDragControllerTest, StartDragWithCustomFormats) {
   OSExchangeData data(OSExchangeDataProviderFactory::CreateProvider());
   ClipboardFormatType kCustomFormats[] = {
       ClipboardFormatType::DataTransferCustomType(),
-      ClipboardFormatType::GetType("chromium/x-bookmark-entries"),
-      ClipboardFormatType::GetType("xyz/arbitrary-custom-type")};
+      ClipboardFormatType::CustomPlatformType("chromium/x-bookmark-entries"),
+      ClipboardFormatType::CustomPlatformType("xyz/arbitrary-custom-type")};
   for (auto format : kCustomFormats) {
     data.SetPickledData(format, {});
   }
@@ -496,7 +495,6 @@ TEST_P(WaylandDataDragControllerTest, ReceiveDrag) {
                           wl::TestWaylandServerThread* server) {
     // HiDPI
     server->output()->SetScale(2);
-    server->output()->SetDeviceScaleFactor(2);
     server->output()->Flush();
 
     // Place the window onto the output.
@@ -901,9 +899,12 @@ TEST_P(WaylandDataDragControllerTest, DragToNonToplevelWindows) {
 
   // Post test tasks, for each non-toplevel window type, to be performed
   // asynchronously once the dnd-related protocol objects are ready.
-  constexpr PlatformWindowType kNonToplevelWindowTypes[]{
-      PlatformWindowType::kPopup, PlatformWindowType::kMenu,
-      PlatformWindowType::kTooltip, PlatformWindowType::kBubble};
+  constexpr auto kNonToplevelWindowTypes = std::to_array<PlatformWindowType>({
+      PlatformWindowType::kPopup,
+      PlatformWindowType::kMenu,
+      PlatformWindowType::kTooltip,
+      PlatformWindowType::kBubble,
+  });
   for (auto window_type : kNonToplevelWindowTypes) {
     // Given there is no guarantee how tasks are scheduled are executed, the end
     // of the test must only be scheduled once all the test cases run.
@@ -1475,8 +1476,9 @@ class PerSurfaceScaleWaylandDataDragControllerTest
       const PerSurfaceScaleWaylandDataDragControllerTest&) = delete;
 
   void SetUp() override {
-    CHECK(
-        !base::Contains(enabled_features_, features::kWaylandPerSurfaceScale));
+    CHECK(!base::Contains(
+        enabled_features_,
+        base::test::FeatureRef(features::kWaylandPerSurfaceScale)));
     enabled_features_.push_back(features::kWaylandPerSurfaceScale);
 
     WaylandDataDragControllerTest::SetUp();
@@ -1535,7 +1537,6 @@ TEST_P(PerSurfaceScaleWaylandDataDragControllerTest,
   SendDndLeave();
 }
 
-#if !BUILDFLAG(IS_CHROMEOS_LACROS)
 INSTANTIATE_TEST_SUITE_P(XdgVersionStableTest,
                          WaylandDataDragControllerTest,
                          Values(wl::ServerConfig{}));
@@ -1543,14 +1544,5 @@ INSTANTIATE_TEST_SUITE_P(XdgVersionStableTest,
                          PerSurfaceScaleWaylandDataDragControllerTest,
                          Values(wl::ServerConfig{
                              .supports_viewporter_surface_scaling = true}));
-#else
-INSTANTIATE_TEST_SUITE_P(
-    XdgVersionStableTestWithAuraShell,
-    WaylandDataDragControllerTest,
-    Values(wl::ServerConfig{.enable_aura_shell =
-                                wl::EnableAuraShellProtocol::kEnabled},
-           wl::ServerConfig{
-               .enable_aura_shell = wl::EnableAuraShellProtocol::kEnabled}));
-#endif
 
 }  // namespace ui

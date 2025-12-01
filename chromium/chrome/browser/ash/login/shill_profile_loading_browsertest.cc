@@ -8,6 +8,7 @@
 // login password has been saved to SessionManager (b/183084821).
 // This means that triggering the shill user profile load depends on user
 // policy having been processed (as user policy would mandate whether the login
+#include "google_apis/gaia/gaia_id.h"
 // password should be reused, and thus only after processing user network policy
 // does chrome decide if the password should be saved in SessionManager).
 //
@@ -34,6 +35,7 @@
 #include "chromeos/ash/components/login/auth/public/user_context.h"
 #include "components/account_id/account_id.h"
 #include "components/policy/proto/chrome_settings.pb.h"
+#include "components/user_manager/test_helper.h"
 #include "components/user_manager/user_names.h"
 #include "content/public/test/browser_test.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -48,11 +50,11 @@ namespace em = ::enterprise_management;
 using ::testing::ElementsAre;
 
 constexpr char kUnmanagedUser[] = "unmanaged@gmail.com";
-constexpr char kUnmanagedGaiaID[] = "33333";
+constexpr GaiaId::Literal kUnmanagedGaiaID("33333");
 constexpr char kSecondaryUnmanagedUser[] = "secondaryunmanaged@gmail.com";
-constexpr char kSecondaryUnmanagedGaiaID[] = "44444";
+constexpr GaiaId::Literal kSecondaryUnmanagedGaiaID("44444");
 constexpr char kManagedUser[] = "user@example.com";
-constexpr char kManagedGaiaID[] = "55555";
+constexpr GaiaId::Literal kManagedGaiaID("55555");
 
 // Implements waiting for the LoadShillProfile call to SessionManagerClient and
 // counting how many LoadShillProfile calls were performed.
@@ -104,6 +106,18 @@ class ShillProfileLoadingTest : public LoginManagerTest {
   ~ShillProfileLoadingTest() override = default;
 
   // LoginManagerTest:
+  void SetUpLocalStatePrefService(PrefService* local_state) override {
+    LoginManagerTest::SetUpLocalStatePrefService(local_state);
+
+    // Register a persisted user.
+    user_manager::TestHelper::RegisterPersistedUser(*local_state,
+                                                    unmanaged_user_.account_id);
+    user_manager::TestHelper::RegisterPersistedUser(
+        *local_state, secondary_unmanaged_user_.account_id);
+    user_manager::TestHelper::RegisterPersistedUser(*local_state,
+                                                    managed_user_.account_id);
+  }
+
   void SetUpInProcessBrowserTestFixture() override {
     LoginManagerTest::SetUpInProcessBrowserTestFixture();
 

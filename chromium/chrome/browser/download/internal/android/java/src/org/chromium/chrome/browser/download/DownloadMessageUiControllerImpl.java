@@ -38,7 +38,6 @@ import org.chromium.components.offline_items_collection.OfflineContentProvider;
 import org.chromium.components.offline_items_collection.OfflineItem;
 import org.chromium.components.offline_items_collection.OfflineItemState;
 import org.chromium.components.offline_items_collection.UpdateDelta;
-import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.url.GURL;
 
@@ -239,13 +238,6 @@ public class DownloadMessageUiControllerImpl implements DownloadMessageUiControl
         // Download is blocked, each blocked downloaded is also counted in failed.
         public int blocked;
 
-        /**
-         * @return The total number of downloads being tracked.
-         */
-        public int totalCount() {
-            return inProgress + pending + failed + completed;
-        }
-
         public int getCountForResultState(@ResultState int state) {
             switch (state) {
                 case ResultState.COMPLETE:
@@ -354,7 +346,7 @@ public class DownloadMessageUiControllerImpl implements DownloadMessageUiControl
         if (dispatcher == null) {
             // When the message dispatcher is null we don't want to block the download, hence
             // we mimic the accepted workflow.
-            callback.onResult(/* accepted= */ true);
+            callback.onResult(/* result= */ true);
             recordIncognitoDownloadMessage(IncognitoMessageEvent.NOT_SHOWN_NULL_MESSAGE_DISPATCHER);
             return;
         }
@@ -381,7 +373,7 @@ public class DownloadMessageUiControllerImpl implements DownloadMessageUiControl
         propertyModel.set(
                 MessageBannerProperties.ON_PRIMARY_ACTION,
                 () -> {
-                    callback.onResult(/* accepted= */ true);
+                    callback.onResult(/* result= */ true);
                     recordIncognitoDownloadMessage(IncognitoMessageEvent.ACCEPTED);
                     return PrimaryActionClickBehavior.DISMISS_IMMEDIATELY;
                 });
@@ -402,7 +394,7 @@ public class DownloadMessageUiControllerImpl implements DownloadMessageUiControl
                         recordIncognitoDownloadMessage(
                                 IncognitoMessageEvent.DISMISSED_WITH_DIFFERENT_REASON);
                     }
-                    callback.onResult(/* accepted= */ false);
+                    callback.onResult(/* result= */ false);
                 });
 
         dispatcher.enqueueWindowScopedMessage(propertyModel, /* highPriority= */ true);
@@ -498,10 +490,6 @@ public class DownloadMessageUiControllerImpl implements DownloadMessageUiControl
 
     private MessageDispatcher getMessageDispatcher() {
         return mDelegate.getMessageDispatcher();
-    }
-
-    private ModalDialogManager getModalDialogManager() {
-        return mDelegate.getModalDialogManager();
     }
 
     private boolean isVisibleToUser(OfflineItem offlineItem) {

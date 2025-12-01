@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -18,7 +19,6 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/types/optional_util.h"
 #include "base/values.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/ui/webui/print_preview/print_preview_utils.h"
 #include "chrome/common/printing/printer_capabilities.h"
 #include "chromeos/crosapi/mojom/local_printer.mojom.h"
@@ -32,7 +32,7 @@
 #include "printing/print_settings_conversion_chromeos.h"
 #include "url/gurl.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ash/crosapi/crosapi_ash.h"
 #include "chrome/browser/ash/crosapi/crosapi_manager.h"
 #include "chrome/browser/ash/crosapi/local_printer_ash.h"
@@ -145,6 +145,54 @@ void RecordDpi(const PrinterSemanticCapsAndDefaults& capabilities) {
   }
 }
 
+template <typename MojoOptionType,
+          typename MojoOptionValueType,
+          typename ValueType>
+base::Value::Dict SimpleTypePrintOptionMojomToDict(
+    const mojo::StructPtr<MojoOptionType>& print_option,
+    base::RepeatingCallback<ValueType(MojoOptionValueType option_value)>
+        convert_func) {
+  base::Value::Dict result;
+
+  if (print_option->default_value) {
+    result.Set(kManagedPrintOptions_DefaultValue,
+               convert_func.Run(*print_option->default_value));
+  }
+  if (print_option->allowed_values) {
+    base::Value::List allowed_values;
+    for (const auto& allowed_value : *print_option->allowed_values) {
+      allowed_values.Append(convert_func.Run(allowed_value));
+    }
+    result.Set(kManagedPrintOptions_AllowedValues, std::move(allowed_values));
+  }
+
+  return result;
+}
+
+template <typename MojoOptionType,
+          typename MojoOptionValueType,
+          typename ValueType>
+base::Value::Dict CustomTypePrintOptionMojomToDict(
+    const mojo::StructPtr<MojoOptionType>& print_option,
+    base::RepeatingCallback<ValueType(MojoOptionValueType option_value)>
+        convert_func) {
+  base::Value::Dict result;
+
+  if (print_option->default_value) {
+    result.Set(kManagedPrintOptions_DefaultValue,
+               convert_func.Run(*print_option->default_value));
+  }
+  if (print_option->allowed_values) {
+    base::Value::List allowed_values;
+    for (const auto& allowed_value : *print_option->allowed_values) {
+      allowed_values.Append(convert_func.Run(*allowed_value));
+    }
+    result.Set(kManagedPrintOptions_AllowedValues, std::move(allowed_values));
+  }
+
+  return result;
+}
+
 }  // namespace
 
 // static
@@ -153,7 +201,7 @@ LocalPrinterHandlerChromeos::Create(
     content::WebContents* preview_web_contents) {
   auto handler =
       std::make_unique<LocalPrinterHandlerChromeos>(preview_web_contents);
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   DCHECK(crosapi::CrosapiManager::IsInitialized());
   handler->local_printer_ =
       crosapi::CrosapiManager::Get()->crosapi_ash()->local_printer_ash();
@@ -186,6 +234,10 @@ base::Value::Dict LocalPrinterHandlerChromeos::PrinterToValue(
   value.Set(kPrinterStatus, printer.printer_status
                                 ? StatusToValue(*printer.printer_status)
                                 : base::Value::Dict());
+  value.Set(kManagedPrintOptions,
+            printer.managed_print_options
+                ? ManagedPrintOptionsToValue(*printer.managed_print_options)
+                : base::Value::Dict());
   return value;
 }
 
@@ -229,6 +281,84 @@ base::Value::Dict LocalPrinterHandlerChromeos::StatusToValue(
   }
   dict.Set("statusReasons", std::move(status_reasons));
   return dict;
+}
+
+// static
+base::Value::Dict LocalPrinterHandlerChromeos::ManagedPrintOptionsToValue(
+    const crosapi::mojom::ManagedPrintOptions& managed_print_options) {
+  base::Value::Dict result;
+
+  if (managed_print_options.media_size) {
+    result.Set(kManagedPrintOptions_MediaSize,
+               CustomTypePrintOptionMojomToDict(
+                   managed_print_options.media_size,
+                   base::BindRepeating([](const crosapi::mojom::Size& value) {
+                     base::Value::Dict result;
+                     result.Set(kManagedPrintOptions_SizeWidth,
+                                static_cast<int>(value.width));
+                     result.Set(kManagedPrintOptions_SizeHeight,
+                                static_cast<int>(value.height));
+                     return result;
+                   })));
+  }
+
+  if (managed_print_options.media_type) {
+    result.Set(kManagedPrintOptions_MediaType,
+               SimpleTypePrintOptionMojomToDict(
+                   managed_print_options.media_type,
+                   base::BindRepeating(
+                       [](const std::string& value) { return value; })));
+  }
+
+  if (managed_print_options.duplex) {
+    result.Set(kManagedPrintOptions_Duplex,
+               SimpleTypePrintOptionMojomToDict(
+                   managed_print_options.duplex,
+                   base::BindRepeating([](crosapi::mojom::DuplexType value) {
+                     return static_cast<int>(ToKnownEnumValue(value));
+                   })));
+  }
+
+  if (managed_print_options.color) {
+    result.Set(
+        kManagedPrintOptions_Color,
+        SimpleTypePrintOptionMojomToDict(
+            managed_print_options.color,
+            base::BindRepeating([](bool value) -> bool { return value; })));
+  }
+
+  if (managed_print_options.dpi) {
+    result.Set(kManagedPrintOptions_Dpi,
+               CustomTypePrintOptionMojomToDict(
+                   managed_print_options.dpi,
+                   base::BindRepeating([](const crosapi::mojom::Dpi& value) {
+                     base::Value::Dict result;
+                     result.Set(kManagedPrintOptions_DpiHorizontal,
+                                static_cast<int>(value.horizontal));
+                     result.Set(kManagedPrintOptions_DpiVertical,
+                                static_cast<int>(value.vertical));
+                     return result;
+                   })));
+  }
+
+  if (managed_print_options.quality) {
+    result.Set(kManagedPrintOptions_Quality,
+               SimpleTypePrintOptionMojomToDict(
+                   managed_print_options.quality,
+                   base::BindRepeating([](crosapi::mojom::QualityType value) {
+                     return static_cast<int>(ToKnownEnumValue(value));
+                   })));
+  }
+
+  if (managed_print_options.print_as_image) {
+    result.Set(
+        kManagedPrintOptions_PrintAsImage,
+        SimpleTypePrintOptionMojomToDict(
+            managed_print_options.print_as_image,
+            base::BindRepeating([](bool value) -> bool { return value; })));
+  }
+
+  return result;
 }
 
 void LocalPrinterHandlerChromeos::Reset() {}

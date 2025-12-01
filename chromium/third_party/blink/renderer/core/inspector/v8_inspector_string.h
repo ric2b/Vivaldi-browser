@@ -6,11 +6,11 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_INSPECTOR_V8_INSPECTOR_STRING_H_
 
 #include <memory>
+#include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/containers/checked_iterators.h"
 #include "base/containers/span.h"
-#include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/ref_counted.h"
@@ -18,7 +18,6 @@
 #include "third_party/blink/renderer/platform/wtf/text/string_hash.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_view.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
-#include "third_party/inspector_protocol/crdtp/maybe.h"
 #include "third_party/inspector_protocol/crdtp/protocol_core.h"
 #include "third_party/inspector_protocol/crdtp/serializable.h"
 #include "v8/include/v8-inspector.h"
@@ -42,10 +41,7 @@ class CORE_EXPORT StringUtil {
   STATIC_ONLY(StringUtil);
 
  public:
-  static String fromUTF8(const uint8_t* data, size_t length) {
-    return String::FromUTF8(data, length);
-  }
-
+  static String fromUTF8(const uint8_t* data, size_t length);
   static String fromUTF16LE(const uint16_t* data, size_t length);
 
   static const uint8_t* CharactersLatin1(const String& s) {
@@ -96,6 +92,10 @@ class CORE_EXPORT Binary : public crdtp::Serializable {
 
   const uint8_t* data() const { return impl_ ? impl_->data() : nullptr; }
   size_t size() const { return impl_ ? impl_->size() : 0; }
+  base::span<const uint8_t> Span() const {
+    // SAFETY: Safety relies on data() and size() of Impl class.
+    return UNSAFE_BUFFERS(base::span(data(), size()));
+  }
 
   String toBase64() const;
   static Binary fromBase64(const String& base64, bool* success);
@@ -133,19 +133,6 @@ struct ProtocolTypeTraits<blink::protocol::Binary> {
   static void Serialize(const blink::protocol::Binary& value,
                         std::vector<uint8_t>* bytes);
 };
-
-namespace detail {
-template <>
-struct MaybeTypedef<WTF::String> {
-  typedef ValueMaybe<WTF::String> type;
-};
-
-template <>
-struct MaybeTypedef<blink::protocol::Binary> {
-  typedef ValueMaybe<blink::protocol::Binary> type;
-};
-
-}  // namespace detail
 
 }  // namespace crdtp
 

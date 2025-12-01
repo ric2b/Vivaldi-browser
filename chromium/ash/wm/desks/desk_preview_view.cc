@@ -31,7 +31,6 @@
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/memory/raw_ptr.h"
-#include "base/ranges/algorithm.h"
 #include "base/trace_event/trace_event.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "third_party/skia/include/core/SkRRect.h"
@@ -159,15 +158,6 @@ std::optional<size_t> GetWindowZOrderForDeskAndRoot(const aura::Window* window,
   return std::nullopt;
 }
 
-// Returns the total number of layers that are descendants of `root`.
-size_t GetNumDescendants(ui::Layer* root) {
-  size_t num_descendants = root->children().size();
-  for (const auto& child : root->children()) {
-    num_descendants += GetNumDescendants(child);
-  }
-  return num_descendants;
-}
-
 // Recursively mirrors `source_layer` and its children and adds them as children
 // of `parent`, taking into account the given |layers_data|. If the layer data
 // of `source_layer` has `should_clear_transform` set to true, the transforms of
@@ -234,7 +224,7 @@ void MirrorLayerTree(
         continue;
       }
 
-      if (base::ranges::find(mru_windows, window) == mru_windows.end()) {
+      if (std::ranges::find(mru_windows, window) == mru_windows.end()) {
         continue;
       }
 
@@ -263,7 +253,7 @@ void MirrorLayerTree(
 
     // Step 3: Sort all child layers based on `LayerOrderData` and write to
     // `children` for further recursion.
-    base::ranges::sort(
+    std::ranges::sort(
         layer_orders, [](const LayerOrderData& lhs, const LayerOrderData& rhs) {
           return (lhs.primary_key > rhs.primary_key) ||
                  (lhs.primary_key == rhs.primary_key &&
@@ -602,10 +592,6 @@ void DeskPreviewView::AcceptSelection() {
       mini_view_->owner_bar()->type() == DeskBarViewBase::Type::kDeskButton
           ? DesksSwitchSource::kDeskButtonMiniViewButton
           : DesksSwitchSource::kMiniViewButton);
-}
-
-size_t DeskPreviewView::GetNumLayersMirrored() const {
-  return GetNumDescendants(desk_mirrored_contents_layer_tree_owner_->root());
 }
 
 void DeskPreviewView::Layout(PassKey) {

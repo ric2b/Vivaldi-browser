@@ -284,8 +284,7 @@ class OverviewSessionTest
   // OverviewTestBase:
   void SetUp() override {
     scoped_feature_list_.InitWithFeatureStates(
-        {{features::kDesksTemplates, DeskTemplatesOn()},
-         {features::kDeskBarWindowOcclusionOptimization, true}});
+        {{features::kDesksTemplates, DeskTemplatesOn()}});
 
     OverviewTestBase::SetUp();
     Shell::Get()->overview_controller()->set_windows_have_snapshot_for_test(
@@ -1232,6 +1231,26 @@ TEST_P(OverviewSessionTest, SkipOverviewWindow) {
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(window1->IsVisible());
   EXPECT_TRUE(window2->IsVisible());
+}
+
+// Tests that showing the non-forcefully hidden windows will not crash. The
+// regression test of crbug.com/372335240.
+TEST_P(OverviewSessionTest, NoCrashOnShowingNonForceHiddenWindows) {
+  std::unique_ptr<aura::Window> window(CreateTestWindow());
+  window->SetProperty(kHideInOverviewKey, true);
+
+  // Enter overview.
+  ToggleOverview();
+
+  // The second window should be hidden.
+  EXPECT_FALSE(window->IsVisible());
+
+  // Showing and focusing on the second window should exit Overview without
+  // crash. Here we simulate the process of `SystemWebDialogDelegate::Focus`.
+  window->Show();
+  window->Focus();
+  EXPECT_FALSE(InOverviewSession());
+  EXPECT_TRUE(window->IsVisible());
 }
 
 // Tests that a minimized window's visibility and layer visibility
@@ -3381,7 +3400,8 @@ TEST_P(OverviewSessionTest, AccessibilityFocusAnnotator) {
     return;
   }
 
-  SavedDeskSaveDeskButton* save_button = grid->GetSaveDeskForLaterButton();
+  SavedDeskSaveDeskButton* save_button =
+      OverviewGridTestApi(grid).GetSaveDeskForLaterButton();
   ASSERT_TRUE(save_button);
   views::Widget* save_widget = save_button->GetWidget();
 
@@ -6252,8 +6272,7 @@ class ContinuousOverviewAnimationTest
   void SetUp() override {
     scoped_feature_list_.InitWithFeatures(
         /*enabled_features=*/{features::kContinuousOverviewScrollAnimation,
-                              features::kDeskButton,
-                              features::kDeskBarWindowOcclusionOptimization},
+                              features::kDeskButton},
         /*disabled_features=*/{});
     OverviewTestBase::SetUp();
 
@@ -7126,8 +7145,7 @@ class SplitViewOverviewSessionTest : public OverviewTestBase {
  public:
   SplitViewOverviewSessionTest() {
     scoped_feature_list_.InitWithFeatures(
-        /*enabled_features=*/{features::kDeskBarWindowOcclusionOptimization,
-                              chromeos::features::
+        /*enabled_features=*/{chromeos::features::
                                   kOverviewSessionInitOptimizations},
         /*disabled_features=*/{});
   }
@@ -7218,8 +7236,6 @@ class SplitViewOverviewSessionTest : public OverviewTestBase {
 
   // Returns the expected overview bounds including the hotseat inset. See
   // `ShrinkBoundsByHotseatInset()`.
-  // TODO(sophiewen): Refactor this for both `SplitViewOverviewSessionTest`
-  // and `FasterSplitScreenSetupTest` and make this work for multi-display.
   gfx::Rect GetExpectedOverviewBounds() {
     aura::Window* root_window = Shell::GetPrimaryRootWindow();
     gfx::Rect overview_bounds(GetWorkAreaInScreen(root_window));
@@ -9435,8 +9451,7 @@ TEST_F(SplitViewOverviewSessionInClamshellTest, BasicFunctionalitiesTest) {
   EXPECT_FALSE(GetOverviewController()->InOverviewSession());
   EXPECT_FALSE(split_view_controller()->InSplitViewMode());
 
-  // Maximize `window3` as `window1` and `window3` may form a Snap Group with
-  // `kSnapGroup` enabled.
+  // Maximize `window3` as `window1` and `window3` may form a Snap Group.
   WindowState::Get(window3.get())->Maximize();
 
   // 4. Test if one window is snapped, the other windows are showing in
@@ -11226,8 +11241,7 @@ class OverviewWallpaperTest : public OverviewTestBase {
  public:
   OverviewWallpaperTest() {
     scoped_feature_list_.InitWithFeatures(
-        /*enabled_features=*/{features::kForestFeature,
-                              features::kDeskBarWindowOcclusionOptimization},
+        /*enabled_features=*/{features::kForestFeature},
         /*disabled_features=*/{});
   }
   OverviewWallpaperTest(const OverviewWallpaperTest&) = delete;

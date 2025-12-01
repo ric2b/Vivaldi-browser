@@ -9,9 +9,11 @@
 
 #include <memory>
 #include <optional>
+#include <unordered_set>
 
 #include "base/memory/raw_ptr.h"
 #include "base/values.h"
+#include "chrome/browser/task_manager/providers/task.h"
 #include "chrome/browser/task_manager/task_manager_observer.h"
 #include "ui/base/models/table_model.h"
 
@@ -20,6 +22,16 @@ class WebContents;
 }
 
 namespace task_manager {
+
+// Determines what OTHER processes to filter out from the Task List.
+// For example, if the selected DisplayCategory is kTabs, Tab processes will be
+// kept, and Extension and System processes will be filtered out.
+enum class DisplayCategory : uint8_t {
+  kAll = 0,
+  kTabsAndExtensions = 1,
+  kSystem = 2,
+  kMax = kSystem
+};
 
 class TaskManagerValuesStringifier;
 
@@ -67,7 +79,9 @@ class TableViewDelegate {
 class TaskManagerTableModel : public TaskManagerObserver,
                               public ui::TableModel {
  public:
-  explicit TaskManagerTableModel(TableViewDelegate* delegate);
+  explicit TaskManagerTableModel(
+      TableViewDelegate* delegate,
+      DisplayCategory initial_display_category = DisplayCategory::kAll);
   TaskManagerTableModel(const TaskManagerTableModel&) = delete;
   TaskManagerTableModel& operator=(const TaskManagerTableModel&) = delete;
   ~TaskManagerTableModel() override;
@@ -79,11 +93,12 @@ class TaskManagerTableModel : public TaskManagerObserver,
   void SetObserver(ui::TableModelObserver* observer) override;
   int CompareValues(size_t row1, size_t row2, int column_id) override;
 
+  void FilterTaskList(TaskIdList& tasks);
+
   // task_manager::TaskManagerObserver:
   void OnTaskAdded(TaskId id) override;
   void OnTaskToBeRemoved(TaskId id) override;
   void OnTasksRefreshed(const TaskIdList& task_ids) override;
-  void OnActiveTaskFetched(TaskId id) override;
 
   // Gets the start index and length of the group to which the task at
   // |row_index| belongs.
@@ -107,7 +122,8 @@ class TaskManagerTableModel : public TaskManagerObserver,
 
   // Restores the saved columns settings from a previous session into
   // |columns_settings_| and updates the table view.
-  void RetrieveSavedColumnsSettingsAndUpdateTable();
+  void RetrieveSavedColumnsSettingsAndUpdateTable(
+      bool default_sorted_column_to_cpu = false);
 
   // Stores the current values in |column_settings_| to the user prefs so that
   // it can be restored later next time the task manager view is opened.
@@ -123,6 +139,11 @@ class TaskManagerTableModel : public TaskManagerObserver,
 
   std::optional<size_t> GetRowForActiveTask();
 
+  // Updates task positions based on category and search filters. Returns true
+  // if the model is changed.
+  bool UpdateModel(const DisplayCategory display_category,
+                   const std::u16string& search_term);
+
  private:
   friend class TaskManagerTester;
 
@@ -135,6 +156,24 @@ class TaskManagerTableModel : public TaskManagerObserver,
   // Checks whether the task at |row_index| is the first task in its process
   // group of tasks.
   bool IsTaskFirstInGroup(size_t row_index) const;
+
+  // Checks whether the task falls in `Tabs`, `Extensions` or `Systems`
+  // category.
+  bool ShouldKeepTaskForSupportedType(TaskId task_id) const;
+
+  // Determines whether a TaskId should be kept based on the DisplayCategory.
+  bool ShouldKeepTask(TaskId task_id) const;
+
+  // Returns whether `task_id` related task group has matching tasks in current
+  // task list.
+  bool HasMatchInTasksSharingSameProcess(TaskId task_id) const;
+
+  // Goes through the task list to get matched process ids based on search
+  // terms.
+  void UpdateMatchedProcessSet();
+
+  // Updates matched process set by single task based on search terms.
+  void UpdateMatchedProcessSetById(TaskId task_id);
 
   // The delegate that will be used to communicate with the platform-specific
   // TableView.
@@ -159,6 +198,16 @@ class TaskManagerTableModel : public TaskManagerObserver,
 
   // The status of the flag #enable-nacl-debug.
   bool is_nacl_debugging_flag_enabled_;
+
+  // Determines which rows should be kept from GetTaskIdsList().
+  DisplayCategory display_category_;
+
+  // Search keyword to filter tasks.
+  std::u16string search_terms_;
+
+  // Contains the process IDs for tasks whose titles match the search
+  // terms. Tasks linked to these processes should be kept.
+  std::unordered_set<base::ProcessId> matched_process_set_;
 
   // Active task id when task manager is open. This variable will only set once
   // after task manager is open. In desktop platforms other than Lacros, active
